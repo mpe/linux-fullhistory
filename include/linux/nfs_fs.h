@@ -30,7 +30,7 @@
  * in tenths of a second.
  */
 
-#define NFS_MAX_RPC_TIMEOUT		600
+#define NFS_MAX_RPC_TIMEOUT		(6*HZ)
 
 /*
  * Size of the lookup cache in units of number of entries cached.

@@ -27,23 +27,53 @@
 static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
 
+#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+  static unsigned char cache_804 = 0xef;
+  static unsigned char cache_805 = 0xff;
+  static unsigned char cache_806 = 0xff;
+# define NUM_IRQS	33
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+  static unsigned char cache_26 = 0xdf;
+  static unsigned char cache_27 = 0xff;
+# define NUM_IRQS	32
+#else
+# define NUM_IRQS	16
+#endif
+
 void disable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
 	unsigned char mask;
 
-	mask = 1 << (irq_nr & 7);
 	save_flags(flags);
+	cli();
+	mask = 1 << (irq_nr & 7);
+
 	if (irq_nr < 8) {
-		cli();
 		cache_21 |= mask;
 		outb(cache_21,0x21);
-		restore_flags(flags);
-		return;
+	} else if (irq_nr < 16) {
+		cache_A1 |= mask;
+		outb(cache_A1,0xA1);
+#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+	} else if (irq_nr < 24) {
+		cache_804 |= mask;
+		outb(cache_804, 0x804);
+	} else if (irq_nr < 32) {
+		cache_805 |= mask;
+		outb(cache_805, 0x805);
+	} else {
+		cache_806 |= mask;
+		outb(cache_806, 0x806);
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P) 
+	} else if (irq_nr < 24) {
+		cache_26 |= mask;
+		outb(cache_26, 0x26);
+	} else {
+		cache_27 |= mask;
+		outb(cache_27, 0x27);
+#endif
 	}
-	cli();
-	cache_A1 |= mask;
-	outb(cache_A1,0xA1);
 	restore_flags(flags);
 }
 
@@ -54,16 +84,33 @@ void enable_irq(unsigned int irq_nr)
 
 	mask = ~(1 << (irq_nr & 7));
 	save_flags(flags);
+	cli();
+
 	if (irq_nr < 8) {
-		cli();
 		cache_21 &= mask;
 		outb(cache_21,0x21);
-		restore_flags(flags);
-		return;
+	} else if (irq_nr < 16) {
+		cache_A1 &= mask;
+		outb(cache_A1,0xA1);
+#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+	} else if (irq_nr < 24) {
+		cache_804 &= mask;
+		outb(cache_804, 0x804);
+	} else if (irq_nr < 32) {
+		cache_805 &= mask;
+		outb(cache_805, 0x805);
+	} else {
+		cache_806 &= mask;
+		outb(cache_806, 0x806);
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+	} else if if (irq_nr < 24) {
+		cache_26 &= mask;
+		outb(cache_26, 0x26);
+	} else {
+		cache_27 &= mask;
+		outb(cache_27, 0x27);
+#endif
 	}
-	cli();
-	cache_A1 &= mask;
-	outb(cache_A1,0xA1);
 	restore_flags(flags);
 }
 
@@ -77,23 +124,14 @@ struct irqaction {
 	const char *name;
 };
 
-static struct irqaction irq_action[16] = {
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
-	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL }
-};
+static struct irqaction irq_action[NUM_IRQS];
 
 int get_irq_list(char *buf)
 {
 	int i, len = 0;
 	struct irqaction * action = irq_action;
 
-	for (i = 0 ; i < 16 ; i++, action++) {
+	for (i = 0 ; i < NUM_IRQS ; i++, action++) {
 		if (!action->handler)
 			continue;
 		len += sprintf(buf+len, "%2d: %8d %c %s\n",
@@ -106,35 +144,78 @@ int get_irq_list(char *buf)
 
 static inline void ack_irq(int irq)
 {
-	/* ACK the interrupt making it the lowest priority */
-	/*  First the slave .. */
-	if (irq > 7) {
-		outb(0xE0 | (irq - 8), 0xa0);
-		irq = 2;
+	if (irq < 16) {
+		/* ACK the interrupt making it the lowest priority */
+		/*  First the slave .. */
+		if (irq > 7) {
+			outb(0xE0 | (irq - 8), 0xa0);
+			irq = 2;
+		}
+		/* .. then the master */
+		outb(0xE0 | irq, 0x20);
 	}
-	/* .. then the master */
-	outb(0xE0 | irq, 0x20);
 }
 
 static inline void mask_irq(int irq)
 {
+	unsigned char mask;
+
+	mask = 1 << (irq & 7);
 	if (irq < 8) {
-		cache_21 |= 1 << irq;
+		cache_21 |= mask;
 		outb(cache_21, 0x21);
-	} else {
-		cache_A1 |= 1 << (irq - 8);
+	} else if (irq < 16) {
+		cache_A1 |= mask;
 		outb(cache_A1, 0xA1);
+#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+	} else if (irq < 24) {
+		cache_804 |= mask;
+		outb(cache_804, 0x804);
+	} else if (irq < 32) {
+	        cache_805 |= mask;
+		outb(cache_805, 0x805);
+	} else {
+		cache_806 |= mask;
+		outb(cache_806, 0x806);
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB66P)
+	} else if (irq < 24) {
+		cache_26 |= mask;
+		outb(cache_26, 0x26);
+	} else {
+		cache_27 |= mask;
+		outb(cache_27, 0x27);
+#endif
 	}
 }
 
 static inline void unmask_irq(unsigned long irq)
 {
+	unsigned char mask = ~(1 << (irq & 7));
+
 	if (irq < 8) {
-		cache_21 &= ~(1 << irq);
+		cache_21 &= mask;
 		outb(cache_21, 0x21);
-	} else {
-		cache_A1 &= ~(1 << (irq - 8));
+	} else if (irq < 16) {
+		cache_A1 &= mask;
 		outb(cache_A1, 0xA1);
+#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+	} else if (irq < 24) {
+		cache_804 &= mask;
+		outb(cache_804, 0x804);
+	} else if (irq < 32) {
+	        cache_805 &= mask;
+		outb(cache_805, 0x805);
+	} else {
+		cache_806 &= mask;
+		outb(cache_806, 0x806);
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB66P)
+	} else if (irq < 24) {
+		cache_26 &= mask;
+		outb(cache_26, 0x26);
+	} else {
+		cache_27 &= mask;
+		outb(cache_27, 0x27);
+#endif
 	}
 }
 
@@ -144,7 +225,7 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 	struct irqaction * action;
 	unsigned long flags;
 
-	if (irq > 15)
+	if (irq >= NUM_IRQS)
 		return -EINVAL;
 	action = irq + irq_action;
 	if (action->handler)
@@ -157,16 +238,9 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 	action->flags = irqflags;
 	action->mask = 0;
 	action->name = devname;
-	if (irq < 8) {
-		if (irq) {
-			cache_21 &= ~(1<<irq);
-			outb(cache_21,0x21);
-		}
-	} else {
-		cache_21 &= ~(1<<2);
-		cache_A1 &= ~(1<<(irq-8));
-		outb(cache_21,0x21);
-		outb(cache_A1,0xA1);
+	enable_irq(irq);
+	if (irq >= 8 && irq < 16) {
+		enable_irq(2);	/* ensure cascade is enabled too */
 	}
 	restore_flags(flags);
 	return 0;
@@ -177,7 +251,7 @@ void free_irq(unsigned int irq)
 	struct irqaction * action = irq + irq_action;
 	unsigned long flags;
 
-	if (irq > 15) {
+	if (irq >= NUM_IRQS) {
 		printk("Trying to free IRQ%d\n", irq);
 		return;
 	}
@@ -195,7 +269,7 @@ void free_irq(unsigned int irq)
 	restore_flags(flags);
 }
 
-static void handle_nmi(struct pt_regs * regs)
+static inline void handle_nmi(struct pt_regs * regs)
 {
 	printk("Whee.. NMI received. Probable hardware error\n");
 	printk("61=%02x, 461=%02x\n", inb(0x61), inb(0x461));
@@ -232,79 +306,15 @@ static inline void handle_irq(int irq, struct pt_regs * regs)
 	action->handler(irq, regs);
 }
 
-#ifndef CONFIG_PCI
-
-static void local_device_interrupt(unsigned long vector, struct pt_regs * regs)
+static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 {
-	switch (vector) {
-		/* com1: map to irq 4 */
-		case 0x900:
-			handle_irq(4, regs);
-			return;
-
-		/* com2: map to irq 3 */
-		case 0x920:
-			handle_irq(3, regs);
-			return;
-
-		/* keyboard: map to irq 1 */
-		case 0x980:
-			handle_irq(1, regs);
-			return;
-
-		/* mouse: map to irq 9 */
-		case 0x990:
-			handle_irq(9, regs);
-			return;
-		default:
-			printk("Unknown local interrupt %lx\n", vector);
-	}
-}
-
-#endif /* !CONFIG_PCI */
-
-/*
- * The vector is 0x8X0 for EISA interrupt X, and 0x9X0 for the local
- * motherboard interrupts.. This is for the Jensen.
- *
- *	0x660 - NMI
- *
- *	0x800 - IRQ0  interval timer (not used, as we use the RTC timer)
- *	0x810 - IRQ1  line printer (duh..)
- *	0x860 - IRQ6  floppy disk
- *	0x8E0 - IRQ14 SCSI controller
- *
- *	0x900 - COM1
- *	0x920 - COM2
- *	0x980 - keyboard
- *	0x990 - mouse
- *
- * The PCI version is more sane: it doesn't have the local interrupts at
- * all, and has only normal PCI interrupts from devices. Happily it's easy
- * enough to do a sane mapping from the Jensen.. Note that this means
- * that we may have to do a hardware "ack" to a different interrupt than
- * we report to the rest of the world..
- */
-static void device_interrupt(unsigned long vector, struct pt_regs * regs)
-{
-	int irq, ack;
 	struct irqaction * action;
 
-	if (vector == 0x660) {
-		handle_nmi(regs);
+	if ((unsigned) irq > NUM_IRQS) {
+		printk("device_interrupt: unexpected interrupt %d\n", irq);
 		return;
 	}
 
-	ack = irq = (vector - 0x800) >> 4;
-#ifndef CONFIG_PCI
-	if (vector >= 0x900) {
-		local_device_interrupt(vector, regs);
-		return;
-	}
-	/* irq1 is supposed to be the keyboard, silly Jensen */
-	if (irq == 1)
-		irq = 7;
-#endif
 	kstat.interrupts[irq]++;
 	action = irq_action + irq;
 	/* quick interrupts get executed with no extra overhead */
@@ -331,14 +341,153 @@ static void device_interrupt(unsigned long vector, struct pt_regs * regs)
 }
 
 /*
+ * Handle ISA interrupt via the PICs.
+ */
+static inline void isa_device_interrupt(unsigned long vector,
+					struct pt_regs * regs)
+{
+	unsigned long pic;
+	int j;
+	/* 
+	 *  The first read of gives you *all* interrupting lines.
+	 *  Therefore, read the mask register and and out those lines
+	 *  not enabled.  Note that some documentation has 21 and a1 
+	 *  write only.  This is not true.
+	 */
+	pic = inb(0x20) | (inb(0xA0) << 8);	/* read isr */
+	pic &= ~((cache_A1 << 8) | cache_21);	/* apply mask */
+	pic &= 0xFFFB;				/* mask out cascade */
+
+	while (pic) {
+		j = ffz(~pic);
+		pic &= pic - 1;
+		device_interrupt(j, j, regs);
+	}
+}
+
+static inline void cabriolet_and_eb66p_device_interrupt(unsigned long vector,
+							struct pt_regs * regs)
+{
+	unsigned long pld;
+	unsigned int i;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+
+	/* read the interrupt summary registers */
+	pld = inb(0x804) | (inb(0x805) << 8) | (inb(0x806) << 16);
+
+	/*
+	 * Now for every possible bit set, work through them and call
+	 * the appropriate interrupt handler.
+	 */
+	while (pld) {
+		i = ffz(~pld);
+		pld &= pld - 1;	/* clear least bit set */
+		if (i == 4) {
+			isa_device_interrupt(vector, regs);
+		} else {
+			device_interrupt(16 + i, 16 + i, regs);
+		}
+	}
+	restore_flags(flags);
+}
+
+static inline void eb66_and_eb64p_device_interrupt(unsigned long vector,
+						   struct pt_regs * regs)
+{
+	unsigned long pld;
+	unsigned int i;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+
+	/* read the interrupt summary registers */
+	pld = inb(0x26) | (inb(0x27) << 8);
+	/*
+	 * Now, for every possible bit set, work through
+	 * them and call the appropriate interrupt handler.
+	 */
+	while (pld) {
+		i = ffz(~pld);
+		pld &= pld - 1;	/* clear least bit set */
+
+		if (i == 5) {
+			isa_device_interrupt(vector, regs);
+		} else {
+			device_interrupt(16 + i, 16 + i, regs);
+		}
+	}
+	restore_flags(flags);
+}
+
+/*
+ * Jensen is special: the vector is 0x8X0 for EISA interrupt X, and
+ * 0x9X0 for the local motherboard interrupts..
+ *
+ *	0x660 - NMI
+ *
+ *	0x800 - IRQ0  interval timer (not used, as we use the RTC timer)
+ *	0x810 - IRQ1  line printer (duh..)
+ *	0x860 - IRQ6  floppy disk
+ *	0x8E0 - IRQ14 SCSI controller
+ *
+ *	0x900 - COM1
+ *	0x920 - COM2
+ *	0x980 - keyboard
+ *	0x990 - mouse
+ *
+ * PCI-based systems are more sane: they don't have the local
+ * interrupts at all, and have only normal PCI interrupts from
+ * devices.  Happily it's easy enough to do a sane mapping from the
+ * Jensen..  Note that this means that we may have to do a hardware
+ * "ack" to a different interrupt than we report to the rest of the
+ * world.
+ */
+static inline void srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
+{
+	int irq, ack;
+	struct irqaction * action;
+
+	ack = irq = (vector - 0x800) >> 4;
+
+#ifdef CONFIG_ALPHA_JENSEN
+	switch (vector) {
+	      case 0x660: handle_nmi(regs); return;
+		/* local device interrupts: */
+	      case 0x900: handle_irq(4, regs); return;	/* com1 -> irq 4 */
+	      case 0x920: handle_irq(3, regs); return;	/* com2 -> irq 3 */
+	      case 0x980: handle_irq(1, regs); return;	/* kbd -> irq 1 */
+	      case 0x990: handle_irq(9, regs); return;	/* mouse -> irq 9 */
+	      default:
+		if (vector > 0x900) {
+			printk("Unknown local interrupt %lx\n", vector);
+		}
+	}
+	/* irq1 is supposed to be the keyboard, silly Jensen (is this really needed??) */
+	if (irq == 1)
+		irq = 7;
+#endif /* CONFIG_ALPHA_JENSEN */
+
+	device_interrupt(irq, ack, regs);
+}
+
+#if NUM_IRQS > 64
+#  error Number of irqs limited to 64 due to interrupt-probing.
+#endif
+
+/*
  * Start listening for interrupts..
  */
-unsigned int probe_irq_on(void)
+unsigned long probe_irq_on(void)
 {
-	unsigned int i, irqs = 0, irqmask;
+	unsigned long irqs = 0, irqmask;
 	unsigned long delay;
+	unsigned int i;
 
-	for (i = 15; i > 0; i--) {
+	for (i = NUM_IRQS - 1; i > 0; i--) {
 		if (!irq_action[i].handler) {
 			enable_irq(i);
 			irqs |= (1 << i);
@@ -350,7 +499,15 @@ unsigned int probe_irq_on(void)
 		/* about 100 ms delay */;
 	
 	/* now filter out any obviously spurious interrupts */
-	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int) cache_21;
+	irqmask = (((unsigned long)cache_A1)<<8) | (unsigned long) cache_21;
+#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+	irqmask |= ((((unsigned long)cache_804)<<16) |
+		    (((unsigned long)cache_805)<<24) |
+		    (((unsigned long)cache_806)<<24));
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+	irqmask |= ((((unsigned long)cache_26)<<16) |
+		    (((unsigned long)cache_27)<<24);
+#endif
 	irqs &= ~irqmask;
 	return irqs;
 }
@@ -360,27 +517,41 @@ unsigned int probe_irq_on(void)
  * we have several candidates (but we return the lowest-numbered
  * one).
  */
-int probe_irq_off(unsigned int irqs)
+int probe_irq_off(unsigned long irqs)
 {
-	unsigned int i, irqmask;
+	unsigned long irqmask;
+	int i;
 	
 	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
+#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+	irqmask |= ((((unsigned long)cache_804)<<16) |
+		    (((unsigned long)cache_805)<<24) |
+		    (((unsigned long)cache_806)<<24));
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+	irqmask |= ((((unsigned long)cache_26)<<16) |
+		    (((unsigned long)cache_27)<<24);
+#endif
 	irqs &= irqmask;
 	if (!irqs)
 		return 0;
 	i = ffz(~irqs);
-	if (irqs != (1 << i))
+	if (irqs != (1UL << i))
 		i = -i;
 	return i;
 }
 
-static void machine_check(unsigned long vector, unsigned long la_ptr, struct pt_regs * regs)
+static void machine_check(unsigned long vector, unsigned long la, struct pt_regs * regs)
 {
+#if defined(CONFIG_ALPHA_LCA)
+	extern void lca_machine_check (unsigned long vector, unsigned long la,
+				       struct pt_regs *regs);
+	lca_machine_check(vector, la, regs);
+#elif defined(CONFIG_ALPHA_APECS)
+	extern void apecs_machine_check(unsigned long vector, unsigned long la,
+					struct pt_regs * regs);
+	apecs_machine_check(vector, la, regs);
+#else
 	printk("Machine check\n");
-#ifdef LCA_MEM_ESR
-	printk("esr=%lx, ear=%lx, ioc_stat0=%lx, ioc_stat1=%lx\n",
-	       *(unsigned long*)LCA_MEM_ESR, *(unsigned long*)LCA_MEM_EAR,
-	       *(unsigned long*)LCA_IOC_STAT0, *(unsigned long*)LCA_IOC_STAT1);
 #endif
 }
 
@@ -400,7 +571,13 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned lon
 			machine_check(vector, la_ptr, &regs);
 			break;
 		case 3:
-			device_interrupt(vector, &regs);
+#if defined(CONFIG_ALPHA_JENSEN) || defined(CONFIG_ALPHA_NONAME)
+			srm_device_interrupt(vector, &regs);
+#elif defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+			cabriolet_and_eb66p_device_interrupt(vector, &regs);
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+			eb66_and_eb64p_device_interrupt(vector, &regs);
+#endif
 			return;
 		case 4:
 			printk("Performance counter interrupt\n");
@@ -420,4 +597,12 @@ void init_IRQ(void)
 	dma_outb(0, DMA2_RESET_REG);
 	dma_outb(0, DMA1_CLR_MASK_REG);
 	dma_outb(0, DMA2_CLR_MASK_REG);
+#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+	outb(cache_804, 0x804);
+	outb(cache_805, 0x805);
+	outb(cache_806, 0x806);
+#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+	outb(cache_26, 0x26);
+	outb(cache_27, 0x27);
+#endif
 }

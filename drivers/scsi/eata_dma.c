@@ -540,8 +540,9 @@ int eata_abort(Scsi_Cmnd * cmd)
 	DBG(DBG_ABNORM, printk("eata_dma: abort, queue slot locked.\n"));
 	DBG(DBG_ABNORM && DBG_DELAY, DEL2(500));
 	return (SCSI_ABORT_NOT_RUNNING);
-    } else
-	panic("eata_dma: abort: invalid slot status\n");
+    }
+    restore_flags(flags);
+    panic("eata_dma: abort: invalid slot status\n");
 }
 
 int eata_reset(Scsi_Cmnd * cmd)

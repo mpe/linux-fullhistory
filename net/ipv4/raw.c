@@ -27,6 +27,8 @@
  *		Alan Cox	:	Use new kernel side addresses
  *	Arnt Gulbrandsen	:	Fixed MSG_DONTROUTE in raw sockets.
  *		Alan Cox	:	BSD style RAW socket demultiplexing.
+ *		Alan Cox	:	Beginnings of mrouted support.
+ *		Alan Cox	:	Added IP_HDRINCL option.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -46,6 +48,7 @@
 #include <linux/in.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/mroute.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <linux/skbuff.h>
@@ -53,6 +56,10 @@
 #include <net/icmp.h>
 #include <net/udp.h>
 #include <net/checksum.h>
+
+#ifdef CONFIG_IP_MROUTE
+struct sock *mroute_socket=NULL;
+#endif
 
 static inline unsigned long min(unsigned long a, unsigned long b)
 {
@@ -199,7 +206,7 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 	if (sk->broadcast == 0 && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
 		return -EACCES;
 
-	if(sk->num==IPPROTO_RAW)
+	if(sk->ip_hdrincl)
 		err=ip_build_xmit(sk, raw_getrawfrag, from, len, sin.sin_addr.s_addr, flags, sin.sin_port);
 	else
 		err=ip_build_xmit(sk, raw_getfrag, from, len, sin.sin_addr.s_addr, flags, sin.sin_port);
@@ -217,6 +224,13 @@ static int raw_write(struct sock *sk, const unsigned char *buff, int len, int no
 static void raw_close(struct sock *sk, int timeout)
 {
 	sk->state = TCP_CLOSE;
+#ifdef CONFIG_IP_MROUTE	
+	if(sk==mroute_socket)
+	{
+		mroute_close(sk);
+		mroute_socket=NULL;
+	}
+#endif	
 }
 
 
@@ -238,7 +252,6 @@ int raw_recvfrom(struct sock *sk, unsigned char *to, int len,
 	int copied=0;
 	struct sk_buff *skb;
 	int err;
-	int truesize;
 
 	if (flags & MSG_OOB)
 		return -EOPNOTSUPP;
@@ -253,9 +266,8 @@ int raw_recvfrom(struct sock *sk, unsigned char *to, int len,
 	if(skb==NULL)
  		return err;
 
-	truesize=skb->len;
-	copied = min(len, truesize);
-  
+	copied = min(len, skb->len);
+	
 	skb_copy_datagram(skb, 0, to, copied);
 	sk->stamp=skb->stamp;
 
@@ -267,7 +279,7 @@ int raw_recvfrom(struct sock *sk, unsigned char *to, int len,
 	}
 	skb_free_datagram(skb);
 	release_sock(sk);
-	return (truesize);	/* len not copied. BSD returns the true size of the message so you know a bit fell off! */
+	return (copied);
 }
 
 
@@ -298,7 +310,11 @@ struct proto raw_prot = {
 	NULL,
 	NULL,
 	datagram_select,
+#ifdef CONFIG_IP_MROUTE	
+	ipmr_ioctl,
+#else
 	NULL,
+#endif		
 	raw_init,
 	NULL,
 	ip_setsockopt,

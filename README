@@ -42,6 +42,10 @@ DOCUMENTATION:
    Project) books.  This README is not meant to be documentation on the
    system: there are much better sources available.
 
+ - There are various readme's in the kernel doc/ subdirectory: these are
+   mainly used for kernel developers and some very kernel-specific
+   installation notes for some drivers for example.
+
 INSTALLING the kernel:
 
  - If you install the full sources, do a

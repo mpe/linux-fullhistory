@@ -1,6 +1,7 @@
 /* 
  * Set these options for all host adapters.
- * 	- Memory mapped IO does not work.
+ * 	- Memory mapped IO does not work on x86 because of cache
+ *	  problems.
  *	- Test 1 does a bus mastering test, which will help
  *	  weed out brain damaged main boards.
  */
@@ -3857,8 +3858,10 @@ NCR53c7xx_reset (Scsi_Cmnd *cmd) {
     save_flags(flags);
     ncr_halt (host);
     NCR53c7x0_write8(SCNTL1_REG, SCNTL1_RST);
+    mb();
     udelay(25);	/* Minimum amount of time to assert RST */
     NCR53c7x0_write8(SCNTL1_REG, SCNTL1_RST);
+    mb();
     for (c = (struct NCR53c7x0_cmd *) hostdata->running_list, found = 0; c; 
     	c = (struct NCR53c7x0_cmd *) c->next)  {
 	tmp = c->cmd;
@@ -3938,8 +3941,10 @@ shutdown (struct Scsi_Host *host) {
  *	reset.  
  */
     NCR53c7x0_write8(SCNTL1_REG, SCNTL1_RST);
+    mb();
     udelay(25);	/* Minimum amount of time to assert RST */
     NCR53c7x0_write8(SCNTL1_REG, SCNTL1_RST);
+    mb();
     restore_flags (flags);
     return 0;
 }
@@ -3968,6 +3973,7 @@ ncr_halt (struct Scsi_Host *host) {
     save_flags(flags);
     cli();
     NCR53c7x0_write8(hostdata->istat, ISTAT_ABRT);
+    mb();
     /* Eat interrupts until we find what we're looking for */
     for (;;) {
 	istat = NCR53c7x0_read8 (hostdata->istat);
@@ -3981,6 +3987,7 @@ ncr_halt (struct Scsi_Host *host) {
 	    }
 	} else if (istat & ISTAT_DIP) {
 	    NCR53c7x0_write8(hostdata->istat, 0);
+	    mb();
 	    tmp = NCR53c7x0_read8(DSTAT_REG);
 	    if (tmp & DSTAT_ABRT)
 		break;

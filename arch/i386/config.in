@@ -57,13 +57,16 @@ if [ "$CONFIG_IP_FORWARD" = "y" -a "$CONFIG_IP_FIREWALL" = "y" ]; then
   bool 'IP: firewall packet logging' CONFIG_IP_FIREWALL_VERBOSE y
   bool 'IP: masquerading (ALPHA)' CONFIG_IP_MASQUERADE n
 fi
+if [ "$CONFIG_IP_FORWARD" = "y" -a "$CONFIG_IP_MULTICAST" = "y" -a "$CONFIG_NET_IPIP" = "y" ]; then
+  bool 'IP: multicast routing(in progress)' CONFIG_IP_MROUTE n
+fi
 comment '(it is safe to leave these untouched)'
 bool 'IP: PC/TCP compatibility mode' CONFIG_INET_PCTCP n
 bool 'IP: Reverse ARP' CONFIG_INET_RARP n
 bool 'IP: Assume subnets are local' CONFIG_INET_SNARL y
 bool 'IP: Disable NAGLE algorithm (normally enabled)' CONFIG_TCP_NAGLE_OFF n
 bool 'IP: Drop source routed frames' CONFIG_IP_NOSR y
-bool 'IP: Allow large windows (not recommend if <16Mb of memory)' CONFIG_SKB_LARGE y
+bool 'IP: Allow large windows (not recommended if <16Mb of memory)' CONFIG_SKB_LARGE y
 fi
 bool 'The IPX protocol' CONFIG_IPX n
 bool 'Appletalk DDP' CONFIG_ATALK n
@@ -142,6 +145,8 @@ if [ "$CONFIG_PPP" = "y" ]; then
 fi
 if [ "$CONFIG_AX25" = "y" ]; then
 	bool 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC y
+else
+	bool 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC n
 fi
 bool 'PLIP (parallel port) support' CONFIG_PLIP n
 bool 'EQL (serial line load balancing) support' CONFIG_EQUALIZER n
@@ -218,7 +223,7 @@ comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
 
 bool 'Sony CDU31A/CDU33A CDROM support' CONFIG_CDU31A n
 bool 'Standard Mitsumi [no XA/Multisession] CDROM support' CONFIG_MCD n
-bool 'Experimental Mitsumi [XA/MultiSession, no Audio] support' CONFIG_MCDX n
+bool 'Experimental Mitsumi [XA/MultiSession] support' CONFIG_MCDX n
 bool 'Matsushita/Panasonic CDROM support' CONFIG_SBPCD n
 if [ "$CONFIG_SBPCD" = "y" ]; then
   bool 'Matsushita/Panasonic second CDROM controller support' CONFIG_SBPCD2 n

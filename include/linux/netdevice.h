@@ -116,6 +116,7 @@ struct device
 
   /* Interface address info. */
   unsigned char		  broadcast[MAX_ADDR_LEN];	/* hw bcast add	*/
+  unsigned char		  pad;				/* make dev_addr aligned to 8 bytes */
   unsigned char		  dev_addr[MAX_ADDR_LEN];	/* hw address	*/
   unsigned char		  addr_len;	/* hardware address length	*/
   unsigned long		  pa_addr;	/* protocol address		*/
@@ -193,6 +194,7 @@ extern int		ip_chk_addr(unsigned long addr);
 extern struct device	*ip_dev_check(unsigned long daddr);
 extern unsigned long	ip_my_addr(void);
 extern unsigned long	ip_get_mask(unsigned long addr);
+extern struct device 	*ip_dev_find(unsigned long addr);
 
 extern void		dev_add_pack(struct packet_type *pt);
 extern void		dev_remove_pack(struct packet_type *pt);

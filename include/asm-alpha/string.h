@@ -1,5 +1,5 @@
-#ifndef __ALPHA_STRING_H
-#define __ALPHA_STRING_H
+#ifndef __ALPHA_STRING_H__
+#define __ALPHA_STRING_H__
 
 extern void * __constant_c_memset(void *, unsigned long, long);
 extern void * __memset(void *, char, size_t);
@@ -13,4 +13,4 @@ extern void * __memcpy(void *, const void *, size_t);
 
 #define __HAVE_ARCH_STRLEN
 
-#endif
+#endif /* __ALPHA_STRING_H__ */

@@ -901,14 +901,14 @@ static void flush_status(void)
 	int i;
 	
 #ifdef MODULE
-	sbp_sleep(150);
+	sbp_sleep(15*HZ/10);
 	for (i=maxtim_data;i!=0;i--) inb(CDi_status);
 #else
 	if (current == task[0])
 		for (i=maxtim02;i!=0;i--) inb(CDi_status);
 	else 
 	{
-		sbp_sleep(150);
+		sbp_sleep(15*HZ/10);
 		for (i=maxtim_data;i!=0;i--) inb(CDi_status);
 	}
 #endif MODULE
@@ -919,7 +919,7 @@ static int CDi_stat_loop(void)
 	int i,j;
 	
 #ifdef MODULE
-	for(timeout = jiffies + 1000, i=maxtim_data; timeout > jiffies; )
+	for(timeout = jiffies + 10*HZ, i=maxtim_data; timeout > jiffies; )
 	{
 		for ( ;i!=0;i--)
 		{
@@ -928,7 +928,7 @@ static int CDi_stat_loop(void)
 			if (!(j&s_not_result_ready)) return (j);
 			if (fam0L_drive) if (j&s_attention) return (j);
 		}
-		sbp_sleep(1);
+		sbp_sleep(HZ/100);
 		i = 1;
 	}
 #else
@@ -941,7 +941,7 @@ static int CDi_stat_loop(void)
 			if (fam0L_drive) if (j&s_attention) return (j);
 		}
 	else
-		for(timeout = jiffies + 1000, i=maxtim_data; timeout > jiffies; )
+		for(timeout = jiffies + 10*HZ, i=maxtim_data; timeout > jiffies; )
 		{
 			for ( ;i!=0;i--)
 			{
@@ -950,7 +950,7 @@ static int CDi_stat_loop(void)
 				if (!(j&s_not_result_ready)) return (j);
 				if (fam0L_drive) if (j&s_attention) return (j);
 			}
-			sbp_sleep(1);
+			sbp_sleep(HZ/100);
 			i = 1;
 		}
 #endif MODULE
@@ -1015,7 +1015,7 @@ static int ResponseInfo(void)
 		}
 	else 
 	{
-		for (i=0,timeout=jiffies+100;i<response_count;i++) 
+		for (i=0,timeout=jiffies+HZ;i<response_count;i++) 
 		{
 			for (j=maxtim_data; ; )
 			{
@@ -1025,7 +1025,7 @@ static int ResponseInfo(void)
 					if (!(st&s_not_result_ready)) break;
 				}
 				if ((j!=0)||(timeout<=jiffies)) break;
-				sbp_sleep(1);
+				sbp_sleep(HZ/100);
 				j = 1;
 			}
 			if (timeout<=jiffies) break;
@@ -1170,8 +1170,8 @@ static int ResponseStatus(void)
 	else
 	{
 		if (flags_cmd_out & f_respo3) timeout = jiffies;
-		else if (flags_cmd_out & f_respo2) timeout = jiffies + 1600;
-		else timeout = jiffies + 400;
+		else if (flags_cmd_out & f_respo2) timeout = jiffies + 16*HZ;
+		else timeout = jiffies + 4*HZ;
 		j=maxtim_8;
 		do
 		{
@@ -1181,7 +1181,7 @@ static int ResponseStatus(void)
 				if (!(i&s_not_result_ready)) break;
 			}
 			if ((j!=0)||(timeout<jiffies)) break;
-			sbp_sleep(1);
+			sbp_sleep(HZ/100);
 			j = 1;
 		}
 		while (1);
@@ -1298,7 +1298,7 @@ static int cmd_out_T(void)
 	sti();
 	for (ntries=CMDT_TRIES;ntries>0;ntries--)
 	{
-		if (drvcmd[0]==CMDT_READ_VER) sbp_sleep(100);
+		if (drvcmd[0]==CMDT_READ_VER) sbp_sleep(HZ);
 #if 1
 		OUT(CDo_sel_i_d,0);
 #endif
@@ -1358,7 +1358,7 @@ static int cmd_out_T(void)
 				drvcmd[0]=CMDT_READ_ERR;
 				j=cmd_out_T(); /* !!! recursive here !!! */
 				--recursion;
-				sbp_sleep(1);
+				sbp_sleep(HZ/100);
 			}
 			while (j<0);
 			D_S[d].error_state=infobuf[2];
@@ -1373,7 +1373,7 @@ static int cmd_out_T(void)
 			return (-D_S[d].error_state-400);
 		}
 		if (drvcmd[0]==CMDT_READ) return (0); /* handled elsewhere */
-		sbp_sleep(10);
+		sbp_sleep(HZ/10);
 		if (ntries>(CMDT_TRIES-50)) continue;
 		msg(DBG_TEA,"cmd_out_T: next CMDT_TRIES (%02X): %d.\n", drvcmd[0], ntries-1);
 	}
@@ -1874,13 +1874,13 @@ static int cc_DriveReset(void)
 		OUT(CDo_command,CMDT_RESET);
 		for (i=1;i<10;i++) OUT(CDo_command,0);
 	}
-	if (fam0L_drive) sbp_sleep(500); /* wait 5 seconds */
-	else sbp_sleep(100); /* wait a second */
+	if (fam0L_drive) sbp_sleep(5*HZ); /* wait 5 seconds */
+	else sbp_sleep(1*HZ); /* wait a second */
 #if 1
 	if (famT_drive)
 	{
 		msg(DBG_TEA, "================CMDT_RESET given=================.\n");
-		sbp_sleep(300);
+		sbp_sleep(3*HZ);
 	}
 #endif 1
 	flush_status();
@@ -1917,7 +1917,7 @@ static int DriveReset(void)
 		i=GetStatus();
 		if ((i<0)&&(i!=-615)) return (-2); /* i!=-615 is from sta2err */
 		if (!st_caddy_in) break;
-		sbp_sleep(1);
+		sbp_sleep(HZ/100);
 	}
 	while (!st_diskok);
 #if 000
@@ -2075,7 +2075,7 @@ static int UnLockDoor(void)
 	{
 		i=cc_LockDoor(0);
 		--j;
-		sbp_sleep(1);
+		sbp_sleep(HZ/100);
 	}
 	while ((i<0)&&(j));
 	if (i<0)
@@ -2095,7 +2095,7 @@ static int LockDoor(void)
 	{
 		i=cc_LockDoor(1);
 		--j;
-		sbp_sleep(1);
+		sbp_sleep(HZ/100);
 	}
 	while ((i<0)&&(j));
 	if (j==0)
@@ -2106,7 +2106,7 @@ static int LockDoor(void)
 		{
 			i=cc_LockDoor(1);
 			--j;
-			sbp_sleep(1);
+			sbp_sleep(HZ/100);
 		}
 		while ((i<0)&&(j));
 	}
@@ -2944,10 +2944,10 @@ static void check_datarate(void)
 #if 1
 	del_timer(&delay_timer);
 #endif
-	delay_timer.expires=jiffies+110;
+	delay_timer.expires=jiffies+11*HZ/10;
 	timed_out_delay=0;
 	add_timer(&delay_timer);
-	msg(DBG_TIM,"delay timer started (110).\n");
+	msg(DBG_TIM,"delay timer started (11*HZ/10).\n");
 	do
 	{
 		i=inb(CDi_status);
@@ -3109,7 +3109,7 @@ static int check_version(void)
 		if (sbpro_type==1) OUT(CDo_sel_i_d,0);
 #if 0
 		OUT(CDo_reset,0);
-		sbp_sleep(600);
+		sbp_sleep(6*HZ);
 		OUT(CDo_enable,D_S[d].drv_sel);
 #endif 0
 		drvcmd[0]=CMD2_READ_VER;
@@ -3165,7 +3165,7 @@ static int check_version(void)
 					OUT(CDo_command,CMDT_RESET);
 					for (i=0;i<9;i++) OUT(CDo_command,0);
 				}
-				sbp_sleep(50);
+				sbp_sleep(5*HZ/10);
 				OUT(CDo_enable,D_S[d].drv_sel);
 				OUT(CDo_sel_i_d,0);
 				i=inb(CDi_status);
@@ -4142,7 +4142,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		msg(DBG_AUD,"read_audio: lba: %d, msf: %06X\n",
 		    block, blk2msf(block));
 		msg(DBG_AUD,"read_audio: before cc_ReadStatus.\n");
-		while (busy_data) sbp_sleep(10); /* wait a bit */
+		while (busy_data) sbp_sleep(HZ/10); /* wait a bit */
 		busy_audio=1;
 		error_flag=0;
 		for (data_tries=5; data_tries>0; data_tries--)
@@ -4156,7 +4156,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				flags_cmd_out |= f_respo3;
 				cc_ReadStatus();
 				if (sbp_status() != 0) break;
-				sbp_sleep(1);    /* wait a bit, try again */
+				sbp_sleep(HZ/100);    /* wait a bit, try again */
 			}
 			if (status_tries == 0)
 			{
@@ -4199,7 +4199,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			for (frame=1;frame<2 && !error_flag; frame++)
 			{
 				try=maxtim_data;
-				for (timeout=jiffies+900; ; )
+				for (timeout=jiffies+9*HZ; ; )
 				{
 					for ( ; try!=0;try--)
 					{
@@ -4211,7 +4211,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 					if (try != 0 || timeout <= jiffies) break;
 					if (data_retrying == 0) data_waits++;
 					data_retrying = 1;
-					sbp_sleep(1);
+					sbp_sleep(HZ/100);
 					try = 1;
 				}
 				if (try==0)
@@ -4249,7 +4249,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			if (fam0L_drive)
 			{
 				i=maxtim_data;
-				for (timeout=jiffies+900; timeout > jiffies; timeout--)
+				for (timeout=jiffies+9*HZ; timeout > jiffies; timeout--)
 				{
 					for ( ;i!=0;i--)
 					{
@@ -4383,7 +4383,7 @@ static void DO_SBPCD_REQUEST(void)
 		msg(DBG_INF, "do_request: bad device: %04X\n", CURRENT->dev);
 		goto err_done;
 	}
-	while (busy_audio) sbp_sleep(100); /* wait a bit */
+	while (busy_audio) sbp_sleep(HZ); /* wait a bit */
 	busy_data=1;
 	
 	if (D_S[i].audio_state==audio_playing) goto err_done;
@@ -4566,10 +4566,10 @@ static int sbp_data(void)
 	error_flag=0;
 	success=0;
 #if LONG_TIMING
-	max_latency=900;
+	max_latency=9*HZ;
 #else
-	if (D_S[d].f_multisession) max_latency=900;
-	else max_latency=300;
+	if (D_S[d].f_multisession) max_latency=9*HZ;
+	else max_latency=3*HZ;
 #endif
 	msg(DBG_TE2,"beginning to READ\n");
 	duration=jiffies;
@@ -4747,7 +4747,7 @@ static int sbp_data(void)
 	{
 		SBPCD_CLI;
 		i=maxtim_data;
-		for (timeout=jiffies+100; timeout > jiffies; timeout--)
+		for (timeout=jiffies+HZ; timeout > jiffies; timeout--)
 		{
 			for ( ;i!=0;i--)
 			{
@@ -5146,7 +5146,7 @@ int init_module(void)
 	if (!famL_drive)
 	{
 		OUT(CDo_reset,0);
-		sbp_sleep(100);
+		sbp_sleep(HZ);
 	}
 #endif 0
 
@@ -5190,7 +5190,7 @@ int init_module(void)
 		    D_S[d].error_byte);
 		if (D_S[d].error_byte==aud_12)
 		{
-			timeout=jiffies+200;
+			timeout=jiffies+2*HZ;
 			do
 			{
 				i=GetStatus();

@@ -44,7 +44,7 @@ typedef int (*sysfun_p)(int, ...);
 extern sysfun_p sys_call_table[];
 #define SYS(name)	(sys_call_table[__NR_##name])
 
-#define DLINFO_ITEMS 8
+#define DLINFO_ITEMS 12
 
 #include <linux/elf.h>
 
@@ -119,7 +119,7 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 
 	}
 	sp = (unsigned long *) (0xfffffffc & (unsigned long) p);
-	if(exec) sp -= DLINFO_ITEMS*2;
+	sp -= exec ? DLINFO_ITEMS*2 : 2;
 	dlinfo = sp;
 	sp -= envc+1;
 	envp = sp;
@@ -130,21 +130,27 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 		put_user(argv,--sp);
 	}
 
-	/* The constant numbers (0-9) that we are writing here are
-	   described in the header file sys/auxv.h on at least
-	   some versions of SVr4 */
+#define NEW_AUX_ENT(id, val) \
+	  put_user ((id), dlinfo++); \
+	  put_user ((val), dlinfo++)
 	if(exec) { /* Put this here for an ELF program interpreter */
 	  struct elf_phdr * eppnt;
 	  eppnt = (struct elf_phdr *) exec->e_phoff;
-	  put_user(3,dlinfo++); put_user(load_addr + exec->e_phoff,dlinfo++);
-	  put_user(4,dlinfo++); put_user(sizeof(struct elf_phdr),dlinfo++);
-	  put_user(5,dlinfo++); put_user(exec->e_phnum,dlinfo++);
-	  put_user(9,dlinfo++); put_user((unsigned long) exec->e_entry,dlinfo++);
-	  put_user(7,dlinfo++); put_user(interp_load_addr,dlinfo++);
-	  put_user(8,dlinfo++); put_user(0,dlinfo++);
-	  put_user(6,dlinfo++); put_user(PAGE_SIZE,dlinfo++);
-	  put_user(0,dlinfo++); put_user(0,dlinfo++);
+
+	  NEW_AUX_ENT (AT_PHDR, load_addr + exec->e_phoff);
+	  NEW_AUX_ENT (AT_PHENT, sizeof (struct elf_phdr));
+	  NEW_AUX_ENT (AT_PHNUM, exec->e_phnum);
+	  NEW_AUX_ENT (AT_PAGESZ, PAGE_SIZE);
+	  NEW_AUX_ENT (AT_BASE, interp_load_addr);
+	  NEW_AUX_ENT (AT_FLAGS, 0);
+	  NEW_AUX_ENT (AT_ENTRY, (unsigned long) exec->e_entry);
+	  NEW_AUX_ENT (AT_UID, (unsigned long) current->uid);
+	  NEW_AUX_ENT (AT_EUID, (unsigned long) current->euid);
+	  NEW_AUX_ENT (AT_GID, (unsigned long) current->gid);
+	  NEW_AUX_ENT (AT_EGID, (unsigned long) current->egid);
 	}
+	NEW_AUX_ENT (AT_NULL, 0);
+#undef NEW_AUX_ENT
 
 	put_user((unsigned long)argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
@@ -370,7 +376,8 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	
 	
 	/* First of all, some simple consistency checks */
-	if(elf_ex.e_type != ET_EXEC || 
+	if((elf_ex.e_type != ET_EXEC &&
+	    elf_ex.e_type != ET_DYN) || 
 	   (elf_ex.e_machine != EM_386 && elf_ex.e_machine != EM_486) ||
 	   (!bprm->inode->i_op || !bprm->inode->i_op->default_file_ops ||
 	    !bprm->inode->i_op->default_file_ops->mmap)){

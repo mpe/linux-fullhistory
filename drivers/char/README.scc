@@ -1,35 +1,47 @@
+// 950824: note -- I will upload the new version 1.9 to ftp.ucsd.edu
+//         as soon as possible... 
+//
+// ****** The driver has it's own MAJOR number (22) now! ******
+//
+// please remake /dev/sc*:
+//
+// mknod /dev/sc1 c 22 0
+// mknod /dev/sc2 c 22 1
+// mknod /dev/sc3 c 22 2
+// mknod /dev/sc4 c 22 3
+//
+// (and so on...)
+//
+// -dl1bke-
+
 This is a subset of the documentation. To use this driver you MUST have the
 full package from:
 
 Internet:
 =========
 
-ftp.ucsd.edu:/hamradio/packet/tcpip/incoming/z8530drv-1.8.dl1bke.tar.gz
+ftp.ucsd.edu:/hamradio/packet/tcpip/incoming/z8530drv-1.9.dl1bke.tar.gz
+
+[
+  if you can't find it there, try:
+  .../tcpip/linux/z8530drv-1.9.dl1bke.tar.gz
+
+]
 
 and various mirrors (i.e. nic.switch.ch)
 
 AX.25 BBS
 =========
 
-UNIX @ DB0ACH.#NRW.DEU.EU, subject: Z8530D18.Pxx/Pyy
+UNIX @ DB0ACH.#NRW.DEU.EU, subject: Z8530D19.Pxx/Pyy
 
 (AX.25 call: DB0ACH-8)
 
 and various BBS that received the file through AUTO7P or 7PSERV
-with the filename Z8530D18.TGZ
+with the filename Z8530D19.TGZ
 
 
 ---------------------------------------------------------------------------
-
-!! Version 1.8
-!!
-!! Deutscher Text siehe scc_ger.doc
-!! 
-!! perhaps somebody could correct the English documentation (grammar,
-!! spelling)?
-!!
-!! BTW: REAL programmers don't document...
-!!
 
 
 	 SCC.C - Linux driver for Z8530 based HDLC cards for AX.25      
@@ -763,6 +775,7 @@ If you can't solve a problem, send me
 And always remember: 
 The 1.1.* kernel series is for alpha tests -- use at your own risk ;-)
 The 1.2.* series should run reliable. This driver perhaps NOT!
+The 1.3.* kernel series is for alpha tests again... you get the idea!
 
 ------------
 
@@ -927,7 +940,12 @@ You  m u s t  use "clock dpll" in /etc/z8530drv.rc for operation,
 the on-board baudrate generator is not supported.
 
 *****************
-
-
 (mni tnx to Mike Bilow)
+
  
+...an many thanks to Linus Torvalds and Alan Cox for including the driver
+   in the LinuX standard distribution...
+
+Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
+		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU
+		Internet: jreuter@lykos.tng.oche.de

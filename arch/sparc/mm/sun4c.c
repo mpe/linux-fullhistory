@@ -364,6 +364,13 @@ sun4c_invalidate(void)
 }
 
 void
+sun4c_set_pte(pte_t *ptep, pte_t entry)
+{
+	/* for now... */
+	*ptep = entry;
+}
+
+void
 sun4c_switch_to_context(int context)
 {
 	__asm__ __volatile__("stba %0, [%1] %2" : :
@@ -630,6 +637,7 @@ ld_mmu_sun4c(void)
 	
 	/* Functions */
 	invalidate = sun4c_invalidate;
+	set_pte = sun4c_set_pte;
 	switch_to_context = sun4c_switch_to_context;
 	pmd_align = sun4c_pmd_align;
 	pgdir_align = sun4c_pgdir_align;

@@ -625,7 +625,7 @@ restart_on_error(void)
    }
 
    current->state = TASK_INTERRUPTIBLE;
-   current->timeout = jiffies + 200;
+   current->timeout = jiffies + 2*HZ;
    schedule();
 
    do_sony_cd_cmd(SONY_READ_TOC_CMD, NULL, 0, res_reg, &res_size);
@@ -834,6 +834,7 @@ do_sony_cd_cmd(unsigned char cmd,
             result_buffer[0] = 0x20;
             result_buffer[1] = SONY_SIGNAL_OP_ERR;
             *result_size = 2;
+            restore_flags(flags);
             return;
          }
       }
@@ -887,7 +888,7 @@ retry_cd_operation:
    {
       num_retries++;
       current->state = TASK_INTERRUPTIBLE;
-      current->timeout = jiffies + 10; /* Wait .1 seconds on retries */
+      current->timeout = jiffies + HZ/10; /* Wait .1 seconds on retries */
       schedule();
       goto retry_cd_operation;
    }
@@ -2137,6 +2138,7 @@ read_audio(struct cdrom_read_audio *ra,
       interruptible_sleep_on(&sony_wait);
       if (current->signal & ~current->blocked)
       {
+         restore_flags(flags);
          return -EAGAIN;
       }
    }

@@ -8,6 +8,7 @@
  * This file initializes the trap entry points
  */
 
+#include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
 
@@ -102,21 +103,27 @@ struct allregs {
 
 struct unaligned_stat {
 	unsigned long count, va, pc;
-} unaligned;
+} unaligned[2];
 
 asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 	unsigned long a3, unsigned long a4, unsigned long a5,
 	struct allregs regs)
 {
 	static int cnt = 0;
+	static long last_time = 0;
 
-	if (++cnt < 5)
-		printk("Unaligned trap at %016lx: %p %lx %ld\n",
-			regs.pc, va, opcode, reg);
+	if (cnt >= 5 && jiffies - last_time > 5*HZ) {
+		cnt = 0;
+	}
+	if (++cnt < 5) {
+		printk("kernel: unaligned trap at %016lx: %p %lx %ld\n",
+		       regs.pc - 4, va, opcode, reg);
+	}
+	last_time = jiffies;
 
-	++unaligned.count;
-	unaligned.va = (unsigned long) va - 4;
-	unaligned.pc = regs.pc;
+	++unaligned[0].count;
+	unaligned[0].va = (unsigned long) va - 4;
+	unaligned[0].pc = regs.pc;
 
 	/* $16-$18 are PAL-saved, and are offset by 19 entries */
 	if (reg >= 16 && reg <= 18)
@@ -141,19 +148,98 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 }
 
 /*
- * Handle user-level unaligned fault.  For now, simply send a
- * SIGBUS---there should be little reason for users not wanting to
- * fix their code instead.  Notice that we have the regular kernel
- * stack layout here, so finding the appropriate registers is a little
- * more difficult than in the kernel case.  Also, we'd need to do
- * a "verify_area()" before accessing memory on behalf of the user.
+ * Handle user-level unaligned fault.  Handling user-level unaligned
+ * faults is *extremely* slow and produces nasty messages.  A user
+ * program *should* fix unaligned faults ASAP.
+ *
+ * Notice that we have (almost) the regular kernel stack layout here,
+ * so finding the appropriate registers is a little more difficult
+ * than in the kernel case.
+ *
+ * Finally, we handle regular integer load/stores only.  In
+ * particular, load-linked/store-conditionally and floating point
+ * load/stores are not supported.  The former make no sense with
+ * unaligned faults (they are guaranteed to fail) and I don't think
+ * the latter will occur in any decent program.
  */
-asmlinkage void do_entUnaUser(void *va, unsigned long opcode, unsigned long reg,
-			      unsigned long a3, unsigned long a4, unsigned long a5,
-			      struct pt_regs regs)
+asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg,
+			      unsigned long * frame)
 {
-	regs.pc -= 4;	/* make pc point to faulting insn */
-	send_sig(SIGBUS, current, 1);
+	long dir, size;
+	unsigned long *reg_addr, *pc_addr, usp, zero = 0;
+	static int cnt = 0;
+	static long last_time = 0;
+
+	pc_addr = frame + 7 + 20 + 1;			/* pc in PAL frame */
+
+	if (cnt >= 5 && jiffies - last_time > 5*HZ) {
+		cnt = 0;
+	}
+	if (++cnt < 5) {
+		printk("%s(%d): unaligned trap at %016lx: %p %lx %ld\n",
+		       current->comm, current->pid,
+		       *pc_addr - 4, va, opcode, reg);
+	}
+	last_time = jiffies;
+
+	++unaligned[1].count;
+	unaligned[1].va = (unsigned long) va - 4;
+	unaligned[1].pc = *pc_addr;
+
+	dir = VERIFY_READ;
+	if (opcode > 0x29) {
+		/* it's a stl or stq */
+		dir = VERIFY_WRITE;
+	}
+	size = 4;
+	if (opcode & 1) {
+		/* it's a quadword op */
+		size = 8;
+	}
+	if (verify_area(dir, va, size)) {
+		*pc_addr -= 4;	/* make pc point to faulting insn */
+		send_sig(SIGSEGV, current, 1);
+		return;
+	}
+
+	reg_addr = frame;
+	if (reg < 9) {
+		reg_addr += 7 + reg;			/* v0-t7 in SAVE_ALL frame */
+	} else if (reg < 16) {
+		reg_addr += (reg - 9);			/* s0-s6 in entUna frame */
+	} else if (reg < 19) {
+		reg_addr += 7 + 20 + 3 + (reg - 16);	/* a0-a2 in PAL frame */
+	} else if (reg < 29) {
+		reg_addr += 7 + 9 + (reg - 19);		/* a3-at in SAVE_ALL frame */
+	} else {
+		switch (reg) {
+			case 29:			/* gp in PAL frame */
+				reg_addr += 7 + 20 + 2;
+				break;
+			case 30:			/* usp in PAL regs */
+				usp = rdusp();
+				reg_addr = &usp;
+				break;
+			case 31:			/* zero "register" */
+				reg_addr = &zero;
+				break;
+		}
+	}
+
+	switch (opcode) {
+		case 0x28: *reg_addr = (int) ldl_u(va);	break;	/* ldl */
+		case 0x29: *reg_addr = ldq_u(va);	break;	/* ldq */
+		case 0x2c: stl_u(*reg_addr, va);	break;	/* stl */
+		case 0x2d: stq_u(*reg_addr, va);	break;	/* stq */
+		default:
+			*pc_addr -= 4;	/* make pc point to faulting insn */
+			send_sig(SIGBUS, current, 1);
+			return;
+	}
+
+	if (reg == 30 && dir == VERIFY_WRITE) {
+		wrusp(usp);
+	} 
 }
 
 /*

@@ -25,6 +25,9 @@ asmlinkage int do_signal(unsigned long, struct pt_regs *, struct switch_stack *,
 	unsigned long, unsigned long);
 asmlinkage void imb(void);
 
+extern int ptrace_set_bpt (struct task_struct *child);
+extern int ptrace_cancel_bpt (struct task_struct *child);
+
 /*
  * The OSF/1 sigprocmask calling sequence is different from the
  * C sigprocmask() sequence..
@@ -119,13 +122,19 @@ asmlinkage void do_sigreturn(struct sigcontext_struct * sc,
 	regs->gp  = get_fs_quad(sc->sc_regs+29);
 	for (i = 0; i < 31; i++)
 		sw->fp[i] = get_fs_quad(sc->sc_fpregs+i);
+
+	/* send SIGTRAP if we're single-stepping: */
+	if (ptrace_cancel_bpt (current))
+		send_sig(SIGTRAP, current, 1);
 }
 
 /*
  * Set up a signal frame...
  */
-static void setup_frame(struct sigaction * sa, struct sigcontext_struct ** fp, unsigned long pc,
-	struct pt_regs * regs, struct switch_stack * sw, int signr, unsigned long oldmask)
+static void setup_frame(struct sigaction * sa, struct sigcontext_struct ** fp,
+			unsigned long pc, struct pt_regs * regs,
+			struct switch_stack * sw, int signr,
+			unsigned long oldmask)
 {
 	int i;
 	struct sigcontext_struct * sc;
@@ -212,11 +221,10 @@ asmlinkage int do_signal(unsigned long oldmask,
 	unsigned long handler_signal = 0;
 	struct sigcontext_struct *frame = NULL;
 	unsigned long pc = 0;
-	unsigned long signr;
+	unsigned long signr, single_stepping;
 	struct sigaction * sa;
-	extern ptrace_cancel_bpt (struct task_struct *child);
 
-	ptrace_cancel_bpt(current);	/* make sure single-step bpt is gone */
+	single_stepping = ptrace_cancel_bpt(current);
 
 	while ((signr = current->signal & mask) != 0) {
 		signr = ffz(~signr);
@@ -228,6 +236,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 			current->state = TASK_STOPPED;
 			notify_parent(current);
 			schedule();
+			single_stepping |= ptrace_cancel_bpt(current);
 			if (!(signr = current->exit_code))
 				continue;
 			current->exit_code = 0;
@@ -263,6 +272,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 						SA_NOCLDSTOP))
 					notify_parent(current);
 				schedule();
+				single_stepping |= ptrace_cancel_bpt(current);
 				continue;
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:
@@ -292,12 +302,16 @@ asmlinkage int do_signal(unsigned long oldmask,
 	    (regs->r0 == ERESTARTNOHAND ||
 	     regs->r0 == ERESTARTSYS ||
 	     regs->r0 == ERESTARTNOINTR)) {
-		regs->r0 = r0;
+		regs->r0 = r0;	/* reset v0 and a3 and replay syscall */
 		regs->r19 = r19;
 		regs->pc -= 4;
 	}
-	if (!handler_signal)		/* no handler will be called - return 0 */
+	if (!handler_signal) {	/* no handler will be called - return 0 */
+		if (single_stepping) {
+			ptrace_set_bpt(current);	/* re-set breakpoint */
+		}
 		return 0;
+	}
 	pc = regs->pc;
 	frame = (struct sigcontext_struct *) rdusp();
 	signr = 1;
@@ -318,5 +332,8 @@ asmlinkage int do_signal(unsigned long oldmask,
 	imb();
 	wrusp((unsigned long) frame);
 	regs->pc = pc;			/* "return" to the first handler */
+	if (single_stepping) {
+		ptrace_set_bpt(current);	/* re-set breakpoint */
+	}
 	return 1;
 }

@@ -433,11 +433,11 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 	 * simple, it hopefully works in most obvious cases.. Easy to
 	 * fool it, but this should catch most mistakes.
 	 */
-	freepages = buffermem >> 12;
+	freepages = buffermem >> PAGE_SHIFT;
 	freepages += nr_free_pages;
 	freepages += nr_swap_pages;
 	freepages -= MAP_NR(high_memory) >> 4;
-	freepages -= (newbrk-oldbrk) >> 12;
+	freepages -= (newbrk-oldbrk) >> PAGE_SHIFT;
 	if (freepages < 0)
 		return current->mm->brk;
 #if 0

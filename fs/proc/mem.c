@@ -289,8 +289,8 @@ int mem_mmap(struct inode * inode, struct file * file,
 		if ((vma->vm_flags & VM_WRITE) && !pte_write(*src_table))
 			do_wp_page(src_vma, stmp, 1);
 
-		*src_table = pte_mkdirty(*src_table);
-		*dest_table = *src_table;
+		set_pte(src_table, pte_mkdirty(*src_table));
+		set_pte(dest_table, *src_table);
 		mem_map[MAP_NR(pte_page(*src_table))]++;
 
 		stmp += PAGE_SIZE;

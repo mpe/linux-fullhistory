@@ -232,12 +232,17 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->u_tsize = ((unsigned long) current->mm->end_code) >> 12;
 	dump->u_dsize = ((unsigned long) (current->mm->brk + (PAGE_SIZE-1))) >> 12;
 	dump->u_dsize -= dump->u_tsize;
+	if (verify_area(VERIFY_READ, (void *) dump->u_tsize, dump->u_dsize) < 0)
+		dump->u_dsize = 0;
 	dump->u_ssize = 0;
 	for (i = 0; i < 8; i++)
 		dump->u_debugreg[i] = current->debugreg[i];  
 
-	if (dump->start_stack < TASK_SIZE)
+	if (dump->start_stack < TASK_SIZE) {
 		dump->u_ssize = ((unsigned long) (TASK_SIZE - dump->start_stack)) >> 12;
+		if (verify_area(VERIFY_READ, (void *) dump->start_stack, dump->u_ssize) < 0)
+			dump->u_ssize = 0;
+	}
 
 	dump->regs = *regs;
 
@@ -246,12 +251,11 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 
 asmlinkage int sys_fork(struct pt_regs regs)
 {
-	return do_fork(COPYVM | SIGCHLD, regs.esp, &regs);
+	return do_fork(SIGCHLD, regs.esp, &regs);
 }
 
 asmlinkage int sys_clone(struct pt_regs regs)
 {
-#ifdef CLONE_ACTUALLY_WORKS_OK
 	unsigned long clone_flags;
 	unsigned long newsp;
 
@@ -259,12 +263,7 @@ asmlinkage int sys_clone(struct pt_regs regs)
 	clone_flags = regs.ecx;
 	if (!newsp)
 		newsp = regs.esp;
-	if (newsp == regs.esp)
-		clone_flags |= COPYVM;
 	return do_fork(clone_flags, newsp, &regs);
-#else
-	return -ENOSYS;
-#endif
 }
 
 /*

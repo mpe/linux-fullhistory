@@ -210,7 +210,7 @@ void proc_read_inode(struct inode * inode)
 			case PROC_KCORE:
 				inode->i_mode = S_IFREG | S_IRUSR;
 				inode->i_op = &proc_kcore_inode_operations;
-				inode->i_size = high_memory + PAGE_SIZE;
+				inode->i_size = (MAP_NR(high_memory) << PAGE_SHIFT) + PAGE_SIZE;
 				break;
 #ifdef CONFIG_PROFILE
 			case PROC_PROFILE:

@@ -1,54 +1,107 @@
 #include <linux/autoconf.h>	/* fastest method */
 #ifdef CONFIG_SCC
 
+#define RCS_ID "$Id: scc.c,v 1.25 1995/08/24 21:05:00 jreuter Exp jreuter $"
 
-#define BANNER "Z8530 SCC driver v1.8.17test.17.7.95 PE1AYX (c)\n"
-
-/* ******************************************************************** */
-/* *   SCC.C - Linux driver for Z8530 based HDLC cards for AX.25      *	*/ 
-/* ******************************************************************** */
-
-/* ********************************************************************
-
-	(c) Hans Alblas PE1AYX 1993,1994,1995
-	          Released for GNU
-	portions (c) 1995 by Joerg Reuter DL1BKE
-	         (c) 1993 Guido ten Dolle PE1NNZ
-
-
-   ********************************************************************	*/   
+#define BANNER "Z8530 SCC driver v1.9.dl1bke (beta) by dl1bke\n"
 
 /*
 
+   ********************************************************************
+   *   SCC.C - Linux driver for Z8530 based HDLC cards for AX.25      *
+   ********************************************************************
 
-   931100	- started with the projekt pe1ayx
-   9406??	- KISS-parameter setting and BayCom USCC support dl1bke
-   940613	- fixed memory leak ,main memory fragmentation problem,
-                  speeded up the interupt routines ,has now its own
-                  memory buffer pool and source cleanup. pe1ayx
-   940620	- bug fixed in line disipline change ,local ringbuf
-   		  reorganisation ,and some little bugfixes.
-   940715	- first release to the public (scc15b.tgz) pe1ayx		                
-   950228	- (hopefully) fixed the reason for kernel panics in
-                  chk_rcv_queue() [stupid error] dl1bke
-   950229       - buffer timeout for vergotten buffer :-( pe1ayx                
-   950304       - fixed underrun/zcount handling dl1bke
-   950305	- the driver registers port addresses now dl1bke
-   950314	- fixed underrun interrupt handling again dl1bke
-   950514	- fixed slip tty wakeup (it wil now work again with kernel ax25)pe1ayx
-   950703	- rewrote the 8530 init/reset routines pe1ayx
-   950712	- rewrote the RXirq + buffering routines pe1ayx
-   950716	- It can now handle ax25 rx frame info > 256
-   O		- rewrite TX + buffering (there is a little mem leak ,but
-                  wil not be dangerous since my buffer timeout routine
-                  wil put back vergotten buffers in the queue pe1ayx
-   O		- change the tty i/o so that the tty wakeup is handled properly
-           	  pe1ayx
+
+   ********************************************************************
+
+	(c) 1993 - 1995 by Joerg Reuter DL1BKE
+
+	portions (c) 1994 Hans Alblas PE1AYX 
+	and      (c) 1993 Guido ten Dolle PE1NNZ
+
+   ********************************************************************
    
+   The driver and the programs in this archive are UNDER CONSTRUCTION.
+   The code is likely to fail, and so your kernel could --- even 
+   a whole network. 
+
+   This driver is intended for Amateur Radio use. If you are running it
+   for commercial purposes, please drop me a note. I am nosy...
+
+   ...BUT:
+ 
+   ! You  m u s t  recognize the appropriate legislations of your country !
+   ! before you connect a radio to the SCC board and start to transmit or !
+   ! receive. The GPL allows you to use the  d r i v e r,  NOT the RADIO! !
+
+   For non-Amateur-Radio use please note that you might need a special
+   allowance/licence from the designer of the SCC Board and/or the
+   MODEM. 
+
+   This program is free software; you can redistribute it and/or modify 
+   it under the terms of the (modified) GNU General Public License 
+   delivered with the LinuX kernel source.
+   
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should find a copy of the GNU General Public License in 
+   /usr/src/linux/COPYING; 
+   
+   ******************************************************************** 
+
+
+   ...If you find any portions of the code that are copyrighted to you,
+   and you don't want to see in here, please send me a private (!) 
+   message to my internet site. I will change it as soon as possible. 
+   Please don't flame to the tcp-group or anywhere else. Thanks!
+
+   Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
+		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU
+		Internet: jreuter@lykos.tng.oche.de
+		
+		
+   History of z8530drv:
+   --------------------
+
+   940913	- started to write the driver, rescued most of my own
+		  code (and Hans Alblas' memory buffer pool concept) from 
+		  an earlier project "sccdrv" which was initiated by 
+		  Guido ten Dolle. Not much of the old driver survived, 
+		  though. The first version I put my hands on was sccdrv1.3
+		  from August 1993. The memory buffer pool concept
+		  appeared in an unauthorized sccdrv version (1.5) from
+		  August 1994.
+
+   950131	- changed copyright notice to GPL without limitations.
+   
+   950228	- (hopefully) fixed the reason for kernel panics in
+                  chk_rcv_queue() [stupid error]
+                  
+   950304       - fixed underrun/zcount handling
+   
+   950305	- the driver registers port addresses now
+   
+   950314	- fixed underrun interrupt handling again
+   
+   950512	- (hope to have) fixed hidden re-entrance problem
+   		  in scc_timer()
+   		  
+   950824	- received frames will be sent to the application
+   		  faster, clean-up of z8530_init()
+
    Thanks to:
-   DL1BKE Joerg - for some good ideas
+   ----------
+   
    PE1CHL Rob	- for a lot of good ideas from his SCC driver for DOS
    PE1NNZ Guido - for his port of the original driver to Linux
+   KA9Q   Phil  - from whom we stole the mbuf-structure
+   PA3AYX Hans  - who rewrote parts of the memory management and some 
+   		  minor, but nevertheless useful changes
+   DL8MBT Flori - for support
+   DG0FT  Rene  - for the BayCom USCC support
    PA3AOU Harry - for ESCC testing, information supply and support
    
    PE1KOX Rob, DG1RTF Thomas, ON5QK Roland, 
@@ -56,9 +109,17 @@
    and all who sent me bug reports and ideas... 
    
    
-      
+   NB -- if you find errors, change something, please let me know
+      	 first before you distribute it... And please don't touch
+   	 the version number. Just replace my callsign in
+   	 "v1.9.dl1bke" with your own. Just to avoid confusion...
+   	 
+   If you want to add your modification to the linux distribution
+   please (!) contact me first.
+   	  
+   Jörg Reuter DL1BKE
+  
 */
-
 
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -87,8 +148,17 @@
 #include <asm/segment.h>
 #include <asm/bitops.h>
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <time.h>
 #include <linux/kernel.h>
 
+#ifndef Z8530_MAJOR
+#define Z8530_MAJOR 22
+#endif
+
+long scc_init(long kmem_start);
 
 int scc_open(struct tty_struct *tty, struct file *filp);
 static void scc_close(struct tty_struct *tty, struct file *filp);
@@ -108,6 +178,8 @@ static void scc_stop(struct tty_struct *tty);
 static void z8530_init(void);
 
 static void scc_change_speed(struct scc_channel *scc);
+static void kiss_encode(struct scc_channel *scc);
+
 static void init_channel(struct scc_channel *scc);
 static void scc_key_trx (struct scc_channel *scc, char tx);
 static void scc_txint(register struct scc_channel *scc);
@@ -117,23 +189,16 @@ static void scc_spint(register struct scc_channel *scc);
 static void scc_isr(int irq, struct pt_regs *regs);
 static void scc_timer(void);
 static void scc_init_timer(struct scc_channel *scc);
+static void scc_rx_timer(void);
 
 /* from serial.c */
-
-#ifndef MIN
-#define MIN(a,b)	((a) < (b) ? (a) : (b))
-#endif
-
-static unsigned char *tmp_buf = 0;
-static struct semaphore tmp_buf_sem = MUTEX;
-static unsigned int start_controle;
 
 static int baud_table[] = {
 	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
 	9600, 19200, 38400, 57600, 115200, 0 };
 
 
-struct tty_driver scc_driver;		    /* new in 1.1.xx */
+struct tty_driver scc_driver;
 static int scc_refcount;
 static struct tty_struct *scc_table[2*MAXSCC];
 static struct termios scc_termios[2 * MAXSCC];
@@ -146,8 +211,7 @@ unsigned char Driver_Initialized = 0;
 static struct sccbuf *sccfreelist[MAX_IBUFS] = {0};
 static int allocated_ibufs = 0;
 
-#define SERIAL_TYPE_NORMAL	1
-
+static struct rx_timer_CB rx_timer_cb;
 
 /* ******************************************************************** */
 /* *			Port Access Functions			      * */
@@ -203,6 +267,10 @@ cl(register struct scc_channel *scc, register unsigned char reg, register unsign
 /* * 			Memory Buffer Management			*/
 /* ******************************************************************** */
 
+/* mbuf concept lent from KA9Q. Tnx PE1AYX for the buffer pool concept	*/
+/* (sorry, do you have any better ideas?) */
+
+
 /* allocate memory for the interrupt buffer pool */
 
 void scc_alloc_buffer_pool(void)
@@ -210,8 +278,6 @@ void scc_alloc_buffer_pool(void)
 	int i;
 	struct sccbuf *sccb;
 	struct mbuf   *bp;
-	
-	start_controle = 0;
 	
    	for (i = 0 ; i < MAX_IBUFS ; i++)
    	{
@@ -290,7 +356,6 @@ scc_get_buffer(char type)
 			sccfreelist[i]->bp->refcnt = 1;
 			sccfreelist[i]->bp->cnt = 0;
 			sccfreelist[i]->bp->in_use = 0;
-			sccfreelist[i]->bp->time_out = CURRENT_TIME + 300;
 		
 			restore_flags(flags);
 			return sccfreelist[i]->bp;
@@ -319,33 +384,7 @@ scc_return_buffer(register struct mbuf *bp, char type)
 		
 	save_flags(flags); cli();
 	bpnext = bp->next;
-/*=========================================================================*/	
-/*==      THIS IS A LITTLE ROUTINE TO FIX THE TX MEM LEAK                ==*/
-/*==             UNTIL I HAVE REWRITE THE TX ROUTINES                    ==*/
-/*==                 PE1AYX@PI8HRL.AMPR.ORG                              ==*/
-/*=========================================================================*/
-
-	 start_controle++;
-	 if(start_controle > 100){
-	  if(bp->type == BT_TRANSMIT){
-	    start_controle = 0;
-	    for(i = 0 ; i < allocated_ibufs ; i++)
-	    {
-	       if(sccfreelist[i]->inuse == 1)
-	        if(sccfreelist[i]->bp->type == BT_TRANSMIT)
-	         if(sccfreelist[i]->bp->time_out < CURRENT_TIME)
-		    {
-			sccfreelist[i]->bp->cnt = 0;
-			sccfreelist[i]->bp->refcnt = 0;
-			sccfreelist[i]->inuse = 0;
-		    }
- 	     }
-           } 
-	 }
-/*=========================================================================*/
-/*==                END OF THAT SILLY STUPID ROUTINE                     ==*/
-/*=========================================================================*/	 
-
+	
 	if (bp->dup)
 	{
 		for(i = 0 ; i < allocated_ibufs ; i++)
@@ -412,7 +451,7 @@ scc_free_chain(register struct mbuf *bp, char type)
 	abp = bp->anext;
 	while (bp) bp = scc_return_buffer(bp, type);
 		
-	restore_flags(flags); cli();
+	restore_flags(flags);
 	return abp;
 }
 
@@ -512,13 +551,13 @@ scc_isr(int irq, struct pt_regs *regs)
 	
 	if (Vector_Latch)
 	{
-	    	while(1)
+	    	while(1)			   /* forever...? */
     		{ 
 			Outb(Vector_Latch, 0);      /* Generate INTACK */
         
 			/* Read the vector */
-			if((vector=Inb(Vector_Latch)) >= 16 * Nchips)
-				break; 
+			if((vector=Inb(Vector_Latch)) >= 16 * Nchips) break; 
+						/* ...not forever! */
           
 			/* Extract channel number and status from vector. */
 			/* Isolate channel nummer */
@@ -650,19 +689,38 @@ scc_txint(register struct scc_channel *scc)
 /* Throw away received mbuf(s) when an error occurred */
 
 static inline void
+scc_toss_buffer(register struct scc_channel *scc)
+{
+	register struct mbuf *bp;
+	
+	if((bp = scc->rbp) != NULLBUF)
+	{
+		scc_free_chain(bp->next, BT_RECEIVE);
+		bp->next = NULLBUF;
+		scc->rbp1 = bp;         /* Don't throw this one away */
+		bp->cnt = 0;            /* Simply rewind it */
+		bp->in_use = 0;
+	}
+}
+
+static inline void
 flush_FIFO(register struct scc_channel *scc)
 {
 	register int k;
 	
 	for (k=0; k<3; k++)
 		Inb(scc->data);
-
-	if(scc->rxbufcnt > 0)
+		
+	if(scc->rbp != NULLBUF)	/* did we receive something? */
 	{
-		scc->stat.rxerrs++;
-		scc->rxbufcnt = 0;         /* throw away frame */
+		if(scc->rbp->next != NULLBUF || scc->rbp->cnt > 0)
+			scc->stat.rxerrs++;  /* then count it as an error */
+			
+		scc_toss_buffer(scc);         /* throw away buffer */
 	}
 }
+
+
 
 /* External/Status interrupt handler */
 static void
@@ -741,7 +799,7 @@ scc_exint(register struct scc_channel *scc)
 static void
 scc_rxint(register struct scc_channel *scc)
 {
-	unsigned char ch;
+	register struct mbuf *bp;
 
 	scc->stat.rxints++;
 
@@ -752,120 +810,98 @@ scc_rxint(register struct scc_channel *scc)
 		return;
 	}
 
-	if (scc->rxbufcnt > 2044)		/* no buffer available? */
-	{
-		Inb(scc->data);		/* discard character */
-		or(scc,R3,ENT_HM);      /* enter hunt mode */
-		scc->rxbufcnt = 0;	/* throw away frame */
-		scc->stat.nospace++;    /* and count this error */
-		return;
+	if ((bp = scc->rbp1) == NULLBUF || bp->cnt >= bp->size)	
+	{ 				/* no buffer available or buffer full */
+		if (scc->rbp == NULLBUF)
+		{
+			if ((bp = scc_get_buffer(BT_RECEIVE)) != NULLBUF)
+				scc->rbp = scc->rbp1 = bp;
+				
+		}
+		else if ((bp = scc_get_buffer(BT_RECEIVE)))
+		{
+			scc_append_to_chain(&scc->rbp, bp);
+			scc->rbp1 = bp;
+		}
+		
+		if (bp == NULLBUF)		/* no buffer available? */
+		{
+			Inb(scc->data);		/* discard character */
+			or(scc,R3,ENT_HM);      /* enter hunt mode */
+			scc_toss_buffer(scc);	/* throw away buffers */
+			scc->stat.nospace++;    /* and count this error */
+			return;
+		}
 	}
 
-	if(scc->rxbufcnt == 0) /* make begin of kissframe */
-	{
-		scc->rxbuf[scc->rxbufcnt++] = FEND;
-		if (scc->kiss.not_slip)
-			scc->rxbuf[scc->rxbufcnt++] = 0;
-	}
-
-	switch( ch = Inb(scc->data) )
-	{
-		case FEND:
-			scc->rxbuf[scc->rxbufcnt++] = FESC;
-			scc->rxbuf[scc->rxbufcnt++] = TFEND;
-			break;
-		case FESC:
-			scc->rxbuf[scc->rxbufcnt++] = FESC;
-			scc->rxbuf[scc->rxbufcnt++] = TFESC;
-			break;
-		default:
-			scc->rxbuf[scc->rxbufcnt++] = ch;
-	}
-
+	/* now, we have a buffer. read character and store it */
+	bp->data[bp->cnt++] = Inb(scc->data);
 }
 
+/* kick rx_timer (try to send received frame or part of it ASAP) */
+/* !experimental! */
+
+static inline void
+kick_rx_timer(register struct scc_channel *scc)
+{
+	register unsigned long expires;
+
+	if (!rx_timer_cb.lock)
+	{
+		expires = timer_table[SCC_TIMER].expires - jiffies;
+
+		rx_timer_cb.expires = (expires > 1)? expires:1;
+		rx_timer_cb.scc = scc;
+		rx_timer_cb.lock = 1;
+	
+		timer_table[SCC_TIMER].fn = scc_rx_timer;
+		timer_table[SCC_TIMER].expires = jiffies + 1;
+		timer_active |= 1 << SCC_TIMER;
+	}
+}
 
 /* Receive Special Condition interrupt handler */
 static void
 scc_spint(register struct scc_channel *scc)
 {
 	register unsigned char status;
-	int i;
-	unsigned char	*cp;
-	char		*fp;
-	int		count;
-
+	register struct mbuf *bp;
 
 	scc->stat.spints++;
 
-	status = InReg(scc->ctrl,R1);		/* read Special Receive Condition status */
+	status = InReg(scc->ctrl,R1);		/* read receiver status */
 	
-	Inb(scc->data);				/* read byte */
+	Inb(scc->data);				/* throw away Rx byte */
 
-	if(status & Rx_OVR)			/* RX_OVerRrun? */
+	if(status & Rx_OVR)			/* receiver overrun */
 	{
-		scc->stat.rx_over++;
-		or(scc,R3,ENT_HM);              /* enter hunt mode */
-		scc->rxbufcnt = 0;              /* rewind the buffer */
+		scc->stat.rx_over++;                /* count them */
+		or(scc,R3,ENT_HM);              /* enter hunt mode for next flag */
+		scc_toss_buffer(scc);                 /* rewind the buffer and toss */
 	}
 	
-	if(status & END_FR && scc->rxbufcnt != 0)	/* END of FRame */
+	if(status & END_FR && scc->rbp != NULLBUF)	/* end of frame */
 	{
-		if (!(status & CRC_ERR) && (status & 0xe) == RES8 && scc->rxbufcnt > 0)
+		/* CRC okay, frame ends on 8 bit boundary and received something ? */
+		
+		if (!(status & CRC_ERR) && (status & 0xe) == RES8 && scc->rbp->cnt)
 		{
-		   scc->rxbufcnt--;	/*strip the CRC */
-  		   scc->rxbuf[scc->rxbufcnt++] = FEND;
-
-		   for(i = 0 ; i < scc->rxbufcnt ; i++)
-			{
-			if((scc->tty->flip.count + 1) < TTY_FLIPBUF_SIZE)
-				tty_insert_flip_char(scc->tty, scc->rxbuf[i], 0);
-			else    {
-				if (scc->tty->flip.buf_num) {
-					cp = scc->tty->flip.char_buf + TTY_FLIPBUF_SIZE;
-					fp = scc->tty->flip.flag_buf + TTY_FLIPBUF_SIZE;
-					scc->tty->flip.buf_num = 0;
-					scc->tty->flip.char_buf_ptr = scc->tty->flip.char_buf;
-					scc->tty->flip.flag_buf_ptr = scc->tty->flip.flag_buf;
-				} else {
-					cp = scc->tty->flip.char_buf;
-					fp = scc->tty->flip.flag_buf;
-					scc->tty->flip.buf_num = 1;
-					scc->tty->flip.char_buf_ptr = scc->tty->flip.char_buf + TTY_FLIPBUF_SIZE;
-					scc->tty->flip.flag_buf_ptr = scc->tty->flip.flag_buf + TTY_FLIPBUF_SIZE;
-					}
-				count = scc->tty->flip.count;
-				scc->tty->flip.count = 0;
-				scc->tty->ldisc.receive_buf(scc->tty, cp, fp, count);
-				tty_insert_flip_char(scc->tty, scc->rxbuf[i], 0);
-				}
-			}
-
-		if (scc->tty->flip.buf_num) {
-			cp = scc->tty->flip.char_buf + TTY_FLIPBUF_SIZE;
-			fp = scc->tty->flip.flag_buf + TTY_FLIPBUF_SIZE;
-			scc->tty->flip.buf_num = 0;
-			scc->tty->flip.char_buf_ptr = scc->tty->flip.char_buf;
-			scc->tty->flip.flag_buf_ptr = scc->tty->flip.flag_buf;
-		} else {
-			cp = scc->tty->flip.char_buf;
-			fp = scc->tty->flip.flag_buf;
-			scc->tty->flip.buf_num = 1;
-			scc->tty->flip.char_buf_ptr = scc->tty->flip.char_buf + TTY_FLIPBUF_SIZE;
-			scc->tty->flip.flag_buf_ptr = scc->tty->flip.flag_buf + TTY_FLIPBUF_SIZE;
-			}
-		count = scc->tty->flip.count;
-		scc->tty->flip.count = 0;
-		scc->tty->ldisc.receive_buf(scc->tty, cp, fp, count);
-		scc->stat.rxframes++;
-
-		scc->rxbufcnt = 0;
+			/* ignore last received byte (first of the CRC bytes) */
 			
-		} else {
-			scc->rxbufcnt = 0;		/* frame is not good */
+			for (bp = scc->rbp; bp->next != NULLBUF; bp = bp->next) ;
+				bp->cnt--;              /* last byte is first CRC byte */
+				
+			scc_enqueue(&scc->rcvq,scc->rbp);
+			scc->rbp = scc->rbp1 = NULLBUF;
+			scc->stat.rxframes++;
+			scc->stat.rx_queued++;
+			kick_rx_timer(scc);
+		} else {				/* a bad frame */
+			scc_toss_buffer(scc);		/* throw away frame */
 			scc->stat.rxerrs++;
-	  		}		
+		}
 	}
+	
 	Outb(scc->ctrl,ERR_RES);
 }
 
@@ -919,7 +955,6 @@ init_channel(register struct scc_channel *scc)
 	wr(scc,R5,Tx8|DTR|TxCRC_ENAB);	/* TX 8 bits/char, disabled, DTR */
 	wr(scc,R6,0);			/* SDLC address zero (not used) */
 	wr(scc,R7,FLAG);		/* SDLC flag value */
-	wr(scc,R9,VIS);			/* vector includes status */
 	wr(scc,R10,(scc->modem.nrz? NRZ : NRZI)|CRCPS|ABUNDER); /* abort on underrun, preset CRC generator, NRZ(I) */
 	wr(scc,R14, 0);
 
@@ -990,7 +1025,7 @@ init_channel(register struct scc_channel *scc)
 	Outb(scc->ctrl,RES_EXT_INT);	/* must be done twice */
 	
 	scc->status = InReg(scc->ctrl,R0);	/* read initial status */
-	scc->rxbufcnt = 0;
+
 	or(scc,R1,INT_ALL_Rx|TxINT_ENAB|EXT_INT_ENAB); /* enable interrupts */
 	or(scc,R9,MIE);			/* master interrupt enable */
 			
@@ -1198,22 +1233,57 @@ static inline void maxk_idle_timeout(register struct scc_channel *scc)
 	scc->t_tail = scc->kiss.tailtime;
 }
 
+static inline void check_rcv_queue(register struct scc_channel *scc)
+{
+	register struct mbuf *bp;
+	
+	if (scc->stat.rx_queued > QUEUE_THRES)
+	{
+		if (scc->rcvq == NULLBUF)
+		{
+			printk("z8530drv: Warning - scc->stat.rx_queued shows overflow"
+			       " (%d) but queue is empty\n", scc->stat.rx_queued);
+			       
+			scc->stat.rx_queued = 0;	/* correct it */
+			scc->stat.nospace = 12345;	/* draw attention to it */
+			return;
+		}
+			
+		bp = scc->rcvq->anext;	/* don't use the one we currently use */
+		
+		while (bp && (scc->stat.rx_queued > QUEUE_HYST))
+		{
+			bp = scc_free_chain(bp, BT_RECEIVE);
+			scc->stat.rx_queued--;
+			scc->stat.nospace++;
+		}
+		
+		scc->rcvq->anext = bp;
+	}
+}
+
 static void
 scc_timer(void)
 {
 	register struct scc_channel *scc;
 	register int chan;
 	unsigned long flags;
+		
 
-	save_flags(flags); cli();
-	
 	for (chan = 0; chan < (Nchips * 2); chan++)
 	{
 		scc = &SCC_Info[chan];
 		
 		if (scc->tty && scc->init)
 		{
+			kiss_encode(scc);
+			
+			save_flags(flags); cli();
+			
+			check_rcv_queue(scc);
+			
 			/* KISS-TNC emulation */
+			
 			if (Expired(t_dwait)) dw_slot_timeout(scc)	; else
 			if (Expired(t_slot))  dw_slot_timeout(scc)	; else
 			if (Expired(t_txdel)) txdel_timeout(scc)   	; else
@@ -1224,10 +1294,12 @@ scc_timer(void)
 			if (Expired(t_mbusy)) busy_timeout(scc);
 			if (Expired(t_maxk))  maxk_idle_timeout(scc);
 			if (Expired(t_idle))  maxk_idle_timeout(scc);
-
+			
+			restore_flags(flags);
 		}
 	}
-
+	
+	save_flags(flags); cli();
 	
 	timer_table[SCC_TIMER].fn = scc_timer;
 	timer_table[SCC_TIMER].expires = jiffies + HZ/TPS;
@@ -1257,6 +1329,24 @@ scc_init_timer(struct scc_channel *scc)
 }
 
 
+static void
+scc_rx_timer(void)
+{
+	unsigned long flags;
+	
+	kiss_encode(rx_timer_cb.scc);
+	
+	save_flags(flags); cli();
+	
+	timer_table[SCC_TIMER].fn = scc_timer;
+	timer_table[SCC_TIMER].expires = jiffies + rx_timer_cb.expires;
+	timer_active |= 1 << SCC_TIMER;
+	
+	rx_timer_cb.lock = 0;
+	
+	restore_flags(flags);
+}
+
 
 /* ******************************************************************** */
 /* *			KISS interpreter			      * */
@@ -1284,7 +1374,7 @@ kiss_set_param(struct scc_channel *scc,char cmd, unsigned int val)
 	case PARAM_TXTAIL:
 		scc->kiss.tailtime = VAL; break;
 	case PARAM_FULLDUP:
-		scc->kiss.fulldup = val; break; 
+		scc->kiss.fulldup = val; break;
 	case PARAM_WAIT:
 		scc->kiss.waittime = VAL; break;
 	case PARAM_MAXKEY:
@@ -1448,6 +1538,97 @@ static inline int kiss_decode(struct scc_channel *scc, unsigned char ch)
 	
 }
 
+/* ----> Encode received data and write it to the flip-buffer  <---- */
+
+/* receive raw frame from SCC. used for AX.25 */
+static void
+kiss_encode(register struct scc_channel *scc)
+{
+	struct mbuf *bp,*bp2;
+	struct tty_struct * tty = scc->tty;
+	unsigned long flags; 
+	unsigned char ch;
+
+	if(!scc->rcvq)
+	{
+		scc->stat.rx_kiss_state = KISS_IDLE;
+		return;
+	}
+	
+	/* worst case: FEND 0 FESC TFEND -> 4 bytes */
+	
+	while(tty->flip.count < TTY_FLIPBUF_SIZE-3)
+	{ 
+		if (scc->rcvq->cnt)
+		{
+			bp = scc->rcvq;
+			
+			if (scc->stat.rx_kiss_state == KISS_IDLE)
+			{
+				tty_insert_flip_char(tty, FEND, 0);
+				
+				if (scc->kiss.not_slip)
+					tty_insert_flip_char(tty, 0, 0);
+					
+				scc->stat.rx_kiss_state = KISS_RXFRAME;
+			}
+				
+			switch(ch = bp->data[bp->in_use++])
+			{
+				case FEND:
+					tty_insert_flip_char(tty, FESC, 0);
+					tty_insert_flip_char(tty, TFEND, 0);
+					break;
+				case FESC:
+					tty_insert_flip_char(tty, FESC, 0);
+					tty_insert_flip_char(tty, TFESC, 0);
+					break;
+				default:
+					tty_insert_flip_char(tty, ch, 0);
+			}
+			
+			bp->cnt--;
+			
+ 		} else {
+			save_flags(flags); cli();
+			
+			while (!scc->rcvq->cnt)
+	 		{				 /* buffer empty? */
+				bp  = scc->rcvq->next;  /* next buffer */
+				bp2 = scc->rcvq->anext; /* next packet */
+				
+				
+				scc_return_buffer(scc->rcvq, BT_RECEIVE);
+				
+				if (!bp)	/* end of frame ? */
+				{
+					scc->rcvq = bp2;
+					
+					if (--scc->stat.rx_queued < 0)
+						scc->stat.rx_queued = 0;
+					
+					if (scc->stat.rx_kiss_state == KISS_RXFRAME)	/* new packet? */
+					{
+						tty_insert_flip_char(tty, FEND, 0); /* send FEND for old frame */
+						scc->stat.rx_kiss_state = KISS_IDLE; /* generate FEND for new frame */
+					}
+					
+					restore_flags(flags);
+					queue_task(&tty->flip.tqueue, &tq_timer);
+					return;
+					
+				} else scc->rcvq = bp; /* next buffer */
+			}
+			
+			restore_flags(flags);
+		}						
+		
+	}
+	
+ 	queue_task(&tty->flip.tqueue, &tq_timer); /* kick it... */
+}
+
+
 /* ******************************************************************* */
 /* *		Init channel structures, special HW, etc...	     * */
 /* ******************************************************************* */
@@ -1460,7 +1641,7 @@ z8530_init(void)
 	int chip;
 	unsigned long flags;
 
-	/* reset all scc chips */
+	/* reset and pre-init all chips in the system */
 	for (chip = 0; chip < Nchips; chip++)
 	{
 		/* Special SCC cards */
@@ -1469,27 +1650,27 @@ z8530_init(void)
 			Outb(Special_Port,0x08);	/* enable interrupt on the board */
 			
 		if(Board & (PC100 | PRIMUS))		/* this is a PC100/EAGLE card */
-			Outb(Special_Port,Option);	/* set the MODEM mode (22H normally) */
+			Outb(Special_Port,Option);	/* set the MODEM mode (0x22) */
 			
+		/* Init SCC */
+		
 		scc=&SCC_Info[2*chip];
 		if (!scc->ctrl) continue;
 		
 		save_flags(flags); cli();
 		
-		OutReg(scc->ctrl,R9,FHWRES);	/* force hardware reset */
-		OutReg(scc->ctrl,R9,0);		/* end hardware reset */
-		OutReg(scc->ctrl,R9,CHRA);	/* reset channel A */
-		OutReg(scc->ctrl,R9,CHRB);	/* reset channel B */
-		OutReg(scc->ctrl,R1, 0);	/* No Rx irq from channel A */
-		scc=&SCC_Info[2*chip+1];
-		OutReg(scc->ctrl,R1, 0);	/* No Rx irq from channel B */
-		scc=&SCC_Info[2*chip];
-		OutReg(scc->ctrl,R2, chip*16);	/* Set Interrupt vector */
- 
+		/* some general init we can do now */
+		
+		Outb(scc->ctrl, 0);
+		OutReg(scc->ctrl,R9,FHWRES);		/* force hardware reset */
+		udelay(100);				/* give it 'a bit' more time than required */
+		wr(scc, R2, chip*16);			/* interrupt vector */
+		wr(scc, R9, VIS);			/* vector includes status */
+
         	restore_flags(flags);
         }
 
-	if (Ivec == 2) Ivec = 9;
+	if (Ivec == 2) Ivec = 9;			/* this f... IBM AT-design! */
 	request_irq(Ivec, scc_isr,   SA_INTERRUPT, "AX.25 SCC");
  
 	Driver_Initialized = 1;
@@ -1541,9 +1722,6 @@ int scc_open(struct tty_struct *tty, struct file * filp)
  	scc = &SCC_Info[chan];
  	
 	tty->driver_data = scc;
-        tty->termios->c_iflag = IGNBRK | IGNPAR;
-        tty->termios->c_cflag = B9600 | CS8 | CLOCAL;
-
  	tty->termios->c_cflag &= ~CBAUD; 
  	
 	if (!Driver_Initialized)
@@ -1574,28 +1752,7 @@ int scc_open(struct tty_struct *tty, struct file * filp)
 	timer_table[SCC_TIMER].fn = scc_timer;
 	timer_table[SCC_TIMER].expires = 0;	/* now! */
 	timer_active |= 1 << SCC_TIMER;
-
-/*====================new pe1ayx====================
-planed for the new TX routines
-
-	if (!scc->xmit_buf) {
-		scc->xmit_buf = (unsigned char *) get_free_page(GFP_KERNEL);
-		if (!scc->xmit_buf)
-			return -ENOMEM;
-	}
-
-	scc->xmit_cnt = scc->xmit_head = scc->xmit_tail = 0;
-
-
-====================new pe1ayx end================*/
-
-	if (!tmp_buf) {
-		tmp_buf = (unsigned char *) get_free_page(GFP_KERNEL);
-		if (!tmp_buf)
-			return -ENOMEM;
-	}
-
-
+	
 	return 0;
 }
 
@@ -1748,7 +1905,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 				scc->kiss.softdcd = 0;		   /* hardware dcd */
 			}
 			
-			scc->init = 1;
+			scc->init = 1;			
 			
 			return 0;
 		}
@@ -1773,7 +1930,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 		
 		restore_flags(flags);
 			
-		put_fs_long(result,(unsigned long *) arg);
+		put_user_long(result,(unsigned int *) arg);
 		return 0;
 	case TIOCMBIS:
 	case TIOCMBIC:
@@ -1788,7 +1945,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 			scc->wreg[R5] &= ~RTS;
 			break;
 		case TIOCMSET:
-			value = get_fs_long((unsigned long *) arg);
+			value = get_user_long((unsigned int *) arg);
 			
 			if(value & TIOCM_DTR)
 				scc->wreg[R5] |= DTR;
@@ -1974,7 +2131,6 @@ static inline void check_tx_queue(register struct scc_channel *scc)
 		
 		scc->sndq1->anext = bp;
 	}
-	
 }
 
 
@@ -1984,14 +2140,12 @@ static inline void check_tx_queue(register struct scc_channel *scc)
 /* send raw frame to SCC. used for AX.25 */
 int scc_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count)
 {
-	unsigned long flags;
-	static unsigned char *p;
 	struct scc_channel * scc = tty->driver_data;
+	unsigned char tbuf[BUFSIZE], *p;
 	int cnt, cnt2;
-
-	if (!tty || !tmp_buf)
-		return 0;
-		
+	
+	if (!tty) return count;
+	
 	if (scc_paranoia_check(scc, tty->device, "scc_write"))
 		return 0;
 
@@ -1999,43 +2153,31 @@ int scc_write(struct tty_struct *tty, int from_user, const unsigned char *buf, i
 	
 	check_tx_queue(scc);
 
-	save_flags(flags);
-
 	cnt2 = count;
 	
 	while (cnt2)
 	{
-		cli();
-		cnt   = cnt2 > SERIAL_XMIT_SIZE? SERIAL_XMIT_SIZE:cnt2;
+		cnt   = cnt2 > BUFSIZE? BUFSIZE:cnt2;
 		cnt2 -= cnt;
 		
-		if (from_user){
-			down(&tmp_buf_sem);
-			memcpy_fromfs(tmp_buf, buf, cnt);
-			up(&tmp_buf_sem);
-			}
+		if (from_user)
+			memcpy_fromfs(tbuf, buf, cnt);
 		else
-			memcpy(tmp_buf, buf, cnt);
+			memcpy(tbuf, buf, cnt);
 		
 		buf += cnt;
 			
-		p=tmp_buf;
+		p=tbuf;
 		
 		while(cnt--) 
 		  if (kiss_decode(scc, *p++))
 		  {
 		  	scc->stat.nospace++;
-		  	restore_flags(flags);
 		  	return 0;
 		  }
 		  	
 	} /* while cnt2 */
-		
-	if ((scc->tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) 
-	     && scc->tty->ldisc.write_wakeup)
-		(scc->tty->ldisc.write_wakeup)(scc->tty);
-
-	restore_flags(flags);
+	
 	return count;
 }
 				
@@ -2059,7 +2201,7 @@ static void scc_flush_chars(struct tty_struct * tty)
 	struct scc_channel *scc = tty->driver_data;
 	
 	scc_paranoia_check(scc, tty->device, "scc_flush_chars"); /* just to annoy the user... */
-
+	
 	return;	/* no flush needed */
 }
 
@@ -2068,7 +2210,7 @@ static void scc_flush_chars(struct tty_struct * tty)
 static int scc_write_room(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
-
+	
 	if (scc_paranoia_check(scc, tty->device, "scc_write_room"))
 		return 0;
 	
@@ -2084,7 +2226,7 @@ static int scc_write_room(struct tty_struct *tty)
 static int scc_chars_in_buffer(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
-
+	
 	if (scc && scc->sndq2)
 		return scc->sndq2->cnt;
 	else
@@ -2094,35 +2236,37 @@ static int scc_chars_in_buffer(struct tty_struct *tty)
 static void scc_flush_buffer(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
-
+	
 	if (scc_paranoia_check(scc, tty->device, "scc_flush_buffer"))
 		return;
 		
 	scc->stat.tx_kiss_state = KISS_IDLE;
-
+	
+	wake_up_interruptible(&tty->write_wait);
+	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
+	    tty->ldisc.write_wakeup)
+		(tty->ldisc.write_wakeup)(tty);
 }
 
 static void scc_throttle(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
-
+	
 	if (scc_paranoia_check(scc, tty->device, "scc_throttle"))
 		return;
 		
 		
 	/* dummy */
-	
 }
 
 static void scc_unthrottle(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
-
+	
 	if (scc_paranoia_check(scc, tty->device, "scc_unthrottle"))
 		return;
 		
 	/* dummy */
-	
 }
 
 static void scc_start(struct tty_struct *tty)
@@ -2146,14 +2290,6 @@ static void scc_stop(struct tty_struct *tty)
 	/* dummy */
 }
 
-void scc_hangup(struct tty_struct *tty)
-{
-	struct scc_channel *scc = tty->driver_data;
-	
-	if (scc_paranoia_check(scc, tty->device, "scc_hangup"))
-		return;
-}
-
 
 /* ******************************************************************** */
 /* * 			Init SCC driver 			      * */
@@ -2161,11 +2297,7 @@ void scc_hangup(struct tty_struct *tty)
 
 long scc_init (long kmem_start)
 {
-
-	int chip;
-#ifdef VERBOSE_BOOTMSG
-	int chan;
-#endif	
+	int chip, chan;
 	register io_port ctrl;
 	long flags;
 	
@@ -2173,35 +2305,35 @@ long scc_init (long kmem_start)
         memset(&scc_driver, 0, sizeof(struct tty_driver));
         scc_driver.magic = TTY_DRIVER_MAGIC;
         scc_driver.name = "sc";
-        scc_driver.major = TTY_MAJOR;		
-        scc_driver.minor_start = 96;
+        scc_driver.major = Z8530_MAJOR;		
+        scc_driver.minor_start = 0;
         scc_driver.num = Nchips*2;
         scc_driver.type = TTY_DRIVER_TYPE_SERIAL;
-        scc_driver.subtype = SERIAL_TYPE_NORMAL;			/* not needed */
+        scc_driver.subtype = 0;			/* not needed */
         scc_driver.init_termios = tty_std_termios;
-        scc_driver.init_termios.c_iflag = IGNBRK | IGNPAR;
-        scc_driver.init_termios.c_cflag = B9600	| CS8 | CLOCAL;
+        scc_driver.init_termios.c_cflag = B9600	| CS8 | CREAD | HUPCL | CLOCAL;
         scc_driver.flags = TTY_DRIVER_REAL_RAW;
         scc_driver.refcount = &scc_refcount;	/* not needed yet */
         scc_driver.table = scc_table;
         scc_driver.termios = (struct termios **) scc_termios;
         scc_driver.termios_locked = (struct termios **) scc_termios_locked;
-
         scc_driver.open = scc_open;
         scc_driver.close = scc_close;
         scc_driver.write = scc_write;
+        scc_driver.start = scc_start;
+        scc_driver.stop = scc_stop;
+        
         scc_driver.put_char = scc_put_char;
         scc_driver.flush_chars = scc_flush_chars;        
 	scc_driver.write_room = scc_write_room;
 	scc_driver.chars_in_buffer = scc_chars_in_buffer;
 	scc_driver.flush_buffer = scc_flush_buffer;
-        scc_driver.ioctl = scc_ioctl;
+	
 	scc_driver.throttle = scc_throttle;
 	scc_driver.unthrottle = scc_unthrottle;
+        
+        scc_driver.ioctl = scc_ioctl;
         scc_driver.set_termios = scc_set_termios;
-        scc_driver.stop = scc_stop;
-        scc_driver.start = scc_start;
-        scc_driver.hangup = scc_hangup;
         
         if (tty_register_driver(&scc_driver))
            panic("Couldn't register Z8530 SCC driver\n");
@@ -2253,6 +2385,12 @@ long scc_init (long kmem_start)
  
         	restore_flags(flags);
         }
+
+#ifdef DO_FAST_RX
+        rx_timer_cb.lock = 0;
+#else
+	rx_timer_cb.lock = 1;
+#endif
         
 #ifdef VERBOSE_BOOTMSG
 	printk("Init Z8530 driver: %u channels, using irq %u\n",Nchips*2,Ivec);

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.10  Aug 26, 1995
+ *  linux/drivers/block/ide.c	Version 5.11  Aug 29, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -124,12 +124,18 @@
  *			added ATAPI reset sequence for cdroms
  *  Version 5.10	added Bus-Mastered DMA support for Triton Chipset
  *			some (mostly) cosmetic changes
+ *  Version 5.11	added ht6560b support by malafoss@snakemail.hut.fi
+ *			reworked PCI scanning code
+ *			added automatic RZ1000 detection/support
+ *			added automatic PCI CMD640 detection/support
+ *			added option for VLB CMD640 support
+ *			tweaked probe to find cdrom on hdb with disks on hda,hdc
  *
  *  Driver compile-time options are in ide.h
  *
  *  To do, in likely order of completion:
- *	- add in several updates from my email collection (soon folks!)
- *	- improved CMD support:  handing this off to someone else
+ *	- improved CMD support:  probably handing this off to someone else
+ *	- modify kernel to obtain BIOS geometry for drives on 2nd/3rd/4th i/f
  *	- find someone to work on IDE *tape drive* support
  */
 
@@ -149,24 +155,23 @@
 #include <linux/genhd.h>
 #include <asm/byteorder.h>
 #include <asm/irq.h>
+#include <asm/segment.h>
 
 #ifdef CONFIG_PCI
 #include <linux/bios32.h>
+#include <linux/pci.h>
 #endif /* CONFIG_PCI */
 
 #include "ide.h"
 
-static ide_hwif_t	ide_hwifs[MAX_HWIFS];		/* hwif info */
+       ide_hwif_t	ide_hwifs[MAX_HWIFS];		/* hwif info */
 static ide_hwgroup_t	*irq_to_hwgroup [16];
 static const byte	ide_hwif_to_major[MAX_HWIFS]   = {IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR};
 
 static const unsigned short default_io_base[MAX_HWIFS] = {0x1f0, 0x170, 0x1e8, 0x168};
 static const byte	default_irqs[MAX_HWIFS]     = {14, 15, 11, 10};
 static int		single_threaded = 0;	/* "serialize" option */
-
-#if SUPPORT_DTC2278
-static unsigned int	probe_dtc2278 = 0;
-#endif
+static int		disallow_unmask = 0;	/* for buggy hardware */
 
 #if (DISK_RECOVERY_TIME > 0)
 /*
@@ -284,7 +289,7 @@ static inline void do_vlb_sync (unsigned short port) {
 #endif	/* __i386__ */
 
 /*
- * This is used for all data transfers *from* the IDE interface
+ * This is used for most PIO data transfers *from* the IDE interface
  */
 void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 {
@@ -304,7 +309,7 @@ void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 }
 
 /*
- * This is used for all data transfers *to* the IDE interface
+ * This is used for most PIO data transfers *to* the IDE interface
  */
 void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 {
@@ -322,6 +327,37 @@ void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 	} else
 		outsw(IDE_DATA_REG, buffer, wcount<<1);
 }
+
+#if SUPPORT_HT6560B
+/*
+ * This routine handles interface switching for the peculiar hardware design
+ * on the F.G.I./Holtek HT-6560B VLB IDE interface.
+ * The HT-6560B can only enable one IDE port at a time, and requires a
+ * silly sequence (below) whenever we switch between primary and secondary.
+ *
+ * Apparently, systems with multiple CMD640 chips may need something similar..
+ *
+ * This algorithm courtesy of malafoss@snakemail.hut.fi
+ */
+
+void ide_hwif_select (ide_hwif_t *hwif)
+{
+	static ide_hwif_t *current_hwif = NULL;
+
+	if (hwif != current_hwif) {
+		unsigned long flags;
+		save_flags (flags);
+		cli();
+		(void) inb(0x3e6);
+		(void) inb(0x3e6);
+		(void) inb(0x3e6);
+		(void) inb(0x3e6);
+		outb(0x1c,hwif->select);
+		current_hwif = hwif;
+		restore_flags (flags);
+	}
+}
+#endif /* SUPPORT_HT6560B */
 
 /*
  * This should get invoked any time we exit the driver to
@@ -837,12 +873,14 @@ int ide_error (ide_drive_t *drive, const char *msg, byte stat)
 	if (GET_STAT() & (BUSY_STAT|DRQ_STAT))
 		rq->errors |= ERROR_RESET;	/* Mmmm.. timing problem */
 
+#ifdef CONFIG_BLK_DEV_TRITON
 	if (rq->errors > 3 && drive->using_dma) {	/* DMA troubles? */
 		drive->using_dma = 0;
 		printk("%s: DMA disabled\n", drive->name);
 		--rq->errors;
 		return 0;
 	}
+#endif /* CONFIG_BLK_DEV_TRITON */
 	if (rq->errors >= ERROR_MAX)
 		ide_end_request(0, HWGROUP(drive));
 	else {
@@ -1196,15 +1234,19 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 #endif
 	}
 	if (rq->cmd == READ) {
+#ifdef CONFIG_BLK_DEV_TRITON
 		if (drive->using_dma && !(HWIF(drive)->dmaproc(ide_dma_read, drive)))
 			return;
+#endif /* CONFIG_BLK_DEV_TRITON */
 		ide_set_handler(drive, &read_intr);
 		OUT_BYTE(drive->mult_count ? WIN_MULTREAD : WIN_READ, IDE_COMMAND_REG);
 		return;
 	}
 	if (rq->cmd == WRITE) {
+#ifdef CONFIG_BLK_DEV_TRITON
 		if (drive->using_dma && !(HWIF(drive)->dmaproc(ide_dma_write, drive)))
 			return;
+#endif /* CONFIG_BLK_DEV_TRITON */
 		OUT_BYTE(drive->mult_count ? WIN_MULTWRITE : WIN_WRITE, IDE_COMMAND_REG);
 		if (ide_wait_stat(drive, DATA_READY, drive->bad_wstat, WAIT_DRQ)) {
 			printk("%s: no DRQ after issuing %s\n", drive->name,
@@ -1286,6 +1328,10 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 	((ide_hwgroup_t *)hwif->hwgroup)->drive = drive;
 #if (DISK_RECOVERY_TIME > 0)
 	while ((read_timer() - hwif->last_time) < DISK_RECOVERY_TIME);
+#endif
+#if SUPPORT_HT6560B
+	if (hwif->select)
+		ide_hwif_select (hwif);
 #endif
 	OUT_BYTE(drive->select.all,IDE_SELECT_REG);
 	if (ide_wait_stat(drive, drive->ready_stat, BUSY_STAT|DRQ_STAT, WAIT_READY)) {
@@ -1473,6 +1519,10 @@ static void unexpected_intr (int irq, ide_hwgroup_t *hwgroup)
 	 */
 	do {
 		if (hwif->irq == irq) {
+#if SUPPORT_HT6560B
+			if (hwif->select)
+				ide_hwif_select (hwif);
+#endif
 			for (unit = 0; unit < MAX_DRIVES; ++unit) {
 				ide_drive_t *drive = &hwif->drives[unit];
 				if (!drive->present)
@@ -1788,6 +1838,10 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 					drive->keep_settings = arg;
 					break;
 				case HDIO_SET_UNMASKINTR:
+					if (arg && disallow_unmask) {
+						restore_flags(flags);
+						return -EPERM;
+					}
 					drive->unmask = arg;
 					break;
 				case HDIO_SET_NOWERR:
@@ -2120,10 +2174,9 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 static int do_probe (ide_drive_t *drive, byte cmd)
 {
 	int rc;
-
 #ifdef CONFIG_BLK_DEV_IDECD
 	if (drive->present) {	/* avoid waiting for inappropriate probes */
-		if ((drive->media == disk) ^ (cmd == WIN_IDENTIFY))
+		if ((drive->media == cdrom) && (cmd == WIN_IDENTIFY))
 			return 4;
 	}
 #endif	/* CONFIG_BLK_DEV_IDECD */
@@ -2131,6 +2184,10 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 	printk("probing for %s: present=%d, type=%s, probetype=%s\n",
 		drive->name, drive->present, drive->media ? "cdrom":"disk",
 		(cmd == WIN_IDENTIFY) ? "ATA" : "ATAPI");
+#endif
+#if SUPPORT_HT6560B
+	if (HWIF(drive)->select)
+		ide_hwif_select (HWIF(drive));
 #endif
 	OUT_BYTE(drive->select.all,IDE_SELECT_REG);	/* select target drive */
 	delay_10ms();				/* wait for BUSY_STAT */
@@ -2251,6 +2308,116 @@ static void probe_for_drives (ide_hwif_t *hwif)
 	}
 }
 
+#if SUPPORT_DTC2278
+/*
+ * From: andy@cercle.cts.com (Dyan Wile)
+ *
+ * Below is a patch for DTC-2278 - alike software-programmable controllers
+ * The code enables the secondary IDE controller and the PIO4 (3?) timings on
+ * the primary (EIDE). You may probably have to enable the 32-bit support to
+ * get the full speed. You better get the disk interrupts disabled ( hdparm -u0
+ * /dev/hd.. ) for the drives connected to the EIDE interface. (I get my 
+ * filesystem  corrupted with -u1, but under heavy disk load only :-)  
+ *
+ * From: mlord@bnr.ca -- this chipset is now forced to use the "serialize" feature,
+ * which hopefully will make it more reliable to use.. maybe it has the same bugs
+ * as the CMD640B and RZ1000 ??
+ */
+
+#if SET_DTC2278_MODE4
+static void sub22 (char b, char c)
+{
+	int i;
+
+	for(i = 0; i < 3; ++i) {
+		inb(0x3f6);
+		outb_p(b,0xb0);
+		inb(0x3f6);
+		outb_p(c,0xb4);
+		inb(0x3f6);
+		if(inb(0xb4) == c) {
+			outb_p(7,0xb0);
+			inb(0x3f6);
+			return;	/* success */
+		}
+	}
+}
+#endif /* SET_DTC2278_MODE4 */
+
+static void init_dtc2278 (void)
+{
+	cli();
+#if SET_DTC2278_MODE4
+	/*
+	 * This enables PIO mode4 (3?) on the first interface
+	 */
+	sub22(1,0xc3);
+	sub22(0,0xa0);
+#endif /* SET_DTC2278_MODE4 */
+	/*
+	 * This enables the second interface
+	 */
+	outb_p(4,0xb0);
+	inb(0x3f6);
+	outb_p(0x20,0xb4);
+	inb(0x3f6);
+
+	sti();
+}
+#endif /* SUPPORT_DTC2278 */
+
+#if SUPPORT_CMD640
+/*
+ * ??? fixme: 
+ */
+byte read_cmd640_vlb (byte port, byte reg)
+{
+	byte val;
+
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	outw(reg, port);
+	val = inb(port+4);
+	restore_flags(flags);
+	return val;
+}
+
+void write_cmd640_vlb (byte port, byte reg, byte val)
+{
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	outw(reg, port);
+	outw(val, port+4);
+	restore_flags(flags);
+}
+
+void init_cmd640_vlb (void)
+{
+	byte reg;
+	unsigned short port = 0x178;
+
+ 	printk("ide: buggy CMD640 interface: ");
+	reg = read_cmd640_vlb(port, 0x50);
+	if (reg == 0xff || (reg & 0x90) != 0x90) {
+#if TRY_CMD640_VLB_AT_0x78
+		port = 0x78;
+		if (reg == 0xff || (reg & 0x90) != 0x90)
+#endif
+		{
+			single_threaded = 1;
+			disallow_unmask = 1;
+			printk("(probe failed) serialized, disabled unmasking\n");
+			return;
+		}
+	}
+	write_cmd640_vlb(port, 0x51, read_cmd640_vlb(port, 0x51)|0xc8);
+	printk("disabled read-ahead, enabled secondary\n");
+
+}
+#endif /* SUPPORT_CMD640 */
+
 /*
  * stridx() returns the offset of c within s,
  * or -1 if c is '\0' or not found within s.
@@ -2333,42 +2500,52 @@ static int match_parm (char *s, const char *keywords[], int vals[], int max_vals
  * "idex=base,ctl"	: specify both base and ctl
  * "idex=base,ctl,irq"	: specify base, ctl, and irq number
  *
- * The following two are valid ONLY on ide0 or ide1:
+ * The following two are valid ONLY on ide0 or ide1,
+ * and the defaults for the base,ctl ports must not be altered.
  *
- * "idex=dtc2278"	: look for and try to initialize a dtc2278
  * "idex=serialize"	: do not overlap operations on ide0 and ide1.
+ * "idex=dtc2278"	: enables use of DTC2278 secondary i/f
+ * "idex=ht6560b"	: enables use of HT6560B secondary i/f
+ * "idex=cmd640_vlb"	: required for VLB cards with the CMD640 chip
+ *			  (PCI version will be automatically detected)
  */
 void ide_setup (char *s)
 {
 	int vals[3];
+	ide_hwif_t *hwif;
 	ide_drive_t *drive;
-	unsigned int unit, hwif;
+	unsigned int hw, unit;
 	const char max_drive = 'a' + ((MAX_HWIFS * MAX_DRIVES) - 1);
 	const char max_hwif  = '0' + (MAX_HWIFS - 1);
 
 	printk("ide_setup: %s", s);
 	init_ide_data ();
+
+	/*
+	 * Look for drive options:  "hdx="
+	 */
 	if (s[0] == 'h' && s[1] == 'd' && s[2] >= 'a' && s[2] <= max_drive) {
 		const char *hd_words[] = {"noprobe", "nowerr", "cdrom", "serialize", NULL};
 		unit = s[2] - 'a';
-		hwif = unit / MAX_DRIVES;
+		hw   = unit / MAX_DRIVES;
 		unit = unit % MAX_DRIVES;
-		drive = &ide_hwifs[hwif].drives[unit];
+		hwif = &ide_hwifs[hw];
+		drive = &hwif->drives[unit];
 		switch (match_parm(&s[3], hd_words, vals, 3)) {
 			case -1: /* "noprobe" */
 				drive->noprobe = 1;
 				goto done;
 			case -2: /* "nowerr" */
 				drive->bad_wstat = BAD_R_STAT;
-				ide_hwifs[hwif].noprobe = 0;
+				hwif->noprobe = 0;
 				goto done;
 			case -3: /* "cdrom" */
 				drive->present = 1;
 				drive->media = cdrom;
-				ide_hwifs[hwif].noprobe = 0;
+				hwif->noprobe = 0;
 				goto done;
 			case -4: /* "serialize" */
-				printk(" -- USE ""ide%c=serialize"" INSTEAD", '0'+hwif);
+				printk(" -- USE ""ide%c=serialize"" INSTEAD", '0'+hw);
 				goto do_serialize;
 			case 3: /* cyl,head,sect */
 				drive->media	= disk;
@@ -2376,41 +2553,58 @@ void ide_setup (char *s)
 				drive->head	= drive->bios_head = vals[1];
 				drive->sect	= drive->bios_sect = vals[2];
 				drive->present	= 1;
-				ide_hwifs[hwif].noprobe = 0;
+				hwif->noprobe = 0;
 				goto done;
 			default:
 				goto bad_option;
 		}
 	}
+	/*
+	 * Look for interface options:  "idex="
+	 */
 	if (s[0] == 'i' && s[1] == 'd' && s[2] == 'e' && s[3] >= '0' && s[3] <= max_hwif) {
-		const char *ide_words[] = {"dtc2278", "serialize", "noprobe", NULL};
-		hwif = s[3] - '0';
+		const char *ide_words[] = {"noprobe", "serialize", "dtc2278", "ht6560b", "cmd640_vlb", NULL};
+		hw = s[3] - '0';
+		hwif = &ide_hwifs[hw];
+
 		switch (match_parm(&s[4], ide_words, vals, 3)) {
+#if SUPPORT_CMD640
+			case -5: /* "cmd640_vlb" */
+				if (hw > 1) goto bad_hwif;
+				init_cmd640_vlb();
+				goto do_serialize; /* not necessary once we implement the above */
+				break;
+#endif /* SUPPORT_CMD640 */
+#if SUPPORT_HT6560B
+			case -4: /* "ht6560b" */
+				if (hw > 1) goto bad_hwif;
+				ide_hwifs[0].select = 0x1c;
+				ide_hwifs[1].select = 0x1d;
+				goto do_serialize;
+#endif /* SUPPORT_HT6560B */
 #if SUPPORT_DTC2278
-			case -1: /* "dtc2278" */
-				if (hwif > 1) goto bad_hwif;
-				probe_dtc2278 = 1;
-				ide_hwifs[hwif].noprobe = 0;
-				goto done;
+			case -3: /* "dtc2278" */
+				if (hw > 1) goto bad_hwif;
+				init_dtc2278();
+				goto do_serialize;
 #endif /* SUPPORT_DTC2278 */
 			case -2: /* "serialize" */
 			do_serialize:
-				if (hwif > 1) goto bad_hwif;
+				if (hw > 1) goto bad_hwif;
 				single_threaded = 1;
-				ide_hwifs[hwif].noprobe = 0;
 				goto done;
-			case -3: /* "noprobe" */
-				ide_hwifs[hwif].noprobe = 1;
+			case -1: /* "noprobe" */
+				hwif->noprobe = 1;
 				goto done;
 			case 1:	/* base */
 				vals[1] = vals[0] + 0x206; /* default ctl */
 			case 2: /* base,ctl */
 				vals[2] = 0;	/* default irq = probe for it */
 			case 3: /* base,ctl,irq */
-				ide_hwifs[hwif].io_base  = vals[0];
-				ide_hwifs[hwif].ctl_port = vals[1];
-				ide_hwifs[hwif].irq      = vals[2];
-				ide_hwifs[hwif].noprobe = 0;
+				hwif->io_base  = vals[0];
+				hwif->ctl_port = vals[1];
+				hwif->irq      = vals[2];
+				hwif->noprobe = 0;
 				goto done;
 		}
 	}
@@ -2418,7 +2612,7 @@ bad_option:
 	printk(" -- BAD OPTION\n");
 	return;
 bad_hwif:
-	printk("-- NOT SUPPORTED ON ide%d", hwif);
+	printk("-- NOT SUPPORTED ON ide%d", hw);
 done:
 	printk("\n");
 }
@@ -2471,6 +2665,16 @@ int ide_xlate_1024 (dev_t i_rdev, int need_offset, const char *msg)
  * nibble.  This will be either a 4 bit drive type or 0xf indicating use byte
  * 0x19 for an 8 bit type, drive 1, 0x1a for drive 2 in CMOS.  A non-zero value 
  * means we have an AT controller hard disk for that drive.
+ *
+ * Of course, there is no guarantee that either drive is actually on the
+ * "primary" IDE interface, but we don't bother trying to sort that out here.
+ * If a drive is not actually on the primary interface, then these parameters
+ * will be ignored.  This results in the user having to supply the logical
+ * drive geometry as a boot parameter for each drive not on the primary i/f.
+ *
+ * The only "perfect" way to handle this would be to modify the setup.[cS] code
+ * to do BIOS calls Int13h/Fn08h and Int13h/Fn48h to get all of the drive info
+ * for us during initialization.  I have the necessary docs -- any takers?  -ml
  */
 
 static void probe_cmos_for_drives (ide_hwif_t *hwif)
@@ -2490,7 +2694,6 @@ static void probe_cmos_for_drives (ide_hwif_t *hwif)
 			drive->head  = drive->bios_head = *(BIOS+2);
 			drive->sect  = drive->bios_sect = *(BIOS+14);
 			drive->ctl   = *(BIOS+8);
-			drive->media = disk;
 			drive->present = 1;
 		}
 		BIOS += 16;
@@ -2577,54 +2780,100 @@ static struct file_operations ide_fops = {
 	revalidate_disk		/* revalidate */
 };
 
+#ifdef CONFIG_PCI
 
-#if SUPPORT_DTC2278
-/*
- * From: andy@cercle.cts.com (Dyan Wile)
- *
- * Below is a patch for DTC-2278 - alike software-programmable controllers
- * The code enables the secondary IDE controller and the PIO4 (3?) timings on
- * the primary (EIDE). You may probably have to enable the 32-bit support to
- * get the full speed. You better get the disk interrupts disabled ( hdparm -u0 
- * /dev/hd.. ) for the drives connected to the EIDE interface. (I get my 
- * filesystem  corrupted with -u 1, but under heavy disk load only :-)  
- */
-
-static void sub22 (char b, char c)
+void ide_pci_access_error (int rc)
 {
-	int i;
+	printk("ide: pcibios access failed - %s\n", pcibios_strerror(rc));
+}
 
-	for(i = 0; i < 3; ++i) {
-		inb(0x3f6);
-		outb_p(b,0xb0);
-		inb(0x3f6);
-		outb_p(c,0xb4);
-		inb(0x3f6);
-		if(inb(0xb4) == c) {
-			outb_p(7,0xb0);
-			inb(0x3f6);
-			return;	/* success */
+#if SUPPORT_RZ1000 || SUPPORT_CMD640
+void buggy_interface_fallback (int rc)
+{
+	ide_pci_access_error (rc);
+	single_threaded = 1;
+	disallow_unmask = 1;
+	printk("serialized, disabled unmasking\n");
+}
+#endif /* SUPPORT_RZ1000 || SUPPORT_CMD640 */
+
+#if SUPPORT_RZ1000
+void init_rz1000 (byte bus, byte fn)
+{
+	int rc;
+	unsigned short reg;
+
+	printk("ide: buggy RZ1000 interface: ");
+	if ((rc = pcibios_read_config_word(bus, fn, 0x40, &reg))
+	 || (rc =  pcibios_write_config_word(bus, fn, 0x40, reg & 0xdfff)))
+		buggy_interface_fallback (rc);
+	else
+		printk("disabled read-ahead\n");
+}
+#endif /* SUPPORT_RZ1000 */
+
+#if SUPPORT_CMD640
+void init_cmd640 (byte bus, byte fn)
+{
+	int rc;
+	unsigned char reg;
+
+	printk("ide: buggy CMD640 interface: ");
+	if ((rc = pcibios_read_config_byte(bus, fn, 0x51, &reg))
+	 || (rc =  pcibios_write_config_byte(bus, fn, 0x51, reg | 0xc8)))
+		buggy_interface_fallback (rc);
+	else
+		printk("disabled read-ahead, enabled secondary\n");
+}
+#endif /* SUPPORT_CMD640 */
+
+typedef void (ide_pci_init_proc_t)(byte, byte);
+
+/*
+ * ide_probe_pci() scans PCI for a specific vendor/device function,
+ * and invokes the supplied init routine for each instance detected.
+ */
+static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci_init_proc_t *init)
+{
+	unsigned long flags;
+	unsigned index = 0;
+	byte fn, bus;
+	int rc;
+
+	if (!pcibios_present())
+		return;
+	save_flags(flags);
+	cli();
+	for (index = 0; !pcibios_find_device (vendor, device, index, &bus, &fn); ++index) {
+		unsigned short command;
+		if ((rc = pcibios_read_config_word (bus, fn, PCI_COMMAND, &command))) {
+			ide_pci_access_error (rc);
+		} else if (command & 1) {	/* is device enabled? */
+			init (bus, fn);
 		}
 	}
+	restore_flags(flags);
 }
 
-static void try_to_init_dtc2278 (void)
+/*
+ * ide_init_pci() finds/initializes "known" PCI IDE interfaces
+ * 
+ * This routine should ideally be using pcibios_find_class() to find
+ * all IDE interfaces, but that function causes some systems to "go weird".
+ */
+static void ide_init_pci (void)
 {
-/* This (presumably) enables PIO mode4 (3?) on the first interface */
-	cli();
-	sub22(1,0xc3);
-	sub22(0,0xa0);
-	sti();
-
-/* This enables the second interface */
-
-	outb_p(4,0xb0);
-	inb(0x3f6);
-	outb_p(0x20,0xb4);
-	inb(0x3f6);
+#if SUPPORT_RZ1000
+	ide_probe_pci (PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1000, &init_rz1000);
+#endif
+#if SUPPORT_CMD640
+	ide_probe_pci (PCI_VENDOR_ID_CMD, PCI_DEVICE_ID_CMD_640, &init_cmd640);
+#endif
+#ifdef CONFIG_BLK_DEV_TRITON
+	ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371, &ide_init_triton);
+#endif
 }
-#endif /* SUPPORT_DTC2278 */
-
+#endif /* CONFIG_PCI */
 
 /*
  * This is gets invoked once during initialization, to set *everything* up
@@ -2638,19 +2887,12 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 	/*
 	 * First, we determine what hardware is present
 	 */
-#if SUPPORT_DTC2278
-	if (probe_dtc2278)
-		try_to_init_dtc2278();
-#endif /* SUPPORT_DTC2278 */
+
 #ifdef CONFIG_PCI
 	/*
-	 * Look for pci disk interfaces.
+	 * Find/initialize PCI IDE interfaces
 	 */
-	if (pcibios_present()) {
-#ifdef CONFIG_BLK_DEV_TRITON
-		ide_init_triton (ide_hwifs);
-#endif /* CONFIG_BLK_DEV_TRITON */
-	}
+	ide_init_pci ();
 #endif /* CONFIG_PCI */
 
 	/*

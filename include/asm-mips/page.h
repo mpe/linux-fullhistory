@@ -10,6 +10,12 @@
 #define invalidate()	tlbflush();
 extern asmlinkage void tlbflush(void);
 
+/* Certain architectures need to do special things when pte's
+ * within a page table are directly modified.  Thus, the following
+ * hook is made available.
+ */
+#define set_pte(pteptr, pteval) ((*(pteptr)) = (pteval))
+
 typedef unsigned short mem_map_t;
 
 #ifdef CONFIG_STRICT_MM_TYPECHECKS

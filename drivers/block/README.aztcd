@@ -1,8 +1,8 @@
-$Id: README.aztcd,v 1.60 1995/08/09 12:37:46 root Exp root $
+$Id: README.aztcd,v 1.70 1995/08/19 16:21:05 root Exp root $
                        Readme-File README.aztcd
    for Aztech CD-ROM CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 
                           CD-ROM  Driver 
-                       Version 1.6 and newer
+                       Version 1.7 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
@@ -20,12 +20,12 @@ Contents of this file:
                          2.  INSTALLATION
                          3.  CONFIGURING YOUR KERNEL
                          4.  RECOMPILING YOUR KERNEL
-                         4.1 AZTCD AS A RUN-TIME LOADABLE MODULE
-                         4.2 CDROM CONNECTED TO A SOUNDCARD
+                         4.1   AZTCD AS A RUN-TIME LOADABLE MODULE
+                         4.2   CDROM CONNECTED TO A SOUNDCARD
                          5.  KNOWN PROBLEMS, FUTURE DEVELOPMENTS
-			 5.1 MULTISESSION SUPPORT
-			 5.2 STATUS RECOGNITION
-			 5.3 DOSEMU's CDROM SUPPORT
+			 5.1   MULTISESSION SUPPORT
+			 5.2   STATUS RECOGNITION
+			 5.3   DOSEMU's CDROM SUPPORT
                          6.  BUG REPORTS
                          7.  OTHER DRIVES
                          8.  IF YOU DON'T SUCCEED ... DEBUGGING  
@@ -181,11 +181,22 @@ configured and mail me (see 6.) the appropriate information.
 
 5. KNOWN PROBLEMS, FUTURE DEVELOPMENTS
 5.1 MULTISESSION SUPPORT
-I have now (July 1995) started support of multisession CDs. Unfortunately I
-do only have one multisession CD and no appropriate applications, so I can
-program, but testing is a little too less :-(. If you'd like to help me, 
-please contact me. As of version 1.4 you can enable the multisession support 
-in aztcd.h by setting AZT_MULTISESSION to 1. 
+Multisession support for CD's still is a myth. I implemented and tested a basic
+support for multisession and XA CDs, but I still have not enough CDs and appli-
+cations to test it rigourously. So if you'd like to help me, please contact me
+(Email address see below). As of version 1.4 and newer you can enable the 
+multisession support in aztcd.h by setting AZT_MULTISESSION to 1. Doing so 
+will cause the ISO9660-filesystem to deal with multisession CDs, ie. redirect 
+requests to the Table of Contents (TOC) information from the last session, 
+which contains the info of all previous sessions etc.. If you do set 
+AZT_MULTISESSION to 0, you can use multisession CDs anyway. In that case the 
+drive's firmware will do automatic redirection. For the ISO9660-filesystem any 
+multisession CD  will then look like a 'normal' single session CD. But never-
+theless the data of all sessions is viewable and accessible. So with practical-
+ly all real world applications you won't notice the difference. But as future
+applications may make use of advanced multisession features, I've started to
+implement the interface for the ISO9660 multisession interface via ioctl
+CDROMMULTISESSION.
 
 5.2 STATUS RECOGNITION
 The drive status recognition does not work correctly in all cases. Changing

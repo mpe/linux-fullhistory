@@ -232,19 +232,19 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
 		return;
 	if (!pte_present(pte)) {
 		swap_duplicate(pte_val(pte));
-		*new_pte = pte;
+		set_pte(new_pte, pte);
 		return;
 	}
 	if (pte_page(pte) > high_memory || (mem_map[MAP_NR(pte_page(pte))] & MAP_PAGE_RESERVED)) {
-		*new_pte = pte;
+		set_pte(new_pte, pte);
 		return;
 	}
 	if (pte_cow(pte))
 		pte = pte_wrprotect(pte);
 	if (delete_from_swap_cache(pte_page(pte)))
 		pte = pte_mkdirty(pte);
-	*new_pte = pte_mkold(pte);
-	*old_pte = pte;
+	set_pte(new_pte, pte_mkold(pte));
+	set_pte(old_pte, pte);
 	mem_map[MAP_NR(pte_page(pte))]++;
 }
 
@@ -433,7 +433,7 @@ static inline void zeromap_pte_range(pte_t * pte, unsigned long address, unsigne
 		end = PMD_SIZE;
 	do {
 		pte_t oldpage = *pte;
-		*pte = zero_pte;
+		set_pte(pte, zero_pte);
 		forget_pte(oldpage);
 		address += PAGE_SIZE;
 		pte++;
@@ -501,7 +501,7 @@ static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned 
 		pte_t oldpage = *pte;
 		pte_clear(pte);
 		if (offset >= high_memory || (mem_map[MAP_NR(offset)] & MAP_PAGE_RESERVED))
-			*pte = mk_pte(offset, prot);
+			set_pte(pte, mk_pte(offset, prot));
 		forget_pte(oldpage);
 		address += PAGE_SIZE;
 		offset += PAGE_SIZE;
@@ -599,7 +599,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 		pte_clear(pte);
 		invalidate();
 	}
-	*pte = pte_mkwrite(pte_mkdirty(mk_pte(page, PAGE_COPY)));
+	set_pte(pte, pte_mkwrite(pte_mkdirty(mk_pte(page, PAGE_COPY))));
 /* no need for invalidate */
 	return page;
 }
@@ -658,18 +658,18 @@ void do_wp_page(struct vm_area_struct * vma, unsigned long address,
 			if (mem_map[MAP_NR(old_page)] & MAP_PAGE_RESERVED)
 				++vma->vm_task->mm->rss;
 			copy_page(old_page,new_page);
-			*page_table = pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot)));
+			set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
 			free_page(old_page);
 			invalidate();
 			return;
 		}
-		*page_table = BAD_PAGE;
+		set_pte(page_table, BAD_PAGE);
 		free_page(old_page);
 		oom(vma->vm_task);
 		invalidate();
 		return;
 	}
-	*page_table = pte_mkdirty(pte_mkwrite(pte));
+	set_pte(page_table, pte_mkdirty(pte_mkwrite(pte)));
 	invalidate();
 	if (new_page)
 		free_page(new_page);
@@ -865,7 +865,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 				return 0;
 		}
 		copy_page(pte_page(from), newpage);
-		*to_table = mk_pte(newpage, to_area->vm_page_prot);
+		set_pte(to_table, mk_pte(newpage, to_area->vm_page_prot));
 		return 1;
 	}
 /*
@@ -880,18 +880,18 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 	if (in_swap_cache(pte_page(from))) {
 		if (!(from_area->vm_flags & VM_SHARED))
 			return 0;
-		*from_table = pte_mkdirty(from);
+		set_pte(from_table, pte_mkdirty(from));
 		delete_from_swap_cache(pte_page(from));
 	}
 	mem_map[MAP_NR(pte_page(from))]++;
-	*to_table = mk_pte(pte_page(from), to_area->vm_page_prot);
+	set_pte(to_table, mk_pte(pte_page(from), to_area->vm_page_prot));
 /* Check if we need to do anything at all to the 'from' field */
 	if (!pte_write(from))
 		return 1;
 	if (from_area->vm_flags & VM_SHARED)
 		return 1;
 /* ok, need to mark it read-only, so invalidate any possible old TB entry */
-	*from_table = pte_wrprotect(from);
+	set_pte(from_table, pte_wrprotect(from));
 	invalidate();
 	return 1;
 }
@@ -990,7 +990,7 @@ static inline void do_swap_page(struct vm_area_struct * vma, unsigned long addre
 		page = pte_wrprotect(page);
 	++vma->vm_task->mm->rss;
 	++vma->vm_task->mm->maj_flt;
-	*page_table = page;
+	set_pte(page_table, page);
 	return;
 }
 
@@ -1086,11 +1086,11 @@ static inline void handle_pte_fault(struct vm_area_struct * vma, unsigned long a
 		do_no_page(vma, address, write_access);
 		return;
 	}
-	*pte = pte_mkyoung(*pte);
+	set_pte(pte, pte_mkyoung(*pte));
 	if (!write_access)
 		return;
 	if (pte_write(*pte)) {
-		*pte = pte_mkdirty(*pte);
+		set_pte(pte, pte_mkdirty(*pte));
 		return;
 	}
 	do_wp_page(vma, address, write_access);

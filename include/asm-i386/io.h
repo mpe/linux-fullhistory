@@ -94,7 +94,7 @@ __OUT1(s##_p,x) __OUT2(s,s1,"w") : : "a" (value), "d" (port)); SLOW_DOWN_IO; } \
 __OUT1(s##c_p,x) __OUT2(s,s1,"") : : "a" (value), "id" (port)); SLOW_DOWN_IO; }
 
 #define __IN1(s) \
-extern inline unsigned int __in##s(unsigned short port) { unsigned int _v;
+extern inline RETURN_TYPE __in##s(unsigned short port) { RETURN_TYPE _v;
 
 #define __IN2(s,s1,s2) \
 __asm__ __volatile__ ("in" #s " %" s2 "1,%" s1 "0"
@@ -115,8 +115,15 @@ extern inline void outs##s(unsigned short port, const void * addr, unsigned long
 { __asm__ __volatile__ ("cld ; rep ; outs" #s \
 : "=S" (addr), "=c" (count) : "d" (port),"0" (addr),"1" (count)); }
 
-__IN(b,"b","0" (0))
-__IN(w,"w","0" (0))
+#define RETURN_TYPE unsigned char
+/* __IN(b,"b","0" (0)) */
+__IN(b,"")
+#undef RETURN_TYPE
+#define RETURN_TYPE unsigned short
+/* __IN(w,"w","0" (0)) */
+__IN(w,)
+#undef RETURN_TYPE
+#define RETURN_TYPE unsigned int
 __IN(l,"")
 
 __OUT(b,"b",char)

@@ -103,10 +103,11 @@ void time_init(void)
 	    BCD_TO_BIN(mon);
 	    BCD_TO_BIN(year);
 	  }
-#if defined(__alpha__) && defined(CONFIG_PCI)
+#ifdef ALPHA_PRE_V1_2_SRM_CONSOLE
 	/*
 	 * The meaning of life, the universe, and everything. Plus
-	 * this makes the year come out right.
+	 * this makes the year come out right on SRM consoles earlier
+	 * than v1.2.
 	 */
 	year -= 42;
 #endif

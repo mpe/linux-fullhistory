@@ -8,22 +8,32 @@
 # Copyright (C) 1994 by Linus Torvalds
 #
 
+# enable this for linking under OSF/1:
+LINKFLAGS = -non_shared -T 0x20000000 -N
+# enable this for linking under Linux:
+#LINKFLAGS = -static -T bootloader.lds -N 
+
 .S.s:
 	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
 
 OBJECTS = head.o main.o
+TARGETS = tools/lxboot tools/bootlx vmlinux vmlinux.gz
 
-all:	tools/lxboot tools/bootlx vmlinux
-	@echo run mkfloppy on machine with floppy drive
+all:	$(TARGETS)
+	@echo Ready to install kernel in $(shell pwd)/vmlinux.gz
 
 msb:	tools/lxboot tools/bootlx vmlinux
 	( cat tools/lxboot tools/bootlx vmlinux ) > /dev/rz0a
 	disklabel -rw rz0 'linux' tools/lxboot tools/bootlx
 
+vmlinux.gz: vmlinux
+	gzip -fv vmlinux
+
 vmlinux: tools/build $(TOPDIR)/vmlinux
-	tools/build -v $(TOPDIR)/vmlinux > vmlinux
+	cp $(TOPDIR)/vmlinux vmlinux
+	quickstrip vmlinux
 
 tools/lxboot: tools/build
 	tools/build > tools/lxboot
@@ -35,13 +45,13 @@ tools/build: tools/build.c
 	$(HOSTCC) tools/build.c -o tools/build
 
 bootloader: $(OBJECTS)
-	$(LD) -non_shared -T 0x20000000 -N \
+	$(LD) $(LINKFLAGS) \
 		$(OBJECTS) \
 		$(LIBS) \
 		-o bootloader || \
 		(rm -f bootloader && exit 1)
 
 clean:
-	rm -f vmlinux bootloader tools/build tools/bootlx tools/lxboot
+	rm -f $(TARGETS) bootloader tools/build
 
 dep:

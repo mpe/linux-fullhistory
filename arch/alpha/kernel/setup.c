@@ -73,7 +73,8 @@ static unsigned long find_end_memory(void)
 	struct memclust_struct * cluster;
 	struct memdesc_struct * memdesc;
 
-	memdesc = (struct memdesc_struct *) (INIT_HWRPB->mddt_offset + (unsigned long) INIT_HWRPB);
+	memdesc = (struct memdesc_struct *)
+	  (INIT_HWRPB->mddt_offset + (unsigned long) INIT_HWRPB);
 	cluster = memdesc->cluster;
 	for (i = memdesc->numclusters ; i > 0; i--, cluster++) {
 		unsigned long tmp;
@@ -93,7 +94,8 @@ void setup_arch(char **cmdline_p,
 
 	hwrpb = (struct hwrpb_struct*)(IDENT_ADDR + INIT_HWRPB->phys_addr);
 
-	set_hae(hae.cache);		/* sync HAE register w/hae_cache */
+	set_hae(hae.cache);	/* sync HAE register w/hae_cache */
+	wrmces(0x7);		/* reset enable correctable error reports */
 
 	ROOT_DEV = 0x0802;		/* sda2 */
 	command_line[COMMAND_LINE_SIZE - 1] = '\0';
@@ -103,8 +105,10 @@ void setup_arch(char **cmdline_p,
 	*memory_start_p = (unsigned long) &_end;
 	*memory_end_p = find_end_memory();
 
-#ifdef CONFIG_PCI
+#if defined(CONFIG_ALPHA_LCA)
 	*memory_start_p = lca_init(*memory_start_p, *memory_end_p);
+#elif defined(CONFIG_ALPHA_APECS)
+	*memory_start_p = apecs_init(*memory_start_p, *memory_end_p);
 #endif
 }
 
@@ -122,22 +126,27 @@ int get_cpuinfo(char *buffer)
 	const char *cpu_name[] = {
 		"EV3", "EV4", "Unknown 1", "LCA4", "EV5", "EV45"
 	};
+#	define SYSTYPE_NAME_BIAS	20
 	const char *systype_name[] = {
-		"ADU", "Cobra", "Ruby", "Flamingo", "Unknown 1", "Jensen",
-		"Pelican", "Unknown 2", "Sable", "AXPvme", "Noname",
-		"Turbolaser", "Avanti", "Mustang", "Alcor", "Unknown 3",
-		"Mikasa", "Unknown3", "EB66", "EB64+"
+		"Cabriolet", "EB66P", "-18", "-17", "-16", "-15",
+		"-14", "-13", "-12", "-11", "-10", "-9", "-8",
+		"-7", "-6", "-5", "-4", "-3", "-2", "-1", "0",
+		"ADU", "Cobra", "Ruby", "Flamingo", "5", "Jensen",
+		"Pelican", "8", "Sable", "AXPvme", "Noname",
+		"Turbolaser", "Avanti", "Mustang", "Alcor", "16",
+		"Mikasa", "18", "EB66", "EB64+"
 	};
 	struct percpu_struct *cpu;
-	unsigned int cpu_index, system_index;
+	unsigned int cpu_index;
+	long sysname_index;
 	extern struct unaligned_stat {
 		unsigned long count, va, pc;
-	} unaligned;
+	} unaligned[2];
 #	define N(a)	(sizeof(a)/sizeof(a[0]))
 
 	cpu = (struct percpu_struct*)((char*)hwrpb + hwrpb->processor_offset);
 	cpu_index = (unsigned) (cpu->type - 1);
-	system_index = (unsigned) (hwrpb->sys_type - 1);
+	sysname_index = hwrpb->sys_type + SYSTYPE_NAME_BIAS;
 
 	return sprintf(buffer,
 		       "cpu\t\t\t: Alpha\n"
@@ -155,11 +164,14 @@ int get_cpuinfo(char *buffer)
 		       "phys. address bits\t: %ld\n"
 		       "max. addr. space #\t: %ld\n"
 		       "BogoMIPS\t\t: %lu.%02lu\n"
-		       "unaligned accesses\t: %ld (pc=%lx,va=%lx)\n",
+		       "kernel unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
+		       "user unaligned acc\t: %ld (pc=%lx,va=%lx)\n",
 
-		       (cpu_index < N(cpu_name) ? cpu_name[cpu_index] : "Unknown"),
+		       (cpu_index < N(cpu_name)
+			? cpu_name[cpu_index] : "Unknown"),
 		       cpu->variation, cpu->revision, (char*)cpu->serial_no,
-		       (system_index < N(systype_name) ? systype_name[system_index] : "Unknown"),
+		       (sysname_index < N(systype_name)
+			? systype_name[sysname_index] : "Unknown"),
 		       hwrpb->sys_variation, hwrpb->sys_revision,
 		       (char*)hwrpb->ssn,
 		       hwrpb->cycle_freq,
@@ -169,6 +181,7 @@ int get_cpuinfo(char *buffer)
 		       hwrpb->pa_bits,
 		       hwrpb->max_asn,
 		       loops_per_sec / 500000, (loops_per_sec / 5000) % 100,
-		       unaligned.count, unaligned.pc, unaligned.va);
+		       unaligned[0].count, unaligned[0].pc, unaligned[0].va,
+		       unaligned[1].count, unaligned[1].pc, unaligned[1].va);
 #       undef N
 }

@@ -908,7 +908,7 @@ static void fd_watchdog(void)
 	} else {		
 		del_timer(&fd_timer);
 		fd_timer.function = (timeout_fn) fd_watchdog;
-		fd_timer.expires = jiffies + 10;
+		fd_timer.expires = jiffies + HZ / 10;
 		add_timer(&fd_timer);
 	}
 }
@@ -1031,7 +1031,7 @@ static void setup_DMA(void)
 static int output_byte(char byte)
 {
 	int counter;
-	unsigned char status;
+	unsigned char status = 0;	/* keep gcc quiet */
 	unsigned char rstatus;
 
 	if (FDCS->reset)
@@ -1065,7 +1065,7 @@ static int output_byte(char byte)
 /* gets the response from the fdc */
 static int result(void)
 {
-	int i = 0, counter, status;
+	int i = 0, counter, status = 0;
 
 	if (FDCS->reset)
 		return -1;

@@ -15,6 +15,7 @@
  *				  udp_err is never called!
  *		Alan Cox	: Added new fields for init and ready for
  *				  proper fragmentation (_NO_ 4K limits!)
+ *		Richard Colella	: Hang on hash collision
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -155,7 +156,7 @@ inet_add_protocol(struct inet_protocol *prot)
 		prot->copy = 1;
 		break;
 	}
-	p2 = (struct inet_protocol *) prot->next;
+	p2 = (struct inet_protocol *) p2->next;
   }
 }
 

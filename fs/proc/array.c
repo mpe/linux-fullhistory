@@ -56,7 +56,7 @@ int get_malloc(char * buffer);
 
 static int read_core(struct inode * inode, struct file * file,char * buf, int count)
 {
-	unsigned long p = file->f_pos;
+	unsigned long p = file->f_pos, memsize;
 	int read;
 	int count1;
 	char * pnt;
@@ -64,14 +64,15 @@ static int read_core(struct inode * inode, struct file * file,char * buf, int co
 
 	memset(&dump, 0, sizeof(struct user));
 	dump.magic = CMAGIC;
-	dump.u_dsize = high_memory >> 12;
+	dump.u_dsize = MAP_NR(high_memory);
 
 	if (count < 0)
 		return -EINVAL;
-	if (p >= high_memory + PAGE_SIZE)
+	memsize = MAP_NR(high_memory + PAGE_SIZE) << PAGE_SHIFT;
+	if (p >= memsize)
 		return 0;
-	if (count > high_memory + PAGE_SIZE - p)
-		count = high_memory + PAGE_SIZE - p;
+	if (count > memsize - p)
+		count = memsize - p;
 	read = 0;
 
 	if (p < sizeof(struct user) && count > 0) {
@@ -93,7 +94,7 @@ static int read_core(struct inode * inode, struct file * file,char * buf, int co
 		count--;
 		read++;
 	}
-	memcpy_tofs(buf,(void *) (p - PAGE_SIZE),count);
+	memcpy_tofs(buf,(void *) (PAGE_OFFSET + p - PAGE_SIZE),count);
 	read += count;
 	file->f_pos += read;
 	return read;

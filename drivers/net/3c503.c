@@ -95,7 +95,7 @@ el2_probe(struct device *dev)
 
     for (addr = addrs; *addr; addr++) {
 	int i;
-	unsigned int base_bits = *(unsigned char *)*addr;
+	unsigned int base_bits = readb(*addr);
 	/* Find first set bit. */
 	for(i = 7; i >= 0; i--, base_bits >>= 1)
 	    if (base_bits & 0x1)
@@ -221,19 +221,19 @@ el2_probe1(struct device *dev, int ioaddr)
 #ifdef EL2MEMTEST
 	/* This has never found an error, but someone might care. */
 	{			/* Check the card's memory. */
-	    int *mem_base = (int *)dev->mem_start;
-	    int memtest_value = 0xbbadf00d;
-	    mem_base[0] = 0xba5eba5e;
-	    for (i = 1; i < EL2_MEMSIZE/sizeof(mem_base[0]); i++) {
-		mem_base[i] = memtest_value;
-		if (mem_base[0] != 0xba5eba5e
-		    || mem_base[i] != memtest_value) {
+	    unsigned long mem_base = dev->mem_start;
+	    unsigned int test_val = 0xbbadf00d;
+	    writel(0xba5eba5e, mem_base);
+	    for (i = sizeof(test_val); i < EL2_MEMSIZE; i+=sizeof(test_val)) {
+		writel(test_val, mem_base + i);
+		if (readl(mem_base) != 0xba5eba5e
+		    || readl(mem_base + i) != test_val) {
 		    printk(" memory failure or memory address conflict.\n");
 		    dev->mem_start = 0;
 		    break;
 		}
-		memtest_value += 0x55555555;
-		mem_base[i] = 0;
+		test_val += 0x55555555;
+		writel(0, mem_base + i);
 	    }
 	}
 #endif  /* EL2MEMTEST */

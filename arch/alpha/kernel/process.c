@@ -91,9 +91,7 @@ void flush_thread(void)
  */
 int alpha_fork(struct switch_stack * swstack)
 {
-	return do_fork(COPYVM | SIGCHLD,
-		rdusp(),
-		(struct pt_regs *) (swstack+1));
+	return do_fork(SIGCHLD, rdusp(), (struct pt_regs *) (swstack+1));
 }
 
 extern void ret_from_sys_call(void);
@@ -169,17 +167,11 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
  * This doesn't actually work correctly like this: we need to do the
  * same stack setups that fork() does first.
  */
-asmlinkage int sys_clone(unsigned long a0, unsigned long a1, unsigned long a2,
+asmlinkage int sys_clone(unsigned long clone_flags, unsigned long newsp, unsigned long a2,
 	unsigned long a3, unsigned long a4, unsigned long a5,
 	struct pt_regs regs)
 {
-	unsigned long clone_flags = a0;
-	unsigned long newsp;
-
-	newsp = rdusp();
-	if (newsp == a1 || !a1)
-		clone_flags |= COPYVM;
-	else
-		newsp = a1;	
+	if (!newsp)
+		newsp = rdusp();
 	return do_fork(clone_flags, newsp, &regs);
 }

@@ -330,7 +330,7 @@ static struct super_block * read_super(dev_t dev,const char *name,int flags,
 
 static char unnamed_dev_in_use[256/8] = { 0, };
 
-static dev_t get_unnamed_dev(void)
+dev_t get_unnamed_dev(void)
 {
 	int i;
 
@@ -341,7 +341,7 @@ static dev_t get_unnamed_dev(void)
 	return 0;
 }
 
-static void put_unnamed_dev(dev_t dev)
+void put_unnamed_dev(dev_t dev)
 {
 	if (!dev)
 		return;
@@ -460,7 +460,7 @@ asmlinkage int sys_umount(char * name)
  * We also have to flush all inode-data for this device, as the new mount
  * might need new info.
  */
-static int do_mount(dev_t dev, const char * dir, const char * type, int flags, void * data)
+int do_mount(dev_t dev, const char * dir, const char * type, int flags, void * data)
 {
 	struct inode * dir_i;
 	struct super_block * sb;

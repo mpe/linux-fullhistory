@@ -283,7 +283,7 @@ static void calibrate_delay(void)
 		ticks = jiffies - ticks;
 		if (ticks >= HZ) {
 			loops_per_sec = muldiv(loops_per_sec, HZ, ticks);
-			printk("ok - %lu.%02lu BogoMips\n",
+			printk("ok - %lu.%02lu BogoMIPS\n",
 				loops_per_sec/500000,
 				(loops_per_sec/5000) % 100);
 			return;

@@ -1,5 +1,5 @@
-#ifndef __ALPHA_LCA__H
-#define __ALPHA_LCA__H
+#ifndef __ALPHA_LCA__H__
+#define __ALPHA_LCA__H__
 
 /*
  * Low Cost Alpha (LCA) definitions (these apply to 21066 and 21068,
@@ -247,6 +247,7 @@ extern inline unsigned long __readl(unsigned long addr)
 extern inline void __writeb(unsigned char b, unsigned long addr)
 {
 	unsigned long msb;
+	unsigned int w;
 
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
@@ -255,12 +256,14 @@ extern inline void __writeb(unsigned char b, unsigned long addr)
 			set_hae(msb);
 		}
 	}
-	*(vuip) ((addr << 5) + LCA_SPARSE_MEM + 0x00) = b * 0x01010101;
+	asm ("insbl %2,%1,%0" : "r="(w) : "ri"(addr & 0x3), "r"(b));
+	*(vuip) ((addr << 5) + LCA_SPARSE_MEM + 0x00) = w;
 }
 
 extern inline void __writew(unsigned short b, unsigned long addr)
 {
 	unsigned long msb;
+	unsigned int w;
 
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
@@ -269,7 +272,8 @@ extern inline void __writew(unsigned short b, unsigned long addr)
 			set_hae(msb);
 		}
 	}
-	*(vuip) ((addr << 5) + LCA_SPARSE_MEM + 0x08) = b * 0x00010001;
+	asm ("inswl %2,%1,%0" : "r="(w) : "ri"(addr & 0x3), "r"(b));
+	*(vuip) ((addr << 5) + LCA_SPARSE_MEM + 0x08) = w;
 }
 
 extern inline void __writel(unsigned int b, unsigned long addr)
@@ -320,8 +324,8 @@ extern unsigned long lca_init (unsigned long mem_start, unsigned long mem_end);
 
 #endif /* __KERNEL__ */
 
-#define RTC_PORT(x) (0x70 + (x))
-#define RTC_ADDR(x) (0x80 | (x))
-#define RTC_ALWAYS_BCD 0
+#define RTC_PORT(x)	(0x70 + (x))
+#define RTC_ADDR(x)	(0x80 | (x))
+#define RTC_ALWAYS_BCD	0
 
-#endif /* __ALPHA_LCA__H */
+#endif /* __ALPHA_LCA__H__ */

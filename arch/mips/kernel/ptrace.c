@@ -156,7 +156,7 @@ repeat:
 	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 /* this should also re-instate whatever read-only mode there was before */
-	*pgtable = pte_mkdirty(mk_pte(page, vma->vm_page_prot));
+	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 	invalidate();
 }
 

@@ -120,7 +120,7 @@ static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned lo
 		page = __get_free_page(GFP_KERNEL);
 		if (!page)
 			return -ENOMEM;
-		*pte = mk_pte(page, PAGE_KERNEL);
+		set_pte(pte, mk_pte(page, PAGE_KERNEL));
 		address += PAGE_SIZE;
 		pte++;
 	}
@@ -179,7 +179,7 @@ static inline void remap_area_pte(pte_t * pte, unsigned long address, unsigned l
 	do {
 		if (!pte_none(*pte))
 			printk("remap_area_pte: page already exists\n");
-		*pte = mk_pte(offset, PAGE_KERNEL);
+		set_pte(pte, mk_pte(offset, PAGE_KERNEL));
 		address += PAGE_SIZE;
 		offset += PAGE_SIZE;
 		pte++;
@@ -277,7 +277,7 @@ void * vmalloc(unsigned long size)
 	struct vm_struct *area;
 
 	size = PAGE_ALIGN(size);
-	if (!size || size > high_memory)
+	if (!size || size > (MAP_NR(high_memory) << PAGE_SHIFT))
 		return NULL;
 	area = get_vm_area(size);
 	if (!area)

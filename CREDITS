@@ -522,8 +522,9 @@ S: Germany
 
 N: Mark Lord
 E: mlord@bnr.ca
-E: mlord@achilles.net
-D: IDE drive support in hd.c
+D: Author of IDE driver (ide.c), hd.c support
+D: Triton Bus Master IDE driver
+D: Hard Disk Parameter (hdparm) utility
 S: 33 Ridgefield Cr
 S: Nepean, Ontario
 S: Canada K2H 6S3

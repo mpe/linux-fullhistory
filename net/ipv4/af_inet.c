@@ -43,6 +43,7 @@
  *		Alan Cox	:	New buffering now used smartly.
  *		Alan Cox	:	BSD rather than common sense interpretation of
  *					listen.
+ *		Germano Caronni	:	Assorted small races.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -726,6 +727,10 @@ static int inet_create(struct socket *sock, int protocol)
 	sock->data =(void *) sk;
 	sk->dummy_th.doff = sizeof(sk->dummy_th)/4;
 	sk->ip_ttl=64;
+	if(sk->type==SOCK_RAW && protocol==IPPROTO_RAW)
+		sk->ip_hdrincl=1;
+	else
+		sk->ip_hdrincl=0;
 #ifdef CONFIG_IP_MULTICAST
 	sk->ip_mc_loop=1;
 	sk->ip_mc_ttl=1;
@@ -978,8 +983,10 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	{
 		if(sk->err!=0)
 		{
+			cli();
 			err=sk->err;
 			sk->err=0;
+			sti();
 			return -err;
 		}
 		return -EALREADY;	/* Connecting is currently in progress */
@@ -1023,10 +1030,10 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 		   icmp error packets wanting to close a tcp or udp socket. */
 		if(sk->err && sk->protocol == IPPROTO_TCP)
 		{
-			sti();
 			sock->state = SS_UNCONNECTED;
 			err = -sk->err;
 			sk->err=0;
+			sti();
 			return err; /* set by tcp_err() */
 		}
 	}
@@ -1036,8 +1043,10 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	if (sk->state != TCP_ESTABLISHED && sk->err) 
 	{
 		sock->state = SS_UNCONNECTED;
+		cli();
 		err=sk->err;
 		sk->err=0;
+		sti();
 		return(-err);
 	}
 	return(0);

@@ -15,6 +15,7 @@
  *		Alan Cox, <gw4pts@gw4pts.ampr.org>
  */
  
+#include <linux/config.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -213,3 +214,17 @@ struct device * ip_dev_check(unsigned long addr)
 	return NULL;
 }
 
+/*
+ *	Find the first device with a given source address.
+ */
+ 
+struct device *ip_dev_find(unsigned long addr)
+{
+	struct device *dev;
+	for(dev = dev_base; dev; dev=dev->next)
+	{
+		if((dev->flags&IFF_UP) && dev->pa_addr==addr)
+			return dev;
+	}
+	return NULL;
+}

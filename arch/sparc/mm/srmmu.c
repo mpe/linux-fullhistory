@@ -427,6 +427,13 @@ srmmu_invalidate(void)
 	return;
 }
 
+void
+srmmu_set_pte(pte_t *ptep, pte_t entry)
+{
+	/* for now... */
+	*ptep = entry;
+}
+
 /* XXX Needs to be written */
 void
 srmmu_switch_to_context(int context)
@@ -840,6 +847,7 @@ ld_mmu_srmmu(void)
 	
 	/* Functions */
 	invalidate = srmmu_invalidate;
+	set_pte = srmmu_set_pte;
 	switch_to_context = srmmu_switch_to_context;
 	pmd_align = srmmu_pmd_align;
 	pgdir_align = srmmu_pgdir_align;

@@ -32,7 +32,11 @@
  * OSF/1 kernel. The SHIFT_HZ define expresses the same value as the
  * nearest power of two in order to avoid hardware multiply operations.
  */
-#define SHIFT_HZ 7		/* log2(HZ) */
+#ifdef __alpha__
+# define SHIFT_HZ 10		/* log2(HZ) */
+#else
+# define SHIFT_HZ 7		/* log2(HZ) */
+#endif
 
 /*
  * The SHIFT_KG and SHIFT_KF defines establish the damping of the PLL
@@ -66,7 +70,7 @@
 #define CLOCK_TICK_FACTOR	20	/* Factor of both 1000000 and CLOCK_TICK_RATE */
 #define LATCH  ((CLOCK_TICK_RATE + HZ/2) / HZ)	/* For divider */
 
-#define FINETUNE (((((LATCH * HZ - CLOCK_TICK_RATE) << SHIFT_HZ) * \
+#define FINETUNE ((((((long)LATCH * HZ - CLOCK_TICK_RATE) << SHIFT_HZ) * \
 	(1000000/CLOCK_TICK_FACTOR) / (CLOCK_TICK_RATE/CLOCK_TICK_FACTOR)) \
 		<< (SHIFT_SCALE-SHIFT_HZ)) / HZ)
 

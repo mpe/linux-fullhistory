@@ -790,15 +790,17 @@ void brelse(struct buffer_head * buf)
 		if (--buf->b_count)
 			return;
 		wake_up(&buffer_wait);
+#if 0
 		if (buf->b_reuse) {
+			buf->b_reuse = 0;
 			if (!buf->b_lock && !buf->b_dirt && !buf->b_wait) {
-			    	buf->b_reuse = 0;
 				if(buf->b_dev == 0xffff) panic("brelse: Wrong list");
 				remove_from_queues(buf);
 				buf->b_dev = 0xffff;
 				put_last_free(buf);
 			}
 		}
+#endif
 		return;
 	}
 	printk("VFS: brelse: Trying to free free buffer\n");
@@ -1659,10 +1661,11 @@ unsigned long generate_cluster(dev_t dev, int b[], int size)
 void buffer_init(void)
 {
 	int i;
-        int isize = BUFSIZE_INDEX(BLOCK_SIZE);
+	int isize = BUFSIZE_INDEX(BLOCK_SIZE);
+	long memsize = MAP_NR(high_memory) << PAGE_SHIFT;
 
-	if (high_memory >= 4*1024*1024) {
-		if(high_memory >= 16*1024*1024)
+	if (memsize >= 4*1024*1024) {
+		if(memsize >= 16*1024*1024)
 			 nr_hash = 16381;
 		else
 			 nr_hash = 4093;

@@ -67,6 +67,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( DEC,		DEC_BRD,	"DC21050"),
 	DEVICE( MATROX,		MATROX_MGA_2,	"Atlas PX2085"),
 	DEVICE( MATROX,		MATROX_MGA_IMP,	"MGA Impression"),
+	DEVICE( MATROX,		MATROX_MIL	,"Millenium"),
 	DEVICE( INTEL,		INTEL_82378,	"82378IB"),
 	BRIDGE( INTEL,		INTEL_82424,	"82424ZX Saturn",	0x00),
 	DEVICE( INTEL,		INTEL_82375,	"82375EB"),
@@ -74,13 +75,20 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_82430,	"82430ZX Aries"),
 	DEVICE( INTEL,		INTEL_82437,	"82437 Triton"),
 	DEVICE( INTEL,		INTEL_82371,	"82371 Triton"),
-	DEVICE( INTEL,		INTEL_82438,	"82438"),
+	DEVICE( INTEL,		INTEL_82438,	"82438/82371"),
 	DEVICE( INTEL,		INTEL_7116,	"SAA7116"),
 	DEVICE( INTEL,		INTEL_82865,	"82865"),
+	DEVICE( INTEL,		INTEL_P6,	"Experimental P6 bridge"),
+#if 0
 	DEVICE( SMC,		SMC_37C665,	"FDC 37C665"),
 	DEVICE( SMC,		SMC_37C922,	"FDC 37C922"),
-	DEVICE( ATI,		ATI_M32,	"Mach 32"),
-	DEVICE( ATI,		ATI_M64,	"Mach 64"),
+#else
+	DEVICE( PCTECH,		PCTECH_RZ1000,	"RZ1000 (buggy)"),
+#endif
+	DEVICE( ATI,		ATI_68800,	"68800AX"),
+	DEVICE( ATI,		ATI_215CT222,	"215CT222"),
+	DEVICE( ATI,		ATI_210888GX,	"210888GX"),
+	DEVICE( ATI,		ATI_210888CX,	"210888CX"),
 	DEVICE( WEITEK,		WEITEK_P9000,	"P9000"),
 	DEVICE( WEITEK,		WEITEK_P9100,	"P9100"),
 	DEVICE( CIRRUS,		CIRRUS_5430,	"GD 5430"),
@@ -101,7 +109,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( TSENG,		TSENG_W32P_b,	"ET4000W32P rev B"),
 	DEVICE( TSENG,		TSENG_W32P_c,	"ET4000W32P rev C"),
 	DEVICE( TSENG,		TSENG_W32P_d,	"ET4000W32P rev D"),
-	DEVICE( CMD,		CMD_640,	"640A"),
+	DEVICE( CMD,		CMD_640,	"640 (buggy)"),
 	DEVICE( VISION,		VISION_QD8500,	"QD-8500"),
 	DEVICE( VISION,		VISION_QD8580,	"QD-8580"),
 	DEVICE( AMD,		AMD_LANCE,	"79C970"),
@@ -126,6 +134,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ZEINET,		ZEINET_1221,	"1221"),
 	DEVICE( EF,		EF_ATM,		"155P-MF1"),
 	DEVICE( HER,		HER_STING,	"Stingray"),
+	DEVICE( HER,		HER_STINGARK,	"Stingray ARK 2000PV"),
   	DEVICE( ATRONICS,	ATRONICS_2015,	"IDE-2015PL"),
 	DEVICE( CT,		CT_65545,	"65545"),
 	DEVICE( FD,		FD_36C70,	"TMC-18C30"),
@@ -141,7 +150,10 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( VORTEX,		VORTEX_GDT,	"GDT 6000b"),
 	DEVICE( HP,		HP_J2585A,	"J2585A"),
 	DEVICE( MUTECH,		MUTECH_MV1000,	"MV-1000"),
-	DEVICE( TEKRAM,		TEKRAM_DC290,	"DC-290")
+	DEVICE( TEKRAM,		TEKRAM_DC290,	"DC-290"),
+	DEVICE( IMAGINGTECH,	IMAGINGTECH_ICPCI, "MVC IC-PCI"),
+	DEVICE( CYCLADES,	CYCLADES_Y,	"Cyclome-Y"),
+	DEVICE( PLX,		PLX_9060,	"PCI9060 i960 bridge")
 };
 
 
@@ -342,7 +354,11 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_DEC:		return "DEC";
 	      case PCI_VENDOR_ID_MATROX:	return "Matrox";
 	      case PCI_VENDOR_ID_INTEL:		return "Intel";
+#if 0
 	      case PCI_VENDOR_ID_SMC:		return "SMC";
+#else
+	      case PCI_VENDOR_ID_PCTECH:	return "PCTECH";
+#endif
 	      case PCI_VENDOR_ID_ATI:		return "ATI";
 	      case PCI_VENDOR_ID_WEITEK:	return "Weitek";
 	      case PCI_VENDOR_ID_CIRRUS:	return "Cirrus Logic";
@@ -378,6 +394,9 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_ACC:		return "ACC MICROELECTRONICS";
 	      case PCI_VENDOR_ID_VORTEX:	return "VORTEX";
 	      case PCI_VENDOR_ID_HP:		return "Hewlett Packard";
+	      case PCI_VENDOR_ID_IMAGINGTECH:	return "Imaging Technology";
+	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
+	      case PCI_VENDOR_ID_OLICOM:	return "Olicom";
 	      default:				return "Unknown vendor";
 	}
 }
@@ -800,10 +819,10 @@ unsigned long pci_init (unsigned long mem_start, unsigned long mem_end)
 
 #ifdef DEBUG
 	{
-		int len = get_pci_list(mem_start);
+		int len = get_pci_list((char*)mem_start);
 		if (len) {
-			((char*)mem_start)[len] = '\0';
-			printk("%s\n", mem_start);
+			((char *) mem_start)[len] = '\0';
+			printk("%s\n", (char *) mem_start);
 		}
 	}
 #endif

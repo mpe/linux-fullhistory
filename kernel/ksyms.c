@@ -149,7 +149,7 @@ struct symbol_table symbol_table = {
 	X(__get_free_pages),
 	X(free_pages),
 	X(kmalloc),
-	X(kfree_s),
+	X(kfree),
 	X(vmalloc),
 	X(vremap),
 	X(vfree),

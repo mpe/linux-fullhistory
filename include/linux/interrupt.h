@@ -85,7 +85,7 @@ extern inline void end_bh_atomic(void)
  * or zero if none occurred, or a negative irq number
  * if more than one irq occurred.
  */
-extern unsigned int probe_irq_on(void);	/* returns 0 on failure */
-extern int probe_irq_off(unsigned int); /* returns 0 or negative on failure */
+extern unsigned long probe_irq_on(void);	/* returns 0 on failure */
+extern int probe_irq_off(unsigned long);	/* returns 0 or negative on failure */
 
 #endif

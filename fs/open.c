@@ -466,16 +466,9 @@ int do_open(const char * filename,int flags,int mode)
 	struct file * f;
 	int flag,error,fd;
 
-	for(fd=0; fd<NR_OPEN && fd<current->rlim[RLIMIT_NOFILE].rlim_cur; fd++)
-		if (!current->files->fd[fd])
-			break;
-	if (fd>=NR_OPEN || fd>=current->rlim[RLIMIT_NOFILE].rlim_cur)
-		return -EMFILE;
-	FD_CLR(fd,&current->files->close_on_exec);
 	f = get_empty_filp();
 	if (!f)
 		return -ENFILE;
-	current->files->fd[fd] = f;
 	f->f_flags = flag = flags;
 	f->f_mode = (flag+1) & O_ACCMODE;
 	if (f->f_mode)
@@ -483,15 +476,12 @@ int do_open(const char * filename,int flags,int mode)
 	if (flag & (O_TRUNC | O_CREAT))
 		flag |= 2;
 	error = open_namei(filename,flag,mode,&inode,NULL);
-	if (!error && (f->f_mode & 2)) {
+	if (error)
+		goto cleanup_file;
+	if (f->f_mode & 2) {
 		error = get_write_access(inode);
 		if (error)
-			iput(inode);
-	}
-	if (error) {
-		current->files->fd[fd]=NULL;
-		f->f_count--;
-		return error;
+			goto cleanup_inode;
 	}
 
 	f->f_inode = inode;
@@ -502,16 +492,34 @@ int do_open(const char * filename,int flags,int mode)
 		f->f_op = inode->i_op->default_file_ops;
 	if (f->f_op && f->f_op->open) {
 		error = f->f_op->open(inode,f);
-		if (error) {
-			if (f->f_mode & 2) put_write_access(inode);
-			iput(inode);
-			f->f_count--;
-			current->files->fd[fd]=NULL;
-			return error;
-		}
+		if (error)
+			goto cleanup_all;
 	}
 	f->f_flags &= ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
-	return (fd);
+
+	/*
+	 * We have to do this last, because we mustn't export
+	 * an incomplete fd to other processes which may share
+	 * the same file table with us.
+	 */
+	for(fd = 0; fd < NR_OPEN && fd < current->rlim[RLIMIT_NOFILE].rlim_cur; fd++) {
+		if (!current->files->fd[fd]) {
+			current->files->fd[fd] = f;
+			FD_CLR(fd,&current->files->close_on_exec);
+			return fd;
+		}
+	}
+	error = -EMFILE;
+	if (f->f_op && f->f_op->release)
+		f->f_op->release(inode,f);
+cleanup_all:
+	if (f->f_mode & 2)
+		put_write_access(inode);
+cleanup_inode:
+	iput(inode);
+cleanup_file:
+	f->f_count--;
+	return error;
 }
 
 asmlinkage int sys_open(const char * filename,int flags,int mode)

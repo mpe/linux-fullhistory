@@ -16,18 +16,18 @@
  * Those macros may have been defined in <gnu/types.h>. But we always
  * use the ones here. 
  */
-#undef __FDSET_LONGS
-#define __FDSET_LONGS (256/(8*sizeof(unsigned long)))
-
-typedef struct fd_set {
-	unsigned long fds_bits [__FDSET_LONGS];
-} fd_set;
-
 #undef __NFDBITS
-#define __NFDBITS	(8 * sizeof(unsigned long))
+#define __NFDBITS	(8 * sizeof(unsigned int))
 
 #undef __FD_SETSIZE
-#define __FD_SETSIZE	(__FDSET_LONGS*__NFDBITS)
+#define __FD_SETSIZE	256
+
+#undef __FDSET_INTS
+#define __FDSET_INTS	(__FD_SETSIZE/__NFDBITS)
+
+typedef struct fd_set {
+	unsigned int fds_bits [__FDSET_INTS];
+} fd_set;
 
 #include <asm/types.h>
 

@@ -84,10 +84,12 @@ extern void _outl (unsigned int l,unsigned long port);
  * "interesting" (read: slightly braindead) Jensen type hardware
  * and the PCI version
  */
-#ifdef CONFIG_PCI
-#include <asm/lca.h>		/* get chip-specific definitions */
+#if defined(CONFIG_ALPHA_LCA)
+# include <asm/lca.h>		/* get chip-specific definitions */
+#elif defined(CONFIG_ALPHA_APECS)
+# include <asm/apecs.h>		/* get chip-specific definitions */
 #else
-#include <asm/jensen.h>
+# include <asm/jensen.h>
 #endif
 
 #ifdef __KERNEL__

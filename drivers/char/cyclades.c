@@ -1025,13 +1025,13 @@ check_wild_interrupts(void)
 	 * Delay for 0.1 seconds -- we use a busy loop since this may 
 	 * occur during the bootup sequence
 	 */
-	timeout = jiffies+10;
+	timeout = jiffies+HZ/10;
 	while (timeout >= jiffies)
 	    ;
 	
 	cy_triggered = 0;	/* Reset after letting things settle */
 
-	timeout = jiffies+10;
+	timeout = jiffies+HZ/10;
 	while (timeout >= jiffies)
 		;
 	
@@ -1072,7 +1072,7 @@ get_auto_irq(int card)
 	base_addr[CySRER] |= CyTxMpty;
     sti();
     
-    timeout = jiffies+2;
+    timeout = jiffies+2*HZ/100;
     while (timeout >= jiffies) {
 	if (cy_irq_triggered)
 	    break;
@@ -2302,7 +2302,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
     if (info->flags & ASYNC_CALLOUT_ACTIVE)
 	info->callout_termios = *tty->termios;
     if (info->flags & ASYNC_INITIALIZED)
-	tty_wait_until_sent(tty, 3000); /* 30 seconds timeout */
+	tty_wait_until_sent(tty, 30*HZ); /* 30 seconds timeout */
     shutdown(info);
     if (tty->driver.flush_buffer)
 	tty->driver.flush_buffer(tty);

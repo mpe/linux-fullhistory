@@ -155,10 +155,10 @@ static int aha1542_out(unsigned int base, unchar *cmdp, int len)
 {
   unsigned long flags = 0;
   
+  save_flags(flags);
   if(len == 1) {
     while(1==1){
 	WAIT(STATUS(base), CDF, 0, CDF);
-	save_flags(flags);
 	cli();
 	if(inb(STATUS(base)) & CDF) {restore_flags(flags); continue;}
 	outb(*cmdp, DATA(base));
@@ -166,7 +166,6 @@ static int aha1542_out(unsigned int base, unchar *cmdp, int len)
 	return 0;
       }
   } else {
-    save_flags(flags);
     cli();
     while (len--)
       {

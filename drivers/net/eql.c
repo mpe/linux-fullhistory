@@ -859,6 +859,7 @@ eql_remove_slave(slave_queue_t *queue, slave_t *slave)
     {
       prev->next = current->next;
       queue->num_slaves--;
+      sti();
       return current;
     }
 

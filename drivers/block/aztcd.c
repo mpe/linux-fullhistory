@@ -1,5 +1,5 @@
-#define AZT_VERSION "1.60"
-/*      $Id: aztcd.c,v 1.60 1995/08/09 12:37:38 root Exp root $
+#define AZT_VERSION "1.70"
+/*      $Id: aztcd.c,v 1.70 1995/08/19 16:16:39 root Exp root $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
 	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
@@ -117,8 +117,7 @@
 	V1.30   Auto-eject feature. Inspired by Franc Racis (racis@psu.edu)
 	        Werner Zimmermann, July 4, 95
 	V1.40   Started multisession support. Implementation copied from mcdx.c
-	        by Heiko Schlittermann. Not tested, as I do not have a multi-
-	        session CD. If you can test it, please contact me.
+	        by Heiko Schlittermann. Not tested yet.
 	        Werner Zimmermann, July 15, 95
         V1.50   Implementation of ioctl CDROMRESET, continued multisession, began
                 XA, but still untested. Heavy modifications to drive status de-
@@ -127,6 +126,10 @@
         V1.60   XA support now should work. Speeded up drive recognition in cases, 
                 where no drive is installed.
                 Werner Zimmermann, August 8, 1995
+        V1.70   Multisession support now is completed, but there is still not 
+                enough testing done. If you can test it, please contact me. For
+                details please read README.aztcd.
+                Werner Zimmermann, August 19, 1995
 	NOTE: 
 	Points marked with ??? are questionable !
 */
@@ -188,6 +191,7 @@ static int aztPresent = 0;
 #define AZT_TEST4 /* QUICK_LOOP-counter */
 #define AZT_TEST5 /* port(1) state */
 #define AZT_DEBUG
+#define AZT_DEBUG_MULTISESSION
 #endif
 
 #define CURRENT_VALID \
@@ -256,6 +260,7 @@ static char aztTocUpToDate = 0;
 static void azt_transfer(void);
 static void azt_poll(void);
 static void azt_invalidate_buffers(void);
+static void do_aztcd_request(void);
 static void azt_hsg2msf(long hsg, struct msf *msf);
 static void azt_bin2bcd(unsigned char *p);
 static int  azt_bcd2bin(unsigned char bcd);
@@ -266,7 +271,10 @@ static int  sendAztCmd(int cmd, struct azt_Play_msf *params);
 static int  aztGetQChannelInfo(struct azt_Toc *qp);
 static int  aztUpdateToc(void);
 static int  aztGetDiskInfo(void);
-static int  aztGetToc(void);
+#if AZT_MULTISESSION 
+  static int  aztGetMultiDiskInfo(void);
+#endif
+static int  aztGetToc(int multi);
 static int  aztGetValue(unsigned char *result);
 static void aztStatTimer(void);
 static void aztCloseDoor(void);
@@ -338,7 +346,7 @@ void dten_low(void)
 #define STEN_LOW_WAIT   statusAzt()
 void statusAzt(void)
 { AztTimeout = AZT_STATUS_DELAY;
-  SET_TIMER(aztStatTimer, 1); 
+  SET_TIMER(aztStatTimer, HZ/100); 
   sleep_on(&azt_waitq);
   if (AztTimeout <= 0) printk("aztcd: Error Wait STEN_LOW_WAIT command:%x\n",aztCmd);
   return;
@@ -355,7 +363,7 @@ static void aztStatTimer(void)
        printk("aztcd: Error aztStatTimer: Timeout\n");
        return;
      }
-  SET_TIMER(aztStatTimer, 1);
+  SET_TIMER(aztStatTimer, HZ/100);
 }
 
 void aztcd_setup(char *str, int *ints)
@@ -467,6 +475,39 @@ static int sendAztCmd(int cmd, struct azt_Play_msf *params)
        azt_error=0xA5;
      }
    RETURNM("sendAztCmd",-1);
+}
+
+/*
+ * Send a seek command to the drive, return -1 on error, else 0
+*/
+static int aztSeek(struct azt_Play_msf *params)
+{  unsigned char data;
+   int retry;
+
+#ifdef AZT_DEBUG
+   printk("aztcd: aztSeek %02x:%02x:%02x\n", \
+	   params->start.min, params->start.sec, params->start.frame);
+#endif   
+   for (retry=0;retry<AZT_RETRY_ATTEMPTS;retry++)
+     { aztSendCmd(ACMD_SEEK);
+       outb(params -> start.min,CMD_PORT);
+       outb(params -> start.sec,CMD_PORT);
+       outb(params -> start.frame,CMD_PORT);
+       STEN_LOW;
+       data=inb(DATA_PORT);
+       if (data==AFL_PA_OK)
+	 { return 0;}           /*PA_OK ?*/
+       if (data==AFL_PA_ERR)
+	 { STEN_LOW;
+	   data=inb(DATA_PORT);
+	   printk("### Error 1 aztcd: aztSeek\n");
+	 }
+     }
+   if (retry>=AZT_RETRY_ATTEMPTS)
+     { printk("### Error 2 aztcd: aztSeek\n ");
+       azt_error=0xA5;
+     }
+   RETURNM("aztSeek",-1);
 }
 
 /* Send a Set Disk Type command
@@ -633,7 +674,6 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 		}
 		aztAudioStatus = CDROM_AUDIO_PLAY;
 		break;
-#if AZT_MULTISESSION
 	case CDROMMULTISESSION: /*multisession support -- experimental*/
 	        { struct cdrom_multisession ms;
 #ifdef AZT_DEBUG
@@ -643,12 +683,12 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 		  if (st) return st;
 		  memcpy_fromfs(&ms, (void*) arg, sizeof(struct cdrom_multisession));
 		  if (ms.addr_format == CDROM_MSF) 
-		     { ms.addr.msf.minute = azt_bcd2bin(DiskInfo.lastTrack.min);
-		       ms.addr.msf.second = azt_bcd2bin(DiskInfo.lastTrack.sec);
-		       ms.addr.msf.frame  = azt_bcd2bin(DiskInfo.lastTrack.frame);
+		     { ms.addr.msf.minute = azt_bcd2bin(DiskInfo.lastSession.min);
+		       ms.addr.msf.second = azt_bcd2bin(DiskInfo.lastSession.sec);
+		       ms.addr.msf.frame  = azt_bcd2bin(DiskInfo.lastSession.frame);
 		     } 
 		  else if (ms.addr_format == CDROM_LBA)
-		       ms.addr.lba = azt_msf2hsg(&DiskInfo.lastTrack);
+		       ms.addr.lba = azt_msf2hsg(&DiskInfo.lastSession);
 		  else
 		       return -EINVAL;
 		  ms.xa_flag = DiskInfo.xa;
@@ -659,16 +699,15 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
  		  if (ms.addr_format == CDROM_MSF) 
                       printk("aztcd multisession xa:%d, msf:%02x:%02x.%02x [%02x:%02x.%02x])\n",
 			      ms.xa_flag, ms.addr.msf.minute, ms.addr.msf.second, 
-			      ms.addr.msf.frame, DiskInfo.lastTrack.min,
-			      DiskInfo.lastTrack.sec, DiskInfo.lastTrack.frame);
+			      ms.addr.msf.frame, DiskInfo.lastSession.min,
+			      DiskInfo.lastSession.sec, DiskInfo.lastSession.frame);
 		  else
 		      printk("atzcd multisession %d, lba:0x%08x [%02x:%02x.%02x])\n",
-			      ms.xa_flag, ms.addr.lba, DiskInfo.lastTrack.min,
-			      DiskInfo.lastTrack.sec, DiskInfo.lastTrack.frame);
+			      ms.xa_flag, ms.addr.lba, DiskInfo.lastSession.min,
+			      DiskInfo.lastSession.sec, DiskInfo.lastSession.frame);
 #endif
    		  return 0;
 		}
-#endif
 	case CDROMPLAYTRKIND:     /* Play a track.  This currently ignores index. */
 		st = verify_area(VERIFY_READ, (void *) arg, sizeof ti);
 		if (st) return st;
@@ -890,6 +929,19 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		  }
 		 } 
                 break;
+	case CDROMSEEK:    /*seek msf address*/
+		st = verify_area(VERIFY_READ,  (void *) arg, sizeof msf);
+		if (st) return st;
+		memcpy_fromfs(&msf, (void *) arg, sizeof msf);
+		/* convert to bcd */
+		azt_bin2bcd(&msf.cdmsf_min0);
+		azt_bin2bcd(&msf.cdmsf_sec0);
+		azt_bin2bcd(&msf.cdmsf_frame0);
+		azt_Play.start.min = msf.cdmsf_min0;
+		azt_Play.start.sec = msf.cdmsf_sec0;
+		azt_Play.start.frame = msf.cdmsf_frame0;
+		if (aztSeek(&azt_Play)) return -1;
+                break;
 #endif /*end of incompatible code*/       
 	case CDROMREADMODE1: /*set read data in mode 1*/
                 return aztSetDiskType(AZT_MODE_1);
@@ -976,7 +1028,7 @@ static void do_aztcd_request(void)
 	}
 	azt_state = AZT_S_START;
 	AztTries = 5;
-	SET_TIMER(azt_poll, 1);
+	SET_TIMER(azt_poll, HZ/100);
       }
       break;
     }
@@ -1372,7 +1424,7 @@ static void azt_poll(void)
       STEN_LOW_WAIT;     
     };
 
-  SET_TIMER(azt_poll, 1);
+  SET_TIMER(azt_poll, HZ/100);
 }
 
 static void azt_invalidate_buffers(void)
@@ -1413,24 +1465,10 @@ int aztcd_open(struct inode *ip, struct file *fp)
 
 	    if ((st & AST_NOT_READY) || (st & AST_DSK_CHG)) /*no disk in drive or changed*/
 	       { printk("aztcd: Disk Changed or No Disk in Drive?\n");
-/*	         return -EIO;
-*/	       }
-
-	    if (aztUpdateToc() < 0)	return -EIO;
-
-            /* XA detection was already done in aztGetToc */
-            if (DiskInfo.xa) 
-               { printk("aztcd: XA support experimental - mail results to zimmerma@rz.fht-esslingen.de\n");
+                 aztTocUpToDate=0;
                }
-
-            /* audio detection was already done in aztGetToc */
-	    if (DiskInfo.audio) 
-	       { printk(("aztcd: Audio-CD found\n"));
-	       } 
-	    else 
-	       { printk("aztcd: %sCD-ROM found\n",
-	  	         DiskInfo.xa ? "XA " : "");
-	       }
+            if (aztUpdateToc())	return -EIO;
+	       
 	  }
 	++azt_open_count;
         MOD_INC_USE_COUNT;
@@ -1503,8 +1541,7 @@ int init_module(void)
           return -EIO;
 #endif	  
 	}
-	printk("aztcd: Aztech, Orchid, Okano, Wearnes CD-ROM Driver\n");
-	printk("aztcd: (C) 1994,1995 Werner Zimmermann\n");
+	printk("aztcd: Aztech, Orchid, Okano, Wearnes CD-ROM Driver (C) 1994,1995 W.Zimmermann\n");
 	printk("aztcd: DriverVersion=%s  BaseAddress=0x%x \n",AZT_VERSION,azt_port);
 
 	if (check_region(azt_port, 4)) {
@@ -1566,9 +1603,10 @@ int init_module(void)
 	            { inb(STATUS_PORT);    /*removing all data from earlier tries*/
 	              inb(DATA_PORT);
 	            }
-	          outb(POLLED,MODE_PORT);              /*???*/
+	          outb(POLLED,MODE_PORT);           /*???*/
 	          inb(CMD_PORT);
 	          inb(CMD_PORT);
+		  getAztStatus(); 		    /*trap errors*/
 	          outb(ACMD_SOFT_RESET,CMD_PORT);   /*send reset*/
 	          STEN_LOW;
 	          if (inb(DATA_PORT)!=AFL_OP_OK)    /*OP_OK?*/
@@ -1579,7 +1617,10 @@ int init_module(void)
                        return -EIO;
 #endif	     
 	             } 
-	          for (count = 0; count < AZT_TIMEOUT; count++);  /* delay a bit */
+	          for (count = 0; count < AZT_TIMEOUT; count++); 
+	             { count=count*2;          /* delay a bit */
+	               count=count/2;
+	             }                        
 	          if ((st=getAztStatus())==-1)
 	             { printk("aztcd: Drive Status Error Status=%x\n",st);
 #ifndef MODULE
@@ -1765,7 +1806,8 @@ int aztGetQChannelInfo(struct azt_Toc *qp)
  * Read the table of contents (TOC) and TOC header if necessary
  */
 static int aztUpdateToc()
-{
+{       int st;
+
 #ifdef AZT_DEBUG
 	printk("aztcd: starting aztUpdateToc  Time:%li\n",jiffies);
 #endif  
@@ -1775,8 +1817,56 @@ static int aztUpdateToc()
 	if (aztGetDiskInfo() < 0)
 		return -EIO;
 
-	if (aztGetToc() < 0)
+	if (aztGetToc(0) < 0)
 		return -EIO;
+
+        /*audio disk detection
+          with my Aztech drive there is no audio status bit, so I use the copy
+          protection bit of the first track. If this track is copy protected 
+          (copy bit = 0), I assume, it's an audio  disk. Strange, but works ??? */
+        if (!(Toc[DiskInfo.first].ctrl_addr & 0x40)) 
+           DiskInfo.audio=1;
+        else 
+           DiskInfo.audio=0;
+
+        /* XA detection */
+	if (! DiskInfo.audio) 
+	   { azt_Play.start.min   = 0;  /*XA detection only seems to work*/
+             azt_Play.start.sec   = 2;  /*when we play a track*/
+	     azt_Play.start.frame = 0;
+	     azt_Play.end.min     = 0;
+	     azt_Play.end.sec     = 0;
+	     azt_Play.end.frame   = 1;
+	     if (sendAztCmd(ACMD_PLAY_READ, &azt_Play)) return -1;
+	     DTEN_LOW;
+	     for (st=0;st<CD_FRAMESIZE;st++) inb(DATA_PORT);
+           } 
+        DiskInfo.xa = getAztStatus() & AST_MODE;
+        if (DiskInfo.xa) 
+           { printk("aztcd: XA support experimental - mail results to zimmerma@rz.fht-esslingen.de\n");
+           }
+        
+        /*multisession detection
+          support for multisession CDs is done automatically with Aztech drives,
+          we don't have to take care about TOC redirection; if we want the isofs
+          to take care about redirection, we have to set AZT_MULTISESSION to 1*/
+        DiskInfo.multi=0;
+#if AZT_MULTISESSION
+  	if (DiskInfo.xa) 
+  	   { aztGetMultiDiskInfo(); /*here Disk.Info.multi is set*/
+  	   }
+#endif
+        if (DiskInfo.multi)
+           { DiskInfo.lastSession.min  = Toc[DiskInfo.next].diskTime.min;
+	     DiskInfo.lastSession.sec  = Toc[DiskInfo.next].diskTime.sec;
+             DiskInfo.lastSession.frame= Toc[DiskInfo.next].diskTime.frame;
+             printk("aztcd: Multisession support experimental\n");
+           }
+        else
+           { DiskInfo.lastSession.min  = Toc[DiskInfo.first].diskTime.min;
+	     DiskInfo.lastSession.sec  = Toc[DiskInfo.first].diskTime.sec;
+             DiskInfo.lastSession.frame= Toc[DiskInfo.first].diskTime.frame;
+           }
 
 	aztTocUpToDate = 1;
 #ifdef AZT_DEBUG
@@ -1786,8 +1876,8 @@ static int aztUpdateToc()
 }
 
 
-/*
- * Read the table of contents header
+/* Read the table of contents header, i.e. no. of tracks and start of first 
+ * track
  */
 static int aztGetDiskInfo()
 { int limit;
@@ -1814,7 +1904,7 @@ static int aztGetDiskInfo()
 	}
       if (qInfo.pointIndex==0xA2)   /*DiskLength*/
 	{ DiskInfo.diskLength.min=qInfo.diskTime.min;
-	  DiskInfo.diskLength.sec=qInfo.diskTime.sec-2;
+	  DiskInfo.diskLength.sec=qInfo.diskTime.sec;
 	  DiskInfo.diskLength.frame=qInfo.diskTime.frame;
 	  test=test|0x04;
 	}
@@ -1827,114 +1917,189 @@ static int aztGetDiskInfo()
       if (test==0x0F) break;
    }
 #ifdef AZT_DEBUG
-printk ("aztcd: exiting aztGetDiskInfo  Time:%li\n",jiffies);
-printk("Disk Info: first %d last %d length %02x:%02x.%02x first %02x:%02x.%02x\n",
-	DiskInfo.first,
-	DiskInfo.last,
-	DiskInfo.diskLength.min,
-	DiskInfo.diskLength.sec,
-	DiskInfo.diskLength.frame,
-	DiskInfo.firstTrack.min,
-	DiskInfo.firstTrack.sec,
-	DiskInfo.firstTrack.frame);
+  printk ("aztcd: exiting aztGetDiskInfo  Time:%li\n",jiffies);
+  printk("Disk Info: first %d last %d length %02X:%02X.%02X dez  first %02X:%02X.%02X dez\n",
+  	  DiskInfo.first,
+	  DiskInfo.last,
+	  DiskInfo.diskLength.min,
+	  DiskInfo.diskLength.sec,
+	  DiskInfo.diskLength.frame,
+	  DiskInfo.firstTrack.min,
+	  DiskInfo.firstTrack.sec,
+	  DiskInfo.firstTrack.frame);
 #endif
   if (test!=0x0F) return -1;
   return 0;
 }
 
+#if AZT_MULTISESSION
+/*
+ * Get Multisession Disk Info
+ */
+static int aztGetMultiDiskInfo(void)
+{ int limit, k=5;
+  unsigned char test;
+  struct azt_Toc qInfo;
+
+#ifdef AZT_DEBUG
+  printk("aztcd: starting aztGetMultiDiskInfo\n");
+#endif
+
+  do { azt_Play.start.min   = Toc[DiskInfo.last+1].diskTime.min;
+       azt_Play.start.sec   = Toc[DiskInfo.last+1].diskTime.sec;
+       azt_Play.start.frame = Toc[DiskInfo.last+1].diskTime.frame;
+       test=0;
+
+       for (limit=30;limit>0;limit--)   /*Seek for LeadIn of next session*/
+           { if (aztSeek(&azt_Play)) RETURNM("aztGetMultiDiskInfo 1",-1);
+             if (aztGetQChannelInfo(&qInfo)<0) RETURNM("aztGetMultiDiskInfo 2",-1);
+             if ((qInfo.track==0)&&(qInfo.pointIndex)) break;  /*LeadIn found*/
+             if ((azt_Play.start.sec+=10) > 59)
+                { azt_Play.start.sec=0;
+                  azt_Play.start.min++;
+                }
+           }
+       if (!limit) break;  /*Check, if a leadin track was found, if not we're
+                             at the end of the disk*/
+#ifdef AZT_DEBUG_MULTISESSION
+       printk("leadin found track %d  pointIndex %x  limit %d\n",qInfo.track,qInfo.pointIndex,limit);
+#endif
+       for (limit=300;limit>0;limit--)
+           { if (++azt_Play.start.frame>74)
+                { azt_Play.start.frame=0;
+                  if (azt_Play.start.sec > 59)
+                     { azt_Play.start.sec=0;
+                       azt_Play.start.min++;
+                     }
+                }     
+             if (aztSeek(&azt_Play)) RETURNM("aztGetMultiDiskInfo 3",-1);
+             if (aztGetQChannelInfo(&qInfo)<0) RETURNM("aztGetMultiDiskInfo 4",-1);
+             if (qInfo.pointIndex==0xA0)   /*Number of NextTrack*/
+	        { DiskInfo.next = qInfo.diskTime.min;
+	          DiskInfo.next = azt_bcd2bin(DiskInfo.next);
+	          test=test|0x01;
+	        }
+             if (qInfo.pointIndex==0xA1)   /*Number of LastTrack*/
+	 	{ DiskInfo.last  = qInfo.diskTime.min;
+	   	  DiskInfo.last  = azt_bcd2bin(DiskInfo.last);
+	   	  test=test|0x02;
+	 	}
+      	     if (qInfo.pointIndex==0xA2)   /*DiskLength*/
+	 	{ DiskInfo.diskLength.min  =qInfo.diskTime.min;
+	   	  DiskInfo.diskLength.sec  =qInfo.diskTime.sec;
+	   	  DiskInfo.diskLength.frame=qInfo.diskTime.frame;
+	  	  test=test|0x04;
+	 	}
+      	     if ((qInfo.pointIndex==DiskInfo.next)&&(test&0x01))   /*StartTime of Next Track*/
+		{ DiskInfo.nextSession.min=qInfo.diskTime.min;
+	  	  DiskInfo.nextSession.sec=qInfo.diskTime.sec;
+	  	  DiskInfo.nextSession.frame=qInfo.diskTime.frame;
+	  	  test=test|0x08;
+		}
+      	     if (test==0x0F) break;
+   	   }
+#ifdef AZT_DEBUG_MULTISESSION
+       printk ("MultiDisk Info: first %d next %d last %d length %02x:%02x.%02x dez  first %02x:%02x.%02x dez  next %02x:%02x.%02x dez\n",
+     		DiskInfo.first,
+		DiskInfo.next,
+		DiskInfo.last,
+		DiskInfo.diskLength.min,
+		DiskInfo.diskLength.sec,
+		DiskInfo.diskLength.frame,
+		DiskInfo.firstTrack.min,
+		DiskInfo.firstTrack.sec,
+		DiskInfo.firstTrack.frame,
+		DiskInfo.nextSession.min,
+		DiskInfo.nextSession.sec,
+		DiskInfo.nextSession.frame);
+#endif
+       if (test!=0x0F) 
+           break;
+       else 
+           DiskInfo.multi=1;   /*found TOC of more than one session*/
+       aztGetToc(1);
+     } while(--k);
+
+#ifdef AZT_DEBUG
+  printk ("aztcd: exiting aztGetMultiDiskInfo  Time:%li\n",jiffies);
+#endif
+  return 0;
+}
+#endif
+
 /*
  * Read the table of contents (TOC)
  */
-static int aztGetToc()
-{       int i, px;
-	int limit;
-	struct azt_Toc qInfo;
+static int aztGetToc(int multi)
+{ int i, px;
+  int limit;
+  struct azt_Toc qInfo;
 
 #ifdef AZT_DEBUG
-	printk("aztcd: starting aztGetToc  Time:%li\n",jiffies);
+  printk("aztcd: starting aztGetToc  Time:%li\n",jiffies);
 #endif
-	for (i = 0; i < MAX_TRACKS; i++)
-		Toc[i].pointIndex = 0;
+  if (!multi)
+     { for (i = 0; i < MAX_TRACKS; i++)
+ 	    Toc[i].pointIndex = 0;
+       i = DiskInfo.last + 3;
+     }
+  else
+     { for (i = DiskInfo.next; i < MAX_TRACKS; i++)
+     	    Toc[i].pointIndex = 0; 
+       i = DiskInfo.last + 4 - DiskInfo.next;
+     }
 
-	i = DiskInfo.last + 3;
-
-/* Is there a good reason to stop motor before TOC read?
-	if (aztSendCmd(ACMD_STOP)) RETURNM("aztGetToc 1",-1);
-	STEN_LOW_WAIT;
+/*Is there a good reason to stop motor before TOC read?
+  if (aztSendCmd(ACMD_STOP)) RETURNM("aztGetToc 1",-1);
+      STEN_LOW_WAIT;
 */
 
-	azt_mode = 0x05;
-	if (aztSendCmd(ACMD_SEEK_TO_LEADIN)) RETURNM("aztGetToc 2",-1); /*???*/
-	STEN_LOW_WAIT;
+  if (!multi)
+     { azt_mode = 0x05;
+       if (aztSendCmd(ACMD_SEEK_TO_LEADIN)) RETURNM("aztGetToc 2",-1); /*???*/
+       STEN_LOW_WAIT;
+     }
+  for (limit = 300; limit > 0; limit--)
+      { if (multi)
+           { if (++azt_Play.start.sec > 59)
+                { azt_Play.start.sec=0;
+                  azt_Play.start.min++;
+                }
+             if (aztSeek(&azt_Play)) RETURNM("aztGetToc 3",-1);
+           }
+	if (aztGetQChannelInfo(&qInfo) < 0)
+	    break;
 
-	for (limit = 300; limit > 0; limit--)
-	{
-		if (aztGetQChannelInfo(&qInfo) < 0)
-			break;
+	px = azt_bcd2bin(qInfo.pointIndex);
 
-		px = azt_bcd2bin(qInfo.pointIndex);
-		if (px > 0 && px < MAX_TRACKS && qInfo.track == 0)
-			if (Toc[px].pointIndex == 0)
-			{
-				Toc[px] = qInfo;
-				i--;
-			}
+	if (px > 0 && px < MAX_TRACKS && qInfo.track == 0)
+  	    if (Toc[px].pointIndex == 0)
+	       { Toc[px] = qInfo;
+		 i--;
+	       }
 
-		if (i <= 0)
-			break;
-	}
+	if (i <= 0)
+	    break;
+      }
 
-	Toc[DiskInfo.last + 1].diskTime = DiskInfo.diskLength;
+  Toc[DiskInfo.last + 1].diskTime = DiskInfo.diskLength;
 
-        /*support for multisession CDs is done automatically with Aztech drives,
-          we don't have to take care about TOC redirection */
-        DiskInfo.multi = 0;    
-        DiskInfo.lastTrack.min  = Toc[DiskInfo.last].diskTime.min;
-	DiskInfo.lastTrack.sec  = Toc[DiskInfo.last].diskTime.sec;
-        DiskInfo.lastTrack.frame= Toc[DiskInfo.last].diskTime.frame;
 
-        /*try to detect XA disks*/
-        i = getAztStatus();
-  	DiskInfo.xa    = i & AST_MODE; /* XA info sometimes unreliable ??? */
-
-        /*try to detect audio disks; with my Aztech drive there is no audio
-          status bit, so I use the copy protection bit of the first track. If
-          this track is copy protected (copy bit = 0), I assume, it's an audio 
-          disk. ???*/
-        if (!(Toc[DiskInfo.first].ctrl_addr & 0x40)) 
-           DiskInfo.audio=1;
-        else 
-           DiskInfo.audio=0;
-
-#ifdef AZT_DEBUG
-printk("aztcd: exiting aztGetToc  Time:%li\n",jiffies);
-for (i = 1; i <= DiskInfo.last+1; i++)
-printk("i = %2d ctl-adr = %02X track %2d px %02X %02X:%02X.%02X    %02X:%02X.%02X\n",
-i, Toc[i].ctrl_addr, Toc[i].track, Toc[i].pointIndex,
-Toc[i].trackTime.min, Toc[i].trackTime.sec, Toc[i].trackTime.frame,
-Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
-for (i = 100; i < 103; i++)
-printk("i = %2d ctl-adr = %02X track %2d px %02X %02X:%02X.%02X    %02X:%02X.%02X\n",
-i, Toc[i].ctrl_addr, Toc[i].track, Toc[i].pointIndex,
-Toc[i].trackTime.min, Toc[i].trackTime.sec, Toc[i].trackTime.frame,
-Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
-printk("\nDisk Info: first %d last %d length %02x:%02x.%02x first %02x:%02x.%02x last %02x:%02x.%02x type %02x %02x\n",
-	DiskInfo.first,
-	DiskInfo.last,
-	DiskInfo.diskLength.min,
-	DiskInfo.diskLength.sec,
-	DiskInfo.diskLength.frame,
-	DiskInfo.firstTrack.min,
-	DiskInfo.firstTrack.sec,
-	DiskInfo.firstTrack.frame,
-	DiskInfo.lastTrack.min,
-	DiskInfo.lastTrack.sec,
-	DiskInfo.lastTrack.frame,
-        DiskInfo.xa,
-        DiskInfo.audio);
+#ifdef AZT_DEBUG_MULTISESSION 
+  printk("aztcd: exiting aztGetToc\n");
+  for (i = 1; i <= DiskInfo.last+1; i++)
+       printk("i = %2d ctl-adr = %02X track %2d px %02X %02X:%02X.%02X dez  %02X:%02X.%02X dez\n",
+               i, Toc[i].ctrl_addr, Toc[i].track, Toc[i].pointIndex,
+               Toc[i].trackTime.min, Toc[i].trackTime.sec, Toc[i].trackTime.frame,
+               Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
+  for (i = 100; i < 103; i++)
+       printk("i = %2d ctl-adr = %02X track %2d px %02X %02X:%02X.%02X dez  %02X:%02X.%02X dez\n",
+               i, Toc[i].ctrl_addr, Toc[i].track, Toc[i].pointIndex,
+               Toc[i].trackTime.min, Toc[i].trackTime.sec, Toc[i].trackTime.frame,
+               Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
 #endif
 
-	return limit > 0 ? 0 : -1;
+  return limit > 0 ? 0 : -1;
 }
 
 #ifdef MODULE

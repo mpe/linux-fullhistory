@@ -209,6 +209,7 @@ struct sock {
   unsigned char		ip_opt_next_strict;	/* Next hop is strict route */
   unsigned long		ip_opt_next_hop;	/* Next hop if forced */
   unsigned char 	*ip_opt_ptr[2];		/* IP option pointers */
+  unsigned char		ip_hdrincl;		/* Include headers ? */
 #ifdef CONFIG_IP_MULTICAST  
   int			ip_mc_ttl;		/* Multicasting TTL */
   int			ip_mc_loop;		/* Loopback */

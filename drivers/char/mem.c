@@ -42,7 +42,7 @@ static int read_mem(struct inode * inode, struct file * file,char * buf, int cou
 
 	if (count < 0)
 		return -EINVAL;
-	if (p >= high_memory)
+	if (MAP_NR(p) >= MAP_NR(high_memory))
 		return 0;
 	if (count > high_memory - p)
 		count = high_memory - p;
@@ -67,7 +67,7 @@ static int write_mem(struct inode * inode, struct file * file,const char * buf, 
 
 	if (count < 0)
 		return -EINVAL;
-	if (p >= high_memory)
+	if (MAP_NR(p) >= MAP_NR(high_memory))
 		return 0;
 	if (count > high_memory - p)
 		count = high_memory - p;

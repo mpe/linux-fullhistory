@@ -1,31 +1,23 @@
-Upgrade Notes from 1.0
-[Alan Cox -  Alan.Cox@linux.org]
 
-Upgrading to 1.2.0 from a 1.0 kernel networking set. If you are using
-a complete 1.2 distribution you can ignore this.
+Maintainers and developers for networking code sections
 
-This doesn't attempt to list the changes. That would be too large. Instead
-just what you need and can change
-
-arp,ifconfig, etc. Get net-tools-1.1.95 (or 1.2.0 if its out) from
-ftp.linux.org.uk:/pub/Linux/Networking/PROGRAMS/NetTools, and install
-these. You will also acquire a couple of new tools "plipconfig" for tuning
-plip links and "ipfw" for ip firewall management.
-
-bootpd: The original bootpd has a bug that the 1.2 kernel spots. You will
-need to upgrade this to the version in
-ftp.linux.org.uk:/pub/Linux/Networking/PROGRAMS/Upgrades
+Code Section		Bug Report Contact
+-------------------+-------------------------------------------
+802 [other	]	alan@cymru.net	
+    [token ring	]	needs a maintainer/debugger
+appletalk		alan@cymru.net and netatalk@umich.edu
+ax25			g4klx@g4klx.demon.co.uk
+core			alan@cymru.net
+ethernet		alan@cymru.net
+ipv4			alan@cymru.net
+ipx			alan@cymru.net,greg@caldera.com
+netrom			g4klx@g4klx.demon.co.uk
+unix			alan@cymru.net
 
 
-Standard programs that you ought to update are
+	If in doubt contact me <alan@cymru.net> first.
 
-named 4.7.x	to 4.9.x	Stops named dying occasionally
-pop3d 1.001     to 1.004	Fixes a bug that can lose mail
-
-A complete current networking set for Linux can be obtained by getting
-the NetKit[A,B...] series archives from ftp.funet.fi. Funet also carries
-binaries for Linux mbone applications if you now wish to make use of
-these facilities.
+---------------------------------------------------------------------------
 
 For commercial UK custom Linux networking projects, drivers and development
 (but not free support!) I can be contacted via
@@ -35,7 +27,9 @@ For commercial UK custom Linux networking projects, drivers and development
 	Fax: +44 1792 295811
 	Tel: +44 1792 295213
 
-Please don't send commercial queries to my email address as I have that
+	Email: alan@cymru.net
+
+Please don't send commercial queries to my .ac.uk email address as I have that
 in an academic and _not_ commercial capacity. On the other hand feel
 free to send bug reports, queries and enhancements that way.
 

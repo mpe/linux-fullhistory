@@ -97,7 +97,7 @@ typedef unsigned long long u64;
 #define __FD_ZERO(fdsetp) \
 		__asm__ __volatile__("cld ; rep ; stosl" \
 			:"=m" (*(fd_set *) (fdsetp)) \
-			:"a" (0), "c" (__FDSET_LONGS), \
+			:"a" (0), "c" (__FDSET_INTS), \
 			"D" ((fd_set *) (fdsetp)) :"cx","di")
 
 #endif

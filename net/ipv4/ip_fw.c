@@ -22,6 +22,8 @@
  *	Established connections (ACK check), ACK check on bidirectional rules,
  *	ICMP type check.
  *		Wilfred Mollenvanger 7/7/1995.
+ *	TCP attack protection.
+ *		Alan Cox 25/8/95, based on information from bugtraq.
  *
  * Masquerading functionality
  *
@@ -36,6 +38,9 @@
  * Fixes:
  *	Pauline Middelink	:	Added masquerading.
  *	Alan Cox		:	Fixed an error in the merge.
+ *
+ * TODO:
+ *	Fix the PORT spoof crash.
  *
  *	All the real work was done by .....
  *
@@ -190,6 +195,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	unsigned short		f_prt=0, prt;
 	char			notcpsyn=1, notcpack=1, frag1, match;
 	unsigned short		f_flag;
+	unsigned short		offset;
 
 	/*
 	 *	If the chain is empty follow policy. The BSD one
@@ -214,11 +220,38 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	 *	of system.
 	 */
 
-	frag1 = ((ntohs(ip->frag_off) & IP_OFFSET) == 0);
+	offset = ntohs(ip->frag_off) & IP_OFFSET;
+	
+	frag1 = (offset == 0);
+
+	/*
+	 *	Don't allow a fragment of TCP 8 bytes in. Nobody
+	 *	normal causes this. Its a cracker trying to break
+	 *	in by doing a flag overwrite to pass the direction
+	 *	checks.
+	 */
+	 
+	if (offset == 1 && ip->protocol == IPPROTO_TCP)
+		return 0;
+		
 	if (!frag1 && (opt != 1) && (ip->protocol == IPPROTO_TCP ||
 			ip->protocol == IPPROTO_UDP))
 		return(1);
-
+		
+	/*
+	 *	 Header fragment for TCP is too small to check the bits.
+	 */
+	 
+	if(ip->protocol==IPPROTO_TCP && (ip->ihl<<2)+16 > ntohs(ip->tot_len))
+		return 0;
+	
+	/*
+	 *	Too short.
+	 */
+	 
+	else if(ntohs(ip->tot_len)<8+(ip->ihl<<2))
+		return 0;
+		
 	src = ip->saddr;
 	dst = ip->daddr;
 

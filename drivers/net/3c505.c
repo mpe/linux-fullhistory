@@ -377,8 +377,10 @@ send_pcb (struct device * dev, pcb_struct * pcb)
 		} else {
 			printk("%s: timeout after sending PCB\n", dev->name);
 		}
-	} else
+	} else {
+		sti();
 		printk("%s: timeout in middle of sending PCB\n", dev->name);
+	}
 
 	adapter_reset(dev);
 	return FALSE;

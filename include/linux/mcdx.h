@@ -1,7 +1,7 @@
 /*
  * Definitions for the Mitsumi CDROM interface
  * Copyright (C) 1995 Heiko Schlittermann
- * VERSION: @VERSION@
+ * VERSION: 1.0a
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -54,7 +54,7 @@
 #if MCDX_AUTOPROBE == 0
 	#define MCDX_NDRIVES 1
 	#define MCDX_DRIVEMAP {		\
-			{0x300, 10},	\
+			{0x300, 11},	\
 			{0x304, 05},  	\
 			{0x000, 00},  	\
 			{0x000, 00},  	\
@@ -64,27 +64,40 @@
 	#error Autoprobing is not implemented yet.
 #endif
 
-/*	The name of the device */
-#define MCD "mcdx"	
-
-#ifdef NOWARN
-#define WARN(x)
-#else
-#define WARN(x) warn x
+#ifndef MCDX_QUIET
+#define MCDX_QUIET   1
 #endif
 
-#if MCDX_DEBUG
+#ifndef MCDX_DEBUG
+#define MCDX_DEBUG   0
+#endif
+
+/* *** make the following line uncommented, if you're sure,
+ * *** all configuration is done */
+/* #define I_WAS_HERE */
+
+/*	The name of the device */
+#define MCDX "mcdx"	
+
+#if MCDX_QUIET == 1
+#define INFO(x)
+#else
+#define INFO(x) warn x
+#endif
+
+#define WARN(x) warn x
+
+#if MCDX_DEBUG == 1
 #define TRACE(x) trace x
 #define INIT 		0
 #define MALLOC 		0
 #define IOCTL 		0
 #define OPENCLOSE 	0
-#define HW		0
+#define HW		    0
 #define TALK		0
 #define IRQ 		0
 #define TRANSFER 	0
 #define REQUEST	 	0
-#define MCDX_DEBUG_TALK 0
 #else
 #define TRACE(x)
 #endif
@@ -145,7 +158,7 @@
 /**	no drive specific */
 #define MCDX_CDBLK	2048	/* 2048 cooked data each blk */
 
-#define MCDX_DATA_TIMEOUT	10	/* jiffies */
+#define MCDX_DATA_TIMEOUT	(HZ/10)	/* 0.1 second */
 
 /*
  * Access to the msf array
@@ -159,3 +172,7 @@
  */
 #define MCDX_E		1			/* unspec error */
 #define MCDX_EOM	2			/* end of media */
+
+#ifndef I_WAS_HERE
+#error Please edit this file first.
+#endif

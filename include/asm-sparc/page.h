@@ -86,6 +86,7 @@ typedef unsigned long pgprot_t;
  */
 
 extern void (*invalidate)(void);
+extern void (*set_pte)(pte_t *ptep, pte_t entry);
 
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)  (((addr)+PAGE_SIZE-1)&PAGE_MASK)

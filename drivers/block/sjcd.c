@@ -380,13 +380,13 @@ static void sjcd_status_timer( void ){
   } else if( --sjcd_status_timeout <= 0 ){
     wake_up( &sjcd_waitq );
   } else {
-    SJCD_SET_TIMER( sjcd_status_timer, 1 );
+    SJCD_SET_TIMER( sjcd_status_timer, HZ/100 );
   }
 }
 
 static int sjcd_wait_for_status( void ){
   sjcd_status_timeout = SJCD_WAIT_FOR_STATUS_TIMEOUT;
-  SJCD_SET_TIMER( sjcd_status_timer, 1 ); 
+  SJCD_SET_TIMER( sjcd_status_timer, HZ/100 );
   sleep_on( &sjcd_waitq );    
   if( sjcd_status_timeout <= 0 )
     printk( "sjcd: Error Wait For Status.\n" );
@@ -1223,7 +1223,7 @@ static void sjcd_poll( void ){
   /*
    * Get back in some time.
    */
-  SJCD_SET_TIMER( sjcd_poll, 1 );
+  SJCD_SET_TIMER( sjcd_poll, HZ/100 );
 }
 
 static void do_sjcd_request( void ){
@@ -1252,7 +1252,7 @@ static void do_sjcd_request( void ){
 	  }
 	}
 	sjcd_transfer_state = SJCD_S_START;
-	SJCD_SET_TIMER( sjcd_poll, 1 );
+	SJCD_SET_TIMER( sjcd_poll, HZ/100 );
       }
       break;
     }

@@ -1,0 +1,818 @@
+\documentstyle{article}
+%
+% Adopt somewhat reasonable margins, so it doesn't take a million
+% pages to print... :-)  If you're actually putting this in print, you
+% may wish to change these.
+%
+\oddsidemargin=0in
+\textwidth=6.5in
+\topmargin=0in
+\headheight=0.5in
+\headsep=0.25in
+\textheight=7.5in
+\footskip=0.75in
+\footheight=0.5in
+%
+\begin{document}
+\newcommand{\file}{\tt}			% Style to use for a filename
+\newcommand{\hex}{\tt}			% Style to use for a hex number
+\newcommand{\ud}{(Under development)}	% Abbreviation
+\newcommand{\1}{\({}^1\)}
+\newcommand{\2}{\({}^2\)}
+\newcommand{\3}{\({}^3\)}
+\newcommand{\4}{\({}^4\)}
+\newlength{\dig}
+\settowidth{\dig}{0}			% Get width of digits
+\newcommand{\num}[2]{\makebox[#1\dig][r]{#2}}
+\newcommand{\major}[4]{\num{3}{#1}#2 \> #3 \> #4 \\}
+\newcommand{\minor}[3]{\> \> \num{3}{#1} \> {\file #2} \> #3 \\}
+\newcommand{\minordots}{\> \> \> \dots \\}
+\newenvironment{devicelist}%
+ {\begin{tabbing}%
+000--000 \= blockxxx \= 000 \= {\file /dev/crambamboli} \= foo \kill}%
+ {\end{tabbing}}
+\newcommand{\link}[4]{{\file #1} \> {\file #2} \> #3 \> #4 \\}
+\newcommand{\vlink}[4]{{\file #1} \> {\em #2 \/} \> #3 \> #4 \\}
+\newcommand{\node}[3]{{\file #1} \> #2 \> #3 \\}
+\newenvironment{nodelist}%
+ {\begin{tabbing}%
+{\file /dev/crambamboli} \= {\file /proc/self/fd/99} \= symbolicxxx \=
+foo \kill}%
+ {\end{tabbing}}
+%
+\title{{\bf Linux Allocated Devices}}
+\author{Maintained by H. Peter Anvin $<$Peter.Anvin@linux.org$>$}
+\date{Last revised: August 28, 1995}
+\maketitle
+%
+\noindent
+This list is the successor to Rick Miller's Linux Device List, which
+he stopped maintaining when he lost network access in 1993.  It is a
+registry of allocated major device numbers, as well as the recommended
+{\file /dev} directory nodes for these devices.
+
+This list is available via FTP from ftp.yggdrasil.com in the directory
+{\file /pub/device-list}; filename is {\file devices.{\it format\/}}
+where {\it format\/} is {\file txt} (ASCII), {\file tex} (\LaTeX),
+{\file dvi} (DVI) or {\file ps} (PostScript).  In cases of
+discrepancy, the \LaTeX\ version has priority.
+
+This document is included by reference into the Linux Filesystem
+Standard (FSSTND).  The FSSTND is available via FTP from
+tsx-11.mit.edu in the directory {\file
+/pub/linux/docs/linux-standards/fsstnd}.
+
+To have a major number allocated, or a minor number in situations
+where that applies (e.g.\ busmice), please contact me.  Also, if you
+have additional information regarding any of the devices listed below,
+or if I have made a mistake, I would greatly appreciate a note.
+
+Allocations marked (68k) apply to Linux/68k only.
+
+\section{Major numbers}
+
+\begin{devicelist}
+\major{ 0}{}{     }{Unnamed devices (NFS mounts, loopback devices)}
+\major{ 1}{}{char }{Memory devices}
+\major{  }{}{block}{RAM disk}
+\major{ 2}{}{char }{Reserved for PTY's $<$tytso@athena.mit.edu$>$}
+\major{  }{}{block}{Floppy disks}
+\major{ 3}{}{char }{Reserved for PTY's $<$tytso@athena.mit.edu$>$}
+\major{  }{}{block}{First MFM, RLL and IDE hard disk/CD-ROM interface}
+\major{ 4}{}{char }{TTY devices}
+\major{ 5}{}{char }{Alternate TTY devices}
+\major{ 6}{}{char }{Parallel printer devices}
+\major{ 7}{}{char }{Virtual console access devices}
+\major{ 8}{}{block}{SCSI disk devices}
+\major{ 9}{}{char }{SCSI tape devices}
+\major{  }{}{block}{Multiple disk devices}
+\major{10}{}{char }{Non-serial mice, misc features}
+\major{11}{}{block}{SCSI CD-ROM devices}
+\major{12}{}{char }{QIC-02 tape}
+\major{  }{}{block}{MSCDEX CD-ROM callback support}
+\major{13}{}{char }{PC speaker}
+\major{  }{}{block}{8-bit MFM/RLL/IDE controller}
+\major{14}{}{char }{Sound card}
+\major{  }{}{block}{BIOS harddrive callback support}
+\major{15}{}{char }{Joystick}
+\major{  }{}{block}{Sony CDU-31A/CDU-33A CD-ROM}
+\major{16}{}{char }{Reserved for scanners}
+\major{  }{}{block}{GoldStar CD-ROM}
+\major{17}{}{char }{Chase serial card}
+\major{  }{}{block}{Optics Storage CD-ROM}
+\major{18}{}{char }{Chase serial card -- alternate devices}
+\major{  }{}{block}{Sanyo CD-ROM}
+\major{19}{}{char }{Cyclades serial card}
+\major{  }{}{block}{Double compressed disk}
+\major{20}{}{char }{Cyclades serial card -- alternate devices}
+\major{  }{}{block}{Hitachi CD-ROM}
+\major{21}{}{char }{Generic SCSI access}
+\major{22}{}{char }{Digiboard serial card}
+\major{  }{}{block}{Second IDE hard disk/CD-ROM interface}
+\major{23}{}{char }{Digiboard serial card -- alternate devices}
+\major{  }{}{block}{Mitsumi proprietary CD-ROM}
+\major{24}{}{char }{Stallion serial card}
+\major{  }{}{block}{Sony CDU-535 CD-ROM}
+\major{25}{}{char }{Stallion serial card -- alternate devices}
+\major{  }{}{block}{First Matsushita (Panasonic/SoundBlaster) CD-ROM}
+\major{26}{}{block}{Second Matsushita (Panasonic/SoundBlaster) CD-ROM}
+\major{27}{}{char }{QIC-117 tape}
+\major{  }{}{block}{Third Matsushita (Panasonic/SoundBlaster) CD-ROM}
+\major{28}{}{char }{Stallion serial card -- card programming}
+\major{  }{}{block}{Fourth Matsushita (Panasonic/SoundBlaster) CD-ROM}
+\major{  }{}{block}{ACSI disk (68k)}
+\major{29}{}{char }{Universal frame buffer}
+\major{  }{}{block}{Aztech/Orchid/Okano/Wearnes CD-ROM}
+\major{30}{}{char }{iBCS-2}
+\major{  }{}{block}{Philips LMS-205 CD-ROM}
+\major{31}{}{char }{MPU-401 MIDI}
+\major{  }{}{block}{ROM/flash memory card}
+\major{32}{}{char }{Specialix serial card}
+\major{  }{}{block}{Philips LMS-206 CD-ROM}
+\major{33}{}{char }{Specialix serial card -- alternate devices}
+\major{  }{}{block}{Modular RAM disk}
+\major{34}{}{block}{Third IDE hard disk/CD-ROM interface}
+\major{35}{}{block}{Fourth IDE hard disk/CD-ROM interface}
+\major{36--223}{}{}{Unallocated}
+\major{224--254}{}{}{Local use}
+\major{255}{}{}{Reserved}
+\end{devicelist}
+
+\section{Minor numbers}
+
+
+\begin{devicelist}
+\major{0}{}{}{Unnamed devices (NFS mounts, loopback devices)}
+	\minor{0}{}{reserved as null device number}
+\end{devicelist}
+
+\begin{devicelist}
+\major{1}{}{char}{Memory devices}
+	\minor{1}{/dev/mem}{Physical memory access}
+	\minor{2}{/dev/kmem}{Kernel virtual memory access}
+	\minor{3}{/dev/null}{Null device}
+	\minor{4}{/dev/port}{I/O port access}
+	\minor{5}{/dev/zero}{Null byte source}
+	\minor{6}{/dev/core}{OBSOLETE -- should be a link to {\file /proc/kcore}}
+	\minor{7}{/dev/full}{Returns ENOSPC on write}
+	\minor{8}{/dev/random}{Nondeterministic random number generator}
+	\minor{9}{/dev/urandom}{Less secure, but faster random number generator}
+\\
+\major{}{}{block}{RAM disk}
+	\minor{1}{/dev/ramdisk}{RAM disk}
+\end{devicelist}
+
+\begin{devicelist}
+\major{2}{}{char}{Reserved for PTY's $<$tytso@athena.mit.edu$>$}
+\major{}{}{block}{Floppy disks}
+	\minor{0}{/dev/fd0}{Controller 1, drive 1 autodetect}
+	\minor{1}{/dev/fd1}{Controller 1, drive 2 autodetect}
+	\minor{2}{/dev/fd2}{Controller 1, drive 3 autodetect}
+	\minor{3}{/dev/fd3}{Controller 1, drive 4 autodetect}
+	\minor{128}{/dev/fd4}{Controller 2, drive 1 autodetect}
+	\minor{129}{/dev/fd5}{Controller 2, drive 2 autodetect}
+	\minor{130}{/dev/fd6}{Controller 2, drive 3 autodetect}
+	\minor{131}{/dev/fd7}{Controller 2, drive 4 autodetect}
+\\
+\major{}{}{}{To specify format, add to the autodetect device number}
+	\minor{  0}{/dev/fd?}{Autodetect format}
+	\minor{  4}{/dev/fd?d360}{5.25" \num{4}{360}K in a \num{4}{360}K drive\1}
+	\minor{ 20}{/dev/fd?h360}{5.25" \num{4}{360}K in a 1200K drive\1}
+	\minor{ 48}{/dev/fd?h410}{5.25" \num{4}{410}K in a 1200K drive}
+	\minor{ 64}{/dev/fd?h420}{5.25" \num{4}{420}K in a 1200K drive}
+	\minor{ 24}{/dev/fd?h720}{5.25" \num{4}{720}K in a 1200K drive}
+	\minor{ 80}{/dev/fd?h880}{5.25" \num{4}{880}K in a 1200K drive\1}
+	\minor{  8}{/dev/fd?h1200}{5.25" 1200K in a 1200K drive\1}
+	\minor{ 40}{/dev/fd?h1440}{5.25" 1440K in a 1200K drive\1}
+	\minor{ 56}{/dev/fd?h1476}{5.25" 1476K in a 1200K drive}
+	\minor{ 72}{/dev/fd?h1494}{5.25" 1494K in a 1200K drive}
+	\minor{ 92}{/dev/fd?h1600}{5.25" 1600K in a 1200K drive\1}
+	\minor{}{}{}
+	\minor{ 12}{/dev/fd?u360}{3.5" \num{4}{360}K Double Density}
+	\minor{ 16}{/dev/fd?u720}{3.5" \num{4}{720}K Double Density\1}
+	\minor{120}{/dev/fd?u800}{3.5" \num{4}{800}K Double Density\2}
+	\minor{ 52}{/dev/fd?u820}{3.5" \num{4}{820}K Double Density}
+	\minor{ 68}{/dev/fd?u830}{3.5" \num{4}{830}K Double Density}
+	\minor{ 84}{/dev/fd?u1040}{3.5" 1040K Double Density\1}
+	\minor{ 88}{/dev/fd?u1120}{3.5" 1120K Double Density\1}
+	\minor{ 28}{/dev/fd?u1440}{3.5" 1440K High Density\1}
+	\minor{124}{/dev/fd?u1600}{3.5" 1600K High Density\1}
+	\minor{ 44}{/dev/fd?u1680}{3.5" 1680K High Density\3}
+	\minor{ 60}{/dev/fd?u1722}{3.5" 1722K High Density}
+	\minor{ 76}{/dev/fd?u1743}{3.5" 1743K High Density}
+	\minor{ 96}{/dev/fd?u1760}{3.5" 1760K High Density}
+	\minor{116}{/dev/fd?u1840}{3.5" 1840K High Density\3}
+	\minor{100}{/dev/fd?u1920}{3.5" 1920K High Density\1}
+	\minor{ 32}{/dev/fd?u2880}{3.5" 2880K Extra Density\1}
+	\minor{104}{/dev/fd?u3200}{3.5" 3200K Extra Density}
+	\minor{108}{/dev/fd?u3520}{3.5" 3520K Extra Density}
+	\minor{112}{/dev/fd?u3840}{3.5" 3840K Extra Density\1}
+	\minor{}{}{}
+	\minor{36}{/dev/fd?CompaQ}{Compaq 2880K drive; probably obsolete}
+\\
+\major{}{}{}{\1 Autodetectable format}
+\major{}{}{}{\2 Autodetectable format in a Double Density (720K) drive only}
+\major{}{}{}{\3 Autodetectable format in a High Density (1440K) drive only}
+\end{devicelist}
+
+NOTE: The letter in the device name ({\file d}, {\file q}, {\file h}
+or {\file u}) signifies the type of drive supported: 5.25" Double
+Density ({\file d}), 5.25" Quad Density ({\file q}), 5.25" High
+Density ({\file h}) or 3.5" (any type, {\file u}).  The capital
+letters {\file D}, {\file H}, or {\file E} for the 3.5" models have
+been deprecated, since the drive type is insignificant for these devices.
+
+\begin{devicelist}
+\major{3}{}{char}{Reserved for PTY's $<$tytso@athena.mit.edu$>$}
+\major{}{}{block}{First MFM, RLL and IDE hard disk/CD-ROM interface}
+	\minor{0}{/dev/hda}{Master: whole disk (or CD-ROM)}
+	\minor{64}{/dev/hdb}{Slave: whole disk (or CD-ROM)}
+\\
+\major{}{}{}{For partitions, add to the whole disk device number}
+	\minor{0}{/dev/hd?}{Whole disk}
+	\minor{1}{/dev/hd?1}{First primary partition}
+	\minor{2}{/dev/hd?2}{Second primary partition}
+	\minor{3}{/dev/hd?3}{Third primary partition}
+	\minor{4}{/dev/hd?4}{Fourth primary partition}
+	\minor{5}{/dev/hd?5}{First logical partition}
+	\minor{6}{/dev/hd?6}{Second logical partition}
+	\minor{7}{/dev/hd?7}{Third logical partition}
+	\minordots
+	\minor{63}{/dev/hd?63}{59th logical partition}
+\end{devicelist}
+
+\begin{devicelist}
+\major{ 4}{}{char }{TTY devices}
+	\minor{0}{/dev/console}{Console device}
+	\minor{1}{/dev/tty1}{First virtual console}
+	\minordots
+	\minor{63}{/dev/tty63}{63rd virtual console}
+	\minor{64}{/dev/ttyS0}{First serial port}
+	\minordots
+	\minor{127}{/dev/ttyS63}{64th serial port}
+	\minor{128}{/dev/ptyp0}{First pseudo-tty master}
+	\minordots
+	\minor{191}{/dev/ptysf}{64th pseudo-tty master}
+	\minor{192}{/dev/ttyp0}{First pseudo-tty slave}
+	\minordots
+	\minor{255}{/dev/ttysf}{64th pseudo-tty slave}
+\end{devicelist}
+
+\noindent
+Pseudo-tty's are named as follows:
+\begin{itemize}
+\item Masters are {\file pty}, slaves are {\file tty};
+\item the fourth letter is one of {\file pqrs} indicating
+the 1st, 2nd, 3rd, 4th series of 16 pseudo-ttys each, and
+\item the fifth letter is one of {\file 0123456789abcdef} indicating
+the position within the series.
+\end{itemize}
+
+\begin{devicelist}
+\major{ 5}{}{char }{Alternate TTY devices}
+	\minor{0}{/dev/tty}{Current TTY device}
+	\minor{64}{/dev/cua0}{Callout device corresponding to {\file ttyS0}}
+	\minordots
+	\minor{127}{/dev/cua63}{Callout device corresponding to {\file ttyS63}}
+\end{devicelist}
+
+\begin{devicelist}
+\major{ 6}{}{char }{Parallel printer devices}
+	\minor{0}{/dev/lp0}{First parallel printer ({\hex 0x3bc})}
+	\minor{1}{/dev/lp1}{Second parallel printer ({\hex 0x378})}
+	\minor{2}{/dev/lp2}{Third parallel printer ({\hex 0x278})}
+\end{devicelist}
+
+\noindent
+Not all computers have the {\hex 0x3bc} parallel port, hence the
+"first" printer may be either {\file /dev/lp0} or {\file /dev/lp1}.
+
+\begin{devicelist}
+\major{ 7}{}{char }{Virtual console access devices}
+	\minor{0}{/dev/vcs}{Current vc text access}
+	\minor{1}{/dev/vcs1}{tty1 text access}
+	\minordots
+	\minor{63}{/dev/vcs63}{tty63 text access}
+	\minor{128}{/dev/vcsa}{Current vc text/attribute access}
+	\minor{129}{/dev/vcsa1}{tty1 text/attribute access}
+	\minordots
+	\minor{191}{/dev/vcsa63}{tty63 text/attribute access}
+\end{devicelist}
+
+\noindent
+NOTE: These devices permit both read and write access.
+
+\begin{devicelist}
+\major{ 8}{}{block}{SCSI disk devices}
+	\minor{0}{/dev/sda}{First SCSI disk whole disk}
+	\minor{16}{/dev/sdb}{Second SCSI disk whole disk}
+	\minor{32}{/dev/sdc}{Third SCSI disk whole disk}
+	\minordots
+	\minor{240}{/dev/sdp}{Sixteenth SCSI disk whole disk}
+\end{devicelist}
+
+\noindent
+Partitions are handled in the same way as for IDE
+disks (see major number 3) except that the limit on
+logical partitions is 11 rather than 59 per disk.
+
+\begin{devicelist}
+\major{ 9}{}{char }{SCSI tape devices}
+	\minor{0}{/dev/st0}{First SCSI tape}
+	\minor{1}{/dev/st1}{Second SCSI tape}
+	\minordots
+	\minor{128}{/dev/nst0}{First SCSI tape, no rewind-on-close}
+	\minor{129}{/dev/nst1}{Second SCSI tape, no rewind-on-close}
+	\minordots
+\\
+\major{  }{}{block}{Multiple disk devices}
+	\minor{0}{/dev/md0}{First device group}
+	\minor{1}{/dev/md1}{Second device group}
+	\minordots
+\end{devicelist}
+
+\noindent
+The multiple device driver is used to span a filesystem across multiple
+physical disks.
+
+\begin{devicelist}
+\major{10}{}{char }{Non-serial mice, misc features}
+	\minor{0}{/dev/logibm}{Logitech bus mouse}
+	\minor{1}{/dev/psaux}{PS/2-style mouse port}
+	\minor{2}{/dev/inportbm}{Microsoft Inport bus mouse}
+	\minor{3}{/dev/atibm}{ATI XL bus mouse}
+	\minor{4}{/dev/jbm}{J-mouse}
+	\minor{4}{/dev/amigamouse}{Amiga Mouse (68k)}
+	\minor{5}{/dev/atarimouse}{Atari Mouse (68k)}
+	\minor{128}{/dev/beep}{Fancy beep device}
+	\minor{129}{/dev/modreq}{Kernel module load request}
+\end{devicelist}
+
+\begin{devicelist}
+\major{11}{}{block}{SCSI CD-ROM devices}
+	\minor{0}{/dev/sr0}{First SCSI CD-ROM}
+	\minor{1}{/dev/sr1}{Second SCSI CD-ROM}
+	\minordots
+\end{devicelist}
+
+\noindent
+The prefix {\file /dev/scd} instead of {\file /dev/sr} has been used
+as well, and might make more sense.
+
+\begin{devicelist}
+\major{12}{}{char }{QIC-02 tape}
+	\minor{2}{/dev/ntpqic11}{QIC-11, no rewind-on-close}
+	\minor{3}{/dev/tpqic11}{QIC-11, rewind-on-close}
+	\minor{4}{/dev/ntpqic24}{QIC-24, no rewind-on-close}
+	\minor{5}{/dev/tpqic24}{QIC-24, rewind-on-close}
+	\minor{6}{/dev/ntpqic120}{QIC-120, no rewind-on-close}
+	\minor{7}{/dev/tpqic120}{QIC-120, rewind-on-close}
+	\minor{8}{/dev/ntpqic150}{QIC-150, no rewind-on-close}
+	\minor{9}{/dev/tpqic150}{QIC-150, rewind-on-close}
+\end{devicelist}
+
+\noindent
+The device names specified are proposed -- if there are ``standard''
+names for these devices, please let me know.
+
+\begin{devicelist}
+\major{  }{}{block}{MSCDEX CD-ROM callback support}
+	\minor{0}{/dev/dos\_cd0}{First MSCDEX CD-ROM}
+	\minor{1}{/dev/dos\_cd1}{Second MSCDEX CD-ROM}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{13}{}{char }{PC speaker}
+	\minor{0}{/dev/pcmixer}{Emulates {\file /dev/mixer}}
+	\minor{3}{/dev/pcsp}{Emulates {\file /dev/dsp} (8-bit)}
+	\minor{4}{/dev/pcaudio}{Emulates {\file /dev/audio}}
+	\minor{5}{/dev/pcsp16}{Emulates {\file /dev/dsp} (16-bit)}
+\\
+\major{  }{}{block}{8-bit MFM/RLL/IDE controller}
+	\minor{0}{/dev/xda}{First XT disk whole disk}
+	\minor{64}{/dev/xdb}{Second XT disk whole disk}
+\end{devicelist}
+
+\noindent
+Partitions are handled in the same way as IDE disks
+(see major number 3).
+
+\begin{devicelist}
+\major{14}{}{char }{Sound card}
+	\minor{0}{/dev/mixer}{Mixer control}
+	\minor{1}{/dev/sequencer}{Audio sequencer}
+	\minor{2}{/dev/midi00}{First MIDI port}
+	\minor{3}{/dev/dsp}{Digital audio}
+	\minor{4}{/dev/audio}{Sun-compatible digital audio}
+	\minor{6}{/dev/sndstat}{Sound card status information}
+	\minor{8}{/dev/sequencer2}{Sequencer -- alternate device}
+	\minor{16}{/dev/mixer1}{Second soundcard mixer control}
+	\minor{17}{/dev/patmgr0}{Sequencer patch manager}
+	\minor{18}{/dev/midi01}{Second MIDI port}
+	\minor{19}{/dev/dsp1}{Second soundcard digital audio}
+	\minor{20}{/dev/audio1}{Second soundcard Sun digital audio}
+	\minor{33}{/dev/patmgr1}{Sequencer patch manager}
+	\minor{34}{/dev/midi02}{Third MIDI port}
+	\minor{50}{/dev/midi03}{Fourth MIDI port}
+\\
+\major{  }{}{block}{BIOS harddrive callback support}
+	\minor{0}{/dev/dos\_hda}{First BIOS harddrive whole disk}
+	\minor{64}{/dev/dos\_hdb}{Second BIOS harddrive whole disk}
+	\minor{128}{/dev/dos\_hdc}{Third BIOS harddrive whole disk}
+	\minor{192}{/dev/dos\_hdd}{Fourth BIOS harddrive whole disk}
+\end{devicelist}
+
+\noindent
+Partitions are handled in the same way as IDE disks
+(see major number 3).
+
+\begin{devicelist}
+\major{15}{}{char }{Joystick}
+	\minor{0}{/dev/js0}{First joystick}
+	\minor{1}{/dev/js1}{Second joystick}
+\\
+\major{  }{}{block}{Sony CDU-31A/CDU-33A CD-ROM}
+	\minor{0}{/dev/sonycd}{Sony CDU-31A CD-ROM}
+\end{devicelist}
+
+\begin{devicelist}
+\major{16}{}{char }{Reserved for scanners}
+\major{  }{}{block}{GoldStar CD-ROM}
+	\minor{0}{/dev/gscd}{GoldStar CD-ROM}
+\end{devicelist}
+
+\begin{devicelist}
+\major{17}{}{char }{Chase serial card}
+	\minor{0}{/dev/ttyH0}{First Chase port}
+	\minor{1}{/dev/ttyH1}{Second Chase port}
+	\minordots
+\\
+\major{  }{}{block}{Optics Storage CD-ROM}
+	\minor{0}{/dev/optcd}{Optics Storage CD-ROM}
+\end{devicelist}
+
+\begin{devicelist}
+\major{18}{}{char }{Chase serial card -- alternate devices}
+	\minor{0}{/dev/cuh0}{Callout device corresponding to {\file ttyH0}}
+	\minor{1}{/dev/cuh1}{Callout device corresponding to {\file ttyH1}}
+	\minordots
+\\
+\major{  }{}{block}{Sanyo CD-ROM}
+	\minor{0}{/dev/sjcd}{Sanyo CD-ROM}
+\end{devicelist}
+
+\begin{devicelist}
+\major{19}{}{char }{Cyclades serial card}
+	\minor{32}{/dev/ttyC0}{First Cyclades port}
+	\minordots
+	\minor{63}{/dev/ttyC31}{32nd Cyclades port}
+\end{devicelist}
+\noindent
+It would make more sense for these to start at 0...
+\begin{devicelist}
+\major{  }{}{block}{``Double'' compressed disk}
+	\minor{0}{/dev/double0}{First compressed disk}
+	\minordots
+	\minor{7}{/dev/double7}{Eighth compressed disk}
+	\minor{128}{/dev/cdouble0}{Mirror of first compressed disk}
+	\minordots
+	\minor{135}{/dev/cdouble7}{Mirror of eighth compressed disk}
+\end{devicelist}
+
+\noindent
+See the Double documentation for an explanation of the ``mirror'' devices.
+
+\begin{devicelist}
+\major{20}{}{char }{Cyclades serial card -- alternate devices}
+	\minor{32}{/dev/cub0}{Callout device corresponding to {\file ttyC0}}
+	\minordots
+	\minor{63}{/dev/cub31}{Callout device corresponding to {\file ttyC31}}
+\\
+\major{  }{}{block}{Hitachi CD-ROM}
+	\minor{0}{/dev/hitcd}{Hitachi CD-ROM}
+\end{devicelist}
+
+\begin{devicelist}
+\major{21}{}{char }{Generic SCSI access}
+	\minor{0}{/dev/sg0}{First generic SCSI device}
+	\minor{1}{/dev/sg1}{Second generic SCSI device}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{22}{}{char }{Digiboard serial card}
+	\minor{0}{/dev/ttyD0}{First Digiboard port}
+	\minor{1}{/dev/ttyD1}{Second Digiboard port}
+	\minordots
+\major{  }{}{block}{Second IDE hard disk/CD-ROM interface}
+	\minor{0}{/dev/hdc}{Master: whole disk (or CD-ROM)}
+	\minor{64}{/dev/hdd}{Slave: whole disk (or CD-ROM)}
+\end{devicelist}
+
+\noindent
+Partitions are handled the same way as for the first
+interface (see major number 3).
+
+\begin{devicelist}
+\major{23}{}{char }{Digiboard serial card -- alternate devices}
+	\minor{0}{/dev/cud0}{Callout device corresponding to {\file ttyD0}}
+	\minor{1}{/dev/cud1}{Callout device corresponding to {\file ttyD1}}
+	\minordots
+\major{  }{}{block}{Mitsumi proprietary CD-ROM}
+	\minor{0}{/dev/mcd}{Mitsumi CD-ROM}
+\end{devicelist}
+
+\begin{devicelist}\
+\major{24}{}{char }{Stallion serial card}
+	\minor{0}{/dev/ttyE0}{Stallion port 0 board 0}
+	\minor{1}{/dev/ttyE1}{Stallion port 1 board 0}
+	\minordots
+	\minor{64}{/dev/ttyE64}{Stallion port 0 board 1}
+	\minor{65}{/dev/ttyE65}{Stallion port 1 board 1}
+	\minordots
+	\minor{128}{/dev/ttyE128}{Stallion port 0 board 2}
+	\minor{129}{/dev/ttyE129}{Stallion port 1 board 2}
+	\minordots
+	\minor{192}{/dev/ttyE192}{Stallion port 0 board 3}
+	\minor{193}{/dev/ttyE193}{Stallion port 1 board 3}
+	\minordots
+\\
+\major{  }{}{block}{Sony CDU-535 CD-ROM}
+	\minor{0}{/dev/cdu535}{Sony CDU-535 CD-ROM}
+\end{devicelist}
+
+\begin{devicelist}
+\major{25}{}{char }{Stallion serial card -- alternate devices}
+	\minor{0}{/dev/cue0}{Callout device corresponding to {\file ttyE0}}
+	\minor{1}{/dev/cue1}{Callout device corresponding to {\file ttyE1}}
+	\minordots
+	\minor{64}{/dev/cue64}{Callout device corresponding to {\file ttyE64}}
+	\minor{65}{/dev/cue65}{Callout device corresponding to {\file ttyE65}}
+	\minordots
+	\minor{128}{/dev/cue128}{Callout device corresponding to {\file ttyE128}}
+	\minor{129}{/dev/cue129}{Callout device corresponding to {\file ttyE129}}
+	\minordots
+	\minor{192}{/dev/cue192}{Callout device corresponding to {\file ttyE192}}
+	\minor{193}{/dev/cue193}{Callout device corresponding to {\file ttyE193}}
+	\minordots
+\\
+\major{  }{}{block}{First Matsushita (Panasonic/SoundBlaster) CD-ROM}
+	\minor{0}{/dev/sbpcd0}{Panasonic CD-ROM controller 0 unit 0}
+	\minor{1}{/dev/sbpcd1}{Panasonic CD-ROM controller 0 unit 1}
+	\minor{2}{/dev/sbpcd2}{Panasonic CD-ROM controller 0 unit 2}
+	\minor{3}{/dev/sbpcd3}{Panasonic CD-ROM controller 0 unit 3}
+\end{devicelist}
+
+\begin{devicelist}
+\major{26}{}{char }{Frame grabbers}
+	\minor{0}{/dev/wvisfgrab}{Quanta WinVision frame grabber}
+\\
+\major{  }{}{block}{Second Matsushita (Panasonic/SoundBlaster) CD-ROM}
+	\minor{0}{/dev/sbpcd4}{Panasonic CD-ROM controller 1 unit 0}
+	\minor{1}{/dev/sbpcd5}{Panasonic CD-ROM controller 1 unit 1}
+	\minor{2}{/dev/sbpcd6}{Panasonic CD-ROM controller 1 unit 2}
+	\minor{3}{/dev/sbpcd7}{Panasonic CD-ROM controller 1 unit 3}
+\end{devicelist}
+
+\begin{devicelist}
+\major{27}{}{char }{QIC-117 tape}
+	\minor{0}{/dev/rft0}{Unit 0, rewind-on-close}
+	\minor{1}{/dev/rft1}{Unit 1, rewind-on-close}
+	\minor{2}{/dev/rft2}{Unit 2, rewind-on-close}
+	\minor{3}{/dev/rft3}{Unit 3, rewind-on-close}
+	\minor{4}{/dev/nrft0}{Unit 0, no rewind-on-close}
+	\minor{5}{/dev/nrft1}{Unit 1, no rewind-on-close}
+	\minor{6}{/dev/nrft2}{Unit 2, no rewind-on-close}
+	\minor{7}{/dev/nrft3}{Unit 3, no rewind-on-close}
+\\
+\major{  }{}{block}{Third Matsushita (Panasonic/SoundBlaster) CD-ROM}
+	\minor{0}{/dev/sbpcd8}{Panasonic CD-ROM controller 2 unit 0}
+	\minor{1}{/dev/sbpcd9}{Panasonic CD-ROM controller 2 unit 1}
+	\minor{2}{/dev/sbpcd10}{Panasonic CD-ROM controller 2 unit 2}
+	\minor{3}{/dev/sbpcd11}{Panasonic CD-ROM controller 2 unit 3}
+\end{devicelist}
+
+\begin{devicelist}
+\major{28}{}{char }{Stallion serial card -- card programming}
+	\minor{0}{/dev/staliomem0}{First Stallion I/O card memory}
+	\minor{1}{/dev/staliomem1}{Second Stallion I/O card memory}
+	\minor{2}{/dev/staliomem2}{Third Stallion I/O card memory}
+	\minor{3}{/dev/staliomem3}{Fourth Stallion I/O card memory}
+\\
+\major{  }{}{block}{Fourth Matsushita (Panasonic/SoundBlaster) CD-ROM}
+	\minor{0}{/dev/sbpcd12}{Panasonic CD-ROM controller 3 unit 0}
+	\minor{1}{/dev/sbpcd13}{Panasonic CD-ROM controller 3 unit 1}
+	\minor{2}{/dev/sbpcd14}{Panasonic CD-ROM controller 3 unit 2}
+	\minor{3}{/dev/sbpcd15}{Panasonic CD-ROM controller 3 unit 3}
+\\
+\major{  }{}{block}{ACSI disk (68k)}
+	\minor{0}{/dev/ada}{First ACSI disk whole disk}
+	\minor{16}{/dev/adb}{Second ACSI disk whole disk}
+	\minor{32}{/dev/adc}{Third ACSI disk whole disk}
+	\minordots
+	\minor{240}{/dev/adp}{Sixteenth ACSI disk whole disk}
+\end{devicelist}
+
+\noindent
+Partitions are handled in the same way as for IDE
+disks (see major number 3) except that the limit on
+logical partitions is 11 rather than 59 per disk.
+
+\begin{devicelist}
+\major{29}{}{char }{Universal frame buffer}
+	\minor{0}{/dev/fb0current}{First frame buffer}
+	\minor{1}{/dev/fb0autodetect}{}
+	\minordots
+	\minor{16}{/dev/fb1current}{Second frame buffer}
+	\minor{17}{/dev/fb1autodetect}{}
+	\minordots
+\end{devicelist}
+
+\noindent
+The universal frame buffer device is currently supported only on
+Linux/68k.  The {\file current} device accesses the frame buffer at
+current resolution; the {\file autodetect} one at bootup (default)
+resolution.  Minor numbers 2--15 within each frame buffer assignment
+are used for specific device-dependent resolutions.  There appears to
+be no standard naming for these devices.
+
+\begin{devicelist}
+\major{  }{}{block}{Aztech/Orchid/Okano/Wearnes CD-ROM}
+	\minor{0}{/dev/aztcd}{Aztech CD-ROM}
+\end{devicelist}
+
+\begin{devicelist}
+\major{30}{}{char }{iBCS-2 compatibility devices}
+	\minor{0}{/dev/socksys}{Socket access}
+	\minor{1}{/dev/spx}{SVR3 local X interface}
+	\minor{2}{/dev/inet/arp}{Network access}
+	\minor{2}{/dev/inet/icmp}{Network access}
+	\minor{2}{/dev/inet/ip}{Network access}
+	\minor{2}{/dev/inet/udp}{Network access}
+	\minor{2}{/dev/inet/tcp}{Network access}
+\end{devicelist}
+
+\noindent
+iBCS-2 requires {\file /dev/nfsd} to be a link to {\file /dev/socksys}
+and {\file /dev/X0R} to be a link to {\file /dev/null}.
+
+\begin{devicelist}
+\major{  }{}{block}{Philips LMS CM-205 CD-ROM}
+	\minor{0}{/dev/cm205cd}{Philips LMS CM-205 CD-ROM}
+\end{devicelist}
+
+\noindent
+{\file /dev/lmscd} is an older name for this drive.  This driver does
+not work with the CM-205MS CD-ROM.
+
+\begin{devicelist}
+\major{31}{}{char }{MPU-401 MIDI}
+	\minor{0}{/dev/mpu401data}{MPU-401 data port}
+	\minor{1}{/dev/mpu401stat}{MPU-401 status port}
+\\
+\major{  }{}{block}{ROM/flash memory card}
+	\minor{0}{/dev/rom0}{First ROM card (rw)}
+	\minordots
+	\minor{7}{/dev/rom7}{Eighth ROM card (rw)}
+	\minor{8}{/dev/rrom0}{First ROM card (ro)}
+	\minordots
+	\minor{15}{/dev/rrom0}{Eighth ROM card (ro)}
+	\minor{16}{/dev/flash0}{First flash memory card (rw)}
+	\minordots
+	\minor{23}{/dev/flash7}{Eighth flash memory card (rw)}
+	\minor{24}{/dev/rflash0}{First flash memory card (ro)}
+	\minordots
+	\minor{31}{/dev/rflash7}{Eighth flash memory card (ro)}
+\end{devicelist}
+
+\noindent
+The read-write (rw) devices support back-caching written data in RAM,
+as well as writing to flash RAM devices.  The read-only devices (ro)
+support reading only.
+
+\begin{devicelist}
+\major{32}{}{char }{Specialix serial card}
+	\minor{0}{/dev/ttyX0}{First Specialix port}
+	\minor{1}{/dev/ttyX1}{Second Specialix port}
+	\minordots
+\major{  }{}{block}{Philips LMS CM-206 CD-ROM}
+	\minor{0}{/dev/cm206cd}{Philips LMS CM-206 CD-ROM}
+\end{devicelist}
+
+\begin{devicelist}
+\major{33}{}{char }{Specialix serial card -- alternate devices}
+	\minor{0}{/dev/cux0}{Callout device corresponding to {\file ttyX0}}
+	\minor{1}{/dev/cux1}{Callout device corresponding to {\file ttyX1}}
+	\minordots
+\major{  }{}{block}{Modular RAM disk}
+	\minor{0}{/dev/ram0}{First modular RAM disk}
+	\minor{1}{/dev/ram1}{Second modular RAM disk}
+	\minordots
+	\minor{255}{/dev/ram255}{256th modular RAM disk}
+\end{devicelist}
+
+\begin{devicelist}
+\major{33}{}{block}{Third IDE hard disk/CD-ROM interface}
+	\minor{0}{/dev/hde}{Master: whole disk (or CD-ROM)}
+	\minor{64}{/dev/hdf}{Slave: whole disk (or CD-ROM)}
+\end{devicelist}
+
+\begin{devicelist}
+\major{34}{}{block}{Fourth IDE hard disk/CD-ROM interface}
+	\minor{0}{/dev/hdg}{Master: whole disk (or CD-ROM)}
+	\minor{64}{/dev/hdh}{Slave: whole disk (or CD-ROM)}
+\end{devicelist}
+
+\noindent
+For both IDE interfaces: partitions are handled the same way as for
+the first interface (see major number 3).
+
+\begin{devicelist}
+\major{35}{--223}{}{Unallocated}
+\end{devicelist}
+
+\begin{devicelist}
+\major{224}{--254}{}{Local/experimental use}
+\end{devicelist}
+
+\noindent
+For devices not assigned official numbers, this range should be used,
+in order to avoid conflict with future assignments.  Please note that
+{\file MAX\_CHRDEV} and {\file MAX\_BLKDEV} in {\file
+linux/include/linux/major.h} must be set to a value greater than the
+highest used major number.  For a kernel using local/experimental
+devices, it is probably easiest to set both of these equal to 256.
+The memory cost above using the default value of 64 is 3K.
+
+\begin{devicelist}
+\major{255}{}{}{Reserved}
+\end{devicelist}
+
+\section{Additional /dev directory entries}
+
+This section details additional entries that should or may exist in the
+{\file /dev} directory.  It is preferred that symbolic links use the
+same form (absolute or relative) as is indicated here.  Links are
+classified as {\em hard\/} or {\em symbolic\/} depending on the
+preferred type of link; if possible, the indicated type of link should
+be used.
+
+\subsection{Compulsory links}
+
+These links should exist on all systems:
+
+\begin{nodelist}
+\link{/dev/fd}{/proc/self/fd}{symbolic}{File descriptors}
+\link{/dev/stdin}{fd/0}{symbolic}{Standard input file descriptor}
+\link{/dev/stdout}{fd/1}{symbolic}{Standard output file descriptor}
+\link{/dev/stderr}{fd/2}{symbolic}{Standard error file descriptor}
+\end{nodelist}
+
+\subsection{Recommended links}
+
+It is recommended that these links exist on all systems:
+
+\begin{nodelist}
+\link{/dev/X0R}{null}{symbolic}{Used by iBCS-2}
+\link{/dev/nfsd}{socksys}{symbolic}{Used by iBCS-2}
+\link{/dev/core}{/proc/kcore}{symbolic}{Backward compatibility}
+\link{/dev/scd?}{sr?}{hard}{Alternate name for CD-ROMs}
+%\link{/dev/fd?H*}{fd?D*}{hard}{Compatible floppy formats}
+%\link{/dev/fd?E*}{fd?D*}{hard}{Compatible floppy formats}
+%\link{/dev/fd?E*}{fd?H*}{hard}{Compatible floppy formats}
+\end{nodelist}
+
+\subsection{Locally defined links}
+
+The following links may be established locally to conform to the
+configuration of the system.  This is merely a tabulation of existing
+practice, and does not constitute a recommendation.  However, if they
+exist, they should have the following uses.
+
+\begin{nodelist}
+\vlink{/dev/mouse}{mouse port}{symbolic}{Current mouse device}
+\vlink{/dev/tape}{tape device}{symbolic}{Current tape device}
+\vlink{/dev/cdrom}{CD-ROM device}{symbolic}{Current CD-ROM device}
+\vlink{/dev/modem}{modem port}{symbolic}{Current dialout device}
+\vlink{/dev/root}{root device}{symbolic}{Current root filesystem}
+\vlink{/dev/swap}{swap device}{symbolic}{Current swap device}
+\end{nodelist}
+
+\noindent
+{\file /dev/modem} should not be used for a modem which supports
+dialin as well as dialout, as it tends to cause lock file problems.
+If it exists, {\file /dev/modem} should point to the appropriate
+dialout (alternate) device.
+
+\subsection{Sockets and pipes}
+
+Non-transient sockets or named pipes may exist in {\file /dev}.
+Common entries are:
+
+\begin{nodelist}
+\node{/dev/printer}{socket}{{\file lpd} local socket}
+\node{/dev/log}{socket}{{\file syslog} local socket}
+\end{nodelist}
+
+\end{document}

@@ -87,7 +87,7 @@ void flush_thread(void)
 
 #define IS_CLONE (regs->orig_reg2 == __NR_clone)
 
-unsigned long copy_thread(int nr, unsigned long clone_flags, struct task_struct * p, struct pt_regs * regs)
+void copy_thread(int nr, unsigned long clone_flags, struct task_struct * p, struct pt_regs * regs)
 {
 	struct pt_regs * childregs;
 
@@ -109,16 +109,6 @@ unsigned long copy_thread(int nr, unsigned long clone_flags, struct task_struct 
 	p->tss.cp0_status = regs->cp0_status &
 	                    ~(ST0_CU1|ST0_CU0|ST0_KSU|ST0_ERL|ST0_EXL);
 	childregs->cp0_status &= ~(ST0_CU1|ST0_CU0);
-
-	if (IS_CLONE) {
-		if (regs->reg4)
-			childregs->reg29 = regs->reg4;
-		clone_flags = regs->reg5;
-		if (childregs->reg29 == regs->reg29)
-			clone_flags |= COPYVM;
-	}
-
-	return clone_flags;
 }
 
 /*

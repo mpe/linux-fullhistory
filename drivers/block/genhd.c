@@ -15,6 +15,8 @@
  *  with information provided by OnTrack.  This now works for linux fdisk
  *  and LILO, as well as loadlin and bootln.  Note that disks other than
  *  /dev/hda *must* have a "DOS" type 0x51 partition in the first slot (hda1).
+ * 
+ *  Added support for "missing/deleted" extended partitions - mlord@bnr.ca
  */
 
 #include <linux/config.h>
@@ -98,17 +100,19 @@ static void extended_partition(struct gendisk *hd, int dev)
 		bh->b_dirt = 0;
 		bh->b_uptodate = 0;
 		bh->b_req = 0;
-		if (*(unsigned short *) (bh->b_data+510) == 0xAA55) {
-			p = (struct partition *) (0x1BE + bh->b_data);
+		if (*(unsigned short *) (bh->b_data+510) != 0xAA55)
+			goto done;
+		p = (struct partition *) (0x1BE + bh->b_data);
 		/*
 		 * Process the first entry, which should be the real
 		 * data partition.
 		 */
-			if (p->sys_ind == EXTENDED_PARTITION || !p->nr_sects)
-				goto done;  /* shouldn't happen */
+		if (p->sys_ind == EXTENDED_PARTITION)
+			goto done;	/* shouldn't happen */
+		if (p->sys_ind && p->nr_sects)
 			add_partition(hd, current_minor, this_sector+p->start_sect, p->nr_sects);
-			current_minor++;
-			p++;
+		current_minor++;
+		p++;
 		/*
 		 * Process the second entry, which should be a link
 		 * to the next logical partition.  Create a minor
@@ -116,15 +120,13 @@ static void extended_partition(struct gendisk *hd, int dev)
 		 * table.  The minor will be reused for the real
 		 * data partition.
 		 */
-			if (p->sys_ind != EXTENDED_PARTITION ||
-			    !(hd->part[current_minor].nr_sects = p->nr_sects))
-				goto done;  /* no more logicals in this partition */
-			hd->part[current_minor].start_sect = first_sector + p->start_sect;
-			this_sector = first_sector + p->start_sect;
-			dev = ((hd->major) << 8) | current_minor;
-			brelse(bh);
-		} else
-			goto done;
+		if (p->sys_ind != EXTENDED_PARTITION ||
+		    !(hd->part[current_minor].nr_sects = p->nr_sects))
+			goto done;  /* no more logicals in this partition */
+		hd->part[current_minor].start_sect = first_sector + p->start_sect;
+		this_sector = first_sector + p->start_sect;
+		dev = ((hd->major) << 8) | current_minor;
+		brelse(bh);
 	}
 done:
 	brelse(bh);

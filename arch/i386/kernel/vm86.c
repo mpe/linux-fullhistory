@@ -93,7 +93,7 @@ static void mark_screen_rdonly(struct task_struct * tsk)
 	pte = pte_offset(pmd, 0xA0000);
 	for (i = 0; i < 32; i++) {
 		if (pte_present(*pte))
-			*pte = pte_wrprotect(*pte);
+			set_pte(pte, pte_wrprotect(*pte));
 		pte++;
 	}
 	invalidate();

@@ -36,6 +36,11 @@
 #define TASK_FLAGS	40
 
 /*
+ * task flags (must match include/linux/sched.h):
+ */
+#define	PF_PTRACED	0x00000010
+
+/*
  * This defines the normal kernel pt-regs layout.
  *
  * regs 9-15 preserved by C code
@@ -373,9 +378,27 @@ entUnaUser:
 	ldq $0,0($30)			/* restore original $0 */
 	lda $30,256($30)		/* pop entUna's stack frame */
 	SAVE_ALL			/* setup normal kernel stack */
+	lda $30,-56($30)
+	stq $9,0($30)
+	stq $10,8($30)
+	stq $11,16($30)
+	stq $12,24($30)
+	stq $13,32($30)
+	stq $14,40($30)
+	stq $15,48($30)
 	lda $27,do_entUnaUser
-	lda $26,ret_from_sys_call
-	jsr $31,($27),do_entUnaUser
+	bis $31,$30,$19
+	jsr $26,($27),do_entUnaUser
+	ldq $9,0($30)
+	ldq $10,8($30)
+	ldq $11,16($30)
+	ldq $12,24($30)
+	ldq $13,32($30)
+	ldq $14,40($30)
+	ldq $15,48($30)
+	lda $30,56($30)
+	br $31,ret_from_sys_call
+
 .end	entUnaUser
 
 .align 3
@@ -424,27 +447,14 @@ entSys:
 	beq	$1,1f
 	ldq	$27,0($2)
 1:	jsr	$26,($27),do_entSys
-	ldq	$1,0($30)	/* We have to handle ptrace specially */
-	subq	$1,26,$1	/* since it returns a pointer value it will*/
-	bne	$1,3f		/* set up a3 and v0 in the return frame */
-	ldq	$1,72($30)
-	stq	$1,0($30)
-	stq	$0,72($30)
-	bis	$31,$31,$1
-	br	$31,ret_from_sys_call
-3:	bis	$31,$31,$1
-	bge	$0,2f		/* the call succeeded */
-	bis	$31,$31,$26	/* tell "ret_from_sys_call" that we can restart */
-	ldq	$19,0($30)	/* .. with this syscall nr */
-	ldq	$20,72($30)	/* .. and this a3 */
-	addq	$31,1,$1	/* set a3 for errno return */
-	subq	$31,$0,$0	/* with error in v0 */
-2:	stq	$0,0($30)
-	stq	$1,72($30)	/* a3 for return */
+	blt	$0,syscall_error	/* the call failed */
+	stq	$0,0($30)
+ret_success:
+	stq	$31,72($30)		/* a3=0 => no error */
 .align 3
 ret_from_sys_call:
 	ldq	$0,SP_OFF($30)
-	cmovne	$26,0,$19
+	cmovne	$26,0,$19		/* $19 = 0 => non-restartable */
 	and	$0,8,$0
 	beq	$0,restore_all
 ret_from_reschedule:
@@ -463,6 +473,27 @@ ret_from_reschedule:
 restore_all:
 	RESTORE_ALL
 	rti
+
+	.align 3
+syscall_error:
+	/*
+	 * Some system calls (e.g., ptrace) can return arbitrary
+	 * values which might normally be mistaken as error numbers.
+	 * Those functions must setup $0 (v0) directly in the stack frame
+	 * and return with value -255.
+	 */
+	addq	$0,255,$1
+	beq	$1,ret_success
+
+	bis	$31,$31,$26	/* tell "ret_from_sys_call" that we can restart */
+	ldq	$19,0($30)	/* .. with this syscall nr */
+	ldq	$20,72($30)	/* .. and this a3 */
+	subq	$31,$0,$0	/* with error in v0 */
+	addq	$31,1,$1	/* set a3 for errno return */
+	stq	$0,0($30)
+	stq	$1,72($30)	/* a3 for return */
+	br	$31,ret_from_sys_call
+
 .align 3
 signal_return:
 	bis	$30,$30,$17
@@ -478,8 +509,8 @@ signal_return:
 .ent reschedule
 reschedule:
 	subq	$30,16,$30
-	stq	$19,0($30)
-	stq	$20,8($30)
+	stq	$19,0($30)	/* save syscall nr */
+	stq	$20,8($30)	/* and error indication (a3) */
 	lda	$27,schedule
 	jsr	$26,($27),schedule
 	ldq	$19,0($30)
@@ -510,7 +541,7 @@ sys_sigsuspend:
 	jsr	$26,($27),do_sigsuspend
 	lda	$30,SWITCH_STACK_SIZE($30)
 	br	$31,ret_from_sys_call
-.end sys_sigreturn
+.end sys_sigsuspend
 
 	.align 3
 	.globl sys_call_table
@@ -525,7 +556,7 @@ sys_call_table:
 	.quad do_entSys, sys_sync, sys_kill, do_entSys, sys_setpgid
 	.quad do_entSys, sys_dup, sys_pipe, do_entSys, do_entSys
 	.quad sys_open, do_entSys, sys_getxgid, osf_sigprocmask, do_entSys
-/*50*/	.quad do_entSys, do_entSys, do_entSys, do_entSys, sys_ioctl
+/*50*/	.quad do_entSys, sys_acct, do_entSys, do_entSys, sys_ioctl
 	.quad do_entSys, do_entSys, sys_symlink, sys_readlink, sys_execve
 	.quad sys_umask, do_entSys, do_entSys, sys_getpgrp, sys_getpagesize
 	.quad do_entSys, osf_vfork, sys_newstat, sys_newlstat, do_entSys
@@ -579,6 +610,6 @@ sys_call_table:
 /* linux-specific system calls start at 300 */
 /*300*/	.quad sys_bdflush, sys_sethae, sys_mount, sys_adjtimex, sys_swapoff
 	.quad sys_getdents, sys_create_module, sys_init_module, sys_delete_module, sys_get_kernel_syms
-	.quad sys_syslog, do_entSys, do_entSys, do_entSys, do_entSys
+	.quad sys_syslog, sys_reboot, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 

@@ -658,6 +658,7 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
    if (SCarg->host_scribble == NULL) {
       printk("%s: abort, target %d, pid %ld inactive.\n",
 	     BN(j), SCarg->target, SCarg->pid);
+      restore_flags(flags);
       return SCSI_ABORT_NOT_RUNNING;
       }
 
@@ -702,8 +703,8 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
       restore_flags(flags);
       return SCSI_ABORT_NOT_RUNNING;
       }
-   else
-      panic("%s: abort, mbox %d, invalid cp_stat.\n", BN(j), i);
+   restore_flags(flags);
+   panic("%s: abort, mbox %d, invalid cp_stat.\n", BN(j), i);
 }
 
 int u14_34f_reset(Scsi_Cmnd * SCarg) {

@@ -71,7 +71,7 @@ static int serial_refcount;
 #undef SERIAL_DEBUG_OPEN
 #undef SERIAL_DEBUG_FLOW
 
-#define RS_STROBE_TIME 10
+#define RS_STROBE_TIME (10*HZ)
 #define RS_ISR_PASS_LIMIT 256
 
 #define _INLINE_ inline
@@ -765,7 +765,7 @@ static void rs_timer(void)
 	struct async_struct *info;
 	unsigned int	i;
 
-	if ((jiffies - last_strobe) >= RS_STROBE_TIME*HZ) {
+	if ((jiffies - last_strobe) >= RS_STROBE_TIME) {
 		for (i=1; i < 16; i++) {
 			info = IRQ_ports[i];
 			if (!info)
@@ -788,7 +788,7 @@ static void rs_timer(void)
 		}
 	}
 	last_strobe = jiffies;
-	timer_table[RS_TIMER].expires = jiffies + RS_STROBE_TIME * HZ;
+	timer_table[RS_TIMER].expires = jiffies + RS_STROBE_TIME;
 	timer_active |= 1 << RS_TIMER;
 
 	if (IRQ_ports[0]) {
@@ -1016,7 +1016,7 @@ static int startup(struct async_struct * info)
 	/*
 	 * Set up serial timers...
 	 */
-	timer_table[RS_TIMER].expires = jiffies + 2;
+	timer_table[RS_TIMER].expires = jiffies + 2*HZ/100;
 	timer_active |= 1 << RS_TIMER;
 
 	/*
@@ -1519,8 +1519,8 @@ static int set_serial_info(struct async_struct * info,
 			(new_serial.flags & ASYNC_FLAGS));
 	info->custom_divisor = new_serial.custom_divisor;
 	info->type = new_serial.type;
-	info->close_delay = new_serial.close_delay;
-	info->closing_wait = new_serial.closing_wait;
+	info->close_delay = new_serial.close_delay * HZ/100;
+	info->closing_wait = new_serial.closing_wait * HZ/100;
 
 	release_region(info->port,8);
 	if (change_port || change_irq) {
@@ -1703,13 +1703,13 @@ static int check_wild_interrupts(int doprint)
 	 * Delay for 0.1 seconds -- we use a busy loop since this may 
 	 * occur during the bootup sequence
 	 */
-	timeout = jiffies+10;
+	timeout = jiffies+HZ/10;
 	while (timeout >= jiffies)
 		;
 	
 	rs_triggered = 0;	/* Reset after letting things settle */
 
-	timeout = jiffies+10;
+	timeout = jiffies+HZ/10;
 	while (timeout >= jiffies)
 		;
 	
@@ -2386,7 +2386,7 @@ static int get_auto_irq(struct async_struct *info)
 	(void)serial_inp(info, UART_IIR);
 	(void)serial_inp(info, UART_MSR);
 	
-	timeout = jiffies+2;
+	timeout = jiffies+2*HZ/100;
 	while (timeout >= jiffies) {
 		if (rs_irq_triggered)
 			break;
@@ -2648,8 +2648,8 @@ long rs_init(long kmem_start)
 		info->tty = 0;
 		info->type = PORT_UNKNOWN;
 		info->custom_divisor = 0;
-		info->close_delay = 50;
-		info->closing_wait = 3000;
+		info->close_delay = 5*HZ/10;
+		info->closing_wait = 30*HZ;
 		info->x_char = 0;
 		info->event = 0;
 		info->count = 0;

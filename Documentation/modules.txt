@@ -31,7 +31,8 @@ You will generally select the minimal set that is needed to boot:
 What has been left out is generally loadable as a modules.
 The set of modules is rapidly increasing, but so far these are known:
 
-	Most filesystems: minix, xiafs, msdos, umsdos, sysv, isofs
+	Most filesystems: minix, xiafs, msdos, umsdos, sysv, isofs, hpfs,
+			  smbfs, nfs
 
 	Some SCSI drivers: aha1542, in2000
 

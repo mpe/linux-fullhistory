@@ -46,6 +46,7 @@
 				copied from sjcd.c, with a few changes.
 				Updated README.optcd. Submitted for
 				inclusion in 1.3.21
+	29-9-95		v0.4a	Fixed bug that prevented compilation as module
 */
 
 #include <linux/major.h>
@@ -1442,7 +1443,7 @@ int init_module(void) {
 
     if ( isp16_config( optcd_port, ISP16_SONY, 0, 0 ) < 0 ) {
       printk( "ISP16 cdrom interface has not been properly configured.\n" );
-      return(mem_start);
+      RETURN_EIO;
     }
   }
 	}

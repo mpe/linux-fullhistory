@@ -12,6 +12,7 @@ void nfs_bl_cache_invalidate(nfs_cache *nh)
 		nh->data=NULL;
 		nh->free=1;
 	}
+	restore_flags(flags);
 }
 
 void nfs_bl_cache_revalidate(nfs_cache *nh, struct fattr fa)

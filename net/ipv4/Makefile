@@ -10,7 +10,7 @@
 O_TARGET := ipv4.o
 IPV4_OBJS	:= utils.o route.o proc.o timer.o protocol.o packet.o \
 		   arp.o ip.o raw.o icmp.o tcp.o udp.o devinet.o af_inet.o \
-		   igmp.o ip_fw.o ipip.o
+		   igmp.o ip_fw.o ipip.o ipmr.o
 
 ifdef CONFIG_INET_RARP
 IPV4_OBJS := $(IPV4_OBJS) rarp.o

@@ -1,4 +1,4 @@
-/* $Id: aztcd.h,v 1.60 1995/08/09 12:38:12 root Exp root $
+/* $Id: aztcd.h,v 1.70 1995/08/19 16:16:45 root Exp root $
  *
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann
@@ -43,17 +43,20 @@
   don't want the auto-eject feature*/
 #define AZT_AUTO_EJECT          0
 
-/*Set this to 1, if you want multisession support. Be warned, this function has
-not been tested !!!*/
-#define AZT_MULTISESSION        1
-
 /*Set this to 1, if you want to use incompatible ioctls for reading in raw and
   cooked mode */
 #define AZT_PRIVATE_IOCTLS      1
 
-/*---------------------------------------------------------------------------*/
-/*------------nothing to be configured below this line-----------------------*/
+/*Set this to 1, if you want multisession support by the ISO fs. Even if you set 
+  this value to '0' you can use multisession CDs. In that case the drive's firm-
+  ware will do the appropriate redirection automatically. The CD will then look
+  like a single session CD (but nevertheless all data may be read). Please read 
+  chapter '5.1 Multisession support' in README.aztcd for details. Normally it's 
+  uncritical to leave this setting untouched */
+#define AZT_MULTISESSION        1
 
+/*---------------------------------------------------------------------------*/
+/*-----nothing to be configured for normal applications below this line------*/
 
 /* Increase this if you get lots of timeouts; if you get kernel panic, replace
    STEN_LOW_WAIT by STEN_LOW in the source code */
@@ -99,6 +102,7 @@ not been tested !!!*/
 #define ACMD_SOFT_RESET		0x10		/* reset drive */
 #define ACMD_PLAY_READ		0x20		/* read data track in cooked mode */
 #define ACMD_PLAY_READ_RAW      0x21		/* reading in raw mode*/
+#define ACMD_SEEK               0x30            /* seek msf address*/
 #define ACMD_SEEK_TO_LEADIN     0x31		/* seek to leadin track*/
 #define ACMD_GET_ERROR		0x40		/* get error code */
 #define ACMD_GET_STATUS		0x41		/* get status */
@@ -129,11 +133,13 @@ struct azt_Play_msf {
 
 struct azt_DiskInfo {
 	unsigned char	first;
+        unsigned char   next;
 	unsigned char	last;
 	struct msf	diskLength;
 	struct msf	firstTrack;
         unsigned char   multi;
-        struct msf      lastTrack;
+        struct msf      nextSession;
+        struct msf      lastSession;
         unsigned char   xa;
         unsigned char   audio;
 };

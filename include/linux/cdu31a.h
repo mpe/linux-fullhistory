@@ -66,16 +66,16 @@
 
 #define LOG_START_OFFSET        150     /* Offset of first logical sector */
 
-#define SONY_DETECT_TIMEOUT     80      /* Maximum amount of time
+#define SONY_DETECT_TIMEOUT	(8*HZ/10) /* Maximum amount of time
                                            that drive detection code
                                            will wait for response
                                            from drive (in 1/100th's
                                            of seconds). */
  
-#define SONY_JIFFIES_TIMEOUT    1000    /* Maximum number of times the
+#define SONY_JIFFIES_TIMEOUT    1000	/* Maximum number of times the
                                            drive will wait/try for an
                                            operation */
-#define SONY_RESET_TIMEOUT      100     /* Maximum number of times the
+#define SONY_RESET_TIMEOUT      100	/* Maximum number of times the
                                            drive will wait/try a reset
                                            operation */
 #define SONY_READY_RETRIES      20000   /* How many times to retry a

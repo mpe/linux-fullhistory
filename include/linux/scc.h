@@ -1,3 +1,4 @@
+/* $Id: scc.h,v 1.11 1995/08/24 21:06:24 jreuter Exp jreuter $ */
 
 #ifndef	_SCC_H
 #define	_SCC_H
@@ -14,9 +15,9 @@
 /* Constants */
 
 #define MAXSCC		4	/* number of max. supported chips */
-#define MAX_IBUFS	300	/* change this if you run out of memory */
-#define BUFSIZE	  	64	/* must not exceed 4096 */
-#define TPS		25	/* scc_timer(): 25  Ticks Per Second */
+#define MAX_IBUFS	200	/* change this if you run out of memory */
+#define BUFSIZE	  	128	/* must not exceed 4096 */
+#define TPS		25	/* scc_timer():  Ticks Per Second */
 
 #define SCC_TIMER	3
 
@@ -133,13 +134,15 @@ typedef unsigned short ioaddr;  /* old def */
 
 /* Basic message buffer structure */
 
+/* looks familiar? Hmm, yes... */
+
 struct mbuf {
 	struct mbuf *next;	/* Links mbufs belonging to single packets */
 	struct mbuf *anext;	/* Links packets on queues */
-
+	
 	char type;		/* who allocated this buffer? */
-	unsigned long  time_out;/* buffer time out */
-
+	int  time_out;		/* unimplemented yet */
+	
 	int size;		/* Size of associated data buffer */
 	int refcnt;		/* Reference count */
 	struct mbuf *dup;	/* Pointer to duplicated mbuf */
@@ -237,19 +240,16 @@ struct scc_channel {
         struct scc_stat stat;	/* statistical information */
         struct scc_modem modem; /* modem information */
 
-	char rxbuf[2048];	/* Rx frame buffer max framesize * 2 */
-	int rxbufcnt;		/* Rx frame counter */
-
+	struct mbuf *rbp;	/* rx: Head of mbuf chain being filled */
+	struct mbuf *rbp1;	/* rx: Pointer to mbuf currently being written */
+	struct mbuf *rcvq;	/* Pointer to mbuf packets currently received */
+	
 	struct mbuf *sndq;	/* tx: Packets awaiting transmission */
 	struct mbuf *tbp;	/* tx: Transmit mbuf being sent */
 
 	struct mbuf *sndq1;	/* Pointer to mbuf currently under construction */
 	struct mbuf *sndq2;	/* Pointer to mbuf currently under construction */
 
-/*	unsigned char 		*xmit_buf;
-	int			xmit_head;
-	int			xmit_tail;
-	int			xmit_cnt;*/
 	
 	/* Timer */
 
@@ -263,6 +263,13 @@ struct scc_channel {
 	unsigned int t_mbusy;	/* time until defer if channel busy */	 	
 };
 
+/* some variables for scc_rx_timer() bound together in a struct */
+
+struct rx_timer_CB {
+			char		   lock;
+			unsigned long	   expires;
+			struct scc_channel *scc;
+};
 
 
 /* 8530 Serial Communications Controller Register definitions */
@@ -546,8 +553,8 @@ struct scc_channel {
 #define FDA	0x40		/* FIFO Data Available Status */
 #define FOY	0x80		/* FIFO Overflow Status */
 
+#endif	/* _SCC_H */
+
 /* global functions */
 
 extern long scc_init(long kmem_start);
-
-#endif	/* _SCC_H */

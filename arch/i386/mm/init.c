@@ -157,7 +157,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 		pg_dir++;
 		for (tmp = 0 ; tmp < PTRS_PER_PTE ; tmp++,pg_table++) {
 			if (address < end_mem)
-				*pg_table = mk_pte(address, PAGE_SHARED);
+				set_pte(pg_table, mk_pte(address, PAGE_SHARED));
 			else
 				pte_clear(pg_table);
 			address += PAGE_SIZE;

@@ -69,6 +69,12 @@ do { if ((task)->mm == current->mm) invalidate(); } while (0)
 #define invalidate_page(task,addr) \
 do { if ((task)->mm == current->mm) invalidate(); } while (0)
 
+/* Certain architectures need to do special things when pte's
+ * within a page table are directly modified.  Thus, the following
+ * hook is made available.
+ */
+#define set_pte(pteptr, pteval) ((*(pteptr)) = (pteval))
+
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 

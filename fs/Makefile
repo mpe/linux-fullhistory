@@ -80,6 +80,8 @@ endif
 
 ifdef CONFIG_HPFS_FS
 SUB_DIRS += hpfs
+else
+MOD_SUB_DIRS += hpfs
 endif
 
 ifdef CONFIG_BINFMT_ELF

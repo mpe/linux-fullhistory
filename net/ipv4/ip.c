@@ -88,6 +88,8 @@
  *		Alan Cox	:	Fixed forwarding (by even more popular demand 8))
  *		Alan Cox	:	Fixed SNMP statistics [I think]
  *	Gerhard Koerting	:	IP fragmentation forwarding fix
+ *		Alan Cox	:	Device lock against page fault.
+ *		Alan Cox	:	IP_HDRINCL facility.
  *
  *  
  *
@@ -143,6 +145,7 @@
 #include <net/checksum.h>
 #include <linux/igmp.h>
 #include <linux/ip_fw.h>
+#include <linux/mroute.h>
 
 #define CONFIG_IP_DEFRAG
 
@@ -1523,8 +1526,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	if ( iph->daddr == skb->dev->pa_addr || (brd = ip_chk_addr(iph->daddr)) != 0)
 	{
 #ifdef CONFIG_IP_MULTICAST	
-
-		if(brd==IS_MULTICAST && iph->daddr!=IGMP_ALL_HOSTS && !(dev->flags&IFF_LOOPBACK))
+		if(!(dev->flags&IFF_ALLMULTI) && brd==IS_MULTICAST && iph->daddr!=IGMP_ALL_HOSTS && !(dev->flags&IFF_LOOPBACK))
 		{
 			/*
 			 *	Check it is for one of our groups
@@ -1729,7 +1731,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
 {
 	struct device *dev=&loopback_dev;
-	int len=skb->len-old_dev->hard_header_len;
+	int len=ntohs(skb->ip_hdr->tot_len);
 	struct sk_buff *newskb=dev_alloc_skb(len+dev->hard_header_len+15);
 	
 	if(newskb==NULL)
@@ -1932,8 +1934,10 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	{
 		if(sk==NULL || sk->ip_mc_loop)
 		{
-			if(iph->daddr==IGMP_ALL_HOSTS)
+			if(iph->daddr==IGMP_ALL_HOSTS || (dev->flags&IFF_ALLMULTI))
+			{
 				ip_loopback(dev,skb);
+			}
 			else
 			{
 				struct ip_mc_list *imc=dev->ip_mc_list;
@@ -1978,6 +1982,8 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	}
 	else
 	{
+		if(sk)
+			sk->err = ENETDOWN;
 		ip_statistics.IpOutDiscards++;
 		if (free)
 			kfree_skb(skb, FREE_WRITE);
@@ -2069,18 +2075,28 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 	struct ip_fw tmp_fw;
 #endif	
 	if (optval == NULL)
-		return(-EINVAL);
-
-	err=verify_area(VERIFY_READ, optval, sizeof(int));
-	if(err)
-		return err;
-
-	val = get_user((int *) optval);
-	ucval=get_user((unsigned char *) optval);
-
+	{
+		val=0;
+		ucval=0;
+	}
+	else
+	{
+		err=verify_area(VERIFY_READ, optval, sizeof(int));
+		if(err)
+			return err;
+		val = get_user((int *) optval);
+		ucval=get_user((unsigned char *) optval);
+	}
+	
 	if(level!=SOL_IP)
 		return -EOPNOTSUPP;
-
+#ifdef CONFIG_IP_MROUTE
+	if(optname>=MRT_BASE && optname <=MRT_BASE+10)
+	{
+		return ip_mroute_setsockopt(sk,optname,optval,optlen);
+	}
+#endif
+	
 	switch(optname)
 	{
 		case IP_TOS:
@@ -2096,6 +2112,11 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			if(val<1||val>255)
 				return -EINVAL;
 			sk->ip_ttl=val;
+			return 0;
+		case IP_HDRINCL:
+			if(sk->type!=SOCK_RAW)
+				return -ENOPROTOOPT;
+			sk->ip_hdrincl=val?1:0;
 			return 0;
 #ifdef CONFIG_IP_MULTICAST
 		case IP_MULTICAST_TTL: 
@@ -2324,6 +2345,13 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 	if(level!=SOL_IP)
 		return -EOPNOTSUPP;
 
+#ifdef CONFIG_IP_MROUTE
+	if(optname>=MRT_BASE && optname <=MRT_BASE+10)
+	{
+		return ip_mroute_getsockopt(sk,optname,optval,optlen);
+	}
+#endif
+
 	switch(optname)
 	{
 		case IP_TOS:
@@ -2331,6 +2359,9 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			break;
 		case IP_TTL:
 			val=sk->ip_ttl;
+			break;
+		case IP_HDRINCL:
+			val=sk->ip_hdrincl;
 			break;
 #ifdef CONFIG_IP_MULTICAST			
 		case IP_MULTICAST_TTL:
@@ -2526,7 +2557,8 @@ int ip_build_xmit(struct sock *sk,
 				skb->arp=1;
 		}
 		skb->ip_hdr=iph=(struct iphdr *)skb_put(skb,length);
-		if(type!=IPPROTO_RAW)
+		dev_lock_list();
+		if(!sk->ip_hdrincl)
 		{
 			iph->version=4;
 			iph->ihl=5;
@@ -2544,6 +2576,7 @@ int ip_build_xmit(struct sock *sk,
 		}
 		else
 			getfrag(frag,saddr,(void *)iph,0,length);
+		dev_unlock_list();
 #ifdef CONFIG_IP_ACCT
 		ip_fw_chk((void *)skb->data,dev,ip_acct_chain, IP_FW_F_ACCEPT,1);
 #endif		
@@ -2559,7 +2592,7 @@ int ip_build_xmit(struct sock *sk,
 			
 			
 	fragheaderlen = dev->hard_header_len;
-	if(type != IPPROTO_RAW)
+	if(!sk->ip_hdrincl)
 		fragheaderlen += 20;
 		
 	/*
@@ -2598,9 +2631,15 @@ int ip_build_xmit(struct sock *sk,
 	 *	Can't fragment raw packets 
 	 */
 	 
-	if (type == IPPROTO_RAW && offset > 0)
+	if (sk->ip_hdrincl && offset > 0)
  		return(-EMSGSIZE);
 
+	/*
+	 *	Lock the device lists.
+	 */
+
+	dev_lock_list();
+	
 	/*
 	 *	Get an identifier
 	 */
@@ -2627,6 +2666,7 @@ int ip_build_xmit(struct sock *sk,
 			ip_statistics.IpOutDiscards++;
 			if(nfrags>1)
 				ip_statistics.IpFragCreates++;			
+			dev_unlock_list();
 			return(error);
 		}
 		
@@ -2674,7 +2714,7 @@ int ip_build_xmit(struct sock *sk,
 		 *	Only write IP header onto non-raw packets 
 		 */
 		 
-		if(type != IPPROTO_RAW) 
+		if(!sk->ip_hdrincl) 
 		{
 
 			iph->version = 4;
@@ -2732,11 +2772,13 @@ int ip_build_xmit(struct sock *sk,
 			/*
 			 *	Loop back any frames. The check for IGMP_ALL_HOSTS is because
 			 *	you are always magically a member of this group.
+			 *
+			 *	Always loop back all host messages when running as a multicast router.
 			 */
 			 
-			if(sk==NULL || sk->ip_mc_loop) 
+			if(sk==NULL || sk->ip_mc_loop)
 			{
-				if(skb->daddr==IGMP_ALL_HOSTS)
+				if(skb->daddr==IGMP_ALL_HOSTS || (dev->flags&IFF_ALLMULTI))
 					ip_loopback(rt?rt->rt_dev:dev,skb);
 				else 
 				{
@@ -2784,22 +2826,25 @@ int ip_build_xmit(struct sock *sk,
 		{
 			/*
 			 *	Whoops... 
-			 *
-			 *	FIXME:	There is a small nasty here. During the ip_build_xmit we could
-			 *	page fault between the route lookup and device send, the device might be
-			 *	removed and unloaded.... We need to add device locks on this.
 			 */
 			 
 			ip_statistics.IpOutDiscards++;
 			if(nfrags>1)
 				ip_statistics.IpFragCreates+=nfrags;
 			kfree_skb(skb, FREE_WRITE);
+			dev_unlock_list();
+			/*
+			 *	BSD behaviour.
+			 */
+			if(sk!=NULL)
+				sk->err=ENETDOWN;
 			return(0); /* lose rest of fragments */
 		}
 	} 
 	while (offset >= 0);
 	if(nfrags>1)
 		ip_statistics.IpFragCreates+=nfrags;
+	dev_unlock_list();
 	return(0);
 }
     

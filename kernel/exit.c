@@ -357,19 +357,37 @@ static void forget_original_parent(struct task_struct * father)
 
 static void exit_files(void)
 {
-	int i;
-
-	for (i=0 ; i<NR_OPEN ; i++)
-		if (current->files->fd[i])
-			sys_close(i);
+	if (!--current->files->count) {
+		int i;
+		for (i=0 ; i<NR_OPEN ; i++)
+			if (current->files->fd[i])
+				sys_close(i);
+	}
+	free_page((long) current->files);
 }
 
 static void exit_fs(void)
 {
-	iput(current->fs->pwd);
-	current->fs->pwd = NULL;
-	iput(current->fs->root);
-	current->fs->root = NULL;
+	if (!--current->fs->count) {
+		iput(current->fs->pwd);
+		current->fs->pwd = NULL;
+		iput(current->fs->root);
+		current->fs->root = NULL;
+	}
+	free_page((long) current->fs);
+}
+
+static void exit_mm(void)
+{
+	if (!--current->mm->count)
+		exit_mmap(current);
+	free_page_tables(current);
+	free_page((long) current->mm);
+}
+
+static void exit_signal(void)
+{
+	free_page((long) current->sigaction);
 }
 
 NORET_TYPE void do_exit(long code)
@@ -384,10 +402,10 @@ fake_volatile:
 	current->flags |= PF_EXITING;
 	del_timer(&current->real_timer);
 	sem_exit();
-	exit_mmap(current);
-	free_page_tables(current);
+	exit_mm();
 	exit_files();
 	exit_fs();
+	exit_signal();
 	exit_thread();
 	forget_original_parent(current);
 	/* 

@@ -15,6 +15,14 @@
  *					the memory usage of all the tiny little
  *					functions.
  *		Alan Cox	:	Dumped the header building experiment.
+ *		Alan Cox	:	Minor tweaks ready for multicast routing
+ *					and extended IGMP protocol.
+ *		Alan Cox	:	Removed a load of inline directives. Gcc 2.5.8
+ *					writes utterly bogus code otherwise (sigh)
+ *					fixed IGMP loopback to behave in the manner
+ *					desired by mrouted, fixed the fact it has been
+ *					broken since 1.3.6 and cleaned up a few minor
+ *					points.
  */
  
  
@@ -47,7 +55,7 @@
  */
  
  
-extern __inline__ void igmp_stop_timer(struct ip_mc_list *im)
+static void igmp_stop_timer(struct ip_mc_list *im)
 {
 	del_timer(&im->timer);
 	im->tm_running=0;
@@ -64,7 +72,7 @@ extern __inline__ int random(void)
  *	Inlined as its only called once.
  */
 
-extern __inline__ void igmp_start_timer(struct ip_mc_list *im)
+static void igmp_start_timer(struct ip_mc_list *im)
 {
 	int tv;
 	if(im->tm_running)
@@ -90,7 +98,7 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 	if(skb==NULL)
 		return;
 	tmp=ip_build_header(skb, INADDR_ANY, address, &dev, IPPROTO_IGMP, NULL,
-				skb->truesize, 0, 1);
+				28 , 0, 1);
 	if(tmp<0)
 	{
 		kfree_skb(skb, FREE_WRITE);
@@ -98,7 +106,7 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 	}
 	ih=(struct igmphdr *)skb_put(skb,sizeof(struct igmphdr));
 	ih->type=IGMP_HOST_MEMBERSHIP_REPORT;
-	ih->unused=0;
+	ih->code=0;
 	ih->csum=0;
 	ih->group=address;
 	ih->csum=ip_compute_csum((void *)ih,sizeof(struct igmphdr));	/* Checksum fill */
@@ -113,7 +121,7 @@ static void igmp_timer_expire(unsigned long data)
 	igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_MEMBERSHIP_REPORT);
 }
 
-extern __inline__ void igmp_init_timer(struct ip_mc_list *im)
+static void igmp_init_timer(struct ip_mc_list *im)
 {
 	im->tm_running=0;
 	init_timer(&im->timer);
@@ -122,7 +130,7 @@ extern __inline__ void igmp_init_timer(struct ip_mc_list *im)
 }
 	
 
-extern __inline__ void igmp_heard_report(struct device *dev, unsigned long address)
+static void igmp_heard_report(struct device *dev, unsigned long address)
 {
 	struct ip_mc_list *im;
 	for(im=dev->ip_mc_list;im!=NULL;im=im->next)
@@ -130,12 +138,14 @@ extern __inline__ void igmp_heard_report(struct device *dev, unsigned long addre
 			igmp_stop_timer(im);
 }
 
-extern __inline__ void igmp_heard_query(struct device *dev)
+static void igmp_heard_query(struct device *dev)
 {
 	struct ip_mc_list *im;
 	for(im=dev->ip_mc_list;im!=NULL;im=im->next)
+	{
 		if(!im->tm_running && im->multiaddr!=IGMP_ALL_HOSTS)
 			igmp_start_timer(im);
+	}
 }
 
 /*
@@ -186,15 +196,13 @@ extern __inline__ void igmp_group_dropped(struct ip_mc_list *im)
 	del_timer(&im->timer);
 	igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_LEAVE_MESSAGE);
 	ip_mc_filter_del(im->interface, im->multiaddr);
-/*	printk("Left group %lX\n",im->multiaddr);*/
 }
 
 extern __inline__ void igmp_group_added(struct ip_mc_list *im)
 {
 	igmp_init_timer(im);
-	igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_MEMBERSHIP_REPORT);
 	ip_mc_filter_add(im->interface, im->multiaddr);
-/*	printk("Joined group %lX\n",im->multiaddr);*/
+	igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_MEMBERSHIP_REPORT);
 }
 
 int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
@@ -204,9 +212,21 @@ int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	/* This basically follows the spec line by line -- see RFC1112 */
 	struct igmphdr *ih;
 	
-	ih=(struct igmphdr *)skb->data;
+	/*
+	 *	Mrouted needs to able to query local interfaces. So
+	 *	report for the device this was sent at. (Which can
+	 *	be the loopback this time)
+	 */
+	 
+	if(dev->flags&IFF_LOOPBACK)
+	{
+		dev=ip_dev_find(saddr);
+		if(dev==NULL)
+			dev=&loopback_dev;
+	}
+	ih=(struct igmphdr *)skb->h.raw;
 		
-	if(skb->len <sizeof(struct igmphdr) || skb->ip_hdr->ttl!=1 || ip_compute_csum((void *)skb->h.raw,sizeof(struct igmphdr)))
+	if(skb->len <sizeof(struct igmphdr) || skb->ip_hdr->ttl>1 || ip_compute_csum((void *)skb->h.raw,sizeof(struct igmphdr)))
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -307,6 +327,7 @@ void ip_mc_allhost(struct device *dev)
 	i->users=1;
 	i->interface=dev;
 	i->multiaddr=IGMP_ALL_HOSTS;
+	i->tm_running=0;
 	i->next=dev->ip_mc_list;
 	dev->ip_mc_list=i;
 	ip_mc_filter_add(i->interface, i->multiaddr);

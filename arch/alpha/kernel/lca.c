@@ -11,6 +11,7 @@
 #include <linux/bios32.h>
 #include <linux/pci.h>
 
+#include <asm/ptrace.h>
 #include <asm/system.h>
 #include <asm/io.h>
 
@@ -18,7 +19,7 @@
  * BIOS32-style PCI interface:
  */
 
-#ifdef CONFIG_PCI
+#ifdef CONFIG_ALPHA_LCA
 
 #define vulp	volatile unsigned long *
 
@@ -76,7 +77,7 @@ static int mk_conf_addr(unsigned char bus, unsigned char device_fn,
 
 		if (device > 12) {
 			return -1;
-		} /* if */
+		}
 
 		*((volatile unsigned long*) LCA_IOC_CONF) = 0;
 		addr = (1 << (11 + device)) | (func << 8) | where;
@@ -84,19 +85,19 @@ static int mk_conf_addr(unsigned char bus, unsigned char device_fn,
 		/* type 1 configuration cycle: */
 		*((volatile unsigned long*) LCA_IOC_CONF) = 1;
 		addr = (bus << 16) | (device_fn << 8) | where;
-	} /* if */
+	}
 	*pci_addr = addr;
-
 	return 0;
 }
 
 
 static unsigned int conf_read(unsigned long addr)
 {
-	unsigned long old_ipl, code, stat0;
+	unsigned long flags, code, stat0;
 	unsigned int value;
 
-	old_ipl = swpipl(7);	/* avoid getting hit by machine check */
+	save_flags(flags);
+	cli();
 
 	/* reset status register to avoid loosing errors: */
 	stat0 = *((volatile unsigned long*)LCA_IOC_STAT0);
@@ -123,17 +124,17 @@ static unsigned int conf_read(unsigned long addr)
 
 		value = 0xffffffff;
 	}
-	swpipl(old_ipl);
-
+	restore_flags(flags);
 	return value;
 }
 
 
 static void conf_write(unsigned long addr, unsigned int value)
 {
-	unsigned long old_ipl, code, stat0;
+	unsigned long flags, code, stat0;
 
-	old_ipl = swpipl(7);	/* avoid getting hit by machine check */
+	save_flags(flags);	/* avoid getting hit by machine check */
+	cli();
 
 	/* reset status register to avoid loosing errors: */
 	stat0 = *((volatile unsigned long*)LCA_IOC_STAT0);
@@ -158,7 +159,7 @@ static void conf_write(unsigned long addr, unsigned int value)
 		mb();
 		wrmces(0x7);			/* reset machine check */
 	}
-	swpipl(old_ipl);
+	restore_flags(flags);
 }
 
 
@@ -172,12 +173,9 @@ int pcibios_read_config_byte (unsigned char bus, unsigned char device_fn,
 
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr) < 0) {
 		return PCIBIOS_SUCCESSFUL;
-	} /* if */
-
+	}
 	addr |= (pci_addr << 5) + 0x00;
-
 	*value = conf_read(addr) >> ((where & 3) * 8);
-
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -192,14 +190,11 @@ int pcibios_read_config_word (unsigned char bus, unsigned char device_fn,
 
 	if (where & 0x1) {
 		return PCIBIOS_BAD_REGISTER_NUMBER;
-	} /* if */
-
+	}
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr)) {
 		return PCIBIOS_SUCCESSFUL;
-	} /* if */
-
+	}
 	addr |= (pci_addr << 5) + 0x08;
-
 	*value = conf_read(addr) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
@@ -212,19 +207,14 @@ int pcibios_read_config_dword (unsigned char bus, unsigned char device_fn,
 	unsigned long pci_addr;
 
 	*value = 0xffffffff;
-
 	if (where & 0x3) {
 		return PCIBIOS_BAD_REGISTER_NUMBER;
-	} /* if */
-
+	}
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr)) {
 		return PCIBIOS_SUCCESSFUL;
-	} /* if */
-
+	}
 	addr |= (pci_addr << 5) + 0x18;
-
 	*value = conf_read(addr);
-
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -237,12 +227,9 @@ int pcibios_write_config_byte (unsigned char bus, unsigned char device_fn,
 
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr) < 0) {
 		return PCIBIOS_SUCCESSFUL;
-	} /* if */
-
+	}
 	addr |= (pci_addr << 5) + 0x00;
-
 	conf_write(addr, value << ((where & 3) * 8));
-
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -255,12 +242,9 @@ int pcibios_write_config_word (unsigned char bus, unsigned char device_fn,
 
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr) < 0) {
 		return PCIBIOS_SUCCESSFUL;
-	} /* if */
-
+	}
 	addr |= (pci_addr << 5) + 0x08;
-
 	conf_write(addr, value << ((where & 3) * 8));
-
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -273,12 +257,9 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char device_fn,
 
 	if (mk_conf_addr(bus, device_fn, where, &pci_addr) < 0) {
 		return PCIBIOS_SUCCESSFUL;
-	} /* if */
-
+	}
 	addr |= (pci_addr << 5) + 0x18;
-
 	conf_write(addr, value << ((where & 3) * 8));
-
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -295,10 +276,20 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 	*(vulp)LCA_IOC_W_BASE0 = 1UL<<33 | LCA_DMA_WIN_BASE;
 	*(vulp)LCA_IOC_W_MASK0 = LCA_DMA_WIN_SIZE - 1;
 	*(vulp)LCA_IOC_T_BASE0 = 0;
-
 	return mem_start;
 }
 
-#endif /* CONFIG_PCI */
 
-			/*** end of lca.c ***/
+void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *regs)
+{
+	unsigned long mces;
+
+	mces = rdmces();
+	wrmces(mces);		/* reset machine check asap */
+	printk("Machine check (la=0x%lx,mces=0x%lx)\n", la, mces);
+	printk("esr=%lx, ear=%lx, ioc_stat0=%lx, ioc_stat1=%lx\n",
+	       *(unsigned long*)LCA_MEM_ESR, *(unsigned long*)LCA_MEM_EAR,
+	       *(unsigned long*)LCA_IOC_STAT0, *(unsigned long*)LCA_IOC_STAT1);
+}
+
+#endif /* CONFIG_ALPHA_LCA */

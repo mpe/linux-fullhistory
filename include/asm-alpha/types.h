@@ -100,7 +100,7 @@ typedef unsigned long u64;
 #endif /* __KERNEL__ */
 
 #undef __FD_SET
-static inline void __FD_SET(unsigned long fd, fd_set *fdsetp)
+static __inline__ void __FD_SET(unsigned long fd, fd_set *fdsetp)
 {
 	unsigned long _tmp = fd / __NFDBITS;
 	unsigned long _rem = fd % __NFDBITS;
@@ -108,7 +108,7 @@ static inline void __FD_SET(unsigned long fd, fd_set *fdsetp)
 }
 
 #undef __FD_CLR
-static inline void __FD_CLR(unsigned long fd, fd_set *fdsetp)
+static __inline__ void __FD_CLR(unsigned long fd, fd_set *fdsetp)
 {
 	unsigned long _tmp = fd / __NFDBITS;
 	unsigned long _rem = fd % __NFDBITS;
@@ -116,7 +116,7 @@ static inline void __FD_CLR(unsigned long fd, fd_set *fdsetp)
 }
 
 #undef __FD_ISSET
-static inline int __FD_ISSET(unsigned long fd, fd_set *p)
+static __inline__ int __FD_ISSET(unsigned long fd, fd_set *p)
 { 
 	unsigned long _tmp = fd / __NFDBITS;
 	unsigned long _rem = fd % __NFDBITS;
@@ -124,27 +124,24 @@ static inline int __FD_ISSET(unsigned long fd, fd_set *p)
 }
 
 /*
- * This will unroll the loop for the normal constant cases (4 or 8 longs,
- * for 256 and 512-bit fd_sets respectively)
+ * This will unroll the loop for the normal constant case (8 ints,
+ * for a 256-bit fd_set)
  */
 #undef __FD_ZERO
-static inline void __FD_ZERO(fd_set *p)
+static __inline__ void __FD_ZERO(fd_set *p)
 {
-	unsigned long *tmp = p->fds_bits;
+	unsigned int *tmp = p->fds_bits;
 	int i;
 
-	if (__builtin_constant_p(__FDSET_LONGS)) {
-		switch (__FDSET_LONGS) {
+	if (__builtin_constant_p(__FDSET_INTS)) {
+		switch (__FDSET_INTS) {
 			case 8:
 				tmp[0] = 0; tmp[1] = 0; tmp[2] = 0; tmp[3] = 0;
 				tmp[4] = 0; tmp[5] = 0; tmp[6] = 0; tmp[7] = 0;
 				return;
-			case 4:
-				tmp[0] = 0; tmp[1] = 0; tmp[2] = 0; tmp[3] = 0;
-				return;
 		}
 	}
-	i = __FDSET_LONGS;
+	i = __FDSET_INTS;
 	while (i) {
 		i--;
 		*tmp = 0;

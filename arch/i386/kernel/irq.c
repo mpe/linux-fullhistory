@@ -295,7 +295,7 @@ static void math_error_irq(int cpl, struct pt_regs *regs)
 
 static void no_action(int cpl, struct pt_regs * regs) { }
 
-unsigned int probe_irq_on (void)
+unsigned long probe_irq_on (void)
 {
 	unsigned int i, irqs = 0, irqmask;
 	unsigned long delay;
@@ -325,7 +325,7 @@ unsigned int probe_irq_on (void)
 	return irqs;
 }
 
-int probe_irq_off (unsigned int irqs)
+int probe_irq_off (unsigned long irqs)
 {
 	unsigned int i, irqmask;
 

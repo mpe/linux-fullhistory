@@ -27,7 +27,7 @@
 #define CD_BLOCK_OFFSET           150  /* offset of first logical frame   */
 #define CD_XA_HEAD                 12  /* header size of XA frame         */
 #define CD_XA_TAIL                280  /* tail size of XA frame           */
-#define CD_XA_SYNC_HEAD (CD_XA_HEAD+12)/* sync bytes + header of XA frame */
+#define CD_XA_SYNC_HEAD CD_XA_HEAD+12  /* sync bytes + header of XA frame */
 /*
  *
  * For IOCTL calls, we will commandeer byte 0x53, or 'S'.
@@ -424,7 +424,11 @@ struct cdrom_multisession
 #define	CDROMVOLREAD		0x5313 /* let the drive tell its volume setting */
 					/* (struct cdrom_volctrl) */
 
+/* 
+ *these ioctls are used in aztcd.c
+ */
 #define CDROMREADRAW            0x5314  /*read data in raw mode*/
 #define CDROMREADCOOKED         0x5315  /*read data in cooked mode*/
+#define CDROMSEEK               0x5316  /*seek msf address*/
 
 #endif  _LINUX_CDROM_H

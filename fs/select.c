@@ -92,8 +92,8 @@ static int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
 	int i,j;
 	int max = -1;
 
-	for (j = 0 ; j < __FDSET_LONGS ; j++) {
-		i = j << 5;
+	for (j = 0 ; j < __FDSET_INTS ; j++) {
+		i = j * __NFDBITS;
 		if (i >= n)
 			break;
 		set = in->fds_bits[j] | out->fds_bits[j] | ex->fds_bits[j];
@@ -154,10 +154,10 @@ repeat:
  * We do a VERIFY_WRITE here even though we are only reading this time:
  * we'll write to it eventually..
  */
-static int __get_fd_set(int nr, unsigned long * fs_pointer, fd_set * fdset)
+static int __get_fd_set(int nr, unsigned int * fs_pointer, fd_set * fdset)
 {
 	int error, i;
-	unsigned long * tmp;
+	unsigned int * tmp;
 
 	FD_ZERO(fdset);
 	if (!fs_pointer)
@@ -166,38 +166,38 @@ static int __get_fd_set(int nr, unsigned long * fs_pointer, fd_set * fdset)
 	if (error)
 		return error;
 	tmp = fdset->fds_bits;
-	for (i = __FDSET_LONGS; i > 0; i--) {
+	for (i = __FDSET_INTS; i > 0; i--) {
 		if (nr <= 0)
 			break;
 		*tmp = get_user(fs_pointer);
 		tmp++;
 		fs_pointer++;
-		nr -= 8 * sizeof(unsigned long);
+		nr -= 8 * sizeof(unsigned int);
 	}
 	return 0;
 }
 
-static void __set_fd_set(int nr, unsigned long * fs_pointer, unsigned long * fdset)
+static void __set_fd_set(int nr, unsigned int * fs_pointer, unsigned int * fdset)
 {
 	int i;
 
 	if (!fs_pointer)
 		return;
-	for (i = __FDSET_LONGS; i > 0; i--) {
+	for (i = __FDSET_INTS; i > 0; i--) {
 		if (nr <= 0)
 			break;
 		put_user(*fdset, fs_pointer);
 		fdset++;
 		fs_pointer++;
-		nr -= 8 * sizeof(unsigned long);
+		nr -= 8 * sizeof(unsigned int);
 	}
 }
 
 #define get_fd_set(nr,fsp,fdp) \
-__get_fd_set(nr, (unsigned long *) (fsp), fdp)
+__get_fd_set(nr, (unsigned int *) (fsp), fdp)
 
 #define set_fd_set(nr,fsp,fdp) \
-__set_fd_set(nr, (unsigned long *) (fsp), (unsigned long *) (fdp))
+__set_fd_set(nr, (unsigned int *) (fsp), (unsigned int *) (fdp))
 
 /*
  * We can actually return ERESTARTSYS instead of EINTR, but I'd

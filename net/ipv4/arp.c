@@ -42,6 +42,7 @@
  *		Mike Shaver     :       RFC1122 checks.
  *		Jonathan Naylor :	Only lookup the hardware address for
  *					the correct hardware type.
+ *		Germano Caronni	:	Assorted subtle races
  */
 
 /* RFC1122 Status:
@@ -278,6 +279,7 @@ static void arp_release_entry(struct arp_table *entry)
 		skb_device_lock(skb);
 		restore_flags(flags);
 		dev_kfree_skb(skb, FREE_WRITE);
+		cli();
 	}
 	restore_flags(flags);
 	del_timer(&entry->timer);
@@ -556,8 +558,10 @@ ugly:
 	{
 		if (entry->ip == ip_addr)
 		{
-			if ((entry->flags & ATF_PERM) && !force)
+			if ((entry->flags & ATF_PERM) && !force) {
+				sti();
 				return;
+			}
 			*pentry = entry->next;
 			del_timer(&entry->timer);
 			sti();

@@ -1662,6 +1662,7 @@ void cleanup_module(void)
        return;    
      }
   release_region(mcd_port,4);
+  free_irq(mcd_irq);
   printk("mcd module released.\n");
 }
 #endif MODULE

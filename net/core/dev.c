@@ -36,6 +36,7 @@
  *		Alan Cox	:	Hashed net_bh()
  *	Richard Kooijman	:	Timestamp fixes.
  *		Alan Cox	:	Wrong field in SIOCGIFDSTADDR
+ *		Alan Cox	:	Device lock protection.
  *
  *	Cleaned up and recommented by Alan Cox 2nd April 1994. I hope to have
  *	the rest as well commented in the end.
@@ -80,6 +81,12 @@
 struct packet_type *ptype_base[16];
 struct packet_type *ptype_all = NULL;		/* Taps */
 
+/*
+ *	Device list lock
+ */
+ 
+int dev_lockct=0;
+ 
 /*
  *	Our notifier list
  */
@@ -242,45 +249,42 @@ int dev_open(struct device *dev)
  
 int dev_close(struct device *dev)
 {
+	int ct=0;
+
 	/*
-	 *	Only close a device if it is up.
+	 *	Call the device specific close. This cannot fail.
+	 *	Only if device is UP
 	 */
-	 
-	if (dev->flags != 0) 
+	if ((dev->flags & IFF_UP) && dev->stop)
+		dev->stop(dev);
+
+	dev->flags = 0;
+
+	/*
+	 *	Tell people we are going down
+	 */
+	notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev);
+	/*
+	 *	Flush the multicast chain
+	 */
+	dev_mc_discard(dev);
+	/*
+	 *	Blank the IP addresses
+	 */
+	dev->pa_addr = 0;
+	dev->pa_dstaddr = 0;
+	dev->pa_brdaddr = 0;
+	dev->pa_mask = 0;
+	/*
+	 *	Purge any queued packets when we down the link 
+	 */
+	while(ct<DEV_NUMBUFFS)
 	{
-  		int ct=0;
-		dev->flags = 0;
-		/*
-		 *	Call the device specific close. This cannot fail.
-		 */
-		if (dev->stop) 
-			dev->stop(dev);
-		/*
-		 *	Tell people we are going down
-		 */
-		notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev);
-		/*
-		 *	Flush the multicast chain
-		 */
-		dev_mc_discard(dev);
-		/*
-		 *	Blank the IP addresses
-		 */
-		dev->pa_addr = 0;
-		dev->pa_dstaddr = 0;
-		dev->pa_brdaddr = 0;
-		dev->pa_mask = 0;
-		/*
-		 *	Purge any queued packets when we down the link 
-		 */
-		while(ct<DEV_NUMBUFFS)
-		{
-			struct sk_buff *skb;
-			while((skb=skb_dequeue(&dev->buffs[ct]))!=NULL)
-				if(skb->free)
-					kfree_skb(skb,FREE_WRITE);
-			ct++;
-		}
+		struct sk_buff *skb;
+		while((skb=skb_dequeue(&dev->buffs[ct]))!=NULL)
+			if(skb->free)
+				kfree_skb(skb,FREE_WRITE);
+		ct++;
 	}
 	return(0);
 }
@@ -995,6 +999,14 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 		case SIOCSIFFLAGS:	/* Set interface flags */
 			{
 				int old_flags = dev->flags;
+				
+				/*
+				 *	We are not allowed to potentially close/unload
+				 *	a device until we get this lock.
+				 */
+				
+				dev_lock_wait();
+				
 				dev->flags = ifr.ifr_flags & (
 					IFF_UP | IFF_BROADCAST | IFF_DEBUG | IFF_LOOPBACK |
 					IFF_POINTOPOINT | IFF_NOTRAILERS | IFF_RUNNING |

@@ -55,6 +55,22 @@ function comment () {
 }
 
 #
+# define_bool sets the value of a boolean argument
+#
+#	define_bool define value
+#
+function define_bool () {
+	if [ "$2" = "y" ]; then
+		echo "$1=y" >>$CONFIG
+		echo "#define $1 1" >>$CONFIG_H
+	else
+		echo "# $1 is not set" >>$CONFIG
+		echo "#undef  $1" >>$CONFIG_H
+	fi
+	eval "$1=$2"
+}
+
+#
 # bool processes a boolean argument
 #
 #	bool question define default
@@ -65,14 +81,18 @@ function bool () {
 	while [ "$ans" != "y" -a "$ans" != "n" ]; do
 		readln "$1 ($2) [$def] " "$def"
 	done
-	if [ "$ans" = "y" ]; then
-		echo "$2=y" >>$CONFIG
-		echo "#define $2 1" >>$CONFIG_H
-	else
-		echo "# $2 is not set" >>$CONFIG
-		echo "#undef  $2" >>$CONFIG_H
-	fi
-	eval "$2=$ans"
+	define_bool "$2" "$ans"
+}
+
+#
+# define_int sets the value of a integer argument
+#
+#	define_int define value
+#
+function define_int () {
+	echo "$1=$2" >>$CONFIG
+	echo "#define $1 ($2)" >>$CONFIG_H
+	eval "$1=$2"
 }
 
 #
@@ -87,9 +107,71 @@ function int () {
 	while [ $[$ans+0] != "$ans" ]; do
 		readln "$1 ($2) [$def] " "$def"
 	done
-	echo "$2=$ans" >>$CONFIG
-	echo "#define $2 ($ans)" >>$CONFIG_H
-	eval "$2=$ans"
+	define_int "$2" "$ans"
+}
+
+#
+# choice processes a choice list (1-out-of-n)
+#
+#	choice question choice-list default
+#
+# The choice list has a syntax of:
+#	NAME:VALUE { WHITESPACE '|' NAME:VALUE }
+# The user may enter any unique prefix of one of the NAMEs and
+# choice will define VALUE as if it were a boolean option.
+# VALUE must be in all uppercase.  Normally, VALUE is of the
+# form CONFIG_<something>.  Thus, if the user selects <something>,
+# the CPP symbol CONFIG_<something> will be defined and the
+# shell variable CONFIG_<something> will be set to "y".
+#
+function choice () {
+	question="$1"
+	choices="$2"
+	def="$3"
+
+	# determine default answer:
+	names=""
+	set -- $choices
+	while [ -n "$2" ]; do
+		if [ -n "$names" ]; then
+			names="$names, $1"
+		else
+			names="$1"
+		fi
+		if [ "$(eval echo \"\${$2}\")" = "y" ]; then
+			def=$1
+		fi
+		shift; shift
+	done
+
+	val=""
+	while [ -z "$val" ]; do
+		readln "$question ($names) [$def] " "$def"
+		ans=$(echo $ans | tr a-z A-Z)
+		set -- $choices
+		val=""
+		while [ -n "$1" ]; do
+			name=$(echo $1 | tr a-z A-Z)
+			case "$name" in
+				${ans}*)
+					if [ "$name" = "$ans" ]; then
+						val="$2"
+						break	# stop on exact match
+					fi
+					if [ -n "$val" ]; then
+						echo \
+		"  Sorry, \"$ans\" is ambiguous; please enter a longer string."
+						val=""
+						break
+					else
+						val="$2"
+					fi;;
+			esac
+			shift; shift
+		done
+	done
+	echo "  defining $val"
+	define_bool "$val" "y"
 }
 
 CONFIG=.tmpconfig

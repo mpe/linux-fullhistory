@@ -879,22 +879,21 @@ void tcp_err(int err, unsigned char *header, unsigned long daddr,
 		return;
 	}
 
-/*	sk->err = icmp_err_convert[err & 0xff].errno;  -- moved as TCP should hide non fatals internally (and does) */
-
 	/*
 	 * If we've already connected we will keep trying
 	 * until we time out, or the user gives up.
 	 */
 
-	if (err < 13 && (icmp_err_convert[err & 0xff].fatal || sk->state == TCP_SYN_SENT))
+	err &= 0xff;
+	if (err < 13 && (icmp_err_convert[err].fatal || sk->state == TCP_SYN_SENT))
 	{
+		sk->err = icmp_err_convert[err].errno;
 		if (sk->state == TCP_SYN_SENT) 
 		{
 			tcp_statistics.TcpAttemptFails++;
 			tcp_set_state(sk,TCP_CLOSE);
 			sk->error_report(sk);		/* Wake people up to see the error (see connect in sock.c) */
 		}
-		sk->err = icmp_err_convert[err & 0xff].errno;		
 	}
 	return;
 }

@@ -126,9 +126,9 @@ static int cm206_irq = CM206_IRQ;
 #define POLLOOP 10000
 #define READ_AHEAD 1		/* defines private buffer, waste! */
 #define BACK_AHEAD 1		/* defines adapter-read ahead */
-#define DATA_TIMEOUT 300	/* measured in jiffies (10 ms) */
-#define UART_TIMEOUT 5
-#define DSB_TIMEOUT 700		/* time for the slowest command to finish */
+#define DATA_TIMEOUT (3*HZ)	/* measured in jiffies (10 ms) */
+#define UART_TIMEOUT (5*HZ/100)
+#define DSB_TIMEOUT (7*HZ)	/* time for the slowest command to finish */
 
 #define RAW_SECTOR_SIZE 2352	/* ok, is also defined in cdrom.h */
 #define ISO_SECTOR_SIZE 2048

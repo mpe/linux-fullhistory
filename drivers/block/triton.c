@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.00  Aug 26, 1995
+ *  linux/drivers/block/triton.c	Version 1.01  Aug 28, 1995
  *
  *  Copyright (c) 1995  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -25,8 +25,8 @@
  * for drives which support multi-word DMA mode2 (mword2), or which are
  * recognized as "good" (see table below).  Drives with only mode0 or mode1
  * (single or multi) DMA should also work with this chipset/driver (eg. MC2112A)
- * but are not enabled by default.  Use "hdparm -i" to view supported modes
- * for a given drive.
+ * but are not enabled by default.  Use "hdparm -i" to view modes supported
+ * by a given drive.
  *
  * The hdparm-2.4 (or later) utility can be used for manually enabling/disabling
  * DMA support, but must be (re-)compiled against this kernel version or later.
@@ -45,11 +45,11 @@
  *
  *   Quantum Fireball 1080A (1Gig w/83kB buffer), DMA mode2, PIO mode4.
  *	- DMA mode2 works fine (7.4MB/sec), despite the tiny on-drive buffer.
- *	- This drive also does PIO mode4, slightly slower than DMA mode2.
+ *	- This drive also does PIO mode4, at about the same speed as DMA mode2.
  *
- *   Micropolis MC2112A (1Gig w/512kB buffer), drive pre-dates EIDE, ATA2.
+ *   Micropolis MC2112A (1Gig w/508kB buffer), drive pre-dates EIDE and ATA2.
  *	- DMA works fine (2.2MB/sec), probably due to the large on-drive buffer.
- *	- This older drive can also be tweaked for fastPIO (3,7MB/sec) by using
+ *	- This older drive can also be tweaked for fastPIO (3.7MB/sec) by using
  *	  maximum clock settings (5,4) and setting all flags except prefetch.
  *
  *   Western Digital AC31000H (1Gig w/128kB buffer), DMA mode1, PIO mode3.
@@ -61,8 +61,8 @@
  * Drives like the AC31000H could likely be made to work if all DMA were done
  * one sector at a time, but that would likely negate any advantage over PIO.
  *
- * If you have any drive models add, email your results to:  mlord@bnr.ca
- * Keep an eye on your /var/adm/messages for "DMA disabled" messages.
+ * If you have any drive models to add, email your results to:  mlord@bnr.ca
+ * Keep an eye on /var/adm/messages for "DMA disabled" messages.
  */
 #define _TRITON_C
 #include <linux/config.h>
@@ -114,9 +114,9 @@ static void dma_intr (ide_drive_t *drive)
 	struct request *rq = HWGROUP(drive)->rq;
 	unsigned short dma_base = HWIF(drive)->dma_base;
 
-	dma_stat = inb(dma_base+2);	/* get DMA status */
+	dma_stat = inb(dma_base+2);		/* get DMA status */
 	outb(inb(dma_base)&~1, dma_base);	/* stop DMA operation */
-	stat = GET_STAT();
+	stat = GET_STAT();			/* get drive status */
 	if (OK_STAT(stat,DRIVE_READY,drive->bad_wstat|DRQ_STAT)) {
 		if ((dma_stat & 7) == 4) {	/* verify good DMA status */
 			rq = HWGROUP(drive)->rq;
@@ -267,21 +267,18 @@ static void print_triton_drive_flags (unsigned int unit, byte flags)
 }
 
 /*
- * ide_init_triton() uses the PCI BIOS to scan for a Triton i82371FB chip,
- * and prepares the IDE driver for DMA operation if one is found.
- * This routine is called from ide.c during driver initialization.
+ * ide_init_triton() prepares the IDE driver for DMA operation.
+ * This routine is called once, from ide.c during driver initialization,
+ * for each triton chipset which is found (unlikely to be more than one).
  */
-void ide_init_triton (ide_hwif_t  hwifs[])
+void ide_init_triton (byte bus, byte fn)
 {
 	int rc = 0, h;
 	unsigned short bmiba, pcicmd;
 	unsigned int timings;
-	unsigned char bus, fn;
+	extern ide_hwif_t ide_hwifs[];
 
-	if (pcibios_find_device (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371, 0, &bus, &fn))
-		goto quit;
-	++fn;	/* IDE is second function on this chip */
-
+	++fn;	/* IDE interface is 2nd function on this device */
 	/*
 	 * See if IDE and BM-DMA features are enabled:
 	 */
@@ -319,7 +316,7 @@ void ide_init_triton (ide_hwif_t  hwifs[])
 	 * Save the dma_base port addr for each interface
 	 */
 	for (h = 0; h < MAX_HWIFS; ++h) {
-		ide_hwif_t *hwif = &hwifs[h];
+		ide_hwif_t *hwif = &ide_hwifs[h];
 		unsigned short base, time;
 		if (hwif->io_base == 0x1f0 && (timings & 0x8000)) {
 			time = timings & 0xffff;

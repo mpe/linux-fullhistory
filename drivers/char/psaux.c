@@ -72,7 +72,11 @@
 #define AUX_RESET	0xff		/* reset aux device */
 
 #define MAX_RETRIES	60		/* some aux operations take long time*/
-#define AUX_IRQ		12
+#if defined(__alpha__) && !defined(CONFIG_PCI)
+# define AUX_IRQ	9		/* Jensen is odd indeed */
+#else
+# define AUX_IRQ	12
+#endif
 #define AUX_BUF_SIZE	2048
 
 /* 82C710 definitions */
@@ -199,6 +203,9 @@ static void aux_interrupt(int cpl, struct pt_regs * regs)
 {
 	int head = queue->head;
 	int maxhead = (queue->tail-1) & (AUX_BUF_SIZE-1);
+
+	if ((inb(AUX_STATUS) & AUX_OBUF_FULL) != AUX_OBUF_FULL)
+		return;
 
 	queue->buf[head] = inb(AUX_INPUT_PORT);
 	if (head != maxhead) {
@@ -502,6 +509,7 @@ unsigned long psaux_init(unsigned long kmem_start)
 	}
 	queue = (struct aux_queue *) kmem_start;
 	kmem_start += sizeof (struct aux_queue);
+	memset(queue, 0, sizeof(*queue));
 	queue->head = queue->tail = 0;
 	queue->proc_list = NULL;
 	if (!qp_found) {

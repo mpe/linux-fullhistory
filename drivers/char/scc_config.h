@@ -60,6 +60,8 @@ int SCC_Enhanced[MAXSCC] =	{0,	/* ...one...	*/
 #undef  SCC_DELAY		/* perhaps a 486DX2 is a *bit* too fast */
 #undef  SCC_LDELAY		/* slow it even a bit more down */
 #undef  DONT_CHECK		/* don't look if the SCCs you specified are available */
+#define DO_FAST_RX		/* experimental timer routine called immediateley */
+				/* after every received frame */
 
 
 /* The external clocking, nrz and fullduplex divider configuration is gone */

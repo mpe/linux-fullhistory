@@ -49,7 +49,7 @@ int pcibios_present(void)
 #define GB		(1024*MB)
 
 #define MAJOR_REV	0
-#define MINOR_REV	2
+#define MINOR_REV	3
 
 /*
  * Align VAL to ALIGN, which must be a power of two.
@@ -209,6 +209,19 @@ static void layout_dev(struct pci_dev *dev)
 		}
         }
 	/* enable device: */
+	if (dev->class >> 8 == PCI_CLASS_NOT_DEFINED ||
+	    dev->class >> 8 == PCI_CLASS_NOT_DEFINED_VGA ||
+	    dev->class >> 8 == PCI_CLASS_DISPLAY_VGA ||
+	    dev->class >> 8 == PCI_CLASS_DISPLAY_XGA)
+	{
+		/*
+		 * All of these (may) have I/O scattered all around
+		 * and may not use i/o-base address registers at all.
+		 * So we just have to always enable I/O to these
+		 * devices.
+		 */
+		cmd |= PCI_COMMAND_IO;
+	}
 	pcibios_write_config_word(bus->number, dev->devfn, PCI_COMMAND,
 				  cmd | PCI_COMMAND_MASTER);
 }
@@ -355,27 +368,202 @@ unsigned long pcibios_init(unsigned long mem_start,
 	return mem_start;
 }
 
+/*
+ * The SRM console *disables* the IDE interface, this code ensures its
+ * enabled.
+ *
+ * This code bangs on a control register of the 87312 Super I/O chip
+ * that implements parallel port/serial ports/IDE/FDI.  Depending on
+ * the motherboard, the Super I/O chip can be configured through a
+ * pair of registers that are located either at I/O ports 0x26e/0x26f
+ * or 0x398/0x399.  Unfortunately, autodetecting which base address is
+ * in use works only once (right after a reset).  The Super I/O chip
+ * has the additional quirk that configuration register data must be
+ * written twice (I believe this is a saftey feature to prevent
+ * accidental modification---fun, isn't it?).
+ */
+static inline void enable_ide(long ide_base)
+{
+	int data;
+
+	outb(0, ide_base);		/* set the index register for reg #0 */
+	data = inb(ide_base+1);		/* read the current contents */
+	outb(0, ide_base);		/* set the index register for reg #0 */
+	outb(data | 0x40, ide_base+1);	/* turn on IDE */
+	outb(data | 0x40, ide_base+1);	/* turn on IDE, really! */
+}
+
+/*
+ * Most evaluation boards share most of the fixup code, which is isolated here.
+ * This function is declared "inline" as only one platform will ever be selected
+ * in any given kernel.  If that platform doesn't need this code, we don't want
+ * it around as dead code.
+ */
+static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_slot,
+				char irq_tab[max_idsel - min_idsel + 1][irqs_per_slot],
+			 long ide_base)
+{
+	struct pci_dev *dev;
+	unsigned char pin;
+	/*
+	 * Go through all devices, fixing up irqs as we see fit:
+	 */
+	for (dev = pci_devices; dev; dev = dev->next) {
+		dev->irq = 0;
+		/*
+		 * Ignore things not on the primary bus - I'll figure
+		 * this out one day - Dave Rusling
+		 */
+		if (dev->bus->number != 0)
+			continue;
+
+		/* read the pin */
+		pcibios_read_config_byte(dev->bus->number, dev->devfn,
+					 PCI_INTERRUPT_PIN, &pin);
+		if (irq_tab[PCI_SLOT(dev->devfn) - min_idsel][pin] != -1)
+			dev->irq = irq_tab[PCI_SLOT(dev->devfn) - min_idsel][pin];
+#if PCI_MODIFY
+		/* tell the device: */
+		pcibios_write_config_byte(dev->bus->number, dev->devfn,
+					  PCI_INTERRUPT_LINE, dev->irq);
+#endif
+	}
+	if (ide_base) {
+		enable_ide(ide_base);
+	}
+}
+
+/*
+ * The EB66+ is very similar to the EB66 except that it does not have
+ * the on-board NCR and Tulip chips.  In the code below, I have used
+ * slot number to refer to the id select line and *not* the slot
+ * number used in the EB66+ documentation.  However, in the table,
+ * I've given the slot number, the id select line and the Jxx number
+ * that's printed on the board.  The interrupt pins from the PCI slots
+ * are wired into 3 interrupt summary registers at 0x804, 0x805 and
+ * 0x806 ISA.
+ *
+ * In the table, -1 means don't assign an IRQ number.  This is usually
+ * because it is the Saturn IO (SIO) PCI/ISA Bridge Chip.
+ */
+static inline void eb66p_fixup(void)
+{
+	char irq_tab[5][5] = {
+		{16+0, 16+0, 16+5,  16+9, 16+13},	/* IdSel 6,  slot 0, J25 */
+		{16+1, 16+1, 16+6, 16+10, 16+14},	/* IdSel 7,  slot 1, J26 */
+		{  -1,   -1,   -1,    -1,    -1},	/* IdSel 8,  SIO         */
+		{16+2, 16+2, 16+7, 16+11, 16+15},	/* IdSel 9,  slot 2, J27 */
+		{16+3, 16+3, 16+8, 16+12,  16+6}	/* IdSel 10, slot 3, J28 */
+	};
+	common_fixup(6, 10, 5, irq_tab, 0x398);
+}
+
+
+/*
+ * The AlphaPC64 is very similar to the EB66+ except that its slots
+ * are numbered differently.  In the code below, I have used slot
+ * number to refer to the id select line and *not* the slot number
+ * used in the AlphaPC64 documentation.  However, in the table, I've
+ * given the slot number, the id select line and the Jxx number that's
+ * printed on the board.  The interrupt pins from the PCI slots are
+ * wired into 3 interrupt summary registers at 0x804, 0x805 and 0x806
+ * ISA.
+ *
+ * In the table, -1 means don't assign an IRQ number.  This is usually
+ * because it is the Saturn IO (SIO) PCI/ISA Bridge Chip.
+ */
+static inline void cabriolet_fixup(void)
+{
+	char irq_tab[5][5] = {
+		{ 16+2, 16+2, 16+7, 16+11, 16+15},      /* IdSel 5,  slot 2, J21 */
+		{ 16+0, 16+0, 16+5,  16+9, 16+13},      /* IdSel 6,  slot 0, J19 */
+		{ 16+1, 16+1, 16+6, 16+10, 16+14},      /* IdSel 7,  slot 1, J20 */
+		{   -1,   -1,   -1,    -1,    -1},	/* IdSel 8,  SIO         */
+		{ 16+3, 16+3, 16+8, 16+12, 16+16}       /* IdSel 9,  slot 3, J22 */
+	};
+	common_fixup(5, 9, 5, irq_tab, 0x398);
+}
+
+
+/*
+ * Fixup configuration for EB66/EB64+ boards.
+ *
+ * Both these boards use the same interrupt summary scheme.  There are
+ * two 8 bit external summary registers as follows:
+ *
+ * Summary @ 0x26:
+ * Bit      Meaning
+ * 0        Interrupt Line A from slot 0
+ * 1        Interrupt Line A from slot 1
+ * 2        Interrupt Line B from slot 0
+ * 3        Interrupt Line B from slot 1
+ * 4        Interrupt Line C from slot 0
+ * 5        Interrupt line from the two ISA PICs
+ * 6        Tulip (slot 
+ * 7        NCR SCSI
+ *
+ * Summary @ 0x27
+ * Bit      Meaning
+ * 0        Interrupt Line C from slot 1
+ * 1        Interrupt Line D from slot 0
+ * 2        Interrupt Line D from slot 1
+ * 3        RAZ
+ * 4        RAZ
+ * 5        RAZ
+ * 6        RAZ
+ * 7        RAZ
+ *
+ * The device to slot mapping looks like:
+ *
+ * Slot     Device
+ *  5       NCR SCSI controller
+ *  6       PCI on board slot 0
+ *  7       PCI on board slot 1
+ *  8       Intel SIO PCI-ISA bridge chip
+ *  9       Tulip - DECchip 21040 ethernet controller
+ *   
+ *
+ * This two layered interrupt approach means that we allocate IRQ 16 and 
+ * above for PCI interrupts.  The IRQ relates to which bit the interrupt
+ * comes in on.  This makes interrupt processing much easier.
+ */
+static inline void eb66_and_eb64p_fixup(void)
+{
+	char irq_tab[5][5] = {
+		{16+7, 16+7, 16+7, 16+7,  16+7},	/* IdSel 5,  slot ?, ?? */
+		{16+0, 16+0, 16+2, 16+4,  16+9},	/* IdSel 6,  slot ?, ?? */
+		{16+1, 16+1, 16+3, 16+8, 16+10},	/* IdSel 7,  slot ?, ?? */
+		{  -1,   -1,   -1,   -1,    -1},	/* IdSel 8,  SIO */
+		{16+6, 16+6, 16+6, 16+6,  16+6},	/* IdSel 9,  TULIP */
+	};
+	common_fixup(5, 9, 5, irq_tab, 0);
+}
+
 
 /*
  * Fixup configuration for Noname boards (AXPpci33).
  */
-static void noname_fixup(void)
+static inline void noname_fixup(void)
 {
 	struct pci_dev *dev;
-
 	/*
 	 * The Noname board has 5 PCI slots with each of the 4
 	 * interrupt pins routed to different pins on the PCI/ISA
 	 * bridge (PIRQ0-PIRQ3).  I don't have any information yet as
 	 * to how INTB, INTC, and INTD get routed (4/12/95,
-	 * davidm@cs.arizona.edu).
+	 * davidm@cs.arizona.edu).  pirq_tab[0] is a fake entry to
+	 * deal with old PCI boards that have the interrupt pin number
+	 * hardwired to 0 (meaning that they use the default INTA
+	 * line, if they are interrupt driven at all).
 	 */
-	static const char pirq_tab[5][4] = {
-		{ 3, -1, -1, -1}, /* slot  6 (53c810) */ 
-		{-1, -1, -1, -1}, /* slot  7 (PCI/ISA bridge) */
-		{ 2, -1, -1, -1}, /* slot  8 (slot closest to ISA) */
-		{ 1, -1, -1, -1}, /* slot  9 (middle slot) */
-		{ 0, -1, -1, -1}, /* slot 10 (slot furthest from ISA) */
+	static const char pirq_tab[7][5] = {
+		{ 3,  3, -1, -1, -1}, /* idsel  6 (53c810) */ 
+		{-1, -1, -1, -1, -1}, /* idsel  7 (PCI/ISA bridge) */
+		{ 2,  2, -1, -1, -1}, /* idsel  8 (slot closest to ISA) */
+		{-1, -1, -1, -1, -1}, /* idsel  9 (unused) */
+		{-1, -1, -1, -1, -1}, /* idsel 10 (unused) */
+		{ 0,  0, -1, -1, -1}, /* idsel 11 (slot furthest from ISA) */
+		{ 1,  1, -1, -1, -1}, /* idsel 12 (middle slot) */
 	};
 	/*
 	 * route_tab selects irq routing in PCI/ISA bridge so that:
@@ -399,7 +587,7 @@ static void noname_fixup(void)
 	for (dev = pci_devices; dev; dev = dev->next) {
 		dev->irq = 0;
 		if (dev->bus->number != 0 ||
-		    PCI_SLOT(dev->devfn) < 6 || PCI_SLOT(dev->devfn) > 10)
+		    PCI_SLOT(dev->devfn) < 6 || PCI_SLOT(dev->devfn) > 12)
 		{
 			printk("noname_set_irq: no dev on bus %d, slot %d!!\n",
 			       dev->bus->number, PCI_SLOT(dev->devfn));
@@ -408,17 +596,7 @@ static void noname_fixup(void)
 
 		pcibios_read_config_byte(dev->bus->number, dev->devfn,
 					 PCI_INTERRUPT_PIN, &pin);
-		if (!pin) {
-			if (dev->vendor == PCI_VENDOR_ID_S3 &&
-			    (dev->device == PCI_DEVICE_ID_S3_864_1 ||
-			     dev->device == PCI_DEVICE_ID_S3_864_2))
-			{
-				pin = 1;
-			} else {
-				continue;	/* no interrupt line */
-			}
-		}
-		pirq = pirq_tab[PCI_SLOT(dev->devfn) - 6][pin - 1];
+		pirq = pirq_tab[PCI_SLOT(dev->devfn) - 6][pin];
 		if (pirq < 0) {
 			continue;
 		}
@@ -450,47 +628,7 @@ static void noname_fixup(void)
 	}
 #endif /* !PCI_MODIFY */
 
-	/*
-	 * The SRM console *disables* the IDE interface, this code *
-	 * enables it.	With the miniloader, this may not be necessary
-	 * but it shouldn't hurt either.
-	 *
-	 * This code bangs on a control register of the 87312 Super
-	 * I/O chip that implements parallel port/serial
-	 * ports/IDE/FDI.  Depending on the motherboard, the Super I/O
-	 * chip can be configured through a pair of registers that are
-	 * located either at I/O ports 0x26e/0x26f or 0x398/0x399.
-	 * Unfortunately, autodetecting which base address is in use
-	 * works only once (right after a reset).  On the other hand,
-	 * the Noname board hardwires the I/O ports to 0x26e/0x26f so
-	 * we just use those.  The Super I/O chip has the additional
-	 * quirk that configuration register data must be written
-	 * twice (I believe this is a saftey feature to prevent
-	 * accidental modification---happy PC world...).
-	 */
-	{
-		long flags;
-		int data;
-
-		/* update needs to be atomic: */
-
-		save_flags(flags);
-		cli();
-
-		outb(0, 0x26e); /* set the index register for reg #0 */
-		data = inb(0x26f); /* read the current contents */
-#ifdef DEBUG
-		printk("base @ 0x26e: reg#0 0x%x\n", data);
-#endif
-		outb(0, 0x26e); /* set the index register for reg #0 */
-		outb(data | 0x40, 0x26f); /* turn on IDE */
-		outb(data | 0x40, 0x26f); /* yes, we really mean it... */
-#ifdef DEBUG
-		outb(0, 0x26e); data = inb(0x26f);
-		printk("base @ 0x26e: reg#0 0x%x\n", data);
-#endif
-		restore_flags(flags);
-	}
+	enable_ide(0x26e);
 }
 
 
@@ -506,19 +644,22 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 	/*
 	 * Now is the time to do all those dirty little deeds...
 	 */
-	switch (hwrpb->sys_type) {
-	      case ST_DEC_AXPPCI_33:	noname_fixup();	break;
-
-	      default:
-		printk("pcibios_fixup: don't know how to fixup sys type %ld\n",
-		       hwrpb->sys_type);
-		break;
-	}
+#if defined(CONFIG_ALPHA_NONAME)
+	noname_fixup();
+#elif defined(CONFIG_ALPHA_CABRIOLET)
+	cabriolet_fixup();
+#elif defined(CONFIG_ALPHA_EB66)
+	eb66_and_eb64p_fixup();
+#elif defined(CONFIG_ALPHA_EB64P)
+	eb66_and_eb64p_fixup();
+#else
+#	error You must tell me what kind of platform you want.
+#endif
 	return mem_start;
 }
 
 
-char *pcibios_strerror (int error)
+const char *pcibios_strerror (int error)
 {
         static char buf[80];
 

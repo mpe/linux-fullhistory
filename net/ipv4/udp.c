@@ -189,9 +189,10 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 	/* 4.1.3.3. */
 	/* After the comment above, that should be no surprise. */
 
-	if (err < 13 && icmp_err_convert[err & 0xff].fatal)
+	err &= 0xff;
+	if (err < 13 && icmp_err_convert[err].fatal)
 	{
-		sk->err = icmp_err_convert[err & 0xff].errno;
+		sk->err = icmp_err_convert[err].errno;
 		sk->error_report(sk);
 	}
 }

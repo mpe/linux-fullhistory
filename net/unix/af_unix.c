@@ -524,6 +524,7 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 		sk->protinfo.af_unix.other->protinfo.af_unix.locks--;
 		sk->protinfo.af_unix.other=NULL;
 		sock->state=SS_UNCONNECTED;
+		sti();
 		return -ECONNREFUSED;
 	}
 	
@@ -532,6 +533,7 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	 */
 	 
 	sock->state=SS_CONNECTED;
+	sti();
 	return 0;
 	
 }
@@ -722,6 +724,7 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 			other->protinfo.af_unix.locks--;
 			sk->protinfo.af_unix.other=NULL;
 			sock->state=SS_UNCONNECTED;
+			sti();
 			return -ECONNRESET;
 		}
 	}
@@ -732,6 +735,7 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		if(other==NULL)
 		{
 			kfree_skb(skb, FREE_WRITE);
+			sti();
 			return err;
 		}
 	}
@@ -790,11 +794,18 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 			{
 				up(&sk->protinfo.af_unix.readsem);
 				if(sk->shutdown & RCV_SHUTDOWN)
+				{
+					sti();
 					return copied;
+				}
 				if(copied)
+				{
+					sti();
 					return copied;
+				}
 				if(noblock)
 				{
+					sti();
 					return -EAGAIN;
 				}
 				sk->socket->flags |= SO_WAITDATA;
@@ -845,6 +856,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 						break;
 				}
 			}
+			sti();
 		}	
 	}	
 	up(&sk->protinfo.af_unix.readsem);

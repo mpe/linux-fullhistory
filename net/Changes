@@ -177,6 +177,17 @@ o	Sendmsg/recvmsg for AX.25/Appletalk		[IN]
 o	Datagram generic iovec support			[IN]
 o	Misc minor bug fixes				[IN]
 
+-------->>>>> 1.3.22 I expect <<<<<-------
+
+o	Device lock against page fault			[IN]
+o	IP_HDRINCL					[TESTED]
+o	IP firewalling spoofing protection		[IN]
+o	IGMP bug fixes and workarounds			[TESTED]
+o	IFF_ALLMULTI protocol layer support		[TESTED]
+o	First parts of IP multicast routing code	[IN]
+o	Generate BSD ENETDOWN errors			[IN]
+
+
 o	Finish merging the bridge code
 o	SIOCSLEEPRT patch
 o	Options support in ip_build_xmit		[PENDING]

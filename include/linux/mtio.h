@@ -1,5 +1,4 @@
-/* $Id: /usr/src/linux-1.1.64/include/linux/mtio.h at Tue Jan 10 21:02:51 1995 by root@kai.home$
- *
+/* 
  * linux/mtio.h header file for Linux. Written by H. Bergman
  */
 
@@ -43,7 +42,6 @@ struct	mtop {
 #define MTRAS2	15	/* run self test 2 (destructive) */
 #define MTRAS3  16	/* reserved for self test 3 */
 
-
 #define MTSETBLK 20	/* set block length (SCSI) */
 #define MTSETDENSITY 21	/* set tape density (SCSI) */
 #define MTSEEK	22	/* seek to block (Tandberg, etc.) */
@@ -53,6 +51,12 @@ struct	mtop {
 #define MTFSS	25	/* space forward over setmarks */
 #define MTBSS	26	/* space backward over setmarks */
 #define MTWSM	27	/* write setmarks */
+
+#define MTLOCK  28	/* lock the drive door */
+#define MTUNLOCK 29	/* unlock the drive door */
+#define MTLOAD  30	/* execute the SCSI load command */
+#define MTUNLOAD 31	/* execute the SCSI unload command */
+
 
 /* structure for MTIOCGET - mag tape get status command */
 
@@ -195,5 +199,6 @@ struct	mtpos {
 #define MT_ST_DEBUGGING		0x8
 #define MT_ST_TWO_FM		0x10
 #define MT_ST_FAST_MTEOM	0x20
+#define MT_ST_AUTO_LOCK		0x40
 
 #endif /* _LINUX_MTIO_H */

@@ -107,9 +107,9 @@
 
 #define LOG_START_OFFSET        150     /* Offset of first logical sector */
 
-#define SONY_JIFFIES_TIMEOUT            500  /* Maximum number of jiffies (10ms)
-                                                  the drive will wait/try for an
-                                                  operation */
+#define SONY_JIFFIES_TIMEOUT	(5*HZ)	/* Maximum time
+					   the drive will wait/try for an
+					   operation */
 #define SONY_READY_RETRIES      (50000)  /* How many times to retry a
                                                   spin waiting for a register
                                                   to come ready */

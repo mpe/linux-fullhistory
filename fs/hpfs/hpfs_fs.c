@@ -12,6 +12,14 @@
  *   linux/fs/isofs  Copyright (C) 1991  Eric Youngdale
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/fs.h>
 #include <linux/hpfs_fs.h>
 #include <linux/errno.h>
@@ -343,6 +351,8 @@ struct super_block *hpfs_read_super(struct super_block *s,
 	int conv;
 	int dubious;
 
+	MOD_INC_USE_COUNT;
+
 	/*
 	 * Get the mount options
 	 */
@@ -350,6 +360,7 @@ struct super_block *hpfs_read_super(struct super_block *s,
 	if (!parse_opts(options, &uid, &gid, &umask, &lowercase, &conv)) {
 		printk("HPFS: syntax error in mount options.  Not mounted.\n");
 		s->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return 0;
 	}
 
@@ -481,6 +492,7 @@ struct super_block *hpfs_read_super(struct super_block *s,
 	if (!s->s_mounted) {
 		printk("HPFS: hpfs_read_super: inode get failed\n");
 		s->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return 0;
 	}
 
@@ -495,6 +507,7 @@ struct super_block *hpfs_read_super(struct super_block *s,
 		printk("HPFS: "
 		       "hpfs_read_super: root dir isn't in the root dir\n");
 		s->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return 0;
 	}
 
@@ -514,6 +527,7 @@ struct super_block *hpfs_read_super(struct super_block *s,
  bail:
 	s->s_dev = 0;
 	unlock_super(s);
+	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -715,6 +729,7 @@ static void hpfs_put_super(struct super_block *s)
 	lock_super(s);
 	s->s_dev = 0;
 	unlock_super(s);
+	MOD_DEC_USE_COUNT;
 }
 
 /*
@@ -1725,3 +1740,25 @@ static void brelse4(struct quad_buffer_head *qbh)
 	brelse(qbh->bh[0]);
 	kfree_s(qbh->data, 2048);
 }
+
+#ifdef MODULE
+
+char kernel_version[] = UTS_RELEASE;
+
+static struct file_system_type hpfs_fs_type = {
+        hpfs_read_super, "hpfs", 1, NULL
+};
+
+int init_module(void)
+{
+        register_filesystem(&hpfs_fs_type);
+        return 0;
+}
+
+void cleanup_module(void)
+{
+        unregister_filesystem(&hpfs_fs_type);
+}
+
+#endif
+

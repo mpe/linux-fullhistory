@@ -409,7 +409,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		return -ENODEV;
 	switch ( cmd ) {
 		case LPTIME:
-			LP_TIME(minor) = arg;
+			LP_TIME(minor) = arg * HZ/100;
 			break;
 		case LPCHAR:
 			LP_CHAR(minor) = arg;

@@ -133,7 +133,7 @@ int filemap_swapout(struct vm_area_struct * vma,
 	unsigned long page = pte_page(*page_table);
 	unsigned long entry = SWP_ENTRY(SHM_SWP_TYPE, MAP_NR(page));
 
-	pte_val(*page_table) = entry;
+	set_pte(page_table, __pte(entry));
 	invalidate();
 	error = filemap_write_page(vma, offset, page);
 	if (pte_val(*page_table) == entry)
@@ -171,7 +171,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 			return 0;
 		if (!pte_dirty(pte))
 			return 0;
-		*ptep = pte_mkclean(pte);
+		set_pte(ptep, pte_mkclean(pte));
 		page = pte_page(pte);
 		mem_map[MAP_NR(page)]++;
 	} else {

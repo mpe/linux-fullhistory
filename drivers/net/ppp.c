@@ -2117,12 +2117,20 @@ int
 init_module(void)
 {
 	int err;
-	int i;
+	int i,j;
 
 	for (i = 0; i < PPP_NRUNIT; i++)  {
 		if ((err = register_netdev(&dev_ppp[i])))  {
 			if (err == -EEXIST)  {
 				printk("PPP: devices already present. Module not loaded.\n");
+				/* we must unregister already registered units */
+				if(i>0) {
+					for(j = 0; j < i ; j++)
+						unregister_netdev(&dev_ppp[j]);
+					if ((j = tty_register_ldisc(N_PPP, NULL)))  {
+						printk("PPP: can't unregister line discipline (err = %d)\n", j);
+					}
+				}
 			}
 			return err;
 		}

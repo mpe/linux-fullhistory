@@ -64,7 +64,7 @@
 #define DMA_MODE	0x03	/* control bits to set for DMA & interrupt */
 
 #define XD_MAXDRIVES	2	/* maximum 2 drives */
-#define XD_TIMEOUT	100	/* 1 second timeout */
+#define XD_TIMEOUT	HZ	/* 1 second timeout */
 #define XD_RETRIES	4	/* maximum 4 retries */
 
 #undef DEBUG			/* define for debugging output */

@@ -15,7 +15,7 @@ TOPINCL := $(TOPDIR)/include/linux
 	$(CC) $(CFLAGS) -E -DCONFIG_MODVERSIONS -D__GENKSYMS__ $< | /sbin/genksyms -w $(TOPINCL)/modules
 	@ln -sf $(TOPINCL)/modules/$@ .
 
-$(SYMTAB_OBJS):
+$(SYMTAB_OBJS): $(TOPINCL)/modversions.h
 	$(CC) $(CFLAGS) -DEXPORT_SYMTAB -c $(@:.o=.c)
 
 $(SYMTAB_OBJS:.o=.ver): $(TOPINCL)/autoconf.h

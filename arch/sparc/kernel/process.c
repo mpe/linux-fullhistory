@@ -139,7 +139,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 
 asmlinkage int sys_fork(struct pt_regs *regs)
 {
-  return do_fork(COPYVM | SIGCHLD, regs->u_regs[14], regs);
+  return do_fork(SIGCHLD, regs->u_regs[14], regs);
 }
 
 /*

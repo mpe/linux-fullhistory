@@ -69,7 +69,7 @@ struct user{
   char u_comm[32];		/* User command that was responsible */
   int u_debugreg[8];
 };
-#define NBPG 4096
+#define NBPG PAGE_SIZE
 #define UPAGES 1
 #define HOST_TEXT_START_ADDR (u.start_code)
 #define HOST_STACK_END_ADDR (u.start_stack + u.u_ssize * NBPG)

@@ -27,28 +27,31 @@ NEW!		  (both are now probed for)
 	- support for interrupt unmasking during I/O (better than hd.c)
 	- improved handshaking and error detection/recovery
 	- can co-exist with hd.c controlling the first interface
-	- support for reliable operation of buggy CMD-640 interfaces
-NEW!		- use kernel command line option:   ide1=serialize
-	- experimental support for DTC-2278D interfaces
-NEW!		- use kernel command line option:   ide1=dtc2278
 	- run-time selectable 32bit interface support (using hdparm-2.3)
-
+NEW!	- support for reliable operation of buggy RZ1000 interfaces
+NEW!		- PCI support is automatic
+NEW!	- support for reliable operation of buggy CMD-640 interfaces
+NEW!		- PCI support is automatic
+NEW!		- for VLB, use kernel command line option:   ide0=cmd640_vlb
+NEW!		- this support also enables the secondary i/f on most cards
+NEW!	- support for secondary interface on the FGI/Holtek HT-6560B VLB i/f
+NEW!		- use kernel command line option:   ide1=ht6560
+NEW!	- experimental support for DTC-2278D interfaces
+NEW!		- use kernel command line option:   ide1=dtc2278
 NEW!	- support for drives with a stuck WRERR_STAT bit
 NEW!	- support for removeable devices, including door lock/unlock
-
 NEW!	- transparent support for DiskManager 6.0x and "Dynamic Disk Overlay"
+NEW!		- works with Linux fdisk, LILO, loadlin, bootln, etc..
 NEW!		- should work for for EZ-Drive disks as well (not verified)
-		- works with Linux fdisk, LILO, loadlin, bootln, etc..
 NEW!	- ide-cd.c now compiles separate from ide.c
 NEW!	- Bus-Master DMA support for Intel PCI Triton chipset IDE interfaces
-		- for details, see comments at top of triton.c
+NEW!		- for details, see comments at top of triton.c
 
 For work in progress, see the comments in ide.c, ide-cd.c, and triton.c.
 
-***
-***  IMPORTANT NOTICES:
-***  ==================
-***
+
+***  IMPORTANT NOTICES (for kernel versions prior to 1.3.22)
+***  =================
 ***  "CMD" EIDE Interfaces will not (by default) work *reliably* when drives
 ***  are attached to the second interface.  This is due to a flaw in the
 ***  hardware.  To "fix" this, supply the special kernel "command line"
@@ -63,7 +66,21 @@ For work in progress, see the comments in ide.c, ide-cd.c, and triton.c.
 ***  and is only a problem when "hdparm -u1" is used after booting.
 ***
 ***  Failure to abide by these restrictions can cause severe data corruption!
+
+
+***  IMPORTANT NOTICES (for kernel versions after 1.3.21)
+***  =================
+***  PCI versions of the CMD640 and RZ1000 interfaces are now detected
+***  automatically at startup when PCI BIOS support is configured.
+***  Linux disables the "pre-fetch" or "read-ahead" modes of these interfaces
+***  to prevent data corruption possible due to hardware design flaws.
+***  Use of the "serialize" option is no longer necessary.
 ***
+***  The CMD640 is also used on some Vesa Local Bus (VLB) cards, and is *NOT*
+***  automatically detected by Linux.  For safe, reliable operation with such
+***  interfaces, one *MUST* use the "ide0=cmd640_vlb" kernel option.
+***  Use of the "serialize" option is no longer necessary.
+
 
 To access devices on the 2nd/3rd/4th interfaces, device entries must first be
 created in /dev for them.  To create such entries, simply run the included
@@ -184,6 +201,9 @@ The following two are valid ONLY on ide0 or ide1:
 
   "idex=dtc2278"	: look for and try to initialize a dtc2278
   "idex=serialize"	: do not overlap operations on ide0 and ide1.
+  "idex=ht6560b"        : enables use of HT6560B secondary i/f
+  "idex=cmd640_vlb"     : required for VLB cards with the CMD640 chip
+                           (not for PCI versions)
 
 Everything else is rejected with a "BAD OPTION" message.
 
@@ -374,3 +394,32 @@ kernels I think.
 
    Vladimir Myslik
 
+comp.sys.intel #41571 (1 + 2 more)              --(1)--(1)+-(1)--(1)
+From: triblet@almaden.ibm.com (Chuck Tribolet)            \-(1)--(1)--(1)--(1)
+Newsgroups: comp.sys.intel,comp.os.os2.bugs
+[1] Re: RZ1000 errorIntel motherboards and RZ1000
+Date: Tue Aug 29 11:00:12 EDT 1995
+Organization: IBM Almaden Research Center
+Lines: 20
+X-Newsreader: IBM NewsReader/2 v1.02
+
+In <41ip85$gf9@park.uvsc.edu>, Terry Lambert <terry@cs.weber.edu> writes:
+>Try running a real OS.  BIOS drivers so not initiate bus mastering
+>DMA, and DOS does not interleave I/O.
+
+1: The RZ1000 can't do DMA.
+2: I was running OS/2 (2.11 back then).
+
+I agreed that you might be able to concoct a benchmark that was affected,
+but it has had no real world effect for me or a lot of other people.  Disabling
+IDE prefetch has the effect of a small increase in PCI bus busy at a time
+when the CPU is giving all it's CPU cycles to the IDE driver (because the
+RZ1000 can't run DMA and the driver has to be in a PIO loop) and therefore
+the CPU can't do much of anything else anyway.
+
+
+Chuck Tribolet
+Triblet@Almaden.IBM.Com
+San Jose, CA
+ 
+Silicon Valley - best day job in the world

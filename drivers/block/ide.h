@@ -30,8 +30,20 @@
 #ifndef OK_TO_RESET_CONTROLLER		/* 1 needed for good error recovery */
 #define OK_TO_RESET_CONTROLLER	1	/* 0 for use with AH2372A/B interface */
 #endif
+#ifndef SUPPORT_RZ1000			/* 1 to support RZ1000 chipset */
+#define SUPPORT_RZ1000		1	/* 0 to reduce kernel size */
+#endif
+#ifndef SUPPORT_CMD640			/* 1 to support CMD640 chipset */
+#define SUPPORT_CMD640		1	/* 0 to reduce kernel size */
+#endif
+#ifndef SUPPORT_HT6560B			/* 1 to support HT6560B chipset */
+#define SUPPORT_HT6560B		1	/* 0 to reduce kernel size */
+#endif
 #ifndef SUPPORT_DTC2278			/* 1 to support DTC2278 chipset */
 #define SUPPORT_DTC2278		1	/* 0 to reduce kernel size */
+#ifndef SET_DTC2278_MODE4
+#define SET_DTC2278_MODE4	0	/* 1 to init primary i/f for PIO mode4 */
+#endif
 #endif
 #ifndef FANCY_STATUS_DUMPS		/* 1 for human-readable drive errors */
 #define FANCY_STATUS_DUMPS	1	/* 0 to reduce kernel size */
@@ -287,7 +299,7 @@ typedef struct hwif_s {
 	unsigned short	dma_base;	/* base addr for dma ports (triton) */
 	byte		irq;		/* our irq number */
 	byte		major;		/* our major number */
-	byte		drivecount;	/* how many drives attached */
+	byte		select;		/* pri/sec hwif select for ht6560b */
 	char 		name[5];	/* name of interface, eg. "ide0" */
 	unsigned	noprobe : 1;	/* don't probe for this interface */
 	unsigned	present : 1;	/* this interface exists */
@@ -415,6 +427,6 @@ void ide_cdrom_setup (ide_drive_t *);
 #endif /* CONFIG_BLK_DEV_IDECD */
 
 #ifdef CONFIG_BLK_DEV_TRITON
-void ide_init_triton (ide_hwif_t *);
+void ide_init_triton (byte, byte);
 #endif /* CONFIG_BLK_DEV_TRITON */
 

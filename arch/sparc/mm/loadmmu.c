@@ -10,6 +10,7 @@
 #include <asm/pgtable.h>
 
 void (*invalidate)(void);
+void (*set_pte)(pte_t *ptep, pte_t entry);
 
 unsigned int pmd_shift, pmd_size, pmd_mask;
 unsigned int (*pmd_align)(unsigned int);

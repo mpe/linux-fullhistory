@@ -752,6 +752,7 @@ adapter_init(struct device *dev)
 #endif /* SHUTDOWN_WHEN_LOST */
 		was_down = 1;
 		dev->tbusy = 1;		/* Transmit busy...  */
+		restore_flags(flags);
 		return 1; /* failed */
 	}
 #endif /* CHECK_LOST_DE600 */

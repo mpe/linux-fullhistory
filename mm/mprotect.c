@@ -38,7 +38,7 @@ static inline void change_pte_range(pmd_t * pmd, unsigned long address,
 	do {
 		pte_t entry = *pte;
 		if (pte_present(entry))
-			*pte = pte_modify(entry, newprot);
+			set_pte(pte, pte_modify(entry, newprot));
 		address += PAGE_SIZE;
 		pte++;
 	} while (address < end);

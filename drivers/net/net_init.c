@@ -350,6 +350,15 @@ void unregister_netdev(struct device *dev)
 			break;
 		}
 	}
+	/* You can i.e use a interfaces in a route though it is not up.
+	   We call close_dev (which is changed: it will down a device even if
+	   dev->flags==0 (but it will not call dev->stop if IFF_UP
+	   is not set).
+	   This will call notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev),
+	   dev_mc_discard(dev), ....
+	*/
+	dev_close(dev);
+
 	restore_flags(flags);
 }
 

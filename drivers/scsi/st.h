@@ -26,6 +26,7 @@ typedef struct {
   struct wait_queue * waiting;
   Scsi_Device* device;
   unsigned char dirty;
+  unsigned char write_pending;
   unsigned char rw;
   unsigned char ready;
   unsigned char eof;
@@ -37,9 +38,11 @@ typedef struct {
   unsigned char do_buffer_writes;
   unsigned char do_async_writes;
   unsigned char do_read_ahead;
+  unsigned char do_auto_lock;
   unsigned char two_fm;
   unsigned char fast_mteom;
   unsigned char density;
+  unsigned char door_locked;
   ST_buffer * buffer;
   int block_size;
   int min_block;
@@ -51,7 +54,13 @@ typedef struct {
   unsigned char at_sm;
   struct mtget * mt_status;
   Scsi_Cmnd SCpnt;
+#if DEBUG
+  int nbr_finished;
+  int nbr_waits;
+#endif
 } Scsi_Tape;
+
+extern Scsi_Tape * scsi_tapes;
 
 /* Values of eof */
 #define	ST_NOEOF	0
@@ -69,6 +78,12 @@ typedef struct {
 #define ST_READY	0
 #define ST_NOT_READY	1
 #define ST_NO_TAPE	2
+
+/* Values for door lock state */
+#define ST_UNLOCKED	0
+#define ST_LOCKED_EXPLICIT 1
+#define ST_LOCKED_AUTO  2
+#define ST_LOCK_FAILS   3
 
 /* Positioning SCSI-commands for Tandberg, etc. drives */
 #define	QFA_REQUEST_BLOCK	0x02

@@ -1,5 +1,5 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Tue Jan 10 21:32:35 1995 by root@kai.home
+Last modified: Sun Aug 27 12:49:11 1995 by root@kai.makisara.fi
 
 BASICS
 
@@ -14,6 +14,8 @@ By default the driver writes one filemark when the device is closed after
 writing and the last operation has been a write. Two filemarks can be
 optionally written. In both cases end of data is signified by
 returning zero bytes for two consecutive reads.
+
+The compile options are defined in the file linux/drivers/scsi/st_options.h.
 
 BUFFERING
 
@@ -108,8 +110,9 @@ MTSETDRVBUFFER
            (enabled/disabled) of the write buffering (MT_ST_BUFFER_WRITES),
            asynchronous writes (MT_ST_ASYNC_WRITES), read ahead
            (MT_ST_READ_AHEAD), writing of two filemark (ST_TWO_FM),
-	   using the SCSI spacing to EOD (MT_ST_FAST_EOM), and
-	   debugging (MT_ST_DEBUGGING ; debugging must be compiled into the
+	   using the SCSI spacing to EOD (MT_ST_FAST_EOM), automatic
+	   locking of the drive door (MT_ST_AUTO_LOCK) and debugging
+	   (MT_ST_DEBUGGING ; debugging must be compiled into the
 	   driver).
         MT_ST_WRITE_THRESHOLD
            Sets the write threshold for this device to kilobytes

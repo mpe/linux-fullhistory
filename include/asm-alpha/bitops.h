@@ -20,18 +20,18 @@ extern __inline__ unsigned long set_bit(unsigned long nr, void * addr)
 
 	__asm__ __volatile__(
 		"\n1:\t"
-		"ldq_l %0,%1\n\t"
+		"ldl_l %0,%1\n\t"
 		"and %0,%3,%2\n\t"
 		"bne %2,2f\n\t"
 		"xor %0,%3,%0\n\t"
-		"stq_c %0,%1\n\t"
+		"stl_c %0,%1\n\t"
 		"beq %0,1b\n"
 		"2:"
 		:"=&r" (temp),
-		 "=m" (((unsigned long *) addr)[nr >> 6]),
+		 "=m" (((int *) addr)[nr >> 5]),
 		 "=&r" (oldbit)
-		:"r" (1UL << (nr & 63)),
-		 "m" (((unsigned long *) addr)[nr >> 6]));
+		:"r" (1UL << (nr & 31)),
+		 "m" (((int *) addr)[nr >> 5]));
 	return oldbit != 0;
 }
 
@@ -42,18 +42,18 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void * addr)
 
 	__asm__ __volatile__(
 		"\n1:\t"
-		"ldq_l %0,%1\n\t"
+		"ldl_l %0,%1\n\t"
 		"and %0,%3,%2\n\t"
 		"beq %2,2f\n\t"
 		"xor %0,%3,%0\n\t"
-		"stq_c %0,%1\n\t"
+		"stl_c %0,%1\n\t"
 		"beq %0,1b\n"
 		"2:"
 		:"=&r" (temp),
-		 "=m" (((unsigned long *) addr)[nr >> 6]),
+		 "=m" (((int *) addr)[nr >> 5]),
 		 "=&r" (oldbit)
-		:"r" (1UL << (nr & 63)),
-		 "m" (((unsigned long *) addr)[nr >> 6]));
+		:"r" (1UL << (nr & 31)),
+		 "m" (((int *) addr)[nr >> 5]));
 	return oldbit != 0;
 }
 
@@ -64,22 +64,22 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
 
 	__asm__ __volatile__(
 		"\n1:\t"
-		"ldq_l %0,%1\n\t"
+		"ldl_l %0,%1\n\t"
 		"and %0,%3,%2\n\t"
 		"xor %0,%3,%0\n\t"
-		"stq_c %0,%1\n\t"
+		"stl_c %0,%1\n\t"
 		"beq %0,1b\n"
 		:"=&r" (temp),
-		 "=m" (((unsigned long *) addr)[nr >> 6]),
+		 "=m" (((int *) addr)[nr >> 5]),
 		 "=&r" (oldbit)
-		:"r" (1UL << (nr & 63)),
-		 "m" (((unsigned long *) addr)[nr >> 6]));
+		:"r" (1UL << (nr & 31)),
+		 "m" (((int *) addr)[nr >> 5]));
 	return oldbit != 0;
 }
 
 extern __inline__ unsigned long test_bit(int nr, void * addr)
 {
-	return 1UL & (((unsigned long *) addr)[nr >> 6] >> (nr & 63));
+	return 1UL & (((int *) addr)[nr >> 5] >> (nr & 31));
 }
 
 /*

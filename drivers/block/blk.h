@@ -128,7 +128,7 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_NAME "harddisk"
 #define DEVICE_INTR do_hd
 #define DEVICE_TIMEOUT HD_TIMER
-#define TIMEOUT_VALUE 600
+#define TIMEOUT_VALUE (6*HZ)
 #define DEVICE_REQUEST do_hd_request
 #define DEVICE_NR(device) (MINOR(device)>>6)
 #define DEVICE_ON(device)
@@ -138,7 +138,7 @@ static void floppy_off(unsigned int nr);
 
 #define DEVICE_NAME "scsidisk"
 #define DEVICE_INTR do_sd  
-#define TIMEOUT_VALUE 200
+#define TIMEOUT_VALUE (2*HZ)
 #define DEVICE_REQUEST do_sd_request
 #define DEVICE_NR(device) (MINOR(device) >> 4)
 #define DEVICE_ON(device)

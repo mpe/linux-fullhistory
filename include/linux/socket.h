@@ -89,8 +89,8 @@ struct msghdr
 #define	IPTOS_THROUGHPUT	0x08
 #define	IPTOS_RELIABILITY	0x04
 #define IP_TTL		2
+#define IP_HDRINCL	3
 #ifdef V1_3_WILL_DO_THIS_FUNKY_STUFF
-#define IP_HRDINCL	3
 #define IP_OPTIONS	4
 #endif
 

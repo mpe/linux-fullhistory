@@ -320,7 +320,7 @@ void swap_in(struct vm_area_struct * vma, pte_t * page_table,
 		return;
 	}
 	if (!page) {
-		*page_table = BAD_PAGE;
+		set_pte(page_table, BAD_PAGE);
 		swap_free(entry);
 		oom(current);
 		return;
@@ -333,10 +333,10 @@ void swap_in(struct vm_area_struct * vma, pte_t * page_table,
 	vma->vm_task->mm->rss++;
 	vma->vm_task->mm->maj_flt++;
 	if (!write_access && add_to_swap_cache(page, entry)) {
-		*page_table = mk_pte(page, vma->vm_page_prot);
+		set_pte(page_table, mk_pte(page, vma->vm_page_prot));
 		return;
 	}
-	*page_table = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
+	set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot))));
   	swap_free(entry);
   	return;
 }
@@ -369,7 +369,7 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
 	if (mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED)
 		return 0;
 	if ((pte_dirty(pte) && delete_from_swap_cache(page)) || pte_young(pte))  {
-		*page_table = pte_mkold(pte);
+		set_pte(page_table, pte_mkold(pte));
 		return 0;
 	}	
 	if (pte_dirty(pte)) {
@@ -384,7 +384,7 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
 			if (!(entry = get_swap_page()))
 				return 0;
 			vma->vm_task->mm->rss--;
-			pte_val(*page_table) = entry;
+			set_pte(page_table, __pte(entry));
 			invalidate();
 			write_swap_page(entry, (char *) page);
 		}
@@ -393,12 +393,12 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
 	}
         if ((entry = find_in_swap_cache(page)))  {
 		if (mem_map[MAP_NR(page)] != 1) {
-			*page_table = pte_mkdirty(pte);
+			set_pte(page_table, pte_mkdirty(pte));
 			printk("Aiee.. duplicated cached swap-cache entry\n");
 			return 0;
 		}
 		vma->vm_task->mm->rss--;
-		pte_val(*page_table) = entry;
+		set_pte(page_table, __pte(entry));
 		invalidate();
 		free_page(page);
 		return 1;
@@ -860,7 +860,7 @@ static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 		if (SWP_TYPE(in_swap_cache(page)) != type)
 			return 0;
 		delete_from_swap_cache(page);
-		*dir = pte_mkdirty(pte);
+		set_pte(dir, pte_mkdirty(pte));
 		return 0;
 	}
 	if (SWP_TYPE(pte_val(pte)) != type)
@@ -870,7 +870,7 @@ static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 		free_page(page);
 		return 1;
 	}
-	*dir = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
+	set_pte(dir, pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot))));
 	++vma->vm_task->mm->rss;
 	swap_free(pte_val(pte));
 	return 1;

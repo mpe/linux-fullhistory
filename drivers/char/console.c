@@ -2030,7 +2030,7 @@ long con_init(long kmem_start)
 	timer_table[BLANK_TIMER].fn = blank_screen;
 	timer_table[BLANK_TIMER].expires = 0;
 	if (blankinterval) {
-		timer_table[BLANK_TIMER].expires = jiffies+blankinterval;
+		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
 		timer_active |= 1<<BLANK_TIMER;
 	}
 
@@ -2051,7 +2051,8 @@ long con_init(long kmem_start)
 			video_type = VIDEO_TYPE_MDA;
 			video_mem_term = 0xb2000;
 			display_desc = "*MDA";
-			request_region(0x3b0,16,"mda");
+			request_region(0x3b0,12,"mda");
+			request_region(0x3bf, 1,"mda");
 		}
 	}
 	else				/* If not, it is color. */

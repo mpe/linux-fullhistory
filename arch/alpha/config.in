@@ -2,7 +2,6 @@
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
-
 comment 'General setup'
 
 bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
@@ -22,9 +21,27 @@ fi
 
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'Networking support' CONFIG_NET y
-bool 'PCI alpha motherboard' CONFIG_PCI n
+choice 'Alpha system type' \
+	"Jensen		CONFIG_ALPHA_JENSEN		\
+	 Noname		CONFIG_ALPHA_NONAME		\
+	 Cabriolet	CONFIG_ALPHA_CABRIOLET		\
+	 EB66		CONFIG_ALPHA_EB66		\
+	 EB66+		CONFIG_ALPHA_EB66P		\
+	 EB64		CONFIG_ALPHA_EB64		\
+	 EB64+		CONFIG_ALPHA_EB64P" Jensen
+if [ "$CONFIG_ALPHA_NONAME" = "y" ]; then
+	define_bool CONFIG_PCI y
+	define_bool CONFIG_ALPHA_LCA y
+fi
+if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_EB66" = "y" \
+	-o "$CONFIG_ALPHA_EB64" = "y" -o "$CONFIG_ALPHA_EB64P" = "y" ]
+then
+	define_bool CONFIG_PCI y
+	define_bool CONFIG_ALPHA_APECS y
+fi
+
 if [ "$CONFIG_PCI" = "y" ]; then
- bool '   PCI bridge optimisation (experimental)' CONFIG_PCI_OPTIMIZE n
+ bool 'PCI bridge optimisation (experimental)' CONFIG_PCI_OPTIMIZE n
 fi
 bool 'System V IPC' CONFIG_SYSVIPC y
 bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF n

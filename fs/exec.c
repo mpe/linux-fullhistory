@@ -235,14 +235,14 @@ int aout_core_dump(long signr, struct pt_regs * regs)
 	set_fs(USER_DS);
 /* Dump the data area */
 	if (dump.u_dsize != 0) {
-		dump_start = dump.u_tsize << 12;
-		dump_size = dump.u_dsize << 12;
+		dump_start = dump.u_tsize << PAGE_SHIFT;
+		dump_size = dump.u_dsize << PAGE_SHIFT;
 		DUMP_WRITE(dump_start,dump_size);
 	}
 /* Now prepare to dump the stack area */
 	if (dump.u_ssize != 0) {
 		dump_start = dump.start_stack;
-		dump_size = dump.u_ssize << 12;
+		dump_size = dump.u_ssize << PAGE_SHIFT;
 		DUMP_WRITE(dump_start,dump_size);
 	}
 /* Finally dump the task struct.  Not be used by gdb, but could be useful */
@@ -317,14 +317,29 @@ unsigned long * create_tables(char * p, struct linux_binprm * bprm, int ibcs)
 		insert_vm_struct(current, mpnt);
 	}
 	sp = (unsigned long *) ((-(unsigned long)sizeof(char *)) & (unsigned long) p);
+#ifdef __alpha__
+/* whee.. test-programs are so much fun. */
+	put_user(0, --sp);
+	put_user(0, --sp);
+	if (bprm->loader) {
+		put_user(0, --sp);
+		put_user(0x3eb, --sp);
+		put_user(bprm->loader, --sp);
+		put_user(0x3ea, --sp);
+	}
+	put_user(bprm->exec, --sp);
+	put_user(0x3e9, --sp);
+#endif
 	sp -= envc+1;
 	envp = sp;
 	sp -= argc+1;
 	argv = sp;
+#ifdef __i386__
 	if (!ibcs) {
 		put_user(envp,--sp);
 		put_user(argv,--sp);
 	}
+#endif
 	put_user(argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
@@ -561,6 +576,7 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	int i;
 	int retval;
 	int sh_bang = 0;
+	int loader = 0;
 
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
@@ -691,6 +707,20 @@ restart_interp:
 			goto exec_error1;
 		goto restart_interp;
 	}
+#ifdef __alpha__
+/* handle /sbin/loader.. */
+	if (!loader && (((struct exec *) bprm.buf)->fh.f_flags & 0x3000)) {
+		char * dynloader[] = { "/sbin/loader" };
+		iput(bprm.inode);
+		loader = 1;
+		bprm.p = copy_strings(1, dynloader, bprm.page, bprm.p, 2);
+		bprm.loader = bprm.p;
+		retval = open_namei(dynloader[0], 0, 0, &bprm.inode, NULL);
+		if (retval)
+			goto exec_error1;
+		goto restart_interp;
+	}
+#endif
 	if (!sh_bang) {
 		bprm.p = copy_strings(1, &bprm.filename, bprm.page, bprm.p, 2);
 		bprm.exec = bprm.p;
@@ -855,6 +885,9 @@ beyond_if:
 	p = (unsigned long)create_tables((char *)p, bprm,
 					current->personality != PER_LINUX);
 	current->mm->start_stack = p;
+#ifdef __alpha__
+	regs->gp = ex.a_gpvalue;
+#endif
 	start_thread(regs, ex.a_entry, p);
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);

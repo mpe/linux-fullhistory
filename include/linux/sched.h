@@ -95,7 +95,7 @@ struct files_struct {
 };
 
 #define INIT_FILES { \
-	0, \
+	1, \
 	{ { 0, } }, \
 	{ NULL, } \
 }
@@ -107,7 +107,7 @@ struct fs_struct {
 };
 
 #define INIT_FS { \
-	0, \
+	1, \
 	0022, \
 	NULL, NULL \
 }
@@ -129,7 +129,7 @@ struct mm_struct {
 };
 
 #define INIT_MM { \
-		0, \
+		1, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
@@ -154,7 +154,7 @@ struct task_struct {
 	struct linux_binfmt *binfmt;
 	struct task_struct *next_task, *prev_task;
 	struct task_struct *next_run,  *prev_run;
-	struct sigaction sigaction[32];
+	struct sigaction *sigaction;
 	unsigned long saved_kernel_stack;
 	unsigned long kernel_stack_page;
 	int exit_code, exit_signal;
@@ -191,11 +191,11 @@ struct task_struct {
 /* tss for this task */
 	struct thread_struct tss;
 /* filesystem information */
-	struct fs_struct fs[1];
+	struct fs_struct *fs;
 /* open file information */
-	struct files_struct files[1];
+	struct files_struct *files;
 /* memory management info */
-	struct mm_struct mm[1];
+	struct mm_struct *mm;
 };
 
 /*
@@ -213,8 +213,10 @@ struct task_struct {
  * cloning flags:
  */
 #define CSIGNAL		0x000000ff	/* signal mask to be sent at exit */
-#define COPYVM		0x00000100	/* set if VM copy desired (like normal fork()) */
-#define COPYFD		0x00000200	/* set if fd's should be copied, not shared (NI) */
+#define CLONE_VM	0x00000100	/* set if VM shared between processes */
+#define CLONE_FS	0x00000200	/* set if fs info shared between processes */
+#define CLONE_FILES	0x00000400	/* set if open files shared between processes */
+#define CLONE_SIGHAND	0x00000800	/* set if signal handlers shared */
 
 /*
  * Limit the stack by to some sane default: root can always
@@ -232,7 +234,7 @@ struct task_struct {
 /* exec domain */&default_exec_domain, \
 /* binfmt */	NULL, \
 /* schedlink */	&init_task,&init_task, &init_task, &init_task, \
-/* signals */	{{ 0, },}, \
+/* signals */	init_sigaction, \
 /* stack */	0,(unsigned long) &init_kernel_stack, \
 /* ec,brk... */	0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0,0, \
@@ -252,9 +254,9 @@ struct task_struct {
 /* ipc */	NULL, NULL, \
 /* ldt */	NULL, \
 /* tss */	INIT_TSS, \
-/* fs */	{ INIT_FS }, \
-/* files */	{ INIT_FILES }, \
-/* mm */	{ INIT_MM } \
+/* fs */	&init_fs, \
+/* files */	&init_files, \
+/* mm */	&init_mm \
 }
 
 #ifdef __KERNEL__
