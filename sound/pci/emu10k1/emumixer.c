@@ -482,9 +482,13 @@ static int snd_emu10k1_efx_send_routing_put(snd_kcontrol_t * kcontrol,
 			change = 1;
 		}
 	}	
-	if (change && mix->epcm->voices[ch])
-		update_emu10k1_fxrt(emu, mix->epcm->voices[ch]->number,
-				    &mix->send_routing[0][0]);
+
+	if (change && mix->epcm) {
+		if (mix->epcm->voices[ch]) {
+			update_emu10k1_fxrt(emu, mix->epcm->voices[ch]->number,
+					&mix->send_routing[0][0]);
+		}
+	}
 	spin_unlock_irqrestore(&emu->reg_lock, flags);
 	return change;
 }
@@ -544,9 +548,12 @@ static int snd_emu10k1_efx_send_volume_put(snd_kcontrol_t * kcontrol,
 			change = 1;
 		}
 	}
-	if (change && mix->epcm->voices[ch])
-		update_emu10k1_send_volume(emu, mix->epcm->voices[ch]->number,
-					   &mix->send_volume[0][0]);
+	if (change && mix->epcm) {
+		if (mix->epcm->voices[ch]) {
+			update_emu10k1_send_volume(emu, mix->epcm->voices[ch]->number,
+						   &mix->send_volume[0][0]);
+		}
+	}
 	spin_unlock_irqrestore(&emu->reg_lock, flags);
 	return change;
 }
@@ -600,8 +607,11 @@ static int snd_emu10k1_efx_attn_put(snd_kcontrol_t * kcontrol,
 		mix->attn[0] = val;
 		change = 1;
 	}
-	if (change && mix->epcm->voices[ch])
-		snd_emu10k1_ptr_write(emu, VTFT_VOLUMETARGET, mix->epcm->voices[ch]->number, mix->attn[0]);
+	if (change && mix->epcm) {
+		if (mix->epcm->voices[ch]) {
+			snd_emu10k1_ptr_write(emu, VTFT_VOLUMETARGET, mix->epcm->voices[ch]->number, mix->attn[0]);
+		}
+	}
 	spin_unlock_irqrestore(&emu->reg_lock, flags);
 	return change;
 }
