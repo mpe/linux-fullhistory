@@ -114,6 +114,7 @@ struct hfsplus_sb_info {
 	struct hfs_btree *attr_tree;
 	struct inode *alloc_file;
 	struct inode *hidden_dir;
+	struct nls_table *nls;
 
 	/* Runtime variables */
 	u32 blockoffset;
@@ -305,7 +306,7 @@ int hfs_brec_goto(struct hfs_find_data *, int);
 
 /* catalog.c */
 int hfsplus_cat_cmp_key(hfsplus_btree_key *, hfsplus_btree_key *);
-void hfsplus_cat_build_key(hfsplus_btree_key *, u32, struct qstr *);
+void hfsplus_cat_build_key(struct super_block *sb, hfsplus_btree_key *, u32, struct qstr *);
 int hfsplus_find_cat(struct super_block *, u32, struct hfs_find_data *);
 int hfsplus_create_cat(u32, struct inode *, struct qstr *, struct inode *);
 int hfsplus_delete_cat(u32, struct inode *, struct qstr *);
@@ -349,8 +350,8 @@ extern u16 case_fold_table[];
 
 /* unicode.c */
 int hfsplus_unistrcmp(const struct hfsplus_unistr *, const struct hfsplus_unistr *);
-int hfsplus_uni2asc(const struct hfsplus_unistr *, char *, int *);
-int hfsplus_asc2uni(struct hfsplus_unistr *, const char *, int);
+int hfsplus_uni2asc(struct super_block *, const struct hfsplus_unistr *, char *, int *);
+int hfsplus_asc2uni(struct super_block *, struct hfsplus_unistr *, const char *, int);
 
 /* wrapper.c */
 int hfsplus_read_wrapper(struct super_block *);

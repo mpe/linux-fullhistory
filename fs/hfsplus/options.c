@@ -12,12 +12,13 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/parser.h>
+#include <linux/nls.h>
 #include "hfsplus_fs.h"
 
 enum {
 	opt_creator, opt_type,
 	opt_umask, opt_uid, opt_gid,
-	opt_part, opt_session,
+	opt_part, opt_session, opt_nls,
 	opt_err
 };
 
@@ -29,6 +30,7 @@ static match_table_t tokens = {
 	{ opt_gid, "gid=%u" },
 	{ opt_part, "part=%u" },
 	{ opt_session, "session=%u" },
+	{ opt_nls, "nls=%s" },
 	{ opt_err, NULL }
 };
 
@@ -65,7 +67,7 @@ int parse_options(char *input, struct hfsplus_sb_info *sbi)
 	int tmp, token;
 
 	if (!input)
-		return 1;
+		goto done;
 
 	while ((p = strsep(&input, ",")) != NULL) {
 		if (!*p)
@@ -118,9 +120,33 @@ int parse_options(char *input, struct hfsplus_sb_info *sbi)
 				return 0;
 			}
 			break;
+		case opt_nls:
+			if (sbi->nls) {
+				printk("HFS+-fs: unable to change nls mapping\n");
+				return 0;
+			}
+			p = match_strdup(&args[0]);
+			sbi->nls = load_nls(p);
+			if (!sbi->nls) {
+				printk("HFS+-fs: unable to load nls mapping \"%s\"\n", p);
+				kfree(p);
+				return 0;
+			}
+			kfree(p);
+			break;
 		default:
 			return 0;
 		}
+	}
+
+done:
+	if (!sbi->nls) {
+		/* try utf8 first, as this is the old default behaviour */
+		sbi->nls = load_nls("utf8");
+		if (!sbi->nls)
+			sbi->nls = load_nls_default();
+		if (!sbi->nls)
+			return 0;
 	}
 
 	return 1;

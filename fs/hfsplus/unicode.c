@@ -59,19 +59,20 @@ int hfsplus_unistrcmp(const struct hfsplus_unistr *s1, const struct hfsplus_unis
 	}
 }
 
-int hfsplus_uni2asc(const struct hfsplus_unistr *ustr, char *astr, int *len)
+int hfsplus_uni2asc(struct super_block *sb, const struct hfsplus_unistr *ustr, char *astr, int *len_p)
 {
 	const hfsplus_unichr *ip;
+	struct nls_table *nls = HFSPLUS_SB(sb).nls;
 	u8 *op;
 	u16 ustrlen, cc;
-	int size, tmp;
+	int size, len;
 
 	op = astr;
 	ip = ustr->unicode;
 	ustrlen = be16_to_cpu(ustr->length);
-	tmp = *len;
-	while (ustrlen > 0 && tmp > 0) {
-		cc = be16_to_cpu(*ip);
+	len = *len_p;
+	while (ustrlen > 0 && len > 0) {
+		cc = be16_to_cpu(*ip++);
 		switch (cc) {
 		case 0:
 			cc = 0x2400;
@@ -80,48 +81,36 @@ int hfsplus_uni2asc(const struct hfsplus_unistr *ustr, char *astr, int *len)
 			cc = ':';
 			break;
 		}
-		if (cc > 0x7f) {
-			size = utf8_wctomb(op, cc, tmp);
-			if (size == -1) {
-				/* ignore */
-			} else {
-				op += size;
-				tmp -= size;
-			}
-		} else {
-			*op++ = (u8) cc;
-			tmp--;
+		size = nls->uni2char(cc, op, len);
+		if (size <= 0) {
+			*op = '?';
+			size = 1;
 		}
-		ip++;
+		op += size;
+		len -= size;
 		ustrlen--;
 	}
-	*len = (char *)op - astr;
+	*len_p = (char *)op - astr;
 	if (ustrlen)
 		return -ENAMETOOLONG;
 	return 0;
 }
 
-int hfsplus_asc2uni(struct hfsplus_unistr *ustr, const char *astr, int len)
+int hfsplus_asc2uni(struct super_block *sb, struct hfsplus_unistr *ustr, const char *astr, int len)
 {
-	int tmp;
+	struct nls_table *nls = HFSPLUS_SB(sb).nls;
+	int size;
 	wchar_t c;
 	u16 outlen = 0;
 
 	while (outlen <= HFSPLUS_MAX_STRLEN && len > 0) {
-		if (*astr & 0x80) {
-			tmp = utf8_mbtowc(&c, astr, len);
-			if (tmp < 0) {
-				astr++;
-				len--;
-				continue;
-			} else {
-				astr += tmp;
-				len -= tmp;
-			}
-		} else {
-			c = *astr++;
-			len--;
+		size = nls->char2uni(astr, len, &c);
+		if (size <= 0) {
+			c = '?';
+			size = 1;
 		}
+		astr += size;
+		len -= size;
 		switch (c) {
 		case 0x2400:
 			c = 0;
