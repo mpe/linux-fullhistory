@@ -53,6 +53,10 @@ static void
 print_arrows (WINDOW * win, int choice, int item_no, int scroll,
 		int y, int x, int height)
 {
+    int cur_y, cur_x;
+
+    getyx(win, cur_y, cur_x);
+
     wmove(win, y, x);
 
     if (scroll > 0) {
@@ -83,22 +87,24 @@ print_arrows (WINDOW * win, int choice, int item_no, int scroll,
 	waddch (win, ACS_HLINE);
 	waddch (win, ACS_HLINE);
    }
+
+   wmove(win, cur_y, cur_x);
 }
 
 /*
  * Display the termination buttons.
  */
 static void
-print_buttons (WINDOW *win, int height, int width,
-		int okval, int exitval, int cancelval)
+print_buttons (WINDOW *win, int height, int width, int selected)
 {
     int x = width / 2 - 16;
     int y = height - 2;
 
-    print_button (win, "Select", y, x, okval);
-    print_button (win, " Exit ", y, x + 12, exitval);
-    print_button (win, " Help ", y, x + 24, cancelval);
+    print_button (win, "Select", y, x, selected == 0);
+    print_button (win, " Exit ", y, x + 12, selected == 1);
+    print_button (win, " Help ", y, x + 24, selected == 2);
 
+    wmove(win, y, x+1+12*selected);
     wrefresh (win);
 }
 
@@ -111,7 +117,7 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 		const char * const * items)
 
 {
-    int i, j, x, y, cur_x, cur_y, box_x, box_y;
+    int i, j, x, y, box_x, box_y;
     int key = 0, button = 0, scroll = 0, choice = 0, first_item = 0, max_choice;
     WINDOW *dialog, *menu;
 
@@ -145,7 +151,6 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
     print_autowrap (dialog, prompt, width - 2, 1, 3);
 
     menu_width = width - 6;
-    getyx (dialog, cur_y, cur_x);
     box_y = height - menu_height - 5;
     box_x = (width - menu_width) / 2 - 1;
 
@@ -186,7 +191,7 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
     print_arrows(dialog, choice, item_no, scroll,
 		 box_y, box_x+item_x+1, menu_height);
 
-    print_buttons (dialog, height, width, TRUE, FALSE, FALSE);
+    print_buttons (dialog, height, width, 0);
 
     while (key != ESC) {
 	key = wgetch (dialog);
@@ -209,8 +214,6 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 		    if (scroll) {
 
 			/* Scroll menu down */
-			getyx (dialog, cur_y, cur_x);
-
 			if (menu_height > 1) {
 			    /* De-highlight current first item */
 			    print_item (menu, items[scroll*2+1], 0, FALSE,
@@ -227,7 +230,6 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
     			print_arrows(dialog, choice, item_no, scroll,
 		 			box_y, box_x+item_x+1, menu_height);
 
-			wmove (dialog, cur_y, cur_x);
 		    }
 		    continue;	/* wait for another key press */
 		} else
@@ -236,7 +238,6 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 		if (choice == max_choice - 1) {
 		    if (scroll + choice < item_no - 1) {
 			/* Scroll menu up */
-			getyx (dialog, cur_y, cur_x);
 			if (menu_height > 1) {
 			    /* De-highlight current last item */
 			    print_item (menu, items[(scroll + max_choice - 1)
@@ -256,7 +257,6 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
     			print_arrows(dialog, choice, item_no, scroll,
 		 			box_y, box_x+item_x+1, menu_height);
 
-			wmove (dialog, cur_y, cur_x);
 			wrefresh (dialog);
 		    }
 		    continue;	/* wait for another key press */
@@ -265,7 +265,6 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 
 	    if (i != choice) {
 		/* De-highlight current item */
-		getyx (dialog, cur_y, cur_x);	/* Save cursor position */
 		print_item (menu, items[(scroll+choice)*2+1], choice, FALSE,
                                 (items[(scroll+choice)*2][0] != ':'));
 
@@ -274,30 +273,19 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 		print_item (menu, items[(scroll+choice)*2+1], choice, TRUE,
                                 (items[(scroll+choice)*2][0] != ':'));
 		wnoutrefresh (menu);
-		wmove (dialog, cur_y, cur_x);
 		wrefresh (dialog);
 	    }
 	    continue;		/* wait for another key press */
 	}
 
 	switch (key) {
-	case TAB:
 	case KEY_LEFT:
+	case TAB:
 	case KEY_RIGHT:
-	    switch (button) {
-	    case 0:
-		button = 1;
-		print_buttons(dialog, height, width, FALSE, TRUE, FALSE);
-		break;
-	    case 1:
-		button = 2;
-		print_buttons(dialog, height, width, FALSE, FALSE, TRUE);
-		break;
-	    case 2:
-		button = 0;
-		print_buttons(dialog, height, width, TRUE, FALSE, FALSE);
-		break;
-	    }
+	    button = ((key == KEY_LEFT ? --button : ++button) < 0)
+			? 2 : (button > 2 ? 0 : button);
+
+	    print_buttons(dialog, height, width, button);
 	    wrefresh (dialog);
 	    break;
 	case ' ':
@@ -313,10 +301,10 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 	case '\n':
 	    delwin (dialog);
 	    if (button == 2) 
-            	fprintf(stderr, "\"%s\" %s", 
+            	fprintf(stderr, "\"%s\" \"%s\"", 
+			items[(scroll + choice) * 2],
 			items[(scroll + choice) * 2 + 1] +
-			first_alpha(items[(scroll + choice) * 2 + 1]),
-			items[(scroll + choice) * 2]);
+			first_alpha(items[(scroll + choice) * 2 + 1]));
 	    else
             	fprintf(stderr, items[(scroll + choice) * 2]);
 

@@ -86,10 +86,10 @@ extern unsigned long video_mem_term;
  */
 static inline void scr_writew(unsigned short val, unsigned short * addr)
 {
-        /*
-        * always deposit the char/attr, then see if it was to "screen" mem.
+	/*
+	 * always deposit the char/attr, then see if it was to "screen" mem.
 	 * if so, then render the char/attr onto the real screen.
-        */
+	 */
         *addr = val;
         if ((unsigned long)addr < video_mem_term &&
 	    (unsigned long)addr >= video_mem_base) {

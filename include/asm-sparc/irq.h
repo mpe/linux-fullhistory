@@ -16,7 +16,7 @@
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
 
-extern int request_fast_irq(unsigned int irq, void (*handler)(int, struct pt_regs *), unsigned long flags, const char *devname);
+extern int request_fast_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *), unsigned long flags, const char *devname);
 
 /* On the sun4m, just like the timers, we have both per-cpu and master
  * interrupt registers.
@@ -68,5 +68,7 @@ extern struct sun4m_intregs *sun4m_interrupts;
 #define SUN4M_INT_ENABLE  0x80000000
 #define SUN4M_INT_E14     0x00000080
 #define SUN4M_INT_E10     0x00080000
+
+/* XXX add cross-cpu ipi functions XXX */
 
 #endif

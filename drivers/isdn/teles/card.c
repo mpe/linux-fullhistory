@@ -668,7 +668,7 @@ isac_new_ph(struct IsdnCardState *sp)
 }
 
 static void
-teles_interrupt(int intno, struct pt_regs *regs)
+teles_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	byte                 val, val2, r;
 	struct IsdnCardState *sp;
@@ -1530,7 +1530,7 @@ get_irq(int cardnr)
 	save_flags(flags);
 	cli();
 	if (request_irq(card->interrupt, &teles_interrupt,
-			SA_INTERRUPT, "teles")) {
+			SA_INTERRUPT, "teles", NULL)) {
 		printk(KERN_WARNING "Teles couldn't get interrupt %d\n",
                        card->interrupt);
 		restore_flags(flags);
@@ -1547,7 +1547,7 @@ release_irq(int cardnr)
 	struct IsdnCard *card = cards + cardnr;
 
 	irq2dev_map[card->interrupt] = NULL;
-	free_irq(card->interrupt);
+	free_irq(card->interrupt, NULL);
 }
 
 void

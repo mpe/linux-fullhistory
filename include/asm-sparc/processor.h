@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.29 1995/11/26 05:01:29 davem Exp $
+/* $Id: processor.h,v 1.40 1996/02/03 10:06:01 davem Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -7,12 +7,13 @@
 #ifndef __ASM_SPARC_PROCESSOR_H
 #define __ASM_SPARC_PROCESSOR_H
 
-#include <linux/string.h>
+#include <linux/a.out.h>
 
 #include <asm/psr.h>
 #include <asm/ptrace.h>
 #include <asm/head.h>
 #include <asm/signal.h>
+#include <asm/segment.h>
 
 /*
  * Bus types
@@ -34,6 +35,7 @@ extern char wp_works_ok;
 /* The Sparc processor specific thread struct. */
 struct thread_struct {
 	unsigned long uwinmask __attribute__ ((aligned (8)));
+	struct pt_regs *kregs;
 
 	/* For signal handling */
 	unsigned long sig_address __attribute__ ((aligned (8)));
@@ -45,6 +47,10 @@ struct thread_struct {
 	unsigned long kpsr;
 	unsigned long kwim;
 
+	/* Special child fork kpsr/kwim values. */
+	unsigned long fork_kpsr __attribute__ ((aligned (8)));
+	unsigned long fork_kwim;
+
 	/* A place to store user windows and stack pointers
 	 * when the stack needs inspection.
 	 */
@@ -52,15 +58,6 @@ struct thread_struct {
 	struct reg_window reg_window[NSWINS] __attribute__ ((aligned (8)));
 	unsigned long rwbuf_stkptrs[NSWINS] __attribute__ ((aligned (8)));
 	unsigned long w_saved;
-
-	/* Where our page table lives. */
-	unsigned long pgd_ptr;
-
-	/* The context currently allocated to this process
-	 * or -1 if no context has been allocated to this
-	 * task yet.
-	 */
-	int context;
 
 	/* Floating point regs */
 	unsigned long   float_regs[64] __attribute__ ((aligned (8)));
@@ -71,20 +68,27 @@ struct thread_struct {
 		unsigned long insn;
 	} fpqueue[16];
 	struct sigstack sstk_info;
+	unsigned long flags;
+	int current_ds;
+	struct exec core_exec;     /* just what it says. */
 };
 
-#define INIT_MMAP { &init_mm, (0xf0000000UL), (0xfe100000UL), \
+#define SPARC_FLAG_KTHREAD      0x1    /* task is a kernel thread */
+
+#define INIT_MMAP { &init_mm, (0), (0), \
 		    __pgprot(0x0) , VM_READ | VM_WRITE | VM_EXEC }
 
 #define INIT_TSS  { \
-/* uwinmask, sig_address, sig_desc, ksp, kpc, kpsr, kwim */ \
-   0,        0,           0,        0,   0,   0,    0, \
+/* uwinmask, kregs, sig_address, sig_desc, ksp, kpc, kpsr, kwim */ \
+   0,        0,     0,           0,        0,   0,   0,    0, \
+/* fork_kpsr, fork_kwim */ \
+   0,         0, \
 /* reg_window */  \
 { { { 0, }, { 0, } }, }, \
 /* rwbuf_stkptrs */  \
 { 0, 0, 0, 0, 0, 0, 0, 0, }, \
-/* w_saved, pgd_ptr,                context */  \
-   0,       (long) &swapper_pg_dir, -1, \
+/* w_saved */ \
+   0, \
 /* FPU regs */   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
@@ -93,19 +97,39 @@ struct thread_struct {
    0,          0,  { { 0, 0, }, }, \
 /* sstk_info */ \
 { 0, 0, }, \
+/* flags,              current_ds, */ \
+   SPARC_FLAG_KTHREAD, USER_DS, \
+/* core_exec */ \
+{ 0, }, \
 }
 
 /* Return saved PC of a blocked thread. */
 extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
-	return ((struct pt_regs *)
-		((t->ksp&(~0xfff))+(0x1000-TRACEREG_SZ)))->pc;
+	return t->kregs->pc;
 }
 
 /*
  * Do necessary setup to start up a newly executed thread.
  */
-extern void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp);
+extern inline void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
+{
+	unsigned long saved_psr = (regs->psr & (PSR_CWP)) | PSR_S;
+	int i;
+
+	for(i = 0; i < 16; i++) regs->u_regs[i] = 0;
+	regs->y = 0;
+	regs->pc = ((pc & (~3)) - 4);
+	regs->npc = regs->pc + 4;
+	regs->psr = saved_psr;
+	regs->u_regs[UREG_G1] = sp; /* Base of arg/env stack area */
+	regs->u_regs[UREG_G2] = regs->u_regs[UREG_G7] = regs->npc;
+	regs->u_regs[UREG_FP] = (sp - REGWIN_SZ);
+}
+
+extern unsigned long (*alloc_kernel_stack)(struct task_struct *tsk);
+extern void (*free_kernel_stack)(unsigned long stack);
+extern struct task_struct *(*alloc_task_struct)(void);
+extern void (*free_task_struct)(struct task_struct *tsk);
 
 #endif /* __ASM_SPARC_PROCESSOR_H */
-

@@ -30,11 +30,11 @@ static char buf[1024];
 extern void console_print(const char *);
 
 /* printk's without a loglevel use this.. */
-#define DEFAULT_MESSAGE_LOGLEVEL 5 /* KERN_NOTICE */
+#define DEFAULT_MESSAGE_LOGLEVEL 4 /* KERN_WARNING */
 
-/* We show everything that is more important than this.. */
-#define MINIMUM_CONSOLE_LOGLEVEL 6 /* Minimum loglevel we let people use */
-#define DEFAULT_CONSOLE_LOGLEVEL 6 /* anything more serious than KERN_INFO */
+/* We show everything that is MORE important than this.. */
+#define MINIMUM_CONSOLE_LOGLEVEL 5 /* Minimum loglevel we let people use */
+#define DEFAULT_CONSOLE_LOGLEVEL 7 /* anything MORE serious than KERN_NOTICE */
 
 unsigned long log_size = 0;
 struct wait_queue * log_wait = NULL;

@@ -1,8 +1,12 @@
-/* $Id: sigcontext.h,v 1.7 1995/11/25 02:32:44 davem Exp $ */
+/* $Id: sigcontext.h,v 1.8 1996/03/01 07:20:59 davem Exp $ */
 #ifndef _ASMsparc_SIGCONTEXT_H
 #define _ASMsparc_SIGCONTEXT_H
 
 #include <asm/ptrace.h>
+
+#define SUNOS_MAXWIN   31
+
+#ifndef __ASSEMBLY__
 
 /* SunOS system call sigstack() uses this arg. */
 struct sunos_sigstack {
@@ -11,7 +15,6 @@ struct sunos_sigstack {
 };
 
 /* This is what SunOS does, so shall I. */
-#define SUNOS_MAXWIN   31
 struct sigcontext_struct {
 	int sigc_onstack;      /* state to restore */
 	int sigc_mask;         /* sigmask to restore */
@@ -33,5 +36,7 @@ struct sigcontext_struct {
 	/* Windows to restore after signal */
 	struct reg_window sigc_wbuf[SUNOS_MAXWIN];
 };
+#endif /* !(__ASSEMBLY__) */
 
 #endif /* !(_ASMsparc_SIGCONTEXT_H) */
+

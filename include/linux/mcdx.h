@@ -1,7 +1,7 @@
 /*
  * Definitions for the Mitsumi CDROM interface
  * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
- * VERSION: 1.5a
+ * VERSION: 1.7
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@
  *  Daniel v. Mosnenck (he sent me the Technical and Programming Reference)
  *  Gerd Knorr (he lent me his PhotoCD)
  *  Nils Faerber and Roger E. Wolff (extensivly tested the LU portion)
+ *  Andreas Kies (testing the mysterious hang up's)
  *  ... somebody forgotten?
  *  
  */
@@ -80,12 +81,13 @@
 #define MCDX "mcdx"	
 
 #if MCDX_QUIET == 1
-#define INFO(x)
+#define INFO(x)  
+#define WARN(x) warn x
 #else
 #define INFO(x) warn x
+#define WARN(x) warn x
 #endif
 
-#define WARN(x) warn x
 
 #if MCDX_DEBUG == 1
 #define TRACE(x) trace x
@@ -101,9 +103,10 @@
 #define OPENCLOSE 	0
 #define HW		    0
 #define TALK		0
-#define IRQ 		1
+#define IRQ 		0
 #define TRANSFER 	0
 #define REQUEST	 	0
+#define SLEEP		0
 #else
 #define TRACE(x)
 #endif
@@ -118,21 +121,25 @@
 #define MCDX_IO_SIZE		4
 
 /*
- *	The Ports & bits
+ *	Bits
  */
 
-#define MCDX_RBIT_OPEN       0x80
-#define MCDX_RBIT_DISKSET    0x40
-#define MCDX_RBIT_CHANGED    0x20
-#define MCDX_RBIT_CHECK      0x10
-#define MCDX_RBIT_AUDIOTR    0x08
-#define MCDX_RBIT_RDERR      0x04
-#define MCDX_RBIT_AUDIOBS    0x02
-#define MCDX_RBIT_CMDERR     0x01
-#define MCDX_RBIT_DOOR       0x10
-#define MCDX_RBIT_STEN       0x04
-#define MCDX_RBIT_DTEN       0x02
+/* The status byte, returned from every command, set if
+ * the description is true */
+#define MCDX_RBIT_OPEN       0x80	/* door is open */
+#define MCDX_RBIT_DISKSET    0x40	/* disk set (recognised) */
+#define MCDX_RBIT_CHANGED    0x20	/* disk was changed */
+#define MCDX_RBIT_CHECK      0x10	/* disk rotates, servo is on */
+#define MCDX_RBIT_AUDIOTR    0x08   /* current track is audio */
+#define MCDX_RBIT_RDERR      0x04	/* read error, refer SENSE KEY */
+#define MCDX_RBIT_AUDIOBS    0x02	/* currently playing audio */
+#define MCDX_RBIT_CMDERR     0x01	/* command, param or format error */
 
+/* The I/O Register holding the h/w status of the drive,
+ * can be read at i/o base + 1 */
+#define MCDX_RBIT_DOOR       0x10	/* door is open */
+#define MCDX_RBIT_STEN       0x04	/* if 0, i/o base contains drive status */
+#define MCDX_RBIT_DTEN       0x02	/* if 0, i/o base contains data */
 
 /*
  *	The commands.
@@ -177,9 +184,12 @@
  * Errors
  */
 #define MCDX_E		1			/* unspec error */
-#define MCDX_EOM	2			/* end of media */
+#define MCDX_ST_EOM 0x0100		/* end of media */
+#define MCDX_ST_DRV 0x00ff		/* mask to query the drive status */
 
 #ifndef I_WAS_HERE
 #warning You have not edited mcdx.h
 #warning Perhaps irq and i/o settings are wrong.
 #endif
+
+/* ex:set ts=4 sw=4: */

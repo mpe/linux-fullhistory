@@ -94,22 +94,7 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 {
 	unsigned long *argv,*envp, *dlinfo;
 	unsigned long * sp;
-	struct vm_area_struct *mpnt;
 
-	mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
-	if (mpnt) {
-		mpnt->vm_mm = current->mm;
-		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
-		mpnt->vm_end = TASK_SIZE;
-		mpnt->vm_page_prot = PAGE_COPY;
-		mpnt->vm_flags = VM_STACK_FLAGS;
-		mpnt->vm_pte = 0;
-		mpnt->vm_inode = NULL;
-		mpnt->vm_offset = 0;
-		mpnt->vm_ops = NULL;
-		insert_vm_struct(current, mpnt);
-		current->mm->total_vm += (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
-	}
 	sp = (unsigned long *) (0xfffffffc & (unsigned long) p);
 	sp -= exec ? DLINFO_ITEMS*2 : 2;
 	dlinfo = sp;
@@ -537,7 +522,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
 	current->mm->rss = 0;
-	bprm->p += setup_arg_pages(0, bprm->page);
+	bprm->p = setup_arg_pages(bprm->p, bprm);
 	current->mm->start_stack = bprm->p;
 	
 	/* Now we do a little grungy work by mmaping the ELF image into
@@ -639,7 +624,6 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 #endif
 	current->suid = current->euid = current->fsuid = bprm->e_uid;
 	current->sgid = current->egid = current->fsgid = bprm->e_gid;
-	bprm->p -= MAX_ARG_PAGES*PAGE_SIZE;
 	bprm->p = (unsigned long) 
 	  create_elf_tables((char *)bprm->p,
 			bprm->argc,

@@ -1,7 +1,7 @@
 /*
  *  ioctl.c
  *
- *  Copyright (C) 1995 by Volker Lendecke
+ *  Copyright (C) 1995, 1996 by Volker Lendecke
  *
  */
 
@@ -73,6 +73,16 @@ ncp_ioctl (struct inode * inode, struct file * filp,
 
 		return server->reply_size;
 
+	case NCP_IOC_CONN_LOGGED_IN:
+
+		if (   (permission(inode, MAY_WRITE) != 0)
+		    && (current->uid != server->m.mounted_uid))
+		{
+			return -EACCES;
+		}
+
+		return ncp_conn_logged_in(server);
+		
 	case NCP_IOC_GET_FS_INFO:
 
 		if (   (permission(inode, MAY_WRITE) != 0)

@@ -1,7 +1,7 @@
 /*
  *  mmap.c
  *
- *  Copyright (C) 1995 by Volker Lendecke
+ *  Copyright (C) 1995, 1996 by Volker Lendecke
  *
  */
 

@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.12 1995/11/25 02:31:34 davem Exp $
+/* $Id: dma.h,v 1.13 1996/02/17 17:32:33 miguel Exp $
  * include/asm-sparc/dma.h
  *
  * Copyright 1995 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -93,6 +93,7 @@ extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 #define DMA_ACC_SZ_ERR   0x00000040        /* The access size was bad */
 #define DMA_FIFO_STDRAIN 0x00000040        /* DMA_VERS1 Drain the FIFO */
 #define DMA_RST_SCSI     0x00000080        /* Reset the SCSI controller */
+#define DMA_RST_ENET     DMA_RST_SCSI      /* Reset the ENET controller */
 #define DMA_ST_WRITE     0x00000100        /* write from device to memory */
 #define DMA_ENABLE       0x00000200        /* Fire up DMA, handle requests */
 #define DMA_PEND_READ    0x00000400        /* DMA_VERS1/0/PLUS Pendind Read */

@@ -989,7 +989,7 @@ cy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  * had to poll every port to see if that port needed servicing.
  */
 static void
-do_cyclades_bh(void *unused)
+do_cyclades_bh(void)
 {
     run_task_queue(&tq_cyclades);
 } /* do_cyclades_bh */
@@ -2816,8 +2816,7 @@ cy_init(void)
     if (tty_register_driver(&cy_callout_driver))
 	    panic("Couldn't register Cyclom callout driver\n");
 
-    bh_base[CYCLADES_BH].routine = do_cyclades_bh;
-    enable_bh(CYCLADES_BH);
+    init_bh(CYCLADES_BH, do_cyclades_bh);
 
     for (i = 0; i < 16; i++) {
 	    IRQ_cards[i] = 0;

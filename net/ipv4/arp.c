@@ -1390,9 +1390,10 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 			if (pos <= offset)
 				len=0;
 			if (pos >= offset+length)
-				break;
+				goto done;
 		}
 	}
+done:
 	arp_unlock();
   
 	*start = buffer+len-(pos-offset);	/* Start of wanted data */

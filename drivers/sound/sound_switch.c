@@ -115,6 +115,18 @@ init_status (void)
 	      "\n");
 #endif
 
+  put_status ("Kernel: ");
+  put_status (system_utsname.sysname);
+  put_status (" ");
+  put_status (system_utsname.nodename);
+  put_status (" ");
+  put_status (system_utsname.release);
+  put_status (" ");
+  put_status (system_utsname.version);
+  put_status (" ");
+  put_status (system_utsname.machine);
+  put_status ("\n");
+
   if (!put_status ("Config options: "))
     return;
   if (!put_status_int (SELECTED_SOUND_OPTIONS, 16))
@@ -139,7 +151,7 @@ init_status (void)
 	  return;
       }
 
-  if (!put_status ("\n\nCard config: \n"))
+  if (!put_status ("\nCard config: \n"))
     return;
 
   for (i = 0; i < num_sound_cards; i++)
@@ -418,6 +430,8 @@ sound_open_sw (int dev, struct fileinfo *file)
       break;
 
     case SND_DEV_CTL:
+      if ((dev & 0xf0) && ((dev & 0xf0) >> 4) >= num_mixers)
+	return -ENXIO;
       return 0;
       break;
 

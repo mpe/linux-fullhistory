@@ -137,24 +137,20 @@ _INLINE_ void queue_task(struct tq_struct *bh_pointer,
  */
 _INLINE_ void run_task_queue(task_queue *list)
 {
-	register struct tq_struct *save_p;
 	register struct tq_struct *p;
-	void *arg;
-	void (*f) (void *);
 
-	while(1) {
-		p = xchg(list,&tq_last);
-		if(p == &tq_last)
-			break;
+	p = xchg(list,&tq_last);
 
-		do {
-			arg    = p -> data;
-			f      = p -> routine;
-			save_p = p -> next;
-			p -> sync = 0;
-			(*f)(arg);
-			p = save_p;
-		} while(p != &tq_last);
+	while (p != &tq_last) {
+		void *arg;
+		void (*f) (void *);
+		register struct tq_struct *save_p;
+		arg    = p -> data;
+		f      = p -> routine;
+		save_p = p;
+		p      = p -> next;
+		save_p -> sync = 0;
+		(*f)(arg);
 	}
 }
 

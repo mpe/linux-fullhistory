@@ -640,14 +640,14 @@ const char *ultrastor_info(struct Scsi_Host * shpnt)
     static char buf[64];
 
     if (config.slot)
-      sprintf(buf, "UltraStor 24F SCSI @ Slot %u IRQ%u\n",
+      sprintf(buf, "UltraStor 24F SCSI @ Slot %u IRQ%u",
 	      config.slot, config.interrupt);
     else if (config.subversion)
-      sprintf(buf, "UltraStor 34F SCSI @ Port %03X BIOS %05X IRQ%u\n",
+      sprintf(buf, "UltraStor 34F SCSI @ Port %03X BIOS %05X IRQ%u",
 	      config.port_address, (int)config.bios_segment,
 	      config.interrupt);
     else
-      sprintf(buf, "UltraStor 14F SCSI @ Port %03X BIOS %05X IRQ%u DMA%u\n",
+      sprintf(buf, "UltraStor 14F SCSI @ Port %03X BIOS %05X IRQ%u DMA%u",
 	      config.port_address, (int)config.bios_segment,
 	      config.interrupt, config.dma_channel);
     return buf;
@@ -884,7 +884,7 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt)
 	printk("Ux4F: abort while completed command pending\n");
 	restore_flags(flags);
 	cli();
-	ultrastor_interrupt(0, NULL);
+	ultrastor_interrupt(0, NULL, NULL);
 	restore_flags(flags);
 	return SCSI_ABORT_SUCCESS;  /* FIXME - is this correct? -ERY */
       }

@@ -1,12 +1,7 @@
-/* $Id: segment.h,v 1.6 1995/11/25 02:32:40 davem Exp $ */
+/* $Id: segment.h,v 1.9 1996/01/14 00:05:33 davem Exp $ */
 #ifndef _ASM_SEGMENT_H
 #define _ASM_SEGMENT_H
 
-/* Sparc is not segmented, these are just place holders. */
-#define KERNEL_DS   0
-#define USER_DS     1
-
-#include <linux/string.h>
 #include <asm/vac-ops.h>
 
 #ifndef __ASSEMBLY__
@@ -109,21 +104,27 @@ static inline void put_user_long(unsigned long val,int * addr)
 
 #define memcpy_tofs(to, from, n) memcpy((to),(from),(n))
 
-extern int current_user_segment;
+/* Sparc is not segmented, however we need to be able to fool verify_area()
+ * when doing system calls from kernel mode legitimately.
+ */
+#define KERNEL_DS   0
+#define USER_DS     1
 
-static inline unsigned long get_fs(void)
+extern int active_ds;
+
+static inline int get_fs(void)
 {
-	return current_user_segment;
+	return active_ds;
 }
 
-static inline unsigned long get_ds(void)
+static inline int get_ds(void)
 {
 	return KERNEL_DS;
 }
 
-static inline void set_fs(unsigned long val)
+static inline void set_fs(int val)
 {
-	current_user_segment = val;
+	active_ds = val;
 }
 
 #endif  /* __ASSEMBLY__ */

@@ -8,7 +8,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/net.h>
-
+#include <linux/fs.h>
 
 #define CONFIG_UNIX		/* always present...	*/
 

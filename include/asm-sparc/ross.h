@@ -1,4 +1,4 @@
-/* $Id: ross.h,v 1.3 1995/11/25 02:32:37 davem Exp $
+/* $Id: ross.h,v 1.4 1996/01/03 03:53:20 davem Exp $
  * ross.h: Ross module specific definitions and defines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -6,6 +6,8 @@
 
 #ifndef _SPARC_ROSS_H
 #define _SPARC_ROSS_H
+
+#include <asm/asi.h>
 
 /* Ross made Hypersparcs have a %psr 'impl' field of '0001'.  The 'vers'
  * field has '1111'.
@@ -51,7 +53,7 @@
 #define HYPERSPARC_MENABLE    0x00000001
 
 /* Flushes which clear out only the on-chip Ross HyperSparc ICACHE. */
-extern inline void flush_i_page(unsigned int addr)
+extern inline void hyper_flush_i_page(unsigned int addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_IFLUSH_PAGE) :
@@ -59,7 +61,7 @@ extern inline void flush_i_page(unsigned int addr)
 	return;
 }
 
-extern inline void flush_i_seg(unsigned int addr)
+extern inline void hyper_flush_i_seg(unsigned int addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_IFLUSH_SEG) :
@@ -67,7 +69,7 @@ extern inline void flush_i_seg(unsigned int addr)
 	return;
 }
 
-extern inline void flush_i_region(unsigned int addr)
+extern inline void hyper_flush_i_region(unsigned int addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_IFLUSH_REGION) :
@@ -75,7 +77,7 @@ extern inline void flush_i_region(unsigned int addr)
 	return;
 }
 
-extern inline void flush_i_ctx(unsigned int addr)
+extern inline void hyper_flush_i_ctx(unsigned int addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_IFLUSH_CTX) :
@@ -83,7 +85,7 @@ extern inline void flush_i_ctx(unsigned int addr)
 	return;
 }
 
-extern inline void flush_i_user(unsigned int addr)
+extern inline void hyper_flush_i_user(unsigned int addr)
 {
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_IFLUSH_USER) :
@@ -92,7 +94,7 @@ extern inline void flush_i_user(unsigned int addr)
 }
 
 /* Finally, flush the entire ICACHE. */
-extern inline void flush_whole_icache(void)
+extern inline void hyper_flush_whole_icache(void)
 {
 	__asm__ __volatile__("sta %%g0, [%%g0] %0\n\t" : :
 			     "i" (ASI_M_FLUSH_IWHOLE));
@@ -148,5 +150,20 @@ extern inline void put_ross_icr(unsigned int icreg)
 
 	return;
 }
+
+/* HyperSparc specific cache flushing. */
+
+extern int hyper_cache_size;
+
+extern inline void hyper_flush_all_combined(void)
+{
+	unsigned long addr;
+
+	for(addr = 0; addr < hyper_cache_size; addr += 32)
+		__asm__ __volatile__("sta %%g0, [%0] 0xe\n\t" : :
+				     "r" (addr));
+}
+
+
 
 #endif /* !(_SPARC_ROSS_H) */

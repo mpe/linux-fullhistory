@@ -49,6 +49,8 @@ static struct symbol_table arch_symbol_table = {
 	X(strncpy),
 	X(strnlen),
 	X(strstr),
+	X(strtok),
+	X(strchr),
 	X(hwrpb),
 	X(memcmp),
 	X(memmove),
@@ -72,6 +74,9 @@ static struct symbol_table arch_symbol_table = {
 	XNOVERS(__remlu),
 	XNOVERS(__remq),
 	XNOVERS(__remqu),
+	XNOVERS(memcpy),
+	XNOVERS(memset),
+	/* these shouldn't be necessary---they should be versioned: */
 	XNOVERS(__memcpy),
 	XNOVERS(__memset),
 #include <linux/symtab_end.h>

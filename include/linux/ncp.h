@@ -1,5 +1,5 @@
 /*
- *  ncp_fs.h
+ *  ncp.h
  *
  *  Copyright (C) 1995 by Volker Lendecke
  *

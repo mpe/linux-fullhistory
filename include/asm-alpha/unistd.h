@@ -70,6 +70,8 @@
 #define __NR_setsockopt		105
 #define __NR_listen		106
 #define __NR_sigsuspend		111
+#define __NR_recvmsg		113
+#define __NR_sendmsg		114
 #define __NR_gettimeofday	116
 #define __NR_getrusage		117
 #define __NR_getsockopt		118
@@ -161,6 +163,7 @@
 #define __NR_sched_rr_get_interval	337
 #define __NR_afs_syscall		338
 #define __NR_uname			339
+#define __NR_nanosleep			340
 
 #ifdef __LIBRARY__
 

@@ -246,6 +246,9 @@ struct symbol_table symbol_table = {
 	/* executable format registration */
 	X(register_binfmt),
 	X(unregister_binfmt),
+	X(get_binfmt_list),
+	X(search_binary_handler),
+	X(prepare_binprm),
 
 	/* execution environment registration */
 	X(lookup_exec_domain),
@@ -326,7 +329,6 @@ struct symbol_table symbol_table = {
 	/* Program loader interfaces */
 	X(setup_arg_pages),
 	X(copy_strings),
-	X(create_tables),
 	X(do_execve),
 	X(flush_old_exec),
 	X(open_inode),

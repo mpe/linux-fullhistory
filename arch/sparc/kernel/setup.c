@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.41 1995/11/25 00:58:21 davem Exp $
+/*  $Id: setup.c,v 1.54 1996/02/25 06:49:18 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -16,6 +16,11 @@
 #include <linux/user.h>
 #include <linux/a.out.h>
 #include <linux/tty.h>
+#include <linux/delay.h>
+#include <linux/config.h>
+#include <linux/fs.h>
+#include <linux/kdev_t.h>
+#include <linux/major.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -28,6 +33,7 @@
 #include <asm/traps.h>
 #include <asm/vaddrs.h>
 #include <asm/kdebug.h>
+#include <asm/mbus.h>
 
 struct screen_info screen_info = {
 	0, 0,			/* orig-x, orig-y */
@@ -42,6 +48,7 @@ struct screen_info screen_info = {
 };
 
 char wp_works_ok = 0;
+unsigned int phys_bytes_of_ram, end_of_phys_memory;
 
 unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
 {
@@ -55,6 +62,9 @@ unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
  */
 
 extern unsigned long trapbase;
+extern void breakpoint(void);
+extern void console_restore_palette(void);
+asmlinkage void sys_sync(void);	/* it's really int */
 
 /* Pretty sick eh? */
 void prom_sync_me(void)
@@ -68,8 +78,14 @@ void prom_sync_me(void)
 			     "nop\n\t"
 			     "nop\n\t" : : "r" (&trapbase));
 
+        console_restore_palette ();
 	prom_printf("PROM SYNC COMMAND...\n");
 	show_free_areas();
+	if(current != task[0]) {
+		sti();
+		sys_sync();
+		cli();
+	}
 	prom_printf("Returning to prom\n");
 
 	__asm__ __volatile__("wr %0, 0x0, %%tbr\n\t"
@@ -145,23 +161,30 @@ boot_flags_init(char *commands)
 
 extern void load_mmu(void);
 extern int prom_probe_memory(void);
-extern void probe_vac(void);
+extern void sun4c_probe_vac(void);
 extern void get_idprom(void);
-extern unsigned int end_of_phys_memory;
 extern char cputypval;
-extern unsigned long start, end, bootup_stack, bootup_kstack;
+extern unsigned long start, end;
+extern void panic_setup(char *, int *);
 
-
-char sparc_command_line[256];  /* Should be enough */
 char saved_command_line[256];
 enum sparc_cpu sparc_cpu_model;
 
 struct tt_entry *sparc_ttable;
 
+static struct pt_regs fake_swapper_regs = { 0, 0, 0, 0, { 0, } };
+
 void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
-	int total, i;
+	int total, i, panic_stuff[2];
+
+	/* Always reboot on panic, but give 5 seconds to hit L1-A
+	 * and look at debugging info if desired.
+	 */
+	panic_stuff[0] = 1;
+	panic_stuff[1] = 5;
+	panic_setup(0, panic_stuff);
 
 	sparc_ttable = (struct tt_entry *) &start;
 
@@ -181,7 +204,7 @@ void setup_arch(char **cmdline_p,
 	  {
 	  case sun4c:
 		  printk("SUN4C\n");
-		  probe_vac();
+		  sun4c_probe_vac();
 		  break;
           case sun4m:
 		  printk("SUN4M\n");
@@ -215,8 +238,10 @@ void setup_arch(char **cmdline_p,
 	load_mmu();
 	total = prom_probe_memory();
 	*memory_start_p = (((unsigned long) &end));
-	printk("Physical Memory: %d bytes (in hex %08lx)\n", (int) total,
+#if 0
+	prom_printf("Physical Memory: %d bytes (in hex %08lx)\n", (int) total,
 		    (unsigned long) total);
+#endif
 
 	for(i=0; sp_banks[i].num_bytes != 0; i++) {
 #if 0
@@ -229,10 +254,15 @@ void setup_arch(char **cmdline_p,
 
 	prom_setsync(prom_sync_me);
 
+	*memory_end_p = (end_of_phys_memory + PAGE_OFFSET);
+	if(*memory_end_p > IOBASE_VADDR)
+		*memory_end_p = IOBASE_VADDR;
+
 	/* Due to stack alignment restrictions and assumptions... */
 	init_task.mm->mmap->vm_page_prot = PAGE_SHARED;
-
-	*memory_end_p = (end_of_phys_memory + PAGE_OFFSET);
+	init_task.mm->mmap->vm_start = KERNBASE;
+	init_task.mm->mmap->vm_end = *memory_end_p;
+	init_task.tss.kregs = &fake_swapper_regs;
 
 	{
 		extern int serial_console;  /* in console.c, of course */
@@ -250,6 +280,15 @@ void setup_arch(char **cmdline_p,
 			prom_halt();
 		}
 	}
+#if 1
+	/* XXX ROOT_DEV hack for kgdb - davem XXX */
+#if 1
+	ROOT_DEV = MKDEV(UNNAMED_MAJOR, 255); /* NFS */
+#else
+	ROOT_DEV = 0x801; /* SCSI DISK */
+#endif
+
+#endif
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
@@ -257,12 +296,35 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
 	return -EIO;
 }
 
-/*
- * BUFFER is PAGE_SIZE bytes long.
- *
- * XXX Need to do better than this! XXX
- */
+/* BUFFER is PAGE_SIZE bytes long. */
+
+extern char *sparc_cpu_type[];
+extern char *sparc_fpu_type[];
+
 int get_cpuinfo(char *buffer)
 {
-	return sprintf(buffer, "Sparc RISC\n");
+	int cpuid=get_cpuid();
+
+	return sprintf(buffer, "cpu\t\t: %s\n"
+            "fpu\t\t: %s\n"
+            "promlib\t\t: Version %d Revision %d\n"
+            "wp\t\t: %s\n"
+            "type\t\t: %s\n"
+            "Elf Support\t: %s\n"   /* I can't remember when I do --ralp */
+            "BogoMips\t: %lu.%02lu\n"
+	    "%s",
+            sparc_cpu_type[cpuid],
+            sparc_fpu_type[cpuid],
+            romvec->pv_romvers, prom_rev,
+            wp_works_ok ? "yes" : "no",
+            &cputypval,
+#if CONFIG_BINFMT_ELF
+            "yes",
+#else
+            "no",
+#endif
+            loops_per_sec/500000, (loops_per_sec/5000) % 100,
+	    mmu_info()
+            );
+
 }

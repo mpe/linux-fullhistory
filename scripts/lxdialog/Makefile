@@ -2,25 +2,24 @@ CC = gcc
 CPP = gcc -E
 OPTIM = -O2 -Wall -fomit-frame-pointer
 
-CFLAGS = $(OPTIM) $(CURSES) -DLOCALE 
+CFLAGS = $(OPTIM) -DLOCALE 
 LDFLAGS = -s -L .
 LDLIBS = -lncurses
 
-CURSES =  -DCURSES_LOC="<curses.h>"
-
 ifeq (/usr/include/ncurses/ncurses.h, $(wildcard /usr/include/ncurses/ncurses.h))
-        CFLAGS += -I/usr/include/ncurses
-        CURSES =  -DCURSES_LOC="<ncurses.h>"
+        CFLAGS += -I/usr/include/ncurses -DCURSES_LOC="<ncurses.h>"
 else
 ifeq (/usr/include/ncurses/curses.h, $(wildcard /usr/include/ncurses/curses.h))
-        CFLAGS += -I/usr/include/ncurses
-        CURSES =  -DCURSES_LOC="<curses.h>"
+        CFLAGS += -I/usr/include/ncurses -DCURSES_LOC="<curses.h>"
 else
 ifeq (/usr/include/ncurses.h, $(wildcard /usr/include/ncurses.h))
-        CURSES =  -DCURSES_LOC="<ncurses.h>"
+        CFLAGS += -DCURSES_LOC="<ncurses.h>"
+else
+	CFLAGS += -DCURSES_LOC="<curses.h>"
 endif
 endif
 endif
+
 
 OBJS = checklist.o menubox.o textbox.o yesno.o inputbox.o \
        util.o lxdialog.o msgbox.o

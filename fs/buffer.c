@@ -363,7 +363,7 @@ static inline void remove_from_free_list(struct buffer_head * bh)
 		bh->b_next_free->b_prev_free = bh->b_prev_free;
 		if (free_list[isize] == bh)
 			 free_list[isize] = bh->b_next_free;
-	};
+	}
 	bh->b_next_free = bh->b_prev_free = NULL;
 }
 
@@ -398,7 +398,7 @@ static inline void put_last_lru(struct buffer_head * bh)
 	if(!lru_list[bh->b_list]) {
 		lru_list[bh->b_list] = bh;
 		lru_list[bh->b_list]->b_prev_free = bh;
-	};
+	}
 	if (!next_to_age[bh->b_list])
 		next_to_age[bh->b_list] = bh;
 
@@ -1571,14 +1571,16 @@ void show_buffers(void)
 			protected++;
 		if (buffer_dirty(bh))
 			dirty++;
-		if(mem_map[MAP_NR(((unsigned long) bh->b_data))].count !=1) shared++;
+		if (mem_map[MAP_NR(((unsigned long) bh->b_data))].count != 1)
+			shared++;
 		if (bh->b_count)
 			used++, lastused = found;
 		bh = bh->b_next_free;
-	      } while (bh != lru_list[nlist]);
-	printk("Buffer[%d] mem: %d buffers, %d used (last=%d), %d locked, "
-	       "%d protected, %d dirty %d shrd\n",
-		nlist, found, used, lastused, locked, protected, dirty, shared);
+	  } while (bh != lru_list[nlist]);
+	  printk("Buffer[%d] mem: %d buffers, %d used (last=%d), "
+		 "%d locked, %d protected, %d dirty %d shrd\n",
+		 nlist, found, used, lastused,
+		 locked, protected, dirty, shared);
 	};
 	printk("Size    [LAV]     Free  Clean  Unshar     Lck    Lck1   Dirty  Shared \n");
 	for(isize = 0; isize<NR_SIZES; isize++){

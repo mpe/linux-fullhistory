@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.3 1995/11/25 01:00:04 davem Exp $
+/* $Id: misc.c,v 1.5 1996/02/02 03:37:44 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -29,13 +29,19 @@ prom_feval(char *fstring)
 	return;
 }
 
+/* We want to do this more nicely some day. */
+extern void console_restore_palette(void);
+extern void set_palette(void);
+
 /* Drop into the prom, with the chance to continue with the 'go'
  * prom command.
  */
 void
 prom_halt(void)
 {
+        console_restore_palette ();
 	(*(romvec->pv_abort))();
+	set_palette ();
 	return;
 }
 

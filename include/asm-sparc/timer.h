@@ -1,4 +1,4 @@
-/* $Id: timer.h,v 1.10 1995/11/25 02:33:03 davem Exp $
+/* $Id: timer.h,v 1.11 1996/01/03 03:53:23 davem Exp $
  * timer.h:  Definitions for the timer chips on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -32,8 +32,7 @@ struct sun4c_timer_info {
 
 #define SUN4C_TIMER_PHYSADDR   0xf3000000
 
-/* All accesses to the sun4c timer registers should use this macro. */
-#define  SUN4C_TIMER_STRUCT  ((volatile struct sun4c_timer_info *) TIMER_VADDR)
+volatile struct sun4c_timer_info *sun4c_timers;
 
 /* A sun4m has two blocks of registers which are probably of the same
  * structure. LSI Logic's L64851 is told to _decrement_ from the limit

@@ -80,6 +80,7 @@ Ioctl	Include File		Comments
 'C'	linux/soundcard.h
 'I'	linux/isdn.h
 'K'	linux/kd.h
+'L'	linux/loop.h
 'M'	linux/soundcard.h
 'P'	linux/soundcard.h
 'Q'	linux/soundcard.h

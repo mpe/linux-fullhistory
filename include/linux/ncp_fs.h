@@ -1,7 +1,7 @@
 /*
  *  ncp_fs.h
  *
- *  Copyright (C) 1995 by Volker Lendecke
+ *  Copyright (C) 1995, 1996 by Volker Lendecke
  *
  */
 
@@ -42,6 +42,7 @@ struct ncp_fs_info {
 
 #define	NCP_IOC_NCPREQUEST		_IOR('n', 1, unsigned char *)
 #define	NCP_IOC_GETMOUNTUID		_IOR('u', 1, uid_t)
+#define NCP_IOC_CONN_LOGGED_IN          _IO('l', 1)
 
 #define NCP_GET_FS_INFO_VERSION (1)
 #define NCP_IOC_GET_FS_INFO             _IOWR('i', 1, unsigned char *)
@@ -128,10 +129,11 @@ extern struct inode_operations ncp_dir_inode_operations;
 void ncp_free_inode_info(struct ncp_inode_info *i);
 void ncp_free_all_inodes(struct ncp_server *server);
 void ncp_init_root(struct ncp_server *server);
-int  ncp_stat_root(struct ncp_server *server);
+int  ncp_conn_logged_in(struct ncp_server *server);
 void ncp_init_dir_cache(void);
-void ncp_invalid_dir_cache(unsigned long ino);
-void ncp_invalidate_all_inodes(struct ncp_server *server);
+void ncp_invalid_dir_cache(struct inode *ino);
+struct ncp_inode_info *ncp_find_inode(struct inode *inode);
+ino_t ncp_info_ino(struct ncp_server *server, struct ncp_inode_info *info);
 void ncp_free_dir_cache(void);
 int  ncp_date_dos2unix(__u16 time, __u16 date);
 void ncp_date_unix2dos(int unix_date, __u16 *time, __u16 *date);
@@ -145,8 +147,6 @@ int ncp_ioctl (struct inode * inode, struct file * filp,
 struct super_block *ncp_read_super(struct super_block *sb,
                                    void *raw_data, int silent);
 extern int init_ncp_fs(void);
-void ncp_invalidate_connection(struct ncp_server *server);
-int ncp_conn_is_valid(struct ncp_server *server);
 void ncp_trigger_message(struct ncp_server *server);
 
 /* linux/fs/ncpfs/sock.c */

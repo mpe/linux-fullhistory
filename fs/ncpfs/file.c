@@ -1,7 +1,7 @@
 /*
  *  file.c
  *
- *  Copyright (C) 1995 by Volker Lendecke
+ *  Copyright (C) 1995, 1996 by Volker Lendecke
  *
  */
 
@@ -241,6 +241,7 @@ ncp_file_write(struct inode *inode, struct file *file, const char *buf,
         if (pos > inode->i_size)
 	{
                 inode->i_size = pos;
+		ncp_invalid_dir_cache(NCP_INOP(inode)->dir->inode);
         }
 
         DPRINTK("ncp_file_write: exit %s\n", NCP_ISTRUCT(inode)->entryName);

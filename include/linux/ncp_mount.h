@@ -1,7 +1,7 @@
 /*
  *  ncp_mount.h
  *
- *  Copyright (C) 1995 by Volker Lendecke
+ *  Copyright (C) 1995, 1996 by Volker Lendecke
  *
  */
 
@@ -26,7 +26,7 @@ struct ncp_mount_data {
 	int version;
 	unsigned int ncp_fd;	/* The socket to the ncp port */
 	unsigned int wdog_fd;	/* Watchdog packets come here */
-	unsigned int message_fd; /* Not used yet, maybe for messages */
+	unsigned int message_fd; /* Message notifications come here */
         uid_t mounted_uid;      /* Who may umount() this filesystem? */
 
 	struct sockaddr_ipx serv_addr;

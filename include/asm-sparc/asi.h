@@ -1,4 +1,4 @@
-/* $Id: asi.h,v 1.11 1995/11/25 02:31:11 davem Exp $ */
+/* $Id: asi.h,v 1.13 1996/03/01 07:20:51 davem Exp $ */
 #ifndef _SPARC_ASI_H
 #define _SPARC_ASI_H
 
@@ -96,6 +96,10 @@
 
 /* This is ROSS HyperSparc only. */
 #define ASI_M_FLUSH_IWHOLE 0x31   /* Flush entire ICACHE; wo, ss */
+
+/* Tsunami/Viking i/d cache flash clear. */
+#define ASI_M_IC_FLCLEAR   0x36
+#define ASI_M_DC_FLCLEAR   0x37
 
 #define ASI_M_DCDR         0x39   /* Data Cache Diagnostics Registerl rw, ss */
 

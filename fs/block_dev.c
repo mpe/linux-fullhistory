@@ -61,11 +61,8 @@ int block_write(struct inode * inode, struct file * filp, const char * buf, int 
 	else
 		size = INT_MAX;
 	while (count>0) {
-		if (block >= size) {
-			if (!written)
-				written = -ENOSPC;
-			return written;
-		}
+		if (block >= size)
+			return written ? written : -ENOSPC;
 		chars = blocksize - offset;
 		if (chars > count)
 			chars=count;
@@ -105,7 +102,7 @@ int block_write(struct inode * inode, struct file * filp, const char * buf, int 
 		      bhlist[i] = getblk (dev, block+i, blocksize);
 		      if(!bhlist[i]){
 			while(i >= 0) brelse(bhlist[i--]);
-			return written? written: -EIO;
+			return written ? written : -EIO;
 		      };
 		    };
 		    ll_rw_block(READ, blocks, bhlist);
@@ -117,7 +114,7 @@ int block_write(struct inode * inode, struct file * filp, const char * buf, int 
 #endif
 		block++;
 		if (!bh)
-			return written?written:-EIO;
+			return written ? written : -EIO;
 		p = offset + bh->b_data;
 		offset = 0;
 		filp->f_pos += chars;

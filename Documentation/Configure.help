@@ -1654,22 +1654,45 @@ CONFIG_NET_ISA
   linux, read the Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
-Arcnet support
+ARCnet support
 CONFIG_ARCNET
   If you have a network card of this type, say Y and check out the
-  beautiful poetry in Documentation/networking/arcnet.txt in the
-  kernel source. If you get this driver to work or not, either way,
-  send mail to the author. You might also want to have a look at the
-  Ethernet-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO (even though arcnet is no true
-  ethernet). This driver is also available as a module ( = code which
-  can be inserted in and removed from the running kernel whenever you
-  want). If you want to compile it as a module, say M here and read
-  Documentation/modules.txt as well as
+  (arguably) beautiful poetry in Documentation/networking/arcnet.txt. 
+  You might also want to have a look at the Ethernet-HOWTO, available
+  via ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO
+  (even though ARCnet is not really ethernet). This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile it
+  as a module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. If you plan to use more
   than one network card under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  
+Enable arc0e (ARCnet "ether-encap" packet format)
+CONFIG_ARCNET_ETH
+  This allows you to use "ethernet encapsulation" with your ARCnet card
+  via the virtual arc0e device.  You only need arc0e if you want to
+  talk to nonstandard ARCnet software, specifically, DOS/Windows-style
+  "NDIS" drivers.  You do not need to enable this option to communicate
+  with industry-standard RFC1201 implementations, like the arcether.com
+  packet driver or most DOS/Windows ODI drivers.  RFC1201 is included
+  automatically as the arc0 device.  Please read the ARCnet
+  documentation in Documentation/networking/arcnet.txt for more
+  information about using arc0e and arc0s.
+
+Enable arc0s (ARCnet RFC1051 packet format)
+CONFIG_ARCNET_1051
+  This allows you to use RFC1051 with your ARCnet card via the virtual
+  arc0s device.  You only need arc0s if you want to talk to ARCnet
+  software complying with the "old" standard, specifically, the DOS
+  arcnet.com packet driver, Amigas running AmiTCP, and some variants of
+  NetBSD.  You do not need to enable this option to communicate with
+  industry-standard RFC1201 implementations, like the arcether.com
+  packet driver or most DOS/Windows ODI drivers.  RFC1201 is included
+  automatically as the arc0 device.  Please read the ARCnet
+  documentation in Documentation/networking/arcnet.txt for more
+  information about using arc0e and arc0s.
 
 Cabletron E21xx support
 CONFIG_E2100

@@ -1,4 +1,4 @@
-/* $Id: vac-ops.h,v 1.7 1995/11/25 02:33:18 davem Exp $ */
+/* $Id: vac-ops.h,v 1.9 1995/12/17 09:02:00 davem Exp $ */
 #ifndef _SPARC_VAC_OPS_H
 #define _SPARC_VAC_OPS_H
 
@@ -122,50 +122,6 @@ extern __inline__ void sun4c_disable_vac(void)
   sun4c_vacinfo.on = 0;
 }
 
-extern unsigned long sun4c_ctxflush;
-extern unsigned long sun4c_segflush;
-extern unsigned long sun4c_pgflush;
-
-extern void sun4c_ctxflush_hw64KB16B(void);
-extern void sun4c_ctxflush_hw64KB32B(void);
-extern void sun4c_ctxflush_sw64KB16B(void);
-extern void sun4c_ctxflush_sw64KB32B(void);
-
-extern void sun4c_segflush_hw64KB16B(void);
-extern void sun4c_segflush_hw64KB32B(void);
-extern void sun4c_segflush_sw64KB16B(void);
-extern void sun4c_segflush_sw64KB32B(void);
-
-extern void sun4c_pgflush_hw64KB16B(void);
-extern void sun4c_pgflush_hw64KB32B(void);
-extern void sun4c_pgflush_sw64KB16B(void);
-extern void sun4c_pgflush_sw64KB32B(void);
-
-/* These do indirect calls to the in-line assembly routines
- * in s4ctlb.S, see that file for more answers.
- */
-extern inline void sun4c_flush_context(void)
-{
-	__asm__ __volatile__("jmpl %0, %%l4\n\t"
-			     "nop\n\t" : :
-			     "r" (sun4c_ctxflush) :
-			     "l4", "l6", "l7", "memory");
-}
-
-extern inline void sun4c_flush_segment(unsigned long segment)
-{
-	__asm__ __volatile__("jmpl %0, %%l4\n\t"
-			     "or %1, %%g0, %%l2\n\t" : :
-			     "r" (sun4c_segflush), "r" (segment) :
-			     "l2", "l4", "l6", "l7", "memory");
-}
-
-extern inline void sun4c_flush_page(unsigned long page)
-{
-	__asm__ __volatile__("jmpl %0, %%l4\n\t"
-			     "or %1, %%g0, %%l2\n\t" : :
-			     "r" (sun4c_pgflush), "r" (page) :
-			     "l2", "l4", "l6", "l7", "memory");
-}
+extern void sun4c_flush_context(void);
 
 #endif /* !(_SPARC_VAC_OPS_H) */

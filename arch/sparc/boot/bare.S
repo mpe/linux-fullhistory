@@ -1,4 +1,4 @@
-/* $Id: bare.S,v 1.2 1995/11/25 00:57:39 davem Exp $
+/* $Id: bare.S,v 1.3 1995/11/27 02:42:50 davem Exp $
  * base.S:      Ugly low-level boot program entry code.  The job of this
  *              module is to parse the boot flags, try to mount the remote
  *              root filesystem and load the kernel into virtual memory.
@@ -51,7 +51,7 @@ C_LABEL(b_block_cksum):
 start_of_execution:
 	sethi	%hi(C_LABEL(first_adr_in_text)), %o1		! This is our top
 	or	%o1, %lo(C_LABEL(first_adr_in_text)), %o1	! of stack too.
-	sub	%o1, STACKFRAME_SZ, %o1
+	sub	%o1, REGWIN_SZ, %o1
 	add	%o1, 0x7, %o1
 	andn	%o1, 0x7, %o1
 	save	%o1, 0x0, %sp					! save is an add

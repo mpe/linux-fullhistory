@@ -41,8 +41,8 @@ foo \kill}%
  {\end{tabbing}}
 %
 \title{{\bf Linux Allocated Devices}}
-\author{Maintained by H. Peter Anvin $<$hpa@storm.net$>$}
-\date{Last revised: February 24, 1996}
+\author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
+\date{Last revised: March 2, 1996}
 \maketitle
 %
 \noindent
@@ -88,12 +88,13 @@ an unreasonable effort.
 \major{ 5}{}{char }{Alternate TTY devices}
 \major{ 6}{}{char }{Parallel printer devices}
 \major{ 7}{}{char }{Virtual console access devices}
-\major{  }{}{block}{Loopback devices}
 \major{ 8}{}{block}{SCSI disk devices}
 \major{ 9}{}{char }{SCSI tape devices}
 \major{  }{}{block}{Metadisk (RAID) devices}
 \major{10}{}{char }{Non-serial mice, misc features}
-\major{11}{}{block}{SCSI CD-ROM devices}
+\major{  }{}{block}{Loopback devices}
+\major{11}{}{char }{Raw keyboard device}
+\major{  }{}{block}{SCSI CD-ROM devices}
 \major{12}{}{char }{QIC-02 tape}
 \major{  }{}{block}{MSCDEX CD-ROM callback support}
 \major{13}{}{char }{PC speaker}
@@ -352,17 +353,6 @@ Not all computers have the {\hex 0x3bc} parallel port, hence the
 \noindent
 NOTE: These devices permit both read and write access.
 
-\major{  }{}{block}{Loopback devices}
-	\minor{0}{/dev/loop0}{First loopback device}
-	\minor{1}{/dev/loop1}{Second loopback device}
-	\minordots
-\end{devicelist}
-
-\noindent
-The loopback devices are used to mount filesystems not associated with
-block devices.  The binding to the loopback devices is usually handled
-by mount(1).
-
 \begin{devicelist}
 \major{ 8}{}{block}{SCSI disk devices}
 	\minor{0}{/dev/sda}{First SCSI disk whole disk}
@@ -403,18 +393,37 @@ physical disks.
 	\minor{2}{/dev/inportbm}{Microsoft Inport bus mouse}
 	\minor{3}{/dev/atibm}{ATI XL bus mouse}
 	\minor{4}{/dev/jbm}{J-mouse}
-	\minor{4}{/dev/amigamouse}{Amiga Mouse (68k/Amiga)}
-	\minor{5}{/dev/atarimouse}{Atari Mouse}
+	\minor{4}{/dev/amigamouse}{Amiga mouse (68k/Amiga)}
+	\minor{5}{/dev/atarimouse}{Atari mouse}
+	\minor{6}{/dev/sunmouse}{Sun mouse}
 	\minor{128}{/dev/beep}{Fancy beep device}
 	\minor{129}{/dev/modreq}{Kernel module load request}
 	\minor{130}{/dev/watchdog}{Watchdog timer port}
 	\minor{131}{/dev/temperature}{Machine internal temperature}
 	\minor{132}{/dev/hwtrap}{Hardware fault trap}
 	\minor{133}{/dev/exttrp}{External device trap}
+\\
+\major{  }{}{block}{Loopback devices}
+	\minor{0}{/dev/loop0}{First loopback device}
+	\minor{1}{/dev/loop1}{Second loopback device}
+	\minordots
 \end{devicelist}
 
+\noindent
+The loopback devices are used to mount filesystems not associated with
+block devices.  The binding to the loopback devices is usually handled
+by mount(1).
+
 \begin{devicelist}
-\major{11}{}{block}{SCSI CD-ROM devices}
+\major{11}{}{char }{Raw keyboard device}
+	\minor{0}{/dev/kbd}{Raw keyboard device}
+\end{devicelist}
+
+\noindent
+The raw keyboard device is used on Linux/SPARC only.
+
+\begin{devicelist}
+\major{  }{}{block}{SCSI CD-ROM devices}
 	\minor{0}{/dev/sr0}{First SCSI CD-ROM}
 	\minor{1}{/dev/sr1}{Second SCSI CD-ROM}
 	\minordots
@@ -693,12 +702,12 @@ disk (same as SCSI.)
 
 \begin{devicelist}
 \major{29}{}{char }{Universal frame buffer}
-	\minor{0}{/dev/fb0current}{First frame buffer}
+	\minor{0}{/dev/fb0}{First frame buffer}
 	\minor{1}{/dev/fb0autodetect}{}
 	\minor{24}{/dev/fb0user0}{}
 	\minordots
 	\minor{31}{/dev/fb0user7}{}
-	\minor{32}{/dev/fb1current}{Second frame buffer}
+	\minor{32}{/dev/fb1}{Second frame buffer}
 	\minor{33}{/dev/fb1autodetect}{}
 	\minor{56}{/dev/fb1user0}{}
 	\minordots
@@ -708,13 +717,15 @@ disk (same as SCSI.)
 
 \noindent
 The universal frame buffer device is currently supported only on
-Linux/68k.  The {\file current} device accesses the frame buffer at
-current resolution; the {\file autodetect} one at bootup (default)
-resolution.  Minor numbers 2--23 within each frame buffer assignment
-are used for specific device-dependent resolutions.  There appears to
-be no standard naming for these devices.  Finally, 24--31 within each
-device are reserved for user-selected modes, usually entered at boot
-time.
+Linux/68k and Linux/SPARC.  The plain device accesses the frame
+buffer at current resolution (Linux/68k calls this file {\file
+current}, e.g. {\file /dev/fb0current}); the {\file autodetect} one at
+bootup (default) resolution.  Minor numbers 2--23 within each frame
+buffer assignment are used for specific device-dependent resolutions.
+There appears to be no standard naming for these devices.  Finally,
+24--31 within each device are reserved for user-selected modes,
+usually entered at boot time.  Currently only Linux/68k uses the
+mode-specific devices.
 
 \begin{devicelist}
 \major{  }{}{block}{Aztech/Orchid/Okano/Wearnes CD-ROM}
@@ -1057,7 +1068,7 @@ point to the ``cooked'' devices ({\file /dev/st*} and {\file
 /dev/scanner} should point to the appropriate generic SCSI devices
 ({\file /dev/sg*}.)
 
-{\file /dev/mouse} may point to a dialout (alternate) TTY device, a
+{\file /dev/mouse} may point to a primary serial TTY device, a
 hardware mouse device, or a socket for a mouse driver program
 (e.g. {\file /dev/gpmdata}.)
 

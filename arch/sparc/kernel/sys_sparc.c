@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.6 1995/11/25 00:58:34 davem Exp $
+/* $Id: sys_sparc.c,v 1.7 1996/03/01 07:15:58 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -42,6 +42,38 @@ asmlinkage void sparc_pipe(struct pt_regs *regs)
 		regs->u_regs[UREG_I1] = fd[1];
 	}
 }
+
+/* Note most sanity checking already done in sclow.S code. */
+asmlinkage int quick_sys_write(unsigned int fd, char *buf, unsigned int count)
+{
+	struct file *file = current->files->fd[fd];
+	struct inode *inode = file->f_inode;
+	int error;
+
+	error = verify_area(VERIFY_READ, buf, count);
+	if(error)
+		return error;
+	/*
+	 * If data has been written to the file, remove the setuid and
+	 * the setgid bits. We do it anyway otherwise there is an
+	 * extremely exploitable race - does your OS get it right |->
+	 *
+	 * Set ATTR_FORCE so it will always be changed.
+	 */
+	if (!suser() && (inode->i_mode & (S_ISUID | S_ISGID))) {
+		struct iattr newattrs;
+		newattrs.ia_mode = inode->i_mode & ~(S_ISUID | S_ISGID);
+		newattrs.ia_valid = ATTR_CTIME | ATTR_MODE | ATTR_FORCE;
+		notify_change(inode, &newattrs);
+	}
+
+	down(&inode->i_sem);
+	error = file->f_op->write(inode,file,buf,count);
+	up(&inode->i_sem);
+	return error;
+}
+
+/* XXX do we need this crap? XXX */
 
 /*
  * sys_ipc() is the de-multiplexer for the SysV IPC calls..

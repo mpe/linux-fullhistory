@@ -26,7 +26,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include <linux/config.h>
 
 
 #ifndef _DEV_TABLE_H_
@@ -411,12 +410,7 @@ struct sound_timer_operations {
 #endif
 
 #ifdef CONFIG_MSS
-	/* always define full MSS even for DEC Alphas, just in case... */
 		{SNDCARD_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA, -1}, SND_DEFAULT_ENABLE},
-#	ifdef __alpha__
-	/* MSS without IRQ/DMA config registers (for DEC Alphas) */
-		{SNDCARD_PSEUDO_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA, -1}, SND_DEFAULT_ENABLE},
-#	endif
 #	ifdef MSS2_BASE
 		{SNDCARD_MSS, {MSS2_BASE, MSS2_IRQ, MSS2_DMA, -1}, SND_DEFAULT_ENABLE},
 #	endif
@@ -430,7 +424,10 @@ struct sound_timer_operations {
 #	ifndef SBC_DMA
 #		define SBC_DMA		1
 #	endif
-		{SNDCARD_SB, {SBC_BASE, SBC_IRQ, SBC_DMA, -1}, SND_DEFAULT_ENABLE},
+#	ifndef SB_DMA2
+#		define SB_DMA2		-1
+#	endif
+		{SNDCARD_SB, {SBC_BASE, SBC_IRQ, SBC_DMA, SB_DMA2}, SND_DEFAULT_ENABLE},
 #endif
 #if defined(CONFIG_MAUI) 
 		{SNDCARD_MAUI, {MAUI_BASE, MAUI_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
@@ -451,9 +448,6 @@ struct sound_timer_operations {
 #endif
 
 #if defined(CONFIG_SB) 
-#if defined(CONFIG_AUDIO) && defined(SB_DMA2)
-		{SNDCARD_SB16, {SBC_BASE, SBC_IRQ, SB_DMA2, -1}, SND_DEFAULT_ENABLE},
-#endif
 #if defined(CONFIG_MIDI) && defined(SB_MPU_BASE)
 		{SNDCARD_SB16MIDI,{SB_MPU_BASE, SB_MPU_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif

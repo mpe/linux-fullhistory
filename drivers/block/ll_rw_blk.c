@@ -357,8 +357,10 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	     || major == IDE3_MAJOR)
 	    && (req = blk_dev[major].current_request))
 	{
-		if (major != SCSI_DISK_MAJOR && major != SCSI_CDROM_MAJOR)
-			req = req->next;
+		if (major != SCSI_DISK_MAJOR &&
+		    major != SCSI_CDROM_MAJOR &&
+		    major != MD_MAJOR)
+		        req = req->next;
 
 		while (req) {
 			if (req->rq_dev == bh->b_dev &&

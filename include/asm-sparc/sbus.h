@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.8 1995/11/25 02:32:38 davem Exp $
+/* $Id: sbus.h,v 1.9 1996/02/15 09:13:03 davem Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -8,6 +8,7 @@
 #define _SPARC_SBUS_H
 
 #include <asm/oplib.h>
+#include <asm/iommu.h>
 
 /* We scan which devices are on the SBus using the PROM node device
  * tree.  SBus devices are described in two different ways.  You can
@@ -64,11 +65,12 @@ struct linux_sbus_device {
 
 /* This struct describes the SBus(s) found on this machine. */
 struct linux_sbus {
-  struct linux_sbus *next;             /* next SBus, if more than one SBus */
-  struct linux_sbus_device *devices;   /* Link to devices on this SBus */
-  int prom_node;                       /* PROM device tree node for this SBus */
-  char prom_name[64];                  /* Usually "sbus" */
-  int clock_freq;
+	struct linux_sbus *next;             /* next SBus, if more than one SBus */
+	struct linux_sbus_device *devices;   /* Link to devices on this SBus */
+	struct iommu_struct *iommu;          /* IOMMU for this sbus if applicable */
+	int prom_node;                       /* PROM device tree node for this SBus */
+	char prom_name[64];                  /* Usually "sbus" */
+	int clock_freq;
 };
 
 extern struct linux_sbus *SBus_chain;

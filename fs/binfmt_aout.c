@@ -197,6 +197,59 @@ aout_core_dump(long signr, struct pt_regs * regs)
 }
 
 /*
+ * create_aout_tables() parses the env- and arg-strings in new user
+ * memory and creates the pointer tables from them, and puts their
+ * addresses on the "stack", returning the new stack pointer value.
+ */
+static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm, int ibcs)
+{
+	unsigned long *argv,*envp;
+	unsigned long * sp;
+	int argc = bprm->argc;
+	int envc = bprm->envc;
+
+	sp = (unsigned long *) ((-(unsigned long)sizeof(char *)) & (unsigned long) p);
+#ifdef __alpha__
+/* whee.. test-programs are so much fun. */
+	put_user(0, --sp);
+	put_user(0, --sp);
+	if (bprm->loader) {
+		put_user(0, --sp);
+		put_user(0x3eb, --sp);
+		put_user(bprm->loader, --sp);
+		put_user(0x3ea, --sp);
+	}
+	put_user(bprm->exec, --sp);
+	put_user(0x3e9, --sp);
+#endif
+	sp -= envc+1;
+	envp = sp;
+	sp -= argc+1;
+	argv = sp;
+#ifdef __i386__
+	if (!ibcs) {
+		put_user(envp,--sp);
+		put_user(argv,--sp);
+	}
+#endif
+	put_user(argc,--sp);
+	current->mm->arg_start = (unsigned long) p;
+	while (argc-->0) {
+		put_user(p,argv++);
+		while (get_user(p++)) /* nothing */ ;
+	}
+	put_user(NULL,argv);
+	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
+	while (envc-->0) {
+		put_user(p,envp++);
+		while (get_user(p++)) /* nothing */ ;
+	}
+	put_user(NULL,envp);
+	current->mm->env_end = (unsigned long) p;
+	return sp;
+}
+
+/*
  * These are the functions used to load a.out style executables and shared
  * libraries.  There is no binary dependent code anywhere else.
  */
@@ -328,13 +381,9 @@ beyond_if:
 
 	set_brk(current->mm->start_brk, current->mm->brk);
 
-	fd_offset = setup_arg_pages(ex.a_text,bprm->page) - MAX_ARG_PAGES*PAGE_SIZE;
-	p += fd_offset;
-	if (bprm->loader)
-		bprm->loader += fd_offset;
-	bprm->exec += fd_offset;
+	p = setup_arg_pages(p, bprm);
 	
-	p = (unsigned long)create_tables((char *)p, bprm,
+	p = (unsigned long) create_aout_tables((char *)p, bprm,
 					current->personality != PER_LINUX);
 	current->mm->start_stack = p;
 #ifdef __alpha__

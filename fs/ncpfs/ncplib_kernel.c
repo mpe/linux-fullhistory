@@ -1,3 +1,10 @@
+/*
+ *  ncplib_kernel.c
+ *
+ *  Copyright (C) 1995, 1996 by Volker Lendecke
+ *
+ */
+
 #include "ncplib_kernel.h"
 
 typedef __u8  byte;
@@ -260,55 +267,18 @@ ncp_extract_file_info(void *structure, struct nw_info_struct *target)
 	target->entryName[*name_len] = '\0';
 	return;
 }
-		
 
 int
-ncp_do_lookup(struct ncp_server *server,
-	      struct nw_info_struct *dir,
-	      char *path,	/* may only be one component */
-	      struct nw_info_struct *target)
+ncp_obtain_info(struct ncp_server *server,
+		__u8 vol_num, __u32 dir_base,
+		char *path, /* At most 1 component */
+		struct nw_info_struct *target)
 {
-	__u8  vol_num;
-	__u32 dir_base;
 	int result;
-	char *volname = NULL;
 
 	if (target == NULL)
 	{
 		return -EINVAL;
-	}
- 
-	if (dir == NULL)
-	{
-
-		DDPRINTK("ncp_do_lookup: looking up vol %s\n", path);
-
-		/* Access a volume's root directory */
-		ncp_init_request(server);
-		ncp_add_byte(server, 22); /* subfunction */
-		ncp_add_byte(server, 0); /* dos name space */
-		ncp_add_byte(server, 0); /* reserved */
-		ncp_add_byte(server, 0); /* reserved */
-		ncp_add_byte(server, 0); /* reserved */
-		ncp_add_handle_path(server, 0, 0, 0, /* no handle */
-				    path);
-
-		if ((result = ncp_request(server, 87)) != 0)
-		{
-			ncp_unlock_server(server);
-			return result;
-		}
-
-		dir_base = ncp_reply_dword(server, 4);
-		vol_num  = ncp_reply_byte (server, 8);
-		ncp_unlock_server(server);
-		volname = path;
-		path = NULL;
-	}
-	else
-	{
-		vol_num = dir->volNumber;
-		dir_base = dir->DosDirNum;
 	}
 
 	ncp_init_request(server);
@@ -317,8 +287,7 @@ ncp_do_lookup(struct ncp_server *server,
 	ncp_add_byte(server, 0); /* dos name space as dest */
 	ncp_add_word(server, 0xff); /* get all */
 	ncp_add_dword(server, RIM_ALL);
-	ncp_add_handle_path(server, vol_num, dir_base, 1,
-			    path);
+	ncp_add_handle_path(server, vol_num, dir_base, 1, path);
 
 	if ((result = ncp_request(server, 87)) != 0)
 	{
@@ -327,14 +296,54 @@ ncp_do_lookup(struct ncp_server *server,
 	}
 
 	ncp_extract_file_info(ncp_reply_data(server, 0), target);
+	ncp_unlock_server(server);
+	return 0;
+}
 
-	if (volname != NULL)
+int
+ncp_lookup_volume(struct ncp_server *server,
+		  char *volname,
+		  struct nw_info_struct *target)
+{
+	int result;
+	__u8  vol_num;
+	__u32 dir_base;
+
+	DPRINTK("ncp_lookup_volume: looking up vol %s\n", volname);
+
+	ncp_init_request(server);
+	ncp_add_byte(server, 22); /* Subfunction: Generate dir handle */
+	ncp_add_byte(server, 0); /* DOS name space */
+	ncp_add_byte(server, 0); /* reserved */
+	ncp_add_byte(server, 0); /* reserved */
+	ncp_add_byte(server, 0); /* reserved */
+
+	ncp_add_byte(server, 0); /* faked volume number */
+	ncp_add_dword(server, 0); /* faked dir_base */
+	ncp_add_byte(server, 0xff); /* Don't have a dir_base */
+	ncp_add_byte(server, 1); /* 1 path component */
+	ncp_add_pstring(server, volname);
+
+	if ((result = ncp_request(server, 87)) != 0)
 	{
-		target->nameLen = strlen(volname);
-		strcpy(target->entryName, volname);
+		ncp_unlock_server(server);
+		return result;
 	}
 
+	dir_base = ncp_reply_dword(server, 4);
+	vol_num  = ncp_reply_byte(server, 8);
 	ncp_unlock_server(server);
+
+	if ((result = ncp_obtain_info(server, vol_num, dir_base, NULL,
+				      target)) != 0)
+	{
+		return result;
+	}
+
+	DPRINTK("ncp_lookup_volume: attribs = %X\n", target->attributes);
+
+	target->nameLen = strlen(volname);
+	strcpy(target->entryName, volname);
 	return 0;
 }
 

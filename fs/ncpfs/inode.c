@@ -1,7 +1,7 @@
 /*
  *  inode.c
  *
- *  Copyright (C) 1995 by Volker Lendecke
+ *  Copyright (C) 1995, 1996 by Volker Lendecke
  *
  */
 
@@ -58,50 +58,25 @@ ncp_read_inode(struct inode *inode)
            inode->i_ino. Just to make sure everything went well, we
            check it's there. */
 
-        struct ncp_inode_info *inode_info
-                = (struct ncp_inode_info *)(inode->i_ino);
+        struct ncp_inode_info *inode_info = ncp_find_inode(inode);
 
-#if 1
-        struct ncp_inode_info *root = &(NCP_SERVER(inode)->root);
-        struct ncp_inode_info *check_info = root;
-
-        do
+	if (inode_info == NULL)
 	{
-                if (inode_info == check_info)
-		{
-                        if (check_info->state == NCP_INODE_LOOKED_UP)
-			{
-                                DDPRINTK("ncp_read_inode: found it!\n");
-                                goto good;
-                        }
-                        else
-			{
-                                printk("ncp_read_inode: "
-                                       "state != NCP_INODE_LOOKED_UP\n");
-				goto good;
-                        }
-                }
-                check_info = check_info->next;
-        }
-	while (check_info != root);
+		/* Ok, now we're in trouble. The inode info is not there. What
+		   should we do now??? */
+		printk("ncp_read_inode: inode info not found\n");
+		return;
+	}
 
-        /* Ok, now we're in trouble. The inode info is not there. What
-           should we do now??? */
-        printk("ncp_read_inode: inode info not found\n");
-        return;
-
- good:
-	DDPRINTK("ncp_read_inode: read entry %s\n",
-		 inode_info->finfo.i.entryName);
-#endif
         inode_info->state = NCP_INODE_VALID;
 
         NCP_INOP(inode) = inode_info;
+	inode_info->inode = inode;
 
         if (NCP_ISTRUCT(inode)->attributes & aDIR)
 	{
                 inode->i_mode = NCP_SERVER(inode)->m.dir_mode;
-		/* for directories in dataStreamSize seems to be some
+		/* for directories dataStreamSize seems to be some
 		   Object ID ??? */
 		inode->i_size = 512;
 	}
@@ -173,7 +148,7 @@ ncp_put_inode(struct inode *inode)
 	{
                 DDPRINTK("ncp_put_inode: put directory %ld\n",
 			 inode->i_ino);
-                ncp_invalid_dir_cache(inode->i_ino);
+                ncp_invalid_dir_cache(inode);
         }                
 
 	clear_inode(inode);
@@ -286,8 +261,6 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 		goto fail;
 	}
    
-        ncp_init_root(server);
-
         /*
          * Make the connection to the server
          */
@@ -326,7 +299,9 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 
         DPRINTK("ncp_read_super: NCP_SBP(sb) = %x\n", (int)NCP_SBP(sb));
 
-	if (!(sb->s_mounted = iget(sb, (int)&(server->root))))
+	ncp_init_root(server);
+
+	if (!(sb->s_mounted = iget(sb, ncp_info_ino(server, &(server->root)))))
 	{
 		sb->s_dev = 0;
 		printk("ncp_read_super: get root inode failed\n");
@@ -537,7 +512,7 @@ ncp_notify_change(struct inode *inode, struct iattr *attr)
 		result = 0;
 	}
 
-        ncp_invalid_dir_cache((unsigned long)(NCP_INOP(inode)->dir));
+        ncp_invalid_dir_cache(NCP_INOP(inode)->dir->inode);
 
 	return result;
 }

@@ -1,4 +1,4 @@
-/* $Id: probe.c,v 1.39 1995/11/26 00:54:37 davem Exp $
+/* $Id: probe.c,v 1.42 1995/12/26 01:38:08 davem Exp $
  * probe.c: Preliminary device tree probing routines...
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -187,9 +187,6 @@ probe_cpu(void)
 			    fpu_vers);
 		sparc_fpu_type[cpuid] = linux_sparc_fpu[31].fp_name;
 	}
-
-	printk("cpu%d CPU: %s \n", cpuid, sparc_cpu_type[cpuid]);
-	printk("cpu%d FPU: %s \n", cpuid, sparc_fpu_type[cpuid]);
 }
 
 void
@@ -212,8 +209,9 @@ probe_vac(void)
 		sun4c_vacinfo.log2lsize = 5;
 		break;
 	default:
-		printk("probe_vac: Didn't expect vac-linesize of %d, halting\n",
+		prom_printf("probe_vac: Didn't expect vac-linesize of %d, halting\n",
 			    sun4c_vacinfo.linesize);
+		prom_halt();
 	};
 
 	propval = prom_getintdefault(prom_root_node, "vac_hwflush", -1);
@@ -222,49 +220,13 @@ probe_vac(void)
 							 "vac-hwflush", 0) :
 				      propval);
 
-	printk("SUN4C: VAC size %d line size %d using %s flushes ",
-	       sun4c_vacinfo.num_bytes, sun4c_vacinfo.linesize,
-	       (sun4c_vacinfo.do_hwflushes ? "hardware" : "software"));
 	if(sun4c_vacinfo.num_bytes != 65536) {
-		printk("WEIRD Sun4C VAC cache size, tell davem");
+		prom_printf("WEIRD Sun4C VAC cache size, tell davem");
 		prom_halt();
 	}
 
-	/* setup the low-level assembly routine ptrs */
-	if(sun4c_vacinfo.do_hwflushes) {
-		if(sun4c_vacinfo.linesize == 16) {
-			sun4c_ctxflush = (unsigned long)sun4c_ctxflush_hw64KB16B;
-			sun4c_segflush = (unsigned long)sun4c_segflush_hw64KB16B;
-			sun4c_pgflush = (unsigned long)sun4c_pgflush_hw64KB16B;
-		} else if(sun4c_vacinfo.linesize == 32) {
-			sun4c_ctxflush = (unsigned long)sun4c_ctxflush_hw64KB32B;
-			sun4c_segflush = (unsigned long)sun4c_segflush_hw64KB32B;
-			sun4c_pgflush = (unsigned long)sun4c_pgflush_hw64KB32B;
-		} else {
-			printk("WEIRD Sun4C VAC cache line size, tell davem\n");
-			prom_halt();
-		}
-	} else {
-		if(sun4c_vacinfo.linesize == 16) {
-			sun4c_ctxflush = (unsigned long)sun4c_ctxflush_sw64KB16B;
-			sun4c_segflush = (unsigned long)sun4c_segflush_sw64KB16B;
-			sun4c_pgflush = (unsigned long)sun4c_pgflush_sw64KB16B;
-		} else if(sun4c_vacinfo.linesize == 32) {
-			sun4c_ctxflush = (unsigned long)sun4c_ctxflush_sw64KB32B;
-			sun4c_segflush = (unsigned long)sun4c_segflush_sw64KB32B;
-			sun4c_pgflush = (unsigned long)sun4c_pgflush_sw64KB32B;
-		} else {
-			printk("WEIRD Sun4C VAC cache line size, tell davem\n");
-			prom_halt();
-		}
-	}
-
-
 	sun4c_flush_all();
 	sun4c_enable_vac();
-	printk("enabled\n");
-
-	return;
 }
 
 extern int num_segmaps, num_contexts;
@@ -284,9 +246,6 @@ probe_mmu(void)
 		/* A sun4, sun4c or sun4e. */
 		num_segmaps = prom_getintdefault(prom_root_node, "mmu-npmg", 128);
 		num_contexts = find_mmu_num_contexts(prom_root_node);
-
-		printk("cpu%d MMU segmaps: %d     MMU contexts: %d\n", cpuid,
-			    num_segmaps, num_contexts);
 		break;
 	default:
 		printk("cpu%d probe_mmu: sparc_cpu_model botch\n", cpuid);
@@ -444,9 +403,6 @@ probe_auxio(void)
 	/* Map the register both read and write */
 	sparc_alloc_io(auxregs[0].phys_addr, (void *) AUXIO_VADDR,
 		       auxregs[0].reg_size, "auxilliaryIO", auxregs[0].which_io, 0x0);
-	printk("Mapped AUXIO at paddr %08lx vaddr %08lx\n",
-		    (unsigned long) auxregs[0].phys_addr,
-		    (unsigned long) AUXIO_VADDR);
 }
 
 extern unsigned long probe_memory(void);
@@ -495,7 +451,9 @@ probe_devices(unsigned long mem_start)
 	linux_num_cpus = cpu_ctr;
 	for(i=0; i<cpu_ctr; i++) {
 		prom_getstring(cpu_nds[i], "name", node_str, sizeof(node_str));
+#if 0
 		printk("cpu%d: %s \n", i, node_str);
+#endif
 	}
 
 	probe_cpu();

@@ -837,7 +837,7 @@ gus_initialize (void)
 
   gus_select_voice (0);		/* This disables writes to IRQ/DMA reg */
 
-  gusintr (0, NULL, NULL);      /* Serve pending interrupts */
+  gusintr (0, NULL, NULL);	/* Serve pending interrupts */
   restore_flags (flags);
 }
 
@@ -3537,10 +3537,16 @@ static struct sound_lowlev_timer gus_tmr =
 static void
 gus_tmr_install (int io_base)
 {
+  struct sound_lowlev_timer *tmr;
+
   select_addr = io_base;
   data_addr = io_base + 1;
 
+  tmr = &gus_tmr;
+
+#ifdef THIS_GETS_FIXED
   sound_timer_init (&gus_tmr, "GUS");
+#endif
 }
 #endif
 

@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.15 1995/11/25 02:33:12 davem Exp $ */
+/* $Id: unistd.h,v 1.16 1995/12/29 23:14:26 miguel Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -258,23 +258,22 @@
 #define __NR_mlockall           239
 #define __NR_munlockall         240
 
-/* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar.
- * XXX These need to be fixed to check the condition codes to see
- * XXX the return value is an errorno or success.
- */
 #define _syscall0(type,name) \
 type name(void) \
 { \
 long __res; \
 __asm__ volatile ("or %%g0, %0, %%g1\n\t" \
 		  "t 0x10\n\t" \
+		  "bcc 1f\n\t" \
 		  "or %%g0, %%o0, %0\n\t" \
-		  : "=r" (__res) \
+		  "sub %%g0, %%o0, %0\n\t" \
+		  "1:\n\t" \
+		  : "=r" (__res)\
 		  : "0" (__NR_##name) \
 		  : "g1"); \
 if (__res >= 0) \
     return (type) __res; \
-errno = __res; \
+errno = -__res; \
 return -1; \
 }
 
@@ -285,13 +284,16 @@ long __res; \
 __asm__ volatile ("or %%g0, %0, %%g1\n\t" \
 		  "or %%g0, %1, %%o0\n\t" \
 		  "t 0x10\n\t" \
+		  "bcc 1f\n\t" \
 		  "or %%g0, %%o0, %0\n\t" \
+		  "sub %%g0, %%o0, %0\n\t" \
+		  "1:\n\t" \
 		  : "=r" (__res), "=r" ((long)(arg1)) \
 		  : "0" (__NR_##name),"1" ((long)(arg1)) \
 		  : "g1", "o0"); \
 if (__res >= 0) \
 	return (type) __res; \
-errno = __res; \
+errno = -__res; \
 return -1; \
 }
 
@@ -303,13 +305,16 @@ __asm__ volatile ("or %%g0, %0, %%g1\n\t" \
 		  "or %%g0, %1, %%o0\n\t" \
 		  "or %%g0, %2, %%o1\n\t" \
 		  "t 0x10\n\t" \
+		  "bcc 1f\n\t" \
 		  "or %%g0, %%o0, %0\n\t" \
+		  "sub %%g0,%%o0,%0\n\t" \
+		  "1:\n\t" \
 		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)) \
 		  : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)) \
 		  : "g1", "o0", "o1"); \
 if (__res >= 0) \
 	return (type) __res; \
-errno = __res; \
+errno = -__res; \
 return -1; \
 }
 
@@ -322,7 +327,10 @@ __asm__ volatile ("or %%g0, %0, %%g1\n\t" \
 		  "or %%g0, %2, %%o1\n\t" \
 		  "or %%g0, %3, %%o2\n\t" \
 		  "t 0x10\n\t" \
+		  "bcc 1f\n\t" \
 		  "or %%g0, %%o0, %0\n\t" \
+		  "sub %%g0, %%o0, %0\n\t" \
+		  "1:\n\t" \
 		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
 		    "=r" ((long)(arg3)) \
 		  : "0" (__NR_##name), "1" ((long)(arg1)), "2" ((long)(arg2)), \
@@ -330,7 +338,7 @@ __asm__ volatile ("or %%g0, %0, %%g1\n\t" \
 		  : "g1", "o0", "o1", "o2"); \
 if (__res>=0) \
 	return (type) __res; \
-errno = __res; \
+errno = -__res; \
 return -1; \
 }
 
@@ -344,7 +352,10 @@ __asm__ volatile ("or %%g0, %0, %%g1\n\t" \
 		  "or %%g0, %3, %%o2\n\t" \
 		  "or %%g0, %4, %%o3\n\t" \
 		  "t 0x10\n\t" \
+		  "bcc 1f\n\t" \
 		  "or %%g0, %%o0, %0\n\t" \
+		  "sub %%g0,%%o0, %0\n\t" \
+		  "1:\n\t" \
 		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
 		    "=r" ((long)(arg3)), "=r" ((long)(arg4)) \
 		  : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
@@ -352,7 +363,7 @@ __asm__ volatile ("or %%g0, %0, %%g1\n\t" \
 		  : "g1", "o0", "o1", "o2", "o3"); \
 if (__res>=0) \
 	return (type) __res; \
-errno = __res; \
+errno = -__res; \
 return -1; \
 } 
 
@@ -376,10 +387,9 @@ __asm__ volatile ("or %%g0, %0, %%g1\n\t" \
 		  : "g1", "o0", "o1", "o2", "o3", "o4"); \
 if (__res>=0) \
 	return (type) __res; \
-errno = __res; \
+errno = -__res; \
 return -1; \
 }
-
 #ifdef __KERNEL_SYSCALLS__
 
 /*
@@ -465,5 +475,15 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 }
 
 #endif /* __KERNEL_SYSCALLS__ */
+
+/* sysconf options, for SunOS compatibility */
+#define   _SC_ARG_MAX             1
+#define   _SC_CHILD_MAX           2
+#define   _SC_CLK_TCK             3
+#define   _SC_NGROUPS_MAX         4
+#define   _SC_OPEN_MAX            5
+#define   _SC_JOB_CONTROL         6
+#define   _SC_SAVED_IDS           7
+#define   _SC_VERSION             8
 
 #endif /* _SPARC_UNISTD_H */

@@ -1,8 +1,10 @@
 Configuring version 3.5 (for Linux) with some most common soundcards
 ====================================================================
 
-NOTE! This document may contain some error. Please inform me
-      if you find any mistakes.
+IMPORTANT!	This document covers only cards that were "known" when
+		this driver version was released. Please look at
+		http://personal.eunet.fi/pp/voxware for info about
+		cards introduced recently.
 
 Cards that are not (fully) supported by this driver
 ---------------------------------------------------
@@ -164,10 +166,14 @@ Audio Excell DSP16
 	Support for this card is made by Riccardo Faccetti
 	(riccardo@cdc8g5.cdc.polimi.it). See aedsp16.c for more info.
 	
-Crystal CS4232 based cards such as AcerMagic S23 and many PC motherboards.
+Crystal CS4232 based cards such as AcerMagic S23 and many PC motherboards
+	(Compaq, HP, Intel, ...).
 	CS4232 is a PnP multimedia chip which contains a CS3231A codec,
 	SB and MPU401 emulations. There is support for OPL3 too.
-	(Unfortunately the MPU401 mode doesn't work).
+	This is a temporary driver which uses the chip in non PnP mode
+	(The final driver should be included in version 3.6 of the driver).
+	Unfortunately the MPU401 mode doesn't work. The chip may also stop
+	working after it has been used few times (only cold boot resets it).
 
 Turtle Beach Maui and Tropez
 	This driver version supports sample, patch and program loading commands
@@ -527,11 +533,16 @@ If you have problems in recording with GUS MAX, you could try to use
 just one 8 bit DMA channel. Recording will not work with one DMA
 channel if it's a 16 bit one.
 
+Microphone input of GUS MAX is connected to mixer in little bit nonstandard
+way. There is actually two microphone volume controls. Normal "mic" controls
+only recording level. Mixer control "speaker" is used to control volume of
+microphone signal connected directly to line/speaker out. So just decrease
+volume of "speaker" if you have problems with microphone feedback.
 
 GUS ACE works too but any attempt to record or to use the MIDI port
 will fail.
 
-GUS PnP (with RAM) is supported but it needs to be initialized using
+GUS PnP (with RAM) is partially supported but it needs to be initialized using
 DOS before booting Linux. This may fail on machines having PnP BIOS.
 
 MPU401 and Windows Sound System
@@ -688,13 +699,10 @@ Tropez is jumper configurable and not connected to the MAD16 chip.
 It can be used by enabling the stand alone MPU401 support but you have
 to initialize it by using the MS-DOS SNDSETUP program.
 
-There are some other OPTi chips which may be used in soundcards such as
-82C930 and MAC32. These chips are not supported by the driver yet. Please
-contact me if you have a soundcard which uses these chips.
-
 Some MAD16 based cards may cause feedback, whistle or terrible noise if the
 line3 mixer channel is turned too high. This happens at least with Shuttle
-Sound System.
+Sound System. Current driver versions set volume of line3 low enough so
+this should not be a problem.
 
 If you have a MAD16 card which have an OPL4 (FM + Wave table) synthesizer
 chip (_not_ an OPL3), you have to apped line containing #define MAD16_OPL4

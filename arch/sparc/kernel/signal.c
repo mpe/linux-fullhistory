@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.20 1995/11/26 02:29:09 davem Exp $
+/*  $Id: signal.c,v 1.28 1995/12/29 21:47:18 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -28,81 +28,76 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs);
  * atomically swap in the new signal mask, and wait for a signal.
  * This is really tricky on the Sparc, watch out...
  */
-asmlinkage inline int _sigpause_common(unsigned int set, struct pt_regs *regs)
+asmlinkage inline void _sigpause_common(unsigned int set, struct pt_regs *regs)
 {
 	unsigned long mask;
 
 	mask = current->blocked;
 	current->blocked = set & _BLOCKABLE;
+
 	/* Advance over the syscall instruction for when
 	 * we return.  We want setup_frame to save the proper
-	 * state, but then below we set ourselves backwards
-	 * to compensate for what ret_sys_call does. Ick!
+	 * state, including the error return number & condition
+	 * codes.
 	 */
-	regs->pc += 4;
+	regs->pc = regs->npc;
 	regs->npc += 4;
+	regs->psr |= PSR_C;
+	regs->u_regs[UREG_I0] = EINTR;
 
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
-		if (do_signal(mask, regs)) {
-			/* If we actually post the signal then we
-			 * will get our PCs advanced in entry.S, to
-			 * compensate we throw the PCs back one insn.
-			 */
-			regs->pc -= 4;
-			regs->npc -= 4;
-			return -EINTR;
-		}
+		if (do_signal(mask, regs))
+			return;
 	}
 }
 
-asmlinkage int sys_sigpause(unsigned int set)
+asmlinkage void do_sigpause(unsigned int set, struct pt_regs *regs)
 {
-	struct pt_regs *regs;
-	unsigned long fp;
-
-	__asm__ __volatile__("mov %%fp, %0\n\t" :
-			     "=r" (fp));
-	regs = ((struct pt_regs *) (fp + STACKFRAME_SZ));
-	return _sigpause_common(set, regs);
+	_sigpause_common(set, regs);
 }
 
-asmlinkage int sys_sigsuspend(unsigned int *sigmaskp)
+asmlinkage void do_sigsuspend(unsigned int *sigmaskp, struct pt_regs *regs)
 {
-	struct pt_regs *regs;
-	unsigned long fp;
 	unsigned int set;
 
-	__asm__ __volatile__("mov %%fp, %0\n\t" :
-			     "=r" (fp));
-	regs = ((struct pt_regs *) (fp + STACKFRAME_SZ));
-	if(verify_area(VERIFY_READ, sigmaskp, sizeof(unsigned int)))
-		return -EFAULT;
+	/* Manual does not state what is supposed to happen if
+	 * the sigmask ptr is bogus.  It does state that EINTR
+	 * is the only valid return value and it indicates
+	 * successful signal delivery.  Must investigate.
+	 */
+	if(verify_area(VERIFY_READ, sigmaskp, sizeof(unsigned int))) {
+		regs->pc = regs->npc;
+		regs->npc += 4;
+		regs->u_regs[UREG_I0] = EFAULT;
+		regs->psr |= PSR_C;
+		return;
+	}
 	set = *sigmaskp;
-	return _sigpause_common(set, regs);
+	_sigpause_common(set, regs);
 }
-
-extern unsigned long nwindows;
 
 asmlinkage void do_sigreturn(struct pt_regs *regs)
 {
 	struct sigcontext_struct *scptr =
 		(struct sigcontext_struct *) regs->u_regs[UREG_I0];
 
-	/* Make the stack consistant. */
-	flush_user_windows();
+	synchronize_user_stack();
 
 	/* Check sanity of the user arg. */
 	if(verify_area(VERIFY_READ, scptr, sizeof(struct sigcontext_struct)) ||
-	   ((((unsigned long) scptr)) & 0x3))
+	   ((((unsigned long) scptr)) & 0x3)) {
+		printk("%s [%d]: do_sigreturn, scptr is invalid at pc<%08lx> scptr<%p>\n",
+		       current->comm, current->pid, regs->pc, scptr);
 		do_exit(SIGSEGV);
+	}
 
 	if((scptr->sigc_pc | scptr->sigc_npc) & 3)
 		return; /* Nice try. */
 
 	current->blocked = scptr->sigc_mask & _BLOCKABLE;
-	current->tss.sstk_info.cur_status = (scptr->sigc_onstack & 0x1);
+	current->tss.sstk_info.cur_status = (scptr->sigc_onstack & 1);
 	regs->pc = scptr->sigc_pc;
 	regs->npc = scptr->sigc_npc;
 	regs->u_regs[UREG_FP] = scptr->sigc_sp;
@@ -112,38 +107,6 @@ asmlinkage void do_sigreturn(struct pt_regs *regs)
 	/* User can only change condition codes in %psr. */
 	regs->psr &= (~PSR_ICC);
 	regs->psr |= (scptr->sigc_psr & PSR_ICC);
-}
-
-/* I love register windows...
- * Basically, this tries to get as many of the current user
- * windows on the stack as possible, even if unaligned.  Failing
- * that the windows end up in the per-task window save buffer
- * in the thread struct, these will be copied onto the signal
- * stack for possible inspection by the process.
- */
-static inline void
-do_magic_sparc_stuff(void)
-{
-	unsigned long sp;
-	int this_win;
-
-	flush_user_windows();
-	this_win = (current->tss.w_saved - 1);
-	while(this_win >= 0) {
-		sp = current->tss.rwbuf_stkptrs[this_win];
-		if(!(sp & 7) && !verify_area(VERIFY_WRITE, (char *)sp,
-		                             sizeof(struct reg_window))) {
-			memcpy((char *)sp,
-			       (char *)&current->tss.reg_window[this_win],
-			       sizeof(struct reg_window));
-			current->tss.w_saved--;
-			memcpy((char *)&current->tss.reg_window[this_win],
-			       (char *)&current->tss.reg_window[this_win+1],
-			       (sizeof(struct reg_window) *
-			       (current->tss.w_saved-this_win)));
-		}
-		this_win -= 1;
-	}
 }
 
 /*
@@ -172,25 +135,27 @@ struct signal_sframe {
 
 static inline void
 setup_frame(struct sigaction *sa, struct sigcontext_struct **fp,
-	    unsigned long pc, struct pt_regs *regs, int signr,
-	    unsigned long oldmask)
+	    unsigned long pc, unsigned long npc, struct pt_regs *regs,
+	    int signr, unsigned long oldmask)
 {
 	struct signal_sframe *sframep;
 	struct sigcontext_struct *sc;
 	int window = 0;
 	int old_status = current->tss.sstk_info.cur_status;
 
+	synchronize_user_stack();
 	sframep = (struct signal_sframe *) *fp;
 	sframep = (struct signal_sframe *) (((unsigned long) sframep)-SF_ALIGNEDSZ);
 	sc = &sframep->sig_context;
 	if(verify_area(VERIFY_WRITE, sframep, sizeof(*sframep)) ||
 	   (((unsigned long) sframep) & 7) ||
-	   (((unsigned long) sframep) >= KERNBASE)) {
+	   (((unsigned long) sframep) >= KERNBASE) ||
+	   ((sparc_cpu_model == sun4 || sparc_cpu_model == sun4c) &&
+	    ((unsigned long) sframep < 0xe0000000 && (unsigned long) sframep >= 0x20000000))) {
 		printk("%s [%d]: User has trashed signal stack\n",
 		       current->comm, current->pid);
 		printk("Sigstack ptr %p handler at pc<%08lx> for sig<%d>\n",
 		       sframep, pc, signr);
-		show_regs(regs);
 		/* Don't change signal code and address, so that
 		 * post mortem debuggers can have a look.
 		 */
@@ -200,13 +165,12 @@ setup_frame(struct sigaction *sa, struct sigcontext_struct **fp,
 		return;
 	}
 	*fp = (struct sigcontext_struct *) sframep;
-	do_magic_sparc_stuff();
 
 	sc->sigc_onstack = old_status;
 	sc->sigc_mask = oldmask;
 	sc->sigc_sp = regs->u_regs[UREG_FP];
-	sc->sigc_pc = regs->pc;
-	sc->sigc_npc = regs->npc;
+	sc->sigc_pc = pc;
+	sc->sigc_npc = npc;
 	sc->sigc_psr = regs->psr;
 	sc->sigc_g1 = regs->u_regs[UREG_G1];
 	sc->sigc_o0 = regs->u_regs[UREG_I0];
@@ -220,12 +184,6 @@ setup_frame(struct sigaction *sa, struct sigcontext_struct **fp,
 			       sizeof(struct reg_window));
 		}
 	else
-		/* This is so that gdb and friends can trace back
-		 * through the stack properly.  An alternative
-		 * is to set the fp in this new window to the
-		 * sp of the frame at the time of the signal and
-		 * I see some problems with that maneuver.
-		 */
 		memcpy(sframep, (char *)regs->u_regs[UREG_FP],
 		       sizeof(struct reg_window));
 
@@ -243,6 +201,7 @@ setup_frame(struct sigaction *sa, struct sigcontext_struct **fp,
 		sframep->sig_address = 0;
 	}
 	sframep->sig_scptr = sc;
+	regs->u_regs[UREG_FP] = (unsigned long) *fp;
 }
 
 /*
@@ -261,6 +220,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	unsigned long handler_signal = 0;
 	struct sigcontext_struct *frame = NULL;
 	unsigned long pc = 0;
+	unsigned long npc = 0;
 	unsigned long signr;
 	struct sigaction *sa;
 
@@ -269,22 +229,6 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 		clear_bit(signr, &current->signal);
 		sa = current->sig->action + signr;
 		signr++;
-		if((current->flags & PF_PTRACED) && signr != SIGKILL) {
-			current->exit_code = signr;
-			current->state = TASK_STOPPED;
-			notify_parent(current);
-			schedule();
-			if(!(signr = current->exit_code))
-				continue;
-			current->exit_code = 0;
-			if(signr == SIGSTOP)
-				continue;
-			if(_S(signr) & current->blocked) {
-				current->signal |= _S(signr);
-				continue;
-			}
-			sa = current->sig->action + signr - 1;
-		}
 		if(sa->sa_handler == SIG_IGN) {
 			if(signr != SIGCHLD)
 				continue;
@@ -299,8 +243,6 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 				continue;
 
 			case SIGSTOP: case SIGTSTP: case SIGTTIN: case SIGTTOU:
-				if(current->flags & PF_PTRACED)
-					continue;
 				current->state = TASK_STOPPED;
 				current->exit_code = signr;
 				if(!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags &
@@ -322,12 +264,27 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 			}
 		}
 		/* OK, we're invoking a handler. */
+		if(regs->psr & PSR_C) {
+			if(regs->u_regs[UREG_I0] == ERESTARTNOHAND ||
+			   (regs->u_regs[UREG_I0] == ERESTARTSYS && !(sa->sa_flags & SA_RESTART)))
+				regs->u_regs[UREG_I0] = EINTR;
+		}
 		handler_signal |= 1 << (signr - 1);
 		mask &= ~sa->sa_mask;
+	}
+	if((regs->psr & PSR_C) &&
+	   (regs->u_regs[UREG_I0] == ERESTARTNOHAND ||
+	    regs->u_regs[UREG_I0] == ERESTARTSYS ||
+	    regs->u_regs[UREG_I0] == ERESTARTNOINTR)) {
+		/* replay the system call when we are done */
+		regs->u_regs[UREG_I0] = regs->u_regs[UREG_G0];
+		regs->pc -= 4;
+		regs->npc -= 4;
 	}
 	if(!handler_signal)
 		return 0;
 	pc = regs->pc;
+	npc = regs->npc;
 	frame = (struct sigcontext_struct *) regs->u_regs[UREG_FP];
 	signr = 1;
 	sa = current->sig->action;
@@ -336,15 +293,16 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 			break;
 		if(!(mask & handler_signal))
 			continue;
-		setup_frame(sa, &frame, pc, regs, signr, oldmask);
+		setup_frame(sa, &frame, pc, npc, regs, signr, oldmask);
 		pc = (unsigned long) sa->sa_handler;
+		npc = pc + 4;
 		if(sa->sa_flags & SA_ONESHOT)
 			sa->sa_handler = NULL;
 		current->blocked |= sa->sa_mask;
 		oldmask |= sa->sa_mask;
 	}
-	regs->u_regs[UREG_FP] = (unsigned long) frame;
-	regs->npc = (regs->pc = pc) + 4;
+	regs->pc = pc;
+	regs->npc = npc;
 	return 1;
 }
 

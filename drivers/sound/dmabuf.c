@@ -738,7 +738,13 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_GETBLKSIZE:
       if (!(dmap_out->flags & DMA_ALLOC_DONE))
-	reorganize_buffers (dev, dmap_out, 0);
+	{
+	  reorganize_buffers (dev, dmap_out,
+			      (audio_devs[dev]->open_mode == OPEN_READ));
+	  if (audio_devs[dev]->flags & DMA_DUPLEX)
+	    reorganize_buffers (dev, dmap_in,
+				(audio_devs[dev]->open_mode == OPEN_READ));
+	}
 
       return snd_ioctl_return ((int *) arg, dmap_out->fragment_size);
       break;
@@ -1403,6 +1409,7 @@ DMAbuf_outputintr (int dev, int event_type)
 
 	      dmap->cfrag = -1;
 	      dmap->flags |= DMA_EMPTY;
+	      dmap->counts[dmap->qtail] = dmap->fragment_size;
 	    }
 	}
 
@@ -1410,6 +1417,10 @@ DMAbuf_outputintr (int dev, int event_type)
 	{
 	  if (!(audio_devs[dev]->flags & DMA_AUTOMODE))
 	    {
+
+	      if (dmap->counts[dmap->qhead] == 0)
+		dmap->counts[dmap->qhead] = dmap->fragment_size;
+
 	      audio_devs[dev]->output_block (dev, dmap->raw_buf_phys +
 					  dmap->qhead * dmap->fragment_size,
 					     dmap->counts[dmap->qhead], 1,

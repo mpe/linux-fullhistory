@@ -1,17 +1,22 @@
 /* lance.c: Linux/Sparc/Lance driver */
 /*
-	Written 1995 by Miguel de Icaza
+	Written 1995, 1996 by Miguel de Icaza
   Sources:
 	The Linux  depca driver
 	The Linux  lance driver.
 	The Linux  skeleton driver.
         The NetBSD Sparc/Lance driver.
-	Theo Deraadt (deraadt@theos.com)
+	Theo de Raadt (deraadt@openbsd.org)
 	NCR92C990 Lan Controller manual
-*/
 
+1.4:
+	Added support to run with a ledma on the Sun4m
+*/
+#undef DEBUG_DRIVER
 static char *version =
-	"lance.c:v1.2 29/Oct/95 Miguel de Icaza (miguel@nuclecu.unam.mx)\n";
+	"sunlance.c:v1.4 17/Feb/96 Miguel de Icaza (miguel@nuclecu.unam.mx)\n";
+
+static char *lancestr = "LANCE";
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -42,9 +47,6 @@ static char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
-#define MASK_INTERRUPTS   1
-#define UNMASK_INTERRUPTS 0
 
 /* Define: 2^2 Tx buffers and 2^4 Rx buffers */
 #ifndef LANCE_LOG_TX_BUFFERS
@@ -114,8 +116,8 @@ static char *version =
 #define RX_RING_LEN_BITS		((LANCE_LOG_RX_BUFFERS) << 29)
 
 #define PKT_BUF_SZ		1544
-#define RX_BUFF_SIZE            1536
-#define TX_BUFF_SIZE            1536
+#define RX_BUFF_SIZE            PKT_BUF_SZ
+#define TX_BUFF_SIZE            PKT_BUF_SZ
 
 struct lance_rx_desc {
     unsigned short rmd0;        /* low address of packet */
@@ -155,14 +157,15 @@ struct lance_init_block {
 };
 
 struct lance_private {
-	char *name;
-	volatile struct lance_regs *ll;
-	volatile struct lance_init_block *init_block;
-	
-	int rx_new, tx_new;
-	int rx_old, tx_old;
-
-	struct enet_statistics stats;
+    char *name;
+    volatile struct lance_regs *ll;
+    volatile struct lance_init_block *init_block;
+    
+    int rx_new, tx_new;
+    int rx_old, tx_old;
+    
+    struct enet_statistics stats;
+    struct Linux_SBus_DMA *ledma; /* if set this points to ledma and arch=4m */
 };
 
 #define TX_BUFFS_AVAIL ((lp->tx_old<=lp->tx_new)?\
@@ -178,7 +181,8 @@ struct lance_regs {
 int sparc_lance_debug = 2;
 
 /* The Lance uses 24 bit addresses */
-/* The DVMA will provide the remaining bytes for us */
+/* On the Sun4c the DVMA will provide the remaining bytes for us */
+/* On the Sun4m we have to instruct the ledma to provide them    */
 #define LANCE_ADDR(x) ((int)(x) & ~0xff000000)
 
 /* Load the CSR registers */
@@ -277,7 +281,8 @@ lance_init_ring (struct device *dev)
     ib->filter [1] = 0;
 }
 
-static int init_restart_lance (struct lance_private *lp)
+static int
+init_restart_lance (struct lance_private *lp)
 {
     volatile struct lance_regs *ll = lp->ll;
     int i;
@@ -290,13 +295,19 @@ static int init_restart_lance (struct lance_private *lp)
 	;
     if ((i == 100) || (ll->rdp & LE_C0_ERR)){
 	printk ("LANCE unopened after %d ticks, csr0=%4.4x.\n", i, ll->rdp);
+	if (lp->ledma)
+	    printk ("dcsr=%8.8x\n", (unsigned int) lp->ledma->regs->cond_reg);
 	return -1;
     }
 
     /* Clear IDON by writing a "1", enable interrupts and start lance */
     ll->rdp = LE_C0_IDON;
     ll->rdp = LE_C0_INEA | LE_C0_STRT;
-    printk ("LANCE opened after %d ticks, csr0=%4.4x\n", i, ll->rdp);
+
+    /* On the 4m, enable dma interrupts */
+    if (lp->ledma)
+	lp->ledma->regs->cond_reg |= DMA_INT_ENAB;
+
     return 0;
 }
 
@@ -307,8 +318,6 @@ lance_rx (struct device *dev)
     volatile struct lance_init_block *ib = lp->init_block;
     volatile struct lance_regs *ll = lp->ll;
     volatile struct lance_rx_desc *rd;
-    int i;
-    int entry;
     unsigned char bits;
 
 #ifdef TEST_HITS
@@ -322,71 +331,28 @@ lance_rx (struct device *dev)
     printk ("]");
 #endif
     
-#ifdef OLD_METHOD
-    ll->rdp = LE_C0_RINT|LE_C0_INEA;
-    /* FIXME: Add slot prediction */
-    for (rd = &ib->brx_ring [i = 0]; i < RX_RING_SIZE; i++, rd++){
-	int bits;
-	
-	bits = rd->rmd1_bits;
-
-	/* Check if we own the packet */
-	if (bits & LE_R1_OWN)
-	    continue;
-
-	/* We got an incomplete frame? */
-	if ((bits & LE_R1_POK) != LE_R1_POK){
-	    /* Count only the end frame as a tx error, not the beginning */
-	    if (bits & LE_R1_EOP) lp->stats.rx_errors++;
-	    if (bits & LE_R1_BUF) lp->stats.rx_fifo_errors++;
-	    if (bits & LE_R1_CRC) lp->stats.rx_crc_errors++;
-	    if (bits & LE_R1_OFL) lp->stats.rx_over_errors++;
-  	    if (bits & LE_R1_FRA) lp->stats.rx_frame_errors++;
-	} else {
-	    int pkt_len = rd->mblength;
-	    struct sk_buff *skb;
-	    char *buf;
-	    
-	    skb = dev_alloc_skb (pkt_len+2);
-	    if (skb == NULL){
-		printk ("%s: Memory squeeze, deferring packet.\n", dev->name);
-		lp->stats.rx_dropped++;
-		rd->rmd1_bits = LE_R1_OWN;
-		return 0;
-	    }
-	    
-	    skb->dev = dev;
-	    skb_reserve (skb, 2);               /* 16 byte align */
-	    buf = skb_put (skb, pkt_len);       /* make room */
-	    memcpy (buf, &(ib->rx_buf [i][0]), pkt_len);
-	    skb->protocol = eth_type_trans (skb,dev);
-	    netif_rx (skb);
-	    lp->stats.rx_packets++;
-	}
-
-	/* Return the packet to the pool */
-	rd->rmd1_bits = LE_R1_OWN;
-    }
-#else
     ll->rdp = LE_C0_RINT|LE_C0_INEA;
     for (rd = &ib->brx_ring [lp->rx_new];
 	 !((bits = rd->rmd1_bits) & LE_R1_OWN);
 	 rd = &ib->brx_ring [lp->rx_new]){
+	int pkt_len;
+	struct sk_buff *skb;
+	char *buf;
 
 	/* We got an incomplete frame? */
 	if ((bits & LE_R1_POK) != LE_R1_POK){
-	    printk ("Incomplete frame\n");
+	    lp->stats.rx_over_errors++;
+	    lp->stats.rx_errors++;
+	    continue;
+	} else if (bits & LE_R1_ERR){
 	    /* Count only the end frame as a tx error, not the beginning */
-	    if (bits & LE_R1_EOP) lp->stats.rx_errors++;
 	    if (bits & LE_R1_BUF) lp->stats.rx_fifo_errors++;
 	    if (bits & LE_R1_CRC) lp->stats.rx_crc_errors++;
 	    if (bits & LE_R1_OFL) lp->stats.rx_over_errors++;
   	    if (bits & LE_R1_FRA) lp->stats.rx_frame_errors++;
+	    if (bits & LE_R1_EOP) lp->stats.rx_errors++;
 	} else {
-	    int pkt_len = rd->mblength;
-	    struct sk_buff *skb;
-	    char *buf;
-
+	    pkt_len = rd->mblength;
 	    skb = dev_alloc_skb (pkt_len+2);
 	    if (skb == NULL){
 		printk ("%s: Memory squeeze, deferring packet.\n", dev->name);
@@ -409,7 +375,6 @@ lance_rx (struct device *dev)
 	rd->rmd1_bits = LE_R1_OWN;
 	lp->rx_new = (lp->rx_new + 1) & RX_RING_MOD_MASK;
     }
-#endif
     return 0;
 }
 
@@ -446,9 +411,13 @@ lance_tx (struct device *dev)
 		/* Stop the lance */
 		ll->rdp = LE_CSR0;
 		ll->rap = LE_C0_STOP;
+		lance_init_ring (dev);
+		load_csrs (lp);
 		init_restart_lance (lp);
+		return 0;
 	    }
-	}
+        } else
+		lp->stats.tx_packets++;
 	
 	j = (j + 1) & TX_RING_MOD_MASK;
     }
@@ -469,13 +438,19 @@ lance_interrupt (int irq, void *dev_id, struct pt_regs *regs)
     lp = (struct lance_private *) dev->priv;
     ll = lp->ll;
 
+    if (lp->ledma)
+	if (lp->ledma->regs->cond_reg & DMA_HNDL_ERROR){
+	    printk ("%s: should reset my ledma (dmacsr=%8.8x, csr=%4.4x\n", dev->name,
+		    (unsigned int) lp->ledma->regs->cond_reg, ll->rdp); 
+	    printk ("send mail to miguel@nuclecu.unam.mx\n");
+	}
     if (dev->interrupt)
 	printk ("%s: again", dev->name);
     
     dev->interrupt = 1;
 
     csr0 = ll->rdp;
-    
+
     /* Acknowledge all the interrupt sources ASAP */
     ll->rdp = csr0 & 0x004f;
     
@@ -512,16 +487,20 @@ lance_open (struct device *dev)
     int status = 0;
 
     last_dev = dev;
-    
+
+    if (request_irq (dev->irq, &lance_interrupt, 0, lancestr, NULL)){
+	printk ("Lance: Can't get irq %d\n", dev->irq);
+	return -EAGAIN;
+    }
     /* Stop the Lance */
     ll->rap = LE_CSR0;
     ll->rdp = LE_C0_STOP;
 
-    if (request_irq (dev->irq, &lance_interrupt, 0, "LANCE", NULL)){
-	printk ("Lance: Can't get irq %d\n", dev->irq);
-	return -EAGAIN;
-    }
     irq2dev_map [dev->irq] = dev;
+
+    /* On the 4m, setup the ledma to provide the upper bits for buffers */
+    if (lp->ledma)
+	lp->ledma->regs->dma_test = ((unsigned int) lp->init_block) & 0xff000000;
 
     lance_init_ring (dev);
     load_csrs (lp);
@@ -531,28 +510,15 @@ lance_open (struct device *dev)
     dev->start = 1;
 
     status = init_restart_lance (lp);
-
-    /* To make life easier to us while Sparc Linux becomes self hosting: */
-    {
-	    struct rtentry server_route;
-	    struct sockaddr_in *sin;
-	    
-	    sin=(struct sockaddr_in *)&server_route.rt_dst;
-	    *sin=server;
-	    sin=(struct sockaddr_in *)&server_route.rt_genmask;
-	    sin->sin_family=AF_INET;
-	    sin->sin_addr.s_addr= ip_get_mask (dev->pa_addr);
-	    server_route.rt_dev[0]=dev;
-	    server_route.
-	    server_route.rt_flags=RTF_HOST|RTF_UP;
-
-	    if(ip_rt_new(&server_route)==-1)
-		    printk("Unable to add NFS server route.\n");
-    }
-    ip_rt_add (RTF_UP,
-	       dev->pa_addr & ip_get_mask (dev->pa_addr),
-	       ip_get_mask (dev->pa_addr),
-	       0, dev, dev->mtu, 0, 0);
+    if (lp->ledma)
+	lp->ledma->regs->cond_reg |= DMA_INT_ENAB;
+#if 0
+    /* To emulate SunOS, we add a route to the local network */
+    rt_add (RTF_UP,
+	    dev->pa_addr & ip_get_mask (dev->pa_addr),
+	    ip_get_mask (dev->pa_addr),
+	    0, dev, dev->mtu, 0, 0);
+#endif
     return status;
 }
 
@@ -575,7 +541,8 @@ lance_close (struct device *dev)
     return 0;
 }
 
-inline static int lance_reset (struct device *dev)
+inline static int
+lance_reset (struct device *dev)
 {
     struct lance_private *lp = (struct lance_private *)dev->priv;
     volatile struct lance_regs *ll = lp->ll;
@@ -584,9 +551,15 @@ inline static int lance_reset (struct device *dev)
     /* Stop the lance */
     ll->rdp = LE_CSR0;
     ll->rap = LE_C0_STOP;
-#ifdef DEBUG_DRIVER
-    printk ("Lance stopped: csr0=%4.4x\n", ll->rdp);
-#endif
+
+    /* On the 4m, reset the dma too */
+    if (lp->ledma){
+	printk ("resetting ledma\n");
+	lp->ledma->regs->cond_reg |= DMA_RST_ENET;
+	udelay (200);
+	lp->ledma->regs->cond_reg &= ~DMA_RST_ENET;
+	lp->ledma->regs->cond_reg |= DMA_INT_ENAB;
+    }
     lance_init_ring (dev);
     load_csrs (lp);
     dev->trans_start = jiffies;
@@ -597,9 +570,11 @@ inline static int lance_reset (struct device *dev)
 #ifdef DEBUG_DRIVER
     printk ("Lance restart=%d\n", status);
 #endif
+    return status;
 }
 
-static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
+static int
+lance_start_xmit (struct sk_buff *skb, struct device *dev)
 {
     struct lance_private *lp = (struct lance_private *)dev->priv;
     volatile struct lance_regs *ll = lp->ll;
@@ -649,9 +624,13 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 
 #ifdef DEBUG_DRIVER
     /* dump the packet */
-    for (i = 0; i < 64; i++){
-	if ((i % 16) == 0) printk ("\n");
-	printk ("%2.2x ", skb->data [i]);
+    {
+	int i;
+	
+	for (i = 0; i < 64; i++){
+	    if ((i % 16) == 0) printk ("\n");
+	    printk ("%2.2x ", skb->data [i]);
+	}
     }
 #endif
     len = (skblen < ETH_ZLEN) ? ETH_ZLEN : skblen;
@@ -692,7 +671,7 @@ lance_get_stats (struct device *dev)
 }
 
 static void
-lance_set_multicast (struct device *dev)
+lance_set_multicast (struct device *dev, int num_addrs, void *addrs)
 {
 #ifdef NOT_YET
     struct lance_private *lp = (struct lance_private *) dev->priv;
@@ -714,6 +693,19 @@ lance_set_multicast (struct device *dev)
 #endif
 }
 
+/* On 4m, find the associated dma for the lance chip */
+static struct Linux_SBus_DMA *
+find_ledma (struct linux_sbus_device *dev)
+{
+    struct Linux_SBus_DMA *p;
+
+    for (p = dma_chain; p; p = p->next)
+	if (p->SBus_dev == dev)
+	    return p;
+    return 0;
+}
+
+/* FIXME: the probe code should be able to detect  */
 int sparc_lance_probe (struct device *dev)
 {
     static unsigned version_printed = 0;
@@ -721,6 +713,7 @@ int sparc_lance_probe (struct device *dev)
     int    found = 0;
     struct linux_sbus *bus;
     struct linux_sbus_device *sdev = 0;
+    struct Linux_SBus_DMA *ledma = 0;
     struct lance_private *lp;
     volatile struct lance_regs *ll;
 
@@ -733,6 +726,12 @@ int sparc_lance_probe (struct device *dev)
 		found = 1;
 		break;
 	    }
+	    if (strcmp (sdev->prom_name, "ledma") == 0){
+		ledma = find_ledma (sdev);
+		found = 1;
+		sdev = sdev->child;
+		break;
+	    }
 	}
     }
     if (!found)
@@ -743,6 +742,8 @@ int sparc_lance_probe (struct device *dev)
 	dev = init_etherdev (0, sizeof (struct lance_private));
     } else {
 	dev->priv = kmalloc (sizeof (struct lance_private), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
     }
     if (sparc_lance_debug && version_printed++ == 0)
 	printk (version);
@@ -759,18 +760,22 @@ int sparc_lance_probe (struct device *dev)
 	printk ("%2.2x%c", dev->dev_addr [i] = idprom->id_eaddr [i], i == 5 ? ' ': ':');
     }
     /* Get the IO region */
+    prom_apply_sbus_ranges (&sdev->reg_addrs [0], sdev->num_registers);
     ll = sparc_alloc_io (sdev->reg_addrs [0].phys_addr, 0,
-			 sizeof (struct lance_regs), "Lance driver", 0x0, 0x0);
-    
+			 sizeof (struct lance_regs), lancestr,
+			 sdev->reg_addrs[0].which_io, 0x0);
+
     /* Make certain the data structures used by the LANCE are aligned. */
     dev->priv = (void *)(((int)dev->priv + 7) & ~7);
     lp = (struct lance_private *) dev->priv;
+    memset ((char *)dev->priv, 0, sizeof (struct lance_private));
     
     lp->init_block = (void *)
-	sparc_dvma_malloc (sizeof (struct lance_init_block), "LANCE");
+	sparc_dvma_malloc (sizeof (struct lance_init_block), lancestr);
     
     lp->ll = ll;
-    lp->name = "LANCE";
+    lp->name = lancestr;
+    lp->ledma = ledma;
 
     /* This should never happen. */
     if ((int)(lp->init_block->brx_ring) & 0x07) {
@@ -787,7 +792,7 @@ int sparc_lance_probe (struct device *dev)
     dev->irq = (unsigned char) sdev->irqs [0].pri;
     dev->dma = 0;
     ether_setup (dev);
-    
+
     return 0;
 }
 /*

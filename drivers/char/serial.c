@@ -723,7 +723,7 @@ static void rs_interrupt_multi(int irq, void *dev_id, struct pt_regs * regs)
  * interrupt driver proper are done; the interrupt driver schedules
  * them using rs_sched_event(), and they get done here.
  */
-static void do_serial_bh(void *unused)
+static void do_serial_bh(void)
 {
 	run_task_queue(&tq_serial);
 }
@@ -2665,8 +2665,7 @@ int rs_init(void)
 	int i;
 	struct async_struct * info;
 	
-	bh_base[SERIAL_BH].routine = do_serial_bh;
-	enable_bh(SERIAL_BH);
+	init_bh(SERIAL_BH, do_serial_bh);
 	timer_table[RS_TIMER].fn = rs_timer;
 	timer_table[RS_TIMER].expires = 0;
 #ifdef CONFIG_AUTO_IRQ

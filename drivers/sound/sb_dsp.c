@@ -55,6 +55,7 @@ int             sb_no_recording = 0;
 static int      dsp_count = 0;
 static int      trigger_bits;
 static int      mpu_base = 0, mpu_irq = 0;
+static int      sb16_inited = 0;
 
 /*
  * The DSP channel can be used either for input or output. Variable
@@ -1613,11 +1614,20 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 
   sb_dsp_ok = 1;
   sb_reset_dsp ();
+
+  if (sb16 || hw_config->dma2 >= 0)
+    {
+      if (sb16_dsp_detect (hw_config))
+	{
+	  sb16_inited = 1;
+	  return sb16_dsp_init (mem_start, hw_config);
+	}
+    }
   return mem_start;
 }
 
 void
-sb_dsp_unload (void)
+sb_dsp_unload (struct address_info *hw_config)
 {
   sound_free_dma (dma8);
 
@@ -1634,6 +1644,9 @@ sb_dsp_unload (void)
     {
       snd_release_irq (ess_mpu_irq);
     }
+
+  if (sb16_inited)
+    unload_sb16 (hw_config);
 }
 
 void

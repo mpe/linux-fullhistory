@@ -194,7 +194,7 @@ static void process_timeout(unsigned long __data)
  *	   +ve: "goodness" value (the larger, the better)
  *	 +1000: realtime process, select this.
  */
-static inline int goodness(struct task_struct * p, int this_cpu)
+static inline int goodness(struct task_struct * p, struct task_struct * prev, int this_cpu)
 {
 	int weight;
 
@@ -230,7 +230,7 @@ static inline int goodness(struct task_struct * p, int this_cpu)
 #endif
 
 		/* .. and a slight advantage to the current process */
-		if (p == current)
+		if (p == prev)
 			weight += 1;
 	}
 
@@ -251,7 +251,7 @@ asmlinkage void schedule(void)
 {
 	int c;
 	struct task_struct * p;
-	struct task_struct * next;
+	struct task_struct * prev, * next;
 	unsigned long timeout = 0;
 	int this_cpu=smp_processor_id();
 
@@ -269,26 +269,27 @@ asmlinkage void schedule(void)
 	run_task_queue(&tq_scheduler);
 
 	need_resched = 0;
+	prev = current;
 	cli();
 	/* move an exhausted RR process to be last.. */
-	if (!current->counter && current->policy == SCHED_RR) {
-		current->counter = current->priority;
-		move_last_runqueue(current);
+	if (!prev->counter && prev->policy == SCHED_RR) {
+		prev->counter = prev->priority;
+		move_last_runqueue(prev);
 	}
-	switch (current->state) {
+	switch (prev->state) {
 		case TASK_INTERRUPTIBLE:
-			if (current->signal & ~current->blocked)
+			if (prev->signal & ~prev->blocked)
 				goto makerunnable;
-			timeout = current->timeout;
+			timeout = prev->timeout;
 			if (timeout && (timeout <= jiffies)) {
-				current->timeout = 0;
+				prev->timeout = 0;
 				timeout = 0;
 		makerunnable:
-				current->state = TASK_RUNNING;
+				prev->state = TASK_RUNNING;
 				break;
 			}
 		default:
-			del_from_runqueue(current);
+			del_from_runqueue(prev);
 		case TASK_RUNNING:
 	}
 	p = init_task.next_run;
@@ -298,7 +299,7 @@ asmlinkage void schedule(void)
 	/*
 	 *	This is safe as we do not permit re-entry of schedule()
 	 */
-	current->processor = NO_PROC_ID;	
+	prev->processor = NO_PROC_ID;	
 #endif	
 
 /*
@@ -310,7 +311,7 @@ asmlinkage void schedule(void)
 	c = -1000;
 	next = &init_task;
 	while (p != &init_task) {
-		int weight = goodness(p, this_cpu);
+		int weight = goodness(p, prev, this_cpu);
 		if (weight > c)
 			c = weight, next = p;
 		p = p->next_run;
@@ -326,8 +327,8 @@ asmlinkage void schedule(void)
 	/*
 	 *	Context switching between two idle threads is pointless.
 	 */
-	if(!current->pid && !next->pid)
-		next=current;
+	if(!prev->pid && !next->pid)
+		next=prev;
 	/*
 	 *	Allocate process to CPU
 	 */
@@ -343,19 +344,19 @@ asmlinkage void schedule(void)
 	else
 		clear_bit(this_cpu,&smp_idle_map);
 #endif
-	if (current != next) {
+	if (prev != next) {
 		struct timer_list timer;
 
 		kstat.context_swtch++;
 		if (timeout) {
 			init_timer(&timer);
 			timer.expires = timeout;
-			timer.data = (unsigned long) current;
+			timer.data = (unsigned long) prev;
 			timer.function = process_timeout;
 			add_timer(&timer);
 		}
 		get_mmu_context(next);
-		switch_to(next);
+		switch_to(prev,next);
 		if (timeout)
 			del_timer(&timer);
 	}
@@ -715,7 +716,7 @@ static void second_overflow(void)
 /*
  * disregard lost ticks for now.. We don't care enough.
  */
-static void timer_bh(void * unused)
+static void timer_bh(void)
 {
 	unsigned long mask;
 	struct timer_struct *tp;
@@ -747,12 +748,12 @@ static void timer_bh(void * unused)
 	}
 }
 
-void tqueue_bh(void * unused)
+void tqueue_bh(void)
 {
 	run_task_queue(&tq_timer);
 }
 
-void immediate_bh(void * unused)
+void immediate_bh(void)
 {
 	run_task_queue(&tq_immediate);
 }
@@ -1290,10 +1291,7 @@ void sched_init(void)
 #ifdef __SMP__	
 	init_task.processor=cpu;
 #endif
-	bh_base[TIMER_BH].routine = timer_bh;
-	bh_base[TQUEUE_BH].routine = tqueue_bh;
-	bh_base[IMMEDIATE_BH].routine = immediate_bh;
-	enable_bh(TIMER_BH);
-	enable_bh(TQUEUE_BH);
-	enable_bh(IMMEDIATE_BH);
+	init_bh(TIMER_BH, timer_bh);
+	init_bh(TQUEUE_BH, tqueue_bh);
+	init_bh(IMMEDIATE_BH, immediate_bh);
 }

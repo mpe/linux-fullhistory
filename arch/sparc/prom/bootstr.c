@@ -1,4 +1,4 @@
-/* $Id: bootstr.c,v 1.3 1995/11/25 00:59:51 davem Exp $
+/* $Id: bootstr.c,v 1.4 1996/02/08 07:06:43 zaitcev Exp $
  * bootstr.c:  Boot string/argument acquisition from the PROM.
  *
  * Copyright(C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -6,7 +6,7 @@
 
 #include <asm/oplib.h>
 
-static char barg_buf[128];
+static char barg_buf[256];
 
 char *
 prom_getbootargs(void)

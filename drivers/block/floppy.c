@@ -4021,7 +4021,7 @@ extern char *get_options(char *str, int *ints);
 
 static void mod_setup(char *pattern, void (*setup)(char *, int *))
 {
-	int i;
+	unsigned long i;
 	char c;
 	int j;
 	int match;

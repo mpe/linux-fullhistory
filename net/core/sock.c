@@ -541,29 +541,18 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 void __release_sock(struct sock *sk)
 {
 #ifdef CONFIG_INET
-	struct sk_buff *skb;
-
-	if (!sk->prot)
+	if (!sk->prot || !sk->prot->rcv)
 		return;
 		
-	/*
-	 *	This is only ever called from a user process context, hence
-	 *	(until fine grained SMP) its safe. sk->users must be volatile
-	 *	so the compiler doesn't do anything unfortunate with it.
-	 *
-	 *	The "barrier()" stuff takes care of that. Note that the rcv
-	 *	function may not sleep, so "users" is not going to change there.
-	 */
-
 	/* See if we have any packets built up. */
 	start_bh_atomic();
-	while ((skb = __skb_dequeue(&sk->back_log)) != NULL) 
-	{
-		if (sk->prot->rcv) 
-			sk->prot->rcv(skb, skb->dev, (struct options*)skb->proto_priv,
-				 skb->saddr, skb->len, skb->daddr, 1,
-				/* Only used for/by raw sockets. */
-				(struct inet_protocol *)sk->pair); 
+	while (!skb_queue_empty(&sk->back_log)) {
+		struct sk_buff * skb = sk->back_log.next;
+		__skb_unlink(skb, &sk->back_log);
+		sk->prot->rcv(skb, skb->dev, (struct options*)skb->proto_priv,
+			      skb->saddr, skb->len, skb->daddr, 1,
+			      /* Only used for/by raw sockets. */
+			      (struct inet_protocol *)sk->pair); 
 	}
 	end_bh_atomic();
 #endif  

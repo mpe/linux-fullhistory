@@ -940,9 +940,9 @@ lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		}
 	}
 
-    /* Clear any other interrupt, and set interrupt enable. */
-    outw(0x0000, dev->base_addr + LANCE_ADDR);
-    outw(0x7940, dev->base_addr + LANCE_DATA);
+	/* Clear any other interrupt, and set interrupt enable. */
+	outw(0x0000, dev->base_addr + LANCE_ADDR);
+	outw(0x7940, dev->base_addr + LANCE_DATA);
 
 	if (lance_debug > 4)
 		printk("%s: exiting interrupt, csr%d=%#4.4x.\n",
@@ -979,7 +979,7 @@ lance_rx(struct device *dev)
 		}
 		else 
 		{
-			/* Malloc up new buffer, compatible with net-2e. */
+			/* Malloc up new buffer, compatible with net3. */
 			short pkt_len = (lp->rx_ring[entry].msg_length & 0xfff)-4;
 			struct sk_buff *skb;
 			

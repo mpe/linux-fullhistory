@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.19 1995/11/25 02:31:47 davem Exp $ */
+/* $Id: head.h,v 1.23 1996/02/15 09:12:55 davem Exp $ */
 #ifndef __SPARC_HEAD_H
 #define __SPARC_HEAD_H
 
@@ -22,6 +22,10 @@
 #define TRAP_ENTRY(type, label) \
 	rd %psr, %l0; b label; rd %wim, %l3; nop;
 
+/* Data/text faults. Defaults to sun4c version at boot time. */
+#define SPARC_TFAULT rd %psr, %l0; rd %wim, %l3; b sun4c_fault; mov 1, %l7;
+#define SPARC_DFAULT rd %psr, %l0; rd %wim, %l3; b sun4c_fault; mov 0, %l7;
+
 /* This is for traps we should NEVER get. */
 #define BAD_TRAP(num) \
         rd %psr, %l0; mov num, %l7; b bad_trap_handler; rd %wim, %l3;
@@ -41,10 +45,10 @@
 
 /* Software trap for SunOS4.1.x system calls. */
 #define SUNOS_SYSCALL_TRAP \
+        rd %psr, %l0; \
         sethi %hi(C_LABEL(sunos_sys_table)), %l7; \
-        or %l7, %lo(C_LABEL(sunos_sys_table)), %l7; \
         b linux_sparc_syscall; \
-        rd %psr, %l0;
+        or %l7, %lo(C_LABEL(sunos_sys_table)), %l7;
 
 /* Software trap for Slowaris system calls. */
 #define SOLARIS_SYSCALL_TRAP \
@@ -74,12 +78,6 @@
 #define TRAP_ENTRY_INTERRUPT(int_level) \
         mov int_level, %l7; rd %psr, %l0; b real_irq_entry; rd %wim, %l3;
 
-/* This is for software interrupts, which currently (atleast on the sun4c)
- * correspond to IRQ levels 1, 4, and 6.
- */
-#define TRAP_ENTRY_SOFTINT(int_level) \
-        mov int_level, %l7; rd %psr, %l0; b soft_irq_entry; rd %wim, %l3;
-
 /* NMI's (Non Maskable Interrupts) are special, you can't keep them
  * from coming in, and basically if you get one, the shows over. ;(
  * On the sun4c they are usually asyncronous memory errors, on the
@@ -88,7 +86,7 @@
  * command you to do CPU tricks, read your mailbox for more info."
  */
 #define NMI_TRAP \
-        rd %wim, %l3; b linux_trap_nmi; mov %psr, %l0; nop;
+        rd %wim, %l3; b linux_trap_nmi_sun4c; mov %psr, %l0; nop;
 
 /* Window overflows/underflows are special and we need to try and be as
  * efficient as possible here....

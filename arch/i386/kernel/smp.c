@@ -7,8 +7,8 @@
  *	Much of the core SMP work is based on previous work by Thomas Radke, to
  *	whom a great many thanks are extended.
  *
- *	Thanks to Intel for testing against several Pentium and Pentium Pro
- *	MP machines.
+ *	Thanks to Intel for making available several different Pentium and
+ *	Pentium Pro MP machines.
  *
  *	This code is released under the GNU public license version 2 or
  *	later.
@@ -543,7 +543,7 @@ void smp_boot_cpus(void)
 	 *	Map the local APIC into kernel space
 	 */
 
-	apic_reg = vremap(0xFEE00000,4096);
+	apic_reg = vremap(apic_addr,4096);
 	
 	if(apic_reg == NULL)
 		panic("Unable to map local apic.\n");
@@ -638,17 +638,19 @@ void smp_boot_cpus(void)
 			 *	Install a writable page 0 entry.
 			 */
 			 
+			cfg=pg0[0];
+			
 			CMOS_WRITE(0xa, 0xf);
 			pg0[0]=7;
 			local_invalidate();
-			*((volatile unsigned short *) 0x467) = ((unsigned long)stack)>>4;
-			*((volatile unsigned short *) 0x469) = 0;
+			*((volatile unsigned short *) 0x469) = ((unsigned long)stack)>>4;
+			*((volatile unsigned short *) 0x467) = 0;
 			
 			/*
 			 *	Protect it again
 			 */
 			 
-			pg0[0]= pte_val(mk_pte(0, PAGE_READONLY));
+			pg0[0]= cfg;
 			local_invalidate();
 
 			/*
@@ -1048,7 +1050,7 @@ void smp_invalidate(void)
  *	Reschedule call back
  */
 
-void smp_reschedule_irq(int cpl, void *dev_id, struct pt_regs *regs)
+void smp_reschedule_irq(int cpl, struct pt_regs *regs)
 {
 #ifdef DEBUGGING_SMP_RESCHED
 	static int ct=0;

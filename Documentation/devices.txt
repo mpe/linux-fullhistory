@@ -1,8 +1,8 @@
 		       LINUX ALLOCATED DEVICES
 
-	     Maintained by H. Peter Anvin <hpa@storm.net>
+	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		   Last revised: February 24, 1996
+		     Last revised: March 2, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -131,7 +131,7 @@ an unreasonable effort.
 		  1 = /dev/hd?1		First partition
 		  2 = /dev/hd?2		Second partition
 		    ...
-		 63 = /dev/hd?63	63rd logical partition
+		 63 = /dev/hd?63	63rd partition
 
 		For Linux/i386, partitions 1-4 are the primary
 		partitions, and 5 and above are logical partitions.
@@ -187,15 +187,6 @@ an unreasonable effort.
 	
 		NOTE: These devices permit both read and write access.
 
-    block	Loopback devices
-		  0 = /dev/loop0	First loopback device
-		  1 = /dev/loop1	Second loopback device
-		      ...
-
-		The loopback devices are used to mount filesystems not
-		associated with block devices.  The binding to the
-		loopback devices is usually handled by mount(1).
-
   8 block	SCSI disk devices
     		  0 = /dev/sda		First SCSI disk whole disk
 		 16 = /dev/sdb		Second SCSI disk whole disk
@@ -228,8 +219,9 @@ an unreasonable effort.
 		  2 = /dev/inportbm	Microsoft Inport bus mouse
 		  3 = /dev/atibm	ATI XL bus mouse
 		  4 = /dev/jbm		J-mouse
-		  4 = /dev/amigamouse	Amiga Mouse (68k/Amiga)
-		  5 = /dev/atarimouse	Atari Mouse
+		  4 = /dev/amigamouse	Amiga mouse (68k/Amiga)
+		  5 = /dev/atarimouse	Atari mouse
+		  6 = /dev/sunmouse	Sun mouse
 		128 = /dev/beep		Fancy beep device
 		129 = /dev/modreq	Kernel module load request
 		130 = /dev/watchdog	Watchdog timer port
@@ -237,7 +229,21 @@ an unreasonable effort.
 		132 = /dev/hwtrap	Hardware fault trap
 		133 = /dev/exttrp	External device trap
 
- 11 block	SCSI CD-ROM devices
+    block	Loopback devices
+		  0 = /dev/loop0	First loopback device
+		  1 = /dev/loop1	Second loopback device
+		      ...
+
+		The loopback devices are used to mount filesystems not
+		associated with block devices.  The binding to the
+		loopback devices is usually handled by mount(1).
+
+ 11 char	Raw keyboard device
+		  0 = /dev/kbd		Raw keyboard device
+
+		The raw keyboard device is used on Linux/SPARC only.
+
+    block	SCSI CD-ROM devices
     		  0 = /dev/sr0		First SCSI CD-ROM
 		  1 = /dev/sr1		Second SCSI CD-ROM
 		      ...
@@ -450,28 +456,32 @@ an unreasonable effort.
 		partitions is 15, like SCSI.
 
  29 char	Universal frame buffer
-		  0 = /dev/fb0current	First frame buffer
+		  0 = /dev/fb0		First frame buffer
 		  1 = /dev/fb0autodetect
 		 24 = /dev/fb0user0
 	              ...
 		 31 = /dev/fb0user7
-		 32 = /dev/fb1current	Second frame buffer
+		 32 = /dev/fb1		Second frame buffer
 		 33 = /dev/fb1autodetect
 		 56 = /dev/fb1user0
 		      ...
 		 63 = /dev/fb1user7
-    block	Aztech/Orchid/Okano/Wearnes CD-ROM
-		  0 = /dev/aztcd	Aztech CD-ROM
 
 		The universal frame buffer device is currenly only
-		supported on Linux/68k.  The "current" device accesses
-		the fame buffer at current resolution; the
-		"autodetect" one at bootup (default) resolution.
-		Minor numbers 2-23 within each frame buffer assignment
-		are used for specific device-dependent resolutions.
-		There appears to be no standard naming for these devices.
-		Finally, 2-31 within each device are reserved for
-		user-selected modes, usually entered at boot time.
+		supported on Linux/68k and Linux/SPARC.  The plain
+		device accesses the frame buffer at current resolution
+		(Linux/68k calls this device "current",
+		e.g. /dev/fb0current); the "autodetect" one at bootup
+		(default) resolution.  Minor numbers 2-23 within each
+		frame buffer assignment are used for specific
+		device-dependent resolutions.  There appears to be no
+		standard naming for these devices.  Finally, 2-31
+		within each device are reserved for user-selected
+		modes, usually entered at boot time.  Currently only
+		Linux/68k uses the mode-specific devices.
+
+    block	Aztech/Orchid/Okano/Wearnes CD-ROM
+		  0 = /dev/aztcd	Aztech CD-ROM
 
  30 char	iBCS-2 compatibility devices
 		  0 = /dev/socksys	Socket access
@@ -615,6 +625,7 @@ an unreasonable effort.
 		 49 = /dev/ml16pb-c0	Second card, first counter/timer
 		 50 = /dev/ml16pb-c1	Second card, second counter/timer
 		 51 = /dev/ml16pb-c2	Second card, third counter/timer
+		      ...
 
  40		UNALLOCATED
 
@@ -732,8 +743,8 @@ For SCSI devices, /dev/tape and /dev/cdrom should point to the
 /dev/cdwriter and /dev/scanner should point to the appropriate generic
 SCSI devices (/dev/sg*).
 
-/dev/mouse may point to a dialout (alternate) TTY device, a hardware
-mouse device, or a socket for a mouse driver program (e.g. /dev/gpmdata).
+/dev/mouse may point to a primary serial TTY device, a hardware mouse
+device, or a socket for a mouse driver program (e.g. /dev/gpmdata).
 
 	Sockets and pipes
 

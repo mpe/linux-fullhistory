@@ -90,6 +90,7 @@
 #if 0
 static int mcd_sizes[] = { 0 };
 #endif
+static int mcd_blocksizes[1] = { 0, };
 
 /* I know putting defines in this file is probably stupid, but it should be */
 /* the only place that they are really needed... I HOPE! :) */
@@ -1184,7 +1185,8 @@ int mcd_init(void)
 		 mcd_port);
           return -EIO;
 	}
-	  
+
+	blksize_size[MAJOR_NR] = mcd_blocksizes;
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	read_ahead[MAJOR_NR] = 4;
 
@@ -1253,7 +1255,7 @@ int mcd_init(void)
 
 	mcd_invalidate_buffers();
 	mcdPresent = 1;
-        return 0;
+	return 0;
 }
 
 

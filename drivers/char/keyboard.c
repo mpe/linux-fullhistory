@@ -1153,7 +1153,7 @@ static inline unsigned char getleds(void){
  * used, but this allows for easy and efficient race-condition
  * prevention later on.
  */
-static void kbd_bh(void * unused)
+static void kbd_bh(void)
 {
 	unsigned char leds = getleds();
 
@@ -1182,14 +1182,13 @@ int kbd_init(void)
 
 	ttytab = console_driver.table;
 
-	bh_base[KEYBOARD_BH].routine = kbd_bh;
 	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard", NULL);
 	request_region(0x60,16,"kbd");
 #ifdef INIT_KBD
 	initialize_kbd();
 #endif
+	init_bh(KEYBOARD_BH, kbd_bh);
 	mark_bh(KEYBOARD_BH);
-	enable_bh(KEYBOARD_BH);
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.5 1995/11/25 02:32:14 davem Exp $
+/* $Id: oplib.h,v 1.6 1996/01/01 02:47:19 davem Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -257,6 +257,9 @@ extern char *prom_firstprop(int node);
  * node.  Returns null string on failure.
  */
 extern char *prom_nextprop(int node, char *prev_property);
+
+/* Returns 1 if the specified node has given property. */
+extern int prom_node_has_property(int node, char *property);
 
 /* Set the indicated property at the given node with the passed value.
  * Returns the number of bytes of your value that the prom took.

@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.14 1995/11/25 02:32:33 davem Exp $ */
+/* $Id: ptrace.h,v 1.19 1996/01/24 02:33:50 davem Exp $ */
 #ifndef _SPARC_PTRACE_H
 #define _SPARC_PTRACE_H
 
@@ -35,6 +35,7 @@ struct pt_regs {
 #define UREG_I6        14
 #define UREG_I7        15
 #define UREG_WIM       UREG_G0
+#define UREG_FADDR     UREG_G0
 #define UREG_FP        UREG_I6
 #define UREG_RETPC     UREG_I7
 
@@ -73,7 +74,7 @@ extern void show_regs(struct pt_regs *);
 #define REGWIN_SZ         0x40
 #endif
 
-/* First generic task_struct offsets. sizeof(task_struct)=1536 */
+/* First generic task_struct offsets. sizeof(task_struct)=1576 */
 #define TASK_STATE        0x000
 #define TASK_PRIORITY     0x008
 #define TASK_SIGNAL       0x00c
@@ -90,14 +91,16 @@ extern void show_regs(struct pt_regs *);
 #define THREAD_KPC        0x224
 #define THREAD_KPSR       0x228
 #define THREAD_KWIM       0x22c
-#define THREAD_REG_WINDOW 0x230
-#define THREAD_STACK_PTRS 0x430
-#define THREAD_W_SAVED    0x450
-#define THREAD_PGD_PTR    0x454
-#define THREAD_CONTEXT    0x458
+#define THREAD_FORK_KPSR  0x230
+#define THREAD_FORK_KWIM  0x234
+#define THREAD_REG_WINDOW 0x238
+#define THREAD_STACK_PTRS 0x438
+#define THREAD_W_SAVED    0x458
 #define THREAD_FLOAT_REGS 0x460
 #define THREAD_FSR        0x560
 #define THREAD_SIGSTK     0x5e8
+#define THREAD_MM     0x620
+#define THREAD_MM_CTX     0x008
 
 /* These are for pt_regs. */
 #define PT_PSR    0x0
@@ -166,5 +169,26 @@ extern void show_regs(struct pt_regs *);
 #define SF_XARG4  0x54
 #define SF_XARG5  0x58
 #define SF_XXARG  0x5c
+
+/* Stuff for the ptrace system call */
+#if 0 /* Need to fix the header files a bit... */
+#undef PTRACE_ATTACH
+#undef PTRACE_DETACH
+#define PTRACE_ATTACH		  10
+#define PTRACE_DETACH		  11
+#endif
+#define PTRACE_GETREGS            12
+#define PTRACE_SETREGS            13
+#define PTRACE_GETFPREGS          14
+#define PTRACE_SETFPREGS          15
+#define PTRACE_READDATA           16
+#define PTRACE_WRITEDATA          17
+#define PTRACE_READTEXT           18
+#define PTRACE_WRITETEXT          19
+#define PTRACE_GETFPAREGS         20
+#define PTRACE_SETFPAREGS         21
+
+#define PTRACE_GETUCODE           29  /* stupid bsd-ism */
+
 
 #endif /* !(_SPARC_PTRACE_H) */

@@ -1402,7 +1402,7 @@ static void sl_keepalive(unsigned long sls)
 {
 	struct slip *sl=(struct slip *)sls;
 
-	if(sls==NULL)
+	if(sl == NULL)
 		return;
 
 	if( sl->keepalive)

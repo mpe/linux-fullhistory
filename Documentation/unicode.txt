@@ -53,7 +53,7 @@ Klingon language support
 
 Unfortunately, Unicode/ISO 10646 does not allocate code points for the
 language Klingon, probably fearing the potential code point explosion
-if many fictional lanugages were submitted for inclusion.  There are
+if many fictional languages were submitted for inclusion.  There are
 also political reasons (the Japanese, for example, are not too happy
 about the whole 16-bit concept to begin with.)  However, with Linux
 being a hacker-driven OS it seems this is a brilliant linguistic hack

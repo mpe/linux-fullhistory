@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.25 1995/11/25 02:32:22 davem Exp $ */
+/* $Id: pgtable.h,v 1.35 1996/02/21 17:57:30 miguel Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -14,23 +14,23 @@
 #include <asm/pgtsrmmu.h>
 #include <asm/vac-ops.h>
 #include <asm/oplib.h>
+#include <asm/sbus.h>
 
 extern void load_mmu(void);
 
+extern void (*quick_kernel_fault)(unsigned long);
+
 /* mmu-specific process creation/cloning/etc hooks. */
-extern void (*mmu_exit_hook)(void *);
-extern void (*mmu_fork_hook)(void *, unsigned long);
-extern void (*mmu_release_hook)(void *);
-extern void (*mmu_flush_hook)(void *);
-extern void (*mmu_task_cacheflush)(void *);
+extern void (*mmu_exit_hook)(void);
+extern void (*mmu_flush_hook)(void);
 
 /* Routines for data transfer buffers. */
 extern char *(*mmu_lockarea)(char *, unsigned long);
 extern void  (*mmu_unlockarea)(char *, unsigned long);
 
 /* Routines for getting a dvma scsi buffer. */
-extern char *(*mmu_get_scsi_buffer)(char *, unsigned long);
-extern void  (*mmu_release_scsi_buffer)(char *, unsigned long);
+extern char *(*mmu_get_scsi_buffer)(char *, unsigned long, struct linux_sbus *sbus);
+extern void  (*mmu_release_scsi_buffer)(char *, unsigned long, struct linux_sbus *sbus);
 
 extern unsigned int pmd_shift;
 extern unsigned int pmd_size;
@@ -58,7 +58,6 @@ extern pgprot_t page_shared;
 extern pgprot_t page_copy;
 extern pgprot_t page_readonly;
 extern pgprot_t page_kernel;
-extern pgprot_t page_invalid;
 
 #define PMD_SHIFT      (pmd_shift)
 #define PMD_SIZE       (pmd_size)
@@ -127,11 +126,11 @@ extern int num_contexts;
 extern pte_t __bad_page(void);
 extern pte_t * __bad_pagetable(void);
 
-extern unsigned long __zero_page(void);
+extern unsigned long empty_zero_page;
 
 #define BAD_PAGETABLE __bad_pagetable()
 #define BAD_PAGE __bad_page()
-#define ZERO_PAGE __zero_page()
+#define ZERO_PAGE (&empty_zero_page)
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR      (8*sizeof(unsigned long))
@@ -144,17 +143,6 @@ extern unsigned long __zero_page(void);
 extern unsigned long (*pte_page)(pte_t);
 extern unsigned long (*pmd_page)(pmd_t);
 extern unsigned long (*pgd_page)(pgd_t);
-
-/* to set the page-dir
- *
- * On the Sparc the page segments hold 64 pte's which means 256k/segment.
- * Therefore there is no global idea of 'the' page directory, although we
- * make a virtual one in kernel memory so that we can keep the stats on
- * all the pages since not all can be loaded at once in the mmu.
- *
- * Actually on the SRMMU things do work exactly like the i386, the
- * page tables live in real physical ram, no funky TLB buisness.
- */
 
 extern void (*sparc_update_rootmmu_dir)(struct task_struct *, pgd_t *pgdir);
 
@@ -190,31 +178,23 @@ extern void (*pgd_reuse)(pgd_t *);
  * The following only work if pte_present() is true.
  * Undefined behaviour if not..
  */
-extern int (*pte_read)(pte_t);
 extern int (*pte_write)(pte_t);
-extern int (*pte_exec)(pte_t);
 extern int (*pte_dirty)(pte_t);
 extern int (*pte_young)(pte_t);
-extern int (*pte_cow)(pte_t);
 
 extern pte_t (*pte_wrprotect)(pte_t);
-extern pte_t (*pte_rdprotect)(pte_t);
-extern pte_t (*pte_exprotect)(pte_t);
 extern pte_t (*pte_mkclean)(pte_t);
 extern pte_t (*pte_mkold)(pte_t);
-extern pte_t (*pte_uncow)(pte_t);
 extern pte_t (*pte_mkwrite)(pte_t);
-extern pte_t (*pte_mkread)(pte_t);
-extern pte_t (*pte_mkexec)(pte_t);
 extern pte_t (*pte_mkdirty)(pte_t);
 extern pte_t (*pte_mkyoung)(pte_t);
-extern pte_t (*pte_mkcow)(pte_t);
 
 /*
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
 extern pte_t (*mk_pte)(unsigned long, pgprot_t);
+extern pte_t (*mk_pte_io)(unsigned long, pgprot_t);
 
 extern void (*pgd_set)(pgd_t *, pmd_t *);
 
@@ -262,29 +242,50 @@ extern void (*pgd_free)(pgd_t *);
 
 extern pgd_t * (*pgd_alloc)(void);
 
+/* Fine grained invalidation. */
+extern void (*invalidate_all)(void);
+extern void (*invalidate_mm)(struct mm_struct *);
+extern void (*invalidate_range)(struct mm_struct *, unsigned long start, unsigned long end);
+extern void (*invalidate_page)(struct vm_area_struct *, unsigned long address);
+
+/* The permissions for pgprot_val to make a page mapped on the obio space */
+extern unsigned int pg_iobits;
+
+/* MMU context switching. */
+extern void (*switch_to_context)(struct task_struct *tsk);
+
+/* Certain architectures need to do special things when pte's
+ * within a page table are directly modified.  Thus, the following
+ * hook is made available.
+ */
+extern void (*set_pte)(pte_t *pteptr, pte_t pteval);
+
+extern char *(*mmu_info)(void);
+
 /* Fault handler stuff... */
 #define FAULT_CODE_PROT     0x1
 #define FAULT_CODE_WRITE    0x2
 #define FAULT_CODE_USER     0x4
-extern int (*get_fault_info)(unsigned long *, unsigned long *, unsigned long);
 extern void (*update_mmu_cache)(struct vm_area_struct *vma, unsigned long address, pte_t pte);
 
 extern int invalid_segment;
 
-#define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
-#define SWP_OFFSET(entry) ((entry) >> 8)
-#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
+#define SWP_TYPE(entry) (((entry)>>2) & 0x7f)
+#define SWP_OFFSET(entry) ((entry) >> 9)
+#define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << 9))
 
 struct ctx_list {
 	struct ctx_list *next;
 	struct ctx_list *prev;
 	unsigned char ctx_number;
-	struct task_struct *ctx_task; /* Who has it now, if not free */
+	struct mm_struct *ctx_mm;
 };
 
 extern struct ctx_list *ctx_list_pool;  /* Dynamically allocated */
 extern struct ctx_list ctx_free;        /* Head of free list */
 extern struct ctx_list ctx_used;        /* Head of used contexts list */
+
+#define NO_CONTEXT     -1
 
 extern inline void remove_from_ctx_list(struct ctx_list *entry)
 {

@@ -1,7 +1,7 @@
 /*
  * The Mitsumi CDROM interface
  * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
- * VERSION: 1.5a
+ * VERSION: 1.7
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@
  *  Daniel v. Mosnenck (he sent me the Technical and Programming Reference)
  *  Gerd Knorr (he lent me his PhotoCD)
  *  Nils Faerber and Roger E. Wolff (extensivly tested the LU portion)
+ *  Andreas Kies (testing the mysterious hang up's)
  *  ... somebody forgotten?
  *  
  */
@@ -34,14 +35,13 @@
 
 #if RCS
 static const char *mcdx_c_version
-		= "mcdx.c,v 1.19.2.1 1996/01/13 21:25:55 heiko Exp";
+		= "mcdx.c,v 1.31 1996/03/02 00:21:18 heiko Exp";
 #endif
 
 #include <linux/version.h>
 #include <linux/module.h>
 
 #include <linux/errno.h>
-#include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/fs.h>
@@ -77,14 +77,13 @@ enum drivemodes { TOC, DATA, RAW, COOKED };
 enum datamodes { MODE0, MODE1, MODE2 };
 enum resetmodes { SOFT, HARD };
 
-const int SINGLE = 0x01;
-const int DOUBLE = 0x02;
-const int DOOR   = 0x04;
-const int MULTI  = 0x08;
-const int READY  = 0x70;
+const int SINGLE = 0x01;		/* single speed drive (FX001S, LU) */
+const int DOUBLE = 0x02;		/* double speed drive (FX001D, ..? */
+const int DOOR   = 0x04;		/* door locking capability */
+const int MULTI  = 0x08;		/* multi session capability */
 
-const unsigned char READSSPEED = 0xc0;
-const unsigned char READDSPEED = 0xc1;
+const unsigned char READ1X = 0xc0;
+const unsigned char READ2X = 0xc1;
 
 
 /* DECLARATIONS ****************************************************/ 
@@ -161,14 +160,15 @@ struct s_drive_stuff {
     int irq;			/* irq used by this drive */
     int minor;			/* minor number of this drive */
     int present;	    /* drive present and its capabilities */
-    char readcmd;		/* read cmd depends on single/double speed */
-    char playcmd;       /* play should always be single speed */
-    unsigned long changed;	/* last jiff the media was changed */
-    unsigned long xxx;      /* last jiff it was asked for media change */
+    unsigned char readcmd;	/* read cmd depends on single/double speed */
+    unsigned char playcmd;  /* play should always be single speed */
+    unsigned int xxx;      /* set if changed, reset while open */
+    unsigned int yyy;      /* set if changed, reset by media_changed */
     unsigned long ejected;  /* time we called the eject function */
     int users;				/* keeps track of open/close */
     int lastsector;			/* last block accessible */
-    int errno;				/* last operation's error */
+    int status;				/* last operation's error / status */
+	int readerrs;			/* # of blocks read w/o error */
 };
 
 
@@ -211,6 +211,7 @@ static char *port(int*);
 static int irq(int*);
 static void mcdx_delay(struct s_drive_stuff*, long jifs);
 static int mcdx_transfer(struct s_drive_stuff*, char* buf, int sector, int nr_sectors);
+static int mcdx_xfer(struct s_drive_stuff*, char* buf, int sector, int nr_sectors);
 
 static int mcdx_config(struct s_drive_stuff*, int);
 static int mcdx_closedoor(struct s_drive_stuff*, int);
@@ -238,6 +239,7 @@ static int mcdx_setattentuator(struct s_drive_stuff*, struct cdrom_volctrl*, int
 
 /* static variables ************************************************/
 
+static int mcdx_blocksizes[MCDX_NDRIVES];
 static int mcdx_drive_map[][2] = MCDX_DRIVEMAP;
 static struct s_drive_stuff* mcdx_stuffp[MCDX_NDRIVES];
 static struct s_drive_stuff* mcdx_irq_map[16] =
@@ -468,7 +470,7 @@ mcdx_ioctl(
 				ms.addr.lba = msf2log(&stuffp->multi.msf_last);
 			else
 				return -EINVAL;
-			ms.xa_flag = stuffp->xa;
+			ms.xa_flag = !!stuffp->multi.multi;
 
 			if (0 != (ans = verify_area(VERIFY_WRITE, (void*) arg,
 					sizeof(struct cdrom_multisession))))
@@ -571,7 +573,7 @@ void do_mcdx_request()
 	  break;
 
       case READ:
-	  stuffp->errno = 0;
+	  stuffp->status = 0;
 	  while (CURRENT->nr_sectors) {
 	      int i;
 
@@ -580,12 +582,13 @@ void do_mcdx_request()
 				      CURRENT->buffer,
 				      CURRENT->sector,
 				      CURRENT->nr_sectors))) {
-              WARN(("do_request() read error\n"));
-              if (stuffp->errno == MCDX_EOM) {
+              INFO(("do_request() read error\n"));
+              if (stuffp->status & MCDX_ST_EOM) {
                   CURRENT->sector += CURRENT->nr_sectors;
                   CURRENT->nr_sectors = 0;
-              }
+              } 
               end_request(0);
+			  /* return; */
               goto again;
 	      }
 	      CURRENT->sector += i;
@@ -627,38 +630,36 @@ mcdx_open(struct inode *ip, struct file *fp)
 	if (inb((unsigned int) stuffp->rreg_status) & MCDX_RBIT_DOOR) {
         if (jiffies - stuffp->ejected < ACLOSE_INHIBIT) return -EIO;
         if (stuffp->autoclose) mcdx_closedoor(stuffp, 1);
-        else return -EIO;
+		else return -EIO;
     }
 
 	/* if the media changed we will have to do a little more */
-	if (stuffp->xxx < stuffp->changed) {
+	if (stuffp->xxx) {
 
 		TRACE((OPENCLOSE, "open() media changed\n"));
         /* but wait - the time of media change will be set at the 
-        very last of this block - it seems, some of the following
-        talk() will detect a media change ... (I think, config()
-        is the reason. */
+           very last of this block - it seems, some of the following
+           talk() will detect a media change ... (I think, config()
+           is the reason. */
 
         stuffp->audiostatus = CDROM_AUDIO_INVALID;
 
 		/* get the multisession information */
-		{
-            int ans;
-
-			TRACE((OPENCLOSE, "open() Request multisession info\n"));
-            ans = mcdx_requestmultidiskinfo(stuffp, &stuffp->multi, 6);
-            if (ans == -1) {
-                stuffp->autoclose = 0;
-                mcdx_eject(stuffp, 1);
-                return -EIO;
-            }
-
-            /* we succeeded, so on next open(2) we could try auto close
-            again */
-            stuffp->autoclose = 1;
+		TRACE((OPENCLOSE, "open() Request multisession info\n"));
+		if (-1 == mcdx_requestmultidiskinfo(
+				stuffp, &stuffp->multi, 6)) {
+			INFO(("No multidiskinfo\n"));
+			stuffp->autoclose = 0;
+		} else {
+			/* we succeeded, so on next open(2) we could try auto close
+			again */
+			stuffp->autoclose = 1;
 		
+#if !MCDX_QUIET
 			if (stuffp->multi.multi > 2)
-				WARN(("open() unknown multisession value (%d)\n", stuffp->multi.multi));
+				INFO(("open() unknown multisession value (%d)\n", 
+						stuffp->multi.multi));
+#endif
 
 			/* multisession ? */
 			if (!stuffp->multi.multi)
@@ -669,38 +670,54 @@ mcdx_open(struct inode *ip, struct file *fp)
 					stuffp->multi.msf_last.minute,
 					stuffp->multi.msf_last.second,
 					stuffp->multi.msf_last.frame));
+
 		} /* got multisession information */
 
 		/* request the disks table of contents (aka diskinfo) */
-		if (-1 == mcdx_requesttocdata(stuffp, &stuffp->di, 1)) return -EIO;
+		if (-1 == mcdx_requesttocdata(stuffp, &stuffp->di, 1)) {
 
-		stuffp->lastsector = (CD_FRAMESIZE / 512) 
-                * msf2log(&stuffp->di.msf_leadout) - 1;
+			stuffp->lastsector = -1;
 
-		TRACE((OPENCLOSE, "open() start %d (%02x:%02x.%02x) %d\n",
-				stuffp->di.n_first,
-				stuffp->di.msf_first.minute,
-				stuffp->di.msf_first.second,
-				stuffp->di.msf_first.frame,
-				msf2log(&stuffp->di.msf_first)));
-		TRACE((OPENCLOSE, "open() last %d (%02x:%02x.%02x) %d\n",
-				stuffp->di.n_last,
-				stuffp->di.msf_leadout.minute,
-				stuffp->di.msf_leadout.second,
-				stuffp->di.msf_leadout.frame,
-				msf2log(&stuffp->di.msf_leadout)));
+		} else {
+
+			stuffp->lastsector = (CD_FRAMESIZE / 512) 
+					* msf2log(&stuffp->di.msf_leadout) - 1;
+
+			TRACE((OPENCLOSE, "open() start %d (%02x:%02x.%02x) %d\n",
+					stuffp->di.n_first,
+					stuffp->di.msf_first.minute,
+					stuffp->di.msf_first.second,
+					stuffp->di.msf_first.frame,
+					msf2log(&stuffp->di.msf_first)));
+			TRACE((OPENCLOSE, "open() last %d (%02x:%02x.%02x) %d\n",
+					stuffp->di.n_last,
+					stuffp->di.msf_leadout.minute,
+					stuffp->di.msf_leadout.second,
+					stuffp->di.msf_leadout.frame,
+					msf2log(&stuffp->di.msf_leadout)));
+		}
 
 		if (stuffp->toc) {
-			TRACE((MALLOC, "open() free toc @ %p\n", stuffp->toc));
+			TRACE((MALLOC, "open() free old toc @ %p\n", stuffp->toc));
 			kfree(stuffp->toc);
+		
+			stuffp->toc = NULL;
 		}
-		stuffp->toc = NULL;
 
 		TRACE((OPENCLOSE, "open() init irq generation\n"));
 		if (-1 == mcdx_config(stuffp, 1)) return -EIO;
 
-		/* try to get the first sector ... */
-		{
+#if FALLBACK
+		/* Set the read speed */
+		WARN(("AAA %x AAA\n", stuffp->readcmd));
+		if (stuffp->readerrs) stuffp->readcmd = READ1X;
+		else stuffp->readcmd = 
+				stuffp->present | SINGLE ? READ1X : READ2X;
+		WARN(("XXX %x XXX\n", stuffp->readcmd));
+#endif
+
+		/* try to get the first sector, iff any ... */
+		if (stuffp->lastsector >= 0) {
 			char buf[512];
 			int ans;
 			int tries;
@@ -709,13 +726,19 @@ mcdx_open(struct inode *ip, struct file *fp)
 			stuffp->audio = 0;
 
 			for (tries = 6; tries; tries--) {
+
+				stuffp->introk = 1;
+
 				TRACE((OPENCLOSE, "open() try as %s\n",
 					stuffp->xa ? "XA" : "normal"));
 
 				/* set data mode */
 				if (-1 == (ans = mcdx_setdatamode(stuffp, 
-						stuffp->xa ? MODE2 : MODE1, 1)))
-					return -EIO;
+						stuffp->xa ? MODE2 : MODE1, 1))) {
+					/* return -EIO; */
+					stuffp->xa = 0;
+					break;
+				}
 
 				if ((stuffp->audio = e_audio(ans))) break; 
 
@@ -725,7 +748,7 @@ mcdx_open(struct inode *ip, struct file *fp)
 				if (ans == 1) break;
 				stuffp->xa = !stuffp->xa; 
 			}
-			if (!tries) return -EIO;
+			/* if (!tries) return -EIO; */
 		}
 
 		/* xa disks will be read in raw mode, others not */
@@ -735,13 +758,13 @@ mcdx_open(struct inode *ip, struct file *fp)
 
 		if (stuffp->audio) {
 			INFO(("open() audio disk found\n"));
-		} else {
+		} else if (stuffp->lastsector >= 0) {
 			INFO(("open() %s%s disk found\n",
 					stuffp->xa ? "XA / " : "",
 					stuffp->multi.multi ? "Multi Session" : "Single Session"));
-		}
+		} 
 
-        stuffp->xxx = jiffies;
+        stuffp->xxx = 0;
 	}
 
     /* lock the door if not already done */
@@ -768,9 +791,12 @@ mcdx_close(struct inode *ip, struct file *fp)
 		/* invalidate_inodes(ip->i_rdev); */
 		invalidate_buffers(ip->i_rdev);
 
+
 #if !MCDX_QUIET
 		if (-1 == mcdx_lockdoor(stuffp, 0, 3))
 				INFO(("close() Cannot unlock the door\n"));
+#else
+		mcdx_lockdoor(stuffp, 0, 3);
 #endif
 
         /* eject if wished */
@@ -783,15 +809,25 @@ mcdx_close(struct inode *ip, struct file *fp)
 }
 
 int check_mcdx_media_change(kdev_t full_dev)
-/*	Return: 1 if media changed since last call to 
-			  this function
-			0 else
-	Setting flag to 0 resets the changed state. */
-
+/*	Return: 1 if media changed since last call to this function
+			0 otherwise */
 {
+    struct s_drive_stuff *stuffp; 
+
     INFO(("check_mcdx_media_change called for device %s\n",
 	  kdevname(full_dev)));
-    return 0;
+
+	stuffp = mcdx_stuffp[MINOR(full_dev)];
+	mcdx_getstatus(stuffp, 1);
+
+	if (stuffp->yyy == 0) {
+		INFO((" ... not changed\n"));
+		return 0;
+	}
+
+	INFO((" ... changed\n"));
+	stuffp->yyy = 0;
+	return 1;
 }
 
 void mcdx_setup(char *str, int *pi)
@@ -803,22 +839,15 @@ void mcdx_setup(char *str, int *pi)
 /* DIRTY PART ******************************************************/ 
 
 static void mcdx_delay(struct s_drive_stuff *stuff, long jifs)
-/*	This routine is used for sleeping while initialisation - it seems that
- 	there are no other means available. May be we could use a simple count
- 	loop w/ jumps to itself, but I wanna make this independend of cpu
- 	speed. [1 jiffie is 1/HZ sec */
+/*	This routine is used for sleeping.
+	May be we could use a simple count loop w/ jumps to itself, but 
+	I wanna make this independend of cpu speed. [1 jiffie is 1/HZ] sec */
 {
     unsigned long tout = jiffies + jifs;
 
-    TRACE((INIT, "mcdx_delay %d\n", jifs));
-    if (jifs < 0) return;
+    /* TRACE((INIT, "mcdx_delay %d\n", jifs)); */
+    if (jifs <= 0) return;
 
-#if 1
-    while (jiffies < tout) {
-        current->timeout = jiffies;
-        schedule();
-    }
-#else
     if (current->pid == 0) {        /* no sleep allowed */
 		while (jiffies < tout) {
             current->timeout = jiffies;
@@ -826,37 +855,50 @@ static void mcdx_delay(struct s_drive_stuff *stuff, long jifs)
         }
     } else {                        /* sleeping is allowed */
         current->timeout = tout;
-        current->state = TASK_INTERRUPTIBLE;
+        /* current->state = TASK_INTERRUPTIBLE; */
+		/* And perhaps we should remove the while() { ... } */
         while (current->timeout) {
             interruptible_sleep_on(&stuff->sleepq);
+			TRACE((SLEEP, "delay: to is %d\n", current->timeout));
         }
     }
-#endif
 }
 
 static void 
 mcdx_intr(int irq, void *dev_id, struct pt_regs* regs)
 {
     struct s_drive_stuff *stuffp;
-	unsigned char x;
+	unsigned char b;
 
     stuffp = mcdx_irq_map[irq];
 
-    if (stuffp == NULL || !stuffp->busy) {
-		TRACE((IRQ, "intr() unexpected interrupt @ irq %d\n", irq));
+    if (stuffp == NULL ) {
+		WARN(("mcdx: no device for intr %d\n", irq));
 		return;
     }
 
-	/* if not ok read the next byte as the drives status */
-	if (0 == (stuffp->introk = 
-			(~(x = inb((unsigned int) stuffp->rreg_status)) & MCDX_RBIT_DTEN))) 
-		TRACE((IRQ, "intr() irq %d failed, status %02x %02x\n",
-				irq, x, inb((unsigned int) stuffp->rreg_data)));
-	else
-	  {
-	    TRACE((IRQ, "irq() irq %d ok, status %02x\n", irq, x));
+	/* get the interrupt status */
+	b = inb((unsigned int) stuffp->rreg_status);
+	stuffp->introk = ~b & MCDX_RBIT_DTEN;
 
-	  }
+	/* NOTE: We only should get interrupts if data were requested.
+	   But the drive seems to generate ``asynchronous'' interrupts
+	   on several error conditions too.  (Despite the err int enable
+	   setting during initialisation) */
+
+	/* if not ok, read the next byte as the drives status */
+	if (!stuffp->introk) {
+		TRACE((IRQ, "intr() irq %d hw status 0x%02x\n", irq, b));
+		if (~b & MCDX_RBIT_STEN) {
+			INFO((  "intr() irq %d    status 0x%02x\n", 
+					irq, inb((unsigned int) stuffp->rreg_data)));
+		} else {
+			INFO((  "intr() irq %d ambigous hw status\n", irq));
+		}
+	} else {
+		TRACE((IRQ, "irq() irq %d ok, status %02x\n", irq, b));
+    }
+
     stuffp->busy = 0;
     wake_up_interruptible(&stuffp->busyq);
 }
@@ -881,13 +923,11 @@ mcdx_talk (
 
     if ((disgard = (buffer == NULL))) buffer = &c;
 
-    while (stuffp->lock)
-		interruptible_sleep_on(&stuffp->lockq);
-
-    if (current->signal && ~current->blocked) {
-        WARN(("talk() got signal %d\n", current->signal));
-        return -1;
-    }
+    while (stuffp->lock) {
+		interruptible_sleep_on(&stuffp->lockq); 
+		TRACE((SLEEP, "talk: lock = %d\n",
+				stuffp->lock));
+	}
 
     stuffp->lock = 1;
     stuffp->valid = 0;	
@@ -906,8 +946,8 @@ mcdx_talk (
      *  st != -1 (good) */
 	for (st = -1; st == -1 && tries; tries--) {
 
-        size_t sz = size;
-        char* bp = buffer;
+		char *bp = (char*) buffer;
+		size_t sz = size;
 
 		outsb((unsigned int) stuffp->wreg_data, cmd, cmdlen);
         TRACE((TALK, "talk() command sent\n"));
@@ -930,7 +970,7 @@ mcdx_talk (
                     cmd[0], cmdlen > 1 ? "..." : ""));
             st = -1;
             continue;
-        }
+		}
 
         /* audio status? */
         if (stuffp->audiostatus == CDROM_AUDIO_INVALID)
@@ -943,7 +983,7 @@ mcdx_talk (
         /* media change? */
         if (e_changed(st)) {
             INFO(("talk() media changed\n"));
-            stuffp->changed = jiffies;
+            stuffp->xxx = stuffp->yyy = 1;
         }
 
         /* now actually get the data */
@@ -958,7 +998,9 @@ mcdx_talk (
         }
     }
 
-    if (!tries && st == -1) WARN(("talk() giving up\n"));
+#if !MCDX_QUIET
+    if (!tries && st == -1) INFO(("talk() giving up\n"));
+#endif
 
     stuffp->lock = 0;
     wake_up_interruptible(&stuffp->lockq);
@@ -995,7 +1037,7 @@ void cleanup_module(void)
 {
     int i;
 
-	WARN(("cleanup_module called\n"));
+	INFO(("cleanup_module called\n"));
 	
     for (i = 0; i < MCDX_NDRIVES; i++) {
 		struct s_drive_stuff *stuffp;
@@ -1012,9 +1054,12 @@ void cleanup_module(void)
 		kfree(stuffp);
     }
 
-    if (unregister_blkdev(MAJOR_NR, DEVICE_NAME) != 0) 
+    if (unregister_blkdev(MAJOR_NR, DEVICE_NAME) != 0) {
         WARN(("cleanup() unregister_blkdev() failed\n"));
-    else INFO(("cleanup() succeeded\n"));
+    } 
+#if !MCDX_QUIET
+	else INFO(("cleanup() succeeded\n"));
+#endif
 }
 
 #endif MODULE
@@ -1046,15 +1091,12 @@ void warn(const char* fmt, ...)
 	va_end(args);
 }
 
-
 int mcdx_init(void)
 {
 	int drive;
 
-	WARN(("Version 1.5a "
-			"mcdx.c,v 1.19.2.1 1996/01/13 21:25:55 heiko Exp\n"));
-	INFO((": Version 1.5a "
-			"mcdx.c,v 1.19.2.1 1996/01/13 21:25:55 heiko Exp\n"));
+	WARN(("Version 1.7 for %s\n", kernel_version));
+	WARN(("mcdx.c,v 1.31 1996/03/02 00:21:18 heiko Exp\n"));
 
 	/* zero the pointer array */
 	for (drive = 0; drive < MCDX_NDRIVES; drive++)
@@ -1065,6 +1107,8 @@ int mcdx_init(void)
 		struct s_version version;
 		struct s_drive_stuff* stuffp;
         int size;
+
+		mcdx_blocksizes[drive] = 0;
 
         size = sizeof(*stuffp);
 		
@@ -1085,7 +1129,6 @@ int mcdx_init(void)
 
 		stuffp->present = 0;		/* this should be 0 already */
 		stuffp->toc = NULL;			/* this should be NULL already */
-		stuffp->changed = jiffies;
 
 		/* setup our irq and i/o addresses */
 		stuffp->irq = irq(mcdx_drive_map[drive]);
@@ -1096,9 +1139,8 @@ int mcdx_init(void)
 
 		/* check if i/o addresses are available */
 		if (0 != check_region((unsigned int) stuffp->wreg_data, MCDX_IO_SIZE)) {
-            WARN(("%s=0x%3p,%d: "
-                    "Init failed. I/O ports (0x%3p..0x3p) already in use.\n"
-                    MCDX, 
+            WARN(("0x%3p,%d: "
+                    "Init failed. I/O ports (0x%3p..0x%3p) already in use.\n",
                     stuffp->wreg_data, stuffp->irq,
                     stuffp->wreg_data, 
                     stuffp->wreg_data + MCDX_IO_SIZE - 1));
@@ -1127,22 +1169,22 @@ int mcdx_init(void)
 
 		switch (version.code) {
 		case 'D': 
-                stuffp->readcmd = READDSPEED; 
+                stuffp->readcmd = READ2X; 
                 stuffp->present = DOUBLE | DOOR | MULTI; 
                 break;
 		case 'F': 
-                stuffp->readcmd = READSSPEED; 
+                stuffp->readcmd = READ1X; 
                 stuffp->present = SINGLE | DOOR | MULTI;
                 break;
 		case 'M': 
-                stuffp->readcmd = READSSPEED;
+                stuffp->readcmd = READ1X;
                 stuffp->present = SINGLE;
                 break;
 		default: 
                 stuffp->present = 0; break;
 		}
 
-        stuffp->playcmd = READSSPEED;
+        stuffp->playcmd = READ1X;
 
 
 		if (!stuffp->present) {
@@ -1164,9 +1206,7 @@ int mcdx_init(void)
 		blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 		read_ahead[MAJOR_NR] = READ_AHEAD;
 
-#if WE_KNOW_WHY
-		 blksize_size[MAJOR_NR] = BLKSIZES;
-#endif
+		blksize_size[MAJOR_NR] = mcdx_blocksizes;
 
 		TRACE((INIT, "init() subscribe irq and i/o\n"));
 		mcdx_irq_map[stuffp->irq] = stuffp;
@@ -1210,8 +1250,38 @@ int mcdx_init(void)
 	return 0;
 }
 
+static int 
+mcdx_transfer(struct s_drive_stuff *stuffp,
+		char *p, int sector, int nr_sectors)
+/*	This seems to do the actually transfer.  But it does more.  It
+	keeps track of errors ocurred and will (if possible) fall back
+	to single speed on error. 
+	Return:	-1 on timeout or other error
+			else status byte (as in stuff->st) */
+{
+	int ans;
 
-static int mcdx_transfer(struct s_drive_stuff *stuffp,
+	ans = mcdx_xfer(stuffp, p, sector, nr_sectors);
+	return ans;
+#if FALLBACK
+	if (-1 == ans) stuffp->readerrs++;
+	else return ans;
+
+	if (stuffp->readerrs && stuffp->readcmd == READ1X) {
+		WARN(("XXX Alrady reading 1x -- no chance\n"));
+		return -1;
+	}
+
+	WARN(("XXX Fallback to 1x\n"));
+
+	stuffp->readcmd = READ1X;
+	return mcdx_transfer(stuffp, p, sector, nr_sectors);
+#endif
+	
+}
+
+
+static int mcdx_xfer(struct s_drive_stuff *stuffp,
 		char *p, int sector, int nr_sectors)
 /*	This does actually the transfer from the drive.
 	Return:	-1 on timeout or other error
@@ -1228,11 +1298,11 @@ static int mcdx_transfer(struct s_drive_stuff *stuffp,
 		return -1;
 	}
 
-    while (stuffp->lock)
+    while (stuffp->lock) {
 		interruptible_sleep_on(&stuffp->lockq);
-    if (current->signal && ~current->blocked) {
-        WARN(("talk() got signal %d\n", current->signal));
-    }
+		TRACE((SLEEP, "xfer: lock = %d\n",
+			stuffp->lock));
+	}
 
     if (stuffp->valid
 			&& (sector >= stuffp->pending)
@@ -1245,29 +1315,32 @@ static int mcdx_transfer(struct s_drive_stuff *stuffp,
 	stuffp->lock = current->pid;
 
 	do {
-	    /* int sig = 0; */
-	    int to = 0;
+		/* wait for the drive become idle, but first
+		   check for possible occured errors --- the drive
+		   seems to report them asynchronously */
 
-		/* wait for the drive become idle */
-	    current->timeout = jiffies + 5*HZ;
-	    while (stuffp->busy) {
+	    current->timeout = jiffies + 5 * HZ;
+	    while (stuffp->introk && stuffp->busy && current->timeout) {
 			interruptible_sleep_on(&stuffp->busyq);
+			TRACE((SLEEP, "request: busy = %d, timeout = %d\n",
+				stuffp->busy, current->timeout));
 		}
 
-	    current->timeout = 0;
-
 		/* test for possible errors */
-	    if (((stuffp->busy == 0) && !stuffp->introk)
-				|| to) {
-			if ((stuffp->busy == 0) && !stuffp->introk)
-                WARN(("mcdx_transfer() failure in data request\n"));
-			else if (to)
-                WARN(("mcdx_transfer(): timeout\n"));
+		if (current->timeout == 0 || !stuffp->introk) {
+			if (current->timeout == 0)  {
+				WARN(("mcdx_transfer() timeout\n"));
+			} else if (!stuffp->introk) { 
+				WARN(("mcdx_transfer() error via irq reported\n"));
+			} else {
+				WARN(("mcdx_transfer() unknown failure in data request\n"));
+			}
+
 			stuffp->lock = 0;
 			stuffp->busy = 0;
+			stuffp->valid = 0;
+
 			wake_up_interruptible(&stuffp->lockq);
-			wake_up_interruptible(&stuffp->busyq);
-			stuffp->errno = MCDX_E;
 			TRACE((TRANSFER, "transfer() done (-1)\n"));
 			return -1;
 	    }
@@ -1301,8 +1374,7 @@ static int mcdx_transfer(struct s_drive_stuff *stuffp,
 			done++;
 			sector++;
 	    }
-	}
-	while (++(stuffp->pending) < off);
+	} while (++(stuffp->pending) < off);
 
 	stuffp->lock = 0;
 	wake_up_interruptible(&stuffp->lockq);
@@ -1325,7 +1397,8 @@ static int mcdx_transfer(struct s_drive_stuff *stuffp,
 		if (stuffp->pending > stuffp->lastsector) {
 			WARN(("transfer() sector %d from nirvana requested.\n",
 				stuffp->pending));
-			stuffp->errno = MCDX_EOM;
+			stuffp->status = MCDX_ST_EOM;
+			stuffp->valid = 0;
 			TRACE((TRANSFER, "transfer() done (-1)\n"));
 			return -1;
 		}
@@ -1507,7 +1580,7 @@ mcdx_playmsf(struct s_drive_stuff* stuffp, const struct cdrom_msf* msf)
 
     outsb((unsigned int) stuffp->wreg_data, cmd, sizeof cmd);
 
-    if (-1 == mcdx_getval(stuffp, 3*HZ, 0, NULL)) {
+    if (-1 == mcdx_getval(stuffp, 3 * HZ, 0, NULL)) {
         WARN(("playmsf() timeout\n")); 
         return -1;
     }
@@ -1550,25 +1623,25 @@ static int
 mcdx_closedoor(struct s_drive_stuff *stuffp, int tries)
 {
 	if (stuffp->present & DOOR)
-		return mcdx_talk(stuffp, "\xf8", 1, NULL, 1, 5*HZ, tries);
+		return mcdx_talk(stuffp, "\xf8", 1, NULL, 1, 5 * HZ, tries);
 	else
 		return 0;
 }
 
 static int 
 mcdx_stop(struct s_drive_stuff *stuffp, int tries)
-{ return mcdx_talk(stuffp, "\xf0", 1, NULL, 1, 2*HZ, tries); }
+{ return mcdx_talk(stuffp, "\xf0", 1, NULL, 1, 2 * HZ, tries); }
 
 static int
 mcdx_hold(struct s_drive_stuff *stuffp, int tries)
-{ return mcdx_talk(stuffp, "\x70", 1, NULL, 1, 2*HZ, tries); }
+{ return mcdx_talk(stuffp, "\x70", 1, NULL, 1, 2 * HZ, tries); }
 
 static int
 mcdx_eject(struct s_drive_stuff *stuffp, int tries)
 {
 	if (stuffp->present & DOOR) {
         stuffp->ejected = jiffies;
-		return mcdx_talk(stuffp, "\xf6", 1, NULL, 1, 5*HZ, tries);
+		return mcdx_talk(stuffp, "\xf6", 1, NULL, 1, 5 * HZ, tries);
     } else return 0;
 }
 
@@ -1582,7 +1655,7 @@ mcdx_requestsubqcode(struct s_drive_stuff *stuffp,
 
 	if (-1 == (ans = mcdx_talk(
             stuffp, "\x20", 1, buf, sizeof(buf),
-            2*HZ, tries))) 
+            2 * HZ, tries))) 
         return -1;
 	sub->control = buf[1];
 	sub->tno = buf[2];
@@ -1604,8 +1677,8 @@ mcdx_requestmultidiskinfo(struct s_drive_stuff *stuffp, struct s_multi *multi, i
 	int ans;
 
     if (stuffp->present & MULTI) {
-        ans = mcdx_talk(stuffp, "\x11", 1, buf, sizeof(buf), 2*HZ, tries);
-        multi->multi = buf[1];
+		ans = mcdx_talk(stuffp, "\x11", 1, buf, sizeof(buf), 1 * HZ, tries);
+		multi->multi = buf[1];
         multi->msf_last.minute = buf[2];
         multi->msf_last.second = buf[3];
         multi->msf_last.frame = buf[4];
@@ -1621,15 +1694,20 @@ mcdx_requesttocdata(struct s_drive_stuff *stuffp, struct s_diskinfo *info, int t
 {
 	char buf[9];
 	int ans;
-	ans = mcdx_talk(stuffp, "\x10", 1, buf, sizeof(buf), 2*HZ, tries);
-	info->n_first = bcd2uint(buf[1]);
-	info->n_last = bcd2uint(buf[2]);
-	info->msf_leadout.minute = buf[3];
-	info->msf_leadout.second = buf[4];
-	info->msf_leadout.frame = buf[5];
-	info->msf_first.minute = buf[6];
-	info->msf_first.second = buf[7];
-	info->msf_first.frame = buf[8];
+	ans = mcdx_talk(stuffp, "\x10", 1, buf, sizeof(buf), 1 * HZ, tries);
+	if (ans == -1) {
+		info->n_first = 0;
+		info->n_last = 0;
+	} else {
+		info->n_first = bcd2uint(buf[1]);
+		info->n_last = bcd2uint(buf[2]);
+		info->msf_leadout.minute = buf[3];
+		info->msf_leadout.second = buf[4];
+		info->msf_leadout.frame = buf[5];
+		info->msf_first.minute = buf[6];
+		info->msf_first.second = buf[7];
+		info->msf_first.frame = buf[8];
+	}
 	return ans;
 }
 
@@ -1641,7 +1719,7 @@ mcdx_setdrivemode(struct s_drive_stuff *stuffp, enum drivemodes mode, int tries)
 
 	TRACE((HW, "setdrivemode() %d\n", mode));
 
-	if (-1 == (ans = mcdx_talk(stuffp, "\xc2", 1, cmd, sizeof(cmd), 5*HZ, tries)))
+	if (-1 == (ans = mcdx_talk(stuffp, "\xc2", 1, cmd, sizeof(cmd), 5 * HZ, tries)))
 		return -1;
 
 	switch (mode) {
@@ -1652,9 +1730,8 @@ mcdx_setdrivemode(struct s_drive_stuff *stuffp, enum drivemodes mode, int tries)
 	  default: break;
 	}
 	cmd[0] = 0x50;
-	return mcdx_talk(stuffp, cmd, 2, NULL, 1, 5*HZ, tries);
+	return mcdx_talk(stuffp, cmd, 2, NULL, 1, 5 * HZ, tries);
 }
-
 
 static int
 mcdx_setdatamode(struct s_drive_stuff *stuffp, enum datamodes mode, int tries)
@@ -1667,7 +1744,7 @@ mcdx_setdatamode(struct s_drive_stuff *stuffp, enum datamodes mode, int tries)
 	  case MODE2: cmd[1] = 0x02; break;
 	  default: return -EINVAL;
 	}
-	return mcdx_talk(stuffp, cmd, 2, NULL, 1, 5*HZ, tries);
+	return mcdx_talk(stuffp, cmd, 2, NULL, 1, 5 * HZ, tries);
 }
 
 static int
@@ -1682,13 +1759,13 @@ mcdx_config(struct s_drive_stuff *stuffp, int tries)
 	cmd[1] = 0x10;		/* irq enable */
 	cmd[2] = 0x05;		/* pre, err irq enable */
 
-	if (-1 == mcdx_talk(stuffp, cmd, 3, NULL, 1, 1*HZ, tries))
+	if (-1 == mcdx_talk(stuffp, cmd, 3, NULL, 1, 1 * HZ, tries))
 		return -1;
 
 	cmd[1] = 0x02;		/* dma select */
 	cmd[2] = 0x00;		/* no dma */
 
-	return mcdx_talk(stuffp, cmd, 3, NULL, 1, 1*HZ, tries);
+	return mcdx_talk(stuffp, cmd, 3, NULL, 1, 1 * HZ, tries);
 }
 
 static int
@@ -1697,7 +1774,8 @@ mcdx_requestversion(struct s_drive_stuff *stuffp, struct s_version *ver, int tri
 	char buf[3];
 	int ans;
 
-	if (-1 == (ans = mcdx_talk(stuffp, "\xdc", 1, buf, sizeof(buf), 2*HZ, tries)))
+	if (-1 == (ans = mcdx_talk(stuffp, "\xdc", 
+			1, buf, sizeof(buf), 1 * HZ, tries)))
 		return ans;
 
 	ver->code = buf[1];
@@ -1713,7 +1791,7 @@ mcdx_reset(struct s_drive_stuff *stuffp, enum resetmodes mode, int tries)
 		outb(0, (unsigned int) stuffp->wreg_chn);		/* no dma, no irq -> hardware */
 		outb(0, (unsigned int) stuffp->wreg_reset);		/* hw reset */
 		return 0;
-	} else return mcdx_talk(stuffp, "\x60", 1, NULL, 1, 5*HZ, tries);
+	} else return mcdx_talk(stuffp, "\x60", 1, NULL, 1, 5 * HZ, tries);
 }
 
 static int
@@ -1722,14 +1800,13 @@ mcdx_lockdoor(struct s_drive_stuff *stuffp, int lock, int tries)
 	char cmd[2] = { 0xfe };
     if (stuffp->present & DOOR) {
         cmd[1] = lock ? 0x01 : 0x00;
-        return mcdx_talk(stuffp, cmd, sizeof(cmd), NULL, 1, 5*HZ, tries);
-    } else 
-        return 0;
+        return mcdx_talk(stuffp, cmd, sizeof(cmd), NULL, 1, 5 * HZ, tries);
+    } else return 0;
 }
 
 static int
 mcdx_getstatus(struct s_drive_stuff *stuffp, int tries)
-{ return mcdx_talk(stuffp, "\x40", 1, NULL, 1, 5*HZ, tries); }
+{ return mcdx_talk(stuffp, "\x40", 1, NULL, 1, 5 * HZ, tries); }
 
 static int
 mcdx_getval(struct s_drive_stuff *stuffp, int to, int delay, char* buf)
@@ -1765,3 +1842,4 @@ mcdx_setattentuator(
     return mcdx_talk(stuffp, cmd, sizeof(cmd), NULL, 5, 200, tries);
 }
 
+/* ex:set ts=4 sw=4: */

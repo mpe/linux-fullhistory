@@ -1,4 +1,4 @@
-/* $Id: mman.h,v 1.5 1995/11/25 02:32:03 davem Exp $ */
+/* $Id: mman.h,v 1.6 1996/01/03 03:53:05 davem Exp $ */
 #ifndef __SPARC_MMAN_H__
 #define __SPARC_MMAN_H__
 
@@ -41,5 +41,9 @@
 #define MC_UNLOCK       3  /* Unlock pages locked via previous mctl() with MC_LOCK arg */
 #define MC_LOCKAS       5  /* Lock an entire address space of the calling process */
 #define MC_UNLOCKAS     6  /* Unlock entire address space of calling process */
+
+/* compatibility flags */
+#define MAP_ANON	MAP_ANONYMOUS
+#define MAP_FILE	0
 
 #endif /* __SPARC_MMAN_H__ */

@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl.c,v 1.8 1995/11/26 04:07:39 davem Exp $
+/* $Id: sunos_ioctl.c,v 1.17 1996/02/10 04:29:20 davem Exp $
  * sunos_ioctl.c: The Linux Operating system: SunOS ioctl compatibility.
  * 
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -17,15 +17,44 @@
 #include <linux/if.h>
 #include <linux/if_arp.h>
 #include <linux/fs.h>
+#include <linux/mm.h>
+#include <asm/kbio.h>
+
+#if 0
+extern char sunkbd_type;
+extern char sunkbd_layout;
+#endif
 
 extern asmlinkage int sys_ioctl(unsigned int, unsigned int, unsigned long);
+extern asmlinkage int sys_setsid(void);
 
 asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 {
 	struct file *filp;
-	
+	int foo;
+
 	if (fd >= NR_OPEN || !(filp = current->files->fd [fd]))
 		return -EBADF;
+
+	/* First handle an easy compat. case for tty ldisc. */
+	if(cmd == TIOCSETD) {
+		int *p, ntty = N_TTY, old_fs;
+
+		p = (int *) arg;
+		foo = verify_area(VERIFY_WRITE, p, sizeof(int));
+		if(foo) return foo;
+		if(*p == 2) {
+			old_fs = get_fs();
+			set_fs(KERNEL_DS);
+			foo = sys_ioctl(fd, cmd, (int) &ntty);
+			set_fs(old_fs);
+			return (foo == -EINVAL ? -EOPNOTSUPP : foo);
+		}
+	}
+
+	/* Binary compatability is good American knowhow fuckin' up. */
+	if(cmd == TIOCNOTTY)
+		return sys_setsid();
 
 	/* SunOS networking ioctls. */
 	switch (cmd) {
@@ -49,7 +78,7 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 		return sys_ioctl(fd, SIOCSIFMEM, arg);
 	case _IORW('i', 19, struct ifreq):
 		return sys_ioctl(fd, SIOCGIFMEM, arg);
-	case _IORW('i', 20, struct ifreq):
+	case _IORW('i', 20, struct ifconf):
 		return sys_ioctl(fd, SIOCGIFCONF, arg);
 	case _IOW('i', 21, struct ifreq): /* SIOCSIFMTU */
 		return sys_ioctl(fd, SIOCSIFMTU, arg);
@@ -83,7 +112,7 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 	case _IOW('i', 46, struct ifreq): /* SIOCSSDSTATS */
 	case _IOW('i', 47, struct ifreq): /* SIOCSSESTATS */
 	case _IOW('i', 48, struct ifreq): /* SIOCSPROMISC */
-		return -EINVAL;
+		return -EOPNOTSUPP;
 
 	case _IOW('i', 49, struct ifreq):
 		return sys_ioctl(fd, SIOCADDMULTI, arg);
@@ -91,6 +120,7 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 		return sys_ioctl(fd, SIOCDELMULTI, arg);
 
 	/* FDDI interface ioctls, unsupported. */
+		
 	case _IOW('i', 51, struct ifreq): /* SIOCFDRESET */
 	case _IOW('i', 52, struct ifreq): /* SIOCFDSLEEP */
 	case _IOW('i', 53, struct ifreq): /* SIOCSTRTFMWAR */
@@ -100,10 +130,27 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 	case _IOW('i', 57, struct ifreq): /* SIOCFDEXUSER */
 	case _IOW('i', 58, struct ifreq): /* SIOCFDGNETMAP */
 	case _IOW('i', 59, struct ifreq): /* SIOCFDGIOCTL */
-		return -EINVAL;
+		printk("FDDI ioctl, returning EOPNOTSUPP\n");
+		return -EOPNOTSUPP;
+	case _IOW('t', 125, int):
+		/* More stupid tty sunos ioctls, just
+		 * say it worked.
+		 */
+		return 0;
+	/* Non posix grp */
+	case _IOR('t', 119, int):
+		return -EIO;
 	}
 
-	return sys_ioctl (fd, cmd, arg);
+#if 0
+	if (cmd & 0xff00 == ('k' << 8)){
+		printk ("[[KBIO: %8.8x\n", (unsigned int) cmd);
+	}
+#endif
+
+	foo = sys_ioctl(fd, cmd, arg);
+	/* so stupid... */
+	return (foo == -EINVAL ? -EOPNOTSUPP : foo);
 }
 
 

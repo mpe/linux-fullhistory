@@ -1231,6 +1231,7 @@ opl3_init (long mem_start, int ioaddr, int *osp)
 
       devc->v_alloc->max_voice = devc->nr_voice = 18;
       devc->fm_info.nr_drums = 0;
+      devc->fm_info.synth_subtype = FM_TYPE_OPL3;
       devc->fm_info.capabilities |= SYNTH_CAP_OPL3;
       strcpy (devc->fm_info.name, "Yamaha OPL-3");
 

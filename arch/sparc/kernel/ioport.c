@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.12 1995/11/25 00:58:07 davem Exp $
+/* $Id: ioport.c,v 1.14 1996/01/03 03:34:41 davem Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -54,20 +54,19 @@ void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
 	unsigned long addr = (unsigned long) address;
 	unsigned long offset = (addr & (~PAGE_MASK));
 
-	if (virtual){
+	if (virtual)
 		vaddr = (unsigned long) virtual;
-	} else {
+	else
 		vaddr = next_free_region;
-	}
 		
 	len += offset;
-	if (((unsigned long) virtual + len) > (IOBASE_VADDR + IOBASE_LEN)){
-		printk ("alloc_io: Mapping ouside IOBASE area\n");
-		prom_halt ();
+	if(((unsigned long) virtual + len) > (IOBASE_VADDR + IOBASE_LEN)) {
+		prom_printf("alloc_io: Mapping ouside IOBASE area\n");
+		prom_halt();
 	}
-	if (check_region ((vaddr | offset), len)){
-		printk ("alloc_io: 0x%lx is already in use\n", vaddr);
-		prom_halt ();
+	if(check_region ((vaddr | offset), len)) {
+		prom_printf("alloc_io: 0x%lx is already in use\n", vaddr);
+		prom_halt();
 	}
 
 	/* Tell Linux resource manager about the mapping */
@@ -75,10 +74,10 @@ void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
 
 	base_address = vaddr;
 	/* Do the actual mapping */
-	for (; len > 0; len -= PAGE_SIZE){
-		mapioaddr (addr, vaddr, bus_type, rdonly);
+	for (; len > 0; len -= PAGE_SIZE) {
+		mapioaddr(addr, vaddr, bus_type, rdonly);
 		vaddr += PAGE_SIZE;
-		addr  += PAGE_SIZE;
+		addr += PAGE_SIZE;
 		if (!virtual)
 			next_free_region += PAGE_SIZE;
 	}
@@ -99,13 +98,13 @@ void *sparc_dvma_malloc (int len, char *name)
 	unsigned long vaddr, base_address;
 
 	vaddr = dvma_next_free;
-	if (check_region (vaddr, len)){
-		printk ("alloc_dma: 0x%lx is already in use\n", vaddr);
-		prom_halt ();
+	if(check_region (vaddr, len)) {
+		prom_printf("alloc_dma: 0x%lx is already in use\n", vaddr);
+		prom_halt();
 	}
-	if (vaddr + len > (DVMA_VADDR + DVMA_LEN)){
-		printk ("alloc_dvma: out of dvma memory\n");
-		prom_halt ();
+	if(vaddr + len > (DVMA_VADDR + DVMA_LEN)) {
+		prom_printf("alloc_dvma: out of dvma memory\n");
+		prom_halt();
 	}
 
 	/* Basically these can be mapped just like any old

@@ -1,5 +1,19 @@
-Changelog for version 3.5-beta7
--------------------------------
+Changelog for version 3.5-beta10
+--------------------------------
+
+Since 3.5-beta8
+- Fixed for compatibility with Linux 1.3.70 and later.
+- Changed boot time passing of 16 bit DMA channel number to SB driver.
+
+Since 3.5-beta8
+- Minor changes
+
+Since 3.5-beta7
+- enhancements to configure program (by Jeff Tranter):
+  - prompts are in same format as 1.3.x Linux kernel config program
+  - on-line help for each question
+  - fixed some compile warnings detected by gcc/g++ -Wall
+  - minor grammatical changes to prompts
 
 Since 3.5-beta6
 - Fixed bugs in mmap() support.
@@ -28,8 +42,8 @@ Since 3.5-beta1
 - Bugfixes.
 - Full duplex audio with MAD16+CS4231 may work now. The driver configures
   SB DMA of MAD16 so that it doesn't conflict with codec's DMA channels.
-  The side effect is that all 8 bit DMA channels (0,1,3) are populated in duplex
-  mode.
+  The side effect is that all 8 bit DMA channels (0,1,3) are populated in 
+  duplex mode.
 
 Since 3.5-alpha9
 - Bugfixes (mostly in Jazz16 and ESS1688/688 supports).

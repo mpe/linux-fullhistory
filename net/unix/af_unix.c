@@ -21,6 +21,9 @@
  *		Alan Cox	:	Fixed the stupid socketpair bug.
  *		Alan Cox	:	BSD compatibility fine tuning.
  *		Alan Cox	:	Fixed a bug in connect when interrupted.
+ *		Alan Cox	:	Sorted out a proper draft version of
+ *					file descriptor passing hacked up from
+ *					Mike Shaver's work.
  *
  *
  * Known differences from reference BSD that was tested:
@@ -273,7 +276,6 @@ static void def_callback3(struct sock *sk)
 static int unix_create(struct socket *sock, int protocol)
 {
 	unix_socket *sk;
-/*	printk("Unix create\n");*/
 	if(protocol && protocol != PF_UNIX)
 		return -EPROTONOSUPPORT;
 	sk=(unix_socket *)kmalloc(sizeof(*sk),GFP_KERNEL);
@@ -682,9 +684,194 @@ static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_
 	return 0;
 }
 
-/* if msg->accrights != NULL, we have fds to pass.
- * Current implementation passes at most one fd.
+/*
+ *	Support routines for struct cmsghdr handling
  */
+ 
+static struct cmsghdr *unix_copyrights(void *userp, int len)
+{
+	struct cmsghdr *cm;
+	if(len>256|| len <=0)
+		return NULL;
+	cm=kmalloc(len, GFP_KERNEL);
+	memcpy_fromfs(cm, userp, len);
+	return cm;
+}
+
+/*
+ *	Return a header block
+ */
+ 
+static void unix_returnrights(void *userp, int len, struct cmsghdr *cm)
+{
+	memcpy_tofs(userp, cm, len);
+	kfree(cm);
+}
+
+/*
+ *	Copy file descriptors into system space.
+ */
+ 
+static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
+{
+	int num=cmsg->cmsg_len-sizeof(struct cmsghdr);
+	int i;
+	int *fdp=(int *)cmsg->cmsg_data;
+	num/=4;	/* Odd bytes are forgotten in BSD not errored */
+	
+	if(num>=UNIX_MAX_FD)
+		return -EINVAL;
+	
+	/*
+	 *	Verify the descriptors.
+	 */
+	 
+	for(i=0;i<=num;i++)
+	{
+		if(fdp[i]<0||fdp[i]>=NR_OPEN)
+			return -EINVAL;
+		if(current->files->fd[fdp[i]]==NULL)
+			return -EBADF;
+	}
+	
+	/*
+	 *	Make sure the garbage collector can cope.
+	 */
+	 
+	if(unix_gc_free<num)
+		return -ENOBUFS;
+	
+	for(i=0;i<=num;i++)
+	{
+		fp[i]=current->files->fd[fdp[i]];
+		fp[i]->f_count++;
+		unix_gc_add(sk, fp[i]);
+	}
+	
+	return num;
+}
+
+/*
+ *	Free the descriptors in the array
+ */
+
+static void unix_fd_free(struct sock *sk, struct file **fp, int num)
+{
+	int i;
+	for(i=0;i<num;i++)
+	{
+		close_fp(fp[i]);
+		unix_gc_remove(fp[i]);
+	}
+}
+
+/*
+ *	Count the free descriptors available to a process. 
+ *	Interpretation issue: Is the limit the highest descriptor (buggy
+ *	allowing passed fd's higher up to cause a limit to be exceeded) -
+ *	but how the old code did it - or like this...
+ */
+
+int unix_files_free(void)
+{
+	int i;
+	int n=0;
+	for (i=0;i<NR_OPEN;i++)
+	{
+		if(current->files->fd[i])
+			n++;
+	}
+	i=NR_OPEN;
+	if(i>current->rlim[RLIMIT_NOFILE].rlim_cur)
+		i=current->rlim[RLIMIT_NOFILE].rlim_cur;
+	if(n>=i)
+		return 0;
+	return i-n;
+}
+
+/*
+ *	Perform the AF_UNIX file descriptor pass out functionality. This
+ *	is nasty and messy as is the whole design of BSD file passing.
+ */
+
+static void unix_detach_fds(struct sk_buff *skb, struct cmsghdr *cmsg)
+{
+	int i;
+	int cmnum;
+	struct file **fp;
+	struct file **ufp;
+	int *cmfptr=NULL;	/* =NULL To keep gcc happy */
+	int fdnum;
+	int ffree;
+	int ufn=0;
+	if(cmsg==NULL)
+		cmnum=0;
+	else
+	{
+		cmnum=cmsg->cmsg_len-sizeof(struct cmsghdr);
+		cmnum/=sizeof(int);
+		cmfptr=(int *)&cmsg->cmsg_data;
+	}
+	
+	memcpy(&fdnum,skb->h.filp,sizeof(int));
+	fp=(struct file **)(skb->h.filp+sizeof(int));
+	if(cmnum>fdnum)
+		cmnum=fdnum;
+	ffree=unix_files_free();
+	if(cmnum>ffree)
+		cmnum=ffree;
+	ufp=&current->files->fd[0];
+	
+	/*
+	 *	Copy those that fit
+	 */
+	for(i=0;i<cmnum;i++)
+	{
+		/*
+		 *	Insert the fd
+		 */
+		while(ufp[ufn]!=NULL)
+			ufn++;
+		ufp[ufn]=fp[i];
+		*cmfptr++=ufn;
+		FD_CLR(ufn,&current->files->close_on_exec);
+		unix_gc_remove(fp[i]);
+	}
+	/*
+	 *	Dump those that don't
+	 */
+	for(;i<fdnum;i++)
+	{
+		close_fp(fp[i]);
+		unix_gc_remove(fp[i]);
+	}
+	kfree(skb->h.filp);
+	skb->h.filp=NULL;
+	
+}
+
+static void unix_destruct_fds(struct sk_buff *skb)
+{
+	unix_detach_fds(skb,NULL);
+}
+	
+/*
+ *	Attach the file descriptor array to an sk_buff
+ */
+ 
+static void unix_attach_fds(int fpnum,struct file **fp,struct sk_buff *skb)
+{
+	skb->h.filp=kmalloc(sizeof(int)+fpnum*sizeof(struct file *), 
+							GFP_KERNEL);
+	memcpy(skb->h.filp,&fpnum,sizeof(int));
+	memcpy(skb->h.filp+sizeof(int),fp,fpnum*sizeof(struct file *));
+	skb->destructor=unix_destruct_fds;
+}
+
+/*
+ *	Send AF_UNIX data.
+ */
+		
 static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nonblock, int flags)
 {
 	unix_socket *sk=sock->data;
@@ -694,8 +881,9 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	struct sk_buff *skb;
 	int limit=0;
 	int sent=0;
-	/* for passing  fd, NULL indicates no fd */
-	struct file *filp;
+	struct file *fp[UNIX_MAX_FD];
+	int fpnum=0;
+	int fp_attached=0;
 
 	if(sk->err)
 		return sock_error(sk);
@@ -723,27 +911,27 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 			return -ENOTCONN;
 	}
 
-
-	/* see if we want to access rights (fd) -- at the moment, 
-	 * we can pass none or 1 fd
-         */
-	filp = NULL;
-	if(msg->msg_accrights) {
-		/* then accrightslen is meaningful */
-		if(msg->msg_accrightslen == sizeof(int)) {
-			int fd;
-
-			fd = get_user((int *) msg->msg_accrights);
-			filp = file_from_fd(fd);
-			if(!filp)
-				return -EBADF;
-		} else if(msg->msg_accrightslen != 0) {
-			/* if we have accrights, we fail here */
-			return -EINVAL;
+	/*
+	 *	A control message has been attached.
+	 */
+	if(msg->msg_accrights) 
+	{
+		struct cmsghdr *cm=unix_copyrights(msg->msg_accrights, 
+						msg->msg_accrightslen);
+		if(cm==NULL || msg->msg_accrightslen<sizeof(struct cmsghdr) ||
+		   cm->cmsg_type!=SCM_RIGHTS ||
+		   cm->cmsg_level!=SOL_SOCKET ||
+		   msg->msg_accrightslen!=cm->cmsg_len)
+		{
+			kfree(cm);
+		   	return -EINVAL;
 		}
+		fpnum=unix_fd_copy(sk,cm,fp);
+		kfree(cm);
+		if(fpnum<0)
+			return fpnum;
 	}
 
-	/* invariant -- flip points to a file to pass or NULL */
 	while(sent < len)
 	{
 		/*
@@ -756,7 +944,10 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		if(size>(sk->sndbuf-sizeof(struct sk_buff))/2)	/* Keep two messages in the pipe so it schedules better */
 		{
 			if(sock->type==SOCK_DGRAM)
+			{
+				unix_fd_free(sk,fp,fpnum);
 				return -EMSGSIZE;
+			}
 			size=(sk->sndbuf-sizeof(struct sk_buff))/2;
 		}
 		/*
@@ -778,6 +969,7 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		
 		if(skb==NULL)
 		{
+			unix_fd_free(sk,fp,fpnum);
 			if(sent)
 			{
 				sk->err=-err;
@@ -790,6 +982,14 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		skb->sk=sk;
 		skb->free=1;
 		
+		if(fpnum && !fp_attached)
+		{
+			fp_attached=1;
+			unix_attach_fds(fpnum,fp,skb);
+			fpnum=0;
+		}
+		else
+			skb->h.filp=NULL;
 		memcpy_fromiovec(skb_put(skb,size),msg->msg_iov, size);
 
 		cli();
@@ -823,16 +1023,9 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 					return err;
 			}
 		}
-		/* at this point, we want to add an fd if we have one  */
-		skb->h.filp = filp;
-		if (filp) {
-			filp->f_count++;
-		}
-		
 		skb_queue_tail(&other->receive_queue, skb);
 		sti();
 		/* if we sent an fd, only do it once */
-		filp = NULL;	
 		other->data_ready(other,size);
 		sent+=size;
 	}
@@ -853,36 +1046,6 @@ static void unix_data_wait(unix_socket * sk)
 	}
 	sti();
 }
-		
-
-/*
- * return 0 if we can stick the fd, negative errno if we can't
- */
-static int stick_fd(struct file *filp, int *uaddr, int size)
-{
-	int slot;
-	int upper_bound;
-
-	if (!uaddr || size < sizeof(int))
-		return -EINVAL;
-
-	upper_bound = current->rlim[RLIMIT_NOFILE].rlim_cur;
-
-	if (upper_bound > NR_OPEN)
-		upper_bound = NR_OPEN;
-
-	for (slot = 0; slot < upper_bound;  slot++) {
-		if (current->files->fd[slot])
-			continue;
-		/* have an fd */
-		current->files->fd[slot] = filp;
-		FD_CLR(slot, &current->files->close_on_exec);
-		/* need verify area here? */
-		put_user(slot, uaddr);
-		return 0;
-	} 
-	return -EMFILE;
-}
 
 static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
 {
@@ -894,8 +1057,8 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	int len;
 	int num;
 	struct iovec *iov=msg->msg_iov;
+	struct cmsghdr *cm=NULL;
 	int ct=msg->msg_iovlen;
-	struct file *filp;
 
 	if(flags&MSG_OOB)
 		return -EOPNOTSUPP;
@@ -905,6 +1068,20 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 		
 	if(sk->err)
 		return sock_error(sk);
+
+	if(msg->msg_accrights) 
+	{
+		cm=unix_copyrights(msg->msg_accrights, 
+			msg->msg_accrightslen);
+		if(msg->msg_accrightslen<sizeof(struct cmsghdr)||
+		   cm->cmsg_type!=SCM_RIGHTS ||
+		   cm->cmsg_level!=SOL_SOCKET ||
+		   msg->msg_accrightslen!=cm->cmsg_len)
+		{
+			kfree(cm);
+		   	return -EINVAL;
+		}
+	}
 	
 	down(&sk->protinfo.af_unix.readsem);		/* Lock the socket */
 	while(ct--)
@@ -953,11 +1130,8 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 			num=min(skb->len,size-copied);
 			memcpy_tofs(sp, skb->data, num);
 
-			if ((filp = skb->h.filp) != NULL) {
-				skb->h.filp = NULL;
-				if (stick_fd(filp, msg->msg_accrights, msg->msg_accrightslen) < 0)
-					close_fp(filp);
-			}
+			if (skb->h.filp!=NULL)
+				unix_detach_fds(skb,cm);
 
 			copied+=num;
 			done+=num;
@@ -970,12 +1144,14 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 				continue;
 			}
 			kfree_skb(skb, FREE_WRITE);
-			if(sock->type==SOCK_DGRAM)
+			if(sock->type==SOCK_DGRAM || cm)
 				goto out;
 		}
 	}
 out:
 	up(&sk->protinfo.af_unix.readsem);
+	if(cm)
+		unix_returnrights(msg->msg_accrights,msg->msg_accrightslen,cm);
 	return copied;
 }
 
@@ -1118,7 +1294,7 @@ static struct proto_ops unix_proto_ops = {
 
 void unix_proto_init(struct net_proto *pro)
 {
-	printk("NET3: Unix domain sockets 0.10 BETA for Linux NET3.033.\n");
+	printk("NET3: Unix domain sockets 0.12 for Linux NET3.033.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {

@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.11 1995/11/25 00:58:19 davem Exp $
+/* $Id: rtrap.S,v 1.21 1996/02/20 07:45:11 davem Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -45,16 +45,15 @@ rtrap_7win_patch5:	and	%g1, 0x7f, %g1
 	.globl	ret_trap_entry, rtrap_patch1, rtrap_patch2
 	.globl	rtrap_patch3, rtrap_patch4, rtrap_patch5
 ret_trap_entry:
-	ld	[%sp + STACKFRAME_SZ + PT_PSR], %t_psr
+	ld	[%sp + REGWIN_SZ + PT_PSR], %t_psr
 	andcc	%t_psr, PSR_PS, %g0
 	bne	ret_trap_kernel
 	 nop
 
 	sethi	%hi(C_LABEL(need_resched)), %twin_tmp1
 	ld	[%twin_tmp1 + %lo(C_LABEL(need_resched))], %twin_tmp2
-	LOAD_CURRENT(twin_tmp1)
 
-	cmp	%twin_tmp2, 0x0
+	cmp	%twin_tmp2, 0
 	be	signal_p
 	 nop
 
@@ -70,41 +69,51 @@ ret_trap_entry:
 
 signal_p:
 	/* No signals for swapper. */
-	sethi	%hi(C_LABEL(init_task)), %twin_tmp3
-	or	%twin_tmp3, %lo(C_LABEL(init_task)), %twin_tmp3
+	LOAD_CURRENT(twin_tmp1, twin_tmp3)
+	set	C_LABEL(init_task), %twin_tmp3
 	cmp	%twin_tmp3, %twin_tmp1
 	be	ret_trap_continue
 	 nop
 
 	ld	[%twin_tmp1 + TASK_SIGNAL], %twin_tmp2
-	ld	[%twin_tmp1 + TASK_BLOCKED], %twin_tmp3
-	andncc	%twin_tmp2, %twin_tmp3, %twin_tmp2
+	ld	[%twin_tmp1 + TASK_BLOCKED], %o0
+	andncc	%twin_tmp2, %o0, %g0
 	be	ret_trap_continue
 	 nop
 
-	mov	%twin_tmp2, %o0		! oldmask
-	add	%sp, STACKFRAME_SZ, %o1	! pt_regs ptr
 	call	C_LABEL(do_signal)
-	 nop
+	 add	%sp, REGWIN_SZ, %o1	! pt_regs ptr
 
 	/* Fall through... */
 ret_trap_continue:
+	ld	[%sp + REGWIN_SZ + PT_PSR], %t_psr
 	wr	%t_psr, 0x0, %psr
 	WRITE_PAUSE
 
-	LOAD_CURRENT(twin_tmp2)
+	/* If not current fpu proc, disable fp-ops */
+	LOAD_CURRENT(twin_tmp2, twin_tmp1)
+	set	C_LABEL(last_task_used_math), %twin_tmp1
+	ld	[%twin_tmp1], %twin_tmp1
+	cmp	%twin_tmp2, %twin_tmp1
+	be	1f
+	 nop
+
+	set	PSR_EF, %twin_tmp1
+	andn	%t_psr, %twin_tmp1, %t_psr
+	st	%t_psr, [%sp + REGWIN_SZ + PT_PSR]
+
+1:
 	ld	[%twin_tmp2 + THREAD_W_SAVED], %twin_tmp1
 	orcc	%g0, %twin_tmp1, %g0
 	be	ret_trap_nobufwins
 	 nop
 
-	wr	%t_psr, 0x0, %psr
 	wr	%t_psr, PSR_ET, %psr
 	WRITE_PAUSE
 
 	mov	1, %o1
-	call	C_LABEL(do_sparc_winfault)
-	 add	%sp, STACKFRAME_SZ, %o0
+	call	C_LABEL(try_to_clear_window_buffer)
+	 add	%sp, REGWIN_SZ, %o0
 
 	b	ret_trap_entry
 	 nop
@@ -126,6 +135,7 @@ ret_trap_nobufwins:
 		/* Calculate new %wim, we have to pull a register
 		 * window from the users stack.
 		 */
+ret_trap_pull_one_window:
 		rd	%wim, %t_wim
 		sll	%t_wim, 0x1, %twin_tmp1
 rtrap_patch1:	srl	%t_wim, 0x7, %twin_tmp2
@@ -159,23 +169,36 @@ ret_trap_userwins_ok:
 	jmp	%t_pc
 	rett	%t_npc
 	
-ret_trap_unaligned_pc:
-	add	%sp, STACKFRAME_SZ, %o0
-	ld	[%sp + STACKFRAME_SZ + PT_PC], %o1
-	ld	[%sp + STACKFRAME_SZ + PT_NPC], %o2
-	ld	[%sp + STACKFRAME_SZ + PT_PSR], %o3
+	/* HyperSparc special nop patching, if we are on a hypersparc
+	 * we nop the top two instructions and the first nop coming
+	 * up to be:
+	 * rd	%iccr, %g0  <-- flush on-chip instruction cache
+	 * jmp	%t_pc
+	 * rett	%t_npc
+	 */
+	nop
+	nop
 
-	wr	%t_psr, 0x0, %psr
+ret_trap_unaligned_pc:
+	add	%sp, REGWIN_SZ, %o0
+	ld	[%sp + REGWIN_SZ + PT_PC], %o1
+	ld	[%sp + REGWIN_SZ + PT_NPC], %o2
+	ld	[%sp + REGWIN_SZ + PT_PSR], %o3
+
+	wr	%t_wim, 0x0, %wim		! or else...
+	WRITE_PAUSE
+
 	wr	%t_psr, PSR_ET, %psr
 	WRITE_PAUSE
 
 	call	C_LABEL(do_memaccess_unaligned)
 	 nop
 
-	b	ret_trap_entry
+	b	ret_trap_entry			! maybe signal posted
 	 nop
 
 ret_trap_kernel:
+	ld	[%sp + REGWIN_SZ + PT_PSR], %t_psr
 	wr	%t_psr, 0x0, %psr
 	WRITE_PAUSE
 
@@ -218,15 +241,12 @@ ret_trap_user_stack_is_bolixed:
 	wr	%t_wim, 0x0, %wim
 	WRITE_PAUSE
 
-	wr	%t_psr, 0x0, %psr
 	wr	%t_psr, PSR_ET, %psr
 	WRITE_PAUSE
 
-	mov	0, %o1
-	call	C_LABEL(do_sparc_winfault)
-	 add	%sp, STACKFRAME_SZ, %o0
+	call	C_LABEL(window_ret_fault)
+	 add	%sp, REGWIN_SZ, %o0
 
-	/* Try it all again. */
 	b	ret_trap_entry
 	 nop
 
@@ -297,7 +317,7 @@ sun4c_rett_onepage:
 	b	ret_trap_userwins_ok
 	 nop
 
-	.globl	C_LABEL(sun4c_rett_stackchk)
+	.globl	C_LABEL(srmmu_rett_stackchk)
 C_LABEL(srmmu_rett_stackchk):
 	bne	ret_trap_user_stack_is_bolixed
 	 sethi	%hi(KERNBASE), %g1

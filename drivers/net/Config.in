@@ -82,4 +82,8 @@ bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" = "y" ]; then
   tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR
 fi
-tristate 'Arcnet support' CONFIG_ARCNET
+tristate 'ARCnet support' CONFIG_ARCNET
+if [ "$CONFIG_ARCNET" != "n" ]; then
+  bool '  Enable arc0e (ARCnet "Ether-Encap" packet format)' CONFIG_ARCNET_ETH
+  bool '  Enable arc0s (ARCnet RFC1051 packet format)' CONFIG_ARCNET_1051
+fi

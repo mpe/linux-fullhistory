@@ -28,6 +28,7 @@ struct ncp_inode_info {
                                    number of references in memory */
         struct ncp_inode_info *dir;
         struct ncp_inode_info *next, *prev;
+	struct inode *inode;
 	struct nw_file_info finfo;
 };
 

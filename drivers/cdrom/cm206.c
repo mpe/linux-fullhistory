@@ -479,7 +479,7 @@ int read_sector(int start)
    4 c_stop waits for receive_buffer_full: 0xff
 */
 
-void cm206_bh(void * unused)
+void cm206_bh(void)
 {
   debug(("bh: %d\n", cd->background));
   switch (cd->background) {
@@ -1169,8 +1169,7 @@ int cm206_init(void)
   }
   blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
   read_ahead[MAJOR_NR] = 16;	/* reads ahead what? */
-  bh_base[CM206_BH].routine = cm206_bh;
-  enable_bh(CM206_BH);
+  init_bh(CM206_BH, cm206_bh);
 
   memset(cd, 0, sizeof(*cd));	/* give'm some reasonable value */
   cd->sector_last = -1;		/* flag no data buffered */

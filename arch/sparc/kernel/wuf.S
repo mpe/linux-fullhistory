@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.13 1995/11/25 00:58:51 davem Exp $
+/* $Id: wuf.S,v 1.20 1996/02/20 07:45:22 davem Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -19,7 +19,7 @@
 #define t_pc        l1
 #define t_npc       l2
 #define t_wim       l3
-/* Don`t touch the above registers or else you die horribly... */
+/* Don't touch the above registers or else you die horribly... */
 
 /* Now macros for the available scratch registers in this routine. */
 #define twin_tmp1    l4
@@ -141,15 +141,14 @@ fwin_user_stack_is_bolixed:
 	/* Place a pt_regs frame on the kernel stack, save back
 	 * to the trap window and call c-code to deal with this.
 	 */
-	LOAD_CURRENT(l4)
-	ld	[%l4 + TASK_KSTACK_PG], %l5
-	add	%l5, (PAGE_SIZE - TRACEREG_SZ - STACKFRAME_SZ), %l5
+	LOAD_CURRENT(l4, l5)
+	ld	[%l4 + TASK_SAVED_KSTACK], %l5
 
 	/* Store globals into pt_regs frame. */
 	STORE_PT_GLOBALS(l5)
 	STORE_PT_YREG(l5, g3)
 
-	/* Save kernel %sp in global while we change windows */
+	/* Save kernel %sp in global while we change windows. */
 	mov	%l5, %g2
 
 	save	%g0, %g0, %g0
@@ -157,6 +156,7 @@ fwin_user_stack_is_bolixed:
 	/* LOCATION: Window 'O' */
 
 	rd	%psr, %g3		/* Read %psr in live user window */
+	mov	%fp, %g6		/* Save bogus frame pointer. */
 
 	save	%g0, %g0, %g0
 
@@ -166,7 +166,7 @@ fwin_user_stack_is_bolixed:
 
 	/* Build rest of pt_regs. */
 	STORE_PT_INS(sp)
-	STORE_PT_PRIV(sp, t_psr, t_pc, t_npc, t_wim)
+	STORE_PT_PRIV(sp, t_psr, t_pc, t_npc)
 
 	/* re-set trap time %wim value */
 	wr	%t_wim, 0x0, %wim
@@ -174,22 +174,16 @@ fwin_user_stack_is_bolixed:
 	/* Fix users window mask and buffer save count. */
 	mov	0x1, %g5
 	sll	%g5, %g3, %g5
-	LOAD_CURRENT(twin_tmp1)
+	LOAD_CURRENT(twin_tmp1, g1)
 	st	%g5, [%twin_tmp1 + THREAD_UMASK]	! one live user window still
 	st	%g0, [%twin_tmp1 + THREAD_W_SAVED]	! no windows in the buffer
 
-	wr	%t_psr, 0x0, %psr
 	wr	%t_psr, PSR_ET, %psr			! enable traps
 	WRITE_PAUSE
 
-	mov	2, %o1
-	call	C_LABEL(do_sparc_winfault)		! call c-code
-	 add	%sp, STACKFRAME_SZ, %o0			! pt_regs ptr is arg0
+	call	C_LABEL(window_underflow_fault)
+	 mov	%g6, %o0
 
-	/* Return from trap if C-code actually fixes things, if it
-	 * doesn't then we never get this far as the process will
-	 * be given the look of death from Commander Peanut.
-	 */
 	b	ret_trap_entry
 	 nop
 
@@ -347,5 +341,11 @@ C_LABEL(srmmu_fwin_stackchk):
 	be	fwin_user_finish_up
 	 nop
 
+	/* Did I ever tell you about my window labotomy?
+	 * anyways... fwin_user_stack_is_bolixed expects
+	 * to be in window 'W' so make it happy or else
+	 * we watchdog badly.
+	 */
+	restore	%g0, %g0, %g0
 	b	fwin_user_stack_is_bolixed	! oh well
-	 nop
+	 restore	%g0, %g0, %g0

@@ -269,7 +269,7 @@ set_mt32 (struct sscape_info *devc, int value)
 		 value ? 1 : 0);
   if (host_read (devc) != CMD_ACK)
     {
-      printk ("SNDSCAPE: Setting MT32 mode failed\n");
+      /* printk ("SNDSCAPE: Setting MT32 mode failed\n"); */
     }
   host_close (devc);
 }

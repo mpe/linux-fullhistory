@@ -186,7 +186,7 @@ extern void smp_invalidate(void);
 extern volatile unsigned long kernel_flag, kernel_counter;
 extern volatile unsigned char active_kernel_processor;
 extern void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs);
-extern void smp_reschedule_irq(int cpl, void *dev_id, struct pt_regs *regs);
+extern void smp_reschedule_irq(int cpl, struct pt_regs *regs);
 extern unsigned long ipi_count;
 extern void smp_invalidate_rcv(void);		/* Process an NMI */
 extern volatile unsigned long kernel_counter;

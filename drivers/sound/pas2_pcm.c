@@ -324,6 +324,9 @@ pas_pcm_output_block (int dev, unsigned long buf, int count,
       pcm_count = count;
     }
   pas_write (pas_read (FILTER_FREQUENCY) | F_F_PCM_BUFFER_COUNTER | F_F_PCM_RATE_COUNTER, FILTER_FREQUENCY);
+#ifdef NO_TRIGGER
+  pas_write (pas_read (PCM_CONTROL) | P_C_PCM_ENABLE | P_C_PCM_DAC_MODE, PCM_CONTROL);
+#endif
 
   pcm_mode = PCM_DAC;
 
@@ -370,12 +373,16 @@ pas_pcm_start_input (int dev, unsigned long buf, int count,
       pcm_count = count;
     }
   pas_write (pas_read (FILTER_FREQUENCY) | F_F_PCM_BUFFER_COUNTER | F_F_PCM_RATE_COUNTER, FILTER_FREQUENCY);
+#ifdef NO_TRIGGER
+  pas_write ((pas_read (PCM_CONTROL) | P_C_PCM_ENABLE) & ~P_C_PCM_DAC_MODE, PCM_CONTROL);
+#endif
 
   pcm_mode = PCM_ADC;
 
   restore_flags (flags);
 }
 
+#ifndef NO_TRIGGER
 static void
 pas_pcm_trigger (int dev, int state)
 {
@@ -394,6 +401,7 @@ pas_pcm_trigger (int dev, int state)
 
   restore_flags (flags);
 }
+#endif
 
 static int
 pas_pcm_prepare_for_input (int dev, int bsize, int bcount)
@@ -426,7 +434,11 @@ static struct audio_operations pas_pcm_operations =
   NULL,
   NULL,
   NULL,
+#ifndef NO_TRIGGER
   pas_pcm_trigger
+#else
+  NULL
+#endif
 };
 
 long

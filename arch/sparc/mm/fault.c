@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.42 1995/11/25 00:59:20 davem Exp $
+/* $Id: fault.c,v 1.53 1996/03/01 07:16:17 davem Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -28,13 +28,9 @@
 extern struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 extern int prom_node_root;
 
-extern void die_if_kernel(char *,struct pt_regs *,long);
+extern void die_if_kernel(char *,struct pt_regs *);
 
 struct linux_romvec *romvec;
-
-/* foo */
-
-int tbase_needs_unmapping;
 
 /* At boot time we determine these two values necessary for setting
  * up the segment maps and page table entries (pte's).
@@ -48,13 +44,6 @@ int invalid_segment;
 int vac_size, vac_linesize, vac_do_hw_vac_flushes;
 int vac_entries_per_context, vac_entries_per_segment;
 int vac_entries_per_page;
-
-/*
- * Define this if things work differently on a i386 and a i486:
- * it will (on a i486) warn about kernel memory accesses that are
- * done without a 'verify_area(VERIFY_WRITE,..)'
- */
-#undef CONFIG_TEST_VERIFY_AREA
 
 /* Nice, simple, prom library does all the sweating for us. ;) */
 int prom_probe_memory (void)
@@ -109,11 +98,14 @@ probe_memory(void)
 	return total;
 }
 
+extern void sun4c_complete_all_stores(void);
+
 /* Whee, a level 15 NMI interrupt memory error.  Let's have fun... */
 asmlinkage void sparc_lvl15_nmi(struct pt_regs *regs, unsigned long serr,
 				unsigned long svaddr, unsigned long aerr,
 				unsigned long avaddr)
 {
+	sun4c_complete_all_stores();
 	printk("FAULT: NMI received\n");
 	printk("SREGS: Synchronous Error %08lx\n", serr);
 	printk("       Synchronous Vaddr %08lx\n", svaddr);
@@ -124,33 +116,22 @@ asmlinkage void sparc_lvl15_nmi(struct pt_regs *regs, unsigned long serr,
 	prom_halt();
 }
 
-/* Whee, looks like an i386 to me ;-) */
-asmlinkage void do_sparc_fault(struct pt_regs *regs, unsigned long tbr)
+asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
+			       unsigned long address)
 {
 	struct vm_area_struct *vma;
-	unsigned long address, error_code, trap_type;
-	unsigned long from_user;
+	int from_user = !(regs->psr & PSR_PS);
 
-	from_user = (((regs->psr & PSR_PS) >> 4) ^ FAULT_CODE_USER);
-	if(get_fault_info(&address, &error_code, from_user))
-		goto bad_area;
-	trap_type = ((tbr>>4)&0xff);
-	if(trap_type == SP_TRAP_TFLT) {
-		/* We play it 'safe'... */
+	if(text_fault)
 		address = regs->pc;
-		error_code = (from_user); /* no page, read */
-	} else if(trap_type != SP_TRAP_DFLT)
-		panic("Bad sparc trap, trap_type not data or text fault...");
 
 	/* Now actually handle the fault.  Do kernel faults special,
 	 * because on the sun4c we could have faulted trying to read
 	 * the vma area of the task and without the following code
 	 * we'd fault recursively until all our stack is gone. ;-(
-	 *
-	 * XXX I think there are races with this maneuver. XXX
 	 */
 	if(!from_user && address >= KERNBASE) {
-		update_mmu_cache(0, address, __pte(0));
+		quick_kernel_fault(address);
 		return;
 	}
 
@@ -168,7 +149,7 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, unsigned long tbr)
 	 * we can handle it..
 	 */
 good_area:
-	if(error_code & FAULT_CODE_WRITE) {
+	if(write) {
 		if(!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	} else {
@@ -176,14 +157,14 @@ good_area:
 		if(!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
-	handle_mm_fault(vma, address, error_code & FAULT_CODE_WRITE);
+	handle_mm_fault(vma, address, write);
 	return;
 	/*
 	 * Something tried to access memory that isn't in our memory map..
 	 * Fix it, but check if it's kernel or user first..
 	 */
 bad_area:
-	if(error_code & FAULT_CODE_USER) {
+	if(from_user) {
 		current->tss.sig_address = address;
 		current->tss.sig_desc = SUBSIG_NOMAPPING;
 		send_sig(SIGSEGV, current, 1);
@@ -204,100 +185,64 @@ bad_area:
 	} else
 		printk(KERN_ALERT "Unable to handle kernel paging request");
 	printk(" at virtual address %08lx\n",address);
-	printk("At PC %08lx nPC %08lx\n", (unsigned long) regs->pc,
-	       (unsigned long) regs->npc);
-	printk(KERN_ALERT "current->tss.pgd_ptr = %08lx\n",
-	       (unsigned long) current->tss.pgd_ptr);
-	show_regs(regs);
-	panic("KERNAL FAULT");
+	printk(KERN_ALERT "current->mm->context = %08lx\n",
+	       (unsigned long) current->mm->context);
+	printk(KERN_ALERT "current->mm->pgd = %08lx\n",
+	       (unsigned long) current->mm->pgd);
+	die_if_kernel("Oops", regs);
 }
 
-/* When the user does not have a mapped stack and we either
- * need to read the users register window from that stack or
- * we need to save a window to that stack, control flow
- * ends up here to investigate the situation.  This is a
- * very odd situation where a 'user fault' happens from
- * kernel space.
- */
-
-/* #define DEBUG_WINFAULT */
-extern void show_regwindow(struct reg_window *);
-asmlinkage void do_sparc_winfault(struct pt_regs *regs, int push)
+/* This always deals with user addresses. */
+inline void force_user_fault(unsigned long address, int write)
 {
-	int wincount = 0;
-	int signal = 0;
-	struct thread_struct *tsp = &current->tss;
+	struct vm_area_struct *vma;
 
-	flush_user_windows();
-#ifdef DEBUG_WINFAULT
-	{
-		int i;
-		printk("%s[%d]wfault<%d>: WINDOW DUMP --> ", current->comm,
-		       current->pid, push);
-		if(push==1)
-			for(i = 0; i < tsp->w_saved; i++)
-				printk("w[%d]sp<%08lx>, ",
-				       i, tsp->rwbuf_stkptrs[i]);
-		else
-			printk("w[0]sp<%08lx>", regs->u_regs[UREG_FP]);
-		if(push!=2)
-			printk("\n");
-	}
-#endif
-	if(push==1) {
-		/* We failed to push a window to users stack. */
-		while(wincount < tsp->w_saved) {
-			if ((tsp->rwbuf_stkptrs[wincount] & 7) ||
-			    (tsp->rwbuf_stkptrs[wincount] > KERNBASE) ||
-			    verify_area(VERIFY_WRITE,
-					(char *) tsp->rwbuf_stkptrs[wincount],
-					sizeof(struct reg_window))) {
-				signal = SIGILL;
-				break;
-			}			
-			/* Do it! */
-			memcpy((char *) tsp->rwbuf_stkptrs[wincount],
-			       (char *)&tsp->reg_window[wincount],
-			       sizeof(struct reg_window));
-			wincount++;
-		}
-	} else {
-		/* We failed to pull a window from users stack.
-		 * For a window underflow from userland we need
-		 * to verify two stacks, for a return from trap
-		 * we need only inspect the one at UREG_FP.
-		 */
-		if((regs->u_regs[UREG_FP] & 7) ||
-		   (regs->u_regs[UREG_FP] > KERNBASE) ||
-		   verify_area(VERIFY_READ,
-			       (char *) regs->u_regs[UREG_FP],
-			       sizeof(struct reg_window)))
-			signal = SIGILL;
-		else
-			memcpy((char *)&tsp->reg_window[0],
-			       (char *) regs->u_regs[UREG_FP],
-			       sizeof(struct reg_window));
-		if(push==2 && !signal) {
-			unsigned long sp = tsp->reg_window[0].ins[6];
-#ifdef DEBUG_WINFAULT
-			printk(", w[1]sp<%08lx>\n", sp);
-			show_regwindow(&tsp->reg_window[0]);
-#endif
-			if((sp & 7) || (sp > KERNBASE) ||
-			   verify_area(VERIFY_READ, (char *) sp,
-				       sizeof(struct reg_window)))
-				signal = SIGILL;
-			else
-				memcpy((char *)&tsp->reg_window[1],
-				       (char *) sp, sizeof(struct reg_window));
-		}
-	}
-	if(signal) {
-		printk("%s[%d]: User has trashed stack pointer pc<%08lx>sp<%08lx>\n",
-		       current->comm, current->pid, regs->pc, regs->u_regs[UREG_FP]);
-		tsp->sig_address = regs->pc;
-		tsp->sig_desc = SUBSIG_STACK;
-		send_sig(signal, current, 1);
-	} else
-		tsp->w_saved = 0;
+	vma = find_vma(current, address);
+	if(!vma)
+		goto bad_area;
+	if(vma->vm_start <= address)
+		goto good_area;
+	if(!(vma->vm_flags & VM_GROWSDOWN))
+		goto bad_area;
+	if(expand_stack(vma, address))
+		goto bad_area;
+good_area:
+	if(write)
+		if(!(vma->vm_flags & VM_WRITE))
+			goto bad_area;
+	else
+		if(!(vma->vm_flags & (VM_READ | VM_EXEC)))
+			goto bad_area;
+	handle_mm_fault(vma, address, write);
+	return;
+bad_area:
+	current->tss.sig_address = address;
+	current->tss.sig_desc = SUBSIG_NOMAPPING;
+	send_sig(SIGSEGV, current, 1);
+	return;
+}
+
+void window_overflow_fault(void)
+{
+	unsigned long sp = current->tss.rwbuf_stkptrs[0];
+
+	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
+		force_user_fault(sp + 0x38, 1);
+	force_user_fault(sp, 1);
+}
+
+void window_underflow_fault(unsigned long sp)
+{
+	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
+		force_user_fault(sp + 0x38, 0);
+	force_user_fault(sp, 0);
+}
+
+void window_ret_fault(struct pt_regs *regs)
+{
+	unsigned long sp = regs->u_regs[UREG_FP];
+
+	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
+		force_user_fault(sp + 0x38, 0);
+	force_user_fault(sp, 0);
 }

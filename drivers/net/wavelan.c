@@ -2023,7 +2023,7 @@ wavelan_set_multicast_list(device *dev)
 	unsigned long	x;
 
 	if (wavelan_debug > 0)
-		printk("%s: ->wavelan_set_multicast_list(dev=0x%x)", dev->name, dev);
+		printk("%s: ->wavelan_set_multicast_list(dev=%p)", dev->name, dev);
 
 	lp = (net_local *)dev->priv;
 

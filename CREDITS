@@ -344,6 +344,13 @@ S: 1123 North Oak Park Avenue
 S: Oak Park, Illinois 60302
 S: USA
 
+N: Bob Frey
+E: bobf@advansys.com
+D: AdvanSys SCSI driver
+S: 1150 Ringwood Court
+S: San Jose, California 95131
+S: USA
+
 N: Nigel Gamble
 E: nigel@nrg.org
 E: nigel@sgi.com
@@ -608,6 +615,10 @@ D: Author of the LOADLIN Linux loader
 S: Am Muehlenweg 38
 S: D53424 Remagen
 S: Germany
+
+N: Martin von Loewis
+E: loewis@informatik.hu-berlin.de
+D: script binary format
 
 N: Mark Lord
 E: mlord@pobox.com

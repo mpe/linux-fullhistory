@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.13 1995/11/25 00:59:24 davem Exp $
+/* $Id: loadmmu.c,v 1.23 1996/02/21 17:56:35 miguel Exp $
  * loadmmu.c:  This code loads up all the mm function pointers once the
  *             machine type has been determined.  It also sets the static
  *             mmu values such as PAGE_NONE, etc.
@@ -16,22 +16,29 @@ struct ctx_list *ctx_list_pool;
 struct ctx_list ctx_free;
 struct ctx_list ctx_used;
 
-void (*mmu_exit_hook)(void *);
-void (*mmu_fork_hook)(void *, unsigned long);
-void (*mmu_release_hook)(void *);
-void (*mmu_flush_hook)(void *);
-void (*mmu_task_cacheflush)(void *);
+unsigned long (*alloc_kernel_stack)(struct task_struct *tsk);
+void (*free_kernel_stack)(unsigned long stack);
+struct task_struct *(*alloc_task_struct)(void);
+void (*free_task_struct)(struct task_struct *tsk);
+
+void (*quick_kernel_fault)(unsigned long);
+
+void (*mmu_exit_hook)(void);
+void (*mmu_flush_hook)(void);
 
 char *(*mmu_lockarea)(char *, unsigned long);
 void  (*mmu_unlockarea)(char *, unsigned long);
-char *(*mmu_get_scsi_buffer)(char *, unsigned long);
-void  (*mmu_release_scsi_buffer)(char *, unsigned long);
+char *(*mmu_get_scsi_buffer)(char *, unsigned long, struct linux_sbus *sbus);
+void  (*mmu_release_scsi_buffer)(char *, unsigned long, struct linux_sbus *sbus);
 
 
-int (*get_fault_info)(unsigned long *, unsigned long *, unsigned long);
 void (*update_mmu_cache)(struct vm_area_struct *vma, unsigned long address, pte_t pte);
 
-void (*invalidate)(void);
+void (*invalidate_all)(void);
+void (*invalidate_mm)(struct mm_struct *);
+void (*invalidate_range)(struct mm_struct *, unsigned long start, unsigned long end);
+void (*invalidate_page)(struct vm_area_struct *, unsigned long address);
+
 void (*set_pte)(pte_t *pteptr, pte_t pteval);
 
 unsigned int pmd_shift, pmd_size, pmd_mask;
@@ -39,9 +46,9 @@ unsigned int (*pmd_align)(unsigned int);
 unsigned int pgdir_shift, pgdir_size, pgdir_mask;
 unsigned int (*pgdir_align)(unsigned int);
 unsigned int ptrs_per_pte, ptrs_per_pmd, ptrs_per_pgd;
+unsigned int pg_iobits;
 
 pgprot_t page_none, page_shared, page_copy, page_readonly, page_kernel;
-pgprot_t page_invalid;
 
 unsigned long (*pte_page)(pte_t);
 unsigned long (*pmd_page)(pmd_t);
@@ -49,7 +56,7 @@ unsigned long (*pgd_page)(pgd_t);
 
 void (*sparc_update_rootmmu_dir)(struct task_struct *, pgd_t *pgdir);
 unsigned long (*(vmalloc_start))(void);
-void (*switch_to_context)(void *vtask);
+void (*switch_to_context)(struct task_struct *tsk);
 
 int (*pte_none)(pte_t);
 int (*pte_present)(pte_t);
@@ -72,6 +79,7 @@ void (*pgd_clear)(pgd_t *);
 void (*pgd_reuse)(pgd_t *);
 
 pte_t (*mk_pte)(unsigned long, pgprot_t);
+pte_t (*mk_pte_io)(unsigned long, pgprot_t);
 void (*pgd_set)(pgd_t *, pmd_t *);
 pte_t (*pte_modify)(pte_t, pgprot_t);
 pgd_t * (*pgd_offset)(struct mm_struct *, unsigned long);
@@ -91,28 +99,18 @@ void (*pgd_free)(pgd_t *);
 
 pgd_t * (*pgd_alloc)(void);
 
-int (*pte_read)(pte_t);
 int (*pte_write)(pte_t);
-int (*pte_exec)(pte_t);
 int (*pte_dirty)(pte_t);
 int (*pte_young)(pte_t);
-int (*pte_cow)(pte_t);
 
 pte_t (*pte_wrprotect)(pte_t);
-pte_t (*pte_rdprotect)(pte_t);
-pte_t (*pte_exprotect)(pte_t);
 pte_t (*pte_mkclean)(pte_t);
 pte_t (*pte_mkold)(pte_t);
-pte_t (*pte_uncow)(pte_t);
 pte_t (*pte_mkwrite)(pte_t);
-pte_t (*pte_mkread)(pte_t);
-pte_t (*pte_mkexec)(pte_t);
 pte_t (*pte_mkdirty)(pte_t);
 pte_t (*pte_mkyoung)(pte_t);
-pte_t (*pte_mkcow)(pte_t);
 
-unsigned long (*sparc_virt_to_phys)(unsigned long);
-unsigned long (*sparc_phys_to_virt)(unsigned long);
+char *(*mmu_info)(void);
 
 extern void ld_mmu_sun4c(void);
 extern void ld_mmu_srmmu(void);

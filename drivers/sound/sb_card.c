@@ -65,7 +65,7 @@ void
 unload_sb (struct address_info *hw_config)
 {
   release_region (hw_config->io_base, 16);
-  sb_dsp_unload ();
+  sb_dsp_unload (hw_config);
 }
 
 #endif

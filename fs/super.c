@@ -498,7 +498,7 @@ static int do_umount(kdev_t dev)
 			/*
 			 * Make sure all quotas are turned off on this device we need to mount
 			 * it readonly so no more writes by the quotasystem.
-			 * If later on the remount fails to bad there are no quotas running
+			 * If later on the remount fails too bad there are no quotas running
 			 * anymore. Turn them on again by hand.
 			 */
 			quota_off(dev, -1);
@@ -517,7 +517,7 @@ static int do_umount(kdev_t dev)
 	/*
 	 * Before checking if the filesystem is still busy make sure the kernel
 	 * doesn't hold any quotafiles open on that device. If the umount fails
-	 * to bad there are no quotas running anymore. Turn them on again by hand.
+	 * too bad there are no quotas running anymore. Turn them on again by hand.
 	 */
 	quota_off(dev, -1);
 	if (!fs_may_umount(dev, sb->s_mounted))

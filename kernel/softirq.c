@@ -27,27 +27,28 @@
 
 unsigned long intr_count = 0;
 
+int bh_mask_count[32];
 unsigned long bh_active = 0;
 unsigned long bh_mask = 0;
-struct bh_struct bh_base[32];
+void (*bh_base[32])(void);
 
 
 asmlinkage void do_bottom_half(void)
 {
 	unsigned long active;
 	unsigned long mask, left;
-	struct bh_struct *bh;
+	void (**bh)(void);
 
 	bh = bh_base;
 	active = bh_active & bh_mask;
 	for (mask = 1, left = ~0 ; left & active ; bh++,mask += mask,left += left) {
 		if (mask & active) {
-			void (*fn)(void *);
+			void (*fn)(void);
 			bh_active &= ~mask;
-			fn = bh->routine;
+			fn = *bh;
 			if (!fn)
 				goto bad_bh;
-			fn(bh->data);
+			fn();
 		}
 	}
 	return;

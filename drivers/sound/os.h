@@ -30,6 +30,7 @@
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
+#include <linux/utsname.h>
 
 #include <linux/wrapper.h>
 

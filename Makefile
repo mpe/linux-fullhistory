@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 70
+SUBLEVEL = 71
 
 ARCH = i386
 
@@ -196,7 +196,6 @@ xconfig: symlinks
 menuconfig: include/linux/version.h symlinks 
 	$(MAKE) -C scripts/lxdialog all
 	$(CONFIG_SHELL) scripts/Menuconfig arch/$(ARCH)/config.in
-	
 
 config: symlinks
 	$(CONFIG_SHELL) scripts/Configure arch/$(ARCH)/config.in
@@ -314,7 +313,7 @@ endif
 
 clean:	archclean
 	rm -f kernel/ksyms.lst include/linux/compile.h
-	rm -f core `find . -name '*.[oas]' ! -regex '.*lxdialog' -print`
+	rm -f core `find . -name '*.[oas]' ! -regex '.*lxdialog/.*' -print`
 	rm -f core `find . -type f -name 'core' -print`
 	rm -f vmlinux System.map
 	rm -f .tmp* drivers/sound/configure
@@ -329,7 +328,7 @@ mrproper: clean
 	rm -f .version .config* config.in config.old
 	rm -f scripts/tkparse scripts/kconfig.tk scripts/kconfig.tmp
 	rm -f scripts/lxdialog/*.o scripts/lxdialog/lxdialog
-	rm -f .menuconfig.in
+	rm -f .menuconfig .menuconfig.log
 	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`
 	rm -f .hdepend

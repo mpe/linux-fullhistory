@@ -33,8 +33,8 @@
 
 struct sk_buff_head 
 {
-	struct sk_buff	* volatile next;
-	struct sk_buff	* volatile prev;
+	struct sk_buff	* next;
+	struct sk_buff	* prev;
 	__u32		qlen;		/* Must be same length as a pointer
 					   for using debugging */
 #if CONFIG_SKB_CHECK
@@ -45,8 +45,8 @@ struct sk_buff_head
 
 struct sk_buff 
 {
-	struct sk_buff	* volatile next;	/* Next buffer in list 				*/
-	struct sk_buff	* volatile prev;	/* Previous buffer in list 			*/
+	struct sk_buff	* next;			/* Next buffer in list 				*/
+	struct sk_buff	* prev;			/* Previous buffer in list 			*/
 	struct sk_buff_head * list;		/* List we are on				*/
 #if CONFIG_SKB_CHECK
 	int		magic_debug_cookie;
@@ -63,8 +63,8 @@ struct sk_buff
 		struct iphdr	*iph;
 		struct udphdr	*uh;
 		unsigned char	*raw;
-		/* for passing an fd in a unix domain socket */
-		struct file *filp;
+		/* for passing file handles in a unix domain socket */
+		void *filp;
 	} h;
   
 	union 
@@ -160,6 +160,11 @@ extern int			skb_headroom(struct sk_buff *skb);
 extern int			skb_tailroom(struct sk_buff *skb);
 extern void			skb_reserve(struct sk_buff *skb, int len);
 extern void 			skb_trim(struct sk_buff *skb, int len);
+
+extern __inline__ int skb_queue_empty(struct sk_buff_head *list)
+{
+	return (list->next == (struct sk_buff *) list);
+}
 
 /*
  *	Peek an sk_buff. Unlike most other operations you _MUST_

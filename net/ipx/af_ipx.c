@@ -1087,7 +1087,7 @@ ipxrtr_add_route(unsigned long network, ipx_interface *intrfc, unsigned char *no
 		ipx_routes=rt;
 	}
 	else if (intrfc == ipx_internal_net)
-		return(-EINVAL);
+		return(-EEXIST);
 
 	rt->ir_net = network;
 	rt->ir_intrfc = intrfc;

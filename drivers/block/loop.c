@@ -15,23 +15,17 @@
 
 #include <linux/module.h>
 
-#include <linux/mm.h>
-#include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/stat.h>
-#include <linux/kernel.h>
-#include <linux/string.h>
 #include <linux/errno.h>
-#include <asm/segment.h>
-#include "loop.h"
+#include <linux/major.h>
 
 #ifdef DES_AVAILABLE
 #include "des.h"
 #endif
+#include <linux/loop.h>		/* must follow des.h */
 
-#define DEFAULT_MAJOR_NR 10
-int loop_major = DEFAULT_MAJOR_NR;
-#define MAJOR_NR loop_major	/* not necessarily constant */
+#define MAJOR_NR LOOP_MAJOR
 
 #define DEVICE_NAME "loop"
 #define DEVICE_REQUEST do_lo_request
@@ -219,6 +213,7 @@ repeat:
 		size = blksize - offset;
 		if (size > len)
 			size = len;
+			   
 		if ((lo->transfer)(lo, CURRENT->cmd, bh->b_data + offset,
 				   dest_addr, size)) {
 			printk("loop: transfer error block %d\n", block);
@@ -260,10 +255,12 @@ static int loop_set_fd(struct loop_device *lo, unsigned int arg)
 			lo->lo_device = inode->i_rdev;
 		else
 			return -EINVAL;
+	invalidate_inode_pages (inode);
 	lo->lo_inode = inode;
 	lo->lo_inode->i_count++;
 	lo->transfer = NULL;
 	figure_loop_size(lo);
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -283,6 +280,7 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 	memset(lo->lo_name, 0, LO_NAME_SIZE);
 	loop_sizes[lo->lo_number] = 0;
 	invalidate_buffers(dev);
+	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -362,8 +360,8 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 
 	if (!inode)
 		return -EINVAL;
-	if (MAJOR(inode->i_rdev) != loop_major) {
-		printk("lo_ioctl: pseudo-major != %d\n", loop_major);
+	if (MAJOR(inode->i_rdev) != MAJOR_NR) {
+		printk("lo_ioctl: pseudo-major != %d\n", MAJOR_NR);
 		return -ENODEV;
 	}
 	dev = MINOR(inode->i_rdev);
@@ -401,8 +399,8 @@ static int lo_open(struct inode *inode, struct file *file)
 
 	if (!inode)
 		return -EINVAL;
-	if (MAJOR(inode->i_rdev) != loop_major) {
-		printk("lo_open: pseudo-major != %d\n", loop_major);
+	if (MAJOR(inode->i_rdev) != MAJOR_NR) {
+		printk("lo_open: pseudo-major != %d\n", MAJOR_NR);
 		return -ENODEV;
 	}
 	dev = MINOR(inode->i_rdev);
@@ -421,14 +419,14 @@ static void lo_release(struct inode *inode, struct file *file)
 
 	if (!inode)
 		return;
-	if (MAJOR(inode->i_rdev) != loop_major) {
-		printk("lo_release: pseudo-major != %d\n", loop_major);
+	if (MAJOR(inode->i_rdev) != MAJOR_NR) {
+		printk("lo_release: pseudo-major != %d\n", MAJOR_NR);
 		return;
 	}
 	dev = MINOR(inode->i_rdev);
 	if (dev >= MAX_LOOP)
 		return;
-	sync_dev(inode->i_rdev);
+	fsync_dev(inode->i_rdev);
 	lo = &loop_dev[dev];
 	if (lo->lo_refcnt <= 0)
 		printk("lo_release: refcount(%d) <= 0\n", lo->lo_refcnt);
@@ -461,26 +459,24 @@ static struct file_operations lo_fops = {
 
 int
 loop_init( void ) {
-	int	i = (loop_major ? loop_major : DEFAULT_MAJOR_NR);
+	int	i;
 
-	if (register_blkdev(i, "loop", &lo_fops) &&
-	    (i = register_blkdev(0, "loop", &lo_fops)) <= 0) {
-		printk("Unable to get major number for loop device\n");
+	if (register_blkdev(MAJOR_NR, "loop", &lo_fops)) {
+		printk("Unable to get major number %d for loop device\n",
+		       MAJOR_NR);
 		return -EIO;
 	}
-	loop_major = i;
-#ifdef MODULE
-	if (i != DEFAULT_MAJOR_NR)
+#ifndef MODULE
+	printk("loop: registered device at major %d\n", MAJOR_NR);
 #endif
-	  printk("loop: registered device at major %d\n",loop_major);
 
-	blk_dev[loop_major].request_fn = DEVICE_REQUEST;
+	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	for (i=0; i < MAX_LOOP; i++) {
 		memset(&loop_dev[i], 0, sizeof(struct loop_device));
 		loop_dev[i].lo_number = i;
 	}
 	memset(&loop_sizes, 0, sizeof(loop_sizes));
-	blk_size[loop_major] = loop_sizes;
+	blk_size[MAJOR_NR] = loop_sizes;
 
 	return 0;
 }
@@ -488,7 +484,7 @@ loop_init( void ) {
 #ifdef MODULE
 void
 cleanup_module( void ) {
-  if (unregister_blkdev(loop_major, "loop") != 0)
+  if (unregister_blkdev(MAJOR_NR, "loop") != 0)
     printk("loop: cleanup_module failed\n");
 }
 #endif

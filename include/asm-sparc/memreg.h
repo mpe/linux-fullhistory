@@ -1,4 +1,4 @@
-/* $Id: memreg.h,v 1.4 1995/11/25 02:32:02 davem Exp $ */
+/* $Id: memreg.h,v 1.5 1995/12/02 20:05:25 davem Exp $ */
 #ifndef _SPARC_MEMREG_H
 #define _SPARC_MEMREG_H
 /* memreg.h:  Definitions of the values found in the synchronous
@@ -22,7 +22,8 @@
 #define SUN4C_SYNC_BADWRITE  0x8000  /* while writing something went bogus */
 
 #define SUN4C_SYNC_BOLIXED  \
-        (SUN4C_SYNC_WDRESET|SUN4C_SYNC_SIZE|SUN4C_SYNC_SBUS|SUN4C_SYNC_NOMEM)
+        (SUN4C_SYNC_WDRESET | SUN4C_SYNC_SIZE | SUN4C_SYNC_SBUS | \
+         SUN4C_SYNC_NOMEM | SUN4C_SYNC_PARITY)
 
 /* Now the asynchronous error codes, these are almost always produced
  * by the cache writing things back to memory and getting a bad translation.

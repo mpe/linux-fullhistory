@@ -1,4 +1,4 @@
-/* $Id: viking.h,v 1.5 1995/11/25 02:33:21 davem Exp $
+/* $Id: viking.h,v 1.6 1996/03/01 07:21:05 davem Exp $
  * viking.h:  Defines specific to the TI Viking MBUS module.
  *            This is SRMMU stuff.
  *
@@ -6,6 +6,8 @@
  */
 #ifndef _SPARC_VIKING_H
 #define _SPARC_VIKING_H
+
+#include <asm/mxcc.h>
 
 /* Bits in the SRMMU control register for TI Viking modules.
  *
@@ -49,4 +51,28 @@
 #define VIKING_TCENABLE     0x00010000   /* Enable table-walks to be cached */
 #define VIKING_DPENABLE     0x00040000   /* Enable the data prefetcher */
 
-#endif
+extern inline void viking_flush_icache(void)
+{
+	__asm__ __volatile__("sta %%g0, [%%g0] %0\n\t" : :
+			     "i" (ASI_M_IC_FLCLEAR));
+}
+
+extern inline void viking_flush_dcache(void)
+{
+	__asm__ __volatile__("sta %%g0, [%%g0] %0\n\t" : :
+			     "i" (ASI_M_DC_FLCLEAR));
+}
+
+/* MXCC stuff... */
+extern inline void viking_enable_mxcc(void)
+{
+}
+
+extern inline void viking_mxcc_scrape(void)
+{
+	/* David, what did you learn in school today? */
+
+
+}
+
+#endif /* !(_SPARC_VIKING_H) */

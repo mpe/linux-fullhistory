@@ -1,16 +1,16 @@
-/* $Id: system.h,v 1.19 1995/11/25 02:32:59 davem Exp $ */
+/* $Id: system.h,v 1.24 1996/02/11 00:42:39 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
-#include <asm/segment.h>
+#include <linux/kernel.h>
 
+#include <asm/segment.h>
 #include <asm/page.h>
-#include <asm/openprom.h>
+#include <asm/oplib.h>
 #include <asm/psr.h>
 
 #define EMPTY_PGT       (&empty_bad_page)
 #define EMPTY_PGE	(&empty_bad_page_table)
-#define ZERO_PGE	(&empty_zero_page)
 
 #ifndef __ASSEMBLY__
 
@@ -42,10 +42,13 @@ extern struct linux_romvec *romvec;
  * frames are up to date.
  */
 extern void flush_user_windows(void);
+extern void synchronize_user_stack(void);
 extern void sparc_switch_to(void *new_task);
 #define switch_to(p) do { \
 			  flush_user_windows(); \
 		          switch_to_context(p); \
+			  current->tss.current_ds = active_ds; \
+                          active_ds = p->tss.current_ds; \
                           sparc_switch_to(p); \
                      } while(0)
 
@@ -94,10 +97,13 @@ extern inline int swpipl(int __new_ipl)
 	return retval;
 }
 
+extern char spdeb_buf[256];
+
 #define cli()			setipl(15)  /* 15 = no int's except nmi's */
 #define sti()			setipl(0)   /* I'm scared */
 #define save_flags(flags)	do { flags = getipl(); } while (0)
 #define restore_flags(flags)	setipl(flags)
+
 #define nop() __asm__ __volatile__ ("nop");
 
 extern inline unsigned long xchg_u32(volatile unsigned long *m, unsigned long val)

@@ -639,7 +639,7 @@ sys_call_table:
 	.quad sys_fsync, sys_setpriority, sys_socket, sys_connect, sys_accept
 /*100*/	.quad osf_getpriority, sys_send, sys_recv, sys_sigreturn, sys_bind
 	.quad sys_setsockopt, sys_listen, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, sys_sigsuspend, do_entSys, do_entSys, do_entSys
+	.quad do_entSys, sys_sigsuspend, do_entSys, sys_recvmsg, sys_sendmsg
 	.quad do_entSys, sys_gettimeofday, sys_getrusage, sys_getsockopt, do_entSys
 	.quad sys_readv, sys_writev, sys_settimeofday, sys_fchown, sys_fchmod
 	.quad sys_recvfrom, sys_setreuid, sys_setregid, sys_rename, sys_truncate
@@ -686,5 +686,5 @@ sys_call_table:
 	.quad sys_setfsuid, sys_setfsgid, sys_ustat, sys_statfs, sys_fstatfs
 	.quad sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler, sys_sched_yield
 	.quad sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, do_entSys /* sys_afs_syscall */, sys_newuname
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+	.quad sys_nanosleep, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys

@@ -48,7 +48,7 @@ static int      dsp_16bit = 0;
 static int      dsp_stereo = 0;
 static int      dsp_current_speed = 8000;
 static int      dsp_busy = 0;
-static int      dma16, dma8;
+static int      dma16 = -1, dma8 = -1;
 static int      trigger_bits = 0;
 static unsigned long dsp_count = 0;
 
@@ -157,7 +157,7 @@ sb16_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     {
     case SOUND_PCM_WRITE_RATE:
       if (local)
-	return dsp_set_speed ((long) arg);
+	return dsp_set_speed ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_speed (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_RATE:
@@ -167,12 +167,12 @@ sb16_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_STEREO:
       if (local)
-	return dsp_set_stereo ((long) arg);
+	return dsp_set_stereo ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-	return dsp_set_stereo ((long) arg - 1) + 1;
+	return dsp_set_stereo ((int) arg - 1) + 1;
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg) - 1) + 1);
 
     case SOUND_PCM_READ_CHANNELS:
@@ -182,7 +182,7 @@ sb16_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_SETFMT:
       if (local)
-	return dsp_set_bits ((long) arg);
+	return dsp_set_bits ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_bits (get_fs_long ((long *) arg)));
 
     case SOUND_PCM_READ_BITS:
@@ -521,6 +521,15 @@ sb16_dsp_init (long mem_start, struct address_info *hw_config)
   return mem_start;
 }
 
+static void
+set_dma (int dma)
+{
+  if (dma >= 0 && dma < 4)
+    dma8 = dma;
+  if (dma >= 5 && dma <= 7)
+    dma16 = dma;
+}
+
 int
 sb16_dsp_detect (struct address_info *hw_config)
 {
@@ -528,22 +537,38 @@ sb16_dsp_detect (struct address_info *hw_config)
   extern int      sbc_major, Jazz16_detected;
 
   extern void     Jazz16_set_dma16 (int dma);
+  int             irq;
 
   if (sb16_dsp_ok)
-    return 1;			/* Can't drive two cards */
+    {
+      return 1;			/* Can't drive two cards */
+    }
+
+  irq = hw_config->irq;
+  set_dma (hw_config->dma);
+  set_dma (hw_config->dma2);
 
   if (Jazz16_detected)
     {
-      Jazz16_set_dma16 (hw_config->dma);
+      Jazz16_set_dma16 (dma16);
       sb16_dsp_ok = 1;
       return 1;
     }
 
-  if (!(sb_config = sound_getconf (SNDCARD_SB)))
-    {
-      printk ("SB16 Error: Plain SB not configured\n");
-      return 0;
-    }
+  if (dma8 == -1)
+    if (!(sb_config = sound_getconf (SNDCARD_SB)))
+      {
+	printk ("SB16 Error: Plain SB not configured\n");
+	return 0;
+      }
+    else
+      {
+	dma8 = sb_config->dma;
+	irq = sb_config->irq;
+      }
+
+  if (dma16 == -1)
+    dma16 = dma8;
 
   /*
    * sb_setmixer(OPSW,0xf); if(sb_getmixer(OPSW)!=0xf) return 0;
@@ -555,20 +580,18 @@ sb16_dsp_detect (struct address_info *hw_config)
   if (sbc_major < 4)		/* Set by the plain SB driver */
     return 0;			/* Not a SB16 */
 
-  if (hw_config->dma < 4)
-    if (hw_config->dma != sb_config->dma)
+  if (dma16 < 4)
+    if (dma16 != dma8)
       {
 	printk ("SB16 Error: Invalid DMA channel %d/%d\n",
-		sb_config->dma, hw_config->dma);
+		dma8, dma16);
 	return 0;
       }
 
-  dma16 = hw_config->dma;
-  dma8 = sb_config->dma;
-  set_irq_hw (sb_config->irq);
-  sb_setmixer (DMA_NR, (1 << hw_config->dma) | (1 << sb_config->dma));
+  set_irq_hw (irq);
+  sb_setmixer (DMA_NR, (1 << dma16) | (1 << dma8));
 
-  DEB (printk ("SoundBlaster 16: IRQ %d DMA %d OK\n", sb_config->irq, hw_config->dma));
+  DEB (printk ("SoundBlaster 16: IRQ %d DMA %d OK\n", sb_config->irq, dma16));
 
   /*
      * dsp_showmessage(0xe3,99);

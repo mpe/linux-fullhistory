@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.10 1995/11/25 00:57:58 davem Exp $
+/* $Id: etrap.S,v 1.16 1996/02/20 07:45:01 davem Exp $
  * etrap.S: Sparc trap window preparation for entry into the
  *          Linux kernel.
  *
@@ -7,6 +7,8 @@
 
 #include <asm/cprefix.h>
 #include <asm/head.h>
+#include <asm/asi.h>
+#include <asm/contregs.h>
 #include <asm/page.h>
 #include <asm/psr.h>
 #include <asm/ptrace.h>
@@ -84,8 +86,8 @@ trap_setup:
 	/* From kernel, allocate more kernel stack and
 	 * build a pt_regs trap frame.
 	 */
-	sub	%fp, (STACKFRAME_SZ + TRACEREG_SZ), %t_kstack
-	STORE_PT_ALL(t_kstack, t_psr, t_pc, t_npc, t_wim, g2)
+	sub	%fp, (REGWIN_SZ + TRACEREG_SZ), %t_kstack
+	STORE_PT_ALL(t_kstack, t_psr, t_pc, t_npc, g2)
 
 	/* See if we are in the trap window. */
 	andcc	%t_twinmask, %t_wim, %g0
@@ -99,12 +101,11 @@ trap_setup:
 	 * Just do it...
 	 */
 1:
-	mov	%t_kstack, %sp		! jump onto new stack
 	jmpl	%t_retpc + 0x8, %g0	! return to caller
-	 nop
+	 mov	%t_kstack, %sp		! jump onto new stack
 
 trap_setup_kernel_spill:
-	LOAD_CURRENT(curptr)
+	LOAD_CURRENT(curptr, g1)
 	ld	[%curptr + THREAD_UMASK], %g1
 	orcc	%g0, %g1, %g0
 	bne	trap_setup_user_spill	! there are some user windows, yuck
@@ -129,21 +130,21 @@ tsetup_patch2:	and	%g2, 0xff, %g2		! patched on 7 window Sparcs
 
 	restore	%g0, %g0, %g0
 
-	mov	%t_kstack, %sp		! and onto new kernel stack
 	jmpl	%t_retpc + 0x8, %g0	! return to caller
-	 nop
+	 mov	%t_kstack, %sp		! and onto new kernel stack
 
 trap_setup_from_user:
 	/* We can't use %curptr yet. */
-	LOAD_CURRENT(t_kstack)
-	ld	[%t_kstack + TASK_KSTACK_PG], %t_kstack
+	LOAD_CURRENT(t_kstack, t_twinmask)
+	mov	1, %t_twinmask
+	ld	[%t_kstack + TASK_SAVED_KSTACK], %t_kstack
+	sll	%t_twinmask, %t_psr, %t_twinmask ! t_twinmask = (1 << psr)
 
 	/* Build pt_regs frame. */
-	add	%t_kstack, (PAGE_SIZE - STACKFRAME_SZ - TRACEREG_SZ), %t_kstack
-	STORE_PT_ALL(t_kstack, t_psr, t_pc, t_npc, t_wim, g2)
+	STORE_PT_ALL(t_kstack, t_psr, t_pc, t_npc, g2)
 
 	/* Clear current->tss.w_saved */
-	LOAD_CURRENT(curptr)
+	LOAD_CURRENT(curptr, g1)
 	st	%g0, [%curptr + THREAD_W_SAVED]
 
 	/* See if we are in the trap window. */
@@ -176,9 +177,8 @@ trap_setup_from_user:
 tsetup_patch3:	and	%g2, 0xff, %g2			! patched on 7win Sparcs
 		st	%g2, [%curptr + THREAD_UMASK]	! store new umask
 
-		mov	%t_kstack, %sp			! and onto kernel stack
 		jmpl	%t_retpc + 0x8, %g0		! return to caller
-		 nop
+		 mov	%t_kstack, %sp			! and onto kernel stack
 
 trap_setup_user_spill:
 		/* A spill occured from either kernel or user mode
@@ -213,18 +213,18 @@ trap_setup_user_stack_is_bolixed:
 	 */
 	SAVE_BOLIXED_USER_STACK(curptr, g3)
 	restore	%g0, %g0, %g0
-	mov	%t_kstack, %sp
+
 	jmpl	%t_retpc + 0x8, %g0
-	 nop
+	 mov	%t_kstack, %sp
 
 trap_setup_good_ustack:
 	STORE_WINDOW(sp)
 
 trap_setup_finish_up:
 	restore %g0, %g0, %g0
-	mov	%t_kstack, %sp
+
 	jmpl	%t_retpc + 0x8, %g0
-	 nop
+	 mov	%t_kstack, %sp
 
 	/* Architecture specific stack checking routines.  When either
 	 * of these routines are called, the globals are free to use
@@ -234,7 +234,6 @@ trap_setup_finish_up:
 #define glob_tmp     g1
 
 	.globl	C_LABEL(tsetup_sun4c_stackchk)
-	.globl	C_LABEL(tsetup_srmmu_stackchk)
 C_LABEL(tsetup_sun4c_stackchk):
 	/* Done by caller: andcc %sp, 0x7, %g0 */
 	be	1f
@@ -293,6 +292,7 @@ tsetup_sun4c_onepage:
 	b	trap_setup_user_stack_is_bolixed
 	 nop
 
+	.globl	C_LABEL(tsetup_srmmu_stackchk)
 C_LABEL(tsetup_srmmu_stackchk):
 	/* Check results of callers andcc %sp, 0x7, %g0 */
 	bne	trap_setup_user_stack_is_bolixed
@@ -302,8 +302,6 @@ C_LABEL(tsetup_srmmu_stackchk):
 	 nop
 
 	/* Clear the fault status and turn on the no_fault bit. */
-	mov	AC_M_SFSR, %glob_tmp			! delay from above...
-	lda	[%glob_tmp] ASI_M_MMUREGS, %g0		! eat SFSR
 	lda	[%g0] ASI_M_MMUREGS, %glob_tmp		! read MMU control
 	or	%glob_tmp, 0x2, %glob_tmp		! or in no_fault bit
 	sta	%glob_tmp, [%g0] ASI_M_MMUREGS		! set it
@@ -317,10 +315,11 @@ C_LABEL(tsetup_srmmu_stackchk):
 	mov	AC_M_SFAR, %glob_tmp
 	lda	[%glob_tmp] ASI_M_MMUREGS, %g0
 	mov	AC_M_SFSR, %glob_tmp
-	lda	[%glob_tmp] ASI_M_MMUREGS, %glob_tmp
+	lda	[%glob_tmp] ASI_M_MMUREGS, %glob_tmp	! save away status of winstore
 	andcc	%glob_tmp, 0x2, %g0			! did we fault?
 	be	trap_setup_finish_up			! cool beans, success
 	 nop
 
 	b	trap_setup_user_stack_is_bolixed	! we faulted, ugh
 	 nop
+

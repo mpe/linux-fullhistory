@@ -216,10 +216,10 @@ struct device *dev_get(const char *name)
 
 extern __inline__ void dev_load(const char *name)
 {
-        const char *sptr;
- 
         if(!dev_get(name)) {
 #ifdef CONFIG_NET_ALIAS
+	        const char *sptr;
+ 
                 for (sptr=name ; *sptr ; sptr++) if(*sptr==':') break;
                 if (!(*sptr && *(sptr+1)))
 #endif
@@ -557,7 +557,7 @@ int in_net_bh()	/* Used by timer.c */
  *	mark_bh(NET_BH);
  */
  
-void net_bh(void *tmp)
+void net_bh(void)
 {
 	struct sk_buff *skb;
 	struct packet_type *ptype;
@@ -728,9 +728,11 @@ void dev_tint(struct device *dev)
 	 */	 
 	for(i = 0;i < DEV_NUMBUFFS; i++,head++)
 	{
-		struct sk_buff *skb = skb_peek(head);
 
-		if (skb) {
+		while (!skb_queue_empty(head)) {
+			struct sk_buff *skb;
+
+			skb = head->next;
 			__skb_unlink(skb, head);
 			/*
 			 *	Stop anyone freeing the buffer while we retransmit it
@@ -1408,7 +1410,6 @@ int net_dev_init(void)
 	net_alias_init();
 #endif
 
-	bh_base[NET_BH].routine = net_bh;
-	enable_bh(NET_BH);
+	init_bh(NET_BH, net_bh);
 	return 0;
 }

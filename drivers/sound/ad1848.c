@@ -39,6 +39,9 @@
  */
 #include <linux/config.h>
 
+
+#define DEB(x)
+#define DEB1(x)
 #include "sound_config.h"
 
 #if defined(CONFIG_AD1848)
@@ -151,7 +154,7 @@ static void
 ad_write (ad1848_info * devc, int reg, int data)
 {
   unsigned long   flags;
-  int             timeout = 90000;
+  int             timeout = 900000;
 
   while (timeout > 0 &&
 	 inb (devc->base) == 0x80)	/*Are we initializing */
@@ -178,7 +181,7 @@ wait_for_calibration (ad1848_info * devc)
    */
 
   timeout = 100000;
-  while (timeout > 0 && inb (devc->base) & 0x80)
+  while (timeout > 0 && inb (devc->base) == 0x80)
     timeout--;
   if (inb (devc->base) & 0x80)
     printk ("ad1848: Auto calibration timed out(1).\n");
@@ -189,7 +192,7 @@ wait_for_calibration (ad1848_info * devc)
   if (!(ad_read (devc, 11) & 0x20))
     return;
 
-  timeout = 20000;
+  timeout = 40000;
   while (timeout > 0 && ad_read (devc, 11) & 0x20)
     timeout--;
   if (ad_read (devc, 11) & 0x20)
@@ -199,31 +202,11 @@ wait_for_calibration (ad1848_info * devc)
 static void
 ad_mute (ad1848_info * devc)
 {
-  int             i;
-  unsigned char   prev;
-
-  /*
-     * Save old register settings and mute output channels
-   */
-  for (i = 6; i < 8; i++)
-    {
-      prev = devc->saved_regs[i] = ad_read (devc, i);
-      ad_write (devc, i, prev | 0x80);
-    }
 }
 
 static void
 ad_unmute (ad1848_info * devc)
 {
-  int             i;
-
-  /*
-     * Restore back old volume registers (unmute)
-   */
-  for (i = 6; i < 8; i++)
-    {
-      ad_write (devc, i, devc->saved_regs[i] & ~0x80);
-    }
 }
 
 static void
@@ -440,6 +423,8 @@ ad1848_mixer_reset (ad1848_info * devc)
   switch (devc->mode)
     {
     case MD_4231:
+    case MD_4231A:
+    case MD_1845:
       devc->supported_devices = MODE2_MIXER_DEVICES;
       break;
 
@@ -584,7 +569,7 @@ ad1848_open (int dev, int mode)
   ad1848_trigger (dev, 0);
   restore_flags (flags);
 /*
- * Mute output until the playback really starts. This decreases clicking.
+ * Mute output until the playback really starts. This decreases clicking (hope so).
  */
   ad_mute (devc);
 
@@ -597,7 +582,7 @@ ad1848_close (int dev)
   unsigned long   flags;
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
 
-  DDB (printk ("ad1848_close(void)\n"));
+  DEB (printk ("ad1848_close(void)\n"));
 
   save_flags (flags);
   cli ();
@@ -1393,7 +1378,7 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
    */
   static int      init_values[] =
   {
-    0xa8, 0xa8, 0x08, 0x08, 0x08, 0x08, 0x80, 0x80,
+    0xa8, 0xa8, 0x08, 0x08, 0x08, 0x08, 0x00, 0x00,
     0x00, 0x0c, 0x02, 0x00, 0x8a, 0x01, 0x00, 0x00,
 
   /* Positions 16 to 31 just for CS4231 */
@@ -1525,13 +1510,11 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
       if (!share_dma)
 	{
 	  if (sound_alloc_dma (dma_playback, "Sound System"))
-	    printk ("ad1848.c: Can't allocate DMA%d for playback\n",
-		    dma_playback);
+	    printk ("ad1848.c: Can't allocate DMA%d\n", dma_playback);
 
-	  if (dma_capture != dma_playback && dma_capture != -1)
+	  if (dma_capture != dma_playback)
 	    if (sound_alloc_dma (dma_capture, "Sound System (capture)"))
-	      printk ("ad1848.c: Can't allocate DMA%d for capture\n",
-		      dma_capture);
+	      printk ("ad1848.c: Can't allocate DMA%d\n", dma_capture);
 	}
 
       /*
@@ -1707,16 +1690,26 @@ probe_ms_sound (struct address_info *hw_config)
 
   if ((tmp = inb (hw_config->io_base + 3)) == 0xff)	/* Bus float */
     {
+      int             ret;
+
       DDB (printk ("I/O address is inactive (%x)\n", tmp));
-      return 0;
+      if (!(ret = ad1848_detect (hw_config->io_base + 4, NULL, hw_config->osp)))
+	return 0;
+      return 1;
     }
   if ((tmp & 0x3f) != 0x04 &&
       (tmp & 0x3f) != 0x0f &&
       (tmp & 0x3f) != 0x00)
     {
+      int             ret;
+
       DDB (printk ("No MSS signature detected on port 0x%x (0x%x)\n",
 		   hw_config->io_base, inb (hw_config->io_base + 3)));
-      return 0;
+      DDB (printk ("Trying to detect codec anyway but IRQ/DMA may not work\n"));
+      if (!(ret = ad1848_detect (hw_config->io_base + 4, NULL, hw_config->osp)))
+	return 0;
+
+      return 1;
     }
 
   if (hw_config->irq > 11)

@@ -58,6 +58,7 @@ ifndef HOSTCC
 CC	= gcc
 HOSTCC	= gcc
 CFLAGS	= -D__KERNEL__ -DMODULE -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -m486
+USE_DEPEND=y
 else
 include $(TOPDIR)/Rules.make
 endif
@@ -69,7 +70,7 @@ sound.a: $(OBJS)
 
 clean:
 	rm -f core core.* *.o *.a tmp_make *~ x y z *%
-	rm -f configure sound_stub.c objects/*.o
+	rm -f configure sound_stub.c objects/*.o 
 
 indent:
 	for n in *.c;do echo indent $$n;indent $$n;done
@@ -144,9 +145,11 @@ modules: local.h sound.o
 	ln -fs `pwd`/sound.o $(TOPDIR)/modules/sound.o
 
 
+ifdef USE_DEPEND
 #
 # include a dependency file if one exists
 #
 ifeq (.depend,$(wildcard .depend))
 include .depend
+endif
 endif

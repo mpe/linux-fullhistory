@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.6 1995/11/25 01:00:16 davem Exp $
+/* $Id: tree.c,v 1.7 1996/01/01 02:46:24 davem Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -172,6 +172,19 @@ prom_nextprop(int node, char *oprop)
 {
 	if(node == -1) return "";
 	return prom_nodeops->no_nextprop(node, oprop);
+}
+
+int
+prom_node_has_property(int node, char *prop)
+{
+	char *current_property = "";
+
+	do {
+		current_property = prom_nextprop(node, current_property);
+		if(!strcmp(current_property, prop))
+		   return 1;
+	} while (*current_property);
+	return 0;
 }
 
 /* Set property 'pname' at node 'node' to value 'value' which has a length

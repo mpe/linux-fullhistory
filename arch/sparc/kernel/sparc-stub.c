@@ -1,4 +1,4 @@
-/* $Id: sparc-stub.c,v 1.7 1995/11/25 00:58:26 davem Exp $
+/* $Id: sparc-stub.c,v 1.10 1996/02/15 09:12:09 davem Exp $
  * sparc-stub.c:  KGDB support for the Linux kernel.
  *
  * Modifications to run under Linux
@@ -636,7 +636,6 @@ handle_exception (unsigned long *registers)
  * breakpoint, and the icache probably has no way of knowing that a data ref to
  * some location may have changed something that is in the instruction cache.
  */
-
 			/* Only instruction cache flushing on the sun4c/sun4
 			 * for now.  We assume control flow during the kgdb
 			 * transaction has not left the context in which it

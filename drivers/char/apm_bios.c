@@ -742,6 +742,9 @@ void apm_do_busy(void)
 #ifndef ALWAYS_CALL_BUSY
 	if (!clock_slowed)
 		return;
+#else
+	if (!apm_enabled)
+		return;
 #endif
 
 	APM_SET_CPU_BUSY(error);

@@ -38,7 +38,7 @@
 
 #define SSSID_SPARE	0x60	/* Unused bits in SSID for standard AX.25 */
 #define ESSID_SPARE	0x20	/* Unused bits in SSID for extended AX.25 */
-#define DAMA_FLAG	0x40	/* Well, it is *NOT* unused! (dl1bke 951121 */
+#define DAMA_FLAG	0x20	/* Well, it is *NOT* unused! (dl1bke 951121 */
 
 #define AX25_REPEATED	0x80
 

@@ -1958,7 +1958,7 @@ static void con_setsize(unsigned long rows, unsigned long cols)
  * us the option to easily disable it to avoid races when we
  * need to write to the console.
  */
-static void console_bh(void * unused)
+static void console_bh(void)
 {
 	if (want_console >= 0) {
 		if (want_console != fg_console) {
@@ -2101,9 +2101,7 @@ unsigned long con_init(unsigned long kmem_start)
 	if (video_type != VIDEO_TYPE_TGAC)
 		register_console(console_print);
 
-	bh_base[CONSOLE_BH].routine = console_bh;
-	enable_bh(CONSOLE_BH);
-
+	init_bh(CONSOLE_BH, console_bh);
 	return kmem_start;
 }
 

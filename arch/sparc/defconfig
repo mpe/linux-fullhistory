@@ -10,13 +10,14 @@ CONFIG_SUN_MOUSE=y
 CONFIG_SUN_SERIAL=y
 CONFIG_SUN_KEYBOARD=y
 CONFIG_SUN_CONSOLE=y
+# CONFIG_NET_ALIAS is not set
+CONFIG_BINFMT_AOUT=y
 CONFIG_NET=y
 CONFIG_SYSVIPC=y
 # CONFIG_BINFMT_ELF is not set
-CONFIG_BINFMT_AOUT=y
 
 #
-# block devices
+# Floppy, IDE, and other block devices
 #
 # CONFIG_BLK_DEV_FD is not set
 
@@ -38,6 +39,10 @@ CONFIG_INET=y
 # CONFIG_TCP_NAGLE_OFF is not set
 CONFIG_IP_NOSR=y
 # CONFIG_SKB_LARGE is not set
+
+#
+#  
+#
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
 # CONFIG_AX25 is not set
@@ -52,8 +57,8 @@ CONFIG_SCSI=y
 # SCSI support type (disk, tape, CDrom)
 #
 CONFIG_BLK_DEV_SD=y
-CONFIG_CHR_DEV_ST=y
-CONFIG_BLK_DEV_SR=y
+# CONFIG_CHR_DEV_ST is not set
+# CONFIG_BLK_DEV_SR is not set
 # CONFIG_CHR_DEV_SG is not set
 
 #
@@ -79,19 +84,22 @@ CONFIG_SUNLANCE=y
 #
 # Filesystems
 #
+# CONFIG_QUOTA is not set
 # CONFIG_MINIX_FS is not set
 # CONFIG_EXT_FS is not set
 CONFIG_EXT2_FS=y
 # CONFIG_XIA_FS is not set
-CONFIG_MSDOS_FS=y
+# CONFIG_FAT_FS is not set
+# CONFIG_MSDOS_FS is not set
+# CONFIG_VFAT_FS is not set
 # CONFIG_UMSDOS_FS is not set
 CONFIG_PROC_FS=y
 CONFIG_NFS_FS=y
 CONFIG_ROOT_NFS=y
-CONFIG_ISO9660_FS=y
+# CONFIG_SMB_FS is not set
+# CONFIG_ISO9660_FS is not set
 # CONFIG_HPFS_FS is not set
 # CONFIG_SYSV_FS is not set
-# CONFIG_SMB_FS is not set
 
 #
 # Kernel hacking

@@ -1625,10 +1625,12 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		skb->saddr = daddr;
 		skb->daddr = saddr;
 
-		/* We may need to add it to the backlog here. */
+		/*
+		 * We may need to add it to the backlog here. 
+		 */
 		if (sk->users) 
 		{
-			skb_queue_tail(&sk->back_log, skb);
+			__skb_queue_tail(&sk->back_log, skb);
 			return(0);
 		}
 	}

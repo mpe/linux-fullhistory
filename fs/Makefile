@@ -157,4 +157,7 @@ else
   endif
 endif
 
+# binfmt_script is always there
+BINFMTS += binfmt_script.o
+
 include $(TOPDIR)/Rules.make

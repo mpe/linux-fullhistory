@@ -45,6 +45,7 @@ static const char *version =
 
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/byteorder.h>
 
 #include "8390.h"
 #include "3c503.h"
@@ -435,7 +436,7 @@ el2_block_output(struct device *dev, int count,
 {
     unsigned short int *wrd;
     int boguscount;		/* timeout counter */
-    unsigned shor tmp_rev;	/* temporary for reversed values */
+    unsigned short tmp_rev;	/* temporary for reversed values */
 
     if (ei_status.word16)      /* Tx packets go into bank 0 on EL2/16 card */
 	outb(EGACFR_RSEL|EGACFR_TCM, E33G_GACFR);

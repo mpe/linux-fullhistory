@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.39 1995/11/25 00:58:01 davem Exp $
+/* $Id: head.S,v 1.47 1996/02/15 09:11:57 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -49,7 +49,7 @@ C_LABEL(cputypvallen) = C_LABEL(cputypvar) - C_LABEL(cputypval)
 C_LABEL(cputypvar):
 	.asciz "compatability"
 
-/* Tested on SS-5, SS-10. Probably someone at Sun applied a spell-checker. --P3 */
+/* Tested on SS-5, SS-10. Probably someone at Sun applied a spell-checker. */
 	.align 4
 C_LABEL(cputypvar_sun4m):
 	.asciz "compatible"
@@ -82,7 +82,7 @@ start:
 C_LABEL(trapbase):
 /* We get control passed to us here at t_zero. */
 t_zero:	b gokernel; nop; nop; nop;
-t_tflt:	TRAP_ENTRY(0x1, sparc_fault)        /* Inst. Access Exception        */
+t_tflt:	SPARC_TFAULT                        /* Inst. Access Exception        */
 t_bins:	TRAP_ENTRY(0x2, bad_instruction)    /* Illegal Instruction           */
 t_pins:	TRAP_ENTRY(0x3, priv_instruction)   /* Privileged Instruction        */
 t_fpd:	TRAP_ENTRY(0x4, fpd_trap_handler)   /* Floating Point Disabled       */
@@ -90,16 +90,16 @@ t_wovf:	WINDOW_SPILL                        /* Window Overflow               */
 t_wunf:	WINDOW_FILL                         /* Window Underflow              */
 t_mna:	TRAP_ENTRY(0x7, mna_handler)        /* Memory Address Not Aligned    */
 t_fpe:	TRAP_ENTRY(0x8, fpe_trap_handler)   /* Floating Point Exception      */
-t_dflt:	TRAP_ENTRY(0x9, sparc_fault)        /* Data Miss Exception           */
+t_dflt:	SPARC_DFAULT                        /* Data Miss Exception           */
 t_tio:	TRAP_ENTRY(0xa, do_tag_overflow)    /* Tagged Instruction Ovrflw     */
 t_wpt:	TRAP_ENTRY(0xb, do_watchpoint)      /* Watchpoint Detected           */
 t_badc:	BAD_TRAP(0xc) BAD_TRAP(0xd) BAD_TRAP(0xe) BAD_TRAP(0xf) BAD_TRAP(0x10)
-t_irq1:	TRAP_ENTRY_SOFTINT(1)               /* IRQ Software/SBUS Level 1     */
+t_irq1:	TRAP_ENTRY_INTERRUPT(1)             /* IRQ Software/SBUS Level 1     */
 t_irq2:	TRAP_ENTRY_INTERRUPT(2)             /* IRQ SBUS Level 2              */
 t_irq3:	TRAP_ENTRY_INTERRUPT(3)             /* IRQ SCSI/DMA/SBUS Level 3     */
-t_irq4:	TRAP_ENTRY_SOFTINT(4)               /* IRQ Software Level 4          */
+t_irq4:	TRAP_ENTRY_INTERRUPT(4)             /* IRQ Software Level 4          */
 t_irq5:	TRAP_ENTRY_INTERRUPT(5)             /* IRQ SBUS/Ethernet Level 5     */
-t_irq6:	TRAP_ENTRY_SOFTINT(6)               /* IRQ Software Level 6          */
+t_irq6:	TRAP_ENTRY_INTERRUPT(6)             /* IRQ Software Level 6          */
 t_irq7:	TRAP_ENTRY_INTERRUPT(7)             /* IRQ Video/SBUS Level 5        */
 t_irq8:	TRAP_ENTRY_INTERRUPT(8)             /* IRQ SBUS Level 6              */
 t_irq9:	TRAP_ENTRY_INTERRUPT(9)             /* IRQ SBUS Level 7              */
@@ -110,20 +110,20 @@ t_irq13:TRAP_ENTRY_INTERRUPT(13)            /* IRQ Audio Intr.               */
 t_irq14:TRAP_ENTRY_INTERRUPT(14)            /* IRQ Timer #2                  */
 t_nmi:	NMI_TRAP                            /* Level 15 (NMI)                */
 t_racc:	TRAP_ENTRY(0x20, do_reg_access)     /* General Register Access Error */
-t_iacce:TRAP_ENTRY(0x21, sparc_fault)       /* Instr Access Error    */
+t_iacce:BAD_TRAP(0x21)                      /* Instr Access Error            */
 t_bad22:BAD_TRAP(0x22) BAD_TRAP(0x23)
 t_cpdis:TRAP_ENTRY(0x24, do_cp_disabled)    /* Co-Processor Disabled         */
 t_uflsh:TRAP_ENTRY(0x25, do_bad_flush)      /* Unimplemented FLUSH inst.     */
 t_bad26:BAD_TRAP(0x26) BAD_TRAP(0x27)
 t_cpexc:TRAP_ENTRY(0x28, do_cp_exception)   /* Co-Processor Exception        */
-t_dacce:TRAP_ENTRY(0x29, sparc_fault)       /* Data Access Error     */
+t_dacce:BAD_TRAP(0x29)                      /* Data Access Error             */
 t_hwdz:	TRAP_ENTRY(0x2a, do_hw_divzero)     /* Division by zero, you lose... */
-t_dserr:TRAP_ENTRY(0x2b, sparc_fault)       /* Data Store Error      */
-t_daccm:TRAP_ENTRY(0x2c, sparc_fault)       /* Data Access MMU-Miss  */
+t_dserr:BAD_TRAP(0x2b)                      /* Data Store Error              */
+t_daccm:BAD_TRAP(0x2c)                      /* Data Access MMU-Miss          */
 t_bad2d:BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
 t_bad32:BAD_TRAP(0x32) BAD_TRAP(0x33) BAD_TRAP(0x34) BAD_TRAP(0x35) BAD_TRAP(0x36)
 t_bad37:BAD_TRAP(0x37) BAD_TRAP(0x38) BAD_TRAP(0x39) BAD_TRAP(0x3a) BAD_TRAP(0x3b)
-t_iaccm:TRAP_ENTRY(0x3c, sparc_fault)       /* Instr Access MMU-Miss */
+t_iaccm:BAD_TRAP(0x3c)                      /* Instr Access MMU-Miss         */
 t_bad3d:BAD_TRAP(0x3d) BAD_TRAP(0x3e) BAD_TRAP(0x3f) BAD_TRAP(0x40) BAD_TRAP(0x41)
 t_bad42:BAD_TRAP(0x42) BAD_TRAP(0x43) BAD_TRAP(0x44) BAD_TRAP(0x45) BAD_TRAP(0x46)
 t_bad47:BAD_TRAP(0x47) BAD_TRAP(0x48) BAD_TRAP(0x49) BAD_TRAP(0x4a) BAD_TRAP(0x4b)
@@ -186,16 +186,6 @@ C_LABEL(end_traptable):
 /* This was the only reasonable way I could think of to properly align
  * these page-table data structures.
  */
-
-	.globl C_LABEL(auxio_reg_addr)
-C_LABEL(auxio_reg_addr):	.skip	(PAGE_SIZE)
-
-	.globl C_LABEL(clock_reg_addr)
-C_LABEL(clock_reg_addr):	.skip	(PAGE_SIZE*5)
-
-	.globl C_LABEL(int_reg_addr)
-C_LABEL(int_reg_addr):		.skip	(PAGE_SIZE*5)
-
 	.globl C_LABEL(bootup_user_stack)
 	.globl C_LABEL(bootup_kernel_stack)
 	.globl C_LABEL(pg0)
@@ -278,21 +268,6 @@ copy_prom_lvl14:
 		std	%g4, [%g3]
 		ldd	[%g2 + 0x8], %g4
 		std	%g4, [%g3 + 0x8]	! Copy proms handler
-
-		/* Copy over the Prom/debugger's trap entry points. */
-copy_prom_bpoint:
-		or	%g0, (0xfe<<4), %g2
-		or	%g1, %g2, %g2
-		set	dbtrap, %g3
-		sub	%g3, %l6, %g3
-		ldd	[%g2], %g4
-		std	%g4, [%g3]
-		ldd	[%g2 + 0x8], %g4
-		std	%g4, [%g3 + 0x8]
-		ldd	[%g2 + 0x10], %g4
-		std	%g4, [%g3 + 0x10]
-		ldd	[%g2 + 0x18], %g4
-		std	%g4, [%g3 + 0x18]
 
 /* Must determine whether we are on a sun4c MMU, SRMMU, or SUN4/400 MUTANT
  * MMU so we can remap ourselves properly.  DONT TOUCH %l0 thru %l5 in these
@@ -652,7 +627,7 @@ sun4c_continue_boot:
 
 		/* I want a kernel stack NOW! */
 		set	C_LABEL(bootup_user_stack), %g1
-		add	%g1, (PAGE_SIZE - STACKFRAME_SZ - TRACEREG_SZ), %sp
+		add	%g1, (PAGE_SIZE - REGWIN_SZ), %sp
 		mov	0, %fp			/* And for good luck */
 
 		/* Zero out our BSS section. */
@@ -673,7 +648,7 @@ sun4c_continue_boot:
 		st	%g4, [%g2]
 
 		/* So now this should work. */
-		LOAD_CURRENT(g2)
+		LOAD_CURRENT(g2, g4)
 		set	C_LABEL(bootup_kernel_stack), %g4
 		st	%g4, [%g2 + TASK_KSTACK_PG]
 		st	%g0, [%g2 + THREAD_UMASK]

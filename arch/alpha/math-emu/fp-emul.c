@@ -32,10 +32,10 @@
  */
 #define FLTI_FUNC_ADDS			0x000
 #define FLTI_FUNC_ADDT			0x020
-#define FLTI_FUNC_CMPTEQ		0x0a5
-#define FLTI_FUNC_CMPTLT		0x0a6
-#define FLTI_FUNC_CMPTLE		0x0a7
-#define FLTI_FUNC_CMPTUN		0x0a4
+#define FLTI_FUNC_CMPTEQ		0x025
+#define FLTI_FUNC_CMPTLT		0x026
+#define FLTI_FUNC_CMPTLE		0x027
+#define FLTI_FUNC_CMPTUN		0x024
 #define FLTI_FUNC_CVTTS_or_CVTST	0x02c
 #define FLTI_FUNC_CVTTQ			0x02f
 #define FLTI_FUNC_CVTQS			0x03c
@@ -288,8 +288,8 @@ alpha_fp_emul (unsigned long pc)
 		break;
 
 	      default:
-		printk("alpha_fp_emul: unexpected function code %#lx at %#lx",
-		       opcode, pc);
+		printk("alpha_fp_emul: unexpected function code %#lx at %#lx\n",
+		       func & 0x3f, pc);
 		return 0;
 	}
 	/*

@@ -1,4 +1,4 @@
-/* $Id: pgtsun4c.h,v 1.16 1995/11/25 02:32:28 davem Exp $
+/* $Id: pgtsun4c.h,v 1.22 1996/01/24 02:33:45 davem Exp $
  * pgtsun4c.h:  Sun4c specific pgtable.h defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -19,7 +19,7 @@
 #define SUN4C_PGDIR_ALIGN(addr) (((addr)+SUN4C_PGDIR_SIZE-1)&SUN4C_PGDIR_MASK)
 
 /* To represent how the sun4c mmu really lays things out. */
-#define SUN4C_REAL_PGDIR_SHIFT  18
+#define SUN4C_REAL_PGDIR_SHIFT       18
 #define SUN4C_REAL_PGDIR_SIZE        (1UL << SUN4C_REAL_PGDIR_SHIFT)
 #define SUN4C_REAL_PGDIR_MASK        (~(SUN4C_REAL_PGDIR_SIZE-1))
 #define SUN4C_REAL_PGDIR_ALIGN(addr) (((addr)+SUN4C_REAL_PGDIR_SIZE-1)&SUN4C_REAL_PGDIR_MASK)
@@ -50,12 +50,7 @@
 #define _SUN4C_PAGE_IO        0x04000000   /* I/O page */
 #define _SUN4C_PAGE_REF       0x02000000   /* Page has been accessed/referenced */
 #define _SUN4C_PAGE_DIRTY     0x01000000   /* Page has been modified, is dirty */
-#define _SUN4C_PAGE_COW       0x00800000   /* COW page */
 
-/* Note that the 'non-cacheable' bit is not set in any of these settings,
- * you may want to turn it on for debugging the flushing of the virtual
- * cache on the SUN4C MMU.
- */
 #define _SUN4C_PAGE_CHG_MASK  (0xffff | _SUN4C_PAGE_REF | _SUN4C_PAGE_DIRTY)
 
 #define SUN4C_PAGE_NONE     __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_PRIV | \
@@ -63,25 +58,12 @@
 #define SUN4C_PAGE_SHARED   __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_WRITE | \
 				     _SUN4C_PAGE_USER | _SUN4C_PAGE_REF)
 #define SUN4C_PAGE_COPY     __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_USER | \
-				     _SUN4C_PAGE_REF | _SUN4C_PAGE_COW)
+				     _SUN4C_PAGE_REF)
 #define SUN4C_PAGE_READONLY __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_USER | \
 				     _SUN4C_PAGE_REF)
 #define SUN4C_PAGE_KERNEL   __pgprot(_SUN4C_PAGE_VALID | _SUN4C_PAGE_WRITE | \
 				     _SUN4C_PAGE_PRIV | _SUN4C_PAGE_DIRTY | \
-				     _SUN4C_PAGE_REF)
-#define SUN4C_PAGE_INVALID  __pgprot(0)
-
-struct pseg_list {
-	struct pseg_list *next;
-	struct pseg_list *prev;
-	struct pseg_list *ctx_next;
-	struct pseg_list *ctx_prev;
-	unsigned long vaddr;    /* Where the pseg is mapped. */
-	unsigned char context;  /* The context in which it is mapped. */
-	unsigned char pseg;     /* The pseg itself. */
-        unsigned ref_cnt:21,
-                 hardlock:1;
-};
+				     _SUN4C_PAGE_REF | _SUN4C_PAGE_NOCACHE)
 
 extern char *sun4c_lockarea(char *vaddr, unsigned long size);
 extern void sun4c_unlockarea(char *vaddr, unsigned long size);
@@ -104,6 +86,66 @@ extern __inline__ unsigned long sun4c_get_synchronous_address(void)
 			     "=r" (sync_addr) :
 			     "r" (AC_SYNC_VA), "i" (ASI_CONTROL));
 	return sync_addr;
+}
+
+/* SUN4C pte, segmap, and context manipulation */
+extern __inline__ unsigned long sun4c_get_segmap(unsigned long addr)
+{
+  register unsigned long entry;
+
+  __asm__ __volatile__("\n\tlduba [%1] %2, %0\n\t" : 
+		       "=r" (entry) :
+		       "r" (addr), "i" (ASI_SEGMAP));
+
+  return entry;
+}
+
+extern __inline__ void sun4c_put_segmap(unsigned long addr, unsigned long entry)
+{
+
+  __asm__ __volatile__("\n\tstba %1, [%0] %2\n\t" : :
+		       "r" (addr), "r" (entry),
+		       "i" (ASI_SEGMAP));
+
+  return;
+}
+
+extern __inline__ unsigned long sun4c_get_pte(unsigned long addr)
+{
+  register unsigned long entry;
+
+  __asm__ __volatile__("\n\tlda [%1] %2, %0\n\t" : 
+		       "=r" (entry) :
+		       "r" (addr), "i" (ASI_PTE));
+  return entry;
+}
+
+extern __inline__ void sun4c_put_pte(unsigned long addr, unsigned long entry)
+{
+  __asm__ __volatile__("\n\tsta %1, [%0] %2\n\t" : :
+		       "r" (addr), 
+		       "r" (entry), "i" (ASI_PTE));
+
+  return;
+}
+
+extern __inline__ int sun4c_get_context(void)
+{
+  register int ctx;
+
+  __asm__ __volatile__("\n\tlduba [%1] %2, %0\n\t" :
+		       "=r" (ctx) :
+		       "r" (AC_CONTEXT), "i" (ASI_CONTROL));
+
+  return ctx;
+}
+
+extern __inline__ int sun4c_set_context(int ctx)
+{
+  __asm__ __volatile__("\n\tstba %0, [%1] %2\n\t" : :
+		       "r" (ctx), "r" (AC_CONTEXT), "i" (ASI_CONTROL));
+
+  return ctx;
 }
 
 #endif /* !(_SPARC_PGTSUN4C_H) */

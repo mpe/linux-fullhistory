@@ -1,4 +1,4 @@
-/* $Id: termios.h,v 1.10 1995/11/25 02:33:01 davem Exp $ */
+/* $Id: termios.h,v 1.11 1996/02/10 04:31:03 davem Exp $ */
 #ifndef _SPARC_TERMIOS_H
 #define _SPARC_TERMIOS_H
 
@@ -193,12 +193,11 @@ struct termios {
 
 #ifdef __KERNEL__
 /*	intr=^C		quit=^|		erase=del	kill=^U
-	eof=^D		vtime=\0	vmin=\1		sxtc=\0
-	start=^Q	stop=^S		susp=^Z		eol=\0
+	eof/vmin=\1	eol/vtime=\0	eol2=\0		sxtc=\0
+	start=^Q	stop=^S		susp=^Z		dsusp=^Y
 	reprint=^R	discard=^U	werase=^W	lnext=^V
-	eol2=\0
 */
-#define INIT_C_CC "\003\034\177\025\004\0\1\0\021\023\032\0\022\017\027\026\0"
+#define INIT_C_CC "\003\034\177\025\001\000\000\000\021\023\032\031\022\025\027\026"
 #endif
 
 /* c_iflag bits */

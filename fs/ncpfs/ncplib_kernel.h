@@ -1,3 +1,10 @@
+/*
+ *  ncplib_kernel.h
+ *
+ *  Copyright (C) 1995, 1996 by Volker Lendecke
+ *
+ */
+
 #ifndef _NCPLIB_H
 #define _NCPLIB_H
 
@@ -114,10 +121,16 @@ ncp_write(struct ncp_server *server, const char *file_id,
 	  const char *source, int *bytes_written);
 
 int
-ncp_do_lookup(struct ncp_server *server,
-	      struct nw_info_struct *dir,
-	      char *path,	/* may only be one component */
-	      struct nw_info_struct *target);
+ncp_obtain_info(struct ncp_server *server,
+		__u8 vol_num, __u32 dir_base,
+		char *path, /* At most 1 component */
+		struct nw_info_struct *target);
+
+int
+ncp_lookup_volume(struct ncp_server *server,
+		  char *volname,
+		  struct nw_info_struct *target);
+
 
 int
 ncp_modify_file_or_subdir_dos_info(struct ncp_server *server,

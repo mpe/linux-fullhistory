@@ -1,4 +1,4 @@
-/* $Id: wof.S,v 1.14 1995/11/25 00:58:49 davem Exp $
+/* $Id: wof.S,v 1.20 1996/02/20 07:45:18 davem Exp $
  * wof.S: Sparc window overflow handler.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -87,14 +87,14 @@ spnwin_patch2:	and	%glob_tmp, 0xff, %glob_tmp
 	 * up for us to see if this is from user or kernel.
 	 * Get the load of 'curptr' out of the way.
 	 */
-	LOAD_CURRENT(curptr)
+	LOAD_CURRENT(curptr, twin_tmp)
 
 	andcc	%t_psr, PSR_PS, %g0
 	be	spwin_fromuser				! all user wins, branch
 	 nop
 	
 	/* See if any user windows are active in the set. */
-	ld	[%curptr + THREAD_UMASK], %twin_tmp	! grab currents win mask
+	ld	[%curptr + THREAD_UMASK], %twin_tmp	! grab win mask
 	orcc	%g0, %twin_tmp, %g0			! check for set bits
 	bne	spwin_exist_uwins			! yep, there are some
 	 nop
@@ -237,22 +237,25 @@ spnwin_patch3:	and	%twin_tmp, 0xff, %twin_tmp	! patched on 7win Sparcs
 		st	%twin_tmp, [%curptr + THREAD_UMASK]
 
 	/* Jump onto kernel stack for this process... */
-	ld	[%curptr + TASK_KSTACK_PG], %sp
-	add	%sp, (PAGE_SIZE - TRACEREG_SZ - STACKFRAME_SZ), %sp
+	ld	[%curptr + TASK_SAVED_KSTACK], %sp
 
 	/* Restore the saved globals and build a pt_regs frame. */
 	mov	%saved_g5, %g5
 	mov	%saved_g6, %g6
-	rd	%wim, %twin_tmp
-	STORE_PT_ALL(sp, t_psr, t_pc, t_npc, twin_tmp, g1)
+	STORE_PT_ALL(sp, t_psr, t_pc, t_npc, g1)
 
 	/* Turn on traps and call c-code to deal with it. */
 	wr	%t_psr, PSR_ET, %psr
 	WRITE_PAUSE
 
-	mov	1, %o1
-	call	C_LABEL(do_sparc_winfault)
-	 add	%sp, STACKFRAME_SZ, %o0
+#if 0
+	mov	0, %o1
+	call	C_LABEL(try_to_clear_window_buffer)
+	 add	%sp, REGWIN_SZ, %o0
+#else
+	call	C_LABEL(window_overflow_fault)
+	 nop
+#endif
 
 	/* Return from trap if C-code actually fixes things, if it
 	 * doesn't then we never get this far as the process will
@@ -388,7 +391,7 @@ C_LABEL(spwin_srmmu_stackchk):
 	 */
 	/* Check results of callers andcc %sp, 0x7, %g0 */
 	bne	spwin_user_stack_is_bolixed
-	sethi	%hi(KERNBASE), %glob_tmp
+	 sethi	%hi(KERNBASE), %glob_tmp
 	cmp	%glob_tmp, %sp
 	bleu	spwin_user_stack_is_bolixed
 	 mov	AC_M_SFSR, %glob_tmp

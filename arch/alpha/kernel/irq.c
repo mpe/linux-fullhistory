@@ -32,85 +32,95 @@ static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
 
 #if NR_IRQS == 33
-  static unsigned char cache_804 = 0xef;
-  static unsigned char cache_805 = 0xff;
-  static unsigned char cache_806 = 0xff;
+  static unsigned int  cache_804 = 0x00ffffef;
 #elif NR_IRQS == 32
   static unsigned char cache_26 = 0xdf;
   static unsigned char cache_27 = 0xff;
 #endif
 
+static void mask_irq(int irq)
+{
+	unsigned long mask;
+
+	if (irq < 16) {
+		mask = 1 << (irq & 7);
+		if (irq < 8) {
+			cache_21 |= mask;
+			outb(cache_21, 0x21);
+		} else {
+			cache_A1 |= mask;
+			outb(cache_A1, 0xA1);
+		}
+#if NR_IRQS == 33
+	} else {
+		mask = 1 << (irq - 16);
+		cache_804 |= mask;
+		outl(cache_804, 0x804);
+#elif NR_IRQS == 32
+	} else {
+		mask = 1 << (irq & 7);
+		if (irq < 24) {
+			cache_26 |= mask;
+			outb(cache_26, 0x26);
+		} else {
+			cache_27 |= mask;
+			outb(cache_27, 0x27);
+		}
+#endif
+	}
+}
+
+static void unmask_irq(unsigned long irq)
+{
+	unsigned long mask;
+
+	if (irq < 16) {
+		mask = ~(1 << (irq & 7));
+		if (irq < 8) {
+			cache_21 &= mask;
+			outb(cache_21, 0x21);
+		} else {
+			cache_A1 &= mask;
+			outb(cache_A1, 0xA1);
+		}
+#if NR_IRQS == 33
+	} else {
+		mask = ~(1 << (irq - 16));
+		cache_804 &= mask;
+		outl(cache_804, 0x804);
+#elif NR_IRQS == 32
+	} else {
+		mask = ~(1 << (irq & 7));
+
+		if (irq < 24) {
+			cache_26 &= mask;
+			outb(cache_26, 0x26);
+		} else {
+			cache_27 &= mask;
+			outb(cache_27, 0x27);
+		}
+#endif
+	}
+}
+
 void disable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
-	unsigned char mask;
 
 	save_flags(flags);
 	cli();
-	mask = 1 << (irq_nr & 7);
-
-	if (irq_nr < 8) {
-		cache_21 |= mask;
-		outb(cache_21,0x21);
-	} else if (irq_nr < 16) {
-		cache_A1 |= mask;
-		outb(cache_A1,0xA1);
-#if NR_IRQS == 33
-	} else if (irq_nr < 24) {
-		cache_804 |= mask;
-		outb(cache_804, 0x804);
-	} else if (irq_nr < 32) {
-		cache_805 |= mask;
-		outb(cache_805, 0x805);
-	} else {
-		cache_806 |= mask;
-		outb(cache_806, 0x806);
-#elif NR_IRQS == 32 
-	} else if (irq_nr < 24) {
-		cache_26 |= mask;
-		outb(cache_26, 0x26);
-	} else {
-		cache_27 |= mask;
-		outb(cache_27, 0x27);
-#endif
-	}
+	mask_irq(irq_nr);
 	restore_flags(flags);
 }
 
 void enable_irq(unsigned int irq_nr)
 {
-	unsigned long flags;
-	unsigned char mask;
+	unsigned long flags, mask;
 
 	mask = ~(1 << (irq_nr & 7));
 	save_flags(flags);
 	cli();
-
-	if (irq_nr < 8) {
-		cache_21 &= mask;
-		outb(cache_21,0x21);
-	} else if (irq_nr < 16) {
-		cache_A1 &= mask;
-		outb(cache_A1,0xA1);
-#if NR_IRQS == 33
-	} else if (irq_nr < 24) {
-		cache_804 &= mask;
-		outb(cache_804, 0x804);
-	} else if (irq_nr < 32) {
-		cache_805 &= mask;
-		outb(cache_805, 0x805);
-	} else {
-		cache_806 &= mask;
-		outb(cache_806, 0x806);
-#elif NR_IRQS == 32
-	} else if (irq_nr < 24) {
-		cache_26 &= mask;
-		outb(cache_26, 0x26);
-	} else {
-		cache_27 &= mask;
-		outb(cache_27, 0x27);
-#endif
-	}
+	unmask_irq(irq_nr);
 	restore_flags(flags);
 }
 
@@ -125,7 +135,7 @@ int get_irq_list(char *buf)
 	struct irqaction * action;
 
 	for (i = 0 ; i < NR_IRQS ; i++) {
-	        action = *(i + irq_action);
+	        action = irq_action[i];
 		if (!action) 
 		        continue;
 		len += sprintf(buf+len, "%2d: %8d %c %s",
@@ -156,69 +166,6 @@ static inline void ack_irq(int irq)
 	}
 }
 
-static inline void mask_irq(int irq)
-{
-	unsigned char mask;
-
-	mask = 1 << (irq & 7);
-	if (irq < 8) {
-		cache_21 |= mask;
-		outb(cache_21, 0x21);
-	} else if (irq < 16) {
-		cache_A1 |= mask;
-		outb(cache_A1, 0xA1);
-#if NR_IRQS == 33
-	} else if (irq < 24) {
-		cache_804 |= mask;
-		outb(cache_804, 0x804);
-	} else if (irq < 32) {
-	        cache_805 |= mask;
-		outb(cache_805, 0x805);
-	} else {
-		cache_806 |= mask;
-		outb(cache_806, 0x806);
-#elif NR_IRQS == 32
-	} else if (irq < 24) {
-		cache_26 |= mask;
-		outb(cache_26, 0x26);
-	} else {
-		cache_27 |= mask;
-		outb(cache_27, 0x27);
-#endif
-	}
-}
-
-static inline void unmask_irq(unsigned long irq)
-{
-	unsigned char mask = ~(1 << (irq & 7));
-
-	if (irq < 8) {
-		cache_21 &= mask;
-		outb(cache_21, 0x21);
-	} else if (irq < 16) {
-		cache_A1 &= mask;
-		outb(cache_A1, 0xA1);
-#if NR_IRQS == 33
-	} else if (irq < 24) {
-		cache_804 &= mask;
-		outb(cache_804, 0x804);
-	} else if (irq < 32) {
-	        cache_805 &= mask;
-		outb(cache_805, 0x805);
-	} else {
-		cache_806 &= mask;
-		outb(cache_806, 0x806);
-#elif NR_IRQS == 32
-	} else if (irq < 24) {
-		cache_26 &= mask;
-		outb(cache_26, 0x26);
-	} else {
-		cache_27 &= mask;
-		outb(cache_27, 0x27);
-#endif
-	}
-}
-
 int request_irq(unsigned int irq, 
 		void (*handler)(int, void *, struct pt_regs *),
 		unsigned long irqflags, 
@@ -235,7 +182,7 @@ int request_irq(unsigned int irq,
 		return -EINVAL;
 	if (!handler)
 	    return -EINVAL;
-	action = *(irq + irq_action);
+	action = irq_action[irq];
 	if (action) {
 	    if ((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ)) {
 		for (tmp = action; tmp->next; tmp = tmp->next);
@@ -265,7 +212,7 @@ int request_irq(unsigned int irq,
 	if (tmp) {
 	    tmp->next = action;
 	} else {
-	    *(irq + irq_action) = action;
+	    irq_action[irq] = action;
 	    enable_irq(irq);
 	    if (irq >= 8 && irq < 16) {
 		enable_irq(2);	/* ensure cascade is enabled too */
@@ -278,7 +225,7 @@ int request_irq(unsigned int irq,
 
 void free_irq(unsigned int irq, void *dev_id)
 {
-	struct irqaction * action = *(irq + irq_action);
+	struct irqaction * action = irq_action[irq];
 	struct irqaction * tmp = NULL;
 	unsigned long flags;
 
@@ -286,7 +233,7 @@ void free_irq(unsigned int irq, void *dev_id)
 		printk("Trying to free IRQ%d\n", irq);
 		return;
 	}
-	if (!action->handler) {
+	if (!action || !action->handler) {
 		printk("Trying to free free IRQ%d\n", irq);
 		return;
 	}
@@ -308,11 +255,11 @@ void free_irq(unsigned int irq, void *dev_id)
 	if (action && tmp) {
 	    tmp->next = action->next;
 	} else {
-	    *(irq + irq_action) = action->next;
+	    irq_action[irq] = action->next;
 	}
 	kfree_s(action, sizeof(struct irqaction));
 
-	if (!(*(irq + irq_action))) {
+	if (!irq_action[irq]) {
 	    mask_irq(irq);
 	}
 
@@ -325,7 +272,7 @@ static inline void handle_nmi(struct pt_regs * regs)
 	printk("61=%02x, 461=%02x\n", inb(0x61), inb(0x461));
 }
 
-static void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs)
+static void unexpected_irq(int irq, struct pt_regs * regs)
 {
 	struct irqaction *action;
 	int i;
@@ -334,7 +281,7 @@ static void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs)
 	printk("PC = %016lx PS=%04lx\n", regs->pc, regs->ps);
 	printk("Expecting: ");
 	for (i = 0; i < 16; i++)
-	        if ((action = *(i + irq_action)))
+	        if ((action = irq_action[i]))
 		        while (action->handler) {
 			        printk("[%s:%d] ", action->name, i);
 				action = action->next;
@@ -352,17 +299,17 @@ static void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs)
 
 static inline void handle_irq(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct irqaction * action = *(irq + irq_action);
+	struct irqaction * action = irq_action[irq];
 
 	kstat.interrupts[irq]++;
 	if (!action) {
-	    unexpected_irq(irq, action->dev_id, regs);
+	    unexpected_irq(irq, regs);
 	    return;
 	}
-	while (action) {
+	do {
 	    action->handler(irq, action->dev_id, regs);
 	    action = action->next;
-	}
+	} while (action);
 }
 
 static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
@@ -375,17 +322,17 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 	}
 
 	kstat.interrupts[irq]++;
-	action = *(irq_action + irq);
-	if (action->flags & SA_SAMPLE_RANDOM)
-		add_interrupt_randomness(irq);
-	/* quick interrupts get executed with no extra overhead */
-	if (action->flags & SA_INTERRUPT) {
-	        while (action) {
-		        action->handler(irq, action->dev_id, regs);
-		        action = action->next;
-	        }
-		ack_irq(ack);
-		return;
+	action = irq_action[irq];
+	if (action) {
+		/* quick interrupts get executed with no extra overhead */
+		if (action->flags & SA_INTERRUPT) {
+		        while (action) {
+			        action->handler(irq, action->dev_id, regs);
+			        action = action->next;
+		        }
+			ack_irq(ack);
+			return;
+		}
 	}
 	/*
 	 * For normal interrupts, we mask it out, and then ACK it.
@@ -400,9 +347,11 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 	ack_irq(ack);
 	if (!action)
 		return;
+	if (action->flags & SA_SAMPLE_RANDOM)
+		add_interrupt_randomness(irq);
 	while (action) {
-	    action->handler(irq, action->dev_id, regs);
-	    action = action->next;
+		action->handler(irq, action->dev_id, regs);
+		action = action->next;
 	}
 	unmask_irq(ack);
 }
@@ -609,8 +558,8 @@ unsigned long probe_irq_on(void)
 	unsigned int i;
 
 	for (i = NR_IRQS - 1; i > 0; i--) {
-	        action = *(i + irq_action);
-		if (!action->handler) {
+	        action = irq_action[i];
+		if (!action) {
 			enable_irq(i);
 			irqs |= (1 << i);
 		}
@@ -623,9 +572,7 @@ unsigned long probe_irq_on(void)
 	/* now filter out any obviously spurious interrupts */
 	irqmask = (((unsigned long)cache_A1)<<8) | (unsigned long) cache_21;
 #if NR_IRQS == 33
-	irqmask |= ((((unsigned long)cache_804)<<16) |
-		    (((unsigned long)cache_805)<<24) |
-		    (((unsigned long)cache_806)<<24));
+	irqmask |= (unsigned long) cache_804 << 16;
 #elif NR_IRQS == 32
 	irqmask |= ((((unsigned long)cache_26)<<16) |
 		    (((unsigned long)cache_27)<<24));
@@ -646,9 +593,7 @@ int probe_irq_off(unsigned long irqs)
 	
 	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
 #if NR_IRQS == 33
-	irqmask |= ((((unsigned long)cache_804)<<16) |
-		    (((unsigned long)cache_805)<<24) |
-		    (((unsigned long)cache_806)<<24));
+	irqmask |= (unsigned long) cache_804 << 16;
 #elif NR_IRQS == 32
 	irqmask |= ((((unsigned long)cache_26)<<16) |
 		    (((unsigned long)cache_27)<<24));
@@ -729,9 +674,7 @@ void init_IRQ(void)
 	dma_outb(0, DMA1_CLR_MASK_REG);
 	dma_outb(0, DMA2_CLR_MASK_REG);
 #if NR_IRQS == 33
-	outb(cache_804, 0x804);
-	outb(cache_805, 0x805);
-	outb(cache_806, 0x806);
+	outl(cache_804, 0x804);
 #elif NR_IRQS == 32
 	outb(cache_26, 0x26);
 	outb(cache_27, 0x27);

@@ -8,4 +8,11 @@ struct sockaddr_un {
 	char sun_path[UNIX_PATH_MAX];	/* pathname */
 };
 
+struct cmsghdr {
+	unsigned int cmsg_len;
+	int cmsg_level;
+	int cmsg_type;
+	unsigned char cmsg_data[0];
+};
+
 #endif /* _LINUX_UN_H */

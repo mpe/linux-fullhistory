@@ -2,56 +2,14 @@
 #define _LINUX_MAJOR_H
 
 /*
- * This file has definitions for major device numbers
+ * This file has definitions for major device numbers.
+ * For the device number assignments, see Documentation/devices.txt.
  */
 
 /* limits */
 
 #define MAX_CHRDEV 64
 #define MAX_BLKDEV 64
-
-/*
- * assignments
- *
- * devices are as follows (same as minix, so we can use the minix fs):
- *
- *      character              block                  comments
- *      --------------------   --------------------   --------------------
- *  0 - unnamed                unnamed                minor 0 = true nodev
- *  1 - /dev/mem               ramdisk
- *  2 - /dev/ptyp*             floppy
- *  3 - /dev/ttyp*             ide0 or hd
- *  4 - /dev/tty*
- *  5 - /dev/tty; /dev/cua*
- *  6 - lp
- *  7 - /dev/vcs*
- *  8 -                        scsi disk
- *  9 - scsi tape              multiple devices driver
- * 10 - mice
- * 11 -                        scsi cdrom
- * 12 - qic02 tape
- * 13 -                        xt disk
- * 14 - sound card
- * 15 -                        cdu31a cdrom
- * 16 - sockets                goldstar cdrom
- * 17 - af_unix                optics cdrom
- * 18 - af_inet                sanyo cdrom
- * 19 - cyclades /dev/ttyC*
- * 20 - cyclades /dev/cub*     mitsumi (mcdx) cdrom
- * 21 - scsi generic
- * 22 -                        ide1
- * 23 -                        mitsumi cdrom
- * 24 -	                       sony535 cdrom
- * 25 -                        matsushita cdrom       minors 0..3
- * 26 -                        matsushita cdrom 2     minors 0..3
- * 27 - qic117 tape            matsushita cdrom 3     minors 0..3
- * 28 -                        matsushita cdrom 4     minors 0..3
- * 29 -                        aztech/orchid/okano/wearnes cdrom
- * 32 -                        philips/lms cm206 cdrom
- * 33 -                        ide2
- * 34 - z8530 driver           ide3
- * 36 - netlink
- */
 
 #define UNNAMED_MAJOR	0
 #define MEM_MAJOR	1
@@ -65,6 +23,7 @@
 #define TTYAUX_MAJOR	5
 #define LP_MAJOR	6
 #define VCS_MAJOR	7
+#define LOOP_MAJOR	7
 #define SCSI_DISK_MAJOR	8
 #define SCSI_TAPE_MAJOR	9
 #define MD_MAJOR        9

@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.17 1995/11/25 02:31:15 davem Exp $
+/* $Id: bitops.h,v 1.18 1996/01/03 03:53:00 davem Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995, David S. Miller (davem@caip.rutgers.edu).
@@ -67,7 +67,7 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
 /* The following routine need not be atomic. */
 extern __inline__ unsigned long test_bit(int nr, const void *addr)
 {
-	return 1UL & (((int *) addr)[nr >> 5] >> (nr & 31));
+	return 1UL & (((const unsigned int *) addr)[nr >> 5] >> (nr & 31));
 }
 
 /* The easy/cheese version for now. */

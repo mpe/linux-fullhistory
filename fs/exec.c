@@ -70,6 +70,8 @@ void binfmt_setup(void)
 #ifdef CONFIG_BINFMT_AOUT
 	init_aout_binfmt();
 #endif
+	/* This cannot be configured out of the kernel */
+	init_script_binfmt();
 }
 
 int register_binfmt(struct linux_binfmt * fmt)
@@ -103,6 +105,11 @@ int unregister_binfmt(struct linux_binfmt * fmt)
 		tmp = &(*tmp)->next;
 	}
 	return -EINVAL;
+}
+
+struct linux_binfmt * get_binfmt_list()
+{
+	return formats;
 }
 #endif	/* CONFIG_MODULES */
 
@@ -175,74 +182,6 @@ asmlinkage int sys_uselib(const char * library)
 	}
 	sys_close(fd);
   	return retval;
-}
-
-/*
- * create_tables() parses the env- and arg-strings in new user
- * memory and creates the pointer tables from them, and puts their
- * addresses on the "stack", returning the new stack pointer value.
- */
-unsigned long * create_tables(char * p, struct linux_binprm * bprm, int ibcs)
-{
-	unsigned long *argv,*envp;
-	unsigned long * sp;
-	struct vm_area_struct *mpnt;
-	int argc = bprm->argc;
-	int envc = bprm->envc;
-
-	mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
-	if (mpnt) {
-		mpnt->vm_mm = current->mm;
-		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
-		mpnt->vm_end = STACK_TOP;
-		mpnt->vm_page_prot = PAGE_COPY;
-		mpnt->vm_flags = VM_STACK_FLAGS;
-		mpnt->vm_ops = NULL;
-		mpnt->vm_offset = 0;
-		mpnt->vm_inode = NULL;
-		mpnt->vm_pte = 0;
-		insert_vm_struct(current, mpnt);
-		current->mm->total_vm = (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
-	}
-	sp = (unsigned long *) ((-(unsigned long)sizeof(char *)) & (unsigned long) p);
-#ifdef __alpha__
-/* whee.. test-programs are so much fun. */
-	put_user(0, --sp);
-	put_user(0, --sp);
-	if (bprm->loader) {
-		put_user(0, --sp);
-		put_user(0x3eb, --sp);
-		put_user(bprm->loader, --sp);
-		put_user(0x3ea, --sp);
-	}
-	put_user(bprm->exec, --sp);
-	put_user(0x3e9, --sp);
-#endif
-	sp -= envc+1;
-	envp = sp;
-	sp -= argc+1;
-	argv = sp;
-#ifdef __i386__
-	if (!ibcs) {
-		put_user(envp,--sp);
-		put_user(argv,--sp);
-	}
-#endif
-	put_user(argc,--sp);
-	current->mm->arg_start = (unsigned long) p;
-	while (argc-->0) {
-		put_user(p,argv++);
-		while (get_user(p++)) /* nothing */ ;
-	}
-	put_user(NULL,argv);
-	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
-	while (envc-->0) {
-		put_user(p,envp++);
-		while (get_user(p++)) /* nothing */ ;
-	}
-	put_user(NULL,envp);
-	current->mm->env_end = (unsigned long) p;
-	return sp;
 }
 
 /*
@@ -344,20 +283,42 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 	return p;
 }
 
-unsigned long setup_arg_pages(unsigned long text_size, unsigned long * page)
+unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm)
 {
-	unsigned long data_base;
+	unsigned long stack_base;
+	struct vm_area_struct *mpnt;
 	int i;
 
-	data_base = STACK_TOP;
-	for (i=MAX_ARG_PAGES-1 ; i>=0 ; i--) {
-		data_base -= PAGE_SIZE;
-		if (page[i]) {
-			current->mm->rss++;
-			put_dirty_page(current,page[i],data_base);
-		}
+	stack_base = STACK_TOP - MAX_ARG_PAGES*PAGE_SIZE;
+
+	p += stack_base;
+	if (bprm->loader)
+		bprm->loader += stack_base;
+	bprm->exec += stack_base;
+
+	mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
+	if (mpnt) {
+		mpnt->vm_mm = current->mm;
+		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
+		mpnt->vm_end = STACK_TOP;
+		mpnt->vm_page_prot = PAGE_COPY;
+		mpnt->vm_flags = VM_STACK_FLAGS;
+		mpnt->vm_ops = NULL;
+		mpnt->vm_offset = 0;
+		mpnt->vm_inode = NULL;
+		mpnt->vm_pte = 0;
+		insert_vm_struct(current, mpnt);
+		current->mm->total_vm = (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 	}
-	return STACK_TOP;
+
+	for (i = 0 ; i < MAX_ARG_PAGES ; i++) {
+		if (bprm->page[i]) {
+			current->mm->rss++;
+			put_dirty_page(current,bprm->page[i],stack_base);
+		}
+		stack_base += PAGE_SIZE;
+	}
+	return p;
 }
 
 /*
@@ -485,20 +446,140 @@ void flush_old_exec(struct linux_binprm * bprm)
 	current->used_math = 0;
 }
 
+/* 
+ * Fill the binprm structure from the inode. 
+ * Check permissions, then read the first 512 bytes
+ */
+int prepare_binprm(struct linux_binprm *bprm)
+{
+	int retval,i;
+	if (!S_ISREG(bprm->inode->i_mode))  /* must be regular file */
+		return -EACCES;
+	if (IS_NOEXEC(bprm->inode))         /* FS mustn't be mounted noexec */
+		return -EACCES;
+	if (!bprm->inode->i_sb)
+		return -EACCES;
+	i = bprm->inode->i_mode;
+	if (IS_NOSUID(bprm->inode) && 
+		(((i & S_ISUID) && bprm->inode->i_uid != current->euid) 
+			|| ((i & S_ISGID) && !in_group_p(bprm->inode->i_gid))) && !suser())
+		return -EPERM;
+	/* make sure we don't let suid, sgid files be ptraced. */
+	if (current->flags & PF_PTRACED) {
+		bprm->e_uid = current->euid;
+		bprm->e_gid = current->egid;
+	} else {
+		bprm->e_uid = (i & S_ISUID) ? bprm->inode->i_uid : current->euid;
+		bprm->e_gid = (i & S_ISGID) ? bprm->inode->i_gid : current->egid;
+	}
+	if ((retval = permission(bprm->inode, MAY_EXEC)) != 0)
+		return retval;
+	if (!(bprm->inode->i_mode & 0111) && fsuser())
+		return -EACCES;
+	/* better not execute files which are being written to */
+	if (bprm->inode->i_writecount > 0)
+		return -ETXTBSY;
+
+	memset(bprm->buf,0,sizeof(bprm->buf));
+	return read_exec(bprm->inode,0,bprm->buf,128,1);
+}
+
+void remove_arg_zero(struct linux_binprm *bprm)
+{
+	if (bprm->argc) {
+		unsigned long offset;
+		char * page;
+		offset = bprm->p % PAGE_SIZE;
+		page = (char*)bprm->page[bprm->p/PAGE_SIZE];
+		while(bprm->p++,*(page+offset++))
+			if(offset==PAGE_SIZE){
+				offset=0;
+				page = (char*)bprm->page[bprm->p/PAGE_SIZE];
+			}
+		bprm->argc--;
+	}
+}
+
+/*
+ * cycle the list of binary formats handler, until one recognizes the image
+ */
+int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
+{
+	int try,retval=0;
+	struct linux_binfmt *fmt;
+#ifdef __alpha__
+	/* handle /sbin/loader.. */
+	{
+	    struct exec * eh = (struct exec *) bprm->buf;
+
+	    if (!bprm->loader && eh->fh.f_magic == 0x183 &&
+		(eh->fh.f_flags & 0x3000) == 0x3000)
+	    {
+		char * dynloader[] = { "/sbin/loader" };
+		iput(bprm->inode);
+		bprm->dont_iput = 1;
+		remove_arg_zero(bprm);
+		bprm->p = copy_strings(1, dynloader, bprm->page, bprm->p, 2);
+		bprm->argc++;
+		bprm->loader = bprm->p;
+		retval = open_namei(dynloader[0], 0, 0, &bprm->inode, NULL);
+		if (retval)
+			return retval;
+		bprm->dont_iput = 0;
+		retval = prepare_binprm(bprm);
+		if (retval<0)
+			return retval;
+		/* should call search_binary_handler recursively here,
+		   but it does not matter */
+	    }
+	}
+#endif
+	for (try=0; try<2; try++) {
+		for (fmt = get_binfmt_list() ; fmt ; fmt = fmt->next) {
+			int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;
+			if (!fn)
+				continue;
+			retval = fn(bprm, regs);
+			if (retval >= 0) {
+				if(!bprm->dont_iput)
+					iput(bprm->inode);
+				bprm->dont_iput=1;
+				current->did_exec = 1;
+				return retval;
+			}
+			if (retval != -ENOEXEC)
+				break;
+			if (bprm->dont_iput) /* We don't have the inode anymore*/
+				return retval;
+		}
+		if (retval != -ENOEXEC) {
+			break;
+#ifdef CONFIG_KERNELD
+		}else{
+#define printable(c) (((c)=='\t') || ((c)=='\n') || (0x20<=(c) && (c)<=0x7e))
+			char modname[20];
+			if (printable(bprm->buf[0]) &&
+			    printable(bprm->buf[1]) &&
+			    printable(bprm->buf[2]) &&
+			    printable(bprm->buf[3]))
+				break; /* -ENOEXEC */
+			sprintf(modname, "binfmt-%hd", *(short*)(&bprm->buf));
+			request_module(modname);
+#endif
+		}
+	}
+	return retval;
+}
+
+
 /*
  * sys_execve() executes a new program.
  */
 int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs)
 {
 	struct linux_binprm bprm;
-	struct linux_binfmt * fmt;
-	int i;
 	int retval;
-	int sh_bang = 0;
-	int try;
-#ifdef __alpha__
-	int loader = 0;
-#endif
+	int i;
 
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
@@ -507,193 +588,35 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	if (retval)
 		return retval;
 	bprm.filename = filename;
+	bprm.sh_bang = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
+	bprm.dont_iput = 0;
 	if ((bprm.argc = count(argv)) < 0)
 		return bprm.argc;
 	if ((bprm.envc = count(envp)) < 0)
 		return bprm.envc;
+
+	retval = prepare_binprm(&bprm);
 	
-restart_interp:
-	if (!S_ISREG(bprm.inode->i_mode)) {	/* must be regular file */
-		retval = -EACCES;
-		goto exec_error2;
-	}
-	if (IS_NOEXEC(bprm.inode)) {		/* FS mustn't be mounted noexec */
-		retval = -EPERM;
-		goto exec_error2;
-	}
-	if (!bprm.inode->i_sb) {
-		retval = -EACCES;
-		goto exec_error2;
-	}
-	i = bprm.inode->i_mode;
-	if (IS_NOSUID(bprm.inode) && (((i & S_ISUID) && bprm.inode->i_uid != current->
-	    euid) || ((i & S_ISGID) && !in_group_p(bprm.inode->i_gid))) && !suser()) {
-		retval = -EPERM;
-		goto exec_error2;
-	}
-	/* make sure we don't let suid, sgid files be ptraced. */
-	if (current->flags & PF_PTRACED) {
-		bprm.e_uid = current->euid;
-		bprm.e_gid = current->egid;
-	} else {
-		bprm.e_uid = (i & S_ISUID) ? bprm.inode->i_uid : current->euid;
-		bprm.e_gid = (i & S_ISGID) ? bprm.inode->i_gid : current->egid;
-	}
-	if ((retval = permission(bprm.inode, MAY_EXEC)) != 0)
-		goto exec_error2;
-	if (!(bprm.inode->i_mode & 0111) && fsuser()) {
-		retval = -EACCES;
-		goto exec_error2;
-	}
-	/* better not execute files which are being written to */
-	if (bprm.inode->i_writecount > 0) {
-		retval = -ETXTBSY;
-		goto exec_error2;
-	}
-	memset(bprm.buf,0,sizeof(bprm.buf));
-	retval = read_exec(bprm.inode,0,bprm.buf,128,1);
-	if (retval < 0)
-		goto exec_error2;
-	if ((bprm.buf[0] == '#') && (bprm.buf[1] == '!') && (!sh_bang)) {
-		/*
-		 * This section does the #! interpretation.
-		 * Sorta complicated, but hopefully it will work.  -TYT
-		 */
-
-		char *cp, *interp, *i_name, *i_arg;
-
-		iput(bprm.inode);
-		bprm.buf[127] = '\0';
-		if ((cp = strchr(bprm.buf, '\n')) == NULL)
-			cp = bprm.buf+127;
-		*cp = '\0';
-		while (cp > bprm.buf) {
-			cp--;
-			if ((*cp == ' ') || (*cp == '\t'))
-				*cp = '\0';
-			else
-				break;
-		}
-		for (cp = bprm.buf+2; (*cp == ' ') || (*cp == '\t'); cp++);
-		if (!cp || *cp == '\0') {
-			retval = -ENOEXEC; /* No interpreter name found */
-			goto exec_error1;
-		}
-		interp = i_name = cp;
-		i_arg = 0;
-		for ( ; *cp && (*cp != ' ') && (*cp != '\t'); cp++) {
- 			if (*cp == '/')
-				i_name = cp+1;
-		}
-		while ((*cp == ' ') || (*cp == '\t'))
-			*cp++ = '\0';
-		if (*cp)
-			i_arg = cp;
-		/*
-		 * OK, we've parsed out the interpreter name and
-		 * (optional) argument.
-		 */
-		if (sh_bang++ == 0) {
-			bprm.p = copy_strings(bprm.envc, envp, bprm.page, bprm.p, 0);
-			bprm.p = copy_strings(--bprm.argc, argv+1, bprm.page, bprm.p, 0);
-		}
-		/*
-		 * Splice in (1) the interpreter's name for argv[0]
-		 *           (2) (optional) argument to interpreter
-		 *           (3) filename of shell script
-		 *
-		 * This is done in reverse order, because of how the
-		 * user environment and arguments are stored.
-		 */
-		bprm.p = copy_strings(1, &bprm.filename, bprm.page, bprm.p, 2);
-		bprm.argc++;
-		if (i_arg) {
-			bprm.p = copy_strings(1, &i_arg, bprm.page, bprm.p, 2);
-			bprm.argc++;
-		}
-		bprm.p = copy_strings(1, &i_name, bprm.page, bprm.p, 2);
-		bprm.argc++;
-		if (!bprm.p) {
-			retval = -E2BIG;
-			goto exec_error1;
-		}
-		/*
-		 * OK, now restart the process with the interpreter's inode.
-		 * Note that we use open_namei() as the name is now in kernel
-		 * space, and we don't need to copy it.
-		 */
-		retval = open_namei(interp, 0, 0, &bprm.inode, NULL);
-		if (retval)
-			goto exec_error1;
-		goto restart_interp;
-	}
-#ifdef __alpha__
-	/* handle /sbin/loader.. */
-	{
-	    struct exec * eh = (struct exec *) bprm.buf;
-
-	    if (!loader && eh->fh.f_magic == 0x183 &&
-		(eh->fh.f_flags & 0x3000) == 0x3000)
-	    {
-		char * dynloader[] = { "/sbin/loader" };
-		iput(bprm.inode);
-		loader = 1;
-		bprm.p = copy_strings(1, dynloader, bprm.page, bprm.p, 2);
-		bprm.loader = bprm.p;
-		retval = open_namei(dynloader[0], 0, 0, &bprm.inode, NULL);
-		if (retval)
-			goto exec_error1;
-		goto restart_interp;
-	    }
-	}
-#endif
-	if (!sh_bang) {
+	if(retval>=0) {
 		bprm.p = copy_strings(1, &bprm.filename, bprm.page, bprm.p, 2);
 		bprm.exec = bprm.p;
 		bprm.p = copy_strings(bprm.envc,envp,bprm.page,bprm.p,0);
 		bprm.p = copy_strings(bprm.argc,argv,bprm.page,bprm.p,0);
-		if (!bprm.p) {
+		if (!bprm.p)
 			retval = -E2BIG;
-			goto exec_error2;
-		}
 	}
 
-	bprm.sh_bang = sh_bang;
-	for (try=0; try<2; try++) {
-		for (fmt = formats ; fmt ; fmt = fmt->next) {
-			int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;
-			if (!fn)
-				continue;
-			retval = fn(&bprm, regs);
-			if (retval >= 0) {
-				iput(bprm.inode);
-				current->did_exec = 1;
-				return retval;
-			}
-			if (retval != -ENOEXEC)
-				break;
-		}
-		if (retval != -ENOEXEC) {
-			break;
-#ifdef CONFIG_KERNELD
-		}else{
-#define printable(c) (((c)=='\t') || ((c)=='\n') || (0x20<=(c) && (c)<=0x7e))
-			char modname[20];
-			if (printable(bprm.buf[0]) &&
-			    printable(bprm.buf[1]) &&
-			    printable(bprm.buf[2]) &&
-			    printable(bprm.buf[3]))
-				break; /* -ENOEXEC */
-			sprintf(modname, "binfmt-%hd", *(short*)(&bprm.buf));
-			request_module(modname);
-#endif
-		}
-	}
-exec_error2:
-	iput(bprm.inode);
-exec_error1:
+	if(retval>=0)
+		retval = search_binary_handler(&bprm,regs);
+	if(retval>=0)
+		/* execve success */
+		return retval;
+
+	/* Something went wrong, return the inode and free the argument pages*/
+	if(!bprm.dont_iput)
+		iput(bprm.inode);
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		free_page(bprm.page[i]);
 	return(retval);

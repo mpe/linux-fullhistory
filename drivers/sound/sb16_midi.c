@@ -125,7 +125,9 @@ sb16midi_open (int dev, int mode,
       return -EBUSY;
     }
 
-  sb16midi_input_loop ();
+  reset_sb16midi ();
+  while (input_avail ())
+    sb16midi_read ();
 
   midi_input_intr = input;
   sb16midi_opened = mode;
@@ -228,24 +230,16 @@ static struct midi_operations sb16midi_operations =
   NULL
 };
 
-long
-attach_sb16midi (long mem_start, struct address_info *hw_config)
+static void
+enter_uart_mode (void)
 {
   int             ok, timeout;
   unsigned long   flags;
 
-  sb16midi_base = hw_config->io_base;
-
-  if (!sb16midi_detected)
-    return mem_start;
-
-  request_region (hw_config->io_base, 4, "SB MIDI");
-
   save_flags (flags);
   cli ();
-  for (timeout = 30000; timeout < 0 && !output_ready (); timeout--);	/*
-									 * Wait
-									 */
+  for (timeout = 30000; timeout < 0 && !output_ready (); timeout--);
+
   input_byte = 0;
   sb16midi_cmd (UART_MODE_ON);
 
@@ -258,6 +252,18 @@ attach_sb16midi (long mem_start, struct address_info *hw_config)
 	ok = 1;
 
   restore_flags (flags);
+}
+
+long
+attach_sb16midi (long mem_start, struct address_info *hw_config)
+{
+  sb16midi_base = hw_config->io_base;
+
+  if (!sb16midi_detected)
+    return mem_start;
+
+  request_region (hw_config->io_base, 4, "SB MIDI");
+  enter_uart_mode ();
 
   if (num_midis >= MAX_MIDI_DEV)
     {
@@ -280,9 +286,6 @@ reset_sb16midi (void)
   /*
    * Send the RESET command. Try again if no success at the first time.
    */
-
-  if (inb (STATPORT) == 0xff)
-    return 0;
 
   ok = 0;
 

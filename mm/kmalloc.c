@@ -19,7 +19,7 @@
 #include <asm/system.h>
 #include <asm/dma.h>
 
-/* Define this is you want slow routines that try to trip errors */
+/* Define this if you want slow routines that try to trip errors */
 #undef SADISTIC_KMALLOC
 
 /* Private flags. */
@@ -89,8 +89,8 @@ struct size_descriptor {
 };
 
 /*
- * For now it is unsafe to allocate bucket sizes between n and n-16 where n is
- * 4096 * any power of two
+ * For now it is unsafe to allocate bucket sizes between n and
+ * n-sizeof(page_descriptor) where n is PAGE_SIZE * any power of two
  */
 #if PAGE_SIZE == 4096
 struct size_descriptor sizes[] =

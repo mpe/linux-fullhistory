@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.18 1995/11/25 00:58:47 davem Exp $
+/* $Id: traps.c,v 1.32 1996/03/01 07:16:08 davem Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -10,6 +10,7 @@
 
 #include <linux/sched.h>  /* for jiffies */
 #include <linux/kernel.h>
+#include <linux/signal.h>
 
 #include <asm/delay.h>
 #include <asm/system.h>
@@ -19,229 +20,183 @@
 #include <asm/pgtable.h>
 #include <asm/mp.h>
 #include <asm/kdebug.h>
+#include <asm/unistd.h>
 
-void
-syscall_trace_entry(struct pt_regs *regs)
+struct trap_trace_entry {
+	unsigned long pc;
+	unsigned long type;
+};
+
+int trap_curbuf = 0;
+struct trap_trace_entry trapbuf[1024];
+
+void syscall_trace_entry(struct pt_regs *regs)
 {
-	printk("%s[%d]: sys[%d](%d, %d, %d, %d) ",
-	       current->comm, current->pid,
-	       regs->u_regs[UREG_G1], regs->u_regs[UREG_I0],
-	       regs->u_regs[UREG_I1], regs->u_regs[UREG_I2],
-	       regs->u_regs[UREG_I3]);
-	return;
+	printk("%s[%d]: ", current->comm, current->pid);
+	printk("scall<%d> (could be %d)\n", (int) regs->u_regs[UREG_G1],
+	       (int) regs->u_regs[UREG_I0]);
 }
 
-void
-syscall_trace_exit(struct pt_regs *regs)
+void syscall_trace_exit(struct pt_regs *regs)
 {
-	printk("retvals[%d,%d] at pc<%08lx>\n",
-	       regs->u_regs[UREG_I0], regs->u_regs[UREG_I1],
-	       regs->pc, regs->npc);
-	return;
 }
 
-void
-do_cwp_assertion_failure(struct pt_regs *regs, unsigned long psr)
+void die_if_kernel(char *str, struct pt_regs *regs)
 {
-	printk("CWP return from trap assertion fails:\n");
-	printk("Current psr %08lx, new psr %08lx\n", psr, regs->psr);
+	unsigned long i;
+	unsigned long *pc;
+
+	if(regs->psr & PSR_PS)
+		do_exit(SIGKILL);
+	printk("%s(%d): %s\n", current->comm, current->pid, str);
 	show_regs(regs);
-	panic("bogus CWP");
+	printk("Instruction DUMP:");
+	pc = (unsigned long *) regs->pc;
+	for(i = -3; i < 6; i++)
+		printk("%c%08lx%c",i?' ':'<',pc[i],i?' ':'>');
+	printk("\n");
+	do_exit(SIGSEGV);
 }
 
-void
-do_hw_interrupt(unsigned long type, unsigned long psr, unsigned long pc)
+void do_hw_interrupt(unsigned long type, unsigned long psr, unsigned long pc)
 {
-
-  printk("Unimplemented Sparc TRAP, type = %02lx psr = %08lx pc = %08lx\n",
-	 type, psr, pc);
-  halt();
-
-  return;
+	if(type < 0x80) {
+		/* Sun OS's puke from bad traps, Linux survives! */
+		printk("Unimplemented Sparc TRAP, type = %02lx\n", type);
+		panic("Whee... Hello Mr. Penguin");
+	}	
+	current->tss.sig_desc = SUBSIG_BADTRAP(type - 0x80);
+	current->tss.sig_address = pc;
+	send_sig(SIGILL, current, 1);
 }
 
-void
-do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		       unsigned long psr)
+void do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+			    unsigned long psr)
 {
-	printk("Illegal instruction at PC %08lx NPC %08lx PSR %08lx\n",
-	       pc, npc, psr);
 	if(psr & PSR_PS)
-		panic("Kernel illegal instruction, how are ya!");
+		die_if_kernel("Kernel illegal instruction", regs);
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_ILLINST;
 	send_sig(SIGILL, current, 1);
-	return;
 }
 
-void
-do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		       unsigned long psr)
+void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+			 unsigned long psr)
 {
-	printk("Privileged instruction at PC %08lx NPC %08lx PSR %08lx\n",
-	       pc, npc, psr);
+	if(psr & PSR_PS)
+		die_if_kernel("Penguin instruction from Penguin mode??!?!", regs);
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_PRIVINST;
 	send_sig(SIGILL, current, 1);
-	return;
 }
 
 /* XXX User may want to be allowed to do this. XXX */
 
-void
-do_memaccess_unaligned(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		       unsigned long psr)
+void do_memaccess_unaligned(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+			    unsigned long psr)
 {
-	printk("Unaligned memory access at PC %08lx NPC %08lx PSR %08lx\n",
-	       pc, npc, psr);
 	if(regs->psr & PSR_PS)
-		panic("Kernel does unaligned memory access, yuck!");
+		die_if_kernel("Kernel MNA access", regs);
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_PRIVINST;
 	send_sig(SIGBUS, current, 1);
-	return;
 }
 
-void
-do_fpd_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		       unsigned long psr)
-{
-	/* Sanity check... */
-	if(psr & PSR_PS)
-		panic("FPE disabled trap from kernel, die die die...");
+extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
+		   void *fpqueue, unsigned long *fpqdepth);
+extern void fpload(unsigned long *fpregs, unsigned long *fsr);
 
-	put_psr(get_psr() | PSR_EF);    /* Allow FPU ops. */
-	if(last_task_used_math == current) {
-		/* No state save necessary */
-		regs->psr |= PSR_EF;
-		return;
-	}
-	if(last_task_used_math) {
-		/* Other processes fpu state, save away */
-		__asm__ __volatile__("st %%fsr, [%0]\n\t" : :
-				     "r" (&current->tss.fsr) : "memory");
-
-		/* Save away the floating point queue if necessary. */
-		if(current->tss.fsr & 0x2000)
-			__asm__ __volatile__("mov 0x0, %%g2\n\t"
-					     "1: std %%fq, [%2 + %%g2]\n\t"
-					     "st %%fsr, [%0]\n\t"
-					     "ld [%0], %%g3\n\t"
-					     "andcc %%g3, %1, %%g0\n\t"
-					     "bne 1b\n\t"
-					     "add %%g2, 0x8, %%g2\n\t"
-					     "srl %%g2, 0x3, %%g2\n\t"
-					     "st %%g2, [%3]\n\t" : :
-					     "r" (&current->tss.fsr), "r" (0x2000),
-					     "r" (&current->tss.fpqueue[0]),
-					     "r" (&current->tss.fpqdepth) :
-					     "g2", "g3", "memory");
-		else
-			current->tss.fpqdepth = 0;
-
-		__asm__ __volatile__("std %%f0, [%0 + 0x00]\n\t"
-				     "std %%f2, [%0 + 0x08]\n\t"
-				     "std %%f4, [%0 + 0x10]\n\t"
-				     "std %%f6, [%0 + 0x18]\n\t"
-				     "std %%f8, [%0 + 0x20]\n\t"
-				     "std %%f10, [%0 + 0x28]\n\t"
-				     "std %%f12, [%0 + 0x30]\n\t"
-				     "std %%f14, [%0 + 0x38]\n\t"
-				     "std %%f16, [%0 + 0x40]\n\t"
-				     "std %%f18, [%0 + 0x48]\n\t"
-				     "std %%f20, [%0 + 0x50]\n\t"
-				     "std %%f22, [%0 + 0x58]\n\t"
-				     "std %%f24, [%0 + 0x60]\n\t"
-				     "std %%f26, [%0 + 0x68]\n\t"
-				     "std %%f28, [%0 + 0x70]\n\t"
-				     "std %%f30, [%0 + 0x78]\n\t" : :
-				     "r" (&current->tss.float_regs[0]) :
-				     "memory");
-	}
-	last_task_used_math = current;
-	if(current->used_math) {
-		/* Restore the old state. */
-		__asm__ __volatile__("ldd [%0 + 0x00], %%f0\n\t"
-				     "ldd [%0 + 0x08], %%f2\n\t"
-				     "ldd [%0 + 0x10], %%f4\n\t"
-				     "ldd [%0 + 0x18], %%f6\n\t"
-				     "ldd [%0 + 0x20], %%f8\n\t"
-				     "ldd [%0 + 0x28], %%f10\n\t"
-				     "ldd [%0 + 0x30], %%f12\n\t"
-				     "ldd [%0 + 0x38], %%f14\n\t"
-				     "ldd [%0 + 0x40], %%f16\n\t"
-				     "ldd [%0 + 0x48], %%f18\n\t"
-				     "ldd [%0 + 0x50], %%f20\n\t"
-				     "ldd [%0 + 0x58], %%f22\n\t"
-				     "ldd [%0 + 0x60], %%f24\n\t"
-				     "ldd [%0 + 0x68], %%f26\n\t"
-				     "ldd [%0 + 0x70], %%f28\n\t"
-				     "ldd [%0 + 0x78], %%f30\n\t"
-				     "ld  [%1], %%fsr\n\t" : :
-				     "r" (&current->tss.float_regs[0]),
-				     "r" (&current->tss.fsr));
-	} else {
-		/* Set initial sane state. */
-		auto unsigned long init_fsr = 0x0UL;
-		auto unsigned long init_fregs[32] __attribute__ ((aligned (8))) =
-		{ ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL,
+static unsigned long init_fsr = 0x0UL;
+static unsigned long init_fregs[32] __attribute__ ((aligned (8))) =
+                { ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL,
 		  ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL,
 		  ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL,
 		  ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL, ~0UL };
-		__asm__ __volatile__("ldd [%0 + 0x00], %%f0\n\t"
-				     "ldd [%0 + 0x08], %%f2\n\t"
-				     "ldd [%0 + 0x10], %%f4\n\t"
-				     "ldd [%0 + 0x18], %%f6\n\t"
-				     "ldd [%0 + 0x20], %%f8\n\t"
-				     "ldd [%0 + 0x28], %%f10\n\t"
-				     "ldd [%0 + 0x30], %%f12\n\t"
-				     "ldd [%0 + 0x38], %%f14\n\t"
-				     "ldd [%0 + 0x40], %%f16\n\t"
-				     "ldd [%0 + 0x48], %%f18\n\t"
-				     "ldd [%0 + 0x50], %%f20\n\t"
-				     "ldd [%0 + 0x58], %%f22\n\t"
-				     "ldd [%0 + 0x60], %%f24\n\t"
-				     "ldd [%0 + 0x68], %%f26\n\t"
-				     "ldd [%0 + 0x70], %%f28\n\t"
-				     "ldd [%0 + 0x78], %%f30\n\t"
-				     "ld  [%1], %%fsr\n\t" : :
-				     "r" (&init_fregs[0]),
-				     "r" (&init_fsr) : "memory");
+
+void do_fpd_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+		 unsigned long psr)
+{
+	/* Sanity check... */
+	if(psr & PSR_PS)
+		die_if_kernel("Kernel gets Penguin-FPU disabled trap", regs);
+
+	put_psr(get_psr() | PSR_EF);    /* Allow FPU ops. */
+	regs->psr |= PSR_EF;
+	if(last_task_used_math == current)
+		return;
+	if(last_task_used_math) {
+		/* Other processes fpu state, save away */
+		struct task_struct *fptask = last_task_used_math;
+		fpsave(&fptask->tss.float_regs[0], &fptask->tss.fsr,
+		       &fptask->tss.fpqueue[0], &fptask->tss.fpqdepth);
+	}
+	last_task_used_math = current;
+	if(current->used_math) {
+		fpload(&current->tss.float_regs[0], &current->tss.fsr);
+	} else {
+		/* Set initial sane state. */
+		fpload(&init_fregs[0], &init_fsr);
 		current->used_math = 1;
 	}
 }
 
-void
-do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		       unsigned long psr)
+static unsigned long fake_regs[32] __attribute__ ((aligned (8)));
+static unsigned long fake_fsr;
+static unsigned long fake_queue[32] __attribute__ ((aligned (8)));
+static unsigned long fake_depth;
+
+void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+		 unsigned long psr)
 {
-	if(psr & PSR_PS)
-		panic("FPE exception trap from kernel, die die die...");
-	/* XXX Do something real... XXX */
+	static calls = 0;
+	struct task_struct *fpt = last_task_used_math;
+
+	put_psr(get_psr() | PSR_EF);
+	/* If nobody owns the fpu right now, just clear the
+	 * error into our fake static buffer and hope it don't
+	 * happen again.  Thank you crashme...
+	 */
+	if(!fpt) {
+		fpsave(&fake_regs[0], &fake_fsr, &fake_queue[0], &fake_depth);
+		regs->psr &= ~PSR_EF;
+		return;
+	}
+	fpsave(&fpt->tss.float_regs[0], &fpt->tss.fsr,
+	       &fpt->tss.fpqueue[0], &fpt->tss.fpqdepth);
+	last_task_used_math->tss.sig_address = pc;
+	last_task_used_math->tss.sig_desc = SUBSIG_FPERROR; /* as good as any */
+	if(psr & PSR_PS) {
+		/* The first fsr store/load we tried trapped,
+		 * the second one will not (we hope).
+		 */
+		printk("WARNING: FPU exception from kernel mode. at pc=%08lx\n",
+		       regs->pc);
+		regs->pc = regs->npc;
+		regs->npc += 4;
+		calls++;
+		if(calls > 2)
+			die_if_kernel("Too many Penguin-FPU traps from kernel mode",
+				      regs);
+		return;
+	}
+	send_sig(SIGFPE, last_task_used_math, 1);
+	last_task_used_math = NULL;
 	regs->psr &= ~PSR_EF;
-	last_task_used_math = (struct task_struct *) 0;
-	current->tss.sig_address = pc;
-	current->tss.sig_desc = SUBSIG_FPERROR; /* as good as any */
-	send_sig(SIGFPE, current, 1);
-	return;
+	if(calls > 0)
+		calls=0;
 }
 
-void
-handle_tag_overflow(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		       unsigned long psr)
+void handle_tag_overflow(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+			 unsigned long psr)
 {
-	printk("Tag overflow trap at PC %08lx NPC %08lx PSR %08lx\n",
-	       pc, npc, psr);
 	if(psr & PSR_PS)
-		panic("KERNEL tag overflow trap, wowza!");
+		die_if_kernel("Penguin overflow trap from kernel mode", regs);
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_TAG; /* as good as any */
 	send_sig(SIGEMT, current, 1);
-	return;
 }
 
-void
-handle_watchpoint(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+void handle_watchpoint(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		       unsigned long psr)
 {
 	printk("Watchpoint detected at PC %08lx NPC %08lx PSR %08lx\n",
@@ -249,63 +204,44 @@ handle_watchpoint(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 	if(psr & PSR_PS)
 		panic("Tell me what a watchpoint trap is, and I'll then deal "
 		      "with such a beast...");
-	return;
 }
 
-void
-handle_reg_access(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+void handle_reg_access(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		       unsigned long psr)
 {
 	printk("Register Access Exception at PC %08lx NPC %08lx PSR %08lx\n",
 	       pc, npc, psr);
-	halt();
-	return;
+	send_sig(SIGILL, current, 1);
 }
 
-void
-handle_cp_disabled(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		       unsigned long psr)
+void handle_cp_disabled(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+			unsigned long psr)
 {
-	printk("Co-Processor disabled trap at PC %08lx NPC %08lx PSR %08lx\n",
-	       pc, npc, psr);
-	halt();
-	return;
+	send_sig(SIGILL, current, 1);
 }
 
-void
-handle_bad_flush(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		       unsigned long psr)
+void handle_bad_flush(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+		      unsigned long psr)
 {
 	printk("Unimplemented FLUSH Exception at PC %08lx NPC %08lx PSR %08lx\n",
 	       pc, npc, psr);
-	halt();
-	return;
+	send_sig(SIGILL, current, 1);
 }
 
-void
-handle_cp_exception(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		       unsigned long psr)
+void handle_cp_exception(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+			 unsigned long psr)
 {
 	printk("Co-Processor Exception at PC %08lx NPC %08lx PSR %08lx\n",
 	       pc, npc, psr);
-	halt();
-	return;
+	send_sig(SIGILL, current, 1);
 }
 
-void
-handle_hw_divzero(struct pt_regs *regs, unsigned long pc, unsigned long npc,
+void handle_hw_divzero(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		       unsigned long psr)
 {
 	printk("Divide By Zero Exception at PC %08lx NPC %08lx PSR %08lx\n",
 	       pc, npc, psr);
-	halt();
-	return;
-}
-
-void do_ast(struct pt_regs *regs)
-{
-	panic("Don't know how to handle AST traps yet ;-(\n");
-	return;
+	send_sig(SIGILL, current, 1);
 }
 
 /* Since we have our mappings set up, on multiprocessors we can spin them
@@ -315,14 +251,13 @@ void do_ast(struct pt_regs *regs)
 extern void sparc_cpu_startup(void);
 
 extern int linux_num_cpus;
-extern pgd_t *lnx_root;
+extern pgd_t **srmmu_context_table;
 
 int linux_smp_still_initting;
 unsigned int thiscpus_tbr;
 int thiscpus_mid;
 
-void
-trap_init(void)
+void trap_init(void)
 {
 	struct linux_prom_registers ctx_reg;
 	int i;
@@ -341,7 +276,7 @@ trap_init(void)
 	       linux_num_cpus);
 	linux_smp_still_initting = 1;
 	ctx_reg.which_io = 0x0;  /* real ram */
-	ctx_reg.phys_addr = (char *) (((unsigned long) lnx_root) - PAGE_OFFSET);
+	ctx_reg.phys_addr = (char *) (((unsigned long) srmmu_context_table) - PAGE_OFFSET);
 	ctx_reg.reg_size = 0x0;
 	/* This basically takes every cpu, loads up our Linux context table
 	 * into it's context table pointer register, inits it at the low level
@@ -369,12 +304,4 @@ trap_init(void)
 	}
 
 	linux_smp_still_initting = 1;
-
-	return;
-}
-
-void
-die_if_kernel(char * str, struct pt_regs * regs, long err)
-{
-  return;
 }

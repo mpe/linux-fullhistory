@@ -17,7 +17,7 @@
 # dialog is available at sunsite.unc.edu or a sunsite mirror.
 #
 # Portions of this script were borrowed from the original Configure
-# script used in linux-1.3.55.
+# script.
 #
 # Please send comments / questions / bug fixes to roadcapw@cfw.com
 #
@@ -28,14 +28,12 @@
 # Change this to TRUE if you prefer all kernel options listed
 # in a single menu rather than the standard menu hierarchy.
 #
-# Don't forget to remove linux/.menuconfig.in
-#
 single_menu_mode=
 
 #
 # Make sure we're really running bash.
 #
-[ -z "$BASH" ] && { echo "Configure requires bash" 1>&2; exit 1; }
+[ -z "$BASH" ] && { echo "Menuconfig requires bash" 1>&2; exit 1; }
 
 #
 # Cache function definitions
@@ -57,18 +55,19 @@ function extract_help () {
      #now pick out the right help text:
      text=$(sed -n "/^$var[ 	]*\$/,\${
                         /^$var[ 	]*\$/d
-                        /^#.*/d;/^[ 	]*\$/q
+                        /^#.*/d
+			/^[ 	]*\$/q
                         p
                     }" Documentation/Configure.help)
 
      if [ -z "$text" ]
      then
-	  echo "There is no help available for this setting."
+	  echo "There is no help available for kernel option."
      else
 	  echo "$text"
      fi
   else
-	 echo "There is no help available for this setting."
+	 echo "There is no help available for kernel option."
   fi
 }
 
@@ -76,29 +75,37 @@ function extract_help () {
 # Activate a help dialog.
 #
 function help () {
-	extract_help $2 >help.out
-	$DIALOG --backtitle "$backtitle" --title "$1" --textbox help.out 20 75
+	extract_help $1 >help.out
+	$DIALOG --backtitle "$backtitle" --title "$2" --textbox help.out 20 75
 	rm help.out
 }
 
+#
+# Show the README file.
+#
+function show_readme() {
+	$DIALOG --backtitle "$backtitle" \
+		--textbox scripts/README.Menuconfig 21 75
+}
 
 #
-# Init temporary scripts for the current menu.
+# Begin building the dialog menu command and Initialize the 
+# Radiolist function file.
 #
 function menu_name () {
 	echo -ne "$DIALOG --title '$1'\
 			--backtitle '$backtitle' \
 			--menu '$menu_instructions' \
-			21 75 11 '$default' " >submenu
-	>radiolists
+			21 75 11 '$default' " >MCmenu
+	>MCradiolists
 }
 
 #
-# Additional comments are currently semi-supported
+# Additional comments
 #
 function comment () {
 	comment_ctr=$[ comment_ctr + 1 ]
-	echo -ne "': $comment_ctr' '--- $1' " >>submenu
+	echo -ne "': $comment_ctr' '--- $1' " >>MCmenu
 }
 
 #
@@ -112,15 +119,26 @@ function define_bool () {
 # Add a submenu option to the menu currently under construction.
 #
 function submenu () {
-	echo -ne "'activate_menu $2' '$1  --->' " >>submenu
+	echo -ne "'activate_menu $2' '$1  --->' " >>MCmenu
 }
 
 #
-# This is to handle the Sound configuration.
+# Create a menu entry to handle the traditional sound configuration.
 #
-function yuck1 () {
-	echo -ne "'clear ; $MAKE $2' '$1' " >>submenu
+function soundcfg () {
+	echo -ne "'l_soundcfg' "\
+		 "'Old configuration script "\
+		 "(For: SM Wave, PSS & AudioTrix Pro) -->' " >>MCmenu
 }
+
+#
+# Startup the traditional sound configuration program.
+#
+function l_soundcfg () {
+	clear
+	$MAKE -C drivers/sound config
+}
+
 
 #
 # Create a boolean (Yes/No) function for our current menu
@@ -136,10 +154,10 @@ function bool () {
 	   ;;
 	esac
 
-	echo -ne "'$2' '($flag) $1' " >>submenu
+	echo -ne "'$2' '($flag) $1' " >>MCmenu
 
 	echo -e "function $2 () { l_bool '$1' '$yes' '$no' '$2' }\n" \
-		>>radiolists
+		>>MCradiolists
 }
 
 #
@@ -148,16 +166,19 @@ function bool () {
 function l_bool () {
 	while true
 	do
-		if $DIALOG --title "$1" \
+		$DIALOG --title "$1" \
 			--backtitle "$backtitle" \
 			--radiolist "$radiolist_instructions" 12 70 2 \
-			'y' 'Yes' $2 'n' 'No' $3 2>dialog.out
-		then
-			eval $4=`cat dialog.out`
-			break
-		fi
-			
-		help "$1" "$4"
+			'y' 'Yes' $2 'n' 'No' $3 2>MCdialog.out
+
+		case "$?" in
+		0) eval $4=`cat MCdialog.out`
+		   break ;;
+
+		1) help "$4" "$1" ;;
+
+		*) break ;;
+		esac
 	done
 }
 
@@ -174,10 +195,10 @@ function mod_bool () {
 	   ;;
 	esac
 
-	echo -ne "'$2' '($flag) $1' " >>submenu
+	echo -ne "'$2' '($flag) $1' " >>MCmenu
 
 	echo -e "function $2 () { l_mod_bool '$1' '$module' '$no' '$2' }\n" \
-		>>radiolists
+		>>MCradiolists
 }
 
 #
@@ -186,16 +207,20 @@ function mod_bool () {
 function l_mod_bool() {
 	while true
 	do
-		if $DIALOG --title "$1" \
+		$DIALOG --title "$1" \
 			--backtitle "$backtitle" \
 			--radiolist "$radiolist_instructions" 12 70 2 \
-			'm' 'Module' $2 'n' 'No' $3 2>dialog.out
-		then
-			eval $4=`cat dialog.out`
-			break
-		fi
+			'm' 'Module' $2 'n' 'No' $3 2>MCdialog.out
+
+		case "$?" in
+		0) eval $4=`cat MCdialog.out`
+		   break ;;
+
+		1) help "$4" "$1" ;;
+
+		*) break ;;
+		esac
 			
-		help "$1" "$4"
 	done
 }
 
@@ -221,12 +246,12 @@ function tristate () {
    		;;
 		esac
 	
-		echo -ne "'$2' '($flag) $1' " >>submenu
+		echo -ne "'$2' '($flag) $1' " >>MCmenu
 	
 		echo -e "
 		function $2 () { \
 			l_tristate '$1' '$yes' '$no' '$module' '$2'
-		}"  >>radiolists
+		}"  >>MCradiolists
 	fi
 }
 
@@ -236,17 +261,20 @@ function tristate () {
 function l_tristate () {
 	while true
 	do
-		if $DIALOG --title "$1" \
+		$DIALOG --title "$1" \
 			--backtitle "$backtitle" \
 			--radiolist "$radiolist_instructions" 13 70 3 \
 			'y' 'Yes' $2 'n' 'No' $3 'm' 'Module' $4 \
-			2>dialog.out
-		then
-			eval $5=`cat dialog.out`
-			break
-		fi
-			
-		help "$1" "$5"
+			2>MCdialog.out
+
+		case "$?" in
+		0) eval $5=`cat MCdialog.out`
+		   break ;;
+
+		1) help "$5" "$1" ;;
+
+		*) break ;;
+		esac
 	done
 }
 
@@ -277,14 +305,14 @@ function dep_tristate () {
 }
 
 #
-# Create a function which will call our local int function.
+# Add a menu item which will call our local int function.
 # 
 function int () {
 	eval $2=\${$2:-"$3"} x=\$$2
 
-	echo -ne "'$2' '($x) $1' " >>submenu
+	echo -ne "'$2' '($x) $1' " >>MCmenu
 
-	echo -e "function $2 () { l_int '$1' '$2' '$3' '$x' }\n" >>radiolists
+	echo -e "function $2 () { l_int '$1' '$2' '$3' '$x' }\n" >>MCradiolists
 }
 
 #
@@ -296,9 +324,9 @@ function l_int () {
 		if $DIALOG --title "$1" \
 			--backtitle "$backtitle" \
 			--inputbox "$inputbox_instructions_int" \
-			15 55 "$4" 2>dialog.out
+			15 55 "$4" 2>MCdialog.out
 		then
-			answer="`cat dialog.out`"
+			answer="`cat MCdialog.out`"
 			answer="${answer:-$3}"
 
 			if expr $answer : '0$\|-?[1-9][0-9]*$' >/dev/null
@@ -315,20 +343,20 @@ function l_int () {
 			break
 		fi
 
-		help "$1" "$2"
+		help "$2" "$1"
 	done
 }
 
 
 #
-# Create a function which will call our local int function.
+# Add a menu item which will call our local int function.
 # 
 function hex () {
 	eval $2=\${$2:-"$3"} x=\${$2##*[x,X]}
 
-	echo -ne "'$2' '($x) $1' " >>submenu
+	echo -ne "'$2' '($x) $1' " >>MCmenu
 
-	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' }\n" >>radiolists
+	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' }\n" >>MCradiolists
 }
 
 #
@@ -340,9 +368,9 @@ function l_hex () {
 		if $DIALOG --title "$1" \
 			--backtitle "$backtitle" \
 			--inputbox "$inputbox_instructions_hex" \
-			15 55 "$4" 2>dialog.out
+			15 55 "$4" 2>MCdialog.out
 		then
-			answer="`cat dialog.out`"
+			answer="`cat MCdialog.out`"
 			answer="${answer:-$3}"
 			answer="${answer##*[x,X]}"
 
@@ -360,12 +388,12 @@ function l_hex () {
 			break
 		fi
 
-		help "$1" "$2"
+		help "$2" "$1"
 	done
 }
 
 #
-# Create a function which will call our local One-of-Many choice list.
+# Add a menu item which will call our local One-of-Many choice list.
 #
 function choice () {
 	#
@@ -395,12 +423,12 @@ function choice () {
 
 	: ${current:=$default}
 
-	echo -ne "'$firstchoice' '($current) $title' " >>submenu
+	echo -ne "'$firstchoice' '($current) $title' " >>MCmenu
 
 	echo -e "
 	function $firstchoice () {
 		l_choice '$title' \"$choices\" $current
-	}\n" >>radiolists
+	}\n" >>MCradiolists
 }
 
 
@@ -433,13 +461,13 @@ function l_choice () {
 		if $DIALOG --title "$title" \
 			--backtitle "$backtitle" \
 			--radiolist "$radiolist_instructions" \
-			22 70 11 $list 2>dialog.out
+			22 70 11 $list 2>MCdialog.out
 		then
-			choice=`cat dialog.out`
+			choice=`cat MCdialog.out`
 			break
 		fi
 
-		help "$title" "$firstchoice"
+		help "$firstchoice" "$title"
 	done
 
 	#
@@ -462,114 +490,130 @@ function l_choice () {
 
 
 #
-# Now parse the configuration files and create our mini scripts.
-# Each script represents a separate menu which when taken together
-# form a linked menu tree.  Since one configuration file
-# may source another elsewhere in the kernel source tree, this 
-# function is recursive.
+# A faster awk based recursive parser. (I hope)
 #
-function parse_config_files () {
-	if [ "_$single_menu_mode" = "_TRUE" ]
-	then
-		parse_single_menu $1
-		return
-	fi
+function parser1 () {
+awk '
+BEGIN {
+	menu_no = 0
+	comment_is_option = 0
+	parser("'$CONFIG_IN'","MCmenu0")
+}
 
-	while read command args
-	do
-		case $command in
+function parser(ifile,menu) {
 
-		#
-		# Will it ever happen that mainmenu_option will be followed
-		# by anything other then "next_comment"?  This assumes not..
-		#
-		mainmenu_option) 
-			comment_is_option=TRUE
-			;;
+	while (getline <ifile) {
+		if ($1 == "mainmenu_option") {
+			comment_is_option = "1"
+		}
+		else if ($1 == "comment" && comment_is_option == "1") {
+			comment_is_option= "0"
+			sub($1,"",$0)
+			++menu_no
 
-		comment)
-			if [ "$comment_is_option" ]
-			then
-				comment_is_option=
+			printf("submenu %s MCmenu%s\n", $0, menu_no) >>menu
 
-				stack="$submenu$stack"
+			printf( "function MCmenu%s () {\n"\
+				"default=$1\n"\
+				"menu_name %s\n",\
+				 menu_no, $0) >"MCmenu"menu_no
 
-				menu_no=$[menu_no + 1]
-				x="submenu$menu_no"
+			parser(ifile, "MCmenu"menu_no)
+		}
+		else if ($1 ~ "endmenu") {
+			printf("}\n") >>menu
+			return
+		} 
+		else if ($0 ~ /^#|$MAKE|mainmenu_name/) {
+			printf("") >>menu
+		}
+		else if ($1 == "source") {
+			# Yuk!  Blah!  Phooey!
+			if ($2 ~ "drivers/sound") {
+				printf("soundcfg\n") >>menu
+			}
 
-				echo "submenu $args $x" >> $submenu
-
-				submenu=$x
-				echo menu_name $args >$submenu
-			else
-				echo comment $args >> $submenu
-			fi
-			;;
-	
-		endmenu)
-			submenu="${stack%%*}"
-			stack="${stack#*}"
-			;;
-
-		mainmenu_name)
-			echo menu_name "'Main Menu'" > submenu0
-			;;
-
-		\$MAKE) echo "yuck1 'Configure (You must do this!)' '$args'"\
-				>>$submenu
-			;;
-
-		source)
-			parse_config_files "$args"
-			;;
-
-		'#'|'')  : ;;
-
-		*)	echo $command $args >> $submenu
-			;;
-		esac
-	done < $1
+			parser($2,menu)
+		}
+		else {
+			print >>menu
+		}
+	}
+}'
 }
 
 #
-# Parses configuration files into a single menu structure.
+# Secondary parser for single menu mode.
 #
-function parse_single_menu () {
+function parser2 () {
+awk '
+BEGIN {
+	parser("'$CONFIG_IN'","MCmenu0")
+}
 
-	while read command args
+function parser(ifile,menu) {
+
+	while (getline <ifile) {
+		if ($1 ~ /mainmenu_option|endmenu/) {
+			printf("") >>menu
+		} 
+		else if ($0 ~ /^#|$MAKE|mainmenu_name/) {
+			printf("") >>menu
+		}
+		else if ($1 == "source") {
+			if ($2 ~ "drivers/sound") {
+				printf("soundcfg\n") >>menu
+			}
+			parser($2,menu)
+		}
+		else {
+			print >>menu
+		}
+	}
+}'
+}
+
+#
+# Parse all the config.in files into mini scripts.
+#
+function parse_config_files () {
+	rm -f MCmenu*
+
+	echo "function MCmenu0 () {" >MCmenu0
+	echo 'default=$1' >>MCmenu0
+	echo "menu_name 'Main Menu'" >>MCmenu0
+
+
+	if [ "_$single_menu_mode" = "_TRUE" ]
+	then
+		parser2
+	else
+		parser1
+	fi
+
+	echo "}" >>MCmenu0
+
+	#
+	# These mini scripts must be sourced into the current
+	# environment in order for all of this to work.  Leaving
+	# them on the disk as executables screws up the recursion
+	# in activate_menu(), among other things.  Once they are
+	# sourced we can disgard them.
+	#
+	for i in MCmenu*
 	do
-		case $command in
+		source $i
+	done
 
-		mainmenu_option | \
-		endmenu)
-			: ;;
-
-		mainmenu_name)
-			echo menu_name "'Main Menu'" > submenu0
-			;;
-
-		\$MAKE) echo "yuck1 'Configure (You must do this!)' '$args'"\
-				>>$submenu
-			;;
-
-		source)
-			parse_single_menu "$args"
-			;;
-
-		'#'|'')  : ;;
-
-		*)	echo $command $args >> $submenu
-			;;
-		esac
-	done < $1
+	rm -f MCmenu*
 }
 
 #
 # This is the menu tree's bootstrap.
 #
-# Executes a mini script to create a set of functions, one per configuration
-# option.  These functions will in turn execute dialog commands or recursively
-# call other mini scripts.
+# Executes the parsed menus on demand and creates a set of functions,
+# one per configuration option.  These functions will in turn execute
+# dialog commands or recursively call other menus.
 #
 function activate_menu () {
 
@@ -577,23 +621,24 @@ function activate_menu () {
 	do
 		comment_ctr=0
 		$1 "$default"		#Create the radiolists and dialog cmd
-		. radiolists		#Read in the dialog functions.
+		. MCradiolists		#Read in the dialog functions.
 
-		. submenu 2>dialog.out	#Activate this menu
+		. MCmenu 2>MCdialog.out	#Activate this menu
 
 		case "$?" in
 		0)
-			defaults="`cat dialog.out`$defaults"  #pseudo stack
-			source dialog.out
-			default="${defaults%%*}" defaults="${defaults#*}"
+			defaults="`cat MCdialog.out`$defaults"  #psuedo stack
+			. MCdialog.out
+			default="${defaults%%*}" defaults="${defaults#*}"
 			;;
 		2)	
-			echo >>dialog.out
-			read selection <dialog.out
-			default="${selection##* }"
+			echo >>MCdialog.out
+			read selection <MCdialog.out
+			default="${selection%% *}"
+
 			case "$selection" in
-			*"-->"*) : ;;
-			*)	 eval help "$selection" ;;
+			*"-->"*) show_readme ;;
+			*)	 eval help $selection ;;
 			esac
 			;;
 		255|1)
@@ -733,12 +778,6 @@ save_configuration () {
 		fi
 	}
 
-	#
-	# This will hopfully prevent the sound configuration from
-	# running again.  (blagh!)
-	#
-	MAKE=:
-
 	CONFIG=.tmpconfig
 	CONFIG_H=.tmpconfig.h
 
@@ -749,16 +788,33 @@ save_configuration () {
 	echo "/*" >$CONFIG_H
 	echo " * Automatically generated by make menuconfig: don't edit" >>$CONFIG_H
 	echo " */" >>$CONFIG_H
-	
-	. $CONFIG_IN
 
-	if [ -f .config ]
+	MAKE=:	#To prevent sound Makefile from running.
+	
+	if . $CONFIG_IN >>.menuconfig.log 2>&1
 	then
-		rm -f .config.old
-		mv .config .config.old
+		#
+		# Create the sound driver's config files for cards
+		# Which are compatible with the new config method.
+		#
+		if [ "_$CONFIG_TRIX"   != "_y" -a\
+		     "_$CONFIG_PSS"    != "_y" -a\
+		     "_$CONFIG_SMWAVE" != "_y"    ]
+		then
+			make -C drivers/sound kernelconfig >>.menuconfig.log 2>&1
+		fi
+
+		if [ -f .config ]
+		then
+			rm -f .config.old
+			mv .config .config.old
+		fi
+		mv .tmpconfig .config
+		mv .tmpconfig.h include/linux/autoconf.h
+		return 0
+	else
+		return 1
 	fi
-	mv .tmpconfig .config
-	mv .tmpconfig.h include/linux/autoconf.h
 }
 
 #
@@ -770,25 +826,24 @@ cleanup () {
 }
 
 cleanup1 () {
-	rm -f submenu* radiolists dialog.out help.out
+	rm -f MCmenu* MCradiolists MCdialog.out help.out
 }
 
 cleanup2 () {
 	rm -f .tmpconfig .tmpconfig.h
 }
 
-
 menu_instructions="\
 Arrow keys navigate the menu.  \
-Highlighted letters are shortcuts. \
+Highlighted letters are hotkeys. \
 Select an item with <Space Bar> or <Enter>. \
-When finished press <E> or <X> or <Esc>.  \
+When finished press <Esc><Esc> or <X>.  \
 (*) indicates an option will be compiled into the kernel.  \
 (M) indicates an option will be compiled as a module."
 
 radiolist_instructions="\
-Use the arrow keys to navigate this radiolist or \
-press the first letter of the item you wish to select \
+Use the arrow keys to navigate this window or \
+press the hotkey of the item you wish to select \
 followed by the <SPACE BAR>.
 Press <H> for additional information about this option."
 
@@ -805,12 +860,9 @@ backtitle="Linux Kernel Configuration"
 
 DIALOG="./scripts/lxdialog/lxdialog"
 
-comment_is_option=
-menu_no=0
-submenu=submenu0
 kernel_version="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
 
-trap "cleanup ; rm -f .menuconfig.in ; exit 1" 1 2 15
+trap "cleanup ; rm -f .menuconfig ; exit 1" 1 2 15
 
 #
 # Locate default files.
@@ -842,57 +894,50 @@ else
   echo "#"
 fi
 
+# Fresh new log.
+>.menuconfig.log
+
+
+$DIALOG	--backtitle "$backtitle" \
+	--infobox "Preparing configuration scripts..." 3 40
 
 #
-# Convert the configuration files into our mini scripts.
-# Then put all the mini scripts into a single file which should
-# stick around and act as a cache until the kernel release changes
-# or "make mrproper".
+# Check kernel version of previous menuconfig build.
+# If it's different then we should tell the sound driver
+# to rebuild it's Config.in file.
 #
-if [ -e .menuconfig.in ]
+rebuildsound=TRUE
+if [ -e .menuconfig ]
 then
-	read x <.menuconfig.in
-	if [ "$x" != "# $kernel_version" ]
+	read x <.menuconfig
+	if [ "$x" = "# $kernel_version" ]
 	then
-		rm -f .menuconfig.in
+		rebuildsound=
 	fi
 fi
 
-if [ ! -e .menuconfig.in ]
+if [ "$rebuildsound" ]
 then
-	$DIALOG	--backtitle "$backtitle" \
-		--infobox "Compiling configuration script..." 3 40
-
-	rm -f submenu*
-	parse_config_files $CONFIG_IN
-
+	# Activate the Linux compatible sound configuration.
+	# This may not work for all sound cards.  (See sound docs)
 	#
-	# For handling Sound configuration. (Yuk!)
-	#
-	echo '$MAKE $*' >submenu999
+	make -C drivers/sound mkscript >>.menuconfig.log 2>&1
 
-	echo "# $kernel_version" >.menuconfig.in
-
-	for i in submenu*
-	do
-		echo "function $i () {"
-		echo 'default=$1'
-		cat $i
-		echo -e "}\n\n"
-	done >> .menuconfig.in
-
-	rm -f submenu*
+	echo "# $kernel_version" >.menuconfig
 fi
 
-source .menuconfig.in
+#
+# Read config.in files and parse them into one shell function per menu.
+#
+parse_config_files $CONFIG_IN
 
 #
 # Start the ball rolling from the top.
 #
-activate_menu submenu0
+activate_menu MCmenu0
 
 #
-# We're done with the menu scripts.  Get rid of them.
+# All done!
 #
 cleanup1
 
@@ -905,15 +950,19 @@ if $DIALOG --backtitle "$backtitle" \
 then
 	save_configuration
 
-	$DIALOG --backtitle "$backtitle" --infobox "\
-The linux kernel is now hopefully configured for your setup.  \
-Check the top-level Makefile for additional configuration, \
-and do a 'make dep ; make clean' if you want to be sure all \
-the files are correctly re-made." 7 60
+	clear
+	cat <<EOM
+
+
+The linux kernel is now hopefully configured for your setup.
+Check the top-level Makefile for additional configuration,
+and do a 'make dep ; make clean' if you want to be sure all
+the files are correctly re-made.
+
+EOM
 else
-	$DIALOG --backtitle "$backtitle" \
-		--infobox "Your new configuration was not saved." 3 42 
-	
+	clear
+	echo -e "Your kernel configuration changes where NOT saved.\n"
 fi
 
 

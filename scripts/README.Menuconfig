@@ -1,113 +1,130 @@
-This is the Linux kernel menuconfig README file.
+This is the Linux kernel Menuconfig README file.
 
-Menuconfig gives the linux kernel configuration a long needed face lift.
-It features text based color menus, radiolists and dialogs, but does
-not require X Windows.  With this utility you can easily select a
-kernel option to modify without having to sift through 100 other options.
+Menuconfig gives the Linux kernel configuration a long needed face
+lift.  Featuring text based color menus and dialogs, it does not
+require X Windows.  With this utility you can easily select a kernel
+option to modify without sifting through 100 other options.
 
-The windowing support utility (lxdialog) is a VERY modified version of the
-dialog utility by Savio Lam <lam836@cs.cuhk.hk>.  Although lxdialog is 
-significantly different from dialog, I have left Savio's copyrights intact.
-Please DO NOT contact Savio with questions about lxdialog.  He will not be
-able to assist.
+The windowing support utility (lxdialog) is a VERY modified version of
+the dialog utility by Savio Lam <lam836@cs.cuhk.hk>.  Although lxdialog
+is significantly different from dialog, I have left Savio's copyrights
+intact.  Please DO NOT contact Savio with questions about lxdialog.
+He will not be able to assist.
 
-
-Please feel free to send any questions or comments or suggestions to
+Please feel free to send any questions, comments or suggestions to
 William Roadcap <roadcapw@cfw.com>.
 
+READ ON! There are hints and notices below...
 
-Some menuconfig keyboard hints:
+
+Some Menuconfig keyboard hints:
 
 Menus
 ----------
 o  Use the Up/Down arrow keys (cursor keys) to highlight the item 
    or submenu you wish to select.  
-   Shortcut: Press the option's highlighted letter. (usually the first)
+   Shortcut: Press the option's highlighted letter (hotkey).
+             Pressing a hotkey more than once will sequence
+             through all items which use that hotkey.
 
 o  Use the cursor keys to highlight <Select> and press <ENTER>.  
-   Shortcut: Press <Space Bar> or <S> if there's no item beginning with <S>.
+   Shortcut: Press the <SPACE BAR> or <S> if there is no item using
+             <S> as it's hotkey.
 
-o  To exit a menu use the cursor keys to highlight the <Exit> button and 
-   press <ENTER>.  
-   Shortcut: Press <Esc> or <E> or <X> if there's no option beginning 
-             those letters.
+o  To exit a menu use the cursor keys to highlight the <Exit> button
+   and press <ENTER>.  
+   Shortcut: Press <ESC><ESC> or <E> or <X> if there is no hotkey
+             using those letters.  You may press a single <ESC>, but
+             there is a delayed response which you may find annoying.
 
-   Also, the <TAB> key will toggle between <Select>, <Exit> and <Help>
+   Also, the <TAB> and cursor keys will cycle between <Select>,
+   <Exit> and <Help>
 
-o  To get help with an item, use the cursor keys to highlight <Help> and
-   Press <ENTER>.
+o  To get help with an item, use the cursor keys to highlight <Help>
+   and Press <ENTER>.
    Shortcut: Press <H> or <?>.
 
 
 Radiolists  (Yes/No/Module)
 -----------
 o  Use the cursor keys to select the option you wish to set and press
-   <O> or the <SPACE BAR>.
+   <S> or the <SPACE BAR>.
    Shortcut: Press the first letter of the option you wish to set then
-             press <O> or <SPACE BAR>.
+             press <S> or <SPACE BAR>.
 
 o  To see available help for the item, use the cursor keys to highlight
    <Help> and Press <ENTER>.
    Shortcut: Press <H> or <?>.
 
-   Also, the <TAB> key will toggle between <Select> and <Help>
+   Also, the <TAB> and cursor keys will cycle between <Select> and
+   <Help>
 
 
 Data Entry
 -----------
 o  Enter the requested information and press <ENTER>
+   If you are entering hexidecimal values, it is not necessary to
+   add the '0x' prefix to the entry.
 
-o  For help, use the <TAB> key to highlight the help option and 
-   press <ENTER>.  You can try <TAB><H> as well.
+o  For help, use the <TAB> or cursor keys to highlight the help option
+   and press <ENTER>.  You can try <TAB><H> as well.
 
 
 Text Box    (Help Window)
 --------
-o  Use the cursor keys to scroll up/down/left/right.
+o  Use the cursor keys to scroll up/down/left/right.  The VI editor
+   keys h,j,k,l function here as do <SPACE BAR> and <B> for those
+   who are familiar with less and lynx.
 
-o  Press <E>, <X>, <Enter> or <Esc> to exit.
+o  Press <E>, <X>, <Enter> or <Esc><Esc> to exit.
 
 
 Final Acceptance
 ----------------
-With the exception of sound configuration, YOUR CHANGES ARE NOT FINAL.
-You will be given a last chance to confirm them prior to exiting menuconfig.
+With the exception of the old style sound configuration,
+YOUR CHANGES ARE NOT FINAL.  You will be given a last chance to
+confirm them prior to exiting Menuconfig.
 
+If Menuconfig quits with an error while saving your configuration,
+you may look in the file /usr/src/linux/.menuconfig.log for
+information which may help you determine the cause.
 
 
 Other information:
 
-Menuconfig attempts to reduce the amount of time it takes to reconfigure
-the kernel. 
-
-Menuconfig keeps a cache of it's compiled configuration scripts in 
-/usr/src/linux/.menuconfig.in.  This file will only be rebuilt if you
-do a 'make mrproper' or if the kernel version changes.  If you make manual 
-changes to any of the config.in files in the kernel source tree, you 
-must remove .menuconfig.in so that menuconfig will know to rebuild it.
-
 The windowing utility, lxdialog, will only be rebuilt if your kernel
-source tree is fresh, or changes are patched into it via a kernel patch
-or you do 'make mrproper'.  If changes to lxdialog are patched in, most
-likely the rebuild time will be short.  You may force a complete rebuild
-of lxdialog by changing to it's directory and doing 'make clean all'
+source tree is fresh, or changes are patched into it via a kernel
+patch or you do 'make mrproper'.  If changes to lxdialog are patched
+in, most likely the rebuild time will be short.  You may force a
+complete rebuild of lxdialog by changing to it's directory and doing
+'make clean all'
 
 NOTICE:  lxdialog requires the ncurses libraries to compile.  If you
          don't already have ncurses you really should get it.
 
-         The makefile for lxdialog attempts to find your ncurses header
-         file.  Although it should find the header for older versions of
-         ncurses, it is probably a good idea to get the latest ncurses
-         anyway.
+         The makefile for lxdialog attempts to find your ncurses
+         header file.  Although it should find the header for older
+         versions of ncurses, it is probably a good idea to get the
+         latest ncurses anyway.
 
-WARNING: It is not recommended that you change any defines in lxdialog's
-         header files.
+WARNING: It is not recommended that you change any defines in
+         lxdialog's header files.  If you have a grayscale display and
+         are brave, you may tinker with color.h to tune the colors to
+         your preference.
+
+COMPATABILITY ISSUE:
+         There have been some compatability problems reported with
+         older versions of bash and sed.  I am trying to work these
+         out but it is preferable that you upgrade those utilities.
 
 
-*** IMPORTANT, OPTIONAL ALTERNATE PERSONALITY AVAILABLE ***
-***                                                     ***
-If you prefer to have all of the kernel options listed in a single menu, 
-rather than the default multimenu hierarchy, you may edit the Menuconfig 
-script and change the line "single_menu_mode="  to "single_menu_mode=TRUE".  
-Don't forget to remove linux/.menuconfig.in afterwards.
+******** IMPORTANT, OPTIONAL ALTERNATE PERSONALITY AVAILABLE ********
+********                                                     ********
+If you prefer to have all of the kernel options listed in a single
+menu, rather than the default multimenu hierarchy, you may edit the
+Menuconfig script and change the line "single_menu_mode="  to 
+"single_menu_mode=TRUE".
 
+This mode is not recommended unless you have a fairly fast machine.
+
+<END OF README>

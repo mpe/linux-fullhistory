@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.5 1995/11/25 00:59:54 davem Exp $
+/* $Id: console.c,v 1.6 1996/01/01 02:46:27 davem Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
@@ -77,11 +77,38 @@ prom_putchar(char c)
 enum prom_input_device
 prom_query_input_device()
 {
-	switch(*romvec->pv_stdin) {
-	case PROMDEV_KBD:	return PROMDEV_IKBD;
-	case PROMDEV_TTYA:	return PROMDEV_ITTYA;
-	case PROMDEV_TTYB:	return PROMDEV_ITTYB;
+	int st_p;
+	char propb[64];
+	char *p;
+
+	switch(prom_vers) {
+	case PROM_V0:
+	case PROM_V2:
 	default:
+		switch(*romvec->pv_stdin) {
+		case PROMDEV_KBD:	return PROMDEV_IKBD;
+		case PROMDEV_TTYA:	return PROMDEV_ITTYA;
+		case PROMDEV_TTYB:	return PROMDEV_ITTYB;
+		default:
+			return PROMDEV_I_UNK;
+		};
+	case PROM_V3:
+	case PROM_P1275:
+		st_p = (*romvec->pv_v2devops.v2_inst2pkg)(*romvec->pv_v2bootargs.fd_stdin);
+		if(prom_node_has_property(st_p, "keyboard"))
+			return PROMDEV_IKBD;
+		prom_getproperty(st_p, "device_type", propb, sizeof(propb));
+		if(strncmp(propb, "serial", sizeof("serial")))
+			return PROMDEV_I_UNK;
+		prom_getproperty(prom_root_node, "stdin-path", propb, sizeof(propb));
+		p = propb;
+		while(*p) p++; p -= 2;
+		if(p[0] == ':') {
+			if(p[1] == 'a')
+				return PROMDEV_ITTYA;
+			else if(p[1] == 'b')
+				return PROMDEV_ITTYB;
+		}
 		return PROMDEV_I_UNK;
 	};
 }
@@ -92,7 +119,8 @@ enum prom_output_device
 prom_query_output_device()
 {
 	int st_p;
-	char propb[ sizeof("display") ];
+	char propb[64];
+	char *p;
 	int propl;
 
 	switch(prom_vers) {
@@ -113,12 +141,26 @@ prom_query_output_device()
 		{
 			return PROMDEV_OSCREEN;
 		}
-		/* This works on SS-2 (an early OpenFirmware) still. */
-		/* XXX fix for serial cases at SS-5.                 */
-		switch(*romvec->pv_stdin) {
-		case PROMDEV_TTYA:	return PROMDEV_OTTYA;
-		case PROMDEV_TTYB:	return PROMDEV_OTTYB;
-		};
+		if(prom_vers == PROM_V3) {
+			if(strncmp("serial", propb, sizeof("serial")))
+				return PROMDEV_O_UNK;
+			prom_getproperty(prom_root_node, "stdout-path", propb, sizeof(propb));
+			p = propb;
+			while(*p) p++; p -= 2;
+			if(p[0]==':') {
+				if(p[1] == 'a')
+					return PROMDEV_OTTYA;
+				else if(p[1] == 'b')
+					return PROMDEV_OTTYB;
+			}
+			return PROMDEV_O_UNK;
+		} else {
+			/* This works on SS-2 (an early OpenFirmware) still. */
+			switch(*romvec->pv_stdin) {
+			case PROMDEV_TTYA:	return PROMDEV_OTTYA;
+			case PROMDEV_TTYB:	return PROMDEV_OTTYB;
+			};
+		}
 		break;
 	};
 	return PROMDEV_O_UNK;

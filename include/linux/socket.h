@@ -5,14 +5,15 @@
 #include <linux/sockios.h>		/* the SIOCxxx I/O controls	*/
 #include <linux/uio.h>			/* iovec support		*/
 
-struct sockaddr {
-  unsigned short	sa_family;	/* address family, AF_xxx	*/
-  char			sa_data[14];	/* 14 bytes of protocol address	*/
+struct sockaddr 
+{
+	unsigned short	sa_family;	/* address family, AF_xxx	*/
+	char		sa_data[14];	/* 14 bytes of protocol address	*/
 };
 
 struct linger {
-  int 			l_onoff;	/* Linger active		*/
-  int			l_linger;	/* How long to linger for	*/
+	int		l_onoff;	/* Linger active		*/
+	int		l_linger;	/* How long to linger for	*/
 };
 
 struct msghdr 
@@ -24,6 +25,17 @@ struct msghdr
 	void 	*	msg_accrights;	/* Per protocol magic (eg BSD file descriptor passing) */
 	int		msg_accrightslen;	/* Length of rights list */
 };
+
+/*
+ *	4.4BSD changed to these new names for no apparent reason.
+ */
+ 
+#define msg_control	msg_accrights	
+#define msg_controllen	msg_accrightslen;	
+
+/* Control Messages */
+
+#define SCM_RIGHTS		1
 
 /* Socket types. */
 #define SOCK_STREAM	1		/* stream (connection) socket	*/
@@ -73,6 +85,7 @@ struct msghdr
 #define MSG_OOB		1
 #define MSG_PEEK	2
 #define MSG_DONTROUTE	4
+/*#define MSG_CTRUNC	8	- We need to support this for BSD oddments */
 
 /* Setsockoptions(2) level. Thanks to BSD these must match IPPROTO_xxx */
 #define SOL_IP		0

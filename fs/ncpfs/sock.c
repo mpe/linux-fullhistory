@@ -3,7 +3,7 @@
  *
  *  Copyright (C) 1992, 1993  Rick Sladkey
  *
- *  Modified 1995 by Volker Lendecke to be usable for ncp
+ *  Modified 1995, 1996 by Volker Lendecke to be usable for ncp
  *
  */
 
@@ -619,7 +619,7 @@ ncp_request(struct ncp_server *server, int function)
 
 	if (result != 0)
 	{
-		DPRINTK("ncp_completion_code: %d\n", result);
+		DPRINTK("ncp_completion_code: %x\n", result);
 	}
 	return result;	
 }

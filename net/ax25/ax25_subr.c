@@ -348,7 +348,7 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 	}
 		
 	if (dama != NULL) 
-		*dama = !(buf[13] & DAMA_FLAG);
+		*dama = ~(buf[13] & DAMA_FLAG);
 		
 	/* Copy to, from */
 	if (dest != NULL) 

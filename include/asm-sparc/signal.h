@@ -1,6 +1,8 @@
-/* $Id: signal.h,v 1.14 1995/11/25 02:32:46 davem Exp $ */
+/* $Id: signal.h,v 1.17 1996/03/01 07:21:02 davem Exp $ */
 #ifndef _ASMSPARC_SIGNAL_H
 #define _ASMSPARC_SIGNAL_H
+
+#include <asm/sigcontext.h>
 
 /* On the Sparc the signal handlers get passed a 'sub-signal' code
  * for certain signal types, which we document here.
@@ -15,7 +17,7 @@
 #define    SUBSIG_STACK       0
 #define    SUBSIG_ILLINST     2
 #define    SUBSIG_PRIVINST    3
-#define    SUBSIG_BADTRAP(t)  (0x80 + (n))
+#define    SUBSIG_BADTRAP(t)  (0x80 + (t))
 
 #define SIGTRAP		 5
 #define SIGABRT		 6
@@ -87,7 +89,7 @@ struct sigstack {
 
 /* Sigvec flags */
 #define SV_SSTACK    1     /* This signal handler should use sig-stack */
-#define SV_INTR      2     /* Sig return should not restart system ??? */
+#define SV_INTR      2     /* Sig return should not restart system call */
 #define SV_RESET     4     /* Set handler to SIG_DFL upon taken signal */
 #define SV_IGNCHILD  8     /* Do not send SIGCHLD */
 
@@ -102,15 +104,15 @@ struct sigstack {
  */
 #define SA_NOCLDSTOP	SV_IGNCHILD
 #define SA_STACK	SV_SSTACK
-#define SA_RESTART	SV_RESET
-#define SA_INTERRUPT	SV_INTR
-#define SA_NOMASK	0x10
-#define SA_ONESHOT	0x20
+#define SA_RESTART	SV_INTR
+#define SA_ONESHOT	SV_RESET
+#define SA_INTERRUPT	0x10
+#define SA_NOMASK	0x20
 #define SA_SHIRQ	0x40
 
-#define SIG_BLOCK          0x00	/* for blocking signals */
-#define SIG_UNBLOCK        0x40	/* for unblocking signals */
-#define SIG_SETMASK        0x80	/* for setting the signal mask */
+#define SIG_BLOCK          0x01	/* for blocking signals */
+#define SIG_UNBLOCK        0x02	/* for unblocking signals */
+#define SIG_SETMASK        0x04	/* for setting the signal mask */
 
 #ifdef __KERNEL__
 /*

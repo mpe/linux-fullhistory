@@ -83,7 +83,7 @@ void tenmicrosec(int *osp);
 void request_sound_timer (int count);
 void sound_stop_timer(void);
 int snd_ioctl_return(int *addr, int value);
-int snd_set_irq_handler (int interrupt_level, void(*hndlr)(int, void *, struct pt_regs *), char *name, int *osp);
+int snd_set_irq_handler (int interrupt_level, void(*hndlr)(int, void*, struct pt_regs *), char *name, int *osp);
 void snd_release_irq(int vect);
 void sound_dma_malloc(int dev);
 void sound_dma_free(int dev);
@@ -106,7 +106,7 @@ int sb_get_irq(void);
 void sb_free_irq(void);
 int sb_dsp_command (unsigned char val);
 int sb_reset_dsp (void);
-void sb_dsp_unload(void);
+void sb_dsp_unload(struct address_info *);
 
 /*	From sb16_dsp.c	*/
 void sb16_dsp_interrupt (int irq);

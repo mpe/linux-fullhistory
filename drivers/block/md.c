@@ -175,7 +175,7 @@ static int md_ioctl (struct inode *inode, struct file *file,
        paging). This is NOT done by fdisk when partitionning,
        but that's a DOS thing anyway... */
     
-    devices[minor][index].size=gen_real->sizes[MINOR(dev)] & (PAGE_MASK>>10);
+    devices[minor][index].size=gen_real->sizes[MINOR(dev)] & ~((PAGE_SIZE >> 10)-1);
     devices[minor][index].offset=index ?
       (devices[minor][index-1].offset + devices[minor][index-1].size) : 0;
 
@@ -461,10 +461,12 @@ void make_md_request (struct request *pending, int n)
 	 || major == IDE3_MAJOR)
 	&& (req = blk_dev[major].current_request))
     {
-#ifdef CONFIG_BLK_DEV_HD
-      if (major == HD_MAJOR)
+      /*
+       * Thanx to Gadi Oxman <gadio@netvision.net.il>
+       * (He reads my own code better than I do... ;-)
+       */
+      if (major != SCSI_DISK_MAJOR)
 	req = req->next;
-#endif CONFIG_BLK_DEV_HD
 
       while (req && !found)
       {

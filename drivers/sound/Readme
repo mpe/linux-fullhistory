@@ -1,109 +1,40 @@
+Version 3.5-beta10 release notes
+--------------------------------
 
-Version 3.5-beta6 release notes
--------------------------------
+Most up to date information about this driver is available from 
+http://personal.eunet.fi/pp/voxware.
 
-IMPORTANT! This version of the driver is compatible only with Linux versions
-	   1.3.59 to 1.3.6x. It may work with few earlier ones as a loadable
-	   module but...
 
-	   This is a BETA test version. Most known bugs should have been fixed.
-	   However it's possible that there are still bugs. Please report them
-	   to me ASAP so that they can be fixed before Linux 1.4. But look
-	   at the web page (see below) before sending me a bug report. 
 
-	   Crashing with GUS should be fixed now.
-	   Recording is still disabled with ESS1688/688 cards since it
-	   causes a crash.
 
 Please read the SOUND-HOWTO (available from sunsite.unc.edu and other Linux ftp 
 sites). It gives instructions about using sound with Linux. It's bit out of
 date but still very useful. Information about bug fixes and such things
 is available from the web page (see below).
 
-*****************************************************************
-* NEW! Driver's home page is http://personal.eunet.fi/pp/voxware*
-* The file Readme.cards contains card specific instructions     *
-* about configuring various cards.				*
-*****************************************************************
-
-There are some programming information (little bit old) in the
-Hacker's Guide 
-(ftp://nic.funet.fi/pub/OS/Linux/ALPHA/sound/snd-sdk-doc-0.1.ps.gz).
-Believe me: The file is really there. The directory is just hidden and
-you have to cd into it before the file is visible. Note: This directory
-was accidently removed some time ago but it's now back.
-
-I have got many patches from various persons during last year. Some of
-them are still on my mailbox and they should be included in versions
-after v3.5 (I will not add aditional features before v3.5 is ready).
+New Programmer's Guide is currently under work (Feb/March 96). Please
+check http://personal.eunet.fi/pp/voxware for more info.
 
    ====================================================
--  THIS VERSION ____REQUIRES____ Linux 1.3.64 OR LATER.
+-  THIS VERSION ____REQUIRES____ Linux 1.3.70 OR LATER.
    ====================================================
 
--  THIS VERSION MAY NOT WORK WITH Linux VERSIONS RELEASED
-   AFTER end of Feb 1996. If this version doesn't compile with
-   your kernel version, please use the sound driver version
-   included in your kernel.
+It's very likely that this driver version is incompatible with
+Linux versions later than 2.x.
 
-You may need the snd-util-3.5.tar.gz and snd-data-0.1.tar.Z
-packages to use this driver. They should be in the same
-ftp site or BBS from where you got this driver. For
-example at nic.funet.fi:pub/OS/Linux/*.
+Packages "snd-util-3.5.tar.gz" and "snd-data-0.1.tar.Z"
+contain usefull utilities to be used with this driver.
 
 If you are looking for the installation instructions, please
-look at linux/Readme.
+look at Readme.linux.
 
 Supported soundcards
 --------------------
 
-Gravis Ultrasound (GUS)
-GUS MAX
-GUS with the 16 bit sampling daughtercard
-GUS ACE
-GUS PnP support should be available around May 1996.
-PAS16
-Windows Sound System compatible soundcards
-ECHO-PSS (cards based on the PSS architecture by Analog Devices.
-	Including Orchid SW32, Cardinal DSP16 among others).
-		(NOTE! WSS mode may not work (DMA channel setup problem)).
-MediaTriX AudioTriX Pro (OPL4 and the optional effect daughtercard
-	require special initialization. There is a program (setfx) in
-	the snd-util-3.0.tar.gz package which does it).
-Ensoniq SoundScape & SoundScape Elite
-Ensonig SoundScape PnP not supported yet (summer 1996?)
-MV Jazz16 based soundcards (ProSonic, 3D etc).
-SoundMan Wave
-Mozart (OAK OTI-601 interface chip) based soundcards.
-MAD16 (an interface chip by OPTi) based soundcards (TB Tropez ???).
-(NOTE! The MAD16 looks similar to the Mozart chip. It could be a good
-idea to configure MAD16 cards as Mozart ones. The MAD16 driver doesn't set
-up MPU401 which the Mozart one does.
-CS4232 based cards such as AcerMagic S23.
-ESS ES1688 based soundcards.
+See Readme.cards.
 
-
-In addition all Sound Blaster models and clones (up to AWE32) work if
-you want to use them. SB16/SB32/AWE32 PnP models don't work yet. See the web
-page for more info.
-
-The Emu synthesizer chip of AWE32 will not be supported soon. The same is
-true with the ASP chip also. Creative Technology will not release detailed
-information about them so it's not possible to support them.
-
-===========================================================================
-If your card is compatible with SB, MPU401 or Windows Sound System, it
-may work with the driver even if it's not listed in the above list. In this
-case it may require initialization using DOS. Just start DOS and cold
-boot to Linux (etc.) by hitting ctrl-alt-del. 
-===========================================================================
-
-Compatibility with the earlier versions
----------------------------------------
-
-There have been some changes in soundcard.h after v2.5 of the driver
-(v2.90 is compatible with this one). Binaries compiled with this version
-of soundcard.h will not work with v2.0 and earlier.
+Please check http://personal.eunet.fi/pp/voxware if you don't find
+your soundcard there.
 
 Contributors
 ------------
@@ -225,29 +156,15 @@ In general the printout of of /dev/sndstat should tell what is the problem.
 It's possible that there are bugs in the sound driver but 99% of the problems
 reported to me are caused by somehow incorrect setup during "make config".
 
-For owners of TI TM4000M notebooks
-----------------------------------
-
-There appears to be some kind of conflict between the sound support
-(MV Jazz), mouse port and the sound driver. You could try to configure kernel
-with the C&T 82C710 mouse port support disabled.
+Best regards,
 
 Hannu
 
-Regards,
-
 Hannu Savolainen
-hannu@voxware.pp.fi
+hannu@voxware.pp.fi	
+(Please check http:/personal.eunet.fi/pp/voxware before mailing me).
 
 Snail mail:	Hannu Savolainen
 		Hiekkalaiturintie 3 A 8
 		00980 Helsinki
 		Finland
-
-NOTE!	I propably don't answer to Snail mail or FAX messages. Sending answer
-	to each of them is simply too expensive and time consuming. However I
-	try to reply every email message I get (within a week). If you don't 
-	get response, please check how your address is written in the message
-	header. I can't answer if I don't have a valid reply address.
-
-Sound driver's home page is http://personal.eunet.fi/pp/voxware

@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.26 1995/11/25 00:59:22 davem Exp $
+/*  $Id: init.c,v 1.33 1996/03/01 07:16:20 davem Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -15,6 +15,7 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/swap.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -52,12 +53,6 @@ pte_t __bad_page(void)
 	return pte_mkdirty(mk_pte((unsigned long) EMPTY_PGE, PAGE_SHARED));
 }
 
-unsigned long __zero_page(void)
-{
-	memset((void *) ZERO_PGE, 0, PAGE_SIZE);
-	return (unsigned long) ZERO_PGE;
-}
-
 void show_mem(void)
 {
 	int i,free = 0,total = 0,reserved = 0;
@@ -88,6 +83,26 @@ void show_mem(void)
 
 extern pgprot_t protection_map[16];
 
+unsigned long sparc_context_init(unsigned long start_mem, int numctx)
+{
+	int ctx;
+
+	ctx_list_pool = (struct ctx_list *) start_mem;
+	start_mem += (numctx * sizeof(struct ctx_list));
+	for(ctx = 0; ctx < numctx; ctx++) {
+		struct ctx_list *clist;
+
+		clist = (ctx_list_pool + ctx);
+		clist->ctx_number = ctx;
+		clist->ctx_mm = 0;
+	}
+	ctx_free.next = ctx_free.prev = &ctx_free;
+	ctx_used.next = ctx_used.prev = &ctx_used;
+	for(ctx = 0; ctx < numctx; ctx++)
+		add_to_free_ctxlist(ctx_list_pool + ctx);
+	return start_mem;
+}
+
 /*
  * paging_init() sets up the page tables: We call the MMU specific
  * init routine based upon the Sun model type on the Sparc.
@@ -95,7 +110,7 @@ extern pgprot_t protection_map[16];
  */
 extern unsigned long sun4c_paging_init(unsigned long, unsigned long);
 extern unsigned long srmmu_paging_init(unsigned long, unsigned long);
-extern unsigned long probe_devices(unsigned long);
+extern unsigned long device_scan(unsigned long);
 
 unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 {
@@ -109,10 +124,10 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 		start_mem = srmmu_paging_init(start_mem, end_mem);
 		break;
 	default:
-		printk("paging_init: Cannot init paging on this Sparc\n");
-		printk("paging_init: sparc_cpu_model = %d\n", sparc_cpu_model);
-		printk("paging_init: Halting...\n");
-		panic("paging_init");
+		prom_printf("paging_init: Cannot init paging on this Sparc\n");
+		prom_printf("paging_init: sparc_cpu_model = %d\n", sparc_cpu_model);
+		prom_printf("paging_init: Halting...\n");
+		prom_halt();
 	};
 
 	/* Initialize the protection map with non-constant values
@@ -134,12 +149,17 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	protection_map[13] = PAGE_READONLY;
 	protection_map[14] = PAGE_SHARED;
 	protection_map[15] = PAGE_SHARED;
-	return probe_devices(start_mem);
+	return device_scan(start_mem);
 }
 
 extern void sun4c_test_wp(void);
-extern void sun4c_lock_entire_kernel(unsigned long start_mem);
 extern void srmmu_test_wp(void);
+
+struct cache_palias *sparc_aliases;
+
+extern int min_free_pages;
+extern int free_pages_low;
+extern int free_pages_high;
 
 void mem_init(unsigned long start_mem, unsigned long end_mem)
 {
@@ -147,6 +167,9 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	int datapages = 0;
 	unsigned long tmp2, addr;
 	extern char etext;
+
+	/* Saves us work later. */
+	memset((void *) ZERO_PAGE, 0, PAGE_SIZE);
 
 	end_mem &= PAGE_MASK;
 	high_memory = end_mem;
@@ -189,10 +212,15 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	       codepages << (PAGE_SHIFT-10),
 	       datapages << (PAGE_SHIFT-10));
 
+	min_free_pages = nr_free_pages >> 7;
+	if(min_free_pages < 16)
+		min_free_pages = 16;
+	free_pages_low = min_free_pages + (min_free_pages >> 1);
+	free_pages_high = min_free_pages + min_free_pages;
+
 	switch(sparc_cpu_model) {
 	case sun4c:
 	case sun4e:
-		sun4c_lock_entire_kernel(start_mem);
 		sun4c_test_wp();
 		break;
 	case sun4m:
