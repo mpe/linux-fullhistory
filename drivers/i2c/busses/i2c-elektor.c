@@ -112,7 +112,7 @@ static int pcf_isa_getclock(void *data)
 static void pcf_isa_waitforpin(void) {
 	DEFINE_WAIT(wait);
 	int timeout = 2;
-	long flags;
+	unsigned long flags;
 
 	if (irq > 0) {
 		spin_lock_irqsave(&lock, flags);
