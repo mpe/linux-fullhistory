@@ -148,13 +148,13 @@ struct dvb_ca_private {
 	wait_queue_head_t thread_queue;
 
 	/* Flag indicating when thread should exit */
-	int exit:1;
+	unsigned int exit:1;
 
 	/* Flag indicating if the CA device is open */
-	int open:1;
+	unsigned int open:1;
 
 	/* Flag indicating the thread should wake up now */
-	int wakeup:1;
+	unsigned int wakeup:1;
 
 	/* Delay the main thread should use */
 	unsigned long delay;
