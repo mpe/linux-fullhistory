@@ -686,7 +686,7 @@ typedef struct idetape_packet_command_s {
 	byte *current_position;			/* Pointer into the above buffer */
 	ide_startstop_t (*callback) (ide_drive_t *);	/* Called when this packet command is completed */
 	byte pc_buffer[IDETAPE_PC_BUFFER_SIZE];	/* Temporary buffer */
-	unsigned int flags;			/* Status/Action bit flags */
+	unsigned long flags;			/* Status/Action bit flags: long for set_bit */
 } idetape_pc_t;
 
 /*
@@ -908,7 +908,7 @@ typedef struct {
 	int pages_per_stage;
 	int excess_bh_size;			/* Wasted space in each stage */
 
-	unsigned int flags;			/* Status/Action flags */
+	unsigned long flags;			/* Status/Action flags: long for set_bit */
 	spinlock_t spinlock;			/* protects the ide-tape queue */
 
 	/*

@@ -17,7 +17,7 @@
 #include <linux/mtd/cfi.h>
 
 
-static struct mtd_info *cfi_probe(struct map_info *);
+struct mtd_info *cfi_probe(struct map_info *);
 
 static void print_cfi_ident(struct cfi_ident *);
 static void check_cmd_set(struct map_info *, int, unsigned long);
@@ -32,7 +32,7 @@ static const char im_name[] = "cfi_probe";
  * this module is non-zero, i.e. between inter_module_get and
  * inter_module_put.  Keith Owens <kaos@ocs.com.au> 29 Oct 2000.
  */
-static struct mtd_info *cfi_probe(struct map_info *map)
+struct mtd_info *cfi_probe(struct map_info *map)
 {
 	struct mtd_info *mtd = NULL;
 	struct cfi_private *cfi;

@@ -50,6 +50,9 @@
  *
  * 21-09-2000 Got rid of attach_sbmpu
  * 	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+ *
+ * 28-10-2000 Added pnplegacy support
+ * 	Daniel Church <dchurch@mbhs.edu>
  */
 
 #include <linux/config.h>
@@ -64,7 +67,7 @@
 #include "sb.h"
 
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
-#define SB_CARDS_MAX 4
+#define SB_CARDS_MAX 5
 #else
 #define SB_CARDS_MAX 1
 #endif
@@ -194,6 +197,7 @@ struct pci_dev 	*sb_dev[SB_CARDS_MAX] 	= {NULL},
 static int isapnp	= 1;
 static int isapnpjump	= 0;
 static int multiple	= 1;
+static int pnplegacy	= 0;
 static int reverse	= 0;
 static int uart401	= 0;
 
@@ -203,6 +207,7 @@ static int opl_activated[SB_CARDS_MAX]   = {0};
 #else
 static int isapnp	= 0;
 static int multiple	= 0;
+static int pnplegacy	= 0;
 #endif
 
 MODULE_DESCRIPTION("Soundblaster driver");
@@ -221,11 +226,13 @@ MODULE_PARM(acer,	"i");
 MODULE_PARM(isapnp,	"i");
 MODULE_PARM(isapnpjump,	"i");
 MODULE_PARM(multiple,	"i");
+MODULE_PARM(pnplegacy,	"i");
 MODULE_PARM(reverse,	"i");
 MODULE_PARM(uart401,	"i");
 MODULE_PARM_DESC(isapnp,	"When set to 0, Plug & Play support will be disabled");
 MODULE_PARM_DESC(isapnpjump,	"Jumps to a specific slot in the driver's PnP table. Use the source, Luke.");
 MODULE_PARM_DESC(multiple,	"When set to 0, will not search for multiple cards");
+MODULE_PARM_DESC(pnplegacy,	"When set to 1, will search for a legacy SB card along with any PnP cards.");
 MODULE_PARM_DESC(reverse,	"When set to 1, will reverse ISAPnP search order");
 MODULE_PARM_DESC(uart401,	"When set to 1, will attempt to detect and enable the mpu on some clones");
 #endif
@@ -659,7 +666,7 @@ static int __init init_sb(void)
 		/* Please remember that even with CONFIG_ISAPNP defined one
 		 * should still be able to disable PNP support for this 
 		 * single driver! */
-		if(isapnp && (sb_isapnp_probe(&cfg[card], &cfg_mpu[card], card) < 0) ) {
+		if((!pnplegacy||card>0) && isapnp && (sb_isapnp_probe(&cfg[card], &cfg_mpu[card], card) < 0) ) {
 			if(!sb_cards_num) {
 				/* Found no ISAPnP cards, so check for a non-pnp
 				 * card and set the detection loop for 1 cycle
@@ -674,7 +681,7 @@ static int __init init_sb(void)
 		}
 #endif
 
-		if(!isapnp) {
+		if(!isapnp || (pnplegacy&&card==0)) {
 			cfg[card].io_base	= io;
 			cfg[card].irq		= irq;
 			cfg[card].dma		= dma;
@@ -695,15 +702,29 @@ static int __init init_sb(void)
 				card--;
 				sb_cards_num--;
 				continue;
+			} else if(pnplegacy && isapnp) {
+				printk(KERN_NOTICE "sb: No legacy SoundBlaster cards " \
+				  "found.  Continuing with PnP detection.\n");
+				pnplegacy=0;
+				card--;
+				continue;
 			} else
 				return -ENODEV;
 		}
 		attach_sb_card(&cfg[card]);
 
-		if(cfg[card].slots[0]==-1)
-			return -ENODEV;
+		if(cfg[card].slots[0]==-1) {
+			if(card==0 && pnplegacy && isapnp) {
+				printk(KERN_NOTICE "sb: No legacy SoundBlaster cards " \
+				  "found.  Continuing with PnP detection.\n");
+				pnplegacy=0;
+				card--;
+				continue;
+			} else
+				return -ENODEV;
+		}
 		
-		if (!isapnp)
+		if (!isapnp||(pnplegacy&&card==0))
 			cfg_mpu[card].io_base = mpu_io;
 		if (probe_sbmpu(&cfg_mpu[card], THIS_MODULE))
 			sbmpu[card] = 1;

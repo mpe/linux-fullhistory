@@ -316,7 +316,7 @@ S:	Maintained
 
 DC390/AM53C974 SCSI driver
 P:	Kurt Garloff
-M:	kurt@garloff.de
+M:	garloff@suse.de
 W:	http://www.garloff.de/kurt/linux/dc390/
 S:	Maintained
 
@@ -907,6 +907,13 @@ M:	phillim@amtrak.com
 L:	linux-net@vger.kernel.org
 L:	linux-tr@emissary.aus-etc.com
 W:	http://www.linuxtr.net
+S:	Maintained
+
+ONSTREAM SCSI TAPE DRIVER
+P:	Willem Riede
+M:	osst@riede.org
+L:	osst@linux1.onstream.nl
+L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 OPL3-SA2, SA3, and SAx DRIVER

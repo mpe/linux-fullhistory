@@ -24,8 +24,7 @@ int x86_udelay_tsc = 0;		/* Delay via TSC */
 	
 /*
  *	Do a udelay using the TSC for any CPU that happens
- *	to have one that we trust. This could be optimised to avoid
- *	the multiply per loop but its a delay loop so who are we kidding...
+ *	to have one that we trust.
  */
 
 static void __rdtsc_delay(unsigned long loops)
@@ -70,8 +69,8 @@ inline void __const_udelay(unsigned long xloops)
 	int d0;
 	__asm__("mull %0"
 		:"=d" (xloops), "=&a" (d0)
-		:"1" (xloops),"0" (current_cpu_data.loops_per_sec));
-        __delay(xloops);
+		:"1" (xloops),"0" (current_cpu_data.loops_per_jiffy));
+        __delay(xloops * HZ);
 }
 
 void __udelay(unsigned long usecs)

@@ -123,8 +123,8 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 			maj = "hd";
 			break;
 		case MD_MAJOR:
-			unit -= 'a'-'0';
-			break;
+			sprintf(buf, "%s%d", maj, unit - 'a');
+			return buf;
 	}
 	if (hd->major >= SCSI_DISK1_MAJOR && hd->major <= SCSI_DISK7_MAJOR) {
 		unit = unit + (hd->major - SCSI_DISK1_MAJOR + 1) * 16;
@@ -408,7 +408,7 @@ void register_disk(struct gendisk *gdev, kdev_t dev, unsigned minors,
 {
 	if (!gdev)
 		return;
-		grok_partitions(gdev, MINOR(dev)>>gdev->minor_shift, minors, size);
+	grok_partitions(gdev, MINOR(dev)>>gdev->minor_shift, minors, size);
 }
 
 void grok_partitions(struct gendisk *dev, int drive, unsigned minors, long size)

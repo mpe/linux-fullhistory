@@ -252,6 +252,24 @@ static struct dev_name_struct {
 	{ "ida/c0d14p",0x48E0 },
 	{ "ida/c0d15p",0x48F0 },
 #endif
+#if defined(CONFIG_BLK_CPQ_CISS_DA) || defined(CONFIG_BLK_CPQ_CISS_DA_MODULE)
+	{ "cciss/c0d0p",0x6800 },
+	{ "cciss/c0d1p",0x6810 },
+	{ "cciss/c0d2p",0x6820 },
+	{ "cciss/c0d3p",0x6830 },
+	{ "cciss/c0d4p",0x6840 },
+	{ "cciss/c0d5p",0x6850 },
+	{ "cciss/c0d6p",0x6860 },
+	{ "cciss/c0d7p",0x6870 },
+	{ "cciss/c0d8p",0x6880 },
+	{ "cciss/c0d9p",0x6890 },
+	{ "cciss/c0d10p",0x68A0 },
+	{ "cciss/c0d11p",0x68B0 },
+	{ "cciss/c0d12p",0x68C0 },
+	{ "cciss/c0d13p",0x68D0 },
+	{ "cciss/c0d14p",0x68E0 },
+	{ "cciss/c0d15p",0x68F0 },
+#endif
 #ifdef CONFIG_NFTL
 	{ "nftla", 0x5d00 },
 #endif
@@ -315,9 +333,9 @@ static int __init checksetup(char *line)
 
 /* this should be approx 2 Bo*oMips to start (note initial shift), and will
    still work even if initially too large, it will just take slightly longer */
-unsigned long loops_per_sec = (1<<12);
+unsigned long loops_per_jiffy = (1<<12);
 
-/* This is the number of bits of precision for the loops_per_second.  Each
+/* This is the number of bits of precision for the loops_per_jiffy.  Each
    bit takes on average 1.5/HZ seconds.  This (like the original) is a little
    better than 1% */
 #define LPS_PREC 8
@@ -327,42 +345,40 @@ void __init calibrate_delay(void)
 	unsigned long ticks, loopbit;
 	int lps_precision = LPS_PREC;
 
-	loops_per_sec = (1<<12);
+	loops_per_jiffy = (1<<12);
 
 	printk("Calibrating delay loop... ");
-	while (loops_per_sec <<= 1) {
+	while (loops_per_jiffy <<= 1) {
 		/* wait for "start of" clock tick */
 		ticks = jiffies;
 		while (ticks == jiffies)
 			/* nothing */;
 		/* Go .. */
 		ticks = jiffies;
-		__delay(loops_per_sec);
+		__delay(loops_per_jiffy);
 		ticks = jiffies - ticks;
 		if (ticks)
 			break;
 	}
 
-/* Do a binary approximation to get loops_per_second set to equal one clock
+/* Do a binary approximation to get loops_per_jiffy set to equal one clock
    (up to lps_precision bits) */
-	loops_per_sec >>= 1;
-	loopbit = loops_per_sec;
+	loops_per_jiffy >>= 1;
+	loopbit = loops_per_jiffy;
 	while ( lps_precision-- && (loopbit >>= 1) ) {
-		loops_per_sec |= loopbit;
+		loops_per_jiffy |= loopbit;
 		ticks = jiffies;
 		while (ticks == jiffies);
 		ticks = jiffies;
-		__delay(loops_per_sec);
+		__delay(loops_per_jiffy);
 		if (jiffies != ticks)	/* longer than 1 tick */
-			loops_per_sec &= ~loopbit;
+			loops_per_jiffy &= ~loopbit;
 	}
 
-/* finally, adjust loops per second in terms of seconds instead of clocks */	
-	loops_per_sec *= HZ;
 /* Round the value and print it */	
 	printk("%lu.%02lu BogoMIPS\n",
-		(loops_per_sec+2500)/500000,
-		((loops_per_sec+2500)/5000) % 100);
+		loops_per_jiffy/(500000/HZ),
+		(loops_per_jiffy/(5000/HZ)) % 100);
 }
 
 static int __init readonly(char *str)

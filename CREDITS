@@ -502,6 +502,12 @@ S: Las Cuevas 2385 - Bo Guemes
 S: Las Heras, Mendoza CP 5539
 S: Argentina
 
+N: Steven P. Cole
+E: scole@lanl.gov
+E: elenstev@mesatop.com
+D: Various build fixes and kernel documentation.
+S: Los Alamos, New Mexico
+
 N: Hamish Coleman
 E: hamish@zot.apana.org.au
 D: SEEQ8005 network driver

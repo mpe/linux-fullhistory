@@ -43,10 +43,6 @@
    Thu Sep 21 05:32:51 BRT 2000 0.0.5
    * got rid of attach_uart401 and attach_sbmpu
      Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-
-   Fri Nov 10 21:24:11 CET 2000 0.0.6
-   * added some __init and __initdata to entries in 724hwmcode.h
-     Bartlomiej Zolnierkiewicz <bkz@linux-ide.org>
  */
 
 #include <linux/module.h>
@@ -436,7 +432,7 @@ static int __init setupLegacyIO( struct pci_dev *pcidev )
 	printk(PFX "set DMA address at 0x%x\n",sb_data[cards].dma);
 #endif
 
-	v = 0x0000 | ((dma<<6)&0x03) | 0x003f;
+	v = 0x0000 | ((dma & 0x03) << 6) | 0x003f;
 	pci_write_config_word(pcidev, YMFSB_PCIR_LEGCTRL, v);
 #ifdef YMF_DEBUG
 	printk(PFX "LEGCTRL: 0x%x\n",v);
@@ -446,7 +442,9 @@ static int __init setupLegacyIO( struct pci_dev *pcidev )
 	case PCI_DEVICE_ID_YMF740:
 	case PCI_DEVICE_ID_YMF724F:
 	case PCI_DEVICE_ID_YMF740C:
-		v = 0x8800 | ((mpuio<<4)&0x03) | ((sbio<<2)&0x03) | (oplio&0x03);
+		v = 0x8800 | ((mpuio & 0x03) << 4)
+			   | ((sbio & 0x03) << 2)
+			   | (oplio & 0x03);
 		pci_write_config_word(pcidev, YMFSB_PCIR_ELEGCTRL, v);
 #ifdef YMF_DEBUG
 		printk(PFX "ELEGCTRL: 0x%x\n",v);
@@ -843,6 +841,7 @@ static void __exit cleanup_ymf7xxsb_module(void)
 	}
 
 	free_iomaps();
+	pci_unregister_driver(&ymf7xxsb_driver);
 
 }
 

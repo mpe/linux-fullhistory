@@ -73,6 +73,15 @@ static struct usb_busmap busmap;
 
 static struct usb_driver *usb_minors[16];
 
+/**
+ *	usb_register - register a USB driver
+ *	@new_driver: USB operations for the driver
+ *
+ *	Registers a USB driver with the USB core.  The list of unattached
+ *	interfaces will be rescanned whenever a new driver is added, allowing
+ *	the new driver to attach to any recognized devices.
+ *	Returns a negative error code on failure and 0 on success.
+ */
 int usb_register(struct usb_driver *new_driver)
 {
 	if (new_driver->fops != NULL) {
@@ -95,12 +104,14 @@ int usb_register(struct usb_driver *new_driver)
 	return 0;
 }
 
-/*
- * We go through all existing devices, and see if any of them would
- * be acceptable to the new driver.. This is done using a depth-first
- * search for devices without a registered driver already, then 
- * running 'probe' with each of the drivers registered on every one 
- * of these.
+/**
+ *	usb_scan_devices - scans all unclaimed USB interfaces
+ *
+ *	Goes through all unclaimed USB interfaces, and offers them to all
+ *	registered USB drivers through the 'probe' function.
+ *	This will automatically be called after usb_register is called.
+ *	It is called by some of the USB subsystems after one of their subdrivers
+ *	are registered.
  */
 void usb_scan_devices(void)
 {
@@ -152,8 +163,11 @@ static void usb_drivers_purge(struct usb_driver *driver,struct usb_device *dev)
 	}
 }
 
-/*
- * Unlink a driver from the driver list when it is unloaded
+/**
+ *	usb_deregister - unregister a USB driver
+ *	@driver: USB operations of the driver to unregister
+ *
+ *	Unlinks the specified driver from the internal USB driver list.
  */
 void usb_deregister(struct usb_driver *driver)
 {
@@ -329,8 +343,16 @@ void usb_release_bandwidth(struct usb_device *dev, struct urb *urb, int isoc)
 	urb->bandwidth = 0;
 }
 
-/*
- * New functions for (de)registering a controller
+/**
+ *	usb_alloc_bus - creates a new USB host controller structure
+ *	@op: pointer to a struct usb_operations that this bus structure should use
+ *
+ *	Creates a USB host controller bus structure with the specified 
+ *	usb_operations and initializes all the necessary internal objects.
+ *
+ *	If no memory is available, NULL is returned.
+ *
+ *	The caller should call usb_free_bus() when it is finished with the structure.
  */
 struct usb_bus *usb_alloc_bus(struct usb_operations *op)
 {
@@ -356,6 +378,11 @@ struct usb_bus *usb_alloc_bus(struct usb_operations *op)
 	return bus;
 }
 
+/**
+ *	usb_free_bus - frees the memory used by a bus structure
+ *	@bus: pointer to the bus to free
+ *
+ */
 void usb_free_bus(struct usb_bus *bus)
 {
 	if (!bus)
@@ -364,6 +391,11 @@ void usb_free_bus(struct usb_bus *bus)
 	kfree(bus);
 }
 
+/**
+ *	usb_register_bus - registers the USB host controller with the usb core
+ *	@bus: pointer to the bus to register
+ *
+ */
 void usb_register_bus(struct usb_bus *bus)
 {
 	int busnum;
@@ -875,6 +907,18 @@ void usb_inc_dev_use(struct usb_device *dev)
  * New USB Core Functions
  * -------------------------------------------------------------------------------------*/
 
+/**
+ *	usb_alloc_urb - creates a new urb for a USB driver to use
+ *	@iso_packets: number of iso packets for this urb
+ *
+ *	Creates an urb for the USB driver to use and returns a pointer to it.
+ *	If no memory is available, NULL is returned.
+ *
+ *	If the driver want to use this urb for interrupt, control, or bulk
+ *	endpoints, pass '0' as the number of iso packets.
+ *
+ *	The driver should call usb_free_urb() when it is finished with the urb.
+ */
 urb_t *usb_alloc_urb(int iso_packets)
 {
 	urb_t *urb;
@@ -893,7 +937,14 @@ urb_t *usb_alloc_urb(int iso_packets)
 	return urb;
 }
 
-/*-------------------------------------------------------------------*/
+/**
+ *	usb_free_urb - frees the memory used by a urb
+ *	@urb: pointer to the urb to free
+ *
+ *	If an urb is created with a call to usb_create_urb() it should be
+ *	cleaned up with a call to usb_free_urb() when the driver is finished
+ *	with it.
+ */
 void usb_free_urb(urb_t* urb)
 {
 	if (urb)
@@ -1010,12 +1061,27 @@ int usb_internal_control_msg(struct usb_device *usb_dev, unsigned int pipe,
 	
 }
 
-/*-------------------------------------------------------------------*/
-/* usb_control_msg() -  builds control urb, and waits for completion */
-/* Synchronous behavior - don't use this function  from within an    */
-/* interrupt context, (like a bottom half handler.)  In this case,   */
-/* use usb_submit_urb() directly instead.                            */
-
+/**
+ *	usb_control_msg - Builds a control urb, sends it off and waits for completion
+ *	@dev: pointer to the usb device to send the message to
+ *	@pipe: endpoint "pipe" to send the message to
+ *	@request: USB message request value
+ *	@requesttype: USB message request type value
+ *	@value: USB message value
+ *	@index: USB message index value
+ *	@data: pointer to the data to send
+ *	@size: length in bytes of the data to send
+ *	@timeout: time to wait for the message to complete before timing out (if 0 the wait is forever)
+ *
+ *	This function sends a simple control message to a specified endpoint
+ *	and waits for the message to complete, or timeout.
+ *	
+ *	If successful, it returns 0, othwise a negative error number.
+ *
+ *	Don't use this function from within an interrupt context, like a
+ *	bottom half handler.  If you need a asyncronous message, or need to send
+ *	a message from within interrupt context, use usb_submit_urb()
+ */
 int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype,
 			 __u16 value, __u16 index, void *data, __u16 size, int timeout)
 {
@@ -1040,12 +1106,27 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u
 	return ret;
 }
 
-/*-------------------------------------------------------------------*/
-/* usb_bulk_msg() Builds a bulk urb, and waits for completion.       */
-/* Synchronous behavior - don't use this function  from within an    */
-/* interrupt context, (like a bottom half handler.)  In this case,   */
-/* use usb_submit_urb() directly instead.                            */
 
+/**
+ *	usb_bulk_msg - Builds a bulk urb, sends it off and waits for completion
+ *	@usb_dev: pointer to the usb device to send the message to
+ *	@pipe: endpoint "pipe" to send the message to
+ *	@data: pointer to the data to send
+ *	@len: length in bytes of the data to send
+ *	@actual_length: pointer to a location to put the actual length transfered in bytes
+ *	@timeout: time to wait for the message to complete before timing out (if 0 the wait is forever)
+ *
+ *	This function sends a simple bulk message to a specified endpoint
+ *	and waits for the message to complete, or timeout.
+ *	
+ *	If successful, it returns 0, othwise a negative error number.
+ *	The number of actual bytes transferred will be plaed in the 
+ *	actual_timeout paramater.
+ *
+ *	Don't use this function from within an interrupt context, like a
+ *	bottom half handler.  If you need a asyncronous message, or need to
+ *	send a message from within interrupt context, use usb_submit_urb()
+ */
 int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, 
 			void *data, int len, int *actual_length, int timeout)
 {

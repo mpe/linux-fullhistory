@@ -74,6 +74,9 @@
 		
 		Tobias Ringström - Rx interrupt status checking suggestion
 
+		Andrew Morton - (v0.9.13): clear blocked signals, avoid
+		buffer overrun setting current->comm.
+
 	Submitting bug reports:
 
 		"rtl8139-diag -mmmaaavvveefN" output
@@ -147,7 +150,7 @@ an MMIO register read.
 #include <asm/io.h>
 
 
-#define RTL8139_VERSION "0.9.12"
+#define RTL8139_VERSION "0.9.13"
 #define MODNAME "8139too"
 #define RTL8139_DRIVER_NAME   MODNAME " Fast Ethernet driver " RTL8139_VERSION
 #define PFX MODNAME ": "
@@ -746,14 +749,6 @@ static int __devinit rtl8139_init_board (struct pci_dev *pdev,
 		/* XXX from becker driver. is this right?? */
 		RTL_W8 (Config1, 0);
 	}
-
-#ifndef USE_IO_OPS
-	/* sanity checks -- ensure PIO and MMIO registers agree */
-	assert (inb (pio_start+Config0) == readb (ioaddr+Config0));
-	assert (inb (pio_start+Config1) == readb (ioaddr+Config1));
-	assert (inb (pio_start+TxConfig) == readb (ioaddr+TxConfig));
-	assert (inb (pio_start+RxConfig) == readb (ioaddr+RxConfig));
-#endif /* !USE_IO_OPS */
 
 	/* make sure chip thinks PIO and MMIO are enabled */
 	tmp8 = RTL_R8 (Config1);
@@ -1460,7 +1455,7 @@ static inline void rtl8139_thread_iter (struct net_device *dev,
 	DPRINTK ("%s: Media selection tick, Link partner %4.4x.\n",
 		 dev->name, RTL_R16 (NWayLPAR));
 	DPRINTK ("%s:  Other registers are IntMask %4.4x IntStatus %4.4x"
-		 " RxStatus %4.4x.\n", dev->name,
+		 " RxStatus %4.4lx.\n", dev->name,
 		 RTL_R16 (IntrMask),
 		 RTL_R16 (IntrStatus),
 		 RTL_R32 (RxEarlyStatus));
@@ -1477,7 +1472,13 @@ static int rtl8139_thread (void *data)
 	unsigned long timeout;
 
 	daemonize ();
-	sprintf (current->comm, "k8139d-%s", dev->name);
+	spin_lock_irq(&current->sigmask_lock);
+	sigemptyset(&current->blocked);
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);
+
+	strncpy (current->comm, dev->name, sizeof(current->comm) - 1);
+	current->comm[sizeof(current->comm) - 1] = '\0';
 
 	while (1) {
 		timeout = next_tick;
@@ -2135,7 +2136,7 @@ static void rtl8139_set_rx_mode (struct net_device *dev)
 
 	DPRINTK ("ENTER\n");
 
-	DPRINTK ("%s:   rtl8139_set_rx_mode(%4.4x) done -- Rx config %8.8x.\n",
+	DPRINTK ("%s:   rtl8139_set_rx_mode(%4.4x) done -- Rx config %8.8lx.\n",
 			dev->name, dev->flags, RTL_R32 (RxConfig));
 
 	/* Note: do not reorder, GCC is clever about common statements. */

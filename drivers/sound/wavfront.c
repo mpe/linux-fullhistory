@@ -92,14 +92,14 @@
  
 #if defined(__alpha__)
 #ifdef CONFIG_SMP
-#define LOOPS_PER_SEC cpu_data[smp_processor_id()].loops_per_sec
+#define LOOPS_PER_TICK cpu_data[smp_processor_id()].loops_per_jiffy
 #else
-#define LOOPS_PER_SEC	loops_per_sec
+#define LOOPS_PER_TICK	loops_per_sec
 #endif
 #endif
 
 #if defined(__i386__)
-#define LOOPS_PER_SEC current_cpu_data.loops_per_sec
+#define LOOPS_PER_TICK current_cpu_data.loops_per_jiffy
 #endif
  
 #define _MIDI_SYNTH_C_
@@ -460,7 +460,7 @@ wavefront_wait (int mask)
 
 	if (short_loop_cnt == 0) {
 		short_loop_cnt = wait_usecs *
-			(LOOPS_PER_SEC / 1000000);
+			(LOOPS_PER_TICK / (1000000 / HZ));
 	}
 
 	/* Spin for a short period of time, because >99% of all

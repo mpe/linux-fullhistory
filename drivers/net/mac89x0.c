@@ -65,13 +65,7 @@ static char *version =
 
 /* Always include 'config.h' first in case the user wants to turn on
    or override something. */
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #define PRINTK(x) printk x
 
@@ -125,7 +119,9 @@ struct net_local {
 /* Index to functions, as function prototypes. */
 
 extern int mac89x0_probe(struct net_device *dev);
+#if 0
 extern void reset_chip(struct net_device *dev);
+#endif
 static int net_open(struct net_device *dev);
 static int	net_send_packet(struct sk_buff *skb, struct net_device *dev);
 static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
@@ -178,6 +174,8 @@ int __init mac89x0_probe(struct net_device *dev)
 	unsigned rev_type = 0;
 	unsigned long ioaddr;
 	unsigned short sig;
+
+	SET_MODULE_OWNER(dev);
 
 	if (once_is_enough)
 		return -ENODEV;
@@ -286,6 +284,7 @@ int __init mac89x0_probe(struct net_device *dev)
 	return 0;
 }
 
+#if 0
 /* This is useful for something, but I don't know what yet. */
 void __init reset_chip(struct net_device *dev)
 {
@@ -302,6 +301,7 @@ void __init reset_chip(struct net_device *dev)
 	while( (readreg(dev, PP_SelfST) & INIT_DONE) == 0 && jiffies - reset_start_time < 2)
 		;
 }
+#endif
 
 /* Open/initialize the board.  This is called (in the current kernel)
    sometime after booting when the 'ifconfig' program is run.
@@ -352,10 +352,7 @@ net_open(struct net_device *dev)
 
 	/* now that we've got our act together, enable everything */
 	writereg(dev, PP_BusCTL, readreg(dev, PP_BusCTL) | ENABLE_IRQ);
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-        MOD_INC_USE_COUNT;
+	netif_start_queue(dev);
 	return 0;
 }
 
@@ -545,13 +542,12 @@ net_close(struct net_device *dev)
 	writereg(dev, PP_BufCFG, 0);
 	writereg(dev, PP_BusCTL, 0);
 
-	dev->start = 0;
+	netif_stop_queue(dev);
 
 	free_irq(dev->irq, dev);
 
 	/* Update the statistics here. */
 
-        MOD_DEC_USE_COUNT;
 	return 0;
 
 }
@@ -615,14 +611,8 @@ static int set_mac_address(struct net_device *dev, void *addr)
 
 #ifdef MODULE
 
-static char namespace[16] = "";
-static struct net_device dev_cs89x0 = {
-        NULL,
-        0, 0, 0, 0,
-        0, 0,
-        0, 0, 0, NULL, NULL };
-
-static int debug=0;
+static struct net_device dev_cs89x0;
+static int debug;
 
 MODULE_PARM(debug, "i");
 
@@ -634,7 +624,6 @@ init_module(void)
 	struct net_local *lp;
 
 	net_debug = debug;
-        dev_cs89x0.name = namespace;
         dev_cs89x0.init = mac89x0_probe;
         dev_cs89x0.priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 	memset(dev_cs89x0.priv, 0, sizeof(struct net_local));

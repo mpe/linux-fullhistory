@@ -104,7 +104,7 @@ typedef struct idefloppy_packet_command_s {
 	byte *current_position;			/* Pointer into the above buffer */
 	void (*callback) (ide_drive_t *);	/* Called when this packet command is completed */
 	byte pc_buffer[IDEFLOPPY_PC_BUFFER_SIZE];	/* Temporary buffer */
-	unsigned int flags;			/* Status/Action bit flags */
+	unsigned long flags;			/* Status/Action bit flags: long for set_bit */
 } idefloppy_pc_t;
 
 /*

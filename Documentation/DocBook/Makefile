@@ -76,6 +76,7 @@ APISOURCES :=	$(TOPDIR)/drivers/media/video/videodev.c \
 		$(TOPDIR)/drivers/sound/sound_firmware.c \
 		$(TOPDIR)/drivers/net/wan/syncppp.c \
 		$(TOPDIR)/drivers/net/wan/z85230.c \
+		$(TOPDIR)/drivers/usb/usb.c \
 		$(TOPDIR)/fs/locks.c \
 		$(TOPDIR)/fs/devfs/base.c \
 		$(TOPDIR)/kernel/pm.c \

@@ -113,8 +113,8 @@ __setup("console=", console_setup);
  * 	0 -- Close the log.  Currently a NOP.
  * 	1 -- Open the log. Currently a NOP.
  * 	2 -- Read from the log.
- * 	3 -- Read up to the last 4k of messages in the ring buffer.
- * 	4 -- Read and clear last 4k of messages in the ring buffer
+ * 	3 -- Read all messages remaining in the ring buffer.
+ * 	4 -- Read and clear all messages remaining in the ring buffer
  * 	5 -- Clear ring buffer.
  * 	6 -- Disable printk's to console
  * 	7 -- Enable printk's to console

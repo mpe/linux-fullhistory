@@ -1636,7 +1636,7 @@ int __init pc_init(void)
 		memory.
 	------------------------------------------------------------------*/
 
-	ulong flags, save_loops_per_sec; 
+	ulong flags;
 	int crd;
 	struct board_info *bd;
 	unsigned char board_id = 0;
@@ -1777,13 +1777,6 @@ int __init pc_init(void)
 	pc_info.subtype = SERIAL_TYPE_INFO;
 
 
-	/* --------------------------------------------------------------------- 
-	   loops_per_sec hasn't been set at this point :-(, so fake it out... 
-	   I set it, so that I can use the __delay() function.
-	------------------------------------------------------------------------ */
-	save_loops_per_sec = loops_per_sec;
-	loops_per_sec = 13L * 500000L;
-
 	save_flags(flags);
 	cli();
 
@@ -1914,8 +1907,6 @@ int __init pc_init(void)
 
 	if (tty_register_driver(&pc_info))
 		panic("Couldn't register Digi PC/ info ");
-
-	loops_per_sec = save_loops_per_sec;  /* reset it to what it should be */
 
 	/* -------------------------------------------------------------------
 	   Start up the poller to check for events on all enabled boards

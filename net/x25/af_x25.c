@@ -29,7 +29,6 @@
  */
 
 #include <linux/config.h>
-#if defined(CONFIG_X25) || defined(CONFIG_X25_MODULE)
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -65,7 +64,7 @@ int sysctl_x25_reset_request_timeout   = X25_DEFAULT_T22;
 int sysctl_x25_clear_request_timeout   = X25_DEFAULT_T23;
 int sysctl_x25_ack_holdback_timeout    = X25_DEFAULT_T2;
 
-static struct sock *volatile x25_list = NULL;
+static struct sock *volatile x25_list /* = NULL initially */;
 
 static struct proto_ops x25_proto_ops;
 
@@ -1329,10 +1328,8 @@ static int __init x25_init(void)
 	x25_register_sysctl();
 #endif
 
-#ifdef CONFIG_PROC_FS
 	proc_net_create("x25", 0, x25_get_info);
 	proc_net_create("x25_routes", 0, x25_routes_get_info);
-#endif	
 
 #ifdef MODULE
 	/*
@@ -1355,7 +1352,6 @@ module_init(x25_init);
 
 
 
-#ifdef MODULE
 EXPORT_NO_SYMBOLS;
 
 MODULE_AUTHOR("Jonathan Naylor <g4klx@g4klx.demon.co.uk>");
@@ -1364,10 +1360,8 @@ MODULE_DESCRIPTION("The X.25 Packet Layer network layer protocol");
 static void __exit x25_exit(void)
 {
 
-#ifdef CONFIG_PROC_FS
 	proc_net_remove("x25");
 	proc_net_remove("x25_routes");
-#endif
 
 	x25_link_free();
 	x25_route_free();
@@ -1383,6 +1377,4 @@ static void __exit x25_exit(void)
 	sock_unregister(AF_X25);
 }
 module_exit(x25_exit);
-#endif
 
-#endif

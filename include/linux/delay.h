@@ -4,10 +4,10 @@
 /*
  * Copyright (C) 1993 Linus Torvalds
  *
- * Delay routines, using a pre-computed "loops_per_second" value.
+ * Delay routines, using a pre-computed "loops_per_jiffy" value.
  */
 
-extern unsigned long loops_per_sec;
+extern unsigned long loops_per_jiffy;
 
 #include <asm/delay.h>
 

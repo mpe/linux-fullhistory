@@ -11,6 +11,9 @@
 	Limit the concurrent number of kmod modprobes to catch loops from
 	"modprobe needs a service that is in a module".
 	Keith Owens <kaos@ocs.com.au> December 1999
+
+	Unblock all signals when we exec a usermode process.
+	Shuu Yamaguchi <shuu@wondernetworkresources.com> December 2000
 */
 
 #define __KERNEL_SYSCALLS__
@@ -83,9 +86,10 @@ use_init_fs_context(void)
 int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 {
 	int i;
+	struct task_struct *curtask = current;
 
-	current->session = 1;
-	current->pgrp = 1;
+	curtask->session = 1;
+	curtask->pgrp = 1;
 
 	use_init_fs_context();
 
@@ -95,19 +99,21 @@ int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 	   as the super user right after the execve fails if you time
 	   the signal just right.
 	*/
-	spin_lock_irq(&current->sigmask_lock);
-	flush_signals(current);
-	flush_signal_handlers(current);
-	spin_unlock_irq(&current->sigmask_lock);
+	spin_lock_irq(&curtask->sigmask_lock);
+	sigemptyset(&curtask->blocked);
+	flush_signals(curtask);
+	flush_signal_handlers(curtask);
+	recalc_sigpending(curtask);
+	spin_unlock_irq(&curtask->sigmask_lock);
 
-	for (i = 0; i < current->files->max_fds; i++ ) {
-		if (current->files->fd[i]) close(i);
+	for (i = 0; i < curtask->files->max_fds; i++ ) {
+		if (curtask->files->fd[i]) close(i);
 	}
 
 	/* Drop the "current user" thing */
 	{
-		struct user_struct *user = current->user;
-		current->user = INIT_USER;
+		struct user_struct *user = curtask->user;
+		curtask->user = INIT_USER;
 		atomic_inc(&INIT_USER->__count);
 		atomic_inc(&INIT_USER->processes);
 		atomic_dec(&user->processes);
@@ -115,9 +121,9 @@ int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 	}
 
 	/* Give kmod all effective privileges.. */
-	current->euid = current->fsuid = 0;
-	current->egid = current->fsgid = 0;
-	cap_set_full(current->cap_effective);
+	curtask->euid = curtask->fsuid = 0;
+	curtask->egid = curtask->fsgid = 0;
+	cap_set_full(curtask->cap_effective);
 
 	/* Allow execve args to be in kernel space. */
 	set_fs(KERNEL_DS);

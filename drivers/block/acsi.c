@@ -404,7 +404,7 @@ extern int slm_init( void );
  * 6), the timeout is based on the 'jiffies' variable to provide exact
  * timeouts for device probing etc.
  * If interrupts are disabled, the number of tries is based on the
- * 'loops_per_sec' variable. A rough estimation is sufficient here...
+ * 'loops_per_jiffy' variable. A rough estimation is sufficient here...
  */
 
 #define INT_LEVEL													\
@@ -422,7 +422,7 @@ int acsi_wait_for_IRQ( unsigned timeout )
 			if (!(mfp.par_dt_reg & 0x20)) return( 1 );
 	}
 	else {
-		long tries = loops_per_sec / HZ / 8 * timeout;
+		long tries = loops_per_jiffy / 8 * timeout;
 		while( --tries >= 0 )
 			if (!(mfp.par_dt_reg & 0x20)) return( 1 );
 	}		
@@ -439,7 +439,7 @@ int acsi_wait_for_noIRQ( unsigned timeout )
 			if (mfp.par_dt_reg & 0x20) return( 1 );
 	}
 	else {
-		long tries = loops_per_sec * timeout / HZ / 8;
+		long tries = loops_per_jiffy * timeout / 8;
 		while( tries-- >= 0 )
 			if (mfp.par_dt_reg & 0x20) return( 1 );
 	}		

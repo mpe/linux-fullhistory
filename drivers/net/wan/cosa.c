@@ -165,8 +165,8 @@ struct cosa_data {
 	int nchannels;			/* # of channels on this card */
 	int driver_status;		/* For communicating with firware */
 	int firmware_status;		/* Downloaded, reseted, etc. */
-	int rxbitmap, txbitmap;		/* Bitmap of channels who are willing to send/receive data */
-	int rxtx;			/* RX or TX in progress? */
+	long int rxbitmap, txbitmap;	/* Bitmap of channels who are willing to send/receive data */
+	long int rxtx;			/* RX or TX in progress? */
 	int enabled;
 	int usage;				/* usage count */
 	int txchan, txsize, rxsize;

@@ -9,6 +9,7 @@ The tmscsim driver
 6. Potential improvements
 7. Bug reports, debugging and updates
 8. Acknowledgements
+9. Copyright
 
 
 1. Purpose and history
@@ -25,7 +26,7 @@ It has originally written by C.L. Huang from the Tekram corp. to support the
 Tekram DC390(T) adapter. This is where the name comes from: tm = Tekram
 scsi = SCSI driver, m = AMD (?) as opposed to w for the DC390W/U/F
 (NCR53c8X5, X=2/7) driver. Yes, there was also a driver for the latter,
-tmscsimw, which supported DC390W/U/F adapters. It's not maintained any more,
+tmscsiw, which supported DC390W/U/F adapters. It's not maintained any more,
 as the ncr53c8xx is perfectly supporting these adpaters since some time.
 
 The driver first appeared in April 1996, exclusively supported the DC390 
@@ -56,10 +57,13 @@ linux/drivers/scsi, you basically have to do nothing special to use this
 driver. Of course you have to choose to compile SCSI support and DC390(T)
 support into your kernel or as module when configuring your kernel for
 compiling.
+NEW: You may as well compile this module outside your kernel, using the
+supplied Makefile.
 
  If you got an old kernel (pre 2.1.127, pre 2.0.37p1) with an old version of
  this driver: Get dc390-21125-20b.diff.gz or dc390-2036p21-20b1.diff.gz from
- my website and apply the patch. 
+ my web page and apply the patch. Apply further patches to upgrade to the 
+ latest version of the driver.
 
  If you want to do it manually, you should copy the files (dc390.h,
  tmscsim.h, tmscsim.c, scsiiom.c and README.tmscsim) from this directory to
@@ -91,6 +95,8 @@ So take at least the following measures:
   tune2fs -e remount-ro /dev/sd??
 * have copies of your SCSI disk's partition tables on some safe location:
   dd if=/dev/sda of=/mnt/floppy/sda bs=512 count=1
+  or just print it with:
+  fdisk -l | lpr
 * make sure you are able to boot Linux (e.g. from floppy disk using InitRD)
   if your SCSI disk gets corrupted. You can use 
   ftp://student.physik.uni-dortmund.de/pub/linux/kernel/bootdisk.gz
@@ -102,7 +108,7 @@ MHz PCI bus works for me, though, but I don't recommend using higher clocks
 than the 33.33 MHz being in the PCI spec.
 
 If you want to share the IRQ with another device and the driver refuses to
-do, you might succeed with changing the DC390_IRQ type in tmscsim.c to 
+do so, you might succeed with changing the DC390_IRQ type in tmscsim.c to 
 SA_SHIRQ | SA_INTERRUPT.
 
 
@@ -121,11 +127,12 @@ SA_SHIRQ | SA_INTERRUPT.
  * Dynamically configurable by writing to /proc/scsi/tmscsim/?
  * Dynamic allocation of resources
  * SMP support: Locking on io_request lock (Linux 2.1/2.2) or adapter 
-    specific locks (Linux 2.3)
+    specific locks (Linux 2.5?)
  * Uniform source code for Linux-2.x.y
  * Support for dyn. addition/removal of devices via add/remove-single-device
-   (Try: echo "scsi add-single-device H C I L" >/proc/scsi/scsi 
-    H = Host, C = Channel, I = SCSI ID, L = SCSI LUN.) Use with care!
+   (Try: echo "scsi add-single-device C B T U" >/proc/scsi/scsi 
+    C = Controller, B = Bus, T = Target SCSI ID, U = Unit SCSI LUN.) 
+    Use with care!
  * Try to use the partition table for the determination of the mapping
 
 
@@ -139,20 +146,21 @@ You will see some info regarding the adapter and, at the end, a listing of
 the attached devices and their settings.
 
 Here's an example:
-garloff@kg1:/home/garloff > cat /proc/scsi/tmscsim/0
-Tekram DC390/AM53C974 PCI SCSI Host Adapter, Driver Version 1.20s, 1998/08/20
-SCSI Host Nr 0, AM53C974 Adapter Nr 0
-IOPortBase 0x6200, IRQLevel 0x09
-MaxID 7, MaxLUN 8, AdapterID 7, SelTimeout 250 ms
-TagMaxNum 16, Status 0, ACBFlag 0, GlitchEater 24 ns
-Statistics: Nr of Cmnds 39563, Cmnds not sent directly 0, Out of SRB conds 0
-            Nr of lost arbitrations 17
+garloff@kurt:/home/garloff > cat /proc/scsi/tmscsim/0
+Tekram DC390/AM53C974 PCI SCSI Host Adapter, Driver Version 2.0e7 2000-11-28
+SCSI Host Nr 1, AM53C974 Adapter Nr 0
+IOPortBase 0xb000, IRQ 10
+MaxID 8, MaxLUN 8, AdapterID 6, SelTimeout 250 ms, DelayReset 1 s
+TagMaxNum 16, Status 0x00, ACBFlag 0x00, GlitchEater 24 ns
+Statistics: Cmnds 1470165, Cmnds not sent directly 0, Out of SRB conds 0
+            Lost arbitrations 587,  Sel. connected 0, Connected: No
 Nr of attached devices: 4, Nr of DCBs: 4
-Idx ID LUN Prty Sync DsCn SndS TagQ STOP NegoPeriod SyncSpeed SyncOffs
-00  00  00  Yes  Yes  Yes  Yes  Yes  No    100 ns    10.0 M      15
-01  01  00  Yes  Yes  Yes  Yes  Yes  No    100 ns    10.0 M      15
-02  03  00  Yes  Yes  Yes  Yes  No   No    100 ns    10.0 M      15
-03  05  00  Yes  No   Yes  Yes  No   No   (200 ns)
+Map of attached LUNs: 01 00 00 03 01 00 00 00
+Idx ID LUN Prty Sync DsCn SndS TagQ NegoPeriod SyncSpeed SyncOffs MaxCmd
+00  00  00  Yes  Yes  Yes  Yes  Yes   100 ns    10.0 M      15      16
+01  03  00  Yes  Yes  Yes  Yes  No    100 ns    10.0 M      15      01
+02  03  01  Yes  Yes  Yes  Yes  No    100 ns    10.0 M      15      01
+03  04  00  Yes  Yes  Yes  Yes  No    100 ns    10.0 M      15      01
 
 Note that the settings MaxID and MaxLUN are not zero- but one-based, which
 means that a setting MaxLUN=4, will result in the support of LUNs 0..3. This
@@ -178,9 +186,8 @@ SyncOffs is the offset used for synchronous negotiations; max. is 15.
 The last values are only shown, if Sync is enabled. (NegoPeriod is still
 displayed in brackets to show the values which will be used after enabling
 Sync.)
-The STOP parameter is for testing/debugging purposes only and should bet set
-to No. Please don't fiddle with it, unless you want to get rid of the
-contents of your disk.
+MaxCmd ist the number of commands (=tags) which can be processed at the same
+time by the device.
 
 If you want to change a setting, you can do that by writing to
 /proc/scsi/tmscsim/?. Basically you have to imitate the output of driver.
@@ -196,8 +203,8 @@ There are three kinds of changes:
      echo "MaxLUN=8 seltimeout 200" >/proc/scsi/tmscsim/0
 
     Note that you can only change MaxID, MaxLUN, AdapterID, SelTimeOut,
-    TagMaxNum, ACBFlag and GlitchEater. Don't change ACBFlag unless you
-    want to see what happens, if the driver hangs.
+    TagMaxNum, ACBFlag, GlitchEater and DelayReset. Don't change ACBFlag
+    unless you want to see what happens, if the driver hangs.
 
 (2) Change device settings: You write a config line to the driver. The Nr
     must match the ID and LUN given. If you give "-" as parameter, it is
@@ -207,8 +214,8 @@ There are three kinds of changes:
     an INQUIRY on the device if necessary to check if it is capable to operate
     with the given settings (Sync, TagQ).
     Examples:
-     echo "0 0 0 y y y - y - 10" >/proc/scsi/tmscsim/0
-     echo "3 5 0 y n y" >/proc/scsi/tmscsim/0
+     echo "0 0 0 y y y - y - 10 " >/proc/scsi/tmscsim/0
+     echo "3 5 0 y n y " >/proc/scsi/tmscsim/0
 
     To give a short explanation of the first example: 
     The first three numbers, "0 0 0" (Device index 0, SCSI ID 0, SCSI LUN 0),
@@ -223,22 +230,26 @@ There are three kinds of changes:
     discussed above. The values used in this example will result in maximum
     performance.
 
-(3) Special commands: You can force a SCSI bus reset, an INQUIRY command and
-    the removal of a device's DCB.
+(3) Special commands: You can force a SCSI bus reset, an INQUIRY command, the
+    removal or the addition of a device's DCB and a SCSI register dump.
     This is only used for debugging when you meet problems. The parameter of
-    the INQUIRY and remove command is the device index as shown by the
+    the INQUIRY and REMOVE commands is the device index as shown by the
     output of /proc/scsi/tmscsim/? in the device listing in the first column
-    (Idx).
+    (Idx). ADD takes the SCSI ID and LUN.
     Examples:
      echo "reset" >/proc/scsi/tmscsim/0
      echo "inquiry 1" >/proc/scsi/tmscsim/0
      echo "remove 2" >/proc/scsi/tmscsim/1
+     echo "add 2 3" >/proc/scsi/tmscsim/?
+     echo "dump" >/proc/scsi/tmscsim/0
 
-    Note that you will meet problems when you remove a device's DCB with the
+    Note that you will meet problems when you REMOVE a device's DCB with the
     remove command if it contains partitions which are mounted. Only use it
     after unmounting its partitions, telling the SCSI mid-level code to
     remove it (scsi remove-single-device) and you really need a few bytes of
     memory.
+    The ADD command allows you to configure a device before you tell the
+    mid-level code to try detection.
 
 
 I'd suggest reviewing the output of /proc/scsi/tmscsim/? after changing
@@ -247,18 +258,20 @@ settings to see if everything changed as requested.
 
 5. Configuration via boot/module parameters
 -------------------------------------------
-With the DC390, the driver reads its EEPROM settings and IGNORES boot / 
-module parameters. If you want to override the EEPROM settings of a DC390, 
-you have to use the /proc/scsi/tmscsim/? interface described in the above
-chapter.
-
-However, if you do have another AM53C974 based adapter you might want to
-adjust some settings before you are able to write to the /proc/scsi/tmscsim/?
-pseudo-file, e.g. if you want to use another adapter ID than 7. (Note that
-the log message "DC390: No EEPROM found!" is normal without a DC390.)
+With the DC390, the driver reads its EEPROM settings and tries to use them.
+But you may want to override the settings prior to being able to change the
+driver configuration via /proc/scsi/tmscsim/?.
+If you do have another AM53C974 based adapter, that's even the only
+possibility to adjust settings before you are able to write to the
+/proc/scsi/tmscsim/? pseudo-file, e.g. if you want to use another 
+adapter ID than 7.  
+(BTW, the log message "DC390: No EEPROM found!" is normal without a DC390.)
 For this purpose, you can pass options to the driver before it is initialised
 by using kernel or module parameters. See lilo(8) or modprobe(1) manual
 pages on how to pass params to the kernel or a module.
+[NOTE: Formerly, it was not possible to override the EEPROM supplied
+ settings of the DC390 with cmd line parameters. This has changed since
+ 2.0e7]
 
 The syntax of the params is much shorter than the syntax of the /proc/...
 interface. This makes it a little bit more difficult to use. However, long
@@ -269,7 +282,7 @@ As the support for non-DC390 adapters works by simulating the values of the
 DC390 EEPROM, the settings are given in a DC390 BIOS' way.
 
 Here's the syntax:
-tmscsim=AdaptID,SpdIdx,DevMode,AdaptMode,TaggedCmnds
+tmscsim=AdaptID,SpdIdx,DevMode,AdaptMode,TaggedCmnds,DelayReset
 
 Each of the parameters is a number, containing the described information:
 
@@ -278,7 +291,7 @@ Each of the parameters is a number, containing the described information:
 
 * SpdIdx: The index of the maximum speed as in the DC390 BIOS. The values
   0..7 mean 10, 8.0, 6.7, 5.7, 5.0, 4.0, 3.1 and 2 MHz resp. Default is
-  1 (8.0 MHz).
+  0 (10.0 MHz).
 
 * DevMode is a bit mapped value describing the per-device features. It
   applies to all devices. (Sync, Disc and TagQ will only apply, if the
@@ -289,7 +302,7 @@ Each of the parameters is a number, containing the described information:
    *1	 0x02	    2	  Synchronous Negotiation
    *2	 0x04	    4	  Disconnection
    *3	 0x08	    8	  Send Start command on startup. (Not used)
-   *4	 0x10	   16	  Tagged Queueing
+   *4	 0x10	   16	  Tagged Command Queueing
 
   As usual, the desired value is obtained by adding the wanted values. If
   you want to enable all values, e.g., you would use 31(0x1f). Default is 31.
@@ -315,18 +328,23 @@ Each of the parameters is a number, containing the described information:
     *3		16
      4		32
 
+* DelayReset is the time in seconds (minus 0.5s), the adapter waits, after a
+  bus reset. Default is 1 (corresp. to 1.5s).
+
 Example:
  modprobe tmscsim tmscsim=6,2,31
 would set the adapter ID to 6, max. speed to 6.7 MHz, enable all device
-features and leave the adapter features and the number of Tagged Commands 
-to the defaults.
+features and leave the adapter features, the number of Tagged Commands
+and the Delay after a reset to the defaults.
 
-As you can see, you don't need to specify all of the five params.
+As you can see, you don't need to specify all of the six params.
+If you want values to be ignored (i.e. the EEprom settings or the defaults
+will be used), you may pass -2 (not 0!) at the corresponding position.
 
-The defaults (7,1,31,15,3) are aggressive to allow good performance. You can
-use tmscsim=7,0,31,63,4 for maximum performance, if your SCSI chain is
-perfect. If you meet problems, you can use tmscsim=-1 which is a shortcut
-for tmscsim=7,4,9,15,2. 
+The defaults (7,0,31,15,3,1) are aggressive to allow good performance. You
+can use tmscsim=7,0,31,63,4,0 for maximum performance, if your SCSI chain
+allows it. If you meet problems, you can use tmscsim=-1 which is a shortcut
+for tmscsim=7,4,9,15,2,10.
 
 
 6. Potential improvements
@@ -334,42 +352,47 @@ for tmscsim=7,4,9,15,2.
 Most of the intended work on the driver has been done. Here are a few ideas
 to further improve its usability:
 
+* Cleanly separate per-Target and per-LUN properties (DCB)
 * More intelligent abort() routine
-* Implement new_eh code (Linux-2.1+)
-* Have the mid-level code (and not the driver) handle more of the various
-  conditions.
-* Rework command queueing in the driver
+* Use new_eh code (Linux-2.1+)
+* Have the mid-level (ML) code (and not the driver) handle more of the
+  various conditions.
+* Command queueing in the driver: Eliminate Query list and use ML instead.
 * More user friendly boot/module param syntax
 
 Further investigation on these problems:
 
 * Driver hangs with sync readcdda (xcdroast) (most probably VIA PCI error)
 
-Known problems:
+Known problems: 
+Please see http://www.garloff.de/kurt/linux/dc390/problems.html
 
-* There was a report that with a certain Scanner, the last SCSI command
-  won't be finished correctly. This might be a command queueing bug or a bug
-  in SCSI implementation of the scanner. Issueing another command to the
-  scanner seems to help. (Try echo "INQUIRY x" >/proc/scsi/tmscsim/?, where
-  x is the index (not the SCSI ID!) of the scanner. See 4.(3).)
+* Changing the parameters of multi-lun by the tmscsim/? interface will
+  cause problems, cause these settings are mostly per Target and not per LUN
+  and should be updated accordingly. To be fixed for 2.0d24.
+* CDRs (eg Yam CRW4416) not recognized, because some buggy devices don't 
+  recover from a SCSI reset in time. Use a higher delay or don't issue
+  a SCSI bus reset on driver initialization. See problems page.
+  For the CRW4416S, this seems to be solved with firmware 1.0g (reported by 
+  Jean-Yves Barbier).
+* TEAC CD-532S not being recognized. (Works with 1.11).
+* Scanners (eg. Astra UMAX 1220S) don't work: Disable Sync Negotiation.
+  If this does not help, try echo "INQUIRY t" >/proc/scsi/tmscsim/? (t
+  replaced by the dev index of your scanner). You may try to reset your SCSI
+  bus afterwards (echo "RESET" >/proc/scsi/tmscsim/?).
+  The problem seems to be solved as of 2.0d18, thanks to Andreas Rick.
 * If there is a valid partition table, the driver will use it for determing
-  the mapping. Other operating systems may not like this mapping, though
+  the mapping. If there's none, a reasonable mapping (Symbios-like) will be
+  assumed. Other operating systems may not like this mapping, though
   it's consistent with the BIOS' behaviour. Old DC390 drivers ignored the
   partition table and used a H/S = 64/32 or 255/63 translation. So if you
   want to be compatible to those, use this old mapping when creating
-  partition tables.
-* In some situations, the driver will get stuck in an abort loop. Please
-  disable DsCn, if you meet this problem. Please contact me for further
-  debugging.
-* 2.1.115+: Linux misses locks in sr_ioctl.c and scsi_ioctl.c
-  There used to be a patch included here, which partially solved the
-  problem. I suggest you contact Chiaki Ishikawa <ishikawa@yk.rim.or.jp>, 
-  Richard Waltham <dormouse@farsrobt.demon.co.uk> or Doug Ledford
-  <dledford@dialnet.net>, if you want to help further debugging it.
-* 2.0.35: CD changers (e.g. NAKAMICHI MBR-7.{0,2}) have problems because
-  the mid-level code doesn't handle BLIST_SINGLELUN correctly. There used
-  to be a patch included here to fix this, but I was told that it is fixed
-  in 2.0.36.
+  partition tables. Even worse, on bootup the DC390 might complain if other
+  mappings are found, so auto rebooting may fail.
+* In some situations, the driver will get stuck in an abort loop. This is a
+  bad interaction between the Mid-Layer of Linux' SCSI code and the driver.
+  Try to disable DsCn, if you meet this problem. Please contact me for
+  further debugging.
 
 
 7. Bug reports, debugging and updates
@@ -394,25 +417,33 @@ having your box spending most of its time doing the logging.
 
 The latest version of the driver can be found at:
  http://www.garloff.de/kurt/linux/dc390/
-and
- ftp://student.physik.uni-dortmund.de/pub/linux/kernel/dc390/
-(The latter might shut down some day.)
+ ftp://ftp.suse.com/pub/people/garloff/linux/dc390/
 
 
 8. Acknowledgements
 -------------------
-Thanks to Linus Torvalds, Alan Cox, David Miller, Rik v. Riel, the FSF
-people, the XFree86 team and all the others for the wonderful OS and
-software. 
+Thanks to Linus Torvalds, Alan Cox, the FSF people, the XFree86 team and 
+all the others for the wonderful OS and software.
 Thanks to C.L. Huang and Philip Giang (Tekram) for the initial driver
 release and support.
-Thanks to Doug Ledford, Gerard Roudier for support with SCSI coding.
+Thanks to Doug Ledford, Gérard Roudier for support with SCSI coding.
 Thanks to a lot of people (espec. Chiaki Ishikawa, Andreas Haumer, Hubert 
 Tonneau) for intensively testing the driver (and even risking data loss
-doing this during early revisions). 
+doing this during early revisions).
+Recently, SuSE GmbH, Nuernberg, FRG, has been paying me for the driver
+development and maintenance. Special thanks!
 
+
+9. Copyright
+------------
+ This driver is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by   
+ the Free Software Foundation; version 2 of the License.
+ If you want to use any later version of the GNU GPL, you will probably
+ be allowed to, but you have to ask me and Tekram <erich@tekram.com.tw>
+ before.
 
 -------------------------------------------------------------------------
 Written by Kurt Garloff <kurt@garloff.de> 1998/06/11
-Last updated 1998/12/25, driver revision 2.0d
-$Id: README.tmscsim,v 2.9 1998/12/25 18:04:20 garloff Exp $
+Last updated 2000/11/28, driver revision 2.0e7
+$Id: README.tmscsim,v 2.25.2.7 2000/12/20 01:07:12 garloff Exp $

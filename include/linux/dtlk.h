@@ -27,7 +27,7 @@
 
 #define DTLK_CLEAR 0x18		/* stops speech */
 
-#define DTLK_MAX_RETRIES (loops_per_sec/10000)
+#define DTLK_MAX_RETRIES (loops_per_jiffy/(10000/HZ))
 
 	/* TTS Port Status Flags */
 #define TTS_READABLE     0x80	/* mask for bit which is nonzero if a

@@ -10,10 +10,10 @@
   General Public License. Originally written by Martin Kolinek, December 1995.
          Officially maintained by Michael Lang since January 1999.
 	   
- 	                       Version 3.2
+ 	                       Version 4.0
 	
 	
-   Last update: 29 July 2000
+   Last update: 28 December 2000
 
 
    Authors of this Driver
@@ -196,7 +196,7 @@
    ldn=15 is reserved for the subsystem itself. Wide adapters may have 
    to check up to 15 * 8 = 120 pun/lun combinations.
    
-   2.3 SCSI-Device Recognition and dynamical ldn Assignment
+   2.3 SCSI-Device Recognition and Dynamical ldn Assignment
    --------------------------------------------------------
    One consequence of information hiding is that the real (pun,lun)    
    numbers are also hidden. The two possibilities to get around this problem
@@ -882,15 +882,39 @@
    1) Submission of this driver for kernel 2.4test-XX and 2.2.17.
    - Michael Lang
    
+   December 28, 2000 (v3.2d / v4.0)
+   1) The interrupt handler had some wrong statement to wait for. This
+      was done due to experimental reasons during 3.2 development but it
+      has shown that this is not stable enough. Going back to wait for the
+      adapter to be not busy is best.
+   2) Inquiry requests can be shorter than 255 bytes of return buffer. Due
+      to a bug in the ibmmca_queuecommand routine, this buffer was forced
+      to 255 at minimum. If the memory address, this return buffer is pointing
+      does not offer more space, invalid memory accesses destabilized the
+      kernel.
+   3) version 4.0 is only valid for kernel 2.4.0 or later. This is necessary
+      to remove old kernel version dependant waste from the driver. 3.2d is
+      only distributed with older kernels but keeps compatibility with older
+      kernel versions.
+   4) The commandline argument 'bypass' and all its functionality got removed
+      in version 4.0. This was never really necessary and is kept in 3.2X for
+      debugging reasons.
+   5) Dynamical reassignment of ldns was again verified and should work now.
+   6) All commands that get sent to the SCSI adapter were verified and
+      completed in such a way, that they are now completely conform to the
+      demands in the technical description of IBM. Main candidates were the
+      DEVICE_INQUIRY, REQUEST_SENSE and DEVICE_CAPACITY commands. They must
+      be tranferred by bypassing the internal command buffer of the adapter
+      or else the response is a random result.
+   7) v3.2d is still hold back for some days for testing, while 4.0 is 
+      released.
+   - Michael Lang
+
    4 To do
    -------
         - IBM SCSI-2 F/W external SCSI bus support in seperate mode.
 	- It seems that the handling of bad disks is really bad -
 	  non-existent, in fact.
-        - More testing of the full driver-controlled dynamical ldn 
-          (re)mapping for up to 56 SCSI-devices. I guess, it won't work
-	  at the moment, but nobody ever really tried it.
-        - Abort and Reset functions still slightly buggy.
 
    5 Users' Manual
    ---------------
@@ -925,7 +949,7 @@
 		                6543210A
 				
 		    where the numbers 0 to 6 light up at the shown position,
-		    when the SCSI-device is accessed. A shows again the SCSI
+		    when the SCSI-device is accessed. 'A' shows again the SCSI
 		    hostindex. If display nor adisplay is set, the internal
 		    PS/2 harddisk LED is used for media-activities. So, if
 		    you really do not have a system with a LED-display, you
@@ -945,7 +969,12 @@
 		    activity indicator, which means, that you must use the
 		    alphanumeric LED display if you want to monitor SCSI-
 		    activity.
-	 bypass     This commandline parameter forces the driver never to use
+	 bypass     This is obsolete from driver version 4.0, as the adapters
+	            got that far understood, that the selection between 
+		    integrated and bypassed commands should now work completely
+		    correct! For historical reasons, the old description is
+		    kept here:
+	            This commandline parameter forces the driver never to use
 	            SCSI-subsystems' integrated SCSI-command set. Except of
 		    the immediate assign, which is of vital importance for
 		    every IBM SCSI-subsystem to set its ldns right. Instead,
@@ -997,15 +1026,19 @@
 		  commandN+1 = adapter PUN
 		  
    e.g. ibmmcascsi=0x3540,7 will force the driver to detect a SCSI-subsystem 
-   at I/O-address 0x3540 with adapter PUN 7.
+   at I/O-address 0x3540 with adapter PUN 7. Please only use this method, if
+   the driver does really not recognize your SCSI-adapter! With driver version
+   3.2, this recognition of various adapters was hugely improved and you
+   should try first to remove your commandline arguments of such type with a 
+   newer driver. I bet, it will be recognized correctly. Even multiple and 
+   different types of IBM SCSI-adapters should be recognized correctly, too.
    
    Examples:
    
-        ibmmcascsi=adisplay,bypass
+        ibmmcascsi=adisplay
 	
-   This will use the advanced display mode for the model 95 LED display and
-   every SCSI-command passed to an attached device will get bypassed in order
-   not to use any of the subsystem built-in commands.
+   This will use the advanced display mode for the model 95 LED alphanumeric
+   display.
    
         ibmmcascsi=display,0x3558,7
 	
@@ -1127,7 +1160,21 @@
 	everything should be fine. This is necessary even if one assumes,
 	that some 80486 system should be downward compatible to 80386
 	software.
-	
+     Q: Some commands hang and interrupts block the machine. After some
+        timeout, the syslog reports that it tries to call abort, but the
+	machine is frozen.
+     A: This can be a busy wait bug in the interrupt handler of driver 
+        version 3.2. You should at least upgrade to 3.2c if you use 
+	kernel < 2.4.0 and driver version 4.0 if you use kernel 2.4.0 or 
+	later (including all test releases).
+     Q: I have a PS/2 model 80 and more than 16 MBytes of RAM. The driver
+        completely refuses to work, reports NMIs, COMMAND ERRORs or other
+	ambiguous stuff. When reducing the RAM size down below 16 MB, 
+	everything is running smoothly.
+     A: No real answer, yet. In any case, one should force the kernel to
+        present SCBs only below the 16 MBytes barrier. Maybe this solves the
+	problem. Not yet tried, but guessing that it could work.
+
    5.3 Bugreports
    --------------
    If you really find bugs in the sourcecode or the driver will successfully
@@ -1167,7 +1214,8 @@
 	
    Here you can find info about the background of this driver, patches,
    troubleshooting support, news and a bugreport form. Please check that
-   WWW-page regularly for latest hints.
+   WWW-page regularly for latest hints. If ever this URL changes, please 
+   refer to the MAINTAINERS File in order to get the latest address.
    
    For the bugreport, please fill out the formular on the corresponding
    WWW-page. Read the dedicated instructions and write as much as you
@@ -1262,7 +1310,9 @@
    Erik Weber
                 for the great deal we made about a model 9595 and the nice
                 surrounding equipment and the cool trip to Mannheim
-                second-hand computer market.
+                second-hand computer market. In addition, I would like to 
+		to thank him for his exhaustive SCSI-driver testing on his 
+		95er PS/2 park.
    Anthony Hogbin
                 for his direct shipment of a SCSI F/W adapter, which allowed
                 me immediately on the first stage to try it on model 8557
@@ -1277,7 +1327,7 @@
 		and his cool remark about how you make an ordinary diskette
 		drive working and how to connect it to an IBM-diskette port.
    Johannes Gutenberg-University, Mainz &
-   Institut fuer Kernphysik, MAMI
+   Institut fuer Kernphysik, Mainz Microtron (MAMI)
                 for the offered space, the link, placed on the central
                 homepage and the space to store and offer the driver and 
 		related material and the free working times, which allow
@@ -1301,7 +1351,10 @@
    that dataloss or severe damage of hardware is possible while using this
    part of software on some arbitrary computer hardware or in combination 
    with other software packages. It is highly recommended to make backup
-   copies of your data before using this software.
+   copies of your data before using this software. Furthermore, personal
+   injuries by hardware defects, that could be caused by this SCSI-driver are
+   not excluded and it is highly recommended to handle this driver with a
+   maximum of carefulness.
    
    This driver supports hardware, produced by International Business Machines
    Corporation (IBM).

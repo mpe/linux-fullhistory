@@ -442,10 +442,9 @@ static int vfat_valid_shortname(struct nls_table *nls, wchar_t *name, int len)
 	space = 1; /* disallow names starting with a dot */
 	for (walk = name; len && walk-name < 8;) {
 		len--;
-		if ( (chl = nls->uni2char(*walk, charbuf, NLS_MAX_CHARSET_SIZE)) < 0) {
-			walk++;
+		chl = nls->uni2char(*walk++, charbuf, NLS_MAX_CHARSET_SIZE);
+		if (chl < 0)
 			return -EINVAL;
-		}
 
 		for (chi = 0; chi < chl; chi++) {
 			c = vfat_getupper(nls, charbuf[chi]);
@@ -471,7 +470,7 @@ dot:;
 		if (len >= 4) return -EINVAL;
 		while (len > 0) {
 			len--;
-			chl = vfat_uni2short(nls, *walk++, charbuf, NLS_MAX_CHARSET_SIZE);
+			chl = nls->uni2char(*walk++, charbuf, NLS_MAX_CHARSET_SIZE);
 			if (chl < 0)
 				return -EINVAL;
 			for (chi = 0; chi < chl; chi++) {

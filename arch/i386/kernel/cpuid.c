@@ -153,6 +153,7 @@ int __init cpuid_init(void)
 
 void __exit cpuid_exit(void)
 {
+  unregister_chrdev(CPUID_MAJOR, "cpu/cpuid");
 }
 
 module_init(cpuid_init);

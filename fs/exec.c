@@ -594,7 +594,6 @@ static inline int must_not_trace_exec(struct task_struct * p)
 int prepare_binprm(struct linux_binprm *bprm)
 {
 	int mode;
-	int id_change,cap_raised;
 	struct inode * inode = bprm->file->f_dentry->d_inode;
 
 	mode = inode->i_mode;
@@ -606,25 +605,20 @@ int prepare_binprm(struct linux_binprm *bprm)
 
 	bprm->e_uid = current->euid;
 	bprm->e_gid = current->egid;
-	id_change = cap_raised = 0;
 
-	/* Set-uid? */
-	if (mode & S_ISUID) {
-		bprm->e_uid = inode->i_uid;
-		if (bprm->e_uid != current->euid)
-			id_change = 1;
-	}
+	if(!IS_NOSUID(inode)) {
+		/* Set-uid? */
+		if (mode & S_ISUID)
+			bprm->e_uid = inode->i_uid;
 
-	/* Set-gid? */
-	/*
-	 * If setgid is set but no group execute bit then this
-	 * is a candidate for mandatory locking, not a setgid
-	 * executable.
-	 */
-	if ((mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP)) {
-		bprm->e_gid = inode->i_gid;
-		if (!in_group_p(bprm->e_gid))
-			id_change = 1;
+		/* Set-gid? */
+		/*
+		 * If setgid is set but no group execute bit then this
+		 * is a candidate for mandatory locking, not a setgid
+		 * executable.
+		 */
+		if ((mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))
+			bprm->e_gid = inode->i_gid;
 	}
 
 	/* We don't have VFS support for capabilities yet */
@@ -649,39 +643,6 @@ int prepare_binprm(struct linux_binprm *bprm)
 			cap_set_full(bprm->cap_effective);
 	}
 
-        /* Only if pP' is _not_ a subset of pP, do we consider there
-         * has been a capability related "change of capability".  In
-         * such cases, we need to check that the elevation of
-         * privilege does not go against other system constraints.
-         * The new Permitted set is defined below -- see (***). */
-	{
-		kernel_cap_t permitted, working;
-
-		permitted = cap_intersect(bprm->cap_permitted, cap_bset);
-		working = cap_intersect(bprm->cap_inheritable,
-					current->cap_inheritable);
-		working = cap_combine(permitted, working);
-		if (!cap_issubset(working, current->cap_permitted)) {
-			cap_raised = 1;
-		}
-	}
-
-	if (id_change || cap_raised) {
-		/* We can't suid-execute if we're sharing parts of the executable */
-		/* or if we're being traced (or if suid execs are not allowed)    */
-		/* (current->mm->mm_users > 1 is ok, as we'll get a new mm anyway)   */
-		if (IS_NOSUID(inode)
-		    || must_not_trace_exec(current)
-		    || (atomic_read(&current->fs->count) > 1)
-		    || (atomic_read(&current->sig->count) > 1)
-		    || (atomic_read(&current->files->count) > 1)) {
- 			if (id_change && !capable(CAP_SETUID))
- 				return -EPERM;
- 			if (cap_raised && !capable(CAP_SETPCAP))
-  				return -EPERM;
-		}
-	}
-
 	memset(bprm->buf,0,BINPRM_BUF_SIZE);
 	return kernel_read(bprm->file,0,bprm->buf,BINPRM_BUF_SIZE);
 }
@@ -698,16 +659,40 @@ int prepare_binprm(struct linux_binprm *bprm)
  *
  * I=Inheritable, P=Permitted, E=Effective // p=process, f=file
  * ' indicates post-exec(), and X is the global 'cap_bset'.
+ *
  */
 
 void compute_creds(struct linux_binprm *bprm) 
 {
 	kernel_cap_t new_permitted, working;
+	int do_unlock = 0;
 
 	new_permitted = cap_intersect(bprm->cap_permitted, cap_bset);
 	working = cap_intersect(bprm->cap_inheritable,
 				current->cap_inheritable);
 	new_permitted = cap_combine(new_permitted, working);
+
+	if (bprm->e_uid != current->uid || bprm->e_gid != current->gid ||
+	    !cap_issubset(new_permitted, current->cap_permitted)) {
+                current->dumpable = 0;
+		
+		lock_kernel();
+		if (must_not_trace_exec(current)
+		    || atomic_read(&current->fs->count) > 1
+		    || atomic_read(&current->files->count) > 1
+		    || atomic_read(&current->sig->count) > 1) {
+			if(!capable(CAP_SETUID)) {
+				bprm->e_uid = current->uid;
+				bprm->e_gid = current->gid;
+			}
+			if(!capable(CAP_SETPCAP)) {
+				new_permitted = cap_intersect(new_permitted,
+							current->cap_permitted);
+			}
+		}
+		do_unlock = 1;
+	}
+
 
 	/* For init, we want to retain the capabilities set
          * in the init_task struct. Thus we skip the usual
@@ -722,10 +707,9 @@ void compute_creds(struct linux_binprm *bprm)
 
         current->suid = current->euid = current->fsuid = bprm->e_uid;
         current->sgid = current->egid = current->fsgid = bprm->e_gid;
-        if (current->euid != current->uid || current->egid != current->gid ||
-	    !cap_issubset(new_permitted, current->cap_permitted))
-                current->dumpable = 0;
 
+	if(do_unlock)
+		unlock_kernel();
 	current->keep_capabilities = 0;
 }
 

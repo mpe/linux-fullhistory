@@ -3,35 +3,47 @@
 ;*		    TEKRAM DC-390(T) PCI SCSI Bus Master Host Adapter  *
 ;*		    Device Driver				       *
 ;***********************************************************************/
-/* $Id: tmscsim.h,v 2.4 1998/12/25 17:33:27 garloff Exp $ */
+/* $Id: tmscsim.h,v 2.15.2.3 2000/11/17 20:52:27 garloff Exp $ */
 
 #ifndef _TMSCSIM_H
 #define _TMSCSIM_H
 
+#include <linux/types.h>
 #include <linux/config.h>
+/* 2.0 compat */
+#if defined(__SMP__) && !defined(CONFIG_SMP)
+# if LINUX_VERSION_CODE < KERNEL_VERSION (2,2,0)
+#  define CONFIG_SMP
+# else
+#  error __SMP__ defined but not CONFIG_SMP
+# endif
+#endif
+
 
 #define IRQ_NONE 255
 
 #define MAX_ADAPTER_NUM 	4
-#define MAX_SG_LIST_BUF 	16
-#define MAX_CMD_PER_LUN 	8
-#define MAX_CMD_QUEUE		2*MAX_CMD_PER_LUN+1	
+#define MAX_SG_LIST_BUF 	16	/* Not used */
+#define MAX_CMD_PER_LUN 	32
+#define MAX_CMD_QUEUE		MAX_CMD_PER_LUN+MAX_CMD_PER_LUN/2+1	
 #define MAX_SCSI_ID		8
 #define MAX_SRB_CNT		MAX_CMD_QUEUE+1	/* Max number of started commands */
-#define END_SCAN		2
 
 #define SEL_TIMEOUT		153	/* 250 ms selection timeout (@ 40 MHz) */
 
-typedef unsigned char	UCHAR;
-typedef unsigned short	USHORT;
-typedef unsigned long	ULONG;
-typedef unsigned int	UINT;
+#define END_SCAN		2
+
+typedef u8		UCHAR;	/*  8 bits */
+typedef u16		USHORT;	/* 16 bits */
+typedef u32		UINT;	/* 32 bits */
+typedef unsigned long	ULONG;	/* 32/64 bits */
 
 typedef UCHAR		*PUCHAR;
 typedef USHORT		*PUSHORT;
+typedef UINT		*PUINT;
 typedef ULONG		*PULONG;
-typedef Scsi_Host_Template  *PSHT;
-typedef struct Scsi_Host    *PSH;
+typedef Scsi_Host_Template	*PSHT;
+typedef struct Scsi_Host	*PSH;
 typedef Scsi_Device	*PSCSIDEV;
 typedef Scsi_Cmnd	*PSCSICMD;
 typedef void		*PVOID;
@@ -74,48 +86,49 @@ ULONG		SGXPtr;
 */
 struct	_SRB
 {
-UCHAR		CmdBlock[12];
+//UCHAR		CmdBlock[12];
 
 struct _SRB	*pNextSRB;
 struct _DCB	*pSRBDCB;
 PSCSICMD	pcmd;
 PSGL		pSegmentList;
 
-ULONG		Segment0[2];
-ULONG		Segment1[2];
-
-/* 0x2c:*/
-ULONG		TotalXferredLen;
-ULONG		SGBusAddr;	/*;a segment starting address as seen by AM53C974A*/
-ULONG		SGToBeXferLen;	/*; to be xfer length */
-ULONG		SRBState;
-
-/* 0x3c: */
-UCHAR		MsgInBuf[6];
-UCHAR		MsgOutBuf[6];
-
-/* 0x48: */
+/* 0x10: */
 SGL		Segmentx;	/* make a one entry of S/G list table */
 
-UCHAR		ScsiCmdLen;
-UCHAR		ScsiPhase;
+/* 0x1c: */
+ULONG		SGBusAddr;	/*;a segment starting address as seen by AM53C974A*/
+ULONG		SGToBeXferLen;	/*; to be xfer length */
+ULONG		TotalXferredLen;
+ULONG		SavedTotXLen;
+UINT		SRBState;
 
+/* 0x30: */
+UCHAR		SRBStatus;
+UCHAR		SRBFlag;	/*; b0-AutoReqSense,b6-Read,b7-write */
+				/*; b4-settimeout,b5-Residual valid */
 UCHAR		AdaptStatus;
 UCHAR		TargetStatus;
 
-/* 0x58: */
+UCHAR		ScsiPhase;
+UCHAR		TagNumber;
+UCHAR		SGIndex;
+UCHAR		SGcount;
+
+/* 0x38: */
 UCHAR		MsgCnt;
 UCHAR		EndMessage;
 UCHAR		RetryCnt;
-UCHAR		SRBFlag;	/*; b0-AutoReqSense,b6-Read,b7-write */
-				/*; b4-settimeout,b5-Residual valid */
-UCHAR		TagNumber;
-UCHAR		SGcount;
-UCHAR		SGIndex;
-UCHAR		SRBStatus;
-  //UCHAR		IORBFlag;	/*;81h-Reset, 2-retry */
+UCHAR		SavedSGCount;			
 
-/* 0x60: */
+ULONG		Saved_Ptr;
+
+/* 0x40: */
+UCHAR		MsgInBuf[6];
+UCHAR		MsgOutBuf[6];
+
+//UCHAR		IORBFlag;	/*;81h-Reset, 2-retry */
+/* 0x4c: */
 };
 
 
@@ -131,48 +144,47 @@ struct	_DCB
 struct _DCB	*pNextDCB;
 struct _ACB	*pDCBACB;
 
-PSCSICMD	pQIORBhead;
-PSCSICMD	pQIORBtail;
-PSCSICMD	AboIORBhead;
-PSCSICMD	AboIORBtail;
-ULONG		QIORBCnt;
-ULONG		AboIORBcnt;
+/* Aborted Commands */
+//PSCSICMD	AboIORBhead;
+//PSCSICMD	AboIORBtail;
+//ULONG		AboIORBcnt;
 
-/* 0x20: */
+/* 0x08: */
+/* Queued SRBs */
 PSRB		pWaitingSRB;
 PSRB		pWaitLast;
 PSRB		pGoingSRB;
 PSRB		pGoingLast;
 PSRB		pActiveSRB;
+UCHAR		WaitSRBCnt;	/* Not used */
 UCHAR		GoingSRBCnt;
-UCHAR		WaitSRBCnt;	/* ??? */
+
 UCHAR		DevType;
 UCHAR		MaxCommand;
 
-/* 0x38: */
-ULONG		TagMask;
+/* 0x20: */
+UINT		TagMask;
 
-UCHAR		UnitSCSIID;	/*; SCSI Target ID  (SCSI Only) */
-UCHAR		UnitSCSILUN;	/*; SCSI Log.  Unit (SCSI Only) */
+UCHAR		TargetID;	/*; SCSI Target ID  (SCSI Only) */
+UCHAR		TargetLUN;	/*; SCSI Log.  Unit (SCSI Only) */
 UCHAR		DevMode;
-UCHAR		IdentifyMsg;
+UCHAR		DCBFlag;
 
 UCHAR		CtrlR1;
 UCHAR		CtrlR3;
 UCHAR		CtrlR4;
+UCHAR		Inquiry7;
 
-UCHAR		DCBFlag;
-
-/* 0x44: */
+/* 0x2c: */
 UCHAR		SyncMode;	/*; 0:async mode */
 UCHAR		NegoPeriod;	/*;for nego. */
 UCHAR		SyncPeriod;	/*;for reg. */
 UCHAR		SyncOffset;	/*;for reg. and nego.(low nibble) */
 
-/* 0x48:*/
+/* 0x30:*/
 //UCHAR		InqDataBuf[8];
 //UCHAR		CapacityBuf[8];
-/* 0x58: */
+///* 0x40: */
 };
 
 typedef  struct  _DCB	 DC390_DCB, *PDCB;
@@ -203,15 +215,23 @@ UCHAR		scan_devices;
 PDCB		pLinkDCB;
 PDCB		pLastDCB;
 PDCB		pDCBRunRobin;
+
 PDCB		pActiveDCB;
 PSRB		pFreeSRB;
 PSRB		pTmpSRB;
 
 /* 0x2c: */
+ULONG		QueryCnt;
+PSCSICMD	pQueryHead;
+PSCSICMD	pQueryTail;
 
+/* 0x38: */
 UCHAR		msgin123[4];
 UCHAR		DCBmap[MAX_SCSI_ID];
+UCHAR		Connected;
+UCHAR		pad;
 
+/* 0x3c: */
 #if defined(USE_SPINLOCKS) && USE_SPINLOCKS > 1 && (defined(CONFIG_SMP) || DEBUG_SPINLOCKS > 0)
 spinlock_t	lock;
 #endif
@@ -222,18 +242,20 @@ UCHAR		MsgLen;
 UCHAR		Ignore_IRQ;	/* Not used */
 
 PDEVDECL1;			/* Pointer to PCI cfg. space */
-/* 0x40/0x3c: */
+/* 0x4c/0x48: */
 ULONG		Cmds;
-ULONG		CmdInQ;
-ULONG		CmdOutOfSRB;
-ULONG		SelLost;
-
+UINT		SelLost;
+UINT		SelConn;
+UINT		CmdInQ;
+UINT		CmdOutOfSRB;
 	
-/* 0x50/0x4c: */	
+/* 0x60/0x5c: */
+struct timer_list	Waiting_Timer;
+/* 0x74/0x70: */
 DC390_SRB	TmpSRB;
-/* 0xb4/0xb0: */
-DC390_SRB	SRB_array[MAX_SRB_CNT]; 	/* 18 SRBs */
-/* 0x7bc/0x7b8: */
+/* 0xd8/0xd4: */
+DC390_SRB	SRB_array[MAX_SRB_CNT]; 	/* 50 SRBs */
+/* 0xfb0/0xfac: */
 };
 
 typedef  struct  _ACB	 DC390_ACB, *PACB;
@@ -341,20 +363,28 @@ typedef  struct  _ACB	 DC390_ACB, *PACB;
 #define H_BAD_CCB_OR_SG  0x1A
 #define H_ABORT 	 0x0FF
 
-/*; SCSI Status byte codes*/ /* Twice the values defined in scsi/scsi.h */
-#define SCSI_STAT_GOOD		0x0	/*;  Good status */
-#define SCSI_STAT_CHECKCOND	0x02	/*;  SCSI Check Condition */
-#define SCSI_STAT_CONDMET	0x04	/*;  Condition Met */
-#define SCSI_STAT_BUSY		0x08	/*;  Target busy status */
-#define SCSI_STAT_INTER 	0x10	/*;  Intermediate status */
-#define SCSI_STAT_INTERCONDMET	0x14	/*;  Intermediate condition met */
-#define SCSI_STAT_RESCONFLICT	0x18	/*;  Reservation conflict */
-#define SCSI_STAT_CMDTERM	0x22	/*;  Command Terminated */
-#define SCSI_STAT_QUEUEFULL	0x28	/*;  Queue Full */
+/*; SCSI Status byte codes*/ 
+/* The values defined in include/scsi/scsi.h, to be shifted << 1 */
 
 #define SCSI_STAT_UNEXP_BUS_F	0xFD	/*;  Unexpect Bus Free */
 #define SCSI_STAT_BUS_RST_DETECT 0xFE	/*;  Scsi Bus Reset detected */
 #define SCSI_STAT_SEL_TIMEOUT	0xFF	/*;  Selection Time out */
+
+/* cmd->result */
+#define RES_TARGET		0x000000FF	/* Target State */
+#define RES_TARGET_LNX		STATUS_MASK	/* Only official ... */
+#define RES_ENDMSG		0x0000FF00	/* End Message */
+#define RES_DID			0x00FF0000	/* DID_ codes */
+#define RES_DRV			0xFF000000	/* DRIVER_ codes */
+
+#define MK_RES(drv,did,msg,tgt) ((int)(drv)<<24 | (int)(did)<<16 | (int)(msg)<<8 | (int)(tgt))
+#define MK_RES_LNX(drv,did,msg,tgt) ((int)(drv)<<24 | (int)(did)<<16 | (int)(msg)<<8 | (int)(tgt)<<1)
+
+#define SET_RES_TARGET(who,tgt) { who &= ~RES_TARGET; who |= (int)(tgt); }
+#define SET_RES_TARGET_LNX(who,tgt) { who &= ~RES_TARGET_LNX; who |= (int)(tgt) << 1; }
+#define SET_RES_MSG(who,msg) { who &= ~RES_ENDMSG; who |= (int)(msg) << 8; }
+#define SET_RES_DID(who,did) { who &= ~RES_DID; who |= (int)(did) << 16; }
+#define SET_RES_DRV(who,drv) { who &= ~RES_DRV; who |= (int)(drv) << 24; }
 
 /*;---Sync_Mode */
 #define SYNC_DISABLE	0
@@ -377,31 +407,8 @@ typedef  struct  _ACB	 DC390_ACB, *PACB;
 #define SCSI_MSG_OUT	6
 #define SCSI_MSG_IN	7
 
-/*;----SCSI MSG BYTE*/ /* see scsi/scsi.h */
-#define MSG_COMPLETE		0x00
-#define MSG_EXTENDED		0x01
-#define MSG_SAVE_PTR		0x02
-#define MSG_RESTORE_PTR 	0x03
-#define MSG_DISCONNECT		0x04
-#define MSG_INITIATOR_ERROR	0x05
-#define MSG_ABORT		0x06
-#define MSG_REJECT_		0x07
-#define MSG_NOP 		0x08
-#define MSG_PARITY_ERROR	0x09
-#define MSG_LINK_CMD_COMPL	0x0A
-#define MSG_LINK_CMD_COMPL_FLG	0x0B
-#define MSG_BUS_RESET		0x0C
-#define MSG_ABORT_TAG		0x0D
-#define MSG_SIMPLE_QTAG 	0x20
-#define MSG_HEAD_QTAG		0x21
-#define MSG_ORDER_QTAG		0x22
-#define MSG_IDENTIFY		0x80
-#define MSG_HOST_ID		0x0C0
-
-/* cmd->result */
-#define STATUS_MASK_		0xFF
-#define MSG_MASK		0xFF00
-#define RETURN_MASK		0xFF0000
+/*;----SCSI MSG BYTE*/ /* see scsi/scsi.h */ /* One is missing ! */
+#define ABORT_TAG	0x0d
 
 /*
 **  Inquiry Data format
@@ -441,7 +448,12 @@ typedef struct	_SCSIInqData { /* INQUIRY */
 /*  Peripheral Device Type definitions */
 /*  see include/scsi/scsi.h for the rest */
 
-#define TYPE_PRINTER		 0x02	   /* Printer device		   */
+#ifndef TYPE_PRINTER
+# define TYPE_PRINTER		 0x02	   /* Printer device		   */
+#endif
+#ifndef TYPE_COMM
+# define TYPE_COMM		 0x09	   /* Communications device	   */
+#endif
 
 /*
 ** Inquiry flag definitions (Inq data byte 7)

@@ -6,14 +6,17 @@
  *
  */
 
+#ifndef _LINUX_WATCHDOG_H
+#define _LINUX_WATCHDOG_H
+
 #include <linux/ioctl.h>
 
 #define	WATCHDOG_IOCTL_BASE	'W'
 
 struct watchdog_info {
-	u32 options;		/* Options the card/driver supports */
-	u32 firmware_version;	/* Firmware version of the card */
-	u8  identity[32];	/* Identity of the board */
+	__u32 options;		/* Options the card/driver supports */
+	__u32 firmware_version;	/* Firmware version of the card */
+	__u8  identity[32];	/* Identity of the board */
 };
 
 #define	WDIOC_GETSUPPORT	_IOR(WATCHDOG_IOCTL_BASE, 0, struct watchdog_info)
@@ -38,3 +41,5 @@ struct watchdog_info {
 #define	WDIOS_DISABLECARD	0x0001	/* Turn off the watchdog timer */
 #define	WDIOS_ENABLECARD	0x0002	/* Turn on the watchdog timer */
 #define	WDIOS_TEMPPANIC		0x0004	/* Kernel panic on temperature trip */
+
+#endif  /* ifndef _LINUX_WATCHDOG_H */

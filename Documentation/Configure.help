@@ -971,7 +971,7 @@ CONFIG_BLK_DEV_TRM290
 
 VIA82CXXX chipset support
 CONFIG_BLK_DEV_VIA82CXXX
-  This allows you to to configure your chipset for a better use while
+  This allows you to configure your chipset for a better use while
   running (U)DMA: it will allow you to enable efficiently the second
   channel dma usage, as it may not be set by BIOS. It allows you to
   pass a kernel command line at boot time in order to set fifo
@@ -5245,6 +5245,30 @@ CONFIG_CHR_DEV_ST
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called st.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt and
+  Documentation/scsi.txt .
+
+OnStream SC-x0 SCSI tape support
+CONFIG_CHR_DEV_OSST
+  The OnStream SC-x0 SCSI tape drives can not be driven by the 
+  standard st driver, but instead need this special osst driver and 
+  use the  /dev/osstX char device nodes (major 206).
+  Via usb-storage and ide-scsi, you may be able to drive the USB-x0 
+  and DI-x0 drives as well. Note that there is also a second generation
+  of OnStream tape drives (ADR-x0) that supports the standard SCSI-2
+  commands for tapes (QIC-157) and can be driven by the standard
+  driver st.
+  For more information, you may have a look at the SCSI-HOWTO
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO  and
+  drivers/scsi/README.osst  in the kernel source. 
+  More info on the OnStream driver may be found on 
+  http://linux1.onstream.nl/test/
+  Please also have a look at the standard st docu, as most of it
+  applies to osst as well.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called osst.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt and
   Documentation/scsi.txt .
 

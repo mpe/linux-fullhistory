@@ -177,7 +177,7 @@
 /*  bits for the above three interrupt registers */
 #define  INTERRUPT_INTE        1<<15   /* interrupt enable */
 #define  INTERRUPT_WI          1<<9    /* wakeup interrupt */
-#define  INTERRUPT_ERI         1<<8    /* early recieve interrupt */
+#define  INTERRUPT_ERI         1<<8    /* early receive interrupt */
 #define  INTERRUPT_PPET        1<<7    /* PCI Tx parity error */
 #define  INTERRUPT_PBFT        1<<6    /* PCI Tx bus fault */
 #define  INTERRUPT_IIDT        1<<5    /* illegal instruction Tx */

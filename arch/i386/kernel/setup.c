@@ -1149,7 +1149,7 @@ static void __init check_cx686_slop(struct cpuinfo_x86 *c)
 		if (ccr5 & 2) { /* possible wrong calibration done */
 			printk(KERN_INFO "Recalibrating delay loop with SLOP bit reset\n");
 			calibrate_delay();
-			c->loops_per_sec = loops_per_sec;
+			c->loops_per_jiffy = loops_per_jiffy;
 		}
 	}
 }
@@ -1553,7 +1553,7 @@ static void __init init_intel(struct cpuinfo_x86 *c)
 						/* L1 D cache */
 						l1d += 16;
 						break;
-					default:
+					default:;
 						/* TLB, or unknown */
 					}
 					break;
@@ -1884,7 +1884,7 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 	int junk, i;
 	u32 xlvl, tfms;
 
-	c->loops_per_sec = loops_per_sec;
+	c->loops_per_jiffy = loops_per_jiffy;
 	c->x86_cache_size = -1;
 	c->x86_vendor = X86_VENDOR_UNKNOWN;
 	c->cpuid_level = -1;	/* CPUID not detected */
@@ -2188,8 +2188,8 @@ int get_cpuinfo(char * buffer)
 				p += sprintf(p, " %s", x86_cap_flags[i]);
 
 		p += sprintf(p, "\nbogomips\t: %lu.%02lu\n\n",
-			(c->loops_per_sec+2500)/500000,
-			((c->loops_per_sec+2500)/5000) % 100);
+			     c->loops_per_jiffy/(500000/HZ),
+			     (c->loops_per_jiffy/(5000/HZ)) % 100);
 	}
 	return p - buffer;
 }

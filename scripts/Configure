@@ -479,11 +479,14 @@ function choice () {
 		while [ -n "$1" ]; do
 			name=$(echo $1 | tr a-z A-Z)
 			case "$name" in
-				"$ans"* )
-					if [ "$name" = "$ans" ]; then
-						val="$2"
-						break	# stop on exact match
-					fi
+				"$ans"* | */"$ans"* )
+					case "$name" in
+						"$ans" | */"$ans"/* | \
+						"$ans"/* | */"$ans" )
+							val="$2"
+							break # exact match
+						;;
+					esac
 					if [ -n "$val" ]; then
 						echo;echo \
 		"  Sorry, \"$ans\" is ambiguous; please enter a longer string."

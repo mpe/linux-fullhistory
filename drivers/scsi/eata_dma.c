@@ -676,7 +676,8 @@ int eata_abort(Scsi_Cmnd * cmd)
 int eata_reset(Scsi_Cmnd * cmd, unsigned int resetflags)
 {
     uint x; 
-    ulong loop = loops_per_sec / 3;
+    /* 10 million PCI reads take at least one third of a second */
+    ulong loop = 10 * 1000 * 1000;
     ulong flags;
     unchar success = FALSE;
     Scsi_Cmnd *sp; 

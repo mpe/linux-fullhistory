@@ -904,6 +904,12 @@ int fat_notify_change(struct dentry * dentry, struct iattr * attr)
 	struct inode *inode = dentry->d_inode;
 	int error;
 
+	/* FAT cannot truncate to a longer file */
+	if (attr->ia_valid & ATTR_SIZE) {
+		if (attr->ia_size > inode->i_size)
+			return -EPERM;
+	}
+
 	error = inode_change_ok(inode, attr);
 	if (error)
 		return MSDOS_SB(sb)->options.quiet ? 0 : error;

@@ -984,11 +984,11 @@ void __init smp_boot_cpus(void)
 		unsigned long bogosum = 0;
 		for (cpu = 0; cpu < NR_CPUS; cpu++)
 			if (cpu_online_map & (1<<cpu))
-				bogosum += cpu_data[cpu].loops_per_sec;
+				bogosum += cpu_data[cpu].loops_per_jiffy;
 		printk(KERN_INFO "Total of %d processors activated (%lu.%02lu BogoMIPS).\n",
 			cpucount+1,
-			(bogosum+2500)/500000,
-			((bogosum+2500)/5000)%100);
+			bogosum/(500000/HZ),
+			(bogosum/(5000/HZ))%100);
 		Dprintk("Before bogocount - setting activated=1.\n");
 	}
 	smp_num_cpus = cpucount + 1;

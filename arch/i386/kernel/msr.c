@@ -261,6 +261,7 @@ int __init msr_init(void)
 
 void __exit msr_exit(void)
 {
+  unregister_chrdev(MSR_MAJOR, "cpu/msr");
 }
 
 module_init(msr_init);

@@ -24,6 +24,9 @@ isapnp=0	Set this to disable ISAPnP detection (use io=0xXXX etc. above)
 multiple=0	Set to disable detection of multiple Soundblaster cards.
 		Consider it a bug if this option is needed, and send in a
 		report.
+pnplegacy=1	Set this to be able to use a PnP card(s) along with a single
+		non-PnP (legacy) card.  Above options for io, irq, etc. are
+		needed, and will apply only to the legacy card.
 reverse=1	Reverses the order of the search in the PnP table.
 uart401=1	Set to enable detection of mpu devices on some clones.
 isapnpjump=n	Jumps to slot n in the driver's PnP table. Use the source,

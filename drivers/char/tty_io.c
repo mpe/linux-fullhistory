@@ -699,9 +699,8 @@ static inline ssize_t do_tty_write(
 	size_t count)
 {
 	ssize_t ret = 0, written = 0;
-	struct inode *inode = file->f_dentry->d_inode;
 	
-	if (down_interruptible(&inode->i_sem)) {
+	if (down_interruptible(&tty->atomic_write)) {
 		return -ERESTARTSYS;
 	}
 	if ( test_bit(TTY_NO_WRITE_SPLIT, &tty->flags) ) {
@@ -734,7 +733,7 @@ static inline ssize_t do_tty_write(
 		file->f_dentry->d_inode->i_mtime = CURRENT_TIME;
 		ret = written;
 	}
-	up(&inode->i_sem);
+	up(&tty->atomic_write);
 	return ret;
 }
 
@@ -1972,6 +1971,7 @@ static void initialize_tty_struct(struct tty_struct *tty)
 	tty->tq_hangup.routine = do_tty_hangup;
 	tty->tq_hangup.data = tty;
 	sema_init(&tty->atomic_read, 1);
+	sema_init(&tty->atomic_write, 1);
 	spin_lock_init(&tty->read_lock);
 	INIT_LIST_HEAD(&tty->tty_files);
 }
@@ -2319,14 +2319,8 @@ void __init tty_init(void)
 #ifdef CONFIG_DIGIEPCA
 	pc_init();
 #endif
-#ifdef CONFIG_RISCOM8
-	riscom8_init();
-#endif
 #ifdef CONFIG_SPECIALIX
 	specialix_init();
-#endif
-#ifdef CONFIG_SX
-	sx_init();
 #endif
 #ifdef CONFIG_RIO
 	rio_init();

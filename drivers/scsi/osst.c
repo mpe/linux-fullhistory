@@ -16,14 +16,15 @@
   Copyright 1992 - 2000 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  $Header: /home/cvsroot/Driver/osst.c,v 1.49 2000/12/20 02:56:01 garloff Exp $
+  $Header: /home/cvsroot/Driver/osst.c,v 1.51 2000/12/22 20:48:27 garloff Exp $
 
+  Microscopic alterations - Rik Ling, 2000/12/21
   Last modified: Wed Feb  2 22:04:05 2000 by makisara@kai.makisara.local
   Some small formal changes - aeb, 950809
 */
 
-static const char * cvsid = "$Id: osst.c,v 1.49 2000/12/20 02:56:01 garloff Exp $";
-const char * osst_version = "0.9.4.2";
+static const char * cvsid = "$Id: osst.c,v 1.51 2000/12/22 20:48:27 garloff Exp $";
+const char * osst_version = "0.9.4.3";
 
 /* The "failure to reconnect" firmware bug */
 #define OSST_FW_NEED_POLL_MIN 10602 /*(107A)*/
@@ -44,6 +45,7 @@ const char * osst_version = "0.9.4.2";
 #include <linux/fcntl.h>
 #include <linux/spinlock.h>
 #include <linux/vmalloc.h>
+#include <linux/version.h>
 #include <asm/uaccess.h>
 #include <asm/dma.h>
 #include <asm/system.h>
@@ -73,6 +75,11 @@ const char * osst_version = "0.9.4.2";
 
 #include "constants.h"
 
+static int buffer_kbs = 0;
+static int write_threshold_kbs = 0;
+static int max_buffers = 0;
+static int max_sg_segs = 0;
+
 #ifdef MODULE
 MODULE_AUTHOR("Willem Riede");
 MODULE_DESCRIPTION("OnStream SCSI Tape Driver");
@@ -80,10 +87,6 @@ MODULE_PARM(buffer_kbs, "i");
 MODULE_PARM(write_threshold_kbs, "i");
 MODULE_PARM(max_buffers, "i");
 MODULE_PARM(max_sg_segs, "i");
-static int buffer_kbs = 0;
-static int write_threshold_kbs = 0;
-static int max_buffers = 0;
-static int max_sg_segs = 0;
 #else
 static struct osst_dev_parm {
        char   *name;
@@ -92,7 +95,8 @@ static struct osst_dev_parm {
        { "buffer_kbs",          &buffer_kbs          },
        { "write_threshold_kbs", &write_threshold_kbs },
        { "max_buffers",         &max_buffers         },
-       { "max_sg_segs",         &max_sg_segs         };
+       { "max_sg_segs",         &max_sg_segs         }
+       };
 #endif
 
 /* Some default definitions have been moved to osst_options.h */
@@ -4932,22 +4936,62 @@ static int osst_copy_from_buffer(OSST_buffer *st_bp, unsigned char *ptr)
 
 /* Module housekeeping */
 
+static void validate_options (void)
+{
+  if (buffer_kbs > 0)
+		osst_buffer_size = buffer_kbs * ST_KILOBYTE;
+  if (write_threshold_kbs > 0)
+		osst_write_threshold = write_threshold_kbs * ST_KILOBYTE;
+  if (osst_write_threshold > osst_buffer_size)
+		osst_write_threshold = osst_buffer_size;
+  if (max_buffers > 0)
+		osst_max_buffers = max_buffers;
+  if (max_sg_segs >= OSST_FIRST_SG)
+		osst_max_sg_segs = max_sg_segs;
+  printk(KERN_INFO "osst: bufsize %d, wrt %d, max buffers %d, s/g segs %d.\n",
+	 osst_buffer_size, osst_write_threshold, osst_max_buffers, osst_max_sg_segs);
+//printk(OSST_DEB_MSG "osst: sizeof(header) = %d (%s)\n",sizeof(os_header_t),sizeof(os_header_t)==OS_DATA_SIZE?"ok":"error");
+}
+	
 #ifndef MODULE
-/* Set the boot options. Syntax: st=xxx,yyy
+/* Set the boot options. Syntax: osst=xxx,yyy,...
    where xxx is buffer size in 1024 byte blocks and yyy is write threshold
    in 1024 byte blocks. */
-__initfunc( void osst_setup(char *str, int *ints))
+static int __init osst_setup (char *str)
 {
-  if (ints[0] > 0 && ints[1] > 0)
-	osst_buffer_size = ints[1] * ST_KILOBYTE;
-  if (ints[0] > 1 && ints[2] > 0) {
-	osst_write_threshold = ints[2] * ST_KILOBYTE;
-	if (osst_write_threshold > osst_buffer_size)
-		osst_write_threshold = osst_buffer_size;
+  int i, ints[5];
+  char *stp;
+
+  stp = get_options(str, ARRAY_SIZE(ints), ints);
+	
+  if (ints[0] > 0) {
+	for (i = 0; i < ints[0] && i < ARRAY_SIZE(parms); i++)
+		  *parms[i].val = ints[i + 1];
+  } else {
+	while (stp != NULL) {
+		for (i = 0; i < ARRAY_SIZE(parms); i++) {
+			int len = strlen(parms[i].name);
+			if (!strncmp(stp, parms[i].name, len) &&
+			    (*(stp + len) == ':' || *(stp + len) == '=')) {
+				*parms[i].val =
+					simple_strtoul(stp + len + 1, NULL, 0);
+				break;
+			}
+		}
+		if (i >= sizeof(parms) / sizeof(struct osst_dev_parm))
+			printk(KERN_WARNING "osst: illegal parameter in '%s'\n",
+			       stp);
+		stp = strchr(stp, ',');
+		if (stp)
+			stp++;
+	}
   }
-  if (ints[0] > 2 && ints[3] > 0)
-	osst_max_buffers = ints[3];
+
+  return 1;
 }
+
+__setup("osst=", osst_setup);
+
 #endif
 
 
@@ -5240,30 +5284,11 @@ static void osst_detach(Scsi_Device * SDp)
   return;
 }
 
-
 static int __init init_osst(void) 
 {
-  int result;
-
-  if (buffer_kbs > 0)
-		osst_buffer_size = buffer_kbs * ST_KILOBYTE;
-  if (write_threshold_kbs > 0)
-		osst_write_threshold = write_threshold_kbs * ST_KILOBYTE;
-  if (osst_write_threshold > osst_buffer_size)
-		osst_write_threshold = osst_buffer_size;
-  if (max_buffers > 0)
-		osst_max_buffers = max_buffers;
-  if (max_sg_segs >= OSST_FIRST_SG)
-		osst_max_sg_segs = max_sg_segs;
-  printk(KERN_INFO "osst: bufsize %d, wrt %d, max buffers %d, s/g segs %d.\n",
-	 osst_buffer_size, osst_write_threshold, osst_max_buffers, osst_max_sg_segs);
-//printk(OSST_DEB_MSG "osst: sizeof(header) = %d (%s)\n",sizeof(os_header_t),sizeof(os_header_t)==OS_DATA_SIZE?"ok":"error");
+  validate_options();
   osst_template.module = THIS_MODULE;
-  result = scsi_register_module(MODULE_SCSI_DEV, &osst_template);
-  if (result)
-		return result;
-
-  return 0;
+  return scsi_register_module(MODULE_SCSI_DEV, &osst_template);
 }
 
 static void __exit exit_osst (void)

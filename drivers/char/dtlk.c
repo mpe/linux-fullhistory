@@ -60,7 +60,7 @@
 #include <linux/mm.h>		/* for verify_area */
 #include <linux/errno.h>	/* for -EBUSY */
 #include <linux/ioport.h>	/* for check_region, request_region */
-#include <linux/delay.h>	/* for loops_per_sec */
+#include <linux/delay.h>	/* for loops_per_jiffy */
 #include <asm/segment.h>	/* for put_user_byte */
 #include <asm/io.h>		/* for inb_p, outb_p, inb, outb, etc. */
 #include <asm/uaccess.h>	/* for get_user, etc. */
@@ -144,7 +144,7 @@ static ssize_t dtlk_read(struct file *file, char *buf,
 	if (minor != DTLK_MINOR || !dtlk_has_indexing)
 		return -EINVAL;
 
-	for (retries = 0; retries < loops_per_sec / 10; retries++) {
+	for (retries = 0; retries < loops_per_jiffy; retries++) {
 		while (i < count && dtlk_readable()) {
 			ch = dtlk_read_lpc();
 			/*        printk("dtlk_read() reads 0x%02x\n", ch); */
@@ -156,9 +156,9 @@ static ssize_t dtlk_read(struct file *file, char *buf,
 			return i;
 		if (file->f_flags & O_NONBLOCK)
 			break;
-		dtlk_delay(10);
+		dtlk_delay(100);
 	}
-	if (retries == loops_per_sec)
+	if (retries == loops_per_jiffy)
 		printk(KERN_ERR "dtlk_read times out\n");
 	TRACE_RET;
 	return -EAGAIN;
@@ -212,7 +212,7 @@ static ssize_t dtlk_write(struct file *file, const char *buf,
 				   up to 250 usec for the RDY bit to
 				   go nonzero. */
 				for (retries = 0;
-				     retries < loops_per_sec / 4000;
+				     retries < loops_per_jiffy / (4000/HZ);
 				     retries++)
 					if (inb_p(dtlk_port_tts) &
 					    TTS_WRITABLE)
@@ -463,7 +463,7 @@ static int __init dtlk_dev_probe(void)
 for (i = 0; i < 10; i++)			\
   {						\
     buffer[b++] = inb_p(dtlk_port_lpc);		\
-    __delay(loops_per_sec/1000000);             \
+    __delay(loops_per_jiffy/(1000000/HZ));             \
   }
 				char buffer[1000];
 				int b = 0, i, j;
@@ -474,7 +474,7 @@ for (i = 0; i < 10; i++)			\
 				LOOK
 				dtlk_write_bytes("\0012I\r", 4);
 				buffer[b++] = 0;
-				__delay(50 * loops_per_sec / 1000);
+				__delay(50 * loops_per_jiffy / (1000/HZ));
 				outb_p(0xff, dtlk_port_lpc);
 				buffer[b++] = 0;
 				LOOK
@@ -493,12 +493,12 @@ for (i = 0; i < 10; i++)			\
 for (i = 0; i < 10; i++)			\
   {						\
     buffer[b++] = inb_p(dtlk_port_tts);		\
-    __delay(loops_per_sec/1000000);  /* 1 us */ \
+    __delay(loops_per_jiffy/(1000000/HZ));  /* 1 us */ \
   }
 				char buffer[1000];
 				int b = 0, i, j;
 
-				__delay(loops_per_sec / 100);	/* 10 ms */
+				mdelay(10);	/* 10 ms */
 				LOOK
 				outb_p(0x03, dtlk_port_tts);
 				buffer[b++] = 0;
@@ -632,7 +632,7 @@ static char dtlk_read_lpc(void)
 	/* acknowledging a read takes 3-4
 	   usec.  Here, we wait up to 20 usec
 	   for the acknowledgement */
-	retries = (loops_per_sec * 20) / 1000000;
+	retries = (loops_per_jiffy * 20) / (1000000/HZ);
 	while (inb_p(dtlk_port_lpc) != 0x7f && --retries > 0);
 	if (retries == 0)
 		printk(KERN_ERR "dtlk_read_lpc() timeout\n");
@@ -674,7 +674,7 @@ static char dtlk_write_tts(char ch)
 	/* the RDY bit goes zero 2-3 usec after writing, and goes
 	   1 again 180-190 usec later.  Here, we wait up to 10
 	   usec for the RDY bit to go zero. */
-	for (retries = 0; retries < loops_per_sec / 100000; retries++)
+	for (retries = 0; retries < loops_per_jiffy / (100000/HZ); retries++)
 		if ((inb_p(dtlk_port_tts) & TTS_WRITABLE) == 0)
 			break;
 

@@ -35,6 +35,7 @@
 #include <asm/pgtable.h>
 #include <asm/feature.h>
 #include <asm/keylargo.h>
+#include <asm/pci-bridge.h>
 #ifdef CONFIG_PMAC_PBOOK
 #include <linux/adb.h>
 #include <linux/pmu.h>
@@ -45,8 +46,8 @@
 
 #define DEBUG_PHY
 
-/* Driver version 1.2, kernel 2.4.x */
-#define GMAC_VERSION	"v1.2k4"
+/* Driver version 1.3, kernel 2.4.x */
+#define GMAC_VERSION	"v1.3k4"
 
 static unsigned char dummy_buf[RX_BUF_ALLOC_SIZE + RX_OFFSET + GMAC_BUFFER_ALIGN];
 static struct net_device *gmacs = NULL;
@@ -81,9 +82,6 @@ static void gmac_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static struct net_device_stats *gmac_stats(struct net_device *dev);
 static int gmac_probe(void);
 static void gmac_probe1(struct device_node *gmac);
-
-extern int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
-		   unsigned char *devfn_ptr);
 
 #ifdef CONFIG_PMAC_PBOOK
 int gmac_sleep_notify(struct pmu_sleep_notifier *self, int when);
@@ -813,21 +811,18 @@ gmac_set_multicast(struct net_device *dev)
 static int
 gmac_open(struct net_device *dev)
 {
+	int ret;
 	struct gmac *gm = (struct gmac *) dev->priv;
 
-	MOD_INC_USE_COUNT;
-
 	/* Power up and reset chip */
-	if (gmac_powerup_and_reset(dev)) {
-		MOD_DEC_USE_COUNT;
+	if (gmac_powerup_and_reset(dev))
 		return -EIO;
-	}
 
 	/* Get our interrupt */
-	if (request_irq(dev->irq, gmac_interrupt, 0, dev->name, dev)) {
+	ret = request_irq(dev->irq, gmac_interrupt, 0, dev->name, dev);
+	if (ret) {
 		printk(KERN_ERR "%s can't get irq %d\n", dev->name, dev->irq);
-		MOD_DEC_USE_COUNT;
-		return -EAGAIN;
+		return ret;
 	}
 
 	gm->full_duplex = 0;
@@ -901,7 +896,6 @@ gmac_close(struct net_device *dev)
 		}
 	}
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1360,7 +1354,7 @@ gmac_probe1(struct device_node *gmac)
 		return;
 	}
 
-	dev = init_etherdev(0, sizeof(struct gmac));
+	dev = init_etherdev(NULL, sizeof(struct gmac));
 
 	if (!dev) {
 		printk(KERN_ERR "GMAC: init_etherdev failed, out of memory\n");
@@ -1368,8 +1362,9 @@ gmac_probe1(struct device_node *gmac)
 		free_page(rx_descpage);
 		return;
 	}
+	SET_MODULE_OWNER(dev);
 
-	gm = (struct gmac *) dev->priv;
+	gm = dev->priv;
 	dev->base_addr = gmac->addrs[0].address;
 	gm->regs = (volatile unsigned int *)
 		ioremap(gmac->addrs[0].address, 0x10000);
@@ -1379,7 +1374,7 @@ gmac_probe1(struct device_node *gmac)
 
 	spin_lock_init(&gm->lock);
 	
-	if (pci_device_loc(gmac, &gm->pci_bus, &gm->pci_devfn)) {
+	if (pci_device_from_OF_node(gmac, &gm->pci_bus, &gm->pci_devfn)) {
 		gm->pci_bus = gm->pci_devfn = 0xff;
 		printk(KERN_ERR "Can't locate GMAC PCI entry\n");
 	}

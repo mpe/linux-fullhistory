@@ -13,8 +13,6 @@
 static const char *version =
 "ncr885e.c:v1.0 02/10/00 dan@synergymicro.com, cort@fsmlabs.com\n";
 
-#include <linux/config.h>
-
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
@@ -40,26 +38,7 @@ static const char *version =
 
 static const char *chipname = "ncr885e";
 
-/* debugging flags */
-#if 0
-#define DEBUG_FUNC    0x0001
-#define DEBUG_PACKET  0x0002
-#define DEBUG_CMD     0x0004
-#define DEBUG_CHANNEL 0x0008
-#define DEBUG_INT     0x0010
-#define DEBUG_RX      0x0020
-#define DEBUG_TX      0x0040
-#define DEBUG_DMA     0x0080
-#define DEBUG_MAC     0x0100
-#define DEBUG_DRIVER  0x0200
-#define DEBUG_ALL     0x1fff
-#endif
-
-#ifdef DEBUG_NCR885E
 #define NCR885E_DEBUG   0
-#else
-#define NCR885E_DEBUG   0
-#endif
 
 /* The 885's Ethernet PCI device id. */
 #ifndef PCI_DEVICE_ID_NCR_53C885_ETHERNET
@@ -142,6 +121,12 @@ static void write_mii( unsigned long ioaddr, int reg, int data );
 #define TX_RESET_FLAGS    (TX_CHANNEL_RUN|TX_CHANNEL_PAUSE|TX_CHANNEL_WAKE)
 #define RX_RESET_FLAGS    (RX_CHANNEL_RUN|RX_CHANNEL_PAUSE|RX_CHANNEL_WAKE)
 
+
+static struct pci_device_id ncr885e_pci_tbl[] __initdata = {
+	{ PCI_VENDOR_ID_NCR, PCI_DEVICE_ID_NCR_53C885_ETHERNET, PCI_ANY_ID, PCI_ANY_ID, },
+	{ }			/* Terminating entry */
+};
+MODULE_DEVICE_TABLE(pci, ncr885e_pci_tbl);
 
 #if 0
 static int
@@ -950,8 +935,6 @@ ncr885e_open( struct net_device *dev )
 
 	netif_start_queue(dev);
 
-	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
@@ -976,9 +959,10 @@ ncr885e_xmit_start( struct sk_buff *skb, struct net_device *dev )
 
 	if ( next >= NR_TX_RING )
 		next = 0;
-
+#if 0
 	/* mark ourselves as busy, even if we have too many packets waiting */
 	netif_stop_queue(dev);
+#endif
 
 	/* see if it's necessary to defer this packet */
 	if ( sp->tx_active >= MAX_TX_ACTIVE ) {
@@ -1082,8 +1066,6 @@ ncr885e_close(struct net_device *dev)
 
 	kfree( np->head );
 
-	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 
@@ -1147,6 +1129,7 @@ static int __init ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
 	dev = init_etherdev( NULL, sizeof( struct ncr885e_private ) );
 	if (!dev)
 		return -ENOMEM;
+	SET_MODULE_OWNER(dev);
 
 	sp = dev->priv;
 
@@ -1199,9 +1182,8 @@ static int __init ncr885e_probe1(unsigned long ioaddr, unsigned char irq )
 static int __init ncr885e_probe(void)
 {
 	struct pci_dev *pdev = NULL;
-	unsigned int ioaddr, chips = 0;
-	unsigned short cmd;
-	unsigned char irq, latency;
+	unsigned int ioaddr, ret;
+	unsigned char irq;
 
 	/* use 'if' not 'while' where because driver only supports one device */
 	if (( pdev = pci_find_device( PCI_VENDOR_ID_NCR, 
@@ -1214,32 +1196,24 @@ static int __init ncr885e_probe(void)
 		}
 
 		if (pci_enable_device(pdev))
-			continue;
+			return -ENODEV;
 
 		/* Use I/O space */
 		ioaddr = pci_resource_start (pdev, 0);
 		irq = pdev->irq;
 
-		/* Adjust around the Grackle... */
-#ifdef CONFIG_GEMINI
-		ioaddr |= 0xfe000000;
-#endif
-
 		if ( !request_region( ioaddr, NCR885E_TOTAL_SIZE, "ncr885e" ))
-			continue;
+			return -ENOMEM;
 
 		/* finish off the probe */
-		if ( !(ncr885e_probe1(ioaddr, irq ))) {
-			chips++;
-			pci_set_master (pdev);
-		} else
-			release_region( ioaddr, NCR885E_TOTAL_SIZE );
+		ret = ncr885e_probe1(ioaddr, irq);
+		if (ret)
+			release_region(ioaddr, NCR885E_TOTAL_SIZE);
+		else
+			pci_set_master(pdev);
 	}
 
-	if ( !chips )
-		return -ENODEV;
-	else
-		return 0;
+	return ret;
 }
 
 /* debugging to peek at dma descriptors */
@@ -1382,6 +1356,6 @@ module_exit(ncr885e_cleanup);
 
 /*
  * Local variables:
- *  compile-command: "gcc -DMODULE -DMODVERSIONS -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O6 -c symba.c"
+ *  c-basic-offset: 8
  * End:
  */
