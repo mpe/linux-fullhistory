@@ -61,7 +61,7 @@ extern void d_delete(struct dentry *);
 /* allocate/de-allocate */
 extern void d_free(struct dentry *);
 extern struct dentry * d_alloc(struct dentry * parent, const struct qstr *name);
-extern void shrink_dcache(int);
+extern void shrink_dcache(void);
 
 /* only used at mount-time */
 extern struct dentry * d_alloc_root(struct inode * root_inode, struct dentry * old_root);

@@ -95,16 +95,10 @@ repeat:
  * more memory, or simply when we need to unmount
  * something (at which point we need to unuse
  * all dentries).
- *
- * "priority" is a value between 0-6, 0 means that
- * we should work really hard on releasing stuff..
  */
-void shrink_dcache(int priority)
+void shrink_dcache(void)
 {
-	int nr = 42;	/* "random" number */
-
-	nr <<= 6; nr >>= priority;
-	do {
+	for (;;) {
 		struct dentry *dentry;
 		struct list_head *tmp = dentry_unused.prev;
 
@@ -128,7 +122,7 @@ void shrink_dcache(int priority)
 			d_free(dentry);
 			dput(parent);
 		}
-	} while (--nr);
+	}
 }
 
 #define NAME_ALLOC_LEN(len)	((len+16) & ~15)

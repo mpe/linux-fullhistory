@@ -362,15 +362,21 @@ static inline int do_try_to_free_page(int priority, int dma, int wait)
 				return 1;
 			state = 1;
 		case 1:
-			if (kmem_cache_reap(i, dma, wait))
-				return 1;
+			shrink_dcache();
 			state = 2;
 		case 2:
-			if (shm_swap(i, dma))
+			/*
+			 * We shouldn't have a priority here:
+			 * If we're low on memory we should
+			 * unconditionally throw away _all_
+			 * kmalloc caches!
+			 */
+			if (kmem_cache_reap(0, dma, wait))
 				return 1;
 			state = 3;
 		case 3:
-			shrink_dcache(i);
+			if (shm_swap(i, dma))
+				return 1;
 			state = 4;
 		default:
 			if (swap_out(i, dma, wait))
