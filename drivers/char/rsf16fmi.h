@@ -8,8 +8,6 @@
 #ifndef __RSF16FMI_H
 #define __RSF16FMI_H
 
-#include <linux/radio.h>
-
 int radiosf16fmi_init(void);
 
 #endif /* __RSF16FMI_H */

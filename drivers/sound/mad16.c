@@ -1033,9 +1033,9 @@ int init_module(void)
 
 	config_mpu.io_base = mpu_io;
 	config_mpu.irq = mpu_irq;
-	found_mpu = probe_mad16_mpu(&config_mpu);
-
 	attach_mad16(&config);
+
+	found_mpu = probe_mad16_mpu(&config_mpu);
 
 	if (found_mpu)
 		attach_mad16_mpu(&config_mpu);
@@ -1047,7 +1047,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	if (found_mpu)
-		unload_mad16_mpu(&config);
+		unload_mad16_mpu(&config_mpu);
 	unload_mad16(&config);
 	SOUND_LOCK_END;
 }

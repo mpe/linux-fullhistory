@@ -97,12 +97,50 @@ ENTRY(outsl)
 		bne	4b
 		mov	pc, lr
 
+		/* Nobody could say these are optimal, but not to worry. */
 
-ENTRY(outsw)
 ENTRY(outswb)
+		mov	r2, r2, lsr #1
+ENTRY(outsw)
+		add	r0, r0, #0xff000000
+		add	r0, r0, #0x00e00000
+1:		teq	r2, #0
+		ldrneh	r3, [r1], #2
+		strneh	r3, [r0]
+		subne	r2, r2, #1
+		bne	1b
 		mov	pc, lr
 
-ENTRY(insw)
 ENTRY(inswb)
+		mov	r2, r2, lsr #1
+ENTRY(insw)
+		add	r0, r0, #0xff000000
+		add	r0, r0, #0x00e00000
+1:		teq	r2, #0
+		ldrneh	r3, [r0]
+		strneh	r3, [r1], #2
+		subne	r2, r2, #1
+		bne	1b
 		mov	pc, lr
 
+
+ENTRY(insb)
+		add	r0, r0, #0xff000000
+		add	r0, r0, #0x00e00000
+1:		teq	r2, #0
+		ldrneb	r3, [r0]
+		strneb	r3, [r1], #1
+		subne	r2, r2, #1
+		bne	1b
+		mov	pc, lr
+
+
+ENTRY(outsb)
+		add	r0, r0, #0xff000000
+		add	r0, r0, #0x00e00000
+1:		teq	r2, #0
+		ldrneb	r3, [r1], #1
+		strneb	r3, [r0]
+		subne	r2, r2, #1
+		bne	1b
+		mov	pc, lr

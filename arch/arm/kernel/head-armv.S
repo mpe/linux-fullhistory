@@ -22,18 +22,20 @@
  * MMU off.  Note! These should be unique!!! Please read Documentation/ARM-README
  * for more information.
  *
- *  r1 = 0 -> ebsa110  (Ram @ 0x00000000)
- *  r1 = 1 -> RPC      (Ram @ 0x10000000)
- *  r1 = 2 -> ebsit    (???)
+ *  r1 = 0 -> ebsa110
+ *  r1 = 1 -> RPC
+ *  r1 = 2 -> ebsit
  *  r1 = 3 -> nexuspci
- *  r1 = 4 -> ebsa285  (Ram @ 0x00000000)
+ *  r1 = 4 -> ebsa285
+ *  r1 = 5 -> vnc
+ *  r1 = 6 -> CATS
  */
 ENTRY(stext)
 ENTRY(_stext)
 __entry:
 		teq	r0, #0					@ check for illegal entry...
 		bne	.Lerror					@ loop indefinitely
-		cmp	r1, #5					@ Unknown machine architecture
+		cmp	r1, #7					@ Unknown machine architecture
 		bge	.Lerror
 @
 @ First thing to do is to get the page tables set up so that we can call the kernel
@@ -119,7 +121,8 @@ __entry:
 								@ we lose this page!
 		mov	pc, lr
 
-.Lerror:	mov	r0, #0x02000000
+.Lerror:
+1:		mov	r0, #0x02000000
 		mov	r1, #0x11
 		orr	r1, r1, r1, lsl #8
 		orr	r1, r1, r1, lsl #16
@@ -127,7 +130,7 @@ __entry:
 		str	r1, [r0], #4
 		str	r1, [r0], #4
 		str	r1, [r0], #4
-		b	.Lerror
+		b	1b
 
 .Lbranch:	.long	.Lalready_done_mmap			@ Real address of routine
 
@@ -156,12 +159,22 @@ __entry:
 		.long	0
 
 		@ EBSA285
-		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000	@ Address of page tables (physical)
+		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 @ Address of page tables (physical)
 		.long	0					@ Address of RAM
 		.long	0x24000000				@ I/O base address (0x42000000 -> 0xFE000000)
 		.long	0
 
+		@ Corel VNC
+		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 @ Address of page tables (physical)
+		.long	0					@ Address of RAM
+		.long	0x24000000				@ I/O base address (0x42000000 -> 0xfe000000)
+		.long	0
 
+		@ CATS
+		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 @ Address of page tables (physical)
+		.long	0					@ Address of RAM
+		.long	0x24000000				@ I/O base address (0x42000000 -> 0xfe000000)
+		.long	0
 
 .LCProcTypes:	@ ARM6 / 610
 		.long	0x41560600
@@ -170,9 +183,16 @@ __entry:
 		b	.Larmv3_flush_early			@ arm v3 flush & ctrl early setup
 		mov	pc, lr
 
-		@ ARM7 / 710
+		@ ARM7
 		.long	0x41007000
 		.long	0xfffff000
+		.long	0x00000c12
+		b	.Larmv3_flush_late			@ arm v3 flush & ctrl late setup
+		mov	pc, lr
+
+		@ ARM710
+		.long	0x41007000
+		.long	0xfff8f000				@ arm710 processors are weird
 		.long	0x00000c12
 		b	.Larmv3_flush_late			@ arm v3 flush & ctrl late setup
 		mov	pc, lr
@@ -267,6 +287,7 @@ __entry:
 		.macro	busyuart,rd,rx
 1002:		ldrb	\rd, [\rx, #0x14]
 		and	\rd, \rd, #0x60
+		teq	\rd, #0x60
 		bne	1002b
 		.endm
 
@@ -289,6 +310,7 @@ __entry:
 		.macro	busyuart,rd,rx
 1002:		ldrb	\rd, [\rx, #0x14]
 		and	\rd, \rd, #0x60
+		teq	\rd, #0x60
 		bne	1002b
 		.endm
 
@@ -298,7 +320,7 @@ __entry:
 		beq	1001b
 		.endm
 
-#elif defined(CONFIG_ARCH_EBSA285)
+#elif defined(CONFIG_ARCH_EBSA285) || defined(CONFIG_ARCH_VNC)
 		.macro	addruart,rx
 		mov	\rx, #0xfe000000
 		.endm

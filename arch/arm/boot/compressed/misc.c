@@ -274,10 +274,10 @@ ulg user_stack [STACK_SIZE];
 
 #ifndef STANDALONE_DEBUG
 
-ulg decompress_kernel(ulg output_start)
+ulg decompress_kernel(ulg output_start, ulg free_mem_ptr_p, ulg free_mem_ptr_end_p)
 {
-	free_mem_ptr = (ulg)&end;
-	free_mem_ptr_end = output_start;
+	free_mem_ptr = free_mem_ptr_p;
+	free_mem_ptr_end = free_mem_ptr_end_p;
 
 	proc_decomp_setup ();
 	arch_decomp_setup ();

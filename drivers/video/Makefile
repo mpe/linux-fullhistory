@@ -29,9 +29,14 @@ ifeq ($(CONFIG_DUMMY_CONSOLE),y)
   L_OBJS += dummycon.o
 endif
 
+ifeq ($(CONFIG_PROM_CONSOLE),y)
+  L_OBJS += promcon.o
+endif
+
 ifeq ($(CONFIG_FB),y)
-  L_OBJS += fonts.o font_8x8.o font_8x16.o pearl_8x8.o font_6x11.o font_sun8x16.o
-  OX_OBJS += fbcon.o fbcmap.o fbgen.o
+  L_OBJS += fonts.o font_8x8.o font_8x16.o pearl_8x8.o font_6x11.o font_sun8x16.o font_sun12x22.o
+  OX_OBJS += fbcon.o fbcmap.o
+# fbgen is not compiled by default since nobody uses it yet
 endif
 
 # Frame Buffer Devices
@@ -60,6 +65,10 @@ ifeq ($(CONFIG_FB_ATY),y)
 L_OBJS += atyfb.o
 endif
 
+ifeq ($(CONFIG_FB_CT65550),y)
+L_OBJS += chipsfb.o
+endif
+
 ifeq ($(CONFIG_FB_CYBER),y)
 L_OBJS += cyberfb.o
 else
@@ -77,7 +86,7 @@ L_OBJS += hpfb.o
 endif
 
 ifeq ($(CONFIG_FB_OF),y)
-L_OBJS += offb.o
+L_OBJS += offb.o macmodes.o
 endif
 
 ifeq ($(CONFIG_FB_RETINAZ3),y)
@@ -129,14 +138,6 @@ L_OBJS += virgefb.o
 else
   ifeq ($(CONFIG_FB_VIRGE),m)
   M_OBJS += virgefb.o
-  endif
-endif
-
-ifeq ($(CONFIG_FB_PROM),y)
-L_OBJS += promfb.o
-else
-  ifeq ($(CONFIG_FB_PROM),m)
-  M_OBJS += promfb.o
   endif
 endif
 
@@ -316,12 +317,6 @@ endif
 
 ifdef CONFIG_VGA_CONSOLE
 L_OBJS += vgacon.o
-endif
-
-# Console Wrapper
-
-ifdef CONFIG_ABSCON_COMPAT
-L_OBJS += compatcon.o
 endif
 
 include $(TOPDIR)/Rules.make

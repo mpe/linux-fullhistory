@@ -12,8 +12,8 @@
 
 #include "tuner.h"
 
-int debug = 0; /* insmod parameter */
-int type  = 0; /* tuner type */
+static int debug = 0; /* insmod parameter */
+static int type  = 0; /* tuner type */
 
 #define dprintk     if (debug) printk
 
@@ -248,7 +248,7 @@ EXPORT_NO_SYMBOLS;
 #ifdef MODULE
 int init_module(void)
 #else
-int msp3400c_init(void)
+int i2c_tuner_init(void)
 #endif
 {
 	i2c_register_driver(&i2c_driver_tuner);

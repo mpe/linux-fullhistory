@@ -22,6 +22,8 @@
  *  06-04-1998	RMK	Tightened conditions for printing incomplete
  *			transfers
  *  02-05-1998	RMK	Added extra checks in fas216_reset
+ *  24-05-1998	RMK	Fixed synchronous transfers with period >= 200ns
+ *  27-06-1998	RMK	Changed asm/delay.h to linux/delay.h
  *
  * Todo:
  *  - tighten up the MESSAGE_REJECT support.
@@ -37,8 +39,8 @@
 #include <linux/proc_fs.h>
 #include <linux/unistd.h>
 #include <linux/stat.h>
+#include <linux/delay.h>
 
-#include <asm/delay.h>
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -50,9 +52,12 @@
 #include "../../scsi/hosts.h"
 #include "fas216.h"
 
+MODULE_AUTHOR("Russell King");
+MODULE_DESCRIPTION("Generic FAS216/NCR53C9x driver");
+
 #define VER_MAJOR	0
 #define VER_MINOR	0
-#define VER_PATCH	3
+#define VER_PATCH	4
 
 #define SCSI2_TAG
 
@@ -81,7 +86,6 @@
  */
 #define SCSI2_SYNC
 
-#undef NO_DISCONNECTS
 #undef DEBUG_CONNECT
 #undef DEBUG_BUSSERVICE
 #undef DEBUG_FUNCTIONDONE
@@ -94,8 +98,7 @@ static int ptr;
 
 static void fas216_dumpstate(FAS216_Info *info)
 {
-	printk("FAS216 registers:\n");
-	printk("    CTCL=%02X CTCM=%02X CMD=%02X STAT=%02X"
+	printk("FAS216: CTCL=%02X CTCM=%02X CMD=%02X STAT=%02X"
 	       " INST=%02X IS=%02X CFIS=%02X",
 		inb(REG_CTCL(info)), inb(REG_CTCM(info)),
 		inb(REG_CMD(info)),  inb(REG_STAT(info)),
@@ -114,7 +117,7 @@ static void fas216_dumpinfo(FAS216_Info *info)
 	if (used++)
 		return;
 
-	printk("FAS216_Info = \n");
+	printk("FAS216_Info=\n");
 	printk("  { magic_start=%lX host=%p SCpnt=%p origSCpnt=%p\n",
 		info->magic_start, info->host, info->SCpnt,
 		info->origSCpnt);
@@ -122,17 +125,18 @@ static void fas216_dumpinfo(FAS216_Info *info)
 		info->scsi.io_port, info->scsi.io_shift, info->scsi.irq,
 		info->scsi.cfg[0], info->scsi.cfg[1], info->scsi.cfg[2],
 		info->scsi.cfg[3]);
-	printk("           type=%p phase=%X reconnected = { target=%d lun=%d tag=%d }\n",
+	printk("           type=%p phase=%X reconnected={ target=%d lun=%d tag=%d }\n",
 		info->scsi.type, info->scsi.phase,
 		info->scsi.reconnected.target,
 		info->scsi.reconnected.lun, info->scsi.reconnected.tag);
-	printk("           SCp = { ptr=%p this_residual=%X buffer=%p buffers_residual=%X }\n",
+	printk("           SCp={ ptr=%p this_residual=%X buffer=%p buffers_residual=%X }\n",
 		info->scsi.SCp.ptr, info->scsi.SCp.this_residual,
 		info->scsi.SCp.buffer, info->scsi.SCp.buffers_residual);
 	printk("      msgs async_stp=%X last_message=%X disconnectable=%d aborting=%d }\n",
 		info->scsi.async_stp, info->scsi.last_message,
 		info->scsi.disconnectable, info->scsi.aborting);
-	printk("    stats={ queues=%X removes=%X fins=%X reads=%X writes=%X miscs=%X disconnects=%X aborts=%X resets=%X }\n",
+	printk("    stats={ queues=%X removes=%X fins=%X reads=%X writes=%X miscs=%X\n"
+	       "            disconnects=%X aborts=%X resets=%X }\n",
 		info->stats.queues, info->stats.removes, info->stats.fins,
 		info->stats.reads, info->stats.writes, info->stats.miscs,
 		info->stats.disconnects, info->stats.aborts, info->stats.resets);
@@ -148,7 +152,7 @@ static void fas216_dumpinfo(FAS216_Info *info)
 	printk("    dma={ transfer_type=%X setup=%p pseudo=%p stop=%p }\n",
 		info->dma.transfer_type, info->dma.setup,
 		info->dma.pseudo, info->dma.stop);
-	printk("    internal_done=%X magic_end=%lX\n",
+	printk("    internal_done=%X magic_end=%lX }\n",
 		info->internal_done, info->magic_end);
 }
 
@@ -228,9 +232,9 @@ static void print_debug_list(void)
 
 	i = ptr;
 
-	printk(KERN_ERR "SCSI state trail: ");
+	printk(KERN_ERR "SCSI IRQ trail: ");
 	do {
-		printk("%02X:%02X:%02X:%02X ",
+		printk("%02X:%02X:%02X:%1X ",
 			list[i].stat, list[i].ssr,
 			list[i].isr, list[i].ph);
 		i = (i + 1) & 7;
@@ -265,7 +269,8 @@ static int fas216_clockrate(int clock)
  *         : ns   - period in ns (between subsequent bytes)
  * Returns : Value suitable for REG_STP
  */
-static int fas216_syncperiod(FAS216_Info *info, int ns)
+static int
+fas216_syncperiod(FAS216_Info *info, int ns)
 {
 	int value = (info->ifcfg.clockrate * ns) / 1000;
 
@@ -277,6 +282,25 @@ static int fas216_syncperiod(FAS216_Info *info, int ns)
 		value = 35;
 
 	return value & 31;
+}
+
+/* Function: void fas216_set_sync(FAS216_Info *info, int target)
+ * Purpose : Correctly setup FAS216 chip for specified transfer period.
+ * Params  : info   - state structure for interface
+ *         : target - target
+ * Notes   : we need to switch the chip out of FASTSCSI mode if we have
+ *           a transfer period >= 200ns - otherwise the chip will violate
+ *           the SCSI timings.
+ */
+static void
+fas216_set_sync(FAS216_Info *info, int target)
+{
+	outb(info->device[target].sof, REG_SOF(info));
+	outb(info->device[target].stp, REG_STP(info));
+	if (info->device[target].period >= (200 / 4))
+		outb(info->scsi.cfg[2] & ~CNTL3_FASTSCSI, REG_CNTL3(info));
+	else
+		outb(info->scsi.cfg[2], REG_CNTL3(info));
 }
 
 /* Function: void fas216_updateptrs(FAS216_Info *info, int bytes_transferred)
@@ -504,6 +528,8 @@ fas216_stoptransfer(FAS216_Info *info)
 		fas216_updateptrs(info, total - residual);
 		info->dma.transfer_type = fasdma_none;
 	}
+	if (info->scsi.phase == PHASE_DATAOUT)
+		outb(CMD_FLUSHFIFO, REG_CMD(info));
 }
 
 /* Function: void fas216_disconnected_intr(FAS216_Info *info)
@@ -857,13 +883,13 @@ static void fas216_message(FAS216_Info *info)
 				info->scsi.phase = PHASE_MSGOUT;
 			case syncneg_sent:
 				info->device[info->SCpnt->target].negstate = syncneg_complete;
+				info->device[info->SCpnt->target].period = message[3];
 				info->device[info->SCpnt->target].sof = message[4];
 				info->device[info->SCpnt->target].stp =
 					fas216_syncperiod(info, message[3] * 4);
 				printk(KERN_NOTICE "scsi%d.%c: using synchronous transfer, offset %d, %d ns\n",
 					info->host->host_no, fas216_target(info), message[4], message[3] * 4);
-				outb(info->device[info->SCpnt->target].sof, REG_SOF(info));
-				outb(info->device[info->SCpnt->target].stp, REG_STP(info));
+				fas216_set_sync(info, info->SCpnt->target);
 				break;
 			}
 			break;
@@ -1416,8 +1442,7 @@ static void fas216_kick(FAS216_Info *info)
 	outb(info->ifcfg.select_timeout, REG_STIM(info));
 
 	/* synchronous transfers */
-	outb(info->device[SCpnt->target].sof, REG_SOF(info));
-	outb(info->device[SCpnt->target].stp, REG_STP(info));
+	fas216_set_sync(info, SCpnt->target);
 
 	msglen = msgqueue_msglength(&info->scsi.msgs);
 
@@ -1742,8 +1767,8 @@ int fas216_abort(Scsi_Cmnd *SCpnt)
 	info->stats.aborts += 1;
 
 	print_debug_list();
-	fas216_dumpinfo(info);
 	fas216_dumpstate(info);
+	fas216_dumpinfo(info);
 	printk(KERN_WARNING "scsi%d: fas216_abort: ", info->host->host_no);
 
 	do {
@@ -1823,12 +1848,9 @@ static void fas216_reset_state(FAS216_Info *info)
 #endif
 
 	for (i = 0; i < 8; i++) {
-#ifndef NO_DISCONNECTS
-		info->device[i].disconnect_ok = 1;
-#else
-		info->device[i].disconnect_ok = 0;
-#endif
+		info->device[i].disconnect_ok = info->ifcfg.disconnect_ok;
 		info->device[i].negstate = negstate;
+		info->device[i].period = info->ifcfg.asyncperiod / 4;
 		info->device[i].stp = info->scsi.async_stp;
 		info->device[i].sof = 0;
 	}
@@ -1979,6 +2001,8 @@ int fas216_init(struct Scsi_Host *instance)
 		queue_free(&info->queues.issue);
 		return 1;
 	}
+
+	outb(CMD_RESETCHIP, REG_CMD(info));
 
 	outb(0, REG_CNTL3(info));
 	outb(CNTL2_S2FE, REG_CNTL2(info));

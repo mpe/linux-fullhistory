@@ -212,7 +212,7 @@ int msnd_fifo_read(msnd_fifo *f, char *buf, size_t len, int user)
 int msnd_wait_TXDE(multisound_dev_t *dev)
 {
 	register unsigned int io = dev->io;
-	register int timeout = 5000;
+	register int timeout = 100;
     
 	while(timeout-- > 0)
 		if (inb(io + HP_ISR) & HPISR_TXDE)
@@ -224,7 +224,7 @@ int msnd_wait_TXDE(multisound_dev_t *dev)
 int msnd_wait_HC0(multisound_dev_t *dev)
 {
 	register unsigned int io = dev->io;
-	register int timeout = 25000;
+	register int timeout = 100;
 
 	while(timeout-- > 0)
 		if (!(inb(io + HP_CVR) & HPCVR_HC))
@@ -291,7 +291,7 @@ int msnd_upload_host(multisound_dev_t *dev, char *bin, int len)
 
 int msnd_enable_irq(multisound_dev_t *dev)
 {
-	printk(KERN_INFO LOGNAME ": enable_irq: count %d\n", dev->irq_ref);
+	printk(KERN_DEBUG LOGNAME ": enable_irq: count %d\n", dev->irq_ref);
 
 	if (dev->irq_ref++ != 0)
 		return 0;
@@ -333,6 +333,8 @@ int msnd_disable_irq(multisound_dev_t *dev)
 		dev->irq_ref = 0;
 
 	printk(KERN_DEBUG LOGNAME ": Disabling IRQ\n");
+	
+	udelay(50);
 
 	spin_lock_irqsave(&dev->lock, flags);
 	outb(inb(dev->io + HP_ICR) & ~HPICR_RREQ, dev->io + HP_ICR);

@@ -24,7 +24,7 @@ while (<DATA>) {
 	/elf32/ && ( $elf = 1 );
 	/a.out/ && ( $aout = 1 );
 	next if ($aout && ! / 07 /);
-	next if ($elf && ! (/^00...... g/ && /.data/));
+	next if ($elf && ! (/^0*0...... g/ && /.data/));
 	next if (!$aout && !$elf);
 
 	if ($aout) {
@@ -33,7 +33,7 @@ while (<DATA>) {
 	}
 	if ($elf) {
 		chomp;
-		$addr = substr ($_, 0, 8);
+		$addr = substr ($_, 0, index($_, " "));
 		$name = substr ($_, rindex($_, " ") + 1);
 		$nam[hex($addr)] = $name;
 	}

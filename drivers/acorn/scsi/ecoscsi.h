@@ -81,7 +81,7 @@ use_clustering:	DISABLE_CLUSTERING				\
 #define NCR5380_read(reg) ecoscsi_read(_instance, reg)
 #define NCR5380_write(reg, value) ecoscsi_write(_instance, reg, value)
 
-#define NCR5380_intr ecoscsi_intr
+#define do_NCR5380_intr do_ecoscsi_intr
 #define NCR5380_queue_command ecoscsi_queue_command
 #define NCR5380_abort ecoscsi_abort
 #define NCR5380_reset ecoscsi_reset

@@ -25,7 +25,8 @@
  *			   Andreas Schwab
  *
  *  Hardware cursor support added by Emmanuel Marty (core@ggi-project.org)
- *  Smart redraw scrolling added by Jakub Jelinek (jj@ultra.linux.cz)
+ *  Smart redraw scrolling, arbitrary font width support added by 
+ *                         Jakub Jelinek (jj@ultra.linux.cz)
  *
  *
  *  The low level operations for the various display memory organizations are
@@ -132,13 +133,10 @@ static int vbl_cursor_cnt = 0;
 static int cursor_on = 0;
 static int cursor_blink_rate;
 
-static __inline__ int CURSOR_UNDRAWN(void)
+static __inline__ void CURSOR_UNDRAWN(void)
 {
-    int cursor_was_drawn;
     vbl_cursor_cnt = 0;
-    cursor_was_drawn = cursor_drawn;
     cursor_drawn = 0;
-    return cursor_was_drawn;
 }
 #endif
 
@@ -168,7 +166,7 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 static void fbcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
 			int height, int width);
 static int fbcon_switch(struct vc_data *conp);
-static int fbcon_blank(int blank);
+static int fbcon_blank(struct vc_data *conp, int blank);
 static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data);
 static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data);
 static int fbcon_set_palette(struct vc_data *conp, unsigned char *table);
@@ -330,6 +328,9 @@ static void fbcon_init(struct vc_data *conp, int init)
     info = registered_fb[(int)con2fb_map[unit]];
 
     info->changevar = &fbcon_changevar;
+    conp->vc_display_fg = &info->display_fg;
+    if (!info->display_fg)
+        info->display_fg = conp;
     fb_display[unit] = *(info->disp);	/* copy from default */
     DPRINTK("mode:   %s\n",info->modename);
     DPRINTK("visual: %d\n",fb_display[unit].visual);
@@ -374,6 +375,20 @@ static __inline__ void updatescrollmode(struct display *p)
 	p->scrollmode = SCROLL_YMOVE;
 }
 
+static void fbcon_font_widths(struct display *p)
+{
+    int i;
+    p->fontwidthlog = 0;
+    for (i = 2; i <= 6; i++)
+    	if (p->fontwidth == (1 << i))
+	    p->fontwidthlog = i;
+    p->fontheightlog = 0;
+    for (i = 2; i <= 6; i++)
+    	if (p->fontheight == (1 << i))
+	    p->fontheightlog = i;
+}
+
+#define fontwidthvalid(p,w) ((p)->dispsw->fontwidthmask & FONTWIDTH(w))
 
 static void fbcon_setup(int con, int init, int logo)
 {
@@ -381,6 +396,8 @@ static void fbcon_setup(int con, int init, int logo)
     struct vc_data *conp = p->conp;
     int nr_rows, nr_cols;
     int old_rows, old_cols;
+    unsigned short *save = NULL, *r, *q;
+    int logo_lines = 0;
     /* Only if not module */
     extern int initmem_freed;
     
@@ -391,10 +408,12 @@ static void fbcon_setup(int con, int init, int logo)
 
     if (!p->fb_info->fontname[0] ||
 	!findsoftfont(p->fb_info->fontname, &p->fontwidth, &p->fontheight,
-		      &p->fontdata) || p->fontwidth != 8)
+		      &p->fontdata) || !fontwidthvalid(p,p->fontwidth))
 	getdefaultfont(p->var.xres, p->var.yres, NULL, &p->fontwidth,
 		       &p->fontheight, &p->fontdata);
-    if (p->fontwidth != 8) {
+
+    fbcon_font_widths(p);
+    if (!fontwidthvalid(p,p->fontwidth)) {
 #ifdef CONFIG_MAC
 	if (MACH_IS_MAC)
 	    /* ++Geert: hack to make 6x11 fonts work on mac */
@@ -403,44 +422,58 @@ static void fbcon_setup(int con, int init, int logo)
 #endif
 	{
 	    /* ++Geert: changed from panic() to `correct and continue' */
-	    printk(KERN_ERR "fbcon_setup: No support for fontwidth != 8");
+	    printk(KERN_ERR "fbcon_setup: No support for fontwidth %d\n", p->fontwidth);
 	    p->dispsw = &fbcon_dummy;
 	}
     }
+    if (p->dispsw->set_font)
+    	p->dispsw->set_font(p, p->fontwidth, p->fontheight);
     updatescrollmode(p);
-    
-    if (logo) {
-    	/* Need to make room for the logo */
-    	int logo_lines = (LOGO_H + p->fontheight - 1) / p->fontheight;
-    	unsigned short *q = (unsigned short *)(conp->vc_origin + 
-    				conp->vc_size_row * conp->vc_rows);
-	unsigned short *r;
-    
-    	for (r = q - logo_lines * conp->vc_cols; r < q; r++)
-    	    if (*r != conp->vc_video_erase_char)
-    	    	break;
-    	if (r == q) {
-    	    /* We can scroll screen down */
-    	    int cnt;
-    	    int step = logo_lines * conp->vc_cols;
-
-	    r = q - step - conp->vc_cols;
-    	    for (cnt = conp->vc_rows - logo_lines; cnt > 0; cnt--) {
-    	    	scr_memcpyw(r + step, r, conp->vc_size_row);
-    	    	r -= conp->vc_cols;
-    	    }
-    	    conp->vc_y += logo_lines;
-    	    conp->vc_pos += logo_lines * conp->vc_size_row;
-    	}
-    	scr_memsetw((unsigned short *)conp->vc_origin, conp->vc_video_erase_char, 
-    		conp->vc_size_row * logo_lines);
-    }
     
     old_cols = conp->vc_cols;
     old_rows = conp->vc_rows;
     
     nr_cols = p->var.xres/p->fontwidth;
     nr_rows = p->var.yres/p->fontheight;
+    
+    if (logo) {
+    	/* Need to make room for the logo */
+	int cnt;
+	int step;
+    
+    	logo_lines = (LOGO_H + p->fontheight - 1) / p->fontheight;
+    	q = (unsigned short *)(conp->vc_origin + conp->vc_size_row * old_rows);
+    	step = logo_lines * old_cols;
+    	for (r = q - logo_lines * old_cols; r < q; r++)
+    	    if (*r != conp->vc_video_erase_char)
+    	    	break;
+	if (r != q && nr_rows >= old_rows + logo_lines) {
+    	    save = kmalloc(logo_lines * nr_cols * 2, GFP_KERNEL);
+    	    if (save) {
+    	        int i = old_cols < nr_cols ? old_cols : nr_cols;
+    	    	scr_memsetw(save, conp->vc_video_erase_char, logo_lines * nr_cols * 2);
+    	    	r = q - step;
+    	    	for (cnt = 0; cnt < logo_lines; cnt++, r += i)
+    	    		scr_memcpyw(save + cnt * nr_cols, r, 2 * i);
+    	    	r = q;
+    	    }
+    	}
+    	if (r == q) {
+    	    /* We can scroll screen down */
+	    r = q - step - old_cols;
+    	    for (cnt = old_rows - logo_lines; cnt > 0; cnt--) {
+    	    	scr_memcpyw(r + step, r, conp->vc_size_row);
+    	    	r -= old_cols;
+    	    }
+    	    if (!save) {
+	    	conp->vc_y += logo_lines;
+    		conp->vc_pos += logo_lines * conp->vc_size_row;
+    	    }
+    	}
+    	scr_memsetw((unsigned short *)conp->vc_origin, conp->vc_video_erase_char, 
+    		conp->vc_size_row * logo_lines);
+    }
+    
     /*
      *  ++guenther: console.c:vc_allocate() relies on initializing
      *  vc_{cols,rows}, but we must not set those if we are only
@@ -465,8 +498,14 @@ static void fbcon_setup(int con, int init, int logo)
 
     if (!init) {
 	vc_resize_con(nr_rows, nr_cols, con);
-	if (con == fg_console &&
-	    old_rows == nr_rows && old_cols == nr_cols)
+	if (save) {
+    	    q = (unsigned short *)(conp->vc_origin + conp->vc_size_row * old_rows);
+	    scr_memcpyw(q, save, logo_lines * nr_cols * 2);
+	    conp->vc_y += logo_lines;
+    	    conp->vc_pos += logo_lines * conp->vc_size_row;
+    	    kfree(save);
+	}
+	if (con == fg_console)
 	    update_screen(con); /* So that we set origin correctly */
     }
 	
@@ -515,6 +554,7 @@ static void fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
     u_int y_break;
+    int redraw_cursor = 0;
 
     if (!p->can_soft_blank && console_blanked)
 	return;
@@ -523,8 +563,10 @@ static void fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
 	return;
 
     if ((sy <= p->cursor_y) && (p->cursor_y < sy+height) &&
-	(sx <= p->cursor_x) && (p->cursor_x < sx+width))
+	(sx <= p->cursor_x) && (p->cursor_x < sx+width)) {
 	CURSOR_UNDRAWN();
+	redraw_cursor = 1;
+    }
 
     /* Split blits that cross physical y_wrap boundary */
 
@@ -535,6 +577,9 @@ static void fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
 	p->dispsw->clear(conp, p, real_y(p, sy+b), sx, height-b, width);
     } else
 	p->dispsw->clear(conp, p, real_y(p, sy), sx, height, width);
+
+    if (redraw_cursor)
+	vbl_cursor_cnt = CURSOR_DRAW_DELAY;
 }
 
 
@@ -542,14 +587,20 @@ static void fbcon_putc(struct vc_data *conp, int c, int ypos, int xpos)
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
+    int redraw_cursor = 0;
 
     if (!p->can_soft_blank && console_blanked)
 	    return;
 
-    if ((p->cursor_x == xpos) && (p->cursor_y == ypos))
+    if ((p->cursor_x == xpos) && (p->cursor_y == ypos)) {
 	    CURSOR_UNDRAWN();
+	    redraw_cursor = 1;
+    }
 
     p->dispsw->putc(conp, p, c, real_y(p, ypos), xpos);
+
+    if (redraw_cursor)
+	    vbl_cursor_cnt = CURSOR_DRAW_DELAY;
 }
 
 
@@ -558,14 +609,19 @@ static void fbcon_putcs(struct vc_data *conp, const unsigned short *s, int count
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
+    int redraw_cursor = 0;
 
     if (!p->can_soft_blank && console_blanked)
 	    return;
 
     if ((p->cursor_y == ypos) && (xpos <= p->cursor_x) &&
-	(p->cursor_x < (xpos + count)))
+	(p->cursor_x < (xpos + count))) {
 	    CURSOR_UNDRAWN();
+	    redraw_cursor = 1;
+    }
     p->dispsw->putcs(conp, p, s, count, real_y(p, ypos), xpos);
+    if (redraw_cursor)
+	    vbl_cursor_cnt = CURSOR_DRAW_DELAY;
 }
 
 
@@ -613,19 +669,16 @@ static void fbcon_cursor(struct vc_data *conp, int mode)
 static void fbcon_vbl_handler(int irq, void *dummy, struct pt_regs *fp)
 {
     struct display *p;
-    static int _vbl_cursor_cnt = 1, _vbl_cursor_drawn;
 
-    if (!--_vbl_cursor_cnt) {
-	_vbl_cursor_cnt = cursor_blink_rate;
-	_vbl_cursor_drawn = !_vbl_cursor_drawn;
-    }
+    if (!cursor_on)
+	return;
 
-    if (cursor_on && vbl_cursor_cnt) {
-	if (cursor_drawn != _vbl_cursor_drawn) {
-	    p = &fb_display[fg_console];
-	    p->dispsw->revc(p, p->cursor_x, real_y(p, p->cursor_y));
-	}
-	cursor_drawn = _vbl_cursor_drawn;
+    if (vbl_cursor_cnt && --vbl_cursor_cnt == 0) {
+	p = &fb_display[fg_console];
+	if (p->dispsw->revc)
+		p->dispsw->revc(p, p->cursor_x, real_y(p, p->cursor_y));
+	cursor_drawn ^= 1;
+	vbl_cursor_cnt = cursor_blink_rate;
     }
 }
 #endif
@@ -759,6 +812,53 @@ static void fbcon_redraw(struct vc_data *conp, struct display *p,
     }
 }
 
+/* This cannot be used together with ypan or ywrap */
+void fbcon_redraw_bmove(struct display *p, int sy, int sx, int dy, int dx, int h, int w)
+{
+    if (sy != dy)
+    	panic("fbcon_redraw_bmove width sy != dy");
+    /* h will be always 1, but it does not matter if we are more generic */
+    while (h-- > 0) {
+	struct vc_data *conp = p->conp;
+	unsigned short *d = (unsigned short *)
+		(conp->vc_origin + conp->vc_size_row * dy + dx * 2);
+	unsigned short *s = d + (dx - sx);
+	unsigned short *start = d;
+	unsigned short *ls = d;
+	unsigned short *le = d + w;
+	unsigned short c;
+	int x = dx;
+	unsigned short attr = 1;
+
+	do {
+	    c = scr_readw(d);
+	    if (attr != (c & 0xff00)) {
+		attr = c & 0xff00;
+		if (d > start) {
+		    p->dispsw->putcs(conp, p, start, d - start, dy, x);
+		    x += d - start;
+		    start = d;
+		}
+	    }
+	    if (s >= ls && s < le && c == scr_readw(s)) {
+		if (d > start) {
+		    p->dispsw->putcs(conp, p, start, d - start, dy, x);
+		    x += d - start + 1;
+		    start = d + 1;
+		} else {
+		    x++;
+		    start++;
+		}
+	    }
+	    s++;
+	    d++;
+	} while (d < le);
+	if (d > start)
+	    p->dispsw->putcs(conp, p, start, d - start, dy, x);
+	sy++;
+	dy++;
+    }
+}
 
 static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 			int count)
@@ -1007,10 +1107,13 @@ static int fbcon_switch(struct vc_data *conp)
 }
 
 
-static int fbcon_blank(int blank)
+static int fbcon_blank(struct vc_data *conp, int blank)
 {
-    struct display *p = &fb_display[fg_console];
+    struct display *p = &fb_display[conp->vc_num];
     struct fb_info *info = p->fb_info;
+
+    if (blank < 0)	/* Entering graphics mode */
+	return 0;
 
     fbcon_cursor(p->conp, blank ? CM_ERASE : CM_DRAW);
 
@@ -1030,7 +1133,7 @@ static int fbcon_blank(int blank)
 			     p->var.xres_virtual*p->var.yres_virtual*
 			     p->var.bits_per_pixel>>3);
 	     } else
-		 p->dispsw->clear(p->conp, p, 0, 0, p->conp->vc_rows, p->conp->vc_cols);
+		 p->dispsw->clear(conp, p, 0, 0, p->conp->vc_rows, p->conp->vc_cols);
 	    return 0;
 	} else {
 	    /* Tell console.c that it has to restore the screen itself */
@@ -1065,6 +1168,7 @@ static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data)
 
 
 #define REFCOUNT(fd)	(((int *)(fd))[-1])
+#define FNTSIZE(fd)	(((int *)(fd))[-2])
 
 static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
 {
@@ -1080,15 +1184,12 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
 
     if (w == 0) {
 	/* engage predefined font, name in 'data' */
-	char name[MAX_FONT_NAME+1];
+	unsigned short width, height;
+	data[MAX_FONT_NAME] = 0;
 
-	if ((i = verify_area( VERIFY_READ, (void *)data, MAX_FONT_NAME )))
-	    return i;
-	copy_from_user( name, data, MAX_FONT_NAME );
-	name[sizeof(name)-1] = 0;
-
-	if (!findsoftfont( name, &w, &h, (u8 **)&data ))
+	if (!findsoftfont( data, &width, &height, (u8 **)&data ))
 	    return -ENOENT;
+	w = width; h = height;
 	userspace = 0;
     } else if (w == 1) {
 	/* copy font from some other console in 'h'*/
@@ -1109,12 +1210,14 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
 	p->fontdata = op->fontdata;
 	w = p->fontwidth = op->fontwidth;
 	h = p->fontheight = op->fontheight;
+	p->fontwidthlog = op->fontwidthlog;
+	p->fontheightlog = op->fontheightlog;
 	if ((p->userfont = op->userfont))
 	    REFCOUNT(p->fontdata)++;	/* increment usage counter */
 	goto activate;
     }
 
-    if (w != 8)
+    if (!fontwidthvalid(p,w))
 	/* Currently only fontwidth == 8 supported */
 	return -ENXIO;
 
@@ -1125,9 +1228,10 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
 	old_data = p->fontdata;
 
     if (userspace) {
-	if (!(new_data = kmalloc( sizeof(int)+size, GFP_USER )))
+	if (!(new_data = kmalloc( 2*sizeof(int)+size, GFP_USER )))
 	    return -ENOMEM;
-	new_data += sizeof(int);
+	new_data += 2*sizeof(int);
+	FNTSIZE(new_data) = size;
 	REFCOUNT(new_data) = 1; /* usage counter */
 
 	for (i = 0; i < 256; i++)
@@ -1142,13 +1246,17 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
     }
     p->fontwidth = w;
     p->fontheight = h;
+    fbcon_font_widths(p);
 
 activate:
     if (resize) {
 	/* reset wrap/pan */
 	p->var.xoffset = p->var.yoffset = p->yscroll = 0;
-	/* Adjust the virtual screen-size to fontheight*rows */
-	p->var.yres_virtual = (p->var.yres/h)*h;
+	if (!p->dispsw->set_font || 
+	    !p->dispsw->set_font(p, p->fontwidth, p->fontheight)) {
+	    /* Adjust the virtual screen-size to fontheight*rows */
+	    p->var.yres_virtual = (p->var.yres/h)*h;
+	}
 	p->vrows = p->var.yres_virtual/h;
 	updatescrollmode(p);
 	vc_resize_con( p->var.yres/h, p->var.xres/w, unit );
@@ -1156,7 +1264,7 @@ activate:
 	update_screen( unit );
 
     if (old_data && (--REFCOUNT(old_data) == 0))
-	kfree( old_data - sizeof(int) );
+	kfree( old_data - 2*sizeof(int) );
 
     return 0;
 }

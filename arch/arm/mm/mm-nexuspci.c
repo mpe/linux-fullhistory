@@ -4,25 +4,24 @@
  *
  * Extra MM routines for the NexusPCI architecture
  *
+ * Copyright (C) 1998 Phil Blundell
  * Copyright (C) 1998 Russell King
  */
 
-#include <asm/io.h>
+#include <linux/sched.h>
+#include <linux/mm.h>
+#include <linux/init.h>
  
-/* map in IO */
-void setup_io_pagetables(void)
-{
-	unsigned long address = IO_START;
-	int spi = IO_BASE >> PGDIR_SHIFT;
+#include <asm/pgtable.h>
+#include <asm/page.h>
+#include <asm/io.h>
+#include <asm/proc/mm-init.h>
+ 
+#define MAPPING								\
+ 	{ 0xfff00000, 0x10000000, 0x00001000, DOMAIN_IO, 0, 1 },	\
+ 	{ 0xffe00000, 0x20000000, 0x00001000, DOMAIN_IO, 0, 1 },	\
+ 	{ 0xffc00000, 0x60000000, 0x00001000, DOMAIN_IO, 0, 1 },	\
+ 	{ 0xfe000000, 0x80000000, 0x00100000, DOMAIN_IO, 0, 1 },	\
+ 	{ 0xfd000000, 0x88000000, 0x00100000, DOMAIN_IO, 0, 1 }
 
-	pgd_val(swapper_pg_dir[spi-1]) = 0xc0000000 | PMD_TYPE_SECT |
-					 PMD_DOMAIN(DOMAIN_KERNEL) | PMD_SECT_AP_WRITE;
-
-	while (address < IO_START + IO_SIZE && address) {
-		pgd_val(swapper_pg_dir[spi++]) = address | PMD_TYPE_SECT |
-						PMD_DOMAIN(DOMAIN_IO) |
-						PMD_SECT_AP_WRITE;
-		address += PGDIR_SIZE;
-	}
-}
-
+#include "mm-armv.c"

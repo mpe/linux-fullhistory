@@ -30,6 +30,7 @@
 #define SNDCARD_OPL3SA1_MPU		40
 #define SNDCARD_SOFTOSS			36
 #define SNDCARD_VMIDI			37
+#define SNDCARD_WAVEFRONT               41
 
 void attach_opl3sa_wss (struct address_info *hw_config);
 int probe_opl3sa_wss (struct address_info *hw_config);
@@ -408,6 +409,8 @@ struct driver_info sound_drivers[] =
 
 #ifdef CONFIG_SOUND_CS4232
 	{"CS4232", 0, SNDCARD_CS4232,	"CS4232",		attach_cs4232, probe_cs4232, unload_cs4232},
+#endif
+#ifdef CONFIG_CS4232_MPU_BASE
 	{"CS4232MPU", 0, SNDCARD_CS4232_MPU,	"CS4232 MIDI",		attach_cs4232_mpu, probe_cs4232_mpu, unload_cs4232_mpu},
 #endif
 
@@ -430,6 +433,10 @@ struct driver_info sound_drivers[] =
 #if defined(CONFIG_SOUND_UART401) && defined(CONFIG_MIDI)
 	{"UART401", 0, SNDCARD_UART401,"MPU-401 (UART)", 
 		attach_uart401, probe_uart401, unload_uart401},
+#endif
+
+#if defined(CONFIG_SOUND_WAVEFRONT)
+	{"WAVEFRONT", 0, SNDCARD_WAVEFRONT,"TB WaveFront", attach_wavefront, probe_wavefront, unload_wavefront},
 #endif
 
 #if defined(CONFIG_SOUND_MAUI)
@@ -594,6 +601,10 @@ struct card_info snd_installed_cards[] =
 #ifdef SB2_BASE
 	{SNDCARD_SB, {SB2_BASE, SB2_IRQ, SB2_DMA, SB2_DMA2}, SND_DEFAULT_ENABLE},
 #endif
+#endif
+
+#if defined(CONFIG_WAVEFRONT) 
+	{SNDCARD_WAVEFRONT, {WAVEFRONT_BASE, WAVEFRONT_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 
 #ifdef CONFIG_SOUND_MAUI

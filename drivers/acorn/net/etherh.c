@@ -36,11 +36,11 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/delay.h>
 
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/ecard.h>
-#include <asm/delay.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 
@@ -525,8 +525,8 @@ static char ethernames[MAX_ETHERH_CARDS][9];
 static struct device *my_ethers[MAX_ETHERH_CARDS];
 static struct expansion_card *ec[MAX_ETHERH_CARDS];
 
-int
-init_module(void)
+static int
+init_all_cards(void)
 {
 	struct device *dev = NULL;
 	struct expansion_card *boguscards[MAX_ETHERH_CARDS];
@@ -550,6 +550,7 @@ init_module(void)
 		if (!io[i]) {
 			if ((ec[i] = ecard_find (0, etherh_cids)) == NULL)
 				continue;
+
 			if (!dev)
 				return -ENOMEM;
 
@@ -567,7 +568,7 @@ init_module(void)
 
 		my_ethers[i] = dev;
 
-		if (register_netdev (my_ethers[i]) != 0) {
+		if (register_netdev(dev) != 0) {
 			printk (KERN_WARNING "No etherh card found at %08lX\n", dev->base_addr);
 			if (ec[i]) {
 				boguscards[i] = ec[i];
@@ -578,16 +579,36 @@ init_module(void)
 		found ++;
 		dev = NULL;
 	}
+
 	if (dev)
 		kfree (dev);
+
 	for (i = 0; i < MAX_ETHERH_CARDS; i++)
 		if (boguscards[i]) {
 			boguscards[i]->ops = NULL;
 			ecard_release (boguscards[i]);
 		}
-	if (!found)
-		return -ENODEV;
-	return 0;
+
+	return found ? 0 : -ENODEV;
+}
+
+int
+init_module(void)
+{
+	int ret;
+
+	if (load_8390_module(__FILE__))
+		return -ENOSYS;
+
+	lock_8390_module();
+
+	ret = init_all_cards();
+
+	if (ret) {
+		unlock_8390_module();
+	}
+
+	return ret;
 }
 
 void
@@ -607,5 +628,6 @@ cleanup_module(void)
 			ec[i] = NULL;
 		}
 	}
+	unlock_8390_module();
 }
 #endif /* MODULE */

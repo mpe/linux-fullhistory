@@ -189,10 +189,15 @@ struct device
 	unsigned int		irq;		/* device IRQ number	*/
 	
 	/* Low-level status flags. */
-	volatile unsigned char	start,		/* start an operation	*/
-				interrupt;	/* interrupt arrived	*/
-	unsigned long		tbusy;		/* transmitter busy must be
-						   long for bitops	*/
+	volatile unsigned char	start;		/* start an operation	*/
+	/*
+	 * These two are just single-bit flags, but due to atomicity
+	 * reasons they have to be inside a "unsigned long". However,
+	 * they should be inside the SAME unsigned long instead of
+	 * this wasteful use of memory..
+	 */
+	unsigned long		interrupt;	/* bitops.. */
+	unsigned long		tbusy;		/* transmitter busy */
 	
 	struct device		*next;
 	

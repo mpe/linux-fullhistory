@@ -184,7 +184,7 @@ void fbcon_cfb32_revc(struct display *p, int xx, int yy)
 
 struct display_switch fbcon_cfb32 = {
     fbcon_cfb32_setup, fbcon_cfb32_bmove, fbcon_cfb32_clear, fbcon_cfb32_putc,
-    fbcon_cfb32_putcs, fbcon_cfb32_revc, NULL
+    fbcon_cfb32_putcs, fbcon_cfb32_revc, NULL, NULL, FONTWIDTH(8)
 };
 
 

@@ -48,8 +48,6 @@
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
-#include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/malloc.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>

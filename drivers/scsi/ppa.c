@@ -122,9 +122,6 @@ int ppa_detect(Scsi_Host_Template * host)
     nhosts = 0;
     try_again = 0;
 
-    if (!pb)
-	pb = parport_enumerate();
-
     if (!pb) {
 	printk("ppa: parport reports no devices.\n");
 	return 0;

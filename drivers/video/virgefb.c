@@ -1163,7 +1163,7 @@ static void fbcon_virge8_clear(struct vc_data *conp, struct display *p, int sy,
 
 static struct display_switch fbcon_virge8 = {
    fbcon_cfb8_setup, fbcon_virge8_bmove, fbcon_virge8_clear, fbcon_cfb8_putc,
-   fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL
+   fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL, NULL, FONTWIDTH(8)
 };
 #endif
 

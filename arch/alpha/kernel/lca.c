@@ -13,6 +13,7 @@
 #include <asm/ptrace.h>
 #include <asm/system.h>
 #include <asm/io.h>
+##include <asm/smp.h>
 
 /*
  * BIOS32-style PCI interface:

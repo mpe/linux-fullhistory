@@ -31,15 +31,14 @@ if [ "$CONFIG_FB" = "y" ]; then
   fi
   if [ "$CONFIG_PPC" = "y" ]; then
     bool 'Open Firmware frame buffer device support' CONFIG_FB_OF
-    bool 'S3 Trio frame buffer device support' CONFIG_FB_S3TRIO
     if [ "$CONFIG_FB_OF" = "y" ]; then
 #     bool 'Apple "control" display support' CONFIG_FB_CONTROL
 #     bool 'Apple "platinum" display support' CONFIG_FB_PLATINUM
 #     bool 'Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
       bool 'ATI Mach64 display support' CONFIG_FB_ATY
 #     bool 'IMS Twin Turbo display support' CONFIG_FB_IMSTT
-#     bool 'Chips 65550 display support' CONFIG_FB_CT65550
-#     bool 'S3 Trio display support' CONFIG_FB_S3TRIO
+      bool 'Chips 65550 display support' CONFIG_FB_CT65550
+      bool 'S3 Trio display support' CONFIG_FB_S3TRIO
     fi
   fi
   if [ "$CONFIG_MAC" = "y" ]; then
@@ -58,20 +57,23 @@ if [ "$CONFIG_FB" = "y" ]; then
     tristate 'TGA framebuffer support' CONFIG_FB_TGA
   fi
   if [ "$ARCH" = "i386" ]; then
-    if [ "$CONFIG_VGA_CONSOLE" != "y" ]; then
-      bool 'VESA VGA graphics console' CONFIG_FB_VESA
-      define_bool CONFIG_VIDEO_SELECT y
-    fi
+    bool 'VESA VGA graphics console' CONFIG_FB_VESA
+    define_bool CONFIG_VIDEO_SELECT y
     tristate 'MDA dual-headed support' CONFIG_FB_MDA
   fi
   if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
-    bool 'PROM framebuffer' CONFIG_FB_PROM
     bool 'SBUS and UPA framebuffers' CONFIG_FB_SBUS
     if [ "$CONFIG_FB_SBUS" != "n" ]; then
       if [ "$ARCH" = "sparc64" ]; then
-	bool 'Creator/Creator3D support' CONFIG_FB_CREATOR
+	bool '  Creator/Creator3D support' CONFIG_FB_CREATOR
       fi
-      bool 'CGsix (GX,GXplus) support' CONFIG_FB_CGSIX
+      bool '  CGsix (GX,GXplus) support' CONFIG_FB_CGSIX
+    fi
+    if [ "$CONFIG_PCI" != "n" ]; then
+      bool 'PCI framebuffers' CONFIG_FB_PCI
+      if [ "$CONFIG_FB_PCI" != "n" ]; then
+        bool '  ATI Mach64 display support' CONFIG_FB_ATY
+      fi
     fi
   fi
   tristate 'Virtual Frame Buffer support (ONLY FOR TESTING!)' CONFIG_FB_VIRTUAL
@@ -143,10 +145,10 @@ if [ "$CONFIG_FB" = "y" ]; then
 	define_bool CONFIG_FBCON_CFB16 m
       fi
     fi
-    if [ "$CONFIG_FB_VIRTUAL" = "y" ]; then
+    if [ "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" ]; then
       define_bool CONFIG_FBCON_CFB24 y
     else
-      if [ "$CONFIG_FB_VIRTUAL" = "m" ]; then
+      if [ "$CONFIG_FB_ATY" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB24 m
       fi
     fi

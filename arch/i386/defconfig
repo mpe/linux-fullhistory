@@ -269,7 +269,6 @@ CONFIG_82C710_MOUSE=y
 # CONFIG_VIDEO_DEV is not set
 # CONFIG_NVRAM is not set
 # CONFIG_JOYSTICK is not set
-# CONFIG_MISC_RADIO is not set
 
 #
 # Ftape, the floppy tape device driver

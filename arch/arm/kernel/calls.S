@@ -1,11 +1,12 @@
 /*
  * linux/arch/arm/lib/calls.h
  *
- * Copyright (C) 1995, 1996 Russell King
+ * Copyright (C) 1995-1998 Russell King
+ *
+ * This file is included twice in entry-common.S
  */
-#ifndef NR_SYSCALLS
+#ifndef NR_syscalls
 #define NR_syscalls 256
-#define NR_SYSCALLS 184
 #else
 
 /* 0 */		.long	SYMBOL_NAME(sys_setup)
@@ -24,7 +25,7 @@
 		.long	SYMBOL_NAME(sys_time)
 		.long	SYMBOL_NAME(sys_mknod)
 /* 15 */	.long	SYMBOL_NAME(sys_chmod)
-		.long	SYMBOL_NAME(sys_chown)
+		.long	SYMBOL_NAME(sys_lchown)
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_break */
 		.long	SYMBOL_NAME(sys_stat)
 		.long	SYMBOL_NAME(sys_lseek)
@@ -190,11 +191,13 @@
 		.long	SYMBOL_NAME(sys_rt_sigsuspend_wrapper)
 /* 180 */	.long	SYMBOL_NAME(sys_pread)
 		.long	SYMBOL_NAME(sys_pwrite)
-#if 0
-		.long	SYMBOL_NAME(sys_xstat)
-		.long	SYMBOL_NAME(sys_xmknod)
-#else
-		.space	8
-#endif
-		.space	(NR_syscalls - 184) * 4
+		.long	SYMBOL_NAME(sys_chown)
+		.long	SYMBOL_NAME(sys_getcwd)
+		.long	SYMBOL_NAME(sys_capget)
+/* 185 */	.long	SYMBOL_NAME(sys_capset)
+		.long	SYMBOL_NAME(sys_sigaltstack_wrapper)
+
+		.rept	NR_syscalls-186
+			.long	SYMBOL_NAME(sys_ni_syscall)
+		.endr
 #endif

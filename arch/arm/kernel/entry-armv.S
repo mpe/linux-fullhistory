@@ -9,12 +9,13 @@
  * Note:  there is a StrongARM bug in the STMIA rn, {regs}^ instruction that causes
  * it to save wrong values...  Be aware!
  */
-#include <linux/config.h> /* for CONFIG_ARCH_EBSA110 */
+#include <linux/config.h> /* for CONFIG_ARCH_xxxx */
 #include <linux/linkage.h>
 
 #include <asm/assembler.h>
 #include <asm/errno.h>
 #include <asm/hardware.h>
+#include <asm/arch/irqs.h>
 
 #include "../lib/constants.h"
 
@@ -89,7 +90,7 @@
 		adreq	\base, irq_prio_l
 
 		teq	\irqstat, #0
-		ldrneb	\irqnr, [r5, \irqstat]		@ get IRQ number
+		ldrneb	\irqnr, [\base, \irqstat]	@ get IRQ number
 		.endm
 
 /*
@@ -159,7 +160,7 @@ irq_prio_h:	.byte	 0, 8, 9, 8,10,10,10,10,11,11,11,11,10,10,10,10
 		adr	\base, irq_prio_ebsa110
 
 		teq	\irqstat, #0
-		ldrneb	\irqnr, [r5, \irqstat]		@ get IRQ number
+		ldrneb	\irqnr, [\base, \irqstat]	@ get IRQ number
 		.endm
 
 		.macro	irq_prio_table
@@ -225,6 +226,65 @@ irq_prio_ebsa110:
 		.macro	irq_prio_table
 		.endm
 
+#elif defined(CONFIG_ARCH_VNC)
+
+		.macro	disable_fiq
+		.endm
+
+		.macro	get_irqnr_and_base, irqnr, irqstat, base
+		mov	r4, #IO_BASE_ARM_CSR
+		ldr	\irqstat, [r4, #IRQ_STATUS]	@ just show us the unmasked ones
+
+		@ run through hard priorities
+		@ timer
+		tst	\irqstat, #IRQ_MASK_TIMER0
+		movne	\irqnr, #IRQ_TIMER0
+		bne	1f
+
+		@ ether10
+		tst	\irqstat, #IRQ_MASK_ETHER10
+		movne	\irqnr, #IRQ_ETHER10
+		bne	1f
+
+		@ ether100
+		tst	\irqstat, #IRQ_MASK_ETHER100
+		movne	\irqnr, #IRQ_ETHER100
+		bne	1f
+
+		@ video compressor
+		tst	\irqstat, #IRQ_VIDCOMP_MASK
+		movne	\irqnr, #IRQ_VIDCOMP
+		bne	1f
+
+		@ now try all the PIC sources
+		@ determine whether we have an irq
+		tst	\irqstat, #IRQ_MASK_EXTERN_IRQ
+		beq	3f
+		mov	r4, #(IO_BASE_PCI_IACK & 0xff000000)
+		orr	r4, r4, #(IO_BASE_PCI_IACK & 0x00ff0000)
+		ldrb	\irqnr, [r4]			@ get the IACK byte
+		b	1f
+
+3:		@ PCI errors
+		tst	\irqstat, #IRQ_MASK_PCI_ERR
+		movne	\irqnr, #IRQ_PCI_ERR
+		bne	1f
+
+		@ softint
+		tst	\irqstat, #IRQ_MASK_SOFT_IRQ
+		movne	\irqnr, #IRQ_SOFT_IRQ
+		bne	1f
+
+		@ debug uart
+		tst	\irqstat, #IRQ_MASK_UART_DEBUG
+		movne	\irqnr, #IRQ_UART_DEBUG
+		bne	1f
+
+		@ watchdog
+		tst	\irqstat, #IRQ_WATCHDOG_MASK
+		movne	\irqnr, #IRQ_WATCHDOG
+
+1:		@ If Z is set, then we will not enter an interrupt
 #else
 #error Unknown architecture
 #endif

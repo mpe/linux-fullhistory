@@ -27,7 +27,9 @@
 #include <linux/utsname.h>
 #include <linux/blk.h>
 #include <linux/init.h>
+#include <linux/console.h>
 
+#include <asm/elf.h>
 #include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
@@ -38,7 +40,9 @@
 #include <asm/arch/mmu.h>
 
 struct drive_info_struct { char dummy[32]; } drive_info;
-struct screen_info screen_info;
+struct screen_info screen_info = {
+  0, 0,  0,  0, 0, 0,  0,  0,  0,  0, 1, 8
+};
 struct processor processor;
 unsigned char aux_device_present;
 
@@ -49,27 +53,39 @@ extern const struct processor arm6_processor_functions;
 extern const struct processor arm7_processor_functions;
 extern const struct processor sa110_processor_functions;
 
-struct armversions armidlist[] = {
+char elf_platform[ELF_PLATFORM_SIZE];
+
+const struct armversions armidlist[] = {
+  /*-- Match -- --- Mask -- -- Manu --  Processor  uname -m   --- ELF STUFF ---
+	--- processor asm funcs --- */
 #if defined(CONFIG_CPU_26)
-	{ 0x41560200, 0xfffffff0, F_MEMC	, "ARM/VLSI",	"arm2"		, &arm2_processor_functions   , "arm2"},
-	{ 0x41560250, 0xfffffff0, F_MEMC	, "ARM/VLSI",	"arm250"	, &arm250_processor_functions , "arm3"},
-	{ 0x41560300, 0xfffffff0, F_MEMC|F_CACHE, "ARM/VLSI",	"arm3"		, &arm3_processor_functions   , "arm3"},
+  { 0x41560200, 0xfffffff0, "ARM/VLSI",	"arm2"	 , "armv1"  , "v1", 0,
+	&arm2_processor_functions   },
+  { 0x41560250, 0xfffffff0, "ARM/VLSI",	"arm250" , "armv2"  , "v2", HWCAP_SWP,
+	&arm250_processor_functions },
+  { 0x41560300, 0xfffffff0, "ARM/VLSI",	"arm3"	 , "armv2"  , "v2", HWCAP_SWP,
+	&arm3_processor_functions   },
 #elif defined(CONFIG_CPU_32)
-	{ 0x41560600, 0xfffffff0, F_MMU|F_32BIT	, "ARM/VLSI",	"arm6"		, &arm6_processor_functions   , "arm6"},
-	{ 0x41560610, 0xfffffff0, F_MMU|F_32BIT	, "ARM/VLSI",	"arm610"	, &arm6_processor_functions   , "arm6"},
-	{ 0x41007000, 0xffffff00, F_MMU|F_32BIT , "ARM/VLSI",   "arm7"		, &arm7_processor_functions   , "arm6"},
-	{ 0x41007100, 0xffffff00, F_MMU|F_32BIT , "ARM/VLSI",   "arm710"	, &arm7_processor_functions   , "arm6"},
-	{ 0x4401a100, 0xfffffff0, F_MMU|F_32BIT	, "DEC",	"sa110"		, &sa110_processor_functions  , "sa1x"},
+  { 0x41560600, 0xfffffff0, "ARM/VLSI",	"arm6"	 , "armv3"  , "v3", HWCAP_SWP,
+	&arm6_processor_functions   },
+  { 0x41560610, 0xfffffff0, "ARM/VLSI",	"arm610" , "armv3"  , "v3", HWCAP_SWP,
+	&arm6_processor_functions   },
+  { 0x41007000, 0xffffff00, "ARM/VLSI",	"arm7"	 , "armv3"  , "v3", HWCAP_SWP,
+	&arm7_processor_functions   },
+  /* ARM710 IDs are non-standard */
+  { 0x41007100, 0xfff8ff00, "ARM/VLSI",	"arm710" , "armv3"  , "v3", HWCAP_SWP,
+	&arm7_processor_functions   },
+  { 0x4401a100, 0xfffffff0, "DEC",	"sa110"	 , "armv4"  , "v3", HWCAP_SWP|HWCAP_HALF,
+	&sa110_processor_functions  },
 #endif
-	{ 0x00000000, 0x00000000, 0		, "***",	"*unknown*"	, NULL			      , NULL  }
+  { 0x00000000, 0x00000000, "***", "unknown", "unknown", "**", 0, NULL }
 };
 
-static struct param_struct *params = (struct param_struct *)PARAMS_BASE;
+static const struct param_struct *params = (struct param_struct *)PARAMS_BASE;
 
 unsigned long arm_id;
 unsigned int vram_half_sam;
 int armidindex;
-int ioebpresent;
 int memc_ctrl_reg;
 int number_ide_drives;
 int number_mfm_drives;
@@ -91,9 +107,11 @@ extern unsigned long real_end_mem;
  */
 #ifdef CONFIG_ARCH_RPC
 
-extern void init_dram_banks(struct param_struct *params);
+extern void
+init_dram_banks(const struct param_struct *params);
 
-static void setup_rpc (struct param_struct *params)
+static void
+setup_rpc(const struct param_struct *params)
 {
 	init_dram_banks(params);
 
@@ -123,11 +141,12 @@ extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
 extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
 
-static void setup_ramdisk (struct param_struct *params)
+static void
+setup_ramdisk(const struct param_struct *params)
 {
-    rd_image_start	= params->u1.s.rd_start;
-    rd_prompt		= (params->u1.s.flags & FLAG_RDPROMPT) == 0;
-    rd_doload		= (params->u1.s.flags & FLAG_RDLOAD) == 0;
+	rd_image_start	= params->u1.s.rd_start;
+	rd_prompt	= (params->u1.s.flags & FLAG_RDPROMPT) == 0;
+	rd_doload	= (params->u1.s.flags & FLAG_RDLOAD) == 0;
 }
 #else
 #define setup_ramdisk(p)
@@ -137,33 +156,30 @@ static void setup_ramdisk (struct param_struct *params)
  * initial ram disk
  */
 #ifdef CONFIG_BLK_DEV_INITRD
-static void setup_initrd (struct param_struct *params, unsigned long memory_end)
+static void
+setup_initrd(const struct param_struct *params, unsigned long memory_end)
 {
-    initrd_start = params->u1.s.initrd_start;
-    initrd_end   = params->u1.s.initrd_start + params->u1.s.initrd_size;
+	if (params->u1.s.initrd_start) {
+		initrd_start = params->u1.s.initrd_start;
+		initrd_end   = initrd_start + params->u1.s.initrd_size;
+	} else {
+		initrd_start = 0;
+		initrd_end   = 0;
+	}
 
-    if (initrd_end > memory_end) {
-	printk ("initrd extends beyond end of memory "
-		"(0x%08lx > 0x%08lx) - disabling initrd\n",
-		initrd_end, memory_end);
-	initrd_start = 0;
-    }
+	if (initrd_end > memory_end) {
+		printk ("initrd extends beyond end of memory "
+			"(0x%08lx > 0x%08lx) - disabling initrd\n",
+			initrd_end, memory_end);
+		initrd_start = 0;
+	}
 }
 #else
 #define setup_initrd(p,m)
 #endif
 
-#ifdef IOEB_BASE
-static inline void check_ioeb_present(void)
-{
-	if (((*IOEB_BASE) & 15) == 5)
-		armidlist[armidindex].features |= F_IOEB;
-}
-#else
-#define check_ioeb_present()
-#endif
-
-static inline void get_processor_type (void)
+static inline void
+get_processor_type(void)
 {
 	for (armidindex = 0; ; armidindex ++)
 		if (!((armidlist[armidindex].id ^ arm_id) &
@@ -186,7 +202,7 @@ static inline void get_processor_type (void)
 /* Can this be initdata?  --pb
  *  command_line can be, saved_command_line can't though
  */
-static char command_line[COMMAND_LINE_SIZE] = { 0, };
+static char command_line[COMMAND_LINE_SIZE] __initdata = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
 
 __initfunc(void setup_arch(char **cmdline_p,
@@ -194,7 +210,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 {
 	static unsigned char smptrap;
 	unsigned long memory_start, memory_end;
-	char c = ' ', *to = command_line, *from;
+	char endian = 'l', c = ' ', *to = command_line;
+	char *from;
 	int len = 0;
 
 	if (smptrap == 1)
@@ -202,12 +219,13 @@ __initfunc(void setup_arch(char **cmdline_p,
 	smptrap = 1;
 
 	get_processor_type ();
-	check_ioeb_present ();
 	processor._proc_init ();
 
+#ifndef CONFIG_FB
 	bytes_per_char_h  = params->u1.s.bytes_per_char_h;
 	bytes_per_char_v  = params->u1.s.bytes_per_char_v;
-	from		  = params->commandline;
+#endif
+	from		  = (char *)params->commandline;
 	ROOT_DEV	  = to_kdev_t (params->u1.s.rootdev);
 	ORIG_X		  = params->u1.s.video_x;
 	ORIG_Y		  = params->u1.s.video_y;
@@ -217,8 +235,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 	number_ide_drives = (params->u1.s.adfsdrives >> 6) & 3;
 	number_mfm_drives = (params->u1.s.adfsdrives >> 3) & 3;
 
-	setup_rpc (params);
-	setup_ramdisk (params);
+	setup_rpc(params);
+	setup_ramdisk(params);
 
 	if (!(params->u1.s.flags & FLAG_READONLY))
 		root_mountflags &= ~MS_RDONLY;
@@ -264,36 +282,73 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_start_p = memory_start;
 	*memory_end_p = memory_end;
 
-	setup_initrd (params, memory_end);
+	setup_initrd(params, memory_end);
 
-	strcpy (system_utsname.machine, armidlist[armidindex].name);
+	sprintf(system_utsname.machine, "%s%c", armidlist[armidindex].arch_vsn, endian);
+	sprintf(elf_platform, "%s%c", armidlist[armidindex].elf_vsn, endian);
+
+#ifdef CONFIG_FB
+	conswitchp = &fb_con;
+#endif
 }
 
-#define ISSET(bit) (armidlist[armidindex].features & bit)
+#if defined(CONFIG_ARCH_ARC)
+#define HARDWARE "Acorn-Archimedes"
+#define IO_BUS	 "Acorn"
+#elif defined(CONFIG_ARCH_A5K)
+#define HARDWARE "Acorn-A5000"
+#define IO_BUS	 "Acorn"
+#elif defined(CONFIG_ARCH_RPC)
+#define HARDWARE "Acorn-RiscPC"
+#define IO_BUS	 "Acorn"
+#elif defined(CONFIG_ARCH_EBSA110)
+#define HARDWARE "DEC-EBSA110"
+#define IO_BUS	 "DEC"
+#elif defined(CONFIG_ARCH_EBSA285)
+#define HARDWARE "DEC-EBSA285"
+#define IO_BUS   "PCI"
+#elif defined(CONFIG_ARCH_NEXUSPCI)
+#define HARDWARE "Nexus-NexusPCI"
+#define IO_BUS   "PCI"
+#elif defined(CONFIG_ARCH_VNC)
+#define HARDWARE "Corel-VNC"
+#define IO_BUS   "PCI"
+#else
+#define HARDWARE "unknown"
+#define IO_BUS   "unknown"
+#endif
+
+#if defined(CONFIG_CPU_ARM2)
+#define OPTIMISATION "ARM2"
+#elif defined(CONFIG_CPU_ARM3)
+#define OPTIMISATION "ARM3"
+#elif defined(CONFIG_CPU_ARM6)
+#define OPTIMISATION "ARM6"
+#elif defined(CONFIG_CPU_ARM7)
+#define OPTIMISATION "ARM7"
+#elif defined(CONFIG_CPU_SA110)
+#define OPTIMISATION "StrongARM"
+#else
+#define OPTIMISATION "unknown"
+#endif
 
 int get_cpuinfo(char * buffer)
 {
 	int len;
 
-	len = sprintf (buffer,  "CPU:\n"
-				"Type\t\t: %s\n"
-				"Revision\t: %d\n"
-				"Manufacturer\t: %s\n"
-				"32bit modes\t: %s\n"
-				"BogoMips\t: %lu.%02lu\n",
-				armidlist[armidindex].name,
-				(int)arm_id & 15,
-				armidlist[armidindex].manu,
-				ISSET (F_32BIT) ? "yes" : "no",
-				(loops_per_sec+2500) / 500000,
-				((loops_per_sec+2500) / 5000) % 100);
-	len += sprintf (buffer + len,
-				"\nHardware:\n"
-				"Mem System\t: %s\n"
-				"IOEB\t\t: %s\n",
-				ISSET(F_MEMC)  ? "MEMC" : 
-				ISSET(F_MMU)   ? "MMU"  : "*unknown*",
-				ISSET(F_IOEB)  ? "present" : "absent"
-				);
+	len = sprintf(buffer,
+		"Processor\t: %s %s rev %d\n"
+		"BogoMips\t: %lu.%02lu\n"
+		"Hardware\t: %s\n"
+		"Optimisation\t: %s\n"
+		"IO Bus\t: %s\n",
+		armidlist[armidindex].manu,
+		armidlist[armidindex].name,
+		(int)arm_id & 15,
+		(loops_per_sec+2500) / 500000,
+		((loops_per_sec+2500) / 5000) % 100,
+		HARDWARE,
+		OPTIMISATION,
+		IO_BUS);
 	return len;
 }

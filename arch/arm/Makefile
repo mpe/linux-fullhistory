@@ -21,6 +21,9 @@ ASFLAGS_PROC		:=
 
 ifeq ($(CONFIG_CPU_26),y)
   PROCESSOR		 = armo
+  TEXTADDR		 = 0x02080000
+  ZTEXTADDR		 = 0x01800000
+  ZRELADDR		 = 0x02080000
   ifeq ($(CONFIG_BINUTILS_NEW),y)
     CFLAGS_PROC		+= -mapcs-26 -mshort-load-bytes
     ifeq ($(CONFIG_CPU_ARM2),y)
@@ -45,6 +48,7 @@ endif
 
 ifeq ($(CONFIG_CPU_32),y)
   PROCESSOR		 = armv
+  TEXTADDR		 = 0xC0008000
   ifeq ($(CONFIG_BINUTILS_NEW),y)
     CFLAGS_PROC		+= -mapcs-32 -mshort-load-bytes
     ifeq ($(CONFIG_CPU_ARM6),y)
@@ -72,12 +76,6 @@ endif
 
 COMPRESSED_HEAD	 = head.o
 
-ifeq ($(PROCESSOR),armo)
-TEXTADDR	 = 0x02080000
-ZTEXTADDR	 = 0x01800000
-ZRELADDR	 = 0x02080000
-endif
-
 ifeq ($(CONFIG_ARCH_A5K),y)
 MACHINE		 = a5k
 ARCHDIR		 = arc
@@ -89,9 +87,6 @@ MACHINE		 = arc
 ARCHDIR		 = arc
 COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr.o
 endif
-
-ifeq ($(PROCESSOR),armv)
-TEXTADDR	 = 0xC0008000
 
 ifeq ($(CONFIG_ARCH_RPC),y)
 MACHINE		 = rpc
@@ -118,12 +113,22 @@ endif
 ifeq ($(CONFIG_ARCH_NEXUSPCI),y)
 MACHINE		 = nexuspci
 ARCHDIR		 = nexuspci
-TEXTADDR	 = 0xc0000000
 ZTEXTADDR	 = 0x40200000
-ZRELADDR	 = 0x40000000
+ZRELADDR	 = 0x40008000
 COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr_scc.o
 COMPRESSED_HEAD	 = head-nexuspci.o
 endif
+
+ifeq ($(CONFIG_ARCH_VNC),y)
+MACHINE		 = vnc
+ARCHDIR		 = vnc
+endif
+
+ifeq ($(CONFIG_ARCH_TBOX),y)
+MACHINE		 = tbox
+ARCHDIR		 = tbox
+ZTEXTADDR	 = 0x80008000
+ZRELDIR		 = 0x80008000
 endif
 
 PERL		 = perl
@@ -144,23 +149,28 @@ CFLAGS		:= $(CFLAGS:-fomit-frame-pointer=)
 endif
 CFLAGS		:= $(CFLAGS_PROC) $(CFLAGS) -pipe
 ASFLAGS		:= $(ASFLAGS_PROC) $(ASFLAGS)
-LINKFLAGS	 = -T $(TOPDIR)/arch/arm/vmlinux.lds -e stext -Ttext $(TEXTADDR)
+LINKFLAGS	 = -T $(TOPDIR)/arch/arm/vmlinux-$(PROCESSOR).lds -e stext -Ttext $(TEXTADDR)
 ZLINKFLAGS	 = -Ttext $(ZTEXTADDR)
 
-SUBDIRS		:= $(SUBDIRS:drivers=) arch/arm/lib arch/arm/kernel arch/arm/mm arch/arm/drivers
+SUBDIRS		:= $(SUBDIRS:drivers=arch/arm/drivers) arch/arm/lib arch/arm/kernel arch/arm/mm
 HEAD		:= arch/arm/kernel/head-$(PROCESSOR).o arch/arm/kernel/init_task.o
 CORE_FILES	:= arch/arm/kernel/kernel.o arch/arm/mm/mm.o $(CORE_FILES)
 LIBS		:= arch/arm/lib/lib.a $(LIBS) $(GCCLIB)
 
 BLOCK_DRIVERS	:= arch/arm/drivers/block/block.a
 CDROM_DRIVERS	:= drivers/cdrom/cdrom.a
+ifeq ($(CONFIG_FB),y)
+CHAR_DRIVERS	:= arch/arm/drivers/char1/char.a
+else
 CHAR_DRIVERS	:= arch/arm/drivers/char/char.a
+endif
 MISC_DRIVERS	:= drivers/misc/misc.a
 NET_DRIVERS	:= drivers/net/net.a
 PARIDE_DRIVERS	:= drivers/block/paride/paride.a
 PCI_DRIVERS	:= drivers/pci/pci.a
 SCSI_DRIVERS	:= drivers/scsi/scsi.a
 SOUND_DRIVERS	:= drivers/sound/sound.a
+VIDEO_DRIVERS	:= drivers/video/video.a
 
 ifeq ($(CONFIG_ARCH_ACORN),y)
 BLOCK_DRIVERS	+= drivers/acorn/block/acorn-block.a
@@ -171,6 +181,9 @@ endif
 
 DRIVERS		:= $(BLOCK_DRIVERS) $(CHAR_DRIVERS) $(MISC_DRIVERS) $(NET_DRIVERS)
 
+ifeq ($(CONFIG_FB),y)
+DRIVERS		:= $(DRIVERS) $(VIDEO_DRIVERS)
+endif
 ifeq ($(CONFIG_SCSI),y)
 DRIVERS		:= $(DRIVERS) $(SCSI_DRIVERS)
 endif
@@ -192,7 +205,7 @@ symlinks::
 	(cd include/asm-arm; ln -sf arch-$(ARCHDIR) arch; ln -sf proc-$(PROCESSOR) proc)
 
 # Once we've finished integrating the sources, the @$(MAKE) will disappear
-mrproper::
+archmrproper:
 	rm -f include/asm-arm/arch include/asm-arm/proc
 	@$(MAKE) -C arch/$(ARCH)/drivers mrproper
 
@@ -201,6 +214,9 @@ arch/arm/kernel: dummy
 
 arch/arm/mm: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/arm/mm
+
+arch/arm/lib: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=arch/arm/lib
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 
@@ -225,8 +241,6 @@ zi:;	@$(MAKEBOOT) zinstall
 archclean:
 	@$(MAKEBOOT) clean
 	$(RM) arch/arm/lib/constants.h
-
-archmrproper:
 
 archdep:
 	@$(MAKEBOOT) dep

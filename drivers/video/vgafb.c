@@ -745,7 +745,7 @@ static void do_install_cmap(int con, struct fb_info *info)
 
 static struct display_switch fbcon_vgafb = {
     fbcon_vga_setup, fbcon_vga_bmove, fbcon_vga_clear, fbcon_vga_putc,
-    fbcon_vga_putcs, fbcon_vga_revc, fbcon_vgafb_cursor
+    fbcon_vga_putcs, fbcon_vga_revc, fbcon_vgafb_cursor, NULL, FONTWIDTH(8)
 };
 
 

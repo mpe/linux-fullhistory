@@ -36,13 +36,13 @@
 */
 
 #include <linux/module.h>
-#include <linux/bios32.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
 #include <linux/mm.h>
 #include <linux/pci.h>
 #include <linux/signal.h>
@@ -352,9 +352,9 @@ void attach_inform(struct i2c_bus *bus, int id)
 			break;
         	case I2C_DRIVERID_TUNER:
 			btv->have_tuner = 1;
-			if (btv->type == BTTV_MIRO) 
+			if (btv->tuner_type != -1) 
 			{
-				tunertype=((btread(BT848_GPIO_DATA)>>10)-1)&7;
+				tunertype=btv->tuner_type;
 				i2c_control_device(&(btv->i2c), I2C_DRIVERID_TUNER,
 					TUNER_SET_TYPE,&tunertype);
 			}
@@ -436,17 +436,6 @@ static struct tvcard tvcards[] =
  *	Tuner, Radio, internal, external and mute 
  */
  
-static unsigned char audiomuxs[][5] = 
-{
-	{ 0x00, 0x00, 0x00, 0x00, 0x00}, /* unknown */
-	{ 0x02, 0x00, 0x00, 0x00, 0x0a}, /* MIRO */
-	{ 0x00, 0x01, 0x02, 0x03, 0x04}, /* Hauppauge */
-	{ 0x04, 0x00, 0x02, 0x03, 0x01}, /* STB */
-	{ 0x00, 0x01, 0x02, 0x03, 0x04}, /* Intel??? */
-	{ 0x00, 0x01, 0x00, 0x01, 0x03}, /* Diamond DTV2000 */
-	{ 0x0c, 0x00, 0x0b, 0x0b, 0x00}, /* AVerMedia TVPhone */
-};
-
 static void audio(struct bttv *btv, int mode)
 {
 	btaor(tvcards[btv->type].gpiomask, ~tvcards[btv->type].gpiomask,
@@ -803,150 +792,6 @@ static inline void write_risc_segment(unsigned int **rp, unsigned long line_adr,
 	*x+=dx;
 }
 
-static void make_clip_tab(struct bttv *btv, struct cliprec *cr, int count)
-{
-        int i,ncr;
-	int yy, y, x, dx;
-	struct cliprec first, *cur, *cur2, *nx, first2, *prev, *nx2;
-	int bpp, bpl, width, height, inter;
-	unsigned int **rp,*ro,*re;
-	unsigned long adr;
-	int cx,cx2,cy,cy2;
-
-	inter=(btv->win.interlace&1)^1;
-	bpp=btv->win.bpp;
-	bpl=btv->win.bpl;
-	ncr=btv->ncr;
-	ro=btv->risc_odd;
-	re=btv->risc_even;
-	width=btv->win.width;
-	height=btv->win.height;
-	adr=btv->win.vidadr+btv->win.x*bpp+btv->win.y*bpl;
-
-	/* clip clipping rects against viewing window AND screen 
-	   so we do not have to rely on the user program
-	 */
-	cx=(btv->win.x<0) ? (-btv->win.x) : 0;
-	cy=(btv->win.y<0) ? (-btv->win.y) : 0;
-	cx2=(btv->win.x+width>btv->win.swidth) ? 
-	        (btv->win.swidth-btv->win.x) : width;
-	cy2=(btv->win.y+height>btv->win.sheight) ? 
-	        (btv->win.sheight-btv->win.y) : height;
-	first.next=NULL;
-	for (i=0; i<ncr; i++)
-	{
-                if (cr[i].y<cy)
-		{
-		        if (cr[i].y2<cy)
-			        continue;
-			cr[i].y=cy;
-		} 
-		if (cr[i].y2>=cy2) 
-		{
-		        if (cr[i].y>=cy2)
-			        continue;
-			cr[i].y2=cy2-1;
-		}
-                if (cr[i].x<cx)
-		{
-		        if (cr[i].x2<cx)
-			        continue;
-			cr[i].x=cx;
-		} 
-		if (cr[i].x2>=cx2) 
-		{
-		        if (cr[i].x>=cx2)
-			        continue;
-			cr[i].x2=cx2-1;
-		}
-	        cur=&first;
-		while ((nx=cur->next) && (cr[i].y > cur->next->y))
-		        cur=nx; 
-		cur->next=&(cr[i]);
-		cr[i].next=nx;
-	}
-	first2.next=NULL;
-	
-	*(ro++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(ro++)=0;
-	*(re++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(re++)=0;
-	
-	/* loop through all lines */
-	for (yy=0; yy<(height<<inter); yy++) 
-	{
-		y=yy>>inter;
-		rp= (yy&1) ? &re : &ro;
-	  
-		/* remove rects with y2 > y */
-		if ((cur=first2.next))
-		{
-			prev=&first2;
-			do
-                	{
-				if (cur->y2 < y) 
-					prev->next=cur->next;
-				else
-					prev=cur;
-			} 
-                	while ((cur=cur->next));
-		}
-
-		/* add rect to second (x-sorted) list if rect.y == y  */
-		if ((cur=first.next))
-		{
-		 	while ((cur) && (cur->y == y))
-			{ 
-			        first.next=cur->next;
-				cur2=&first2;
-				while ((nx2=cur2->next) && (cur->x > cur2->next->x)) 
-				        cur2=nx2; 
-				cur2->next=cur;
-				cur->next=nx2;
-				cur=first.next;
-			}
-		}
-        	x=0;
-		if ((btv->win.y+y<=0)||(btv->win.y+y>=btv->win.sheight))
-			write_risc_segment(rp, adr, BT848_RISC_SKIP, &x,
- 					width, bpp, width);
-		else 
-		{
-			dx=cx;
-			for (cur2=first2.next; cur2; cur2=cur2->next)
-	       	        {
-				if (x+dx < cur2->x)
-				{
-					write_risc_segment(rp, adr, BT848_RISC_SKIP,
-						&x, dx, bpp, width);
-					dx=cur2->x-x;
-					write_risc_segment(rp, adr, BT848_RISC_WRITEC,
-						&x, dx, bpp, width);
-					dx=cur2->x2-x+1;
-				}
-				else if (x+dx < cur2->x2) 
-					dx=cur2->x2-x+1; 
-			}
-			if (cx2<width)
-			{
-				write_risc_segment(rp, adr, BT848_RISC_SKIP,
-					&x, dx, bpp, width);
-				write_risc_segment(rp, adr, BT848_RISC_WRITEC,
-					&x, cx2-x, bpp, width);
-				dx=width-x;
-			}
-			write_risc_segment(rp, adr, BT848_RISC_SKIP,
-				&x, dx, bpp, width);
-			write_risc_segment(rp, adr, BT848_RISC_WRITEC,
-				&x, width-x, bpp, width);
-		}
-		if ((!inter)||(yy&1))
-			adr+=bpl;
-	}
-	
-	*(ro++)=BT848_RISC_JUMP;
-	*(ro++)=btv->bus_vbi_even;
-	*(re++)=BT848_RISC_JUMP;
-	*(re++)=btv->bus_vbi_odd;
-}
 
 /*
  *	Set the registers for the size we have specified. Don't bother
@@ -1092,28 +937,15 @@ int bpp2fmt[4] = {
 static void bt848_set_winsize(struct bttv *btv)
 {
         unsigned short format;
-	int bpp;
 
         btv->win.color_fmt=format= (btv->win.depth==15) ? BT848_COLOR_FMT_RGB15 :
 		bpp2fmt[(btv->win.bpp-1)&3];
-#if 0
-	bpp=fmtbppx2[btv->win.color_fmt&0x0f]/2;
-	if (btv->win.bpp == 0) 
-	{
-	        btv->win.bpp=bpp;
-		format=btv->win.color_fmt;
-	}
-	else if (btv->win.bpp!=bpp)
-		btv->win.color_fmt=format=bpp2fmt[(btv->win.bpp-1)&3];
-	else
-                format=btv->win.color_fmt;
-#endif
                 	
 	/*	RGB8 seems to be a 9x5x5 GRB color cube starting at
 	 *	color 16. Why the h... can't they even mention this in the
-	 *	datasheet???  [AC - because its a standard format so I guess
-	 *	it never occured them]
-	 *	Enable dithering in this mode
+	 *	data sheet?  [AC - because it's a standard format so I guess
+	 *	it never occurred to them]
+	 *	Enable dithering in this mode.
 	 */
 #if 0	 
 	if (format==BT848_COLOR_FMT_RGB8)
@@ -1727,7 +1559,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			strcpy(v.name, "Television");
 			v.rangelow=0;
 			v.rangehigh=0xFFFFFFFF;
-			v.flags=VIDEO_TUNER_PAL|VIDEO_TUNER_NTSC;
+			v.flags=VIDEO_TUNER_PAL|VIDEO_TUNER_NTSC|VIDEO_TUNER_SECAM;
 			v.mode = btv->win.norm;
 			if(copy_to_user(arg,&v,sizeof(v)))
 				return -EFAULT;
@@ -1913,13 +1745,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			if(v.depth!=8 && v.depth!=15 && v.depth!=16 && v.depth!=24 && v.depth!=32)
 				return -EINVAL;
-			if (v.base) {
-			        /* also handle virtual base addresses */
-			        if ((unsigned int)v.base>=0xe0000000UL)
-			                btv->win.vidadr=(uint)v.base;
-				else 
-				  btv->win.vidadr= __va(uvirt_to_bus((uint)v.base));
-			}
+	                btv->win.vidadr=(unsigned long)v.base;
 			btv->win.sheight=v.height;
 			btv->win.swidth=v.width;
 			btv->win.bpp=((v.depth+1)&0x38)/8;
@@ -2315,6 +2141,8 @@ static struct vidbases vbs[] = {
 		"Matrox Millennium", PCI_BASE_ADDRESS_1},
 	{ PCI_VENDOR_ID_MATROX, PCI_DEVICE_ID_MATROX_MIL_2,
 		"Matrox Millennium II", PCI_BASE_ADDRESS_0},
+	{ PCI_VENDOR_ID_MATROX, PCI_DEVICE_ID_MATROX_MIL_2_AGP,
+		"Matrox Millennium II AGP", PCI_BASE_ADDRESS_0},
 	{ PCI_VENDOR_ID_MATROX, 0x051a, "Matrox Mystique", PCI_BASE_ADDRESS_1},
 	{ PCI_VENDOR_ID_N9, PCI_DEVICE_ID_N9_I128, 
 		"Number Nine Imagine 128", PCI_BASE_ADDRESS_0},
@@ -2339,48 +2167,41 @@ static uint dec_offsets[4] = {
 
 static int find_vga(void)
 {
-	unsigned int devfn, class, vendev;
-	unsigned short vendor, device, badr;
-	int found=0, bus=0, i, tga_type;
+	unsigned short badr;
+	int found = 0, i, tga_type;
 	unsigned int vidadr=0;
+	struct pci_dev *dev;
 
 
-	for (devfn = 0; devfn < 0xff; devfn++) 
+	for (dev = pci_devices; dev != NULL; dev = dev->next) 
 	{
-		if (PCI_FUNC(devfn) != 0)
-			continue;
-		pcibios_read_config_dword(bus, devfn, PCI_VENDOR_ID, &vendev);
-		if (vendev == 0xffffffff || vendev == 0x00000000) 
-			continue;
-		pcibios_read_config_word(bus, devfn, PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &device);
-		pcibios_read_config_dword(bus, devfn, PCI_CLASS_REVISION, &class);
-		class = class >> 16;
-/*		if (class == PCI_CLASS_DISPLAY_VGA) {*/
-		if ((class>>8) == PCI_BASE_CLASS_DISPLAY ||
-			/* Number 9 GXE64Pro needs this */
-			class == PCI_CLASS_NOT_DEFINED_VGA) 
+		if (dev->class != PCI_CLASS_NOT_DEFINED_VGA &&
+			(dev->class) >> 8 != PCI_BASE_CLASS_DISPLAY) 
 		{
-			badr=0;
-			printk(KERN_INFO "bttv: PCI display adapter: ");
-			for (i=0; i<NR_CARDS; i++) 
+			continue;
+		}
+		if (PCI_FUNC(dev->devfn) != 0)
+			continue;
+
+		badr=0;
+		printk(KERN_INFO "bttv: PCI display adapter: ");
+		for (i=0; i<NR_CARDS; i++) 
+		{
+			if (dev->vendor == vbs[i].vendor) 
 			{
-				if (vendor==vbs[i].vendor) 
-				{
-					if (vbs[i].device) 
-						if (vbs[i].device!=device)
-							continue;
-					printk("%s.\n", vbs[i].name);
-					badr=vbs[i].badr;
-					break;
-				}
+				if (vbs[i].device) 
+					if (vbs[i].device!=dev->device)
+						continue;
+				printk("%s.\n", vbs[i].name);
+				badr=vbs[i].badr;
+				break;
 			}
 			if (!badr) 
 			{
 				printk(KERN_ERR "bttv: Unknown video memory base address.\n");
 				continue;
 			}
-			pcibios_read_config_dword(bus, devfn, badr, &vidadr);
+			pci_read_config_dword(dev, badr, &vidadr);
 			if (vidadr & PCI_BASE_ADDRESS_SPACE_IO) 
 			{
 				printk(KERN_ERR "bttv: Memory seems to be I/O memory.\n");
@@ -2394,8 +2215,8 @@ static int find_vga(void)
 				continue;
 			}
       
-			if (vendor==PCI_VENDOR_ID_DEC)
-				if (device==PCI_DEVICE_ID_DEC_TGA) 
+			if (dev->vendor == PCI_VENDOR_ID_DEC &&
+				dev->device == PCI_DEVICE_ID_DEC_TGA) 
 			{
 				tga_type = (readl((unsigned long)vidadr) >> 12) & 0x0f;
 				if (tga_type != 0 && tga_type != 1 && tga_type != 3) 
@@ -2405,9 +2226,8 @@ static int find_vga(void)
 				}
 				vidadr+=dec_offsets[tga_type];
 			}
-
 			DEBUG(printk(KERN_DEBUG "bttv: memory @ 0x%08x, ", vidadr));
-			DEBUG(printk(KERN_DEBUG "devfn: 0x%04x.\n", devfn));
+			DEBUG(printk(KERN_DEBUG "devfn: 0x%04x.\n", dev->devfn));
 			found++;
 		}
 	}
@@ -2434,76 +2254,65 @@ static int find_vga(void)
   
 static void handle_chipset(void)
 {
-	int index;
+	struct pci_dev *dev = NULL;
   
 	/*	Just in case some nut set this to something dangerous */
 	if (triton1)
 		triton1=BT848_INT_ETBF;
 	
-	for (index = 0; index < 8; index++)
+	while ((dev = pci_find_device(PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_496, dev))) 
 	{
-		unsigned char bus, devfn;
-		unsigned char b;
-    
 		/* Beware the SiS 85C496 my friend - rev 49 don't work with a bttv */
-		
-		if (!pcibios_find_device(PCI_VENDOR_ID_SI, 
-					 PCI_DEVICE_ID_SI_496, 
-					 index, &bus, &devfn))
-		{
-			printk(KERN_WARNING "BT848 and SIS 85C496 chipset don't always work together.\n");
-		}			
+		printk(KERN_WARNING "BT848 and SIS 85C496 chipset don't always work together.\n");
+	}			
 
-		if (!pcibios_find_device(PCI_VENDOR_ID_INTEL, 
-					 PCI_DEVICE_ID_INTEL_82441,
-					 index, &bus, &devfn)) 
-		{
-			pcibios_read_config_byte(bus, devfn, 0x53, &b);
-			DEBUG(printk(KERN_INFO "bttv: Host bridge: 82441FX Natoma, "));
-			DEBUG(printk("bufcon=0x%02x\n",b));
-		}
+	/* dev == NULL */
 
-		if (!pcibios_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82437,
-			    index, &bus, &devfn)) 
-		{
-			printk(KERN_INFO "bttv: Host bridge 82437FX Triton PIIX\n");
-			triton1=BT848_INT_ETBF;
+	while ((dev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82441, dev))) 
+	{
+		unsigned char b;
+		pci_read_config_byte(dev, 0x53, &b);
+		DEBUG(printk(KERN_INFO "bttv: Host bridge: 82441FX Natoma, "));
+		DEBUG(printk("bufcon=0x%02x\n",b));
+	}
+
+	while ((dev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82437, dev))) 
+	{
+/*		unsigned char b;
+		unsigned char bo;*/
+
+		printk(KERN_INFO "bttv: Host bridge 82437FX Triton PIIX\n");
+		triton1=BT848_INT_ETBF;
 			
 #if 0			
-			/* The ETBF bit SHOULD make all this unnecessary */
-			/* 430FX (Triton I) freezes with bus concurrency on -> switch it off */
-			{   
-			        unsigned char bo;
+		/* The ETBF bit SHOULD make all this unnecessary */
+		/* 430FX (Triton I) freezes with bus concurrency on -> switch it off */
 
-				pcibios_read_config_byte(bus, devfn, TRITON_PCON, &b);
-				bo=b;
-				DEBUG(printk(KERN_DEBUG "bttv: 82437FX: PCON: 0x%x\n",b));
-
-				if(!(b & TRITON_BUS_CONCURRENCY)) 
-				{
-					printk(KERN_WARNING "bttv: 82437FX: disabling bus concurrency\n");
-					b |= TRITON_BUS_CONCURRENCY;
-				}
-
-				if(b & TRITON_PEER_CONCURRENCY) 
-				{
-					printk(KERN_WARNING "bttv: 82437FX: disabling peer concurrency\n");
-					b &= ~TRITON_PEER_CONCURRENCY;
-				}
-				if(!(b & TRITON_STREAMING)) 
-				{
-					printk(KERN_WARNING "bttv: 82437FX: disabling streaming\n");
-					b |=  TRITON_STREAMING;
-				}
-
-				if (b!=bo) 
-				{
-					pcibios_write_config_byte(bus, devfn, TRITON_PCON, b); 
-					printk(KERN_DEBUG "bttv: 82437FX: PCON changed to: 0x%x\n",b);
-				}
-			}
-#endif
+		pci_read_config_byte(dev, TRITON_PCON, &b);
+		bo=b;
+		DEBUG(printk(KERN_DEBUG "bttv: 82437FX: PCON: 0x%x\n",b));
+		if(!(b & TRITON_BUS_CONCURRENCY)) 
+		{
+			printk(KERN_WARNING "bttv: 82437FX: disabling bus concurrency\n");
+			b |= TRITON_BUS_CONCURRENCY;
 		}
+		if(b & TRITON_PEER_CONCURRENCY) 
+		{
+			printk(KERN_WARNING "bttv: 82437FX: disabling peer concurrency\n");
+			b &= ~TRITON_PEER_CONCURRENCY;
+		}
+		if(!(b & TRITON_STREAMING)) 
+		{
+			printk(KERN_WARNING "bttv: 82437FX: disabling streaming\n");
+			b |=  TRITON_STREAMING;
+		}
+
+		if (b!=bo) 
+		{
+			pci_write_config_byte(dev, TRITON_PCON, b); 
+			printk(KERN_DEBUG "bttv: 82437FX: PCON changed to: 0x%x\n",b);
+		}
+#endif
 	}
 }
 
@@ -2534,13 +2343,13 @@ static void init_tda9850(struct i2c_bus *bus)
 
 static void idcard(struct bttv *btv)
 {
-	int tunertype;
 	btwrite(0, BT848_GPIO_OUT_EN);
 	DEBUG(printk(KERN_DEBUG "bttv: GPIO: 0x%08x\n", btread(BT848_GPIO_DATA)));
 
 	/* Default the card to the user-selected one. */
 	btv->type=card;
- 
+        btv->tuner_type=-1; /* use default tuner type */
+
 	/* If we were asked to auto-detect, then do so! 
 	   Right now this will only recognize Miro, Hauppauge or STB
 	   */
@@ -2553,6 +2362,11 @@ static void idcard(struct bttv *btv)
 		else
 		        if (I2CRead(&(btv->i2c), I2C_STBEE)>=0)
 			        btv->type=BTTV_STB;
+
+                if (btv->type == BTTV_MIRO) {
+                        /* auto detect tuner for MIRO cards */
+                        btv->tuner_type=((btread(BT848_GPIO_DATA)>>10)-1)&7;
+                }
 	}
 
         if (I2CRead(&(btv->i2c), I2C_TDA9850) >=0)
@@ -2583,13 +2397,6 @@ static void idcard(struct bttv *btv)
 	{
 		case BTTV_MIRO:
 			printk("MIRO\n");
-			if (btv->have_tuner) 
-			{
-				tunertype=((btread(BT848_GPIO_DATA)>>10)-1)&7;
-				i2c_control_device(&(btv->i2c),
-						   I2C_DRIVERID_TUNER,
-						   TUNER_SET_TYPE,&tunertype);
-			}
 			strcpy(btv->video_dev.name,"BT848(Miro)");
 			break;
 		case BTTV_HAUPPAUGE:
@@ -2666,7 +2473,7 @@ static void bt848_set_risc_jmps(struct bttv *btv)
 	btv->risc_jmp[12]=BT848_RISC_JUMP;
 	btv->risc_jmp[13]=virt_to_bus(btv->risc_jmp);
 
-	/* enable cpaturing and DMA */
+	/* enable capturing and DMA */
 	btaor(flags, ~0x0f, BT848_CAP_CTL);
 	if (flags&0x0f)
 		bt848_dma(btv, 3);
@@ -2973,30 +2780,29 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
  
 static int find_bt848(void)
 {
-	short pci_index;    
 	unsigned char command, latency;
 	int result;
-	unsigned char bus, devfn;
 	struct bttv *btv;
+	struct pci_dev *dev;
 
 	bttv_num=0;
 
 	if (!pcibios_present()) 
 	{
-		DEBUG(printk(KERN_DEBUG "bttv: PCI-BIOS not present or not accessable!\n"));
+		DEBUG(printk(KERN_DEBUG "bttv: PCI-BIOS not present or not accessible!\n"));
 		return 0;
 	}
-
-	for (pci_index = 0;
-                !pcibios_find_device(PCI_VENDOR_ID_BROOKTREE, PCI_DEVICE_ID_BT849,
-				     pci_index, &bus, &devfn)
-	      ||!pcibios_find_device(PCI_VENDOR_ID_BROOKTREE, PCI_DEVICE_ID_BT848,
- 				    pci_index, &bus, &devfn);
-		++pci_index) 
+	for (dev = pci_devices; dev != NULL; dev = dev->next) 
 	{
+		if (dev->vendor != PCI_VENDOR_ID_BROOKTREE)
+			continue;
+		if (dev->device != PCI_DEVICE_ID_BT849 &&
+			dev->device != PCI_DEVICE_ID_BT848)
+			continue;
+
+		/* Ok, Bt848 or Bt849 found! */
 		btv=&bttvs[bttv_num];
-		btv->bus=bus;
-		btv->devfn=devfn;
+		btv->dev=dev;
 		btv->bt848_mem=NULL;
 		btv->vbibuf=NULL;
 		btv->risc_jmp=NULL;
@@ -3009,12 +2815,10 @@ static int find_bt848(void)
 
 		btv->vbip=VBIBUF_SIZE;
 
-		pcibios_read_config_word(btv->bus, btv->devfn, PCI_DEVICE_ID,
-					 &btv->id);
-		pcibios_read_config_byte(btv->bus, btv->devfn,
-			PCI_INTERRUPT_LINE, &btv->irq);
-		pcibios_read_config_dword(btv->bus, btv->devfn, PCI_BASE_ADDRESS_0,
-			&btv->bt848_adr);
+		pci_read_config_word (btv->dev, PCI_DEVICE_ID,      &btv->id);
+
+		/* pci_read_config_dword(btv->dev, PCI_BASE_ADDRESS_0, &btv->bt848_adr); */
+		btv->bt848_adr = btv->dev->base_address[0];
     
 		if (remap&&(!bttv_num))
 		{ 
@@ -3022,20 +2826,19 @@ static int find_bt848(void)
 			remap&=PCI_BASE_ADDRESS_MEM_MASK;
 			printk(KERN_INFO "Remapping to : 0x%08x.\n", remap);
 			remap|=btv->bt848_adr&(~PCI_BASE_ADDRESS_MEM_MASK);
-			pcibios_write_config_dword(btv->bus, btv->devfn, PCI_BASE_ADDRESS_0,
-				 remap);
-			pcibios_read_config_dword(btv->bus, btv->devfn, PCI_BASE_ADDRESS_0,
-				&btv->bt848_adr);
+			pci_write_config_dword(btv->dev, PCI_BASE_ADDRESS_0, remap);
+			pci_read_config_dword(btv->dev,  PCI_BASE_ADDRESS_0, &btv->bt848_adr);
+			btv->dev->base_address[0] = btv->bt848_adr;
 		}					
     
 		btv->bt848_adr&=PCI_BASE_ADDRESS_MEM_MASK;
-		pcibios_read_config_byte(btv->bus, btv->devfn, PCI_CLASS_REVISION,
+		pci_read_config_byte(btv->dev, PCI_CLASS_REVISION,
 			     &btv->revision);
 		printk(KERN_INFO "bttv: Brooktree Bt%d (rev %d) ",
 			btv->id, btv->revision);
 		printk("bus: %d, devfn: %d, ",
-			btv->bus, btv->devfn);
-		printk("irq: %d, ",btv->irq);
+			btv->dev->bus->number, btv->dev->devfn);
+		printk("irq: %d, ",btv->dev->irq);
 		printk("memory: 0x%08x.\n", btv->bt848_adr);
     
     		btv->pll = 0;
@@ -3049,7 +2852,7 @@ static int find_bt848(void)
                 
 		btv->bt848_mem=ioremap(btv->bt848_adr, 0x1000);
 
-		result = request_irq(btv->irq, bttv_irq,
+		result = request_irq(btv->dev->irq, bttv_irq,
 			SA_SHIRQ | SA_INTERRUPT,"bttv",(void *)btv);
 		if (result==-EINVAL) 
 		{
@@ -3058,29 +2861,27 @@ static int find_bt848(void)
 		}
 		if (result==-EBUSY)
 		{
-			printk(KERN_ERR "bttv: IRQ %d busy, change your PnP config in BIOS\n",btv->irq);
+			printk(KERN_ERR "bttv: IRQ %d busy, change your PnP config in BIOS\n",btv->dev->irq);
 			return result;
 		}
 		if (result < 0) 
 			return result;
 
 		/* Enable bus-mastering */
-		pcibios_read_config_byte(btv->bus, btv->devfn, PCI_COMMAND, &command);
+		pci_read_config_byte(btv->dev, PCI_COMMAND, &command);
 		command|=PCI_COMMAND_MASTER;
-		pcibios_write_config_byte(btv->bus, btv->devfn, PCI_COMMAND, command);
-		pcibios_read_config_byte(btv->bus, btv->devfn, PCI_COMMAND, &command);
+		pci_write_config_byte(btv->dev, PCI_COMMAND, command);
+		pci_read_config_byte(btv->dev, PCI_COMMAND, &command);
 		if (!(command&PCI_COMMAND_MASTER)) 
 		{
 			printk(KERN_ERR "bttv: PCI bus-mastering could not be enabled\n");
 			return -1;
 		}
-		pcibios_read_config_byte(btv->bus, btv->devfn, PCI_LATENCY_TIMER,
-			&latency);
+		pci_read_config_byte(btv->dev, PCI_LATENCY_TIMER, &latency);
 		if (!latency) 
 		{
 			latency=32;
-			pcibios_write_config_byte(btv->bus, btv->devfn,
-						  PCI_LATENCY_TIMER, latency);
+			pci_write_config_byte(btv->dev, PCI_LATENCY_TIMER, latency);
 		}
 		DEBUG(printk(KERN_DEBUG "bttv: latency: %02x\n", latency));
 		bttv_num++;
@@ -3114,9 +2915,10 @@ static void release_bttv(void)
 		i2c_unregister_bus((&btv->i2c));
 
 		/* disable PCI bus-mastering */
-		pcibios_read_config_byte(btv->bus, btv->devfn, PCI_COMMAND, &command);
-		command|=PCI_COMMAND_MASTER;
-		pcibios_write_config_byte(btv->bus, btv->devfn, PCI_COMMAND, command);
+		pci_read_config_byte(btv->dev, PCI_COMMAND, &command);
+		/* Should this be &=~ ?? */
+ 		command|=PCI_COMMAND_MASTER;
+		pci_write_config_byte(btv->dev, PCI_COMMAND, command);
     
 		/* unmap and free memory */
 		if (btv->grisc)
@@ -3137,7 +2939,7 @@ static void release_bttv(void)
 			vfree((void *) btv->vbibuf);
 
 
-		free_irq(btv->irq,btv);
+		free_irq(btv->dev->irq,btv);
 		DEBUG(printk(KERN_DEBUG "bt848_mem: 0x%08x.\n", btv->bt848_mem));
 		if (btv->bt848_mem)
 			iounmap(btv->bt848_mem);

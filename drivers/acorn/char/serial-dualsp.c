@@ -15,4 +15,3 @@
 #define MY_PORT_ADDRESS(port,cardaddress) \
 	((cardaddress) + (port) * 8)
 #include "serial-card.c"
-

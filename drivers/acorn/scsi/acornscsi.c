@@ -20,6 +20,7 @@
  *			reconnect race condition causing a warning message.
  *  12-Oct-1997	RMK	Added catch for re-entering interrupt routine.
  *  15-Oct-1997	RMK	Improved handling of commands.
+ *  27-Jun-1998	RMK	Changed asm/delay.h to linux/delay.h.
  */
 #define DEBUG_NO_WRITE	1
 #define DEBUG_QUEUES	2
@@ -136,8 +137,9 @@
 #include <linux/stat.h>
 #include <linux/ioport.h>
 #include <linux/blk.h>
+#include <linux/delay.h>
+
 #include <asm/bitops.h>
-#include <asm/delay.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/ecard.h>

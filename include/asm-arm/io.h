@@ -170,5 +170,20 @@ __IO(l,"",long)
 #undef ARCH_IO_DELAY
 #undef ARCH_IO_CONSTANT
 
+#ifdef __KERNEL__
+
+/*
+ * String version of IO memory access ops:
+ */
+extern void _memcpy_fromio(void *, unsigned long, unsigned long);
+extern void _memcpy_toio(unsigned long, void *, unsigned long);
+extern void _memset_io(unsigned long, int, unsigned long);
+
+#define memcpy_fromio(to,from,len)	_memcpy_fromio((to),(unsigned long)(from),(len))
+#define memcpy_toio(to,from,len)	_memcpy_toio((unsigned long)(to),(from),(len))
+#define memset_io(addr,c,len)		_memset_io((unsigned long)(addr),(c),(len))
+
+#endif
+
 #endif
 

@@ -43,7 +43,7 @@ static struct fb_var_screeninfo macfb_defined={
 	{0,0,0},	/* transparency */
 	0,		/* standard pixel format */
 	FB_ACTIVATE_NOW,
-	274,195,	/* 14" monitor *Mikael Nykvist's anyway* */
+	274,195,	/* 14" monitor - the late Mikael Nykvist's anyway */
 	0,		/* The only way to accelerate a mac is .. */
 	0L,0L,0L,0L,0L,
 	0L,0L,0,	/* No sync info */

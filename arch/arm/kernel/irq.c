@@ -2,7 +2,8 @@
  *  linux/arch/arm/kernel/irq.c
  *
  *  Copyright (C) 1992 Linus Torvalds
- *  Modifications for ARM processor Copyright (C) 1995, 1996 Russell King.
+ *  Modifications for ARM processor Copyright (C) 1995-1998 Russell King.
+ *  FIQ support written by Philip Blundell <philb@gnu.org>, 1998.
  *
  * This file contains the code used by various IRQ handling routines:
  * asking for different IRQ's should be done through these routines
@@ -30,20 +31,40 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 
-#include <asm/io.h>
-#include <asm/system.h>
+#include <asm/fiq.h>
 #include <asm/hardware.h>
+#include <asm/io.h>
+#include <asm/pgtable.h>
+#include <asm/system.h>
 #include <asm/arch/irq.h>
 
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
 spinlock_t irq_controller_lock;
+static struct fiq_handler *current_fiq;
+static unsigned long no_fiq_insn;
+
+#define FIQ_VECTOR ((unsigned long *)0x1c)
 
 #ifndef SMP
 #define irq_enter(cpu, irq)	(++local_irq_count[cpu])
 #define irq_exit(cpu, irq)	(--local_irq_count[cpu])
 #else
 #error SMP not supported
+#endif
+
+#ifdef CONFIG_ARCH_ACORN
+/* Bitmask indicating valid interrupt numbers
+ * (to be moved to include/asm-arm/arch-*)
+ */
+unsigned long validirqs[NR_IRQS / 32] = {
+	0x003ffe7f,	0x000001ff,	0x000000ff,	0x00000000
+};
+
+#define valid_irq(x) ((x) < NR_IRQS && validirqs[(x) >> 5] & (1 << ((x) & 31)))
+#else
+
+#define valid_irq(x) ((x) < NR_IRQS)
 #endif
 
 void disable_irq(unsigned int irq_nr)
@@ -74,21 +95,6 @@ void enable_irq(unsigned int irq_nr)
 
 struct irqaction *irq_action[NR_IRQS];
 
-#ifdef CONFIG_ARCH_ACORN
-/* Bitmask indicating valid interrupt numbers
- * (to be moved to include/asm-arm/arch-*)
- */
-unsigned long validirqs[NR_IRQS / 32] = {
-	0x003ffe7f,	0x000001ff,	0x000000ff,	0x00000000
-};
-
-#define valid_irq(x) ((x) < NR_IRQS && validirqs[(x) >> 5] & (1 << ((x) & 31)))
-#else
-
-#define valid_irq(x) ((x) < NR_IRQS)
-
-#endif
-
 int get_irq_list(char *buf)
 {
 	int i;
@@ -106,6 +112,8 @@ int get_irq_list(char *buf)
 		}
 		*p++ = '\n';
 	}
+	p += sprintf(p, "FIQ:              %s\n",
+		     current_fiq?current_fiq->name:"unused");
 	return p - buf;
 }
 
@@ -186,7 +194,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	}
 }
 
-#if defined(HAS_IOMD) || defined(HAS_IOC)
+#if defined(CONFIG_ARCH_ACORN)
 void do_ecard_IRQ(int irq, struct pt_regs *regs)
 {
 	struct irqaction * action;
@@ -336,9 +344,41 @@ int probe_irq_off (unsigned long irqs)
 	return i;
 }
 
+int claim_fiq(struct fiq_handler *f)
+{
+	if (current_fiq) {
+		if (current_fiq->callback == NULL || (*current_fiq->callback)())
+			return -EBUSY;
+	}
+	current_fiq = f;
+	return 0;
+}
+
+void release_fiq(struct fiq_handler *f)
+{
+	if (current_fiq != f) {
+		printk(KERN_ERR "%s tried to release FIQ when not owner!\n",
+		       f->name);
+#ifdef CONFIG_DEBUG_ERRORS
+		__backtrace();
+#endif
+		return;
+	}
+	current_fiq = NULL;
+
+	*FIQ_VECTOR = no_fiq_insn;
+	__flush_entry_to_ram(FIQ_VECTOR);
+}
+
 __initfunc(void init_IRQ(void))
 {
 	extern void init_dma(void);
+
 	irq_init_irq();
+
+	current_fiq = NULL;
+	no_fiq_insn = *FIQ_VECTOR;
+
 	init_dma();
 }
+

@@ -9,11 +9,14 @@
 #include <linux/init.h>
 
 #include <asm/dma.h>
+#include <asm/fiq.h>
 #include <asm/io.h>
 #include <asm/hardware.h>
 #include <asm/pgtable.h>
 
 #include "dma.h"
+
+static struct fiq_handler fh = { "floppydma", NULL };
 
 int arch_request_dma(dmach_t channel, dma_t *dma, const char *dev_id)
 {
@@ -26,13 +29,13 @@ int arch_request_dma(dmach_t channel, dma_t *dma, const char *dev_id)
 void arch_free_dma(dmach_t channel, dma_t *dma)
 {
 	if (channel != DMA_VIRTUAL_FLOPPY)
-		printk ("arch_free_dma: invalid channel %d\n", channel);
+		printk("arch_free_dma: invalid channel %d\n", channel);
 }
 
 int arch_get_dma_residue(dmach_t channel, dma_t *dma)
 {
 	if (channel != DMA_VIRTUAL_FLOPPY)
-		printk ("arch_dma_count: invalid channel %d\n", channel);
+		printk("arch_dma_count: invalid channel %d\n", channel);
 	else {
 		extern int floppy_fiqresidual(void);
 		return floppy_fiqresidual();
@@ -43,11 +46,11 @@ int arch_get_dma_residue(dmach_t channel, dma_t *dma)
 void arch_enable_dma(dmach_t channel, dma_t *dma)
 {
 	if (channel != DMA_VIRTUAL_FLOPPY)
-		printk ("arch_enable_dma: invalid channel %d\n", channel);
+		printk("arch_enable_dma: invalid channel %d\n", channel);
 	else {
 		void *fiqhandler_start;
 		unsigned int fiqhandler_length;
-		extern void floppy_fiqsetup (unsigned long len, unsigned long addr,
+		extern void floppy_fiqsetup(unsigned long len, unsigned long addr,
 					     unsigned long port);
 
 		if (dma->dma_mode == DMA_MODE_READ) {
@@ -59,19 +62,25 @@ void arch_enable_dma(dmach_t channel, dma_t *dma)
 			fiqhandler_start = &floppy_fiqout_start;
 			fiqhandler_length = &floppy_fiqout_end - &floppy_fiqout_start;
 		}
-		memcpy ((void *)0x1c, fiqhandler_start, fiqhandler_length);
+		if (claim_fiq(&fh)) {
+			printk("floppydma: couldn't claim FIQ.\n");
+			return;
+		}
+		memcpy((void *)0x1c, fiqhandler_start, fiqhandler_length);
 		flush_page_to_ram(0);
-		floppy_fiqsetup (dma->buf.length, __bus_to_virt(dma->buf.address), (int)PCIO_FLOPPYDMABASE);
-		enable_irq (dma->dma_irq);
+		floppy_fiqsetup(dma->buf.length, __bus_to_virt(dma->buf.address), (int)PCIO_FLOPPYDMABASE);
+		enable_irq(dma->dma_irq);
 	}
 }
 
 void arch_disable_dma(dmach_t channel, dma_t *dma)
 {
 	if (channel != DMA_VIRTUAL_FLOPPY)
-		printk ("arch_disable_dma: invalid channel %d\n", channel);
-	else
-		disable_irq (dma->dma_irq);
+		printk("arch_disable_dma: invalid channel %d\n", channel);
+	else {
+		disable_irq(dma->dma_irq);
+		release_fiq(&fh);
+	}
 }
 
 __initfunc(void arch_dma_init(dma_t *dma))

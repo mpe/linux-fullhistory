@@ -49,7 +49,14 @@ else
 obj-$(CONFIG_SOUND)		+= soundcore.o
 obj-$(CONFIG_SOUND_OSS)		+= sound.o
 obj-$(CONFIG_SOUND_ADLIB)	+= adlib_card.o opl3.o
-obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o uart401.o
+obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o 
+
+# In theory, there's probably no reason to include the uart401 code
+# to support a WaveFront card's CS4232 module. However, it makes
+# reconfiguring things require a recompile, so just leave this
+# here and try not to worry about the extra uart401 module.
+
+obj-$(CONFIG_SOUND_CS4232)	+= uart401.o
 obj-$(CONFIG_SOUND_GUS)		+= gus.o ad1848.o
 obj-$(CONFIG_SOUND_MAD16)	+= mad16.o ad1848.o sb.o uart401.o
 obj-$(CONFIG_SOUND_MAUI)	+= maui.o mpu401.o
@@ -69,7 +76,7 @@ obj-$(CONFIG_SOUND_UART6850)	+= uart6850.c
 obj-$(CONFIG_SOUND_VMIDI)	+= v_midi.o
 obj-$(CONFIG_SOUND_YM3812)	+= adlib_card.o opl3.o
 obj-$(CONFIG_VIDC_SOUND)	+= vidc_mod.o
-
+obj-$(CONFIG_SOUND_WAVEFRONT)   += wavefront.o
 #jnx
 obj-$(CONFIG_SOUND_ES1370)	+= es1370.o
 obj-$(CONFIG_SOUND_ES1371)	+= es1371.o
@@ -81,7 +88,8 @@ endif
 
 # Declare multi-part drivers.
 
-list-multi	:= sound.o gus.o pas2.o sb.o softoss2.o vidc_mod.o soundcore.o
+list-multi	:= sound.o gus.o pas2.o sb.o softoss2.o vidc_mod.o \
+    soundcore.o wavefront.o
 
 sound-objs	:= 							\
     dev_table.o soundcard.o sound_syms.o		\
@@ -96,7 +104,7 @@ pas2-objs	:= pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
 sb-objs		:= sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o
 softoss2-objs	:= softoss.o softoss_rs.o
 vidc_mod-objs	:= vidc.o vidc_audio.o vidc_fill.o vidc_mixer.o vidc_synth.o
-
+wavefront-objs  := wavfront.o wf_midi.o yss225.o
 
 
 # Extract lists of the multi-part drivers.
@@ -179,7 +187,8 @@ softoss2.o: $(softoss2-objs)
 vidc_mod.o: $(vidc_mod-objs)
 	$(LD) -r -o $@ $(vidc_mod-objs)
 
-
+wavefront.o: $(wavefront-objs)
+	$(LD) -r -o $@ $(wavefront-objs)
 
 # Firmware files that need translation
 #

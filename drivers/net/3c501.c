@@ -1,4 +1,4 @@
-/* 3c501.c: A 3Com 3c501 ethernet driver for linux. */
+/* 3c501.c: A 3Com 3c501 Ethernet driver for Linux. */
 /*
     Written 1992,1993,1994  Donald Becker
 
@@ -64,14 +64,14 @@
 
     	The driver is less efficient than it could be. It switches through
     receive mode even if more transmits are queued. If this worries you buy
-    a real ethernet card.
+    a real Ethernet card.
 
     	The combination of slow receive restart and no real multicast
     filter makes the board unusable with a kernel compiled for IP
     multicasting in a real multicast environment. That's down to the board,
     but even with no multicast programs running a multicast IP kernel is
     in group 224.0.0.1 and you will therefore be listening to all multicasts.
-    One nv conference running over that ethernet and you can give up.
+    One nv conference running over that Ethernet and you can give up.
 
 */
 
@@ -564,7 +564,7 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			 *	Timed out
 			 */
 			if (el_debug)
-				printk("%s: Transmit failed 16 times, ethernet jammed?\n",dev->name);
+				printk("%s: Transmit failed 16 times, Ethernet jammed?\n",dev->name);
 			outb(AX_SYS, AX_CMD);
 			lp->stats.tx_aborted_errors++;
 		}
@@ -749,7 +749,7 @@ static int el1_close(struct device *dev)
 	int ioaddr = dev->base_addr;
 
 	if (el_debug > 2)
-		printk("%s: Shutting down ethercard at %#x.\n", dev->name, ioaddr);
+		printk("%s: Shutting down Ethernet card at %#x.\n", dev->name, ioaddr);
 
 	dev->tbusy = 1;
 	dev->start = 0;

@@ -28,8 +28,6 @@
 #define FAULT_CODE_WRITE	0x02
 #define FAULT_CODE_USER		0x01
 
-#define USER_PTRS_PER_PGD (TASK_SIZE / PGDIR_SIZE)
-
 struct pgtable_cache_struct quicklists;
 
 void __bad_pmd(pmd_t *pmd)

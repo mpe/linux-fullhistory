@@ -47,6 +47,11 @@ extern char fontname_sun8x16[];
 extern int fontwidth_sun8x16, fontheight_sun8x16;
 extern u8 fontdata_sun8x16[];
 
+/* SUN12x22 */
+extern char fontname_sun12x22[];
+extern int fontwidth_sun12x22, fontheight_sun12x22;
+extern u8 fontdata_sun12x22[];
+
 
 
    /*
@@ -66,6 +71,7 @@ struct softfontdesc {
 #define PEARL8x8_IDX	2
 #define VGA6x11_IDX	3
 #define SUN8x16_IDX	4
+#define SUN12x22_IDX	5
 
 static struct softfontdesc softfonts[] = {
    { VGA8x8_IDX, fontname_8x8, &fontwidth_8x8, &fontheight_8x8, fontdata_8x8 },
@@ -77,6 +83,8 @@ static struct softfontdesc softfonts[] = {
 #else
    { SUN8x16_IDX, fontname_sun8x16, &fontwidth_sun8x16, &fontheight_sun8x16, 
      fontdata_sun8x16 },
+   { SUN12x22_IDX, fontname_sun12x22, &fontwidth_sun12x22, &fontheight_sun12x22, 
+     fontdata_sun12x22 },
 #endif
 };
 
@@ -87,7 +95,7 @@ static unsigned int numsoftfonts = sizeof(softfonts)/sizeof(*softfonts);
     *    Find a font with a specific name
     */
 
-int findsoftfont(char *name, int *width, int *height, u8 *data[])
+int findsoftfont(char *name, unsigned short *width, unsigned short *height, u8 *data[])
 {
    unsigned int i;
 
@@ -109,7 +117,7 @@ int findsoftfont(char *name, int *width, int *height, u8 *data[])
     *    Get the default font for a specific screen size
     */
 
-void getdefaultfont(int xres, int yres, char *name[], int *width, int *height,
+void getdefaultfont(int xres, int yres, char *name[], unsigned short *width, unsigned short *height,
                     u8 *data[])
 {
     int i, j;

@@ -6,6 +6,7 @@
 #include <linux/malloc.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <asm/hwrpb.h>
 #include <asm/io.h>

@@ -87,6 +87,8 @@
  * 17/1/97:RMK:	Upgraded to 2.1 kernels.
  *
  *  4/3/98:RMK:	Changed major number to 21.
+ *
+ * 27/6/98:RMK:	Changed asm/delay.h to linux/delay.h for mdelay().
  */
 
 /*
@@ -109,15 +111,15 @@
 #include <linux/genhd.h>
 #include <linux/major.h>
 #include <linux/ioport.h>
+#include <linux/delay.h>
 
 #define MAJOR_NR	MFM_ACORN_MAJOR
 #include <linux/blk.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/irq-no.h>
+#include <asm/irq.h>
 #include <asm/uaccess.h>
-#include <asm/delay.h>
 #include <asm/dma.h>
 #include <asm/hardware.h>
 #include <asm/ecard.h>

@@ -68,7 +68,7 @@ static int rdtsc_ok = 1;
 #ifdef __i386__
 __initfunc(static void i386_capability(void))
 {
-	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC))
+	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC)
 		rdtsc_ok = 1;
 	else
 		printk(KERN_INFO "%s: cpu does not support the rdtsc instruction\n", hfmodem_drvname);

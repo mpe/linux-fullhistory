@@ -20,6 +20,9 @@
 
 #include "../../scsi/scsi.h"
 
+MODULE_AUTHOR("Russell King");
+MODULE_DESCRIPTION("SCSI command queueing");
+
 typedef struct queue_entry {
 	struct queue_entry *next;
 	struct queue_entry *prev;

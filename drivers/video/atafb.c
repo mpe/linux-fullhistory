@@ -2671,7 +2671,7 @@ check_default_par( int detected_mode )
 			sprintf(default_name,"default%d",i);
 			default_par=get_video_mode(default_name);
 			if (! default_par)
-				panic("can't set default video mode\n");
+				panic("can't set default video mode");
 			var=atafb_predefined[default_par-1];
 			var.activate = FB_ACTIVATE_TEST;
 			if (! do_fb_set_var(&var,1))
@@ -2768,7 +2768,7 @@ __initfunc(void atafb_init(void))
 #else /* ATAFB_STE */
 		/* no default driver included */
 		/* Nobody will ever see this message :-) */
-		panic("Cannot initialize video hardware\n");
+		panic("Cannot initialize video hardware");
 #endif
 	} while (0);
 
@@ -2791,6 +2791,8 @@ __initfunc(void atafb_init(void))
 		mem_req = ((mem_req + PAGE_SIZE - 1) & PAGE_MASK) + PAGE_SIZE;
 		screen_base = (unsigned long)atari_stram_alloc(mem_req, NULL,
 							       "atafb");
+		if (!screen_base)
+			panic("Cannot allocate screen memory");
 		memset((char *) screen_base, 0, mem_req);
 		pad = ((screen_base + PAGE_SIZE-1) & PAGE_MASK) - screen_base;
 		screen_base+=pad;

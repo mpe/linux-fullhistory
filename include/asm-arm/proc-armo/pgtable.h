@@ -117,6 +117,7 @@ extern __inline__ void update_memc_addr(struct mm_struct *mm, unsigned long addr
 #define PTRS_PER_PTE    32
 #define PTRS_PER_PMD    1
 #define PTRS_PER_PGD    32
+#define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
 
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 8MB value just means that there will be a 8MB "hole" after the
@@ -450,7 +451,6 @@ extern __inline__ pmd_t *pmd_alloc(pgd_t *pgd, unsigned long address)
 #define pmd_alloc_kernel        pmd_alloc
 #define pte_alloc_kernel        pte_alloc
 
-#if 0
 extern __inline__ void set_pgdir(unsigned long address, pgd_t entry)
 {
 	struct task_struct * p;
@@ -466,7 +466,6 @@ extern __inline__ void set_pgdir(unsigned long address, pgd_t entry)
 	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 		pgd[address >> PGDIR_SHIFT] = entry;
 }
-#endif
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 

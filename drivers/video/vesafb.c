@@ -74,23 +74,13 @@ static struct fb_var_screeninfo vesafb_defined = {
 	{0,0,0,0,0,0}
 };
 
-#define NUM_TOTAL_MODES		1
-#define NUM_PREDEF_MODES	1
-
 static struct display disp;
 static struct fb_info fb_info;
 static struct { u_char red, green, blue, pad; } palette[256];
 
 static int inverse = 0;
 
-struct vesafb_par
-{
-	void *unused;
-};
-
 static int currcon = 0;
-static int current_par_valid = 0;
-struct vesafb_par current_par;
 
 /* --------------------------------------------------------------------- */
 /* speed up scrolling                                                    */
@@ -98,18 +88,8 @@ struct vesafb_par current_par;
 #define USE_REDRAW   1
 #define USE_MEMMOVE  2
   
-static vesafb_scroll = USE_REDRAW;
+static int vesafb_scroll = USE_REDRAW;
 static struct display_switch vesafb_sw;
-
-void vesafb_bmove(struct display *p, int sy, int sx, int dy, int dx,
-		  int height, int width)
-{
-	/*
-	 * this is really faster than memmove (at least with my box)
-	 *    read access to video memory is slow...
-	 */
-	update_screen(currcon);
-}
 
 /* --------------------------------------------------------------------- */
 
@@ -132,33 +112,13 @@ static int vesafb_release(struct fb_info *info, int user)
 	return(0);
 }
 
-static void vesafb_encode_var(struct fb_var_screeninfo *var, 
-				struct vesafb_par *par)
-{
-	memcpy(var, &vesafb_defined, sizeof(struct fb_var_screeninfo));
-}
-
-static void vesafb_get_par(struct vesafb_par *par)
-{
-	*par=current_par;
-}
-
 static int fb_update_var(int con, struct fb_info *info)
 {
 	return 0;
 }
 
-static int do_fb_set_var(struct fb_var_screeninfo *var, int isactive)
-{
-	struct vesafb_par par;
-	
-	vesafb_get_par(&par);
-	vesafb_encode_var(var, &par);
-	return 0;
-}
-
-static void vesafb_encode_fix(struct fb_fix_screeninfo *fix, 
-				struct vesafb_par *par)
+static int vesafb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			 struct fb_info *info)
 {
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id,"VESA VGA");
@@ -171,27 +131,14 @@ static void vesafb_encode_fix(struct fb_fix_screeninfo *fix,
 	fix->ypanstep=0;
 	fix->ywrapstep=0;
 	fix->line_length=video_linelength;
-	return;
-}
-
-static int vesafb_get_fix(struct fb_fix_screeninfo *fix, int con,
-			 struct fb_info *info)
-{
-	struct vesafb_par par;
-	vesafb_get_par(&par);
-	vesafb_encode_fix(fix, &par);
 	return 0;
 }
 
 static int vesafb_get_var(struct fb_var_screeninfo *var, int con,
 			 struct fb_info *info)
 {
-	struct vesafb_par par;
 	if(con==-1)
-	{
-		vesafb_get_par(&par);
-		vesafb_encode_var(var, &par);
-	}
+		memcpy(var, &vesafb_defined, sizeof(struct fb_var_screeninfo));
 	else
 		*var=fb_display[con].var;
 	return 0;
@@ -201,6 +148,7 @@ static void vesafb_set_disp(int con)
 {
 	struct fb_fix_screeninfo fix;
 	struct display *display;
+	struct display_switch *sw;
 	
 	if (con >= 0)
 		display = &fb_display[con];
@@ -209,6 +157,7 @@ static void vesafb_set_disp(int con)
 
 	vesafb_get_fix(&fix, con, 0);
 
+	memset(display, 0, sizeof(struct display));
 	display->screen_base = video_vbase;
 	display->visual = fix.visual;
 	display->type = fix.type;
@@ -219,42 +168,40 @@ static void vesafb_set_disp(int con)
 	display->next_line = fix.line_length;
 	display->can_soft_blank = 0;
 	display->inverse = inverse;
+	vesafb_get_var(&display->var, -1, &fb_info);
 
 	switch (video_bpp) {
 #ifdef CONFIG_FBCON_CFB8
 	case 8:
-		display->dispsw = &fbcon_cfb8;
+		sw = &fbcon_cfb8;
 		break;
 #endif
 #ifdef CONFIG_FBCON_CFB16
 	case 15:
 	case 16:
-		display->dispsw = &fbcon_cfb16;
+		sw = &fbcon_cfb16;
 		break;
 #endif
 #ifdef CONFIG_FBCON_CFB32
 	case 32:
-		display->dispsw = &fbcon_cfb32;
+		sw = &fbcon_cfb32;
 		break;
 #endif
 	default:
-		display->dispsw = NULL;
-		break;
+		return;
 	}
+	memcpy(&vesafb_sw, sw, sizeof(*sw));
+	display->dispsw = &vesafb_sw;
 	if (vesafb_scroll == USE_REDRAW) {
-		memcpy(&vesafb_sw,display->dispsw,sizeof(vesafb_sw));
-		vesafb_sw.bmove = vesafb_bmove;
-		display->dispsw = &vesafb_sw;
+		display->scrollmode = SCROLL_YREDRAW;
+		vesafb_sw.bmove = fbcon_redraw_bmove;
 	}
 }
 
 static int vesafb_set_var(struct fb_var_screeninfo *var, int con,
 			 struct fb_info *info)
 {
-	int err;
-	
-	if ((err=do_fb_set_var(var, 1)))
-		return err;
+	memcpy(var, &vesafb_defined, sizeof(struct fb_var_screeninfo));
 	return 0;
 }
 
@@ -297,7 +244,7 @@ static int vesa_setcolreg(unsigned regno, unsigned red, unsigned green,
 	switch (video_bpp) {
 #ifdef CONFIG_FBCON_CFB8
 	case 8:
-		/* Hmm, can we do it _allways_ this way ??? */
+		/* Hmm, can we do it _always_ this way ??? */
 		outb_p(regno, dac_reg);
 		outb_p(red, dac_val);
 		outb_p(green, dac_val);
@@ -432,7 +379,6 @@ static int vesafb_switch(int con, struct fb_info *info)
 	currcon = con;
 	/* Install new colormap */
 	do_install_cmap(con, info);
-	fb_update_var(con, info);
 	return 0;
 }
 
@@ -515,9 +461,6 @@ __initfunc(void vesafb_init(void))
 	fb_info.switch_con=&vesafb_switch;
 	fb_info.updatevar=&fb_update_var;
 	fb_info.blank=&vesafb_blank;
-	do_fb_set_var(&vesafb_defined,1);
-
-	vesafb_get_var(&disp.var, -1, &fb_info);
 	vesafb_set_disp(-1);
 
 	if (register_framebuffer(&fb_info)<0)

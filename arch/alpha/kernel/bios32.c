@@ -1946,8 +1946,8 @@ static inline void sio_fixup(void)
 }
 
 
-void __init
-pcibios_fixup(void)
+__initfunc(void
+pcibios_fixup(void))
 {
 	  struct pci_bus *cur;
 
@@ -2019,6 +2019,12 @@ pcibios_fixup(void)
 #else
 # error "You must tell me what kind of platform you want."
 #endif
+}
+
+
+__initfunc(void
+pcibios_fixup_bus(struct pci_bus *bus))
+{
 }
 
 

@@ -30,7 +30,14 @@ struct display_switch {
 		  int count, int yy, int xx);     
     void (*revc)(struct display *p, int xx, int yy);
     void (*cursor)(struct display *p, int mode, int xx, int yy);
+    int  (*set_font)(struct display *p, int width, int height);
+    unsigned int fontwidthmask;      /* 1 at (1 << (width - 1)) if width is supported */
 }; 
+
+/* fontwidth w is supported by dispsw */
+#define FONTWIDTH(w)	(1 << ((w) - 1))
+/* fontwidths w1-w2 inclusive are supported by dispsw */
+#define FONTWIDTHRANGE(w1,w2)	(FONTWIDTH(w2+1) - FONTWIDTH(w1))
 
 
     /*
@@ -63,6 +70,8 @@ struct display_switch {
 #define SCROLL_YPAN	(1)
 #define SCROLL_YMOVE	(2)
 #define SCROLL_YREDRAW	(3)
+
+extern void fbcon_redraw_bmove(struct display *, int, int, int, int, int, int);
 
 
 /* ================================================================= */

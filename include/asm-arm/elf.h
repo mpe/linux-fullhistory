@@ -40,10 +40,9 @@ typedef struct { void *null; } elf_fpregset_t;
 #define ELF_ET_DYN_BASE	(2 * TASK_SIZE / 3)
 
 /* This yields a mask that user programs can use to figure out what
-   instruction set this cpu supports.  This could be done in userspace,
-   but it's not easy, and we've already done it here.  */
+   instruction set this cpu supports. */
 
-#define ELF_HWCAP	(0)
+#define ELF_HWCAP	(armidlist[armidindex].hwcap)
 
 /* This yields a string that ld.so will use to load implementation
    specific libraries for optimization.  This is more specific in
@@ -52,12 +51,14 @@ typedef struct { void *null; } elf_fpregset_t;
 /* For now we just provide a fairly general string that describes the
    processor family.  This could be made more specific later if someone
    implemented optimisations that require it.  26-bit CPUs give you
-   "arm2" for ARM2 (no SWP) and "arm3" for anything else (ARM1 isn't
-   supported).  32-bit CPUs give you "arm6" for anything based on an
-   ARM6 or ARM7 core and "sa1x" for anything based on a StrongARM-1
+   "v1l" for ARM2 (no SWP) and "v2l" for anything else (ARM1 isn't
+   supported).  32-bit CPUs give you "v3[lb]" for anything based on an
+   ARM6 or ARM7 core and "armv4[lb]" for anything based on a StrongARM-1
    core.  */
 
-#define ELF_PLATFORM	(armidlist[armidindex].optname)
+#define ELF_PLATFORM_SIZE 8
+extern char elf_platform[];
+#define ELF_PLATFORM	(elf_platform)
 
 #ifdef __KERNEL__
 #define SET_PERSONALITY(ex,ibcs2) \

@@ -347,12 +347,11 @@ _arm6_7_proc_fin:
  *
  * Purpose : Set a PMD and flush it out of any WB cache
  */
-_arm6_set_pmd:	and	r2, r1, #3
-		teq	r2, #2
-		andeq	r2, r1, #8
-		orreq	r1, r1, r2, lsl #1		@ Updatable = Cachable
+_arm6_set_pmd:	and	r2, r1, #11
 		teq	r2, #1
-		orreq	r1, r1, #16			@ Updatable = 1 if Page table
+		teqne	r2, #9
+		teqne	r2, #10
+		orreq	r1, r1, #16			@ Updatable = 1 if Page table/Cacheable section
 		str	r1, [r0]
 		mov	pc, lr
 
@@ -364,7 +363,8 @@ _arm6_set_pmd:	and	r2, r1, #3
  *
  * Purpose : Set a PMD and flush it out of any WB cache
  */
-_arm7_set_pmd:	orr	r1, r1, #16			@ Updatable bit is always set on ARM7
+_arm7_set_pmd:	tst	r1, #3
+		orrne	r1, r1, #16			@ Updatable bit is always set on ARM7
 		str	r1, [r0]
 		mov	pc, lr
 

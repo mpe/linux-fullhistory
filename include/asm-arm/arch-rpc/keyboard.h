@@ -28,7 +28,11 @@ extern unsigned char ps2kbd_sysrq_xlate[NR_SCANCODES];
  * Returns  : 0 to ignore scancode, *keycode set to keycode, *up_flag
  *            set to 0200 if scancode indicates release
  */
+#ifdef NEW_KEYBOARD
 #define kbd_translate(sc, kcp, ufp, rm)	ps2kbd_translate(sc, kcp, ufp)
+#else
+#define kbd_translate(sc, kcp, rm) ({ unsigned int up_flag; ps2kbd_translate(sc, kcp, &up_flag); })
+#endif
 #define kbd_unexpected_up(kc)		(0200)
 #define kbd_leds(leds)			ps2kbd_leds(leds)
 #define kbd_init_hw()			ps2kbd_init_hw()

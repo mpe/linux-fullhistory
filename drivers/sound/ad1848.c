@@ -1721,7 +1721,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 	 */
 
 
-	int my_dev;
+	long my_dev;
 	char dev_name[100];
 	int e;
 
@@ -1951,12 +1951,12 @@ void adintr(int irq, void *dev_id, struct pt_regs *dummy)
 {
 	unsigned char status;
 	ad1848_info *devc;
-	int dev;
+	long dev;
 	int alt_stat = 0xff;
 	unsigned char c930_stat = 0;
 	int cnt = 0;
 
-	dev = (int)dev_id;
+	dev = (long)dev_id;
 	devc = (ad1848_info *) audio_devs[dev]->devc;
 
 interrupt_again:		/* Jump back here if int status doesn't reset */

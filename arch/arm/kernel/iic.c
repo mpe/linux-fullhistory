@@ -6,8 +6,9 @@
  * IIC is used to get the current time from the CMOS rtc.
  */
 
+#include <linux/delay.h>
+
 #include <asm/system.h>
-#include <asm/delay.h>
 #include <asm/io.h>
 #include <asm/hardware.h>
 

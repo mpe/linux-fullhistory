@@ -90,7 +90,7 @@ use_clustering:		DISABLE_CLUSTERING				\
 #define NCR5380_read(reg) cumanascsi_read(_instance, reg)
 #define NCR5380_write(reg, value) cumanascsi_write(_instance, reg, value)
 
-#define NCR5380_intr cumanascsi_intr
+#define do_NCR5380_intr do_cumanascsi_intr
 #define NCR5380_queue_command cumanascsi_queue_command
 #define NCR5380_abort cumanascsi_abort
 #define NCR5380_reset cumanascsi_reset

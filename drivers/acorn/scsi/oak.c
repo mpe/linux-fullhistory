@@ -116,7 +116,7 @@ int oakscsi_detect(Scsi_Host_Template * tpnt)
 	request_region (instance->io_port, instance->n_io_port, "Oak SCSI");
 
 	if (instance->irq != IRQ_NONE)
-	    if (request_irq(instance->irq, oakscsi_intr, SA_INTERRUPT, "Oak SCSI", NULL)) {
+	    if (request_irq(instance->irq, do_oakscsi_intr, SA_INTERRUPT, "Oak SCSI", NULL)) {
 		printk("scsi%d: IRQ%d not free, interrupts disabled\n",
 		    instance->host_no, instance->irq);
 		instance->irq = IRQ_NONE;

@@ -300,6 +300,16 @@ parport_ax_dec_use_count(void)
 #endif
 }
 
+static void parport_ax_fill_inode(struct inode *inode, int fill)
+{
+#ifdef MODULE
+	if (fill)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
+#endif
+}
+
 static struct parport_operations parport_ax_ops = 
 {
 	parport_ax_write_data,
@@ -345,7 +355,8 @@ static struct parport_operations parport_ax_ops =
 	parport_ax_examine_irq,
 
 	parport_ax_inc_use_count,
-	parport_ax_dec_use_count
+	parport_ax_dec_use_count,
+	parport_ax_fill_inode
 };
 
 

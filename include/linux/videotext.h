@@ -99,7 +99,7 @@ typedef struct
 	unsigned serial : 1;		/* serial mode (C11) */
 	unsigned notfound : 1;		/* /FOUND */
 	unsigned pblf : 1;		/* PBLF */
-	unsigned hamming : 1;		/* hamming-error occured */
+	unsigned hamming : 1;		/* hamming-error occurred */
 }
 vtx_pageinfo_t;
 

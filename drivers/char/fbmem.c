@@ -83,8 +83,6 @@ extern void hpfb_init(void);
 extern void hpfb_setup(char *options, int *ints);
 extern void sbusfb_init(void);
 extern void sbusfb_setup(char *options, int *ints);
-extern void promfb_init(void);
-extern void promfb_setup(char *options, int *ints);
 
 static struct {
 	const char *name;
@@ -144,9 +142,6 @@ static struct {
 #endif 
 #ifdef CONFIG_FB_SBUS
 	{ "sbus", sbusfb_init, sbusfb_setup },
-#endif
-#ifdef CONFIG_FB_PROM
-	{ "prom", promfb_init, promfb_setup },
 #endif
 #ifdef CONFIG_GSP_RESOLVER
 	/* Not a real frame buffer device... */
@@ -474,27 +469,6 @@ static struct file_operations fb_fops = {
 	NULL		/* fsync 	*/
 };
 
-static inline void take_over_console(struct consw *sw)
-{
-    int i;
-    extern void set_palette(void);
-
-    conswitchp = sw;
-    conswitchp->con_startup();
-
-    for (i = 0; i < MAX_NR_CONSOLES; i++) {
-	if (!vc_cons[i].d || !vc_cons[i].d->vc_sw)
-	    continue;
-	if (i == fg_console &&
-	    vc_cons[i].d->vc_sw->con_save_screen)
-		vc_cons[i].d->vc_sw->con_save_screen(vc_cons[i].d);
-	vc_cons[i].d->vc_sw->con_deinit(vc_cons[i].d);
-	vc_cons[i].d->vc_sw = conswitchp;
-	vc_cons[i].d->vc_sw->con_init(vc_cons[i].d, 0);
-    }
-    set_palette();
-}
-
 int
 register_framebuffer(struct fb_info *fb_info)
 {
@@ -523,7 +497,7 @@ register_framebuffer(struct fb_info *fb_info)
 
 	if (first) {
 		first = 0;
-		take_over_console(&fb_con);
+		take_over_console(&fb_con, 0, MAX_NR_CONSOLES-1, 1);
 	}
 
 	return 0;

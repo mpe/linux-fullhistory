@@ -24,7 +24,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd_pinnacle.h,v 1.3 1998/06/09 20:39:34 andrewtv Exp $
+ * $Id: msnd_pinnacle.h,v 1.4 1998/07/14 22:59:25 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_PINNACLE_H
@@ -61,19 +61,6 @@
 #define HIDSP_INPUT_CLIPPING	0x20
 #define	HIDSP_MIX_CLIPPING	0x30
 #define HIDSP_DAT_IN_OFF	0x21
-
-#define	HDEX_BASE	       	0x92
-#define	HDEX_PLAY_START		(0 + HDEX_BASE)
-#define	HDEX_PLAY_STOP		(1 + HDEX_BASE)
-#define	HDEX_PLAY_PAUSE		(2 + HDEX_BASE)
-#define	HDEX_PLAY_RESUME	(3 + HDEX_BASE)
-#define	HDEX_RECORD_START	(4 + HDEX_BASE)
-#define	HDEX_RECORD_STOP	(5 + HDEX_BASE)
-#define	HDEX_MIDI_IN_START 	(6 + HDEX_BASE)
-#define	HDEX_MIDI_IN_STOP	(7 + HDEX_BASE)
-#define	HDEX_MIDI_OUT_START	(8 + HDEX_BASE)
-#define	HDEX_MIDI_OUT_STOP	(9 + HDEX_BASE)
-#define	HDEX_AUX_REQ		(10 + HDEX_BASE)
 
 #define	HDEXAR_SET_ANA_IN	0
 #define	HDEXAR_CLEAR_PEAKS	1
@@ -237,6 +224,14 @@ struct SMA0_CommonData {
 #  define PERMCODESIZE		sizeof(pndsperm)
 #  define INITCODESIZE		sizeof(pndspini)
 #else
+#  ifndef CONFIG_MSNDPIN_INIT_FILE
+#    define CONFIG_MSNDPIN_INIT_FILE				\
+				"/etc/sound/pndspini.bin"
+#  endif
+#  ifndef CONFIG_MSNDPIN_PERM_FILE
+#    define CONFIG_MSNDPIN_PERM_FILE				\
+				"/etc/sound/pndsperm.bin"
+#  endif
 #  define PERMCODEFILE		CONFIG_MSNDPIN_PERM_FILE
 #  define INITCODEFILE		CONFIG_MSNDPIN_INIT_FILE
 #  define PERMCODE		dspini

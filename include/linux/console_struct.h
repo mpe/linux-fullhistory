@@ -10,6 +10,8 @@
  */
 #define CUR_DEFAULT CUR_UNDERLINE
 
+#include <linux/config.h>
+
 #define NPAR 16
 
 struct vc_data {
@@ -77,6 +79,7 @@ struct vc_data {
 	unsigned int	vc_bell_pitch;		/* Console bell pitch */
 	unsigned int	vc_bell_duration;	/* Console bell duration */
 	unsigned int	vc_cursor_type;
+	struct vc_data **vc_display_fg;		/* Ptr to var holding fg console for this display */
 	/* additional information is in vt_kern.h */
 };
 

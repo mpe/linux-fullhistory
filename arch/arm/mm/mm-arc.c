@@ -5,6 +5,7 @@
  *
  * Copyright (C) 1998 Russell King
  */
+#include <linux/init.h>
 #include <asm/hardware.h>
 #include <asm/pgtable.h>
 
@@ -13,7 +14,7 @@ unsigned long phys_screen_end;
 /*
  * This routine needs more work to make it dynamically release/allocate mem!
  */
-unsigned long map_screen_mem(unsigned long log_start, unsigned long kmem, int update)
+__initfunc(unsigned long map_screen_mem(unsigned long log_start, unsigned long kmem, int update))
 {
 	static int updated = 0;
 
@@ -75,8 +76,7 @@ unsigned long map_screen_mem(unsigned long log_start, unsigned long kmem, int up
 
 		phys_screen_end = offset;
 		flush_tlb_all ();
-		update_mm_cache_all ();
+		update_memc_all ();
 	}
 	return kmem;
 }
-

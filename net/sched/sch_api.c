@@ -9,10 +9,6 @@
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  */
 
-#include <asm/processor.h>
-#include <asm/uaccess.h>
-#include <asm/system.h>
-#include <asm/bitops.h>
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -29,9 +25,14 @@
 #include <linux/rtnetlink.h>
 #include <linux/init.h>
 #include <linux/proc_fs.h>
+
 #include <net/sock.h>
 #include <net/pkt_sched.h>
 
+#include <asm/processor.h>
+#include <asm/uaccess.h>
+#include <asm/system.h>
+#include <asm/bitops.h>
 
 #define BUG_TRAP(x) if (!(x)) { printk("Assertion (" #x ") failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); }
 

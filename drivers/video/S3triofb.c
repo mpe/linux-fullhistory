@@ -94,14 +94,6 @@ static int s3trio_pan_display(struct fb_var_screeninfo *var, int con,
 static int s3trio_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			u_long arg, int con, struct fb_info *info);
 
-#ifdef CONFIG_FB_COMPAT_XPMAC
-extern struct vc_mode display_info;
-extern struct fb_info *console_fb_info;
-extern int (*console_setmode_ptr)(struct vc_mode *, int);
-extern int (*console_set_cmap_ptr)(struct fb_cmap *, int, int,
-				   struct fb_info *);
-static int s3trio_console_setmode(struct vc_mode *mode, int doit);
-#endif /* CONFIG_FB_COMPAT_XPMAC */
 
     /*
      *  Interface to the low level console driver
@@ -616,8 +608,6 @@ __initfunc(void s3triofb_init_of(struct device_node *dp))
 	display_info.cmap_adr_address = address + 0x1008000 + 0x3c8;
 	display_info.cmap_data_address = address + 0x1008000 + 0x3c9;
 	console_fb_info = &fb_info;
-	console_setmode_ptr = s3trio_console_setmode;
-	console_set_cmap_ptr = s3trio_set_cmap;
     }
 #endif /* CONFIG_FB_COMPAT_XPMAC) */
 
@@ -729,51 +719,6 @@ static void do_install_cmap(int con, struct fb_info *info)
 	fb_set_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
 		    &fb_display[con].var, 1, s3trio_setcolreg, &fb_info);
 }
-
-#ifdef CONFIG_FB_COMPAT_XPMAC
-
-    /*
-     *  Backward compatibility mode for Xpmac
-     */
-
-static int s3trio_console_setmode(struct vc_mode *mode, int doit)
-{
-#if 1
-    return -EINVAL;
-#else
-    int err;
-    struct fb_var_screeninfo var;
-    struct s3trio_par par;
-
-    if (mode->mode <= 0 || mode->mode > VMODE_MAX )
-        return -EINVAL;
-    par.video_mode = mode->mode;
-
-    switch (mode->depth) {
-        case 24:
-        case 32:
-            par.color_mode = CMODE_32;
-            break;
-        case 16:
-            par.color_mode = CMODE_16;
-            break;
-        case 8:
-        case 0:			/* (default) */
-            par.color_mode = CMODE_8;
-            break;
-        default:
-            return -EINVAL;
-    }
-    encode_var(&var, &par);
-    if ((err = decode_var(&var, &par)))
-        return err;
-    if (doit)
-        s3trio_set_var(&var, currcon, 0);
-    return 0;
-#endif
-}
-
-#endif /* CONFIG_FB_COMPAT_XPMAC */
 
 void s3triofb_setup(char *options, int *ints) {
 
@@ -933,6 +878,6 @@ static void fbcon_trio8_revc(struct display *p, int xx, int yy)
 
 static struct display_switch fbcon_trio8 = {
    fbcon_cfb8_setup, fbcon_trio8_bmove, fbcon_trio8_clear, fbcon_trio8_putc,
-   fbcon_trio8_putcs, fbcon_trio8_revc, NULL
+   fbcon_trio8_putcs, fbcon_trio8_revc, NULL, NULL, FONTWIDTH(8)
 };
 #endif

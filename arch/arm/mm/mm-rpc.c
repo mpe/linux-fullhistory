@@ -5,9 +5,9 @@
  *
  * Copyright (C) 1998 Russell King
  */
-
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/init.h>
 
 #include <asm/pgtable.h>
 #include <asm/setup.h>
@@ -88,50 +88,10 @@ void init_dram_banks(struct param_struct *params)
 	current->tss.memmap = __virt_to_phys((unsigned long)swapper_pg_dir);
 }
 
-static struct mapping {
-	unsigned long virtual;
-	unsigned long physical;
-	unsigned long length;
-} io_mapping[] = {
-	{ SCREEN2_BASE,	SCREEN_START,	2*1048576	},	/* VRAM		*/
-	{ IO_BASE,	IO_START,	IO_SIZE		}	/* IO space	*/
-};
-
-#define SIZEOFIO (sizeof(io_mapping) / sizeof(io_mapping[0]))
-
-/* map in IO */
-unsigned long setup_io_pagetables(unsigned long start_mem)
-{
-	struct mapping *mp;
-	int i;
-
-	for (i = 0, mp = io_mapping; i < SIZEOFIO; i++, mp++) {
-		while ((mp->virtual & 1048575 || mp->physical & 1048575) && mp->length >= PAGE_SIZE) {
-			alloc_init_page(&start_mem, mp->virtual, mp->physical, DOMAIN_IO,
-					PTE_AP_WRITE);
-
-			mp->length -= PAGE_SIZE;
-			mp->virtual += PAGE_SIZE;
-			mp->physical += PAGE_SIZE;
-		}
-
-		while (mp->length >= 1048576) {
-			alloc_init_section(&start_mem, mp->virtual, mp->physical, DOMAIN_IO,
-					   PMD_SECT_AP_WRITE);
-			mp->length -= 1048576;
-			mp->virtual += 1048576;
-			mp->physical += 1048576;
-		}
-
-		while (mp->length >= PAGE_SIZE) {
-			alloc_init_page(&start_mem, mp->virtual, mp->physical, DOMAIN_IO,
-					PTE_AP_WRITE);
-
-			mp->length -= PAGE_SIZE;
-			mp->virtual += PAGE_SIZE;
-			mp->physical += PAGE_SIZE;
-		}
-	}
-
-	return start_mem;
-}
+#define MAPPING \
+	{ SCREEN2_BASE,	SCREEN_START,	2*1048576, DOMAIN_IO, 0, 1 },	/* VRAM		*/ \
+	{ IO_BASE,	IO_START,	IO_SIZE	 , DOMAIN_IO, 0, 1 }	/* IO space	*/
+/*
+ * Include common routine to set up page tables
+ */
+#include "mm-armv.c"

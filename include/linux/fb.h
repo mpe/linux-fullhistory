@@ -257,20 +257,22 @@ struct display {
    struct vc_data *conp;            /* pointer to console data */
    struct fb_info *fb_info;         /* frame buffer for this console */
    int vrows;                       /* number of virtual rows */
-   int cursor_x;                    /* current cursor position */
-   int cursor_y;
+   unsigned short cursor_x;	    /* current cursor position */
+   unsigned short cursor_y;
    int fgcol;                       /* text colors */
    int bgcol;
    u_long next_line;                /* offset to one line below */
    u_long next_plane;               /* offset to next plane */
    u_char *fontdata;                /* Font associated to this display */
-   int fontheight;
-   int fontwidth;
+   unsigned short fontheightlog;
+   unsigned short fontwidthlog;
+   unsigned short fontheight;
+   unsigned short fontwidth;
    int userfont;                    /* != 0 if fontdata kmalloc()ed */
    struct display_switch *dispsw;   /* low level operations */
    u_short scrollmode;              /* Scroll Method */
    short yscroll;                   /* Hardware scrolling */
-}; 
+};
 
 
 struct fb_info {
@@ -279,6 +281,7 @@ struct fb_info {
    struct fb_ops *fbops;
    struct fb_monspecs monspecs;
    struct display *disp;		/* initial display variable */
+   struct vc_data *display_fg;		/* Console visible on this display */
    char fontname[40];			/* default font name */
    int (*changevar)(int);		/* tell console var has changed */
    int (*switch_con)(int, struct fb_info*);

@@ -21,6 +21,7 @@ struct fb_info_cgsix {
 	struct bt_regs *bt;
 	struct cg6_fbc *fbc;
 	struct cg6_thc *thc;
+	struct cg6_tec *tec;
 	volatile u32 *fhc;
 };
 
@@ -76,6 +77,7 @@ struct fb_info_sbusfb {
 	void (*loadcmap)(struct fb_info_sbusfb *, int, int);
 	void (*blank)(struct fb_info_sbusfb *);
 	void (*unblank)(struct fb_info_sbusfb *);
+	void (*margins)(struct fb_info_sbusfb *, struct display *, int, int);
 	void (*reset)(struct fb_info_sbusfb *);
 	void (*fill)(struct fb_info_sbusfb *, int, int, unsigned short *);
 	void (*switch_from_graph)(struct fb_info_sbusfb *);

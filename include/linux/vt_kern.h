@@ -6,7 +6,6 @@
  * with information needed by the vt package
  */
 
-#include <linux/config.h>
 #include <linux/vt.h>
 
 /*
@@ -60,15 +59,6 @@ void scrollfront(int);
 
 struct tty_struct;
 int tioclinux(struct tty_struct *tty, unsigned long arg);
-
-#if defined(CONFIG_PMAC_CONSOLE) || defined(CONFIG_FB_COMPAT_XPMAC)
-#include <asm/vc_ioctl.h>
-extern int console_getmode(struct vc_mode *);
-extern int console_setmode(struct vc_mode *, int);
-extern int console_setcmap(int, unsigned char *,
-			   unsigned char *, unsigned char *);
-extern int console_powermode(int);
-#endif
 
 /* consolemap.c */
 

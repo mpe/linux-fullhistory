@@ -24,11 +24,11 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <asm/delay.h>
 
 #include <linux/timex.h>
 #include <asm/hardware.h>

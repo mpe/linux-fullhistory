@@ -566,6 +566,9 @@ __initfunc(int chr_dev_init(void))
 #ifdef CONFIG_FTAPE
 	ftape_init();
 #endif
+#ifdef CONFIG_VIDEO_BT848
+	i2c_init();
+#endif
 #ifdef CONFIG_VIDEO_DEV
 	videodev_init();
 #endif

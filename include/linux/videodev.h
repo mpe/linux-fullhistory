@@ -199,6 +199,8 @@ struct video_key
 #define VID_HARDWARE_AZTECH	7
 #define VID_HARDWARE_SF16MI	8
 #define VID_HARDWARE_RTRACK	9
+#define VID_HARDWARE_ZOLTRIX	10
+#define VID_HARDWARE_SAA7146    11
 
 /*
  *	Initialiser list

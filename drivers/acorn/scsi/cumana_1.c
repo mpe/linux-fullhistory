@@ -128,7 +128,7 @@ int cumanascsi_detect(Scsi_Host_Template * tpnt)
         outb(0x00, instance->io_port - 577);
 
 	if (instance->irq != IRQ_NONE)
-	    if (request_irq(instance->irq, cumanascsi_intr, SA_INTERRUPT, "CumanaSCSI-1", NULL)) {
+	    if (request_irq(instance->irq, do_cumanascsi_intr, SA_INTERRUPT, "CumanaSCSI-1", NULL)) {
 		printk("scsi%d: IRQ%d not free, interrupts disabled\n",
 		    instance->host_no, instance->irq);
 		instance->irq = IRQ_NONE;

@@ -485,8 +485,17 @@ static void dsp_halt(void)
 	mdelay(1);
 	if (test_and_clear_bit(F_WRITING, &dev.flags)) {
 
+		set_bit(F_WRITEFLUSH, &dev.flags);
+		interruptible_sleep_on(&dev.writeflush);
+		current->state = TASK_INTERRUPTIBLE;
+		current->timeout = 
+			jiffies + DAP_BUFF_SIZE / 2 * HZ /
+			dev.sample_rate / dev.channels;
+		schedule();
+		current->timeout = 0;
 		msnd_send_dsp_cmd(&dev, HDEX_PLAY_STOP);
 		msnd_disable_irq(&dev);
+		memset_io(dev.base, 0, DAP_BUFF_SIZE * 3);
 
 	}
 	mdelay(1);
@@ -706,8 +715,9 @@ static void eval_dsp_msg(WORD wMessage)
 			} 
 			else if (!test_bit(F_WRITEBLOCK, &dev.flags)) {
 
-				memset_io(dev.base, 0, DAP_BUFF_SIZE * 3);
 				clear_bit(F_WRITING, &dev.flags);
+				if (test_and_clear_bit(F_WRITEFLUSH, &dev.flags))
+					wake_up_interruptible(&dev.writeflush);
 				msnd_disable_irq(&dev);
 
 			}
@@ -761,7 +771,7 @@ static void eval_dsp_msg(WORD wMessage)
 			break;
 
 		default:
-			printk(KERN_INFO LOGNAME ": DSP message %u\n", LOBYTE(wMessage));
+			printk(KERN_DEBUG LOGNAME ": DSP message %u\n", LOBYTE(wMessage));
 			break;
 		}
 		break;
@@ -771,15 +781,19 @@ static void eval_dsp_msg(WORD wMessage)
 			(*dev.midi_in_interrupt)(&dev);
 		break;
 
+	case HIMT_MIDI_OUT:
+		printk(KERN_DEBUG LOGNAME ": MIDI out event\n");
+		break;
+
 	default:
+		printk(KERN_DEBUG LOGNAME ": HIMT message %u\n", HIBYTE(wMessage));
 		break;
 	}
 }
 
 static void intr(int irq, void *dev_id, struct pt_regs *regs)
 {
-	if (test_bit(F_INTERRUPT, &dev.flags) || 
-	    ((multisound_dev_t *)dev_id != &dev))
+	if (test_bit(F_INTERRUPT, &dev.flags))
 		return;
 
 	set_bit(F_INTERRUPT, &dev.flags);
@@ -1293,6 +1307,7 @@ __initfunc(int msnd_pinnacle_init(void))
 
 	init_waitqueue(&dev.writeblock);
 	init_waitqueue(&dev.readblock);
+	init_waitqueue(&dev.writeflush);
 	msnd_fifo_init(&dev.DAPF);
 	msnd_fifo_init(&dev.DARF);
 	spin_lock_init(&dev.lock);

@@ -32,6 +32,7 @@
 #include <asm/io.h>
 #include <asm/prom.h>
 
+#include "fbcon.h"
 #include "fbcon-cfb8.h"
 
 
@@ -86,9 +87,6 @@ int console_setmode(struct vc_mode *, int);
 int console_setcmap(int, unsigned char *, unsigned char *, unsigned char *);
 int console_powermode(int);
 struct fb_info *console_fb_info = NULL;
-int (*console_setmode_ptr)(struct vc_mode *, int) = NULL;
-int (*console_set_cmap_ptr)(struct fb_cmap *, int, int, struct fb_info *)
-    = NULL;
 struct vc_mode display_info;
 #endif /* CONFIG_FB_COMPAT_XPMAC */
 
@@ -276,17 +274,13 @@ static int offb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 #ifdef CONFIG_FB_ATY
 extern void atyfb_of_init(struct device_node *dp);
-
-static const char *aty_names[] = {
-    "ATY,mach64", "ATY,XCLAIM", "ATY,264VT", "ATY,mach64ii", "ATY,264GT-B", 
-    "ATY,mach64_3D_pcc", "ATY,XCLAIM3D", "ATY,XCLAIMVR", "ATY,RAGEII_M",
-    "ATY,XCLAIMVRPro", "ATY,mach64_3DU", "ATY,XCLAIM3DPro"
-};
 #endif /* CONFIG_FB_ATY */
 #ifdef CONFIG_FB_S3TRIO
 extern void s3triofb_init_of(struct device_node *dp);
 #endif /* CONFIG_FB_S3TRIO */
-
+#ifdef CONFIG_FB_CT65550
+extern void chips_of_init(struct device_node *dp);
+#endif /* CONFIG_FB_CT65550 */
 
     /*
      *  Initialisation
@@ -308,10 +302,7 @@ __initfunc(void offb_init(void))
 
 	if (!ofonly) {
 #ifdef CONFIG_FB_ATY
-	    for (i = 0; i < sizeof(aty_names)/sizeof(*aty_names); i++)
-		if (!strcmp(dp->name, aty_names[i]))
-		    break;
-	    if (i < sizeof(aty_names)/sizeof(*aty_names)) {
+	    if (!strncmp(dp->name, "ATY", 3)) {
 		atyfb_of_init(dp);
 		continue;
 	    }
@@ -320,6 +311,12 @@ __initfunc(void offb_init(void))
             if (s3triofb_init_of(dp))
                 continue;
 #endif /* CONFIG_FB_S3TRIO */
+#ifdef CONFIG_FB_CT65550
+	    if (!strcmp(dp->name, "chips65550")) {
+		chips_of_init(dp);
+		continue;
+	    }
+#endif /* CONFIG_FB_CT65550 */
 	}
 
 	info = kmalloc(sizeof(struct fb_info_offb), GFP_ATOMIC);
@@ -414,6 +411,7 @@ __initfunc(void offb_init(void))
 #else
 	disp->dispsw = NULL;
 #endif
+	disp->scrollmode = SCROLL_YREDRAW;
 
 	strcpy(info->info.modename, "OFfb ");
 	strncat(info->info.modename, dp->full_name,
@@ -462,7 +460,6 @@ __initfunc(void offb_init(void))
 		    display_info.cmap_data_address = address + 0x7ffcc1;
 	    }
 	    console_fb_info = &info->info;
-	    console_set_cmap_ptr = offb_set_cmap;
 	}
 #endif /* CONFIG_FB_COMPAT_XPMAC) */
     }
@@ -596,17 +593,6 @@ static void do_install_cmap(int con, struct fb_info *info)
 
     /*
      *  Backward compatibility mode for Xpmac
-     *
-     *  To do:
-     *
-     *    - console_setmode() should fill in a struct fb_var_screeninfo (using
-     *	    the MacOS video mode database) and simply call a decode_var()
-     *	    function, so console_setmode_ptr is no longer needed.
-     *	    console_getmode() should convert in the other direction.
-     *
-     *    - instead of using the console_* stuff (filled in by the frame
-     *      buffer), we should use the correct struct fb_info for the
-     *	    foreground virtual console.
      */
 
 int console_getmode(struct vc_mode *mode)
@@ -617,12 +603,31 @@ int console_getmode(struct vc_mode *mode)
 
 int console_setmode(struct vc_mode *mode, int doit)
 {
-    int err;
+    struct fb_var_screeninfo var;
+    int cmode, err;
 
-    if (console_setmode_ptr == NULL)
-	return -EINVAL;
-
-    err = (*console_setmode_ptr)(mode, doit);
+    if (!console_fb_info)
+	return -EOPNOTSUPP;
+    switch (mode->depth) {
+	case 8:
+	case 0:		/* default */
+	    cmode = 0;	/* CMODE_8 */
+	    break;
+	case 16:
+	    cmode = 1;	/* CMODE_16 */
+	    break;
+	case 24:
+	case 32:
+	    cmode = 2;	/* CMODE_32 */
+	    break;
+	default:
+	    return -EINVAL;
+    }
+    if ((err = mac_vmode_to_var(mode->mode, cmode, &var)))
+	return err;
+    var.activate = doit ? FB_ACTIVATE_NOW : FB_ACTIVATE_TEST;
+    err = console_fb_info->fbops->fb_set_var(&var, fg_console,
+					     console_fb_info);
     return err;
 }
 
@@ -637,9 +642,9 @@ static struct fb_cmap palette_cmap = {
 int console_setcmap(int n_entries, unsigned char *red, unsigned char *green,
 		    unsigned char *blue)
 {
-    int i, j, n;
+    int i, j, n, err;
 
-    if (console_set_cmap_ptr == NULL)
+    if (!console_fb_info)
 	return -EOPNOTSUPP;
     for (i = 0; i < n_entries; i += n) {
 	n = n_entries-i;
@@ -652,7 +657,10 @@ int console_setcmap(int n_entries, unsigned char *red, unsigned char *green,
 	    palette_cmap.green[j] = (green[i+j] << 8) | green[i+j];
 	    palette_cmap.blue[j]  = (blue[i+j] << 8) | blue[i+j];
 	}
-	(*console_set_cmap_ptr)(&palette_cmap, 1, fg_console, console_fb_info);
+	err = console_fb_info->fbops->fb_set_cmap(&palette_cmap, 1, fg_console,
+						  console_fb_info);
+	if (err)
+	    return err;
     }
     return 0;
 }

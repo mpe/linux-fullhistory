@@ -12,6 +12,7 @@
  *  15-02-1998	RMK	Added DMA support and hardware definitions.
  *  15-04-1998	RMK	Only do PIO if FAS216 will allow it.
  *  02-05-1998	RMK	Moved DMA sg list into per-interface structure.
+ *  27-06-1998	RMK	Changed asm/delay.h to linux/delay.h
  */
 
 #include <linux/module.h>
@@ -23,8 +24,8 @@
 #include <linux/proc_fs.h>
 #include <linux/unistd.h>
 #include <linux/stat.h>
+#include <linux/delay.h>
 
-#include <asm/delay.h>
 #include <asm/dma.h>
 #include <asm/ecard.h>
 #include <asm/io.h>
@@ -67,6 +68,11 @@
 #define VER_MAJOR	0
 #define VER_MINOR	0
 #define VER_PATCH	2
+
+MODULE_AUTHOR("Russell King");
+MODULE_DESCRIPTION("Powertec SCSI driver");
+MODULE_PARM(term, "1-8i");
+MODULE_PARM_DESC(term, "SCSI bus termination");
 
 static struct expansion_card *ecs[MAX_ECARDS];
 
@@ -271,6 +277,7 @@ powertecscsi_detect(Scsi_Host_Template *tpnt)
 		info->info.ifcfg.asyncperiod	= POWERTEC_ASYNC_PERIOD;
 		info->info.ifcfg.sync_max_depth	= POWERTEC_SYNC_DEPTH;
 		info->info.ifcfg.cntl3		= CNTL3_BS8 | CNTL3_FASTSCSI | CNTL3_FASTCLK;
+		info->info.ifcfg.disconnect_ok	= 1;
 		info->info.dma.setup		= powertecscsi_dma_setup;
 		info->info.dma.pseudo		= NULL;
 		info->info.dma.stop		= powertecscsi_dma_stop;

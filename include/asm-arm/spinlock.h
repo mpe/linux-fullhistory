@@ -18,7 +18,7 @@ typedef struct { } spinlock_t;
 #define spin_unlock_irq(lock)	sti()
 
 #define spin_lock_irqsave(lock, flags) \
-	do { save_flags(flags); cli(); } while (0)
+	do { __save_flags_cli(flags); } while (0)
 #define spin_unlock_irqrestore(lock, flags) \
 	restore_flags(flags)
 
@@ -45,11 +45,11 @@ typedef struct { } rwlock_t;
 #define write_unlock_irq(lock)	sti()
 
 #define read_lock_irqsave(lock, flags)	\
-	do { save_flags(flags); cli(); } while (0)
+	do { __save_flags_cli(flags); } while (0)
 #define read_unlock_irqrestore(lock, flags) \
 	restore_flags(flags)
 #define write_lock_irqsave(lock, flags)	\
-	do { save_flags(flags); cli(); } while (0)
+	do { __save_flags_cli(flags); } while (0)
 #define write_unlock_irqrestore(lock, flags) \
 	restore_flags(flags)
 

@@ -272,3 +272,39 @@ void unload_v_midi (struct address_info *hw_config);
 void attach_vidc(struct address_info *hw_config);
 int probe_vidc(struct address_info *hw_config);
 void unload_vidc(struct address_info *hw_config);
+
+/*      From wavefront.c */
+void attach_wavefront (struct address_info *hw_config);
+int probe_wavefront (struct address_info *hw_config);
+void unload_wavefront (struct address_info *hw_config);
+
+/*      From wf_midi.c */
+void attach_wf_mpu(struct address_info * hw_config);
+int probe_wf_mpu(struct address_info *hw_config);
+void unload_wf_mpu(struct address_info *hw_config);
+int virtual_midi_enable (int mididev, struct address_info *);
+void virtual_midi_disable (int mididev);
+
+/*      From wavefront.c */
+void attach_wavefront (struct address_info *hw_config);
+int probe_wavefront (struct address_info *hw_config);
+void unload_wavefront (struct address_info *hw_config);
+
+/*      From wf_midi.c */
+void attach_wf_mpu(struct address_info * hw_config);
+int probe_wf_mpu(struct address_info *hw_config);
+void unload_wf_mpu(struct address_info *hw_config);
+int virtual_midi_enable (int mididev, struct address_info *);
+void virtual_midi_disable (int mididev);
+
+/*      From wavefront.c */
+void attach_wavefront (struct address_info *hw_config);
+int probe_wavefront (struct address_info *hw_config);
+void unload_wavefront (struct address_info *hw_config);
+
+/*      From wf_midi.c */
+void attach_wf_mpu(struct address_info * hw_config);
+int probe_wf_mpu(struct address_info *hw_config);
+void unload_wf_mpu(struct address_info *hw_config);
+int virtual_midi_enable (int mididev, struct address_info *);
+void virtual_midi_disable (int mididev);

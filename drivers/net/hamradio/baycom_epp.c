@@ -453,7 +453,7 @@ static int exec_eppfpga(void *b)
 		bc->cfg.intclk ? "int" : "ext",
 		bc->cfg.extmodem ? "ext" : "int", bc->cfg.divider,
 		bc->cfg.loopback ? ",loopback" : "");
-	sprintf(portarg, "%d", bc->pdev->port->base);
+	sprintf(portarg, "%ld", bc->pdev->port->base);
 	printk(KERN_DEBUG "%s: %s -s -p %s -m %s\n", bc_drvname, eppconfig_path, portarg, modearg);
 
         for (i = 0; i < current->files->max_fds; i++ )

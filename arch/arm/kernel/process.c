@@ -38,6 +38,8 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
+struct task_struct *last_task_used_math;
+
 extern void fpe_save(struct fp_soft_struct *);
 extern char *processor_modes[];
 
@@ -171,15 +173,7 @@ void flush_thread(void)
 	current->flags &= ~PF_USEDFPU;
 }
 
-void release_segments(struct mm_struct *mm)
-{
-}
-
 void release_thread(struct task_struct *dead_task)
-{
-}
-
-void copy_segments(int nr, struct task_struct *p, struct mm_struct *new_mm)
 {
 }
 

@@ -26,6 +26,7 @@
 #include <linux/major.h>
 #include <linux/utsname.h>
 #include <linux/init.h>
+#include <linux/console.h>
 
 #include <asm/hardware.h>
 #include <asm/pgtable.h>
@@ -58,7 +59,7 @@ int armidindex;
 extern int root_mountflags;
 extern int _etext, _edata, _end;
 
-static char command_line[COMMAND_LINE_SIZE] = { 0, };
+static char command_line[COMMAND_LINE_SIZE] __initdata = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
 
 #ifdef CONFIG_BLK_DEV_RAM
@@ -164,6 +165,10 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_start_p = memory_start;
 	*memory_end_p = memory_end;
 	strcpy (system_utsname.machine, "sa110");
+
+#ifdef CONFIG_FB
+	conswitchp = &fb_con;
+#endif
 }
 
 int get_cpuinfo(char * buffer)

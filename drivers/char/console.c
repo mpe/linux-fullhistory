@@ -165,15 +165,24 @@ int want_console = -1;
 int kmsg_redirect = 0;
 
 /*
+ * For each existing display, we have a pointer to console currently visible
+ * on that display, allowing consoles other than fg_console to be refreshed
+ * appropriately. Unless the low-level driver supplies its own display_fg
+ * variable, we use this one for the "master display".
+ */
+static struct vc_data *master_display_fg = NULL;
+
+/*
  *	Low-Level Functions
  */
 
 #define IS_FG (currcons == fg_console)
+#define IS_VISIBLE (*display_fg == vc_cons[currcons].d)
 
 #ifdef VT_BUF_VRAM_ONLY
 #define DO_UPDATE 0
 #else
-#define DO_UPDATE IS_FG
+#define DO_UPDATE IS_VISIBLE
 #endif
 
 static inline unsigned short *screenpos(int currcons, int offset, int viewed)
@@ -205,7 +214,7 @@ static void scrup(int currcons, unsigned int t, unsigned int b, int nr)
 		nr = b - t - 1;
 	if (b > video_num_lines || t >= b || nr < 1)
 		return;
-	if (IS_FG && sw->con_scroll(vc_cons[currcons].d, t, b, SM_UP, nr))
+	if (IS_VISIBLE && sw->con_scroll(vc_cons[currcons].d, t, b, SM_UP, nr))
 		return;
 	d = (unsigned short *) (origin+video_size_row*t);
 	s = (unsigned short *) (origin+video_size_row*(t+nr));
@@ -224,7 +233,7 @@ scrdown(int currcons, unsigned int t, unsigned int b, int nr)
 		nr = b - t - 1;
 	if (b > video_num_lines || t >= b || nr < 1)
 		return;
-	if (IS_FG && sw->con_scroll(vc_cons[currcons].d, t, b, SM_DOWN, nr))
+	if (IS_VISIBLE && sw->con_scroll(vc_cons[currcons].d, t, b, SM_DOWN, nr))
 		return;
 	s = (unsigned short *) (origin+video_size_row*(b-nr-1));
 	step = video_num_columns * nr;
@@ -401,7 +410,6 @@ static void delete_char(int currcons, unsigned int nr)
 	}
 }
 
-/* FIXME: Does it make sense to hide cursor on non-fg consoles? */
 static inline void hide_cursor(int currcons)
 {
     sw->con_cursor(vc_cons[currcons].d,CM_ERASE);
@@ -419,7 +427,7 @@ void set_cursor(int currcons)
 
 static void set_origin(int currcons)
 {
-	if (!IS_FG ||
+	if (!IS_VISIBLE ||
 	    !sw->con_set_origin ||
 	    !sw->con_set_origin(vc_cons[currcons].d))
 		origin = (unsigned long) screenbuf;
@@ -442,9 +450,11 @@ static inline void save_screen(void)
 void update_screen(int new_console)
 {
 	int currcons = fg_console;
-	int xx, yy, startx, attrib;
+	int redraw = 1;
+	int xx, yy, startx, attrib, old_console;
 	unsigned short *p, *q;
 	static int lock = 0;
+	struct vc_data **display;
 
 	if (lock)
 		return;
@@ -457,31 +467,42 @@ void update_screen(int new_console)
 
 	clear_selection();
 
-	fg_console = new_console;
-	set_origin(currcons);
-	currcons = new_console;
-	sw->con_cursor (vc_cons[currcons].d, CM_ERASE);
-	set_origin(currcons);
-	if (sw->con_switch (vc_cons[currcons].d)) {
-		/* Update the screen contents */
-		p = (unsigned short *)origin;
-		attrib = scr_readw(p) & 0xff00;
-		for (yy = 0; yy < video_num_lines; yy++) {
-			q = p;
-			for (startx = xx = 0; xx < video_num_columns; xx++) {
-				if (attrib != (scr_readw(p) & 0xff00)) {
-					if (p > q)
-						sw->con_putcs (vc_cons[currcons].d, q,
-							       p - q, yy, startx);
-					startx = xx;
-					q = p;
-					attrib = (scr_readw(p) & 0xff00);
+	hide_cursor(currcons);
+	if (fg_console != new_console) {
+		display = vc_cons[new_console].d->vc_display_fg;
+		old_console = (*display) ? (*display)->vc_num : fg_console;
+		*display = vc_cons[new_console].d;
+		fg_console = new_console;
+		currcons = old_console;
+		if (!IS_VISIBLE)
+			set_origin(currcons);
+		currcons = new_console;
+		if (old_console == new_console)
+			redraw = 0;
+	}
+	if (redraw) {
+		set_origin(currcons);
+		if (sw->con_switch (vc_cons[currcons].d)) {
+			/* Update the screen contents */
+			p = (unsigned short *)origin;
+			attrib = scr_readw(p) & 0xff00;
+			for (yy = 0; yy < video_num_lines; yy++) {
+				q = p;
+				for (startx = xx = 0; xx < video_num_columns; xx++) {
+					if (attrib != (scr_readw(p) & 0xff00)) {
+						if (p > q)
+							sw->con_putcs (vc_cons[currcons].d, q,
+								       p - q, yy, startx);
+						startx = xx;
+						q = p;
+						attrib = (scr_readw(p) & 0xff00);
+					}
+					p++;
 				}
-				p++;
+				if (p > q)
+					sw->con_putcs (vc_cons[currcons].d, q,
+						       p - q, yy, startx);
 			}
-			if (p > q)
-				sw->con_putcs (vc_cons[currcons].d, q,
-					       p - q, yy, startx);
 		}
 	}
 	set_cursor (currcons);
@@ -504,6 +525,7 @@ void visual_init(int currcons)
     /* ++Geert: sw->con_init determines console size */
     sw = conswitchp;
     cons_num = currcons;
+    display_fg = &master_display_fg;
     sw->con_init(vc_cons[currcons].d, 1);
     video_size_row = video_num_columns<<1;
     video_screen_size = video_num_lines*video_size_row;
@@ -1155,6 +1177,7 @@ static void setterm_command(int currcons)
 				update_screen(par[1]-1);
 			break;
 		case 13: /* unblank the screen */
+			/* FIXME: call poke_blanked_console? */
 			unblank_screen();
 			break;
 		case 14: /* set vesa powerdown interval */
@@ -1692,6 +1715,12 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 	    return 0;
 	}
 
+	if (from_user) {
+		/* just to make sure that noone lurks at places he shouldn't see. */
+		if (verify_area(VERIFY_READ, buf, count))
+			return 0; /* ?? are error codes legal here ?? */
+	}
+
 	/* undraw cursor first */
 	if (DO_UPDATE)
 		hide_cursor(currcons);
@@ -1699,12 +1728,6 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 	/* clear the selection */
 	if (currcons == sel_cons)
 		clear_selection();
-
-	if (from_user) {
-		/* just to make sure that noone lurks at places he shouldn't see. */
-		if (verify_area(VERIFY_READ, buf, count))
-			return 0; /* ?? are error codes legal here ?? */
-	}
 
 	disable_bh(CONSOLE_BH);
 	while (count) {
@@ -1816,7 +1839,6 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 			}
 			continue;
 		}
-		/* FIXME: Handle tabs in a special way and use putcs for them as well */
 		FLUSH
 		do_con_trol(tty, currcons, c);
 	}
@@ -1839,6 +1861,7 @@ static void console_bh(void)
 {
 	if (want_console >= 0) {
 		if (want_console != fg_console) {
+			clear_selection();
 			save_screen();
 			change_console(want_console);
 			/* we only changed when the console had already
@@ -2095,12 +2118,9 @@ static void con_start(struct tty_struct *tty)
 
 static void con_flush_chars(struct tty_struct *tty)
 {
-	unsigned int currcons;
 	struct vt_struct *vt = (struct vt_struct *)tty->driver_data;
 
-	currcons = vt->vc_num;
-	if (vcmode != KD_GRAPHICS)
-		set_cursor(currcons);
+	set_cursor(vt->vc_num);
 }
 
 /*
@@ -2155,8 +2175,6 @@ static void vc_init(unsigned int currcons, unsigned int rows, unsigned int cols,
  * This routine initializes console interrupts, and does nothing
  * else. If you want the screen to clear, call tty_write with
  * the appropriate escape-sequence.
- *
- * FIXME: return early if we don't _have_ a video card installed.
  */
 
 struct tty_driver console_driver;
@@ -2239,6 +2257,8 @@ __initfunc(unsigned long con_init(unsigned long kmem_start))
 		}
 	}
 	currcons = fg_console = 0;
+	master_display_fg = vc_cons[currcons].d;
+	set_origin(currcons);
 	save_screen();
 	gotoxy(currcons,x,y);
 	csi_J(currcons, 0);
@@ -2260,6 +2280,42 @@ __initfunc(unsigned long con_init(unsigned long kmem_start))
 }
 
 /*
+ *	If we support more console drivers, this function is used
+ *	when a driver wants to take over some existing consoles
+ *	and become default driver for newly opened ones.
+ */
+
+#ifndef VT_BUF_VRAM_ONLY
+
+void take_over_console(struct consw *csw, int first, int last, int deflt)
+{
+	int i;
+	const char *desc;
+
+	if (deflt)
+		conswitchp = csw;
+	desc = csw->con_startup();
+	if (!desc) return;
+
+	for (i = first; i <= last; i++) {
+		if (!vc_cons[i].d || !vc_cons[i].d->vc_sw)
+			continue;
+		if (i == fg_console &&
+		    vc_cons[i].d->vc_sw->con_save_screen)
+			vc_cons[i].d->vc_sw->con_save_screen(vc_cons[i].d);
+		vc_cons[i].d->vc_sw->con_deinit(vc_cons[i].d);
+		vc_cons[i].d->vc_sw = csw;
+		vc_cons[i].d->vc_sw->con_init(vc_cons[i].d, 0);
+		}
+	printk("Console: switching to %s %s %dx%d\n",
+	       vc_cons[fg_console].d->vc_can_do_color ? "colour" : "mono",
+	       desc, vc_cons[fg_console].d->vc_cols, vc_cons[fg_console].d->vc_rows);
+	set_palette();
+}
+
+#endif
+
+/*
  *	Screen blanking
  */
 
@@ -2273,11 +2329,13 @@ void set_vesa_blanking(unsigned long arg)
 
 void vesa_blank(void)
 {
-    vc_cons[fg_console].d->vc_sw->con_blank(vesa_blank_mode + 1);
+    struct vc_data *c = vc_cons[fg_console].d;
+    c->vc_sw->con_blank(c, vesa_blank_mode + 1);
 }
 
 void vesa_powerdown(void)
 {
+    struct vc_data *c = vc_cons[fg_console].d;
     /*
      *  Power down if currently suspended (1 or 2),
      *  suspend if currently blanked (0),
@@ -2286,11 +2344,11 @@ void vesa_powerdown(void)
      */
     switch (vesa_blank_mode) {
 	case VESA_NO_BLANKING:
-	    vc_cons[fg_console].d->vc_sw->con_blank(VESA_VSYNC_SUSPEND+1);
+	    c->vc_sw->con_blank(c, VESA_VSYNC_SUSPEND+1);
 	    break;
 	case VESA_VSYNC_SUSPEND:
 	case VESA_HSYNC_SUSPEND:
-	    vc_cons[fg_console].d->vc_sw->con_blank(VESA_POWERDOWN+1);
+	    c->vc_sw->con_blank(c, VESA_POWERDOWN+1);
 	    break;
     }
 }
@@ -2305,17 +2363,28 @@ void vesa_powerdown_screen(void)
 
 void do_blank_screen(int nopowersave)
 {
-	int currcons;
+	int currcons = fg_console;
 
 	if (console_blanked)
 		return;
 
+	/* entering graphics mode? */
+	if (nopowersave) {
+		save_screen();
+		hide_cursor(currcons);
+		sw->con_blank(vc_cons[currcons].d, -1);
+		console_blanked = fg_console + 1;
+		set_origin(currcons);
+		return;
+	}
+
 	/* don't blank graphics */
 	if (vt_cons[fg_console]->vc_mode != KD_TEXT) {
 		console_blanked = fg_console + 1;
-		hide_cursor(fg_console);
 		return;
 	}
+
+	hide_cursor(fg_console);
 	if(vesa_off_interval && !nopowersave) {
 		timer_table[BLANK_TIMER].fn = vesa_powerdown_screen;
 		timer_table[BLANK_TIMER].expires = jiffies + vesa_off_interval;
@@ -2325,9 +2394,8 @@ void do_blank_screen(int nopowersave)
 		timer_table[BLANK_TIMER].fn = unblank_screen;
 	}
 
-	currcons = fg_console;
 	save_screen();
-	sw->con_blank(1);
+	sw->con_blank(vc_cons[currcons].d, 1);
 	console_blanked = fg_console + 1;
 
 	if(!nopowersave)
@@ -2358,16 +2426,12 @@ void do_unblank_screen(void)
 
 	currcons = fg_console;
 	console_blanked = 0;
-	if (sw->con_blank(0))
+	if (sw->con_blank(vc_cons[currcons].d, 0))
 		/* Low-level driver cannot restore -> do it ourselves */
 		update_screen(fg_console);
 	set_cursor(fg_console);
 }
 
-/*
- * If a blank_screen is due to a timer, then a power save is allowed.
- * If it is related to console_switching, then avoid vesa_blank().
- */
 static void blank_screen(void)
 {
 	do_blank_screen(0);
@@ -2400,7 +2464,7 @@ void poke_blanked_console(void)
 void set_palette(void)
 {
     if (vt_cons[fg_console]->vc_mode != KD_GRAPHICS)
-	conswitchp->con_set_palette(vc_cons[fg_console].d, color_table);
+	vc_cons[fg_console].d->vc_sw->con_set_palette(vc_cons[fg_console].d, color_table);
 }
 
 int set_get_cmap(unsigned char *arg, int set)
@@ -2579,3 +2643,7 @@ EXPORT_SYMBOL(default_grn);
 EXPORT_SYMBOL(default_blu);
 EXPORT_SYMBOL(video_font_height);
 EXPORT_SYMBOL(video_scan_lines);
+
+#ifndef VT_BUF_VRAM_ONLY
+EXPORT_SYMBOL(take_over_console);
+#endif

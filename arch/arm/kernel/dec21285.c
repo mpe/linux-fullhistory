@@ -109,6 +109,7 @@ __initfunc(void pcibios_fixup(void))
 {
 	struct pci_dev *dev;
 	unsigned char pin;
+	unsigned int cmd;
 
 	for (dev = pci_devices; dev; dev = dev->next) {
 		pcibios_read_config_byte(dev->bus->number,
@@ -127,6 +128,10 @@ __initfunc(void pcibios_fixup(void))
 			dev->bus->number, dev->devfn,
 			dev->vendor, dev->device,
 			pin, dev->irq);
+
+		/* Turn on bus mastering - boot loader doesn't - perhaps it should! */
+		pcibios_read_config_byte(dev->bus->number, dev->devfn, PCI_COMMAND, &cmd);
+		pcibios_write_config_byte(dev->bus->number, dev->devfn, PCI_COMMAND, cmd | PCI_COMMAND_MASTER);
 	}
 }
 
@@ -136,6 +141,10 @@ __initfunc(void pcibios_init(void))
 
 	rev = *(unsigned char *)0xfe000008;
 	printk("DEC21285 PCI revision %02X\n", rev);
+}
+
+__initfunc(void pcibios_fixup_bus(struct pci_bus *bus))
+{
 }
 
 __initfunc(char *pcibios_setup(char *str))

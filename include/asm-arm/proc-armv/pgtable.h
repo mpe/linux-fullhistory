@@ -133,6 +133,7 @@
 #define PTRS_PER_PTE    256
 #define PTRS_PER_PMD    1
 #define PTRS_PER_PGD    4096
+#define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
 
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 8MB value just means that there will be a 8MB "hole" after the
@@ -177,23 +178,22 @@
 
 /*
  * We define the bits in the page tables as follows:
- *  PTE_BUFFERABLE	page is writable
- *  PTE_AP_WRITE	page is dirty
+ *  PTE_BUFFERABLE	page is dirty
+ *  PTE_AP_WRITE	page is writable
  *  PTE_AP_READ		page is a young (unsetting this causes faults for any access)
+ *  PTE_CACHEABLE       page is readable
  *
- * Any page that is mapped in is assumed to be readable...
+ * A page will not be made writable without the dirty bit set.
+ * It is not legal to have a writable non-dirty page though (it breaks).
+ *
+ * A readable page is marked as being cacheable.
+ * Youngness is indicated by hardware read.  If the page is old,
+ * then we will fault and make the page young again.
  */
-#if 0
 #define _PTE_YOUNG	PTE_AP_READ
-#define _PTE_DIRTY	PTE_AP_WRITE
-#define _PTE_READ	PTE_CACHEABLE
-#define _PTE_WRITE	PTE_BUFFERABLE
-#else
-#define _PTE_YOUNG	PTE_CACHEABLE
 #define _PTE_DIRTY	PTE_BUFFERABLE
-#define _PTE_READ	PTE_AP_READ
+#define _PTE_READ	PTE_CACHEABLE
 #define _PTE_WRITE	PTE_AP_WRITE
-#endif
 
 #define PAGE_NONE       __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG)
 #define PAGE_SHARED     __pgprot(PTE_TYPE_SMALL | _PTE_YOUNG | _PTE_READ | _PTE_WRITE)
@@ -350,7 +350,7 @@ extern __inline__ int pmd_present(pmd_t pmd)
 
 extern __inline__ int pte_write(pte_t pte)
 {
-	return pte_val(pte) & PTE_AP_WRITE;
+	return pte_val(pte) & _PTE_WRITE;
 }
 
 extern __inline__ int pte_dirty(pte_t pte)
@@ -365,7 +365,7 @@ extern __inline__ int pte_young(pte_t pte)
 
 extern __inline__ pte_t pte_wrprotect(pte_t pte)
 {
-	pte_val(pte) &= ~PTE_AP_WRITE;
+	pte_val(pte) &= ~_PTE_WRITE;
 	return pte;
 }
 
@@ -377,31 +377,31 @@ extern __inline__ pte_t pte_nocache(pte_t pte)
 
 extern __inline__ pte_t pte_mkclean(pte_t pte)
 {
-	pte_val(pte) &= ~PTE_BUFFERABLE;
+	pte_val(pte) &= ~_PTE_DIRTY;
 	return pte;
 }
 
 extern __inline__ pte_t pte_mkold(pte_t pte)
 {
-	pte_val(pte) &= ~PTE_AP_READ;
+	pte_val(pte) &= ~_PTE_YOUNG;
 	return pte;
 }
 
 extern __inline__ pte_t pte_mkwrite(pte_t pte)
 {
-	pte_val(pte) |= PTE_AP_WRITE;
+	pte_val(pte) |= _PTE_WRITE;
 	return pte;
 }
 
 extern __inline__ pte_t pte_mkdirty(pte_t pte)
 {
-	pte_val(pte) |= PTE_BUFFERABLE;
+	pte_val(pte) |= _PTE_DIRTY;
 	return pte;
 }
 
 extern __inline__ pte_t pte_mkyoung(pte_t pte)
 {
-	pte_val(pte) |= PTE_AP_READ;
+	pte_val(pte) |= _PTE_YOUNG;
 	return pte;
 }
 
@@ -670,7 +670,6 @@ extern __inline__ pmd_t *pmd_alloc(pgd_t *pgd, unsigned long address)
 #define pmd_free_kernel		pmd_free
 #define pmd_alloc_kernel	pmd_alloc
 
-#if 0
 extern __inline__ void set_pgdir(unsigned long address, pgd_t entry)
 {
 	struct task_struct * p;
@@ -686,7 +685,6 @@ extern __inline__ void set_pgdir(unsigned long address, pgd_t entry)
 	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 		pgd[address >> PGDIR_SHIFT] = entry;
 }
-#endif
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 

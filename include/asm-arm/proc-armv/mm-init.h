@@ -48,12 +48,13 @@ static inline void
 alloc_init_section(unsigned long *mem, unsigned long virt, unsigned long phys, int domain, int prot)
 {
 	pgd_t *pgdp;
-	pmd_t *pmdp;
+	pmd_t *pmdp, pmd;
 
 	pgdp = pgd_offset_k(virt);
 	pmdp = pmd_offset(pgdp, virt);
 
-	pmd_val(*pmdp) = phys | PMD_TYPE_SECT | PMD_DOMAIN(domain) | prot;
+	pmd_val(pmd) = phys | PMD_TYPE_SECT | PMD_DOMAIN(domain) | prot;
+	set_pmd(pmdp, pmd);
 }
 
 /*
@@ -78,7 +79,7 @@ static inline void
 alloc_init_page(unsigned long *mem, unsigned long virt, unsigned long phys, int domain, int prot)
 {
 	pgd_t *pgdp;
-	pmd_t *pmdp;
+	pmd_t *pmdp, pmd;
 	pte_t *ptep;
 
 	pgdp = pgd_offset_k(virt);
@@ -92,7 +93,8 @@ alloc_init_page(unsigned long *mem, unsigned long virt, unsigned long phys, int 
 		ptep = (pte_t *)memory;
 		memzero(ptep, PTE_SIZE);
 
-		pmd_val(*pmdp) = __virt_to_phys(memory) | PMD_TYPE_TABLE | PMD_DOMAIN(domain);
+		pmd_val(pmd) = __virt_to_phys(memory) | PMD_TYPE_TABLE | PMD_DOMAIN(domain);
+		set_pmd(pmdp, pmd);
 
 		*mem = memory + PTE_SIZE;
 	}

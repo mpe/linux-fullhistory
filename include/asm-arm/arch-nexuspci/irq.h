@@ -4,35 +4,35 @@
  * Copyright (C) 1998 Philip Blundell
  */
 
-#define INT_RESET	((volatile unsigned char *)0xfff00000)
-#define INT_ENABLE	((volatile unsigned char *)0xfff00000)
-#define INT_DISABLE	((volatile unsigned char *)0xfff00000)
+#include <asm/io.h>
 
-static __inline__ void mask_and_ack_irq(unsigned int irq)
-{
-	INT_DISABLE[irq << 2] = 0;
-	INT_RESET[irq << 2] = 0;
-}
+#define INTCONT		0xffe00000
+
+extern unsigned long soft_irq_mask;
 
 static __inline__ void mask_irq(unsigned int irq)
 {
-	INT_DISABLE[irq << 2] = 0;
+	writel((irq << 1), INTCONT);
+	soft_irq_mask &= ~(1<<irq);
 }
+
+#define mask_and_ack_irq(_x)	mask_irq(_x)
 
 static __inline__ void unmask_irq(unsigned int irq)
 {
-	INT_ENABLE[irq << 2] = 0;
+	writel((irq << 1) + 1, INTCONT);
+	soft_irq_mask |= (1<<irq);
 }
  
 static __inline__ unsigned long get_enabled_irqs(void)
 {
-	return 0;
+	return soft_irq_mask;
 }
 
 static __inline__ void irq_init_irq(void)
 {
 	unsigned int i;
 	/* Disable all interrupts initially. */
-	for (i = 0; i < 8; i++)
+	for (i = 0; i < NR_IRQS; i++)
 		mask_irq(i);
 }

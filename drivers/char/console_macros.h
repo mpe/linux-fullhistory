@@ -62,6 +62,8 @@
 #define bell_pitch	(vc_cons[currcons].d->vc_bell_pitch)
 #define bell_duration	(vc_cons[currcons].d->vc_bell_duration)
 #define cursor_type	(vc_cons[currcons].d->vc_cursor_type)
+#define display_fg	(vc_cons[currcons].d->vc_display_fg)
+
 #define vcmode		(vt_cons[currcons]->vc_mode)
 
 #define structsize	(sizeof(struct vc_data) + sizeof(struct vt_struct))

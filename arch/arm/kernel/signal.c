@@ -4,7 +4,7 @@
  *  Copyright (C) 1995, 1996 Russell King
  */
 
-#include <linux/config.h> /* for CONFIG_CPU_ARM6 and CONFIG_CPU_SA110 */
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
@@ -37,7 +37,6 @@ extern int ptrace_set_bpt (struct task_struct *);
  */
 asmlinkage int sys_sigsuspend(int restart, unsigned long oldmask, old_sigset_t mask, struct pt_regs *regs)
 {
-
 	sigset_t saveset;
 
 	mask &= _BLOCKABLE;

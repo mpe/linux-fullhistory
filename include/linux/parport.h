@@ -127,6 +127,7 @@ struct parport_operations {
 
 	void (*inc_use_count)(void);
 	void (*dec_use_count)(void);
+	void (*fill_inode)(struct inode *inode, int fill);
 };
 
 struct parport_device_info {

@@ -27,6 +27,10 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
+#endif
+
 
 #define VIDEO_NUM_DEVICES	256 
 
@@ -38,6 +42,7 @@ static struct video_device *video_device[VIDEO_NUM_DEVICES];
 
 #ifdef CONFIG_VIDEO_BT848
 extern int init_bttv_cards(struct video_init *);
+extern int i2c_tuner_init(struct video_init *);
 #endif
 #ifdef CONFIG_VIDEO_SAA5249
 extern int init_saa_5249(struct video_init *);
@@ -60,6 +65,7 @@ extern int fmi_init(struct video_init *);
 
 static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_BT848
+	{"i2c-tuner", i2c_tuner_init},
 	{"bttv", init_bttv_cards},
 #endif	
 #ifdef CONFIG_VIDEO_SAA5249
@@ -132,8 +138,17 @@ static int video_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 		
 	vfl=video_device[minor];
-	if(vfl==NULL)
-		return -ENODEV;
+	if(vfl==NULL) {
+#ifdef CONFIG_KMOD
+		char modname[20];
+
+		sprintf (modname, "char-major-%d-%d", VIDEO_MAJOR, minor);
+		request_module(modname);
+		vfl=video_device[minor];
+		if (vfl==NULL)
+#endif
+			return -ENODEV;
+	}
 	if(vfl->busy)
 		return -EBUSY;
 	vfl->busy=1;		/* In case vfl->open sleeps */

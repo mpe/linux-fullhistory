@@ -52,6 +52,7 @@ static inline int serial_register_onedev (unsigned long port, int irq)
     req.baud_base = MY_BAUD_BASE;
     req.irq = irq;
     req.port = port;
+    req.flags = 0;
 
     return register_serial(&req);
 }

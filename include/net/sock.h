@@ -448,6 +448,9 @@ struct sock {
 #if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
 		struct ipx_opt		af_ipx;
 #endif
+#if defined (CONFIG_DECNET) || defined(CONFIG_DECNET_MODULE)
+		struct dn_scp           dn;
+#endif
 #if defined (CONFIG_PACKET) || defined(CONFIG_PACKET_MODULE)
 		struct packet_opt	*af_packet;
 #endif
@@ -456,15 +459,12 @@ struct sock {
 #endif
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 		ax25_cb			*ax25;
+#endif
 #if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 		nr_cb			*nr;
 #endif
 #if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 		rose_cb			*rose;
-#endif
-#endif
-#if defined(CONFIG_DECNET) || defined(CONFIG_DECNET_MODULE)
-	        dn_cb                    *dn;
 #endif
 #ifdef CONFIG_NETLINK
 		struct netlink_opt	af_netlink;

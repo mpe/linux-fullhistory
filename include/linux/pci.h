@@ -1,5 +1,5 @@
 /*
- *	$Id: pci.h,v 1.72 1998/05/12 07:35:54 mj Exp $
+ *	$Id: pci.h,v 1.76 1998/07/15 20:34:50 mj Exp $
  *
  *	PCI defines and function prototypes
  *	Copyright 1994, Drew Eckhardt
@@ -76,7 +76,7 @@
  * 1 bits are decoded.
  */
 #define PCI_BASE_ADDRESS_0	0x10	/* 32 bits */
-#define PCI_BASE_ADDRESS_1	0x14	/* 32 bits */
+#define PCI_BASE_ADDRESS_1	0x14	/* 32 bits [htype 0,1 only] */
 #define PCI_BASE_ADDRESS_2	0x18	/* 32 bits [htype 0 only] */
 #define PCI_BASE_ADDRESS_3	0x1c	/* 32 bits */
 #define PCI_BASE_ADDRESS_4	0x20	/* 32 bits */
@@ -145,17 +145,13 @@
 #define  PCI_BRIDGE_CTL_BUS_RESET 0x40	/* Secondary bus reset */
 #define  PCI_BRIDGE_CTL_FAST_BACK 0x80	/* Fast Back2Back enabled on secondary interface */
 
-/* Header type 2 (CardBus bridges) -- detailed info welcome */
-#define PCI_CB_CARDBUS_BASE	0x10	/* CardBus Socket/ExCa base address */
-#define  PCI_CB_CARDBUS_BASE_TYPE_MASK 0xfff
-#define  PCI_CB_CARDBUS_BASE_MASK ~0xfff
-#define PCI_CB_CAPABILITIES	0x14	/* Offset of list of capabilities in cfg space */
-/* 0x15 reserved */
+/* Header type 2 (CardBus bridges) */
+/* 0x14-0x15 reserved */
 #define PCI_CB_SEC_STATUS	0x16	/* Secondary status */
-#define PCI_CB_BUS_NUMBER	0x18	/* PCI bus number */
-#define PCI_CB_CARDBUS_NUMBER	0x19	/* CardBus bus number */
+#define PCI_CB_PRIMARY_BUS	0x18	/* PCI bus number */
+#define PCI_CB_CARD_BUS		0x19	/* CardBus bus number */
 #define PCI_CB_SUBORDINATE_BUS	0x1a	/* Subordinate bus number */
-#define PCI_CB_CARDBUS_LATENCY	0x1b	/* CardBus latency timer */
+#define PCI_CB_LATENCY_TIMER	0x1b	/* CardBus latency timer */
 #define PCI_CB_MEMORY_BASE_0	0x1c
 #define PCI_CB_MEMORY_LIMIT_0	0x20
 #define PCI_CB_MEMORY_BASE_1	0x24
@@ -168,8 +164,19 @@
 #define PCI_CB_IO_BASE_1_HI	0x36
 #define PCI_CB_IO_LIMIT_1	0x38
 #define PCI_CB_IO_LIMIT_1_HI	0x3a
+#define  PCI_CB_IO_RANGE_MASK	~0x03
 /* 0x3c-0x3d are same as for htype 0 */
-/* 0x3e-0x3f are same as for htype 1 */
+#define PCI_CB_BRIDGE_CONTROL	0x3e
+#define  PCI_CB_BRIDGE_CTL_PARITY	0x01	/* Similar to standard bridge control register */
+#define  PCI_CB_BRIDGE_CTL_SERR		0x02
+#define  PCI_CB_BRIDGE_CTL_ISA		0x04
+#define  PCI_CB_BRIDGE_CTL_VGA		0x08
+#define  PCI_CB_BRIDGE_CTL_MASTER_ABORT	0x20
+#define  PCI_CB_BRIDGE_CTL_CB_RESET	0x40	/* CardBus reset */
+#define  PCI_CB_BRIDGE_CTL_16BIT_INT	0x80	/* Enable interrupt for 16-bit cards */
+#define  PCI_CB_BRIDGE_CTL_PREFETCH_MEM0 0x100	/* Prefetch enable for both memory regions */
+#define  PCI_CB_BRIDGE_CTL_PREFETCH_MEM1 0x200
+#define  PCI_CB_BRIDGE_CTL_POST_WRITES	0x400
 #define PCI_CB_SUBSYSTEM_VENDOR_ID 0x40
 #define PCI_CB_SUBSYSTEM_ID	0x42
 #define PCI_CB_LEGACY_MODE_BASE	0x44	/* 16-bit PC Card legacy mode base address (ExCa) */
@@ -1037,43 +1044,6 @@
 #include <linux/types.h>
 
 /*
- * Error values that may be returned by the PCI bios.
- */
-#define PCIBIOS_SUCCESSFUL		0x00
-#define PCIBIOS_FUNC_NOT_SUPPORTED	0x81
-#define PCIBIOS_BAD_VENDOR_ID		0x83
-#define PCIBIOS_DEVICE_NOT_FOUND	0x86
-#define PCIBIOS_BAD_REGISTER_NUMBER	0x87
-#define PCIBIOS_SET_FAILED		0x88
-#define PCIBIOS_BUFFER_TOO_SMALL	0x89
-
-/* Direct configuration space access */
-
-int pcibios_present (void);
-void pcibios_init(void);
-void pcibios_fixup(void);
-char *pcibios_setup (char *str);
-int pcibios_read_config_byte (unsigned char bus, unsigned char dev_fn,
-			      unsigned char where, unsigned char *val);
-int pcibios_read_config_word (unsigned char bus, unsigned char dev_fn,
-			      unsigned char where, unsigned short *val);
-int pcibios_read_config_dword (unsigned char bus, unsigned char dev_fn,
-			       unsigned char where, unsigned int *val);
-int pcibios_write_config_byte (unsigned char bus, unsigned char dev_fn,
-			       unsigned char where, unsigned char val);
-int pcibios_write_config_word (unsigned char bus, unsigned char dev_fn,
-			       unsigned char where, unsigned short val);
-int pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
-				unsigned char where, unsigned int val);
-
-/* Don't use these in new code, use pci_find_... instead */
-
-int pcibios_find_class (unsigned int class_code, unsigned short index, unsigned char *bus, unsigned char *dev_fn);
-int pcibios_find_device (unsigned short vendor, unsigned short dev_id,
-			 unsigned short index, unsigned char *bus,
-			 unsigned char *dev_fn);
-
-/*
  * There is one pci_dev structure for each slot-number/function-number
  * combination:
  */
@@ -1130,6 +1100,46 @@ struct pci_bus {
 
 extern struct pci_bus	pci_root;	/* root bus */
 extern struct pci_dev	*pci_devices;	/* list of all devices */
+
+/*
+ * Error values that may be returned by the PCI bios.
+ */
+#define PCIBIOS_SUCCESSFUL		0x00
+#define PCIBIOS_FUNC_NOT_SUPPORTED	0x81
+#define PCIBIOS_BAD_VENDOR_ID		0x83
+#define PCIBIOS_DEVICE_NOT_FOUND	0x86
+#define PCIBIOS_BAD_REGISTER_NUMBER	0x87
+#define PCIBIOS_SET_FAILED		0x88
+#define PCIBIOS_BUFFER_TOO_SMALL	0x89
+
+/* Low-level architecture-dependent routines */
+
+int pcibios_present (void);
+void pcibios_init(void);
+void pcibios_fixup(void);
+void pcibios_fixup_bus(struct pci_bus *);
+char *pcibios_setup (char *str);
+int pcibios_read_config_byte (unsigned char bus, unsigned char dev_fn,
+			      unsigned char where, unsigned char *val);
+int pcibios_read_config_word (unsigned char bus, unsigned char dev_fn,
+			      unsigned char where, unsigned short *val);
+int pcibios_read_config_dword (unsigned char bus, unsigned char dev_fn,
+			       unsigned char where, unsigned int *val);
+int pcibios_write_config_byte (unsigned char bus, unsigned char dev_fn,
+			       unsigned char where, unsigned char val);
+int pcibios_write_config_word (unsigned char bus, unsigned char dev_fn,
+			       unsigned char where, unsigned short val);
+int pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
+				unsigned char where, unsigned int val);
+
+/* Don't use these in new code, use pci_find_... instead */
+
+int pcibios_find_class (unsigned int class_code, unsigned short index, unsigned char *bus, unsigned char *dev_fn);
+int pcibios_find_device (unsigned short vendor, unsigned short dev_id,
+			 unsigned short index, unsigned char *bus,
+			 unsigned char *dev_fn);
+
+/* Generic PCI interface functions */
 
 void pci_init(void);
 void pci_setup(char *str, int *ints);

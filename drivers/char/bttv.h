@@ -54,7 +54,7 @@ struct bttv_window
 	ushort swidth, sheight;
 	short cropx, cropy;
 	ushort cropwidth, cropheight;
-	unsigned int vidadr;
+	unsigned long vidadr;
 	ushort freq;
 	int norm;
 	int interlace;
@@ -74,12 +74,11 @@ struct bttv
 	struct i2c_bus i2c;
 	int have_msp3400;
 	int have_tuner;
+        int tuner_type;
 
 	unsigned short id;
-	unsigned char bus;          /* PCI bus the Bt848 is on */
-	unsigned char devfn;
+	struct pci_dev *dev;
 	unsigned char revision;
-	unsigned char irq;          /* IRQ used by Bt848 card */
 	unsigned int bt848_adr;      /* bus address of IO mem returned by PCI BIOS */
 	unsigned char *bt848_mem;   /* pointer to mapped IO memory */
 	unsigned long busriscmem; 

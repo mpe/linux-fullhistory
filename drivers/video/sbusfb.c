@@ -51,12 +51,14 @@ void sbusfb_init(void);
 void sbusfb_setup(char *options, int *ints);
 
 static int currcon;
-static int nomargins __initdata = 0;
+static int defx_margin = -1, defy_margin = -1;
+static int disable __initdata = 0;
+static char fontname[40] __initdata = { 0 };
 static struct {
 	int depth;
 	int xres, yres;
 	int x_margin, y_margin;
-} def_margins [] __initdata = {
+} def_margins [] = {
 	{ 8, 1280, 1024, 64, 80 },
 	{ 8, 1152, 1024, 64, 80 },
 	{ 8, 1152, 900,  64, 18 },
@@ -145,6 +147,8 @@ static int sbusfb_release(struct fb_info *info, int user)
 			if (fb->mmaped)
 				sbusfb_clear_margin(&fb_display[fb->vtconsole], 0);
 		}
+		if (fb->reset)
+			fb->reset(fb);
 		fb->open = 0;
 	} else
 		fb->consolecnt--;
@@ -337,39 +341,7 @@ static int sbusfb_get_var(struct fb_var_screeninfo *var, int con,
 static int sbusfb_set_var(struct fb_var_screeninfo *var, int con,
 			struct fb_info *info)
 {
-#if 1
 	return -EINVAL;
-#else
-    struct display *display;
-    int oldbpp = -1, err;
-    int activate = var->activate;
-    struct fb_info_sbusfb *fb = sbusfbinfo(info);
-
-    if (con >= 0)
-	display = &fb_display[con];
-    else
-	display = &fb->disp;	/* used during initialization */
-
-    if (var->xres > fb->var.xres || var->yres > fb->var.yres ||
-	var->xres_virtual > fb->var.xres_virtual ||
-	var->yres_virtual > fb->var.yres_virtual ||
-	var->bits_per_pixel > fb->var.bits_per_pixel ||
-	var->nonstd ||
-	(var->vmode & FB_VMODE_MASK) != FB_VMODE_NONINTERLACED)
-	return -EINVAL;
-    memcpy(var, &fb->var, sizeof(struct fb_var_screeninfo));
-
-    if ((activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) {
-	oldbpp = display->var.bits_per_pixel;
-	display->var = *var;
-    }
-    if (oldbpp != var->bits_per_pixel) {
-	if ((err = fb_alloc_cmap(&display->cmap, 0, 0)))
-	    return err;
-	do_install_cmap(con, info);
-    }
-    return 0;
-#endif
 }
 
     /*
@@ -487,9 +459,12 @@ static void sbusfb_cursor(struct display *p, int mode, int x, int y)
 			(*fb->setcurshape) (fb);
 			fb->hw_cursor_shown = 1;
 		}
-		fb->cursor.cpos.fbx = (x << 3) + fb->x_margin; /* x * p->fontwidth */
-		if (p->fontheight == 16)
-			fb->cursor.cpos.fby = (y << 4) + fb->y_margin;
+		if (p->fontwidthlog)
+			fb->cursor.cpos.fbx = (x << p->fontwidthlog) + fb->x_margin;
+		else
+			fb->cursor.cpos.fbx = (x * p->fontwidth) + fb->x_margin;
+		if (p->fontheightlog)
+			fb->cursor.cpos.fby = (y << p->fontheightlog) + fb->y_margin;
 		else
 			fb->cursor.cpos.fby = (y * p->fontheight) + fb->y_margin;
 		(*fb->setcursor)(fb);
@@ -591,7 +566,7 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	case FBIOGVIDEO:
 		put_user_ret(fb->blanked, (int *) arg, -EFAULT);
 		break;
-	case FBIOGETCMAP: {
+	case FBIOGETCMAP_SPARC: {
 		char *rp, *gp, *bp;
 		int end, count, index;
 		struct fbcmap *cmap;
@@ -623,7 +598,7 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		(*fb->loadcmap)(fb, index, count);
 		break;			
 	}
-	case FBIOPUTCMAP: {	/* load color map entries */
+	case FBIOPUTCMAP_SPARC: {	/* load color map entries */
 		char *rp, *gp, *bp;
 		int end, count, index;
 		struct fbcmap *cmap;
@@ -696,19 +671,63 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Setup: parse used options
      */
 
-void sbusfb_setup(char *options, int *ints)
+__initfunc(void sbusfb_setup(char *options, int *ints))
 {
-	if (!strncmp(options, "nomargins", 9))
-		nomargins = 1;
+	char *p;
+	
+	for (p = options;;) {
+		if (!strncmp(p, "nomargins", 9)) {
+			defx_margin = 0; defy_margin = 0;
+		} else if (!strncmp(p, "margins=", 8)) {
+			int i, j;
+			char *q;
+			
+			i = simple_strtoul(p+8,&q,10);
+			if (i >= 0 && *q == 'x') {
+			    j = simple_strtoul(q+1,&q,10);
+			    if (j >= 0 && (*q == ' ' || !*q)) {
+			    	defx_margin = i; defy_margin = j;
+			    }
+			}
+		} else if (!strncmp(p, "disable", 7))
+			disable = 1;
+		else if (!strncmp(p, "font=", 5)) {
+			int i;
+			
+			for (i = 0; i < sizeof(fontname) - 1; i++)
+				if (p[i+5] == ' ' || !p[i+5])
+					break;
+			memcpy(fontname, p+5, i);
+			fontname[i] = 0;
+		}
+		while (*p && *p != ' ' && *p != ',') p++;
+		if (*p != ',') break;
+		p++;
+	}
 }
 
 static int sbusfbcon_switch(int con, struct fb_info *info)
 {
+	int x_margin, y_margin;
+	struct fb_info_sbusfb *fb = sbusfbinfo(info);
+    
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
 		fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1, sbusfb_getcolreg, info);
 
-	sbusfbinfo(info)->lastconsole = con;
+	if (fb->lastconsole != con && 
+	    (fb_display[fb->lastconsole].fontwidth != fb_display[con].fontwidth ||
+	     fb_display[fb->lastconsole].fontheight != fb_display[con].fontheight))
+		fb->hw_cursor_shown = 0;
+	fb->lastconsole = con;
+	x_margin = (fb_display[con].var.xres_virtual - fb_display[con].var.xres) / 2;
+	y_margin = (fb_display[con].var.yres_virtual - fb_display[con].var.yres) / 2;
+	if (fb->margins)
+		fb->margins(fb, &fb_display[con], x_margin, y_margin);
+	if (fb->x_margin != x_margin || fb->y_margin != y_margin) {
+		fb->x_margin = x_margin; fb->y_margin = y_margin;
+		sbusfb_clear_margin(&fb_display[con], 0);
+	}
 	currcon = con;
 	/* Install new colormap */
 	do_install_cmap(con, info);
@@ -731,23 +750,12 @@ static int sbusfbcon_updatevar(int con, struct fb_info *info)
 
 static void sbusfbcon_blank(int blank, struct fb_info *info)
 {
-#if 0
     struct fb_info_sbusfb *fb = sbusfbinfo(info);
-    int i, j;
-
-    if (!fb->cmap_adr)
-	return;
-
-    if (blank)
-	for (i = 0; i < 256; i++) {
-	    *fb->cmap_adr = i;
-	    for (j = 0; j < 3; j++) {
-		*fb->cmap_data = 0;
-	    }
-	}
-    else
-	do_install_cmap(currcon, info);
-#endif
+    
+    if (blank && fb->blank)
+    	return fb->blank(fb);
+    else if (!blank && fb->unblank)
+    	return fb->unblank(fb);
 }
 
     /*
@@ -805,6 +813,48 @@ static void do_install_cmap(int con, struct fb_info *info)
 		(*fb->loadcmap)(fb, 0, 256);
 }
 
+static int sbusfb_set_font(struct display *p, int width, int height)
+{
+	int margin;
+	int w = p->var.xres_virtual, h = p->var.yres_virtual;
+	int depth = p->var.bits_per_pixel;
+	struct fb_info_sbusfb *fb = sbusfbinfod(p);
+	int x_margin, y_margin;
+	
+	if (depth > 8) depth = 8;
+	x_margin = 0;
+	y_margin = 0;
+	if (defx_margin < 0 || defy_margin < 0) {
+		for (margin = 0; def_margins[margin].depth; margin++)
+			if (w == def_margins[margin].xres &&
+			    h == def_margins[margin].yres &&
+			    depth == def_margins[margin].depth) {
+				x_margin = def_margins[margin].x_margin;
+				y_margin = def_margins[margin].y_margin;
+				break;
+			}
+	} else {
+		x_margin = defx_margin;
+		y_margin = defy_margin;
+	}
+	x_margin += ((w - 2*x_margin) % width) / 2;
+	y_margin += ((h - 2*y_margin) % height) / 2;
+
+	p->var.xres = w - 2*x_margin;
+	p->var.yres = h - 2*y_margin;
+	
+	fb->hw_cursor_shown = 0;
+	
+	if (fb->margins)
+		fb->margins(fb, p, x_margin, y_margin);
+	if (fb->x_margin != x_margin || fb->y_margin != y_margin) {
+		fb->x_margin = x_margin; fb->y_margin = y_margin;
+		sbusfb_clear_margin(p, 0);
+	}
+
+	return 1;
+}
+
     /*
      *  Initialisation
      */
@@ -852,7 +902,7 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 	linebytes = prom_getintdefault(node, "linebytes", w * depth / 8);
 	type->fb_size   = PAGE_ALIGN((linebytes) * h);
 	
-	if (!nomargins)
+	if (defx_margin < 0 || defy_margin < 0) {
 		for (margin = 0; def_margins[margin].depth; margin++)
 			if (w == def_margins[margin].xres &&
 			    h == def_margins[margin].yres &&
@@ -861,7 +911,11 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 				fb->y_margin = def_margins[margin].y_margin;
 				break;
 			}
-	fb->x_margin += ((w - 2*fb->x_margin) & 15) / 2;
+	} else {
+		fb->x_margin = defx_margin;
+		fb->y_margin = defy_margin;
+	}
+	fb->x_margin += ((w - 2*fb->x_margin) & 7) / 2;
 	fb->y_margin += ((h - 2*fb->y_margin) & 15) / 2;
 
 	var->xres_virtual = w;
@@ -883,7 +937,7 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 	fb->info.node = -1;
 	fb->info.fbops = &sbusfb_ops;
 	fb->info.disp = disp;
-	fb->info.fontname[0] = '\0';
+	strcpy(fb->info.fontname, fontname);
 	fb->info.changevar = NULL;
 	fb->info.switch_con = &sbusfbcon_switch;
 	fb->info.updatevar = &sbusfbcon_updatevar;
@@ -934,6 +988,7 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 	disp->dispsw = &fb->dispsw;
 	if (fb->setcursor)
 		fb->dispsw.cursor = sbusfb_cursor;
+	fb->dispsw.set_font = sbusfb_set_font;
 	fb->setup = fb->dispsw.setup;
 	fb->dispsw.setup = sbusfb_disp_setup;
 
@@ -942,6 +997,9 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 	disp->type = fix->type;
 	disp->type_aux = fix->type_aux;
 	disp->line_length = fix->line_length;
+	
+	if (fb->blank)
+		disp->can_soft_blank = 1;
 
 	sbusfb_set_var(var, -1, &fb->info);
 
@@ -978,7 +1036,10 @@ __initfunc(void sbusfb_init(void))
 	struct linux_sbus_device *sbdp;
 	struct linux_sbus *sbus;
 	char prom_name[40];
-    
+	extern int con_is_present(void);
+	
+	if (!con_is_present() || disable) return;
+	
 #ifdef CONFIG_FB_CREATOR
 	root = prom_getchild(prom_root_node);
 	for (node = prom_searchsiblings(root, "SUNW,ffb"); node;

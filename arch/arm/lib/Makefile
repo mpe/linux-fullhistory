@@ -6,7 +6,7 @@
 
 L_TARGET := lib.a
 L_OBJS   := backtrace.o bitops.o checksum.o delay.o fp_support.o \
-	    loaders.o memcpy.o system.o string.o uaccess.o
+	    loaders.o memcpy.o system.o string.o uaccess.o io.o
 
 ifeq ($(PROCESSOR),armo)
   L_OBJS += uaccess-armo.o

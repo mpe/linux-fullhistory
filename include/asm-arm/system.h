@@ -29,5 +29,7 @@ extern void arm_invalidptr(const char *, int);
 #define mb() __asm__ __volatile__ ("" : : : "memory")
 #define nop() __asm__ __volatile__("mov r0,r0\n\t");
 
+extern asmlinkage void __backtrace(void);
+
 #endif
 

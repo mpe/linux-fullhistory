@@ -24,17 +24,17 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.h,v 1.3 1998/06/09 20:39:34 andrewtv Exp $
+ * $Id: msnd.h,v 1.4 1998/07/14 22:59:25 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_H
 #define __MSND_H
 
-#define VERSION			"0.6"
+#define VERSION			"0.6.2"
 
-#define DEFSAMPLERATE		44100
-#define DEFSAMPLESIZE		16
-#define DEFCHANNELS		2
+#define DEFSAMPLERATE		DSP_DEFAULT_SPEED
+#define DEFSAMPLESIZE		8
+#define DEFCHANNELS		1
 
 #define DEFFIFOSIZE		64
 
@@ -129,6 +129,19 @@
 #define	HIMT_MIDI_IN_UCHAR	0x0E
 #define	HIMT_DSP		0x0F
 
+#define	HDEX_BASE	       	0x92
+#define	HDEX_PLAY_START		(0 + HDEX_BASE)
+#define	HDEX_PLAY_STOP		(1 + HDEX_BASE)
+#define	HDEX_PLAY_PAUSE		(2 + HDEX_BASE)
+#define	HDEX_PLAY_RESUME	(3 + HDEX_BASE)
+#define	HDEX_RECORD_START	(4 + HDEX_BASE)
+#define	HDEX_RECORD_STOP	(5 + HDEX_BASE)
+#define	HDEX_MIDI_IN_START 	(6 + HDEX_BASE)
+#define	HDEX_MIDI_IN_STOP	(7 + HDEX_BASE)
+#define	HDEX_MIDI_OUT_START	(8 + HDEX_BASE)
+#define	HDEX_MIDI_OUT_STOP	(9 + HDEX_BASE)
+#define	HDEX_AUX_REQ		(10 + HDEX_BASE)
+
 #define HIWORD(l)		((WORD)((((DWORD)(l)) >> 16) & 0xFFFF ))
 #define LOWORD(l)		((WORD)(DWORD)(l))
 #define HIBYTE(w)		((BYTE)(((WORD)(w) >> 8 ) & 0xFF ))
@@ -140,6 +153,8 @@
 #define PCTODSP_BASED(w)	(USHORT)(((w)/2) + DSP_BASE_ADDR)
 
 #ifdef SLOWIO
+#  undef outb
+#  undef inb
 #  define outb			outb_p
 #  define inb			inb_p
 #endif
@@ -195,8 +210,9 @@ typedef struct multisound_dev {
 	struct SMA0_CommonData *SMA;	/* diff. structure for classic vs. pinnacle */
 	struct DAQueueDataStruct *CurDAQD;
 	struct DAQueueDataStruct *CurDARQD;
-	WORD *pwDSPQData , *pwMIDQData , *pwMODQData;
-	struct JobQueueStruct *DAPQ , *DARQ , *MODQ , *MIDQ , *DSPQ;
+	volatile WORD *pwDSPQData , *pwMIDQData , *pwMODQData;
+	volatile struct JobQueueStruct *DAPQ , *DARQ , *MODQ , *MIDQ , *DSPQ;
+	BYTE bCurrentMidiPatch;
 
 	/* State variables */
 	mode_t mode;
@@ -210,7 +226,10 @@ typedef struct multisound_dev {
 #define F_AUDIO_INUSE			6
 #define F_EXT_MIDI_INUSE		7
 #define F_INT_MIDI_INUSE		8
+#define F_WRITEFLUSH			9
+
 	struct wait_queue *writeblock, *readblock;
+	struct wait_queue *writeflush;
 	unsigned long recsrc;
 	int left_levels[16];
 	int right_levels[16];

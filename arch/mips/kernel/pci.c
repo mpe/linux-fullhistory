@@ -129,4 +129,13 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
 	return pci_ops->pcibios_write_config_dword(bus, dev_fn, where, val);
 }
 
+__initfunc(void pcibios_fixup_bus(struct pci_bus *bus))
+{
+}
+
+__initfunc(char *pcibios_setup(char *str))
+{
+	return str;
+}
+
 #endif /* defined(CONFIG_PCI) */

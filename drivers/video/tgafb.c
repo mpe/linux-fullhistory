@@ -40,6 +40,7 @@
 #include <linux/selection.h>
 #include <asm/io.h>
 
+#include "fbcon.h"
 #include "fbcon-cfb8.h"
 #include "fbcon-cfb32.h"
 
@@ -743,12 +744,14 @@ __initfunc(void tgafb_init(void))
 #ifdef CONFIG_FBCON_CFB8
 	case 0: /* 8-plane */
 	    disp.dispsw = &fbcon_cfb8;
+	    disp.scrollmode = SCROLL_YREDRAW;
 	    break;
 #endif
 #ifdef CONFIG_FBCON_CFB32
 	case 1: /* 24-plane */
 	case 3: /* 24plusZ */
 	    disp.dispsw = &fbcon_cfb32;
+	    disp.scrollmode = SCROLL_YREDRAW;
 	    break;
 #endif
 	default:

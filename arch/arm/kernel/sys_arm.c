@@ -239,7 +239,6 @@ asmlinkage int sys_clone(unsigned long clone_flags, unsigned long newsp, struct 
 	lock_kernel();
 	if (!newsp)
 		newsp = regs->ARM_sp;
-
 	ret = do_fork(clone_flags, newsp, regs);
 	unlock_kernel();
 	return ret;

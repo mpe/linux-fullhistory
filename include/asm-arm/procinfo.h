@@ -9,25 +9,23 @@
 
 #include <asm/proc-fns.h>
 
-#define F_MEMC   (1<<0)
-#define F_MMU    (1<<1)
-#define F_32BIT  (1<<2)
-#define F_CACHE  (1<<3)
-#define F_IOEB   (1<<31)
-
 #ifndef __ASSEMBLER__
 
+#define HWCAP_SWP	(1 << 0)
+#define HWCAP_HALF	(1 << 1)
+
 struct armversions {
-	unsigned long id;		/* Processor ID			*/
-	unsigned long mask;		/* Processor ID mask		*/
-	unsigned long features;		/* Features (see above)		*/
+	const unsigned long id;		/* Processor ID			*/
+	const unsigned long mask;	/* Processor ID mask		*/
 	const char *manu;		/* Manufacturer			*/
 	const char *name;		/* Processor name		*/
+	const char *arch_vsn;		/* Architecture version		*/
+	const char *elf_vsn;		/* ELF library version		*/
+	const int hwcap;		/* ELF HWCAP			*/
 	const struct processor *proc;	/* Processor-specific ASM	*/
-	const char *optname;		/* Optimisation name		*/
 };
 
-extern struct armversions armidlist[];
+extern const struct armversions armidlist[];
 extern int armidindex;
 
 #endif

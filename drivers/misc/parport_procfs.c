@@ -199,7 +199,8 @@ static void destroy_proc_tree(struct parport *pp) {
 
 static struct proc_dir_entry *new_proc_entry(const char *name, mode_t mode,
 					     struct proc_dir_entry *parent,
-					     unsigned short ino)
+					     unsigned short ino,
+					     struct parport *p)
 {
 	struct proc_dir_entry *ent;
 
@@ -219,9 +220,12 @@ static struct proc_dir_entry *new_proc_entry(const char *name, mode_t mode,
 	ent->namelen = strlen(name);
 	ent->mode = mode;
 
-	if (S_ISDIR(mode)) 
+	if (S_ISDIR(mode))
+	{
+		if (p && p->ops)
+			ent->fill_inode = p->ops->fill_inode;
 		ent->nlink = 2;
-	else
+	} else
 		ent->nlink = 1;
 
 	proc_register(parent, ent);
@@ -229,10 +233,29 @@ static struct proc_dir_entry *new_proc_entry(const char *name, mode_t mode,
 	return ent;
 }
 
+/*
+ * This is called as the fill_inode function when an inode
+ * is going into (fill = 1) or out of service (fill = 0).
+ * We use it here to manage the module use counts.
+ *
+ * Note: only the top-level directory needs to do this; if
+ * a lower level is referenced, the parent will be as well.
+ */
+static void parport_modcount(struct inode *inode, int fill)
+{
+#ifdef MODULE
+	if (fill)
+		inc_parport_count();
+	else
+		dec_parport_count();
+#endif
+}
 
 int parport_proc_init(void)
 {
-	base = new_proc_entry("parport", S_IFDIR, &proc_root,PROC_PARPORT);
+	base = new_proc_entry("parport", S_IFDIR, &proc_root,PROC_PARPORT,
+			      NULL);
+	base->fill_inode = &parport_modcount;
 
 	if (base == NULL) {
 		printk(KERN_ERR "Unable to initialise /proc/parport.\n");
@@ -244,8 +267,11 @@ int parport_proc_init(void)
 
 void parport_proc_cleanup(void)
 {
-	if (base) proc_unregister(&proc_root,base->low_ino);
-	base = NULL;
+	if (base) {
+		proc_unregister(&proc_root,base->low_ino);
+		kfree(base);
+		base = NULL;
+	}
 }
 
 int parport_proc_register(struct parport *pp)
@@ -260,12 +286,12 @@ int parport_proc_register(struct parport *pp)
 	strncpy(pp->pdir.name, pp->name + strlen("parport"), 
 		sizeof(pp->pdir.name));
 
-	pp->pdir.entry = new_proc_entry(pp->pdir.name, S_IFDIR, base, 0);
+	pp->pdir.entry = new_proc_entry(pp->pdir.name, S_IFDIR, base, 0, pp);
 	if (pp->pdir.entry == NULL)
 		goto out_fail;
 
 	pp->pdir.irq = new_proc_entry("irq", S_IFREG | S_IRUGO | S_IWUSR, 
-				      pp->pdir.entry, 0);
+				      pp->pdir.entry, 0, pp);
 	if (pp->pdir.irq == NULL)
 		goto out_fail;
 
@@ -273,14 +299,15 @@ int parport_proc_register(struct parport *pp)
 	pp->pdir.irq->write_proc = irq_write_proc;
 	pp->pdir.irq->data = pp;
 	
-	pp->pdir.devices = new_proc_entry("devices", 0, pp->pdir.entry, 0);
+	pp->pdir.devices = new_proc_entry("devices", 0, pp->pdir.entry, 0, pp);
 	if (pp->pdir.devices == NULL)
 		goto out_fail;
 
 	pp->pdir.devices->read_proc = devices_read_proc;
 	pp->pdir.devices->data = pp;
 	
-	pp->pdir.hardware = new_proc_entry("hardware", 0, pp->pdir.entry, 0);
+	pp->pdir.hardware = new_proc_entry("hardware", 0, pp->pdir.entry, 0,
+					   pp);
 	if (pp->pdir.hardware == NULL)
 		goto out_fail;
 

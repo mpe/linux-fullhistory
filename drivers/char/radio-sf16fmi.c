@@ -39,7 +39,7 @@ static int io = CONFIG_RADIO_SF16FMI_PORT;
 static int users = 0;
 
 /* local things */
-#define RSF16_ENCODE(x)	((x*(1000/RADIO_FM_RES)+10700)/50)
+#define RSF16_ENCODE(x)	((x*(1000/4)+10700)/50)
 
 static void outbits(int bits, int data, int port)
 {

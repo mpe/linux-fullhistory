@@ -31,7 +31,7 @@ modules in the usual way.
 alias char-major-14 sb
 post-install sb /sbin/modprobe "-k" "adlib_card"
 options sb io=0x220 irq=7 dma=1 dma16=5 mpu_io=0x330
-options adlib_card io=0x388     # FM synthesizer
+options adlib_card io=0x388     # FM synthetiser
 
   The effect of this is that the sound driver and all necessary bits and
 pieces autoload on demand, assuming you use kerneld (a sound choice) and

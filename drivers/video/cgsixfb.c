@@ -1,4 +1,4 @@
-/* $Id: cgsixfb.c,v 1.1 1998/07/06 15:51:09 jj Exp $
+/* $Id: cgsixfb.c,v 1.2 1998/07/13 12:47:14 jj Exp $
  * cgsixfb.c: CGsix (GX,GXplus) frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -226,37 +226,6 @@ static void cg6_setup(struct display *p)
 	p->next_plane = 0;
 }
 
-static void cg6_bmove(struct display *p, int sy, int sx, int dy, int dx,
-			   int height, int width)
-{
-#if 0
-	int bytes = p->next_line, linesize = bytes * p->fontheight, rows;
-	u8 *src, *dst;
-
-	if (sx == 0 && dx == 0 && width * 32 == bytes)
-		mymemmove(p->screen_base + dy * linesize,
-				  p->screen_base + sy * linesize,
-				  height * linesize);
-	else if (dy < sy || (dy == sy && dx < sx)) {
-		src = p->screen_base + sy * linesize + sx * 32;
-		dst = p->screen_base + dy * linesize + dx * 32;
-		for (rows = height * p->fontheight ; rows-- ;) {
-			mymemmove(dst, src, width * 32);
-			src += bytes;
-			dst += bytes;
-		}
-	} else {
-		src = p->screen_base + (sy+height) * linesize + sx * 32 - bytes;
-		dst = p->screen_base + (dy+height) * linesize + dx * 32 - bytes;
-		for (rows = height * p->fontheight ; rows-- ;) {
-			mymemmove(dst, src, width * 32);
-			src -= bytes;
-			dst -= bytes;
-		}
-	}
-#endif	
-}
-
 static void cg6_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 		      int height, int width)
 {
@@ -310,113 +279,160 @@ static void cg6_fill(struct fb_info_sbusfb *fb, int s,
 
 static void cg6_putc(struct vc_data *conp, struct display *p, int c, int yy, int xx)
 {
-#if 0
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
-	int i, xy;
+	int i, x, y;
 	u8 *fd;
 
-	if (p->fontheight == 16) {
-		xy = (yy << (16 + 4));
-		fd = p->fontdata + ((c & 0xff) << 4);
+	if (p->fontheightlog) {
+		y = fb->y_margin + (yy << p->fontheightlog);
+		i = ((c & 0xff) << p->fontheightlog);
 	} else {
-		xy = ((yy * p->fontheight) << 16);
-		fd = p->fontdata + (c & 0xff) * p->fontheight;
+		y = fb->y_margin + (yy * p->fontheight);
+		i = (c & 0xff) * p->fontheight;
 	}
-	xy += (xx << 3) + fb->s.cg6.xy_margin;
-	fbc->ppc = 0x203;
-	fbc->fg = cg6_cmap[attr_fg_col(c)];
-	fbc->fbc = 0x2000707f;
-	fbc->rop = 0x83;
-	fbc->pmask = 0xffffffff;
-	fbc->bg = cg6_cmap[attr_bg_col(c)];
-	fbc->fontw = 8;
-	fbc->fontinc = 0x10000;
-	fbc->fontxy = xy;
-	for (i = 0; i < p->fontheight; i++)
-		fbc->font = *fd++ << 24;
-#endif		
+	if (p->fontwidth <= 8)
+		fd = p->fontdata + i;
+	else
+		fd = p->fontdata + (i << 1);
+	if (p->fontwidthlog)
+		x = fb->x_margin + (xx << p->fontwidthlog);
+	else
+		x = fb->x_margin + (xx * p->fontwidth);
+	do {
+		i = fbc->s;
+	} while (i & 0x10000000);
+	fbc->fg = attr_fg_col(c);
+	fbc->bg = attr_bg_col(c);
+	fbc->mode = 0x140000;
+	fbc->alu = 0xe880fc30;
+	fbc->pixelm = ~(0);
+	fbc->s = 0;
+	fbc->clip = 0;
+	fbc->pm = 0xff;
+	fbc->incx = 0;
+	fbc->incy = 1;
+	fbc->x0 = x;
+	fbc->x1 = x + p->fontwidth - 1;
+	fbc->y0 = y;
+	if (p->fontwidth <= 8) {
+		for (i = 0; i < p->fontheight; i++)
+			fbc->font = *fd++ << 24;
+	} else {
+		for (i = 0; i < p->fontheight; i++) {
+			fbc->font = *(u16 *)fd << 16;
+			fd += 2;
+		}
+	}
 }
 
 static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
 		      int count, int yy, int xx)
 {
-#if 0
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
-	int i, xy;
+	int i, x, y;
 	u8 *fd1, *fd2, *fd3, *fd4;
 
-	fbc->ppc = 0x203;
-	fbc->fg = cg6_cmap[attr_fg_col(*s)];
-	fbc->fbc = 0x2000707f;
-	fbc->rop = 0x83;
-	fbc->pmask = 0xffffffff;
-	fbc->bg = cg6_cmap[attr_bg_col(*s)];
-	if (p->fontheight == 16) {
-		xy = (yy << (16 + 4)) + (xx << 3) + fb->s.cg6.xy_margin;
+	do {
+		i = fbc->s;
+	} while (i & 0x10000000);
+	fbc->fg = attr_fg_col(*s);
+	fbc->bg = attr_bg_col(*s);
+	fbc->mode = 0x140000;
+	fbc->alu = 0xe880fc30;
+	fbc->pixelm = ~(0);
+	fbc->s = 0;
+	fbc->clip = 0;
+	fbc->pm = 0xff;
+	x = fb->x_margin;
+	y = fb->y_margin;
+	if (p->fontwidthlog)
+		x += (xx << p->fontwidthlog);
+	else
+		x += xx * p->fontwidth;
+	if (p->fontheightlog)
+		y += (yy << p->fontheightlog);
+	else
+		y += (yy * p->fontheight);
+	if (p->fontwidth <= 8) {
 		while (count >= 4) {
 			count -= 4;
-			fbc->fontw = 32;
-			fbc->fontinc = 0x10000;
-			fbc->fontxy = xy;
-			fd1 = p->fontdata + ((*s++ & 0xff) << 4);
-			fd2 = p->fontdata + ((*s++ & 0xff) << 4);
-			fd3 = p->fontdata + ((*s++ & 0xff) << 4);
-			fd4 = p->fontdata + ((*s++ & 0xff) << 4);
-			for (i = 0; i < 16; i++)
-				fbc->font = ((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) << 8)) << 8)) << 8);
-			xy += 32;
-		}
-		while (count) {
-			count--;
-			fbc->fontw = 8;
-			fbc->fontinc = 0x10000;
-			fbc->fontxy = xy;
-			fd1 = p->fontdata + ((*s++ & 0xff) << 4);
-			for (i = 0; i < 16; i++)
-				fbc->font = *fd1++ << 24;
-			xy += 8;
+			fbc->incx = 0;
+			fbc->incy = 1;
+			fbc->x0 = x;
+			fbc->x1 = (x += 4 * p->fontwidth) - 1;
+			fbc->y0 = y;
+			if (p->fontheightlog) {
+				fd1 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
+				fd2 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
+				fd3 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
+				fd4 = p->fontdata + ((*s++ & 0xff) << p->fontheightlog);
+			} else {
+				fd1 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
+				fd2 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
+				fd3 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
+				fd4 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
+			}
+			if (p->fontwidth == 8) {
+				for (i = 0; i < p->fontheight; i++)
+					fbc->font = ((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
+						<< 8)) << 8)) << 8);
+			} else {
+				for (i = 0; i < p->fontheight; i++)
+					fbc->font = (((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
+						<< p->fontwidth)) << p->fontwidth)) << p->fontwidth)) << (24 - 3 * p->fontwidth);
+			}
 		}
 	} else {
-		xy = ((yy * p->fontheight) << 16) + (xx << 3) + fb->s.cg6.xy_margin;
-		while (count >= 4) {
-			count -= 4;
-			fbc->fontw = 32;
-			fbc->fontinc = 0x10000;
-			fbc->fontxy = xy;
-			fd1 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-			fd2 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-			fd3 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-			fd4 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-			for (i = 0; i < p->fontheight; i++)
-				fbc->font = ((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) << 8)) << 8)) << 8);
-			xy += 32;
-		}
-		while (count) {
-			count--;
-			fbc->fontw = 8;
-			fbc->fontinc = 0x10000;
-			fbc->fontxy = xy;
-			fd1 = p->fontdata + ((*s++ & 0xff) * p->fontheight);
-			for (i = 0; i < 16; i++)
-				fbc->font = *fd1++ << 24;
-			xy += 8;
+		while (count >= 2) {
+			count -= 2;
+			fbc->incx = 0;
+			fbc->incy = 1;
+			fbc->x0 = x;
+			fbc->x1 = (x += 2 * p->fontwidth) - 1;
+			fbc->y0 = y;
+			if (p->fontheightlog) {
+				fd1 = p->fontdata + ((*s++ & 0xff) << (p->fontheightlog + 1));
+				fd2 = p->fontdata + ((*s++ & 0xff) << (p->fontheightlog + 1));
+			} else {
+				fd1 = p->fontdata + (((*s++ & 0xff) * p->fontheight) << 1);
+				fd2 = p->fontdata + (((*s++ & 0xff) * p->fontheight) << 1);
+			}
+			for (i = 0; i < p->fontheight; i++) {
+				fbc->font = ((((u32)*(u16 *)fd1) << p->fontwidth) | ((u32)*(u16 *)fd2)) << (16 - p->fontwidth);
+				fd1 += 2; fd2 += 2;
+			}
 		}
 	}
-#endif
+	while (count) {
+		count--;
+		fbc->incx = 0;
+		fbc->incy = 1;
+		fbc->x0 = x;
+		fbc->x1 = (x += p->fontwidth) - 1;
+		fbc->y0 = y;
+		if (p->fontheightlog)
+			i = ((*s++ & 0xff) << p->fontheightlog);
+		else
+			i = ((*s++ & 0xff) * p->fontheight);
+		if (p->fontwidth <= 8) {
+			fd1 = p->fontdata + i;
+			for (i = 0; i < p->fontheight; i++)
+				fbc->font = *fd1++ << 24;
+		} else {
+			fd1 = p->fontdata + (i << 1);
+			for (i = 0; i < p->fontheight; i++) {
+				fbc->font = *(u16 *)fd1 << 16;
+				fd1 += 2;
+			}
+		}
+	}
 }
 
 static void cg6_revc(struct display *p, int xx, int yy)
 {
-	u8 *dest;
-	int bytes=p->next_line, rows;
-        
-	dest = p->screen_base + yy * p->fontheight * bytes + xx * 8;
-	for (rows = p->fontheight ; rows-- ; dest += bytes) {
-		((u32 *)dest)[0] ^= 0x0f0f0f0f;
-		((u32 *)dest)[1] ^= 0x0f0f0f0f;
-	}
+	/* Not used if hw cursor */
 }
 
 static void cg6_loadcmap (struct fb_info_sbusfb *fb, int index, int count)
@@ -433,7 +449,8 @@ static void cg6_loadcmap (struct fb_info_sbusfb *fb, int index, int count)
 }
 
 static struct display_switch cg6_dispsw __initdata = {
-	cg6_setup, cg6_bmove, cg6_clear, cg6_putc, cg6_putcs, cg6_revc, NULL
+	cg6_setup, fbcon_redraw_bmove, cg6_clear, cg6_putc, cg6_putcs, cg6_revc, 
+	NULL, NULL, FONTWIDTHRANGE(1,16) /* Allow fontwidths up to 16 */
 };
 
 static void cg6_setcursormap (struct fb_info_sbusfb *fb, u8 *red, u8 *green, u8 *blue)
@@ -477,6 +494,63 @@ static void cg6_setcursor (struct fb_info_sbusfb *fb)
 	fb->s.cg6.thc->thc_cursxy = v;
 }
 
+static void cg6_blank (struct fb_info_sbusfb *fb)
+{
+	fb->s.cg6.thc->thc_misc &= ~CG6_THC_MISC_VIDEO;
+}
+
+static void cg6_unblank (struct fb_info_sbusfb *fb)
+{
+	fb->s.cg6.thc->thc_misc |= CG6_THC_MISC_VIDEO;
+}
+
+static void cg6_reset (struct fb_info_sbusfb *fb)
+{
+	unsigned int rev, conf;
+	
+	/* Turn off stuff in the Transform Engine. */
+	fb->s.cg6.tec->tec_matrix = 0;
+	fb->s.cg6.tec->tec_clip = 0;
+	fb->s.cg6.tec->tec_vdc = 0;
+
+	/* Take care of bugs in old revisions. */
+	rev = (*(fb->s.cg6.fhc) >> CG6_FHC_REV_SHIFT) & CG6_FHC_REV_MASK;
+	if (rev < 5) {
+		conf = (*(fb->s.cg6.fhc) & CG6_FHC_RES_MASK) |
+			CG6_FHC_CPU_68020 | CG6_FHC_TEST |
+			(11 << CG6_FHC_TEST_X_SHIFT) |
+			(11 << CG6_FHC_TEST_Y_SHIFT);
+		if (rev < 2)
+			conf |= CG6_FHC_DST_DISABLE;
+		*(fb->s.cg6.fhc) = conf;
+	}
+
+	/* Set things in the FBC. */
+	fb->s.cg6.fbc->mode &= ~(CG6_FBC_BLIT_MASK | CG6_FBC_MODE_MASK |
+			    CG6_FBC_DRAW_MASK | CG6_FBC_BWRITE0_MASK |
+			    CG6_FBC_BWRITE1_MASK | CG6_FBC_BREAD_MASK |
+			    CG6_FBC_BDISP_MASK);
+	fb->s.cg6.fbc->mode |= (CG6_FBC_BLIT_SRC | CG6_FBC_MODE_COLOR8 |
+			   CG6_FBC_DRAW_RENDER | CG6_FBC_BWRITE0_ENABLE |
+			   CG6_FBC_BWRITE1_DISABLE | CG6_FBC_BREAD_0 |
+			   CG6_FBC_BDISP_0);
+	fb->s.cg6.fbc->clip = 0;
+	fb->s.cg6.fbc->offx = 0;
+	fb->s.cg6.fbc->offy = 0;
+	fb->s.cg6.fbc->clipminx = 0;
+	fb->s.cg6.fbc->clipminy = 0;
+	fb->s.cg6.fbc->clipmaxx = fb->type.fb_width - 1;
+	fb->s.cg6.fbc->clipmaxy = fb->type.fb_height - 1;
+	/* Enable cursor in Brooktree DAC. */
+	fb->s.cg6.bt->addr = 0x06 << 24;
+	fb->s.cg6.bt->control |= 0x03 << 24;
+}
+
+static void cg6_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)
+{
+	p->screen_base += (y_margin - fb->y_margin) * p->line_length + (x_margin - fb->x_margin);
+}
+
 static char idstring[60] __initdata = { 0 };
 
 __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
@@ -504,8 +578,10 @@ __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 		disp->screen_base = (char *)sparc_alloc_io(phys + CG6_RAM_OFFSET, 0, 
 			type->fb_size, "cgsix_ram", fb->iospace, 0);
 	disp->screen_base += fix->line_length * fb->y_margin + fb->x_margin;
-	fb->s.cg6.fbc = (struct cg6_fbc *)(char *)sparc_alloc_io(phys + CG6_FBC_OFFSET, 0, 
+	fb->s.cg6.fbc = (struct cg6_fbc *)sparc_alloc_io(phys + CG6_FBC_OFFSET, 0, 
 			4096, "cgsix_fbc", fb->iospace, 0);
+	fb->s.cg6.tec = (struct cg6_tec *)sparc_alloc_io(phys + CG6_TEC_OFFSET, 0, 
+			sizeof(struct cg6_tec), "cgsix_tec", fb->iospace, 0);
 	fb->s.cg6.thc = (struct cg6_thc *)sparc_alloc_io(phys + CG6_THC_OFFSET, 0, 
 				sizeof(struct cg6_thc), "cgsix_thc", fb->iospace, 0);
 	fb->s.cg6.bt = (struct bt_regs *)sparc_alloc_io(phys + CG6_BROOKTREE_OFFSET, 0, 
@@ -514,11 +590,15 @@ __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 				sizeof(u32), "cgsix_fhc", fb->iospace, 0);
 	fb->dispsw = cg6_dispsw;
 
+	fb->margins = cg6_margins;
 	fb->loadcmap = cg6_loadcmap;
 	fb->setcursor = cg6_setcursor;
 	fb->setcursormap = cg6_setcursormap;
 	fb->setcurshape = cg6_setcurshape;
 	fb->fill = cg6_fill;
+	fb->blank = cg6_blank;
+	fb->unblank = cg6_unblank;
+	fb->reset = cg6_reset;
 	
 	fb->physbase = phys;
 	fb->mmap_map = cg6_mmap_map;
@@ -543,6 +623,8 @@ __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 	sprintf(idstring, "cgsix at %02x.%08lx TEC Rev %x CPU %s Rev %x", fb->iospace, phys, 
 		    (fb->s.cg6.thc->thc_misc >> CG6_THC_MISC_REV_SHIFT) & CG6_THC_MISC_REV_MASK,
 		    p, conf >> CG6_FHC_REV_SHIFT & CG6_FHC_REV_MASK);
+		    
+	cg6_reset(fb);
 		    
 	return idstring;
 }

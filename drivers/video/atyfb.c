@@ -53,6 +53,9 @@
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
 #endif
+#ifdef __sparc__
+#include <asm/pbm.h>
+#endif
 
 #include "aty.h"
 #include "fbcon.h"
@@ -239,12 +242,21 @@ struct rage_regvals {
     u32 h_sync_neg, v_sync_neg;
 };
 
+struct pci_mmap_map {
+    unsigned long voff;
+    unsigned long poff;
+    unsigned long size;
+    unsigned long prot_flag;
+    unsigned long prot_mask;
+};
+
 struct fb_info_aty {
     struct fb_info fb_info;
     unsigned long ati_regbase_phys;
     unsigned long ati_regbase;
     unsigned long frame_buffer_phys;
     unsigned long frame_buffer;
+    struct pci_mmap_map *mmap_map;
     u8 chip_class;
     u8 pixclock_lim_8;	/* ps, <= 8 bpp */
     u8 pixclock_lim_hi;	/* ps, > 8 bpp */
@@ -387,6 +399,10 @@ static int atyfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
 static int atyfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		       u_long arg, int con, struct fb_info *info);
+#ifdef __sparc__
+static int atyfb_mmap(struct fb_info *info, struct file *file,
+		      struct vm_area_struct *vma);
+#endif
 
 
     /*
@@ -428,7 +444,7 @@ static int atyfb_console_setmode(struct vc_mode *, int);
      */
 
 static int aty_init(struct fb_info_aty *info, const char *name);
-#ifndef CONFIG_FB_OF
+#ifdef CONFIG_ATARI
 static int store_video_par(char *videopar, unsigned char m64_num);
 static char *strtoke(char *s, const char *ct);
 #endif
@@ -442,7 +458,12 @@ static void do_install_cmap(int con, struct fb_info *info);
 
 static struct fb_ops atyfb_ops = {
     atyfb_open, atyfb_release, atyfb_get_fix, atyfb_get_var, atyfb_set_var,
-    atyfb_get_cmap, atyfb_set_cmap, atyfb_pan_display, atyfb_ioctl
+    atyfb_get_cmap, atyfb_set_cmap, atyfb_pan_display, atyfb_ioctl,
+#ifdef __sparc__
+    atyfb_mmap
+#else
+    NULL
+#endif
 };
 
 
@@ -785,7 +806,7 @@ static void set_off_pitch(const struct atyfb_par *par,
 
 static void atyfb_set_par(struct atyfb_par *par, struct fb_info_aty *info)
 {
-    int i, j, hres;
+    int i, j = 0, hres;
     struct aty_regvals *init = get_aty_struct(par->hw.gx.vmode, info);
     int vram_type = aty_ld_le32(CONFIG_STAT0, info) & 7;
 
@@ -911,8 +932,22 @@ static void atyfb_set_par(struct atyfb_par *par, struct fb_info_aty *info)
 	    j = 0x47052100;
 	    break;
 
-	case CLASS_CT:
 	case CLASS_VT:
+	    if (vram_type == 4) {
+		/*
+		 * What to do here? - The contents of MEM_CNTL do not
+		 * seem to match my documentation, and touching this
+		 * register makes the output unusable.
+		 * (green bars across the screen and similar effects).
+		 *
+		 * Eddie C. Dost  (ecd@skynet.be)
+		 */
+		j = 0x87010184;
+		break;
+	     }
+	     /* fallthrough */
+
+	case CLASS_CT:
 	    aty_st_le32(BUS_CNTL, 0x680000f9, info);
 	    switch (info->total_vram) {
 		case 0x00100000:
@@ -1208,7 +1243,7 @@ static int encode_var(struct fb_var_screeninfo *var,
     u_int h_sync_strt, h_sync_dly, h_sync_wid, h_sync_pol;
     u_int v_total, v_disp;
     u_int v_sync_strt, v_sync_wid, v_sync_pol;
-    u_int xtalin, vclk;
+    u_int xtalin, vclk = 0;
     u8 pll_ref_div, vclk_fb_div, vclk_post_div, pll_ext_cntl;
 
     memset(var, 0, sizeof(struct fb_var_screeninfo));
@@ -1476,6 +1511,7 @@ static int atyfb_set_var(struct fb_var_screeninfo *var, int con,
 		    display->dispsw = NULL;
 		    break;
 	    }
+	    display->scrollmode = accel ? 0 : SCROLL_YREDRAW;
 	    if (info->changevar)
 		(*info->changevar)(con);
 	}
@@ -1564,6 +1600,112 @@ static int atyfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
     return -EINVAL;
 }
 
+#ifdef __sparc__
+static int atyfb_mmap(struct fb_info *info, struct file *file,
+		      struct vm_area_struct *vma)
+{
+	struct fb_info_aty *fb = (struct fb_info_aty *)info;
+	unsigned int size, page, map_size = 0;
+	unsigned long map_offset = 0;
+	int i;
+
+	if (!fb->mmap_map)
+		return -ENXIO;
+
+	size = vma->vm_end - vma->vm_start;
+	if (vma->vm_offset & ~PAGE_MASK)
+		return -ENXIO;
+
+	/* To stop the swapper from even considering these pages. */
+	vma->vm_flags |= (VM_SHM | VM_LOCKED);
+
+#ifdef __sparc_v9__
+	/* Align it as much as desirable */
+	{
+		int j, max = -1, align;
+		
+		map_offset = vma->vm_offset+size;
+		for (i = 0; fb->mmap_map[i].size; i++) {
+			if (fb->mmap_map[i].voff < vma->vm_offset)
+				continue;
+			if (fb->mmap_map[i].voff >= map_offset)
+				break;
+			if (max < 0 ||
+			    fb->mmap_map[i].size > fb->mmap_map[max].size)
+				max = i;
+		}
+		if (max >= 0) {
+			j = fb->mmap_map[max].size;
+			if (fb->mmap_map[max].voff + j > map_offset)
+				j = map_offset - fb->mmap_map[max].voff;
+			for (align = 0x400000; align > PAGE_SIZE; align >>= 3)
+				if (j >= align &&
+				    !(fb->mmap_map[max].poff & (align - 1)))
+					break;
+			if (align > PAGE_SIZE) {
+				j = align;
+				align = j - ((vma->vm_start
+					      + fb->mmap_map[max].voff
+					      - vma->vm_offset) & (j - 1));
+				if (align != j) {
+					struct vm_area_struct *vmm;
+
+					vmm = find_vma(current->mm,
+						       vma->vm_start);
+					if (!vmm || vmm->vm_start
+						    >= vma->vm_end + align) {
+						vma->vm_start += align;
+						vma->vm_end += align;
+					}
+				}
+			}
+		}
+	}
+#endif	
+
+	/* Each page, see which map applies */
+	for (page = 0; page < size; ) {
+		map_size = 0;
+		for (i = 0; fb->mmap_map[i].size; i++) {
+			unsigned long start = fb->mmap_map[i].voff;
+			unsigned long end = start + fb->mmap_map[i].size;
+			unsigned long offset = vma->vm_offset + page;
+
+			if (start > offset)
+				continue;
+			if (offset > end)
+				continue;
+
+			map_size = fb->mmap_map[i].size - (offset - start);
+			map_offset = fb->mmap_map[i].poff + (offset - start);
+			break;
+		}
+		if (!map_size) {
+			page += PAGE_SIZE;
+			continue;
+		}
+		if (page + map_size > size)
+			map_size = size - page;
+
+		pgprot_val(vma->vm_page_prot) &= ~(fb->mmap_map[i].prot_mask);
+		pgprot_val(vma->vm_page_prot) |= fb->mmap_map[i].prot_flag;
+
+		if (remap_page_range(vma->vm_start + page, map_offset,
+				     map_size, vma->vm_page_prot))
+			return -EAGAIN;
+
+		page += map_size;
+	}
+
+	if (!map_size)
+		return -EINVAL;
+
+	vma->vm_file = file;
+	file->f_count++;
+	vma->vm_flags |= VM_IO;
+	return 0;
+}
+#endif /* __sparc__ */
 
     /*
      *  Initialisation
@@ -1667,7 +1809,9 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 #endif
 
     sense = read_aty_sense(info);
+#if 0
     printk("monitor sense = %x\n", sense);
+#endif
 #if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
     if (default_vmode == VMODE_NVRAM) {
 	default_vmode = nvram_read_byte(NV_VMODE);
@@ -1774,7 +1918,204 @@ __initfunc(void atyfb_init(void))
     /* We don't want to be called like this. */
     /* We rely on Open Firmware (offb) instead. */
 #elif defined(CONFIG_PCI)
-    /* Anyone who wants to do a PCI probe for an ATI chip? */
+    struct pci_dev *pdev;
+    struct fb_info_aty *info;
+    unsigned long addr;
+    int i, j;
+    u16 tmp;
+
+    for (pdev = pci_devices; pdev; pdev = pdev->next) {
+	if (((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY) &&
+	    (pdev->vendor == PCI_VENDOR_ID_ATI)) {
+
+	    info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
+	    if (!info) {
+		printk("atyfb_init: can't alloc fb_info_aty\n");
+		return;
+	    }
+
+	    addr = pdev->base_address[0];
+	    if ((addr & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
+		addr = pdev->base_address[1];
+	    if (!addr)
+		continue;
+
+#ifdef __sparc__
+	    /*
+	     * Map memory-mapped registers.
+	     */
+	    info->ati_regbase = addr + 0x7ffc00;
+	    info->ati_regbase_phys = __pa(addr + 0x7ffc00);
+
+	    /*
+	     * Map in big-endian aperture.
+	     */
+	    info->frame_buffer = (unsigned long)(addr + 0x800000);
+	    info->frame_buffer_phys = __pa(addr + 0x800000);
+
+	    /*
+	     * Figure mmap addresses from PCI config space.
+	     * Split Framebuffer in big- and little-endian halfs.
+	     */
+	    for (i = 0; i < 6 && pdev->base_address[i]; i++)
+		/* nothing */;
+	    j = i + 1;
+
+            info->mmap_map = kmalloc(j * sizeof(*info->mmap_map), GFP_ATOMIC);
+	    if (!info->mmap_map) {
+		printk("atyfb_init: can't alloc mmap_map\n");
+		kfree(info);
+	    }
+
+	    memset(info->mmap_map, 0, j * sizeof(*info->mmap_map));
+	    for (i = j = 0; i < 6 && pdev->base_address[i]; i++) {
+		int io, breg = PCI_BASE_ADDRESS_0 + (i << 2);
+		unsigned long base;
+		u32 size, pbase;
+
+		base = pdev->base_address[i];
+
+		io = (base & PCI_BASE_ADDRESS_SPACE)==PCI_BASE_ADDRESS_SPACE_IO;
+
+		pci_read_config_dword(pdev, breg, &pbase);
+		pci_write_config_dword(pdev, breg, 0xffffffff);
+		pci_read_config_dword(pdev, breg, &size);
+		pci_write_config_dword(pdev, breg, pbase);
+
+		if (io)
+			size &= ~1;
+		size = ~(size) + 1;
+
+		if (base == addr) {
+			info->mmap_map[j].voff = (pbase + 0x800000)
+								& PAGE_MASK;
+			info->mmap_map[j].poff = __pa((base + 0x800000)
+								& PAGE_MASK);
+			info->mmap_map[j].size = 0x800000;
+			info->mmap_map[j].prot_mask = _PAGE_CACHE;
+			info->mmap_map[j].prot_flag = _PAGE_E|_PAGE_IE;
+			size -= 0x800000;
+			j++;
+		}
+
+		info->mmap_map[j].voff = pbase & PAGE_MASK;
+		info->mmap_map[j].poff = __pa(base & PAGE_MASK);
+		info->mmap_map[j].size = (size + ~PAGE_MASK) & PAGE_MASK;
+		info->mmap_map[j].prot_mask = _PAGE_CACHE;
+		info->mmap_map[j].prot_flag = _PAGE_E;
+		j++;
+	    }
+
+	    /*
+	     * Fix PROMs idea of MEM_CNTL settings...
+	     */
+	    tmp = aty_ld_le32(CONFIG_CHIP_ID, info) & CFG_CHIP_TYPE;
+	    if (tmp == MACH64_VT_ID) {
+		u32 mem = aty_ld_le32(MEM_CNTL, info);
+		switch (mem & 0x0f) {
+		    case 3:
+			mem = (mem & ~(0x0f)) | 2;
+			break;
+		    case 7:
+			mem = (mem & ~(0x0f)) | 3;
+			break;
+		    case 9:
+			mem = (mem & ~(0x0f)) | 4;
+			break;
+		    case 11:
+			mem = (mem & ~(0x0f)) | 5;
+			break;
+		    default:
+			break;
+		}
+		mem &= ~(0x00f00000);
+		aty_st_le32(MEM_CNTL, mem, info);
+	    }
+
+	    /*
+	     * Set default vmode and cmode from PROM properties.
+	     */
+	    {
+		struct pcidev_cookie *cookie = pdev->sysdata;
+		int node = cookie->prom_node;
+		int width = prom_getintdefault(node, "width", 1024);
+		int height = prom_getintdefault(node, "height", 768);
+		int depth = prom_getintdefault(node, "depth", 8);
+
+		switch (depth) {
+		    case 8:
+			default_cmode = CMODE_8;
+			break;
+		    case 16:
+			default_cmode = CMODE_16;
+			break;
+		    case 32:
+			default_cmode = CMODE_32;
+			break;
+		    default:
+			break;
+		}
+
+		switch (width) {
+		    case 1024:
+			if (height == 768)
+			    default_vmode = VMODE_1024_768_75;
+			break;
+		    case 1152:
+			if (height == 870)
+			    default_vmode = VMODE_1152_870_75;
+			break;
+		    case 1280:
+			if (height == 960)
+			    default_vmode = VMODE_1280_960_75;
+			else if (height == 1024)
+			    default_vmode = VMODE_1280_1024_75;
+			break;
+		    default:
+			break;
+		}
+	    }
+
+#else /* __sparc__ */
+
+	    info->ati_regbase = (unsigned long)
+				ioremap(0x7ff000 + addr, 0x1000) + 0xc00;
+
+	    info->ati_regbase_phys = 0x7ff000 + addr;
+	    info->ati_regbase = (unsigned long)
+				ioremap(info->ati_regbase_phys, 0x1000);
+
+	    info->ati_regbase_phys += 0xc00;
+	    info->ati_regbase += 0xc00;
+
+	    /*
+	     * Enable memory-space accesses using config-space
+	     * command register.
+	     */
+	    pci_read_config_word(pdev, PCI_COMMAND, &tmp);
+	    if (!(tmp & PCI_COMMAND_MEMORY)) {
+		tmp |= PCI_COMMAND_MEMORY;
+		pci_write_config_word(pdev, PCI_COMMAND, tmp);
+	    }
+
+#ifdef __BIG_ENDIAN
+	    /* Use the big-endian aperture */
+	    addr += 0x800000;
+#endif
+
+	    /* Map in frame buffer */
+	    info->frame_buffer_phys = addr;
+	    info->frame_buffer = (unsigned long)ioremap(addr, 0x800000);
+
+#endif /* __sparc__ */
+
+	    if (!aty_init(info, "PCI")) {
+		if (info->mmap_map)
+		    kfree(info->mmap_map);
+	        kfree(info);
+	    }
+	}
+    }
 #elif defined(CONFIG_ATARI)
     int m64_num;
     struct fb_info_aty *info;
@@ -1979,7 +2320,7 @@ __initfunc(static char *strtoke(char *s, const char *ct))
     ssave = send;
     return sbegin;
 }
-#endif /* !CONFIG_FB_OF */
+#endif /* CONFIG_ATARI */
 
 static int atyfbcon_switch(int con, struct fb_info *info)
 {
@@ -2021,14 +2362,20 @@ static void atyfbcon_blank(int blank, struct fb_info *info)
     u8 gen_cntl;
 
     gen_cntl = aty_ld_8(CRTC_GEN_CNTL, info2);
+#ifndef __sparc__
     if (blank & VESA_VSYNC_SUSPEND)
 	    gen_cntl |= 0x8;
     if (blank & VESA_HSYNC_SUSPEND)
 	    gen_cntl |= 0x4;
     if ((blank & VESA_POWERDOWN) == VESA_POWERDOWN)
 	    gen_cntl |= 0x40;
+#endif
     if (blank == VESA_NO_BLANKING)
 	    gen_cntl &= ~(0x4c);
+#ifdef __sparc__
+    else
+	    gen_cntl |= 0x40;
+#endif
     aty_st_8(CRTC_GEN_CNTL, gen_cntl, info2);
 }
 
@@ -2237,7 +2584,7 @@ static void fbcon_aty8_putcs(struct vc_data *conp, struct display *p,
 
 static struct display_switch fbcon_aty8 = {
     fbcon_cfb8_setup, fbcon_aty_bmove, fbcon_aty_clear, fbcon_aty8_putc,
-    fbcon_aty8_putcs, fbcon_cfb8_revc, NULL
+    fbcon_aty8_putcs, fbcon_cfb8_revc, NULL, NULL, FONTWIDTH(8)
 };
 #endif
 
@@ -2258,7 +2605,7 @@ static void fbcon_aty16_putcs(struct vc_data *conp, struct display *p,
 
 static struct display_switch fbcon_aty16 = {
     fbcon_cfb16_setup, fbcon_aty_bmove, fbcon_aty_clear, fbcon_aty16_putc,
-    fbcon_aty16_putcs, fbcon_cfb16_revc, NULL
+    fbcon_aty16_putcs, fbcon_cfb16_revc, NULL, FONTWIDTH(8)
 };
 #endif
 
@@ -2279,7 +2626,7 @@ static void fbcon_aty32_putcs(struct vc_data *conp, struct display *p,
 
 static struct display_switch fbcon_aty32 = {
     fbcon_cfb32_setup, fbcon_aty_bmove, fbcon_aty_clear, fbcon_aty32_putc,
-    fbcon_aty32_putcs, fbcon_cfb32_revc, NULL
+    fbcon_aty32_putcs, fbcon_cfb32_revc, NULL, FONTWIDTH(8)
 };
 #endif
 

@@ -24,6 +24,7 @@
 #include <asm/atomic.h>
 #include <asm/pgtable.h>
 
+extern struct task_struct *last_task_used_math;
 extern void fpe_save(struct fp_soft_struct *);
 extern void fpe_restore(struct fp_soft_struct *);
 extern void die_if_kernel(char *str, struct pt_regs *regs, int err, int ret);
@@ -306,7 +307,7 @@ asmlinkage void arm_syscall (int no, struct pt_regs *regs)
 
 asmlinkage void deferred(int n, struct pt_regs *regs)
 {
-	dump_state("old system call", regs, 0);
+	dump_state("old system call", regs, n);
 	force_sig (SIGILL, current);
 }
 

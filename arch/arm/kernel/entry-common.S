@@ -73,7 +73,7 @@ vector_swi:	save_user_regs
 		
 		bic	r6, r6, #0xff000000	@ mask off SWI op-code
 		eor	r6, r6, #OS_NUMBER<<20	@ check OS number
-		cmp	r6, #NR_SYSCALLS	@ check upper syscall limit
+		cmp	r6, #NR_syscalls	@ check upper syscall limit
 		bcs	2f
 
 		get_current_task r5
@@ -133,7 +133,7 @@ vector_swi:	save_user_regs
 SYMBOL_NAME(sys_syscall):
 		mov	r6, r0
 		eor	r6, r6, #OS_NUMBER << 20
-		cmp	r6, #NR_SYSCALLS		@ check range
+		cmp	r6, #NR_syscalls		@ check range
 		movgt	r0, #-ENOSYS
 		movgt	pc, lr
 		add	sp, sp, #4			@ take of the save of our r4
@@ -192,6 +192,10 @@ sys_sigreturn_wrapper:
 sys_rt_sigreturn_wrapper:
 		add	r0, sp, #4
 		b	SYMBOL_NAME(sys_rt_sigreturn)
+
+sys_sigaltstack_wrapper:
+		ldr	r2, [sp, #4 + S_SP]
+		b	do_sigaltstack
 
 /*
  *=============================================================================

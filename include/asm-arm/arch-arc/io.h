@@ -159,7 +159,18 @@ DECLARE_IO(long,l,"")
 	result & 0xffff;							\
 })
 
-#define __outlc(v,p) __outwc((v),(p))
+#define __outlc(value,port) 							\
+({										\
+	unsigned long v = value;						\
+	if (__PORT_PCIO((port)))						\
+		__asm__ __volatile__(						\
+		"str	%0, [%1, %2]"						\
+		: : "r" (v), "r" (PCIO_BASE), "Jr" ((port) << 2));		\
+	else									\
+		__asm__ __volatile__(						\
+		"str	%0, [%1, %2]"						\
+		: : "r" (v), "r" (IO_BASE), "r" ((port) << 2));			\
+})
 
 #define __inlc(port)								\
 ({										\

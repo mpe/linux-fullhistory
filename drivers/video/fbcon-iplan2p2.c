@@ -374,7 +374,8 @@ void fbcon_iplan2p2_revc(struct display *p, int xx, int yy)
 
 struct display_switch fbcon_iplan2p2 = {
     fbcon_iplan2p2_setup, fbcon_iplan2p2_bmove, fbcon_iplan2p2_clear,
-    fbcon_iplan2p2_putc, fbcon_iplan2p2_putcs, fbcon_iplan2p2_revc, NULL
+    fbcon_iplan2p2_putc, fbcon_iplan2p2_putcs, fbcon_iplan2p2_revc, NULL,
+    NULL, FONTWIDTH(8)
 };
 
 

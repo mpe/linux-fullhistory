@@ -1,7 +1,7 @@
 /*
  * drivers/acorn/scsi/msgqueue.c: message queue handling
  *
- * Copyright (C) 1997,8 Russell King
+ * Copyright (C) 1997-1998 Russell King
  */
 
 #include <linux/module.h>
@@ -9,6 +9,9 @@
 #include <linux/stddef.h>
 
 #include "msgqueue.h"
+
+MODULE_AUTHOR("Russell King");
+MODULE_DESCRIPTION("SCSI message queue handling");
 
 /*
  * Function: struct msgqueue_entry *mqe_alloc(MsgQueue_t *msgq)

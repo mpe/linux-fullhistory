@@ -18,15 +18,15 @@
     *    Find a font with a specific name
     */
 
-extern int findsoftfont(char *name, int *width, int *height, u_char *data[]);
+extern int findsoftfont(char *name, unsigned short *width, unsigned short *height, u_char *data[]);
 
 
    /*
     *    Get the default font for a specific screen size
     */
 
-extern void getdefaultfont(int xres, int yres, char *name[], int *width,
-                           int *height, u_char *data[]);
+extern void getdefaultfont(int xres, int yres, char *name[], unsigned short *width,
+                           unsigned short *height, u_char *data[]);
 
 
 /* Max. length for the name of a predefined font */

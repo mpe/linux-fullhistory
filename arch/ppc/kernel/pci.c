@@ -245,6 +245,10 @@ __initfunc(void pcibios_fixup(void))
 	}
 }
 
+__initfunc(void pcibios_fixup_bus(struct pci_bus *bus))
+{
+}
+
 __initfunc(char *pcibios_setup(char *str))
 {
 	return str;

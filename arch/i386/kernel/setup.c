@@ -147,8 +147,13 @@ __initfunc(void setup_arch(char **cmdline_p,
 			memory_end = memory_alt_end;
 	}
 #endif
-	if (memory_end > (1024-64)*1024*1024)
-		memory_end = (1024-64)*1024*1024;
+
+#define VMALLOC_RESERVE	(64 << 20)	/* 64MB for vmalloc */
+#define MAXMEM	((unsigned long)(-PAGE_OFFSET-VMALLOC_RESERVE))
+
+	if (memory_end > MAXMEM)
+		memory_end = MAXMEM;
+
 	memory_end &= PAGE_MASK;
 #ifdef CONFIG_BLK_DEV_RAM
 	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;

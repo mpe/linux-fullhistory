@@ -261,6 +261,16 @@ void parport_pc_dec_use_count(void)
 #endif
 }
 
+static void parport_pc_fill_inode(struct inode *inode, int fill)
+{
+#ifdef MODULE
+	if (fill)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
+#endif
+}
+
 struct parport_operations parport_pc_ops = 
 {
 	parport_pc_write_data,
@@ -306,7 +316,8 @@ struct parport_operations parport_pc_ops =
 	parport_pc_examine_irq,
 
 	parport_pc_inc_use_count,
-	parport_pc_dec_use_count
+	parport_pc_dec_use_count,
+	parport_pc_fill_inode
 };
 
 /* --- Mode detection ------------------------------------- */

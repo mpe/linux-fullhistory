@@ -43,6 +43,7 @@ struct rt_device
 	int port;
 	int curvol;
 	unsigned long curfreq;
+	int muted;
 };
 
 
@@ -51,7 +52,7 @@ struct rt_device
 static void sleep_delay(long n)
 {
 	/* Sleep nicely for 'n' uS */
-	int d=n/1000000/HZ;
+	int d=n/(1000000/HZ);
 	if(!d)
 		udelay(n);
 	else
@@ -77,26 +78,33 @@ static void rt_incvol(void)
 	outb(0xd8, io);		/* volume steady + sigstr + on	*/
 }
 
-static void rt_mute(void)
+static void rt_mute(struct rt_device *dev)
 {
-	outb(0x48, io);			/* volume down but still "on"	*/
-	sleep_delay(2000000);		/* make sure it's totally down	*/
-	outb(0xc0, io);			/* volume steady, off		*/
+	dev->muted = 1;
+	outb(0xd0, io);			/* volume steady, off		*/
 }
 
 static int rt_setvol(struct rt_device *dev, int vol)
 {
 	int i;
 
-	if(vol == dev->curvol)		/* no change needed */
-		return 0;
-
-	if(vol == 0) {			/* volume = 0 means mute the card */
-		rt_mute();
-		dev->curvol = 0;
+	if(vol == dev->curvol) {	/* requested volume = current */
+		if (dev->muted) {	/* user is unmuting the card  */
+			dev->muted = 0;
+			outb (0xd8, io);	/* enable card */
+		}	
+	
 		return 0;
 	}
 
+	if(vol == 0) {			/* volume = 0 means mute the card */
+		outb(0x48, io);		/* volume down but still "on"	*/
+		sleep_delay(2000000);	/* make sure it's totally down	*/
+		outb(0xd0, io);		/* volume steady, off		*/
+		return 0;
+	}
+
+	dev->muted = 0;
 	if(vol > dev->curvol)
 		for(i = dev->curvol; i < vol; i++) 
 			rt_incvol();
@@ -116,7 +124,7 @@ static int rt_setvol(struct rt_device *dev, int vol)
 
 void send_0_byte(int port, struct rt_device *dev)
 {
-	if (dev->curvol == 0) {
+	if ((dev->curvol == 0) || (dev->muted)) {
 		outb_p(128+64+16+  1, port);   /* wr-enable + data low */
 		outb_p(128+64+16+2+1, port);   /* clock */
 	}
@@ -129,7 +137,7 @@ void send_0_byte(int port, struct rt_device *dev)
 
 void send_1_byte(int port, struct rt_device *dev)
 {
-	if (dev->curvol == 0) {
+	if ((dev->curvol == 0) || (dev->muted)) {
 		outb_p(128+64+16+4  +1, port);   /* wr-enable+data high */
 		outb_p(128+64+16+4+2+1, port);   /* clock */
 	} 
@@ -172,7 +180,7 @@ static int rt_setfreq(struct rt_device *dev, unsigned long freq)
 	send_0_byte (io, dev);		/* 22: spacing (0 = 25 kHz)   */
 	send_1_byte (io, dev);		/* 23: AM/FM (FM = 1, always) */
 
-	if (dev->curvol == 0)
+	if ((dev->curvol == 0) || (dev->muted))
 		outb (0xd0, io);	/* volume steady + sigstr */
 	else
 		outb (0xd8, io);	/* volume steady + sigstr + on */
@@ -262,10 +270,8 @@ static int rt_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			if(v.audio) 
 				return -EINVAL;
 
-			if(v.flags&VIDEO_AUDIO_MUTE) {
-				rt_mute();
-				rt->curvol=0;
-			}
+			if(v.flags&VIDEO_AUDIO_MUTE) 
+				rt_mute(rt);
 			else
 				rt_setvol(rt,v.volume/6554);	
 
@@ -322,9 +328,15 @@ __initfunc(int rtrack_init(struct video_init *v))
 		
 	request_region(io, 2, "rtrack");
 	printk(KERN_INFO "AIMSlab Radiotrack/radioreveal card driver.\n");
-	/* mute card - prevents noisy bootups */
-	rt_mute();
+
+ 	/* mute card - prevents noisy bootups */
+
+	/* this ensures that the volume is all the way down  */
+	outb(0x48, io);		/* volume down but still "on"	*/
+	sleep_delay(2000000);	/* make sure it's totally down	*/
+	outb(0xc0, io);		/* steady volume, mute card	*/
 	rtrack_unit.curvol = 0;
+
 	return 0;
 }
 

@@ -35,7 +35,7 @@ struct consw {
 	int	(*con_scroll)(struct vc_data *, int, int, int, int);
 	void	(*con_bmove)(struct vc_data *, int, int, int, int, int, int);
 	int	(*con_switch)(struct vc_data *);
-	int	(*con_blank)(int);
+	int	(*con_blank)(struct vc_data *, int);
 	int	(*con_get_font)(struct vc_data *, int *, int *, char *);
 	int	(*con_set_font)(struct vc_data *, int, int, char *);
 	int	(*con_set_palette)(struct vc_data *, unsigned char *);
@@ -51,6 +51,8 @@ extern struct consw fb_con;	/* frame buffer based console */
 extern struct consw vga_con;	/* VGA text console */
 extern struct consw compat_con;	/* console wrapper */
 extern struct consw prom_con;	/* SPARC PROM console */
+
+void take_over_console(struct consw *sw, int first, int last, int deflt);
 
 /* flag bits */
 #define CON_INITED  (1)

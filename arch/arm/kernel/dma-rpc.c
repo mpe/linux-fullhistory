@@ -13,11 +13,14 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/dma.h>
+#include <asm/fiq.h>
 #include <asm/io.h>
 #include <asm/hardware.h>
 #include <asm/uaccess.h>
 
 #include "dma.h"
+
+static struct fiq_handler fh = { "floppydma", NULL };
 
 #if 0
 typedef enum {
@@ -269,6 +272,10 @@ void arch_enable_dma(dmach_t channel, dma_t *dma)
 			extern unsigned char floppy_fiqout_start, floppy_fiqout_end;
 			fiqhandler_start = &floppy_fiqout_start;
 			fiqhandler_length = &floppy_fiqout_end - &floppy_fiqout_start;
+		}
+		if (claim_fiq(&fh)) {
+			printk("floppydma: couldn't claim FIQ.\n");
+			return;
 		}
 		/* Allow access to page 0 via domains */
 		__asm__ __volatile__("mcr	p15, 0, %0, c3, c0" :

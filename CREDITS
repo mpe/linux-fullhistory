@@ -62,10 +62,12 @@ S: USA
 
 N: Andrea Arcangeli
 E: arcangeli@mbox.queen.it
-W: http://www.cs.unibo.it/~arcangel/
+W: http://e-mind.com/~andrea/
 P: 1024/CB4660B9 CC A0 71 81 F4 A0 63 AC  C0 4B 81 1D 8C 15 C8 E5
-D: Parport sharing hacker.
-D: Various other kernel hacks.
+D: Parport hacker
+D: Implemented a workaround for some interrupt buggy printers
+D: Author of pscan that helps to fix lp/parport bug
+D: Various other kernel hacks
 S: Via Ciaclini 26
 S: Imola 40026
 S: Italy

@@ -318,6 +318,7 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 	}
 
 	skb->dev = dev;
+	skb->nh.raw = skb->data;
 	dev->hard_header(skb, dev, ETH_P_BPQ, bpq->dest_addr, NULL, 0);
 	bpq->stats.tx_packets++;
 	bpq->stats.tx_bytes+=skb->len;

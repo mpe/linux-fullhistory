@@ -257,6 +257,7 @@ typedef struct {
 		unsigned char	sync_max_depth;		/* Synchronous xfer max fifo depth	*/
 		unsigned char	cntl3;			/* Control Reg 3			*/
 		unsigned int	asyncperiod;		/* Async transfer period (ns)		*/
+		unsigned int	disconnect_ok:1;	/* Disconnects allowed?			*/
 	} ifcfg;
 
 	/* queue handling */
@@ -268,6 +269,7 @@ typedef struct {
 	/* per-device info */
 	struct {
 		unsigned char	disconnect_ok:1;	/* device can disconnect		*/
+		unsigned int	period;			/* sync xfer period (*4ns)		*/
 		unsigned char	stp;			/* synchronous transfer period		*/
 		unsigned char	sof;			/* synchronous offset register		*/
 		syncneg_t	negstate;		/* synchronous transfer mode		*/

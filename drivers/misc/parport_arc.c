@@ -58,6 +58,16 @@ static void arc_dec_use_count(void)
 #endif
 }
 
+static void arc_fill_inode(struct inode *inode, int fill)
+{
+#ifdef MODULE
+	if (fill)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
+#endif
+}
+
 static struct parport_operations parport_arc_ops = 
 {
 	arc_write_data,
@@ -103,7 +113,8 @@ static struct parport_operations parport_arc_ops =
 	arc_examine_irq,
 
 	arc_inc_use_count,
-	arc_dec_use_count
+	arc_dec_use_count,
+	arc_fill_inode
 };
 
 /* --- Initialisation code -------------------------------- */

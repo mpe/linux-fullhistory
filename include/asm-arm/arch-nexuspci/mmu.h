@@ -16,11 +16,11 @@
 #define __phys_to_virt__is_a_macro
 
 /*
- * These are exactly the same as the physical memory view.
+ * On the PCI bus the DRAM appears at address 0
  */
 #define __virt_to_bus__is_a_macro
-#define __virt_to_bus(x) __virt_to_phys(x)
+#define __virt_to_bus(x) ((x) - PAGE_OFFSET)
 #define __bus_to_virt__is_a_macro
-#define __bus_to_virt(x) __phys_to_virt(x)
+#define __bus_to_virt(x) ((x) + PAGE_OFFSET)
 
 #endif

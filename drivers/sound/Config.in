@@ -148,6 +148,12 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       int 'MAD16 MIDI IRQ 5, 7, 9 or 10' CONFIG_MAD16_MPU_IRQ 9
   fi
   
+  dep_tristate 'Full support for Turtle Beach WaveFront (Tropez Plus, Tropez, Maui) synth/soundcards' CONFIG_SOUND_WAVEFRONT $CONFIG_SOUND_OSS
+  if [ "$CONFIG_SOUND_WAVEFRONT" = "y" ]; then
+      hex 'I/O base for WaveFront 210, 230, 260, 290, 300, 320, 338 or 330' CONFIG_WAVEFRONT_BASE 330
+      int 'WaveFront IRQ 5, 9, 12 or 15' CONFIG_WAVEFRONT_IRQ 9
+  fi
+
   dep_tristate 'Support for Crystal CS4232 based (PnP) cards' CONFIG_SOUND_CS4232 $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_CS4232" = "y" ]; then
       hex 'CS4232 audio I/O base 530, 604, E80 or F40' CONFIG_CS4232_BASE 530
@@ -157,8 +163,8 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       hex 'CS4232 MIDI I/O base 330, 370, 3B0 or 3F0' CONFIG_CS4232_MPU_BASE 330
       int 'CS4232 MIDI IRQ 5, 7, 9, 11, 12 or 15' CONFIG_CS4232_MPU_IRQ 9
   fi
-  
-  dep_tristate 'Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers' CONFIG_SOUND_MAUI $CONFIG_SOUND_OSS
+
+  dep_tristate 'Limited support for Turtle Beach Wave Front (Maui, Tropez) synthesizers' CONFIG_SOUND_MAUI $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_MAUI" = "y" ]; then
       hex 'I/O base for Maui 210, 230, 260, 290, 300, 320, 338 or 330' CONFIG_MAUI_BASE 330
       int 'Maui IRQ 5, 9, 12 or 15' CONFIG_MAUI_IRQ 9

@@ -20,7 +20,10 @@ start:		mov	r0, r0
 		mov	r0, r0
 		mov	r0, r0
 		mov	r0, r0
-		teq	r0, #0
+		b	1f
+		.word	0x016f2818			@ Magic numbers to help the loader
+		.word	_start	
+1:		teq	r0, #0
 		beq	2f
 		mov	r4, #0x02000000
 		add	r4, r4, #0x7C000
@@ -59,11 +62,13 @@ start:		mov	r0, r0
  * Uncompress the kernel
  */
 		mov	r1, #0x8000
-		add	r2, r2, r1, lsl #1	@ Add 64k for malloc
+		add	r3, r2, r1, lsl #1	@ Add 64k for malloc
 		sub	r1, r1, #1
-		add	r2, r2, r1
-		bic	r5, r2, r1		@ decompress kernel to after end of the compressed
+		add	r3, r3, r1
+		bic	r5, r3, r1		@ decompress kernel to after end of the compressed
 		mov	r0, r5
+		mov	r1, r2
+		mov	r2, r0
 		bl	SYMBOL_NAME(decompress_kernel)
 		add	r0, r0, #7
 		bic	r2, r0, #7

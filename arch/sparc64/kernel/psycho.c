@@ -2381,6 +2381,10 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 	return err;
 }
 
+__initfunc(void pcibios_fixup_bus(struct pci_bus *bus))
+{
+}
+
 __initfunc(char *pcibios_setup(char *str))
 {
 	return str;

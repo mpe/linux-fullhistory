@@ -1174,7 +1174,7 @@ static void fbcon_cyber8_revc(struct display *p, int xx, int yy)
 
 static struct display_switch fbcon_cyber8 = {
    fbcon_cfb8_setup, fbcon_cyber8_bmove, fbcon_cyber8_clear, fbcon_cyber8_putc,
-   fbcon_cyber8_putcs, fbcon_cyber8_revc, NULL
+   fbcon_cyber8_putcs, fbcon_cyber8_revc, NULL, NULL, FONTWIDTH(8)
 };
 #endif
 

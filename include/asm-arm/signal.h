@@ -6,6 +6,7 @@
 /* Avoid too many header ordering problems.  */
 struct siginfo;
 
+#ifdef __KERNEL__
 /* Most things should be clean enough to redefine this at will, if care
    is taken to make libc match.  */
 
@@ -18,6 +19,14 @@ typedef unsigned long old_sigset_t;		/* at least 32 bits */
 typedef struct {
 	unsigned long sig[_NSIG_WORDS];
 } sigset_t;
+
+#else
+/* Here we must cater to lics that poke about in kernel headers.  */
+
+#define NSIG		32
+typedef unsigned long sigset_t;
+
+#endif /* __KERNEL__ */
 
 #define SIGHUP		 1
 #define SIGINT		 2
@@ -87,6 +96,15 @@ typedef struct {
 #define SA_INTERRUPT	0x20000000 /* dummy -- ignored */
 
 #define SA_RESTORER	0x04000000
+
+/* 
+ * sigaltstack controls
+ */
+#define SS_ONSTACK	1
+#define SS_DISABLE	2
+
+#define MINSIGSTKSZ	2048
+#define SIGSTKSZ	8192
 
 #ifdef __KERNEL__
 

@@ -15,15 +15,8 @@
  * 0xfd000000	0x78000000	Outbound write flush
  * 0xfc000000	0x79000000	PCI IACK/special space
  *
- * 0xf9030000	0x7a080000	PCI Config type 1 card 4
- * 0xf9020000	0x7a040000	PCI Config type 1 card 3
- * 0xf9010000	0x7a020000	PCI Config type 1 card 2
- * 0xf9000000	0x7a010000	PCI Config type 1 card 1
- *
- * 0xf8030000	0x7b080000	PCI Config type 0 card 4
- * 0xf8020000	0x7b040000	PCI Config type 0 card 3
- * 0xf8010000	0x7b020000	PCI Config type 0 card 2
- * 0xf8000000	0x7b010000	PCI Config type 0 card 1
+ * 0xf9000000	0x7a010000	PCI Config type 1
+ * 0xf8000000	0x7b010000	PCI Config type 0
  * 
  */
  
