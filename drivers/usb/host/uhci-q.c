@@ -1482,3 +1482,58 @@ static void uhci_remove_pending_urbps(struct uhci_hcd *uhci)
 	/* Splice the urb_remove_list onto the end of the complete_list */
 	list_splice_init(&uhci->urb_remove_list, uhci->complete_list.prev);
 }
+
+/* Process events in the schedule, but only in one thread at a time */
+static void uhci_scan_schedule(struct uhci_hcd *uhci, struct pt_regs *regs)
+{
+	struct urb_priv *urbp, *tmp;
+
+	/* Don't allow re-entrant calls */
+	if (uhci->scan_in_progress) {
+		uhci->need_rescan = 1;
+		return;
+	}
+	uhci->scan_in_progress = 1;
+ rescan:
+	uhci->need_rescan = 0;
+
+	uhci_get_current_frame_number(uhci);
+
+	if (uhci->frame_number + uhci->is_stopped != uhci->qh_remove_age)
+		uhci_free_pending_qhs(uhci);
+	if (uhci->frame_number + uhci->is_stopped != uhci->td_remove_age)
+		uhci_free_pending_tds(uhci);
+	if (uhci->frame_number + uhci->is_stopped != uhci->urb_remove_age)
+		uhci_remove_pending_urbps(uhci);
+
+	/* Walk the list of pending URBs to see which ones completed
+	 * (must be _safe because uhci_transfer_result() dequeues URBs) */
+	list_for_each_entry_safe(urbp, tmp, &uhci->urb_list, urb_list) {
+		struct urb *urb = urbp->urb;
+
+		/* Checks the status and does all of the magic necessary */
+		uhci_transfer_result(uhci, urb);
+	}
+	uhci_finish_completion(uhci, regs);
+
+	/* If the controller is stopped, we can finish these off right now */
+	if (uhci->is_stopped) {
+		uhci_free_pending_qhs(uhci);
+		uhci_free_pending_tds(uhci);
+		uhci_remove_pending_urbps(uhci);
+	}
+
+	if (uhci->need_rescan)
+		goto rescan;
+	uhci->scan_in_progress = 0;
+
+	if (list_empty(&uhci->urb_remove_list) &&
+	    list_empty(&uhci->td_remove_list) &&
+	    list_empty(&uhci->qh_remove_list))
+		uhci_clear_next_interrupt(uhci);
+	else
+		uhci_set_next_interrupt(uhci);
+
+	/* Wake up anyone waiting for an URB to complete */
+	wake_up_all(&uhci->waitqh);
+}

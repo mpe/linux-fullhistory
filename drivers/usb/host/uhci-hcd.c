@@ -113,18 +113,9 @@ static void stall_callback(unsigned long ptr)
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 	struct urb_priv *up;
 	unsigned long flags;
-	int called_uhci_finish_completion = 0;
 
 	spin_lock_irqsave(&uhci->lock, flags);
-	uhci_get_current_frame_number(uhci);
-
-	if (!list_empty(&uhci->urb_remove_list) &&
-			uhci->frame_number + uhci->is_stopped !=
-				uhci->urb_remove_age) {
-		uhci_remove_pending_urbps(uhci);
-		uhci_finish_completion(uhci, NULL);
-		called_uhci_finish_completion = 1;
-	}
+	uhci_scan_schedule(uhci, NULL);
 
 	list_for_each_entry(up, &uhci->urb_list, urb_list) {
 		struct urb *u = up->urb;
@@ -137,10 +128,6 @@ static void stall_callback(unsigned long ptr)
 
 		spin_unlock(&u->lock);
 	}
-
-	/* Wake up anyone waiting for an URB to complete */
-	if (called_uhci_finish_completion)
-		wake_up_all(&uhci->waitqh);
 
 	/* Really disable FSBR */
 	if (!uhci->fsbr && uhci->fsbrtimeout && time_after_eq(jiffies, uhci->fsbrtimeout)) {
@@ -175,7 +162,6 @@ static irqreturn_t uhci_irq(struct usb_hcd *hcd, struct pt_regs *regs)
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 	unsigned long io_addr = uhci->io_addr;
 	unsigned short status;
-	struct urb_priv *urbp, *tmp;
 
 	/*
 	 * Read the interrupt status, and write it back to clear the
@@ -205,36 +191,8 @@ static irqreturn_t uhci_irq(struct usb_hcd *hcd, struct pt_regs *regs)
 		uhci->resume_detect = 1;
 
 	spin_lock(&uhci->lock);
-	uhci_get_current_frame_number(uhci);
-
-	if (uhci->frame_number + uhci->is_stopped != uhci->qh_remove_age)
-		uhci_free_pending_qhs(uhci);
-	if (uhci->frame_number + uhci->is_stopped != uhci->td_remove_age)
-		uhci_free_pending_tds(uhci);
-	if (uhci->frame_number + uhci->is_stopped != uhci->urb_remove_age)
-		uhci_remove_pending_urbps(uhci);
-
-	if (list_empty(&uhci->urb_remove_list) &&
-	    list_empty(&uhci->td_remove_list) &&
-	    list_empty(&uhci->qh_remove_list))
-		uhci_clear_next_interrupt(uhci);
-	else
-		uhci_set_next_interrupt(uhci);
-
-	/* Walk the list of pending URBs to see which ones completed
-	 * (must be _safe because uhci_transfer_result() dequeues URBs) */
-	list_for_each_entry_safe(urbp, tmp, &uhci->urb_list, urb_list) {
-		struct urb *urb = urbp->urb;
-
-		/* Checks the status and does all of the magic necessary */
-		uhci_transfer_result(uhci, urb);
-	}
-	uhci_finish_completion(uhci, regs);
-
+	uhci_scan_schedule(uhci, regs);
 	spin_unlock(&uhci->lock);
-
-	/* Wake up anyone waiting for an URB to complete */
-	wake_up_all(&uhci->waitqh);
 
 	return IRQ_HANDLED;
 }
@@ -273,6 +231,8 @@ static void suspend_hc(struct uhci_hcd *uhci)
 	/* FIXME: Wait for the controller to actually stop */
 	uhci_get_current_frame_number(uhci);
 	uhci->is_stopped = UHCI_IS_STOPPED;
+
+	uhci_scan_schedule(uhci, NULL);
 }
 
 static void wakeup_hc(struct uhci_hcd *uhci)
@@ -746,26 +706,11 @@ static void uhci_stop(struct usb_hcd *hcd)
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 
 	del_timer_sync(&uhci->stall_timer);
-
-	/*
-	 * At this point, we're guaranteed that no new connects can be made
-	 * to this bus since there are no more parents
-	 */
-
 	reset_hc(uhci);
 
 	spin_lock_irq(&uhci->lock);
-	uhci_free_pending_qhs(uhci);
-	uhci_free_pending_tds(uhci);
-	uhci_remove_pending_urbps(uhci);
-	uhci_finish_completion(uhci, NULL);
-
-	uhci_free_pending_qhs(uhci);
-	uhci_free_pending_tds(uhci);
+	uhci_scan_schedule(uhci, NULL);
 	spin_unlock_irq(&uhci->lock);
-
-	/* Wake up anyone waiting for an URB to complete */
-	wake_up_all(&uhci->waitqh);
 	
 	release_uhci(uhci);
 }
@@ -784,6 +729,7 @@ static int uhci_suspend(struct usb_hcd *hcd, u32 state)
 		spin_unlock_irq(&uhci->lock);
 		reset_hc(uhci);
 		spin_lock_irq(&uhci->lock);
+		uhci_scan_schedule(uhci, NULL);
 	}
 
 	spin_unlock_irq(&uhci->lock);
