@@ -18,6 +18,7 @@
 
 #include <asm/uaccess.h>
 #include <asm/pbm.h>
+#include <asm/pgtable.h>
 #include <asm/irq.h>
 #include <asm/ebus.h>
 #include <asm/isa.h>
@@ -734,11 +735,9 @@ static void __pci_mmap_set_flags(struct pci_dev *dev, struct vm_area_struct *vma
 static void __pci_mmap_set_pgprot(struct pci_dev *dev, struct vm_area_struct *vma,
 					     enum pci_mmap_state mmap_state)
 {
-	/* Our io_remap_page_range takes care of this, do nothing. */
+	/* Our io_remap_page_range/io_remap_pfn_range takes care of this,
+	   do nothing. */
 }
-
-extern int io_remap_page_range(struct vm_area_struct *vma, unsigned long from, unsigned long offset,
-			       unsigned long size, pgprot_t prot, int space);
 
 /* Perform the actual remap of the pages for a PCI device mapping, as appropriate
  * for this architecture.  The region in the process to map is described by vm_start
@@ -761,10 +760,10 @@ int pci_mmap_page_range(struct pci_dev *dev, struct vm_area_struct *vma,
 	__pci_mmap_set_flags(dev, vma, mmap_state);
 	__pci_mmap_set_pgprot(dev, vma, mmap_state);
 
-	ret = io_remap_page_range(vma, vma->vm_start,
-				  (vma->vm_pgoff << PAGE_SHIFT |
-				   (write_combine ? 0x1UL : 0x0UL)),
-				  vma->vm_end - vma->vm_start, vma->vm_page_prot, 0);
+	ret = io_remap_pfn_range(vma, vma->vm_start,
+				 vma->vm_pgoff,
+				 vma->vm_end - vma->vm_start,
+				 vma->vm_page_prot);
 	if (ret)
 		return ret;
 
