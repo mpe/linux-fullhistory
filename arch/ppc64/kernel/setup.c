@@ -1361,6 +1361,12 @@ EXPORT_SYMBOL(check_legacy_ioport);
 static int __init early_xmon(char *p)
 {
 	/* ensure xmon is enabled */
+	if (p) {
+		if (strncmp(p, "on", 2) == 0)
+			xmon_init();
+		if (strncmp(p, "early", 5) != 0)
+			return 0;
+	}
 	xmon_init();
 	debugger(NULL);
 
