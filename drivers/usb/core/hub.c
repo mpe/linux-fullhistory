@@ -1388,8 +1388,13 @@ static int hub_port_reset(struct usb_hub *hub, int port1,
 			dev_err(hub->intfdev,
 					"cannot reset port %d (err = %d)\n",
 					port1, status);
-		else
+		else {
 			status = hub_port_wait_reset(hub, port1, udev, delay);
+			if (status)
+				dev_dbg(hub->intfdev,
+						"port_wait_reset: err = %d\n",
+						status);
+		}
 
 		/* return on disconnect or reset */
 		switch (status) {
@@ -1620,9 +1625,11 @@ static int __usb_suspend_device (struct usb_device *udev, int port1,
 		struct usb_bus	*bus = udev->bus;
 		if (bus && bus->op->hub_suspend) {
 			status = bus->op->hub_suspend (bus);
-			if (status == 0)
+			if (status == 0) {
+				dev_dbg(&udev->dev, "usb suspend\n");
 				usb_set_device_state(udev,
 						USB_STATE_SUSPENDED);
+			}
 		} else
 			status = -EOPNOTSUPP;
 	} else
@@ -1840,9 +1847,11 @@ int usb_resume_device(struct usb_device *udev)
 		} else
 			status = -EOPNOTSUPP;
 		if (status == 0) {
+			dev_dbg(&udev->dev, "usb resume\n");
 			/* TRSMRCY = 10 msec */
 			msleep(10);
 			usb_set_device_state (udev, USB_STATE_CONFIGURED);
+			udev->dev.power.power_state = PMSG_ON;
 			status = hub_resume (udev
 					->actconfig->interface[0]);
 		}
