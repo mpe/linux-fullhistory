@@ -755,7 +755,7 @@ static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int
 
 	pci_read_config_dword(dev, PCI_PRIMARY_BUS, &buses);
 	DBG("Scanning behind PCI bridge %s, config %06x, pass %d\n", dev->slot_name, buses & 0xffffff, pass);
-	if ((buses & 0xffffff) && !pcibios_assign_all_busses()) {
+	if ((buses & 0xffff00) && !pcibios_assign_all_busses()) {
 		/*
 		 * Bus already configured by firmware, process it in the first
 		 * pass and just note the configuration.
@@ -772,8 +772,10 @@ static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int
 			if (cmax > max) max = cmax;
 		} else {
 			int i;
+			unsigned int cmax = child->subordinate;
 			for (i = 0; i < 4; i++)
 				child->resource[i] = &dev->resource[PCI_BRIDGE_RESOURCES+i];
+			if (cmax > max) max = cmax;
 		}
 	} else {
 		/*

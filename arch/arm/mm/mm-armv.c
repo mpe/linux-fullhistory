@@ -361,6 +361,7 @@ void __init memtable_init(struct meminfo *mi)
 		p ++;
 	}
 
+#ifdef FLUSH_BASE
 	p->physical   = FLUSH_BASE_PHYS;
 	p->virtual    = FLUSH_BASE;
 	p->length     = PGDIR_SIZE;
@@ -371,6 +372,7 @@ void __init memtable_init(struct meminfo *mi)
 	p->bufferable = 1;
 
 	p ++;
+#endif
 
 #ifdef FLUSH_BASE_MINICACHE
 	p->physical   = FLUSH_BASE_PHYS + PGDIR_SIZE;

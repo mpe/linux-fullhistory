@@ -13,7 +13,7 @@
 #include <linux/ppp_defs.h>
 #include "netjet.h"
 
-const char *NETjet_U_revision = "$Revision: 2.4 $";
+const char *NETjet_U_revision = "$Revision: 2.8 $";
 
 static u_char dummyrr(struct IsdnCardState *cs, int chan, u_char off)
 {
@@ -94,7 +94,8 @@ reset_netjet_u(struct IsdnCardState *cs)
 	byteout(cs->hw.njet.base + NETJET_CTRL, cs->hw.njet.ctrl_reg);
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
-	cs->hw.njet.ctrl_reg = 0x00;  /* Reset Off and status read clear */
+	cs->hw.njet.ctrl_reg = 0x40;  /* Reset Off and status read clear */
+	/* now edge triggered for TJ320 GE 13/07/00 */
 	byteout(cs->hw.njet.base + NETJET_CTRL, cs->hw.njet.ctrl_reg);
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
@@ -130,10 +131,10 @@ NETjet_U_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-static 	struct pci_dev *dev_netjet __initdata = NULL;
+static struct pci_dev *dev_netjet __initdata;
 
-__initfunc(int
-setup_netjet_u(struct IsdnCard *card))
+int __init
+setup_netjet_u(struct IsdnCard *card)
 {
 	int bytecnt;
 	struct IsdnCardState *cs = card->cs;
@@ -155,7 +156,7 @@ setup_netjet_u(struct IsdnCard *card))
 	for ( ;; )
 	{
 		if (!pci_present()) {
-			printk(KERN_ERR "NETspider-U: no PCI bus present\n");
+			printk(KERN_ERR "Netjet: no PCI bus present\n");
 			return(0);
 		}
 		if ((dev_netjet = pci_find_device(PCI_VENDOR_ID_TIGERJET,
@@ -241,7 +242,7 @@ setup_netjet_u(struct IsdnCard *card))
 		       cs->hw.njet.base + bytecnt);
 		return (0);
 	} else {
-		request_region(cs->hw.njet.base, bytecnt, "netjet-u isdn");
+		request_region(cs->hw.njet.base, bytecnt, "netspider-u isdn");
 	}
 	reset_netjet_u(cs);
 	cs->readisac  = &NETjet_ReadIC;

@@ -1,4 +1,4 @@
-/* $Id: avm_a1p.c,v 2.6 2000/06/26 08:59:12 keil Exp $
+/* $Id: avm_a1p.c,v 2.7 2000/11/24 17:05:37 kai Exp $
  *
  * avm_a1p.c    low level stuff for the following AVM cards:
  *              A1 PCMCIA
@@ -10,6 +10,7 @@
  *  This file is (c) under GNU PUBLIC LICENSE
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"
@@ -52,7 +53,7 @@
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
 
-static const char *avm_revision = "$Revision: 2.6 $";
+static const char *avm_revision = "$Revision: 2.7 $";
 
 static inline u_char
 ReadISAC(struct IsdnCardState *cs, u_char offset)
@@ -244,8 +245,8 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return 0;
 }
 
-__initfunc(int
-setup_avm_a1_pcmcia(struct IsdnCard *card))
+int __devinit
+setup_avm_a1_pcmcia(struct IsdnCard *card)
 {
 	u_char model, vers;
 	struct IsdnCardState *cs = card->cs;

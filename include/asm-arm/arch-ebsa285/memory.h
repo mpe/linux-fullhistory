@@ -67,6 +67,12 @@ extern unsigned long __bus_to_virt(unsigned long);
 #define PHYS_OFFSET		(0x00000000UL)
 
 /*
+ * This decides where the kernel will search for a free chunk of vm
+ * space during mmap's.
+ */
+#define TASK_UNMAPPED_BASE (TASK_SIZE / 3)
+
+/*
  * The DRAM is always contiguous.
  */
 #define __virt_to_phys__is_a_macro

@@ -10,6 +10,8 @@
 #ifndef __ASM_PROC_PTRACE_H
 #define __ASM_PROC_PTRACE_H
 
+#include <linux/config.h>
+
 #define USR26_MODE	0x00
 #define FIQ26_MODE	0x01
 #define IRQ26_MODE	0x02
@@ -64,8 +66,12 @@ struct pt_regs {
 #define user_mode(regs)	\
 	(((regs)->ARM_cpsr & 0xf) == 0)
 
+#ifdef CONFIG_ARM_THUMB
 #define thumb_mode(regs) \
 	(((regs)->ARM_cpsr & T_BIT))
+#else
+#define thumb_mode(regs) (0)
+#endif
 
 #define processor_mode(regs) \
 	((regs)->ARM_cpsr & MODE_MASK)

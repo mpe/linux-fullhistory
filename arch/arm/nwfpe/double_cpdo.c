@@ -44,7 +44,7 @@ unsigned int DoubleCPDO(const unsigned int opcode)
    float64 rFm, rFn;
    unsigned int Fd, Fm, Fn, nRc = 1;
 
-   //fp_printk("DoubleCPDO(0x%08x)\n",opcode);
+   //printk("DoubleCPDO(0x%08x)\n",opcode);
    
    Fm = getFm(opcode);
    if (CONSTANT_FM(opcode))
@@ -65,7 +65,7 @@ unsigned int DoubleCPDO(const unsigned int opcode)
 
         case typeExtended:
             // !! patb
-	    //fp_printk("not implemented! why not?\n");
+	    //printk("not implemented! why not?\n");
             //!! ScottB
             // should never get here, if extended involved
             // then other operand should be promoted then

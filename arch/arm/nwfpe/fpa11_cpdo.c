@@ -30,7 +30,7 @@ unsigned int EmulateCPDO(const unsigned int opcode)
 {
    unsigned int Fd, nType, nDest, nRc = 1;
    
-   //fp_printk("EmulateCPDO(0x%08x)\n",opcode);
+   //printk("EmulateCPDO(0x%08x)\n",opcode);
 
    /* Get the destination size.  If not valid let Linux perform
       an invalid instruction trap. */

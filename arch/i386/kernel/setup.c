@@ -2113,7 +2113,7 @@ int get_cpuinfo(char * buffer)
 			p += sprintf(p, "stepping\t: unknown\n");
 
 		if ( test_bit(X86_FEATURE_TSC, &c->x86_capability) ) {
-			p += sprintf(p, "cpu MHz\t\t: %lu.%06lu\n",
+			p += sprintf(p, "cpu MHz\t\t: %lu.%03lu\n",
 				cpu_khz / 1000, (cpu_khz % 1000));
 		}
 

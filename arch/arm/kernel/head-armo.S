@@ -21,7 +21,6 @@
  */
 		.section ".text.init",#alloc,#execinstr
 ENTRY(stext)
-ENTRY(_stext)
 __entry:	cmp	pc, #0x02000000
 		ldrlt	pc, LC0			@ if 0x01800000, call at 0x02080000
 		teq	r0, #0			@ Check for old calling method

@@ -56,8 +56,7 @@ SRAM can also be used as additional console device, use debug=mem.
 This will save kernel startup msgs into SRAM, the screen will display 
 only the penguin - and shell prompt if it gets that far..
 
-Serial console works and can also be used for debugging, provided serial
-initialisation works.
+Serial console works and can also be used for debugging, see loader_txt
 
 Most problems seem to be caused by fawlty or badly configured io-cards or 
 harddrives anyway..there are so many things that can go wrong here.
@@ -82,8 +81,9 @@ The main interrupt register IIRQ_REG will indicate whether an IRQ was internal
 or from some ISA devices, EIRQ_REG can distinguish up to 8 ISA IRQs.
 
 The Q40 custom chip is programmable to provide 2 periodic timers:
-	- 50 or 200 Hz - level 2,  !!THIS CANT BE DISABLED!!
-	- 10 or 20 KHz - level 4 (and possibly 6 - hardware decoding..)
+	- 50 or 200 Hz - level 2,
+	- 10 or 20 KHz - level 4 
+  !!THIS CANT BE DISABLED!!
 
 Linux uses the 200 Hz interrupt for timer and beep by default.
 
@@ -92,9 +92,6 @@ Interrupts
 ==========
 
 q40 master chip handles only level triggered interrupts :-((
-further limitation is no disabling etc. There is NO WAY to remove
-an ISA irq request other than serve the HW specific control register,
-the ISA irq lines are connected straight to the CPU ipl1 pin..
 
 IRQ sharing is not yet implemented but this should be only a minor
 problem..
@@ -102,12 +99,17 @@ problem..
 Linux has some requirements wrt interrupt architecture, these are
 to my knowledge:
 	(a) interrupt handler must not be reentered even when sti() is called
+	    from within handler
 	(b) working enable/disable_irq
 
 Luckily these requirements are only important for drivers shared
 with other architectures - ide,serial,parallel, ethernet..
-q40ints.c now contains a trivial hack for (a), however (b) could
-be only solved by driver-specific code
+q40ints.c now contains a trivial hack for (a), (b) is more difficult
+because only irq's 4-15 can be disabled - and only all o them at once.
+Thus disable_irq() can effectively block the machine if the driver goes
+asleep.
+One thing to keep in minde when hacking around the interrupt code is 
+that there is no way to find out which IRQ caused a request.
 
 Keyboard
 ========

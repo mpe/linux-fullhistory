@@ -62,13 +62,14 @@
 #include <linux/ioport.h>
 #include <linux/pci.h>
 #include <linux/capi.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.11 $";
+static char *revision = "$Revision: 1.13 $";
 
 #undef CONFIG_T1PCI_DEBUG
 #undef CONFIG_T1PCI_POLLDEBUG
@@ -275,14 +276,9 @@ static struct capi_driver t1pci_driver = {
     add_card: 0, /* no add_card function */
 };
 
-#ifdef MODULE
-#define t1pci_init init_module
-void cleanup_module(void);
-#endif
-
 static int ncards = 0;
 
-int t1pci_init(void)
+static int __init t1pci_init(void)
 {
 	struct capi_driver *driver = &t1pci_driver;
 	struct pci_dev *dev = NULL;
@@ -320,7 +316,7 @@ int t1pci_init(void)
 		struct capicardparams param;
 
 		param.port = pci_resource_start(dev, 1);
-		param.irq = dev->irq;
+ 		param.irq = dev->irq;
 		param.membase = pci_resource_start(dev, 0);
 
 		retval = pci_enable_device (dev);
@@ -364,9 +360,10 @@ int t1pci_init(void)
 #endif
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit t1pci_exit(void)
 {
     detach_capi_driver(&t1pci_driver);
 }
-#endif
+
+module_init(t1pci_init);
+module_exit(t1pci_exit);

@@ -126,6 +126,39 @@ out:
 	return fault;
 }
 
+static int __do_vmalloc_fault(unsigned long addr, struct mm_struct *mm)
+{
+	/* Synchronise this task's top level page-table
+	 * with the 'reference' page table.
+	 */
+	int offset = __pgd_offset(addr);
+	pgd_t *pgd, *pgd_k;
+	pmd_t *pmd, *pmd_k;
+
+	pgd_k = init_mm.pgd + offset;
+	if (!pgd_present(*pgd_k))
+		goto bad_area;
+
+	pgd = mm->pgd + offset;
+#if 0	/* note that we are two-level */
+	if (!pgd_present(*pgd))
+		set_pgd(pgd, *pgd_k);
+#endif
+
+	pmd_k = pmd_offset(pgd_k, addr);
+	if (pmd_none(*pmd_k))
+		goto bad_area;
+
+	pmd = pmd_offset(pgd, addr);
+	if (!pmd_none(*pmd))
+		goto bad_area;
+	set_pmd(pmd, *pmd_k);
+	return 1;
+
+bad_area:
+	return -2;
+}
+
 static int do_page_fault(unsigned long addr, int mode, struct pt_regs *regs)
 {
 	struct task_struct *tsk;
@@ -135,6 +168,18 @@ static int do_page_fault(unsigned long addr, int mode, struct pt_regs *regs)
 
 	tsk = current;
 	mm  = tsk->mm;
+
+	/*
+	 * We fault-in kernel-space virtual memory on-demand. The
+	 * 'reference' page table is init_mm.pgd.
+	 *
+	 * NOTE! We MUST NOT take any locks for this case. We may
+	 * be in an interrupt or a critical region, and should
+	 * only copy the information from the master page table,
+	 * nothing more.
+	 */
+	if (addr >= TASK_SIZE)
+		goto vmalloc_fault;
 
 	/*
 	 * If we're in an interrupt or have no user
@@ -147,6 +192,7 @@ static int do_page_fault(unsigned long addr, int mode, struct pt_regs *regs)
 	fault = __do_page_fault(mm, addr, mode, tsk);
 	up(&mm->mmap_sem);
 
+ret:
 	/*
 	 * Handle the "normal" case first
 	 */
@@ -240,4 +286,8 @@ no_context:
 	do_exit(SIGKILL);
 
 	return 0;
+
+vmalloc_fault:
+	fault = __do_vmalloc_fault(addr, mm);
+	goto ret;
 }

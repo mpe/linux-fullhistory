@@ -336,6 +336,7 @@ int proc_readdir(struct file * filp,
  * the /proc directory.
  */
 static struct file_operations proc_dir_operations = {
+	read:			generic_read_dir,
 	readdir:		proc_readdir,
 };
 

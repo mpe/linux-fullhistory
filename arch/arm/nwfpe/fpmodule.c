@@ -46,7 +46,6 @@ extern FPA11 *fpa11;
 typedef struct task_struct*	PTASK;
 
 #ifdef MODULE
-int fp_printk(const char *,...);
 void fp_send_sig(unsigned long sig, PTASK p, int priv);
 #if LINUX_VERSION_CODE > 0x20115
 MODULE_AUTHOR("Scott Bambrough <scottb@rebel.com>");
@@ -54,7 +53,6 @@ MODULE_DESCRIPTION("NWFPE floating point emulator");
 #endif
 
 #else
-#define fp_printk	printk
 #define fp_send_sig	send_sig
 #define kern_fp_enter	fp_enter
 #endif
@@ -74,23 +72,14 @@ extern void nwfpe_enter(void);
 /* Address of user registers on the kernel stack. */
 unsigned int *userRegisters;
 
-void __init fpe_version(void)
-{
-  static const char szTitle[] = "<4>NetWinder Floating Point Emulator ";
-  static const char szVersion[] = "V0.95 ";
-  static const char szCopyright[] = "(c) 1998-1999 Rebel.com\n";
-  fp_printk(szTitle);
-  fp_printk(szVersion);
-  fp_printk(szCopyright);
-}
-
 int __init fpe_init(void)
 {
   if (sizeof(FPA11) > sizeof(union fp_state))
     printk(KERN_ERR "nwfpe: bad structure size\n");
   else {
     /* Display title, version and copyright information. */
-    fpe_version();
+    printk(KERN_WARNING "NetWinder Floating Point Emulator V0.95 "
+	   "(c) 1998-1999 Rebel.com\n");
 
     /* Save pointer to the old FP handler and then patch ourselves in */
     orig_fp_enter = kern_fp_enter;

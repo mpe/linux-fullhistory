@@ -71,6 +71,8 @@ int (*mach_request_irq) (unsigned int, void (*)(int, void *, struct pt_regs *),
                       unsigned long, const char *, void *) = dummy_request_irq;
 void (*mach_free_irq) (unsigned int, void *) = dummy_free_irq;
 
+void init_irq_proc(void);
+
 /*
  * void init_IRQ(void)
  *
@@ -257,3 +259,9 @@ int get_irq_list(char *buf)
 	len += mach_get_irq_list(buf+len);
 	return len;
 }
+
+void init_irq_proc(void)
+{
+	/* Insert /proc/irq driver here */
+}
+

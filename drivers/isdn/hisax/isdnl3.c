@@ -1,4 +1,4 @@
-/* $Id: isdnl3.c,v 2.14 2000/06/26 08:59:13 keil Exp $
+/* $Id: isdnl3.c,v 2.17 2000/11/24 17:05:38 kai Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,16 +11,16 @@
  *              Fritz Elfert
  *
  */
+
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isdnl3.h"
 #include <linux/config.h>
 
-const char *l3_revision = "$Revision: 2.14 $";
+const char *l3_revision = "$Revision: 2.17 $";
 
-static
-struct Fsm l3fsm =
-{NULL, 0, 0, NULL, NULL};
+static struct Fsm l3fsm;
 
 enum {
 	ST_L3_LC_REL,
@@ -303,7 +303,10 @@ release_l3_process(struct l3_process *p)
 				if (!skb_queue_len(&p->st->l3.squeue)) {
 					if (p->debug)
 						l3_debug(p->st, "release_l3_process: release link");
-					FsmEvent(&p->st->l3.l3m, EV_RELEASE_REQ, NULL);
+					if (p->st->protocol != ISDN_PTYPE_NI1)
+						FsmEvent(&p->st->l3.l3m, EV_RELEASE_REQ, NULL);
+					else
+						FsmEvent(&p->st->l3.l3m, EV_RELEASE_IND, NULL);
 				} else {
 					if (p->debug)
 						l3_debug(p->st, "release_l3_process: not release link");
@@ -521,7 +524,7 @@ lc_release_cnf(struct FsmInst *fi, int event, void *arg)
 
 
 /* *INDENT-OFF* */
-static struct FsmNode L3FnList[] HISAX_INITDATA =
+static struct FsmNode L3FnList[] __initdata =
 {
 	{ST_L3_LC_REL,		EV_ESTABLISH_REQ,	lc_activate},
 	{ST_L3_LC_REL,		EV_ESTABLISH_IND,	lc_connect},
@@ -530,7 +533,7 @@ static struct FsmNode L3FnList[] HISAX_INITDATA =
 	{ST_L3_LC_ESTAB_WAIT,	EV_RELEASE_REQ,		lc_start_delay},
 	{ST_L3_LC_ESTAB_WAIT,	EV_RELEASE_IND,		lc_release_ind},
 	{ST_L3_LC_ESTAB,	EV_RELEASE_IND,		lc_release_ind},
-	{ST_L3_LC_ESTAB,	EV_RELEASE_REQ,		lc_start_delay},
+	{ST_L3_LC_ESTAB,	EV_RELEASE_REQ,		lc_start_delay_check},
         {ST_L3_LC_REL_DELAY,    EV_RELEASE_IND,         lc_release_ind},
         {ST_L3_LC_REL_DELAY,    EV_ESTABLISH_REQ,       lc_connected},
         {ST_L3_LC_REL_DELAY,    EV_TIMEOUT,             lc_release_req},
@@ -576,8 +579,8 @@ l3_msg(struct PStack *st, int pr, void *arg)
 	}
 }
 
-HISAX_INITFUNC(void
-Isdnl3New(void))
+void __init
+Isdnl3New(void)
 {
 	l3fsm.state_count = L3_STATE_COUNT;
 	l3fsm.event_count = L3_EVENT_COUNT;

@@ -1,4 +1,4 @@
-/* $Id: hscx.c,v 1.19 2000/06/26 08:59:13 keil Exp $
+/* $Id: hscx.c,v 1.21 2000/11/24 17:05:37 kai Exp $
  *
  * hscx.c   HSCX specific routines
  *
@@ -9,18 +9,19 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "hscx.h"
 #include "isac.h"
 #include "isdnl1.h"
 #include <linux/interrupt.h>
 
-static char *HSCXVer[] HISAX_INITDATA =
+static char *HSCXVer[] __initdata =
 {"A1", "?1", "A2", "?3", "A3", "V2.1", "?6", "?7",
  "?8", "?9", "?10", "?11", "?12", "?13", "?14", "???"};
 
-HISAX_INITFUNC(int
-HscxVersion(struct IsdnCardState *cs, char *s))
+int __init
+HscxVersion(struct IsdnCardState *cs, char *s)
 {
 	int verA, verB;
 
@@ -218,8 +219,8 @@ setstack_hscx(struct PStack *st, struct BCState *bcs)
 	return (0);
 }
 
-HISAX_INITFUNC(void
-clear_pending_hscx_ints(struct IsdnCardState *cs))
+void __init
+clear_pending_hscx_ints(struct IsdnCardState *cs)
 {
 	int val, eval;
 
@@ -244,8 +245,8 @@ clear_pending_hscx_ints(struct IsdnCardState *cs))
 	cs->BC_Write_Reg(cs, 1, HSCX_MASK, 0xFF);
 }
 
-HISAX_INITFUNC(void
-inithscx(struct IsdnCardState *cs))
+void __init
+inithscx(struct IsdnCardState *cs)
 {
 	cs->bcs[0].BC_SetStack = setstack_hscx;
 	cs->bcs[1].BC_SetStack = setstack_hscx;
@@ -261,8 +262,8 @@ inithscx(struct IsdnCardState *cs))
 	modehscx(cs->bcs + 1, 0, 0);
 }
 
-HISAX_INITFUNC(void
-inithscxisac(struct IsdnCardState *cs, int part))
+void __init
+inithscxisac(struct IsdnCardState *cs, int part)
 {
 	if (part & 1) {
 		clear_pending_isac_ints(cs);

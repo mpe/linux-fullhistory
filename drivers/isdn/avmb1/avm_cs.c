@@ -145,9 +145,7 @@ static dev_link_t *avmcs_attach(void)
     /* The io structure describes IO port mapping */
     link->io.NumPorts1 = 16;
     link->io.Attributes1 = IO_DATA_PATH_WIDTH_8;
-    link->io.NumPorts2 = 16;
-    link->io.Attributes2 = IO_DATA_PATH_WIDTH_16;
-    link->io.IOAddrLines = 5;
+    link->io.NumPorts2 = 0;
 
     /* Interrupt setup */
     link->irq.Attributes = IRQ_TYPE_EXCLUSIVE;
@@ -329,9 +327,10 @@ static void avmcs_config(dev_link_t *link)
 		link->conf.ConfigIndex = cf->index;
 		link->io.BasePort1 = cf->io.win[0].base;
 		link->io.NumPorts1 = cf->io.win[0].len;
+		link->io.NumPorts2 = 0;
                 printk(KERN_INFO "avm_cs: testing i/o %#x-%#x\n",
 			link->io.BasePort1,
-		        link->io.BasePort1+link->io.NumPorts1);
+		        link->io.BasePort1+link->io.NumPorts1-1);
 		i = CardServices(RequestIO, link->handle, &link->io);
 		if (i == CS_SUCCESS) goto found_port;
 	    }
@@ -504,7 +503,7 @@ static int avmcs_event(event_t event, int priority,
 
 /*====================================================================*/
 
-int init_module(void)
+static int __init avmcs_init(void)
 {
     servinfo_t serv;
     CardServices(GetCardServicesInfo, &serv);
@@ -517,7 +516,7 @@ int init_module(void)
     return 0;
 }
 
-void cleanup_module(void)
+static void __exit avmcs_exit(void)
 {
     unregister_pccard_driver(&dev_info);
     while (dev_list != NULL) {
@@ -526,3 +525,6 @@ void cleanup_module(void)
 	avmcs_detach(dev_list);
     }
 }
+
+module_init(avmcs_init);
+module_exit(avmcs_exit);

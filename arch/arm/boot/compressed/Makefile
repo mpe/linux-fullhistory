@@ -18,6 +18,7 @@ ZLDFLAGS	 = -p -X -T vmlinux.lds
 #
 ifeq ($(CONFIG_ARCH_ACORN),y)
 OBJS		+= ll_char_wr.o font.o
+ZLDFLAGS	+= -defsym params=$(PARAMS_PHYS)
 endif
 
 ifeq ($(CONFIG_ARCH_NETWINDER),y)
@@ -34,6 +35,11 @@ endif
 
 ifeq ($(CONFIG_ARCH_L7200),y)
 OBJS		+= head-l7200.o
+endif
+
+ifeq ($(CONFIG_ARCH_P720T),y)
+# Borrow this code from SA1100
+OBJS		+= head-sa1100.o
 endif
 
 ifeq ($(CONFIG_ARCH_SA1100),y)

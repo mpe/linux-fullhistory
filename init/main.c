@@ -254,7 +254,9 @@ static struct dev_name_struct {
 	{ "ida/c0d14p",0x48E0 },
 	{ "ida/c0d15p",0x48F0 },
 #endif
-
+#ifdef CONFIG_NFTL
+	{ "nftla", 0x5d00 },
+#endif
 	{ NULL, 0 }
 };
 

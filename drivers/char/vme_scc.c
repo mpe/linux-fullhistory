@@ -48,7 +48,7 @@
 #include <asm/bvme6000hw.h>
 #endif
 
-#include "generic_serial.h"
+#include <linux/generic_serial.h>
 #include "scc.h"
 
 
@@ -75,7 +75,7 @@ static void scc_disable_rx_interrupts(void * ptr);
 static void scc_enable_rx_interrupts(void * ptr);
 static int  scc_get_CD(void * ptr);
 static void scc_shutdown_port(void * ptr);
-static void scc_set_real_termios(void  *ptr);
+static int scc_set_real_termios(void  *ptr);
 static void scc_hungup(void  *ptr);
 static void scc_close(void  *ptr);
 static int scc_chars_in_buffer(void * ptr);
@@ -688,7 +688,7 @@ static void scc_shutdown_port(void *ptr)
 }
 
 
-static void scc_set_real_termios (void *ptr)
+static int scc_set_real_termios (void *ptr)
 {
 	/* the SCC has char sizes 5,7,6,8 in that order! */
 	static int chsize_map[4] = { 0, 2, 1, 3 };
@@ -697,12 +697,12 @@ static void scc_set_real_termios (void *ptr)
 	struct scc_port *port = ptr;
 	SCC_ACCESS_INIT(port);
 
-	if (!port->gs.tty || !port->gs.tty->termios) return;
+	if (!port->gs.tty || !port->gs.tty->termios) return 0;
 
 	channel = port->channel;
 
 	if (channel == CHANNEL_A)
-		return;		/* Settings controlled by boot PROM */
+		return 0;		/* Settings controlled by boot PROM */
 
 	cflag  = port->gs.tty->termios->c_cflag;
 	baud = port->gs.baud;
@@ -714,13 +714,13 @@ static void scc_set_real_termios (void *ptr)
 		cli();
 		SCCmod(TX_CTRL_REG, ~TCR_DTR, 0);
 		restore_flags(flags);
-		return;
+		return 0;
 	}
 	else if ((MACH_IS_MVME16x && (baud < 50 || baud > 38400)) ||
 		 (MACH_IS_MVME147 && (baud < 50 || baud > 19200)) ||
 		 (MACH_IS_BVME6000 &&(baud < 50 || baud > 76800))) {
 		printk("SCC: Bad speed requested, %d\n", baud);
-		return;
+		return 0;
 	}
 
 	if (cflag & CLOCAL)
@@ -769,6 +769,8 @@ static void scc_set_real_termios (void *ptr)
 	SCCmod(DPLL_CTRL_REG, 0xff, DCR_BRG_ENAB);
 
 	restore_flags(flags);
+
+	return 0;
 }
 
 

@@ -1,11 +1,14 @@
 /*
- * $Id: capidev.h,v 1.5 2000/03/03 15:50:42 calle Exp $
+ * $Id: capidev.h,v 1.6 2000/11/25 17:00:59 kai Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * (c) Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidev.h,v $
+ * Revision 1.6  2000/11/25 17:00:59  kai
+ * compatibility cleanup - final part for the time being
+ *
  * Revision 1.5  2000/03/03 15:50:42  calle
  * - kernel CAPI:
  *   - Changed parameter "param" in capi_signal from __u32 to void *.

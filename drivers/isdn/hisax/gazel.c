@@ -1,4 +1,4 @@
-/* $Id: gazel.c,v 2.8 2000/06/26 08:59:12 keil Exp $
+/* $Id: gazel.c,v 2.11 2000/11/24 17:05:37 kai Exp $
  *
  * gazel.c     low level stuff for Gazel isdn cards
  *
@@ -9,6 +9,7 @@
  *
  */
 #include <linux/config.h>
+#include <linux/init.h>
 #define __NO_VERSION__
 #include "hisax.h"
 #include "isac.h"
@@ -18,7 +19,7 @@
 #include <linux/pci.h>
 
 extern const char *CardType[];
-const char *gazel_revision = "$Revision: 2.8 $";
+const char *gazel_revision = "$Revision: 2.11 $";
 
 #define R647      1
 #define R685      2
@@ -557,7 +558,7 @@ setup_gazelisa(struct IsdnCard *card, struct IsdnCardState *cs)
 	return (0);
 }
 
-static struct pci_dev *dev_tel __initdata = NULL;
+static struct pci_dev *dev_tel __initdata;
 
 static int
 setup_gazelpci(struct IsdnCardState *cs)
@@ -645,8 +646,8 @@ setup_gazelpci(struct IsdnCardState *cs)
 	return (0);
 }
 
-__initfunc(int
-	   setup_gazel(struct IsdnCard *card))
+int __init
+setup_gazel(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.31 2000/08/20 07:32:55 keil Exp $
+/* $Id: hfc_pci.c,v 1.34 2000/11/24 17:05:37 kai Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -24,6 +24,7 @@
  *
  */
 
+#include <linux/init.h>
 #include <linux/config.h>
 #define __NO_VERSION__
 #include "hisax.h"
@@ -31,11 +32,10 @@
 #include "isdnl1.h"
 #include <linux/pci.h>
 #include <linux/interrupt.h>
-#include <linux/init.h>
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.31 $";
+static const char *hfcpci_revision = "$Revision: 1.34 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1571,8 +1571,8 @@ hfcpci_bh(struct IsdnCardState *cs)
 /********************************/
 /* called for card init message */
 /********************************/
-__initfunc(void
-	   inithfcpci(struct IsdnCardState *cs))
+void __init
+inithfcpci(struct IsdnCardState *cs)
 {
 	cs->setstack_d = setstack_hfcpci;
 	cs->dbusytimer.function = (void *) hfcpci_dbusy_timer;

@@ -139,7 +139,7 @@ Ldata_ldmstm:	tst	r4, #1 << 21			@ check writeback bit
 Ldata_saver7:	str	r7, [sp, r5, lsr #14]		@ Put register
 Ldata_simple:	mrc	p15, 0, r0, c6, c0, 0		@ get FAR
 		mrc	p15, 0, r3, c5, c0, 0		@ get FSR
-		and	r3, r3, #15
+		and	r3, r3, #255
 		mov	pc, lr
 
 ENTRY(cpu_arm720_data_abort)
@@ -155,7 +155,7 @@ ENTRY(cpu_arm720_data_abort)
 		b	Ldata_unknown
 		b	Ldata_unknown
 		b	Ldata_lateldrpostconst		@ ldr	rd, [rn], #m
-		b	Ldata_lateldrpreconst		@ ldr	rd, [rn, #m]	@ RegVal
+		b	Ldata_lateldrpreconst		@ ldr	rd, [rn, #m] 
 		b	Ldata_lateldrpostreg		@ ldr	rd, [rn], rm
 		b	Ldata_lateldrprereg		@ ldr	rd, [rn, rm]
 		b	Ldata_ldmstm			@ ldm*a	rn, <rlist>
@@ -177,25 +177,14 @@ Ldata_lateldrhpre:
 		tst	r4, #1 << 21			@ check writeback bit
 		beq	Ldata_simple
 Ldata_lateldrhpost:
-		tst	r4, #1 << 22			@ check if register or immediate offset
-		beq	Ldata_lateldrhpostreg
-Ldata_lateldrhpostconst:
-		and	r2, r4, #0xf			@ load and clear low nibble of const offset
-		and	r5, r4, #0xf00			@ load and clear high nibble of const offset
-		orrs	r2, r2, r5, lsr #4		@ create offset
-		beq	Ldata_simple			@ don't have to do anything if zero
-		and	r5, r4, #0xf << 16		@ get Rn
-		ldr	r0, [sp, r5, lsr #14]
+		and	r5, r4, #0x00f			@ get Rm / low nibble of immediate value
+		tst	r4, #1 << 22			@ if (immediate offset)
+		andne	r2, r4, #0xf00			@ { immediate high nibble
+		orrne	r2, r5, r2, lsr #4		@   combine nibbles } else
+		ldreq	r2, [sp, r5, lsl #2]		@ { load Rm value }
+		and	r5, r4, #15 << 16		@ get Rn
+		ldr	r0, [sp, r5, lsr #14]		@ load Rn value
 		tst	r4, #1 << 23			@ U bit
-		subne	r7, r0, r2, lsr #20
-		addeq	r7, r0, r2, lsr #20
-		b	Ldata_saver7
-Ldata_lateldrhpostreg:
-		and	r5, r4, #0xf
-		ldr	r2, [sp, r5, lsl #2]		@ get Rm
-		and	r5, r4, #0xf << 16
-		ldr	r0, [sp, r5, lsr #14]		@ get Rn
-		tst	r4, #1 << 23
 		subne	r7, r0, r2
 		addeq	r7, r0, r2
 		b	Ldata_saver7
@@ -385,7 +374,7 @@ ENTRY(cpu_arm720_reset)
 
 	
 cpu_armvlsi_name:
-		.asciz	"ARM/VLSI"
+		.asciz	"ARM"
 cpu_arm720_name:
 		.asciz	"ARM720T"
 		.align
@@ -471,8 +460,8 @@ cpu_elf_name:	.asciz	"v4"
 __arm720_proc_info:
 		.long	0x41807200				@ cpu_val
 		.long	0xffffff00				@ cpu_mask
-		.long	0x00000c0e				@ __cpu_mmu_flags
-		b	__arm720_setup				@ --cpu_flush
+		.long	0x00000c1e				@ section_mmu_flags
+		b	__arm720_setup				@ cpu_flush
 		.long	cpu_arch_name				@ arch_name
 		.long	cpu_elf_name				@ elf_name
 		.long	HWCAP_SWP | HWCAP_HALF | HWCAP_26BIT	@ elf_hwcap

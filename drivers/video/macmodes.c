@@ -17,7 +17,9 @@
 #include <linux/fb.h>
 #include <linux/string.h>
 
+#ifdef CONFIG_FB_COMPAT_XPMAC
 #include <asm/vc_ioctl.h>
+#endif
 
 #include <video/fbcon.h>
 #include <video/macmodes.h>

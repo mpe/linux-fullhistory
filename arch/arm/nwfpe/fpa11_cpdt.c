@@ -189,7 +189,7 @@ unsigned int PerformLDF(const unsigned int opcode)
    unsigned int *pBase, *pAddress, *pFinal, nRc = 1,
      write_back = WRITE_BACK(opcode);
 
-   //fp_printk("PerformLDF(0x%08x), Fd = 0x%08x\n",opcode,getFd(opcode));
+   //printk("PerformLDF(0x%08x), Fd = 0x%08x\n",opcode,getFd(opcode));
 
    pBase = (unsigned int*)readRegister(getRn(opcode));
    if (REG_PC == getRn(opcode))
@@ -223,7 +223,7 @@ unsigned int PerformSTF(const unsigned int opcode)
    unsigned int *pBase, *pAddress, *pFinal, nRc = 1,
      write_back = WRITE_BACK(opcode);
    
-   //fp_printk("PerformSTF(0x%08x), Fd = 0x%08x\n",opcode,getFd(opcode));
+   //printk("PerformSTF(0x%08x), Fd = 0x%08x\n",opcode,getFd(opcode));
    SetRoundingMode(ROUND_TO_NEAREST);
    
    pBase = (unsigned int*)readRegister(getRn(opcode));
@@ -322,7 +322,7 @@ unsigned int EmulateCPDT(const unsigned int opcode)
 {
   unsigned int nRc = 0;
 
-  //fp_printk("EmulateCPDT(0x%08x)\n",opcode);
+  //printk("EmulateCPDT(0x%08x)\n",opcode);
   
   if (LDF_OP(opcode))
   {

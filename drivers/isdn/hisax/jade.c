@@ -1,4 +1,4 @@
-/* $Id: jade.c,v 1.4 2000/06/26 08:59:14 keil Exp $
+/* $Id: jade.c,v 1.6 2000/11/24 17:05:38 kai Exp $
  *
  * jade.c   JADE stuff (derived from original hscx.c)
  *
@@ -10,6 +10,7 @@
 
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "hscx.h"
 #include "jade.h"
@@ -17,8 +18,8 @@
 #include <linux/interrupt.h>
 
 
-HISAX_INITFUNC(int
-JadeVersion(struct IsdnCardState *cs, char *s))
+int __init
+JadeVersion(struct IsdnCardState *cs, char *s)
 {
     int ver,i;
     int to = 50;
@@ -262,8 +263,8 @@ setstack_jade(struct PStack *st, struct BCState *bcs)
 	return (0);
 }
 
-HISAX_INITFUNC(void
-clear_pending_jade_ints(struct IsdnCardState *cs))
+void __init
+clear_pending_jade_ints(struct IsdnCardState *cs)
 {
 	int val;
 	char tmp[64];
@@ -288,8 +289,8 @@ clear_pending_jade_ints(struct IsdnCardState *cs))
 	cs->BC_Write_Reg(cs, 1, jade_HDLC_IMR, 0xF8);
 }
 
-HISAX_INITFUNC(void
-initjade(struct IsdnCardState *cs))
+void __init
+initjade(struct IsdnCardState *cs)
 {
 	cs->bcs[0].BC_SetStack = setstack_jade;
 	cs->bcs[1].BC_SetStack = setstack_jade;

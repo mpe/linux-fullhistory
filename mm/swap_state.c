@@ -17,8 +17,15 @@
 
 #include <asm/pgtable.h>
 
+static int swap_writepage(struct file *file, struct page *page)
+{
+	rw_swap_page(WRITE, page, 0);
+	return 0;
+}
+
 static struct address_space_operations swap_aops = {
-	sync_page: block_sync_page
+	writepage: swap_writepage,
+	sync_page: block_sync_page,
 };
 
 struct address_space swapper_space = {
@@ -106,6 +113,7 @@ void delete_from_swap_cache_nolock(struct page *page)
 		lru_cache_del(page);
 
 	spin_lock(&pagecache_lock);
+	ClearPageDirty(page);
 	__delete_from_swap_cache(page);
 	spin_unlock(&pagecache_lock);
 	page_cache_release(page);

@@ -110,6 +110,7 @@
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
 #include <linux/locks.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 #include "capicmd.h"
 #include "capiutil.h"
@@ -118,7 +119,7 @@
 #include <linux/b1lli.h>
 #endif
 
-static char *revision = "$Revision: 1.18 $";
+static char *revision = "$Revision: 1.21 $";
 
 /* ------------------------------------------------------------- */
 
@@ -1724,36 +1725,11 @@ EXPORT_SYMBOL(detach_capi_interface);
 EXPORT_SYMBOL(attach_capi_driver);
 EXPORT_SYMBOL(detach_capi_driver);
 
-#ifndef MODULE
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
-extern int b1isa_init(void);
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
-extern int b1pci_init(void);
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
-extern int t1isa_init(void);
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
-extern int b1pcmcia_init(void);
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
-extern int t1pci_init(void);
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_C4
-extern int c4_init(void);
-#endif
-#endif
-
 /*
  * init / exit functions
  */
 
-#ifdef MODULE
-#define kcapi_init init_module
-#endif
-
-int kcapi_init(void)
+static int __init kcapi_init(void)
 {
 	char *p;
 	char rev[10];
@@ -1761,7 +1737,6 @@ int kcapi_init(void)
 	MOD_INC_USE_COUNT;
 
 	skb_queue_head_init(&recv_queue);
-	/* init_bh(CAPI_BH, do_capi_bh); */
 
 	tq_state_notify.routine = notify_handler;
 	tq_state_notify.data = 0;
@@ -1782,31 +1757,12 @@ int kcapi_init(void)
         printk(KERN_NOTICE "CAPI-driver Rev%s: loaded\n", rev);
 #else
 	printk(KERN_NOTICE "CAPI-driver Rev%s: started\n", rev);
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
-	(void)b1isa_init();
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
-	(void)b1pci_init();
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
-	(void)t1isa_init();
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
-	(void)b1pcmcia_init();
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
-	(void)t1pci_init();
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_C4
-	(void)c4_init();
-#endif
 #endif
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit kcapi_exit(void)
 {
 	char rev[10];
 	char *p;
@@ -1822,4 +1778,6 @@ void cleanup_module(void)
         proc_capi_exit();
 	printk(KERN_NOTICE "CAPI-driver Rev%s: unloaded\n", rev);
 }
-#endif
+
+module_init(kcapi_init);
+module_exit(kcapi_exit);

@@ -1,4 +1,4 @@
-/* $Id: teles0.c,v 2.12 2000/06/26 08:59:14 keil Exp $
+/* $Id: teles0.c,v 2.13 2000/11/24 17:05:38 kai Exp $
  *
  * teles0.c     low level stuff for Teles Memory IO isdn cards
  *              based on the teles driver from Jan den Ouden
@@ -13,6 +13,7 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isdnl1.h"
 #include "isac.h"
@@ -20,7 +21,7 @@
 
 extern const char *CardType[];
 
-const char *teles0_revision = "$Revision: 2.12 $";
+const char *teles0_revision = "$Revision: 2.13 $";
 
 #define TELES_IOMEM_SIZE	0x400
 #define byteout(addr,val) outb(val,addr)
@@ -260,8 +261,8 @@ Teles_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_teles0(struct IsdnCard *card))
+int __init
+setup_teles0(struct IsdnCard *card)
 {
 	u_char val;
 	struct IsdnCardState *cs = card->cs;

@@ -31,8 +31,18 @@
  * Revision 1.36.1.4  1995/03/29  06:14:14  bentson
  * disambiguate between Cyclom-16Y and Cyclom-32Ye;
  *
+ * Changes:
+ *
  * 200 lines of changes record removed - RGH 11-10-95, starting work on
  * converting this to drive serial ports on mvme166 (cd2401).
+ *
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 2000/08/25
+ * - get rid of verify_area
+ * - use get_user to access memory from userspace in set_threshold,
+ *   set_default_threshold and set_timeout
+ * - don't use the panic function in serial167_init
+ * - do resource release on failure on serial167_init
+ * - include missing restore_flags in mvme167_serial_console_setup
  */
 
 #include <linux/config.h>
@@ -67,17 +77,6 @@
 #include <linux/version.h>
 #include <asm/uaccess.h>
 #include <linux/init.h>
-
-#define cy_put_user	put_user
-
-static unsigned long cy_get_user(unsigned long *addr)
-{
-	unsigned long result = 0;
-	int error = get_user (result, addr);
-	if (error)
-		printk ("serial167: cy_get_user: error == %d\n", error);
-	return result;
-}
 
 #define SERIAL_PARANOIA_CHECK
 #undef  SERIAL_DEBUG_OPEN
@@ -1259,7 +1258,11 @@ cy_write(struct tty_struct * tty, int from_user,
 
 	if (from_user) {
 	    down(&tmp_buf_sem);
-	    copy_from_user(tmp_buf, buf, c);
+	    if (copy_from_user(tmp_buf, buf, c)) {
+	    	up(&tmp_buf_sem);
+	        restore_flags(flags);
+		return 0;
+	    }
 	    c = MIN(c, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
 		       SERIAL_XMIT_SIZE - info->xmit_head));
 	    memcpy(info->xmit_buf + info->xmit_head, tmp_buf, c);
@@ -1435,8 +1438,7 @@ get_serial_info(struct cyclades_port * info,
     tmp.close_delay = info->close_delay;
     tmp.custom_divisor = 0;     /*!!!*/
     tmp.hub6 = 0;               /*!!!*/
-    copy_to_user(retinfo,&tmp,sizeof(*retinfo));
-    return 0;
+    return copy_to_user(retinfo,&tmp,sizeof(*retinfo)) ? -EFAULT : 0;
 } /* get_serial_info */
 
 static int
@@ -1449,7 +1451,8 @@ set_serial_info(struct cyclades_port * info,
 /* CP('s'); */
     if (!new_info)
 	    return -EFAULT;
-    copy_from_user(&new_serial,new_info,sizeof(new_serial));
+    if (copy_from_user(&new_serial,new_info,sizeof(new_serial)))
+	    return -EFAULT;
     old_info = *info;
 
     if (!suser()) {
@@ -1503,8 +1506,7 @@ get_modem_info(struct cyclades_port * info, unsigned int *value)
             | ((status  & CyDCD) ? TIOCM_CAR : 0)
             | ((status  & CyDSR) ? TIOCM_DSR : 0)
             | ((status  & CyCTS) ? TIOCM_CTS : 0);
-    cy_put_user(result,(unsigned int *) value);
-    return 0;
+    return put_user(result,(unsigned int *) value);
 } /* get_modem_info */
 
 static int
@@ -1514,8 +1516,10 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
   int channel;
   volatile unsigned char *base_addr = (u_char *)BASE_ADDR;
   unsigned long flags;
-  unsigned int arg = cy_get_user((unsigned long *) value);
-
+  unsigned int arg;
+	  
+    if (get_user(arg, (unsigned long *) value))
+	return -EFAULT;
     channel = info->line;
 
     switch (cmd) {
@@ -1612,7 +1616,8 @@ static int
 get_mon_info(struct cyclades_port * info, struct cyclades_monitor * mon)
 {
 
-   copy_to_user(mon, &info->mon, sizeof(struct cyclades_monitor));
+   if (copy_to_user(mon, &info->mon, sizeof(struct cyclades_monitor)))
+	   return -EFAULT;
    info->mon.int_count  = 0;
    info->mon.char_count = 0;
    info->mon.char_max   = 0;
@@ -1621,13 +1626,16 @@ get_mon_info(struct cyclades_port * info, struct cyclades_monitor * mon)
 }
 
 static int
-set_threshold(struct cyclades_port * info, unsigned long value)
+set_threshold(struct cyclades_port * info, unsigned long *arg)
 {
    volatile unsigned char *base_addr = (u_char *)BASE_ADDR;
+   unsigned long value;
    int channel;
    
-   channel = info->line;
+   if (get_user(value, arg))
+	   return -EFAULT;
 
+   channel = info->line;
    info->cor4 &= ~CyREC_FIFO;
    info->cor4 |= value & CyREC_FIFO;
    base_addr[CyCOR4] = info->cor4;
@@ -1644,13 +1652,17 @@ get_threshold(struct cyclades_port * info, unsigned long *value)
    channel = info->line;
 
    tmp = base_addr[CyCOR4] & CyREC_FIFO;
-   cy_put_user(tmp,value);
-   return 0;
+   return put_user(tmp,value);
 }
 
 static int
-set_default_threshold(struct cyclades_port * info, unsigned long value)
+set_default_threshold(struct cyclades_port * info, unsigned long *arg)
 {
+   unsigned long value;
+
+   if (get_user(value, arg))
+	return -EFAULT;
+
    info->default_threshold = value & 0x0f;
    return 0;
 }
@@ -1658,15 +1670,18 @@ set_default_threshold(struct cyclades_port * info, unsigned long value)
 static int
 get_default_threshold(struct cyclades_port * info, unsigned long *value)
 {
-   cy_put_user(info->default_threshold,value);
-   return 0;
+   return put_user(info->default_threshold,value);
 }
 
 static int
-set_timeout(struct cyclades_port * info, unsigned long value)
+set_timeout(struct cyclades_port * info, unsigned long *arg)
 {
    volatile unsigned char *base_addr = (u_char *)BASE_ADDR;
    int channel;
+   unsigned long value;
+
+   if (get_user(value, arg))
+	   return -EFAULT;
    
    channel = info->line;
 
@@ -1685,8 +1700,7 @@ get_timeout(struct cyclades_port * info, unsigned long *value)
    channel = info->line;
 
    tmp = base_addr[CyRTPRL];
-   cy_put_user(tmp,value);
-   return 0;
+   return put_user(tmp,value);
 }
 
 static int
@@ -1699,15 +1713,14 @@ set_default_timeout(struct cyclades_port * info, unsigned long value)
 static int
 get_default_timeout(struct cyclades_port * info, unsigned long *value)
 {
-   cy_put_user(info->default_timeout,value);
-   return 0;
+   return put_user(info->default_timeout,value);
 }
 
 static int
 cy_ioctl(struct tty_struct *tty, struct file * file,
             unsigned int cmd, unsigned long arg)
 {
-  int error;
+  unsigned long val;
   struct cyclades_port * info = (struct cyclades_port *)tty->driver_data;
   int ret_val = 0;
 
@@ -1717,57 +1730,27 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
 
     switch (cmd) {
         case CYGETMON:
-            error = verify_area(VERIFY_WRITE, (void *) arg
-                                ,sizeof(struct cyclades_monitor));
-            if (error){
-                ret_val = error;
-                break;
-            }
             ret_val = get_mon_info(info, (struct cyclades_monitor *)arg);
 	    break;
         case CYGETTHRESH:
-            error = verify_area(VERIFY_WRITE, (void *) arg
-                                ,sizeof(unsigned long));
-            if (error){
-                ret_val = error;
-                break;
-            }
 	    ret_val = get_threshold(info, (unsigned long *)arg);
  	    break;
         case CYSETTHRESH:
-            ret_val = set_threshold(info, (unsigned long)arg);
+            ret_val = set_threshold(info, (unsigned long *)arg);
 	    break;
         case CYGETDEFTHRESH:
-            error = verify_area(VERIFY_WRITE, (void *) arg
-                                ,sizeof(unsigned long));
-            if (error){
-                ret_val = error;
-                break;
-            }
 	    ret_val = get_default_threshold(info, (unsigned long *)arg);
  	    break;
         case CYSETDEFTHRESH:
-            ret_val = set_default_threshold(info, (unsigned long)arg);
+            ret_val = set_default_threshold(info, (unsigned long *)arg);
 	    break;
         case CYGETTIMEOUT:
-            error = verify_area(VERIFY_WRITE, (void *) arg
-                                ,sizeof(unsigned long));
-            if (error){
-                ret_val = error;
-                break;
-            }
 	    ret_val = get_timeout(info, (unsigned long *)arg);
  	    break;
         case CYSETTIMEOUT:
-            ret_val = set_timeout(info, (unsigned long)arg);
+            ret_val = set_timeout(info, (unsigned long *)arg);
 	    break;
         case CYGETDEFTIMEOUT:
-            error = verify_area(VERIFY_WRITE, (void *) arg
-                                ,sizeof(unsigned long));
-            if (error){
-                ret_val = error;
-                break;
-            }
 	    ret_val = get_default_timeout(info, (unsigned long *)arg);
  	    break;
         case CYSETDEFTIMEOUT:
@@ -1776,7 +1759,7 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
         case TCSBRK:    /* SVID version: non-zero arg --> no break */
 	    ret_val = tty_check_change(tty);
 	    if (ret_val)
-		return ret_val;
+		    break;
             tty_wait_until_sent(tty,0);
             if (!arg)
                 send_break(info, HZ/4); /* 1/4 second */
@@ -1784,7 +1767,7 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
         case TCSBRKP:   /* support for POSIX tcsendbreak() */
 	    ret_val = tty_check_change(tty);
 	    if (ret_val)
-		return ret_val;
+		break;
             tty_wait_until_sent(tty,0);
             send_break(info, arg ? arg*(HZ/10) : HZ/4);
             break;
@@ -1796,46 +1779,20 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
 
 /* The following commands are incompletely implemented!!! */
         case TIOCGSOFTCAR:
-            error = verify_area(VERIFY_WRITE, (void *) arg
-                                ,sizeof(unsigned int *));
-            if (error){
-                ret_val = error;
-                break;
-            }
-            cy_put_user(C_CLOCAL(tty) ? 1 : 0,
-                        (unsigned long *) arg);
+            ret_val = put_user(C_CLOCAL(tty) ? 1 : 0, (unsigned long *) arg);
             break;
         case TIOCSSOFTCAR:
-	    error = verify_area(VERIFY_READ, (void *) arg
-				,sizeof(unsigned long *));
-            if (error){
-                ret_val = error;
-                break;
-            }
-
-            arg = cy_get_user((unsigned long *) arg);
+            ret_val = get_user(val, (unsigned long *) arg);
+	    if (ret_val)
+		    break;
             tty->termios->c_cflag =
-                    ((tty->termios->c_cflag & ~CLOCAL) |
-                     (arg ? CLOCAL : 0));
+                    ((tty->termios->c_cflag & ~CLOCAL) | (val ? CLOCAL : 0));
             break;
         case TIOCMGET:
-            error = verify_area(VERIFY_WRITE, (void *) arg
-                                ,sizeof(unsigned int *));
-            if (error){
-                ret_val = error;
-                break;
-            }
             ret_val = get_modem_info(info, (unsigned int *) arg);
             break;
         case TIOCGSERIAL:
-            error = verify_area(VERIFY_WRITE, (void *) arg
-                                ,sizeof(struct serial_struct));
-            if (error){
-                ret_val = error;
-                break;
-            }
-            ret_val = get_serial_info(info,
-                                   (struct serial_struct *) arg);
+            ret_val = get_serial_info(info, (struct serial_struct *) arg);
             break;
         case TIOCSSERIAL:
             ret_val = set_serial_info(info,
@@ -2288,6 +2245,7 @@ mvme167_serial_console_setup(int cflag)
 
         my_udelay(20000L);	/* Allow time for any active o/p to complete */
         if(base_addr[CyCCR] != 0x00){
+            restore_flags(flags);
             /* printk(" chip is never idle (CCR != 0)\n"); */
             return;
         }
@@ -2296,6 +2254,7 @@ mvme167_serial_console_setup(int cflag)
         my_udelay(1000L);
 
         if(base_addr[CyGFRCR] == 0x00){
+            restore_flags(flags);
             /* printk(" chip is not responding (GFRCR stayed 0)\n"); */
             return;
         }
@@ -2384,6 +2343,7 @@ int
 serial167_init(void)
 {
   struct cyclades_port *info;
+  int ret = 0;
   int good_ports = 0;
   int port_num = 0;
   int index;
@@ -2456,10 +2416,16 @@ scrn[1] = '\0';
     cy_callout_driver.major = TTYAUX_MAJOR;
     cy_callout_driver.subtype = SERIAL_TYPE_CALLOUT;
 
-    if (tty_register_driver(&cy_serial_driver))
-	    panic("Couldn't register Cyclom serial driver\n");
-    if (tty_register_driver(&cy_callout_driver))
-	    panic("Couldn't register Cyclom callout driver\n");
+    ret = tty_register_driver(&cy_serial_driver);
+    if (ret) {
+	    printk(KERN_ERR "Couldn't register MVME166/7 serial driver\n");
+	    return ret;
+    }
+    ret = tty_register_driver(&cy_callout_driver);
+    if (ret) {
+	    printk(KERN_ERR "Couldn't register MVME166/7 callout driver\n");
+	    goto cleanup_serial_driver;
+    }
 
     init_bh(CYCLADES_BH, do_cyclades_bh);
 
@@ -2529,16 +2495,32 @@ scrn[1] = '\0';
 #ifdef CONFIG_REMOTE_DEBUG
     debug_setup();
 #endif
-    if (request_irq (MVME167_IRQ_SER_ERR, cd2401_rxerr_interrupt, 0,
-				"cd2401_errors", cd2401_rxerr_interrupt) ||
-	request_irq (MVME167_IRQ_SER_MODEM, cd2401_modem_interrupt, 0,
-				"cd2401_modem", cd2401_modem_interrupt) ||
-	request_irq (MVME167_IRQ_SER_TX, cd2401_tx_interrupt, 0,
-				"cd2401_txints", cd2401_tx_interrupt) ||
-	request_irq (MVME167_IRQ_SER_RX, cd2401_rx_interrupt, 0,
-				"cd2401_rxints", cd2401_rx_interrupt))
-    {
-	panic ("Couldn't get serial IRQs");
+    ret = request_irq(MVME167_IRQ_SER_ERR, cd2401_rxerr_interrupt, 0,
+				"cd2401_errors", cd2401_rxerr_interrupt);
+    if (ret) {
+	    printk(KERN_ERR "Could't get cd2401_errors IRQ");
+	    goto cleanup_callout_driver;
+    }
+
+    ret = request_irq(MVME167_IRQ_SER_MODEM, cd2401_modem_interrupt, 0,
+				"cd2401_modem", cd2401_modem_interrupt);
+    if (ret) {
+	    printk(KERN_ERR "Could't get cd2401_modem IRQ");
+	    goto cleanup_irq_cd2401_errors;
+    }
+
+    ret = request_irq(MVME167_IRQ_SER_TX, cd2401_tx_interrupt, 0,
+				"cd2401_txints", cd2401_tx_interrupt);
+    if (ret) {
+	    printk(KERN_ERR "Could't get cd2401_txints IRQ");
+	    goto cleanup_irq_cd2401_modem;
+    }
+
+    ret = request_irq(MVME167_IRQ_SER_RX, cd2401_rx_interrupt, 0,
+				"cd2401_rxints", cd2401_rx_interrupt);
+    if (ret) {
+	    printk(KERN_ERR "Could't get cd2401_rxints IRQ");
+	    goto cleanup_irq_cd2401_txints;
     }
 
     /* Now we have registered the interrupt handlers, allow the interrupts */
@@ -2550,6 +2532,19 @@ scrn[1] = '\0';
     pcc2chip[PccIMLR] = 3;			/* Allow PCC2 ints above 3!? */
 
     return 0;
+cleanup_irq_cd2401_txints:
+    free_irq(MVME167_IRQ_SER_TX, cd2401_tx_interrupt);
+cleanup_irq_cd2401_modem:
+    free_irq(MVME167_IRQ_SER_MODEM, cd2401_modem_interrupt);
+cleanup_irq_cd2401_errors:
+    free_irq(MVME167_IRQ_SER_ERR, cd2401_rxerr_interrupt);
+cleanup_callout_driver:
+    if (tty_unregister_driver(&cy_callout_driver))
+	    printk(KERN_ERR "Couldn't unregister MVME166/7 callout driver\n");
+cleanup_serial_driver:
+    if (tty_unregister_driver(&cy_serial_driver))
+	    printk(KERN_ERR "Couldn't unregister MVME166/7 serial driver\n");
+    return ret;
 } /* serial167_init */
 
 

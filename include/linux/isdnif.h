@@ -1,4 +1,4 @@
-/* $Id: isdnif.h,v 1.35 2000/06/16 13:19:38 keil Exp $
+/* $Id: isdnif.h,v 1.37 2000/11/19 17:01:54 kai Exp $
 
  * Linux ISDN subsystem
  *
@@ -53,6 +53,7 @@
 #define ISDN_PROTO_L2_V11038 9   /* V.110 bitrate adaption 38400 Baud */
 #define ISDN_PROTO_L2_MODEM  10  /* Analog Modem on Board */
 #define ISDN_PROTO_L2_FAX    11  /* Fax Group 2/3         */
+#define ISDN_PROTO_L2_HDLC_56K 12   /* HDLC 56k                          */
 #define ISDN_PROTO_L2_MAX    15  /* Max. 16 Protocols                 */
 
 /*
@@ -253,6 +254,7 @@ typedef struct
 #define ISDN_FEATURE_L2_V11038  (0x0001 << ISDN_PROTO_L2_V11038)
 #define ISDN_FEATURE_L2_MODEM   (0x0001 << ISDN_PROTO_L2_MODEM)
 #define ISDN_FEATURE_L2_FAX	(0x0001 << ISDN_PROTO_L2_FAX)
+#define ISDN_FEATURE_L2_HDLC_56K (0x0001 << ISDN_PROTO_L2_HDLC_56K)
 
 #define ISDN_FEATURE_L2_MASK    (0x0FFFF) /* Max. 16 protocols */
 #define ISDN_FEATURE_L2_SHIFT   (0)

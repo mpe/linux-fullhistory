@@ -16,28 +16,33 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 
+#define K(a,b,c)	((a) << 24 | (b) << 12 | (c))
+
+/*
+ * We place the page tables 16K below TEXTADDR.  Therefore, we must make sure
+ * that TEXTADDR is correctly set.  Currently, we expect the least significant
+ * "short" to be 0x8000, but we could probably relax this restriction to
+ * TEXTADDR > PAGE_OFFSET + 0x4000
+ *
+ * Note that swapper_pg_dir is the virtual address of the page tables, and
+ * pgtbl gives us a position-independent reference to these tables.  We can
+ * do this because stext == TEXT_ADDR
+ */
 #if (TEXTADDR & 0xffff) != 0x8000
 #error TEXTADDR must start at 0xXXXX8000
 #endif
 
-#define K(a,b,c)	((a) << 24 | (b) << 12 | (c))
-
-/*
- * swapper_pg_dir is the virtual address of the "init_task" page tables.
- * SWAPPER_PGDIR_OFFSET is the offset from the start of memory of the
- * page tables.
- *
- * Note that at the moment, we assume TEXTADDR is the virtual equivalent
- * of start of memory + 0x8000
- */
-#define SWAPPER_PGDIR_OFFSET	0x4000
 		.globl	SYMBOL_NAME(swapper_pg_dir)
-		.equ	SYMBOL_NAME(swapper_pg_dir),	TEXTADDR - 0x8000 + SWAPPER_PGDIR_OFFSET
+		.equ	SYMBOL_NAME(swapper_pg_dir), TEXTADDR - 0x4000
+
+		.macro	pgtbl, reg
+		adr	\reg, stext
+		sub	\reg, \reg, #0x4000
+		.endm
 
 		.section ".text.init",#alloc,#execinstr
 		.type	stext, #function
 ENTRY(stext)
-ENTRY(_stext)
 /*
  * Entry point.  The general rules are:
  *  should be called with r0 == 0
@@ -185,7 +190,7 @@ __mmap_switched:
  * r8 = page table flags
  */
 __create_page_tables:
-		add	r4, r5, #SWAPPER_PGDIR_OFFSET
+		pgtbl	r4
 		mov	r0, r4
 		mov	r3, #0
 		add	r2, r0, #0x4000			@ 16k of page table

@@ -1,4 +1,4 @@
-// $Id: icc.c,v 1.3 2000/08/20 07:34:04 keil Exp $
+// $Id: icc.c,v 1.5 2000/11/24 17:05:37 kai Exp $
 //-----------------------------------------------------------------------------
 //
 // ICC specific routines
@@ -15,6 +15,7 @@
 //-----------------------------------------------------------------------------
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "icc.h"
 // #include "arcofi.h"
@@ -24,7 +25,7 @@
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 0
 
-static char *ICCVer[] HISAX_INITDATA =
+static char *ICCVer[] __initdata =
 {"2070 A1/A3", "2070 B1", "2070 B2/B3", "2070 V2.4"};
 
 void
@@ -622,8 +623,8 @@ dbusy_timer_handler(struct IsdnCardState *cs)
 	}
 }
 
-HISAX_INITFUNC(void
-initicc(struct IsdnCardState *cs))
+void __init
+initicc(struct IsdnCardState *cs)
 {
 	cs->tqueue.routine = (void *) (void *) icc_bh;
 	cs->setstack_d = setstack_icc;
@@ -659,8 +660,8 @@ initicc(struct IsdnCardState *cs))
 	ph_command(cs, ICC_CMD_DI);
 }
 
-HISAX_INITFUNC(void
-clear_pending_icc_ints(struct IsdnCardState *cs))
+void __init
+clear_pending_icc_ints(struct IsdnCardState *cs)
 {
 	int val, eval;
 

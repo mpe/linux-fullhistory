@@ -1,4 +1,4 @@
-/* $Id: hfc_2bs0.c,v 1.15 2000/07/26 20:46:47 keil Exp $
+/* $Id: hfc_2bs0.c,v 1.17 2000/11/24 17:05:37 kai Exp $
  *
  *  specific routines for CCD's HFC 2BS0
  *
@@ -9,6 +9,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "hfc_2bs0.h"
 #include "isac.h"
@@ -570,8 +571,8 @@ setstack_hfc(struct PStack *st, struct BCState *bcs)
 	return (0);
 }
 
-__initfunc(void
-init_send(struct BCState *bcs))
+void __init
+init_send(struct BCState *bcs)
 {
 	int i;
 
@@ -584,8 +585,8 @@ init_send(struct BCState *bcs))
 		bcs->hw.hfc.send[i] = 0x1fff;
 }
 
-__initfunc(void
-inithfc(struct IsdnCardState *cs))
+void __init
+inithfc(struct IsdnCardState *cs)
 {
 	init_send(&cs->bcs[0]);
 	init_send(&cs->bcs[1]);

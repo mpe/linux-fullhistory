@@ -1,4 +1,4 @@
-/* $Id: isurf.c,v 1.9 2000/06/26 08:59:13 keil Exp $
+/* $Id: isurf.c,v 1.10 2000/11/24 17:05:38 kai Exp $
  *
  * isurf.c  low level stuff for Siemens I-Surf/I-Talk cards
  *
@@ -9,6 +9,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "isar.h"
@@ -16,7 +17,7 @@
 
 extern const char *CardType[];
 
-static const char *ISurf_revision = "$Revision: 1.9 $";
+static const char *ISurf_revision = "$Revision: 1.10 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -190,8 +191,8 @@ isurf_auxcmd(struct IsdnCardState *cs, isdn_ctrl *ic) {
 	return(isar_auxcmd(cs, ic));
 }
 
-__initfunc(int
-setup_isurf(struct IsdnCard *card))
+int __init
+setup_isurf(struct IsdnCard *card)
 {
 	int ver;
 	struct IsdnCardState *cs = card->cs;

@@ -45,14 +45,14 @@ static int check_bread = 0;
 
 static int isofs_hashi(struct dentry *parent, struct qstr *qstr);
 static int isofs_hash(struct dentry *parent, struct qstr *qstr);
-static int isofs_cmpi(struct dentry *dentry, struct qstr *a, struct qstr *b);
-static int isofs_cmp(struct dentry *dentry, struct qstr *a, struct qstr *b);
+static int isofs_dentry_cmpi(struct dentry *dentry, struct qstr *a, struct qstr *b);
+static int isofs_dentry_cmp(struct dentry *dentry, struct qstr *a, struct qstr *b);
 
 #ifdef CONFIG_JOLIET
 static int isofs_hashi_ms(struct dentry *parent, struct qstr *qstr);
 static int isofs_hash_ms(struct dentry *parent, struct qstr *qstr);
-static int isofs_cmpi_ms(struct dentry *dentry, struct qstr *a, struct qstr *b);
-static int isofs_cmp_ms(struct dentry *dentry, struct qstr *a, struct qstr *b);
+static int isofs_dentry_cmpi_ms(struct dentry *dentry, struct qstr *a, struct qstr *b);
+static int isofs_dentry_cmp_ms(struct dentry *dentry, struct qstr *a, struct qstr *b);
 #endif
 
 static void isofs_put_super(struct super_block *sb)
@@ -84,20 +84,20 @@ static struct super_operations isofs_sops = {
 static struct dentry_operations isofs_dentry_ops[] = {
 	{
 		d_hash:		isofs_hash,
-		d_compare:	isofs_cmp,
+		d_compare:	isofs_dentry_cmp,
 	},
 	{
 		d_hash:		isofs_hashi,
-		d_compare:	isofs_cmpi,
+		d_compare:	isofs_dentry_cmpi,
 	},
 #ifdef CONFIG_JOLIET
 	{
 		d_hash:		isofs_hash_ms,
-		d_compare:	isofs_cmp_ms,
+		d_compare:	isofs_dentry_cmp_ms,
 	},
 	{
 		d_hash:		isofs_hashi_ms,
-		d_compare:	isofs_cmpi_ms,
+		d_compare:	isofs_dentry_cmpi_ms,
 	}
 #endif
 };
@@ -173,7 +173,7 @@ isofs_hashi_common(struct dentry *dentry, struct qstr *qstr, int ms)
  * Case insensitive compare of two isofs names.
  */
 static int
-isofs_cmpi_common(struct dentry *dentry,struct qstr *a,struct qstr *b,int ms)
+isofs_dentry_cmpi_common(struct dentry *dentry,struct qstr *a,struct qstr *b,int ms)
 {
 	int alen, blen;
 
@@ -197,7 +197,7 @@ isofs_cmpi_common(struct dentry *dentry,struct qstr *a,struct qstr *b,int ms)
  * Case sensitive compare of two isofs names.
  */
 static int
-isofs_cmp_common(struct dentry *dentry,struct qstr *a,struct qstr *b,int ms)
+isofs_dentry_cmp_common(struct dentry *dentry,struct qstr *a,struct qstr *b,int ms)
 {
 	int alen, blen;
 
@@ -230,15 +230,15 @@ isofs_hashi(struct dentry *dentry, struct qstr *qstr)
 }
 
 static int
-isofs_cmp(struct dentry *dentry,struct qstr *a,struct qstr *b)
+isofs_dentry_cmp(struct dentry *dentry,struct qstr *a,struct qstr *b)
 {
-	return isofs_cmp_common(dentry, a, b, 0);
+	return isofs_dentry_cmp_common(dentry, a, b, 0);
 }
 
 static int
-isofs_cmpi(struct dentry *dentry,struct qstr *a,struct qstr *b)
+isofs_dentry_cmpi(struct dentry *dentry,struct qstr *a,struct qstr *b)
 {
-	return isofs_cmpi_common(dentry, a, b, 0);
+	return isofs_dentry_cmpi_common(dentry, a, b, 0);
 }
 
 #ifdef CONFIG_JOLIET
@@ -255,15 +255,15 @@ isofs_hashi_ms(struct dentry *dentry, struct qstr *qstr)
 }
 
 static int
-isofs_cmp_ms(struct dentry *dentry,struct qstr *a,struct qstr *b)
+isofs_dentry_cmp_ms(struct dentry *dentry,struct qstr *a,struct qstr *b)
 {
-	return isofs_cmp_common(dentry, a, b, 1);
+	return isofs_dentry_cmp_common(dentry, a, b, 1);
 }
 
 static int
-isofs_cmpi_ms(struct dentry *dentry,struct qstr *a,struct qstr *b)
+isofs_dentry_cmpi_ms(struct dentry *dentry,struct qstr *a,struct qstr *b)
 {
-	return isofs_cmpi_common(dentry, a, b, 1);
+	return isofs_dentry_cmpi_common(dentry, a, b, 1);
 }
 #endif
 
@@ -500,15 +500,13 @@ static struct super_block *isofs_read_super(struct super_block *s, void *data,
  	 * that value.
  	 */
  	blocksize = get_hardblocksize(dev);
- 	if(    (blocksize != 0)
- 	    && (blocksize > opt.blocksize) )
- 	  {
+ 	if(blocksize > opt.blocksize) {
  	    /*
  	     * Force the blocksize we are going to use to be the
  	     * hardware blocksize.
  	     */
  	    opt.blocksize = blocksize;
- 	  }
+	}
  
 	blocksize_bits = 0;
 	{
@@ -605,9 +603,8 @@ static struct super_block *isofs_read_super(struct super_block *s, void *data,
 	pri_bh = NULL;
 
 root_found:
-	brelse(pri_bh);
 
-	if (joliet_level && opt.rock == 'n') {
+	if (joliet_level && (pri == NULL || opt.rock == 'n')) {
 	    /* This is the case of Joliet with the norock mount flag.
 	     * A disc with both Joliet and Rock Ridge is handled later
 	     */
@@ -704,6 +701,7 @@ root_found:
 	 * We're all done using the volume descriptor, and may need
 	 * to change the device blocksize, so release the buffer now.
 	 */
+	brelse(pri_bh);
 	brelse(bh);
 
 	/*
@@ -873,7 +871,7 @@ static int isofs_statfs (struct super_block *sb, struct statfs *buf)
 /* Life is simpler than for other filesystem since we never
  * have to create a new block, only find an existing one.
  */
-int isofs_get_block(struct inode *inode, long iblock,
+static int isofs_get_block(struct inode *inode, long iblock,
 		    struct buffer_head *bh_result, int create)
 {
 	unsigned long b_off;
@@ -940,26 +938,26 @@ abort:
 	return err;
 
 abort_create_attempted:
-	printk("_isofs_bmap: Kernel tries to allocate a block\n");
+	printk("isofs_get_block: Kernel tries to allocate a block\n");
 	goto abort;
 
 abort_negative:
-	printk("_isofs_bmap: block < 0\n");
+	printk("isofs_get_block: block < 0\n");
 	goto abort;
 
 abort_beyond_end:
-	printk("_isofs_bmap: block >= EOF (%ld, %ld)\n",
+	printk("isofs_get_block: block >= EOF (%ld, %ld)\n",
 	       iblock, (unsigned long) inode->i_size);
 	goto abort;
 
 abort_too_many_sections:
-	printk("isofs_bmap: More than 100 file sections ?!?, aborting...\n");
-	printk("isofs_bmap: ino=%lu block=%ld firstext=%u sect_size=%u nextino=%lu\n",
+	printk("isofs_get_block: More than 100 file sections ?!?, aborting...\n");
+	printk("isofs_get_block: ino=%lu block=%ld firstext=%u sect_size=%u nextino=%lu\n",
 	       inode->i_ino, iblock, firstext, (unsigned) sect_size, nextino);
 	goto abort;
 }
 
-int isofs_bmap(struct inode *inode, int block)
+static int isofs_bmap(struct inode *inode, int block)
 {
 	struct buffer_head dummy;
 	int error;

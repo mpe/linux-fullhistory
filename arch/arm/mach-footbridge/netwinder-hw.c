@@ -65,9 +65,9 @@ static inline void wb977_ww(int reg, int val)
  */
 spinlock_t gpio_lock = SPIN_LOCK_UNLOCKED;
 
-static unsigned int current_gpio_op = 0;
-static unsigned int current_gpio_io = 0;
-static unsigned int current_cpld = 0;
+static unsigned int current_gpio_op;
+static unsigned int current_gpio_io;
+static unsigned int current_cpld;
 
 void gpio_modify_op(int mask, int set)
 {

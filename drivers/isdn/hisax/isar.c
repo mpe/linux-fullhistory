@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.15 2000/06/26 08:59:13 keil Exp $
+/* $Id: isar.c,v 1.17 2000/11/24 17:05:37 kai Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -9,6 +9,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isar.h"
 #include "isdnl1.h"
@@ -1782,8 +1783,8 @@ isar_auxcmd(struct IsdnCardState *cs, isdn_ctrl *ic) {
 	return(0);
 }
 
-HISAX_INITFUNC(void 
-initisar(struct IsdnCardState *cs))
+void __devinit
+initisar(struct IsdnCardState *cs)
 {
 	cs->bcs[0].BC_SetStack = setstack_isar;
 	cs->bcs[1].BC_SetStack = setstack_isar;

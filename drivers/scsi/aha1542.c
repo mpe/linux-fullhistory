@@ -1416,6 +1416,7 @@ int aha1542_dev_reset(Scsi_Cmnd * SCpnt)
 			SCtmp = HOSTDATA(SCpnt->host)->SCint[i];
 			if (SCtmp->host_scribble) {
 				scsi_free(SCtmp->host_scribble, 512);
+				SCtmp->host_scribble = NULL;
 			}
 			HOSTDATA(SCpnt->host)->SCint[i] = NULL;
 			HOSTDATA(SCpnt->host)->mb[i].status = 0;
@@ -1478,6 +1479,7 @@ int aha1542_bus_reset(Scsi_Cmnd * SCpnt)
 			}
 			if (SCtmp->host_scribble) {
 				scsi_free(SCtmp->host_scribble, 512);
+				SCtmp->host_scribble = NULL;
 			}
 			HOSTDATA(SCpnt->host)->SCint[i] = NULL;
 			HOSTDATA(SCpnt->host)->mb[i].status = 0;
@@ -1546,6 +1548,7 @@ int aha1542_host_reset(Scsi_Cmnd * SCpnt)
 			}
 			if (SCtmp->host_scribble) {
 				scsi_free(SCtmp->host_scribble, 512);
+				SCtmp->host_scribble = NULL;
 			}
 			HOSTDATA(SCpnt->host)->SCint[i] = NULL;
 			HOSTDATA(SCpnt->host)->mb[i].status = 0;
@@ -1681,8 +1684,10 @@ int aha1542_old_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 				Scsi_Cmnd *SCtmp;
 				SCtmp = HOSTDATA(SCpnt->host)->SCint[i];
 				SCtmp->result = DID_RESET << 16;
-				if (SCtmp->host_scribble)
+				if (SCtmp->host_scribble) {
 					scsi_free(SCtmp->host_scribble, 512);
+					SCtmp->host_scribble = NULL;
+				}
 				printk(KERN_WARNING "Sending DID_RESET for target %d\n", SCpnt->target);
 				SCtmp->scsi_done(SCpnt);
 
@@ -1725,8 +1730,10 @@ fail:
 						Scsi_Cmnd *SCtmp;
 						SCtmp = HOSTDATA(SCpnt->host)->SCint[i];
 						SCtmp->result = DID_RESET << 16;
-						if (SCtmp->host_scribble)
+						if (SCtmp->host_scribble) {
 							scsi_free(SCtmp->host_scribble, 512);
+							SCtmp->host_scribble = NULL;
+						}
 						printk(KERN_WARNING "Sending DID_RESET for target %d\n", SCpnt->target);
 						SCtmp->scsi_done(SCpnt);
 

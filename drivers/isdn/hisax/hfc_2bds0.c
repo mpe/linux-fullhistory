@@ -1,4 +1,4 @@
-/* $Id: hfc_2bds0.c,v 1.13 2000/06/26 08:59:12 keil Exp $
+/* $Id: hfc_2bds0.c,v 1.15 2000/11/24 17:05:37 kai Exp $
  *
  *  specific routines for CCD's HFC 2BDS0
  *
@@ -8,6 +8,7 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "hfc_2bds0.h"
 #include "isdnl1.h"
@@ -1104,8 +1105,8 @@ hfc_dbusy_timer(struct IsdnCardState *cs)
 {
 }
 
-__initfunc(unsigned int
-*init_send_hfcd(int cnt))
+unsigned int __init
+*init_send_hfcd(int cnt)
 {
 	int i, *send;
 
@@ -1119,8 +1120,8 @@ __initfunc(unsigned int
 	return(send);
 }
 
-__initfunc(void
-init2bds0(struct IsdnCardState *cs))
+void __init
+init2bds0(struct IsdnCardState *cs)
 {
 	cs->setstack_d = setstack_hfcd;
 	cs->dbusytimer.function = (void *) hfc_dbusy_timer;

@@ -9,6 +9,7 @@ SECTIONS
 	. = TEXTADDR;
 
 	.init : {
+		_stext = .;
 		__init_begin = .;	/* Init code and data		*/
 			*(.text.init)
 		__proc_info_begin = .;

@@ -113,6 +113,46 @@ parport_atari_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static void
+parport_atari_enable_irq(struct parport *p)
+{
+	enable_irq(IRQ_MFP_BUSY);
+}
+
+static void
+parport_atari_disable_irq(struct parport *p)
+{
+	disable_irq(IRQ_MFP_BUSY);
+}
+
+static void
+parport_atari_data_forward(struct parport *p)
+{
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	/* Soundchip port B as output. */
+	sound_ym.rd_data_reg_sel = 7;
+	sound_ym.wd_data = sound_ym.rd_data_reg_sel | 0x40;
+	restore_flags(flags);
+}
+
+static void
+parport_atari_data_reverse(struct parport *p)
+{
+#if 0 /* too dangerous, can kill sound chip */
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	/* Soundchip port B as input. */
+	sound_ym.rd_data_reg_sel = 7;
+	sound_ym.wd_data = sound_ym.rd_data_reg_sel & ~0x40;
+	restore_flags(flags);
+#endif
+}
+
+static void
 parport_atari_inc_use_count(void)
 {
 	MOD_INC_USE_COUNT;
@@ -134,11 +174,11 @@ static struct parport_operations parport_atari_ops = {
 
 	parport_atari_read_status,
 
-	NULL, /* enable_irq - FIXME */
-	NULL, /* disable_irq - FIXME */
+	parport_atari_enable_irq,
+	parport_atari_disable_irq,
 
-	NULL, /* data_forward - FIXME */
-	NULL, /* data_reverse - FIXME */
+	parport_atari_data_forward,
+	parport_atari_data_reverse,
 
 	parport_atari_init_state,
 	parport_atari_save_state,
@@ -147,18 +187,18 @@ static struct parport_operations parport_atari_ops = {
 	parport_atari_inc_use_count,
 	parport_atari_dec_use_count,
 
-	NULL, /* epp_write_data */
-	NULL, /* epp_read_data */
-	NULL, /* epp_write_addr */
-	NULL, /* epp_read_addr */
+	parport_ieee1284_epp_write_data,
+	parport_ieee1284_epp_read_data,
+	parport_ieee1284_epp_write_addr,
+	parport_ieee1284_epp_read_addr,
 
-	NULL, /* ecp_write_data */
-	NULL, /* ecp_read_data */
-	NULL, /* ecp_write_addr */
+	parport_ieee1284_ecp_write_data,
+	parport_ieee1284_ecp_read_data,
+	parport_ieee1284_ecp_write_addr,
 
-	NULL, /* compat_write_data */
-	NULL, /* nibble_read_data */
-	NULL, /* byte_read_data */
+	parport_ieee1284_write_compat,
+	parport_ieee1284_read_nibble,
+	parport_ieee1284_read_byte,
 };
 
 

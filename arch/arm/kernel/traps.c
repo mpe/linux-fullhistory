@@ -31,6 +31,7 @@
 #include "ptrace.h"
 
 extern void c_backtrace (unsigned long fp, int pmode);
+extern void show_pte(struct mm_struct *mm, unsigned long addr);
 
 const char *processor_modes[]=
 { "USER_26", "FIQ_26" , "IRQ_26" , "SVC_26" , "UK4_26" , "UK5_26" , "UK6_26" , "UK7_26" ,
@@ -72,10 +73,14 @@ void dump_mem(unsigned long bottom, unsigned long top)
 		printk("%08lx: ", p);
 
 		for (i = 0; i < 8; i++, p += 4) {
+			unsigned int val;
+
 			if (p < bottom || p >= top)
 				printk("         ");
-			else
-				printk("%08lx ", *(unsigned long *)p);
+			else {
+				__get_user(val, (unsigned long *)p);
+				printk("%08x ", val);
+			}
 			if (i == 3)
 				printk(" ");
 		}
@@ -91,45 +96,57 @@ void dump_mem(unsigned long bottom, unsigned long top)
 #define VMALLOC_OFFSET (8*1024*1024)
 #define MODULE_RANGE (8*1024*1024)
 
-static void dump_instr(unsigned long pc, int user)
+static void dump_instr(struct pt_regs *regs)
 {
-	int pmin = -2, pmax = 3, ok = 0;
-	extern char start_kernel, _etext;
+	unsigned long addr = instruction_pointer(regs);
+	const int thumb = thumb_mode(regs);
+	const int width = thumb ? 4 : 8;
+	int i;
 
-	if (!user) {
-		unsigned long module_start, module_end;
-		unsigned long kernel_start, kernel_end;
+	printk("Code: ");
+	for (i = -2; i < 3; i++) {
+		unsigned int val, bad;
 
-		module_start = VMALLOC_START;
-		module_end   = module_start + MODULE_RANGE;
+		if (thumb)
+			bad = __get_user(val, &((u16 *)addr)[i]);
+		else
+			bad = __get_user(val, &((u32 *)addr)[i]);
 
-		kernel_start = (unsigned long)&start_kernel;
-		kernel_end   = (unsigned long)&_etext;
-
-		if (pc >= kernel_start && pc < kernel_end) {
-			if (pc + pmin < kernel_start)
-				pmin = kernel_start - pc;
-			if (pc + pmax > kernel_end)
-				pmax = kernel_end - pc;
-			ok = 1;
-		} else if (pc >= module_start && pc < module_end) {
-			if (pc + pmin < module_start)
-				pmin = module_start - pc;
-			if (pc + pmax > module_end)
-				pmax = module_end - pc;
-			ok = 1;
+		if (!bad)
+			printk(i == 0 ? "(%0*x) " : "%0*x", width, val);
+		else {
+			printk("bad PC value.");
+			break;
 		}
-	} else
-		ok = verify_area(VERIFY_READ, (void *)(pc + pmin), pmax - pmin) == 0;
+	}
+	printk("\n");
+}
 
-	printk ("Code: ");
-	if (ok) {
-		int i;
-		for (i = pmin; i < pmax; i++)
-			printk(i == 0 ? "(%08lx) " : "%08lx ", ((unsigned long *)pc)[i]);
-		printk ("\n");
-	} else
-		printk ("pc not in code space\n");
+static void dump_stack(struct task_struct *tsk, unsigned long sp)
+{
+	printk("Stack:\n");
+	dump_mem(sp - 16, 8192+(unsigned long)tsk);
+}
+
+static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
+{
+	unsigned int fp;
+	int ok = 1;
+
+	printk("Backtrace: ");
+	fp = regs->ARM_fp;
+	if (!fp) {
+		printk("no frame pointer");
+		ok = 0;
+	} else if (verify_stack(fp)) {
+		printk("invalid frame pointer %08lx", fp);
+		ok = 0;
+	} else if (fp < 4096+(unsigned long)tsk)
+		printk("frame pointer underflow");
+	printk("\n");
+
+	if (ok)
+		c_backtrace(fp, processor_mode(regs));
 }
 
 spinlock_t die_lock = SPIN_LOCK_UNLOCKED;
@@ -141,9 +158,9 @@ void die(const char *str, struct pt_regs *regs, int err)
 {
 	struct task_struct *tsk = current;
 
+	console_verbose();
 	spin_lock_irq(&die_lock);
 
-	console_verbose();
 	printk("Internal error: %s: %x\n", str, err);
 	printk("CPU: %d\n", smp_processor_id());
 	show_regs(regs);
@@ -151,39 +168,22 @@ void die(const char *str, struct pt_regs *regs, int err)
 		current->comm, current->pid, 4096+(unsigned long)tsk);
 
 	if (!user_mode(regs)) {
-		unsigned long sp = (unsigned long)(regs + 1);
-		unsigned long fp;
-		int dump_info = 1;
+		mm_segment_t fs;
 
-		printk("Stack: ");
-		if (verify_stack(sp)) {
-			printk("invalid kernel stack pointer %08lx", sp);
-			dump_info = 0;
-		} else if (sp < 4096+(unsigned long)tsk)
-			printk("kernel stack pointer underflow");
-		printk("\n");
+		/*
+		 * We need to switch to kernel mode so that we can
+		 * use __get_user to safely read from kernel space.
+		 * Note that we now dump the code first, just in case
+		 * the backtrace kills us.
+		 */
+		fs = get_fs();
+		set_fs(KERNEL_DS);
 
-		if (dump_info)
-			dump_mem(sp - 16, 8192+(unsigned long)tsk);
+		dump_instr(regs);
+		dump_stack(tsk, (unsigned long)(regs + 1));
+		dump_backtrace(regs, tsk);
 
-		dump_info = 1;
-
-		printk("Backtrace: ");
-		fp = regs->ARM_fp;
-		if (!fp) {
-			printk("no frame pointer");
-			dump_info = 0;
-		} else if (verify_stack(fp)) {
-			printk("invalid frame pointer %08lx", fp);
-			dump_info = 0;
-		} else if (fp < 4096+(unsigned long)tsk)
-			printk("frame pointer underflow");
-		printk("\n");
-
-		if (dump_info)
-			c_backtrace(fp, processor_mode(regs));
-
-		dump_instr(instruction_pointer(regs), 0);
+		set_fs(fs);
 	}
 
 	spin_unlock_irq(&die_lock);
@@ -206,6 +206,7 @@ asmlinkage void do_undefinstr(int address, struct pt_regs *regs, int mode)
 #ifdef CONFIG_DEBUG_USER
 	printk(KERN_INFO "%s (%d): undefined instruction: pc=%08lx\n",
 		current->comm, current->pid, addr);
+	dump_instr(regs);
 #endif
 
 	current->thread.error_code = 0;
@@ -228,6 +229,7 @@ asmlinkage void do_excpt(int address, struct pt_regs *regs, int mode)
 #ifdef CONFIG_DEBUG_USER
 	printk(KERN_INFO "%s (%d): address exception: pc=%08lx\n",
 		current->comm, current->pid, instruction_pointer(regs));
+	dump_instr(regs);
 #endif
 
 	current->thread.error_code = 0;
@@ -275,7 +277,7 @@ asmlinkage void bad_mode(struct pt_regs *regs, int reason, int proc_mode)
 
 	die("Oops", regs, 0);
 	cli();
-	while(1);
+	panic("bad mode");
 }
 
 /*
@@ -332,6 +334,7 @@ asmlinkage int arm_syscall(int no, struct pt_regs *regs)
 		 * something catastrophic has happened
 		 */
 		printk("[%d] %s: arm syscall %d\n", current->pid, current->comm, no);
+		dump_instr(regs);
 		if (user_mode(regs)) {
 			show_regs(regs);
 			c_backtrace(regs->ARM_fp, processor_mode(regs));
@@ -359,8 +362,9 @@ asmlinkage void deferred(int n, struct pt_regs *regs)
 	}
 
 #ifdef CONFIG_DEBUG_USER
-	printk(KERN_ERR "[%d] %s: obsolete system call %08x.\n", current->pid, 
-	       current->comm, n);
+	printk(KERN_ERR "[%d] %s: obsolete system call %08x.\n",
+		current->pid, current->comm, n);
+	dump_instr(regs);
 #endif
 	force_sig(SIGILL, current);
 	die_if_kernel("Oops", regs, n);
@@ -384,21 +388,10 @@ baddataabort(int code, unsigned long instr, struct pt_regs *regs)
 	siginfo_t info;
 
 #ifdef CONFIG_DEBUG_USER
-	dump_instr(addr, 1);
-	{
-		pgd_t *pgd;
-
-		pgd = pgd_offset(current->mm, addr);
-		printk ("*pgd = %08lx", pgd_val (*pgd));
-		if (!pgd_none (*pgd)) {
-			pmd_t *pmd;
-			pmd = pmd_offset (pgd, addr);
-			printk (", *pmd = %08lx", pmd_val (*pmd));
-			if (!pmd_none (*pmd))
-				printk (", *pte = %08lx", pte_val(*pte_offset (pmd, addr)));
-		}
-		printk ("\n");
-	}
+	printk(KERN_ERR "[%d] %s: bad data abort: code %d instr 0x%08lx\n",
+		current->pid, current->comm, code, instr);
+	dump_instr(regs);
+	show_pte(current->mm, addr);
 #endif
 
 	info.si_signo = SIGILL;

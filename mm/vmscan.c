@@ -91,6 +91,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	 */
 	if (PageSwapCache(page)) {
 		entry.val = page->index;
+set_swap_pte:
 		swap_duplicate(entry);
 		set_pte(page_table, swp_entry_to_pte(entry));
 drop_pte:
@@ -99,7 +100,8 @@ drop_pte:
 		flush_tlb_page(vma, address);
 		deactivate_page(page);
 		page_cache_release(page);
-		goto out_failed;
+out_failed:
+		return 0;
 	}
 
 	/*
@@ -185,31 +187,14 @@ drop_pte:
 	if (!entry.val)
 		goto out_unlock_restore; /* No swap space left */
 
-	/* Make sure to flush the TLB _before_ we start copying things.. */
-	flush_tlb_page(vma, address);
-	if (!(page = prepare_highmem_swapout(page)))
-		goto out_swap_free;
-
-	swap_duplicate(entry);	/* One for the process, one for the swap cache */
-
-	/* Add it to the swap cache */
+	/* Add it to the swap cache and mark it dirty */
 	add_to_swap_cache(page, entry);
-
-	/* Put the swap entry into the pte after the page is in swapcache */
-	mm->rss--;
-	set_pte(page_table, swp_entry_to_pte(entry));
-	spin_unlock(&mm->page_table_lock);
-
-	/* OK, do a physical asynchronous write to swap.  */
-	rw_swap_page(WRITE, page, 0);
-	deactivate_page(page);
+	SetPageDirty(page);
+	goto set_swap_pte;
 
 out_free_success:
 	page_cache_release(page);
 	return 1;
-out_swap_free:
-	set_pte(page_table, pte);
-	swap_free(entry);
 out_failed:
 	return 0;
 out_unlock_restore:
@@ -616,6 +601,35 @@ dirty_page_rescan:
 		}
 
 		/*
+		 * Dirty swap-cache page? Write it out if
+		 * last copy..
+		 */
+		if (PageDirty(page)) {
+			int (*writepage)(struct file *, struct page *) = page->mapping->a_ops->writepage;
+			if (!writepage)
+				goto page_active;
+
+			/* Can't start IO? Move it to the back of the list */
+			if (!can_get_io_locks) {
+				list_del(page_lru);
+				list_add(page_lru, &inactive_dirty_list);
+				UnlockPage(page);
+				continue;
+			}
+
+			/* OK, do a physical asynchronous write to swap.  */
+			ClearPageDirty(page);
+			page_cache_get(page);
+			spin_unlock(&pagemap_lru_lock);
+
+			writepage(NULL, page);
+			page_cache_release(page);
+
+			/* And re-start the thing.. */
+			goto dirty_page_rescan;
+		}
+
+		/*
 		 * If the page has buffers, try to free the buffer mappings
 		 * associated with this page. If we succeed we either free
 		 * the page (in case it was a buffercache only page) or we
@@ -701,6 +715,7 @@ dirty_page_rescan:
 			UnlockPage(page);
 			cleaned_pages++;
 		} else {
+page_active:
 			/*
 			 * OK, we don't know what to do with the page.
 			 * It's no use keeping it here, so we move it to

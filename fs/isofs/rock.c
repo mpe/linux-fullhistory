@@ -152,6 +152,7 @@ int find_rock_ridge_relocation(struct iso_directory_record * de,
   return retval;
 }
 
+/* return length of name field; 0: not found, -1: to be ignored */
 int get_rock_ridge_filename(struct iso_directory_record * de,
 			    char * retname, struct inode * inode)
 {
@@ -215,7 +216,7 @@ int get_rock_ridge_filename(struct iso_directory_record * de,
 	printk("RR: RE (%x)\n", inode->i_ino);
 #endif
 	if (buffer) kfree(buffer);
-	return 0;
+	return -1;
       default:
 	break;
       }

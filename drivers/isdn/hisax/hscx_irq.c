@@ -1,4 +1,4 @@
-/* $Id: hscx_irq.c,v 1.15 2000/06/26 08:59:13 keil Exp $
+/* $Id: hscx_irq.c,v 1.16 2000/11/19 17:02:47 kai Exp $
  *
  * hscx_irq.c     low level b-channel stuff for Siemens HSCX
  *

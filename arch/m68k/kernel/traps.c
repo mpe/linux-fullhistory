@@ -5,6 +5,7 @@
  *
  *  68040 fixes by Michael Rausch
  *  68040 fixes by Martin Apel
+ *  68040 fixes and writeback by Richard Zidlicky
  *  68060 fixes by Roman Hodek
  *  68060 fixes by Jesper Skov
  *
@@ -195,6 +196,7 @@ static char *space_names[] = {
 void die_if_kernel(char *,struct pt_regs *,int);
 asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
                              unsigned long error_code);
+int send_fault_sig(struct pt_regs *regs);
 
 asmlinkage void trap_c(struct frame *fp);
 
@@ -214,26 +216,33 @@ static inline void access_error060 (struct frame *fp)
 				      "movec %/d0,%/cacr"
 				      : : : "d0" );
 		/* return if there's no other error */
-		if ((!(fslw & MMU060_ERR_BITS)) && !(fslw & MMU060_SEE))
+		if (!(fslw & MMU060_ERR_BITS) && !(fslw & MMU060_SEE))
 			return;
 	}
 
 	if (fslw & (MMU060_DESC_ERR | MMU060_WP | MMU060_SP)) {
 		unsigned long errorcode;
 		unsigned long addr = fp->un.fmt4.effaddr;
-		errorcode = ((fslw & MMU060_WP) ? 1 : 0) |
-					((fslw & MMU060_W)  ? 2 : 0);
+
+		if (fslw & MMU060_MA)
+			addr = (addr + 7) & -8;
+
+		errorcode = 1;
+		if (fslw & MMU060_DESC_ERR) {
+			__flush_tlb040_one(addr);
+			errorcode = 0;
+		}
+		if (fslw & MMU060_W)
+			errorcode |= 2;
 #ifdef DEBUG
 		printk("errorcode = %d\n", errorcode );
 #endif
-		if (fslw & MMU060_MA)
-			addr = PAGE_ALIGN(addr);
 		do_page_fault(&fp->ptregs, addr, errorcode);
 	} else if (fslw & (MMU060_SEE)){
-		/* Software Emulation Error. Probably an instruction
-		 * using an unsupported addressing mode
+		/* Software Emulation Error.
+		 * fault during mem_read/mem_write in ifpsp060/os.S
 		 */
-		send_sig (SIGSEGV, current, 1);
+		send_fault_sig(&fp->ptregs);
 	} else {
 		printk("pc=%#lx, fa=%#lx\n", fp->ptregs.pc, fp->un.fmt4.effaddr);
 		printk( "68060 access error, fslw=%lx\n", fslw );
@@ -243,74 +252,113 @@ static inline void access_error060 (struct frame *fp)
 #endif /* CONFIG_M68060 */
 
 #if defined (CONFIG_M68040)
-static inline unsigned long probe040 (int iswrite, int fc, unsigned long addr)
+static inline unsigned long probe040(int iswrite, unsigned long addr)
 {
 	unsigned long mmusr;
-	mm_segment_t fs = get_fs();
 
-	set_fs (MAKE_MM_SEG(fc));
+	asm volatile (".chip 68040");
 
 	if (iswrite)
-		/* write */
-		asm volatile (".chip 68040\n\t"
-			      "ptestw (%1)\n\t"
-			      "movec %%mmusr,%0\n\t"
-			      ".chip 68k"
-			      : "=r" (mmusr)
-			      : "a" (addr));
+		asm volatile ("ptestw (%0)" : : "a" (addr));
 	else
-		asm volatile (".chip 68040\n\t"
-			      "ptestr (%1)\n\t"
-			      "movec %%mmusr,%0\n\t"
-			      ".chip 68k"
-			      : "=r" (mmusr)
-			      : "a" (addr));
+		asm volatile ("ptestr (%0)" : : "a" (addr));
 
-	set_fs (fs);
+	asm volatile ("movec %%mmusr,%0" : "=r" (mmusr));
+
+	asm volatile (".chip 68k");
 
 	return mmusr;
 }
 
-static inline void do_040writeback (unsigned short ssw,
-			     unsigned short wbs,
-			     unsigned long wba,
-			     unsigned long wbd,
-			     struct frame *fp)
+static inline int do_040writeback1(unsigned short wbs, unsigned long wba,
+				   unsigned long wbd)
 {
-	mm_segment_t fs = get_fs ();
-	unsigned long mmusr;
-	unsigned long errorcode;
+	int res = 0;
 
-	/*
-	 * No special handling for the second writeback anymore.
-	 * It misinterpreted the misaligned status sometimes.
-	 * This way an extra page-fault may be caused (Martin Apel).
-	 */
+	set_fs(MAKE_MM_SEG(wbs));
 
-	mmusr = probe040 (1, wbs & WBTM_040,  wba);
-	errorcode = (mmusr & MMU_R_040) ? 3 : 2;
-	if (do_page_fault (&fp->ptregs, wba, errorcode))
-	  /* just return if we can't perform the writeback */
-	  return;
-
-	set_fs (MAKE_MM_SEG(wbs & WBTM_040));
 	switch (wbs & WBSIZ_040) {
-	    case BA_SIZE_BYTE:
-		put_user (wbd & 0xff, (char *)wba);
+	case BA_SIZE_BYTE:
+		res = put_user(wbd & 0xff, (char *)wba);
 		break;
-	    case BA_SIZE_WORD:
-		put_user (wbd & 0xffff, (short *)wba);
+	case BA_SIZE_WORD:
+		res = put_user(wbd & 0xffff, (short *)wba);
 		break;
-	    case BA_SIZE_LONG:
-		put_user (wbd, (int *)wba);
+	case BA_SIZE_LONG:
+		res = put_user(wbd, (int *)wba);
 		break;
 	}
-	set_fs (fs);
+
+#ifdef DEBUG
+	printk("do_040writeback1, res=%d\n",res);
+#endif
+
+	return res;
 }
 
-static inline void access_error040 (struct frame *fp)
+/* after an exception in a writeback the stack frame coresponding
+ * to that exception is discarded, set a few bits in the old frame 
+ * to simulate what it should look like
+ */
+static inline void fix_xframe040(struct frame *fp, unsigned short wbs)
+{
+	fp->un.fmt7.faddr = current->thread.faddr;
+	fp->un.fmt7.ssw = wbs & 0xff;
+}
+
+static inline void do_040writebacks(struct frame *fp)
+{
+	int res = 0;
+#if 0
+	if (fp->un.fmt7.wb1s & WBV_040)
+		printk("access_error040: cannot handle 1st writeback. oops.\n");
+#endif
+
+	if ((fp->un.fmt7.wb2s & WBV_040) &&
+	    !(fp->un.fmt7.wb2s & WBTT_040)) {
+		res = do_040writeback1(fp->un.fmt7.wb2s, fp->un.fmt7.wb2a,
+				       fp->un.fmt7.wb2d);
+		if (res)
+			fix_xframe040(fp, fp->un.fmt7.wb2s);
+		else 
+			fp->un.fmt7.wb2s = 0;
+	}
+
+	/* do the 2nd wb only if the first one was succesful (except for a kernel wb) */
+	if (fp->un.fmt7.wb3s & WBV_040 && (!res || fp->un.fmt7.wb3s & 4)) {
+		res = do_040writeback1(fp->un.fmt7.wb3s, fp->un.fmt7.wb3a,
+				       fp->un.fmt7.wb3d);
+		if (res)
+			fix_xframe040(fp, fp->un.fmt7.wb3s);
+		else
+			fp->un.fmt7.wb3s = 0;
+	}
+
+	if (res)
+		send_fault_sig(&fp->ptregs);
+}
+
+/*
+ * called from sigreturn(), must ensure userspace code didn't
+ * manipulate exception frame to circumvent protection, then complete
+ * pending writebacks
+ * we just clear TM2 to turn it into an userspace access
+ */
+asmlinkage void berr_040cleanup(struct frame *fp)
+{
+	mm_segment_t old_fs = get_fs();
+
+	fp->un.fmt7.wb2s &= ~4;
+	fp->un.fmt7.wb3s &= ~4;
+
+	do_040writebacks(fp);
+	set_fs(old_fs);
+}
+
+static inline void access_error040(struct frame *fp)
 {
 	unsigned short ssw = fp->un.fmt7.ssw;
+	mm_segment_t old_fs = get_fs();
 	unsigned long mmusr;
 
 #ifdef DEBUG
@@ -322,7 +370,6 @@ static inline void access_error040 (struct frame *fp)
 		fp->un.fmt7.wb2d, fp->un.fmt7.wb3d);
 #endif
 
-
 	if (ssw & ATC_040) {
 		unsigned long addr = fp->un.fmt7.faddr;
 		unsigned long errorcode;
@@ -332,56 +379,50 @@ static inline void access_error040 (struct frame *fp)
 		 * has been corrected if there was a misaligned access (MA).
 		 */
 		if (ssw & MA_040)
-			addr = PAGE_ALIGN (addr);
+			addr = (addr + 7) & -8;
 
+		set_fs(MAKE_MM_SEG(ssw));
 		/* MMU error, get the MMUSR info for this access */
-		mmusr = probe040 (!(ssw & RW_040), ssw & TM_040, addr);
+		mmusr = probe040(!(ssw & RW_040), addr);
 #ifdef DEBUG
 		printk("mmusr = %lx\n", mmusr);
 #endif
-		errorcode = ((mmusr & MMU_R_040) ? 1 : 0) |
-			((ssw & RW_040) ? 0 : 2);
-#ifdef CONFIG_FTRACE
-		{
-			unsigned long flags;
-
-			save_flags(flags);
-			cli();
-			do_ftrace(0xfa000000 | errorcode);
-			do_ftrace(mmusr);
-			restore_flags(flags);
+		errorcode = 1;
+		if (!(mmusr & MMU_R_040)) {
+			/* clear the invalid atc entry */
+			__flush_tlb040_one(addr);
+			errorcode = 0;
 		}
+		if (!(ssw & RW_040))
+			errorcode |= 2;
+		if (do_page_fault(&fp->ptregs, addr, errorcode)) {
+#ifdef DEBUG
+		        printk("do_page_fault() !=0 \n");
 #endif
-		do_page_fault (&fp->ptregs, addr, errorcode);
+			if (user_mode(&fp->ptregs)){
+				/* delay writebacks after signal delivery */
+#ifdef DEBUG
+			        printk(".. was usermode - return\n");
+#endif
+				return;
+			}
+			/* disable writeback into user space from kernel
+			 * (if do_page_fault didn't fix the mapping,
+                         * the writeback won't do good)
+			 */
+#ifdef DEBUG
+			printk(".. disabling wb2\n");
+#endif
+			if (fp->un.fmt7.wb2a == fp->un.fmt7.faddr)
+				fp->un.fmt7.wb2s &= ~WBV_040;
+		}
 	} else {
-		printk ("68040 access error, ssw=%x\n", ssw);
-		trap_c (fp);
+		printk("68040 access error, ssw=%x\n", ssw);
+		trap_c(fp);
 	}
 
-#if 0
-	if (fp->un.fmt7.wb1s & WBV_040)
-		printk("access_error040: cannot handle 1st writeback. oops.\n");
-#endif
-
-/*
- *  We may have to do a couple of writebacks here.
- *
- *  MR: we can speed up the thing a little bit and let do_040writeback()
- *  not produce another page fault as wb2 corresponds to the address that
- *  caused the fault. on write faults no second fault is generated, but
- *  on read faults for security reasons (although per definitionem impossible)
- */
-
-	if (fp->un.fmt7.wb2s & WBV_040 && (fp->un.fmt7.wb2s &
-					   WBTT_040) != BA_TT_MOVE16)
-		do_040writeback (ssw,
-				 fp->un.fmt7.wb2s, fp->un.fmt7.wb2a,
-				 fp->un.fmt7.wb2d, fp);
-
-	if (fp->un.fmt7.wb3s & WBV_040)
-		do_040writeback (ssw, fp->un.fmt7.wb3s,
-				 fp->un.fmt7.wb3a, fp->un.fmt7.wb3d,
-				 fp);
+	do_040writebacks(fp);
+	set_fs(old_fs);
 }
 #endif /* CONFIG_M68040 */
 
@@ -470,12 +511,14 @@ extern inline void bus_error030 (struct frame *fp)
 		else if (buserr_type & SUN3_BUSERR_INVALID)
 			errorcode = 0x00;
 		else {
+#ifdef DEBUG
 			printk ("*** unexpected busfault type=%#04x\n", buserr_type);
 			printk ("invalid %s access at %#lx from pc %#lx\n",
 				!(ssw & RW) ? "write" : "read", addr,
 				fp->ptregs.pc);
+#endif
 			die_if_kernel ("Oops", &fp->ptregs, buserr_type);
-			force_sig (SIGSEGV, current);
+			force_sig (SIGBUS, current);
 			return;
 		}
 
@@ -596,7 +639,7 @@ static inline void bus_error030 (struct frame *fp)
 	    printk ("mmusr is %#x for addr %#lx in task %p\n",
 		    mmusr, addr, current);
 	    printk ("descriptor address is %#lx, contents %#lx\n",
-		    mm_ptov(desc), *(unsigned long *)mm_ptov(desc));
+		    __va(desc), *(unsigned long *)__va(desc));
 #endif
 
 	    errorcode = (mmusr & MMU_I) ? 0 : 1;
@@ -694,7 +737,7 @@ static inline void bus_error030 (struct frame *fp)
 	printk ("mmusr is %#x for addr %#lx in task %p\n",
 		mmusr, addr, current);
 	printk ("descriptor address is %#lx, contents %#lx\n",
-		mm_ptov(desc), *(unsigned long *)mm_ptov(desc));
+		__va(desc), *(unsigned long *)__va(desc));
 #endif
 
 	if (mmusr & MMU_I)

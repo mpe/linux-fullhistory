@@ -17,6 +17,9 @@
 
 #ifdef __KERNEL__
 
+#define smp_mb__before_clear_bit()	do { } while (0)
+#define smp_mb__after_clear_bit()	do { } while (0)
+
 /*
  * Function prototypes to keep gcc -Wall happy.
  */

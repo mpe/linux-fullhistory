@@ -290,13 +290,19 @@ static __inline__ void *fb_memclear_small(void *s, size_t count)
       "1: lsrl   #1,%1 ; jcc 1f ; movew %2,%0@-\n\t"
       "1: lsrl   #1,%1 ; jcc 1f ; movel %2,%0@-\n\t"
       "1: lsrl   #1,%1 ; jcc 1f ; movel %2,%0@- ; movel %2,%0@-\n\t"
-      "1: subql  #1,%1 ; jcs 3f\n\t"
-      "2: moveml %2/%3/%4/%5,%0@-\n\t"
+      "1:"
+         : "=a" (s), "=d" (count)
+         : "d" (0), "0" ((char *)s+count), "1" (count)
+   );
+   __asm__ __volatile__(
+         "subql  #1,%1 ; jcs 3f\n\t"
+	 "movel %2,%%d4; movel %2,%%d5; movel %2,%%d6\n\t"
+      "2: moveml %2/%%d4/%%d5/%%d6,%0@-\n\t"
          "dbra %1,2b\n\t"
       "3:"
          : "=a" (s), "=d" (count)
-         :  "d" (0), "d" (0), "d" (0), "d" (0),
-            "0" ((char *)s+count), "1" (count)
+         : "d" (0), "0" (s), "1" (count)
+	 : "d4", "d5", "d6"
   );
 
    return(0);
@@ -355,13 +361,19 @@ static __inline__ void *fb_memset255(void *s, size_t count)
       "1: lsrl   #1,%1 ; jcc 1f ; movew %2,%0@-\n\t"
       "1: lsrl   #1,%1 ; jcc 1f ; movel %2,%0@-\n\t"
       "1: lsrl   #1,%1 ; jcc 1f ; movel %2,%0@- ; movel %2,%0@-\n\t"
-      "1: subql  #1,%1 ; jcs 3f\n\t"
-      "2: moveml %2/%3/%4/%5,%0@-\n\t"
+      "1:"
+         : "=a" (s), "=d" (count)
+         : "d" (-1), "0" ((char *)s+count), "1" (count)
+   );
+   __asm__ __volatile__(
+         "subql  #1,%1 ; jcs 3f\n\t"
+	 "movel %2,%%d4; movel %2,%%d5; movel %2,%%d6\n\t"
+      "2: moveml %2/%%d4/%%d5/%%d6,%0@-\n\t"
          "dbra %1,2b\n\t"
       "3:"
          : "=a" (s), "=d" (count)
-         :  "d" (-1), "d" (-1), "d" (-1), "d" (-1),
-            "0" ((char *) s + count), "1" (count)
+         : "d" (-1), "0" (s), "1" (count)
+	 : "d4", "d5", "d6"
   );
 
    return(0);

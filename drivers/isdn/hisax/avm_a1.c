@@ -1,4 +1,4 @@
-/* $Id: avm_a1.c,v 2.12 2000/06/26 08:59:12 keil Exp $
+/* $Id: avm_a1.c,v 2.13 2000/11/24 17:05:37 kai Exp $
  *
  * avm_a1.c     low level stuff for AVM A1 (Fritz) isdn cards
  *
@@ -8,13 +8,14 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"
 #include "isdnl1.h"
 
 extern const char *CardType[];
-static const char *avm_revision = "$Revision: 2.12 $";
+static const char *avm_revision = "$Revision: 2.13 $";
 
 #define	 AVM_A1_STAT_ISAC	0x01
 #define	 AVM_A1_STAT_HSCX	0x02
@@ -171,8 +172,8 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_avm_a1(struct IsdnCard *card))
+int __init
+setup_avm_a1(struct IsdnCard *card)
 {
 	u_char val;
 	struct IsdnCardState *cs = card->cs;

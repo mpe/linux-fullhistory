@@ -1,4 +1,4 @@
-/* $Id: mic.c,v 1.9 2000/06/26 08:59:14 keil Exp $
+/* $Id: mic.c,v 1.10 2000/11/24 17:05:38 kai Exp $
  *
  * mic.c  low level stuff for mic cards
  *
@@ -11,6 +11,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"
@@ -18,7 +19,7 @@
 
 extern const char *CardType[];
 
-const char *mic_revision = "$Revision: 1.9 $";
+const char *mic_revision = "$Revision: 1.10 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -198,8 +199,8 @@ mic_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_mic(struct IsdnCard *card))
+int __init
+setup_mic(struct IsdnCard *card)
 {
 	int bytecnt;
 	struct IsdnCardState *cs = card->cs;

@@ -157,7 +157,8 @@ Kernel entry (head-armv.S)
   the mail a subject of 'Register new architecture':
 
     Name: <name of your architecture>
-    ARCHDIR: <name of include/asm-arm/arch-* directory>
+    ArchDir: <name of include/asm-arm/arch-* directory>
+    Type: <MACH_TYPE_* macro name>
     Description:
     <description of your architecture>
 

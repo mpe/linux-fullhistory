@@ -156,7 +156,7 @@ static void a5k_floppy_enable_dma(dmach_t channel, dma_t *dma)
 	memcpy((void *)0x1c, fiqhandler_start, fiqhandler_length);
 	regs.ARM_r9 = dma->buf.length;
 	regs.ARM_r10 = dma->buf.address;
-	regs.ARM_fp = (int)PCIO_FLOPPYDMABASE;
+	regs.ARM_fp = FLOPPYDMA_BASE;
 	set_fiq_regs(&regs);
 	enable_irq(dma->dma_irq);
 }
@@ -191,7 +191,7 @@ static struct dma_ops sound_dma_ops = {
 void __init arch_dma_init(dma_t *dma)
 {
 #if defined(CONFIG_BLK_DEV_FD1772) || defined(CONFIG_BLK_DEV_FD1772_MODULE)
-	if (machine_is_arc()) {
+	if (machine_is_archimedes()) {
 		dma[DMA_VIRTUAL_FLOPPY0].dma_irq = 64;
 		dma[DMA_VIRTUAL_FLOPPY0].d_ops   = &arc_floppy_data_dma_ops;
 		dma[DMA_VIRTUAL_FLOPPY1].dma_irq = 65;

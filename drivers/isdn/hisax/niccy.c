@@ -1,4 +1,4 @@
-/* $Id: niccy.c,v 1.12 2000/06/26 08:59:14 keil Exp $
+/* $Id: niccy.c,v 1.15 2000/11/24 17:05:38 kai Exp $
  *
  * niccy.c  low level stuff for Dr. Neuhaus NICCY PnP and NICCY PCI and
  *          compatible (SAGEM cybermodem)
@@ -14,6 +14,7 @@
 
 #define __NO_VERSION__
 #include <linux/config.h>
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"
@@ -21,7 +22,7 @@
 #include <linux/pci.h>
 
 extern const char *CardType[];
-const char *niccy_revision = "$Revision: 1.12 $";
+const char *niccy_revision = "$Revision: 1.15 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -240,10 +241,10 @@ niccy_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-static 	struct pci_dev *niccy_dev __initdata = NULL;
+static struct pci_dev *niccy_dev __initdata;
 
-__initfunc(int
-setup_niccy(struct IsdnCard *card))
+int __init
+setup_niccy(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

@@ -39,7 +39,7 @@ and exception flags.
 */
 int8 float_rounding_mode = float_round_nearest_even;
 int8 floatx80_rounding_precision = 80;
-int8 float_exception_flags = 0;
+int8 float_exception_flags;
 
 /*
 -------------------------------------------------------------------------------
@@ -418,9 +418,8 @@ static float64 roundAndPackFloat64( flag zSign, int16 zExp, bits64 zSig )
              || (    ( zExp == 0x7FD )
                   && ( (sbits64) ( zSig + roundIncrement ) < 0 ) )
            ) {
-            //register int lr;
-            //__asm__("mov %0, lr" :: "g" (lr));
-            //fp_printk("roundAndPackFloat64 called from 0x%08x\n",lr);
+            //register int lr = __builtin_return_address(0);
+            //printk("roundAndPackFloat64 called from 0x%08x\n",lr);
             float_raise( float_flag_overflow | float_flag_inexact );
             return packFloat64( zSign, 0x7FF, 0 ) - ( roundIncrement == 0 );
         }

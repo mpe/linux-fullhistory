@@ -1,4 +1,4 @@
-/* $Id: s0box.c,v 2.3 2000/06/26 08:59:14 keil Exp $
+/* $Id: s0box.c,v 2.4 2000/11/24 17:05:38 kai Exp $
  *
  * s0box.c      low level stuff for Creatix S0BOX
  *
@@ -8,13 +8,14 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *s0box_revision = "$Revision: 2.3 $";
+const char *s0box_revision = "$Revision: 2.4 $";
 
 static inline void
 writereg(unsigned int padr, signed int addr, u_char off, u_char val) {
@@ -213,8 +214,8 @@ S0Box_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_s0box(struct IsdnCard *card))
+int __init
+setup_s0box(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

@@ -28,6 +28,9 @@
  * 12/03/96 Jes: Currently we only support m68k single-cpu systems, so
  *               all pointers that used to be 'current' are now entry
  *               number 0 in the 'current_set' list.
+ *
+ *  6/05/00 RZ:	 addedd writeback completion after return from sighandler
+ *		 for 68040
  */
 
 #include <linux/sys.h>
@@ -104,8 +107,18 @@ do_trace:
 	jbsr	SYMBOL_NAME(syscall_trace)
 
 SYMBOL_NAME_LABEL(ret_from_signal)
-	RESTORE_SWITCH_STACK
+	RESTORE_SWITCH_STACK 
 	addql	#4,%sp
+/* on 68040 complete pending writebacks if any */	
+#ifdef CONFIG_M68040
+	bfextu	%sp@(PT_VECTOR){#0,#4},%d0  
+	subql	#7,%d0				| bus error frame ?
+	jbne	1f
+	movel	%sp,%sp@-
+	jbsr	SYMBOL_NAME(berr_040cleanup)
+	addql	#4,%sp
+1:	
+#endif	
 	jra	SYMBOL_NAME(ret_from_exception)
 
 ENTRY(system_call)
@@ -578,7 +591,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_mremap)
 	.long SYMBOL_NAME(sys_setresuid16)
 	.long SYMBOL_NAME(sys_getresuid16)	/* 165 */
-	.long SYMBOL_NAME(sys_ni_syscall)	/* for vm86 */
+	.long SYMBOL_NAME(sys_getpagesize)
 	.long SYMBOL_NAME(sys_query_module)
 	.long SYMBOL_NAME(sys_poll)
 	.long SYMBOL_NAME(sys_nfsservctl)

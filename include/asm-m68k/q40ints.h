@@ -4,7 +4,7 @@
 
 #define Q40_IRQ_MAX      (34)
 
-#define Q40_IRQ_TIMER    (34)
+#define Q40_IRQ_SAMPLE    (34)
 #define Q40_IRQ_KEYBOARD (32)
 #define Q40_IRQ_FRAME    (33)
 

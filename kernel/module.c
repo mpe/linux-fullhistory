@@ -100,7 +100,8 @@ void inter_module_register(const char *im_name, struct module *owner, const void
 			spin_unlock(&ime_lock);
 			kfree(ime_new);
 			/* Program logic error, fatal */
-			panic("inter_module_register: duplicate im_name '%s'", im_name);
+			printk(KERN_ERR "inter_module_register: duplicate im_name '%s'", im_name);
+			BUG();
 		}
 	}
 	list_add(&(ime_new->list), &ime_list);
@@ -140,7 +141,8 @@ void inter_module_unregister(const char *im_name)
 	}
 	else {
 		/* Program logic error, fatal */
-		panic("inter_module_unregister: no entry for '%s'", im_name);
+		printk(KERN_ERR "inter_module_unregister: no entry for '%s'", im_name);
+		BUG();
 	}
 }
 
@@ -211,7 +213,8 @@ void inter_module_put(const char *im_name)
 		}
 	}
 	spin_unlock(&ime_lock);
-	panic("inter_module_put: no entry for '%s'", im_name);
+	printk(KERN_ERR "inter_module_put: no entry for '%s'", im_name);
+	BUG();
 }
 
 

@@ -13,6 +13,7 @@
  */
 
 #include <linux/config.h>
+#include <stdarg.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -22,6 +23,7 @@
 #include <linux/linkage.h>
 #include <linux/init.h>
 #include <linux/major.h>
+#include <linux/serial_reg.h>
 
 #include <asm/rtc.h>
 #include <asm/bootinfo.h>
@@ -34,8 +36,8 @@
 #include <asm/q40_master.h>
 #include <asm/keyboard.h>
 
-extern void fd_floppy_eject(void);
-extern void fd_floppy_setup(char *str, int *ints);
+extern void floppy_eject(void);
+extern void floppy_setup(char *str, int *ints);
 
 extern void q40_process_int (int level, struct pt_regs *regs);
 extern void (*q40_sys_default_handler[]) (int, void *, struct pt_regs *);  /* added just for debugging */
@@ -65,9 +67,12 @@ extern char *saved_command_line;
 extern char m68k_debug_device[];
 static void q40_mem_console_write(struct console *co, const char *b,
 				    unsigned int count);
+#if 0
+extern int ql_ticks=0;
+extern int sound_ticks=0;
+#endif
 
-static int ql_ticks=0;
-static int sound_ticks=0;
+extern int ql_ticks;
 
 static unsigned char bcd2bin (unsigned char b);
 static unsigned char bin2bcd (unsigned char b);
@@ -79,12 +84,6 @@ static struct console q40_console_driver = {
 	flags:		CON_PRINTBUFFER,
 	index:		-1,
 };
-
-
-/* Save tick handler routine pointer, will point to do_timer() in
- * kernel/sched.c */
-
-/* static void (*tick_handler)(int, void *, struct pt_regs *); */
 
 
 /* early debugging function:*/
@@ -140,6 +139,41 @@ static void q40_get_model(char *model)
     sprintf(model, "Q40");
 }
 
+/* pasted code to make parport_pc happy */
+extern __inline__ int __get_order(unsigned long size)
+{
+	int order;
+
+	size = (size-1) >> (PAGE_SHIFT-1);
+	order = -1;
+	do {
+		size >>= 1;
+		order++;
+	} while (size);
+	return order;
+}
+void *pci_alloc_consistent(void *hwdev, size_t size,
+			   dma_addr_t *dma_handle)
+{
+	void *ret;
+	int gfp = GFP_ATOMIC;
+
+	ret = (void *)__get_free_pages(gfp, __get_order(size));
+
+	if (ret != NULL) {
+		memset(ret, 0, size);
+		*dma_handle = virt_to_bus(ret);
+	}
+	return ret;
+}
+
+void pci_free_consistent(void *hwdev, size_t size,
+			 void *vaddr, dma_addr_t dma_handle)
+{
+	free_pages((unsigned long)vaddr, __get_order(size));
+}
+/* end pasted code */
+
 
 /* No hardware options on Q40? */
 
@@ -149,6 +183,16 @@ static int q40_get_hardware_list(char *buffer)
     return 0;
 }
 
+static unsigned int serports[]={0x3f8,0x2f8,0x3e8,0x2e8,0};
+void q40_disable_irqs(void)
+{
+  unsigned i,j;
+  
+  j=0;
+  while((i=serports[j++])) outb(0,i+UART_IER);
+  master_outb(0,EXT_ENABLE_REG);
+  master_outb(0,KEY_IRQ_ENABLE_REG);
+}
 
 void __init config_q40(void)
 {
@@ -177,13 +221,14 @@ void __init config_q40(void)
     mach_sysrq_key       = 0x54;
 #endif
     conswitchp = &dummy_con;
-#ifdef CONFIG_BLK_DEV_FD
-    mach_floppy_setup    = fd_floppy_setup;
-    mach_floppy_eject    = fd_floppy_eject;
+#if 0 /*def CONFIG_BLK_DEV_FD*/
+    mach_floppy_setup    = floppy_setup;
+    mach_floppy_eject    = floppy_eject;
     /**/
 #endif
 
-    mach_max_dma_address = 0;   /* no DMA at all */
+    q40_disable_irqs();
+    mach_max_dma_address = 32*1024*1024;   /* no DMA at all, but ide-scsi requires it.. */
 
 
 /* userfull for early debuging stages writes kernel messages into SRAM */
@@ -203,6 +248,7 @@ int q40_parse_bootinfo(const struct bi_record *rec)
   return 1;  /* unknown */
 }
 
+#if 0
 #define DAC_LEFT  ((unsigned char *)0xff008000)
 #define DAC_RIGHT ((unsigned char *)0xff008004)
 void q40_mksound(unsigned int hz, unsigned int ticks)
@@ -258,7 +304,11 @@ static void q40_timer_int (int irq, void *dev_id, struct pt_regs *fp)
 #endif
     q40_timer_routine(irq, dev_id, fp);
 }
+#endif
 
+#if 0
+extern void (*q40_timer_routine)(int, void *, struct pt_regs *);
+extern void q40_timer_int();
 
 void q40_sched_init (void (*timer_routine)(int, void *, struct pt_regs *))
 {
@@ -289,7 +339,7 @@ void q40_sched_init (void (*timer_routine)(int, void *, struct pt_regs *))
 #endif
 #endif
 }
-
+#endif
 
 unsigned long q40_gettimeoffset (void)
 {

@@ -71,6 +71,8 @@ struct thread_struct {
 	unsigned short fs;		/* saved fs (sfc, dfc) */
 	unsigned long  crp[2];		/* cpu root pointer */
 	unsigned long  esp0;		/* points to SR of stack frame */
+	unsigned long  faddr;		/* info about last fault */
+	int            signo, code;
 	unsigned long  fp[8*3];
 	unsigned long  fpcntl[3];	/* fp control regs */
 	unsigned char  fpstate[FPSTATESIZE];  /* floating point state */
@@ -81,7 +83,6 @@ struct thread_struct {
 #define INIT_THREAD  { \
 	sizeof(init_stack) + (unsigned long) init_stack, 0, \
 	PS_S, __KERNEL_DS, \
-	{0, 0}, 0, {0,}, {0, 0, 0}, {0,}, \
 }
 
 /*

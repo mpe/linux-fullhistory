@@ -72,7 +72,7 @@
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.de>");
 
-static char *revision = "$Revision: 1.10 $";
+static char *revision = "$Revision: 1.14 $";
 
 struct capifs_ncci {
 	struct inode *inode;
@@ -558,7 +558,7 @@ void capifs_free_ncci(char type, unsigned int num)
 	}
 }
 
-int __init capifs_init(void)
+static int __init capifs_init(void)
 {
 	char rev[10];
 	char *p;
@@ -587,7 +587,7 @@ int __init capifs_init(void)
 	return 0;
 }
 
-void capifs_exit(void)
+static void __exit capifs_exit(void)
 {
 	unregister_filesystem(&capifs_fs_type);
 }
@@ -595,16 +595,5 @@ void capifs_exit(void)
 EXPORT_SYMBOL(capifs_new_ncci);
 EXPORT_SYMBOL(capifs_free_ncci);
 
-#ifdef MODULE
-
-int init_module(void)
-{
-	return capifs_init();
-}
-
-void cleanup_module(void)
-{
-	capifs_exit();
-}
-
-#endif
+module_init(capifs_init);
+module_exit(capifs_exit);

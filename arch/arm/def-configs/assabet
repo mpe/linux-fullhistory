@@ -12,44 +12,6 @@ CONFIG_EXPERIMENTAL=y
 # CONFIG_OBSOLETE is not set
 
 #
-# System Type
-#
-# CONFIG_ARCH_ARC is not set
-# CONFIG_ARCH_A5K is not set
-# CONFIG_ARCH_CO285 is not set
-# CONFIG_ARCH_EBSA110 is not set
-# CONFIG_ARCH_FOOTBRIDGE is not set
-# CONFIG_ARCH_RPC is not set
-CONFIG_ARCH_SA1100=y
-
-#
-# SA11x0 Implementations
-#
-CONFIG_SA1100_ASSABET=y
-# CONFIG_ASSABET_NEPONSET is not set
-# CONFIG_SA1100_BRUTUS is not set
-# CONFIG_SA1100_BITSY is not set
-# CONFIG_SA1100_LART is not set
-# CONFIG_SA1100_THINCLIENT is not set
-# CONFIG_SA1100_GRAPHICSCLIENT is not set
-# CONFIG_SA1100_VICTOR is not set
-CONFIG_ANGELBOOT=y
-# CONFIG_SA1100_FREQUENCY_SCALE is not set
-# CONFIG_SA1100_VOLTAGE_SCALE is not set
-CONFIG_CPU_32=y
-# CONFIG_CPU_26 is not set
-CONFIG_CPU_32v4=y
-CONFIG_CPU_SA1100=y
-# CONFIG_ARCH_ACORN is not set
-# CONFIG_FOOTBRIDGE is not set
-# CONFIG_FOOTBRIDGE_HOST is not set
-# CONFIG_FOOTBRIDGE_ADDIN is not set
-CONFIG_DISCONTIGMEM=y
-# CONFIG_PCI is not set
-# CONFIG_ISA is not set
-# CONFIG_ISA_DMA is not set
-
-#
 # Loadable module support
 #
 CONFIG_MODULES=y
@@ -57,12 +19,68 @@ CONFIG_MODULES=y
 # CONFIG_KMOD is not set
 
 #
+# System Type
+#
+# CONFIG_ARCH_ARCA5K is not set
+# CONFIG_ARCH_CLPS7500 is not set
+# CONFIG_ARCH_CO285 is not set
+# CONFIG_ARCH_EBSA110 is not set
+# CONFIG_ARCH_FOOTBRIDGE is not set
+# CONFIG_ARCH_INTEGRATOR is not set
+# CONFIG_ARCH_RPC is not set
+CONFIG_ARCH_SA1100=y
+
+#
+# Archimedes/A5000 Implementations
+#
+
+#
+# Footbridge Implementations
+#
+
+#
+# SA11x0 Implementations
+#
+CONFIG_SA1100_ASSABET=y
+# CONFIG_ASSABET_NEPONSET is not set
+# CONFIG_SA1100_BRUTUS is not set
+# CONFIG_SA1100_CERF is not set
+# CONFIG_SA1100_BITSY is not set
+# CONFIG_SA1100_LART is not set
+# CONFIG_SA1100_GRAPHICSCLIENT is not set
+# CONFIG_SA1100_NANOENGINE is not set
+# CONFIG_SA1100_VICTOR is not set
+# CONFIG_SA1100_SHERMAN is not set
+# CONFIG_SA1100_XP860 is not set
+# CONFIG_SA1100_PANGOLIN is not set
+CONFIG_ANGELBOOT=y
+CONFIG_SA1100_FREQUENCY_SCALE=y
+# CONFIG_SA1100_VOLTAGE_SCALE is not set
+# CONFIG_ARCH_ACORN is not set
+# CONFIG_FOOTBRIDGE is not set
+# CONFIG_FOOTBRIDGE_HOST is not set
+# CONFIG_FOOTBRIDGE_ADDIN is not set
+CONFIG_CPU_32=y
+# CONFIG_CPU_26 is not set
+
+#
+# Processor Type
+#
+CONFIG_CPU_32v4=y
+CONFIG_CPU_SA1100=y
+CONFIG_DISCONTIGMEM=y
+
+#
 # General setup
 #
+# CONFIG_PCI is not set
+# CONFIG_ISA is not set
+# CONFIG_ISA_DMA is not set
+CONFIG_PC_KEYMAP=y
 CONFIG_HOTPLUG=y
 
 #
-# PC Card support
+# PCMCIA/CardBus support
 #
 CONFIG_PCMCIA=y
 # CONFIG_PCMCIA_DEBUG is not set
@@ -135,16 +153,10 @@ CONFIG_INET=y
 # CONFIG_IP_MULTICAST is not set
 # CONFIG_IP_ADVANCED_ROUTER is not set
 # CONFIG_IP_PNP is not set
-# CONFIG_IP_ROUTER is not set
 # CONFIG_NET_IPIP is not set
 # CONFIG_NET_IPGRE is not set
-# CONFIG_IP_ALIAS is not set
+# CONFIG_INET_ECN is not set
 # CONFIG_SYN_COOKIES is not set
-
-#
-# (it is safe to leave these untouched)
-#
-CONFIG_SKB_LARGE=y
 # CONFIG_IPV6 is not set
 # CONFIG_KHTTPD is not set
 # CONFIG_ATM is not set
@@ -181,13 +193,13 @@ CONFIG_NETDEVICES=y
 # CONFIG_DUMMY is not set
 # CONFIG_BONDING is not set
 # CONFIG_EQUALIZER is not set
+# CONFIG_TUN is not set
 # CONFIG_NET_SB1000 is not set
 
 #
 # Ethernet (10 or 100Mbit)
 #
 CONFIG_NET_ETHERNET=y
-# CONFIG_ARM_AM79C961A is not set
 # CONFIG_NET_VENDOR_3COM is not set
 # CONFIG_LANCE is not set
 # CONFIG_NET_VENDOR_SMC is not set
@@ -320,13 +332,14 @@ CONFIG_BLK_DEV_IDECS=y
 #
 CONFIG_VT=y
 # CONFIG_VT_CONSOLE is not set
-CONFIG_SERIAL_SA1100=y
-CONFIG_SERIAL_SA1100_CONSOLE=y
-# CONFIG_TOUCHSCREEN_SA1100 is not set
-# CONFIG_TOUCHSCREEN_BITSY is not set
 # CONFIG_SERIAL is not set
 # CONFIG_SERIAL_EXTENDED is not set
 # CONFIG_SERIAL_NONSTANDARD is not set
+CONFIG_SERIAL_SA1100=y
+CONFIG_SERIAL_SA1100_CONSOLE=y
+CONFIG_SA1100_DEFAULT_BAUDRATE=9600
+CONFIG_TOUCHSCREEN_UCB1200=y
+# CONFIG_TOUCHSCREEN_BITSY is not set
 CONFIG_UNIX98_PTYS=y
 CONFIG_UNIX98_PTY_COUNT=32
 
@@ -345,6 +358,10 @@ CONFIG_UNIX98_PTY_COUNT=32
 # Joysticks
 #
 # CONFIG_JOYSTICK is not set
+
+#
+# Input core support is needed for joysticks
+#
 # CONFIG_QIC02_TAPE is not set
 
 #
@@ -354,11 +371,6 @@ CONFIG_UNIX98_PTY_COUNT=32
 # CONFIG_INTEL_RNG is not set
 # CONFIG_NVRAM is not set
 # CONFIG_RTC is not set
-
-#
-# Video For Linux
-#
-# CONFIG_VIDEO_DEV is not set
 # CONFIG_DTLK is not set
 # CONFIG_R3964 is not set
 # CONFIG_APPLICOM is not set
@@ -367,10 +379,9 @@ CONFIG_UNIX98_PTY_COUNT=32
 # Ftape, the floppy tape device driver
 #
 # CONFIG_FTAPE is not set
-# CONFIG_DRM is not set
-# CONFIG_DRM_TDFX is not set
-# CONFIG_PCMCIA_SERIAL is not set
 # CONFIG_AGP is not set
+# CONFIG_DRM is not set
+# CONFIG_PCMCIA_SERIAL is not set
 
 #
 # File systems
@@ -451,12 +462,14 @@ CONFIG_MSDOS_PARTITION=y
 # CONFIG_SOLARIS_X86_PARTITION is not set
 # CONFIG_UNIXWARE_DISKLABEL is not set
 # CONFIG_SGI_PARTITION is not set
+# CONFIG_ULTRIX_PARTITION is not set
 # CONFIG_SUN_PARTITION is not set
 CONFIG_NLS=y
 
 #
 # Native Language Support
 #
+CONFIG_NLS_DEFAULT="iso8859-1"
 CONFIG_NLS_CODEPAGE_437=y
 # CONFIG_NLS_CODEPAGE_737 is not set
 # CONFIG_NLS_CODEPAGE_775 is not set
@@ -473,6 +486,10 @@ CONFIG_NLS_CODEPAGE_437=y
 # CONFIG_NLS_CODEPAGE_866 is not set
 # CONFIG_NLS_CODEPAGE_869 is not set
 # CONFIG_NLS_CODEPAGE_874 is not set
+# CONFIG_NLS_CODEPAGE_932 is not set
+# CONFIG_NLS_CODEPAGE_936 is not set
+# CONFIG_NLS_CODEPAGE_949 is not set
+# CONFIG_NLS_CODEPAGE_950 is not set
 # CONFIG_NLS_ISO8859_1 is not set
 # CONFIG_NLS_ISO8859_2 is not set
 # CONFIG_NLS_ISO8859_3 is not set
@@ -485,6 +502,7 @@ CONFIG_NLS_CODEPAGE_437=y
 # CONFIG_NLS_ISO8859_14 is not set
 # CONFIG_NLS_ISO8859_15 is not set
 # CONFIG_NLS_KOI8_R is not set
+# CONFIG_NLS_UTF8 is not set
 
 #
 # Console drivers
@@ -497,7 +515,9 @@ CONFIG_FB=y
 #
 CONFIG_FB=y
 CONFIG_DUMMY_CONSOLE=y
+# CONFIG_FB_CYBER2000 is not set
 CONFIG_FB_SA1100=y
+# CONFIG_FB_MQ200 is not set
 # CONFIG_FB_VIRTUAL is not set
 # CONFIG_FBCON_ADVANCED is not set
 CONFIG_FBCON_CFB2=y
@@ -517,8 +537,10 @@ CONFIG_FONT_8x8=y
 #
 CONFIG_SOUND=y
 CONFIG_SOUND_UDA1341=y
+# CONFIG_SOUND_SA1100_SSP is not set
 # CONFIG_SOUND_CMPCI is not set
 # CONFIG_SOUND_EMU10K1 is not set
+# CONFIG_SOUND_FUSION is not set
 # CONFIG_SOUND_ES1370 is not set
 # CONFIG_SOUND_ES1371 is not set
 # CONFIG_SOUND_ESSSOLO1 is not set

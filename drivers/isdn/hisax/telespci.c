@@ -1,4 +1,4 @@
-/* $Id: telespci.c,v 2.13 2000/06/26 08:59:15 keil Exp $
+/* $Id: telespci.c,v 2.16 2000/11/24 17:05:38 kai Exp $
  *
  * telespci.c     low level stuff for Teles PCI isdn cards
  *
@@ -9,6 +9,7 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include <linux/config.h>
 #include "hisax.h"
 #include "isac.h"
@@ -17,7 +18,7 @@
 #include <linux/pci.h>
 
 extern const char *CardType[];
-const char *telespci_revision = "$Revision: 2.13 $";
+const char *telespci_revision = "$Revision: 2.16 $";
 
 #define ZORAN_PO_RQ_PEN	0x02000000
 #define ZORAN_PO_WR	0x00800000
@@ -280,10 +281,10 @@ TelesPCI_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-static 	struct pci_dev *dev_tel __initdata = NULL;
+static struct pci_dev *dev_tel __initdata;
 
-__initfunc(int
-setup_telespci(struct IsdnCard *card))
+int __init
+setup_telespci(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

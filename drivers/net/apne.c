@@ -384,9 +384,8 @@ apne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_pa
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_get_8390_hdr "
-	   "[DMAstat:%d][irqlock:%d][intr:%ld].\n",
-	   dev->name, ei_status.dmaing, ei_status.irqlock,
-	   dev->interrupt);
+	   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
+	   dev->name, ei_status.dmaing, ei_status.irqlock, dev->irq);
 	return;
     }
 
@@ -433,9 +432,8 @@ apne_block_input(struct net_device *dev, int count, struct sk_buff *skb, int rin
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_block_input "
-	   "[DMAstat:%d][irqlock:%d][intr:%ld].\n",
-	   dev->name, ei_status.dmaing, ei_status.irqlock,
-	   dev->interrupt);
+	   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
+	   dev->name, ei_status.dmaing, ei_status.irqlock, dev->irq);
 	return;
     }
     ei_status.dmaing |= 0x01;
@@ -482,9 +480,8 @@ apne_block_output(struct net_device *dev, int count,
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_block_output."
-	   "[DMAstat:%d][irqlock:%d][intr:%ld]\n",
-	   dev->name, ei_status.dmaing, ei_status.irqlock,
-	   dev->interrupt);
+	   "[DMAstat:%d][irqlock:%d][intr:%d]\n",
+	   dev->name, ei_status.dmaing, ei_status.irqlock, dev->irq);
 	return;
     }
     ei_status.dmaing |= 0x01;

@@ -54,6 +54,7 @@ Sedlbauer ISDN-Controller PC/104
 USR Sportster internal TA (compatible Stollmann tina-pp V3)
 ith Kommunikationstechnik GmbH MIC 16 ISA card
 Traverse Technologie NETjet PCI S0 card and NETspider U card
+Ovislink ISDN sc100-p card (NETjet driver)
 Dr. Neuhaus Niccy PnP/PCI
 Siemens I-Surf 1.0
 Siemens I-Surf 2.0 (with IPAC, try type 12 asuscom) 
@@ -191,8 +192,9 @@ Card types:
    34	Gazel ISDN cards (PCI)   none
    35	HFC 2BDS0 PCI            none
    36	W6692 based PCI cards    none
-   37	HFC 2BDS0 S+, SP/PCMCIA  irq,io (pcmcia must be set with cardmgr)
+   37	HFC 2BDS0 S+, SP         irq,io
    38	NETspider U PCI card     none
+   39	HFC 2BDS0 SP/PCMCIA      irq,io (set with cardmgr)
 
 At the moment IRQ sharing is only possible with PCI cards. Please make sure
 that your IRQ is free and enabled for ISA use.

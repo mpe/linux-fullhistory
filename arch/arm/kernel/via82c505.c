@@ -76,7 +76,7 @@ static struct pci_ops via82c505_ops = {
 
 #ifdef CONFIG_ARCH_SHARK
 
-static char size_wanted = 0;
+static char size_wanted;
 
 static int
 dummy_read_config_byte(struct pci_dev *dev, int where, u8 *value)

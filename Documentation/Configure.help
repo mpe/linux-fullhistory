@@ -16263,12 +16263,6 @@ CONFIG_SA1100_LART
   (also known as the LART).  See http://www.lart.tudelft.nl/ for
   information on the LART.
 
-Include support for ThinClient
-CONFIG_SA1100_THINCLIENT
-  Say Y here if you are using an Applied Data Systems Intel(R)
-  StrongARM(R) SA-1100 based Thin Client SBC.  See
-  http://www.flatpanels.com/ for information on this system.
-
 Include support for GraphicsClient
 CONFIG_SA1100_GRAPHICSCLIENT
   Say Y here if you are using an Applied Data Systems Intel(R)
@@ -16281,6 +16275,27 @@ CONFIG_SA1100_VICTOR
   SA-1100 based Victor Digital Talking Book Reader.  See
   http://www.visuaide.com/pagevictor.en.html for information on
   this system.
+
+Support ARM610 processor
+CONFIG_CPU_ARM6
+  Say Y here if you wish to include support for the ARM610 processor.
+
+Support ARM710 processor
+CONFIG_CPU_ARM7
+  Say Y here if you wish to include support for the ARM710 processor.
+
+Support StrongARM(R) SA-110 processor
+CONFIG_CPU_SA110
+  Say Y here if you wish to include support for the Intel(R)
+  StrongARM(R) SA-110 processor.
+
+Support ARM720 processor
+CONFIG_CPU_ARM720
+  Say Y here if you wish to include support for the ARM720 processor.
+
+Support ARM920
+CONFIG_CPU_ARM920
+  Say Y here if you wish to include support for the ARM920 processor.
 
 Support ARM610 processor
 CONFIG_CPU_ARM6
@@ -16425,6 +16440,17 @@ Console on 21285 serial port
 CONFIG_SERIAL_21285_CONSOLE
   If you have enabled the serial port on the 21285 footbridge you can
   make it the console by answering Y to this option.
+
+SA1100 serial port support
+CONFIG_SERIAL_SA1100
+  If you have a machine based on a SA1100/SA1110 StrongARM CPU you can
+  enable its onboard serial port by enabling this option.
+  Please read Documentation/arm/SA1100/serial_UART for further info.
+
+Console on SA1100 serial port
+CONFIG_SERIAL_SA1100_CONSOLE
+  If you have enabled the serial port on the SA1100/SA1110 StrongARM
+  CPU you can make it the console by answering Y to this option.
 
 L7200 serial port support
 CONFIG_SERIAL_L7200

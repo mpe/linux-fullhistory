@@ -496,9 +496,9 @@ void release_thread(struct task_struct *dead_task)
 void copy_segments(struct task_struct *p, struct mm_struct *new_mm)
 {
 	struct mm_struct * old_mm = current->mm;
-	void * old_ldt = old_mm->segments, * ldt = old_ldt;
+	void * old_ldt = old_mm->segments, * ldt;
 
-	if (!old_mm->segments) {
+	if (!old_ldt) {
 		/*
 		 * default LDT - use the one from init_task
 		 */

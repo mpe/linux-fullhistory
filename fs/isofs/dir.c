@@ -115,9 +115,6 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 	char *p = NULL;		/* Quiet GCC */
 	struct iso_directory_record *de;
 
- 	if (filp->f_pos >= inode->i_size)
-		return 0;
- 
 	offset = filp->f_pos & (bufsize - 1);
 	block = filp->f_pos >> bufbits;
 	high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
@@ -132,7 +129,8 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		}
 
 		de = (struct iso_directory_record *) (bh->b_data + offset);
-		if (first_de) inode_number = (bh->b_blocknr << bufbits) + offset;
+		if (first_de)
+			inode_number = (bh->b_blocknr << bufbits) + offset;
 
 		de_len = *(unsigned char *) de;
 
@@ -207,7 +205,7 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		map = 1;
 		if (inode->i_sb->u.isofs_sb.s_rock) {
 			len = get_rock_ridge_filename(de, tmpname, inode);
-			if (len != 0) {
+			if (len != 0) {		/* may be -1 */
 				p = tmpname;
 				map = 0;
 			}

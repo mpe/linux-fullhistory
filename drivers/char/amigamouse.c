@@ -47,6 +47,7 @@
 #include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 #include <linux/logibusmouse.h>
 
 #include <asm/setup.h>
@@ -185,6 +186,8 @@ static int __init amiga_mouse_init(void)
 {
 	if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(AMI_MOUSE))
 		return -ENODEV;
+	if (!request_mem_region(CUSTOM_PHYSADDR+10, 2, "amigamouse [Denise]"))
+		return -EBUSY;
 
 	custom.joytest = 0;	/* reset counters */
 #if AMIGA_OLD_INT
@@ -201,6 +204,7 @@ static int __init amiga_mouse_init(void)
 static void __exit amiga_mouse_exit(void)
 {
 	unregister_busmouse(msedev);
+	release_mem_region(CUSTOM_PHYSADDR+10, 2);
 }
 
 module_init(amiga_mouse_init);

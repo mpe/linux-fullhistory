@@ -94,6 +94,7 @@
 #include <linux/ioport.h>
 #include <linux/capi.h>
 #include <asm/io.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 #include <linux/netdevice.h>
 #include "capilli.h"
@@ -101,7 +102,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.16 $";
+static char *revision = "$Revision: 1.20 $";
 
 /* ------------------------------------------------------------- */
 
@@ -728,12 +729,7 @@ EXPORT_SYMBOL(b1_handle_interrupt);
 
 EXPORT_SYMBOL(b1ctl_read_proc);
 
-#ifdef MODULE
-#define b1_init init_module
-void cleanup_module(void);
-#endif
-
-int b1_init(void)
+static int __init b1_init(void)
 {
 	char *p;
 	char rev[10];
@@ -750,8 +746,9 @@ int b1_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit b1_exit(void)
 {
 }
-#endif
+
+module_init(b1_init);
+module_exit(b1_exit);

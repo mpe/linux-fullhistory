@@ -1484,8 +1484,6 @@ static int shm_swap_core(struct shmid_kernel *shp, unsigned long idx, swp_entry_
 		return RETRY;
 
 	lock_page(page_map);
-	if (!(page_map = prepare_highmem_swapout(page_map)))
-		return FAILED;
 	SHM_ENTRY (shp, idx) = swp_entry_to_pte(swap_entry);
 
 	/* add the locked page to the swap cache before allowing

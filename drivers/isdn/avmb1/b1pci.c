@@ -94,12 +94,13 @@
 #include <linux/pci.h>
 #include <linux/capi.h>
 #include <asm/io.h>
+#include <linux/init.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.27 $";
+static char *revision = "$Revision: 1.29 $";
 
 /* ------------------------------------------------------------- */
 
@@ -481,11 +482,6 @@ static struct capi_driver b1pciv4_driver = {
 
 #endif /* CONFIG_ISDN_DRV_AVMB1_B1PCIV4 */
 
-#ifdef MODULE
-#define b1pci_init init_module
-void cleanup_module(void);
-#endif
-
 static int ncards = 0;
 
 static int add_card(struct pci_dev *dev)
@@ -548,7 +544,7 @@ static int add_card(struct pci_dev *dev)
 	return retval;
 }
 
-int b1pci_init(void)
+static int __init b1pci_init(void)
 {
 	struct capi_driver *driver = &b1pci_driver;
 #ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
@@ -640,12 +636,13 @@ int b1pci_init(void)
 #endif
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit b1pci_exit(void)
 {
     detach_capi_driver(&b1pci_driver);
 #ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
     detach_capi_driver(&b1pciv4_driver);
 #endif
 }
-#endif
+
+module_init(b1pci_init);
+module_exit(b1pci_exit);

@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.8 2000/09/07 20:33:30 werner Exp $
+/* $Id: w6692.c,v 1.12 2000/11/24 17:05:38 kai Exp $
  *
  * w6692.c   Winbond W6692 specific routines
  *
@@ -10,6 +10,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/init.h>
 #define __NO_VERSION__
 #include "hisax.h"
 #include "w6692.h"
@@ -46,11 +47,11 @@ static const PCI_ENTRY id_list[] =
 
 extern const char *CardType[];
 
-const char *w6692_revision = "$Revision: 1.8 $";
+const char *w6692_revision = "$Revision: 1.12 $";
 
 #define DBUSY_TIMER_VALUE 80
 
-static char *W6692Ver[] HISAX_INITDATA =
+static char *W6692Ver[] __initdata =
 {"W6692 V00", "W6692 V01", "W6692 V10",
  "W6692 V11"};
 
@@ -869,7 +870,7 @@ setstack_w6692(struct PStack *st, struct BCState *bcs)
 	return (0);
 }
 
-HISAX_INITFUNC(void initW6692(struct IsdnCardState *cs, int part))
+void __init initW6692(struct IsdnCardState *cs, int part)
 {
 	if (part & 1) {
 		cs->tqueue.routine = (void *) (void *) W6692_bh;
@@ -966,11 +967,12 @@ w6692_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return (0);
 }
 
-static int id_idx = 0;
+static int id_idx ;
 
-static struct pci_dev *dev_w6692 __initdata = NULL;
+static struct pci_dev *dev_w6692 __initdata;
 
-__initfunc(int setup_w6692(struct IsdnCard *card))
+int __init
+setup_w6692(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

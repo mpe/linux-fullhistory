@@ -49,10 +49,27 @@ unsigned char amiga_vblank;
 unsigned char amiga_psfreq;
 struct amiga_hw_present amiga_hw_present;
 
-static const char *amiga_models[] = {
-    "A500", "A500+", "A600", "A1000", "A1200", "A2000", "A2500", "A3000",
-    "A3000T", "A3000+", "A4000", "A4000T", "CDTV", "CD32", "Draco"
+static const char s_a500[] __initdata = "A500";
+static const char s_a500p[] __initdata = "A500+";
+static const char s_a600[] __initdata = "A600";
+static const char s_a1000[] __initdata = "A1000";
+static const char s_a1200[] __initdata = "A1200";
+static const char s_a2000[] __initdata = "A2000";
+static const char s_a2500[] __initdata = "A2500";
+static const char s_a3000[] __initdata = "A3000";
+static const char s_a3000t[] __initdata = "A3000T";
+static const char s_a3000p[] __initdata = "A3000+";
+static const char s_a4000[] __initdata = "A4000";
+static const char s_a4000t[] __initdata = "A4000T";
+static const char s_cdtv[] __initdata = "CDTV";
+static const char s_cd32[] __initdata = "CD32";
+static const char s_draco[] __initdata = "Draco";
+static const char *amiga_models[] __initdata = {
+    s_a500, s_a500p, s_a600, s_a1000, s_a1200, s_a2000, s_a2500, s_a3000,
+    s_a3000t, s_a3000p, s_a4000, s_a4000t, s_cdtv, s_cd32, s_draco,
 };
+
+static char amiga_model_name[13] = "Amiga ";
 
 extern char m68k_debug_device[];
 
@@ -117,6 +134,26 @@ static char amiga_sysrq_xlate[128] =
 
 extern void (*kd_mksound)(unsigned int, unsigned int);
 
+
+    /*
+     *  Motherboard Resources present in all Amiga models
+     */
+
+static struct resource mb_res[] = {
+    { "Ranger Memory", 0x00c00000, 0x00c7ffff },
+    { "CIA B", 0x00bfd000, 0x00bfdfff },
+    { "CIA A", 0x00bfe000, 0x00bfefff },
+    { "Custom I/O", 0x00dff000, 0x00dfffff },
+    { "Kickstart ROM", 0x00f80000, 0x00ffffff }
+};
+
+static struct resource rtc_resource = {
+    "A2000 RTC", 0x00dc0000, 0x00dcffff
+};
+
+static struct resource ram_resource[NUM_MEMINFO];
+
+
     /*
      *  Parse an Amiga-specific record in the bootinfo
      */
@@ -157,11 +194,15 @@ int amiga_parse_bootinfo(const struct bi_record *record)
 	    break;
 
 	case BI_AMIGA_AUTOCON:
-	    if (zorro_num_autocon < ZORRO_NUM_AUTO)
-		memcpy(&zorro_autocon[zorro_num_autocon++],
-		       (const struct ConfigDev *)data,
-		       sizeof(struct ConfigDev));
-	    else
+	    if (zorro_num_autocon < ZORRO_NUM_AUTO) {
+		const struct ConfigDev *cd = (struct ConfigDev *)data;
+		struct zorro_dev *dev = &zorro_autocon[zorro_num_autocon++];
+		dev->rom = cd->cd_Rom;
+		dev->slotaddr = cd->cd_SlotAddr;
+		dev->slotsize = cd->cd_SlotSize;
+		dev->resource.start = (unsigned long)cd->cd_BoardAddr;
+		dev->resource.end = dev->resource.start+cd->cd_BoardSize-1;
+	    } else
 		printk("amiga_parse_bootinfo: too many AutoConfig devices\n");
 	    break;
 
@@ -188,8 +229,10 @@ static void __init amiga_identify(void)
   memset(&amiga_hw_present, 0, sizeof(amiga_hw_present));
 
   printk("Amiga hardware found: ");
-  if (amiga_model >= AMI_500 && amiga_model <= AMI_DRACO)
+  if (amiga_model >= AMI_500 && amiga_model <= AMI_DRACO) {
     printk("[%s] ", amiga_models[amiga_model-AMI_500]);
+    strcat(amiga_model_name, amiga_models[amiga_model-AMI_500]);
+  }
 
   switch(amiga_model) {
   case AMI_UNKNOWN:
@@ -342,8 +385,18 @@ static void __init amiga_identify(void)
 
 void __init config_amiga(void)
 {
+  int i;
+
   amiga_debug_init();
   amiga_identify();
+
+  /* Some APUS boxes may have PCI memory, but ... */
+  iomem_resource.name = "Memory";
+  request_resource(&iomem_resource, &ranger_resource);
+  request_resource(&iomem_resource, &ciab_resource);
+  request_resource(&iomem_resource, &ciaa_resource);
+  request_resource(&iomem_resource, &custom_chips_resource);
+  request_resource(&iomem_resource, &kickstart_resource);
 
   mach_sched_init      = amiga_sched_init;
   mach_keyb_init       = amiga_keyb_init;
@@ -362,9 +415,12 @@ void __init config_amiga(void)
   mach_gettimeoffset   = amiga_gettimeoffset;
   if (AMIGAHW_PRESENT(A3000_CLK)){
     mach_gettod  = a3000_gettod;
+    rtc_resource.name[1] = '3';
+    request_resource(&iomem_resource, &rtc_resource);
   }
   else{ /* if (AMIGAHW_PRESENT(A2000_CLK)) */
     mach_gettod  = a2000_gettod;
+    request_resource(&iomem_resource, &rtc_resource);
   }
 
   mach_max_dma_address = 0xffffffff; /*
@@ -404,6 +460,17 @@ void __init config_amiga(void)
   /* ensure that the DMA master bit is set */
   custom.dmacon = DMAF_SETCLR | DMAF_MASTER;
 
+  /* request all RAM */
+  for (i = 0; i < m68k_num_memory; i++) {
+    ram_resource[i].name =
+      (m68k_memory[i].addr >= 0x01000000) ? "32-bit Fast RAM" :
+      (m68k_memory[i].addr < 0x00c00000) ? "16-bit Fast RAM" :
+      "16-bit Slow RAM";
+    ram_resource[i].start = m68k_memory[i].addr;
+    ram_resource[i].end = m68k_memory[i].addr+m68k_memory[i].size-1;
+    request_resource(&iomem_resource, &ram_resource[i]);
+  }
+
   /* initialize chipram allocator */
   amiga_chip_init ();
 
@@ -437,6 +504,8 @@ static void __init amiga_sched_init(void (*timer_routine)(int, void *,
 {
 	jiffy_ticks = (amiga_eclock+HZ/2)/HZ;
 
+	if (!request_mem_region(CIAB_PHYSADDR+0x400, 0x200, "timer"))
+	    printk("Cannot allocate ciab.ta{lo,hi}\n");
 	ciab.cra &= 0xC0;   /* turn off timer A, continuous mode, from Eclk */
 	ciab.talo = jiffy_ticks % 256;
 	ciab.tahi = jiffy_ticks / 256;
@@ -840,9 +909,7 @@ static void amiga_heartbeat(int on)
 
 static void amiga_get_model(char *model)
 {
-    strcpy(model, "Amiga ");
-    if (amiga_model >= AMI_500 && amiga_model <= AMI_DRACO)
-	strcat(model, amiga_models[amiga_model-AMI_500]);
+    strcpy(model, amiga_model_name);
 }
 
 

@@ -1,4 +1,4 @@
-/* $Id: asuscom.c,v 1.10 2000/06/26 08:59:12 keil Exp $
+/* $Id: asuscom.c,v 1.11 2000/11/24 17:05:37 kai Exp $
  *
  * asuscom.c     low level stuff for ASUSCOM NETWORK INC. ISDNLink cards
  *
@@ -11,6 +11,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "ipac.h"
@@ -19,7 +20,7 @@
 
 extern const char *CardType[];
 
-const char *Asuscom_revision = "$Revision: 1.10 $";
+const char *Asuscom_revision = "$Revision: 1.11 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -306,8 +307,8 @@ Asus_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_asuscom(struct IsdnCard *card))
+int __init
+setup_asuscom(struct IsdnCard *card)
 {
 	int bytecnt;
 	struct IsdnCardState *cs = card->cs;

@@ -176,7 +176,6 @@ static void pirq_ali_ide_interrupt(struct pci_dev *router, unsigned reg, unsigne
 	pci_read_config_byte(router, reg, &x);
 	x = (x & 0xe0) | val;	/* clear the level->edge transform */
 	pci_write_config_byte(router, reg, x);
-	eisa_set_level_irq(irq);
 }
 
 static int pirq_ali_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
@@ -196,7 +195,6 @@ static int pirq_ali_set(struct pci_dev *router, struct pci_dev *dev, int pirq, i
 			pirq_ali_ide_interrupt(router, 0x75, val, irq);
 			break;
 		}
-		eisa_set_level_irq(irq);
 		return 1;
 	}
 	return 0;
@@ -279,6 +277,27 @@ static int pirq_cyrix_set(struct pci_dev *router, struct pci_dev *dev, int pirq,
 	return 1;
 }
 
+static int pirq_sis_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
+{
+	u8 x;
+	int reg = 0x41 + (pirq - 'A') ;
+
+	pci_read_config_byte(router, reg, &x);
+	return (x & 0x80) ? 0 : (x & 0x0f);
+}
+
+static int pirq_sis_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
+{
+	u8 x;
+	int reg = 0x41 + (pirq - 'A') ;
+
+	pci_read_config_byte(router, reg, &x);
+	x = (pirq & 0x20) ? 0 : (irq & 0x0f);
+	pci_write_config_byte(router, reg, x);
+
+	return 1;
+}
+
 #ifdef CONFIG_PCI_BIOS
 
 static int pirq_bios_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
@@ -309,7 +328,7 @@ static struct irq_router pirq_routers[] = {
 	{ "OPTI", PCI_VENDOR_ID_OPTI, PCI_DEVICE_ID_OPTI_82C700, pirq_opti_get, pirq_opti_set },
 
 	{ "NatSemi", PCI_VENDOR_ID_CYRIX, PCI_DEVICE_ID_CYRIX_5520, pirq_cyrix_get, pirq_cyrix_set },
-
+	{ "SIS", PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_503, pirq_sis_get, pirq_sis_set },
 	{ "default", 0, 0, NULL, NULL }
 };
 
@@ -427,6 +446,7 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 	} else if (newirq && r->set && (dev->class >> 8) != PCI_CLASS_DISPLAY_VGA) {
 		DBG(" -> assigning IRQ %d", newirq);
 		if (r->set(pirq_router_dev, d, pirq, newirq)) {
+			eisa_set_level_irq(newirq);
 			DBG(" ... OK\n");
 			msg = "Assigned";
 			irq = newirq;

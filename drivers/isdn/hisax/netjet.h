@@ -1,4 +1,4 @@
-// $Id: netjet.h,v 2.3 2000/06/26 08:59:14 keil Exp $
+// $Id: netjet.h,v 2.5 2000/11/24 17:05:38 kai Exp $
 //-----------------------------------------------------------------------------
 //
 // NETjet common header file
@@ -72,6 +72,6 @@ void write_tiger(struct IsdnCardState *cs);
 
 void netjet_fill_dma(struct BCState *bcs);
 void netjet_interrupt(int intno, void *dev_id, struct pt_regs *regs);
-__initfunc(void inittiger(struct IsdnCardState *cs));
+void inittiger(struct IsdnCardState *cs);
 void release_io_netjet(struct IsdnCardState *cs);
 

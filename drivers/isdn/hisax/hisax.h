@@ -1,4 +1,4 @@
-/* $Id: hisax.h,v 2.48 2000/07/04 10:24:32 keil Exp $
+/* $Id: hisax.h,v 2.52 2000/11/25 17:01:00 kai Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -476,6 +476,7 @@ struct amd7930_hw {
 #define L1_MODE_TRANS	1
 #define L1_MODE_HDLC	2
 #define L1_MODE_EXTRN	3
+#define L1_MODE_HDLC_56K 4
 #define L1_MODE_MODEM	7
 #define L1_MODE_V32	8
 #define L1_MODE_FAX	9
@@ -987,23 +988,13 @@ struct IsdnCardState {
 #define  ISDN_CTYPE_W6692	36
 #define  ISDN_CTYPE_HFC_SX      37
 #define  ISDN_CTYPE_NETJET_U	38
-#define  ISDN_CTYPE_COUNT	38
+#define  ISDN_CTYPE_HFC_SP_PCMCIA      39
+#define  ISDN_CTYPE_COUNT	39
 
 
 #ifdef ISDN_CHIP_ISAC
 #undef ISDN_CHIP_ISAC
 #endif
-
-#ifndef __initfunc
-#define __initfunc(__arginit) __arginit
-#endif
-
-#ifndef __initdata
-#define __initdata
-#endif
-
-#define HISAX_INITFUNC(__arginit) __initfunc(__arginit)
-#define HISAX_INITDATA __initdata
 
 #ifdef	CONFIG_HISAX_16_0
 #define  CARD_TELES0 1
@@ -1064,10 +1055,6 @@ struct IsdnCardState {
 #ifndef ISDN_CHIP_ISAC
 #define ISDN_CHIP_ISAC 1
 #endif
-#undef HISAX_INITFUNC
-#define HISAX_INITFUNC(__arginit) __arginit
-#undef HISAX_INITDATA
-#define HISAX_INITDATA
 #else
 #define  CARD_ELSA  0
 #endif

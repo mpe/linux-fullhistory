@@ -1,4 +1,4 @@
-/* $Id: bkm_a8.c,v 1.12 2000/06/26 08:59:12 keil Exp $
+/* $Id: bkm_a8.c,v 1.14 2000/11/24 17:05:37 kai Exp $
  * bkm_a8.c     low level stuff for Scitel Quadro (4*S0, passive)
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -12,6 +12,7 @@
 #define __NO_VERSION__
 
 #include <linux/config.h>
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "ipac.h"
@@ -26,7 +27,7 @@
 
 extern const char *CardType[];
 
-const char sct_quadro_revision[] = "$Revision: 1.12 $";
+const char sct_quadro_revision[] = "$Revision: 1.14 $";
 
 static const char *sct_quadro_subtypes[] =
 {
@@ -268,8 +269,8 @@ BKM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return (0);
 }
 
-__initfunc(int
-sct_alloc_io(u_int adr, u_int len))
+int __init
+sct_alloc_io(u_int adr, u_int len)
 {
 	if (check_region(adr, len)) {
 		printk(KERN_WARNING
@@ -282,17 +283,17 @@ sct_alloc_io(u_int adr, u_int len))
 	return(0);
 }
 
-static struct pci_dev *dev_a8 __initdata = NULL;
-static u16  sub_vendor_id __initdata = 0;
-static u16  sub_sys_id __initdata = 0;
-static u_char pci_bus __initdata = 0;
-static u_char pci_device_fn __initdata = 0;
-static u_char pci_irq __initdata = 0;
+static struct pci_dev *dev_a8 __initdata;
+static u16  sub_vendor_id __initdata;
+static u16  sub_sys_id __initdata;
+static u_char pci_bus __initdata;
+static u_char pci_device_fn __initdata;
+static u_char pci_irq __initdata;
 
 #endif /* CONFIG_PCI */
 
-__initfunc(int
-setup_sct_quadro(struct IsdnCard *card))
+int __init
+setup_sct_quadro(struct IsdnCard *card)
 {
 #if CONFIG_PCI
 	struct IsdnCardState *cs = card->cs;

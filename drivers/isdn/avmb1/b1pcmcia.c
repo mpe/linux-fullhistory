@@ -75,6 +75,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include <linux/capi.h>
 #include <linux/b1pcmcia.h>
@@ -83,7 +84,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.10 $";
+static char *revision = "$Revision: 1.12 $";
 
 /* ------------------------------------------------------------- */
 
@@ -300,12 +301,7 @@ EXPORT_SYMBOL(b1pcmcia_delcard);
 
 /* ------------------------------------------------------------- */
 
-#ifdef MODULE
-#define b1pcmcia_init init_module
-void cleanup_module(void);
-#endif
-
-int b1pcmcia_init(void)
+static int __init b1pcmcia_init(void)
 {
 	struct capi_driver *driver = &b1pcmcia_driver;
 	char *p;
@@ -332,9 +328,10 @@ int b1pcmcia_init(void)
 	return retval;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit b1pcmcia_exit(void)
 {
     detach_capi_driver(&b1pcmcia_driver);
 }
-#endif
+
+module_init(b1pcmcia_init);
+module_exit(b1pcmcia_exit);

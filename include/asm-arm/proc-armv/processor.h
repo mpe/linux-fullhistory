@@ -41,9 +41,9 @@ struct context_save_struct {
 	unsigned int	domain;
 
 #define EXTRA_THREAD_STRUCT_INIT					\
-	, domain_val(DOMAIN_USER, DOMAIN_CLIENT) |			\
-	  domain_val(DOMAIN_KERNEL, DOMAIN_MANAGER) |			\
-	  domain_val(DOMAIN_IO, DOMAIN_CLIENT)
+	domain:	  domain_val(DOMAIN_USER, DOMAIN_CLIENT) |		\
+		  domain_val(DOMAIN_KERNEL, DOMAIN_MANAGER) |		\
+		  domain_val(DOMAIN_IO, DOMAIN_CLIENT)
 
 #define start_thread(regs,pc,sp)					\
 ({									\

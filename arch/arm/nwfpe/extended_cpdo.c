@@ -42,7 +42,7 @@ unsigned int ExtendedCPDO(const unsigned int opcode)
    floatx80 rFm, rFn;
    unsigned int Fd, Fm, Fn, nRc = 1;
 
-   //fp_printk("ExtendedCPDO(0x%08x)\n",opcode);
+   //printk("ExtendedCPDO(0x%08x)\n",opcode);
    
    Fm = getFm(opcode);
    if (CONSTANT_FM(opcode))

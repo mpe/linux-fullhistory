@@ -185,8 +185,6 @@ int get_joliet_filename(struct iso_directory_record *, unsigned char *, struct i
 int get_acorn_filename(struct iso_directory_record *, char *, struct inode *);
 
 extern struct dentry *isofs_lookup(struct inode *, struct dentry *);
-extern int isofs_get_block(struct inode *, long, struct buffer_head *, int);
-extern int isofs_bmap(struct inode *, int);
 extern struct buffer_head *isofs_bread(struct inode *, unsigned int, unsigned int);
 
 extern struct inode_operations isofs_dir_inode_operations;

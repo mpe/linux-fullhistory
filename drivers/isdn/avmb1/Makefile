@@ -1,5 +1,5 @@
 #
-# $Id: Makefile,v 1.21 2000/11/01 14:05:02 calle Exp $
+# $Id: Makefile,v 1.22 2000/11/23 20:45:14 kai Exp $
 #
 # Makefile for the CAPI and AVM-B1 device drivers.
 #
@@ -11,6 +11,10 @@
 # parent makes..
 #
 # $Log: Makefile,v $
+# Revision 1.22  2000/11/23 20:45:14  kai
+# fixed module_init/exit stuff
+# Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+#
 # Revision 1.21  2000/11/01 14:05:02  calle
 # - use module_init/module_exit from linux/init.h.
 # - all static struct variables are initialized with "membername:" now.
@@ -150,19 +154,19 @@ ifeq ($(CONFIG_ISDN_CAPI),y)
   OX_OBJS  += kcapi.o
   O_OBJS   += capi.o
   ifdef CONFIG_ISDN_CAPIFS
-  	OX_OBJS   += capifs.o
+	OX_OBJS   += capifs.o
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
-  	O_OBJS   += b1isa.o
+	O_OBJS   += b1isa.o
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
-  	O_OBJS  += b1pci.o
+	O_OBJS  += b1pci.o
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
-  	O_OBJS   += t1isa.o
+	O_OBJS   += t1isa.o
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
-  	OX_OBJS   += b1pcmcia.o
+	OX_OBJS   += b1pcmcia.o
 	ifeq ($(CONFIG_HOTPLUG),y)
 		ifneq ($(CONFIG_PCMCIA),n)
 			M_OBJS   += avm_cs.o
@@ -170,44 +174,44 @@ ifeq ($(CONFIG_ISDN_CAPI),y)
 	endif
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
-  	O_OBJS   += t1pci.o
+	O_OBJS   += t1pci.o
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_C4
-  	O_OBJS   += c4.o
+	O_OBJS   += c4.o
   endif
   OX_OBJS  += capiutil.o capidrv.o b1.o b1dma.o
 else
   ifeq ($(CONFIG_ISDN_CAPI),m)
-  	O_TARGET += kernelcapi.o
-  	OX_OBJS  += kcapi.o
-  	M_OBJS   += capi.o kernelcapi.o
-  	ifdef CONFIG_ISDN_CAPIFS
-  		MX_OBJS   += capifs.o
-  	endif
-  	ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
-  		M_OBJS   += b1isa.o
-  	endif
-  	ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
-  		M_OBJS  += b1pci.o
-  	endif
-  	ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
-  		M_OBJS   += t1isa.o
-  	endif
-  	ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
-  		MX_OBJS  += b1pcmcia.o
+	O_TARGET += kernelcapi.o
+	OX_OBJS  += kcapi.o
+	M_OBJS   += capi.o kernelcapi.o
+	ifdef CONFIG_ISDN_CAPIFS
+		MX_OBJS   += capifs.o
+	endif
+	ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
+		M_OBJS   += b1isa.o
+	endif
+	ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
+		M_OBJS  += b1pci.o
+	endif
+	ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
+		M_OBJS   += t1isa.o
+	endif
+	ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
+		MX_OBJS  += b1pcmcia.o
 		ifeq ($(CONFIG_HOTPLUG),y)
 			ifneq ($(CONFIG_PCMCIA),n)
-  				M_OBJS   += avm_cs.o
+				M_OBJS   += avm_cs.o
 			endif
 		endif
-  	endif
-  	ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
-  		M_OBJS   += t1pci.o
-  	endif
-  	ifdef CONFIG_ISDN_DRV_AVMB1_C4
-  		M_OBJS   += c4.o
-  	endif
-  	MX_OBJS  += capiutil.o capidrv.o b1.o b1dma.o
+	endif
+	ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
+		M_OBJS   += t1pci.o
+	endif
+	ifdef CONFIG_ISDN_DRV_AVMB1_C4
+		M_OBJS   += c4.o
+	endif
+	MX_OBJS  += capiutil.o capidrv.o b1.o b1dma.o
   endif
 endif
 

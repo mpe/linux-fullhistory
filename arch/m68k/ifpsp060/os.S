@@ -85,21 +85,20 @@
 |
 	.global		_060_dmem_write
 _060_dmem_write:
+	subq.l		#1,%d0
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	beqs		user_write
 super_write:
 	move.b		(%a0)+,(%a1)+		| copy 1 byte
-	subq.l		#0x1,%d0		| decr byte counter
-	bnes		super_write		| quit if ctr = 0
+	dbra		%d0,super_write		| quit if --ctr < 0
 	clr.l		%d1			| return success
 	rts
 user_write:
-	move.l		%d0,-(%sp)		| pass: counter
-	move.l		%a1,-(%sp)		| pass: user dst
-	move.l		%a0,-(%sp)		| pass: supervisor src
-	bsr.l		_copyout		| write byte to user mem
-	move.l		%d0,%d1			| return success
-	add.l		#0xc, %sp		| clear 3 lw params
+	move.b		(%a0)+,%d1		| copy 1 byte
+copyoutae:
+	movs.b		%d1,(%a1)+
+	dbra		%d0,user_write		| quit if --ctr < 0
+	clr.l		%d1			| return success
 	rts
 
 |
@@ -119,21 +118,20 @@ user_write:
 	.global		_060_dmem_read
 _060_imem_read:
 _060_dmem_read:
+	subq.l		#1,%d0
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	beqs		user_read
 super_read:
 	move.b		(%a0)+,(%a1)+		| copy 1 byte
-	subq.l		#0x1,%d0		| decr byte counter
-	bnes		super_read		| quit if ctr = 0
+	dbra		%d0,super_read		| quit if --ctr < 0
 	clr.l		%d1			| return success
 	rts
 user_read:
-	move.l		%d0,-(%sp)		| pass: counter
-	move.l		%a1,-(%sp)		| pass: super dst
-	move.l		%a0,-(%sp)		| pass: user src
-	bsr.l		_copyin			| read byte from user mem
-	move.l		%d0,%d1			| return success
-	add.l		#0xc,%sp		| clear 3 lw params
+copyinae:
+	movs.b		(%a0)+,%d1
+	move.b		%d1,(%a1)+		| copy 1 byte
+	dbra		%d0,user_read		| quit if --ctr < 0
+	clr.l		%d1			| return success
 	rts
 
 |
@@ -150,14 +148,13 @@ user_read:
 |
 	.global 		_060_dmem_read_byte
 _060_dmem_read_byte:
+	clr.l		%d0			| clear whole longword
+	clr.l		%d1			| assume success
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmrbs			| supervisor
-dmrbu:	clr.l		%d0			| clear whole longword
 dmrbuae:movs.b		(%a0),%d0		| fetch user byte
-	bras		dmrbr
-dmrbs:	clr.l		%d0			| clear whole longword
-	move.b		(%a0),%d0		| fetch super byte
-dmrbr:	clr.l		%d1			| return success
+	rts
+dmrbs:	move.b		(%a0),%d0		| fetch super byte
 	rts
 
 |
@@ -187,14 +184,13 @@ dmrbr:	clr.l		%d1			| return success
 	.global 		_060_imem_read_word
 _060_dmem_read_word:
 _060_imem_read_word:
+	clr.l		%d1			| assume success
+	clr.l		%d0			| clear whole longword
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmrws			| supervisor
-dmrwu:	clr.l		%d0			| clear whole longword
 dmrwuae:movs.w		(%a0), %d0		| fetch user word
-	bras		dmrwr
-dmrws:	clr.l		%d0			| clear whole longword
-	move.w		(%a0), %d0		| fetch super word
-dmrwr:	clr.l		%d1			| return success
+	rts
+dmrws:	move.w		(%a0), %d0		| fetch super word
 	rts
 
 |
@@ -224,13 +220,12 @@ dmrwr:	clr.l		%d1			| return success
 	.global 		_060_imem_read_long
 _060_dmem_read_long:
 _060_imem_read_long:
+	clr.l		%d1			| assume success
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmrls			| supervisor
-dmrlu:
 dmrluae:movs.l		(%a0),%d0		| fetch user longword
-	bras		dmrlr
+	rts
 dmrls:	move.l		(%a0),%d0		| fetch super longword
-dmrlr:	clr.l		%d1			| return success
 	rts
 
 |
@@ -247,13 +242,12 @@ dmrlr:	clr.l		%d1			| return success
 |
 	.global 		_060_dmem_write_byte
 _060_dmem_write_byte:
+	clr.l		%d1			| assume success
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmwbs			| supervisor
-dmwbu:
 dmwbuae:movs.b		%d0,(%a0)		| store user byte
-	bras		dmwbr
+	rts
 dmwbs:	move.b		%d0,(%a0)		| store super byte
-dmwbr:	clr.l		%d1			| return success
 	rts
 
 |
@@ -270,6 +264,7 @@ dmwbr:	clr.l		%d1			| return success
 |
 	.global 		_060_dmem_write_word
 _060_dmem_write_word:
+	clr.l		%d1			| assume success
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmwws			| supervisor
 dmwwu:
@@ -293,16 +288,16 @@ dmwwr:	clr.l		%d1			| return success
 |
 	.global 		_060_dmem_write_long
 _060_dmem_write_long:
+	clr.l		%d1			| assume success
 	btst		#0x5,0x4(%a6)		| check for supervisor state
 	bnes		dmwls			| supervisor
-dmwlu:
 dmwluae:movs.l		%d0,(%a0)		| store user longword
-	bra		dmwlr
+	rts
 dmwls:	move.l		%d0,(%a0)		| store super longword
-dmwlr:	clr.l		%d1			| return success
 	rts
 
 
+#if 0
 |###############################################
 
 |
@@ -323,7 +318,7 @@ _copyout:
 	move.l		4(%sp),%a0		| source
 	move.l		8(%sp),%a1		| destination
 	move.l		12(%sp),%d0		| count
-    subq.l      #1,%d0
+	subq.l		#1,%d0
 moreout:
 	move.b		(%a0)+,%d1		| fetch supervisor byte
 copyoutae:
@@ -348,6 +343,7 @@ copyinae:
 	dbra		%d0,morein		| are we through yet?
 	moveq		#0,%d0			| return success
 	rts
+#endif
 
 |###########################################################################
 

@@ -66,6 +66,11 @@
  * this thing into as good a shape as possible, and I'm positive
  * there are lots of lurking bugs and "Stupid Places".
  *
+ * Updates:
+ *
+ * Added support for pre -A chips, which don't have advanced features
+ * and will generate CSR_RESEL rather than CSR_RESEL_AM.
+ *	Richard Hirst <richard@sleepie.demon.co.uk>  August 2000
  */
 
 #include <linux/module.h>
@@ -1251,11 +1256,16 @@ DB(DB_INTR,printk(":%d",cmd->SCp.Status))
 
 
       case CSR_RESEL_AM:
-DB(DB_INTR,printk("RESEL"))
+      case CSR_RESEL:
+DB(DB_INTR,printk("RESEL%s", sr == CSR_RESEL_AM ? "_AM" : ""))
 
-   /* First we have to make sure this reselection didn't */
-   /* happen during Arbitration/Selection of some other device. */
-   /* If yes, put losing command back on top of input_Q. */
+   /* Old chips (pre -A ???) don't have advanced features and will
+    * generate CSR_RESEL.  In that case we have to extract the LUN the
+    * hard way (see below).
+    * First we have to make sure this reselection didn't
+    * happen during Arbitration/Selection of some other device.
+    * If yes, put losing command back on top of input_Q.
+    */
 
          if (hostdata->level2 <= L2_NONE) {
 
@@ -1295,10 +1305,53 @@ DB(DB_INTR,printk("RESEL"))
     * not the right way to go, but...)
     */
 
-         lun = read_wd33c93(regp, WD_DATA);
-         if (hostdata->level2 < L2_RESELECT)
-            write_wd33c93_cmd(regp,WD_CMD_NEGATE_ACK);
-         lun &= 7;
+         if (sr == CSR_RESEL_AM) {
+            lun = read_wd33c93(regp, WD_DATA);
+            if (hostdata->level2 < L2_RESELECT)
+               write_wd33c93_cmd(regp,WD_CMD_NEGATE_ACK);
+            lun &= 7;
+         }
+         else {
+            /* Old chip; wait for msgin phase to pick up the LUN. */
+            for (lun = 255; lun; lun--) {
+               if ((asr = READ_AUX_STAT()) & ASR_INT)
+                  break;
+               udelay(10);
+            }
+            if (!(asr & ASR_INT)) {
+               printk("wd33c93: Reselected without IDENTIFY\n");
+               lun = 0;
+            }
+            else {
+               /* Verify this is a change to MSG_IN and read the message */
+               sr = read_wd33c93(regp, WD_SCSI_STATUS);
+               if (sr == (CSR_ABORT   | PHS_MESS_IN) ||
+                   sr == (CSR_UNEXP   | PHS_MESS_IN) ||
+                   sr == (CSR_SRV_REQ | PHS_MESS_IN)) {
+                  /* Got MSG_IN, grab target LUN */
+                  lun = read_1_byte(regp);
+                  /* Now we expect a 'paused with ACK asserted' int.. */
+                  asr = READ_AUX_STAT();
+                  if (!(asr & ASR_INT)) {
+                     udelay(10);
+                     asr = READ_AUX_STAT();
+                     if (!(asr & ASR_INT))
+                        printk("wd33c93: No int after LUN on RESEL (%02x)\n",
+                              asr);
+                  }
+                  sr = read_wd33c93(regp, WD_SCSI_STATUS);
+                  if (sr != CSR_MSGIN)
+                     printk("wd33c93: Not paused with ACK on RESEL (%02x)\n",
+                           sr);
+                  lun &= 7;
+                  write_wd33c93_cmd(regp,WD_CMD_NEGATE_ACK);
+               }
+               else {
+                  printk("wd33c93: Not MSG_IN on reselect (%02x)\n", sr);
+                  lun = 0;
+               }
+            }
+         }
 
    /* Now we look for the command that's reconnecting. */
 
@@ -1372,6 +1425,9 @@ uchar sr;
    write_wd33c93(regp, WD_SYNCHRONOUS_TRANSFER,
                  calc_sync_xfer(hostdata->default_sx_per/4,DEFAULT_SX_OFF));
    write_wd33c93(regp, WD_COMMAND, WD_CMD_RESET);
+#ifdef CONFIG_MVME147_SCSI
+   udelay(25); /* The old wd33c93 on MVME147 needs this, at least */
+#endif
 
    while (!(READ_AUX_STAT() & ASR_INT))
       ;

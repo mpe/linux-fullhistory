@@ -1,11 +1,32 @@
 /*
- * $Id: capi.c,v 1.39 2000/07/24 13:42:50 calle Exp $
+ * $Id: capi.c,v 1.44 2000/11/25 17:00:59 kai Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.44  2000/11/25 17:00:59  kai
+ * compatibility cleanup - final part for the time being
+ *
+ * Revision 1.43  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.42  2000/11/19 17:03:55  kai
+ * compatibility cleanup - part 5
+ *
+ * Revision 1.41  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.40  2000/10/24 15:15:04  calle
+ * Workaround: pppd calls restoretty before reseting the ldisc and
+ *   ldisc "ppp_sync" didn't support this. So we call n_tty_ioctl
+ *   in the driver ioctl function. (remember: driver ioctl function is
+ *   only called if ldisc ioctl function did not handle the call)
+ *
  * Revision 1.39  2000/07/24 13:42:50  calle
  * - lock_kernel/unlock_kernel for _release functions. (from 2.4)
  *
@@ -211,6 +232,7 @@
 #include <linux/poll.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
+#include <linux/init.h>
 #include <linux/devfs_fs_kernel.h>
 #include <linux/init.h>
 #include "capiutil.h"
@@ -220,7 +242,7 @@
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 #include <linux/slab.h>
 
-static char *revision = "$Revision: 1.39 $";
+static char *revision = "$Revision: 1.44 $";
 
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
 
@@ -1667,7 +1689,13 @@ int capinc_tty_chars_in_buffer(struct tty_struct *tty)
 int capinc_tty_ioctl(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned long arg)
 {
-	return -ENOIOCTLCMD;
+	int error = 0;
+	switch (cmd) {
+	default:
+		error = n_tty_ioctl (tty, file, cmd, arg);
+		break;
+	}
+	return error;
 }
 
 void capinc_tty_set_termios(struct tty_struct *tty, struct termios * old)
@@ -1960,7 +1988,7 @@ static void __exit proc_exit(void)
 /* -------- init function and module interface ---------------------- */
 
 
-static void alloc_exit(void)
+static void __exit alloc_exit(void)
 {
 	if (capidev_cachep) {
 		(void)kmem_cache_destroy(capidev_cachep);
@@ -2060,7 +2088,7 @@ static struct capi_interface_user cuser = {
 
 static char rev[10];
 
-int __init capi_init(void)
+static int __init capi_init(void)
 {
 	char *p;
 
@@ -2173,8 +2201,5 @@ static void __exit capi_exit(void)
 	printk(KERN_NOTICE "capi: Rev%s: unloaded\n", rev);
 }
 
-#ifdef MODULE
 module_init(capi_init);
-#endif
 module_exit(capi_exit);
-

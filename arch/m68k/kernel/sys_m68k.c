@@ -24,6 +24,7 @@
 #include <asm/cachectl.h>
 #include <asm/traps.h>
 #include <asm/ipc.h>
+#include <asm/page.h>
 
 /*
  * sys_pipe() is the normal C calling standard for creating
@@ -659,6 +660,11 @@ sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
 out:
 	unlock_kernel();
 	return ret;
+}
+
+asmlinkage int sys_getpagesize(void)
+{
+	return PAGE_SIZE;
 }
 
 /*

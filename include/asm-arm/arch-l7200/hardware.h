@@ -41,9 +41,6 @@
 #define FLUSH_BASE_PHYS		0x40000000	/* ROM */
 #define FLUSH_BASE		0xdf000000
 
-#define PARAMS_OFFSET		(0x0100)
-#define Z_PARAMS_BASE		(RAM_START + PARAMS_OFFSET)
-
 #define PCIO_BASE		IO_BASE
 
 #endif

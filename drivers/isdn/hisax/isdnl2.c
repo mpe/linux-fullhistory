@@ -1,4 +1,4 @@
-/* $Id: isdnl2.c,v 2.23 2000/06/26 08:59:13 keil Exp $
+/* $Id: isdnl2.c,v 2.25 2000/11/24 17:05:38 kai Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -12,16 +12,15 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isdnl2.h"
 
-const char *l2_revision = "$Revision: 2.23 $";
+const char *l2_revision = "$Revision: 2.25 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
-static
-struct Fsm l2fsm =
-{NULL, 0, 0, NULL, NULL};
+static struct Fsm l2fsm;
 
 enum {
 	ST_L2_1,
@@ -1535,7 +1534,7 @@ l2_frame_error_reest(struct FsmInst *fi, int event, void *arg)
 	test_and_clear_bit(FLG_L3_INIT, &st->l2.flag);
 }
 
-static struct FsmNode L2FnList[] HISAX_INITDATA =
+static struct FsmNode L2FnList[] __initdata =
 {
 	{ST_L2_1, EV_L2_DL_ESTABLISH_REQ, l2_mdl_assign},
 	{ST_L2_2, EV_L2_DL_ESTABLISH_REQ, l2_go_st3},
@@ -1832,8 +1831,8 @@ releasestack_transl2(struct PStack *st)
 {
 }
 
-HISAX_INITFUNC(void
-Isdnl2New(void))
+void __init
+Isdnl2New(void)
 {
 	l2fsm.state_count = L2_STATE_COUNT;
 	l2fsm.event_count = L2_EVENT_COUNT;

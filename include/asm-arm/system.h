@@ -4,7 +4,7 @@
 #ifdef __KERNEL__
 
 #include <linux/config.h>
-#include <linux/linkage.h>
+#include <linux/kernel.h>
 
 /* information about the system we're running on */
 extern unsigned int system_rev;
@@ -64,7 +64,16 @@ extern struct task_struct *__switch_to(struct task_struct *prev, struct task_str
 
 #ifdef CONFIG_SMP
 #error SMP not supported
+
+#define smp_mb()		mb()
+#define smp_rmb()		rmb()
+#define smp_wmb()		wmb()
+
 #else
+
+#define smp_mb()		barrier()
+#define smp_rmb()		barrier()
+#define smp_wmb()		barrier()
 
 #define cli()			__cli()
 #define sti()			__sti()

@@ -1,5 +1,5 @@
 /*
- * $Id: capiutil.c,v 1.11 2000/03/03 15:50:42 calle Exp $
+ * $Id: capiutil.c,v 1.13 2000/11/23 20:45:14 kai Exp $
  *
  * CAPI 2.0 convert capi message to capi message struct
  *
@@ -7,6 +7,15 @@
  * Rewritten for Linux 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capiutil.c,v $
+ * Revision 1.13  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.12  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
  * Revision 1.11  2000/03/03 15:50:42  calle
  * - kernel CAPI:
  *   - Changed parameter "param" in capi_signal from __u32 to void *.
@@ -81,6 +90,7 @@
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 #include <asm/segment.h>
 #include <linux/config.h>
 
@@ -978,7 +988,6 @@ char *capi_cmsg2str(_cmsg * cmsg)
 	return buf;
 }
 
-
 EXPORT_SYMBOL(capi_cmsg2message);
 EXPORT_SYMBOL(capi_message2cmsg);
 EXPORT_SYMBOL(capi_cmsg_header);
@@ -987,15 +996,14 @@ EXPORT_SYMBOL(capi_cmsg2str);
 EXPORT_SYMBOL(capi_message2str);
 EXPORT_SYMBOL(capi_info2str);
 
-#ifdef MODULE
-
-int init_module(void)
+static int __init capiutil_init(void)
 {
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit capiutil_exit(void)
 {
 }
 
-#endif
+module_init(capiutil_init);
+module_exit(capiutil_exit);

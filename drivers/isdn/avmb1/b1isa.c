@@ -67,13 +67,14 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/capi.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.8 $";
+static char *revision = "$Revision: 1.10 $";
 
 /* ------------------------------------------------------------- */
 
@@ -260,12 +261,7 @@ static struct capi_driver b1isa_driver = {
     add_card: b1isa_add_card,
 };
 
-#ifdef MODULE
-#define b1isa_init init_module
-void cleanup_module(void);
-#endif
-
-int b1isa_init(void)
+static int __init b1isa_init(void)
 {
 	struct capi_driver *driver = &b1isa_driver;
 	char *p;
@@ -292,9 +288,10 @@ int b1isa_init(void)
 	return retval;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit b1isa_exit(void)
 {
     detach_capi_driver(&b1isa_driver);
 }
-#endif
+
+module_init(b1isa_init);
+module_exit(b1isa_exit);

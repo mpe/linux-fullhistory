@@ -131,6 +131,9 @@ obj-$(CONFIG_AMIGA_BUILTIN_SERIAL) += amiserial.o
 obj-$(CONFIG_SX) += sx.o generic_serial.o
 obj-$(CONFIG_RIO) += rio/rio.o generic_serial.o
 obj-$(CONFIG_SH_SCI) += sh-sci.o generic_serial.o
+obj-$(CONFIG_SERIAL167) += serial167.o
+obj-$(CONFIG_MVME162_SCC) += generic_serial.o vme_scc.o
+obj-$(CONFIG_BVME6000_SCC) += generic_serial.o vme_scc.o
 
 ifeq ($(CONFIG_RIO),y)
   SUB_DIRS += rio

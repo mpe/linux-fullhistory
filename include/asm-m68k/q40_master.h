@@ -3,13 +3,14 @@
  * RTC stuff merged for compactnes..
 */
 
-#if 1
+#ifndef _Q40_MASTER_H
+#define _Q40_MASTER_H
+
+#include <asm/io.h>
+
+
 #define q40_master_addr 0xff000000
 #define q40_rtc_addr    0xff021ffc
-#else
-extern unsigned long q40_master_addr;  /* wherever it is mapped ... */
-extern unsigned long q40_rtc_addr;
-#endif
 
 #define IIRQ_REG            0x0       /* internal IRQ reg */
 #define EIRQ_REG            0x4       /* external ... */
@@ -22,7 +23,7 @@ extern unsigned long q40_rtc_addr;
 #define KEYBOARD_UNLOCK_REG 0x20      /* clear kb int */
 
 #define SAMPLE_ENABLE_REG   0x14      /* generate SAMPLE ints */
-#define SAMPLE_RATE_REG     0x28
+#define SAMPLE_RATE_REG     0x2c
 #define SAMPLE_CLEAR_REG    0x28
 #define SAMPLE_LOW          0x00
 #define SAMPLE_HIGH         0x01
@@ -34,9 +35,13 @@ extern unsigned long q40_rtc_addr;
 #endif
 #define EXT_ENABLE_REG      0x10      /* ... rest of the ISA ints ... */
 
+#if 0
 #define master_inb(_reg_)           (*(((unsigned char *)q40_master_addr)+_reg_))
 #define master_outb(_b_,_reg_)      (*(((unsigned char *)q40_master_addr)+_reg_)=(_b_))
-
+#else
+#define master_inb(_reg_)      native_inb((unsigned char *)q40_master_addr+_reg_)
+#define master_outb(_b_,_reg_)  native_outb(_b_,(unsigned char *)q40_master_addr+_reg_)
+#endif
 
 /* define some Q40 specific ints */
 #include "q40ints.h"
@@ -55,21 +60,13 @@ extern unsigned long q40_rtc_addr;
 #define RTC_CTRL        (*(unsigned char *)(Q40_RTC_BASE-28))
 
 
-#if 0
-struct RTC_STRUCT{ 
-  unsigned char bcd_year;
-  unsigned char bcd_mth;
-  unsigned char bcd_dom;
-  unsigned char bcd_dayofweek;
-  unsigned char bcd_hr;
-  unsigned char bcd_min;
-  unsigned char bcd_sec;
-  unsigned char ctrl;
-};
-typedef struct RTC_STRUCT *RtcPtr_t;
-#endif
-
-
 /* some control bits */
 #define RTC_READ   64  /* prepare for reading */
 #define RTC_WRITE  128
+
+
+/* misc defs */
+#define DAC_LEFT  ((unsigned char *)0xff008000)
+#define DAC_RIGHT ((unsigned char *)0xff008004)
+
+#endif /* _Q40_MASTER_H */

@@ -29,6 +29,7 @@
 
 #include <linux/major.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
 #include <linux/blk.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -201,8 +202,6 @@ z2_open( struct inode *inode, struct file *filp )
 #ifdef __powerpc__
 		/* FIXME: ioremap doesn't build correct memory tables. */
 		{
-			extern void* vmalloc (unsigned long);
-			extern void vfree (void*);
 			vfree(vmalloc (size));
 		}
 

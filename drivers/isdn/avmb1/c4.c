@@ -80,6 +80,7 @@
 #include <linux/ioport.h>
 #include <linux/pci.h>
 #include <linux/capi.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <linux/netdevice.h>
@@ -88,7 +89,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.18 $";
+static char *revision = "$Revision: 1.20 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
@@ -1327,15 +1328,9 @@ static struct capi_driver c4_driver = {
 };
 
 
-#ifdef MODULE
-#define c4_init init_module
-void cleanup_module(void);
-#endif
-
-
 static int ncards = 0;
 
-int c4_init(void)
+static int __init c4_init(void)
 {
 	struct capi_driver *driver = &c4_driver;
 	struct pci_dev *dev = NULL;
@@ -1419,9 +1414,10 @@ int c4_init(void)
 #endif
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit c4_exit(void)
 {
     detach_capi_driver(&c4_driver);
 }
-#endif
+
+module_init(c4_init);
+module_exit(c4_exit);

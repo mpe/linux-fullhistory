@@ -1,4 +1,4 @@
-/* $Id: amd7930.c,v 1.4 2000/06/26 08:59:12 keil Exp $
+/* $Id: amd7930.c,v 1.5 2000/11/24 17:05:37 kai Exp $
  *
  * HiSax ISDN driver - chip specific routines for AMD 7930
  *
@@ -94,7 +94,7 @@
 #include "rawhdlc.h"
 #include <linux/interrupt.h>
 
-static const char *amd7930_revision = "$Revision: 1.4 $";
+static const char *amd7930_revision = "$Revision: 1.5 $";
 
 #define RCV_BUFSIZE	1024	/* Size of raw receive buffer in bytes */
 #define RCV_BUFBLKS	4	/* Number of blocks to divide buffer into
@@ -734,8 +734,8 @@ amd7930_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_amd7930(struct IsdnCard *card))
+int __init
+setup_amd7930(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

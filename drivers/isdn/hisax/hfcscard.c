@@ -1,4 +1,4 @@
-/* $Id: hfcscard.c,v 1.7 2000/06/26 08:59:13 keil Exp $
+/* $Id: hfcscard.c,v 1.8 2000/11/24 17:05:37 kai Exp $
  *
  * hfcscard.c     low level stuff for hfcs based cards (Teles3c, ACER P10)
  *
@@ -9,13 +9,14 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "hfc_2bds0.h"
 #include "isdnl1.h"
 
 extern const char *CardType[];
 
-static const char *hfcs_revision = "$Revision: 1.7 $";
+static const char *hfcs_revision = "$Revision: 1.8 $";
 
 static void
 hfcs_interrupt(int intno, void *dev_id, struct pt_regs *regs)
@@ -136,8 +137,8 @@ hfcs_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_hfcs(struct IsdnCard *card))
+int __init
+setup_hfcs(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

@@ -1,4 +1,4 @@
-/* $Id: elsa.c,v 2.23 2000/06/26 08:59:12 keil Exp $
+/* $Id: elsa.c,v 2.26 2000/11/24 17:05:37 kai Exp $
  *
  * elsa.c     low level stuff for Elsa isdn cards
  *
@@ -16,6 +16,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include <linux/config.h>
 #include "hisax.h"
 #include "arcofi.h"
@@ -29,7 +30,7 @@
 
 extern const char *CardType[];
 
-const char *Elsa_revision = "$Revision: 2.23 $";
+const char *Elsa_revision = "$Revision: 2.26 $";
 const char *Elsa_Types[] =
 {"None", "PC", "PCC-8", "PCC-16", "PCF", "PCF-Pro",
  "PCMCIA", "QS 1000", "QS 3000", "Microlink PCI", "QS 3000 PCI", 
@@ -865,10 +866,10 @@ probe_elsa(struct IsdnCardState *cs)
 	return (CARD_portlist[i]);
 }
 
-static 	struct pci_dev *dev_qs1000 __initdata = NULL;
-static 	struct pci_dev *dev_qs3000 __initdata = NULL;
+static 	struct pci_dev *dev_qs1000 __devinitdata = NULL;
+static 	struct pci_dev *dev_qs3000 __devinitdata = NULL;
 
-int
+int __devinit
 setup_elsa(struct IsdnCard *card)
 {
 	long flags;

@@ -13,19 +13,35 @@ L_OBJS   := changebit.o csumipv6.o csumpartial.o csumpartialcopy.o \
 	    strncpy_from_user.o strnlen_user.o strchr.o strrchr.o  \
 	    testchangebit.o testclearbit.o testsetbit.o uaccess.o
 
+l-obj-y	:=
+l-obj-n	:=
+
 O_TARGET := lib.o
 O_OBJS   := backtrace.o delay.o
 
-L_OBJS_arc		:= io-acorn.o floppydma.o
-L_OBJS_rpc		:= io-acorn.o floppydma.o
+ifeq ($(CONFIG_ARCH_ACORN),y)
+  half := n
+  full := y
+else
+  half := y
+  full := n
+endif
+
+L_OBJS_arc		:= ecard.o io-acorn.o floppydma.o
+L_OBJS_rpc		:= ecard.o io-acorn.o floppydma.o
 L_OBJS_clps7500		:= io-acorn.o
-L_OBJS_ebsa110		:= io-ebsa110.o
-L_OBJS_footbridge	:= io-footbridge.o
+L_OBJS_footbridge	:= io-pcio.o
 L_OBJS_l7200     	:= io-acorn.o
-L_OBJS_nexuspci		:= io-footbridge.o
-L_OBJS_sa1100		:= io-footbridge.o
+L_OBJS_nexuspci		:= io-pcio.o
+L_OBJS_sa1100		:= io-pcio.o
 L_OBJS_shark		:= io-shark.o
-L_OBJS_integrator	:= io-shark.o
+L_OBJS_integrator	:= io-pcio.o
+L_OBJS_clps711x		:= io-shark.o
+
+l-obj-y			+= io-readsb.o io-writesb.o
+l-obj-$(full)		+= io-readsw-armv3.o io-writesw-armv3.o
+l-obj-$(half)		+= io-readsw-armv4.o io-writesw-armv4.o
+l-obj-y			+= io-readsl.o io-writesl.o
 
 ifeq ($(PROCESSOR),armo)
   L_OBJS += uaccess-armo.o
@@ -35,7 +51,7 @@ ifneq ($(MACHINE),ebsa110)
   OX_OBJS += io.o
 endif
 
-L_OBJS	+= $(L_OBJS_$(MACHINE))
+L_OBJS	+= $(L_OBJS_$(MACHINE)) $(l-obj-y)
 
 include $(TOPDIR)/Rules.make
 

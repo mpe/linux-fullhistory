@@ -377,34 +377,48 @@ static int __init check_initrd(struct meminfo *mi)
 /*
  * Reserve the various regions of node 0
  */
-static inline void reserve_node_zero(unsigned int bootmap_pfn, unsigned int bootmap_pages)
+static __init void reserve_node_zero(unsigned int bootmap_pfn, unsigned int bootmap_pages)
 {
+	pg_data_t *pgdat = NODE_DATA(0);
+
 	/*
 	 * Register the kernel text and data with bootmem.
 	 * Note that this can only be in node 0.
 	 */
-	reserve_bootmem_node(NODE_DATA(0), __pa(&_stext), &_end - &_stext);
+	reserve_bootmem_node(pgdat, __pa(&_stext), &_end - &_stext);
 
 #ifdef CONFIG_CPU_32
 	/*
 	 * Reserve the page tables.  These are already in use,
 	 * and can only be in node 0.
 	 */
-	reserve_bootmem_node(NODE_DATA(0), __pa(swapper_pg_dir),
+	reserve_bootmem_node(pgdat, __pa(swapper_pg_dir),
 			     PTRS_PER_PGD * sizeof(void *));
-#else
-	/*
-	 * Stop this memory from being grabbed - its special DMA
-	 * memory that is required for the screen.
-	 */
-	reserve_bootmem_node(NODE_DATA(0), 0x02000000, 0x00080000);
 #endif
 	/*
 	 * And don't forget to reserve the allocator bitmap,
 	 * which will be freed later.
 	 */
-	reserve_bootmem_node(NODE_DATA(0), bootmap_pfn << PAGE_SHIFT,
+	reserve_bootmem_node(pgdat, bootmap_pfn << PAGE_SHIFT,
 			     bootmap_pages << PAGE_SHIFT);
+
+	/*
+	 * Hmm... This should go elsewhere, but we really really
+	 * need to stop things allocating the low memory; we need
+	 * a better implementation of GFP_DMA which does not assume
+	 * that DMA-able memory starts at zero.
+	 */
+	if (machine_is_integrator())
+		reserve_bootmem_node(pgdat, 0, __pa(swapper_pg_dir));
+	/*
+	 * These should likewise go elsewhere.  They pre-reserve
+	 * the screen memory region at the start of main system
+	 * memory.
+	 */
+	if (machine_is_archimedes() || machine_is_a5k())
+		reserve_bootmem_node(pgdat, 0x02000000, 0x00080000);
+	if (machine_is_p720t())
+		reserve_bootmem_node(pgdat, 0xc0000000, 0x00014000);
 }
 
 /*
@@ -412,11 +426,12 @@ static inline void reserve_node_zero(unsigned int bootmap_pfn, unsigned int boot
  */
 static inline void free_bootmem_node_bank(int node, struct meminfo *mi)
 {
+	pg_data_t *pgdat = NODE_DATA(node);
 	int bank;
 
 	for (bank = 0; bank < mi->nr_banks; bank++)
 		if (mi->bank[bank].node == node)
-			free_bootmem_node(NODE_DATA(node), mi->bank[bank].start,
+			free_bootmem_node(pgdat, mi->bank[bank].start,
 					  mi->bank[bank].size);
 }
 
@@ -632,9 +647,11 @@ static inline void free_area(unsigned long addr, unsigned long end, char *s)
 
 void free_initmem(void)
 {
-	free_area((unsigned long)(&__init_begin),
-		  (unsigned long)(&__init_end),
-		  "init");
+	if (!machine_is_integrator()) {
+		free_area((unsigned long)(&__init_begin),
+			  (unsigned long)(&__init_end),
+			  "init");
+	}
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD

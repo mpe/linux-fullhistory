@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.84 2000/11/13 22:51:46 kai Exp $
+/* $Id: isdn_ppp.c,v 1.85 2000/11/25 17:00:59 kai Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *

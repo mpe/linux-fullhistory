@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 2.15 2000/06/26 08:59:14 keil Exp $
+/* $Id: tei.c,v 2.17 2000/11/24 17:05:38 kai Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -14,9 +14,10 @@
 #define __NO_VERSION__
 #include "hisax.h"
 #include "isdnl2.h"
+#include <linux/init.h>
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 2.15 $";
+const char *tei_revision = "$Revision: 2.17 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -28,9 +29,7 @@ const char *tei_revision = "$Revision: 2.15 $";
 
 #define TEI_ENTITY_ID	0xf
 
-static
-struct Fsm teifsm =
-{NULL, 0, 0, NULL, NULL};
+static struct Fsm teifsm;
 
 void tei_handler(struct PStack *st, u_char pr, struct sk_buff *skb);
 
@@ -430,7 +429,7 @@ release_tei(struct IsdnCardState *cs)
 	}
 }
 
-static struct FsmNode TeiFnList[] HISAX_INITDATA =
+static struct FsmNode TeiFnList[] __initdata =
 {
 	{ST_TEI_NOP, EV_IDREQ, tei_id_request},
 	{ST_TEI_NOP, EV_ASSIGN, tei_id_test_dup},
@@ -447,8 +446,8 @@ static struct FsmNode TeiFnList[] HISAX_INITDATA =
 
 #define TEI_FN_COUNT (sizeof(TeiFnList)/sizeof(struct FsmNode))
 
-HISAX_INITFUNC(void
-TeiNew(void))
+void __init
+TeiNew(void)
 {
 	teifsm.state_count = TEI_STATE_COUNT;
 	teifsm.event_count = TEI_EVENT_COUNT;

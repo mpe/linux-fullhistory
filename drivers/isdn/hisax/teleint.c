@@ -1,4 +1,4 @@
-/* $Id: teleint.c,v 1.13 2000/06/26 08:59:14 keil Exp $
+/* $Id: teleint.c,v 1.14 2000/11/24 17:05:38 kai Exp $
  *
  * teleint.c     low level stuff for TeleInt isdn cards
  *
@@ -9,6 +9,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hfc_2bs0.h"
@@ -16,7 +17,7 @@
 
 extern const char *CardType[];
 
-const char *TeleInt_revision = "$Revision: 1.13 $";
+const char *TeleInt_revision = "$Revision: 1.14 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -260,8 +261,8 @@ TeleInt_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_TeleInt(struct IsdnCard *card))
+int __init
+setup_TeleInt(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

@@ -258,17 +258,21 @@ static void dc21285_parity_irq(int irq, void *dev_id, struct pt_regs *regs)
 void __init dc21285_init(struct arm_pci_sysdata *sysdata)
 {
 	unsigned long cntl;
-	unsigned int mem_size;
+	unsigned int mem_size, mem_mask;
 	unsigned int pci_cmd = PCI_COMMAND_IO | PCI_COMMAND_MEMORY |
 				PCI_COMMAND_MASTER | PCI_COMMAND_INVALIDATE;
 	int cfn_mode;
+
+	mem_size = (unsigned int)high_memory - PAGE_OFFSET;
+	for (mem_mask = 0x00100000; mem_mask < 0x10000000; mem_mask <<= 1)
+		if (mem_mask >= mem_size)
+			break;		
 
 	/*
 	 * These registers need to be set up whether we're the
 	 * central function or not.
 	 */
-	mem_size = (unsigned int)high_memory - PAGE_OFFSET;
-	*CSR_SDRAMBASEMASK    = (mem_size - 1) & 0x0ffc0000;
+	*CSR_SDRAMBASEMASK    = (mem_mask - 1) & 0x0ffc0000;
 	*CSR_SDRAMBASEOFFSET  = 0;
 	*CSR_ROMBASEMASK      = 0x80000000;
 	*CSR_CSRBASEMASK      = 0;

@@ -100,7 +100,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.15 $";
+static char *revision = "$Revision: 1.16 $";
 
 /* ------------------------------------------------------------- */
 
@@ -613,12 +613,7 @@ static struct capi_driver t1isa_driver = {
     add_card: t1isa_add_card,
 };
 
-#ifdef MODULE
-#define t1isa_init init_module
-void cleanup_module(void);
-#endif
-
-int t1isa_init(void)
+static int __init t1isa_init(void)
 {
 	struct capi_driver *driver = &t1isa_driver;
 	char *p;
@@ -646,9 +641,10 @@ int t1isa_init(void)
 	return retval;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit t1isa_exit(void)
 {
     detach_capi_driver(&t1isa_driver);
 }
-#endif
+
+module_init(t1isa_init);
+module_exit(t1isa_exit);

@@ -94,8 +94,6 @@
 #define XBUS_SWITCH_J17_11	((*XBUS_SWITCH) & (1 << 5))
 #define XBUS_SWITCH_J17_9	((*XBUS_SWITCH) & (1 << 6))
 
-#define PARAMS_OFFSET		0x0100
-
 #define FLUSH_BASE_PHYS		0x50000000
 #define UNCACHEABLE_ADDR	(ARMCSR_BASE + 0x108)
 
@@ -132,5 +130,10 @@ extern void gpio_modify_io(int mask, int in);
 extern int  gpio_read(void);
 extern void cpld_modify(int mask, int set);
 #endif
+
+#define pcibios_assign_all_busses()	1
+
+#define PCIBIOS_MIN_IO		0x6000
+#define PCIBIOS_MIN_MEM 	0x40000000
 
 #endif
