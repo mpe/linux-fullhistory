@@ -86,12 +86,6 @@ static int sd_open(struct inode * inode, struct file * filp)
 	if(target >= sd_template.dev_max || !rscsi_disks[target].device)
 	  return -ENXIO;   /* No such device */
 	
-	/*
-	 * See if we are requesting a non-existent partition.
-	 */
-	if(sd_sizes[MINOR(inode->i_rdev)] == 0)
-	  return -ENXIO;
-
 /* Make sure that only one process can do a check_change_disk at one time.
  This is also used to lock out further access when the partition table is being re-read. */
 
@@ -103,6 +97,13 @@ static int sd_open(struct inode * inode, struct file * filp)
 	  if(!rscsi_disks[target].device->access_count)
 	    sd_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
 	};
+	/*
+	 * See if we are requesting a non-existent partition.  Do this
+	 * after checking for disk change.
+	 */
+	if(sd_sizes[MINOR(inode->i_rdev)] == 0)
+	  return -ENXIO;
+
 	rscsi_disks[target].device->access_count++;
 	if (rscsi_disks[target].device->host->hostt->usage_count)
 	  (*rscsi_disks[target].device->host->hostt->usage_count)++;

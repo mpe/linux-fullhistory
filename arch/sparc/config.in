@@ -13,9 +13,10 @@ comment 'Sparc Kernel setup'
 
 bool 'Sparc V8 kernel' CONFIG_SPARC_V8 y
 bool 'Sparc SMP support' CONFIG_LINUX_SMP n
-bool 'Networking support' CONFIG_NET y
+bool 'Networking support' CONFIG_NET n
 bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
 bool 'System V IPC' CONFIG_SYSVIPC y
+bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 
 if [ "$CONFIG_NET" = "y" ]; then
 comment 'Networking options'
@@ -174,16 +175,16 @@ bool 'Aztech/Orchid/Okano/Wearnes (non IDE) CDROM support' CONFIG_AZTCD n
 comment 'Filesystems'
 
 bool 'Standard (minix) fs support' CONFIG_MINIX_FS y
-bool 'Extended fs support' CONFIG_EXT_FS n
+bool 'Extended fs support' CONFIG_EXT_FS y
 bool 'Second extended fs support' CONFIG_EXT2_FS y
-bool 'xiafs filesystem support' CONFIG_XIA_FS n
+bool 'xiafs filesystem support' CONFIG_XIA_FS y
 bool 'msdos fs support' CONFIG_MSDOS_FS y
 if [ "$CONFIG_MSDOS_FS" = "y" ]; then
 bool 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS n
 fi
-bool '/proc filesystem support' CONFIG_PROC_FS y
+bool '/proc filesystem support' CONFIG_PROC_FS n
 if [ "$CONFIG_INET" = "y" ]; then
-bool 'NFS filesystem support' CONFIG_NFS_FS y
+bool 'NFS filesystem support' CONFIG_NFS_FS n
 fi
 if [ "$CONFIG_BLK_DEV_SR" = "y" -o "$CONFIG_CDU31A" = "y" -o "$CONFIG_MCD" = "y" -o "$CONFIG_SBPCD" = "y" -o "$CONFIG_BLK_DEV_IDECD" = "y" ]; then
 	bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS y
@@ -191,7 +192,7 @@ else
 	bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n
 fi
 bool 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS n
-bool 'System V and Coherent filesystem support' CONFIG_SYSV_FS n
+bool 'System V and Coherent filesystem support' CONFIG_SYSV_FS y
 
 
 comment 'character devices'

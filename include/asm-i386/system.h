@@ -249,4 +249,11 @@ __asm__ __volatile__ ("movw $" #limit ",%1\n\t" \
  */
 extern struct desc_struct default_ldt;
 
+/*
+ * disable hlt during certain critical i/o operations
+ */
+#define HAVE_DISABLE_HLT
+void disable_hlt(void);
+void enable_hlt(void);
+
 #endif

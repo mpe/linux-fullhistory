@@ -180,6 +180,7 @@ struct task_struct {
 	struct tty_struct *tty; /* NULL if no tty */
 /* ipc stuff */
 	struct sem_undo *semundo;
+	struct sem_queue *semsleeping;
 /* ldt for this task - used by Wine.  If NULL, default_ldt is used */
 	struct desc_struct *ldt;
 /* tss for this task */
@@ -232,7 +233,7 @@ struct task_struct {
 /* math */	0, \
 /* comm */	"swapper", \
 /* fs info */	0,NULL, \
-/* ipc */	NULL, \
+/* ipc */	NULL, NULL, \
 /* ldt */	NULL, \
 /* tss */	INIT_TSS, \
 /* fs */	{ INIT_FS }, \

@@ -313,7 +313,7 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
   printk("do cmd\n");
 #endif
   scsi_do_cmd (SCpnt,(void *) cmnd,
-               (void *) device->buff,device->header.pack_len-size-sizeof(struct sg_header),
+               (void *) device->buff,amt,
 	       sg_command_done,device->timeout,SG_DEFAULT_RETRIES);
 #ifdef DEBUG
   printk("done cmd\n");

@@ -9,6 +9,7 @@
 #include <asm/segment.h>
 #include <asm/openprom.h>
 #include <asm/page.h>
+#include <asm/pgtable.h>
 
 extern unsigned long pg0[1024];		/* page table for 0-4MB for everybody */
 extern void die_if_kernel(char *,struct pt_regs *,long);

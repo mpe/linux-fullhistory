@@ -156,9 +156,11 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 	action->flags = irqflags;
 	action->mask = 0;
 	action->name = devname;
-	if (irq < 8 && irq) {
-		cache_21 &= ~(1<<irq);
-		outb(cache_21,0x21);
+	if (irq < 8) {
+		if (irq) {
+			cache_21 &= ~(1<<irq);
+			outb(cache_21,0x21);
+		}
 	} else {
 		cache_21 &= ~(1<<2);
 		cache_A1 &= ~(1<<(irq-8));
@@ -298,7 +300,6 @@ static void device_interrupt(unsigned long vector, struct pt_regs * regs)
 	if (irq == 1)
 		irq = 7;
 #endif
-	printk("%d%d", irq, ack);
 	kstat.interrupts[irq]++;
 	action = irq_action + irq;
 	/* quick interrupts get executed with no extra overhead */

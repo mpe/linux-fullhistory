@@ -206,6 +206,27 @@ typedef struct {
   Elf32_Word	sh_entsize;
 } Elf32_Shdr;
 
+#define	EI_MAG0		0		/* e_ident[] indexes */
+#define	EI_MAG1		1
+#define	EI_MAG2		2
+#define	EI_MAG3		3
+#define	EI_CLASS	4
+#define	EI_DATA		5
+#define	EI_VERSION	6
+#define	EI_PAD		7
+
+#define	ELFMAG0		0x7f		/* EI_MAG */
+#define	ELFMAG1		'E'
+#define	ELFMAG2		'L'
+#define	ELFMAG3		'F'
+#define	ELFMAG		"\177ELF"
+#define	SELFMAG		4
+
+#define	ELFCLASSNONE	0		/* EI_CLASS */
+#define	ELFCLASS32	1
+#define	ELFCLASS64	2
+#define	ELFCLASSNUM	3
+
 #define ELF_START_MMAP 0x80000000
 
 #endif /* _LINUX_ELF_H */

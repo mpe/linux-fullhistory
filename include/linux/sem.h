@@ -3,7 +3,7 @@
 #include <linux/ipc.h>
 
 /* semop flags */
-#define SEM_UNDO        010000  /* undo the operation on exit */
+#define SEM_UNDO        0x1000  /* undo the operation on exit */
 
 /* semctl Command Definitions. */
 #define GETPID  11       /* get sempid */
@@ -16,14 +16,14 @@
 
 /* One semid data structure for each set of semaphores in the system. */
 struct semid_ds {
-  struct ipc_perm sem_perm;       /* permissions .. see ipc.h */
-  time_t          sem_otime;      /* last semop time */
-  time_t          sem_ctime;      /* last change time */
-  struct sem      *sem_base;      /* ptr to first semaphore in array */
-  struct wait_queue *eventn;
-  struct wait_queue *eventz;
-  struct sem_undo  *undo;	  /* undo requests on this array */
-  ushort          sem_nsems;      /* no. of semaphores in array */
+  struct ipc_perm sem_perm;            /* permissions .. see ipc.h */
+  time_t          sem_otime;           /* last semop time */
+  time_t          sem_ctime;           /* last change time */
+  struct sem      *sem_base;           /* ptr to first semaphore in array */
+  struct sem_queue *sem_pending;       /* pending operations to be processed */
+  struct sem_queue **sem_pending_last; /* last pending operation */
+  struct sem_undo *undo;	       /* undo requests on this array */
+  ushort          sem_nsems;           /* no. of semaphores in array */
 };
 
 /* semop system calls takes an array of these. */
@@ -43,16 +43,16 @@ union semun {
 };
 
 struct  seminfo {
-    int semmap; 
-    int semmni; 
-    int semmns; 
-    int semmnu; 
-    int semmsl; 
-    int semopm; 
-    int semume; 
-    int semusz; 
-    int semvmx; 
-    int semaem; 
+    int semmap;
+    int semmni;
+    int semmns;
+    int semmnu;
+    int semmsl;
+    int semopm;
+    int semume;
+    int semusz;
+    int semvmx;
+    int semaem;
 };
 
 #define SEMMNI  128             /* ?  max # of semaphore identifiers */
@@ -66,31 +66,42 @@ struct  seminfo {
 #define SEMMNU  SEMMNS          /* num of undo structures system wide */
 #define SEMAEM  (SEMVMX >> 1)   /* adjust on exit max value */
 #define SEMMAP  SEMMNS          /* # of entries in semaphore map */
-#define SEMUSZ  20		/* sizeof struct sem_undo */ 
+#define SEMUSZ  20		/* sizeof struct sem_undo */
 
 #ifdef __KERNEL__
 
 /* One semaphore structure for each semaphore in the system. */
 struct sem {
+  short   semval;         /* current value */
   short   sempid;         /* pid of last operation */
-  ushort  semval;         /* current value */
-  ushort  semncnt;        /* num procs awaiting increase in semval */
-  ushort  semzcnt;        /* num procs awaiting semval = 0 */
 };
 
 /* ipcs ctl cmds */
-#define SEM_STAT 18	
+#define SEM_STAT 18
 #define SEM_INFO 19
 
-/* per process undo requests */
-/* this gets linked into the task_struct */
+/* One queue for each semaphore set in the system. */
+struct sem_queue {
+    struct sem_queue *	next;	 /* next entry in the queue */
+    struct sem_queue **	prev;	 /* previous entry in the queue, *(q->prev) == q */
+    struct wait_queue *	sleeper; /* sleeping process */
+    struct sem_undo *	undo;	 /* undo structure */
+    int    		pid;	 /* process id of requesting process */
+    int    		status;	 /* completion status of operation */
+    struct semid_ds *	sma;	 /* semaphore array for operations */
+    struct sembuf *	sops;	 /* array of pending operations */
+    int			nsops;	 /* number of operations */
+};
+
+/* Each task has a list of undo requests. They are executed automatically
+ * when the process exits.
+ */
 struct sem_undo {
-    struct sem_undo *proc_next;
-    struct sem_undo *id_next;
-    int    semid;
-    short  semadj; 		/* semval adjusted by exit */
-    ushort sem_num; 		/* semaphore index in array semid */
-};      
+    struct sem_undo *  proc_next; /* next entry on this process */
+    struct sem_undo *  id_next;	  /* next entry on this semaphore set */
+    int		       semid;	  /* semaphore set identifier */
+    short *	       semadj;	  /* array of adjustments, one per semaphore */
+};
 
 #endif /* __KERNEL__ */
 

@@ -24,6 +24,9 @@ struct pt_regs {
 	unsigned long f_regs[64];    /* yuck yuck yuck */
 };
 
-#define user_mode(regs) (~((regs)->ps&0x1))  /* if previous supervisor is 0, came from user */
+#ifdef __KERNEL__
+#define user_mode(regs) (0x0)  /* if previous supervisor is 0, came from user */
+extern void show_regs(struct pt_regs *);
+#endif
 
 #endif

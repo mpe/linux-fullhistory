@@ -202,13 +202,13 @@ int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	memcpy(&tip,rarp_ptr,4);
 
 /*
- *	Process entry
+ *	Process entry. Use tha for table lookup according to RFC903.
  */
   
 	cli();
 	for (entry = rarp_tables; entry != NULL; entry = entry->next)
-	if (!memcmp(entry->ha, sha, rarp->ar_hln))
-		break;
+		if (!memcmp(entry->ha, tha, rarp->ar_hln))
+			break;
   
 	if (entry != NULL)
 	{

@@ -8,9 +8,9 @@
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
  */
 
-#include <asm/cprefix.h>
 #include <asm/head.h>
 #include <asm/asi.h>
+#include <asm/cprefix.h>
 
 /* Here are macros for routines we do often, this allows me to inline this
  * without making the code look real ugly. Well, the macro looks ugly too but
@@ -44,7 +44,7 @@
 	sethi	%hi( C_LABEL(current) ), %g6; \
 	ld	[%g6 + %lo( C_LABEL(current) )], %g6; \
 	ld	[%g6 + THREAD_UWINDOWS], %g7; /* how many user wins are active? */ \
-	subcc	%g7, 0x0, %g0
+	subcc	%g7, 0x0, %g0; \
 	bne	2f;                            /* If there are any, branch. */ \
 	save	%g0, %g0, %g0;                 /* Save into that window either way. */ \
 	std	%l0, [%sp];                    /* If above shows only kernel windows */ \
@@ -128,8 +128,7 @@
 	or	%g0, %l5, %g5;                  /* Restore the globals. */ \
 	or	%g0, %l6, %g6; \
 	or	%g0, %l7, %g7; \
-8:                                              /* We are done when we get here. */ \
-
+8:      nop;                                     /* We are done when we get here. */ \
 
 /* As if the last macro wasn't enough, we have to go through a very similar routine
  * upon entry to most traps and interrupts. This is save away the current window
@@ -191,7 +190,7 @@
 	sub	%fp, 0xb0, %sp; \
 1: 	sethi	%hi( C_LABEL(current) ), %l6; \
 	ld	[%l6 + %lo( C_LABEL(current) )], %l6; \
-	ld	[%l6 + PCB_WIM], %l5; \
+	ld	[%l6 + THREAD_WIM], %l5; \
 	and	%l0, 0x1f, %l7; \
 	cmp	%l5, %l7; \
 	ble,a	4f; \
@@ -209,7 +208,7 @@
 	sethi	%hi( C_LABEL(eintstack) ), %l7; \
 2: \
 	sub	%l7, 0xb0, %sp; \
-3: \
+3:
 
 	.text
 	.align 4
@@ -217,6 +216,11 @@
 /* Default trap handler */
 	.globl my_trap_handler
 my_trap_handler:
+#if 1
+		jmp	%l1
+		rett	%l2
+		nop
+#else
 		rd %wim, %l4
 		or %g0, 0x1, %l5
 		sll %l5, %l0, %l5
@@ -234,7 +238,18 @@ my_trap_handler:
 		nop                 ! click our heels three times, "no place like home"
 		jmp %l1
 		rett %l2
+#endif /* bogon */
 	
+	.globl sparc_timer
+sparc_timer:
+	ENTER_IRQ
+	or	%g0, 0x10, %o0	
+	call	C_LABEL(do_IRQ)
+	or	%g0, %g0, %o1
+	jmp	%l1
+	rett	%l2
+	nop	
+
 /* This routine is optimized for kernel window fills. User fills take about two
  * or three extra jumps on the average. We'll see how this works out.
  */
@@ -244,10 +259,11 @@ my_trap_handler:
  * see below.
  */
 
-	.globl fill_window_entry
-fill_window_entry:
+	.align 4
+	.globl spill_window_entry
+spill_window_entry:
 	andcc	%l0, 0x40, %g0		! see if this is a user window fill
-	bz,a	fill_from_user
+	bz,a	spill_from_user
 	nop
 
 	TRAP_WIN_CLEAN			/* danger, danger... */
@@ -256,7 +272,7 @@ fill_window_entry:
 	jmp	%l1
 	rett	%l2
 
-fill_from_user:
+spill_from_user:
 	sethi	%hi( C_LABEL(current) ), %l6
 	ld	[%l6 + %lo( C_LABEL(current) )], %l6
 	ld	[%l6 + THREAD_WIM], %l5
@@ -301,12 +317,13 @@ fill_from_user:
  * it the first time. :>
  */
 
-	.globl spill_window_entry
-spill_window_entry:
+	.align 4
+	.globl fill_window_entry
+fill_window_entry:
 	wr	%g0, 0, %wim		! Can not enter invalid register without this.
 	andcc	%l0, 0x40, %g0          ! From user?
 	restore				! restore to where trap occurred
-	bz	spill_from_user
+	bz	fill_from_user
 	restore				! enter invalid register, whee...
 	restore %g0, 0x1, %l1		! enter one-past invalid register
 	rd	%psr, %l0		! this is the window we need to save
@@ -332,24 +349,24 @@ spill_window_entry:
 	jmp	%l1
 	rett	%l2			! are you as confused as I am?
 
-spill_from_user:
+fill_from_user:
 	andcc	%sp, 0x7, %g0		! check for alignment of user stack
-	bne	spill_bad_stack
+	bne	fill_bad_stack
 	sra	%sp, 0x1e, %l7
 	cmp	%l7, 0x0
 	be,a	1f
 	andn	%sp, 0xfff, %l7
 	cmp	%l7, -1
-	bne	spill_bad_stack
+	bne	fill_bad_stack
 	andn	%sp, 0xfff, %l7
 1:	lda	[%l7] ASI_PTE, %l7
 	srl	%l7, 0x1d, %l7
 	andn	%l7, 0x2, %l7
 	cmp	%l7, 0x4
-	bne	spill_bad_stack
+	bne	fill_bad_stack
 	and	%sp, 0xfff, %l7
 	cmp	%l7, 0xfc1
-	bl,a	spill_stack_ok
+	bl,a	fill_stack_ok
 	restore	%g0, 1, %l1
 	add	%sp, 0x38, %l5
 	sra	%sp, 0x1e, %l7
@@ -357,16 +374,16 @@ spill_from_user:
 	be,a	1f
 	andn	%sp, 0xfff, %l7
 	cmp	%l7, -1
-	bne	spill_bad_stack
+	bne	fill_bad_stack
 	andn	%sp, 0xfff, %l7
 1:	lda	[%l7] ASI_PTE, %l7
 	srl	%l7, 0x1d, %l7
 	andn	%l7, 0x2, %l7
 	cmp	%l7, 0x4
-	be,a	spill_stack_ok
+	be,a	fill_stack_ok
 	restore	%g0, 0x1, %l1
 
-spill_bad_stack:
+fill_bad_stack:
 	save	%g0, %g0, %g0			! save to where restore happened
 	save	%g0, 0x1, %l4			! save is an add remember? to trap window
 	sethi	%hi( C_LABEL(current) ), %l6
@@ -450,7 +467,7 @@ spill_bad_stack:
 	jmp	%l1
 	rett	%l2
 
-spill_stack_ok:
+fill_stack_ok:
 	rd	%psr, %l0
 	sll	%l1, %l0, %l1
 	wr	%l1, 0x0, %wim
@@ -474,24 +491,28 @@ spill_stack_ok:
 	jmp	%l1
 	rett	%l2
 
+	.align 4
 	.globl trap_entry
 trap_entry:
 	TRAP_WIN_CLEAN
 	jmp	%l1
 	rett	%l2
 
+	.align 4
 	.globl linux_trap_nmi
 linux_trap_nmi:
 	TRAP_WIN_CLEAN
 	jmp	%l1
 	rett	%l2
 
+	.align 4
 	.globl sparc_trap
 sparc_trap:
 	TRAP_WIN_CLEAN
 	jmp	%l1
 	rett	%l2
 
+	.align 4
 	.globl leave_trap
 leave_trap:
 	jmp	%l1
@@ -655,3 +676,4 @@ C_LABEL(sys_call_table):
 	.long C_LABEL(sys_setfsuid)
 	.long C_LABEL(sys_setfsgid)
 	.long C_LABEL(sys_llseek)		/* 140 */
+	.align 4

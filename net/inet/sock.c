@@ -62,6 +62,8 @@
  *		Alan Cox	:	Split IP from generic code
  *		Alan Cox	:	New kfree_skbmem()
  *		Alan Cox	:	Make SO_DEBUG superuser only.
+ *		Alan Cox	:	Allow anyone to clear SO_DEBUG
+ *					(compatibility fix)
  *
  * To Fix:
  *
@@ -134,7 +136,7 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 		  	return(-ENOPROTOOPT);
 
 		case SO_DEBUG:	
-			if(!suser())
+			if(val && !suser())
 				return(-EPERM);
 			sk->debug=val?1:0;
 			return 0;

@@ -46,6 +46,9 @@ struct pt_regs {
 	unsigned long r18;
 };
 
+#ifdef __KERNEL__
 #define user_mode(regs) ((regs)->ps & 8)
+extern void show_regs(struct pt_regs *);
+#endif
 
 #endif

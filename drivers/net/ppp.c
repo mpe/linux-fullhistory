@@ -32,6 +32,11 @@
 #define NEW_TTY_DRIVERS				/* */
 #define OPTIMIZE_FLAG_TIME  ((HZ * 3)/2)	/* */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -63,8 +68,8 @@
 
 #include <linux/ppp.h>
 
-#include <ip.h>
-#include <tcp.h>
+#include <linux/ip.h>
+#include <linux/tcp.h>
 
 #include "slhc.h"
 
@@ -563,6 +568,10 @@ ppp_open(struct tty_struct *tty)
 
   PRINTKN (2,(KERN_INFO "ppp: channel %s open\n", ppp->dev->name));
 
+#ifdef MODULE
+  MOD_INC_USE_COUNT;
+#endif
+
   return (ppp->line);
 }
 
@@ -603,6 +612,9 @@ ppp_dev_close(struct device *dev)
   PRINTKN (2,(KERN_INFO "ppp: channel %s going down for IP packets!\n",
 	      dev->name));
   CHECK_PPP(-ENXIO);
+#ifdef MODULE
+  MOD_DEC_USE_COUNT;
+#endif
   return 0;
 }
 
@@ -2034,3 +2046,54 @@ static void ppp_print_buffer(const char *name, char *buf, int count, int seg)
 
   set_fs (old_fs);
 }
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+
+static struct device dev_ppp[PPP_NRUNIT] = {
+	{
+		"ppp0",		/* ppp */
+		0, 0, 0, 0,	/* memory */
+		0, 0,		/* base, irq */
+		0, 0, 0, NULL, ppp_init,
+	},
+	{ "ppp1" , 0, 0, 0, 0,  1, 0, 0, 0, 0, NULL, ppp_init },
+	{ "ppp2" , 0, 0, 0, 0,  2, 0, 0, 0, 0, NULL, ppp_init },
+	{ "ppp3" , 0, 0, 0, 0,  3, 0, 0, 0, 0, NULL, ppp_init },
+};
+
+int
+init_module(void)
+{
+	int err;
+	int i;
+
+	for (i = 0; i < PPP_NRUNIT; i++)  {
+		if ((err = register_netdev(&dev_ppp[i])))  {
+			if (err == -EEXIST)  {
+				printk("PPP: devices already present. Module not loaded.\n");
+			}
+			return err;
+		}
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	int i;
+
+	if (MOD_IN_USE)  {
+		printk("PPP: device busy, remove delayed\n");
+		return;
+	}
+	for (i = 0; i < PPP_NRUNIT; i++)  {
+		unregister_netdev(&dev_ppp[i]);
+	}
+	if ((i = tty_register_ldisc(N_PPP, NULL)))  {
+		printk("PPP: can't unregister line discipline (err = %d)\n", i);
+	}
+}
+
+#endif

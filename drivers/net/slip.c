@@ -71,8 +71,8 @@
 #include <linux/if_arp.h>
 #include "slip.h"
 #ifdef CONFIG_INET
-#include "ip.h"
-#include "tcp.h"
+#include <linux/ip.h>
+#include <linux/tcp.h>
 #include "slhc.h"
 #endif
 

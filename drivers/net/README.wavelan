@@ -38,7 +38,7 @@ Tue Jan 31 10:42:35 EST 1995
    are unique to this package and simply may be moved into place.  The
    others are modified versions of pre-existing files and must
    be incorporated more carefully.  However, the regions of modified code
-   within these files are small and are bracketted by the preprocessor
+   within these files are small and are bracketed by the preprocessor
    symbol CONFIG_WAVELAN, so incorporation should be straightforward.
 
 4. If you encounter any problems send me some email.

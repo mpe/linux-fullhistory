@@ -10,9 +10,11 @@
 #define SUN4C_SEGSZ     (1 << 18)
 #define USRSTACK        0x0         /* no joke, this is temporary, trust me */
 #define INT_ENABLE_REG_PHYSADR      0xf5000000
-#define INTS_ALL_ENAB   0x01
+#define INTS_ENAB   0x01
 
 #define WRITE_PAUSE     nop; nop; nop;
+
+#define PAGE_SIZE       4096
 
 /* Here are some trap goodies */
 

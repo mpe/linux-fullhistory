@@ -94,6 +94,8 @@ endif
 ifdef CONFIG_SCSI_U14_34F
 SCSI_OBJS := $(SCSI_OBJS) u14-34f.o
 SCSI_SRCS := $(SCSI_SRCS) u14-34f.c
+else
+SCSI_MODULE_OBJS := $(SCSI_MODULE_OBJS) u14-34f.o
 endif
 
 ifdef CONFIG_SCSI_DEBUG
@@ -158,6 +160,8 @@ endif
 ifdef CONFIG_SCSI_EATA
 SCSI_OBJS := $(SCSI_OBJS) eata.o
 SCSI_SRCS := $(SCSI_SRCS) eata.c
+else
+SCSI_MODULE_OBJS := $(SCSI_MODULE_OBJS) eata.o
 endif
 
 

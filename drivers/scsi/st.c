@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Thu Jan 19 23:28:05 1995 by makisara@kai.home
+  Last modified: Mon Jan 30 23:20:07 1995 by root@kai.home
 */
 
 #include <linux/fs.h>
@@ -894,7 +894,8 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
       else
 	(STp->buffer)->writing = ((STp->buffer)->buffer_bytes /
 	  STp->block_size) * STp->block_size;
-      STp->dirty = 0;
+      STp->dirty = !((STp->buffer)->writing ==
+		     (STp->buffer)->buffer_bytes);
 
       if (STp->block_size == 0)
 	blks = (STp->buffer)->writing;
@@ -1612,18 +1613,30 @@ st_int_ioctl(struct inode * inode,struct file * file,
        STp->drv_block = 0;
      }
      else if (cmd_in == MTFSR) {
-       if (blkno >= undone)
-	 STp->drv_block = blkno - undone;
-       else
-	 STp->drv_block = (-1);
+       if (SCpnt->sense_buffer[2] & 0x80) { /* Hit filemark */
+	 (STp->mt_status)->mt_fileno++;
+	 STp->drv_block = 0;
+       }
+       else {
+	 if (blkno >= undone)
+	   STp->drv_block = blkno - undone;
+	 else
+	   STp->drv_block = (-1);
+       }
      }
      else if (cmd_in == MTBSR) {
-       if (blkno >= 0)
-	 STp->drv_block = blkno + undone;
-       else
+       if (SCpnt->sense_buffer[2] & 0x80) { /* Hit filemark */
+	 (STp->mt_status)->mt_fileno--;
 	 STp->drv_block = (-1);
+       }
+       else {
+	 if (blkno >= 0)
+	   STp->drv_block = blkno + undone;
+	 else
+	   STp->drv_block = (-1);
+       }
      }
-     else if (cmd_in == MTEOM) {
+     else if (cmd_in == MTEOM || cmd_in == MTSEEK) {
        (STp->mt_status)->mt_fileno = (-1);
        STp->drv_block = (-1);
      }

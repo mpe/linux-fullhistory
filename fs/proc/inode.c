@@ -139,7 +139,24 @@ void proc_read_inode(struct inode * inode)
 		return;
 	}
 
-	/* files within /proc/net */
+#ifdef CONFIG_IP_ACCT
+	/* be careful: /proc/net/ip_acct_0 resets IP accounting */
+	if (ino == PROC_NET_IPACCT0) {
+		inode->i_mode = S_IFREG | S_IRUSR;
+		inode->i_op = &proc_net_inode_operations;
+		return;
+	}
+#endif
+#ifdef CONFIG_IP_FIREWALL
+	/* /proc/net/ip_forward_0 and /proc/net/ip_block_0 reset counters */
+	if ((ino == PROC_NET_IPFWFWD0) || (ino == PROC_NET_IPFWBLK0)) {
+		inode->i_mode = S_IFREG | S_IRUSR;
+		inode->i_op = &proc_net_inode_operations;
+		return;
+	}
+#endif
+
+	/* other files within /proc/net */
 	if ((ino >= PROC_NET_UNIX) && (ino < PROC_NET_LAST)) {
 		inode->i_mode = S_IFREG | S_IRUGO;
 		inode->i_op = &proc_net_inode_operations;

@@ -55,11 +55,16 @@
 #ifdef CONFIG_IP_FIREWALL
 struct ip_fw *ip_fw_fwd_chain;
 struct ip_fw *ip_fw_blk_chain;
-static int ip_fw_policy=1;
+int ip_fw_blk_policy=1;
+int ip_fw_fwd_policy=1;
 #endif
 #ifdef CONFIG_IP_ACCT
 struct ip_fw *ip_acct_chain;
 #endif
+
+#define IP_INFO_BLK	0
+#define IP_INFO_FWD	1
+#define IP_INFO_ACCT	2
 
 
 extern inline void print_ip(unsigned long xaddr)
@@ -106,7 +111,7 @@ extern inline int port_match(unsigned short *portptr,int nports,unsigned short p
 
 #ifdef CONFIG_IP_FIREWALL
 
-int ip_fw_chk(struct iphdr *ip, struct ip_fw *chain)
+int ip_fw_chk(struct iphdr *ip, struct ip_fw *chain, int policy)
 {
 	unsigned long src, dst;
 	char got_proto=0;
@@ -116,7 +121,7 @@ int ip_fw_chk(struct iphdr *ip, struct ip_fw *chain)
 	unsigned short *portptr=(unsigned short *)&(((u_int *)ip)[ip->ihl]);
 
 	if (!chain) 
-		return(1);     /* If no chain , always say Ok to packet */
+		return(policy);  /* If no chain, use your policy. */
 
 	src = ip->saddr;
 	dst = ip->daddr;
@@ -166,6 +171,8 @@ int ip_fw_chk(struct iphdr *ip, struct ip_fw *chain)
 #ifdef DEBUG_CONFIG_IP_FIREWALL
 				printf("universal frwl match\n");
 #endif
+				f->p_cnt++;
+				f->b_cnt+=ntohs(ip->tot_len);
 #ifdef CONFIG_IP_FIREWALL_VERBOSE
 				if (!(f->flags & IP_FW_F_ACCEPT))
 					goto bad_packet;
@@ -226,6 +233,9 @@ int ip_fw_chk(struct iphdr *ip, struct ip_fw *chain)
 					        port_match(&f->ports[f->n_src_p],f->n_dst_p,dst_port,
 						f->flags&IP_FW_F_DRNG))) 
 					{
+					/* We've got a match! */
+					f->p_cnt++;
+					f->b_cnt+=ntohs(ip->tot_len);
 #ifdef CONFIG_IP_FIREWALL_VERBOSE
 						if (!(f->flags & IP_FW_F_ACCEPT))
 							goto bad_packet;
@@ -246,11 +256,11 @@ int ip_fw_chk(struct iphdr *ip, struct ip_fw *chain)
 	 */
 
 #ifdef CONFIG_IP_FIREWALL_VERBOSE
-	if (!(ip_fw_policy))
+	if (!(policy))
 		goto bad_packet;
 	return 1;
 #else
-	return(ip_fw_policy);
+	return(policy);
 #endif
 
 #ifdef CONFIG_IP_FIREWALL_VERBOSE
@@ -302,7 +312,7 @@ bad_packet:
 
 
 #ifdef CONFIG_IP_ACCT
-void ip_acct_cnt(struct iphdr *ip,struct ip_fw *chain,int nh_conv)
+void ip_acct_cnt(struct iphdr *ip,struct ip_fw *chain)
 {
 	unsigned long src, dst;
 	char got_proto=0,rev=0;
@@ -341,13 +351,10 @@ addr_match:
      			f->p_cnt++;	/*	Rise packet count */
 
 			/*
-			 *	Rise byte count, if need to convert from host to network byte order,do it.
+			 *	Rise byte count, convert from host to network byte order.
 		     	 */
 		     	 
-			if (nh_conv)		    
-				f->b_cnt+=ntohs(ip->tot_len);
-			else
-				f->b_cnt+=ip->tot_len;
+			f->b_cnt+=ntohs(ip->tot_len);
 		}
 		else
 		{
@@ -407,12 +414,9 @@ addr_match:
 				{
 					f->p_cnt++;                   /* Rise packet count */
 					/*
-					 * Rise byte count, if need to convert from host to network byte order,do it.
+					 * Rise byte count, convert from host to network byte order.
 					 */
-					if (nh_conv)		    
-						f->b_cnt+=ntohs(ip->tot_len);
-					else
-						f->b_cnt+=ip->tot_len;
+					f->b_cnt+=ntohs(ip->tot_len);
 				} /* Ports match */
 			} /* Proto matches */
 		}  /* ALL/Specific */
@@ -811,25 +815,44 @@ int ip_acct_ctl(int stage, void *m, int len)
 #ifdef CONFIG_IP_FIREWALL
 int ip_fw_ctl(int stage, void *m, int len)
 {
-	if ( stage == IP_FW_FLUSH )
+	if ( stage == IP_FW_FLUSH_BLK )
 	{
 		free_fw_chain(&ip_fw_blk_chain);
+		return(0);
+	}  
+
+	if ( stage == IP_FW_FLUSH_FWD )
+	{
 		free_fw_chain(&ip_fw_fwd_chain);
 		return(0);
 	}  
 
-	if ( stage == IP_FW_POLICY )
+	if ( stage == IP_FW_ZERO_BLK )
+	{
+		zero_fw_chain(ip_fw_blk_chain);
+		return(0);
+	}  
+
+	if ( stage == IP_FW_ZERO_FWD )
+	{
+		zero_fw_chain(ip_fw_fwd_chain);
+		return(0);
+	}  
+
+	if ( stage == IP_FW_POLICY_BLK || stage == IP_FW_POLICY_FWD )
 	{
 		int *tmp_policy_ptr;
 		tmp_policy_ptr=(int *)m;
 		if ((*tmp_policy_ptr)!=1 && (*tmp_policy_ptr)!=0)
 			return (EINVAL);
-		ip_fw_policy=*tmp_policy_ptr;
+		if ( stage == IP_FW_POLICY_BLK )
+			ip_fw_blk_policy=*tmp_policy_ptr;
+		else
+			ip_fw_fwd_policy=*tmp_policy_ptr;
 		return 0;
 	}
 
-	if ( stage == IP_FW_CHK_BLK 
-		|| stage == IP_FW_CHK_FWD )
+	if ( stage == IP_FW_CHK_BLK || stage == IP_FW_CHK_FWD )
 	{
 		struct iphdr *ip;
 
@@ -855,7 +878,9 @@ int ip_fw_ctl(int stage, void *m, int len)
 
 		if ( ip_fw_chk(ip,
 			stage == IP_FW_CHK_BLK ?
-	                ip_fw_blk_chain : ip_fw_fwd_chain )
+	                ip_fw_blk_chain : ip_fw_fwd_chain,
+			stage == IP_FW_CHK_BLK ?
+	                ip_fw_blk_policy : ip_fw_fwd_policy )
 		       ) 
 			return(0);
 	    	else	
@@ -906,19 +931,44 @@ int ip_fw_ctl(int stage, void *m, int len)
 
 #if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
 
-static int ip_chain_procinfo(struct ip_fw *chain, char *buffer, char **start, off_t offset, int length)
+static int ip_chain_procinfo(int stage, char *buffer, char **start,
+		off_t offset, int length, int reset)
 {
 	off_t pos=0, begin=0;
 	struct ip_fw *i;
 	unsigned long flags;
-	int len=0;
+	int len;
 	
-	
-	len=sprintf(buffer,"Firewall Rules\n");  
+
+	switch(stage)
+	{
+#ifdef CONFIG_IP_FIREWALL
+		case IP_INFO_BLK:
+			i = ip_fw_blk_chain;
+			len=sprintf(buffer, "IP firewall block rules, policy = %d\n",
+				ip_fw_blk_policy);
+			break;
+		case IP_INFO_FWD:
+			i = ip_fw_fwd_chain;
+			len=sprintf(buffer, "IP firewall forward rules, policy = %d\n",
+				ip_fw_fwd_policy);
+			break;
+#endif
+#ifdef CONFIG_IP_ACCT
+		case IP_INFO_ACCT:
+			i = ip_acct_chain;
+			len=sprintf(buffer,"IP accounting rules\n");
+			break;
+#endif
+		default:
+			/* this should never be reached, but safety first... */
+			i = NULL;
+			len=0;
+			break;
+	}
+
 	save_flags(flags);
 	cli();
-	
-	i=chain;
 	
 	while(i!=NULL)
 	{
@@ -938,6 +988,12 @@ static int ip_chain_procinfo(struct ip_fw *chain, char *buffer, char **start, of
 			len=0;
 			begin=pos;
 		}
+		else if(reset)
+		{
+			/* This needs to be done at this specific place! */
+			i->p_cnt=0L;
+			i->b_cnt=0L;
+		}
 		if(pos>offset+length)
 			break;
 		i=i->next;
@@ -955,7 +1011,12 @@ static int ip_chain_procinfo(struct ip_fw *chain, char *buffer, char **start, of
 
 int ip_acct_procinfo(char *buffer, char **start, off_t offset, int length)
 {
-	return ip_chain_procinfo(ip_acct_chain, buffer,start,offset,length);
+	return ip_chain_procinfo(IP_INFO_ACCT, buffer,start,offset,length,0);
+}
+
+int ip_acct0_procinfo(char *buffer, char **start, off_t offset, int length)
+{
+	return ip_chain_procinfo(IP_INFO_ACCT, buffer,start,offset,length,1);
 }
 
 #endif
@@ -964,12 +1025,22 @@ int ip_acct_procinfo(char *buffer, char **start, off_t offset, int length)
 
 int ip_fw_blk_procinfo(char *buffer, char **start, off_t offset, int length)
 {
-	return ip_chain_procinfo(ip_fw_blk_chain, buffer,start,offset,length);
+	return ip_chain_procinfo(IP_INFO_BLK, buffer,start,offset,length,0);
+}
+
+int ip_fw_blk0_procinfo(char *buffer, char **start, off_t offset, int length)
+{
+	return ip_chain_procinfo(IP_INFO_BLK, buffer,start,offset,length,1);
 }
 
 int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset, int length)
 {
-	return ip_chain_procinfo(ip_fw_fwd_chain, buffer,start,offset,length);
+	return ip_chain_procinfo(IP_INFO_FWD, buffer,start,offset,length,0);
+}
+
+int ip_fw_fwd0_procinfo(char *buffer, char **start, off_t offset, int length)
+{
+	return ip_chain_procinfo(IP_INFO_FWD, buffer,start,offset,length,1);
 }
 
 #endif

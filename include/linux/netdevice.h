@@ -72,7 +72,7 @@ struct device
   unsigned long		  rmem_start;		/* shmem "recv" start	*/
   unsigned long		  mem_end;		/* sahared mem end	*/
   unsigned long		  mem_start;		/* shared mem start	*/
-  unsigned short	  base_addr;		/* device I/O address	*/
+  unsigned long		  base_addr;		/* device I/O address	*/
   unsigned char		  irq;			/* device IRQ number	*/
 
   /* Low-level status flags. */

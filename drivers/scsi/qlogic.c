@@ -4,32 +4,35 @@
    Use at your own risk.  Support Tort Reform so you won't have to read all
    these silly disclaimers.
 
-   Copyright 1994, Tom Zerucha.
+   Copyright 1994, Tom Zerucha.   
    zerucha@shell.portal.com
 
    Additional Code, and much appreciated help by
    Michael A. Griffith
    grif@cs.ucr.edu
 
+   Thanks to Eric Youngdale and Dave Hinds for loadable module and PCMCIA
+   help respectively, and for suffering through my foolishness during the
+   debugging process.
+
    Reference Qlogic FAS408 Technical Manual, 53408-510-00A, May 10, 1994
    (you can reference it, but it is incomplete and inaccurate in places)
 
-   Version 0.38b
+   Version 0.39a
 
-   This also works with loadable SCSI as a module.  Check configuration
-   options QL_INT_ACTIVE_HIGH and QL_TURBO_PDMA for PCMCIA usage (which
-   also requires an enabler).
+   Functions as standalone, loadable, and PCMCIA driver, the latter from
+   Dave Hind's PCMCIA package.
 
    Redistributable under terms of the GNU Public License
 
 */
 /*----------------------------------------------------------------*/
 /* Configuration */
-/* Set this if you are using the PCMCIA adapter - it will automatically
-   take care of several settings */
-#define QL_PCMCIA 0
 
-/* Set the following to 2 to use normal interrupt (active high/totempole-
+/* The following option is normally left alone.  PCMCIA support needs to
+   change this to adapt to the different way the interrupt pin works.
+   
+   Set the following to 2 to use normal interrupt (active high/totempole-
    tristate), otherwise use 0 (REQUIRED FOR PCMCIA) for active low, open
    drain */
 #define QL_INT_ACTIVE_HIGH 2
@@ -39,16 +42,18 @@
 #define QL_USE_IRQ 1
 
 /* Set the following to max out the speed of the PIO PseudoDMA transfers,
-   again, 0 tends to be slower, but more stable.  THIS SHOULD BE ZERO FOR
-   PCMCIA */
+   again, 0 tends to be slower, but more stable.  */
 #define QL_TURBO_PDMA 1
 
 /* This will reset all devices when the driver is initialized (during bootup).
    The other linux drivers don't do this, but the DOS drivers do, and after
-   using DOS or some kind of crash or lockup this will bring things back */
+   using DOS or some kind of crash or lockup this will bring things back
+   without requiring a cold boot.  It does take some time to recover from a
+   reset, so it is slower, and I have seen timeouts so that devices weren't
+   recognized when this was set. */
 #define QL_RESET_AT_START 1
 
-/* This will set fast (10Mhz) synchronous timing, FASTCLK must also be 1*/
+/* This will set fast (10Mhz) synchronous timing, FASTCLK must also be 1 */
 #define FASTSCSI  0
 
 /* This will set a faster sync transfer rate */
@@ -72,13 +77,10 @@
 	cause the deassertion to be early by 1/2 clock.  Bits 5&4 control
 	the assertion delay, also in 1/2 clocks (FASTCLK is ignored here). */
 
-/* Option Synchronization */
-	
-#if QL_PCMCIA
+/* PCMCIA option adjustment */
+#ifdef PCMCIA
 #undef QL_INT_ACTIVE_HIGH
-#undef QL_TURBO_PDMA
 #define QL_INT_ACTIVE_HIGH 0
-#define QL_TURBO_PDMA 0
 #endif
 
 /*----------------------------------------------------------------*/
@@ -109,11 +111,11 @@ static char	    qinfo[80];	/* description */
 static Scsi_Cmnd   *qlcmd;	/* current command being processed */
 
 /*----------------------------------------------------------------*/
-
+/* The qlogic card uses two register maps - These macros select which one */
 #define REG0 ( outb( inb( qbase + 0xd ) & 0x7f , qbase + 0xd ), outb( 4 , qbase + 0xd ))
 #define REG1 ( outb( inb( qbase + 0xd ) | 0x80 , qbase + 0xd ), outb( 0xb4 | QL_INT_ACTIVE_HIGH , qbase + 0xd ))
 
-/* following is watchdog timeout */
+/* following is watchdog timeout in microseconds */
 #define WATCHDOG 5000000
 
 /*----------------------------------------------------------------*/
@@ -414,7 +416,9 @@ Scsi_Cmnd	   *icmd;
 	if (!(inb(qbase + 4) & 0x80))	/* false alarm? */
 		return;
 	if (qlcmd == NULL) {		/* no command to process? */
-		while (inb(qbase + 5)); /* maybe also ql_zap() */
+		int	i;
+		i = 16;
+		while (i-- && inb(qbase + 5)); /* maybe also ql_zap() */
 		return;
 	}
 	icmd = qlcmd;
@@ -489,22 +493,15 @@ unsigned long	flags;
 
 /* Qlogic Cards only exist at 0x230 or 0x330 (the chip itself decodes the
    address - I check 230 first since MIDI cards are typically at 330
-   Note that this will not work for 2 Qlogic cards in 1 system.  The
-   easiest way to do that is to create 2 versions of this file, one for
-   230 and one for 330.
 
-   Alternately, the Scsi_Host structure now stores the i/o port and can
-   be used to set the port (go through and replace qbase with
-   (struct Scsi_Cmnd *) cmd->host->io_port, or for efficiency, set a local
-   copy of qbase.  There will also need to be something similar within the
-   IRQ handlers to sort out which board it came from and thus which port.
+   Theoretically, two Qlogic cards can coexist in the same system.  This
+   should work by simply using this as a loadable module for the second
+   card, but I haven't tested this.
 */
 
 	for (qbase = 0x230; qbase < 0x430; qbase += 0x100) {
-#ifndef PCMCIA
 		if( check_region( qbase , 0x10 ) )
 			continue;
-#endif			
 		REG1;
 		if ( ( (inb(qbase + 0xe) ^ inb(qbase + 0xe)) == 7 )
 		  && ( (inb(qbase + 0xe) ^ inb(qbase + 0xe)) == 7 ) )
@@ -548,20 +545,19 @@ unsigned long	flags;
 	while (inb(qbase + 5)); 			/* purge int */
 	while (i)					/* find on bit */
 		i >>= 1, qlirq++;	/* should check for exactly 1 on */
-	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, SA_INTERRUPT, "qlogic"))
+	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogic"))
 		host->can_queue = 1;
 	restore_flags( flags );
 #endif
-#ifndef PCMCIA
 	request_region( qbase , 0x10 ,"qlogic");
-#endif
 	hreg = scsi_register( host , 0 );	/* no host data */
 	hreg->io_port = qbase;
 	hreg->n_io_port = 16;
+	hreg->dma_channel = -1;
 	if( qlirq != -1 )
 		hreg->irq = qlirq;
 
-	sprintf(qinfo, "Qlogic Driver version 0.38b, chip %02X at %03X, IRQ %d, Opts:%d%d",
+	sprintf(qinfo, "Qlogic Driver version 0.39a, chip %02X at %03X, IRQ %d, Opts:%d%d",
 	    qltyp, qbase, qlirq, QL_INT_ACTIVE_HIGH, QL_TURBO_PDMA );
 	host->name = qinfo;
 

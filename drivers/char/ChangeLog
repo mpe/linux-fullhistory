@@ -16,7 +16,7 @@ Thu Jan 26 09:02:49 1995  Theodore Y. Ts'o  (tytso@rt-11)
 		should happen before the receiver is shutdown; this is
 		done by reversing the values of close_wait and
 		close_wait2.  In the case of a very slow device, the
-		timeouts for close_wait or close_wait2 should be lengthed.
+		timeouts for close_wait or close_wait2 should be lengthened.
 		If either value is set to 0, the kernel will wait forever
 		for all of the data to be transmitted.  
 

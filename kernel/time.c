@@ -202,18 +202,13 @@ void do_gettimeofday(struct timeval *tv)
 
 	save_flags(flags);
 	cli();
-#if defined (__i386__) || defined (__mips__)
 	*tv = xtime;
+#if defined (__i386__) || defined (__mips__)
 	tv->tv_usec += do_gettimeoffset();
 	if (tv->tv_usec >= 1000000) {
 		tv->tv_usec -= 1000000;
 		tv->tv_sec++;
 	}
-	sti();
-#else /* !defined (__i386__) && !defined (__mips__) */
-	cli();
-	*tv = xtime;
-	sti();
 #endif /* !defined (__i386__) && !defined (__mips__) */
 	restore_flags(flags);
 }

@@ -56,6 +56,7 @@ struct linger {
 #define SOL_IP		0
 #define SOL_IPX		256
 #define SOL_AX25	257
+#define SOL_ATALK	258
 #define SOL_TCP		6
 #define SOL_UDP		17
 

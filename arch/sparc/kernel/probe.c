@@ -5,6 +5,10 @@
 
 #include <linux/kernel.h>
 #include <asm/vac-ops.h>
+#include <asm/io.h>
+#include <asm/vaddrs.h>
+#include <asm/param.h>
+#include <asm/clock.h>
 
 /* #define DEBUG_PROBING */
 
@@ -236,7 +240,49 @@ probe_mmu(void)
 void
 probe_clock(int fchild)
 {
-  /* TODO :> I just can't stomach it right now... */
+  register int node, type;
+  register char *node_str;
+
+  /* This will basically traverse the node-tree of the prom to see
+   * which timer chip is on this machine.
+   */
+
+  printk("Probing timer chip... ");
+
+  type = 0;
+  for(node = fchild ; ; )
+    {
+      node_str = get_str_from_prom(node, "model", promstr_buf);
+      if(strcmp(node_str, "mk48t02") == 0)
+	{
+	  type = 2;
+	  break;
+	}
+
+      if(strcmp(node_str, "mk48t08") == 0)
+	{
+	  type = 8;
+	  break;
+	}
+
+      node = node_get_sibling(node);
+      if(node == fchild)
+	{
+	  printk("Aieee, could not find timer chip type\n");
+	  return;
+	}
+    }
+
+  printk("%s\n", node_str);
+  printk("At OBIO address: 0x%x Virtual address: 0x%x\n",
+	 (unsigned int) 0xf3000000, (unsigned int) TIMER_STRUCT);
+
+  mapioaddr((unsigned long) 0xf3000000,
+	    (unsigned long) TIMER_STRUCT);
+
+  TIMER_STRUCT->timer_limit14=(((10000) << 10) | 0x80000000);
+  TIMER_STRUCT->timer_limit10=(((10000) << 10) | 0x80000000);
+
   return;
 }
 

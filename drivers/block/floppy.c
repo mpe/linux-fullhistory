@@ -135,6 +135,19 @@ static int FDC2=-1;
 static unsigned int fake_change = 0;
 static int initialising=1;
 
+#define FLOPPY0_TYPE	((CMOS_READ(0x10) >> 4) & 15)
+#define FLOPPY1_TYPE	(CMOS_READ(0x10) & 15)
+
+/*
+ * Again, the CMOS information doesn't work on the alpha..
+ */
+#ifdef __alpha__
+#undef FLOPPY0_TYPE
+#undef FLOPPY1_TYPE
+#define FLOPPY0_TYPE 6
+#define FLOPPY1_TYPE 0
+#endif
+
 
 #ifdef CONFIG_FLOPPY_2_FDC
 #define N_FDC 2
@@ -551,7 +564,7 @@ static int disk_change(int drive)
 		}
 		/*USETF(FD_DISK_NEWCHANGE);*/
 		return 1;
-	} else if(jiffies >= DRS->select_date+DP->select_delay){
+	} else {
 		UDRS->last_checked=jiffies;
 		UCLEARF(FD_DISK_NEWCHANGE);
 	}
@@ -808,6 +821,36 @@ static int wait_for_completion(int delay, timeout_fn function)
 	return 0;
 }
 
+static int hlt_disabled=0;
+static void floppy_disable_hlt(void)
+{
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	if(!hlt_disabled){
+		hlt_disabled=1;
+#ifdef HAVE_DISABLE_HLT
+		disable_hlt();
+#endif
+	}
+	restore_flags(flags);
+}
+
+static void floppy_enable_hlt(void)
+{
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	if(hlt_disabled){
+		hlt_disabled=0;
+#ifdef HAVE_DISABLE_HLT
+		enable_hlt();
+#endif
+	}
+	restore_flags(flags);
+}
+		
+
 static void setup_DMA(void)
 {
 #ifdef CONFIG_FLOPPY_SANITY
@@ -854,6 +897,7 @@ static void setup_DMA(void)
 	set_dma_count(FLOPPY_DMA, raw_cmd.length);
 	enable_dma(FLOPPY_DMA);
 	sti();
+	floppy_disable_hlt();
 }
 
 /* sends a command byte to the fdc */
@@ -1418,6 +1462,7 @@ static void floppy_interrupt(int irq, struct pt_regs * regs)
 {
 	void (*handler)(void) = DEVICE_INTR;
 
+	floppy_enable_hlt();
 	CLEAR_INTR;
 	if ( fdc >= N_FDC || FDCS->address == -1){
 		/* we don't even know which FDC is the culprit */
@@ -1527,6 +1572,7 @@ static void floppy_shutdown(void)
 	floppy_tq.routine = (void *)(void *) empty;
 	del_timer( &fd_timer);
 
+	floppy_enable_hlt();
 	disable_dma(FLOPPY_DMA);
 	/* avoid dma going to a random drive after shutdown */
 
@@ -2877,10 +2923,10 @@ static void config_types(void)
 		       sizeof( struct floppy_drive_params ));
 	}
 	printk("Floppy drive(s): ");
-	set_base_type(0, (CMOS_READ(0x10) >> 4) & 15);
-	if (CMOS_READ(0x10) & 15) {
+	set_base_type(0, FLOPPY0_TYPE);
+	if (FLOPPY1_TYPE) {
 		printk(", ");
-		set_base_type(1, CMOS_READ(0x10) & 15);
+		set_base_type(1, FLOPPY1_TYPE);
 	}
 	printk("\n");
 }
@@ -3157,7 +3203,6 @@ static char get_fdc_version(void)
 	return FDC_82077;	/* Revised 82077AA passes all the tests */
 } /* get_fdc_version */
 
-#ifndef FD_MODULE
 /* lilo configuration */
 static void invert_dcl(int *ints)
 {
@@ -3198,6 +3243,8 @@ static struct param_table {
 void floppy_setup(char *str, int *ints)
 {
 	int i;
+	if(!str)
+		return;
 	for(i=0; i< ARRAY_SIZE(config_params); i++){
 		if (strcmp(str,config_params[i].name) == 0 ){
 			config_params[i].fn(ints);
@@ -3206,7 +3253,7 @@ void floppy_setup(char *str, int *ints)
 	}
 	printk("unknown floppy parameter %s\n", str);
 }
-#endif
+#define FLOPPY_SETUP
 
 #ifdef FD_MODULE
 static
@@ -3372,7 +3419,7 @@ static void floppy_release_irq_and_dma(void)
 #if N_FDC > 1
 	set_dor(1, ~8, 0);
 #endif
-
+	floppy_enable_hlt();
 #ifdef CONFIG_FLOPPY_SANITY
 	for(drive=0; drive < N_FDC * 4; drive++)
 		if( motor_off_timer[drive].next )

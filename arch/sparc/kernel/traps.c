@@ -32,9 +32,11 @@ void trap_init(void)
 
   /* load up the trap table */
 
+#if 0 /* not yet */
   __asm__("wr %0, 0x0, %%tbr\n\t"
 	  "nop; nop; nop\n\t" : :
 	  "r" (trapbase));
+#endif
 
   return;
 }

@@ -92,6 +92,8 @@ void setup_arch(char **cmdline_p,
 	printk("calling probe_devices...\n");
 	probe_devices();  /* cpu/fpu, mmu probes */
 
+	swpipl(13);
+
 	*memory_start_p = (((unsigned long) &end));
 }
 

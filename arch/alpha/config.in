@@ -5,7 +5,7 @@
 
 comment 'General setup'
 
-bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD n
+bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
 bool 'Normal harddisk support' CONFIG_BLK_DEV_HD n
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'Networking support' CONFIG_NET n

@@ -145,6 +145,7 @@ static struct blist blacklist[] =
    {"CHINON","CD-ROM CDS-431","H42"},  /* Locks up if polled for lun != 0 */
    {"CHINON","CD-ROM CDS-535","Q14"}, /* Lockup if polled for lun != 0 */
    {"DENON","DRD-25X","V"},   /* A cdrom that locks up when probed at lun != 0 */
+   {"HITACHI","DK314C","CR21" }, /* responds to all lun */
    {"IMS", "CDD521/10","2.06"},   /* Locks-up when LUN>0 polled. */
    {"MAXTOR","XT-3280","PR02"},   /* Locks-up when LUN>0 polled. */
    {"MAXTOR","XT-4380S","B3C"},   /* Locks-up when LUN>0 polled. */
@@ -227,10 +228,10 @@ static void scan_scsis_done (Scsi_Cmnd * SCpnt)
 	  up(SCpnt->request.sem);
 	}
 
-#ifdef NO_MULTI_LUN
-static int max_scsi_luns = 1;
-#else
+#ifdef CONFIG_SCSI_MULTI_LUN
 static int max_scsi_luns = 8;
+#else
+static int max_scsi_luns = 1;
 #endif
 
 void scsi_luns_setup(char *str, int *ints) {

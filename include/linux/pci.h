@@ -489,38 +489,6 @@ struct bridge_mapping_type {
 	{0x0	,0x0	,0x0	}  \
 }
 
+#include <linux/bios32.h>
 
-/* PCI BIOS */
-
-extern int pcibios_present (void);
-
-#define PCIBIOS_SUCCESSFUL		0x00
-#define PCIBIOS_FUNC_NOT_SUPPORTED	0x81
-#define PCIBIOS_BAD_VENDOR_ID		0x83
-#define PCIBIOS_DEVICE_NOT_FOUND	0x86
-#define PCIBIOS_BAD_REGISTER_NUMBER	0x87
-
-/*
- * The PCIBIOS calls all bit-field the device_function variable such that 
- * the bit fielding matches that of the bl register used in the actual
- * calls.
- */
-
-extern int pcibios_find_class (unsigned long class_code, unsigned short index, 
-    unsigned char *bus, unsigned char *device_fn);
-extern int pcibios_find_device (unsigned short vendor, unsigned short device_id, 
-    unsigned short index, unsigned char *bus, unsigned char *device_fn);
-extern int pcibios_read_config_byte (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned char *value);
-extern int pcibios_read_config_word (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned short *value);
-extern int pcibios_read_config_dword (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned long *value);
-extern char *pcibios_strerror (int error);
-extern int pcibios_write_config_byte (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned char value);
-extern int pcibios_write_config_word (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned short value);
-extern pcibios_write_config_dword (unsigned char bus,
-    unsigned char device_fn, unsigned char where, unsigned long value);
 #endif /* ndef PCI_H */

@@ -39,6 +39,7 @@
 #define ARPHRD_RSRVD	260		/* Notional KISS type 		*/
 #define ARPHRD_ADAPT	264
 #define ARPHRD_PPP	512
+#define ARPHRD_TUNNEL	768		/* IPIP tunnel			*/
 
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/

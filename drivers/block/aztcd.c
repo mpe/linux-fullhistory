@@ -1,11 +1,12 @@
-#define AZT_VERSION "V0.8"
-/*      $Id: aztcd.c,v 0.80 1995/01/21 19:54:53 root Exp $
+#define AZT_VERSION "V0.9"
+/*      $Id: aztcd.c,v 0.90 1995/02/02 18:14:17 root Exp $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
 	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
 
 	based on Mitsumi CDROM driver by  Martin Hariss and preworks by
-	Eberhard Moenkeberg.
+	Eberhard Moenkeberg; contains contributions by Joe Nardone and Robby 
+	Schirmer.
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -94,6 +95,10 @@
                 Modified the SET_TIMER and CLEAR_TIMER macros to comply with
                 the new timer scheme.
                 W.Zimmermann, Jan. 21, 1995
+        V0.90   Included CDROMVOLCTRL, but with my Aztech drive I can only turn
+                the channels on and off. If it works better with your drive, 
+                please mail me. Also implemented ACMD_CLOSE for CDROMSTART.
+                W.Zimmermann, Jan. 24, 1995
 	NOTE: 
 	Points marked with ??? are questionable !
 */
@@ -456,6 +461,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 	struct cdrom_tocentry entry;
 	struct azt_Toc *tocPtr;            
 	struct cdrom_subchnl subchnl;
+        struct cdrom_volctrl volctrl;
 
 #ifdef AZT_DEBUG
 	printk("aztcd: starting aztcd_ioctl - Command:%x\n",cmd);
@@ -468,11 +474,12 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 
 	switch (cmd)
 	{
-	case CDROMSTART:     /* Spin up the drive */
-		/* Don't think we can do this.  Even if we could,
-		 * I think the drive times out and stops after a while
-		 * anyway.  For now, ignore it.
-		 */
+	case CDROMSTART:     /* Spin up the drive. Don't know, what to do,
+	                        at least close the tray */
+#ifdef AZT_PRIVATE_IOCTLS 
+	        if (aztSendCmd(ACMD_CLOSE)) return -1;
+	        STEN_LOW_WAIT;
+#endif
 		break;
 	case CDROMSTOP:      /* Spin down the drive */
 		if (aztSendCmd(ACMD_STOP)) return -1;
@@ -481,8 +488,8 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 		aztAudioStatus = CDROM_AUDIO_NO_STATUS;
 		break;
 	case CDROMPAUSE:     /* Pause the drive */
-/*              if (aztAudioStatus != CDROM_AUDIO_PLAY) return -EINVAL; 
-*/
+                if (aztAudioStatus != CDROM_AUDIO_PLAY) return -EINVAL; 
+
 		if (aztGetQChannelInfo(&qInfo) < 0)
 		{ /* didn't get q channel info */
 		  aztAudioStatus = CDROM_AUDIO_NO_STATUS;
@@ -629,13 +636,22 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		  return -EINVAL;
 		memcpy_tofs((void *) arg, &subchnl, sizeof subchnl);
 		break;
-	case CDROMVOLCTRL:   /* Volume control */
-	/*
-	 * This is not working yet.  Setting the volume by itself does
-	 * nothing.  Following the 'set' by a 'play' results in zero
-	 * volume.  Something to work on for the next release.
-	 */
-		break;
+	case CDROMVOLCTRL:   /* Volume control 
+	 * With my Aztech CD268-01A volume control does not work, I can only
+	   turn the cannels on (any value !=0) or off (value==0). Maybe it
+           works better with your drive */
+                st=verify_area(VERIFY_READ,(void *) arg, sizeof(volctrl));
+                if (st) return (st);
+                memcpy_fromfs(&volctrl,(char *) arg,sizeof(volctrl));
+		azt_Play.start.min = 0x21;
+		azt_Play.start.sec = 0x84;
+		azt_Play.start.frame = volctrl.channel0;
+		azt_Play.end.min =     volctrl.channel1;
+		azt_Play.end.sec =     volctrl.channel2;
+		azt_Play.end.frame =   volctrl.channel3;
+                sendAztCmd(ACMD_SET_VOLUME, &azt_Play);
+                STEN_LOW_WAIT;
+                break;
 	case CDROMEJECT:
 	       /* all drives can at least stop! */
 		if (aztAudioStatus == CDROM_AUDIO_PLAY) 

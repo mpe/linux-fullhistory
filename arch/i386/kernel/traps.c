@@ -199,8 +199,11 @@ asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
+#ifndef CONFIG_IGNORE_NMI
 	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
-	printk("You probably have a hardware problem with your RAM chips\n");
+	printk("You probably have a hardware problem with your RAM chips or a\n");
+	printk("power saving mode enabled.\n");
+#endif	
 }
 
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)

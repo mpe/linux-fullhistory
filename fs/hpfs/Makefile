@@ -14,10 +14,10 @@
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	hpfs_fs.o
+OBJS=	hpfs_fs.o hpfs_caps.o
 
 hpfs.o: $(OBJS)
-	ln -f hpfs_fs.o hpfs.o
+	$(LD) -r -o hpfs.o $(OBJS)
 
 dep:
 	$(CPP) -M *.c > .depend

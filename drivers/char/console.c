@@ -346,6 +346,16 @@ static void memsetw(void * s, unsigned short c, unsigned int count)
 	}
 }
 
+static inline void memcpyw(unsigned short *to, unsigned short *from,
+			   unsigned int count)
+{
+	count /= 2;
+	while (count) {
+		count--;
+		writew(readw(from++), to++);
+	}
+}
+
 int vc_cons_allocated(unsigned int i)
 {
 	return (i < MAX_NR_CONSOLES && vc_cons[i].d);
@@ -452,7 +462,7 @@ int vc_resize(unsigned long lines, unsigned long cols)
 	      ol += (oll - ll) * osr;
 
 	    while (ol < scr_end) {
-		memcpy((void *) nl, (void *) ol, rlth);
+		memcpyw((unsigned short *) nl, (unsigned short *) ol, rlth);
 		if (rrem)
 		  memsetw((void *)(nl + rlth), video_erase_char, rrem);
 		ol += osr;
@@ -2036,7 +2046,8 @@ long con_init(long kmem_start)
 
 static void get_scrmem(int currcons)
 {
-	memcpy((void *)vc_scrbuf[currcons], (void *)origin, video_screen_size);
+	memcpyw((unsigned short *)vc_scrbuf[currcons],
+		(unsigned short *)origin, video_screen_size);
 	origin = video_mem_start = (unsigned long)vc_scrbuf[currcons];
 	scr_end = video_mem_end = video_mem_start + video_screen_size;
 	pos = origin + y*video_size_row + (x<<1);
@@ -2077,7 +2088,8 @@ static void set_scrmem(int currcons, long offset)
 
 	if (video_mem_term - video_mem_base < offset + video_screen_size)
 	  offset = 0;	/* strange ... */
-	memcpy((void *)(video_mem_base + offset), (void *) origin, video_screen_size);
+	memcpyw((unsigned short *)(video_mem_base + offset),
+		(unsigned short *) origin, video_screen_size);
 	video_mem_start = video_mem_base;
 	video_mem_end = video_mem_term;
 	origin = video_mem_base + offset;
@@ -2235,13 +2247,13 @@ int do_screendump(unsigned long arg, int mode)
 				put_fs_byte(*sptr++,buf++);	
 			break;
 	    case 1:
-			put_fs_byte((char)x,buf++); put_fs_byte((char)y,buf++); 
-			memcpy_tofs(buf,(char *)origin,2*chcount);
+			put_fs_byte((char)x,buf++); put_fs_byte((char)y,buf++);
+/*XXX*/			memcpy_tofs(buf,(char *)origin,2*chcount);
 			break;
 	    case 2:
 			gotoxy(currcons, get_fs_byte(buf+2), get_fs_byte(buf+3));
 			buf+=4; /* ioctl#, console#, x,y */
-			memcpy_fromfs((char *)origin,buf,2*chcount);
+/*XXX*/			memcpy_fromfs((char *)origin,buf,2*chcount);
 			break;
 	    }
 	return(0);

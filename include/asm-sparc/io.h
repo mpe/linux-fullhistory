@@ -1,6 +1,8 @@
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
 
+#include <asm/page.h>      /* IO address mapping routines need this */
+
 /*
  * Defines for io operations on the Sparc. Whether a memory access is going
  * to i/o sparc is encoded in the pte. The type bits determine whether this
@@ -83,5 +85,16 @@ extern inline void writel(unsigned int b, unsigned long addr)
 
 #define inb_p inb
 #define outb_p outb
+
+extern inline void mapioaddr(unsigned long physaddr, unsigned long virt_addr)
+{
+  unsigned long page_entry;
+
+  page_entry = physaddr >> PAGE_SHIFT;
+  page_entry |= (PTE_V | PTE_ACC | PTE_W | PTE_P | PTE_IO);  /* kernel io addr */
+
+  put_pte(page_entry, virt_addr);
+  return;
+}
 
 #endif /* !(__SPARC_IO_H) */

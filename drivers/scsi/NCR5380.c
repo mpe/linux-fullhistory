@@ -1030,7 +1030,7 @@ static void NCR5380_main (void) {
  *
  */
 
-static void NCR5380_intr (int irq) {
+static void NCR5380_intr (int irq, struct pt_regs * regs) {
     NCR5380_local_declare(); 
     struct Scsi_Host *instance;
     int done;
@@ -1912,7 +1912,10 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 	instance->hostdata;
     unsigned char msgout = NOP;
     int sink = 0;
-    int len, transfersize;
+    int len;
+#if defined(PSEUDO_DMA) || defined(REAL_DMA_POLL)
+    int transfersize;
+#endif
     unsigned char *data;
     unsigned char phase, tmp, extended_msg[10], old_phase=0xff;
     Scsi_Cmnd *cmd = (Scsi_Cmnd *) hostdata->connected;
@@ -2014,7 +2017,7 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		    } else
 			cmd->SCp.this_residual -= transfersize - len;
 		} else
-#endif /* defined(REAL_DMA) || defined(REAL_DMA_POLL) */
+#endif /* defined(PSEUDO_DMA) || defined(REAL_DMA_POLL) */
 		  NCR5380_transfer_pio(instance, &phase, 
 		    (int *) &cmd->SCp.this_residual, (unsigned char **)
 		    &cmd->SCp.ptr);

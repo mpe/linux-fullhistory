@@ -12,22 +12,10 @@
 #define _MC146818RTC_H
 #include <asm/io.h>
 
+#ifndef RTC_PORT
 #define RTC_PORT(x)	(0x70 + (x))
 #define RTC_ADDR(x)	(0x80 | (x))
 #define RTC_ALWAYS_BCD	1
-
-/*
- * The Alpha Jensen hardware for some rather strange reason puts
- * the RTC clock at 0x170 instead of 0x70. Probably due to some
- * misguided idea about using 0x70 for NMI stuff.
- */
-#ifdef __alpha__
-#undef RTC_PORT
-#undef RTC_ADDR
-#undef RTC_ALWAYS_BCD
-#define RTC_PORT(x)	(0x170+(x))
-#define RTC_ADDR(x)	(x)
-#define RTC_ALWAYS_BCD	0
 #endif
 
 #define CMOS_READ(addr) ({ \

@@ -27,6 +27,18 @@
 
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
+static int hlt_counter=0;
+
+void disable_hlt(void)
+{
+	hlt_counter++;
+}
+
+void enable_hlt(void)
+{
+	hlt_counter--;
+}
+
 /*
  * The idle loop on a i386..
  */
@@ -44,7 +56,7 @@ asmlinkage int sys_idle(void)
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
 	for (;;) {
-		if (hlt_works_ok && !need_resched)
+		if (hlt_works_ok && !hlt_counter && !need_resched)
 			__asm__("hlt");
 		schedule();
 	}
@@ -83,6 +95,22 @@ void hard_reset_now(void)
 		}
 		__asm__ __volatile__("\tlidt %0": "=m" (no_idt));
 	}
+}
+
+void show_regs(struct pt_regs * regs)
+{
+	printk("\n");
+	printk("EIP: %04x:%08lx",0xffff & regs->cs,regs->eip);
+	if (regs->cs & 3)
+		printk(" ESP: %04x:%08lx",0xffff & regs->ss,regs->esp);
+	printk(" EFLAGS: %08lx\n",regs->eflags);
+	printk("EAX: %08lx EBX: %08lx ECX: %08lx EDX: %08lx\n",
+		regs->orig_eax,regs->ebx,regs->ecx,regs->edx);
+	printk("ESI: %08lx EDI: %08lx EBP: %08lx",
+		regs->esi, regs->edi, regs->ebp);
+	printk(" DS: %04x ES: %04x FS: %04x GS: %04x\n",
+		0xffff & regs->ds,0xffff & regs->es,
+		0xffff & regs->fs,0xffff & regs->gs);
 }
 
 /*

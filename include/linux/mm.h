@@ -10,6 +10,8 @@ extern unsigned long high_memory;
 
 #include <asm/page.h>
 
+#ifdef __KERNEL__
+
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
 
@@ -123,8 +125,6 @@ struct page_info {
 	struct wait_queue *wait;
 };
 /* end of planning stage */
-
-#ifdef __KERNEL__
 
 /*
  * Free area management

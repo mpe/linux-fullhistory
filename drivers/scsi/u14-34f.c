@@ -1,6 +1,15 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      28 Jan 1995 rev. 1.14 for linux 1.1.86
+ *          Added module support.
+ *          Log and do a retry when a disk drive returns a target status
+ *          different from zero on a recovered error.
+ *          Auto detects if U14F boards have an old firmware revision.
+ *          Max number of scatter/gather lists set to 16 for all boards
+ *          (most installation run fine using 33 sglists, while other
+ *          has problems when using more then 16).
+ *
  *      16 Jan 1995 rev. 1.13 for linux 1.1.81
  *          Display a message if check_region detects a port address
  *          already in use.
@@ -9,7 +18,7 @@
  *          The host->block flag is set for all the detected ISA boards.
  *
  *      30 Nov 1994 rev. 1.11 for linux 1.1.68
- *          Redo i/o on target status CONDITION_GOOD for TYPE_DISK only.
+ *          Redo i/o on target status CHECK_CONDITION for TYPE_DISK only.
  *          Added optional support for using a single board at a time.
  *
  *      14 Nov 1994 rev. 1.10 for linux 1.1.63
@@ -54,8 +63,8 @@
  *
  *  Here a sample configuration using two U14F boards:
  *
- U14F0: PORT 0x330, BIOS 0xc8000, IRQ 11, DMA 5, SG 33, Mbox 16, CmdLun 2, C1.
- U14F1: PORT 0x340, BIOS 0x00000, IRQ 10, DMA 6, SG 33, Mbox 16, CmdLun 2, C1.
+ U14F0: PORT 0x330, BIOS 0xc8000, IRQ 11, DMA 5, SG 16, Mbox 16, CmdLun 2, C1.
+ U14F1: PORT 0x340, BIOS 0x00000, IRQ 10, DMA 6, SG 16, Mbox 16, CmdLun 2, C1.
  *
  *  The boot controller must have its BIOS enabled, while other boards can
  *  have their BIOS disabled, or enabled to an higher address.
@@ -96,12 +105,15 @@
  *    when DISABLE_CLUSTERING is in effect, but unscattered requests could be
  *    larger than 16Kbyte.
  *
- *    The new firmware has fixed all the above problems and has been tested 
- *    with up to 33 scatter/gather lists.
+ *    The new firmware has fixed all the above problems.
  *
  *  In order to support multiple ISA boards in a reliable way,
  *  the driver sets host->block = TRUE for all ISA boards.
  */
+
+#if defined(MODULE)
+#include <linux/module.h>
+#endif
 
 #include <linux/string.h>
 #include <linux/sched.h>
@@ -137,17 +149,6 @@
 #define HA_CMD_READ_BUFF  0x3
 #define HA_CMD_WRITE_BUFF 0x4
 
-#if defined (HAVE_OLD_U14F_FIRMWARE)
-#define U14F_MAX_SGLIST 16
-#define U14F_CLUSTERING DISABLE_CLUSTERING
-#else
-#define U14F_MAX_SGLIST 33
-#define U14F_CLUSTERING ENABLE_CLUSTERING
-#endif
-
-#define U34F_MAX_SGLIST 33
-#define U34F_CLUSTERING ENABLE_CLUSTERING
-
 #undef  DEBUG_DETECT
 #undef  DEBUG_INTERRUPT
 #undef  DEBUG_STATISTICS
@@ -156,7 +157,7 @@
 #define MAX_IRQ 16
 #define MAX_BOARDS 4
 #define MAX_MAILBOXES 16
-#define MAX_SGLIST 33
+#define MAX_SGLIST 16
 #define MAX_CMD_PER_LUN 2
 
 #define FALSE 0
@@ -165,8 +166,10 @@
 #define IN_USE   1
 #define LOCKED   2
 #define IN_RESET 3
+#define IGNORE   4
 #define NO_IRQ  0xff
-#define MAXLOOP 20000
+#define NO_DMA  0xff
+#define MAXLOOP 200000
 
 #define REG_LCL_MASK      0
 #define REG_LCL_INTR      1
@@ -178,9 +181,9 @@
 #define REG_CONFIG2       7
 #define REG_OGM           8
 #define REG_ICM           12
-#define REG_REGION        0x0c
+#define REGION_SIZE       13
 #define BSY_ASSERTED      0x01
-#define INTR_ASSERTED     0x01
+#define IRQ_ASSERTED      0x01
 #define CMD_RESET         0xc0
 #define CMD_OGM_INTR      0x01
 #define CMD_CLR_INTR      0x01
@@ -230,13 +233,13 @@ struct hostdata {
    unsigned int multicount;             /* Total ... in second ihdlr loop */
    int board_number;                    /* Number of this board */
    char board_name[16];                 /* Name of this board */
+   char board_id[256];                  /* data from INQUIRY on this board */
    int in_reset;                        /* True if board is doing a reset */
    int target_time_out[MAX_TARGET];     /* N. of timeout errors on target */
    int target_reset[MAX_TARGET];        /* If TRUE redo operation on target */
-   unsigned char bios_drive_number: 1;
+   unsigned char subversion;            /* Bus type, either ISA or ESA */
    unsigned char heads;
    unsigned char sectors;
-   unsigned char subversion: 4;         /* Bus type, either ISA or ESA */
 
    /* slot != 0 for the U24F, slot == 0 for both the U14F and U34F */
    unsigned char slot;
@@ -257,6 +260,49 @@ static inline unchar wait_on_busy(ushort iobase) {
 
    while (inb(iobase + REG_LCL_INTR) & BSY_ASSERTED)
       if (--loop == 0) return TRUE;
+
+   return FALSE;
+}
+
+static int board_inquiry(unsigned int j) {
+   struct mscp *cpp;
+   unsigned int time, limit = 0;
+
+   cpp = &HD(j)->cp[0];
+   memset(cpp, 0, sizeof(struct mscp));
+   cpp->opcode = OP_HOST_ADAPTER;
+   cpp->xdir = DTD_IN;
+   cpp->data_address = (unsigned int) HD(j)->board_id;
+   cpp->data_len = sizeof(HD(j)->board_id);
+   cpp->scsi_cdbs_len = 6;
+   cpp->scsi_cdbs[0] = HA_CMD_INQUIRY;
+
+   if (wait_on_busy(sh[j]->io_port)) {
+      printk("%s: board_inquiry, adapter busy.\n", BN(j));
+      return TRUE;
+      }
+
+   HD(j)->cp_stat[0] = IGNORE;
+
+   /* Clear the interrupt indication */
+   outb(CMD_CLR_INTR, sh[j]->io_port + REG_SYS_INTR);
+
+   /* Store pointer in OGM address bytes */
+   outl((unsigned int)cpp, sh[j]->io_port + REG_OGM);
+
+   /* Issue OGM interrupt */
+   outb(CMD_OGM_INTR, sh[j]->io_port + REG_LCL_INTR);
+
+   sti();
+   time = jiffies;
+   while (jiffies < (time + 100) && limit++ < 100000000) sti();
+   cli();
+
+   if (cpp->adapter_status || HD(j)->cp_stat[0] != FREE) {
+      HD(j)->cp_stat[0] = FREE;
+      printk("%s: board_inquiry, err 0x%x.\n", BN(j), cpp->adapter_status);
+      return TRUE;
+      }
 
    return FALSE;
 }
@@ -305,8 +351,8 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
    sprintf(name, "%s%d", driver_name, j);
 
-   if(check_region(*port_base, REG_REGION)) {
-      printk("%s: address 0x%03x already in use, detaching.\n", 
+   if(check_region(*port_base, REGION_SIZE)) {
+      printk("%s: address 0x%03x in use, skipping probe.\n", 
              name, *port_base);
       return FALSE;
       }
@@ -340,8 +386,10 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
    sh[j] = scsi_register(tpnt, sizeof(struct hostdata));
    sh[j]->io_port = *port_base;
+   sh[j]->n_io_port = REGION_SIZE;
    sh[j]->base = bios_segment_table[config_1.bios_segment];
    sh[j]->irq = irq;
+   sh[j]->sg_tablesize = MAX_SGLIST;
    sh[j]->this_id = config_2.ha_scsi_id;
    sh[j]->can_queue = MAX_MAILBOXES;
    sh[j]->cmd_per_lun = MAX_CMD_PER_LUN;
@@ -360,34 +408,52 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    if (sh[j]->base == 0) outb(CMD_ENA_INTR, sh[j]->io_port + REG_SYS_MASK);
 
    /* Register the I/O space that we use */
-   request_region(sh[j]->io_port, REG_REGION, driver_name);
+   request_region(sh[j]->io_port, REGION_SIZE, driver_name);
 
    memset(HD(j), 0, sizeof(struct hostdata));
    HD(j)->heads = mapping_table[config_2.mapping_mode].heads;
    HD(j)->sectors = mapping_table[config_2.mapping_mode].sectors;
-   HD(j)->bios_drive_number = config_2.bios_drive_number;
    HD(j)->subversion = subversion;
    HD(j)->board_number = j;
    irqlist[irq] = j;
 
    if (HD(j)->subversion == ESA) {
-      sh[j]->dma_channel = 0;
+      sh[j]->dma_channel = NO_DMA;
       sh[j]->unchecked_isa_dma = FALSE;
-      sh[j]->sg_tablesize = U34F_MAX_SGLIST;
-      sh[j]->hostt->use_clustering = U34F_CLUSTERING;
+      sh[j]->hostt->use_clustering = ENABLE_CLUSTERING;
       sprintf(BN(j), "U34F%d", j);
       }
    else {
-      sh[j]->dma_channel = dma_channel;
+
+#if !defined(MODULE)
+      /* The module code does not checkin/checkout in the blocking list yet */
       sh[j]->block = sh[j];
+#endif
+
+#if defined (HAVE_OLD_U14F_FIRMWARE)
+      sh[j]->hostt->use_clustering = DISABLE_CLUSTERING;
+#else
+      sh[j]->hostt->use_clustering = ENABLE_CLUSTERING;
+#endif
+
+      sh[j]->dma_channel = dma_channel;
       sh[j]->unchecked_isa_dma = TRUE;
-      sh[j]->sg_tablesize = U14F_MAX_SGLIST;
-      sh[j]->hostt->use_clustering = U14F_CLUSTERING;
       sprintf(BN(j), "U14F%d", j);
       disable_dma(dma_channel);
       clear_dma_ff(dma_channel);
       set_dma_mode(dma_channel, DMA_MODE_CASCADE);
       enable_dma(dma_channel);
+      }
+
+   if (HD(j)->subversion == ISA && !board_inquiry(j)) {
+      HD(j)->board_id[40] = 0;
+
+      if (strcmp(&HD(j)->board_id[32], "06000600")) {
+         printk("%s: %s.\n", BN(j), &HD(j)->board_id[8]);
+         printk("%s: firmware %s is outdated, BIOS rev. should be 2.01.\n", 
+                BN(j), &HD(j)->board_id[32]);
+         sh[j]->hostt->use_clustering = DISABLE_CLUSTERING;
+         }
       }
 
    printk("%s: PORT 0x%03x, BIOS 0x%05x, IRQ %u, DMA %u, SG %d, "\
@@ -716,7 +782,7 @@ int u14_34f_biosparam(Disk * disk, int dev, int * dkinfo) {
 
 static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
    Scsi_Cmnd *SCpnt;
-   unsigned int i, j, k, flags, status, loops, total_loops = 0;
+   unsigned int i, j, k, flags, status, tstatus, loops, total_loops = 0;
    struct mscp *spp;
 
    save_flags(flags);
@@ -739,7 +805,7 @@ static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
       loops = 0;
 
       /* Loop until all interrupts for a board are serviced */
-      while (inb(sh[j]->io_port + REG_SYS_INTR) & INTR_ASSERTED) {
+      while (inb(sh[j]->io_port + REG_SYS_INTR) & IRQ_ASSERTED) {
          total_loops++;
          loops++;
 
@@ -756,7 +822,11 @@ static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
          if (i >= sh[j]->can_queue)
             panic("%s: ihdlr, invalid mscp address.\n", BN(j));
 
-         if (HD(j)->cp_stat[i] == LOCKED) {
+         if (HD(j)->cp_stat[i] == IGNORE) {
+            HD(j)->cp_stat[i] = FREE;
+            continue;
+            }
+         else if (HD(j)->cp_stat[i] == LOCKED) {
             HD(j)->cp_stat[i] = FREE;
             printk("%s: ihdlr, mbox %d unlocked, count %d.\n",
                    BN(j), i, HD(j)->iocount);
@@ -787,29 +857,50 @@ static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
                   " irq %d.\n", BN(j), i, SCpnt->pid, 
                   *(unsigned int *)SCpnt->host_scribble, irq);
 
+         tstatus = status_byte(spp->target_status);
+
          switch (spp->adapter_status) {
             case ASOK:     /* status OK */
 
-               /* Fix a "READ CAPACITY failed" error on some disk drives */
-               if (spp->target_status == INTERMEDIATE_GOOD
-                                     && SCpnt->device->type != TYPE_TAPE) 
+               /* Forces a reset if a disk drive keeps returning BUSY */
+               if (tstatus == BUSY && SCpnt->device->type != TYPE_TAPE) 
                   status = DID_ERROR << 16;
 
                /* If there was a bus reset, redo operation on each target */
-               else if (spp->target_status == CONDITION_GOOD
-                                     && SCpnt->device->type == TYPE_DISK
-                                     && HD(j)->target_reset[SCpnt->target])
+               else if (tstatus != GOOD
+                        && SCpnt->device->type == TYPE_DISK
+                        && HD(j)->target_reset[SCpnt->target])
                   status = DID_BUS_BUSY << 16;
+
+               /* Works around a flaw in scsi.c */
+               else if (tstatus == CHECK_CONDITION
+                        && SCpnt->device->type == TYPE_DISK
+                        && (SCpnt->sense_buffer[2] & 0xf) == RECOVERED_ERROR)
+                  status = DID_BUS_BUSY << 16;
+
+               else if (tstatus == CHECK_CONDITION
+                        && (SCpnt->device->type == TYPE_DISK
+                         || SCpnt->device->type == TYPE_ROM)
+                        && (SCpnt->sense_buffer[2] & 0xf) == UNIT_ATTENTION)
+                  status = DID_ERROR << 16;
+   
                else
                   status = DID_OK << 16;
 
-               if (spp->target_status == 0)
+               if (tstatus == GOOD)
                   HD(j)->target_reset[SCpnt->target] = FALSE;
+
+               if (spp->target_status && (SCpnt->device->type == TYPE_DISK
+                                       || SCpnt->device->type == TYPE_ROM))
+                  printk("%s: ihdlr, target %d:%d, pid %ld, target_status "\
+                         "0x%x, sense key 0x%x.\n", BN(j), 
+                         SCpnt->target, SCpnt->lun, SCpnt->pid,
+                         spp->target_status, SCpnt->sense_buffer[2]);
 
                HD(j)->target_time_out[SCpnt->target] = 0;
 
                break;
-            case ASST:     /* SCSI bus selection time out */
+            case ASST:     /* Selection Time Out */
 
                if (HD(j)->target_time_out[SCpnt->target] > 1)
                   status = DID_ERROR << 16;
@@ -894,3 +985,9 @@ static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
    restore_flags(flags);
    return;
 }
+
+#if defined(MODULE)
+Scsi_Host_Template driver_template = ULTRASTOR_14_34F;
+
+#include "scsi_module.c"
+#endif

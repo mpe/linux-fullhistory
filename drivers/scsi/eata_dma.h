@@ -2,7 +2,7 @@
 * Header file for eata_dma.c Linux EATA-DMA SCSI driver *
 * (c) 1993,94,95 Michael Neuffer                        *
 *********************************************************
-* last change: 95/01/16                                 *
+* last change: 95/01/30                                 *
 ********************************************************/
 
 
@@ -15,8 +15,8 @@
 #include <linux/scsicam.h>
 
 #define VER_MAJOR 2
-#define VER_MINOR 1
-#define VER_SUB   "0i"
+#define VER_MINOR 3
+#define VER_SUB   "0a"
 
 /************************************************************************
  * Here you can configure your drives that are using a non-standard     *
@@ -65,6 +65,7 @@
 #define DBG_QUEUE	0	/* Trace command queueing. 		*/
 #define DBG_INTR	0       /* Trace interrupt service routine. 	*/
 #define DBG_INTR2	0       /* Trace interrupt service routine. 	*/
+#define DBG_PROC        0       /* Debug proc-fs related statistics     */
 #define DBG_REGISTER    0       /* */
 #define DBG_ABNORM	1	/* Debug abnormal actions (reset, abort)*/
 
@@ -79,7 +80,7 @@
 	NULL, NULL,                  \
         "EATA (Extended Attachment) driver", \
         eata_detect,                 \
-        NULL,                        \
+        eata_release,                \
         eata_info,                   \
         eata_command,                \
         eata_queue,                  \
@@ -101,7 +102,7 @@ int eata_command(Scsi_Cmnd *);
 int eata_queue(Scsi_Cmnd *, void *(done)(Scsi_Cmnd *));
 int eata_abort(Scsi_Cmnd *);
 int eata_reset(Scsi_Cmnd *);
-
+int eata_release(struct Scsi_Host *);
 
 /*********************************************
  * Misc. definitions                         *
@@ -127,8 +128,24 @@ int eata_reset(Scsi_Cmnd *);
 #define MAX_PCI_BUS       16             /* Maximum # Of Busses Allowed    */
 
 #define SG_SIZE           64 
-#define C_P_L_DIV          8             /* 1 <= C_P_L_DIV <= 8            */
-#define C_P_L_CURRENT_MAX  2             /* Until this limit is removed    */
+
+#define C_P_L_CURRENT_MAX 10  /* Until this limit in the mm is removed    
+			       * Kernels < 1.1.86 died horrible deaths
+			       * if you used values >2. The memory management
+			       * of pl.86 seems to cope with 10. 
+			       */
+#define C_P_L_DIV          4  /* 1 <= C_P_L_DIV <= 8            
+			       * You can use this parameter to fine-tune
+			       * the driver. Depending on the number of 
+			       * devices and their ablilty to queue commands
+			       * you will get the best results with a value
+			       * ~= numdevices-(devices_unable_to_queue_commands/2)
+			       * The reason for this is that the disk driver tents 
+			       * to flood the queue, so that other drivers have 
+			       * problems to queue commands themselves. This can 
+			       * for example result in the effect that the tape
+			       * stops during disk accesses. 
+			       */
 
 #define FREE       0
 #define USED       1
@@ -210,7 +227,7 @@ struct eata_register {      	    /* EATA register set */
   unchar data_reg[2];     	/* R, couldn't figure this one out          */
   unchar cp_addr[4];      	/* W, CP address register                   */
   union { 
-    unchar command;     	        /* W, command code: [read|set] conf, send CP*/
+    unchar command;     	/* W, command code: [read|set] conf, send CP*/
     struct reg_bit status;	/* R, see register_bit1                     */
     unchar statusunchar;
   } ovr;   
@@ -319,8 +336,7 @@ struct eata_ccb {             /* Send Command Packet structure      */
 };
 
 
-struct eata_sp
-{
+struct eata_sp {
   unchar hba_stat:7,          /* HBA status                     */
               EOC:1;          /* True if command finished       */
   unchar scsi_stat;           /* Target SCSI status             */       
@@ -330,7 +346,7 @@ struct eata_sp
   unchar msg[12];
 };
 
-typedef struct hstd{
+typedef struct hstd {
   char   vendor[9];
   char   name[18];
   char   revision[6];
@@ -338,9 +354,11 @@ typedef struct hstd{
   unchar bustype;              /* bustype of HBA             */
   unchar channel;              /* no. of scsi channel        */
   unchar state;                /* state of HBA               */
+  unchar primary;              /* true if primary            */
+  ulong  reads[13];
+  ulong  writes[13];
   unchar t_state[MAXTARGET];   /* state of Target (RESET,..) */
   uint   t_timeout[MAXTARGET]; /* timeouts on target         */
-  unchar primary;              /* true if primary            */
   uint   last_ccb;             /* Last used ccb              */
   struct Scsi_Host *next;         
   struct Scsi_Host *prev;
@@ -366,28 +384,5 @@ struct geom_emul {
   int bios_drives;               /* number of emulated drives */
   struct drive_geom_emul drv[2]; /* drive structures          */
 };
-
-struct lun_map {
-  unchar   id:5,
-         chan:3;
-  unchar lun;
-};
-
-typedef struct emul_pp {
-  unchar p_code:6,
-           null:1,
-         p_save:1;
-  unchar p_length;
-  ushort cylinder;
-  unchar heads;
-  unchar sectors;
-  unchar null2;
-  unchar s_lunmap:4,
-              ems:1;
-  ushort drive_type;   /* In Little Endian ! */
-  struct lun_map lunmap[4];
-}emulpp;
-
-
 
 #endif /* _EATA_H */

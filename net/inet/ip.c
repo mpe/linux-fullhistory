@@ -1268,7 +1268,7 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	 */
 
 #ifdef CONFIG_IP_FIREWALL
-	if(!ip_fw_chk(skb->h.iph, ip_fw_fwd_chain))
+	if(!ip_fw_chk(skb->h.iph, ip_fw_fwd_chain, ip_fw_fwd_policy))
 	{
 		return;
 	}
@@ -1425,7 +1425,7 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 			 *	Count mapping we shortcut
 			 */
 			 
-			ip_acct_cnt(iph,ip_acct_chain,1);
+			ip_acct_cnt(iph,ip_acct_chain);
 #endif			
 			
 			/*
@@ -1493,7 +1493,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 #ifdef	CONFIG_IP_FIREWALL
 	
-	if(!LOOPBACK(iph->daddr) && !ip_fw_chk(iph,ip_fw_blk_chain))
+	if(!LOOPBACK(iph->daddr) && !ip_fw_chk(iph,ip_fw_blk_chain,
+			ip_fw_blk_policy))
 	{
 		kfree_skb(skb, FREE_WRITE);
 		return 0;	
@@ -1608,7 +1609,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 */
 	 
 #ifdef CONFIG_IP_ACCT
-	ip_acct_cnt(iph,ip_acct_chain,1);
+	ip_acct_cnt(iph,ip_acct_chain);
 #endif	
 
 	/*
@@ -1905,7 +1906,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 
 	ip_statistics.IpOutRequests++;
 #ifdef CONFIG_IP_ACCT
-	ip_acct_cnt(iph,ip_acct_chain,1);
+	ip_acct_cnt(iph,ip_acct_chain);
 #endif	
 	
 #ifdef CONFIG_IP_MULTICAST	
@@ -2280,8 +2281,12 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_FW_DEL_FWD:
 		case IP_FW_CHK_BLK:
 		case IP_FW_CHK_FWD:
-		case IP_FW_FLUSH:
-		case IP_FW_POLICY:
+		case IP_FW_FLUSH_BLK:
+		case IP_FW_FLUSH_FWD:
+		case IP_FW_ZERO_BLK:
+		case IP_FW_ZERO_FWD:
+		case IP_FW_POLICY_BLK:
+		case IP_FW_POLICY_FWD:
 			if(!suser())
 				return -EPERM;
 			if(optlen>sizeof(tmp_fw) || optlen<1)

@@ -248,9 +248,7 @@ mcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 	struct cdrom_tocentry entry;
 	struct mcd_Toc *tocPtr;
 	struct cdrom_subchnl subchnl;
-#if 0
 	struct cdrom_volctrl volctrl;
-#endif
 
 	if (!ip)
 		return -EINVAL;
@@ -492,42 +490,30 @@ mcd_Play.end.min, mcd_Play.end.sec, mcd_Play.end.frame);
 		return 0;
 
 	case CDROMVOLCTRL:   /* Volume control */
-	/*
-	 * This is not working yet.  Setting the volume by itself does
-	 * nothing.  Following the 'set' by a 'play' results in zero
-	 * volume.  Something to work on for the next release.
-	 */
-#if 0
 		st = verify_area(VERIFY_READ, (void *) arg, sizeof(volctrl));
 		if (st)
 			return st;
 
 		memcpy_fromfs(&volctrl, (char *) arg, sizeof(volctrl));
-printk("VOL %d %d\n", volctrl.channel0 & 0xFF, volctrl.channel1 & 0xFF);
 		outb(MCMD_SET_VOLUME, MCDPORT(0));
 		outb(volctrl.channel0, MCDPORT(0));
-		outb(0, MCDPORT(0));
+		outb(255, MCDPORT(0));
 		outb(volctrl.channel1, MCDPORT(0));
-		outb(1, MCDPORT(0));
+		outb(255, MCDPORT(0));
 
 		i = getMcdStatus(MCD_STATUS_DELAY);
 		if (i < 0)
 			return -EIO;
 
 		{
-			int a, b, c, d;
+			char a, b, c, d;
 
 			getValue(&a);
 			getValue(&b);
 			getValue(&c);
 			getValue(&d);
-			printk("%02X %02X %02X %02X\n", a, b, c, d);
 		}
 
-		outb(0xF8, MCDPORT(0));
-		i = getMcdStatus(MCD_STATUS_DELAY);
-		printk("F8 -> %02X\n", i & 0xFF);
-#endif
 		return 0;
 
 	case CDROMEJECT:

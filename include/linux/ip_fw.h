@@ -82,21 +82,25 @@ struct ip_fw
  *	a raw socket for this. Instead we check rights in the calls.
  */     
 
-#define IP_FW_BASE_CTL	64
+#define IP_FW_BASE_CTL   64
 
-#define IP_FW_ADD_BLK (IP_FW_BASE_CTL)
-#define IP_FW_ADD_FWD (IP_FW_BASE_CTL+1)   
-#define IP_FW_CHK_BLK (IP_FW_BASE_CTL+2)
-#define IP_FW_CHK_FWD (IP_FW_BASE_CTL+3)
-#define IP_FW_DEL_BLK (IP_FW_BASE_CTL+4)
-#define IP_FW_DEL_FWD (IP_FW_BASE_CTL+5)
-#define IP_FW_FLUSH   (IP_FW_BASE_CTL+6)
-#define IP_FW_POLICY  (IP_FW_BASE_CTL+7) 
+#define IP_FW_ADD_BLK    (IP_FW_BASE_CTL)
+#define IP_FW_ADD_FWD    (IP_FW_BASE_CTL+1)   
+#define IP_FW_CHK_BLK    (IP_FW_BASE_CTL+2)
+#define IP_FW_CHK_FWD    (IP_FW_BASE_CTL+3)
+#define IP_FW_DEL_BLK    (IP_FW_BASE_CTL+4)
+#define IP_FW_DEL_FWD    (IP_FW_BASE_CTL+5)
+#define IP_FW_FLUSH_BLK  (IP_FW_BASE_CTL+6)
+#define IP_FW_FLUSH_FWD  (IP_FW_BASE_CTL+7)
+#define IP_FW_ZERO_BLK   (IP_FW_BASE_CTL+8)
+#define IP_FW_ZERO_FWD   (IP_FW_BASE_CTL+9)
+#define IP_FW_POLICY_BLK (IP_FW_BASE_CTL+10)
+#define IP_FW_POLICY_FWD (IP_FW_BASE_CTL+11)
 
-#define IP_ACCT_ADD   (IP_FW_BASE_CTL+10)
-#define IP_ACCT_DEL   (IP_FW_BASE_CTL+11)
-#define IP_ACCT_FLUSH (IP_FW_BASE_CTL+12)
-#define IP_ACCT_ZERO  (IP_FW_BASE_CTL+13)
+#define IP_ACCT_ADD      (IP_FW_BASE_CTL+16)
+#define IP_ACCT_DEL      (IP_FW_BASE_CTL+17)
+#define IP_ACCT_FLUSH    (IP_FW_BASE_CTL+18)
+#define IP_ACCT_ZERO     (IP_FW_BASE_CTL+19)
 
 
 /*
@@ -110,13 +114,14 @@ struct ip_fw
 #ifdef CONFIG_IP_FIREWALL
 extern struct ip_fw *ip_fw_blk_chain;
 extern struct ip_fw *ip_fw_fwd_chain;
-extern int ip_fw_policy;
-extern int ip_fw_chk(struct iphdr *, struct ip_fw *);
+extern int ip_fw_blk_policy;
+extern int ip_fw_fwd_policy;
+extern int ip_fw_chk(struct iphdr *, struct ip_fw *, int);
 extern int ip_fw_ctl(int, void *, int);
 #endif
 #ifdef CONFIG_IP_ACCT
 extern struct ip_fw *ip_acct_chain;
-extern void ip_acct_cnt(struct iphdr *, struct ip_fw *, int);
+extern void ip_acct_cnt(struct iphdr *, struct ip_fw *);
 extern int ip_acct_ctl(int, void *, int);
 #endif
 #endif /* KERNEL */

@@ -2642,11 +2642,18 @@ static inline unsigned long default_mask(unsigned long dst)
 
 /*
  *	Default sequence number picking algorithm.
+ *	As close as possible to RFC 793, which
+ *	suggests using a 250kHz clock.
+ *	Further reading shows this assumes 2MB/s networks.
+ *	For 10MB/s ethernet, a 1MHz clock is appropriate.
+ *	That's funny, Linux has one built in!  Use it!
  */
 
-extern inline long tcp_init_seq(void)
+extern inline unsigned long tcp_init_seq(void)
 {
-	return jiffies * SEQ_TICK - seq_offset; 
+	struct timeval tv;
+	do_gettimeofday(&tv);
+	return tv.tv_usec+tv.tv_sec*1000000;
 }
 
 /*
@@ -4276,7 +4283,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   
 	sk->inuse = 1;
 	sk->daddr = usin->sin_addr.s_addr;
-	sk->write_seq = jiffies * SEQ_TICK - seq_offset;
+	sk->write_seq = tcp_init_seq();
 	sk->window_seq = sk->write_seq;
 	sk->rcv_ack_seq = sk->write_seq -1;
 	sk->err = 0;

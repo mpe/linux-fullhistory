@@ -366,12 +366,6 @@ void handle_vm86_fault(struct vm86_regs * regs, long error_code)
 		set_vflags_short(popw(ssp, sp), regs);
 		return;
 
-	/* int 3 */
-	case 0xcc:
-		IP(regs)++;
-		do_int(regs, 3, ssp, sp);
-		return;
-
 	/* int xx */
 	case 0xcd:
 		IP(regs) += 2;

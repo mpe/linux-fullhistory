@@ -58,9 +58,16 @@ extern int afinet_get_info(char *, char **, off_t, int);
 #if	defined(CONFIG_WAVELAN)
 extern int wavelan_get_info(char *, char **, off_t, int);
 #endif	/* defined(CONFIG_WAVELAN) */
+#ifdef CONFIG_IP_ACCT
 extern int ip_acct_procinfo(char *, char **, off_t, int);
+extern int ip_acct0_procinfo(char *, char **, off_t, int);
+#endif /* CONFIG_IP_ACCT */
+#ifdef CONFIG_IP_FIREWALL
 extern int ip_fw_blk_procinfo(char *, char **, off_t, int);
+extern int ip_fw_blk0_procinfo(char *, char **, off_t, int);
 extern int ip_fw_fwd_procinfo(char *, char **, off_t, int);
+extern int ip_fw_fwd0_procinfo(char *, char **, off_t, int);
+#endif /* CONFIG_IP_FIREWALL */
 extern int ip_msqhst_procinfo(char *, char **, off_t, int);
 extern int ip_mc_procinfo(char *, char **, off_t, int);
 #endif /* CONFIG_INET */
@@ -140,13 +147,16 @@ static struct proc_dir_entry net_dir[] = {
 #endif
 #ifdef CONFIG_IP_FIREWALL
 	{ PROC_NET_IPFWFWD,	10, "ip_forward"},
-	{ PROC_NET_IPBLFWD,	8,  "ip_block"},
+	{ PROC_NET_IPFWFWD0,	12, "ip_forward_0"},
+	{ PROC_NET_IPFWBLK,	8,  "ip_block"},
+	{ PROC_NET_IPFWBLK0,	10, "ip_block_0"},
 #endif
 #ifdef CONFIG_IP_MASQUERADE
 	{ PROC_NET_IPMSQHST,	13, "ip_masquerade"},
 #endif
 #ifdef CONFIG_IP_ACCT
 	{ PROC_NET_IPACCT,	7,  "ip_acct"},
+	{ PROC_NET_IPACCT0,	9,  "ip_acct_0"},
 #endif
 #if	defined(CONFIG_WAVELAN)
 	{ PROC_NET_WAVELAN,	7, "wavelan" },
@@ -292,13 +302,22 @@ static int proc_readnet(struct inode * inode, struct file * file,
 			case PROC_NET_IPFWFWD:
 				length = ip_fw_fwd_procinfo(page, &start, file->f_pos,thistime);
 				break;
-			case PROC_NET_IPBLFWD:
+			case PROC_NET_IPFWFWD0:
+				length = ip_fw_fwd0_procinfo(page, &start, file->f_pos,thistime);
+				break;
+			case PROC_NET_IPFWBLK:
 				length = ip_fw_blk_procinfo(page, &start, file->f_pos,thistime);
+				break;
+			case PROC_NET_IPFWBLK0:
+				length = ip_fw_blk0_procinfo(page, &start, file->f_pos,thistime);
 				break;
 #endif
 #ifdef CONFIG_IP_ACCT
 			case PROC_NET_IPACCT:
 				length = ip_acct_procinfo(page, &start, file->f_pos,thistime);
+				break;
+			case PROC_NET_IPACCT0:
+				length = ip_acct0_procinfo(page, &start, file->f_pos,thistime);
 				break;
 #endif
 #ifdef CONFIG_IP_MASQUERADE

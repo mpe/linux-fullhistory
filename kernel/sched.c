@@ -770,4 +770,7 @@ void sched_init(void)
 	bh_base[IMMEDIATE_BH].routine = immediate_bh;
 	if (request_irq(TIMER_IRQ, do_timer, 0, "timer") != 0)
 		panic("Could not allocate timer IRQ!");
+	enable_bh(TIMER_BH);
+	enable_bh(TQUEUE_BH);
+	enable_bh(IMMEDIATE_BH);
 }

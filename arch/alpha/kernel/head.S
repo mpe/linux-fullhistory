@@ -9,6 +9,7 @@
 
 #define __ASSEMBLY__
 #include <asm/system.h>
+#include <linux/fd.h>
 
 #define halt .long PAL_halt
 
@@ -58,4 +59,7 @@ rdusp:
 	ret ($26)
 	.end rdusp
 
-
+.align 5
+.globl floppy_track_buffer
+floppy_track_buffer:
+	.space 512*2*MAX_BUFFER_SECTORS,1

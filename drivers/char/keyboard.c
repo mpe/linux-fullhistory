@@ -614,22 +614,8 @@ static void caps_on(void)
 
 static void show_ptregs(void)
 {
-#ifdef __i386__
-	if (!pt_regs)
-		return;
-	printk("\n");
-	printk("EIP: %04x:%08lx",0xffff & pt_regs->cs,pt_regs->eip);
-	if (pt_regs->cs & 3)
-		printk(" ESP: %04x:%08lx",0xffff & pt_regs->ss,pt_regs->esp);
-	printk(" EFLAGS: %08lx\n",pt_regs->eflags);
-	printk("EAX: %08lx EBX: %08lx ECX: %08lx EDX: %08lx\n",
-		pt_regs->orig_eax,pt_regs->ebx,pt_regs->ecx,pt_regs->edx);
-	printk("ESI: %08lx EDI: %08lx EBP: %08lx",
-		pt_regs->esi, pt_regs->edi, pt_regs->ebp);
-	printk(" DS: %04x ES: %04x FS: %04x GS: %04x\n",
-		0xffff & pt_regs->ds,0xffff & pt_regs->es,
-		0xffff & pt_regs->fs,0xffff & pt_regs->gs);
-#endif
+	if (pt_regs)
+		show_regs(pt_regs);
 }
 
 static void hold(void)
@@ -1037,7 +1023,7 @@ static int send_data(unsigned char data)
 		resend = 0;
 		reply_expected = 1;
 		outb_p(data, 0x60);
-		for(i=0; i<0x20000; i++) {
+		for(i=0; i<0x200000; i++) {
 			inb_p(0x64);		/* just as a delay */
 			if (acknowledge)
 				return 1;
@@ -1185,9 +1171,10 @@ unsigned long kbd_init(unsigned long kmem_start)
 	outb(0x1,0x60);
 	while (inb(0x64) & 2)
 		/* nothing */;
-	send_data(0xf0);	/* Select scan code */
-	send_data(0x01);	/* type 1 */
-#endif		
+	if (!send_data(0xf0) || !send_data(0x01))
+		printk("Scanmode 1 change failed\n");
+#endif
 	mark_bh(KEYBOARD_BH);
+	enable_bh(KEYBOARD_BH);
 	return kmem_start;
 }

@@ -2501,6 +2501,7 @@ scrn[1] = '\0';
 	    panic("Couldn't register Cyclom callout driver\n");
 
     bh_base[CYCLADES_BH].routine = do_cyclades_bh;
+    enable_bh(CYCLADES_BH);
 
     for (index = 0; index < 16; index++) {
 	    IRQ_cards[index] = 0;

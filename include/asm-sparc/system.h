@@ -18,6 +18,7 @@
  */
 
 #include <asm/openprom.h>
+#include <asm/psr.h>
 
 #define INIT_PCB	0x00011fe0
 #define INIT_STACK	0x00013fe0
@@ -26,6 +27,10 @@
 #define EMPTY_PGT	0x00001000
 #define EMPTY_PGE	0x00001000
 #define ZERO_PGE	0x00001000
+
+#define IRQ_ENA_ADR     0x2000        /* This is a bitmap of all activated IRQ's
+				       * which is mapped in head.S during boot.
+				       */
 
 #ifndef __ASSEMBLY__
 
@@ -46,18 +51,17 @@ extern struct linux_romvec *romvec;
  */
 
 #define swpipl(__new_ipl) \
-({ unsigned long __old_ipl, psr; \
+({ unsigned long psr, retval; \
 __asm__ __volatile__( \
-        "rd %%psr, %0\n\t" : "=&r" (__old_ipl)); \
+        "rd %%psr, %0\n\t" : "=&r" (psr)); \
+retval = psr; \
+psr = (psr & ~(PSR_PIL)); \
+psr |= ((__new_ipl << 8) & PSR_PIL); \
 __asm__ __volatile__( \
-	"and %1, 15, %0\n\t" \
-	"sll %0, 8, %0\n\t" \
-	"or  %0, %2, %0\n\t" \
 	"wr  %0, 0x0, %%psr\n\t" \
-	: "=&r" (psr) \
-	: "r" (__new_ipl), "r" (__old_ipl)); \
-__old_ipl = ((__old_ipl>>8)&15); \
-__old_ipl; })
+	: : "r" (psr)); \
+retval = ((retval>>8)&15); \
+retval; })
 
 #define cli()			swpipl(15)  /* 15 = no int's except nmi's */
 #define sti()			swpipl(0)   /* same as alpha */
@@ -82,6 +86,20 @@ __asm__ __volatile__ ("nop\n\t")
 #define set_call_gate(a,addr) \
 	_set_gate(a,12,3,addr)
 
+
+extern inline unsigned int get_psr(void)
+{
+  unsigned int ret_val;
+  __asm__("rd %%psr, %0\n\t" :
+	  "=r" (ret_val));
+  return ret_val;
+}
+
+extern inline void put_psr(unsigned int new_psr)
+{
+  __asm__("wr %0, 0x0, %%psr\n\t" : :
+	  "r" (new_psr));
+}
 
 /* Must this be atomic? */
 

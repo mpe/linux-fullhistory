@@ -1,7 +1,7 @@
 /* cprefix.h:  This file is included by assembly source which needs
  *             to know what the c-label prefixes are. The newer versions
  *	       of cpp that come with gcc predefine such things to help
- *	       us out. The reason this stuff is needed is to make
+ *	       us out. The reason this stuff is neaded is to make
  *	       solaris compiles of the kernel work.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

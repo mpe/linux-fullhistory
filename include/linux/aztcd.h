@@ -1,4 +1,4 @@
-/* $Id: aztcd.h,v 0.80 1995/01/21 19:55:04 root Exp $
+/* $Id: aztcd.h,v 0.90 1995/02/02 18:14:28 root Exp $
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann
  *
@@ -70,13 +70,14 @@
 #define ACMD_GET_ERROR		0x40		/* get error code */
 #define ACMD_GET_STATUS		0x41		/* get status */
 #define ACMD_GET_Q_CHANNEL      0x50		/* read info from q channel */
-#define ACMD_EJECT		0x60		/* eject/open */
+#define ACMD_EJECT		0x60		/* eject/open tray */
+#define ACMD_CLOSE              0x61            /* close tray */
 #define ACMD_PAUSE		0x80		/* pause */
 #define ACMD_STOP		0x81		/* stop play */
 #define ACMD_PLAY_AUDIO		0x90		/* play audio track */
+#define ACMD_SET_VOLUME		0x93		/* set audio level */
 #define ACMD_GET_VERSION	0xA0		/* get firmware version */
 #define ACMD_SET_MODE		0xA1		/* set drive mode */
-#define ACMD_SET_VOLUME		0xAE		/* set audio level */
 
 #define SET_TIMER(func, jifs) \
         delay_timer.expires = jifs; \

@@ -25,6 +25,7 @@
 #include <asm/segment.h>
 
 #include "hpfs.h"
+#include "hpfs_caps.h"
 
 /* 
  * HPFS is a mixture of 512-byte blocks and 2048-byte blocks.  The 2k blocks
@@ -1209,12 +1210,8 @@ static inline int memcasecmp(const unsigned char *s1, const unsigned char *s2,
 
 	if (n != 0)
 		do {
-			unsigned c1 = *s1++;
-			unsigned c2 = *s2++;
-			if (c1 - 'a' < 26)
-				c1 -= 040;
-			if (c2 - 'a' < 26)
-				c2 -= 040;
+			unsigned c1 = linux_char_to_upper_linux (*s1++);
+			unsigned c2 = hpfs_char_to_upper_linux (*s2++);
 			if ((t = c1 - c2) != 0)
 				return t;
 		} while (--n != 0);
@@ -1394,15 +1391,14 @@ static void write_one_dirent(struct dirent *dirent, const unsigned char *name,
 	put_fs_long(ino, &dirent->d_ino);
 	put_fs_word(namelen, &dirent->d_reclen);
 
-	if (lowercase)
-		for (n = namelen; n != 0;) {
-			unsigned t = name[--n];
-			if (t - 'A' < 26)
-				t += 040;
-			put_fs_byte(t, &dirent->d_name[n]);
-		}
-	else
-		memcpy_tofs(dirent->d_name, name, namelen);
+	for (n = namelen; n != 0;) {
+		unsigned t = name[--n];
+		if (lowercase)
+			t = hpfs_char_to_lower_linux (t);
+		else
+			t = hpfs_char_to_linux (t);
+		put_fs_byte(t, &dirent->d_name[n]);
+	}
 
 	put_fs_byte(0, &dirent->d_name[namelen]);
 }

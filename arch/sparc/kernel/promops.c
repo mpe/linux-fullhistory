@@ -8,7 +8,7 @@
 
 #include <asm/openprom.h>
 
-#define DEBUG_PROMOPS
+/* #define DEBUG_PROMOPS */
 #define MAX_PR_LEN   16           /* exotic hardware probably overshoots this */
 
 int prom_node_root;               /* initialized in init_prom */

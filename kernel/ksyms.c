@@ -37,6 +37,8 @@
 #ifdef CONFIG_INET
 #include <linux/net.h>
 #include <linux/netdevice.h>
+#include <linux/ip.h>
+#include "../net/inet/protocol.h"
 #endif
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
@@ -202,6 +204,10 @@ struct symbol_table symbol_table = {
 	/* dma handling */
 	X(request_dma),
 	X(free_dma),
+#ifdef HAVE_DISABLE_HLT
+	X(disable_hlt),
+	X(enable_hlt),
+#endif
 
 	/* IO port handling */
 	X(check_region),
@@ -247,10 +253,19 @@ struct symbol_table symbol_table = {
 
 	/* Miscellaneous access points */
 	X(si_meminfo),
-
+#ifdef CONFIG_NET
 	/* socket layer registration */
 	X(sock_register),
 	X(sock_unregister),
+	/* Internet layer registration */
+#ifdef CONFIG_INET	
+	X(inet_add_protocol),
+	X(inet_del_protocol),
+#endif
+	/* Device callback registration */
+	X(register_netdevice_notifier),
+	X(unregister_netdevice_notifier),
+#endif
 
 #ifdef CONFIG_FTAPE
 	/* The next labels are needed for ftape driver.  */
@@ -275,6 +290,11 @@ struct symbol_table symbol_table = {
 	X(dev_ioctl),
 	X(dev_queue_xmit),
 	X(dev_base),
+	X(dev_close),
+	X(n_tty_ioctl),
+	X(tty_register_ldisc),
+	X(kill_fasync),
+	X(tty_hung_up_p),
 #endif
 #ifdef CONFIG_SCSI
 	/* Supports loadable scsi drivers */
@@ -284,6 +304,7 @@ struct symbol_table symbol_table = {
 	X(scsi_malloc),
 	X(scsi_register),
 	X(scsi_unregister),
+	X(scsicam_bios_param),
 #endif
 	/* Added to make file system as module */
 	X(set_writetime),

@@ -7,7 +7,7 @@
 
 #include <linux/scsicam.h>
 
-#define EATA_VERSION "1.12.00"
+#define EATA_VERSION "1.14.03"
 
 int eata_detect(Scsi_Host_Template *);
 int eata_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
@@ -16,7 +16,7 @@ int eata_reset(Scsi_Cmnd *);
 
 #define EATA {  NULL, /* Ptr for modules */                    \
                 NULL, /* usage count for modules */	       \
-                "EATA/DMA 2.0A rev. " EATA_VERSION " by "      \
+                "EATA/DMA 2.0 rev. " EATA_VERSION " by "       \
                 "Dario_Ballabio@milano.europe.dg.com.",        \
                 eata_detect,	        	               \
                 NULL, /* Release */     	               \
@@ -32,7 +32,7 @@ int eata_reset(Scsi_Cmnd *);
                 0,   /* sg_tablesize, reset by detect */       \
                 0,   /* cmd_per_lun, reset by detect */        \
 		0,   /* number of boards present */            \
-                0,   /* unchecked isa dma, reset by detect */  \
+                1,   /* unchecked isa dma, reset by detect */  \
                 ENABLE_CLUSTERING                              \
                 }
 #endif

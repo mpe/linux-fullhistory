@@ -26,7 +26,7 @@ struct psa_t
 	unsigned char	psa_univ_local_sel;	/* Universal Local Selection */
 #define		PSA_UNIVERSAL	0		/* Universal (factory) */
 #define		PSA_LOCAL	1		/* Local */
-	unsigned char	psa_comp_number;	/* Compatability Number: */
+	unsigned char	psa_comp_number;	/* Compatibility Number: */
 #define		PSA_COMP_PC_AT_915	0 	/* PC-AT 915 MHz	*/
 #define		PSA_COMP_PC_MC_915	1 	/* PC-MC 915 MHz	*/
 #define		PSA_COMP_PC_AT_2400	2 	/* PC-AT 2.4 GHz	*/
@@ -94,7 +94,7 @@ struct mmw_t
 #define		MMW_LOOPT_SEL_LT3C	0x02	/* looptest 3c */
 #define		MMW_LOOPT_SEL_LT3D	0x01	/* looptest 3d */
 	unsigned char	mmw_jabber_enable;	/* jabber timer enable */
-	unsigned char	mmw_freeze;		/* freeze / unfreeeze signal level */
+	unsigned char	mmw_freeze;		/* freeze / unfreeze signal level */
 	unsigned char	mmw_anten_sel;		/* antenna selection */
 #define		MMW_ANTEN_SEL_SEL	0x01	/* direct antenna selection */
 #define		MMW_ANTEN_SEL_ALG_EN	0x02	/* antenna selection algorithm enable */
@@ -104,7 +104,7 @@ struct mmw_t
 	unsigned char	mmw_unused2[1];		/* unused */
 	unsigned char	mmw_thr_pre_set;	/* level threshold preset */
 	unsigned char	mmw_decay_prm;		/* decay parameters */
-	unsigned char	mmw_decay_updat_prm;	/* decay update parameterz */
+	unsigned char	mmw_decay_updat_prm;	/* decay update parameters */
 	unsigned char	mmw_quality_thr;	/* quality (z-quotient) threshold */
 	unsigned char	mmw_netw_id_l;		/* NWID low order byte */
 	unsigned char	mmw_netw_id_h;		/* NWID high order byte */

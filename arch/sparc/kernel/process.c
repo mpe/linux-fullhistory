@@ -48,6 +48,12 @@ void hard_reset_now(void)
 	halt();
 }
 
+void show_regs(struct pt_regs * regs)
+{
+        printk("\nSP: %08lx PC: %08lx NPC: %08lx\n", regs->sp, regs->pc,
+	       regs->npc);
+}
+
 /*
  * Do necessary setup to start up a newly executed thread.
  */

@@ -126,6 +126,7 @@ extern const unsigned char scsi_command_size[8];
 #define INTERMEDIATE_GOOD	0x08
 #define INTERMEDIATE_C_GOOD	0x0a
 #define RESERVATION_CONFLICT	0x0c
+#define QUEUE_FULL              0x1a
 
 #define STATUS_MASK		0x1e
 	

@@ -14,6 +14,7 @@ struct timezone {
 #define NFDBITS			__NFDBITS
 
 #ifdef __KERNEL__
+void do_gettimeofday(struct timeval *tv);
 #include <asm/bitops.h>
 #include <linux/string.h>
 #define FD_SETSIZE		__FD_SETSIZE

@@ -81,6 +81,12 @@ If you still get a different message while Linux boots or when you get the
 message, that the ISO9660-filesystem is not supported by your kernel, when
 you try to mount the CD-ROM drive, you have to recompile your kernel.
 
+If you do *not* have an Aztech/Orchid/Okano/Wearnes drive and want to bypass
+drive detection during Linux boot up, start with boot parameter aztcd=0.
+
+Joe Nardone has compiled a boot disk with the Aztech driver for installing 
+Slackware from CDROM. You can find the disk images at 'sunsite.unc.edu'; 
+see file 'aztech.gz.README' for instructions on how to use it.
 
 4. RECOMPILING YOUR KERNEL
 If your kernel is not yet configured for the AZTECH driver and the ISO9660-
@@ -428,6 +434,7 @@ History:  V0.1  W.Zimmermann: First release. Nov. 8, 1994
           V0.4  W.Zimmermann: fixed some bugs. Dec. 17, 1994
           V0.5  W.Zimmermann: clean 'scanf' commands without compiler warnings
                               Jan. 6, 1995
+          V0.6  W.Zimmermann: volume control (still experimental). Jan. 24, 1995
 */
 
 #include <stdio.h>
@@ -444,7 +451,7 @@ void help(void)
   printf("                     PLAY TRACK   t      PAUSE        p       RESUME       r\n");
   printf("                     NEXT TRACK   n      REPEAT LAST  l       HELP         h\n");
   printf("                     SUB CHANNEL  c      TRACK INFO   i       PLAY AT      a\n");
-  printf("                     READ         d      READ RAW     w                     \n");
+  printf("                     READ         d      READ RAW     w       VOLUME       v\n");
 }
 
 int main(void)
@@ -459,8 +466,9 @@ int main(void)
   union  { struct cdrom_msf msf;
            unsigned char buf[2336];
          } azt;
+  struct cdrom_volctrl  volctrl;
 
-  printf("\nMini-Audio CD-Player V0.5   (C) 1994,1995  W.Zimmermann\n");
+  printf("\nMini-Audio CD-Player V0.6   (C) 1994,1995  W.Zimmermann\n");
   handle=open("/dev/cdrom",O_RDWR);
   ioctl(handle,CDROMRESUME);
   
@@ -580,7 +588,7 @@ int main(void)
                               entry.cdte_track=arg1;
                               if (entry.cdte_track<first) entry.cdte_track=first;
                               if (entry.cdte_track>last)  entry.cdte_track=last;
-                              entry.cdte_format=CDROM_MSF;
+			      entry.cdte_format=CDROM_MSF;
                               if (ioctl(handle,cmd,&entry)) 
                                { printf("Drive error or invalid track no.\n");
                                }
@@ -672,6 +680,19 @@ int main(void)
                            } 
                           break;
 #endif
+              case 'v':   cmd=CDROMVOLCTRL;
+                          printf("--Channel 0 Left  (0-255): ");
+                          scanf("%d",&arg1);
+                          printf("--Channel 1 Right (0-255): ");
+                          scanf("%d",&arg2);
+                          volctrl.channel0=arg1;
+                          volctrl.channel1=arg2;
+                          volctrl.channel2=0;
+                          volctrl.channel3=0;
+                          if (ioctl(handle,cmd,&volctrl)) 
+                           { printf("Drive error or unsupported command\n");
+                           }
+                          break;  
               case 'q':   if (close(handle)) printf("Drive Error: CLOSE\n");
                           exit(0);
               case 'h':   help();

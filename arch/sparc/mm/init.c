@@ -19,6 +19,8 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/vac-ops.h>
+#include <asm/page.h>
+#include <asm/pgtable.h>
 
 extern void scsi_mem_init(unsigned long);
 extern void sound_mem_init(void);
@@ -42,16 +44,16 @@ extern int invalid_segment, num_segmaps, num_contexts;
  * ZERO_PAGE is a special page that is used for zero-initialized
  * data and COW.
  */
-unsigned long __bad_pagetable(void)
+pte_t *__bad_pagetable(void)
 {
 	memset((void *) EMPTY_PGT, 0, PAGE_SIZE);
-	return EMPTY_PGT;
+	return (pte_t *) EMPTY_PGT;
 }
 
-unsigned long __bad_page(void)
+pte_t __bad_page(void)
 {
 	memset((void *) EMPTY_PGE, 0, PAGE_SIZE);
-	return EMPTY_PGE;
+	return pte_mkdirty(mk_pte((unsigned long) EMPTY_PGE, PAGE_SHARED));
 }
 
 unsigned long __zero_page(void)
@@ -95,7 +97,7 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
  * unmaps the bootup page table (as we're now in KSEG, so we don't need it).
  *
  * The bootup sequence put the virtual page table into high memory: that
- * means that we can change the L1 page table by just using VL1p below.
+ * means that we cah change the L1 page table by just using VL1p below.
  */
 
 unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
@@ -135,12 +137,12 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 
 	for(a=0; a<b; a++)
 	  {
-	    for(i=1; i<num_contexts; i++)
+	    for(i=0; i<num_contexts; i++)
 	      {
 		/* map the kernel virt_addrs */
 		(*(romvec->pv_setctxt))(i, (char *) c, a);
-		c += 4096;
 	      }
+	    c += 0x40000;
 	  }
 
 	/* Ok, since now mapped in all contexts, we can free up
@@ -181,9 +183,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	      }
 	  }
 
-#if 0 /* bogosity */
 	invalidate(); /* flush the virtual address cache */
-#endif /* bletcherous */
 
 	printk("\nCurrently in context - ");
 	for(i=0; i<num_contexts; i++)

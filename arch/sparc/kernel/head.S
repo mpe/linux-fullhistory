@@ -229,13 +229,13 @@ IE_reg_addr = C_LABEL(msgbuf) + msgbufsize   ! this page not used; points to IEr
 _start:   /* danger danger */
 start:
 C_LABEL(trapbase):
-	b gokernel; WRITE_PAUSE		! we never get trap #0 it is special
+	b gokernel; nop; nop; nop;	! we never get trap #0 it is special 
 
 	TRAP_ENTRY(0x1, my_trap_handler) /* Instruction Access Exception */
 	TRAP_ENTRY(0x2, my_trap_handler) /* Illegal Instruction */
 	TRAP_ENTRY(0x3, my_trap_handler) /* Privileged Instruction */
 	TRAP_ENTRY(0x4, my_trap_handler) /* Floating Point Disabled */
-	TRAP_ENTRY(0x5, spill_window_entry) /* Window Overflow */
+	TRAP_ENTRY(0x5, spill_window_entry)   /* Window Overflow */
 	TRAP_ENTRY(0x6, fill_window_entry)  /* Window Underflow */
 	TRAP_ENTRY(0x7, my_trap_handler) /* Memory Address Not Aligned */
 	TRAP_ENTRY(0x8, my_trap_handler) /* Floating Point Exception */
@@ -263,7 +263,7 @@ C_LABEL(trapbase):
         TRAP_ENTRY_INTERRUPT(11)            /* Interrupt Level 11 */
         TRAP_ENTRY_INTERRUPT(12)            /* Interrupt Level 12 */
         TRAP_ENTRY_INTERRUPT(13)            /* Interrupt Level 13 */
-        TRAP_ENTRY_INTERRUPT(14)            /* Interrupt Level 14 */
+        TRAP_ENTRY(0x27, sparc_timer)       /* Interrupt Level 14 */
         TRAP_ENTRY_INTERRUPT_NMI(15, linux_trap_nmi) /* Level 15 (nmi) */
 
 	TRAP_ENTRY(0x20, my_trap_handler)   /* General Register Access Error */
@@ -491,6 +491,8 @@ C_LABEL(trapbase):
 	TRAP_ENTRY(0xfe, my_trap_handler)   /* Software Trap                 */
 	TRAP_ENTRY(0xff, my_trap_handler)   /* Software Trap                 */	
 
+	.skip 4096
+
 C_LABEL(msgbufmapped):
         .word   1
 
@@ -712,18 +714,24 @@ rest_of_boot:
  * to all its routines which allows some sanity during bootup.
  */
 
-#if 0 /* paranoid, need to fix this routine now */
 		sethi	%hi(IE_reg_addr), %l0
 		or	%l0, %lo(IE_reg_addr), %l0
+
+		set	0xf4000000, %l3
 		sethi	%hi(INT_ENABLE_REG_PHYSADR), %l2
 		or	%l2, %lo(INT_ENABLE_REG_PHYSADR), %l2
-		srl	%l2, %g5, %l1
+		srl	%l2, %g5, %l2
+		or	%l2, %l3, %l1		
 
 		sta	%l1, [%l0] ASI_PTE
-		mov	INTS_ALL_ENAB, %l1
-		stb	%l1, [%l0]
-#endif /* paranoid, see above */
 	
+		or	%g0, INTS_ENAB, %l1
+		nop
+		nop
+
+		stb	%l1, [%l0]
+	
+
 /* Aieee, now set PC and nPC, enable traps, give ourselves a stack and it's
  * show-time!
  */
@@ -760,7 +768,6 @@ rest_of_boot:
 		wr	%g0, 0x0, %wim		! magical invalid window reg
 		WRITE_PAUSE			! see above
 
-	
 /* I keep the timer interrupt on so that BogoMIPS works and the prom
  * keeps updating it's "jiffies" counter. 100HZ clock on sparcstations.
  */	
@@ -769,28 +776,28 @@ rest_of_boot:
  * write. ;-( like this (PSR_PS | PSR_S | PSR_PIL)...
  */
 
-		sethi	%hi(0x1fc0), %g2
-		or	%g2, %lo(0x1fc0), %g2
+		sethi	%hi(PSR_PS | PSR_S | PSR_PIL | PSR_EF), %g2
+		or	%g2, %lo(PSR_PS | PSR_S | PSR_PIL | PSR_EF), %g2
 		wr	%g2, 0x0, %psr
 		WRITE_PAUSE
 
 		wr	%g0, 0x2, %wim		! window 1 invalid
 		WRITE_PAUSE
+
 		or	%g0, 0x1, %g1
 		sethi	%hi( C_LABEL(current) + THREAD_WIM), %g2
 		st	%g1, [%g2 + %lo( C_LABEL(current) + THREAD_WIM)]
 
 /* I want a kernel stack NOW! */
 
-		set	( C_LABEL(init_user_stack) + 4096 - 96), %fp	
-		set	( C_LABEL(init_user_stack) + 4096), %sp
+		set	( C_LABEL(init_user_stack) + 4092 - 96 - 80), %fp	
+		set	( C_LABEL(init_user_stack) + 4092), %sp
 
-	/* now out stack is set up similarly to the way it is on the i386 */
+/* now out stack is set up similarly to the way it is on the i386 */
 
 		rd	%psr, %l0
 		wr	%l0, PSR_ET, %psr
 		WRITE_PAUSE
-
 
 /*
  * Maybe the prom zeroes out our BSS section, maybe it doesn't. I certainly 
@@ -851,6 +858,11 @@ rest_of_boot:
 
 
 /* Here we go */
+
+		set	C_LABEL(trapbase), %g3
+		wr	%g3, 0x0, %tbr
+		WRITE_PAUSE
+
 
 /* First we call init_prom() to set up romvec, then off to start_kernel() */
 /* XXX put this in arch_init() */
@@ -985,3 +997,6 @@ C_LABEL(empty_bad_page):		.skip 0x1000
 C_LABEL(empty_bad_page_table):		.skip 0x1000
 C_LABEL(empty_zero_page):		.skip 0x1000
 
+		.align 4
+diagstr:	.asciz	"DIAG\n"
+		.align 4

@@ -10,7 +10,7 @@ int u14_34f_abort(Scsi_Cmnd *);
 int u14_34f_reset(Scsi_Cmnd *);
 int u14_34f_biosparam(Disk *, int, int *);
 
-#define U14_34F_VERSION "1.13.00"
+#define U14_34F_VERSION "1.14.05"
 
 #define ULTRASTOR_14_34F {                                            \
                 NULL,                                                 \
@@ -31,7 +31,7 @@ int u14_34f_biosparam(Disk *, int, int *);
                 0,   /* sg_tablesize, reset by detect */              \
                 0,   /* cmd_per_lun, reset by detect */               \
 		0,   /* number of boards present */                   \
-                0,   /* unchecked isa dma, reset by detect */         \
+                1,   /* unchecked isa dma, reset by detect */         \
                 0,   /* use_clustering, reset by detect */            \
                 }
 #endif

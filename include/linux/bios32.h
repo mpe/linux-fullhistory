@@ -22,7 +22,14 @@
 #ifndef BIOS32_H
 #define BIOS32_H
 
+extern int pcibios_present (void);
 unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end);
+
+#define PCIBIOS_SUCCESSFUL		0x00
+#define PCIBIOS_FUNC_NOT_SUPPORTED	0x81
+#define PCIBIOS_BAD_VENDOR_ID		0x83
+#define PCIBIOS_DEVICE_NOT_FOUND	0x86
+#define PCIBIOS_BAD_REGISTER_NUMBER	0x87
 
 extern int pcibios_find_class (unsigned long class_code, unsigned short index, 
     unsigned char *bus, unsigned char *device_fn);

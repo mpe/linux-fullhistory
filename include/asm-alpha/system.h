@@ -80,8 +80,9 @@ extern void wrusp(unsigned long);
 extern unsigned long rdusp(void);
 
 #define halt() __asm__ __volatile__(".long 0");
-#define move_to_user_mode() halt()
-#define switch_to(x) halt()
+
+#define move_to_user_mode()	printk("Null move_to_user_mode\n")
+#define switch_to(x)		panic("switch_to() not yet done")
 
 #ifndef mb
 #define mb() __asm__ __volatile__("mb": : :"memory")

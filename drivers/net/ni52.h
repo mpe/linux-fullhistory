@@ -227,7 +227,7 @@ struct mcsetup_cmd_struct
   unsigned short cmd_cmd;
   unsigned short cmd_link;
   unsigned short mc_cnt;		/* number of bytes in the MC-List */
-  unsigned char  mc_list[16][6];  	/* the list for 16 entries */
+  unsigned char  mc_list[0][6];  	/* pointer to 6 bytes entries */
 };
 
 /*

@@ -29,12 +29,6 @@
 unsigned char aux_device_present;
 
 /*
- * XXXXX!! Warning Will Robinson.
- * Danger! Danger! This is bogus, I'll get it to link if it kills me
- */
-unsigned char floppy_track_buffer[256];
-
-/*
  * The format of "screen_info" is strange, and due to early
  * i386-setup code. This is just enough to make the console
  * code think we're on a EGA+ colour display.

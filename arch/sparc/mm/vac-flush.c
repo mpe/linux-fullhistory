@@ -5,6 +5,7 @@
 */
 
 #include <asm/vac-ops.h>
+#include <asm/page.h>
 
 /* Flush all VAC entries for the current context */
 
@@ -26,7 +27,7 @@ flush_vac_context()
       while(entries_left-- >=0)
 	{
 	  hw_flush_vac_context_entry(address);
-	  address += 4096;
+	  address += PAGE_SIZE;
 	}
     }
   else
@@ -56,7 +57,7 @@ flush_vac_segment(register unsigned int segment)
       while(entries_left-- >=0)
 	{
 	  hw_flush_vac_segment_entry(address);
-	  address += 4096;
+	  address += PAGE_SIZE;
 	}
     }
   else

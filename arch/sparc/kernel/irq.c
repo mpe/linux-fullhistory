@@ -19,17 +19,58 @@
  * sa_restorer is the unused
  */
 
-#include <asm/ptrace.h>
-#include <asm/system.h>
+#include <linux/config.h>
+#include <linux/ptrace.h>
+#include <linux/errno.h>
 #include <linux/linkage.h>
 #include <linux/kernel_stat.h>
 #include <linux/signal.h>
+#include <linux/sched.h>
+#include <linux/interrupt.h>
+#include <asm/ptrace.h>
+#include <asm/system.h>
+#include <asm/psr.h>
 
 void disable_irq(unsigned int irq_nr)
 {
   unsigned long flags;
-
+  unsigned char *int_reg;
+  
   save_flags(flags);
+  cli();
+
+  /* We have mapped the irq enable register in head.S and all we
+   * have to do here is frob the bits.
+   */
+
+  int_reg = (char *) IRQ_ENA_ADR;
+
+  switch(irq_nr)
+    {
+    case 1:
+      *int_reg = ((*int_reg) & (~(0x02)));
+      break;
+    case 4:
+      *int_reg = ((*int_reg) & (~(0x04)));
+      break;
+    case 6:
+      *int_reg = ((*int_reg) & (~(0x08)));
+      break;      
+    case 8:
+      *int_reg = ((*int_reg) & (~(0x10)));
+      break;      
+    case 10:
+      *int_reg = ((*int_reg) & (~(0x20)));
+      break;      
+    case 14:
+      *int_reg = ((*int_reg) & (~(0x80)));
+      break;      
+    default:
+      printk("AIEEE, Illegal interrupt disable requested irq=%d\n", 
+	     (int) irq_nr);
+      break;
+    };
+  
   restore_flags(flags);
   return;
 }
@@ -37,17 +78,139 @@ void disable_irq(unsigned int irq_nr)
 void enable_irq(unsigned int irq_nr)
 {
   unsigned long flags;
-
+  unsigned int *int_reg;
+  
   save_flags(flags);
+  cli();
+
+  /* We have mapped the irq enable register in head.S and all we
+   * have to do here is frob the bits.
+   */
+
+  int_reg = (unsigned int *) IRQ_ENA_ADR;
+  
+  switch(irq_nr)
+    {
+    case 1:
+      *int_reg = ((*int_reg) | 0x02);
+      break;
+    case 4:
+      *int_reg = ((*int_reg) | 0x04);
+      break;
+    case 6:
+      *int_reg = ((*int_reg) | 0x08);
+      break;      
+    case 8:
+      *int_reg = ((*int_reg) | 0x10);
+      break;      
+    case 10:
+      *int_reg = ((*int_reg) | 0x20);
+      break;      
+    case 14:
+      *int_reg = ((*int_reg) | 0x80);
+      break;      
+    default:
+      printk("AIEEE, Illegal interrupt enable requested irq=%d\n", 
+	     (int) irq_nr);
+      break;
+    };
+
   restore_flags(flags);
   return;
 }
 
+/*
+ * Initial irq handlers.
+ */
+struct irqaction {
+  void (*handler)(int, struct pt_regs *);
+  unsigned long flags;
+  unsigned long mask;
+  const char *name;
+};
+
+static struct irqaction irq_action[16] = {
+  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+  { NULL, 0, 0, NULL }, { NULL, 0, 0, NULL }
+};
+
+
 int get_irq_list(char *buf)
 {
-  int len = 0;
-
+  int i, len = 0;
+  struct irqaction * action = irq_action;
+  
+  for (i = 0 ; i < 16 ; i++, action++) {
+    if (!action->handler)
+      continue;
+    len += sprintf(buf+len, "%2d: %8d %c %s\n",
+		   i, kstat.interrupts[i],
+		   (action->flags & SA_INTERRUPT) ? '+' : ' ',
+		   action->name);
+  }
   return len;
+}
+
+void free_irq(unsigned int irq)
+{
+        struct irqaction * action = irq + irq_action;
+        unsigned long flags;
+
+        if (irq > 14) {  /* 14 irq levels on the sparc */
+                printk("Trying to free IRQ%d\n", irq);
+                return;
+        }
+        if (!action->handler) {
+                printk("Trying to free free IRQ%d\n", irq);
+                return;
+        }
+        save_flags(flags);
+        cli();
+        disable_irq(irq);
+        action->handler = NULL;
+        action->flags = 0;
+        action->mask = 0;
+        action->name = NULL;
+        restore_flags(flags);
+}
+
+#if 0
+static void handle_nmi(struct pt_regs * regs)
+{
+  printk("NMI, probably due to bus-parity error.\n");
+  printk("PC=%08lx, SP=%08lx\n", regs->pc, regs->sp);
+}
+#endif
+
+static void unexpected_irq(int irq, struct pt_regs * regs)
+{
+        int i;
+
+        printk("IO device interrupt, irq = %d\n", irq);
+        printk("PC = %08lx NPC = %08lx SP=%08lx\n", regs->pc, 
+	       regs->npc, regs->sp);
+        printk("Expecting: ");
+        for (i = 0; i < 16; i++)
+                if (irq_action[i].handler)
+                        printk("[%s:%d] ", irq_action[i].name, i);
+        printk("AIEEE\n");
+}
+
+static inline void handler_irq(int irq, struct pt_regs * regs)
+{
+  struct irqaction * action = irq + irq_action;
+
+  if (!action->handler) {
+    unexpected_irq(irq, regs);
+    return;
+  }
+  action->handler(irq, regs);
 }
 
 /*
@@ -59,7 +222,10 @@ int get_irq_list(char *buf)
  */
 asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
+  struct irqaction *action = irq + irq_action;
+
   kstat.interrupts[irq]++;
+  action->handler(irq, regs);
   return;
 }
 
@@ -71,37 +237,43 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 asmlinkage void do_fast_IRQ(int irq)
 {
   kstat.interrupts[irq]++;
+  printk("Got FAST_IRQ number %04lx\n", (long unsigned int) irq);
   return;
 }
 
-#define SA_PROBE SA_ONESHOT
-
-/*
- * Using "struct sigaction" is slightly silly, but there
- * are historical reasons and it works well, so..
- */
-static int irqaction(unsigned int irq, struct sigaction * new_sa)
-{
-	unsigned long flags;
-
-	save_flags(flags);
-	restore_flags(flags);
-	return 0;
-}
 		
-int request_irq(unsigned int irq, void (*handler)(int),
-	unsigned long flags, const char * devname)
+int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
+	unsigned long irqflags, const char * devname)
 {
-	return irqaction(irq, (struct sigaction *) 0);
-}
-
-void free_irq(unsigned int irq)
-{
+  struct irqaction *action;
   unsigned long flags;
 
+  if(irq > 14)  /* Only levels 1-14 are valid on the Sparc. */
+    return -EINVAL;
+
+  if(irq == 0)  /* sched_init() requesting the timer IRQ */
+    irq = 14;
+
+  action = irq + irq_action;
+
+  if(action->handler)
+    return -EBUSY;
+
+  if(!handler)
+    return -EINVAL;
+
   save_flags(flags);
+  cli();
+
+  action->handler = handler;
+  action->flags = irqflags;
+  action->mask = 0;
+  action->name = devname;
+
+  enable_irq(irq);
+
   restore_flags(flags);
-  return;
+  return 0;
 }
 
 unsigned int probe_irq_on (void)
@@ -120,10 +292,5 @@ int probe_irq_off (unsigned int irqs)
 
 void init_IRQ(void)
 {
-  int i;
-
-  for (i = 0; i < 16 ; i++)
-    set_intr_gate(0x20+i,bad_interrupt[i]);
-
   return;
 }

@@ -2425,6 +2425,7 @@ long rs_init(long kmem_start)
 	struct async_struct * info;
 	
 	bh_base[SERIAL_BH].routine = do_serial_bh;
+	enable_bh(SERIAL_BH);
 	timer_table[RS_TIMER].fn = rs_timer;
 	timer_table[RS_TIMER].expires = 0;
 #ifdef CONFIG_AUTO_IRQ

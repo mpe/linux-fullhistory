@@ -1370,6 +1370,7 @@ void sock_init(void)
 	 */
 
 	bh_base[NET_BH].routine= net_bh;
+	enable_bh(NET_BH);
 #endif  
 }
 
