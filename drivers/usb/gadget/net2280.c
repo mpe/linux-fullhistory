@@ -1270,7 +1270,7 @@ static int net2280_dequeue (struct usb_ep *_ep, struct usb_request *_req)
 	}
 
 	spin_unlock_irqrestore (&ep->dev->lock, flags);
-	return req ? 0 : -EOPNOTSUPP;
+	return 0;
 }
 
 /*-------------------------------------------------------------------------*/
