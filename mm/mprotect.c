@@ -206,20 +206,20 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 {
 	unsigned long nstart, end, tmp;
 	struct vm_area_struct * vma, * next;
-	int error;
+	int error = -EINVAL;
 
+	lock_kernel();
 	if (start & ~PAGE_MASK)
-		return -EINVAL;
+		goto out;
 	len = (len + ~PAGE_MASK) & PAGE_MASK;
 	end = start + len;
 	if (end < start)
-		return -EINVAL;
+		goto out;
 	if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC))
-		return -EINVAL;
+		goto out;
+	error = 0;
 	if (end == start)
-		return 0;
-
-	down(&current->mm->mmap_sem);
+		goto out;
 	vma = find_vma(current->mm, start);
 	error = -EFAULT;
 	if (!vma || vma->vm_start > start)
@@ -255,6 +255,6 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 	}
 	merge_segments(current->mm, start, end);
 out:
-	up(&current->mm->mmap_sem);
+	unlock_kernel();
 	return error;
 }

@@ -91,7 +91,7 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 	unsigned long newbrk, oldbrk;
 	struct mm_struct *mm = current->mm;
 
-	down(&mm->mmap_sem);
+	lock_kernel();
 	retval = mm->brk;
 	if (brk < mm->end_code)
 		goto out;
@@ -126,13 +126,13 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 		goto out;
 
 	/* Ok, looks good - let it rip. */
-	if (do_mmap(NULL, oldbrk, newbrk-oldbrk,
+	if(do_mmap(NULL, oldbrk, newbrk-oldbrk,
 		   PROT_READ|PROT_WRITE|PROT_EXEC,
 		   MAP_FIXED|MAP_PRIVATE, 0) == oldbrk)
 		mm->brk = brk;
 	retval = mm->brk;
 out:
-	up(&mm->mmap_sem);
+	unlock_kernel();
 	return retval;
 }
 
@@ -158,8 +158,7 @@ static inline unsigned long vm_flags(unsigned long prot, unsigned long flags)
 #undef _trans
 }
 
-unsigned long do_mmap(struct file * file,
-	unsigned long addr, unsigned long len,
+unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off)
 {
 	struct mm_struct * mm = current->mm;
@@ -318,15 +317,6 @@ unsigned long do_mmap(struct file * file,
 	if ((flags & VM_LOCKED) && !(flags & VM_IO)) {
 		unsigned long start = addr;
 		mm->locked_vm += len >> PAGE_SHIFT;
-
-/* 
- * This used to be just ugly, now it's downright broken - we can't do
- * this when we're holding the mm semaphore (because the page fault
- * will also try to get the semaphore - quite correctly). Besides, this
- * never worked correctly anyway (we may not have read permission to
- * the area in the first place).
- */
-#if 0
 		do {
 			char c;
 			get_user(c,(char *) start);
@@ -334,7 +324,6 @@ unsigned long do_mmap(struct file * file,
 			start += PAGE_SIZE;
 			__asm__ __volatile__("": :"r" (c));
 		} while (len > 0);
-#endif
 	}
 	return addr;
 }
@@ -441,6 +430,16 @@ static void unmap_fixup(struct vm_area_struct *area,
 	insert_vm_struct(current->mm, mpnt);
 }
 
+asmlinkage int sys_munmap(unsigned long addr, size_t len)
+{
+	int ret;
+
+	lock_kernel();
+	ret = do_munmap(addr, len);
+	unlock_kernel();
+	return ret;
+}
+
 /* Munmap is split into 2 main parts -- this part which finds
  * what needs doing, and the areas themselves, which do the
  * work.  This now handles partial unmappings.
@@ -519,16 +518,6 @@ int do_munmap(unsigned long addr, size_t len)
 	return 0;
 }
 
-asmlinkage int sys_munmap(unsigned long addr, size_t len)
-{
-	int ret;
-
-	down(&current->mm->mmap_sem);
-	ret = do_munmap(addr, len);
-	up(&current->mm->mmap_sem);
-	return ret;
-}
-
 /* Release all mmaps. */
 void exit_mmap(struct mm_struct * mm)
 {
@@ -601,6 +590,8 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 {
 	struct vm_area_struct *prev, *mpnt, *next;
 
+	down(&mm->mmap_sem);
+
 	prev = NULL;
 	mpnt = mm->mmap;
 	while(mpnt && mpnt->vm_end <= start_addr) {
@@ -608,7 +599,7 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 		mpnt = mpnt->vm_next;
 	}
 	if (!mpnt)
-		return;
+		goto no_vma;
 
 	next = mpnt->vm_next;
 
@@ -660,6 +651,8 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 		mpnt = prev;
 	}
 	mm->mmap_cache = NULL;		/* Kill the cache. */
+no_vma:
+	up(&mm->mmap_sem);
 }
 
 __initfunc(void vma_init(void))

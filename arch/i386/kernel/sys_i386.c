@@ -58,24 +58,23 @@ struct mmap_arg_struct {
 
 asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 {
+	int error = -EFAULT;
 	struct file * file = NULL;
 	struct mmap_arg_struct a;
 
+	lock_kernel();
 	if (copy_from_user(&a, arg, sizeof(a)))
-		return -EFAULT;
+			goto out;
 	if (!(a.flags & MAP_ANONYMOUS)) {
+		error = -EBADF;
 		if (a.fd >= NR_OPEN || !(file = current->files->fd[a.fd]))
-			return -EBADF;
+			goto out;
 	}
 	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	{
-		unsigned long retval;
-		struct semaphore *sem = &current->mm->mmap_sem;
-		down(sem);
-		retval = do_mmap(file, a.addr, a.len, a.prot, a.flags, a.offset);
-		up(sem);
-		return retval;
-	}
+	error = do_mmap(file, a.addr, a.len, a.prot, a.flags, a.offset);
+out:
+	unlock_kernel();
+	return error;
 }
 
 extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
