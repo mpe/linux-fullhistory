@@ -117,7 +117,8 @@ static int command(struct i2c_client *client, unsigned int cmd, void *arg)
 			dprintk("i2c_smbus_write_byte() failed, ret:%d\n", result);
 		break;
 
-	case TDA9840_DETECT:
+	case TDA9840_DETECT: {
+		int *ret = (int *)arg;
 
 		byte = i2c_smbus_read_byte_data(client, STEREO_ADJUST);
 		if (byte == -1) {
@@ -131,8 +132,10 @@ static int command(struct i2c_client *client, unsigned int cmd, void *arg)
 		}
 
 		dprintk("TDA9840_DETECT: byte: 0x%02x\n", byte);
-		return ((byte & 0x60) >> 5);
-
+		*ret = ((byte & 0x60) >> 5);
+		result = 0;
+		break;
+	}
 	case TDA9840_TEST:
 		dprintk("TDA9840_TEST: 0x%02x\n", byte);
 
