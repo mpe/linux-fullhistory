@@ -106,11 +106,17 @@ struct vm_operations_struct {
 	pte_t (*swapin)(struct vm_area_struct *, unsigned long, unsigned long);
 };
 
-typedef struct {
-	unsigned count:24,
+typedef struct page {
+	unsigned int count;
+	unsigned dirty:16,
 		 age:6,
-		 dirty:1,
+		 unused:9,
 		 reserved:1;
+	unsigned long offset;
+	struct inode *inode;
+	struct page *write_list;
+	struct page *next, *prev;
+	struct page *next_hash, *prev_hash;
 } mem_map_t;
 
 extern mem_map_t * mem_map;
@@ -208,6 +214,10 @@ extern void build_mmap_avl(struct mm_struct *);
 extern void exit_mmap(struct mm_struct *);
 extern int do_munmap(unsigned long, size_t);
 extern unsigned long get_unmapped_area(unsigned long, unsigned long);
+
+/* filemap.c */
+extern unsigned long page_unuse(unsigned long);
+extern int shrink_mmap(int, unsigned long);
 
 #define read_swap_page(nr,buf) \
 	rw_swap_page(READ,(nr),(buf))

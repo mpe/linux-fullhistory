@@ -59,7 +59,7 @@ struct switch_stack {
 	unsigned long r14;
 	unsigned long r15;
 	unsigned long r26;
-	unsigned long fp[32];
+	unsigned long fp[32];	/* fp[31] is fpcr */
 };
 
 #ifdef __KERNEL__

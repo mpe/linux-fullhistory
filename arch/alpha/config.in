@@ -7,6 +7,7 @@ mainmenu_name "Kernel configuration of Linux for Alpha machines"
 # clear all implied options (don't want default values for those):
 unset CONFIG_CROSSCOMPILE CONFIG_NATIVE
 unset CONFIG_PCI CONFIG_ALPHA_LCA CONFIG_ALPHA_APECS
+unset CONFIG_ALPHA_NEED_ROUNDING_EMULATION
 
 mainmenu_option next_comment
 comment 'General setup'
@@ -24,7 +25,6 @@ choice 'Alpha system type' \
 	 Cabriolet	CONFIG_ALPHA_CABRIOLET		\
 	 EB66		CONFIG_ALPHA_EB66		\
 	 EB66+		CONFIG_ALPHA_EB66P		\
-	 EB64		CONFIG_ALPHA_EB64		\
 	 EB64+		CONFIG_ALPHA_EB64P" Cabriolet
 if [ "$CONFIG_ALPHA_NONAME" = "y" -o "$CONFIG_ALPHA_EB66" = "y" \
 	-o "$CONFIG_ALPHA_EB66P" = "y" ]
@@ -33,13 +33,14 @@ then
 	define_bool CONFIG_ALPHA_LCA y
 fi
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
-	-o "$CONFIG_ALPHA_EB64" = "y" -o "$CONFIG_ALPHA_EB64P" = "y" ]
+	-o "$CONFIG_ALPHA_EB64P" = "y" ]
 then
 	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_APECS y
 fi
-
+# This needs to be defined for all EV4 and EV45 CPUs:
+define_bool CONFIG_ALPHA_NEED_ROUNDING_EMULATION y
 bool 'Echo console messages on /dev/ttyS1' CONFIG_SERIAL_ECHO
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'TGA Console Support' CONFIG_TGA_CONSOLE

@@ -291,6 +291,13 @@ static int get_version(char * buffer)
 	return strlen(buffer);
 }
 
+static int get_cmdline(char * buffer)
+{
+	extern char saved_command_line[];
+
+	return sprintf(buffer, "%s\n", saved_command_line);
+}
+
 static struct task_struct ** get_task(pid_t pid)
 {
 	struct task_struct ** p;
@@ -827,6 +834,8 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 		case PROC_APM:
 			return apm_proc(page);
 #endif
+		case PROC_CMDLINE:
+			return get_cmdline(page);
 	}
 	return -EBADF;
 }
@@ -927,6 +936,8 @@ struct inode_operations proc_array_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */
@@ -973,6 +984,8 @@ struct inode_operations proc_arraylong_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */

@@ -11,9 +11,11 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
+#include <linux/config.h>
 
-#include <asm/unaligned.h>
 #include <asm/gentrap.h>
+#include <asm/segment.h>
+#include <asm/unaligned.h>
 
 void die_if_kernel(char * str, struct pt_regs * regs, long err)
 {
@@ -47,17 +49,30 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 }
 
 asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
-	unsigned long a2, unsigned long a3, unsigned long a4, unsigned long a5,
-	struct pt_regs regs)
+			    unsigned long a2, unsigned long a3,
+			    unsigned long a4, unsigned long a5,
+			    struct pt_regs regs)
 {
-	printk("Arithmetic trap: %02lx %016lx\n", summary, write_mask);
+	if ((summary & 1)) {
+		extern long alpha_fp_emul_imprecise (struct pt_regs * regs,
+						     unsigned long write_mask);
+		/*
+		 * Software-completion summary bit is set, so try to
+		 * emulate the instruction.
+		 */
+		if (alpha_fp_emul_imprecise(&regs, write_mask)) {
+			return;		/* emulation was successful */
+		}
+	}
+	printk("Arithmetic trap at %016lx: %02lx %016lx\n",
+	       regs.pc, summary, write_mask);
 	die_if_kernel("Arithmetic fault", &regs, 0);
 	send_sig(SIGFPE, current, 1);
 }
 
 asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
-	unsigned long a3, unsigned long a4, unsigned long a5,
-	struct pt_regs regs)
+			 unsigned long a3, unsigned long a4, unsigned long a5,
+			 struct pt_regs regs)
 {
 	extern int ptrace_cancel_bpt (struct task_struct *who);
 
@@ -110,7 +125,28 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
 
 	      case 1: /* bugcheck */
 	      case 3: /* FEN fault */
+		send_sig(SIGILL, current, 1);
+		break;
+
 	      case 4: /* opDEC */
+#ifdef CONFIG_ALPHA_NEED_ROUNDING_EMULATION
+		{
+			extern long alpha_fp_emul (unsigned long pc);
+			unsigned int opcode;
+
+			/* get opcode of faulting instruction: */
+			opcode = get_user((__u32*)(regs.pc - 4)) >> 26;
+			if (opcode == 0x16) {
+				/*
+				 * It's a FLTI instruction, emulate it
+				 * (we don't do no stinkin' VAX fp...)
+				 */
+				if (!alpha_fp_emul(regs.pc - 4))
+					send_sig(SIGFPE, current, 1);
+				break;
+			}
+		}
+#endif
 		send_sig(SIGILL, current, 1);
 		break;
 
@@ -197,6 +233,11 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
  * load/stores are not supported.  The former make no sense with
  * unaligned faults (they are guaranteed to fail) and I don't think
  * the latter will occur in any decent program.
+ *
+ * Sigh. We *do* have to handle some FP operations, because GCC will
+ * uses them as temporary storage for integer memory to memory copies.
+ * However, we need to deal with stt/ldt only as they are the only
+ * fp load/stores that preserve the bit pattern.
  */
 asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg,
 			      unsigned long * frame)
@@ -223,12 +264,12 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 	unaligned[1].pc = *pc_addr;
 
 	dir = VERIFY_READ;
-	if (opcode > 0x29) {
-		/* it's a stl or stq */
+	if (opcode & 0x4) {
+		/* it's a stl, stq, or stt */
 		dir = VERIFY_WRITE;
 	}
 	size = 4;
-	if (opcode & 1) {
+	if (opcode & 0x1) {
 		/* it's a quadword op */
 		size = 8;
 	}
@@ -239,41 +280,47 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 	}
 
 	reg_addr = frame;
-	if (reg < 9) {
-		reg_addr += 7 + reg;			/* v0-t7 in SAVE_ALL frame */
-	} else if (reg < 16) {
-		reg_addr += (reg - 9);			/* s0-s6 in entUna frame */
-	} else if (reg < 19) {
-		reg_addr += 7 + 20 + 3 + (reg - 16);	/* a0-a2 in PAL frame */
-	} else if (reg < 29) {
-		reg_addr += 7 + 9 + (reg - 19);		/* a3-at in SAVE_ALL frame */
-	} else {
-		switch (reg) {
-			case 29:			/* gp in PAL frame */
+	if (opcode >= 0x28) {
+		/* it's an integer load/store */
+		if (reg < 9) {
+			reg_addr += 7 + reg;			/* v0-t7 in SAVE_ALL frame */
+		} else if (reg < 16) {
+			reg_addr += (reg - 9);			/* s0-s6 in entUna frame */
+		} else if (reg < 19) {
+			reg_addr += 7 + 20 + 3 + (reg - 16);	/* a0-a2 in PAL frame */
+		} else if (reg < 29) {
+			reg_addr += 7 + 9 + (reg - 19);		/* a3-at in SAVE_ALL frame */
+		} else {
+			switch (reg) {
+			      case 29:				/* gp in PAL frame */
 				reg_addr += 7 + 20 + 2;
 				break;
-			case 30:			/* usp in PAL regs */
+			      case 30:				/* usp in PAL regs */
 				usp = rdusp();
 				reg_addr = &usp;
 				break;
-			case 31:			/* zero "register" */
+			      case 31:				/* zero "register" */
 				reg_addr = &zero;
 				break;
+			}
 		}
 	}
 
 	switch (opcode) {
-		case 0x28: *reg_addr = (int) ldl_u(va);	break;	/* ldl */
-		case 0x29: *reg_addr = ldq_u(va);	break;	/* ldq */
-		case 0x2c: stl_u(*reg_addr, va);	break;	/* stl */
-		case 0x2d: stq_u(*reg_addr, va);	break;	/* stq */
-		default:
-			*pc_addr -= 4;	/* make pc point to faulting insn */
-			send_sig(SIGBUS, current, 1);
-			return;
+	      case 0x23: alpha_write_fp_reg(reg, ldq_u(va)); break; /* ldt */
+	      case 0x27: stq_u(alpha_read_fp_reg(reg), va);  break; /* stt */
+
+	      case 0x28: *reg_addr = (int) ldl_u(va);	     break; /* ldl */
+	      case 0x29: *reg_addr = ldq_u(va);		     break; /* ldq */
+	      case 0x2c: stl_u(*reg_addr, va);		     break; /* stl */
+	      case 0x2d: stq_u(*reg_addr, va);		     break; /* stq */
+	      default:
+		*pc_addr -= 4;	/* make pc point to faulting insn */
+		send_sig(SIGBUS, current, 1);
+		return;
 	}
 
-	if (reg == 30 && dir == VERIFY_WRITE) {
+	if (opcode >= 0x28 && reg == 30 && dir == VERIFY_WRITE) {
 		wrusp(usp);
 	} 
 }

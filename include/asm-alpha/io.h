@@ -124,8 +124,20 @@ extern void		_writew(unsigned short b, unsigned long addr);
 #ifndef inb_p
 # define inb_p		inb
 #endif
+#ifndef inw_p
+# define inw_p		inw
+#endif
+#ifndef inl_p
+# define inl_p		inl
+#endif
 #ifndef outb_p
 # define outb_p		outb
+#endif
+#ifndef outw_p
+# define outw_p		outw
+#endif
+#ifndef outl_p
+# define outl_p		outl
 #endif
 
 #ifndef inw_p

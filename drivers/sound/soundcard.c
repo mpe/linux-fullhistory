@@ -29,7 +29,6 @@
 /*
  * Created modular version by Peter Trattler (peter@sbox.tu-graz.ac.at)
  */
-
 #include <linux/module.h>
 
 #include "sound_config.h"

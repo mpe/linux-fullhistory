@@ -51,6 +51,8 @@ struct inode_operations msdos_dir_inode_operations = {
 	msdos_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	msdos_bmap,		/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */

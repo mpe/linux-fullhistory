@@ -71,6 +71,8 @@ struct inode_operations ext2_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	ext2_bmap,		/* bmap */
 	ext2_truncate,		/* truncate */
 	ext2_permission,	/* permission */

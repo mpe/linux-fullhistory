@@ -1874,6 +1874,10 @@ void console_print(const char * b)
 			if (c == 10 || c == 13)
 				continue;
 		}
+		if (c == 8) {		/* backspace */
+			bs(currcons);
+			continue;
+		}
 		scr_writew((attr << 8) + c, (unsigned short *) pos);
 		if (x == video_num_columns - 1) {
 			need_wrap = 1;

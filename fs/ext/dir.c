@@ -56,6 +56,8 @@ struct inode_operations ext_dir_inode_operations = {
 	ext_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	ext_truncate,		/* truncate */
 	NULL			/* permission */

@@ -64,6 +64,8 @@ struct inode_operations nfs_dir_inode_operations = {
 	nfs_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */

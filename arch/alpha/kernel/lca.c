@@ -299,6 +299,13 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 	*(vulp)LCA_IOC_W_BASE0 = 1UL<<33 | LCA_DMA_WIN_BASE;
 	*(vulp)LCA_IOC_W_MASK0 = LCA_DMA_WIN_SIZE - 1;
 	*(vulp)LCA_IOC_T_BASE0 = 0;
+
+	/*
+	 * Disable PCI parity for now.  The NCR53c810 chip has
+	 * troubles meeting the PCI spec which results in
+	 * data parity errors.
+	 */
+	*(vulp)LCA_IOC_PAR_DIS = 1UL<<5;
 	return mem_start;
 }
 
@@ -310,10 +317,71 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
  * could be moved into lca.h but I don't see much reason why anybody
  * else would want to use them.
  */
-#define ESR_EAV	(1UL<< 0)	/* error address valid */
-#define ESR_CEE	(1UL<< 1)	/* correctable error */
-#define ESR_UEE (1UL<< 2)	/* uncorrectable error */
-#define ESR_NXM (1UL<<12)	/* non-existent memory */
+#define ESR_EAV		(1UL<< 0)	/* error address valid */
+#define ESR_CEE		(1UL<< 1)	/* correctable error */
+#define ESR_UEE		(1UL<< 2)	/* uncorrectable error */
+#define ESR_WRE		(1UL<< 3)	/* write-error */
+#define ESR_SOR		(1UL<< 4)	/* error source */
+#define ESR_CTE		(1UL<< 7)	/* cache-tag error */
+#define ESR_MSE		(1UL<< 9)	/* multiple soft errors */
+#define ESR_MHE		(1UL<<10)	/* multiple hard errors */
+#define ESR_NXM		(1UL<<12)	/* non-existent memory */
+
+#define IOC_ERR		(  1<<4)	/* ioc logs an error */
+#define IOC_CMD_SHIFT	0
+#define IOC_CMD		(0xf<<IOC_CMD_SHIFT)
+#define IOC_CODE_SHIFT	8
+#define IOC_CODE	(0xf<<IOC_CODE_SHIFT)
+#define IOC_LOST	(  1<<5)
+#define IOC_P_NBR	((__u32) ~((1<<13) - 1))
+
+
+void mem_error (unsigned long esr, unsigned long ear)
+{
+    printk("    %s %s error to %s occurred at address %x",
+	   (esr & ESR_CEE) ? "Correctable" : ((esr & ESR_UEE) ? "Uncorrectable" : "A"),
+	   (esr & ESR_WRE) ? "write" : "read",
+	   (esr & ESR_SOR) ? "b-cache" : "memory",
+	   (unsigned) (ear & 0x1ffffff8));
+    if (esr & ESR_CTE) {
+	printk("    A b-cache tag parity error was detected.\n");
+    }
+    if (esr & ESR_MSE) {
+	printk("    Several other correctable errors occurred.\n");
+    }
+    if (esr & ESR_MHE) {
+	printk("    Several other uncorrectable errors occurred.\n");
+    }
+    if (esr & ESR_NXM) {
+	printk("    Attempted to access non-existent memory.\n");
+    }
+}
+
+
+void ioc_error (__u32 stat0, __u32 stat1)
+{
+    const char *pci_cmd[] = {
+	"Interrupt Acknowledge", "Special", "I/O Read", "I/O Write",
+	"Rsvd 1", "Rsvd 2", "Memory Read", "Memory Write", "Rsvd3", "Rsvd4",
+	"Configuration Read", "Configuration Write", "Memory Read Multiple",
+	"Dual Address", "Memory Read Line", "Memory Write and Invalidate"
+    };
+    const char *err_name[] = {
+	"exceeded retry limit", "no device", "bad data parity", "target abort",
+	"bad address parity", "page table read error", "invalid page", "data error"
+    };
+    unsigned code = (stat0 & IOC_CODE) >> IOC_CODE_SHIFT;
+    unsigned cmd  = (stat0 & IOC_CMD)  >> IOC_CMD_SHIFT;
+
+    printk("    %s initiated PCI %s cycle to address %x failed due to %s.\n",
+	   code > 3 ? "PCI" : "CPU", pci_cmd[cmd], stat1, err_name[code]);
+    if (code == 5 || code == 6) {
+	printk("    (Error occurred at PCI memory address %x.)\n", (stat0 & ~IOC_P_NBR));
+    }
+    if (stat0 & IOC_LOST) {
+	printk("    Other PCI errors occurred simultaneously.\n");
+    }
+}
 
 
 void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *regs)
@@ -322,14 +390,16 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	union el_lca el;
 	char buf[128];
 
-	printk("lca: machine check (la=0x%lx)\n", la);
+	printk("lca: machine check (la=0x%lx,pc=0x%lx)\n", la, regs->pc);
 	el.c = (struct el_common *) la;
 	/*
 	 * The first quadword after the common header always seems to
 	 * be the machine check reason---don't know why this isn't
-	 * part of the common header instead.
+	 * part of the common header instead.  In the case of a long
+	 * logout frame, the upper 32 bits is the machine check
+	 * revision level, which we ignore for now.
 	 */
-	switch (el.s->reason) {
+	switch (el.s->reason & 0xffffffff) {
 	      case MCHK_K_TPERR:	reason = "tag parity error"; break;
 	      case MCHK_K_TCPERR:	reason = "tag something parity error"; break;
 	      case MCHK_K_HERR:		reason = "access to non-existent memory"; break;
@@ -345,7 +415,8 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	      case MCHK_K_DCSR:		reason = "MCHK_K_DCSR"; break;
 	      case MCHK_K_UNKNOWN:
 	      default:
-		sprintf(buf, "reason for machine-check unknown (0x%lx)", el.s->reason);
+		sprintf(buf, "reason for machine-check unknown (0x%lx)",
+			el.s->reason & 0xffffffff);
 		reason = buf;
 		break;
 	}
@@ -354,11 +425,14 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 
 	switch (el.c->size) {
 	      case sizeof(struct el_lca_mcheck_short):
-		printk("  Reason: %s (short frame%s):\n",
-		       reason, el.c->retry ? ", retryable" : "");
-		printk("    esr: %lx  ear: %lx\n", el.s->esr, el.s->ear);
-		printk("    dc_stat: %lx  ioc_stat0: %lx  ioc_stat1: %lx\n",
-		       el.s->dc_stat, el.s->ioc_stat0, el.s->ioc_stat1);
+		printk("  Reason: %s (short frame%s, dc_stat=%lx):\n",
+		       reason, el.c->retry ? ", retryable" : "", el.s->dc_stat);
+		if (el.s->esr & ESR_EAV) {
+		    mem_error(el.s->esr, el.s->ear);
+		}
+		if (el.s->ioc_stat0 & IOC_ERR) {
+		    ioc_error(el.s->ioc_stat0, el.s->ioc_stat1);
+		}
 		break;
 
 	      case sizeof(struct el_lca_mcheck_long):
@@ -366,8 +440,13 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 		       reason, el.c->retry ? ", retryable" : "");
 		printk("    reason: %lx  exc_addr: %lx  dc_stat: %lx\n", 
 		       el.l->pt[0], el.l->exc_addr, el.l->dc_stat);
-		printk("    esr: %lx  ear: %lx  car: %lx\n", el.l->esr, el.l->ear, el.l->car);
-		printk("    ioc_stat0: %lx  ioc_stat1: %lx\n", el.l->ioc_stat0, el.l->ioc_stat1);
+		printk("    car: %lx\n", el.l->car);
+		if (el.l->esr & ESR_EAV) {
+		    mem_error(el.l->esr, el.l->ear);
+		}
+		if (el.l->ioc_stat0 & IOC_ERR) {
+		    ioc_error(el.l->ioc_stat0, el.l->ioc_stat1);
+		}
 		break;
 
 	      default:

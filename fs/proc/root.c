@@ -62,6 +62,8 @@ static struct inode_operations proc_dir_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */
@@ -101,6 +103,8 @@ static struct inode_operations proc_root_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */
@@ -202,6 +206,8 @@ static struct inode_operations proc_self_inode_operations = {
 	NULL,			/* rename */
 	proc_self_readlink,	/* readlink */
 	proc_self_followlink,	/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */
@@ -302,6 +308,10 @@ void proc_root_init(void)
 		S_IFREG | S_IRUGO, 1, 0, 0,
 	});
 #endif
+	proc_register(&proc_root, &(struct proc_dir_entry) {
+		PROC_CMDLINE, 7, "cmdline",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+	});
 		   
 	if (prof_shift) {
 		proc_register(&proc_root, &(struct proc_dir_entry) {

@@ -28,9 +28,10 @@
 #include <linux/mman.h>
 #include <linux/shm.h>
 
+#include <asm/fpu.h>
+#include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>
-#include <asm/io.h>
 
 extern int do_mount(kdev_t, const char *, const char *, char *, int, void *);
 extern int do_pipe(int *);
@@ -618,4 +619,92 @@ asmlinkage long osf_proplist_syscall (enum pl_code code, union pl_args *args)
 	      default:
 		return -EOPNOTSUPP;
 	}
+}
+
+/*
+ * The Linux kernel isn't good at returning values that look
+ * like negative longs (they are mistaken as error values).
+ * Until that is fixed, we need this little workaround for
+ * create_module() because it's one of the few system calls
+ * that return kernel addresses (which are negative).
+ */
+asmlinkage unsigned long
+alpha_create_module (char * module_name, unsigned long size,
+		     int a3, int a4, int a5, int a6,
+		     struct pt_regs regs)
+{
+	asmlinkage unsigned long sys_create_module (char *, unsigned long);
+	long retval;
+
+	retval = sys_create_module(module_name, size);
+	/*
+	 * we get either a module address or an error number,
+	 * and we know the error number is a small negative
+	 * number, while the address is always negative but
+	 * much larger.
+	 */
+	if (retval + 1000 > 0)
+	  return retval;
+
+	/* tell entry.S:syscall_error that this is NOT an error: */
+	regs.r0 = 0;
+	return retval;
+}
+
+
+asmlinkage unsigned long
+osf_getsysinfo (unsigned long op, void * buffer, unsigned long nbytes,
+		int * start, void *arg)
+{
+    extern unsigned long rdfpcr (void);
+    unsigned long fpcw;
+
+    switch (op) {
+      case 45:	/* GSI_IEEE_FP_CONTROL */
+	  /* build and return current fp control word: */
+	  fpcw = current->tss.flags & IEEE_TRAP_ENABLE_MASK;
+	  fpcw |= ((rdfpcr() >> 52) << 17) & IEEE_STATUS_MASK;
+	  put_user(fpcw, (unsigned long *) buffer);
+	  return 0;
+
+      case 46:	/* GSI_IEEE_STATE_AT_SIGNAL */
+	  /*
+	   * Not sure anybody will ever use this weird stuff.  These
+	   * ops can be used (under OSF/1) to set the fpcr that should
+	   * be used when a signal handler starts executing.
+	   */
+	  break;
+
+      default:
+	  break;
+    }
+    return -EOPNOTSUPP;
+}
+
+
+asmlinkage unsigned long
+osf_setsysinfo (unsigned long op, void * buffer, unsigned long nbytes,
+		int * start, void *arg)
+{
+    unsigned long fpcw;
+
+    switch (op) {
+      case 14:	/* SSI_IEEE_FP_CONTROL */
+	  /* update trap enable bits: */
+	  fpcw = get_user((unsigned long *) buffer);
+	  current->tss.flags &= ~IEEE_TRAP_ENABLE_MASK;
+	  current->tss.flags |= (fpcw & IEEE_TRAP_ENABLE_MASK);
+	  return 0;
+
+      case 15:	/* SSI_IEEE_STATE_AT_SIGNAL */
+      case 16:	/* SSI_IEEE_IGNORE_STATE_AT_SIGNAL */
+	  /*
+	   * Not sure anybody will ever use this weird stuff.  These
+	   * ops can be used (under OSF/1) to set the fpcr that should
+	   * be used when a signal handler starts executing.
+	   */
+      default:
+	  break;
+    }
+    return -EOPNOTSUPP;
 }

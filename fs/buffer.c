@@ -16,6 +16,8 @@
  * invalidate changed floppy-disk-caches.
  */
  
+/* Some bdflush() changes for the dynamic ramdisk - Paul Gortmaker, 12/94 */
+
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
@@ -827,24 +829,18 @@ void __brelse(struct buffer_head * buf)
 }
 
 /*
- * bforget() is like brelse(), except is throws the buffer away
+ * bforget() is like brelse(), except it removes the buffer
+ * from the hash-queues (so that it won't be re-used if it's
+ * shared).
  */
 void __bforget(struct buffer_head * buf)
 {
 	wait_on_buffer(buf);
-	if (buf->b_count != 1) {
-		printk("Aieee... bforget(): count = %d\n", buf->b_count);
-		return;
-	}
-	if (mem_map[MAP_NR(buf->b_data)].count != 1) {
-		printk("Aieee... bforget(): shared buffer\n");
-		return;
-	}
 	mark_buffer_clean(buf);
-	buf->b_count = 0;
-	remove_from_queues(buf);
-	buf->b_dev = B_FREE;
-	put_last_free(buf);
+	buf->b_count--;
+	remove_from_hash_queue(buf);
+	buf->b_dev = NODEV;
+	refile_buffer(buf);
 	wake_up(&buffer_wait);
 }
 
@@ -1035,64 +1031,7 @@ static void read_buffers(struct buffer_head * bh[], int nrbuf)
 	}
 }
 
-/*
- * This actually gets enough info to try to align the stuff,
- * but we don't bother yet.. We'll have to check that nobody
- * else uses the buffers etc.
- *
- * "address" points to the new page we can use to move things
- * around..
- */
-static inline unsigned long try_to_align(struct buffer_head ** bh, int nrbuf,
-	unsigned long address)
-{
-	while (nrbuf-- > 0)
-		brelse(bh[nrbuf]);
-	return 0;
-}
-
-static unsigned long check_aligned(struct buffer_head * first, unsigned long address,
-	kdev_t dev, int *b, int size)
-{
-	struct buffer_head * bh[MAX_BUF_PER_PAGE];
-	unsigned long page;
-	unsigned long offset;
-	int block;
-	int nrbuf;
-	int aligned = 1;
-
-	bh[0] = first;
-	nrbuf = 1;
-	page = (unsigned long) first->b_data;
-	if (page & ~PAGE_MASK)
-		aligned = 0;
-	for (offset = size ; offset < PAGE_SIZE ; offset += size) {
-		block = *++b;
-		if (!block)
-			goto no_go;
-		first = get_hash_table(dev, block, size);
-		if (!first)
-			goto no_go;
-		bh[nrbuf++] = first;
-		if (page+offset != (unsigned long) first->b_data)
-			aligned = 0;
-	}
-	if (!aligned)
-		return try_to_align(bh, nrbuf, address);
-	mem_map[MAP_NR(page)].count++;
-	read_buffers(bh,nrbuf);		/* make sure they are actually read correctly */
-	while (nrbuf-- > 0)
-		brelse(bh[nrbuf]);
-	free_page(address);
-	++current->min_flt;
-	return page;
-no_go:
-	while (nrbuf-- > 0)
-		brelse(bh[nrbuf]);
-	return 0;
-}
-
-static unsigned long try_to_load_aligned(unsigned long address,
+static int try_to_load_aligned(unsigned long address,
 	kdev_t dev, int b[], int size)
 {
 	struct buffer_head * bh, * tmp, * arr[MAX_BUF_PER_PAGE];
@@ -1142,7 +1081,7 @@ static unsigned long try_to_load_aligned(unsigned long address,
 	while (block-- > 0)
 		brelse(arr[block]);
 	++current->maj_flt;
-	return address;
+	return 1;
 not_aligned:
 	while ((tmp = bh) != NULL) {
 		bh = bh->b_this_page;
@@ -1154,15 +1093,13 @@ not_aligned:
 /*
  * Try-to-share-buffers tries to minimize memory use by trying to keep
  * both code pages and the buffer area in the same page. This is done by
- * (a) checking if the buffers are already aligned correctly in memory and
- * (b) if none of the buffer heads are in memory at all, trying to load
- * them into memory the way we want them.
+ * trying to load them into memory the way we want them.
  *
  * This doesn't guarantee that the memory is shared, but should under most
  * circumstances work very well indeed (ie >90% sharing of code pages on
  * demand-loadable executables).
  */
-static inline unsigned long try_to_share_buffers(unsigned long address,
+static inline int try_to_share_buffers(unsigned long address,
 	kdev_t dev, int *b, int size)
 {
 	struct buffer_head * bh;
@@ -1172,9 +1109,10 @@ static inline unsigned long try_to_share_buffers(unsigned long address,
 	if (!block)
 		return 0;
 	bh = get_hash_table(dev, block, size);
-	if (bh)
-		return check_aligned(bh, address, dev, b, size);
-	return try_to_load_aligned(address, dev, b, size);
+	if (!bh)
+		return try_to_load_aligned(address, dev, b, size);
+	brelse(bh);
+	return 0;
 }
 
 /*
@@ -1184,17 +1122,14 @@ static inline unsigned long try_to_share_buffers(unsigned long address,
  * etc. This also allows us to optimize memory usage by sharing code pages
  * and filesystem buffers..
  */
-unsigned long bread_page(unsigned long address, kdev_t dev, int b[], int size, int no_share)
+void bread_page(unsigned long address, kdev_t dev, int b[], int size)
 {
 	struct buffer_head * bh[MAX_BUF_PER_PAGE];
 	unsigned long where;
 	int i, j;
 
-	if (!no_share) {
-		where = try_to_share_buffers(address, dev, b, size);
-		if (where)
-			return where;
-	}
+	if (try_to_share_buffers(address, dev, b, size))
+		return;
 	++current->maj_flt;
  	for (i=0, j=0; j<PAGE_SIZE ; i++, j+= size) {
 		bh[i] = NULL;
@@ -1211,7 +1146,6 @@ unsigned long bread_page(unsigned long address, kdev_t dev, int b[], int size, i
 		} else
 			memset((void *) where, 0, size);
 	}
-	return address;
 }
 
 #if 0
@@ -1788,32 +1722,18 @@ void buffer_init(void)
 
 /* ====================== bdflush support =================== */
 
-/* This is a simple kernel daemon, whose job it is to provide a dynamically
+/* This is a simple kernel daemon, whose job it is to provide a dynamic
  * response to dirty buffers.  Once this process is activated, we write back
  * a limited number of buffers to the disks and then go back to sleep again.
- * In effect this is a process which never leaves kernel mode, and does not have
- * any user memory associated with it except for the stack.  There is also
- * a kernel stack page, which obviously must be separate from the user stack.
  */
 struct wait_queue * bdflush_wait = NULL;
 struct wait_queue * bdflush_done = NULL;
 
-static int bdflush_running = 0;
-
 static void wakeup_bdflush(int wait)
 {
-	extern int	rd_loading;
-	
-	if (!bdflush_running){
-		if (!rd_loading)
-			printk("Warning - bdflush not running\n");
-		sync_buffers(0,0);
-		return;
-	};
 	wake_up(&bdflush_wait);
 	if(wait) sleep_on(&bdflush_done);
 }
-
 
 
 /* 
@@ -1894,18 +1814,13 @@ asmlinkage int sync_old_buffers(void)
 
 
 /* This is the interface to bdflush.  As we get more sophisticated, we can
- * pass tuning parameters to this "process", to adjust how it behaves.  If you
- * invoke this again after you have done this once, you would simply modify 
- * the tuning parameters.  We would want to verify each parameter, however,
- * to make sure that it is reasonable. */
+ * pass tuning parameters to this "process", to adjust how it behaves. 
+ * We would want to verify each parameter, however, to make sure that it 
+ * is reasonable. */
 
 asmlinkage int sys_bdflush(int func, long data)
 {
 	int i, error;
-	int ndirty;
-	int nlist;
-	int ncount;
-	struct buffer_head * bh, *next;
 
 	if (!suser())
 		return -EPERM;
@@ -1913,7 +1828,7 @@ asmlinkage int sys_bdflush(int func, long data)
 	if (func == 1)
 		 return sync_old_buffers();
 
-	/* Basically func 0 means start, 1 means read param 1, 2 means write param 1, etc */
+	/* Basically func 1 means read param 1, 2 means write param 1, etc */
 	if (func >= 2) {
 		i = (func-2) >> 1;
 		if (i < 0 || i >= N_PARAM)
@@ -1930,13 +1845,32 @@ asmlinkage int sys_bdflush(int func, long data)
 		bdf_prm.data[i] = data;
 		return 0;
 	};
+
+	/* Having func 0 used to launch the actual bdflush and then never
+	return (unless explicitly killed). We return zero here to 
+	remain semi-compatible with present update(8) programs. */
+
+	return 0;
+}
+
+/* This is the actual bdflush daemon itself. It used to be started from
+ * the syscall above, but now we launch it ourselves internally with
+ * kernel_thread(...)  directly after the first thread in init/main.c */
+
+int bdflush(void * unused) {
 	
-	if (bdflush_running)
-		return -EBUSY; /* Only one copy of this running at one time */
-	bdflush_running++;
-	
-	/* OK, from here on is the daemon */
-	
+	int i;
+	int ndirty;
+	int nlist;
+	int ncount;
+	struct buffer_head * bh, *next;
+
+	/* We have a bare-bones task_struct, and really should fill
+	in a few more things so "top" and /proc/2/{exe,root,cwd}
+	display semi-sane things. Not real crucial though...  */
+
+	sprintf(current->comm, "bdflush - kernel");
+
 	for (;;) {
 #ifdef DEBUG
 		printk("bdflush() activated...");
@@ -1995,11 +1929,7 @@ asmlinkage int sys_bdflush(int func, long data)
 		
 		if(nr_buffers_type[BUF_DIRTY] <= (nr_buffers - nr_buffers_type[BUF_SHARED]) * 
 		   bdf_prm.b_un.nfract/100) {
-		   	if (current->signal & (1 << (SIGKILL-1))) {
-				bdflush_running--;
-		   		return 0;
-			}
-		   	current->signal = 0;
+			current->signal = 0;
 			interruptible_sleep_on(&bdflush_wait);
 		}
 	}

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 49
+SUBLEVEL = 50
 
 ARCH = i386
 
@@ -249,7 +249,7 @@ MODFLAGS += -DMODVERSIONS -include $(HPATH)/linux/modversions.h
 endif
 
 modules: include/linux/version.h
-	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i CFLAGS="$(CFLAGS) $(MODFLAGS)" modules; done
+	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i CFLAGS="-dc $(CFLAGS) $(MODFLAGS)" modules; done
 
 modules_install:
 	@( \
@@ -261,10 +261,11 @@ modules_install:
 		echo Installing modules under $$MODLIB/$$2; \
 	}; \
 	\
-	if [ -f NET_MODULES  ]; then inst_mod NET_MODULES  net;  fi; \
-	if [ -f IPV4_MODULES ]; then inst_mod IPV4_MODULES ipv4; fi; \
-	if [ -f SCSI_MODULES ]; then inst_mod SCSI_MODULES scsi; fi; \
-	if [ -f FS_MODULES   ]; then inst_mod FS_MODULES   fs;   fi; \
+	if [ -f BLOCK_MODULES ]; then inst_mod BLOCK_MODULES block; fi; \
+	if [ -f NET_MODULES   ]; then inst_mod NET_MODULES   net;   fi; \
+	if [ -f IPV4_MODULES  ]; then inst_mod IPV4_MODULES  ipv4;  fi; \
+	if [ -f SCSI_MODULES  ]; then inst_mod SCSI_MODULES  scsi;  fi; \
+	if [ -f FS_MODULES    ]; then inst_mod FS_MODULES    fs;    fi; \
 	\
 	ls *.o > .allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 .allmods - > .misc; \

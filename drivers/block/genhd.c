@@ -25,6 +25,22 @@
 
 #include <asm/system.h>
 
+#ifdef __alpha__
+/*
+ * On the Alpha, we get unaligned access exceptions on
+ *  p->nr_sects and p->start_sect, when the partition table
+ *  is not on a 4-byte boundary, which is frequently the case.
+ * This code uses unaligned load instructions to prevent
+ *  such exceptions.
+ */
+#include <asm/unaligned.h>
+#define NR_SECTS(p)	ldl_u(&p->nr_sects)
+#define START_SECT(p)	ldl_u(&p->start_sect)
+#else /* __alpha__ */
+#define NR_SECTS(p)	p->nr_sects
+#define START_SECT(p)	p->start_sect
+#endif /* __alpha__ */
+
 struct gendisk *gendisk_head = NULL;
 
 static int current_minor = 0;
@@ -130,19 +146,19 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 		 * First process the data partition(s)
 		 */
 		for (i=0; i<4; i++, p++) {
-		    if (!p->nr_sects || is_extended_partition(p))
+		    if (!NR_SECTS(p) || is_extended_partition(p))
 		      continue;
 
 		    /* Check the 3rd and 4th entries -
 		       these sometimes contain random garbage */
 		    if (i >= 2
-			&& p->start_sect + p->nr_sects > this_size
-			&& (this_sector + p->start_sect < first_sector ||
-			    this_sector + p->start_sect + p->nr_sects >
+			&& START_SECT(p) + NR_SECTS(p) > this_size
+			&& (this_sector + START_SECT(p) < first_sector ||
+			    this_sector + START_SECT(p) + NR_SECTS(p) >
 			     first_sector + first_size))
 		      continue;
 
-		    add_partition(hd, current_minor, this_sector+p->start_sect, p->nr_sects);
+		    add_partition(hd, current_minor, this_sector+START_SECT(p), NR_SECTS(p));
 		    current_minor++;
 		    if ((current_minor & mask) == 0)
 		      goto done;
@@ -159,14 +175,14 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 		 */
 		p -= 4;
 		for (i=0; i<4; i++, p++)
-		  if(p->nr_sects && is_extended_partition(p))
+		  if(NR_SECTS(p) && is_extended_partition(p))
 		    break;
 		if (i == 4)
 		  goto done;	 /* nothing left to do */
 
-		hd->part[current_minor].nr_sects = p->nr_sects;
-		hd->part[current_minor].start_sect = first_sector + p->start_sect;
-		this_sector = first_sector + p->start_sect;
+		hd->part[current_minor].nr_sects = NR_SECTS(p);
+		hd->part[current_minor].start_sect = first_sector + START_SECT(p);
+		this_sector = first_sector + START_SECT(p);
 		dev = MKDEV(hd->major, current_minor);
 		brelse(bh);
 	}
@@ -262,9 +278,9 @@ check_table:
 
 	current_minor += 4;  /* first "extra" minor (for extended partitions) */
 	for (i=1 ; i<=4 ; minor++,i++,p++) {
-		if (!p->nr_sects)
+		if (!NR_SECTS(p))
 			continue;
-		add_partition(hd, minor, first_sector+p->start_sect, p->nr_sects);
+		add_partition(hd, minor, first_sector+START_SECT(p), NR_SECTS(p));
 		if (is_extended_partition(p)) {
 			printk(" <");
 			/*
@@ -292,9 +308,9 @@ check_table:
 			p--;
 			if ((current_minor & mask) == 0)
 				break;
-			if (!(p->start_sect && p->nr_sects))
+			if (!(START_SECT(p) && NR_SECTS(p)))
 				continue;
-			add_partition(hd, current_minor, p->start_sect, p->nr_sects);
+			add_partition(hd, current_minor, START_SECT(p), NR_SECTS(p));
 		}
 	}
 	printk("\n");
@@ -558,5 +574,7 @@ void device_setup(void)
 		nr += p->nr_real;
 	}
 
+#ifdef CONFIG_BLK_DEV_RAM
 	rd_load();
+#endif
 }

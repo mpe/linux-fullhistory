@@ -1564,6 +1564,13 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 #ifdef DEBUG
 	    printk("Aborting\n");
 #endif
+	    /*
+	      Allow TEST_UNIT_READY and INQUIRY commands to timeout early
+	      without causing resets.  All other commands should be retried.
+	    */
+	    if (SCpnt->cmnd[0] != TEST_UNIT_READY &&
+		SCpnt->cmnd[0] != INQUIRY)
+		    status = MAYREDO;
 	    exit = (DRIVER_TIMEOUT | SUGGEST_ABORT);
 	}
 	else

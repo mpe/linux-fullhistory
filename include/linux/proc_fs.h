@@ -35,7 +35,8 @@ enum root_directory_inos {
 	PROC_DMA,	
 	PROC_IOPORTS,
 	PROC_APM,
-	PROC_PROFILE /* whether enabled or not */
+	PROC_PROFILE, /* whether enabled or not */
+	PROC_CMDLINE
 };
 
 enum pid_directory_inos {

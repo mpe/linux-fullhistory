@@ -114,6 +114,11 @@
 #define __NR_shmdt		211
 #define __NR_shmget		212
 
+#define __NR_getsid		234
+
+#define __NR_getsysinfo		256
+#define __NR_setsysinfo		257
+
 /*
  * Linux-specific system calls begin at 300
  */
@@ -131,6 +136,10 @@
 #define __NR_reboot		311
 #define __NR_clone		312
 #define __NR_uselib		313
+#define __NR_mlock		314
+#define __NR_munlock		315
+#define __NR_mlockall		316
+#define __NR_munlockall		317
 
 #ifdef __LIBRARY__
 

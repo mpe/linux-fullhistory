@@ -50,6 +50,7 @@ unsigned char aux_device_present = 0xaa;
 #define COMMAND_LINE_SIZE	256
 
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
+       char saved_command_line[COMMAND_LINE_SIZE];
 
 /*
  * The format of "screen_info" is strange, and due to early
@@ -67,6 +68,30 @@ struct screen_info screen_info = {
 	1,			/* orig-video-isVGA */
 	16			/* orig-video-points */
 };
+
+/*
+ * Initialize Programmable Interval Timers with standard values.  Some
+ * drivers depend on them being initialized (e.g., joystick driver).
+ */
+static void init_pit (void)
+{
+#if 0
+    /*
+     * Leave refresh timer alone---nobody should depend on
+     * a particular value anyway.
+     */
+    outb(0x54, 0x43);	/* counter 1: refresh timer */
+    outb(0x18, 0x41);
+#endif
+
+    outb(0x36, 0x43);	/* counter 0: system timer */
+    outb(0x00, 0x40);
+    outb(0x00, 0x40);
+
+    outb(0xb6, 0x43);	/* counter 2: speaker */
+    outb(0x31, 0x42);
+    outb(0x13, 0x42);
+}
 
 static unsigned long find_end_memory(void)
 {
@@ -94,6 +119,8 @@ void setup_arch(char **cmdline_p,
 {
 	extern int _end;
 
+	init_pit();
+
 	hwrpb = (struct hwrpb_struct*)(IDENT_ADDR + INIT_HWRPB->phys_addr);
 
 	set_hae(hae.cache);	/* sync HAE register w/hae_cache */
@@ -102,6 +129,7 @@ void setup_arch(char **cmdline_p,
 	ROOT_DEV = to_kdev_t(0x0802);		/* sda2 */
 	command_line[COMMAND_LINE_SIZE - 1] = '\0';
 	strcpy(command_line, COMMAND_LINE);
+	strcpy(saved_command_line, COMMAND_LINE);
 
 	*cmdline_p = command_line;
 	*memory_start_p = (unsigned long) &_end;

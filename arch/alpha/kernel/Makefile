@@ -24,7 +24,6 @@ head.s: head.S $(TOPDIR)/include/asm-alpha/system.h
 
 kernel.o: $(OBJS)
 	$(LD) -r -o kernel.o $(OBJS)
-	sync
 
 dep:
 	$(CPP) -M *.c > .depend

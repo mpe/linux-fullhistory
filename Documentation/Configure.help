@@ -56,6 +56,15 @@ CONFIG_BLK_DEV_FD
   want to compile it as a module, say M here and read
   Documentation/modules.txt.
   
+RAM disk support
+CONFIG_BLK_DEV_RAM
+  Enabling this option will allow you to use a portion of your RAM memory 
+  as a block device, so that you can make filesystems on it, read and
+  write to it and do all the other things that normal block devices can do.
+  It is usually used to load and store a copy of a minimal root file
+  system off of a floppy into RAM during the initial install of Linux.
+  Most normal users won't need this functionality, and can thus say N here.
+
 Normal (MFM/RLL) disk and IDE disk/cdrom support
 CONFIG_ST506   		           
   This is the regular, non-SCSI harddisk support. Pretty much everyone

@@ -479,7 +479,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	vma->vm_mm->rss--;
 	pte_clear(page_table);
 	invalidate_page(vma, address);
-	entry = mem_map[MAP_NR(page)].count;
+	entry = page_unuse(page);
 	free_page(page);
 	return entry;
 }
@@ -687,6 +687,10 @@ static int try_to_free_page(int priority, unsigned long limit)
 			if (shm_swap(i, limit))
 				return 1;
 			state = 2;
+		case 2:
+			if (shrink_mmap(i, limit))
+				return 1;
+			state = 3;
 		default:
 			if (swap_out(i, limit))
 				return 1;
@@ -1324,6 +1328,11 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 		p->count = 0;
 		p->dirty = 0;
 		p->reserved = 1;
+		p->inode = NULL;
+		p->offset = 0;
+		p->write_list = NULL;
+		p->next = p->prev = NULL;
+		p->next_hash = p->next_hash = NULL;
 	}
 
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {

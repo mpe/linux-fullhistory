@@ -696,20 +696,20 @@ depca_open(struct device *dev)
       printk("\nDescriptor buffers:\nRX: ");
       for (i=0;i<lp->rxRingMask;i++){
 	if (i < 3) {
-	  printk("0x%8.8x  ", readl(&lp->rx_ring[i].base));
+	  printk("0x%8.8lx  ", readl(&lp->rx_ring[i].base));
 	}
       }
-      printk("...0x%8.8x\n", readl(&lp->rx_ring[i].base));
+      printk("...0x%8.8lx\n", readl(&lp->rx_ring[i].base));
       printk("TX: ");
       for (i=0;i<lp->txRingMask;i++){
 	if (i < 3) {
-	  printk("0x%8.8x  ", readl(&lp->tx_ring[i].base));
+	  printk("0x%8.8lx  ", readl(&lp->tx_ring[i].base));
 	}
       }
-      printk("...0x%8.8x\n", readl(&lp->tx_ring[i].base));
+      printk("...0x%8.8lx\n", readl(&lp->tx_ring[i].base));
       printk("Status:  %d\n", status);
       printk("Initialisation block at 0x%8.8lx\n",lp->sh_mem);
-      printk("\tmode: 0x%4.4x\n",readw(&p->mode));
+      printk("\tmode: 0x%4.4lx\n",readw(&p->mode));
       printk("\tphysical address: ");
       for (i=0;i<ETH_ALEN-1;i++){
 	printk("%2.2x:",(u_char)readb(&p->phys_addr[i]));
@@ -720,8 +720,8 @@ depca_open(struct device *dev)
 	printk("%2.2x:",(u_char)readb(&p->mcast_table[i]));
       }
       printk("%2.2x\n",(u_char)readb(&p->mcast_table[i]));
-      printk("\trx_ring at: 0x%8.8x\n",readl(&p->rx_ring));
-      printk("\ttx_ring at: 0x%8.8x\n",readl(&p->tx_ring));
+      printk("\trx_ring at: 0x%8.8lx\n",readl(&p->rx_ring));
+      printk("\ttx_ring at: 0x%8.8lx\n",readl(&p->tx_ring));
       printk("dma_buffs: 0x%8.8lx\n",lp->dma_buffs);
       printk("Ring size:\nRX: %d  Log2(rxRingMask): 0x%8.8x\n", 
                                           (int)lp->rxRingMask + 1, 

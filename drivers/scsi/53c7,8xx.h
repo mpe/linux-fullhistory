@@ -67,7 +67,7 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 #endif
 
 #ifdef LINUX_1_2
-#define NCR53c7xx {NULL, NULL, "NCR53c{7,8}xx (rel 13)", NCR53c7xx_detect,\
+#define NCR53c7xx {NULL, NULL, "NCR53c{7,8}xx (rel 14)", NCR53c7xx_detect,\
 	NULL, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\
 	NULL /* slave attach */, scsicam_bios_param, /* can queue */ 24, \
@@ -75,7 +75,7 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 	/* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
 #else
 #define NCR53c7xx {NULL, NULL, NULL, NULL, \
-        "NCR53c{7,8}xx (rel 13)", NCR53c7xx_detect,\
+        "NCR53c{7,8}xx (rel 14)", NCR53c7xx_detect,\
         NULL, /* info */ NULL, /* command, deprecated */ NULL,		\
 	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\
 	NULL /* slave attach */, scsicam_bios_param, /* can queue */ 24, \
@@ -985,10 +985,6 @@ extern inline void * phys_to_virt(unsigned long address)
 #define OPTION_DEBUG_DISCONNECT 0x10000000	
 #define OPTION_ALWAYS_SYNCHRONOUS 0x20000000	/* Negotiate sync. transfers
 						   on power up */
-#define OPTION_SCSI_MALLOC	0x40000000	/* Use scsi_malloc instead of
-						   kmalloc() to allocate NCR
-						   command structures after 
-						   boot */
 #define OPTION_DEBUG_QUEUES	0x80000000	
 #define OPTION_DEBUG_ALLOCATION 0x100000000LL
 #define OPTION_DEBUG_SYNCHRONOUS 0x200000000LL	/* Sanity check SXFER and 
@@ -1207,7 +1203,6 @@ struct NCR53c7x0_break {
 struct NCR53c7x0_hostdata {
     int size;				/* Size of entire Scsi_Host
 					   structure */
-    struct Scsi_Host *next;		/* next of this type */
     int board;				/* set to board type, useful if 
 					   we have host specific things,
 					   ie, a general purpose I/O 
@@ -1452,6 +1447,9 @@ struct NCR53c7x0_hostdata {
     volatile u16 initiate_wdtr;
     /* Bit fielded list of targets we've talked to. */
     volatile u16 talked_to;
+    /* Bit fielded list of targets that answered */
+    volatile u16 answered;
+
     /* Array of bit-fielded lun lists that we need to request_sense */
     volatile unsigned char request_sense[16];
 

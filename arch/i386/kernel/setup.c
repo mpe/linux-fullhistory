@@ -62,9 +62,13 @@ struct apm_bios_info apm_bios_info;
 #endif
 
 unsigned char aux_device_present;
+
+#ifdef CONFIG_BLK_DEV_RAM
 extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
 extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
+#endif
+
 extern int root_mountflags;
 extern int _etext, _edata, _end;
 
@@ -92,6 +96,7 @@ extern char empty_zero_page[PAGE_SIZE];
 #define RAMDISK_LOAD_FLAG		0x4000	
 
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
+       char saved_command_line[COMMAND_LINE_SIZE];
 
 void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p)
@@ -116,9 +121,11 @@ void setup_arch(char **cmdline_p,
 	aux_device_present = AUX_DEVICE_INFO;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= PAGE_MASK;
+#ifdef CONFIG_BLK_DEV_RAM
 	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
 	rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
 	rd_doload = ((RAMDISK_FLAGS & RAMDISK_LOAD_FLAG) != 0);
+#endif
 #ifdef CONFIG_MAX_16M
 	if (memory_end > 16*1024*1024)
 		memory_end = 16*1024*1024;
@@ -130,6 +137,10 @@ void setup_arch(char **cmdline_p,
 	init_task.mm->end_code = TASK_SIZE + (unsigned long) &_etext;
 	init_task.mm->end_data = TASK_SIZE + (unsigned long) &_edata;
 	init_task.mm->brk = TASK_SIZE + (unsigned long) &_end;
+
+	/* Save unparsed command line copy for /proc/cmdline */
+	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
+	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
 
 	for (;;) {
 		/*

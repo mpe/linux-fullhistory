@@ -216,6 +216,7 @@ struct bootinfo boot_info = BOOT_INFO;
 #endif
 
 static char command_line[CL_SIZE] = { 0, };
+       char saved_command_line[CL_SIZE];
 
 #if 0
 /*
@@ -306,6 +307,9 @@ void setup_arch(char **cmdline_p,
 
 	memory_start = (unsigned long) &_end;
 	memory_start += (ramdisk_size << 10);
+
+	memcpy(saved_command_line, command_line, CL_SIZE);
+	saved_command_line[CL_SIZE-1] = '\0';
 
 	*cmdline_p = command_line;
 	*memory_start_p = memory_start;

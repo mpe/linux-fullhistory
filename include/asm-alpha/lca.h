@@ -143,6 +143,14 @@ extern inline unsigned long virt_to_bus(void * address)
 
 extern inline void * bus_to_virt(unsigned long address)
 {
+	/*
+	 * This check is a sanity check but also ensures that bus
+	 * address 0 maps to virtual address 0 which is useful to
+	 * detect null "pointers" (the NCR driver is much simpler if
+	 * NULL pointers are preserved).
+	 */
+	if (address < LCA_DMA_WIN_BASE)
+		return 0;
 	return phys_to_virt(address - LCA_DMA_WIN_BASE);
 }
 

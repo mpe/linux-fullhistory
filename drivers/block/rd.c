@@ -70,8 +70,6 @@ int rd_doload = 0;		/* 1 = load ramdisk, 0 = don't load */
 int rd_prompt = 1;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 int rd_image_start = 0;		/* starting block # of image */
 
-int rd_loading = 0;
-
 /*
  *  Basically, my strategy here is to set up a buffer-head which can't be
  *  deleted, and make that my Ramdisk.  If the request is outside of the
@@ -253,7 +251,6 @@ identify_ramdisk_image(int device, struct file *fp, int start_block)
 	}
 
 	/* Try ext2 */
-	printk("ext2 magic = %d\n", ext2sb->s_magic);
 	if (ext2sb->s_magic == EXT2_SUPER_MAGIC) {
 		printk(KERN_NOTICE
 		       "RAMDISK: Ext2 filesystem found at block %d\n",
@@ -296,6 +293,8 @@ void rd_load()
 	int device, ram_device;
 	int nblocks, i;
 	char *buf;
+	unsigned short rotate = 0;
+	char rotator[4] = { '|' , '/' , '-' , '\\' };
 
 	if (rd_doload == 0)
 		return;
@@ -328,7 +327,6 @@ void rd_load()
 
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-	rd_loading = 1;
 	
 	nblocks = identify_ramdisk_image(device, &infile, rd_image_start);
 	if (nblocks < 0)
@@ -360,12 +358,19 @@ void rd_load()
 		printk(KERN_ERR "RAMDISK: could not allocate buffer\n");
 		goto done;
 	}
+
+	printk(KERN_NOTICE "RAMDISK: Loading %d blocks into ram disk... ", nblocks);
 	for (i=0; i < nblocks; i++) {
 		infile.f_op->read(infile.f_inode, &infile, buf,
 				  BLOCK_SIZE);
 		outfile.f_op->write(outfile.f_inode, &outfile, buf,
 				    BLOCK_SIZE);
+		if (!(i % 16)) {
+			printk("%c\b", rotator[rotate & 0x3]);
+			rotate++;
+		}
 	}
+	printk("done.\n");
 	kfree(buf);
 
 successful_load:
@@ -376,12 +381,9 @@ done:
 	if (infile.f_op->release)
 		infile.f_op->release(&inode, &infile);
 	set_fs(fs);
-	rd_loading = 0;
 }
 
 #ifdef BUILD_CRAMDISK
-
-#include <string.h>
 
 /*
  * gzip declarations

@@ -38,3 +38,9 @@ void * __memset(void * s,char c,size_t count)
 	__constant_c_memset(s,0x0101010101010101UL * (unsigned char) c, count);
 	return s;
 }
+
+/*
+ * gcc-2.7.1 and newer generate calls to memset and memcpy.  So we
+ * need to define that here:
+ */
+asm (".weakext memset, __memset");

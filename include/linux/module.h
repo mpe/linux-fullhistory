@@ -12,14 +12,10 @@
 #  undef  MODVERSIONS
 #  define MODVERSIONS
 #else /* ! __GENKSYMS__ */
-# ifdef MODVERSIONS
-#  ifndef MODULE
-#   ifdef EXPORT_SYMTAB
-#    define _set_ver(sym,vers) sym
-#    include <linux/modversions.h>
-#   endif /* EXPORT_SYMTAB */
-#  endif /* MODULE */
-# endif /* MODVERSIONS */
+# if defined(MODVERSIONS) && !defined(MODULE) && defined(EXPORT_SYMTAB)
+#   define _set_ver(sym,vers) sym
+#   include <linux/modversions.h>
+# endif
 #endif /* __GENKSYMS__ */
 
 /* values of module.state */

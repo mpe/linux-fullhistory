@@ -20,6 +20,7 @@
 #include <linux/malloc.h>
 #include <linux/fs.h>
 #include <linux/locks.h>
+#include <linux/pagemap.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -32,20 +33,111 @@
  * Shared mappings now work. 15.8.1995  Bruno.
  */
 
+struct page * page_hash_table[PAGE_HASH_SIZE];
+
 /*
  * Simple routines for both non-shared and shared mappings.
  */
 
-static inline void multi_bmap(struct inode * inode, unsigned long block, unsigned int * nr, int shift)
+void invalidate_inode_pages(struct inode * inode, unsigned long start)
 {
-	int i = PAGE_SIZE >> shift;
-	block >>= shift;
+	struct page ** p = &inode->i_pages;
+	struct page * page;
+
+	while ((page = *p) != NULL) {
+		unsigned long offset = page->offset;
+
+		/* page wholly truncated - free it */
+		if (offset >= start) {
+			inode->i_nrpages--;
+			if ((*p = page->next) != NULL)
+				(*p)->prev = page->prev;
+			page->dirty = 0;
+			page->next = NULL;
+			page->prev = NULL;
+			remove_page_from_hash_queue(page);
+			page->inode = NULL;
+			free_page(page_address(page));
+			continue;
+		}
+		p = &page->next;
+		offset = start - offset;
+		/* partial truncate, clear end of page */
+		if (offset < PAGE_SIZE)
+			memset((void *) (offset + page_address(page)), 0, PAGE_SIZE - offset);
+	}
+}
+
+int shrink_mmap(int priority, unsigned long limit)
+{
+	static int clock = 0;
+	struct page * page;
+
+	if (limit > high_memory)
+		limit = high_memory;
+	limit = MAP_NR(limit);
+	if (clock >= limit)
+		clock = 0;
+	priority = limit >> (2*priority);
+	page = mem_map + clock;
+	while (priority-- > 0) {
+		if (page->inode && page->count == 1) {
+			remove_page_from_hash_queue(page);
+			remove_page_from_inode_queue(page);
+			free_page(page_address(page));
+			return 1;
+		}
+		page++;
+		clock++;
+		if (clock >= limit) {
+			clock = 0;
+			page = mem_map;
+		}
+	}
+	return 0;
+}
+
+/*
+ * This is called from try_to_swap_out() when we try to egt rid of some
+ * pages..  If we're unmapping the last occurrence of this page, we also
+ * free it from the page hash-queues etc, as we don't want to keep it
+ * in-core unnecessarily.
+ */
+unsigned long page_unuse(unsigned long page)
+{
+	struct page * p = mem_map + MAP_NR(page);
+	int count = p->count;
+
+	if (count != 2)
+		return count;
+	if (!p->inode)
+		return count;
+	remove_page_from_hash_queue(p);
+	remove_page_from_inode_queue(p);
+	free_page(page);
+	return 1;
+}
+
+/*
+ * This should be a low-level fs-specific function (ie
+ * inode->i_op->readpage).
+ */
+static int readpage(struct inode * inode, unsigned long offset, char * page)
+{
+	int *p, nr[PAGE_SIZE/512];
+	int i;
+
+	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
+	offset >>= inode->i_sb->s_blocksize_bits;
+	p = nr;
 	do {
-		*nr = bmap(inode, block);
+		*p = inode->i_op->bmap(inode, offset);
 		i--;
-		block++;
-		nr++;
+		offset++;
+		p++;
 	} while (i > 0);
+	bread_page((unsigned long) page, inode->i_dev, nr, inode->i_sb->s_blocksize);
+	return 0;
 }
 
 /*
@@ -57,15 +149,51 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 	unsigned long page, int no_share)
 {
 	struct inode * inode = area->vm_inode;
-	int nr[PAGE_SIZE/512];
+	unsigned long new_page, old_page;
+	struct page *p;
 
 	address = (address & PAGE_MASK) - area->vm_start + area->vm_offset;
 	if (address >= inode->i_size && (area->vm_flags & VM_SHARED) && area->vm_mm == current->mm)
 		send_sig(SIGBUS, current, 1);
-	multi_bmap(inode, address, nr, inode->i_sb->s_blocksize_bits);
-	return bread_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize, no_share);
-}
+	p = find_page(inode, address);
+	if (p)
+		goto old_page_exists;
+	new_page = 0;
+	if (no_share) {
+		new_page = __get_free_page(GFP_USER);
+		if (!new_page) {
+			oom(current);
+			return page;
+		}
+	}
+	/* inode->i_op-> */ readpage(inode, address, (char *) page);
+	p = find_page(inode, address);
+	if (p)
+		goto old_and_new_page_exists;
+	p = mem_map + MAP_NR(page);
+	p->offset = address;
+	add_page_to_inode_queue(inode, p);
+	add_page_to_hash_queue(inode, p);
+	if (new_page) {
+		memcpy((void *) new_page, (void *) page, PAGE_SIZE);
+		return new_page;
+	}
+	p->count++;
+	return page;
 
+old_and_new_page_exists:
+	if (new_page)
+		free_page(new_page);
+old_page_exists:
+	old_page = page_address(p);
+	if (no_share) {
+		memcpy((void *) page, (void *) old_page, PAGE_SIZE);
+		return page;
+	}
+	p->count++;
+	free_page(page);
+	return old_page;
+}
 
 /*
  * Tries to write a shared mapped page to its backing store. May return -EIO

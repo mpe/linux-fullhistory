@@ -269,7 +269,7 @@ seagate.o: seagate.c
 	$(CC) $(CFLAGS) -g -c 53c7,8xx.c
 
 53c8xx_d.h 53c8xx_u.h : 53c7,8xx.scr script_asm.pl
-	ln 53c7,8xx.scr fake.c
+	ln -sf 53c7,8xx.scr fake.c
 	$(CPP) -traditional -DCHIP=810 fake.c | grep -v '^#' | perl script_asm.pl 
 	mv script.h 53c8xx_d.h
 	mv scriptu.h 53c8xx_u.h

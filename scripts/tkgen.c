@@ -499,10 +499,10 @@ static int find_menu_size(struct kconfig *cfg,
       case tok_dep_tristate:
       case tok_int:
       case tok_choose:
-      case tok_choice:
       case tok_sound:
 	tot++;
 	break;
+      case tok_choice:
       default:
 	break;
       }
@@ -561,7 +561,6 @@ dump_tk_script(struct kconfig *scfg)
 	case tok_dep_tristate:
 	case tok_int:
 	case tok_choose:
-	case tok_choice:
 	case tok_sound:
 	  /*
 	   * If we have overfilled the menu, then go to the next one.
@@ -578,6 +577,7 @@ dump_tk_script(struct kconfig *scfg)
 	  break;
 	case tok_define:
 	  cfg->menu_number = -1;
+	case tok_choice:
 	default:
 	  break;
 	};

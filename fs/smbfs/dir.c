@@ -108,6 +108,8 @@ struct inode_operations smb_dir_inode_operations =
 	smb_rename,    		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL,			/* permission */

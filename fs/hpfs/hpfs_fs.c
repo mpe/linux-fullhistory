@@ -175,6 +175,8 @@ static const struct inode_operations hpfs_file_iops =
 	NULL,				/* rename */
 	NULL,				/* readlink */
 	NULL,				/* follow_link */
+	NULL,				/* readpage */
+	NULL,				/* writepage */
 	(int (*)(struct inode *, int))
 	&hpfs_bmap,			/* bmap */
 	NULL,				/* truncate */
@@ -217,6 +219,8 @@ static const struct inode_operations hpfs_dir_iops =
 	NULL,				/* rename */
 	NULL,				/* readlink */
 	NULL,				/* follow_link */
+	NULL,				/* readpage */
+	NULL,				/* writepage */
 	NULL,				/* bmap */
 	NULL,				/* truncate */
 	NULL,				/* permission */

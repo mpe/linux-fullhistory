@@ -916,62 +916,39 @@ static int share_page(struct vm_area_struct * area, unsigned long address,
 }
 
 /*
- * This function tries to find a page that is shared with the buffer cache,
- * and if so it moves the buffer cache to a new location.
- *
- * It returns non-zero if we used up the "new_page" page.
+ * This function zeroes out partial mmap'ed pages at truncation time..
  */
-static int unshare(struct vm_area_struct *vma, unsigned long address, unsigned long new_page)
+static void partial_clear(struct vm_area_struct *vma, unsigned long address)
 {
 	pgd_t *page_dir;
 	pmd_t *page_middle;
 	pte_t *page_table, pte;
-	unsigned long old_page;
-	struct buffer_head * bh, * tmp;
 
 	page_dir = pgd_offset(vma->vm_mm, address);
 	if (pgd_none(*page_dir))
-		return 0;
+		return;
 	if (pgd_bad(*page_dir)) {
 		printk("bad page table directory entry %p:[%lx]\n", page_dir, pgd_val(*page_dir));
 		pgd_clear(page_dir);
-		return 0;
+		return;
 	}
 	page_middle = pmd_offset(page_dir, address);
 	if (pmd_none(*page_middle))
-		return 0;
+		return;
 	if (pmd_bad(*page_middle)) {
 		printk("bad page table directory entry %p:[%lx]\n", page_dir, pgd_val(*page_dir));
 		pmd_clear(page_middle);
-		return 0;
+		return;
 	}
 	page_table = pte_offset(page_middle, address);
 	pte = *page_table;
 	if (!pte_present(pte))
-		return 0;
-	old_page = pte_page(pte);
-	if (MAP_NR(old_page) > MAP_NR(high_memory))
-		return 0;
+		return;
 	address &= ~PAGE_MASK;
-	memset((void *) (old_page + address), 0, PAGE_SIZE - address);
-	bh = buffer_pages[MAP_NR(old_page)];
-	if (!bh)
-		return 0;
-	if (!new_page) {
-		printk("Aieee... unshare(): no page available\n");
-		return 0;
-	}
-	buffer_pages[MAP_NR(old_page)] = NULL;
-	copy_page(old_page, new_page);
-	free_page(old_page);
-	old_page -= new_page;
-	buffer_pages[MAP_NR(new_page)] = bh;
-	tmp = bh;
-	do {
-		tmp->b_data -= old_page;
-		tmp = tmp->b_this_page;
-	} while (tmp != bh);
-	return 1;
+	address += pte_page(pte);
+	if (address >= high_memory)
+		return;
+	memset((void *) address, 0, PAGE_SIZE - (address & ~PAGE_MASK));
 }
 
 /*
@@ -984,17 +961,12 @@ static int unshare(struct vm_area_struct *vma, unsigned long address, unsigned l
  */
 void vmtruncate(struct inode * inode, unsigned long offset)
 {
-	unsigned long page;
 	struct vm_area_struct * mpnt;
 
+	invalidate_inode_pages(inode, offset);
 	if (!inode->i_mmap)
 		return;
-	page = __get_free_page(GFP_KERNEL);
 	mpnt = inode->i_mmap;
-	if (!mpnt) {
-		free_page(page);
-		return;
-	}
 	do {
 		unsigned long start = mpnt->vm_start;
 		unsigned long len = mpnt->vm_end - start;
@@ -1012,15 +984,12 @@ void vmtruncate(struct inode * inode, unsigned long offset)
 		/* Ok, partially affected.. */
 		start += diff;
 		len = (len - diff) & PAGE_MASK;
-		/* Ugh, here comes the _really_ ugly part.. */
 		if (start & ~PAGE_MASK) {
-			if (unshare(mpnt, start, page))
-				page = 0;
+			partial_clear(mpnt, start);
 			start = (start + ~PAGE_MASK) & PAGE_MASK;
 		}
 		zap_page_range(mpnt->vm_mm, start, len);
 	} while ((mpnt = mpnt->vm_next_share) != inode->i_mmap);
-	free_page(page);
 }
 
 /*

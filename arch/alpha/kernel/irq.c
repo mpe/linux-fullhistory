@@ -356,6 +356,14 @@ static inline void isa_device_interrupt(unsigned long vector,
 #	define IACK_SC	APECS_IACK_SC
 #elif defined(CONFIG_ALPHA_LCA)
 #	define IACK_SC	LCA_IACK_SC
+#else
+    	/*
+	 * This is bogus but necessary to get it to compile
+	 * on all platforms.  If you try to use this on any
+	 * other than the intended platforms, you'll notice
+	 * real fast...
+	 */
+#	define IACK_SC	1L
 #endif
 	int j;
 
@@ -568,7 +576,7 @@ int probe_irq_off(unsigned long irqs)
 	irqmask |= ((((unsigned long)cache_26)<<16) |
 		    (((unsigned long)cache_27)<<24));
 #endif
-	irqs &= irqmask;
+	irqs &= irqmask & ~1;	/* always mask out irq 0---it's the unused timer */
 	if (!irqs)
 		return 0;
 	i = ffz(~irqs);

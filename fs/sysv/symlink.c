@@ -39,6 +39,8 @@ struct inode_operations sysv_symlink_inode_operations = {
 	NULL,			/* rename */
 	sysv_readlink,		/* readlink */
 	sysv_follow_link,	/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */

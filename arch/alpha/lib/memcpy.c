@@ -123,3 +123,9 @@ char * bcopy(const char * src, char * dest, size_t n)
 	__memcpy(dest, src, n);
 	return dest;
 }
+
+/*
+ * gcc-2.7.1 and newer generate calls to memset and memcpy.  So we
+ * need to define that here:
+ */
+asm (".weakext memcpy, __memcpy");

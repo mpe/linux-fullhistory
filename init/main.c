@@ -43,6 +43,7 @@ static char printbuf[1024];
 extern int console_loglevel;
 
 static int init(void *);
+extern int bdflush(void *);
 
 extern void init_IRQ(void);
 extern void init_modules(void);
@@ -101,9 +102,11 @@ extern void optcd_setup(char *str, int *ints);
 #ifdef CONFIG_SJCD
 extern void sjcd_setup(char *str, int *ints);
 #endif CONFIG_SJCD
+#ifdef CONFIG_BLK_DEV_RAM
 static void ramdisk_start_setup(char *str, int *ints);
 static void load_ramdisk(char *str, int *ints);
 static void prompt_ramdisk(char *str, int *ints);
+#endif CONFIG_BLK_DEV_RAM
 
 #ifdef CONFIG_SYSVIPC
 extern void ipc_init(void);
@@ -122,9 +125,12 @@ static unsigned long memory_end = 0;
 
 int rows, cols;
 
+#ifdef CONFIG_BLK_DEV_RAM
 extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
 extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
+#endif
+
 int root_mountflags = MS_RDONLY;
 char *execute_command = 0;
 
@@ -176,9 +182,11 @@ struct {
 } bootsetups[] = {
 	{ "reserve=", reserve_setup },
 	{ "profile=", profile_setup },
+#ifdef CONFIG_BLK_DEV_RAM
 	{ "ramdisk_start=", ramdisk_start_setup },
-	{ "load_ramdisk", load_ramdisk },
-	{ "prompt_ramdisk", prompt_ramdisk },
+	{ "load_ramdisk=", load_ramdisk },
+	{ "prompt_ramdisk=", prompt_ramdisk },
+#endif
 	{ "swap=", swap_setup },
 	{ "buff=", buff_setup },
 #ifdef CONFIG_BUGi386
@@ -273,6 +281,7 @@ struct {
 	{ 0, 0 }
 };
 
+#ifdef CONFIG_BLK_DEV_RAM
 static void ramdisk_start_setup(char *str, int *ints)
 {
    if (ints[0] > 0 && ints[1] >= 0)
@@ -281,13 +290,16 @@ static void ramdisk_start_setup(char *str, int *ints)
 
 static void load_ramdisk(char *str, int *ints)
 {
-	rd_doload = 1;
+   if (ints[0] > 0 && ints[1] >= 0)
+      rd_doload = ints[1] & 1;
 }
 
 static void prompt_ramdisk(char *str, int *ints)
 {
-	rd_prompt = 1;
+   if (ints[0] > 0 && ints[1] >= 0)
+      rd_prompt = ints[1] & 1;
 }
+#endif
 
 static int checksetup(char *line)
 {
@@ -657,6 +669,9 @@ static int do_shell(void * shell)
 static int init(void * unused)
 {
 	int pid,i;
+
+	/* Launch bdflush from here, instead of the old syscall way. */
+	kernel_thread(bdflush, NULL, 0);
 
 	setup();
 

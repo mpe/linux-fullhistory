@@ -277,9 +277,11 @@ do_switch_stack:
 	stt $f25,264($30)
 	stt $f26,272($30)
 	stt $f27,280($30)
+	mf_fpcr $f0		# get fpcr
 	stt $f28,288($30)
 	stt $f29,296($30)
 	stt $f30,304($30)
+	stt $f0,312($30)	# save fpcr in slot of $f31
 	ret $31,($1),1
 .end do_switch_stack
 
@@ -294,10 +296,12 @@ undo_switch_stack:
 	ldq $14,40($30)
 	ldq $15,48($30)
 	ldq $26,56($30)
+	ldt $f30,312($30)	# get saved fpcr
 	ldt $f0,64($30)
 	ldt $f1,72($30)
 	ldt $f2,80($30)
 	ldt $f3,88($30)
+	mt_fpcr $f30		# install saved fpcr
 	ldt $f4,96($30)
 	ldt $f5,104($30)
 	ldt $f6,112($30)
@@ -641,12 +645,12 @@ sys_call_table:
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+	.quad do_entSys, do_entSys, do_entSys, do_entSys, sys_getsid
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, osf_proplist_syscall
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 /*250*/	.quad do_entSys, osf_usleep_thread, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+	.quad do_entSys, osf_getsysinfo, osf_setsysinfo, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
@@ -657,7 +661,6 @@ sys_call_table:
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 /* linux-specific system calls start at 300 */
 /*300*/	.quad sys_bdflush, sys_sethae, sys_mount, sys_adjtimex, sys_swapoff
-	.quad sys_getdents, sys_create_module, sys_init_module, sys_delete_module, sys_get_kernel_syms
-	.quad sys_syslog, sys_reboot, sys_clone, sys_uselib, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-
+	.quad sys_getdents, alpha_create_module, sys_init_module, sys_delete_module, sys_get_kernel_syms
+	.quad sys_syslog, sys_reboot, sys_clone, sys_uselib, sys_mlock
+	.quad sys_munlock, sys_mlockall, sys_munlockall, do_entSys, do_entSys

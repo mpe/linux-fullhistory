@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@storm.net$>$}
-\date{Last revised: December 4, 1995}
+\date{Last revised: December 17, 1995}
 \maketitle
 %
 \noindent
@@ -51,11 +51,9 @@ he stopped maintaining when he lost network access in 1993.  It is a
 registry of allocated major device numbers, as well as the recommended
 {\file /dev} directory nodes for these devices.
 
-This list is now included with the Linux kernel sources in \LaTeX\ and
-ASCII form.  This list is also vailable via FTP from ftp.yggdrasil.com
-in the directory {\file /pub/device-list}; filename is {\file
-devices.{\it format\/}} where {\it format\/} is {\file txt} (ASCII),
-{\file tex} (\LaTeX), {\file dvi} (DVI) or {\file ps} (PostScript).
+The latest version of this list is included with the Linux kernel
+sources in \LaTeX\ and ASCII form.  In case of discrepancy, the
+\LaTeX\ version is authoritative.
 
 This document is included by reference into the Linux Filesystem
 Standard (FSSTND).  The FSSTND is available via FTP from
@@ -67,7 +65,9 @@ where that applies (e.g.\ busmice), please contact me.  Also, if you
 have additional information regarding any of the devices listed below,
 or if I have made a mistake, I would greatly appreciate a note.
 
-Allocations marked (68k) apply to Linux/68k only.
+Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
+platform only.  Allocations marked (68k/Atari) apply to Linux/68k on
+the Atari platform only.
 
 This document is in the public domain.  The author requests, however,
 that semantically altered versions are not distributed without
@@ -90,7 +90,7 @@ an unreasonable effort.
 \major{ 7}{}{char }{Virtual console access devices}
 \major{ 8}{}{block}{SCSI disk devices}
 \major{ 9}{}{char }{SCSI tape devices}
-\major{  }{}{block}{Multiple disk devices}
+\major{  }{}{block}{Metadisk (RAID) devices}
 \major{10}{}{char }{Non-serial mice, misc features}
 \major{11}{}{block}{SCSI CD-ROM devices}
 \major{12}{}{char }{QIC-02 tape}
@@ -101,7 +101,7 @@ an unreasonable effort.
 \major{  }{}{block}{BIOS harddrive callback support}
 \major{15}{}{char }{Joystick}
 \major{  }{}{block}{Sony CDU-31A/CDU-33A CD-ROM}
-\major{16}{}{char }{Reserved for scanners}
+\major{16}{}{char }{Non-SCSI scanners}
 \major{  }{}{block}{GoldStar CD-ROM}
 \major{17}{}{char }{Chase serial card}
 \major{  }{}{block}{Optics Storage CD-ROM}
@@ -120,12 +120,14 @@ an unreasonable effort.
 \major{  }{}{block}{Sony CDU-535 CD-ROM}
 \major{25}{}{char }{Stallion serial card -- alternate devices}
 \major{  }{}{block}{First Matsushita (Panasonic/SoundBlaster) CD-ROM}
-\major{26}{}{block}{Second Matsushita (Panasonic/SoundBlaster) CD-ROM}
+\major{26}{}{char }{Frame grabbers}
+\major{  }{}{block}{Second Matsushita (Panasonic/SoundBlaster) CD-ROM}
 \major{27}{}{char }{QIC-117 tape}
 \major{  }{}{block}{Third Matsushita (Panasonic/SoundBlaster) CD-ROM}
 \major{28}{}{char }{Stallion serial card -- card programming}
+\major{  }{}{char }{Atari SLM ACSI laser printer (68k/Atari)}
 \major{  }{}{block}{Fourth Matsushita (Panasonic/SoundBlaster) CD-ROM}
-\major{  }{}{block}{ACSI disk (68k)}
+\major{  }{}{block}{ACSI disk (68k/Atari)}
 \major{29}{}{char }{Universal frame buffer}
 \major{  }{}{block}{Aztech/Orchid/Okano/Wearnes CD-ROM}
 \major{30}{}{char }{iBCS-2}
@@ -143,11 +145,17 @@ an unreasonable effort.
 \major{36}{}{char }{Netlink support}
 \major{  }{}{block}{MCA ESDI hard disk}
 \major{37}{}{char }{IDE tape}
-\major{38}{--41}{}{Unallocated}
+\major{38}{}{char }{Myricom PCI Myrinet board}
+\major{39}{}{char }{Reserved for ncpfs $<$lendecke@namu01.gwdg.de$>$}
+\major{40}{--41}{}{Unallocated}
 \major{42}{}{}{Demo/sample use}
-\major{43}{--223}{}{Unallocated}
+\major{43}{--59}{}{Unallocated}
+\major{60}{--63}{}{Local/experimental use}
+\major{64}{--119}{}{Unallocated}
+\major{120}{--127}{}{Local/experimental use}
+\major{128}{--223}{}{Unallocated}
 \major{224}{--239}{}{SEE NOTE}
-\major{240}{--254}{}{Local use}
+\major{240}{--254}{}{Local/experimental use}
 \major{255}{}{}{Reserved}
 \end{devicelist}
 
@@ -265,16 +273,16 @@ been deprecated, since the drive type is insignificant for these devices.
 \\
 \major{}{}{}{For partitions, add to the whole disk device number}
 	\minor{0}{/dev/hd?}{Whole disk}
-	\minor{1}{/dev/hd?1}{First primary partition}
-	\minor{2}{/dev/hd?2}{Second primary partition}
-	\minor{3}{/dev/hd?3}{Third primary partition}
-	\minor{4}{/dev/hd?4}{Fourth primary partition}
-	\minor{5}{/dev/hd?5}{First logical partition}
-	\minor{6}{/dev/hd?6}{Second logical partition}
-	\minor{7}{/dev/hd?7}{Third logical partition}
+	\minor{1}{/dev/hd?1}{First partition}
+	\minor{2}{/dev/hd?2}{Second partition}
 	\minordots
-	\minor{63}{/dev/hd?63}{59th logical partition}
+	\minor{63}{/dev/hd?63}{63rd partition}
 \end{devicelist}
+
+\noindent
+For Linux/i386, partitions 1-4 are the primary partitions, partitions
+5 and up are logical partitions.  Other versions of Linux use
+partitioning schemes appropriate to their respective architectures.
 
 \begin{devicelist}
 \major{ 4}{}{char }{TTY devices}
@@ -344,8 +352,8 @@ NOTE: These devices permit both read and write access.
 
 \noindent
 Partitions are handled in the same way as for IDE disks (see major
-number 3) except that the limit on logical partitions is 11 rather
-than 59 per disk.
+number 3) except that the partition limit is 15 rather than 63 per
+disk.
 
 \begin{devicelist}
 \major{ 9}{}{char }{SCSI tape devices}
@@ -356,14 +364,14 @@ than 59 per disk.
 	\minor{129}{/dev/nst1}{Second SCSI tape, no rewind-on-close}
 	\minordots
 \\
-\major{  }{}{block}{Multiple disk devices}
-	\minor{0}{/dev/md0}{First device group}
-	\minor{1}{/dev/md1}{Second device group}
+\major{  }{}{block}{Metadisk (RAID) devices}
+	\minor{0}{/dev/md0}{First metadisk group}
+	\minor{1}{/dev/md1}{Second metadisk group}
 	\minordots
 \end{devicelist}
 
 \noindent
-The multiple device driver is used to span a filesystem across multiple
+The metadisk driver is used to span a filesystem across multiple
 physical disks.
 
 \begin{devicelist}
@@ -373,8 +381,8 @@ physical disks.
 	\minor{2}{/dev/inportbm}{Microsoft Inport bus mouse}
 	\minor{3}{/dev/atibm}{ATI XL bus mouse}
 	\minor{4}{/dev/jbm}{J-mouse}
-	\minor{4}{/dev/amigamouse}{Amiga Mouse (68k)}
-	\minor{5}{/dev/atarimouse}{Atari Mouse (68k)}
+	\minor{4}{/dev/amigamouse}{Amiga Mouse (68k/Amiga)}
+	\minor{5}{/dev/atarimouse}{Atari Mouse}
 	\minor{128}{/dev/beep}{Fancy beep device}
 	\minor{129}{/dev/modreq}{Kernel module load request}
 	\minor{130}{/dev/watchdog}{Watchdog timer port}
@@ -472,7 +480,9 @@ number 3).
 \end{devicelist}
 
 \begin{devicelist}
-\major{16}{}{char }{Reserved for scanners}
+\major{16}{}{char }{Non-SCSI scanners}
+	\minor{0}{/dev/gs4500}{Genius 4500 handheld scanner}
+\\
 \major{  }{}{block}{GoldStar CD-ROM}
 	\minor{0}{/dev/gscd}{GoldStar CD-ROM}
 \end{devicelist}
@@ -635,13 +645,18 @@ major number 3).
 	\minor{2}{/dev/staliomem2}{Third Stallion I/O card memory}
 	\minor{3}{/dev/staliomem3}{Fourth Stallion I/O card memory}
 \\
+\major{  }{}{char }{Atari SLM ACSI laser printer (68k/Atari)}
+	\minor{0}{/dev/slm0}{First SLM laser printer}
+	\minor{1}{/dev/slm1}{Second SLM laser printer}
+	\minordots
+\\
 \major{  }{}{block}{Fourth Matsushita (Panasonic/SoundBlaster) CD-ROM}
 	\minor{0}{/dev/sbpcd12}{Panasonic CD-ROM controller 3 unit 0}
 	\minor{1}{/dev/sbpcd13}{Panasonic CD-ROM controller 3 unit 1}
 	\minor{2}{/dev/sbpcd14}{Panasonic CD-ROM controller 3 unit 2}
 	\minor{3}{/dev/sbpcd15}{Panasonic CD-ROM controller 3 unit 3}
 \\
-\major{  }{}{block}{ACSI disk (68k)}
+\major{  }{}{block}{ACSI disk/CD-ROM (68k/Atari)}
 	\minor{0}{/dev/ada}{First ACSI disk whole disk}
 	\minor{16}{/dev/adb}{Second ACSI disk whole disk}
 	\minor{32}{/dev/adc}{Third ACSI disk whole disk}
@@ -651,16 +666,16 @@ major number 3).
 
 \noindent
 Partitions are handled in the same way as for IDE disks (see major
-number 3) except that the limit on logical partitions is 11 rather
-than 59 per disk.
+number 3) except that the partition limit is 15 rather than 63 per
+disk (same as SCSI.)
 
 \begin{devicelist}
 \major{29}{}{char }{Universal frame buffer}
 	\minor{0}{/dev/fb0current}{First frame buffer}
 	\minor{1}{/dev/fb0autodetect}{}
 	\minordots
-	\minor{16}{/dev/fb1current}{Second frame buffer}
-	\minor{17}{/dev/fb1autodetect}{}
+	\minor{32}{/dev/fb1current}{Second frame buffer}
+	\minor{33}{/dev/fb1autodetect}{}
 	\minordots
 \end{devicelist}
 
@@ -668,7 +683,7 @@ than 59 per disk.
 The universal frame buffer device is currently supported only on
 Linux/68k.  The {\file current} device accesses the frame buffer at
 current resolution; the {\file autodetect} one at bootup (default)
-resolution.  Minor numbers 2--15 within each frame buffer assignment
+resolution.  Minor numbers 2--31 within each frame buffer assignment
 are used for specific device-dependent resolutions.  There appears to
 be no standard naming for these devices.
 
@@ -761,7 +776,7 @@ major number 3).
 \end{devicelist}
 
 \noindent
-In a previous version these files were named {\file /dev/sc1} for
+In a previous version these devices were named {\file /dev/sc1} for
 {\file /dev/scc0}, {\file /dev/sc2} for {\file /dev/scc1}, and so on.
 
 \begin{devicelist}
@@ -821,7 +836,23 @@ Partitions are handled the same way as for IDE disks (see major number
 Currently, only one IDE tape drive is supported.
 
 \begin{devicelist}
-\major{38}{--41}{}{Unallocated}
+\major{38}{}{char }{Myricom PCI Myrinet board}
+	\minor{0}{/dev/mlanai0}{First Myrinet board}
+	\minor{1}{/dev/mlanai1}{Second Myrinet board}
+	\minordots
+\end{devicelist}
+
+\noindent
+This device is used for board control, status query and ``user level
+packet I/O''.  The board is also accessible as a regular {\file eth}
+networking device.
+
+\begin{devicelist}
+\major{39}{}{char }{Reserved for ncpfs $<$lendecke@namu01.gwdg.de$>$}
+\end{devicelist}
+
+\begin{devicelist}
+\major{40}{--41}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}
@@ -837,7 +868,27 @@ driver with this number should not cause ill effects to the system
 (bugs excepted.)
 
 \begin{devicelist}
-\major{43}{--223}{}{Unallocated}
+\major{43}{--59}{}{Unallocated}
+\end{devicelist}
+
+\begin{devicelist}
+\major{60}{--63}{}{Local/experimental use}
+\end{devicelist}
+
+\noindent
+For devices not assigned official numbers, these ranges should be
+used, in order to avoid conflict with future assignments.
+
+\begin{devicelist}
+\major{64}{--119}{}{Unallocated}
+\end{devicelist}
+
+\begin{devicelist}
+\major{120}{--127}{}{Local/experimental use}
+\end{devicelist}
+
+\begin{devicelist}
+\major{128}{--223}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}
@@ -845,26 +896,12 @@ driver with this number should not cause ill effects to the system
 \end{devicelist}
 
 \noindent
-This range is currently assigned as part of the local/experimental
-range.  However, because of the Linux way of setting a limit on the
-highest device number in the system, currently set at 63 by default, I
-am considering changing the local/experimental use to 60--63,
-120--127, 240--254.  If you are currently using the range 224--239 and
-such a change would pose a problem for you, please contact
-$<$hpa@storm.net$>$ as soon as possible.
+This range is no longer a local/experimental range, since the feedback
+I received was all in favour of realignment.
 
 \begin{devicelist}
 \major{240}{--254}{}{Local/experimental use}
 \end{devicelist}
-
-\noindent
-For devices not assigned official numbers, this range should be used,
-in order to avoid conflict with future assignments.  Please note that
-{\file MAX\_CHRDEV} and {\file MAX\_BLKDEV} in {\file
-linux/include/linux/major.h} must be set to a value greater than the
-highest used major number.  For a kernel using local/experimental
-devices, it is probably easiest to set both of these equal to 256.
-The memory cost above using the default value of 64 is 3K.
 
 \begin{devicelist}
 \major{255}{}{}{Reserved}

@@ -3479,6 +3479,7 @@ static int floppy_open(struct inode * inode, struct file * filp)
 		if (floppy_track_buffer){
 			free_pages((unsigned long)tmp,__get_order(try*1024));
 		}else {
+			buffer_min = buffer_max = -1;
 			floppy_track_buffer = tmp;
 			max_buffer_sectors = try;
 		}
@@ -3955,6 +3956,7 @@ static void floppy_release_irq_and_dma(void)
 		tmpaddr = (void *)floppy_track_buffer;
 		floppy_track_buffer = 0;
 		max_buffer_sectors = 0;
+		buffer_min = buffer_max = -1;
 		free_pages((unsigned long)tmpaddr, __get_order(tmpsize));
 	}
 

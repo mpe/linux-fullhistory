@@ -38,6 +38,8 @@ struct inode_operations nfs_symlink_inode_operations = {
 	NULL,			/* rename */
 	nfs_readlink,		/* readlink */
 	nfs_follow_link,	/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */

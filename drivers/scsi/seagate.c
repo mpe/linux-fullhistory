@@ -363,6 +363,8 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 				hostno, (int) irq);
 			return 0;
 		}
+		instance->irq = irq;
+		instance->io_port = (unsigned int) base_address;
 #ifdef SLOW_HANDSHAKE
 		borken_init();
 #endif

@@ -87,7 +87,8 @@ bad_area:
  * Oops. The kernel tried to access some bad page. We'll have to
  * terminate things with extreme prejudice.
  */
-	printk(KERN_ALERT "Unable to handle kernel paging request at virtual address %08lx\n",address);
+	printk(KERN_ALERT 
+	       "Unable to handle kernel paging request at virtual address %016lx\n", address);
 	die_if_kernel("Oops", &regs, cause);
 	do_exit(SIGKILL);
 }

@@ -748,8 +748,13 @@ restart_interp:
 		goto restart_interp;
 	}
 #ifdef __alpha__
-/* handle /sbin/loader.. */
-	if (!loader && (((struct exec *) bprm.buf)->fh.f_flags & 0x3000)) {
+	/* handle /sbin/loader.. */
+	{
+	    struct exec * eh = (struct exec *) bprm.buf;
+
+	    if (!loader && eh->fh.f_magic == 0x183 &&
+		(eh->fh.f_flags & 0x3000) == 0x3000)
+	    {
 		char * dynloader[] = { "/sbin/loader" };
 		iput(bprm.inode);
 		loader = 1;
@@ -759,6 +764,7 @@ restart_interp:
 		if (retval)
 			goto exec_error1;
 		goto restart_interp;
+	    }
 	}
 #endif
 	if (!sh_bang) {

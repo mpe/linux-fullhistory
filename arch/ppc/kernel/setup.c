@@ -134,6 +134,9 @@ int size_memory;
 
 #define DEFAULT_ROOT_DEVICE 0x0200	/* fd0 */
 
+#define COMMAND_LINE_SIZE 512	/* Should match head.S */
+char saved_command_line[COMMAND_LINE_SIZE];
+
 void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
@@ -143,6 +146,7 @@ void setup_arch(char **cmdline_p,
 
 	ROOT_DEV = DEFAULT_ROOT_DEVICE;
 	aux_device_present = 0xaa;
+	strcpy(saved_command_line, cmd_line);
 	*cmdline_p = cmd_line;
 	*memory_start_p = (unsigned long) &_end;
 	*memory_end_p = (unsigned long *)Hash;

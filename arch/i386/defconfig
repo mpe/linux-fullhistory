@@ -24,6 +24,7 @@ CONFIG_M486=y
 # block devices
 #
 CONFIG_BLK_DEV_FD=y
+# CONFIG_BLK_DEV_RAM is not set
 CONFIG_ST506=y
 
 #

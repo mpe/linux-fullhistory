@@ -250,12 +250,14 @@ struct inode {
 	unsigned long	i_blksize;
 	unsigned long	i_blocks;
 	unsigned long	i_version;
+	unsigned long	i_nrpages;
 	struct semaphore i_sem;
 	struct inode_operations *i_op;
 	struct super_block *i_sb;
 	struct wait_queue *i_wait;
 	struct file_lock *i_flock;
 	struct vm_area_struct *i_mmap;
+	struct page *i_pages;
 	struct dquot *i_dquot[MAXQUOTAS];
 	struct inode *i_next, *i_prev;
 	struct inode *i_hash_next, *i_hash_prev;
@@ -402,6 +404,8 @@ struct inode_operations {
 	int (*rename) (struct inode *,const char *,int,struct inode *,const char *,int);
 	int (*readlink) (struct inode *,char *,int);
 	int (*follow_link) (struct inode *,struct inode *,int,int,struct inode **);
+	int (*readpage) (struct inode *, unsigned long, char *);
+	int (*writepage) (struct inode *, struct page *);
 	int (*bmap) (struct inode *,int);
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
@@ -524,6 +528,7 @@ extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 
 extern int check_disk_change(kdev_t dev);
 extern void invalidate_inodes(kdev_t dev);
+extern void invalidate_inode_pages(struct inode *, unsigned long);
 extern void invalidate_buffers(kdev_t dev);
 extern int floppy_is_wp(int minor);
 extern void sync_inodes(kdev_t dev);
@@ -569,7 +574,7 @@ extern inline void bforget(struct buffer_head *buf)
 }
 extern void set_blocksize(kdev_t dev, int size);
 extern struct buffer_head * bread(kdev_t dev, int block, int size);
-extern unsigned long bread_page(unsigned long addr,kdev_t dev,int b[],int size,int no_share);
+extern void bread_page(unsigned long addr,kdev_t dev,int b[],int size);
 extern void bwrite_page(unsigned long addr,kdev_t dev,int b[],int size);
 extern struct buffer_head * breada(kdev_t dev,int block, int size, 
 				   unsigned int pos, unsigned int filesize);

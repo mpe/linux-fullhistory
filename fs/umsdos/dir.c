@@ -812,6 +812,8 @@ struct inode_operations umsdos_dir_inode_operations = {
 	UMSDOS_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */

@@ -24,9 +24,11 @@ CFLAGS := $(CFLAGS) -mno-fp-regs
 
 HEAD := arch/alpha/kernel/head.o
 
-SUBDIRS := $(SUBDIRS) arch/alpha/kernel arch/alpha/mm arch/alpha/lib
+SUBDIRS := $(SUBDIRS) arch/alpha/kernel arch/alpha/mm arch/alpha/lib \
+	arch/alpha/math-emu
 ARCHIVES := arch/alpha/kernel/kernel.o arch/alpha/mm/mm.o $(ARCHIVES)
-LIBS := $(TOPDIR)/arch/alpha/lib/lib.a $(LIBS) $(TOPDIR)/arch/alpha/lib/lib.a
+LIBS := $(TOPDIR)/arch/alpha/math-emu/math-emu.a \
+	$(TOPDIR)/arch/alpha/lib/lib.a $(LIBS) $(TOPDIR)/arch/alpha/lib/lib.a
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 

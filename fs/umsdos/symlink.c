@@ -137,6 +137,8 @@ struct inode_operations umsdos_symlink_inode_operations = {
 	NULL,			/* rename */
 	UMSDOS_readlink,	/* readlink */
 	UMSDOS_follow_link,	/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */

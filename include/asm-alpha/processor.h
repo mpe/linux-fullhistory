@@ -33,6 +33,10 @@ struct thread_struct {
 	unsigned int pcc;
 	unsigned int asn;
 	unsigned long unique;
+	/*
+	 * bit  0.. 0: floating point enable (used by PALcode)
+	 * bit  1.. 5: IEEE_TRAP_ENABLE bits (see fpu.h)
+	 */
 	unsigned long flags;
 	unsigned long res1, res2;
 };

@@ -398,7 +398,7 @@ struct symbol_table symbol_table = {
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
-	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		
+	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)
 	/* If 8390 NIC support is built in, we will need these. */
 	X(ei_open),
 	X(ei_close),
@@ -415,6 +415,9 @@ struct symbol_table symbol_table = {
 	X(slhc_compress),
 	X(slhc_uncompress),
 	X(slhc_toss),
+#endif
+#ifdef CONFIG_NET_ALIAS
+#include <linux/net_alias.h>
 #endif
 #endif
 	/* Device callback registration */

@@ -238,14 +238,33 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 	if (dcache_lookup(dir, name, len, &ino)) ino_back = dir->i_ino;
 
 	if (!ino) {
-	  if (!(bh = isofs_find_entry(dir,name,len, &ino, &ino_back))) {
-	    iput(dir);
-	    return -ENOENT;
-	  }
-	  if (ino_back == dir->i_ino)
-		dcache_add(dir, name, len, ino);
-	  brelse(bh);
-	};
+		char *lcname;
+
+		/* If mounted with check=relaxed (and most likely norock),
+		   then first convert this name to lower case. */
+		if (dir->i_sb->u.isofs_sb.s_name_check == 'r'
+		    && (lcname = kmalloc(len, GFP_KERNEL)) != NULL) {
+			int i;
+			char c;
+
+			for (i=0; i<len; i++) {
+				c = name[i];
+				if (c >= 'A' && c <= 'Z') c |= 0x20;
+				lcname[i] = c;
+			}
+			bh = isofs_find_entry(dir,lcname,len, &ino, &ino_back);
+			kfree(lcname);
+		} else
+			bh = isofs_find_entry(dir,name,len, &ino, &ino_back);
+
+		if (!bh) {
+			iput(dir);
+	  		return -ENOENT;
+		}
+		if (ino_back == dir->i_ino)
+			dcache_add(dir, name, len, ino);
+		brelse(bh);
+	}
 
 	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);

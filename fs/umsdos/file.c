@@ -87,6 +87,8 @@ struct inode_operations umsdos_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	msdos_bmap,		/* bmap */
 	UMSDOS_truncate,/* truncate */
 	NULL,			/* permission */
@@ -119,6 +121,8 @@ struct inode_operations umsdos_file_inode_operations_no_bmap = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	UMSDOS_truncate,/* truncate */
 	NULL,			/* permission */

@@ -39,6 +39,8 @@ struct inode_operations ext_symlink_inode_operations = {
 	NULL,			/* rename */
 	ext_readlink,		/* readlink */
 	ext_follow_link,	/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */

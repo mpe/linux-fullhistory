@@ -53,6 +53,8 @@ struct inode_operations isofs_dir_inode_operations =
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	isofs_bmap,		/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */

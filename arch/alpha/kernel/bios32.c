@@ -581,7 +581,7 @@ static inline void avanti_and_noname_fixup(void)
 		{ 0,  0,  2,  1,  0}, /* idsel 11 (slot furthest from ISA) KN25_PCI_SLOT0 */
 		{ 1,  1,  0,  2,  1}, /* idsel 12 (middle slot) KN25_PCI_SLOT1 */
 #ifdef CONFIG_ALPHA_AVANTI
-		{ 1,  1, -1, -1, -1}, /* idsel 13 KN25_PCI_SLOT2 ??? */
+		{ 1,  1, -1, -1, -1}, /* idsel 13 KN25_PCI_SLOT2 */
 #endif /* CONFIG_ALPHA_AVANTI */
 	};
 	/*
@@ -595,7 +595,8 @@ static inline void avanti_and_noname_fixup(void)
 	 * example, sound boards seem to like using IRQ 9.
 	 */
 	const unsigned int route_tab = 0x0b0a090f;
-	unsigned char pin, level_bits;
+	unsigned int level_bits;
+	unsigned char pin;
 	int pirq;
 
 	pcibios_write_config_dword(0, PCI_DEVFN(7, 0), 0x60, route_tab);
@@ -634,8 +635,7 @@ static inline void avanti_and_noname_fixup(void)
 		dev->irq = (route_tab >> (8 * pirq)) & 0xff;
 
 		/* must set the PCI IRQs to level triggered */
-		/* assume they are all >= 8 */
-		level_bits |= (1 << (dev->irq - 8));
+		level_bits |= (1 << dev->irq);
 
 #if PCI_MODIFY
 		/* tell the device: */
@@ -645,7 +645,7 @@ static inline void avanti_and_noname_fixup(void)
 	}
 	/* now, set any level-triggered IRQs */
 	if (level_bits)
-		outb(level_bits, 0x4d1);
+		outw(level_bits, 0x4d0);
 
 
 #if PCI_MODIFY

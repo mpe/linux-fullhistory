@@ -258,18 +258,17 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 			newtab->n_symbols * sizeof(struct internal_symbol) +
 			newtab->n_refs * sizeof(struct module_ref);
 
-		if ((newtab->n_symbols < 0) || (newtab->n_refs < 0) ||
-			(legal_start > size)) {
-			printk("Illegal symbol table! Rejected!\n");
+		if ((newtab->n_symbols < 0) || (newtab->n_refs < 0) || (legal_start > size)) {
+			printk("Rejecting illegal symbol table (n_symbols=%d,n_refs=%d)\n",
+			       newtab->n_symbols, newtab->n_refs);
 			kfree_s(newtab, size);
 			return -EINVAL;
 		}
 
 		/* relocate name pointers, index referred from start of table */
-		for (sym = &(newtab->symbol[0]), i = 0;
-			i < newtab->n_symbols; ++sym, ++i) {
+		for (sym = &(newtab->symbol[0]), i = 0; i < newtab->n_symbols; ++sym, ++i) {
 			if ((unsigned long)sym->name < legal_start || size <= (unsigned long)sym->name) {
-				printk("Illegal symbol table! Rejected!\n");
+				printk("Rejecting illegal symbol table\n");
 				kfree_s(newtab, size);
 				return -EINVAL;
 			}

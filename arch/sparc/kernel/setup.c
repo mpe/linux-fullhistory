@@ -153,6 +153,7 @@ extern unsigned long start, end, bootup_stack, bootup_kstack;
 
 
 char sparc_command_line[256];  /* Should be enough */
+char saved_command_line[256];
 enum sparc_cpu sparc_cpu_model;
 
 struct tt_entry *sparc_ttable;
@@ -166,6 +167,7 @@ void setup_arch(char **cmdline_p,
 
 	/* Initialize PROM console and command line. */
 	*cmdline_p = prom_getbootargs();
+	strcpy(saved_command_line, *cmdline_p);
 
 	/* Set sparc_cpu_model */
 	sparc_cpu_model = sun_unknown;

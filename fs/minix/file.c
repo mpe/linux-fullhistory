@@ -58,6 +58,8 @@ struct inode_operations minix_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
 	minix_bmap,		/* bmap */
 	minix_truncate,		/* truncate */
 	NULL			/* permission */

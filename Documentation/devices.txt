@@ -2,18 +2,16 @@
 
 	 Maintained by H. Peter Anvin <Peter.Anvin@linux.org>
 
-		    Last revised: December 4, 1995
+		   Last revised: December 17, 1995
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he lost network access in 1993.  It is a
 registry of allocated major device numbers, as well as the recommended
 /dev directory nodes for these devices.
 
-This list is now included with the Linux kernel sources in LaTeX and
-ASCII form.  This list is also available via FTP from
-ftp.yggdrasil.com in the directory /pub/device-list; filename is
-devices.<format> where <format> is txt (ASCII), tex (LaTeX), dvi (DVI)
-or ps (PostScript).
+The lastest version of this list is included with the Linux kernel
+sources in LaTeX and ASCII form.  In case of discrepancy, the LaTeX
+version is authoritative.
 
 This document is included by reference into the Linux Filesystem
 Standard (FSSTND).  The FSSTND is available via FTP from
@@ -24,7 +22,9 @@ where that applies (e.g. busmice), please contact me.  Also, if you
 have additional information regarding any of the devices listed below,
 or if I have made a mistake, I would greatly appreciate a note.
 
-Allocations marked (68k) apply to Linux/68k only.
+Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
+platform only.  Allocations marked (68k/Atari) apply to Linux/68k on
+the Atari platform only.
 
 This document is in the public domain.  The author requests, however,
 that semantically altered versions are not distributed without
@@ -124,16 +124,16 @@ an unreasonable effort.
 		
 		For partitions, add to the whole disk device number:
 		  0 = /dev/hd?		Whole disk
-		  1 = /dev/hd?1		First primary partition
-		  2 = /dev/hd?2		Second primary partition
-		  3 = /dev/hd?3		Third primary partition
-		  4 = /dev/hd?4		Fourth primary partition
-		  5 = /dev/hd?5		First logical partition
-		  6 = /dev/hd?6		Second logical partition
-		  7 = /dev/hd?7		Third logical partition
+		  1 = /dev/hd?1		First partition
+		  2 = /dev/hd?2		Second partition
 		    ...
-		 63 = /dev/hd?63	59th logical partition
+		 63 = /dev/hd?63	63rd logical partition
 
+		For Linux/i386, partitions 1-4 are the primary
+		partitions, and 5 and above are logical partitions.
+		Other versions of Linux use partitioning schemes
+		appropriate to their respective architectures.
+		
   4 char	TTY devices
     		  0 = /dev/console	Console device
 
@@ -192,7 +192,7 @@ an unreasonable effort.
 
 		Partitions are handled in the same way as for IDE
 		disks (see major number 3) except that the limit on
-		logical partitions is 11.
+		partitions is 15.
 
   9 char	SCSI tape devices
     		  0 = /dev/st0		First SCSI tape
@@ -201,12 +201,12 @@ an unreasonable effort.
 		128 = /dev/nst0		First SCSI tape, no rewind-on-close
 		129 = /dev/nst1		Second SCSI tape, no rewind-on-close
 		      ...
-    block	Multiple disk devices
-		  0 = /dev/md0		First device group
-		  1 = /dev/md1		Second device group
+    block	Metadisk (RAID) devices
+		  0 = /dev/md0		First metadisk group
+		  1 = /dev/md1		Second metadisk group
 		      ...
 
-		The multiple devices driver is used to span a
+		The metadisk driver is used to span a
 		filesystem across multiple physical disks.
 
  10 char	Non-serial mice, misc features
@@ -215,8 +215,8 @@ an unreasonable effort.
 		  2 = /dev/inportbm	Microsoft Inport bus mouse
 		  3 = /dev/atibm	ATI XL bus mouse
 		  4 = /dev/jbm		J-mouse
-		  4 = /dev/amigamouse	Amiga Mouse (68k)
-		  5 = /dev/atarimouse	Atari Mouse (68k)
+		  4 = /dev/amigamouse	Amiga Mouse (68k/Amiga)
+		  5 = /dev/atarimouse	Atari Mouse
 		128 = /dev/beep		Fancy beep device
 		129 = /dev/modreq	Kernel module load request
 		130 = /dev/watchdog	Watchdog timer port
@@ -293,7 +293,8 @@ an unreasonable effort.
     block	Sony CDU-31A/CDU-33A CD-ROM
 		  0 = /dev/sonycd	Sony CDU-31a CD-ROM
 
- 16 char	Reserved for scanners
+ 16 char	Non-SCSI scanners
+		  0 = /dev/gs4500	Genius 4500 handheld scanner
     block	GoldStar CD-ROM
 		  0 = /dev/gscd		GoldStar CD-ROM
 
@@ -415,12 +416,16 @@ an unreasonable effort.
 		  1 = /dev/staliomem1	Second Stallion card I/O memory
 		  2 = /dev/staliomem2	Third Stallion card I/O memory
 		  3 = /dev/staliomem3	Fourth Stallion card I/O memory
+    char	Atari SLM ACSI laser printer (68k/Atari)
+		  0 = /dev/slm0		First SLM laser printer
+		  1 = /dev/slm1		Second SLM laser printer
+		      ...
     block	Fourth Matsushita (Panasonic/SoundBlaster) CD-ROM
 		  0 = /dev/sbpcd12	Panasonic CD-ROM controller 3 unit 0
 		  1 = /dev/sbpcd13	Panasonic CD-ROM controller 3 unit 1
 		  2 = /dev/sbpcd14	Panasonic CD-ROM controller 3 unit 2
 		  3 = /dev/sbpcd15	Panasonic CD-ROM controller 3 unit 3
-    block	ACSI disk (68k)
+    block	ACSI disk (68k/Atari)
 		  0 = /dev/ada		First ACSI disk whole disk
 		 16 = /dev/adb		Second ACSI disk whole disk
 		 32 = /dev/adc		Third ACSI disk whole disk
@@ -429,14 +434,14 @@ an unreasonable effort.
 
 		Partitions are handled in the same way as for IDE
 		disks (see major number 3) except that the limit on
-		logical partitions is 11.
+		partitions is 15, like SCSI.
 
  29 char	Universal frame buffer
 		  0 = /dev/fb0current	First frame buffer
 		  1 = /dev/fb0autodetect
 		      ...
-		 16 = /dev/fb1current	Second frame buffer
-		 17 = /dev/fb1autodetect
+		 32 = /dev/fb1current	Second frame buffer
+		 33 = /dev/fb1autodetect
 		      ...
     block	Aztech/Orchid/Okano/Wearnes CD-ROM
 		  0 = /dev/aztcd	Aztech CD-ROM
@@ -445,7 +450,7 @@ an unreasonable effort.
 		supported on Linux/68k.  The "current" device accesses
 		the fame buffer at current resolution; the
 		"autodetect" one at bootup (default) resolution.
-		Minor numbers 2-15 within each frame buffer assignment
+		Minor numbers 2-31 within each frame buffer assignment
 		are used for specific device-dependent resolutions.
 		There appears to be no standard naming for these devices.
 
@@ -508,11 +513,16 @@ an unreasonable effort.
 		interface (see major number 3).
 
  34 char	Z8530 HDLC driver
-		  0 = /dev/sc1		First Z8530, first port
-		  1 = /dev/sc2		First Z8530, second port
-		  2 = /dev/sc3		Second Z8530, first port
-		  3 = /dev/sc4		Second Z8530, second port
+		  0 = /dev/scc0		First Z8530, first port
+		  1 = /dev/scc1		First Z8530, second port
+		  2 = /dev/scc2		Second Z8530, first port
+		  3 = /dev/scc3		Second Z8530, second port
 		      ...
+
+		In a previous version these devices were named
+		/dev/sc1 for /dev/scc0, /dev/sc2 for /dev/scc1, and so
+		on.
+
     block	Fourth IDE hard disk/CD-ROM interface
     		  0 = /dev/hdg		Master: whole disk (or CD-ROM)
 		 64 = /dev/hdh		Slave: whole disk (or CD-ROM)
@@ -556,7 +566,18 @@ an unreasonable effort.
 
 		Currently, only one IDE tape drive is supported.
 
- 38-41		UNALLOCATED
+ 38 char	Myricom PCI Myrinet board
+		  0 = /dev/mlanai0	First Myrinet board
+		  1 = /dev/mlanai1	Second Myrinet board
+		      ...
+
+		This device is used for status query, board control
+		and "user level packet I/O."  This board is also
+		accessible as a standard networking "eth" device.
+
+ 39		Reserved for ncpfs <lendecke@namu01.gwdg.de>
+
+ 40-41		UNALLOCATED
 
  42		Demo/sample use
 
@@ -568,29 +589,25 @@ an unreasonable effort.
 		removal of a driver with this number should not cause
 		ill effects to the system (bugs excepted.)
 
- 43-223		UNALLOCATED
+ 43-59		UNALLOCATED
+
+ 60-63		LOCAL/EXPERIMENTAL USE
+		Allocated for local/experimental use.  For devices not
+		assigned official numbers, these ranges should be
+		used, in order to avoid conflicting with future assignments.
+
+ 64-119		UNALLOCATED
+
+120-127		LOCAL/EXPERIMENTAL USE
+
+128-223		UNALLOCATED
 
 224-239		SEE NOTE
+		This range is no longer allocated to
+		local/experimental use, since the feedback I received
+		was all in favour of realignment.
 
-		This range is currently assigned as part of the
-		local/experimental range.  However, because of the
-		Linux way of setting a limit on the highest device
-		number in the system, currently set at 63 by default,
-		I am considering changing the local/experimental use
-		to 60-63, 120-127, 240-254.  If you are currently
-		using the range 224-239 and such a change would pose a
-		problem for you, please contact <hpa@storm.net> as
-		soon as possible.
-
-240-254		LOCAL USE
-		Allocated for local/experimental use
-
-		Please note that MAX_CHRDEV and MAX_BLKDEV in
-		linux/include/linux/major.h must be set to a value
-		greater than the highest used major number.  For a
-		kernel using local/experimental devices, it is
-		probably easiest to set both of these equal to 256.  The
-		memory cost above using the default value of 64 is 3K.
+240-254		LOCAL/EXPERIMENTAL USE
 
 255		RESERVED
 

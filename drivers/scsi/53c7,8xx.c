@@ -1323,6 +1323,11 @@ normal_init (Scsi_Host_Template *tpnt, int board, int chip,
     /* Initialize single command */
     hostdata->free = (struct NCR53c7x0_cmd *) 
 	(hostdata->script + hostdata->script_count);
+/* 
+ * FIXME: This is wrong.  If we add max_cmd_size to hostdata->free
+ * once it's been rounded up, we end up going past the end of what 
+ * we allocated.
+ */
     hostdata->free = ROUNDUP(hostdata->free, void *);
     hostdata->free->real = (void *) hostdata->free;
     hostdata->free->size = max_cmd_size;
@@ -3369,22 +3374,17 @@ NCR53c8x0_soft_reset (struct Scsi_Host *host) {
 
     /* Enable active negation */
     NCR53c7x0_write8(STEST3_REG_800, STEST3_800_TE);
-
-    
 }
 
 
 /*
  * Function static struct NCR53c7x0_cmd *allocate_cmd (Scsi_Cmnd *cmd)
  * 
- * Purpose : If we have not already allocated enough NCR53c7x0_cmd
- *	structures to satisfy any allowable number of simultaneous 
- *	commands for this host; do so (using either scsi_malloc()
- *	or kmalloc() depending on configuration), and add them to the 
- *	free list.
- *
- *	Return the first free NCR53c7x0_cmd structure (which are 
+ * Purpose : Return the first free NCR53c7x0_cmd structure (which are 
  * 	reused in a LIFO maner to minimize cache thrashing).
+ *
+ * Side effects : If we don't have enough NCR53c7x0_cmd structures,
+ *	allocate more.  Teach programmers not to drink and hack.
  *
  * Inputs : cmd - SCSI command
  *
@@ -3399,8 +3399,7 @@ allocate_cmd (Scsi_Cmnd *cmd) {
 	(struct NCR53c7x0_hostdata *) host->hostdata;
     void *real;			/* Real address */
     int size;			/* Size of *tmp */
-    int i;
-    struct NCR53c7x0_cmd *tmp = NULL;
+    struct NCR53c7x0_cmd *tmp;
     unsigned long flags;
 
     if (hostdata->options & OPTION_DEBUG_ALLOCATION)
@@ -3409,91 +3408,56 @@ allocate_cmd (Scsi_Cmnd *cmd) {
 	    host->host_no, hostdata->num_cmds, host->can_queue,
 	    cmd->target, cmd->lun, (hostdata->cmd_allocated[cmd->target] &
 		(1 << cmd->lun)) ? "allready allocated" : "not allocated");
-	    
 
-    if (hostdata->num_cmds < host->can_queue &&
+/* 
+ * Under Linux 1.2.x, kmalloc() and friends are unavailable until after 
+ * device driver initialization has happened.  Calling kmalloc()
+ * during scsi device initialization will print a "cannot get free page"
+ * message.  To avoid too many of these, we'll forget about trying 
+ * to allocate command structures until AFTER initialization.
+ */
 #ifdef LINUX_1_2
-	!in_scan_scsis &&
+    if (!in_scan_scsis)
 #endif
-	(hostdata->extra_allocate ||
-    	    !(hostdata->cmd_allocated[cmd->target] & (1 << cmd->lun)))) {
-	
-    	for (i = !(hostdata->cmd_allocated[cmd->target] & (1 << cmd->lun)) ?
-		(host->hostt->cmd_per_lun - 1) : -1;
-	    (hostdata->extra_allocate || i >= 0) && hostdata->num_cmds 
-		< host->can_queue ;
-	    (hostdata->extra_allocate ? --hostdata->extra_allocate : --i), 
-		++hostdata->num_cmds) {
-
-	    if (hostdata->options & OPTION_SCSI_MALLOC) {
-    /* scsi_malloc must allocate with a 512 byte granularity, but always
-       returns buffers which are aligned on a 512 boundary */
-	    	size = (hostdata->max_cmd_size + 511) / 512 * 512;
-	    	tmp = (struct NCR53c7x0_cmd *) scsi_malloc (size);
-	    	if (!tmp) {
-		    if (hostdata->options & OPTION_DEBUG_ALLOCATION)
-			printk ("scsi%d : scsi_malloc(%d) failed\n",
-			    host->host_no, size);
-		    break;
-		}
-	    	tmp->real = (void *) tmp; 
-		tmp->free = ((void (*)(void *, int)) scsi_free); 
-	    } else {
+    for (; hostdata->extra_allocate > 0 ; --hostdata->extra_allocate, 
+    	++hostdata->num_cmds) {
     /* kmalloc() can allocate any size, but historically has returned 
        unaligned addresses, so we need to allow for alignment */
-		size = hostdata->max_cmd_size + sizeof (void *);
-		real = kmalloc (size, GFP_ATOMIC);
-		if (!real) {
-		    if (hostdata->options & OPTION_DEBUG_ALLOCATION)
-			printk ("scsi%d : kmalloc(%d) failed\n",
-			    host->host_no, size);
-		    break;
-		}
-		tmp = ROUNDUP(real, void *);
-		tmp->real = real;
-		tmp->size = size;			
-#ifdef LINUX_1_2
-		tmp->free = ((void (*)(void *, int)) kfree_s);
-#else
-		tmp->free = ((void (*)(void *, int)) kfree);
-#endif
-	    }
-
-
-	    if (!hostdata->extra_allocate) 
-		hostdata->cmd_allocated[cmd->target] |= 1 << cmd->lun;
-
-    /* Keep the last one out of the free list so we can use it now */
-	    if (i > 0) {
-		save_flags (flags);
-		cli();
-		tmp->next = hostdata->free;
-		hostdata->free = tmp;
-		restore_flags (flags);
-	    }
+	size = hostdata->max_cmd_size + sizeof (void *);
+/* FIXME: for ISA bus '7xx chips, we need to or GFP_DMA in here */
+	real = kmalloc (size, GFP_ATOMIC);
+	if (!real) {
+	    if (hostdata->options & OPTION_DEBUG_ALLOCATION)
+		printk ("scsi%d : kmalloc(%d) failed\n",
+		    host->host_no, size);
+	    break;
 	}
-    /* If for some reason, our allocation attempt failed here, we'll
-	try again later */
-	if (i >= 0) 
-	    hostdata->extra_allocate += i + 1;
+	tmp = ROUNDUP(real, void *);
+	tmp->real = real;
+	tmp->size = size;			
+#ifdef LINUX_1_2
+	tmp->free = ((void (*)(void *, int)) kfree_s);
+#else
+	tmp->free = ((void (*)(void *, int)) kfree);
+#endif
+	save_flags (flags);
+	cli();
+	tmp->next = hostdata->free;
+	hostdata->free = tmp;
+	restore_flags (flags);
     }
-
-    if (!tmp) {
-    	save_flags(flags);
-    	cli();
-    	tmp = (struct NCR53c7x0_cmd *) hostdata->free;
-	if (tmp) {
-    	    hostdata->free = tmp->next;
-	    restore_flags(flags);
-    	}
-	restore_flags(flags);
+    save_flags(flags);
+    cli();
+    tmp = (struct NCR53c7x0_cmd *) hostdata->free;
+    if (tmp) {
+	hostdata->free = tmp->next;
     }
+    restore_flags(flags);
     if (!tmp)
 	printk ("scsi%d : can't allocate command for target %d lun %d\n",
 	    host->host_no, cmd->target, cmd->lun);
     return tmp;
 }
-
 
 /*
  * Function static struct NCR53c7x0_cmd *create_cmd (Scsi_Cmnd *cmd) 
@@ -4486,6 +4450,25 @@ restart:
 #if 0
 			hostdata->options &= ~OPTION_DEBUG_INTR;
 #endif
+
+/*
+ * If we have not yet reserved commands for this I_T_L nexus, and the 
+ * command completed successfully, reserve NCR53c7x0_cmd structures
+ * which will be allocated the next time we run the allocate
+ * routine.
+ */
+			if (!(hostdata->cmd_allocated[tmp->target] &
+			    	(1 << tmp->lun)) && 
+			    status_byte(tmp->result) == GOOD) {
+			    if ((hostdata->extra_allocate + hostdata->num_cmds)
+			    	< host->can_queue) {
+				hostdata->extra_allocate += 
+				    host->cmd_per_lun;
+			    }
+			    hostdata->cmd_allocated[tmp->target] |=
+				(1 << tmp->lun);
+			}
+
 			tmp->scsi_done(tmp);
 			goto restart;
 
