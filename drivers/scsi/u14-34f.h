@@ -4,6 +4,8 @@
 #ifndef _U14_34F_H
 #define _U14_34F_H
 
+#include <linux/version.h>
+
 int u14_34f_detect(Scsi_Host_Template *);
 int u14_34f_release(struct Scsi_Host *);
 int u14_34f_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
@@ -11,7 +13,7 @@ int u14_34f_abort(Scsi_Cmnd *);
 int u14_34f_reset(Scsi_Cmnd *, unsigned int);
 int u14_34f_biosparam(Disk *, kdev_t, int *);
 
-#define U14_34F_VERSION "4.02.00"
+#define U14_34F_VERSION "4.04.00"
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 

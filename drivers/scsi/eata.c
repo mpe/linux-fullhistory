@@ -1,6 +1,14 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *   
+ *      10 Apr 1998 rev. 4.04 for linux 2.0.33 and 2.1.95
+ *          Improved SMP support (if linux version >= 2.1.95).
+ *
+ *       9 Apr 1998 rev. 4.03 for linux 2.0.33 and 2.1.94
+ *          Added support for new PCI code and IO-APIC remapping of irqs.
+ *          Performance improvement: when sequential i/o is detected,
+ *          always use direct sort instead of reverse sort.
+ *   
  *       4 Apr 1998 rev. 4.02 for linux 2.0.33 and 2.1.92
  *          io_port is now unsigned long.
  *
@@ -280,11 +288,14 @@
  *  the driver sets host->wish_block = TRUE for all ISA boards.
  */
 
+#include <linux/version.h>
+
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 #define MAX_INT_PARAM 10
+
 #if defined(MODULE)
 #include <linux/module.h>
-#include <linux/version.h>
+
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,26)
 MODULE_PARM(io_port, "1-" __MODULE_STRING(MAX_INT_PARAM) "i");
 MODULE_PARM(linked_comm, "i");
@@ -294,6 +305,7 @@ MODULE_PARM(max_queue_depth, "i");
 MODULE_PARM(tag_mode, "i");
 MODULE_AUTHOR("Dario Ballabio");
 #endif
+
 #endif
 
 #include <linux/string.h>
@@ -314,8 +326,11 @@ MODULE_AUTHOR("Dario Ballabio");
 #include "eata.h"
 #include <linux/stat.h>
 #include <linux/config.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
+
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,93)
+#include <linux/bios32.h>
+#endif
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,36)
 #include <linux/init.h>
@@ -338,6 +353,7 @@ struct proc_dir_entry proc_scsi_eata2x = {
 
 #undef  DEBUG_LINKED_COMMANDS
 #undef  DEBUG_DETECT
+#undef  DEBUG_PCI_DETECT
 #undef  DEBUG_INTERRUPT
 #undef  DEBUG_RESET
 
@@ -583,7 +599,7 @@ static unsigned long io_port[] __initdata = {
 #define V2DEV(addr) ((addr) ? H2DEV(virt_to_bus((void *)addr)) : 0)
 #define DEV2V(addr) ((addr) ? DEV2H(bus_to_virt((unsigned long)addr)) : 0)
 
-static void eata2x_interrupt_handler(int, void *, struct pt_regs *);
+static void interrupt_handler(int, void *, struct pt_regs *);
 static void flush_dev(Scsi_Device *, unsigned long, unsigned int, unsigned int);
 static int do_trace = FALSE;
 static int setup_done = FALSE;
@@ -715,10 +731,48 @@ static inline int read_pio(unsigned long iobase, ushort *start, ushort *end) {
    return FALSE;
 }
 
+__initfunc (static inline int
+            get_pci_irq(unsigned long port_base, unsigned char *apic_irq)) {
+
+#if defined(CONFIG_PCI)
+
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,93)
+
+   unsigned int addr;
+   struct pci_dev *dev = NULL;
+
+   if (!pci_present()) return FALSE;
+
+   while((dev = pci_find_class(PCI_CLASS_STORAGE_SCSI << 8, dev))) {
+
+      if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &addr)) continue;
+
+#if defined(DEBUG_PCI_DETECT)
+      printk("%s: get_pci_irq, bus %d, devfn 0x%x, addr 0x%x, apic_irq %u.\n",
+             driver_name, dev->bus->number, dev->devfn, addr, dev->irq);
+#endif
+
+      if ((addr & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+             continue;
+
+      if ((addr & PCI_BASE_ADDRESS_IO_MASK) + PCI_BASE_ADDRESS_0 == port_base) {
+         *apic_irq = dev->irq;
+         return TRUE;
+         }
+
+      }
+
+#endif /* end new style PCI code */
+
+#endif /* end CONFIG_PCI */
+
+   return FALSE;
+}
+
 __initfunc (static inline int port_detect \
       (unsigned long port_base, unsigned int j, Scsi_Host_Template *tpnt)) {
    unsigned char irq, dma_channel, subversion, i;
-   unsigned char protocol_rev;
+   unsigned char protocol_rev, apic_irq;
    struct eata_info info;
    char *bus_type, dma_name[16], tag_type;
 
@@ -812,8 +866,13 @@ __initfunc (static inline int port_detect \
       printk("%s: warning, LEVEL triggering is suggested for IRQ %u.\n",
              name, irq);
 
+   if (get_pci_irq(port_base, &apic_irq) && (irq != apic_irq)) {
+      printk("%s: IRQ %u mapped to IO-APIC IRQ %u.\n", name, irq, apic_irq);
+      irq = apic_irq;
+      }
+
    /* Board detected, allocate its IRQ */
-   if (request_irq(irq, eata2x_interrupt_handler,
+   if (request_irq(irq, interrupt_handler,
              SA_INTERRUPT | ((subversion == ESA) ? SA_SHIRQ : 0),
              driver_name, (void *) &sha[j])) {
       printk("%s: unable to allocate IRQ %u, detaching.\n", name, irq);
@@ -1016,11 +1075,39 @@ __initfunc (static void add_pci_ports(void)) {
 
 #if defined(CONFIG_PCI)
 
-   unsigned short i = 0;
-   unsigned char bus, devfn;
    unsigned int addr, k;
 
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,93)
+
+   struct pci_dev *dev = NULL;
+
    if (!pci_present()) return;
+
+   for (k = 0; k < MAX_PCI; k++) {
+
+      if (!(dev = pci_find_class(PCI_CLASS_STORAGE_SCSI << 8, dev))) break;
+
+      if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &addr)) continue;
+
+#if defined(DEBUG_PCI_DETECT)
+      printk("%s: detect, seq. %d, bus %d, devfn 0x%x, addr 0x%x.\n",
+             driver_name, k, dev->bus->number, dev->devfn, addr);
+#endif
+
+      if ((addr & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+             continue;
+
+      /* Reverse the returned address order */
+      io_port[MAX_INT_PARAM + MAX_PCI - k] = 
+             (addr & PCI_BASE_ADDRESS_IO_MASK) + PCI_BASE_ADDRESS_0;
+      }
+
+#else  /* else old style PCI code */
+
+   unsigned short i = 0;
+   unsigned char bus, devfn;
+
+   if (!pcibios_present()) return;
 
    for (k = 0; k < MAX_PCI; k++) {
 
@@ -1030,7 +1117,7 @@ __initfunc (static void add_pci_ports(void)) {
       if (pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &addr)
              != PCIBIOS_SUCCESSFUL) continue;
 
-#if defined(DEBUG_DETECT)
+#if defined(DEBUG_PCI_DETECT)
       printk("%s: detect, seq. %d, bus %d, devfn 0x%x, addr 0x%x.\n",
              driver_name, k, bus, devfn, addr);
 #endif
@@ -1042,7 +1129,10 @@ __initfunc (static void add_pci_ports(void)) {
       io_port[MAX_INT_PARAM + MAX_PCI - k] = 
              (addr & PCI_BASE_ADDRESS_IO_MASK) + PCI_BASE_ADDRESS_0;
       }
-#endif
+
+#endif /* end old style PCI code */
+
+#endif /* end CONFIG_PCI */
 
    return;
 }
@@ -1523,6 +1613,7 @@ static inline void reorder(unsigned int j, unsigned long cursec,
    unsigned int input_only = TRUE, overlap = FALSE;
    unsigned long sl[n_ready], pl[n_ready], ll[n_ready];
    unsigned long maxsec = 0, minsec = ULONG_MAX, seek = 0, iseek = 0;
+   unsigned long ioseek = 0;
 
    static unsigned int flushcount = 0, batchcount = 0, sortcount = 0;
    static unsigned int readycount = 0, ovlcount = 0, inputcount = 0;
@@ -1547,6 +1638,7 @@ static inline void reorder(unsigned int j, unsigned long cursec,
       if (SCpnt->request.sector > maxsec) maxsec = SCpnt->request.sector;
 
       sl[n] = SCpnt->request.sector;
+      ioseek += SCpnt->request.nr_sectors;
 
       if (!n) continue;
 
@@ -1567,6 +1659,8 @@ static inline void reorder(unsigned int j, unsigned long cursec,
       }
 
    if (cursec > ((maxsec + minsec) / 2)) rev = TRUE;
+
+   if (ioseek > ((maxsec - minsec) / 2)) rev = FALSE;
 
    if (!((rev && r) || (!rev && s))) sort(sl, il, n_ready, rev);
 
@@ -1644,8 +1738,7 @@ static void flush_dev(Scsi_Device *dev, unsigned long cursec, unsigned int j,
 
 }
 
-static void eata2x_interrupt_handler(int irq, void *shap,
-                                     struct pt_regs *regs) {
+static inline void ihdlr(int irq, void *shap, struct pt_regs *regs) {
    Scsi_Cmnd *SCpnt;
    unsigned int i, j, k, c, status, tstatus, reg;
    unsigned int n, n_ready, il[MAX_MAILBOXES];
@@ -1703,7 +1796,8 @@ static void eata2x_interrupt_handler(int irq, void *shap,
       else if (HD(j)->cp_stat[i] == IN_RESET)
          printk("%s: ihdlr, mbox %d is in reset.\n", BN(j), i);
       else if (HD(j)->cp_stat[i] != IN_USE) 
-         panic("%s: ihdlr, mbox %d, invalid cp_stat.\n", BN(j), i);
+         panic("%s: ihdlr, mbox %d, invalid cp_stat: %d.\n", 
+               BN(j), i, HD(j)->cp_stat[i]);
 
       HD(j)->cp_stat[i] = FREE;
       cpp = &HD(j)->cp[i];
@@ -1839,6 +1933,22 @@ static void eata2x_interrupt_handler(int irq, void *shap,
                         HD(j)->iocount);
 
    return;
+}
+
+static void interrupt_handler(int irq, void *shap, struct pt_regs *regs) {
+
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,95)
+
+   unsigned long flags;
+   spin_lock_irqsave(&io_request_lock, flags);
+   ihdlr(irq, shap, regs);
+   spin_unlock_irqrestore(&io_request_lock, flags);
+
+#else
+
+   ihdlr(irq, shap, regs);
+
+#endif
 }
 
 int eata2x_release(struct Scsi_Host *shpnt) {

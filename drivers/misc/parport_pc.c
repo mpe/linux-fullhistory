@@ -641,61 +641,6 @@ static int parport_ECPPS2_supported(struct parport *pb)
 
 /* --- IRQ detection -------------------------------------- */
 
-/* This code is for detecting ECP interrupts (due to problems with the
- * monolithic interrupt probing routines).
- *
- * In short this is a voting system where the interrupt with the most
- * "votes" is the elected interrupt (it SHOULD work...)
- *
- * This is horribly x86-specific at the moment.  I'm not convinced it
- * belongs at all.
- */
-
-static int intr_vote[16];
-
-static void parport_vote_intr_func(int irq, void *dev_id, struct pt_regs *regs)
-{
-	intr_vote[irq]++;
-	return;
-}
-
-static long open_intr_election(void)
-{
-	long tmp = 0;
-	int i;
-
-	/* We ignore the timer - irq 0 */
-	for (i = 1; i < 16; i++) {
-		intr_vote[i] = 0;
-		if (request_irq(i, parport_vote_intr_func,
-		       SA_INTERRUPT, "probe", intr_vote) == 0)
-			tmp |= 1 << i;
-	}
-	return tmp;
-}
-
-static int close_intr_election(long tmp)
-{
-	int irq = PARPORT_IRQ_NONE;
-	int i, valid = 1;
-
-	/* We ignore the timer - irq 0 */
-	for (i = 1; i < 16; i++)
-		if (tmp & (1 << i)) {
-			if (intr_vote[i]) {
-				if (irq != PARPORT_IRQ_NONE)
-					/* More than one interrupt */
-					valid = 0;
-				irq = i;
-			}
-			free_irq(i, intr_vote);
-		}
-	if(valid)
-		return irq;
-	else
-		return PARPORT_IRQ_NONE;
-}
-
 /* Only if supports ECP mode */
 static int programmable_irq_support(struct parport *pb)
 {
@@ -717,20 +662,23 @@ static int programmable_irq_support(struct parport *pb)
 static int irq_probe_ECP(struct parport *pb)
 {
 	int irqs, i;
-	unsigned char oecr = parport_pc_read_econtrol(pb);
 		
-	probe_irq_off(probe_irq_on());	/* Clear any interrupts */
-	irqs = open_intr_election();
+	sti();
+	irqs = probe_irq_on();
 		
-	parport_pc_write_econtrol(pb, 0x00);	    /* Reset FIFO */
-	parport_pc_write_econtrol(pb, 0xd0);	    /* TEST FIFO + nErrIntrEn */
+	parport_pc_write_econtrol(pb, 0x00);    /* Reset FIFO */
+	parport_pc_write_econtrol(pb, 0xd0);    /* TEST FIFO + nErrIntrEn */
 
 	/* If Full FIFO sure that WriteIntrThresold is generated */
 	for (i=0; i < 1024 && !(parport_pc_read_econtrol(pb) & 0x02) ; i++) 
 		parport_pc_write_fifo(pb, 0xaa);
 		
-	pb->irq = close_intr_election(irqs);
-	parport_pc_write_econtrol(pb, oecr);
+	pb->irq = probe_irq_off(irqs);
+	parport_pc_write_econtrol(pb, 0x00);
+
+	if (pb->irq <= 0)
+		pb->irq = PARPORT_IRQ_NONE;
+
 	return pb->irq;
 }
 
@@ -748,26 +696,30 @@ static int irq_probe_EPP(struct parport *pb)
 	return PARPORT_IRQ_NONE;
 #endif
 	
-	probe_irq_off(probe_irq_on());	/* Clear any interrupts */
-	irqs = open_intr_election();
+	sti();
+	irqs = probe_irq_on();
 
 	if (pb->modes & PARPORT_MODE_PCECR)
-		parport_pc_write_econtrol(pb, parport_pc_read_econtrol(pb) | 0x10);
+		parport_pc_frob_econtrol (pb, 0x10, 0x10);
 	
 	epp_clear_timeout(pb);
-	parport_pc_write_control(pb, parport_pc_read_control(pb) | 0x20);
-	parport_pc_write_control(pb, parport_pc_read_control(pb) | 0x10);
+	parport_pc_frob_control (pb, 0x20, 0x20);
+	parport_pc_frob_control (pb, 0x10, 0x10);
 	epp_clear_timeout(pb);
 
-	/*  Device isn't expecting an EPP read
+	/* Device isn't expecting an EPP read
 	 * and generates an IRQ.
 	 */
 	parport_pc_read_epp(pb);
 	udelay(20);
 
-	pb->irq = close_intr_election(irqs);
+	pb->irq = probe_irq_off (irqs);
 	parport_pc_write_econtrol(pb, oecr);
 	parport_pc_write_control(pb, octr);
+
+	if (pb->irq <= 0)
+		pb->irq = PARPORT_IRQ_NONE;
+
 	return pb->irq;
 }
 
@@ -818,16 +770,19 @@ static int irq_probe_SPP(struct parport *pb)
  */
 static int parport_irq_probe(struct parport *pb)
 {
-	if (pb->modes & PARPORT_MODE_PCECR)
+	unsigned char oecr = parport_pc_read_econtrol (pb);
+
+	if (pb->modes & PARPORT_MODE_PCECR) {
 		pb->irq = programmable_irq_support(pb);
+		if (pb->irq != PARPORT_IRQ_NONE)
+			goto out;
+	}
 
 	if (pb->modes & PARPORT_MODE_PCECP)
 		pb->irq = irq_probe_ECP(pb);
-			
+
 	if (pb->irq == PARPORT_IRQ_NONE && 
 	    (pb->modes & PARPORT_MODE_PCECPEPP)) {
-		unsigned char oecr = parport_pc_read_econtrol(pb);
-		parport_pc_write_econtrol(pb, 0x80);
 		pb->irq = irq_probe_EPP(pb);
 		parport_pc_write_econtrol(pb, oecr);
 	}
@@ -842,6 +797,8 @@ static int parport_irq_probe(struct parport *pb)
 	if (pb->irq == PARPORT_IRQ_NONE)
 		pb->irq = irq_probe_SPP(pb);
 
+out:
+	parport_pc_write_econtrol (pb, oecr);
 	return pb->irq;
 }
 

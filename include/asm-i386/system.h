@@ -215,7 +215,12 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 	return x;
 }
 
-#define mb()  __asm__ __volatile__ (""   : : :"memory")
+/*
+ * Force strict CPU ordering.
+ * And yes, this is required on UP too when we're talking
+ * to devices.
+ */
+#define mb() 	__asm__ __volatile__ ("lock; addl $0,0(%%esp)": : :"memory")
 
 /* interrupt control.. */
 #define __sti() __asm__ __volatile__ ("sti": : :"memory")
