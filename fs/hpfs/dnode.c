@@ -368,7 +368,6 @@ int hpfs_add_dirent(struct inode *i, unsigned char *name, unsigned namelen,
 	struct quad_buffer_head qbh;
 	dnode_secno dno;
 	int c;
-	int depth = cdepth;
 	int c1, c2 = 0;
 	dno = i->i_hpfs_dno;
 	down:
@@ -385,7 +384,6 @@ int hpfs_add_dirent(struct inode *i, unsigned char *name, unsigned namelen,
 			if (de->down) {
 				dno = de_down_pointer(de);
 				hpfs_brelse4(&qbh);
-				depth++;
 				goto down;
 			}
 			break;
@@ -393,7 +391,7 @@ int hpfs_add_dirent(struct inode *i, unsigned char *name, unsigned namelen,
 	}
 	hpfs_brelse4(&qbh);
 	if (!cdepth) hpfs_lock_creation(i->i_sb);
-	if (hpfs_check_free_dnodes(i->i_sb, depth + 2)) {
+	if (hpfs_check_free_dnodes(i->i_sb, FREE_DNODES_ADD)) {
 		c = 1;
 		goto ret;
 	}	
@@ -574,11 +572,6 @@ static void delete_empty_dnode(struct inode *i, dnode_secno dno)
 		goto end;
 	}
 
-	/*{
-		static int cnt_t_ = 0;
-		if (cnt_t_++ & 1) goto endm;
-	}*/
-
 	if (!de->last) {
 		struct hpfs_dirent *de_next = de_next_de(de);
 		struct hpfs_dirent *de_cp;
@@ -607,7 +600,6 @@ static void delete_empty_dnode(struct inode *i, dnode_secno dno)
 		kfree(de_cp);
 		goto try_it_again;
 	} else {
-		/*printk("HPFS: warning: not balancing tree\n");*/
 		struct hpfs_dirent *de_prev = dnode_pre_last_de(dnode);
 		struct hpfs_dirent *de_cp;
 		struct dnode *d1;
@@ -692,20 +684,21 @@ int hpfs_remove_dirent(struct inode *i, dnode_secno dno, struct hpfs_dirent *de,
 {
 	struct dnode *dnode = qbh->data;
 	dnode_secno down = 0;
+	int lock = 0;
 	loff_t t;
 	if (de->first || de->last) {
 		hpfs_error(i->i_sb, "hpfs_remove_dirent: attempt to delete first or last dirent in dnode %08x", dno);
 		hpfs_brelse4(qbh);
 		return 1;
 	}
-	if (de->down) {
-		if ((down = de_down_pointer(de)) && depth) {
-			hpfs_lock_creation(i->i_sb);
-			if (hpfs_check_free_dnodes(i->i_sb, depth + 2)) {
-				hpfs_brelse4(qbh);
-				hpfs_unlock_creation(i->i_sb);
-				return 2;
-			}
+	if (de->down) down = de_down_pointer(de);
+	if (depth && (de->down || (de == dnode_first_de(dnode) && de_next_de(de)->last))) {
+		lock = 1;
+		hpfs_lock_creation(i->i_sb);
+		if (hpfs_check_free_dnodes(i->i_sb, FREE_DNODES_DEL)) {
+			hpfs_brelse4(qbh);
+			hpfs_unlock_creation(i->i_sb);
+			return 2;
 		}
 	}
 	i->i_version = ++event;
@@ -716,10 +709,12 @@ int hpfs_remove_dirent(struct inode *i, dnode_secno dno, struct hpfs_dirent *de,
 	if (down) {
 		dnode_secno a = move_to_top(i, down, dno);
 		for_all_poss(i, hpfs_pos_subst, 5, t);
-		if (depth) hpfs_unlock_creation(i->i_sb);
 		if (a) delete_empty_dnode(i, a);
+		if (lock) hpfs_unlock_creation(i->i_sb);
 		return !a;
-	} else delete_empty_dnode(i, dno);
+	}
+	delete_empty_dnode(i, dno);
+	if (lock) hpfs_unlock_creation(i->i_sb);
 	return 0;
 }
 
@@ -888,14 +883,12 @@ struct hpfs_dirent *map_pos_dirent(struct inode *inode, loff_t *posp,
 /* Find a dirent in tree */
 
 struct hpfs_dirent *map_dirent(struct inode *inode, dnode_secno dno, char *name, unsigned len,
-			       dnode_secno *dd, struct quad_buffer_head *qbh, int *depth)
+			       dnode_secno *dd, struct quad_buffer_head *qbh)
 {
 	struct dnode *dnode;
 	struct hpfs_dirent *de;
 	struct hpfs_dirent *de_end;
 	int c1, c2 = 0;
-
-	if (depth) *depth = 0;
 
 	if (!S_ISDIR(inode->i_mode)) hpfs_error(inode->i_sb, "map_dirent: not a directory\n");
 	again:
@@ -914,7 +907,6 @@ struct hpfs_dirent *map_dirent(struct inode *inode, dnode_secno dno, char *name,
 			if (de->down) {
 				dno = de_down_pointer(de);
 				hpfs_brelse4(qbh);
-				if (depth) (*depth)++;
 				goto again;
 			}
 		break;

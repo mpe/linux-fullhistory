@@ -198,6 +198,7 @@ static inline int __get_order(unsigned long size);
 #define MAJOR_NR FLOPPY_MAJOR
 
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 #include <linux/cdrom.h> /* for the compatibility eject ioctl */
 
 #ifndef fd_get_dma_residue
@@ -3293,7 +3294,7 @@ static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 		LOCK_FDC(drive,1);
 		if (cmd != FDDEFPRM)
 			/* notice a disk change immediately, else
-			 * we loose our settings immediately*/
+			 * we lose our settings immediately*/
 			CALL(poll_drive(1, FD_RAW_NEED_DISK));
 		user_params[drive] = *g;
 		if (buffer_drive == drive)
@@ -3402,7 +3403,12 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
 	device = inode->i_rdev;
 	switch (cmd) {
-		RO_IOCTLS(device,param);
+		case BLKROSET:
+		case BLKROGET:
+		case BLKRASET:
+		case BLKRAGET:
+		case BLKFLSBUF:
+			return blk_ioctl(device, cmd, param);
 	}
 	type = TYPE(device);
 	drive = DRIVE(device);
@@ -3432,19 +3438,6 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			loc.start = 0;
 			return _COPYOUT(loc);
 		}
-		case BLKRASET:
-			if(!capable(CAP_SYS_ADMIN)) return -EACCES;
-			if(param > 0xff) return -EINVAL;
-			read_ahead[MAJOR(inode->i_rdev)] = param;
-			return 0;
-                case BLKRAGET:
-			return put_user(read_ahead[MAJOR(inode->i_rdev)],
-					(long *) param);
-		case BLKFLSBUF:
-			if(!capable(CAP_SYS_ADMIN)) return -EACCES;
-			fsync_dev(inode->i_rdev);
-			invalidate_buffers(inode->i_rdev);
-			return 0;
 
 		case BLKGETSIZE:
 			ECALL(get_floppy_geometry(drive, type, &g));

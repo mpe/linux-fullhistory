@@ -160,7 +160,7 @@ queue_head_t h8_actq, h8_cmdq, h8_freeq;
  */
 int cpu_speed_divisor = -1;			
 int h8_event_mask = 0;			
-struct wait_queue *h8_monitor_wait = NULL;
+DECLARE_WAIT_QUEUE_HEAD(h8_monitor_wait);
 unsigned int h8_command_mask = 0;
 int h8_uthermal_threshold = DEFAULT_UTHERMAL_THRESHOLD;
 int h8_uthermal_window = UTH_HYSTERESIS;		      
@@ -170,7 +170,7 @@ int h8_udamp = MHZ_57;
 u_char h8_current_temp = 0;
 u_char h8_system_temp = 0;
 int h8_sync_channel = 0;
-struct wait_queue *h8_sync_wait = NULL;
+DECLARE_WAIT_QUEUE_HEAD(h8_sync_wait);
 int h8_init_performed;
 
 /* CPU speeds and clock divisor values */

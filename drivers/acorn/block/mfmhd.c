@@ -195,7 +195,7 @@ static struct hd_struct mfm[MFM_MAXDRIVES << 6];
 static int mfm_sizes[MFM_MAXDRIVES << 6];
 static int mfm_blocksizes[MFM_MAXDRIVES << 6];
 static int mfm_sectsizes[MFM_MAXDRIVES << 6];
-static struct wait_queue *mfm_wait_open = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(mfm_wait_open);
 
 /* Stuff from the assembly routines */
 extern unsigned int hdc63463_baseaddress;	/* Controller base address */

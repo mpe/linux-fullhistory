@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.28 1999/05/12 11:15:05 davem Exp $
+/* $Id: pcikbd.c,v 1.29 1999/05/16 13:47:53 ecd Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -982,6 +982,8 @@ found:
 		return -ENOMEM;
 	}
 	memset(queue, 0, sizeof(*queue));
+
+	init_waitqueue_head(&queue->proc_list);
 
 	if (request_irq(pcimouse_irq, &pcimouse_interrupt,
 		        SA_SHIRQ, "mouse", (void *)pcimouse_iobase)) {

@@ -245,7 +245,7 @@ PERMANENT_MALLOC(buffer, char*, size, _mem_start); index = (nums);\
 #endif /* AWE_MODULE_SUPPORT */
 
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,0)
-inline static void interruptible_sleep_on_timeout(struct wait_queue **q, unsigned long timeout)
+inline static void interruptible_sleep_on_timeout(wait_queue_head_t *q, unsigned long timeout)
 {
 	current->timeout = jiffies + timeout;
 	interruptible_sleep_on(q);

@@ -25,22 +25,27 @@ CFLAGS := $(CFLAGS) $(CFLAGS_PIPE) $(CFLAGS_NSR)
 
 ifdef CONFIG_M386
 CFLAGS := $(CFLAGS) -m386 -DCPU=386
+AFLAGS := $(AFLAGS) -DCPU=386
 endif
 
 ifdef CONFIG_M486
 CFLAGS := $(CFLAGS) -m486 -DCPU=486
+AFLAGS := $(AFLAGS) -DCPU=486
 endif
 
 ifdef CONFIG_M586
-CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=586
+CFLAGS := $(CFLAGS) -DCPU=586
+AFLAGS := $(AFLAGS) -DCPU=586
 endif
 
 ifdef CONFIG_M586TSC
-CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=586
+CFLAGS := $(CFLAGS) -DCPU=586
+AFLAGS := $(AFLAGS) -DCPU=586
 endif
 
 ifdef CONFIG_M686
-CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=686
+CFLAGS := $(CFLAGS) -DCPU=686
+AFLAGS := $(AFLAGS) -DCPU=686
 endif
 
 HEAD := arch/i386/kernel/head.o arch/i386/kernel/init_task.o

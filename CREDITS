@@ -1534,6 +1534,15 @@ N: David Parsons
 E: orc@pell.chi.il.us
 D: improved memory detection code.
 
+N: Mikulas Patocka
+E: mikulas@artax.karlin.mff.cuni.cz
+W: http://artax.karlin.mff.cuni.cz/~mikulas/
+P: 1024/BB11D2D5 A0 F1 28 4A C4 14 1E CF  92 58 7A 8F 69 BC A4 D3
+D: Read/write HPFS filesystem
+S: Weissova 8
+S: 644 00 Brno
+S: Czech Republic
+
 N: Vojtech Pavlik
 E: vojtech@ucw.cz
 D: Joystick driver
@@ -1839,7 +1848,7 @@ S: Australia
 
 N: Chris Smith
 E: csmith@convex.com
-D: HPFS filesystem
+D: Read only HPFS filesystem
 S: Richardson, Texas
 S: USA
 

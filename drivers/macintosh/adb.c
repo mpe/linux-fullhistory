@@ -375,7 +375,7 @@ struct adbdev_state {
 	spinlock_t	lock;
 	atomic_t	n_pending;
 	struct adb_request *completed;
-	struct wait_queue *wait_queue;
+	wait_queue_head_t wait_queue;
 	int		inuse;
 };
 
@@ -458,7 +458,7 @@ static ssize_t adb_read(struct file *file, char *buf,
 	int ret;
 	struct adbdev_state *state = file->private_data;
 	struct adb_request *req;
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
 
 	if (count < 2)

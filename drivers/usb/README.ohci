@@ -1,3 +1,31 @@
+May 16, 1999 16:20:54
+
+EDs are now allocated dynamically from their device's pool.  Root hub
+status changes should stop the infinite "no device connected" messages
+that occurred after removing a device.
+
+TODO:
+
+~ Add the concept of a td_group to lump TDs associated with a single
+  data transfer request from the higher layers.  This will be needed
+  for bulk and all larger transfers that will span multiple TDs but
+  which need to allocate/free them as a group as things happen.  I
+  am thinking about create_td_group and free_td_group functions...
+~ Add bulk transfer support.
+~ Add Isochronous transfer support.  These have their own special
+  format TDs to allow for several DMA data pointers.  Kinda neat, but
+  likely harder to use through a generic interface in practice.
+~ Support dynamic allocation & growth of the TD/ED pools.  Merge them
+  into global pools rather than a today's static per device allocation.
+
+KNOWN BUGS:
+
+~ Unplugging a hub causes khubd to Oops.  I don't think this is
+  directly related to OHCI, but due to the fact that the interrupt TD
+  for the hub is never stopped.  We need a usb_release_irq() that gets
+  called using the "IRQ handle" that should be returned by
+  usb_request_irq().
+
 May 09, 1999 16:25:58
 
 Cool, things are working "well" now.  (I'm not getting oops's from the

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.62 1999/05/08 21:09:55 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.63 1999/05/15 23:02:21 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -541,10 +541,6 @@ static void tcp_syn_recv_timer(unsigned long data)
 						prev = conn; 
 						continue; 
 					}
-
-					if ((long)(now - conn->expires) <= 0)
-						break;
-
 
 					tcp_synq_unlink(tp, conn, prev);
 					if (conn->retrans >= sysctl_tcp_retries1) {

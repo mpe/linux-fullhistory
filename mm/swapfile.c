@@ -473,6 +473,18 @@ int get_swaparea_info(char *buf)
 	return len;
 }
 
+int is_swap_partition(kdev_t dev) {
+	struct swap_info_struct *ptr = swap_info;
+	int i;
+
+	for (i = 0 ; i < nr_swapfiles ; i++, ptr++) {
+		if (ptr->flags & SWP_USED)
+			if (ptr->swap_device == dev)
+				return 1;
+	}
+	return 0;
+}
+
 /*
  * Written 01/25/92 by Simmule Turner, heavily changed by Linus.
  *

@@ -13,7 +13,7 @@
 struct semaphore {
 	atomic_t count;
 	atomic_t waking;
-	struct wait_queue *wait;
+	wait_queue_head_t wait;
 };
 
 #define sema_init(sem, val)	atomic_set(&((sem)->count), (val))

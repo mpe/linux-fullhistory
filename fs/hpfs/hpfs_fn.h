@@ -42,6 +42,9 @@
 #define ANODE_RD_AHEAD	16
 #define DNODE_RD_AHEAD	4
 
+#define FREE_DNODES_ADD	58
+#define FREE_DNODES_DEL	29
+
 #define CHKCOND(x,y) if (!(x)) printk y
 
 #ifdef DBG
@@ -237,7 +240,7 @@ int hpfs_remove_dirent(struct inode *, dnode_secno, struct hpfs_dirent *, struct
 void hpfs_count_dnodes(struct super_block *, dnode_secno, int *, int *, int *);
 dnode_secno hpfs_de_as_down_as_possible(struct super_block *, dnode_secno dno);
 struct hpfs_dirent *map_pos_dirent(struct inode *, loff_t *, struct quad_buffer_head *);
-struct hpfs_dirent *map_dirent(struct inode *, dnode_secno, char *, unsigned, dnode_secno *, struct quad_buffer_head *, int *depth);
+struct hpfs_dirent *map_dirent(struct inode *, dnode_secno, char *, unsigned, dnode_secno *, struct quad_buffer_head *);
 void hpfs_remove_dtree(struct super_block *, dnode_secno);
 struct hpfs_dirent *map_fnode_dirent(struct super_block *, fnode_secno, struct fnode *, struct quad_buffer_head *);
 
@@ -285,7 +288,7 @@ int hpfs_mmap(struct file *, struct vm_area_struct *);
 /* name.c */
 
 unsigned char hpfs_upcase(unsigned char *, unsigned char);
-int hpfs_chk_name(unsigned char *, unsigned);
+int hpfs_chk_name(unsigned char *, unsigned *);
 char *hpfs_translate_name(struct super_block *, unsigned char *, unsigned, int, int);
 int hpfs_compare_names(struct super_block *, unsigned char *, unsigned, unsigned char *, unsigned, int);
 int hpfs_is_name_long(unsigned char *, unsigned);
@@ -310,5 +313,6 @@ void hpfs_error(struct super_block *, char *, ...);
 int hpfs_stop_cycles(struct super_block *, int, int *, int *, char *);
 int hpfs_remount_fs(struct super_block *, int *, char *);
 void hpfs_put_super(struct super_block *);
+unsigned hpfs_count_one_bitmap(struct super_block *, secno);
 int hpfs_statfs(struct super_block *, struct statfs *, int);
 struct super_block *hpfs_read_super(struct super_block *, void *, int);

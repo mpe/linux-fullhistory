@@ -315,7 +315,7 @@ affs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	error       = affs_add_entry(dir,NULL,inode,dentry,ST_USERDIR);
 	if (error)
 		goto out_iput;
-	inode->i_mode = S_IFDIR | S_ISVTX | (mode & 0777 & ~current->fs->umask);
+	inode->i_mode = S_IFDIR | S_ISVTX | mode;
 	inode->u.affs_i.i_protect = mode_to_prot(inode->i_mode);
 	d_instantiate(dentry,inode);
 	mark_inode_dirty(inode);

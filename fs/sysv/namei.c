@@ -291,7 +291,7 @@ int sysv_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 	inode->i_nlink = 2;
 	mark_buffer_dirty(dir_block, 1);
 	brelse(dir_block);
-	inode->i_mode = S_IFDIR | (mode & 0777 & ~current->fs->umask);
+	inode->i_mode = S_IFDIR | mode;
 	if (dir->i_mode & S_ISGID)
 		inode->i_mode |= S_ISGID;
 	mark_inode_dirty(inode);

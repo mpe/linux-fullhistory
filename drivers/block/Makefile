@@ -20,7 +20,7 @@ ALL_SUB_DIRS := $(SUB_DIRS) paride
 
 
 L_TARGET := block.a
-L_OBJS   := genhd.o
+L_OBJS   := genhd.o blkpg.o
 M_OBJS   :=
 MOD_LIST_NAME := BLOCK_MODULES
 LX_OBJS := ll_rw_blk.o

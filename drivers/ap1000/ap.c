@@ -36,7 +36,7 @@
 #define NUM_APDEVS 8
 #define MAX_REQUESTS 1
 
-static struct wait_queue * busy_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(busy_wait);
 
 static int ap_blocksizes[NUM_APDEVS];
 static int ap_length[NUM_APDEVS];

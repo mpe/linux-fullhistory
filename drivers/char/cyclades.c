@@ -1264,7 +1264,7 @@ printk("cy_interrupt: rcvd intr, chip %d\n\r", chip);
 							    TTY_OVERRUN;
                                         *tty->flip.char_buf_ptr++ = 0;
                                         /* If the flip buffer itself is
-                                           overflowing, we still loose
+                                           overflowing, we still lose
                                            the next incoming character.
                                          */
                                         if(tty->flip.count

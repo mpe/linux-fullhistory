@@ -184,6 +184,7 @@ struct parport_dir {
 /* A parallel port */
 struct parport {
 	unsigned long base;	/* base address */
+	unsigned long base_hi;	/* base address (ECR) */
 	unsigned int size;	/* IO extent */
 	const char *name;
 	int irq;		/* interrupt (or -1 for none) */

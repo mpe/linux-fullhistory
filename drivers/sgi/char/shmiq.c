@@ -82,7 +82,7 @@ static struct {
 	int    events;
 	int    mapped;
 	
-	struct wait_queue    *proc_list;
+	wait_queue_head_t     proc_list;
 	struct fasync_struct *fasync;
 } shmiqs [MAX_SHMI_QUEUES];
 

@@ -405,7 +405,7 @@ extern __inline__ void  dev_unlock_list(void)
 extern __inline__ void dev_lock_wait(void)
 {
 	while (atomic_read(&dev_lockct)) {
-		current->counter = 0;
+		current->policy |= SCHED_YIELD;
 		schedule();
 	}
 }

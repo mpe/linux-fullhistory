@@ -36,6 +36,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -53,7 +54,7 @@
    than PARPORT_MAX (in <linux/parport.h>).  */
 #define PARPORT_PC_MAX_PORTS  8
 
-static int user_specified = 0;
+static int user_specified __initdata = 0;
 
 static void parport_pc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
@@ -62,27 +63,27 @@ static void parport_pc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 void parport_pc_write_epp(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+EPPDATA);
+	outb(d, EPPDATA(p));
 }
 
 unsigned char parport_pc_read_epp(struct parport *p)
 {
-	return inb(p->base+EPPDATA);
+	return inb(EPPDATA(p));
 }
 
 void parport_pc_write_epp_addr(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+EPPADDR);
+	outb(d, EPPADDR(p));
 }
 
 unsigned char parport_pc_read_epp_addr(struct parport *p)
 {
-	return inb(p->base+EPPADDR);
+	return inb(EPPADDR(p));
 }
 
 int parport_pc_check_epp_timeout(struct parport *p)
 {
-	if (!(inb(p->base+STATUS) & 1))
+	if (!(inb(STATUS(p)) & 1))
 		return 0;
 	parport_pc_epp_clear_timeout(p);
 	return 1;
@@ -90,24 +91,24 @@ int parport_pc_check_epp_timeout(struct parport *p)
 
 unsigned char parport_pc_read_configb(struct parport *p)
 {
-	return inb(p->base+CONFIGB);
+	return inb(CONFIGB(p));
 }
 
 void parport_pc_write_data(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+DATA);
+	outb(d, DATA(p));
 }
 
 unsigned char parport_pc_read_data(struct parport *p)
 {
-	return inb(p->base+DATA);
+	return inb(DATA(p));
 }
 
 void parport_pc_write_control(struct parport *p, unsigned char d)
 {
 	struct parport_pc_private *priv = p->private_data;
 	priv->ctr = d;/* update soft copy */
-	outb(d, p->base+CONTROL);
+	outb(d, CONTROL(p));
 }
 
 unsigned char parport_pc_read_control(struct parport *p)
@@ -121,34 +122,34 @@ unsigned char parport_pc_frob_control(struct parport *p, unsigned char mask,  un
 	struct parport_pc_private *priv = p->private_data;
 	unsigned char ctr = priv->ctr;
 	ctr = (ctr & ~mask) ^ val;
-	outb (ctr, p->base+CONTROL);
+	outb (ctr, CONTROL(p));
 	return priv->ctr = ctr; /* update soft copy */
 }
 
 void parport_pc_write_status(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+STATUS);
+	outb(d, STATUS(p));
 }
 
 unsigned char parport_pc_read_status(struct parport *p)
 {
-	return inb(p->base+STATUS);
+	return inb(STATUS(p));
 }
 
 void parport_pc_write_econtrol(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+ECONTROL);
+	outb(d, ECONTROL(p));
 }
 
 unsigned char parport_pc_read_econtrol(struct parport *p)
 {
-	return inb(p->base+ECONTROL);
+	return inb(ECONTROL(p));
 }
 
 unsigned char parport_pc_frob_econtrol(struct parport *p, unsigned char mask,  unsigned char val)
 {
-	unsigned char old = inb(p->base+ECONTROL);
-	outb(((old & ~mask) ^ val), p->base+ECONTROL);
+	unsigned char old = inb(ECONTROL(p));
+	outb(((old & ~mask) ^ val), ECONTROL(p));
 	return old;
 }
 
@@ -159,12 +160,12 @@ void parport_pc_change_mode(struct parport *p, int m)
 
 void parport_pc_write_fifo(struct parport *p, unsigned char v)
 {
-	outb (v, p->base+CONFIGA);
+	outb (v, CONFIGA(p));
 }
 
 unsigned char parport_pc_read_fifo(struct parport *p)
 {
-	return inb (p->base+CONFIGA);
+	return inb (CONFIGA(p));
 }
 
 void parport_pc_disable_irq(struct parport *p)
@@ -183,7 +184,7 @@ void parport_pc_release_resources(struct parport *p)
 		free_irq(p->irq, p);
 	release_region(p->base, p->size);
 	if (p->modes & PARPORT_MODE_PCECR)
-		release_region(p->base+0x400, 3);
+		release_region(p->base_hi, 3);
 }
 
 int parport_pc_claim_resources(struct parport *p)
@@ -195,7 +196,7 @@ int parport_pc_claim_resources(struct parport *p)
 			return err;
 	request_region(p->base, p->size, p->name);
 	if (p->modes & PARPORT_MODE_PCECR)
-		request_region(p->base+0x400, 3, p->name);
+		request_region(p->base_hi, 3, p->name);
 	return 0;
 }
 
@@ -223,8 +224,8 @@ size_t parport_pc_epp_read_block(struct parport *p, void *buf, size_t length)
 {
 	size_t got = 0;
 	for (; got < length; got++) {
-		*((char*)buf)++ = inb (p->base+EPPDATA);
-		if (inb (p->base+STATUS) & 0x01)
+		*((char*)buf)++ = inb (EPPDATA(p));
+		if (inb (STATUS(p)) & 0x01)
 			break;
 	}
 	return got;
@@ -234,8 +235,8 @@ size_t parport_pc_epp_write_block(struct parport *p, void *buf, size_t length)
 {
 	size_t written = 0;
 	for (; written < length; written++) {
-		outb (*((char*)buf)++, p->base+EPPDATA);
-		if (inb (p->base+STATUS) & 0x01)
+		outb (*((char*)buf)++, EPPDATA(p));
+		if (inb (STATUS(p)) & 0x01)
 			break;
 	}
 	return written;
@@ -350,7 +351,7 @@ int parport_pc_epp_clear_timeout(struct parport *pb)
 /*
  * Checks for port existence, all ports support SPP MODE
  */
-static int parport_SPP_supported(struct parport *pb)
+static int __init parport_SPP_supported(struct parport *pb)
 {
 	unsigned char r, w;
 
@@ -370,11 +371,11 @@ static int parport_SPP_supported(struct parport *pb)
 	 * allow reads, so read_control just returns a software
 	 * copy. Some ports _do_ allow reads, so bypass the software
 	 * copy here.  In addition, some bits aren't writable. */
-	r = inb (pb->base+CONTROL);
+	r = inb (CONTROL (pb));
 	if ((r & 0x3f) == w) {
 		w = 0xe;
 		parport_pc_write_control (pb, w);
-		r = inb (pb->base+CONTROL);
+		r = inb (CONTROL(pb));
 		parport_pc_write_control (pb, 0xc);
 		if ((r & 0x3f) == w)
 			return PARPORT_MODE_PCSPP;
@@ -425,7 +426,7 @@ static int parport_SPP_supported(struct parport *pb)
  * We will write 0x2c to ECR and 0xcc to CTR since both of these
  * values are "safe" on the CTR since bits 6-7 of CTR are unused.
  */
-static int parport_ECR_present(struct parport *pb)
+static int __init parport_ECR_present(struct parport *pb)
 {
 	unsigned char r;
 
@@ -458,7 +459,7 @@ static int parport_ECR_present(struct parport *pb)
 	return 0;
 }
 
-static int parport_ECP_supported(struct parport *pb)
+static int __init parport_ECP_supported(struct parport *pb)
 {
 	int i;
 	unsigned char oecr;
@@ -493,7 +494,7 @@ static int parport_ECP_supported(struct parport *pb)
  *	or writing a 1 to the bit (SMC, UMC, WinBond), others ???
  *	This bit is always high in non EPP modes.
  */
-static int parport_EPP_supported(struct parport *pb)
+static int __init parport_EPP_supported(struct parport *pb)
 {
 	/* If EPP timeout bit clear then EPP available */
 	if (!parport_pc_epp_clear_timeout(pb))
@@ -514,7 +515,7 @@ static int parport_EPP_supported(struct parport *pb)
 	return 0;
 }
 
-static int parport_ECPEPP_supported(struct parport *pb)
+static int __init parport_ECPEPP_supported(struct parport *pb)
 {
 	int mode;
 	unsigned char oecr;
@@ -550,7 +551,7 @@ static int parport_ECPEPP_supported(struct parport *pb)
  * be misdetected here is rather academic. 
  */
 
-static int parport_PS2_supported(struct parport *pb)
+static int __init parport_PS2_supported(struct parport *pb)
 {
 	int ok = 0;
 	unsigned char octr = parport_pc_read_control(pb);
@@ -570,7 +571,7 @@ static int parport_PS2_supported(struct parport *pb)
 	return ok?PARPORT_MODE_PCPS2:0;
 }
 
-static int parport_ECPPS2_supported(struct parport *pb)
+static int __init parport_ECPPS2_supported(struct parport *pb)
 {
 	int mode;
 	unsigned char oecr;
@@ -590,7 +591,7 @@ static int parport_ECPPS2_supported(struct parport *pb)
 /* --- IRQ detection -------------------------------------- */
 
 /* Only if supports ECP mode */
-static int programmable_irq_support(struct parport *pb)
+static int __init programmable_irq_support(struct parport *pb)
 {
 	int irq, intrLine;
 	unsigned char oecr = parport_pc_read_econtrol(pb);
@@ -607,7 +608,7 @@ static int programmable_irq_support(struct parport *pb)
 	return irq;
 }
 
-static int irq_probe_ECP(struct parport *pb)
+static int __init irq_probe_ECP(struct parport *pb)
 {
 	int irqs, i;
 
@@ -634,7 +635,7 @@ static int irq_probe_ECP(struct parport *pb)
  * This detection seems that only works in National Semiconductors
  * This doesn't work in SMC, LGS, and Winbond 
  */
-static int irq_probe_EPP(struct parport *pb)
+static int __init irq_probe_EPP(struct parport *pb)
 {
 	int irqs;
 	unsigned char octr = parport_pc_read_control(pb);
@@ -675,7 +676,7 @@ static int irq_probe_EPP(struct parport *pb)
 	return pb->irq;
 }
 
-static int irq_probe_SPP(struct parport *pb)
+static int __init irq_probe_SPP(struct parport *pb)
 {
 	int irqs;
 	unsigned char octr = parport_pc_read_control(pb);
@@ -723,7 +724,7 @@ static int irq_probe_SPP(struct parport *pb)
  * When ECP is available we can autoprobe for IRQs.
  * NOTE: If we can autoprobe it, we can register the IRQ.
  */
-static int parport_irq_probe(struct parport *pb)
+static int __init parport_irq_probe(struct parport *pb)
 {
 	if (pb->modes & PARPORT_MODE_PCECR) {
 		pb->irq = programmable_irq_support(pb);
@@ -754,7 +755,9 @@ out:
 
 /* --- Initialisation code -------------------------------- */
 
-static int probe_one_port(unsigned long int base, int irq, int dma)
+static int __init probe_one_port(unsigned long int base,
+				 unsigned long int base_hi,
+				 int irq, int dma)
 {
 	struct parport *p;
 	int probedirq = PARPORT_IRQ_NONE;
@@ -770,8 +773,9 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 		return 0;
 	}
 	((struct parport_pc_private *) (p->private_data))->ctr = 0xc;
+	p->base_hi = base_hi;
 	if (p->base != 0x3bc) {
-		if (!check_region(base+0x400,3)) {
+		if (base_hi && !check_region(base_hi,3)) {
 			p->modes |= parport_ECR_present(p);	
 			p->modes |= parport_ECP_supported(p);
 			p->modes |= parport_ECPPS2_supported(p);
@@ -791,6 +795,8 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	p->size = (p->modes & (PARPORT_MODE_PCEPP 
 			       | PARPORT_MODE_PCECPEPP))?8:3;
 	printk(KERN_INFO "%s: PC-style at 0x%lx", p->name, p->base);
+	if (p->base_hi && (p->modes & PARPORT_MODE_PCECR))
+		printk (" (0x%lx)", p->base_hi);
 	if (p->irq == PARPORT_IRQ_AUTO) {
 		p->irq = PARPORT_IRQ_NONE;
 		parport_irq_probe(p);
@@ -829,11 +835,14 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	/* Done probing.  Now put the port into a sensible start-up state. */
 	if (p->modes & PARPORT_MODE_PCECR)
 		/*
-		 * Put the ECP detected port in the more SPP like mode.
+		 * Put the ECP detected port in PS2 mode.
 		 */
-		parport_pc_write_econtrol(p, 0x0);
-	parport_pc_write_control(p, 0xc);
+		parport_pc_write_econtrol(p, 0x24);
 	parport_pc_write_data(p, 0);
+	parport_pc_write_control(p, 0x8);
+	udelay (50);
+	parport_pc_write_control(p, 0xc);
+	udelay (50);
 
 	if (parport_probe_hook)
 		(*parport_probe_hook)(p);
@@ -841,20 +850,22 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	return 1;
 }
 
-int parport_pc_init(int *io, int *irq, int *dma)
+int __init parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 {
 	int count = 0, i = 0;
 	if (io && *io) {
 		/* Only probe the ports we were given. */
 		user_specified = 1;
 		do {
-			count += probe_one_port(*(io++), *(irq++), *(dma++));
+			if (!*io_hi) *io_hi = 0x400 + *io;
+			count += probe_one_port(*(io++), *(io_hi++),
+						*(irq++), *(dma++));
 		} while (*io && (++i < PARPORT_PC_MAX_PORTS));
 	} else {
 		/* Probe all the likely ports. */
-		count += probe_one_port(0x3bc, irq[0], dma[0]);
-		count += probe_one_port(0x378, irq[0], dma[0]);
-		count += probe_one_port(0x278, irq[0], dma[0]);
+		count += probe_one_port(0x3bc, 0x7bc, irq[0], dma[0]);
+		count += probe_one_port(0x378, 0x778, irq[0], dma[0]);
+		count += probe_one_port(0x278, 0x678, irq[0], dma[0]);
 	}
 
 	return count;
@@ -862,10 +873,12 @@ int parport_pc_init(int *io, int *irq, int *dma)
 
 #ifdef MODULE
 static int io[PARPORT_PC_MAX_PORTS+1] = { [0 ... PARPORT_PC_MAX_PORTS] = 0 };
+static int io_hi[PARPORT_PC_MAX_PORTS+1] = { [0 ... PARPORT_PC_MAX_PORTS] = 0 };
 static int dma[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_DMA_NONE };
 static int irqval[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_IRQ_PROBEONLY };
 static const char *irq[PARPORT_PC_MAX_PORTS] = { NULL, };
 MODULE_PARM(io, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
+MODULE_PARM(io_hi, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "s");
 MODULE_PARM(dma, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
 
@@ -877,7 +890,7 @@ int init_module(void)
 	for (i = 0; i < PARPORT_PC_MAX_PORTS && io[i]; i++);
 	parport_parse_irqs(i, irq, irqval);
 
-	return (parport_pc_init(io, irqval, dma)?0:1);
+	return (parport_pc_init(io, io_hi, irqval, dma)?0:1);
 }
 
 void cleanup_module(void)

@@ -80,17 +80,18 @@ void show_ohci_ed(struct ohci_ed *ed)
 
 	printk(KERN_DEBUG "   ohci ED:\n");
 	printk(KERN_DEBUG "     status     =  0x%x\n", stat);
-	printk(KERN_DEBUG "       %sMPS %d%s%s%s%s tc%d e%d fa%d\n",
+	printk(KERN_DEBUG "       %sMPS %d%s%s%s%s tc%d e%d fa%d%s\n",
 			skip ? "Skip " : "",
 			mps,
-			isoc ? "Isoc. " : "",
+			isoc ? " Isoc." : "",
 			low_speed ? " LowSpd" : "",
 			(dir == OHCI_ED_D_IN) ? " Input" :
 			(dir == OHCI_ED_D_OUT) ? " Output" : "",
 			halted ? " Halted" : "",
 			toggle,
 			endnum,
-			funcaddr);
+			funcaddr,
+			(stat & ED_ALLOCATED) ? " Allocated" : "");
 	printk(KERN_DEBUG "     tail_td    =  0x%x\n", ed->tail_td);
 	printk(KERN_DEBUG "     head_td    =  0x%x\n", ed_head_td(ed));
 	printk(KERN_DEBUG "     next_ed    =  0x%x\n", ed->next_ed);
@@ -108,19 +109,21 @@ void show_ohci_td(struct ohci_td *td)
 
 	printk(KERN_DEBUG "   ohci TD hardware fields:\n");
 	printk(KERN_DEBUG "      info     =  0x%x\n", td->info);
-	printk(KERN_DEBUG "        %s%s%s%d %s\n",
+	printk(KERN_DEBUG "        %s%s%s%d %s %s%d\n",
 		td_round ? "Rounding " : "",
 		(td_dir == OHCI_TD_D_IN) ? "Input " :
 		(td_dir == OHCI_TD_D_OUT) ? "Output " :
 		(td_dir == OHCI_TD_D_SETUP) ? "Setup " : "",
 		"IntDelay ", td_int_delay,
 		(td_toggle < 2) ? " " :
-		(td_toggle & 1) ? "Data1 " : "Data0 ");
-	printk(KERN_DEBUG "        %s%d %s0x%x, %sAccessed, %sActive\n",
-		"ErrorCnt ", td_errcnt,
-		"ComplCode ", td_cc,
+		(td_toggle & 1) ? "Data1" : "Data0",
+		"ErrorCnt ", td_errcnt);
+	printk(KERN_DEBUG "        ComplCode 0x%x, %sAccessed, %sActive\n",
+		td_cc,
 		td_cc_accessed(*td) ? "" : "Not ",
 		td_active(*td) ? "" : "Not ");
+
+	printk(KERN_DEBUG "        %s\n", td_allocated(*td) ? "Allocated" : "Free");
 
 	printk(KERN_DEBUG "      cur_buf  =  0x%x\n", td->cur_buf);
 	printk(KERN_DEBUG "      next_td  =  0x%x\n", td->next_td);

@@ -42,6 +42,7 @@
 #include <linux/genhd.h>
 #include <linux/ps2esdi.h>
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 #include <linux/mca.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
@@ -1140,15 +1141,7 @@ static int ps2esdi_ioctl(struct inode *inode,
 				return (0);
 			}
 			break;
-		case BLKRASET:
-			if (!capable(CAP_SYS_ADMIN))
-				return -EACCES;
-			if (!inode->i_rdev)
-				return -EINVAL;
-			if (arg > 0xff)
-				return -EINVAL;
-			read_ahead[MAJOR(inode->i_rdev)] = arg;
-			return 0;
+
 		case BLKGETSIZE:
 			if (arg) {
 				if ((err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long))))
@@ -1158,20 +1151,19 @@ static int ps2esdi_ioctl(struct inode *inode,
 				return (0);
 			}
 			break;
-		case BLKFLSBUF:
-			if (!capable(CAP_SYS_ADMIN))
-				return -EACCES;
-			if (!inode->i_rdev)
-				return -EINVAL;
-			fsync_dev(inode->i_rdev);
-			invalidate_buffers(inode->i_rdev);
-			return 0;
 
 		case BLKRRPART:
                         if (!capable(CAP_SYS_ADMIN)) 
 				return -EACCES;
 			return (ps2esdi_reread_partitions(inode->i_rdev));
-			RO_IOCTLS(inode->i_rdev, arg);
+
+		case BLKROSET:
+		case BLKROGET:
+		case BLKRASET:
+		case BLKRAGET:
+		case BLKFLSBUF:
+		case BLKPG:
+			return blk_ioctl(inode->i_rdev, cmd, arg);
 		}
 	return (-EINVAL);
 }

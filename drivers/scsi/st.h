@@ -65,7 +65,7 @@ typedef struct {
 typedef struct {
   kdev_t devt;
   unsigned capacity;
-  struct wait_queue * waiting;
+  wait_queue_head_t waiting;
   Scsi_Device* device;
   struct semaphore sem;
   ST_buffer * buffer;

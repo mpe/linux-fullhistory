@@ -1,4 +1,4 @@
-Read/Write HPFS 1.98b
+Read/Write HPFS 1.99b
 1998-1999, Mikulas Patocka
 
 email: mikulas@artax.karlin.mff.cuni.cz
@@ -58,9 +58,9 @@ also won't be able to compile linux kernel (and maybe other things) on HPFS
 because kernel creates different files with names like bootsect.S and
 bootsect.s. When searching for file thats name has characters >= 128, codepages
 are used - see below.
-OS/2 ignores dots and spaces at the end of file name, so this driver does. If
-you create 'a. ...', the file 'a' will be created, but you can still access it
-under names 'a.', 'a..', 'a .  . . ' etc.
+OS/2 ignores dots and spaces at the end of file name, so this driver does as
+well. If you create 'a. ...', the file 'a' will be created, but you can still
+access it under names 'a.', 'a..', 'a .  . . ' etc.
 
 
 Extended attributes
@@ -161,9 +161,6 @@ You can't rename over directories (what is it good for?).
 
 Renaming files so that only case changes doesn't work. This driver supports it
 but vfs doesn't. Something like 'mv file FILE' won't work.
-
-When you try to create file with bad filename (too long or containing forbidden
-characters), you get ENOENT error instead of EINVAL or ENAMETOOLONG.
 
 All atimes and directory mtimes are not updated. That's because of performance
 reasons. If you extremely wish to update them, let me know, I'll write it (but
@@ -266,6 +263,10 @@ History
        Fixed a bug when chmoding or chowning root directory
 1.98 Fixed a deadlock when using old_readdir
      Better directory handling; workaround for "unbalanced tree" bug in OS/2
+1.99 Corrected a possible problem when there's not enough space while deleting
+	file
+     Now it tries to truncate the file if there's not enough space when deleting
+     Removed a lot of redundat code
 
 
  vim: set textwidth=80:

@@ -64,6 +64,7 @@
 typedef void Scsi_Device; /* hack to avoid including scsi.h */
 #include <scsi/scsi_ioctl.h>
 #include <linux/hdreg.h> /* for HDIO_GETGEO */
+#include <linux/blkpg.h>
 
 #include <asm/setup.h>
 #include <asm/pgtable.h>
@@ -1125,8 +1126,8 @@ static int acsi_ioctl( struct inode *inode, struct file *file,
 		return -EINVAL;
 	switch (cmd) {
 	  case HDIO_GETGEO:
-		/* HDIO_GETGEO is supported more for getting the partition's start
-		 * sector... */
+		/* HDIO_GETGEO is supported more for getting the partition's
+		 * start sector... */
 	  { struct hd_geometry *geo = (struct hd_geometry *)arg;
 	    /* just fake some geometry here, it's nonsense anyway; to make it
 		 * easy, use Adaptec's usual 64/32 mapping */
@@ -1147,19 +1148,18 @@ static int acsi_ioctl( struct inode *inode, struct file *file,
 	  case BLKGETSIZE:   /* Return device size */
 		return put_user(acsi_part[MINOR(inode->i_rdev)].nr_sects,
 				(long *) arg);
-		
+
+	  case BLKROSET:
+	  case BLKROGET:
 	  case BLKFLSBUF:
-		if(!capable(CAP_SYS_ADMIN))  return -EACCES;
-		if(!inode->i_rdev) return -EINVAL;
-		fsync_dev(inode->i_rdev);
-		invalidate_buffers(inode->i_rdev);
-		return 0;
+	  case BLKPG:
+		return blk_ioctl(inode->i_rdev, cmd, arg);
 
 	  case BLKRRPART: /* Re-read partition tables */
 	        if (!capable(CAP_SYS_ADMIN)) 
 			return -EACCES;
 		return revalidate_acsidisk(inode->i_rdev, 1);
-	  RO_IOCTLS(inode->i_rdev,arg);
+
 	  default:
 		return -EINVAL;
 	}

@@ -2328,12 +2328,12 @@ struct adbdev_state {
 	struct adb_request req;
 };
 
-static struct wait_queue *adb_wait;
+static DECLARE_WAIT_QUEUE_HEAD(adb_wait);
 
 static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 {
 	int ret = 0;
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait,current);
 
 	add_wait_queue(&adb_wait, &wait);
 	current->state = TASK_INTERRUPTIBLE;
@@ -2552,12 +2552,12 @@ struct adbdev_state {
 	struct adb_request req;
 };
 
-static struct wait_queue *adb_wait;
+static DECLARE_WAIT_QUEUE_HEAD(adb_wait);
 
 static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 {
 	int ret = 0;
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 #if (ADBDEBUG & ADBDEBUG_DEVICE)
 	printk("ADB request: wait_reply (blocking ... \n");

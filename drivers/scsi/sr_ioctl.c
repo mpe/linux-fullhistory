@@ -7,6 +7,7 @@
 #include <linux/string.h>
 
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 #include "scsi.h"
 #include "hosts.h"
 #include <scsi/scsi_ioctl.h>
@@ -768,7 +769,7 @@ sr_is_xa(int minor)
 int sr_dev_ioctl(struct cdrom_device_info *cdi,
                  unsigned int cmd, unsigned long arg)
 {
-    int target, err;
+    int target;
     
     target = MINOR(cdi->dev);
     
@@ -855,40 +856,14 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
         spin_unlock_irqrestore(&io_request_lock, flags);
         return rc;
     }
-    case BLKRAGET:
-	if (!arg)
-		return -EINVAL;
-	err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
-	if (err)
-		return err;
-	put_user(read_ahead[MAJOR(cdi->dev)], (long *) arg);
-	return 0;
 
+    case BLKROSET:
+    case BLKROGET:
     case BLKRASET:
-	if(!capable(CAP_SYS_ADMIN))
-        	return -EACCES;
-	if(!(cdi->dev))
-        	return -EINVAL;
-	if(arg > 0xff)
-        	return -EINVAL;
-	read_ahead[MAJOR(cdi->dev)] = arg;
-	return 0;
-
-    case BLKSSZGET:
-	/* Block size of media */
-	return put_user(blksize_size[MAJOR(cdi->dev)][MINOR(cdi->dev)],
-		(int *)arg);
-
-    RO_IOCTLS(cdi->dev,arg);
-
+    case BLKRAGET:
     case BLKFLSBUF:
-	if(!capable(CAP_SYS_ADMIN))
-		return -EACCES;
-	if(!(cdi->dev))
-		return -EINVAL;
-	fsync_dev(cdi->dev);
-	invalidate_buffers(cdi->dev);
-	return 0;
+    case BLKSSZGET:
+	return blk_ioctl(cdi->dev, cmd, arg);
 
     default:
 	return scsi_ioctl(scsi_CDs[target].device,cmd,(void *) arg);

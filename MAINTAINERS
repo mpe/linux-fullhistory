@@ -361,6 +361,12 @@ M:	langa2@kph.uni-mainz.de
 W:	http://www.uni-mainz.de/~langm000/linux.html
 S:	Maintained
 
+HPFS FILESYSTEM
+P:	Mikulas Patocka
+M:	mikulas@artax.karlin.mff.cuni.cz
+W:	http://artax.karlin.mff.cuni.cz/~mikulas/vyplody/hpfs/index-e.cgi
+S:	Maintained
+
 IDE DRIVER [GENERAL]
 P:	Andre Hedrick
 M:	hedrick@astro.dyer.vanderbilt.edu

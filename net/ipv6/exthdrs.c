@@ -369,7 +369,7 @@ ipv6_invert_rthdr(struct sock *sk, struct ipv6_rt_hdr *hdr)
    Certainly, it is possible only for udp and raw sockets, but not for tcp.
 
    AUTH header has 4byte granular length, which kills all the idea
-   behind AUTOMATIC 64bit alignment of IPv6. Now we will loose
+   behind AUTOMATIC 64bit alignment of IPv6. Now we will lose
    cpu ticks, checking that sender did not something stupid
    and opt->hdrlen is even. Shit!		--ANK (980730)
  */

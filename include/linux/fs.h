@@ -140,6 +140,7 @@ extern int max_super_blocks, nr_super_blocks;
 #define IS_NOATIME(inode)	__IS_FLG(inode, MS_NOATIME)
 #define IS_NODIRATIME(inode)	__IS_FLG(inode, MS_NODIRATIME)
 
+
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */
 
@@ -154,7 +155,13 @@ extern int max_super_blocks, nr_super_blocks;
 #define BLKFRAGET  _IO(0x12,101)/* get filesystem (mm/filemap.c) read-ahead */
 #define BLKSECTSET _IO(0x12,102)/* set max sectors per request (ll_rw_blk.c) */
 #define BLKSECTGET _IO(0x12,103)/* get max sectors per request (ll_rw_blk.c) */
-#define BLKSSZGET  _IO(0x12,104)/* get block device sector size (reserved for) */
+#define BLKSSZGET  _IO(0x12,104)/* get block device sector size */
+#if 0
+#define BLKPG      _IO(0x12,105)/* See blkpg.h */
+/* This was here just to show that the number is taken -
+   probably all these _IO(0x12,*) ioctls should be moved to blkpg.h. */
+#endif
+
 
 #define BMAP_IOCTL 1		/* obsolete - kept for compatibility */
 #define FIBMAP	   _IO(0x00,1)	/* bmap access */
@@ -724,7 +731,6 @@ extern char * bdevname(kdev_t dev);
 extern char * cdevname(kdev_t dev);
 extern char * kdevname(kdev_t dev);
 extern void init_special_inode(struct inode *, umode_t, int);
-
 
 extern void init_fifo(struct inode * inode);
 extern struct inode_operations fifo_inode_operations;

@@ -16,7 +16,7 @@ struct mouse_status {
 	short		dy;
 	int		ready;
 	int		active;
-	struct wait_queue *wait;
+	wait_queue_head_t wait;
 	struct fasync_struct *fasyncptr;
 };
 

@@ -384,7 +384,7 @@ static int trunc_tindirect (struct inode * inode)
 		
 void ext2_truncate (struct inode * inode)
 {
-	int err, offset, retry;
+	int err, offset;
 
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	    S_ISLNK(inode->i_mode)))
@@ -393,7 +393,7 @@ void ext2_truncate (struct inode * inode)
 		return;
 	ext2_discard_prealloc(inode);
 	while (1) {
-		retry = trunc_direct(inode);
+		int retry = trunc_direct(inode);
 		retry |= trunc_indirect (inode, 
 				EXT2_IND_BLOCK,
 				(u32 *) &inode->u.ext2_i.i_data[EXT2_IND_BLOCK],

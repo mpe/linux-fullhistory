@@ -267,7 +267,7 @@ static int MotorOn = 0, MotorOffTrys;
 
 /* Synchronization of FDC1772 access. */
 static volatile int fdc_busy = 0;
-static struct wait_queue *fdc_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(fdc_wait);
 
 
 static unsigned int changed_floppies = 0xff, fake_change = 0;

@@ -208,6 +208,7 @@ MODULE_PARM(drive3,"1-8i");
 #define DEVICE_OFF(device)
 
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 
 #include "pseudo.h"
 
@@ -331,7 +332,7 @@ static int pd_dev;			/* minor of current request */
 static int pd_poffs;			/* partition offset of current minor */
 static char * pd_buf;                   /* buffer for request in progress */
 
-static struct wait_queue *pd_wait_open = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(pd_wait_open);
 
 static char *pd_errs[17] = { "ERR","INDEX","ECC","DRQ","SEEK","WRERR",
                              "READY","BUSY","AMNF","TK0NF","ABRT","MCR",
@@ -483,35 +484,23 @@ static int pd_ioctl(struct inode *inode,struct file *file,
 		}
                 put_user(pd_hd[dev].start_sect,(long *)&geo->start);
                 return 0;
-            case BLKRASET:
-                if(!capable(CAP_SYS_ADMIN)) return -EACCES;
-                if(!(inode->i_rdev)) return -EINVAL;
-                if(arg > 0xff) return -EINVAL;
-                read_ahead[MAJOR(inode->i_rdev)] = arg;
-                return 0;
-            case BLKRAGET:
-                if (!arg) return -EINVAL;
-                err = verify_area(VERIFY_WRITE,(long *) arg,sizeof(long));
-                if (err) return (err);
-                put_user(read_ahead[MAJOR(inode->i_rdev)],(long *) arg);
-                return (0);
             case BLKGETSIZE:
                 if (!arg) return -EINVAL;
                 err = verify_area(VERIFY_WRITE,(long *) arg,sizeof(long));
                 if (err) return (err);
                 put_user(pd_hd[dev].nr_sects,(long *) arg);
                 return (0);
-            case BLKFLSBUF:
-                if(!capable(CAP_SYS_ADMIN))  return -EACCES;
-                if(!(inode->i_rdev)) return -EINVAL;
-                fsync_dev(inode->i_rdev);
-                invalidate_buffers(inode->i_rdev);
-                return 0;
             case BLKRRPART:
 		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;
                 return pd_revalidate(inode->i_rdev);
-            RO_IOCTLS(inode->i_rdev,arg);
+	    case BLKROSET:
+	    case BLKROGET:
+	    case BLKRASET:
+	    case BLKRAGET:
+	    case BLKFLSBUF:
+	    case BLKPG:
+		return blk_ioctl(inode->i_rdev, cmd, arg);
             default:
                 return -EINVAL;
         }

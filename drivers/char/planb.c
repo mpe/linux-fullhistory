@@ -379,7 +379,7 @@ static volatile struct dbdma_cmd *cmd_geo_setup(
 
 static void __planb_wait(struct planb *pb)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 	add_wait_queue(&pb->lockq, &wait);
 repeat:

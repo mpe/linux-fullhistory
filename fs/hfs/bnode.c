@@ -228,7 +228,7 @@ void hfs_bnode_lock(struct hfs_bnode_ref *bnr, int lock_type)
 			break;
 
 		case HFS_LOCK_NONE:
-			while (bn->lock || witqueue_active(&bn->wqueue)) {
+			while (bn->lock || waitqueue_active(&bn->wqueue)) {
 				hfs_sleep_on(&bn->rqueue);
 			}
 			++bn->count;

@@ -666,7 +666,7 @@ asmlinkage int irix_waitsys(int type, int pid, struct irix5_siginfo *info,
 			    int options, struct rusage *ru)
 {
 	int flag, retval;
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait,current);
 	struct task_struct *p;
 
 	lock_kernel();

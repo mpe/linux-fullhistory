@@ -7322,14 +7322,24 @@ CONFIG_NFSD_SUN
   directories that are mount points on the local filesystem (this is
   how nfsd behaves on Sun systems), say yes here. If unsure, say N.
 
-OS/2 HPFS filesystem support (read only)
+OS/2 HPFS filesystem support (read/write)
 CONFIG_HPFS_FS
   OS/2 is IBM's operating system for PC's, the same as Warp, and HPFS
   is the filesystem used for organizing files on OS/2 hard disk
-  partitions. Say Y if you want to be able to read files from an OS/2
-  HPFS partition of your hard drive. OS/2 floppies however are in
-  regular MSDOS format, so you don't need this option in order to be
-  able to read them. Read Documentation/filesystems/hpfs.txt. 
+  partitions. Say Y if you want to be able to read and write files
+  on an OS/2 HPFS partition of your hard drive. OS/2 floppies however
+  are in regular MSDOS format, so you don't need this option in order
+  to be able to read them. Read Documentation/filesystems/hpfs.txt. 
+  
+  Write support is new and experimental. I don't think it's so
+  "experimental" that it corrupts disks. (but you know: "There's no
+  warranty") There are many checks and filesystem is remounted read-only
+  if any inconsistency found. I use it quite long time and it works.
+
+  This driver may not be able to write to HPFS386 disks on Warp server.
+  HPFS386 on Warp client seems to work ok. If some unknown HPFS386
+  structures are deteced, they are not destroyed and filesystem is
+  remounted read-only.
 
   This filesystem is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).

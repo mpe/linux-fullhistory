@@ -33,7 +33,7 @@
 #define NUM_SERIAL 1     /* One chip on board. */
 #define NUM_CHANNELS (NUM_SERIAL * 2)
 
-extern struct wait_queue * keypress_wait;
+extern struct wait_queue_head_t keypress_wait;
 
 struct sgi_zslayout *zs_chips[NUM_SERIAL] = { 0, };
 struct sgi_zschannel *zs_channels[NUM_CHANNELS] = { 0, 0, };
@@ -1519,7 +1519,7 @@ void rs_hangup(struct tty_struct *tty)
 static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			   struct sgi_serial *info)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int		retval;
 	int		do_clocal = 0;
 

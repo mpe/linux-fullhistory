@@ -20,10 +20,11 @@
 
 #ifndef MODULE
 static int io[PARPORT_MAX+1] __initdata = { [0 ... PARPORT_MAX] = 0 };
+static int io_hi[PARPORT_MAX+1] __initdata = { [0 ... PARPORT_MAX] = 0 };
 static int irq[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_IRQ_PROBEONLY };
 static int dma[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_DMA_NONE };
 
-extern int parport_pc_init(int *io, int *irq, int *dma);
+extern int parport_pc_init(int *io, int *io_hi, int *irq, int *dma);
 extern int parport_ax_init(void);
 
 static int parport_setup_ptr __initdata = 0;
@@ -121,7 +122,7 @@ __initfunc(int parport_init(void))
 	parport_proc_init();
 #endif
 #ifdef CONFIG_PARPORT_PC
-	parport_pc_init(io, irq, dma);
+	parport_pc_init(io, io_hi, irq, dma);
 #endif
 #ifdef CONFIG_PARPORT_AX
 	parport_ax_init();

@@ -93,6 +93,7 @@
 
 #define MAJOR_NR FLOPPY_MAJOR
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 
 #define	FD_MAX_UNITS 2
 
@@ -1584,7 +1585,12 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 
 	device = inode->i_rdev;
 	switch (cmd) {
-		RO_IOCTLS (device, param);
+		case BLKROSET:
+		case BLKROGET:
+		case BLKRASET:
+		case BLKRAGET:
+		case BLKFLSBUF:
+			return blk_ioctl(device, cmd, param);
 	}
 	drive = MINOR (device);
 	type  = drive >> 2;
@@ -1620,22 +1626,6 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		getprm.stretch = dtp->stretch;
 		if (copy_to_user((void *)param, &getprm, sizeof(getprm)))
 			return -EFAULT;
-		return 0;
-	case BLKRASET:
-		if (!capable(CAP_SYS_ADMIN))
-			return -EACCES;
-		if (param > 0xff)
-			return -EINVAL;
-		read_ahead[MAJOR(inode->i_rdev)] = param;
-		return 0;
-	case BLKRAGET:
-		return put_user(read_ahead[MAJOR(inode->i_rdev)],
-				(int *) param);
-	case BLKFLSBUF:
-		if (!capable(CAP_SYS_ADMIN))
-			return -EACCES;
-		fsync_dev(inode->i_rdev);
-		invalidate_buffers(inode->i_rdev);
 		return 0;
 	}
 	if (!IOCTL_ALLOWED)

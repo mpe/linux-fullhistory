@@ -585,7 +585,7 @@ static const char *major_name="sbpcd4";
 /*==========================================================================*/
 
 #if FUTURE
-static struct wait_queue *sbp_waitq = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(sbp_waitq);
 #endif FUTURE
 
 static int teac=SBP_TEAC_SPEED;

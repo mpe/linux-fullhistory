@@ -882,10 +882,6 @@ out:
 	return error;
 }
 
-/*
- * Look out: this function may change a normal dentry
- * into a directory dentry (different size)..
- */
 static inline int do_mkdir(const char * pathname, int mode)
 {
 	int error;
@@ -919,7 +915,7 @@ static inline int do_mkdir(const char * pathname, int mode)
 		goto exit_lock;
 
 	DQUOT_INIT(dir->d_inode);
-	mode &= 0777 & ~current->fs->umask;
+	mode &= (S_IRWXUGO|S_ISVTX) & ~current->fs->umask;
 	error = dir->d_inode->i_op->mkdir(dir->d_inode, dentry, mode);
 
 exit_lock:

@@ -193,7 +193,7 @@ int unregister_blkdev(unsigned int major, const char * name)
  * it. Thus it is called only upon a 'mount' or 'open'. This
  * is the best way of combining speed and utility, I think.
  * People changing diskettes in the middle of an operation deserve
- * to loose :-)
+ * to lose :-)
  */
 int check_disk_change(kdev_t dev)
 {

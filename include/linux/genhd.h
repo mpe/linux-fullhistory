@@ -39,7 +39,7 @@
 #endif
 
 #define DM6_PARTITION		0x54	/* has DDO: use xlated geom & offset */
-#define EZD_PARTITION		0x55	/* EZ-DRIVE:  same as DM6 (we think) */
+#define EZD_PARTITION		0x55	/* EZ-DRIVE */
 #define DM6_AUX1PARTITION	0x51	/* no DDO:  use xlated geom */
 #define DM6_AUX3PARTITION	0x53	/* no DDO:  use xlated geom */
 	
@@ -70,8 +70,8 @@ struct gendisk {
 	int max_nr;			/* maximum number of real devices */
 
 	void (*init)(struct gendisk *);	/* Initialization called before we do our thing */
-	struct hd_struct *part;		/* partition table */
-	int *sizes;			/* device size in blocks, copied to blk_size[] */
+	struct hd_struct *part;		/* [indexed by minor] */
+	int *sizes;			/* [idem], device size in blocks */
 	int nr_real;			/* number of real devices */
 
 	void *real_devices;		/* internal use */
@@ -226,14 +226,12 @@ struct unixware_disklabel {
 
 #endif /* CONFIG_UNIXWARE_DISKLABEL */
 
+#ifdef __KERNEL__
 extern struct gendisk *gendisk_head;	/* linked list of disks */
 
-/*
- * disk_name() is used by genhd.c and md.c.
- * It formats the devicename of the indicated disk
- * into the supplied buffer, and returns a pointer
- * to that same buffer (for convenience).
- */
 char *disk_name (struct gendisk *hd, int minor, char *buf);
+
+int get_hardsect_size(kdev_t dev);
+#endif
 
 #endif

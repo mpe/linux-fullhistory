@@ -155,8 +155,8 @@ typedef struct serial_info {
 	long			pgrp; /* pgrp of opening process */
 	struct tq_struct	tqueue;
 	struct tq_struct	tqueue_hangup;
-	struct wait_queue	*open_wait;
-	struct wait_queue	*close_wait;
+	wait_queue_head_t	open_wait;
+	wait_queue_head_t	close_wait;
 
 	/* CPM Buffer Descriptor pointers.
 	*/
@@ -1733,7 +1733,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			   ser_info_t *info)
 {
 #ifdef DO_THIS_LATER
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 #endif
 	struct serial_state *state = info->state;
 	int		retval;

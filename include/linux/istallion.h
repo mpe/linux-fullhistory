@@ -70,9 +70,9 @@ typedef struct {
 	long			pgrp;
 	unsigned int		rxmarkmsk;
 	struct tty_struct	*tty;
-	struct wait_queue	*open_wait;
-	struct wait_queue	*close_wait;
-	struct wait_queue	*raw_wait;
+	wait_queue_head_t	open_wait;
+	wait_queue_head_t	close_wait;
+	wait_queue_head_t	raw_wait;
 	struct tq_struct	tqhangup;
 	struct termios		normaltermios;
 	struct termios		callouttermios;

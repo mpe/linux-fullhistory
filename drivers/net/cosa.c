@@ -126,7 +126,8 @@ struct channel_data {
 	struct semaphore rsem, wsem;
 	char *rxdata;
 	int rxsize;
-	struct wait_queue *txwaitq, *rxwaitq;
+	wait_queue_head_t txwaitq; 
+	wait_queue_head_t rxwaitq;
 	int tx_status, rx_status;
 
 	/* SPPP/HDLC device parts */
@@ -762,7 +763,7 @@ static long long cosa_lseek(struct file * file,
 static ssize_t cosa_read(struct file *file,
 	char *buf, size_t count, loff_t *ppos)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int flags;
 	struct channel_data *chan = (struct channel_data *)file->private_data;
 	struct cosa_data *cosa = chan->cosa;
@@ -833,7 +834,7 @@ static ssize_t cosa_write(struct file *file,
 	const char *buf, size_t count, loff_t *ppos)
 {
 	struct channel_data *chan = (struct channel_data *)file->private_data;
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	struct cosa_data *cosa = chan->cosa;
 	unsigned int flags;
 	char *kbuf;

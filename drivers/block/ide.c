@@ -122,6 +122,7 @@
 #include <linux/major.h>
 #include <linux/errno.h>
 #include <linux/genhd.h>
+#include <linux/blkpg.h>
 #include <linux/malloc.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
@@ -2232,17 +2233,6 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 				(unsigned long *) &loc->start)) return -EFAULT;
 			return 0;
 		}
-		case BLKSSZGET:
-			/* Block size of media */
-			return put_user(blksize_size[HWIF(drive)->major]
-						    [minor&PARTN_MASK],
-						    (int *)arg);
-		
-		case BLKFLSBUF:
-			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
-			fsync_dev(inode->i_rdev);
-			invalidate_buffers(inode->i_rdev);
-			return 0;
 
 	 	case BLKGETSIZE:   /* Return device size */
 			return put_user(drive->part[MINOR(inode->i_rdev)&PARTN_MASK].nr_sects, (long *) arg);
@@ -2383,7 +2373,12 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			drive->nice1 = (arg >> IDE_NICE_1) & 1;
 			return 0;
 
-		RO_IOCTLS(inode->i_rdev, arg);
+		case BLKROSET:
+		case BLKROGET:
+		case BLKFLSBUF:
+		case BLKSSZGET:
+		case BLKPG:
+			return blk_ioctl(inode->i_rdev, cmd, arg);
 
 		default:
 			if (drive->driver != NULL)
@@ -2917,120 +2912,9 @@ done:
  * Returns 1 if the geometry translation was successful.
  */
 
-#define ANDRIES_GEOMETRY	0
-
 int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 {
 	ide_drive_t *drive;
-
-#if ANDRIES_GEOMETRY
-	/*
-	 * This is the documented list of values (some version of)
-	 * OnTrack DM uses.
-	 */
-
-	static const byte dm_head_vals[] = {4, 8, 16, 32, 64, 128, 255, 0};
-
-	/*
-	 * This is a pure phantasy list - known to be incorrect.
-	 *
-	 * In fact it seems that EZD does not do anything to the CHS
-	 * values in the partition table, so whether EZD is present
-	 * or not should probably not influence the geometry.
-	 */
-
-	static const byte ez_head_vals[] = {4, 8, 16, 32, 64, 128, 240, 255, 0};        const byte *heads;
-	unsigned long tracks;
-
-	drive = get_info_ptr(i_rdev);
-	if (!drive)
-		return 0;
-
-	if (xparm > 1 && xparm <= drive->bios_head && drive->bios_sect == 63) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
-		return 0;	/* we already have a translation */
-	}
-
-	if (xparm == -1) {
-		int ret = 0;
-#if FAKE_FDISK_FOR_EZDRIVE
-		if (drive->remap_0_to_1 == 0) {
-			drive->remap_0_to_1 = 1;
-			printk("%s [remap 0->1]", msg);
-			msg = NULL;
-			ret = 1;
-		}
-		if (drive->bios_head > 16)
-#endif /* FAKE_FDISK_FOR_EZDRIVE */
-		{
-			/*
-			 * Update the current 3D drive values.
-			 */
-			drive->id->cur_cyls	= drive->bios_cyl;
-			drive->id->cur_heads	= drive->bios_head;
-			drive->id->cur_sectors	= drive->bios_sect;
-			return ret;	/* we already have a translation */
-		}
-	}
-
-	if (msg)
-		printk("%s ", msg);
-
-	if (drive->forced_geom) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
-		return 0;
-	}
-
-#if 1
-	/* There used to be code here that assigned drive->id->CHS
-	   to drive->CHS and that to drive->bios_CHS. However,
-	   some disks have id->C/H/S = 4092/16/63 but are larger than 2.1 GB.
-	   In such cases that code was wrong.  Moreover,
-	   there seems to be no reason to do any of these things. */
-#else
-	if (drive->id) {
-		drive->cyl  = drive->id->cyls;
-		drive->head = drive->id->heads;
-		drive->sect = drive->id->sectors;
-	}
-	drive->bios_cyl  = drive->cyl;
-	drive->bios_head = drive->head;
-	drive->bios_sect = drive->sect;
-	drive->special.b.set_geometry = 1;
-
-#endif
-
-	tracks = drive->bios_cyl * drive->bios_head * drive->bios_sect / 63;
-	drive->bios_sect = 63;
-	if (xparm > 1) {
-		drive->bios_head = xparm;
-		drive->bios_cyl = tracks / drive->bios_head;
-	} else {
-		heads = (xparm == -1) ? ez_head_vals : dm_head_vals;
-		while (drive->bios_cyl >= 1024) {
-			drive->bios_head = *heads;
-			drive->bios_cyl = tracks / drive->bios_head;
-			if (0 == *++heads)
-				break;
-		}
-		if (xparm == 1) {
-			drive->sect0 = 63;
-			drive->bios_cyl = (tracks - 1) / drive->bios_head;
-			printk("[remap +63] ");
-		}
-	}
-
-#else /* ANDRIES_GEOMETRY */
 
 	static const byte head_vals[] = {4, 8, 16, 32, 64, 128, 255, 0};
 	const byte *heads = head_vals;
@@ -3106,7 +2990,6 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 			printk("[remap +63] ");
 		}
 	}
-#endif /* ANDRIES_GEOMETRY */
 
 	drive->part[0].nr_sects = current_capacity(drive);
 	printk("[%d/%d/%d]", drive->bios_cyl, drive->bios_head, drive->bios_sect);

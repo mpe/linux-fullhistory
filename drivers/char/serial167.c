@@ -2007,7 +2007,7 @@ static int
 block_til_ready(struct tty_struct *tty, struct file * filp,
                            struct cyclades_port *info)
 {
-  struct wait_queue wait = { current, NULL };
+  DECLARE_WAITQUEUE(wait, current);
   unsigned long flags;
   int channel;
   int retval;

@@ -39,7 +39,7 @@
 
 struct irix_usema {
 	struct file *filp;
-	struct wait_queue *proc_list;
+	wait_queue_head_t proc_list;
 };
 
 static int

@@ -979,7 +979,7 @@ awe_wait(unsigned short delay)
 }
 #else
 
-static struct wait_queue *awe_sleeper = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(awe_sleeper);
 static void awe_wait(unsigned short delay)
 {
 	interruptible_sleep_on_timeout(&awe_sleeper, (HZ * (unsigned long)delay + 44099) / 44100);

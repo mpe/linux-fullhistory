@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.107 1999/03/05 13:21:02 davem Exp $
+/* $Id: sys_sparc32.c,v 1.108 1999/05/16 10:50:32 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -2363,6 +2363,94 @@ static void scm_detach_fds32(struct msghdr *kmsg, struct scm_cookie *scm)
 	__scm_destroy(scm);
 }
 
+/* In these cases we (currently) can just copy to data over verbatim
+ * because all CMSGs created by the kernel have well defined types which
+ * have the same layout in both the 32-bit and 64-bit API.  One must add
+ * some special cased conversions here if we start sending control messages
+ * with incompatible types.
+ *
+ * SCM_RIGHTS and SCM_CREDENTIALS are done by hand in recvmsg32 right after
+ * we do our work.  The remaining cases are:
+ *
+ * SOL_IP	IP_PKTINFO	struct in_pktinfo	32-bit clean
+ *		IP_TTL		int			32-bit clean
+ *		IP_TOS		__u8			32-bit clean
+ *		IP_RECVOPTS	variable length		32-bit clean
+ *		IP_RETOPTS	variable length		32-bit clean
+ *		(these last two are clean because the types are defined
+ *		 by the IPv4 protocol)
+ *		IP_RECVERR	struct sock_extended_err +
+ *				struct sockaddr_in	32-bit clean
+ * SOL_IPV6	IPV6_RECVERR	struct sock_extended_err +
+ *				struct sockaddr_in6	32-bit clean
+ *		IPV6_PKTINFO	struct in6_pktinfo	32-bit clean
+ *		IPV6_HOPLIMIT	int			32-bit clean
+ *		IPV6_FLOWINFO	u32			32-bit clean
+ *		IPV6_HOPOPTS	ipv6 hop exthdr		32-bit clean
+ *		IPV6_DSTOPTS	ipv6 dst exthdr(s)	32-bit clean
+ *		IPV6_RTHDR	ipv6 routing exthdr	32-bit clean
+ *		IPV6_AUTHHDR	ipv6 auth exthdr	32-bit clean
+ */
+static void cmsg32_recvmsg_fixup(struct msghdr *kmsg, unsigned long orig_cmsg_uptr)
+{
+	unsigned char *workbuf, *wp;
+	unsigned long bufsz, space_avail;
+	struct cmsghdr *ucmsg;
+
+	bufsz = ((unsigned long)kmsg->msg_control) - orig_cmsg_uptr;
+	space_avail = kmsg->msg_controllen + bufsz;
+	wp = workbuf = kmalloc(bufsz, GFP_KERNEL);
+	if(workbuf == NULL)
+		goto fail;
+
+	/* To make this more sane we assume the kernel sends back properly
+	 * formatted control messages.  Because of how the kernel will truncate
+	 * the cmsg_len for MSG_TRUNC cases, we need not check that case either.
+	 */
+	ucmsg = (struct cmsghdr *) orig_cmsg_uptr;
+	while(((unsigned long)ucmsg) < ((unsigned long)kmsg->msg_control)) {
+		struct cmsghdr32 *kcmsg32 = (struct cmsghdr32 *) wp;
+		int clen64, clen32;
+
+		/* UCMSG is the 64-bit format CMSG entry in user-space.
+		 * KCMSG32 is within the kernel space temporary buffer
+		 * we use to convert into a 32-bit style CMSG.
+		 */
+		__get_user(kcmsg32->cmsg_len, &ucmsg->cmsg_len);
+		__get_user(kcmsg32->cmsg_level, &ucmsg->cmsg_level);
+		__get_user(kcmsg32->cmsg_type, &ucmsg->cmsg_type);
+
+		clen64 = kcmsg32->cmsg_len;
+		copy_from_user(CMSG32_DATA(kcmsg32), CMSG_DATA(ucmsg),
+			       clen64 - CMSG_ALIGN(sizeof(*ucmsg)));
+		clen32 = ((clen64 - CMSG_ALIGN(sizeof(*ucmsg))) +
+			  CMSG32_ALIGN(sizeof(struct cmsghdr32)));
+		kcmsg32->cmsg_len = clen32;
+
+		ucmsg = (struct cmsghdr *) (((char *)ucmsg) + CMSG_ALIGN(clen64));
+		wp = (((char *)kcmsg32) + CMSG32_ALIGN(clen32));
+	}
+
+	/* Copy back fixed up data, and adjust pointers. */
+	bufsz = (wp - workbuf);
+	copy_to_user((void *)orig_cmsg_uptr, workbuf, bufsz);
+
+	kmsg->msg_control = (struct cmsghdr *)
+		(((char *)orig_cmsg_uptr) + bufsz);
+	kmsg->msg_controllen = space_avail - bufsz;
+
+	kfree(workbuf);
+	return;
+
+fail:
+	/* If we leave the 64-bit format CMSG chunks in there,
+	 * the application could get confused and crash.  So to
+	 * ensure greater recovery, we report no CMSGs.
+	 */
+	kmsg->msg_controllen += bufsz;
+	kmsg->msg_control = (void *) orig_cmsg_uptr;
+}
+
 asmlinkage int sys32_sendmsg(int fd, struct msghdr32 *user_msg, unsigned user_flags)
 {
 	struct socket *sock;
@@ -2455,6 +2543,14 @@ asmlinkage int sys32_recvmsg(int fd, struct msghdr32 *user_msg, unsigned int use
 				if(scm.fp)
 					__scm_destroy(&scm);
 			} else {
+				/* If recvmsg processing itself placed some
+				 * control messages into user space, it's is
+				 * using 64-bit CMSG processing, so we need
+				 * to fix it up before we tack on more stuff.
+				 */
+				if((unsigned long) kern_msg.msg_control != cmsg_ptr)
+					cmsg32_recvmsg_fixup(&kern_msg, cmsg_ptr);
+
 				/* Wheee... */
 				if(sock->passcred)
 					put_cmsg32(&kern_msg,
@@ -2471,9 +2567,9 @@ asmlinkage int sys32_recvmsg(int fd, struct msghdr32 *user_msg, unsigned int use
 	if(uaddr != NULL && err >= 0)
 		err = move_addr_to_user(addr, kern_msg.msg_namelen, uaddr, uaddr_len);
 	if(cmsg_ptr != 0 && err >= 0) {
-		u32 ucmsg_ptr = ((u32)(unsigned long)kern_msg.msg_control);
-		err  = __put_user(ucmsg_ptr, &user_msg->msg_control);
-		err |= __put_user(kern_msg.msg_controllen, &user_msg->msg_controllen);
+		unsigned long ucmsg_ptr = ((unsigned long)kern_msg.msg_control);
+		__kernel_size_t32 uclen = (__kernel_size_t32) (ucmsg_ptr - cmsg_ptr);
+		err |= __put_user(uclen, &user_msg->msg_controllen);
 	}
 	if(err >= 0)
 		err = __put_user(kern_msg.msg_flags, &user_msg->msg_flags);

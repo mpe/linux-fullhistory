@@ -117,9 +117,11 @@ csum_partial:
 #else /* CPU==686 */
 
 csum_partial:
-	movl 12(%esp),%eax	# Function arg: unsigned int sum
-	movl 8(%esp),%ecx	# Function arg: int len
-	movl 4(%esp),%esi	# Function arg:	const unsigned char *buf
+	pushl %esi
+	pushl %ebx
+	movl 20(%esp),%eax	# Function arg: unsigned int sum
+	movl 16(%esp),%ecx	# Function arg: int len
+	movl 12(%esp),%esi	# Function arg:	const unsigned char *buf
 
 	testl $2, %esi         
 	jnz 30f                 
@@ -204,6 +206,8 @@ csum_partial:
 	addl %ebx,%eax
 	adcl $0,%eax
 80: 
+	popl %ebx
+	popl %esi
 	ret
 				
 #endif /* CPU==686 */ 
@@ -369,7 +373,7 @@ DST(	movb %cl, (%edi)	)
 
 #define ROUND1(x) \
 	SRC(movl x(%esi), %ebx	)	;	\
-	addl %ebx, %eax\n		;	\
+	addl %ebx, %eax			;	\
 	DST(movl %ebx, x(%edi)	)	; 
 
 #define ROUND(x) \

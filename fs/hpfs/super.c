@@ -105,7 +105,7 @@ void hpfs_put_super(struct super_block *s)
 	MOD_DEC_USE_COUNT;
 }
 
-static unsigned count_one_bitmap(struct super_block *s, secno secno)
+unsigned hpfs_count_one_bitmap(struct super_block *s, secno secno)
 {
 	struct quad_buffer_head qbh;
 	unsigned *bits;
@@ -114,6 +114,7 @@ static unsigned count_one_bitmap(struct super_block *s, secno secno)
 	count = 0;
 	for (i = 0; i < 2048 / sizeof(unsigned); i++) {
 		unsigned b; 
+		if (!bits[i]) continue;
 		for (b = bits[i]; b; b>>=1) count += b & 1;
 	}
 	hpfs_brelse4(&qbh);
@@ -126,7 +127,7 @@ static unsigned count_bitmaps(struct super_block *s)
 	n_bands = (s->s_hpfs_fs_size + 0x3fff) >> 14;
 	count = 0;
 	for (n = 0; n < n_bands; n++)
-		count += count_one_bitmap(s, s->s_hpfs_bmp_dir[n]);
+		count += hpfs_count_one_bitmap(s, s->s_hpfs_bmp_dir[n]);
 	return count;
 }
 
@@ -135,7 +136,7 @@ int hpfs_statfs(struct super_block *s, struct statfs *buf, int bufsiz)
 	struct statfs tmp;
 	/*if (s->s_hpfs_n_free == -1) {*/
 		s->s_hpfs_n_free = count_bitmaps(s);
-		s->s_hpfs_n_free_dnodes = count_one_bitmap(s, s->s_hpfs_dmap);
+		s->s_hpfs_n_free_dnodes = hpfs_count_one_bitmap(s, s->s_hpfs_dmap);
 	/*}*/
 	tmp.f_type = s->s_magic;
 	tmp.f_bsize = 512;
@@ -379,7 +380,8 @@ struct super_block *hpfs_read_super(struct super_block *s, void *options,
 	s->s_hpfs_cp_table = NULL;
 
 	s->s_hpfs_creation_de_lock = s->s_hpfs_rd_inode = 0;
-	s->s_hpfs_creation_de = s->s_hpfs_iget_q = NULL;
+	init_waitqueue_head(&s->s_hpfs_creation_de);
+	init_waitqueue_head(&s->s_hpfs_iget_q);
 
 	uid = current->uid;
 	gid = current->gid;
@@ -540,7 +542,7 @@ struct super_block *hpfs_read_super(struct super_block *s, void *options,
 
 	root_dno = hpfs_fnode_dno(s, s->s_hpfs_root);
 	if (root_dno)
-		de = map_dirent(s->s_root->d_inode, root_dno, "\001\001", 2, NULL, &qbh, NULL);
+		de = map_dirent(s->s_root->d_inode, root_dno, "\001\001", 2, NULL, &qbh);
 	if (!root_dno || !de) hpfs_error(s, "unable to find root dir");
 	else {
 		s->s_root->d_inode->i_atime = local_to_gmt(s, de->read_date);

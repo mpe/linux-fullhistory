@@ -30,8 +30,6 @@ int hpfs_readdir(struct file *filp, void * dirent, filldir_t filldir)
 	char *tempname;
 	int c1, c2 = 0;
 
-	if (!inode) return -EBADF;
-	if (!S_ISDIR(inode->i_mode)) return -EBADF;
 	if (inode->i_sb->s_hpfs_chk) {
 		if (hpfs_chk_sectors(inode->i_sb, inode->i_ino, 1, "dir_fnode"))
 			return -EFSERROR;
@@ -150,57 +148,30 @@ int hpfs_readdir(struct file *filp, void * dirent, filldir_t filldir)
 struct dentry *hpfs_lookup(struct inode *dir, struct dentry *dentry)
 {
 	const char *name = dentry->d_name.name;
-	int len = dentry->d_name.len;
+	unsigned len = dentry->d_name.len;
 	struct quad_buffer_head qbh;
 	struct hpfs_dirent *de;
-	struct inode *inode;
 	ino_t ino;
-
+	int err;
 	struct inode *result = NULL;
-	if (dir == 0) return -ENOENT;
-	hpfs_adjust_length((char *)name, &len);
+
+	if ((err = hpfs_chk_name((char *)name, &len))) {
+		if (err == -ENAMETOOLONG) return ERR_PTR(-ENAMETOOLONG);
+		goto end_add;
+	}
+
 	hpfs_lock_inode(dir);
-	if (!S_ISDIR(dir->i_mode)) goto bail;
 	/*
-	 * Read in the directory entry. "." is there under the name ^A^A .
-	 * Always read the dir even for . and .. in case we need the dates.
-	 *
-	 * M.P.: No - we can't read '^A^A' for current directory. In some cases
-	 * the information under '^A^A' is incomplete (missing ea_size, bad
-	 * fnode number) - chkdsk ignores such errors and it doesn't seem to
-	 * matter under OS/2.
+	 * '.' and '..' will never be passed here.
 	 */
-	if (name[0] == '.' && len == 1) {
-		result = dir;
-		dir->i_count++;
-		goto end;
-	} else if (name[0] == '.' && name[1] == '.' && len == 2) {
-		struct buffer_head *bh;
-		struct fnode *fnode;
-		if (dir->i_ino == dir->i_sb->s_hpfs_root) {
-			result = dir;
-			dir->i_count++;
-			goto end;
-		}
-		if (dir->i_hpfs_parent_dir == dir->i_sb->s_hpfs_root) {
-			result = dir->i_sb->s_root->d_inode;
-			result->i_count++;
-			goto end;
-		}
-		if (!(fnode = hpfs_map_fnode(dir->i_sb, dir->i_hpfs_parent_dir, &bh))) goto bail;
-		de = map_fnode_dirent(dir->i_sb, dir->i_hpfs_parent_dir, fnode, &qbh);
-		brelse(bh);
-	} else
-		de = map_dirent(dir, dir->i_hpfs_dno, (char *) name, len, NULL, &qbh, NULL);
+
+	de = map_dirent(dir, dir->i_hpfs_dno, (char *) name, len, NULL, &qbh);
 
 	/*
 	 * This is not really a bailout, just means file not found.
 	 */
 
-	if (!de) {
-		result = NULL;
-		goto end;
-	}
+	if (!de) goto end;
 
 	/*
 	 * Get inode number, what we're after.
@@ -213,18 +184,18 @@ struct dentry *hpfs_lookup(struct inode *dir, struct dentry *dentry)
 	 */
 
 	hpfs_lock_iget(dir->i_sb, de->directory || (de->ea_size && dir->i_sb->s_hpfs_eas) ? 1 : 2);
-	if (!(inode = iget(dir->i_sb, ino))) {
+	if (!(result = iget(dir->i_sb, ino))) {
 		hpfs_unlock_iget(dir->i_sb);
-		hpfs_error(inode->i_sb, "hpfs_lookup: can't get inode");
+		hpfs_error(result->i_sb, "hpfs_lookup: can't get inode");
 		goto bail1;
 	}
-	if (!de->directory) inode->i_hpfs_parent_dir = dir->i_ino;
+	if (!de->directory) result->i_hpfs_parent_dir = dir->i_ino;
 	hpfs_unlock_iget(dir->i_sb);
 
-	hpfs_decide_conv(inode, (char *)name, len);
+	hpfs_decide_conv(result, (char *)name, len);
 
 	if (de->has_acl || de->has_xtd_perm) if (!(dir->i_sb->s_flags & MS_RDONLY)) {
-		hpfs_error(inode->i_sb, "ACLs or XPERM found. This is probably HPFS386. This driver doesn't support it now. Send me some info on these structures");
+		hpfs_error(result->i_sb, "ACLs or XPERM found. This is probably HPFS386. This driver doesn't support it now. Send me some info on these structures");
 		goto bail1;
 	}
 
@@ -233,24 +204,24 @@ struct dentry *hpfs_lookup(struct inode *dir, struct dentry *dentry)
 	 * inode.
 	 */
 
-	if (!inode->i_ctime) {
-		if (!(inode->i_ctime = local_to_gmt(dir->i_sb, de->creation_date)))
-			inode->i_ctime = 1;
-		inode->i_mtime = local_to_gmt(dir->i_sb, de->write_date);
-		inode->i_atime = local_to_gmt(dir->i_sb, de->read_date);
-		inode->i_hpfs_ea_size = de->ea_size;
-		if (!inode->i_hpfs_ea_mode && de->read_only)
-			inode->i_mode &= ~0222;
+	if (!result->i_ctime) {
+		if (!(result->i_ctime = local_to_gmt(dir->i_sb, de->creation_date)))
+			result->i_ctime = 1;
+		result->i_mtime = local_to_gmt(dir->i_sb, de->write_date);
+		result->i_atime = local_to_gmt(dir->i_sb, de->read_date);
+		result->i_hpfs_ea_size = de->ea_size;
+		if (!result->i_hpfs_ea_mode && de->read_only)
+			result->i_mode &= ~0222;
 		if (!de->directory) {
-			if (inode->i_size == -1) {
-				inode->i_size = de->file_size;
+			if (result->i_size == -1) {
+				result->i_size = de->file_size;
 			/*
 			 * i_blocks should count the fnode and any anodes.
 			 * We count 1 for the fnode and don't bother about
 			 * anodes -- the disk heads are on the directory band
 			 * and we want them to stay there.
 			 */
-				inode->i_blocks = 1 + ((inode->i_size + 511) >> 9);
+				result->i_blocks = 1 + ((result->i_size + 511) >> 9);
 			}
 		}
 	}
@@ -261,9 +232,9 @@ struct dentry *hpfs_lookup(struct inode *dir, struct dentry *dentry)
 	 * Made it.
 	 */
 
-	result = inode;
 	end:
 	hpfs_unlock_inode(dir);
+	end_add:
 	hpfs_set_dentry_operations(dentry);
 	d_add(dentry, result);
 	return NULL;
@@ -275,7 +246,7 @@ struct dentry *hpfs_lookup(struct inode *dir, struct dentry *dentry)
 	
 	hpfs_brelse4(&qbh);
 	
-	bail:
+	/*bail:*/
 
 	hpfs_unlock_inode(dir);
 	return ERR_PTR(-ENOENT);

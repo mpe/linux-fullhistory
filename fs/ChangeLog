@@ -144,24 +144,12 @@ Wed Dec 16 06:10:04 1998  AV
 	* rmdir of immutable/append-only directory shouldn't be allowed. Fixed.
 
 Remains unfixed:
-	* UMSDOS_rename is broken. Call it with the dest. existing and being an
-		empty directory and you've got EBUSY. At least it doesn't do
-		any harm, so that will wait several days till rename cleanup.
-		Sigh... It will wait a bit more. Problems with fat-derived
-		filesystems are much worse than I thought. Idea of changing
-		inode under dentry is broken by design - guess where the
-		semaphore sits, for one.
-	* umsdos: weird. rename() shouldn't return -EEXIST. BTW, manpage
-		for rename(2) is obviously bogus - it mentions EEXIST and
-		on the next line (correctly) says that EINVAL should be
-		returned. Under the same conditions.
 	* rename's handling of races is, erm, not optimal. Looks like I know
 		what to do, but this thing needs some more cleanup - we can
 		take care of almost all races in VFS and be much more graceful
 		wrt locking. Moreover, it would give strong lookup atomicity.
 		But it's a lot of changes to lookup and dcache code, so it will
 		go after the fs drivers' cleanup.
-	* hfs allows mknod. Only for regular files ;-/ IMHO it's bogus.
 	* affs allows HARD links to directories. VFS is, to put it politely,
 		not too ready to cope with _that_. And I'm not sure it should
 		be - looks like they are pretty much similar to symlinks.
@@ -169,8 +157,3 @@ Remains unfixed:
 		braindead filesystems). I've submitted a patch to Linus, but
 		looks like it wasn't applied.
 	* msdos: shouldn't we treat SYS as IMMUTABLE? Makes sense, IMHO.
-	* minix, qnx and sysv do NOT allow to mkdir sticky directories.
-	* {minix,sysv}/namei.c (do_{minix,syv}_{rename,unlink}):
-		Stuff related to retries still needs cleanup/fixing.
-		Looks like I've found an extremely low-probability race
-		there...

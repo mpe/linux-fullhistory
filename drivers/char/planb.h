@@ -175,7 +175,7 @@ struct planb {
 	unsigned int tab_size;
 	int     maxlines;
 	int lock;
-	struct wait_queue *lockq;
+	wait_queue_head_t lockq;
 	unsigned int	irq;			/* interrupt number */
 	volatile unsigned int intr_mask;
 
@@ -190,13 +190,13 @@ struct planb {
 	unsigned long ch1_cmd_phys;
 	volatile unsigned char *mask;		/* Clipmask buffer */
 	int suspend;
-	struct wait_queue *suspendq;
+	wait_queue_head_t suspendq;
 	struct planb_suspend suspended;
 	int	cmd_buff_inited;		/* cmd buffer inited? */
 
 	int grabbing;
 	unsigned int gcount;
-	struct wait_queue *capq;
+	wait_queue_head_t capq;
 	int last_fr;
 	int prev_last_fr;
         unsigned char *fbuffer;

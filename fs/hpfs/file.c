@@ -54,7 +54,6 @@ void hpfs_truncate(struct inode *i)
 	i->i_hpfs_n_secs = 0;
 	hpfs_truncate_btree(i->i_sb, i->i_ino, 1, ((i->i_size + 511) >> 9));
 	i->i_blocks = 1 + ((i->i_size + 511) >> 9);
-	/*mark_inode_dirty(i);*/i->i_hpfs_dirty = 1;
 	hpfs_write_inode(i);
 }
 

@@ -128,6 +128,7 @@ void hpfs_read_inode(struct inode *i)
 	unsigned char *ea;
 	int ea_size;
 	i->i_op = 0;
+	/*i->i_hpfs_sem = MUTEX;*/
 	init_MUTEX(&i->i_hpfs_sem);
 	i->i_uid = sb->s_hpfs_uid;
 	i->i_gid = sb->s_hpfs_gid;
@@ -199,27 +200,27 @@ void hpfs_read_inode(struct inode *i)
 			return;
 		}
 		if ((ea = hpfs_get_ea(i->i_sb, fnode, "MODE", &ea_size))) {
+			int rdev = 0;
+			umode_t mode = sb->s_hpfs_mode;
 			if (ea_size == 2) {
-				i->i_mode = ea[0] + (ea[1] << 8);
+				mode = ea[0] + (ea[1] << 8);
 				i->i_hpfs_ea_mode = 1;
 			}
 			kfree(ea);
-			if (S_ISBLK(i->i_mode) || S_ISCHR(i->i_mode)) {
+			i->i_mode = mode;
+			if (S_ISBLK(mode) || S_ISCHR(mode)) {
 				if ((ea = hpfs_get_ea(i->i_sb, fnode, "DEV", &ea_size))) {
 					if (ea_size == 4)
-						i->i_rdev = to_kdev_t(ea[0] + (ea[1] << 8) + (ea[2] << 16) + (ea[3] << 24));
+						rdev = ea[0] + (ea[1] << 8) + (ea[2] << 16) + (ea[3] << 24);
 					kfree(ea);
 				}
 			}
-			if (S_ISBLK(i->i_mode) || S_ISCHR(i->i_mode) || S_ISFIFO(i->i_mode) || S_ISSOCK(i->i_mode)) {
+			if (S_ISBLK(mode) || S_ISCHR(mode) || S_ISFIFO(mode) || S_ISSOCK(mode)) {
 				brelse(bh);
 				i->i_nlink = 1;
 				i->i_size = 0;
 				i->i_blocks = 1;
-				i->i_op = NULL;
-				if (S_ISBLK(i->i_mode)) i->i_op = (struct inode_operations *) &blkdev_inode_operations;
-				if (S_ISCHR(i->i_mode)) i->i_op = (struct inode_operations *) &chrdev_inode_operations;
-				if (S_ISFIFO(i->i_mode)) init_fifo(i);
+				init_special_inode(i, mode, rdev);
 				return;
 			}
 		}
@@ -341,7 +342,7 @@ void hpfs_write_inode_nolock(struct inode *i)
 		hpfs_brelse4(&qbh);
 	}
 	if (S_ISDIR(i->i_mode)) {
-		if ((de = map_dirent(i, i->i_hpfs_dno, "\001\001", 2, NULL, &qbh, NULL))) {
+		if ((de = map_dirent(i, i->i_hpfs_dno, "\001\001", 2, NULL, &qbh))) {
 			de->write_date = gmt_to_local(i->i_sb, i->i_mtime);
 			de->read_date = gmt_to_local(i->i_sb, i->i_atime);
 			de->creation_date = gmt_to_local(i->i_sb, i->i_ctime);

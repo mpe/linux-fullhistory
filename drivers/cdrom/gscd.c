@@ -76,7 +76,7 @@ static short gscd_port            = GSCD_BASE_ADDR;
 MODULE_PARM(gscd, "h");
 
 /* Kommt spaeter vielleicht noch mal dran ...
- *    static struct wait_queue *gscd_waitq = NULL;
+ *    static DECLARE_WAIT_QUEUE_HEAD(gscd_waitq);
  */ 
 
 static void gscd_transfer         (void);

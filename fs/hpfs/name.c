@@ -70,13 +70,15 @@ static inline unsigned char locase(unsigned char *dir, unsigned char a)
 	return dir[a];
 }
 
-int hpfs_chk_name(unsigned char *name, unsigned len)
+int hpfs_chk_name(unsigned char *name, unsigned *len)
 {
 	int i;
-	if (!len || len > 254) return 1;
-	for (i = 0; i < len; i++) if (not_allowed_char(name[i])) return 1;
-	if (len == 1) if (name[0] == '.') return 1;
-	if (len == 2) if (name[0] == '.' && name[1] == '.') return 1;
+	if (*len > 254) return -ENAMETOOLONG;
+	hpfs_adjust_length(name, len);
+	if (!*len) return -EINVAL;
+	for (i = 0; i < *len; i++) if (not_allowed_char(name[i])) return -EINVAL;
+	if (*len == 1) if (name[0] == '.') return -EINVAL;
+	if (*len == 2) if (name[0] == '.' && name[1] == '.') return -EINVAL;
 	return 0;
 }
 
@@ -101,7 +103,7 @@ char *hpfs_translate_name(struct super_block *s, unsigned char *from,
 }
 
 int hpfs_compare_names(struct super_block *s, unsigned char *n1, unsigned l1,
-		  unsigned char *n2, unsigned l2, int last)
+		       unsigned char *n2, unsigned l2, int last)
 {
 	unsigned l = l1 < l2 ? l1 : l2;
 	unsigned i;

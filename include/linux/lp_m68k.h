@@ -116,7 +116,7 @@ struct lp_struct {
 	unsigned int chars;	/*busy timeout */
 	unsigned int time;	/*wait time */
 	unsigned int wait;
-	struct wait_queue *lp_wait_q; /*strobe wait */
+	struct wait_queue_head_t lp_wait_q; /*strobe wait */
 	void *base;			/* hardware drivers internal use*/
 	enum lp_type type;
 	char lp_buffer[LP_BUFFER_SIZE];

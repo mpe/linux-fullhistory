@@ -691,6 +691,8 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		break;
 	case S_IFDIR:
 		opfunc = (nfsd_dirop_t) dirp->i_op->mkdir;
+		/* Odd, indeed, but filesystems did it anyway */
+		iap->ia_mode &= (S_IRWXUGO|S_ISVTX) & ~current->fs->umask;
 		break;
 	case S_IFCHR:
 	case S_IFBLK:

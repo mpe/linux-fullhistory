@@ -85,7 +85,7 @@ struct thread_struct {
  * is the frame pointer in schedule() and $15 is saved at offset 48 by
  * entry.S:do_switch_stack).
  *
- * Under heavy swap load I've seen this loose in an ugly way.  So do
+ * Under heavy swap load I've seen this lose in an ugly way.  So do
  * some extra sanity checking on the ranges we expect these pointers
  * to be in so that we can fail gracefully.  This is just for ps after
  * all.  -- r~

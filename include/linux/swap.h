@@ -113,6 +113,7 @@ extern void free_page_and_swap_cache(unsigned long addr);
 /* linux/mm/swapfile.c */
 extern unsigned int nr_swapfiles;
 extern struct swap_info_struct swap_info[];
+extern int is_swap_partition(kdev_t);
 void si_swapinfo(struct sysinfo *);
 unsigned long get_swap_page(void);
 extern void FASTCALL(swap_free(unsigned long));

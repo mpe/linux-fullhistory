@@ -24,13 +24,13 @@ struct hpfs_sb_info {
 	unsigned sb_rd_inode : 2;	/* lookup tells read_inode: 1-read fnode
 					   2-don't read fnode, file
 					   3-don't read fnode, direcotry */
-	struct wait_queue *sb_iget_q;
+	wait_queue_head_t sb_iget_q;
 	unsigned char *sb_cp_table;	/* code page tables: */
 					/* 	128 bytes uppercasing table & */
 					/*	128 bytes lowercasing table */
 	unsigned *sb_bmp_dir;		/* main bitmap directory */
 	unsigned sb_c_bitmap;		/* current bitmap */
-	struct wait_queue *sb_creation_de;/* when creating dirents, nobody else
+	wait_queue_head_t sb_creation_de;/* when creating dirents, nobody else
 					   can alloc blocks */
 	unsigned sb_creation_de_lock : 1;
 	/*unsigned sb_mounting : 1;*/
@@ -55,7 +55,7 @@ struct hpfs_sb_info {
 #define s_hpfs_chk u.hpfs_sb.sb_chk
 #define s_hpfs_was_error u.hpfs_sb.sb_was_error
 #define s_hpfs_chkdsk u.hpfs_sb.sb_chkdsk
-#define s_hpfs_rd_fnode u.hpfs_sb.sb_rd_fnode
+/*#define s_hpfs_rd_fnode u.hpfs_sb.sb_rd_fnode*/
 #define s_hpfs_rd_inode u.hpfs_sb.sb_rd_inode
 #define s_hpfs_cp_table u.hpfs_sb.sb_cp_table
 #define s_hpfs_bmp_dir u.hpfs_sb.sb_bmp_dir

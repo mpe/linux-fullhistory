@@ -1,5 +1,5 @@
 MTRR (Memory Type Range Register) control
-2 May 1998
+16 May 1999
 Richard Gooch
 <rgooch@atnf.csiro.au>
 
@@ -31,8 +31,10 @@ Reading MTRRs from the shell:
 reg00: base=0x00000000 (   0MB), size= 128MB: write-back, count=1
 reg01: base=0x08000000 ( 128MB), size=  64MB: write-back, count=1
 ===============================================================================
-Creating MTRRs from the shell:
+Creating MTRRs from the C-shell:
 # echo "base=0xf8000000 size=0x400000 type=write-combining" >! /proc/mtrr
+or if you use bash:
+# echo "base=0xf8000000 size=0x400000 type=write-combining" >| /proc/mtrr
 
 And the result thereof:
 % cat /proc/mtrr
@@ -79,8 +81,10 @@ registers.
 NOTE: You can only create type=uncachable region, if the first
 region that you created is type=write-combining.
 ===============================================================================
-Removing MTRRs from the shell:
+Removing MTRRs from the C-shell:
 % echo "disable=2" >! /proc/mtrr
+or using bash:
+% echo "disable=2" >| /proc/mtrr
 ===============================================================================
 Reading MTRRs from a C programme using ioctl()'s:
 

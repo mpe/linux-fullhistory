@@ -14,7 +14,12 @@ comment 'USB drivers - not for the faint of heart'
 tristate 'Support for USB (EXPERIMENTAL!)' CONFIG_USB
 if [ ! "$CONFIG_USB" = "n" ]; then
   bool 'UHCI (intel PIIX4 and others) support?' CONFIG_USB_UHCI
+
   bool 'OHCI (compaq and some others) support?' CONFIG_USB_OHCI
+  if [ "$CONFIG_USB_OHCI" = "y" ]; then
+     bool '  Enable tons of OHCI debugging output?' CONFIG_USB_OHCI_DEBUG
+  fi
+
   bool 'OHCI-HCD (other OHCI opt. Virt. Root Hub) support?' CONFIG_USB_OHCI_HCD
   if [ "$CONFIG_USB_OHCI_HCD" = "y" ]; then
      bool 'OHCI-HCD Virtual Root Hub' CONFIG_USB_OHCI_VROOTHUB

@@ -85,12 +85,6 @@ void initrd_init(void);
 
 #endif
 
-#define RO_IOCTLS(dev,where) \
-  case BLKROSET: { int __val;  if (!capable(CAP_SYS_ADMIN)) return -EACCES; \
-		   if (get_user(__val, (int *)(where))) return -EFAULT; \
-		   set_device_ro((dev),__val); return 0; } \
-  case BLKROGET: { int __val = (is_read_only(dev) != 0) ; \
-		    return put_user(__val,(int *) (where)); }
 		 
 #if defined(MAJOR_NR) || defined(IDE_DRIVER)
 

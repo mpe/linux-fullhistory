@@ -846,7 +846,8 @@ int fs_may_mount(kdev_t dev)
  * Anyone using this new feature must know what he/she is doing.
  */
 
-int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const char * type, int flags, void * data)
+int do_mount(kdev_t dev, const char * dev_name, const char * dir_name,
+	     const char * type, int flags, void * data)
 {
 	struct dentry * dir_d;
 	struct super_block * sb;

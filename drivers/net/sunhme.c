@@ -1834,7 +1834,7 @@ static inline void sun4c_happy_meal_tx(struct happy_meal *hp)
 #define RXD(x)
 #endif
 
-/* Originally I use to handle the allocation failure by just giving back just
+/* Originally I used to handle the allocation failure by just giving back just
  * that one ring buffer to the happy meal.  Problem is that usually when that
  * condition is triggered, the happy meal expects you to do something reasonable
  * with all of the packets it has DMA'd in.  So now I just drop the entire

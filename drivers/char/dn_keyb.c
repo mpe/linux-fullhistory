@@ -47,7 +47,7 @@ static int keyb_cmd_transmit=0;
 static unsigned int kbd_mode=APOLLO_KBD_MODE_KEYB;
 static short mouse_dx,mouse_dy,mouse_buttons;
 static int mouse_ready=0,mouse_update_allowed=0,mouse_active=0;
-static struct wait_queue *mouse_wait=NULL;
+static DECLARE_WAIT_QUEUE_HEAD(mouse_wait);
 static struct fasync_struct *mouse_fasyncptr=NULL;
 
 #if 0

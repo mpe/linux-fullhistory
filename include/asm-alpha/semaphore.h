@@ -16,7 +16,7 @@ struct semaphore {
 	/* Careful, inline assembly knows about the position of these two.  */
 	atomic_t count;
 	atomic_t waking;		/* biased by -1 */
-	struct wait_queue *wait;
+	wait_queue_head_t wait;
 };
 
 #define MUTEX ((struct semaphore) \

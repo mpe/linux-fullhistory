@@ -1,4 +1,4 @@
-/* $Id: ide.h,v 1.12 1999/04/17 14:25:29 davem Exp $
+/* $Id: ide.h,v 1.14 1999/05/15 05:02:35 davem Exp $
  * ide.h: Ultra/PCI specific IDE glue.
  *
  * Copyright (C) 1997  David S. Miller (davem@caip.rutgers.edu)
@@ -11,6 +11,8 @@
 #ifdef __KERNEL__
 
 #include <asm/pgtable.h>
+#include <asm/io.h>
+#include <asm/hdreg.h>
 
 #undef  MAX_HWIFS
 #define MAX_HWIFS	2

@@ -279,7 +279,8 @@ void handle_scancode(unsigned char scancode, int down)
 		u_char type;
 
 		/* the XOR below used to be an OR */
-		int shift_final = shift_state ^ kbd->lockstate ^ kbd->slockstate;
+		int shift_final = (shift_state | kbd->slockstate) ^
+		    kbd->lockstate;
 		ushort *key_map = key_maps[shift_final];
 
 		if (key_map != NULL) {
@@ -311,6 +312,7 @@ void handle_scancode(unsigned char scancode, int down)
 			/* we have at least to update shift_state */
 #if 1			/* how? two almost equivalent choices follow */
 			compute_shiftstate();
+			kbd->slockstate = 0; /* play it safe */
 #else
 			keysym = U(plain_map[keycode]);
 			type = KTYP(keysym);
@@ -472,6 +474,7 @@ static void scroll_back(void)
 
 static void boot_it(void)
 {
+	if (kbd->slockstate & ~shift_state) return;
 	ctrl_alt_del();
 }
 
@@ -741,7 +744,7 @@ void compute_shiftstate(void)
 	    for(j=0; j<BITS_PER_LONG; j++,k++)
 	      if(test_bit(k, key_down)) {
 		sym = U(plain_map[k]);
-		if(KTYP(sym) == KT_SHIFT) {
+		if(KTYP(sym) == KT_SHIFT || KTYP(sym) == KT_SLOCK) {
 		  val = KVAL(sym);
 		  if (val == KVAL(K_CAPSSHIFT))
 		    val = KVAL(K_SHIFT);
@@ -793,9 +796,15 @@ static void do_lock(unsigned char value, char up_flag)
 
 static void do_slock(unsigned char value, char up_flag)
 {
+	do_shift(value,up_flag);
 	if (up_flag || rep)
 		return;
 	chg_vc_kbd_slock(kbd, value);
+	/* try to make Alt, oops, AltGr and such work */
+	if (!key_maps[kbd->lockstate ^ kbd->slockstate]) {
+		kbd->slockstate = 0;
+		chg_vc_kbd_slock(kbd, value);
+	}
 }
 
 /*

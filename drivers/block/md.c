@@ -59,6 +59,7 @@
 #define MD_DRIVER
 
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
 #include <asm/atomic.h>
@@ -97,36 +98,6 @@ static struct md_personality *pers[MAX_PERSONALITY]={NULL, };
 struct md_dev md_dev[MAX_MD_DEV];
 
 int md_thread(void * arg);
-
-static struct gendisk *find_gendisk (kdev_t dev)
-{
-  struct gendisk *tmp=gendisk_head;
-
-  while (tmp != NULL)
-  {
-    if (tmp->major==MAJOR(dev))
-      return (tmp);
-    
-    tmp=tmp->next;
-  }
-
-  return (NULL);
-}
-
-char *partition_name (kdev_t dev)
-{
-  static char name[40];		/* This should be long
-				   enough for a device name ! */
-  struct gendisk *hd = find_gendisk (dev);
-
-  if (!hd)
-  {
-    sprintf (name, "[dev %s]", kdevname(dev));
-    return (name);
-  }
-
-  return disk_name (hd, MINOR(dev), name);  /* routine in genhd.c */
-}
 
 static int legacy_raid_sb (int minor, int pnum)
 {
@@ -653,24 +624,7 @@ static int md_ioctl (struct inode *inode, struct file *file,
       return err;
     break;
 
-    case BLKFLSBUF:
-    fsync_dev (inode->i_rdev);
-    invalidate_buffers (inode->i_rdev);
-    break;
-
-    case BLKRASET:
-    if (arg > 0xff)
-      return -EINVAL;
-    read_ahead[MAJOR(inode->i_rdev)] = arg;
-    return 0;
     
-    case BLKRAGET:
-    if  (!arg)  return -EINVAL;
-    err = put_user (read_ahead[MAJOR(inode->i_rdev)], (long *) arg);
-    if (err)
-      return err;
-    break;
-
     /* We have a problem here : there is no easy way to give a CHS
        virtual geometry. We currently pretend that we have a 2 heads
        4 sectors (with a BIG number of cylinders...). This drives dosfs
@@ -693,7 +647,12 @@ static int md_ioctl (struct inode *inode, struct file *file,
       return err;
     break;
     
-    RO_IOCTLS(inode->i_rdev,arg);
+    case BLKROSET:
+    case BLKROGET:
+    case BLKRAGET:
+    case BLKRASET:
+    case BLKFLSBUF:
+	  return blk_ioctl(inode->i_rdev, cmd, arg);
     
     default:
     return -EINVAL;
@@ -901,7 +860,6 @@ EXPORT_SYMBOL(md_size);
 EXPORT_SYMBOL(md_maxreadahead);
 EXPORT_SYMBOL(register_md_personality);
 EXPORT_SYMBOL(unregister_md_personality);
-EXPORT_SYMBOL(partition_name);
 EXPORT_SYMBOL(md_dev);
 EXPORT_SYMBOL(md_error);
 EXPORT_SYMBOL(md_register_thread);

@@ -43,7 +43,7 @@ static int stdma_locked = 0;			/* the semaphore */
 						/* int func to be called */
 static void (*stdma_isr)(int, void *, struct pt_regs *) = NULL;
 static void	*stdma_isr_data = NULL;		/* data passed to isr */
-static struct wait_queue *stdma_wait = NULL;	/* wait queue for ST-DMA */
+static DECLARE_WAIT_QUEUE_HEAD(stdma_wait);	/* wait queue for ST-DMA */
 
 
 

@@ -331,8 +331,8 @@ struct z8530_channel
 	int			line;		/* Minor number */
 	struct termios		normal_termios;	/* Terminal settings */
 	struct termios		callout_termios;
-	struct wait_queue	*open_wait;	/* Tasks waiting to open */
-	struct wait_queue	*close_wait;	/* and for close to end */
+	wait_queue_head_t	open_wait;	/* Tasks waiting to open */
+	wait_queue_head_t	close_wait;	/* and for close to end */
 	unsigned long		event;		/* Pending events */
 	int			fdcount;    	/* # of fd on device */
 	int			blocked_open;	/* # of blocked opens */

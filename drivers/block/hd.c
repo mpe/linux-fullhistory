@@ -604,31 +604,25 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			g.start = hd[MINOR(inode->i_rdev)].start_sect;
 			return copy_to_user(loc, &g, sizeof g) ? -EFAULT : 0; 
 		}
-		case BLKRASET:
-			if(!capable(CAP_SYS_ADMIN))  return -EACCES;
-			if(arg > 0xff) return -EINVAL;
-			read_ahead[MAJOR(inode->i_rdev)] = arg;
-			return 0;
-		case BLKRAGET:
-			if (!arg)  return -EINVAL;
-			return put_user(read_ahead[MAJOR(inode->i_rdev)],
-					(long *) arg); 
+
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
 			return put_user(hd[MINOR(inode->i_rdev)].nr_sects, 
 					(long *) arg);
-		case BLKFLSBUF:
-			if(!capable(CAP_SYS_ADMIN))  return -EACCES;
-			fsync_dev(inode->i_rdev);
-			invalidate_buffers(inode->i_rdev);
-			return 0;
 
 		case BLKRRPART: /* Re-read partition tables */
 			if (!capable(CAP_SYS_ADMIN)) 
 				return -EACCES;
 			return revalidate_hddisk(inode->i_rdev, 1);
 
-		RO_IOCTLS(inode->i_rdev,arg);
+		case BLKROSET:
+		case BLKROGET:
+		case BLKRASET:
+		case BLKRAGET:
+		case BLKFLSBUF:
+		case BLKPG:
+			return blk_ioctl(inode->i_rdev, cmd, arg);
+
 		default:
 			return -EINVAL;
 	}
@@ -836,7 +830,7 @@ static int revalidate_hddisk(kdev_t dev, int maxusage)
 	if (DEVICE_BUSY || USAGE > maxusage) {
 		restore_flags(flags);
 		return -EBUSY;
-	};
+	}
 	DEVICE_BUSY = 1;
 	restore_flags(flags);
 
@@ -854,7 +848,7 @@ static int revalidate_hddisk(kdev_t dev, int maxusage)
 		invalidate_buffers(devi);
 		gdev->part[minor].start_sect = 0;
 		gdev->part[minor].nr_sects = 0;
-	};
+	}
 
 #ifdef MAYBE_REINIT
 	MAYBE_REINIT;

@@ -106,7 +106,7 @@ int sk_run_filter(struct sk_buff *skb, struct sock_filter *filter, int flen)
 				continue;
 
 			case BPF_ALU|BPF_MUL|BPF_K:
-				A *= X;
+				A *= fentry->k;
 				continue;
 
 			case BPF_ALU|BPF_DIV|BPF_X:

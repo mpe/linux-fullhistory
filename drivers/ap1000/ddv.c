@@ -84,7 +84,7 @@ static void ddv_request1(void);
 static char *ddv_opcodep = NULL;
 static struct request *next_request = NULL;
 
-static struct wait_queue * busy_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(busy_wait);
 
 static int ddv_blocksizes[NUM_DDVDEVS]; /* in bytes */
 int ddv_sect_length[NUM_DDVDEVS]; /* in sectors */
@@ -93,7 +93,7 @@ int ddv_blk_length[NUM_DDVDEVS]; /* in blocks */
 /* these are used by the ddv_daemon, which services remote disk requests */
 static struct remote_request *rem_queue = NULL;
 static struct remote_request *rem_queue_end;
-static struct wait_queue *ddv_daemon_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(ddv_daemon_wait);
 
 static int opiu_kernel_loaded = 0;
 

@@ -326,7 +326,7 @@ static void pcxx_error(int line, char *msg)
 
 static int pcxx_waitcarrier(struct tty_struct *tty,struct file *filp,struct channel *info)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int	retval = 0;
 	int	do_clocal = 0;
 

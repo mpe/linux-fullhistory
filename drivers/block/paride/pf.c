@@ -205,6 +205,7 @@ MODULE_PARM(drive3,"1-7i");
 #define DEVICE_OFF(device)
 
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 
 #include "pseudo.h"
 
@@ -433,31 +434,18 @@ static int pf_ioctl(struct inode *inode,struct file *file,
                 }
                 put_user(0,(long *)&geo->start);
                 return 0;
-            case BLKRASET:
-                if(!capable(CAP_SYS_ADMIN)) return -EACCES;
-                if(!(inode->i_rdev)) return -EINVAL;
-                if(arg > 0xff) return -EINVAL;
-                read_ahead[MAJOR(inode->i_rdev)] = arg;
-                return 0;
-            case BLKRAGET:
-                if (!arg) return -EINVAL;
-                err = verify_area(VERIFY_WRITE,(long *) arg,sizeof(long));
-                if (err) return (err);
-                put_user(read_ahead[MAJOR(inode->i_rdev)],(long *) arg);
-                return (0);
             case BLKGETSIZE:
                 if (!arg) return -EINVAL;
                 err = verify_area(VERIFY_WRITE,(long *) arg,sizeof(long));
                 if (err) return (err);
                 put_user(PF.capacity,(long *) arg);
                 return (0);
-            case BLKFLSBUF:
-                if(!capable(CAP_SYS_ADMIN))  return -EACCES;
-                if(!(inode->i_rdev)) return -EINVAL;
-                fsync_dev(inode->i_rdev);
-                invalidate_buffers(inode->i_rdev);
-                return 0;
-            RO_IOCTLS(inode->i_rdev,arg);
+	    case BLKROSET:
+	    case BLKROGET:
+	    case BLKRASET:
+	    case BLKRAGET:
+	    case BLKFLSBUF:
+		return blk_ioctl(inode->i_rdev, cmd, arg);
             default:
                 return -EINVAL;
         }

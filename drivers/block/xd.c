@@ -49,6 +49,7 @@
 
 #define MAJOR_NR XT_DISK_MAJOR
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 
 #include "xd.h"
 
@@ -337,21 +338,9 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 			g.start = xd_struct[MINOR(inode->i_rdev)].start_sect;
 			return copy_to_user(geometry, &g, sizeof g) ? -EFAULT : 0;
 		}
-		case BLKRASET:
-			if(!capable(CAP_SYS_ADMIN)) return -EACCES;
-			if(arg > 0xff) return -EINVAL;
-			read_ahead[MAJOR(inode->i_rdev)] = arg;
-			return 0;
-		case BLKRAGET:
-			return put_user(read_ahead[MAJOR(inode->i_rdev)], (long*) arg);
 		case BLKGETSIZE:
 			if (!arg) return -EINVAL;
 			return put_user(xd_struct[MINOR(inode->i_rdev)].nr_sects,(long *) arg);
-		case BLKFLSBUF:   /* Return devices size */
-			if(!capable(CAP_SYS_ADMIN))  return -EACCES;
-			fsync_dev(inode->i_rdev);
-			invalidate_buffers(inode->i_rdev);
-			return 0;
 		case HDIO_SET_DMA:
 			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
 			if (xdc_busy) return -EBUSY;
@@ -369,7 +358,15 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 			if (!capable(CAP_SYS_ADMIN)) 
 				return -EACCES;
 			return xd_reread_partitions(inode->i_rdev);
-		RO_IOCTLS(inode->i_rdev,arg);
+
+		case BLKFLSBUF:
+		case BLKROSET:
+		case BLKROGET:
+		case BLKRASET:
+		case BLKRAGET:
+		case BLKPG:
+			return blk_ioctl(inode->i_rdev, cmd, arg);
+
 		default:
 			return -EINVAL;
 	}

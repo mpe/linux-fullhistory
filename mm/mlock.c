@@ -115,10 +115,11 @@ static int mlock_fixup(struct vm_area_struct * vma,
 	if (!retval) {
 		/* keep track of amount of locked VM */
 		pages = (end - start) >> PAGE_SHIFT;
-		if (!(newflags & VM_LOCKED))
+		if (newflags & VM_LOCKED) {
 			pages = -pages;
-		vma->vm_mm->locked_vm += pages;
-		make_pages_present(start, end);
+			make_pages_present(start, end);
+		}
+		vma->vm_mm->locked_vm -= pages;
 	}
 	return retval;
 }

@@ -72,6 +72,7 @@ extern void wait_for_keypress(void);
  */
 #define MAJOR_NR RAMDISK_MAJOR
 #include <linux/blk.h>
+#include <linux/blkpg.h>
 
 /*
  * We use a block size of 512 bytes in comparision to BLOCK_SIZE
@@ -198,11 +199,10 @@ static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 			if (!arg)  return -EINVAL;
 			return put_user(rd_length[minor] >> RDBLK_SIZE_BITS, (long *) arg);
 
-		case BLKSSZGET:	   /* Block size of media */
-			if (!arg)  return -EINVAL;
-			return put_user(rd_blocksizes[minor], (int *)arg);
-
-		RO_IOCTLS(inode->i_rdev, arg);
+		case BLKROSET:
+		case BLKROGET:
+		case BLKSSZGET:
+			return blk_ioctl(inode->i_rdev, cmd, arg);
 
 		default:
 			return -EINVAL;
@@ -519,7 +519,7 @@ __initfunc(static void rd_load_image(kdev_t device, int offset, int unit))
 	}
 
 	if (nblocks > (rd_length[unit] >> RDBLK_SIZE_BITS)) {
-		printk("RAMDISK: image too big! (%d/%d blocks)\n",
+		printk("RAMDISK: image too big! (%d/%ld blocks)\n",
 		       nblocks, rd_length[unit] >> RDBLK_SIZE_BITS);
 		goto done;
 	}

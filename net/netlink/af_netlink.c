@@ -203,7 +203,7 @@ static int netlink_release(struct socket *sock, struct socket *peer)
 	 */
 
 	while (netlink_locked(sk)) {
-		current->counter = 0;
+		current->policy |= SCHED_YIELD;
 		schedule();
 	}
 

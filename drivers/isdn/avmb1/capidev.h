@@ -22,7 +22,7 @@ struct capidev {
 	int is_registered;
 	__u16 applid;
 	struct sk_buff_head recv_queue;
-	struct wait_queue *recv_wait;
+	wait_queue_head_t recv_wait;
 	__u16 errcode;
 };
 

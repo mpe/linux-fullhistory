@@ -664,7 +664,7 @@ de620_rx_intr(struct device *dev)
 	if ((pagelink < first_rx_page) || (last_rx_page < pagelink)) {
 		/* Ouch... Forget it! Skip all and start afresh... */
 		printk("%s: Ring overrun? Restoring...\n", dev->name);
-		/* You win some, you loose some. And sometimes plenty... */
+		/* You win some, you lose some. And sometimes plenty... */
 		adapter_init(dev);
 		((struct net_device_stats *)(dev->priv))->rx_over_errors++;
 		return 0;

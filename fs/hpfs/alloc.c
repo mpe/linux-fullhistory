@@ -307,6 +307,7 @@ int hpfs_check_free_dnodes(struct super_block *s, int n)
 	if ((bmp = hpfs_map_dnode_bitmap(s, &qbh))) {
 		for (j = 0; j < 512; j++) {
 			unsigned k;
+			if (!bmp[j]) continue;
 			for (k = bmp[j]; k; k >>= 1) if (k & 1) if (!--n) {
 				hpfs_brelse4(&qbh);
 				return 0;
@@ -327,9 +328,9 @@ int hpfs_check_free_dnodes(struct super_block *s, int n)
 	if (bmp) {
 		for (j = 0; j < 512; j++) {
 			unsigned k;
+			if (!bmp[j]) continue;
 			for (k = 0xf; k; k <<= 4)
 				if ((bmp[j] & k) == k) {
-					/*printk("%08x,%08x\n",j,i);*/
 					if (!--n) {
 						hpfs_brelse4(&qbh);
 						return 0;
@@ -372,8 +373,13 @@ struct dnode *hpfs_alloc_dnode(struct super_block *s, secno near,
 			 int lock)
 {
 	struct dnode *d;
-	if (!(*dno = alloc_in_dirband(s, near, lock)))
-		if (!(*dno = hpfs_alloc_sector(s, near, 4, 0, lock))) return NULL;
+	if (hpfs_count_one_bitmap(s, s->s_hpfs_dmap) > FREE_DNODES_ADD) {
+		if (!(*dno = alloc_in_dirband(s, near, lock)))
+			if (!(*dno = hpfs_alloc_sector(s, near, 4, 0, lock))) return NULL;
+	} else {
+		if (!(*dno = hpfs_alloc_sector(s, near, 4, 0, lock)))
+			if (!(*dno = alloc_in_dirband(s, near, lock))) return NULL;
+	}
 	if (!(d = hpfs_get_4sectors(s, *dno, qbh))) {
 		hpfs_free_dnode(s, *dno);
 		return NULL;

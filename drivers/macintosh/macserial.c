@@ -1595,7 +1595,7 @@ static void rs_hangup(struct tty_struct *tty)
 static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			   struct mac_serial *info)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait,current);
 	int		retval;
 	int		do_clocal = 0;
 
