@@ -491,8 +491,13 @@ ftp://sunsite.unc.edu/pub/Linux/devel/make/make-3.74-direntfix-elf.tgz
 Linux C++ Library
 =================
 
+ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.1.3.bin.tar.gz
 ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.1.4.bin.tar.gz
+
+Use libc5.2.18 with 2.7.1.3, libc5.3.12 with 2.7.1.4
+
 Installation notes:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.1.3
 ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.1.4
 
 Dynamic Linker

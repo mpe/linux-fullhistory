@@ -16,6 +16,9 @@
  * Another possible solution to this problem may be to have a cache of recent
  * RPC call results indexed by page pointer, or even a result code field
  * in struct page.
+ *
+ * June 96: Added retries of RPCs that seem to have failed for a transient
+ * reason.
  */
 
 #include <linux/sched.h>
@@ -90,64 +93,114 @@ io_error:
 }
 
 /*
+ * This is the function to (re-) transmit an NFS readahead request
+ */
+static int
+nfsiod_read_setup(struct nfsiod_req *req)
+{
+	struct inode	*inode = req->rq_inode;
+	struct page	*page = req->rq_page;
+
+	return nfs_proc_read_request(&req->rq_rpcreq,
+			NFS_SERVER(inode), NFS_FH(inode),
+			page->offset, PAGE_SIZE, 
+			(__u32 *) page_address(page));
+}
+
+/*
  * This is the callback from nfsiod telling us whether a reply was
  * received or some error occurred (timeout or socket shutdown).
  */
-static void
-nfs_read_cb(int result, struct nfsiod_req *req)
+static int
+nfsiod_read_result(int result, struct nfsiod_req *req)
 {
-	struct page	*page = (struct page *) req->rq_cdata;
+	struct nfs_server *server = NFS_SERVER(req->rq_inode);
+	struct page	*page = req->rq_page;
 	static int	succ = 0, fail = 0;
+	int		i;
 
 	dprintk("BIO: received callback for page %p, result %d\n",
 			page, result);
 
-	if (result >= 0
-	 && (result = nfs_proc_read_reply(&req->rq_rpcreq)) >= 0) {
-		succ++;
+	if (result >= 0) {
+		struct nfs_fattr	fattr;
+
+		result = nfs_proc_read_reply(&req->rq_rpcreq, &fattr);
+		if (result >= 0) {
+			nfs_refresh_inode(req->rq_inode, &fattr);
+			if (result < PAGE_SIZE)
+				memset((u8 *) page_address(page)+result,
+						0, PAGE_SIZE-result);
+		}
+	} else
+	if (result == -ETIMEDOUT && !(server->flags & NFS_MOUNT_SOFT)) {
+		/* XXX: Theoretically, we'd have to increment the initial
+		 * timeo here; but I'm not going to bother with this now
+		 * because this old nfsiod stuff will soon die anyway.
+		 */
+		result = -EAGAIN;
+	}
+
+	if (result == -EAGAIN && req->rq_retries--) {
+		dprintk("BIO: retransmitting request.\n");
+		memset(&req->rq_rpcreq, 0, sizeof(struct rpc_ioreq));
+		while (rpc_reserve(server->rsock, &req->rq_rpcreq, 1) < 0)
+			schedule();
+		current->fsuid = req->rq_fsuid;
+		current->fsgid = req->rq_fsgid;
+		for (i = 0; i < NGROUPS; i++)
+			current->groups[i] = req->rq_groups[i];
+		nfsiod_read_setup(req);
+		return 0;
+	}
+	if (result >= 0) {
 		set_bit(PG_uptodate, &page->flags);
+		succ++;
 	} else {
-		fail++;
 		dprintk("BIO: %d successful reads, %d failures\n", succ, fail);
 		set_bit(PG_error, &page->flags);
+		fail++;
 	}
 	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 	free_page(page_address(page));
+	return 1;
 }
 
 static inline int
 do_read_nfs_async(struct inode *inode, struct page *page)
 {
 	struct nfsiod_req *req;
-	int		result = -1;	/* totally arbitrary */
+	int		result, i;
 
 	dprintk("NFS: do_read_nfs_async(%p)\n", page);
 
 	set_bit(PG_locked, &page->flags);
 	clear_bit(PG_error, &page->flags);
 
-	if (!(req = nfsiod_reserve(NFS_SERVER(inode), nfs_read_cb)))
-		goto done;
-	result = nfs_proc_read_request(&req->rq_rpcreq,
-			NFS_SERVER(inode), NFS_FH(inode),
-			page->offset, PAGE_SIZE, 
-			(__u32 *) page_address(page));
-	if (result >= 0) {
-		req->rq_cdata = page;
+	if (!(req = nfsiod_reserve(NFS_SERVER(inode))))
+		return -EAGAIN;
+
+	req->rq_retries = 5;
+	req->rq_callback = nfsiod_read_result;
+	req->rq_inode = inode;
+	req->rq_page = page;
+
+	req->rq_fsuid = current->fsuid;
+	req->rq_fsgid = current->fsgid;
+	for (i = 0; i < NGROUPS; i++)
+		req->rq_groups[i] = current->groups[i];
+
+	if ((result = nfsiod_read_setup(req)) >= 0) {
 		page->count++;
-		result = nfsiod_enqueue(req);
-		if (result >= 0)
-			dprintk("NFS: enqueued async READ request.\n");
-	}
-	if (result < 0) {
+		nfsiod_enqueue(req);
+	} else {
 		dprintk("NFS: deferring async READ request.\n");
 		nfsiod_release(req);
 		clear_bit(PG_locked, &page->flags);
 		wake_up(&page->wait);
 	}
 
-done:
 	return result < 0? result : 0;
 }
 

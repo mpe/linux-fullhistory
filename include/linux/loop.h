@@ -32,6 +32,10 @@ struct loop_device {
 	des_key_schedule lo_des_key;
 	unsigned long	lo_des_init[2];
 #endif
+#ifdef IDEA_AVAILABLE
+        idea_key        lo_idea_en_key;
+        idea_key        lo_idea_de_key;
+#endif
 };
 
 typedef	int (* transfer_proc_t)(struct loop_device *, int cmd,

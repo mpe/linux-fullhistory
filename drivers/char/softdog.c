@@ -73,6 +73,7 @@ static int softdog_open(struct inode *inode, struct file *file)
 	/*
 	 *	Activate timer
 	 */
+	del_timer(&watchdog_ticktock);
 	watchdog_ticktock.expires=jiffies + (soft_margin * HZ);
 	add_timer(&watchdog_ticktock);
 	timer_alive++;

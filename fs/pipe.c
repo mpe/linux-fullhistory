@@ -67,8 +67,10 @@ static int pipe_read(struct inode * inode, struct file * filp, char * buf, int c
 	}
 	PIPE_LOCK(*inode)--;
 	wake_up_interruptible(&PIPE_WAIT(*inode));
-	if (read)
+	if (read) {
+	        inode->i_atime = CURRENT_TIME;
 		return read;
+	}
 	if (PIPE_WRITERS(*inode))
 		return -EAGAIN;
 	return 0;
@@ -118,6 +120,7 @@ static int pipe_write(struct inode * inode, struct file * filp, const char * buf
 		wake_up_interruptible(&PIPE_WAIT(*inode));
 		free = 1;
 	}
+	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	return written;
 }
 

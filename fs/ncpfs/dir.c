@@ -63,7 +63,8 @@ ncp_unlink(struct inode *dir, const char *name, int len);
 
 static int
 ncp_rename(struct inode *old_dir, const char *old_name, int old_len, 
-           struct inode *new_dir, const char *new_name, int new_len);
+           struct inode *new_dir, const char *new_name, int new_len,
+           int must_be_dir);
 
 static inline void
 str_upper(char *name)
@@ -1099,7 +1100,8 @@ ncp_unlink(struct inode *dir, const char *name, int len)
 
 static int
 ncp_rename(struct inode *old_dir, const char *old_name, int old_len,
-           struct inode *new_dir, const char *new_name, int new_len)
+           struct inode *new_dir, const char *new_name, int new_len,
+           int must_be_dir)
 {
 	int res;
 	char _old_name[old_len+1];

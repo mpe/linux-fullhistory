@@ -573,6 +573,7 @@ static inline void run_timer_list(void)
 {
 	struct timer_list * timer;
 
+	cli();
 	while ((timer = timer_head.next) != &timer_head && timer->expires <= jiffies) {
 		void (*fn)(unsigned long) = timer->function;
 		unsigned long data = timer->data;
@@ -583,6 +584,7 @@ static inline void run_timer_list(void)
 		fn(data);
 		cli();
 	}
+	sti();
 }
 
 static inline void run_old_timers(void)
@@ -942,6 +944,12 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 			}
 			update_one_process(p, ticks, utime, stime);
 
+			if (p->priority < DEF_PRIORITY)
+				kstat.cpu_nice += utime;
+			else
+				kstat.cpu_user += utime;
+			kstat.cpu_system += stime;
+
 			p->counter -= ticks;
 			if (p->counter >= 0)
 				continue;
@@ -966,25 +974,27 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 static unsigned long lost_ticks = 0;
 static unsigned long lost_ticks_system = 0;
 
-static void timer_bh(void)
+static inline void update_times(void)
 {
-	unsigned long ticks, system;
+	unsigned long ticks;
 
-	run_old_timers();
-
-	cli();
-	run_timer_list();
-	ticks = lost_ticks;
-	lost_ticks = 0;
-	system = lost_ticks_system;
-	lost_ticks_system = 0;
-	sti();
+	ticks = xchg(&lost_ticks, 0);
 
 	if (ticks) {
+		unsigned long system;
+
+		system = xchg(&lost_ticks_system, 0);
 		calc_load(ticks);
 		update_wall_time(ticks);
 		update_process_times(ticks, system);
 	}
+}
+
+static void timer_bh(void)
+{
+	update_times();
+	run_old_timers();
+	run_timer_list();
 }
 
 /*

@@ -2,251 +2,100 @@
 /*
  * sound/sb_mixer.c
  *
- * The low level mixer driver for the SoundBlaster Pro and SB16 cards.
+ * The low level mixer driver for the SoundBlaster compatible cards.
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
-/*
- * Modified:
- *      Hunyue Yau      Jan 6 1994
- *      Added code to support the Sound Galaxy NX Pro mixer.
- *
- */
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SB)
+#if defined(CONFIG_SBDSP)
 #define __SB_MIXER_C__
 
 #include "sb.h"
 #include "sb_mixer.h"
-#undef SB_TEST_IRQ
 
-extern int      sbc_base;
-extern int      Jazz16_detected;
-extern int     *sb_osp;
-extern int      AudioDrive;
-
-static int      mixer_initialized = 0;
-
-static int      supported_rec_devices;
-static int      supported_devices;
-static int      recmask = 0;
-static int      mixer_model;
-static int      mixer_caps;
-static mixer_tab *iomap;
+void            sb_mixer_reset (sb_devc * devc);
 
 void
-sb_setmixer (unsigned int port, unsigned int value)
+sb_mixer_set_stereo (sb_devc * devc, int mode)
 {
-  unsigned long   flags;
-
-  save_flags (flags);
-  cli ();
-  outb ((unsigned char) (port & 0xff), MIXER_ADDR);	/*
-							   * Select register
-							 */
-  tenmicrosec (sb_osp);
-  outb ((unsigned char) (value & 0xff), MIXER_DATA);
-  tenmicrosec (sb_osp);
-  restore_flags (flags);
+  sb_setmixer (devc, OUT_FILTER, ((sb_getmixer (devc, OUT_FILTER) & ~STEREO_DAC)
+				  | (mode ? STEREO_DAC : MONO_DAC)));
 }
 
-int
-sb_getmixer (unsigned int port)
-{
-  int             val;
-  unsigned long   flags;
-
-  save_flags (flags);
-  cli ();
-  outb ((unsigned char) (port & 0xff), MIXER_ADDR);	/*
-							   * Select register
-							 */
-  tenmicrosec (sb_osp);
-  val = inb (MIXER_DATA);
-  tenmicrosec (sb_osp);
-  restore_flags (flags);
-
-  return val;
-}
-
-void
-sb_mixer_set_stereo (int mode)
-{
-  if (!mixer_initialized)
-    return;
-
-  sb_setmixer (OUT_FILTER, ((sb_getmixer (OUT_FILTER) & ~STEREO_DAC)
-			    | (mode ? STEREO_DAC : MONO_DAC)));
-}
-
-/*
- * Returns:
- *      0       No mixer detected.
- *      1       Only a plain Sound Blaster Pro style mixer detected.
- *      2       The Sound Galaxy NX Pro mixer detected.
- */
 static int
-detect_mixer (void)
+detect_mixer (sb_devc * devc)
 {
-#ifdef __SGNXPRO__
-  int             oldbass, oldtreble;
-  extern int      sbc_major;
-
-#endif
-  int             retcode = 1;
-
   /*
    * Detect the mixer by changing parameters of two volume channels. If the
    * values read back match with the values written, the mixer is there (is
    * it?)
    */
-  sb_setmixer (FM_VOL, 0xff);
-  sb_setmixer (VOC_VOL, 0x33);
+  sb_setmixer (devc, FM_VOL, 0xff);
+  sb_setmixer (devc, VOC_VOL, 0x33);
 
-  if (sb_getmixer (FM_VOL) != 0xff)
-    return 0;			/*
-				 * No match
-				 */
-  if (sb_getmixer (VOC_VOL) != 0x33)
+  if (sb_getmixer (devc, FM_VOL) != 0xff)
+    return 0;
+  if (sb_getmixer (devc, VOC_VOL) != 0x33)
     return 0;
 
-#ifdef __SGNXPRO__
-  /* Attempt to detect the SG NX Pro by check for valid bass/treble
-     * registers.
-   */
-  oldbass = sb_getmixer (BASS_LVL);
-  oldtreble = sb_getmixer (TREBLE_LVL);
-
-  sb_setmixer (BASS_LVL, 0xaa);
-  sb_setmixer (TREBLE_LVL, 0x55);
-
-  if ((sb_getmixer (BASS_LVL) != 0xaa) ||
-      (sb_getmixer (TREBLE_LVL) != 0x55))
-    {
-      retcode = 1;		/* 1 == Only SB Pro detected */
-    }
-  else
-    retcode = 2;		/* 2 == SG NX Pro detected */
-  /* Restore register in either case since SG NX Pro has EEPROM with
-   * 'preferred' values stored.
-   */
-  sb_setmixer (BASS_LVL, oldbass);
-  sb_setmixer (TREBLE_LVL, oldtreble);
-
-  /*
-     * If the SB version is 3.X (SB Pro), assume we have a SG NX Pro 16.
-     * In this case it's good idea to disable the Disney Sound Source
-     * compatibility mode. It's useless and just causes noise every time the
-     * LPT-port is accessed.
-     *
-     * Also place the card into WSS mode.
-   */
-  if (sbc_major == 3)
-    {
-      outb (0x01, sbc_base + 0x1c);
-      outb (0x00, sbc_base + 0x1a);
-    }
-
-#endif
-  return retcode;
+  return 1;
 }
 
 static void
-change_bits (unsigned char *regval, int dev, int chn, int newval)
+change_bits (sb_devc * devc, unsigned char *regval, int dev, int chn, int newval)
 {
   unsigned char   mask;
   int             shift;
 
-  mask = (1 << (*iomap)[dev][chn].nbits) - 1;
-  newval = (int) ((newval * mask) + 50) / 100;	/*
-						 * Scale it
-						 */
+  mask = (1 << (*devc->iomap)[dev][chn].nbits) - 1;
+  newval = (int) ((newval * mask) + 50) / 100;	/* Scale */
 
-  shift = (*iomap)[dev][chn].bitoffs - (*iomap)[dev][LEFT_CHN].nbits + 1;
+  shift = (*devc->iomap)[dev][chn].bitoffs - (*devc->iomap)[dev][LEFT_CHN].nbits + 1;
 
-  *regval &= ~(mask << shift);	/*
-				 * Filter out the previous value
-				 */
-  *regval |= (newval & mask) << shift;	/*
-					 * Set the new value
-					 */
+  *regval &= ~(mask << shift);	/* Mask out previous value */
+  *regval |= (newval & mask) << shift;	/* Set the new value */
 }
 
 static int
-sb_mixer_get (int dev)
+sb_mixer_get (sb_devc * devc, int dev)
 {
-  if (!((1 << dev) & supported_devices))
-    return -EINVAL;
+  if (!((1 << dev) & devc->supported_devices))
+    return -(EINVAL);
 
-  return levels[dev];
+  return devc->levels[dev];
 }
 
-static char     smw_mix_regs[] =	/* Left mixer registers */
-{
-  0x0b,				/* SOUND_MIXER_VOLUME */
-  0x0d,				/* SOUND_MIXER_BASS */
-  0x0d,				/* SOUND_MIXER_TREBLE */
-  0x05,				/* SOUND_MIXER_SYNTH */
-  0x09,				/* SOUND_MIXER_PCM */
-  0x00,				/* SOUND_MIXER_SPEAKER */
-  0x03,				/* SOUND_MIXER_LINE */
-  0x01,				/* SOUND_MIXER_MIC */
-  0x07,				/* SOUND_MIXER_CD */
-  0x00,				/* SOUND_MIXER_IMIX */
-  0x00,				/* SOUND_MIXER_ALTPCM */
-  0x00,				/* SOUND_MIXER_RECLEV */
-  0x00,				/* SOUND_MIXER_IGAIN */
-  0x00,				/* SOUND_MIXER_OGAIN */
-  0x00,				/* SOUND_MIXER_LINE1 */
-  0x00,				/* SOUND_MIXER_LINE2 */
-  0x00				/* SOUND_MIXER_LINE3 */
-};
-
 void
-smw_mixer_init (void)
+smw_mixer_init (sb_devc * devc)
 {
   int             i;
 
-  sb_setmixer (0x00, 0x18);	/* Mute unused (Telephone) line */
-  sb_setmixer (0x10, 0x38);	/* Config register 2 */
+  sb_setmixer (devc, 0x00, 0x18);	/* Mute unused (Telephone) line */
+  sb_setmixer (devc, 0x10, 0x38);	/* Config register 2 */
 
-  supported_devices = 0;
+  devc->supported_devices = 0;
   for (i = 0; i < sizeof (smw_mix_regs); i++)
     if (smw_mix_regs[i] != 0)
-      supported_devices |= (1 << i);
+      devc->supported_devices |= (1 << i);
 
-  supported_rec_devices = supported_devices &
+  devc->supported_rec_devices = devc->supported_devices &
     ~(SOUND_MASK_BASS | SOUND_MASK_TREBLE | SOUND_MASK_PCM |
       SOUND_MASK_VOLUME);
+
+  sb_mixer_reset (devc);
 }
 
 static int
-smw_mixer_set (int dev, int value)
+smw_mixer_set (sb_devc * devc, int dev, int value)
 {
   int             left = value & 0x000000ff;
   int             right = (value & 0x0000ff00) >> 8;
@@ -258,47 +107,47 @@ smw_mixer_set (int dev, int value)
     right = 100;
 
   if (dev > 31)
-    return -EINVAL;
+    return -(EINVAL);
 
-  if (!(supported_devices & (1 << dev)))	/* Not supported */
-    return -EINVAL;
+  if (!(devc->supported_devices & (1 << dev)))	/* Not supported */
+    return -(EINVAL);
 
   switch (dev)
     {
     case SOUND_MIXER_VOLUME:
-      sb_setmixer (0x0b, 96 - (96 * left / 100));	/* 96=mute, 0=max */
-      sb_setmixer (0x0c, 96 - (96 * right / 100));
+      sb_setmixer (devc, 0x0b, 96 - (96 * left / 100));		/* 96=mute, 0=max */
+      sb_setmixer (devc, 0x0c, 96 - (96 * right / 100));
       break;
 
     case SOUND_MIXER_BASS:
     case SOUND_MIXER_TREBLE:
-      levels[dev] = left | (right << 8);
+      devc->levels[dev] = left | (right << 8);
 
       /* Set left bass and treble values */
-      val = ((levels[SOUND_MIXER_TREBLE] & 0xff) * 16 / (unsigned) 100) << 4;
-      val |= ((levels[SOUND_MIXER_BASS] & 0xff) * 16 / (unsigned) 100) & 0x0f;
-      sb_setmixer (0x0d, val);
+      val = ((devc->levels[SOUND_MIXER_TREBLE] & 0xff) * 16 / (unsigned) 100) << 4;
+      val |= ((devc->levels[SOUND_MIXER_BASS] & 0xff) * 16 / (unsigned) 100) & 0x0f;
+      sb_setmixer (devc, 0x0d, val);
 
       /* Set right bass and treble values */
-      val = (((levels[SOUND_MIXER_TREBLE] >> 8) & 0xff) * 16 / (unsigned) 100) << 4;
-      val |= (((levels[SOUND_MIXER_BASS] >> 8) & 0xff) * 16 / (unsigned) 100) & 0x0f;
-      sb_setmixer (0x0e, val);
+      val = (((devc->levels[SOUND_MIXER_TREBLE] >> 8) & 0xff) * 16 / (unsigned) 100) << 4;
+      val |= (((devc->levels[SOUND_MIXER_BASS] >> 8) & 0xff) * 16 / (unsigned) 100) & 0x0f;
+      sb_setmixer (devc, 0x0e, val);
       break;
 
     default:
       reg = smw_mix_regs[dev];
       if (reg == 0)
-	return -EINVAL;
-      sb_setmixer (reg, (24 - (24 * left / 100)) | 0x20);	/* 24=mute, 0=max */
-      sb_setmixer (reg + 1, (24 - (24 * right / 100)) | 0x40);
+	return -(EINVAL);
+      sb_setmixer (devc, reg, (24 - (24 * left / 100)) | 0x20);		/* 24=mute, 0=max */
+      sb_setmixer (devc, reg + 1, (24 - (24 * right / 100)) | 0x40);
     }
 
-  levels[dev] = left | (right << 8);
+  devc->levels[dev] = left | (right << 8);
   return left | (right << 8);
 }
 
 static int
-sb_mixer_set (int dev, int value)
+sb_mixer_set (sb_devc * devc, int dev, int value)
 {
   int             left = value & 0x000000ff;
   int             right = (value & 0x0000ff00) >> 8;
@@ -306,8 +155,8 @@ sb_mixer_set (int dev, int value)
   int             regoffs;
   unsigned char   val;
 
-  if (Jazz16_detected == 2)
-    return smw_mixer_set (dev, value);
+  if (devc->model == MDL_SMW)
+    return smw_mixer_set (devc, dev, value);
 
   if (left > 100)
     left = 100;
@@ -315,67 +164,70 @@ sb_mixer_set (int dev, int value)
     right = 100;
 
   if (dev > 31)
-    return -EINVAL;
+    return -(EINVAL);
 
-  if (!(supported_devices & (1 << dev)))	/*
+  if (!(devc->supported_devices & (1 << dev)))	/*
 						 * Not supported
 						 */
-    return -EINVAL;
+    return -(EINVAL);
 
-  regoffs = (*iomap)[dev][LEFT_CHN].regno;
+  regoffs = (*devc->iomap)[dev][LEFT_CHN].regno;
 
   if (regoffs == 0)
-    return -EINVAL;
+    return -(EINVAL);
 
-  val = sb_getmixer (regoffs);
-  change_bits (&val, dev, LEFT_CHN, left);
+  val = sb_getmixer (devc, regoffs);
+  change_bits (devc, &val, dev, LEFT_CHN, left);
 
-  levels[dev] = left | (left << 8);
+  devc->levels[dev] = left | (left << 8);
 
-  if ((*iomap)[dev][RIGHT_CHN].regno != regoffs)	/*
+  if ((*devc->iomap)[dev][RIGHT_CHN].regno != regoffs)	/*
 							 * Change register
 							 */
     {
-      sb_setmixer (regoffs, val);	/*
-					 * Save the old one
-					 */
-      regoffs = (*iomap)[dev][RIGHT_CHN].regno;
+      sb_setmixer (devc, regoffs, val);		/*
+						 * Save the old one
+						 */
+      regoffs = (*devc->iomap)[dev][RIGHT_CHN].regno;
 
       if (regoffs == 0)
 	return left | (left << 8);	/*
 					 * Just left channel present
 					 */
 
-      val = sb_getmixer (regoffs);	/*
-					 * Read the new one
-					 */
+      val = sb_getmixer (devc, regoffs);	/*
+						   * Read the new one
+						 */
     }
 
-  change_bits (&val, dev, RIGHT_CHN, right);
+  change_bits (devc, &val, dev, RIGHT_CHN, right);
 
-  sb_setmixer (regoffs, val);
+  sb_setmixer (devc, regoffs, val);
 
-  levels[dev] = left | (right << 8);
+  devc->levels[dev] = left | (right << 8);
   return left | (right << 8);
 }
 
 static void
-set_recsrc (int src)
+set_recsrc (sb_devc * devc, int src)
 {
-  sb_setmixer (RECORD_SRC, (sb_getmixer (RECORD_SRC) & ~7) | (src & 0x7));
+  sb_setmixer (devc, RECORD_SRC, (sb_getmixer (devc, RECORD_SRC) & ~7) | (src & 0x7));
 }
 
 static int
-set_recmask (int mask)
+set_recmask (sb_devc * devc, int mask)
 {
   int             devmask, i;
   unsigned char   regimageL, regimageR;
 
-  devmask = mask & supported_rec_devices;
+  devmask = mask & devc->supported_rec_devices;
 
-  switch (mixer_model)
+  switch (devc->model)
     {
-    case 3:
+    case MDL_SBPRO:
+    case MDL_ESS:
+    case MDL_JAZZ:
+    case MDL_SMW:
 
       if (devmask != SOUND_MASK_MIC &&
 	  devmask != SOUND_MASK_LINE &&
@@ -384,7 +236,7 @@ set_recmask (int mask)
 				 * More than one devices selected. Drop the *
 				 * previous selection
 				 */
-	  devmask &= ~recmask;
+	  devmask &= ~devc->recmask;
 	}
 
       if (devmask != SOUND_MASK_MIC &&
@@ -398,33 +250,33 @@ set_recmask (int mask)
 	}
 
 
-      if (devmask ^ recmask)	/*
-				 * Input source changed
-				 */
+      if (devmask ^ devc->recmask)	/*
+					   * Input source changed
+					 */
 	{
 	  switch (devmask)
 	    {
 
 	    case SOUND_MASK_MIC:
-	      set_recsrc (SRC_MIC);
+	      set_recsrc (devc, SRC__MIC);
 	      break;
 
 	    case SOUND_MASK_LINE:
-	      set_recsrc (SRC_LINE);
+	      set_recsrc (devc, SRC__LINE);
 	      break;
 
 	    case SOUND_MASK_CD:
-	      set_recsrc (SRC_CD);
+	      set_recsrc (devc, SRC__CD);
 	      break;
 
 	    default:
-	      set_recsrc (SRC_MIC);
+	      set_recsrc (devc, SRC__MIC);
 	    }
 	}
 
       break;
 
-    case 4:
+    case MDL_SB16:
       if (!devmask)
 	devmask = SOUND_MASK_MIC;
 
@@ -435,159 +287,155 @@ set_recmask (int mask)
 	    regimageL |= sb16_recmasks_L[i];
 	    regimageR |= sb16_recmasks_R[i];
 	  }
-      sb_setmixer (SB16_IMASK_L, regimageL);
-      sb_setmixer (SB16_IMASK_R, regimageR);
+      sb_setmixer (devc, SB16_IMASK_L, regimageL);
+      sb_setmixer (devc, SB16_IMASK_R, regimageR);
       break;
     }
 
-  recmask = devmask;
-  return recmask;
+  devc->recmask = devmask;
+  return devc->recmask;
 }
 
 static int
 sb_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
+  sb_devc        *devc = mixer_devs[dev]->devc;
+
   if (((cmd >> 8) & 0xff) == 'M')
     {
       if (_IOC_DIR (cmd) & _IOC_WRITE)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:
-	    return snd_ioctl_return ((int *) arg, set_recmask (get_fs_long ((long *) arg)));
+	    return snd_ioctl_return ((int *) arg, set_recmask (devc, get_fs_long ((long *) arg)));
 	    break;
 
 	  default:
 
-	    return snd_ioctl_return ((int *) arg, sb_mixer_set (cmd & 0xff, get_fs_long ((long *) arg)));
+	    return snd_ioctl_return ((int *) arg, sb_mixer_set (devc, cmd & 0xff, get_fs_long ((long *) arg)));
 	  }
       else
-	switch (cmd & 0xff)	/*
-				 * Return parameters
-				 */
+	switch (cmd & 0xff)
 	  {
 
 	  case SOUND_MIXER_RECSRC:
-	    return snd_ioctl_return ((int *) arg, recmask);
+	    return snd_ioctl_return ((int *) arg, devc->recmask);
 	    break;
 
 	  case SOUND_MIXER_DEVMASK:
-	    return snd_ioctl_return ((int *) arg, supported_devices);
+	    return snd_ioctl_return ((int *) arg, devc->supported_devices);
 	    break;
 
 	  case SOUND_MIXER_STEREODEVS:
-	    if (Jazz16_detected)
-	      return snd_ioctl_return ((int *) arg, supported_devices);
+	    if (devc->model == MDL_JAZZ || devc->model == MDL_SMW)
+	      return snd_ioctl_return ((int *) arg, devc->supported_devices);
 	    else
-	      return snd_ioctl_return ((int *) arg, supported_devices & ~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER));
+	      return snd_ioctl_return ((int *) arg, devc->supported_devices & ~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER));
 	    break;
 
 	  case SOUND_MIXER_RECMASK:
-	    return snd_ioctl_return ((int *) arg, supported_rec_devices);
+	    return snd_ioctl_return ((int *) arg, devc->supported_rec_devices);
 	    break;
 
 	  case SOUND_MIXER_CAPS:
-	    return snd_ioctl_return ((int *) arg, mixer_caps);
+	    return snd_ioctl_return ((int *) arg, devc->mixer_caps);
 	    break;
 
 	  default:
-	    return snd_ioctl_return ((int *) arg, sb_mixer_get (cmd & 0xff));
+	    return snd_ioctl_return ((int *) arg, sb_mixer_get (devc, cmd & 0xff));
 	  }
     }
   else
-    return -EINVAL;
+    return -(EINVAL);
 }
 
 static struct mixer_operations sb_mixer_operations =
 {
+  "SB",
   "SoundBlaster",
   sb_mixer_ioctl
 };
 
 void
-sb_mixer_reset (void)
+sb_mixer_reset (sb_devc * devc)
 {
   int             i;
 
   for (i = 0; i < SOUND_MIXER_NRDEVICES; i++)
-    sb_mixer_set (i, levels[i]);
-  set_recmask (SOUND_MASK_MIC);
+    sb_mixer_set (devc, i, devc->levels[i]);
+  set_recmask (devc, SOUND_MASK_MIC);
 }
 
-/*
- * Returns a code depending on whether a SG NX Pro was detected.
- * 1 == Plain SB Pro
- * 2 == SG NX Pro detected.
- * 3 == SB16
- *
- * Used to update message.
- */
 int
-sb_mixer_init (int major_model)
+sb_mixer_init (sb_devc * devc)
 {
   int             mixer_type = 0;
 
-  sb_setmixer (0x00, 0);	/* Reset mixer */
+  sb_setmixer (devc, 0x00, 0);	/* Reset mixer */
 
-  if (!(mixer_type = detect_mixer ()))
+  if (!(mixer_type = detect_mixer (devc)))
     return 0;			/* No mixer. Why? */
 
-  mixer_initialized = 1;
-  mixer_model = major_model;
-
-  switch (major_model)
+  switch (devc->model)
     {
-    case 3:
-      mixer_caps = SOUND_CAP_EXCL_INPUT;
-
-      if (AudioDrive)
-	{
-	  supported_devices = ES688_MIXER_DEVICES;
-	  supported_rec_devices = ES688_RECORDING_DEVICES;
-	  iomap = &es688_mix;
-	}
-      else if (Jazz16_detected == 2)	/* SM Wave */
-	{
-	  supported_devices = 0;
-	  supported_rec_devices = 0;
-	  iomap = &sbpro_mix;
-	  smw_mixer_init ();
-	  mixer_type = 1;
-	}
-      else
-#ifdef __SGNXPRO__
-      if (mixer_type == 2)	/* A SGNXPRO was detected */
-	{
-	  supported_devices = SGNXPRO_MIXER_DEVICES;
-	  supported_rec_devices = SGNXPRO_RECORDING_DEVICES;
-	  iomap = &sgnxpro_mix;
-	}
-      else
-#endif
-	{
-	  supported_devices = SBPRO_MIXER_DEVICES;
-	  supported_rec_devices = SBPRO_RECORDING_DEVICES;
-	  iomap = &sbpro_mix;
-	  mixer_type = 1;
-	}
+    case MDL_SBPRO:
+    case MDL_JAZZ:
+      devc->mixer_caps = SOUND_CAP_EXCL_INPUT;
+      devc->supported_devices = SBPRO_MIXER_DEVICES;
+      devc->supported_rec_devices = SBPRO_RECORDING_DEVICES;
+      devc->iomap = &sbpro_mix;
       break;
 
-    case 4:
-      mixer_caps = 0;
-      supported_devices = SB16_MIXER_DEVICES;
-      supported_rec_devices = SB16_RECORDING_DEVICES;
-      iomap = &sb16_mix;
-      mixer_type = 3;
+    case MDL_ESS:
+      devc->mixer_caps = SOUND_CAP_EXCL_INPUT;
+      devc->supported_devices = ES688_MIXER_DEVICES;
+      devc->supported_rec_devices = ES688_RECORDING_DEVICES;
+      devc->iomap = &es688_mix;
+      break;
+
+    case MDL_SMW:
+      devc->mixer_caps = SOUND_CAP_EXCL_INPUT;
+      devc->supported_devices = 0;
+      devc->supported_rec_devices = 0;
+      devc->iomap = &sbpro_mix;
+      smw_mixer_init (devc);
+      break;
+
+    case MDL_SB16:
+      devc->mixer_caps = 0;
+      devc->supported_devices = SB16_MIXER_DEVICES;
+      devc->supported_rec_devices = SB16_RECORDING_DEVICES;
+      devc->iomap = &sb16_mix;
       break;
 
     default:
-      printk ("SB Warning: Unsupported mixer type\n");
+      printk ("SB Warning: Unsupported mixer type %d\n", devc->model);
       return 0;
     }
 
-  if (num_mixers < MAX_MIXER_DEV)
-    mixer_devs[num_mixers++] = &sb_mixer_operations;
-  sb_mixer_reset ();
-  return mixer_type;
+  if (num_mixers >= MAX_MIXER_DEV)
+    return 0;
+
+
+  mixer_devs[num_mixers] = (struct mixer_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct mixer_operations)));
+
+  if (sound_nblocks < 1024)
+    sound_nblocks++;;
+  if (mixer_devs[num_mixers] == NULL)
+    {
+      printk ("sb_mixer: Can't allocate memory\n");
+      return 0;
+    }
+
+  memcpy ((char *) mixer_devs[num_mixers], (char *) &sb_mixer_operations,
+	  sizeof (struct mixer_operations));
+
+  mixer_devs[num_mixers]->devc = devc;
+  memcpy ((char *) devc->levels, (char *) &default_levels, sizeof (default_levels));
+
+  sb_mixer_reset (devc);
+  devc->my_mixerdev = num_mixers++;
+  return 1;
 }
 
 #endif

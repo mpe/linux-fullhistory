@@ -6,6 +6,7 @@
  * Copyright 1993 by Theodore Ts'o.  Redistribution of this file is
  * permitted under the GNU Public License.
  *
+ * more DES encryption plus IDEA encryption by Nicholas J. Leon, June 20, 1996
  * DES encryption plus some minor changes by Werner Almesberger, 30-MAY-1993
  *
  * Modularized and updated for 1.1.16 kernel - Mitch Dsouza 28th May 1994
@@ -15,6 +16,7 @@
 
 #include <linux/module.h>
 
+#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/stat.h>
 #include <linux/errno.h>
@@ -22,9 +24,14 @@
 
 #include <asm/segment.h>
 
-#ifdef DES_AVAILABLE
-#include "des.h"
+#ifdef CONFIG_BLK_DEV_LOOP_DES
+#include <linux/des.h>
 #endif
+
+#ifdef CONFIG_BLK_DEV_LOOP_IDEA
+#include <linux/idea.h>
+#endif
+
 #include <linux/loop.h>		/* must follow des.h */
 
 #define MAJOR_NR LOOP_MAJOR
@@ -113,6 +120,23 @@ static int transfer_des(struct loop_device *lo, int cmd, char *raw_buf,
 }
 #endif
 
+#ifdef IDEA_AVAILABLE
+
+extern void idea_encrypt_block(idea_key,char *,char *,int);
+
+static int transfer_idea(struct loop_device *lo, int cmd, char *raw_buf,
+		  char *loop_buf, int size)
+{
+  if (cmd==READ) {
+    idea_encrypt_block(lo->lo_idea_en_key,raw_buf,loop_buf,size);
+  }
+  else {
+    idea_encrypt_block(lo->lo_idea_de_key,loop_buf,raw_buf,size);
+  }
+  return 0;
+}
+#endif
+
 static transfer_proc_t xfer_funcs[MAX_LOOP] = {
 	transfer_none,		/* LO_CRYPT_NONE */
 	transfer_xor,		/* LO_CRYPT_XOR */
@@ -121,7 +145,11 @@ static transfer_proc_t xfer_funcs[MAX_LOOP] = {
 #else
 	NULL,			/* LO_CRYPT_DES */
 #endif
-	0			/* LO_CRYPT_IDEA */
+#ifdef IDEA_AVAILABLE           /* LO_CRYPT_IDEA */
+	transfer_idea
+#else
+	NULL
+#endif
 };
 
 
@@ -225,8 +253,10 @@ repeat:
 			brelse(bh);
 			goto error_out;
 		}
-		if (CURRENT->cmd == WRITE)
+		if (CURRENT->cmd == WRITE) {
+			mark_buffer_uptodate(bh, 1);
 			mark_buffer_dirty(bh, 1);
+		}
 		brelse(bh);
 		dest_addr += size;
 		len -= size;
@@ -334,6 +364,20 @@ static int loop_set_status(struct loop_device *lo, struct loop_info *arg)
 		   lo->lo_des_key);
 		memcpy(lo->lo_des_init,info.lo_init,8);
 		break;
+#endif
+#ifdef IDEA_AVAILABLE
+	case LO_CRYPT_IDEA:
+	  {
+	        uint16 tmpkey[8];
+
+	        if (info.lo_encrypt_key_size != IDEAKEYSIZE)
+		        return -EINVAL;
+                /* create key in lo-> from info.lo_encrypt_key */
+		memcpy(tmpkey,info.lo_encrypt_key,sizeof(tmpkey));
+		en_key_idea(tmpkey,lo->lo_idea_en_key);
+		de_key_idea(lo->lo_idea_en_key,lo->lo_idea_de_key);
+		break;
+	  }
 #endif
 	default:
 		return -EINVAL;
@@ -494,6 +538,12 @@ loop_init( void ) {
 	}
 #ifndef MODULE
 	printk("loop: registered device at major %d\n", MAJOR_NR);
+#ifdef DES_AVAILABLE
+	printk("loop: DES encryption available\n");
+#endif
+#ifdef IDEA_AVAILABLE
+	printk("loop: IDEA encryption available\n");
+#endif
 #endif
 
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;

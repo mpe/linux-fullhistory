@@ -2,7 +2,7 @@
  *		IP_MASQ_APP application masquerading module
  *
  *
- * Version:	@(#)ip_masq_app.c  0.03      03/96
+ * Version:	@(#)ip_masq_app.c  0.04      96/06/17
  *
  * Author:	Juan Jose Ciarlante, <jjciarla@raiz.uncu.edu.ar>
  *
@@ -13,7 +13,8 @@
  *	2 of the License, or (at your option) any later version.
  *
  * Fixes:
- *	JJC		: Implemented also input pkt hook
+ *	JJC			: Implemented also input pkt hook
+ *	Miquel van Smoorenburg	: Copy more stuff when resizing skb
  *
  *
  * FIXME:
@@ -502,6 +503,7 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
 {
         int maxsize, diff, o_offset;
         struct sk_buff *n_skb;
+	int offset;
 
 	maxsize = skb->truesize - sizeof(struct sk_buff);
 
@@ -521,7 +523,9 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
 	    skb->end = skb->head+n_len;
 	} else {
                 /*
-                 * 	Sizes differ, make a copy
+                 * 	Sizes differ, make a copy.
+                 *
+                 *	FIXME: move this to core/sbuff.c:skb_grow()
                  */
         
                 n_skb = alloc_skb(MAX_HEADER + skb->len + diff, pri);
@@ -534,8 +538,22 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
                 n_skb->free = skb->free;
                 skb_reserve(n_skb, MAX_HEADER);
                 skb_put(n_skb, skb->len + diff);
-                n_skb->h.raw = n_skb->data + (skb->h.raw - skb->data);
-                
+
+                /*
+                 *	Copy as much data from the old skb as possible. Even
+                 *	though we're only forwarding packets, we need stuff
+                 *	like skb->protocol (PPP driver wants it).
+                 */
+                offset = n_skb->data - skb->data;
+                n_skb->h.raw = skb->h.raw + offset;
+                n_skb->when = skb->when;
+                n_skb->dev = skb->dev;
+                n_skb->mac.raw = skb->mac.raw + offset;
+                n_skb->ip_hdr = (struct iphdr *)(((char *)skb->ip_hdr)+offset);
+                n_skb->pkt_type = skb->pkt_type;
+                n_skb->protocol = skb->protocol;
+                n_skb->ip_summed = skb->ip_summed;
+
                 /*
                  * Copy pkt in new buffer
                  */

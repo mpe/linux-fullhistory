@@ -8,6 +8,7 @@
  * This file handles the architecture-dependent parts of process handling..
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -52,6 +53,11 @@ asmlinkage int sys_idle(void)
 
 void hard_reset_now(void)
 {
+#if defined(CONFIG_ALPHA_SRM) && defined(CONFIG_ALPHA_ALCOR)
+	/* who said DEC engineer's have no sense of humor? ;-)) */
+	*(int *) GRU_RESET = 0x0000dead;
+	mb();
+#endif
 	halt();
 }
 

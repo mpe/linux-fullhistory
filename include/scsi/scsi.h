@@ -96,7 +96,7 @@
 #define RESERVATION_CONFLICT 0x0c
 #define QUEUE_FULL           0x1a
 
-#define STATUS_MASK          0x1e
+#define STATUS_MASK          0x3e
 
 /*
  *  SENSE KEYS

@@ -58,16 +58,7 @@
 /*
  *  task queue struct
  */ 
-struct tq_struct *tq_delivery=NULL;
 
-static void do_pcbit_bh(task_queue *list)
-{
-	run_task_queue(list);
-}
-
-struct tq_struct run_delivery= {
-        0, 0, (void *)(void *) do_pcbit_bh, &tq_delivery,
-};
 
 
 /*
@@ -87,7 +78,6 @@ void pcbit_deliver(void * data);
 static void pcbit_transmit(struct pcbit_dev * dev);
 
 static void pcbit_recv_ack(struct pcbit_dev *dev, unsigned char ack);
-static void pcbit_frame_read(struct pcbit_dev * dev, unsigned char read_seq);
 
 static void pcbit_l2_error(struct pcbit_dev *dev);
 static void pcbit_l2_active_conf(struct pcbit_dev *dev, u_char info);
@@ -95,11 +85,10 @@ static void pcbit_l2_err_recover(unsigned long data);
 
 static void pcbit_firmware_bug(struct pcbit_dev * dev);
 
-static void pcbit_sched_delivery(struct pcbit_dev *dev)
+static __inline__ void pcbit_sched_delivery(struct pcbit_dev *dev)
 {
-  queue_task_irq_off(&dev->qdelivery, &tq_delivery);
-  queue_task_irq_off(&run_delivery, &tq_immediate);
-  mark_bh(IMMEDIATE_BH);
+	queue_task(&dev->qdelivery, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
 }
 
 
@@ -195,11 +184,10 @@ static void pcbit_transmit(struct pcbit_dev * dev)
 
         unacked = (dev->send_seq + (8 - dev->unack_seq) ) & 0x07;
 
+	save_flags(flags);
+	cli();
+
         if (dev->free > 16 && dev->write_queue && unacked < 7) {
-
-                save_flags(flags);
-                cli();
-
 
                 if (!dev->w_busy)
                         dev->w_busy = 1;
@@ -209,10 +197,11 @@ static void pcbit_transmit(struct pcbit_dev * dev)
                         return;
                 }
 
-                restore_flags(flags);
 
                 frame = dev->write_queue;
                 free = dev->free;
+
+                restore_flags(flags);
 
 		if (frame->copied == 0) {
 
@@ -311,12 +300,15 @@ static void pcbit_transmit(struct pcbit_dev * dev)
 		dev->w_busy = 0;
 		restore_flags(flags);				
         }
-#ifdef DEBUG
         else
+	{
+		restore_flags(flags);
+#ifdef DEBUG		
                 printk(KERN_DEBUG "unacked %d free %d write_queue %s\n",
                        unacked, dev->free, dev->write_queue ? "not empty" : 
-		       "empty");
+		       "empty");	
 #endif
+	}
 }
 
 
@@ -334,29 +326,31 @@ void pcbit_deliver(void * data)
 	save_flags(flags);
         cli();
 
-        /* get frame from queue */
-        if (!(frame=dev->read_queue)) {
+	while((frame=dev->read_queue))
+	{
+		dev->read_queue = frame->next;
 		restore_flags(flags);
-                return;
+
+		msg.cpu = 0;
+		msg.proc = 0;
+		msg.cmd = frame->skb->data[2];
+		msg.scmd = frame->skb->data[3];
+
+		frame->refnum = *((ushort*) frame->skb->data + 4);
+		frame->msg = *((ulong*) &msg);
+		
+		skb_pull(frame->skb, 6);
+
+		pcbit_l3_receive(dev, frame->msg, frame->skb, frame->hdr_len, 
+				 frame->refnum);
+
+		kfree(frame);
+
+		save_flags(flags);
+		cli();
 	}
 
-        dev->read_queue = frame->next;
-        restore_flags(flags);
-
-	msg.cpu = 0;
-	msg.proc = 0;
-	msg.cmd = frame->skb->data[2];
-	msg.scmd = frame->skb->data[3];
-
-	frame->refnum = *((ushort*) frame->skb->data + 4);
-	frame->msg = *((ulong*) &msg);
-	
-	skb_pull(frame->skb, 6);
-
-        pcbit_l3_receive(dev, frame->msg, frame->skb, frame->hdr_len, 
-			 frame->refnum);
-
-        kfree(frame);
+	restore_flags(flags);
 }
 
 /*
@@ -517,8 +511,7 @@ static void pcbit_receive(struct pcbit_dev * dev)
                 }
                 else
                         dev->read_queue = frame;
-
-                pcbit_sched_delivery(dev);
+                
                 restore_flags(flags);
 
         }
@@ -572,7 +565,6 @@ void pcbit_irq_handler(int interrupt, void * devptr, struct pt_regs *regs)
 {
         struct pcbit_dev * dev;
         u_char info, ack_seq, read_seq;
-        u_char ack_int = 1;
 
 	dev = (struct pcbit_dev *) devptr;
 
@@ -618,33 +610,27 @@ void pcbit_irq_handler(int interrupt, void * devptr, struct pt_regs *regs)
         read_seq = (info & 0x07U); 
         
 	dev->interrupt = 0;
-	sti();
-
-	/*
-	 *	Bottom Half
-	 *	Runs with ints enabled
-	 */
 
         if (read_seq != dev->rcv_seq)
         {
-                pcbit_frame_read(dev, read_seq);
-                ack_int = 0;
+		while (read_seq != dev->rcv_seq)
+		{
+			pcbit_receive(dev);
+			dev->rcv_seq = (dev->rcv_seq + 1) % 8;
+		}
+		pcbit_sched_delivery(dev);
         }
 
 	if (ack_seq != dev->unack_seq)
         {
                 pcbit_recv_ack(dev, ack_seq);
-                ack_int = 0;
         }
 
-        if (ack_int) 
-	{
-                info = 0;
-                info |= dev->rcv_seq << 3;
-                info |= dev->send_seq;
+
+	info = dev->rcv_seq << 3;
+	info |= dev->send_seq;
     
-                writeb(info, dev->sh_mem + BANK4);  
-        }	
+	writeb(info, dev->sh_mem + BANK4);  
 }
 
 
@@ -685,17 +671,19 @@ static void pcbit_l2_err_recover(unsigned long data)
 
         del_timer(&dev->error_recover_timer);
 	if (dev->w_busy || dev->r_busy)
-	  {
-	    init_timer(&dev->error_recover_timer);
-	    dev->error_recover_timer.expires = jiffies + ERRTIME;
-	    add_timer(&dev->error_recover_timer);
-	    return;
-	  }
+	{
+		init_timer(&dev->error_recover_timer);
+		dev->error_recover_timer.expires = jiffies + ERRTIME;
+		add_timer(&dev->error_recover_timer);
+		return;
+	}
 
 	dev->w_busy = dev->r_busy = 1;
 
-        if (dev->read_frame) {
-                if (dev->read_frame->skb) {
+        if (dev->read_frame)
+	{
+                if (dev->read_frame->skb)
+		{
 			dev->read_frame->skb->free = 1; 
                         kfree_skb(dev->read_frame->skb, FREE_READ);
 		}
@@ -704,7 +692,8 @@ static void pcbit_l2_err_recover(unsigned long data)
         }
 
 
-        if (dev->write_queue) {
+        if (dev->write_queue)
+	{
                 frame = dev->write_queue;
 #ifdef FREE_ON_ERROR
                 dev->write_queue = dev->write_queue->next;
@@ -775,14 +764,20 @@ static void  pcbit_recv_ack(struct pcbit_dev *dev, unsigned char ack)
 	{
 
 		if (dev->send_seq > dev->unack_seq)
-                        if (ack <= dev->unack_seq || ack > dev->send_seq) 
+                        if (ack <= dev->unack_seq || ack > dev->send_seq)
 			{
-                                printk("layer 2 ack unacceptable - dev %d", dev->id);
+                                printk(KERN_DEBUG
+				       "layer 2 ack unacceptable - dev %d",
+				       dev->id);
+
                                 pcbit_l2_error(dev);
                         }
                         else
-                                if (ack > dev->send_seq && ack <= dev->unack_seq) {
-					printk("layer 2 ack unacceptable - dev %d", dev->id);
+                                if (ack > dev->send_seq && ack <= dev->unack_seq)
+				{
+					printk(KERN_DEBUG
+					       "layer 2 ack unacceptable - dev %d",
+					       dev->id);
                                         pcbit_l2_error(dev);
                                 }
 
@@ -805,55 +800,9 @@ static void  pcbit_recv_ack(struct pcbit_dev *dev, unsigned char ack)
 
 			if (dev->send_seq == lsend_seq)
 				break;
-                        count++;			
-                }
-    
-                if (!count) {
-                        u_char info;
-
-                        info = 0;
-                        info |= dev->rcv_seq << 3;
-                        info |= dev->send_seq;
-	
-                        writeb(info, dev->sh_mem + BANK4);  
-                }
+                        count++;
+                }    
         }
         else
                 printk(KERN_DEBUG "recv_ack: unacked = 0\n");
 }
-
-static void pcbit_frame_read(struct pcbit_dev * dev, unsigned char read_seq)
-{
-        unsigned long flags;
-        int busy;
-        u_char info;
-
-        save_flags(flags);
-        cli();
-        if (!(busy=dev->r_busy))
-                dev->r_busy = 1;
-        restore_flags(flags);
-
-        if (busy)
-                return;
-        
-
-        while (read_seq != dev->rcv_seq) {
-                pcbit_receive(dev);
-                dev->rcv_seq = (dev->rcv_seq + 1) % 8;  
-        }
-
-        dev->r_busy = 0;
-
-        info = 0;
-        info |= dev->rcv_seq << 3;
-        info |= dev->send_seq;
-  
-        writeb(info, dev->sh_mem + BANK4);  
-}
-
-
-
-
-
-

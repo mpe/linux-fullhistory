@@ -885,7 +885,8 @@ end_rename:
  * as they are on different partitions.
  */
 int ext_rename(struct inode * old_dir, const char * old_name, int old_len,
-	struct inode * new_dir, const char * new_name, int new_len)
+	struct inode * new_dir, const char * new_name, int new_len,
+	int must_be_dir)
 {
 	static struct wait_queue * wait = NULL;
 	static int lock = 0;

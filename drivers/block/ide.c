@@ -1794,7 +1794,7 @@ static int ide_open(struct inode * inode, struct file * filp)
 	unsigned long flags;
 
 	if ((drive = get_info_ptr(inode->i_rdev)) == NULL)
-		return -ENODEV;
+		return -ENXIO;
 	save_flags(flags);
 	cli();
 	while (drive->busy)

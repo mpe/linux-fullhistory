@@ -1,4 +1,4 @@
-/* $Id: card.c,v 1.9 1996/06/06 14:42:09 fritz Exp $
+/* $Id: card.c,v 1.12 1996/06/24 17:16:52 fritz Exp $
  *
  * card.c     low level stuff for the Teles S0 isdn card
  * 
@@ -7,6 +7,16 @@
  * Beat Doebeli         log all D channel traffic
  * 
  * $Log: card.c,v $
+ * Revision 1.12  1996/06/24 17:16:52  fritz
+ * Added check for misconfigured membase.
+ *
+ * Revision 1.11  1996/06/14 03:30:37  fritz
+ * Added recovery from EXIR 40 interrupt.
+ * Some cleanup.
+ *
+ * Revision 1.10  1996/06/11 14:57:20  hipp
+ * minor changes to ensure, that SKBs are sent in the right order
+ *
  * Revision 1.9  1996/06/06 14:42:09  fritz
  * Bugfix: forgot hsp-> in last change.
  *
@@ -52,7 +62,6 @@
 #include <linux/interrupt.h>
 
 #undef DCHAN_VERBOSE
-#define FRITZ_EXPERIMENTAL
 
 extern void     tei_handler(struct PStack *st, byte pr,
 			    struct BufHeader *ibh);
@@ -215,16 +224,9 @@ waitforCEC_3(int iobase, byte hscx)
 static inline void
 waitforXFW_0(byte * base, byte hscx)
 {
-#ifdef FRITZ_EXPERIMENTAL
 	long            to = 20;
 
 	while ((!(readhscx_0(base, hscx, HSCX_STAR) & 0x44)==0x40) && to) {
-#else
-	long            to = 10;
-
-	waitforCEC_0(base, hscx);
-	while ((!(readhscx_0(base, hscx, HSCX_STAR) & 0x40)) && to) {
-#endif
 		udelay(5);
 		to--;
 	}
@@ -235,16 +237,9 @@ waitforXFW_0(byte * base, byte hscx)
 static inline void
 waitforXFW_3(int iobase, byte hscx)
 {
-#ifdef FRITZ_EXPERIMENTAL
 	long            to = 20;
 
 	while ((!(readhscx_3(iobase, hscx, HSCX_STAR) & 0x44)==0x40) && to) {
-#else
-	long            to = 10;
-
-	waitforCEC_3(iobase, hscx);
-	while ((!(readhscx_3(iobase, hscx, HSCX_STAR) & 0x40)) && to) {
-#endif
 		udelay(5);
 		to--;
 	}
@@ -507,10 +502,10 @@ hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
 			} else {
 				if (hsp->releasebuf)
 					BufPoolRelease(hsp->xmtibh);
-				hsp->xmtibh = NULL;
 				hsp->sendptr = 0;
 				if (hsp->st->l4.l1writewakeup)
 					hsp->st->l4.l1writewakeup(hsp->st);
+				hsp->xmtibh = NULL;
 			}
 		if (!BufQueueUnlink(&hsp->xmtibh, &hsp->sq)) {
 			hsp->releasebuf = !0;
@@ -709,7 +704,7 @@ isac_new_ph(struct IsdnCardState *sp)
 static void
 teles_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
-	byte                 val, val2, r, exval;
+	byte                 val, r, exval;
 	struct IsdnCardState *sp;
 	unsigned int         count;
 	struct HscxState     *hsp;
@@ -725,11 +720,20 @@ teles_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (val & 0x01) {
 		hsp = sp->hs + 1;
                 exval = READHSCX(sp->membase, sp->iobase, 1, HSCX_EXIR);
-                if ((hsp->mode == 1) || (exval == 0x40))
-                        hscx_fill_fifo(hsp);
-                else
-                        printk(KERN_WARNING "HSCX B EXIR %x xmitbh %lx rcvibh %lx\n",
-                               exval, (long) hsp->xmtibh, (long) hsp->rcvibh);
+                if (exval == 0x40) {
+                        if (hsp->mode == 1)
+                                hscx_fill_fifo(hsp);
+                        else {
+                                /* Here we lost an TX interrupt, so
+                                 * restart transmitting the whole frame.
+                                 */
+                                hsp->sendptr = 0;
+			        WRITEHSCX_CMDR(hsp->membase, hsp->iobase,
+                                               hsp->hscx, 0x01);
+                                printk(KERN_DEBUG "HSCX B EXIR %x\n", exval);
+                        }
+                } else
+                        printk(KERN_WARNING "HSCX B EXIR %x\n", exval);
 	}
 	if (val & 0xf8) {
 		if (sp->debug)
@@ -739,33 +743,28 @@ teles_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if (val & 0x02) {
 		hsp = sp->hs;
                 exval = READHSCX(sp->membase, sp->iobase, 0, HSCX_EXIR);
-                if ((hsp->mode == 1) && (exval == 0x40))
-                        hscx_fill_fifo(hsp);
-                else
-                        printk(KERN_WARNING "HSCX A EXIR %x\n",exval);
+                if (exval == 0x40) {
+                        if (hsp->mode == 1)
+                                hscx_fill_fifo(hsp);
+                        else {
+                                /* Here we lost an TX interrupt, so
+                                 * restart transmitting the whole frame.
+                                 */
+                                hsp->sendptr = 0;
+			        WRITEHSCX_CMDR(hsp->membase, hsp->iobase,
+                                               hsp->hscx, 0x01);
+                                printk(KERN_DEBUG "HSCX A EXIR %x\n", exval);
+                        }
+                } else
+                        printk(KERN_WARNING "HSCX A EXIR %x\n", exval);
 	}
-
-/* ??? Why do that vvvvvvvvvvvvvvvvvvvvv different on Teles 16-3 ??? */
-        if (sp->membase) {
-                if (val & 0x04) {
-                        val = readhscx_0(sp->membase, 0, HSCX_ISTA);
-                        if (sp->debug)
-                                printk(KERN_DEBUG "HSCX A interrupt %x\n",
-                                       val);
-                        hscx_interrupt(sp, val, 0);
-                }
-        } else {
-                val2 = readhscx_3(sp->iobase, 0, HSCX_ISTA);
+        if (val & 0x04) {
+                val = READHSCX(sp->membase, sp->iobase, 0, HSCX_ISTA);
                 if (sp->debug)
-                        printk(KERN_DEBUG "HSCX A ISTA %x\n", val2);
-                if (val & 0x04) {
-                        if (sp->debug)
-                                printk(KERN_DEBUG "HSCX A interrupt %x\n",
-                                       val2);
-                        hscx_interrupt(sp, val2, 0);
-                }
+                        printk(KERN_DEBUG "HSCX A interrupt %x\n",
+                               val);
+                hscx_interrupt(sp, val, 0);
         }
-/* ??? Why do that ^^^^^^^^^^^^^^^^^^^^^ different on Teles 16-3 ??? */
 
 	val = READISAC(sp->membase, sp->iobase, ISAC_ISTA);
 
@@ -1083,6 +1082,13 @@ checkcard(int cardnr)
 	byte            cfval, val;
 	struct IsdnCard *card = cards + cardnr;
 
+        if (card->membase)
+                if ((unsigned long)card->membase < 0x10000) {
+                        (unsigned long)card->membase <<= 4;
+                        printk(KERN_INFO
+                               "Teles membase configured DOSish, assuming 0x%lx\n",
+                               (unsigned long)card->membase);
+                }
         if (!card->iobase) {
                 if (card->membase) {
                         printk(KERN_NOTICE
@@ -1090,7 +1096,7 @@ checkcard(int cardnr)
                                (long) card->membase, card->interrupt,
                                (card->protocol == ISDN_PTYPE_1TR6) ?
                                "1TR6" : "EDSS1");
-                        printk(KERN_INFO "HSCX version A: %x B:%x\n",
+                        printk(KERN_INFO "HSCX version A:%x B:%x\n",
                                readhscx_0(card->membase, 0, HSCX_VSTR) & 0xf,
                                readhscx_0(card->membase, 1, HSCX_VSTR) & 0xf);
                 }
@@ -1736,12 +1742,18 @@ hscx_l2l1(struct PStack *st, int pr,
 	struct IsdnCardState *sp = (struct IsdnCardState *)
 	st->l1.hardware;
 	struct HscxState *hsp = sp->hs + st->l1.hscx;
+	long flags;
 
 	switch (pr) {
                 case (PH_DATA):
-                        if (hsp->xmtibh)
+			save_flags(flags);
+			cli();
+                        if (hsp->xmtibh) {
                                 BufQueueLink(&hsp->sq, ibh);
+				restore_flags(flags);
+			}
                         else {
+				restore_flags(flags);
                                 hsp->xmtibh = ibh;
                                 hsp->sendptr = 0;
                                 hsp->releasebuf = !0;

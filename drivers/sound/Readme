@@ -1,9 +1,9 @@
-Version 3.5.2 release notes
---------------------------------
+USS Lite version 3.5.4 release notes
+------------------------------------
 
 Most up to date information about this driver is available from 
-http://personal.eunet.fi/pp/voxware.
-
+http://www.4front-tech.com/usslite or http://personal.eunet.fi/pp/voxware
+(european mirror).
 
 
 
@@ -12,18 +12,20 @@ sites). It gives instructions about using sound with Linux. It's bit out of
 date but still very useful. Information about bug fixes and such things
 is available from the web page (see below).
 
-New Programmer's Guide is currently under work (Feb/March 96). Please
-check http://personal.eunet.fi/pp/voxware for more info.
+New Programmer's Guide is currently under work (June/July 96). Please
+check http://www.4front-tech.com/pguide for more info.
 
    ====================================================
 -  THIS VERSION ____REQUIRES____ Linux 1.3.70 OR LATER.
    ====================================================
 
 It's very likely that this driver version is incompatible with
-Linux versions later than 2.x.
+Linux versions later than 2.0.x.
 
 Packages "snd-util-3.5.tar.gz" and "snd-data-0.1.tar.Z"
-contain useful utilities to be used with this driver.
+contain usefull utilities to be used with this driver.
+See http://www.4front-tech.com/usslite/getting.html for
+download instructions.
 
 If you are looking for the installation instructions, please
 look at Readme.linux.
@@ -33,14 +35,14 @@ Supported soundcards
 
 See Readme.cards.
 
-Please check http://personal.eunet.fi/pp/voxware if you don't find
+Please check http://www.4front-tech.com/usslite if you don't find
 your soundcard there.
 
 Contributors
 ------------
 
 This driver contains code by several contributors. In addition several other
-persons have given useful suggestions. The following is a list of major
+persons have given usefull suggestions. The following is a list of major
 contributors. (I could have forgotten some names.)
 
 	Craig Metz	1/2 of the PAS16 Mixer and PCM support
@@ -53,9 +55,9 @@ contributors. (I could have forgotten some names.)
 	Jim Lowe,
 	Amancio Hasty Jr	FreeBSD/NetBSD port
 	Anders Baekgaard 	Bughunting and valuable suggestions.
-	Joerg Schubert	SB16 DSP support.
+	Joerg Schubert	SB16 DSP support (initial version).
 	Andrew Robinson Improvements to the GUS driver
-	Megens SA	MIDI recording for SB and SB Pro.
+	Megens SA	MIDI recording for SB and SB Pro (initial version).
 	Mikael Nordqvist  Linear volume support for GUS and
 			  nonblocking /dev/sequencer.
 	Ian Hartas		SVR4.2 port
@@ -63,16 +65,18 @@ contributors. (I could have forgotten some names.)
 	Risto Kankkunen		Major contributions to the mixer support
 				of GUS v3.7.
 	Hunyue Yau	Mixer support for SG NX Pro.
-	Marc Hoffman	PSS support.
-	Rainer Vranken	Initialization for Jazz16 (ProSonic, MV3D, SM Wave).
+	Marc Hoffman	PSS support (initial version).
+	Rainer Vranken	Initialization for Jazz16 (initial version).
 	Peter Trattler	Initial version of loadable module support for Linux.
-	JRA Gibson	16 bit mode for Jazz16
-	Davor Jadrijevic MAD16 support
-	Gregor Hoffleit	Mozart support
+	JRA Gibson	16 bit mode for Jazz16 (initial version)
+	Davor Jadrijevic MAD16 support (initial version)
+	Gregor Hoffleit	Mozart support (initial version)
 	Riccardo Facchetti Audio Excel DSP 16 (aedsp16) support
 	James Hightower Spotting a tiny but important bug in CS423x support.
+	
+	Please look at lowlevel/README for more contributors.
 
-There are probably many other names missing. If you have sent me some
+There are propably many other names missing. If you have sent me some
 patches and your name is not in the above list, please inform me.
 
 Sponsors etc.
@@ -84,7 +88,7 @@ in form of a free copy of their product:
 Novell, Inc.		UnixWare personal edition + SDK
 The Santa Cruz Operation, Inc. 	A SCO OpenServer + SDK
 Ensoniq Corp,		a SoundScape card and extensive amount of assistance
-MediaTriX Peripherals Inc, a AudioTriX Pro card + SDK
+MediaTrix Peripherals Inc, a AudioTrix Pro card + SDK
 Acer, Inc.		a pair of AcerMagic S23 cards.
 
 In addition the following companies have provided me sufficient amount
@@ -99,6 +103,8 @@ Crystal Semiconductor Corporation,
 Integrated Circuit Systems Inc.
 OAK Technology
 OPTi
+Turtle Beach
+miro
 Ad Lib Inc. ($$)
 Music Quest Inc. ($$)
 Creative Labs ($$$)
@@ -107,7 +113,7 @@ If you have some problems
 =========================
 
 Read the sound HOWTO (sunsite.unc.edu:/pub/Linux/docs/...?).
-Also look at the home page (http://personal.eunet.fi/pp/voxware). It may
+Also look at the home page (http://www.4front-tech.com/usslite). It may
 contain info about some recent bug fixes.
 
 It's likely that you have some problems when trying to use the sound driver
@@ -119,7 +125,7 @@ If you get an error message when trying to use the driver, please look
 at /var/adm/messages for more verbose error message.
 
 
-In general the easiest way to diagnose problems is to do "cat /dev/sndstat".
+In general the easiest way to diagnoze problems is to do "cat /dev/sndstat".
 
 If you get an error message, there are some problems with the driver setup:
 
@@ -127,7 +133,7 @@ If you get an error message, there are some problems with the driver setup:
 	the sound driver are missing. Use the script at the end of
 	linux/drivers/sound/Readme.linux to create them.
 
-	- "No such device" shows that the sound driver is not in the kernel.
+	- "No such device" telss that the sound driver is not in the kernel.
 	You have to reconfigure and recompile the kernel to have the sound
 	driver. Compiling the driver doesn't help alone. You have to boot
 	with the newly compiled one before the driver becomes active.
@@ -142,7 +148,7 @@ The following errors are likely with /dev/dsp and /dev/audio.
 	this particular device. For example /dev/audio and /dev/dsp will not
 	work if "digitized voice support" was not enabled during "make config".
 	
-	- "Device or resource busy". Probably the IRQ (or DMA) channel 
+	- "Device or resource busy". Propably the IRQ (or DMA) channel 
 	required by the soundcard is in use by some other device/driver.
 
 	- "I/O error". Almost certainly (99%) it's an IRQ or DMA conflict.
@@ -161,8 +167,8 @@ Best regards,
 Hannu
 
 Hannu Savolainen
-hannu@voxware.pp.fi	
-(Please check http:/personal.eunet.fi/pp/voxware before mailing me).
+hannu@voxware.pp.fi, hannu@4front-tech.com	
+(Please check http://www.4front-tech.com/usslite before mailing me).
 
 Snail mail:	Hannu Savolainen
 		Hiekkalaiturintie 3 A 8

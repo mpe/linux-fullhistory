@@ -5,31 +5,15 @@
  * a PnP compatible chip which contains a CS4231A codec, SB emulation,
  * a MPU401 compatible MIDI port, joystick and synthesizer and IDE CD-ROM 
  * interfaces. This is just a temporary driver until full PnP support
- * gets implemented. Just the WSS codec, FM synth and the MIDI ports are
+ * gets inplemented. Just the WSS codec, FM synth and the MIDI ports are
  * supported. Other interfaces are left uninitialized.
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -67,10 +51,9 @@ probe_cs4232_mpu (struct address_info *hw_config)
   return 0;
 }
 
-long
-attach_cs4232_mpu (long mem_start, struct address_info *hw_config)
+void
+attach_cs4232_mpu (struct address_info *hw_config)
 {
-  return mem_start;
 }
 
 static unsigned char crystal_key[] =	/* A 32 byte magic key sequence */
@@ -122,7 +105,7 @@ probe_cs4232 (struct address_info *hw_config)
 
   for (n = 0; n < 4; n++)
     {
-      cs_sleep_flag.mode = WK_NONE;
+      cs_sleep_flag.flags = WK_NONE;
 /*
  * Wake up the card by sending a 32 byte Crystal key to the key port.
  */
@@ -131,20 +114,20 @@ probe_cs4232 (struct address_info *hw_config)
 
 
       {
-	unsigned long   tl;
+	unsigned long   tlimit;
 
 	if (HZ / 10)
-	  current_set_timeout (tl = jiffies + (HZ / 10));
+	  current_set_timeout (tlimit = jiffies + (HZ / 10));
 	else
-	  tl = (unsigned long) -1;
-	cs_sleep_flag.mode = WK_SLEEP;
+	  tlimit = (unsigned long) -1;
+	cs_sleep_flag.flags = WK_SLEEP;
 	module_interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.mode & WK_WAKEUP))
+	if (!(cs_sleep_flag.flags & WK_WAKEUP))
 	  {
-	    if (jiffies >= tl)
-	      cs_sleep_flag.mode |= WK_TIMEOUT;
+	    if (jiffies >= tlimit)
+	      cs_sleep_flag.flags |= WK_TIMEOUT;
 	  }
-	cs_sleep_flag.mode &= ~WK_SLEEP;
+	cs_sleep_flag.flags &= ~WK_SLEEP;
       };			/* Delay */
 
 /*
@@ -179,20 +162,20 @@ probe_cs4232 (struct address_info *hw_config)
 
 
       {
-	unsigned long   tl;
+	unsigned long   tlimit;
 
 	if (HZ / 10)
-	  current_set_timeout (tl = jiffies + (HZ / 10));
+	  current_set_timeout (tlimit = jiffies + (HZ / 10));
 	else
-	  tl = (unsigned long) -1;
-	cs_sleep_flag.mode = WK_SLEEP;
+	  tlimit = (unsigned long) -1;
+	cs_sleep_flag.flags = WK_SLEEP;
 	module_interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.mode & WK_WAKEUP))
+	if (!(cs_sleep_flag.flags & WK_WAKEUP))
 	  {
-	    if (jiffies >= tl)
-	      cs_sleep_flag.mode |= WK_TIMEOUT;
+	    if (jiffies >= tlimit)
+	      cs_sleep_flag.flags |= WK_TIMEOUT;
 	  }
-	cs_sleep_flag.mode &= ~WK_SLEEP;
+	cs_sleep_flag.flags &= ~WK_SLEEP;
       };			/* Delay */
 
 /*
@@ -216,20 +199,20 @@ probe_cs4232 (struct address_info *hw_config)
 
 
       {
-	unsigned long   tl;
+	unsigned long   tlimit;
 
 	if (HZ / 5)
-	  current_set_timeout (tl = jiffies + (HZ / 5));
+	  current_set_timeout (tlimit = jiffies + (HZ / 5));
 	else
-	  tl = (unsigned long) -1;
-	cs_sleep_flag.mode = WK_SLEEP;
+	  tlimit = (unsigned long) -1;
+	cs_sleep_flag.flags = WK_SLEEP;
 	module_interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.mode & WK_WAKEUP))
+	if (!(cs_sleep_flag.flags & WK_WAKEUP))
 	  {
-	    if (jiffies >= tl)
-	      cs_sleep_flag.mode |= WK_TIMEOUT;
+	    if (jiffies >= tlimit)
+	      cs_sleep_flag.flags |= WK_TIMEOUT;
 	  }
-	cs_sleep_flag.mode &= ~WK_SLEEP;
+	cs_sleep_flag.flags &= ~WK_SLEEP;
       };			/* Delay */
 
 /*
@@ -241,28 +224,28 @@ probe_cs4232 (struct address_info *hw_config)
 
 
       {
-	unsigned long   tl;
+	unsigned long   tlimit;
 
 	if (HZ)
-	  current_set_timeout (tl = jiffies + (HZ));
+	  current_set_timeout (tlimit = jiffies + (HZ));
 	else
-	  tl = (unsigned long) -1;
-	cs_sleep_flag.mode = WK_SLEEP;
+	  tlimit = (unsigned long) -1;
+	cs_sleep_flag.flags = WK_SLEEP;
 	module_interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.mode & WK_WAKEUP))
+	if (!(cs_sleep_flag.flags & WK_WAKEUP))
 	  {
-	    if (jiffies >= tl)
-	      cs_sleep_flag.mode |= WK_TIMEOUT;
+	    if (jiffies >= tlimit)
+	      cs_sleep_flag.flags |= WK_TIMEOUT;
 	  }
-	cs_sleep_flag.mode &= ~WK_SLEEP;
+	cs_sleep_flag.flags &= ~WK_SLEEP;
       };			/* Longer delay */
     }
 
   return 0;
 }
 
-long
-attach_cs4232 (long mem_start, struct address_info *hw_config)
+void
+attach_cs4232 (struct address_info *hw_config)
 {
   int             base = hw_config->io_base, irq = hw_config->irq;
   int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
@@ -297,7 +280,7 @@ attach_cs4232 (long mem_start, struct address_info *hw_config)
       if (probe_mpu401 (&hw_config2))
 	{
 	  mpu_detected = 1;
-	  mem_start = attach_mpu401 (mem_start, &hw_config2);
+	  attach_mpu401 (&hw_config2);
 	}
       else
 	{
@@ -305,7 +288,6 @@ attach_cs4232 (long mem_start, struct address_info *hw_config)
 	}
     }
 #endif
-  return mem_start;
 }
 
 void

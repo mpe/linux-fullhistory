@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		      Last revised: May 12, 1996
+		      Last revised: June 9, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -34,6 +34,10 @@ an unreasonable effort.
 
 In particular, please don't sent patches for this list to Linus, at
 least not without contacting me first.
+
+I do not have any information about these devices beyond what appears
+on this list.  Any such information requests will be deleted without
+reply.
 
   0 		Unnamed devices (e.g. non-device mounts)
 		  0 = reserved as null device number
@@ -461,7 +465,14 @@ least not without contacting me first.
 		  3 = /dev/sbpcd7	Panasonic CD-ROM controller 1 unit 3
 
  27 char	QIC-117 tape
-		  0 = /dev/ftape	QIC-117 tape
+		  0 = /dev/rft0		Unit 0, rewind-on-close
+		  1 = /dev/rft1		Unit 1, rewind-on-close
+		  2 = /dev/rft2		Unit 2, rewind-on-close
+		  3 = /dev/rft3		Unit 3, rewind-on-close
+		  4 = /dev/nrft0	Unit 0, no rewind-on-close
+		  5 = /dev/nrft1	Unit 1, no rewind-on-close
+		  6 = /dev/nrft2	Unit 2, no rewind-on-close
+		  7 = /dev/nrft3	Unit 3, no rewind-on-close
     block	Third Matsushita (Panasonic/SoundBlaster) CD-ROM
 		  0 = /dev/sbpcd8	Panasonic CD-ROM controller 2 unit 0
 		  1 = /dev/sbpcd9	Panasonic CD-ROM controller 2 unit 1
@@ -670,8 +681,8 @@ least not without contacting me first.
 
  40 char	Matrox Meteor frame grabber
 		  0 = /dev/mmetfgrab	Matrox Meteor frame grabber
-    block	Syquest EZ135 removable drive
-		  0 = /dev/eza		First EZ135 drive, whole disk
+    block	Syquest EZ135 parallel port removable drive
+		  0 = /dev/eza		Parallel EZ135 drive, whole disk
 
 		Partitions are handled in the same way as IDE disks
 		(see major number 3).
@@ -740,7 +751,27 @@ least not without contacting me first.
 		  1 = /dev/bc1		Second Baycom radio modem
 		      ...
 
- 52-59		UNALLOCATED
+ 52 char	Spellcaster DataComm/BRI ISDN card
+		  0 = /dev/dcbri0	First DataComm card
+		  1 = /dev/dcbri1	Second DataComm card
+		  2 = /dev/dcbri2	Third DataComm card
+		  3 = /dev/dcbri3	Fourth DataComm card
+
+ 53 char	BDM interface for remote debugging MC683xx microcontrollers
+		  0 = /dev/pd_bdm0	PD BDM interface on lp0
+          	  1 = /dev/pd_bdm1	PD BDM interface on lp1
+          	  2 = /dev/pd_bdm2	PD BDM interface on lp2
+		  4 = /dev/icd_bdm0	ICD BDM interface on lp0
+		  5 = /dev/icd_bdm1	ICD BDM interface on lp1
+		  6 = /dev/icd_bdm2	ICD BDM interface on lp2
+
+		This device is used for the interfacing to the MC683xx
+		microcontrollers via Background Debug Mode by use of a
+		Parallel Port interface. PD is the Motorola Public
+		Domain Interface and ICD is the commercial interface
+		by P&E.
+
+ 54-59		UNALLOCATED
 
  60-63		LOCAL/EXPERIMENTAL USE
 		Allocated for local/experimental use.  For devices not
@@ -780,7 +811,7 @@ These links should exist on all systems:
 /dev/nfsd	socksys		symbolic	Required by iBCS-2
 /dev/X0R	null		symbolic	Required by iBCS-2
 
-Note: the last device is letter X-digit 0-letter R.
+Note: the last device is <letter X>-<digit 0>-<letter R>.
 
 	Recommended links
 
@@ -788,6 +819,7 @@ It is recommended that these links exist on all systems:
 
 /dev/core	/proc/kcore	symbolic	Backward compatibility
 /dev/ramdisk	ram0		symbolic	Backward compatibility
+/dev/ftape	rft0		symbolic	Backward compatibility
 /dev/scd?	sr?		hard		Alternate SCSI CD-ROM name
 
 

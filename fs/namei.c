@@ -515,6 +515,43 @@ asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
 	return error;
 }
 
+/*
+ * Some operations need to remove trailing slashes for POSIX.1
+ * conformance. For rename we also need to change the behaviour
+ * depending on whether we had a trailing slash or not.. (we
+ * cannot rename normal files with trailing slashes, only dirs)
+ *
+ * "dummy" is used to make sure we don't do "/" -> "".
+ */
+static int remove_trailing_slashes(char * name)
+{
+	int result;
+	char dummy[1];
+	char *remove = dummy+1;
+
+	for (;;) {
+		char c = *name;
+		name++;
+		if (!c)
+			break;
+		if (c != '/') {
+			remove = NULL;
+			continue;
+		}
+		if (remove)
+			continue;
+		remove = name;
+	}
+
+	result = 0;
+	if (remove) {
+		remove[-1] = 0;
+		result = 1;
+	}
+
+	return result;
+}
+
 static int do_mkdir(const char * pathname, int mode)
 {
 	const char * basename;
@@ -557,6 +594,7 @@ asmlinkage int sys_mkdir(const char * pathname, int mode)
 
 	error = getname(pathname,&tmp);
 	if (!error) {
+		remove_trailing_slashes(tmp);
 		error = do_mkdir(tmp,mode);
 		putname(tmp);
 	}
@@ -607,6 +645,7 @@ asmlinkage int sys_rmdir(const char * pathname)
 
 	error = getname(pathname,&tmp);
 	if (!error) {
+		remove_trailing_slashes(tmp);
 		error = do_rmdir(tmp);
 		putname(tmp);
 	}
@@ -788,7 +827,7 @@ asmlinkage int sys_link(const char * oldname, const char * newname)
 	return error;
 }
 
-static int do_rename(const char * oldname, const char * newname)
+static int do_rename(const char * oldname, const char * newname, int must_be_dir)
 {
 	struct inode * old_dir, * new_dir;
 	const char * old_base, * new_base;
@@ -852,7 +891,7 @@ static int do_rename(const char * oldname, const char * newname)
 		new_dir->i_sb->dq_op->initialize(new_dir, -1);
 	down(&new_dir->i_sem);
 	error = old_dir->i_op->rename(old_dir, old_base, old_len, 
-		new_dir, new_base, new_len);
+		new_dir, new_base, new_len, must_be_dir);
 	up(&new_dir->i_sem);
 	iput(new_dir);
 	return error;
@@ -867,7 +906,9 @@ asmlinkage int sys_rename(const char * oldname, const char * newname)
 	if (!error) {
 		error = getname(newname,&to);
 		if (!error) {
-			error = do_rename(from,to);
+			error = do_rename(from,to,
+				remove_trailing_slashes(from) |
+				remove_trailing_slashes(to));
 			putname(to);
 		}
 		putname(from);

@@ -167,8 +167,6 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 		return -EINVAL;
 	old_len = PAGE_ALIGN(old_len);
 	new_len = PAGE_ALIGN(new_len);
-	if (old_len == new_len)
-		return addr;
 
 	/*
 	 * Always allow a shrinking remap: that just unmaps
@@ -196,7 +194,8 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	}
 
 	/* old_len exactly to the end of the area.. */
-	if (old_len == vma->vm_end - addr) {
+	if (old_len == vma->vm_end - addr &&
+	    (old_len != new_len || !(flags & MREMAP_MAYMOVE))) {
 		unsigned long max_addr = TASK_SIZE;
 		if (vma->vm_next)
 			max_addr = vma->vm_next->vm_start;

@@ -4,27 +4,11 @@
  * The low level driver for the Personal Sound System (ECHO ESC614).
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -69,12 +53,12 @@
 #include "synth-ld.h"
 #else
 static int      pss_synthLen = 0;
-static unsigned char pss_synth[1] =
-{0};
+static unsigned char *pss_synth =
+NULL;
 
 #endif
 
-typedef struct pss_config
+typedef struct pss_confdata
   {
     int             base;
     int             irq;
@@ -82,10 +66,10 @@ typedef struct pss_config
     int            *osp;
   }
 
-pss_config;
+pss_confdata;
 
-static pss_config pss_data;
-static pss_config *devc = &pss_data;
+static pss_confdata pss_data;
+static pss_confdata *devc = &pss_data;
 
 static int      pss_initialized = 0;
 static int      nonstandard_microcode = 0;
@@ -122,7 +106,7 @@ probe_pss (struct address_info *hw_config)
 }
 
 static int
-set_irq (pss_config * devc, int dev, int irq)
+set_irq (pss_confdata * devc, int dev, int irq)
 {
   static unsigned short irq_bits[16] =
   {
@@ -150,7 +134,7 @@ set_irq (pss_config * devc, int dev, int irq)
 }
 
 static int
-set_io_base (pss_config * devc, int dev, int base)
+set_io_base (pss_confdata * devc, int dev, int base)
 {
   unsigned short  tmp = inw (REG (dev)) & 0x003f;
   unsigned short  bits = (base & 0x0ffc) << 4;
@@ -161,7 +145,7 @@ set_io_base (pss_config * devc, int dev, int base)
 }
 
 static int
-set_dma (pss_config * devc, int dev, int dma)
+set_dma (pss_confdata * devc, int dev, int dma)
 {
   static unsigned short dma_bits[8] =
   {
@@ -187,7 +171,7 @@ set_dma (pss_config * devc, int dev, int dma)
 }
 
 static int
-pss_reset_dsp (pss_config * devc)
+pss_reset_dsp (pss_confdata * devc)
 {
   unsigned long   i, limit = jiffies + 10;
 
@@ -202,7 +186,7 @@ pss_reset_dsp (pss_config * devc)
 }
 
 static int
-pss_put_dspword (pss_config * devc, unsigned short word)
+pss_put_dspword (pss_confdata * devc, unsigned short word)
 {
   int             i, val;
 
@@ -219,7 +203,7 @@ pss_put_dspword (pss_config * devc, unsigned short word)
 }
 
 static int
-pss_get_dspword (pss_config * devc, unsigned short *word)
+pss_get_dspword (pss_confdata * devc, unsigned short *word)
 {
   int             i, val;
 
@@ -237,7 +221,7 @@ pss_get_dspword (pss_config * devc, unsigned short *word)
 }
 
 static int
-pss_download_boot (pss_config * devc, unsigned char *block, int size, int flags)
+pss_download_boot (pss_confdata * devc, unsigned char *block, int size, int flags)
 {
   int             i, limit, val, count;
 
@@ -320,8 +304,8 @@ pss_download_boot (pss_config * devc, unsigned char *block, int size, int flags)
   return 1;
 }
 
-long
-attach_pss (long mem_start, struct address_info *hw_config)
+void
+attach_pss (struct address_info *hw_config)
 {
   unsigned short  id;
   char            tmp[100];
@@ -332,7 +316,7 @@ attach_pss (long mem_start, struct address_info *hw_config)
   devc->osp = hw_config->osp;
 
   if (!probe_pss (hw_config))
-    return mem_start;
+    return;
 
   id = inw (REG (PSS_ID)) & 0x00ff;
 
@@ -349,27 +333,25 @@ attach_pss (long mem_start, struct address_info *hw_config)
   if (sound_alloc_dma (hw_config->dma, "PSS"))
     {
       printk ("pss.c: Can't allocate DMA channel\n");
-      return mem_start;
+      return;
     }
 
   if (!set_irq (devc, CONF_PSS, devc->irq))
     {
       printk ("PSS: IRQ error\n");
-      return mem_start;
+      return;
     }
 
   if (!set_dma (devc, CONF_PSS, devc->dma))
     {
       printk ("PSS: DRQ error\n");
-      return mem_start;
+      return;
     }
 #endif
 
   pss_initialized = 1;
   sprintf (tmp, "ECHO-PSS  Rev. %d", id);
   conf_printf (tmp, hw_config);
-
-  return mem_start;
 }
 
 int
@@ -440,14 +422,14 @@ pss_coproc_open (void *dev_info, int sub_device)
       if (pss_synthLen == 0)
 	{
 	  printk ("PSS: MIDI synth microcode not available.\n");
-	  return -EIO;
+	  return -(EIO);
 	}
 
       if (nonstandard_microcode)
 	if (!pss_download_boot (devc, pss_synth, pss_synthLen, CPF_FIRST | CPF_LAST))
 	  {
 	    printk ("PSS: Unable to load MIDI synth microcode to DSP.\n");
-	    return -EIO;
+	    return -(EIO);
 	  }
       nonstandard_microcode = 0;
       break;
@@ -478,12 +460,12 @@ static int
 download_boot_block (void *dev_info, copr_buffer * buf)
 {
   if (buf->len <= 0 || buf->len > sizeof (buf->data))
-    return -EINVAL;
+    return -(EINVAL);
 
   if (!pss_download_boot (devc, buf->data, buf->len, buf->flags))
     {
       printk ("PSS: Unable to load microcode block to DSP.\n");
-      return -EIO;
+      return -(EIO);
     }
   nonstandard_microcode = 1;	/* The MIDI microcode has been overwritten */
 
@@ -507,31 +489,29 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	copr_buffer    *buf;
 	int             err;
 
-	buf = (copr_buffer *) kmalloc (sizeof (copr_buffer), GFP_KERNEL);
+	buf = (copr_buffer *) vmalloc (sizeof (copr_buffer));
 	if (buf == NULL)
-	  return -ENOSPC;
+	  return -(ENOSPC);
 
-	memcpy_fromfs ((char *) buf, &(((char *) arg)[0]), sizeof (*buf));
+	memcpy_fromfs ((char *) buf, &((char *) arg)[0], sizeof (*buf));
 	err = download_boot_block (dev_info, buf);
-	kfree (buf);
+	vfree (buf);
 	return err;
       }
       break;
 
     case SNDCTL_COPR_SENDMSG:
       {
-	/* send buf->len words from buf->data to DSP */
-
 	copr_msg       *buf;
 	unsigned long   flags;
 	unsigned short *data;
 	int             i;
 
-	buf = (copr_msg *) kmalloc (sizeof (copr_msg), GFP_KERNEL);
+	buf = (copr_msg *) vmalloc (sizeof (copr_msg));
 	if (buf == NULL)
-	  return -ENOSPC;
+	  return -(ENOSPC);
 
-	memcpy_fromfs ((char *) buf, &(((char *) arg)[0]), sizeof (*buf));
+	memcpy_fromfs ((char *) buf, &((char *) arg)[0], sizeof (*buf));
 
 	data = (unsigned short *) (buf->data);
 
@@ -543,16 +523,15 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	    if (!pss_put_dspword (devc, *data++))
 	      {
 		restore_flags (flags);
-		/* feed back number of WORDs sent */
-		memcpy_tofs( (char *)(&(((copr_msg *)arg)->len)),
-				(char *)(&i), sizeof(buf->len));
-		kfree (buf);
-		return -EIO;
+		buf->len = i;	/* feed back number of WORDs sent */
+		memcpy_tofs (&((char *) arg)[0], &buf, sizeof (buf));
+		vfree (buf);
+		return -(EIO);
 	      }
 	  }
 
 	restore_flags (flags);
-	kfree (buf);
+	vfree (buf);
 
 	return 0;
       }
@@ -561,42 +540,37 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_COPR_RCVMSG:
       {
-	/* try to read as much words as possible from DSP into buf */
 	copr_msg       *buf;
 	unsigned long   flags;
 	unsigned short *data;
 	unsigned int    i;
 	int             err = 0;
 
-	buf = (copr_msg *) kmalloc (sizeof (copr_msg), GFP_KERNEL);
+	buf = (copr_msg *) vmalloc (sizeof (copr_msg));
 	if (buf == NULL)
-	  return -ENOSPC;
-#if 0
-	memcpy_fromfs ((char *) buf, &(((char *) arg)[0]), sizeof (*buf));
-#endif
+	  return -(ENOSPC);
+
 
 	data = (unsigned short *) buf->data;
 
 	save_flags (flags);
 	cli ();
 
-	for (i = 0; i < sizeof(buf->data); i++)
+	for (i = 0; i < buf->len; i++)
 	  {
+	    buf->len = i;	/* feed back number of WORDs read */
 	    if (!pss_get_dspword (devc, data++))
 	      {
-		buf->len = i;	/* feed back number of WORDs read */
-		err = (i==0)? -EIO : 0;	   /* EIO only if no word read */
+		if (i == 0)
+		  err = -(EIO);
 		break;
 	      }
 	  }
 
-	if( i==sizeof(buf->data) )
-		buf->len = i;
-
 	restore_flags (flags);
 
-	memcpy_tofs ((&((char *) arg)[0]), buf, sizeof (*buf));
-	kfree (buf);
+	memcpy_tofs (&((char *) arg)[0], &buf, sizeof (buf));
+	vfree (buf);
 
 	return err;
       }
@@ -609,32 +583,32 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs ((char *) &buf, &(((char *) arg)[0]), sizeof (buf));
+	memcpy_fromfs ((char *) &buf, &((char *) arg)[0], sizeof (buf));
 
 	save_flags (flags);
 	cli ();
 	if (!pss_put_dspword (devc, 0x00d0))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	if (!pss_put_dspword (devc, (unsigned short) (buf.parm1 & 0xffff)))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	if (!pss_get_dspword (devc, &tmp))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	buf.parm1 = tmp;
 	restore_flags (flags);
 
-	memcpy_tofs ((&((char *) arg)[0]), &buf, sizeof (buf));
+	memcpy_tofs (&((char *) arg)[0], &buf, sizeof (buf));
 	return 0;
       }
       break;
@@ -645,27 +619,27 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs ((char *) &buf, &(((char *) arg)[0]), sizeof (buf));
+	memcpy_fromfs ((char *) &buf, &((char *) arg)[0], sizeof (buf));
 
 	save_flags (flags);
 	cli ();
 	if (!pss_put_dspword (devc, 0x00d1))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	if (!pss_put_dspword (devc, (unsigned short) (buf.parm1 & 0xffff)))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	tmp = (unsigned int) buf.parm2 & 0xffff;
 	if (!pss_put_dspword (devc, tmp))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	restore_flags (flags);
@@ -679,34 +653,34 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs ((char *) &buf, &(((char *) arg)[0]), sizeof (buf));
+	memcpy_fromfs ((char *) &buf, &((char *) arg)[0], sizeof (buf));
 
 	save_flags (flags);
 	cli ();
 	if (!pss_put_dspword (devc, 0x00d3))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	if (!pss_put_dspword (devc, (unsigned short) (buf.parm1 & 0xffff)))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	tmp = (unsigned int) buf.parm2 & 0x00ff;
 	if (!pss_put_dspword (devc, tmp))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	tmp = ((unsigned int) buf.parm2 >> 8) & 0xffff;
 	if (!pss_put_dspword (devc, tmp))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	restore_flags (flags);
@@ -720,26 +694,26 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs ((char *) &buf, &(((char *) arg)[0]), sizeof (buf));
+	memcpy_fromfs ((char *) &buf, &((char *) arg)[0], sizeof (buf));
 
 	save_flags (flags);
 	cli ();
 	if (!pss_put_dspword (devc, 0x00d2))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	if (!pss_put_dspword (devc, (unsigned short) (buf.parm1 & 0xffff)))
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	if (!pss_get_dspword (devc, &tmp))	/* Read msb */
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	buf.parm1 = tmp << 8;
@@ -747,23 +721,23 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	if (!pss_get_dspword (devc, &tmp))	/* Read lsb */
 	  {
 	    restore_flags (flags);
-	    return -EIO;
+	    return -(EIO);
 	  }
 
 	buf.parm1 |= tmp & 0x00ff;
 
 	restore_flags (flags);
 
-	memcpy_tofs ((&((char *) arg)[0]), &buf, sizeof (buf));
+	memcpy_tofs (&((char *) arg)[0], &buf, sizeof (buf));
 	return 0;
       }
       break;
 
     default:
-      return -EINVAL;
+      return -(EINVAL);
     }
 
-  return -EINVAL;
+  return -(EINVAL);
 }
 
 static coproc_operations pss_coproc_operations =
@@ -776,23 +750,19 @@ static coproc_operations pss_coproc_operations =
   &pss_data
 };
 
-long
-attach_pss_mpu (long mem_start, struct address_info *hw_config)
+void
+attach_pss_mpu (struct address_info *hw_config)
 {
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
-  long            ret;
-
   {
     int             prev_devs;
+
     prev_devs = num_midis;
-    ret = attach_mpu401 (mem_start, hw_config);
+    attach_mpu401 (hw_config);
 
     if (num_midis == (prev_devs + 1))	/* The MPU driver installed itself */
       midi_devs[prev_devs]->coproc = &pss_coproc_operations;
   }
-  return ret;
-#else
-  return mem_start;
 #endif
 }
 
@@ -830,7 +800,7 @@ probe_pss_mss (struct address_info *hw_config)
 
   /*
      * For some reason the card returns 0xff in the WSS status register
-     * immediately after boot. Probably MIDI+SB emulation algorithm
+     * immediately after boot. Propably MIDI+SB emulation algorithm
      * downloaded to the ADSP2115 spends some time initializing the card.
      * Let's try to wait until it finishes this task.
    */
@@ -842,19 +812,16 @@ probe_pss_mss (struct address_info *hw_config)
   return probe_ms_sound (hw_config);
 }
 
-long
-attach_pss_mss (long mem_start, struct address_info *hw_config)
+void
+attach_pss_mss (struct address_info *hw_config)
 {
   int             prev_devs;
-  long            ret;
 
   prev_devs = num_audiodevs;
-  ret = attach_ms_sound (mem_start, hw_config);
+  attach_ms_sound (hw_config);
 
   if (num_audiodevs == (prev_devs + 1))		/* The MSS driver installed itself */
     audio_devs[prev_devs]->coproc = &pss_coproc_operations;
-
-  return ret;
 }
 
 void
@@ -865,9 +832,7 @@ unload_pss (struct address_info *hw_config)
 void
 unload_pss_mpu (struct address_info *hw_config)
 {
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   unload_mpu401 (hw_config);
-#endif
 }
 
 void

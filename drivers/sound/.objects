@@ -29,7 +29,7 @@ ifdef CONFIG_GUS
 endif
 
 ifdef CONFIG_MAD16
-	OBJS := $(OBJS)  mad16.o mad16_sb_midi.o
+	OBJS := $(OBJS)  mad16.o
 endif
 
 ifdef CONFIG_MAUI
@@ -65,11 +65,11 @@ ifdef CONFIG_PSS
 endif
 
 ifdef CONFIG_SB
-	OBJS := $(OBJS)  sb16_midi.o sb_card.o sb_dsp.o sb_midi.o sb_mixer.o
-	OBJS := $(OBJS)  sb_card.o
-	OBJS := $(OBJS)  sb_dsp.o sb16_dsp.o
-	OBJS := $(OBJS)  sb_midi.o
-	OBJS := $(OBJS)  sb_mixer.o
+	OBJS := $(OBJS) sb_card.o 
+endif
+
+ifdef CONFIG_SBDSP
+	OBJS := $(OBJS) sb_common.o sb_audio.o sb_mixer.o sb_midi.o
 endif
 
 ifdef CONFIG_SEQUENCER
@@ -94,4 +94,8 @@ endif
 
 ifdef CONFIG_UART6850
 	OBJS := $(OBJS)  uart6850.o
+endif
+
+ifdef CONFIG_UART401
+	OBJS := $(OBJS)  uart401.o
 endif

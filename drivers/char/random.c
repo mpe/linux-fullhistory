@@ -357,8 +357,6 @@ static void add_entropy_word(struct random_bucket *r,
 #if (!defined (__i386__))
 extern inline __u32 rotate_left(int i, __u32 word)
 {
-	__u32 nbits = 0;
-	
 	return (word << i) | (word >> (32 - i));
 	
 }

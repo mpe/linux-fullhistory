@@ -43,6 +43,21 @@
 #ifndef _QLOGICISP_H
 #define _QLOGICISP_H
 
+/*
+ * With the qlogic interface, every queue slot can hold a SCSI
+ * command with up to 4 scatter/gather entries.  If we need more
+ * than 4 entries, continuation entries can be used that hold
+ * another 7 entries each.  Unlike for other drivers, this means
+ * that the maximum number of scatter/gather entries we can
+ * support at any given time is a function of the number of queue
+ * slots available.  That is, host->can_queue and host->sg_tablesize
+ * are dynamic and _not_ independent.  This all works fine because
+ * requests are queued serially and the scatter/gather limit is
+ * determined for each queue request anew.
+ */
+#define QLOGICISP_REQ_QUEUE_LEN	63	/* must be power of two - 1 */
+#define QLOGICISP_MAX_SG(ql)	(4 + ((ql) > 0) ? 7*((ql) - 1) : 0)
+
 int isp1020_detect(Scsi_Host_Template *);
 int isp1020_release(struct Scsi_Host *);
 const char * isp1020_info(struct Scsi_Host *);
@@ -57,28 +72,28 @@ int isp1020_biosparam(Disk *, kdev_t, int[]);
 
 extern struct proc_dir_entry proc_scsi_isp1020;
 
-#define QLOGICISP {					\
-	/* next */		NULL,			\
-	/* usage_count */	NULL,			\
-        /* proc dir */          NULL,                   \
-        /* procfs info */       NULL,                   \
-	/* name */		NULL,			\
-	/* detect */		isp1020_detect,		\
-	/* release */		isp1020_release,	\
-	/* info */		isp1020_info,		\
-	/* command */		NULL,		 	\
-	/* queuecommand */	isp1020_queuecommand,	\
-	/* abort */		isp1020_abort,		\
-	/* reset */		isp1020_reset,		\
-	/* slave_attach */	NULL,			\
-	/* bios_param */	isp1020_biosparam,	\
-	/* can_queue */		8,			\
-	/* this_id */		-1,			\
-	/* sg_tablesize */	4,			\
-	/* cmd_per_lun */	1,			\
-	/* present */		0,			\
-	/* unchecked_isa_dma */	0,			\
-	/* use_clustering */	DISABLE_CLUSTERING	\
+#define QLOGICISP {							   \
+	/* next */		NULL,					   \
+	/* usage_count */	NULL,					   \
+	/* proc dir */		NULL,					   \
+	/* procfs info */	NULL,					   \
+	/* name */		NULL,					   \
+	/* detect */		isp1020_detect,				   \
+	/* release */		isp1020_release,			   \
+	/* info */		isp1020_info,				   \
+	/* command */		NULL,					   \
+	/* queuecommand */	isp1020_queuecommand,			   \
+	/* abort */		isp1020_abort,				   \
+	/* reset */		isp1020_reset,				   \
+	/* slave_attach */	NULL,					   \
+	/* bios_param */	isp1020_biosparam,			   \
+	/* can_queue */		QLOGICISP_REQ_QUEUE_LEN,		   \
+	/* this_id */		-1,					   \
+	/* sg_tablesize */	QLOGICISP_MAX_SG(QLOGICISP_REQ_QUEUE_LEN), \
+	/* cmd_per_lun */	1,					   \
+	/* present */		0,					   \
+	/* unchecked_isa_dma */	0,					   \
+	/* use_clustering */	DISABLE_CLUSTERING			   \
 }
 
 #endif /* _QLOGICISP_H */

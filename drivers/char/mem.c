@@ -358,7 +358,7 @@ static int memory_open(struct inode * inode, struct file * filp)
 			filp->f_op = &urandom_fops;
 			break;
 		default:
-			return -ENODEV;
+			return -ENXIO;
 	}
 	if (filp->f_op && filp->f_op->open)
 		return filp->f_op->open(inode,filp);

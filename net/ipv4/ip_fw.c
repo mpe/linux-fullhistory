@@ -264,9 +264,11 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 	
 	/*
 	 *	Too short.
+	 *
+	 *	But only too short for a packet with ports...
 	 */
 	 
-	else if(ntohs(ip->tot_len)<8+(ip->ihl<<2))
+	else if((ntohs(ip->tot_len)<8+(ip->ihl<<2))&&(ip->protocol==IPPROTO_TCP || ip->protocol==IPPROTO_UDP))
 		return FW_BLOCK;
 		
 	src = ip->saddr;

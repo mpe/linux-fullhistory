@@ -37,7 +37,7 @@ static int			active = 0;
  * Reserve an nfsiod slot and initialize the request struct
  */
 struct nfsiod_req *
-nfsiod_reserve(struct nfs_server *server, nfsiod_done_fn_t callback)
+nfsiod_reserve(struct nfs_server *server)
 {
 	struct nfsiod_req	*req;
 
@@ -56,8 +56,6 @@ nfsiod_reserve(struct nfs_server *server, nfsiod_done_fn_t callback)
 	}
 
 	req->rq_server = server;
-	req->rq_callback = callback;
-
 	return req;
 }
 
@@ -74,21 +72,12 @@ nfsiod_release(struct nfsiod_req *req)
 /*
  * Transmit a request and put it on nfsiod's list of pending requests.
  */
-int
+void
 nfsiod_enqueue(struct nfsiod_req *req)
 {
-	int	result;
-
 	dprintk("BIO: enqueuing request %p\n", &req->rq_rpcreq);
-	result = rpc_transmit(req->rq_server->rsock, &req->rq_rpcreq);
-	if (result < 0) {
-		dprintk("BIO: rpc_transmit returned %d\n", result);
-	} else {
-		dprintk("BIO: waking up nfsiod (%p)\n", req->rq_wait);
-		wake_up(&req->rq_wait);
-		schedule();
-	}
-	return result;
+	wake_up(&req->rq_wait);
+	schedule();
 }
 
 /*
@@ -120,8 +109,10 @@ nfsiod(void)
 				current->pid);
 		active++;
 		dprintk("BIO: before: now %d nfsiod's active\n", active);
-		result = nfs_rpc_doio(req->rq_server, &req->rq_rpcreq, 1);
-		req->rq_callback(result, req);
+		do {
+			result = nfs_rpc_doio(req->rq_server,
+						&req->rq_rpcreq, 1);
+		} while (!req->rq_callback(result, req));
 		active--;
 	}
 

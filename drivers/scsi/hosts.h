@@ -244,7 +244,7 @@ struct Scsi_Host
     unsigned short extra_bytes;
     volatile unsigned char host_busy;
     char host_no;  /* Used for IOCTL_GET_IDLUN, /proc/scsi et al. */
-    int last_reset;
+    unsigned long last_reset;
     struct wait_queue *host_wait;
     Scsi_Cmnd *host_queue;
     Scsi_Host_Template * hostt;

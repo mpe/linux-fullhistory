@@ -1,4 +1,4 @@
-$Id: INTERFACE,v 1.2 1996/05/18 15:58:53 fritz Exp $
+$Id: INTERFACE,v 1.3 1996/06/25 17:52:41 fritz Exp $
 
 Description of the Interface between Linklevel and Hardwarelevel
   of isdn4linux:
@@ -255,7 +255,7 @@ Description of the Interface between Linklevel and Hardwarelevel
      This command is intended for performing ioctl-calls for configuring
      hardware or similar purposes (setting port-addresses, loading firmware
      etc.) For this purpose, in the LL all ioctl-calls with an argument
-     >= ISDN_IOCTL_DRVIOCTL (0x100) will be handed transparently to this
+     >= IIOCDRVCTL (0x100) will be handed transparently to this
      function after subtracting 0x100 and placing the result in arg.
      Example:
        If a userlevel-program calls ioctl(0x101,...) the function gets
@@ -264,7 +264,7 @@ Description of the Interface between Linklevel and Hardwarelevel
      Parameter:
        driver  = driver-Id.
        command = ISDN_CMD_IOCTL
-       arg     = Original ioctl-cmd - ISDN_IOCTL_DRVIOCTL
+       arg     = Original ioctl-cmd - IIOCDRVCTL
        num     = first bytes filled with (unsigned long)arg
    
      Returnvalue:

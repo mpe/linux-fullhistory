@@ -1,0 +1,13 @@
+Additional low level sound drivers for Linux
+--------------------------------------------
+
+This directory contains additional low level sound drivers which
+are not part of USS/Lite (UNIX Sound System). These drivers are
+maintained by their authors.
+
+If you like to write a low level sound driver, please contact
+Hannu Savolainen (hannu@voxware.pp.fi) for more info.
+
+The following low level drivers are included:
+
+- ACI MIXER for miroPCM12 by Markus Kuhn. See aci.readme for more info.

@@ -51,7 +51,7 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 	}
 	if (filp->f_op && filp->f_op->ioctl)
 		return filp->f_op->ioctl(filp->f_inode, filp, cmd, arg);
-	return -EINVAL;
+	return -ENOTTY;
 }
 
 
@@ -103,6 +103,6 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			if (filp->f_op && filp->f_op->ioctl)
 				return filp->f_op->ioctl(filp->f_inode, filp, cmd, arg);
 
-			return -EINVAL;
+			return -ENOTTY;
 	}
 }

@@ -11,6 +11,14 @@
  *        PCBIT-D interface with isdn4linux
  */
 
+/*
+ *	Fixes:
+ *
+ *	Nuno Grilo	<l38486@alfa.ist.utl.pt>
+ *      fixed msn_list NULL pointer dereference.
+ *		
+ */
+
 #define __NO_VERSION__
 
 #include <linux/module.h>
@@ -109,7 +117,7 @@ int pcbit_init_dev(int board, int mem_base, int irq)
 	dev->b2->id = 1;
 
 
-	dev->qdelivery.next = 0;
+	dev->qdelivery.next = NULL;
 	dev->qdelivery.sync = 0;
 	dev->qdelivery.routine = pcbit_deliver;
 	dev->qdelivery.data = dev;
@@ -152,8 +160,8 @@ int pcbit_init_dev(int board, int mem_base, int irq)
 	dev_if->channels = 2;
 
 
-	dev_if->features = ISDN_FEATURE_P_EURO | ISDN_FEATURE_L3_TRANS | 
-		ISDN_FEATURE_L2_HDLC;
+	dev_if->features = (ISDN_FEATURE_P_EURO  | ISDN_FEATURE_L3_TRANS | 
+			    ISDN_FEATURE_L2_HDLC | ISDN_FEATURE_L2_TRANS );
 
 	dev_if->writebuf_skb = pcbit_xmit;
 	dev_if->writebuf  = NULL;
@@ -1051,7 +1059,8 @@ static void pcbit_clear_msn(struct pcbit_dev *dev)
 
 static void pcbit_set_msn(struct pcbit_dev *dev, char *list)
 {
-	struct msn_entry *ptr, *back;
+	struct msn_entry *ptr;
+	struct msn_entry *back = NULL;
 	char *cp, *sp;
 	int len;
 
@@ -1070,7 +1079,8 @@ static void pcbit_set_msn(struct pcbit_dev *dev, char *list)
 		return;
 	}
 
-	for (back=dev->msn_list; back->next; back=back->next);
+	if (dev->msn_list)
+		for (back=dev->msn_list; back->next; back=back->next);
 	
 	sp = list;
 
@@ -1128,10 +1138,3 @@ static int pcbit_check_msn(struct pcbit_dev *dev, char *msn)
 
 	return 0;
 }
-
-
-
-
-
-
-

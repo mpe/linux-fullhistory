@@ -107,29 +107,27 @@ slhc_init(int rslots, int tslots)
 	memset(comp, 0, sizeof(struct slcompress));
 
 	if ( rslots > 0  &&  rslots < 256 ) {
-		comp->rstate =
-		  (struct cstate *)kmalloc(rslots * sizeof(struct cstate),
-					   GFP_KERNEL);
+		size_t rsize = rslots * sizeof(struct cstate);
+		comp->rstate = (struct cstate *) kmalloc(rsize, GFP_KERNEL);
 		if (! comp->rstate)
 		{
 			kfree((unsigned char *)comp);
 			return NULL;
 		}
-		memset(comp->rstate, 0, rslots * sizeof(struct cstate));
+		memset(comp->rstate, 0, rsize);
 		comp->rslot_limit = rslots - 1;
 	}
 
 	if ( tslots > 0  &&  tslots < 256 ) {
-		comp->tstate =
-		  (struct cstate *)kmalloc(tslots * sizeof(struct cstate),
-					   GFP_KERNEL);
+		size_t tsize = tslots * sizeof(struct cstate);
+		comp->tstate = (struct cstate *) kmalloc(tsize, GFP_KERNEL);
 		if (! comp->tstate)
 		{
 			kfree((unsigned char *)comp->rstate);
 			kfree((unsigned char *)comp);
 			return NULL;
 		}
-		memset(comp->tstate, 0, tslots * sizeof(struct cstate));
+		memset(comp->tstate, 0, tsize);
 		comp->tslot_limit = tslots - 1;
 	}
 

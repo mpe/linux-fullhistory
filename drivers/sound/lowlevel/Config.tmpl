@@ -1,0 +1,5 @@
+bool 'Additional low level drivers' CONFIG_LOWLEVEL_SOUND
+
+if [ "$CONFIG_LOWLEVEL_SOUND" = "y" ]; then
+   bool 'ACI mixer (miroPCM12)' CONFIG_ACI_MIXER
+fi

@@ -12,10 +12,10 @@
 #endif
 
 /*
- * This allows for 256 file descriptors: if NR_OPEN is ever grown
- * beyond that you'll have to change this too. But 256 fd's seem to be
- * enough even for such "real" unices like SunOS, so hopefully this is
- * one limit that doesn't have to be changed.
+ * This allows for 1024 file descriptors: if NR_OPEN is ever grown
+ * beyond that you'll have to change this too. But 1024 fd's seem to be
+ * enough even for such "real" unices like OSF/1, so hopefully this is
+ * one limit that doesn't have to be changed [again].
  *
  * Note that POSIX wants the FD_CLEAR(fd,fdsetp) defines to be in
  * <sys/time.h> (and thus <linux/time.h>) - but this is a more logical
@@ -30,7 +30,7 @@
 #define __NFDBITS	(8 * sizeof(unsigned int))
 
 #undef __FD_SETSIZE
-#define __FD_SETSIZE	256
+#define __FD_SETSIZE	1024
 
 #undef __FDSET_INTS
 #define __FDSET_INTS	(__FD_SETSIZE/__NFDBITS)
@@ -41,7 +41,7 @@
 #undef __FDMASK
 #define	__FDMASK(d)	(1 << ((d) % __NFDBITS))
 
-typedef struct fd_set {
+typedef struct {
 	unsigned int fds_bits [__FDSET_INTS];
 } __kernel_fd_set;
 

@@ -107,7 +107,7 @@ static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
 	/* Recurse. The device check against IFF_LOOPBACK will stop infinite recursion */
 		
 	/*printk("Loopback output queued [%lX to %lX].\n", newskb->ip_hdr->saddr,newskb->ip_hdr->daddr);*/
-	ip_queue_xmit(NULL, dev, newskb, 1);
+	ip_queue_xmit(NULL, dev, newskb, 2);
 }
 
 
@@ -160,9 +160,9 @@ static int ip_send_room(struct rtable * rt, struct sk_buff *skb, __u32 daddr, in
 	skb->dev = dev;
 	skb->arp = 1;
 	skb->protocol = htons(ETH_P_IP);
+	skb_reserve(skb,MAX_HEADER);
 	if (dev->hard_header)
 	{
-		skb_reserve(skb,MAX_HEADER);
 		if (rt && dev == rt->rt_dev && rt->rt_hh)
 		{
 			memcpy(skb_push(skb,dev->hard_header_len),rt->rt_hh->hh_data,dev->hard_header_len);
@@ -574,7 +574,7 @@ int ip_build_xmit(struct sock *sk,
 	ip_statistics.IpOutRequests++;
 
 #ifdef CONFIG_IP_MULTICAST	
-	if(sk && MULTICAST(daddr) && *sk->ip_mc_name)
+	if(MULTICAST(daddr) && *sk->ip_mc_name)
 	{
 		dev=dev_get(sk->ip_mc_name);
 		if(!dev)
@@ -710,8 +710,10 @@ int ip_build_xmit(struct sock *sk,
 		}
 		return 0;
 	}
-	length -= sizeof(struct iphdr);
-	if (sk && !sk->ip_hdrincl && opt) 
+	if (!sk->ip_hdrincl)
+		length -= sizeof(struct iphdr);
+		
+	if(opt) 
 	{
 		length -= opt->optlen;
 		fragheaderlen = dev->hard_header_len + sizeof(struct iphdr) + opt->optlen;
@@ -810,6 +812,7 @@ int ip_build_xmit(struct sock *sk,
 		skb->sk = sk;
 		skb->arp = 0;
 		skb->saddr = saddr;
+		skb->daddr = daddr;
 		skb->raddr = raddr;
 		skb_reserve(skb,(dev->hard_header_len+15)&~15);
 		data = skb_put(skb, fraglen-dev->hard_header_len);
@@ -927,7 +930,7 @@ int ip_build_xmit(struct sock *sk,
 			 
 			if(sk==NULL || sk->ip_mc_loop)
 			{
-				if(skb->daddr==IGMP_ALL_HOSTS || (dev->flags&IFF_ALLMULTI))
+				if(daddr==IGMP_ALL_HOSTS || (dev->flags&IFF_ALLMULTI))
 					ip_loopback(dev,skb);
 				else 
 				{
@@ -950,7 +953,11 @@ int ip_build_xmit(struct sock *sk,
 			 */
 
 			if(skb->ip_hdr->ttl==0)
-				kfree_skb(skb, FREE_READ);
+			{
+				kfree_skb(skb, FREE_WRITE);
+				nfrags++;
+				continue;
+			}
 		}
 #endif
 

@@ -244,6 +244,12 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 	return retval;
 }
 
+static void pty_set_termios(struct tty_struct *tty, struct termios *old_termios)
+{
+        tty->termios->c_cflag &= ~(CSIZE | PARENB);
+        tty->termios->c_cflag |= (CS8 | CREAD);
+}
+
 int pty_init(void)
 {
 	memset(&pty_state, 0, sizeof(pty_state));
@@ -274,6 +280,7 @@ int pty_init(void)
 	pty_driver.flush_buffer = pty_flush_buffer;
 	pty_driver.chars_in_buffer = pty_chars_in_buffer;
 	pty_driver.unthrottle = pty_unthrottle;
+	pty_driver.set_termios = pty_set_termios;
 
 	pty_slave_driver = pty_driver;
 	pty_slave_driver.name = "ttyp";

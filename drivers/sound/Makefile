@@ -5,6 +5,8 @@
 #
 #
 
+.PHONY: dummy
+SUB_DIRS	= lowlevel
 VERSION		= `head -1 .version`
 TARGET_OS	= linux
 USRINCDIR	= /usr/include
@@ -12,17 +14,15 @@ MODULEDIR	= /lib/modules/misc
 
 FIXEDOBJS	= soundcard.o dev_table.o sound_switch.o
 
+ifndef NO_LOWLEVEL
+	FIXEDOBJS := $(FIXEDOBJS) lowlevel/lowlevel.o
+endif
+
 ifeq (.defines,$(wildcard .defines))
 include .defines
 include .objects
 else
-OBJS   = audio.o dmabuf.o sb_dsp.o \
-	 opl3.o sequencer.o midibuf.o sb_card.o pas2_card.o adlib_card.o \
-	 pas2_pcm.o pas2_mixer.o pas2_midi.o gus_card.o gus_wave.o mpu401.o \
-	 gus_midi.o gus_vol.o patmgr.o sb_mixer.o sb16_dsp.o sb_midi.o \
-	 sb16_midi.o midi_synth.o uart6850.o sound_timer.o \
-	 sys_timer.o ics2101.o ad1848.o pss.o sscape.o trix.o aedsp16.o \
-	 mad16.o mad16_sb_midi.o cs4232.o maui.o
+OBJS   = `cat .object_files`
 endif
 
 ifndef TOPDIR
@@ -59,7 +59,7 @@ ifndef HOSTCC
 #
 CC	= gcc
 HOSTCC	= gcc
-CFLAGS	= -D__KERNEL__ -DMODULE -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -m486
+CFLAGS	= -O2 -D__KERNEL__ -DMODULE -I/usr/src/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe -m486
 USE_DEPEND=y
 else
 include $(TOPDIR)/Rules.make
@@ -72,7 +72,8 @@ sound.a: $(OBJS)
 
 clean:
 	rm -f core core.* *.o *.a tmp_make *~ x y z *%
-	rm -f configure sound_stub.c objects/*.o
+	rm -f configure sound_stub.c objects/*.o 
+	cd lowlevel;make clean
 
 indent:
 	for n in *.c;do echo indent $$n;indent $$n;done
@@ -85,9 +86,9 @@ local.h:
 	@echo
 	@echo
 	@echo
-	@echo "NOTE! Object file dependencies may not be up to date. Run"
-	@echo "make again if kernel/driver doesn't link properly. Restarting"
-	@echo "it now may save some time."
+	@echo NOTE! Object file dependencies may not be up to date. Run
+	@echo make again if kernel/driver doesn''t link properly. Restarting
+	@echo it now may save some time.
 	@echo
 	@echo
 
@@ -108,7 +109,9 @@ oldconfig: setup-$(TARGET_OS) configure
 #	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
-kernelconfig: setup-$(TARGET_OS) configure
+kernelconfig: setup-$(TARGET_OS)
+	rm -f configure
+	$(HOSTCC) -o configure configure.c
 	./configure fixedlocal > local.h
 	./configure fixeddefines > .defines
 	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
@@ -117,13 +120,16 @@ kernelconfig: setup-$(TARGET_OS) configure
 #	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
-mkscript: setup-$(TARGET_OS) configure
+mkscript: setup-$(TARGET_OS)
+	rm -f configure
+	$(HOSTCC) -o configure configure.c
 	./configure script > Config.in
+	cat lowlevel/Config.tmpl >> Config.in
 	./configure fixedlocal > local.h
 	./configure fixeddefines > .defines
 
 clrconf:
-	rm -f local.h .depend synth-ld.h trix_boot.h smw-midi0001.h .defines
+	rm -f local.h .depend synth-ld.h trix_boot.h smw-midi0001.h maui_boot.h .defines
 
 configure: configure.c
 	$(HOSTCC) -o configure configure.c
@@ -142,6 +148,9 @@ sound.o: local.h $(FIXEDOBJS) sound.a
 modules: local.h sound.o
 	ln -fs `pwd`/sound.o $(TOPDIR)/modules/sound.o
 
+
+lowlevel/lowlevel.o: dummy
+		cd lowlevel;make
 
 ifdef USE_DEPEND
 #

@@ -404,6 +404,7 @@ int kswapd(void *unused)
 	while (1) {
 		kswapd_awake = 0;
 		current->signal = 0;
+		run_task_queue(&tq_disk);
 		interruptible_sleep_on(&kswapd_wait);
 		kswapd_awake = 1;
 		swapstats.wakeups++;

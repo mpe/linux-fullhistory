@@ -1,10 +1,13 @@
 #ifndef _LINUX_TIME_H
 #define _LINUX_TIME_H
 
+#ifndef _STRUCT_TIMESPEC
+#define _STRUCT_TIMESPEC
 struct timespec {
 	long	tv_sec;		/* seconds */
 	long	tv_nsec;	/* nanoseconds */
 };
+#endif /* _STRUCT_TIMESPEC */
 
 struct timeval {
 	int	tv_sec;		/* seconds */

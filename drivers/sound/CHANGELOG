@@ -1,10 +1,63 @@
-Changelog for version 3.5.2
+Changelog for version 3.5.4
 ---------------------------
+
+Since 3.5.4-beta8
+- Fixed a bug in handling of non-fragment sized writes in 16 bit/stereo mode
+  with GUS.
+- Limited minimum fragment size with some audio devices (GUS=512 and
+  SB=32). These devices require more time to "recover" from processing
+  of each fragment. 
+
+Since 3.5.4-beta6/7
+- There seems to be problems in the OPTi 82C930 so cards based on this
+  chip don't necessarily work yet. There are problems in detecting the 
+  MIDI interface. Also mixer volumes may be seriously wrong on some systems.
+  You can safely use this driver version with C930 if it looks to work.
+  However please don't complain if you have problems with it. C930 support
+  should be fixed in future releases.
+- Got initialization of GUS PnP to work. With this version GUS PnP should
+  work in GUS compatible mode after initialization using isapnptools.
+- Fixed a bug in handling of full duplex cards in write only mode. This has
+  been causing "audio device opening" errors with RealAudio player.
+
+Since 3.5.4.beta5
+- Changes to OPTi 82C930 driver.
+- Major changes to the Soundscape driver. The driver requires now just one
+  DMA channel. The extra audio/dsp device (the "Not functional" one) used
+  for code download in the earlier versions has been eliminated. There is now
+  just one /dev/dsp# device which is used both for code download and audio.
+
+Since 3.5.4.beta4
+- Minor changes.
+
+Since 3.5.4-beta2
+- Fixed silent playback with ESS 688/1688.
+- Got SB16 to work without the 16 bit DMA channel (only the 8 bit one
+  is required for 8 and 16 bit modes).
+- Added the "lowlevel" subdirectory for additional low level drivers that
+  are not part of USS core. See lowlevel/README for more info.
+- Included support for ACI mixer (by Markus Kuhn). ACI is a mixer used in
+  miroPCM soundcards. See lowlevel/aci.readme for more info.
+- Support for Aztech Washington chipset (AZT2316 ASIC).
+
+Since 3.5.4-beta1
+- Reduced clicking with AD1848.
+- Support for OPTi 82C930. Only half duplex at this time. 16 bit playback
+  is sometimes just white noise (occurs randomly).
+
+Since 3.5.2
+- Major changes to the SB/Jazz16/ESS driver (most parts rewritten).
+  The most noticeable new feature is support for multiple SB cards at the same
+  time.
+- Renamed sb16_midi.c to uart401.c. Also modified it to work also with
+  other MPU401 UART compatible cards than SB16/ESS/Jazz.
+- Some changes which reduce clicking in audio playback.
+- Copying policy is now GPL.
 
 Since 3.5.1
 - TB Maui initialization support
 Since 3.5
-- Improved handling of playback underrun situations.
+- Improved handling of playback underrunt situations.
 
 Since 3.5-beta10
 - Bug fixing
@@ -82,7 +135,7 @@ configure to handle this.
 modularized version. They can be enabled by using init_trace=1 in
 the insmod command line (insmod sound init_trace=1).
 - More AIX stuff.
-- Added support for synchronizing dsp/audio devices with /dev/sequencer.
+- Added support for syncronizing dsp/audio devices with /dev/sequencer.
 - mmap() support for dsp/audio devices.
 
 Since 3.5-alpha5
@@ -106,13 +159,13 @@ Since 3.5-alpha2
 - Fixed random protection fault in gus_wave.c
 
 Since 3.5-alpha1
-- Modified to work with Linux-1.3.33 and later
+- Modified to work with Linux-1.3.33 and leater
 - Some minor changes
 
 Since 3.0.2
 - Support for CS4232 based PnP cards (AcerMagic S23 etc).
 - Full duplex support for some CS4231, CS4232 and AD1845 based cards
-(GUS MAX, AudioTrix Pro, AcerMagic S23 and many MAD16/Mozart cards
+(GUA MAX, AudioTrix Pro, AcerMagic S23 and many MAD16/Mozart cards
 having a codec mentioned above).
 - Almost fully rewritten loadable modules support.
 - Fixed some bugs.
@@ -255,7 +308,7 @@ Since 2.2
 
 Since 2.1
 - Preliminary support for SB16. 
-  - The SB16 mixer is supported in its native mode.
+  - The SB16 mixer is supported in it's native mode.
   - Digitized voice capability up to 44.1 kHz/8 bit/mono
     (16 bit and stereo support coming in the next release).
 - Fixed some bugs in the digitized voice driver for PAS16.

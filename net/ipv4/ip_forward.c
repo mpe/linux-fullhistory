@@ -326,7 +326,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #ifdef CONFIG_IP_MROUTE
 			if(is_frag&IPFWD_MULTITUNNEL)
 			{
-				skb_reserve(skb,(encap+dev->hard_header_len+15)&~15);	/* 16 byte aligned IP headers are good */
+				skb_reserve(skb2,(encap+dev2->hard_header_len+15)&~15);	/* 16 byte aligned IP headers are good */
 				ip_encap(skb2,skb->len, dev2, raddr);
 			}
 			else

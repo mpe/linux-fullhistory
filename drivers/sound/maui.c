@@ -4,27 +4,11 @@
  * The low level driver for Turtle Beach Maui and Tropez.
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -57,6 +41,10 @@ static int      (*orig_load_patch) (int dev, int format, const char *addr,
 
 #ifdef HAVE_MAUI_BOOT
 #include "maui_boot.h"
+#else
+static unsigned char *maui_os = NULL;
+static int      maui_osLen = 0;
+
 #endif
 
 static wait_handle *maui_sleeper = NULL;
@@ -93,20 +81,20 @@ maui_wait (int mask)
 
 
       {
-	unsigned long   tl;
+	unsigned long   tlimit;
 
 	if (HZ / 10)
-	  current_set_timeout (tl = jiffies + (HZ / 10));
+	  current_set_timeout (tlimit = jiffies + (HZ / 10));
 	else
-	  tl = (unsigned long) -1;
-	maui_sleep_flag.mode = WK_SLEEP;
+	  tlimit = (unsigned long) -1;
+	maui_sleep_flag.flags = WK_SLEEP;
 	module_interruptible_sleep_on (&maui_sleeper);
-	if (!(maui_sleep_flag.mode & WK_WAKEUP))
+	if (!(maui_sleep_flag.flags & WK_WAKEUP))
 	  {
-	    if (jiffies >= tl)
-	      maui_sleep_flag.mode |= WK_TIMEOUT;
+	    if (jiffies >= tlimit)
+	      maui_sleep_flag.flags |= WK_TIMEOUT;
 	  }
-	maui_sleep_flag.mode &= ~WK_SLEEP;
+	maui_sleep_flag.flags &= ~WK_SLEEP;
       };
       if (current_got_fatal_signal ())
 	return 0;
@@ -193,7 +181,7 @@ download_code (void)
 
 		if (c != 0x80)
 		  {
-		    printk ("Download not acknowledged\n");
+		    printk ("Doanload not acknowledged\n");
 		    return 0;
 		  }
 		else if (!(lines++ % 10))
@@ -317,7 +305,7 @@ maui_load_patch (int dev, int format, const char *addr,
   if (count < hdr_size)
     {
       printk ("Maui error: Patch header too short\n");
-      return -EINVAL;
+      return -(EINVAL);
     }
 
   count -= hdr_size;
@@ -327,7 +315,7 @@ maui_load_patch (int dev, int format, const char *addr,
    * been transferred already.
    */
 
-  memcpy_fromfs (&((char *) &header)[offs], &((addr)[offs]), hdr_size - offs);
+  memcpy_fromfs (&((char *) &header)[offs], &(addr)[offs], hdr_size - offs);
 
   if (count < header.len)
     {
@@ -345,10 +333,10 @@ maui_load_patch (int dev, int format, const char *addr,
 
       data = get_fs_byte (&((addr)[hdr_size + i]));
       if (i == 0 && !(data & 0x80))
-	return -EINVAL;
+	return -(EINVAL);
 
       if (maui_write (data) == -1)
-	return -EIO;
+	return -(EIO);
     }
 
   if ((i = maui_read ()) != 0x80)
@@ -356,7 +344,7 @@ maui_load_patch (int dev, int format, const char *addr,
       if (i != -1)
 	printk ("Maui: Error status %02x\n", i);
 
-      return -EIO;
+      return -(EIO);
     }
 
   return 0;
@@ -377,7 +365,7 @@ probe_maui (struct address_info *hw_config)
   if (snd_set_irq_handler (hw_config->irq, mauiintr, "Maui", maui_osp) < 0)
     return 0;
 
-  maui_sleep_flag.mode = WK_NONE;
+  maui_sleep_flag.flags = WK_NONE;
 /*
  * Initialize the processor if necessary
  */
@@ -448,22 +436,23 @@ probe_maui (struct address_info *hw_config)
   return ret;
 }
 
-long
-attach_maui (long mem_start, struct address_info *hw_config)
+void
+attach_maui (struct address_info *hw_config)
 {
   int             this_dev = num_midis;
 
   conf_printf ("Maui", hw_config);
 
   hw_config->irq *= -1;
-  mem_start = attach_mpu401 (mem_start, hw_config);
+  hw_config->name = "Maui";
+  attach_mpu401 (hw_config);
 
   if (num_midis > this_dev)	/* The MPU401 driver installed itself */
     {
       struct synth_operations *synth;
 
       /*
-       * Intercept patch loading calls so that they can be handled
+       * Intercept patch loading calls so that they canbe handled
        * by the Maui driver.
        */
 
@@ -477,7 +466,6 @@ attach_maui (long mem_start, struct address_info *hw_config)
       else
 	printk ("Maui: Can't install patch loader\n");
     }
-  return mem_start;
 }
 
 void

@@ -778,7 +778,7 @@ asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_ad
 		sock_release(newsock);
 		return(-EINVAL);
 	}
-	sock->file=current->files->fd[fd];
+	newsock->file=current->files->fd[fd];
 	
 	if (upeer_sockaddr)
 	{

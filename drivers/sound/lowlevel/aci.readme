@@ -1,0 +1,40 @@
+
+ACI mixer driver extension (miroSOUND PCM12) for Linux
+------------------------------------------------------
+
+Markus Kuhn -- 1995-12-31
+
+
+This is the ACI mixer driver for the miroSOUND PCM12 soundcard. It
+works probably also for other ACI miroSOUND boards like the PCM1 pro
+or the PCM20, however this has not been tested.
+
+Just copy the file aci.c into the /usr/src/linux/drivers/sound/
+subdirectory, then change to the subdirectory /usr/src/linux/drivers/
+and apply with "patch -p0 <aci.patch" the path file which adds the
+call of the attach_aci() to the MAD16 driver.
+
+With these patches, /dev/mixer will be the ACI mixer, and /dev/mixer1
+will be the (mostly unoperational) mixer in the codec, which is the
+primary mixer of most other MAD16 cards.
+
+Things which still have to be done for full PCM12 support:
+
+  - /dev/mixer1 should be automatically initialized to sensible
+    settings (see the comments in aci.c for details).
+
+  - I still have not been able to record anything with the PCM12
+    in duplex mode. No matter what DMA and IRQ setting I tried,
+    I always get "Sound: DMA (input) timed out - IRQ/DRQ config
+    error?".
+
+Please let me know if you have any problems/suggestions.
+
+*** Happy mixing ***
+
+Markus
+
+-- 
+Markus Kuhn, Computer Science student -- University of Erlangen,
+Internet Mail: <mskuhn@cip.informatik.uni-erlangen.de> - Germany
+WWW Home: <http://wwwcip.informatik.uni-erlangen.de/user/mskuhn>

@@ -551,8 +551,15 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 			if (rt->rt_mtu > new_mtu)
 				rt->rt_mtu = new_mtu;
 
+		/*
+		 *	FIXME::
+		 *	Not the nicest of fixes: Lose a MTU update if the socket is
+		 *	locked this instant. Not the right answer but will be best
+		 *	for the production fix. Make 2.1 work right!
+		 */
+		 
 		if (sk->mtu > new_mtu - sizeof(struct iphdr) - sizeof(struct tcphdr)
-			&& new_mtu > sizeof(struct iphdr)+sizeof(struct tcphdr))
+			&& new_mtu > sizeof(struct iphdr)+sizeof(struct tcphdr) && !sk->users)
 			sk->mtu = new_mtu - sizeof(struct iphdr) - sizeof(struct tcphdr);
 
 		return;
@@ -943,40 +950,44 @@ static int do_tcp_sendmsg(struct sock *sk,
 				return -EPIPE;
 			}
 
-		/*
-		 * The following code can result in copy <= if sk->mss is ever
-		 * decreased.  It shouldn't be.  sk->mss is min(sk->mtu, sk->max_window).
-		 * sk->mtu is constant once SYN processing is finished.  I.e. we
-		 * had better not get here until we've seen his SYN and at least one
-		 * valid ack.  (The SYN sets sk->mtu and the ack sets sk->max_window.)
-		 * But ESTABLISHED should guarantee that.  sk->max_window is by definition
-		 * non-decreasing.  Note that any ioctl to set user_mss must be done
-		 * before the exchange of SYN's.  If the initial ack from the other
-		 * end has a window of 0, max_window and thus mss will both be 0.
-		 */
+			/*
+			 * The following code can result in copy <= if sk->mss is ever
+			 * decreased.  It shouldn't be.  sk->mss is min(sk->mtu, sk->max_window).
+			 * sk->mtu is constant once SYN processing is finished.  I.e. we
+			 * had better not get here until we've seen his SYN and at least one
+			 * valid ack.  (The SYN sets sk->mtu and the ack sets sk->max_window.)
+			 * But ESTABLISHED should guarantee that.  sk->max_window is by definition
+			 * non-decreasing.  Note that any ioctl to set user_mss must be done
+			 * before the exchange of SYN's.  If the initial ack from the other
+			 * end has a window of 0, max_window and thus mss will both be 0.
+			 */
 
-		/*
-		 *	Now we need to check if we have a half built packet.
-		 */
+			/*
+			 *	Now we need to check if we have a half built packet.
+			 */
 #ifndef CONFIG_NO_PATH_MTU_DISCOVERY
-		/*
-		 *	FIXME:  I'm almost sure that this fragment is BUG,
-		 *		but it works... I do not know why 8) --ANK
-		 *
-		 *	Really, we should rebuild all the queues...
-		 *	It's difficult. Temporary hack is to send all
-		 *	queued segments with allowed fragmentation.
-		 */
-		{
-			int new_mss = min(sk->mtu, sk->max_window);
-			if (new_mss < sk->mss)
+			/*
+			 *	FIXME:  I'm almost sure that this fragment is BUG,
+			 *		but it works... I do not know why 8) --ANK
+			 *
+			 *	Really, we should rebuild all the queues...
+			 *	It's difficult. Temporary hack is to send all
+			 *	queued segments with allowed fragmentation.
+			 */
 			{
-				tcp_send_partial(sk);
-				sk->mss = new_mss;
+				int new_mss = min(sk->mtu, sk->max_window);
+				if (new_mss < sk->mss)
+				{
+					tcp_send_partial(sk);
+					sk->mss = new_mss;
+				}
 			}
-		}
 #endif
 
+			/*
+			 *	If there is a partly filled frame we can fill
+			 *	out.
+			 */
 			if ((skb = tcp_dequeue_partial(sk)) != NULL)
 			{
 				int tcp_size;
@@ -987,11 +998,33 @@ static int do_tcp_sendmsg(struct sock *sk,
 				if (!(flags & MSG_OOB))
 				{
 					copy = min(sk->mss - tcp_size, seglen);
+					
+					/*
+					 *	Now we may find the frame is as big, or too
+					 *	big for our MSS. Thats all fine. It means the
+					 *	MSS shrank (from an ICMP) after we allocated 
+					 *	this frame.
+					 */
+					 
 					if (copy <= 0)
 					{
-						printk(KERN_CRIT "TCP: **bug**: \"copy\" <= 0\n");
-				  		return -EFAULT;
+						/*
+						 *	Send the now forced complete frame out. 
+						 *
+						 *	Note for 2.1: The MSS reduce code ought to
+						 *	flush any frames in partial that are now
+						 *	full sized. Not serious, potential tiny
+						 *	performance hit.
+						 */
+						tcp_send_skb(sk,skb);
+						/*
+						 *	Get a new buffer and try again.
+						 */
+						continue;
 					}
+					/*
+					 *	Otherwise continue to fill the buffer.
+					 */
 					tcp_size += copy;
 					memcpy_fromfs(skb_put(skb,copy), from, copy);
 					skb->csum = csum_partial(skb->tail - tcp_size, tcp_size, 0);
@@ -1378,11 +1411,9 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 		current->state = TASK_INTERRUPTIBLE;
 
-		skb = skb_peek(&sk->receive_queue);
-		do
+		skb = sk->receive_queue.next;
+		while (skb != (struct sk_buff *)&sk->receive_queue)
 		{
-			if (!skb)
-				break;
 			if (before(*seq, skb->seq))
 				break;
 			offset = *seq - skb->seq;
@@ -1396,7 +1427,6 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 				skb->used = 1;
 			skb = skb->next;
 		}
-		while (skb != (struct sk_buff *)&sk->receive_queue);
 
 		if (copied)
 			break;

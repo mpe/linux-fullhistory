@@ -125,14 +125,22 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent * dirent,
 	return count - buf.count;
 }
 
-asmlinkage int osf_getpriority(int which, int who)
+/*
+ * Alpha syscall convention has no problem returning negative
+ * values:
+ */
+asmlinkage int osf_getpriority(int which, int who, int a2, int a3, int a4,
+			       int a5, struct pt_regs regs)
 {
 	extern int sys_getpriority(int, int);
-	/*
-	 * Alpha syscall convention has no problem returning negative
-	 * values:
-	 */
-	return 20 - sys_getpriority(which, who);
+	int prio;
+
+	prio = sys_getpriority(which, who);
+	if (prio < 0)
+		return prio;
+
+	regs.r0 = 0; /* special return: no errors */
+	return 20 - prio;
 }
 
 
@@ -177,6 +185,7 @@ asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 			return -EBADF;
 	}
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	return do_mmap(file, addr, len, prot, flags, off);
 }
 

@@ -317,6 +317,8 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		break;
 	case F_UNLCK :
 		break;
+	default:
+		return -EINVAL;
 	}
 	
 	return (posix_lock_file(filp, &file_lock, cmd == F_SETLKW));
@@ -448,7 +450,7 @@ repeat:
 			if (current->signal & ~current->blocked)
 				return (-ERESTARTSYS);
 			if (posix_locks_deadlock(current, fl->fl_owner))
-				return (-EDEADLOCK);
+				return (-EDEADLK);
 			interruptible_sleep_on(&fl->fl_wait);
 			if (current->signal & ~current->blocked)
 				return (-ERESTARTSYS);
@@ -762,7 +764,7 @@ repeat:
 				if (current->signal & ~current->blocked)
 					return (-ERESTARTSYS);
 				if (posix_locks_deadlock(caller->fl_owner, fl->fl_owner))
-					return (-EDEADLOCK);
+					return (-EDEADLK);
 				interruptible_sleep_on(&fl->fl_wait);
 				if (current->signal & ~current->blocked)
 					return (-ERESTARTSYS);

@@ -148,7 +148,7 @@ current kernel. (Read more about this in the module utilities package.)
 
 Whenever a program wants the kernel to use a feature that is only
 available as a loadable module, and if the kernel hasn't got the
-module installed yet, the kernel will ask the kerneld deamon to take
+module installed yet, the kernel will ask the kerneld daemon to take
 care of the situation and make the best of it.
 
 This is what happens:
@@ -166,7 +166,7 @@ This is what happens:
 	  has decided that the kernel needs.  Every module will be
 	  configured according to the "options" lines in "/etc/conf.modules".
 	- modprobe exits and kerneld tells the kernel that the request
-	  succeded (or failed...)
+	  succeeded (or failed...)
 	- The kernel uses the freshly installed feature just as if it
 	  had been configured into the kernel as a "resident" part.
 

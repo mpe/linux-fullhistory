@@ -8,27 +8,11 @@
  * sound/configure.c  - Configuration program for the Linux Sound Driver
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 
 
@@ -83,14 +67,17 @@
 #define AUDIO_CARDS (B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_GUS) | \
 		B (OPT_MSS) | B (OPT_GUS16) | B (OPT_GUSMAX) | B (OPT_TRIX) | \
 		B (OPT_SSCAPE)| B(OPT_MAD16) | B(OPT_CS4232))
-#define MIDI_CARDS (B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_MPU401) | \
+#define MPU_DEVS (B(OPT_PSS)|\
+		  B(OPT_CS4232)|B(OPT_SPNP)|B(OPT_MAUI))
+#define UART401_DEVS (SBDSP_DEVS|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_SSCAPE))
+#define MIDI_CARDS (MPU_DEVS | UART401_DEVS | \
+		    B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_MPU401) | \
 		    B (OPT_GUS) | B (OPT_TRIX) | B (OPT_SSCAPE)|B(OPT_MAD16) | \
 		    B (OPT_CS4232)|B(OPT_MAUI))
-#define MPU_DEVS (B(OPT_PSS)|B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|\
-		  B(OPT_CS4232)|B(OPT_SPNP)|B(OPT_MAUI))
 #define AD1848_DEVS (B(OPT_GUS16)|B(OPT_MSS)|B(OPT_PSS)|B(OPT_GUSMAX)|\
 		     B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_CS4232)|\
 		     B(OPT_SPNP))
+#define SBDSP_DEVS (B(OPT_SB)|B(OPT_SPNP)|B(OPT_MAD16))
 #define SEQUENCER_DEVS (OPT_MIDI|OPT_YM3812|OPT_ADLIB|OPT_GUS|OPT_MAUI|MIDI_CARDS)
 /*
  * Options that have been disabled for some reason (incompletely implemented
@@ -171,7 +158,7 @@ char           *questions[] =
   "GUS MAX support",
   "Microsoft Sound System support",
   "Ensoniq Soundscape support",
-  "MediaTriX AudioTriX Pro support",
+  "MediaTrix AudioTrix Pro support",
   "Support for MAD16 and/or Mozart based cards",
   "Support for Crystal CS4232 based (PnP) cards",
   "Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers",
@@ -235,7 +222,7 @@ char           *help[] =
   "Soundscape chipset. Such cards are being manufactured by Ensoniq,\n"
   "Spea and Reveal (Reveal makes other cards as well).\n",
 
-  "Enable this option if you have the AudioTriX Pro sound card\n"
+  "Enable this option if you have the AudioTrix Pro sound card\n"
   "manufactured by MediaTrix.\n",
 
   "Enable this if your card has a Mozart (OAK OTI-601) or MAD16 (OPTi\n"
@@ -291,6 +278,14 @@ extra_options[] =
   ,
   {
     "AD1848", AD1848_DEVS
+  }
+  ,
+  {
+    "SBDSP", SBDSP_DEVS
+  }
+  ,
+  {
+    "UART401", UART401_DEVS
   }
   ,
   {
@@ -687,11 +682,14 @@ use_old_config (char *filename)
   printf ("#define SELECTED_SOUND_OPTIONS\t0x%08x\n", selected_options);
   fprintf (stderr, "Old configuration copied.\n");
 
+#if defined(linux) || defined(Solaris)
   build_defines ();
+#endif
   old_config_used = 1;
   return 1;
 }
 
+#if defined(linux) || defined(Solaris)
 void
 build_defines (void)
 {
@@ -725,6 +723,7 @@ build_defines (void)
   fprintf (optf, "\n");
   fclose (optf);
 }
+#endif
 
 void
 ask_parameters (void)
@@ -764,7 +763,7 @@ ask_parameters (void)
 		"SoundBlaster 16 bit DMA (_REQUIRED_for SB16, Jazz16, SMW)",
 		  FMT_INT,
 		  5,
-		  "5, 6 or 7");
+		  "5, 6 or 7 (use 1 for 8 bit cards)");
 
   ask_int_choice (B (OPT_SB), "SB_MPU_BASE",
 		  "MPU401 I/O base of SB16, Jazz16 and ES1688",
@@ -948,7 +947,7 @@ ask_parameters (void)
 		  "Soundscape MIDI I/O base",
 		  FMT_HEX,
 		  0x330,
-		  "");
+		  "320, 330, 340 or 350");
 
   ask_int_choice (B (OPT_SSCAPE), "SSCAPE_IRQ",
 		  "Soundscape MIDI IRQ",
@@ -974,11 +973,6 @@ ask_parameters (void)
 		  11,
 		  "7, 9, 10 or 11");
 
-  ask_int_choice (B (OPT_SSCAPE), "SSCAPE_MSS_DMA",
-		  "Soundscape audio DMA",
-		  FMT_INT,
-		  0,
-		  "0, 1 or 3");
 
   if (selected_options & B (OPT_SSCAPE))
     {
@@ -995,55 +989,55 @@ ask_parameters (void)
     }
 
   ask_int_choice (B (OPT_TRIX), "TRIX_BASE",
-		  "AudioTriX audio I/O base",
+		  "AudioTrix audio I/O base",
 		  FMT_HEX,
 		  0x530,
 		  "530, 604, E80 or F40");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_IRQ",
-		  "AudioTriX audio IRQ",
+		  "AudioTrix audio IRQ",
 		  FMT_INT,
 		  11,
 		  "7, 9, 10 or 11");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_DMA",
-		  "AudioTriX audio DMA",
+		  "AudioTrix audio DMA",
 		  FMT_INT,
 		  0,
 		  "0, 1 or 3");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_DMA2",
-		  "AudioTriX second (duplex) DMA",
+		  "AudioTrix second (duplex) DMA",
 		  FMT_INT,
 		  3,
 		  "0, 1 or 3");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_MPU_BASE",
-		  "AudioTriX MIDI I/O base",
+		  "AudioTrix MIDI I/O base",
 		  FMT_HEX,
 		  0x330,
 		  "330, 370, 3B0 or 3F0");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_MPU_IRQ",
-		  "AudioTriX MIDI IRQ",
+		  "AudioTrix MIDI IRQ",
 		  FMT_INT,
 		  9,
 		  "3, 4, 5, 7 or 9");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_SB_BASE",
-		  "AudioTriX SB I/O base",
+		  "AudioTrix SB I/O base",
 		  FMT_HEX,
 		  0x220,
 		  "220, 210, 230, 240, 250, 260 or 270");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_SB_IRQ",
-		  "AudioTriX SB IRQ",
+		  "AudioTrix SB IRQ",
 		  FMT_INT,
 		  7,
 		  "3, 4, 5 or 7");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_SB_DMA",
-		  "AudioTriX SB DMA",
+		  "AudioTrix SB DMA",
 		  FMT_INT,
 		  1,
 		  "1 or 3");
@@ -1141,7 +1135,6 @@ dump_script (void)
 /*
  * Some "hardcoded" options
  */
-  printf ("bool 'Support for SM Wave' CONFIG_SMWAVE\n");
 
   dump_only = 1;
   selected_options = 0;
@@ -1437,7 +1430,7 @@ main (int argc, char *argv[])
 	{
 	  FILE           *sf = fopen ("synth-ld.h", "w");
 
-	  fprintf (sf, "/* automatically generated by configure */\n");
+	  fprintf (sf, "/* automaticaly generated by configure */\n");
 	  fprintf (sf, "unsigned char pss_synth[1];\n"
 		   "#define pss_synthLen 0\n");
 	  fclose (sf);
@@ -1450,10 +1443,10 @@ main (int argc, char *argv[])
 
       if (think_positively ("Do you want to include TRXPRO.HEX in your kernel",
 			    1,
-	"The MediaTriX AudioTrix Pro has an onboard microcontroller which\n"
+	"The MediaTrix AudioTrix Pro has an onboard microcontroller which\n"
 			    "needs to be initialized by downloading the code from the file TRXPRO.HEX\n"
 			    "in the DOS driver directory. If you don't have the TRXPRO.HEX file handy\n"
-			    "you may skip this step. However, the SB and MPU-401 modes of AudioTriX\n"
+			    "you may skip this step. However, the SB and MPU-401 modes of AudioTrix\n"
 			    "Pro will not work without this file!\n"))
 	{
 	  char            path[512];
@@ -1467,6 +1460,15 @@ main (int argc, char *argv[])
 	    goto hex2hex_again;
 	  printf ("/*build hex2hex %s trix_boot.h trix_boot */\n", path);
 	  printf ("#define INCLUDE_TRIX_BOOT\n");
+	}
+    }
+
+  if (selected_options & B (OPT_MSS))
+    {
+      if (think_positively ("Support for builtin sound of Compaq Deskpro XL", 0,
+			    "Enable this if you have Compaq Deskpro XL.\n"))
+	{
+	  printf ("#define DESKPROXL\n");
 	}
     }
 

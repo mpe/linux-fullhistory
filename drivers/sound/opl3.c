@@ -4,27 +4,11 @@
  * A low level driver for Yamaha YM3812 and OPL-3 -chips
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -58,6 +42,7 @@ struct voice_info
 
 typedef struct opl_devinfo
   {
+    int             base;
     int             left_io, right_io;
     int             nr_voice;
     int             lv_map[MAX_VOICE];
@@ -133,12 +118,12 @@ opl3_ioctl (int dev,
       {
 	struct sbi_instrument ins;
 
-	memcpy_fromfs ((char *) &ins, &(((char *) arg)[0]), sizeof (ins));
+	memcpy_fromfs ((char *) &ins, &((char *) arg)[0], sizeof (ins));
 
 	if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
 	  {
 	    printk ("FM Error: Invalid instrument number %d\n", ins.channel);
-	    return -EINVAL;
+	    return -(EINVAL);
 	  }
 
 	pmgr_inform (dev, PM_E_PATCH_LOADED, ins.channel, 0, 0, 0);
@@ -149,7 +134,7 @@ opl3_ioctl (int dev,
     case SNDCTL_SYNTH_INFO:
       devc->fm_info.nr_voices = (devc->nr_voice == 12) ? 6 : devc->nr_voice;
 
-      memcpy_tofs ((&((char *) arg)[0]), &devc->fm_info, sizeof (devc->fm_info));
+      memcpy_tofs (&((char *) arg)[0], &devc->fm_info, sizeof (devc->fm_info));
       return 0;
       break;
 
@@ -164,7 +149,7 @@ opl3_ioctl (int dev,
       break;
 
     default:
-      return -EINVAL;
+      return -(EINVAL);
     }
 
 }
@@ -190,9 +175,9 @@ opl3_detect (int ioaddr, int *osp)
     return 0;
 
 
-  devc = (struct opl_devinfo *) (sound_mem_blocks[sound_num_blocks] = kmalloc (sizeof (*devc), GFP_KERNEL));
-  if (sound_num_blocks < 1024)
-    sound_num_blocks++;;
+  devc = (struct opl_devinfo *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (*devc)));
+  if (sound_nblocks < 1024)
+    sound_nblocks++;;
 
   if (devc == NULL)
     {
@@ -201,6 +186,7 @@ opl3_detect (int ioaddr, int *osp)
     }
 
   devc->osp = osp;
+  devc->base = ioaddr;
 
   /* Reset timers 1 and 2 */
   opl3_command (ioaddr, TIMER_CONTROL_REGISTER, TIMER1_MASK | TIMER2_MASK);
@@ -266,7 +252,7 @@ opl3_detect (int ioaddr, int *osp)
       detected_model = 3;
 
       /*
-       * Detect availability of OPL4 (_experimental_). Works probably
+       * Detect availability of OPL4 (_experimental_). Works propably
        * only after a cold boot. In addition the OPL4 port
        * of the chip may not be connected to the PC bus at all.
        */
@@ -319,7 +305,7 @@ opl3_detect (int ioaddr, int *osp)
 }
 
 static int
-opl3_kill_note (int dev, int voice, int note, int velocity)
+opl3_kill_note (int devno, int voice, int note, int velocity)
 {
   struct physical_voice_info *map;
 
@@ -797,7 +783,7 @@ opl3_command (int io_addr, unsigned int addr, unsigned int val)
 }
 
 static void
-opl3_reset (int dev)
+opl3_reset (int devno)
 {
   int             i;
 
@@ -821,7 +807,7 @@ opl3_reset (int dev)
 			KSL_LEVEL + pv_map[devc->lv_map[i]].op[3], 0xff);
 	}
 
-      opl3_kill_note (dev, i, 0, 64);
+      opl3_kill_note (devno, i, 0, 64);
     }
 
   if (devc->model == 2)
@@ -841,7 +827,7 @@ opl3_open (int dev, int mode)
   int             i;
 
   if (devc->busy)
-    return -EBUSY;
+    return -(EBUSY);
   devc->busy = 1;
 
   devc->v_alloc->max_voice = devc->nr_voice = (devc->model == 2) ? 18 : 9;
@@ -887,15 +873,15 @@ opl3_load_patch (int dev, int format, const char *addr,
   if (count < sizeof (ins))
     {
       printk ("FM Error: Patch record too short\n");
-      return -EINVAL;
+      return -(EINVAL);
     }
 
-  memcpy_fromfs (&((char *) &ins)[offs], &((addr)[offs]), sizeof (ins) - offs);
+  memcpy_fromfs (&((char *) &ins)[offs], &(addr)[offs], sizeof (ins) - offs);
 
   if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
     {
       printk ("FM Error: Invalid instrument number %d\n", ins.channel);
-      return -EINVAL;
+      return -(EINVAL);
     }
   ins.key = format;
 
@@ -1055,7 +1041,7 @@ opl3_controller (int dev, int voice, int ctrl_num, int value)
 static int
 opl3_patchmgr (int dev, struct patmgr_info *rec)
 {
-  return -EINVAL;
+  return -(EINVAL);
 }
 
 static void
@@ -1173,25 +1159,26 @@ static struct synth_operations opl3_operations =
   opl3_setup_voice
 };
 
-long
-opl3_init (long mem_start, int ioaddr, int *osp)
+void
+opl3_init (int ioaddr, int *osp)
 {
   int             i;
 
   if (num_synths >= MAX_SYNTH_DEV)
     {
       printk ("OPL3 Error: Too many synthesizers\n");
-      return mem_start;
+      return;
     }
 
   if (devc == NULL)
     {
       printk ("OPL3: Device control structure not initialized.\n");
-      return mem_start;
+      return;
     }
 
   memset ((char *) devc, 0x00, sizeof (*devc));
   devc->osp = osp;
+  devc->base = ioaddr;
 
   devc->nr_voice = 9;
   strcpy (devc->fm_info.name, "OPL2");
@@ -1257,7 +1244,6 @@ opl3_init (long mem_start, int ioaddr, int *osp)
   for (i = 0; i < SBFM_MAXINSTR; i++)
     devc->i_map[i].channel = -1;
 
-  return mem_start;
 }
 
 #endif

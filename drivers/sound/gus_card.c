@@ -4,27 +4,11 @@
  * Detection routine for the Gravis Ultrasound.
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -45,8 +29,8 @@ int             gus_pnp_flag = 0;
 
 int            *gus_osp;
 
-long
-attach_gus_card (long mem_start, struct address_info *hw_config)
+void
+attach_gus_card (struct address_info *hw_config)
 {
   int             io_addr;
 
@@ -57,7 +41,7 @@ attach_gus_card (long mem_start, struct address_info *hw_config)
 						 * Try first the default
 						 */
     {
-      mem_start = gus_wave_init (mem_start, hw_config);
+      gus_wave_init (hw_config);
 
       request_region (hw_config->io_base, 16, "GUS");
       request_region (hw_config->io_base + 0x100, 12, "GUS");	/* 0x10c-> is MAX */
@@ -68,9 +52,9 @@ attach_gus_card (long mem_start, struct address_info *hw_config)
 	if (sound_alloc_dma (hw_config->dma2, "GUS(2)"))
 	  printk ("gus_card.c: Can't allocate DMA channel2\n");
 #ifdef CONFIG_MIDI
-      mem_start = gus_midi_init (mem_start);
+      gus_midi_init ();
 #endif
-      return mem_start;
+      return;
     }
 
 #ifndef EXCLUDE_GUS_IODETECT
@@ -88,7 +72,7 @@ attach_gus_card (long mem_start, struct address_info *hw_config)
 	  hw_config->io_base = io_addr;
 
 	  printk (" WARNING! GUS found at %x, config was %x ", io_addr, hw_config->io_base);
-	  mem_start = gus_wave_init (mem_start, hw_config);
+	  gus_wave_init (hw_config);
 	  request_region (io_addr, 16, "GUS");
 	  request_region (io_addr + 0x100, 12, "GUS");	/* 0x10c-> is MAX */
 	  if (sound_alloc_dma (hw_config->dma, "GUS"))
@@ -97,16 +81,13 @@ attach_gus_card (long mem_start, struct address_info *hw_config)
 	    if (sound_alloc_dma (hw_config->dma2, "GUS"))
 	      printk ("gus_card.c: Can't allocate DMA channel2\n");
 #ifdef CONFIG_MIDI
-	  mem_start = gus_midi_init (mem_start);
+	  gus_midi_init ();
 #endif
-	  return mem_start;
+	  return;
 	}
 
 #endif
 
-  return mem_start;		/*
-				 * Not detected
-				 */
 }
 
 int
@@ -242,8 +223,8 @@ probe_gus_db16 (struct address_info *hw_config)
   return ad1848_detect (hw_config->io_base, NULL, hw_config->osp);
 }
 
-long
-attach_gus_db16 (long mem_start, struct address_info *hw_config)
+void
+attach_gus_db16 (struct address_info *hw_config)
 {
 #ifdef CONFIG_GUS
   gus_pcm_volume = 100;
@@ -255,7 +236,6 @@ attach_gus_db16 (long mem_start, struct address_info *hw_config)
 	       hw_config->dma,
 	       hw_config->dma, 0,
 	       hw_config->osp);
-  return mem_start;
 }
 
 void

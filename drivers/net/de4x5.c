@@ -1,4 +1,4 @@
-/*  de4x5.c: A DIGITAL DE425/DE434/DE435/DE500 ethernet driver for Linux.
+/*  de4x5.c: A DIGITAL DE425/DE434/DE435/DE450/DE500 ethernet driver for Linux.
 
     Copyright 1994, 1995 Digital Equipment Corporation.
 
@@ -191,15 +191,25 @@
                           Fix bug in dc21040 and dc21041 autosense code.
 			  Remove buffer copies on receive for Intels.
 			  Change sk_buff handling during media disconnects to
-			  eliminate DUP packets.
+			   eliminate DUP packets.
 			  Add dynamic TX thresholding.
 			  Change all chips to use perfect multicast filtering.
 			  Fix alloc_device() bug <jari@markkus2.fimr.fi>
+      0.43   21-Jun-96    Fix unconnected media TX retry bug.
+                          Add Accton to the list of broken cards.
+			  Fix TX under-run bug for non DC21140 chips.
+			  Fix boot command probe bug in alloc_device() as
+			   reported by <koen.gadeyne@barco.com> and 
+			   <orava@nether.tky.hut.fi>.
+			  Add cache locks to prevent a race condition as
+			   reported by <csd@microplex.com> and 
+			   <baba@beckman.uiuc.edu>.
+			  Upgraded alloc_device() code.
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:v0.42 96/4/26 davies@wanton.lkg.dec.com\n";
+static const char *version = "de4x5.c:v0.43 96/6/21 davies@wanton.lkg.dec.com\n";
 
 #include <linux/module.h>
 
@@ -226,6 +236,7 @@ static const char *version = "de4x5.c:v0.42 96/4/26 davies@wanton.lkg.dec.com\n"
 #include <linux/time.h>
 #include <linux/types.h>
 #include <linux/unistd.h>
+#include <linux/ctype.h>
 
 #include "de4x5.h"
 
@@ -274,10 +285,12 @@ static struct phy_table phy_info[] = {
 ** Define special SROM detection cases
 */
 static c_char enet_det[][ETH_ALEN] = {
-    {0x00, 0x00, 0xc0, 0x00, 0x00, 0x00}
+    {0x00, 0x00, 0xc0, 0x00, 0x00, 0x00},
+    {0x00, 0x00, 0xe8, 0x00, 0x00, 0x00}
 };
 
-#define SMC 1
+#define SMC    1
+#define ACCTON 2
 
 
 #ifdef DE4X5_DEBUG
@@ -511,6 +524,7 @@ struct de4x5_private {
     struct {
 	void *priv;                         /* Original kmalloc'd mem addr  */
 	void *buf;                          /* Original kmalloc'd mem addr  */
+	int lock;                           /* Lock the cache accesses      */
 	s32 csr0;                           /* Saved Bus Mode Register      */
 	s32 csr6;                           /* Saved Operating Mode Reg.    */
 	s32 csr7;                           /* Saved IRQ Mask Register      */
@@ -633,12 +647,15 @@ static int     get_hw_addr(struct device *dev);
 static void    eisa_probe(struct device *dev, u_long iobase);
 static void    pci_probe(struct device *dev, u_long iobase);
 static struct  device *alloc_device(struct device *dev, u_long iobase);
+static struct  device *insert_device(struct device *dev, u_long iobase,
+				     int (*init)(struct device *));
 static char    *build_setup_frame(struct device *dev, int mode);
 static void    disable_ast(struct device *dev);
 static void    enable_ast(struct device *dev, u32 time_out);
 static long    de4x5_switch_to_srl(struct device *dev);
 static long    de4x5_switch_to_mii(struct device *dev);
 static void    timeout(struct device *dev, void (*fn)(u_long data), u_long data, u_long msec);
+static int     de4x5_dev_index(char *s);
 static void    de4x5_dbg_open(struct device *dev);
 static void    de4x5_dbg_mii(struct device *dev, int k);
 static void    de4x5_dbg_media(struct device *dev);
@@ -683,7 +700,7 @@ de4x5_probe(struct device *dev)
 {
     int tmp = num_de4x5s, status = -ENODEV;
     u_long iobase = dev->base_addr;
-    
+
     eisa_probe(dev, iobase);
     pci_probe(dev, iobase);
     
@@ -691,7 +708,7 @@ de4x5_probe(struct device *dev)
 	printk("%s: de4x5_probe() cannot find device at 0x%04lx.\n", dev->name, 
 	       iobase);
     }
-    
+
     /*
     ** Walk the device list to check that at least one device
     ** initialised OK
@@ -1076,6 +1093,7 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 	return 0;
     }
 
+    set_bit(0, (void*)&dev->tbusy);              /* Stop send re-tries */
     if (lp->tx_enable == NO) {                   /* Cannot send for now */
 	return -1;                                
     }
@@ -1085,11 +1103,13 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
     ** interrupts are lost by delayed descriptor status updates relative to
     ** the irq assertion, especially with a busy PCI bus.
     */
-    set_bit(0, (void*)&dev->tbusy);
     cli();
     de4x5_tx(dev);
     sti();
-    
+
+    /* Test if cache is already locked - requeue skb if so */
+    if (set_bit(0, (void *)&lp->cache.lock) && !dev->interrupt) return -1;
+
     /* Transmit descriptor ring full or stale skb */
     if (dev->tbusy || lp->tx_skb[lp->tx_new]) {
 	if (dev->interrupt) {
@@ -1130,6 +1150,8 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 	}
     }
     
+    lp->cache.lock = 0;
+
     return status;
 }
 
@@ -1195,8 +1217,11 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     }
 
     /* Load the TX ring with any locally stored packets */
-    while (lp->cache.skb && !dev->tbusy && lp->tx_enable) {
-	de4x5_queue_pkt(de4x5_get_cache(dev), dev);
+    if (!set_bit(0, (void *)&lp->cache.lock)) {
+	while (lp->cache.skb && !dev->tbusy && lp->tx_enable) {
+	    de4x5_queue_pkt(de4x5_get_cache(dev), dev);
+	}
+	lp->cache.lock = 0;
     }
 
     dev->interrupt = UNMASK_INTERRUPTS;
@@ -1376,7 +1401,7 @@ de4x5_txur(struct device *dev)
     int omr;
 
     omr = inl(DE4X5_OMR);
-    if (!(omr & OMR_SF)) {
+    if (!(omr & OMR_SF) || (lp->chipset==DC21041) || (lp->chipset==DC21040)) {
 	omr &= ~(OMR_ST|OMR_SR);
 	outl(omr, DE4X5_OMR);
 	while (inl(DE4X5_STS) & STS_TS);
@@ -1564,6 +1589,7 @@ eisa_probe(struct device *dev, u_long ioaddr)
     u_long iobase;
     struct bus_type *lp = &bus;
     char name[DE4X5_STRLEN];
+    struct device *tmp;
     
     if (!ioaddr && autoprobed) return;     /* Been here before ! */
     
@@ -1589,15 +1615,14 @@ eisa_probe(struct device *dev, u_long ioaddr)
 	    DevicePresent(EISA_APROM);
 	    /* Write the PCI Configuration Registers */
 	    outl(PCI_COMMAND_IO | PCI_COMMAND_MASTER, PCI_CFCS);
-	    outl(0x00004000, PCI_CFLT);
+	    outl(0x00006000, PCI_CFLT);
 	    outl(iobase, PCI_CBIO);
 	    
 	    if (check_region(iobase, DE4X5_EISA_TOTAL_SIZE) == 0) {
-		if ((dev = alloc_device(dev, iobase)) != NULL) {
-		    if ((status = de4x5_hw_init(dev, iobase)) == 0) {
+		if ((tmp = alloc_device(dev, iobase)) != NULL) {
+		    if ((status = de4x5_hw_init(tmp, iobase)) == 0) {
 			num_de4x5s++;
 		    }
-		    num_eth++;
 		}
 	    } else if (autoprobed) {
 		printk("%s: region already allocated at 0x%04lx.\n", dev->name,iobase);
@@ -1632,6 +1657,7 @@ pci_probe(struct device *dev, u_long ioaddr)
     u_int class = DE4X5_CLASS_CODE;
     u_int iobase;
     struct bus_type *lp = &bus;
+    struct device *tmp;
 
     if ((!ioaddr || !loading_module) && autoprobed) return;
     
@@ -1639,14 +1665,14 @@ pci_probe(struct device *dev, u_long ioaddr)
     
     lp->bus = PCI;
     
-    if (ioaddr < 0x1000) {
+    if ((ioaddr < 0x1000) && loading_module) {
 	pbus = (u_short)(ioaddr >> 8);
 	dnum = (u_short)(ioaddr & 0xff);
     } else {
 	pbus = 0;
 	dnum = 0;
     }
-    
+
     for (index=0; 
 	 (pcibios_find_class(class, index, &pb, &dev_fn)!= PCIBIOS_DEVICE_NOT_FOUND);
 	 index++) {
@@ -1667,7 +1693,7 @@ pci_probe(struct device *dev, u_long ioaddr)
 	    /* Get the board I/O address */
 	    pcibios_read_config_dword(pb, PCI_DEVICE, PCI_BASE_ADDRESS_0, &iobase);
 	    iobase &= CBIO_MASK;
-	    
+
 	    /* Fetch the IRQ to be used */
 	    pcibios_read_config_byte(pb, PCI_DEVICE, PCI_INTERRUPT_LINE, &irq);
 	    if ((irq == 0) || (irq == (u_char) 0xff)) continue;
@@ -1684,12 +1710,11 @@ pci_probe(struct device *dev, u_long ioaddr)
 
 	    DevicePresent(DE4X5_APROM);
 	    if (check_region(iobase, DE4X5_PCI_TOTAL_SIZE) == 0) {
-		if ((dev = alloc_device(dev, iobase)) != NULL) {
-		    dev->irq = irq;
-		    if ((status = de4x5_hw_init(dev, iobase)) == 0) {
+		if ((tmp = alloc_device(dev, iobase)) != NULL) {
+		    tmp->irq = irq;
+		    if ((status = de4x5_hw_init(tmp, iobase)) == 0) {
 			num_de4x5s++;
 		    }
-		    num_eth++;
 		}
 	    } else if (autoprobed) {
 		printk("%s: region already allocated at 0x%04x.\n", dev->name, 
@@ -1702,109 +1727,95 @@ pci_probe(struct device *dev, u_long ioaddr)
 }
 
 /*
-** Allocate the device by pointing to the next available space in the
-** device structure. Should one not be available, it is created.
+** Search the entire 'eth' device list for a fixed probe. If a match isn't
+** found then check for an autoprobe or unused device location. If they
+** are not available then insert a new device structure at the end of
+** the current list.
 */
 static struct device *
 alloc_device(struct device *dev, u_long iobase)
 {
-    int addAutoProbe = 0;
-    struct device *tmp = NULL, *ret;
-    int (*init)(struct device *) = NULL;
-    
+    struct device *adev = NULL;
+    int fixed = 0, new_dev = 0;
+
+    num_eth = de4x5_dev_index(dev->name);
     if (loading_module) return dev;
     
-    /*
-    ** Check the device structures for an end of list or unused device
-    */
-    while (dev->next != NULL) {
-	if ((dev->base_addr == DE4X5_NDA) || (dev->base_addr == 0)) break;
-	dev = dev->next;                   /* walk through eth device list */
-	num_eth++;                         /* increment eth device number */
-    }
-    
-    /*
-    ** If an autoprobe is requested for another device, we must re-insert
-    ** the request later in the list. Remember the current position first.
-    */
-    if ((dev->base_addr == 0) && (num_de4x5s > 0)) {
-	addAutoProbe++;
-	tmp = dev->next;                   /* point to the next device */
-	init = dev->init;                  /* remember the probe function */
-    }
-    
-    /*
-    ** If at end of list and can't use current entry, malloc one up. 
-    ** If memory could not be allocated, print an error message.
-    */
-    if ((dev->next == NULL) &&  
-	!((dev->base_addr == DE4X5_NDA) || (dev->base_addr == 0))) {
-	dev->next = (struct device *)kmalloc(sizeof(struct device)+8, GFP_KERNEL);
-	dev = dev->next;                   /* point to the new device */
-	if (dev == NULL) {
-	    printk("eth%d: Device not initialised, insufficient memory\n", num_eth);
+    while (1) {
+	if (((dev->base_addr == DE4X5_NDA) || (dev->base_addr==0)) && !adev) {
+	    adev=dev;
+	} else if ((dev->priv == NULL) && (dev->base_addr==iobase)) {
+	    fixed = 1;
 	} else {
-	    /*
-	    ** If the memory was allocated, point to the new memory area
-	    ** and initialize it (name, I/O address, next device (NULL) and
-	    ** initialisation probe routine).
-	    */
-	    dev->name = (char *)(dev + 1);
-	    if (num_eth > 9999) {
-		sprintf(dev->name,"eth????");/* New device name */
-	    } else {
-		sprintf(dev->name,"eth%d", num_eth);/* New device name */
+	    if (dev->next == NULL) {
+		new_dev = 1;
+	    } else if (strncmp(dev->next->name, "eth", 3) != 0) {
+		new_dev = 1;
 	    }
-	    dev->base_addr = iobase;       /* assign the io address */
-	    dev->next = NULL;              /* mark the end of list */
-	    dev->init = &de4x5_probe;      /* initialisation routine */
-	    num_de4x5s++;
 	}
+	if ((dev->next == NULL) || new_dev || fixed) break;
+	dev = dev->next;
+	num_eth++;
     }
-    ret = dev;                             /* return current struct, or NULL */
-     
-    /*
-    ** Now figure out what to do with the autoprobe that has to be inserted.
-    ** Firstly, search the (possibly altered) list for an empty space.
-    */
-    if (ret != NULL) {
-	if (addAutoProbe) {
-	    for (; (tmp->next!=NULL) && (tmp->base_addr!=DE4X5_NDA); tmp=tmp->next);
-	    /*
-	    ** If no more device structures and can't use the current one, 
-	    ** malloc one up. If memory could not be allocated, print an error
-	    **message.
-	    */
-	    if ((tmp->next == NULL) && !(tmp->base_addr == DE4X5_NDA)) {
-		tmp->next = (struct device *)kmalloc(sizeof(struct device) + 8,
-						     GFP_KERNEL);
-		tmp = tmp->next;           /* point to the new device */
-		if (tmp == NULL) {
-		    printk("%s: Insufficient memory to extend the device list.\n", 
-			   dev->name);
-		} else {
-		    /*
-		    ** If the memory was allocated, point to the new memory
-		    ** area and initialize it (name, I/O address, next device
-		    ** (NULL) and initialisation probe routine).
-		    */
-		    tmp->name = (char *)(tmp + 1);
-		    if (num_eth > 9999) {
-			sprintf(tmp->name,"eth????");
-		    } else {               /* New device name */
-			sprintf(tmp->name,"eth%d", num_eth);
-		    }
-		    tmp->base_addr = 0;    /* re-insert the io address */
-		    tmp->next = NULL;      /* mark the end of list */
-		    tmp->init = init;      /* initialisation routine */
-		}
-	    } else {                       /* structure already exists */
-		tmp->base_addr = 0;        /* re-insert the io address */
-	    }
-	}
+    if (adev && !fixed) {
+	dev = adev;
+	num_eth = de4x5_dev_index(dev->name);
+	new_dev = 0;
+    }
+
+    if (((dev->next == NULL) &&  
+	((dev->base_addr != DE4X5_NDA) && (dev->base_addr != 0)) && !fixed) ||
+	new_dev) {
+	num_eth++;                         /* New device */
+	dev = insert_device(dev, iobase, de4x5_probe);
     }
     
-    return ret;
+    return dev;
+}
+
+/*
+** If at end of eth device list and can't use current entry, malloc
+** one up. If memory could not be allocated, print an error message.
+*/
+static struct device *
+insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
+{
+    struct device *new;
+
+    new = (struct device *)kmalloc(sizeof(struct device)+8, GFP_KERNEL);
+    if (new == NULL) {
+	printk("eth%d: Device not initialised, insufficient memory\n",num_eth);
+	return NULL;
+    } else {
+	new->next = dev->next;
+	dev->next = new;
+	dev = dev->next;               /* point to the new device */
+	dev->name = (char *)(dev + 1);
+	if (num_eth > 9999) {
+	    sprintf(dev->name,"eth????");/* New device name */
+	} else {
+	    sprintf(dev->name,"eth%d", num_eth);/* New device name */
+	}
+	dev->base_addr = iobase;       /* assign the io address */
+	dev->init = init;              /* initialisation routine */
+    }
+
+    return dev;
+}
+
+static int
+de4x5_dev_index(char *s)
+{
+    int i=0, j=0;
+
+    for (;*s; s++) {
+	if (isdigit(*s)) {
+	    j=1;
+	    i = (i * 10) + (*s - '0');
+	} else if (j) break;
+    }
+
+    return i;
 }
 
 /*
@@ -2381,8 +2392,10 @@ de4x5_init_connection(struct device *dev)
     de4x5_setup_intr(dev);
     lp->lostMedia = 0;
     lp->tx_enable = YES;
+    dev->tbusy = 0;
     sti();
     outl(POLL_DEMAND, DE4X5_TPD);
+    mark_bh(NET_BH);
 
     return;
 }
@@ -2643,8 +2656,9 @@ de4x5_alloc_rx_buff(struct device *dev, int index, int len)
     ret = lp->rx_skb[index];
     lp->rx_skb[index] = p;
 
-    if ((unsigned long) ret > 1)
-	    skb_put(ret, len);
+    if ((u_long) ret > 1) {
+	skb_put(ret, len);
+    }
 
     return ret;
 
@@ -2675,7 +2689,7 @@ de4x5_free_rx_buffs(struct device *dev)
     int i;
 
     for (i=0; i<lp->rxRingSize; i++) {
-	if ((unsigned long) lp->rx_skb[i] > 1) {
+	if ((u_long) lp->rx_skb[i] > 1) {
 	    dev_kfree_skb(lp->rx_skb[i], FREE_WRITE);
 	}
 	lp->rx_ring[i].status = 0;
@@ -2728,7 +2742,6 @@ de4x5_save_skbs(struct device *dev)
 	de4x5_cache_state(dev, DE4X5_SAVE_STATE);
 	de4x5_sw_reset(dev);
 	de4x5_cache_state(dev, DE4X5_RESTORE_STATE);
-	dev->tbusy = 0;
 	lp->cache.save_cnt++;
 	START_DE4X5;
     }
@@ -2748,7 +2761,6 @@ de4x5_restore_skbs(struct device *dev)
 	de4x5_cache_state(dev, DE4X5_SAVE_STATE);
 	de4x5_sw_reset(dev);
 	de4x5_cache_state(dev, DE4X5_RESTORE_STATE);
-	dev->tbusy = 0;
 	lp->cache.save_cnt--;
 	START_DE4X5;
     }
@@ -3074,7 +3086,7 @@ get_hw_addr(struct device *dev)
 	    } else if (!broken) {
 		dev->dev_addr[i] = (u_char) lp->srom.ieee_addr[i]; i++;
 		dev->dev_addr[i] = (u_char) lp->srom.ieee_addr[i]; i++;
-	    } else if (broken == SMC) {           /* Assume SMC9332 for now */
+	    } else if ((broken == SMC) || (broken == ACCTON)) {
 		dev->dev_addr[i] = *((u_char *)&lp->srom + i); i++;
 		dev->dev_addr[i] = *((u_char *)&lp->srom + i); i++;
 	    }
@@ -3118,7 +3130,11 @@ de4x5_bad_srom(struct bus_type *lp)
     for (i=0; i<sizeof(enet_det)/ETH_ALEN; i++) {
 	if (!de4x5_strncmp((char *)&lp->srom, (char *)&enet_det[i], 3) &&
 	    !de4x5_strncmp((char *)&lp->srom+0x10, (char *)&enet_det[i], 3)) {
-	    status = SMC;
+	    if (i == 0) {
+		status = SMC;
+	    } else if (i == 1) {
+		status = ACCTON;
+	    }
 	    break;
 	}
     }
@@ -4123,8 +4139,8 @@ cleanup_module(void)
 
 /*
  * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O2 -m486 -c de4x5.c"
+ *  compile-command: "gcc -D__KERNEL__ -I/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -fno-strength-reduce -malign-loops=2 -malign-jumps=2 -malign-functions=2 -O2 -m486 -c de4x5.c"
  *
- *  compile-command: "gcc -D__KERNEL__ -DMODULE -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O2 -m486 -c de4x5.c"
+ *  compile-command: "gcc -D__KERNEL__ -DMODULE -I/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -fno-strength-reduce -malign-loops=2 -malign-jumps=2 -malign-functions=2 -O2 -m486 -c de4x5.c"
  * End:
  */

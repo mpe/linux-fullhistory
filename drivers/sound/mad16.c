@@ -1,25 +1,9 @@
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -31,9 +15,9 @@
  *      OPTi 82C928     MAD16           (replaced by C929)
  *      OAK OTI-601D    Mozart
  *      OPTi 82C929     MAD16 Pro
- *      OPTi 82C930     (Not supported yet)
+ *      OPTi 82C930
  *
- * These audio interface chips don't produce sound themselves. They just
+ * These audio interface chips don't prduce sound themselves. They just
  * connect some other components (OPL-[234] and a WSS compatible codec)
  * to the PC bus and perform I/O, DMA and IRQ address decoding. There is
  * also a UART for the MPU-401 mode (not 82C928/Mozart).
@@ -77,6 +61,8 @@
 
 #if defined(CONFIG_MAD16)
 
+#include "sb.h"
+
 static int      already_initialized = 0;
 
 #define C928	1
@@ -91,6 +77,9 @@ static int      already_initialized = 0;
  *      All ports are inactive by default. They can be activated by
  *      writing 0xE2 or 0xE3 to the password register. The password is valid
  *      only until the next I/O read or write.
+ *
+ *      82C930 uses 0xE4 as the password and indirect addressing to access
+ *      the config registers.
  */
 
 #define MC0_PORT	0xf8c	/* Dummy port */
@@ -136,9 +125,18 @@ mad_read (int port)
       outb (0xE3, PASSWD_REG);
       break;
 
+    case C930:
+      /* outb( 0xE4,  PASSWD_REG); */
+      break;
     }
 
-  tmp = inb (port);
+  if (board_type == C930)
+    {
+      outb (port - MC0_PORT, 0xe0e);	/* Write to index reg */
+      tmp = inb (0xe0f);	/* Read from data reg */
+    }
+  else
+    tmp = inb (port);
   restore_flags (flags);
 
   return tmp;
@@ -163,10 +161,57 @@ mad_write (int port, int value)
       outb (0xE3, PASSWD_REG);
       break;
 
+    case C930:
+      /* outb( 0xE4,  PASSWD_REG); */
+      break;
     }
 
-  outb ((unsigned char) (value & 0xff), port);
+  if (board_type == C930)
+    {
+      outb (port - MC0_PORT, 0xe0e);	/* Write to index reg */
+      outb ((unsigned char) (value & 0xff), 0xe0f);
+    }
+  else
+    outb ((unsigned char) (value & 0xff), port);
   restore_flags (flags);
+}
+
+static int
+detect_c930 (void)
+{
+  unsigned char   tmp = mad_read (MC1_PORT);
+
+  if ((tmp & 0x06) != 0x06)
+    {
+      DDB (printk ("Wrong C930 signature (%x)\n", tmp));
+      /* return 0; */
+    }
+
+  mad_write (MC1_PORT, 0);
+
+  if (mad_read (MC1_PORT) != 0x06)
+    {
+      DDB (printk ("Wrong C930 signature2 (%x)\n", tmp));
+      /* return 0; */
+    }
+
+  mad_write (MC1_PORT, tmp);	/* Restore bits */
+
+  mad_write (MC7_PORT, 0);
+  if ((tmp = mad_read (MC7_PORT)) != 0)
+    {
+      DDB (printk ("MC7 not writeable (%x)\n", tmp));
+      return 0;
+    }
+
+  mad_write (MC7_PORT, 0xcb);
+  if ((tmp = mad_read (MC7_PORT)) != 0xcb)
+    {
+      DDB (printk ("MC7 not writeable2 (%x)\n", tmp));
+      return 0;
+    }
+
+  return 1;
 }
 
 static int
@@ -190,6 +235,8 @@ detect_mad16 (void)
   for (i = 0xf8d; i <= 0xf98; i++)
     DDB (printk ("Port %0x (init value) = %0x\n", i, mad_read (i)));
 
+  if (board_type == C930)
+    return detect_c930 ();
 /*
  * Now check that the gate is closed on first I/O after writing
  * the password. (This is how a MAD16 compatible card works).
@@ -201,7 +248,7 @@ detect_mad16 (void)
       return 0;
     }
 
-  mad_write (MC1_PORT, tmp ^ 0x80);	/* Toggle a bit */
+  mad_write (MC1_PORT, tmp ^ 0x80);	/* Togge a bit */
   if ((tmp2 = mad_read (MC1_PORT)) != (tmp ^ 0x80))	/* Compare the bit */
     {
       mad_write (MC1_PORT, tmp);	/* Restore */
@@ -233,7 +280,7 @@ wss_init (struct address_info *hw_config)
     return 0;
   /*
      * Check if the IO port returns valid signature. The original MS Sound
-     * system returns 0x04 while some cards (AudioTriX Pro for example)
+     * system returns 0x04 while some cards (AudioTrix Pro for example)
      * return 0x00.
    */
 
@@ -275,6 +322,57 @@ wss_init (struct address_info *hw_config)
   return 1;
 }
 
+static int
+init_c930 (struct address_info *hw_config)
+{
+  unsigned char   cfg;
+
+  cfg = (mad_read (MC1_PORT) & ~0x30);
+  /* mad_write(MC1_PORT, 0); */
+
+  switch (hw_config->io_base)
+    {
+    case 0x530:
+      cfg |= 0x00;
+      break;
+    case 0xe80:
+      cfg |= 0x10;
+      break;
+    case 0xf40:
+      cfg |= 0x20;
+      break;
+    case 0x604:
+      cfg |= 0x30;
+      break;
+
+    default:
+      printk ("MAD16: Invalid codec port %x\n", hw_config->io_base);
+      return 0;
+    }
+  mad_write (MC1_PORT, cfg);
+
+  /* MC2 is CD configuration. Don't touch it. */
+
+  mad_write (MC3_PORT, 0);	/* Disable SB mode IRQ and DMA */
+
+  mad_write (MC4_PORT, 0x52);	/* ??? */
+  mad_write (MC5_PORT, 0x3D);	/* Init it into mode2 */
+  mad_write (MC6_PORT, 0x02);	/* Enable WSS, Disable MPU and SB */
+  mad_write (MC7_PORT, 0xCB);
+  mad_write (MC10_PORT, 0x11);
+
+  if (!wss_init (hw_config))
+    return 0;
+
+/*
+ * A temporarary kludge which drops the device back to mode1.
+ * This removes problems with interrupts but disables full duplex.
+ * A better solution should be introduced later.
+ */
+  mad_write (MC5_PORT, 0x1D);	/* Disable mode2 */
+  return wss_init (hw_config);
+}
+
 int
 probe_mad16 (struct address_info *hw_config)
 {
@@ -313,7 +411,28 @@ probe_mad16 (struct address_info *hw_config)
 
       if (!detect_mad16 ())
 	{
-	  return 0;
+	  if (inb (PASSWD_REG) != 0xff)
+	    return 0;
+
+/*
+ * First relocate MC# registers to 0xe0e/0xe0f, disable password 
+ */
+
+	  outb (0xE4, PASSWD_REG);
+	  outb (0x80, PASSWD_REG);
+
+	  board_type = C930;
+
+	  DDB (printk ("Detect using password = 0xE4\n"));
+
+	  for (i = 0xf8d; i <= 0xf93; i++)
+	    DDB (printk ("port %03x = %02x\n", i, mad_read (i)));
+
+	  if (!detect_mad16 ())
+	    return 0;
+
+	  DDB (printk ("mad16.c: 82C930 detected\n"));
+	  return init_c930 (hw_config);
 	}
       else
 	{
@@ -408,8 +527,8 @@ probe_mad16 (struct address_info *hw_config)
   return 1;
 }
 
-long
-attach_mad16 (long mem_start, struct address_info *hw_config)
+void
+attach_mad16 (struct address_info *hw_config)
 {
 
   static char     interrupt_bits[12] =
@@ -430,7 +549,7 @@ attach_mad16 (long mem_start, struct address_info *hw_config)
   already_initialized = 1;
 
   if (!ad1848_detect (hw_config->io_base + 4, &ad_flags, mad16_osp))
-    return mem_start;
+    return;
 
   /*
      * Set the IRQ and DMA addresses.
@@ -438,7 +557,7 @@ attach_mad16 (long mem_start, struct address_info *hw_config)
 
   bits = interrupt_bits[hw_config->irq];
   if (bits == -1)
-    return mem_start;
+    return;
 
   outb (bits | 0x40, config_port);
   if ((inb (version_port) & 0x40) == 0)
@@ -450,12 +569,21 @@ attach_mad16 (long mem_start, struct address_info *hw_config)
 
   if (ad_flags & AD_F_CS4231 && dma2 != -1 && dma2 != dma)
     {
+      if (!((dma == 0 && dma2 == 1) ||
+	    (dma == 1 && dma2 == 0) ||
+	    (dma == 3 && dma2 == 0)))
+	{			/* Unsupported combination. Try to swap channels */
+	  int             tmp = dma;
+
+	  dma = dma2;
+	  dma2 = tmp;
+	}
+
       if ((dma == 0 && dma2 == 1) ||
 	  (dma == 1 && dma2 == 0) ||
 	  (dma == 3 && dma2 == 0))
 	{
 	  dma2_bit = 0x04;	/* Enable capture DMA */
-
 	}
       else
 	{
@@ -474,12 +602,10 @@ attach_mad16 (long mem_start, struct address_info *hw_config)
 	       dma2, 0,
 	       hw_config->osp);
   request_region (hw_config->io_base, 4, "MAD16 WSS config");
-
-  return mem_start;
 }
 
-long
-attach_mad16_mpu (long mem_start, struct address_info *hw_config)
+void
+attach_mad16_mpu (struct address_info *hw_config)
 {
   if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
     {
@@ -490,19 +616,20 @@ attach_mad16_mpu (long mem_start, struct address_info *hw_config)
       else
 	hw_config->io_base = 0x220;
 
-      return mad16_sb_dsp_init (mem_start, hw_config);
-#else
-      return 0;
+      hw_config->name = "Mad16/Mozart";
+      sb_dsp_init (hw_config);
 #endif
+
+      return;
     }
 
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   if (!already_initialized)
-    return mem_start;
+    return;
 
-  return attach_mpu401 (mem_start, hw_config);
-#else
-  return mem_start;
+  hw_config->driver_use_1 = SB_MIDI_ONLY;
+  hw_config->name = "Mad16/Mozart";
+  attach_uart401 (hw_config);
 #endif
 }
 
@@ -562,13 +689,15 @@ probe_mad16_mpu (struct address_info *hw_config)
 	}
 
       mad_write (MC3_PORT, tmp | 0x04);
-      return mad16_sb_dsp_detect (hw_config);
+      hw_config->driver_use_1 = SB_MIDI_ONLY;
+      return sb_dsp_detect (hw_config);
 #else
       return 0;
 #endif
     }
 
-  tmp = 0x83;			/* MPU-401 enable */
+  tmp = mad_read (MC6_PORT) & 0x83;
+  tmp |= 0x80;			/* MPU-401 enable */
 
 /*
  * Set the MPU base bits
@@ -609,7 +738,7 @@ probe_mad16_mpu (struct address_info *hw_config)
     }
   mad_write (MC6_PORT, tmp);	/* Write MPU401 config */
 
-  return probe_mpu401 (hw_config);
+  return probe_uart401 (hw_config);
 #else
   return 0;
 #endif
@@ -632,13 +761,13 @@ unload_mad16_mpu (struct address_info *hw_config)
 #ifdef CONFIG_MIDI
   if (board_type < C929)	/* Early chip. No MPU support. Just SB MIDI */
     {
-      mad16_sb_dsp_unload (hw_config);
+      sb_dsp_unload (hw_config);
       return;
     }
 #endif
 
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
-  unload_mpu401 (hw_config);
+#if (defined(CONFIG_UART401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+  unload_uart401 (hw_config);
 #endif
 }
 

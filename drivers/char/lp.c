@@ -322,9 +322,9 @@ static int lp_open(struct inode * inode, struct file * file)
 	unsigned int irq;
 
 	if (minor >= LP_NO)
-		return -ENODEV;
+		return -ENXIO;
 	if ((LP_F(minor) & LP_EXIST) == 0)
-		return -ENODEV;
+		return -ENXIO;
 	if (LP_F(minor) & LP_BUSY)
 		return -EBUSY;
 

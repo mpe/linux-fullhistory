@@ -122,7 +122,8 @@ int UMSDOS_rename (struct inode *old_dir,
 	 int old_len,
 	 struct inode *new_dir,
 	 const char *new_name,
-	 int new_len);
+	 int new_len,
+	 int must_be_dir);
 /* rdir.c 22/03/95 03.31.42 */
 int umsdos_rlookup_x (struct inode *dir,
 	 const char *name,

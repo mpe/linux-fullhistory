@@ -305,7 +305,7 @@ smb_errno(int errcls, int error)
 			case ERRdiffdevice: return EXDEV;
 			case ERRnofiles:    return 0;
 			case ERRbadshare:   return ETXTBSY;
-			case ERRlock:       return EDEADLOCK;
+			case ERRlock:       return EDEADLK;
 			case ERRfilexists:  return EEXIST;
 			case 87:            return 0; /* Unknown error!! */
 			/* This next error seems to occur on an mv when
@@ -330,7 +330,7 @@ smb_errno(int errcls, int error)
 			case ERRdata: return EIO;
 			case ERRbadreq: return ERANGE;
 			case ERRbadshare: return ETXTBSY;
-			case ERRlock: return EDEADLOCK;
+			case ERRlock: return EDEADLK;
 			default: return EIO;
 		}
 	else if (errcls == ERRCMD) 

@@ -233,7 +233,7 @@ static int rd_open(struct inode * inode, struct file * filp)
 #endif
 
 	if (DEVICE_NR(inode->i_rdev) >= NUM_RAMDISKS)
-		return -ENODEV;
+		return -ENXIO;
 
 	MOD_INC_USE_COUNT;
 

@@ -5,27 +5,11 @@
  */
 
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -51,7 +35,7 @@ static int      audio_format[MAX_AUDIO_DEV];
 static int      local_conversion[MAX_AUDIO_DEV];
 
 static int
-set_format (int dev, long fmt)
+set_format (int dev, int fmt)
 {
   if (fmt != AFMT_QUERY)
     {
@@ -80,7 +64,7 @@ int
 audio_open (int dev, struct fileinfo *file)
 {
   int             ret;
-  long            bits;
+  int             bits;
   int             dev_type = dev & 0x0f;
   int             mode = file->mode & O_ACCMODE;
 
@@ -108,8 +92,9 @@ audio_open (int dev, struct fileinfo *file)
 
   if (DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) bits, 1) != bits)
     {
+      printk ("audio: Can't set number of bits on device %d\n", dev);
       audio_release (dev, file);
-      return -ENXIO;
+      return -(ENXIO);
     }
 
   if (dev_type == SND_DEV_AUDIO)
@@ -143,7 +128,7 @@ sync_output (int dev)
 
   p = dmap->qtail;
 
-  for (i = dmap->qlen; i < dmap->nbufs; i++)
+  for (i = dmap->qlen + 1; i < dmap->nbufs; i++)
     {
       memset (dmap->raw_buf + p * dmap->fragment_size,
 	      dmap->neutral_byte,
@@ -240,7 +225,7 @@ audio_write (int dev, struct fileinfo *file, const char *buf, int count)
 					    dev_nblock[dev])) < 0)
 	    {
 	      /* Handle nonblocking mode */
-	      if (dev_nblock[dev] && buf_no == -EAGAIN)
+	      if (dev_nblock[dev] && buf_no == -(EAGAIN))
 		return p;	/* No more space. Return # of accepted bytes */
 	      return buf_no;
 	    }
@@ -251,15 +236,15 @@ audio_write (int dev, struct fileinfo *file, const char *buf, int count)
       if (l > (buf_size - buf_ptr))
 	l = (buf_size - buf_ptr);
 
-      if (!audio_devs[dev]->copy_from_user)
+      if (!audio_devs[dev]->d->copy_from_user)
 	{			/*
 				 * No device specific copy routine
 				 */
-	  memcpy_fromfs (&dma_buf[buf_ptr], &((buf)[p]), l);
+	  memcpy_fromfs (&dma_buf[buf_ptr], &(buf)[p], l);
 	}
       else
-	audio_devs[dev]->copy_from_user (dev,
-					 dma_buf, buf_ptr, buf, p, l);
+	audio_devs[dev]->d->copy_from_user (dev,
+					    dma_buf, buf_ptr, buf, p, l);
 
       if (local_conversion[dev] == AFMT_MU_LAW)
 	{
@@ -318,7 +303,7 @@ audio_read (int dev, struct fileinfo *file, char *buf, int count)
 	{
 	  /* Nonblocking mode handling. Return current # of bytes */
 
-	  if (dev_nblock[dev] && buf_no == -EAGAIN)
+	  if (dev_nblock[dev] && buf_no == -(EAGAIN))
 	    return p;
 
 	  return buf_no;
@@ -341,7 +326,7 @@ audio_read (int dev, struct fileinfo *file, char *buf, int count)
 	  translate_bytes (dsp_ulaw, (unsigned char *) dmabuf, l);
 	}
 
-      memcpy_tofs (&((buf)[p]), dmabuf, l);
+      memcpy_tofs (&(buf)[p], dmabuf, l);
 
       DMAbuf_rmchars (dev, buf_no, l);
 
@@ -366,17 +351,22 @@ audio_ioctl (int dev, struct fileinfo *file,
       else
 	printk ("/dev/dsp%d: No coprocessor for this device\n", dev);
 
-      return -ENXIO;
+      return -(ENXIO);
     }
   else
     switch (cmd)
       {
       case SNDCTL_DSP_SYNC:
+	if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
+	  return 0;
+
 	sync_output (dev);
 	return DMAbuf_ioctl (dev, cmd, arg, 0);
 	break;
 
       case SNDCTL_DSP_POST:
+	if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
+	  return 0;
 	sync_output (dev);
 	return 0;
 	break;
@@ -394,8 +384,10 @@ audio_ioctl (int dev, struct fileinfo *file,
 	return snd_ioctl_return ((int *) arg, set_format (dev, get_fs_long ((long *) arg)));
 
       case SNDCTL_DSP_GETISPACE:
+	if (!(audio_devs[dev]->open_mode & OPEN_READ))
+	  return 0;
 	if ((audio_mode[dev] & AM_WRITE) && !(audio_devs[dev]->flags & DMA_DUPLEX))
-	  return -EBUSY;
+	  return -(EBUSY);
 
 	{
 	  audio_buf_info  info;
@@ -405,13 +397,15 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (err < 0)
 	    return err;
 
-	  memcpy_tofs ((&((char *) arg)[0]), (char *) &info, sizeof (info));
+	  memcpy_tofs (&((char *) arg)[0], (char *) &info, sizeof (info));
 	  return 0;
 	}
 
       case SNDCTL_DSP_GETOSPACE:
+	if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
+	  return 0;
 	if ((audio_mode[dev] & AM_READ) && !(audio_devs[dev]->flags & DMA_DUPLEX))
-	  return -EBUSY;
+	  return -(EBUSY);
 
 	{
 	  audio_buf_info  info;
@@ -426,7 +420,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
 	    info.bytes += buf_size - buf_ptr;
 
-	  memcpy_tofs ((&((char *) arg)[0]), (char *) &info, sizeof (info));
+	  memcpy_tofs (&((char *) arg)[0], (char *) &info, sizeof (info));
 	  return 0;
 	}
 
@@ -445,15 +439,15 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (audio_devs[dev]->coproc)
 	    info |= DSP_CAP_COPROC;
 
-	  if (audio_devs[dev]->local_qlen)	/* Device has hidden buffers */
+	  if (audio_devs[dev]->d->local_qlen)	/* Device has hidden buffers */
 	    info |= DSP_CAP_BATCH;
 
-	  if (audio_devs[dev]->trigger)		/* Supports SETTRIGGER */
+	  if (audio_devs[dev]->d->trigger)	/* Supports SETTRIGGER */
 	    info |= DSP_CAP_TRIGGER;
 
 	  info |= DSP_CAP_MMAP;
 
-	  memcpy_tofs ((&((char *) arg)[0]), (char *) &info, sizeof (info));
+	  memcpy_tofs (&((char *) arg)[0], (char *) &info, sizeof (info));
 	  return 0;
 	}
 	break;
@@ -463,13 +457,12 @@ audio_ioctl (int dev, struct fileinfo *file,
       }
 }
 
-long
-audio_init (long mem_start)
+void
+audio_init (void)
 {
   /*
      * NOTE! This routine could be called several times during boot.
    */
-  return mem_start;
 }
 
 int

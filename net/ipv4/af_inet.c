@@ -926,7 +926,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 			 *	Reuse ?
 			 */
 			 
-			if (!sk2->reuse || sk2->state==TCP_LISTEN) 
+			if (!sk2->dead)
 			{
 				sti();
 				return(-EADDRINUSE);

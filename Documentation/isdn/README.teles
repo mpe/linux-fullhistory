@@ -43,8 +43,9 @@ options you wish enabled:
 	4   D channel Q.931 (call control messages)
 	8   D channel Q.921 
 	16  B channel X.75
+	32  Lowlevel (irq and Layer1 stuff)
 
-For example 'teles/telesctrl MyTeles 1 31' enables full 
+For example 'teles/telesctrl MyTeles 1 63' enables full 
 debugging.
 
 Questions

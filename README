@@ -76,14 +76,14 @@ INSTALLING the kernel:
    the current directory, but an alternative directory can be specified
    as the second argument.
 
- - make sure your /usr/include/linux and /usr/include/asm directories
-   are just symlinks to the kernel sources:
+ - make sure your /usr/include/asm, /usr/include/linux, and /usr/include/scsi
+   directories are just symlinks to the kernel sources:
 
 		cd /usr/include
-		rm -rf linux
-		rm -rf asm
-		ln -s /usr/src/linux/include/linux linux
+		rm -rf asm linux scsi
 		ln -s /usr/src/linux/include/asm-i386 asm
+		ln -s /usr/src/linux/include/linux linux
+		ln -s /usr/src/linux/include/scsi scsi
 
  - make sure you have no stale .o files and dependencies lying around:
 
@@ -138,6 +138,9 @@ COMPILING the kernel:
    in your A: drive, and do a "make zdisk".  It is also possible to do
    "make zlilo" if you have lilo installed to suit the kernel makefiles,
    but you may want to check your particular lilo setup first. 
+
+ - if your kernel is too large for "make zImage", use "make bzImage"
+   instead.
 
  - if you configured any of the parts of the kernel as `modules', you
    will have to do "make modules" followed by "make modules_install".

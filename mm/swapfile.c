@@ -16,6 +16,7 @@
 #include <linux/swap.h>
 #include <linux/fs.h>
 #include <linux/swapctl.h>
+#include <linux/blkdev.h> /* for blk_size */
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
@@ -457,7 +458,9 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		if(error)
 			goto bad_swap_2;
 		error = -ENODEV;
-		if (!p->swap_device)
+		if (!p->swap_device ||
+		    (blk_size[MAJOR(p->swap_device)] &&
+		     !blk_size[MAJOR(p->swap_device)][MINOR(p->swap_device)]))
 			goto bad_swap;
 		error = -EBUSY;
 		for (i = 0 ; i < nr_swapfiles ; i++) {

@@ -74,7 +74,7 @@ extern int ext_symlink(struct inode * inode, const char * name, int len,
 extern int ext_link(struct inode * oldinode, struct inode * dir, const char * name, int len);
 extern int ext_mknod(struct inode * dir, const char * name, int len, int mode, int rdev);
 extern int ext_rename(struct inode * old_dir, const char * old_name, int old_len,
-	struct inode * new_dir, const char * new_name, int new_len);
+	struct inode * new_dir, const char * new_name, int new_len, int must_be_dir);
 extern struct inode * ext_new_inode(const struct inode * dir);
 extern void ext_free_inode(struct inode * inode);
 extern unsigned long ext_count_free_inodes(struct super_block *sb);

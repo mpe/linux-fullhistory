@@ -21,6 +21,9 @@ extern unsigned short int	htons(unsigned short int);
 
 extern unsigned long int	__ntohl(unsigned long int);
 extern unsigned short int	__ntohs(unsigned short int);
+
+#ifdef __GNUC__
+
 extern unsigned long int	__constant_ntohl(unsigned long int);
 extern unsigned short int	__constant_ntohs(unsigned short int);
 
@@ -100,6 +103,8 @@ __ntohs(unsigned short int x)
 (__builtin_constant_p((short)(x)) ? \
  __constant_htons((x)) : \
  __htons((x)))
-#endif
+#endif /* __OPTIMIZE__ */
 
-#endif
+#endif /* __GNUC__ */
+
+#endif /* _ALPHA_BYTEORDER_H */

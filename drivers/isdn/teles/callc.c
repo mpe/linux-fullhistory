@@ -1,6 +1,12 @@
-/* $Id: callc.c,v 1.11 1996/06/07 12:32:20 fritz Exp $
+/* $Id: callc.c,v 1.13 1996/06/24 17:15:55 fritz Exp $
  *
  * $Log: callc.c,v $
+ * Revision 1.13  1996/06/24 17:15:55  fritz
+ * corrected return code of teles_writebuf()
+ *
+ * Revision 1.12  1996/06/12 16:15:33  fritz
+ * Extended user-configurable debugging flags.
+ *
  * Revision 1.11  1996/06/07 12:32:20  fritz
  * More changes to support suspend/resume.
  *
@@ -1297,8 +1303,10 @@ distr_debug(void)
                 chanlist[i].ds.l2.l2m.debug = debugflags & 16;
         }
         for (i = 0; i < nrcards; i++)
-                if (cards[i].sp)
+                if (cards[i].sp) {
                         cards[i].sp->dlogflag = debugflags & 4;
+                        cards[i].sp->debug = debugflags & 32;
+                }
 }
 
 int
@@ -1419,12 +1427,15 @@ teles_writebuf(int id, int chan, const u_char * buf, int count, int user)
 
 	if (!chanp->data_open) {
 		printk(KERN_DEBUG "teles_writebuf: channel not open\n");
-		return -ENOMEM;
+		return -EIO;
 	}
 	
         err = BufPoolGet(&ibh, st->l1.sbufpool, GFP_ATOMIC, st, 21);
         if (err)
-                return -ENOMEM;
+                /* Must return 0 here, since this is not an error
+                 * but a temporary lack of resources.
+                 */
+                return 0;
 
         ptr = DATAPTR(ibh);
         if (chanp->lc_b.l2_establish)

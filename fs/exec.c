@@ -429,7 +429,6 @@ void flush_old_exec(struct linux_binprm * bprm)
 	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
 	    permission(bprm->inode,MAY_READ))
 		current->dumpable = 0;
-	current->signal = 0;
 	for (i=0 ; i<32 ; i++) {
 		current->sig->action[i].sa_mask = 0;
 		current->sig->action[i].sa_flags = 0;

@@ -25,12 +25,6 @@
 #include <linux/locks.h>
 
 /*
- * comment out this line if you want names > EXT2_NAME_LEN chars to be
- * truncated. Else they will be disallowed.
- */
-/* #define NO_TRUNCATE */
-
-/*
  * define how far ahead to read directories while searching them.
  */
 #define NAMEI_RA_CHUNKS  2
@@ -80,13 +74,8 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 		return NULL;
 	sb = dir->i_sb;
 
-#ifdef NO_TRUNCATE
 	if (namelen > EXT2_NAME_LEN)
 		return NULL;
-#else
-	if (namelen > EXT2_NAME_LEN)
-		namelen = EXT2_NAME_LEN;
-#endif
 
 	memset (bh_use, 0, sizeof (bh_use));
 	toread = 0;
@@ -176,6 +165,8 @@ int ext2_lookup (struct inode * dir, const char * name, int len,
 		iput (dir);
 		return -ENOENT;
 	}
+	if (len > EXT2_NAME_LEN)
+		return -ENAMETOOLONG;
 	if (dcache_lookup(dir, name, len, &ino)) {
 		if (!ino) {
 			iput(dir);
@@ -232,13 +223,13 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 	if (!dir)
 		return NULL;
 	sb = dir->i_sb;
-#ifdef NO_TRUNCATE
+
 	if (namelen > EXT2_NAME_LEN)
+	{
+		*err = -ENAMETOOLONG;
 		return NULL;
-#else
-	if (namelen > EXT2_NAME_LEN)
-		namelen = EXT2_NAME_LEN;
-#endif
+	}
+
 	if (!namelen)
 		return NULL;
 	/*
@@ -415,6 +406,9 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 
 	if (!dir)
 		return -ENOENT;
+
+	if (len > EXT2_NAME_LEN)
+		return -ENAMETOOLONG;
 	bh = ext2_find_entry (dir, name, len, &de);
 	if (bh) {
 		brelse (bh);
@@ -478,6 +472,8 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 
 	if (!dir)
 		return -ENOENT;
+	if (len > EXT2_NAME_LEN)
+		return -ENAMETOOLONG;
 	bh = ext2_find_entry (dir, name, len, &de);
 	if (bh) {
 		brelse (bh);
@@ -615,6 +611,8 @@ repeat:
 	if (!dir)
 		return -ENOENT;
 	inode = NULL;
+	if (len > EXT2_NAME_LEN)
+		return -ENAMETOOLONG;
 	bh = ext2_find_entry (dir, name, len, &de);
 	retval = -ENOENT;
 	if (!bh)
@@ -624,8 +622,10 @@ repeat:
 		goto end_rmdir;
 	if (inode->i_sb->dq_op)
 		inode->i_sb->dq_op->initialize (inode, -1);
-	if (inode->i_dev != dir->i_dev)
+	if (inode->i_dev != dir->i_dev) {
+		retval = -EBUSY;
 		goto end_rmdir;
+	}
 	if (de->inode != inode->i_ino) {
 		iput(inode);
 		brelse(bh);
@@ -699,6 +699,8 @@ repeat:
 		return -ENOENT;
 	retval = -ENOENT;
 	inode = NULL;
+	if (len > EXT2_NAME_LEN)
+		return -ENAMETOOLONG;
 	bh = ext2_find_entry (dir, name, len, &de);
 	if (!bh)
 		goto end_unlink;
@@ -928,7 +930,8 @@ static int subdir (struct inode * new_inode, struct inode * old_inode)
  */
 static int do_ext2_rename (struct inode * old_dir, const char * old_name,
 			   int old_len, struct inode * new_dir,
-			   const char * new_name, int new_len)
+			   const char * new_name, int new_len,
+			   int must_be_dir)
 {
 	struct inode * old_inode, * new_inode;
 	struct buffer_head * old_bh, * new_bh, * dir_bh;
@@ -952,12 +955,18 @@ start_up:
 	old_inode = new_inode = NULL;
 	old_bh = new_bh = dir_bh = NULL;
 	new_de = NULL;
+	retval = -ENAMETOOLONG;
+	if (old_len > EXT2_NAME_LEN)
+		goto end_rename;
+
 	old_bh = ext2_find_entry (old_dir, old_name, old_len, &old_de);
 	retval = -ENOENT;
 	if (!old_bh)
 		goto end_rename;
 	old_inode = __iget (old_dir->i_sb, old_de->inode, 0); /* don't cross mnt-points */
 	if (!old_inode)
+		goto end_rename;
+	if (must_be_dir && !S_ISDIR(old_inode->i_mode))
 		goto end_rename;
 	retval = -EPERM;
 	if ((old_dir->i_mode & S_ISVTX) && 
@@ -1099,7 +1108,8 @@ end_rename:
  * on the same file system
  */
 int ext2_rename (struct inode * old_dir, const char * old_name, int old_len,
-		 struct inode * new_dir, const char * new_name, int new_len)
+		 struct inode * new_dir, const char * new_name, int new_len,
+		 int must_be_dir)
 {
 	int result;
 
@@ -1107,7 +1117,7 @@ int ext2_rename (struct inode * old_dir, const char * old_name, int old_len,
 		sleep_on (&old_dir->i_sb->u.ext2_sb.s_rename_wait);
 	old_dir->i_sb->u.ext2_sb.s_rename_lock = 1;
 	result = do_ext2_rename (old_dir, old_name, old_len, new_dir,
-				 new_name, new_len);
+				 new_name, new_len, must_be_dir);
 	old_dir->i_sb->u.ext2_sb.s_rename_lock = 0;
 	wake_up (&old_dir->i_sb->u.ext2_sb.s_rename_wait);
 	return result;

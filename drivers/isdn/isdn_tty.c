@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.c,v 1.18 1996/06/07 11:17:33 tsbogend Exp $
+/* $Id: isdn_tty.c,v 1.21 1996/06/24 17:40:28 fritz Exp $
  *
  * Linux ISDN subsystem, tty functions and AT-command emulator (linklevel).
  *
@@ -20,6 +20,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_tty.c,v $
+ * Revision 1.21  1996/06/24 17:40:28  fritz
+ * Bugfix: Did not compile without CONFIG_ISDN_AUDIO
+ *
+ * Revision 1.20  1996/06/15 14:59:39  fritz
+ * Fixed isdn_tty_tint() to handle partially sent
+ * sk_buffs.
+ *
+ * Revision 1.19  1996/06/12 15:53:56  fritz
+ * Bugfix: AT+VTX and AT+VRX could be executed without
+ *         having a connection.
+ *         Missing check for NULL tty in isdn_tty_flush_buffer().
+ *
  * Revision 1.18  1996/06/07 11:17:33  tsbogend
  * added missing #ifdef CONFIG_ISDN_AUDIO to make compiling without
  * audio support possible
@@ -127,7 +139,7 @@ static char *isdn_ttyname_cui  = "cui";
 static int bit2si[8] = {1,5,7,7,7,7,7,7};
 static int si2bit[8] = {4,1,4,4,4,4,4,4};
                                 
-char *isdn_tty_revision        = "$Revision: 1.18 $";
+char *isdn_tty_revision        = "$Revision: 1.21 $";
 
 #define DLE 0x10
 #define ETX 0x03
@@ -262,10 +274,13 @@ void isdn_tty_cleanup_xmit(modem_info *info)
 static void isdn_tty_tint(modem_info *info)
 {
         struct sk_buff *skb = skb_dequeue(&info->xmit_queue);
+        int len, slen;
 
         if (!skb)
                 return;
-        if (isdn_writebuf_skb_stub(info->isdn_driver, info->isdn_channel, skb) > 0) {
+        len = skb->len;
+        if ((slen = isdn_writebuf_skb_stub(info->isdn_driver,
+                                         info->isdn_channel, skb)) == len) {
                 struct tty_struct *tty = info->tty;
                 info->send_outstanding++;
                 info->msr |= UART_MSR_CTS;
@@ -276,6 +291,8 @@ static void isdn_tty_tint(modem_info *info)
                 wake_up_interruptible(&tty->write_wait);
                 return;
         }
+        if (slen > 0)
+                skb_pull(skb,slen);
         skb_queue_head(&info->xmit_queue, skb);
 }
 
@@ -369,9 +386,10 @@ static int isdn_tty_end_vrx(const char *buf, int c, int from_user)
         }
         return 0;
 }
-#endif        /* CONFIG_ISDN_AUDIO */
 
 static int voice_cf[7] = { 1, 1, 4, 3, 2, 1, 1 };
+
+#endif        /* CONFIG_ISDN_AUDIO */
 
 /* isdn_tty_senddown() is called either directly from within isdn_tty_write()
  * or via timer-interrupt from within isdn_tty_modem_xmit(). It pulls
@@ -398,8 +416,8 @@ static void isdn_tty_senddown(modem_info * info)
                 return;
         }
         skb_res = dev->drv[info->isdn_driver]->interface->hl_hdrlen + 4;
-        if (info->vonline & 2) {
 #ifdef CONFIG_ISDN_AUDIO
+        if (info->vonline & 2) {
                 /* For now, ifmt is fixed to 1 (alaw), since this
                  * is used with ISDN everywhere in the world, except
                  * US, Canada and Japan.
@@ -454,8 +472,8 @@ static void isdn_tty_senddown(modem_info * info)
                         if (!info->vonline)
                                 isdn_tty_at_cout("\r\nVCON\r\n",info);
                 }
-#endif        /* CONFIG_ISDN_AUDIO */
         } else {
+#endif        /* CONFIG_ISDN_AUDIO */
                 skb = dev_alloc_skb(buflen + skb_res);
                 if (!skb) {
                         printk(KERN_WARNING
@@ -467,7 +485,9 @@ static void isdn_tty_senddown(modem_info * info)
                 memcpy(skb_put(skb,buflen),buf,buflen);
                 info->xmit_count = 0;
                 restore_flags(flags);
+#ifdef CONFIG_ISDN_AUDIO
         }
+#endif
         skb->free = 1;
         if (info->emu.mdmreg[13] & 2)
                 /* Add T.70 simplified header */
@@ -591,6 +611,9 @@ void isdn_tty_modem_hup(modem_info * info)
 
         if (!info)
                 return;
+#ifdef ISDN_DEBUG_MODEM_HUP
+        printk(KERN_DEBUG "Mhup ttyI%d\n", info->line);
+#endif
         info->rcvsched = 0;
         info->online = 0;
         isdn_tty_flush_buffer(info->tty);
@@ -896,13 +919,20 @@ static int isdn_tty_chars_in_buffer(struct tty_struct *tty)
 
 static void isdn_tty_flush_buffer(struct tty_struct *tty)
 {
-	modem_info *info = (modem_info *) tty->driver_data;
+	modem_info *info;
         unsigned long flags;
 
-	if (isdn_tty_paranoia_check(info, tty->device, "isdn_tty_flush_buffer"))
-		return;
         save_flags(flags);
         cli();
+        if (!tty) {
+                restore_flags(flags);
+                return;
+        }
+        info =  (modem_info *) tty->driver_data;
+	if (isdn_tty_paranoia_check(info, tty->device, "isdn_tty_flush_buffer")) {
+                restore_flags(flags);
+		return;
+        }
         isdn_tty_cleanup_xmit(info);
         info->xmit_count = 0;
         restore_flags(flags);
@@ -2324,6 +2354,10 @@ static int isdn_tty_cmd_PLUSV(char **p, modem_info * info)
                         /* AT+VRX - Start recording */
                         if (!m->vpar[0])
                                 PARSE_ERROR1;
+                        if (info->online != 1) {
+                                isdn_tty_modem_result(8, info);
+                                return 1;
+                        }
                         info->dtmf_state = isdn_audio_dtmf_init(info->dtmf_state);
                         if (!info->dtmf_state) {
                                 printk(KERN_WARNING "isdn_tty: Couldn't malloc dtmf state\n");
@@ -2430,6 +2464,10 @@ static int isdn_tty_cmd_PLUSV(char **p, modem_info * info)
                         /* AT+VTX - Start sending */
                         if (!m->vpar[0])
                                 PARSE_ERROR1;
+                        if (info->online != 1) {
+                                isdn_tty_modem_result(8, info);
+                                return 1;
+                        }
                         info->dtmf_state = isdn_audio_dtmf_init(info->dtmf_state);
                         if (!info->dtmf_state) {
                                 printk(KERN_WARNING "isdn_tty: Couldn't malloc dtmf state\n");

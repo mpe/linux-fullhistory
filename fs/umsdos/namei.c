@@ -353,7 +353,8 @@ chkstk();
 						ret = msdos_rename (old_dir
 								    ,old_info.fake.fname,old_info.fake.len
 								    ,new_dir
-								    ,new_info.fake.fname,new_info.fake.len);
+								    ,new_info.fake.fname,new_info.fake.len
+								    ,0);
 chkstk();
 						PRINTK (("after m_rename ret %d ",ret));
 						if (ret != 0){
@@ -1014,7 +1015,8 @@ int UMSDOS_rename(
 	int old_len,
 	struct inode * new_dir,
 	const char * new_name,
-	int new_len)
+	int new_len,
+	int must_be_dir)
 {
 	/* #Specification: weakness / rename
 		There is a case where UMSDOS rename has a different behavior

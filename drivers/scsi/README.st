@@ -1,5 +1,8 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Wed May  1 11:51:35 1996 by root@kai.makisara.fi
+The driver is currently maintained by Kai M{kisara (email
+Kai.Makisara@metla.fi)
+
+Last modified: Sun Jun 30 15:47:14 1996 by root@kai.makisara.fi
 
 
 BASICS
@@ -85,13 +88,15 @@ the SCSI adapter. The following buffering options are selectable at
 compile time and/or at run time (via ioctl):
 
 Buffering of data across write calls in fixed block mode (define
-ST_BUFFER_WRITES). This should be disabled if reliable detection of
-end of medium (EOM) for fixed block mode is desired.
+ST_BUFFER_WRITES).
 
 Asynchronous writing. Writing the buffer contents to the tape is
 started and the write call returns immediately. The status is checked
-at the next tape operation. Should not used if reliable EOM detection
-is desired.
+at the next tape operation.
+
+Buffered writes and asynchronous writes may in some rare cases cause
+problems in multivolume operations if there is not enough space after
+the early-warning mark to flush the driver buffer.
 
 Read ahead for fixed block mode (ST_READ_AHEAD). Filling the buffer is
 attempted even if the user does not want to get all of the data at
@@ -187,7 +192,8 @@ MTCOMPRESSION Sets compressing or uncompressing drive mode using the
 	control of compression. Some drives (like the Exabytes) use
 	density codes for compression control. Some drives use another
 	mode page but this page has not been implemented in the
-	driver.
+	driver. Some drives without compression capability will accept
+	any compression mode without error.
 MTSETPART Moves the tape to the partition given by the argument at the
 	next tape operation. The block at which the tape is positioned
 	is the block where the tape was previously positioned in the
@@ -310,5 +316,3 @@ within file can be obtained if ST_IN_FILE_POS is defined at compile
 time or the MT_ST_CAN_BSR bit is set for the drive with an ioctl.
 (The driver always backs over a filemark crossed by read ahead if the
 user does not request data that far.)
-
-Kai M{kisara

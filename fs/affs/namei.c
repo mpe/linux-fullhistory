@@ -535,7 +535,8 @@ subdir(struct inode * new_inode, struct inode * old_inode)
 
 int
 affs_rename(struct inode *old_dir, const char *old_name, int old_len,
-	    struct inode *new_dir, const char *new_name, int new_len)
+	    struct inode *new_dir, const char *new_name, int new_len,
+	    int must_be_dir)
 {
 	struct inode		*old_inode;
 	struct inode		*new_inode;
@@ -568,6 +569,8 @@ start_up:
 		goto end_rename;
 	old_inode = __iget(old_dir->i_sb,old_ino,0);
 	if (!old_inode)
+		goto end_rename;
+	if (must_be_dir && !S_ISDIR(old_inode->i_mode))
 		goto end_rename;
 	new_bh = affs_find_entry(new_dir,new_name,new_len,&new_ino);
 	if (new_bh) {

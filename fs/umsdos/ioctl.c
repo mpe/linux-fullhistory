@@ -219,7 +219,7 @@ int UMSDOS_ioctl_dir (
 				ret = msdos_rename (dir
 					,data.dos_dirent.d_name,data.dos_dirent.d_reclen
 					,dir
-					,data.umsdos_dirent.name,data.umsdos_dirent.name_len);
+					,data.umsdos_dirent.name,data.umsdos_dirent.name_len,0);
 			}else if (cmd == UMSDOS_UNLINK_EMD){
 				/* #Specification: ioctl / UMSDOS_UNLINK_EMD
 					The umsdos_dirent field of the struct umsdos_ioctl is used

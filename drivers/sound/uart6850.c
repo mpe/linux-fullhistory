@@ -2,27 +2,11 @@
  * sound/uart6850.c
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -154,7 +138,7 @@ uart6850_open (int dev, int mode,
   if (uart6850_opened)
     {
       printk ("Midi6850: Midi busy\n");
-      return -EBUSY;
+      return -(EBUSY);
     }
 
   ;
@@ -238,7 +222,7 @@ uart6850_end_read (int dev)
 static int
 uart6850_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
-  return -EINVAL;
+  return -(EINVAL);
 }
 
 static void
@@ -275,8 +259,8 @@ static struct midi_operations uart6850_operations =
 };
 
 
-long
-attach_uart6850 (long mem_start, struct address_info *hw_config)
+void
+attach_uart6850 (struct address_info *hw_config)
 {
   int             ok, timeout;
   unsigned long   flags;
@@ -284,7 +268,7 @@ attach_uart6850 (long mem_start, struct address_info *hw_config)
   if (num_midis >= MAX_MIDI_DEV)
     {
       printk ("Sound: Too many midi devices detected\n");
-      return mem_start;
+      return;
     }
 
   uart6850_base = hw_config->io_base;
@@ -292,7 +276,7 @@ attach_uart6850 (long mem_start, struct address_info *hw_config)
   uart6850_irq = hw_config->irq;
 
   if (!uart6850_detected)
-    return -EIO;
+    return;
 
   save_flags (flags);
   cli ();
@@ -310,7 +294,6 @@ attach_uart6850 (long mem_start, struct address_info *hw_config)
 
   std_midi_synth.midi_dev = my_dev = num_midis;
   midi_devs[num_midis++] = &uart6850_operations;
-  return mem_start;
 }
 
 static int

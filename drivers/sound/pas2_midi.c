@@ -3,35 +3,10 @@
  *
  * The low level driver for the PAS Midi Interface.
  */
-/*
- * Copyright by Hannu Savolainen 1993-1996
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- */
+
 #include <linux/config.h>
 
-
 #include "sound_config.h"
-
-#include "pas.h"
 
 #if defined(CONFIG_PAS) && defined(CONFIG_MIDI)
 
@@ -59,19 +34,19 @@ pas_midi_open (int dev, int mode,
   if (midi_busy)
     {
       printk ("PAS2: Midi busy\n");
-      return -EBUSY;
+      return -(EBUSY);
     }
 
   /*
    * Reset input and output FIFO pointers
    */
-  pas_write (M_C_RESET_INPUT_FIFO | M_C_RESET_OUTPUT_FIFO,
-	     MIDI_CONTROL);
+  pas_write (0x20 | 0x40,
+	     0x178b);
 
   save_flags (flags);
   cli ();
 
-  if ((err = pas_set_intr (I_M_MIDI_IRQ_ENABLE)) < 0)
+  if ((err = pas_set_intr (0x10)) < 0)
     return err;
 
   /*
@@ -84,28 +59,28 @@ pas_midi_open (int dev, int mode,
 
   if (mode == OPEN_READ || mode == OPEN_READWRITE)
     {
-      ctrl |= M_C_ENA_INPUT_IRQ;	/*
-					   * Enable input
-					 */
+      ctrl |= 0x04;		/*
+				   * Enable input
+				 */
       input_opened = 1;
     }
 
   if (mode == OPEN_WRITE || mode == OPEN_READWRITE)
     {
-      ctrl |= M_C_ENA_OUTPUT_IRQ |	/*
-					 * Enable output
-					 */
-	M_C_ENA_OUTPUT_HALF_IRQ;
+      ctrl |= 0x08 |		/*
+				   * Enable output
+				 */
+	0x10;
     }
 
   pas_write (ctrl,
-	     MIDI_CONTROL);
+	     0x178b);
 
   /*
    * Acknowledge any pending interrupts
    */
 
-  pas_write (0xff, MIDI_STATUS);
+  pas_write (0xff, 0x1B88);
   ofifo_bytes = 0;
 
   restore_flags (flags);
@@ -122,9 +97,9 @@ pas_midi_close (int dev)
   /*
    * Reset FIFO pointers, disable intrs
    */
-  pas_write (M_C_RESET_INPUT_FIFO | M_C_RESET_OUTPUT_FIFO, MIDI_CONTROL);
+  pas_write (0x20 | 0x40, 0x178b);
 
-  pas_remove_intr (I_M_MIDI_IRQ_ENABLE);
+  pas_remove_intr (0x10);
   midi_busy = 0;
 }
 
@@ -133,7 +108,7 @@ dump_to_midi (unsigned char midi_byte)
 {
   int             fifo_space, x;
 
-  fifo_space = ((x = pas_read (MIDI_FIFO_STATUS)) >> 4) & 0x0f;
+  fifo_space = ((x = pas_read (0x1B89)) >> 4) & 0x0f;
 
   if (fifo_space == 15 || (fifo_space < 2 && ofifo_bytes > 13))		/*
 									   * Fifo
@@ -147,7 +122,7 @@ dump_to_midi (unsigned char midi_byte)
 
   ofifo_bytes++;
 
-  pas_write (midi_byte, MIDI_DATA);
+  pas_write (midi_byte, 0x178A);
 
   return 1;
 }
@@ -219,7 +194,7 @@ pas_midi_end_read (int dev)
 static int
 pas_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
-  return -EINVAL;
+  return -(EINVAL);
 }
 
 static void
@@ -257,18 +232,17 @@ static struct midi_operations pas_midi_operations =
   NULL
 };
 
-long
-pas_midi_init (long mem_start)
+void
+pas_midi_init (void)
 {
   if (num_midis >= MAX_MIDI_DEV)
     {
       printk ("Sound: Too many midi devices detected\n");
-      return mem_start;
+      return;
     }
 
   std_midi_synth.midi_dev = my_dev = num_midis;
   midi_devs[num_midis++] = &pas_midi_operations;
-  return mem_start;
 }
 
 void
@@ -278,32 +252,32 @@ pas_midi_interrupt (void)
   int             i, incount;
   unsigned long   flags;
 
-  stat = pas_read (MIDI_STATUS);
+  stat = pas_read (0x1B88);
 
-  if (stat & M_S_INPUT_AVAIL)	/*
-				 * Input byte available
+  if (stat & 0x04)		/*
+				   * Input byte available
 				 */
     {
-      incount = pas_read (MIDI_FIFO_STATUS) & 0x0f;	/*
-							 * Input FIFO count
-							 */
+      incount = pas_read (0x1B89) & 0x0f;	/*
+						   * Input FIFO count
+						 */
       if (!incount)
 	incount = 16;
 
       for (i = 0; i < incount; i++)
 	if (input_opened)
 	  {
-	    midi_input_intr (my_dev, pas_read (MIDI_DATA));
+	    midi_input_intr (my_dev, pas_read (0x178A));
 	  }
 	else
-	  pas_read (MIDI_DATA);	/*
+	  pas_read (0x178A);	/*
 				 * Flush
 				 */
     }
 
-  if (stat & (M_S_OUTPUT_EMPTY | M_S_OUTPUT_HALF_EMPTY))
+  if (stat & (0x08 | 0x10))
     {
-      if (!(stat & M_S_OUTPUT_EMPTY))
+      if (!(stat & 0x08))
 	{
 	  ofifo_bytes = 8;
 	}
@@ -325,15 +299,15 @@ pas_midi_interrupt (void)
     }
 
 
-  if (stat & M_S_OUTPUT_OVERRUN)
+  if (stat & 0x40)
     {
-      printk ("MIDI output overrun %x,%x,%d \n", pas_read (MIDI_FIFO_STATUS), stat, ofifo_bytes);
+      printk ("MIDI output overrun %x,%x,%d \n", pas_read (0x1B89), stat, ofifo_bytes);
       ofifo_bytes = 100;
     }
 
-  pas_write (stat, MIDI_STATUS);	/*
-					   * Acknowledge interrupts
-					 */
+  pas_write (stat, 0x1B88);	/*
+				   * Acknowledge interrupts
+				 */
 }
 
 #endif

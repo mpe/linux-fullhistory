@@ -146,7 +146,9 @@ static int nfs_file_write(struct inode *inode, struct file *file, const char *bu
 	file->f_pos = pos;
 	if (pos > inode->i_size)
 		inode->i_size = pos;
-	nfs_refresh_inode(inode, &fattr);
+	/* Avoid possible Solaris 2.5 nfsd bug */
+	if (inode->i_ino == fattr.fileid)
+		nfs_refresh_inode(inode, &fattr);
 	return written;
 }
 

@@ -82,6 +82,6 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		inode->i_dirt = 1;
 		return 0;
 	default:
-		return -EINVAL;
+		return -ENOTTY;
 	}
 }

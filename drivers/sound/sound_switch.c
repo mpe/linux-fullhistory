@@ -4,27 +4,11 @@
  * The system call switch handler
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -48,7 +32,7 @@ static int      status_busy = 0;
 static int
 put_status (char *s)
 {
-  int             l = strnlen (s, 256);
+  int             l = strlen (s);
 
   if (status_len + l >= 4000)
     return 0;
@@ -172,18 +156,24 @@ init_status (void)
 	  if (!put_status (sound_drivers[drv].name))
 	    return;
 
-	if (!put_status (" at 0x"))
-	  return;
-	if (!put_status_int (snd_installed_cards[i].config.io_base, 16))
-	  return;
+	if (snd_installed_cards[i].config.io_base)
+	  {
+	    if (!put_status (" at 0x"))
+	      return;
+	    if (!put_status_int (snd_installed_cards[i].config.io_base, 16))
+	      return;
+	  }
 
-	if (!put_status (" irq "))
-	  return;
 	tmp = snd_installed_cards[i].config.irq;
-	if (tmp < 0)
-	  tmp = -tmp;
-	if (!put_status_int (tmp, 10))
-	  return;
+	if (tmp != 0)
+	  {
+	    if (!put_status (" irq "))
+	      return;
+	    if (tmp < 0)
+	      tmp = -tmp;
+	    if (!put_status_int (tmp, 10))
+	      return;
+	  }
 
 	if (snd_installed_cards[i].config.dma != -1)
 	  {
@@ -326,7 +316,7 @@ read_status (char *buf, int count)
   if (l <= 0)
     return 0;
 
-  memcpy_tofs (&((buf)[0]), &status_buf[status_ptr], l);
+  memcpy_tofs (&(buf)[0], &status_buf[status_ptr], l);
   status_ptr += l;
 
   return l;
@@ -367,7 +357,7 @@ sound_read_sw (int dev, struct fileinfo *file, char *buf, int count)
       printk ("Sound: Undefined minor device %d\n", dev);
     }
 
-  return -EPERM;
+  return -(EPERM);
 }
 
 int
@@ -401,77 +391,67 @@ sound_write_sw (int dev, struct fileinfo *file, const char *buf, int count)
 
     }
 
-  return -EPERM;
+  return -(EPERM);
 }
 
 int
 sound_open_sw (int dev, struct fileinfo *file)
 {
+  int             retval;
+
   DEB (printk ("sound_open_sw(dev=%d)\n", dev));
 
   if ((dev >= SND_NDEVS) || (dev < 0))
     {
       printk ("Invalid minor device %d\n", dev);
-      return -ENXIO;
+      return -(ENXIO);
     }
 
   switch (dev & 0x0f)
     {
     case SND_DEV_STATUS:
       if (status_busy)
-	return -EBUSY;
+	return -(EBUSY);
       status_busy = 1;
-      if ((status_buf = (char *) kmalloc (4000, GFP_KERNEL)) == NULL)
-	return -EIO;
+      if ((status_buf = (char *) vmalloc (4000)) == NULL)
+	return -(EIO);
       status_len = status_ptr = 0;
       init_status ();
       break;
 
     case SND_DEV_CTL:
       if ((dev & 0xf0) && ((dev & 0xf0) >> 4) >= num_mixers)
-	return -ENXIO;
+	return -(ENXIO);
       return 0;
       break;
 
 #ifdef CONFIG_SEQUENCER
     case SND_DEV_SEQ:
     case SND_DEV_SEQ2:
-    {
-      int retval;
-
       if ((retval = sequencer_open (dev, file)) < 0)
 	return retval;
       break;
-    }
 #endif
 
 #ifdef CONFIG_MIDI
     case SND_DEV_MIDIN:
-    {
-      int retval;
-
       if ((retval = MIDIbuf_open (dev, file)) < 0)
 	return retval;
       break;
-    }
 #endif
 
 #ifdef CONFIG_AUDIO
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
-    {
-      int retval;
-
       if ((retval = audio_open (dev, file)) < 0)
 	return retval;
       break;
-    }
 #endif
 
     default:
       printk ("Invalid minor device %d\n", dev);
-      return -ENXIO;
+      return -(ENXIO);
     }
 
   in_use++;
@@ -489,7 +469,7 @@ sound_release_sw (int dev, struct fileinfo *file)
     {
     case SND_DEV_STATUS:
       if (status_buf)
-	kfree (status_buf);
+	vfree (status_buf);
       status_buf = NULL;
       status_busy = 0;
       break;
@@ -524,6 +504,21 @@ sound_release_sw (int dev, struct fileinfo *file)
   in_use--;
 }
 
+static int
+get_mixer_info (int dev, caddr_t arg)
+{
+  mixer_info      info;
+
+  if (dev < 0 || dev >= num_mixers)
+    return -(ENXIO);
+
+  strcpy (info.id, mixer_devs[dev]->id);
+  strcpy (info.name, mixer_devs[dev]->name);
+
+  memcpy_tofs (&((char *) arg)[0], (char *) &info, sizeof (info));
+  return 0;
+}
+
 int
 sound_ioctl_sw (int dev, struct fileinfo *file,
 		unsigned int cmd, caddr_t arg)
@@ -533,22 +528,29 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
   if (((cmd >> 8) & 0xff) == 'M' && num_mixers > 0)	/* Mixer ioctl */
     if ((dev & 0x0f) != SND_DEV_CTL)
       {
-#ifdef CONFIG_AUDIO
 	int             dtype = dev & 0x0f;
 	int             mixdev;
 
 	switch (dtype)
 	  {
+#ifdef CONFIG_AUDIO
 	  case SND_DEV_DSP:
 	  case SND_DEV_DSP16:
 	  case SND_DEV_AUDIO:
 	    mixdev = audio_devs[dev >> 4]->mixer_dev;
 	    if (mixdev < 0 || mixdev >= num_mixers)
-	      return -ENXIO;
+	      return -(ENXIO);
+	    if (cmd == SOUND_MIXER_INFO)
+	      return get_mixer_info (mixdev, arg);
 	    return mixer_devs[mixdev]->ioctl (mixdev, cmd, arg);
-	  }
+	    break;
 #endif
-	  return mixer_devs[0]->ioctl (0, cmd, arg);
+
+	  default:
+	    if (cmd == SOUND_MIXER_INFO)
+	      return get_mixer_info (0, arg);
+	    return mixer_devs[0]->ioctl (0, cmd, arg);
+	  }
       }
 
   switch (dev & 0x0f)
@@ -557,13 +559,15 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
     case SND_DEV_CTL:
 
       if (!num_mixers)
-	return -ENXIO;
+	return -(ENXIO);
 
       dev = dev >> 4;
 
       if (dev >= num_mixers)
-	return -ENXIO;
+	return -(ENXIO);
 
+      if (cmd == SOUND_MIXER_INFO)
+	return get_mixer_info (dev, arg);
       return mixer_devs[dev]->ioctl (dev, cmd, arg);
       break;
 
@@ -590,5 +594,5 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 
     }
 
-  return -EPERM;
+  return -(EPERM);
 }

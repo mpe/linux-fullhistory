@@ -4,27 +4,11 @@
  * The low level driver for Roland MPU-401 compatible Midi cards.
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -508,21 +492,21 @@ mpu401_open (int dev, int mode,
   struct mpu_config *devc;
 
   if (dev < 0 || dev >= num_midis)
-    return -ENXIO;
+    return -(ENXIO);
 
   devc = &dev_conf[dev];
 
   if (devc->opened)
     {
       printk ("MPU-401: Midi busy\n");
-      return -EBUSY;
+      return -(EBUSY);
     }
 
   /*
      *  Verify that the device is really running.
      *  Some devices (such as Ensoniq SoundScape don't
      *  work before the on board processor (OBP) is initialized
-     *  by downloading its microcode.
+     *  by downloadin it's microcode.
    */
 
   if (!devc->initialized)
@@ -530,7 +514,7 @@ mpu401_open (int dev, int mode,
       if (mpu401_status (devc) == 0xff)		/* Bus float */
 	{
 	  printk ("MPU-401: Device not initialized properly\n");
-	  return -EIO;
+	  return -(EIO);
 	}
       reset_mpu401 (devc);
     }
@@ -624,7 +608,7 @@ mpu401_command (int dev, mpu_command_rec * cmd)
 				 */
     {
       printk ("MPU-401 commands not possible in the UART mode\n");
-      return -EINVAL;
+      return -(EINVAL);
     }
 
   /*
@@ -643,7 +627,7 @@ retry:
   if (timeout-- <= 0)
     {
       printk ("MPU-401: Command (0x%x) timeout\n", (int) cmd->cmd);
-      return -EIO;
+      return -(EIO);
     }
 
   save_flags (flags);
@@ -667,7 +651,7 @@ retry:
 	      ok = 1;
 	  }
 	else
-	  {			/* Device is not currently open. Use simpler method */
+	  {			/* Device is not currently open. Use simplier method */
 	    if (read_data (devc) == MPU_ACK)
 	      ok = 1;
 	  }
@@ -677,7 +661,7 @@ retry:
     {
       restore_flags (flags);
       /*       printk ("MPU: No ACK to command (0x%x)\n", (int) cmd->cmd); */
-      return -EIO;
+      return -(EIO);
     }
 
   if (cmd->nr_args)
@@ -689,7 +673,7 @@ retry:
 	  {
 	    restore_flags (flags);
 	    printk ("MPU: Command (0x%x), parm send failed.\n", (int) cmd->cmd);
-	    return -EIO;
+	    return -(EIO);
 	  }
       }
 
@@ -711,7 +695,7 @@ retry:
 	  {
 	    restore_flags (flags);
 	    /* printk ("MPU: No response(%d) to command (0x%x)\n", i, (int) cmd->cmd);  */
-	    return -EIO;
+	    return -(EIO);
 	  }
       }
 
@@ -796,7 +780,7 @@ mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
   switch (cmd)
     {
     case 1:
-      memcpy_fromfs ((char *) init_sequence, &(((char *) arg)[0]), sizeof (init_sequence));
+      memcpy_fromfs ((char *) init_sequence, &((char *) arg)[0], sizeof (init_sequence));
       return 0;
       break;
 
@@ -804,7 +788,7 @@ mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
       if (!(devc->capabilities & MPU_CAP_INTLG))	/* No intelligent mode */
 	{
 	  printk ("MPU-401: Intelligent mode not supported by the HW\n");
-	  return -EINVAL;
+	  return -(EINVAL);
 	}
       set_uart_mode (dev, devc, !get_fs_long ((long *) arg));
       return 0;
@@ -815,18 +799,18 @@ mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
 	int             ret;
 	mpu_command_rec rec;
 
-	memcpy_fromfs ((char *) &rec, &(((char *) arg)[0]), sizeof (rec));
+	memcpy_fromfs ((char *) &rec, &((char *) arg)[0], sizeof (rec));
 
 	if ((ret = mpu401_command (dev, &rec)) < 0)
 	  return ret;
 
-	memcpy_tofs ((&((char *) arg)[0]), (char *) &rec, sizeof (rec));
+	memcpy_tofs (&((char *) arg)[0], (char *) &rec, sizeof (rec));
 	return 0;
       }
       break;
 
     default:
-      return -EINVAL;
+      return -(EINVAL);
     }
 }
 
@@ -853,7 +837,7 @@ mpu_synth_ioctl (int dev,
   midi_dev = synth_devs[dev]->midi_dev;
 
   if (midi_dev < 0 || midi_dev > num_midis)
-    return -ENXIO;
+    return -(ENXIO);
 
   devc = &dev_conf[midi_dev];
 
@@ -861,7 +845,7 @@ mpu_synth_ioctl (int dev,
     {
 
     case SNDCTL_SYNTH_INFO:
-      memcpy_tofs ((&((char *) arg)[0]), &mpu_synth_info[midi_dev], sizeof (struct synth_info));
+      memcpy_tofs (&((char *) arg)[0], &mpu_synth_info[midi_dev], sizeof (struct synth_info));
 
       return 0;
       break;
@@ -871,7 +855,7 @@ mpu_synth_ioctl (int dev,
       break;
 
     default:
-      return -EINVAL;
+      return -(EINVAL);
     }
 }
 
@@ -885,7 +869,7 @@ mpu_synth_open (int dev, int mode)
 
   if (midi_dev < 0 || midi_dev > num_midis)
     {
-      return -ENXIO;
+      return -(ENXIO);
     }
 
   devc = &dev_conf[midi_dev];
@@ -894,7 +878,7 @@ mpu_synth_open (int dev, int mode)
      *  Verify that the device is really running.
      *  Some devices (such as Ensoniq SoundScape don't
      *  work before the on board processor (OBP) is initialized
-     *  by downloading its microcode.
+     *  by downloadin it's microcode.
    */
 
   if (!devc->initialized)
@@ -902,7 +886,7 @@ mpu_synth_open (int dev, int mode)
       if (mpu401_status (devc) == 0xff)		/* Bus float */
 	{
 	  printk ("MPU-401: Device not initialized properly\n");
-	  return -EIO;
+	  return -(EIO);
 	}
       reset_mpu401 (devc);
     }
@@ -910,7 +894,7 @@ mpu_synth_open (int dev, int mode)
   if (devc->opened)
     {
       printk ("MPU-401: Midi busy\n");
-      return -EBUSY;
+      return -(EBUSY);
     }
 
   devc->mode = MODE_SYNTH;
@@ -1047,8 +1031,8 @@ mpu401_chk_version (struct mpu_config *devc)
   restore_flags (flags);
 }
 
-long
-attach_mpu401 (long mem_start, struct address_info *hw_config)
+void
+attach_mpu401 (struct address_info *hw_config)
 {
   unsigned long   flags;
   char            revision_char;
@@ -1058,7 +1042,7 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
   if (num_midis >= MAX_MIDI_DEV)
     {
       printk ("MPU-401: Too many midi devices detected\n");
-      return mem_start;
+      return;
     }
 
   devc = &dev_conf[num_midis];
@@ -1091,14 +1075,14 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
       if (!reset_mpu401 (devc))
 	{
 	  printk ("MPU401: Device didn't respond\n");
-	  return mem_start;
+	  return;
 	}
 
       if (!devc->shared_irq)
 	if (snd_set_irq_handler (devc->irq, mpuintr, "mpu401", devc->osp) < 0)
 	  {
 	    printk ("MPU401: Failed to allocate IRQ%d\n", devc->irq);
-	    return mem_start;
+	    return;
 	  }
 
       save_flags (flags);
@@ -1117,15 +1101,15 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
 	devc->capabilities |= MPU_CAP_INTLG;	/* Supports intelligent mode */
 
 
-  mpu401_synth_operations[num_midis] = (struct synth_operations *) (sound_mem_blocks[sound_num_blocks] = kmalloc (sizeof (struct synth_operations), GFP_KERNEL));
+  mpu401_synth_operations[num_midis] = (struct synth_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct synth_operations)));
 
-  if (sound_num_blocks < 1024)
-    sound_num_blocks++;;
+  if (sound_nblocks < 1024)
+    sound_nblocks++;;
 
   if (mpu401_synth_operations[num_midis] == NULL)
     {
       printk ("mpu401: Can't allocate memory\n");
-      return mem_start;
+      return;
     }
 
   if (!(devc->capabilities & MPU_CAP_INTLG))	/* No intelligent mode */
@@ -1177,12 +1161,15 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
 
       devc->capabilities |= MPU_CAP_SYNC | MPU_CAP_FSK;
 
-      sprintf (mpu_synth_info[num_midis].name,
-	       "MPU-401 %d.%d%c Midi interface #%d",
-	       (int) (devc->version & 0xf0) >> 4,
-	       devc->version & 0x0f,
-	       revision_char,
-	       n_mpu_devs);
+      if (hw_config->name)
+	sprintf (mpu_synth_info[num_midis].name, "%s (MPU401)", hw_config->name);
+      else
+	sprintf (mpu_synth_info[num_midis].name,
+		 "MPU-401 %d.%d%c Midi interface #%d",
+		 (int) (devc->version & 0xf0) >> 4,
+		 devc->version & 0x0f,
+		 revision_char,
+		 n_mpu_devs);
     }
 
   strcpy (mpu401_midi_operations[num_midis].info.name,
@@ -1199,7 +1186,6 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
 
   irq2dev[devc->irq] = num_midis;
   midi_devs[num_midis++] = &mpu401_midi_operations[devc->devno];
-  return mem_start;
 }
 
 static int
@@ -1348,7 +1334,7 @@ clocks2ticks (unsigned long clocks)
   /*
      * The MPU-401 supports just a limited set of possible timebase values.
      * Since the applications require more choices, the driver has to
-     * program the HW to do its best and to convert between the HW and
+     * program the HW to do it's best and to convert between the HW and
      * actual timebases.
    */
 
@@ -1478,7 +1464,7 @@ mpu_timer_open (int dev, int mode)
   int             midi_dev = sound_timer_devs[dev]->devlink;
 
   if (timer_open)
-    return -EBUSY;
+    return -(EBUSY);
 
   tmr_reset ();
   curr_tempo = 50;
@@ -1677,7 +1663,7 @@ mpu_timer_ioctl (int dev,
 
     case SNDCTL_SEQ_CTRLRATE:
       if (get_fs_long ((long *) arg) != 0)	/* Can't change */
-	return -EINVAL;
+	return -(EINVAL);
 
       return snd_ioctl_return ((int *) arg, ((curr_tempo * curr_timebase) + 30) / 60);
       break;
@@ -1691,7 +1677,7 @@ mpu_timer_ioctl (int dev,
     default:;
     }
 
-  return -EINVAL;
+  return -(EINVAL);
 }
 
 static void

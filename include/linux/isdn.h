@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.14 1996/06/06 21:24:23 fritz Exp $
+/* $Id: isdn.h,v 1.15 1996/06/15 14:56:57 fritz Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.15  1996/06/15 14:56:57  fritz
+ * Added version signatures for data structures used
+ * by userlevel programs.
+ *
  * Revision 1.14  1996/06/06 21:24:23  fritz
  * Started adding support for suspend/resume.
  *
@@ -118,6 +122,7 @@
 #define IIOCNETASL  _IO('I',19)
 #define IIOCNETDIL  _IO('I',20)
 #define IIOCGETCPS  _IO('I',21)
+#define IIOCGETDVR  _IO('I',22)
 
 #define IIOCNETALN  _IO('I',32)
 #define IIOCNETDLN  _IO('I',33)
@@ -164,6 +169,9 @@ typedef struct {
   char phone[20];
   int  outgoing;
 } isdn_net_ioctl_phone;
+
+#define NET_DV 0x01 /* Data version for net_cfg     */
+#define TTY_DV 0x01 /* Data version for iprofd etc. */
 
 typedef struct {
   char name[10];     /* Name of interface                     */

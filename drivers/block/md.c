@@ -163,6 +163,7 @@ static int do_md_run (int minor, int repart)
   {
     md_dev[minor].devices[i].size &= ~(min - 1);
     md_size[minor] += md_dev[minor].devices[i].size;
+    md_dev[minor].devices[i].offset=i ? (md_dev[minor].devices[i-1].offset + md_dev[minor].devices[i-1].size) : 0;
   }
 
   md_dev[minor].pers=pers[pnum];
@@ -218,6 +219,7 @@ static int do_md_stop (int minor, struct inode *inode)
     clear_inode (md_dev[minor].devices[i].inode);
   
   md_dev[minor].nb_dev=md_size[minor]=0;
+  md_hd_struct[minor].nr_sects=0;
   md_dev[minor].pers=NULL;
   
   set_ra ();			/* calculate new read_ahead */
@@ -257,14 +259,7 @@ static int do_md_add (int minor, kdev_t dev)
   /* Sizes are now rounded at run time */
   
   md_dev[minor].devices[i].size=gen_real->sizes[MINOR(dev)];
-  md_dev[minor].devices[i].offset=i ?
-    (md_dev[minor].devices[i-1].offset + md_dev[minor].devices[i-1].size) : 0;
-  
-  if (!i)
-    md_size[minor]=0;
-  
-  md_size[minor]+=md_dev[minor].devices[i].size;
-  
+
   printk ("REGISTER_DEV %s to md%x done\n", partition_name(dev), minor);
   return (0);
 }
@@ -372,11 +367,33 @@ static void md_release (struct inode *inode, struct file *file)
 }
 
 
+static int md_read (struct inode *inode, struct file *file,
+		    char *buf, int count)
+{
+  int minor=MINOR(inode->i_rdev);
+
+  if (!md_dev[minor].pers)	/* Check if device is being run */
+    return -ENXIO;
+
+  return block_read (inode, file, buf, count);
+}
+
+static int md_write (struct inode *inode, struct file *file,
+		     const char *buf, int count)
+{
+  int minor=MINOR(inode->i_rdev);
+
+  if (!md_dev[minor].pers)	/* Check if device is being run */
+    return -ENXIO;
+
+  return block_write (inode, file, buf, count);
+}
+
 static struct file_operations md_fops=
 {
   NULL,
-  block_read,
-  block_write,
+  md_read,
+  md_write,
   NULL,
   NULL,
   md_ioctl,
@@ -431,6 +448,7 @@ static void md_geninit (struct gendisk *gdisk)
   {
     md_blocksizes[i] = 1024;
     md_gendisk.part[i].start_sect=-1; /* avoid partition check */
+    md_gendisk.part[i].nr_sects=0;
     md_dev[i].pers=NULL;
   }
 
@@ -448,7 +466,7 @@ static void md_geninit (struct gendisk *gdisk)
 
 int get_md_status (char *page)
 {
-  int sz=0, i, j;
+  int sz=0, i, j, size;
 
   sz+=sprintf( page+sz, "Personalities : ");
   for (i=0; i<MAX_PERSONALITY; i++)
@@ -470,12 +488,16 @@ int get_md_status (char *page)
     if (md_dev[i].pers)
       sz+=sprintf (page+sz, " %s", md_dev[i].pers->name);
 
+    size=0;
     for (j=0; j<md_dev[i].nb_dev; j++)
+    {
       sz+=sprintf (page+sz, " %s",
 		   partition_name(md_dev[i].devices[j].dev));
+      size+=md_dev[i].devices[j].size;
+    }
     
     if (md_dev[i].nb_dev)
-      sz+=sprintf (page+sz, " %d blocks", md_size[i]);
+      sz+=sprintf (page+sz, " %d blocks", size);
 
     if (!md_dev[i].pers)
     {

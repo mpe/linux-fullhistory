@@ -330,7 +330,7 @@ static int hung_up_tty_select(struct inode * inode, struct file * filp, int sel_
 static int hung_up_tty_ioctl(struct inode * inode, struct file * file,
 			     unsigned int cmd, unsigned long arg)
 {
-	return -EIO;
+	return cmd == TIOCSPGRP ? -ENOTTY : -EIO;
 }
 
 static int tty_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
@@ -475,8 +475,10 @@ void disassociate_ctty(int on_exit)
 {
 	struct tty_struct *tty = current->tty;
 	struct task_struct *p;
+	int tty_pgrp = -1;
 
 	if (tty) {
+		tty_pgrp = tty->pgrp;
 		if (on_exit && tty->driver.type != TTY_DRIVER_TYPE_PTY)
 			tty_vhangup(tty);
 	} else {
@@ -486,9 +488,10 @@ void disassociate_ctty(int on_exit)
 		}
 		return;
 	}
-	if (tty->pgrp > 0) {
-		kill_pg(tty->pgrp, SIGHUP, on_exit);
-		kill_pg(tty->pgrp, SIGCONT, on_exit);
+	if (tty_pgrp > 0) {
+		kill_pg(tty_pgrp, SIGHUP, on_exit);
+		if (!on_exit)
+			kill_pg(tty_pgrp, SIGCONT, on_exit);
 	}
 
 	current->tty_old_pgrp = 0;
@@ -1496,6 +1499,8 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			return 0;
 		case TIOCSPGRP:
 			retval = tty_check_change(real_tty);
+			if (retval == -EIO)
+				return -ENOTTY;
 			if (retval)
 				return retval;
 			if (!current->tty ||
@@ -1816,7 +1821,7 @@ long console_init(long kmem_start, long kmem_end)
 	memcpy(tty_std_termios.c_cc, INIT_C_CC, NCCS);
 	tty_std_termios.c_iflag = ICRNL | IXON;
 	tty_std_termios.c_oflag = OPOST | ONLCR;
-	tty_std_termios.c_cflag = B38400 | CS8 | CREAD;
+	tty_std_termios.c_cflag = B38400 | CS8 | CREAD | HUPCL;
 	tty_std_termios.c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK |
 		ECHOCTL | ECHOKE | IEXTEN;
 

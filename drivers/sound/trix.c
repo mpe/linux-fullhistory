@@ -1,36 +1,21 @@
 /*
  * sound/trix.c
  *
- * Low level driver for the MediaTriX AudioTriX Pro
+ * Low level driver for the MediaTrix AudioTrix Pro
  * (MT-0002-PC Control Chip)
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
 
 #include "sound_config.h"
+#include "sb.h"
 
 #if defined(CONFIG_TRIX)
 
@@ -98,7 +83,7 @@ trix_set_wss_port (struct address_info *hw_config)
 
   if (check_region (0x390, 2))
     {
-      printk ("AudioTriX: Config port I/O conflict\n");
+      printk ("AudioTrix: Config port I/O conflict\n");
       return 0;
     }
 
@@ -107,7 +92,7 @@ trix_set_wss_port (struct address_info *hw_config)
 
   if (trix_read (0x15) != 0x71)	/* No asic signature */
     {
-      DDB (printk ("No AudioTriX ASIC signature found\n"));
+      DDB (printk ("No AudioTrix ASIC signature found\n"));
       return 0;
     }
 
@@ -148,7 +133,7 @@ trix_set_wss_port (struct address_info *hw_config)
 
 /*
  *    Probe and attach routines for the Windows Sound System mode of
- *      AudioTriX Pro
+ *      AudioTrix Pro
  */
 
 int
@@ -158,12 +143,12 @@ probe_trix_wss (struct address_info *hw_config)
 
   /*
      * Check if the IO port returns valid signature. The original MS Sound
-     * system returns 0x04 while some cards (AudioTriX Pro for example)
+     * system returns 0x04 while some cards (AudioTrix Pro for example)
      * return 0x00.
    */
   if (check_region (hw_config->io_base, 8))
     {
-      printk ("AudioTriX: MSS I/O port conflict (%x)\n", hw_config->io_base);
+      printk ("AudioTrix: MSS I/O port conflict (%x)\n", hw_config->io_base);
       return 0;
     }
 
@@ -180,20 +165,20 @@ probe_trix_wss (struct address_info *hw_config)
 
   if (hw_config->irq > 11)
     {
-      printk ("AudioTriX: Bad WSS IRQ %d\n", hw_config->irq);
+      printk ("AudioTrix: Bad WSS IRQ %d\n", hw_config->irq);
       return 0;
     }
 
   if (hw_config->dma != 0 && hw_config->dma != 1 && hw_config->dma != 3)
     {
-      printk ("AudioTriX: Bad WSS DMA %d\n", hw_config->dma);
+      printk ("AudioTrix: Bad WSS DMA %d\n", hw_config->dma);
       return 0;
     }
 
   if (hw_config->dma2 != -1)
     if (hw_config->dma2 != 0 && hw_config->dma2 != 1 && hw_config->dma2 != 3)
       {
-	printk ("AudioTriX: Bad capture DMA %d\n", hw_config->dma2);
+	printk ("AudioTrix: Bad capture DMA %d\n", hw_config->dma2);
 	return 0;
       }
 
@@ -203,43 +188,43 @@ probe_trix_wss (struct address_info *hw_config)
 
   if (hw_config->dma == 0 && inb (hw_config->io_base + 3) & 0x80)
     {
-      printk ("AudioTriX: Can't use DMA0 with a 8 bit card\n");
+      printk ("AudioTrix: Can't use DMA0 with a 8 bit card\n");
       return 0;
     }
 
   if (hw_config->irq > 7 && hw_config->irq != 9 && inb (hw_config->io_base + 3) & 0x80)
     {
-      printk ("AudioTriX: Can't use IRQ%d with a 8 bit card\n", hw_config->irq);
+      printk ("AudioTrix: Can't use IRQ%d with a 8 bit card\n", hw_config->irq);
       return 0;
     }
 
   ret = ad1848_detect (hw_config->io_base + 4, NULL, hw_config->osp);
 
   if (ret)
-    request_region (0x390, 2, "AudioTriX");
+    request_region (0x390, 2, "AudioTrix");
 
   return ret;
 }
 
-long
-attach_trix_wss (long mem_start, struct address_info *hw_config)
+void
+attach_trix_wss (struct address_info *hw_config)
 {
   static unsigned char interrupt_bits[12] =
-  {-1, -1, -1, -1, -1, -1, -1, 0x08, -1, 0x10, 0x18, 0x20};
+  {0, 0, 0, 0, 0, 0, 0, 0x08, 0, 0x10, 0x18, 0x20};
   char            bits;
 
   static unsigned char dma_bits[4] =
   {1, 2, 0, 3};
 
-  int             config_port = hw_config->io_base + 0, version_port = hw_config->io_base + 3;
+  int             config_port = hw_config->io_base + 0;
   int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
 
   trix_osp = hw_config->osp;
 
   if (!kilroy_was_here)
     {
-      DDB (printk ("AudioTriX: Attach called but not probed yet???\n"));
-      return mem_start;
+      DDB (printk ("AudioTrix: Attach called but not probed yet???\n"));
+      return;
     }
 
   /*
@@ -247,17 +232,15 @@ attach_trix_wss (long mem_start, struct address_info *hw_config)
    */
 
   bits = interrupt_bits[hw_config->irq];
-  if (bits == -1)
+  if (bits == 0)
     {
-      printk ("AudioTriX: Bad IRQ (%d)\n", hw_config->irq);
-      return mem_start;
+      printk ("AudioTrix: Bad IRQ (%d)\n", hw_config->irq);
+      return;
     }
 
   outb (bits | 0x40, config_port);
-  if ((inb (version_port) & 0x40) == 0)
-    printk ("[IRQ Conflict?]");
 
-  if (hw_config->dma2 == -1)	/* Single DMA mode */
+  if (hw_config->dma2 == -1 || hw_config->dma2 == hw_config->dma)
     {
       bits |= dma_bits[dma1];
       dma2 = dma1;
@@ -275,14 +258,13 @@ attach_trix_wss (long mem_start, struct address_info *hw_config)
 
   outb (bits, config_port);	/* Write IRQ+DMA setup */
 
-  ad1848_init ("AudioTriX Pro", hw_config->io_base + 4,
+  ad1848_init ("AudioTrix Pro", hw_config->io_base + 4,
 	       hw_config->irq,
 	       dma1,
 	       dma2,
 	       0,
 	       hw_config->osp);
   request_region (hw_config->io_base, 4, "MSS config");
-  return mem_start;
 }
 
 int
@@ -298,18 +280,18 @@ probe_trix_sb (struct address_info *hw_config)
     return 0;			/* No boot code -> no fun */
 
   if (!kilroy_was_here)
-    return 0;			/* AudioTriX Pro has not been detected earlier */
+    return 0;			/* AudioTrix Pro has not been detected earlier */
 
   if (sb_initialized)
     return 0;
 
   if (check_region (hw_config->io_base, 16))
     {
-      printk ("AudioTriX: SB I/O port conflict (%x)\n", hw_config->io_base);
+      printk ("AudioTrix: SB I/O port conflict (%x)\n", hw_config->io_base);
       return 0;
     }
 
-  if (hw_config->io_base & 0xffffff8f != 0x200)
+  if ((hw_config->io_base & 0xffffff8f) != 0x200)
     return 0;
 
   tmp = hw_config->irq;
@@ -332,36 +314,36 @@ probe_trix_sb (struct address_info *hw_config)
   download_boot (hw_config->io_base);
   sb_initialized = 1;
 
-  return 1;
-}
-
-long
-attach_trix_sb (long mem_start, struct address_info *hw_config)
-{
-#ifdef CONFIG_SB
-  extern int      sb_no_recording;
-
-  sb_dsp_disable_midi ();
-  sb_no_recording = 1;
-#endif
-  conf_printf ("AudioTriX (SB)", hw_config);
-  return mem_start;
-}
-
-long
-attach_trix_mpu (long mem_start, struct address_info *hw_config)
-{
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
-  return attach_mpu401 (mem_start, hw_config);
+  hw_config->name = "AudioTrix SB";
+#ifdef CONFIG_SBDSP
+  return probe_sb (hw_config);
 #else
-  return mem_start;
+  return 0;
+#endif
+}
+
+void
+attach_trix_sb (struct address_info *hw_config)
+{
+#ifdef CONFIG_SBDSP
+  hw_config->driver_use_1 = SB_NO_MIDI | SB_NO_MIXER | SB_NO_RECORDING;
+  attach_sb_card (hw_config);
+#endif
+}
+
+void
+attach_trix_mpu (struct address_info *hw_config)
+{
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
+  hw_config->name = "AudioTrix Pro";
+  attach_uart401 (hw_config);
 #endif
 }
 
 int
 probe_trix_mpu (struct address_info *hw_config)
 {
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
   unsigned char   conf;
   static char     irq_bits[] =
   {-1, -1, -1, 1, 2, 3, -1, 4, -1, 5};
@@ -369,7 +351,7 @@ probe_trix_mpu (struct address_info *hw_config)
   if (!kilroy_was_here)
     {
       DDB (printk ("Trix: WSS and SB modes must be initialized before MPU\n"));
-      return 0;			/* AudioTriX Pro has not been detected earlier */
+      return 0;			/* AudioTrix Pro has not been detected earlier */
     }
 
   if (!sb_initialized)
@@ -386,19 +368,19 @@ probe_trix_mpu (struct address_info *hw_config)
 
   if (check_region (hw_config->io_base, 4))
     {
-      printk ("AudioTriX: MPU I/O port conflict (%x)\n", hw_config->io_base);
+      printk ("AudioTrix: MPU I/O port conflict (%x)\n", hw_config->io_base);
       return 0;
     }
 
   if (hw_config->irq > 9)
     {
-      printk ("AudioTriX: Bad MPU IRQ %d\n", hw_config->irq);
+      printk ("AudioTrix: Bad MPU IRQ %d\n", hw_config->irq);
       return 0;
     }
 
   if (irq_bits[hw_config->irq] == -1)
     {
-      printk ("AudioTriX: Bad MPU IRQ %d\n", hw_config->irq);
+      printk ("AudioTrix: Bad MPU IRQ %d\n", hw_config->irq);
       return 0;
     }
 
@@ -426,7 +408,7 @@ probe_trix_mpu (struct address_info *hw_config)
 
   mpu_initialized = 1;
 
-  return probe_mpu401 (hw_config);
+  return probe_uart401 (hw_config);
 #else
   return 0;
 #endif
@@ -453,13 +435,14 @@ unload_trix_wss (struct address_info *hw_config)
 void
 unload_trix_mpu (struct address_info *hw_config)
 {
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
-  unload_mpu401 (hw_config);
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
+  unload_uart401 (hw_config);
 #endif
 }
 void
 unload_trix_sb (struct address_info *hw_config)
 {
+  unload_sb (hw_config);
 }
 
 

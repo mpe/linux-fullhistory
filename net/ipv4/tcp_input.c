@@ -66,7 +66,7 @@ extern __inline__ void tcp_delack_estimator(struct sock *sk)
 
 		/* This used to test against sk->rtt.
 		 * On a purely receiving link, there is no rtt measure.
-		 * The result is that we loose delayed ACKs on one way links.
+		 * The result is that we lose delayed ACKs on one-way links.
 		 * Therefore we test against sk->rto, which will always
 		 * at least have a default value.
 		 */
@@ -860,11 +860,11 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 		 * sensitive to minor changes in the round trip time.
 			 * We add in two compensating factors.
 			 * First we multiply by 5/4. For large congestion
-			 * windows this allows us to tollerate burst traffic
+			 * windows this allows us to tolerate burst traffic
 			 * delaying up to 1/4 of our packets.
 			 * We also add in a rtt / cong_window term.
 			 * For small congestion windows this allows
-			 * a single packet delay, but has neglibible effect
+			 * a single packet delay, but has negligible effect
 			 * on the compensation for large windows.
 	 		 */
 			sk->rto = (sk->rtt >> 3) + sk->mdev;
@@ -1902,7 +1902,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			{
 				/* We got an ack, but it's not a good ack.
 				 * We used to test this with a call to tcp_ack,
-				 * but this looses, because it takes the SYN
+				 * but this loses, because it takes the SYN
 				 * packet out of the send queue, even if
 				 * the ACK doesn't have the SYN bit sent, and
 				 * therefore isn't the one we are waiting for.
@@ -1932,7 +1932,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 				/* process the ACK, get the SYN packet out
 				 * of the send queue, do other initial
-				 * processing stuff. [We know its good, and
+				 * processing stuff. [We know it's good, and
 				 * we know it's the SYN,ACK we want.]
 				 */
 				tcp_ack(sk,th,skb->ack_seq,len);

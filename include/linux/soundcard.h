@@ -58,6 +58,8 @@
 #define SNDCARD_MAUI		23
 #define SNDCARD_PSEUDO_MSS	24
 #define SNDCARD_GUSPNP		25
+#define SNDCARD_UART401		26
+/* Soundcard numbers 27 to N are reserved. Don't add more numbers here */
 
 /***********************************
  * IOCTL Commands for /dev/sequencer
@@ -140,7 +142,7 @@
  *	Sample loading mechanism for internal synthesizers (/dev/sequencer)
  *	The following patch_info structure has been designed to support
  *	Gravis UltraSound. It tries to be universal format for uploading
- *	sample based patches but is probably too limited.
+ *	sample based patches but is propably too limited.
  */
 
 struct patch_info {
@@ -168,6 +170,7 @@ struct patch_info {
 #define WAVE_VIBRATO	0x00010000	/* The vibrato info is valid */
 #define WAVE_TREMOLO	0x00020000	/* The tremolo info is valid */
 #define WAVE_SCALE	0x00040000	/* The scaling info is valid */
+#define WAVE_FRACTIONS	0x00080000	/* Fraction information is valid */
 /* Other bits must be zeroed */
 
 		int len;	/* Size of the wave data in bytes */
@@ -220,7 +223,8 @@ struct patch_info {
 		unsigned int	scale_factor;		/* from 0 to 2048 or 0 to 2 */
 	
 	        int		volume;
-	        int		spare[4];
+		int		fractions;
+	        int		spare[3];
 		char data[1];	/* The waveform data starts here */
 	};
 
@@ -259,7 +263,7 @@ struct sysex_info {
  * may confuse the patch manager daemon.
  */
 
-struct patmgr_info {	/* Note! size must be < 4k since kmalloc() is used */
+struct patmgr_info {
 	  unsigned int key;	/* Don't worry. Reserved for communication
 	  			   between the patch manager and the driver. */
 #define PM_K_EVENT		1 /* Event from the /dev/sequencer driver */
@@ -550,7 +554,8 @@ typedef struct {
 #define SNDCTL_DSP_STEREO		_IOWR('P', 3, int)
 #define SNDCTL_DSP_GETBLKSIZE		_IOWR('P', 4, int)
 #define SNDCTL_DSP_SAMPLESIZE		SNDCTL_DSP_SETFMT
-#define SOUND_PCM_WRITE_CHANNELS	_IOWR('P', 6, int)
+#define SNDCTL_DSP_CHANNELS		_IOWR('P', 6, int)
+#define SOUND_PCM_WRITE_CHANNELS	SNDCTL_DSP_CHANNELS
 #define SOUND_PCM_WRITE_FILTER		_IOWR('P', 7, int)
 #define SNDCTL_DSP_POST			_IO  ('P', 8)
 #define SNDCTL_DSP_SUBDIVIDE		_IOWR('P', 9, int)
@@ -575,7 +580,7 @@ typedef struct {
  * Buffer status queries.
  */
 typedef struct audio_buf_info {
-			int fragments;	/* # of available fragments (partially used ones not counted) */
+			int fragments;	/* # of available fragments (partially usend ones not counted) */
 			int fragstotal;	/* Total # of fragments allocated */
 			int fragsize;	/* Size of a fragment in bytes */
 
@@ -688,7 +693,7 @@ typedef struct copr_msg {
 #define SNDCTL_COPR_WCODE	      _IOW ('C',  5, copr_debug_buf)
 #define SNDCTL_COPR_RUN		      _IOWR('C',  6, copr_debug_buf)
 #define SNDCTL_COPR_HALT	      _IOWR('C',  7, copr_debug_buf)
-#define SNDCTL_COPR_SENDMSG	      _IOW ('C',  8, copr_msg)
+#define SNDCTL_COPR_SENDMSG	      _IOWR('C',  8, copr_msg)
 #define SNDCTL_COPR_RCVMSG	      _IOR ('C',  9, copr_msg)
 
 /*********************************************
@@ -722,7 +727,7 @@ typedef struct copr_msg {
 /* 
  * The AD1848 codec and compatibles have three line level inputs
  * (line, aux1 and aux2). Since each card manufacturer have assigned
- * different meanings to these inputs, it's impractical to assign
+ * different meanings to these inputs, it's inpractical to assign
  * specific meanings (line, cd, synth etc.) to them.
  */
 #define SOUND_MIXER_LINE1	14	/* Input source 1  (aux1) */
@@ -737,6 +742,7 @@ typedef struct copr_msg {
 /* Note!	Number 31 cannot be used since the sign bit is reserved */
 
 
+#ifdef NO_LONGER_AVAILABLE
 /*
  * The following unsupported macros will be removed from the API in near
  * future.
@@ -744,7 +750,7 @@ typedef struct copr_msg {
 #define SOUND_MIXER_ENHANCE	29	/* Enhanced stereo (0, 40, 60 or 80) */
 #define SOUND_MIXER_MUTE	28	/* 0 or 1 */
 #define SOUND_MIXER_LOUD	30	/* 0 or 1 */
-
+#endif
 
 
 #define SOUND_DEVICE_LABELS	{"Vol  ", "Bass ", "Trebl", "Synth", "Pcm  ", "Spkr ", "Line ", \
@@ -784,9 +790,11 @@ typedef struct copr_msg {
 #define SOUND_MASK_LINE2	(1 << SOUND_MIXER_LINE2)
 #define SOUND_MASK_LINE3	(1 << SOUND_MIXER_LINE3)
 
+#ifdef NO_LONGER_AVAILABLE
 #define SOUND_MASK_MUTE		(1 << SOUND_MIXER_MUTE)
 #define SOUND_MASK_ENHANCE	(1 << SOUND_MIXER_ENHANCE)
 #define SOUND_MASK_LOUD		(1 << SOUND_MIXER_LOUD)
+#endif
 
 #define MIXER_READ(dev)		_IOR('M', dev, int)
 #define SOUND_MIXER_READ_VOLUME		MIXER_READ(SOUND_MIXER_VOLUME)
@@ -806,9 +814,11 @@ typedef struct copr_msg {
 #define SOUND_MIXER_READ_LINE1		MIXER_READ(SOUND_MIXER_LINE1)
 #define SOUND_MIXER_READ_LINE2		MIXER_READ(SOUND_MIXER_LINE2)
 #define SOUND_MIXER_READ_LINE3		MIXER_READ(SOUND_MIXER_LINE3)
+#ifdef NO_LONGER_AVAILABLE
 #define SOUND_MIXER_READ_MUTE		MIXER_READ(SOUND_MIXER_MUTE)
 #define SOUND_MIXER_READ_ENHANCE	MIXER_READ(SOUND_MIXER_ENHANCE)
 #define SOUND_MIXER_READ_LOUD		MIXER_READ(SOUND_MIXER_LOUD)
+#endif
 
 #define SOUND_MIXER_READ_RECSRC		MIXER_READ(SOUND_MIXER_RECSRC)
 #define SOUND_MIXER_READ_DEVMASK	MIXER_READ(SOUND_MIXER_DEVMASK)
@@ -834,11 +844,41 @@ typedef struct copr_msg {
 #define SOUND_MIXER_WRITE_LINE1		MIXER_WRITE(SOUND_MIXER_LINE1)
 #define SOUND_MIXER_WRITE_LINE2		MIXER_WRITE(SOUND_MIXER_LINE2)
 #define SOUND_MIXER_WRITE_LINE3		MIXER_WRITE(SOUND_MIXER_LINE3)
+#ifdef NO_LONGER_AVAILABLE
 #define SOUND_MIXER_WRITE_MUTE		MIXER_WRITE(SOUND_MIXER_MUTE)
 #define SOUND_MIXER_WRITE_ENHANCE	MIXER_WRITE(SOUND_MIXER_ENHANCE)
 #define SOUND_MIXER_WRITE_LOUD		MIXER_WRITE(SOUND_MIXER_LOUD)
+#endif
 
 #define SOUND_MIXER_WRITE_RECSRC	MIXER_WRITE(SOUND_MIXER_RECSRC)
+
+typedef struct mixer_info
+{
+  char id[16];
+  char name[32];
+} mixer_info;
+
+#define SOUND_MIXER_INFO		_IOR ('M', 101, mixer_info)
+
+/*
+ * A mechanism for accessing "proprietary" mixer features. This method
+ * permits passing 128 bytes of arbitrary data between a mixer application
+ * and the mixer driver. Interpretation of the record is defined by
+ * the particular mixer driver.
+ */
+typedef unsigned char mixer_record[128];
+
+#define SOUND_MIXER_ACCESS		_IOWR('M', 102, mixer_record)
+
+/*
+ * The SOUND_MIXER_PRIVATE# commands can be redefined by low level drivers.
+ * These features can be used when accessing device specific features.
+ */
+#define SOUND_MIXER_PRIVATE1		_IOWR('M', 111, int)
+#define SOUND_MIXER_PRIVATE2		_IOWR('M', 112, int)
+#define SOUND_MIXER_PRIVATE3		_IOWR('M', 113, int)
+#define SOUND_MIXER_PRIVATE4		_IOWR('M', 114, int)
+#define SOUND_MIXER_PRIVATE5		_IOWR('M', 115, int)
 
 /*
  * Level 2 event types for /dev/sequencer
@@ -1077,7 +1117,7 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 #define SEQ_PANNING(dev, voice, pos) SEQ_CONTROL(dev, voice, CTL_PAN, (pos+128) / 2)
 
 /*
- * Timing and synchronization macros
+ * Timing and syncronization macros
  */
 
 #define _TIMER_EVENT(ev, parm)		{_SEQ_NEEDBUF(8);\

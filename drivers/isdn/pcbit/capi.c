@@ -58,7 +58,7 @@
  *
  */
 
-int capi_conn_req(const char * calledPN, struct sk_buff **skb)
+int capi_conn_req(const char * calledPN, struct sk_buff **skb, int proto)
 {
         ushort len;
 
@@ -80,6 +80,9 @@ int capi_conn_req(const char * calledPN, struct sk_buff **skb)
 
         len = 18 + strlen(calledPN);
 
+	if (proto == ISDN_PROTO_L2_TRANS)
+		len++;
+
 	if ((*skb = dev_alloc_skb(len)) == NULL) {
     
 	        printk(KERN_WARNING "capi_conn_req: alloc_skb failed\n");
@@ -89,11 +92,21 @@ int capi_conn_req(const char * calledPN, struct sk_buff **skb)
         /* InfoElmMask */
         *((ushort*) skb_put(*skb, 2)) = AppInfoMask; 
 
-
-        /* Bearer Capability - Mandatory*/
-        *(skb_put(*skb, 1)) = 2;        /* BC0.Length                        */
-        *(skb_put(*skb, 1)) = 0x88;     /* BC0.Octect3 - Digital Information */
-        *(skb_put(*skb, 1)) = 0x90;     /* BC0.Octect4 -                     */
+	if (proto == ISDN_PROTO_L2_TRANS)
+	{
+		/* Bearer Capability - Mandatory*/
+		*(skb_put(*skb, 1)) = 3;        /* BC0.Length		*/
+		*(skb_put(*skb, 1)) = 0x80;     /* Speech		*/
+		*(skb_put(*skb, 1)) = 0x10;     /* Circuit Mode		*/
+		*(skb_put(*skb, 1)) = 0x23;     /* A-law		*/
+	}
+	else
+	{
+		/* Bearer Capability - Mandatory*/
+		*(skb_put(*skb, 1)) = 2;        /* BC0.Length		*/
+		*(skb_put(*skb, 1)) = 0x88;     /* Digital Information	*/
+		*(skb_put(*skb, 1)) = 0x90;     /* BC0.Octect4		*/
+	}
 
         /* Bearer Capability - Optional*/
         *(skb_put(*skb, 1)) = 0;        /* BC1.Length = 0                    */
@@ -220,16 +233,19 @@ int capi_select_proto_req(struct pcbit_chan *chan, struct sk_buff **skb,
                 *(skb_put(*skb, 1)) = 0x05;            /* LAPB */
                 break;
         case ISDN_PROTO_L2_HDLC:
-#ifdef DEBUG
-                printk(KERN_DEBUG "HDLC\n");           /* HDLC */
-#endif
                 *(skb_put(*skb, 1)) = 0x02;
                 break;
+	case ISDN_PROTO_L2_TRANS:
+		/* 
+		 *	Voice (a-law)
+		 */
+		*(skb_put(*skb, 1)) = 0x06;
+		break;
         default:
 #ifdef DEBUG 
                 printk(KERN_DEBUG "Transparent\n");
 #endif
-                *(skb_put(*skb, 1)) = 0x03;         
+                *(skb_put(*skb, 1)) = 0x03;
                 break;
         }
 

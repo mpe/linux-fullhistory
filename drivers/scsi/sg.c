@@ -230,7 +230,7 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
      * Now copy the result back to the user buffer.
      */
     device->header.pack_len=device->header.reply_len;
-    device->header.result=0;
+
     if (count>=sizeof(struct sg_header))
     {
 	memcpy_tofs(buf,&device->header,sizeof(struct sg_header));
@@ -242,7 +242,7 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
 	}
     }
     else
-	count=0;
+	count= device->header.result==0 ? 0 : -EIO;
     
     /*
      * Clean up, and release the device so that we can send another
@@ -276,12 +276,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
      * wrong.
      */
     memcpy(device->header.sense_buffer, SCpnt->sense_buffer, sizeof(SCpnt->sense_buffer));
-    if (SCpnt->sense_buffer[0])
-    {
-	device->header.result=EIO;
-    }
-    else
-	device->header.result=SCpnt->result;
+    device->header.result=SCpnt->result;
 
     /*
      * Now wake up the process that is waiting for the
@@ -593,6 +588,11 @@ static void sg_detach(Scsi_Device * SDp)
 	    gpnt->device = NULL;
 	    SDp->attached--;
 	    sg_template.nr_dev--;
+            /* 
+             * avoid associated device /dev/sg? bying incremented 
+             * each time module is inserted/removed , <dan@lectra.fr>
+             */
+            sg_template.dev_noticed--;
 	    return;
 	}
     return;

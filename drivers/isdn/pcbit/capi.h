@@ -22,7 +22,8 @@
 #define AppInfoMask  REQ_CAUSE|REQ_DISPLAY|REQ_USER_TO_USER 
 
 /* Connection Setup */
-extern int capi_conn_req(const char * calledPN, struct sk_buff **buf);
+extern int capi_conn_req(const char * calledPN, struct sk_buff **buf,
+			 int proto);
 extern int capi_decode_conn_conf(struct pcbit_chan * chan, struct sk_buff *skb,
 				 int *complete); 
 

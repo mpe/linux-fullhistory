@@ -1184,27 +1184,38 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
 
 inline void internal_cmnd (Scsi_Cmnd * SCpnt)
 {
-    int temp;
+    unsigned long flags, timeout;
     struct Scsi_Host * host;
-    unsigned int flags;
 #ifdef DEBUG_DELAY
-    int clock;
+    unsigned long clock;
 #endif
     
     host = SCpnt->host;
     
-    /*
-     * We will wait MIN_RESET_DELAY clock ticks after the last reset so
-     * we can avoid the drive not being ready.
-     */
     save_flags(flags);
     cli();
     /* Assign a unique nonzero serial_number. */
     if (++serial_number == 0) serial_number = 1;
     SCpnt->serial_number = serial_number;
-    sti();
-    temp = host->last_reset + MIN_RESET_DELAY;
-    while (jiffies < temp);
+
+    /*
+     * We will wait MIN_RESET_DELAY clock ticks after the last reset so
+     * we can avoid the drive not being ready.
+     */
+    timeout = host->last_reset + MIN_RESET_DELAY;
+    if (jiffies < timeout) {
+        /*
+         * NOTE: This may be executed from within an interrupt
+         * handler!  This is bad, but for now, it'll do.  The irq
+         * level of the interrupt handler has been masked out by the
+         * platform dependent interrupt handling code already, so the
+         * sti() here will not cause another call to the SCSI host's
+         * interrupt handler (assuming there is one irq-level per
+         * host).
+         */
+        sti();
+        while (jiffies < timeout) barrier();
+    }
     restore_flags(flags);
     
     update_timeout(SCpnt, SCpnt->timeout_per_command);
@@ -1245,15 +1256,16 @@ inline void internal_cmnd (Scsi_Cmnd * SCpnt)
     }
     else
     {
-	
+	int temp;
+
 #ifdef DEBUG
 	printk("command() :  routine at %p\n", host->hostt->command);
 #endif
-	temp=host->hostt->command (SCpnt);
+	temp = host->hostt->command (SCpnt);
 	SCpnt->result = temp;
 #ifdef DEBUG_DELAY
 	clock = jiffies + 4 * HZ;
-	while (jiffies < clock);
+	while (jiffies < clock) barrier();
 	printk("done(host = %d, result = %04x) : routine at %p\n", 
 	       host->host_no, temp, host->hostt->command);
 #endif
@@ -2055,10 +2067,11 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	 * Protect against races here.  If the command is done, or we are
 	 * on a different command forget it.
 	 */
-	if (SCpnt->serial_number != SCpnt->serial_number_at_timeout) {
+	if (reset_flags & SCSI_RESET_ASYNCHRONOUS)
+	  if (SCpnt->serial_number != SCpnt->serial_number_at_timeout) {
 	    restore_flags(flags);
 	    return 0;
-	}
+	  }
 
 	if (SCpnt->internal_timeout & IN_RESET)
 	{

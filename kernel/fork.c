@@ -34,7 +34,6 @@ int last_pid=0;
 static inline int find_empty_process(void)
 {
 	int i;
-	struct task_struct *p;
 
 	if (nr_tasks >= NR_TASKS - MIN_TASKS_LEFT_FOR_ROOT) {
 		if (current->uid)
@@ -43,7 +42,9 @@ static inline int find_empty_process(void)
 	if (current->uid) {
 		long max_tasks = current->rlim[RLIMIT_NPROC].rlim_cur;
 
+		max_tasks--;	/* count the new process.. */
 		if (max_tasks < nr_tasks) {
+			struct task_struct *p;
 			for_each_task (p) {
 				if (p->uid == current->uid)
 					if (--max_tasks < 0)

@@ -4,32 +4,23 @@
  *	Global definitions for device call tables
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 
 
 #ifndef _DEV_TABLE_H_
 #define _DEV_TABLE_H_
+
+
+/*
+ * Sound card numbers 27 to 999. (1 to 26 are defined in soundcard.h)
+ * Numbers 1000 to N are reserved for driver's internal use.
+ */
+#define SNDCARD_DESKPROXL		27	/* Compaq Deskpro XL */
 
 /*
  *	NOTE! 	NOTE!	NOTE!	NOTE!
@@ -43,10 +34,10 @@ extern int sound_started;
 
 struct driver_info {
 	char *driver_id;
-	int card_subtype;	/* Driver specific. Usually 0 */
+	int card_subtype;	/* Driver spesific. Usually 0 */
 	int card_type;		/*	From soundcard.h	*/
 	char *name;
-	long (*attach) (long mem_start, struct address_info *hw_config);
+	void (*attach) (struct address_info *hw_config);
 	int (*probe) (struct address_info *hw_config);
 	void (*unload) (struct address_info *hw_config);
 };
@@ -143,16 +134,7 @@ typedef struct coproc_operations {
 		void *devc;		/* Driver specific info */
 	} coproc_operations;
 
-struct audio_operations {
-        char name[32];
-	int flags;
-#define NOTHING_SPECIAL 	0
-#define NEEDS_RESTART		1
-#define DMA_AUTOMODE		2
-#define DMA_DUPLEX		4
-#define DMA_PSEUDO_AUTOMODE	8
-	int  format_mask;	/* Bitmask for supported audio formats */
-	void *devc;		/* Driver specific info */
+struct audio_driver {
 	int (*open) (int dev, int mode);
 	void (*close) (int dev);
 	void (*output_block) (int dev, unsigned long buf, 
@@ -170,6 +152,23 @@ struct audio_operations {
 	void (*halt_input) (int dev);
 	void (*halt_output) (int dev);
 	void (*trigger) (int dev, int bits);
+	int (*set_speed)(int dev, int speed);
+	unsigned int (*set_bits)(int dev, unsigned int bits);
+	short (*set_channels)(int dev, short channels);
+};
+
+struct audio_operations {
+        char name[32];
+	int flags;
+#define NOTHING_SPECIAL 	0x00
+#define NEEDS_RESTART		0x01
+#define DMA_AUTOMODE		0x02
+#define DMA_DUPLEX		0x04
+#define DMA_PSEUDO_AUTOMODE	0x08
+#define DMA_HARDSTOP		0x10
+	int  format_mask;	/* Bitmask for supported audio formats */
+	void *devc;		/* Driver specific info */
+	struct audio_driver *d;
 	long buffsize;
 	int dmachan1, dmachan2;
 	struct dma_buffparms *dmap_in, *dmap_out;
@@ -178,11 +177,15 @@ struct audio_operations {
 	int enable_bits;
  	int open_mode;
 	int go;
+	int min_fragment;	/* 0 == unlimited */
 };
 
 struct mixer_operations {
+	char id[16];
 	char name[32];
 	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg);
+	
+	void *devc;
 };
 
 struct synth_operations {
@@ -246,6 +249,7 @@ struct midi_operations {
 	int (*buffer_status) (int dev);
 	int (*prefix_cmd) (int dev, unsigned char status);
 	struct coproc_operations *coproc;
+	void *devc;
 };
 
 struct sound_lowlev_timer {
@@ -290,7 +294,7 @@ struct sound_timer_operations {
 
 	struct driver_info sound_drivers[] = {
 #ifdef CONFIG_PSS
-	  {"PSSECHO", 0, SNDCARD_PSS, "Echo Personal Sound System PSS (ESC614)", attach_pss, probe_pss, unload_pss},
+	  {"PSS", 0, SNDCARD_PSS, "Echo Personal Sound System PSS (ESC614)", attach_pss, probe_pss, unload_pss},
 	  {"PSSMPU", 0, SNDCARD_PSS_MPU, "PSS-MPU", attach_pss_mpu, probe_pss_mpu, unload_pss_mpu},
 	  {"PSSMSS", 0, SNDCARD_PSS_MSS, "PSS-MSS", attach_pss_mss, probe_pss_mss, unload_pss_mss},
 #endif
@@ -298,6 +302,8 @@ struct sound_timer_operations {
 		{"MSS", 0, SNDCARD_MSS,	"MS Sound System",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
 	/* MSS without IRQ/DMA config registers (for DEC Alphas) */
 		{"PCXBJ", 1, SNDCARD_PSEUDO_MSS,	"MS Sound System (AXP)",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
+	/* Compaq Deskpro XL */
+		{"DESKPROXL", 2, SNDCARD_DESKPROXL,	"Compaq Deskpro XL",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
 #endif
 #ifdef CONFIG_MAD16
 		{"MAD16", 0, SNDCARD_MAD16,	"MAD16/Mozart (MSS)",		attach_mad16, probe_mad16, unload_mad16},
@@ -324,11 +330,8 @@ struct sound_timer_operations {
 #endif
 #ifdef CONFIG_SB
 		{"SBLAST", 0, SNDCARD_SB,	"SoundBlaster",		attach_sb_card, probe_sb, unload_sb},
-#ifdef CONFIG_AUDIO
-		{"SBX", 0, SNDCARD_SB16,	"SoundBlaster 16bit",	sb16_dsp_init, sb16_dsp_detect, unload_sb16},
-#endif
 #ifdef CONFIG_MIDI
-		{"SBMPU", 0, SNDCARD_SB16MIDI,"SB MPU",	attach_sb16midi, probe_sb16midi, unload_sb16midi},
+		{"UART401", 0, SNDCARD_UART401,"MPU-401 UART",	attach_uart401, probe_uart401, unload_uart401},
 #endif
 #endif
 #ifdef CONFIG_GUS16
@@ -346,9 +349,6 @@ struct sound_timer_operations {
 		{"TRXPRO", 0, SNDCARD_TRXPRO, "MediaTriX AudioTriX Pro",	attach_trix_wss, probe_trix_wss, unload_trix_wss},
 		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTriX (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
 		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTriX MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
-#endif
-#ifdef CONFIG_SPNP
-		{"AD1848", 0, 500, "SoundPort",	attach_pnp_ad1848, probe_pnp_ad1848, unload_pnp_ad1848},
 #endif
 		{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}
 	};
@@ -390,7 +390,7 @@ struct sound_timer_operations {
 #endif
 #ifdef CONFIG_SSCAPE
 	     {SNDCARD_SSCAPE, {SSCAPE_BASE, SSCAPE_IRQ, SSCAPE_DMA, -1}, SND_DEFAULT_ENABLE},
-	     {SNDCARD_SSCAPE_MSS, {SSCAPE_MSS_BASE, SSCAPE_MSS_IRQ, SSCAPE_MSS_DMA, -1}, SND_DEFAULT_ENABLE},
+	     {SNDCARD_SSCAPE_MSS, {SSCAPE_MSS_BASE, SSCAPE_MSS_IRQ, SSCAPE_DMA, -1}, SND_DEFAULT_ENABLE},
 #endif
 #ifdef CONFIG_MAD16
 #ifndef MAD16_DMA2
@@ -412,12 +412,18 @@ struct sound_timer_operations {
 	     {SNDCARD_CS4232, {CS4232_BASE, CS4232_IRQ, CS4232_DMA, CS4232_DMA2}, SND_DEFAULT_ENABLE},
 #endif
 
+
 #ifdef CONFIG_MSS
+#	ifdef DESKPROXL
+		{SNDCARD_DESKPROXL, {MSS_BASE, MSS_IRQ, MSS_DMA, -1}, SND_DEFAULT_ENABLE},
+#	else
 		{SNDCARD_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA, -1}, SND_DEFAULT_ENABLE},
+#	endif
 #	ifdef MSS2_BASE
 		{SNDCARD_MSS, {MSS2_BASE, MSS2_IRQ, MSS2_DMA, -1}, SND_DEFAULT_ENABLE},
 #	endif
 #endif
+
 
 #ifdef CONFIG_PAS
 		{SNDCARD_PAS, {PAS_BASE, PAS_IRQ, PAS_DMA, -1}, SND_DEFAULT_ENABLE},
@@ -431,6 +437,9 @@ struct sound_timer_operations {
 #		define SB_DMA2		-1
 #	endif
 		{SNDCARD_SB, {SBC_BASE, SBC_IRQ, SBC_DMA, SB_DMA2}, SND_DEFAULT_ENABLE},
+# 	ifdef SB2_BASE
+		{SNDCARD_SB, {SB2_BASE, SB2_IRQ, SB2_DMA, SB2_DMA2}, SND_DEFAULT_ENABLE},
+#	endif
 #endif
 #if defined(CONFIG_MAUI) 
 		{SNDCARD_MAUI, {MAUI_BASE, MAUI_IRQ, 0, -1}, SND_DEFAULT_ENABLE},
@@ -508,8 +517,9 @@ struct sound_timer_operations {
 	extern int max_sound_cards;
 
 	extern int trace_init;
+#endif	/* _DEV_TABLE_C_ */
 
-long sndtable_init(long mem_start);
+void sndtable_init(void);
 int sndtable_get_cardcount (void);
 struct address_info *sound_getconf(int card_type);
 void sound_chconf(int card_type, int ioaddr, int irq, int dma);
@@ -521,15 +531,32 @@ void sound_setup (char *str, int *ints);
 
 int sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan);
 void sound_free_dmap (int dev, struct dma_buffparms *dmap);
-extern int sound_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
+extern int soud_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
 void install_pnp_sounddrv(struct pnp_sounddev *drv);
 int sndtable_probe (int unit, struct address_info *hw_config);
 int sndtable_init_card (int unit, struct address_info *hw_config);
+int sndtable_start_card (int unit, struct address_info *hw_config);
 void sound_timer_init (struct sound_lowlev_timer *t, char *name);
 int sound_start_dma (	int dev, struct dma_buffparms *dmap, int chan,
 			unsigned long physaddr,
 			int count, int dma_mode, int autoinit);
 void sound_dma_intr (int dev, struct dma_buffparms *dmap, int chan);
 
-#endif	/* _DEV_TABLE_C_ */
+#define AUDIO_DRIVER_VERSION	1
+#define MIXER_DRIVER_VERSION	1
+int sound_install_audiodrv(int vers,
+			   char *name,
+			   struct audio_driver *driver,
+			   int driver_size,
+			   int flags,
+      			   unsigned int format_mask,
+			   void *devc,
+			   int dma1, 
+			   int dma2);
+int sound_install_mixer(int vers, 
+			char *name,
+			struct mixer_operations *driver,
+			int driver_size,
+			void *devc);
+
 #endif	/* _DEV_TABLE_H_ */

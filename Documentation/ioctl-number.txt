@@ -1,5 +1,5 @@
 Ioctl Numbers
-29 May 1996
+12 Jun 1996
 Michael Chastain
 <mec@duracef.shout.net>
 
@@ -98,6 +98,7 @@ Code	Seq#	Include File		Comments
 't'	80-8F	linux/isdn_ppp.h
 'u'	all	linux/smb_fs.h
 'v'	all	linux/ext2_fs.h
+'w'	all	CERN SCI driver (in development)
 0x89	00-0F	asm-i386/sockios.h
 0x89	10-FF	linux/sockios.h
 0x90	00	linux/sbpcd.h

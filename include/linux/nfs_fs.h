@@ -79,7 +79,8 @@ extern int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir,
 			   const char *name);
 extern int nfs_proc_rename(struct nfs_server *server,
 			   struct nfs_fh *old_dir, const char *old_name,
-			   struct nfs_fh *new_dir, const char *new_name);
+			   struct nfs_fh *new_dir, const char *new_name,
+			   int must_be_dir);
 extern int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
 			 struct nfs_fh *dir, const char *name);
 extern int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
@@ -96,7 +97,7 @@ extern int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
 extern int nfs_proc_read_request(struct rpc_ioreq *, struct nfs_server *,
 				 struct nfs_fh *, unsigned long offset,
 				 unsigned long count, __u32 *buf);
-extern int nfs_proc_read_reply(struct rpc_ioreq *);
+extern int nfs_proc_read_reply(struct rpc_ioreq *, struct nfs_fattr *);
 extern int *rpc_header(int *p, int procedure, int program, int version,
 				int uid, int gid, int *groups);
 extern int *rpc_verify(int *p);

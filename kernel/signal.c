@@ -91,7 +91,7 @@ asmlinkage int sys_sigpending(sigset_t *set)
  * POSIX 3.3.1.3:
  *  "Setting a signal action to SIG_IGN for a signal that is pending
  *   shall cause the pending signal to be discarded, whether or not
- *   it is blocked" (but SIGCHLD is unspecified: linux leaves it alone).
+ *   it is blocked."
  *
  *  "Setting a signal action to SIG_DFL for a signal that is pending
  *   and whose default action is to ignore the signal (for example,
@@ -108,8 +108,6 @@ static inline void check_pending(int signum)
 
 	p = signum - 1 + current->sig->action;
 	if (p->sa_handler == SIG_IGN) {
-		if (signum == SIGCHLD)
-			return;
 		current->signal &= ~_S(signum);
 		return;
 	}
@@ -156,18 +154,14 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 
 	if (signum<1 || signum>32)
 		return -EINVAL;
-	if (signum==SIGKILL || signum==SIGSTOP)
-		return -EINVAL;
 	p = signum - 1 + current->sig->action;
 	if (action) {
 		int err = verify_area(VERIFY_READ, action, sizeof(*action));
 		if (err)
 			return err;
+		if (signum==SIGKILL || signum==SIGSTOP)
+			return -EINVAL;
 		memcpy_fromfs(&new_sa, action, sizeof(struct sigaction));
-		new_sa.sa_mask |= _S(signum);
-		if (new_sa.sa_flags & SA_NOMASK)
-			new_sa.sa_mask &= ~_S(signum);
-		new_sa.sa_mask &= _BLOCKABLE;
 		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
 			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
 			if (err)

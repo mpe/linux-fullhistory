@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.18 1996/06/06 14:51:51 fritz Exp $
+/* $Id: isdn_common.c,v 1.23 1996/06/25 18:35:38 fritz Exp $
  *
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,6 +21,25 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_common.c,v $
+ * Revision 1.23  1996/06/25 18:35:38  fritz
+ * Fixed bogus memory access in isdn_set_allcfg().
+ *
+ * Revision 1.22  1996/06/24 17:37:37  fritz
+ * Bugfix: isdn_timer_ctrl() did restart timer, even if it
+ *         was already running.
+ *         lowlevel driver locking did use wrong parameters.
+ *
+ * Revision 1.21  1996/06/15 14:58:20  fritz
+ * Added version signatures for data structures used
+ * by userlevel programs.
+ *
+ * Revision 1.20  1996/06/12 16:01:49  fritz
+ * Bugfix: Remote B-channel hangup sometimes did not result
+ *         in a NO CARRIER on tty.
+ *
+ * Revision 1.19  1996/06/11 14:52:04  hipp
+ * minor bugfix in isdn_writebuf_skb_stub()
+ *
  * Revision 1.18  1996/06/06 14:51:51  fritz
  * Changed to support DTMF decoding on audio playback also.
  *
@@ -115,11 +134,12 @@
 
 /* Debugflags */
 #undef  ISDN_DEBUG_STATCALLB
+#define NEW_ISDN_TIMER_CTRL
 
 isdn_dev *dev = (isdn_dev *) 0;
 
 static int  has_exported = 0;
-static char *isdn_revision      = "$Revision: 1.18 $";
+static char *isdn_revision      = "$Revision: 1.23 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -222,8 +242,10 @@ static void isdn_timer_funct(ulong dummy)
 
 		save_flags(flags);
 		cli();
-		del_timer(&dev->timer);
-		dev->timer.function = isdn_timer_funct;
+                del_timer(&dev->timer);
+#ifndef NEW_ISDN_TIMER_CTRL
+                dev->timer.function = isdn_timer_funct;
+#endif
 		dev->timer.expires = jiffies + ISDN_TIMER_RES;
 		add_timer(&dev->timer);
 		restore_flags(flags);
@@ -245,12 +267,20 @@ void isdn_timer_ctrl(int tf, int onoff)
 		dev->tflags |= tf;
 	else
 		dev->tflags &= ~tf;
+#ifdef NEW_ISDN_TIMER_CTRL
 	if (dev->tflags) {
-		del_timer(&dev->timer);
-		dev->timer.function = isdn_timer_funct;
+                if (!del_timer(&dev->timer)) /* del_timer is 1, when active */
+                        dev->timer.expires = jiffies + ISDN_TIMER_RES;
+		add_timer(&dev->timer);
+	}
+#else
+	if (dev->tflags) {
+                del_timer(&dev->timer);
+                dev->timer.function = isdn_timer_funct;
 		dev->timer.expires = jiffies + ISDN_TIMER_RES;
 		add_timer(&dev->timer);
 	}
+#endif
 	restore_flags(flags);
 }
 
@@ -277,6 +307,7 @@ static void isdn_receive_skb_callback(int di, int channel, struct sk_buff *skb)
 	if (isdn_net_rcv_skb(i, skb))
 		return;
 	/* No network-device found, deliver to tty or raw-channel */
+        skb->free = 1;
 	if (skb->len) {
                 if ((midx = dev->m_idx[i])<0) {
                         /* if midx is invalid, drop packet */
@@ -599,9 +630,9 @@ static int isdn_status_callback(isdn_ctrl * c)
                                 info = &dev->mdm.info[mi];
 				if (info->flags &
 				    (ISDN_ASYNC_NORMAL_ACTIVE | ISDN_ASYNC_CALLOUT_ACTIVE)) {
-					info->msr &= ~(UART_MSR_DCD | UART_MSR_RI);
-					if (info->online)
+					if (info->msr & UART_MSR_DCD)
 						isdn_tty_modem_result(3, info);
+					info->msr &= ~(UART_MSR_DCD | UART_MSR_RI);
 #ifdef ISDN_DEBUG_MODEM_HUP
 					printk(KERN_DEBUG "Mhup in ISDN_STAT_BHUP\n");
 #endif
@@ -806,6 +837,8 @@ static __inline int isdn_minor2chan(int minor)
 {
 	return (dev->chanmap[minor]);
 }
+
+#define INF_DV 0x01 /* Data version for /dev/isdninfo */
 
 static char *
  isdn_statstr(void)
@@ -1043,7 +1076,8 @@ static int isdn_set_allcfg(char *src)
 		restore_flags(flags);
 		return ret;
 	}
-	memcpy_tofs((char *) &i, src, sizeof(int));
+	memcpy_fromfs((char *) &i, src, sizeof(int));
+        src += sizeof(int);
 	while (i) {
 		char *c;
 		char *c2;
@@ -1185,6 +1219,10 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
 
 	if (minor == ISDN_MINOR_STATUS) {
                 switch (cmd) {
+                        case IIOCGETDVR:
+                                return(TTY_DV +
+                                       (NET_DV << 8) +
+                                       (INF_DV << 16));
                         case IIOCGETCPS:
                                 if (arg) {
                                         ulong *p = (ulong *)arg;
@@ -1728,7 +1766,7 @@ int isdn_get_free_channel(int usage, int l2_proto, int l3_proto, int pre_dev
 						dev->usage[i] &= ISDN_USAGE_EXCLUSIVE;
 						dev->usage[i] |= usage;
 						isdn_info_update();
-                                                cmd.driver = i;
+                                                cmd.driver = d;
                                                 cmd.arg = 0;
                                                 cmd.command = ISDN_CMD_LOCK;
                                                 (void) dev->drv[d]->interface->command(&cmd);
@@ -1739,7 +1777,7 @@ int isdn_get_free_channel(int usage, int l2_proto, int l3_proto, int pre_dev
 							dev->usage[i] &= ISDN_USAGE_EXCLUSIVE;
 							dev->usage[i] |= usage;
 							isdn_info_update();
-                                                        cmd.driver = i;
+                                                        cmd.driver = d;
                                                         cmd.arg = 0;
                                                         cmd.command = ISDN_CMD_LOCK;
                                                         (void) dev->drv[d]->interface->command(&cmd);
@@ -1878,17 +1916,18 @@ int isdn_writebuf_stub(int drvidx, int chan, const u_char *buf, int len,
 int isdn_writebuf_skb_stub(int drvidx, int chan, struct sk_buff * skb)
 {
         int ret;
+	int len = skb->len;	/* skb pointer no longer valid after free */
 
         if (dev->drv[drvidx]->interface->writebuf_skb) 
 		ret = dev->drv[drvidx]->interface->
 			writebuf_skb(drvidx, chan, skb);
 	else {
 		if ((ret = dev->drv[drvidx]->interface->
-                     writebuf(drvidx,chan,skb->data,skb->len,0)) == skb->len)
+                     writebuf(drvidx,chan,skb->data,skb->len,0)) == len)
 		        dev_kfree_skb(skb, FREE_WRITE);
         }
         if (ret > 0)
-                dev->obytes[isdn_dc2minor(drvidx,chan)] += skb->len;
+                dev->obytes[isdn_dc2minor(drvidx,chan)] += len;
         return ret;
 }
 
@@ -2063,6 +2102,10 @@ int isdn_init(void)
 		return -EIO;
 	}
 	memset((char *) dev, 0, sizeof(isdn_dev));
+#ifdef NEW_ISDN_TIMER_CTRL
+        init_timer(&dev->timer);
+        dev->timer.function = isdn_timer_funct;
+#endif
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		dev->drvmap[i] = -1;
 		dev->chanmap[i] = -1;

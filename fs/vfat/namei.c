@@ -1352,7 +1352,7 @@ int vfat_unlink(struct inode *dir,const char *name,int len)
 
 
 int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
-	struct inode *new_dir,const char *new_name,int new_len)
+	struct inode *new_dir,const char *new_name,int new_len,int must_be_dir)
 {
 	struct super_block *sb = old_dir->i_sb;
 	struct buffer_head *old_bh,*new_bh,*dotdot_bh;
@@ -1383,8 +1383,12 @@ int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
 	PRINTK(("vfat_rename 3\n"));
 	if (res < 0) goto rename_done;
 
-	if (!(old_inode = iget(old_dir->i_sb,old_ino))) goto rename_done;
+	res = -ENOENT;
+	if (!(old_inode = iget(old_dir->i_sb,old_ino)))
+		goto rename_done;
 	is_dir = S_ISDIR(old_inode->i_mode);
+	if (must_be_dir && !is_dir)
+		goto rename_done;
 	if (is_dir) {
 		if ((old_dir->i_dev != new_dir->i_dev) ||
 		    (old_ino == new_dir->i_ino)) {

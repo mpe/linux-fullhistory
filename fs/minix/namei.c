@@ -672,7 +672,7 @@ static int subdir(struct inode * new_inode, struct inode * old_inode)
  * higher-level routines.
  */
 static int do_minix_rename(struct inode * old_dir, const char * old_name, int old_len,
-	struct inode * new_dir, const char * new_name, int new_len)
+	struct inode * new_dir, const char * new_name, int new_len, int must_be_dir)
 {
 	struct inode * old_inode, * new_inode;
 	struct buffer_head * old_bh, * new_bh, * dir_bh;
@@ -699,6 +699,8 @@ start_up:
 		goto end_rename;
 	old_inode = __iget(old_dir->i_sb, old_de->inode,0); /* don't cross mnt-points */
 	if (!old_inode)
+		goto end_rename;
+	if (must_be_dir && !S_ISDIR(old_inode->i_mode))
 		goto end_rename;
 	retval = -EPERM;
 	if ((old_dir->i_mode & S_ISVTX) && 
@@ -816,7 +818,8 @@ end_rename:
  * as they are on different partitions.
  */
 int minix_rename(struct inode * old_dir, const char * old_name, int old_len,
-	struct inode * new_dir, const char * new_name, int new_len)
+	struct inode * new_dir, const char * new_name, int new_len,
+	int must_be_dir)
 {
 	static struct wait_queue * wait = NULL;
 	static int lock = 0;
@@ -826,7 +829,7 @@ int minix_rename(struct inode * old_dir, const char * old_name, int old_len,
 		sleep_on(&wait);
 	lock = 1;
 	result = do_minix_rename(old_dir, old_name, old_len,
-		new_dir, new_name, new_len);
+		new_dir, new_name, new_len, must_be_dir);
 	lock = 0;
 	wake_up(&wait);
 	return result;

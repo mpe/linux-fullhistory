@@ -59,7 +59,8 @@ void cb_out_1(struct pcbit_dev * dev, struct pcbit_chan* chan,
          *     - kfree   when msg has been sent
          */
 
-        if ((len = capi_conn_req(cbdata->data.setup.CalledPN, &skb)) < 0)
+        if ((len = capi_conn_req(cbdata->data.setup.CalledPN, &skb, 
+				 chan->proto)) < 0)
         {
                 printk("capi_conn_req failed\n");
                 return;

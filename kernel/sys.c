@@ -634,8 +634,13 @@ asmlinkage int sys_getsid(pid_t pid)
 
 asmlinkage int sys_setsid(void)
 {
-	if (current->leader)
-		return -EPERM;
+	struct task_struct * p;
+
+	for_each_task(p) {
+		if (p->pgrp == current->pid)
+		        return -EPERM;
+	}
+
 	current->leader = 1;
 	current->session = current->pgrp = current->pid;
 	current->tty = NULL;
@@ -651,21 +656,29 @@ asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist)
 	int i;
 	int * groups;
 
-	if (gidsetsize) {
-		i = verify_area(VERIFY_WRITE, grouplist, sizeof(gid_t) * gidsetsize);
-		if (i)
-			return i;
-	}
+	if (gidsetsize < 0)
+		return -EINVAL;
 	groups = current->groups;
-	for (i = 0 ; (i < NGROUPS) && (*groups != NOGROUP) ; i++, groups++) {
-		if (!gidsetsize)
-			continue;
-		if (i >= gidsetsize)
+	for (i = 0 ; i < NGROUPS ; i++) {
+		if (groups[i] == NOGROUP)
 			break;
-		put_user(*groups, grouplist);
-		grouplist++;
 	}
-	return(i);
+	if (gidsetsize) {
+		int error;
+		error = verify_area(VERIFY_WRITE, grouplist, sizeof(gid_t) * gidsetsize);
+		if (error)
+			return error;
+		if (i > gidsetsize)
+		        return -EINVAL;
+
+		for (i = 0 ; i < NGROUPS ; i++) {
+			if (groups[i] == NOGROUP)
+				break;
+			put_user(groups[i], grouplist);
+			grouplist++;
+		}
+	}
+	return i;
 }
 
 asmlinkage int sys_setgroups(int gidsetsize, gid_t *grouplist)

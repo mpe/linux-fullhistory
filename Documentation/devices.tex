@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: May 12, 1996}
+\date{Last revised: June 9, 1996}
 \maketitle
 %
 \noindent
@@ -77,6 +77,10 @@ an unreasonable effort.
 
 In particular, please don't sent patches for this list to Linus, at
 least not without contacting me first.
+
+I do not have any information about these devices beyond what appears
+on this list.  Any such information requests will be deleted without
+reply.
 
 \section{Major numbers}
 
@@ -157,7 +161,7 @@ least not without contacting me first.
 \major{39}{}{char }{ML-16P experimental I/O board}
 \major{  }{}{block}{Reserved for Linux/AP+}
 \major{40}{}{char }{Matrox Meteor frame grabber}
-\major{  }{}{block}{Syquest EZ135 removable drive}
+\major{  }{}{block}{Syquest EZ135 parallel port removable drive}
 \major{41}{}{char }{Yet Another Micro Monitor}
 \major{42}{}{}{Demo/sample use}
 \major{43}{}{char }{isdn4linux virtual modem}
@@ -169,7 +173,9 @@ least not without contacting me first.
 \major{49}{}{char }{SDL RISCom serial card -- alternate devices}
 \major{50}{}{char }{Reserved for GLINT}
 \major{51}{}{char }{Baycom radio modem}
-\major{52}{--59}{}{Unallocated}
+\major{52}{}{char }{Spellcaster DataComm/BRI ISDN card}
+\major{53}{}{char }{BDM interface for remote debugging MC683xx microcontrollers}
+\major{54}{--59}{}{Unallocated}
 \major{60}{--63}{}{Local/experimental use}
 \major{64}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
@@ -972,8 +978,8 @@ networking device.
 \major{40}{}{char }{Matrox Meteor frame grabber}
 	\minor{0}{/dev/mmetfgrab}{Matrox Meteor frame grabber}
 \\
-\major{  }{}{block}{Syquest EZ135 removable drive}
-	\minor{0}{/dev/eza}{First EZ135 drive whole disk}
+\major{  }{}{block}{Syquest EZ135 parallel port removable drive}
+	\minor{0}{/dev/eza}{Parallel EZ135 drive whole disk}
 \end{devicelist}
 
 \noindent
@@ -1065,7 +1071,32 @@ driver with this number should not cause ill effects to the system
 \end{devicelist}
 
 \begin{devicelist}
-\major{52}{--59}{}{Unallocated}
+\major{52}{}{char }{Spellcaster DataComm/BRI ISDN card}
+	\minor{0}{/dev/dcbri0}{First DataComm card}
+	\minor{1}{/dev/dcbri1}{Second DataComm card}
+	\minor{2}{/dev/dcbri2}{Third DataComm card}
+	\minor{3}{/dev/dcbri3}{Fourth DataComm card}
+\end{devicelist}
+
+\begin{devicelist}
+\major{53}{}{char }{BDM interface for remote debugging MC683xx
+microcontrollers}
+	\minor{0}{/dev/pd\_bdm0}{PD BDM interface on {\file lp0}}
+	\minor{1}{/dev/pd\_bdm1}{PD BDM interface on {\file lp1}}
+	\minor{2}{/dev/pd\_bdm2}{PD BDM interface on {\file lp2}}
+	\minor{4}{/dev/icd\_bdm0}{ICD BDM interface on {\file lp0}}
+	\minor{5}{/dev/icd\_bdm1}{ICD BDM interface on {\file lp1}}
+	\minor{6}{/dev/icd\_bdm2}{ICD BDM interface on {\file lp2}}
+\end{devicelist}
+
+\noindent
+This device is used for the interfacing to the MC683xx
+microcontrollers via Background Debug Mode by use of a Parallel Port
+interface. PD is the Motorola Public Domain Interface and ICD is the
+commercial interface by P\&E.
+
+\begin{devicelist}
+\major{54}{--59}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}
@@ -1119,7 +1150,8 @@ These links should exist on all systems:
 \end{nodelist}
 
 \noindent
-Note: The last device is: letter {\tt X}-digit {\tt 0}-letter {\tt R}.
+Note: The last device is: $<$letter {\tt X}$>$-$<$digit {\tt
+0}$>$-$<$letter {\tt R}$>$.
 
 \subsection{Recommended links}
 
@@ -1128,6 +1160,7 @@ It is recommended that these links exist on all systems:
 \begin{nodelist}
 \link{/dev/core}{/proc/kcore}{symbolic}{Backward compatibility}
 \link{/dev/ramdisk}{ram0}{symbolic}{Backward compatibility}
+\link{/dev/ftape}{rft0}{symbolic}{Backward compatibility}
 \link{/dev/scd?}{sr?}{hard}{Alternate name for CD-ROMs}
 %\link{/dev/fd?H*}{fd?D*}{hard}{Compatible floppy formats}
 %\link{/dev/fd?E*}{fd?D*}{hard}{Compatible floppy formats}

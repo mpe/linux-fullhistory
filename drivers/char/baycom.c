@@ -236,7 +236,6 @@ struct modem_state_par96 {
 	unsigned int dcd_shreg;
 	unsigned long descram;
 	unsigned long scram;
-	unsigned char last_rxbit;
 };
 
 struct modem_state {
@@ -581,8 +580,7 @@ static inline unsigned int tenms_to_flags(struct baycom_state *bc,
 
 /* ---------------------------------------------------------------------- */
 /*
- * The HDLC routines could be more efficient; they could take more than
- * one bit per call
+ * The HDLC routines
  */
 
 static inline int hdlc_rx_add_bytes(struct baycom_state *bc, 
@@ -1212,7 +1210,7 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	register struct baycom_state *bc = (struct baycom_state *)dev_id;
 	int i;
-	unsigned int data, rawdata, mask, mask2;
+	unsigned int data, mask, mask2;
 	
 	if (!bc || bc->magic != BAYCOM_MAGIC)
 		return;
@@ -1270,7 +1268,7 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	/*
 	 * do receiver; differential decode and descramble on the fly
 	 */
-	for(rawdata = data = i = 0; i < PAR96_BURSTBITS; i++) {
+	for(data = i = 0; i < PAR96_BURSTBITS; i++) {
 		unsigned int descx;
 		bc->modem.par96.descram = (bc->modem.par96.descram << 1);
 		if (inb(LPT_STATUS(bc->iobase)) & PAR96_RXBIT)
@@ -1281,14 +1279,9 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		outb(PAR97_POWER | PAR96_PTT, LPT_DATA(bc->iobase));
 		descx ^= ((descx >> PAR96_DESCRAM_TAPSH1) ^
 			  (descx >> PAR96_DESCRAM_TAPSH2));
-		if (descx & 1)
-			bc->modem.par96.last_rxbit = 
-				!bc->modem.par96.last_rxbit;
 		data >>= 1;
-		if (bc->modem.par96.last_rxbit)
+		if (!(descx & 1))
 			data |= 0x8000;
-		rawdata <<= 1;
-		rawdata |= !(descx & 1);
 		outb(PAR97_POWER | PAR96_PTT | PAR96_BURST, 
 		     LPT_DATA(bc->iobase));
 	}
@@ -1304,16 +1297,16 @@ static void baycom_par96_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 * do DCD algorithm
 	 */
 	if (bc->options & BAYCOM_OPTIONS_SOFTDCD) {
-		bc->modem.par96.dcd_shreg = (bc->modem.par96.dcd_shreg << 16)
-			| rawdata;
+		bc->modem.par96.dcd_shreg = (bc->modem.par96.dcd_shreg >> 16)
+			| (data << 16);
 		/* search for flags and set the dcd counter appropriately */
-		for(mask = 0x7f8000, mask2 = 0x3f0000, i = 0; 
-		    i < PAR96_BURSTBITS; i++, mask >>= 1, mask2 >>= 1)
+		for(mask = 0x1fe00, mask2 = 0xfc00, i = 0; 
+		    i < PAR96_BURSTBITS; i++, mask <<= 1, mask2 <<= 1)
 			if ((bc->modem.par96.dcd_shreg & mask) == mask2)
 				bc->modem.par96.dcd_count = BAYCOM_MAXFLEN+4;
 		/* check for abort/noise sequences */
-		for(mask = 0x3f8000, mask2 = 0x3f8000, i = 0; 
-		    i < PAR96_BURSTBITS; i++, mask >>= 1, mask2 >>= 1)
+		for(mask = 0x1fe00, mask2 = 0x1fe00, i = 0; 
+		    i < PAR96_BURSTBITS; i++, mask <<= 1, mask2 <<= 1)
 			if ((bc->modem.par96.dcd_shreg & mask) == mask2)
 				if (bc->modem.par96.dcd_count >= 0)
 					bc->modem.par96.dcd_count -= 

@@ -32,7 +32,7 @@ static int nfs_symlink(struct inode *, const char *, int, const char *);
 static int nfs_link(struct inode *, struct inode *, const char *, int);
 static int nfs_mknod(struct inode *, const char *, int, int, int);
 static int nfs_rename(struct inode *, const char *, int,
-		      struct inode *, const char *, int);
+		      struct inode *, const char *, int, int);
 
 static struct file_operations nfs_dir_operations = {
 	NULL,			/* lseek - default */
@@ -505,8 +505,7 @@ static int nfs_rmdir(struct inode *dir, const char *name, int len)
 		return -ENAMETOOLONG;
 	}
 	error = nfs_proc_rmdir(NFS_SERVER(dir), NFS_FH(dir), name);
-	if (!error)
-		nfs_lookup_cache_remove(dir, NULL, name);
+	nfs_lookup_cache_remove(dir, NULL, name);
 	iput(dir);
 	return error;
 }
@@ -531,7 +530,7 @@ static int nfs_sillyrename(struct inode *dir, const char *name, int len)
 		return -EIO;		/* DWIM */
 	}
 	ret = nfs_proc_rename(NFS_SERVER(dir), NFS_FH(dir), name,
-					       NFS_FH(dir), silly);
+					       NFS_FH(dir), silly, 0);
 	if (ret >= 0) {
 		nfs_lookup_cache_remove(dir, NULL, name);
 		nfs_lookup_cache_remove(dir, NULL, silly);
@@ -571,8 +570,7 @@ static int nfs_unlink(struct inode *dir, const char *name, int len)
 	}
 	if ((error = nfs_sillyrename(dir, name, len)) < 0) {
 		error = nfs_proc_remove(NFS_SERVER(dir), NFS_FH(dir), name);
-		if (!error)
-			nfs_lookup_cache_remove(dir, NULL, name);
+		nfs_lookup_cache_remove(dir, NULL, name);
 	}
 	iput(dir);
 	return error;
@@ -630,15 +628,16 @@ static int nfs_link(struct inode *oldinode, struct inode *dir,
 	}
 	error = nfs_proc_link(NFS_SERVER(oldinode), NFS_FH(oldinode),
 		NFS_FH(dir), name);
-	if (!error)
-		nfs_lookup_cache_remove(dir, oldinode, NULL);
+
+	nfs_lookup_cache_remove(dir, oldinode, NULL);
 	iput(oldinode);
 	iput(dir);
 	return error;
 }
 
 static int nfs_rename(struct inode *old_dir, const char *old_name, int old_len,
-		      struct inode *new_dir, const char *new_name, int new_len)
+		      struct inode *new_dir, const char *new_name, int new_len,
+		      int must_be_dir)
 {
 	int error;
 
@@ -661,11 +660,11 @@ static int nfs_rename(struct inode *old_dir, const char *old_name, int old_len,
 	}
 	error = nfs_proc_rename(NFS_SERVER(old_dir),
 		NFS_FH(old_dir), old_name,
-		NFS_FH(new_dir), new_name);
-	if (!error) {
-		nfs_lookup_cache_remove(old_dir, NULL, old_name);
-		nfs_lookup_cache_remove(new_dir, NULL, new_name);
-	}
+		NFS_FH(new_dir), new_name,
+		must_be_dir);
+
+	nfs_lookup_cache_remove(old_dir, NULL, old_name);
+	nfs_lookup_cache_remove(new_dir, NULL, new_name);
 	iput(old_dir);
 	iput(new_dir);
 	return error;

@@ -4,27 +4,11 @@
  * Definitions for the SB Pro and SB16 mixers
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 
 /*
@@ -109,16 +93,6 @@
 #define LEFT_CHN	0
 #define RIGHT_CHN	1
 
-struct mixer_def {
-	unsigned int regno: 8;
-	unsigned int bitoffs:4;
-	unsigned int nbits:4;
-};
-
-
-typedef struct mixer_def mixer_tab[32][2];
-typedef struct mixer_def mixer_ent;
-
 #define MIX_ENT(name, reg_l, bit_l, len_l, reg_r, bit_r, len_r)	\
 	{{reg_l, bit_l, len_l}, {reg_r, bit_r, len_r}}
 
@@ -197,7 +171,7 @@ MIX_ENT(SOUND_MIXER_OGAIN,	0x41, 7, 2, 0x42, 7, 2)
 			     higher than with SB Pro. This improves the
 			     sound quality */
 
-static unsigned short levels[SOUND_MIXER_NRDEVICES] =
+static unsigned short default_levels[SOUND_MIXER_NRDEVICES] =
 {
   0x2020,			/* Master Volume */
   0x4b4b,			/* Bass */
@@ -220,7 +194,7 @@ static unsigned short levels[SOUND_MIXER_NRDEVICES] =
 
 #else  /* If the user selected just plain SB Pro */
 
-static unsigned short levels[SOUND_MIXER_NRDEVICES] =
+static unsigned short default_levels[SOUND_MIXER_NRDEVICES] =
 {
   0x5a5a,			/* Master Volume */
   0x4b4b,			/* Bass */
@@ -278,12 +252,33 @@ static unsigned char sb16_recmasks_R[SOUND_MIXER_NRDEVICES] =
 	0x00	/* SOUND_MIXER_OGAIN	*/
 };
 
+static char     smw_mix_regs[] =	/* Left mixer registers */
+{
+  0x0b,				/* SOUND_MIXER_VOLUME */
+  0x0d,				/* SOUND_MIXER_BASS */
+  0x0d,				/* SOUND_MIXER_TREBLE */
+  0x05,				/* SOUND_MIXER_SYNTH */
+  0x09,				/* SOUND_MIXER_PCM */
+  0x00,				/* SOUND_MIXER_SPEAKER */
+  0x03,				/* SOUND_MIXER_LINE */
+  0x01,				/* SOUND_MIXER_MIC */
+  0x07,				/* SOUND_MIXER_CD */
+  0x00,				/* SOUND_MIXER_IMIX */
+  0x00,				/* SOUND_MIXER_ALTPCM */
+  0x00,				/* SOUND_MIXER_RECLEV */
+  0x00,				/* SOUND_MIXER_IGAIN */
+  0x00,				/* SOUND_MIXER_OGAIN */
+  0x00,				/* SOUND_MIXER_LINE1 */
+  0x00,				/* SOUND_MIXER_LINE2 */
+  0x00				/* SOUND_MIXER_LINE3 */
+};
+
 /*
  *	Recording sources (SB Pro)
  */
 
-#define SRC_MIC         1	/* Select Microphone recording source */
-#define SRC_CD          3	/* Select CD recording source */
-#define SRC_LINE        7	/* Use Line-in for recording source */
+#define SRC__MIC         1	/* Select Microphone recording source */
+#define SRC__CD          3	/* Select CD recording source */
+#define SRC__LINE        7	/* Use Line-in for recording source */
 
 #endif

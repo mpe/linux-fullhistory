@@ -4,27 +4,11 @@
  * The low level driver for the GUS Midi Interface.
  */
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met: 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer. 2.
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
  */
 #include <linux/config.h>
 
@@ -64,7 +48,7 @@ gus_midi_open (int dev, int mode,
   if (midi_busy)
     {
       printk ("GUS: Midi busy\n");
-      return -EBUSY;
+      return -(EBUSY);
     }
 
   outb (MIDI_RESET, u_MidiControl);
@@ -196,7 +180,7 @@ gus_midi_end_read (int dev)
 static int
 gus_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
-  return -EINVAL;
+  return -(EINVAL);
 }
 
 static void
@@ -249,20 +233,20 @@ static struct midi_operations gus_midi_operations =
   NULL
 };
 
-long
-gus_midi_init (long mem_start)
+void
+gus_midi_init (void)
 {
   if (num_midis >= MAX_MIDI_DEV)
     {
       printk ("Sound: Too many midi devices detected\n");
-      return mem_start;
+      return;
     }
 
   outb (MIDI_RESET, u_MidiControl);
 
   std_midi_synth.midi_dev = my_dev = num_midis;
   midi_devs[num_midis++] = &gus_midi_operations;
-  return mem_start;
+  return;
 }
 
 void

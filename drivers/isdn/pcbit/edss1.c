@@ -288,15 +288,10 @@ void pcbit_fsm_event(struct pcbit_dev *dev, struct pcbit_chan *chan,
 	save_flags(flags);
 	cli();
 
-        if (chan->fsm_timer.function) {
-                del_timer(&chan->fsm_timer);
-                chan->fsm_timer.function = NULL;
-        }
 
         for (action = fsm_table; action->init != 0xff; action++)
                 if (action->init == chan->fsm_state && action->event == event)
                         break;
-
   
 	if (action->init == 0xff) {
 		
@@ -304,6 +299,11 @@ void pcbit_fsm_event(struct pcbit_dev *dev, struct pcbit_chan *chan,
                        event, chan->fsm_state);
 		return;
 	}
+
+        if (chan->fsm_timer.function) {
+                del_timer(&chan->fsm_timer);
+                chan->fsm_timer.function = NULL;
+        }
 
 	chan->fsm_state = action->final;
   

@@ -248,7 +248,8 @@ static void handle_signal(unsigned long signr, struct sigaction *sa,
 
 	if (sa->sa_flags & SA_ONESHOT)
 		sa->sa_handler = NULL;
-	current->blocked |= sa->sa_mask;
+	if (!(sa->sa_flags & SA_NOMASK))
+		current->blocked |= (sa->sa_mask | _S(signr)) & _BLOCKABLE;
 }
 
 /*
@@ -310,7 +311,10 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 			case SIGCONT: case SIGCHLD: case SIGWINCH:
 				continue;
 
-			case SIGSTOP: case SIGTSTP: case SIGTTIN: case SIGTTOU:
+			case SIGTSTP: case SIGTTIN: case SIGTTOU:
+				if (is_orphaned_pgrp(current->pgrp))
+					continue;
+			case SIGSTOP:
 				if (current->flags & PF_PTRACED)
 					continue;
 				current->state = TASK_STOPPED;

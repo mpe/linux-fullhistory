@@ -10,7 +10,7 @@
 #define __ASSEMBLY__
 #include <asm/system.h>
 
-#define halt .long PAL_halt
+#define halt call_pal PAL_halt
 
 .globl swapper_pg_dir
 .globl _stext
@@ -32,7 +32,7 @@ __start:
 	.globl	wrent
 	.ent	wrent
 wrent:
-	.long PAL_wrent
+	call_pal PAL_wrent
 	ret	($26)
 	.end wrent
 
@@ -40,7 +40,7 @@ wrent:
 	.globl	wrkgp
 	.ent	wrkgp
 wrkgp:
-	.long PAL_wrkgp
+	call_pal PAL_wrkgp
 	ret	($26)
 	.end wrkgp
 
@@ -48,7 +48,7 @@ wrkgp:
 	.globl	wrusp
 	.ent	wrusp
 wrusp:
-	.long PAL_wrusp
+	call_pal PAL_wrusp
 	ret	($26)
 	.end wrusp
 
@@ -56,7 +56,7 @@ wrusp:
 	.globl	rdusp
 	.ent	rdusp
 rdusp:
-	.long PAL_rdusp
+	call_pal PAL_rdusp
 	ret	($26)
 	.end rdusp
 
@@ -64,7 +64,7 @@ rdusp:
 	.globl	tbi
 	.ent	tbi
 tbi:
-	.long PAL_tbi
+	call_pal PAL_tbi
 	ret	($26)
 	.end tbi
 
@@ -72,7 +72,7 @@ tbi:
 	.globl	imb
 	.ent	imb
 imb:
-	.long PAL_imb
+	call_pal PAL_imb
 	ret	($26)
 	.end imb
 

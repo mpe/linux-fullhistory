@@ -53,6 +53,8 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
+	if (!inode->i_sb)
+	        return -ENODEV;
 	if (!inode->i_sb->s_op->statfs)
 		return -ENOSYS;
 	inode->i_sb->s_op->statfs(inode->i_sb, buf, sizeof(struct statfs));
@@ -397,7 +399,7 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	/*
 	 * If the owner has been changed, remove the setuid bit
 	 */
-	if (user != inode->i_uid && (inode->i_mode & S_ISUID)) {
+	if (inode->i_mode & S_ISUID) {
 		newattrs.ia_mode &= ~S_ISUID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
@@ -407,8 +409,7 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	 * Don't remove the setgid bit if no group execute bit.
 	 * This is a file marked for mandatory locking.
 	 */
-	if (group != inode->i_gid &&
-	    ((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
+	if (((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
@@ -453,7 +454,7 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	/*
 	 * If the owner has been changed, remove the setuid bit
 	 */
-	if (user != inode->i_uid && (inode->i_mode & S_ISUID)) {
+	if (inode->i_mode & S_ISUID) {
 		newattrs.ia_mode &= ~S_ISUID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
@@ -463,8 +464,7 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	 * Don't remove the setgid bit if no group execute bit.
 	 * This is a file marked for mandatory locking.
 	 */
-	if (group != inode->i_gid &&
-	    ((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
+	if (((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
@@ -509,7 +509,7 @@ int do_open(const char * filename,int flags,int mode)
 	f->f_mode = (flag+1) & O_ACCMODE;
 	if (f->f_mode)
 		flag++;
-	if (flag & (O_TRUNC | O_CREAT))
+	if (flag & O_TRUNC)
 		flag |= 2;
 	error = open_namei(filename,flag,mode,&inode,NULL);
 	if (error)

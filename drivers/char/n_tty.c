@@ -201,7 +201,7 @@ static void eraser(unsigned char c, struct tty_struct *tty)
 			tty->read_head = tty->canon_head;
 			return;
 		}
-		if (!L_ECHOK(tty) || !L_ECHOKE(tty)) {
+		if (!L_ECHOK(tty) || !L_ECHOKE(tty) || !L_ECHOE(tty)) {
 			tty->read_cnt -= ((tty->read_head - tty->canon_head) &
 					  (N_TTY_BUF_SIZE - 1));
 			tty->read_head = tty->canon_head;
@@ -236,7 +236,7 @@ static void eraser(unsigned char c, struct tty_struct *tty)
 					tty->erasing = 1;
 				}
 				echo_char(c, tty);
-			} else if (!L_ECHOE(tty)) {
+			} else if (kill_type == ERASE && !L_ECHOE(tty)) {
 				echo_char(ERASE_CHAR(tty), tty);
 			} else if (c == '\t') {
 				unsigned int col = tty->canon_column;
@@ -290,11 +290,11 @@ static void eraser(unsigned char c, struct tty_struct *tty)
 		finish_erasing(tty);
 }
 
-static void isig(int sig, struct tty_struct *tty)
+static inline void isig(int sig, struct tty_struct *tty, int flush)
 {
 	if (tty->pgrp > 0)
 		kill_pg(tty->pgrp, sig, 1);
-	if (!L_NOFLSH(tty)) {
+	if (flush || !L_NOFLSH(tty)) {
 		n_tty_flush_buffer(tty);
 		if (tty->driver.flush_buffer)
 			tty->driver.flush_buffer(tty);
@@ -306,7 +306,7 @@ static inline void n_tty_receive_break(struct tty_struct *tty)
 	if (I_IGNBRK(tty))
 		return;
 	if (I_BRKINT(tty)) {
-		isig(SIGINT, tty);
+		isig(SIGINT, tty, 1);
 		return;
 	}
 	if (I_PARMRK(tty)) {
@@ -340,8 +340,10 @@ static inline void n_tty_receive_parity_error(struct tty_struct *tty,
 		put_tty_queue('\377', tty);
 		put_tty_queue('\0', tty);
 		put_tty_queue(c, tty);
-	} else
+	} else	if (I_INPCK(tty))
 		put_tty_queue('\0', tty);
+	else
+		put_tty_queue(c, tty);
 	wake_up_interruptible(&tty->read_wait);
 }
 
@@ -415,17 +417,17 @@ static inline void n_tty_receive_char(struct tty_struct *tty, unsigned char c)
 		}
 	}
 	if (L_ISIG(tty)) {
-		if (c == INTR_CHAR(tty)) {
-			isig(SIGINT, tty);
-			return;
-		}
-		if (c == QUIT_CHAR(tty)) {
-			isig(SIGQUIT, tty);
-			return;
-		}
+		int signal;
+		signal = SIGINT;
+		if (c == INTR_CHAR(tty))
+			goto send_signal;
+		signal = SIGQUIT;
+		if (c == QUIT_CHAR(tty))
+			goto send_signal;
+		signal = SIGTSTP;
 		if (c == SUSP_CHAR(tty)) {
-			if (!is_orphaned_pgrp(tty->pgrp))
-				isig(SIGTSTP, tty);
+send_signal:
+			isig(signal, tty, 0);
 			return;
 		}
 	}

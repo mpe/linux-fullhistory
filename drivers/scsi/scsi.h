@@ -202,7 +202,7 @@ typedef struct scsi_device {
  *  Use these to separate status msg and our bytes
  */
 
-#define status_byte(result) (((result) >> 1) & 0xf)
+#define status_byte(result) (((result) >> 1) & 0x1f)
 #define msg_byte(result)    (((result) >> 8) & 0xff)
 #define host_byte(result)   (((result) >> 16) & 0xff)
 #define driver_byte(result) (((result) >> 24) & 0xff)

@@ -306,7 +306,7 @@ int vc_cons_allocated(unsigned int i)
 int vc_allocate(unsigned int i)		/* return 0 on success */
 {
 	if (i >= MAX_NR_CONSOLES)
-	  return -ENODEV;
+	  return -ENXIO;
 	if (!vc_cons[i].d) {
 	    long p, q;
 
