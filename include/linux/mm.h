@@ -96,12 +96,14 @@ extern void mem_init(unsigned long low_start_mem,
 extern void show_mem(void);
 extern void do_page_fault(unsigned long *esp, unsigned long error_code);
 extern void oom(struct task_struct * task);
+extern void si_meminfo(struct sysinfo * val);
 
 /* swap.c */
 
 extern void swap_free(unsigned int page_nr);
 extern void swap_duplicate(unsigned int page_nr);
 extern void swap_in(unsigned long *table_ptr);
+extern void si_swapinfo(struct sysinfo * val);
 
 #define invalidate() \
 __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3":::"ax")

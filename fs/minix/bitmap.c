@@ -8,6 +8,7 @@
 
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
+#include <linux/stat.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 
@@ -117,7 +118,7 @@ int minix_new_block(struct super_block * sb)
 repeat:
 	j = 8192;
 	for (i=0 ; i<8 ; i++)
-		if (bh=sb->u.minix_sb.s_zmap[i])
+		if ((bh=sb->u.minix_sb.s_zmap[i]) != NULL)
 			if ((j=find_first_zero(bh->b_data))<8192)
 				break;
 	if (i>=8 || !bh || j>=8192)
@@ -187,19 +188,21 @@ void minix_free_inode(struct inode * inode)
 	clear_inode(inode);
 }
 
-struct inode * minix_new_inode(struct super_block * sb)
+struct inode * minix_new_inode(const struct inode * dir)
 {
+	struct super_block * sb;
 	struct inode * inode;
 	struct buffer_head * bh;
 	int i,j;
 
-	if (!sb || !(inode = get_empty_inode()))
+	if (!dir || !(inode = get_empty_inode()))
 		return NULL;
+	sb = dir->i_sb;
 	inode->i_sb = sb;
 	inode->i_flags = inode->i_sb->s_flags;
 	j = 8192;
 	for (i=0 ; i<8 ; i++)
-		if (bh=inode->i_sb->u.minix_sb.s_imap[i])
+		if ((bh = inode->i_sb->u.minix_sb.s_imap[i]) != NULL)
 			if ((j=find_first_zero(bh->b_data))<8192)
 				break;
 	if (!bh || j >= 8192 || j+i*8192 > inode->i_sb->u.minix_sb.s_ninodes) {
@@ -216,7 +219,7 @@ struct inode * minix_new_inode(struct super_block * sb)
 	inode->i_nlink = 1;
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->euid;
-	inode->i_gid = current->egid;
+	inode->i_gid = (dir->i_mode & S_ISGID) ? dir->i_gid : current->egid;
 	inode->i_dirt = 1;
 	inode->i_ino = j + i*8192;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;

@@ -102,11 +102,11 @@ int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
 	FD_ZERO(res_out);
 	FD_ZERO(res_ex);
 	count = 0;
-repeat:
 	wait_table.nr = 0;
 	wait_table.entry = entry;
-	current->state = TASK_INTERRUPTIBLE;
 	wait = &wait_table;
+repeat:
+	current->state = TASK_INTERRUPTIBLE;
 	for (i = 0 ; i < n ; i++) {
 		if (FD_ISSET(i,in) && check(SEL_IN,wait,current->filp[i])) {
 			FD_SET(i, res_in);
@@ -124,10 +124,9 @@ repeat:
 			wait = NULL;
 		}
 	}
-	if (!count && current->timeout
-	    && !(current->signal & ~current->blocked)) {
+	wait = NULL;
+	if (!count && current->timeout && !(current->signal & ~current->blocked)) {
 		schedule();
-		free_wait(&wait_table);
 		goto repeat;
 	}
 	free_wait(&wait_table);
@@ -198,9 +197,11 @@ int sys_select( unsigned long *buffer )
 	get_fd_set(n, exp, &ex);
 	timeout = 0xffffffff;
 	if (tvp) {
-		timeout = get_fs_long((unsigned long *)&tvp->tv_usec)/(1000000/HZ);
+		timeout = jiffies;
+		timeout += get_fs_long((unsigned long *)&tvp->tv_usec)/(1000000/HZ);
 		timeout += get_fs_long((unsigned long *)&tvp->tv_sec) * HZ;
-		timeout += jiffies;
+		if (timeout <= jiffies)
+			timeout = 0;
 	}
 	current->timeout = timeout;
 	i = do_select(n, &in, &out, &ex, &res_in, &res_out, &res_ex);

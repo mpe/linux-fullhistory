@@ -8,15 +8,16 @@
  *		Drew Eckhardt 
  *
  *	<drew@colorado.edu>
+ *
+ *       Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *       add scatter-gather, multiple outstanding request, and other
+ *       enhancements.
  */
 
 #ifndef _SR_H
 #define _SR_H
 
 #include "scsi.h"
-
-#define MAX_SR 2
-extern int NR_SR;
 
 typedef struct
 	{
@@ -30,11 +31,6 @@ typedef struct
 	unsigned 	use:1;			/* is this device still supportable	*/
 	} Scsi_CD;
 	
-extern Scsi_CD scsi_CDs[MAX_SR];
+extern Scsi_CD * scsi_CDs;
 
-unsigned long sr_init(unsigned long, unsigned long);
-
-#define SR_HOST (scsi_CDs[DEVICE_NR(CURRENT->dev)].device->host_no)
-#define SR_ID (scsi_CDs[DEVICE_NR(CURRENT->dev)].device->id)
-#define SR_LUN (scsi_CDs[DEVICE_NR(CURRENT->dev)].device->lun)
 #endif

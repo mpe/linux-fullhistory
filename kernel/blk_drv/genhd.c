@@ -14,10 +14,14 @@
 #include <linux/fs.h>
 #include <linux/genhd.h>
 #include <linux/kernel.h>
+
 struct gendisk *gendisk_head = NULL;
 
 static int current_minor = 0;
 extern int *blk_size[];
+extern void rd_load(void);
+extern int ramdisk_size;
+
 /*
  * Create devices for each logical partition in an extended partition.
  * The logical partitions form a linked list, with each entry being
@@ -211,9 +215,8 @@ int sys_setup(void * BIOS)
 	if (nr)
 		printk("Partition table%s ok.\n\r",(nr>1)?"s":"");
 
-#ifdef RAMDISK
-	rd_load();
-#endif
+	if (ramdisk_size)
+		rd_load();
 	mount_root();
 	return (0);
 }

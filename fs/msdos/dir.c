@@ -85,18 +85,16 @@ static int msdos_readdir(struct inode *inode,struct file *filp,
 				put_fs_byte(c,i+dirent->d_name);
 			}
 			i = last;
-			if (de->ext[0] && de->ext[0] != ' ') {
-				put_fs_byte('.',i+dirent->d_name);
+			put_fs_byte('.',i+dirent->d_name);
+			i++;
+			for (i2 = 0; i2 < 3; i2++) {
+				if (!(c = de->ext[i2])) break;
+				if (c >= 'A' && c <= 'Z') c += 32;
+				if (c != ' ') last = i+1;
+				put_fs_byte(c,i+dirent->d_name);
 				i++;
-				for (i2 = 0; i2 < 3; i2++) {
-					if (!(c = de->ext[i2])) break;
-					if (c >= 'A' && c <= 'Z') c += 32;
-					put_fs_byte(c,i+dirent->d_name);
-					i++;
-					if (c != ' ') last = i;
-				}
 			}
-			if (i = last) {
+			if ((i = last) != 0) {
 				if (!strcmp(de->name,MSDOS_DOT))
 					ino = inode->i_ino;
 				else if (!strcmp(de->name,MSDOS_DOTDOT))

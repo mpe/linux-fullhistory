@@ -40,6 +40,12 @@ ENDSEG    = SYSSEG + SYSSIZE		! where to stop loading
 ! ROOT_DEV & SWAP_DEV are now written by "build".
 ROOT_DEV = 0
 SWAP_DEV = 0
+#ifndef SVGA_MODE
+#define SVGA_MODE ASK_VGA
+#endif
+#ifndef RAMDISK
+#define RAMDISK 0
+#endif 
 
 ! ld86 requires an entry symbol. This may as well be the usual one.
 .globl	_main
@@ -425,9 +431,13 @@ msg1:
 	.byte 13,10
 	.ascii "Loading"
 
-.org 506
+.org 502
 swap_dev:
 	.word SWAP_DEV
+ram_size:
+	.word RAMDISK
+vid_mode:
+	.word SVGA_MODE
 root_dev:
 	.word ROOT_DEV
 boot_flag:

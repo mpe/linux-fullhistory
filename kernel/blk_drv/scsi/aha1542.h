@@ -80,6 +80,12 @@ struct mailbox {
   unchar ccbptr[3];		/* msb, .., lsb */
 };
 
+/* This is used with scatter-gather */
+struct chain {
+  unchar datalen[3];		/* Size of this part of chain */
+  unchar dataptr[3];		/* Location of data */
+};
+
 /* These belong in scsi.h also */
 #define any2scsi(up, p)				\
 (up)[0] = (((unsigned long)(p)) >> 16)  ;	\
@@ -120,11 +126,15 @@ struct ccb {			/* Command Control Block 5.3 */
 };
 
 int aha1542_detect(int);
-int aha1542_command(unsigned char target, const void *cmnd, void *buff, int bufflen);
-int aha1542_queuecommand(unchar target, const void *cmnd, void *buff, int bufflen, void (*done)(int, int));
-int aha1542_abort(int);
-char *aha1542_info(void);
+int aha1542_command(Scsi_Cmnd *);
+int aha1542_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
+int aha1542_abort(Scsi_Cmnd *, int);
+const char *aha1542_info(void);
 int aha1542_reset(void);
+int aha1542_biosparam(int, int, int*);
+
+#define AHA1542_MAILBOXES 8
+#define AHA1542_SCATTER 16
 
 #ifndef NULL
 	#define NULL 0
@@ -135,5 +145,8 @@ int aha1542_reset(void);
 		aha1542_queuecommand,			\
 		aha1542_abort,				\
 		aha1542_reset,				\
-		1, 7, 0, 1}
+	        NULL,		                        \
+		aha1542_biosparam,                      \
+		AHA1542_MAILBOXES, 7, AHA1542_SCATTER, 1, 0, 1}
+
 #endif

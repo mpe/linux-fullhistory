@@ -32,6 +32,7 @@
 #include <linux/kd.h>
 #include <linux/mm.h>
 #include <linux/string.h>
+#include <linux/keyboard.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -52,7 +53,8 @@ int fg_console = 0;
 struct tty_struct * redirect = NULL;
 struct wait_queue * keypress_wait = NULL;
 
-int initialize_tty_struct(struct tty_struct *tty, int line);
+static int initialize_tty_struct(struct tty_struct *tty, int line);
+static void reset_tty_termios(int line);
 
 void put_tty_queue(char c, struct tty_queue * queue)
 {
@@ -279,28 +281,13 @@ static void wait_for_canon_input(struct tty_struct * tty)
 		__wait_for_canon_input(tty);
 }
 
-static int read_chan(unsigned int channel, struct file * file, char * buf, int nr)
+static int read_chan(struct tty_struct * tty, struct file * file, char * buf, int nr)
 {
-	struct tty_struct * tty;
 	struct wait_queue wait = { current, NULL };
 	int c;
 	char * b=buf;
 	int minimum,time;
 
-	if (channel > 255)
-		return -EIO;
-	tty = TTY_TABLE(channel);
-	if (!tty)
-		return -EIO;
-	if ((tty->pgrp > 0) &&
-	    (current->tty == channel) &&
-	    (tty->pgrp != current->pgrp))
-		if (is_ignored(SIGTTIN) || is_orphaned_pgrp(current->pgrp))
-			return -EIO;
-		else {
-			(void) kill_pg(current->pgrp, SIGTTIN, 1);
-			return -ERESTARTSYS;
-		}
 	if (L_CANON(tty))
 		minimum = time = current->timeout = 0;
 	else {
@@ -445,29 +432,11 @@ static int available_canon_input(struct tty_struct * tty)
 	return 0;
 }
 
-static int write_chan(unsigned int channel, struct file * file, char * buf, int nr)
+static int write_chan(struct tty_struct * tty, struct file * file, char * buf, int nr)
 {
-	struct tty_struct * tty;
 	struct wait_queue wait = { current, NULL };
 	char c, *b=buf;
 
-	if (channel > 255)
-		return -EIO;
-	if (redirect && ((channel == 0) || (channel == fg_console+1)))
-		tty = redirect;
-	else
-		tty = TTY_TABLE(channel);
-	if (!tty || !tty->write)
-		return -EIO;
-	if (L_TOSTOP(tty) && (tty->pgrp > 0) &&
-	    (current->tty == channel) && (tty->pgrp != current->pgrp)) {
-		if (is_orphaned_pgrp(tty->pgrp))
-			return -EIO;
-		if (!is_ignored(SIGTTOU)) {
-			(void) kill_pg(current->pgrp, SIGTTOU, 1);
-			return -ERESTARTSYS;
-		}
-	}
 	if (nr < 0)
 		return -EINVAL;
 	if (!nr)
@@ -524,13 +493,28 @@ static int write_chan(unsigned int channel, struct file * file, char * buf, int 
 
 static int tty_read(struct inode * inode, struct file * file, char * buf, int count)
 {
-	int i;
+	int i, dev;
+	struct tty_struct * tty;
 
-	if (MAJOR(file->f_rdev) != 4) {
+	dev = file->f_rdev;
+	if (MAJOR(dev) != 4) {
 		printk("tty_read: pseudo-major != 4\n");
 		return -EINVAL;
 	}
-	i = read_chan(MINOR(file->f_rdev),file,buf,count);
+	dev = MINOR(dev);
+	tty = TTY_TABLE(dev);
+	if (!tty)
+		return -EIO;
+	if (MINOR(inode->i_rdev) && (tty->pgrp > 0) &&
+	    (current->tty == dev) &&
+	    (tty->pgrp != current->pgrp))
+		if (is_ignored(SIGTTIN) || is_orphaned_pgrp(current->pgrp))
+			return -EIO;
+		else {
+			(void) kill_pg(current->pgrp, SIGTTIN, 1);
+			return -ERESTARTSYS;
+		}
+	i = read_chan(tty,file,buf,count);
 	if (i > 0)
 		inode->i_atime = CURRENT_TIME;
 	return i;
@@ -538,13 +522,32 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 
 static int tty_write(struct inode * inode, struct file * file, char * buf, int count)
 {
-	int i;
-	
-	if (MAJOR(file->f_rdev) != 4) {
+	int dev,i;
+	struct tty_struct * tty;
+
+	dev = file->f_rdev;
+	if (MAJOR(dev) != 4) {
 		printk("tty_write: pseudo-major != 4\n");
 		return -EINVAL;
 	}
-	i = write_chan(MINOR(file->f_rdev),file,buf,count);
+	dev = MINOR(dev);
+	if (redirect && ((dev == 0) || (dev == fg_console+1)))
+		tty = redirect;
+	else
+		tty = TTY_TABLE(dev);
+	if (!tty || !tty->write)
+		return -EIO;
+	if (MINOR(inode->i_rdev) &&
+	    L_TOSTOP(tty) && (tty->pgrp > 0) &&
+	    (current->tty == dev) && (tty->pgrp != current->pgrp)) {
+		if (is_orphaned_pgrp(tty->pgrp))
+			return -EIO;
+		if (!is_ignored(SIGTTOU)) {
+			(void) kill_pg(current->pgrp, SIGTTOU, 1);
+			return -ERESTARTSYS;
+		}
+	}
+	i = write_chan(tty,file,buf,count);
 	if (i > 0)
 		inode->i_mtime = CURRENT_TIME;
 	return i;
@@ -562,6 +565,9 @@ static int tty_lseek(struct inode * inode, struct file * file, off_t offset, int
  *
  * Open-counting is needed for pty masters, as well as for keeping
  * track of serial lines: DTR is dropped when the last close happens.
+ *
+ * The termios state of a pty is reset on first open so that
+ * settings don't persist across reuse.
  */
 static int tty_open(struct inode * inode, struct file * filp)
 {
@@ -574,16 +580,18 @@ static int tty_open(struct inode * inode, struct file * filp)
 	else
 		dev = MINOR(dev);
 	if (dev < 0)
-		return -ENODEV;
+		return -ENXIO;
+	if (!dev)
+		dev = fg_console + 1;
 	filp->f_rdev = 0x0400 | dev;
 /*
  * There be race-conditions here... Lots of them. Careful now.
  */
 	tty = o_tty = NULL;
-	if (!TTY_TABLE(dev)) {
+	if (!tty_table[dev]) {
 		tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
 		if (tty) {
-			retval = initialize_tty_struct(tty, TTY_TABLE_IDX(dev));
+			retval = initialize_tty_struct(tty, dev);
 			if (retval) {
 				free_page((unsigned long)tty);
 				return retval;
@@ -607,11 +615,11 @@ static int tty_open(struct inode * inode, struct file * filp)
 			return -ENOMEM;
 		}
 	}
-	if (TTY_TABLE(dev)) {
+	if (tty_table[dev]) {
 		free_page((unsigned long) tty);
-		tty = TTY_TABLE(dev);
+		tty = tty_table[dev];
 	} else if (tty)
-		TTY_TABLE(dev) = tty;
+		tty_table[dev] = tty;
 	else {
 		free_page((unsigned long) o_tty);
 		return -ENOMEM;
@@ -628,13 +636,12 @@ static int tty_open(struct inode * inode, struct file * filp)
 	if (IS_A_PTY_MASTER(dev)) {
 		if (tty->count)
 			return -EAGAIN;
-		if (tty->link)
-			tty->link->count++;
-
-		/* perhaps user applications that don't take care of
-		   this deserve what the get, but I think my system
-		   has hung do to this, esp. in X. -RAB */
-		tty->termios->c_lflag &= ~ECHO;
+		if (tty->link && tty->link->count++ == 0)
+			reset_tty_termios(PTY_OTHER(dev));
+		reset_tty_termios(dev);
+	} else if (IS_A_PTY_SLAVE(dev)) {
+		if (tty->count == 0)
+			reset_tty_termios(dev);
 	}
 	tty->count++;
 	retval = 0;
@@ -680,9 +687,11 @@ static void tty_release(struct inode * inode, struct file * filp)
 		return;
 	}
 	dev = MINOR(filp->f_rdev);
-	tty = TTY_TABLE(dev);
+	if (!dev)
+		dev = fg_console+1;
+	tty = tty_table[dev];
 	if (!tty) {
-		printk("tty_release: TTY_TABLE(%d) was NULL\n", dev);
+		printk("tty_release: tty_table[%d] was NULL\n", dev);
 		return;
 	}
 	if (IS_A_PTY_MASTER(dev) && tty->link)  {
@@ -693,7 +702,7 @@ static void tty_release(struct inode * inode, struct file * filp)
 		}
 	}
 	if (--tty->count < 0) {
-		printk("tty_release: bad TTY_TABLE(%d)->count: %d\n",
+		printk("tty_release: bad tty_table[%d]->count: %d\n",
 		       dev, tty->count);
 		tty->count = 0;
 	}
@@ -708,11 +717,11 @@ static void tty_release(struct inode * inode, struct file * filp)
 	if (tty->link) {
 		if (tty->link->count)
 			return;
-		free_page((unsigned long) TTY_TABLE(PTY_OTHER(dev)));
-		TTY_TABLE(PTY_OTHER(dev)) = 0;
+		free_page((unsigned long) tty_table[PTY_OTHER(dev)]);
+		tty_table[PTY_OTHER(dev)] = 0;
 	}
-	free_page((unsigned long) TTY_TABLE(dev));
-	TTY_TABLE(dev) = 0;
+	free_page((unsigned long) tty_table[dev]);
+	tty_table[dev] = 0;
 }
 
 static int tty_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
@@ -815,35 +824,18 @@ void do_SAK( struct tty_struct *tty)
  * This subroutine initializes a tty structure.  We have to set up
  * things correctly for each different type of tty.
  */
-int initialize_tty_struct(struct tty_struct *tty, int line)
+static int initialize_tty_struct(struct tty_struct *tty, int line)
 {
-	struct termios *tp;
-	
 	memset(tty, 0, sizeof(struct tty_struct));
 	tty->line = line;
 	tty->pgrp = -1;
 	tty->winsize.ws_row = 24;
 	tty->winsize.ws_col = 80;
 	if (!tty_termios[line]) {
-		tp = tty_termios[line] = kmalloc(sizeof(struct termios),
-						GFP_KERNEL);
-		if (!tp)
+		tty_termios[line] = kmalloc(sizeof(struct termios), GFP_KERNEL);
+		if (!tty_termios[line])
 			return -ENOMEM;
-		memset(tp, 0, sizeof(struct termios));
-		memcpy(tp->c_cc, INIT_C_CC, NCCS);
-		if (IS_A_CONSOLE(line)) {
-			tp->c_iflag = ICRNL | IXON;
-			tp->c_oflag = OPOST | ONLCR;
-			tp->c_cflag = B38400 | CS8 | CREAD;
-			tp->c_lflag = ISIG | ICANON | ECHO | ECHOCTL | ECHOKE;
-		} else if (IS_A_SERIAL(line)) {
-			tp->c_cflag = B2400 | CS8 | CREAD | HUPCL;
-		} else if (IS_A_PTY_MASTER(line)) {
-			tp->c_cflag = B9600 | CS8 | CREAD;
-		} else if (IS_A_PTY_SLAVE(line)) {
-			tp->c_cflag = B9600 | CS8 | CREAD;
-			tp->c_lflag = ISIG | ICANON;
-		}
+		reset_tty_termios(line);
 	}
 	tty->termios = tty_termios[line];
 	
@@ -859,6 +851,33 @@ int initialize_tty_struct(struct tty_struct *tty, int line)
 	return 0;
 }
 
+static void reset_tty_termios(int line)
+{
+	struct termios *tp = tty_termios[line];
+
+	if (!tp) {
+		printk("termios of line was NULL\n");
+		return;
+	}
+	memset(tp, 0, sizeof(struct termios));
+	memcpy(tp->c_cc, INIT_C_CC, NCCS);
+	if (IS_A_CONSOLE(line)) {
+		tp->c_iflag = ICRNL | IXON;
+		tp->c_oflag = OPOST | ONLCR;
+		tp->c_cflag = B38400 | CS8 | CREAD;
+		tp->c_lflag = ISIG | ICANON | ECHO | ECHOCTL | ECHOKE;
+	} else if (IS_A_SERIAL(line)) {
+		tp->c_cflag = B2400 | CS8 | CREAD | HUPCL;
+	} else if (IS_A_PTY_MASTER(line)) {
+		tp->c_cflag = B9600 | CS8 | CREAD;
+	} else if (IS_A_PTY_SLAVE(line)) {
+		tp->c_iflag = ICRNL | IXON;
+		tp->c_oflag = OPOST | ONLCR;
+		tp->c_cflag = B38400 | CS8 | CREAD;
+		tp->c_lflag = ISIG | ICANON | ECHO | ECHOCTL | ECHOKE;
+	}
+}
+
 long tty_init(long kmem_start)
 {
 	int i;
@@ -869,6 +888,7 @@ long tty_init(long kmem_start)
 		tty_table[i] =  0;
 		tty_termios[i] = 0;
 	}
+	kmem_start = kbd_init(kmem_start);
 	kmem_start = con_init(kmem_start);
 	kmem_start = rs_init(kmem_start);
 	printk("%d virtual consoles\n\r",NR_CONSOLES);

@@ -19,8 +19,17 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: udp.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: udp.c,v 0.8.4.5 1992/11/18 15:38:03 bir7 Exp $ */
 /* $Log: udp.c,v $
+ * Revision 0.8.4.5  1992/11/18  15:38:03  bir7
+ * fixed minor problem in waiting for memory.
+ *
+ * Revision 0.8.4.4  1992/11/17  14:19:47  bir7
+ * *** empty log message ***
+ *
+ * Revision 0.8.4.3  1992/11/15  14:55:30  bir7
+ * Fixed ctrl-h and added NULL checking to print_uh
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -242,7 +251,7 @@ udp_loopback (volatile struct sock *sk, unsigned short port,
 	uh -> source = sk->dummy_th.source;
 	uh -> dest = port;
 	uh -> len = len + sizeof (*uh);
-	verify_area (from , len);
+/*	verify_area (from , len); */
 	memcpy_fromfs(uh+1, from, len);
 	pair->inuse = 1;
 	if (pair->rqueue == NULL)
@@ -292,7 +301,7 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 	  {
 		  if (addr_len < sizeof (sin))
 		    return (-EINVAL);
-		  verify_area (usin, sizeof (sin));
+/*		  verify_area (usin, sizeof (sin));*/
 		  memcpy_fromfs (&sin, usin, sizeof(sin));
 		  if (sin.sin_family &&
 		      sin.sin_family != AF_INET)
@@ -340,10 +349,24 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 		    {
 		       printk ("udp_sendto: write buffer full?\n");
 		       print_sk(sk);
+		       tmp = sk->wmem_alloc;
 		       release_sock (sk);
-		       if (copied || !noblock)
-			 return (copied);
-		       return (-EAGAIN);
+		       if (copied) return (copied);
+		       if (noblock) return (-EAGAIN);
+		       cli();
+		       if (tmp <= sk->wmem_alloc)
+			 {
+			   interruptible_sleep_on (sk->sleep);
+			   if (current->signal & ~current->blocked)
+			     {
+			       sti();
+			       if (copied) return (copied);
+			       return (-ERESTARTSYS);
+			     }
+			 }
+		       sk->inuse = 1;
+		       sti();
+		       continue;
 		    }
 
 		  skb->mem_addr = skb;
@@ -383,7 +406,7 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 		  amt -= sizeof (*uh);
 		  buff += sizeof (*uh);
 
-		  verify_area (from, amt);
+/*		  verify_area (from, amt);*/
 		  memcpy_fromfs( buff, from, amt);
 
 		  len -= amt;
@@ -547,7 +570,7 @@ udp_connect (volatile struct sock *sk, struct sockaddr_in *usin, int addr_len)
 {
 	struct sockaddr_in sin;
 	if (addr_len < sizeof (sin)) return (-EINVAL);
-	verify_area (usin, sizeof (sin));
+/*	verify_area (usin, sizeof (sin)); */
 	memcpy_fromfs (&sin, usin, sizeof (sin));
 	if (sin.sin_family && sin.sin_family != AF_INET)
 	  return (-EAFNOSUPPORT);

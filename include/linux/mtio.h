@@ -1,9 +1,12 @@
+/* $Id: mtio.h,v 1.4 1992/11/18 01:32:03 root Exp root $
+ *
+ * linux/mtio.h header file for Linux. Written by H. Bergman
+ */
+
 #ifndef _LINUX_MTIO_H
 #define _LINUX_MTIO_H
 
-/*
- * linux/mtio.h header file for Linux. Written by H. Bergman
- */
+#include <linux/ioctl.h>
 
 /*
  * Structures and definitions for mag tape io control commands
@@ -42,12 +45,9 @@ struct	mtop {
 
 
 #define MTSETBLK 20	/* set block length (SCSI) */
+#define MTSETDENSITY 21	/* set tape density (SCSI) */
 
 
-/* may need to add
-#define MTFORMAT
- * or something similar for QIC-40/80 type tapes.
- */
 
 /* structure for MTIOCGET - mag tape get status command */
 
@@ -138,4 +138,5 @@ struct mt_tape_info {
  * I think DDS drives are DAT drives.
  */
 
-#endif /* not _LINUX_MTIO_H */
+#endif /* _LINUX_MTIO_H */
+

@@ -1,7 +1,10 @@
 /* Internet Control Message Protocol (ICMP) header file */
 
-/* $Id: icmp.h,v 0.8.4.1 1992/11/10 00:17:18 bir7 Exp $ */
+/* $Id: icmp.h,v 0.8.4.2 1992/11/15 14:55:30 bir7 Exp $ */
 /* $Log: icmp.h,v $
+ * Revision 0.8.4.2  1992/11/15  14:55:30  bir7
+ * Remove ctrl-h so diff no longer thinks it's a binary file.
+ *
  * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
  * version change only.
  *

@@ -36,6 +36,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/types.h>
 
 unsigned long high_memory = 0;
 
@@ -259,7 +260,7 @@ int unmap_page_range(unsigned long from, unsigned long size)
 			poff = 0;
 		}
 		for (pc = pcnt; pc--; page_table++) {
-			if (page = *page_table) {
+			if ((page = *page_table) != 0) {
 				--current->rss;
 				*page_table = 0;
 				if (1 & page)
@@ -336,7 +337,7 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 			if (permiss & 4)
 				mask |= 1;
 
-			if (page = *page_table) {
+			if ((page = *page_table) != 0) {
 				*page_table = 0;
 				--current->rss;
 				if (1 & page)
@@ -661,7 +662,7 @@ repeat:
 		*p = page | PAGE_ACCESSED | 7;
 		return *p;
 	}
-	if (page = get_free_page(GFP_KERNEL))
+	if ((page = get_free_page(GFP_KERNEL)) != 0)
 		goto repeat;
 	oom(current);
 	*p = BAD_PAGETABLE | 7;
@@ -953,5 +954,30 @@ void mem_init(unsigned long start_low_mem,
 		codepages << 2,
 		reservedpages << 2,
 		datapages << 2);
+	return;
+}
+
+void si_meminfo(struct sysinfo *val)
+{
+	int i;
+
+	i = high_memory >> PAGE_SHIFT;
+	val->totalram = 0;
+	val->freeram = 0;
+	val->sharedram = 0;
+	val->bufferram = buffermem;
+	while (i-- > 0)  {
+		if (mem_map[i] & MAP_PAGE_RESERVED)
+			continue;
+		val->totalram++;
+		if (!mem_map[i]) {
+			val->freeram++;
+			continue;
+		}
+		val->sharedram += mem_map[i]-1;
+	}
+	val->totalram <<= PAGE_SHIFT;
+	val->freeram <<= PAGE_SHIFT;
+	val->sharedram <<= PAGE_SHIFT;
 	return;
 }

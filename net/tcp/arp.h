@@ -19,13 +19,19 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: arp.h,v 0.8.4.1 1992/11/10 00:17:18 bir7 Exp $ */
+/* $Id: arp.h,v 0.8.4.2 1992/11/15 14:55:30 bir7 Exp $ */
 /* $Log: arp.h,v $
+ * Revision 0.8.4.2  1992/11/15  14:55:30  bir7
+ * make arp_q global so sock.c can mess with it.
+ *
  * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
  * version change only.
  *
  * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
  * Changed malloc to kmalloc and added $iId$ and $Log: arp.h,v $
+ * Revision 0.8.4.2  1992/11/15  14:55:30  bir7
+ * make arp_q global so sock.c can mess with it.
+ *
  * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
  * version change only.
  *.
@@ -53,7 +59,7 @@ struct arp_table
   unsigned char hard[MAX_ADDR_LEN];
 };
 
-
+struct sk_buff *arp_q;
 
 int arp_rcv(struct sk_buff *, struct device *, struct packet_type *);
 void arp_snd (unsigned long, struct device *, unsigned long);

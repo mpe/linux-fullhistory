@@ -4,6 +4,10 @@
  *		Drew Eckhardt 
  *
  *	<drew@colorado.edu>
+ *
+ *       Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *       add scatter-gather, multiple outstanding request, and other
+ *       enhancements.
  */
 #ifndef _SD_H
 	#define _SD_H
@@ -25,10 +29,7 @@
 	more in kernel space if that is your thing.
 */
 
-#define MAX_SD 4
-extern int NR_SD;
-
-extern struct hd_struct sd[MAX_SD << 4];
+extern struct hd_struct * sd;
 
 typedef struct {
 		unsigned capacity;		/* size in blocks */
@@ -40,11 +41,6 @@ typedef struct {
 		unsigned remap:1;		/* support remapping  */
 		} Scsi_Disk;
 	
-extern Scsi_Disk rscsi_disks[MAX_SD];
+extern Scsi_Disk * rscsi_disks;
 
-unsigned long sd_init(unsigned long, unsigned long);
-
-#define HOST (rscsi_disks[DEVICE_NR(CURRENT->dev)].device->host_no)
-#define ID (rscsi_disks[DEVICE_NR(CURRENT->dev)].device->id)
-#define LUN (rscsi_disks[DEVICE_NR(CURRENT->dev)].device->lun)
 #endif

@@ -13,9 +13,10 @@
 #include <asm/system.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
-#include "seagate.h"
+#include "../blk.h"
 #include "scsi.h"
 #include "hosts.h"
+#include "seagate.h"
 
 
 static int internal_command(unsigned char target, const void *cmnd,
@@ -196,7 +197,7 @@ static struct sigaction seagate_sigaction = {
 		}
 	}
 	 
-char *seagate_st0x_info(void)
+const char *seagate_st0x_info(void)
 {
 	static char buffer[] = "Seagate ST-0X SCSI driver by Drew Eckhardt \n"
 "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/seagate.c,v 1.1 1992/07/24 06:27:38 root Exp root $\n";
@@ -211,7 +212,8 @@ char *seagate_st0x_info(void)
 static unsigned char current_target;
 static unsigned char *current_cmnd, *current_data;
 static int current_bufflen;
-static void (*done_fn)(int, int) = NULL;
+static void (*done_fn)(Scsi_Cmnd *) = NULL;
+static Scsi_Cmnd * SCint = NULL;
 
 /*
  * These control whether or not disconnect / reconnect will be attempted,
@@ -268,7 +270,8 @@ static void seagate_reconnect_intr (int unused)
 				printk("scsi%d : done_fn(%d,%08x)", hostno, 
 				hostno, temp);
 #endif
-				done_fn (hostno, temp);
+				SCint->result = temp;
+				done_fn (SCint);
 				}
 			else
 				printk("done_fn() not defined.\n");
@@ -283,33 +286,34 @@ static void seagate_reconnect_intr (int unused)
  * is set to the one passed to the function.
  */
 
-int seagate_st0x_queue_command (unsigned char target, const void *cmnd,
-				void *buff, int bufflen, void (*fn)(int, 
-				 int))
+int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
 	{
 	int result;
 
-	done_fn = fn;
-	current_target = target;
-	(const void *) current_cmnd = cmnd;
-	current_data = buff;
-	current_bufflen = bufflen;
+	done_fn = done;
+	current_target = SCpnt->target;
+	(const void *) current_cmnd = SCpnt->cmnd;
+	current_data = SCpnt->request_buffer;
+	current_bufflen = SCpnt->request_bufflen;
+	SCint = SCpnt;
 
-	result = internal_command (target, cmnd, buff, bufflen, 
+	result = internal_command (SCpnt->target, SCpnt->cmnd, SCpnt->request_buffer,
+				   SCpnt->request_bufflen, 
 				   CAN_RECONNECT);
 	if (msg_byte(result) == DISCONNECT)
 		return 0;
 	else 
 		{
-		done_fn (hostno, result); 
+		  SCpnt->result = result;
+		done_fn (SCpnt); 
 		return 1; 
 		}
 	}
 
-int seagate_st0x_command (unsigned char target, const void *cmnd, 
-			void *buff, int bufflen)
+int seagate_st0x_command (Scsi_Cmnd * SCpnt)
 	{
-	return internal_command (target, cmnd, buff, bufflen, 
+	return internal_command (SCpnt->target, SCpnt->cmnd, SCpnt->request_buffer,
+				 SCpnt->request_bufflen, 
 				 (int) NO_RECONNECT);
 	}
 	
@@ -658,7 +662,7 @@ static int internal_command(unsigned char target, const void *cmnd,
  * 	We loop as long as we are in a data out phase, there is data to send, 
  *	and BSY is still active.
  */
-		__asm__ ("
+		__asm__ (
 
 /*
 	Local variables : 
@@ -669,9 +673,9 @@ static int internal_command(unsigned char target, const void *cmnd,
 
 	Test for any data here at all.
 */
-	movl %0, %%esi		/* local value of data */
-	movl %1, %%ecx		/* local value of len */	
-	orl %%ecx, %%ecx
+	"movl %0, %%esi\n"		/* local value of data */
+	"\tmovl %1, %%ecx\n"		/* local value of len */	
+	"\torl %%ecx, %%ecx
 	jz 2f
 
 	cld
@@ -679,23 +683,23 @@ static int internal_command(unsigned char target, const void *cmnd,
 	movl _st0x_cr_sr, %%ebx
 	movl _st0x_dr, %%edi
 	
-1:	movb (%%ebx), %%al
+1:	movb (%%ebx), %%al\n"
 /*
 	Test for BSY
 */
 
-	test $1, %%al 
-	jz 2f
+	"\ttest $1, %%al
+	jz 2f\n"
 
 /*
 	Test for data out phase - STATUS & REQ_MASK should be REQ_DATAOUT, which is 0.
 */
-	test $0xe, %%al
-	jnz 2f	
+	"\ttest $0xe, %%al
+	jnz 2f	\n"
 /*
 	Test for REQ
 */	
-	test $0x10, %%al
+	"\ttest $0x10, %%al
 	jz 1b
 	lodsb
 	movb %%al, (%%edi) 
@@ -720,7 +724,7 @@ static int internal_command(unsigned char target, const void *cmnd,
  * 	and BSY is still active
  */
  
-			__asm__ ("
+			__asm__ (
 /*
 	Local variables : 
 	ecx = len
@@ -731,44 +735,44 @@ static int internal_command(unsigned char target, const void *cmnd,
 	Test for room to read
 */
 
-	movl %0, %%edi		/* data */
-	movl %1, %%ecx		/* len */
-	orl %%ecx, %%ecx
+	"movl %0, %%edi\n"		/* data */
+	"\tmovl %1, %%ecx\n"		/* len */
+	"\torl %%ecx, %%ecx
 	jz 2f
 
 	cld
 	movl _st0x_cr_sr, %%esi
 	movl _st0x_dr, %%ebx
 
-1:	movb (%%esi), %%al
+1:	movb (%%esi), %%al\n"
 /*
 	Test for BSY
 */
 
-	test $1, %%al 
-	jz 2f
+	"\ttest $1, %%al 
+	jz 2f\n"
 
 /*
 	Test for data in phase - STATUS & REQ_MASK should be REQ_DATAIN, = STAT_IO, which is 4.
 */
-	movb $0xe, %%ah	
+	"\tmovb $0xe, %%ah	
 	andb %%al, %%ah
 	cmpb $0x04, %%ah
-	jne 2f
+	jne 2f\n"
 		
 /*
 	Test for REQ
 */	
-	test $0x10, %%al
+	"\ttest $0x10, %%al
 	jz 1b
 
 	movb (%%ebx), %%al	
 	stosb	
 	loop 1b
 
-2: 	movl %%edi, %2	 	/* data */
-	movl %%ecx, %3 		/* len */
-									":
+2: 	movl %%edi, %2\n"	 	/* data */
+	"\tmovl %%ecx, %3\n" 		/* len */
+									:
 /* output */
 "=r" (data), "=r" (len) :
 /* input */
@@ -923,7 +927,7 @@ static int internal_command(unsigned char target, const void *cmnd,
 	return retcode (st0x_aborted);
 	}
 
-int seagate_st0x_abort (int code)
+int seagate_st0x_abort (Scsi_Cmnd * SCpnt, int code)
 	{
 	if (code)
 		st0x_aborted = code;

@@ -121,7 +121,8 @@ static struct super_block * read_super(dev_t dev,char *name,int flags,void *data
 	if (!dev)
 		return NULL;
 	check_disk_change(dev);
-	if (s = get_super(dev))
+	s = get_super(dev);
+	if (s)
 		return s;
 	if (!(type = get_fs_type(name))) {
 		printk("get fs type failed %s\n",name);
@@ -304,7 +305,6 @@ static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * 
 		iput(dir_i);
 		return -EBUSY;
 	}
-	sb->s_flags = flags;
 	sb->s_covered = dir_i;
 	dir_i->i_mount = 1;
 	return 0;		/* we don't iput(dir_i) - see umount */
@@ -348,7 +348,8 @@ int sys_mount(char * dev_name, char * dir_name, char * type,
 		return -ENODEV;
 	t = fstype->name;
 	if (fstype->requires_dev) {
-		if (retval = namei(dev_name,&inode))
+		retval = namei(dev_name,&inode);
+		if (retval)
 			return retval;
 		if (!S_ISBLK(inode->i_mode)) {
 			iput(inode);
@@ -371,7 +372,8 @@ int sys_mount(char * dev_name, char * dir_name, char * type,
 	}
 	fops = blkdev_fops[MAJOR(dev)];
 	if (fops && fops->open) {
-		if (retval = fops->open(inode,NULL)) {
+		retval = fops->open(inode,NULL);
+		if (retval) {
 			iput(inode);
 			return retval;
 		}

@@ -460,7 +460,7 @@ static void bad_flp_intr(void)
  * 82077 Untested! 1Mbps data rate only possible with 82077-1.
  * TODO: increase MAX_BUFFER_SECTORS, add floppy_type entries.
  */
-static void inline perpendicular_mode(unsigned char rate)
+static inline void perpendicular_mode(unsigned char rate)
 {
 	if (fdc_version == FDC_TYPE_82077) {
 		output_byte(FD_PERPENDICULAR);
@@ -922,6 +922,8 @@ static void redo_fd_request(void)
 	unsigned int block;
 	char * buffer_area;
 	int device;
+
+	if (CURRENT && CURRENT->dev < 0) return;
 
 repeat:
 	if (format_status == FORMAT_WAIT)

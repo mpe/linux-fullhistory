@@ -4,10 +4,15 @@
  *		Drew Eckhardt 
  *
  *	<drew@colorado.edu>
+ *
+ *       Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *       add scatter-gather, multiple outstanding request, and other
+ *       enhancements.
  */
 
 #ifndef _SCSI_H
-	#define _SCSI_H
+#define _SCSI_H
+
 /*
 	$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/scsi.h,v 1.1 1992/07/24 06:27:38 root Exp root $
 
@@ -24,18 +29,24 @@
 #define REZERO_UNIT		0x01
 #define REQUEST_SENSE		0x03
 #define FORMAT_UNIT		0x04
+#define READ_BLOCK_LIMITS	0x05
 #define REASSIGN_BLOCKS		0x07
 #define READ_6			0x08
 #define WRITE_6			0x0a
 #define SEEK_6			0x0b
+#define READ_REVERSE		0x0f
+#define WRITE_FILEMARKS		0x10
+#define SPACE			0x11
 #define INQUIRY			0x12
+#define RECOVER_BUFFERED_DATA	0x14
 #define MODE_SELECT		0x15
 #define RESERVE			0x16
 #define RELEASE			0x17
 #define COPY			0x18
+#define ERASE			0x19
 #define MODE_SENSE		0x1a
 #define START_STOP		0x1b
-#define RECIEVE_DAIGNOSTIC	0x1c
+#define RECEIVE_DIAGNOSTIC	0x1c
 #define SEND_DIAGNOSTIC		0x1d
 #define ALLOW_MEDIUM_REMOVAL	0x1e
 
@@ -49,8 +60,20 @@
 #define SEARCH_EQUAL		0x31
 #define SEARCH_LOW		0x32
 #define SET_LIMITS		0x33
+#define PRE_FETCH		0x34
+#define SYNCRONIZE_CACHE	0x35
+#define LOCK_UNLOCK_CACHE	0x36
+#define READ_DEFECT_DATA	0x37
 #define COMPARE			0x39
 #define COPY_VERIFY		0x3a
+#define WRITE_BUFFER		0x3b
+#define READ_BUFFER		0x3c
+#define READ_LONG		0x3e
+#define CHANGE_DEFINITION	0x40
+#define LOG_SELECT		0x4c
+#define LOG_SENSE		0x4d
+#define MODE_SELECT_10		0x55
+#define MODE_SENSE_10		0x5a
 
 #define COMMAND_SIZE(opcode) ((opcode) ? ((opcode) > 0x20 ? 10 : 6) : 0)
 
@@ -212,8 +235,10 @@
 */
 
 typedef struct scsi_device {
-	unsigned char host_no, id, lun;
+	unsigned char host_no, id, lun, index;
 	int access_count;	/* Count of open channels/mounts */
+	struct wait_queue * device_wait;  /* Used to wait if device is busy */
+	char type;
 	unsigned writeable:1;
 	unsigned removable:1; 
 	unsigned random:1;
@@ -238,35 +263,203 @@ typedef struct scsi_device {
 	These are the SCSI devices available on the system.
 */
 
-#define MAX_SCSI_DEVICE 4
 extern int NR_SCSI_DEVICES;
-extern Scsi_Device scsi_devices[MAX_SCSI_DEVICE];
-/*
-	scsi_abort aborts the current command that is executing on host host.
-	The error code, if non zero is returned in the host byte, otherwise 
-	DID_ABORT is returned in the hostbyte.
-*/
-
-extern int scsi_abort (int host, int code);
-
+extern Scsi_Device * scsi_devices;
 /*
 	Initializes all SCSI devices.  This scans all scsi busses.
 */
 
 extern unsigned long scsi_dev_init (unsigned long, unsigned long);
 
+struct scatterlist {
+     char *  address; /* Location data is to be transferred to */
+     char * alt_address; /* Location of actual if address is a 
+			    dma indirect buffer.  NULL otherwise */
+     unsigned short length;
+     };
+
+#define ISA_DMA_THRESHOLD (0x00ffffff)
+
+char *   scsi_malloc(unsigned int);
+int      scsi_free(char *, unsigned int);
+extern unsigned int dma_free_sectors;   /* How much room do we have left */
+extern unsigned int need_isa_buffer;   /* True if some devices need indirection
+				 buffers */
+
 /*
-	You guesed it.  This sends a command to the selected SCSI host 
+	The Scsi_Cmnd structure is used by scsi.c internally, and for communication with
+	low level drivers that support multiple outstanding commands.
+*/
+typedef struct scsi_pointer {
+  char * ptr;                     /* data pointer */
+  int this_residual;              /* left in this buffer */
+  struct scatterlist *buffer;     /* which buffer */
+  int buffers_residual;           /* how many buffers left */
 
-extern void print_inquiry(unsigned char *data);
+  volatile int Status;
+  volatile int Message;
+  volatile int have_data_in;
+  volatile int sent_command;
+  volatile int phase;
+} Scsi_Pointer;
 
+typedef struct scsi_cmnd {
+	int host;
+	unsigned char target, lun,  index;
+	struct scsi_cmnd *next, *prev;	
+
+/* These elements define the operation we are about to perform */
+	unsigned char cmnd[10];
+	unsigned request_bufflen; /* Actual request size */
+
+	void * request_buffer;  /* Actual requested buffer */
+
+/* These elements define the operation we ultimately want to perform */
+	unsigned char data_cmnd[10];
+	unsigned short use_sg;  /* Number of pieces of scatter-gather */
+	unsigned short sglist_len;  /* size of malloc'd scatter-gather list */
+	unsigned bufflen;     /* Size of data buffer */
+	void *buffer;   /* Data buffer */
+	
+	struct request request;  /* A copy of the command we are working on*/
+
+	unsigned char sense_buffer[16];	 /* Sense for this command, if needed*/
+
+
+	int retries;
+	int allowed;
+	int timeout_per_command, timeout_total, timeout;
+/*
+ *	We handle the timeout differently if it happens when a reset, 
+ *	abort, etc are in process. 
+ */
+
+	unsigned char internal_timeout;
+
+	unsigned flags;
+		
+/* These variables are for the cdrom only.  Once we have variable size buffers
+   in the buffer cache, they will go away. */
+	int this_count; 
+/* End of special cdrom variables */
+	
+	/* Low-level done function - can be used by low-level driver to point
+	 to completion function.  Not used by mid/upper level code. */
+	void (*scsi_done)(struct scsi_cmnd *);  
+
+	void (*done)(struct scsi_cmnd *);  /* Mid-level done function */
+
+/* The following fields can be written to by the host specific code. 
+   Everything else should be left alone. */
+
+	Scsi_Pointer SCp;   /* Scratchpad used by some host adapters */
+
+	unsigned char * host_scribble; /* The host adapter is allowed to
+					  call scsi_malloc and get some memory
+					  and hang it here.  The host adapter
+					  is also expected to call scsi_free
+					  to release this memory.  (The memory
+					  obtained by scsi_malloc is guaranteed
+					  to be at an address < 16Mb). */
+
+	int result;                   /* Status code from lower level driver */
+	} Scsi_Cmnd;		 
+
+/*
+	scsi_abort aborts the current command that is executing on host host.
+	The error code, if non zero is returned in the host byte, otherwise 
+	DID_ABORT is returned in the hostbyte.
 */
 
+extern int scsi_abort (Scsi_Cmnd *, int code);
+
+extern void scsi_do_cmd (Scsi_Cmnd *, const void *cmnd ,
+                  void *buffer, unsigned bufflen, void (*done)(struct scsi_cmnd *),
+                  int timeout, int retries);
 
 
-extern void scsi_do_cmd (int host,  unsigned char target, const void *cmnd ,
-                  void *buffer, unsigned bufflen, void (*done)(int,int),
-                  int timeout, unsigned  char *sense_buffer, int retries);
+extern Scsi_Cmnd * allocate_device(struct request **, int, int);
 
-extern int scsi_reset (int host);
+extern Scsi_Cmnd * request_queueable(struct request *, int);
+
+extern int scsi_reset (Scsi_Cmnd *);
+
+extern int max_scsi_hosts;
+extern int MAX_SD, NR_SD, MAX_ST, NR_ST, MAX_SR, NR_SR;
+extern unsigned long sd_init(unsigned long, unsigned long);
+extern unsigned long sd_init1(unsigned long, unsigned long);
+extern void sd_attach(Scsi_Device *);
+
+extern unsigned long sr_init(unsigned long, unsigned long);
+extern unsigned long sr_init1(unsigned long, unsigned long);
+extern void sr_attach(Scsi_Device *);
+
+extern unsigned long st_init(unsigned long, unsigned long);
+extern unsigned long st_init1(unsigned long, unsigned long);
+extern void st_attach(Scsi_Device *);
+
+#if defined(MAJOR_NR) && (MAJOR_NR != 9)
+static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
+{
+	struct request * req;
+	struct buffer_head * bh;
+	struct task_struct * p;
+
+	req = &SCpnt->request;
+	req->errors = 0;
+	if (!uptodate) {
+		printk(DEVICE_NAME " I/O error\n\r");
+		printk("dev %04x, sector %d\n\r",req->dev,req->sector);
+	}
+
+	do {
+	  if ((bh = req->bh) != NULL) {
+	    req->bh = bh->b_reqnext;
+	    req->nr_sectors -= bh->b_size >> 9;
+	    req->sector += bh->b_size >> 9;
+	    bh->b_reqnext = NULL;
+	    bh->b_uptodate = uptodate;
+	    unlock_buffer(bh);
+	    sectors -= bh->b_size >> 9;
+	    if ((bh = req->bh) != NULL) {
+	      req->current_nr_sectors = bh->b_size >> 9;
+	      if (req->nr_sectors < req->current_nr_sectors) {
+		req->nr_sectors = req->current_nr_sectors;
+		printk("end_scsi_request: buffer-list destroyed\n");
+	      }
+	    }
+	  }
+	} while(sectors && bh);
+	if (req->bh){
+	  req->buffer = bh->b_data;
+	  return;
+	};
+	DEVICE_OFF(req->dev);
+	if ((p = req->waiting) != NULL) {
+		req->waiting = NULL;
+		p->state = TASK_RUNNING;
+		if (p->counter > current->counter)
+			need_resched = 1;
+	}
+	req->dev = -1;
+	wake_up(&scsi_devices[SCpnt->index].device_wait);
+	return;
+}
 #endif
+
+#define SCSI_SLEEP(QUEUE, CONDITION) {				\
+	if (CONDITION) {					\
+                struct wait_queue wait = { current, NULL};      \
+		add_wait_queue(QUEUE, &wait);			\
+sleep_repeat:							\
+		current->state = TASK_UNINTERRUPTIBLE;		\
+		if (CONDITION) {				\
+			schedule();				\
+			goto sleep_repeat;			\
+		}						\
+		remove_wait_queue(QUEUE, &wait);		\
+		current->state = TASK_RUNNING;			\
+	}; }
+
+#endif
+

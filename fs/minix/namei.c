@@ -205,7 +205,7 @@ int minix_create(struct inode * dir,const char * name, int len, int mode,
 	*result = NULL;
 	if (!dir)
 		return -ENOENT;
-	inode = minix_new_inode(dir->i_sb);
+	inode = minix_new_inode(dir);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -243,7 +243,7 @@ int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rd
 		iput(dir);
 		return -EEXIST;
 	}
-	inode = minix_new_inode(dir->i_sb);
+	inode = minix_new_inode(dir);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -253,8 +253,11 @@ int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rd
 	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode))
 		inode->i_op = &minix_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
+	else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &minix_dir_inode_operations;
+		if (dir->i_mode & S_ISGID)
+			inode->i_mode |= S_ISGID;
+	}
 	else if (S_ISLNK(inode->i_mode))
 		inode->i_op = &minix_symlink_inode_operations;
 	else if (S_ISCHR(inode->i_mode))
@@ -301,7 +304,7 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 		iput(dir);
 		return -EEXIST;
 	}
-	inode = minix_new_inode(dir->i_sb);
+	inode = minix_new_inode(dir);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -327,6 +330,8 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 	dir_block->b_dirt = 1;
 	brelse(dir_block);
 	inode->i_mode = S_IFDIR | (mode & 0777 & ~current->umask);
+	if (dir->i_mode & S_ISGID)
+		inode->i_mode |= S_ISGID;
 	inode->i_dirt = 1;
 	bh = minix_add_entry(dir,name,len,&de);
 	if (!bh) {
@@ -496,7 +501,7 @@ int minix_symlink(struct inode * dir, const char * name, int len, const char * s
 	int i;
 	char c;
 
-	if (!(inode = minix_new_inode(dir->i_sb))) {
+	if (!(inode = minix_new_inode(dir))) {
 		iput(dir);
 		return -ENOSPC;
 	}

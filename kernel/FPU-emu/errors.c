@@ -160,16 +160,16 @@ static struct {
   int type;
   char *name;
 } exception_names[] = {
-  EX_StackOver, "stack overflow",
-  EX_StackUnder, "stack underflow",
-  EX_Precision, "loss of precision",
-  EX_Underflow, "underflow",
-  EX_Overflow, "overflow",
-  EX_ZeroDiv, "divide by zero",
-  EX_Denormal, "denormalized operand",
-  EX_Invalid, "invalid operation",
-  EX_INTERNAL, "INTERNAL BUG in "FPU_VERSION,
-  0,0
+  { EX_StackOver, "stack overflow" },
+  { EX_StackUnder, "stack underflow" },
+  { EX_Precision, "loss of precision" },
+  { EX_Underflow, "underflow" },
+  { EX_Overflow, "overflow" },
+  { EX_ZeroDiv, "divide by zero" },
+  { EX_Denormal, "denormalized operand" },
+  { EX_Invalid, "invalid operation" },
+  { EX_INTERNAL, "INTERNAL BUG in "FPU_VERSION },
+  { 0, NULL }
 };
 
 /*
@@ -220,7 +220,8 @@ static struct {
 void exception(int n)
 {
   int i, int_type;
-  
+
+  int_type = 0;
   if ( n & EX_INTERNAL )
     {
       int_type = n - EX_INTERNAL;

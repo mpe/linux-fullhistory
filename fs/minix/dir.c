@@ -77,7 +77,7 @@ static int minix_readdir(struct inode * inode, struct file * filp,
 			filp->f_pos += sizeof (struct minix_dir_entry);
 			if (de->inode) {
 				for (i = 0; i < MINIX_NAME_LEN; i++)
-					if (c = de->name[i])
+					if ((c = de->name[i]) != 0)
 						put_fs_byte(c,i+dirent->d_name);
 					else
 						break;

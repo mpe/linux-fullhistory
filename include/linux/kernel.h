@@ -9,6 +9,7 @@ void verify_area(void * addr,int count);
 volatile void panic(const char * str);
 volatile void do_exit(long error_code);
 unsigned long simple_strtoul(const char *,char **,unsigned int);
+int sprintf(char * buf, const char * fmt, ...);
 int printk(const char * fmt, ...);
 
 void * kmalloc(unsigned int size, int priority);
@@ -24,5 +25,19 @@ void kfree_s(void * obj, int size);
  * permissions checks first, and check suser() last.
  */
 #define suser() (current->euid == 0)
+
+#define SI_LOAD_SHIFT	16
+struct sysinfo {
+	long uptime;			/* Seconds since boot */
+	unsigned long loads[3];		/* 1, 5, and 15 minute load averages */
+	unsigned long totalram;		/* Total usable main memory size */
+	unsigned long freeram;		/* Available memory size */
+	unsigned long sharedram;	/* Amount of shared memory */
+	unsigned long bufferram;	/* Memory used by buffers */
+	unsigned long totalswap;	/* Total swap space size */
+	unsigned long freeswap;		/* swap space still available */
+	unsigned short procs;		/* Number of current processes */
+	char _f[22];			/* Pads structure to 64 bytes */
+};
 
 #endif

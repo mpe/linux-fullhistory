@@ -70,7 +70,8 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid, 
 	*umask = current->umask;
 	if (!options) return 1;
 	for (this = strtok(options,","); this; this = strtok(NULL,",")) {
-		if (value = strchr(this,'=')) *value++ = 0;
+		if ((value = strchr(this,'=')) != NULL)
+			*value++ = 0;
 		if (!strcmp(this,"check") && value) {
 			if (value[0] && !value[1] && strchr("rns",*value))
 				*check = *value;
@@ -254,7 +255,7 @@ void msdos_read_inode(struct inode *inode)
 		inode->i_blksize = MSDOS_SB(inode->i_sb)->cluster_size*
 		    SECTOR_SIZE;
 		inode->i_blocks = (inode->i_size+inode->i_blksize-1)/
-		    inode->i_blksize;
+		    inode->i_blksize*MSDOS_SB(inode->i_sb)->cluster_size;
 		MSDOS_I(inode)->i_start = 0;
 		MSDOS_I(inode)->i_attrs = 0;
 		inode->i_mtime = inode->i_atime = inode->i_ctime = 0;
@@ -279,7 +280,7 @@ void msdos_read_inode(struct inode *inode)
 		}
 #endif
 		inode->i_size = 0;
-		if (this = raw_entry->start)
+		if ((this = raw_entry->start) != 0)
 			while (this != -1) {
 				inode->i_size += SECTOR_SIZE*MSDOS_SB(inode->
 				    i_sb)->cluster_size;
@@ -304,7 +305,7 @@ void msdos_read_inode(struct inode *inode)
 	/* this is as close to the truth as we can get ... */
 	inode->i_blksize = MSDOS_SB(inode->i_sb)->cluster_size*SECTOR_SIZE;
 	inode->i_blocks = (inode->i_size+inode->i_blksize-1)/
-	    inode->i_blksize;
+	    inode->i_blksize*MSDOS_SB(inode->i_sb)->cluster_size;
 	inode->i_mtime = inode->i_atime = inode->i_ctime =
 	    date_dos2unix(raw_entry->time,raw_entry->date);
 	brelse(bh);

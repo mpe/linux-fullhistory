@@ -13,13 +13,11 @@
 */
 #ifndef ASM
 int seagate_st0x_detect(int);
-int seagate_st0x_command(unsigned char target, const void *cmnd,  void *buff, 
-	int bufflen);
-int seagate_st0x_queue_command(unsigned char target, const void *cmnd,  
-	void *buff,  int bufflen, void (*done)(int, int));
+int seagate_st0x_command(Scsi_Cmnd *);
+int seagate_st0x_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 
-int seagate_st0x_abort(int);
-char *seagate_st0x_info(void);
+int seagate_st0x_abort(Scsi_Cmnd *, int);
+const char *seagate_st0x_info(void);
 int seagate_st0x_reset(void); 
 
 #ifndef NULL
@@ -29,7 +27,8 @@ int seagate_st0x_reset(void);
 #define SEAGATE_ST0X  {"Seagate ST-01/ST-02", seagate_st0x_detect, 	\
 			 seagate_st0x_info, seagate_st0x_command,  	\
 			 seagate_st0x_queue_command, seagate_st0x_abort, \
-			 seagate_st0x_reset, 1, 7, 0, 0}
+			 seagate_st0x_reset, NULL, NULL,		\
+			 1, 7, SG_NONE, 1, 0, 0}
 #endif
 
 

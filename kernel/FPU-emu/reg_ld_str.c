@@ -805,7 +805,8 @@ int reg_store_int64(void)
   round_to_int(&t);
   ((long *)&tll)[0] = t.sigl;
   ((long *)&tll)[1] = t.sigh;
-  if ( t.sigh & 0x80000000 )
+  if ( (t.sigh & 0x80000000) &&
+      !((t.sigh == 0x80000000) && (t.sigl == 0) && (t.sign == SIGN_NEG)) )
     {
       EXCEPTION(EX_Invalid);
       /* This is a special case: see sec 16.2.5.1 of the 80486 book */
@@ -819,7 +820,7 @@ put_indefinite:
       else
 	return 0;
     }
-  else if (t.sign)
+  else if ( t.sign )
     tll = - tll;
 
   RE_ENTRANT_CHECK_OFF
@@ -837,7 +838,6 @@ int reg_store_int32(void)
 {
   long *d = (long *)FPU_data_address;
   FPU_REG t;
-  long tl;
 
   if ( FPU_st0_tag == TW_Empty )
     {
@@ -859,24 +859,26 @@ int reg_store_int32(void)
 
   reg_move(FPU_st0_ptr, &t);
   round_to_int(&t);
-  if (t.sigh || (t.sigl & 0x80000000))
+  if (t.sigh ||
+      ((t.sigl & 0x80000000) &&
+       !((t.sigl == 0x80000000) && (t.sign == SIGN_NEG))) )
     {
       EXCEPTION(EX_Invalid);
       /* This is a special case: see sec 16.2.5.1 of the 80486 book */
       if ( control_word & EX_Invalid )
 	{
 	  /* Produce "indefinite" */
-	  tl = 0x80000000;
+	  t.sigl = 0x80000000;
 	}
       else
 	return 0;
     }
-  else
-    tl = FPU_st0_ptr->sign ? -t.sigl : t.sigl;
+  else if ( t.sign )
+    t.sigl = -(long)t.sigl;
 
   RE_ENTRANT_CHECK_OFF
   verify_area(d,4);
-  put_fs_long(tl, (unsigned long *) d);
+  put_fs_long(t.sigl, (unsigned long *) d);
   RE_ENTRANT_CHECK_ON
 
   return 1;
@@ -910,7 +912,9 @@ int reg_store_int16(void)
 
   reg_move(FPU_st0_ptr, &t);
   round_to_int(&t);
-  if (t.sigh || (t.sigl & 0xFFFF8000))
+  if (t.sigh ||
+      ((t.sigl & 0xffff8000) &&
+       !((t.sigl == 0x8000) && (t.sign == SIGN_NEG))) )
     {
       EXCEPTION(EX_Invalid);
       /* This is a special case: see sec 16.2.5.1 of the 80486 book */
@@ -922,12 +926,12 @@ int reg_store_int16(void)
       else
 	return 0;
     }
-  else
-    ts = FPU_st0_ptr->sign ? -t.sigl : t.sigl;
+  else if ( t.sign )
+    t.sigl = -t.sigl;
 
   RE_ENTRANT_CHECK_OFF
   verify_area(d,2);
-  put_fs_word(ts,(short *) d);
+  put_fs_word((short)t.sigl,(short *) d);
   RE_ENTRANT_CHECK_ON
 
   return 1;

@@ -10,6 +10,7 @@
 #include <linux/tty.h>
 #include <linux/timer.h>
 #include <linux/kernel.h>
+#include <linux/keyboard.h>
 #include <linux/kd.h>
 #include <linux/vt.h>
 
@@ -23,10 +24,6 @@
  */
 
 struct vt_cons vt_cons[NR_CONSOLES];
-
-extern unsigned char kleds;
-extern unsigned char kraw;
-extern unsigned char ke0;
 
 extern int sys_ioperm(unsigned long from, unsigned long num, int on);
 extern void set_leds(void);
@@ -71,12 +68,14 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 {
 	int console;
 	unsigned char ucval;
+	struct kbd_struct * kbd;
 
 	console = tty->line - 1;
 
 	if (console < 0 || console >= NR_CONSOLES)
 		return -EINVAL;
 
+	kbd = kbd_table + console;
 	switch (cmd) {
 	case KIOCSOUND:
 		return kiocsound((unsigned int)arg);
@@ -148,19 +147,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 
 	case KDSKBMODE:
 		if (arg == K_RAW) {
-			if (console == fg_console) {
-				kraw = 1;
-				ke0 = 0;
-			} else {
-				vt_cons[console].vc_kbdraw = 1;
-				vt_cons[console].vc_kbde0 = 0;
-			}
-		}
-		else if (arg == K_XLATE) {
-			if (console == fg_console)
-				kraw = 0;
-			else
-				vt_cons[console].vc_kbdraw = 0;
+			set_vc_kbd_flag(kbd, VC_RAW);
+		} else if (arg == K_XLATE) {
+			clr_vc_kbd_flag(kbd, VC_RAW);
 		}
 		else
 			return -EINVAL;
@@ -168,32 +157,37 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
 	case KDGKBMODE:
 		verify_area((void *) arg, sizeof(unsigned long));
-		ucval = (console == fg_console) ? kraw :
-			vt_cons[console].vc_kbdraw;
+		ucval = vc_kbd_flag(kbd, VC_RAW);
 		put_fs_long(ucval ? K_RAW : K_XLATE, (unsigned long *) arg);
 		return 0;
 
 	case KDGETLED:
 		verify_area((void *) arg, sizeof(unsigned char));
-		ucval = (console == fg_console) ? kleds :
-			vt_cons[console].vc_kbdleds;
-		put_fs_byte((((ucval & 1) ? LED_SCR : 0) |
-			     ((ucval & 2) ? LED_NUM : 0) |
-			     ((ucval & 4) ? LED_CAP : 0)),
-			    (unsigned char *) arg);
+		ucval = 0;
+		if (vc_kbd_flag(kbd, VC_SCROLLOCK))
+			ucval |= LED_SCR;
+		if (vc_kbd_flag(kbd, VC_NUMLOCK))
+			ucval |= LED_NUM;
+		if (vc_kbd_flag(kbd, VC_CAPSLOCK))
+			ucval |= LED_CAP;
+		put_fs_byte(ucval, (unsigned char *) arg);
 		return 0;
 	case KDSETLED:
 		if (arg & ~7)
 			return -EINVAL;
-		ucval = (((arg & LED_SCR) ? 1 : 0) |
-			 ((arg & LED_NUM) ? 2 : 0) |
-			 ((arg & LED_CAP) ? 4 : 0));
-		if (console == fg_console) {
-			kleds = ucval;
-			set_leds();
-		}
+		if (arg & LED_SCR)
+			set_vc_kbd_flag(kbd, VC_SCROLLOCK);
 		else
-			vt_cons[console].vc_kbdleds = ucval;
+			clr_vc_kbd_flag(kbd, VC_SCROLLOCK);
+		if (arg & LED_NUM)
+			set_vc_kbd_flag(kbd, VC_NUMLOCK);
+		else
+			clr_vc_kbd_flag(kbd, VC_NUMLOCK);
+		if (arg & LED_CAP)
+			set_vc_kbd_flag(kbd, VC_CAPSLOCK);
+		else
+			clr_vc_kbd_flag(kbd, VC_CAPSLOCK);
+		set_leds();
 		return 0;
 
 	default:

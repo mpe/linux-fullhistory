@@ -78,6 +78,7 @@ extern unsigned long scsi_dev_init(unsigned long, unsigned long);
 #define EXT_MEM_K (*(unsigned short *)0x90002)
 #define DRIVE_INFO (*(struct drive_info *)0x90080)
 #define SCREEN_INFO (*(struct screen_info *)0x90000)
+#define RAMDISK_SIZE (*(unsigned short *)0x901F8)
 #define ORIG_ROOT_DEV (*(unsigned short *)0x901FC)
 #define AUX_DEVICE_INFO (*(unsigned char *)0x901FF)
 
@@ -145,6 +146,7 @@ struct drive_info { char dummy[32]; } drive_info;
 struct screen_info screen_info;
 
 unsigned char aux_device_present;
+int ramdisk_size;
 
 static char command_line[80] = { 0, };
 
@@ -169,8 +171,8 @@ static void parse_options(char *line)
 	args = 0;
 	envs = 1;	/* TERM is set to 'console' by default */
 	next = line;
-	while (line = next) {
-		if (next = strchr(line,' '))
+	while ((line = next) != NULL) {
+		if ((next = strchr(line,' ')) != NULL)
 			*next++ = 0;
 		/*
 		 * check for kernel options first..
@@ -209,6 +211,7 @@ void start_kernel(void)
 	aux_device_present = AUX_DEVICE_INFO;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= 0xfffff000;
+	ramdisk_size = RAMDISK_SIZE;
 #ifdef MAX_16M
 	if (memory_end > 16*1024*1024)
 		memory_end = 16*1024*1024;
@@ -294,7 +297,7 @@ void init(void)
 		while (pid != wait(&i))
 			/* nothing */;
 	while (1) {
-		if ((pid=fork())<0) {
+		if ((pid = fork()) < 0) {
 			printf("Fork failed in init\r\n");
 			continue;
 		}

@@ -124,7 +124,6 @@ int do_IRQ(int irq, struct pt_regs * regs)
 	struct sigaction * sa = irq + irq_sigaction;
 
 	sa->sa_handler((int) regs);
-	return 0;		/* re-enable the irq when returning */
 }
 
 /*
@@ -137,7 +136,6 @@ int do_fast_IRQ(int irq)
 	struct sigaction * sa = irq + irq_sigaction;
 
 	sa->sa_handler(irq);
-	return 0;		/* re-enable the irq when returning */
 }
 
 int irqaction(unsigned int irq, struct sigaction * new)

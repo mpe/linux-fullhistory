@@ -86,12 +86,12 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 		s->u.minix_sb.s_zmap[i] = NULL;
 	block=2;
 	for (i=0 ; i < s->u.minix_sb.s_imap_blocks ; i++)
-		if (s->u.minix_sb.s_imap[i]=bread(dev,block,BLOCK_SIZE))
+		if ((s->u.minix_sb.s_imap[i]=bread(dev,block,BLOCK_SIZE)) != NULL)
 			block++;
 		else
 			break;
 	for (i=0 ; i < s->u.minix_sb.s_zmap_blocks ; i++)
-		if (s->u.minix_sb.s_zmap[i]=bread(dev,block,BLOCK_SIZE))
+		if ((s->u.minix_sb.s_zmap[i]=bread(dev,block,BLOCK_SIZE)) != NULL)
 			block++;
 		else
 			break;

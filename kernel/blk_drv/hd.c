@@ -206,7 +206,7 @@ static int drive_busy(void)
 			return 0;
 	}
 	printk("HD controller times out, status = 0x%02x\n\r",c);
-	return(1);
+	return 1;
 }
 
 static void reset_controller(void)
@@ -421,6 +421,8 @@ static void do_hd_request(void)
 	unsigned int sec,head,cyl,track;
 	unsigned int nsect;
 
+	if (CURRENT && CURRENT->dev < 0) return;
+
 	if (DEVICE_INTR)
 		return;
 repeat:
@@ -512,6 +514,12 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 				(short *) &loc->cylinders);
 			put_fs_long(hd[MINOR(inode->i_rdev)].start_sect,
 				(long *) &loc->start);
+			return 0;
+         	case BLKGETSIZE:   /* Return device size */
+			if (!arg)  return -EINVAL;
+			verify_area((long *) arg, sizeof(long));
+			put_fs_long(hd[MINOR(inode->i_rdev)].nr_sects,
+				(long *) arg);
 			return 0;
 		case BLKRRPART: /* Re-read partition tables */
 			return revalidate_hddisk(inode->i_rdev, 1);

@@ -23,8 +23,11 @@
     The author of this file may be reached at rth@sparta.com or Sparta, Inc.
     7926 Jones Branch Dr. Suite 900, McLean Va 22102.
 */
-/* $Id: icmp.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: icmp.c,v 0.8.4.3 1992/11/18 15:38:03 bir7 Exp $ */
 /* $Log: icmp.c,v $
+ * Revision 0.8.4.3  1992/11/18  15:38:03  bir7
+ * Fixed some printk's.
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -53,8 +56,17 @@
 #include <linux/timer.h>
 #include <asm/system.h>
 #include <asm/segment.h>
-#include "../kern_sock.h" /* for PRINTK */
 #include "icmp.h"
+#ifdef PRINTK
+#undef PRINTK
+#endif
+
+#undef ICMP_DEBUG
+#ifdef ICMP_DEBUG
+#define PRINTK printk
+#else
+#define PRINTK dummy_routine
+#endif
 
 #define min(a,b) ((a)<(b)?(a):(b))
 
@@ -168,7 +180,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	if( ip_compute_csum( (unsigned char *)icmph, len ) )
 	  {
 	     /* Failed checksum! */
-	     PRINTK("\nICMP ECHO failed checksum!");
+	     PRINTK("ICMP ECHO failed checksum!\n");
 	     skb1->sk = NULL;
 	     kfree_skb (skb1, FREE_READ);
 	     return (0);
@@ -251,7 +263,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	if (offset < 0)
 	  {
 	     /* Problems building header */
-	     PRINTK("\nCould not build IP Header for ICMP ECHO Response");
+	     PRINTK("Could not build IP Header for ICMP ECHO Response\n");
 	     kfree_s (skb->mem_addr, skb->mem_len);
 	     skb1->sk = NULL;
 	     kfree_skb (skb1, FREE_READ);
@@ -281,7 +293,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	return( 0 );
 
 	default:
-	PRINTK("\nUnsupported ICMP type = x%x", icmph->type );
+	PRINTK("Unsupported ICMP type = x%x\n", icmph->type );
 	skb1->sk = NULL;
 	kfree_skb (skb1, FREE_READ);
 	return( 0 ); /* just toss the packet */

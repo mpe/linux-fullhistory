@@ -282,7 +282,7 @@ int fat_free(struct inode *inode,int skip)
 			panic("fat_free: deleting beyond EOF");
 		if (MSDOS_SB(inode->i_sb)->free_clusters != -1)
 			MSDOS_SB(inode->i_sb)->free_clusters++;
-		inode->i_blocks--;
+		inode->i_blocks -= MSDOS_SB(inode->i_sb)->cluster_size;
 	}
 	unlock_fat(inode->i_sb);
 	cache_inval_inode(inode);

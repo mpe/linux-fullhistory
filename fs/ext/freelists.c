@@ -32,6 +32,7 @@
 
 #include <linux/sched.h>
 #include <linux/ext_fs.h>
+#include <linux/stat.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/locks.h>
@@ -230,15 +231,17 @@ printk("ext_free_inode: inode full, skipping to %d\n", inode->i_ino);
 	clear_inode(inode);
 }
 
-struct inode * ext_new_inode(struct super_block * sb)
+struct inode * ext_new_inode(const struct inode * dir)
 {
+	struct super_block * sb;
 	struct inode * inode;
 	struct ext_free_inode * efi;
 	unsigned long block;
 	int j;
 
-	if (!sb || !(inode=get_empty_inode()))
+	if (!dir || !(inode=get_empty_inode()))
 		return NULL;
+	sb = dir->i_sb;
 	inode->i_sb = sb;
 	inode->i_flags = sb->s_flags;
 	if (!sb->u.ext_sb.s_firstfreeinodeblock)
@@ -275,7 +278,7 @@ printk("ext_free_inode: inode empty, skipping to %d\n", efi->next);
 	inode->i_nlink = 1;
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->euid;
-	inode->i_gid = current->egid;
+	inode->i_gid = (dir->i_mode & S_ISGID) ? dir->i_gid : current->egid;
 	inode->i_dirt = 1;
 	inode->i_ino = j;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;

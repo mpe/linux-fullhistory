@@ -19,8 +19,11 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: loopback.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: loopback.c,v 0.8.4.3 1992/11/18 15:38:03 bir7 Exp $ */
 /* $Log: loopback.c,v $
+ * Revision 0.8.4.3  1992/11/18  15:38:03  bir7
+ * Fixed bug in start_xmit.
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -54,9 +57,15 @@
 #include "sock.h"
 #include "arp.h"
 
-#include "../kern_sock.h" /* for PRINTK */
+#ifdef PRINTK
+#undef PRINTK
+#endif
 
-
+#ifdef LOOPBACK_DEBUG
+#define PRINTK printk
+#else
+#define PRINTK dummy_routine
+#endif
 
 static int
 loopback_xmit(struct sk_buff *skb, struct device *dev)
@@ -77,27 +86,36 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
     }
   inuse = 1;
   sti();
-  tmp = NULL;
-  done = dev_rint ((unsigned char *)(skb+1), skb->len, 0, dev);
+
+  done = -1;
+  while (done == -1)
+    done = dev_rint ((unsigned char *)(skb+1), skb->len, 0, dev);
 
   if (skb->free)
     kfree_skb (skb, FREE_WRITE);
 
+  tmp = NULL;
+  i = 0;
   while (done != 1)
 	 {
 	    if (done != -1 && (i = dev_tint (buff,dev)) != 0)
 	      {
 		 /* print out the buffer. */
-		 PRINTK ("ethernet xmit: \n");
+		 PRINTK ("loopback xmit: \n");
 		 eth = (struct enet_header *)buff;
 		 print_eth (eth);
 		 tmp = buff;
 		 done = dev_rint (buff, i, 0, dev);
-		 if (done != -1) tmp = NULL;
+		 if (done != -1)
+		   {
+		     tmp = NULL;
+		     i = 0;
+		   }
 	      }
 	    else
 	      {
-		 done = dev_rint (tmp, 0, 0, dev);
+		if (i == 0) tmp = NULL;
+		 done = dev_rint (tmp, i, 0, dev);
 	      }
 	    
 	 }

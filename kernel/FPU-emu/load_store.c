@@ -48,6 +48,7 @@ void load_store_instr(char type)
 {
   FPU_REG *pop_ptr;  /* We need a version of FPU_st0_ptr which won't change. */
 
+  pop_ptr = NULL;
   switch ( type_table[(int) (unsigned) type] )
     {
     case _NONE_:

@@ -39,7 +39,7 @@ void flush_input(struct tty_struct * tty)
 	flush(&tty->secondary);
 	tty->secondary.data = 0;
 
-	if (tty = tty->link) {
+	if ((tty = tty->link) != NULL) {
 		flush(&tty->write_q);
 		wake_up_interruptible(&tty->write_q.proc_list);
 	}
@@ -51,7 +51,7 @@ void flush_output(struct tty_struct * tty)
 	tty->ctrl_status |= TIOCPKT_FLUSHWRITE;
 	flush(&tty->write_q);
 	wake_up_interruptible(&tty->write_q.proc_list);
-	if (tty = tty->link) {
+	if ((tty = tty->link) != NULL) {
 		flush(&tty->read_q);
 		wake_up_interruptible(&tty->read_q.proc_list);
 		flush(&tty->secondary);
@@ -336,19 +336,19 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			return -EINVAL; /* set controlling term NI */
 		case TIOCGPGRP:
 			verify_area((void *) arg,4);
-			put_fs_long(tty->pgrp,(unsigned long *) arg);
+			put_fs_long(termios_tty->pgrp,(unsigned long *) arg);
 			return 0;
 		case TIOCSPGRP:
 			if ((current->tty < 0) ||
-			    (current->tty != dev) ||
-			    (tty->session != current->session))
+			    (current->tty != termios_dev) ||
+			    (termios_tty->session != current->session))
 				return -ENOTTY;
 			pgrp=get_fs_long((unsigned long *) arg);
 			if (pgrp < 0)
 				return -EINVAL;
 			if (session_of_pgrp(pgrp) != current->session)
 				return -EPERM;
-			tty->pgrp = pgrp;			
+			termios_tty->pgrp = pgrp;			
 			return 0;
 		case TIOCOUTQ:
 			verify_area((void *) arg,4);

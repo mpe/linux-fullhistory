@@ -19,8 +19,12 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: arp.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: arp.c,v 0.8.4.3 1992/11/15 14:55:30 bir7 Exp $ */
 /* $Log: arp.c,v $
+ * Revision 0.8.4.3  1992/11/15  14:55:30  bir7
+ * Put more cli/sti pairs in send_q and another sanity check
+ * in arp_queue.
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -28,7 +32,7 @@
  * version change only.
  *
  * Revision 0.8.3.3  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$
+ * Changed malloc to kmalloc and added Id and Log
  *
  */
 
@@ -55,19 +59,22 @@
 #endif
 
 static struct arp_table *arp_table[ARP_TABLE_SIZE] ={NULL, };
-static struct sk_buff *arp_q=NULL;
+struct sk_buff *arp_q=NULL;
 
 /* this will try to retransmit everything on the queue. */
 static void
 send_arp_q(void)
 {
    struct sk_buff *skb;
+   cli();
    if (arp_q == NULL) return;
 
    skb = arp_q;
    do {
+     sti();
       if (!skb->dev->rebuild_header (skb+1, skb->dev))
 	{
+	  cli();
 	   if (skb->next == skb)
 	     {
 		arp_q = NULL;
@@ -81,13 +88,16 @@ send_arp_q(void)
 	   skb->next = NULL;
 	   skb->prev = NULL;
 	   skb->arp  = 1;
+	  sti();
 	   skb->dev->queue_xmit (skb, skb->dev, 0);
+	   cli();
 	   if (arp_q == NULL) break;
 	   skb = arp_q;
 	   continue;
 	}
       skb=skb->next;
    } while (skb != arp_q);
+   sti();
 
 }
 
@@ -98,6 +108,11 @@ print_arp(struct arp *arp)
   unsigned long *lptr;
   unsigned char *ptr;
   PRINTK ("arp: \n");
+  if (arp == NULL)
+    {
+      PRINTK ("(null)\n");
+      return;
+    }
   PRINTK ("   hrd = %d\n",net16(arp->hrd));
   PRINTK ("   pro = %d\n",net16(arp->pro));
   PRINTK ("   hlen = %d plen = %d\n",arp->hlen, arp->plen);
@@ -440,15 +455,15 @@ arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 	 }
     }
 
-  /* if we didn't find an entry, we will try to 
-     send an arp packet. */
-  if (apt == NULL || after (timer_seq, apt->last_used+ARP_RES_TIME))
-    arp_snd(paddr,dev,saddr);
-
-  /* this assume haddr are atleast 4 bytes.
+  /* this assume haddr are at least 4 bytes.
      If this isn't true we can use a lookup
      table, one for every dev. */
   *(unsigned long *)haddr = paddr;
+
+  /* if we didn't find an entry, we will try to 
+     send an arp packet. */
+  arp_snd(paddr,dev,saddr);
+
   return (1);
 }
 
@@ -476,7 +491,13 @@ arp_add_broad (unsigned long addr, struct device *dev)
 void
 arp_queue(struct sk_buff *skb)
 {
-   cli();
+  cli();
+  if (skb->next != NULL)
+    {
+      sti();
+      printk ("arp.c: arp_queue skb already on queue. \n");
+      return;
+    }
    if (arp_q == NULL)
      {
 	arp_q = skb;

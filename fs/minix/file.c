@@ -65,7 +65,10 @@ static int minix_file_read(struct inode * inode, struct file * filp, char * buf,
 {
 	int read,left,chars;
 	int block, blocks, offset;
+	int bhrequest;
+	int ra_blocks, max_block, nextblock;
 	struct buffer_head ** bhb, ** bhe;
+	struct buffer_head * bhreq[NBUF];
 	struct buffer_head * buflist[NBUF];
 
 	if (!inode) {
@@ -89,50 +92,118 @@ static int minix_file_read(struct inode * inode, struct file * filp, char * buf,
 	offset = filp->f_pos & (BLOCK_SIZE-1);
 	blocks = (left + offset + BLOCK_SIZE - 1) / BLOCK_SIZE;
 	bhb = bhe = buflist;
+
+	ra_blocks = read_ahead[MAJOR(inode->i_dev)] / (BLOCK_SIZE >> 9);
+	max_block = (inode->i_size + BLOCK_SIZE - 1)/BLOCK_SIZE;
+	nextblock = -1;
+
+	/* We do this in a two stage process.  We first try and request
+	   as many blocks as we can, then we wait for the first one to
+	   complete, and then we try and wrap up as many as are actually
+	   done.  This routine is rather generic, in that it can be used
+	   in a filesystem by substituting the appropriate function in
+	   for getblk.
+
+	   This routine is optimized to make maximum use of the various
+	   buffers and caches. */
+
 	do {
-		if (blocks) {
+	        bhrequest = 0;
+		while (blocks) {
+		        int uptodate;
 			--blocks;
-			*bhb = minix_getblk(inode,block++,0);
-			if (*bhb && !(*bhb)->b_uptodate)
-				ll_rw_block(READ, 1, bhb);
+			*bhb = minix_getblk(inode, block++, 0);
+			uptodate = 1;
+			if (*bhb && !(*bhb)->b_uptodate) {
+			        uptodate = 0;
+			        bhreq[bhrequest++] = *bhb;
+				nextblock = (*bhb)->b_blocknr + 1;
+			      };
 
 			if (++bhb == &buflist[NBUF])
 				bhb = buflist;
 
-			if (bhb != bhe)
-				continue;
-		}
-		if (*bhe) {
-			wait_on_buffer(*bhe);
-			if (!(*bhe)->b_uptodate) {
-				do {
-					brelse(*bhe);
-					if (++bhe == &buflist[NBUF])
-						bhe = buflist;
-				} while (bhe != bhb);
-				break;
-			}
-		}
+			/* If the block we have on hand is uptodate, go ahead
+			   and complete processing. */
+			if(bhrequest == 0 && uptodate) break;
 
-		if (left < BLOCK_SIZE - offset)
-			chars = left;
-		else
-			chars = BLOCK_SIZE - offset;
-		filp->f_pos += chars;
-		left -= chars;
-		read += chars;
-		if (*bhe) {
-			memcpy_tofs(buf,offset+(*bhe)->b_data,chars);
+			if (bhb == bhe)
+				break;
+		      }
+
+		if(blocks == 0 && bhrequest && filp->f_reada && bhb != bhe) { 
+		  /* If we are going to read something anyways, add in the
+		     read-ahead blocks */
+		  while(ra_blocks){
+		    if (block >= max_block) break;
+		    if(bhrequest == NBUF) break;  /* Block full */
+		    --ra_blocks;
+		    *bhb = minix_getblk(inode, block++, 0);
+
+		    if (*bhb && !(*bhb)->b_uptodate) {
+		      if((*bhb)->b_blocknr != nextblock) {
+			brelse(*bhb);
+			break;
+		      };
+		      nextblock = (*bhb)->b_blocknr + 1;
+		      bhreq[bhrequest++] = *bhb;
+		    };
+		    
+		    if (++bhb == &buflist[NBUF])
+		      bhb = buflist;
+		    
+		    if (bhb == bhe)
+		      break;
+		  };
+		};
+		/* Now request them all */
+		if (bhrequest)
+		  ll_rw_block(READ, bhrequest, bhreq);
+
+		do{ /* Finish off all I/O that has actually completed */
+		  if (*bhe) {/* test for valid buffer */
+		    wait_on_buffer(*bhe);
+		    if (!(*bhe)->b_uptodate) {
+		      do {
 			brelse(*bhe);
-			buf += chars;
-		} else {
-			while (chars-->0)
-				put_fs_byte(0,buf++);
-		}
-		offset = 0;
-		if (++bhe == &buflist[NBUF])
-			bhe = buflist;
+			if (++bhe == &buflist[NBUF])
+			  bhe = buflist;
+		      } while (bhe != bhb);
+		      break;
+		    }
+		  }
+		  
+		  if (left < BLOCK_SIZE - offset)
+		    chars = left;
+		  else
+		    chars = BLOCK_SIZE - offset;
+		  filp->f_pos += chars;
+		  left -= chars;
+		  read += chars;
+		  if (*bhe) {
+		    memcpy_tofs(buf,offset+(*bhe)->b_data,chars);
+		    brelse(*bhe);
+		    buf += chars;
+		  } else {
+		    while (chars-->0)
+		      put_fs_byte(0,buf++);
+		  }
+		  offset = 0;
+		  if (++bhe == &buflist[NBUF])
+		    bhe = buflist;
+		} while( bhe != bhb && (*bhe == 0 || !(*bhe)->b_lock) && 
+			(left > 0));
 	} while (left > 0);
+
+/* Release the read-ahead blocks */
+	while (bhe != bhb) {
+	  if (*bhe) brelse(*bhe);
+	  if (++bhe == &buflist[NBUF])
+	    bhe = buflist;
+	};
+
+	filp->f_reada = 1;
+
 	if (!read)
 		return -EIO;
 	if (!IS_RDONLY(inode)) {

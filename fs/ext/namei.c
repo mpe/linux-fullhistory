@@ -122,18 +122,23 @@ static struct buffer_head * ext_find_entry(struct inode * dir,
 			if (prev_dir)
 				*prev_dir = NULL;
 		}
-		if (de->rec_len < 8 || de->rec_len % 4 != 0 ||
-		    de->rec_len < de->name_len + 8) {
+		if (de->rec_len < 8 || de->rec_len % 8 != 0 ||
+		    de->rec_len < de->name_len + 8 ||
+		    (((char *) de) + de->rec_len-1 >= BLOCK_SIZE+bh->b_data)) {
 			printk ("ext_find_entry: bad dir entry\n");
 			printk ("dev=%d, dir=%d, offset=%d, rec_len=%d, name_len=%d\n",
 				dir->i_dev, dir->i_ino, offset, de->rec_len, de->name_len);
-			brelse (bh);
-			return NULL;
+			de = (struct ext_dir_entry *) (bh->b_data+BLOCK_SIZE);
+			offset = ((offset / BLOCK_SIZE) + 1) * BLOCK_SIZE;
+			continue;
+/*			brelse (bh);
+			return NULL; */
 		}
 		if (ext_match(namelen,name,de)) {
 			*res_dir = de;
 			if (next_dir)
-				if (offset + de->rec_len < dir->i_size)
+				if (offset + de->rec_len < dir->i_size &&
+				    ((char *)de) + de->rec_len < BLOCK_SIZE+bh->b_data)
 					*next_dir = (struct ext_dir_entry *)
 						((char *) de + de->rec_len);
 				else
@@ -221,15 +226,15 @@ printk ("ext_add_entry: skipping to next block\n");
 #endif
 			brelse(bh);
 			bh = NULL;
-			bh = ext_bread(dir,offset>>BLOCK_SIZE_BITS,1);
+			bh = ext_bread(dir,offset>>BLOCK_SIZE_BITS,0);
 			if (!bh)
 				return NULL;
 			de = (struct ext_dir_entry *) bh->b_data;
 		}
 		if (offset >= dir->i_size) {
 			/* Check that the directory entry fits in the block */
-			if (offset % BLOCK_SIZE == 0 
-			    || (BLOCK_SIZE - (offset % BLOCK_SIZE)) < rec_len) {
+			if (offset % BLOCK_SIZE == 0  ||
+			    (BLOCK_SIZE - (offset % BLOCK_SIZE)) < rec_len) {
 				if ((offset % BLOCK_SIZE) != 0) {
 					/* If the entry does not fit in the
 					   block, the remainder of the block
@@ -262,7 +267,8 @@ printk ("ext_add_entry : creating next block\n");
 			dir->i_ctime = CURRENT_TIME;
 		}
 		if (de->rec_len < 8 || de->rec_len % 4 != 0 ||
-		    de->rec_len < de->name_len + 8) {
+		    de->rec_len < de->name_len + 8 ||
+		    (((char *) de) + de->rec_len-1 >= BLOCK_SIZE+bh->b_data)) {
 			printk ("ext_addr_entry: bad dir entry\n");
 			printk ("dev=%d, dir=%d, offset=%d, rec_len=%d, name_len=%d\n",
 				dir->i_dev, dir->i_ino, offset, de->rec_len, de->name_len);
@@ -307,7 +313,7 @@ int ext_create(struct inode * dir,const char * name, int len, int mode,
 	*result = NULL;
 	if (!dir)
 		return -ENOENT;
-	inode = ext_new_inode(dir->i_sb);
+	inode = ext_new_inode(dir);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -345,7 +351,7 @@ int ext_mknod(struct inode * dir, const char * name, int len, int mode, int rdev
 		iput(dir);
 		return -EEXIST;
 	}
-	inode = ext_new_inode(dir->i_sb);
+	inode = ext_new_inode(dir);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -355,8 +361,11 @@ int ext_mknod(struct inode * dir, const char * name, int len, int mode, int rdev
 	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode))
 		inode->i_op = &ext_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode))
+	else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &ext_dir_inode_operations;
+		if (dir->i_mode & S_ISGID)
+			inode->i_mode |= S_ISGID;
+	}
 	else if (S_ISLNK(inode->i_mode))
 		inode->i_op = &ext_symlink_inode_operations;
 	else if (S_ISCHR(inode->i_mode))
@@ -403,7 +412,7 @@ int ext_mkdir(struct inode * dir, const char * name, int len, int mode)
 		iput(dir);
 		return -EEXIST;
 	}
-	inode = ext_new_inode(dir->i_sb);
+	inode = ext_new_inode(dir);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
@@ -437,6 +446,8 @@ int ext_mkdir(struct inode * dir, const char * name, int len, int mode)
 	dir_block->b_dirt = 1;
 	brelse(dir_block);
 	inode->i_mode = S_IFDIR | (mode & 0777 & ~current->umask);
+	if (dir->i_mode & S_ISGID)
+		inode->i_mode |= S_ISGID;
 	inode->i_dirt = 1;
 	bh = ext_add_entry(dir,name,len,&de);
 	if (!bh) {
@@ -617,7 +628,7 @@ int ext_symlink(struct inode * dir, const char * name, int len, const char * sym
 	int i;
 	char c;
 
-	if (!(inode = ext_new_inode(dir->i_sb))) {
+	if (!(inode = ext_new_inode(dir))) {
 		iput(dir);
 		return -ENOSPC;
 	}

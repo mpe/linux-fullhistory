@@ -128,7 +128,7 @@ int core_dump(long signr, struct pt_regs * regs)
 /* Flag indicating the math stuff is valid. We don't support this for the
    soft-float routines yet */
 	if (hard_math) {
-		if (dump.u_fpvalid = current->used_math) {
+		if ((dump.u_fpvalid = current->used_math) != 0) {
 			if (last_task_used_math == current)
 				__asm__("clts ; fnsave %0"::"m" (dump.i387));
 			else
@@ -264,7 +264,7 @@ static int count(char ** argv)
 	int i=0;
 	char ** tmp;
 
-	if (tmp = argv)
+	if ((tmp = argv) != 0)
 		while (get_fs_long((unsigned long *) (tmp++)))
 			i++;
 
@@ -481,7 +481,7 @@ restart_interp:
 		brelse(bh);
 		iput(inode);
 		buf[127] = '\0';
-		if (cp = strchr(buf, '\n')) {
+		if ((cp = strchr(buf, '\n')) != NULL) {
 			*cp = '\0';
 			for (cp = buf; (*cp == ' ') || (*cp == '\t'); cp++);
 		}

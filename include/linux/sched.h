@@ -38,6 +38,8 @@
  *    the EXP_n values would be 1981, 2034 and 2043 if still using only
  *    11 bit fractions.
  */
+extern unsigned long avenrun[];		/* Load averages */
+
 #define FSHIFT		11		/* nr of bits of precision */
 #define FIXED_1		(1<<FSHIFT)	/* 1.0 as fixed-point */
 #define LOAD_FREQ	(5*HZ)		/* 5 sec intervals */
@@ -77,7 +79,7 @@
 #define NULL ((void *) 0)
 #endif
 
-#define MAX_SHARED_LIBS 6
+#define MAX_SHARED_LIBS 16
 
 extern void sched_init(void);
 extern void show_state(void);
@@ -107,7 +109,7 @@ union i387_union {
 		long	foo;
 		long	fos;
 		long    top;
-		struct fpu_reg	regs[8];	/* 8*16 bytes for each FP-reg = 112 bytes */
+		struct fpu_reg	regs[8];	/* 8*16 bytes for each FP-reg = 128 bytes */
 		unsigned char	lookahead;
 		struct info	*info;
 		unsigned long	entry_eip;
@@ -221,7 +223,7 @@ struct task_struct {
  */
 #define INIT_TASK \
 /* state etc */	{ 0,15,15, \
-/* signals */	0,{{},},0,0,0, \
+/* signals */	0,{{ 0, },},0,0,0, \
 /* flags */	0, \
 /* ec,brk... */	0,0,0,0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
@@ -238,9 +240,9 @@ struct task_struct {
 /* comm */	"swapper", \
 /* vm86_info */	NULL, 0, \
 /* fs info */	0,-1,0022,NULL,NULL,NULL,NULL, \
-/* libraries */	{ { NULL, 0, 0}, }, 0, \
+/* libraries */	{ { NULL, 0, 0, 0}, }, 0, \
 /* filp */	{NULL,}, \
-/* cloe */	{0,}, \
+/* cloe */	{{ 0, }}, \
 		{ \
 			{0,0}, \
 /* ldt */		{0x9f,0xc0c0fa00}, \
@@ -251,8 +253,8 @@ struct task_struct {
 	 0,0,0,0,0,0,0,0, \
 	 0,0,0x17,0x17,0x17,0x17,0x17,0x17, \
 	 _LDT(0),0x80000000,{0xffffffff}, \
-		{ { 0, } } \
-	}, \
+		{ { 0, }, } \
+	} \
 }
 
 extern struct task_struct *task[NR_TASKS];
@@ -430,7 +432,7 @@ extern inline void select_wait(struct wait_queue ** wait_address, select_table *
 	p->nr++;
 }
 
-static unsigned long inline _get_base(char * addr)
+static inline unsigned long _get_base(char * addr)
 {
 	unsigned long __base;
 	__asm__("movb %3,%%dh\n\t"
@@ -446,7 +448,7 @@ static unsigned long inline _get_base(char * addr)
 
 #define get_base(ldt) _get_base( ((char *)&(ldt)) )
 
-static unsigned long inline get_limit(unsigned long segment)
+static inline unsigned long get_limit(unsigned long segment)
 {
 	unsigned long __limit;
 	__asm__("lsll %1,%0"
@@ -464,7 +466,7 @@ static unsigned long inline get_limit(unsigned long segment)
 
 #define SET_LINKS(p) \
 	(p)->p_ysptr = NULL; \
-	if ((p)->p_osptr = (p)->p_pptr->p_cptr) \
+	if (((p)->p_osptr = (p)->p_pptr->p_cptr) != NULL) \
 		(p)->p_osptr->p_ysptr = p; \
 	(p)->p_pptr->p_cptr = p
 

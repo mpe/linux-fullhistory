@@ -1,9 +1,11 @@
+/* $Id: ioctl.h,v 1.2 1992/11/18 01:31:16 root Exp root $
+ *
+ * linux/ioctl.h for Linux by H.H. Bergman.
+ */
+
 #ifndef _LINUX_IOCTL_H
 #define _LINUX_IOCTL_H
 
-/*
- * linux/ioctl.h for Linux by H.H. Bergman.
- */
 
 /* ioctl command encoding: 32 bits total, command in lower 16 bits,
  * size of the parameter structure in the upper 14 bits.
@@ -34,4 +36,5 @@
 #define _IOWR(c,d,t)	(IOC_INOUT | (sizeof(t)<<16) & IOCSIZE_MASK) | \
 				     (c<<8) | d)
 
-#endif
+#endif /* _LINUX_IOCTL_H */
+

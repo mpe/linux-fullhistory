@@ -198,7 +198,7 @@ int kill_pg(int pgrp, int sig, int priv)
 		return -EINVAL;
  	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if (*p && (*p)->pgrp == pgrp) {
-			if (err = send_sig(sig,*p,priv))
+			if ((err = send_sig(sig,*p,priv)) != 0)
 				retval = err;
 			else
 				found++;
@@ -345,7 +345,7 @@ fake_volatile:
 	 *	as a result of our exiting, and if they have any stopped
 	 *	jobs, send them a SIGHUP and then a SIGCONT.  (POSIX 3.2.2.2)
 	 */
-	while (p = current->p_cptr) {
+	while ((p = current->p_cptr) != NULL) {
 		current->p_cptr = p->p_osptr;
 		p->p_ysptr = NULL;
 		p->flags &= ~(PF_PTRACED|PF_TRACESYS);

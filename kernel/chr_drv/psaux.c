@@ -75,11 +75,9 @@ static int aux_present = 0;
 
 static int poll_status(void);
 
-
 /*
  * Write to aux device
  */
-
 static void aux_write_dev(int val)
 {
 	poll_status();
@@ -89,7 +87,7 @@ static void aux_write_dev(int val)
 	
 }
 
-
+#if 0
 /*
  * Write to device & handle returned ack
  */
@@ -104,7 +102,7 @@ static int aux_write_ack(int val)
 	}
 	return 0;
 }
-
+#endif
 
 /*
  * Write aux device command

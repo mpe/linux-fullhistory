@@ -19,8 +19,21 @@
      The Author may be reached as bir7@leland.stanford.edu or
      C/O Department of Mathematics; Stanford University; Stanford, CA 94305
  */
-/* $Id: tcp.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: tcp.c,v 0.8.4.6 1992/11/18 15:38:03 bir7 Exp $ */
 /* $Log: tcp.c,v $
+ * Revision 0.8.4.6  1992/11/18  15:38:03  bir7
+ * fixed minor problem in waiting for memory.
+ *
+ * Revision 0.8.4.5  1992/11/17  14:19:47  bir7
+ * *** empty log message ***
+ *
+ * Revision 0.8.4.4  1992/11/16  16:13:40  bir7
+ * Fixed some error returns and undid one of the accept changes.
+ *
+ * Revision 0.8.4.3  1992/11/15  14:55:30  bir7
+ * Fixed problem with accept.  It was charging the memory for the initial
+ * sock buff to one socket, but freeing it from another.
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -51,6 +64,18 @@
 /* #include <signal.h>*/
 #include <linux/termios.h> /* for ioctl's */
 #include "../kern_sock.h" /* for PRINTK */
+
+#ifdef PRINTK
+#undef PRINTK
+#endif
+
+#undef TCP_DEBUG
+
+#ifdef TCP_DEBUG
+#define PRINTK printk
+#else
+#define PRINTK dummy_routine
+#endif
 
 #define tmax(a,b) (before ((a),(b)) ? (b) : (a))
 #define swap(a,b) {unsigned long c; c=a; a=b; b=c;}
@@ -512,7 +537,7 @@ tcp_write(volatile struct sock *sk, unsigned char *from,
 		}
 	      if (copied) return (copied);
 	      if (sk->err) return (-sk->err);
-	      return (-ENOTCONN);
+	      return (-EPIPE);
 	    }
 
 	  if (nonblock)
@@ -577,8 +602,8 @@ tcp_write(volatile struct sock *sk, unsigned char *from,
 		   return (-ERESTARTSYS);
 		}
 	    }
-	  sti();
 	  sk->inuse = 1;
+	  sti();
 	  continue;
 	}
       skb->mem_addr = skb;
@@ -1221,7 +1246,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
   t1->source = newsk->dummy_th.source;
   t1->seq = net32(newsk->send_seq++);
   t1->ack = 1;
-  newsk->window = sk->prot->rspace(newsk);
+  newsk->window = newsk->prot->rspace(newsk);
   t1->window = net16(newsk->window);
   t1->res1=0;
   t1->res2=0;
@@ -1493,9 +1518,9 @@ tcp_ack (volatile struct sock *sk, struct tcp_header *th, unsigned long saddr)
 		    int i;
 		    for (i = 0; i < DEV_NUMBUFFS; i++)
 		      {
-			 if (oskb->dev->buffs[i] = oskb)
+			 if (oskb->dev->buffs[i] == oskb)
 			   {
-			      oskb->dev->buffs[i]= NULL;
+			      oskb->dev->buffs[i] = NULL;
 			      break;
 			   }
 		      }
@@ -1955,6 +1980,7 @@ tcp_accept (volatile struct sock *sk, int flags)
 
   /* now all we need to do is return skb->sk. */
   newsk = skb->sk;
+
   kfree_skb (skb, FREE_READ);
   release_sock (sk);
   return (newsk);
@@ -1975,7 +2001,7 @@ tcp_connect (volatile struct sock *sk, struct sockaddr_in *usin, int addr_len)
   if (sk->state != TCP_CLOSE) return (-EISCONN);
   if (addr_len < 8) return (-EINVAL);
 
-  verify_area (usin, addr_len);
+/*  verify_area (usin, addr_len);*/
   memcpy_fromfs (&sin,usin, min(sizeof (sin), addr_len));
 
   if (sin.sin_family && sin.sin_family != AF_INET) return (-EAFNOSUPPORT);
@@ -2155,6 +2181,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
        if (th->check && tcp_check (th, len, saddr, daddr ))
 	 {
 	    skb->sk = NULL;
+	    PRINTK ("packet dropped with bad checksum.\n");
 	    kfree_skb (skb, 0);
 	    /* we don't release the socket because it was never
 	       marked in use. */
@@ -2225,6 +2252,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   if (sk->rmem_alloc + skb->mem_len >= SK_RMEM_MAX)
     {
        skb->sk = NULL;
+       PRINTK ("dropping packet due to lack of buffer space.\n");
        kfree_skb (skb, 0);
        release_sock (sk);
        return (0);

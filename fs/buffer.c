@@ -43,6 +43,7 @@ static struct buffer_head * unused_list = NULL;
 static struct wait_queue * buffer_wait = NULL;
 
 int nr_buffers = 0;
+int buffermem = 0;
 int nr_buffer_heads = 0;
 
 /*
@@ -306,7 +307,8 @@ struct buffer_head * getblk(dev_t dev, int block, int size)
 	int buffers;
 
 repeat:
-	if (bh = get_hash_table(dev, block, size)) {
+	bh = get_hash_table(dev, block, size);
+	if (bh) {
 		if (bh->b_uptodate && !bh->b_dirt)
 			put_last_free(bh);
 		return bh;
@@ -417,15 +419,21 @@ __asm__("cld\n\t" \
 void bread_page(unsigned long address, dev_t dev, int b[4])
 {
 	struct buffer_head * bh[4];
+	struct buffer_head * bhr[4];
+	int bhnum = 0;
 	int i;
 
 	for (i=0 ; i<4 ; i++)
 		if (b[i]) {
-			if (bh[i] = getblk(dev, b[i], 1024))
-				if (!bh[i]->b_uptodate)
-					ll_rw_block(READ, 1, &bh[i]);
+			bh[i] = getblk(dev, b[i], 1024);
+			if (bh[i] && !bh[i]->b_uptodate)
+				bhr[bhnum++] = bh[i];
 		} else
 			bh[i] = NULL;
+
+	if(bhnum)
+	  ll_rw_block(READ, bhnum, bhr);
+
 	for (i=0 ; i<4 ; i++,address += BLOCK_SIZE)
 		if (bh[i]) {
 			wait_on_buffer(bh[i]);
@@ -564,6 +572,7 @@ void grow_buffers(int size)
 			break;
 	}
 	tmp->b_this_page = bh;
+	buffermem += 4096;
 	return;
 /*
  * In case anything failed, we just free everything we got.
@@ -605,6 +614,7 @@ static int try_to_free(struct buffer_head * bh)
 		remove_from_queues(p);
 		put_unused_buffer_head(p);
 	} while (tmp != bh);
+	buffermem -= 4096;
 	free_page(page);
 	return 1;
 }

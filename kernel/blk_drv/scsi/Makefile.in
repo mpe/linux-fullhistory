@@ -1,0 +1,121 @@
+#
+# Makefile for kernel/blk_drv/scsi
+#
+# Note! This Makefile is automatically generated from makefile.in.
+# DO NOT edit makefile, edit makefile.in instead.
+#
+# Note! Dependencies are done automagically by 'make dep', which also
+# removes any old dependencies. DONT put your own dependencies here
+# unless its something special (ie not a .c file).
+#
+
+#include <linux/config.h>
+#undef linux
+
+.c.s:
+	$(CC) $(CFLAGS) $(DEBUG) -S $<
+
+.s.o:
+	$(AS) -c -o $*.o $<
+
+.c.o:
+	$(CC) $(CFLAGS) $(DEBUG) -c $<
+
+#ifdef CONFIG_SCSI
+#ifdef CONFIG_BLK_DEV_ST
+ST_CSRC = st.c
+ST_OBJS = st.o
+#endif
+
+#ifdef CONFIG_BLK_DEV_SD
+SD_CSRC = sd.c sd_ioctl.c
+SD_OBJS = sd.o sd_ioctl.o
+#endif
+
+#ifdef CONFIG_BLK_DEV_SR
+SR_CSRC = sr.c sr_ioctl.c
+SR_OBJS = sr.o sr_ioctl.o
+#endif
+
+#ifdef CONFIG_SCSI_AHA1542
+AHA1542_OBJS = aha1542.o
+#endif
+
+#ifdef CONFIG_SCSI_AHA1740
+AHA1740_OBJS = aha1740.o
+#endif
+
+#ifdef CONFIG_SCSI_FUTURE_DOMAIN
+FDOMAIN_OBJS = fdomain.o
+#endif
+
+#ifdef CONFIG_SCSI_ULTRASTOR
+ULTRASTOR_OBJS = ultrastor.o
+#endif
+
+#ifdef CONFIG_SCSI_7000FASST
+WD7000_OBJS = wd7000.o
+#endif
+
+#if defined(CONFIG_SCSI_SEAGATE) || defined(CONFIG_SCSI_FD_88x) 
+SEAGATE_OBJS = seagate.o
+#endif
+
+#ifdef CONFIG_SCSI_DEBUG
+SCSI_DEBUG_OBJS = scsi_debug.o
+#endif
+
+SCSI_OBJS = hosts.o scsi.o scsi_ioctl.o
+
+#endif
+
+OBJS =	$(SCSI_OBJS) $(SD_OBJS) $(ST_OBJS) $(SR_OBJS) \
+	$(AHA1542_OBJS) $(AHA1740_OBJS) $(FDOMAIN_OBJS) $(SEAGATE_OBJS) \
+	$(ULTRASTOR_OBJS) $(WD7000_OBJS) $(SCSI_DEBUG_OBJS)
+
+all: 
+	$(MAKE) Makefile
+	$(MAKE) scsi.a
+
+figure : hosts.h $(KERNELHDRS)/linux/config.h hosts.c
+	$(HOSTCC) -I$(KERNELHDRS) -DFIGURE_MAX_SCSI_HOSTS hosts.c -o figure
+
+max_hosts.h : figure
+	(echo "#ifndef _MAX_HOSTS_H"; \
+	 echo "#define _MAX_HOSTS_H"; \
+	 echo "#define MAX_SCSI_HOSTS `./figure`";\
+	 echo "#endif") > tmp_max
+	cp tmp_max max_hosts.h
+
+have_makefile:
+	touch have_makefile
+
+Makefile: ../../../include/linux/config.h \
+	../../../include/linux/config.site.h \
+	../../../include/linux/config.dist.h \
+	 Makefile.in have_makefile
+	cp Makefile.in tmp_make.c
+	$(CPP) -E tmp_make.c \
+		| uniq > tmp_make
+	rm tmp_make.c
+	cp tmp_make Makefile
+	rm -f tmp_make*
+	$(MAKE) dep
+
+scsi.a: $(OBJS)
+	rm -f scsi.a
+	$(AR) rcs scsi.a $(OBJS)
+	sync
+
+clean:
+	rm -f core *.o *.a tmp_make tmp_max figure max_hosts.h have_makefile
+
+seagate.o: seagate.c
+	$(CC) -Wall -I$(KERNELHDRS) -c seagate.c 
+
+dep:   max_hosts.h
+	sed '/\# \X\XDependencies/q' < Makefile > tmp_make
+	$(CPP) -M *.c >> tmp_make
+	cp tmp_make Makefile
+
+# XXDependencies:

@@ -265,7 +265,9 @@ getkey:
 chsvga:	cld
 	push	ds
 	push	cs
+	mov	ax,[0x01fa]
 	pop	ds
+	mov	modesave,ax
 	mov 	ax,#0xc000
 	mov	es,ax
 	mov	ax,modesave

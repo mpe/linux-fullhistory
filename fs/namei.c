@@ -65,7 +65,8 @@ int lookup(struct inode * dir,const char * name, int len,
 		else if ((sb = dir->i_sb) && (dir == sb->s_mounted)) {
 			sb = dir->i_sb;
 			iput(dir);
-			if (dir = sb->s_covered)
+			dir = sb->s_covered;
+			if (dir)
 				dir->i_count++;
 		}
 	}
@@ -258,7 +259,8 @@ int open_namei(const char * pathname, int flag, int mode,
 		iput(inode);
 		return -EEXIST;
 	}
-	if (error = follow_link(dir,inode,flag,mode,&inode))
+	error = follow_link(dir,inode,flag,mode,&inode);
+	if (error)
 		return error;
 	if (S_ISDIR(inode->i_mode) && (flag & 2)) {
 		iput(inode);

@@ -94,7 +94,7 @@ static int msdos_file_read(struct inode *inode,struct file *filp,char *buf,
 	}
 	if (filp->f_pos >= inode->i_size || count <= 0) return 0;
 	start = buf;
-	while (left = MIN(inode->i_size-filp->f_pos,count-(buf-start))) {
+	while ((left = MIN(inode->i_size-filp->f_pos,count-(buf-start))) > 0){
 		if (!(sector = msdos_smap(inode,filp->f_pos >> SECTOR_BITS)))
 			break;
 		offset = filp->f_pos & (SECTOR_SIZE-1);

@@ -169,7 +169,7 @@ void wake_up(struct wait_queue **q)
 	if (!q || !(tmp = *q))
 		return;
 	do {
-		if (p = tmp->task) {
+		if ((p = tmp->task) != NULL) {
 			if ((p->state == TASK_UNINTERRUPTIBLE) ||
 			    (p->state == TASK_INTERRUPTIBLE)) {
 				p->state = TASK_RUNNING;
@@ -196,7 +196,7 @@ void wake_up_interruptible(struct wait_queue **q)
 	if (!q || !(tmp = *q))
 		return;
 	do {
-		if (p = tmp->task) {
+		if ((p = tmp->task) != NULL) {
 			if (p->state == TASK_INTERRUPTIBLE) {
 				p->state = TASK_RUNNING;
 				if (p->counter > current->counter)

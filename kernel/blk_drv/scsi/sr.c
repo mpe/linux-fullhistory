@@ -7,47 +7,40 @@
  *		Drew Eckhardt 
  *
  *	<drew@colorado.edu>
+ *
+ *       Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *       add scatter-gather, multiple outstanding request, and other
+ *       enhancements.
  */
-
-#include <linux/config.h>
-
-#ifdef CONFIG_BLK_DEV_SR
 
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/errno.h>
-
-#include "scsi.h"
-#include "sr.h"
-#include "scsi_ioctl.h"   /* For the door lock/unlock commands */
+#include <asm/system.h>
 
 #define MAJOR_NR 11
 
 #include "../blk.h"
+#include "scsi.h"
+#include "hosts.h"
+#include "sr.h"
+#include "scsi_ioctl.h"   /* For the door lock/unlock commands */
 
 #define MAX_RETRIES 0
-#define SR_TIMEOUT 200
+#define SR_TIMEOUT 250
 
 int NR_SR=0;
-Scsi_CD scsi_CDs[MAX_SR];
-static int sr_sizes[MAX_SR << 4];
-static unsigned long int this_count;
-
-struct block_buffer
-	{
-	unsigned	block;
-	unsigned	start;
-	unsigned	use:1;
-	unsigned char	buffer[2048];
-	};
-
-static struct block_buffer * bb;
+int MAX_SR=0;
+Scsi_CD * scsi_CDs;
+static int * sr_sizes;
 
 static int sr_open(struct inode *, struct file *);
 
 extern int sr_ioctl(struct inode *, struct file *, unsigned int, unsigned int);
+
+void requeue_sr_request (Scsi_Cmnd * SCpnt);
 
 static void sr_release(struct inode * inode, struct file * file)
 {
@@ -109,93 +102,135 @@ int check_cdrom_media_change(int full_dev, int flag){
 }
 
 /*
- * The sense_buffer is where we put data for all mode sense commands performed.
- */
-static unsigned char sense_buffer[255];
-
-/*
  * rw_intr is the interrupt routine for the device driver.  It will be notified on the 
  * end of a SCSI read / write, and will take on of several actions based on success or failure.
  */
 
-static void rw_intr (int host, int result)
+static void rw_intr (Scsi_Cmnd * SCpnt)
 {
-  	if (SR_HOST != host)		
-		{
-		panic ("sr.o : rw_intr() recieving interrupt for different host.");
-		}
-
-	if (!result)
-		{ /* No error */
-	        if (bb[DEVICE_NR(CURRENT->dev)].use)
-		        {
-			memcpy((char *)CURRENT->buffer, 
-			       bb[DEVICE_NR(CURRENT->dev)].buffer + 
-			       (bb[DEVICE_NR(CURRENT->dev)].start << 9), 
-			       this_count << 9);
-		        }
-
-		CURRENT->nr_sectors -= this_count;
+	int result = SCpnt->result;
+	int this_count = SCpnt->this_count;
 
 #ifdef DEBUG
-		printk("(%x %x %x) ",CURRENT->bh, CURRENT->nr_sectors, 
+	printk("sr.c done: %x %x\n",result, SCpnt->request.bh->b_data);
+#endif
+	if (!result)
+		{ /* No error */
+		  if (SCpnt->use_sg == 0) {
+		    if (SCpnt->buffer != SCpnt->request.buffer)
+		      {
+			int offset;
+			offset = (SCpnt->request.sector % 4) << 9;
+			memcpy((char *)SCpnt->request.buffer, 
+			       SCpnt->buffer + offset, 
+			       this_count << 9);
+			/* Even though we are not using scatter-gather, we look
+			   ahead and see if there is a linked request for the
+			   other half of this buffer.  If there is, then satisfy
+			   it. */
+			if((offset == 0) && this_count == 2 &&
+			   SCpnt->request.nr_sectors > this_count && 
+			   SCpnt->request.bh &&
+			   SCpnt->request.bh->b_reqnext &&
+			   SCpnt->request.bh->b_reqnext->b_size == 1024) {
+			  memcpy((char *)SCpnt->request.bh->b_reqnext->b_data, 
+				 SCpnt->buffer + 1024, 
+				 1024);
+			  this_count += 2;
+			};
+			
+			scsi_free(SCpnt->buffer, 2048);
+		      }
+		  } else {
+		    struct scatterlist * sgpnt;
+		    int i;
+		    sgpnt = (struct scatterlist *) SCpnt->buffer;
+		    for(i=0; i<SCpnt->use_sg; i++) {
+		      if (sgpnt[i].alt_address) {
+			if (sgpnt[i].alt_address != sgpnt[i].address) {
+			  memcpy(sgpnt[i].alt_address, sgpnt[i].address, sgpnt[i].length);
+			};
+			scsi_free(sgpnt[i].address, sgpnt[i].length);
+		      };
+		    };
+		    scsi_free(SCpnt->buffer, SCpnt->sglist_len);  /* Free list of scatter-gather pointers */
+		    if(SCpnt->request.sector % 4) this_count -= 2;
+/* See   if there is a padding record at the end that needs to be removed */
+		    if(this_count > SCpnt->request.nr_sectors)
+		      this_count -= 2;
+		  };
+
+#ifdef DEBUG
+		printk("(%x %x %x) ",SCpnt->request.bh, SCpnt->request.nr_sectors, 
 		       this_count);
 #endif
-		if (CURRENT->nr_sectors)
+		if (SCpnt->request.nr_sectors > this_count)
 			{	 
-			CURRENT->sector += this_count;
-			CURRENT->errors = 0;
-			if (!CURRENT->bh)
+			SCpnt->request.errors = 0;
+			if (!SCpnt->request.bh)
 			  {
-			    (char *) CURRENT->buffer += this_count << 9;
-			  } else {
-			    end_request(1);
-			    do_sr_request();
+			    printk("sr.c: linked page request. (%x %x)",
+				  SCpnt->request.sector, this_count);
+			    panic("Aiiiiiiiiiiiieeeeeeeee");
 			  }
 			}
-		else 
-			{
-			end_request(1);  /* All done */
-			do_sr_request();
-			} 
-		}
+
+		  end_scsi_request(SCpnt, 1, this_count);  /* All done */
+		  requeue_sr_request(SCpnt);
+		  return;
+		} /* Normal completion */
 
 	/* We only come through here if we have an error of some kind */
 
+/* Free up any indirection buffers we allocated for DMA purposes. */
+	if (SCpnt->use_sg) {
+	  struct scatterlist * sgpnt;
+	  int i;
+	  sgpnt = (struct scatterlist *) SCpnt->buffer;
+	  for(i=0; i<SCpnt->use_sg; i++) {
+	    if (sgpnt[i].alt_address) {
+	      scsi_free(sgpnt[i].address, sgpnt[i].length);
+	    };
+	  };
+	  scsi_free(SCpnt->buffer, SCpnt->sglist_len);  /* Free list of scatter-gather pointers */
+	} else {
+	  if (SCpnt->buffer != SCpnt->request.buffer)
+	    scsi_free(SCpnt->buffer, SCpnt->bufflen);
+	};
+
 	if (driver_byte(result) != 0) {
-		bb[DEVICE_NR(CURRENT->dev)].block = -1;
-		
-		if ((sense_buffer[0] & 0x7f) == 0x70) {
-			if ((sense_buffer[2] & 0xf) == UNIT_ATTENTION) {
+		if ((SCpnt->sense_buffer[0] & 0x7f) == 0x70) {
+			if ((SCpnt->sense_buffer[2] & 0xf) == UNIT_ATTENTION) {
 				/* detected disc change.  set a bit and quietly refuse	*/
 				/* further access.					*/
 		    
-				scsi_CDs[DEVICE_NR(CURRENT->dev)].device->changed = 1;
-				end_request(0);
-			        do_sr_request();
+				scsi_CDs[DEVICE_NR(SCpnt->request.dev)].device->changed = 1;
+				end_scsi_request(SCpnt, 0, this_count);
+			        requeue_sr_request(SCpnt);
 				return;
 			}
 		}
 	    
-		if (sense_buffer[2] == ILLEGAL_REQUEST) {
+		if (SCpnt->sense_buffer[2] == ILLEGAL_REQUEST) {
 			printk("CD-ROM error: Drive reports ILLEGAL REQUEST.\n");
-			if (scsi_CDs[DEVICE_NR(CURRENT->dev)].ten) {
-				scsi_CDs[DEVICE_NR(CURRENT->dev)].ten = 0;
-				do_sr_request();
+			if (scsi_CDs[DEVICE_NR(SCpnt->request.dev)].ten) {
+				scsi_CDs[DEVICE_NR(SCpnt->request.dev)].ten = 0;
+				requeue_sr_request(SCpnt);
 				result = 0;
 				return;
 			} else {
-			printk("CD-ROM error: Drive reports %d.\n", sense_buffer[2]);				end_request(0);
-				do_sr_request(); /* Do next request */
-				return;
+			  printk("CD-ROM error: Drive reports %d.\n", SCpnt->sense_buffer[2]);				
+			  end_scsi_request(SCpnt, 0, this_count);
+			  requeue_sr_request(SCpnt); /* Do next request */
+			  return;
 			}
 
 		}
 
-		if (sense_buffer[2] == NOT_READY) {
+		if (SCpnt->sense_buffer[2] == NOT_READY) {
 			printk("CDROM not ready.  Make sure you have a disc in the drive.\n");
-			end_request(0);
-			do_sr_request(); /* Do next request */
+			end_scsi_request(SCpnt, 0, this_count);
+			requeue_sr_request(SCpnt); /* Do next request */
 			return;
 		};
 	      }
@@ -203,25 +238,25 @@ static void rw_intr (int host, int result)
 	/* We only get this far if we have an error we have not recognized */
 	if(result) {
 	  printk("SCSI CD error : host %d id %d lun %d return code = %03x\n", 
-		 scsi_CDs[DEVICE_NR(CURRENT->dev)].device->host_no, 
-		 scsi_CDs[DEVICE_NR(CURRENT->dev)].device->id,
-		 scsi_CDs[DEVICE_NR(CURRENT->dev)].device->lun,
+		 scsi_CDs[DEVICE_NR(SCpnt->request.dev)].device->host_no, 
+		 scsi_CDs[DEVICE_NR(SCpnt->request.dev)].device->id,
+		 scsi_CDs[DEVICE_NR(SCpnt->request.dev)].device->lun,
 		 result);
 	    
 	if (status_byte(result) == CHECK_CONDITION)
 	    printk("\tSense class %x, sense error %x, extended sense %x\n",
-		 sense_class(sense_buffer[0]), 
-		 sense_error(sense_buffer[0]),
-		 sense_buffer[2] & 0xf);
+		 sense_class(SCpnt->sense_buffer[0]), 
+		 sense_error(SCpnt->sense_buffer[0]),
+		 SCpnt->sense_buffer[2] & 0xf);
 	
-	end_request(0);
-	do_sr_request();
+	end_scsi_request(SCpnt, 0, SCpnt->request.current_nr_sectors);
+	requeue_sr_request(SCpnt);
 	}
 }
 
 static int sr_open(struct inode * inode, struct file * filp)
 {
-	if(MINOR(inode->i_rdev) >= NR_SR ||
+	if(MINOR(inode->i_rdev) >= NR_SR || 
 	   !scsi_CDs[MINOR(inode->i_rdev)].device) return -EACCES;   /* No such device */
 
         check_disk_change(inode->i_rdev);
@@ -231,30 +266,85 @@ static int sr_open(struct inode * inode, struct file * filp)
 	return 0;
 }
 
+
 /*
  * do_sr_request() is the request handler function for the sr driver.  Its function in life 
  * is to take block device requests, and translate them to SCSI commands.
  */
 	
-void do_sr_request (void)
+static void do_sr_request (void)
+{
+  Scsi_Cmnd * SCpnt = NULL;
+  struct request * req = NULL;
+
+  while (1==1){
+    if (CURRENT != NULL && CURRENT->dev == -1) return;
+
+    INIT_REQUEST;
+
+    SCpnt = allocate_device(&CURRENT,
+			    scsi_CDs[DEVICE_NR(MINOR(CURRENT->dev))].device->index, 0); 
+
+
+/* This is a performance enhancement.  We dig down into the request list and
+   try and find a queueable request (i.e. device not busy, and host able to
+   accept another command.  If we find one, then we queue it. This can
+   make a big difference on systems with more than one disk drive.  We want
+   to have the interrupts off when monkeying with the request list, because
+   otherwise the kernel might try and slip in a request inbetween somewhere. */
+
+    if (!SCpnt && NR_SR > 1){
+      struct request *req1;
+      req1 = NULL;
+      cli();
+      req = CURRENT;
+      while(req){
+	SCpnt = request_queueable(req,
+				  scsi_CDs[DEVICE_NR(MINOR(req->dev))].device->index);
+	if(SCpnt) break;
+	req1 = req;
+	req = req->next;
+      };
+      if (SCpnt) {
+	if (req == CURRENT) 
+	  CURRENT = CURRENT->next;
+	else
+	  req1->next = req->next;
+      };
+      sti();
+    };
+    
+    if (!SCpnt)
+      return; /* Could not find anything to do */
+    
+  wake_up(&wait_for_request);
+
+/* Queue command */
+  requeue_sr_request(SCpnt);
+  };  /* While */
+}    
+
+void requeue_sr_request (Scsi_Cmnd * SCpnt)
 {
 	unsigned int dev, block, realcount;
 	unsigned char cmd[10], *buffer, tries;
+	int this_count, start, end_rec;
 
 	tries = 2;
 
       repeat:
-	INIT_REQUEST;
-	dev =  MINOR(CURRENT->dev);
-	block = CURRENT->sector;	
+	if(SCpnt->request.dev <= 0)
+	  return do_sr_request();
 
-	bb[dev].start = block % 4;
-	block = block / 4;
+	dev =  MINOR(SCpnt->request.dev);
+	block = SCpnt->request.sector;	
+	buffer = NULL;
+	this_count = 0;
 
 	if (dev >= NR_SR)
 		{
 		/* printk("CD-ROM request error: invalid device.\n");			*/
-		end_request(0);
+		end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
 		}
@@ -262,7 +352,7 @@ void do_sr_request (void)
 	if (!scsi_CDs[dev].use)
 		{
 		/* printk("CD-ROM request error: device marked not in use.\n");		*/
-		end_request(0);
+		end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
 		}
@@ -273,69 +363,184 @@ void do_sr_request (void)
  * quietly refuse to do anything to a changed disc until the changed bit has been reset
  */
 		/* printk("CD-ROM has been changed.  Prohibiting further I/O.\n");	*/
-		end_request(0);
+		end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
 		}
 	
-	if (!CURRENT->bh)  	
-		this_count = CURRENT->nr_sectors;
-	else
-		this_count = (CURRENT->bh->b_size / 512);
-
-	if (bb[dev].start)
-	        {				  
-		bb[dev].use = 1;
-
-	        this_count = ((this_count > 4 - bb[dev].start) ? 
-			      (4 - bb[dev].start) : (this_count));
-
-		if (bb[dev].block == block)
-			{
-			  rw_intr(SR_HOST, 0);
-			  return;
-			}
-
-		buffer = bb[dev].buffer;
-		bb[dev].block = block;
-	        } 
-	else if (this_count < 4)
-	        {
-		bb[dev].use = 1;
-
-		if (bb[dev].block == block)
-			{
-			  rw_intr(SR_HOST, 0);
-			  return;
-			}
-
-		buffer = bb[dev].buffer;
-		bb[dev].block = block;
-	        }
-	else
-	        {
-		this_count -= this_count % 4;
-		buffer = CURRENT->buffer;
-		bb[dev].use = 0;
-	        }
-
-	realcount = (this_count + 3) / 4;
-
-	switch (CURRENT->cmd)
+	switch (SCpnt->request.cmd)
 		{
 		case WRITE: 		
-			end_request(0);
+			end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 			goto repeat;
 			break;
 		case READ : 
 		        cmd[0] = READ_6;
 			break;
 		default : 
-			printk ("Unknown sr command %d\r\n", CURRENT->cmd);
+			printk ("Unknown sr command %d\r\n", SCpnt->request.cmd);
 			panic("");
 		}
 	
-	cmd[1] = (SR_LUN << 5) & 0xe0;
+	cmd[1] = (SCpnt->lun << 5) & 0xe0;
+
+/*
+           Now do the grungy work of figuring out which sectors we need, and
+	   where in memory we are going to put them.
+
+	   The variables we need are:
+
+	   this_count= number of 512 byte sectors being read 
+	   block     = starting cdrom sector to read.
+	   realcount = # of cdrom sectors to read
+
+	   The major difference between a scsi disk and a scsi cdrom
+is that we will always use scatter-gather if we can, because we can
+work around the fact that the buffer cache has a block size of 1024,
+and we have 2048 byte sectors.  This code should work for buffers that
+are any multiple of 512 bytes long.  */
+
+	SCpnt->use_sg = 0;
+
+	if (scsi_hosts[SCpnt->host].sg_tablesize > 0 &&
+	    (!need_isa_buffer ||
+	    dma_free_sectors >= 10)) {
+	  struct buffer_head * bh;
+	  struct scatterlist * sgpnt;
+	  int count, this_count_max;
+	  bh = SCpnt->request.bh;
+	  this_count = 0;
+	  count = 0;
+	  this_count_max = (scsi_CDs[dev].ten ? 0xffff : 0xff) << 4;
+	  /* Calculate how many links we can use.  First see if we need
+	   a padding record at the start */
+	  this_count = SCpnt->request.sector % 4;
+	  if(this_count) count++;
+	  while(bh && count < scsi_hosts[SCpnt->host].sg_tablesize) {
+	    if ((this_count + (bh->b_size >> 9)) > this_count_max) break;
+	    this_count += (bh->b_size >> 9);
+	    count++;
+	    bh = bh->b_reqnext;
+	  };
+	  /* Fix up in case of an odd record at the end */
+	  end_rec = 0;
+	  if(this_count % 4) {
+	    if (count < scsi_hosts[SCpnt->host].sg_tablesize) {
+	      count++;
+	      end_rec = (4 - (this_count % 4)) << 9;
+	      this_count += 4 - (this_count % 4);
+	    } else {
+	      count--;
+	      this_count -= (this_count % 4);
+	    };
+	  };
+	  SCpnt->use_sg = count;  /* Number of chains */
+	  count = 512;/* scsi_malloc can only allocate in chunks of 512 bytes*/
+	  while( count < (SCpnt->use_sg * sizeof(struct scatterlist))) 
+	    count = count << 1;
+	  SCpnt->sglist_len = count;
+	  sgpnt = (struct scatterlist * ) scsi_malloc(count);
+	  if (!sgpnt) {
+	    printk("Warning - running *really* short on DMA buffers\n");
+	    SCpnt->use_sg = 0;  /* No memory left - bail out */
+	  } else {
+	    buffer = (char *) sgpnt;
+	    count = 0;
+	    bh = SCpnt->request.bh;
+	    if(SCpnt->request.sector % 4) {
+	      sgpnt[count].length = (SCpnt->request.sector % 4) << 9;
+	      sgpnt[count].address = scsi_malloc(sgpnt[count].length);
+	      if(!sgpnt[count].address) panic("SCSI DMA pool exhausted.");
+	      sgpnt[count].alt_address = sgpnt[count].address; /* Flag to delete
+								  if needed */
+	      count++;
+	    };
+	    for(bh = SCpnt->request.bh; count < SCpnt->use_sg; 
+		count++, bh = bh->b_reqnext) {
+	      if (bh) { /* Need a placeholder at the end of the record? */
+		sgpnt[count].address = bh->b_data;
+		sgpnt[count].length = bh->b_size;
+		sgpnt[count].alt_address = NULL;
+	      } else {
+		sgpnt[count].address = scsi_malloc(end_rec);
+		if(!sgpnt[count].address) panic("SCSI DMA pool exhausted.");
+		sgpnt[count].length = end_rec;
+		sgpnt[count].alt_address = sgpnt[count].address;
+		if (count+1 != SCpnt->use_sg) panic("Bad sr request list");
+		break;
+	      };
+	      if (((int) sgpnt[count].address) + sgpnt[count].length > 
+		  ISA_DMA_THRESHOLD & (scsi_hosts[SCpnt->host].unchecked_isa_dma)) {
+		sgpnt[count].alt_address = sgpnt[count].address;
+		/* We try and avoid exhausting the DMA pool, since it is easier
+		   to control usage here.  In other places we might have a more
+		   pressing need, and we would be screwed if we ran out */
+		if(dma_free_sectors < (sgpnt[count].length >> 9) + 5) {
+		  sgpnt[count].address = NULL;
+		} else {
+		  sgpnt[count].address = scsi_malloc(sgpnt[count].length);
+		};
+/* If we start running low on DMA buffers, we abort the scatter-gather
+   operation, and free all of the memory we have allocated.  We want to
+   ensure that all scsi operations are able to do at least a non-scatter/gather
+   operation */
+		if(sgpnt[count].address == NULL){ /* Out of dma memory */
+		  printk("Warning: Running low on SCSI DMA buffers");
+		  /* Try switching back to a non scatter-gather operation. */
+		  while(--count){
+		    if(sgpnt[count].alt_address) 
+		      scsi_free(sgpnt[count].address, sgpnt[count].length);
+		  };
+		  SCpnt->use_sg = 0;
+		  scsi_free(buffer, SCpnt->sglist_len);
+		  break;
+		}; /* if address == NULL */
+	      };  /* if need DMA fixup */
+	    };  /* for loop to fill list */
+#ifdef DEBUG
+	    printk("SG: %d %d %d %d %d *** ",SCpnt->use_sg, SCpnt->request.sector,
+		   this_count, 
+		   SCpnt->request.current_nr_sectors,
+		   SCpnt->request.nr_sectors);
+	    for(count=0; count<SCpnt->use_sg; count++)
+	      printk("SGlist: %d %x %x %x\n", count,
+		     sgpnt[count].address, 
+		     sgpnt[count].alt_address, 
+		     sgpnt[count].length);
+#endif
+	  };  /* Able to allocate scatter-gather list */
+	};
+	
+	if (SCpnt->use_sg == 0){
+	  /* We cannot use scatter-gather.  Do this the old fashion way */
+	  if (!SCpnt->request.bh)  	
+	    this_count = SCpnt->request.nr_sectors;
+	  else
+	    this_count = (SCpnt->request.bh->b_size >> 9);
+	  
+	  start = block % 4;
+	  if (start)
+	    {				  
+	      this_count = ((this_count > 4 - start) ? 
+			    (4 - start) : (this_count));
+	      buffer = scsi_malloc(2048);
+	    } 
+	  else if (this_count < 4)
+	    {
+	      buffer = scsi_malloc(2048);
+	    }
+	  else
+	    {
+	      this_count -= this_count % 4;
+	      buffer = SCpnt->request.buffer;
+	      if (((int) buffer) + (this_count << 9) > ISA_DMA_THRESHOLD & 
+		  (scsi_hosts[SCpnt->host].unchecked_isa_dma))
+		buffer = scsi_malloc(this_count << 9);
+	    }
+	};
+
+	block = block >> 2; /* These are the sectors that the cdrom uses */
+	realcount = (this_count + 3) / 4;
 
 	if (((realcount > 0xff) || (block > 0x1fffff)) && scsi_CDs[dev].ten) 
 		{
@@ -369,16 +574,35 @@ void do_sr_request (void)
 		cmd[5] = 0;
 		}   
 
-	scsi_do_cmd (SR_HOST, SR_ID, (void *) cmd, buffer, realcount << 11, 
-		     rw_intr, SR_TIMEOUT, sense_buffer, MAX_RETRIES);
+#ifdef DEBUG
+	printk("ReadCD: %d %d %d\n",block, realcount, buffer);
+#endif
+
+	SCpnt->this_count = this_count;
+	scsi_do_cmd (SCpnt, (void *) cmd, buffer, realcount << 11, 
+		     rw_intr, SR_TIMEOUT, MAX_RETRIES);
 }
+
+unsigned long sr_init1(unsigned long mem_start, unsigned long mem_end){
+  scsi_CDs = (Scsi_CD *) mem_start;
+  mem_start += MAX_SR * sizeof(Scsi_CD);
+  return mem_start;
+};
+
+void sr_attach(Scsi_Device * SDp){
+  scsi_CDs[NR_SR++].device = SDp;
+  if(NR_SR > MAX_SR) panic ("scsi_devices corrupt (sr)");
+};
 
 unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 {
 	int i;
 
-	bb = (struct block_buffer *) memory_start;
-	memory_start += NR_SR * sizeof(struct block_buffer);
+	if(MAX_SR == 0) return memory_start;
+
+	sr_sizes = (int *) memory_start;
+	memory_start += MAX_SR * sizeof(int);
+	memset(sr_sizes, 0, MAX_SR * sizeof(int));
 
 	for (i = 0; i < NR_SR; ++i)
 		{
@@ -388,18 +612,19 @@ unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 		scsi_CDs[i].ten = 1;
 		scsi_CDs[i].remap = 1;
 		sr_sizes[i] = scsi_CDs[i].capacity;
-
-		bb[i].block = -1;
 		}
 
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	blk_size[MAJOR_NR] = sr_sizes;	
+
+	/* If our host adapter is capable of scatter-gather, then we increase
+	   the read-ahead to 8 blocks (16 sectors).  If not, we use
+	   a two block (4 sector) read ahead. */
+	if(scsi_hosts[scsi_CDs[0].device->host_no].sg_tablesize)
+	  read_ahead[MAJOR_NR] = 16;  /* 16 sector read-ahead */
+	else
+	  read_ahead[MAJOR_NR] = 4;  /* 4 sector read-ahead */
+
 	blkdev_fops[MAJOR_NR] = &sr_fops; 
 	return memory_start;
 }	
-#endif
-
-
-
-
-

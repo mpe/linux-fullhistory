@@ -19,8 +19,22 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: sock.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: sock.c,v 0.8.4.6 1992/11/18 15:38:03 bir7 Exp $ */
 /* $Log: sock.c,v $
+ * Revision 0.8.4.6  1992/11/18  15:38:03  bir7
+ * Fixed minor problem in setsockopt.
+ *
+ * Revision 0.8.4.5  1992/11/17  14:19:47  bir7
+ * *** empty log message ***
+ *
+ * Revision 0.8.4.4  1992/11/16  16:13:40  bir7
+ * Fixed some error returns and undid one of the accept changes.
+ *
+ * Revision 0.8.4.3  1992/11/15  14:55:30  bir7
+ * Added more checking for a packet being on a queue before it's
+ * dropped when a socket is closed.  Added check to see if it's
+ * on the arp_q also.
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -421,6 +435,7 @@ destroy_sock(volatile struct sock *sk)
        do {
 	  struct sk_buff *skb2;
 	  skb2=skb->next;
+
 	  /* this will take care of closing sockets that were
 	     listening and didn't accept everything. */
 
@@ -440,29 +455,56 @@ destroy_sock(volatile struct sock *sk)
   for (skb = sk->send_head; skb != NULL; )
     {
       struct sk_buff *skb2;
-      /* we need to remove skb from the transmit queue. */
+      /* we need to remove skb from the transmit queue, or
+       maybe the arp queue */
       cli();
       /* see if it's in a transmit queue. */
       if (skb->next != NULL)
 	{
+	  extern struct sk_buff *arp_q;
+	  int i;
 	   if (skb->next != skb)
 	     {
 		skb->next->prev = skb->prev;
 		skb->prev->next = skb->next;
+
+		if (skb == arp_q)
+		  {
+		    arp_q = skb->next;
+		  }
+		else
+		  {
+		    for (i = 0; i < DEV_NUMBUFFS; i++)
+		      {
+			if (skb->dev && skb->dev->buffs[i] == skb)
+			  {
+			    skb->dev->buffs[i]= skb->next;
+			    break;
+			  }
+		      }
+		  }
 	     }
 	   else
 	     {
-		int i;
-		for (i = 0; i < DEV_NUMBUFFS; i++)
-		  {
-		     if (skb->dev && skb->dev->buffs[i] == skb)
-		       {
-			  skb->dev->buffs[i]= NULL;
-			  break;
-		       }
-		  }
+
+	       if (skb == arp_q)
+		 {
+		   arp_q = NULL;
+		 }
+	       else
+		 {
+		   for (i = 0; i < DEV_NUMBUFFS; i++)
+		     {
+		       if (skb->dev && skb->dev->buffs[i] == skb)
+			 {
+			   skb->dev->buffs[i]= NULL;
+			   break;
+			 }
+		     }
+		 }
 	     }
 	}
+      skb->dev = NULL;
       sti();
       skb2=skb->link3;
       kfree_skb(skb, FREE_WRITE);
@@ -494,7 +536,7 @@ destroy_sock(volatile struct sock *sk)
   if (sk->pair)
     {
       sk->pair->dead = 1;
-      sk->pair->prot->close (sk, 0);
+      sk->pair->prot->close (sk->pair, 0);
       sk->pair = NULL;
     }
 
@@ -559,7 +601,9 @@ ip_proto_setsockopt(struct socket *sock, int level, int optname,
 	printk ("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return (0);
      }
-    verify_area (optval, sizeof (int));
+    if (optval == NULL) return (-EINVAL);
+
+/*    verify_area (optval, sizeof (int));*/
     val = get_fs_long ((unsigned long *)optval);
     switch (optname)
       {
@@ -992,7 +1036,7 @@ ip_proto_bind (struct socket *sock, struct sockaddr *uaddr,
   if (sk->state != TCP_CLOSE) return (-EIO);
   if (sk->num != 0) return (-EINVAL);
 
-  verify_area (uaddr, addr_len);
+/*  verify_area (uaddr, addr_len);*/
   memcpy_fromfs (&addr, uaddr, min (sizeof (addr), addr_len));
   if (addr.sin_family && addr.sin_family != AF_INET)
     return (-EINVAL); /* this needs to be changed. */
@@ -1074,7 +1118,7 @@ ip_proto_connect (struct socket *sock, struct sockaddr * uaddr,
 
   sock->state = SS_CONNECTED;
 
-  if (flags & O_NONBLOCK) return (0);
+  if (flags & O_NONBLOCK) return (-EINPROGRESS);
 
   cli(); /* avoid the race condition */
 
@@ -1172,11 +1216,9 @@ ip_proto_getname(struct socket *sock, struct sockaddr *uaddr,
   struct sockaddr_in sin;
   volatile struct sock *sk;
   int len;
-  verify_area(uaddr_len, sizeof (len));
   len = get_fs_long(uaddr_len);
   /* check this error. */
   if (len < sizeof (sin)) return (-EINVAL);
-  verify_area (uaddr, len);
   sin.sin_family=AF_INET;
   sk = sock->data;
   if (sk == NULL)
@@ -1197,7 +1239,9 @@ ip_proto_getname(struct socket *sock, struct sockaddr *uaddr,
       sin.sin_addr.s_addr = sk->saddr;
     }
   len = sizeof (sin);
+  verify_area (uaddr, len);
   memcpy_tofs(uaddr, &sin, sizeof (sin));
+  verify_area(uaddr_len, sizeof (len));
   put_fs_long (len, uaddr_len);
   return (0);
 }
@@ -1213,7 +1257,9 @@ ip_proto_read (struct socket *sock, char *ubuf, int size, int noblock)
 	return (0);
      }
   if (sk->shutdown & RCV_SHUTDOWN)
-    return (-EIO);
+    {
+      return (0); /* this seems to be what sunos does. */
+    }
 
   /* we may need to bind the socket. */
   if (sk->num == 0)
@@ -1239,7 +1285,10 @@ ip_proto_recv (struct socket *sock, void *ubuf, int size, int noblock,
 	return (0);
      }
   if (sk->shutdown & RCV_SHUTDOWN)
-    return (-EIO);
+    {
+      return (0);
+    }
+
 
   /* we may need to bind the socket. */
   if (sk->num == 0)
@@ -1264,7 +1313,11 @@ ip_proto_write (struct socket *sock, char *ubuf, int size, int noblock)
 	return (0);
      }
   if (sk->shutdown & SEND_SHUTDOWN)
-    return (-EIO);
+    {
+      send_sig (SIGPIPE, current, 1);
+      return (-EPIPE);
+    }
+
 
   /* we may need to bind the socket. */
   if (sk->num == 0)
@@ -1291,7 +1344,11 @@ ip_proto_send (struct socket *sock, void *ubuf, int size, int noblock,
 	return (0);
      }
   if (sk->shutdown & SEND_SHUTDOWN)
-    return (-EIO);
+    {
+      send_sig (SIGPIPE, current, 1);
+      return (-EPIPE);
+    }
+
 
   /* we may need to bind the socket. */
   if (sk->num == 0)
@@ -1318,7 +1375,11 @@ ip_proto_sendto (struct socket *sock, void *ubuf, int size, int noblock,
 	return (0);
      }
   if (sk->shutdown & SEND_SHUTDOWN)
-    return (-EIO);
+    {
+      send_sig (SIGPIPE, current, 1);
+      return (-EPIPE);
+    }
+
   if (sk->prot->sendto == NULL) return (-EOPNOTSUPP);
 
   /* we may need to bind the socket. */
@@ -1346,7 +1407,10 @@ ip_proto_recvfrom (struct socket *sock, void *ubuf, int size, int noblock,
 	return (0);
      }
   if (sk->shutdown & RCV_SHUTDOWN)
-    return (-EIO);
+    {
+      return (0);
+    }
+
   if (sk->prot->recvfrom == NULL) return (-EOPNOTSUPP);
 
   /* we may need to bind the socket. */

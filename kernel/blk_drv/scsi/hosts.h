@@ -4,47 +4,34 @@
  *		Drew Eckhardt 
  *
  *	<drew@colorado.edu>
+ *
+ *       Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *       add scatter-gather, multiple outstanding request, and other
+ *       enhancements.
  */
 
 #ifndef _HOSTS_H
 	#define _HOSTS_H
-
-#ifndef MAX_SCSI_HOSTS
-	#include "max_hosts.h"
-#endif
 
 /*
 	$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hosts.h,v 1.1 1992/07/24 06:27:38 root Exp root $
 */
 
 /*
-	The Scsi_Cmnd structure is used by scsi.c internally, and for communication with
-	low level drivers that support multiple outstanding commands.
-*/
-
-typedef struct scsi_cmnd {
-	int host;
-	unsigned char target, lun;
-	unsigned char cmnd[10];
-	unsigned bufflen;
-	void *buffer;
-	
-	unsigned char sense_cmnd[6];
-	unsigned char *sense_buffer;	
-
-	unsigned flags;
-		
-	int retries;
-	int allowed;
-	int timeout_per_command, timeout_total, timeout;
-	
-	void (*done)(int,int);
-	struct scsi_cmnd *next, *prev;	
-	} Scsi_Cmnd;		 
-
-/*
 	The Scsi_Host type has all that is needed to interface with a SCSI
 	host in a device independant matter.  
+*/
+
+#define SG_NONE 0
+#define SG_ALL 0xff
+
+/* The various choices mean:
+   NONE: Self evident.  Host adapter is not capable of scatter-gather.
+   ALL:  Means that the host adapter module can do scatter-gather,
+         and that there is no limit to the size of the table to which
+	 we scatter/gather data.
+  Anything else:  Indicates the maximum number of chains that can be
+        used in one scatter-gather request.
 */
 
 typedef struct     
@@ -70,7 +57,7 @@ typedef struct
 		information the developer sees fit.              
 	*/
 
-        char *(* info)(void);
+        const char *(* info)(void);
 
 	/*
 		The command function takes a target, a command (this is a SCSI 
@@ -84,8 +71,7 @@ typedef struct
 		3	mid level error return
 	*/
 
-	int (* command)(unsigned char target, const void *cmnd, 
-			     void *buff, int bufflen);
+	int (* command)(Scsi_Cmnd *);
 
         /*
                 The QueueCommand function works in a similar manner
@@ -96,10 +82,8 @@ typedef struct
 		host adapter.
         */
 
-        int (* queuecommand)(unsigned char target, const void *cmnd,
-                             void *buff, int bufflen, void (*done)(int,int));
+        int (* queuecommand)(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 
-	
 	/*
 		Since the mid level driver handles time outs, etc, we want to 
 		be able to abort the current command.  Abort returns 0 if the 
@@ -111,7 +95,7 @@ typedef struct
 		resetting the bus, etc.  if necessary. 
 	*/
 
-	int (* abort)(int);
+	int (* abort)(Scsi_Cmnd *, int);
 
 	/*
 		The reset function will reset the SCSI bus.  Any executing 
@@ -119,24 +103,57 @@ typedef struct
 	*/ 
 
 	int (* reset)(void);
+	/*
+		This function is used to select synchronous communications,
+		which will result in a higher data throughput.  Not implemented
+		yet.
+	*/ 
+
+	int (* slave_attach)(int, int);
+	/*
+		This function determines the bios parameters for a given
+		harddisk.  These tend to be numbers that are made up by
+		the host adapter.  Parameters:
+		size, device number, list (heads, sectors, cylinders)
+	*/ 
+
+	int (* bios_param)(int, int, int []);
 	
 	/*
 		This determines if we will use a non-interrupt driven
 		or an interrupt driven scheme,  It is set to the maximum number
 		of simulataneous commands a given host adapter will accept.
 	*/
-
 	int can_queue;
 
 	/*
 		In many instances, especially where disconnect / reconnect are 
 		supported, our host also has an ID on the SCSI bus.  If this is 
-		the case, then it must be reserved.  Please set this_id to -1 if 		your settup is in single initiator mode, and the host lacks an 
+		the case, then it must be reserved.  Please set this_id to -1 if
+ 		your settup is in single initiator mode, and the host lacks an 
 		ID.
 	*/
 	
 	int this_id;
 
+	/*
+	        This determines the degree to which the host adapter is capable
+		of scatter-gather.
+	*/
+
+	short unsigned int sg_tablesize;
+
+	/*
+	  True if this host adapter can make good use of linked commands.
+	  This will allow more than one command to be queued to a given
+	  unit on a given host.  Set this to the maximum number of command
+	  blocks to be provided for each device.  Set this to 1 for one
+	  command block per lun, 2 for two, etc.  Do not set this to 0.
+	  You should make sure that the host adapter will do the right thing
+	  before you try setting this above 1.
+	 */
+
+	short cmd_per_lun;
 	/*
 		present contains a flag as to weather we are present -
 		so we don't have to call detect multiple times.
@@ -147,7 +164,6 @@ typedef struct
 	  true if this host adapter uses unchecked DMA onto an ISA bus.
 	*/
 	unsigned unchecked_isa_dma:1;
-
 	} Scsi_Host;
 
 /*
@@ -164,14 +180,15 @@ extern Scsi_Host scsi_hosts[];
 */
 
 extern volatile unsigned char host_busy[];
-extern volatile int host_timeout[];
 
 /*
 	This is the queue of currently pending commands for a given
 	SCSI host.
 */
 
-extern volatile Scsi_Cmnd *host_queue[];
+extern Scsi_Cmnd *host_queue[];
+
+extern struct wait_queue *host_wait[];   /* For waiting until host available*/
 
 /*
 	scsi_init initializes the scsi hosts.
@@ -180,5 +197,5 @@ extern volatile Scsi_Cmnd *host_queue[];
 
 void scsi_init(void);
 
-#define BLANK_HOST {"", 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define BLANK_HOST {"", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #endif

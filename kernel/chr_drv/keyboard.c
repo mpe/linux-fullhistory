@@ -7,11 +7,14 @@
  * the assembly version by Linus (with diacriticals added)
  */
 
+#define KEYBOARD_IRQ 1
+
 #include <linux/sched.h>
 #include <linux/ctype.h>
 #include <linux/tty.h>
 #include <linux/mm.h>
 #include <linux/ptrace.h>
+#include <linux/keyboard.h>
 
 /*
  * The default IO slowdown is doing 'inb()'s from 0x61, which should be
@@ -24,44 +27,18 @@
 #include <asm/io.h>
 #include <asm/system.h>
 
-#define LSHIFT		0x01
-#define RSHIFT		0x02
-#define LCTRL		0x04
-#define RCTRL		0x08
-#define ALT		0x10
-#define ALTGR		0x20
-#define CAPS		0x40
-#define CAPSDOWN	0x80
-
-#define SCRLED		0x01
-#define NUMLED		0x02
-#define CAPSLED		0x04
-
-#define NO_META_BIT 0x80
-
-#ifndef KBD_DEFLOCK
-#define KBD_DEFLOCK NUMLED
-#endif
-
-unsigned char kapplic = 0;
-unsigned char ckmode = 0;
-unsigned char krepeat = 1;
-unsigned char kmode = 0;
-unsigned char default_kleds = KBD_DEFLOCK;
-unsigned char kleds = KBD_DEFLOCK;
-unsigned char ke0 = 0;
-unsigned char kraw = 0;
-unsigned char kbd_flags = KBDFLAGS;
-unsigned char lfnlmode = 0;
-
 extern void do_keyboard_interrupt(void);
 extern void ctrl_alt_del(void);
 extern void change_console(unsigned int new_console);
-extern struct tty_queue *table_list[];
+
+unsigned long kbd_flags = 0;
+
+struct kbd_struct kbd_table[NR_CONSOLES];
+static struct kbd_struct * kbd = kbd_table;
+static struct tty_struct * tty = NULL;
 
 typedef void (*fptr)(int);
 
-static unsigned char old_leds = NUMLED;
 static int diacr = -1;
 static int npadch = 0;
 fptr key_table[];
@@ -70,38 +47,34 @@ static void put_queue(int);
 void set_leds(void);
 static void applkey(int);
 static void cur(int);
-static void kb_wait(void), kb_ack(void);
 static unsigned int handle_diacr(unsigned int);
 
 static struct pt_regs * pt_regs;
 
-void keyboard_interrupt(int int_pt_regs)
+static void keyboard_interrupt(int int_pt_regs)
 {
-	static unsigned char rep = 0xff, repke0 = 0;
+	static unsigned char rep = 0xff;
 	unsigned char scancode, x;
-	struct tty_struct * tty = TTY_TABLE(0);
 
 	pt_regs = (struct pt_regs *) int_pt_regs;
 	scancode=inb_p(0x60);
 	x=inb_p(0x61);
 	outb_p(x|0x80, 0x61);
 	outb_p(x&0x7f, 0x61);
-	outb(0x20, 0x20);
-	sti();
-
-	if (kraw) {
+	if (scancode == 0xe0)
+		set_kbd_flag(KG_E0);
+	else if (scancode == 0xe1)
+		set_kbd_flag(KG_E1);
+	tty = TTY_TABLE(0);
+	kbd = kbd_table + fg_console;
+	if (vc_kbd_flag(kbd,VC_RAW)) {
+		kbd_flags = 0;
 		put_queue(scancode);
 		do_keyboard_interrupt();
 		return;
 	}
-	if (scancode == 0xe0) {
-		ke0 = 1;
+	if (scancode == 0xe0 || scancode == 0xe1)
 		return;
-	}
-	if (scancode == 0xe1) {
-		ke0 = 2;
-		return;
-	}
 	/*
 	 *  The keyboard maintains its own internal caps lock and num lock
 	 *  statuses. In caps lock mode E0 AA precedes make code and E0 2A
@@ -109,8 +82,9 @@ void keyboard_interrupt(int int_pt_regs)
 	 *  code and E0 AA follows break code. We do our own book-keeping,
 	 *  so we will just ignore these.
 	 */
-	if (ke0 == 1 && (scancode == 0x2a || scancode == 0xaa)) {
-		ke0 = 0;
+	if (kbd_flag(KG_E0) && (scancode == 0x2a || scancode == 0xaa)) {
+		clr_kbd_flag(KG_E0);
+		clr_kbd_flag(KG_E1);
 		return;
 	}
 	/*
@@ -118,31 +92,26 @@ void keyboard_interrupt(int int_pt_regs)
 	 *  characters get echoed locally. This makes key repeat usable
 	 *  with slow applications and unders heavy loads.
 	 */
-	if (rep == 0xff) {
-		if (scancode < 0x80) {
-			rep = scancode;
-			repke0 = ke0;
-		}
-	} else if (ke0 == repke0 && (scancode & 0x7f) == rep) {
-		if (scancode & 0x80)
-			rep = 0xff;
-		else if (!(krepeat && tty &&
+	if (scancode == rep) {
+		if (!(vc_kbd_flag(kbd,VC_REPEAT) && tty &&
 			   (L_ECHO(tty) ||
 			    (EMPTY(&tty->secondary) &&
 			     EMPTY(&tty->read_q))))) {
-			ke0 = 0;
+			clr_kbd_flag(KG_E0);
+			clr_kbd_flag(KG_E1);
 			return;
 		}
 	}
+	rep = scancode;
 	key_table[scancode](scancode);
 	do_keyboard_interrupt();
-	ke0 = 0;
+	clr_kbd_flag(KG_E0);
+	clr_kbd_flag(KG_E1);
 }
 
 static void put_queue(int ch)
 {
 	struct tty_queue *qp;
-	struct tty_struct *tty = TTY_TABLE(0);
 	unsigned long new_head;
 
 	wake_up_interruptible(&keypress_wait);
@@ -159,7 +128,6 @@ static void put_queue(int ch)
 static void puts_queue(char *cp)
 {
 	struct tty_queue *qp;
-	struct tty_struct *tty = TTY_TABLE(0);
 	unsigned long new_head;
 	char ch;
 
@@ -168,7 +136,7 @@ static void puts_queue(char *cp)
 		return;
 	qp = &tty->read_q;
 
-	while (ch=*cp++) {
+	while ((ch = *(cp++)) != 0) {
 		qp->buf[qp->head]=ch;
 		if ((new_head=(qp->head+1)&(TTY_BUF_SIZE-1))
 				 != qp->tail)
@@ -179,34 +147,34 @@ static void puts_queue(char *cp)
 
 static void ctrl(int sc)
 {
-	if (ke0)
-		kmode|=RCTRL;
+	if (kbd_flag(KG_E0))
+		set_kbd_flag(KG_RCTRL);
 	else
-		kmode|=LCTRL;
+		set_kbd_flag(KG_LCTRL);
 }
 
 static void alt(int sc)
 {
-	if (ke0)
-		kmode|=ALTGR;
+	if (kbd_flag(KG_E0))
+		set_kbd_flag(KG_ALTGR);
 	else
-		kmode|=ALT;
+		set_kbd_flag(KG_ALT);
 }
 
 static void unctrl(int sc)
 {
-	if (ke0)
-		kmode&=(~RCTRL);
+	if (kbd_flag(KG_E0))
+		clr_kbd_flag(KG_RCTRL);
 	else
-		kmode&=(~LCTRL);
+		clr_kbd_flag(KG_LCTRL);
 }
 
 static void unalt(int sc)
 {
-	if (ke0)
-		kmode&=(~ALTGR);
+	if (kbd_flag(KG_E0))
+		clr_kbd_flag(KG_ALTGR);
 	else {
-		kmode&=(~ALT);
+		clr_kbd_flag(KG_ALT);
 		if (npadch != 0) {
 			put_queue(npadch);
 			npadch=0;
@@ -216,50 +184,36 @@ static void unalt(int sc)
 
 static void lshift(int sc)
 {
-	kmode|=LSHIFT;
+	set_kbd_flag(KG_LSHIFT);
 }
 
 static void unlshift(int sc)
 {
-	kmode&=(~LSHIFT);
+	clr_kbd_flag(KG_LSHIFT);
 }
 
 static void rshift(int sc)
 {
-	kmode|=RSHIFT;
+	set_kbd_flag(KG_RSHIFT);
 }
 
 static void unrshift(int sc)
 {
-	kmode&=(~RSHIFT);
+	clr_kbd_flag(KG_RSHIFT);
 }
 
 static void caps(int sc)
 {
-	if (!(kmode & CAPSDOWN)) {
-		kleds ^= CAPSLED;
-		kmode ^= CAPS;
-		kmode |= CAPSDOWN;
-		set_leds();
-	}
-}
-
-void set_leds(void)
-{
-	if (kleds != old_leds) {
-		old_leds = kleds;
-		kb_wait();
-		outb(0xed, 0x60);	/* set leds command */
-		kb_ack();
-		kb_wait();
-		outb(kleds, 0x60);
-		kb_ack();
-	}
+	if (kbd_flag(KG_CAPSLOCK))
+		return;		/* key already pressed: defeat repeat */
+	set_kbd_flag(KG_CAPSLOCK);
+	chg_vc_kbd_flag(kbd,VC_CAPSLOCK);
+	set_leds();
 }
 
 static void uncaps(int sc)
 {
-	kmode &= ~CAPSDOWN;
+	clr_kbd_flag(KG_CAPSLOCK);
 }
 
 static void show_ptregs(void)
@@ -279,22 +233,24 @@ static void show_ptregs(void)
 
 static void scroll(int sc)
 {
-	if (kmode & (LSHIFT | RSHIFT))
+	if (kbd_flag(KG_LSHIFT) || kbd_flag(KG_RSHIFT))
 		show_mem();
-	else if (kmode & (ALT | ALTGR))
+	else if (kbd_flag(KG_ALT) || kbd_flag(KG_ALTGR))
 		show_ptregs();
-	else if (kmode & (LCTRL | RCTRL))
+	else if (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL))
 		show_state();
-	kleds ^= SCRLED;
-	set_leds();
+	else {
+		chg_vc_kbd_flag(kbd,VC_SCROLLOCK);
+		set_leds();
+	}
 }
 
 static void num(int sc)
 {
-	if (kapplic)
+	if (vc_kbd_flag(kbd,VC_APPLIC))
 		applkey(0x50);
 	else {
-		kleds ^= NUMLED;
+		chg_vc_kbd_flag(kbd,VC_NUMLOCK);
 		set_leds();
 	}
 }
@@ -1062,9 +1018,10 @@ static void do_self(int sc)
 {
 	unsigned char ch;
 
-	if (kmode & ALTGR)
+	if (kbd_flag(KG_ALTGR))
 		ch = alt_map[sc];
-	else if (kmode & (LSHIFT | RSHIFT | LCTRL | RCTRL))
+	else if (kbd_flag(KG_LSHIFT) || kbd_flag(KG_RSHIFT) ||
+		 kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL))
 		ch = shift_map[sc];
 	else
 		ch = key_map[sc];
@@ -1075,14 +1032,15 @@ static void do_self(int sc)
 	if ((ch = handle_diacr(ch)) == 0)
 		return;
 
-	if (kmode & (LCTRL | RCTRL | CAPS))	/* ctrl or caps */
+	if (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL) ||
+	    vc_kbd_flag(kbd,VC_CAPSLOCK))	/* ctrl or caps */
 		if ((ch >= 'a' && ch <= 'z') || (ch >= 224 && ch <= 254))
 			ch -= 32;
-	if (kmode & (LCTRL | RCTRL))		/* ctrl */
+	if (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL))	/* ctrl */
 		ch &= 0x1f;
 
-	if (kmode & ALT)
-		if (kbd_flags & NO_META_BIT) {
+	if (kbd_flag(KG_ALT))
+		if (vc_kbd_flag(kbd,VC_META)) {
 			put_queue('\033');
 			put_queue(ch);
 		} else
@@ -1124,7 +1082,7 @@ unsigned int handle_diacr(unsigned int ch)
 	int i;
 
 	for(i=0; diacr_table[i]; i++)
-		if (ch==diacr_table[i] && ((1<<i)&kbd_flags)) {
+		if (ch==diacr_table[i] && ((1<<i)&kbd->kbd_flags)) {
 			if (diacr == i) {
 				diacr=-1;
 				return ch;		/* pressed twice */
@@ -1202,27 +1160,31 @@ static void cursor(int sc)
 {
 	if (sc < 0x47 || sc > 0x53)
 		return;
-	sc-=0x47;
-	if (sc == 12 && (kmode&(LCTRL|RCTRL)) && (kmode&(ALT|ALTGR))) {
+	sc -= 0x47;
+	if (sc == 12 &&
+	    (kbd_flag(KG_LCTRL) || kbd_flag(KG_RCTRL)) &&
+	    (kbd_flag(KG_ALT) || kbd_flag(KG_ALTGR))) {
 		ctrl_alt_del();
 		return;
 	}
-	if (ke0 == 1) {
+	if (kbd_flag(KG_E0)) {
 		cur(sc);
 		return;
 	}
 
-	if ((kmode&ALT) && sc!=12) {			/* Alt-numpad */
+	if (kbd_flag(KG_ALT) && sc != 12) {			/* Alt-numpad */
 		npadch=npadch*10+pad_table[sc];
 		return;
 	}
 
-	if (kapplic && !(kmode&(LSHIFT|RSHIFT))) {	/* shift forces cursor */
+	if (vc_kbd_flag(kbd,VC_APPLIC) &&
+	    !kbd_flag(KG_LSHIFT) &&	/* shift forces cursor */
+	    !kbd_flag(KG_RSHIFT)) {
 		applkey(appl_table[sc]);
 		return;
 	}
 
-	if (kleds&NUMLED) {
+	if (vc_kbd_flag(kbd,VC_NUMLOCK)) {
 		put_queue(num_table[sc]);
 	} else
 		cur(sc);
@@ -1236,7 +1198,9 @@ static void cur(int sc)
 	if (buf[2] < '9')
 		buf[3]='~';
 	else
-		if ((buf[2] >= 'A' && buf[2] <= 'D') ? ckmode : kapplic)
+		if ((buf[2] >= 'A' && buf[2] <= 'D') ?
+		    vc_kbd_flag(kbd,VC_CKMODE) :
+		    vc_kbd_flag(kbd,VC_APPLIC))
 			buf[1]='O';
 	puts_queue(buf);
 }
@@ -1251,10 +1215,10 @@ static void func(int sc)
 		if (sc < 10 || sc > 11)
 			return;
 	}
-	if (kmode&ALT)
+	if (kbd_flag(KG_ALT))
 		change_console(sc);
 	else
-		if (kmode & ( LSHIFT | RSHIFT))		/* DEC F11 - F20 */
+		if (kbd_flag(KG_LSHIFT) || kbd_flag(KG_RSHIFT))	/* DEC F11 - F20 */
 			puts_queue(func_table[1][sc]);
 		else					/* DEC F1 - F10 */
 			puts_queue(func_table[0][sc]);
@@ -1262,9 +1226,9 @@ static void func(int sc)
 
 static void slash(int sc)
 {
-	if (ke0 != 1)
+	if (!kbd_flag(KG_E0))
 		do_self(sc);
-	else if (kapplic)
+	else if (vc_kbd_flag(kbd,VC_APPLIC))
 		applkey('Q');
 	else
 		put_queue('/');
@@ -1272,7 +1236,7 @@ static void slash(int sc)
 
 static void star(int sc)
 {
-	if (kapplic)
+	if (vc_kbd_flag(kbd,VC_APPLIC))
 		applkey('R');
 	else
 		do_self(sc);
@@ -1280,18 +1244,18 @@ static void star(int sc)
 
 static void enter(int sc)
 {
-	if (ke0 == 1 && kapplic)
+	if (kbd_flag(KG_E0) && vc_kbd_flag(kbd,VC_APPLIC))
 		applkey('M');
 	else {
 		put_queue(13);
-		if (lfnlmode)
+		if (vc_kbd_flag(kbd,VC_CRLF))
 			put_queue(10);
 	}
 }
 
 static void minus(int sc)
 {
-	if (kapplic)
+	if (vc_kbd_flag(kbd,VC_APPLIC))
 		applkey('S');
 	else
 		do_self(sc);
@@ -1299,7 +1263,7 @@ static void minus(int sc)
 
 static void plus(int sc)
 {
-	if (kapplic)
+	if (vc_kbd_flag(kbd,VC_APPLIC))
 		applkey('l');
 	else
 		do_self(sc);
@@ -1312,7 +1276,6 @@ static void none(int sc)
 /*
  * kb_wait waits for the keyboard controller buffer to empty.
  */
-
 static void kb_wait(void)
 {
 	int i;
@@ -1333,14 +1296,29 @@ static void kb_wait(void)
  * I don't know how much waiting actually is required,
  * but this seems to work
  */
-
-void kb_ack(void)
+static void kb_ack(void)
 {
 	int i;
 
 	for(i=0; i<0x10000; i++)
 		if (inb(0x60) == 0xfa)
 			break;
+}
+
+void set_leds(void)
+{
+	static unsigned char old_leds = -1;
+	unsigned char leds = kbd_table[fg_console].flags & LED_MASK;
+
+	if (leds != old_leds) {
+		old_leds = leds;
+		kb_wait();
+		outb(0xed, 0x60);	/* set leds command */
+		kb_ack();
+		kb_wait();
+		outb(leds, 0x60);
+		kb_ack();
+	}
 }
 
 long no_idt[2] = {0, 0};
@@ -1436,3 +1414,22 @@ static fptr key_table[] = {
 	none,none,none,none,			/* F8-FB ? ? ? ? */
 	none,none,none,none			/* FC-FF ? ? ? ? */
 };
+
+unsigned long kbd_init(unsigned long kmem_start)
+{
+	int i;
+	unsigned char a;
+	struct kbd_struct * kbd;
+
+	kbd = kbd_table + 0;
+	for (i = 0 ; i < NR_CONSOLES ; i++,kbd++) {
+		kbd->flags = KBD_DEFFLAGS;
+		kbd->default_flags = KBD_DEFFLAGS;
+		kbd->kbd_flags = KBDFLAGS;
+	}
+	request_irq(KEYBOARD_IRQ,keyboard_interrupt);
+	a=inb_p(0x61);
+	outb_p(a|0x80,0x61);
+	outb_p(a,0x61);
+	return kmem_start;
+}

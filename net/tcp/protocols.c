@@ -3,8 +3,11 @@
 /* these headers are overkill, but until I clean up the socket header
    files, this is the best way. */
 
-/* $Id: protocols.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: protocols.c,v 0.8.4.3 1992/11/15 14:55:30 bir7 Exp $ */
 /* $Log: protocols.c,v $
+ * Revision 0.8.4.3  1992/11/15  14:55:30  bir7
+ * Remove ctrl-h so diff no longer thinks it's a binary file.
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *

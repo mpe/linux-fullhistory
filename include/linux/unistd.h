@@ -122,6 +122,7 @@
 #define __NR_vm86		113
 #define __NR_wait4		114
 #define __NR_swapoff		115
+#define __NR_sysinfo		116
 
 extern int errno;
 

@@ -18,8 +18,6 @@
 
 #include "blk.h"
 
-extern long rd_init(long mem_start, int length);
-
 /*
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory
@@ -30,6 +28,11 @@ struct request request[NR_REQUEST];
  * used to wait on when there are no free requests
  */
 struct wait_queue * wait_for_request = NULL;
+
+/* This specifies how many blocks to read ahead on the disk.  We might want
+   to change this to sectors later, but for now this will work */
+
+int read_ahead[NR_BLK_DEV] = {0, };
 
 /* blk_dev_struct is:
  *	do_request-address
@@ -109,6 +112,13 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 	}
 	req->next = tmp->next;
 	tmp->next = req;
+
+/* Scsi devices are treated differently */
+	if(MAJOR(req->dev) == 8 || 
+	   MAJOR(req->dev) == 9 ||
+	   MAJOR(req->dev) == 11)
+	  (dev->request_fn)();
+
 	sti();
 }
 
@@ -120,7 +130,8 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 
 /* WRITEA/READA is special case - it is not really needed, so if the */
 /* buffer is locked, we just forget about it, else it's a normal read */
-	if (rw_ahead = (rw == READA || rw == WRITEA)) {
+	rw_ahead = (rw == READA || rw == WRITEA);
+	if (rw_ahead) {
 		if (bh->b_lock)
 			return;
 		if (rw == READA)
@@ -144,10 +155,15 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 		unlock_buffer(bh);
 		return;
 	}
+/* The scsi disk drivers completely remove the request from the queue when
+   they start processing an entry.  For this reason it is safe to continue
+   to add links to the top entry for scsi devices */
+
 repeat:
 	cli();
 	if ((major == 3 ||  major == 8 || major == 11)&& (req = blk_dev[major].current_request)) {
-		while (req = req->next) {
+	        if(major == 3) req = req->next;
+		while (req) {
 			if (req->dev == bh->b_dev &&
 			    !req->waiting &&
 			    req->cmd == rw &&
@@ -159,9 +175,10 @@ repeat:
 				bh->b_dirt = 0;
 				sti();
 				return;
-			}
-		}
-	}
+			      }
+			req = req->next;
+		      }
+	      }
 /* we don't allow the write-requests to fill up the queue completely:
  * we want some room for reads: they take precedence. The last third
  * of the requests are only for reads.
@@ -243,30 +260,71 @@ repeat:
 	schedule();
 }
 
+/* This function can be used to request a number of buffers from a block
+   device. Currently the only restriction is that all buffers must belong to
+   the same device */
+
 void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 {
 	unsigned int major;
 
-	if (nr!=1) panic("ll_rw_block: only one block at a time implemented");
-	if (!bh[0])
-		return;
-	if (bh[0]->b_size != 1024) {
-		printk("ll_rw_block: only 1024-char blocks implemented (%d)\n",bh[0]->b_size);
-		bh[0]->b_dirt = bh[0]->b_uptodate = 0;
-		return;
-	}
+	struct request plug;
+	int plugged;
+	struct blk_dev_struct * dev;
+	int i, j;
+
+	/* Make sure that the first block contains something reasonable */
+	while(!bh[0]){
+	  bh++;
+	  nr--;
+	  if (nr <= 0) return;
+	};
+
+	for(j=0;j<nr; j++){
+	  if(!bh[j]) continue;
+	  if (bh[j]->b_size != 1024) {
+	    printk("ll_rw_block: only 1024-char blocks implemented (%d)\n",bh[0]->b_size);
+	    for (i=0;i<nr; i++)
+	      if (bh[i]) bh[i]->b_dirt = bh[i]->b_uptodate = 0;
+	    return;
+	  }
+	};
+
 	if ((major=MAJOR(bh[0]->b_dev)) >= NR_BLK_DEV ||
 	!(blk_dev[major].request_fn)) {
 		printk("ll_rw_block: Trying to read nonexistent block-device %04x (%d)\n",bh[0]->b_dev,bh[0]->b_blocknr);
-		bh[0]->b_dirt = bh[0]->b_uptodate = 0;
+		for (i=0;i<nr; i++)
+		  if (bh[i]) bh[i]->b_dirt = bh[i]->b_uptodate = 0;
 		return;
 	}
 	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh[0]->b_dev)) {
 		printk("Can't write to read-only device 0x%X\n\r",bh[0]->b_dev);
-		bh[0]->b_dirt = bh[0]->b_uptodate = 0;
+		for (i=0;i<nr; i++)
+		  if (bh[i]) bh[i]->b_dirt = bh[i]->b_uptodate = 0;
 		return;
 	}
-	make_request(major,rw,bh[0]);
+/* If there are no pending requests for this device, then we insert a dummy
+   request for that device.  This will prevent the request from starting until
+   we have shoved all of the blocks into the queue, and then we let it rip */
+
+	plugged = 0;
+	cli();
+	if (!blk_dev[major].current_request && nr > 1) {
+	  blk_dev[major].current_request = &plug;
+	  plug.dev = -1;
+	  plug.next = NULL;
+	  plugged = 1;
+	};
+	sti();
+	for (i=0;i<nr; i++)
+	  if (bh[i]) make_request(major, rw, bh[i]);
+	if(plugged){
+	  cli();
+	  blk_dev[major].current_request = plug.next;
+	  dev = major+blk_dev;
+	  (dev->request_fn)();
+	  sti();
+	};
 }
 
 void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
@@ -329,8 +387,7 @@ long blk_dev_init(long mem_start, long mem_end)
 #ifdef CONFIG_BLK_DEV_HD
 	mem_start = hd_init(mem_start,mem_end);
 #endif
-#ifdef RAMDISK
-	mem_start += rd_init(mem_start, RAMDISK*1024);
-#endif
+	if (ramdisk_size)
+		mem_start += rd_init(mem_start, ramdisk_size*1024);
 	return mem_start;
 }

@@ -54,74 +54,79 @@ errors.o : errors.c /usr/include/linux/signal.h /usr/include/asm/segment.h fpu_s
   /usr/include/linux/limits.h /usr/include/linux/wait.h /usr/include/linux/types.h \
   /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
   /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h \
-  /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h \
-  /usr/include/linux/mm.h /usr/include/linux/kernel.h /usr/include/linux/time.h \
-  /usr/include/linux/param.h /usr/include/linux/resource.h /usr/include/linux/vm86.h \
-  /usr/include/linux/math_emu.h exception.h fpu_emu.h fpu_proto.h status_w.h control_w.h \
-  reg_constant.h version.h 
+  /usr/include/linux/iso_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
+  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/iso_fs_sb.h /usr/include/linux/mm.h \
+  /usr/include/linux/kernel.h /usr/include/linux/time.h /usr/include/linux/param.h \
+  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
+  exception.h fpu_emu.h fpu_proto.h status_w.h control_w.h reg_constant.h version.h 
 fpu_arith.o : fpu_arith.c fpu_system.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \
   /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h \
-  /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
-  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
-  /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
-  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
-  fpu_emu.h fpu_proto.h 
+  /usr/include/linux/msdos_fs_i.h /usr/include/linux/iso_fs_i.h /usr/include/linux/minix_fs_sb.h \
+  /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/iso_fs_sb.h \
+  /usr/include/linux/mm.h /usr/include/linux/kernel.h /usr/include/linux/signal.h \
+  /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
+  /usr/include/linux/vm86.h /usr/include/linux/math_emu.h fpu_emu.h fpu_proto.h 
 fpu_aux.o : fpu_aux.c fpu_system.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \
   /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h \
-  /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
-  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
-  /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
-  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
-  exception.h fpu_emu.h fpu_proto.h status_w.h 
+  /usr/include/linux/msdos_fs_i.h /usr/include/linux/iso_fs_i.h /usr/include/linux/minix_fs_sb.h \
+  /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/iso_fs_sb.h \
+  /usr/include/linux/mm.h /usr/include/linux/kernel.h /usr/include/linux/signal.h \
+  /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
+  /usr/include/linux/vm86.h /usr/include/linux/math_emu.h exception.h fpu_emu.h \
+  fpu_proto.h status_w.h 
 fpu_entry.o : fpu_entry.c /usr/include/linux/signal.h /usr/include/linux/sched.h \
   /usr/include/linux/head.h /usr/include/linux/fs.h /usr/include/linux/limits.h \
   /usr/include/linux/wait.h /usr/include/linux/types.h /usr/include/linux/dirent.h \
   /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h \
-  /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h \
-  /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h \
-  /usr/include/linux/kernel.h /usr/include/linux/time.h /usr/include/linux/param.h \
-  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h 
+  /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h /usr/include/linux/iso_fs_i.h \
+  /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h \
+  /usr/include/linux/iso_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
+  /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
+  /usr/include/linux/vm86.h /usr/include/linux/math_emu.h 
 fpu_etc.o : fpu_etc.c fpu_system.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \
   /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h \
-  /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
-  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
-  /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
-  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
-  exception.h fpu_emu.h fpu_proto.h status_w.h reg_constant.h 
+  /usr/include/linux/msdos_fs_i.h /usr/include/linux/iso_fs_i.h /usr/include/linux/minix_fs_sb.h \
+  /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/iso_fs_sb.h \
+  /usr/include/linux/mm.h /usr/include/linux/kernel.h /usr/include/linux/signal.h \
+  /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
+  /usr/include/linux/vm86.h /usr/include/linux/math_emu.h exception.h fpu_emu.h \
+  fpu_proto.h status_w.h reg_constant.h 
 fpu_trig.o : fpu_trig.c fpu_system.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \
   /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h \
-  /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
-  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
-  /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
-  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
-  exception.h fpu_emu.h fpu_proto.h status_w.h control_w.h reg_constant.h 
+  /usr/include/linux/msdos_fs_i.h /usr/include/linux/iso_fs_i.h /usr/include/linux/minix_fs_sb.h \
+  /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/iso_fs_sb.h \
+  /usr/include/linux/mm.h /usr/include/linux/kernel.h /usr/include/linux/signal.h \
+  /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
+  /usr/include/linux/vm86.h /usr/include/linux/math_emu.h exception.h fpu_emu.h \
+  fpu_proto.h status_w.h control_w.h reg_constant.h 
 get_address.o : get_address.c /usr/include/linux/stddef.h /usr/include/asm/segment.h \
   fpu_system.h /usr/include/linux/sched.h /usr/include/linux/head.h /usr/include/linux/fs.h \
   /usr/include/linux/limits.h /usr/include/linux/wait.h /usr/include/linux/types.h \
   /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
   /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h \
-  /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h \
-  /usr/include/linux/mm.h /usr/include/linux/kernel.h /usr/include/linux/signal.h \
-  /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
-  /usr/include/linux/vm86.h /usr/include/linux/math_emu.h exception.h fpu_emu.h \
-  fpu_proto.h 
+  /usr/include/linux/iso_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
+  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/iso_fs_sb.h /usr/include/linux/mm.h \
+  /usr/include/linux/kernel.h /usr/include/linux/signal.h /usr/include/linux/time.h \
+  /usr/include/linux/param.h /usr/include/linux/resource.h /usr/include/linux/vm86.h \
+  /usr/include/linux/math_emu.h exception.h fpu_emu.h fpu_proto.h 
 load_store.o : load_store.c /usr/include/asm/segment.h fpu_system.h /usr/include/linux/sched.h \
   /usr/include/linux/head.h /usr/include/linux/fs.h /usr/include/linux/limits.h \
   /usr/include/linux/wait.h /usr/include/linux/types.h /usr/include/linux/dirent.h \
   /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h \
-  /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h \
-  /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h \
-  /usr/include/linux/kernel.h /usr/include/linux/signal.h /usr/include/linux/time.h \
-  /usr/include/linux/param.h /usr/include/linux/resource.h /usr/include/linux/vm86.h \
-  /usr/include/linux/math_emu.h exception.h fpu_emu.h fpu_proto.h status_w.h 
+  /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h /usr/include/linux/iso_fs_i.h \
+  /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h \
+  /usr/include/linux/iso_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
+  /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
+  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
+  exception.h fpu_emu.h fpu_proto.h status_w.h 
 poly_2xm1.o : poly_2xm1.c exception.h fpu_emu.h /usr/include/linux/math_emu.h \
   fpu_proto.h reg_constant.h 
 poly_atan.o : poly_atan.c exception.h fpu_emu.h /usr/include/linux/math_emu.h \
@@ -138,30 +143,32 @@ reg_compare.o : reg_compare.c fpu_system.h /usr/include/linux/sched.h /usr/inclu
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \
   /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h \
-  /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
-  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
-  /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
-  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
-  exception.h fpu_emu.h fpu_proto.h status_w.h 
+  /usr/include/linux/msdos_fs_i.h /usr/include/linux/iso_fs_i.h /usr/include/linux/minix_fs_sb.h \
+  /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/iso_fs_sb.h \
+  /usr/include/linux/mm.h /usr/include/linux/kernel.h /usr/include/linux/signal.h \
+  /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
+  /usr/include/linux/vm86.h /usr/include/linux/math_emu.h exception.h fpu_emu.h \
+  fpu_proto.h status_w.h 
 reg_constant.o : reg_constant.c fpu_system.h /usr/include/linux/sched.h /usr/include/linux/head.h \
   /usr/include/linux/fs.h /usr/include/linux/limits.h /usr/include/linux/wait.h \
   /usr/include/linux/types.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \
   /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h \
-  /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
-  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
-  /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
-  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
-  fpu_emu.h fpu_proto.h status_w.h reg_constant.h 
+  /usr/include/linux/msdos_fs_i.h /usr/include/linux/iso_fs_i.h /usr/include/linux/minix_fs_sb.h \
+  /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/iso_fs_sb.h \
+  /usr/include/linux/mm.h /usr/include/linux/kernel.h /usr/include/linux/signal.h \
+  /usr/include/linux/time.h /usr/include/linux/param.h /usr/include/linux/resource.h \
+  /usr/include/linux/vm86.h /usr/include/linux/math_emu.h fpu_emu.h fpu_proto.h \
+  status_w.h reg_constant.h 
 reg_ld_str.o : reg_ld_str.c /usr/include/asm/segment.h fpu_system.h /usr/include/linux/sched.h \
   /usr/include/linux/head.h /usr/include/linux/fs.h /usr/include/linux/limits.h \
   /usr/include/linux/wait.h /usr/include/linux/types.h /usr/include/linux/dirent.h \
   /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h \
-  /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h /usr/include/linux/minix_fs_sb.h \
-  /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h /usr/include/linux/mm.h \
-  /usr/include/linux/kernel.h /usr/include/linux/signal.h /usr/include/linux/time.h \
-  /usr/include/linux/param.h /usr/include/linux/resource.h /usr/include/linux/vm86.h \
-  /usr/include/linux/math_emu.h exception.h fpu_emu.h fpu_proto.h reg_constant.h \
-  control_w.h 
+  /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h /usr/include/linux/iso_fs_i.h \
+  /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h /usr/include/linux/msdos_fs_sb.h \
+  /usr/include/linux/iso_fs_sb.h /usr/include/linux/mm.h /usr/include/linux/kernel.h \
+  /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
+  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
+  exception.h fpu_emu.h fpu_proto.h reg_constant.h control_w.h 
 reg_mul.o : reg_mul.c exception.h fpu_emu.h /usr/include/linux/math_emu.h fpu_proto.h \
   reg_constant.h 
 div_small.o : div_small.S fpu_asm.h fpu_emu.h 

@@ -172,7 +172,7 @@ int sys_fork(long ebx,long ecx,long edx,
 	}
 	p->tss.esp0 = PAGE_SIZE + p->kernel_stack_page;
 	for (i=0; i<NR_OPEN;i++)
-		if (f=p->filp[i])
+		if ((f = p->filp[i]) != NULL)
 			f->f_count++;
 	if (current->pwd)
 		current->pwd->i_count++;

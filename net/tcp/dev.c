@@ -19,8 +19,14 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: dev.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: dev.c,v 0.8.4.4 1992/11/18 15:38:03 bir7 Exp $ */
 /* $Log: dev.c,v $
+ * Revision 0.8.4.4  1992/11/18  15:38:03  bir7
+ * Fixed bug in copying packets and changed some printk's
+ *
+ * Revision 0.8.4.3  1992/11/15  14:55:30  bir7
+ * More sanity checks.
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -131,9 +137,15 @@ void
 dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
 {
   struct sk_buff *skb2;
-  PRINTK ("eth_queue_xmit (skb=%X, dev=%X, pri = %d)\n", skb, dev, pri);
-  skb->dev = dev;
+  PRINTK ("dev_queue_xmit (skb=%X, dev=%X, pri = %d)\n", skb, dev, pri);
 
+  if (dev == NULL)
+    {
+      printk ("dev.c: dev_queue_xmit: dev = NULL\n");
+      return;
+    }
+  
+  skb->dev = dev;
   if (skb->next != NULL)
     {
       /* make sure we haven't missed an interrupt. */
@@ -152,12 +164,8 @@ dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
        return;
     }
 
-  /* used to say it is not currently on a send list. */
-  skb->next = NULL;
-
-
   /* put skb into a bidirectional circular linked list. */
-  PRINTK ("eth_queue dev->buffs[%d]=%X\n",pri, dev->buffs[pri]);
+  PRINTK ("dev_queue_xmit dev->buffs[%d]=%X\n",pri, dev->buffs[pri]);
   /* interrupts should already be cleared by hard_start_xmit. */
   cli();
   if (dev->buffs[pri] == NULL)
@@ -313,6 +321,10 @@ dev_rint(unsigned char *buff, unsigned long len, int flags,
 		  if (skb2 == NULL) continue;
 		  memcpy (skb2, skb, skb->mem_len);
 		  skb2->mem_addr = skb2;
+		  skb2->h.raw = (void *)((unsigned long)skb2
+					 + (unsigned long)skb->h.raw
+					 - (unsigned long)skb);
+
 	       }
 	     else
 	       {
@@ -366,15 +378,15 @@ dev_tint(unsigned char *buff,  struct device *dev)
 	    }
 	  skb->next = NULL;
 	  skb->prev = NULL;
-	  sti();
 	  tmp = skb->len;
 	  if (!skb->arp)
 	    {
 	       if (dev->rebuild_header (skb+1, dev))
 		 {
-		    skb->dev = dev;
-		    arp_queue (skb);
-		    continue;
+		   skb->dev = dev;
+		   sti();
+		   arp_queue (skb);
+		   continue;
 		 }
 	    }
 	     
@@ -394,7 +406,7 @@ dev_tint(unsigned char *buff,  struct device *dev)
 	    {
 	       printk ("**** bug len bigger than mtu. \n");
 	    }
-
+	  sti();
 	  if (skb->free)
 	    {
 		  kfree_skb(skb, FREE_WRITE);

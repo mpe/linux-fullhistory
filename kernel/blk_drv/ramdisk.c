@@ -6,7 +6,6 @@
 
 
 #include <linux/config.h>
-#ifdef RAMDISK
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/fs.h>
@@ -87,7 +86,7 @@ void rd_load(void)
 {
 	struct buffer_head *bh;
 	struct minix_super_block s;
-	int		block = 256;	/* Start at block 256 */
+	int		block = 512;	/* Start at block 512 */
 	int		i = 1;
 	int		nblocks;
 	char		*cp;		/* Move pointer */
@@ -138,4 +137,3 @@ void rd_load(void)
 	printk("\ndone\n");
 	ROOT_DEV=0x0101;
 }
-#endif

@@ -357,7 +357,8 @@ int sys_open(const char * filename,int flag,int mode)
 		return -ENFILE;
 	current->filp[fd] = f;
 	f->f_flags = flag;
-	if (f->f_mode = (flag+1) & O_ACCMODE)
+	f->f_mode = (flag+1) & O_ACCMODE;
+	if (f->f_mode)
 		flag++;
 	if (flag & (O_TRUNC | O_CREAT))
 		flag |= 2;
@@ -388,13 +389,15 @@ int sys_open(const char * filename,int flag,int mode)
 	f->f_op = NULL;
 	if (inode->i_op)
 		f->f_op = inode->i_op->default_file_ops;
-	if (f->f_op && f->f_op->open)
-		if (i = f->f_op->open(inode,f)) {
+	if (f->f_op && f->f_op->open) {
+		i = f->f_op->open(inode,f);
+		if (i) {
 			iput(inode);
 			f->f_count--;
 			current->filp[fd]=NULL;
 			return i;
 		}
+	}
 	f->f_flags &= ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
 	return (fd);
 }
@@ -457,7 +460,7 @@ static void kill_wait(struct wait_queue **q, int sig)
 	do { 
 		tmp = next;
 		next = tmp->next;
-		if (p = tmp->task)
+		if ((p = tmp->task) != NULL)
 			send_sig (sig, p , 1);
 	} while (next && next != *q);
 }

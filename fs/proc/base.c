@@ -48,12 +48,6 @@ struct inode_operations proc_base_inode_operations = {
 	NULL			/* truncate */
 };
 
-struct proc_dir_entry {
-	unsigned short low_ino;
-	unsigned short namelen;
-	char * name;
-};
-
 static struct proc_dir_entry base_dir[] = {
 	{ 1,2,".." },
 	{ 2,1,"." },
@@ -62,12 +56,15 @@ static struct proc_dir_entry base_dir[] = {
 	{ 5,4,"root" },
 	{ 6,3,"exe" },
 	{ 7,2,"fd" },
-	{ 8,3,"lib" }
+	{ 8,3,"lib" },
+	{ 9,7,"environ" },
+	{ 10,7,"cmdline" },
+	{ 11,4,"stat" }
 };
 
 #define NR_BASE_DIRENTRY ((sizeof (base_dir))/(sizeof (base_dir[0])))
 
-static int proc_match(int len,const char * name,struct proc_dir_entry * de)
+int proc_match(int len,const char * name,struct proc_dir_entry * de)
 {
 	register int same __asm__("ax");
 

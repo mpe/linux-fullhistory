@@ -118,7 +118,7 @@ printk("free cluster: %d\n",this);
 printk("set to %x\n",fat_access(inode->i_sb,this,-1));
 #endif
 	last = 0;
-	if (current = MSDOS_I(inode)->i_start) {
+	if ((current = MSDOS_I(inode)->i_start) != 0) {
 		cache_lookup(inode,0x7fffffff,&last,&current);
 		while (current && current != -1)
 			if (!(current = fat_access(inode->i_sb,
@@ -163,7 +163,7 @@ printk("zeroing sector %d\n",sector);
 			brelse(bh);
 		}
 	}
-	inode->i_blocks++;
+	inode->i_blocks += MSDOS_SB(inode->i_sb)->cluster_size;
 	if (S_ISDIR(inode->i_mode)) {
 		if (inode->i_size & (SECTOR_SIZE-1))
 			panic("Odd directory size");

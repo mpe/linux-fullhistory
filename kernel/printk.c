@@ -42,7 +42,7 @@ int sys_syslog(int type, char * buf, int len)
 			if (log_page) {
 				free_page(i);
 				return 0;
-			} else if (log_page = i) {
+			} else if ((log_page = i) != 0) {
 				log_start = log_size = 0;
 				return 0;
 			}

@@ -23,6 +23,9 @@
 #ifdef NFS_FS
 #include <linux/nfs_fs.h>
 #endif
+#ifdef ISO9660_FS
+#include <linux/iso_fs.h>
+#endif
 
 struct file_system_type file_systems[] = {
 #ifdef MINIX_FS
@@ -39,6 +42,9 @@ struct file_system_type file_systems[] = {
 #endif
 #ifdef NFS_FS
 	{nfs_read_super,	"nfs",		0},
+#endif
+#ifdef ISO9660_FS
+	{isofs_read_super,	"iso9660",	1},
 #endif
 	{NULL,			NULL,		0}
 };

@@ -12,6 +12,27 @@
 #include <linux/dirent.h>
 #include <linux/vfs.h>
 
+/*
+ * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
+ * that later. Anyway, now the file code is no longer dependent
+ * on bitmaps in unsigned longs, but uses the new fd_set structure..
+ *
+ * Some programs (notably those using select()) may have to be 
+ * recompiled to take full advantage of the new limits..
+ */
+#undef NR_OPEN
+#define NR_OPEN 256
+
+#define NR_INODE 128
+#define NR_FILE 128
+#define NR_SUPER 16
+#define NR_HASH 997
+#define NR_FILE_LOCKS 32
+#define BLOCK_SIZE 1024
+#define BLOCK_SIZE_BITS 10
+#define MAX_CHRDEV 32
+#define MAX_BLKDEV 32
+
 /* devices are as follows: (same as minix, so we can use the minix
  * file system. These are major numbers.)
  *
@@ -86,6 +107,7 @@ extern void inode_init(void);
 #define BLKROSET 4701 /* set device read-only (0 = read-write) */
 #define BLKROGET 4702 /* get read-only status (0 = read_write) */
 #define BLKRRPART 4703 /* re-read partition table */
+#define BLKGETSIZE 4704 /* return device size */
 
 #define BMAP_IOCTL 1	/* obsolete - kept for compatibility */
 #define FIBMAP	   1	/* bmap access */
@@ -115,6 +137,7 @@ struct buffer_head {
 #include <linux/minix_fs_i.h>
 #include <linux/ext_fs_i.h>
 #include <linux/msdos_fs_i.h>
+#include <linux/iso_fs_i.h>
 
 struct inode {
 	dev_t		i_dev;
@@ -151,6 +174,7 @@ struct inode {
 		struct minix_inode_info minix_i;
 		struct ext_inode_info ext_i;
 		struct msdos_inode_info msdos_i;
+		struct iso_inode_info isofs_i;
 	} u;
 };
 
@@ -178,6 +202,7 @@ struct file_lock {
 #include <linux/minix_fs_sb.h>
 #include <linux/ext_fs_sb.h>
 #include <linux/msdos_fs_sb.h>
+#include <linux/iso_fs_sb.h>
 
 struct super_block {
 	dev_t s_dev;
@@ -196,6 +221,7 @@ struct super_block {
 		struct minix_sb_info minix_sb;
 		struct ext_sb_info ext_sb;
 		struct msdos_sb_info msdos_sb;
+		struct isofs_sb_info isofs_sb;
 	} u;
 };
 
@@ -259,6 +285,7 @@ extern void grow_buffers(int size);
 extern int shrink_buffers(unsigned int priority);
 
 extern int nr_buffers;
+extern int buffermem;
 extern int nr_buffer_heads;
 
 extern void check_disk_change(dev_t dev);
@@ -301,6 +328,7 @@ extern void mount_root(void);
 
 extern int char_read(struct inode *, struct file *, char *, int);
 extern int block_read(struct inode *, struct file *, char *, int);
+extern int read_ahead[];
 
 extern int char_write(struct inode *, struct file *, char *, int);
 extern int block_write(struct inode *, struct file *, char *, int);

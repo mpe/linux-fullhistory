@@ -73,6 +73,10 @@ extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 extern int is_read_only(int dev);
 extern void set_device_ro(int dev,int flag);
 
+extern void rd_load(void);
+extern long rd_init(long mem_start, int length);
+extern int ramdisk_size;
+
 #define RO_IOCTLS(dev,where) \
   case BLKROSET: if (!suser()) return -EPERM; \
 		 set_device_ro((dev),get_fs_long((long *) (where))); return 0; \
@@ -167,7 +171,7 @@ void (*DEVICE_INTR)(void) = NULL;
 timer_active &= ~(1<<DEVICE_TIMEOUT)
 
 #define SET_INTR(x) \
-if (DEVICE_INTR = (x)) \
+if ((DEVICE_INTR = (x)) != NULL) \
 	SET_TIMER; \
 else \
 	CLEAR_TIMER;
@@ -187,6 +191,8 @@ extern inline void unlock_buffer(struct buffer_head * bh)
 	wake_up(&bh->b_wait);
 }
 
+/* SCSI devices have their own version */
+#if (MAJOR_NR != 8 && MAJOR_NR != 9 && MAJOR_NR != 11)
 static void end_request(int uptodate)
 {
 	struct request * req;
@@ -204,12 +210,12 @@ static void end_request(int uptodate)
 		req->sector &= ~SECTOR_MASK;		
 	}
 
-	if (bh = req->bh) {
+	if ((bh = req->bh) != NULL) {
 		req->bh = bh->b_reqnext;
 		bh->b_reqnext = NULL;
 		bh->b_uptodate = uptodate;
 		unlock_buffer(bh);
-		if (bh = req->bh) {
+		if ((bh = req->bh) != NULL) {
 			req->current_nr_sectors = bh->b_size >> 9;
 			if (req->nr_sectors < req->current_nr_sectors) {
 				req->nr_sectors = req->current_nr_sectors;
@@ -221,7 +227,7 @@ static void end_request(int uptodate)
 	}
 	DEVICE_OFF(req->dev);
 	CURRENT = req->next;
-	if (p = req->waiting) {
+	if ((p = req->waiting) != NULL) {
 		req->waiting = NULL;
 		p->state = TASK_RUNNING;
 		if (p->counter > current->counter)
@@ -230,6 +236,7 @@ static void end_request(int uptodate)
 	req->dev = -1;
 	wake_up(&wait_for_request);
 }
+#endif
 
 #ifdef DEVICE_INTR
 #define CLEAR_INTR SET_INTR(NULL)

@@ -24,7 +24,7 @@ static char *reserved_names[] = {
 
 /* Characters that are undesirable in an MS-DOS file name */
   
-static char bad_chars[] = "*?<>|\" ";
+static char bad_chars[] = "*?<>|\"";
 static char bad_if_strict[] = "+=,;";
 
 
@@ -180,7 +180,8 @@ static int msdos_create_entry(struct inode *dir,char *name,int is_dir,
 	date_unix2dos(CURRENT_TIME,&de->time,&de->date);
 	de->size = 0;
 	bh->b_dirt = 1;
-	if (*result = iget(dir->i_sb,ino)) msdos_read_inode(*result);
+	if ((*result = iget(dir->i_sb,ino)) != NULL)
+		msdos_read_inode(*result);
 	brelse(bh);
 	if (!*result) return -EIO;
 	(*result)->i_mtime = (*result)->i_atime = (*result)->i_ctime =
@@ -409,7 +410,7 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,
 	memcpy(old_de->name,new_name,MSDOS_NAME);
 	old_bh->b_dirt = 1;
 	if (MSDOS_SB(old_dir->i_sb)->conversion == 'a') /* update binary info */
-		if (old_inode = iget(old_dir->i_sb,old_ino)) {
+		if ((old_inode = iget(old_dir->i_sb,old_ino)) != NULL) {
 			msdos_read_inode(old_inode);
 			iput(old_inode);
 		}

@@ -24,13 +24,13 @@
 #define SLOW_DOWN_IO __SLOW_DOWN_IO
 #endif
 
-extern void inline outb(char value, unsigned short port)
+extern inline void outb(char value, unsigned short port)
 {
 __asm__ __volatile__ ("outb %%al,%%dx"
 		::"a" ((char) value),"d" ((unsigned short) port));
 }
 
-extern unsigned int inline inb(unsigned short port)
+extern inline unsigned int inb(unsigned short port)
 {
 	unsigned int _v;
 __asm__ __volatile__ ("inb %%dx,%%al"
@@ -38,14 +38,14 @@ __asm__ __volatile__ ("inb %%dx,%%al"
 	return _v;
 }
 
-extern void inline outb_p(char value, unsigned short port)
+extern inline void outb_p(char value, unsigned short port)
 {
 __asm__ __volatile__ ("outb %%al,%%dx"
 		::"a" ((char) value),"d" ((unsigned short) port));
 	SLOW_DOWN_IO;
 }
 
-extern unsigned int inline inb_p(unsigned short port)
+extern inline unsigned int inb_p(unsigned short port)
 {
 	unsigned int _v;
 __asm__ __volatile__ ("inb %%dx,%%al"

@@ -19,8 +19,11 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: packet.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: packet.c,v 0.8.4.3 1992/11/17 14:19:47 bir7 Exp $ */
 /* $Log: packet.c,v $
+ * Revision 0.8.4.3  1992/11/17  14:19:47  bir7
+ * *** empty log message ***
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -132,7 +135,7 @@ packet_sendto (volatile struct sock *sk, unsigned char *from, int len,
      {
 	if (addr_len < sizeof (saddr))
 	  return (-EINVAL);
-	verify_area (usin, sizeof (saddr));
+/*	verify_area (usin, sizeof (saddr));*/
 	memcpy_fromfs (&saddr, usin, sizeof(saddr));
      }
    else
@@ -158,7 +161,7 @@ packet_sendto (volatile struct sock *sk, unsigned char *from, int len,
 	sk->prot->wfree (sk, skb->mem_addr, skb->mem_len);
 	return (-ENXIO);
      }
-   verify_area (from, len);
+/*   verify_area (from, len);*/
    memcpy_fromfs (skb+1, from, len);
    skb->len = len;
    skb->next = NULL;

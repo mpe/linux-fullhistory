@@ -119,8 +119,6 @@ __asm__( \
 	"pushl $" #nr "\n\t" \
 	"call _do_IRQ\n\t" \
 	"addl $8,%esp\n\t" \
-	"testl %eax,%eax\n\t" \
-	"jne ret_from_sys_call\n\t" \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
 	"jmp ret_from_sys_call\n" \
@@ -131,11 +129,8 @@ __asm__( \
 	"pushl $" #nr "\n\t" \
 	"call _do_fast_IRQ\n\t" \
 	"addl $4,%esp\n\t" \
-	"testl %eax,%eax\n\t" \
-	"jne 2f\n\t" \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
-	"\n2:\t" \
 	RESTORE_MOST \
 "\n\n.align 2\n" \
 "_bad_IRQ" #nr "_interrupt:\n\t" \

@@ -44,8 +44,12 @@
 /* Note:  My driver was full of bugs.  Basically if it works, credit
    Bob Harris.  If it's broken blame me.  -RAB */
 
-/* $Id: we.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: we.c,v 0.8.4.3 1992/11/15 14:55:30 bir7 Exp $ */
 /* $Log: we.c,v $
+ * Revision 0.8.4.3  1992/11/15  14:55:30  bir7
+ * Put more checking in start_xmit to make sure packet doesn't disapear
+ * out from under us.
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -206,25 +210,40 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
     {
        /* put in a time out. */
        if (jiffies - dev->trans_start < 30)
-	 return (1);
+	 {
+	   return (1);
+	 }
+
        printk ("wd8003 transmit timed out. \n");
     }
   status |= TRS_BUSY;
-  sti();
 
   if (skb == NULL)
     {
+      sti();
       wd_trs(dev);
       return (0);
     }
+
+  /* this should check to see if it's been killed. */
+  if (skb->dev != dev)
+    {
+      sti();
+      return (0);
+    }
+
 
   if (!skb->arp)
     {
       if ( dev->rebuild_header (skb+1, dev)) 
 	{
-	   skb->dev = dev;
-	   arp_queue (skb);
+	  cli();
+	  if (skb->dev == dev)
+	    {
+	      arp_queue (skb);
+	    }
 	   status &= ~TRS_BUSY;
+	   sti();
 	   return (0);
 	}
     }
@@ -238,7 +257,7 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
   len=max(len, ETHER_MIN_LEN); /* actually we should zero out
 				  the extra memory. */
 /*  printk ("start_xmit len - %d\n", len);*/
-  cli();
+
   cmd=inb_p(WD_COMM);
   cmd &= ~CPAGE;
   outb_p(cmd, WD_COMM);

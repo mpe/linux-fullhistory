@@ -15,10 +15,6 @@
 #define O_NDELAY	O_NONBLOCK
 #define O_SYNC		010000
 
-/* Defines for fcntl-commands. Note that currently
- * locking isn't supported, and other things aren't really
- * tested.
- */
 #define F_DUPFD		0	/* dup */
 #define F_GETFD		1	/* get f_flags */
 #define F_SETFD		2	/* set f_flags */
@@ -34,9 +30,6 @@
 /* for F_[GET|SET]FL */
 #define FD_CLOEXEC	1	/* actually anything with low bit set goes */
 
-/* Ok, these are locking features, and aren't implemented at any
- * level. POSIX wants them.
- */
 #define F_RDLCK		0
 #define F_WRLCK		1
 #define F_UNLCK		2

@@ -1,4 +1,4 @@
-/* $Header: /sys/linux-0.97/kernel/RCS/dma.c,v 1.4 1992/09/18 02:54:14 root Exp $
+/* $Id: dma.c,v 1.5 1992/11/18 02:49:05 root Exp root $
  * linux/kernel/dma.c: A DMA channel allocator. Inspired by linux/kernel/irq.c.
  * Written by Hennus Bergman, 1992. 
  */
@@ -41,7 +41,7 @@ static volatile unsigned int dma_chan_busy[MAX_DMA_CHANNELS] = {
  * Maybe this should be in include/asm/mutex.h and be used for
  * implementing kernel-semaphores as well.
  */
-static unsigned int __inline__ mutex_atomic_swap(volatile unsigned int * p, unsigned int newval)
+static __inline__ unsigned int mutex_atomic_swap(volatile unsigned int * p, unsigned int newval)
 {
 	unsigned int semval = newval;
 

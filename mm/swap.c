@@ -406,7 +406,7 @@ void free_page(unsigned long addr)
  */
 #define REMOVE_FROM_MEM_QUEUE(queue,nr) \
 	cli(); \
-	if (result = queue) { \
+	if ((result = queue) != 0) { \
 		if (!(result & 0xfff) && result < high_memory) { \
 			queue = *(unsigned long *) result; \
 			if (!mem_map[MAP_NR(result)]) { \
@@ -705,4 +705,27 @@ int sys_swapon(const char * specialfile)
 	p->flags = SWP_WRITEOK;
 	printk("Adding Swap: %dk swap-space\n\r",j<<2);
 	return 0;
+}
+
+void si_swapinfo(struct sysinfo *val)
+{
+	unsigned int i, j;
+
+	val->freeswap = val->totalswap = 0;
+	for (i = 0; i < nr_swapfiles; i++) {
+		if (!(swap_info[i].flags & SWP_USED))
+			continue;
+		for (j = 0; j < 4096; ++j)
+			switch (swap_info[i].swap_map[j]) {
+				case 128:
+					continue;
+				case 0:
+					++val->freeswap;
+				default:
+					++val->totalswap;
+			}
+	}
+	val->freeswap <<= PAGE_SHIFT;
+	val->totalswap <<= PAGE_SHIFT;
+	return;
 }

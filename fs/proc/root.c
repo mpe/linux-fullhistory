@@ -48,6 +48,16 @@ struct inode_operations proc_root_inode_operations = {
 	NULL			/* truncate */
 };
 
+static struct proc_dir_entry root_dir[] = {
+	{ 1,1,"." },
+	{ 1,2,".." },
+	{ 2,7,"loadavg" },
+	{ 3,6,"uptime" },
+	{ 4,7,"meminfo" }
+};
+
+#define NR_ROOT_DIRENTRY ((sizeof (root_dir))/(sizeof (root_dir[0])))
+
 static int proc_lookuproot(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
@@ -61,34 +71,40 @@ static int proc_lookuproot(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -ENOENT;
 	}
-	pid = 0;
-	if (!len || (get_fs_byte(name) == '.' && (len == 1 ||
-	    (get_fs_byte(name+1) == '.' && len == 2)))) {
-		*result = dir;
-		return 0;
-	}
-	while (len-- > 0) {
-		c = get_fs_byte(name) - '0';
-		name++;
-		if (c > 9) {
-			pid = 0;
-			break;
+	i = NR_ROOT_DIRENTRY;
+	while (i-- > 0 && !proc_match(len,name,root_dir+i))
+		/* nothing */;
+	if (i >= 0) {
+		ino = root_dir[i].low_ino;
+		if (ino == 1) {
+			*result = dir;
+			return 0;
 		}
-		pid *= 10;
-		pid += c;
-		if (pid & 0xffff0000) {
-			pid = 0;
-			break;
+	} else {
+		pid = 0;
+		while (len-- > 0) {
+			c = get_fs_byte(name) - '0';
+			name++;
+			if (c > 9) {
+				pid = 0;
+				break;
+			}
+			pid *= 10;
+			pid += c;
+			if (pid & 0xffff0000) {
+				pid = 0;
+				break;
+			}
 		}
+		for (i = 0 ; i < NR_TASKS ; i++)
+			if (task[i] && task[i]->pid == pid)
+				break;
+		if (!pid || i >= NR_TASKS) {
+			iput(dir);
+			return -ENOENT;
+		}
+		ino = (pid << 16) + 2;
 	}
-	for (i = 0 ; i < NR_TASKS ; i++)
-		if (task[i] && task[i]->pid == pid)
-			break;
-	if (!pid || i >= NR_TASKS) {
-		iput(dir);
-		return -ENOENT;
-	}
-	ino = (pid << 16) + 2;
 	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -ENOENT;
@@ -101,42 +117,48 @@ static int proc_readroot(struct inode * inode, struct file * filp,
 	struct dirent * dirent, int count)
 {
 	struct task_struct * p;
-	unsigned int pid;
+	unsigned int nr,pid;
 	int i,j;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
-	while ((pid = filp->f_pos) < NR_TASKS+2) {
+repeat:
+	nr = filp->f_pos;
+	if (nr < NR_ROOT_DIRENTRY) {
+		struct proc_dir_entry * de = root_dir + nr;
+
 		filp->f_pos++;
-		if (pid < 2) {
-			i = j = pid+1;
-			put_fs_long(1, &dirent->d_ino);
-			put_fs_word(i, &dirent->d_reclen);
-			put_fs_byte(0, i+dirent->d_name);
-			while (i--)
-				put_fs_byte('.', i+dirent->d_name);
-			return j;
-		}			
-		p = task[pid-2];
-		if (!p || !(pid = p->pid))
-			continue;
-		if (pid & 0xffff0000)
-			continue;
-		j = 10;
-		i = 1;
-		while (pid >= j) {
-			j *= 10;
-			i++;
-		}
+		i = de->namelen;
+		put_fs_long(de->low_ino, &dirent->d_ino);
+		put_fs_word(i,&dirent->d_reclen);
+		put_fs_byte(0,i+dirent->d_name);
 		j = i;
-		put_fs_long((pid << 16)+2, &dirent->d_ino);
-		put_fs_word(i, &dirent->d_reclen);
-		put_fs_byte(0, i+dirent->d_name);
-		while (i--) {
-			put_fs_byte('0'+(pid % 10), i+dirent->d_name);
-			pid /= 10;
-		}
+		while (i--)
+			put_fs_byte(de->name[i], i+dirent->d_name);
 		return j;
 	}
-	return 0;
+	nr -= NR_ROOT_DIRENTRY;
+	if (nr >= NR_TASKS)
+		return 0;
+	filp->f_pos++;
+	p = task[nr];
+	if (!p || !(pid = p->pid))
+		goto repeat;
+	if (pid & 0xffff0000)
+		goto repeat;
+	j = 10;
+	i = 1;
+	while (pid >= j) {
+		j *= 10;
+		i++;
+	}
+	j = i;
+	put_fs_long((pid << 16)+2, &dirent->d_ino);
+	put_fs_word(i, &dirent->d_reclen);
+	put_fs_byte(0, i+dirent->d_name);
+	while (i--) {
+		put_fs_byte('0'+(pid % 10), i+dirent->d_name);
+		pid /= 10;
+	}
+	return j;
 }
