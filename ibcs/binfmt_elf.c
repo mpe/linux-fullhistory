@@ -1,5 +1,12 @@
 /*
  * linux/fs/binfmt_elf.c
+ *
+ * These are the functions used to load ELF format executables as used
+ * on SVr4 machines.  Information on the format may be found in the book
+ * "UNIX SYSTEM V RELEASE 4 Programmers Guide: Ansi C and Programming Support
+ * Tools".
+ *
+ * Copyright 1993, 1994: Eric Youngdale (ericy@cais.com).
  */
 #include <linux/fs.h>
 #include <linux/sched.h>
@@ -14,6 +21,7 @@
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
 #include <linux/shm.h>
+#include <linux/personality.h>
 
 #include <asm/segment.h>
 
@@ -139,7 +147,7 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	if((interp_elf_ex->e_type != ET_EXEC && 
 	    interp_elf_ex->e_type != ET_DYN) || 
 	   (interp_elf_ex->e_machine != EM_386 && interp_elf_ex->e_machine != EM_486) ||
-	   (!interpreter_inode->i_op || !interpreter_inode->i_op->bmap || 
+	   (!interpreter_inode->i_op || 
 	    !interpreter_inode->i_op->default_file_ops->mmap)){
 		return 0xffffffff;
 	};
@@ -251,7 +259,7 @@ static unsigned int load_aout_interp(struct exec * interp_ex,
 #define INTERPRETER_AOUT 1
 #define INTERPRETER_ELF 2
 
-int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
+static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct elfhdr elf_ex;
 	struct elfhdr interp_elf_ex;
@@ -496,8 +504,17 @@ int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	
 	kfree(elf_phdata);
 	
-	if(!elf_interpreter) sys_close(elf_exec_fileno);
-	current->elf_executable = 1;
+	if(interpreter_type != INTERPRETER_AOUT) sys_close(elf_exec_fileno);
+
+       	/* The following 3 lines need a little bit of work if we are loading
+	   an iBCS2 binary.  We should initially load it this way, and if
+	   we get a lcall7, then we should look to see if the iBCS2 execution
+	   profile is present.  If it is, then switch to that, otherwise
+	   bomb. */
+	current->personality = PER_LINUX;
+	current->lcall7 = no_lcall7;
+	current->signal_map = current->signal_invmap = ident_map;
+
 	current->executable = bprm->inode;
 	bprm->inode->i_count++;
 #ifdef LOW_ELF_STACK
@@ -545,7 +562,7 @@ int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 /* This is really simpleminded and specialized - we are loading an
    a.out library that is given an ELF header. */
 
-int load_elf_library(int fd){
+static int load_elf_library(int fd){
         struct file * file;
 	struct elfhdr elf_ex;
 	struct elf_phdr *elf_phdata  =  NULL;
@@ -576,7 +593,7 @@ int load_elf_library(int fd){
 	/* First of all, some simple consistency checks */
 	if(elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
 	   (elf_ex.e_machine != EM_386 && elf_ex.e_machine != EM_486) ||
-	   (!inode->i_op || !inode->i_op->bmap || 
+	   (!inode->i_op ||
 	    !inode->i_op->default_file_ops->mmap)){
 		return -ENOEXEC;
 	};
@@ -634,3 +651,5 @@ int load_elf_library(int fd){
 	kfree(elf_phdata);
 	return 0;
 }
+
+struct linux_binfmt elf_format = { NULL, load_elf_binary, load_elf_library };

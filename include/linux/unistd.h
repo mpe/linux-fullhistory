@@ -142,6 +142,7 @@
 #define __NR_fchdir		133
 #define __NR_bdflush		134
 #define __NR_sysfs		135
+#define __NR_personality	136
 
 extern int errno;
 

@@ -35,6 +35,12 @@
  * asyncronous events from the drive informing the driver that a disk
  * has been inserted, removed, etc.
  *
+ * NEWS FLASH - The driver now supports interrupts and DMA, but they are
+ * turned off by default.  Use of interrupts is highly encouraged, it
+ * cuts CPU usage down to a reasonable level.  For a single-speed drive,
+ * DMA is ok, but the 8-bit DMA cannot keep up with the double speed
+ * drives.
+ *
  * One thing about these drives: They talk in MSF (Minute Second Frame) format.
  * There are 75 frames a second, 60 seconds a minute, and up to 75 minutes on a
  * disk.  The funny thing is that these are sent to the drive in BCD, but the
@@ -58,8 +64,6 @@
  *
  */
 
-
-
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -69,10 +73,12 @@
 #include <linux/hdreg.h>
 #include <linux/genhd.h>
 #include <linux/ioport.h>
+#include <linux/string.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
+#include <asm/dma.h>
 
 #include <linux/cdrom.h>
 #include <linux/cdu31a.h>
@@ -82,17 +88,30 @@
 
 #define CDU31A_MAX_CONSECUTIVE_ATTENTIONS 10
 
-static unsigned short cdu31a_addresses[] =
-{
-   0x340,	/* Standard configuration Sony Interface */
-   0x1f88,	/* Fusion CD-16 */
-   0x230,	/* SoundBlaster 16 card */
-   0x360,	/* Secondary standard Sony Interface */
-   0x320,	/* Secondary standard Sony Interface */
-   0x330,	/* Secondary standard Sony Interface */
-   0
-};
+/* Define the following if you have data corruption problems. */
+#undef SONY_POLL_EACH_BYTE
 
+/*
+** Edit the following data to change interrupts, DMA channels, etc.
+** Default is polled and no DMA.  DMA is not recommended for double-speed
+** drives.
+*/
+static struct
+{
+   unsigned short base;		/* I/O Base Address */
+   short          dma_num;	/* DMA Number (-1 means no DMA) */
+   short          int_num;	/* Interrupt Number (-1 means scan for it,
+                                   0 means don't use) */
+} cdu31a_addresses[] =
+{
+   { 0x340,	-1,	0 },	/* Standard configuration Sony Interface */
+   { 0x1f88,	-1,	0 },	/* Fusion CD-16 */
+   { 0x230,	-1,	0 },	/* SoundBlaster 16 card */
+   { 0x360,	-1,	0 },	/* Secondary standard Sony Interface */
+   { 0x320,	-1,	0 },	/* Secondary standard Sony Interface */
+   { 0x330,	-1,	0 },	/* Secondary standard Sony Interface */
+   { 0 }
+};
 
 static int handle_sony_cd_attention(void);
 static int read_subcode(void);
@@ -157,6 +176,8 @@ static struct wait_queue * sony_wait = NULL;
 static struct task_struct *has_cd_task = NULL;  /* The task that is currently using the
                                                    CDROM drive, or NULL if none. */
 
+static int is_double_speed = 0; /* Is the drive a CDU33A? */
+
 /*
  * The audio status uses the values from read subchannel data as specified
  * in include/linux/cdrom.h.
@@ -170,8 +191,15 @@ static volatile int sony_audio_status = CDROM_AUDIO_NO_STATUS;
  * position during a pause so a resume can restart it.  It uses the
  * audio status variable above to tell if it is paused.
  */
-unsigned volatile char cur_pos_msf[3] = { 0, 0, 0 };
-unsigned volatile char final_pos_msf[3] = { 0, 0, 0 };
+static unsigned volatile char cur_pos_msf[3] = { 0, 0, 0 };
+static unsigned volatile char final_pos_msf[3] = { 0, 0, 0 };
+
+static int irq_used = -1;
+static int dma_channel = -1;
+static struct wait_queue *cdu31a_irq_wait = NULL;
+
+static int curr_control_reg = 0; /* Current value of the control register */
+
 
 /*
  * This routine returns 1 if the disk has been changed since the last
@@ -199,6 +227,30 @@ check_cdu31a_media_change(int full_dev, int flag)
    return retval;
 }
 
+static inline void
+enable_interrupts(void)
+{
+   curr_control_reg |= (  SONY_ATTN_INT_EN_BIT
+                        | SONY_RES_RDY_INT_EN_BIT
+                        | SONY_DATA_RDY_INT_EN_BIT);
+   outb(curr_control_reg, sony_cd_control_reg);
+}
+
+static inline void
+disable_interrupts(void)
+{
+   curr_control_reg &= ~(  SONY_ATTN_INT_EN_BIT
+                         | SONY_RES_RDY_INT_EN_BIT
+                         | SONY_DATA_RDY_INT_EN_BIT);
+   outb(curr_control_reg, sony_cd_control_reg);
+}
+
+static void
+cdu31a_interrupt(int unused)
+{
+   disable_interrupts();
+   wake_up(&cdu31a_irq_wait);
+}
 
 /*
  * Wait a little while (used for polling the drive).  If in initialization,
@@ -207,9 +259,19 @@ check_cdu31a_media_change(int full_dev, int flag)
 static inline void
 sony_sleep(void)
 {
-   current->state = TASK_INTERRUPTIBLE;
-   current->timeout = jiffies;
-   schedule();
+   if (irq_used <= 0)
+   {
+      current->state = TASK_INTERRUPTIBLE;
+      current->timeout = jiffies;
+      schedule();
+   }
+   else /* Interrupt driven */
+   {
+      cli();
+      enable_interrupts();
+      interruptible_sleep_on(&cdu31a_irq_wait);
+      sti();
+   }
 }
 
 
@@ -256,31 +318,32 @@ is_param_write_rdy(void)
 static inline void
 reset_drive(void)
 {
+   curr_control_reg = 0;
    outb(SONY_DRIVE_RESET_BIT, sony_cd_control_reg);
 }
 
 static inline void
 clear_attention(void)
 {
-   outb(SONY_ATTN_CLR_BIT, sony_cd_control_reg);
+   outb(curr_control_reg | SONY_ATTN_CLR_BIT, sony_cd_control_reg);
 }
 
 static inline void
 clear_result_ready(void)
 {
-   outb(SONY_RES_RDY_CLR_BIT, sony_cd_control_reg);
+   outb(curr_control_reg | SONY_RES_RDY_CLR_BIT, sony_cd_control_reg);
 }
 
 static inline void
 clear_data_ready(void)
 {
-   outb(SONY_DATA_RDY_CLR_BIT, sony_cd_control_reg);
+   outb(curr_control_reg | SONY_DATA_RDY_CLR_BIT, sony_cd_control_reg);
 }
 
 static inline void
 clear_param_reg(void)
 {
-   outb(SONY_PARAM_CLR_BIT, sony_cd_control_reg);
+   outb(curr_control_reg | SONY_PARAM_CLR_BIT, sony_cd_control_reg);
 }
 
 static inline unsigned char
@@ -310,8 +373,8 @@ write_param(unsigned char param)
 static inline void
 write_cmd(unsigned char cmd)
 {
+   outb(curr_control_reg | SONY_RES_RDY_INT_EN_BIT, sony_cd_control_reg);
    outb(cmd, sony_cd_cmd_reg);
-   outb(SONY_RES_RDY_INT_EN_BIT, sony_cd_control_reg);
 }
 
 /*
@@ -327,7 +390,11 @@ set_drive_params(void)
 
 
    params[0] = SONY_SD_MECH_CONTROL;
-   params[1] = 0x03;
+   params[1] = 0x03; /* Set auto spin up and auto eject */
+   if (is_double_speed)
+   {
+      params[1] |= 0x04; /* Set the drive to double speed if possible */
+   }
    do_sony_cd_cmd(SONY_SET_DRIVE_PARAM_CMD,
                   params,
                   2,
@@ -532,18 +599,57 @@ get_result(unsigned char *result_buffer,
    }
 }
 
+static void
+read_data_dma(unsigned char *data,
+              unsigned int  data_size,
+              unsigned char *result_buffer,
+              unsigned int  *result_size)
+{
+   unsigned int retry_count;
+
+
+   cli();
+   disable_dma(dma_channel);
+   clear_dma_ff(dma_channel);
+   set_dma_mode(dma_channel, DMA_MODE_READ);
+   set_dma_addr(dma_channel, (int) data);
+   set_dma_count(dma_channel, data_size);
+   enable_dma(dma_channel);
+   sti();
+
+   retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
+   while (   (retry_count > jiffies)
+          && (!is_data_ready())
+          && (!is_result_ready()))
+   {
+      while (handle_sony_cd_attention())
+         ;
+         
+      sony_sleep();
+   }
+   if (!is_data_requested())
+   {
+      result_buffer[0] = 0x20;
+      result_buffer[1] = SONY_TIMEOUT_OP_ERR;
+      *result_size = 2;
+      return;
+   }
+}
+
 /*
  * Read in a 2048 byte block of data.
  */
 static void
 read_data_block(unsigned char *data,
+                unsigned int  data_size,
                 unsigned char *result_buffer,
                 unsigned int  *result_size)
 {
+#ifdef SONY_POLL_EACH_BYTE
    int i;
    unsigned int retry_count;
 
-   for (i=0; i<2048; i++)
+   for (i=0; i<data_size; i++)
    {
       retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
       while ((retry_count > jiffies) && (!is_data_requested()))
@@ -564,6 +670,9 @@ read_data_block(unsigned char *data,
       *data = read_data_register();
       data++;
    }
+#else
+   insb(sony_cd_read_reg, data, data_size);
+#endif
 }
 
 /*
@@ -595,22 +704,6 @@ get_data(unsigned char *orig_data,
    unsigned char *data = orig_data;
    unsigned int data_size = orig_data_size;
 
-
-   cli();
-   while (sony_inuse)
-   {
-      interruptible_sleep_on(&sony_wait);
-      if (current->signal & ~current->blocked)
-      {
-         result_buffer[0] = 0x20;
-         result_buffer[1] = SONY_SIGNAL_OP_ERR;
-         *result_size = 2;
-         return 0;
-      }
-   }
-   sony_inuse = 1;
-   has_cd_task = current;
-   sti();
 
    num_retries = 0;
 retry_data_operation:
@@ -679,14 +772,28 @@ retry_data_operation:
             result_read = 1;
             get_result(result_buffer, result_size);
          }
-         else /* Handle data next */
+         /* Handle data next */
+         else if (dma_channel > 0)
+         {
+            clear_data_ready();
+            read_data_dma(data, 2048, result_buffer, result_size);
+            data += 2048;
+            data_size -= 2048;
+            cur_offset = cur_offset + 2048;
+            num_sectors_read++;
+         }
+         else
          {
             /*
              * The drive has to be polled for status on a byte-by-byte basis
-             * to know if the data is ready.  Yuck.  I really wish I could use DMA.
+             * to know if the data is ready.  Yuck.  I really wish I could use
+             * DMA all the time.
+	     *
+	     * NEWS FLASH - I am no longer polling on a byte-by-byte basis.
+	     * It seems to work ok, but the spec says you shouldn't.
              */
             clear_data_ready();
-            read_data_block(data, result_buffer, result_size);
+            read_data_block(data, 2048, result_buffer, result_size);
             data += 2048;
             data_size -= 2048;
             cur_offset = cur_offset + 2048;
@@ -733,10 +840,6 @@ retry_data_operation:
       /* Restart the operation. */
       goto retry_data_operation;
    }
-
-   has_cd_task = NULL;
-   sony_inuse = 0;
-   wake_up_interruptible(&sony_wait);
 
    return(num_sectors_read);
 }
@@ -989,6 +1092,23 @@ do_cdu31a_request(void)
    unsigned int read_size;
 
 
+   /* 
+    * Make sure no one else is using the driver; wait for them
+    * to finish if it is so.
+    */
+   cli();
+   while (sony_inuse)
+   {
+      interruptible_sleep_on(&sony_wait);
+      if (current->signal & ~current->blocked)
+      {
+         return;
+      }
+   }
+   sony_inuse = 1;
+   has_cd_task = current;
+   sti();
+
    if (!sony_spun_up)
    {
       scd_open (NULL,NULL);
@@ -1003,7 +1123,7 @@ cdu31a_request_startover:
        */
       if (!(CURRENT) || CURRENT->dev < 0)
       {
-         return;
+         goto end_do_cdu31a_request;
       }
 
       INIT_REQUEST;
@@ -1111,6 +1231,11 @@ try_read_again:
          panic("Unkown SONY CD cmd");
       }
    }
+
+end_do_cdu31a_request:
+   has_cd_task = NULL;
+   sony_inuse = 0;
+   wake_up_interruptible(&sony_wait);
 }
 
 
@@ -1771,6 +1896,15 @@ get_drive_configuration(unsigned short base_io,
 }
 
 
+static struct sigaction cdu31a_sigaction = {
+	cdu31a_interrupt,
+	0,
+	SA_INTERRUPT,
+	NULL
+};
+
+static int cdu31a_block_size;
+
 /*
  * Initialize the driver.
  */
@@ -1781,6 +1915,7 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
    unsigned int res_size;
    int i;
    int drive_found;
+   int tmp_irq;
 
 
    /*
@@ -1795,25 +1930,68 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
 
    i = 0;
    drive_found = 0;
-   while (   (cdu31a_addresses[i] != 0)
+   while (   (cdu31a_addresses[i].base != 0)
           && (!drive_found))
    {
-      if (check_region(cdu31a_addresses[i], 4)) {
+      if (check_region(cdu31a_addresses[i].base, 4)) {
 	  i++;
 	  continue;
       }
-      get_drive_configuration(cdu31a_addresses[i],
+      get_drive_configuration(cdu31a_addresses[i].base,
                                drive_config.exec_status,
                                &res_size);
       if ((res_size > 2) && ((drive_config.exec_status[0] & 0x20) == 0x00))
       {
          drive_found = 1;
-	 snarf_region(cdu31a_addresses[i], 4);
+	 snarf_region(cdu31a_addresses[i].base, 4);
 
          if (register_blkdev(MAJOR_NR,"cdu31a",&scd_fops))
          {
             printk("Unable to get major %d for CDU-31a\n", MAJOR_NR);
             return mem_start;
+         }
+
+	 if (SONY_HWC_DOUBLE_SPEED(drive_config))
+         {
+            is_double_speed = 1;
+	 }
+
+	 tmp_irq = cdu31a_addresses[i].int_num;
+         if (tmp_irq < 0)
+         {
+            autoirq_setup(0);
+	    enable_interrupts();
+	    reset_drive();
+	    tmp_irq = autoirq_report(10);
+	    disable_interrupts();
+
+            set_drive_params();
+            irq_used = tmp_irq;
+	 }
+         else
+         {
+            set_drive_params();
+            irq_used = tmp_irq;
+         }
+
+         if (irq_used > 0)
+         {
+	    if (irqaction(irq_used,&cdu31a_sigaction))
+            {
+               irq_used = 0;
+	       printk("Unable to grab IRQ%d for the CDU31A driver\n", irq_used);
+            }
+         }
+
+         dma_channel = cdu31a_addresses[i].dma_num;
+	 if (dma_channel > 0)
+	 {
+	    if (request_dma(dma_channel))
+            {
+               dma_channel = -1;
+	       printk("Unable to grab DMA%d for the CDU31A driver\n",
+                      dma_channel);
+            }
          }
 
          sony_buffer_size = mem_size[SONY_HWC_GET_BUF_MEM_SIZE(drive_config)];
@@ -1827,19 +2005,59 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
          printk("  using %d byte buffer", sony_buffer_size);
          if (SONY_HWC_AUDIO_PLAYBACK(drive_config))
          {
-            printk(", capable of audio playback");
+            printk(", audio");
          }
+         if (SONY_HWC_EJECT(drive_config))
+         {
+           printk(", eject");
+         }
+         if (SONY_HWC_LED_SUPPORT(drive_config))
+         {
+           printk(", LED");
+         }
+         if (SONY_HWC_ELECTRIC_VOLUME(drive_config))
+         {
+           printk(", elec. Vol");
+         }
+         if (SONY_HWC_ELECTRIC_VOLUME_CTL(drive_config))
+         {
+           printk(", sep. Vol");
+         }
+	 if (is_double_speed)
+	 {
+            printk(", double speed");
+         }
+	 if (irq_used > 0)
+	 {
+	    printk(", irq %d", irq_used);
+	 }
+	 if (dma_channel > 0)
+	 {
+	    printk(", drq %d", dma_channel);
+	 }
          printk("\n");
 
-         set_drive_params();
-
          blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-         read_ahead[MAJOR_NR] = 8;               /* 8 sector (4kB) read-ahead */
+         read_ahead[MAJOR_NR] = 32; /* 32 sector (16kB) read-ahead */
+	 cdu31a_block_size = 2048; /* 2kB block size */
+				   /* use 'mount -o block=2048' */
+	 blksize_size[MAJOR_NR] = &cdu31a_block_size;
 
          sony_toc = (struct s_sony_toc *) mem_start;
          mem_start += sizeof(*sony_toc);
          last_sony_subcode = (struct s_sony_subcode *) mem_start;
          mem_start += sizeof(*last_sony_subcode);
+
+         /* If memory will not fit into the current 64KB block, align it
+            so the block will not cross a 64KB boundary.  This is
+            because DMA cannot cross 64KB boundaries. */
+	 if (   (dma_channel > 0)
+	     && (   ((mem_start) & (~0xffff))
+                 != (((mem_start) + sony_buffer_size) & (~0xffff))))
+         {
+            mem_start = (((int)mem_start) + 0x10000) & (~0xffff);
+         }
+
          sony_buffer = (unsigned char *) mem_start;
          mem_start += sony_buffer_size;
       }

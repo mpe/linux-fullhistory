@@ -483,6 +483,10 @@ fake_volatile:
 #ifdef DEBUG_PROC_TREE
 	audit_ptree();
 #endif
+	if (current->exec_domain && current->exec_domain->use_count)
+		(*current->exec_domain->use_count)--;
+	if (current->binfmt && current->binfmt->use_count)
+		(*current->binfmt->use_count)--;
 	schedule();
 /*
  * In order to get rid of the "volatile function does return" message

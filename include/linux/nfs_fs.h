@@ -22,14 +22,6 @@
 
 #define NFS_READDIR_CACHE_SIZE		64
 
-/*
- * WARNING!  The I/O buffer size cannot be bigger than about 3900 for now.
- * It needs to fit inside a 4096-byte page and leave room for the RPC and
- * NFS headers.  But it ought to at least be a multiple of 512 and probably
- * should be a power of 2.  I don't think Linux TCP/IP can handle more than
- * about 1800 yet.
- */
-
 #define NFS_MAX_FILE_IO_BUFFER_SIZE	(7*512)
 #define NFS_DEF_FILE_IO_BUFFER_SIZE	1024
 

@@ -379,7 +379,9 @@ static int inet_setsockopt(struct socket *sock, int level, int optname,
 		return sk->prot->setsockopt(sk,level,optname,optval,optlen);
 }
 
-
+/*
+ *	Get a socket option on an AF_INET socket.
+ */
 
 static int inet_getsockopt(struct socket *sock, int level, int optname,
 		    char *optval, int *optlen)
@@ -393,6 +395,9 @@ static int inet_getsockopt(struct socket *sock, int level, int optname,
   		return sk->prot->getsockopt(sk,level,optname,optval,optlen);
 }
 
+/*
+ *	Automatically bind an unbound socket.
+ */
 
 static int inet_autobind(struct sock *sk)
 {
@@ -408,6 +413,10 @@ static int inet_autobind(struct sock *sk)
 	return 0;
 }
 
+/*
+ *	Move a socket into listening state.
+ */
+ 
 static int inet_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk = (struct sock *) sock->data;
@@ -728,10 +737,9 @@ static int inet_release(struct socket *sock, struct socket *peer)
 static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 	       int addr_len)
 {
-	struct sockaddr_in addr;
+	struct sockaddr_in *addr=(struct sockaddr_in *)uaddr;
 	struct sock *sk=(struct sock *)sock->data, *sk2;
 	unsigned short snum;
-	int err;
 	int chk_addr_ret;
 
 	/* check this error. */
@@ -740,12 +748,10 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 	if (sk->num != 0) 
 		return(-EINVAL);
 
-	err=verify_area(VERIFY_READ, uaddr, addr_len);
-	if(err)
-  		return err;
-	memcpy_fromfs(&addr, uaddr, min(sizeof(addr), addr_len));
+	if(addr_len<sizeof(struct sockaddr_in))
+		return -EINVAL;
 
-	snum = ntohs(addr.sin_port);
+	snum = ntohs(addr->sin_port);
 
 	/*
 	 * We can't just leave the socket bound wherever it is, it might
@@ -759,12 +765,12 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 	if (snum < PROT_SOCK && !suser()) 
 		return(-EACCES);
 
-	chk_addr_ret = ip_chk_addr(addr.sin_addr.s_addr);
-	if (addr.sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR)
+	chk_addr_ret = ip_chk_addr(addr->sin_addr.s_addr);
+	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR)
 		return(-EADDRNOTAVAIL);	/* Source address MUST be ours! */
   	
-	if (chk_addr_ret || addr.sin_addr.s_addr == 0)
-		sk->saddr = addr.sin_addr.s_addr;
+	if (chk_addr_ret || addr->sin_addr.s_addr == 0)
+		sk->saddr = addr->sin_addr.s_addr;
 
 	/* Make sure we are allowed to bind here. */
 	cli();
@@ -841,7 +847,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	}
 
 	if (sock->state == SS_CONNECTING && sk->protocol == IPPROTO_TCP && (flags & O_NONBLOCK))
-		return -EALREADY;	/* Connecting is currently in progress */
+		return -EINPROGRESS;	/* Connecting is currently in progress */
   	
 	if (sock->state != SS_CONNECTING) 
 	{
@@ -985,46 +991,27 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 static int inet_getname(struct socket *sock, struct sockaddr *uaddr,
 		 int *uaddr_len, int peer)
 {
-	struct sockaddr_in sin;
+	struct sockaddr_in *sin=(struct sockaddr_in *)uaddr;
 	struct sock *sk;
-	int len;
-	int err;
   
-  
-	err = verify_area(VERIFY_WRITE,uaddr_len,sizeof(long));
-	if(err)
-		return err;
-  	
-	len=get_fs_long(uaddr_len);
-  
-	err = verify_area(VERIFY_WRITE, uaddr, len);
-	if(err)
-		return err;
-  	
-	/* Check this error. */
-	if (len < sizeof(sin)) 
-		return(-EINVAL);
-
-	sin.sin_family = AF_INET;
+	sin->sin_family = AF_INET;
 	sk = (struct sock *) sock->data;
 	if (peer) 
 	{
 		if (!tcp_connected(sk->state)) 
 			return(-ENOTCONN);
-		sin.sin_port = sk->dummy_th.dest;
-		sin.sin_addr.s_addr = sk->daddr;
+		sin->sin_port = sk->dummy_th.dest;
+		sin->sin_addr.s_addr = sk->daddr;
 	} 
 	else 
 	{
-		sin.sin_port = sk->dummy_th.source;
+		sin->sin_port = sk->dummy_th.source;
 		if (sk->saddr == 0) 
-			sin.sin_addr.s_addr = ip_my_addr();
+			sin->sin_addr.s_addr = ip_my_addr();
 		else 
-			sin.sin_addr.s_addr = sk->saddr;
+			sin->sin_addr.s_addr = sk->saddr;
 	}
-	len = sizeof(sin);
-	memcpy_tofs(uaddr, &sin, sizeof(sin));
-	put_fs_long(len, uaddr_len);
+	*uaddr_len = sizeof(*sin);
 	return(0);
 }
 
@@ -1033,40 +1020,46 @@ static int inet_getname(struct socket *sock, struct sockaddr *uaddr,
  *	The assorted BSD I/O operations
  */
 
+static int inet_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, 
+		   unsigned flags, struct sockaddr *sin, int *addr_len )
+{
+	struct sock *sk = (struct sock *) sock->data;
+	
+	if (sk->prot->recvfrom == NULL) 
+		return(-EOPNOTSUPP);
+	if(sk->err)
+		return inet_error(sk);
+	/* We may need to bind the socket. */
+	if(inet_autobind(sk)!=0)
+		return(-EAGAIN);
+	return(sk->prot->recvfrom(sk, (unsigned char *) ubuf, size, noblock, flags,
+			     (struct sockaddr_in*)sin, addr_len));
+}
+
 
 static int inet_recv(struct socket *sock, void *ubuf, int size, int noblock,
 	  unsigned flags)
 {
-	struct sock *sk = (struct sock *) sock->data;
-	int err;
-	
-	if(sk->err)
-		return inet_error(sk);
-	if(size<0)
-		return -EINVAL;
-	if(size==0)
-		return 0;
-	err=verify_area(VERIFY_WRITE,ubuf,size);
-	if(err)
-		return err;
-
-	/* We may need to bind the socket. */
-	if(inet_autobind(sk))
-		return(-EAGAIN);	
-	return(sk->prot->read(sk, (unsigned char *) ubuf, size, noblock, flags));
+	/* BSD explicitly states these are the same - so we do it this way to be sure */
+	return inet_recvfrom(sock,ubuf,size,noblock,flags,NULL,NULL);
 }
-
 
 static int inet_read(struct socket *sock, char *ubuf, int size, int noblock)
 {
-	return inet_recv(sock,ubuf,size,noblock,0);
+	struct sock *sk = (struct sock *) sock->data;
+	
+	if(sk->err)
+		return inet_error(sk);
+	/* We may need to bind the socket. */
+	if(inet_autobind(sk))
+		return(-EAGAIN);	
+	return(sk->prot->read(sk, (unsigned char *) ubuf, size, noblock, 0));
 }
 
 static int inet_send(struct socket *sock, void *ubuf, int size, int noblock, 
 	       unsigned flags)
 {
 	struct sock *sk = (struct sock *) sock->data;
-	int err;
 	if (sk->shutdown & SEND_SHUTDOWN) 
 	{
 		send_sig(SIGPIPE, current, 1);
@@ -1074,13 +1067,6 @@ static int inet_send(struct socket *sock, void *ubuf, int size, int noblock,
 	}
 	if(sk->err)
 		return inet_error(sk);
-	if(size<0)
-		return -EINVAL;
-	if(size==0)
-		return 0;
-	err=verify_area(VERIFY_READ,ubuf,size);
-	if(err)
-		return err;
 	/* We may need to bind the socket. */
 	if(inet_autobind(sk)!=0)
 		return(-EAGAIN);
@@ -1095,7 +1081,6 @@ static int inet_write(struct socket *sock, char *ubuf, int size, int noblock)
 static int inet_sendto(struct socket *sock, void *ubuf, int size, int noblock, 
 	    unsigned flags, struct sockaddr *sin, int addr_len)
 {
-	int err;
 	struct sock *sk = (struct sock *) sock->data;
 	if (sk->shutdown & SEND_SHUTDOWN) 
 	{
@@ -1106,46 +1091,11 @@ static int inet_sendto(struct socket *sock, void *ubuf, int size, int noblock,
 		return(-EOPNOTSUPP);
 	if(sk->err)
 		return inet_error(sk);
-	if(size<0)
-		return -EINVAL;
-	if(size==0)
-		return 0;
-	err=verify_area(VERIFY_READ,ubuf,size);
-	if(err)
-		return err;
-
 	/* We may need to bind the socket. */
-	
 	if(inet_autobind(sk)!=0)
 		return -EAGAIN;
 	return(sk->prot->sendto(sk, (unsigned char *) ubuf, size, noblock, flags, 
 			   (struct sockaddr_in *)sin, addr_len));
-}
-
-
-static int inet_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, 
-		   unsigned flags, struct sockaddr *sin, int *addr_len )
-{
-	struct sock *sk = (struct sock *) sock->data;
-	int err;
-	
-	if (sk->prot->recvfrom == NULL) 
-		return(-EOPNOTSUPP);
-	if(sk->err)
-		return inet_error(sk);
-	if(size<0)
-		return -EINVAL;
-	if(size==0)
-		return 0;
-	err=verify_area(VERIFY_WRITE,ubuf,size);
-	if(err)
-		return err;
-
-	/* We may need to bind the socket. */
-	if(inet_autobind(sk)!=0)
-		return(-EAGAIN);
-	return(sk->prot->recvfrom(sk, (unsigned char *) ubuf, size, noblock, flags,
-			     (struct sockaddr_in*)sin, addr_len));
 }
 
 
@@ -1352,7 +1302,8 @@ void inet_proto_init(struct net_proto *pro)
 	struct inet_protocol *p;
 	int i;
 
-	printk("Swansea University Computer Society NET3.014\n");
+
+	printk("NET3 TCP/IP protcols stack v016\n");
 
 	/*
 	 *	Tell SOCKET that we are alive... 

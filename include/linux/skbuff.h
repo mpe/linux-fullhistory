@@ -108,11 +108,11 @@ extern void			skb_append(struct sk_buff *old,struct sk_buff *newsk);
 extern void			skb_unlink(struct sk_buff *buf);
 extern struct sk_buff *		skb_peek_copy(struct sk_buff_head *list);
 extern struct sk_buff *		alloc_skb(unsigned int size, int priority);
-extern void			kfree_skbmem(void *mem, unsigned size);
+extern void			kfree_skbmem(struct sk_buff *skb, unsigned size);
 extern struct sk_buff *		skb_clone(struct sk_buff *skb, int priority);
-extern void			skb_kept_by_device(struct sk_buff *skb);
-extern void			skb_device_release(struct sk_buff *skb,
-					int mode);
+extern void			skb_device_lock(struct sk_buff *skb);
+extern void			skb_device_unlock(struct sk_buff *skb);
+extern void			dev_kfree_skb(struct sk_buff *skb, int mode);
 extern int			skb_device_locked(struct sk_buff *skb);
 /*
  *	Peek an sk_buff. Unlike most other operations you _MUST_

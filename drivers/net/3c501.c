@@ -291,8 +291,7 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 
     if (el_debug > 2)
 	printk(" queued xmit.\n");
-    if (skb->free)
-	kfree_skb (skb, FREE_WRITE);
+    dev_kfree_skb (skb, FREE_WRITE);
     return 0;
 }
 
@@ -514,9 +513,9 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
 static struct device dev_3c501 = {
-	"" /*"3c501"*/, 
+	"        " /*"3c501"*/, 
 		0, 0, 0, 0,
-	 	0x280, 7,
+	 	0x280, 5,
 	 	0, 0, 0, NULL, el1_probe };
 	
 int

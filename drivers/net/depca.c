@@ -914,9 +914,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
 	dev->tbusy=0;
       }
 
-      if (skb->free) {
-	kfree_skb (skb, FREE_WRITE);
-      }
+      dev_kfree_skb (skb, FREE_WRITE);
     }
 
     return 0;

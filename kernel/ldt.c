@@ -58,8 +58,10 @@ static int write_ldt(void * ptr, unsigned long bytecount)
 		limit *= PAGE_SIZE;
 
 	limit += base;
+#ifdef	NOTDEF_KLUDGE
 	if (limit < base || limit >= 0xC0000000)
 		return -EINVAL;
+#endif
 
 	if (!current->ldt) {
 		for (i=1 ; i<NR_TASKS ; i++) {
@@ -88,7 +90,8 @@ static int write_ldt(void * ptr, unsigned long bytecount)
 		  ((ldt_info.read_exec_only ^ 1) << 9) |
 		  (ldt_info.seg_32bit << 22) |
 		  (ldt_info.limit_in_pages << 23) |
-		  0xf000;
+		  ((ldt_info.seg_not_present ^1) << 15) |
+		  0x7000;
 	return 0;
 }
 

@@ -406,8 +406,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		/* Turn on Tx interrupts back on. */
 		outb(0x82, ioaddr + TX_INTR);
 	}
-	if (skb->free)
-		kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb, FREE_WRITE);
 
 	return 0;
 }

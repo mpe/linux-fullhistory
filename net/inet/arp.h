@@ -4,6 +4,7 @@
 
 extern void	arp_init(void);
 extern void	arp_destroy(unsigned long paddr, int force);
+extern void	arp_device_down(struct device *dev);
 extern int	arp_rcv(struct sk_buff *skb, struct device *dev,
 			struct packet_type *pt);
 extern int	arp_find(unsigned char *haddr, unsigned long paddr,

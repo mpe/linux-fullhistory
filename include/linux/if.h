@@ -60,7 +60,7 @@ struct ifaddr {
 /*
  *	Device mapping structure. I'd just gone off and designed a 
  *	beautiful scheme using only loadable modules with arguments
- *	for driver options and along come the PCMICA people 8)
+ *	for driver options and along come the PCMCIA people 8)
  *
  *	Ah well. The get() side of this is good for WDSETUP, and it'll
  *	be handy for debugging things. The set side is fine for now and

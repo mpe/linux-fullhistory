@@ -24,6 +24,7 @@
  *		Alan Cox	:	Removed wake_up calls
  *		Alan Cox	:	Use ttl/tos
  *		Alan Cox	:	Cleaned up old debugging
+ *		Alan Cox	:	Use new kernel side addresses
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -51,86 +52,92 @@
 #include "udp.h"
 
 
-static unsigned long
-min(unsigned long a, unsigned long b)
+static inline unsigned long min(unsigned long a, unsigned long b)
 {
-  if (a < b) return(a);
-  return(b);
+	if (a < b) 
+		return(a);
+	return(b);
 }
 
 
 /* raw_err gets called by the icmp module. */
-void
-raw_err (int err, unsigned char *header, unsigned long daddr,
+void raw_err (int err, unsigned char *header, unsigned long daddr,
 	 unsigned long saddr, struct inet_protocol *protocol)
 {
-  struct sock *sk;
+	struct sock *sk;
    
-  if (protocol == NULL) return;
-  sk = (struct sock *) protocol->data;
-  if (sk == NULL) return;
+	if (protocol == NULL) 
+		return;
+	sk = (struct sock *) protocol->data;
+	if (sk == NULL) 
+		return;
 
-  /* This is meaningless in raw sockets. */
-  if (err & 0xff00 == (ICMP_SOURCE_QUENCH << 8)) {
-	if (sk->cong_window > 1) sk->cong_window = sk->cong_window/2;
-	return;
-  }
+	/* This is meaningless in raw sockets. */
+	if (err & 0xff00 == (ICMP_SOURCE_QUENCH << 8)) 
+	{
+		if (sk->cong_window > 1) sk->cong_window = sk->cong_window/2;
+		return;
+	}
 
-  sk->err = icmp_err_convert[err & 0xff].errno;
-  sk->error_report(sk);
+	sk->err = icmp_err_convert[err & 0xff].errno;
+	sk->error_report(sk);
   
-  return;
+	return;
 }
 
 
 /*
- * This should be the easiest of all, all we do is\
- * copy it into a buffer.
+ *	This should be the easiest of all, all we do is
+ *	copy it into a buffer.
  */
-int
-raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
+
+int raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	unsigned long daddr, unsigned short len, unsigned long saddr,
 	int redo, struct inet_protocol *protocol)
 {
-  struct sock *sk;
+	struct sock *sk;
 
-  if (skb == NULL)
-  	return(0);
+	if (skb == NULL)
+		return(0);
   	
-  if (protocol == NULL) 
-  {
-	kfree_skb(skb, FREE_READ);
-	return(0);
-  }
+	if (protocol == NULL) 
+	{
+		kfree_skb(skb, FREE_READ);
+		return(0);
+	}
   
-  sk = (struct sock *) protocol->data;
-  if (sk == NULL) 
-  {
-	kfree_skb(skb, FREE_READ);
-	return(0);
-  }
+	sk = (struct sock *) protocol->data;
+	if (sk == NULL) 
+	{
+		kfree_skb(skb, FREE_READ);
+		return(0);
+	}
 
-  /* Now we need to copy this into memory. */
-  skb->sk = sk;
-  skb->len = len + skb->ip_hdr->ihl*sizeof(long);
-  skb->h.raw = (unsigned char *) skb->ip_hdr;
-  skb->dev = dev;
-  skb->saddr = daddr;
-  skb->daddr = saddr;
+	/* Now we need to copy this into memory. */
 
-  /* Charge it too the socket. */
-  if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) {
-	ip_statistics.IpInDiscards++;
-	skb->sk=NULL;
-	kfree_skb(skb, FREE_READ);
+	skb->sk = sk;
+	skb->len = len + skb->ip_hdr->ihl*sizeof(long);
+	skb->h.raw = (unsigned char *) skb->ip_hdr;
+	skb->dev = dev;
+	skb->saddr = daddr;
+	skb->daddr = saddr;
+
+	/* Charge it to the socket. */
+	
+	if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) 
+	{
+		ip_statistics.IpInDiscards++;
+		skb->sk=NULL;
+		kfree_skb(skb, FREE_READ);
+		return(0);
+	}
+
+	sk->rmem_alloc += skb->mem_len;
+	ip_statistics.IpInDelivers++;
+	skb_queue_tail(&sk->receive_queue,skb);
+	sk->data_ready(sk,skb->len);
+	release_sock(sk);
 	return(0);
-  }
-  sk->rmem_alloc += skb->mem_len;
-  ip_statistics.IpInDelivers++;
-  skb_queue_tail(&sk->receive_queue,skb);
-  sk->data_ready(sk,skb->len);
-  release_sock(sk);
-  return(0);
 }
 
 /*
@@ -160,10 +167,7 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 	{
 		if (addr_len < sizeof(sin)) 
 			return(-EINVAL);
-		err=verify_area (VERIFY_READ, usin, sizeof (sin));
-		if(err)
-			return err;
-		memcpy_fromfs(&sin, usin, sizeof(sin));
+		memcpy(&sin, usin, sizeof(sin));
 		if (sin.sin_family && sin.sin_family != AF_INET) 
 			return(-EINVAL);
 	}
@@ -279,123 +283,105 @@ static void raw_close(struct sock *sk, int timeout)
 }
 
 
-static int
-raw_init(struct sock *sk)
+static int raw_init(struct sock *sk)
 {
-  struct inet_protocol *p;
+	struct inet_protocol *p;
 
-  p = (struct inet_protocol *) kmalloc(sizeof (*p), GFP_KERNEL);
-  if (p == NULL) return(-ENOMEM);
+	p = (struct inet_protocol *) kmalloc(sizeof (*p), GFP_KERNEL);
+	if (p == NULL)
+		return(-ENOMEM);
 
-  p->handler = raw_rcv;
-  p->protocol = sk->protocol;
-  p->data = (void *)sk;
-  p->err_handler = raw_err;
-  p->name="USER";
-  p->frag_handler = NULL;	/* For now */
-  inet_add_protocol(p);
+	p->handler = raw_rcv;
+	p->protocol = sk->protocol;
+	p->data = (void *)sk;
+	p->err_handler = raw_err;
+	p->name="USER";
+	p->frag_handler = NULL;	/* For now */
+	inet_add_protocol(p);
    
-  /* We need to remember this somewhere. */
-  sk->pair = (struct sock *)p;
+	/* We need to remember this somewhere. */
+	sk->pair = (struct sock *)p;
 
-  return(0);
+	return(0);
 }
 
 
 /*
- * This should be easy, if there is something there
- * we return it, otherwise we block.
+ *	This should be easy, if there is something there
+ *	we return it, otherwise we block.
  */
-int
-raw_recvfrom(struct sock *sk, unsigned char *to, int len,
-	     int noblock, unsigned flags, struct sockaddr_in *sin,
+
+int raw_recvfrom(struct sock *sk, unsigned char *to, int len,
+     int noblock, unsigned flags, struct sockaddr_in *sin,
 	     int *addr_len)
 {
-  int copied=0;
-  struct sk_buff *skb;
-  int err;
+	int copied=0;
+	struct sk_buff *skb;
+	int err;
+	int truesize;
 
-  if (len == 0) return(0);
-  if (len < 0) return(-EINVAL);
+	if (sk->shutdown & RCV_SHUTDOWN) 
+		return(0);
 
-  if (sk->shutdown & RCV_SHUTDOWN) return(0);
-  if (addr_len) {
-	err=verify_area(VERIFY_WRITE, addr_len, sizeof(*addr_len));
-	if(err)
-		return err;
-	put_fs_long(sizeof(*sin), addr_len);
-  }
-  if(sin)
-  {
-  	err=verify_area(VERIFY_WRITE, sin, sizeof(*sin));
-	if(err)
-		return err;
-  }
+	if (addr_len) 
+		*addr_len=sizeof(*sin);
+
+	skb=skb_recv_datagram(sk,flags,noblock,&err);
+	if(skb==NULL)
+ 		return err;
+
+	truesize=skb->len;
+	copied = min(len, truesize);
   
-  err=verify_area(VERIFY_WRITE,to,len);
-  if(err)
-  	return err;
+	skb_copy_datagram(skb, 0, to, copied);
+	sk->stamp=skb->stamp;
 
-  skb=skb_recv_datagram(sk,flags,noblock,&err);
-  if(skb==NULL)
-  	return err;
-
-  copied = min(len, skb->len);
-  
-  skb_copy_datagram(skb, 0, to, copied);
-  sk->stamp=skb->stamp;
-
-  /* Copy the address. */
-  if (sin) {
-	struct sockaddr_in addr;
-
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = skb->daddr;
-	memcpy_tofs(sin, &addr, sizeof(*sin));
-  }
-
-  skb_free_datagram(skb);
-  release_sock(sk);
-  return (copied);
+	/* Copy the address. */
+	if (sin) 
+	{
+		sin->sin_family = AF_INET;
+		sin->sin_addr.s_addr = skb->daddr;
+	}
+	skb_free_datagram(skb);
+	release_sock(sk);
+	return (truesize);	/* len not copied. BSD returns the true size of the message so you know a bit fell off! */
 }
 
 
-int
-raw_read (struct sock *sk, unsigned char *buff, int len, int noblock,
-	  unsigned flags)
+int raw_read (struct sock *sk, unsigned char *buff, int len, int noblock,unsigned flags)
 {
-  return(raw_recvfrom(sk, buff, len, noblock, flags, NULL, NULL));
+	return(raw_recvfrom(sk, buff, len, noblock, flags, NULL, NULL));
 }
 
 
 struct proto raw_prot = {
-  sock_wmalloc,
-  sock_rmalloc,
-  sock_wfree,
-  sock_rfree,
-  sock_rspace,
-  sock_wspace,
-  raw_close,
-  raw_read,
-  raw_write,
-  raw_sendto,
-  raw_recvfrom,
-  ip_build_header,
-  udp_connect,
-  NULL,
-  ip_queue_xmit,
-  ip_retransmit,
-  NULL,
-  NULL,
-  raw_rcv,
-  datagram_select,
-  NULL,
-  raw_init,
-  NULL,
-  ip_setsockopt,
-  ip_getsockopt,
-  128,
-  0,
-  {NULL,},
-  "RAW"
+	sock_wmalloc,
+	sock_rmalloc,
+	sock_wfree,
+	sock_rfree,
+	sock_rspace,
+	sock_wspace,
+	raw_close,
+	raw_read,
+	raw_write,
+	raw_sendto,
+	raw_recvfrom,
+	ip_build_header,
+	udp_connect,
+	NULL,
+	ip_queue_xmit,
+	ip_retransmit,
+	NULL,
+	NULL,
+	raw_rcv,
+	datagram_select,
+	NULL,
+	raw_init,
+	NULL,
+	ip_setsockopt,
+	ip_getsockopt,
+	128,
+	0,
+	{NULL,},
+	"RAW"
 };

@@ -21,6 +21,8 @@ int ultrastor_reset(Scsi_Cmnd *);
 int ultrastor_biosparam(int, int, int *);
 
 #define ULTRASTOR_14F_MAX_SG 16
+#define ULTRASTOR_24F_MAX_SG 33
+
 #define ULTRASTOR_MAX_CMDS_PER_LUN 5
 #define ULTRASTOR_MAX_CMDS 16
 

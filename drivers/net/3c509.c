@@ -388,8 +388,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 			outw(0x9000 + 1536, ioaddr + EL3_CMD);
 	}
 
-	if (skb->free)
-		kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb, FREE_WRITE);
 
 	/* Clear the Tx status stack. */
 	{
@@ -669,7 +668,7 @@ el3_close(struct device *dev)
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
 static struct device dev_3c509 = {
-	"" /*"3c509"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el3_probe };
+	"        " /*"3c509"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el3_probe };
 
 int
 init_module(void)

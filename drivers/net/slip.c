@@ -464,41 +464,11 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 
   /* We were not, so we are now... :-) */
   if (skb != NULL) {
-#if 0  
-#ifdef CONFIG_AX25 
-  	if(sl->mode & SL_MODE_AX25)
-  	{
-  		if(!skb->arp && dev->rebuild_header(skb->data,dev))
-  		{
-  			skb->dev=dev;
-  			arp_queue(skb);
-  			return 0;
-  		}
-  		skb->arp=1;
-  	}
-#endif  	
-#endif
 	sl_lock(sl);
 	
 	size=skb->len;
-#if 0	
-	if(!(sl->mode&SL_MODE_AX25))
-	{
-		if(size<sizeof(struct iphdr))
-		{
-			printk("Runt IP frame fed to slip!\n");
-		}
-		else
-		{
-			size=((struct iphdr *)(skb->data))->tot_len;
-			size=ntohs(size);
-		/*	sl_hex_dump(skb->data,skb->len);*/
-		}
-	}
-#endif	
 	sl_encaps(sl, skb->data, size);
-	if (skb->free) 
-		kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb, FREE_WRITE);
   }
   return(0);
 }

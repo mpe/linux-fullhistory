@@ -147,7 +147,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	Scsi_Cmnd * SCpnt;
 	unsigned char opcode;
 	int inlen, outlen, cmdlen;
-	int needed;
+	int needed, buf_needed;
 	int result;
 
 	if (!buffer)
@@ -159,11 +159,11 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	cmd_in = (char *) ( ((int *)buffer) + 2);
 	opcode = get_fs_byte(cmd_in); 
 
-	needed = (inlen > outlen ? inlen : outlen);
-	if(needed){
-	  needed = (needed + 511) & ~511;
-	  if (needed > MAX_BUF) needed = MAX_BUF;
-	  buf = (char *) scsi_malloc(needed);
+	needed = buf_needed = (inlen > outlen ? inlen : outlen);
+	if(buf_needed){
+	  buf_needed = (buf_needed + 511) & ~511;
+	  if (buf_needed > MAX_BUF) buf_needed = MAX_BUF;
+	  buf = (char *) scsi_malloc(buf_needed);
 	  if (!buf) return -ENOMEM;
 	} else
 	  buf = NULL;
@@ -202,7 +202,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	};
 	result = SCpnt->result;
 	SCpnt->request.dev = -1;  /* Mark as not busy */
-	if (buf) scsi_free(buf, needed);
+	if (buf) scsi_free(buf, buf_needed);
 
 	if(scsi_devices[SCpnt->index].scsi_request_fn)
 	  (*scsi_devices[SCpnt->index].scsi_request_fn)();

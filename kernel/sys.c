@@ -39,6 +39,9 @@ asmlinkage int sys_idle(void)
 {
 	int i;
 
+	if (current->pid != 0)
+		return -EPERM;
+
 	/* Map out the low memory: it's no longer needed */
 	for (i = 0 ; i < 768 ; i++)
 		swapper_pg_dir[i] = 0;

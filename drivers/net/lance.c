@@ -555,14 +555,8 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 	memcpy(&lp->tx_bounce_buffs[entry], skb->data, skb->len);
 	lp->tx_ring[entry].base =
 	    (int)(lp->tx_bounce_buffs + entry) | 0x83000000;
-	if (skb->free)
-	    kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb, FREE_WRITE);
     } else {
-    	/* We can't free the packet yet, so we inform the memory management
-	   code that we are still using it. */
-
-        skb_kept_by_device(skb);
-
 	lp->tx_ring[entry].base = (int)(skb->data) | 0x83000000;
     }
     lp->cur_tx++;
@@ -650,7 +644,7 @@ lance_interrupt(int reg_ptr)
 	    if (databuff >= (void*)(&lp->tx_bounce_buffs[TX_RING_SIZE])
 		|| databuff < (void*)(lp->tx_bounce_buffs)) {
 		struct sk_buff *skb = ((struct sk_buff *)databuff) - 1;
-		skb_device_release(skb,FREE_WRITE);
+		dev_kfree_skb(skb,FREE_WRITE);
 
 		/* Warning: skb may well vanish at the point you call
 		   device_release! */

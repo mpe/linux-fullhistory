@@ -16,6 +16,7 @@
 #include <linux/utsname.h>
 #include <linux/interrupt.h>
 #include <linux/binfmts.h>
+#include <linux/personality.h>
 #ifdef CONFIG_INET
 #include <linux/netdevice.h>
 #endif
@@ -61,7 +62,7 @@ struct {
 	X(wp_works_ok),
 
 	/* process memory management */
-	X(__verify_write),
+	X(verify_area),
 	X(do_mmap),
 	X(do_munmap),
 	X(insert_vm_struct),
@@ -96,6 +97,11 @@ struct {
 	/* executable format registration */
 	X(register_binfmt),
 	X(unregister_binfmt),
+
+	/* execution environment registration */
+	X(lookup_exec_domain),
+	X(register_exec_domain),
+	X(unregister_exec_domain),
 
 	/* interrupt handling */
 	X(request_irq),

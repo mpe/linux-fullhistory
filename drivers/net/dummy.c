@@ -89,8 +89,7 @@ dummy_xmit(struct sk_buff *skb, struct device *dev)
 	if (skb == NULL || dev == NULL)
 		return 0;
 
-	if (skb->free)
-		kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb, FREE_WRITE);
 
 #if DUMMY_STATS
 	stats = (struct enet_statistics *)dev->priv;

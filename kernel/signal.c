@@ -18,8 +18,6 @@
 
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
-extern int core_dump(long signr,struct pt_regs * regs);
-
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs);
 
 asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
@@ -246,7 +244,10 @@ static void setup_frame(struct sigaction * sa, unsigned long ** fp, unsigned lon
 		do_exit(SIGSEGV);
 /* set up the "normal" stack seen by the signal handler (iBCS2) */
 	put_fs_long(__CODE,frame);
-	put_fs_long(current->signal_invmap[signr], frame+1);
+	if (current->exec_domain && current->exec_domain->signal_invmap)
+		put_fs_long(current->exec_domain->signal_invmap[signr], frame+1);
+	else
+		put_fs_long(signr, frame+1);
 	put_fs_long(regs->gs, frame+2);
 	put_fs_long(regs->fs, frame+3);
 	put_fs_long(regs->es, frame+4);
@@ -348,8 +349,10 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:
 			case SIGIOT: case SIGFPE: case SIGSEGV:
-				if (core_dump(signr,regs))
-					signr |= 0x80;
+				if (current->binfmt && current->binfmt->core_dump) {
+					if (current->binfmt->core_dump(signr, regs))
+						signr |= 0x80;
+				}
 				/* fall through */
 			default:
 				current->signal |= _S(signr & 0x7f);

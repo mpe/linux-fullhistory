@@ -51,6 +51,7 @@
  *					UDP as there is a nasty checksum issue
  *					if you do things the wrong way.
  *		Alan Cox	:	Always defrag, moved IP_FORWARD to the config.in file
+ *		Alan Cox	: 	IP options adjust sk->priority.
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
@@ -1578,25 +1579,9 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	*/
 		if (ipprot->copy) 
 		{
-#if 0		
-			skb2 = alloc_skb(skb->mem_len-sizeof(struct sk_buff), GFP_ATOMIC);
-			if (skb2 == NULL) 
-				continue;
-			memcpy(skb2, skb, skb2->mem_len);
-			skb2->ip_hdr = (struct iphdr *)(
-					(unsigned long)skb2 +
-					(unsigned long) skb->ip_hdr -
-					(unsigned long)skb);
-			skb2->h.raw = (unsigned char *)(
-					(unsigned long)skb2 +
-					(unsigned long) skb->h.raw -
-					(unsigned long)skb);
-			skb2->free=1;
-#else
 			skb2 = skb_clone(skb, GFP_ATOMIC);
 			if(skb2==NULL)
 				continue;
-#endif							
 		} 
 		else 
 		{
@@ -1958,6 +1943,10 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			if(val<0||val>255)
 				return -EINVAL;
 			sk->ip_tos=val;
+			if(val==IPTOS_LOWDELAY)
+				sk->priority=SOPRI_INTERACTIVE;
+			if(val==IPTOS_THROUGHPUT)
+				sk->priority=SOPRI_BACKGROUND;
 			return 0;
 		case IP_TTL:
 			if(val<1||val>255)

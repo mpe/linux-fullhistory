@@ -33,12 +33,15 @@ struct linger {
 #define AF_AX25		3
 #define AF_IPX		4
 
+#define AF_MAX		8	/* For now.. */
+
 /* Protocol families, same as address families. */
 #define PF_UNIX		AF_UNIX
 #define PF_INET		AF_INET
 #define PF_AX25		AF_AX25
 #define PF_IPX		AF_IPX
 
+#define PF_MAX		AF_MAX
 /* Flags we can use with send/ and recv. */
 #define MSG_OOB		1
 #define MSG_PEEK	2

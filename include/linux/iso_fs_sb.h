@@ -18,6 +18,10 @@ struct isofs_sb_info {
 			unsigned char s_cruft; /* Broken disks with high
 						  byte of length containing
 						  junk */
+			unsigned char s_nosuid;
+			unsigned char s_nodev;
+			gid_t s_gid;
+			uid_t s_uid;
 };
 
 #endif

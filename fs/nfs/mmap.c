@@ -73,6 +73,7 @@ int nfs_mmap(struct inode * inode, struct file * file,
 	mpnt->vm_start = addr;
 	mpnt->vm_end = addr + len;
 	mpnt->vm_page_prot = prot;
+	mpnt->vm_flags = 0;
 	mpnt->vm_share = NULL;
 	mpnt->vm_inode = inode;
 	inode->i_count++;

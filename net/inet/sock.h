@@ -180,9 +180,9 @@ struct proto {
   struct sk_buff *	(*rmalloc)(struct sock *sk,
 				    unsigned long size, int force,
 				    int priority);
-  void			(*wfree)(struct sock *sk, void *mem,
+  void			(*wfree)(struct sock *sk, struct sk_buff *skb,
 				 unsigned long size);
-  void			(*rfree)(struct sock *sk, void *mem,
+  void			(*rfree)(struct sock *sk, struct sk_buff *skb,
 				 unsigned long size);
   unsigned long		(*rspace)(struct sock *sk);
   unsigned long		(*wspace)(struct sock *sk);
@@ -262,9 +262,9 @@ extern struct sk_buff		*sock_wmalloc(struct sock *sk,
 extern struct sk_buff		*sock_rmalloc(struct sock *sk,
 					      unsigned long size, int force,
 					      int priority);
-extern void			sock_wfree(struct sock *sk, void *mem,
+extern void			sock_wfree(struct sock *sk, struct sk_buff *skb,
 					   unsigned long size);
-extern void			sock_rfree(struct sock *sk, void *mem,
+extern void			sock_rfree(struct sock *sk, struct sk_buff *skb,
 					   unsigned long size);
 extern unsigned long		sock_rspace(struct sock *sk);
 extern unsigned long		sock_wspace(struct sock *sk);

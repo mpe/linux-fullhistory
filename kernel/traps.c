@@ -40,7 +40,7 @@ asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 }
 
 #define get_seg_byte(seg,addr) ({ \
-register char __res; \
+register unsigned char __res; \
 __asm__("push %%fs;mov %%ax,%%fs;movb %%fs:%2,%%al;pop %%fs" \
 	:"=a" (__res):"0" (seg),"m" (*(addr))); \
 __res;})
@@ -123,21 +123,30 @@ DO_ERROR( 7, SIGSEGV, "device not available", device_not_available, current)
 DO_ERROR( 8, SIGSEGV, "double fault", double_fault, current)
 DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun, last_task_used_math)
 DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS, current)
-DO_ERROR(11, SIGSEGV, "segment not present", segment_not_present, current)
-DO_ERROR(12, SIGSEGV, "stack segment", stack_segment, current)
+DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
+DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
 DO_ERROR(15, SIGSEGV, "reserved", reserved, current)
 DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
+	int signr = SIGSEGV;
+
 	if (regs->eflags & VM_MASK) {
 		handle_vm86_fault((struct vm86_regs *) regs, error_code);
 		return;
 	}
+	die_if_kernel("general protection",regs,error_code);
+	switch (get_seg_byte(regs->cs, (char *)regs->eip)) {
+		case 0xCD: /* INT */
+		case 0xF4: /* HLT */
+		case 0xFA: /* CLI */
+		case 0xFB: /* STI */
+			signr = SIGILL;
+	}
 	current->tss.error_code = error_code;
 	current->tss.trap_no = 13;
-	send_sig(SIGSEGV, current, 1);
-	die_if_kernel("general protection",regs,error_code);
+	send_sig(signr, current, 1);	
 }
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)

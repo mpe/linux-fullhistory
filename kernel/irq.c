@@ -306,7 +306,7 @@ void free_irq(unsigned int irq)
 static void math_error_irq(int cpl)
 {
 	outb(0,0xF0);
-	if (ignore_irq13)
+	if (ignore_irq13 || !hard_math)
 		return;
 	math_error();
 }

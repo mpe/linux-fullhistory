@@ -52,6 +52,9 @@
 static struct device *ethdev_index[MAX_ETH_CARDS];
 
 unsigned long lance_init(unsigned long mem_start, unsigned long mem_end);
+unsigned long pi_init(unsigned long mem_start, unsigned long mem_end);
+unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end);
+
 
 /*
   net_dev_init() is our network device initialization routine.
@@ -67,6 +70,9 @@ unsigned long net_dev_init (unsigned long mem_start, unsigned long mem_end)
 #endif
 #if defined(CONFIG_PI)
 	mem_start = pi_init(mem_start, mem_end);
+#endif	
+#if defined(CONFIG_APRICOT)
+	mem_start = apricot_init(mem_start, mem_end);
 #endif	
 	return mem_start;
 }

@@ -453,8 +453,7 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 	
 	sti(); /* interrupts back on */
 	
-	if (skb->free)
-		kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb, FREE_WRITE);
 
 	return 0;
 }
@@ -751,7 +750,7 @@ de600_rspace(struct sock *sk)
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
 static struct device de600_dev = {
-	"" /*"de600"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de600_probe };
+	"        " /*"de600"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de600_probe };
 
 int
 init_module(void)

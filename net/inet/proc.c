@@ -151,6 +151,9 @@ int snmp_get_info(char *buffer, char **start, off_t offset, int length)
   extern struct tcp_mib tcp_statistics;
   extern struct udp_mib udp_statistics;
   int len;
+/*
+  extern unsigned long tcp_rx_miss, tcp_rx_hit1,tcp_rx_hit2;
+*/
 
   len = sprintf (buffer,
 	"Ip: Forwarding DefaultTTL InReceives InHdrErrors InAddrErrors ForwDatagrams InUnknownProtos InDiscards InDelivers OutRequests OutDiscards OutNoRoutes ReasmTimeout ReasmReqds ReasmOKs ReasmFails FragOKs FragFails FragCreates\n"
@@ -197,6 +200,12 @@ int snmp_get_info(char *buffer, char **start, off_t offset, int length)
 	"Udp: InDatagrams NoPorts InErrors OutDatagrams\nUdp: %lu %lu %lu %lu\n",
 	    udp_statistics.UdpInDatagrams, udp_statistics.UdpNoPorts,
 	    udp_statistics.UdpInErrors, udp_statistics.UdpOutDatagrams);
+	    
+/*
+	  len += sprintf( buffer + len,
+	  	"TCP fast path RX:  H2: %ul H1: %ul L: %ul\n",
+	  		tcp_rx_hit2,tcp_rx_hit1,tcp_rx_miss);
+*/
 	
   if (offset >= len)
     {

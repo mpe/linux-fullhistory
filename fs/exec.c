@@ -42,6 +42,7 @@
 #include <asm/system.h>
 
 #include <linux/binfmts.h>
+#include <linux/personality.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -55,12 +56,15 @@ extern void shm_exit (void);
 
 static int load_aout_binary(struct linux_binprm *, struct pt_regs * regs);
 static int load_aout_library(int fd);
+static int aout_core_dump(long signr, struct pt_regs * regs);
 
 /*
  * Here are the actual binaries that will be accepted:
  * add more with "register_binfmt()"..
  */
-static struct linux_binfmt aout_format = { NULL, load_aout_binary, load_aout_library };
+static struct linux_binfmt aout_format = {
+	NULL, NULL, load_aout_binary, load_aout_library, aout_core_dump
+};
 static struct linux_binfmt *formats = &aout_format;
 
 int register_binfmt(struct linux_binfmt * fmt)
@@ -154,7 +158,7 @@ if (file.f_op->lseek) { \
  * field, which also makes sure the core-dumps won't be recursive if the
  * dumping of the process results in another error..
  */
-int core_dump(long signr, struct pt_regs * regs)
+static int aout_core_dump(long signr, struct pt_regs * regs)
 {
 	struct inode * inode = NULL;
 	struct file file;
@@ -318,12 +322,12 @@ unsigned long * create_tables(char * p,int argc,int envc,int ibcs)
 		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
 		mpnt->vm_end = TASK_SIZE;
 		mpnt->vm_page_prot = PAGE_PRIVATE|PAGE_DIRTY;
+		mpnt->vm_flags = VM_GROWSDOWN;
 		mpnt->vm_share = NULL;
 		mpnt->vm_inode = NULL;
 		mpnt->vm_offset = 0;
 		mpnt->vm_ops = NULL;
 		insert_vm_struct(current, mpnt);
-		current->mm->stk_vma = mpnt;
 	}
 	sp = (unsigned long *) (0xfffffffc & (unsigned long) p);
 	sp -= envc+1;
@@ -529,7 +533,6 @@ void flush_old_exec(struct linux_binprm * bprm)
 
 	mpnt = current->mm->mmap;
 	current->mm->mmap = NULL;
-	current->mm->stk_vma = NULL;
 	while (mpnt) {
 		mpnt1 = mpnt->vm_next;
 		if (mpnt->vm_ops && mpnt->vm_ops->close)
@@ -571,9 +574,6 @@ void flush_old_exec(struct linux_binprm * bprm)
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;
 	current->used_math = 0;
-	current->personality = 0;
-	current->lcall7 = no_lcall7;
-	current->signal_map = current->signal_invmap = ident_map;
 }
 
 /*
@@ -764,25 +764,6 @@ asmlinkage int sys_execve(struct pt_regs regs)
 	return error;
 }
 
-/*
- * signal mapping: this is the default identity mapping used for normal
- * linux binaries (it's both the reverse and the normal map, of course)
- */
-unsigned long ident_map[33] = {
-	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-	13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-	23, 24, 25, 26, 27, 28, 29, 30, 31, 32
-};
-
-/*
- * default lcall7 handler.. The native linux stuff doesn't
- * use it at all, so we just segfault on it.
- */
-asmlinkage void no_lcall7(struct pt_regs * regs)
-{
-	send_sig(SIGSEGV, current, 1);
-}
-
 static void set_brk(unsigned long start, unsigned long end)
 {
 	start = PAGE_ALIGN(start);
@@ -805,6 +786,7 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	struct file * file;
 	int fd, error;
 	unsigned long p = bprm->p;
+	unsigned long fd_offset;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC && 
@@ -814,17 +796,19 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		return -ENOEXEC;
 	}
 
-	if (N_MAGIC(ex) == ZMAGIC &&
-	    (N_TXTOFF(ex) < bprm->inode->i_sb->s_blocksize)) {
-		printk("N_TXTOFF < BLOCK_SIZE. Please convert binary.");
+	current->personality = PER_LINUX;
+	fd_offset = N_TXTOFF(ex);
+	if (N_MAGIC(ex) == ZMAGIC && fd_offset != BLOCK_SIZE) {
+		printk(KERN_NOTICE "N_TXTOFF != BLOCK_SIZE. See a.out.h.\n");
 		return -ENOEXEC;
 	}
 
-	if (N_TXTOFF(ex) != BLOCK_SIZE && N_MAGIC(ex) == ZMAGIC) {
-		printk("N_TXTOFF != BLOCK_SIZE. See a.out.h.");
+	if (N_MAGIC(ex) == ZMAGIC && ex.a_text &&
+	    (fd_offset < bprm->inode->i_sb->s_blocksize)) {
+		printk(KERN_NOTICE "N_TXTOFF < BLOCK_SIZE. Please convert binary.\n");
 		return -ENOEXEC;
 	}
-	
+
 	/* OK, This is the point of no return */
 	flush_old_exec(bprm);
 
@@ -845,7 +829,7 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		read_exec(bprm->inode, 32, (char *) 0, ex.a_text+ex.a_data);
 	} else {
 		if (ex.a_text & 0xfff || ex.a_data & 0xfff)
-			printk("%s: executable not page aligned\n", current->comm);
+			printk(KERN_NOTICE "executable not page aligned\n");
 		
 		fd = open_inode(bprm->inode, O_RDONLY);
 		
@@ -857,23 +841,26 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			do_mmap(NULL, 0, ex.a_text+ex.a_data,
 				PROT_READ|PROT_WRITE|PROT_EXEC,
 				MAP_FIXED|MAP_PRIVATE, 0);
-			read_exec(bprm->inode, N_TXTOFF(ex),
+			read_exec(bprm->inode, fd_offset,
 				  (char *) N_TXTADDR(ex), ex.a_text+ex.a_data);
 			goto beyond_if;
 		}
-		error = do_mmap(file, N_TXTADDR(ex), ex.a_text,
-				PROT_READ | PROT_EXEC,
-				MAP_FIXED | MAP_SHARED, N_TXTOFF(ex));
 
-		if (error != N_TXTADDR(ex)) {
-			sys_close(fd);
-			send_sig(SIGSEGV, current, 0);
-			return 0;
-		};
+		if (ex.a_text) {
+			error = do_mmap(file, N_TXTADDR(ex), ex.a_text,
+				PROT_READ | PROT_EXEC,
+				MAP_FIXED | MAP_SHARED, fd_offset);
+
+			if (error != N_TXTADDR(ex)) {
+				sys_close(fd);
+				send_sig(SIGSEGV, current, 0);
+				return 0;
+			};
+		}
 		
  		error = do_mmap(file, N_TXTADDR(ex) + ex.a_text, ex.a_data,
 				PROT_READ | PROT_WRITE | PROT_EXEC,
-				MAP_FIXED | MAP_PRIVATE, N_TXTOFF(ex) + ex.a_text);
+				MAP_FIXED | MAP_PRIVATE, fd_offset + ex.a_text);
 		sys_close(fd);
 		if (error != N_TXTADDR(ex) + ex.a_text) {
 			send_sig(SIGSEGV, current, 0);
@@ -883,11 +870,24 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		bprm->inode->i_count++;
 	}
 beyond_if:
+	if (current->exec_domain && current->exec_domain->use_count)
+		(*current->exec_domain->use_count)--;
+	if (current->binfmt && current->binfmt->use_count)
+		(*current->binfmt->use_count)--;
+	current->exec_domain = lookup_exec_domain(current->personality);
+	current->binfmt = &aout_format;
+	if (current->exec_domain && current->exec_domain->use_count)
+		(*current->exec_domain->use_count)++;
+	if (current->binfmt && current->binfmt->use_count)
+		(*current->binfmt->use_count)++;
+
 	set_brk(current->mm->start_brk, current->mm->brk);
 	
 	p += change_ldt(ex.a_text,bprm->page);
 	p -= MAX_ARG_PAGES*PAGE_SIZE;
-	p = (unsigned long) create_tables((char *)p,bprm->argc,bprm->envc,0);
+	p = (unsigned long)create_tables((char *)p,
+					bprm->argc, bprm->envc,
+					current->personality != PER_LINUX);
 	current->mm->start_stack = p;
 	regs->eip = ex.a_entry;		/* eip, magic happens :-) */
 	regs->esp = p;			/* stack pointer */

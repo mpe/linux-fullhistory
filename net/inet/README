@@ -1,4 +1,87 @@
-This is snapshot 014
+This is snapshot 015
+
+Changes for the 015 snapshot
+
+o	All read/write buffers are validated at the top level _only_
+o	All address structures are moved to and from user mode at the top
+	level. Thus you can now issue proto->bind(....) calls and related
+	functions such as connect from another kernel task. All thats left
+	to fix now is a kernel alloc_socket()/free_socket() and accompanying
+	proto->make_kernel(socket)
+o	Small fixes to address behaviour caused by the above
+o	Max NFS size of 16K bytes
+o	Added the apricot driver as a test (#'ed out in config.in)
+o	Fixed a missing function definition in net_init.c
+o	Added G4KLX ax25_router code
+o	Added Niibe's PLIP driver and altered it to support timer
+	configuration and IRQ/port setting. Added if_plip.h. Comments and
+	feedback appreciated on this (both to Niibe and me).
+o	Added AF_MAX/PF_MAX defines
+o	Added a note that the DE600 driver also works for a noname 'PE1200'.
+o	Network buffer statistics on shift-scroll_lock
+o	Fixed a serious race in the device driver code. This was causing odd
+	crashes with the Lance drivers, lockups with the ne2000 cards and
+	a few other 'bad' goings on. All drivers are effected. See
+	README.DEV if porting a driver to this revision.
+
+	If you see entries in your 'free while locked' count, those would
+	typically have crashed a pre 1.20 kernel.
+
+o	TCP keeps the timers above 0.2sec round-trip time because of the use of
+	delayed ACK's by BSD style kernels.
+o	Fixed a small BSD error in the return from datagram socket
+	recv/recvfrom() calls when data is truncated. BSD returns the true
+	length of the message, Linux returned the amount copied which broke
+	programs that did a MSG_PEEK with a small buffer and grew it if need
+	be (some of the AV/RTP stuff notably).
+o	Added TIOCINQ/OUTQ to AX.25 and IPX.
+o	Added driver ioctl() calls to IPX.
+o	Corrected the skb->len==0 in the tcp_data reset on shutdown to check
+	skb->copied_seq.
+o	IP options reflect onto SO_PRIORITY.
+o	When a driver is downed its ARP entries are flushed. Should solve
+	the occasional crash when taking out a modular driver.
+o	Added Donald's multicast reception while promiscuous fix for the
+	8390 drivers.
+o	Potential ARP TCP-retransmit clear race fixed. Incredibly
+	unlikely to occur but no doubt it will 8(.
+
+To Do
+
+o	Fast path the tcp for packets in order with no flags set - we ought
+	to hit cable speed on slower machines if we fix that and the below.
+	(under test - define TCP_FASTPATH in tcp.c if you want to be brave
+	 and report any findings.)
+o	Include the HP onboard lance fixes.
+o	Fix Unix domain sockets.
+o	Fix the _SLOW_ TCP window calculation junk in tcp_data/tcp_ack.
+o	Make the dev_add_proto() list hashed by protocol type.
+o	Remove the call to dev->header_type - load it into the skbuff.
+	instead to avoid the extra calls and cache misses.
+o	Include new sk_buff skb_push() code and move toward using it.
+o	Fix the PI driver so pi0a can be down when pi0b is up without getting
+	crashes. Also fix the stuff to allow piconfig to set the parameters.
+o	Make AX.25 set the packet type - certainly before it hits IP.
+o	sk_buff building at the top level - pure kernel interfaces to the
+	protocol layers
+o	Clean up NFS, merge NFS/TCP code.
+o	SIGIO
+o	IP forwarding use of options properly (needs new sk_buff code)
+o	Reroute TCP retransmits if needed (needs new sk_buffs)
+
+
+Fixes added for 1.1.19
+
+o	Unix domain bind error code.
+o	skb->localroute starts cleared.
+o	Compiles with networking disabled
+
+Fixes added for 1.1.18
+
+o	Dummy driver includes correctly.
+o	PPP fixes from A.L.
+o	ifslave fixes
+o	Small error causing nfsd to coredump fixed by Linus.
 
 Fixes added for 1.1.17
 
@@ -10,10 +93,12 @@ o	Module fixes by Bj0rn.
 o	PLIP fix by Tanabe.
 
 Fixes added for 1.1.16
+
 o	Charles Hedricks fixes to TCP.
 o	Small fixes all over the place.
 
 Fixes added for 1.1.15
+
 o	Modular PLIP and 3c501 drivers. Now you -can- have multiple 3c501's
 	(sort of).
 o	Integrated new AX.25 - this will be ready for the big time in a few

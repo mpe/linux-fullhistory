@@ -13,6 +13,7 @@
 /*
  * TODO:
  *	1. Find out why scatter/gather is limited to 16 requests per command.
+ *         This is fixed, at least on the 24F, as of version 1.12 - CAE.
  *	2. Look at command linking (mscp.command_link and
  *	   mscp.command_link_id).  (Does not work with many disks, 
  *				and no performance increase.  ERY).
@@ -36,6 +37,15 @@
  *
  *    Places flagged with a triple question-mark are things which are either
  *    unfinished, questionable, or wrong.
+ */
+
+/* Changes from version 1.11 alpha to 1.12
+ *
+ * Increased the size of the scatter-gather list to 33 entries for
+ * the 24F adapter (it was 16).  I don't have the specs for the 14F
+ * or the 34F, so they may support larger s-g lists as well.
+ *
+ * Caleb Epstein <cae@jpmorgan.com>
  */
 
 /* Changes from version 1.9 to 1.11
@@ -138,7 +148,7 @@
 #define ULTRASTOR_DEBUG (UD_ABORT|UD_CSIR|UD_RESET)
 #endif
 
-#define VERSION "1.11 alpha"
+#define VERSION "1.12"
 
 #define ARRAY_SIZE(arr) (sizeof (arr) / sizeof (arr)[0])
 
@@ -183,7 +193,7 @@ struct mscp {
      the MSCP structure because they are associated with SCSI requests.  */
   void (*done)(Scsi_Cmnd *);
   Scsi_Cmnd *SCint;
-  ultrastor_sg_list sglist[ULTRASTOR_14F_MAX_SG];
+  ultrastor_sg_list sglist[ULTRASTOR_24F_MAX_SG]; /* use larger size for 24F */
 };
 
 
@@ -504,6 +514,7 @@ static int ultrastor_14f_detect(int hostnum)
 static int ultrastor_24f_detect(int hostnum)
 {
   register int i;
+  struct Scsi_Host * shpnt = NULL;
 
 #if (ULTRASTOR_DEBUG & UD_DETECT)
   printk("US24F: detect");
@@ -580,7 +591,12 @@ static int ultrastor_24f_detect(int hostnum)
       config.host_number = hostnum;
       scsi_hosts[hostnum].this_id = config.ha_scsi_id;
       scsi_hosts[hostnum].unchecked_isa_dma = 0;
-      scsi_hosts[hostnum].sg_tablesize = ULTRASTOR_14F_MAX_SG;
+      scsi_hosts[hostnum].sg_tablesize = ULTRASTOR_24F_MAX_SG;
+
+      shpnt = scsi_register(hostnum, 0);
+      shpnt->irq = config.interrupt;
+      shpnt->dma_channel = config.dma_channel;
+      shpnt->io_port = config.port_address;
 
 #if ULTRASTOR_MAX_CMDS > 1
       config.mscp_free = ~0;
@@ -594,7 +610,7 @@ static int ultrastor_24f_detect(int hostnum)
       outb(ultrastor_bus_reset ? 0xc2 : 0x82, LCL_DOORBELL_MASK(addr+12));
       outb(0x02, SYS_DOORBELL_MASK(addr+12));
       printk("UltraStor driver version " VERSION ".  Using %d SG lists.\n",
-	     ULTRASTOR_14F_MAX_SG);
+	     scsi_hosts[hostnum].sg_tablesize);
       return TRUE;
     }
   return FALSE;
@@ -810,6 +826,10 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt)
     if(config.slot) 
       return SCSI_ABORT_SNOOZE;  /* Do not attempt an abort for the 24f */
 
+    /* Simple consistency checking */
+    if(!SCpnt->host_scribble)
+      return SCSI_ABORT_NOT_RUNNING;
+
     mscp_index = ((struct mscp *)SCpnt->host_scribble) - config.mscp;
     if (mscp_index >= ULTRASTOR_MAX_CMDS)
 	panic("Ux4F aborting invalid MSCP");
@@ -899,7 +919,7 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt)
 
 #if ULTRASTOR_DEBUG & UD_ABORT
     if (config.mscp[mscp_index].SCint != SCpnt)
-	printk("abort: command mismatch, %x != %x\n",
+	printk("abort: command mismatch, %p != %p\n",
 	       config.mscp[mscp_index].SCint, SCpnt);
 #endif
     if (config.mscp[mscp_index].SCint == 0)
@@ -915,7 +935,6 @@ int ultrastor_abort(Scsi_Cmnd *SCpnt)
 
     /* Need to set a timeout here in case command never completes.  */
     return SCSI_ABORT_SUCCESS;
-
 }
 
 int ultrastor_reset(Scsi_Cmnd * SCpnt)

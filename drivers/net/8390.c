@@ -230,8 +230,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
     ei_local->irqlock = 0;
     outb_p(ENISR_ALL, e8390_base + EN0_IMR);
 
-    if (skb->free)
-		kfree_skb (skb, FREE_WRITE);
+    dev_kfree_skb (skb, FREE_WRITE);
     
     return 0;
 }
@@ -556,7 +555,7 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		   rely on higher-level filtering for now. */
 		outb_p(E8390_RXCONFIG | 0x08, ioaddr + EN0_RXCR);
     } else if (num_addrs < 0)
-		outb_p(E8390_RXCONFIG | 0x10, ioaddr + EN0_RXCR);
+		outb_p(E8390_RXCONFIG | 0x18, ioaddr + EN0_RXCR);
     else
 		outb_p(E8390_RXCONFIG, ioaddr + EN0_RXCR);
 }

@@ -136,6 +136,9 @@ ifdef CONFIG_AC3200
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(ac3200.o)
 CONFIG_8390 = CONFIG_8390
 endif
+ifdef CONFIG_APRICOT
+NETDRV_OBJS := $(NETDRV_OBJS) net.a(apricot.o)
+endif
 
 ifdef CONFIG_8390
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(8390.o)

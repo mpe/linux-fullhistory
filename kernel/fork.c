@@ -94,7 +94,6 @@ static int dup_mmap(struct task_struct * tsk)
 	struct vm_area_struct * mpnt, **p, *tmp;
 
 	tsk->mm->mmap = NULL;
-	tsk->mm->stk_vma = NULL;
 	p = &tsk->mm->mmap;
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		tmp = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
@@ -107,8 +106,6 @@ static int dup_mmap(struct task_struct * tsk)
 			tmp->vm_inode->i_count++;
 		*p = tmp;
 		p = &tmp->vm_next;
-		if (current->mm->stk_vma == mpnt)
-			tsk->mm->stk_vma = tmp;
 	}
 	return 0;
 }
@@ -184,6 +181,12 @@ asmlinkage int sys_fork(struct pt_regs regs)
 		goto bad_fork_free;
 	task[nr] = p;
 	*p = *current;
+
+	if (p->exec_domain && p->exec_domain->use_count)
+		(*p->exec_domain->use_count)++;
+	if (p->binfmt && p->binfmt->use_count)
+		(*p->binfmt->use_count)++;
+
 	p->did_exec = 0;
 	p->kernel_stack_page = 0;
 	p->state = TASK_UNINTERRUPTIBLE;

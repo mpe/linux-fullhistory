@@ -27,6 +27,7 @@
  *
  *              Ross Martin     :       Rewrote arp_rcv() and arp_get_info()
  *		Stephen Henson	:	Add AX25 support to arp_get_info()
+ *		Alan Cox	:	Drop data when a device is downed.
  */
 
 #include <linux/types.h>
@@ -228,18 +229,60 @@ static void arp_check_expire(unsigned long dummy)
 static void arp_release_entry(struct arp_table *entry)
 {
 	struct sk_buff *skb;
+	unsigned long flags;
 
 	if (entry->flags & ATF_PUBL)
 		proxies--;
+		
+	save_flags(flags);
+	cli();
 	/* Release the list of `skb' pointers. */
 	while ((skb = skb_dequeue(&entry->skb)) != NULL)
 	{
-		if (skb->free)
-			kfree_skb(skb, FREE_WRITE);
+		skb_device_lock(skb);
+		restore_flags(flags);
+		dev_kfree_skb(skb, FREE_WRITE);
 	}
+	restore_flags(flags);
 	del_timer(&entry->timer);
 	kfree_s(entry, sizeof(struct arp_table));
 	return;
+}
+
+/*
+ *	Purge a device from the ARP queue
+ */
+ 
+void arp_device_down(struct device *dev)
+{
+	int i;
+	unsigned long flags;
+	
+	/*
+	 *	This is a bit OTT - maybe we need some arp semaphores instead.
+	 */
+	save_flags(flags);
+	cli();
+	for (i = 0; i < ARP_TABLE_SIZE; i++)
+	{
+		struct arp_table *entry;
+		struct arp_table **pentry = &arp_tables[i];
+
+		while ((entry = *pentry) != NULL)
+		{
+			if(entry->dev==dev)
+			{
+				*pentry = entry->next;	/* remove from list */
+				if (entry->flags & ATF_PUBL)
+					proxies--;
+				del_timer(&entry->timer);	/* Paranoia */
+				kfree_s(entry, sizeof(struct arp_table));
+			}
+			else
+				pentry = &entry->next;	/* go to next entry */
+		}
+	}
+	restore_flags(flags);
 }
 
 
@@ -393,6 +436,7 @@ static void arp_send_q(struct arp_table *entry, unsigned char *hw_dest)
 {
 	struct sk_buff *skb;
 
+	unsigned long flags;
 
 	/*
 	 *	Empty the entire queue, building its data up ready to send
@@ -405,9 +449,14 @@ static void arp_send_q(struct arp_table *entry, unsigned char *hw_dest)
 		return;
 	}
 
+	save_flags(flags);
+	
+	cli();
 	while((skb = skb_dequeue(&entry->skb)) != NULL)
 	{
 		IS_SKB(skb);
+		skb_device_lock(skb);
+		restore_flags(flags);
 		if(!skb->dev->rebuild_header(skb->data,skb->dev,skb->raddr,skb))
 		{
 			skb->arp  = 1;
@@ -419,12 +468,13 @@ static void arp_send_q(struct arp_table *entry, unsigned char *hw_dest)
 		else
 		{
 			/* This routine is only ever called when 'entry' is
-			   complete. Thus this can't fail (but does) */
+			   complete. Thus this can't fail. */
 			printk("arp_send_q: The impossible occurred. Please notify Alan.\n");
 			printk("arp_send_q: active entity %s\n",in_ntoa(entry->ip));
 			printk("arp_send_q: failed to find %s\n",in_ntoa(skb->raddr));
 		}
 	}
+	restore_flags(flags);
 }
 
 

@@ -16,6 +16,11 @@
  *		Alan Cox <gw4pts@gw4pts.ampr.org>
  *		David Hinds <dhinds@allegro.stanford.edu>
  *
+ *	Changes:
+ *		Alan Cox	:	device private ioctl copies fields back.
+ *		Alan Cox	:	Transmit queue code does relevant stunts to
+ *					keep the queue safe.
+ *
  *	Cleaned up and recommented by Alan Cox 2nd April 1994. I hope to have
  *	the rest as well commented in the end.
  */
@@ -292,7 +297,8 @@ int dev_close(struct device *dev)
 		 */
 #ifdef CONFIG_INET		 
 		ip_rt_flush(dev);
-#endif	
+		arp_device_down(dev);
+#endif		
 #ifdef CONFIG_IPX
 		ipxrtr_device_down(dev);
 #endif	
@@ -321,6 +327,10 @@ int dev_close(struct device *dev)
 
 /*
  *	Send (or queue for sending) a packet. 
+ *
+ *	IMPORTANT: When this is called to resend frames. The caller MUST
+ *	already have locked the sk_buff. Apart from that we do the
+ *	rest of the magic.
  */
 
 void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
@@ -328,13 +338,16 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	unsigned long flags;
 	int where = 0;		/* used to say if the packet should go	*/
 				/* at the front or the back of the	*/
-				/* queue.				*/
+				/* queue - front is a retranmsit try	*/
 
 	if (dev == NULL) 
 	{
 		printk("dev.c: dev_queue_xmit: dev = NULL\n");
 		return;
 	}
+	
+	if(pri>=0 && !skb_device_locked(skb))
+		skb_device_lock(skb);	/* Shove a lock on the frame */
 #ifdef CONFIG_SLAVE_BALANCING
 	save_flags(flags);
 	cli();
@@ -386,6 +399,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	 */
 	 
 	if (!skb->arp && dev->rebuild_header(skb->data, dev, skb->raddr, skb)) {
+		skb_device_unlock(skb);	/* It's now safely on the arp queue */
 		return;
 	}
 
@@ -396,7 +410,9 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		skb->in_dev_queue=1;
 #endif		
 		skb_queue_tail(dev->buffs + pri,skb);
+		skb_device_unlock(skb);		/* Buffer is on the device queue and can be freed safely */
 		skb = skb_dequeue(dev->buffs + pri);
+		skb_device_lock(skb);		/* New buffer needs locking down */
 #ifdef CONFIG_SLAVE_BALANCING		
 		skb->in_dev_queue=0;
 #endif		
@@ -404,6 +420,9 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	restore_flags(flags);
 
 	if (dev->hard_start_xmit(skb, dev) == 0) {
+		/*
+		 *	Packet is now solely the responsibility of the driver
+		 */
 #ifdef CONFIG_SLAVE_BALANCING	
 		dev->pkt_queue--;
 #endif
@@ -411,13 +430,15 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	}
 
 	/*
-	 *	Transmission failed, put skb back into a list. 
+	 *	Transmission failed, put skb back into a list. Once on the list its safe and
+	 *	no longer device locked (it can be freed safely from the device queue)
 	 */
 	cli();
 #ifdef CONFIG_SLAVE_BALANCING
 	skb->in_dev_queue=1;
 	dev->pkt_queue++;
 #endif		
+	skb_device_unlock(skb);
 	skb_queue_head(dev->buffs + pri,skb);
 	restore_flags(flags);
 }
@@ -783,7 +804,9 @@ void dev_tint(struct device *dev)
 {
 	int i;
 	struct sk_buff *skb;
+	unsigned long flags;
 	
+	save_flags(flags);	
 	/*
 	 *	Work the queues in priority order
 	 */
@@ -794,8 +817,15 @@ void dev_tint(struct device *dev)
 		 *	Pull packets from the queue
 		 */
 		 
+
+		cli();
 		while((skb=skb_dequeue(&dev->buffs[i]))!=NULL)
 		{
+			/*
+			 *	Stop anyone freeing the buffer while we retransmit it
+			 */
+			skb_device_lock(skb);
+			restore_flags(flags);
 			/*
 			 *	Feed them to the output stage and if it fails
 			 *	indicate they re-queue at the front.
@@ -806,8 +836,10 @@ void dev_tint(struct device *dev)
 			 */
 			if (dev->tbusy)
 				return;
+			cli();
 		}
 	}
+	restore_flags(flags);
 }
 
 
@@ -1222,7 +1254,9 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 		case SIOCDEVPRIVATE:
 			if(dev->do_ioctl==NULL)
 				return -EOPNOTSUPP;
-			return dev->do_ioctl(dev, &ifr);
+			ret=dev->do_ioctl(dev, &ifr);
+			memcpy_tofs(arg,&ifr,sizeof(struct ifreq));
+			break;
 			
 		case SIOCGIFMAP:
 			ifr.ifr_map.mem_start=dev->mem_start;

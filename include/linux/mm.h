@@ -9,18 +9,7 @@
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
 
-int __verify_write(unsigned long addr, unsigned long count);
-
-extern inline int verify_area(int type, const void * addr, unsigned long size)
-{
-	if (TASK_SIZE <= (unsigned long) addr)
-		return -EFAULT;
-	if (size > TASK_SIZE - (unsigned long) addr)
-		return -EFAULT;
-	if (wp_works_ok || type == VERIFY_READ || !size)
-		return 0;
-	return __verify_write((unsigned long) addr,size);
-}
+extern int verify_area(int, const void *, unsigned long);
 
 /*
  * Linux kernel virtual memory manager primitives.
@@ -42,12 +31,19 @@ struct vm_area_struct {
 	unsigned long vm_start;
 	unsigned long vm_end;
 	unsigned short vm_page_prot;
+	unsigned short vm_flags;
 	struct vm_area_struct * vm_next;	/* linked list */
 	struct vm_area_struct * vm_share;	/* linked list */
 	struct inode * vm_inode;
 	unsigned long vm_offset;
 	struct vm_operations_struct * vm_ops;
 };
+
+/*
+ * vm_flags..
+ */
+#define VM_GROWSDOWN	0x01
+#define VM_GROWSUP	0x02
 
 /*
  * These are the virtual MM functions - opening of an area, closing it (needed to

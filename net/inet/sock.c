@@ -60,6 +60,7 @@
  *		Alan Cox	:	Fixed bogus SO_TYPE handling in getsockopt()
  *		Adam Caldwell	:	Missing return in SO_DONTROUTE/SO_DEBUG code
  *		Alan Cox	:	Split IP from generic code
+ *		Alan Cox	:	New kfree_skbmem()
  *
  * To Fix:
  *
@@ -307,124 +308,134 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 }
 
 
-struct sk_buff *
-sock_wmalloc(struct sock *sk, unsigned long size, int force,
-	     int priority)
+struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
-  if (sk) {
-	if (sk->wmem_alloc + size < sk->sndbuf || force) {
-		struct sk_buff * c = alloc_skb(size, priority);
-		if (c) {
-			cli();
-			sk->wmem_alloc+= c->mem_len;
-			sti();
+	if (sk) 
+	{
+		if (sk->wmem_alloc + size < sk->sndbuf || force) 
+		{
+			struct sk_buff * c = alloc_skb(size, priority);
+			if (c) 
+			{
+				cli();
+				sk->wmem_alloc+= c->mem_len;
+				sti();
+			}
+			return c;
 		}
-		return c;
+		return(NULL);
 	}
-	return(NULL);
-  }
-  return(alloc_skb(size, priority));
+	return(alloc_skb(size, priority));
 }
 
 
-struct sk_buff *
-sock_rmalloc(struct sock *sk, unsigned long size, int force, int priority)
+struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
-  if (sk) {
-	if (sk->rmem_alloc + size < sk->rcvbuf || force) {
-		struct sk_buff *c = alloc_skb(size, priority);
-		if (c) {
-			cli();
-			sk->rmem_alloc += c->mem_len;
-			sti();
+	if (sk) 
+	{
+		if (sk->rmem_alloc + size < sk->rcvbuf || force) 
+		{
+			struct sk_buff *c = alloc_skb(size, priority);
+			if (c) 
+			{
+				cli();
+				sk->rmem_alloc += c->mem_len;
+				sti();
+			}
+			return(c);
 		}
-		return(c);
+		return(NULL);
 	}
-	return(NULL);
-  }
-  return(alloc_skb(size, priority));
+	return(alloc_skb(size, priority));
 }
 
 
-unsigned long
-sock_rspace(struct sock *sk)
+unsigned long sock_rspace(struct sock *sk)
 {
-  int amt;
+	int amt;
 
-  if (sk != NULL) {
-	if (sk->rmem_alloc >= sk->rcvbuf-2*MIN_WINDOW) return(0);
-	amt = min((sk->rcvbuf-sk->rmem_alloc)/2-MIN_WINDOW, MAX_WINDOW);
-	if (amt < 0) return(0);
-	return(amt);
-  }
-  return(0);
+	if (sk != NULL) 
+	{
+		if (sk->rmem_alloc >= sk->rcvbuf-2*MIN_WINDOW) 
+			return(0);
+		amt = min((sk->rcvbuf-sk->rmem_alloc)/2-MIN_WINDOW, MAX_WINDOW);
+		if (amt < 0) 
+			return(0);
+		return(amt);
+	}
+	return(0);
 }
 
 
-unsigned long
-sock_wspace(struct sock *sk)
+unsigned long sock_wspace(struct sock *sk)
 {
-  if (sk != NULL) {
-	if (sk->shutdown & SEND_SHUTDOWN) return(0);
-	if (sk->wmem_alloc >= sk->sndbuf) return(0);
-	return(sk->sndbuf-sk->wmem_alloc );
-  }
-  return(0);
+	if (sk != NULL) 
+	{
+		if (sk->shutdown & SEND_SHUTDOWN)
+			return(0);
+		if (sk->wmem_alloc >= sk->sndbuf)
+			return(0);
+		return(sk->sndbuf-sk->wmem_alloc );
+	}
+	return(0);
 }
 
 
-void
-sock_wfree(struct sock *sk, void *mem, unsigned long size)
+void sock_wfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
 {
-  IS_SKB(mem);
-  kfree_skbmem(mem, size);
-  if (sk) {
-	sk->wmem_alloc -= size;
-
-	/* In case it might be waiting for more memory. */
-	if (!sk->dead) sk->write_space(sk);
-	return;
-  }
+	IS_SKB(skb);
+	kfree_skbmem(skb, size);
+	if (sk) 
+	{
+		sk->wmem_alloc -= size;
+		/* In case it might be waiting for more memory. */
+		if (!sk->dead)
+			sk->write_space(sk);
+		return;
+	}
 }
 
 
-void
-sock_rfree(struct sock *sk, void *mem, unsigned long size)
+void sock_rfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
 {
-  IS_SKB(mem);
-  kfree_skbmem(mem, size);
-  if (sk) {
-	sk->rmem_alloc -= size;
-  }
+	IS_SKB(skb);
+	kfree_skbmem(skb, size);
+	if (sk) 
+	{
+		sk->rmem_alloc -= size;
+	}
 }
 
 
 void release_sock(struct sock *sk)
 {
-  struct sk_buff *skb;
+	struct sk_buff *skb;
 
-  if (!sk->prot)
-	return;
-
-  if (sk->blog) return;
+	if (!sk->prot)
+		return;
+	if (sk->blog) 
+		return;
 #ifdef CONFIG_INET
-  /* See if we have any packets built up. */
-  sk->inuse = 1;
-  while((skb = skb_dequeue(&sk->back_log)) != NULL) {
-	sk->blog = 1;
-	if (sk->prot->rcv) sk->prot->rcv(skb, skb->dev, sk->opt,
-					 skb->saddr, skb->len, skb->daddr, 1,
-					/* Only used for/by raw sockets. */
-					(struct inet_protocol *)sk->pair); 
-  }
+	/* See if we have any packets built up. */
+	sk->inuse = 1;
+	while((skb = skb_dequeue(&sk->back_log)) != NULL) 
+	{
+		sk->blog = 1;
+		if (sk->prot->rcv) 
+			sk->prot->rcv(skb, skb->dev, sk->opt,
+				 skb->saddr, skb->len, skb->daddr, 1,
+				/* Only used for/by raw sockets. */
+				(struct inet_protocol *)sk->pair); 
+	}
 #endif  
-  sk->blog = 0;
-  sk->inuse = 0;
+	sk->blog = 0;
+	sk->inuse = 0;
 #ifdef CONFIG_INET  
-  if (sk->dead && sk->state == TCP_CLOSE) {
-	/* Should be about 2 rtt's */
-	reset_timer(sk, TIME_DONE, min(sk->rtt * 2, TCP_DONE_TIME));
-  }
+	if (sk->dead && sk->state == TCP_CLOSE) 
+	{
+		/* Should be about 2 rtt's */
+		reset_timer(sk, TIME_DONE, min(sk->rtt * 2, TCP_DONE_TIME));
+	}
 #endif  
 }
 

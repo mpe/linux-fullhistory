@@ -80,7 +80,7 @@ if [ "$CONFIG_SLIP" = "y" ]; then
 #  bool ' SLIP debugging on' SL_DUMP y
 fi
 bool 'PPP (point-to-point) support' CONFIG_PPP n
-bool 'Load balancing support (very experimental)' CONFIG_SLAVE_BALANCING n
+bool 'Load balancing support (experimental)' CONFIG_SLAVE_BALANCING n
 bool 'PLIP (parallel port) support' CONFIG_PLIP n
 bool 'NE2000/NE1000 support' CONFIG_NE2000 n
 bool 'WD80*3 support' CONFIG_WD80x3 n
@@ -95,6 +95,7 @@ bool 'AT1500 and NE2100 (LANCE and PCnet-ISA) support' CONFIG_LANCE n
 bool 'AT1700 support' CONFIG_AT1700 n
 #bool 'Zenith Z-Note support' CONFIG_ZNET n
 #bool 'EtherExpress support' CONFIG_EEXPRESS n
+#bool 'Apricot Xen-II on board ethernet' CONFIG_APRICOT n
 bool 'DEPCA support' CONFIG_DEPCA n
 #bool 'NI52EE support' CONFIG_NI52 n
 #bool 'NI65EE support' CONFIG_NI65 n
@@ -107,7 +108,7 @@ fi
 
 comment 'CD-ROM drivers'
 
-bool 'Sony CDU31A CDROM driver support' CONFIG_CDU31A n
+bool 'Sony CDU31A/CDU33A CDROM driver support' CONFIG_CDU31A n
 bool 'Mitsumi CDROM driver support' CONFIG_MCD n
 bool 'Matsushita/Panasonic CDROM driver support' CONFIG_SBPCD n
 

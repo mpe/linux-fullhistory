@@ -21,6 +21,7 @@
  *		Alan Cox	:	Uses the improved datagram code.
  *		Alan Cox	:	Added NULL's for socket options.
  *		Alan Cox	:	Re-commented the code.
+ *		Alan Cox	:	Use new kernel side addressing
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -124,16 +125,13 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
 {
 	struct sk_buff *skb;
 	struct device *dev;
-	struct sockaddr saddr;
-	int err;
+	struct sockaddr *saddr=(struct sockaddr *)usin;
 
 	/*
 	 *	Check the flags. 
 	 */
 
 	if (flags) 
-		return(-EINVAL);
-	if (len < 0) 
 		return(-EINVAL);
 
 	/*
@@ -142,31 +140,18 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
 	 
 	if (usin) 
 	{
-		if (addr_len < sizeof(saddr)) 
+		if (addr_len < sizeof(*saddr)) 
 			return(-EINVAL);
-		err=verify_area(VERIFY_READ, usin, sizeof(saddr));
-		if(err)
-			return err;
-		memcpy_fromfs(&saddr, usin, sizeof(saddr));
 	} 
 	else
 		return(-EINVAL);	/* SOCK_PACKET must be sent giving an address */
 	
-
-	/*
-	 *	Check the buffer is readable.
-	 */
-
-	err=verify_area(VERIFY_READ,from,len);
-	if(err)
-		return(err);
-		
 	/*
 	 *	Find the device first to size check it 
 	 */
 
-	saddr.sa_data[13] = 0;
-	dev = dev_get(saddr.sa_data);
+	saddr->sa_data[13] = 0;
+	dev = dev_get(saddr->sa_data);
 	if (dev == NULL) 
 	{
 		return(-ENXIO);
@@ -180,15 +165,11 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
 	if(len>dev->mtu)
   		return -EMSGSIZE;
 
-	/*
-	 *	Now allocate the buffer, knowing 4K pagelimits wont break this line.
-	 */  
-	 
 	skb = sk->prot->wmalloc(sk, len, 0, GFP_KERNEL);
 
 	/*
 	 *	If the write buffer is full, then tough. At this level the user gets to
-	 *	deal with the problem.
+	 *	deal with the problem - do your own algorithmic backoffs.
 	 */
 	 
 	if (skb == NULL) 
@@ -289,12 +270,9 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	struct sk_buff *skb;
 	struct sockaddr *saddr;
 	int err;
+	int truesize;
 
 	saddr = (struct sockaddr *)sin;
-	if (len == 0) 
-		return(0);
-	if (len < 0)
-		return(-EINVAL);
 
 	if (sk->shutdown & RCV_SHUTDOWN) 
 		return(0);
@@ -305,28 +283,8 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	 */
 
 	if (addr_len) 
-	{
-		err=verify_area(VERIFY_WRITE, addr_len, sizeof(*addr_len));
-		if(err)
-			return err;
-		put_fs_long(sizeof(*saddr), addr_len);
-	}
+		*addr_len=sizeof(*saddr);
 	
-	if(saddr)
-	{
-		err=verify_area(VERIFY_WRITE, saddr, sizeof(*saddr));		
-		if(err)
-			return err;
-  	}
-	
-	/*
-	 *	Check the user given area can be written to.
-	 */
-	 
-	err=verify_area(VERIFY_WRITE,to,len);
-	if(err)
-		return err;
-		
 	/*
 	 *	Call the generic datagram receiver. This handles all sorts
 	 *	of horrible races and re-entrancy so we can forget about it
@@ -349,7 +307,8 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	 *	user program they can ask the device for its MTU anyway.
 	 */
 	 
-	copied = min(len, skb->len);
+	truesize = skb->len;
+	copied = min(len, truesize);
 
 	memcpy_tofs(to, skb->data, copied);	/* We can't use skb_copy_datagram here */
 
@@ -359,11 +318,8 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	 
 	if (saddr) 
 	{
-		struct sockaddr addr;
-
-		addr.sa_family = skb->dev->type;
-		memcpy(addr.sa_data,skb->dev->name, 14);
-		memcpy_tofs(saddr, &addr, sizeof(*saddr));
+		saddr->sa_family = skb->dev->type;
+		memcpy(saddr->sa_data,skb->dev->name, 14);
 	}
 	
 	/*
@@ -378,7 +334,7 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	 */
 	 
 	release_sock(sk);
-	return(copied);
+	return(truesize);
 }
 
 

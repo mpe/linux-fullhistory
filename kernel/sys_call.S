@@ -78,7 +78,7 @@ flags		= 20
 errno		= 24
 dbgreg6		= 52
 dbgreg7		= 56
-lcall7		= 60
+exec_domain	= 60
 
 ENOSYS = 38
 
@@ -144,7 +144,8 @@ _lcall7:
 	movl %esp,%eax
 	movl _current,%edx
 	pushl %eax
-	movl lcall7(%edx),%edx
+	movl exec_domain(%edx),%edx	# Get the execution domain
+	movl 4(%edx),%edx	# Get the lcall7 handler for the domain
 	call *%edx
 	popl %eax
 	jmp ret_from_sys_call
@@ -535,5 +536,6 @@ _sys_call_table:
 	.long _sys_fchdir
 	.long _sys_bdflush
 	.long _sys_sysfs		/* 135 */
+	.long _sys_personality
 
-	.space (NR_syscalls-135)*4
+	.space (NR_syscalls-136)*4

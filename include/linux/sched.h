@@ -36,6 +36,8 @@ __asm__ __volatile__("decl _intr_count")
 extern int EISA_bus;
 #define MCA_bus 0
 
+#include <linux/binfmts.h>
+#include <linux/personality.h>
 #include <linux/tasks.h>
 #include <asm/system.h>
 
@@ -228,7 +230,6 @@ struct mm_struct {
 	short swap_page;		/* current page */
 #endif NEW_SWAP
 	struct vm_area_struct * mmap;
-	struct vm_area_struct * stk_vma;
 };
 
 #define INIT_MM { \
@@ -240,7 +241,7 @@ struct mm_struct {
 /* ?_flt */	0, 0, 0, 0, \
 		0, \
 /* swap */	0, 0, 0, 0, 0, \
-		NULL, NULL }
+		NULL }
 
 struct task_struct {
 /* these are hardcoded - don't touch */
@@ -252,12 +253,11 @@ struct task_struct {
 	unsigned long flags;	/* per process flags, defined below */
 	int errno;
 	int debugreg[8];  /* Hardware debugging registers */
-	asmlinkage void (*lcall7)(struct pt_regs *);
+	struct exec_domain *exec_domain;
 /* various fields */
+	struct linux_binfmt *binfmt;
 	struct task_struct *next_task, *prev_task;
 	struct sigaction sigaction[32];
-	unsigned long * signal_map;
-	unsigned long * signal_invmap;
 	unsigned long saved_kernel_stack;
 	unsigned long kernel_stack_page;
 	int exit_code, exit_signal;
@@ -326,9 +326,10 @@ struct task_struct {
 #define INIT_TASK \
 /* state etc */	{ 0,15,15,0,0,0,0, \
 /* debugregs */ { 0, },            \
-/* lcall 7 */	no_lcall7, \
+/* exec domain */&default_exec_domain, \
+/* binfmt */	NULL, \
 /* schedlink */	&init_task,&init_task, \
-/* signals */	{{ 0, },}, ident_map, ident_map, \
+/* signals */	{{ 0, },}, \
 /* stack */	0,(unsigned long) &init_kernel_stack, \
 /* ec,brk... */	0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
@@ -360,9 +361,6 @@ extern unsigned long itimer_ticks;
 extern unsigned long itimer_next;
 extern struct timeval xtime;
 extern int need_resched;
-
-extern unsigned long ident_map[33];
-extern asmlinkage void no_lcall7(struct pt_regs *);
 
 #define CURRENT_TIME (xtime.tv_sec)
 

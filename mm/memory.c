@@ -59,6 +59,7 @@ extern unsigned long pg0[1024];		/* page table for 0-4MB for everybody */
 
 extern void sound_mem_init(void);
 extern void die_if_kernel(char *,struct pt_regs *,long);
+extern void show_net_buffers(void);
 
 /*
  * The free_area_list arrays point to the queue heads of the free areas
@@ -78,11 +79,11 @@ unsigned short * mem_map = NULL;
 
 /*
  * oom() prints a message (so that the user knows why the process died),
- * and gives the process an untrappable SIGSEGV.
+ * and gives the process an untrappable SIGKILL.
  */
 void oom(struct task_struct * task)
 {
-	printk("\nout of memory\n");
+	printk("\nOut of memory.\n");
 	task->sigaction[SIGKILL-1].sa_handler = NULL;
 	task->blocked &= ~(1<<(SIGKILL-1));
 	send_sig(SIGKILL,task,1);
@@ -660,7 +661,7 @@ void do_wp_page(unsigned long error_code, unsigned long address,
 	*pg_table = 0;
 }
 
-int __verify_write(unsigned long start, unsigned long size)
+static int __verify_write(unsigned long start, unsigned long size)
 {
 	size--;
 	size += start & ~PAGE_MASK;
@@ -671,6 +672,38 @@ int __verify_write(unsigned long start, unsigned long size)
 		start += PAGE_SIZE;
 	} while (size--);
 	return 0;
+}
+
+int verify_area(int type, const void * addr, unsigned long size)
+{
+	struct vm_area_struct * vma;
+
+	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
+		if (!vma)
+			goto bad_area;
+		if (vma->vm_end > (unsigned long) addr)
+			break;
+	}
+	if (vma->vm_start <= (unsigned long) addr)
+		goto good_area;
+	if (!(vma->vm_flags & VM_GROWSDOWN))
+		goto bad_area;
+	if (vma->vm_end - (unsigned long) addr > current->rlim[RLIMIT_STACK].rlim_cur)
+		goto bad_area;
+good_area:
+	while (vma->vm_end - (unsigned long) addr < size) {
+		struct vm_area_struct * next = vma->vm_next;
+		if (!next)
+			goto bad_area;
+		if (vma->vm_end != next->vm_start)
+			goto bad_area;
+		vma = next;
+	}
+	if (wp_works_ok || type == VERIFY_READ || !size)
+		return 0;
+	return __verify_write((unsigned long) addr,size);
+bad_area:
+	return -EFAULT;
 }
 
 static inline void get_empty_page(struct task_struct * tsk, unsigned long address)
@@ -843,8 +876,8 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	tmp = *(unsigned long *) page;
 	if (tmp & PAGE_PRESENT)
 		return;
-	++tsk->mm->rss;
 	if (tmp) {
+		++tsk->mm->rss;
 		++tsk->mm->maj_flt;
 		swap_in((unsigned long *) page);
 		return;
@@ -859,10 +892,12 @@ void do_no_page(unsigned long error_code, unsigned long address,
 			continue;
 		}
 		if (!mpnt->vm_ops || !mpnt->vm_ops->nopage) {
+			++tsk->mm->rss;
 			++tsk->mm->min_flt;
 			get_empty_page(tsk,address);
 			return;
 		}
+		++tsk->mm->rss;
 		mpnt->vm_ops->nopage(error_code, mpnt, address);
 		return;
 	}
@@ -870,7 +905,7 @@ void do_no_page(unsigned long error_code, unsigned long address,
 		goto ok_no_page;
 	if (address >= tsk->mm->end_data && address < tsk->mm->brk)
 		goto ok_no_page;
-	if (mpnt && mpnt == tsk->mm->stk_vma &&
+	if (mpnt && (mpnt->vm_flags & VM_GROWSDOWN) &&
 	    address - tmp > mpnt->vm_start - address &&
 	    tsk->rlim[RLIMIT_STACK].rlim_cur > mpnt->vm_end - address) {
 		mpnt->vm_start = address;
@@ -883,6 +918,7 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	if (error_code & 4)	/* user level access? */
 		return;
 ok_no_page:
+	++tsk->mm->rss;
 	++tsk->mm->min_flt;
 	get_empty_page(tsk,address);
 }
@@ -1021,6 +1057,7 @@ void show_mem(void)
 	printk("%d reserved pages\n",reserved);
 	printk("%d pages shared\n",shared);
 	show_buffers();
+	show_net_buffers();
 }
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
