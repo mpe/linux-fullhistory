@@ -148,9 +148,7 @@ static void do_load(void)
 		}
 
 		/* Try ext2 */
-		if (nblocks == -1 && (ext2sb->s_magic ==
-			EXT2_PRE_02B_MAGIC ||
-			ext2sb->s_magic == EXT2_SUPER_MAGIC))
+		if (nblocks == -1 && ext2sb->s_magic == EXT2_SUPER_MAGIC)
 	        {
 			printk("RAMDISK: Ext2 filesystem found at block %d\n",
 				block);

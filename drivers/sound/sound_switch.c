@@ -58,8 +58,8 @@ put_status (char *s)
 {
   int             l;
 
-  for (l = 0; l < 256 && s[l]; l++);	/*
-					 * l=strnlen(s,256);
+  for (l = 0; l < 256, s[l]; l++);	/*
+					 * l=strlen(s);
 					 */
 
   if (status_len + l >= 4000)
@@ -115,10 +115,17 @@ init_status (void)
 
   status_ptr = 0;
 
+#ifdef SOUND_UNAME_A
+  put_status ("VoxWare Sound Driver:" SOUND_VERSION_STRING
+	      " (" SOUND_CONFIG_DATE " " SOUND_CONFIG_BY ",\n"
+	      SOUND_UNAME_A ")"
+	      "\n");
+#else
   put_status ("VoxWare Sound Driver:" SOUND_VERSION_STRING
 	      " (" SOUND_CONFIG_DATE " " SOUND_CONFIG_BY "@"
 	      SOUND_CONFIG_HOST "." SOUND_CONFIG_DOMAIN ")"
 	      "\n");
+#endif
 
   if (!put_status ("Config options: "))
     return;

@@ -436,7 +436,7 @@ sb16_dsp_halt (int dev)
       sb_dsp_command01 (0xda);
       sb_dsp_command01 (0xd0);
     }
-  DMAbuf_reset_dma (dev);
+  /* DMAbuf_reset_dma (dev); */
 }
 
 static void

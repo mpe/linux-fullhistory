@@ -207,7 +207,7 @@ plip_init(struct device *dev)
 	struct net_local *nl;
 
 	/* Check region before the probe */
-	if (check_region(PAR_DATA(dev), 3) < 0)
+	if (check_region(PAR_DATA(dev), (PAR_DATA(dev) == 0x3bc)? 4 : 8) < 0)
 		return -ENODEV;
 
 	/* Check that there is something at base_addr. */
@@ -244,7 +244,7 @@ plip_init(struct device *dev)
 			       " Please set IRQ by ifconfig.\n", irq);
 	}
 
-	request_region(PAR_DATA(dev), 3, dev->name);
+	request_region(PAR_DATA(dev), (PAR_DATA(dev) == 0x3bc)? 4 : 8, dev->name);
 
 	/* Fill in the generic fields of the device structure. */
 	ether_setup(dev);
@@ -1082,19 +1082,19 @@ cleanup_module(void)
 {
 	if (dev_plip0.priv) {
 		unregister_netdev(&dev_plip0);
-		release_region(PAR_DATA(&dev_plip0), 3);
+		release_region(PAR_DATA(&dev_plip0), (PAR_DATA(&dev_plip0) == 0x3bc)? 4 : 8);
 		kfree_s(dev_plip0.priv, sizeof(struct net_local));
 		dev_plip0.priv = NULL;
 	}
 	if (dev_plip1.priv) {
 		unregister_netdev(&dev_plip1);
-		release_region(PAR_DATA(&dev_plip1), 3);
+		release_region(PAR_DATA(&dev_plip1), (PAR_DATA(&dev_plip1) == 0x3bc)? 4 : 8);
 		kfree_s(dev_plip1.priv, sizeof(struct net_local));
 		dev_plip1.priv = NULL;
 	}
 	if (dev_plip2.priv) {
 		unregister_netdev(&dev_plip2);
-		release_region(PAR_DATA(&dev_plip2), 3);
+		release_region(PAR_DATA(&dev_plip2), (PAR_DATA(&dev_plip2) == 0x3bc)? 4 : 8);
 		kfree_s(dev_plip2.priv, sizeof(struct net_local));
 		dev_plip2.priv = NULL;
 	}

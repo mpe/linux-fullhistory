@@ -84,10 +84,10 @@ struct proc_dir_entry scsi_dir[PROC_SCSI_FILE - PROC_SCSI_SCSI + 3];
 struct proc_dir_entry scsi_hba_dir[(PROC_SCSI_LAST - PROC_SCSI_FILE) * 4]; 
 
 static struct proc_dir_entry scsi_dir2[] = {
-    { PROC_SCSI,		NULL,	 1, "." },
-    { PROC_ROOT_INO,		NULL,	 2, ".." },
-    { PROC_SCSI_NOT_PRESENT,	NULL,	11, "not.present" },
-    { 0,			NULL,	 0, NULL }
+    { PROC_SCSI,		 1, "." },
+    { PROC_ROOT_INO,		 2, ".." },
+    { PROC_SCSI_NOT_PRESENT,	11, "not.present" },
+    { 0,			 0, NULL }
 };
 
 inline static uint count_dir_entries(uint inode, uint *num)

@@ -1462,11 +1462,13 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_3c505 = {
 	"        " /*"3c505"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, elplus_probe };
 
-int io = 0;
+int io = 0x300;
 int irq = 0;
 
 int init_module(void)
 {
+	if (io == 0)
+	  printk("3c505: You should not use auto-probing with insmod!\n");
 	dev_3c505.base_addr = io;
 	dev_3c505.irq       = irq;
 	if (register_netdev(&dev_3c505) != 0) {

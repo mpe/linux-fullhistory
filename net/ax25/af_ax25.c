@@ -96,6 +96,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
+#include <linux/proc_fs.h>
 
 #include <net/ip.h>
 #include <net/arp.h>
@@ -2031,11 +2032,11 @@ void ax25_proto_init(struct net_proto *pro)
 	register_netdevice_notifier(&ax25_dev_notifier);
 			  
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_AX25_ROUTE,	ax25_rt_get_info,	10, "ax25_route" });
+	{ PROC_NET_AX25_ROUTE, 10, "ax25_route", ax25_rt_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_AX25,	ax25_get_info,		4, "ax25" });
+	{ PROC_NET_AX25, 4, "ax25", ax25_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_AX25_CALLS,	ax25_cs_get_info,	10, "ax25_calls" });
+	{ PROC_NET_AX25_CALLS, 10, "ax25_calls", ax25_cs_get_info });
 
 	printk("GW4PTS/G4KLX AX.25 for Linux. Version 0.30 ALPHA for Linux NET3.030 (Linux 1.3.0)\n");
 }

@@ -14,7 +14,7 @@
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 */
 
-static char *version = "tulip.c:v0.05 1/20/95 becker@cesdis.gsfc.nasa.gov\n";
+static const char *version = "tulip.c:v0.05 1/20/95 becker@cesdis.gsfc.nasa.gov\n";
 
 #ifdef MODULE
 #include <linux/module.h>
@@ -39,10 +39,6 @@ static char *version = "tulip.c:v0.05 1/20/95 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
-/* This will be in linux/etherdevice.h someday. */
-struct device *init_etherdev(struct device *dev, int sizeof_private,
-							 unsigned long *mem_startp);
 
 /* The total size is unusually large: The 21040 aligns each of its 16
    longword-wide registers on a quadword boundary. */
@@ -757,6 +753,11 @@ int irq = 0;
 
 int init_module(void)
 {
+	printk("tulip: Sorry, modularization is not completed\n");
+	return -EIO;
+#if 0
+	if (io == 0)
+	  printk("tulip: You should not use auto-probing with insmod!\n");
 	dev_tulip.base_addr = io;
 	dev_tulip.irq       = irq;
 	if (register_netdev(&dev_tulip) != 0) {
@@ -764,6 +765,7 @@ int init_module(void)
 		return -EIO;
 	}
 	return 0;
+#endif
 }
 
 void

@@ -109,7 +109,7 @@ PSS based cards (AD1848 + ADSP-2115 + Echo ESC614 ASIC)
 MediaTriX AudioTriX Pro
 	The ATP card is built around a CS4231 codec and a OPL4 synthesizer
 	chips. The OPL4 mode is supported by a microcontroller running a
-	General MIDI emulator. There is also SB 1.5 playback mode.
+	General MIDI emulator. There is also a SB 1.5 compatible playback mode.
 
 Ensoniq SoundScape and compatibles
 	Ensoniq has designed a soundcard architecture based on the
@@ -127,6 +127,39 @@ MAD16 and Mozart based cards
 Audio Excell DSP16 
 	Support for this card is made by Riccardo Faccetti
 	(riccardo@cdc8g5.cdc.polimi.it). See aedsp16.c for more info.
+
+Jumpers and software configuration
+----------------------------------
+
+Some of the earliest soundcards were jumper configurable. You have to
+configure VoxWare to configure VoxWare use I/O, IRQ and DMA settings
+that match the jumpers. Just few 8 bit cards are fully jumper 
+configurable (SB 1.x/2.x, SB Pro and clones).
+Some cards made by Aztech have an EEPROM which contains the 
+config info. These cards behave much like hardware jumpered cards.
+
+Most cards have jumper for the base I/O address but other parameters
+are software configurable. Sometimes there are few other jumpers too.
+
+Latest cards are fully software configurable or they are PnP ISA
+compatible. There are no jumpers on the board.
+
+VoxWare handles software configurable cards automaticly. Just configure
+the driver to use I/O, IRQ and DMA settings which are known to work.
+You could usually use the same values than with DOS and/or Windows.
+Using different settings is possible but not recommended since it may cause
+some trouble (for example when warm booting from an OS to another or
+when installing new hardware to the machine).
+
+VoxWare sets the soft configurable parameters of the card automaticly
+during boot. Usually you don't need to run any extra initialization
+programs when booting Linux but there are some exceptions. See the
+card specific instructions (below) for more info.
+
+The drawback of software configuration is that the driver needs to know
+how the card must be initialized. It cannot initialize unknown cards
+even if they are otherwise compatible with some other cards (like SB,
+MPU401 or Windows Sound System).
 
 What if your card was not listed above?
 ---------------------------------------
@@ -495,7 +528,7 @@ AudioTriX Pro
 -------------
 
 You have to enable the OPL3 and SB (not SB Pro or SB16) drivers in addition
-to the native AudioTriX driver. You don't need to enable MSS or MPU drivers.
+to the native AudioTriX driver. Don't enable MSS or MPU drivers.
 
 Configuring ATP is little bit tricky since it uses so many I/O, IRQ and
 DMA numbers. Using the same values than with DOS/Win is a good idea. Don't
@@ -607,6 +640,10 @@ contact me if you have a soundcard which uses these chips.
 
 Some MAD16 based cards may cause feedback, whistle or terrible noise if the
 line3 mixer channel is turned too high.
+
+If you have a MAD16 card which have an OPL4 (FM + Wave table) synthesizer
+chip (_not_ an OPL3), you have to apped line containing #define MAD16_OPL4
+to the file linux/dirvers/sound/local.h (after running make config).
 
 MV Jazz (ProSonic)
 ------------------

@@ -17,6 +17,12 @@
          
 	**********************
 	
+	v1.93 ALPHA (95/08/10)
+	  - Should work with both 1.2.x and 1.3.x now. (I hope)
+	  - Renamed arc0w ("Windows" protocol) to arc0e ("Ethernet-Encap")
+	    because the protocol used isn't necessarily limited to
+	    Microsoft.
+
 	v1.92 ALPHA (95/07/11)
 	  - Fixes to make things work with kernel 1.3.x.  Completely broke
 	    1.2.x support.  Oops?  1.2.x users keep using 1.91 ALPHA until I
@@ -24,7 +30,7 @@
 
 	v1.91 ALPHA (95/07/02)
 	  - Oops.  Exception packets hit us again!  I remembered to test
-	    them in Windows-protocol mode, but due to the many various
+	    them in ethernet-protocol mode, but due to the many various
 	    changes they broke in RFC1201 instead.  All fixed.
 	  - A long-standing bug with "exception" packets not setting
 	    protocol_id properly has been corrected.  This would have caused
@@ -52,8 +58,8 @@
 	    IRQ.
 	  - Initial support for "multiprotocol" ARCnet (this involved a LOT
 	    of reorganizing!).  Added an arc0w device, which allows us to
-	    talk to "Windows" ARCnet TCP/IP protocol.  To use it, ifconfig
-	    arc0 and arc0w (in that order).  For now, Windows-protocol
+	    talk to ethernet-over-ARCnet TCP/IP protocol.  To use it, ifconfig
+	    arc0 and arc0w (in that order).  For now, ethernet-protocol
 	    hosts should have routes through arc0w - eventually I hope to
 	    make things more automatic.
 	v1.11 ALPHA (95/06/07)
@@ -102,6 +108,11 @@
            If someone sends me information, I'll try to implement it.
          - Remove excess lock variables that are probably not necessary
            anymore due to the changes in Linux 1.2.9.
+         - Dump Linux 1.2 and properly use the extended 1.3.x skb functions.
+         - Problems forwarding from arc0e to arc0 in 1.3.x? (it may be a
+           general kernel bug, though, since I heard other people complaining
+           about forwarding problems on ethernet cards)
+         - D_SKB doesn't work right on 1.3.x kernels.
 
            
 	Sources:
@@ -120,8 +131,8 @@
 */
 
 static const char *version =
- "arcnet.c:v1.92 ALPHA 95/07/11 Avery Pennarun <apenwarr@foxnet.net>\n";
- 
+ "arcnet.c:v1.93 ALPHA 95/08/10 Avery Pennarun <apenwarr@foxnet.net>\n";
+
 /**************************************************************************/
 
 /* Define this if you want to detect network reconfigurations.
@@ -156,10 +167,18 @@ static const char *version =
  
 
 #include <linux/config.h>
+#include <linux/version.h>
+
 #ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
 #endif /* MODULE */
+
+
+/* are we Linux 1.2.x? */
+#if LINUX_VERSION_CODE < 0x10300
+#define LINUX12
+#endif
+
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -229,11 +248,11 @@ extern struct device *irq2dev_map[16];
 
 /* Some useful multiprotocol macros */
 #define TBUSY lp->adev->tbusy \
-		=lp->wdev->tbusy
+		=lp->edev->tbusy
 #define IF_TBUSY (lp->adev->tbusy \
-		|| lp->wdev->tbusy)
+		|| lp->edev->tbusy)
 #define START lp->adev->start \
-		=lp->wdev->start
+		=lp->edev->start
 
 
 /* The number of low I/O ports used by the ethercard. */
@@ -416,7 +435,7 @@ struct arcnet_local {
 	struct Outgoing outgoing; /* packet currently being sent */
 	
 	struct device *adev;	/* RFC1201 protocol device */
-	struct device *wdev;	/* Windows protocol device */
+	struct device *edev;	/* Ethernet-Encap device */
 };
 
 
@@ -426,7 +445,7 @@ extern int arcnet_probe(struct device *dev);
 static int arcnet_memprobe(struct device *dev,u_char *addr);
 static int arcnet_ioprobe(struct device *dev, short ioaddr);
 #endif
-static int arcnetW_init(struct device *dev);
+static int arcnetE_init(struct device *dev);
 
 static int arcnet_open(struct device *dev);
 static int arcnet_close(struct device *dev);
@@ -438,7 +457,7 @@ static void arcnetA_prepare_tx(struct device *dev,struct ClientData *hdr,
 		short length,char *data);
 static void arcnetA_go_tx(struct device *dev);
 
-static int arcnetW_send_packet(struct sk_buff *skb, struct device *dev);
+static int arcnetE_send_packet(struct sk_buff *skb, struct device *dev);
 
 static void arcnet_interrupt(int irq,struct pt_regs *regs);
 static void arcnet_inthandler(struct device *dev);
@@ -446,15 +465,21 @@ static void arcnet_inthandler(struct device *dev);
 static void arcnet_rx(struct device *dev,int recbuf);
 static void arcnetA_rx(struct device *dev,struct ClientData *arcsoft,
 	int length,u_char saddr, u_char daddr);
-static void arcnetW_rx(struct device *dev,u_char *arcsoft,
+static void arcnetE_rx(struct device *dev,u_char *arcsoft,
 	int length,u_char saddr, u_char daddr);
 
 static struct enet_statistics *arcnet_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 
-	/* annoying functions for header/arp/etc building */
-int arcnetA_header(struct sk_buff *skb,struct device *dev,unsigned short type,
-		void *daddr,void *saddr,unsigned len);
+	/* functions for header/arp/etc building */
+#ifdef LINUX12
+int arcnetA_header(unsigned char *buff,struct device *dev,
+		unsigned short type,void *daddr,void *saddr,unsigned len,
+		struct sk_buff *skb);
+#else
+int arcnetA_header(struct sk_buff *skb,struct device *dev,
+		unsigned short type,void *daddr,void *saddr,unsigned len);
+#endif
 int arcnetA_rebuild_header(void *eth,struct device *dev,unsigned long raddr,
 		struct sk_buff *skb);
 unsigned short arcnetA_type_trans(struct sk_buff *skb,struct device *dev);
@@ -652,6 +677,10 @@ arcnet_probe(struct device *dev)
 
 	dev->hard_header=arcnetA_header;
 	dev->rebuild_header=arcnetA_rebuild_header;
+	
+	#ifdef LINUX12
+	dev->type_trans=arcnetA_type_trans;
+	#endif
 
 	return 0;
 }
@@ -886,21 +915,21 @@ int arcnet_reset(struct device *dev)
 	return 0;
 }
 
-static int arcnetW_init(struct device *dev)
+static int arcnetE_init(struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 
-	ether_setup(lp->wdev);
+	ether_setup(lp->edev);
 	dev->dev_addr[0]=0;
 	dev->dev_addr[5]=lp->arcnum;
 	dev->mtu=493;	/* MTU is small because of missing packet splitting */
-	lp->wdev->open=NULL;
-	lp->wdev->stop=NULL;
-	lp->wdev->hard_start_xmit=arcnetW_send_packet;
+	lp->edev->open=NULL;
+	lp->edev->stop=NULL;
+	lp->edev->hard_start_xmit=arcnetE_send_packet;
 
 	BUGLVL(D_EXTRA)
-		printk("%s: ARCnet \"Windows\" protocol initialized.\n",
-			lp->wdev->name);
+		printk("%s: ARCnet \"Ethernet-Encap\" protocol initialized.\n",
+			lp->edev->name);
 			
 	return 0;
 }
@@ -953,13 +982,13 @@ arcnet_open(struct device *dev)
 		printk("%s:  ARCnet RFC1201 protocol initialized.\n",
 			lp->adev->name);
 	
-	/* Initialize the Windows protocol driver */
-	lp->wdev=(struct device *)kmalloc(sizeof(struct device),GFP_KERNEL);
-	memcpy(lp->wdev,dev,sizeof(struct device));
-	lp->wdev->name=(char *)kmalloc(10,GFP_KERNEL);
-	sprintf(lp->wdev->name,"%sw",dev->name);
-	lp->wdev->init=arcnetW_init;
-	register_netdev(lp->wdev);
+	/* Initialize the ethernet-encap protocol driver */
+	lp->edev=(struct device *)kmalloc(sizeof(struct device),GFP_KERNEL);
+	memcpy(lp->edev,dev,sizeof(struct device));
+	lp->edev->name=(char *)kmalloc(10,GFP_KERNEL);
+	sprintf(lp->edev->name,"%se",dev->name);
+	lp->edev->init=arcnetE_init;
+	register_netdev(lp->edev);
 
 	/* we're started */
 	START=1;
@@ -992,13 +1021,13 @@ arcnet_close(struct device *dev)
 	/* do NOT free lp->adev!!  It's static! */
 	lp->adev=NULL;
 	
-	/* free the Windows protocol device */
-	lp->wdev->start=0;
-	lp->wdev->priv=NULL;
-	unregister_netdev(lp->wdev);
-	kfree(lp->wdev->name);
-	kfree(lp->wdev);
-	lp->wdev=NULL;
+	/* free the ethernet-encap protocol device */
+	lp->edev->start=0;
+	lp->edev->priv=NULL;
+	unregister_netdev(lp->edev);
+	kfree(lp->edev->name);
+	kfree(lp->edev);
+	lp->edev=NULL;
 
 	/* Update the statistics here. */
 	
@@ -1408,15 +1437,15 @@ arcnetA_go_tx(struct device *dev)
 }
 
 
-/* Called by the kernel in order to transmit a "Windows" packet.
+/* Called by the kernel in order to transmit an ethernet-type packet.
  */
 static int
-arcnetW_send_packet(struct sk_buff *skb, struct device *dev)
+arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 	
 	BUGLVL(D_DURING)
-		printk("%s: in arcnetW_send_packet (skb=%p)\n",dev->name,skb);
+		printk("%s: in arcnetE_send_packet (skb=%p)\n",dev->name,skb);
 
 	if (IF_TBUSY)
 	{
@@ -1457,8 +1486,8 @@ arcnetW_send_packet(struct sk_buff *skb, struct device *dev)
 		
 		if (length>XMTU)
 		{
-			printk("arcnet: MTU for %s and %s must be <= 493 for Windows protocol.\n",
-				lp->adev->name,lp->wdev->name);
+			printk("arcnet: MTU for %s and %s must be <= 493 for ethernet encap.\n",
+				lp->adev->name,lp->edev->name);
 			printk("arcnet: transmit aborted.\n");
 
 			dev_kfree_skb(skb,FREE_WRITE);
@@ -1827,7 +1856,7 @@ arcnet_rx(struct device *dev,int recbuf)
 			length,saddr,daddr);
 		break;
 	case ARC_P_MS_TCPIP:
-		arcnetW_rx(dev,arcsoft,length,saddr,daddr);
+		arcnetE_rx(dev,arcsoft,length,saddr,daddr);
 		break;		
 	default:
 		printk("arcnet: received unknown protocol %d (%Xh)\n",
@@ -1851,6 +1880,11 @@ arcnet_rx(struct device *dev,int recbuf)
        		
        		printk("\n");
        	}
+
+
+	/* clean out the page to make debugging make more sense :) */
+	BUGLVL(D_DURING)
+		memset((void *)arcpacket->raw,0x42,512);
 
 
 	/* If any worth-while packets have been received, a mark_bh(NET_BH)
@@ -1972,7 +2006,9 @@ arcnetA_rx(struct device *dev,struct ClientData *arcsoft,
                		printk("\n");
             	}
 
-		skb->protocol=arcnetA_type_trans(skb,dev);
+			#ifndef LINUX12
+			skb->protocol=arcnetA_type_trans(skb,dev);
+			#endif
 
          	netif_rx(skb);
          	lp->stats.rx_packets++;
@@ -2136,8 +2172,11 @@ arcnetA_rx(struct device *dev,struct ClientData *arcsoft,
                			printk("\n");
             		}
 
-			skb->protocol=arcnetA_type_trans(skb,dev);
-
+			
+				#ifndef LINUX12
+				skb->protocol=arcnetA_type_trans(skb,dev);
+				#endif
+				
 	         	netif_rx(skb);
         	 	lp->stats.rx_packets++;
         	}
@@ -2145,17 +2184,17 @@ arcnetA_rx(struct device *dev,struct ClientData *arcsoft,
 }
 
 
-/* Packet receiver for non-standard Windows-style packets
+/* Packet receiver for non-standard ethernet-style packets
  */
 static void
-arcnetW_rx(struct device *dev,u_char *arcsoft,
+arcnetE_rx(struct device *dev,u_char *arcsoft,
 	int length,u_char saddr, u_char daddr)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 	struct sk_buff *skb;
 	
 	BUGLVL(D_DURING)
-		printk("arcnet: it's a Windows packet (length=%d)\n",
+		printk("arcnet: it's an ethernet-encap packet (length=%d)\n",
 			length);
 
        	skb = alloc_skb(length, GFP_ATOMIC);
@@ -2166,7 +2205,7 @@ arcnetW_rx(struct device *dev,u_char *arcsoft,
        	}
        	
        	skb->len = length;
-       	skb->dev = lp->wdev;
+       	skb->dev = lp->edev;
        	
        	memcpy(skb->data,(u_char *)arcsoft+1,length-1);
 
@@ -2184,7 +2223,9 @@ arcnetW_rx(struct device *dev,u_char *arcsoft,
                 printk("\n");
         }
         
-	skb->protocol=eth_type_trans(skb,dev);
+		#ifndef LINUX12
+		skb->protocol=eth_type_trans(skb,dev);
+		#endif
         
         netif_rx(skb);
         lp->stats.rx_packets++;
@@ -2235,11 +2276,21 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
  * saddr=NULL	means use device source address (always will anyway)
  * daddr=NULL	means leave destination address (eg unresolved arp)
  */
-int arcnetA_header(struct sk_buff *skb,struct device *dev,unsigned short type,
-		void *daddr,void *saddr,unsigned len)
+#ifdef LINUX12
+int arcnetA_header(unsigned char *buff,struct device *dev,
+		unsigned short type,void *daddr,void *saddr,unsigned len,
+		struct sk_buff *skb)
+#else
+int arcnetA_header(struct sk_buff *skb,struct device *dev,
+		unsigned short type,void *daddr,void *saddr,unsigned len)
+#endif
 {
 	struct ClientData *head = (struct ClientData *)
+#ifdef LINUX12
+		buff;
+#else
 		skb_push(skb,dev->hard_header_len);
+#endif
 /*	struct arcnet_local *lp=(struct arcnet_local *)(dev->priv);*/
 
 	/* set the protocol ID according to RFC-1201 */
@@ -2350,9 +2401,11 @@ unsigned short arcnetA_type_trans(struct sk_buff *skb,struct device *dev)
 	struct ClientData *head = (struct ClientData *) skb->data;
 	struct arcnet_local *lp=(struct arcnet_local *) (dev->priv);
 
+#ifndef LINUX12
 	/* Pull off the arcnet header. */
 	skb->mac.raw=skb->data;
 	skb_pull(skb,dev->hard_header_len);
+#endif
 	
 	if (head->daddr==0)
 		skb->pkt_type=PACKET_BROADCAST;
@@ -2409,6 +2462,9 @@ int num=0;	/* number of device (ie for 0 for arc0, 1 for arc1...) */
 int
 init_module(void)
 {
+	if (io == 0)
+	  printk("arcnet: You should not use auto-probing with insmod!\n");
+
 	sprintf(thiscard.name,"arc%d",num);
 
 	thiscard.base_addr=io;

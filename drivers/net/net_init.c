@@ -312,8 +312,6 @@ void unregister_netdev(struct device *dev)
 	save_flags(flags);
 	cli();
 
-	printk("unregister_netdev: device ");
-
 	if (dev == NULL) 
 	{
 		printk("was NULL\n");
@@ -333,11 +331,10 @@ void unregister_netdev(struct device *dev)
 		if (d && (d->next == dev)) 
 		{
 			d->next = dev->next;
-			printk("'%s' unlinked\n", dev->name);
 		}
 		else 
 		{
-			printk("'%s' not found\n", dev->name);
+			printk("unregister_netdev: '%s' not found\n", dev->name);
 			restore_flags(flags);
 			return;
 		}

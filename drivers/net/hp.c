@@ -72,9 +72,6 @@ static void hp_init_card(struct device *dev);
 /* My default is IRQ5	   0  1	 2  3  4  5  6	7  8  9 10 11 */
 static char irqmap[16] = { 0, 0, 4, 6, 8,10, 0,14, 0, 4, 2,12,0,0,0,0};
 
-/* NE2000, et.al. bug-fix code */
-static int ne8390_rw_bugfix = 0;
-
 
 /*	Probe for an HP LAN adaptor.
 	Also initialize the card and fill in STATION_ADDR with the station
@@ -275,19 +272,19 @@ hp_block_output(struct device *dev, int count,
 	/* We should already be in page 0, but to be safe... */
 	outb_p(E8390_PAGE0+E8390_START+E8390_NODMA, nic_base);
 
-	if (ne8390_rw_bugfix) {
-		/* Handle the read-before-write bug the same way as the
-		   Crynwr packet driver -- the NatSemi method doesn't work. */
-		outb_p(0x42, nic_base + EN0_RCNTLO);
-		outb_p(0,	nic_base + EN0_RCNTHI);
-		outb_p(0xff, nic_base + EN0_RSARLO);
-		outb_p(0x00, nic_base + EN0_RSARHI);
+#ifdef NE8390_RW_BUGFIX
+	/* Handle the read-before-write bug the same way as the
+	   Crynwr packet driver -- the NatSemi method doesn't work. */
+	outb_p(0x42, nic_base + EN0_RCNTLO);
+	outb_p(0,	nic_base + EN0_RCNTHI);
+	outb_p(0xff, nic_base + EN0_RSARLO);
+	outb_p(0x00, nic_base + EN0_RSARHI);
 #define NE_CMD	 	0x00
-		outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
-		/* Make certain that the dummy read has occurred. */
-		inb_p(0x61);
-		inb_p(0x61);
-	}
+	outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
+	/* Make certain that the dummy read has occurred. */
+	inb_p(0x61);
+	inb_p(0x61);
+#endif
 
 	outb_p(count & 0xff, nic_base + EN0_RCNTLO);
 	outb_p(count >> 8,	 nic_base + EN0_RCNTHI);
@@ -333,11 +330,13 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_hp = {
 	"        " /*"hp"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, hp_probe };
 
-int io = 0;
+int io = 300;
 int irq = 0;
 
 int init_module(void)
 {
+	if (io == 0)
+	  printk("hp: You should not use auto-probing with insmod!\n");
 	dev_hp.base_addr = io;
 	dev_hp.irq       = irq;
 	if (register_netdev(&dev_hp) != 0) {

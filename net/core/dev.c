@@ -1321,7 +1321,7 @@ void dev_init(void)
 		}
 	}
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_DEV,		dev_get_info,	3, "dev" });
+	{ PROC_NET_DEV, 3, "dev", dev_get_info });
 
 }
 

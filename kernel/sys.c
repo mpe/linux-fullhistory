@@ -436,7 +436,7 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 	freepages = buffermem >> 12;
 	freepages += nr_free_pages;
 	freepages += nr_swap_pages;
-	freepages -= (high_memory - 0x100000) >> 16;
+	freepages -= MAP_NR(high_memory) >> 4;
 	freepages -= (newbrk-oldbrk) >> 12;
 	if (freepages < 0)
 		return current->mm->brk;

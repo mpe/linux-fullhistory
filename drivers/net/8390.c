@@ -84,12 +84,12 @@ static const char *version =
 #ifdef EI_DEBUG
 int ei_debug = EI_DEBUG;
 #else
-int ei_debug = 0;
+int ei_debug = 1;
 #endif
-#ifdef EI_NOPINGPONG
-static int ei_pingpong = 0;
-#else
+#ifdef EI_PINGPONG
 static int ei_pingpong = 1;
+#else
+static int ei_pingpong = 0;
 #endif
 
 /* Max number of packets received at one Intr.

@@ -40,6 +40,8 @@
  *		Alan Cox	:	Don't proxy across hardware types!
  *		Jonathan Naylor :	Added support for NET/ROM.
  *		Mike Shaver     :       RFC1122 checks.
+ *		Jonathan Naylor :	Only lookup the hardware address for
+ *					the correct hardware type.
  */
 
 /* RFC1122 Status:
@@ -160,7 +162,7 @@ enum proxy {
 
 /* Forward declarations. */
 static void arp_check_expire (unsigned long);  
-static struct arp_table *arp_lookup(u32 paddr, enum proxy proxy);
+static struct arp_table *arp_lookup(u32 paddr, enum proxy proxy, unsigned short type);
 
 
 static struct timer_list arp_timer =
@@ -953,7 +955,7 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 	/*
 	 *	Find an entry
 	 */
-	entry = arp_lookup(paddr, PROXY_NONE);
+	entry = arp_lookup(paddr, PROXY_NONE, dev->type);
 
 	if (entry != NULL) 	/* It exists */
 	{
@@ -1126,13 +1128,14 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
  *	for proxy entries, otherwise the netmask will be used
  */
 
-static struct arp_table *arp_lookup(u32 paddr, enum proxy proxy)
+static struct arp_table *arp_lookup(u32 paddr, enum proxy proxy, unsigned short type)
 {
 	struct arp_table *entry;
 	unsigned long hash = HASH(paddr);
 	
 	for (entry = arp_tables[hash]; entry != NULL; entry = entry->next)
-		if (entry->ip == paddr) break;
+		if (entry->ip == paddr && entry->htype == type)
+			break;
 
 	/* it's possibly a proxy entry (with a netmask) */
 	if (!entry && proxy != PROXY_NONE)
@@ -1186,7 +1189,7 @@ int arp_find_cache(unsigned char *dp, u32 daddr, struct device *dev)
 			return 1;
 			
 		default:
-			entry=arp_lookup(daddr, PROXY_NONE);
+			entry=arp_lookup(daddr, PROXY_NONE, dev->type);
 			if(entry)
 			{
 				memcpy(dp,entry->ha, ETH_ALEN);
@@ -1277,7 +1280,7 @@ static int arp_req_set(struct arpreq *req)
 	/*
 	 *	Find the entry
 	 */
-	entry = arp_lookup(ip, PROXY_EXACT);
+	entry = arp_lookup(ip, PROXY_EXACT, htype);
 	if (entry && (entry->flags & ATF_PUBL) != (r.arp_flags & ATF_PUBL))
 	{
 		sti();
@@ -1358,7 +1361,7 @@ static int arp_req_get(struct arpreq *req)
 	
 	si = (struct sockaddr_in *) &r.arp_pa;
 	cli();
-	entry = arp_lookup(si->sin_addr.s_addr,PROXY_ANY);
+	entry = arp_lookup(si->sin_addr.s_addr, PROXY_ANY, r.arp_ha.sa_family);
 
 	if (entry == NULL)
 	{
@@ -1458,6 +1461,6 @@ void arp_init (void)
 	register_netdevice_notifier(&arp_dev_notifier);
 
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_ARP,		arp_get_info,	3, "arp" });
+	{ PROC_NET_ARP,	3, "arp", arp_get_info });
 }
 

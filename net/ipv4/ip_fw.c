@@ -1551,16 +1551,16 @@ void ip_fw_init(void)
 {
 #ifdef CONFIG_IP_ACCT
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPACCT,	ip_acct_procinfo,	7,  "ip_acct"});
+	{ PROC_NET_IPACCT, 7, "ip_acct", ip_acct_procinfo });
 #endif
 #ifdef CONFIG_IP_FIREWALL
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPFWBLK,	ip_fw_blk_procinfo,	8,  "ip_block"});
+	{ PROC_NET_IPFWBLK, 8, "ip_block", ip_fw_blk_procinfo });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPFWFWD,	ip_fw_fwd_procinfo,	10, "ip_forward"});
+	{ PROC_NET_IPFWFWD, 10, "ip_forward", ip_fw_fwd_procinfo });
 #endif
 #ifdef CONFIG_IP_MASQUERADE
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPMSQHST,	ip_msqhst_procinfo,	13, "ip_masquerade"});
+	{ PROC_NET_IPMSQHST, 13, "ip_masquerade", ip_msqhst_procinfo });
 #endif
 }

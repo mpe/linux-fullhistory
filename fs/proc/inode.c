@@ -205,7 +205,7 @@ void proc_read_inode(struct inode * inode)
 			case PROC_NET:
 				inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 				inode->i_nlink = 2;
-				inode->i_op = &proc_net_inode_operations;
+				inode->i_op = &proc_netdir_inode_operations;
 				break;
 			case PROC_SCSI:
                                 inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;

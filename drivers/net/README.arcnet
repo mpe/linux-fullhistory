@@ -145,10 +145,12 @@ Windows:  See DOS :)  Trumpet Winsock works fine with either the Novell or
 LAN Manager and Windows for Workgroups: These programs use protocols that
         are incompatible with the internet standard.  They try to pretend
         the cards are ethernet, and confuse everyone else on the network. 
-        However, v1.90 ALPHA and later of the Linux ARCnet driver support
-        this protocol via the 'arc0w' device.  After setting up arc0 as
-        usual, ifconfig and set up routes to your WfWg-protocol hosts
-        through arc0w.
+        However, v1.93 ALPHA and later of the Linux ARCnet driver support
+        this protocol via the 'arc0e' device.  After setting up arc0 as
+        usual, ifconfig and set up routes to your ethernet-encap hosts
+        through arc0e.  There may be non-Microsoft products that support
+        this protocol as well, so it was changed in 1.93 ALPHA from arc0w
+        to arc0e.
         
 	Using the freeware Samba server and clients for Linux, you can now
 	interface quite nicely with TCP/IP-based WfWg or Lan Manager

@@ -80,10 +80,6 @@ static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg);
 static int sock_fasync(struct inode *inode, struct file *filp, int on);
 
-extern int proc_net_register(struct proc_dir_entry *);
-extern int proc_net_unregister(int);
-		   
-
 
 /*
  *	Socket files have a set of 'special' operations as well as the generic file ones. These don't appear

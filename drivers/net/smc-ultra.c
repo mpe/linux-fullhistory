@@ -328,11 +328,13 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_ultra = {
 	"        " /*"smc-ultra"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ultra_probe };
 
-int io = 0;
+int io = 0x200;
 int irq = 0;
 
 int init_module(void)
 {
+	if (io == 0)
+	  printk("smc-ultra: You should not use auto-probing with insmod!\n");
 	dev_ultra.base_addr = io;
 	dev_ultra.irq       = irq;
 	if (register_netdev(&dev_ultra) != 0) {

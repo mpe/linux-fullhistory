@@ -103,8 +103,7 @@ static const char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-						unsigned long *mem_startp);
+
 
 /* First, a few definitions that the brave might change. */
 /* A zero-terminated list of I/O addresses to be probed. */
@@ -1137,12 +1136,14 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_eepro = {
 	"        " /*"eepro"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, eepro_probe };
 
-int io = 0;
+int io = 0x200;
 int irq = 0;
 
 int
 init_module(void)
 {
+	if (io == 0)
+	  printk("eepro: You should not use auto-probing with insmod!\n");
 	dev_eepro.base_addr = io;
 	dev_eepro.irq       = irq;
 

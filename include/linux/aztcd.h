@@ -1,4 +1,4 @@
-/* $Id: aztcd.h,v 1.50 1995/07/29 20:31:32 root Exp $
+/* $Id: aztcd.h,v 1.60 1995/08/09 12:38:12 root Exp root $
  *
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann
@@ -32,7 +32,7 @@
 */
 
 #ifdef AZT_SW32 
-#define AZT_SW32_BASE_ADDR       0x220  /*I/O port base adress of your soundcard*/
+#define AZT_SW32_BASE_ADDR       0x220  /*I/O port base address of your soundcard*/
 #endif
 
 /* Set this to 1, if you want your tray to be locked, set to 0 to prevent tray 

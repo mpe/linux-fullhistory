@@ -28,21 +28,6 @@
 #undef EXT2FS_DEBUG
 
 /*
- * Define EXT2FS_DEBUG_CACHE to produce cache debug messages
- */
-#undef EXT2FS_DEBUG_CACHE
-
-/*
- * Define EXT2FS_CHECK_CACHE to add some checks to the name cache code
- */
-#undef EXT2FS_CHECK_CACHE
-
-/*
- * Define EXT2FS_PRE_02B_COMPAT to convert ext 2 fs prior to 0.2b
- */
-#undef EXT2FS_PRE_02B_COMPAT
-
-/*
  * Define EXT2_PREALLOCATE to preallocate data blocks for expanding files
  */
 #define EXT2_PREALLOCATE
@@ -50,7 +35,7 @@
 /*
  * The second extended file system version
  */
-#define EXT2FS_DATE		"95/07/02"
+#define EXT2FS_DATE		"95/08/09"
 #define EXT2FS_VERSION		"0.5b"
 
 /*
@@ -80,7 +65,6 @@
 /*
  * The second extended file system magic number
  */
-#define EXT2_PRE_02B_MAGIC	0xEF51
 #define EXT2_SUPER_MAGIC	0xEF53
 
 /*
@@ -151,15 +135,6 @@ struct ext2_acl_entry	/* Access Control List Entry */
 /*
  * Structure of a blocks group descriptor
  */
-struct ext2_old_group_desc
-{
-	__u32	bg_block_bitmap;		/* Blocks bitmap block */
-	__u32	bg_inode_bitmap;		/* Inodes bitmap block */
-	__u32	bg_inode_table;		/* Inodes table block */
-	__u16	bg_free_blocks_count;	/* Free blocks count */
-	__u16	bg_free_inodes_count;	/* Free inodes count */
-};
-
 struct ext2_group_desc
 {
 	__u32	bg_block_bitmap;		/* Blocks bitmap block */
@@ -362,12 +337,25 @@ struct ext2_super_block {
 	__u32	s_reserved[235];	/* Padding to the end of the block */
 };
 
+/*
+ * Codes for operating systems
+ */
 #define EXT2_OS_LINUX		0
 #define EXT2_OS_HURD		1
 #define EXT2_OS_MASIX		2
+#define EXT2_OS_FREEBSD		3
+#define EXT2_OS_LITES		4
 
-#define EXT2_CURRENT_REV	0
+/*
+ * Revision levels
+ */
+#define EXT2_GOOD_OLD_REV	0	/* The good old (original) format */
 
+#define EXT2_CURRENT_REV	EXT2_GOOD_OLD_REV
+
+/*
+ * Default values for user and/or group using reserved blocks
+ */
 #define	EXT2_DEF_RESUID		0
 #define	EXT2_DEF_RESGID		0
 

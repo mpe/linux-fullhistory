@@ -128,48 +128,6 @@ static struct super_operations ext2_sops = {
 	ext2_remount
 };
 
-#ifdef EXT2FS_PRE_02B_COMPAT
-
-static int convert_pre_02b_fs (struct super_block * sb,
-			       struct buffer_head * bh)
-{
-	struct ext2_super_block * es;
-	struct ext2_old_group_desc old_group_desc [BLOCK_SIZE / sizeof (struct ext2_old_group_desc)];
-	struct ext2_group_desc * gdp;
-	struct buffer_head * bh2;
-	int groups_count;
-	int i;
-
-	es = (struct ext2_super_block *) bh->b_data;
-	bh2 = bread (sb->s_dev, 2, BLOCK_SIZE);
-	if (!bh2) {
-		printk ("Cannot read descriptor blocks while converting !\n");
-		return 0;
-	}
-	memcpy (old_group_desc, bh2->b_data, BLOCK_SIZE);
-	groups_count = (sb->u.ext2_sb.s_blocks_count - 
-			sb->u.ext2_sb.s_first_data_block +
-			(EXT2_BLOCK_SIZE(sb) * 8) - 1) /
-				(EXT2_BLOCK_SIZE(sb) * 8);
-	memset (bh2->b_data, 0, BLOCK_SIZE);
-	gdp = (struct ext2_group_desc *) bh2->b_data;
-	for (i = 0; i < groups_count; i++) {
-		gdp[i].bg_block_bitmap = old_group_desc[i].bg_block_bitmap;
-		gdp[i].bg_inode_bitmap = old_group_desc[i].bg_inode_bitmap;
-		gdp[i].bg_inode_table = old_group_desc[i].bg_inode_table;
-		gdp[i].bg_free_blocks_count = old_group_desc[i].bg_free_blocks_count;
-		gdp[i].bg_free_inodes_count = old_group_desc[i].bg_free_inodes_count;
-	}
-	mark_buffer_dirty(bh2, 1);
-	brelse (bh2);
-	es->s_magic = EXT2_SUPER_MAGIC;
-	mark_buffer_dirty(bh, 1);
-	sb->s_magic = EXT2_SUPER_MAGIC;
-	return 1;
-}
-
-#endif
-
 /*
  * This function has been shamelessly adapted from the msdos fs
  */
@@ -403,9 +361,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	int dev = sb->s_dev;
 	int db_count;
 	int i, j;
-#ifdef EXT2FS_PRE_02B_COMPAT
-	int fs_converted = 0;
-#endif
 
 	set_opt (sb->u.ext2_sb.s_mount_opt, CHECK_NORMAL);
 	if (!parse_options ((char *) data, &sb_block, &resuid, &resgid,
@@ -429,11 +384,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	es = (struct ext2_super_block *) bh->b_data;
 	sb->u.ext2_sb.s_es = es;
 	sb->s_magic = es->s_magic;
-	if (sb->s_magic != EXT2_SUPER_MAGIC
-#ifdef EXT2FS_PRE_02B_COMPAT
-	   && sb->s_magic != EXT2_PRE_02B_MAGIC
-#endif
-	   ) {
+	if (sb->s_magic != EXT2_SUPER_MAGIC) {
 		sb->s_dev = 0;
 		unlock_super (sb);
 		brelse (bh);
@@ -500,39 +451,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		log2 (EXT2_INODES_PER_BLOCK(sb));
 	sb->u.ext2_sb.s_desc_per_block_bits =
 		log2 (EXT2_DESC_PER_BLOCK(sb));
-#ifdef EXT2FS_PRE_02B_COMPAT
-	if (sb->s_magic == EXT2_PRE_02B_MAGIC) {
-		if (es->s_blocks_count > 262144) {
-			/*
-			 * fs > 256 MB can't be converted
-			 */ 
-			sb->s_dev = 0;
-			unlock_super (sb);
-			brelse (bh);
-			printk ("EXT2-fs: trying to mount a pre-0.2b file"
-				"system which cannot be converted\n");
-			return NULL;
-		}
-		printk ("EXT2-fs: mounting a pre 0.2b file system, "
-			"will try to convert the structure\n");
-		if (!(sb->s_flags & MS_RDONLY)) {
-			sb->s_dev = 0;
-			unlock_super (sb);
-			brelse (bh);
-			printk ("EXT2-fs: cannot convert a read-only fs\n");
-			return NULL;
-		}
-		if (!convert_pre_02b_fs (sb, bh)) {
-			sb->s_dev = 0;
-			unlock_super (sb);
-			brelse (bh);
-			printk ("EXT2-fs: conversion failed !!!\n");
-			return NULL;
-		}
-		printk ("EXT2-fs: conversion succeeded !!!\n");
-		fs_converted = 1;
-	}
-#endif
 	if (sb->s_magic != EXT2_SUPER_MAGIC) {
 		sb->s_dev = 0;
 		unlock_super (sb);
@@ -652,13 +570,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 		printk ("EXT2-fs: get root inode failed\n");
 		return NULL;
 	}
-#ifdef EXT2FS_PRE_02B_COMPAT
-	if (fs_converted) {
-		for (i = 0; i < db_count; i++)
-			mark_buffer_dirty(sb->u.ext2_sb.s_group_desc[i], 1);
-		sb->s_dirt = 1;
-	}
-#endif
 	ext2_setup_super (sb, es);
 	return sb;
 }

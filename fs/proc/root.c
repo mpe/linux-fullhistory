@@ -52,34 +52,34 @@ struct inode_operations proc_root_inode_operations = {
 };
 
 static struct proc_dir_entry root_dir[] = {
-	{ PROC_ROOT_INO,	NULL,	1, "." },
-	{ PROC_ROOT_INO,	NULL,	2, ".." },
-	{ PROC_LOADAVG,		NULL,	7, "loadavg" },
-	{ PROC_UPTIME,		NULL,	6, "uptime" },
-	{ PROC_MEMINFO,		NULL,	7, "meminfo" },
-	{ PROC_KMSG,		NULL,	4, "kmsg" },
-	{ PROC_VERSION,		NULL,	7, "version" },
+	{ PROC_ROOT_INO,	1, "." },
+	{ PROC_ROOT_INO,	2, ".." },
+	{ PROC_LOADAVG,		7, "loadavg" },
+	{ PROC_UPTIME,		6, "uptime" },
+	{ PROC_MEMINFO,		7, "meminfo" },
+	{ PROC_KMSG,		4, "kmsg" },
+	{ PROC_VERSION,		7, "version" },
 #ifdef CONFIG_PCI
-	{ PROC_PCI,             NULL,	3, "pci"  },
+	{ PROC_PCI,             3, "pci" },
 #endif
-	{ PROC_CPUINFO,		NULL,	7, "cpuinfo" },
-	{ PROC_SELF,		NULL,	4, "self" },	/* will change inode # */
-	{ PROC_NET,		NULL,	3, "net" },
-   	{ PROC_SCSI,	        NULL,	4, "scsi" },
+	{ PROC_CPUINFO,		7, "cpuinfo" },
+	{ PROC_SELF,		4, "self" },	/* will change inode # */
+	{ PROC_NET,		3, "net" },
+   	{ PROC_SCSI,	        4, "scsi" },
 #ifdef CONFIG_DEBUG_MALLOC
-	{ PROC_MALLOC,		NULL,	6, "malloc" },
+	{ PROC_MALLOC,		6, "malloc" },
 #endif
-	{ PROC_KCORE,		NULL,	5, "kcore" },
-   	{ PROC_MODULES,		NULL,	7, "modules" },
-   	{ PROC_STAT,		NULL,	4, "stat" },
-   	{ PROC_DEVICES,		NULL,	7, "devices" },
-	{ PROC_INTERRUPTS,	NULL,	10,"interrupts" },
-   	{ PROC_FILESYSTEMS,	NULL,	11,"filesystems" },
-   	{ PROC_KSYMS,		NULL,	5, "ksyms" },
-   	{ PROC_DMA,		NULL,	3, "dma" },
-	{ PROC_IOPORTS,		NULL,	7, "ioports"},
+	{ PROC_KCORE,		5, "kcore" },
+   	{ PROC_MODULES,		7, "modules" },
+   	{ PROC_STAT,		4, "stat" },
+   	{ PROC_DEVICES,		7, "devices" },
+	{ PROC_INTERRUPTS,	10,"interrupts" },
+   	{ PROC_FILESYSTEMS,	11,"filesystems" },
+   	{ PROC_KSYMS,		5, "ksyms" },
+   	{ PROC_DMA,		3, "dma" },
+	{ PROC_IOPORTS,		7, "ioports" },
 #ifdef CONFIG_PROFILE
-	{ PROC_PROFILE,		NULL,	7, "profile"},
+	{ PROC_PROFILE,		7, "profile" },
 #endif
 };
 
@@ -88,6 +88,7 @@ static struct proc_dir_entry root_dir[] = {
 static int proc_lookuproot(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
+	struct proc_dir_entry * de = NULL;
 	unsigned int pid, c;
 	int i, ino;
 
@@ -98,11 +99,14 @@ static int proc_lookuproot(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -ENOENT;
 	}
-	i = NR_ROOT_DIRENTRY;
-	while (i-- > 0 && !proc_match(len,name,root_dir+i))
-		/* nothing */;
-	if (i >= 0) {
-		ino = root_dir[i].low_ino;
+	for (i = 0; i < NR_ROOT_DIRENTRY; i++) {
+		if (!proc_match(len,name,root_dir+i))
+			continue;
+		de = root_dir + i;
+		break;
+	}
+	if (de) {
+		ino = de->low_ino;
 		if (ino == PROC_ROOT_INO) {
 			*result = dir;
 			return 0;
@@ -139,6 +143,7 @@ static int proc_lookuproot(struct inode * dir,const char * name, int len,
 		return -ENOENT;
 	}
 	iput(dir);
+	(*result)->u.generic_ip = de;
 	return 0;
 }
 

@@ -395,10 +395,10 @@ probe_pss_mpu (struct address_info *hw_config)
 	break;			/* No more input */
     }
 
-#ifdef EXCLUDE_MIDI
-  return 0;
-#else
+#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
   return probe_mpu401 (hw_config);
+#else
+  return 0
 #endif
 }
 
@@ -662,7 +662,7 @@ attach_pss_mpu (long mem_start, struct address_info *hw_config)
   int             prev_devs;
   long            ret;
 
-#ifndef EXCLUDE_MIDI
+#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
   prev_devs = num_midis;
   ret = attach_mpu401 (mem_start, hw_config);
 

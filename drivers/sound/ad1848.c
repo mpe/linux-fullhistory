@@ -7,6 +7,11 @@
  * The CS4231 which is used in the GUS MAX and some other cards is
  * upwards compatible with AD1848 and this driver is able to drive it.
  *
+ * CS4231A and AD1845 are upward compatible with CS4231. However
+ * the new features of these chips are different.
+ *
+ * CS4232 is a PnP audio chip which contains a CS4231A.
+ *
  * Copyright by Hannu Savolainen 1994, 1995
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1039,7 +1044,7 @@ ad1848_halt (int dev)
   OUTB (0, io_Status (devc));	/* Clear interrupt status */
   ad_leave_MCE (devc);
 
-  DMAbuf_reset_dma (dev);
+  /* DMAbuf_reset_dma (dev); */
 }
 
 int
@@ -1181,17 +1186,46 @@ ad1848_detect (int io_base)
 	  if ((ad_read (devc, 25) & 0xe7) == (tmp1 & 0xe7))
 	    {
 	      /*
-	         *      It's a CS4231
+	       *      It's at least CS4231
 	       */
 	      devc->chip_name = "CS4231";
-
 
 #ifdef MOZART_PORT
 	      if (devc->base != MOZART_PORT + 4)
 #endif
 		devc->mode = 2;
 
+	      /*
+	       * It could be an AD1845 or CS4231A as well.
+	       * CS4231 and AD1845 report the same revision info in I25
+	       * while the CS4231A reports different.
+	       */
 
+	      if ((ad_read (devc, 25) & 0xe7) == 0xa0)
+		{
+		  devc->chip_name = "CS4231A";
+		}
+	      else if ((ad_read (devc, 25) & 0xe7) == 0x80)
+		{
+		  /* 
+		   * It must be a CS4231 or AD1845. The register I23 of
+		   * CS4231 is undefined and it appears to be read only.
+		   * AD1845 uses I23 for setting sample rate. Assume
+		   * the chip is AD1845 if I23 is changeable.
+		   */
+
+		  unsigned char   tmp = ad_read (devc, 23);
+
+		  ad_write (devc, 23, ~tmp);
+		  if (ad_read (devc, 23) != tmp)	/* AD1845 ? */
+		    {
+		      devc->chip_name = "AD1845";
+		    }
+
+		  ad_write (devc, 23, tmp);	/* Restore */
+		}
+
+	      /* Otherwise behave just as if the chip is a CS4231 */
 	    }
 	  ad_write (devc, 25, tmp1);	/* Restore bits */
 	}

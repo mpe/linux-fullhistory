@@ -1,3 +1,4 @@
+#define MAD16_OPL4		/* Disable this if you have problems with OPL3 */
 /*
  * sound/mad16.c
  *
@@ -20,14 +21,17 @@
  *      0x01    - joystick disabled
  *
  *      CD-ROM type selection (select just one):
+ *      0x00    - none
  *      0x02    - Sony 31A
  *      0x04    - Mitsumi
- *      0x06    - Panasonic
- *      0x08    - Secondary IDE
- *      0x0a    - Primary IDE
+ *      0x06    - Panasonic (type "LaserMate", not "SoundBlaster")
+ *      0x08    - Secondary IDE (address 0x170)
+ *      0x0a    - Primary IDE (address 0x1F0)
  *      
  *      For example Mitsumi with joystick disabled = 0x04|0x01 = 0x05
+ *      For example LaserMate (for use with sbpcd) plus joystick = 0x06
  *      
+ *    MAD16_CDSEL:
  *      This defaults to CD I/O 0x340, no IRQ and DMA3 
  *      (DMA5 with Mitsumi or IDE). If you like to change these, define
  *      MAD16_CDSEL with the following bits:
@@ -40,6 +44,8 @@
  *      CD-ROM DMA (Sony or Panasonic): 0x00=DMA3, 0x01=DMA2, 0x02=DMA1 or 0x03=disabled
  *   or
  *      CD-ROM DMA (Mitsumi or IDE):    0x00=DMA5, 0x01=DMA6, 0x02=DMA7 or 0x03=disabled
+ *
+ *      For use with sbpcd, address 0x340, set MAD16_CDSEL to 0x03 or 0x23.
  *
  * Copyright by Hannu Savolainen 1995
  *
@@ -84,8 +90,8 @@ static int      already_initialized = 0;
  *      only until the next I/O read or write.
  */
 
-#define MC1_PORT	0xf8d
-#define MC2_PORT	0xf8e
+#define MC1_PORT	0xf8d	/* SB address, CDROM interface type, joystick */
+#define MC2_PORT	0xf8e	/* CDROM address, IRQ, DMA, plus OPL4 bit */
 #define MC3_PORT	0xf8f
 #define PASSWD_REG	0xf8f
 #define MC4_PORT	0xf90
@@ -236,9 +242,9 @@ probe_mad16 (struct address_info *hw_config)
     }
   else
     {
-      unsigned char model;
+      unsigned char   model;
 
-      if (((model=mad_read (MC3_PORT)) & 0x03) == 0x03)
+      if (((model = mad_read (MC3_PORT)) & 0x03) == 0x03)
 	{
 	  printk ("mad16.c: Mozart detected???\n");
 	  board_type = MOZART;
@@ -277,6 +283,8 @@ probe_mad16 (struct address_info *hw_config)
 /*
  * Set optional CD-ROM and joystick settings.
  */
+#define MAD16_CONF 0x06
+#define MAD16_CDSEL 0x03
 
 #ifdef MAD16_CONF
   tmp |= ((MAD16_CONF) & 0x0f);	/* CD-ROM and joystick bits */
@@ -327,22 +335,20 @@ long
 attach_mad16_mpu (long mem_start, struct address_info *hw_config)
 {
 
-#ifdef EXCLUDE_MIDI
-  return mem_start;
-#else
+#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
   if (!already_initialized)
     return mem_start;
 
   return attach_mpu401 (mem_start, hw_config);
+#else
+  return mem_start;
 #endif
 }
 
 int
 probe_mad16_mpu (struct address_info *hw_config)
 {
-#ifdef EXCLUDE_MIDI
-  return 0;
-#else
+#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
   static int      mpu_attached = 0;
   static int      valid_ports[] =
   {0x330, 0x320, 0x310, 0x300};
@@ -365,7 +371,7 @@ probe_mad16_mpu (struct address_info *hw_config)
       return 0;
     }
 
-  tmp = 0x80;			/* MPU-401 enable */
+  tmp = 0x83;			/* MPU-401 enable */
 
 /*
  * Set the MPU base bits
@@ -403,12 +409,12 @@ probe_mad16_mpu (struct address_info *hw_config)
 	  tmp |= i << 3;
 	  break;
 	}
-
-      tmp |= 0x03;		/* ???????? */
-      mad_write (MC6_PORT, tmp);	/* Write MPU401 config */
     }
+  mad_write (MC6_PORT, tmp);	/* Write MPU401 config */
 
   return probe_mpu401 (hw_config);
+#else
+  return 0;
 #endif
 }
 

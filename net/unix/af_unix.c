@@ -12,6 +12,9 @@
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
+ *
+ * Fixes:
+ *		Linus Torvalds	:	Assorted bug cures.
  */
 
 #include <linux/config.h>
@@ -34,7 +37,6 @@
 #include <linux/malloc.h>
 #include <asm/segment.h>
 #include <linux/skbuff.h>
-/*#include <linux/netprotocol.h>*/
 #include <linux/netdevice.h>
 #include <net/sock.h>
 #include <net/tcp.h>
@@ -1015,7 +1017,7 @@ void unix_proto_init(struct net_proto *pro)
 	printk("NET3: Unix domain sockets 0.07 BETA for Linux NET3.030.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
 	proc_net_register(&(struct proc_dir_entry)
-			  { PROC_NET_UNIX,  unix_get_info,  4,  "unix" });
+			  { PROC_NET_UNIX,  4, "unix", unix_get_info });
 }
 /*
  * Local variables:

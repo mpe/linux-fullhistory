@@ -33,7 +33,7 @@
 #include "soundvers.h"
 
 #if !defined(PSS_MPU_BASE) && defined(EXCLUDE_SSCAPE) && \
-			      defined(EXCLUDE_TRIX) && !defined(MAD16_MPU_BASE)
+      defined(EXCLUDE_TRIX) && !defined(MAD16_MPU_BASE)
 #define EXCLUDE_MPU_EMU
 #endif
 

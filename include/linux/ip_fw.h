@@ -163,6 +163,7 @@ extern void ip_acct_cnt(struct iphdr *, struct device *, struct ip_fw *);
 extern int ip_acct_ctl(int, void *, int);
 #endif
 extern int ip_fw_chk(struct iphdr *, struct device *rif,struct ip_fw *, int, int);
+extern void ip_fw_init(void);
 #endif /* KERNEL */
 
 #ifdef CONFIG_IP_MASQUERADE

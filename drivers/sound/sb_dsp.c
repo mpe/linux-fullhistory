@@ -1139,6 +1139,13 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 	}
     }
 
+  if (sbc_major == 0)
+    {
+      printk ("\n\nFailed to get SB version (%x) - possible I/O conflict\n\n",
+	      INB (DSP_DATA_AVAIL));
+      sbc_major = 1;
+    }
+
   if (sbc_major == 2 || sbc_major == 3)
     sb_duplex_midi = 1;
 

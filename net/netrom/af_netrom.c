@@ -54,6 +54,8 @@
 #include <net/ip.h>
 #include <net/arp.h>
 
+#include <linux/proc_fs.h>
+
 /************************************************************************\
 *									*
 *			Handlers for the socket list			*
@@ -1391,11 +1393,11 @@ void nr_proto_init(struct net_proto *pro)
 	nr_default.window     = NR_DEFAULT_WINDOW;
 
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_NR,		nr_get_info,		2, "nr" });
+	{ PROC_NET_NR, 2, "nr", nr_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_NR_NEIGH,	nr_neigh_get_info,	8, "nr_neigh" });
+	{ PROC_NET_NR_NEIGH, 8, "nr_neigh", nr_neigh_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_NR_NODES,	nr_nodes_get_info,	8, "nr_nodes" });
+	{ PROC_NET_NR_NODES, 8, "nr_nodes", nr_nodes_get_info });
 
 }
 

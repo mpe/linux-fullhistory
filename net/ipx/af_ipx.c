@@ -70,6 +70,7 @@
 #include <linux/interrupt.h>
 #include <net/p8022.h>
 #include <net/psnap.h>
+#include <linux/proc_fs.h>
 
 #ifdef CONFIG_IPX
 /* Configuration Variables */
@@ -1969,11 +1970,11 @@ void ipx_proto_init(struct net_proto *pro)
 	register_netdevice_notifier(&ipx_dev_notifier);
 
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPX,		ipx_get_info,	3, "ipx" });
+	{ PROC_NET_IPX, 3, "ipx", ipx_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPX_INTERFACE, ipx_interface_get_info, 13,"ipx_interface"});
+	{ PROC_NET_IPX_INTERFACE, 13, "ipx_interface", ipx_interface_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_IPX_ROUTE,	ipx_rt_get_info 9, "ipx_route" });
+	{ PROC_NET_IPX_ROUTE, 9, "ipx_route", ipx_rt_get_info });
 		
 	printk("Swansea University Computer Society IPX 0.31 for NET3.030\n");
 	printk("IPX Portions Copyright (c) 1995 Caldera, Inc.\n");

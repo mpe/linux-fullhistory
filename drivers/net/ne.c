@@ -51,19 +51,9 @@ static const char *version =
 
 /* Do we perform extra sanity checks on stuff ? */
 /* #define CONFIG_NE_SANITY */
-#ifdef CONFIG_NE_SANITY
-static int config_ne_sanity = 1;
-#else
-static int config_ne_sanity = 0;
-#endif
 
 /* Do we implement the read before write bugfix ? */
 /* #define CONFIG_NE_RW_BUGFIX */
-#ifdef CONFIG_NE_RW_BUGFIX
-static int ne8390_rw_bugfix = 1;
-#else
-static int ne8390_rw_bugfix = 0;
-#endif
 
 /* ---- No user-serviceable parts below ---- */
 
@@ -388,8 +378,9 @@ static int
 ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 {
     int nic_base = dev->base_addr;
-    /* CONFIG_NE_SANITY */
+#ifdef CONFIG_NE_SANITY
     int xfer_count = count;
+#endif
 
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
@@ -411,19 +402,20 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
       insw(NE_BASE + NE_DATAPORT,buf,count>>1);
       if (count & 0x01) {
 	buf[count-1] = inb(NE_BASE + NE_DATAPORT);
-	/* CONFIG_NE_SANITY */
+#ifdef CONFIG_NE_SANITY
 	xfer_count++;
+#endif
       }
     } else {
 	insb(NE_BASE + NE_DATAPORT, buf, count);
     }
 
+#ifdef CONFIG_NE_SANITY
     /* This was for the ALPHA version only, but enough people have
        been encountering problems so it is still here.  If you see
        this message you either 1) have a slightly incompatible clone
        or 2) have noise/speed problems with your bus. */
-    if (config_ne_sanity &&
-	ei_debug > 1) {		/* DMA termination address check... */
+    if (ei_debug > 1) {		/* DMA termination address check... */
 	int addr, tries = 20;
 	do {
 	    /* DON'T check for 'inb_p(EN0_ISR) & ENISR_RDC' here
@@ -439,6 +431,7 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 		   "%#4.4x (expected) vs. %#4.4x (actual).\n",
 		   dev->name, ring_offset + xfer_count, addr);
     }
+#endif
     outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
     ei_status.dmaing &= ~0x01;
     return ring_offset + count;
@@ -450,8 +443,9 @@ ne_block_output(struct device *dev, int count,
 {
     int nic_base = NE_BASE;
     unsigned long dma_start;
-    /* CONFIG_NE_SANITY */
+#ifdef CONFIG_NE_SANITY
     int retries = 0;
+#endif
 
     /* Round the count up for word writes.  Do we need to do this?
        What effect will an odd byte count have on the 8390?
@@ -472,23 +466,25 @@ ne_block_output(struct device *dev, int count,
     /* We should already be in page 0, but to be safe... */
     outb_p(E8390_PAGE0+E8390_START+E8390_NODMA, nic_base + NE_CMD);
 
+#ifdef CONFIG_NE_SANITY
  retry:
+#endif
 
-    if (ne8390_rw_bugfix) { 
-	/* Handle the read-before-write bug the same way as the
-	   Crynwr packet driver -- the NatSemi method doesn't work.
-	   Actually this doesn't always work either, but if you have
-	   problems with your NEx000 this is better than nothing! */
-	outb_p(0x42, nic_base + EN0_RCNTLO);
-	outb_p(0x00,   nic_base + EN0_RCNTHI);
-	outb_p(0x42, nic_base + EN0_RSARLO);
-	outb_p(0x00, nic_base + EN0_RSARHI);
-	outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
-	/* Make certain that the dummy read has occurred. */
-	SLOW_DOWN_IO;
-	SLOW_DOWN_IO;
-	SLOW_DOWN_IO;
-    }
+#ifdef NE8390_RW_BUGFIX
+    /* Handle the read-before-write bug the same way as the
+       Crynwr packet driver -- the NatSemi method doesn't work.
+       Actually this doesn't always work either, but if you have
+       problems with your NEx000 this is better than nothing! */
+    outb_p(0x42, nic_base + EN0_RCNTLO);
+    outb_p(0x00,   nic_base + EN0_RCNTHI);
+    outb_p(0x42, nic_base + EN0_RSARLO);
+    outb_p(0x00, nic_base + EN0_RSARHI);
+    outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
+    /* Make certain that the dummy read has occurred. */
+    SLOW_DOWN_IO;
+    SLOW_DOWN_IO;
+    SLOW_DOWN_IO;
+#endif
 
     outb_p(ENISR_RDC, nic_base + EN0_ISR);
 
@@ -507,10 +503,10 @@ ne_block_output(struct device *dev, int count,
 
     dma_start = jiffies;
 
+#ifdef CONFIG_NE_SANITY
     /* This was for the ALPHA version only, but enough people have
        been encountering problems so it is still here. */
-    if (config_ne_sanity &&
-	ei_debug > 1) {		/* DMA termination address check... */
+    if (ei_debug > 1) {		/* DMA termination address check... */
 	int addr, tries = 20;
 	do {
 	    int high = inb_p(nic_base + EN0_RSARHI);
@@ -527,6 +523,7 @@ ne_block_output(struct device *dev, int count,
 		goto retry;
 	}
     }
+#endif
 
     while ((inb_p(nic_base + EN0_ISR) & ENISR_RDC) == 0)
 	if (jiffies - dma_start > 2*HZ/100) {		/* 20ms */
@@ -546,11 +543,13 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_ne2000 = {
 	"        " /*"ne2000"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ne_probe };
 
-int io = 0;
+int io = 0x300;
 int irq = 0;
 
 int init_module(void)
 {
+	if (io == 0)
+		printk("ne: You should not use auto-probing with insmod!\n");
 	dev_ne2000.base_addr = io;
 	dev_ne2000.irq       = irq;
 	if (register_netdev(&dev_ne2000) != 0)

@@ -186,7 +186,6 @@ static char mcdVersion;
 static void mcd_transfer(void);
 static void mcd_poll(void);
 static void mcd_invalidate_buffers(void);
-static void do_mcd_request(void);
 static void hsg2msf(long hsg, struct msf *msf);
 static void bin2bcd(unsigned char *p);
 static int bcd2bin(unsigned char bcd);

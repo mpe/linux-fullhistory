@@ -1201,10 +1201,12 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_ibmtr = {
 	"        " /*"ibmtr"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, tok_probe };
 
-int io = 0;
+int io = 0xa20;
 
 int init_module(void)
 {
+	if (io == 0)
+	  printk("ibmtr: You should not use auto-probing with insmod!\n");
 	dev_ibmtr.base_addr = io;
 	dev_ibmtr.irq       = 0;
 	if (register_netdev(&dev_ibmtr) != 0) {

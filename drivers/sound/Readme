@@ -7,21 +7,12 @@ sites). It contains much more information than this file.
 * about configuring various cards.				*
 *****************************************************************
 
-VoxWare v3.0 release notes
---------------------------
+VoxWare v3.0.1 release notes
+----------------------------
 
 This version is the final v3.0. All features I have planned to
 include in v3.0 are there but some of them are completely untested
 (see experimental.txt).
-
-NOTE!	This Linux only distribution doesn't contain files required
-	for other operating systems than Linux. They are distributed
-	in file VoxWare-3.0.tar.gz which is available from
-	sunsite.unc.edu:pub/Linux/kernel/sound (or pub/Linux/Incoming).
-
-	Also some utilities for SoundScape, PSS and AudioTriX cards
-	have been removed. They are available in VoxWare-3.0.tar.gz and
-	in snd-util-3.0.tar.gz (when I have time to release it).
 
 *** GUS MAX enhancements *****************************************************
 Recording with GUS MAX works now. The configuration program asks
@@ -178,7 +169,8 @@ Sponsors etc.
 The following companies have greatly helped development of this driver 
 in form of a free copy of their product:
 
-Novell Inc,		UnixWare personal edition + SDK
+Novell, Inc.		UnixWare personal edition + SDK
+The Santa Cruz Operation, Inc. 	A SCO OpenServer + SDK
 Ensoniq Corp,		a SoundScape card and extensive amount of assistance
 MediaTriX Peripherals Inc, a AudioTriX Pro card + SDK
 
@@ -202,6 +194,8 @@ If you have some problems
 =========================
 
 Read the sound HOWTO (sunsite.unc.edu:/pub/Linux/docs/...?).
+Also look at the home page (http://personal.eunet.fi/pp/voxware). It may
+contain info about some recent bug fixes.
 
 It's likely that you have some problems when trying to use the sound driver
 first time. Soundcards don't have standard configuration so there are no
@@ -248,6 +242,13 @@ The following errors are likely with /dev/dsp and /dev/audio.
 In general the printout of of /dev/sndstat should tell what is the problem.
 It's possible that there are bugs in the sound driver but 99% of the problems
 reported to me are caused by somehow incorrect setup during "make config".
+
+For owners of TI TM4000M notebooks
+----------------------------------
+
+There appears to be some kind of conflict between the sound support
+(MV Jazz), mouse port and VoxWare. You could try to configure kernel
+with the C&T 82C710 mouse port support disabled.
 
 Hannu
 

@@ -116,11 +116,28 @@ enum scsi_directory_inos {
 
 #define PROC_SUPER_MAGIC 0x9fa0
 
+/*
+ * This is not completely implemented yet. The idea is to
+ * create a in-memory tree (like the actual /proc filesystem
+ * tree) of these proc_dir_entries, so that we can dynamically
+ * add new files to /proc.
+ *
+ * The "next" pointer creates a linked list of one /proc directory,
+ * while parent/subdir create the directory structure (every
+ * /proc file has a parent, but "subdir" is NULL for all
+ * non-directory entries).
+ *
+ * "get_info" is called at "read", while "fill_inode" is used to
+ * fill in file type/protection/owner information specific to the
+ * particular /proc file.
+ */
 struct proc_dir_entry {
 	unsigned short low_ino;
-	int (*get_info)(char *, char **, off_t, int, int);
 	unsigned short namelen;
-	const char * name;
+	const char *name;
+	int (*get_info)(char *, char **, off_t, int, int);
+	void (*fill_inode)(struct inode *);
+	struct proc_dir_entry *next, *parent, *subdir;
 };
 
 extern struct super_block *proc_read_super(struct super_block *,void *,int);
@@ -136,6 +153,7 @@ extern int proc_net_unregister(int);
 extern struct inode_operations proc_root_inode_operations;
 extern struct inode_operations proc_base_inode_operations;
 extern struct inode_operations proc_net_inode_operations;
+extern struct inode_operations proc_netdir_inode_operations;
 extern struct inode_operations proc_scsi_inode_operations;
 extern struct inode_operations proc_mem_inode_operations;
 extern struct inode_operations proc_array_inode_operations;

@@ -96,7 +96,7 @@ struct mpu_config
 
 #define	OUTPUT_READY	0x40
 #define	INPUT_AVAIL	0x80
-#define	MPU_ACK		0xF7
+#define	MPU_ACK		0xFE
 #define	MPU_RESET	0xFF
 #define	UART_MODE_ON	0x3F
 
@@ -638,10 +638,16 @@ retry:
   ok = 0;
   for (timeout = 50000; timeout > 0 && !ok; timeout--)
     if (input_avail (devc->base))
-      {
-	if (mpu_input_scanner (devc, read_data (devc->base)) == MPU_ACK)
-	  ok = 1;
-      }
+      if (devc->opened && devc->mode == MODE_SYNTH)
+	{
+	  if (mpu_input_scanner (devc, read_data (devc->base)) == MPU_ACK)
+	    ok = 1;
+	}
+      else
+	{			/* Device is not currently open. Use simplier method */
+	  if (read_data (devc->base) == MPU_ACK)
+	    ok = 1;
+	}
 
   if (!ok)
     {
@@ -680,7 +686,7 @@ retry:
 	if (!ok)
 	  {
 	    RESTORE_INTR (flags);
-	    /* printk ("MPU: No response(%d) to command (0x%x)\n", i, (int) cmd->cmd); */
+	    /* printk ("MPU: No response(%d) to command (0x%x)\n", i, (int) cmd->cmd);  */
 	    return RET_ERROR (EIO);
 	  }
       }
@@ -1219,6 +1225,7 @@ probe_mpu401 (struct address_info *hw_config)
   tmp_devc.base = hw_config->io_base;
   tmp_devc.irq = hw_config->irq;
   tmp_devc.initialized = 0;
+  tmp_devc.opened = 0;
 
 #if !defined(EXCLUDE_AEDSP16) && defined(AEDSP16_MPU401)
   /*

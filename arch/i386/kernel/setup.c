@@ -130,8 +130,7 @@ void setup_arch(char **cmdline_p,
 	request_region(0x70,0x10,"rtc");
 	request_region(0x80,0x20,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
-	request_region(0xf0,0x2,"npu");
-	request_region(0xf8,0x8,"npu");
+	request_region(0xf0,0x10,"npu");
 }
 
 int get_cpuinfo(char * buffer)

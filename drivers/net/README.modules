@@ -2,12 +2,34 @@ Wed 2-Aug-95  <matti.aarnio@utu.fi>
 
 		Linux network driver modules
 
-	This is a potpourri of INSMOD-time(*) configuration
-	options (if exist) and their default values of various
-	modules on Linux network drivers collection.
+	Do not mistake this to "README.modules" at the top-level
+	directory!  That document tells about modules in general, while
+	this one tells only about network device driver modules.
 
-	Do NOT mistake this to "README.modules" at the top-level
-	directory!
+	This is a potpourri of INSMOD-time(*) configuration options
+	(if such exists) and their default values of various modules
+	on Linux network drivers collection.
+
+	Some modules have also hidden (= non-documented) tunable values.
+	Choice of not documenting them is based on general belief, that
+	the less user needs to know, the better.  (There are things that
+	driver developer can use, others should not confuse themselves.)
+
+	In many cases it is highly preferred that insmod:ing is done
+	ONLY with defining an explicite address for the card, AND BY
+	NOT USING AUTO-PROBING!
+
+	Now most cards have some explicitely defined base address, they
+	are compiled with (to avoid auto-probing, among other things).
+	If that compiled value does not match your actual configuration,
+	do use  "io=0xXXX" -parameter for the  insmod, and give there
+	a value matching your environment.
+
+	If you are adventureous, you can ask the driver to autoprobe
+	by using "io=0" parameter, however it is potentially dangerous
+	thing to do in a live system.  (If you don't know where the
+	card is located, you can try autoprobing, and after possible
+	crash recovery, insmod with proper IO-address..)
 
 	--------------------------
 	(*)	"INSMOD-time" means when you load module with
@@ -22,29 +44,29 @@ Wed 2-Aug-95  <matti.aarnio@utu.fi>
 	(Probes ports:	0x280, 0x300)
 
 3c503.c:
-	io = 0
+	io = 0x300
 	irq = 0
 	(Probes ports: 0x300, 0x310, 0x330, 0x350, 0x250, 0x280, 0x2A0, 0x2E0)
 
 3c505.c:
-	io = 0
+	io = 0x300
 	irq = 0
 	(Probes ports: 0x300, 0x280, 0x310)
 
 3c507.c:
-	io = 0
+	io = 0x300
 	irq = 0
 	(Probes ports: 0x300, 0x320, 0x340, 0x280)
 
 3c509.c:
-	No parameters (autoprobes)
-	(EISA, and MCA probes in addition to ISA-probes;
-	 ISA probing via PCMCIA AutoConfig (or similar)
-	 via port 0x100.)
+	io = 0
+	irq = 0
+	( Module load-time probing Works reliably only on EISA, ISA ID-PROBE
+	  IS NOT RELIABLE!  Compile this driver statically into kernel for
+	  now, if you need it auto-probing on an ISA-bus machine. )
 
 8390.c:
-	ei_debug = 0
-	ei_pingpong = 1	  (If no Rx/Tx PINGPONG is desired, set to zero)
+	(No public options, several other modules need this one)
 
 ac3200.c:
 	io = 0
@@ -60,6 +82,7 @@ arcnet.c:
 	irqnum = 0
 	shmem = 0
 	num = 0
+	DO SET THESE MANUALLY AT INSMOD!
 	(When probing, looks at the following possible addresses:
 	 Suggested ones:
 		0x300, 0x2E0, 0x2F0, 0x2D0
@@ -70,7 +93,7 @@ arcnet.c:
 		0x380, 0x390, 0x3A0,			  0x3E0, 0x3F0  )
 
 at1700.c:
-	io = 0
+	io = 0x260
 	irq = 0
 	(Probes ports: 0x260, 0x280, 0x2A0, 0x240, 0x340, 0x320, 0x380, 0x300)
 
@@ -107,17 +130,17 @@ dummy.c:
 	No options
 
 e2100.c:
-	io = 0
+	io = 0x300
 	irq = 0
 	(Probes ports: 0x300, 0x280, 0x380, 0x220)
 
 eepro.c:
-	io = 0
+	io = 0x200
 	irq = 0
 	(Probes ports: 0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0x360)
 
 eexpress.c:
-	io = 0
+	io = 0x300
 	irq = 0
 	(Probes ports: 0x300, 0x270, 0x320, 0x340)
 
@@ -135,14 +158,13 @@ ewrk3.c:
 		0x300,        0x340, 0x360, 0x380, 0x3A0, 0x3C0)
 
 hp-plus.c:
-	io = 0
+	io = 0x200
 	irq = 0
 	(Probes ports: 0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340)
 
 hp.c:
-	io = 0
+	io = 0x300
 	irq = 0
-	ne8390_rw_bugfix = 0
 	(Probes ports: 0x300, 0x320, 0x340, 0x280, 0x2C0, 0x200, 0x240)
 
 hp100.c:
@@ -152,7 +174,7 @@ hp100.c:
 	 in increments of 0x020)
 
 ibmtr.c:
-	io = 0
+	io = 0xA20
 	(Probes ports: 0xA20, 0xA24 -- Ok, 0x220, 0x224, but IBM style..)
 
 lance.c: *Not modularized*
@@ -162,10 +184,8 @@ lance.c: *Not modularized*
 loopback.c: *Static kernel component*
 
 ne.c:
-	io = 0
+	io = 0x300
 	irq = 0
-	config_ne_sanity = 0
-	ne8390_rw_bugfix = 0;
 	(Probes ports: 0x300, 0x280, 0x320, 0x340, 0x360)
 
 net_init.c: *Static kernel component*
@@ -205,7 +225,7 @@ slip.c:
 
 
 smc-ultra.c:
-	io = 0
+	io = 0x200
 	irq = 0
 	(Probes ports:	0x200, 0x220, 0x240, 0x280, 0x300, 0x340, 0x380)
 
@@ -220,7 +240,7 @@ wavelan.c:
 	irq = 0		(Not honoured, if changed..)
 
 wd.c:
-	io = 0
+	io = 0x300
 	irq = 0
 	mem = 0		(Force shared-memory on address 0xC8000, or whatever..)
 	(Probes ports:	0x300, 0x280, 0x380, 0x240,

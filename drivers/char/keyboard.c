@@ -1180,8 +1180,7 @@ unsigned long kbd_init(unsigned long kmem_start)
 
 	bh_base[KEYBOARD_BH].routine = kbd_bh;
 	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard");
-	request_region(0x60,1,"kbd");
-	request_region(0x64,1,"kbd");
+	request_region(0x60,16,"kbd");
 #ifdef __alpha__
 	/* enable keyboard interrupts, PC/AT mode */
 	kb_wait();

@@ -87,6 +87,7 @@
  *		Alan Cox	:	Fixed multicast (by popular demand 8))
  *		Alan Cox	:	Fixed forwarding (by even more popular demand 8))
  *		Alan Cox	:	Fixed SNMP statistics [I think]
+ *	Gerhard Koerting	:	IP fragmentation forwarding fix
  *
  *  
  *
@@ -987,6 +988,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		 */
 		iph = (struct iphdr *)(skb2->h.raw/*+dev->hard_header_len*/);
 		iph->frag_off = htons((offset >> 3));
+		skb2->ip_hdr = iph;
 		/*
 		 *	Added AC : If we are fragmenting a fragment thats not the
 		 *		   last fragment then keep MF on each bit
@@ -2819,7 +2821,7 @@ void ip_init(void)
 
 #ifdef CONFIG_IP_MULTICAST
 	proc_net_register(&(struct proc_dir_entry)
-			  { PROC_NET_IGMP,  ip_mc_procinfo,  4,  "igmp"});
+		  { PROC_NET_IGMP, 4, "igmp", ip_mc_procinfo });
 #endif
 }
 

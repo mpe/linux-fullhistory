@@ -1135,6 +1135,8 @@ static struct device dev_hp100 = {
 
 int init_module( void )
 {
+  if (hp100_port == 0 && !EISA_bus)
+    printk("HP100: You should not use auto-probing with insmod!\n");
   if ( hp100_port > 0 )
     dev_hp100.base_addr = hp100_port;
   if ( register_netdev( &dev_hp100 ) != 0 )

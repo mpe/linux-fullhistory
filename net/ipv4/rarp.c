@@ -546,7 +546,7 @@ void
 rarp_init(void)
 {
 	proc_net_register(&(struct proc_dir_entry)
-			  { PROC_NET_RARP, rarp_get_info, 4, "rarp"});
+		  { PROC_NET_RARP, 4, "rarp", rarp_get_info });
 	rarp_ioctl_hook = rarp_ioctl;
 }
 

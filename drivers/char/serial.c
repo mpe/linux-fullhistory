@@ -1785,21 +1785,37 @@ static int set_multiport_struct(struct async_struct * info,
 	
 	multi->port_monitor = new_multi.port_monitor;
 	
+	if (multi->port1)
+		release_region(multi->port1,1);
 	multi->port1 = new_multi.port1;
 	multi->mask1 = new_multi.mask1;
 	multi->match1 = new_multi.match1;
+	if (multi->port1)
+		request_region(multi->port1,1,"serial(multiport1)");
 
+	if (multi->port2)
+		release_region(multi->port2,1);
 	multi->port2 = new_multi.port2;
 	multi->mask2 = new_multi.mask2;
 	multi->match2 = new_multi.match2;
+	if (multi->port2)
+		request_region(multi->port2,1,"serial(multiport2)");
 
+	if (multi->port3)
+		release_region(multi->port3,1);
 	multi->port3 = new_multi.port3;
 	multi->mask3 = new_multi.mask3;
 	multi->match3 = new_multi.match3;
+	if (multi->port3)
+		request_region(multi->port3,1,"serial(multiport3)");
 
+	if (multi->port4)
+		release_region(multi->port4,1);
 	multi->port4 = new_multi.port4;
 	multi->mask4 = new_multi.mask4;
 	multi->match4 = new_multi.match4;
+	if (multi->port4)
+		request_region(multi->port4,1,"serial(multiport4)");
 
 	now_multi = (multi->port1 != 0);
 	

@@ -52,7 +52,7 @@
 #include <linux/malloc.h>
 #include <linux/string.h>
 
-#include "linux/soundcard.h"
+#include <linux/soundcard.h>
 
 typedef char snd_rw_buf;
 
@@ -155,7 +155,7 @@ struct snd_wait {
  */
 
 #define ACTIVATE_TIMER(name, proc, time) \
-  {name.expires = jiffies+(time); \
+  {name.expires = time; \
   add_timer (&name);}
 
 #define INB	inb

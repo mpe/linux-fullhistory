@@ -39,8 +39,6 @@ static const char *version =
 
 
 #include "8390.h"
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-									unsigned long *mem_startp);
 
 /* A zero-terminated list of I/O addresses to be probed. */
 static unsigned int hpplus_portlist[] =
@@ -372,11 +370,13 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_hp = {
 	"        " /*"hp"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, hp_plus_probe };
 
-int io = 0;
+int io = 0x200;
 int irq = 0;
 
 int init_module(void)
 {
+	if (io == 0)
+	  printk("HP-plus: You should not use auto-probing with insmod!\n");
 	dev_hp.base_addr = io;
 	dev_hp.irq       = irq;
 	if (register_netdev(&dev_hp) != 0) {

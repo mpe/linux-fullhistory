@@ -410,9 +410,6 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (err < 0)
 	    return err;
 
-	  if (wr_buff_no[dev] != -1)
-	    info.bytes += wr_buff_ptr[dev];
-
 	  IOCTL_TO_USER ((char *) arg, 0, (char *) &info, sizeof (info));
 	  return 0;
 	}
@@ -478,7 +475,7 @@ audio_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
       break;
 
     case SEL_OUT:
-      if (audio_mode[dev] != AM_WRITE)	/* Wrong direction */
+      if (audio_mode[dev] == AM_READ)	/* Wrong direction */
 	return 0;
 
       if (wr_buff_no[dev] != -1)

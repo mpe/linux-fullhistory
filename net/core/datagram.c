@@ -16,6 +16,7 @@
  *		Alan Cox	:	Fixed write select of non IP protocol crash.
  *		Florian  La Roche:	Changed for my new skbuff handling.
  *		Darryl Miles	:	Fixed non-blocking SOCK_SEQPACKET.
+ *		Linus Torvalds	:	BSD semantic fixes.
  *
  *	Note:
  *		A lot of this will change when the protocol/socket separation

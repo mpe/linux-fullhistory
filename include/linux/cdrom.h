@@ -14,20 +14,20 @@
 /*
  * some fix numbers
  */
-#define CD_MINS                   74  /* max. minutes per CD             */
-#define CD_SECS                   60  /* seconds per minute              */
-#define CD_FRAMES                 75  /* frames per second               */
-#define CD_CHUNK_SIZE             24  /* lowest-level "data bytes piece" */
-#define CD_NUM_OF_CHUNKS          98  /* chunks per frame                */
-#define CD_FRAMESIZE            2048  /* bytes per frame, cooked mode    */
-#define CD_FRAMESIZE_RAW0       2336  /* bytes per frame, "raw" mode     */
-#define CD_FRAMESIZE_XA         2340  /* bytes per frame, "xa" mode      */
-#define CD_FRAMESIZE_RAW        2352  /* bytes per frame, "raw" mode     */
-#define CD_FRAMESIZE_SUB          96  /* subchannel data size            */
-#define CD_BLOCK_OFFSET          150  /* offset of first logical frame   */
-#define CD_XA_HEAD                12  /* header size of XA frame         */
-#define CD_XA_TAIL               280  /* tail size of XA frame           */
-
+#define CD_MINS                    74  /* max. minutes per CD             */
+#define CD_SECS                    60  /* seconds per minute              */
+#define CD_FRAMES                  75  /* frames per second               */
+#define CD_CHUNK_SIZE              24  /* lowest-level "data bytes piece" */
+#define CD_NUM_OF_CHUNKS           98  /* chunks per frame                */
+#define CD_FRAMESIZE             2048  /* bytes per frame, cooked mode    */
+#define CD_FRAMESIZE_RAW0        2336  /* bytes per frame, "raw" mode     */
+#define CD_FRAMESIZE_XA          2340  /* bytes per frame, "xa" mode      */
+#define CD_FRAMESIZE_RAW         2352  /* bytes per frame, "raw" mode     */
+#define CD_FRAMESIZE_SUB           96  /* subchannel data size            */
+#define CD_BLOCK_OFFSET           150  /* offset of first logical frame   */
+#define CD_XA_HEAD                 12  /* header size of XA frame         */
+#define CD_XA_TAIL                280  /* tail size of XA frame           */
+#define CD_XA_SYNC_HEAD (CD_XA_HEAD+12)/* sync bytes + header of XA frame */
 /*
  *
  * For IOCTL calls, we will commandeer byte 0x53, or 'S'.
@@ -424,8 +424,7 @@ struct cdrom_multisession
 #define	CDROMVOLREAD		0x5313 /* let the drive tell its volume setting */
 					/* (struct cdrom_volctrl) */
 
-#define CDROMREADMODE0          0x5314  /*read data in audio mode*/
-#define CDROMREADRAW            0x5315  /*read data in raw mode*/
-#define CDROMREADCOOKED         0x5316  /*read data in cooked mode*/
+#define CDROMREADRAW            0x5314  /*read data in raw mode*/
+#define CDROMREADCOOKED         0x5315  /*read data in cooked mode*/
 
 #endif  _LINUX_CDROM_H

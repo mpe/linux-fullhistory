@@ -33,7 +33,7 @@ struct rtable
 	unsigned long		rt_mask;
 	unsigned long		rt_gateway;
 	unsigned short		rt_flags;
-	unsigned short		rt_metric;
+	short			rt_metric;
 	unsigned int		rt_refcnt;
 	unsigned long		rt_use;
 	unsigned short		rt_mss;
@@ -45,7 +45,7 @@ struct rtable
 
 extern void		ip_rt_flush(struct device *dev);
 extern void		ip_rt_add(short flags, unsigned long addr, unsigned long mask,
-			       unsigned long gw, struct device *dev, unsigned short mss, unsigned long window, unsigned short irtt, unsigned char metric);
+			       unsigned long gw, struct device *dev, unsigned short mss, unsigned long window, unsigned short irtt, short metric);
 extern struct rtable	*ip_rt_route(unsigned long daddr, struct options *opt, unsigned long *src_addr);
 extern struct rtable 	*ip_rt_local(unsigned long daddr, struct options *opt, unsigned long *src_addr);
 extern int		rt_get_info(char * buffer, char **start, off_t offset, int length, int dummy);

@@ -489,14 +489,46 @@ DMAbuf_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
     case SNDCTL_DSP_GETOSPACE:
       if (!local)
 	return RET_ERROR (EINVAL);
+      else
+	{
+	  audio_buf_info *info = (audio_buf_info *) arg;
 
-      {
-	audio_buf_info *info = (audio_buf_info *) arg;
+	  if (!(dmap->flags & DMA_ALLOC_DONE))
+	    reorganize_buffers (dev);
 
-	info->fragments = dmap->qlen;
-	info->fragsize = dmap->fragment_size;
-	info->bytes = dmap->qlen * dmap->fragment_size;
-      }
+	  if (cmd == SNDCTL_DSP_GETISPACE)
+	    info->fragments = dmap->qlen;
+	  else
+	    {
+	      if (!space_in_queue (dev))
+		info->fragments = 0;
+	      else
+		{
+		  info->fragments = dmap->nbufs - dmap->qlen;
+		  if (audio_devs[dev]->local_qlen)
+		    {
+		      int             tmp = audio_devs[dev]->local_qlen (dev);
+
+		      if (tmp & info->fragments)
+			tmp--;	/*
+				   * This buffer has been counted twice
+				 */
+		      info->fragments -= tmp;
+		    }
+		}
+	    }
+
+	  if (info->fragments < 0)
+	    info->fragments = 0;
+	  else if (info->fragments > dmap->nbufs)
+	    info->fragments = dmap->nbufs;
+
+	  info->fragsize = dmap->fragment_size;
+	  info->bytes = info->fragments * dmap->fragment_size;
+
+	  if (cmd == SNDCTL_DSP_GETISPACE && dmap->qlen)
+	    info->bytes -= dmap->counts[dmap->qhead];
+	}
       return 0;
 
     default:
@@ -511,7 +543,7 @@ space_in_queue (int dev)
   int             len, max, tmp;
   struct dma_buffparms *dmap = audio_devs[dev]->dmap;
 
-  if (dmap->qlen == dmap->nbufs)	/* No space at all */
+  if (dmap->qlen >= dmap->nbufs)	/* No space at all */
     return 0;
 
   /*
@@ -929,6 +961,7 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait
   switch (sel_type)
     {
     case SEL_IN:
+
       if (dmap->dma_mode != DMODE_INPUT)
 	return 0;
 
@@ -945,10 +978,14 @@ DMAbuf_select (int dev, struct fileinfo *file, int sel_type, select_table * wait
 
     case SEL_OUT:
       if (dmap->dma_mode == DMODE_INPUT)
-	return 0;
+	{
+	  return 0;
+	}
 
       if (dmap->dma_mode == DMODE_NONE)
-	return 1;
+	{
+	  return 1;
+	}
 
       if (!space_in_queue (dev))
 	{

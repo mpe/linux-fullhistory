@@ -30,6 +30,7 @@
  *		Alan Cox	:	TCP irtt support.
  *		Jonathan Naylor	:	Added Metric support.
  *	Miquel van Smoorenburg	:	BSD API fixes.
+ *	Miquel van Smoorenburg	:	Metrics.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -73,9 +74,11 @@ static struct rtable *rt_loopback = NULL;
 
 /*
  *	Remove a routing table entry.
+ *	Should we return a status value here ?
  */
 
-static void rt_del(unsigned long dst, char *devname)
+static void rt_del(unsigned long dst, unsigned long mask,
+		char *devname, unsigned long gtw, short rt_flags, short metric)
 {
 	struct rtable *r, **rp;
 	unsigned long flags;
@@ -91,9 +94,16 @@ static void rt_del(unsigned long dst, char *devname)
 	cli();
 	while((r = *rp) != NULL) 
 	{
-		/* Make sure both the destination and the device match */
-		if ( r->rt_dst != dst ||
-		(devname != NULL && strcmp((r->rt_dev)->name,devname) != 0) )
+		/*
+		 *	Make sure the destination and netmask match.
+		 *	metric, gateway and device are also checked
+		 *	if they were specified.
+		 */
+		if (r->rt_dst != dst ||
+		    (mask && r->rt_mask != mask) ||
+		    (gtw && r->rt_gateway != gtw) ||
+		    (metric >= 0 && r->rt_metric != metric) ||
+		    (devname && strcmp((r->rt_dev)->name,devname) != 0) )
 		{
 			rp = &r->rt_next;
 			continue;
@@ -211,11 +221,13 @@ static inline struct device * get_gw_dev(unsigned long gw)
  */
  
 void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
-	unsigned long gw, struct device *dev, unsigned short mtu, unsigned long window, unsigned short irtt, unsigned char metric)
+	unsigned long gw, struct device *dev, unsigned short mtu,
+	unsigned long window, unsigned short irtt, short metric)
 {
 	struct rtable *r, *rt;
 	struct rtable **rp;
 	unsigned long cpuflags;
+	int duplicate = 0;
 
 	/*
 	 *	A host is a unique machine and has no network bits.
@@ -320,6 +332,12 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 			rp = &r->rt_next;
 			continue;
 		}
+		if (r->rt_metric != metric && r->rt_gateway != gw)
+		{
+			duplicate = 1;
+			rp = &r->rt_next;
+			continue;
+		}
 		*rp = r->rt_next;
 		if (rt_loopback == r)
 			rt_loopback = NULL;
@@ -332,8 +350,22 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	 
 	rp = &rt_base;
 	while ((r = *rp) != NULL) {
-		if ((r->rt_mask & mask) != mask)
+		/*
+		 * When adding a duplicate route, add it before
+		 * the route with a higher metric.
+		 */
+		if (duplicate &&
+		    r->rt_dst == dst &&
+		    r->rt_mask == mask &&
+		    r->rt_metric > metric)
 			break;
+		else
+		/*
+		 * Otherwise, just add it before the
+		 * route with a higher generality.
+		 */
+			if ((r->rt_mask & mask) != mask)
+				break;
 		rp = &r->rt_next;
 	}
 	rt->rt_next = r;
@@ -381,7 +413,7 @@ static int rt_new(struct rtentry *r)
 	char * devname;
 	struct device * dev = NULL;
 	unsigned long flags, daddr, mask, gw;
-	unsigned char metric;
+	short metric;
 
 	/*
 	 *	If a device is specified find it.
@@ -489,17 +521,26 @@ static int rt_new(struct rtentry *r)
 static int rt_kill(struct rtentry *r)
 {
 	struct sockaddr_in *trg;
+	struct sockaddr_in *msk;
+	struct sockaddr_in *gtw;
 	char *devname;
 	int err;
 
 	trg = (struct sockaddr_in *) &r->rt_dst;
+	msk = (struct sockaddr_in *) &r->rt_genmask;
+	gtw = (struct sockaddr_in *) &r->rt_gateway;
 	if ((devname = r->rt_dev) != NULL) 
 	{
 		err = getname(devname, &devname);
 		if (err)
 			return err;
 	}
-	rt_del(trg->sin_addr.s_addr, devname);
+	/*
+	 * metric can become negative here if it wasn't filled in
+	 * but that's a fortunate accident; we really use that in rt_del.
+	 */
+	rt_del(trg->sin_addr.s_addr, msk->sin_addr.s_addr, devname,
+		gtw->sin_addr.s_addr, r->rt_flags, r->rt_metric - 1);
 	if ( devname != NULL )
 		putname(devname);
 	return 0;

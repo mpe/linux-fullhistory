@@ -62,8 +62,10 @@ char * strncat(char *dest, const char *src, size_t count)
 		while (*dest)
 			dest++;
 		while ((*dest++ = *src++)) {
-			if (--count == 0)
+			if (--count == 0) {
+				*dest = '\0';
 				break;
+			}
 		}
 	}
 

@@ -1601,21 +1601,26 @@ void inet_proto_init(struct net_proto *pro)
   	 */
 	ip_init();
 
+#if defined(CONFIG_IP_ACCT)||defined(CONFIG_IP_FIREWALL)|| \
+    defined(CONFIG_IP_MASQUERADE)
+	ip_fw_init();
+#endif
+
 #ifdef CONFIG_INET_RARP
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_RARP,	rarp_get_info,		4, "rarp"});
+	{ PROC_NET_RARP, 4, "rarp", rarp_get_info });
 	rarp_ioctl_hook = rarp_ioctl;
 #endif
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_RAW,		raw_get_info,		3, "raw" });
+	{ PROC_NET_RAW, 3, "raw", raw_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_SNMP,	snmp_get_info,		4, "snmp" });
+	{ PROC_NET_SNMP, 4, "snmp", snmp_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_SOCKSTAT,	afinet_get_info,	8, "sockstat" });
+	{ PROC_NET_SOCKSTAT, 8, "sockstat", afinet_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_TCP,		tcp_get_info,		3, "tcp" });
+	{ PROC_NET_TCP, 3, "tcp", tcp_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_UDP,		udp_get_info,		3, "udp" });
+	{ PROC_NET_UDP, 3, "udp", udp_get_info });
 proc_net_register(&(struct proc_dir_entry)
-	{ PROC_NET_ROUTE,	rt_get_info,		5, "route" });
+	{ PROC_NET_ROUTE, 5, "route", rt_get_info });
 }

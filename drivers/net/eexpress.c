@@ -1006,12 +1006,14 @@ static struct device dev_eexpress = {
 	"        " /*"eexpress"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe };
 	
 
-int irq=0;
+int irq=0x300;
 int io=0;	
 
 int
 init_module(void)
 {
+	if (io == 0)
+	  printk("eexpress: You should not use auto-probing with insmod!\n");
 	dev_eexpress.base_addr=io;
 	dev_eexpress.irq=irq;
 	if (register_netdev(&dev_eexpress) != 0)

@@ -473,7 +473,7 @@ static struct device el2_drv =
 static struct device el2pio_drv =
 {"3c503pio", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el2_pio_probe };
 
-int io = 0;
+int io = 0x300;
 int irq = 0;
 
 static int no_pio = 1;
@@ -484,6 +484,9 @@ int init_module(void)
 	el2_drv.irq       = irq;
 	el2pio_drv.base_addr = io;
 	el2pio_drv.irq       = irq;
+
+	if (io == 0)
+	  printk("3c503: You should not use auto-probing with insmod!\n");
 
 	rc2 = 0;
 	no_pio = 1;

@@ -400,12 +400,14 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_wd80x3 = {
 	"        " /*"wd80x3"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, wd_probe };
 
-int io = 0;
+int io = 0x300;
 int irq = 0;
 int mem = 0;
 
 int init_module(void)
 {
+	if (io == 0)
+	  printk("wd: You should not use auto-probing with insmod!\n");
 	dev_wd80x3.base_addr = io;
 	dev_wd80x3.irq       = irq;
 	dev_wd80x3.mem_start = mem;
@@ -421,6 +423,11 @@ cleanup_module(void)
 		printk("wd80x3: device busy, remove delayed\n");
 	else
 	{
+		int ioaddr = dev_wd80x3.base_addr - WD_NIC_OFFSET;
+
+    	free_irq(dev_wd80x3.irq);
+    	release_region(ioaddr, WD_IO_EXTENT);
+
 		unregister_netdev(&dev_wd80x3);
 	}
 }

@@ -1818,7 +1818,7 @@ note_to_freq (int note_num)
     369998, 391998, 415306, 440000, 466162, 493880
   };
 
-#define BASE_OCTAVE	4
+#define BASE_OCTAVE	5
 
   octave = note_num / 12;
   note = note_num % 12;

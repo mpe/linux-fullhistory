@@ -154,14 +154,21 @@ o	Minor bug fixes					[IN]
 
 ------->>>> 1.3.16 <<<--------
 
-o	Missing patches for device change in TCP	[IN]
-o	Device locking					[IN]
+o	Missing patches for device change in TCP	[TESTED]
+o	Device locking					[TESTED]
 o	Infinite slip devices				[IN]
 o	New AF_UNIX sockets				[IN]
 o	Sendmsg/recvmsg (for some stuff only)		[IN]
-o	Device unload loopholes fixed			[IN]
+o	Device unload loopholes fixed			[TESTED]
 o	Extra firewall abilities			[IN]
-o	Appletalk node probe bug fix			[IN]
+o	Appletalk node probe bug fix			[TESTED]
+
+------->>>> 1.3.18 <<<<---------
+
+o	AF_UNIX debugging				[IN]
+o	TCP explode on SWS bug fix			[IN]
+o	John Naylor's ARP hwtype fix			[IN]
+o	Datagram select matches BSD semantics		[IN]
 
 
 o	Finish merging the bridge code

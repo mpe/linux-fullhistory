@@ -1829,6 +1829,8 @@ static int io=0x200;    /* Or use the irq= io= options to insmod */
 int
 init_module(void)
 {
+  if (io == 0)
+    printk("depca: You should not use auto-probing with insmod!\n");
   thisDepca.irq=irq;
   thisDepca.base_addr=io;
   if (register_netdev(&thisDepca) != 0)

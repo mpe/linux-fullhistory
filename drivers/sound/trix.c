@@ -88,10 +88,10 @@ trix_set_wss_port (struct address_info *hw_config)
   if (kilroy_was_here)		/* Already initialized */
     return 0;
 
-  kilroy_was_here = 1;
-
   if (trix_read (0x15) != 0x71)	/* No asic signature */
     return 0;
+
+  kilroy_was_here = 1;
 
   /*
      * Disable separate wave playback and recording DMA channels since
@@ -276,12 +276,17 @@ attach_trix_sb (long mem_start, struct address_info *hw_config)
 long
 attach_trix_mpu (long mem_start, struct address_info *hw_config)
 {
+#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
   return attach_mpu401 (mem_start, hw_config);
+#else
+  return mem_start;
+#endif
 }
 
 int
 probe_trix_mpu (struct address_info *hw_config)
 {
+#if (!defined(EXCLUDE_MPU401) || !defined(EXCLUDE_MPU_EMU)) && !defined(EXCLUDE_MIDI)
   unsigned char   conf;
   static char     irq_bits[] =
   {-1, -1, -1, 1, 2, 3, -1, 4, -1, 5};
@@ -326,6 +331,9 @@ probe_trix_mpu (struct address_info *hw_config)
   mpu_initialized = 1;
 
   return probe_mpu401 (hw_config);
+#else
+  return 0;
+#endif
 }
 
 #endif

@@ -68,6 +68,7 @@
 			    FALSE to ignore error.  Default is ignore.  */
 #define LPGETSTATUS 0x060b  /* return LP_S(minor) */
 #define LPRESET     0x060c  /* reset printer */
+#define LPGETSTATS  0x060d  /* get statistics (struct lp_stats) */
 
 /* timeout for printk'ing a timeout, in jiffies (100ths of a second).
    This is also used for re-checking error conditions if LP_ABORT is
@@ -85,8 +86,18 @@
 #define LP_WAIT(minor)	lp_table[(minor)].wait		/* strobe wait */
 #define LP_IRQ(minor)	lp_table[(minor)].irq		/* interrupt # */
 							/* 0 means polled */
+#define LP_STAT(minor)	lp_table[(minor)].stats		/* statistics area */
 
 #define LP_BUFFER_SIZE 256
+
+struct lp_stats {
+	unsigned long chars;
+	unsigned long sleeps;
+	unsigned int maxrun;
+	unsigned int maxwait;
+	unsigned int meanwait;
+	unsigned int mdev;
+};
 
 struct lp_struct {
 	int base;
@@ -97,6 +108,10 @@ struct lp_struct {
 	unsigned int wait;
 	struct wait_queue *lp_wait_q;
 	char *lp_buffer;
+	unsigned int lastcall;
+	unsigned int runchars;
+	unsigned int waittime;
+	struct lp_stats stats;
 };
 
 /*
@@ -123,11 +138,11 @@ struct lp_struct {
  * base + 2 
  * accessed with LP_C(minor)
  */
-#define LP_PINTEN	0x10
+#define LP_PINTEN	0x10  /* high to read data in or-ed with data out */
 #define LP_PSELECP	0x08  /* inverted output, active low */
 #define LP_PINITP	0x04  /* unchanged output, active low */
 #define LP_PAUTOLF	0x02  /* inverted output, active low */
-#define LP_PSTROBE	0x01  /* inverted output, active low */
+#define LP_PSTROBE	0x01  /* short high output on raising edge */
 
 /* 
  * the value written to ports to test existence. PC-style ports will 
@@ -137,10 +152,10 @@ struct lp_struct {
 #define LP_DUMMY	0x00
 
 /*
- * This is the port delay time.  Your mileage may vary.
- * It is used only in the lp_init() routine.
+ * This is the port delay time, in microseconds.
+ * It is used only in the lp_init() and lp_reset() routine.
  */
-#define LP_DELAY 	150000
+#define LP_DELAY 	50
 
 /*
  * function prototypes

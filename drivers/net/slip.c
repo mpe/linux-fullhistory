@@ -1175,8 +1175,8 @@ slip_init_ctrl_dev(struct device *dummy)
 	 *  now needs to be unregistered.
 	 */
 #ifndef MODULE
-	printk("SLIP: Unregistering bootstrap device "
-	       "'slip_proto' - slip OK\n");
+/*	printk("SLIP: Unregistering bootstrap device "
+	       "'slip_proto' - slip OK\n");*/
 	unregister_netdev(dummy);
 #endif
 	return status;

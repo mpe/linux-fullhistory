@@ -173,10 +173,8 @@ repeat:
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
-	if (page < high_memory) {
-		page += addr & ~PAGE_MASK;
-		*(unsigned long *) page = data;
-	}
+	if (page < high_memory)
+		*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 /* this should also re-instate whatever read-only mode there was before */
 	*pgtable = pte_mkdirty(mk_pte(page, vma->vm_page_prot));

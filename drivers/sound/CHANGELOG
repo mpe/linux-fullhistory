@@ -1,5 +1,14 @@
-Changelog for version 3.0
--------------------------
+Changelog for version 3.0.1
+---------------------------
+
+Since 3.0
+- Some important bug fixes. 
+- select() for /dev/dsp and /dev/audio (Linux only).
+(To use select() with read, you have to call read() to start
+the recording. Calling write() kills recording immediately so
+use select() carefully when you are writing a half duplex app.
+Full duplex mode is not implemented yet.) Select works also with
+/dev/sequencer and /dev/music. Maybe with /dev/midi## too.
 
 Since 3.0-beta2
 - Minor fixes.

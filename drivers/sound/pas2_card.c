@@ -57,7 +57,7 @@ static char    *pas_model_names[] =
 /*
  * to support other than the default base address
  */
-extern void mix_write (unsigned char data, int ioaddr);
+extern void     mix_write (unsigned char data, int ioaddr);
 
 unsigned char
 pas_read (int ioaddr)
@@ -99,9 +99,7 @@ pasintr (INT_HANDLER_PARMS (irq, dummy))
   if (status & I_S_MIDI_IRQ)
     {
 #ifndef EXCLUDE_MIDI
-#ifdef EXCLUDE_PRO_MIDI
       pas_midi_interrupt ();
-#endif
 #endif
       status &= ~I_S_MIDI_IRQ;
     }
@@ -253,7 +251,7 @@ config_pas_hw (struct address_info *hw_config)
 								 * 17.897 kHz
 								 */
 #if 1
-    pas_write (8, PRESCALE_DIVIDER);
+  pas_write (8, PRESCALE_DIVIDER);
 #else
   if (pas_model == PAS_16 || pas_model == PAS_16D)
     pas_write (8, PRESCALE_DIVIDER);
@@ -264,7 +262,7 @@ config_pas_hw (struct address_info *hw_config)
   mix_write (P_M_MV508_ADDRESS | 5, PARALLEL_MIXER);
   mix_write (5, PARALLEL_MIXER);
 
-#if !defined(EXCLUDE_SB_EMULATION) || !defined(EXCLUDE_SB)
+#if !defined(EXCLUDE_SB_EMULATION) && !defined(EXCLUDE_SB)
 
   {
     struct address_info *sb_config;
@@ -396,9 +394,7 @@ attach_pas_card (long mem_start, struct address_info *hw_config)
 #endif
 
 #ifndef EXCLUDE_MIDI
-#ifdef EXCLUDE_PRO_MIDI
 	  mem_start = pas_midi_init (mem_start);
-#endif
 #endif
 
 	  pas_init_mixer ();

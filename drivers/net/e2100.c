@@ -359,11 +359,13 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_e2100 = {
 	"        " /*"e2100"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, e2100_probe };
 
-int io = 0;
+int io = 0x300;
 int irq = 0;
 
 int init_module(void)
 {
+	if (io == 0)
+	  printk("e2100: You should not use auto-probing with insmod!\n");
 	dev_e2100.base_addr = io;
 	dev_e2100.irq       = irq;
 	if (register_netdev(&dev_e2100) != 0) {

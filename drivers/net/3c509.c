@@ -171,6 +171,14 @@ int el3_probe(struct device *dev)
 	   ID_PORT.  We find cards past the first by setting the 'current_tag'
 	   on cards as they are found.  Cards with their tag set will not
 	   respond to subsequent ID sequences. */
+
+	if (check_region(ID_PORT,1)) {
+	  static int once = 1;
+	  if (once) printk("3c509: Somebody has reserved 0x%x, can't do ID_PORT lookup, nor card auto-probing\n",ID_PORT);
+	  once = 0;
+	  return -ENODEV;
+	}
+
 	outb(0x00, ID_PORT);
 	outb(0x00, ID_PORT);
 	for(i = 0; i < 255; i++) {
@@ -698,9 +706,17 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_3c509 = {
 	"        " /*"3c509"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el3_probe };
 
+int io = 0;
+int irq = 0;
+
 int
 init_module(void)
 {
+	dev_3c509.base_addr = io;
+	dev_3c509.irq       = irq;
+	if (!EISA_bus) {
+		printk("3c509: WARNING! Module load-time probing works reliably only for EISA-bus!\n");
+	}
 	if (register_netdev(&dev_3c509) != 0)
 		return -EIO;
 	return 0;

@@ -57,8 +57,6 @@ static const char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-									unsigned long *mem_startp);
 
 /* This unusual address order is used to verify the CONFIG register. */
 static int at1700_probe_list[] =
@@ -634,11 +632,13 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_at1700 = {
 	"        " /*"at1700"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, at1700_probe };
 
-int io = 0;
+int io = 0x260;
 int irq = 0;
 
 int init_module(void)
 {
+	if (io == 0)
+	  printk("at1700: You should not use auto-probing with insmod!\n");
 	dev_at1700.base_addr = io;
 	dev_at1700.irq       = irq;
 	if (register_netdev(&dev_at1700) != 0) {

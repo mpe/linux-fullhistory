@@ -51,18 +51,18 @@ struct inode_operations proc_base_inode_operations = {
 };
 
 static struct proc_dir_entry base_dir[] = {
-	{ PROC_PID_INO,		NULL,	1, "." },
-	{ PROC_ROOT_INO,	NULL,	2, ".." },
-	{ PROC_PID_MEM,		NULL,	3, "mem" },
-	{ PROC_PID_CWD,		NULL,	3, "cwd" },
-	{ PROC_PID_ROOT,	NULL,	4, "root" },
-	{ PROC_PID_EXE,		NULL,	3, "exe" },
-	{ PROC_PID_FD,		NULL,	2, "fd" },
-	{ PROC_PID_ENVIRON,	NULL,	7, "environ" },
-	{ PROC_PID_CMDLINE,	NULL,	7, "cmdline" },
-	{ PROC_PID_STAT,	NULL,	4, "stat" },
-	{ PROC_PID_STATM,	NULL,	5, "statm" },
-	{ PROC_PID_MAPS,	NULL,	4, "maps" }
+	{ PROC_PID_INO,		1, "." },
+	{ PROC_ROOT_INO,	2, ".." },
+	{ PROC_PID_MEM,		3, "mem" },
+	{ PROC_PID_CWD,		3, "cwd" },
+	{ PROC_PID_ROOT,	4, "root" },
+	{ PROC_PID_EXE,		3, "exe" },
+	{ PROC_PID_FD,		2, "fd" },
+	{ PROC_PID_ENVIRON,	7, "environ" },
+	{ PROC_PID_CMDLINE,	7, "cmdline" },
+	{ PROC_PID_STAT,	4, "stat" },
+	{ PROC_PID_STATM,	5, "statm" },
+	{ PROC_PID_MAPS,	4, "maps" }
 };
 
 #define NR_BASE_DIRENTRY ((sizeof (base_dir))/(sizeof (base_dir[0])))
@@ -82,6 +82,7 @@ int proc_match(int len,const char * name,struct proc_dir_entry * de)
 static int proc_lookupbase(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
+	struct proc_dir_entry * de = NULL;
 	unsigned int pid, ino;
 	int i;
 
@@ -94,17 +95,20 @@ static int proc_lookupbase(struct inode * dir,const char * name, int len,
 	}
 	ino = dir->i_ino;
 	pid = ino >> 16;
-	i = NR_BASE_DIRENTRY;
-	while (i-- > 0 && !proc_match(len,name,base_dir+i))
-		/* nothing */;
-	if (i < 0) {
+	for (i = 0; i < NR_BASE_DIRENTRY; i++) {
+		if (!proc_match(len, name, base_dir+i))
+			continue;
+		de = base_dir+i;
+		break;
+	}
+	if (!de) {
 		iput(dir);
 		return -ENOENT;
 	}
-	if (base_dir[i].low_ino == 1)
+	if (de->low_ino == 1)
 		ino = 1;
 	else
-		ino = (pid << 16) + base_dir[i].low_ino;
+		ino = (pid << 16) + de->low_ino;
 	for (i = 0 ; i < NR_TASKS ; i++)
 		if (task[i] && task[i]->pid == pid)
 			break;
@@ -117,6 +121,7 @@ static int proc_lookupbase(struct inode * dir,const char * name, int len,
 		return -ENOENT;
 	}
 	iput(dir);
+	(*result)->u.generic_ip = de;
 	return 0;
 }
 

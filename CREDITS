@@ -795,6 +795,14 @@ S: Molenbaan 29
 S: B2240 Zandhoven
 S: Belgium
 
+N: Martin Schulze
+E: joey@infodrom.north.de
+D: Random Linux Hacker, Linux Promoter
+D: CD-List, Books-List, Ex-FAQ
+D: Linux-Support, -Mailbox, -Stammtisch
+D: several improvements to system programs
+S: Oldenburg, Germany
+
 N: Darren Senn
 E: sinster@scintilla.santa-clara.ca.us
 D: Whatever I notice needs doing (so far: itimers, /proc)
@@ -958,7 +966,6 @@ D: Moderator, comp.os.linux.announce
 S: 205 Gray Street NE
 S: Wilson, North Carolina 27893
 S: USA
-
 
 N: Marco van Wieringen
 E: mvw@mercury.mcs.nl.mugnet.org

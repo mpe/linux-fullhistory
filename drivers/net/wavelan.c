@@ -839,8 +839,8 @@ wavelan_probe(device *dev)
 			if (wavelan_debug > 0)
 				printk("%s: <-wavelan_probe(): 0\n", dev->name);
 			proc_net_register(&(struct proc_dir_entry)
-					  { PROC_NET_WAVELAN, wavelan_get_info,
-					      7, "wavelan" });
+					  { PROC_NET_WAVELAN, 7, "wavelan",
+					    wavelan_get_info });
 
 			return 0;
 		}
