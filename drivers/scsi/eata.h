@@ -5,7 +5,7 @@
 #ifndef _EISA_EATA_H
 #define _EISA_EATA_H
 
-#define EATA_VERSION "1.07.00"
+#define EATA_VERSION "1.08.00"
 
 int eata_detect(Scsi_Host_Template *);
 int eata_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));

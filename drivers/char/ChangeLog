@@ -1,3 +1,8 @@
+Sun Nov  6 21:05:44 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* serial.c (change_speed): Add support for direct access of
+		57,600 and 115,200 bps.
+
 Wed Nov  2 10:32:36 1994  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* n_tty.c (n_tty_receive_room): Only allow excess characters
@@ -14,7 +19,7 @@ Sat Oct 29 18:17:34 1994  Theodore Y. Ts'o  (tytso@rt-11)
 Thu Oct 27 23:14:29 1994  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* tty_ioctl.c (wait_until_sent): Added debugging printk statements
-		(under the #ifdef TTY_DEBUG_WAIT_UNTL_SENT)  
+		(under the #ifdef TTY_DEBUG_WAIT_UNTIL_SENT)  
 
 	* serial.c (rs_interrupt, rs_interrupt_single, receive_chars,
 		change_speed, rs_close): rs_close now disables receiver
@@ -33,12 +38,12 @@ Thu Oct 27 23:14:29 1994  Theodore Y. Ts'o  (tytso@rt-11)
 Mon Oct 24 23:36:21 1994  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* serial.c (rs_close): Add a timeout to the transmitter flush
-		loop; this is just a sanity check in case we have flakey
+		loop; this is just a sanity check in case we have flaky
 		(or non-existent-but-configured-by-the-user) hardware.
 
 Fri Oct 21 09:37:23 1994  Theodore Y. Ts'o  (tytso@rt-11)
 
-	* tty_io.c (tty_fasync): When asyncronous I/O is enabled, if the
+	* tty_io.c (tty_fasync): When asynchronous I/O is enabled, if the
 		process or process group has not be specified yet, set it
 		to be the tty's process group, or if that is not yet set,
 		to the current process's pid.
@@ -55,7 +60,7 @@ Tue Oct 18 10:02:43 1994  Theodore Y. Ts'o  (tytso@rt-11)
 		preventing transmit interrupts from being re-enabled in
 		rs_start().  Fortunately in most cases it would be
 		re-enabled elsewhere, but this still should be fixed
-		corectly.
+		correctly.
 
 Sun Oct  9 23:46:03 1994  Theodore Y. Ts'o  (tytso@rt-11)
 

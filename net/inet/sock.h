@@ -271,7 +271,10 @@ extern unsigned long		sock_rspace(struct sock *sk);
 extern unsigned long		sock_wspace(struct sock *sk);
 
 extern int			sock_setsockopt(struct sock *sk,int level,int op,char *optval,int optlen);
+
 extern int			sock_getsockopt(struct sock *sk,int level,int op,char *optval,int *optlen);
+extern struct sk_buff 		*sock_alloc_send_skb(struct sock *skb, unsigned long size, int noblock, int *errcode);
+extern int			sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb);
 
 /* declarations from timer.c */
 extern struct sock *timer_base;

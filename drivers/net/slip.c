@@ -25,6 +25,7 @@
  *		Alan Cox	:	Default to 192.168.0.0 (RFC 1597)
  *		A.N.Kuznetsov	:	dev_tint() recursion fix.
  *	Dmitry Gorodchanin	:	SLIP memory leaks
+ *		Alan Cox	:	Oops - fix AX.25 buffer lengths
  *
  *
  *	FIXME:	This driver still makes some IP'ish assumptions. It should build cleanly KISS TNC only without
@@ -163,8 +164,12 @@ static void sl_changedmtu(struct slip *sl)
 	unsigned char *tb,*rb,*cb,*tf,*rf,*cf;
 	int l;
 	int omtu=sl->mtu;
-	
+
+#ifdef CONFIG_AX25
+	sl->mtu=dev->mtu+73
+#else
 	sl->mtu=dev->mtu;
+#endif	
 	l=(dev->mtu *2);
 /*
  * allow for arrival of larger UDP packets, even if we say not to
@@ -357,7 +362,11 @@ sl_encaps(struct slip *sl, unsigned char *icp, int len)
   int actual, count;
 
   
-  if(sl->mtu != sl->dev->mtu)	/* Someone has been ifconfigging */
+#ifdef CONFIG_AX25
+  if(sl->mtu != sl->dev->mtu+73)/* Someone has been ifconfigging */
+#else
+  if(sl->mtu != sl->dev->mtu)   /* Someone has been ifconfigging */  
+#endif
   	sl_changedmtu(sl);
   
   if(len>sl->mtu)		/* Sigh, shouldn't occur BUT ... */
@@ -561,8 +570,12 @@ sl_open(struct device *dev)
   if (p == NULL) {
 	return(-ENOMEM);
   }
-  
+
+#ifdef CONFIG_AX25
+  sl->mtu		= dev->mtu+73
+#else    
   sl->mtu		= dev->mtu;
+#endif  
   sl->dev->mem_start	= (unsigned long) p;
   sl->dev->mem_end	= (unsigned long) (sl->dev->mem_start + l);
 
@@ -655,7 +668,11 @@ static void slip_receive_buf(struct tty_struct *tty, unsigned char *cp,
 	 * Argh! mtu change time! - costs us the packet part received
 	 * at the change
 	 */
+#ifdef CONFIG_AX25
+	if(sl->mtu!=sl->dev->mtu+73)
+#else	 
 	if(sl->mtu!=sl->dev->mtu)
+#endif	
 		sl_changedmtu(sl);
   	
 	/* Read the characters out of the buffer */

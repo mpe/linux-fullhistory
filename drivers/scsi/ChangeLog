@@ -121,7 +121,7 @@ Sat Aug  6 21:29:36 1994  Eric Youngdale  (eric@andante)
 	* g_NCR5380.c: 
 	* pas16.c:  Correct usage of NCR5380_init.
 
-	* scsi.c: Remove redunant (and unused variables).
+	* scsi.c: Remove redundant (and unused variables).
 
 	* sd.c: Use memset to clear all of rscsi_disks before we use it.
 

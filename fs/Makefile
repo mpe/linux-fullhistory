@@ -64,7 +64,7 @@ OBJS=	open.o read_write.o inode.o devices.o file_table.o buffer.o super.o \
 	block_dev.o stat.o exec.o pipe.o namei.o fcntl.o ioctl.o \
 	select.o fifo.o locks.o filesystems.o dcache.o $(BINFMTS)
 
-all: fs.o filesystems.a modules
+all: fs.o filesystems.a modules modules_fs
 
 fs.o: $(OBJS)
 	$(LD) -r -o fs.o $(OBJS)
@@ -80,6 +80,16 @@ ifdef MODULES
 modules:
 	$(MAKE) CFLAGS="$(CFLAGS) -DMODULE" $(MODULES)
 	(cd ../modules;for i in $(MODULES); do ln -sf ../fs/$$i .; done)
+
+else
+
+modules:
+
+endif
+
+ifdef MODULE_FS_SUBDIRS
+
+modules_fs:
 	set -e; for i in $(MODULE_FS_SUBDIRS); do \
 	  test ! -d $$i || \
 	    { $(MAKE) -C $$i; }; done
@@ -87,7 +97,7 @@ modules:
 
 else
 
-modules:
+modules_fs:
 
 endif
 

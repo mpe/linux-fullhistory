@@ -190,7 +190,7 @@ void to_utf8(ushort c) {
 	put_queue(0x80 | ((c >> 6) & 0x3f));
 	put_queue(0x80 | (c & 0x3f));
     }
-    /* uft-8 is defined for words of up to 36 bits,
+    /* utf-8 is defined for words of up to 36 bits,
        but we need only 16 bits here */
 }
 
@@ -688,9 +688,10 @@ static void incr_console(void)
 
 static void send_intr(void)
 {
-	if (!tty || (tty->termios && I_IGNBRK(tty)))
+	if (!tty)
 		return;
 	tty_insert_flip_char(tty, 0, TTY_BREAK);
+	tty_schedule_flip(tty);
 }
 
 static void scroll_forw(void)

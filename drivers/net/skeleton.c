@@ -174,7 +174,7 @@ static int netcard_probe1(struct device *dev, int ioaddr)
 	/* Fill in the 'dev' fields. */
 	dev->base_addr = ioaddr;
 
-	/* Retrive and print the ethernet address. */
+	/* Retrieve and print the ethernet address. */
 	for (i = 0; i < 6; i++)
 		printk(" %2.2x", dev->dev_addr[i] = inb(ioaddr + i));
 

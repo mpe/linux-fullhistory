@@ -103,9 +103,10 @@ int msdos_file_read(
 	char *buf,
 	int count)
 {
-	char *start;
-	int left;
+	char *start = buf;
+	char *end   = buf + count;
 	int i;
+	int left_in_file;
 	struct msdos_pre pre;
 		
 
@@ -144,6 +145,7 @@ int msdos_file_read(
 			/* pre read enough, since we don't know how many blocks */
 			/* we really need */
 			int ahead = read_ahead[MAJOR(inode->i_dev)];
+			PRINTK (("to_reada %d ahead %d\n",to_reada,ahead));
 			if (ahead == 0) ahead = 8;
 			to_reada += ahead;
 		}
@@ -151,10 +153,10 @@ int msdos_file_read(
 		pre.nblist = 0;
 		msdos_prefetch (inode,&pre,to_reada);
 	}
-	start = buf;
 	pre.nolist = 0;
 	PRINTK (("count %d ahead %d nblist %d\n",count,read_ahead[MAJOR(inode->i_dev)],pre.nblist));
-	while ((left = MIN(inode->i_size-filp->f_pos,count-(buf-start))) > 0){
+	while ((left_in_file = inode->i_size - filp->f_pos) > 0
+		&& buf < end){
 		struct buffer_head *bh = pre.bhlist[pre.nolist];
 		char *data;
 		int size,offset;
@@ -176,15 +178,17 @@ int msdos_file_read(
 			break;
 		}
 		offset = filp->f_pos & (SECTOR_SIZE-1);
-		filp->f_pos += (size = MIN(SECTOR_SIZE-offset,left));
 		data = bh->b_data + offset;
+		size = MIN(SECTOR_SIZE-offset,left_in_file);
 		if (MSDOS_I(inode)->i_binary) {
+			size = MIN(size,end-buf);
 			memcpy_tofs(buf,data,size);
 			buf += size;
+			filp->f_pos += size;
 		}else{
-			int cnt;
-			for (cnt = size; cnt; cnt--) {
+			for (; size && buf < end; size--) {
 				char ch = *data++;
+				filp->f_pos++;
 				if (ch == 26){
 					filp->f_pos = inode->i_size;
 					break;
@@ -199,7 +203,6 @@ int msdos_file_read(
 	for (i=0; i<pre.nblist; i++) brelse (pre.bhlist[i]);
 	if (start == buf) return -EIO;
 	if (!IS_RDONLY(inode)) inode->i_atime = CURRENT_TIME;
-	PRINTK (("file_read ret %d\n",(buf-start)));
 	filp->f_reada = 1;	/* Will be reset if a lseek is done */
 	return buf-start;
 }

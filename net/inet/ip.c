@@ -1485,17 +1485,19 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	/*
 	 *	Remember if the frame is fragmented.
 	 */
-
-	if (iph->frag_off & 0x0020)
-		is_frag|=1;
-
-	/*
-	 *	Last fragment ?
-	 */
-
-	if (ntohs(iph->frag_off) & 0x1fff)
-		is_frag|=2;
-
+	 
+	if(iph->frag_off)
+	{
+		if (iph->frag_off & 0x0020)
+			is_frag|=1;
+		/*
+		 *	Last fragment ?
+		 */
+	
+		if (ntohs(iph->frag_off) & 0x1fff)
+			is_frag|=2;
+	}
+	
 	/*
 	 *	Do any IP forwarding required.  chk_addr() is expensive -- avoid it someday.
 	 *
@@ -1514,7 +1516,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		 *	Don't forward multicast or broadcast frames.
 		 */
 
-		if(skb->pkt_type!=PACKET_HOST)
+		if(skb->pkt_type!=PACKET_HOST || brd==IS_BROADCAST)
 		{
 			kfree_skb(skb,FREE_WRITE);
 			return 0;
@@ -1613,7 +1615,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 	if (!flag)
 	{
-		if (brd != IS_BROADCAST)
+		if (brd != IS_BROADCAST && brd!=IS_MULTICAST)
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, dev);
 		kfree_skb(skb, FREE_WRITE);
 	}

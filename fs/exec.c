@@ -374,10 +374,10 @@ static int count(char ** argv)
 	int error, i = 0;
 	char ** tmp, *p;
 
-	error = verify_area(VERIFY_READ, argv, sizeof(char *));
-	if (error)
-		return error;
-	if ((tmp = argv) != 0) {
+	if ((tmp = argv) != NULL) {
+		error = verify_area(VERIFY_READ, tmp, sizeof(char *));
+		if (error)
+			return error;
 		while ((p = (char *) get_fs_long((unsigned long *) (tmp++))) != NULL) {
 			i++;
 			error = verify_area(VERIFY_READ, p, 1);

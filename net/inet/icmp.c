@@ -26,6 +26,7 @@
  *		Ulrich Kunitz	:	Fixed ICMP timestamp reply
  *		A.N.Kuznetsov	:	Multihoming fixes.
  *		Laco Rusnak	:	Multihoming fixes.
+ *		Alan Cox	:	Tightened up icmp_send().
  *
  * 
  *
@@ -100,13 +101,37 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 	struct icmphdr *icmph;
 	int len;
 	struct device *ndev=NULL;	/* Make this =dev to force replies on the same interface */
-
+	unsigned long our_addr;
+	int atype;
+	
 	/*
 	 *	Find the original IP header.
 	 */
 	 
 	iph = (struct iphdr *) (skb_in->data + dev->hard_header_len);
 	
+	/*
+	 *	No replies to MAC multicast
+	 */
+	 
+	if(skb_in->pkt_type!=PACKET_HOST)
+		return;
+		
+	/*
+	 *	No replies to IP multicasting
+	 */
+	 
+	atype=ip_chk_addr(iph->daddr);
+	if(atype==IS_BROADCAST || IN_MULTICAST(iph->daddr))
+		return;
+
+	/*
+	 *	Only reply to first fragment.
+	 */
+	 
+	if(ntohs(iph->frag_off)&IP_OFFSET)
+		return;
+	 		
 	/*
 	 *	We must NEVER NEVER send an ICMP error to an ICMP error message
 	 */
@@ -178,14 +203,12 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 	 *	Build Layer 2-3 headers for message back to source. 
 	 */
 
-	{ unsigned long our_addr = dev->pa_addr;
+	our_addr = dev->pa_addr;
 	if (iph->daddr != our_addr && ip_chk_addr(iph->daddr) == IS_MYADDR)
 		our_addr = iph->daddr;
 	offset = ip_build_header(skb, our_addr, iph->saddr,
 			   &ndev, IPPROTO_ICMP, NULL, len,
 			   skb_in->ip_hdr->tos,255);
-	}
-
 	if (offset < 0) 
 	{
 		icmp_statistics.IcmpOutErrors++;

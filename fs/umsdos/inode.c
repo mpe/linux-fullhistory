@@ -410,7 +410,7 @@ struct super_block *UMSDOS_read_super(
 		msdos directory, with all limitation of msdos.
 	*/
 	struct super_block *sb = msdos_read_super(s,data,silent);
-	printk ("UMSDOS Alpha 0.5 (compatibility level %d.%d, fast msdos)\n"
+	printk ("UMSDOS Alpha 0.5a (compatibility level %d.%d, fast msdos)\n"
 		,UMSDOS_VERSION,UMSDOS_RELEASE);
 	if (sb != NULL){
 		sb->s_op = &umsdos_sops;

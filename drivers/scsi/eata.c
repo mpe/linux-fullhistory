@@ -1,6 +1,10 @@
 /*
  *      eata.c - Low-level SCSI driver for EISA EATA SCSI controllers.
  *
+ *      18 Nov 1994 rev. 1.08 for linux 1.1.64
+ *                  Forces sg_tablesize = 64 and can_queue = 64 if these
+ *                  values are not correctly detected (DPT PM2012).
+ *
  *      14 Nov 1994 rev. 1.07 for linux 1.1.63  Final BETA release.
  *      04 Aug 1994 rev. 1.00 for linux 1.1.39  First BETA release.
  *
@@ -306,16 +310,22 @@ static inline int port_detect (ushort *port_base, unsigned int j,
    irqlist[info.irq] = j;
    strcpy(BN(j), name);
 
-   if (sh[j]->sg_tablesize > MAX_SGLIST)
-           sh[j]->sg_tablesize = MAX_SGLIST;
-
-   if (sh[j]->can_queue > MAX_MAILBOXES) 
-           sh[j]->can_queue = MAX_MAILBOXES;
-
    printk("%s: SCSI ID %d, PORT 0x%03x, IRQ %u, SG %d, "\
           "Mbox %d, CmdLun %d.\n", BN(j), sh[j]->this_id, 
            sh[j]->io_port, sh[j]->irq, sh[j]->sg_tablesize, 
            sh[j]->can_queue, sh[j]->hostt->cmd_per_lun);
+
+   /* DPT PM2012 does not allow to detect sg_tablesize correctly */
+   if (sh[j]->sg_tablesize > MAX_SGLIST || sh[j]->sg_tablesize < 2) {
+      printk("%s: detect, forcing to use %d SG lists.\n", BN(j), MAX_SGLIST);
+      sh[j]->sg_tablesize = MAX_SGLIST;
+      }
+
+   /* DPT PM2012 does not allow to detect can_queue correctly */
+   if (sh[j]->can_queue > MAX_MAILBOXES || sh[j]->can_queue  < 2) {
+      printk("%s: detect, forcing to use %d Mbox.\n", BN(j), MAX_MAILBOXES);
+      sh[j]->can_queue = MAX_MAILBOXES;
+      }
 
 #if defined (DEBUG_DETECT)
    printk("%s: Version 0x%x, SYNC 0x%x, infol %ld, cpl %ld spl %ld.\n", 

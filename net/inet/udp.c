@@ -261,11 +261,11 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	 */
 	 
 	size = sk->prot->max_header + len;
-	skb = sk->prot->wmalloc(sk, size, 0, GFP_KERNEL);
+	skb = sock_alloc_send_skb(sk, size, 0, &tmp);
 
 
 	if (skb == NULL) 
-		return(-ENOBUFS);
+		return tmp;
 
 	skb->sk       = NULL;	/* to avoid changing sk->saddr */
 	skb->free     = 1;
@@ -619,8 +619,10 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	/*
 	 *	Charge it to the socket, dropping if the queue is full.
 	 */
+
+	skb->len = len - sizeof(*uh);  
 	 
-	if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) 
+	if (sock_queue_rcv_skb(sk,skb)<0) 
 	{
 		udp_statistics.UdpInErrors++;
 		ip_statistics.IpInDiscards++;
@@ -630,20 +632,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		release_sock(sk);
 		return(0);
 	}
-	sk->rmem_alloc += skb->mem_len;
   	udp_statistics.UdpInDatagrams++;
-
-	/*
-	 *	Now add it to the data chain and wake things up. 
-	 */
-  
-	skb->len = len - sizeof(*uh);  
-	skb_queue_tail(&sk->receive_queue,skb);
-
-
-	if (!sk->dead) 
-	  	sk->data_ready(sk,skb->len);
-  	
 	release_sock(sk);
 	return(0);
 }

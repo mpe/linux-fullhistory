@@ -109,7 +109,7 @@ the buffers are only used when needed as low-memory bounce buffers.
 IIIB. 16M memory limitations.
 For the ISA bus master mode all structures used directly by the LANCE,
 the initialization block, Rx and Tx rings, and data buffers, must be
-accessable from the ISA bus, i.e. in the lower 16M of real memory.
+accessible from the ISA bus, i.e. in the lower 16M of real memory.
 This is a problem for current Linux kernels on >16M machines. The network
 devices are initialized after memory initialization, and the kernel doles out
 memory from the top of memory downward.	 The current solution is to have a
@@ -207,7 +207,7 @@ struct lance_private {
 };
 
 /* A mapping from the chip ID number to the part number and features.
-   These are fro the datasheets -- in real life the '970 version
+   These are from the datasheets -- in real life the '970 version
    reportedly has the same ID as the '965. */
 static struct lance_chip_type {
 	int id_number;
@@ -239,7 +239,7 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 
 /* This lance probe is unlike the other board probes in 1.0.*.  The LANCE may
    have to allocate a contiguous low-memory region for bounce buffers.
-   This requirement is satified by having the lance initialization occur before the
+   This requirement is satisfied by having the lance initialization occur before the
    memory management system is started, and thus well before the other probes. */
 unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 {

@@ -176,7 +176,7 @@ start:
 #  into the message out phase since we have ATN asserted.  Prepare
 #  the message to send, locking out the device driver.  If the device
 #  driver hasn't beaten us with an ABORT or RESET message, then tack
-#  on a SDTR negotation if required.
+#  on a SDTR negotiation if required.
 #
 #  Messages are stored in scratch RAM starting with a flag byte (high bit
 #  set means active message), one length byte, and then the message itself.
@@ -812,7 +812,7 @@ assert1:
 
 #  Find out if disconnection is ok from the information the BIOS has left
 #  us.  The target ID should be in the upper four bits of SINDEX; A will
-#  contain either 0x40 (disconnection ok) or 0x00 (diconnection not ok)
+#  contain either 0x40 (disconnection ok) or 0x00 (disconnection not ok)
 #  on exit.
 #
 #  This is the only place the target ID is limited to three bits, so we

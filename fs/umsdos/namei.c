@@ -838,7 +838,9 @@ int UMSDOS_rmdir(
 		if (ret == 0){
 			int empty;
 			umsdos_lockcreate(dir);
-			if ((empty = umsdos_isempty (sdir)) != 0){
+			if (sdir->i_count > 1){
+				ret = -EBUSY;
+			}else if ((empty = umsdos_isempty (sdir)) != 0){
 				PRINTK (("isempty %d i_count %d ",empty,sdir->i_count));
 				if (empty == 1){
 					/* We have to removed the EMD file */

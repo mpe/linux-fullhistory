@@ -122,7 +122,7 @@ int permission(struct inode * inode,int mask)
  * put_write_access() releases this write permission.
  * This is used for regular files.
  * We cannot support write (and maybe mmap read-write shared) accesses and
- * MAP_DENYWRITE mmapings simultaneously.
+ * MAP_DENYWRITE mmappings simultaneously.
  */
 int get_write_access(struct inode * inode)
 {
@@ -527,7 +527,7 @@ static int do_mkdir(const char * pathname, int mode)
 	}
 	dir->i_count++;
 	down(&dir->i_sem);
-	error = dir->i_op->mkdir(dir,basename,namelen,mode);
+	error = dir->i_op->mkdir(dir, basename, namelen, mode & 0777 & ~current->fs->umask);
 	up(&dir->i_sem);
 	iput(dir);
 	return error;

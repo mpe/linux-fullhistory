@@ -79,7 +79,7 @@ MTBSFM  As above but ape positioned after filemark.
 MTFSR   Space forward over count records.
 MTBSR   Space backward over count records.
 MTFSS   Space forward over count setmarks.
-MTBSS   Space backward over coutn setmarks.
+MTBSS   Space backward over count setmarks.
 MTWEOF  Write count filemarks.
 MTWSM   Write count setmarks.
 MTREW   Rewind tape.

@@ -2930,7 +2930,7 @@ static struct cont_t poll_cont={
 
 
 /* revalidate the floppy disk, i.e. trigger format autodetection by reading
- * the bootblock (block 0). "Autodetection" is also needed to check wether
+ * the bootblock (block 0). "Autodetection" is also needed to check whether
  * there is a disk in the drive at all... Thus we also do it for fixed
  * geometry formats */
 static int floppy_revalidate(dev_t dev)

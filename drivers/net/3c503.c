@@ -183,7 +183,7 @@ el2_probe1(struct device *dev, int ioaddr)
 
     printk("%s: 3c503 at %#3x,", dev->name, ioaddr);
 
-    /* Retrive and print the ethernet address. */
+    /* Retrieve and print the ethernet address. */
     for (i = 0; i < 6; i++)
 	printk(" %2.2x", dev->dev_addr[i] = inb(ioaddr + i));
 

@@ -21,7 +21,14 @@ CAUTION!
 	This version of driver works with applications written and
 	compiled for v2.*. The problem is that APPLICATIONS COMPILED
 	WITH soundcard.h OF THIS VERSION WILL NOT WORK WITH OLDER DRIVER.
-	Be carefull when distributing applications compiled with this
+	Be careful when distributing applications compiled with this
 	version (just the apps using /dev/sequencer are incompatible).
+
+	*********************************************************
+	* IF YOU HAVE ANY PROBLEMS WITH THE SOUND DRIVER,	*
+	* PLEASE READ THE SOUND-HOWTO. IT'S AVAILABLE FROM YOUR	*
+	* NEAREST LINUX FTP SITE AND CONTAINS ANSWER TO YOUR	*
+	* PROBLEM.						*
+	*********************************************************
 
 Hannu

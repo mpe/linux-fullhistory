@@ -483,13 +483,10 @@ int init_module(void)
 void cleanup_module(void)
 {
 	if (MOD_IN_USE)
-		printk("ne: device busy, remove delayed\n");
+		printk("msdos: device busy, remove delayed\n");
 	else
 	{
 		unregister_filesystem(&msdos_fs_type);
-		/* This is not clear why the floppy drivers does not initialise */
-		/* the table, but we left it the way we saw it first */
-		blksize_size[FLOPPY_MAJOR] = NULL;
 	}
 }
 

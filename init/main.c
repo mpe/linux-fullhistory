@@ -456,11 +456,11 @@ asmlinkage void start_kernel(void)
 	memory_start = blk_dev_init(memory_start,memory_end);
 	sti();
 	calibrate_delay();
-#ifdef CONFIG_INET
-	memory_start = net_dev_init(memory_start,memory_end);
-#endif
 #ifdef CONFIG_SCSI
 	memory_start = scsi_dev_init(memory_start,memory_end);
+#endif
+#ifdef CONFIG_INET
+	memory_start = net_dev_init(memory_start,memory_end);
 #endif
 	memory_start = inode_init(memory_start,memory_end);
 	memory_start = file_table_init(memory_start,memory_end);

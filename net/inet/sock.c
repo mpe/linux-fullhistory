@@ -406,6 +406,93 @@ void sock_rfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
 	}
 }
 
+/*
+ *	Generic send/receive buffer handlers
+ */
+
+struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, int noblock, int *errcode)
+{
+	struct sk_buff *skb;
+	int err;
+
+	sk->inuse=1;
+		
+	do
+	{
+		if(sk->err!=0)
+		{
+			cli();
+			err= -sk->err;
+			sk->err=0;
+			sti();
+			*errcode=err;
+			return NULL;
+		}
+		
+		if(sk->shutdown&SEND_SHUTDOWN)
+		{
+			*errcode=-EPIPE;
+			return NULL;
+		}
+		
+		skb = sock_wmalloc(sk, size, 0, GFP_KERNEL);
+		
+		if(skb==NULL)
+		{
+			unsigned long tmp;
+			if(noblock)
+			{
+				*errcode=-EAGAIN;
+				return NULL;
+			}
+			if(sk->shutdown&SEND_SHUTDOWN)
+			{
+				*errcode=-EPIPE;
+				return NULL;
+			}
+			tmp = sk->wmem_alloc;
+			cli();
+			if(sk->shutdown&SEND_SHUTDOWN)
+			{
+				sti();
+				*errcode=-EPIPE;
+				return NULL;
+			}
+			
+			if( tmp <= sk->wmem_alloc)
+			{
+				interruptible_sleep_on(sk->sleep);
+				if (current->signal & ~current->blocked) 
+				{
+					sti();
+					*errcode = -ERESTARTSYS;
+					return NULL;
+				}
+			}
+			sti();
+		}
+	}
+	while(skb==NULL);
+		
+	return skb;
+}
+
+/*
+ *	Queue a received datagram if it will fit. Stream and sequenced protocols
+ *	can't normally use this as they need to fit buffers in and play with them.
+ */
+
+int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
+{
+	if(sk->rmem_alloc + skb->mem_len >= sk->rcvbuf)
+		return -ENOMEM;
+	sk->rmem_alloc+=skb->mem_len;
+	skb->sk=sk;
+	skb_queue_tail(&sk->receive_queue,skb);
+	if(!sk->dead)
+		sk->data_ready(sk,skb->len);
+	return 0;
+}
 
 void release_sock(struct sock *sk)
 {

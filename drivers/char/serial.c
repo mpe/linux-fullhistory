@@ -1084,6 +1084,13 @@ static void change_speed(struct async_struct *info)
 	if (!(port = info->port))
 		return;
 	i = cflag & CBAUD;
+	if (i & CBAUDEX) {
+		i &= ~CBAUDEX;
+		if (i < 1 || i > 2) 
+			info->tty->termios->c_cflag &= ~CBAUDEX;
+		else
+			i += 15;
+	}
 	if (i == 15) {
 		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
 			i += 1;
@@ -1833,7 +1840,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	/*
 	 * At this point we stop accepting input.  To do this, we
 	 * disable the receive line status interrupts, and tell the
-	 * interrut driver to stop checking the data ready bit in the
+	 * interrupt driver to stop checking the data ready bit in the
 	 * line status register.
 	 */
 	info->IER &= ~UART_IER_RLSI;

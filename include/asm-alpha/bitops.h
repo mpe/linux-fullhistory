@@ -84,7 +84,7 @@ extern __inline__ unsigned long test_bit(int nr, void * addr)
 
 /*
  * ffz = Find First Zero in word. Undefined if no zero exists,
- * so code should check agains ~0UL first..
+ * so code should check against ~0UL first..
  *
  * This uses the cmpbge insn to check which byte contains the zero.
  * I don't know if that's actually a good idea, but it's fun and the

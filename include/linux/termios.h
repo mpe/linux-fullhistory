@@ -159,7 +159,7 @@ struct termios {
 #define   FF1	0100000
 
 /* c_cflag bit meaning */
-#define CBAUD	0000017
+#define CBAUD	0010017
 #define  B0	0000000		/* hang up */
 #define  B50	0000001
 #define  B75	0000002
@@ -189,7 +189,10 @@ struct termios {
 #define PARODD	0001000
 #define HUPCL	0002000
 #define CLOCAL	0004000
-#define CIBAUD	03600000		/* input baud rate (not used) */
+#define CBAUDEX 0010000
+#define  B57600  0010001
+#define  B115200 0010002
+#define CIBAUD	  002003600000	/* input baud rate (not used) */
 #define CRTSCTS	  020000000000		/* flow control */
 
 /* c_lflag bits */
@@ -222,7 +225,7 @@ struct termios {
 #define TIOCM_CD	TIOCM_CAR
 #define TIOCM_RI	TIOCM_RNG
 
-/* ioctl (fd, TIOCSERGTLSR, &result) where result may be as below */
+/* ioctl (fd, TIOCSERGETLSR, &result) where result may be as below */
 #define TIOCSER_TEMT    0x01	/* Transmitter physically empty */
 
 

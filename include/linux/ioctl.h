@@ -30,7 +30,7 @@
 #define IOCPARM_SHIFT IOCCMD_SHIFT
 
 #define IOC_SIZE(cmd)	(((cmd) & IOCSIZE_MASK) >> IOCSIZE_SHIFT)
-#define IOCBASECMD(cmd)	((cmd) & ~IOOCPARM_MASK
+#define IOCBASECMD(cmd)	((cmd) & ~IOCPARM_MASK)
 #define IOCGROUP(cmd)	(((cmd) >> 8) & 0xFF)
 
 /* _IO(magic, subcode); size field is zero and the 

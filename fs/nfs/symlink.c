@@ -71,14 +71,14 @@ static int nfs_follow_link(struct inode *dir, struct inode *inode,
 	}
 	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,
 		&res, &len, NFS_MAXPATHLEN);
-	while ((res2 = (char *) kmalloc(NFS_MAXPATHLEN + 1, GFP_NFS)) == NULL) {
-		schedule();
-	}
 	if (error) {
 		iput(inode);
 		iput(dir);
 		kfree(mem);
 		return error;
+	}
+	while ((res2 = (char *) kmalloc(NFS_MAXPATHLEN + 1, GFP_NFS)) == NULL) {
+		schedule();
 	}
 	memcpy(res2, res, len);
 	res2[len] = '\0';

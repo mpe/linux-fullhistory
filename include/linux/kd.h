@@ -51,7 +51,7 @@ struct unimapdesc {
 	struct unipair *entries;
 };
 #define PIO_UNIMAP	0x4B67	/* put unicode-to-font mapping in kernel */
-#define PIO_UNIMAPCLR	0x4B68	/* clear table, possibly advise hashalgorithm */
+#define PIO_UNIMAPCLR	0x4B68	/* clear table, possibly advise hash algorithm */
 struct unimapinit {
 	u_short advised_hashsize;  /* 0 if no opinion */
 	u_short advised_hashstep;  /* 0 if no opinion */

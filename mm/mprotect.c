@@ -55,7 +55,6 @@ static inline int mprotect_fixup_all(struct vm_area_struct * vma,
 {
 	vma->vm_flags = newflags;
 	vma->vm_page_prot = prot;
-	merge_segments(current->mm->mmap);
 	return 0;
 }
 
@@ -79,7 +78,6 @@ static inline int mprotect_fixup_start(struct vm_area_struct * vma,
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current, n);
-	merge_segments(current->mm->mmap);
 	return 0;
 }
 
@@ -103,7 +101,6 @@ static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current, n);
-	merge_segments(current->mm->mmap);
 	return 0;
 }
 
@@ -139,7 +136,6 @@ static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 	}
 	insert_vm_struct(current, left);
 	insert_vm_struct(current, right);
-	merge_segments(current->mm->mmap);
 	return 0;
 }
 
@@ -179,7 +175,8 @@ static int mprotect_fixup(struct vm_area_struct * vma,
 asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 {
 	unsigned long end, tmp;
-	struct vm_area_struct * vma;
+	struct vm_area_struct * vma, * next;
+	int error;
 
 	if (start & ~PAGE_MASK)
 		return -EINVAL;
@@ -201,27 +198,33 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 		return -EFAULT;
 
 	for ( ; ; ) {
-		int error;
 		unsigned int newflags;
 
-		newflags = prot | (vma->vm_flags & ~(PROT_READ | PROT_WRITE | PROT_EXEC));
-		if ((newflags & ~(newflags >> 4)) & 0xf)
-			return -EACCES;
+		/* Here we know that  vma->vm_start <= start < vma->vm_end. */
 
-		if (vma->vm_end >= end)
-			return mprotect_fixup(vma, start, end, newflags);
+		newflags = prot | (vma->vm_flags & ~(PROT_READ | PROT_WRITE | PROT_EXEC));
+		if ((newflags & ~(newflags >> 4)) & 0xf) {
+			error = -EACCES;
+			break;
+		}
+
+		if (vma->vm_end >= end) {
+			error = mprotect_fixup(vma, start, end, newflags);
+			break;
+		}
 
 		tmp = vma->vm_end;
+		next = vma->vm_next;
 		error = mprotect_fixup(vma, start, tmp, newflags);
 		if (error)
-			return error;
+			break;
 		start = tmp;
-		if (vma->vm_end <= start) {
-			vma = vma->vm_next;
-			if (vma && vma->vm_start < start)
-				vma = vma->vm_next;
-			if (!vma || vma->vm_start != start)
-				return -EFAULT;
+		vma = next;
+		if (!vma || vma->vm_start != start) {
+			error = -EFAULT;
+			break;
 		}
 	}
+	merge_segments(current->mm->mmap);
+	return error;
 }

@@ -125,7 +125,7 @@ int raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 	/* Charge it to the socket. */
 	
-	if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) 
+	if(sock_queue_rcv_skb(sk,skb)<0)
 	{
 		ip_statistics.IpInDiscards++;
 		skb->sk=NULL;
@@ -133,10 +133,7 @@ int raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		return(0);
 	}
 
-	sk->rmem_alloc += skb->mem_len;
 	ip_statistics.IpInDelivers++;
-	skb_queue_tail(&sk->receive_queue,skb);
-	sk->data_ready(sk,skb->len);
 	release_sock(sk);
 	return(0);
 }
@@ -189,41 +186,10 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 	if (sk->broadcast == 0 && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
 		return -EACCES;
 
-	sk->inuse = 1;
-	skb = NULL;
-	while (skb == NULL) 
-	{
-  		if(sk->err!=0)
-  		{
-  			err= -sk->err;
-  			sk->err=0;
-  			release_sock(sk);
-  			return(err);
-  		}
-  	
-		skb = sk->prot->wmalloc(sk,
-				len + sk->prot->max_header,
-				0, GFP_KERNEL);
-		if (skb == NULL) 
-		{
-			int tmp;
-
-			if (noblock) 
-				return(-EAGAIN);
-			tmp = sk->wmem_alloc;
-			release_sock(sk);
-			cli();
-			if (tmp <= sk->wmem_alloc) {
-				interruptible_sleep_on(sk->sleep);
-				if (current->signal & ~current->blocked) {
-					sti();
-					return(-ERESTARTSYS);
-				}
-			}
-			sk->inuse = 1;
-			sti();
-		}
-	}
+	skb=sock_alloc_send_skb(sk, len+sk->prot->max_header, noblock, &err);
+	if(skb==NULL)
+		return err;
+		
 	skb->sk = sk;
 	skb->free = 1;
 	skb->localroute = sk->localroute | (flags&MSG_DONTROUTE);

@@ -37,6 +37,7 @@
 #define IS_LOOPBACK	2		/* address is for LOOPBACK	*/
 #define IS_BROADCAST	3		/* address is a valid broadcast	*/
 #define IS_INVBCAST	4		/* Wrong netmask bcast not for us (unused)*/
+#define IS_MULTICAST	5		/* Multicast IP address */
 
 /*
  * The DEVICE structure.

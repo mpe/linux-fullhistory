@@ -948,18 +948,12 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	if (sock->ipx_source_addr.net == 0L)
 		sock->ipx_source_addr.net = ln->net;
 	
-	if(sock->rmem_alloc>=sock->rcvbuf)
+	if(sock_queue_rcv_skb(sock, skb)<0)
 	{
 		kfree_skb(skb,FREE_READ);	/* Socket is full */
 		return(0);
 	}
 	
-	sock->rmem_alloc+=skb->mem_len;
-	skb->sk = sock;
-
-	skb_queue_tail(&sock->receive_queue,skb);
-	if(!sock->dead)
-		sock->data_ready(sock,skb->len);
 	return(0);
 }
 

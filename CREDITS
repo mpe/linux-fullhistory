@@ -638,6 +638,10 @@ S: 59 Bugden Avenue
 S: Gowrie ACT 2904
 S: Australia
 
+N: Alessandro Rubini
+E: rubini@ipvvis.unipv.it
+D: the gpm mouse server and kernel support for it
+
 N: Robert Sanders
 E: gt8134b@prism.gatech.edu
 D: Dosemu
