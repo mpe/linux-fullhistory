@@ -132,15 +132,15 @@ static __inline__ void set_dcache_dirty(struct page *page, int this_cpu)
 	mask = (mask << 24) | (1UL << PG_dcache_dirty);
 	__asm__ __volatile__("1:\n\t"
 			     "ldx	[%2], %%g7\n\t"
-			     "and	%%g7, %1, %%g5\n\t"
-			     "or	%%g5, %0, %%g5\n\t"
-			     "casx	[%2], %%g7, %%g5\n\t"
-			     "cmp	%%g7, %%g5\n\t"
+			     "and	%%g7, %1, %%g1\n\t"
+			     "or	%%g1, %0, %%g1\n\t"
+			     "casx	[%2], %%g7, %%g1\n\t"
+			     "cmp	%%g7, %%g1\n\t"
 			     "bne,pn	%%xcc, 1b\n\t"
 			     " membar	#StoreLoad | #StoreStore"
 			     : /* no outputs */
 			     : "r" (mask), "r" (non_cpu_bits), "r" (&page->flags)
-			     : "g5", "g7");
+			     : "g1", "g7");
 }
 
 static __inline__ void clear_dcache_dirty_cpu(struct page *page, unsigned long cpu)
@@ -150,20 +150,20 @@ static __inline__ void clear_dcache_dirty_cpu(struct page *page, unsigned long c
 	__asm__ __volatile__("! test_and_clear_dcache_dirty\n"
 			     "1:\n\t"
 			     "ldx	[%2], %%g7\n\t"
-			     "srlx	%%g7, 24, %%g5\n\t"
-			     "and	%%g5, %3, %%g5\n\t"
-			     "cmp	%%g5, %0\n\t"
+			     "srlx	%%g7, 24, %%g1\n\t"
+			     "and	%%g1, %3, %%g1\n\t"
+			     "cmp	%%g1, %0\n\t"
 			     "bne,pn	%%icc, 2f\n\t"
-			     " andn	%%g7, %1, %%g5\n\t"
-			     "casx	[%2], %%g7, %%g5\n\t"
-			     "cmp	%%g7, %%g5\n\t"
+			     " andn	%%g7, %1, %%g1\n\t"
+			     "casx	[%2], %%g7, %%g1\n\t"
+			     "cmp	%%g7, %%g1\n\t"
 			     "bne,pn	%%xcc, 1b\n\t"
 			     " membar	#StoreLoad | #StoreStore\n"
 			     "2:"
 			     : /* no outputs */
 			     : "r" (cpu), "r" (mask), "r" (&page->flags),
 			       "i" (NR_CPUS - 1UL)
-			     : "g5", "g7");
+			     : "g1", "g7");
 }
 
 extern void __update_mmu_cache(unsigned long mmu_context_hw, unsigned long address, pte_t pte, int code);
