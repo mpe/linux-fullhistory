@@ -1,7 +1,7 @@
 /*
  * XFS filesystem operations.
  *
- * Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2005 Silicon Graphics, Inc.  All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -258,11 +258,6 @@ xfs_start_flags(
 	mp->m_fsname = kmem_alloc(mp->m_fsname_len, KM_SLEEP);
 	strcpy(mp->m_fsname, ap->fsname);
 
-	/*
-	 * Pull in the 'wsync' and 'ino64' mount options before we do the real
-	 * work of mounting and recovery.  The arg pointer will
-	 * be NULL when we are being called from the root mount code.
-	 */
 	if (ap->flags & XFSMNT_WSYNC)
 		mp->m_flags |= XFS_MOUNT_WSYNC;
 #if XFS_BIG_INUMS
@@ -302,6 +297,10 @@ xfs_start_flags(
 		mp->m_flags |= XFS_MOUNT_DFLT_IOSIZE;
 		mp->m_readio_log = mp->m_writeio_log = ap->iosizelog;
 	}
+
+	if (ap->flags & XFSMNT_IHASHSIZE)
+		mp->m_flags |= XFS_MOUNT_IHASHSIZE;
+
 	if (ap->flags & XFSMNT_IDELETE)
 		mp->m_flags |= XFS_MOUNT_IDELETE;
 
@@ -1742,6 +1741,7 @@ xfs_parseargs(
 					this_char); 
 				return EINVAL;
 			}
+			args->flags |= XFSMNT_IHASHSIZE;
 			args->ihashsize = simple_strtoul(value, &eov, 10);
 		} else if (!strcmp(this_char, MNTOPT_WSYNC)) {
 			args->flags |= XFSMNT_WSYNC;
@@ -1869,6 +1869,9 @@ xfs_showargs(
 		if (mp->m_flags & xfs_infop->flag)
 			seq_puts(m, xfs_infop->str);
 	}
+
+	if (mp->m_flags & XFS_MOUNT_IHASHSIZE)
+		seq_printf(m, "," MNTOPT_IHASHSIZE "=%d", mp->m_ihsize);
 
 	if (mp->m_flags & XFS_MOUNT_DFLT_IOSIZE)
 		seq_printf(m, "," MNTOPT_BIOSIZE "=%d", mp->m_writeio_log);
