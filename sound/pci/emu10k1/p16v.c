@@ -229,22 +229,24 @@ static int snd_p16v_pcm_prepare_playback(snd_pcm_substream_t *substream)
 	u32 *table_base = (u32 *)(emu->p16v_buffer.area+(8*16*channel));
 	u32 period_size_bytes = frames_to_bytes(runtime, runtime->period_size);
 	int i;
+	u32 tmp;
 	
         //snd_printk("prepare:channel_number=%d, rate=%d, format=0x%x, channels=%d, buffer_size=%ld, period_size=%ld, periods=%u, frames_to_bytes=%d\n",channel, runtime->rate, runtime->format, runtime->channels, runtime->buffer_size, runtime->period_size, runtime->periods, frames_to_bytes(runtime, 1));
         //snd_printk("dma_addr=%x, dma_area=%p, table_base=%p\n",runtime->dma_addr, runtime->dma_area, table_base);
 	//snd_printk("dma_addr=%x, dma_area=%p, dma_bytes(size)=%x\n",emu->p16v_buffer.addr, emu->p16v_buffer.area, emu->p16v_buffer.bytes);
+	tmp = snd_emu10k1_ptr_read(emu, A_SPDIF_SAMPLERATE, channel);
         switch (runtime->rate) {
 	case 44100:
-	  snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, channel, 0x8000); /* FIXME: This will change the capture rate as well! */
+	  snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, channel, (tmp & ~0xe000) | 0x8000); /* FIXME: This will change the capture rate as well! */
 	  break;
 	case 48000:
-	  snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, channel, 0x1000); /* FIXME: This will change the capture rate as well! */
+	  snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, channel, (tmp & ~0xe000) | 0x0000); /* FIXME: This will change the capture rate as well! */
 	  break;
 	case 96000:
-	  snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, channel, 0x4000); /* FIXME: This will change the capture rate as well! */
+	  snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, channel, (tmp & ~0xe000) | 0x4000); /* FIXME: This will change the capture rate as well! */
 	  break;
 	case 192000:
-	  snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, channel, 0x2000); /* FIXME: This will change the capture rate as well! */
+	  snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, channel, (tmp & ~0xe000) | 0x2000); /* FIXME: This will change the capture rate as well! */
 	  break;
 	default:
 	  snd_emu10k1_ptr_write(emu, A_SPDIF_SAMPLERATE, channel, 0x0000); /* FIXME: This will change the capture rate as well! */
