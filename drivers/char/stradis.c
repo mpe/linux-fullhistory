@@ -2249,7 +2249,7 @@ int init_stradis_cards(struct video_init *unused)
 	saa_num = 0;
 
 	while ((dev = pci_find_device(PCI_VENDOR_ID_PHILIPS, PCI_DEVICE_ID_PHILIPS_SAA7146, dev))) {
-		if (!dev->subsystem_vendor_id)
+		if (!dev->subsystem_vendor)
 			printk(KERN_INFO "stradis%d: rev1 decoder\n", saa_num);
 		else
 			printk(KERN_INFO "stradis%d: SDM2xx found\n", saa_num); 

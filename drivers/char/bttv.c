@@ -386,7 +386,7 @@ static int init_bttv_i2c(struct bttv *btv)
 
 	bttv_bit_setscl(btv,1);
 	bttv_bit_setsda(btv,1);
-	
+
 	return i2c_bit_add_bus(&btv->i2c_adap);
 }
 
@@ -428,15 +428,15 @@ static int I2CWrite(struct bttv *btv, unsigned char addr, unsigned char b1,
 }
 
 /* read EEPROM */
-static void readee(struct bttv *btv, unsigned char *eedata)
+static void readee(struct bttv *btv, unsigned char *eedata, int addr)
 {
 	int i;
         
-	if (I2CWrite(btv, 0xa0, 0, -1, 0)<0) {
+	if (I2CWrite(btv, addr, 0, -1, 0)<0) {
 		printk(KERN_WARNING "bttv: readee error\n");
 		return;
 	}
-	btv->i2c_client.addr = 0xa0 >> 1;
+	btv->i2c_client.addr = addr >> 1;
 	for (i=0; i<256; i+=16) {
 		if (16 != i2c_master_recv(&btv->i2c_client,eedata+i,16)) {
 			printk(KERN_WARNING "bttv: readee error\n");
@@ -486,7 +486,7 @@ hauppauge_tuner[] =
 static void
 hauppauge_eeprom(struct bttv *btv)
 {
-        readee(btv, eeprom_data);
+        readee(btv, eeprom_data, 0xa0);
         if (eeprom_data[9] < sizeof(hauppauge_tuner)/sizeof(struct HAUPPAUGE_TUNER)) 
         {
                 btv->tuner_type = hauppauge_tuner[eeprom_data[9]].id;
@@ -515,7 +515,10 @@ hauppauge_msp_reset(struct bttv *btv)
  *  driver, but using BTTV functions */
 static void init_PXC200(struct bttv *btv)
 {
-	int tmp;
+	static const int vals[] = { 0x08, 0x09, 0x0a, 0x0b, 0x0d, 0x0d,
+				    0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+				    0x00 };
+	int i,tmp;
 
 	/*	Initialise GPIO-connevted stuff */
 	btwrite(1<<13,BT848_GPIO_OUT_EN); /* Reset pin only */
@@ -537,38 +540,36 @@ static void init_PXC200(struct bttv *btv)
 	 *	argument so the numbers are different */
 	
 	printk(KERN_INFO "Initialising 12C508 PIC chip ...\n");
-	
-	tmp=I2CWrite(btv,0x1E,0x08,0,1);
-	printk(KERN_INFO "I2C Write(0x08) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x09,0,1);
-	printk(KERN_INFO "I2C Write(0x09) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x0a,0,1);
-	printk(KERN_INFO "I2C Write(0x0a) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x0b,0,1);
-	printk(KERN_INFO "I2C Write(0x0b) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x0c,0,1);
-	printk(KERN_INFO "I2C Write(0x0c) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x0d,0,1);
-	printk(KERN_INFO "I2C Write(0x0d) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x01,0,1);
-	printk(KERN_INFO "I2C Write(0x01) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x02,0,1);
-	printk(KERN_INFO "I2C Write(0x02) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x03,0,1);
-	printk(KERN_INFO "I2C Write(0x03) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x04,0,1);
-	printk(KERN_INFO "I2C Write(0x04) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x05,0,1);
-	printk(KERN_INFO "I2C Write(0x05) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x06,0,1);
-	printk(KERN_INFO "I2C Write(0x06) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	tmp=I2CWrite(btv,0x1E,0x00,0,1);
-	printk(KERN_INFO "I2C Write(0x00) = %i\nI2C Read () = %x\n\n",tmp,I2CRead(btv,0x1F,NULL));
-	
+
+	for (i = 0; i < sizeof(vals)/sizeof(int); i++) {
+		tmp=I2CWrite(btv,0x1E,vals[i],0,1);
+		printk(KERN_INFO "I2C Write(0x08) = %i\nI2C Read () = %x\n\n",
+		       tmp,I2CRead(btv,0x1F,NULL));
+	}
 	printk(KERN_INFO "PXC200 Initialised.\n");
 }
 
 /* ----------------------------------------------------------------------- */
+
+static struct VENDOR {
+	int id;
+	char *name;
+} vendors[] = {
+	{ 0x0070, "Hauppauge" },
+	{ 0x144f, "Askey" },
+	{ -1, NULL }
+};
+
+static struct CARD {
+	int id;
+	int vid;
+	int cardnr;
+	char *name;
+} cards[] = {
+	{ 0x13eb, 0x0070, BTTV_HAUPPAUGE878,  "WinTV Theater" },
+	{ 0x3002, 0x144f, BTTV_MAGICTVIEW061, "Magic TView"   },
+	{ -1, -1, -1, NULL }
+};
 
 struct tvcard
 {
@@ -677,8 +678,8 @@ static struct tvcard tvcards[] =
 	  1,1,1,1,0 },
 
 	/* 0x18 */
-	{ "Magic TView CPH061 (bt878)",
-	  3, 1, 0, 2, 0xe00, { 2, 0, 1, 1}, {0x400, 0, 0, 0, 0},0,
+        { "Askey/Typhoon/Anubis Magic TView CPH051/061 (bt878)",
+	  3, 1, 0, 2, 0xe00, { 2, 3, 1, 1}, {0x400, 0x400, 0x400, 0x400, 0},0,
 	  1,1,1,1,0 },
         { "Terratec/Vobis TV-Boostar",
           3, 1, 0, 2, 16777215 , { 2, 3, 1, 1}, { 131072, 1, 1638400, 3,4},0,
@@ -709,14 +710,57 @@ static struct tvcard tvcards[] =
 	{ "Intel Create and Share PCI",
 	  4, 1, 0, 2, 7, { 2, 3, 1, 1}, { 4, 4, 4, 4, 4},0,
 	  1,1,1,1,0 },
-        { "Askey/Typhoon/Anubis Magic TView",
-	  3, 1, 0, 2, 0xe00, { 2, 0, 1, 1}, {0x400, 0x400, 0x400, 0x400, 0},0,
-	  1,1,1,1,0 },
 	{ "Terratec TerraTValue",
-          3, 1, 0, 2, 0x70000, { 2, 3, 1, 1}, { 0x500, 0, 0x300, 0x900, 0x900},0,
+          3, 1, 0, 2, 0xf00, { 2, 3, 1, 1}, { 0x500, 0, 0x300, 0x900, 0x900},0,
 	  1,1,1,1,0 },
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(struct tvcard))
+
+static void
+dump_eeprom(struct bttv *btv, int addr)
+{
+	int i,id1,id2,n1,n2;
+
+	printk(KERN_DEBUG "bttv%d: dump eeprom @ 0x%02x\n",btv->nr,addr);
+        readee(btv, eeprom_data,addr);
+	for (i = 0; i < 256;) {
+		printk(KERN_DEBUG "  %02x:",i);
+		do {
+			printk(" %02x",eeprom_data[i++]);
+		} while (i % 16);
+		printk("\n");
+	}
+	id1 = (eeprom_data[252] << 8) | (eeprom_data[253]);
+	id2 = (eeprom_data[254] << 8) | (eeprom_data[255]);
+	if (id1 != 0 && id1 != 0xffff &&
+	    id2 != 0 && id2 != 0xffff) {
+		n1 = -1;
+		n2 = -1;
+		for (i = 0; vendors[i].id != -1; i++)
+			if (vendors[i].id == id2)
+				n2 = i;
+		for (i = 0; cards[i].id != -1; i++)
+			if (cards[i].id  == id1 &&
+			    cards[i].vid == id2)
+				n1 = i;
+		if (n1 != -1 && n2 != -1) {
+			printk(KERN_INFO "  id: %s (0x%04x), vendor: %s (0x%04x)\n",
+			       cards[n1].name,id1,vendors[n2].name,id2);
+			printk(KERN_INFO "  => card=%d (%s)\n",
+			       cards[n1].cardnr,tvcards[cards[n1].cardnr].name);
+#if 1
+			/* not yet, but that's the plan for autodetect... */
+			btv->type = cards[n1].cardnr;
+#endif
+		} else {
+			printk(KERN_INFO "  id: %s (0x%04x), vendor: %s (0x%04x)\n",
+			       (n1 != -1) ? cards[n1].name   : "unknown", id1,
+			       (n2 != -1) ? vendors[n2].name : "unknown", id2);
+			printk(KERN_INFO "  please mail card type, id + vendor to ");
+			printk(" kraxel@goldbach.in-berlin.de\n");
+		}
+	}
+}
 
 /* ----------------------------------------------------------------------- */
 
@@ -2883,6 +2927,13 @@ static void idcard(int i)
 		}
 	}
 
+#if 1
+	/* DEBUG: dump eeprom content if available */
+	if (I2CRead(btv, 0xa0, "eeprom")>=0) {
+		dump_eeprom(btv,0xa0);
+	}
+#endif
+
 	/* print which board we have found */
 	printk(KERN_INFO "bttv%d: model: ",btv->nr);
 
@@ -2917,7 +2968,8 @@ static void idcard(int i)
         if (btv->type == BTTV_HAUPPAUGE878	||
 	    btv->type == BTTV_CONFERENCETV	||
 	    btv->type == BTTV_PIXVIEWPLAYTV	||
-	    btv->type == BTTV_AVERMEDIA98) {
+	    btv->type == BTTV_AVERMEDIA98	||
+	    btv->type == BTTV_MAGICTVIEW061) {
                 btv->pll.pll_ifreq=28636363;
                 btv->pll.pll_crystal=BT848_IFORM_XT0;
         }
@@ -2952,8 +3004,8 @@ static void idcard(int i)
 			request_module("tda9855");
 	}
 
-	if (tvcards[btv->type].tea63xx &&
-	    I2CRead(btv, I2C_TEA6300, "TEA63xx") >= 0) {
+	if (tvcards[btv->type].tea63xx /* &&
+	    I2CRead(btv, I2C_TEA6300, "TEA63xx") >= 0 */) {
 		if (autoload)
 			request_module("tea6300");
 	}
@@ -3553,7 +3605,11 @@ int init_bttv_cards(struct video_init *unused)
 #endif
 {
 	int i;
-  
+
+	printk(KERN_INFO "bttv: driver version %d.%d.%d loaded\n",
+	       (BTTV_VERSION_CODE >> 16) & 0xff,
+	       (BTTV_VERSION_CODE >> 8) & 0xff,
+	       BTTV_VERSION_CODE & 0xff);
 	handle_chipset();
 	if (find_bt848()<=0)
 		return -EIO;

@@ -6,7 +6,8 @@
  * what works and what doesn't:
  *
  *  AM-Mono
- *      probably doesn't (untested)
+ *      Support for Hauppauge cards added (decoding handled by tuner) added by
+ *      Frederic Crozat <fcrozat@mail.dotcom.fr>
  *
  *  FM-Mono
  *      should work. The stereo modes are backward compatible to FM-mono,
@@ -19,7 +20,7 @@
  *      should work, no autodetect (i.e. default is mono, but you can
  *      switch to stereo -- untested)
  *
- *  NICAM (B/G, used in UK, Scandinavia and Spain)
+ *  NICAM (B/G, L , used in UK, Scandinavia, Spain and France)
  *      should work, with autodetect. Support for NICAM was added by
  *      Pekka Pietikainen <pp@netppl.fi>
  *
@@ -49,15 +50,13 @@
 #include <asm/pgtable.h>
 #include <linux/smp_lock.h>
 #endif
-
 /* kernel_thread */
 #define __KERNEL_SYSCALLS__
 #include <linux/unistd.h>
 
 #include "audiochip.h"
-  
-#define WAIT_QUEUE                 wait_queue_head_t
 
+#define WAIT_QUEUE                 wait_queue_head_t
 
 /* sound mixer stuff */ 
 #include <linux/config.h>
@@ -278,7 +277,7 @@ static struct MSP_INIT_DATA_DEM {
 	/* NICAM/AM -- L (6.5/5.85) */
 	{ {  -2, -8, -10, 10, 50, 86 }, {  -4, -12, -9, 23, 79, 126 },
 	  MSP_CARRIER(6.5), MSP_CARRIER(6.5),
-	  0x00c6, 0x0140,   0x0120, 0x7000},
+	  0x00c6, 0x0140,   0x0120, 0x7c03},
 };
 
 struct CARRIER_DETECT {
@@ -302,7 +301,7 @@ static struct CARRIER_DETECT carrier_detect_55[] = {
 
 static struct CARRIER_DETECT carrier_detect_65[] = {
 	/* PAL SAT / SECAM */
-	{ MSP_CARRIER(5.85),       "5.85  PAL D/K NICAM" },
+	{ MSP_CARRIER(5.85),       "5.85  PAL D/K + SECAM NICAM" },
 	{ MSP_CARRIER(6.2578125),  "6.25  PAL D/K1 FM-stereo" },
 	{ MSP_CARRIER(6.7421875),  "6.74  PAL D/K2 FM-stereo" },
 	{ MSP_CARRIER(7.02),       "7.02  PAL SAT FM-stereo s/b" },
@@ -409,7 +408,7 @@ static void msp3400c_setmode(struct i2c_client *client, int type)
 
 	if (msp->nicam) {
 		/* nicam prescale */
-		msp3400c_write(client,I2C_MSP3400C_DFP, 0x0010, 0x3000);
+		msp3400c_write(client,I2C_MSP3400C_DFP, 0x0010, 0x5a00); /* was: 0x3000 */
 	}
 }
 
@@ -475,10 +474,22 @@ static void msp3400c_setstereo(struct i2c_client *client, int mode)
 	case VIDEO_SOUND_STEREO:
 		src = 0x0020 | nicam;
 #if 0 
+		/* spatial effect */
 		msp3400c_write(client,I2C_MSP3400C_DFP, 0x0005,0x4000);
 #endif
 		break;
 	case VIDEO_SOUND_MONO:
+		if (msp->mode == MSP_MODE_AM_NICAM) {
+			printk("msp3400: switching to AM mono\n");
+			/* AM mono decoding is handled by tuner, not MSP chip */
+			/* so let's redirect sound from tuner via SCART */
+			/* volume prescale for SCART */
+			msp3400c_write(client,I2C_MSP3400C_DFP, 0x000d, 0x1900);
+			/* SCART switching control register*/
+			msp3400c_write(client,I2C_MSP3400C_DFP, 0x0013, 0xe900);
+			src = 0x0200;
+			break;
+		}
 	case VIDEO_SOUND_LANG1:
 		src = 0x0000 | nicam;
 		break;
@@ -551,7 +562,7 @@ autodetect_stereo(struct i2c_client *client)
 		val = msp3400c_read(client, I2C_MSP3400C_DFP, 0x18);
 		if (val > 32768)
 			val -= 65536;
-		dprintk("msp3400: stereo detect register: %d\n",val);
+		dprintk("msp34xx: stereo detect register: %d\n",val);
 		
 		if (val > 4096) {
 			newstereo = VIDEO_SOUND_STEREO | VIDEO_SOUND_MONO;
@@ -566,7 +577,7 @@ autodetect_stereo(struct i2c_client *client)
 	case MSP_MODE_FM_NICAM2:
 	case MSP_MODE_AM_NICAM:
 		val = msp3400c_read(client, I2C_MSP3400C_DEM, 0x23);
-		dprintk("msp3400: nicam sync=%d, mode=%d\n",val & 1, (val & 0x1e) >> 1);
+		dprintk("msp34xx: nicam sync=%d, mode=%d\n",val & 1, (val & 0x1e) >> 1);
 
 		if (val & 1) {
 			/* nicam synced */
@@ -592,30 +603,33 @@ autodetect_stereo(struct i2c_client *client)
 			}
 			newnicam=1;
 		} else {
-			newnicam=0;
-#if 0 /* fixme: quick & dirty for testing */
-			if (msp->main == MSP_CARRIER(6.5)) {
-				/* This is a french mono channel => AM */
-				printk("msp3400: switching to AM mono\n");
-				msp3400c_setstereo(msp, VIDEO_SOUND_MONO);
-				msp->second = msp->main;
-				msp3400c_setmode(msp, MSP_MODE_AM_DETECT);
-				msp3400c_setcarrier(client, msp->second, msp->main);
-			}
-#endif
+			newnicam = 0;
 			newstereo = VIDEO_SOUND_MONO;
 		}
+		break;
+	case MSP_MODE_BTSC:
+		val = msp3400c_read(client, I2C_MSP3400C_DEM, 0x200);
+		dprintk("msp3410: status=0x%x (pri=%s, sec=%s, %s%s%s)\n",
+			val,
+			(val & 0x0002) ? "no"     : "yes",
+			(val & 0x0004) ? "no"     : "yes",
+			(val & 0x0040) ? "stereo" : "mono",
+			(val & 0x0080) ? ", nicam 2nd mono" : "",
+			(val & 0x0100) ? ", bilingual/SAP"  : "");
+		newstereo = VIDEO_SOUND_MONO;
+		if (val & 0x0040) newstereo |= VIDEO_SOUND_STEREO;
+		if (val & 0x0100) newstereo |= VIDEO_SOUND_LANG1;
 		break;
 	}
 	if (newstereo != msp->stereo) {
 		update = 1;
-		dprintk("msp3400: watch: stereo %d => %d\n",
+		dprintk("msp34xx: watch: stereo %d => %d\n",
 			msp->stereo,newstereo);
 		msp->stereo   = newstereo;
 	}
 	if (newnicam != msp->nicam_on) {
 		update = 1;
-		dprintk("msp3400: watch: nicam %d => %d\n",
+		dprintk("msp34xx: watch: nicam %d => %d\n",
 			msp->nicam_on,newnicam);
 		msp->nicam_on = newnicam;
 	}
@@ -706,8 +720,15 @@ static int msp3400c_thread(void *data)
 			msp->active = 0;
 			continue;
 		}
-	
+
+		/* some time for the tuner to sync */
+		current->state   = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ/10);
+		if (signal_pending(current))
+			goto done;
+		
 	restart:
+		msp->restart = 0;
 		msp3400c_setvolume(client, 0, 0);
 		msp3400c_setmode(client, MSP_MODE_AM_DETECT /* +1 */ );
 		val1 = val2 = 0;
@@ -717,6 +738,14 @@ static int msp3400c_thread(void *data)
 
 		/* carrier detect pass #1 -- main carrier */
 		cd = carrier_detect_main; count = CARRIER_COUNT(carrier_detect_main);
+
+		if (amsound && (msp->norm == VIDEO_MODE_SECAM)) {
+			/* autodetect doesn't work well with AM ... */
+			max1 = 3;
+			count = 0;
+			dprintk("msp3400: AM sound override\n");
+		}
+
 		for (this = 0; this < count; this++) {
 			msp3400c_setcarrier(client, cd[this].cdo,cd[this].cdo);
 
@@ -724,23 +753,15 @@ static int msp3400c_thread(void *data)
 			schedule_timeout(HZ/25);
 			if (signal_pending(current))
 				goto done;
-			if (msp->restart) {
+			if (msp->restart)
 				msp->restart = 0;
-				goto restart;
-			}
 
 			val = msp3400c_read(client, I2C_MSP3400C_DFP, 0x1b);
 			if (val1 < val)
 				val1 = val, max1 = this;
 			dprintk("msp3400: carrier1 val: %5d / %s\n", val,cd[this].name);
 		}
-
-		if (amsound) {
-			/* autodetect does'nt work well with AM ... */
-			max1 = 3;
-			dprintk("msp3400: AM sound override\n");
-		}
-		
+	
 		/* carrier detect pass #2 -- second (stereo) carrier */
 		switch (max1) {
 		case 1: /* 5.5 */
@@ -755,6 +776,11 @@ static int msp3400c_thread(void *data)
 			cd = NULL; count = 0;
 			break;
 		}
+		
+		if (amsound && (msp->norm == VIDEO_MODE_SECAM)) {
+			/* autodetect doesn't work well with AM ... */
+			cd = NULL; count = 0; max2 = 0;
+		}
 		for (this = 0; this < count; this++) {
 			msp3400c_setcarrier(client, cd[this].cdo,cd[this].cdo);
 
@@ -762,10 +788,8 @@ static int msp3400c_thread(void *data)
 			schedule_timeout(HZ/25);
 			if (signal_pending(current))
 				goto done;
-			if (msp->restart) {
-				msp->restart = 0;
+			if (msp->restart)
 				goto restart;
-			}
 
 			val = msp3400c_read(client, I2C_MSP3400C_DFP, 0x1b);
 			if (val2 < val)
@@ -811,12 +835,13 @@ static int msp3400c_thread(void *data)
 				msp->nicam_on = 0;
 				msp3400c_setstereo(client, VIDEO_SOUND_MONO);
 				msp->watch_stereo = 1;
-			} else if (max2 == 0 && msp->nicam &&
+			} else if (max2 == 0 &&
 				   msp->norm == VIDEO_MODE_SECAM) {
-				/* L NICAM */
+				/* L NICAM or AM-mono */
 				msp->second = carrier_detect_65[max2].cdo;
 				msp3400c_setmode(client, MSP_MODE_AM_NICAM);
-				msp->nicam_on = 1;
+				msp->nicam_on = 0;
+				msp3400c_setstereo(client, VIDEO_SOUND_MONO);
 				msp3400c_setcarrier(client, msp->second, msp->main);
 				msp->watch_stereo = 1;
 			} else if (max2 == 0 && msp->nicam) {
@@ -942,24 +967,19 @@ static int msp3410d_thread(void *data)
 		msp->active = 1;
 
 		if (msp->watch_stereo) {
-#if 1 /* dump status register */
-			val = msp3400c_read(client, I2C_MSP3400C_DEM, 0x200);
-			printk("msp3410: status=0x%x (pri=%s, sec=%s, %s%s%s)\n",
-			       val,
-			       (val & 0x0002) ? "no"     : "yes",
-			       (val & 0x0004) ? "no"     : "yes",
-			       (val & 0x0040) ? "stereo" : "mono",
-			       (val & 0x0080) ? ", nicam 2nd mono" : "",
-			       (val & 0x0100) ? ", bilingual/SAP"  : "");
-			msp->watch_stereo = 0;
-#else
-			watch_stereo(msp);
-#endif
+			watch_stereo(client);
 			msp->active = 0;
 			continue;
 		}
 	
+		/* some time for the tuner to sync */
+		current->state   = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ/10);
+		if (signal_pending(current))
+			goto done;
+
 	restart:
+		msp->restart = 0;
 		del_timer(&msp->wake_stereo);
 		msp->watch_stereo = 0;
 
@@ -977,6 +997,9 @@ static int msp3410d_thread(void *data)
 			std  = 0x0020;
 			break;
 		case VIDEO_MODE_SECAM: 
+			mode = 0x0003;
+			std = 1;
+			break;
 		default:
 			mode = 0x0003;
 			std  = 1;
@@ -1005,10 +1028,8 @@ static int msp3410d_thread(void *data)
 				schedule_timeout(HZ/10);
 				if (signal_pending(current))
 					goto done;
-				if (msp->restart) {
-					msp->restart = 0;
+				if (msp->restart)
 					goto restart;
-				}
 
 				/* check results */
 				val = msp3400c_read(client, I2C_MSP3400C_DEM, 0x7e);
@@ -1027,11 +1048,21 @@ static int msp3410d_thread(void *data)
 		msp->main   = modelist[i].main;
 		msp->second = modelist[i].second;
 
+		if (amsound && (msp->norm == VIDEO_MODE_SECAM) && (val != 0x0009)) {
+			/* autodetection has failed, let backup */
+			dprintk("msp3410: autodetection failed, switching to backup mode: %s (0x%04x)\n",
+				modelist[8].name ? modelist[8].name : "unknown",val);
+			val = 0x0009;
+			msp3400c_write(client, I2C_MSP3400C_DEM, 0x20, val);
+		}
+
 		/* set prescale / stereo */
 		switch (val) {
-		case 0x0009:
-			msp3400c_write(client, I2C_MSP3400C_DFP, 0x0e, 0x7c03); /* AM */
-			msp3400c_write(client, I2C_MSP3400C_DFP, 0x10, 0x5a00); /* NICAM */
+		case 0x0009:			
+			msp->mode = MSP_MODE_AM_NICAM;
+			msp->stereo = VIDEO_SOUND_MONO;
+			msp3400c_setstereo(client,VIDEO_SOUND_MONO);
+			msp->watch_stereo = 1;
 			break;
 		case 0x0020: /* BTSC */
 			/* just turn on stereo */
@@ -1479,12 +1510,8 @@ static int msp_command(struct i2c_client *client,unsigned int cmd, void *arg)
 		va->bass = msp->bass;
 		va->treble = msp->treble;
 
-		if (msp->simple) {
-			/* fixme */
-		} else {
-			autodetect_stereo(client);
-			va->mode = msp->stereo;
-		}
+		autodetect_stereo(client);
+		va->mode = msp->stereo;
 		break;
 	}
 	case VIDIOCSAUDIO:
@@ -1501,9 +1528,7 @@ static int msp_command(struct i2c_client *client,unsigned int cmd, void *arg)
 		msp3400c_setbass(client,msp->bass);
 		msp3400c_settreble(client,msp->treble);
 
-		if (msp->simple) {
-			/* fixme */
-		} else if (va->mode != 0) {
+		if (va->mode != 0) {
 			msp->watch_stereo=0;
 			del_timer(&msp->wake_stereo);
 			msp->stereo = va->mode;
@@ -1584,17 +1609,11 @@ static int msp_command(struct i2c_client *client,unsigned int cmd, void *arg)
 		msp3400c_settreble(client,msp->treble);
 		break;
 
-	case AUDC_GET_STEREO:
-		if (msp->simple) {
-			*sarg = 0; /* fixme */
-		} else {
-			autodetect_stereo(client);
-			*sarg = msp->stereo;
-		}
+	case AUDC_GET_STEREO:	
+	        autodetect_stereo(client);
+	        *sarg = msp->stereo;		
 		break;
 	case AUDC_SET_STEREO:
-		if (msp->simple)
-			break; /* fixme */
 		if (*sarg) {
 			msp->watch_stereo=0;
 			del_timer(&msp->wake_stereo);
@@ -1642,4 +1661,3 @@ void cleanup_module(void)
  * c-basic-offset: 8
  * End:
  */
-

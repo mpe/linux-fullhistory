@@ -38,6 +38,7 @@ struct hw_interrupt_type open_pic = {
 	0,
 	0
 };
+int open_pic_irq_offset;
 
 /*
  *  Accesses to the current processor's registers
@@ -69,7 +70,7 @@ struct hw_interrupt_type open_pic = {
  *   -- Cort
  */ 
 #define check_arg_irq(irq) \
-    /*if (irq < 0 || irq >= (NumSources+open_pic.irq_offset)) \
+    /*if (irq < 0 || irq >= (NumSources+open_pic_irq_offset)) \
       printk("openpic.c:%d: illegal irq %d\n", __LINE__, irq);*/
 #define check_arg_cpu(cpu) \
     if (cpu < 0 || cpu >= NumProcessors) \
@@ -212,11 +213,11 @@ void __init openpic_init(int main_pic)
 		/* Initialize external interrupts */
 		if ( ppc_md.progress ) ppc_md.progress("openpic ext",0x3bc);
 		/* SIOint (8259 cascade) is special */
-		openpic_initirq(0, 8, open_pic.irq_offset, 1, 1);
+		openpic_initirq(0, 8, open_pic_irq_offset, 1, 1);
 		openpic_mapirq(0, 1<<0);
 		for (i = 1; i < NumSources; i++) {
 			/* Enabled, Priority 8 */
-			openpic_initirq(i, 8, open_pic.irq_offset+i, 0,
+			openpic_initirq(i, 8, open_pic_irq_offset+i, 0,
 					i < OpenPIC_NumInitSenses ? OpenPIC_InitSenses[i] : 1);
 			/* Processor 0 */
 			openpic_mapirq(i, 1<<0);
@@ -416,13 +417,13 @@ void openpic_maptimer(u_int timer, u_int cpumask)
 void openpic_enable_irq(u_int irq)
 {
 	check_arg_irq(irq);
-	openpic_clearfield(&OpenPIC->Source[irq-irq_desc[irq].handler->irq_offset].Vector_Priority, OPENPIC_MASK);
+	openpic_clearfield(&OpenPIC->Source[irq - open_pic_irq_offset].Vector_Priority, OPENPIC_MASK);
 }
 
 void openpic_disable_irq(u_int irq)
 {
 	check_arg_irq(irq);
-	openpic_setfield(&OpenPIC->Source[irq-irq_desc[irq].handler->irq_offset].Vector_Priority, OPENPIC_MASK);
+	openpic_setfield(&OpenPIC->Source[irq - open_pic_irq_offset].Vector_Priority, OPENPIC_MASK);
 }
 
 /*

@@ -790,7 +790,9 @@ __inline static int __init_io(Scsi_Cmnd * SCpnt,
 	 */
 	if (count != SCpnt->use_sg) {
 		printk("Incorrect number of segments after building list\n");
+#ifdef CONFIG_SCSI_DEBUG_QUEUES
 		dump_stats(req, use_clustering, dma_host, count);
+#endif
 	}
 	if (!dma_host) {
 		return 1;

@@ -10,7 +10,6 @@
 #include "zlib.h"
 #include <asm/bootinfo.h>
 #include <asm/processor.h>
-#define __KERNEL__
 #include <asm/page.h>
 
 extern void *finddevice(const char *);

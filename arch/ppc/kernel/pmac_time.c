@@ -24,6 +24,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
+#include <asm/machdep.h>
 
 #include "time.h"
 

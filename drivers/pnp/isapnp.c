@@ -30,30 +30,16 @@
 #include <linux/ioport.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
-#include <linux/proc_fs.h>
 #include <linux/delay.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/irq.h>
 #include <linux/pci.h>
-#include <linux/vmalloc.h>
-#include <linux/poll.h>
 #include <linux/init.h>
-#include <asm/uaccess.h>
 #include <linux/isapnp.h>
 
 LIST_HEAD(isapnp_cards);
 LIST_HEAD(isapnp_devices);
-
-#define isapnp_for_each_card(card) \
-	for(card = pci_bus_b(isapnp_cards.next); card != pci_bus_b(&isapnp_cards); card = pci_bus_b(card->node.next))
-#define isapnp_for_each_dev(dev) \
-	for(dev = pci_dev_g(isapnp_devices.next); dev != pci_dev_g(&isapnp_devices); dev = pci_dev_g(dev->global_list.next))
-
-
-#ifdef CONFIG_PROC_FS
-#include "isapnp_proc.c"
-#endif
 
 #if 0
 #define ISAPNP_REGION_OK
@@ -1000,6 +986,7 @@ static int __init isapnp_build_device_list(void)
 		if (isapnp_checksum_value != 0x00)
 			printk("isapnp: checksum for device %i is not valid (0x%x)\n", csn, isapnp_checksum_value);
 		card->checksum = isapnp_checksum_value;
+		INIT_LIST_HEAD(&card->devices);
 
 		list_add_tail(&card->node, &isapnp_cards);
 	}

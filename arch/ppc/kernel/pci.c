@@ -9,6 +9,7 @@
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/openpic.h>
+#include <linux/errno.h>
 
 #include <asm/processor.h>
 #include <asm/io.h>
@@ -21,7 +22,7 @@
 
 #include "pci.h"
 
-static void __init pcibios_claim_resources(struct pci_bus *);
+static void __init pcibios_claim_resources(struct list_head *);
 
 unsigned long isa_io_base     = 0;
 unsigned long isa_mem_base    = 0;
@@ -69,10 +70,9 @@ struct pci_ops generic_pci_ops =
 void __init pcibios_init(void)
 {
 	printk("PCI: Probing PCI hardware\n");
-	ioport_resource.end = ~0L;
 	pci_scan_bus(0, &generic_pci_ops, NULL);
-	pcibios_claim_resources(pci_root);
-	if ( ppc_md.pcibios_fixup )
+	pcibios_claim_resources(&pci_root_buses);
+	if (ppc_md.pcibios_fixup)
 		ppc_md.pcibios_fixup();
 }
 
@@ -161,4 +161,76 @@ pcibios_update_irq(struct pci_dev *dev, int irq)
 void __init
 pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
+}
+
+int pcibios_enable_device(struct pci_dev *dev)
+{
+	u16 cmd, old_cmd;
+	int idx;
+	struct resource *r;
+
+	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+	old_cmd = cmd;
+	for (idx=0; idx<6; idx++) {
+		r = &dev->resource[idx];
+		if (!r->start && r->end) {
+			printk(KERN_ERR "PCI: Device %s not available because of resource collisions\n", dev->slot_name);
+			return -EINVAL;
+		}
+		if (r->flags & IORESOURCE_IO)
+			cmd |= PCI_COMMAND_IO;
+		if (r->flags & IORESOURCE_MEM)
+			cmd |= PCI_COMMAND_MEMORY;
+	}
+	if (cmd != old_cmd) {
+		printk("PCI: Enabling device %s (%04x -> %04x)\n",
+		       dev->slot_name, old_cmd, cmd);
+		pci_write_config_word(dev, PCI_COMMAND, cmd);
+	}
+	return 0;
+}
+
+/*
+ * Assign new address to PCI resource.  We hope our resource information
+ * is complete.  We don't re-assign resources unless we are
+ * forced to do so.
+ *
+ * Expects start=0, end=size-1, flags=resource type.
+ */
+
+int pci_assign_resource(struct pci_dev *dev, int i)
+{
+	struct resource *r = &dev->resource[i];
+	struct resource *pr = pci_find_parent_resource(dev, r);
+	unsigned long size = r->end + 1;
+	u32 new, check;
+
+	if (!pr) {
+		printk(KERN_ERR "PCI: Cannot find parent resource for device %s\n", dev->slot_name);
+		return -EINVAL;
+	}
+	if (r->flags & IORESOURCE_IO) {
+		if (allocate_resource(pr, r, size, 0x100, ~0, size, NULL, NULL)) {
+			printk(KERN_ERR "PCI: Allocation of I/O region %s/%d (%ld bytes) failed\n", dev->slot_name, i, size);
+			return -EBUSY;
+		}
+	} else {
+		if (allocate_resource(pr, r, size, 0x10000, ~0, size, NULL, NULL)) {
+			printk(KERN_ERR "PCI: Allocation of memory region %s/%d (%ld bytes) failed\n", dev->slot_name, i, size);
+			return -EBUSY;
+		}
+	}
+	if (i < 6) {
+		int reg = PCI_BASE_ADDRESS_0 + 4*i;
+		new = r->start | (r->flags & PCI_REGION_FLAG_MASK);
+		pci_write_config_dword(dev, reg, new);
+		pci_read_config_dword(dev, reg, &check);
+		if (new != check)
+			printk(KERN_ERR "PCI: Error while updating region %s/%d (%08x != %08x)\n", dev->slot_name, i, new, check);
+	} else if (i == PCI_ROM_RESOURCE) {
+		r->flags |= PCI_ROM_ADDRESS_ENABLE;
+		pci_write_config_dword(dev, dev->rom_base_reg, r->start | (r->flags & PCI_REGION_FLAG_MASK));
+	}
+	printk("PCI: Assigned addresses %08lx-%08lx to region %s/%d\n", r->start, r->end, dev->slot_name, i);
+	return 0;
 }

@@ -8,7 +8,8 @@
  *  by James Banks
  *
  *  (C) 1997-1998 Caldera, Inc.
- *
+ *  (C) 1999-2000 Torben Mathiasen
+ * 
  *  This software may be used and distributed according to the terms
  *  of the GNU Public License, incorporated herein by reference.
  *
@@ -206,7 +207,7 @@ typedef struct tlan_private_tag {
 #define TLAN_TIMER_PHY_FINISH_AN	7
 #define TLAN_TIMER_FINISH_RESET		8
 
-#define TLAN_TIMER_ACT_DELAY		10
+#define TLAN_TIMER_ACT_DELAY		(HZ/10)
 
 
 

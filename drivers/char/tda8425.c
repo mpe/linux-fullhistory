@@ -104,7 +104,7 @@ static void tda8425_set(struct i2c_client *client)
 	tda8425_write(client, TDA8425_TR, tda->treble>>12|0xF0);
 }
 
-static void tda8425_init(struct i2c_client *client)
+static void do_tda8425_init(struct i2c_client *client)
 {
 	struct tda8425 *tda = client->data;
 
@@ -152,7 +152,7 @@ static int tda8425_attach(struct i2c_adapter *adap, int addr,
 	if (!tda)
 		return -ENOMEM;
 	memset(tda,0,sizeof *tda);
-	tda8425_init(client);
+	do_tda8425_init(client);
 	MOD_INC_USE_COUNT;
 	strcpy(client->name,"TDA8425");
 	printk(KERN_INFO "tda8425: init\n");
@@ -173,7 +173,7 @@ static int tda8425_detach(struct i2c_client *client)
 {
 	struct tda8425 *tda  = client->data;
     
-	tda8425_init(client);
+	do_tda8425_init(client);
 	i2c_detach_client(client);
 
 	kfree(tda);

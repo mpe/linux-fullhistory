@@ -1,3 +1,9 @@
+Sat Jan 8  22:00 2000 Gerard Roudier (groudier@club-internet.fr)
+	* version sym53c8xx-1.5h
+	- Add year 2000 copyright.
+	- Display correctly bus signals when bus is detected wrong.
+	- Some fix for Sparc from DSM that went directly to kernel tree.
+
 Mon Dec 6  22:00 1999 Gerard Roudier (groudier@club-internet.fr)
 	* version sym53c8xx-1.5g
 	- Change messages written by the driver at initialisation and 

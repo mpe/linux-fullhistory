@@ -195,6 +195,89 @@ pci_enable_device(struct pci_dev *dev)
 	return 0;
 }
 
+/*
+ *  Registration of PCI drivers and handling of hot-pluggable devices.
+ */
+
+static LIST_HEAD(pci_drivers);
+
+void
+pci_register_driver(struct pci_driver *drv)
+{
+	struct pci_dev *dev;
+
+	list_add_tail(&drv->node, &pci_drivers);
+	pci_for_each_dev(dev) {
+		if (!pci_dev_driver(dev) && drv->probe(dev))
+			dev->driver = drv;
+	}
+}
+
+void
+pci_unregister_driver(struct pci_driver *drv)
+{
+	struct pci_dev *dev;
+
+	list_del(&drv->node);
+	pci_for_each_dev(dev) {
+		if (dev->driver == drv) {
+			if (drv->remove)
+				drv->remove(dev);
+			dev->driver = NULL;
+		}
+	}
+}
+
+void
+pci_insert_device(struct pci_dev *dev, struct pci_bus *bus)
+{
+	struct list_head *ln;
+
+	list_add_tail(&dev->bus_list, &bus->devices);
+	list_add_tail(&dev->global_list, &pci_devices);
+#ifdef CONFIG_PROC_FS
+	pci_proc_attach_device(dev);
+#endif
+	for(ln=pci_drivers.next; ln != &pci_devices; ln=ln->next) {
+		struct pci_driver *drv = list_entry(ln, struct pci_driver, node);
+		if (drv->probe(dev)) {
+			dev->driver = drv;
+			break;
+		}
+	}
+}
+
+void
+pci_remove_device(struct pci_dev *dev)
+{
+	if (dev->driver->remove)
+		dev->driver->remove(dev);
+	dev->driver = NULL;
+	list_del(&dev->bus_list);
+	list_del(&dev->global_list);
+#ifdef CONFIG_PROC_FS
+	pci_proc_detach_device(dev);
+#endif
+}
+
+static struct pci_driver pci_compat_driver = {
+	name: "compat"
+};
+
+struct pci_driver *
+pci_dev_driver(struct pci_dev *dev)
+{
+	if (dev->driver)
+		return dev->driver;
+	else {
+		int i;
+		for(i=0; i<=PCI_ROM_RESOURCE; i++)
+			if (dev->resource[i].flags & IORESOURCE_BUSY)
+				return &pci_compat_driver;
+	}
+	return NULL;
+}
+
 
 /*
  * This interrupt-safe spinlock protects all accesses to PCI

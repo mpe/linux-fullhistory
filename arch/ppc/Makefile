@@ -155,9 +155,6 @@ oak_config: clean_config
 walnut_config: clean_config
 	ln -s configs/walnut_defconfig arch/ppc/defconfig
 
-tags:
-	etags */*.c include/{asm,linux}/*.h arch/ppc/kernel/*.{c,h}
-
 archclean:
 	rm -f arch/ppc/kernel/{mk_defs,ppc_defs.h,find_name,checks}
 	@$(MAKECOFFBOOT) clean

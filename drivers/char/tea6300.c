@@ -111,7 +111,7 @@ static void tea6300_set(struct i2c_client *client)
 	tea6300_write(client, TEA6300_TR, tea->treble>>12);
 }
 
-static void tea6300_init(struct i2c_client *client)
+static void do_tea6300_init(struct i2c_client *client)
 {
 	struct tea6300 *tea = client->data;
 	
@@ -173,7 +173,7 @@ static int tea6300_attach(struct i2c_adapter *adap, int addr,
 	if (!tea)
 		return -ENOMEM;
 	memset(tea,0,sizeof *tea);
-	tea6300_init(client);
+	do_tea6300_init(client);
 
 	MOD_INC_USE_COUNT;
 	strcpy(client->name,"TEA6300T");
@@ -194,7 +194,7 @@ static int tea6300_detach(struct i2c_client *client)
 {
 	struct tea6300 *tea  = client->data;
     
-	tea6300_init(client);
+	do_tea6300_init(client);
 	i2c_detach_client(client);
 
 	kfree(tea);

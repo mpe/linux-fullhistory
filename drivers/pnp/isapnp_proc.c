@@ -19,6 +19,17 @@
  *
  */
 
+#define __NO_VERSION__
+
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/init.h>
+#include <linux/proc_fs.h>
+#include <linux/poll.h>
+#include <linux/vmalloc.h>
+#include <asm/uaccess.h>
+#include <linux/isapnp.h>
+
 struct isapnp_info_buffer {
 	char *buffer;		/* pointer to begin of buffer */
 	char *curr;		/* current position in buffer */
@@ -208,7 +219,7 @@ static struct inode_operations isapnp_info_entry_inode_operations =
 	&isapnp_info_entry_operations,	/* default sound info directory file-ops */
 };
 
-static int __init isapnp_proc_init(void)
+int __init isapnp_proc_init(void)
 {
 	struct proc_dir_entry *p;
 
@@ -222,7 +233,7 @@ static int __init isapnp_proc_init(void)
 }
 
 #ifdef MODULE
-static int isapnp_proc_done(void)
+int isapnp_proc_done(void)
 {
 	if (isapnp_proc_entry)
 		remove_proc_entry("isapnp",&proc_root);
@@ -533,10 +544,9 @@ static void isapnp_print_device(isapnp_info_buffer_t *buffer, struct pci_dev *de
  
 static void isapnp_info_read(isapnp_info_buffer_t *buffer)
 {
-	struct list_head *card_list;
-	
-	for (card_list = isapnp_cards.next; card_list != &isapnp_cards; card_list = card_list->next) {
-		struct pci_bus *card = list_entry(card_list, struct pci_bus, node);
+	struct pci_bus *card;
+
+	isapnp_for_each_card(card) {
 		struct list_head *dev_list;
 
 		isapnp_printf(buffer, "Card %i '", card->number);
@@ -547,10 +557,8 @@ static void isapnp_info_read(isapnp_info_buffer_t *buffer)
 		if (card->productver)
 			isapnp_printf(buffer, " Product version %x.%x", card->productver >> 4, card->productver & 0x0f);
 		isapnp_printf(buffer,"\n");
-		for (dev_list = card->devices.next; dev_list != &card->devices; dev_list = dev_list->next) {
-			struct pci_dev *dev = list_entry(dev_list, struct pci_dev, bus_list);
-			isapnp_print_device(buffer, dev);
-		}
+		for (dev_list = card->devices.next; dev_list != &card->devices; dev_list = dev_list->next)
+			isapnp_print_device(buffer, pci_dev_b(dev_list));
 	}
 }
 
@@ -644,12 +652,13 @@ static int isapnp_select_csn(char *line)
 	isapnp_info_device = NULL;
 	isapnp_get_str(index, line, sizeof(index));
 	csn = simple_strtoul(index, NULL, 0);
+
 	for (list = isapnp_cards.next; list != &isapnp_cards; list = list->next) {
-		isapnp_info_card = list_entry(list, struct pci_bus, node);
+		isapnp_info_card = pci_bus_b(list);
 		if (isapnp_info_card->number == csn)
 			break;
 	}
-	if (isapnp_info_card == NULL) {
+	if (list == &isapnp_cards) {
 		printk("isapnp: cannot find CSN %i\n", csn);
 		return 1;
 	}

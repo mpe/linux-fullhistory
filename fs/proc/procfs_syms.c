@@ -17,6 +17,7 @@ EXPORT_SYMBOL(proc_root);
 EXPORT_SYMBOL(proc_root_fs);
 EXPORT_SYMBOL(proc_net);
 EXPORT_SYMBOL(proc_bus);
+EXPORT_SYMBOL(proc_root_driver);
 
 static struct file_system_type proc_fs_type = {
 	"proc", 

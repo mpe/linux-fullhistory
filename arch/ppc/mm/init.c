@@ -339,9 +339,7 @@ void si_meminfo(struct sysinfo *val)
 			continue;
 		val->sharedram += atomic_read(&mem_map[i].count) - 1;
 	}
-	val->totalram <<= PAGE_SHIFT;
-	val->sharedram <<= PAGE_SHIFT;
-	return;
+	val->mem_unit = PAGE_SIZE;
 }
 
 void *
@@ -1037,29 +1035,21 @@ unsigned long __init find_available_memory(void)
  */
 void __init paging_init(void)
 {
+	unsigned int zones_size[MAX_NR_ZONES], i;
+
 	/*
 	 * Grab some memory for bad_page and bad_pagetable to use.
 	 */
 	empty_bad_page = alloc_bootmem_pages(PAGE_SIZE);
 	empty_bad_page_table = alloc_bootmem_pages(PAGE_SIZE);
-	{
-		unsigned int zones_size[MAX_NR_ZONES], i;
-		/*
-		 * All pages are DMA-able so this is wrong - the zone code is
-		 * assuming both regions have a value so this is necessary for
-		 * now.
-		 * -- Cort
-		 */
-#if 1
-		for ( i = 1; i < MAX_NR_ZONES; i++ )
-			zones_size[i] = 1<<MAX_ORDER;
-		zones_size[0] = (virt_to_phys(end_of_DRAM) >> PAGE_SHIFT) -
-			((MAX_NR_ZONES-1)*(1<<MAX_ORDER));
-#else
-		zones_size[0] = virt_to_phys(end_of_DRAM) >> PAGE_SHIFT;
-#endif
-		free_area_init(zones_size);
-	}
+
+	/*
+	 * All pages are DMA-able so we put them all in the DMA zone.
+	 */
+	zones_size[0] = virt_to_phys(end_of_DRAM) >> PAGE_SHIFT;
+	for (i = 1; i < MAX_NR_ZONES; i++)
+		zones_size[i] = 0;
+	free_area_init(zones_size);
 }
 
 void __init mem_init(void)

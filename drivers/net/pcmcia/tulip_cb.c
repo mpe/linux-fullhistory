@@ -39,13 +39,6 @@ static const char * const medianame[] = {
 	"10baseT(forced)", "MII 100baseTx", "MII 100baseTx-FD", "MII 100baseT4",
 };
 
-/* Set if the PCI BIOS detects the chips on a multiport board backwards. */
-#ifdef REVERSE_PROBE_ORDER
-static int reverse_probe = 1;
-#else
-static int reverse_probe = 0;
-#endif
-
 /* Keep the ring sizes a power of two for efficiency.
    Making the Tx ring too large decreases the effectiveness of channel
    bonding and packet priority.
@@ -126,6 +119,7 @@ static int csr0 = 0x00A00000 | 0x4800;
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -284,7 +278,6 @@ struct pci_id_info {
 	struct net_device *(*probe1)(int pci_bus, int pci_devfn, struct net_device *dev,
 							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
-#ifndef CARDBUS
 static struct pci_id_info pci_tbl[] = {
   { "Digital DC21040 Tulip",
 	0x1011, 0x0002, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
@@ -310,9 +303,10 @@ static struct pci_id_info pci_tbl[] = {
 	0x1317, 0x0981, 0xffff, PCI_ADDR0_IO, 256, 32, tulip_probe1 },
   { "Compex RL100-TX",
 	0x11F6, 0x9881, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
+  { "Xircom Cardbus Adapter (DEC 21143 compatible mode)",
+	0x115D, 0x0003, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
   {0},
 };
-#endif /* !CARD_BUS */
 
 /* This table use during operation for capabilities and media timer. */
 
@@ -456,7 +450,6 @@ struct mediainfo {
 struct tulip_private {
 	char devname[8];			/* Used only for kernel debugging. */
 	const char *product_name;
-	struct net_device *next_module;
 	struct tulip_rx_desc rx_ring[RX_RING_SIZE];
 	struct tulip_tx_desc tx_ring[TX_RING_SIZE];
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
@@ -574,107 +567,6 @@ static void outl_CSR6 (u32 newcsr6, long ioaddr, int chip_idx)
     restore_flags(flags);
 }
 
-/* A list of all installed Tulip devices. */
-static struct net_device *root_tulip_dev = NULL;
-
-#ifndef CARDBUS
-int tulip_probe(struct net_device *dev)
-{
-	int cards_found = 0;
-	int pci_index = 0;
-	unsigned char pci_bus, pci_device_fn;
-
-	if ( ! pcibios_present())
-		return -ENODEV;
-
-	for (;pci_index < 0xff; pci_index++) {
-		u16 vendor, device, pci_command, new_command;
-		int chip_idx;
-		int irq;
-		long ioaddr;
-
-		if (pcibios_find_class
-			(PCI_CLASS_NETWORK_ETHERNET << 8,
-			 reverse_probe ? 0xfe - pci_index : pci_index,
-			 &pci_bus, &pci_device_fn) != PCIBIOS_SUCCESSFUL) {
-			if (reverse_probe)
-				continue;
-			else
-				break;
-		}
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_DEVICE_ID, &device);
-
-		for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
-			if (vendor == pci_tbl[chip_idx].vendor_id
-				&& (device & pci_tbl[chip_idx].device_id_mask) ==
-				pci_tbl[chip_idx].device_id)
-				break;
-		if (pci_tbl[chip_idx].vendor_id == 0)
-			continue;
-
-		{
-#if defined(PCI_SUPPORT_VER2)
-			struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
-			ioaddr = pdev->base_address[0] & ~3;
-			irq = pdev->irq;
-#elif defined(PCI_SUPPORT_VER3)
-			struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
-			ioaddr = pdev->resource[0].start;
-			irq = pdev->irq;
-#else
-			u32 pci_ioaddr;
-			u8 pci_irq_line;
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_INTERRUPT_LINE, &pci_irq_line);
-			ioaddr = pci_ioaddr & ~3;
-			irq = pci_irq_line;
-#endif
-		}
-
-		if (debug > 2)
-			printk(KERN_INFO "Found %s at PCI I/O address %#lx.\n",
-				   pci_tbl[chip_idx].name, ioaddr);
-
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_COMMAND, &pci_command);
-		new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
-		if (pci_command != new_command) {
-			printk(KERN_INFO "  The PCI BIOS has not enabled the"
-				   " device at %d/%d!  Updating PCI command %4.4x->%4.4x.\n",
-				   pci_bus, pci_device_fn, pci_command, new_command);
-			pcibios_write_config_word(pci_bus, pci_device_fn,
-									  PCI_COMMAND, new_command);
-		}
-
-		dev = pci_tbl[chip_idx].probe1(pci_bus, pci_device_fn, dev, ioaddr,
-									   irq, chip_idx, cards_found);
-
-		/* Get and check the bus-master and latency values. */
-		if (dev) {
-			u8 pci_latency;
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_LATENCY_TIMER, &pci_latency);
-			if (pci_latency < 10) {
-				printk(KERN_INFO "  PCI latency timer (CFLT) is "
-					   "unreasonably low at %d.  Setting to 64 clocks.\n",
-					   pci_latency);
-				pcibios_write_config_byte(pci_bus, pci_device_fn,
-										  PCI_LATENCY_TIMER, 64);
-			}
-		}
-		dev = 0;
-		cards_found++;
-	}
-
-	return cards_found ? 0 : -ENODEV;
-}
-#endif  /* not CARDBUS */
-
 static struct net_device *tulip_probe1(int pci_bus, int pci_devfn,
 								   struct net_device *dev, long ioaddr, int irq,
 								   int chip_idx, int board_idx)
@@ -850,9 +742,6 @@ static struct net_device *tulip_probe1(int pci_bus, int pci_devfn,
 	tp = (void *)(((long)kmalloc(sizeof(*tp), GFP_KERNEL | GFP_DMA) + 7) & ~7);
 	memset(tp, 0, sizeof(*tp));
 	dev->priv = tp;
-
-	tp->next_module = root_tulip_dev;
-	root_tulip_dev = dev;
 
 	tp->pci_bus = pci_bus;
 	tp->pci_devfn = pci_devfn;
@@ -3251,127 +3140,82 @@ static void set_rx_mode(struct net_device *dev)
 	outl_CSR6(csr6 | 0x0000, ioaddr, tp->chip_id);
 }
 
-#ifdef CARDBUS
-
-#include <pcmcia/driver_ops.h>
-
-static dev_node_t *tulip_attach(dev_locator_t *loc)
+static int tulip_probe(struct pci_dev *pdev)
 {
 	struct net_device *dev;
-	u16 dev_id;
-	u16 vendor_id;
-	u32 io;
-	u8 bus, devfn, irq;
+	int chip_idx;
+	static int board_idx = 0;
 
-	if (loc->bus != LOC_PCI) return NULL;
-	bus = loc->b.pci.bus; devfn = loc->b.pci.devfn;
-	printk(KERN_INFO "tulip_attach(bus %d, function %d)\n", bus, devfn);
-	pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &io);
-	pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &dev_id);
-	pcibios_read_config_byte(bus, devfn, PCI_INTERRUPT_LINE, &irq);
-	pcibios_read_config_word(bus, devfn, PCI_VENDOR_ID, &vendor_id);
-	if (dev_id == 0x0003 && vendor_id == 0x115d) 
-		dev = tulip_probe1(bus, devfn, NULL, io & ~3, irq, X3201_3, 0);
-	else
-		dev = tulip_probe1(bus, devfn, NULL, io & ~3, irq, DC21142, 0);
+	printk(KERN_INFO "tulip_attach(%s)\n", pdev->slot_name);
+
+	for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
+		if (pdev->vendor == pci_tbl[chip_idx].vendor_id
+		    && (pdev->device & pci_tbl[chip_idx].device_id_mask) ==
+		    pci_tbl[chip_idx].device_id)
+			break;
+	if (pci_tbl[chip_idx].vendor_id == 0)
+		return 0;
+
+	pci_set_master(pdev);
+	dev = pci_tbl[chip_idx].probe1(pdev->bus->number, pdev->devfn, NULL,
+				       pdev->resource[0].start, pdev->irq,
+				       chip_idx, board_idx++);
 	if (dev) {
-		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
-		strcpy(node->dev_name, dev->name);
-		node->major = node->minor = 0;
-		node->next = NULL;
+		pdev->driver_data = dev;
 		MOD_INC_USE_COUNT;
-		return node;
+		return 1;
 	}
-	return NULL;
+	return 0;
 }
 
-static void tulip_suspend(dev_node_t *node)
+static void tulip_suspend(struct pci_dev *pdev)
 {
-	struct net_device *dev, *next;
-	printk(KERN_INFO "tulip_suspend(%s)\n", node->dev_name);
-	for (dev = root_tulip_dev; dev; dev = next) {
-		next = ((struct tulip_private *)dev->priv)->next_module;
-		if (strcmp(dev->name, node->dev_name) == 0) break;
-	}
-	if (dev) {
-		struct tulip_private *tp = (struct tulip_private *)dev->priv;
-		if (tp->open) tulip_down(dev);
-	}
+	struct net_device *dev = pdev->driver_data;
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
+	printk(KERN_INFO "tulip_suspend(%s)\n", dev->name);
+	if (tp->open) tulip_down(dev);
 }
 
-static void tulip_resume(dev_node_t *node)
+static void tulip_resume(struct pci_dev *pdev)
 {
-	struct net_device *dev, *next;
-	printk(KERN_INFO "tulip_resume(%s)\n", node->dev_name);
-	for (dev = root_tulip_dev; dev; dev = next) {
-		next = ((struct tulip_private *)dev->priv)->next_module;
-		if (strcmp(dev->name, node->dev_name) == 0) break;
-	}
-	if (dev) {
-		struct tulip_private *tp = (struct tulip_private *)dev->priv;
-		if (tp->open) tulip_up(dev);
-	}
+	struct net_device *dev = pdev->driver_data;
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
+	printk(KERN_INFO "tulip_resume(%s)\n", dev->name);
+	if (tp->open) tulip_up(dev);
 }
 
-static void tulip_detach(dev_node_t *node)
+static void tulip_remove(struct pci_dev *pdev)
 {
-	struct net_device **devp, **next;
-	printk(KERN_INFO "tulip_detach(%s)\n", node->dev_name);
-	for (devp = &root_tulip_dev; *devp; devp = next) {
-		next = &((struct tulip_private *)(*devp)->priv)->next_module;
-		if (strcmp((*devp)->name, node->dev_name) == 0) break;
-	}
-	if (*devp) {
-		struct net_device *dev = *devp;
-		struct tulip_private *tp = dev->priv;
-		*devp = *next;
-		unregister_netdev(dev);
-		kfree(dev);
-		kfree(tp);
-		kfree(node);
-		MOD_DEC_USE_COUNT;
-	}
+	struct net_device *dev = pdev->driver_data;
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
+
+	printk(KERN_INFO "tulip_detach(%s)\n", dev->name);
+	unregister_netdev(dev);
+	kfree(dev);
+	kfree(tp);
 }
 
-struct driver_operations tulip_ops = {
-	"tulip_cb", tulip_attach, tulip_suspend, tulip_resume, tulip_detach
+struct pci_driver tulip_ops = {
+	name:		"tulip_cb",
+	probe:		tulip_probe,
+	remove:		tulip_remove,
+	suspend:	tulip_suspend,
+	resume:		tulip_resume
 };
 
-#endif  /* Cardbus support */
-
-#ifdef MODULE
-int init_module(void)
+int __init tulip_init(void)
 {
-#ifdef CARDBUS
-	reverse_probe = 0;			/* Not used. */
-	register_driver(&tulip_ops);
+	pci_register_driver(&tulip_ops);
 	return 0;
-#else
-	return tulip_probe(NULL);
-#endif
 }
 
-void cleanup_module(void)
+void __exit tulip_cleanup(void)
 {
-	struct net_device *next_dev;
-
-#ifdef CARDBUS
-	unregister_driver(&tulip_ops);
-#endif
-
-	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
-	while (root_tulip_dev) {
-		struct tulip_private *tp = (struct tulip_private *)root_tulip_dev->priv;
-		next_dev = tp->next_module;
-		unregister_netdev(root_tulip_dev);
-		release_region(root_tulip_dev->base_addr,
-					   tulip_tbl[tp->chip_id].io_size);
-		kfree(root_tulip_dev);
-		root_tulip_dev = next_dev;
-	}
+	pci_unregister_driver(&tulip_ops);
 }
 
-#endif  /* MODULE */
+module_init(tulip_init);
+module_exit(tulip_cleanup);
 
 /*
  * Local variables:

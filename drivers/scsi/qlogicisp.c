@@ -2,7 +2,9 @@
  * QLogic ISP1020 Intelligent SCSI Processor Driver (PCI)
  * Written by Erik H. Moe, ehm@cris.com
  * Copyright 1995, Erik H. Moe
- * Copyright 1996, 1997  Michael A. Griffith <grif@acm.org> 
+ * Copyright 1996, 1997  Michael A. Griffith <grif@acm.org>
+ * Copyright 2000, Jayson C. Vantuyl <vantuyl@csc.smsu.edu>
+ *             and Bryon W. Roche    <bryon@csc.smsu.edu>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -555,6 +557,10 @@ static void	isp1020_print_scsi_cmd(Scsi_Cmnd *);
 static void	isp1020_print_status_entry(struct Status_Entry *);
 #endif
 
+/* memaddr should be used to determine if memmapped port i/o is being used
+ * non-null memaddr == mmap'd
+ * JV 7-Jan-2000
+ */
 static inline u_short isp_inw(struct Scsi_Host *host, long offset)
 {
 	struct isp1020_hostdata *h = (struct isp1020_hostdata *)host->hostdata;
@@ -607,15 +613,23 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 		hostdata = (struct isp1020_hostdata *) host->hostdata;
 
 		memset(hostdata, 0, sizeof(struct isp1020_hostdata));
+
 		hostdata->pci_dev = pdev;
 
-		if (isp1020_init(host) || isp1020_reset_hardware(host)
+		if (isp1020_init(host)) {
+			scsi_unregister(host);
+			continue;
+		}
+		
+		if (isp1020_reset_hardware(host)
 #if USE_NVRAM_DEFAULTS
 		    || isp1020_get_defaults(host)
 #else
 		    || isp1020_set_defaults(host)
 #endif /* USE_NVRAM_DEFAULTS */
 		    || isp1020_load_parameters(host)) {
+			iounmap((void *)hostdata->memaddr);
+			release_region(host->io_port, 0xff);
 			scsi_unregister(host);
 			continue;
 		}
@@ -627,20 +641,11 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 		{
 			printk("qlogicisp : interrupt %d already in use\n",
 			       host->irq);
+			iounmap((void *)hostdata->memaddr);
+			release_region(host->io_port, 0xff);
 			scsi_unregister(host);
 			continue;
 		}
-
-		if (check_region(host->io_port, 0xff)) {
-			printk("qlogicisp : i/o region 0x%lx-0x%lx already "
-			       "in use\n",
-			       host->io_port, host->io_port + 0xff);
-			free_irq(host->irq, host);
-			scsi_unregister(host);
-			continue;
-		}
-
-		request_region(host->io_port, 0xff, "qlogicisp");
 
 		isp_outw(0x0, host, PCI_SEMAPHORE);
 		isp_outw(HCCR_CLEAR_RISC_INTR, host, HOST_HCCR);
@@ -666,6 +671,8 @@ int isp1020_release(struct Scsi_Host *host)
 	isp_outw(0x0, host, PCI_INTF_CTL);
 	free_irq(host->irq, host);
 
+	iounmap((void *)hostdata->memaddr);
+
 	release_region(host->io_port, 0xff);
 
 	LEAVE("isp1020_release");
@@ -685,8 +692,8 @@ const char *isp1020_info(struct Scsi_Host *host)
 	sprintf(buf,
 		"QLogic ISP1020 SCSI on PCI bus %02x device %02x irq %d %s base 0x%lx",
 		hostdata->pci_dev->bus->number, hostdata->pci_dev->devfn, host->irq,
-		(host->io_port ? "I/O" : "MEM"),
-		(host->io_port ? host->io_port : hostdata->memaddr));
+		(hostdata->memaddr ? "MEM" : "I/O"),
+		(hostdata->memaddr ? hostdata->memaddr : host->io_port));
 
 	LEAVE("isp1020_info");
 
@@ -1255,25 +1262,35 @@ static int isp1020_init(struct Scsi_Host *sh)
 	command &= ~PCI_COMMAND_MEMORY; 
 #endif
 
+	if (!(command & PCI_COMMAND_MASTER)) {
+		printk("qlogicisp : bus mastering is disabled\n");
+		return 1;
+	}
+
+	sh->io_port = io_base;
+
+	if (check_region(sh->io_port, 0xff)) {
+		printk("qlogicisp : i/o region 0x%lx-0x%lx already "
+		       "in use\n",
+		       sh->io_port, sh->io_port + 0xff);
+		return 1;
+	}
+
+	request_region(sh->io_port, 0xff, "qlogicisp");
+
  	if ((command & PCI_COMMAND_MEMORY) &&
  	    ((mem_flags & 1) == 0)) {
  		mem_base = (u_long) ioremap(mem_base, PAGE_SIZE);
  		hostdata->memaddr = mem_base;
- 		io_base = 0;
  	} else {
  		if (command & PCI_COMMAND_IO && (io_flags & 3) != 1)
  		{
  			printk("qlogicisp : i/o mapping is disabled\n");
+			release_region(sh->io_port, 0xff);
  			return 1;
  		}
- 		hostdata->memaddr = 0;
- 		sh->io_port = io_base;
+ 		hostdata->memaddr = 0; /* zero to signify no i/o mapping */
  		mem_base = 0;
-	}
-
-	if (!(command & PCI_COMMAND_MASTER)) {
-		printk("qlogicisp : bus mastering is disabled\n");
-		return 1;
 	}
 
 	if (revision != ISP1020_REV_ID)
@@ -1285,6 +1302,8 @@ static int isp1020_init(struct Scsi_Host *sh)
 		printk("qlogicisp : can't decode %s address space 0x%lx\n",
 		       (io_base ? "I/O" : "MEM"),
 		       (io_base ? io_base : mem_base));
+		iounmap((void *)hostdata->memaddr);
+		release_region(sh->io_port, 0xff);
 		return 1;
 	}
 

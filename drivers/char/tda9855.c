@@ -194,7 +194,7 @@ static int tda9855_set(struct i2c_client *client)
 	return 0;
 }
 
-static void tda9855_init(struct i2c_client *client)
+static void do_tda9855_init(struct i2c_client *client)
 {
 	struct tda9855 *t = client->data;
 
@@ -235,7 +235,7 @@ static int tda9855_attach(struct i2c_adapter *adap, int addr,
 	if (!t)
 		return -ENOMEM;
 	memset(t,0,sizeof *t);
-	tda9855_init(client);
+	do_tda9855_init(client);
 	MOD_INC_USE_COUNT;
 	strcpy(client->name,"TDA9855");
 	printk(KERN_INFO "tda9855: init\n");
@@ -255,7 +255,7 @@ static int tda9855_detach(struct i2c_client *client)
 {
 	struct tda9855 *t  = client->data;
 
-	tda9855_init(client);
+	do_tda9855_init(client);
 	i2c_detach_client(client);
 	
 	kfree(t);
@@ -298,8 +298,7 @@ static int tda9855_command(struct i2c_client *client,
 
 		va->mode = ((TDA9855_STP | TDA9855_SAPP) & 
 			    tda9855_read(client)) >> 4;
-		if (0 == va->mode)
-			va->mode = VIDEO_SOUND_MONO;
+		va->mode |= VIDEO_SOUND_MONO;
 		break;
 	}
 	case VIDIOCSAUDIO:
@@ -327,7 +326,7 @@ static int tda9855_command(struct i2c_client *client,
 		case VIDEO_SOUND_STEREO:
 			t->c2= TDA9855_STEREO | (t->c2 & 0x3f); 
 			break;
-		case VIDEO_SOUND_LANG2:
+		case VIDEO_SOUND_LANG1:
 			t->c2= TDA9855_SAP | (t->c2 & 0x3f); 
 			break;
 		}
@@ -445,7 +444,7 @@ int tda9855_init(void)
 #ifdef MODULE
 void cleanup_module(void)
 {
-	i2c_add_driver(&driver);
+	i2c_del_driver(&driver);
 }
 #endif
 

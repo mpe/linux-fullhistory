@@ -203,7 +203,7 @@ DRIVERS := $(DRIVERS) drivers/macintosh/macintosh.a
 endif
 
 ifeq ($(CONFIG_PNP),y)
-DRIVERS := $(DRIVERS) drivers/pnp/pnp.a
+DRIVERS := $(DRIVERS) drivers/pnp/isa-pnp.o
 endif
 
 ifdef CONFIG_SGI
@@ -227,7 +227,7 @@ DRIVERS := $(DRIVERS) drivers/tc/tc.a
 endif
 
 ifeq ($(CONFIG_USB),y)
-DRIVERS := $(DRIVERS) drivers/usb/usb.a
+DRIVERS := $(DRIVERS) drivers/usb/usbdrv.o
 endif
 
 ifeq ($(CONFIG_I2O),y)

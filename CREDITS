@@ -539,6 +539,15 @@ S: Virginia Tech
 S: Blacksburg, Virginia 24061
 S: USA
 
+N: Randy Dunlap
+E: randy.dunlap@intel.com
+W: http://home.att.net/~randy.dunlap/
+W: http://www.linux-usb.org
+D: Linux-USB subsystem, USB core/UHCI/printer/storage drivers
+S: 5200 NE Elam Young Pkwy., M/S HF3-77
+S: Hillsboro, Oregon 97124
+S: USA
+
 N: Cyrus Durgin
 E: cider@speakeasy.org
 W: http://www.speakeasy.org/~cider/
@@ -1039,12 +1048,14 @@ S: USA
 
 N: Dave Jones
 E: dave@powertweak.com
+E: djones2@glam.ac.uk
 W: http://linux.powertweak.com
-D: Centaur/IDT Winchip/Winchip 2 tweaks
+D: Moved PCI bridge tuning to userspace (Powertweak).
+D: Centaur/IDT Winchip/Winchip 2 tweaks.
 D: Misc clean ups and other random hacking.
-S: 40, Heol Edward Lewis,
-S: Gelligaer, Hengoed,
-S: Mid Glamorgan, CF82 8EJ,
+S: 28, Laura Street,
+S: Treforest, Pontypridd,
+S: Mid Glamorgan, CF37 1NW,
 S: Wales, United Kingdom
 
 N: Bernhard Kaindl

@@ -73,7 +73,7 @@
 */
 
 /*
-**	December 6 1999, version 3.2d
+**	January 8 2000, version 3.2e
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -104,7 +104,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2d"
+#define SCSI_NCR_DRIVER_NAME	"ncr53c8xx - version 3.2e"
 
 #define SCSI_NCR_DEBUG_FLAGS	(0)
 
@@ -5400,11 +5400,13 @@ static int ncr_reset_scsi_bus(ncb_p np, int enab_int, int settle_delay)
 	**	We are expecting RESET to be TRUE and other signals to be 
 	**	FALSE.
 	*/
-	term =	INB(nc_sstat0);				/* rst, sdp0 */
-	term =	((term & 2) << 7) + ((term & 1) << 16);
-	term |= ((INB(nc_sstat2) & 0x01) << 25) |	/* sdp1 */
-		(INW(nc_sbdl) << 9) |			/* d15-0 */
-		INB(nc_sbcl);	/* req, ack, bsy, sel, atn, msg, cd, io */
+
+	term =	INB(nc_sstat0);
+	term =	((term & 2) << 7) + ((term & 1) << 17);	/* rst sdp0 */
+	term |= ((INB(nc_sstat2) & 0x01) << 26) |	/* sdp1     */
+		((INW(nc_sbdl) & 0xff)   << 9)  |	/* d7-0     */
+		((INW(nc_sbdl) & 0xff00) << 10) |	/* d15-8    */
+		INB(nc_sbcl);	/* req ack bsy sel atn msg cd io    */
 
 	if (!(np->features & FE_WIDE))
 		term &= 0x3ffff;
@@ -9660,9 +9662,6 @@ ncr53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
 	uint irq;
 	ulong base, base_2, io_port; 
 	int i;
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-	ncr_nvram *nvram = device->nvram;
-#endif
 	ncr_chip *chip;
 
 	/*
@@ -10001,52 +10000,7 @@ ncr53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
 	device->slot.io_port	= io_port;
 	device->slot.irq	= irq;
 	device->attach_done	= 0;
-#ifdef SCSI_NCR_NVRAM_SUPPORT
-	if (!nvram)
-		goto out;
 
-	/*
-	** Get access to chip IO registers
-	*/
-#ifdef NCR_IOMAPPED
-	request_region(io_port, 128, "ncr53c8xx");
-	device->slot.port = io_port;
-#else
-	device->slot.reg = (struct ncr_reg *) remap_pci_mem((ulong) base, 128);
-	if (!device->slot.reg)
-		goto out;
-#endif
-
-	/*
-	** Try to read SYMBIOS nvram.
-	** Data can be used to order booting of boards.
-	**
-	** Data is saved in ncr_device structure if NVRAM found. This
-	** is then used to find drive boot order for ncr_attach().
-	**
-	** NVRAM data is passed to Scsi_Host_Template later during ncr_attach()
-	** for any device set up.
-	**
-	** Try to read TEKRAM nvram if Symbios nvram not found.
-	*/
-
-	if	(!ncr_get_Symbios_nvram(&device->slot, &nvram->data.Symbios))
-		nvram->type = SCSI_NCR_SYMBIOS_NVRAM;
-	else if	(!ncr_get_Tekram_nvram(&device->slot, &nvram->data.Tekram))
-		nvram->type = SCSI_NCR_TEKRAM_NVRAM;
-	else
-		nvram->type = 0;
-out:
-	/*
-	** Release access to chip IO registers
-	*/
-#ifdef NCR_IOMAPPED
-	release_region(device->slot.port, 128);
-#else
-	unmap_pci_mem((vm_offset_t) device->slot.reg, (u_long) 128);
-#endif
-
-#endif	/* SCSI_NCR_NVRAM_SUPPORT */
 	return 0;     
 }
 

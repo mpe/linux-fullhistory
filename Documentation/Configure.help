@@ -7308,7 +7308,7 @@ CONFIG_TLAN
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-  Please email feedback to james.banks@caldera.com.
+  Please email feedback to torben.mathiasen@compaq.com.
 
 VIA Rhine support
 CONFIG_VIA_RHINE

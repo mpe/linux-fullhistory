@@ -356,7 +356,7 @@ the parallel port.  As the reset operation is potentially disruptive in
 multiple device environments, the PARIDE drivers will not do it 
 automatically.  You can however, force a printer reset by doing:
 
-	insmod lp
+	insmod lp reset=1
 	rmmod lp
 
 If you have one of these marginal cases, you should probably build

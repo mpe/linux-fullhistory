@@ -1,7 +1,7 @@
 /******************************************************************************
 **  High Performance device driver for the Symbios 53C896 controller.
 **
-**  Copyright (C) 1998-1999  Gerard Roudier <groudier@club-internet.fr>
+**  Copyright (C) 1998-2000  Gerard Roudier <groudier@club-internet.fr>
 **
 **  This driver also supports all the Symbios 53C8XX controller family, 
 **  except 53C810 revisions < 16, 53C825 revisions < 16 and all 
@@ -55,7 +55,7 @@
 */
 
 /*
-**	December 6 1999, sym53c8xx 1.5g
+**	January 9 2000, sym53c8xx 1.5h
 **
 **	Supported SCSI features:
 **	    Synchronous data transfers
@@ -84,7 +84,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5g"
+#define SCSI_NCR_DRIVER_NAME	"sym53c8xx - version 1.5h"
 
 /* #define DEBUG_896R1 */
 #define SCSI_NCR_OPTIMIZE_896
@@ -6367,11 +6367,12 @@ static int ncr_reset_scsi_bus(ncb_p np, int enab_int, int settle_delay)
 	**	We are expecting RESET to be TRUE and other signals to be 
 	**	FALSE.
 	*/
-	term =	INB(nc_sstat0);				/* rst, sdp0 */
-	term =	((term & 2) << 7) + ((term & 1) << 16);
-	term |= ((INB(nc_sstat2) & 0x01) << 25) |	/* sdp1 */
-		(INW(nc_sbdl) << 9) |			/* d15-0 */
-		INB(nc_sbcl);	/* req, ack, bsy, sel, atn, msg, cd, io */
+	term =	INB(nc_sstat0);
+	term =	((term & 2) << 7) + ((term & 1) << 17);	/* rst sdp0 */
+	term |= ((INB(nc_sstat2) & 0x01) << 26) |	/* sdp1     */
+		((INW(nc_sbdl) & 0xff)   << 9)  |	/* d7-0     */
+		((INW(nc_sbdl) & 0xff00) << 10) |	/* d15-8    */
+		INB(nc_sbcl);	/* req ack bsy sel atn msg cd io    */
 
 	if (!(np->features & FE_WIDE))
 		term &= 0x3ffff;

@@ -49,7 +49,7 @@ Insmod-options:	list of all insmod options available for bttv and
 MAKEDEV:	a script to create the special files for v4l
 CARDLIST:	List of all supported cards
 
-Loading just the bttv modules isn't enough for most cards.  The
+Loading just the bttv modules isn't enouth for most cards.  The
 drivers for the i2c tuner/sound chips must also be loaded.  bttv tries
 to load them automagically by calling request_module() now, but this
 obviously works only with kmod enabled.

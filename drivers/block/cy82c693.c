@@ -275,9 +275,9 @@ static void cy82c693_tune_drive (ide_drive_t *drive, byte pio)
 
 	/* select primary or secondary channel */
 	if (hwif->index > 0) {  /* drive is on the secondary channel */
-		dev = pci_find_slot(dev, dev->devfn+1);
+		dev = pci_find_slot(dev->bus->number, dev->devfn+1);
 		if (!dev) {
-			printk(KERN_ERR "%s: tune_drive: Cannot find secondary interface!\n");
+			printk(KERN_ERR "%s: tune_drive: Cannot find secondary interface!\n", drive->name);
 			return;
 		}
 	}

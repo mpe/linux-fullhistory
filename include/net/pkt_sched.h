@@ -81,6 +81,7 @@ struct Qdisc
 	unsigned		flags;
 #define TCQ_F_BUILTIN	1
 #define TCQ_F_THROTTLED	2
+#define TCQ_F_INGRES	4
 	struct Qdisc_ops	*ops;
 	struct Qdisc		*next;
 	u32			handle;

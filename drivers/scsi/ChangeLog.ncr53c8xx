@@ -1,3 +1,9 @@
+Sat Jan 8  22:00 2000 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.2e
+	- Add year 2000 copyright.
+	- Display correctly bus signals when bus is detected wrong.
+	- Remove the dead code that broke driver 3.2d.
+
 Mon Dec 6  22:00 1999 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.2d
 	- Change messages written by the driver at initialisation and 

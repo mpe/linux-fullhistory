@@ -1,4 +1,4 @@
-/********************************************************************
+/*******************************************************************************
  *
  *  Linux ThunderLAN Driver
  *
@@ -7,6 +7,7 @@
  *
  *  (C) 1997-1998 Caldera, Inc.
  *  (C) 1998 James Banks
+ *  (C) 1999, 2000 Torben Mathiasen
  *
  *  This software may be used and distributed according to the terms
  *  of the GNU Public License, incorporated herein by reference.
@@ -34,12 +35,21 @@
  *      
  *	Torben Mathiasen <torben.mathiasen@compaq.com> New Maintainer!
  *
- *	v1.1 Dec 20 --	Removed linux version checking(patch from 
- *			Tigran Aivazian). v1.1 includes Alan's SMP
- *			opdates. We still have problems on SMP though,
- *			but I'm looking into that. 
+ *	v1.1 Dec 20, 1999    - Removed linux version checking
+ *			       Patch from Tigran Aivazian. 
+ *			     - v1.1 includes Alan's SMP updates.
+ *			     - We still have problems on SMP though,
+ *			       but I'm looking into that. 
+ *			
+ *	v1.2 Jan 02, 2000    - Hopefully fixed the SMP deadlock.
+ *			     - Removed dependency of HZ being 100.
+ *			     - We now allow higher priority timers to 
+ *			       overwrite timers like TLAN_TIMER_ACTIVITY
+ *			       Patch from John Cagle <john.cagle@compaq.com>.
+ *			     - Fixed a few compiler warnings.
+ *			     
  *
- ********************************************************************/
+ *******************************************************************************/
 
 
 #include <linux/module.h>
@@ -81,7 +91,7 @@ static	int		bbuf = 0;
 static	u8		*TLanPadBuffer;
 static	char		TLanSignature[] = "TLAN";
 static	int		TLanVersionMajor = 1;
-static	int		TLanVersionMinor = 1;
+static	int		TLanVersionMinor = 2;
 
 
 static	TLanAdapterEntry TLanAdapterList[] = {
@@ -244,7 +254,8 @@ TLan_SetTimer( struct net_device *dev, u32 ticks, u32 type )
 	unsigned long flags;
 
 	spin_lock_irqsave(&priv->lock, flags);
-	if ( priv->timer.function != NULL ) {
+	if ( priv->timer.function != NULL &&
+		priv->timerType != TLAN_TIMER_ACTIVITY) {
 		spin_unlock_irqrestore(&priv->lock, flags);
 		return;
 	}
@@ -1160,7 +1171,12 @@ u32 TLan_HandleTxEOF( struct net_device *dev, u16 host_int )
 	if ( priv->adapter->flags & TLAN_ADAPTER_ACTIVITY_LED ) {
 		TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK | TLAN_LED_ACT );
 		if ( priv->timer.function == NULL ) {
-			TLan_SetTimer( dev, TLAN_TIMER_ACT_DELAY, TLAN_TIMER_ACTIVITY );
+			 priv->timer.function = &TLan_Timer;
+			 priv->timer.data = (unsigned long) dev;
+			 priv->timer.expires = jiffies + TLAN_TIMER_ACT_DELAY;
+			 priv->timerSetAt = jiffies;
+			 priv->timerType = TLAN_TIMER_ACTIVITY;
+			 add_timer(&priv->timer);
 		} else if ( priv->timerType == TLAN_TIMER_ACTIVITY ) {
 			priv->timerSetAt = jiffies;
 		}
@@ -1316,7 +1332,12 @@ u32 TLan_HandleRxEOF( struct net_device *dev, u16 host_int )
 	if ( priv->adapter->flags & TLAN_ADAPTER_ACTIVITY_LED ) {
 		TLan_DioWrite8( dev->base_addr, TLAN_LED_REG, TLAN_LED_LINK | TLAN_LED_ACT );
 		if ( priv->timer.function == NULL )  {
-			TLan_SetTimer( dev, TLAN_TIMER_ACT_DELAY, TLAN_TIMER_ACTIVITY );
+			priv->timer.function = &TLan_Timer;
+			priv->timer.data = (unsigned long) dev;
+			priv->timer.expires = jiffies + TLAN_TIMER_ACT_DELAY;
+			priv->timerSetAt = jiffies;
+			priv->timerType = TLAN_TIMER_ACTIVITY;
+			add_timer(&priv->timer);
 		} else if ( priv->timerType == TLAN_TIMER_ACTIVITY ) {
 			priv->timerSetAt = jiffies;
 		}
@@ -1554,7 +1575,7 @@ u32 TLan_HandleRxEOC( struct net_device *dev, u16 host_int )
 	 *		for a short period to power up the LED so it
 	 *		can be seen.  This delay can be changed by
 	 *		changing the TLAN_TIMER_ACT_DELAY in tlan.h,
-	 *		if desired.  10 jiffies produces a slightly
+	 *		if desired.  100 ms  produces a slightly
 	 *		sluggish response.
 	 *
 	 **************************************************************/
@@ -1564,7 +1585,7 @@ void TLan_Timer( unsigned long data )
 	struct net_device	*dev = (struct net_device *) data;
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u32		elapsed;
-	unsigned long	flags;
+	unsigned long	flags = 0;
 
 	priv->timer.function = NULL;
 
@@ -2203,11 +2224,11 @@ void TLan_PhyPowerDown( struct net_device *dev )
 		TLan_MiiWriteReg( dev, priv->phy[1], MII_GEN_CTL, value );
 	}
 
-	/* Wait for 5 jiffies (50 ms) and powerup
+	/* Wait for 50 ms and powerup
 	 * This is abitrary.  It is intended to make sure the
 	 * tranceiver settles.
 	 */
-	TLan_SetTimer( dev, 5, TLAN_TIMER_PHY_PUP );
+	TLan_SetTimer( dev, (50/(1000/HZ)), TLAN_TIMER_PHY_PUP );
 
 } /* TLan_PhyPowerDown */
 
@@ -2224,11 +2245,11 @@ void TLan_PhyPowerUp( struct net_device *dev )
 	value = MII_GC_LOOPBK;
 	TLan_MiiWriteReg( dev, priv->phy[priv->phyNum], MII_GEN_CTL, value );
 
-	/* Wait for 50 jiffies (500 ms) and reset the
+	/* Wait for 500 ms and reset the
 	 * tranceiver.  The TLAN docs say both 50 ms and
 	 * 500 ms, so do the longer, just in case
 	 */
-	TLan_SetTimer( dev, 50, TLAN_TIMER_PHY_RESET );
+	TLan_SetTimer( dev, (HZ/2), TLAN_TIMER_PHY_RESET );
 
 } /* TLan_PhyPowerUp */
 
@@ -2253,10 +2274,10 @@ void TLan_PhyReset( struct net_device *dev )
 	}
 	TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0 );
 
-	/* Wait for 50 jiffies (500 ms) and initialize.
+	/* Wait for 500 ms and initialize.
 	 * I don't remember why I wait this long.
 	 */
-	TLan_SetTimer( dev, 50, TLAN_TIMER_PHY_START_LINK );
+	TLan_SetTimer( dev, (HZ/2), TLAN_TIMER_PHY_START_LINK );
 
 } /* TLan_PhyReset */
 
@@ -2299,13 +2320,13 @@ void TLan_PhyStartLink( struct net_device *dev )
        		TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x1000 );
 		TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x1200 );
 
-		/* Wait for 400 jiffies (4 sec) for autonegotiation
+		/* Wait for 4 sec for autonegotiation
 		 * to complete.  The max spec time is less than this
 		 * but the card need additional time to start AN.
 		 * .5 sec should be plenty extra.
 		 */
 		printk( "TLAN:  %s: Starting autonegotiation.\n", dev->name );
-		TLan_SetTimer( dev, 400, TLAN_TIMER_PHY_FINISH_AN );
+		TLan_SetTimer( dev, (4*HZ), TLAN_TIMER_PHY_FINISH_AN );
 		return;
 	}
 
@@ -2334,10 +2355,10 @@ void TLan_PhyStartLink( struct net_device *dev )
         	TLan_MiiWriteReg( dev, phy, TLAN_TLPHY_CTL, tctl );
 	}
 
-	/* Wait for 100 jiffies (1 sec) to give the tranceiver time
+	/* Wait for 1 sec to give the tranceiver time
 	 * to establish link.
 	 */
-	TLan_SetTimer( dev, 100, TLAN_TIMER_FINISH_RESET );
+	TLan_SetTimer( dev, HZ, TLAN_TIMER_FINISH_RESET );
 
 } /* TLan_PhyStartLink */
 
@@ -2358,11 +2379,11 @@ void TLan_PhyFinishAutoNeg( struct net_device *dev )
 
 	TLan_MiiReadReg( dev, phy, MII_GEN_STS, &status );
 	if ( ! ( status & MII_GS_AUTOCMPLT ) ) {
-		/* Wait for 800 jiffies (8 sec) to give the process
+		/* Wait for 8 sec to give the process
 		 * more time.  Perhaps we should fail after a while.
 		 */
 		printk( "TLAN:  Giving autonegotiation more time.\n" );
-		TLan_SetTimer( dev, 800, TLAN_TIMER_PHY_FINISH_AN );
+		TLan_SetTimer( dev, (8*HZ), TLAN_TIMER_PHY_FINISH_AN );
 		return;
 	}
 
@@ -2394,9 +2415,9 @@ void TLan_PhyFinishAutoNeg( struct net_device *dev )
 		}
 	}
 
-	/* Wait for 10 jiffies (100 ms).  No reason in partiticular.
+	/* Wait for 100 ms.  No reason in partiticular.
 	 */
-	TLan_SetTimer( dev, 10, TLAN_TIMER_FINISH_RESET );
+	TLan_SetTimer( dev, (HZ/10), TLAN_TIMER_FINISH_RESET );
 		
 } /* TLan_PhyFinishAutoNeg */
 
@@ -2447,7 +2468,7 @@ int TLan_MiiReadReg( struct net_device *dev, u16 phy, u16 reg, u16 *val )
 	int	err;
 	int	minten;
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
-	unsigned long flags;
+	unsigned long flags = 0;
 
 	err = FALSE;
 	outw(TLAN_NET_SIO, dev->base_addr + TLAN_DIO_ADR);
@@ -2616,7 +2637,7 @@ void TLan_MiiWriteReg( struct net_device *dev, u16 phy, u16 reg, u16 val )
 {
 	u16	sio;
 	int	minten;
-	unsigned long flags;
+	unsigned long flags = 0;
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 
 	outw(TLAN_NET_SIO, dev->base_addr + TLAN_DIO_ADR);
@@ -2847,7 +2868,7 @@ int TLan_EeReadByte( struct net_device *dev, u8 ee_addr, u8 *data )
 {
 	int err;
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
-	unsigned long flags;
+	unsigned long flags = 0;
 	int ret=0;
 
 	if ( dev->interrupt == 0 )

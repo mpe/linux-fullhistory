@@ -10,6 +10,7 @@
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/prom.h>
+#include <asm/machdep.h>
 #include <linux/adb.h>
 #include <linux/pmu.h>
 

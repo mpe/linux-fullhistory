@@ -254,6 +254,8 @@ repeat:
 	}
 	if (metadata) {
 		result = getblk (inode->i_dev, tmp, blocksize);
+		if (!buffer_uptodate(result))
+			wait_on_buffer(result);
 		memset(result->b_data, 0, blocksize);
 		mark_buffer_uptodate(result, 1);
 		mark_buffer_dirty(result, 1);
@@ -363,6 +365,8 @@ repeat:
 		goto out;
 	if (metadata) {
 		result = getblk (bh->b_dev, tmp, blocksize);
+		if (!buffer_uptodate(result))
+			wait_on_buffer(result);
 		memset(result->b_data, 0, inode->i_sb->s_blocksize);
 		mark_buffer_uptodate(result, 1);
 		mark_buffer_dirty(result, 1);
@@ -542,6 +546,8 @@ struct buffer_head * ext2_getblk(struct inode * inode, long block, int create, i
 		struct buffer_head *bh;
 		bh = getblk(dummy.b_dev, dummy.b_blocknr, inode->i_sb->s_blocksize);
 		if (buffer_new(&dummy)) {
+			if (!buffer_uptodate(bh))
+				wait_on_buffer(bh);
 			memset(bh->b_data, 0, inode->i_sb->s_blocksize);
 			mark_buffer_uptodate(bh, 1);
 			mark_buffer_dirty(bh, 1);

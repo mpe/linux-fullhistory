@@ -5,18 +5,18 @@
  *	2 of the License, or (at your option) any later version.
  *
  *	(c) Copyright 1998 Building Number Three Ltd
+ *	(c) Copyright 2000 Red Hat Software
  *
  *	Development of this driver was funded by Equiinet Ltd
  *			http://www.equiinet.com
  *
  *	ChangeLog:
  *
- *	Asynchronous mode dropped for 2.2. For 2.3 we will attempt the
+ *	Asynchronous mode dropped for 2.2. For 2.5 we will attempt the
  *	unification of all the Z85x30 asynchronous drivers for real.
  *
- *	To Do:
- *	
- *	Finish DMA mode support.
+ *	DMA now uses get_free_page as kmalloc buffers may span a 64K 
+ *	boundary.
  *
  *	Performance
  *
@@ -662,39 +662,28 @@ int z8530_sync_dma_open(struct net_device *dev, struct z8530_channel *c)
 	c->txdma_on = 0;
 	
 	/*
-	 *	Allocate the DMA flip buffers
+	 *	Allocate the DMA flip buffers. Limit by page size.
+	 *	Everyone runs 1500 mtu or less on wan links so this
+	 *	should be fine.
 	 */
 	 
-	c->rx_buf[0]=kmalloc(c->mtu, GFP_KERNEL|GFP_DMA);
+	if(c->mtu  > PAGE_SIZE/2)
+		return -EMSGSIZE;
+	 
+	c->rx_buf[0]=get_free_page(GFP_KERNEL|GFP_DMA);
 	if(c->rx_buf[0]==NULL)
 		return -ENOBUFS;
-	c->rx_buf[1]=kmalloc(c->mtu, GFP_KERNEL|GFP_DMA);
-	if(c->rx_buf[1]==NULL)
-	{
-		kfree(c->rx_buf[0]);
-		c->rx_buf[0]=NULL;
-		return -ENOBUFS;
-	}
+	c->rx_buf[1]=c->rx_buf[0]+PAGE_SIZE/2;
 	
-	c->tx_dma_buf[0]=kmalloc(c->mtu, GFP_KERNEL|GFP_DMA);
+	c->tx_dma_buf[0]=get_free_page(GFP_KERNEL|GFP_DMA);
 	if(c->tx_dma_buf[0]==NULL)
 	{
-		kfree(c->rx_buf[0]);
-		kfree(c->rx_buf[1]);
+		free_page(c->rx_buf[0]);
 		c->rx_buf[0]=NULL;
 		return -ENOBUFS;
 	}
-	c->tx_dma_buf[1]=kmalloc(c->mtu, GFP_KERNEL|GFP_DMA);
-	if(c->tx_dma_buf[1]==NULL)
-	{
-		kfree(c->tx_dma_buf[0]);
-		kfree(c->rx_buf[0]);
-		kfree(c->rx_buf[1]);
-		c->rx_buf[0]=NULL;
-		c->rx_buf[1]=NULL;
-		c->tx_dma_buf[0]=NULL;
-		return -ENOBUFS;
-	}
+	c->tx_dma_buf[1]=c->tx_dma_buf[0]+PAGE_SIZE/2;
+
 	c->tx_dma_used=0;
 	c->dma_tx = 1;
 	c->dma_num=0;
@@ -806,23 +795,13 @@ int z8530_sync_dma_close(struct net_device *dev, struct z8530_channel *c)
 	
 	if(c->rx_buf[0])
 	{
-		kfree(c->rx_buf[0]);
+		free_page(c->rx_buf[0]);
 		c->rx_buf[0]=NULL;
-	}
-	if(c->rx_buf[1])
-	{
-		kfree(c->rx_buf[1]);
-		c->rx_buf[1]=NULL;
 	}
 	if(c->tx_dma_buf[0])
 	{
-		kfree(c->tx_dma_buf[0]);
+		free_page(c->tx_dma_buf[0]);
 		c->tx_dma_buf[0]=NULL;
-	}
-	if(c->tx_dma_buf[1])
-	{
-		kfree(c->tx_dma_buf[1]);
-		c->tx_dma_buf[1]=NULL;
 	}
 	chk=read_zsreg(c,R0);
 	write_zsreg(c, R3, c->regs[R3]);
@@ -857,25 +836,21 @@ int z8530_sync_txdma_open(struct net_device *dev, struct z8530_channel *c)
 	c->rxdma_on = 0;
 	c->txdma_on = 0;
 	
-	c->tx_dma_buf[0]=kmalloc(c->mtu, GFP_KERNEL|GFP_DMA);
+	/*
+	 *	Allocate the DMA flip buffers. Limit by page size.
+	 *	Everyone runs 1500 mtu or less on wan links so this
+	 *	should be fine.
+	 */
+	 
+	if(c->mtu  > PAGE_SIZE/2)
+		return -EMSGSIZE;
+	 
+	c->tx_dma_buf[0]=get_free_page(GFP_KERNEL|GFP_DMA);
 	if(c->tx_dma_buf[0]==NULL)
-	{
-		kfree(c->rx_buf[0]);
-		kfree(c->rx_buf[1]);
-		c->rx_buf[0]=NULL;
 		return -ENOBUFS;
-	}
-	c->tx_dma_buf[1]=kmalloc(c->mtu, GFP_KERNEL|GFP_DMA);
-	if(c->tx_dma_buf[1]==NULL)
-	{
-		kfree(c->tx_dma_buf[0]);
-		kfree(c->rx_buf[0]);
-		kfree(c->rx_buf[1]);
-		c->rx_buf[0]=NULL;
-		c->rx_buf[1]=NULL;
-		c->tx_dma_buf[0]=NULL;
-		return -ENOBUFS;
-	}
+
+	c->tx_dma_buf[1] = c->tx_dma_buf[0] + PAGE_SIZE/2;
+
 	c->tx_dma_used=0;
 	c->dma_num=0;
 	c->dma_ready=1;
@@ -960,13 +935,8 @@ int z8530_sync_txdma_close(struct net_device *dev, struct z8530_channel *c)
 	
 	if(c->tx_dma_buf[0])
 	{
-		kfree(c->tx_dma_buf[0]);
+		free_page(c->tx_dma_buf[0]);
 		c->tx_dma_buf[0]=NULL;
-	}
-	if(c->tx_dma_buf[1])
-	{
-		kfree(c->tx_dma_buf[1]);
-		c->tx_dma_buf[1]=NULL;
 	}
 	chk=read_zsreg(c,R0);
 	write_zsreg(c, R3, c->regs[R3]);

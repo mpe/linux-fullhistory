@@ -21,7 +21,7 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define BTTV_VERSION_CODE 0x00070b
+#define BTTV_VERSION_CODE 0x00070d
 
 #include <linux/types.h>
 #include <linux/wait.h>
@@ -247,32 +247,6 @@ extern __inline__ void io_st_le32(volatile unsigned *addr, unsigned val)
 #define BTTV_MAXI          0x1b
 #define BTTV_TERRATV       0x1c
 #define BTTV_PXC200        0x1d
-
-#if 0
-#define BTTV_UNKNOWN       0x00
-#define BTTV_MIRO          0x01
-#define BTTV_HAUPPAUGE     0x02
-#define BTTV_STB           0x03
-#define BTTV_INTEL         0x04
-#define BTTV_DIAMOND       0x05 
-#define BTTV_AVERMEDIA     0x06 
-#define BTTV_MATRIX_VISION 0x07 
-#define BTTV_FLYVIDEO      0x08
-#define BTTV_TURBOTV       0x09
-#define BTTV_HAUPPAUGE878  0x0a
-#define BTTV_MIROPRO       0x0b
-#define BTTV_TVBOOSTAR     0x0c
-#define BTTV_WINCAM        0x0d
-#define BTTV_MAXI          0x0e
-#define BTTV_VHX           0x10
-#define BTTV_PXC200        0x11
-#define BTTV_AVERMEDIA98   0x12
-#define BTTV_FLYVIDEO98    0x13
-
-#define BTTV_PIXVIEWPLAYTV 0x17
-#define BTTV_WINVIEW_601   0x18
-#define BTTV_CONFERENCETV  0x1c
-#endif
 
 
 #define AUDIO_TUNER        0x00

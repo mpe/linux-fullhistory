@@ -181,11 +181,11 @@ extern inline struct proc_dir_entry *create_proc_entry(const char *name,
 	mode_t mode, struct proc_dir_entry *parent) { return NULL; }
 
 extern inline void remove_proc_entry(const char *name, struct proc_dir_entry *parent) {};
-extern inline proc_dir_entry *proc_symlink(const char *name,
+extern inline struct proc_dir_entry *proc_symlink(const char *name,
 		struct proc_dir_entry *parent,char *dest) {return NULL;}
-extern inline proc_dir_entry *proc_mknod(const char *name,mode_t mode,
+extern inline struct proc_dir_entry *proc_mknod(const char *name,mode_t mode,
 		struct proc_dir_entry *parent,kdev_t rdev) {return NULL;}
-extern struct proc_dir_entry *proc_mkdir(const char *name,
+extern inline struct proc_dir_entry *proc_mkdir(const char *name,
 	struct proc_dir_entry *parent) {return NULL;}
 
 extern inline struct proc_dir_entry *create_proc_read_entry(const char *name,

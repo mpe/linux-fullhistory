@@ -23,7 +23,7 @@ bttv.o
   card=21 - Lucky Star Image World ConferenceTV
   card=22 - Phoebe Tv Master + FM
   card=23 - Modular Technology MM205 PCTV, bt878
-  card=24 - Magic TView CPH061 (bt878)
+  card=24 - Askey/Typhoon/Anubis Magic TView CPH051/061 (bt878)
   card=25 - Terratec/Vobis TV-Boostar
   card=26 - Newer Hauppauge WinCam (bt878)
   card=27 - MAXI TV Video PCI2
@@ -32,8 +32,7 @@ bttv.o
   card=30 - FlyVideo 98
   card=31 - iProTV
   card=32 - Intel Create and Share PCI
-  card=33 - Askey/Typhoon/Anubis Magic TView
-  card=34 - Terratec TerraTValue
+  card=33 - Terratec TerraTValue
 
 tuner.o
   type=0 - Temic PAL

@@ -59,8 +59,8 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 		 * Unfortunately proc_register puts each new entry
 		 * at the beginning of the list.  So we rearrange them.
 		 */
-		ent = create_proc_read_entry(de, 0, pp->name,
-						property_read_proc, pp);
+		ent = create_proc_read_entry(pp->name, S_IRUGO, de,
+					     property_read_proc, pp);
 		if (ent == 0)
 			break;
 		ent->size = pp->length;
@@ -77,7 +77,7 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 		l = strlen(p);
 		if (l > 2 && p[l-2] == '@' && p[l-1] == '0')
 			l -= 2;
-		ent = proc_mkdir(de, p);
+		ent = proc_mkdir(p, de);
 		if (ent == 0)
 			break;
 		*lastp = ent;
@@ -99,7 +99,7 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 			if (sib->name && strcmp(sib->name, child->name) == 0)
 				break;
 		if (sib == child && strncmp(p, child->name, l) != 0) {
-			al = proc_symlink(de, child->name, ent->name);
+			al = proc_symlink(child->name, de, ent->name);
 			if (al == 0)
 				break;
 			*lastp = al;
@@ -109,7 +109,7 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 		/*
 		 * Add another directory with the @address part as its name.
 		 */
-		al = proc_symlink(de, at, ent->name);
+		al = proc_symlink(at, de, ent->name);
 		if (al == 0)
 			break;
 		proc_register(de, al);

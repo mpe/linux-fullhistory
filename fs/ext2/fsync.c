@@ -23,6 +23,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/locks.h>
 
 
 
@@ -40,10 +41,21 @@ static int sync_indirect(struct inode * inode, u32 * block, int wait)
 	if (!bh)
 		return 0;
 	if (wait && buffer_req(bh) && !buffer_uptodate(bh)) {
-		brelse(bh);
-		return -1;
+		/* There can be a parallell read(2) that started read-I/O
+		   on the buffer so we can't assume that there's been
+		   an I/O error without first waiting I/O completation. */
+		wait_on_buffer(bh);
+		if (!buffer_uptodate(bh))
+		{
+			brelse (bh);
+			return -1;
+		}
 	}
 	if (wait || !buffer_uptodate(bh) || !buffer_dirty(bh)) {
+		if (wait)
+			/* when we return from fsync all the blocks
+			   must be _just_ stored on disk */
+			wait_on_buffer(bh);
 		brelse(bh);
 		return 0;
 	}

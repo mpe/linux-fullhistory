@@ -311,9 +311,10 @@ struct pci_dev {
 	unsigned short	subsystem_device;
 	unsigned int	class;		/* 3 bytes: (base,sub,prog-if) */
 	u8		hdr_type;	/* PCI header type (`multi' flag masked out) */
-	u8		rom_base_reg;	/* Which config register controls the ROM */
+	u8		rom_base_reg;	/* which config register controls the ROM */
 
-	unsigned short	regs;
+	struct pci_driver *driver;	/* which driver has allocated this device */
+	void		*driver_data;	/* data private to the driver */
 
 	/* device is compatible with these IDs */
 	unsigned short vendor_compatible[DEVICE_COUNT_COMPATIBLE];
@@ -328,12 +329,13 @@ struct pci_dev {
 	struct resource dma_resource[DEVICE_COUNT_DMA];
 	struct resource irq_resource[DEVICE_COUNT_IRQ];
 
-	char		name[48];	/* Device name */
-	char		slot_name[8];	/* Slot name */
-	int active;			/* device is active */
-	int ro;				/* Read/Only */
+	char		name[48];	/* device name */
+	char		slot_name[8];	/* slot name */
+	int		active;		/* ISAPnP: device is active */
+	int		ro;		/* ISAPnP: read only */
+	unsigned short	regs;		/* ISAPnP: supported registers */
 
-	int (*prepare)(struct pci_dev *dev);
+	int (*prepare)(struct pci_dev *dev);	/* ISAPnP hooks */
 	int (*activate)(struct pci_dev *dev);
 	int (*deactivate)(struct pci_dev *dev);
 };
@@ -497,6 +499,23 @@ void pci_assign_unassigned_resources(u32 min_io, u32 min_mem);
 void pci_set_bus_ranges(void);
 void pci_fixup_irqs(u8 (*)(struct pci_dev *, u8 *),
 		    int (*)(struct pci_dev *, u8, u8));
+
+/* New-style probing supporting hot-pluggable devices */
+
+struct pci_driver {
+	struct list_head node;
+	char *name;
+	int (*probe)(struct pci_dev *dev);	/* New device inserted, check if known */
+	void (*remove)(struct pci_dev *dev);	/* Device removed */
+	void (*suspend)(struct pci_dev *dev);	/* Device suspended */
+	void (*resume)(struct pci_dev *dev);	/* Device woken up */
+};
+
+void pci_register_driver(struct pci_driver *);
+void pci_unregister_driver(struct pci_driver *);
+void pci_insert_device(struct pci_dev *, struct pci_bus *);
+void pci_remove_device(struct pci_dev *);
+struct pci_driver *pci_dev_driver(struct pci_dev *);
 
 /*
  * simple PCI probing for drivers (drivers/pci/helper.c)

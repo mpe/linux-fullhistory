@@ -224,6 +224,7 @@ get_pci_dev_info(char *buf, char **start, off_t pos, int count)
 
 	cnt = 0;
 	pci_for_each_dev(dev) {
+		struct pci_driver *drv = pci_dev_driver(dev);
 		len = sprintf(buf, "%02x%02x\t%04x%04x\t%x",
 			dev->bus->number,
 			dev->devfn,
@@ -237,6 +238,9 @@ get_pci_dev_info(char *buf, char **start, off_t pos, int count)
 		for(i=0; i<7; i++)
 			len += sprintf(buf+len, LONG_FORMAT, dev->resource[i].start < dev->resource[i].end ?
 				       dev->resource[i].end - dev->resource[i].start + 1 : 0);
+		buf[len++] = '\t';
+		if (drv)
+			len += sprintf(buf+len, "%s", drv->name);
 		buf[len++] = '\n';
 		at += len;
 		if (at >= pos) {

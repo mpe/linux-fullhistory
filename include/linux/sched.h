@@ -508,10 +508,10 @@ extern long FASTCALL(interruptible_sleep_on_timeout(wait_queue_head_t *q,
 extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 
 #define wake_up(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
-#define wake_up_all(x)			__wake_up_all((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE)
+#define wake_up_all(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE)
 #define wake_up_sync(x)			__wake_up_sync((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
 #define wake_up_interruptible(x)	__wake_up((x),TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
-#define wake_up_interruptible_all(x)	__wake_up_all((x),TASK_INTERRUPTIBLE)
+#define wake_up_interruptible_all(x)	__wake_up((x),TASK_INTERRUPTIBLE)
 #define wake_up_interruptible_sync(x)	__wake_up_sync((x),TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
 
 extern int in_group_p(gid_t);

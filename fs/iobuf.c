@@ -88,7 +88,7 @@ int expand_kiobuf(struct kiobuf *iobuf, int wanted)
 		return 0;
 	}
 	
-	memcpy (maplist,  iobuf->maplist,   wanted * sizeof(struct page **));
+	memcpy (maplist, iobuf->maplist, iobuf->array_len * sizeof(struct page **));
 
 	if (iobuf->array_len > KIO_STATIC_PAGES)
 		kfree (iobuf->maplist);
