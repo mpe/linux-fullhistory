@@ -358,6 +358,7 @@ ppp_first_time (void)
  */
 	(void) memset (&ppp_ldisc, 0, sizeof (ppp_ldisc));
 	ppp_ldisc.magic		= TTY_LDISC_MAGIC;
+	ppp_ldisc.name          = "ppp";
 	ppp_ldisc.open		= ppp_tty_open;
 	ppp_ldisc.close		= ppp_tty_close;
 	ppp_ldisc.read		= ppp_tty_read;

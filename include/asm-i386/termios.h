@@ -33,6 +33,8 @@ struct termio {
 #define TIOCM_DSR	0x100
 #define TIOCM_CD	TIOCM_CAR
 #define TIOCM_RI	TIOCM_RNG
+#define TIOCM_OUT1	0x2000
+#define TIOCM_OUT2	0x4000
 
 /* ioctl (fd, TIOCSERGETLSR, &result) where result may be as below */
 

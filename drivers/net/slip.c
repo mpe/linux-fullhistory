@@ -1120,6 +1120,7 @@ int slip_init_ctrl_dev(struct device *dummy)
 	/* Fill in our line protocol discipline, and register it */
 	memset(&sl_ldisc, 0, sizeof(sl_ldisc));
 	sl_ldisc.magic  = TTY_LDISC_MAGIC;
+	sl_ldisc.name   = "slip";
 	sl_ldisc.flags  = 0;
 	sl_ldisc.open   = slip_open;
 	sl_ldisc.close  = slip_close;

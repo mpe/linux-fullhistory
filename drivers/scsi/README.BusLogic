@@ -1,9 +1,10 @@
-		  BusLogic MultiMaster SCSI Driver for Linux
+	   BusLogic MultiMaster and FlashPoint SCSI Driver for Linux
 
-		       Version 1.2.6 for Linux 1.2.13
-		       Version 2.0.6 for Linux 2.0.4
+			  Version 2.0.7 for Linux 2.0
 
-				 17 July 1996
+			      PRODUCTION RELEASE
+
+			       23 February 1997
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -18,10 +19,15 @@ BusLogic, Inc. designs and manufactures a variety of high performance SCSI host
 adapters which share a common programming interface across a diverse collection
 of bus architectures by virtue of their MultiMaster ASIC technology.  This
 driver supports all present BusLogic MultiMaster Host Adapters, and should
-support any future MultiMaster designs with little or no modification.  Host
-adapters based on the new FlashPoint architecture are not supported by this
-driver; consult the README.FlashPoint file for information about a program to
-upgrade Linux users from the unsupported FlashPoint LT to the supported BT-948.
+support any future MultiMaster designs with little or no modification.  More
+recently, BusLogic has introduced the FlashPoint Host Adapters, which are less
+costly and rely on the host CPU, rather than including an onboard processor.
+Mylex/BusLogic has recently provided me with the FlashPoint Driver Developer's
+Kit, which comprises documentation and freely redistributable source code for
+the FlashPoint SCCB Manager.  The SCCB Manager is the library of code that runs
+on the host CPU and performs functions analogous to the firmware on the
+MultiMaster Host Adapters.  Thanks to their having provided the SCCB Manager,
+this driver now supports the FlashPoint Host Adapters as well.
 
 My primary goals in writing this completely new BusLogic driver for Linux are
 to achieve the full performance that BusLogic SCSI Host Adapters and modern
@@ -112,26 +118,23 @@ o Performance Features
 o Robustness Features
 
   The driver implements extensive error recovery procedures.  When the higher
-  level parts of the SCSI subsystem request that a command be reset, action is
-  taken to restore proper operation of the host adapter and SCSI bus.  On Linux
-  1.2.13, by default a full host adapter hard reset and SCSI bus reset is
-  performed.  On Linux 2.0.x, by default a selection is made between a full
-  host adapter hard reset and SCSI bus reset versus sending a bus device reset
-  message to the individual target device based on the recommendation of the
-  SCSI subsystem.  Error recovery strategies are selectable from the kernel
-  command line individually for each target device, and also include sending a
-  bus device reset to the specific target device associated with the command
-  being reset, as well as suppressing error recovery entirely to avoid
-  perturbing an improperly functioning device.  If the bus device reset error
-  recovery strategy is selected and sending a bus device reset does not restore
-  correct operation, the next command that is reset will force a full host
-  adapter hard reset and SCSI bus reset.  SCSI bus resets caused by other
-  devices and detected by the host adapter are also handled by issuing a hard
-  reset to the host adapter and full re-initialization.  Finally, if tagged
-  queuing is active and more than one command reset occurs in a 10 minute
-  interval, or if a command reset occurs within the first 10 minutes of
-  operation, then tagged queuing will be disabled for that target device.
-  These error recovery options should improve overall system robustness by
+  level parts of the SCSI subsystem request that a timed out command be reset,
+  a selection is made between a full host adapter hard reset and SCSI bus reset
+  versus sending a bus device reset message to the individual target device
+  based on the recommendation of the SCSI subsystem.  Error recovery strategies
+  are selectable from the kernel command line individually for each target
+  device, and also include sending a bus device reset to the specific target
+  device associated with the command being reset, as well as suppressing error
+  recovery entirely to avoid perturbing an improperly functioning device.  If
+  the bus device reset error recovery strategy is selected and sending a bus
+  device reset does not restore correct operation, the next command that is
+  reset will force a full host adapter hard reset and SCSI bus reset.  SCSI bus
+  resets caused by other devices and detected by the host adapter are also
+  handled by issuing a hard reset to the host adapter and re-initialization.
+  Finally, if tagged queuing is active and more than one command reset occurs
+  in a 10 minute interval, or if a command reset occurs within the first 10
+  minutes of operation, then tagged queuing will be disabled for that target
+  device.  These error recovery options improve overall system robustness by
   preventing individual errant devices from causing the system as a whole to
   lock up or crash, and thereby allowing a clean shutdown and restart after the
   offending component is removed.
@@ -155,13 +158,16 @@ o PCI Configuration Support
   used to disable the ISA compatible I/O port entirely as it is not necessary.
   The ISA compatible I/O port is disabled by default on the BT-948/958/958D.
 
+o /proc File System Support
+
+  Copies of the host adapter configuration information together with data
+  transfer and error recovery statistics are now available through the
+  /proc/scsi/BusLogic/<N> interface.
+
 o Shared Interrupts Support
 
   On systems that support shared interrupts, any number of BusLogic Host
-  Adapters may share the same interrupt request channel, and in fact it is more
-  efficient if they do so.  The driver scans all known BusLogic Host Adapters
-  whenever an interrupt is handled on an interrupt channel assigned to any
-  BusLogic Host Adapter.
+  Adapters may share the same interrupt request channel.
 
 o Wide SCSI Support
 
@@ -181,48 +187,50 @@ the date of this document.  It is recommended that anyone purchasing a BusLogic
 Host Adapter not in the following table contact the author beforehand to verify
 that it is or will be supported.
 
-"W" Series Host Adapters:
+FlashPoint Series PCI Host Adapters:
 
-BT-948	    PCI	    Ultra Fast Single-ended SCSI-2
-BT-958	    PCI	    Ultra Wide Single-ended SCSI-2
-BT-958D	    PCI	    Ultra Wide Differential SCSI-2
+FlashPoint LT (BT-930)	Ultra Fast Single-ended SCSI-2
+FlashPoint DL (BT-932)	Dual Channel Ultra Fast Single-ended SCSI-2
+FlashPoint LW (BT-950)	Ultra Wide Single-ended SCSI-2
+FlashPoint DW (BT-952)	Dual Channel Ultra Wide Single-ended SCSI-2
 
-"C" Series Host Adapters:
+MultiMaster "W" Series Host Adapters:
 
-BT-946C	    PCI	    Fast Single-ended SCSI-2
-BT-956C	    PCI	    Fast Wide Single-ended SCSI-2
-BT-956CD    PCI	    Fast Wide Differential SCSI-2
-BT-445C	    VLB	    Fast Single-ended SCSI-2
-BT-747C	    EISA    Fast Single-ended SCSI-2
-BT-757C	    EISA    Fast Wide Single-ended SCSI-2
-BT-757CD    EISA    Fast Wide Differential SCSI-2
-BT-545C	    ISA	    Fast Single-ended SCSI-2
-BT-540CF    ISA	    Fast Single-ended SCSI-2
+BT-948	    PCI		Ultra Fast Single-ended SCSI-2
+BT-958	    PCI		Ultra Wide Single-ended SCSI-2
+BT-958D	    PCI		Ultra Wide Differential SCSI-2
 
-"S" Series Host Adapters:
+MultiMaster "C" Series Host Adapters:
 
-BT-445S	    VLB	    Fast Single-ended SCSI-2
-BT-747S	    EISA    Fast Single-ended SCSI-2
-BT-747D	    EISA    Fast Differential SCSI-2
-BT-757S	    EISA    Fast Wide Single-ended SCSI-2
-BT-757D	    EISA    Fast Wide Differential SCSI-2
-BT-545S	    ISA	    Fast Single-ended SCSI-2
-BT-542D	    ISA	    Fast Differential SCSI-2
-BT-742A	    EISA    Single-ended SCSI-2 (742A revision H)
-BT-542B	    ISA	    Single-ended SCSI-2 (542B revision H)
+BT-946C	    PCI		Fast Single-ended SCSI-2
+BT-956C	    PCI		Fast Wide Single-ended SCSI-2
+BT-956CD    PCI		Fast Wide Differential SCSI-2
+BT-445C	    VLB		Fast Single-ended SCSI-2
+BT-747C	    EISA	Fast Single-ended SCSI-2
+BT-757C	    EISA	Fast Wide Single-ended SCSI-2
+BT-757CD    EISA	Fast Wide Differential SCSI-2
+BT-545C	    ISA		Fast Single-ended SCSI-2
+BT-540CF    ISA		Fast Single-ended SCSI-2
 
-"A" Series Host Adapters:
+MultiMaster "S" Series Host Adapters:
 
-BT-742A	    EISA    Single-ended SCSI-2 (742A revisions A - G)
-BT-542B	    ISA	    Single-ended SCSI-2 (542B revisions A - G)
+BT-445S	    VLB		Fast Single-ended SCSI-2
+BT-747S	    EISA	Fast Single-ended SCSI-2
+BT-747D	    EISA	Fast Differential SCSI-2
+BT-757S	    EISA	Fast Wide Single-ended SCSI-2
+BT-757D	    EISA	Fast Wide Differential SCSI-2
+BT-545S	    ISA		Fast Single-ended SCSI-2
+BT-542D	    ISA		Fast Differential SCSI-2
+BT-742A	    EISA	Single-ended SCSI-2 (742A revision H)
+BT-542B	    ISA		Single-ended SCSI-2 (542B revision H)
 
-The FlashPoint LT, also known as the BT-930 Ultra, implements a different host
-interface and is not supported by this driver.  Consult the README.FlashPoint
-file for information about a program to upgrade Linux users from the
-unsupported FlashPoint LT to the supported BT-948.
+MultiMaster "A" Series Host Adapters:
 
-AMI FastDisk Host Adapters that are true BusLogic clones are supported by this
-driver.
+BT-742A	    EISA	Single-ended SCSI-2 (742A revisions A - G)
+BT-542B	    ISA		Single-ended SCSI-2 (542B revisions A - G)
+
+AMI FastDisk Host Adapters that are true BusLogic MultiMaster clones are also
+supported by this driver.
 
 
 		      BT-948/958/958D INSTALLATION NOTES
@@ -285,6 +293,45 @@ kernel command line options.  A full description of the command line options
 may be found in the comments before BusLogic_Setup in the kernel source code
 file "BusLogic.c".  The following examples may be useful as a starting point:
 
+  "BusLogic=NoProbe"
+
+    No probing of any kind is to be performed, and hence no BusLogic Host
+    Adapters will be detected.
+
+  "BusLogic=NoProbeISA"
+
+    No probing of the standard ISA I/O Addresses will be done, and hence only
+    PCI Host Adapters will be detected.
+
+  "BusLogic=NoProbePCI"
+
+    No interrogation of PCI Configuration Space will be made, and hence only
+    ISA Multimaster Host Adapters will be detected, as well as PCI Multimaster
+    Host Adapters that have their ISA Compatible I/O Port set to "Primary" or
+    "Alternate".
+
+  "BusLogic=NoSortPCI"
+
+    PCI MultiMaster Host Adapters will be enumerated in the order provided by
+    the PCI BIOS, ignoring any setting of the AutoSCSI "Use Bus And Device #
+    For PCI Scanning Seq." option.
+
+  "BusLogic=MultiMasterFirst"
+
+    By default, if both FlashPoint and PCI MultiMaster Host Adapters are
+    present, this driver will probe for PCI MultiMaster Host Adapters first
+    unless the BIOS primary disk is not controlled by the first PCI MultiMaster
+    Host Adapter, in which case FlashPoint Host Adapters will be probed first.
+    This option forces MultiMaster Host Adapters to be probed first.
+
+  "BusLogic=FlashPointFirst"
+
+    By default, if both FlashPoint and PCI MultiMaster Host Adapters are
+    present, this driver will probe for PCI MultiMaster Host Adapters first
+    unless the BIOS primary disk is not controlled by the first PCI MultiMaster
+    Host Adapter, in which case FlashPoint Host Adapters will be probed first.
+    This option forces FlashPoint Host Adapters to be probed first.
+
   "BusLogic=0x330"
 
     This command line limits probing to the single I/O port at 0x330.
@@ -295,10 +342,11 @@ file "BusLogic.c".  The following examples may be useful as a starting point:
     which also disables tagged queuing.  It may be useful if problems arise
     during installation on a system with a flaky SCSI configuration.  In cases
     of a marginal SCSI configuration it may also be beneficial to disable fast
-    transfers and/or synchronous negotiation using AutoSCSI on "W" and "C"
-    series controllers.  Disconnect/reconnect may also be disabled for fast
-    devices such as disk drives, but should not be disabled for tape drives or
-    other devices where a single command may take over a second to execute.
+    transfers and/or synchronous negotiation using AutoSCSI on FlashPoint and
+    "W" and "C" series MultiMaster host adapters.  Disconnect/reconnect may
+    also be disabled for fast devices such as disk drives, but should not be
+    disabled for tape drives or other devices where a single command may take
+    over a second to execute.
 
   "BusLogic=0,0,30"
 
@@ -325,21 +373,16 @@ substantially impact performance.
 
 				 INSTALLATION
 
-This distribution was prepared for Linux kernel version 1.2.13
-(BusLogic-1.2.6.tar.gz) or Linux kernel version 2.0.4 (BusLogic-2.0.6.tar.gz).
-Installation in later versions will probably be successful as well, though
-BusLogic.patch may not be required.  Installation in earlier versions is not
-recommended.
+This distribution was prepared for Linux kernel version 2.0.29, but should be
+compatible with 2.0.4 or any later 2.0 series kernel.
 
-To install the BusLogic SCSI driver, you may use the following commands,
-replacing "/usr/src" with wherever you keep your Linux kernel source tree
-(substitute "1.2" or "2.0" for "x.y" in the tar command as appropriate):
+To install the new BusLogic SCSI driver, you may use the following commands,
+replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf BusLogic-x.y.6.tar.gz
-  mv README.* BusLogic.[ch] linux/drivers/scsi
-  patch -p < BusLogic.patch	    (on Linux 1.2.13 only)
-  patch -p < BusLogic.elf_patch	    (on Linux 1.2.13 ELF systems only)
+  tar -xvzf BusLogic-2.0.7.tar.gz
+  mv README.* LICENSE.* BusLogic.[ch] FlashPoint.c linux/drivers/scsi
+  patch -p < BusLogic.patch
   cd linux
   make config
   make depend

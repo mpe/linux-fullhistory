@@ -13,6 +13,9 @@
  *        controller).
  *  Modified by Matti Aarnio
  *        Accept parameters from LILO cmd-line. -- 1-Oct-94
+ *  Modified by Mike McLagan <mike.mclagan@linux.org>
+ *        Recognise extended mode on AHA1542CP, different bit than 1542CF
+ *        1-Jan-97
  */
 
 #include <linux/module.h>
@@ -813,7 +816,9 @@ static int aha1542_mbenable(int base)
      mbenable_cmd[0]=CMD_MBENABLE;
      mbenable_cmd[1]=0;
      mbenable_cmd[2]=mbenable_result[1];
-     if(mbenable_result[1] & 1) retval = BIOS_TRANSLATION_25563;
+
+     if(mbenable_result[1] & 0x03) retval = BIOS_TRANSLATION_25563;
+
      aha1542_out(base,mbenable_cmd,3);
      WAIT(INTRFLAGS(base),INTRMASK,HACC,0);
   };

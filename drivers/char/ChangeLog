@@ -1,3 +1,52 @@
+Thu Feb 27 01:53:08 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* serial.c (change_speed): Add support for the termios flag
+		CMSPAR, which allows the user to select stick parity.
+		(i.e, if PARODD is set, the the parity bit is always 1; if
+		PARRODD is not set, then the parity bit is always 0).
+
+Wed Feb 26 19:03:10 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* serial.c (cleanup_module): Fix memory leak when using the serial
+		driver as a module; make sure tmp_buf gets freed!
+
+Tue Feb 25 11:01:59 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* serial.c (set_modem_info): Add support for setting and clearing
+		the OUT1 and OUT2 bits.  (For special case UART's, usually
+		for half-duplex.)
+		(autoconfig, change_speed): Fix TI 16750 support.
+
+Sun Feb 16 00:14:43 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* tty_io.c (release_dev): Add sanity check to make sure there are
+		no waiters on tty->read_wait or tty->write_wait.
+
+	* serial.c (rs_init): Don't autoconfig a device if the I/O region
+		is already reserved.
+
+	* serial.c (serial_proc_info): Add support for /proc/serial.
+
+Thu Feb 13 00:49:10 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* serial.c (receive_chars): When the UART repotrs an overrun
+ 		condition, it does so with a valid character.  Changed to
+ 		not throw away the valid character, but instead report the
+		overrun after the valid character.
+
+	* serial.c: Added new #ifdef's for some of the advanced serial
+		driver features.  A minimal driver that only supports COM
+		1/2/3/4 without sharing serial interrupts only takes 17k;
+		the full driver takes 32k.
+		
+Wed Feb 12 14:50:44 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* vt.c:
+	* pty.c: 
+	* tty_ioctl.c: 
+	* serial.c: Update routines to use the new 2.1 memory access
+	 	routines.
+
 Wed Dec  4 07:51:52 1996  Theodre Ts'o  <tytso@localhost.mit.edu>
 
 	* serial.c (change_speed): Use save_flags(); cli() and

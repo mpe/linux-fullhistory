@@ -1010,6 +1010,7 @@ static unsigned int normal_poll(struct tty_struct * tty, struct file * file, pol
 
 struct tty_ldisc tty_ldisc_N_TTY = {
 	TTY_LDISC_MAGIC,	/* magic */
+	"n_tty",		/* name */
 	0,			/* num */
 	0,			/* flags */
 	n_tty_open,		/* open */

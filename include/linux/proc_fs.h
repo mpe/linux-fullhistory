@@ -223,6 +223,10 @@ struct proc_dir_entry {
 	void (*fill_inode)(struct inode *);
 	struct proc_dir_entry *next, *parent, *subdir;
 	void *data;
+	int (*read_proc)(char *page, char **start, off_t off,
+			 int count, void *data);
+	int (*write_proc)(struct file *file, const char *buffer,
+			  unsigned long count, void *data);
 };
 
 extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
@@ -327,6 +331,7 @@ extern int proc_openprom_regdev(struct openpromfs_dev *);
 extern int proc_openprom_unregdev(struct openpromfs_dev *);
   
 extern struct inode_operations proc_dir_inode_operations;
+extern struct inode_operations proc_file_inode_operations;
 extern struct inode_operations proc_net_inode_operations;
 extern struct inode_operations proc_netdir_inode_operations;
 extern struct inode_operations proc_scsi_inode_operations;
@@ -344,3 +349,16 @@ extern struct inode_operations proc_fd_inode_operations;
 extern struct inode_operations proc_ringbuf_inode_operations;
 #endif
 #endif
+
+/*
+ * generic.c
+ */
+struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
+					 struct proc_dir_entry *parent);
+
+/*
+ * proc_tty.c
+ */
+extern void proc_tty_init(void);
+extern void proc_tty_register_driver(struct tty_driver *driver);
+extern void proc_tty_unregister_driver(struct tty_driver *driver);

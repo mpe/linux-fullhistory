@@ -328,13 +328,8 @@ extern struct tty_ldisc tty_ldisc_N_TTY;
 extern int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 		       unsigned int cmd, unsigned long arg);
 
-/* serial.c */
+/* pcxx.c */
 
-extern int  rs_open(struct tty_struct * tty, struct file * filp);
-
-/* pty.c */
-
-extern int  pty_open(struct tty_struct * tty, struct file * filp);
 extern int pcxe_open(struct tty_struct *tty, struct file *filp);
 
 /* console.c */

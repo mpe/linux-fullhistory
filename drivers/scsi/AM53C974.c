@@ -684,6 +684,7 @@ AM53C974_write_8(CNTLREG1, CNTLREG1_DISR | instance->this_id);
 AM53C974_write_8(CMDREG, CMDREG_RBUS);     /* reset SCSI bus */
 udelay(10);
 AM53C974_config_after_reset(instance);
+udelay(500000);
 return(1);
 }
 

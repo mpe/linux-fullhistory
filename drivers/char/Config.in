@@ -4,19 +4,29 @@
 mainmenu_option next_comment
 comment 'Character devices'
 
-tristate 'Standard/generic serial support' CONFIG_SERIAL
-bool 'Digiboard PC/Xx Support' CONFIG_DIGI
-tristate 'Cyclades async mux support' CONFIG_CYCLADES
-bool 'Stallion multiport serial support' CONFIG_STALDRV
-if [ "$CONFIG_STALDRV" = "y" ]; then
-  tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION
-  tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
+tristate 'Standard/generic (dumb) serial support' CONFIG_SERIAL
+bool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED
+if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
+   bool '   Support more than 4 serial ports' CONFIG_SERIAL_MANY_PORTS
+   bool '   Support for sharing serial interrupts' CONFIG_SERIAL_SHARE_IRQ
+   bool '   Support special multiport boards' CONFIG_SERIAL_MULTIPORT
+   bool '   Support the Bell Technologies HUB6 card' CONFIG_HUB6
 fi
-tristate 'SDL RISCom/8 card support' CONFIG_RISCOM8
-tristate 'Hayes ESP serial port support' CONFIG_ESPSERIAL
-if [ "$CONFIG_ESPSERIAL" = "y" -o "$CONFIG_ESPSERIAL" = "m" ]; then
-  int '  DMA channel' CONFIG_ESPSERIAL_DMA_CHANNEL 1
-  int '  FIFO trigger level' CONFIG_ESPSERIAL_TRIGGER_LEVEL 768
+bool 'Non-standard serial port support' CONFIG_SERIAL_NONSTANDARD
+if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
+   bool 'Digiboard PC/Xx Support' CONFIG_DIGI
+   tristate 'Cyclades async mux support' CONFIG_CYCLADES
+   bool 'Stallion multiport serial support' CONFIG_STALDRV
+   if [ "$CONFIG_STALDRV" = "y" ]; then
+     tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION
+     tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
+   fi
+   tristate 'SDL RISCom/8 card support' CONFIG_RISCOM8
+   tristate 'Hayes ESP serial port support' CONFIG_ESPSERIAL
+   if [ "$CONFIG_ESPSERIAL" = "y" -o "$CONFIG_ESPSERIAL" = "m" ]; then
+     int '  DMA channel' CONFIG_ESPSERIAL_DMA_CHANNEL 1
+     int '  FIFO trigger level' CONFIG_ESPSERIAL_TRIGGER_LEVEL 768
+   fi
 fi
 tristate 'Parallel printer support' CONFIG_PRINTER
 

@@ -63,6 +63,9 @@
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/poll.h>
+#ifdef CONFIG_PROC_FS
+#include <linux/proc_fs.h>
+#endif
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -1135,6 +1138,25 @@ static void release_dev(struct file * filp)
 		return;
 
 	/*
+	 * Sanity check --- if tty->count is zero, there shouldn't be
+	 * any waiters on tty->read_wait or tty->write_wait.  But just
+	 * in case....
+	 */
+	while (1) {
+		if (waitqueue_active(&tty->read_wait)) {
+			printk("release_dev: %s: read_wait active?!?\n",
+			       tty_name(tty));
+			wake_up(&tty->read_wait);
+		} else if (waitqueue_active(&tty->write_wait)) {
+			printk("release_dev: %s: write_wait active?!?\n",
+			       tty_name(tty));
+			wake_up(&tty->write_wait);
+		} else
+			break;
+		schedule();
+	}
+	
+	/*
 	 * We're committed; at this point, we must not block!
 	 */
 	if (o_tty) {
@@ -1232,7 +1254,9 @@ static int tty_open(struct inode * inode, struct file * filp)
 	int minor;
 	int noctty, retval;
 	kdev_t device;
+	unsigned short saved_flags;
 
+	saved_flags = filp->f_flags;
 retry_open:
 	noctty = filp->f_flags & O_NOCTTY;
 	device = inode->i_rdev;
@@ -1240,6 +1264,7 @@ retry_open:
 		if (!current->tty)
 			return -ENXIO;
 		device = current->tty->device;
+		filp->f_flags |= O_NONBLOCK; /* Don't let /dev/tty block */
 		/* noctty = 1; */
 	}
 	if (device == CONSOLE_DEV) {
@@ -1263,6 +1288,7 @@ retry_open:
 		retval = tty->driver.open(tty, filp);
 	else
 		retval = -ENODEV;
+	filp->f_flags = saved_flags;
 
 	if (!retval && test_bit(TTY_EXCLUSIVE, &tty->flags) && !suser())
 		retval = -EBUSY;
@@ -1830,6 +1856,10 @@ int tty_register_driver(struct tty_driver *driver)
 	driver->next = tty_drivers;
 	if (tty_drivers) tty_drivers->prev = driver;
 	tty_drivers = driver;
+	
+#ifdef CONFIG_PROC_FS
+	proc_tty_register_driver(driver);
+#endif	
 	return error;
 }
 
@@ -1871,6 +1901,9 @@ int tty_unregister_driver(struct tty_driver *driver)
 	if (driver->next)
 		driver->next->prev = driver->prev;
 
+#ifdef CONFIG_PROC_FS
+	proc_tty_unregister_driver(driver);
+#endif
 	return 0;
 }
 
@@ -1925,18 +1958,24 @@ int tty_init(void)
 	 */
 	memset(&dev_tty_driver, 0, sizeof(struct tty_driver));
 	dev_tty_driver.magic = TTY_DRIVER_MAGIC;
-	dev_tty_driver.name = "tty";
+	dev_tty_driver.driver_name = "/dev/tty";
+	dev_tty_driver.name = dev_tty_driver.driver_name + 5;
 	dev_tty_driver.name_base = 0;
 	dev_tty_driver.major = TTY_MAJOR;
 	dev_tty_driver.minor_start = 0;
 	dev_tty_driver.num = 1;
+	dev_tty_driver.type = TTY_DRIVER_TYPE_SYSTEM;
+	dev_tty_driver.subtype = SYSTEM_TYPE_TTY;
 	
 	if (tty_register_driver(&dev_tty_driver))
 		panic("Couldn't register /dev/tty driver\n");
 
 	dev_console_driver = dev_tty_driver;
-	dev_console_driver.name = "console";
+	dev_console_driver.driver_name = "/dev/console";
+	dev_console_driver.name = dev_console_driver.driver_name + 5;
 	dev_console_driver.major = TTYAUX_MAJOR;
+	dev_console_driver.type = TTY_DRIVER_TYPE_SYSTEM;
+	dev_console_driver.subtype = SYSTEM_TYPE_CONSOLE;
 
 	if (tty_register_driver(&dev_console_driver))
 		panic("Couldn't register /dev/console driver\n");

@@ -107,6 +107,7 @@
 
 struct tty_driver {
 	int	magic;		/* magic number for this structure */
+	const char	*driver_name;
 	const char	*name;
 	int	name_base;	/* offset of printed name */
 	short	major;		/* major device number */
@@ -117,6 +118,7 @@ struct tty_driver {
 	struct termios init_termios; /* Initial termios */
 	int	flags;		/* tty driver flags */
 	int	*refcount;	/* for loadable tty drivers */
+	struct proc_dir_entry *proc_entry; /* /proc fs entry */
 	struct tty_driver *other; /* only used for the PTY driver */
 
 	/*
@@ -150,6 +152,10 @@ struct tty_driver {
 	void (*set_ldisc)(struct tty_struct *tty);
 	void (*wait_until_sent)(struct tty_struct *tty, int timeout);
 	void (*send_xchar)(struct tty_struct *tty, char ch);
+	int (*read_proc)(char *page, char **start, off_t off,
+			  int count, void *data);
+	int (*write_proc)(struct file *file, const char *buffer,
+			  unsigned long count, void *data);
 
 	/*
 	 * linked list pointers
@@ -196,5 +202,9 @@ struct tty_driver {
 /* pty subtypes (magic, used by tty_io.c) */
 #define PTY_TYPE_MASTER			0x0001
 #define PTY_TYPE_SLAVE			0x0002
+
+/* serial subtype definitions */
+#define SERIAL_TYPE_NORMAL	1
+#define SERIAL_TYPE_CALLOUT	2
 
 #endif /* #ifdef _LINUX_TTY_DRIVER_H */

@@ -543,7 +543,7 @@ CONFIG_ALPHA_AVANTI
   choices:
   ** Avanti: This is for Mustang (AS200), M3 (AS250), Avanti (AS400)
      and XL (a.k.a. "Windows NT Dream Machine" :-) AlphaStations.
-     These usually come with a TGA graphics adaptor, so you'll want to
+     These usually come with a TGA graphics adapter, so you'll want to
      say Y to "TGA Console support", below, if you have one of these.
   ** Jensen: a.k.a. DEC 2000 a.k.a. DECpc AXP 150, the oldest Alpha
      PC; it sports an EISA bus. The boot process on Jensen machines is
@@ -595,11 +595,52 @@ CONFIG_SERIAL_ECHO
   corresponds to a serial port; this could be useful if you attached
   a terminal or printer to that port.
 
+Non-standard serial port support
+CONFIG_SERIAL_NONSTANDARD
+  Say Y here if you have any non-standard serial boards --- boards
+  which aren't supported using the standard "dumb" serial driver.
+  This includes intelligent serial boards such as Cyclades,
+  Digiboards, etc.
+
+Extended dumb serial driver options
+CONFIG_SERIAL_EXTENDED  
+  If you wish to use any non-standard features of the standard "dumb"
+  driver, say Y here.  This includes HUB6 support, shared serial
+  interrupts, special multiport support, support for more than the
+  four COM 1/2/3/4 boards, etc.
+
+Support more than 4 serial ports
+CONFIG_SERIAL_MANY_PORTS
+  Enable this option if you have dumb serial boards other than the
+  four standard COM 1/2/3/4 ports.  This may happen if you have an AST
+  FourPort, Accent Async, Boca, or other custom serial port hardware
+  which acts similar to standard serial port hardware.  If you only
+  use the standard COM 1/2/3/4 ports, you can say N here to save some
+  memory.
+
+Support for sharing serial interrupts
+CONFIG_SERIAL_SHARE_IRQ
+  Some serial boards have hardware support which allows multiple dumb
+  serial ports on the same board to share a single IRQ.  To enable
+  support for this in the serial driver, say Y here.
+
+Support special multiport boards
+CONFIG_SERIAL_MULTIPORT
+  Some multiport serial ports have special ports which are used to
+  signal when there are any serial ports on the board which need
+  servicing.  Say Y here to enable the serial driver to take advantage
+  of those special I/O ports.
+
+Support the Bell Technologies HUB6 card
+CONFIG_HUB6
+  Say Y here to enable support in the dumb serial driver to support
+  the HUB6 card.
+
 TGA Console Support
 CONFIG_TGA_CONSOLE
   Many Alpha systems (e.g the Multia) are shipped with a graphics card
   that implements the TGA interface (much like the VGA standard, but
-  older TGA adaptors are *not* VGA compatible).  On such systems, you
+  older TGA adapters are *not* VGA compatible).  On such systems, you
   should say Y here so that the TGA driver rather than the standard
   VGA driver is used.  Note that, at this time, there is no X server
   for these systems. If unsure, try N.
@@ -1393,7 +1434,7 @@ SCSI support?
 CONFIG_SCSI
   If you want to use a SCSI harddisk, SCSI tapedrive, SCSI CDROM or
   any other SCSI device under Linux, say Y and make sure that you know
-  the name of your SCSI host adaptor (the card inside your computer
+  the name of your SCSI host adapter (the card inside your computer
   that "speaks" the SCSI protocol), because you will be asked for
   it. You also need to say Y here if you want support for the parallel
   port version of the 100MB IOMEGA ZIP drive. Please read the
@@ -1480,7 +1521,7 @@ CONFIG_SCSI_CONSTANTS
 
 AdvanSys SCSI support
 CONFIG_SCSI_ADVANSYS
-  This is a driver for all SCSI host adaptors manufactured by
+  This is a driver for all SCSI host adapters manufactured by
   AdvanSys. It is documented in the kernel source in
   drivers/scsi/advansys.c. This driver is also available as a module (
   = code which can be inserted in and removed from the running kernel
@@ -1491,7 +1532,7 @@ CONFIG_SCSI_ADVANSYS
 Adaptec AHA152X/2825 support
 CONFIG_SCSI_AHA152X
   This is support for the AHA-1510, AHA-1520, AHA-1522, and AHA-2825
-  SCSI host adaptors. It is explained in section 3.3 of the
+  SCSI host adapters. It is explained in section 3.3 of the
   SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. You might also want to read
   the comments at the top of drivers/scsi/aha152x.c. This driver is
@@ -1502,7 +1543,7 @@ CONFIG_SCSI_AHA152X
 
 Adaptec AHA1542 support
 CONFIG_SCSI_AHA1542
-  This is support for a SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adapter. It is explained in section
   3.4 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  Note that Trantor was
   recently purchased by Adaptec, and some former Trantor products are
@@ -1515,7 +1556,7 @@ CONFIG_SCSI_AHA1542
  
 Adaptec AHA1740 support
 CONFIG_SCSI_AHA1740
-  This is support for a SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adapter. It is explained in section
   3.5 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
   the box, you may have to change some settings in
@@ -1527,7 +1568,7 @@ CONFIG_SCSI_AHA1740
 
 Adaptec AHA274X/284X/294X support
 CONFIG_SCSI_AIC7XXX
-  Information about this SCSI host adaptor is contained in
+  Information about this SCSI host adapter is contained in
   drivers/scsi/README.aic7xxx and in the SCSI-HOWTO, available via ftp
   (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it
   doesn't work out of the box, you may have to change some settings in
@@ -1538,24 +1579,25 @@ CONFIG_SCSI_AIC7XXX
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
-  This is support for BusLogic MultiMaster SCSI Host Adaptors.
-  Consult the SCSI-HOWTO, available via anonymous ftp from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO and the file
-  drivers/scsi/README.BusLogic for more information. BusLogic
-  FlashPoint SCSI Host Adapters are not supported by this driver, but
-  BusLogic has initiated an upgrade program which allows you to get a
-  better adaptor for few $$. Read about it in
-  drivers/scsi/README.FlashPoint.  If this driver does not work
-  correctly without modification, please contact the author.  You can
-  build this driver also as a module ( = code which can be inserted in
-  and removed from the running kernel whenever you want), but only a
-  single instance may be loaded. The module will be called
-  BusLogic.o. If you want to compile it as a module, say M here and
-  read Documentation/modules.txt.
+  This is support for BusLogic MultiMaster and FlashPoint SCSI Host Adapters.
+  Consult the SCSI-HOWTO, available via anonymous ftp from sunsite.unc.edu in
+  /pub/Linux/docs/HOWTO, and the files README.BusLogic and README.FlashPoint in
+  drivers/scsi for more information.  If this driver does not work correctly
+  without modification, please contact the author, Leonard N. Zubkoff, by email
+  to lnz@dandelion.com.  You can also build this driver as a module ( = code
+  which can be inserted in and removed from the running kernel whenever you
+  want), but only a single instance may be loaded.  If you want to compile it
+  as a module, say M here and read Documentation/modules.txt.
+
+Omit BusLogic SCSI FlashPoint support
+CONFIG_SCSI_OMIT_FLASHPOINT
+  This option allows you to omit the FlashPoint support from the BusLogic
+  SCSI driver.  The FlashPoint SCCB Manager code is substantial, so users of
+  MultiMaster Host Adapters may wish to omit it.
 
 DTC3180/3280 SCSI support
 CONFIG_SCSI_DTC3280
-  This is support for DTC 3180/3280 SCSI Host Adaptors.  Please read
+  This is support for DTC 3180/3280 SCSI Host Adapters.  Please read
   the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO and the file
   drivers/scsi/README.dtc3x80.  This driver is also available as a
@@ -1567,7 +1609,7 @@ CONFIG_SCSI_DTC3280
 EATA-DMA (DPT, NEC, AT&T, SNI, AST, Olivetti, Alphatronix) support
 CONFIG_SCSI_EATA_DMA
   This is support for the EATA-DMA protocol compliant SCSI Host
-  Adaptors like the SmartCache III/IV, SmartRAID controller families
+  Adapters like the SmartCache III/IV, SmartRAID controller families
   and the DPT PM2011B and PM2012B controllers.  Note that there is
   also another driver for the same hardware: "EATA ISA/EISA/PCI
   support". You should only say Y to one of them. Please read the
@@ -1581,8 +1623,8 @@ CONFIG_SCSI_EATA_DMA
 EATA-PIO (old DPT PM2001, PM2012A) support
 CONFIG_SCSI_EATA_PIO
   This driver supports all EATA-PIO protocol compliant SCSI Host
-  Adaptors like the DPT PM2001 and the PM2012A. EATA-DMA compliant
-  host adaptors could also use this driver but are discouraged from
+  Adapters like the DPT PM2001 and the PM2012A. EATA-DMA compliant
+  host adapters could also use this driver but are discouraged from
   doing so, since this driver only supports harddisks and lacks
   numerous features.  You might want to have a look at the SCSI-HOWTO,
   available via ftp (user: anonymous) at
@@ -1609,7 +1651,7 @@ CONFIG_SCSI_U14_34F
 enable linked commands
 CONFIG_SCSI_U14_34F_LINKED_COMMANDS
   This is a feature of SCSI-2 which improves performance: the host
-  adaptor can send a whole list of commands to a device in one
+  adapter can send a whole list of commands to a device in one
   batch. Some SCSI devices might not implement this properly, so the
   save answer is N.
 
@@ -1621,9 +1663,9 @@ CONFIG_SCSI_U14_34F_MAX_TAGS
 
 Future Domain 16xx SCSI support
 CONFIG_SCSI_FUTURE_DOMAIN
-  This is support for Future Domain's 16-bit SCSI host adaptors
+  This is support for Future Domain's 16-bit SCSI host adapters
   (TMC-1660/1680, TMC-1650/1670, TMC-3260, TMC-1610M/MER/MEX) and
-  other adaptors based on the Future Domain chipsets (Quantum
+  other adapters based on the Future Domain chipsets (Quantum
   ISA-200S, ISA-250MG; Adaptec AHA-2920; and at least one IBM board).
   It is explained in section 3.7 of the SCSI-HOWTO, available via ftp
   (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This
@@ -1682,7 +1724,7 @@ CONFIG_SCSI_NCR53C7xx_sync
 allow FAST-SCSI [10MHz]
 CONFIG_SCSI_NCR53C7xx_FAST
   This will enable 10MHz FAST-SCSI transfers with your host
-  adaptor. Some systems have problems with that speed, so it's safest
+  adapter. Some systems have problems with that speed, so it's safest
   to say N here.
  
 allow DISCONNECT
@@ -1779,7 +1821,7 @@ CONFIG_SCSI_IBMMCA
 
 Always IN2000 SCSI support
 CONFIG_SCSI_IN2000
-  This is support for an ISA bus SCSI host adaptor. You'll find more
+  This is support for an ISA bus SCSI host adapter. You'll find more
   information in drivers/scsi/in2000.readme. If it doesn't work out of
   the box, you may have to change the jumpers for IRQ or address
   selection. If you want to compile this as a module ( = code which
@@ -1789,7 +1831,7 @@ CONFIG_SCSI_IN2000
 
 PAS16 SCSI support
 CONFIG_SCSI_PAS16
-  This is support for a SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adapter. It is explained in section
   3.10 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
   box, you may have to change some settings in drivers/scsi/pas16.h.
@@ -1816,7 +1858,7 @@ CONFIG_SCSI_QLOGIC_FAS
 
 Qlogic ISP SCSI support (EXPERIMENTAL)
 CONFIG_SCSI_QLOGIC_ISP
-  This driver works for all QLogic PCI SCSI host adaptors (IQ-PCI,
+  This driver works for all QLogic PCI SCSI host adapters (IQ-PCI,
   IQ-PCI-10, IQ_PCI-D) except for the PCI-basic card. (This latter
   card is supported by the "AM53/79C974 PCI SCSI" driver). If you say
   Y here, make sure to say Y to "PCI BIOS support" as well. More
@@ -1843,7 +1885,7 @@ CONFIG_SCSI_SEAGATE
 
 Trantor T128/T128F/T228 SCSI support
 CONFIG_SCSI_T128
-  This is support for a SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adapter. It is explained in section
   3.11 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
   the box, you may have to change some settings in
@@ -1857,7 +1899,7 @@ CONFIG_SCSI_T128
 UltraStor SCSI support
 CONFIG_SCSI_ULTRASTOR
   This is support for the UltraStor 14F, 24F and 34F SCSI-2 host
-  adaptor family. This driver is explained in section 3.12 of the
+  adapter family. This driver is explained in section 3.12 of the
   SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
   box, you may have to change some settings in
@@ -1870,7 +1912,7 @@ CONFIG_SCSI_ULTRASTOR
  
 7000FASST SCSI support
 CONFIG_SCSI_7000FASST
-  This driver supports the Western Digital 7000 SCSI host adaptor.
+  This driver supports the Western Digital 7000 SCSI host adapter.
   Some information is in the source: drivers/scsi/wd7000.c.  This
   driver is also available as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want). The
@@ -1896,14 +1938,14 @@ CONFIG_SCSI_EATA
 enable tagged command queuing
 CONFIG_SCSI_EATA_TAGGED_QUEUE
   This is a feature of SCSI-2 which improves performance: the host
-  adaptor can send several SCSI commands to a device's queue even if
+  adapter can send several SCSI commands to a device's queue even if
   previous commands haven't finished yet. Some SCSI devices don't
   implement this properly, so the save answer is N.
 
 enable linked commands
 CONFIG_SCSI_EATA_LINKED_COMMANDS
   This is a feature of SCSI-2 which improves performance: the host
-  adaptor can send a whole list of commands to a device in one
+  adapter can send a whole list of commands to a device in one
   batch. Some SCSI devices might not implement this properly, so the
   save answer is N.
 
@@ -3081,10 +3123,10 @@ CONFIG_ZNET
   by this driver. Read the Ethernet-HOWTO, available via ftp (user:
   anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.
 
-Pocket and portable adaptors
+Pocket and portable adapters
 CONFIG_NET_POCKET
   Cute little network (ethernet) devices which attach to the parallel
-  port ("pocket adaptors"), commonly used with laptops. If you have
+  port ("pocket adapters"), commonly used with laptops. If you have
   one of those, say Y and read the Ethernet-HOWTO, available via ftp
   (user: anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you
   want to plug a network card into the PCMCIA slot of your laptop
@@ -3098,10 +3140,10 @@ CONFIG_NET_POCKET
   plan to use more than one network device under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you intend to use an
-  adaptor attaching to the parallel port as well as a parallel
+  adapter attaching to the parallel port as well as a parallel
   printer, you should compile both drivers as modules (if possible).
 
-AT-LAN-TEC/RealTek pocket adaptor support
+AT-LAN-TEC/RealTek pocket adapter support
 CONFIG_ATP
   This is a network (ethernet) device which attaches to your parallel
   port. Read drivers/net/atp.c as well as the Ethernet-HOWTO,
@@ -3113,7 +3155,7 @@ CONFIG_ATP
   this driver, you should have said N to the Parallel Printer support,
   because the two drivers don't like each other.
 
-D-Link DE600 pocket adaptor support
+D-Link DE600 pocket adapter support
 CONFIG_DE600
   This is a network (ethernet) device which attaches to your parallel
   port. Read drivers/net/README.DLINK as well as the Ethernet-HOWTO,
@@ -3122,13 +3164,13 @@ CONFIG_DE600
   you want to compile this as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want), say M
   here and read Documentation/modules.txt. The module will be called
-  de600.o. If you intend to use this pocket adaptor as well as a
+  de600.o. If you intend to use this pocket adapter as well as a
   parallel printer, you should compile both drivers as modules. If you
   plan to use more than one network card under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
-D-Link DE620 pocket adaptor support
+D-Link DE620 pocket adapter support
 CONFIG_DE620
   This is a network (ethernet) device which attaches to your parallel
   port. Read drivers/net/README.DLINK as well as the Ethernet-HOWTO,
@@ -3137,7 +3179,7 @@ CONFIG_DE620
   you want to compile this as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want), say M
   here and read Documentation/modules.txt. The module will be called
-  de620.o. If you intend to use this pocket adaptor as well as a
+  de620.o. If you intend to use this pocket adapter as well as a
   parallel printer, you should compile both drivers as modules. If you
   plan to use more than one network card under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
@@ -3150,7 +3192,7 @@ CONFIG_TR
   ring network and want to use your Token Ring card under Linux, say Y.
   Most people can say N here.
 
-IBM Tropic chipset based adaptor support
+IBM Tropic chipset based adapter support
 CONFIG_IBMTR
   This is support for all IBM Token Ring cards that don't use DMA. If
   you have such a beast, say Y, otherwise N. Warning: this driver will

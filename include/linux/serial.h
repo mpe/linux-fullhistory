@@ -123,7 +123,10 @@ struct serial_multiport_struct {
  */
 struct serial_icounter_struct {
 	int cts, dsr, rng, dcd;
-	int reserved[16];
+	int rx, tx;
+	int frame, overrun, parity, brk;
+	int buf_overrun;
+	int reserved[9];
 };
 
 
@@ -144,7 +147,9 @@ struct serial_icounter_struct {
  * Counters of the input lines (CTS, DSR, RI, CD) interrupts
  */
 struct async_icount {
-	__u32	cts, dsr, rng, dcd;	
+	__u32	cts, dsr, rng, dcd, tx, rx;
+	__u32	frame, parity, overrun, brk;
+	__u32	buf_overrun;
 };
 
 struct serial_state {
@@ -178,6 +183,7 @@ struct async_struct {
 	int			read_status_mask;
 	int			ignore_status_mask;
 	int			timeout;
+	int			quot;
 	int			x_char;	/* xon/xoff character */
 	int			close_delay;
 	unsigned short		closing_wait;
@@ -235,5 +241,6 @@ struct rs_multiport_struct {
 /* Export to allow PCMCIA to use this - Dave Hinds */
 extern int register_serial(struct serial_struct *req);
 extern void unregister_serial(int line);
+
 #endif /* __KERNEL__ */
 #endif /* _LINUX_SERIAL_H */

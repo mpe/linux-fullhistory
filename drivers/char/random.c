@@ -1,9 +1,9 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 1.00, last modified 26-May-96
+ * Version 1.01, last modified 13-Feb-97
  * 
- * Copyright Theodore Ts'o, 1994, 1995, 1996.  All rights reserved.
+ * Copyright Theodore Ts'o, 1994, 1995, 1996, 1997.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -269,6 +269,21 @@
 #endif
 
 /*
+ * For the purposes of better mixing, we use the CRC-32 polynomial as
+ * well to make a twisted Generalized Feedback Shift Reigster
+ *
+ * (See M. Matsumoto & Y. Kurita, 1992.  Twisted GFSR generators.  ACM
+ * Transactions on Modeling and Computer Simulation 2(3):179-194.
+ * Also see M. Matsumoto & Y. Kurita, 1994.  Twisted GFSR generators
+ * II.  ACM Transactions on Mdeling and Computer Simulation 4:254-266)
+ *
+ * Thanks to Colin Plumb for suggesting this.  (Note that the behavior
+ * of the 1.0 version of the driver was equivalent to using a second
+ * element of 0x80000000).
+ */
+static __u32 twist_table[2] = { 0, 0xEDB88320 };
+
+/*
  * The minimum number of bits to release a "wait on input".  Should
  * probably always be 8, since a /dev/random read can return a single
  * byte.
@@ -287,7 +302,7 @@ struct random_bucket {
 	unsigned add_ptr;
 	unsigned entropy_count;
 	int input_rotate;
-	__u32 *pool;
+	__u32 pool[POOLWORDS];
 };
 
 #ifdef RANDOM_BENCHMARK
@@ -321,13 +336,13 @@ struct timer_rand_state {
 };
 
 static struct random_bucket random_state;
-static __u32 random_pool[POOLWORDS];
 static struct timer_rand_state keyboard_timer_state;
 static struct timer_rand_state mouse_timer_state;
 static struct timer_rand_state extract_timer_state;
 static struct timer_rand_state *irq_timer_state[NR_IRQS];
 static struct timer_rand_state *blkdev_timer_state[MAX_BLKDEV];
-static struct wait_queue *random_wait;
+static struct wait_queue *random_read_wait;
+static struct wait_queue *random_write_wait;
 
 static long random_read(struct inode * inode, struct file * file,
 		       char * buf, unsigned long nbytes);
@@ -432,11 +447,7 @@ static void init_std_data(struct random_bucket *r)
 /* Clear the entropy pool and associated counters. */
 static void rand_clear_pool(void)
 {
-	random_state.add_ptr = 0;
-	random_state.entropy_count = 0;
-	random_state.pool = random_pool;
-	random_state.input_rotate = 0;
-	memset(random_pool, 0, sizeof(random_pool));
+	memset(&random_state, 0, sizeof(random_state));
 	init_std_data(&random_state);
 }
 
@@ -456,7 +467,8 @@ void rand_initialize(void)
 	initialize_benchmark(&timer_benchmark, "timer", 0);
 #endif
 	extract_timer_state.dont_count_entropy = 1;
-	random_wait = NULL;
+	random_read_wait = NULL;
+	random_write_wait = NULL;
 }
 
 void rand_initialize_irq(int irq)
@@ -516,8 +528,6 @@ static inline void fast_add_entropy_word(struct random_bucket *r,
 	int new_rotate;
 	__u32 w;
 
-	w = rotate_left(r->input_rotate, input);
-	i = r->add_ptr = (r->add_ptr - 1) & (POOLWORDS-1);
 	/*
 	 * Normally, we add 7 bits of rotation to the pool.  At the
 	 * beginning of the pool, add an extra 7 bits rotation, so
@@ -525,19 +535,21 @@ static inline void fast_add_entropy_word(struct random_bucket *r,
 	 * pool evenly.
 	 */
 	new_rotate = r->input_rotate + 14;
-	if (i)
-		new_rotate = r->input_rotate + 7;
+	if ((i = r->add_ptr--))
+		new_rotate -= 7;
 	r->input_rotate = new_rotate & 31;
 
+	w = rotate_left(r->input_rotate, input);
+	
 	/* XOR in the various taps */
 	w ^= r->pool[(i+TAP1)&(POOLWORDS-1)];
 	w ^= r->pool[(i+TAP2)&(POOLWORDS-1)];
 	w ^= r->pool[(i+TAP3)&(POOLWORDS-1)];
 	w ^= r->pool[(i+TAP4)&(POOLWORDS-1)];
 	w ^= r->pool[(i+TAP5)&(POOLWORDS-1)];
-	w ^= r->pool[i];
-	/* Rotate w left 1 bit (stolen from SHA) and store */
-	r->pool[i] = (w << 1) | (w >> 31);
+	w ^= r->pool[i&(POOLWORDS-1)];
+	/* Use a twisted GFSR for the mixing operation */
+	r->pool[i&(POOLWORDS-1)] = (w >> 1) ^ twist_table[w & 1];
 }
 
 /*
@@ -619,7 +631,7 @@ static void add_timer_randomness(struct random_bucket *r,
 		
 	/* Wake up waiting processes, if we have enough entropy. */
 	if (r->entropy_count >= WAIT_INPUT_BITS)
-		wake_up_interruptible(&random_wait);
+		wake_up_interruptible(&random_read_wait);
 #ifdef RANDOM_BENCHMARK
 	end_benchmark(&timer_benchmark);
 #endif
@@ -662,6 +674,8 @@ void add_blkdev_randomness(int major)
 
 #ifdef USE_SHA
 
+#define SMALL_VERSION		/* Optimize for space over time */
+
 #define HASH_BUFFER_SIZE 5
 #define HASH_TRANSFORM SHATransform
 
@@ -694,10 +708,14 @@ void add_blkdev_randomness(int major)
     ( e += ROTL( 5, a ) + f( b, c, d ) + k + data, b = ROTL( 30, b ) )
 
 
-void SHATransform(__u32 *digest, __u32 *data)
+static void SHATransform(__u32 *digest, __u32 *data)
     {
     __u32 A, B, C, D, E;     /* Local vars */
     __u32 eData[ 16 ];       /* Expanded data */
+#ifdef SMALL_VERSION
+    int	i;
+    __u32 TEMP;
+#endif
 
     /* Set up first buffer and local data buffer */
     A = digest[ 0 ];
@@ -707,6 +725,25 @@ void SHATransform(__u32 *digest, __u32 *data)
     E = digest[ 4 ];
     memcpy( eData, data, 16*sizeof(__u32));
 
+#ifdef SMALL_VERSION
+    /*
+     * Approximately 50% of the speed of the optimized version, but
+     * takes up 1/16 the space.  Saves about 6k on an i386 kernel.
+     */
+    for (i=0; i < 80; i++) {
+	    if (i < 20)
+		    TEMP = f1(B, C, D) + K1;
+	    else if (i < 40)
+		    TEMP = f2(B, C, D) + K2;
+	    else if (i < 60)
+		    TEMP = f3(B, C, D) + K3;
+	    else
+		    TEMP = f4(B, C, D) + K4;
+	    TEMP += ROTL (5, A) + E +
+		    ((i > 15) ? expand(eData, i) : eData[i]);
+	    E = D; D = C; C = ROTL(30, B); B = A; A = TEMP;
+    }
+#else
     /* Heavy mangling, in 4 sub-rounds of 20 iterations each. */
     subRound( A, B, C, D, E, f1, K1, eData[  0 ] );
     subRound( E, A, B, C, D, f1, K1, eData[  1 ] );
@@ -791,6 +828,7 @@ void SHATransform(__u32 *digest, __u32 *data)
     subRound( D, E, A, B, C, f4, K4, expand( eData, 77 ) );
     subRound( C, D, E, A, B, f4, K4, expand( eData, 78 ) );
     subRound( B, C, D, E, A, f4, K4, expand( eData, 79 ) );
+#endif /* SMALL_VERSION */
 
     /* Build message digest */
     digest[ 0 ] += A;
@@ -938,12 +976,6 @@ static int extract_entropy(struct random_bucket *r, char * buf,
 	__u32 tmp[HASH_BUFFER_SIZE];
 	char *cp,*dp;
 
-	if (to_user) {
-		ret = verify_area(VERIFY_WRITE, (void *) buf, nbytes);
-		if (ret)
-			return(ret);
-	}
-	
 	add_timer_randomness(r, &extract_timer_state, nbytes);
 	
 	/* Redundant, but just in case... */
@@ -956,6 +988,9 @@ static int extract_entropy(struct random_bucket *r, char * buf,
 	else
 		r->entropy_count = 0;
 
+	if (r->entropy_count < WAIT_OUTPUT_BITS)
+		wake_up_interruptible(&random_write_wait);
+	
 	while (nbytes) {
 		/* Hash the pool to get the output */
 		tmp[0] = 0x67452301;
@@ -995,9 +1030,13 @@ static int extract_entropy(struct random_bucket *r, char * buf,
 		
 		/* Copy data to destination buffer */
 		i = MIN(nbytes, HASH_BUFFER_SIZE*sizeof(__u32)/2);
-		if (to_user)
-			copy_to_user(buf, (__u8 const *)tmp, i);
-		else
+		if (to_user) {
+			i -= copy_to_user(buf, (__u8 const *)tmp, i);
+			if (!i) {
+				ret = -EFAULT;
+				break;
+			}
+		} else
 			memcpy(buf, (__u8 const *)tmp, i);
 		nbytes -= i;
 		buf += i;
@@ -1033,7 +1072,7 @@ random_read(struct inode * inode, struct file * file, char * buf, unsigned long 
 	if (nbytes == 0)
 		return 0;
 
-	add_wait_queue(&random_wait, &wait);
+	add_wait_queue(&random_read_wait, &wait);
 	while (nbytes > 0) {
 		current->state = TASK_INTERRUPTIBLE;
 		
@@ -1065,7 +1104,7 @@ random_read(struct inode * inode, struct file * file, char * buf, unsigned long 
 				/* like a named pipe */
 	}
 	current->state = TASK_RUNNING;
-	remove_wait_queue(&random_wait, &wait);
+	remove_wait_queue(&random_read_wait, &wait);
 
 	/*
 	 * If we gave the user some bytes and we have an inode pointer,
@@ -1091,9 +1130,10 @@ random_poll(struct file *file, poll_table * wait)
 {
 	unsigned int mask;
 
-	poll_wait(&random_wait, wait);
+	poll_wait(&random_read_wait, wait);
+	poll_wait(&random_write_wait, wait);
 	mask = 0;
-	if (random_state.entropy_count >= 8)
+	if (random_state.entropy_count >= WAIT_INPUT_BITS)
 		mask |= POLLIN | POLLRDNORM;
 	if (random_state.entropy_count < WAIT_OUTPUT_BITS)
 		mask |= POLLOUT | POLLWRNORM;
@@ -1104,25 +1144,33 @@ static long
 random_write(struct inode * inode, struct file * file,
 	     const char * buffer, unsigned long count)
 {
-	int i;
-	__u32 word, *p;
+	int 		i, bytes, ret = 0;
+	__u32 		buf[16];
+	const char 	*p = buffer;
+	int		c = count;
 
-	for (i = count, p = (__u32 *)buffer;
-	     i >= sizeof(__u32);
-	     i-= sizeof(__u32), p++) {
-		copy_from_user(&word, p, sizeof(__u32));
-		add_entropy_word(&random_state, word);
+	while (c > 0) {
+		bytes = MIN(c, sizeof(buf));
+
+		bytes -= copy_from_user(&buf, p, bytes);
+		if (!bytes) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
+		c -= bytes;
+		p += bytes;
+		ret += bytes;
+		
+		i = (c+sizeof(__u32)-1) / sizeof(__u32);
+		while (i--)
+			add_entropy_word(&random_state, buf[i]);
 	}
-	if (i) {
-		word = 0;
-		copy_from_user(&word, p, i);
-		add_entropy_word(&random_state, word);
-	}
-	if (inode) {
+	if ((ret > 0) && inode) {
 		inode->i_mtime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
-	return count;
+	return ret;
 }
 
 static int
@@ -1132,20 +1180,6 @@ random_ioctl(struct inode * inode, struct file * file,
 	int *p, size, ent_count;
 	int retval;
 	
-	/*
-	 * Translate old 1.3.XX values.
-	 * Remove this code in 2.1.0.
-	 * <mec@duracef.shout.net>
-	 */
-	switch (cmd) {
-	case 0x01080000: cmd = RNDGETENTCNT;   break;
-	case 0x01080001: cmd = RNDADDTOENTCNT; break;
-	case 0x01080002: cmd = RNDGETPOOL;     break;
-	case 0x01080003: cmd = RNDADDENTROPY;  break;
-	case 0x01080004: cmd = RNDZAPENTCNT;   break;
-	case 0x01080006: cmd = RNDCLEARPOOL;   break;
-	}
-
 	switch (cmd) {
 	case RNDGETENTCNT:
 		retval = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
@@ -1181,7 +1215,7 @@ random_ioctl(struct inode * inode, struct file * file,
 		 * entropy.
 		 */
 		if (random_state.entropy_count >= WAIT_INPUT_BITS)
-			wake_up_interruptible(&random_wait);
+			wake_up_interruptible(&random_read_wait);
 		return 0;
 	case RNDGETPOOL:
 		if (!suser())
@@ -1201,11 +1235,8 @@ random_ioctl(struct inode * inode, struct file * file,
 			return -EINVAL;
 		if (size > POOLWORDS)
 			size = POOLWORDS;
-		retval = verify_area(VERIFY_WRITE, (void *) p,
-				     size * sizeof(__u32));
-		if (retval)
-			return retval;
-		copy_to_user(p, random_state.pool, size*sizeof(__u32));
+		if (copy_to_user(p, random_state.pool, size*sizeof(__u32)))
+			return -EFAULT;
 		return 0;
 	case RNDADDENTROPY:
 		if (!suser())
@@ -1242,7 +1273,7 @@ random_ioctl(struct inode * inode, struct file * file,
 		 * entropy.
 		 */
 		if (random_state.entropy_count >= WAIT_INPUT_BITS)
-			wake_up_interruptible(&random_wait);
+			wake_up_interruptible(&random_read_wait);
 		return 0;
 	case RNDZAPENTCNT:
 		if (!suser())

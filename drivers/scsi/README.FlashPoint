@@ -1,7 +1,5 @@
-The BusLogic FlashPoint SCSI host adapters are now supported on Linux 2.0.x.
-See http://www.dandelion.com/Linux/ for the beta test BusLogic driver which
-includes FlashPoint support.  The upgrade program described below will remain
-available through the end of 1996.
+The BusLogic FlashPoint SCSI Host Adapters are now supported on Linux.  The
+upgrade program described below will remain available through March 1997.
 
 
 

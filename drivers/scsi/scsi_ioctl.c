@@ -247,8 +247,12 @@ static int ioctl_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
 	retries = 1;
 	break;
       case START_STOP:
+	timeout =  2 * 60 * HZ;	/* 2 minutes */
+	retries = 1;
+	break;
       case MOVE_MEDIUM:
-	timeout =  60 * HZ;	/* 60 seconds */
+      case READ_ELEMENT_STATUS:
+	timeout =  5 * 60 * HZ;	/* 5 minutes */
 	retries = 1;
 	break;
       default:

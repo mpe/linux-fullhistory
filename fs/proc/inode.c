@@ -81,6 +81,7 @@ static int parse_options(char *options,uid_t *uid,gid_t *gid)
 struct inode * proc_get_inode(struct super_block * s, int ino, struct proc_dir_entry * de)
 {
 	struct inode * inode = iget(s, ino);
+	struct task_struct *p;
 	
 #ifdef CONFIG_SUN_OPENPROMFS_MODULE
 	if ((inode->i_ino >= PROC_OPENPROM_FIRST)
@@ -105,6 +106,14 @@ struct inode * proc_get_inode(struct super_block * s, int ino, struct proc_dir_e
 			if (de->fill_inode)
 				de->fill_inode(inode);
 		}
+	}
+	/*
+	 * Fixup the root inode's nlink value
+	 */
+	if (inode->i_ino == PROC_ROOT_INO) {
+		for_each_task(p)
+			if (p && p->pid)
+				inode->i_nlink++;
 	}
 	return inode;
 }			
@@ -162,92 +171,19 @@ void proc_read_inode(struct inode * inode)
 	inode->i_nlink = 1;
 	inode->i_size = 0;
 	pid = ino >> 16;
+	if (!pid)
+		return;
 	p = task[0];
 	for (i = 0; i < NR_TASKS ; i++)
 		if ((p = task[i]) && (p->pid == pid))
 			break;
 	if (!p || i >= NR_TASKS)
 		return;
-	if (ino == PROC_ROOT_INO) {
-		inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
-		inode->i_nlink = 2;
-		for (i = 1 ; i < NR_TASKS ; i++)
-			if (task[i])
-				inode->i_nlink++;
-		return;
-	}
 
-	if (!pid) {
-		switch (ino) {
-			case PROC_KMSG:
-				inode->i_mode = S_IFREG | S_IRUSR;
-				inode->i_op = &proc_kmsg_inode_operations;
-				break;
-			case PROC_NET:
-				inode->i_nlink = 2;
-				break;
-			case PROC_SCSI:
-                                inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
-                                inode->i_nlink = 2;
-                                inode->i_op = &proc_scsi_inode_operations;
-                                break;
-			case PROC_KCORE:
-				inode->i_mode = S_IFREG | S_IRUSR;
-				inode->i_op = &proc_kcore_inode_operations;
-				inode->i_size = (MAP_NR(high_memory) << PAGE_SHIFT) + PAGE_SIZE;
-				break;
-			case PROC_PROFILE:
-				inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;
-				inode->i_op = &proc_profile_inode_operations;
-				inode->i_size = (1+prof_len) * sizeof(unsigned long);
-				break;
-			default:
-				inode->i_mode = S_IFREG | S_IRUGO;
-				inode->i_op = &proc_array_inode_operations;
-				break;
-		}
-		return;
-	}
 	ino &= 0x0000ffff;
 	if (ino == PROC_PID_INO || p->dumpable) {
 		inode->i_uid = p->euid;
 		inode->i_gid = p->egid;
-	}
-	switch (ino) {
-		case PROC_PID_INO:
-			inode->i_nlink = 4;
-			return;
-		case PROC_PID_MEM:
-			inode->i_op = &proc_mem_inode_operations;
-			inode->i_mode = S_IFREG | S_IRUSR | S_IWUSR;
-			return;
-		case PROC_PID_CWD:
-		case PROC_PID_ROOT:
-		case PROC_PID_EXE:
-			inode->i_op = &proc_link_inode_operations;
-			inode->i_size = 64;
-			inode->i_mode = S_IFLNK | S_IRWXU;
-			return;
-		case PROC_PID_FD:
-			inode->i_mode = S_IFDIR | S_IRUSR | S_IXUSR;
-			inode->i_op = &proc_fd_inode_operations;
-			inode->i_nlink = 2;
-			return;
-		case PROC_PID_ENVIRON:
-			inode->i_mode = S_IFREG | S_IRUSR;
-			inode->i_op = &proc_array_inode_operations;
-			return;
-		case PROC_PID_CMDLINE:
-		case PROC_PID_STATUS:
-		case PROC_PID_STAT:
-		case PROC_PID_STATM:
-			inode->i_mode = S_IFREG | S_IRUGO;
-			inode->i_op = &proc_array_inode_operations;
-			return;
-		case PROC_PID_MAPS:
-			inode->i_mode = S_IFIFO | S_IRUGO;
-			inode->i_op = &proc_arraylong_inode_operations;
-			return;
 	}
 	switch (ino >> 8) {
 		case PROC_PID_FD_DIR:

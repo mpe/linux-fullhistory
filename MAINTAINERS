@@ -142,6 +142,7 @@ BUSLOGIC SCSI DRIVER
 P:	Leonard N. Zubkoff
 M:	Leonard N. Zubkoff <lnz@dandelion.com>
 L:	linux-scsi@vger.rutgers.edu
+W:	http://www.dandelion.com/Linux/
 S:	Maintained
 
 CYCLADES ASYNC MUX DRIVER
@@ -301,6 +302,12 @@ SPARC:
 P:	Eddie C. Dost
 M:	ecd@skynet.be
 L:	sparclinux@vger.rutgers.edu
+S:	Maintained
+
+SCSI SUBSYSTEM
+P:	Leonard N. Zubkoff
+M:	Leonard N. Zubkoff <lnz@dandelion.com>
+L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 SVGA HANDLING:

@@ -299,13 +299,41 @@ struct proc_dir_entry proc_openprom = {
 extern void openpromfs_init (void);
 #endif /* CONFIG_SUN_OPENPROMFS */
 
+static int make_inode_number(void)
+{
+	int i = find_first_zero_bit((void *) proc_alloc_map, PROC_NDYNAMIC);
+	if (i<0 || i>=PROC_NDYNAMIC) 
+		return -1;
+	set_bit(i, (void *) proc_alloc_map);
+	return PROC_DYNAMIC_FIRST + i;
+}
+
 int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 {
+	int	i;
+	
+	if (dp->low_ino == 0) {
+		i = make_inode_number();
+		if (i < 0)
+			return -EAGAIN;
+		dp->low_ino = i;
+	}
 	dp->next = dir->subdir;
 	dp->parent = dir;
 	dir->subdir = dp;
-	if (S_ISDIR(dp->mode))
+	if (S_ISDIR(dp->mode)) {
+		if (dp->ops == NULL)
+			dp->ops = &proc_dir_inode_operations;
 		dir->nlink++;
+	} else {
+		if (dp->ops == NULL)
+			dp->ops = &proc_file_inode_operations;
+	}
+	/*
+	 * kludge until we fixup the md device driver
+	 */
+	if (dp->low_ino == PROC_MD)
+		dp->ops = &proc_array_inode_operations;
 	return 0;
 }
 
@@ -330,28 +358,16 @@ int proc_unregister(struct proc_dir_entry * dir, int ino)
 	return -EINVAL;
 }	
 
-static int make_inode_number(void)
-{
-	int i = find_first_zero_bit((void *) proc_alloc_map, PROC_NDYNAMIC);
-	if (i<0 || i>=PROC_NDYNAMIC) 
-		return -1;
-	set_bit(i, (void *) proc_alloc_map);
-	return PROC_DYNAMIC_FIRST + i;
-}
-
 int proc_register_dynamic(struct proc_dir_entry * dir,
 			  struct proc_dir_entry * dp)
 {
-	int i = make_inode_number();
-	if (i < 0)
-		return -EAGAIN;
-	dp->low_ino = i;
-	dp->next = dir->subdir;
-	dp->parent = dir;
-	dir->subdir = dp;
-	if (S_ISDIR(dp->mode))
-		dir->nlink++;
-	return 0;
+	/*
+	 * Make sure we use a dynamically allocated inode.
+	 * In the future, all procedures should just call
+	 * proc_register....
+	 */
+	dp->low_ino = 0;
+	return proc_register(dir, dp);
 }
 
 /*
@@ -404,38 +420,46 @@ static struct inode_operations proc_self_inode_operations = {
 static struct proc_dir_entry proc_root_loadavg = {
 	PROC_LOADAVG, 7, "loadavg",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_uptime = {
 	PROC_UPTIME, 6, "uptime",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_meminfo = {
 	PROC_MEMINFO, 7, "meminfo",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_kmsg = {
 	PROC_KMSG, 4, "kmsg",
 	S_IFREG | S_IRUSR, 1, 0, 0,
+	0, &proc_kmsg_inode_operations
 };
 static struct proc_dir_entry proc_root_version = {
 	PROC_VERSION, 7, "version",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 #ifdef CONFIG_PCI
 static struct proc_dir_entry proc_root_pci = {
 	PROC_PCI, 3, "pci",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 #endif
 #ifdef CONFIG_ZORRO
 static struct proc_dir_entry proc_root_zorro = {
 	PROC_ZORRO, 5, "zorro",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 #endif
 static struct proc_dir_entry proc_root_cpuinfo = {
 	PROC_CPUINFO, 7, "cpuinfo",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_self = {
 	PROC_SELF, 4, "self",
@@ -446,81 +470,99 @@ static struct proc_dir_entry proc_root_self = {
 static struct proc_dir_entry proc_root_malloc = {
 	PROC_MALLOC, 6, "malloc",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 #endif
 static struct proc_dir_entry proc_root_kcore = {
 	PROC_KCORE, 5, "kcore",
 	S_IFREG | S_IRUSR, 1, 0, 0,
+	0, &proc_kcore_inode_operations
 };
 #ifdef CONFIG_MODULES
 static struct proc_dir_entry proc_root_modules = {
 	PROC_MODULES, 7, "modules",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_ksyms = {
 	PROC_KSYMS, 5, "ksyms",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 #endif
 static struct proc_dir_entry proc_root_stat = {
 	PROC_STAT, 4, "stat",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_devices = {
 	PROC_DEVICES, 7, "devices",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_interrupts = {
 	PROC_INTERRUPTS, 10,"interrupts",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 #ifdef __SMP_PROF__
 static struct proc_dir_entry proc_root_smp = {
 	PROC_SMP_PROF, 3,"smp",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 #endif
 static struct proc_dir_entry proc_root_filesystems = {
 	PROC_FILESYSTEMS, 11,"filesystems",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_dma = {
 	PROC_DMA, 3, "dma",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_ioports = {
 	PROC_IOPORTS, 7, "ioports",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_cmdline = {
 	PROC_CMDLINE, 7, "cmdline",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 #ifdef CONFIG_RTC
 static struct proc_dir_entry proc_root_rtc = {
 	PROC_RTC, 3, "rtc",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 #endif
 static struct proc_dir_entry proc_root_locks = {
 	PROC_LOCKS, 5, "locks",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_mounts = {
 	PROC_MTAB, 6, "mounts",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_swaps = {
 	PROC_SWAP, 5, "swaps",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 static struct proc_dir_entry proc_root_profile = {
 	PROC_PROFILE, 7, "profile",
 	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+	0, &proc_profile_inode_operations
 };
 static struct proc_dir_entry proc_root_slab = {
 	PROC_SLABINFO, 8, "slabinfo",
 	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
 };
 
 void proc_root_init(void)
@@ -555,6 +597,7 @@ void proc_root_init(void)
 	proc_register(&proc_root, &proc_root_malloc);
 #endif
 	proc_register(&proc_root, &proc_root_kcore);
+	proc_root_kcore.size = (MAP_NR(high_memory) << PAGE_SHIFT) + PAGE_SIZE;
 
 #ifdef CONFIG_MODULES
 	proc_register(&proc_root, &proc_root_modules);
@@ -589,7 +632,10 @@ void proc_root_init(void)
 
 	if (prof_shift) {
 		proc_register(&proc_root, &proc_root_profile);
+		proc_root_profile.size = (1+prof_len) * sizeof(unsigned long);
 	}
+
+	proc_tty_init();
 }
 
 
@@ -666,8 +712,17 @@ static int proc_root_lookup(struct inode * dir,const char * name, int len,
 {
 	unsigned int pid, c;
 	int i, ino, retval;
+	struct task_struct *p;
 
 	dir->i_count++;
+
+	if (dir->i_ino == PROC_ROOT_INO) { /* check for safety... */
+		dir->i_nlink = proc_root.nlink;
+		for_each_task(p)
+			if (p && p->pid)
+				dir->i_nlink++;
+	}
+
 	retval = proc_lookup(dir, name, len, result);
 	if (retval != -ENOENT) {
 		iput(dir);

@@ -304,19 +304,13 @@ csum_partial_cfu_unaligned(unsigned long * src, unsigned long * dst,
 	return checksum;
 }
 
-unsigned int
-csum_partial_copy_from_user(int *errp, char *src, char *dst,
-			    int len, unsigned int sum)
+static unsigned int
+do_csum_partial_copy_from_user(char *src, char *dst, int len,
+			       unsigned int sum, int *errp)
 {
 	unsigned long checksum = (unsigned) sum;
 	unsigned long soff = 7 & (unsigned long) src;
 	unsigned long doff = 7 & (unsigned long) dst;
-
-	if (!access_ok(src, len, VERIFY_READ)) {
-		*errp = -EFAULT;
-		memset(dst, 0, len);
-		return checksum;
-	}
 
 	if (len) {
 		if (!doff) {
@@ -358,12 +352,25 @@ csum_partial_copy_from_user(int *errp, char *src, char *dst,
 }
 
 unsigned int
+csum_partial_copy_from_user(char *src, char *dst, int len,
+			    unsigned int sum, int *errp)
+{
+	if (!access_ok(src, len, VERIFY_READ)) {
+		*errp = -EFAULT;
+		memset(dst, 0, len);
+		return sum;
+	}
+
+	return do_csum_partial_copy_from_user(src, dst, len, sum, errp);
+}
+
+unsigned int
 csum_partial_copy (const char *src, char *dst, int len, unsigned int sum)
 {
 	unsigned int ret;
 	int error = 0;
 
-	ret = csum_partial_copy_from_user(&error, src, dst, len, sum);
+	ret = do_csum_partial_copy_from_user(src, dst, len, sum, &error);
 	if (error)
 		printk("csum_partial_copy_old(): tell mingo to convert me!\n");
 

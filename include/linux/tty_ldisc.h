@@ -102,6 +102,7 @@
 
 struct tty_ldisc {
 	int	magic;
+	char	*name;
 	int	num;
 	int	flags;
 	/*

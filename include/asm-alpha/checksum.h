@@ -53,7 +53,7 @@ unsigned int csum_partial_copy(const char *src, char *dst, int len, unsigned int
  * this is a new version of the above that records errors it finds in *errp,
  * but continues and zeros the rest of the buffer.
  */
-unsigned int csum_partial_copy_from_user(int *errp, char *src, char *dst, int len, unsigned int sum);
+unsigned int csum_partial_copy_from_user(char *src, char *dst, int len, unsigned int sum, int *errp);
 
 /*
  * this routine is used for miscellaneous IP-like checksums, mainly

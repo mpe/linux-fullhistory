@@ -629,7 +629,6 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     if ((STp->buffer)->last_result_fatal != 0) {
       if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
 	  (SCpnt->sense_buffer[2] & 0x0f) == NO_TAPE) {
-	printk(KERN_NOTICE "st%d: No tape.\n", dev);
 	STp->ready = ST_NO_TAPE;
       } else
 	STp->ready = ST_NOT_READY;

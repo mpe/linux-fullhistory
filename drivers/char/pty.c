@@ -4,14 +4,6 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-/*
- *	pty.c
- *
- * This module exports the following pty function:
- * 
- * 	int  pty_open(struct tty_struct * tty, struct file * filp);
- */
-
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
@@ -47,8 +39,8 @@ struct pty_struct {
 static unsigned char *tmp_buf;
 static struct semaphore tmp_buf_sem = MUTEX;
 
-struct tty_driver pty_driver, pty_slave_driver;
-struct tty_driver old_pty_driver, old_pty_slave_driver;
+static struct tty_driver pty_driver, pty_slave_driver;
+static struct tty_driver old_pty_driver, old_pty_slave_driver;
 static int pty_refcount;
 
 static struct tty_struct *pty_table[NR_PTYS];
@@ -74,8 +66,10 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 	}
 	wake_up_interruptible(&tty->read_wait);
 	wake_up_interruptible(&tty->write_wait);
+	tty->packet = 0;
 	if (!tty->link)
 		return;
+	tty->link->packet = 0;
 	wake_up_interruptible(&tty->link->read_wait);
 	wake_up_interruptible(&tty->link->write_wait);
 	set_bit(TTY_OTHER_CLOSED, &tty->link->flags);
@@ -125,7 +119,12 @@ static int pty_write(struct tty_struct * tty, int from_user,
 			((tty->driver.subtype-1) * PTY_BUF_SIZE);
 		while (count > 0) {
 			n = MIN(count, PTY_BUF_SIZE);
-			copy_from_user(temp_buffer, buf, n);
+			n -= copy_from_user(temp_buffer, buf, n);
+			if (!n) {
+				if (!c)
+					c = -EFAULT;
+				break;
+			}
 			r = to->ldisc.receive_room(to);
 			if (r <= 0)
 				break;
@@ -179,7 +178,7 @@ static void pty_flush_buffer(struct tty_struct *tty)
 	}
 }
 
-int pty_open(struct tty_struct *tty, struct file * filp)
+static int pty_open(struct tty_struct *tty, struct file * filp)
 {
 	int	retval;
 	int	line;
@@ -230,6 +229,7 @@ int pty_init(void)
 	memset(&pty_state, 0, sizeof(pty_state));
 	memset(&pty_driver, 0, sizeof(struct tty_driver));
 	pty_driver.magic = TTY_DRIVER_MAGIC;
+	pty_driver.driver_name = "pty_master";
 	pty_driver.name = "pty";
 	pty_driver.major = PTY_MASTER_MAJOR;
 	pty_driver.minor_start = 0;
@@ -258,6 +258,8 @@ int pty_init(void)
 	pty_driver.set_termios = pty_set_termios;
 
 	pty_slave_driver = pty_driver;
+	pty_slave_driver.driver_name = "pty_slave";
+	pty_slave_driver.proc_entry = 0;
 	pty_slave_driver.name = "ttyp";
 	pty_slave_driver.subtype = PTY_TYPE_SLAVE;
 	pty_slave_driver.major = PTY_SLAVE_MAJOR;
@@ -270,12 +272,16 @@ int pty_init(void)
 	pty_slave_driver.other = &pty_driver;
 
 	old_pty_driver = pty_driver;
+	old_pty_driver.driver_name = "compat_pty_master";
+	old_pty_driver.proc_entry = 0;
 	old_pty_driver.major = TTY_MAJOR;
 	old_pty_driver.minor_start = 128;
 	old_pty_driver.num = (NR_PTYS > 64) ? 64 : NR_PTYS;
 	old_pty_driver.other = &old_pty_slave_driver;
 	
 	old_pty_slave_driver = pty_slave_driver;
+	old_pty_slave_driver.driver_name = "compat_pty_slave";
+	old_pty_slave_driver.proc_entry = 0;
 	old_pty_slave_driver.major = TTY_MAJOR;
 	old_pty_slave_driver.minor_start = 192;
 	old_pty_slave_driver.num = (NR_PTYS > 64) ? 64 : NR_PTYS;

@@ -125,7 +125,7 @@ entInt:
 	lda	$0,intr_count
 	ldl	$1,0($0)
 	addq	$1,1,$1
-	stq	$1,0($0)
+	stl	$1,0($0)
 /* set up the arguments to the C interrupt handler */
 	ldq	$8,current_set
 	jsr	$26,do_entInt
@@ -133,7 +133,7 @@ entInt:
 	lda	$0,intr_count
 	ldl	$1,0($0)
 	subq	$1,1,$1
-	stq	$1,0($0)
+	stl	$1,0($0)
 	br	$31,ret_from_sys_call
 .end entInt
 
@@ -710,7 +710,7 @@ sys_call_table:
 /*0*/	.quad do_entSys, sys_exit, sys_fork, sys_read, sys_write
 	.quad do_entSys, sys_close, sys_wait4, do_entSys, sys_link
 	.quad sys_unlink, do_entSys, sys_chdir, sys_fchdir, sys_mknod
-	.quad sys_chmod, sys_chown, sys_brk, do_entSys, sys_lseek
+	.quad sys_chmod, sys_chown, osf_brk, do_entSys, sys_lseek
 	.quad sys_getxpid, osf_mount, osf_umount, sys_setuid, sys_getxuid
 	.quad do_entSys, sys_ptrace, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, sys_access, do_entSys

@@ -349,7 +349,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	int do_random = 0;
 
 	lock_kernel();
-	intr_count++;
+	atomic_inc(&intr_count);
 #ifdef __SMP__
 	if(smp_threads_ready && active_kernel_processor!=smp_processor_id())
 		panic("IRQ %d: active processor set wrongly(%d not %d).\n", irq, active_kernel_processor, smp_processor_id());
@@ -366,7 +366,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	}
 	if (do_random & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
-	intr_count--;
+	atomic_dec(&intr_count);
 	unlock_kernel();
 }
 

@@ -48,6 +48,20 @@ extern asmlinkage int sys_swapon(const char *specialfile, int swap_flags);
 extern asmlinkage unsigned long sys_brk(unsigned long);
 
 /*
+ * Brk needs to return an error.  Still support Linux's brk(0) query idiom,
+ * which OSF programs just shouldn't be doing.  We're still not quite
+ * identical to OSF as we don't return 0 on success, but doing otherwise
+ * would require changes to libc.  Hopefully this is good enough.
+ */
+asmlinkage unsigned long osf_brk(unsigned long brk)
+{
+	unsigned long retval = sys_brk(brk);
+	if (brk && brk != retval)
+		retval = -ENOMEM;
+	return retval;
+}
+ 
+/*
  * This is pure guess-work..
  */
 asmlinkage int osf_set_program_attributes(
