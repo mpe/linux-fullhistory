@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Tue Apr  6 16:17:16 1999
+ * Modified at:   Wed Jun 23 22:56:51 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997, 1998 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1997, 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -37,28 +37,34 @@
 /* 
  *  Timeout definitions, some defined in IrLAP p. 92
  */
-#define POLL_TIMEOUT        450*HZ/1000    /* Must never exceed 500 ms */
-#define FINAL_TIMEOUT       500*HZ/1000    /* Must never exceed 500 ms */
+#define POLL_TIMEOUT        (450*HZ/1000)    /* Must never exceed 500 ms */
+#define FINAL_TIMEOUT       (500*HZ/1000)    /* Must never exceed 500 ms */
 
 /* 
  *  Normally twice of p-timer. Note 3, IrLAP p. 60 suggests at least twice 
  *  duration of the P-timer.
  */
-#define WD_TIMEOUT          POLL_TIMEOUT*2
-#define MEDIABUSY_TIMEOUT   500*HZ/1000    /* 500 msec */
+#define WD_TIMEOUT          (POLL_TIMEOUT*2)
+#define MEDIABUSY_TIMEOUT   (500*HZ/1000)    /* 500 msec */
 
 /*
  *  Slot timer must never exceed 85 ms, and must always be at least 25 ms, 
- *  suggested to  75-85 msec by IrDA lite
+ *  suggested to  75-85 msec by IrDA lite. This doesn't work with a lot of
+ *  devices, and other stackes uses a lot more, so it's best we do it as well
  */
-#define SLOT_TIMEOUT            80*HZ/1000
-#define QUERY_TIMEOUT           HZ          /* 1 sec */
+#define SLOT_TIMEOUT            (90*HZ/1000)
 
-#define WATCHDOG_TIMEOUT        20*HZ       /* 20 sec */
+/* 
+ *  We set the query timeout to 100 ms and then expect the value to be 
+ *  multiplied with the number of slots to product the actual timeout value
+ */
+#define QUERY_TIMEOUT           (HZ/10)       
 
-typedef void (*TIMER_CALLBACK)(unsigned long);
+#define WATCHDOG_TIMEOUT        (20*HZ)       /* 20 sec */
 
-void irda_start_timer(struct timer_list *ptimer, int timeout, int data,
+typedef void (*TIMER_CALLBACK)(void *);
+
+void irda_start_timer(struct timer_list *ptimer, int timeout, void* data,
 		      TIMER_CALLBACK callback);
 
 inline void irlap_start_slot_timer(struct irlap_cb *self, int timeout);

@@ -448,7 +448,7 @@ int inet_dump_rules(struct sk_buff *skb, struct netlink_callback *cb)
 
 #endif /* CONFIG_RTNETLINK */
 
-__initfunc(void fib_rules_init(void))
+void __init fib_rules_init(void)
 {
 	register_netdevice_notifier(&fib_rules_notifier);
 }

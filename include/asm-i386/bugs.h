@@ -50,7 +50,7 @@ __setup("no387", no_387);
 
 static char __initdata fpu_error = 0;
 
-__initfunc(static void copro_timeout(void))
+static void __init copro_timeout(void)
 {
 	fpu_error = 1;
 	timer_table[COPRO_TIMER].expires = jiffies+100;
@@ -64,7 +64,7 @@ __initfunc(static void copro_timeout(void))
 static double __initdata x = 4195835.0;
 static double __initdata y = 3145727.0;
 
-__initfunc(static void check_fpu(void))
+static void __init check_fpu(void)
 {
 	unsigned short control_word;
 
@@ -111,7 +111,7 @@ __initfunc(static void check_fpu(void))
 	 * should get there first..
 	 */
 	printk(KERN_INFO "Checking 386/387 coupling... ");
-	timer_table[COPRO_TIMER].expires = jiffies+50;
+	timer_table[COPRO_TIMER].expires = jiffies+HZ/2;
 	timer_table[COPRO_TIMER].fn = copro_timeout;
 	timer_active |= 1<<COPRO_TIMER;
 	__asm__("clts ; fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));
@@ -143,7 +143,7 @@ __initfunc(static void check_fpu(void))
 		printk("Hmm, FPU using exception 16 error reporting with FDIV bug.\n");
 }
 
-__initfunc(static void check_hlt(void))
+static void __init check_hlt(void)
 {
 	printk(KERN_INFO "Checking 'hlt' instruction... ");
 	if (!boot_cpu_data.hlt_works_ok) {
@@ -159,7 +159,7 @@ __initfunc(static void check_hlt(void))
  *	machine even from user space.
  */
  
-__initfunc(static void check_popad(void))
+static void __init check_popad(void)
 {
 #ifndef CONFIG_X86_POPAD_OK
 	int res, inp = (int) &res;
@@ -192,7 +192,7 @@ __initfunc(static void check_popad(void))
 extern void vide(void);
 __asm__(".align 4\nvide: ret");
 
-__initfunc(static void check_amd_k6(void))
+static void __init check_amd_k6(void)
 {
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
 	    boot_cpu_data.x86_model == 6 &&
@@ -238,7 +238,7 @@ __initfunc(static void check_amd_k6(void))
 
 extern void trap_init_f00f_bug(void);
 
-__initfunc(static void check_pentium_f00f(void))
+static void __init check_pentium_f00f(void)
 {
 	/*
 	 * Pentium and Pentium MMX
@@ -280,7 +280,7 @@ static inline int test_cyrix_52div(void)
 
 extern unsigned char Cx86_dir0_msb;  /* exported HACK from cyrix_model() */
 
-__initfunc(static void check_cx686_cpuid(void))
+static void __init check_cx686_cpuid(void)
 {
 	if (boot_cpu_data.cpuid_level == -1 &&
 	    ((Cx86_dir0_msb == 5) || (Cx86_dir0_msb == 3))) {
@@ -320,7 +320,7 @@ __initfunc(static void check_cx686_cpuid(void))
 
 extern void calibrate_delay(void) __init;
 
-__initfunc(static void check_cx686_slop(void))
+static void __init check_cx686_slop(void)
 {
 	if (Cx86_dir0_msb == 3) {
 		unsigned char ccr3, ccr5;
@@ -348,7 +348,7 @@ __initfunc(static void check_cx686_slop(void))
  * PII and PPro exhibit this behavior too, but they have cpuid available.
  */
 
-__initfunc(static void check_cyrix_cpu(void))
+static void __init check_cyrix_cpu(void)
 {
 	if ((boot_cpu_data.cpuid_level == -1) && (boot_cpu_data.x86 == 4)
 	    && test_cyrix_52div()) {
@@ -363,7 +363,7 @@ __initfunc(static void check_cyrix_cpu(void))
  * enable the workaround for it.
  */
 
-__initfunc(static void check_cyrix_coma(void))
+static void __init check_cyrix_coma(void)
 {
 }
  
@@ -380,7 +380,7 @@ __initfunc(static void check_cyrix_coma(void))
  *   reads from the APIC.
 */
 
-__initfunc(static void check_config(void))
+static void __init check_config(void)
 {
 /*
  * We'd better not be a i386 if we're configured to use some
@@ -409,7 +409,7 @@ __initfunc(static void check_config(void))
 #endif
 }
 
-__initfunc(static void check_bugs(void))
+static void __init check_bugs(void)
 {
 	check_cyrix_cpu();
 	identify_cpu(&boot_cpu_data);

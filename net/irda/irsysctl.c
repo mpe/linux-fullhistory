@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 24 22:12:06 1998
- * Modified at:   Thu May  6 21:32:46 1999
+ * Modified at:   Fri Jun  4 02:50:15 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
@@ -31,13 +31,15 @@
 #include <net/irda/irda.h>
 
 #define NET_IRDA 412 /* Random number */
-enum { DISCOVERY=1, DEVNAME, COMPRESSION, DEBUG, SLOTS, SLOT_TIMEOUT };
+enum { DISCOVERY=1, DEVNAME, COMPRESSION, DEBUG, SLOTS, DISCOVERY_TIMEOUT, 
+       SLOT_TIMEOUT };
 
-extern int sysctl_discovery;
-extern int sysctl_discovery_slots;
-extern int sysctl_slot_timeout;
-extern int sysctl_fast_poll_increase;
-int sysctl_compression = 0;
+extern int  sysctl_discovery;
+extern int  sysctl_discovery_slots;
+extern int  sysctl_discovery_timeout;
+extern int  sysctl_slot_timeout;
+extern int  sysctl_fast_poll_increase;
+int         sysctl_compression = 0;
 extern char sysctl_devname[];
 
 #ifdef CONFIG_IRDA_DEBUG
@@ -61,6 +63,8 @@ static ctl_table irda_table[] = {
 	  sizeof(int), 0644, NULL, &proc_dointvec },
 #endif
 	{ SLOTS, "discovery_slots", &sysctl_discovery_slots,
+	  sizeof(int), 0644, NULL, &proc_dointvec },
+	{ DISCOVERY_TIMEOUT, "discovery_timeout", &sysctl_discovery_timeout,
 	  sizeof(int), 0644, NULL, &proc_dointvec },
 	{ SLOT_TIMEOUT, "slot_timeout", &sysctl_slot_timeout,
 	  sizeof(int), 0644, NULL, &proc_dointvec },
@@ -89,9 +93,10 @@ static struct ctl_table_header *irda_table_header;
  */
 int irda_sysctl_register(void)
 {
-	irda_table_header = register_sysctl_table( irda_root_table, 0);
-	if ( !irda_table_header)
+	irda_table_header = register_sysctl_table(irda_root_table, 0);
+	if (!irda_table_header)
 		return -ENOMEM;
+
 	return 0;
 }
 
@@ -103,7 +108,7 @@ int irda_sysctl_register(void)
  */
 void irda_sysctl_unregister(void) 
 {
-	unregister_sysctl_table( irda_table_header);
+	unregister_sysctl_table(irda_table_header);
 }
 
 

@@ -194,7 +194,7 @@ int __init xd_init (void)
 }
 
 /* xd_detect: scan the possible BIOS ROM locations for the signature strings */
-static __init u_char xd_detect (u_char *controller, unsigned int *address)
+static u_char __init xd_detect (u_char *controller, unsigned int *address)
 {
 	u_char i,j,found = 0;
 
@@ -1204,5 +1204,10 @@ void cleanup_module(void)
 			xd_dma_mem_free((unsigned long)xd_dma_buffer, xd_maxsectors * 0x200);
 	}
 }
+#else
+
+__setup ("xd=", xd_setup);
+__setup ("xd_geo=", xd_manual_geo_init);
+
 #endif /* MODULE */
 

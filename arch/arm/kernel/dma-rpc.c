@@ -359,7 +359,7 @@ int arch_set_dma_speed(dmach_t channel, dma_t *dma, int cycle)
 	outb(tcr, IOMD_DMATCR);
 }
 
-__initfunc(void arch_dma_init(dma_t *dma))
+void __init arch_dma_init(dma_t *dma)
 {
 	outb(0, IOMD_IO0CR);
 	outb(0, IOMD_IO1CR);

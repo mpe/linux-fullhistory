@@ -839,7 +839,7 @@ struct proc_dir_entry proc_net_bridge= {
 	br_tree_get_info
 };
 #endif
-__initfunc(void br_init(void))
+void __init br_init(void)
 {						  /* (4.8.1)	 */
 	int port_no;
 

@@ -52,7 +52,7 @@
 	Result:		FPU_accum_3:FPU_accum_2:FPU_accum_1:FPU_accum_0
 	Overflow flag:	ovfl_flag
  */
-	.align 2,0
+	.align 4,0
 FPU_accum_3:
 	.long	0
 FPU_accum_2:

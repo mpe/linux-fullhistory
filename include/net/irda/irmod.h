@@ -119,7 +119,7 @@ static inline int irda_lock(int *lock)
 
 inline int irda_unlock(int *lock);
 
-void irda_notify_init(struct notify_t *notify);
+void irda_notify_init(notify_t *notify);
 
 void irda_execute_as_process(void *self, TODO_CALLBACK callback, __u32 param);
 void irmanager_notify(struct irmanager_event *event);

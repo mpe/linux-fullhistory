@@ -6,6 +6,12 @@
 /* 
  * Adapted for booting Linux by Hannu Savolainen 1993
  * based on gzip-1.0.3 
+ *
+ * Nicolas Pitre <nico@visuaide.com>, 1999/04/14 :
+ *   Little mods for all variable to reside either into rodata or bss segments
+ *   by marking constant variables with 'const' and initializing all the others
+ *   at run-time only.  This allows for the kernel uncompressor to run
+ *   directly from Flash or ROM memory on embeded systems.
  */
 
 /*
@@ -132,8 +138,8 @@ struct huft {
 
 
 /* Function prototypes */
-STATIC int huft_build OF((unsigned *, unsigned, unsigned, ush *, ush *,
-                   struct huft **, int *));
+STATIC int huft_build OF((unsigned *, unsigned, unsigned, 
+		const ush *, const ush *, struct huft **, int *));
 STATIC int huft_free OF((struct huft *));
 STATIC int inflate_codes OF((struct huft *, struct huft *, int, int));
 STATIC int inflate_stored OF((void));
@@ -156,20 +162,20 @@ STATIC int inflate OF((void));
 #define flush_output(w) (wp=(w),flush_window())
 
 /* Tables for deflate from PKZIP's appnote.txt. */
-static unsigned border[] = {    /* Order of the bit length code lengths */
+static const unsigned border[] = {    /* Order of the bit length code lengths */
         16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
-static ush cplens[] = {         /* Copy lengths for literal codes 257..285 */
+static const ush cplens[] = {         /* Copy lengths for literal codes 257..285 */
         3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
         35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258, 0, 0};
         /* note: see note #13 above about the 258 in this list. */
-static ush cplext[] = {         /* Extra bits for literal codes 257..285 */
+static const ush cplext[] = {         /* Extra bits for literal codes 257..285 */
         0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
         3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0, 99, 99}; /* 99==invalid */
-static ush cpdist[] = {         /* Copy offsets for distance codes 0..29 */
+static const ush cpdist[] = {         /* Copy offsets for distance codes 0..29 */
         1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193,
         257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145,
         8193, 12289, 16385, 24577};
-static ush cpdext[] = {         /* Extra bits for distance codes */
+static const ush cpdext[] = {         /* Extra bits for distance codes */
         0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6,
         7, 7, 8, 8, 9, 9, 10, 10, 11, 11,
         12, 12, 13, 13};
@@ -209,7 +215,7 @@ static ush cpdext[] = {         /* Extra bits for distance codes */
 STATIC ulg bb;                         /* bit buffer */
 STATIC unsigned bk;                    /* bits in bit buffer */
 
-STATIC ush mask_bits[] = {
+STATIC const ush mask_bits[] = {
     0x0000,
     0x0001, 0x0003, 0x0007, 0x000f, 0x001f, 0x003f, 0x007f, 0x00ff,
     0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff, 0x3fff, 0x7fff, 0xffff
@@ -253,8 +259,8 @@ STATIC ush mask_bits[] = {
  */
 
 
-STATIC int lbits = 9;          /* bits in base literal/length lookup table */
-STATIC int dbits = 6;          /* bits in base distance lookup table */
+STATIC const int lbits = 9;          /* bits in base literal/length lookup table */
+STATIC const int dbits = 6;          /* bits in base distance lookup table */
 
 
 /* If BMAX needs to be larger than 16, then h and x[] should be ulg. */
@@ -269,8 +275,8 @@ STATIC int huft_build(b, n, s, d, e, t, m)
 unsigned *b;            /* code lengths in bits (all assumed <= BMAX) */
 unsigned n;             /* number of codes (assumed <= N_MAX) */
 unsigned s;             /* number of simple-valued codes (0..s-1) */
-ush *d;                 /* list of base values for non-simple codes */
-ush *e;                 /* list of extra bits for non-simple codes */
+const ush *d;                 /* list of base values for non-simple codes */
+const ush *e;                 /* list of extra bits for non-simple codes */
 struct huft **t;        /* result: starting table */
 int *m;                 /* maximum lookup bits, returns actual */
 /* Given a list of code lengths and a maximum table size, make a set of
@@ -1002,7 +1008,7 @@ STATIC int inflate()
  **********************************************************************/
 
 static ulg crc_32_tab[256];
-static ulg crc = (ulg)0xffffffffL; /* shift register contents */
+static ulg crc;		/* initialized in makecrc() so it'll reside in bss */
 #define CRC_VALUE (crc ^ 0xffffffffL)
 
 /*
@@ -1021,7 +1027,7 @@ makecrc(void)
   int k;                /* byte being shifted into crc apparatus */
 
   /* terms of polynomial defining this crc (except x^32): */
-  static int p[] = {0,1,2,4,5,7,8,10,11,12,16,22,23,26};
+  static const int p[] = {0,1,2,4,5,7,8,10,11,12,16,22,23,26};
 
   /* Make exclusive-or pattern from polynomial */
   e = 0;
@@ -1041,6 +1047,9 @@ makecrc(void)
     }
     crc_32_tab[i] = c;
   }
+
+  /* this is initialized here so this code could reside in ROM */
+  crc = (ulg)0xffffffffL; /* shift register contents */
 }
 
 /* gzip flag byte */

@@ -221,7 +221,7 @@ EXPORT_SYMBOL(get_dma_residue);
 EXPORT_SYMBOL(set_dma_sg);
 EXPORT_SYMBOL(set_dma_speed);
 
-__initfunc(void init_dma(void))
+void __init init_dma(void)
 {
 	arch_dma_init(dma_chan);
 }

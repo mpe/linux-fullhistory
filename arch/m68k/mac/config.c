@@ -227,7 +227,7 @@ void (*mac_handlers[8])(int, void *, struct pt_regs *)=
      *  Parse a Macintosh-specific record in the bootinfo
      */
 
-__initfunc(int mac_parse_bootinfo(const struct bi_record *record))
+int __init mac_parse_bootinfo(const struct bi_record *record)
 {
     int unknown = 0;
     const u_long *data = record->data;
@@ -288,7 +288,7 @@ static void mac_cache_card_flush(int writeback)
 	restore_flags(flags);
 }
 
-__initfunc(void config_mac(void))
+void __init config_mac(void)
 {
 
     if (!MACH_IS_MAC) {

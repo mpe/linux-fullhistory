@@ -6,10 +6,11 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Sun May  9 11:38:18 1999
+ * Modified at:   Thu Jul  8 21:22:50 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -31,6 +32,7 @@
 #include <linux/netdevice.h>
 #include <linux/ppp_defs.h>
 #include <linux/ppp-comp.h>
+#include <linux/timer.h>
 
 #include <net/irda/irlap_event.h>
 
@@ -54,7 +56,7 @@
 #define XID_FORMAT 0x01       /* Discovery XID format */
 
 #define LAP_WINDOW_SIZE 8
-#define MAX_CONNECTIONS 1
+#define LAP_MAX_QUEUE  10
 
 #define NR_EXPECTED     1
 #define NR_UNEXPECTED   0
@@ -85,9 +87,8 @@ struct irda_compressor {
 
 /* Main structure of IrLAP */
 struct irlap_cb {
-	QUEUE q; /* Must be first */
-
-	int magic;
+	QUEUE   q;     /* Must be first */
+	magic_t magic;
 
 	struct irda_device *irdev;
 	struct net_device      *netdev;
@@ -138,12 +139,11 @@ struct irlap_cb {
 
 	__u8    vs;           /* Next frame to be sent */
 	__u8    vr;           /* Next frame to be received */
-/* 	int     tmp; */
 	__u8    va;           /* Last frame acked */
  	int     window;       /* Nr of I-frames allowed to send */
 	int     window_size;  /* Current negotiated window size */
-	int     window_bytes; /* Number of bytes allowed to send */
-	int     bytes_left;   /* Number of bytes allowed to transmit */
+	__u32   window_bytes; /* Number of bytes allowed to send */
+	__u32   bytes_left;   /* Number of bytes allowed to transmit */
 
 	struct sk_buff_head wx_list;
 
@@ -161,7 +161,7 @@ struct irlap_cb {
 	struct qos_info qos_tx;    /* QoS requested by peer */
 	struct qos_info qos_rx;    /* QoS requested by self */
 
-	struct notify_t notify; /* Callbacks to IrLMP */
+	notify_t notify; /* Callbacks to IrLMP */
 
 	int    mtt_required;  /* Minumum turnaround time required */
 	int    xbofs_delay;   /* Nr of XBOF's used to MTT */
@@ -180,55 +180,60 @@ extern hashbin_t *irlap;
 /* 
  *  Function prototypes 
  */
+int irlap_init(void);
+void irlap_cleanup(void);
 
-int irlap_init( void);
-void irlap_cleanup( void);
+struct irlap_cb *irlap_open(struct irda_device *dev);
+void irlap_close(struct irlap_cb *self);
 
-struct irlap_cb *irlap_open( struct irda_device *dev);
-void irlap_close( struct irlap_cb *self);
+void irlap_connect_request(struct irlap_cb *self, __u32 daddr, 
+			   struct qos_info *qos, int sniff);
+void irlap_connect_response(struct irlap_cb *self, struct sk_buff *skb);
+void irlap_connect_indication(struct irlap_cb *self, struct sk_buff *skb);
+void irlap_connect_confirm(struct irlap_cb *, struct sk_buff *skb);
 
-void irlap_connect_request( struct irlap_cb *self, __u32 daddr, 
-			    struct qos_info *qos, int sniff);
-void irlap_connect_response( struct irlap_cb *self, struct sk_buff *skb);
-void irlap_connect_indication( struct irlap_cb *self, struct sk_buff *skb);
-void irlap_connect_confirm( struct irlap_cb *, struct sk_buff *skb);
+inline void irlap_data_indication(struct irlap_cb *, struct sk_buff *);
+inline void irlap_unit_data_indication(struct irlap_cb *, struct sk_buff *);
+inline void irlap_data_request(struct irlap_cb *, struct sk_buff *, 
+			       int reliable);
 
-inline void irlap_data_indication( struct irlap_cb *, struct sk_buff *);
-inline void irlap_unit_data_indication( struct irlap_cb *, struct sk_buff *);
-inline void irlap_data_request( struct irlap_cb *, struct sk_buff *, 
-				int reliable);
+void irlap_disconnect_request(struct irlap_cb *);
+void irlap_disconnect_indication(struct irlap_cb *, LAP_REASON reason);
 
-void irlap_disconnect_request( struct irlap_cb *);
-void irlap_disconnect_indication( struct irlap_cb *, LAP_REASON reason);
+void irlap_status_indication(int quality_of_link);
 
-void irlap_status_indication( int quality_of_link);
-
-void irlap_test_request( __u8 *info, int len);
+void irlap_test_request(__u8 *info, int len);
 
 void irlap_discovery_request(struct irlap_cb *, discovery_t *discovery);
 void irlap_discovery_confirm(struct irlap_cb *, hashbin_t *discovery_log);
 void irlap_discovery_indication(struct irlap_cb *, discovery_t *discovery);
 
-void irlap_reset_indication( struct irlap_cb *self);
+void irlap_reset_indication(struct irlap_cb *self);
 void irlap_reset_confirm(void);
 
-void irlap_update_nr_received( struct irlap_cb *, int nr);
-int irlap_validate_nr_received( struct irlap_cb *, int nr);
-int irlap_validate_ns_received( struct irlap_cb *, int ns);
+void irlap_update_nr_received(struct irlap_cb *, int nr);
+int irlap_validate_nr_received(struct irlap_cb *, int nr);
+int irlap_validate_ns_received(struct irlap_cb *, int ns);
 
-int  irlap_generate_rand_time_slot( int S, int s);
-void irlap_initiate_connection_state( struct irlap_cb *);
+int  irlap_generate_rand_time_slot(int S, int s);
+void irlap_initiate_connection_state(struct irlap_cb *);
 void irlap_flush_all_queues(struct irlap_cb *);
-void irlap_change_speed(struct irlap_cb *, int);
+void irlap_change_speed(struct irlap_cb *self, __u32 speed);
 void irlap_wait_min_turn_around(struct irlap_cb *, struct qos_info *);
 
 void irlap_init_qos_capabilities(struct irlap_cb *, struct qos_info *);
 void irlap_apply_default_connection_parameters(struct irlap_cb *self);
 void irlap_apply_connection_parameters(struct irlap_cb *, struct qos_info *);
+void irlap_set_local_busy(struct irlap_cb *self, int status);
 
 extern inline __u8 irlap_get_header_size(struct irlap_cb *self)
 {
 	return 2;
+}
+
+extern inline int irlap_get_tx_queue_len(struct irlap_cb *self)
+{
+	return skb_queue_len(&self->tx_list);
 }
 
 #endif

@@ -31,7 +31,7 @@ extern int hp300_get_irq_list(char *buf);
 extern int hp300_keyb_init(void);
 #else
 /* Dummy function for when there is no keyboard. */
-__initfunc(int hp300_keyb_init(void))
+int __init hp300_keyb_init(void)
 {
 }
 #endif
@@ -60,7 +60,7 @@ static void hp300_get_model(char *model)
   strcpy(model, "HP9000/300");
 }
 
-__initfunc(void config_hp300(void))
+void __init config_hp300(void)
 {
   mach_sched_init      = hp300_sched_init;
   mach_keyb_init       = hp300_keyb_init;

@@ -23,7 +23,7 @@ extern struct bcache_ops *bcops;
 #ifdef CONFIG_SGI_PROM_CONSOLE
 void prom_putchar(char c)
 #else
-__initfunc(void prom_putchar(char c))
+void __init prom_putchar(char c)
 #endif
 {
 	long cnt;
@@ -37,7 +37,7 @@ __initfunc(void prom_putchar(char c))
 #ifdef CONFIG_SGI_PROM_CONSOLE
 char prom_getchar(void)
 #else
-__initfunc(char prom_getchar(void))
+char __init prom_getchar(void)
 #endif
 {
 	long cnt;

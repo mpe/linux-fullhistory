@@ -25,7 +25,7 @@ static const struct mapping {
 
 #define SIZEOFMAP (sizeof(mapping) / sizeof(mapping[0]))
 
-__initfunc(unsigned long setup_io_pagetables(unsigned long start_mem))
+unsigned long __init setup_io_pagetables(unsigned long start_mem)
 {
 	const struct mapping *mp;
 	int i;

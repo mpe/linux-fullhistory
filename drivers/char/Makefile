@@ -206,11 +206,11 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_MOUSE),y)
+ifeq ($(CONFIG_BUSMOUSE),y)
 M = y
 OX_OBJS += busmouse.o
 else
-  ifeq ($(CONFIG_MOUSE),m)
+  ifeq ($(CONFIG_BUSMOUSE),m)
   MM = m
   MX_OBJS += busmouse.o
   endif
@@ -385,7 +385,7 @@ endif
 ifeq ($(CONFIG_VIDEO_ZORAN),y)
 O_OBJS += buz.o
 else
-  ifeq ($(CONFIG_VIDEO_LML33),m)
+  ifeq ($(CONFIG_VIDEO_ZORAN),m)
     M_OBJS += buz.o
   endif
 endif

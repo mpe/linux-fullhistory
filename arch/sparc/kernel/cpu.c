@@ -123,7 +123,7 @@ char *sparc_fpu_type[NR_CPUS] = { 0 };
 
 unsigned int fsr_storage;
 
-__initfunc(void cpu_probe(void))
+void __init cpu_probe(void)
 {
 	int psr_impl, psr_vers, fpu_vers;
 	int i, cpuid, psr;

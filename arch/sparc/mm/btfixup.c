@@ -48,7 +48,7 @@ static char fca_und[] __initdata = "flush_cache_all undefined in btfixup()\n";
 static char wrong_setaddr[] __initdata = "Garbled CALL/INT patch at %p[%08x,%08x,%08x]=%08x\n";
 
 #ifdef BTFIXUP_OPTIMIZE_OTHER
-__initfunc(static void set_addr(unsigned int *addr, unsigned int q1, int fmangled, unsigned int value))
+static void __init set_addr(unsigned int *addr, unsigned int q1, int fmangled, unsigned int value)
 {
 	if (!fmangled)
 		*addr = value;
@@ -74,7 +74,7 @@ static __inline__ void set_addr(unsigned int *addr, unsigned int q1, int fmangle
 }
 #endif
 
-__initfunc(void btfixup(void))
+void __init btfixup(void)
 {
 	unsigned int *p, *q;
 	int type, count;

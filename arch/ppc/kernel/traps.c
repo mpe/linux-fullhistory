@@ -259,6 +259,6 @@ TAUException(struct pt_regs *regs)
 	       regs->nip, regs->msr, regs->trap);
 }
 
-__initfunc(void trap_init(void))
+void __init trap_init(void)
 {
 }

@@ -21,7 +21,7 @@ extern int (*rex_getsysid)(void);
 extern unsigned long mips_machgroup;
 extern unsigned long mips_machtype;
 
-__initfunc(void prom_identify_arch (unsigned int magic))
+void __init prom_identify_arch (unsigned int magic)
 {
 	unsigned char dec_cpunum, dec_firmrev, dec_etc;
 	int dec_systype;

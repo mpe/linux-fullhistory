@@ -95,7 +95,7 @@ static void swift_clockstop(void)
 	clk_ctrl[0] = 0;
 }
 
-__initfunc(void clock_stop_probe(void))
+void __init clock_stop_probe(void)
 {
 	unsigned int node, clk_nd;
 	char name[20];

@@ -21,10 +21,10 @@ else
 endif
 
 ifeq ($(CONFIG_ATM_ZATM),y)
-L_OBJS += zatm.o uPD98402.o
+LX_OBJS += zatm.o uPD98402.o
 else
   ifeq ($(CONFIG_ATM_ZATM),m)
-  M_OBJS += zatm.o uPD98402.o
+  MX_OBJS += zatm.o uPD98402.o
   endif
 endif
 

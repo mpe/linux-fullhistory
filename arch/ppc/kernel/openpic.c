@@ -173,7 +173,7 @@ static void openpic_safe_writefield(volatile u_int *addr, u_int mask,
      *  Initialize the OpenPIC
      */
 
-__initfunc(void openpic_init(int main_pic))
+void __init openpic_init(int main_pic)
 {
     u_int t, i;
     u_int timerfreq;

@@ -119,10 +119,6 @@ EXPORT_NO_SYMBOLS;
 typedef struct enet_statistics hp100_stats_t;
 #endif
 
-#ifndef __initfunc
-#define __initfunc(__initarg) __initarg
-#endif
-
 #include "hp100.h"
 
 /*

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Wed May 19 08:44:48 1999
+ * Modified at:   Tue Aug 24 13:58:23 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -75,7 +75,7 @@ struct chipio_t {
         int irqflags;         /* interrupt flags (ie, SA_SHIRQ|SA_INTERRUPT) */
 	int direction;        /* Link direction, used by some FIR drivers */
 
-	int baudrate;         /* Currently used baudrate */
+	__u32 baudrate;       /* Currently used baudrate */
 	int dongle_id;        /* Dongle or transceiver currently used */
 };
 
@@ -102,17 +102,17 @@ struct iobuff_t {
  * stuff from IrDA port implementations.
  */
 struct irda_device {
-	QUEUE q;               /* Must be first */
+	QUEUE   q;             /* Must be first */
+        magic_t magic;	       /* Our magic bullet */
 
-        int  magic;	       /* Our magic bullet */
 	char name[16];         /* Name of device "irda0" */
 	char description[32];  /* Something like "irda0 <-> ttyS0" */
 
-	struct irlap_cb *irlap; /* The link layer we are connected to  */
-	struct net_device netdev;   /* Yes! we are some kind of netdevice */
+	struct irlap_cb *irlap;   /* The link layer we are connected to  */
+	struct net_device netdev; /* Yes! we are some kind of netdevice */
 	struct enet_statistics stats;
 
- 	int flags;            /* Interface flags (see defs above) */
+ 	__u32 flags;          /* Interface flags (see defs above) */
 
  	void *priv;           /* Pointer to low level implementation */
 
@@ -130,11 +130,16 @@ struct irda_device {
 	int media_busy;
 	struct timer_list media_busy_timer;
 
-	/* Callbacks for driver specific implementation */
-        void (*change_speed)(struct irda_device *idev, int baud);
+	int raw_mode;
+
+	/* Callbacks to driver specific implementations */
+        void (*change_speed)(struct irda_device *idev, __u32 speed);
  	int  (*is_receiving)(struct irda_device *);    /* receiving? */
 	void (*set_dtr_rts)(struct irda_device *idev, int dtr, int rts);
+	void (*set_raw_mode)(struct irda_device *dev, int mode);
 	int  (*raw_write)(struct irda_device *idev, __u8 *buf, int len);
+	int  (*raw_read)(struct irda_device *idev, __u8 *buf, int len, 
+			 int timeout);
 	void (*wait_until_sent)(struct irda_device *);
 	void (*set_caddr)(struct irda_device *);      /* Set connection addr */
 };
@@ -155,14 +160,17 @@ inline int  irda_device_is_receiving(struct irda_device *);
 inline void irda_device_change_speed(struct irda_device *, int);
 
 inline struct qos_info *irda_device_get_qos(struct irda_device *self);
-int irda_device_txqueue_empty(struct irda_device *self);
+int  irda_device_txqueue_empty(struct irda_device *self);
 void irda_device_init_dongle(struct irda_device *self, int type);
 void irda_device_unregister_dongle(struct dongle *dongle);
-int irda_device_register_dongle(struct dongle *dongle);
-
-int irda_device_setup(struct net_device *dev);
+int  irda_device_register_dongle(struct dongle *dongle);
+int  irda_device_set_raw_mode(struct irda_device* self, int status);
+int  irda_device_setup(struct net_device *dev);
 
 void setup_dma(int channel, char *buffer, int count, int mode);
+
+int irda_device_net_open(struct net_device *dev);
+int irda_device_net_close(struct net_device *dev);
 
 /*
  * Function irda_get_mtt (skb)
@@ -174,10 +182,10 @@ extern inline __u16 irda_get_mtt(struct sk_buff *skb)
 {
 	__u16 mtt;
 
-	if (((struct irlap_skb_cb *)(skb->cb))->magic != LAP_MAGIC)
+	if (((struct irda_skb_cb *)(skb->cb))->magic != LAP_MAGIC)
 		mtt = 10000;
 	else
-		mtt = ((struct irlap_skb_cb *)(skb->cb))->mtt;
+		mtt = ((struct irda_skb_cb *)(skb->cb))->mtt;
 
 	ASSERT(mtt <= 10000, return 10000;);
 	

@@ -91,10 +91,11 @@ struct sysinfo {
 	unsigned long freeram;		/* Available memory size */
 	unsigned long sharedram;	/* Amount of shared memory */
 	unsigned long bufferram;	/* Memory used by buffers */
+	unsigned long totalbig;		/* Total big memory size */
+	unsigned long freebig;		/* Available big memory size */
 	unsigned long totalswap;	/* Total swap space size */
 	unsigned long freeswap;		/* swap space still available */
 	unsigned short procs;		/* Number of current processes */
-	char _f[22];			/* Pads structure to 64 bytes */
 };
 
 #endif

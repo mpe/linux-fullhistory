@@ -157,7 +157,7 @@ static int q40_get_hardware_list(char *buffer)
 }
 
 
-__initfunc(void config_q40(void))
+void __init config_q40(void)
 {
     mach_sched_init      = q40_sched_init;           /* ok */
     /*mach_kbdrate         = q40_kbdrate;*/          /* unneeded ?*/

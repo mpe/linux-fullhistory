@@ -3203,11 +3203,9 @@ Forced Error: Driver must define ADV_MAX_SG_LIST.
  * are not used when the driver is built as a module, cf. linux/init.h.
  */
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,23)
-#define ASC_INITFUNC(func)      func
 #define ASC_INITDATA
 #define ASC_INIT
 #else /* version >= v2.1.23 */
-#define ASC_INITFUNC(func)      __initfunc(func)
 #define ASC_INITDATA            __initdata
 #define ASC_INIT                __init
 #endif /* version >= v2.1.23 */
@@ -4168,10 +4166,8 @@ advansys_proc_info(char *buffer, char **start, off_t offset, int length,
  * it must not call SCSI mid-level functions including scsi_malloc()
  * and scsi_free().
  */
-ASC_INITFUNC(
-int
+int ASC_INIT
 advansys_detect(Scsi_Host_Template *tpnt)
-)
 {
     static int          detect_called = ASC_FALSE;
     int                 iop;
@@ -6192,10 +6188,8 @@ advansys_biosparam(Disk *dp, kdev_t dep, int ip[])
  * ints[2] - second argument
  * ...
  */
-ASC_INITFUNC(
-void
+void ASC_INIT
 advansys_setup(char *str, int *ints)
-)
 {
     int    i;
 
@@ -7454,10 +7448,8 @@ adv_isr_callback(ADV_DVC_VAR *adv_dvc_varp, ADV_SCSI_REQ_Q *scsiqp)
 /*
  * Search for an AdvanSys PCI device in the PCI configuration space.
  */
-ASC_INITFUNC(
-STATIC int
+STATIC int ASC_INIT
 asc_srch_pci_dev(PCI_DEVICE *pciDevice)
-)
 {
     int                        ret = PCI_DEVICE_NOT_FOUND;
 
@@ -7494,10 +7486,8 @@ asc_srch_pci_dev(PCI_DEVICE *pciDevice)
 /*
  * Determine the access method to be used for 'pciDevice'.
  */
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 asc_scan_method(void)
-)
 {
     ushort      data;
     PCI_DATA    pciData;
@@ -7526,10 +7516,8 @@ asc_scan_method(void)
  *
  * Return PCI_DEVICE_FOUND if found, otherwise return PCI_DEVICE_NOT_FOUND.
  */
-ASC_INITFUNC(
-STATIC int
+STATIC int ASC_INIT
 asc_pci_find_dev(PCI_DEVICE *pciDevice)
-)
 {
     PCI_DATA    pciData;
     ushort      vendorid, deviceid;
@@ -7578,10 +7566,8 @@ asc_pci_find_dev(PCI_DEVICE *pciDevice)
 /*
  * Read PCI configuration data into 'pciConfig'.
  */
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 asc_get_pci_cfg(PCI_DEVICE *pciDevice, PCI_CONFIG_SPACE *pciConfig)
-)
 {
     PCI_DATA    pciData;
     uchar       counter;
@@ -7610,10 +7596,8 @@ asc_get_pci_cfg(PCI_DEVICE *pciDevice, PCI_CONFIG_SPACE *pciConfig)
  *
  * The configuration mechanism is checked for the correct access method.
  */
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 asc_get_cfg_word(PCI_DATA *pciData)
-)
 {
     ushort   tmp;
     ulong    address;
@@ -7693,10 +7677,8 @@ asc_get_cfg_word(PCI_DATA *pciData)
  *
  * The configuration mechanism is checked for the correct access method.
  */
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 asc_get_cfg_byte(PCI_DATA *pciData)
-)
 {
     uchar tmp;
     ulong address;
@@ -7773,10 +7755,8 @@ asc_get_cfg_byte(PCI_DATA *pciData)
 /*
  * Write a byte to the PCI configuration space.
  */
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 asc_put_cfg_byte(PCI_DATA *pciData, uchar byte_data)
-)
 {
     ulong tmpl;
     ulong address;
@@ -9366,12 +9346,10 @@ DvcOutPortDWords(PortAddr port, ulong *pdw, int dwords)
 /*
  * Read a PCI configuration byte.
  */
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 DvcReadPCIConfigByte(
         ASC_DVC_VAR asc_ptr_type *asc_dvc, 
         ushort offset)
-)
 {
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,93)
 #ifdef ASC_CONFIG_PCI
@@ -9403,13 +9381,11 @@ DvcReadPCIConfigByte(
 /*
  * Write a PCI configuration byte.
  */
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 DvcWritePCIConfigByte(
         ASC_DVC_VAR asc_ptr_type *asc_dvc, 
         ushort offset, 
         uchar  byte_data)
-)
 {
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,93)
 #ifdef ASC_CONFIG_PCI
@@ -9436,12 +9412,10 @@ DvcWritePCIConfigByte(
  * Return the BIOS address of the adapter at the specified
  * I/O port and with the specified bus type.
  */
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscGetChipBiosAddress(
         PortAddr iop_base,
         ushort bus_type
-)
 )
 {
     ushort  cfg_lsw ;
@@ -9519,12 +9493,10 @@ DvcGetPhyAddr(ADV_DVC_VAR *asc_dvc, ADV_SCSI_REQ_Q *scsiq,
 /*
  * Read a PCI configuration byte.
  */
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 DvcAdvReadPCIConfigByte(
         ADV_DVC_VAR *asc_dvc, 
         ushort offset)
-)
 {
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,93)
 #ifdef ASC_CONFIG_PCI
@@ -9556,13 +9528,11 @@ DvcAdvReadPCIConfigByte(
 /*
  * Write a PCI configuration byte.
  */
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 DvcAdvWritePCIConfigByte(
         ADV_DVC_VAR *asc_dvc, 
         ushort offset, 
         uchar  byte_data)
-)
 {
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,93)
 #ifdef ASC_CONFIG_PCI
@@ -10206,11 +10176,9 @@ interrupts_enabled(void)
  * --- Asc Library Functions
  */
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscGetEisaChipCfg(
                      PortAddr iop_base
-)
 )
 {
     PortAddr            eisa_cfg_iop;
@@ -10220,12 +10188,10 @@ AscGetEisaChipCfg(
     return (inpw(eisa_cfg_iop));
 }
 
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 AscSetChipScsiID(
                     PortAddr iop_base,
                     uchar new_host_id
-)
 )
 {
     ushort              cfg_lsw;
@@ -10240,11 +10206,9 @@ AscSetChipScsiID(
     return (AscGetChipScsiID(iop_base));
 }
 
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 AscGetChipScsiCtrl(
                       PortAddr iop_base
-)
 )
 {
     uchar               sc;
@@ -10255,12 +10219,10 @@ AscGetChipScsiCtrl(
     return (sc);
 }
 
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 AscGetChipVersion(
                      PortAddr iop_base,
                      ushort bus_type
-)
 )
 {
     if ((bus_type & ASC_IS_EISA) != 0) {
@@ -10274,11 +10236,9 @@ AscGetChipVersion(
     return (AscGetChipVerNo(iop_base));
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscGetChipBusType(
                      PortAddr iop_base
-)
 )
 {
     ushort              chip_ver;
@@ -10309,14 +10269,12 @@ AscGetChipBusType(
     return (0);
 }
 
-ASC_INITFUNC(
-STATIC ulong
+STATIC ulong ASC_INIT
 AscLoadMicroCode(
                     PortAddr iop_base,
                     ushort s_addr,
                     ushort *mcode_buf,
                     ushort mcode_size
-)
 )
 {
     ulong               chksum;
@@ -10335,11 +10293,9 @@ AscLoadMicroCode(
     return (chksum);
 }
 
-ASC_INITFUNC(
-STATIC int
+STATIC int ASC_INIT
 AscFindSignature(
                     PortAddr iop_base
-)
 )
 {
     ushort              sig_word;
@@ -10361,12 +10317,10 @@ STATIC PortAddr _asc_def_iop_base[ASC_IOADR_TABLE_MAX_IX] ASC_INITDATA =
     ASC_IOADR_5, ASC_IOADR_6, ASC_IOADR_7, ASC_IOADR_8
 };
 
-ASC_INITFUNC(
-STATIC PortAddr
+STATIC PortAddr ASC_INIT
 AscSearchIOPortAddr(
                        PortAddr iop_beg,
                        ushort bus_type
-)
 )
 {
     if (bus_type & ASC_IS_VL) {
@@ -10398,11 +10352,9 @@ AscSearchIOPortAddr(
     return (0);
 }
 
-ASC_INITFUNC(
-STATIC PortAddr
+STATIC PortAddr ASC_INIT
 AscSearchIOPortAddr11(
                          PortAddr s_addr
-)
 )
 {
     int                 i;
@@ -10429,11 +10381,9 @@ AscSearchIOPortAddr11(
     return (0);
 }
 
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 AscToggleIRQAct(
                    PortAddr iop_base
-)
 )
 {
     AscSetChipStatus(iop_base, CIW_IRQ_ACT);
@@ -10441,23 +10391,19 @@ AscToggleIRQAct(
     return;
 }
 
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 AscSetISAPNPWaitForKey(
     void)
-)
 {
     outp(ASC_ISA_PNP_PORT_ADDR, 0x02);
     outp(ASC_ISA_PNP_PORT_WRITE, 0x02);
     return;
 }
 
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 AscGetChipIRQ(
                  PortAddr iop_base,
                  ushort bus_type
-)
 )
 {
     ushort              cfg_lsw;
@@ -10488,13 +10434,11 @@ AscGetChipIRQ(
     return ((uchar) (chip_irq + ASC_MIN_IRQ_NO));
 }
 
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 AscSetChipIRQ(
                  PortAddr iop_base,
                  uchar irq_no,
                  ushort bus_type
-)
 )
 {
     ushort              cfg_lsw;
@@ -10529,11 +10473,9 @@ AscSetChipIRQ(
     return (0);
 }
 
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 AscEnableIsaDma(
                    uchar dma_channel
-)
 )
 {
     if (dma_channel < 4) {
@@ -12396,11 +12338,9 @@ DvcDelayNanoSecond(ASC_DVC_VAR asc_ptr_type * asc_dvc, ulong nano_sec)
     udelay((nano_sec + 999)/1000);
 }
 
-ASC_INITFUNC(
-STATIC ulong
+STATIC ulong ASC_INIT
 AscGetEisaProductID(
                        PortAddr iop_base
-)
 )
 {
     PortAddr            eisa_iop;
@@ -12414,11 +12354,9 @@ AscGetEisaProductID(
     return (product_id);
 }
 
-ASC_INITFUNC(
-STATIC PortAddr
+STATIC PortAddr ASC_INIT
 AscSearchIOPortAddrEISA(
                            PortAddr iop_base
-)
 )
 {
     ulong               eisa_product_id;
@@ -12608,11 +12546,9 @@ AscResetChipAndScsiBus(
     return (AscIsChipHalted(iop_base));
 }
 
-ASC_INITFUNC(
-STATIC ulong
+STATIC ulong ASC_INIT
 AscGetMaxDmaCount(
                      ushort bus_type
-)
 )
 {
     if (bus_type & ASC_IS_ISA)
@@ -12622,11 +12558,9 @@ AscGetMaxDmaCount(
     return (ASC_MAX_PCI_DMA_COUNT);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscGetIsaDmaChannel(
                        PortAddr iop_base
-)
 )
 {
     ushort              channel;
@@ -12639,12 +12573,10 @@ AscGetIsaDmaChannel(
     return (channel + 4);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscSetIsaDmaChannel(
                        PortAddr iop_base,
                        ushort dma_channel
-)
 )
 {
     ushort              cfg_lsw;
@@ -12663,12 +12595,10 @@ AscSetIsaDmaChannel(
     return (0);
 }
 
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 AscSetIsaDmaSpeed(
                      PortAddr iop_base,
                      uchar speed_value
-)
 )
 {
     speed_value &= 0x07;
@@ -12678,11 +12608,9 @@ AscSetIsaDmaSpeed(
     return (AscGetIsaDmaSpeed(iop_base));
 }
 
-ASC_INITFUNC(
-STATIC uchar
+STATIC uchar ASC_INIT
 AscGetIsaDmaSpeed(
                      PortAddr iop_base
-)
 )
 {
     uchar               speed_value;
@@ -12694,12 +12622,10 @@ AscGetIsaDmaSpeed(
     return (speed_value);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscReadPCIConfigWord(
     ASC_DVC_VAR asc_ptr_type *asc_dvc,
     ushort pci_config_offset)
-)
 {
     uchar       lsb, msb;
 
@@ -12708,11 +12634,9 @@ AscReadPCIConfigWord(
     return ((ushort) ((msb << 8) | lsb));
 }
 
-ASC_INITFUNC(
-STATIC ushort 
+STATIC ushort ASC_INIT
 AscInitGetConfig(
         ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
 )
 {
     ushort              warn_code;
@@ -12793,11 +12717,9 @@ AscInitGetConfig(
     return(warn_code);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscInitSetConfig(
                     ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
 )
 {
     ushort              warn_code = 0;
@@ -12814,11 +12736,9 @@ AscInitSetConfig(
     return (warn_code);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscInitFromAscDvcVar(
                         ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
 )
 {
     PortAddr            iop_base;
@@ -12877,11 +12797,9 @@ AscInitFromAscDvcVar(
     return (warn_code);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscInitAsc1000Driver(
                         ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
 )
 {
     ushort              warn_code;
@@ -12919,11 +12837,9 @@ AscInitAsc1000Driver(
     return (warn_code);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscInitAscDvcVar(
                     ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
 )
 {
     int                 i;
@@ -13034,11 +12950,9 @@ AscInitAscDvcVar(
     return (warn_code);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscInitFromEEP(
                   ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
 )
 {
     ASCEEP_CONFIG       eep_config_buf;
@@ -13189,11 +13103,9 @@ AscInitFromEEP(
     return (warn_code);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscInitMicroCodeVar(
                        ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
 )
 {
     int                 i;
@@ -13239,11 +13151,9 @@ AscInitMicroCodeVar(
     return (warn_code);
 }
 
-ASC_INITFUNC(
-STATIC int
+STATIC int ASC_INIT
 AscTestExternalLram(
                        ASC_DVC_VAR asc_ptr_type * asc_dvc
-)
 )
 {
     PortAddr            iop_base;
@@ -13266,12 +13176,10 @@ AscTestExternalLram(
     return (sta);
 }
 
-ASC_INITFUNC(
-STATIC int
+STATIC int ASC_INIT
 AscWriteEEPCmdReg(
                      PortAddr iop_base,
                      uchar cmd_reg
-)
 )
 {
     uchar               read_back;
@@ -13291,12 +13199,10 @@ AscWriteEEPCmdReg(
     }
 }
 
-ASC_INITFUNC(
-STATIC int
+STATIC int ASC_INIT
 AscWriteEEPDataReg(
                       PortAddr iop_base,
                       ushort data_reg
-)
 )
 {
     ushort              read_back;
@@ -13316,34 +13222,28 @@ AscWriteEEPDataReg(
     }
 }
 
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 AscWaitEEPRead(
                   void
-)
 )
 {
     DvcSleepMilliSecond(1);
     return;
 }
 
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 AscWaitEEPWrite(
                    void
-)
 )
 {
     DvcSleepMilliSecond(20);
     return;
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscReadEEPWord(
                   PortAddr iop_base,
                   uchar addr
-)
 )
 {
     ushort              read_wval;
@@ -13359,13 +13259,11 @@ AscReadEEPWord(
     return (read_wval);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscWriteEEPWord(
                    PortAddr iop_base,
                    uchar addr,
                    ushort word_val
-)
 )
 {
     ushort              read_wval;
@@ -13386,12 +13284,10 @@ AscWriteEEPWord(
     return (read_wval);
 }
 
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AscGetEEPConfig(
                    PortAddr iop_base,
                    ASCEEP_CONFIG * cfg_buf, ushort bus_type
-)
 )
 {
     ushort              wval;
@@ -13427,12 +13323,10 @@ AscGetEEPConfig(
     return (sum);
 }
 
-ASC_INITFUNC(
-STATIC int
+STATIC int ASC_INIT
 AscSetEEPConfigOnce(
                        PortAddr iop_base,
                        ASCEEP_CONFIG * cfg_buf, ushort bus_type
-)
 )
 {
     int                 n_error;
@@ -13484,12 +13378,10 @@ AscSetEEPConfigOnce(
     return (n_error);
 }
 
-ASC_INITFUNC(
-STATIC int
+STATIC int ASC_INIT
 AscSetEEPConfig(
                    PortAddr iop_base,
                    ASCEEP_CONFIG * cfg_buf, ushort bus_type
-)
 )
 {
     int            retry;
@@ -14175,10 +14067,8 @@ Default_EEPROM_Config ASC_INITDATA = {
  * For a non-fatal error return a warning code. If there are no warnings
  * then 0 is returned.
  */
-ASC_INITFUNC(
-int
+int ASC_INIT
 AdvInitGetConfig(ADV_DVC_VAR *asc_dvc)
-)
 {
     ushort      warn_code;
     AdvPortAddr iop_base;
@@ -14285,10 +14175,8 @@ AdvInitGetConfig(ADV_DVC_VAR *asc_dvc)
  * For a non-fatal error return a warning code. If there are no warnings
  * then 0 is returned.
  */
-ASC_INITFUNC(
-int
+int ASC_INIT
 AdvInitAsc3550Driver(ADV_DVC_VAR *asc_dvc)
-)
 {
     AdvPortAddr iop_base;
     ushort      warn_code;
@@ -14620,10 +14508,8 @@ AdvInitAsc3550Driver(ADV_DVC_VAR *asc_dvc)
  *
  * Note: Chip is stopped on entry.
  */
-ASC_INITFUNC(
-STATIC int
+STATIC int ASC_INIT
 AdvInitFromEEP(ADV_DVC_VAR *asc_dvc)
-)
 {
     AdvPortAddr         iop_base;
     ushort              warn_code;
@@ -14786,10 +14672,8 @@ AdvInitFromEEP(ADV_DVC_VAR *asc_dvc)
  *
  * Return a checksum based on the EEPROM configuration read.
  */
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AdvGetEEPConfig(AdvPortAddr iop_base, ADVEEP_CONFIG *cfg_buf)
-)
 {
     ushort              wval, chksum;
     ushort              *wbuf;
@@ -14820,10 +14704,8 @@ AdvGetEEPConfig(AdvPortAddr iop_base, ADVEEP_CONFIG *cfg_buf)
 /*
  * Read the EEPROM from specified location
  */
-ASC_INITFUNC(
-STATIC ushort
+STATIC ushort ASC_INIT
 AdvReadEEPWord(AdvPortAddr iop_base, int eep_word_addr)
-)
 {
     AdvWriteWordRegister(iop_base, IOPW_EE_CMD,
         ASC_EEP_CMD_READ | eep_word_addr);
@@ -14834,10 +14716,8 @@ AdvReadEEPWord(AdvPortAddr iop_base, int eep_word_addr)
 /*
  * Wait for EEPROM command to complete
  */
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 AdvWaitEEPCmd(AdvPortAddr iop_base)
-)
 {
     int eep_delay_ms;
 
@@ -14859,10 +14739,8 @@ AdvWaitEEPCmd(AdvPortAddr iop_base)
 /*
  * Write the EEPROM from 'cfg_buf'.
  */
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 AdvSetEEPConfig(AdvPortAddr iop_base, ADVEEP_CONFIG *cfg_buf)
-)
 {
     ushort       *wbuf;
     ushort       addr, chksum;
@@ -14923,10 +14801,8 @@ AdvSetEEPConfig(AdvPortAddr iop_base, ADVEEP_CONFIG *cfg_buf)
  * configuration is read to determine whether SCSI Bus Resets
  * should be performed.
  */
-ASC_INITFUNC(
-STATIC void
+STATIC void ASC_INIT
 AdvResetChip(ADV_DVC_VAR *asc_dvc)
-)
 {
     AdvPortAddr    iop_base;
     ushort         word;

@@ -11,7 +11,7 @@ void (*__wbflush) (void);
 
 static void wbflush_baget(void);
 
-__initfunc(void wbflush_setup(void))
+void __init wbflush_setup(void)
 {
 	__wbflush = wbflush_baget;
 }

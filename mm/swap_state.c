@@ -214,8 +214,6 @@ static inline void remove_from_swap_cache(struct page *page)
 		   page_address(page), page_count(page));
 #endif
 	PageClearSwapCache(page);
-	if (inode->i_op->flushpage)
-		inode->i_op->flushpage(inode, page, 0);
 	remove_inode_page(page);
 }
 
@@ -239,6 +237,15 @@ void __delete_from_swap_cache(struct page *page)
 	swap_free (entry);
 }
 
+static void delete_from_swap_cache_nolock(struct page *page)
+{
+	if (!swapper_inode.i_op->flushpage ||
+	    swapper_inode.i_op->flushpage(&swapper_inode, page, 0))
+		lru_cache_del(page);
+
+	__delete_from_swap_cache(page);
+}
+
 /*
  * This must be called only on pages that have
  * been verified to be in the swap cache.
@@ -247,7 +254,7 @@ void delete_from_swap_cache(struct page *page)
 {
 	lock_page(page);
 
-	__delete_from_swap_cache(page);
+	delete_from_swap_cache_nolock(page);
 
 	UnlockPage(page);
 	page_cache_release(page);
@@ -267,9 +274,7 @@ void free_page_and_swap_cache(unsigned long addr)
 	 */
 	lock_page(page);
 	if (PageSwapCache(page) && !is_page_shared(page)) {
-		long entry = page->offset;
-		remove_from_swap_cache(page);
-		swap_free(entry);
+		delete_from_swap_cache_nolock(page);
 		page_cache_release(page);
 	}
 	UnlockPage(page);

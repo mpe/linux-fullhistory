@@ -103,8 +103,8 @@ static int __60nsram = 0;
 
 /*********************************************************** SETUP */
 /* From arch/m68k/kernel/setup.c. */
-__initfunc(void apus_setup_arch(unsigned long * memory_start_p,
-				unsigned long * memory_end_p))
+void __init apus_setup_arch(unsigned long * memory_start_p,
+				unsigned long * memory_end_p)
 {
 	extern char cmd_line[];
 	int i;
@@ -245,7 +245,7 @@ void arch_gettod(int *year, int *mon, int *day, int *hour,
 
 /*********************************************************** FLOPPY */
 #if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY)
-__initfunc(void floppy_setup(char *str, int *ints))
+void __init floppy_setup(char *str, int *ints)
 {
 	if (mach_floppy_setup)
 		mach_floppy_setup (str, ints);
@@ -560,24 +560,24 @@ apus_ide_fix_driveid(struct hd_driveid *id)
         m68k_ide_fix_driveid(id);
 }
 
-__initfunc(void
-apus_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq))
+void __init
+apus_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq)
 {
         m68k_ide_init_hwif_ports(hw, data_port, ctrl_port, irq);
 }
 #endif
 
-__initfunc(void
-apus_local_init_IRQ(void))
+void __init
+apus_local_init_IRQ(void)
 {
 	ppc_md.mask_irq = amiga_disable_irq;
 	ppc_md.unmask_irq = amiga_enable_irq;
 	apus_init_IRQ();
 }
 
-__initfunc(void
+void __init
 apus_init(unsigned long r3, unsigned long r4, unsigned long r5,
-	  unsigned long r6, unsigned long r7))
+	  unsigned long r6, unsigned long r7)
 {
 	/* Parse bootinfo. The bootinfo is located right after
            the kernel bss */

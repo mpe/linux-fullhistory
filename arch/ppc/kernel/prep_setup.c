@@ -211,8 +211,8 @@ no_l2:
 	return len;
 }
 
-__initfunc(void
-prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
+void __init
+prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	extern char cmd_line[];
 	unsigned char reg;
@@ -365,7 +365,7 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
  * This allows for a faster boot as we do not need to calibrate the
  * decrementer against another clock. This is important for embedded systems.
  */
-__initfunc(void prep_res_calibrate_decr(void))
+void __init prep_res_calibrate_decr(void)
 {
 	int freq, divisor;
 
@@ -386,10 +386,10 @@ __initfunc(void prep_res_calibrate_decr(void))
 int calibrate_done = 0;
 volatile int *done_ptr = &calibrate_done;
 
-__initfunc(void
+void __init
 prep_calibrate_decr_handler(int            irq,
 			    void           *dev,
-			    struct pt_regs *regs))
+			    struct pt_regs *regs)
 {
 	unsigned long freq, divisor;
 	static unsigned long t1 = 0, t2 = 0;
@@ -412,7 +412,7 @@ prep_calibrate_decr_handler(int            irq,
 	}
 }
 
-__initfunc(void prep_calibrate_decr(void))
+void __init prep_calibrate_decr(void)
 {
 	unsigned long flags;
 
@@ -437,7 +437,7 @@ __initfunc(void prep_calibrate_decr(void))
 
 
 /* We use the NVRAM RTC to time a second to calibrate the decrementer. */
-__initfunc(void mk48t59_calibrate_decr(void))
+void __init mk48t59_calibrate_decr(void)
 {
 	unsigned long freq, divisor;
 	unsigned long t1, t2;
@@ -603,8 +603,8 @@ prep_do_IRQ(struct pt_regs *regs, int cpu, int isfake)
         ppc_irq_dispatch_handler( regs, irq );
 }		
 
-__initfunc(void
-prep_init_IRQ(void))
+void __init
+prep_init_IRQ(void)
 {
 	int i;
 
@@ -691,8 +691,8 @@ prep_ide_fix_driveid(struct hd_driveid *id)
 {
 }
 
-__initfunc(void
-prep_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq))
+void __init
+prep_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq)
 {
 	ide_ioreg_t reg = data_port;
 	int i;
@@ -711,9 +711,9 @@ prep_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl
 }
 #endif
 
-__initfunc(void
+void __init
 prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
-	  unsigned long r6, unsigned long r7))
+	  unsigned long r6, unsigned long r7)
 {
 	/* make a copy of residual data */
 	if ( r3 )

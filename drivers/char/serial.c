@@ -3076,7 +3076,7 @@ EXPORT_SYMBOL(unregister_serial);
 /*
  * The serial driver boot-time initialization code!
  */
-__initfunc(int rs_init(void))
+int __init rs_init(void)
 {
 	int i;
 	struct serial_state * state;
@@ -3429,7 +3429,7 @@ static kdev_t serial_console_device(struct console *c)
  *	- initialize the serial port
  *	Return non-zero if we didn't find a serial port.
  */
-__initfunc(static int serial_console_setup(struct console *co, char *options))
+static int __init serial_console_setup(struct console *co, char *options)
 {
 	struct serial_state *ser;
 	unsigned cval;
@@ -3550,7 +3550,7 @@ static struct console sercons = {
 /*
  *	Register console.
  */
-__initfunc (long serial_console_init(long kmem_start, long kmem_end))
+long __init serial_console_init(long kmem_start, long kmem_end)
 {
 	register_console(&sercons);
 	return kmem_start;

@@ -148,7 +148,7 @@ static struct busmouse adb_mouse =
 	ADB_MOUSE_MINOR, "adbmouse", open_mouse, close_mouse, 7
 };
 
-__initfunc(int adb_mouse_init(void))
+int __init adb_mouse_init(void)
 {
 #ifdef __powerpc__
 	if ((_machine != _MACH_chrp) && (_machine != _MACH_Pmac))
@@ -174,7 +174,7 @@ __initfunc(int adb_mouse_init(void))
  * option, which is about using ADB keyboard buttons to emulate
  * mouse buttons. -- paulus
  */
-__initfunc(void adb_mouse_setup(char *str, int *ints))
+void __init adb_mouse_setup(char *str, int *ints)
 {
 	if (ints[0] >= 1) {
 		adb_emulate_buttons = ints[1] > 0;

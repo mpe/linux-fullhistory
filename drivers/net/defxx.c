@@ -549,11 +549,12 @@ int __init dfx_probe(struct net_device *dev)
 
 				/* Get I/O base address from PCI Configuration Space */
 
-				port = pdev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
+				port = pdev->resource[1].start
 
 				/* Verify port address range is not already being used */
 
 				port_len = PFI_K_CSR_IO_LEN;
+
 				if (check_region(port, port_len) == 0)
 					{
 					/* Allocate a new device structure for this adapter */

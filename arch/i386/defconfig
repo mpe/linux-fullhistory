@@ -1,6 +1,7 @@
 #
 # Automatically generated make config: don't edit
 #
+CONFIG_X86=y
 
 #
 # Code maturity level options
@@ -37,6 +38,7 @@ CONFIG_MODULES=y
 #
 # General setup
 #
+# CONFIG_BIGMEM is not set
 CONFIG_NET=y
 CONFIG_PCI=y
 # CONFIG_PCI_GOBIOS is not set
@@ -176,6 +178,7 @@ CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_AHA1542 is not set
 # CONFIG_SCSI_AHA1740 is not set
 # CONFIG_SCSI_AIC7XXX is not set
+# CONFIG_SCSI_IPS is not set
 # CONFIG_SCSI_ADVANSYS is not set
 # CONFIG_SCSI_IN2000 is not set
 # CONFIG_SCSI_AM53C974 is not set
@@ -276,7 +279,7 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_HAMRADIO is not set
 
 #
-# IrDA subsystem support
+# IrDA (infrared) support
 #
 # CONFIG_IRDA is not set
 
@@ -378,8 +381,11 @@ CONFIG_LOCKD=y
 #
 # CONFIG_PARTITION_ADVANCED is not set
 CONFIG_MSDOS_PARTITION=y
-# CONFIG_SMD_DISKLABEL is not set
-# CONFIG_SGI_DISKLABEL is not set
+# CONFIG_BSD_DISKLABEL is not set
+# CONFIG_SOLARIS_X86_PARTITION is not set
+# CONFIG_UNIXWARE_DISKLABEL is not set
+# CONFIG_SGI_PARTITION is not set
+# CONFIG_SUN_PARTITION is not set
 # CONFIG_NLS is not set
 
 #

@@ -22,7 +22,7 @@ struct pci_ops *pci_ops;
 /*
  * BIOS32 replacement.
  */
-__initfunc(void pcibios_init(void))
+void __init pcibios_init(void)
 {
 }
 
@@ -81,12 +81,12 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
 	return pci_ops->pcibios_write_config_dword(bus, dev_fn, where, val);
 }
 
-__initfunc(char *pcibios_setup(char *str))
+char * __init pcibios_setup(char *str)
 {
 	return str;
 }
 
-__initfunc(void pcibios_fixup_bus(struct pci_bus *bus))
+void __init pcibios_fixup_bus(struct pci_bus *bus)
 {
 }
 

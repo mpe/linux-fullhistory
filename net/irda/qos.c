@@ -1,12 +1,13 @@
 /*********************************************************************
  *                
+ *                
  * Filename:      qos.c
- * Version:       0.8
- * Description:   IrLAP QoS negotiation
+ * Version:       1.0
+ * Description:   IrLAP QoS parameter negotiation
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Sep  9 00:00:26 1997
- * Modified at:   Mon May  3 21:15:08 1999
+ * Modified at:   Tue Aug 17 10:25:21 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -16,17 +17,24 @@
  *     modify it under the terms of the GNU General Public License as 
  *     published by the Free Software Foundation; either version 2 of 
  *     the License, or (at your option) any later version.
- *
- *     Neither Dag Brattli nor University of Tromsø admit liability nor
- *     provide warranty for any of this software. This material is 
- *     provided "AS-IS" and at no charge.
- *
+ * 
+ *     This program is distributed in the hope that it will be useful,
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *     GNU General Public License for more details.
+ * 
+ *     You should have received a copy of the GNU General Public License 
+ *     along with this program; if not, write to the Free Software 
+ *     Foundation, Inc., 59 Temple Place, Suite 330, Boston, 
+ *     MA 02111-1307 USA
+ *     
  ********************************************************************/
 
 #include <linux/config.h>
 #include <asm/byteorder.h>
 
 #include <net/irda/irda.h>
+#include <net/irda/parameters.h>
 #include <net/irda/qos.h>
 #include <net/irda/irlap.h>
 #ifdef CONFIG_IRDA_COMPRESSION
@@ -36,17 +44,55 @@
 #define CI_BZIP2  27 /* Random pick */
 #endif
 
-int min_turn_time[] = { 10000, 5000, 1000, 500, 100, 50, 10, 0 };
-int baud_rates[] = { 2400, 9600, 19200, 38400, 57600, 115200, 576000, 1152000,
-		     4000000 };
-int data_size[]  = { 64, 128, 256, 512, 1024, 2048 };
-int add_bofs[]   = { 48, 24, 12, 5, 3, 2, 1, 0 };
-int max_turn_time[] = { 500, 250, 100, 50 };
-int link_disc_time[] = { 3, 8, 12, 16, 20, 25, 30, 40 };
+static int irlap_param_baud_rate(void *instance, param_t *param, int get);
+static int irlap_param_link_disconnect(void *instance, param_t *parm, int get);
+static int irlap_param_max_turn_time(void *instance, param_t *param, int get);
+static int irlap_param_data_size(void *instance, param_t *param, int get);
+static int irlap_param_window_size(void *instance, param_t *param, int get);
+static int irlap_param_additional_bofs(void *instance, param_t *parm, int get);
+static int irlap_param_min_turn_time(void *instance, param_t *param, int get);
+
+__u32 min_turn_time[]  = { 10000, 5000, 1000, 500, 100, 50, 10, 0 }; /* us */
+__u32 baud_rates[]     = { 2400, 9600, 19200, 38400, 57600, 115200, 576000, 
+			   1152000, 4000000, 16000000 };            /* bps */
+__u32 data_size[]      = { 64, 128, 256, 512, 1024, 2048 };         /* bytes */
+__u32 add_bofs[]       = { 48, 24, 12, 5, 3, 2, 1, 0 };             /* bytes */
+__u32 max_turn_time[]  = { 500, 250, 100, 50 };                     /* ms */
+__u32 link_disc_time[] = { 3, 8, 12, 16, 20, 25, 30, 40 };          /* secs */
 
 #ifdef CONFIG_IRDA_COMPRESSION
-int compression[] = { CI_BZIP2, CI_DEFLATE, CI_DEFLATE_DRAFT };
+__u32 compression[] = { CI_BZIP2, CI_DEFLATE, CI_DEFLATE_DRAFT };
 #endif
+
+static pi_minor_info_t pi_minor_call_table_type_0[] = {
+	{ NULL, 0 },
+/* 01 */{ irlap_param_baud_rate,       PV_INTEGER | PV_LITTLE_ENDIAN },
+	{ NULL, 0 },
+	{ NULL, 0 },
+	{ NULL, 0 },
+	{ NULL, 0 },
+	{ NULL, 0 },
+	{ NULL, 0 },
+/* 08 */{ irlap_param_link_disconnect, PV_INT_8_BITS }
+};
+
+static pi_minor_info_t pi_minor_call_table_type_1[] = {
+	{ NULL, 0 },
+	{ NULL, 0 },
+/* 82 */{ irlap_param_max_turn_time,   PV_INT_8_BITS },
+/* 83 */{ irlap_param_data_size,       PV_INT_8_BITS },
+/* 84 */{ irlap_param_window_size,     PV_INT_8_BITS },
+/* 85 */{ irlap_param_additional_bofs, PV_INT_8_BITS },
+/* 86 */{ irlap_param_min_turn_time,   PV_INT_8_BITS },
+};
+
+static pi_major_info_t pi_major_call_table[] = {
+	{ pi_minor_call_table_type_0, 9 },
+	{ pi_minor_call_table_type_1, 7 },
+};
+
+static pi_param_info_t irlap_param_info = { pi_major_call_table, 2, 0x7f, 7 };
+
 /*
  * Function irda_qos_compute_intersection (qos, new)
  *
@@ -81,7 +127,7 @@ void irda_qos_compute_intersection(struct qos_info *qos, struct qos_info *new)
  *    set the maximum QoS possible and then "and in" their own limitations
  * 
  */
-void irda_init_max_qos_capabilies( struct qos_info *qos)
+void irda_init_max_qos_capabilies(struct qos_info *qos)
 {
 	/* 
 	 *  These are the maximum supported values as specified on pages
@@ -110,158 +156,46 @@ void irda_init_max_qos_capabilies( struct qos_info *qos)
  *    We just set the QoS capabilities for the peer station
  *
  */
-void irda_qos_negotiate(struct qos_info *qos_rx, struct qos_info *qos_tx, 
-			struct sk_buff *skb) 
+int irlap_qos_negotiate(struct irlap_cb *self, struct sk_buff *skb) 
 {
-	int n=0;
+	int ret;
 #ifdef CONFIG_IRDA_COMPRESSION
 	int comp_seen = FALSE;
 #endif
-	__u8 length;
-	__u8 *frame;
-	__u8 final_byte;
-	__u8 code;
-	__u8 byte;
- 	__u16 final_word;
-	__u16_host_order word;
-
-	ASSERT( qos_tx != NULL, return;);
-	ASSERT( qos_rx != NULL, return;);
-	ASSERT( skb != NULL, return;);
-
-	frame = skb->data;
-
-	while( n < skb->len-2) {
-		code = frame[n++];
-		/* Length */
-		length = frame[n++];
-
-		/*  
-		 *  Get the value, since baud_rate may need two bytes, we
-		 *  Just use word size all the time
-		 */
-		switch( length) {
-		case 1:
-			byte = frame[n++];
-			word.word = byte; /* To make things a little easier */
-			break;
-		case 2:
-#ifdef __LITTLE_ENDIAN
-			word.byte[0] = frame[n++];
-			word.byte[1] = frame[n++];
-#else ifdef __BIG_ENDIAN
-			word.byte[1] = frame[n++];
-			word.byte[0] = frame[n++];
-#endif
-			byte = 0;
-			break;
-		default:
-			DEBUG( 0, __FUNCTION__ "Error\n");
-			word.word = byte = 0;
-			n += length;
-			
-			break;
-		}
-
-		switch(code) {
-		case PI_BAUD_RATE:
-			/* 
-			 *  Stations must agree on baud rate, so calculate
-                         *  intersection 
-			 */
-			DEBUG( 4, "Requested BAUD_RATE: 0x%04x\n", word.word);
-			final_word = word.word & qos_rx->baud_rate.bits;
-			DEBUG( 4, "Final BAUD_RATE: 0x%04x\n", final_word);
-			qos_tx->baud_rate.bits = final_word;
-			qos_rx->baud_rate.bits = final_word;
-			break;
-		case PI_MAX_TURN_TIME:
-			/*
-			 *  Negotiated independently for each station
-			 */
-			DEBUG(4, __FUNCTION__ "(), MAX_TURN_TIME: %02x\n", 
-			      byte);
-			qos_tx->max_turn_time.bits = byte;
-			break;
-		case PI_DATA_SIZE:
-			/*
-			 *  Negotiated independently for each station
-			 */
-			DEBUG( 4, "DATA_SIZE: %02x\n", byte);
-			qos_tx->data_size.bits = byte;
-			break;
-		case PI_WINDOW_SIZE:
-			/*
-			 *  Negotiated independently for each station
-			 */
-			qos_tx->window_size.bits = byte;
-			break;
-		case PI_ADD_BOFS:
-			/*
-			 *  Negotiated independently for each station
-			 */
-			DEBUG( 4, "ADD_BOFS: %02x\n", byte);
-			qos_tx->additional_bofs.bits = byte;	
-			break;
-		case PI_MIN_TURN_TIME:
-			DEBUG( 4, "MIN_TURN_TIME: %02x\n", byte);
-			qos_tx->min_turn_time.bits = byte;
-			break;
-		case PI_LINK_DISC:
-			/*  
-			 *  Stations must agree on link disconnect/threshold 
-			 *  time.
-			 */
-			DEBUG( 4, "LINK_DISC: %02x\n", byte);
-			
-			final_byte = byte & qos_rx->link_disc_time.bits;
-			DEBUG( 4, "Final LINK_DISC: %02x\n", final_byte);
-			qos_tx->link_disc_time.bits = final_byte;
-			qos_rx->link_disc_time.bits = final_byte;
-			break;
-#ifdef CONFIG_IRDA_COMPRESSION
-		case PI_COMPRESSION:
-			final_byte = byte & qos_rx->compression.bits;
-			qos_rx->compression.bits = byte;
-			qos_tx->compression.bits = byte;
-			comp_seen = TRUE;
-			break;
-#endif
-		default:
-			DEBUG( 0, __FUNCTION__ "(), Unknown value\n");
-			break;
-		}
-	}
-#ifdef CONFIG_IRDA_COMPRESSION
-	if ( !comp_seen) {
-		DEBUG( 4, __FUNCTION__ "(), Compression not seen!\n");
-		qos_tx->compression.bits = 0x00;
-		qos_rx->compression.bits = 0x00;
-	}
-#endif
-	/* Convert the negotiated bits to values */
-	irda_qos_bits_to_value( qos_tx);
-	irda_qos_bits_to_value( qos_rx);
-		
-	DEBUG( 4, "Setting BAUD_RATE to %d bps.\n", 
-	       qos_tx->baud_rate.value);
-	DEBUG( 4, "Setting DATA_SIZE to %d bytes\n",
-	       qos_tx->data_size.value);
-	DEBUG( 4, "Setting WINDOW_SIZE to %d\n", 
-	       qos_tx->window_size.value);
-	DEBUG( 4, "Setting XBOFS to %d\n", 
-	       qos_tx->additional_bofs.value);
-	DEBUG( 4, "Setting MAX_TURN_TIME to %d ms.\n",
-	       qos_tx->max_turn_time.value);
-	DEBUG( 4, "Setting MIN_TURN_TIME to %d usecs.\n",
-	       qos_tx->min_turn_time.value);
-	DEBUG( 4, "Setting LINK_DISC to %d secs.\n", 
-	       qos_tx->link_disc_time.value);
-#ifdef CONFIG_IRDA_COMPRESSION
-	DEBUG( 4, "Setting COMPRESSION to %d\n", 
-	       qos_tx->compression.value);
-#endif
+	ret = irda_param_extract_all(self, skb->data, skb->len, 
+				     &irlap_param_info);
 	
+#ifdef CONFIG_IRDA_COMPRESSION
+	if (!comp_seen) {
+		DEBUG( 4, __FUNCTION__ "(), Compression not seen!\n");
+		self->qos_tx.compression.bits = 0x00;
+		self->qos_rx.compression.bits = 0x00;
+	}
+#endif
+
+	/* Convert the negotiated bits to values */
+	irda_qos_bits_to_value(&self->qos_tx);
+	irda_qos_bits_to_value(&self->qos_rx);
+		
+	DEBUG(2, "Setting BAUD_RATE to %d bps.\n", 
+	      self->qos_tx.baud_rate.value);
+	DEBUG(2, "Setting DATA_SIZE to %d bytes\n",
+	      self->qos_tx.data_size.value);
+	DEBUG(2, "Setting WINDOW_SIZE to %d\n", 
+	      self->qos_tx.window_size.value);
+	DEBUG(2, "Setting XBOFS to %d\n", 
+	      self->qos_tx.additional_bofs.value);
+	DEBUG(2, "Setting MAX_TURN_TIME to %d ms.\n",
+	      self->qos_tx.max_turn_time.value);
+	DEBUG(2, "Setting MIN_TURN_TIME to %d usecs.\n",
+	      self->qos_tx.min_turn_time.value);
+	DEBUG(2, "Setting LINK_DISC to %d secs.\n", 
+	      self->qos_tx.link_disc_time.value);
+#ifdef CONFIG_IRDA_COMPRESSION
+	DEBUG(2, "Setting COMPRESSION to %d\n", 
+	      self->qos_tx.compression.value);
+#endif	
+	return ret;
 }
 
 /*
@@ -270,100 +204,247 @@ void irda_qos_negotiate(struct qos_info *qos_rx, struct qos_info *qos_tx,
  *    Insert QoS negotiaion pararameters into frame
  *
  */
-int irda_insert_qos_negotiation_params(struct qos_info *qos, __u8 *frame)
+int irlap_insert_qos_negotiation_params(struct irlap_cb *self, 
+					struct sk_buff *skb)
 {
-	int n;
-	__u16_host_order word;
+	int ret;
 
-	ASSERT( qos != NULL, return 0;);
-	ASSERT( frame != NULL, return 0;);
+	/* Insert data rate */
+	ret = irda_param_insert(self, PI_BAUD_RATE, skb->tail, 
+				skb_tailroom(skb), &irlap_param_info);
+	if (ret < 0)
+		return ret;
+	skb_put(skb, ret);
 
-	n = 0;
+	/* Insert max turnaround time */
+	ret = irda_param_insert(self, PI_MAX_TURN_TIME, skb->tail, 
+				skb_tailroom(skb), &irlap_param_info);
+	if (ret < 0)
+		return ret;
+	skb_put(skb, ret);
 
-	/* Set baud rate */
-	if (qos->baud_rate.bits < 256) {
-		frame[n++] = PI_BAUD_RATE;
-		frame[n++] = 0x01;   /* length 1 */
-		frame[n++] = qos->baud_rate.bits;
-	} else {
-		frame[n++] = PI_BAUD_RATE;
-		frame[n++] = 0x02;   /* length 2 */
-		
-		/* 
-		 *  qos->baud_rate.bits is in host byte order, so make sure
-		 *  we transmit it in little endian format 
-		 */
-		word.word = qos->baud_rate.bits;
-#ifdef __LITTLE_ENDIAN
-		frame[n++] = word.byte[0]; /* LSB */
-		frame[n++] = word.byte[1]; /* MSB */
-#else ifdef __BIG_ENDIAN
-		frame[n++] = word.byte[1]; /* LSB */
-		frame[n++] = word.byte[0]; /* MSB */
-#endif
-	}
+	/* Insert data size */
+	ret = irda_param_insert(self, PI_DATA_SIZE, skb->tail, 
+				skb_tailroom(skb), &irlap_param_info);
+	if (ret < 0)
+		return ret;
+	skb_put(skb, ret);
 
-	/* Set Maximum Turn Around Time */
-	frame[n++] = PI_MAX_TURN_TIME;
-	frame[n++] = 0x01;   /* length 1 */
-	frame[n++] = qos->max_turn_time.bits;
-	
-	/* Set data size */
-	frame[n++] = PI_DATA_SIZE;
-	frame[n++] = 0x01;   /* length 1 */
-	frame[n++] = qos->data_size.bits;
+	/* Insert window size */
+	ret = irda_param_insert(self, PI_WINDOW_SIZE, skb->tail, 
+				skb_tailroom(skb), &irlap_param_info);
+	if (ret < 0)
+		return ret;
+	skb_put(skb, ret);
 
-	/* Set window size */
-	frame[n++] = PI_WINDOW_SIZE;
-	frame[n++] = 0x01;   /* length 1 */
-	frame[n++] = qos->window_size.bits;
+	/* Insert additional BOFs */
+	ret = irda_param_insert(self, PI_ADD_BOFS, skb->tail, 
+				skb_tailroom(skb), &irlap_param_info);
+	if (ret < 0)
+		return ret;
+	skb_put(skb, ret);
 
-	/* Set additional BOFs */
-	frame[n++] = PI_ADD_BOFS;
-	frame[n++] = 0x01;   /* length 1 */
-	frame[n++] = qos->additional_bofs.bits;
+	/* Insert minimum turnaround time */
+	ret = irda_param_insert(self, PI_MIN_TURN_TIME, skb->tail, 
+				skb_tailroom(skb), &irlap_param_info);
+	if (ret < 0)
+		return ret;
+	skb_put(skb, ret);
 
-	/* Set minimum turn around time */
-	frame[n++] = PI_MIN_TURN_TIME;
-	frame[n++] = 0x01;   /* length 1 */
-	frame[n++] = qos->min_turn_time.bits;
+	/* Insert link disconnect/threshold time */
+	ret = irda_param_insert(self, PI_LINK_DISC, skb->tail, 
+				skb_tailroom(skb), &irlap_param_info);
+	if (ret < 0)
+		return ret;
+	skb_put(skb, ret);
 
-	/* Set Link Disconnect/Threshold Time */
-	frame[n++] = PI_LINK_DISC;
-	frame[n++] = 0x01;   /* length 1 */
-	frame[n++] = qos->link_disc_time.bits;
-#ifdef CONFIG_IRDA_COMPRESSION
-	/* Set compression bits*/
-	if ( qos->compression.bits) {
-		DEBUG( 4, __FUNCTION__ "(), inserting compresion bits\n");
-		frame[n++] = PI_COMPRESSION;
-		frame[n++] = 0x01;   /* length 1 */
-		frame[n++] = qos->compression.bits;
-	}
-#endif
-	return n;
+	return 0;
 }
 
-int byte_value( __u8 byte, int *array) 
+/*
+ * Function irlap_param_baud_rate (instance, param, get)
+ *
+ *    Negotiate data-rate
+ *
+ */
+static int irlap_param_baud_rate(void *instance, param_t *param, int get)
+{
+	__u16 final;
+
+	struct irlap_cb *self = (struct irlap_cb *) instance;
+
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
+
+	if (get) {
+		param->pv.i = self->qos_rx.baud_rate.bits;
+		DEBUG(0, __FUNCTION__ "(), baud rate = 0x%02x\n", param->pv.i);		
+	} else {
+		/* 
+		 *  Stations must agree on baud rate, so calculate
+		 *  intersection 
+		 */
+		DEBUG(2, "Requested BAUD_RATE: 0x%04x\n", param->pv.s);
+		final = param->pv.s & self->qos_rx.baud_rate.bits;
+
+		DEBUG(2, "Final BAUD_RATE: 0x%04x\n", final);
+		self->qos_tx.baud_rate.bits = final;
+		self->qos_rx.baud_rate.bits = final;	       
+	}
+
+	return 0;
+}
+
+/*
+ * Function irlap_param_link_disconnect (instance, param, get)
+ *
+ *    Negotiate link disconnect/threshold time. 
+ *
+ */
+static int irlap_param_link_disconnect(void *instance, param_t *param, int get)
+{
+	__u16 final;
+	
+	struct irlap_cb *self = (struct irlap_cb *) instance;
+	
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
+	
+	if (get)
+		param->pv.b = self->qos_rx.link_disc_time.bits;
+	else {
+		/*  
+		 *  Stations must agree on link disconnect/threshold 
+		 *  time.
+		 */
+		DEBUG(2, "LINK_DISC: %02x\n", param->pv.b);
+		final = param->pv.b & self->qos_rx.link_disc_time.bits;
+
+		DEBUG(2, "Final LINK_DISC: %02x\n", final);
+		self->qos_tx.link_disc_time.bits = final;
+		self->qos_rx.link_disc_time.bits = final;
+	}
+	return 0;
+}
+
+/*
+ * Function irlap_param_max_turn_time (instance, param, get)
+ *
+ *    Negotiate the maximum turnaround time. This is a type 1 parameter and
+ *    will be negotiated independently for each station
+ *
+ */
+static int irlap_param_max_turn_time(void *instance, param_t *param, int get)
+{
+	struct irlap_cb *self = (struct irlap_cb *) instance;
+	
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
+	
+	if (get)
+		param->pv.b = self->qos_rx.max_turn_time.bits;
+	else
+		self->qos_tx.max_turn_time.bits = param->pv.b;
+
+	return 0;
+}
+
+/*
+ * Function irlap_param_data_size (instance, param, get)
+ *
+ *    Negotiate the data size. This is a type 1 parameter and
+ *    will be negotiated independently for each station
+ *
+ */
+static int irlap_param_data_size(void *instance, param_t *param, int get)
+{
+	struct irlap_cb *self = (struct irlap_cb *) instance;
+	
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
+	
+	if (get)
+		param->pv.b = self->qos_rx.data_size.bits;
+	else
+		self->qos_tx.data_size.bits = param->pv.b;
+
+	return 0;
+}
+
+/*
+ * Function irlap_param_window_size (instance, param, get)
+ *
+ *    Negotiate the window size. This is a type 1 parameter and
+ *    will be negotiated independently for each station
+ *
+ */
+static int irlap_param_window_size(void *instance, param_t *param, int get)
+{
+	struct irlap_cb *self = (struct irlap_cb *) instance;
+	
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
+	
+	if (get)
+		param->pv.b = self->qos_rx.window_size.bits;
+	else
+		self->qos_tx.window_size.bits = param->pv.b;
+
+	return 0;
+}
+
+/*
+ * Function irlap_param_additional_bofs (instance, param, get)
+ *
+ *    Negotiate additional BOF characters. This is a type 1 parameter and
+ *    will be negotiated independently for each station.
+ */
+static int irlap_param_additional_bofs(void *instance, param_t *param, int get)
+{
+	struct irlap_cb *self = (struct irlap_cb *) instance;
+	
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
+	
+	if (get)
+		param->pv.b = self->qos_rx.additional_bofs.bits;
+	else
+		self->qos_tx.additional_bofs.bits = param->pv.b;
+
+	return 0;
+}
+
+/*
+ * Function irlap_param_min_turn_time (instance, param, get)
+ *
+ *    Negotiate the minimum turn around time. This is a type 1 parameter and
+ *    will be negotiated independently for each station
+ */
+static int irlap_param_min_turn_time(void *instance, param_t *param, int get)
+{
+	struct irlap_cb *self = (struct irlap_cb *) instance;
+	
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
+	
+	if (get)
+		param->pv.b = self->qos_rx.min_turn_time.bits;
+	else
+		self->qos_tx.min_turn_time.bits = param->pv.b;
+
+	return 0;
+}
+
+__u32 byte_value(__u8 byte, int *array) 
 {
 	int index;
 
-	ASSERT( array != NULL, return -1;);
+	ASSERT(array != NULL, return -1;);
 
-	index = msb_index( byte);
-	return index_value( index, array);
+	index = msb_index(byte);
+
+	return index_value(index, array);
 }
-
-
-/* __u8 value_byte( int value, int *array) */
-/* { */
-/* 	int index; */
-/* 	__u8 byte; */
-
-/* 	index = value_index( value, array); */
-
-/* 	byte =  */
-/* } */
 
 /*
  * Function msb_index (word)
@@ -371,18 +452,18 @@ int byte_value( __u8 byte, int *array)
  *    Returns index to most significant bit (MSB) in word
  *
  */
-int msb_index ( __u16 word) 
+int msb_index (__u16 word) 
 {
 	__u16 msb = 0x8000;
 	int index = 15;   /* Current MSB */
 	
-	while( msb) {
-		if ( word & msb)
+	while (msb) {
+		if (word & msb)
 			break;   /* Found it! */
 		msb >>=1;
 		index--;
 	}
-
+	
 	return index;
 }
 
@@ -391,12 +472,12 @@ int msb_index ( __u16 word)
  *
  *    Returns the index to the value in the specified array
  */
-int value_index( int value, int *array) 
+int value_index(__u32 value, int *array) 
 {
 	int i;
 	
-	for( i=0;i<8;i++)
-		if ( array[i] == value)
+	for (i=0;i<8;i++)
+		if (array[i] == value)
 			break;
 	return i;
 }
@@ -407,44 +488,50 @@ int value_index( int value, int *array)
  *    Returns value to index in array, easy!
  *
  */
-int index_value( int index, int *array) 
+__u32 index_value(int index, int *array) 
 {
 	return array[index];
 }
 
-void irda_qos_bits_to_value( struct qos_info *qos)
+void irda_qos_bits_to_value(struct qos_info *qos)
 {
 	int index;
 
-	ASSERT( qos != NULL, return;);
+	ASSERT(qos != NULL, return;);
 	
-	index = msb_index( qos->baud_rate.bits);
+	index = msb_index(qos->baud_rate.bits);
 	qos->baud_rate.value = baud_rates[index];
 
-	index = msb_index( qos->data_size.bits);
+	index = msb_index(qos->data_size.bits);
 	qos->data_size.value = data_size[index];
 
-	index = msb_index( qos->window_size.bits);
+	index = msb_index(qos->window_size.bits);
 	qos->window_size.value = index+1;
 
-	index = msb_index( qos->min_turn_time.bits);
+	index = msb_index(qos->min_turn_time.bits);
 	qos->min_turn_time.value = min_turn_time[index];
 	
-	index = msb_index( qos->max_turn_time.bits);
+	index = msb_index(qos->max_turn_time.bits);
 	qos->max_turn_time.value = max_turn_time[index];
 
-	index = msb_index( qos->link_disc_time.bits);
+	index = msb_index(qos->link_disc_time.bits);
 	qos->link_disc_time.value = link_disc_time[index];
 	
-	index = msb_index( qos->additional_bofs.bits);
+	index = msb_index(qos->additional_bofs.bits);
 	qos->additional_bofs.value = add_bofs[index];
 
 #ifdef CONFIG_IRDA_COMPRESSION
-	index = msb_index( qos->compression.bits);
-	if ( index >= 0)
+	index = msb_index(qos->compression.bits);
+	if (index >= 0)
 		qos->compression.value = compression[index];
 	else 
 		qos->compression.value = 0;
 #endif
 }
+
+
+
+
+
+
 

@@ -60,7 +60,7 @@ extern int setup_dec_irq(int, struct irqaction *);
 
 void (*board_time_init) (struct irqaction * irq);
 
-__initfunc(static void dec_irq_setup(void))
+static void __init dec_irq_setup(void)
 {
     switch (mips_machtype) {
     case MACH_DS23100:
@@ -97,7 +97,7 @@ __initfunc(static void dec_irq_setup(void))
 /*
  * enable the periodic interrupts
  */
-__initfunc(static void dec_time_init(struct irqaction *irq))
+static void __init dec_time_init(struct irqaction *irq)
 {
     /*
      * Here we go, enable periodic rtc interrupts.
@@ -112,7 +112,7 @@ __initfunc(static void dec_time_init(struct irqaction *irq))
     setup_dec_irq(CLOCK, irq);
 }
 
-__initfunc(void decstation_setup(void))
+void __init decstation_setup(void)
 {
     irq_setup = dec_irq_setup;
     board_time_init = dec_time_init;
@@ -130,7 +130,7 @@ __initfunc(void decstation_setup(void))
  * Machine-specific initialisation for kn01, aka Pmax, aka DS2100, DS3100,
  * and possibly also the DS5100.
  */
-__initfunc(void dec_init_kn01(void))
+void __init dec_init_kn01(void)
 {
     /*
      * Setup some memory addresses.
@@ -176,7 +176,7 @@ __initfunc(void dec_init_kn01(void))
  *
  * There are a lot of experiments to do, this is definitely incomplete.
  */
-__initfunc(void dec_init_kn230(void))
+void __init dec_init_kn230(void)
 {
     /*
      * Setup some memory addresses.
@@ -200,7 +200,7 @@ __initfunc(void dec_init_kn230(void))
 /*
  * Machine-specific initialisation for kn02, aka 3max, aka DS5000/2xx.
  */
-__initfunc(void dec_init_kn02(void))
+void __init dec_init_kn02(void)
 {
     /*
      * Setup some memory addresses. FIXME: probably incomplete!
@@ -270,7 +270,7 @@ __initfunc(void dec_init_kn02(void))
 /*
  * Machine-specific initialisation for kn02ba, aka 3min, aka DS5000/1xx.
  */
-__initfunc(void dec_init_kn02ba(void))
+void __init dec_init_kn02ba(void)
 {
     /*
      * Setup some memory addresses.
@@ -350,7 +350,7 @@ __initfunc(void dec_init_kn02ba(void))
 /*
  * Machine-specific initialisation for kn02ca, aka maxine, aka DS5000/2x.
  */
-__initfunc(void dec_init_kn02ca(void))
+void __init dec_init_kn02ca(void)
 {
     /*
      * Setup some memory addresses. FIXME: probably incomplete!
@@ -425,7 +425,7 @@ __initfunc(void dec_init_kn02ca(void))
 /*
  * Machine-specific initialisation for kn03, aka 3max+, aka DS5000/240.
  */
-__initfunc(void dec_init_kn03(void))
+void __init dec_init_kn03(void)
 {
     /*
      * Setup some memory addresses. FIXME: probably incomplete!

@@ -120,7 +120,7 @@ void show_mem(void)
 unsigned long mm_cachebits = 0;
 #endif
 
-__initfunc(static pte_t * kernel_page_table(unsigned long *memavailp))
+static pte_t * __init kernel_page_table(unsigned long *memavailp)
 {
 	pte_t *ptablep;
 
@@ -138,7 +138,7 @@ __initfunc(static pte_t * kernel_page_table(unsigned long *memavailp))
 static pmd_t *last_pgtable __initdata = NULL;
 static pmd_t *zero_pgtable __initdata = NULL;
 
-__initfunc(static pmd_t * kernel_ptr_table(unsigned long *memavailp))
+static pmd_t * __init kernel_ptr_table(unsigned long *memavailp)
 {
 	if (!last_pgtable) {
 		unsigned long pmd, last;
@@ -177,8 +177,8 @@ __initfunc(static pmd_t * kernel_ptr_table(unsigned long *memavailp))
 	return last_pgtable;
 }
 
-__initfunc(static unsigned long
-map_chunk (unsigned long addr, long size, unsigned long *memavailp))
+static unsigned long __init
+map_chunk (unsigned long addr, long size, unsigned long *memavailp)
 {
 #define PTRTREESIZE (256*1024)
 #define ROOTTREESIZE (32*1024*1024)
@@ -285,8 +285,8 @@ extern char __init_begin, __init_end;
  * paging_init() continues the virtual memory environment setup which
  * was begun by the code in arch/head.S.
  */
-__initfunc(unsigned long paging_init(unsigned long start_mem,
-				     unsigned long end_mem))
+unsigned long __init paging_init(unsigned long start_mem,
+				     unsigned long end_mem)
 {
 	int chunk;
 	unsigned long mem_avail = 0;
@@ -363,7 +363,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem,
 	return PAGE_ALIGN(free_area_init(start_mem, end_mem));
 }
 
-__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
+void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int codepages = 0;
 	int datapages = 0;

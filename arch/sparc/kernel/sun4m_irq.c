@@ -220,7 +220,7 @@ char *sun4m_irq_itoa(unsigned int irq)
 	return buff;
 }
 
-__initfunc(static void sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_regs *)))
+static void __init sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
 {
 	int reg_count, irq, cpu;
 	struct linux_prom_registers cnt_regs[PROMREG_MAX];
@@ -303,7 +303,7 @@ __initfunc(static void sun4m_init_timers(void (*counter_fn)(int, void *, struct 
 #endif
 }
 
-__initfunc(void sun4m_init_IRQ(void))
+void __init sun4m_init_IRQ(void)
 {
 	int ie_node,i;
 	struct linux_prom_registers int_regs[PROMREG_MAX];

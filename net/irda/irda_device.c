@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Sep  2 20:22:08 1998
- * Modified at:   Tue Jun  1 09:05:13 1999
+ * Modified at:   Tue Aug 24 14:31:13 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Modified at:   Fri May 28  3:11 CST 1999
  * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
@@ -76,7 +76,7 @@ int irda_device_proc_read( char *buf, char **start, off_t offset, int len,
 
 #endif /* CONFIG_PROC_FS */
 
-__initfunc(int irda_device_init( void))
+int __init irda_device_init( void)
 {
 	/* Allocate master array */
 	irda_device = hashbin_new( HB_LOCAL);
@@ -123,10 +123,12 @@ __initfunc(int irda_device_init( void))
 #ifdef CONFIG_GIRBIL_DONGLE
 	girbil_init();
 #endif
-#ifdef CONFIG_GIRBIL_DONGLE
+#ifdef CONFIG_LITELINK_DONGLE
 	litelink_init();
 #endif
-
+#ifdef CONFIG_AIRPORT_DONGLE
+ 	airport_init();
+#endif
 	return 0;
 }
 
@@ -163,8 +165,10 @@ int irda_device_open(struct irda_device *self, char *name, void *priv)
 	if (self->tx_buff.truesize > 0) {
 		self->tx_buff.head = ( __u8 *) kmalloc(self->tx_buff.truesize, 
 						       self->tx_buff.flags);
-		if (self->tx_buff.head == NULL)
+		if (self->tx_buff.head == NULL) {
+			kfree(self->rx_buff.head);
 			return -ENOMEM;
+		}
 
 		memset(self->tx_buff.head, 0, self->tx_buff.truesize);
 	}
@@ -215,15 +219,6 @@ int irda_device_open(struct irda_device *self, char *name, void *priv)
 	MESSAGE("IrDA: Registered device %s\n", self->name);
 
 	irda_device_set_media_busy(self, FALSE);
-
-	/* 
-	 * Open new IrLAP layer instance, now that everything should be
-	 * initialized properly 
-	 */
-	self->irlap = irlap_open(self);
-        
-	/* It's now safe to initilize the saddr */
-	memcpy(self->netdev.dev_addr, &self->irlap->saddr, 4);
 
 	return 0;
 }
@@ -277,11 +272,6 @@ void irda_device_close(struct irda_device *self)
 	/* We are not using any dongle anymore! */
 	if (self->dongle)
 		self->dongle->close(self);
-
-	/* Stop and remove instance of IrLAP */
-	if (self->irlap)
-		irlap_close(self->irlap);
-	self->irlap = NULL;
 
 	hashbin_remove(irda_device, (int) self, NULL);
 
@@ -345,13 +335,15 @@ static void __irda_device_change_speed(struct irda_device *self, int speed)
 
 		if (n++ > 10) {
 			WARNING(__FUNCTION__ "(), breaking loop!\n");
-			break;
+			return;
 		}
 	}
 	
+	/* Change speed of dongle */
 	if (self->dongle)
 		self->dongle->change_speed(self, speed);
 	
+	/* Change speed of IrDA port */
 	if (self->change_speed) {
 		self->change_speed(self, speed);
 		
@@ -449,6 +441,57 @@ int irda_device_setup(struct net_device *dev)
 
 	dev->flags = IFF_NOARP;
 	
+	return 0;
+}
+
+int irda_device_net_open(struct net_device *dev)
+{
+	struct irda_device *self;
+
+	ASSERT(dev != NULL, return -1;);
+
+	self = dev->priv;
+
+	ASSERT(self != NULL, return 0;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return -1;);
+
+	/* Ready to play! */
+	dev->tbusy = 0;
+	dev->interrupt = 0;
+	dev->start = 1;
+
+	/* 
+	 * Open new IrLAP layer instance, now that everything should be
+	 * initialized properly 
+	 */
+	self->irlap = irlap_open(self);
+        
+	/* It's now safe to initilize the saddr */
+	memcpy(self->netdev.dev_addr, &self->irlap->saddr, 4);
+
+	return 0;
+}
+
+int irda_device_net_close(struct net_device *dev)
+{
+	struct irda_device *self;
+
+	ASSERT(dev != NULL, return -1;);
+
+	self = dev->priv;
+
+	ASSERT(self != NULL, return 0;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return -1;);
+	
+	/* Stop device */
+	dev->tbusy = 1;
+	dev->start = 0;
+
+	/* Stop and remove instance of IrLAP */
+	if (self->irlap)
+		irlap_close(self->irlap);
+	self->irlap = NULL;
+
 	return 0;
 }
 
@@ -618,7 +661,7 @@ static int irda_device_net_ioctl(struct net_device *dev, /* ioctl device */
 }
 
 /*
- * Function irda_device_transmit_finished (void)
+ * Function irda_device_txqueue_empty (irda_device)
  *
  *    Check if there is still some frames in the transmit queue for this
  *    device. Maybe we should use: q->q.qlen == 0.
@@ -671,6 +714,10 @@ void irda_device_init_dongle(struct irda_device *self, int type)
 	case LITELINK_DONGLE:
 		MESSAGE("IrDA: Initializing Litelink dongle!\n");
 		request_module("litelink");
+		break;
+	case AIRPORT_DONGLE:
+		MESSAGE("IrDA: Initializing Airport dongle!\n");
+		request_module("airport");
 		break;
 	default:
 		ERROR("Unknown dongle type!\n");
@@ -749,6 +796,31 @@ void irda_device_unregister_dongle(struct dongle *dongle)
 		return;
 	}
 	kfree(node);
+}
+
+/*
+ * Function irda_device_set_raw_mode (self, status)
+ *
+ *    
+ *
+ */
+int irda_device_set_raw_mode(struct irda_device* self, int status)
+{	
+	DEBUG(2, __FUNCTION__ "()\n");
+
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRDA_DEVICE_MAGIC, return -1;);
+	
+	if (self->set_raw_mode == NULL) {
+		ERROR(__FUNCTION__ "(), set_raw_mode not impl. by "
+		      "device driver\n");
+		return -1;
+	}
+	
+	self->raw_mode = status;
+	self->set_raw_mode(self, status);
+	
+	return 0;
 }
 
 /*

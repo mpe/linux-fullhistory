@@ -739,7 +739,7 @@ static struct file_system_type ext2_fs_type = {
 	NULL
 };
 
-__initfunc(int init_ext2_fs(void))
+int __init init_ext2_fs(void)
 {
         return register_filesystem(&ext2_fs_type);
 }

@@ -79,35 +79,29 @@ int fat_is_binary(char conversion,char *extension)
 /* File creation lock. This is system-wide to avoid deadlocks in rename. */
 /* (rename might deadlock before detecting cross-FS moves.) */
 
-static DECLARE_WAIT_QUEUE_HEAD(creation_wait);
-static int creation_lock = 0;
-
+static DECLARE_MUTEX(creation_lock);
 
 void fat_lock_creation(void)
 {
-	while (creation_lock) sleep_on(&creation_wait);
-	creation_lock = 1;
+	down(&creation_lock);
 }
 
 
 void fat_unlock_creation(void)
 {
-	creation_lock = 0;
-	wake_up(&creation_wait);
+	up(&creation_lock);
 }
 
 
 void lock_fat(struct super_block *sb)
 {
-	while (MSDOS_SB(sb)->fat_lock) sleep_on(&MSDOS_SB(sb)->fat_wait);
-	MSDOS_SB(sb)->fat_lock = 1;
+	down(&(MSDOS_SB(sb)->fat_lock));
 }
 
 
 void unlock_fat(struct super_block *sb)
 {
-	MSDOS_SB(sb)->fat_lock = 0;
-	wake_up(&MSDOS_SB(sb)->fat_wait);
+	up(&(MSDOS_SB(sb)->fat_lock));
 }
 
 /* Flushes the number of free clusters on FAT32 */

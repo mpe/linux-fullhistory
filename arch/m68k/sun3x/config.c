@@ -39,7 +39,7 @@ void sun3x_reboot(void)
     asm ("reset");
 }
 
-__initfunc(int sun3x_keyb_init(void))
+int __init sun3x_keyb_init(void)
 {
     return 0;
 }
@@ -75,7 +75,7 @@ void sun3x_disable_irq(unsigned int irq)
     *sun3x_intreg &= ~(1 << irq);
 }
 
-__initfunc(void sun3x_init_IRQ(void))
+void __init sun3x_init_IRQ(void)
 {
     /* disable all interrupts initially */
     *sun3x_intreg = 1;  /* master enable only */
@@ -89,7 +89,7 @@ int sun3x_get_irq_list(char *buf)
 /*
  *  Setup the sun3x configuration info
  */
-__initfunc(void config_sun3x(void))
+void __init config_sun3x(void)
 {
     mach_get_irq_list	 = sun3x_get_irq_list;
     mach_max_dma_address = 0xffffffff; /* we can DMA anywhere, whee */

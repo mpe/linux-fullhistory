@@ -330,7 +330,7 @@ int sis5513_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
 
-__initfunc(unsigned int pci_init_sis5513 (struct pci_dev *dev, const char *name))
+unsigned int __init pci_init_sis5513 (struct pci_dev *dev, const char *name)
 {
 	struct pci_dev *host;
 	byte latency = 0, reg48h = 0;
@@ -383,7 +383,7 @@ __initfunc(unsigned int pci_init_sis5513 (struct pci_dev *dev, const char *name)
 	return 0;
 }
 
-__initfunc(void ide_init_sis5513 (ide_hwif_t *hwif))
+void __init ide_init_sis5513 (ide_hwif_t *hwif)
 {
 	byte reg48h = 0;
 	byte mask = hwif->channel ? 0x20 : 0x10;

@@ -27,6 +27,6 @@ int get_dma_list(char *buf)
 	return 0;
 }
 
-__initfunc(void init_dma(void))
+void __init init_dma(void)
 {
 }

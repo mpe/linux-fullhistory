@@ -32,7 +32,7 @@ static struct super_operations efs_superblock_operations = {
 	NULL		/* remount */
 };
 
-__initfunc(int init_efs_fs(void)) {
+int __init init_efs_fs(void) {
 	return register_filesystem(&efs_fs_type);
 }
 

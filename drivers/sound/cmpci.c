@@ -2176,9 +2176,9 @@ static struct initvol {
 };
 
 #ifdef MODULE
-__initfunc(int init_module(void))
+int __init init_module(void)
 #else
-__initfunc(int init_cmpci(void))
+int __init init_cmpci(void)
 #endif
 {
 	struct cm_state *s;

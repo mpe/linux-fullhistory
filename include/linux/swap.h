@@ -64,6 +64,8 @@ struct swap_info_struct {
 
 extern int nr_swap_pages;
 extern int nr_free_pages;
+extern int nr_lru_pages;
+extern struct list_head lru_cache;
 extern atomic_t nr_async_pages;
 extern struct inode swapper_inode;
 extern atomic_t page_cache_size;
@@ -157,10 +159,29 @@ static inline int is_page_shared(struct page *page)
 	count = page_count(page);
 	if (PageSwapCache(page))
 		count += swap_count(page->offset) - 2;
-	if (PageFreeAfter(page))
-		count--;
 	return  count > 1;
 }
+
+extern spinlock_t pagemap_lru_lock;
+
+/*
+ * Helper macros for lru_pages handling.
+ */
+#define	lru_cache_add(page)			\
+do {						\
+	spin_lock(&pagemap_lru_lock);		\
+	list_add(&(page)->lru, &lru_cache);	\
+	nr_lru_pages++;				\
+	spin_unlock(&pagemap_lru_lock);		\
+} while (0)
+
+#define	lru_cache_del(page)			\
+do {						\
+	spin_lock(&pagemap_lru_lock);		\
+	list_del(&(page)->lru);			\
+	nr_lru_pages--;				\
+	spin_unlock(&pagemap_lru_lock);		\
+} while (0)
 
 #endif /* __KERNEL__*/
 

@@ -92,12 +92,12 @@ unsigned long get_tc_speed(void)
 /*
  * Probing for TURBOchannel modules
  */
-__initfunc(static void my_dbe_handler(struct pt_regs *regs))
+static void __init my_dbe_handler(struct pt_regs *regs)
 {
 	regs->cp0_epc += 4;
 }
 
-__initfunc(static void tc_probe(unsigned long startaddr, unsigned long size, int max_slot))
+static void __init tc_probe(unsigned long startaddr, unsigned long size, int max_slot)
 {
 	int i, slot;
 	long offset;
@@ -164,7 +164,7 @@ __initfunc(static void tc_probe(unsigned long startaddr, unsigned long size, int
 /*
  * the main entry
  */
-__initfunc(void tc_init(void))
+void __init tc_init(void)
 {
 	int tc_clock;
 	int i;

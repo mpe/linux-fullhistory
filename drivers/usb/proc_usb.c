@@ -1,6 +1,7 @@
 /*
  * drivers/usb/proc_usb.c
  * (C) Copyright 1999 Randy Dunlap.
+ * (C) Copyright 1999 Thomas Sailer <sailer@ife.ee.ethz.ch>. (proc file per device)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,6 +49,9 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/list.h>
+#include <linux/bitops.h>
+#include <asm/uaccess.h>
+#include <linux/mm.h>
 
 #include "usb.h"
 
@@ -191,7 +195,7 @@ static int usb_dump_interface (const struct usb_interface_descriptor *interface,
  *    which ones are active, if any)
  * 2. Add proc_usb_init() call from usb-core.c.
  * 3. proc_usb as a MODULE ?
- * 4. use __initfunc() ?
+ * 4. use __init ?
  * 5. add <halted> status to each endpoint line
  */
 
@@ -435,12 +439,7 @@ static int usb_driver_list_dump (char *buf, char **start, off_t offset,
 
 /*
  * proc entry for every device
- * sailer@ife.ee.ethz.ch
  */
-#include <linux/bitops.h>
-#include <asm/uaccess.h>
-#include <linux/mm.h>
-#include "ezusb.h"
 
 static long long usbdev_lseek(struct file * file, long long offset, int orig)
 {
@@ -484,8 +483,12 @@ static ssize_t usbdev_read(struct file * file, char * buf, size_t nbytes, loff_t
 	return ret;
 }
 
-static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
+/* note: this is a compatibility kludge that will vanish soon. */
+#include "ezusb.h"
+
+static int usbdev_ioctl_ezusbcompat(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
+	static unsigned obsolete_warn = 0;
 	struct proc_dir_entry *dp = (struct proc_dir_entry *)inode->u.generic_ip;
 	struct usb_device *dev = (struct usb_device *)dp->data;
 	struct ezusb_ctrltransfer ctrl;
@@ -498,6 +501,11 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 
 	switch (cmd) {
 	case EZUSB_CONTROL:
+		if (obsolete_warn < 20) {
+			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_CONTROL ioctl\n",
+			       current->pid, current->comm);
+			obsolete_warn++;
+		}
 		if (!capable(CAP_SYS_RAWIO))
 			return -EPERM;
 		copy_from_user_ret(&ctrl, (void *)arg, sizeof(ctrl), -EFAULT);
@@ -529,6 +537,11 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		return 0;
 
 	case EZUSB_BULK:
+		if (obsolete_warn < 20) {
+			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_BULK ioctl\n",
+			       current->pid, current->comm);
+			obsolete_warn++;
+		}
 		if (!capable(CAP_SYS_RAWIO))
 			return -EPERM;
 		copy_from_user_ret(&bulk, (void *)arg, sizeof(bulk), -EFAULT);
@@ -567,6 +580,11 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		return len2;
 
 	case EZUSB_RESETEP:
+		if (obsolete_warn < 20) {
+			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_RESETEP ioctl\n",
+			       current->pid, current->comm);
+			obsolete_warn++;
+		}
 		if (!capable(CAP_SYS_RAWIO))
 			return -EPERM;
 		get_user_ret(ep, (unsigned int *)arg, -EFAULT);
@@ -576,12 +594,131 @@ static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		return 0;
 
 	case EZUSB_SETINTERFACE:
+		if (obsolete_warn < 20) {
+			printk(KERN_WARNING "/proc/bus/usb: process %d (%s) used obsolete EZUSB_SETINTERFACE ioctl\n",
+			       current->pid, current->comm);
+			obsolete_warn++;
+		}
 		if (!capable(CAP_SYS_RAWIO))
 			return -EPERM;
 		copy_from_user_ret(&setintf, (void *)arg, sizeof(setintf), -EFAULT);
 		if (usb_set_interface(dev, setintf.interface, setintf.altsetting))
 			return -EINVAL;
 		return 0;
+	}
+	return -ENOIOCTLCMD;
+}
+
+
+
+static int usbdev_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct proc_dir_entry *dp = (struct proc_dir_entry *)inode->u.generic_ip;
+	struct usb_device *dev = (struct usb_device *)dp->data;
+	struct usb_proc_ctrltransfer ctrl;
+	struct usb_proc_bulktransfer bulk;
+	struct usb_proc_setinterface setintf;
+	unsigned int len1, ep, pipe;
+	unsigned long len2;
+	unsigned char *tbuf;
+	int i;
+
+	switch (cmd) {
+	case USB_PROC_CONTROL:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		copy_from_user_ret(&ctrl, (void *)arg, sizeof(ctrl), -EFAULT);
+		if (ctrl.length > PAGE_SIZE)
+			return -EINVAL;
+		if (!(tbuf = (unsigned char *)__get_free_page(GFP_KERNEL)))
+			return -ENOMEM;
+		if (ctrl.requesttype & 0x80) {
+			if (ctrl.length && !access_ok(VERIFY_WRITE, ctrl.data, ctrl.length)) {
+				free_page((unsigned long)tbuf);
+				return -EINVAL;
+			}
+			i = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), ctrl.request, 
+					    ctrl.requesttype, ctrl.value, ctrl.index, tbuf, 
+					    ctrl.length);
+			if (!i && ctrl.length) {
+				copy_to_user_ret(ctrl.data, tbuf, ctrl.length, -EFAULT);
+			}
+		} else {
+			if (ctrl.length) {
+				copy_from_user_ret(tbuf, ctrl.data, ctrl.length, -EFAULT);
+			}
+			i = usb_control_msg(dev, usb_sndctrlpipe(dev, 0), ctrl.request, 
+					    ctrl.requesttype, ctrl.value, ctrl.index, tbuf, 
+					    ctrl.length);
+		}
+		free_page((unsigned long)tbuf);
+		if (i) {
+			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_CONTROL failed rqt %u rq %u len %u ret %d\n", 
+			       ctrl.requesttype, ctrl.request, ctrl.length, i);
+			return -ENXIO;
+		}
+		return 0;
+
+	case USB_PROC_BULK:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		copy_from_user_ret(&bulk, (void *)arg, sizeof(bulk), -EFAULT);
+		if (bulk.ep & 0x80)
+			pipe = usb_rcvbulkpipe(dev, bulk.ep & 0x7f);
+		else
+			pipe = usb_sndbulkpipe(dev, bulk.ep & 0x7f);
+		if (!usb_maxpacket(dev, pipe, !(bulk.ep & 0x80)))
+			return -EINVAL;
+		len1 = bulk.len;
+		if (len1 > PAGE_SIZE)
+			len1 = PAGE_SIZE;
+		if (!(tbuf = (unsigned char *)__get_free_page(GFP_KERNEL)))
+			return -ENOMEM;
+		if (bulk.ep & 0x80) {
+			if (len1 && !access_ok(VERIFY_WRITE, bulk.data, len1)) {
+				free_page((unsigned long)tbuf);
+				return -EINVAL;
+			}
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2);
+			if (!i && len2) {
+				copy_to_user_ret(bulk.data, tbuf, len2, -EFAULT);
+			}
+		} else {
+			if (len1) {
+				copy_from_user_ret(tbuf, bulk.data, len1, -EFAULT);
+			}
+			i = dev->bus->op->bulk_msg(dev, pipe, tbuf, len1, &len2);
+		}
+		free_page((unsigned long)tbuf);
+		if (i) {
+			printk(KERN_WARNING "/proc/bus/usb: USB_PROC_BULK failed ep 0x%x len %u ret %d\n", 
+			       bulk.ep, bulk.len, i);
+			return -ENXIO;
+		}
+		return len2;
+
+	case USB_PROC_RESETEP:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		get_user_ret(ep, (unsigned int *)arg, -EFAULT);
+		if ((ep & ~0x80) >= 16)
+			return -EINVAL;
+		usb_settoggle(dev, ep & 0xf, !(ep & 0x80), 0);
+		return 0;
+
+	case USB_PROC_SETINTERFACE:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
+		copy_from_user_ret(&setintf, (void *)arg, sizeof(setintf), -EFAULT);
+		if (usb_set_interface(dev, setintf.interface, setintf.altsetting))
+			return -EINVAL;
+		return 0;
+
+	case EZUSB_CONTROL:
+	case EZUSB_BULK:
+	case EZUSB_RESETEP:
+	case EZUSB_SETINTERFACE:
+		return usbdev_ioctl_ezusbcompat(inode, file, cmd, arg);
 	}
 	return -ENOIOCTLCMD;
 }

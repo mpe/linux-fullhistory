@@ -17,8 +17,8 @@
 #include <linux/init.h>
 
 
-__initfunc(void
-atari_sched_init(void (*timer_routine)(int, void *, struct pt_regs *)))
+void __init
+atari_sched_init(void (*timer_routine)(int, void *, struct pt_regs *))
 {
     /* set Timer C data Register */
     mfp.tim_dt_c = INT_TICKS;

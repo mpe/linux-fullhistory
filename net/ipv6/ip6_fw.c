@@ -377,7 +377,7 @@ static void ip6_fw_destroy(struct flow_rule *rl)
 #define ip6_fw_init module_init
 #endif
 
-__initfunc(void ip6_fw_init(void))
+void __init ip6_fw_init(void)
 {
 #ifdef CONFIG_NETLINK
 	netlink_attach(NETLINK_IP6_FW, ip6_fw_msgrcv);

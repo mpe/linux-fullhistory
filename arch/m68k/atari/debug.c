@@ -168,7 +168,7 @@ int atari_midi_console_wait_key(struct console *co)
  * SCC serial ports. They're used by the debugging interface, kgdb, and the
  * serial console code. */
 #ifndef CONFIG_SERIAL_CONSOLE
-__initfunc(static void atari_init_mfp_port( int cflag ))
+static void __init atari_init_mfp_port( int cflag )
 #else
 void atari_init_mfp_port( int cflag )
 #endif
@@ -214,7 +214,7 @@ void atari_init_mfp_port( int cflag )
     } while(0)
     
 #ifndef CONFIG_SERIAL_CONSOLE
-__initfunc(static void atari_init_scc_port( int cflag ))
+static void __init atari_init_scc_port( int cflag )
 #else
 void atari_init_scc_port( int cflag )
 #endif
@@ -281,7 +281,7 @@ void atari_init_scc_port( int cflag )
 }
 
 #ifndef CONFIG_SERIAL_CONSOLE 
-__initfunc(static void atari_init_midi_port( int cflag ))
+static void __init atari_init_midi_port( int cflag )
 #else
 void atari_init_midi_port( int cflag )
 #endif
@@ -309,7 +309,7 @@ void atari_init_midi_port( int cflag )
 		     ACIA_RHTID : ACIA_RLTID);
 }
 
-__initfunc(void atari_debug_init(void))
+void __init atari_debug_init(void)
 {
 #ifdef CONFIG_KGDB
     /* the m68k_debug_device is used by the GDB stub, do nothing here */

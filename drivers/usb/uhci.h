@@ -60,7 +60,9 @@
 #define UHCI_PTR_QH		0x0002
 #define UHCI_PTR_DEPTH		0x0004
 
-#define UHCI_NUMFRAMES		1024
+#define UHCI_NUMFRAMES		1024	/* in the frame list [array] */
+#define UHCI_MAX_SOF_NUMBER	2047	/* in an SOF packet */
+#define CAN_SCHEDULE_FRAMES	1000	/* how far future frames can be scheduled */
 
 struct uhci_td;
 
@@ -80,7 +82,7 @@ struct uhci_qh {
 } __attribute__((aligned(16)));
 
 struct uhci_framelist {
-	__u32 frame[1024];
+	__u32 frame[UHCI_NUMFRAMES];
 } __attribute__((aligned(4096)));
 
 /*
@@ -112,20 +114,6 @@ struct uhci_framelist {
  * for TD <flags>:
  */
 #define UHCI_TD_REMOVE		0x0001		/* Remove when done */
-
-/*
- * for TD <info>: (a.k.a. Token)
- */
-#define TD_TOKEN_TOGGLE		19
-
-#define uhci_maxlen(token)	((token) >> 21)
-#define uhci_toggle(token)	(((token) >> TD_TOKEN_TOGGLE) & 1)
-#define uhci_endpoint(token)	(((token) >> 15) & 0xf)
-#define uhci_devaddr(token)	(((token) >> 8) & 0x7f)
-#define uhci_devep(token)	(((token) >> 8) & 0x7ff)
-#define uhci_packetid(token)	((token) & 0xff)
-#define uhci_packetout(token)	(uhci_packetid(token) != USB_PID_IN)
-#define uhci_packetin(token)	(uhci_packetid(token) == USB_PID_IN)
 
 /*
  * for TD <info>: (a.k.a. Token)
@@ -176,16 +164,6 @@ struct uhci_td {
 	int isoc_td_number;		/* 0-relative number within a usb_isoc_desc. */
 } __attribute__((aligned(16)));
 
-struct uhci_iso_td {
-	int num;			/* Total number of TD's */
-	char *data;			/* Beginning of buffer */
-	int maxsze;			/* Maximum size of each data block */
-
-	struct uhci_td *td;		/* Pointer to first TD */
-
-	int frame;			/* Beginning frame */
-	int endframe;			/* End frame */
-};
 
 /*
  * Note the alignment requirements of the entries

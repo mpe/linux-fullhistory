@@ -33,7 +33,7 @@
  * that shared pages stay shared while being swapped.
  */
 
-static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, int wait, int dolock)
+static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, int wait)
 {
 	unsigned long type, offset;
 	struct swap_info_struct * p;
@@ -88,7 +88,6 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 	} else
 		kstat.pswpout++;
 
-	get_page(page);
 	if (p->swap_device) {
 		zones[0] = offset;
 		zones_used = 1;
@@ -111,18 +110,12 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 		dev = swapf->i_dev;
 	} else {
 		printk(KERN_ERR "rw_swap_page: no swap file or device\n");
-		put_page(page);
 		return;
 	}
  	if (!wait) {
  		set_bit(PG_decr_after, &page->flags);
  		atomic_inc(&nr_async_pages);
  	}
- 	if (dolock) {
- 		set_bit(PG_free_swap_after, &page->flags);
-		p->swap_map[offset]++;
- 	}
- 	set_bit(PG_free_after, &page->flags);
 
  	/* block_size == PAGE_SIZE/zones_used */
  	brw_page(rw, page, dev, zones, block_size, 0);
@@ -164,11 +157,10 @@ void rw_swap_page(int rw, struct page *page, int wait)
 		PAGE_BUG(page);
 	if (page->inode != &swapper_inode)
 		PAGE_BUG(page);
-	rw_swap_page_base(rw, entry, page, wait, 1);
+	rw_swap_page_base(rw, entry, page, wait);
 }
 
 /*
- * shmfs needs a version that doesn't put the page in the page cache!
  * The swap lock map insists that pages be in the page cache!
  * Therefore we can't use it.  Later when we can remove the need for the
  * lock map and we can reduce the number of functions exported.
@@ -181,5 +173,5 @@ void rw_swap_page_nolock(int rw, unsigned long entry, char *buf, int wait)
 		PAGE_BUG(page);
 	if (PageSwapCache(page))
 		PAGE_BUG(page);
-	rw_swap_page_base(rw, entry, page, wait, 0);
+	rw_swap_page_base(rw, entry, page, wait);
 }

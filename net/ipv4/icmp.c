@@ -1129,7 +1129,7 @@ static struct icmp_control icmp_pointers[NR_ICMP_TYPES+1] = {
  { &icmp_statistics.IcmpOutAddrMaskReps, &icmp_statistics.IcmpInAddrMaskReps, icmp_address_reply, 0, }
 };
 
-__initfunc(void icmp_init(struct net_proto_family *ops))
+void __init icmp_init(struct net_proto_family *ops)
 {
 	int err;
 

@@ -899,7 +899,7 @@ static void rtmsg_fib(int event, struct fib_node* f, int z, int tb_id,
 #ifdef CONFIG_IP_MULTIPLE_TABLES
 struct fib_table * fib_hash_init(int id)
 #else
-__initfunc(struct fib_table * fib_hash_init(int id))
+struct fib_table * __init fib_hash_init(int id)
 #endif
 {
 	struct fib_table *tb;

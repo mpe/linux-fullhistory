@@ -53,7 +53,7 @@ extern struct ide_ops std_ide_ops;
 extern struct rtc_ops std_rtc_ops;
 extern struct kbd_ops std_kbd_ops;
 
-__initfunc(static void sni_irq_setup(void))
+static void __init sni_irq_setup(void)
 {
 	set_except_vector(0, sni_rm200_pci_handle_int);
 	request_region(0x20,0x20, "pic1");
@@ -69,7 +69,7 @@ __initfunc(static void sni_irq_setup(void))
 
 void (*board_time_init)(struct irqaction *irq);
 
-__initfunc(static void sni_rm200_pci_time_init(struct irqaction *irq))
+static void __init sni_rm200_pci_time_init(struct irqaction *irq)
 {
 	/* set the clock to 100 Hz */
 	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
@@ -104,7 +104,7 @@ static inline void sni_pcimt_detect(void)
 	printk("%s.\n", boardtype);
 }
 
-__initfunc(void sni_rm200_pci_setup(void))
+void __init sni_rm200_pci_setup(void)
 {
 	tag *atag;
 

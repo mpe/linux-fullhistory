@@ -64,7 +64,7 @@ static int irq=11;
  *	Setup options
  */
  
-__initfunc(void wdt_setup(char *str, int *ints))
+void __init wdt_setup(char *str, int *ints)
 {
 	if(ints[0]>0)
 	{
@@ -365,7 +365,7 @@ void cleanup_module(void)
 
 #endif
 
-__initfunc(int wdt_init(void))
+int __init wdt_init(void)
 {
 	printk("WDT500/501-P driver 0.07 at %X (Interrupt %d)\n", io,irq);
 	if(request_irq(irq, wdt_interrupt, SA_INTERRUPT, "wdt501p", NULL))

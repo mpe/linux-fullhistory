@@ -167,7 +167,7 @@ volatile int pcic_trapped;
 static void pci_do_gettimeofday(struct timeval *tv);
 static void pci_do_settimeofday(struct timeval *tv);
 
-__initfunc(void pcic_probe(void))
+void __init pcic_probe(void)
 {
 	struct linux_prom_registers regs[PROMREG_MAX];
 	struct linux_pbm_info* pbm;
@@ -274,7 +274,7 @@ __initfunc(void pcic_probe(void))
 	}
 }
 
-__initfunc(void pcibios_init(void))
+void __init pcibios_init(void)
 {
 	/*
 	 * PCIC should be initialized at start of the timer.
@@ -309,8 +309,8 @@ int pcibios_present(void)
 	return pcic != NULL;
 }
 
-__initfunc(static int pdev_to_pnode(struct linux_pbm_info *pbm, 
-				    struct pci_dev *pdev))
+static int __init pdev_to_pnode(struct linux_pbm_info *pbm, 
+				    struct pci_dev *pdev)
 {
 	struct linux_prom_pci_registers regs[PROMREG_MAX];
 	int err;
@@ -506,7 +506,7 @@ unsigned long pcic_alloc_io( unsigned long* addr )
 /*
  * Stolen from both i386 and sparc64 branch 
  */
-__initfunc(void pcibios_fixup(void))
+void __init pcibios_fixup(void)
 {
   struct pci_dev *dev;
   int i, has_io, has_mem;
@@ -611,7 +611,7 @@ static void pcic_timer_handler (int irq, void *h, struct pt_regs *regs)
 #define USECS_PER_JIFFY  10000  /* We have 100HZ "standard" timer for sparc */
 #define TICK_TIMER_LIMIT ((100*1000000/4)/100)
 
-__initfunc(void pci_time_init(void))
+void __init pci_time_init(void)
 {
 	unsigned long v;
 	int timer_irq, irq;
@@ -802,7 +802,7 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char devfn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-__initfunc(char *pcibios_setup(char *str))
+char * __init pcibios_setup(char *str)
 {
 	return str;
 }
@@ -973,7 +973,7 @@ static void pcic_enable_pil_irq(unsigned int pil)
 	writel(get_irqmask(pil), pcic->pcic_regs+PCI_SYS_INT_TARGET_MASK_CLEAR);
 }
 
-__initfunc(void sun4m_pci_init_IRQ(void))
+void __init sun4m_pci_init_IRQ(void)
 {
 	BTFIXUPSET_CALL(enable_irq, pcic_enable_irq, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(disable_irq, pcic_disable_irq, BTFIXUPCALL_NORM);
@@ -985,7 +985,7 @@ __initfunc(void sun4m_pci_init_IRQ(void))
 	BTFIXUPSET_CALL(__irq_itoa, pcic_irq_itoa, BTFIXUPCALL_NORM);
 }
 
-__initfunc(void pcibios_fixup_bus(struct pci_bus *bus))
+void __init pcibios_fixup_bus(struct pci_bus *bus)
 {
 }
 

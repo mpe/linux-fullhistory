@@ -30,7 +30,7 @@ extern int hrz_detect(void);
 #endif
 
 
-__initfunc(int atmdev_init(void))
+int __init atmdev_init(void)
 {
 	int devs;
 

@@ -1928,7 +1928,7 @@ ctl_table ipv6_route_table[] = {
 #endif
 
 
-__initfunc(void ip6_route_init(void))
+void __init ip6_route_init(void)
 {
 	ip6_dst_ops.kmem_cachep = kmem_cache_create("ip6_dst_cache",
 						     sizeof(struct rt6_info),

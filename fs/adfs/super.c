@@ -385,7 +385,7 @@ static struct file_system_type adfs_fs_type = {
 	"adfs", FS_REQUIRES_DEV, adfs_read_super, NULL
 };
 
-__initfunc(int init_adfs_fs(void))
+int __init init_adfs_fs(void)
 {
 	return register_filesystem(&adfs_fs_type);
 }

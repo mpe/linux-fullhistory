@@ -2516,7 +2516,7 @@ static void r4k_add_wired_entry(unsigned long entrylo0, unsigned long entrylo1,
 }
 
 /* Detect and size the various r4k caches. */
-__initfunc(static void probe_icache(unsigned long config))
+static void __init probe_icache(unsigned long config)
 {
 	icache_size = 1 << (12 + ((config >> 9) & 7));
 	ic_lsize = 16 << ((config >> 5) & 1);
@@ -2525,7 +2525,7 @@ __initfunc(static void probe_icache(unsigned long config))
 	       icache_size >> 10, ic_lsize);
 }
 
-__initfunc(static void probe_dcache(unsigned long config))
+static void __init probe_dcache(unsigned long config)
 {
 	dcache_size = 1 << (12 + ((config >> 6) & 7));
 	dc_lsize = 16 << ((config >> 4) & 1);
@@ -2540,7 +2540,7 @@ __initfunc(static void probe_dcache(unsigned long config))
  * the cache sizing loop that executes in KSEG1 space or else
  * you will crash and burn badly.  You have been warned.
  */
-__initfunc(static int probe_scache(unsigned long config))
+static int __init probe_scache(unsigned long config)
 {
 	extern unsigned long stext;
 	unsigned long flags, addr, begin, end, pow2;
@@ -2624,7 +2624,7 @@ __initfunc(static int probe_scache(unsigned long config))
 	return 1;
 }
 
-__initfunc(static void setup_noscache_funcs(void))
+static void __init setup_noscache_funcs(void)
 {
 	unsigned int prid;
 
@@ -2662,7 +2662,7 @@ __initfunc(static void setup_noscache_funcs(void))
 	dma_cache_inv = r4k_dma_cache_inv_pc;
 }
 
-__initfunc(static void setup_scache_funcs(void))
+static void __init setup_scache_funcs(void)
 {
 	switch(sc_lsize) {
 	case 16:
@@ -2748,7 +2748,7 @@ __initfunc(static void setup_scache_funcs(void))
 
 typedef int (*probe_func_t)(unsigned long);
 
-__initfunc(static inline void setup_scache(unsigned int config))
+static inline void __init setup_scache(unsigned int config)
 {
 	probe_func_t probe_scache_kseg1;
 	int sc_present = 0;
@@ -2770,7 +2770,7 @@ static int r4k_user_mode(struct pt_regs *regs)
 	return (regs->cp0_status & ST0_KSU) == KSU_USER;
 }
 
-__initfunc(void ld_mmu_r4xx0(void))
+void __init ld_mmu_r4xx0(void)
 {
 	unsigned long config = read_32bit_cp0_register(CP0_CONFIG);
 

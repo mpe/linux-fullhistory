@@ -902,7 +902,7 @@ static void send_break (struct dz_serial *info, int duration)
   
   dz_out (info, DZ_TCR, tmp);
   
-  schedule_timeout(jiffies + duration);
+  schedule_timeout(duration);
   
   tmp &= ~mask;
   dz_out (info, DZ_TCR, tmp);
@@ -1093,7 +1093,7 @@ static void dz_close (struct tty_struct *tty, struct file *filp)
   if (info->blocked_open) {
     if (info->close_delay) {
       current->state = TASK_INTERRUPTIBLE;
-      schedule_timeout(jiffies + info->close_delay);
+      schedule_timeout(info->close_delay);
     }
     wake_up_interruptible (&info->open_wait);
   }
@@ -1281,7 +1281,7 @@ static void show_serial_version (void)
 }
 
 
-__initfunc(int dz_init(void))
+int __init dz_init(void)
 {
   int i, flags;
   struct dz_serial *info;
@@ -1454,7 +1454,7 @@ static kdev_t dz_console_device(struct console *c)
 	return MKDEV(TTY_MAJOR, 64 + c->index);
 }
 
-__initfunc(static int dz_console_setup(struct console *co, char *options))
+static int __init dz_console_setup(struct console *co, char *options)
 {
   	int	baud = 9600;
 	int	bits = 8;
@@ -1590,7 +1590,7 @@ static struct console dz_sercons = {
 	NULL
 };
 
-__initfunc (long dz_serial_console_init(long kmem_start, long kmem_end))
+long __init dz_serial_console_init(long kmem_start, long kmem_end)
 {
 	register_console(&dz_sercons);
 

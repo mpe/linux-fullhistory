@@ -304,8 +304,8 @@ ip2_loadmain(int *iop, int *irqp, unsigned char *firmware, int firmsize)
 
 // Some functions to keep track of what irq's we have
 
-__initfunc(static int 
-is_valid_irq(int irq) )
+static int __init
+is_valid_irq(int irq)
 {
 	int *i = Valid_Irqs;
 	
@@ -315,14 +315,14 @@ is_valid_irq(int irq) )
 	return (*i);
 }
 
-__initfunc( static void
-mark_requested_irq( char irq ))
+static void __init
+mark_requested_irq( char irq )
 {
 	rirqs[iindx++] = irq;
 }
 
-__initfunc( static int
-clear_requested_irq( char irq ))
+static int __init
+clear_requested_irq( char irq )
 {
 	int i;
 	for ( i = 0; i < IP2_MAX_BOARDS; ++i ) {
@@ -334,8 +334,8 @@ clear_requested_irq( char irq ))
 	return 0;
 }
 
-__initfunc( static int
-have_requested_irq( char irq )) 
+static int __init
+have_requested_irq( char irq )
 {
 	// array init to zeros so 0 irq will not be requested as a side effect
 	int i;
@@ -470,8 +470,8 @@ cleanup_module(void)
 /* SA_RANDOM   - can be source for cert. random number generators */
 #define IP2_SA_FLAGS	0
 
-__initfunc( int
-old_ip2_init(void))
+int __init
+old_ip2_init(void)
 {
 	int i;
 	int err;
@@ -738,8 +738,8 @@ retry:
 /* the board, the channel structures are initialized, and the board details   */
 /* are reported on the console.                                               */
 /******************************************************************************/
-__initfunc( static void
-ip2_init_board( int boardnum ))
+static void __init
+ip2_init_board( int boardnum )
 {
 	int i,rc;
 	int nports = 0, nboxes = 0;
@@ -864,8 +864,8 @@ ex_exit:
 /* EISA motherboard, or no valid board ID is selected it returns 0. Otherwise */
 /* it returns the base address of the controller.                             */
 /******************************************************************************/
-__initfunc( static unsigned short
-find_eisa_board( int start_slot ))
+static unsigned short __init
+find_eisa_board( int start_slot )
 {
 	int i, j;
 	unsigned int idm = 0;

@@ -6,6 +6,7 @@
  * Fixed the shm swap deallocation (shm_unuse()), August 1998 Andrea Arcangeli.
  *
  * /proc/sysvipc/shm support (c) 1999 Dragos Acostachioaie <dragos@iname.com>
+ * BIGMEM support, Andrea Arcangeli <andrea@suse.de>
  */
 
 #include <linux/config.h>
@@ -17,6 +18,7 @@
 #include <linux/vmalloc.h>
 #include <linux/pagemap.h>
 #include <linux/proc_fs.h>
+#include <linux/bigmem.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -657,9 +659,10 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 	pte = __pte(shp->shm_pages[idx]);
 	if (!pte_present(pte)) {
 		if (pte_none(pte)) {
-			page = get_free_page(GFP_USER);
+			page = __get_free_page(GFP_BIGUSER);
 			if (!page)
 				goto oom;
+			clear_bigpage(page);
 			if (pte_val(pte) != shp->shm_pages[idx])
 				goto changed;
 		} else {
@@ -677,6 +680,8 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 			if (!page_map)
 				goto oom;
 			delete_from_swap_cache(page_map);
+			page_map = replace_with_bigmem(page_map);
+			page = page_address(page_map);
 			swap_free(entry);
 			shm_swp--;
 		}
@@ -719,10 +724,12 @@ int shm_swap (int prio, int gfp_mask)
 	int loop = 0;
 	int counter;
 	struct page * page_map;
+	int ret = 0;
 	
+	lock_kernel();
 	counter = shm_rss >> prio;
 	if (!counter || !(swap_nr = get_swap_page()))
-		return 0;
+		goto out_unlock;
 
  check_id:
 	shp = shm_segs[swap_id];
@@ -750,14 +757,18 @@ int shm_swap (int prio, int gfp_mask)
 	page_map = &mem_map[MAP_NR(pte_page(page))];
 	if ((gfp_mask & __GFP_DMA) && !PageDMA(page_map))
 		goto check_table;
+	if (!(gfp_mask & __GFP_BIGMEM) && PageBIGMEM(page_map))
+		goto check_table;
 	swap_attempts++;
 
 	if (--counter < 0) { /* failed */
 		failed:
 		swap_free (swap_nr);
-		return 0;
+		goto out_unlock;
 	}
 	if (page_count(mem_map + MAP_NR(pte_page(page))) != 1)
+		goto check_table;
+	if (!(page_map = prepare_bigmem_swapout(page_map)))
 		goto check_table;
 	shp->shm_pages[idx] = swap_nr;
 	swap_duplicate(swap_nr);
@@ -768,7 +779,10 @@ int shm_swap (int prio, int gfp_mask)
 	swap_successes++;
 	shm_swp++;
 	shm_rss--;
-	return 1;
+	ret = 1;
+ out_unlock:
+	unlock_kernel();
+	return ret;
 }
 
 /*

@@ -613,7 +613,7 @@ int mac_kbdrate(struct kbd_repeat *k)
 	return 0;
 }
 
-__initfunc(int mac_keyb_init(void))
+int __init mac_keyb_init(void)
 {
 	static struct adb_request autopoll_req, confcod_req, mouse_req, readkey_req;
 	volatile int ct;

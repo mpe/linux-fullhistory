@@ -17,6 +17,14 @@
  *
  *  IDT Winchip tweaks, misc clean ups.
  *	Dave Jones <dave@powertweak.com>, August 1999
+ *
+ *  Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999
+ *
+ *  Better detection of Centaur/IDT WinChip models.
+ *      Bart Hartgers <bart@etpmod.phys.tue.nl>, August 1999.
+ *
+ *  Memory region support
+ *	David Parsons <orc@pell.chi.il.us>, July-August 1999
  */
 
 /*
@@ -42,6 +50,7 @@
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
+#include <linux/bigmem.h>
 #include <asm/processor.h>
 #include <linux/console.h>
 #include <asm/uaccess.h>
@@ -51,6 +60,7 @@
 #include <asm/cobalt.h>
 #include <asm/msr.h>
 #include <asm/desc.h>
+#include <asm/e820.h>
 
 /*
  * Machine setup..
@@ -84,6 +94,8 @@ struct sys_desc_table_struct {
 	unsigned char table[0];
 };
 
+struct e820map e820 = { 0 };
+
 unsigned char aux_device_present;
 
 #ifdef CONFIG_BLK_DEV_RAM
@@ -103,6 +115,8 @@ extern unsigned long cpu_hz;
 #define SCREEN_INFO (*(struct screen_info *) (PARAM+0))
 #define EXT_MEM_K (*(unsigned short *) (PARAM+2))
 #define ALT_MEM_K (*(unsigned long *) (PARAM+0x1e0))
+#define E820_MAP_NR (*(char*) (PARAM+E820NR))
+#define E820_MAP    ((unsigned long *) (PARAM+E820MAP))
 #define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+0x40))
 #define DRIVE_INFO (*(struct drive_info_struct *) (PARAM+0x80))
 #define SYS_DESC_TABLE (*(struct sys_desc_table_struct*)(PARAM+0xa0))
@@ -345,12 +359,80 @@ static void __init probe_roms(void)
 	}
 }
 
+unsigned long __init memparse(char *ptr, char **retptr)
+{
+	unsigned long ret;
+
+	ret = simple_strtoul(ptr, retptr, 0);
+
+	if (**retptr == 'K' || **retptr == 'k') {
+		ret <<= 10;
+		(*retptr)++;
+	}
+	else if (**retptr == 'M' || **retptr == 'm') {
+		ret <<= 20;
+		(*retptr)++;
+	}
+	return ret;
+} /* memparse */
+
+
+void __init add_memory_region(unsigned long start,
+                                  unsigned long size, int type)
+{
+	int x = e820.nr_map;
+
+	if (x == E820MAX) {
+	    printk("Ooops! Too many entries in the memory map!\n");
+	    return;
+	}
+
+	e820.map[x].addr = start;
+	e820.map[x].size = size;
+	e820.map[x].type = type;
+	e820.nr_map++;
+} /* add_memory_region */
+
+
+#define LOWMEMSIZE()	((*(unsigned short *)__va(0x413)) * 1024)
+
+
+void __init setup_memory_region(void)
+{
+	/*
+	 * If we're lucky and live on a modern system, the setup code
+	 * will have given us a memory map that we can use to properly
+	 * set up memory.  If we aren't, we'll fake a memory map.
+	 */
+	if (E820_MAP_NR) {
+		/* got a memory map; copy it into a safe place.
+		 */
+		e820.nr_map = E820_MAP_NR;
+		if (e820.nr_map > E820MAX)
+			e820.nr_map = E820MAX;
+		memcpy(e820.map, E820_MAP, e820.nr_map * sizeof e820.map[0]);
+	}
+	else {
+		/* otherwise fake a memory map; one section from 0k->640k,
+		 * the next section from 1mb->appropriate_mem_k
+		 */
+		unsigned long mem_size;
+
+		mem_size = (ALT_MEM_K < EXT_MEM_K) ? EXT_MEM_K : ALT_MEM_K;
+
+		add_memory_region(0, LOWMEMSIZE(), 1);
+		add_memory_region(HIGH_MEMORY, mem_size << 10, 1);
+  	}
+} /* setup_memory_region */
+
+
 void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	unsigned long memory_start, memory_end;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
 	int i;
+	int usermem=0;
 
 #ifdef CONFIG_VISWS
 	visws_get_board_type_and_rev();
@@ -367,24 +449,14 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 		BIOS_revision = SYS_DESC_TABLE.table[2];
 	}
 	aux_device_present = AUX_DEVICE_INFO;
-	memory_end = (1<<20) + (EXT_MEM_K<<10);
-#ifndef STANDARD_MEMORY_BIOS_CALL
-	{
-		unsigned long memory_alt_end = (1<<20) + (ALT_MEM_K<<10);
-		/* printk(KERN_DEBUG "Memory sizing: %08x %08x\n", memory_end, memory_alt_end); */
-		if (memory_alt_end > memory_end)
-			memory_end = memory_alt_end;
-	}
-#endif
 
-	ram_resources[1].end = memory_end-1;
-
-	memory_end &= PAGE_MASK;
 #ifdef CONFIG_BLK_DEV_RAM
 	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
 	rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
 	rd_doload = ((RAMDISK_FLAGS & RAMDISK_LOAD_FLAG) != 0);
 #endif
+	setup_memory_region();
+
 	if (!MOUNT_ROOT_RDONLY)
 		root_mountflags &= ~MS_RDONLY;
 	memory_start = (unsigned long) &_end;
@@ -405,8 +477,10 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 	for (;;) {
 		/*
 		 * "mem=nopentium" disables the 4MB page tables.
-		 * "mem=XXX[kKmM]" overrides the BIOS-reported
-		 * memory size
+		 * "mem=XXX[kKmM]" defines a memory region from HIGH_MEM
+		 * to <mem>, overriding the bios size.
+		 * "mem=XXX[KkmM]@XXX[KkmM]" defines a memory region from
+		 * <start> to <start>+<mem>, overriding the bios size.
 		 */
 		if (c == ' ' && *(const unsigned long *)from == *(const unsigned long *)"mem=") {
 			if (to != command_line) to--;
@@ -414,16 +488,29 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 				from += 9+4;
 				boot_cpu_data.x86_capability &= ~X86_FEATURE_PSE;
 			} else {
-				memory_end = simple_strtoul(from+4, &from, 0);
-				if ( *from == 'K' || *from == 'k' ) {
-					memory_end = memory_end << 10;
-					from++;
-				} else if ( *from == 'M' || *from == 'm' ) {
-					memory_end = memory_end << 20;
-					from++;
+				/* If the user specifies memory size, we
+				 * blow away any automatically generated
+				 * size
+				 */
+				unsigned long start_at, mem_size;
+ 
+				if (usermem == 0) {
+					/* first time in: zap the whitelist
+					 * and reinitialize it with the
+					 * standard low-memory region.
+					 */
+					e820.nr_map = 0;
+					usermem = 1;
+					add_memory_region(0, LOWMEMSIZE(), 1);
 				}
-				if (memory_end > ram_resources[1].end)
-					ram_resources[1].end = memory_end-1;
+				mem_size = memparse(from+4, &from);
+				if (*from == '@')
+					start_at = memparse(from+1,&from);
+				else {
+					start_at = HIGH_MEMORY;
+					mem_size -= HIGH_MEMORY;
+				}
+				add_memory_region(start_at, mem_size, 1);
 			}
 		}
 		c = *(from++);
@@ -436,23 +523,47 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 	*to = '\0';
 	*cmdline_p = command_line;
 
-	/* Request the standard RAM and ROM resources - they eat up PCI memory space */
-	request_resource(&iomem_resource, ram_resources+0);
-	request_resource(&iomem_resource, ram_resources+1);
-	request_resource(&iomem_resource, ram_resources+2);
-	request_resource(ram_resources+1, &code_resource);
-	request_resource(ram_resources+1, &data_resource);
-	probe_roms();
-
 #define VMALLOC_RESERVE	(128 << 20)	/* 128MB for vmalloc and initrd */
 #define MAXMEM	((unsigned long)(-PAGE_OFFSET-VMALLOC_RESERVE))
 
+	memory_end = 0;
+	for (i=0; i < e820.nr_map; i++) {
+		/* RAM? */
+		if (e820.map[i].type == 1) {
+			unsigned long end = e820.map[i].addr + e820.map[i].size;
+
+			if (end > memory_end)
+				memory_end = end;
+		}
+	}
+	memory_end &= PAGE_MASK;
+	ram_resources[1].end = memory_end-1;
+
+#ifdef CONFIG_BIGMEM
+	bigmem_start = bigmem_end = memory_end;
+#endif
 	if (memory_end > MAXMEM)
 	{
+#ifdef CONFIG_BIGMEM
+#define MAXBIGMEM ((unsigned long)(~(VMALLOC_RESERVE-1)))
+		bigmem_start = MAXMEM;
+		bigmem_end = (memory_end < MAXBIGMEM) ? memory_end : MAXBIGMEM;
+#endif
 		memory_end = MAXMEM;
+#ifdef CONFIG_BIGMEM
+		printk(KERN_NOTICE "%ldMB BIGMEM available.\n",
+			(bigmem_end-bigmem_start)>>20);
+#else
 		printk(KERN_WARNING "Warning only %ldMB will be used.\n",
 			MAXMEM>>20);
+#endif
 	}
+#if defined(CONFIG_BIGMEM) && defined(BIGMEM_DEBUG)
+	else {
+		memory_end -= memory_end/4;
+		bigmem_start = memory_end;
+	}
+#endif
 
 	memory_end += PAGE_OFFSET;
 	*memory_start_p = memory_start;
@@ -477,6 +588,17 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 		}
 	}
 #endif
+
+	/*
+	 * Request the standard RAM and ROM resources -
+	 * they eat up PCI memory space
+	 */
+	request_resource(&iomem_resource, ram_resources+0);
+	request_resource(&iomem_resource, ram_resources+1);
+	request_resource(&iomem_resource, ram_resources+2);
+	request_resource(ram_resources+1, &code_resource);
+	request_resource(ram_resources+1, &data_resource);
+	probe_roms();
 
 	/* request I/O space for devices used on all i[345]86 PCs */
 	for (i = 0; i < STANDARD_IO_RESOURCES; i++)
@@ -769,6 +891,98 @@ static void __init cyrix_model(struct cpuinfo_x86 *c)
 	return;
 }
 
+static void __init centaur_model(struct cpuinfo_x86 *c)
+{
+	enum {
+		ECX8=1<<1,
+		EIERRINT=1<<2,
+		DPM=1<<3,
+		DMCE=1<<4,
+		DSTPCLK=1<<5,
+		ELINEAR=1<<6,
+		DSMC=1<<7,
+		DTLOCK=1<<8,
+		EDCTLB=1<<8,
+		EMMX=1<<9,
+		DPDC=1<<11,
+		EBRPRED=1<<12,
+		DIC=1<<13,
+		DDC=1<<14,
+		DNA=1<<15,
+		ERETSTK=1<<16,
+		E2MMX=1<<19,
+		EAMD3D=1<<20,
+	};
+
+	char *name;
+	u32  fcr_set=0;
+	u32  fcr_clr=0;
+	u32  lo,hi,newlo;
+	u32  aa,bb,cc,dd;
+
+	switch(c->x86_model) {
+	case 4:
+		name="C6";
+		fcr_set=ECX8|DSMC|EDCTLB|EMMX|ERETSTK;
+		fcr_clr=DPDC;
+		break;
+	case 8:
+		switch(c->x86_mask) {
+		default:
+			name="2";
+			break;
+		case 7 ... 9:
+			name="2A";
+			break;
+		case 10 ... 15:
+			name="2B";
+			break;
+		}
+		fcr_set=ECX8|DSMC|DTLOCK|EMMX|EBRPRED|ERETSTK|E2MMX|EAMD3D;
+		fcr_clr=DPDC;
+		break;
+	case 9:
+		name="3";
+		fcr_set=ECX8|DSMC|DTLOCK|EMMX|EBRPRED|ERETSTK|E2MMX|EAMD3D;
+		fcr_clr=DPDC;
+		break;
+	case 10:
+		name="4";
+		/* no info on the WC4 yet */
+		break;
+	default:
+		name="??";
+	}
+
+	/* get FCR  */
+	rdmsr(0x107, lo, hi);
+
+	newlo=(lo|fcr_set) & (~fcr_clr);
+
+	if (newlo!=lo) {
+		printk("Centaur FCR was 0x%X now 0x%X\n", lo, newlo );
+		wrmsr(0x107, newlo, hi );
+	} else {
+		printk("Centaur FCR is 0x%X\n",lo);
+	}
+
+	/* Emulate MTRRs using Centaur's MCR. */
+	c->x86_capability |= X86_FEATURE_MTRR;
+	/* Report CX8 */
+	c->x86_capability |= X86_FEATURE_CX8;
+	/* Set 3DNow! on Winchip 2 and above. */
+	if (c->x86_model >=8)
+		c->x86_capability |= X86_FEATURE_AMD3D;
+	/* See if we can find out some more. */
+	cpuid(0x80000000,&aa,&bb,&cc,&dd);
+	if (aa>=0x80000005) { /* Yes, we can. */
+		cpuid(0x80000005,&aa,&bb,&cc,&dd);
+		/* Add L1 data and code cache sizes. */
+		c->x86_cache_size = (cc>>24)+(dd>>24);
+	}
+	sprintf( c->x86_model_id, "WinChip %s", name );
+}
+
 void __init get_cpu_vendor(struct cpuinfo_x86 *c)
 {
 	char *v = c->x86_vendor_id;
@@ -826,9 +1040,6 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	{ X86_VENDOR_UMC,	4,
 	  { NULL, "U5D", "U5S", NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	    NULL, NULL, NULL, NULL, NULL, NULL }},
-	{ X86_VENDOR_CENTAUR,	5,
-	  { NULL, NULL, NULL, NULL, "C6", NULL, NULL, NULL, "C6-2", NULL, NULL,
-	    NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_NEXGEN,	5,
 	  { "Nx586", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
@@ -855,6 +1066,11 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 
 	if (c->x86_vendor == X86_VENDOR_AMD && amd_model(c))
 		return;
+
+	if (c->x86_vendor == X86_VENDOR_CENTAUR) {
+		centaur_model(c);
+		return;
+	}
 		
 	if (c->cpuid_level > 0 && c->x86_vendor == X86_VENDOR_INTEL)
 	{
@@ -981,24 +1197,6 @@ void __init print_cpu_info(struct cpuinfo_x86 *c)
 
 	if (c->x86_mask || c->cpuid_level>=0) 
 		printk(" stepping %02x\n", c->x86_mask);
-
-	if(c->x86_vendor == X86_VENDOR_CENTAUR) {
-		u32 hv,lv;
-		rdmsr(0x107, lv, hv);
-		printk("Centaur FSR was 0x%X ",lv);
-		lv|=(1<<1 | 1<<2 | 1<<7);
-		/* lv|=(1<<6);	- may help too if the board can cope */
-		printk("now 0x%X\n", lv);
-		wrmsr(0x107, lv, hv);
-		/* Emulate MTRRs using Centaur's MCR. */
-		c->x86_capability |= X86_FEATURE_MTRR;
-
-		/* Set 3DNow! on Winchip 2 and above. */
-		if (c->x86_model >=8)
-		    c->x86_capability |= X86_FEATURE_AMD3D;
-
-		c->x86_capability |=X86_FEATURE_CX8;
-	}
 }
 
 /*

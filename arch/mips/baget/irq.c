@@ -422,7 +422,7 @@ static void write_err_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	*(volatile char*) BAGET_WRERR_ACK = 0;
 }
 
-__initfunc(void init_IRQ(void))
+void __init init_IRQ(void)
 {
 	irq_setup();
 

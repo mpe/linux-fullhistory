@@ -369,6 +369,17 @@ static void cy82c693_tune_drive (ide_drive_t *drive, byte pio)
 /*
  * this function is called during init and is used to setup the cy82c693 chip
  */
+/*
+ * FIXME! "pci_init_cy82c693" really should replace
+ * the "init_cy82c693_chip", it is the correct location to tinker/setup
+ * the device prior to INIT.
+ */
+
+unsigned int __init pci_init_cy82c693(struct pci_dev *dev, const char *name)
+{
+	return 0;
+}
+
 static void init_cy82c693_chip (struct pci_dev *dev)
 {
 	static int initDone = 0;
@@ -420,7 +431,7 @@ static void init_cy82c693_chip (struct pci_dev *dev)
 /*
  * the init function - called for each ide channel once
  */
-__initfunc(void ide_init_cy82c693(ide_hwif_t *hwif))
+void __init ide_init_cy82c693(ide_hwif_t *hwif)
 {
 	hwif->chipset = ide_cy82c693;
 	if (hwif->dma_base)

@@ -16,7 +16,7 @@
 #define cacheconf (*(volatile unsigned int *)PCIMT_CACHECONF)
 #define invspace (*(volatile unsigned int *)PCIMT_INVSPACE)
 
-__initfunc(void sni_pcimt_sc_init(void))
+void __init sni_pcimt_sc_init(void)
 {
 	unsigned int scsiz, sc_size;
 

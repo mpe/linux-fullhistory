@@ -299,7 +299,7 @@ static struct video_device terratec_radio=
 	NULL
 };
 
-__initfunc(int terratec_init(struct video_init *v))
+int __init terratec_init(struct video_init *v)
 {
 	if (check_region(io, 2)) 
 	{

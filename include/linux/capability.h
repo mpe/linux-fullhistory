@@ -175,6 +175,7 @@ typedef __u32 kernel_cap_t;
 #define CAP_SYS_MODULE       16
 
 /* Allow ioperm/iopl access */
+/* Allow sending USB messages to any device via /proc/bus/usb */
 
 #define CAP_SYS_RAWIO        17
 

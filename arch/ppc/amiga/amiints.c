@@ -79,7 +79,7 @@ static void ami_badint(int irq, void *dev_id, struct pt_regs *fp)
  * the amiga IRQ handling routines.
  */
 
-__initfunc(void amiga_init_IRQ(void))
+void __init amiga_init_IRQ(void)
 {
 	int i;
 

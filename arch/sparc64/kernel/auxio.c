@@ -22,7 +22,7 @@
 /* Probe and map in the Auxiliary I/O register */
 unsigned char *auxio_register;
 
-__initfunc(void auxio_probe(void))
+void __init auxio_probe(void)
 {
         struct linux_sbus *bus;
         struct linux_sbus_device *sdev = 0;

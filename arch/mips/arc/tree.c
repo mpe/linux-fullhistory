@@ -10,41 +10,41 @@
 
 #define DEBUG_PROM_TREE
 
-__initfunc(pcomponent *prom_getsibling(pcomponent *this))
+pcomponent * __init prom_getsibling(pcomponent *this)
 {
 	if(this == PROM_NULL_COMPONENT)
 		return PROM_NULL_COMPONENT;
 	return romvec->next_component(this);
 }
 
-__initfunc(pcomponent *prom_getchild(pcomponent *this))
+pcomponent * __init prom_getchild(pcomponent *this)
 {
 	return romvec->child_component(this);
 }
 
-__initfunc(pcomponent *prom_getparent(pcomponent *child))
+pcomponent * __init prom_getparent(pcomponent *child)
 {
 	if(child == PROM_NULL_COMPONENT)
 		return PROM_NULL_COMPONENT;
 	return romvec->parent_component(child);
 }
 
-__initfunc(long prom_getcdata(void *buffer, pcomponent *this))
+long __init prom_getcdata(void *buffer, pcomponent *this)
 {
 	return romvec->component_data(buffer, this);
 }
 
-__initfunc(pcomponent *prom_childadd(pcomponent *this, pcomponent *tmp, void *data))
+pcomponent * __init prom_childadd(pcomponent *this, pcomponent *tmp, void *data)
 {
 	return romvec->child_add(this, tmp, data);
 }
 
-__initfunc(long prom_delcomponent(pcomponent *this))
+long __init prom_delcomponent(pcomponent *this)
 {
 	return romvec->comp_del(this);
 }
 
-__initfunc(pcomponent *prom_componentbypath(char *path))
+pcomponent * __init prom_componentbypath(char *path)
 {
 	return romvec->component_by_path(path);
 }
@@ -74,7 +74,7 @@ static char *iflags[] = {
 	"input", "output"
 };
 
-__initfunc(static void dump_component(pcomponent *p))
+static void __init dump_component(pcomponent *p)
 {
 	prom_printf("[%p]:class<%s>type<%s>flags<%s>ver<%d>rev<%d>",
 		    p, classes[p->class], types[p->type],
@@ -83,7 +83,7 @@ __initfunc(static void dump_component(pcomponent *p))
 		    p->key, p->amask, (int)p->cdsize, (int)p->ilen, p->iname);
 }
 
-__initfunc(static void traverse(pcomponent *p, int op))
+static void __init traverse(pcomponent *p, int op)
 {
 	dump_component(p);
 	if(prom_getchild(p))
@@ -92,7 +92,7 @@ __initfunc(static void traverse(pcomponent *p, int op))
 		traverse(prom_getsibling(p), 1);
 }
 
-__initfunc(void prom_testtree(void))
+void __init prom_testtree(void)
 {
 	pcomponent *p;
 

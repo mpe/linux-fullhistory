@@ -437,7 +437,7 @@ static inline void sun4c_init_clean_mmu(unsigned long kernel_end)
 	sun4c_set_context(savectx);
 }
 
-__initfunc(void sun4c_probe_vac(void))
+void __init sun4c_probe_vac(void)
 {
 	sun4c_disable_vac();
 
@@ -601,7 +601,7 @@ static void patch_kernel_fault_handler(void)
 	}
 }
 
-__initfunc(static void sun4c_probe_mmu(void))
+static void __init sun4c_probe_mmu(void)
 {
 	if (ARCH_SUN4) {
 		switch(idprom->id_machtype) {
@@ -652,7 +652,7 @@ __initfunc(static void sun4c_probe_mmu(void))
 
 volatile unsigned long *sun4c_memerr_reg = 0;
 
-__initfunc(void sun4c_probe_memerr_reg(void))
+void __init sun4c_probe_memerr_reg(void)
 {
 	int node;
 	struct linux_prom_registers regs[1];
@@ -730,7 +730,7 @@ struct sun4c_mmu_entry {
 
 static struct sun4c_mmu_entry mmu_entry_pool[SUN4C_MAX_SEGMAPS];
 
-__initfunc(static void sun4c_init_mmu_entry_pool(void))
+static void __init sun4c_init_mmu_entry_pool(void)
 {
 	int i;
 
@@ -788,7 +788,7 @@ static inline void sun4c_init_map_kernelprom(unsigned long kernel_end)
 	}
 }
 
-__initfunc(static void sun4c_init_lock_area(unsigned long start, unsigned long end))
+static void __init sun4c_init_lock_area(unsigned long start, unsigned long end)
 {
 	int i, ctx;
 
@@ -897,7 +897,7 @@ static inline void free_kernel_entry(struct sun4c_mmu_entry *entry,
         add_ring(&sun4c_kfree_ring, entry);
 }
 
-__initfunc(static void sun4c_init_fill_kernel_ring(int howmany))
+static void __init sun4c_init_fill_kernel_ring(int howmany)
 {
 	int i;
 
@@ -912,7 +912,7 @@ __initfunc(static void sun4c_init_fill_kernel_ring(int howmany))
 	}
 }
 
-__initfunc(static void sun4c_init_fill_user_ring(void))
+static void __init sun4c_init_fill_user_ring(void)
 {
 	int i;
 
@@ -1372,7 +1372,7 @@ static void sun4c_free_task_struct_sw(struct task_struct *tsk)
 	garbage_collect(entry);
 }
 
-__initfunc(static void sun4c_init_buckets(void))
+static void __init sun4c_init_buckets(void)
 {
 	int entry;
 
@@ -1534,7 +1534,7 @@ static void sun4c_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_s
 
 struct vm_area_struct sun4c_kstack_vma;
 
-__initfunc(static unsigned long sun4c_init_lock_areas(unsigned long start_mem))
+static unsigned long __init sun4c_init_lock_areas(unsigned long start_mem)
 {
 	unsigned long sun4c_taskstack_start;
 	unsigned long sun4c_taskstack_end;
@@ -2745,7 +2745,7 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
 extern unsigned long sparc_context_init(unsigned long, int);
 extern unsigned long end;
 
-__initfunc(unsigned long sun4c_paging_init(unsigned long start_mem, unsigned long end_mem))
+unsigned long __init sun4c_paging_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int i, cnt;
 	unsigned long kernel_end, vaddr;
@@ -2798,7 +2798,7 @@ __initfunc(unsigned long sun4c_paging_init(unsigned long start_mem, unsigned lon
 }
 
 /* Load up routines and constants for sun4c mmu */
-__initfunc(void ld_mmu_sun4c(void))
+void __init ld_mmu_sun4c(void)
 {
 	extern void ___xchg32_sun4c(void);
 	

@@ -234,7 +234,8 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			err = filp->f_owner.signum;
 			break;
 		case F_SETSIG:
-			if (arg <= 0 || arg > _NSIG) {
+			/* arg == 0 restores default behaviour. */
+			if (arg < 0 || arg > _NSIG) {
 				err = -EINVAL;
 				break;
 			}

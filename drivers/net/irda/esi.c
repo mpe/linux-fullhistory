@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 18:54:38 1998
- * Modified at:   Sun May 16 14:35:21 1999
+ * Modified at:   Sat Jun 26 16:50:17 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  esi.c
  *
@@ -39,7 +39,7 @@
 
 static void esi_open(struct irda_device *idev, int type);
 static void esi_close(struct irda_device *driver);
-static void esi_change_speed(struct irda_device *idev, int baud);
+static void esi_change_speed(struct irda_device *idev, __u32 speed);
 static void esi_reset(struct irda_device *idev);
 static void esi_qos_init(struct irda_device *idev, struct qos_info *qos);
 
@@ -81,19 +81,19 @@ static void esi_close(struct irda_device *idev)
 }
 
 /*
- * Function esi_change_speed (tty, baud)
+ * Function esi_change_speed (idev, speed)
  *
  *    Set the speed for the Extended Systems JetEye PC ESI-9680 type dongle
  *
  */
-static void esi_change_speed(struct irda_device *idev, int baud)
+static void esi_change_speed(struct irda_device *idev, __u32 speed)
 {
 	int dtr, rts;
 	
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	
-	switch (baud) {
+	switch (speed) {
 	case 19200:
 		dtr = TRUE;
 		rts = FALSE;

@@ -1055,22 +1055,22 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 		case TIOCOUTQ: {
-			long amount;
+			int amount;
 			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if (amount < 0)
 				amount = 0;
-			if (put_user(amount, (unsigned long *)arg))
+			if (put_user(amount, (unsigned int *)arg))
 				return -EFAULT;
 			return 0;
 		}
 
 		case TIOCINQ: {
 			struct sk_buff *skb;
-			long amount = 0L;
+			int amount = 0;
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
 				amount = skb->len;
-			if (put_user(amount, (unsigned long *)arg))
+			if (put_user(amount, (unsigned int *)arg))
 				return -EFAULT;
 			return 0;
 		}
@@ -1298,7 +1298,7 @@ static struct proc_dir_entry proc_net_x25_routes = {
 };
 #endif	
 
-__initfunc(void x25_proto_init(struct net_proto *pro))
+void __init x25_proto_init(struct net_proto *pro)
 {
 	sock_register(&x25_family_ops);
 

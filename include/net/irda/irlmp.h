@@ -6,10 +6,11 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Sun May  9 11:01:34 1999
+ * Modified at:   Thu Jul  8 13:44:20 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -97,9 +98,8 @@ struct lap_cb; /* Forward decl. */
  *  Information about each logical LSAP connection
  */
 struct lsap_cb {
-	QUEUE queue;      /* Must be first */
-
-	int   magic;
+	QUEUE   queue;      /* Must be first */
+	magic_t magic;
 
 	int   connected;
 	int   persistent;
@@ -114,7 +114,7 @@ struct lsap_cb {
 	struct timer_list watchdog_timer;
 
 	IRLMP_STATE     lsap_state;  /* Connection state */
-	struct notify_t notify;      /* Indication/Confirm entry points */
+	notify_t notify;             /* Indication/Confirm entry points */
 	struct qos_info qos;         /* QoS for this connection */
 
 	struct lap_cb *lap; /* Pointer to LAP connection structure */
@@ -124,9 +124,9 @@ struct lsap_cb {
  *  Information about each registred IrLAP layer
  */
 struct lap_cb {
-	QUEUE queue;      /* Must be first */
+	QUEUE   queue;      /* Must be first */
+	magic_t magic;
 
-	int magic;
 	int reason;    /* LAP disconnect reason */
 
 	IRLMP_STATE lap_state;
@@ -157,7 +157,7 @@ typedef struct {
  *  Main structure for IrLMP
  */
 struct irlmp_cb {
-	int magic;
+	magic_t magic;
 
 	__u8 conflict_flag;
 	
@@ -187,7 +187,7 @@ struct irlmp_cb {
 /* Prototype declarations */
 int  irlmp_init(void);
 void irlmp_cleanup(void);
-struct lsap_cb *irlmp_open_lsap( __u8 slsap, struct notify_t *notify);
+struct lsap_cb *irlmp_open_lsap( __u8 slsap, notify_t *notify);
 void irlmp_close_lsap( struct lsap_cb *self);
 
 __u16 irlmp_service_to_hint(int service);
@@ -199,27 +199,27 @@ int irlmp_unregister_client(__u32 handle);
 int irlmp_update_client(__u32 handle, __u16 hint_mask, 
 			DISCOVERY_CALLBACK1, DISCOVERY_CALLBACK2);
 
-void irlmp_register_link(struct irlap_cb *, __u32 saddr, struct notify_t *);
+void irlmp_register_link(struct irlap_cb *, __u32 saddr, notify_t *);
 void irlmp_unregister_link(__u32 saddr);
 
 int  irlmp_connect_request(struct lsap_cb *, __u8 dlsap_sel, 
 			   __u32 saddr, __u32 daddr,
 			   struct qos_info *, struct sk_buff *);
 void irlmp_connect_indication(struct lsap_cb *self, struct sk_buff *skb);
-void irlmp_connect_response(struct lsap_cb *, struct sk_buff *);
+int  irlmp_connect_response(struct lsap_cb *, struct sk_buff *);
 void irlmp_connect_confirm(struct lsap_cb *, struct sk_buff *);
 struct lsap_cb *irlmp_dup(struct lsap_cb *self, void *instance);
 
 void irlmp_disconnect_indication(struct lsap_cb *self, LM_REASON reason, 
 				 struct sk_buff *userdata);
-void irlmp_disconnect_request(struct lsap_cb *, struct sk_buff *userdata);
+int  irlmp_disconnect_request(struct lsap_cb *, struct sk_buff *userdata);
 
 void irlmp_discovery_confirm(hashbin_t *discovery_log);
 void irlmp_discovery_request(int nslots);
 void irlmp_do_discovery(int nslots);
 discovery_t *irlmp_get_discovery_response(void);
 
-void irlmp_data_request(struct lsap_cb *, struct sk_buff *);
+int irlmp_data_request(struct lsap_cb *, struct sk_buff *);
 inline void irlmp_udata_request(struct lsap_cb *, struct sk_buff *);
 inline void irlmp_data_indication(struct lsap_cb *, struct sk_buff *);
 inline void irlmp_udata_indication(struct lsap_cb *, struct sk_buff *);
@@ -235,10 +235,20 @@ __u32 irlmp_get_saddr(struct lsap_cb *self);
 __u32 irlmp_get_daddr(struct lsap_cb *self);
 
 extern char *lmp_reasons[];
+extern int sysctl_discovery_timeout;
 extern int sysctl_discovery_slots;
 extern int sysctl_discovery;
 extern struct irlmp_cb *irlmp;
 
 static inline hashbin_t *irlmp_get_cachelog(void) { return irlmp->cachelog; }
+
+static inline int irlmp_get_lap_tx_queue_len(struct lsap_cb *self)
+{
+	ASSERT(self != NULL, return 0;);
+	ASSERT(self->lap != NULL, return 0;);
+	ASSERT(self->lap->irlap != NULL, return 0;);
+
+	return irlap_get_tx_queue_len(self->lap->irlap);
+}
 
 #endif

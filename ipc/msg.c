@@ -420,10 +420,10 @@ asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		tbuf.msg_stime  = msq->msg_stime;
 		tbuf.msg_rtime  = msq->msg_rtime;
 		tbuf.msg_ctime  = msq->msg_ctime;
-		tbuf.msg_cbytes_old = msq->msg_cbytes;
 		tbuf.msg_cbytes = msq->msg_cbytes;
+		tbuf.msg_lcbytes = msq->msg_cbytes;
 		tbuf.msg_qnum   = msq->msg_qnum;
-		tbuf.msg_qbytes_old = msq->msg_qbytes;
+		tbuf.msg_lqbytes = msq->msg_qbytes;
 		tbuf.msg_qbytes = msq->msg_qbytes;
 		tbuf.msg_lspid  = msq->msg_lspid;
 		tbuf.msg_lrpid  = msq->msg_lrpid;
@@ -464,10 +464,10 @@ asmlinkage long sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		tbuf.msg_stime  = msq->msg_stime;
 		tbuf.msg_rtime  = msq->msg_rtime;
 		tbuf.msg_ctime  = msq->msg_ctime;
-		tbuf.msg_cbytes_old = msq->msg_cbytes;
+		tbuf.msg_lcbytes = msq->msg_cbytes;
 		tbuf.msg_cbytes = msq->msg_cbytes;
 		tbuf.msg_qnum   = msq->msg_qnum;
-		tbuf.msg_qbytes_old = msq->msg_qbytes;
+		tbuf.msg_lqbytes = msq->msg_qbytes;
 		tbuf.msg_qbytes = msq->msg_qbytes;
 		tbuf.msg_lspid  = msq->msg_lspid;
 		tbuf.msg_lrpid  = msq->msg_lrpid;

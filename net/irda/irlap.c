@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Mon May 31 21:43:55 1999
+ * Modified at:   Mon Aug 23 12:05:26 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -69,7 +69,7 @@ int irlap_proc_read(char *, char **, off_t, int, int);
 
 #endif /* CONFIG_PROC_FS */
 
-__initfunc(int irlap_init(void))
+int __init irlap_init(void)
 {
 	/* Allocate master array */
 	irlap = hashbin_new(HB_LOCAL);
@@ -129,7 +129,7 @@ struct irlap_cb *irlap_open(struct irda_device *irdev)
 
 	irlap_next_state(self, LAP_OFFLINE);
 
-	/* Initialize transmitt queue */
+	/* Initialize transmit queue */
 	skb_queue_head_init(&self->tx_list);
 	skb_queue_head_init(&self->wx_list);
 
@@ -360,11 +360,10 @@ void irlap_unit_data_indication(struct irlap_cb *self, struct sk_buff *skb)
  *
  */
 inline void irlap_data_request(struct irlap_cb *self, struct sk_buff *skb,
-				int reliable)
+			       int reliable)
 {
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
-	ASSERT(skb != NULL, return;);
 
 #ifdef CONFIG_IRDA_COMPRESSION
 	if (self->qos_tx.compression.value) {
@@ -408,7 +407,7 @@ inline void irlap_data_request(struct irlap_cb *self, struct sk_buff *skb,
 		}
 		irlap_do_event(self, SEND_I_CMD, skb, NULL);
 	} else
-		skb_queue_tail(&self->tx_list, skb);	
+		skb_queue_tail(&self->tx_list, skb);
 }
 
 /*
@@ -423,6 +422,14 @@ void irlap_disconnect_request(struct irlap_cb *self)
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
 	
+	/* Don't disconnect until all data frames are successfully sent */
+	if (skb_queue_len(&self->tx_list) > 0) {
+		self->disconnect_pending = TRUE;
+		
+		return;
+	}
+
+	/* Check if we are in the right state for disconnecting */
 	switch (self->state) {
 	case LAP_XMIT_P:        /* FALLTROUGH */
 	case LAP_XMIT_S:        /* FALLTROUGH */
@@ -432,7 +439,7 @@ void irlap_disconnect_request(struct irlap_cb *self)
 		irlap_do_event(self, DISCONNECT_REQUEST, NULL, NULL);
 		break;
 	default:
-		DEBUG(0, __FUNCTION__ "(), disconnect pending!\n");
+		DEBUG(2, __FUNCTION__ "(), disconnect pending!\n");
 		self->disconnect_pending = TRUE;
 		break;
 	}
@@ -466,8 +473,8 @@ void irlap_disconnect_indication(struct irlap_cb *self, LAP_REASON reason)
 	case LAP_DISC_INDICATION:  /* FALLTROUGH */
 	case LAP_FOUND_NONE:       /* FALLTROUGH */
 	case LAP_MEDIA_BUSY:
-		irlmp_link_disconnect_indication(self->notify.instance, 
-						  self, reason, NULL);
+		irlmp_link_disconnect_indication(self->notify.instance, self, 
+						 reason, NULL);
 		break;
 	default:
 		DEBUG(1, __FUNCTION__ "(), Reason %d not implemented!\n", 
@@ -495,11 +502,16 @@ void irlap_discovery_request(struct irlap_cb *self, discovery_t *discovery)
 	       (discovery->nslots == 8) || (discovery->nslots == 16), 
 	       return;);
 	
+	/* Check if last discovery request finished in time */
+	if (self->discovery_log != NULL) {
+		hashbin_delete(self->discovery_log, (FREE_FUNC) kfree);
+		self->discovery_log = NULL;
+	}
+
   	/*
 	 *  Discovery is only possible in NDM mode
 	 */ 
 	if (self->state == LAP_NDM) {
-		ASSERT(self->discovery_log == NULL, return;);
 		self->discovery_log= hashbin_new(HB_LOCAL);
 		
 		info.S = discovery->nslots; /* Number of slots */
@@ -557,11 +569,6 @@ void irlap_discovery_confirm(struct irlap_cb *self, hashbin_t *discovery_log)
 	
 	/* Inform IrLMP */
 	irlmp_link_discovery_confirm(self->notify.instance, discovery_log);
-	
-	/* 
-	 *  IrLMP has now the responsibilities for the discovery_log 
-	 */
-	self->discovery_log = NULL;
 }
 
 /*
@@ -591,7 +598,7 @@ void irlap_discovery_indication(struct irlap_cb *self, discovery_t *discovery)
  */
 void irlap_status_indication(int quality_of_link) 
 {
-	switch(quality_of_link) {
+	switch (quality_of_link) {
 	case STATUS_NO_ACTIVITY:
 		printk(KERN_INFO "IrLAP, no activity on link!\n");
 		break;
@@ -666,15 +673,9 @@ void irlap_update_nr_received(struct irlap_cb *self, int nr)
 	struct sk_buff *skb = NULL;
 	int count = 0;
 
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == LAP_MAGIC, return;);
-
 	/*
          * Remove all the ack-ed frames from the window queue.
          */
-
-	DEBUG(4, "--> wx_list=%d, va=%d, nr=%d\n", 
-	       skb_queue_len(&self->wx_list), self->va, nr);
 
 	/* 
 	 *  Optimize for the common case. It is most likely that the receiver
@@ -683,7 +684,7 @@ void irlap_update_nr_received(struct irlap_cb *self, int nr)
 	 */
 	if (nr == self->vs) {
 		while ((skb = skb_dequeue(&self->wx_list)) != NULL) {
-		     dev_kfree_skb(skb);
+			dev_kfree_skb(skb);
 		}
 		/* The last acked frame is the next to send minus one */
 		self->va = nr - 1;
@@ -698,10 +699,6 @@ void irlap_update_nr_received(struct irlap_cb *self, int nr)
 			self->va = (self->va + 1) % 8;
 			count++;
 		}
-		
-		DEBUG(4, "irlap_update_nr_received(), removed %d\n", count);
-		DEBUG(4, "wx_list=%d, va=%d, nr=%d -->\n", 
-		       skb_queue_len(&self->wx_list), self->va, nr);
 	}
 	
 	/* Advance window */
@@ -715,20 +712,15 @@ void irlap_update_nr_received(struct irlap_cb *self, int nr)
  */
 int irlap_validate_ns_received(struct irlap_cb *self, int ns) 
 {
-	ASSERT(self != NULL, return -ENODEV;);
-	ASSERT(self->magic == LAP_MAGIC, return -EBADR;);
-
 	/*  ns as expected?  */
-	if (ns == self->vr) {
-		DEBUG(4, __FUNCTION__ "(), expected!\n");
+	if (ns == self->vr)
 		return NS_EXPECTED;
-	}
 	/*
 	 *  Stations are allowed to treat invalid NS as unexpected NS
 	 *  IrLAP, Recv ... with-invalid-Ns. p. 84
 	 */
 	return NS_UNEXPECTED;
-
+	
 	/* return NR_INVALID; */
 }
 /*
@@ -739,9 +731,6 @@ int irlap_validate_ns_received(struct irlap_cb *self, int ns)
  */
 int irlap_validate_nr_received(struct irlap_cb *self, int nr) 
 {
-	ASSERT(self != NULL, return -ENODEV;);
-	ASSERT(self->magic == LAP_MAGIC, return -EBADR;);
-
 	/*  nr as expected?  */
 	if (nr == self->vs) {
 		DEBUG(4, __FUNCTION__ "(), expected!\n");
@@ -858,7 +847,7 @@ void irlap_flush_all_queues(struct irlap_cb *self)
  *    Change the speed of the IrDA port
  *
  */
-void irlap_change_speed(struct irlap_cb *self, int speed)
+void irlap_change_speed(struct irlap_cb *self, __u32 speed)
 {
 	DEBUG(4, __FUNCTION__ "(), setting speed to %d\n", speed);
 
@@ -1079,6 +1068,24 @@ void irlap_apply_connection_parameters(struct irlap_cb *self,
 		irlap_compressor_init(self, 0);
 	}
 #endif
+}
+
+/*
+ * Function irlap_set_local_busy (self, status)
+ *
+ *    
+ *
+ */
+void irlap_set_local_busy(struct irlap_cb *self, int status)
+{
+	DEBUG(0, __FUNCTION__ "()\n");
+
+	self->local_busy = status;
+	
+	if (status)
+		DEBUG(0, __FUNCTION__ "(), local busy ON\n");
+	else
+		DEBUG(0, __FUNCTION__ "(), local busy OFF\n");
 }
 
 #ifdef CONFIG_PROC_FS

@@ -153,7 +153,7 @@ int obp_system_intr(void)
  * Process kernel command line switches that are specific to the
  * SPARC or that require special low-level processing.
  */
-__initfunc(static void process_switch(char c))
+static void __init process_switch(char c)
 {
 	switch (c) {
 	case 'd':
@@ -172,7 +172,7 @@ __initfunc(static void process_switch(char c))
 	}
 }
 
-__initfunc(static void boot_flags_init(char *commands))
+static void __init boot_flags_init(char *commands)
 {
 	while (*commands) {
 		/* Move to the start of the next "argument". */
@@ -297,8 +297,8 @@ static struct console prom_console = {
 	"PROM", prom_cons_write, 0, 0, 0, 0, 0, CON_PRINTBUFFER, 0, 0, 0
 };
 
-__initfunc(void setup_arch(char **cmdline_p,
-	unsigned long * memory_start_p, unsigned long * memory_end_p))
+void __init setup_arch(char **cmdline_p,
+	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	int total, i, packed;
 

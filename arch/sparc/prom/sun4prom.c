@@ -114,7 +114,7 @@ static struct linux_nodeops sun4_nodeops = {
 	
 static int synch_hook;
 
-__initfunc(struct linux_romvec *sun4_prom_init(void))
+struct linux_romvec * __init sun4_prom_init(void)
 {
 	int i;
 	unsigned char x;

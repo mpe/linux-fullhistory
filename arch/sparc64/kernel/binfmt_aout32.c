@@ -453,7 +453,7 @@ load_aout32_library(int fd)
 }
 
 
-__initfunc(int init_aout32_binfmt(void))
+int __init init_aout32_binfmt(void)
 {
 	return register_binfmt(&aout32_format);
 }

@@ -31,6 +31,9 @@
 /*
  * 05.04.94  -  Multi-page memory management added for v1.1.
  * 		Idea by Alex Bligh (alex@cconcepts.co.uk)
+ *
+ * 16.07.99  -  Support of BIGMEM added by Gerhard Wichert, Siemens AG
+ *		(Gerhard.Wichert@pdb.siemens.de)
  */
 
 #include <linux/mm.h>
@@ -40,6 +43,7 @@
 #include <linux/smp_lock.h>
 #include <linux/swapctl.h>
 #include <linux/iobuf.h>
+#include <linux/bigmem.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -56,10 +60,10 @@ void * high_memory = NULL;
 static inline void copy_cow_page(unsigned long from, unsigned long to)
 {
 	if (from == ZERO_PAGE(to)) {
-		clear_page(to);
+		clear_bigpage(to);
 		return;
 	}
-	copy_page(to, from);
+	copy_bigpage(to, from);
 }
 
 mem_map_t * mem_map = NULL;
@@ -809,7 +813,7 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 * Ok, we need to copy. Oh, well..
 	 */
 	spin_unlock(&tsk->mm->page_table_lock);
-	new_page = __get_free_page(GFP_USER);
+	new_page = __get_free_page(GFP_BIGUSER);
 	if (!new_page)
 		return -1;
 	spin_lock(&tsk->mm->page_table_lock);
@@ -996,6 +1000,8 @@ static int do_swap_page(struct task_struct * tsk,
 	set_bit(PG_swap_entry, &page->flags);
 	if (write_access && !is_page_shared(page)) {
 		delete_from_swap_cache(page);
+		page = replace_with_bigmem(page);
+		pte = mk_pte(page_address(page), vma->vm_page_prot);
 		pte = pte_mkwrite(pte_mkdirty(pte));
 	}
 	set_pte(page_table, pte);
@@ -1011,10 +1017,10 @@ static int do_anonymous_page(struct task_struct * tsk, struct vm_area_struct * v
 {
 	pte_t entry = pte_wrprotect(mk_pte(ZERO_PAGE(addr), vma->vm_page_prot));
 	if (write_access) {
-		unsigned long page = __get_free_page(GFP_USER);
+		unsigned long page = __get_free_page(GFP_BIGUSER);
 		if (!page)
 			return -1;
-		clear_page(page);
+		clear_bigpage(page);
 		entry = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 		vma->vm_mm->rss++;
 		tsk->min_flt++;

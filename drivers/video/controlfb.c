@@ -149,7 +149,7 @@ static int default_cmode = CMODE_NVRAM;
 /*
  * Exported functions
  */
-void control_init(void);
+int control_init(void);
 #ifdef CONFIG_FB_OF
 void control_of_init(struct device_node *dp);
 #endif
@@ -185,13 +185,9 @@ static struct fb_ops controlfb_ops = {
 
 /********************  The functions for controlfb_ops ********************/
 
-#ifndef MODULE
-__openfirmware
-#endif
-
 /**********  Dummies for loading control as a module  **********/
 
-static int control_open(struct fb_info *info, int user)
+int control_open(struct fb_info *info, int user)
 {
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -660,7 +656,7 @@ static void control_set_hardware(struct fb_info_control *p, struct fb_par_contro
 #endif /* CONFIG_FB_COMPAT_XPMAC */
 }
 
-void __init control_init(void)
+int __init control_init(void)
 {
 #ifndef CONFIG_FB_OF
 	struct device_node *dp;
@@ -669,6 +665,7 @@ void __init control_init(void)
 	if (dp != 0)
 		control_of_init(dp);
 #endif /* CONFIG_FB_OF */
+	return 0;
 }
 
 void __init control_of_init(struct device_node *dp)
@@ -720,9 +717,11 @@ void __init control_of_init(struct device_node *dp)
 	p->total_vram = (bank1 + bank2) * 0x200000;
 	/* If we don't have bank 1 installed, we hope we have bank 2 :-) */
 	p->control_use_bank2 = !bank1;
-	if (p->control_use_bank2)
+	if (p->control_use_bank2) {
 		p->frame_buffer += 0x600000;
-
+		p->frame_buffer_phys += 0x600000;
+	}
+	
 	init_control(p);
 }
 

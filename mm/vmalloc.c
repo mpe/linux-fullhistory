@@ -2,6 +2,7 @@
  *  linux/mm/vmalloc.c
  *
  *  Copyright (C) 1993  Linus Torvalds
+ *  Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999
  */
 
 #include <linux/malloc.h>
@@ -94,7 +95,7 @@ static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned lo
 		unsigned long page;
 		if (!pte_none(*pte))
 			printk("alloc_area_pte: page already exists\n");
-		page = __get_free_page(GFP_KERNEL);
+		page = __get_free_page(GFP_KERNEL|GFP_BIGMEM);
 		if (!page)
 			return -ENOMEM;
 		set_pte(pte, mk_pte(page, PAGE_KERNEL));

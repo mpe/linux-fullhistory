@@ -1414,7 +1414,7 @@ alloc_device(struct net_device *dev, u_long iobase)
    ** If at end of eth device list and can't use current entry, malloc
    ** one up. If memory could not be allocated, print an error message.
  */
-static __init struct net_device *
+static struct net_device * __init
 insert_device(struct net_device *dev, u_long iobase, int (*init) (struct net_device *))
 {
 	struct net_device *new;

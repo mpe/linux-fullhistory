@@ -479,7 +479,7 @@ struct irqaction irq0  = { timer_interrupt, SA_INTERRUPT, 0,
 
 void (*board_time_init)(struct irqaction *irq);
 
-__initfunc(void time_init(void))
+void __init time_init(void)
 {
 	unsigned int epoch, year, mon, day, hour, min, sec;
 	int i;

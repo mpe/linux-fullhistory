@@ -72,11 +72,9 @@ EXPORT_SYMBOL(last_arlan);
 
 //        #warning kernel 2.1.110 tested
 #define myATOMIC_INIT(a,b) atomic_set(&(a),b)
-#define __initfunctio(a)                __initfunc(a)
 
 #else
 #define test_and_set_bit	set_bit
-#define __initfunctio(a)        a
 #if LINUX_VERSION_CODE != 0x20024
  //        #warning kernel  2.0.36  tested
 #endif
@@ -1034,7 +1032,7 @@ static int lastFoundAt = 0xbe000;
  * verifies that the correct device exists and functions.
  */
 
-__initfunctio(static int arlan_check_fingerprint(int memaddr))
+static int __init arlan_check_fingerprint(int memaddr)
 {
 	static char probeText[] = "TELESYSTEM SLW INC.    ARLAN \0";
 	char tempBuf[49];
@@ -1056,7 +1054,7 @@ __initfunctio(static int arlan_check_fingerprint(int memaddr))
 
 }
 
-__initfunctio(int arlan_probe_everywhere(struct net_device *dev))
+int __init arlan_probe_everywhere(struct net_device *dev)
 {
 	int m;
 	int probed = 0;
@@ -1094,7 +1092,7 @@ __initfunctio(int arlan_probe_everywhere(struct net_device *dev))
 	return ENODEV;
 }
 
-__initfunctio(int arlan_find_devices(void))
+int __init arlan_find_devices(void)
 {
 	int m;
 	int found = 0;
@@ -1153,8 +1151,8 @@ static int arlan_mac_addr(struct net_device *dev, void *p)
 
 
 
-__initfunctio(static int
-	      arlan_allocate_device(int num, struct net_device *devs))
+static int __init
+	      arlan_allocate_device(int num, struct net_device *devs)
 {
 
 	struct net_device *dev;
@@ -1214,7 +1212,7 @@ __initfunctio(static int
 }
 
 
-__initfunctio(int arlan_probe_here(struct net_device *dev, int memaddr))
+int __init arlan_probe_here(struct net_device *dev, int memaddr)
 {
 	volatile struct arlan_shmem *arlan;
 
@@ -1992,7 +1990,7 @@ static void arlan_set_multicast(struct net_device *dev)
 }
 
 
-__initfunctio(int arlan_probe(struct net_device *dev))
+int __init arlan_probe(struct net_device *dev)
 {
 	printk("Arlan driver %s\n", arlan_version);
 

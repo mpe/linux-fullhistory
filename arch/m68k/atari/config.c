@@ -111,8 +111,8 @@ extern void (*kd_mksound)(unsigned int, unsigned int);
  */
   
 #if 0
-__initfunc(static int
-hwreg_present_bywrite(volatile void *regp, unsigned char val))
+static int __init
+hwreg_present_bywrite(volatile void *regp, unsigned char val)
 {
     int		ret;
     long	save_sp, save_vbr;
@@ -150,7 +150,7 @@ hwreg_present_bywrite(volatile void *regp, unsigned char val))
  * should be readable without trouble (from channel A!).
  */
 
-__initfunc(static int scc_test( volatile char *ctla ))
+static int __init scc_test( volatile char *ctla )
 {
 	if (!hwreg_present( ctla ))
 		return( 0 );
@@ -177,7 +177,7 @@ __initfunc(static int scc_test( volatile char *ctla ))
      *  Parse an Atari-specific record in the bootinfo
      */
 
-__initfunc(int atari_parse_bootinfo(const struct bi_record *record))
+int __init atari_parse_bootinfo(const struct bi_record *record)
 {
     int unknown = 0;
     const u_long *data = record->data;
@@ -197,7 +197,7 @@ __initfunc(int atari_parse_bootinfo(const struct bi_record *record))
 
 
 /* Parse the Atari-specific switches= option. */
-__initfunc(void atari_switches_setup( const char *str, unsigned len ))
+void __init atari_switches_setup( const char *str, unsigned len )
 {
     char switches[len+1];
     char *p;
@@ -238,7 +238,7 @@ __initfunc(void atari_switches_setup( const char *str, unsigned len ))
      *  Setup the Atari configuration info
      */
 
-__initfunc(void config_atari(void))
+void __init config_atari(void)
 {
     unsigned short tos_version;
 

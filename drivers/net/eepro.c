@@ -23,7 +23,7 @@
 	This is a compatibility hardware problem.
 
 	Versions:
-	0.11d	added __initdata, __initfunc stuff; call spin_lock_init
+	0.11d	added __initdata, __init stuff; call spin_lock_init
 	        in eepro_probe1. Replaced "eepro" by dev->name. Augmented 
 		the code protected by spin_lock in interrupt routine 
 		(PdP, 12/12/1998)
@@ -157,7 +157,6 @@ static const char *version =
 /* I had reports of looong delays with SLOW_DOWN defined as udelay(2) */
 #define SLOW_DOWN inb(0x80)
 /* udelay(2) */
-#define compat_init_func(X)  __initfunc(X)
 #define compat_init_data     __initdata
 
 #else 
@@ -166,7 +165,6 @@ static const char *version =
 #define compat_dev_kfree_skb( skb, mode ) dev_kfree_skb( (skb), (mode) )
 #define test_and_set_bit(a,b) set_bit((a),(b))
 #define SLOW_DOWN SLOW_DOWN_IO
-#define compat_init_func(X) X
 #define compat_init_data
 
 #endif
@@ -461,7 +459,7 @@ buffer (transmit-buffer = 32K - receive-buffer).
 struct netdev_entry netcard_drv =
 {"eepro", eepro_probe1, EEPRO_IO_EXTENT, eepro_portlist};
 #else
-compat_init_func(int eepro_probe(struct net_device *dev))
+int __init eepro_probe(struct net_device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;

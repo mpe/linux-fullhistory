@@ -467,7 +467,7 @@ extern asmlinkage void r6000_restore_fp_context(struct sigcontext *sc);
 extern asmlinkage void *r4xx0_resume(void *last, void *next);
 extern asmlinkage void *r2300_resume(void *last, void *next);
 
-__initfunc(void trap_init(void))
+void __init trap_init(void)
 {
 	extern char except_vec0_nevada, except_vec0_r4000;
 	extern char except_vec0_r4600, except_vec0_r2300;

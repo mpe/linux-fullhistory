@@ -187,7 +187,7 @@ int __init misc_init(void)
 	proc_misc = create_proc_entry("misc", 0, 0);
 	if (proc_misc)
 		proc_misc->read_proc = misc_read_proc;
-#ifdef CONFIG_MOUSE
+#ifdef CONFIG_BUSMOUSE
 	bus_mouse_init();
 #endif
 #if defined CONFIG_82C710_MOUSE

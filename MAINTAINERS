@@ -401,11 +401,18 @@ M:	mikulas@artax.karlin.mff.cuni.cz
 W:	http://artax.karlin.mff.cuni.cz/~mikulas/vyplody/hpfs/index-e.cgi
 S:	Maintained
 
+IBM ServeRAID RAID DRIVER
+P:      Keith Mitchell
+M:      ipslinux@us.ibm.com
+W:      http://www.developer.ibm.com/welcome/netfinity/serveraid_beta.html
+S:      Supported 
+
 IDE DRIVER [GENERAL]
 P:	Andre Hedrick
-M:	hedrick@astro.dyer.vanderbilt.edu
+M:	andre@suse.com
 L:	linux-kernel@vger.rutgers.edu
-S:	Maintained
+W:	http://linux.kernel.org/pub/linux/kernel/people/hedrick/
+S:	Supported
 
 IDE/ATAPI CDROM DRIVER 
 P:	Jens Axboe

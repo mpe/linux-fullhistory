@@ -243,6 +243,7 @@ static int proc_ide_write_config
 					}
 #endif	/* CONFIG_BLK_DEV_IDEPCI */
 				} else {	/* not pci */
+#ifndef CONFIG_Q40
 					switch (digits) {
 						case 2:	outb(val, reg);
 							break;
@@ -251,6 +252,7 @@ static int proc_ide_write_config
 						case 8:	outl(val, reg);
 							break;
 					}
+#endif	/* CONFIG_Q40 */
 				}
 			}
 		}

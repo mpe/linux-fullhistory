@@ -183,7 +183,7 @@ int amiga_parse_bootinfo(const struct bi_record *record)
      *  Identify builtin hardware
      */
 
-__initfunc(static void amiga_identify(void))
+static void __init amiga_identify(void)
 {
   /* Fill in some default values, if necessary */
   if (amiga_eclock == 0)
@@ -344,7 +344,7 @@ __initfunc(static void amiga_identify(void))
      *  Setup the Amiga configuration info
      */
 
-__initfunc(void config_amiga(void))
+void __init config_amiga(void)
 {
   amiga_debug_init();
   amiga_identify();
@@ -437,8 +437,8 @@ __initfunc(void config_amiga(void))
 
 static unsigned short jiffy_ticks;
 
-__initfunc(static void amiga_sched_init(void (*timer_routine)(int, void *,
-					struct pt_regs *)))
+static void __init amiga_sched_init(void (*timer_routine)(int, void *,
+					struct pt_regs *))
 {
 	jiffy_ticks = (amiga_eclock+HZ/2)/HZ;
 
@@ -819,7 +819,7 @@ void amiga_serial_gets(struct console *co, char *s, int len)
 }
 #endif
 
-__initfunc(static void amiga_debug_init(void))
+static void __init amiga_debug_init(void)
 {
 	if (!strcmp( m68k_debug_device, "ser" )) {
 		/* no initialization required (?) */

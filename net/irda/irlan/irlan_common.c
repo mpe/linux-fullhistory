@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Mon May 31 14:25:19 1999
+ * Modified at:   Tue Aug 17 15:30:40 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -106,10 +106,10 @@ extern struct proc_dir_entry *proc_irda;
 /*
  * Function irlan_watchdog_timer_expired (data)
  *
- *    
+ *    Something has gone wrong during the connection establishment
  *
  */
-void irlan_watchdog_timer_expired(unsigned long data)
+void irlan_watchdog_timer_expired(void *data)
 {
 	struct irmanager_event mgr_event;
 	struct irlan_cb *self;
@@ -123,7 +123,8 @@ void irlan_watchdog_timer_expired(unsigned long data)
 
 	/* Check if device still configured */
 	if (self->dev.start) {
-		DEBUG(0, __FUNCTION__ "(), notifying irmanager to stop irlan!\n");
+		DEBUG(0, __FUNCTION__ 
+		      "(), notifying irmanager to stop irlan!\n");
 		mgr_event.event = EVENT_IRLAN_STOP;
 		sprintf(mgr_event.devname, "%s", self->ifname);
 		irmanager_notify(&mgr_event);
@@ -137,12 +138,7 @@ void irlan_watchdog_timer_expired(unsigned long data)
 		self->notify_irmanager = FALSE;
 	} else {
 		DEBUG(0, __FUNCTION__ "(), closing instance!\n");
-		if (self->netdev_registered) {
-			DEBUG(0, __FUNCTION__ "(), removing netdev!\n");
-			unregister_netdev(&self->dev);
-			self->netdev_registered = FALSE;
-		}
-		irlan_close(self);
+		/*irlan_close(self);*/
 	}
 }
 
@@ -156,7 +152,7 @@ void irlan_start_watchdog_timer(struct irlan_cb *self, int timeout)
 {
 	DEBUG(4, __FUNCTION__ "()\n");
 	
-	irda_start_timer(&self->watchdog_timer, timeout, (unsigned long) self,
+	irda_start_timer(&self->watchdog_timer, timeout, (void *) self,
 			 irlan_watchdog_timer_expired);
 }
 
@@ -173,7 +169,7 @@ __initfunc(int irlan_init(void))
 
 	DEBUG(4, __FUNCTION__"()\n");
 
-	/* Allocate master array */
+	/* Allocate master structure */
 	irlan = hashbin_new(HB_LOCAL); 
 	if (irlan == NULL) {
 		printk(KERN_WARNING "IrLAN: Can't allocate hashbin!\n");
@@ -323,6 +319,8 @@ struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr, int netdev)
  */
 static void __irlan_close(struct irlan_cb *self)
 {
+	struct sk_buff *skb;
+
 	DEBUG(2, __FUNCTION__ "()\n");
 	
 	ASSERT(self != NULL, return;);
@@ -333,6 +331,11 @@ static void __irlan_close(struct irlan_cb *self)
 
 	/* Close all open connections and remove TSAPs */
 	irlan_close_tsaps(self);
+
+	/* Remove frames queued on the control channel */
+	while ((skb = skb_dequeue(&self->client.txq))) {
+		dev_kfree_skb(skb);
+	}
 
 	if (self->netdev_registered) {
 		unregister_netdev(&self->dev);
@@ -352,7 +355,7 @@ static void __irlan_close(struct irlan_cb *self)
 void irlan_close(struct irlan_cb *self)
 {
 	struct irlan_cb *entry;
-	
+
 	DEBUG(0, __FUNCTION__ "()\n");
 
         ASSERT(self != NULL, return;);
@@ -507,8 +510,8 @@ void irlan_disconnect_indication(void *instance, void *sap, LM_REASON reason,
 
 void irlan_open_data_tsap(struct irlan_cb *self)
 {
-	struct notify_t notify;
 	struct tsap_cb *tsap;
+	notify_t notify;
 
 	DEBUG(2, __FUNCTION__ "()\n");
 
@@ -631,6 +634,8 @@ int irlan_run_ctrl_tx_queue(struct irlan_cb *self)
 {
 	struct sk_buff *skb;
 
+	DEBUG(3, __FUNCTION__ "()\n");
+
 	if (irda_lock(&self->client.tx_busy) == FALSE)
 		return -EBUSY;
 
@@ -639,11 +644,16 @@ int irlan_run_ctrl_tx_queue(struct irlan_cb *self)
 		self->client.tx_busy = FALSE;
 		return 0;
 	}
-	if (self->client.tsap_ctrl == NULL) {
+	
+	/* Check that it's really possible to send commands */
+	if ((self->client.tsap_ctrl == NULL) || 
+	    (self->client.state == IRLAN_IDLE)) 
+	{
 		self->client.tx_busy = FALSE;
 		dev_kfree_skb(skb);
 		return -1;
 	}
+	DEBUG(3, __FUNCTION__ "(), sending ...\n");
 
 	return irttp_data_request(self->client.tsap_ctrl, skb);
 }
@@ -656,6 +666,8 @@ int irlan_run_ctrl_tx_queue(struct irlan_cb *self)
  */
 void irlan_ctrl_data_request(struct irlan_cb *self, struct sk_buff *skb)
 {
+	DEBUG(2, __FUNCTION__ "()\n");
+
 	/* Queue command */
 	skb_queue_tail(&self->client.txq, skb);
 
@@ -764,7 +776,6 @@ void irlan_close_data_channel(struct irlan_cb *self)
 
 	irlan_insert_byte_param(skb, "DATA_CHAN", self->dtsap_sel_data);
 
-	/* irttp_data_request(self->client.tsap_ctrl, skb); */
 	irlan_ctrl_data_request(self, skb);
 }
 

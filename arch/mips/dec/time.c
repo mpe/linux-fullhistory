@@ -385,7 +385,7 @@ struct irqaction irq0 =
 
 void (*board_time_init) (struct irqaction * irq);
 
-__initfunc(void time_init(void))
+void __init time_init(void)
 {
     unsigned int year, mon, day, hour, min, sec;
     int i;

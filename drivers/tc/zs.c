@@ -1564,7 +1564,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 /* Finally, routines used to initialize the serial driver. */
 
-__initfunc(static void show_serial_version(void))
+static void __init show_serial_version(void)
 {
 	printk("DECstation Z8530 serial driver version 0.03\n");
 }
@@ -1572,7 +1572,7 @@ __initfunc(static void show_serial_version(void))
 /*  Initialize Z8530s zs_channels
  */
 
-__initfunc(static void probe_sccs(void))
+static void __init probe_sccs(void)
 {
 	struct dec_serial **pp;
 	int i, n, n_chips = 0, n_channels, chip, channel;
@@ -1654,7 +1654,7 @@ __initfunc(static void probe_sccs(void))
 }
 
 /* zs_init inits the driver */
-__initfunc(int zs_init(void))
+int __init zs_init(void)
 {
 	int channel, i;
 	unsigned long flags;
@@ -1886,7 +1886,7 @@ static kdev_t serial_console_device(struct console *c)
  *	- initialize the serial port
  *	Return non-zero if we didn't find a serial port.
  */
-__initfunc(static int serial_console_setup(struct console *co, char *options))
+static int __init serial_console_setup(struct console *co, char *options)
 {
 	struct dec_serial *info;
 	int	baud = 9600;
@@ -2022,7 +2022,7 @@ static struct console sercons = {
 /*
  *	Register console.
  */
-__initfunc (long zs_serial_console_init(long kmem_start, long kmem_end))
+long __init zs_serial_console_init(long kmem_start, long kmem_end)
 {
 	register_console(&sercons);
 	return kmem_start;
@@ -2087,7 +2087,7 @@ static inline void kgdb_chaninit(struct dec_zschannel *ms, int intson, int bps)
  * for /dev/ttyb which is determined in setup_arch() from the
  * boot command line flags.
  */
-__initfunc(void zs_kgdb_hook(int tty_num))
+void __init zs_kgdb_hook(int tty_num)
 {
 	/* Find out how many Z8530 SCCs we have */
 	if (zs_chain == 0)

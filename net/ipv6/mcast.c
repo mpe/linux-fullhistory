@@ -705,7 +705,7 @@ done:
 }
 #endif
 
-__initfunc(int igmp6_init(struct net_proto_family *ops))
+int __init igmp6_init(struct net_proto_family *ops)
 {
 #ifdef CONFIG_PROC_FS
 	struct proc_dir_entry *ent;

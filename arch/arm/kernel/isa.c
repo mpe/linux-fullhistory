@@ -37,8 +37,8 @@ static ctl_table ctl_isa[2] = {{BUS_ISA, "isa", NULL, 0, 0555, ctl_isa_vars},
 static ctl_table ctl_bus[2] = {{CTL_BUS, "bus", NULL, 0, 0555, ctl_isa},
 			       {0}};
 
-__initfunc(void
-register_isa_ports(unsigned int membase, unsigned int portbase, unsigned int portshift))
+void __init
+register_isa_ports(unsigned int membase, unsigned int portbase, unsigned int portshift)
 {
 	isa_membase = membase;
 	isa_portbase = portbase;

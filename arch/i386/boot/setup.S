@@ -37,6 +37,7 @@
 #include <linux/version.h>
 #include <linux/compile.h>
 #include <asm/boot.h>
+#include <asm/e820.h>
 
 ! Signature words to ensure LILO loaded us right
 #define SIG1	0xAA55
@@ -59,7 +60,7 @@ begbss:
 
 entry start
 start:
-	jmp	start_of_setup
+	jmp	trampoline
 ! ------------------------ start of header --------------------------------
 !
 ! SETUP-header, must start at CS:2 (old 0x9020:2)
@@ -119,6 +120,8 @@ bootsect_kludge:
 heap_end_ptr:	.word	modelist+1024	! space from here (exclusive) down to
 				! end of setup code can be used by setup
 				! for local heap purposes.
+trampoline:	call	start_of_setup
+		.space	1024
 ! ------------------------ end of header ----------------------------------
 
 start_of_setup:
@@ -245,37 +248,91 @@ loader_panic_mess:
 loader_ok:
 ! Get memory size (extended mem, kB)
 
+	xor	eax, eax
+	mov	dword ptr [0x1e0], eax
 #ifndef STANDARD_MEMORY_BIOS_CALL
-	push	ebx
 
-        xor     ebx,ebx		! preload new memory slot with 0k
-        mov	[0x1e0], ebx
+	mov	byte ptr [E820NR], al
 
-        mov     ax,#0xe801
-	int     0x15
-	jc      oldstylemem
+! Try three different memory detection schemes.  First, try
+! e820h, which lets us assemble a memory map, then try e801h,
+! which returns a 32-bit memory size, and finally 88h, which
+! returns 0-64m
 
-! Memory size is in 1 k chunksizes, to avoid confusing loadlin.
-! We store the 0xe801 memory size in a completely different place,
+! method E820H:
+! the memory map from hell.  e820h returns memory classified into
+! a whole bunch of different types, and allows memory holes and
+! everything.  We scan through this memory map and build a list
+! of the first 32 memory areas, which we return at [E820MAP].
+! 
+
+meme820:
+	mov	edx, #0x534d4150		! ascii `SMAP'
+	xor	ebx, ebx			! continuation counter
+
+	mov	di, #E820MAP			! point into the whitelist
+						! so we can have the bios
+						! directly write into it.
+
+jmpe820:
+	mov	eax, #0x0000e820		! e820, upper word zeroed
+	mov	ecx, #20			! size of the e820rec
+
+	push	ds				! data record.
+	pop	es
+	int	0x15				! make the call
+	jc	bail820				! fall to e801 if it fails
+
+	cmp	eax, #0x534d4150		! check the return is `SMAP'
+	jne	bail820				! fall to e801 if it fails
+
+!	cmp	dword ptr [16+di], #1		! is this usable memory?
+!	jne	again820
+	
+	! If this is usable memory, we save it by simply advancing di by
+	! sizeof(e820rec).
+	!
+good820:
+	mov	al, byte ptr [E820NR]	! up to 32 good entries, that is
+	cmp	al, #E820MAX
+	jnl	bail820
+	inc	byte ptr [E820NR]
+	mov	ax, di
+	add	ax, #20
+	mov	di, ax
+
+again820:
+	cmp	ebx, #0			! check to see if ebx is
+	jne	jmpe820			! set to EOF
+
+bail820:
+
+
+! method E801H:
+! memory size is in 1k chunksizes, to avoid confusing loadlin.
+! we store the 0xe801 memory size in a completely different place,
 ! because it will most likely be longer than 16 bits.
 ! (use 1e0 because that's what Larry Augustine uses in his
 ! alternative new memory detection scheme, and it's sensible
 ! to write everything into the same place.)
 
-	and     ebx, #0xffff    ! clear sign extend
-	shl     ebx, 6          ! and go from 64k to 1k chunks
-	mov     [0x1e0],ebx     ! store extended memory size
+meme801:
 
-	and     eax, #0xffff    ! clear sign extend
- 	add     [0x1e0],eax     ! and add lower memory into total size.
-  
-	! and fall into the old memory detection code to populate the
-	! compatibility slot.
+        mov     ax,#0xe801
+	int     0x15
+	jc	mem88
 
-oldstylemem:
-	pop	ebx
-#else
-	mov     dword ptr [0x1e0], #0
+	and     edx, #0xffff    ! clear sign extend
+	shl     edx, 6          ! and go from 64k to 1k chunks
+	mov     [0x1e0],edx     ! store extended memory size
+
+	and     ecx, #0xffff    ! clear sign extend
+	add     [0x1e0],ecx     ! and add lower memory into total size.
+
+! Ye Olde Traditional Methode.  Returns the memory size (up to 16mb or
+! 64mb, depending on the bios) in ax.
+mem88:
+
 #endif
 	mov	ah,#0x88
 	int	0x15

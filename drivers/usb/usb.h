@@ -1,33 +1,10 @@
 #ifndef __LINUX_USB_H
 #define __LINUX_USB_H
 
-#include <linux/config.h>
 #include <linux/types.h>
-#include <linux/list.h>
-#include <linux/sched.h>
+#include <linux/ioctl.h>
 
-extern int usb_hub_init(void);
-extern int usb_kbd_init(void);
-extern int usb_cpia_init(void);
-extern int usb_mouse_init(void);
-extern int usb_printer_init(void);
-
-extern void usb_hub_cleanup(void);
-extern void usb_mouse_cleanup(void);
-
-static __inline__ void wait_ms(unsigned int ms)
-{
-        current->state = TASK_UNINTERRUPTIBLE;
-        schedule_timeout(1 + ms * HZ / 1000);
-}
-
-typedef struct {
-	__u8 requesttype;
-	__u8 request;
-	__u16 value;
-	__u16 index;
-	__u16 length;
-} devrequest __attribute__ ((packed));
+/* USB constants */
 
 /*
  * Device and/or Interface Class codes
@@ -131,6 +108,69 @@ typedef struct {
 #define USB_RT_PORT			(USB_TYPE_CLASS | USB_RECIP_OTHER)
 
 #define USB_RT_HIDD			(USB_TYPE_CLASS | USB_RECIP_INTERFACE)
+
+/* /proc/bus/usb/xxx/yyy ioctl codes */
+
+struct usb_proc_ctrltransfer {
+	__u8 requesttype;
+	__u8 request;
+	__u16 value;
+	__u16 index;
+	__u16 length;
+        /* pointer to data */
+        void *data;
+};
+
+#define USB_PROC_CONTROL        _IOWR('U', 0, struct usb_proc_ctrltransfer)
+
+struct usb_proc_bulktransfer {
+        unsigned int ep;
+        unsigned int len;
+        void *data;
+};
+
+#define USB_PROC_BULK           _IOWR('U', 2, struct usb_proc_bulktransfer)
+
+#define USB_PROC_RESETEP        _IOR('U', 3, unsigned int)
+
+struct usb_proc_setinterface {
+        unsigned int interface;
+        unsigned int altsetting;
+};
+
+#define USB_PROC_SETINTERFACE   _IOR('U', 4, struct usb_proc_setinterface)
+
+
+
+
+#ifdef __KERNEL__
+
+#include <linux/config.h>
+#include <linux/list.h>
+#include <linux/sched.h>
+
+extern int usb_hub_init(void);
+extern int usb_kbd_init(void);
+extern int usb_cpia_init(void);
+extern int usb_mouse_init(void);
+extern int usb_printer_init(void);
+
+extern void usb_hub_cleanup(void);
+extern void usb_mouse_cleanup(void);
+
+static __inline__ void wait_ms(unsigned int ms)
+{
+        current->state = TASK_UNINTERRUPTIBLE;
+        schedule_timeout(1 + ms * HZ / 1000);
+}
+
+typedef struct {
+	__u8 requesttype;
+	__u8 request;
+	__u16 value;
+	__u16 index;
+	__u16 length;
+} devrequest __attribute__ ((packed));
 
 /* 
  * Status codes (these follow OHCI controllers condition codes)
@@ -639,6 +679,8 @@ extern inline void proc_usb_remove_bus(struct usb_bus *bus) {}
 extern inline void proc_usb_add_device(struct usb_device *dev) {}
 extern inline void proc_usb_remove_device(struct usb_device *dev) {}
 #endif
+
+#endif  /* __KERNEL */
 
 #endif
 

@@ -1491,7 +1491,7 @@ static struct proc_dir_entry proc_net_rose_routes = {
 
 static struct net_device *dev_rose;
 
-__initfunc(void rose_proto_init(struct net_proto *pro))
+void __init rose_proto_init(struct net_proto *pro)
 {
 	int i;
 

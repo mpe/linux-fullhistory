@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 02:09:59 1997
- * Modified at:   Mon May 31 09:53:16 1999
+ * Modified at:   Thu Jul  8 12:12:02 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -40,18 +40,14 @@ static struct lsap_cb *irlmp_find_lsap(struct lap_cb *self, __u8 dlsap,
 inline void irlmp_send_data_pdu(struct lap_cb *self, __u8 dlsap, __u8 slsap,
 				int expedited, struct sk_buff *skb)
 {
-	__u8 *frame;
-
-	frame = skb->data;
-
-	frame[0] = dlsap;
-	frame[1] = slsap;
+	skb->data[0] = dlsap;
+	skb->data[1] = slsap;
 
 	if (expedited) {
-		DEBUG( 4, __FUNCTION__ "(), sending expedited data\n");
-		irlap_data_request( self->irlap, skb, FALSE);
+		DEBUG(4, __FUNCTION__ "(), sending expedited data\n");
+		irlap_data_request(self->irlap, skb, FALSE);
 	} else
-		irlap_data_request( self->irlap, skb, TRUE);
+		irlap_data_request(self->irlap, skb, TRUE);
 }
 
 /*

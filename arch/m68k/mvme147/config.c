@@ -90,7 +90,7 @@ static int mvme147_get_hardware_list(char *buffer)
 }
 
 
-__initfunc(void config_mvme147(void))
+void __init config_mvme147(void)
 {
 	mach_sched_init		= mvme147_sched_init;
 	mach_keyb_init		= mvme147_keyb_init;

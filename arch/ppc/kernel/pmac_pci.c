@@ -315,7 +315,7 @@ int grackle_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
  * N.B. we can't use pcibios_*_config_* here because bridges[]
  * is not initialized yet.
  */
-__initfunc(static void init_bandit(struct bridge_data *bp))
+static void __init init_bandit(struct bridge_data *bp)
 {
 	unsigned int vendev, magic;
 	int rev;
@@ -360,7 +360,7 @@ __initfunc(static void init_bandit(struct bridge_data *bp))
 	       bp->io_base);
 }
 
-__initfunc(unsigned long pmac_find_bridges(unsigned long mem_start, unsigned long mem_end))
+unsigned long __init pmac_find_bridges(unsigned long mem_start, unsigned long mem_end)
 {
 	int bus;
 	struct bridge_data *bridge;
@@ -385,7 +385,7 @@ __initfunc(unsigned long pmac_find_bridges(unsigned long mem_start, unsigned lon
  * "pci" (a MPC106) and no bandit or chaos bridges, and contrariwise,
  * if we have one or more bandit or chaos bridges, we don't have a MPC106.
  */
-__initfunc(static void add_bridges(struct device_node *dev, unsigned long *mem_ptr))
+static void __init add_bridges(struct device_node *dev, unsigned long *mem_ptr)
 {
 	int *bus_range;
 	int len;
@@ -442,9 +442,8 @@ __initfunc(static void add_bridges(struct device_node *dev, unsigned long *mem_p
 	}
 }
 
-__initfunc(
-void
-pmac_pcibios_fixup(void))
+void __init
+pmac_pcibios_fixup(void)
 {
 	struct pci_dev *dev;
 	
@@ -472,9 +471,8 @@ pmac_pcibios_fixup(void))
 	}
 }
 
-__initfunc(
-void
-pmac_setup_pci_ptrs(void))
+void __init
+pmac_setup_pci_ptrs(void)
 {
 	if (find_devices("pci") != 0) {
 		/* looks like a G3 powermac */

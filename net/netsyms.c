@@ -32,6 +32,11 @@
 #include <net/br.h>
 #endif
 
+#ifdef CONFIG_NET
+extern __u32 sysctl_wmem_max;
+extern __u32 sysctl_rmem_max;
+#endif
+
 #ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <net/protocol.h>
@@ -46,8 +51,6 @@
 #include <linux/igmp.h>
 
 extern struct net_proto_family inet_family_ops;
-extern __u32 sysctl_wmem_max;
-extern __u32 sysctl_rmem_max;
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE) || defined (CONFIG_KHTTPD) || defined (CONFIG_KHTTPD_MODULE)
 #include <linux/in6.h>
@@ -221,7 +224,6 @@ EXPORT_SYMBOL(br_avl_find_addr);
 /* Internet layer registration */
 EXPORT_SYMBOL(inet_add_protocol);
 EXPORT_SYMBOL(inet_del_protocol);
-EXPORT_SYMBOL(init_etherdev);
 EXPORT_SYMBOL(ip_route_output);
 EXPORT_SYMBOL(ip_route_input);
 EXPORT_SYMBOL(icmp_send);
@@ -279,6 +281,7 @@ EXPORT_SYMBOL(inet_sendmsg);
 EXPORT_SYMBOL(inet_recvmsg);
 EXPORT_SYMBOL(inet_sock_nr);
 EXPORT_SYMBOL(inet_sock_destruct);
+EXPORT_SYMBOL(inet_sock_release);
 
 /* Socket demultiplexing. */
 EXPORT_SYMBOL(tcp_ehash);
@@ -303,8 +306,10 @@ EXPORT_SYMBOL(tcp_v4_lookup_listener);
 /* UDP/TCP exported functions for TCPv6 */
 EXPORT_SYMBOL(udp_ioctl);
 EXPORT_SYMBOL(udp_connect);
+EXPORT_SYMBOL(udp_disconnect);
 EXPORT_SYMBOL(udp_sendmsg);
 EXPORT_SYMBOL(tcp_close);
+EXPORT_SYMBOL(tcp_disconnect);
 EXPORT_SYMBOL(tcp_accept);
 EXPORT_SYMBOL(tcp_write_wakeup);
 EXPORT_SYMBOL(tcp_read_wakeup);
@@ -327,6 +332,8 @@ EXPORT_SYMBOL(__tcp_inc_slow_timer);
 EXPORT_SYMBOL(tcp_statistics);
 EXPORT_SYMBOL(tcp_rcv_state_process);
 EXPORT_SYMBOL(tcp_timewait_state_process);
+EXPORT_SYMBOL(tcp_timewait_cachep);
+EXPORT_SYMBOL(tcp_timewait_kill);
 EXPORT_SYMBOL(tcp_do_sendmsg);
 EXPORT_SYMBOL(tcp_v4_rebuild_header);
 EXPORT_SYMBOL(tcp_v4_send_check);
@@ -350,6 +357,7 @@ EXPORT_SYMBOL(tcp_transmit_skb);
 EXPORT_SYMBOL(tcp_connect);
 EXPORT_SYMBOL(tcp_make_synack);
 EXPORT_SYMBOL(tcp_tw_death_row_slot);
+EXPORT_SYMBOL(tcp_tw_deschedule);
 EXPORT_SYMBOL(sysctl_local_port_range);
 EXPORT_SYMBOL(tcp_port_rover);
 EXPORT_SYMBOL(udp_port_rover);
@@ -385,6 +393,7 @@ EXPORT_SYMBOL(rtattr_parse);
 EXPORT_SYMBOL(rtnetlink_links);
 EXPORT_SYMBOL(__rta_fill);
 EXPORT_SYMBOL(rtnetlink_dump_ifinfo);
+EXPORT_SYMBOL(rtnetlink_put_metrics);
 EXPORT_SYMBOL(rtnl);
 EXPORT_SYMBOL(neigh_delete);
 EXPORT_SYMBOL(neigh_add);
@@ -444,6 +453,7 @@ EXPORT_SYMBOL(unregister_netdevice_notifier);
 
 /* support for loadable net drivers */
 #ifdef CONFIG_NET
+EXPORT_SYMBOL(init_etherdev);
 EXPORT_SYMBOL(loopback_dev);
 EXPORT_SYMBOL(register_netdevice);
 EXPORT_SYMBOL(unregister_netdevice);

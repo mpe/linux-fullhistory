@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Sun May 16 14:35:11 1999
+ * Modified at:   Sat Jun 26 16:57:57 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -37,11 +37,11 @@
 static void actisys_reset(struct irda_device *dev);
 static void actisys_open(struct irda_device *idev, int type);
 static void actisys_close(struct irda_device *dev);
-static void actisys_change_speed( struct irda_device *dev, int baudrate);
+static void actisys_change_speed( struct irda_device *dev, __u32 speed);
 static void actisys_init_qos(struct irda_device *idev, struct qos_info *qos);
 
 /* These are the baudrates supported */
-static int baud_rates[] = { 9600, 19200, 57600, 115200, 38400};
+static __u32 baud_rates[] = { 9600, 19200, 57600, 115200, 38400};
 
 static struct dongle dongle = {
 	ACTISYS_DONGLE,
@@ -107,9 +107,9 @@ static void actisys_close(struct irda_device *idev)
  *    To cycle through the available baud rates, pulse RTS low for a few
  *    ms.  
  */
-static void actisys_change_speed(struct irda_device *idev, int baudrate)
+static void actisys_change_speed(struct irda_device *idev, __u32 speed)
 {
-        int current_baudrate;
+        __u32 current_baudrate;
         int index = 0;
 	
 	DEBUG(4, __FUNCTION__ "()\n");
@@ -126,7 +126,7 @@ static void actisys_change_speed(struct irda_device *idev, int baudrate)
         DEBUG( 4, __FUNCTION__ "(), index=%d\n", index);
 
 	/* Cycle through avaiable baudrates until we reach the correct one */
-        while (current_baudrate != baudrate) {	
+        while (current_baudrate != speed) {	
                 DEBUG(4, __FUNCTION__ "(), current baudrate = %d\n",
 		      baud_rates[index]);
 		
@@ -152,7 +152,7 @@ static void actisys_change_speed(struct irda_device *idev, int baudrate)
 
                 current_baudrate = baud_rates[index];
         }
-	DEBUG(4, __FUNCTION__ "(), current baudrate = %d\n",baud_rates[index]);
+	DEBUG(4, __FUNCTION__ "(), current baudrate = %d\n", baud_rates[index]);
 }
 
 /*

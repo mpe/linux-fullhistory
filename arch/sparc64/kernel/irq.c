@@ -1399,7 +1399,7 @@ void enable_prom_timer(void)
 	prom_timers->count0 = 0;
 }
 
-__initfunc(void init_IRQ(void))
+void __init init_IRQ(void)
 {
 	static int called = 0;
 

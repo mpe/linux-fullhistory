@@ -8,12 +8,12 @@
 #include <linux/init.h>
 #include <asm/sgialib.h>
 
-__initfunc(struct linux_tinfo *prom_gettinfo(void))
+struct linux_tinfo * __init prom_gettinfo(void)
 {
 	return romvec->get_tinfo();
 }
 
-__initfunc(unsigned long prom_getrtime(void))
+unsigned long __init prom_getrtime(void)
 {
 	return romvec->get_rtime();
 }

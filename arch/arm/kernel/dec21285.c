@@ -129,7 +129,7 @@ pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-__initfunc(void pci_set_cmd(struct pci_dev *dev, unsigned short clear, unsigned short set))
+void __init pci_set_cmd(struct pci_dev *dev, unsigned short clear, unsigned short set)
 {
 	unsigned short cmd;
 
@@ -138,7 +138,7 @@ __initfunc(void pci_set_cmd(struct pci_dev *dev, unsigned short clear, unsigned 
 	pci_write_config_word(dev, PCI_COMMAND, cmd);
 }
 
-__initfunc(void pci_set_base_addr(struct pci_dev *dev, int idx, unsigned int addr))
+void __init pci_set_base_addr(struct pci_dev *dev, int idx, unsigned int addr)
 {
 	int reg = PCI_BASE_ADDRESS_0 + (idx << 2);
 
@@ -148,7 +148,7 @@ __initfunc(void pci_set_base_addr(struct pci_dev *dev, int idx, unsigned int add
 	dev->base_address[idx] = addr;
 }
 
-__initfunc(void pcibios_fixup(void))
+void __init pcibios_fixup(void)
 {
 	struct pci_dev *dev;
 
@@ -167,7 +167,7 @@ __initfunc(void pcibios_fixup(void))
 	hw_init();
 }
 
-__initfunc(void pcibios_init(void))
+void __init pcibios_init(void)
 {
 	unsigned int mem_size = (unsigned int)high_memory - PAGE_OFFSET;
 	unsigned long cntl;
@@ -242,11 +242,11 @@ __initfunc(void pcibios_init(void))
 	printk(KERN_DEBUG"PCI: DEC21285 revision %02lX\n", *CSR_CLASSREV & 0xff);
 }
 
-__initfunc(void pcibios_fixup_bus(struct pci_bus *bus))
+void __init pcibios_fixup_bus(struct pci_bus *bus)
 {
 }
 
-__initfunc(char *pcibios_setup(char *str))
+char * __init pcibios_setup(char *str)
 {
 	return str;
 }

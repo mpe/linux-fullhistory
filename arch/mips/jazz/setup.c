@@ -52,14 +52,14 @@ extern struct fd_ops jazz_fd_ops;
 
 void (*board_time_init)(struct irqaction *irq);
 
-__initfunc(static void jazz_time_init(struct irqaction *irq))
+static void __init jazz_time_init(struct irqaction *irq)
 {
         /* set the clock to 100 Hz */
         r4030_write_reg32(JAZZ_TIMER_INTERVAL, 9);
         i8259_setup_irq(JAZZ_TIMER_IRQ, irq);
 }
 
-__initfunc(static void jazz_irq_setup(void))
+static void __init jazz_irq_setup(void)
 {
         set_except_vector(0, jazz_handle_int);
 	r4030_write_reg16(JAZZ_IO_IRQ_ENABLE,
@@ -79,7 +79,7 @@ __initfunc(static void jazz_irq_setup(void))
 	i8259_setup_irq(2, &irq2);
 }
 
-__initfunc(void jazz_setup(void))
+void __init jazz_setup(void)
 {
 	add_wired_entry (0x02000017, 0x03c00017, 0xe0000000, PM_64K);
 	add_wired_entry (0x02400017, 0x02440017, 0xe2000000, PM_16M);

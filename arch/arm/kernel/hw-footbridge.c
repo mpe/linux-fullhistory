@@ -44,7 +44,7 @@ extern void (*kd_mksound)(unsigned int hz, unsigned int ticks);
 
 static int irqmap_ebsa[] __initdata = { IRQ_IN1, IRQ_IN0, IRQ_PCI, IRQ_IN3 };
 
-__initfunc(static int ebsa_irqval(struct pci_dev *dev))
+static int __init ebsa_irqval(struct pci_dev *dev)
 {
 	unsigned char pin;
 	
@@ -59,7 +59,7 @@ __initfunc(static int ebsa_irqval(struct pci_dev *dev))
 #ifdef CONFIG_CATS
 static int irqmap_cats[] __initdata = { IRQ_PCI, IRQ_IN0, IRQ_IN1, IRQ_IN3 };
 
-__initfunc(static int cats_irqval(struct pci_dev *dev))
+static int __init cats_irqval(struct pci_dev *dev)
 {
 	if (dev->irq >= 128)
 		return 16 + (dev->irq & 0x1f);
@@ -80,7 +80,7 @@ __initfunc(static int cats_irqval(struct pci_dev *dev))
 }
 #endif
 
-__initfunc(void pcibios_fixup_ebsa285(struct pci_dev *dev))
+void __init pcibios_fixup_ebsa285(struct pci_dev *dev)
 {
 	/* Latency timer of 32 */
 	pci_write_config_byte(dev, PCI_LATENCY_TIMER, 32);
@@ -284,7 +284,7 @@ static struct irqaction irq_pci_error = {
 	irq_pci_err, SA_INTERRUPT, 0, "PCI error", NULL, NULL
 };
 
-__initfunc(void pcibios_init_ebsa285(void))
+void __init pcibios_init_ebsa285(void)
 {
 	setup_arm_irq(IRQ_PCI_ERR, &irq_pci_error);
 }
@@ -592,7 +592,7 @@ static inline void wb977_init_gpio(void)
 /*
  * Initialise the Winbond W83977F chip.
  */
-__initfunc(static void wb977_init(void))
+static void __init wb977_init(void)
 {
 	request_region(0x370, 2, "W83977AF configuration");
 
@@ -642,7 +642,7 @@ void __netwinder_text cpld_modify(int mask, int set)
 	gpio_modify_op(GPIO_IOLOAD, 0);
 }
 
-__initfunc(static void cpld_init(void))
+static void __init cpld_init(void)
 {
 	unsigned long flags;
 
@@ -842,7 +842,7 @@ static void rwa010_soundblaster_reset(void)
 	outb(1, 0x38b);
 }
 
-__initfunc(static void rwa010_init(void))
+static void __init rwa010_init(void)
 {
 	rwa010_unlock();
 	rwa010_read_ident();
@@ -918,7 +918,7 @@ static void __init cats_hw_init(void)
 
 #endif
 
-__initfunc(void hw_init(void))
+void __init hw_init(void)
 {
 	extern void register_isa_ports(unsigned int, unsigned int, 
 				       unsigned int);

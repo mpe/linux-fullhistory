@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/proc_fs.h>
+#include <linux/bigmem.h>
 
 #include <asm/page.h>
 #include <asm/uaccess.h>
@@ -120,7 +121,9 @@ static ssize_t mem_read(struct file * file, char * buf,
 		i = PAGE_SIZE-(addr & ~PAGE_MASK);
 		if (i > scount)
 			i = scount;
+		page = (char *) kmap((unsigned long) page, KM_READ);
 		copy_to_user(tmp, page, i);
+		kunmap((unsigned long) page, KM_READ);
 		addr += i;
 		tmp += i;
 		scount -= i;
@@ -177,7 +180,9 @@ static ssize_t mem_write(struct file * file, char * buf,
 		i = PAGE_SIZE-(addr & ~PAGE_MASK);
 		if (i > count)
 			i = count;
+		page = (unsigned long) kmap((unsigned long) page, KM_WRITE);
 		copy_from_user(page, tmp, i);
+		kunmap((unsigned long) page, KM_WRITE);
 		addr += i;
 		tmp += i;
 		count -= i;

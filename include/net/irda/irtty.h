@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Mon May 10 13:22:23 1999
+ * Modified at:   Thu Jul  1 10:13:02 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *  
  *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
@@ -42,11 +42,10 @@
 #endif
 
 struct irtty_cb {
-	QUEUE q; /* Must be first */
-
-	int	magic;
+	QUEUE   q;     /* Must be first */
+	magic_t magic;
 	
-	struct  tty_struct  *tty;  /* Ptr to TTY structure */
+	struct  tty_struct  *tty;
 	struct  irda_device idev;
 };
  

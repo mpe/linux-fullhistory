@@ -1982,7 +1982,7 @@ static void addrconf_sysctl_unregister(struct ipv6_devconf *p)
  *	Init / cleanup code
  */
 
-__initfunc(void addrconf_init(void))
+void __init addrconf_init(void)
 {
 #ifdef MODULE
 	struct net_device *dev;

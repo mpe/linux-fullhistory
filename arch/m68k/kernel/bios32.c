@@ -240,7 +240,7 @@ static unsigned int mem_base = FIRST_MEM_ADDR;	/* Skip first 32M. */
  * accesses.
  */
 
-__initfunc(static void disable_dev(struct pci_dev *dev))
+static void __init disable_dev(struct pci_dev *dev)
 {
 	struct pci_bus *bus;
 	unsigned short cmd;
@@ -263,8 +263,8 @@ __initfunc(static void disable_dev(struct pci_dev *dev))
 
 #define MAX(val1, val2) ( ((val1) > (val2)) ? val1 : val2)
 
-__initfunc(static void layout_dev(struct pci_dev *dev, unsigned long pci_mem_base,
-								  unsigned long pci_io_base))
+static void __init layout_dev(struct pci_dev *dev, unsigned long pci_mem_base,
+								  unsigned long pci_io_base)
 {
 	struct pci_bus *bus;
 	unsigned short cmd;
@@ -400,8 +400,8 @@ __initfunc(static void layout_dev(struct pci_dev *dev, unsigned long pci_mem_bas
 		  bus->number, PCI_SLOT(dev->devfn), dev->vendor, dev->device, dev->class));
 }
 
-__initfunc(static void layout_bus(struct pci_bus *bus, unsigned long pci_mem_base,
-								  unsigned long pci_io_base))
+static void __init layout_bus(struct pci_bus *bus, unsigned long pci_mem_base,
+								  unsigned long pci_io_base)
 {
 	struct pci_dev *dev;
 
@@ -512,7 +512,7 @@ int pcibios_present(void)
 		return 0;
 }
 
-__initfunc(void pcibios_init(void))
+void __init pcibios_init(void)
 {
 	printk("Linux/m68k PCI BIOS32 revision %x.%02x\n", MAJOR_REV, MINOR_REV);
 
@@ -531,7 +531,7 @@ __initfunc(void pcibios_init(void))
  * of the PCI cards.
  */
 
-__initfunc(static inline void hades_fixup(void))
+static inline void __init hades_fixup(void)
 {
 	char irq_tab[4] = {
 			    IRQ_TT_MFP_IO0,	/* Slot 0. */
@@ -560,7 +560,7 @@ __initfunc(static inline void hades_fixup(void))
 	}
 }
 
-__initfunc(void pcibios_fixup(void))
+void __init pcibios_fixup(void)
 {
 #if PCI_MODIFY
 	unsigned long orig_mem_base, orig_io_base;
@@ -587,11 +587,11 @@ __initfunc(void pcibios_fixup(void))
 	hades_fixup();
 }
 
-__initfunc(void pcibios_fixup_bus(struct pci_bus *bus))
+void __init pcibios_fixup_bus(struct pci_bus *bus)
 {
 }
 
-__initfunc(char *pcibios_setup(char *str))
+char * __init pcibios_setup(char *str)
 {
 	return str;
 }

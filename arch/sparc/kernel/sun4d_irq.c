@@ -366,7 +366,7 @@ static void sun4d_set_udt(int cpu)
 }
 
 /* Setup IRQ distribution scheme. */
-__initfunc(void sun4d_distribute_irqs(void))
+void __init sun4d_distribute_irqs(void)
 {
 #ifdef DISTRIBUTE_IRQS
 	struct linux_sbus *sbus;
@@ -431,7 +431,7 @@ static void sun4d_load_profile_irq(int cpu, unsigned int limit)
 	bw_set_prof_limit(cpu, limit);
 }
 
-__initfunc(static void sun4d_init_timers(void (*counter_fn)(int, void *, struct pt_regs *)))
+static void __init sun4d_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
 {
 	int irq;
 	extern struct prom_cpuinfo linux_cpus[NR_CPUS];
@@ -492,7 +492,7 @@ __initfunc(static void sun4d_init_timers(void (*counter_fn)(int, void *, struct 
 #endif
 }
 
-__initfunc(void sun4d_init_sbi_irq(void))
+void __init sun4d_init_sbi_irq(void)
 {
 	struct linux_sbus *sbus;
 	unsigned mask;
@@ -529,7 +529,7 @@ static char *sun4d_irq_itoa(unsigned int irq)
 	return buff;
 }
 
-__initfunc(void sun4d_init_IRQ(void))
+void __init sun4d_init_IRQ(void)
 {
 	__cli();
 

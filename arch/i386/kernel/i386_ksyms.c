@@ -88,6 +88,7 @@ EXPORT_SYMBOL(synchronize_bh);
 EXPORT_SYMBOL(global_bh_count);
 EXPORT_SYMBOL(global_bh_lock);
 EXPORT_SYMBOL(global_irq_holder);
+EXPORT_SYMBOL(i386_bh_lock);
 EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);
 EXPORT_SYMBOL(__global_save_flags);

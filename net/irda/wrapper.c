@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Fri May 28 20:30:24 1999
+ * Modified at:   Wed Aug 25 13:13:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Modified at:   Fri May 28  3:11 CST 1999
  * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
@@ -53,7 +53,7 @@ static void (*state[])(struct irda_device *idev, __u8 byte) =
 };
 
 /*
- * Function async_wrap (skb, *tx_buff)
+ * Function async_wrap (skb, *tx_buff, buffsize)
  *
  *    Makes a new buffer with wrapping and stuffing, should check that 
  *    we don't get tx buffer overflow.
@@ -72,21 +72,15 @@ int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 	fcs.value = INIT_FCS;
 	n = 0;
 
-	if (skb->len > 2048) {
-		DEBUG(0, __FUNCTION__ "Warning size=%d of sk_buff to big!\n", 
-		      (int) skb->len);
-		return 0;
-	}
-	
 	/*
 	 *  Send  XBOF's for required min. turn time and for the negotiated
 	 *  additional XBOFS
 	 */
-	if (((struct irlap_skb_cb *)(skb->cb))->magic != LAP_MAGIC) {
+	if (((struct irda_skb_cb *)(skb->cb))->magic != LAP_MAGIC) {
 		DEBUG(1, __FUNCTION__ "(), wrong magic in skb!\n");
 		xbofs = 10;
 	} else
-		xbofs = ((struct irlap_skb_cb *)(skb->cb))->xbofs;
+		xbofs = ((struct irda_skb_cb *)(skb->cb))->xbofs;
 
 	memset(tx_buff+n, XBOF, xbofs);
 	n += xbofs;
@@ -122,7 +116,7 @@ int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 }
 
 /*
- * Function async_bump (idev)
+ * Function async_bump (idev, buf, len)
  *
  *    Got a frame, make a copy of it, and pass it up the stack!
  *
@@ -182,7 +176,7 @@ static inline int stuff_byte(__u8 byte, __u8 *buf)
 }
 
 /*
- * Function async_unwrap (skb)
+ * Function async_unwrap_char (idev, byte)
  *
  *    Parse and de-stuff frame received from the IrDA-port
  *

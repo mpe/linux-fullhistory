@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Sun May  9 12:22:56 1999
+ * Modified at:   Wed Jun  9 11:03:29 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
@@ -439,8 +439,8 @@ void irlan_provider_send_reply(struct irlan_cb *self, int command,
  */
 int irlan_provider_open_ctrl_tsap(struct irlan_cb *self)
 {
-	struct notify_t notify;
 	struct tsap_cb *tsap;
+	notify_t notify;
 	
 	DEBUG(4, __FUNCTION__ "()\n");
 

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Mon May 31 14:19:34 1999
+ * Modified at:   Thu Jul  8 13:50:16 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane, <loz@holmes.demon.co.uk>
@@ -67,7 +67,7 @@ static void irlan_client_ctrl_connect_confirm(void *instance, void *sap,
 static void irlan_check_response_param(struct irlan_cb *self, char *param, 
 				       char *value, int val_len);
 
-static void irlan_client_kick_timer_expired(unsigned long data)
+static void irlan_client_kick_timer_expired(void *data)
 {
 	struct irlan_cb *self = (struct irlan_cb *) data;
 	
@@ -92,8 +92,7 @@ void irlan_client_start_kick_timer(struct irlan_cb *self, int timeout)
 {
 	DEBUG(4, __FUNCTION__ "()\n");
 	
-	irda_start_timer(&self->client.kick_timer, timeout, 
-			 (unsigned long) self, 
+	irda_start_timer(&self->client.kick_timer, timeout, (void *) self, 
 			 irlan_client_kick_timer_expired);
 }
 
@@ -166,7 +165,7 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
  */
 void irlan_client_discovery_indication(discovery_t *discovery) 
 {
-	struct irlan_cb *self, *entry;
+	struct irlan_cb *self;
 	__u32 saddr, daddr;
 	
 	DEBUG(1, __FUNCTION__"()\n");
@@ -223,7 +222,8 @@ static int irlan_client_ctrl_data_indication(void *instance, void *sap,
 	
 	irlan_do_client_event(self, IRLAN_DATA_INDICATION, skb); 
 
-	/* Ready for a new command */
+	/* Ready for a new command */	
+	DEBUG(2, __FUNCTION__ "(), clearing tx_busy\n");
 	self->client.tx_busy = FALSE;
 
 	/* Check if we have some queued commands waiting to be sent */
@@ -238,6 +238,7 @@ static void irlan_client_ctrl_disconnect_indication(void *instance, void *sap,
 {
 	struct irlan_cb *self;
 	struct tsap_cb *tsap;
+	struct sk_buff *skb;
 
 	DEBUG(4, __FUNCTION__ "(), reason=%d\n", reason);
 	
@@ -251,6 +252,12 @@ static void irlan_client_ctrl_disconnect_indication(void *instance, void *sap,
 	
 	ASSERT(tsap == self->client.tsap_ctrl, return;);
 
+       	/* Remove frames queued on the control channel */
+	while ((skb = skb_dequeue(&self->client.txq))) {
+		dev_kfree_skb(skb);
+	}
+	self->client.tx_busy = FALSE;
+
 	irlan_do_client_event(self, IRLAN_LMP_DISCONNECT, NULL);
 }
 
@@ -262,8 +269,8 @@ static void irlan_client_ctrl_disconnect_indication(void *instance, void *sap,
  */
 void irlan_client_open_ctrl_tsap(struct irlan_cb *self)
 {
-	struct notify_t notify;
 	struct tsap_cb *tsap;
+	notify_t notify;
 
 	DEBUG(4, __FUNCTION__ "()\n");
 

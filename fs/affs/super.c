@@ -688,7 +688,7 @@ static struct file_system_type affs_fs_type = {
 	NULL
 };
 
-__initfunc(int init_affs_fs(void))
+int __init init_affs_fs(void)
 {
 	return register_filesystem(&affs_fs_type);
 }

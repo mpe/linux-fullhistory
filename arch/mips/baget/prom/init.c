@@ -10,7 +10,7 @@
 
 char arcs_cmdline[CL_SIZE];
 
-__initfunc(int prom_init(unsigned int mem_upper))
+int __init prom_init(unsigned int mem_upper)
 {
 	mips_memory_upper = mem_upper;
 	mips_machgroup  = MACH_GROUP_UNKNOWN;

@@ -75,8 +75,8 @@ void __init adbdev_init(void)
 {
 }
 
-__initfunc(void
-mbx_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
+void __init
+mbx_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	int	cpm_page;
 	extern char cmd_line[];
@@ -141,7 +141,7 @@ abort(void)
  * sixteen, or external oscillator divided by four.  Currently, we only
  * support the MBX, which is system clock divided by sixteen.
  */
-__initfunc(void mbx_calibrate_decr(void))
+void __init mbx_calibrate_decr(void)
 {
 	bd_t	*binfo = (bd_t *)&res;
 	int freq, fp, divisor;
@@ -310,8 +310,8 @@ static void mbx_i8259_action(int cpl, void *dev_id, struct pt_regs *regs)
  * interrupts can be either edge or level triggered, but there is no
  * reason for us to change the EPPC-bug values (it would not work if we did).
  */
-__initfunc(void
-mbx_init_IRQ(void))
+void __init
+mbx_init_IRQ(void)
 {
 	int i;
 
@@ -413,9 +413,9 @@ mbx_ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_p
 }
 #endif
 
-__initfunc(void
+void __init
 mbx_init(unsigned long r3, unsigned long r4, unsigned long r5,
-	 unsigned long r6, unsigned long r7))
+	 unsigned long r6, unsigned long r7)
 {
 
 	if ( r3 )

@@ -327,7 +327,7 @@ extern int atari_SCC_reset_done;
  * the atari IRQ handling routines.
  */
 
-__initfunc(void atari_init_IRQ(void))
+void __init atari_init_IRQ(void)
 {
 	int i;
 

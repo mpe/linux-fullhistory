@@ -21,8 +21,8 @@ int linux_num_cpus = 0;
 extern void cpu_probe(void);
 extern unsigned long central_probe(unsigned long);
 
-__initfunc(unsigned long
-device_scan(unsigned long mem_start))
+unsigned long __init
+device_scan(unsigned long mem_start)
 {
 	char node_str[128];
 	int nd, prom_node_cpu, thismid;

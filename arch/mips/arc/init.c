@@ -22,7 +22,7 @@ unsigned short prom_vers, prom_rev;
 
 extern void prom_testtree(void);
 
-__initfunc(int prom_init(int argc, char **argv, char **envp))
+int __init prom_init(int argc, char **argv, char **envp)
 {
 	struct linux_promblock *pb;
 

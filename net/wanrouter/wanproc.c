@@ -26,7 +26,7 @@
 #include <linux/malloc.h>	/* kmalloc(), kfree() */
 #include <linux/mm.h>		/* verify_area(), etc. */
 #include <linux/string.h>	/* inline mem*, str* functions */
-#include <linux/init.h>		/* __initfunc et al. */
+#include <linux/init.h>		/* __init et al. */
 #include <asm/segment.h>	/* kernel <-> user copy */
 #include <asm/byteorder.h>	/* htons(), etc. */
 #include <asm/uaccess.h>	/* copy_to_user */
@@ -269,7 +269,7 @@ static char stat_hdr[] =
  *	Initialize router proc interface.
  */
 
-__initfunc(int wanrouter_proc_init (void))
+int __init wanrouter_proc_init (void)
 {
 	int err = proc_register(proc_net, &proc_router);
 
@@ -543,7 +543,7 @@ static int wandev_get_info(char* buf, char** start, off_t offs, int len,
  *	No /proc - output stubs
  */
  
-__initfunc(int wanrouter_proc_init(void))
+int __init wanrouter_proc_init(void)
 {
 	return 0;
 }

@@ -290,8 +290,8 @@ static void __init pmac_fix_gatwick_interrupts(struct device_node *gw, int irq_b
 	}
 }
 
-__initfunc(void
-pmac_pic_init(void))
+void __init
+pmac_pic_init(void)
 {
         int i;
         struct device_node *irqctrler;

@@ -44,8 +44,8 @@ static inline void iommu_map_dvma_pages_for_iommu(struct iommu_struct *iommu)
 	}
 }
 
-__initfunc(void
-iommu_init(int iommund, struct linux_sbus *sbus))
+void __init
+iommu_init(int iommund, struct linux_sbus *sbus)
 {
 	unsigned int impl, vers, ptsize;
 	unsigned long tmp;
@@ -264,7 +264,7 @@ static void iommu_unlockarea(char *vaddr, unsigned long len)
 {
 }
 
-__initfunc(void ld_mmu_iommu(void))
+void __init ld_mmu_iommu(void)
 {
 	viking_flush = (BTFIXUPVAL_CALL(flush_page_for_dma) == (unsigned long)viking_flush_page);
 	BTFIXUPSET_CALL(mmu_lockarea, iommu_lockarea, BTFIXUPCALL_RETO0);

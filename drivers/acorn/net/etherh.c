@@ -84,8 +84,8 @@ static char *version = "etherh [500/600/600A] ethernet driver (c) 1998 R.M.King 
  * Read the ethernet address string from the on board rom.
  * This is an ascii string...
  */
-__initfunc(static int
-etherh_addr(char *addr, struct expansion_card *ec))
+static int __init
+etherh_addr(char *addr, struct expansion_card *ec)
 {
 	struct in_chunk_dir cd;
 	char *s;
@@ -352,8 +352,8 @@ etherh_close(struct net_device *dev)
 /*
  * This is the real probe routine.
  */
-__initfunc(static int
-etherh_probe1(struct net_device *dev))
+static int __init
+etherh_probe1(struct net_device *dev)
 {
 	static int version_printed;
 	unsigned int addr, i, reg0, tmp;
@@ -463,8 +463,8 @@ static expansioncard_ops_t etherh_ops = {
 	NULL
 };
 
-__initfunc(static void
-etherh_initdev(ecard_t *ec, struct net_device *dev))
+static void __init
+etherh_initdev(ecard_t *ec, struct net_device *dev)
 {
 	ecard_claim (ec);
 	
@@ -496,8 +496,8 @@ etherh_initdev(ecard_t *ec, struct net_device *dev))
 }
 
 #ifndef MODULE
-__initfunc(int
-etherh_probe(struct net_device *dev))
+int __init
+etherh_probe(struct net_device *dev)
 {
 	if (!dev)
 		return ENODEV;

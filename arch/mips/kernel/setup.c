@@ -135,13 +135,13 @@ unsigned long mips_io_port_base;
  */
 unsigned long isa_slot_offset;
 
-__initfunc(static void default_irq_setup(void))
+static void __init default_irq_setup(void)
 {
 	panic("Unknown machtype in init_IRQ");
 }
 
-__initfunc(void setup_arch(char **cmdline_p,
-           unsigned long * memory_start_p, unsigned long * memory_end_p))
+void __init setup_arch(char **cmdline_p,
+           unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	unsigned long memory_end;
 #ifdef CONFIG_BLK_DEV_INITRD

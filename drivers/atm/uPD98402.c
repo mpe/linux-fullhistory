@@ -196,7 +196,7 @@ static const struct atmphy_ops uPD98402_ops = {
 };
 
 
-__initfunc(int uPD98402_init(struct atm_dev *dev))
+int __init uPD98402_init(struct atm_dev *dev)
 {
 DPRINTK("phy_init\n");
 	dev->phy = &uPD98402_ops;

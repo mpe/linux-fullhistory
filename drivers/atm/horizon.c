@@ -2517,7 +2517,7 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
   
   // clear error and grab cell rate resource lock
   error = 0;
-  spin_lock (&dev->rates_lock);
+  spin_lock (&dev->rate_lock);
   
   if (vcc.tx_rate > dev->tx_avail) {
     PRINTD (DBG_QOS, "not enough TX PCR left");
@@ -2538,7 +2538,7 @@ static int hrz_open (struct atm_vcc * atm_vcc, short vpi, int vci) {
   }
   
   // release lock and exit on error
-  spin_unlock (&dev->rates_lock);
+  spin_unlock (&dev->rate_lock);
   if (error) {
     PRINTD (DBG_QOS|DBG_VCC, "insufficient cell rate resources");
     kfree (vccp);
@@ -2618,12 +2618,12 @@ static void hrz_close (struct atm_vcc * atm_vcc) {
   }
   
   // atomically release our rate reservation
-  spin_lock (&dev->rates_lock);
+  spin_lock (&dev->rate_lock);
   PRINTD (DBG_QOS|DBG_VCC, "releasing %u TX PCR and %u RX PCR",
 	  vcc->tx_rate, vcc->rx_rate);
   dev->tx_avail += vcc->tx_rate;
   dev->rx_avail += vcc->rx_rate;
-  spin_unlock (&dev->rates_lock);
+  spin_unlock (&dev->rate_lock);
   
   // free our structure
   kfree (vcc);
@@ -2790,9 +2790,8 @@ static int __init hrz_probe (void) {
     hrz_dev * dev;
     
     // adapter slot free, read resources from PCI configuration space
-    u32 iobase = pci_dev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
-    u32 * membase = bus_to_virt
-      (pci_dev->base_address[1] & PCI_BASE_ADDRESS_MEM_MASK);
+    u32 iobase = pci_dev->resource[0].start;
+    u32 * membase = bus_to_virt(pci_dev->resource[1].start);
     u8 irq = pci_dev->irq;
     
     // check IO region

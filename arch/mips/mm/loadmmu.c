@@ -62,7 +62,7 @@ extern void ld_mmu_r6000(void);
 extern void ld_mmu_tfp(void);
 extern void ld_mmu_andes(void);
 
-__initfunc(void loadmmu(void))
+void __init loadmmu(void)
 {
 	switch(mips_cputype) {
 	case CPU_R2000:

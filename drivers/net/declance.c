@@ -1000,7 +1000,7 @@ static void lance_set_multicast(struct net_device *dev)
 	dev->tbusy = 0;
 }
 
-__initfunc(static int dec_lance_init(struct net_device *dev, const int type))
+static int __init dec_lance_init(struct net_device *dev, const int type)
 {
 	static unsigned version_printed = 0;
 	struct lance_private *lp;
@@ -1194,7 +1194,7 @@ __initfunc(static int dec_lance_init(struct net_device *dev, const int type))
 
 
 /* Find all the lance cards on the system and initialize them */
-__initfunc(int dec_lance_probe(struct net_device *dev))
+int __init dec_lance_probe(struct net_device *dev)
 {
 	static int called = 0;
 

@@ -419,7 +419,7 @@ static struct busmouse a5kkbd_mouse = {
 };
 #endif
 
-__initfunc(void a5kkbd_init_hw (void))
+void __init a5kkbd_init_hw (void)
 {
 	unsigned long flags;
 

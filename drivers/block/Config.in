@@ -51,7 +51,9 @@ else
         bool '     Boot off-board chipsets first support' CONFIG_BLK_DEV_OFFBOARD
         bool '     AEC6210 chipset support' CONFIG_BLK_DEV_AEC6210
         if [ "$IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
-          bool '     ALI M15x3 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_ALI15X3
+          if [ "$CONFIG_X86" = "y" ]; then
+            bool '     ALI M15x3 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_ALI15X3
+          fi
           bool '     CMD646 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CMD646
           bool '     CY82C693 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CY82C693
         fi
@@ -61,10 +63,12 @@ else
           bool '       HPT34X DMA support (DANGEROUS)' CONFIG_BLK_DEV_HPT34X_DMA
         fi
         bool '     HPT366 chipset support' CONFIG_BLK_DEV_HPT366
-        bool '     Intel PIIXn chipsets support' CONFIG_BLK_DEV_PIIX
-        if [ "$IDEDMA_PCI_EXPERIMENTAL" = "y" -a \
-             "$CONFIG_BLK_DEV_PIIX" = "y" ]; then
-          bool '       PIIXn Tuning support (EXPERIMENTAL)' CONFIG_BLK_DEV_PIIX_TUNING
+        if [ "$CONFIG_X86" = "y" ]; then
+          bool '     Intel PIIXn chipsets support' CONFIG_BLK_DEV_PIIX
+          if [ "$IDEDMA_PCI_EXPERIMENTAL" = "y" -a \
+               "$CONFIG_BLK_DEV_PIIX" = "y" ]; then
+            bool '       PIIXn Tuning support (EXPERIMENTAL)' CONFIG_BLK_DEV_PIIX_TUNING
+          fi
         fi
         if [ "$IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
           bool '     NS87415 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_NS87415
@@ -80,10 +84,14 @@ else
             bool '       Special Mode Feature (DANGEROUS)' PDC202XX_FORCE_MASTER_MODE
           fi
         fi
-        bool '     SiS5513 chipset support' CONFIG_BLK_DEV_SIS5513
+        if [ "$CONFIG_X86" = "y" ]; then
+          bool '     SiS5513 chipset support' CONFIG_BLK_DEV_SIS5513
+        fi
         if [ "$IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
           bool '     Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290
-          bool '     VIA82C586 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82C586
+          if [ "$CONFIG_X86" = "y" ]; then
+            bool '     VIA82C586 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82C586
+          fi
         fi
       fi
       if [ "$CONFIG_PPC" = "y" -o "$CONFIG_ARM" = "y" ]; then

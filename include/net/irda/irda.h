@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Mon May 10 09:51:13 1999
+ * Modified at:   Thu Jul  8 12:53:35 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -40,6 +40,10 @@
 #define FALSE 0
 #endif
 
+#ifndef MIN
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#endif
+
 #define ALIGN __attribute__((aligned))
 #define PACK __attribute__((packed))
 
@@ -51,7 +55,7 @@ extern __u32 irda_debug;
 /* use 0 for production, 1 for verification, >2 for debug */
 #define IRDA_DEBUG_LEVEL 0
 
-#define DEBUG(n, args...) if (irda_debug >= (n)) printk(KERN_DEBUG args)
+#define DEBUG(n, args...) (irda_debug >= (n)) ? (printk(KERN_DEBUG args)) : 0
 #define ASSERT(expr, func) \
 if(!(expr)) { \
         printk( "Assertion failed! %s,%s,%s,line=%d\n",\
@@ -66,12 +70,14 @@ if(!(expr)) { \
 #define MESSAGE(args...) printk(KERN_INFO args)
 #define ERROR(args...)   printk(KERN_ERR args)
 
-#define MSECS_TO_JIFFIES(ms) (ms*HZ/1000)
+#define MSECS_TO_JIFFIES(ms) (((ms)*HZ+999)/1000)
 
 /*
  *  Magic numbers used by Linux/IR. Random numbers which must be unique to 
  *  give the best protection
  */
+typedef __u32 magic_t;
+
 #define IRTTY_MAGIC        0x2357
 #define LAP_MAGIC          0x1357
 #define LMP_MAGIC          0x4321
@@ -140,6 +146,16 @@ typedef union {
 	__u16 word;
 	__u8  byte[2];
 } __u16_host_order;
+
+/* Per-packet information we need to hide inside sk_buff */
+struct irda_skb_cb {
+	magic_t magic;     /* Be sure that we can trust the information */
+	int     mtt;       /* minimum turn around time */
+	int     xbofs;     /* number of xbofs required, used by SIR mode */
+	int     line;      /* Used by IrCOMM in IrLPT mode */
+	void    *instance; /* Used by IrTTP */
+	void (*destructor)(struct sk_buff *skb); /* Used for flow control */
+};
 
 /*
  *  Information monitored by some layers
@@ -222,7 +238,7 @@ typedef enum {
 /*
  *  Notify structure used between transport and link management layers
  */
-struct notify_t {
+typedef struct {
 	int (*data_indication)(void *priv, void *sap, struct sk_buff *skb);
 	int (*udata_indication)(void *priv, void *sap, struct sk_buff *skb);
 	void (*connect_confirm)(void *instance, void *sap, 
@@ -236,7 +252,7 @@ struct notify_t {
 	void (*flow_indication)(void *instance, void *sap, LOCAL_FLOW flow);
 	void *instance; /* Layer instance pointer */
 	char name[16];  /* Name of layer */
-};
+} notify_t;
 
 #define NOTIFY_MAX_NAME 16
 

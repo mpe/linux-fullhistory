@@ -60,7 +60,7 @@ static int mouse_irq = MOUSE_IRQ;
 MODULE_PARM(mouse_irq, "i");
 #endif
 
-__initfunc(void msmouse_setup(char *str, int *ints))
+void __init msmouse_setup(char *str, int *ints)
 {
 	if (ints[0] > 0)
 		mouse_irq=ints[1];
@@ -117,7 +117,7 @@ static struct busmouse msbusmouse = {
 	MICROSOFT_BUSMOUSE, "msbusmouse", open_mouse, release_mouse, 0
 };
 
-__initfunc(int ms_bus_mouse_init(void))
+int __init ms_bus_mouse_init(void)
 {
 	int present = 0;
 	int mse_byte, i;

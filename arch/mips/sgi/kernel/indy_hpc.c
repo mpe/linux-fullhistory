@@ -25,7 +25,7 @@ int sgi_has_ioc2 = 0;
 int sgi_guiness = 0;
 int sgi_boardid;
 
-__initfunc(void sgihpc_init(void))
+void __init sgihpc_init(void)
 {
 	unsigned long sid, crev, brev;
 

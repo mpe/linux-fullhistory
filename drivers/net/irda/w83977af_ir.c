@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Wed Nov  4 11:46:16 1998
- * Modified at:   Fri May 21 22:18:19 1999
+ * Modified at:   Wed Aug 11 09:27:54 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -90,7 +90,7 @@ static int  w83977af_dma_receive_complete(struct irda_device *idev);
 static int  w83977af_hard_xmit(struct sk_buff *skb, struct net_device *dev);
 static int  w83977af_pio_write(int iobase, __u8 *buf, int len, int fifo_size);
 static void w83977af_dma_write(struct irda_device *idev, int iobase);
-static void w83977af_change_speed(struct irda_device *idev, int baud);
+static void w83977af_change_speed(struct irda_device *idev, __u32 speed);
 static void w83977af_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void w83977af_wait_until_sent(struct irda_device *idev);
 static int  w83977af_is_receiving(struct irda_device *idev);
@@ -376,7 +376,7 @@ int w83977af_probe( int iobase, int irq, int dma)
  *    Change the speed of the device
  *
  */
-void w83977af_change_speed(struct irda_device *idev, int speed)
+void w83977af_change_speed(struct irda_device *idev, __u32 speed)
 {
 	int ir_mode = HCR_SIR;
 	int iobase; 
@@ -1203,11 +1203,6 @@ static int w83977af_net_open(struct net_device *dev)
 		return -EAGAIN;
 	}
 		
-	/* Ready to play! */
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
 	/* Save current set */
 	set = inb(iobase+SSR);
 
@@ -1221,6 +1216,9 @@ static int w83977af_net_open(struct net_device *dev)
 
 	/* Restore bank register */
 	outb(set, iobase+SSR);
+
+	/* Ready to play! */
+	irda_device_net_open(dev);
 
 	MOD_INC_USE_COUNT;
 
@@ -1240,18 +1238,18 @@ static int w83977af_net_close(struct net_device *dev)
 	__u8 set;
 
 	DEBUG(0, __FUNCTION__ "()\n");
-	
-	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
 
 	ASSERT(dev != NULL, return -1;);
+	
 	idev = (struct irda_device *) dev->priv;
 	
 	ASSERT(idev != NULL, return 0;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return 0;);
 	
 	iobase = idev->io.iobase;
+
+	/* Stop device */
+	irda_device_net_close(dev);
 
 	disable_dma(idev->io.dma);
 

@@ -11,9 +11,6 @@
 
 #define __init __attribute__ ((__section__ (".text.init")))
 #define __initdata __attribute__ ((__section__ (".data.init")))
-#define __initfunc(__arginit) \
-	__arginit __init; \
-	__arginit
 
 #if __GNUC__ >= 2 && __GNUC_MINOR__ >= 8
 #define __initlocaldata  __initdata

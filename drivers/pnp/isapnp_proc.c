@@ -230,7 +230,7 @@ static struct inode_operations isapnp_info_entry_inode_operations =
 	NULL			/* permission */
 };
 
-__initfunc(static int isapnp_proc_init(void))
+static int __init isapnp_proc_init(void)
 {
 	struct proc_dir_entry *p;
 

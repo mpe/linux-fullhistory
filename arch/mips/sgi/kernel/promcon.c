@@ -37,7 +37,7 @@ static int prom_console_wait_key(struct console *co)
     return prom_getchar();
 }
 
-__initfunc(static int prom_console_setup(struct console *co, char *options))
+static int __init prom_console_setup(struct console *co, char *options)
 {
     return 0;
 }
@@ -66,7 +66,7 @@ static struct console sercons =
  *    Register console.
  */
 
-__initfunc(long sgi_prom_console_init(long kmem_start, long kmem_end))
+long __init sgi_prom_console_init(long kmem_start, long kmem_end)
 {
     register_console(&sercons);
     return kmem_start;

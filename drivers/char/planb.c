@@ -1533,7 +1533,8 @@ static int planb_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 
 			DEBUG("PlanB: IOCTL VIDIOCSFBUF\n");
 
-                        if (!capable(CAP_SYS_ADMIN))
+                        if (!capable(CAP_SYS_ADMIN)
+			|| !capable(CAP_SYS_RAWIO))
                                 return -EPERM;
                         if (copy_from_user(&v, arg,sizeof(v)))
                                 return -EFAULT;

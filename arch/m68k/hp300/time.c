@@ -61,7 +61,7 @@ unsigned long hp300_gettimeoffset(void)
   return (USECS_PER_JIFFY * ticks) / INTVAL;
 }
 
-__initfunc(void hp300_sched_init(void (*vector)(int, void *, struct pt_regs *)))
+void __init hp300_sched_init(void (*vector)(int, void *, struct pt_regs *))
 {
   writeb(0x1, CLOCKBASE + CLKCR2);		/* select CR1 */
   writeb(0x1, CLOCKBASE + CLKCR1);		/* reset */

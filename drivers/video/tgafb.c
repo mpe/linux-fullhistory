@@ -1027,7 +1027,7 @@ int __init tgafb_setup(char *options) {
      *  Initialisation
      */
 
-__initfunc(int tgafb_init(void))
+int __init tgafb_init(void)
 {
     struct pci_dev *pdev;
 

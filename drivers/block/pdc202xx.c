@@ -491,16 +491,16 @@ int pdc202xx_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
 
-__initfunc(unsigned int pci_init_pdc202xx (struct pci_dev *dev, const char *name))
+unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 {
 	unsigned long high_16	= dev->resource[4].start & PCI_BASE_ADDRESS_IO_MASK;
 	byte udma_speed_flag	= inb(high_16 + 0x001f);
 	byte primary_mode	= inb(high_16 + 0x001a);
 	byte secondary_mode	= inb(high_16 + 0x001b);
 
-	if (dev->rom_address) {
-		pci_write_config_dword(dev, PCI_ROM_ADDRESS, dev->rom_address | PCI_ROM_ADDRESS_ENABLE);
-		printk("%s: ROM enabled at 0x%08lx\n", name, dev->rom_address);
+	if (dev->resource[PCI_ROM_RESOURCE].start) {
+		pci_write_config_dword(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
+		printk("%s: ROM enabled at 0x%08lx\n", name, dev->resource[PCI_ROM_RESOURCE].start);
 	}
 
 	if ((dev->class >> 8) != PCI_CLASS_STORAGE_IDE) {
@@ -547,7 +547,7 @@ __initfunc(unsigned int pci_init_pdc202xx (struct pci_dev *dev, const char *name
 	return dev->irq;
 }
 
-__initfunc(void ide_init_pdc202xx (ide_hwif_t *hwif))
+void __init ide_init_pdc202xx (ide_hwif_t *hwif)
 {
 	if (hwif->dma_base) {
 		hwif->dmaproc = &pdc202xx_dmaproc;

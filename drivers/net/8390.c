@@ -983,7 +983,7 @@ static void set_multicast_list(struct net_device *dev)
 }	
 
 /*
- * Initialize the rest of the 8390 device structure.  Do NOT __initfunc
+ * Initialize the rest of the 8390 device structure.  Do NOT __init
  * this, as it is used by 8390 based modular drivers too.
  */
 

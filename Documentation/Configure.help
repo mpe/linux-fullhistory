@@ -168,6 +168,11 @@ CONFIG_MATHEMU
   on the Alpha. The only time you would ever not say Y is to say M in
   order to debug the code. Say Y unless you know what you are doing.
 
+Big memory support
+CONFIG_BIGMEM
+  This option is required if you want to utilize physical memory which
+  is not covered by the kernel virtual address space (> 1GB).
+
 Normal PC floppy disk support
 CONFIG_BLK_DEV_FD
   If you want to use the floppy disk drive(s) of your PC under Linux,
@@ -930,6 +935,17 @@ CONFIG_BLK_DEV_XD
   called xd.o. 
 
   It's pretty unlikely that you have one of these: say N.
+
+Mylex DAC960/DAC1100 PCI RAID Controller support
+CONFIG_BLK_DEV_DAC960
+  This driver adds support for the Mylex DAC960, AcceleRAID, and
+  eXtremeRAID PCI RAID controllers.  See README.DAC960 for further
+  information about this driver.
+
+  If you want to compile the driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt.  The module will be
+  called DAC960.o. 
 
 Parallel port IDE device support
 CONFIG_PARIDE
@@ -4046,6 +4062,15 @@ CONFIG_AIC7XXX_RESET_DELAY
   interactions between the aic7xxx driver and the rest of the linux
   kernel. The default value has been reduced to 5 seconds. If this
   doesn't work with your hardware, try increasing this value.
+
+IBM ServeRAID Support
+CONFIG_SCSI_IPS
+  This is support for the IBM ServeRAID hardware RAID controllers.
+  Consult the SCSI-HOWTO, available via anonymous FTP from
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO, and the file
+  README.ips in drivers/scsi for more information.  If this driver
+  does not work correctly without modification please contact the
+  author by email at ipslinux@us.ibm.com.
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC

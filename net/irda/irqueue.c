@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Jun  9 13:29:31 1998
- * Modified at:   Thu Mar 11 13:27:04 1999
+ * Modified at:   Thu Jun 10 11:00:12 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (C) 1998, Aage Kvalnes <aage@cs.uit.no>
+ *     Copyright (C) 1998-1999, Aage Kvalnes <aage@cs.uit.no>
  *     Copyright (C) 1998, Dag Brattli, 
  *     All Rights Reserved.
  *
@@ -50,8 +50,6 @@ hashbin_t *hashbin_new(int type)
 	hashbin_t* hashbin;
 	int i;
 	
-	DEBUG( 4, __FUNCTION__ "()\n");
-	
 	/*
 	 * Allocate new hashbin
 	 */
@@ -84,8 +82,8 @@ int hashbin_clear( hashbin_t* hashbin, FREE_FUNC free_func)
 	QUEUE* queue;
 	int i;
 	
-	ASSERT( hashbin != NULL, return -1;);
-	ASSERT( hashbin->magic == HB_MAGIC, return -1;);
+	ASSERT(hashbin != NULL, return -1;);
+	ASSERT(hashbin->magic == HB_MAGIC, return -1;);
 
 	/*
 	 * Free the entries in the hashbin
@@ -114,22 +112,23 @@ int hashbin_clear( hashbin_t* hashbin, FREE_FUNC free_func)
  */
 int hashbin_delete( hashbin_t* hashbin, FREE_FUNC free_func)
 {
-	int i;
 	QUEUE* queue;
+	int i;
 
-	DEBUG( 4, "hashbin_destroy()\n");
+	ASSERT(hashbin != NULL, return -1;);
+	ASSERT(hashbin->magic == HB_MAGIC, return -1;);
 	
 	/*
 	 *  Free the entries in the hashbin, TODO: use hashbin_clear when
 	 *  it has been shown to work
 	 */
-	for ( i = 0; i < HASHBIN_SIZE; i ++ ) {
-		queue = dequeue_first( (QUEUE**) &hashbin->hb_queue[ i ] );
-		while( queue ) {
-			if ( free_func)
-				(*free_func)( queue );
+	for (i = 0; i < HASHBIN_SIZE; i ++ ) {
+		queue = dequeue_first((QUEUE**) &hashbin->hb_queue[i]);
+		while (queue ) {
+			if (free_func)
+				(*free_func)(queue);
 			queue = dequeue_first( 
-				(QUEUE**) &hashbin->hb_queue[ i ]);
+				(QUEUE**) &hashbin->hb_queue[i]);
 		}
 	}
 	
@@ -137,7 +136,7 @@ int hashbin_delete( hashbin_t* hashbin, FREE_FUNC free_func)
 	 *  Free the hashbin structure
 	 */
 	hashbin->magic = ~HB_MAGIC;
-	kfree( hashbin );
+	kfree(hashbin);
 
 	return 0;
 }
@@ -148,28 +147,28 @@ int hashbin_delete( hashbin_t* hashbin, FREE_FUNC free_func)
  *    Lock the hashbin
  *
  */
-void hashbin_lock( hashbin_t* hashbin, __u32 hashv, char* name, 
-		   unsigned long flags)
+void hashbin_lock(hashbin_t* hashbin, __u32 hashv, char* name, 
+		  unsigned long flags)
 {
 	int bin;
 	
-	DEBUG( 0, "hashbin_lock\n");
+	DEBUG(0, "hashbin_lock\n");
 
-	ASSERT( hashbin != NULL, return;);
-	ASSERT( hashbin->magic == HB_MAGIC, return;);
+	ASSERT(hashbin != NULL, return;);
+	ASSERT(hashbin->magic == HB_MAGIC, return;);
 
 	/*
 	 * Locate hashbin
 	 */
-	if ( name )
-		hashv = hash( name );
-	bin = GET_HASHBIN( hashv);
+	if (name)
+		hashv = hash(name);
+	bin = GET_HASHBIN(hashv);
 	
 	/* Synchronize */
 	if ( hashbin->hb_type & HB_GLOBAL )
-		spin_lock_irqsave( &hashbin->hb_mutex[ bin], flags);
+		spin_lock_irqsave(&hashbin->hb_mutex[ bin], flags);
 	else {
-		save_flags( flags);
+		save_flags(flags);
 		cli();
 	}
 }

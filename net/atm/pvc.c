@@ -139,7 +139,7 @@ static struct net_proto_family pvc_family_ops = {
  */
 
 
-__initfunc(void atmpvc_proto_init(struct net_proto *pro))
+void __init atmpvc_proto_init(struct net_proto *pro)
 {
 	int error;
 

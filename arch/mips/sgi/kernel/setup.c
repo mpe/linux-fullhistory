@@ -118,7 +118,7 @@ struct kbd_ops sgi_kbd_ops = {
 	sgi_read_status
 };
 
-__initfunc(static void sgi_irq_setup(void))
+static void __init sgi_irq_setup(void)
 {
 	sgint_init();
 
@@ -129,7 +129,7 @@ __initfunc(static void sgi_irq_setup(void))
 #endif
 }
 
-__initfunc(void sgi_setup(void))
+void __init sgi_setup(void)
 {
 #ifdef CONFIG_SERIAL_CONSOLE
 	char *ctype;

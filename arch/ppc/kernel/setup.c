@@ -121,11 +121,11 @@ struct screen_info screen_info = {
 /*
  * I really need to add multiple-console support... -- Cort
  */
-__initfunc(int pmac_display_supported(char *name))
+int __init pmac_display_supported(char *name)
 {
 	return 0;
 }
-__initfunc(void pmac_find_display(void))
+void __init pmac_find_display(void)
 {
 }
 
@@ -500,16 +500,16 @@ void ppc_setup_l2cr(char *str, int *ints)
 	}
 }
 
-__initfunc(void
-	   ppc_init(void))
+void __init
+	   ppc_init(void)
 {
 	if (ppc_md.init != NULL) {
 		ppc_md.init();
 	}
 }
 
-__initfunc(void setup_arch(char **cmdline_p,
-			   unsigned long * memory_start_p, unsigned long * memory_end_p))
+void __init setup_arch(char **cmdline_p,
+			   unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	extern int panic_timeout;
 	extern char _etext[], _edata[];

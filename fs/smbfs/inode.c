@@ -575,7 +575,7 @@ static struct file_system_type smb_fs_type = {
 	NULL
 };
 
-__initfunc(int init_smb_fs(void))
+int __init init_smb_fs(void)
 {
 	return register_filesystem(&smb_fs_type);
 }

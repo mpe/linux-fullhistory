@@ -4,9 +4,6 @@
 #if __GNUC__ > 2 || __GNUC_MINOR__ >= 90 /* egcs */
 #define __init __attribute__ ((__section__ (".text.init")))
 #define __initdata __attribute__ ((__section__ (".data.init")))
-#define __initfunc(__arginit) \
-	__arginit __init; \
-	__arginit
 
 #define __pmac __attribute__ ((__section__ (".text.pmac")))
 #define __pmacdata __attribute__ ((__section__ (".data.pmac")))
@@ -38,7 +35,6 @@
 
 #define __init
 #define __initdata
-#define __initfunc(x) x
 	
 #define __INIT
 #define __FINIT

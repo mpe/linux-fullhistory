@@ -143,7 +143,7 @@ static struct proc_dir_entry proc_zorro_devices = {
 
 static struct proc_dir_entry *proc_bus_zorro_dir;
 
-__initfunc(static int zorro_proc_attach_device(u_int slot))
+static int __init zorro_proc_attach_device(u_int slot)
 {
 	struct proc_dir_entry *entry;
 	char name[4];
@@ -158,7 +158,7 @@ __initfunc(static int zorro_proc_attach_device(u_int slot))
 	return 0;
 }
 
-__initfunc(void zorro_proc_init(void))
+void __init zorro_proc_init(void)
 {
 	u_int slot;
 

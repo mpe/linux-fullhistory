@@ -1200,7 +1200,9 @@ static void ide_do_request (ide_hwgroup_t *hwgroup, unsigned long *hwgroup_flags
 			return;
 		}
 		hwif = HWIF(drive);
-		if (hwgroup->hwif->sharing_irq && hwif != hwgroup->hwif) /* set nIEN for previous hwif */
+		if (hwgroup->hwif->sharing_irq && hwif != hwgroup->hwif &&
+		    hwif->io_ports[IDE_CONTROL_OFFSET])
+			/* set nIEN for previous hwif */
 			OUT_BYTE(hwgroup->drive->ctl|2, hwgroup->hwif->io_ports[IDE_CONTROL_OFFSET]);
 		hwgroup->hwif = hwif;
 		hwgroup->drive = drive;
@@ -2277,7 +2279,8 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 	 * this point (lost interrupt).
 	 */
 	SELECT_DRIVE(HWIF(drive), drive);
-	OUT_BYTE(drive->ctl | 2, IDE_CONTROL_REG);
+	if (IDE_CONTROL_REG)
+	    OUT_BYTE(drive->ctl | 2, IDE_CONTROL_REG);
 	OUT_BYTE(speed, IDE_NSECTOR_REG);
 	OUT_BYTE(SETFEATURES_XFER, IDE_FEATURE_REG);
 	OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);

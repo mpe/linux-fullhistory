@@ -762,7 +762,7 @@ void atari_kbd_leds (unsigned int leds)
  * Martin Rogge, 20 Aug 1995
  */
  
-__initfunc(int atari_keyb_init(void))
+int __init atari_keyb_init(void)
 {
     /* setup key map */
     memcpy(key_maps[0], ataplain_map, sizeof(plain_map));

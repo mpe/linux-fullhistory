@@ -98,7 +98,7 @@ static ptable_desc ptable_list = { &ptable_list, &ptable_list };
 
 #define PTABLE_SIZE (PTRS_PER_PMD * sizeof(pmd_t))
 
-__initfunc(void init_pointer_table(unsigned long ptable))
+void __init init_pointer_table(unsigned long ptable)
 {
 	ptable_desc *dp;
 	unsigned long page = ptable & PAGE_MASK;

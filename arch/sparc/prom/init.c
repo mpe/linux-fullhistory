@@ -35,7 +35,7 @@ struct linux_nodeops *prom_nodeops;
 extern void prom_meminit(void);
 extern void prom_ranges_init(void);
 
-__initfunc(void prom_init(struct linux_romvec *rp))
+void __init prom_init(struct linux_romvec *rp)
 {
 #ifdef CONFIG_SUN4
 	extern struct linux_romvec *sun4_prom_init(void);

@@ -467,7 +467,7 @@ static struct teql_master the_master = {
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(int teql_init(void))
+int __init teql_init(void)
 #endif
 {
 	int err;

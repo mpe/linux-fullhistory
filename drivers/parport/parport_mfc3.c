@@ -313,7 +313,7 @@ static struct parport_operations pp_mfc3_ops = {
 
 /* ----------- Initialisation code --------------------------------- */
 
-__initfunc(int parport_mfc3_init(void))
+int __init parport_mfc3_init(void)
 {
 	struct parport *p;
 	int pias = 0;

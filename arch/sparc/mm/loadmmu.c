@@ -31,7 +31,7 @@ unsigned int pg_iobits;
 extern void ld_mmu_sun4c(void);
 extern void ld_mmu_srmmu(void);
 
-__initfunc(void load_mmu(void))
+void __init load_mmu(void)
 {
 	switch(sparc_cpu_model) {
 	case sun4c:

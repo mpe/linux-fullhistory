@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Sun May 16 14:33:42 1999
+ * Modified at:   Thu Jul 15 01:17:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -36,7 +36,7 @@
 static void tekram_reset(struct irda_device *dev);
 static void tekram_open(struct irda_device *dev, int type);
 static void tekram_close(struct irda_device *dev);
-static void tekram_change_speed(struct irda_device *dev, int baud);
+static void tekram_change_speed(struct irda_device *dev, __u32 speed);
 static void tekram_init_qos(struct irda_device *idev, struct qos_info *qos);
 
 #define TEKRAM_115200 0x00
@@ -85,7 +85,7 @@ static void tekram_close(struct irda_device *idev)
 }
 
 /*
- * Function tekram_change_speed (tty, baud)
+ * Function tekram_change_speed (tty, speed)
  *
  *    Set the speed for the Tekram IRMate 210 type dongle. Warning, this 
  *    function must be called with a process context!
@@ -100,7 +100,7 @@ static void tekram_close(struct irda_device *idev)
  *    6. wait at least 50 us, new setting (baud rate, etc) takes effect here 
  *       after
  */
-static void tekram_change_speed(struct irda_device *idev, int baud)
+static void tekram_change_speed(struct irda_device *idev, __u32 speed)
 {
 	__u8 byte;
 	
@@ -109,7 +109,7 @@ static void tekram_change_speed(struct irda_device *idev, int baud)
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 
-	switch (baud) {
+	switch (speed) {
 	default:
 	case 9600:
 		byte = TEKRAM_PW|TEKRAM_9600;
@@ -135,7 +135,7 @@ static void tekram_change_speed(struct irda_device *idev, int baud)
 	irda_device_set_dtr_rts(idev, TRUE, FALSE);
 	
 	/* Wait at least 7us */
-	udelay(7);
+	udelay(10);
 
 	/* Write control byte */
 	irda_device_raw_write(idev, &byte, 1);

@@ -46,16 +46,36 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 		}
 	}
 	si->cluster_nr = SWAPFILE_CLUSTER;
+
+	/* try to find an empty (even not aligned) cluster. */
+	offset = si->lowest_bit;
+ check_next_cluster:
+	if (offset+SWAPFILE_CLUSTER-1 <= si->highest_bit)
+	{
+		int nr;
+		for (nr = offset; nr < offset+SWAPFILE_CLUSTER; nr++)
+			if (si->swap_map[nr])
+			{
+				offset = nr+1;
+				goto check_next_cluster;
+			}
+		/* We found a completly empty cluster, so start
+		 * using it.
+		 */
+		goto got_page;
+	}
+	/* No luck, so now go finegrined as usual. -Andrea */
 	for (offset = si->lowest_bit; offset <= si->highest_bit ; offset++) {
 		if (si->swap_map[offset])
 			continue;
-		si->lowest_bit = offset;
-got_page:
-		si->swap_map[offset] = 1;
-		nr_swap_pages--;
+	got_page:
+		if (offset == si->lowest_bit)
+			si->lowest_bit++;
 		if (offset == si->highest_bit)
 			si->highest_bit--;
-		si->cluster_next = offset;
+		si->swap_map[offset] = 1;
+		nr_swap_pages--;
+		si->cluster_next = offset+1;
 		return offset;
 	}
 	return 0;
@@ -81,12 +101,9 @@ unsigned long get_swap_page(void)
 				entry = SWP_ENTRY(type,offset);
 				type = swap_info[type].next;
 				if (type < 0 ||
-					p->prio != swap_info[type].prio) 
-				{
+					p->prio != swap_info[type].prio) {
 						swap_list.next = swap_list.head;
-				}
-				else
-				{
+				} else {
 					swap_list.next = type;
 				}
 				return entry;
@@ -129,8 +146,7 @@ void swap_free(unsigned long entry)
 	if (!p->swap_map[offset])
 		goto bad_free;
 	if (p->swap_map[offset] < SWAP_MAP_MAX) {
-		if (!--p->swap_map[offset])
-		{
+		if (!--p->swap_map[offset]) {
 			if (offset < p->lowest_bit)
 				p->lowest_bit = offset;
 			if (offset > p->highest_bit)

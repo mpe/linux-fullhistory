@@ -1127,7 +1127,7 @@ static void devinet_sysctl_unregister(struct ipv4_devconf *p)
 }
 #endif
 
-__initfunc(void devinet_init(void))
+void __init devinet_init(void)
 {
 	register_gifconf(PF_INET, inet_gifconf);
 	register_netdevice_notifier(&ip_netdev_notifier);

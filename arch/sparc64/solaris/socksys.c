@@ -174,8 +174,8 @@ static struct file_operations socksys_fops = {
 	socksys_release,/* release */
 };
 
-__initfunc(int
-init_socksys(void))
+int __init
+init_socksys(void)
 {
 	int ret;
 	struct file * file;

@@ -1044,8 +1044,7 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u
         dr.index = cpu_to_le16p(&index);
         dr.length = cpu_to_le16p(&size);
 
-        return dev->bus->op->control_msg(dev, usb_rcvctrlpipe(dev,0), &dr,
-                data, size);
+        return dev->bus->op->control_msg(dev, pipe, &dr, data, size);
 }
 
 void *usb_request_irq(struct usb_device *dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)

@@ -299,24 +299,7 @@ icside_config_drive(ide_drive_t *drive, int mode)
 		drive->drive_data = 250;
 	}
 
-#if 1
 	err = ide_config_drive_speed(drive, (byte) speed);
-#else
-	/*
-	 * Don't use ide_wait_cmd here - it will
-	 * attempt to set_geometry and recalibrate,
-	 * but for some reason these don't work at
-	 * this point (lost interrupt).
-	 */
-	SELECT_DRIVE(hwif, drive);
-	OUT_BYTE(drive->ctl | 2, IDE_CONTROL_REG);
-	OUT_BYTE(speed, IDE_NSECTOR_REG);
-	OUT_BYTE(SETFEATURES_XFER, IDE_FEATURE_REG);
-	OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);
-
-	err = ide_wait_stat(drive, DRIVE_READY,
-			    BUSY_STAT|DRQ_STAT|ERR_STAT, WAIT_CMD);
-#endif
 
 	if (err == 0) {
 		drive->id->dma_mword &= 0x00ff;

@@ -1288,7 +1288,7 @@ static inline void bt848_set_eogeo(struct bttv *btv, int odd, u8 vtc,
 }
 
 
-static void bt848_set_geo(struct bttv *btv, u16 width, u16 height, u16 fmt)
+static void bt848_set_geo(struct bttv *btv, u16 width, u16 height, u16 fmt, int pllset)
 {
         u16 vscale, hscale;
 	u32 xsf, sr;
@@ -1297,9 +1297,13 @@ static void bt848_set_geo(struct bttv *btv, u16 width, u16 height, u16 fmt)
 	u16 inter;
 	u8 crop, vtc;  
 	struct tvnorm *tvn;
+	unsigned long flags;
  	
 	if (!width || !height)
 	        return;
+	        
+	save_flags(flags);
+	cli();
 
 	tvn=&tvnorms[btv->win.norm];
 	
@@ -1324,7 +1328,8 @@ static void bt848_set_geo(struct bttv *btv, u16 width, u16 height, u16 fmt)
 	btwrite(1, BT848_VBI_PACK_DEL);
 
         btv->pll.pll_ofreq = tvn->Fsc;
-        set_pll(btv);
+        if(pllset)
+        	set_pll(btv);
 
 	btwrite(fmt, BT848_COLOR_FMT);
 #ifdef __sparc__
@@ -1372,6 +1377,8 @@ static void bt848_set_geo(struct bttv *btv, u16 width, u16 height, u16 fmt)
 			hdelay, vdelay, crop);
 	bt848_set_eogeo(btv, 1, vtc, hscale, vscale, hactive, vactive,
 			hdelay, vdelay, crop);
+			
+	restore_flags(flags);
 }
 
 
@@ -1400,7 +1407,7 @@ static void bt848_set_winsize(struct bttv *btv)
 	else
 	        btor(BT848_CAP_CTL_DITH_FRAME, BT848_CAP_CTL);
 
-        bt848_set_geo(btv, btv->win.width, btv->win.height, format);
+        bt848_set_geo(btv, btv->win.width, btv->win.height, format, 1);
 }
 
 /*
@@ -1976,7 +1983,8 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		{
 			struct video_buffer v;
 #if LINUX_VERSION_CODE >= 0x020100
-			if(!capable(CAP_SYS_ADMIN))
+			if(!capable(CAP_SYS_ADMIN)
+			&& !capable(CAP_SYS_RAWIO))
 #else
 			if(!suser())
 #endif
@@ -2161,7 +2169,8 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 
 		case BTTV_WRITEE:
 #if LINUX_VERSION_CODE >= 0x020100
-			if(!capable(CAP_SYS_ADMIN))
+			if(!capable(CAP_SYS_ADMIN)
+			|| !capable(CAP_SYS_RAWIO))
 #else
 			if(!suser())
 #endif
@@ -3432,14 +3441,14 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 					btv->risc_jmp[11]=cpu_to_le32(btv->gre);
 					bt848_set_geo(btv, btv->gwidth,
 						      btv->gheight,
-						      btv->gfmt);
+						      btv->gfmt, 0);
 				} else {
 					bt848_set_risc_jmps(btv);
 					btand(~BT848_VSCALE_COMB, BT848_E_VSCALE_HI);
 					btand(~BT848_VSCALE_COMB, BT848_O_VSCALE_HI);
                                         bt848_set_geo(btv, btv->win.width, 
 						      btv->win.height,
-						      btv->win.color_fmt);
+						      btv->win.color_fmt, 0);
 				}
 				wake_up_interruptible(&btv->capq);
 				break;
@@ -3450,7 +3459,7 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 				btv->risc_jmp[11]=cpu_to_le32(btv->gre);
 				btv->risc_jmp[12]=cpu_to_le32(BT848_RISC_JUMP);
 				bt848_set_geo(btv, btv->gwidth, btv->gheight,
-					      btv->gfmt);
+					      btv->gfmt, 0);
 			}
 		}
 		if (astat&BT848_INT_OCERR) 

@@ -254,8 +254,8 @@ ether1_readbuffer (struct net_device *dev, void *data, unsigned int start, unsig
 	}
 }
 
-__initfunc(static int
-ether1_ramtest (struct net_device *dev, unsigned char byte))
+static int __init
+ether1_ramtest (struct net_device *dev, unsigned char byte)
 {
 	unsigned char *buffer = kmalloc (BUFFER_SIZE, GFP_KERNEL);
 	int i, ret = BUFFER_SIZE;
@@ -308,8 +308,8 @@ ether1_reset (struct net_device *dev)
 	return BUS_16;
 }
 
-__initfunc(static int
-ether1_init_2 (struct net_device *dev))
+static int __init
+ether1_init_2 (struct net_device *dev)
 {
 	int i;
 	dev->mem_start = 0;
@@ -612,8 +612,8 @@ ether1_init_for_open (struct net_device *dev)
 	return failures ? 1 : 0;
 }
 
-__initfunc(static int
-ether1_probe1 (struct net_device *dev))
+static int __init
+ether1_probe1 (struct net_device *dev)
 {
 	static unsigned int version_printed = 0;
 	struct ether1_priv *priv;
@@ -664,8 +664,8 @@ ether1_probe1 (struct net_device *dev))
     
 /* ------------------------------------------------------------------------- */
 
-__initfunc(static void
-ether1_addr (struct net_device *dev))
+static void __init
+ether1_addr (struct net_device *dev)
 {
 	int i;
     
@@ -673,8 +673,8 @@ ether1_addr (struct net_device *dev))
 		dev->dev_addr[i] = inb (IDPROM_ADDRESS + i);
 }
 
-__initfunc(int
-ether1_probe (struct net_device *dev))
+int __init
+ether1_probe (struct net_device *dev)
 {
 #ifndef MODULE
 	struct expansion_card *ec;

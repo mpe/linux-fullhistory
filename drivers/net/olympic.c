@@ -150,7 +150,7 @@ static int sprintf_info(char *buffer, struct net_device *dev) ;
 #endif
 #endif
 
-__initfunc(int olympic_probe(struct net_device *dev)) 
+int __init olympic_probe(struct net_device *dev)
 {
 	int cards_found;
 
@@ -158,7 +158,7 @@ __initfunc(int olympic_probe(struct net_device *dev))
 	return cards_found ? 0 : -ENODEV;
 }
 
-__initfunc(static int olympic_scan(struct net_device *dev)) 
+static int __init olympic_scan(struct net_device *dev)
 {
 	struct pci_dev *pci_device = NULL ;
 	struct olympic_private *olympic_priv;
@@ -226,7 +226,7 @@ __initfunc(static int olympic_scan(struct net_device *dev))
 }
 
 
-__initfunc(static int olympic_init(struct net_device *dev)) 
+static int __init olympic_init(struct net_device *dev)
 {
     	struct olympic_private *olympic_priv;
 	__u8 *olympic_mmio, *init_srb,*adapter_addr;

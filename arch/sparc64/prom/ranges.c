@@ -87,11 +87,11 @@ void prom_apply_central_ranges(struct linux_central *central,
 				 central->num_central_ranges);
 }
 
-__initfunc(void prom_ranges_init(void))
+void __init prom_ranges_init(void)
 {
 }
 
-__initfunc(void prom_sbus_ranges_init(int iommund, struct linux_sbus *sbus))
+void __init prom_sbus_ranges_init(int iommund, struct linux_sbus *sbus)
 {
 	int success;
 	
@@ -103,7 +103,7 @@ __initfunc(void prom_sbus_ranges_init(int iommund, struct linux_sbus *sbus))
 		sbus->num_sbus_ranges = (success/sizeof(struct linux_prom_ranges));
 }
 
-__initfunc(void prom_central_ranges_init(int cnode, struct linux_central *central))
+void __init prom_central_ranges_init(int cnode, struct linux_central *central)
 {
 	int success;
 	
@@ -115,7 +115,7 @@ __initfunc(void prom_central_ranges_init(int cnode, struct linux_central *centra
 		central->num_central_ranges = (success/sizeof(struct linux_prom_ranges));
 }
 
-__initfunc(void prom_fhc_ranges_init(int fnode, struct linux_fhc *fhc))
+void __init prom_fhc_ranges_init(int fnode, struct linux_fhc *fhc)
 {
 	int success;
 	
@@ -128,7 +128,7 @@ __initfunc(void prom_fhc_ranges_init(int fnode, struct linux_fhc *fhc))
 }
 
 #ifdef CONFIG_PCI
-__initfunc(void prom_ebus_ranges_init(struct linux_ebus *ebus))
+void __init prom_ebus_ranges_init(struct linux_ebus *ebus)
 {
 	int success;
 
@@ -140,7 +140,7 @@ __initfunc(void prom_ebus_ranges_init(struct linux_ebus *ebus))
 		ebus->num_ebus_ranges = (success/sizeof(struct linux_prom_ebus_ranges));
 }
 
-__initfunc(void prom_ebus_intmap_init(struct linux_ebus *ebus))
+void __init prom_ebus_intmap_init(struct linux_ebus *ebus)
 {
 	int success;
 
@@ -162,7 +162,7 @@ __initfunc(void prom_ebus_intmap_init(struct linux_ebus *ebus))
 	}
 }
 
-__initfunc(void prom_pbm_ranges_init(int pnode, struct linux_pbm_info *pbm))
+void __init prom_pbm_ranges_init(int pnode, struct linux_pbm_info *pbm)
 {
 	int success;
 
@@ -174,7 +174,7 @@ __initfunc(void prom_pbm_ranges_init(int pnode, struct linux_pbm_info *pbm))
 		pbm->num_pbm_ranges = (success/sizeof(struct linux_prom_pci_ranges));
 }
 
-__initfunc(void prom_pbm_intmap_init(int pnode, struct linux_pbm_info *pbm))
+void __init prom_pbm_intmap_init(int pnode, struct linux_pbm_info *pbm)
 {
 	int success;
 

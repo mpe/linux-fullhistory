@@ -92,6 +92,8 @@ extern int sbusfb_init(void);
 extern int sbusfb_setup(char*);
 extern int valkyriefb_init(void);
 extern int valkyriefb_setup(char*);
+extern int control_init(void);
+extern int control_setup(char*);
 extern int g364fb_init(void);
 extern int fm2fb_init(void);
 extern int fm2fb_setup(char*);
@@ -176,6 +178,9 @@ static struct {
 #ifdef CONFIG_FB_HP300
 	{ "hpfb", hpfb_init, hpfb_setup },
 #endif 
+#ifdef CONFIG_FB_CONTROL
+	{ "controlfb", control_init, control_setup },
+#endif
 #ifdef CONFIG_FB_VALKYRIE
 	{ "valkyriefb", valkyriefb_init, valkyriefb_setup },
 #endif

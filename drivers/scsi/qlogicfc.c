@@ -635,7 +635,8 @@ struct init_cb {
 #define AS_FIRMWARE_DEAD      -1
 #define AS_LOOP_DOWN           0
 #define AS_LOOP_GOOD           1
-#define AS_REDO_PORTDB         2
+#define AS_REDO_FABRIC_PORTDB  2
+#define AS_REDO_LOOP_PORTDB    4
 
 struct isp2x00_hostdata {
 	u_char revision;
@@ -965,30 +966,31 @@ int isp2x00_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int
 	}
 	printk("qlogicfc%d : Fabric found.\n", hostdata->host_id);
 
-
-	memset(&req, 0, sizeof(req));
+	if (hostdata->adapter_state & AS_REDO_LOOP_PORTDB){
+	        memset(&req, 0, sizeof(req));
 	
-	req.len = 8;
-	req.response_low = virt_to_bus_low32(sns_response);
-	req.response_high = virt_to_bus_high32(sns_response);
-	req.sub_len = 22;
-	req.data[0] = 0x17;
-	req.data[1] = 0x02;
-	req.data[8] = (u_char) (hostdata->port_id & 0xff);
-	req.data[9] = (u_char) (hostdata->port_id >> 8 & 0xff);
-	req.data[10] = (u_char) (hostdata->port_id >> 16 & 0xff);
-	req.data[13] = 0x01;
-	param[0] = MBOX_SEND_SNS;
-	param[1] = 30;
-	param[2] = virt_to_bus_low32(&req) >> 16;
-	param[3] = virt_to_bus_low32(&req);
-	param[6] = virt_to_bus_high32(&req) >> 16;
-	param[7] = virt_to_bus_high32(&req);
+		req.len = 8;
+		req.response_low = virt_to_bus_low32(sns_response);
+		req.response_high = virt_to_bus_high32(sns_response);
+		req.sub_len = 22;
+		req.data[0] = 0x17;
+		req.data[1] = 0x02;
+		req.data[8] = (u_char) (hostdata->port_id & 0xff);
+		req.data[9] = (u_char) (hostdata->port_id >> 8 & 0xff);
+		req.data[10] = (u_char) (hostdata->port_id >> 16 & 0xff);
+		req.data[13] = 0x01;
+		param[0] = MBOX_SEND_SNS;
+		param[1] = 30;
+		param[2] = virt_to_bus_low32(&req) >> 16;
+		param[3] = virt_to_bus_low32(&req);
+		param[6] = virt_to_bus_high32(&req) >> 16;
+		param[7] = virt_to_bus_high32(&req);
+		
+		isp2x00_mbox_command(host, param);
 	
-	isp2x00_mbox_command(host, param);
-	
-	if (param[0] != MBOX_COMMAND_COMPLETE)
-	        printk("qlogicfc%d : error sending RFC-4\n", hostdata->host_id);	       
+		if (param[0] != MBOX_COMMAND_COMPLETE)
+		        printk("qlogicfc%d : error sending RFC-4\n", hostdata->host_id);	       
+	}
 
 	port_id = hostdata->port_id;
 	while (!done) {
@@ -1131,9 +1133,9 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 
 	DEBUG(isp2x00_print_scsi_cmd(Cmnd));
 
-	if (hostdata->adapter_state == AS_REDO_PORTDB) {
-		hostdata->adapter_state = AS_LOOP_GOOD;
+	if (hostdata->adapter_state & AS_REDO_FABRIC_PORTDB || hostdata->adapter_state & AS_REDO_LOOP_PORTDB) {
 		isp2x00_make_portdb(host);
+		hostdata->adapter_state = AS_LOOP_GOOD;
 		printk("qlogicfc%d : Port Database\n", hostdata->host_id);
 		for (i = 0; hostdata->port_db[i].wwn != 0; i++) {
 			printk("wwn: %08x%08x  scsi_id: %x  loop_id: %x\n", (u_int) (hostdata->port_db[i].wwn >> 32), (u_int) hostdata->port_db[i].wwn, i, hostdata->port_db[i].loop_id);
@@ -1270,6 +1272,9 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	}
 
 	switch (Cmnd->cmnd[0]) {
+	case TEST_UNIT_READY:
+	case START_STOP:
+	        break;
 	case WRITE_10:
 	case WRITE_6:
 	case WRITE_BUFFER:
@@ -1378,7 +1383,7 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 		case LOOP_UP:
 		case POINT_TO_POINT_UP:
 		        printk("qlogicfc%d : link is up\n", hostdata->host_id);
-			hostdata->adapter_state = AS_REDO_PORTDB;
+			hostdata->adapter_state = AS_REDO_FABRIC_PORTDB | AS_REDO_LOOP_PORTDB;
 			break;
 		case LOOP_DOWN:
 		        printk("qlogicfc%d : link is down\n", hostdata->host_id);
@@ -1387,12 +1392,15 @@ void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 		case CONNECTION_MODE:
 		        printk("received CONNECTION_MODE irq %x\n", inw(host->io_port + MBOX1));
 			break;
-		case LIP_OCCURED:
 		case CHANGE_NOTIFICATION:
+			if (hostdata->adapter_state == AS_LOOP_GOOD)
+				hostdata->adapter_state = AS_REDO_FABRIC_PORTDB;
+			break;		        
+		case LIP_OCCURED:
 		case PORT_DB_CHANGED:
 		case LIP_RECEIVED:
 			if (hostdata->adapter_state == AS_LOOP_GOOD)
-				hostdata->adapter_state = AS_REDO_PORTDB;
+				hostdata->adapter_state = AS_REDO_LOOP_PORTDB;
 			break;
 		case SYSTEM_ERROR:
 			printk("qlogicfc%d : The firmware just choked.\n", hostdata->host_id);

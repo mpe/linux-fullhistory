@@ -2222,7 +2222,7 @@ struct proto tcp_prot = {
 
 
 
-__initfunc(void tcp_v4_init(struct net_proto_family *ops))
+void __init tcp_v4_init(struct net_proto_family *ops)
 {
 	int err;
 

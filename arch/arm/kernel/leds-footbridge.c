@@ -223,8 +223,8 @@ static void dummy_leds_event(led_event_t evt)
 {
 }
 
-__initfunc(void
-init_leds_event(led_event_t evt))
+void __init
+init_leds_event(led_event_t evt)
 {
 	switch (machine_arch_type) {
 #ifdef CONFIG_FOOTBRIDGE

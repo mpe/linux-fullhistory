@@ -1295,7 +1295,7 @@ static struct proc_dir_entry proc_net_nr_nodes = {
 
 static struct net_device *dev_nr;
 
-__initfunc(void nr_proto_init(struct net_proto *pro))
+void __init nr_proto_init(struct net_proto *pro)
 {
 	int i;
 

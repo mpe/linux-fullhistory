@@ -68,7 +68,8 @@ static int ide_set_drive_pio_mode(ide_drive_t *drive, byte pio)
 		 * the correct drive has been selected.
 		 */
 		SELECT_DRIVE(hwif, drive);
-		OUT_BYTE(drive->ctl | 2, IDE_CONTROL_REG);
+		if (IDE_CONTROL_REG)
+			OUT_BYTE(drive->ctl | 2, IDE_CONTROL_REG);
 		OUT_BYTE(0x08 | pio,  IDE_NSECTOR_REG);
 		OUT_BYTE(0x03, IDE_FEATURE_REG);
 		OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);
@@ -79,8 +80,8 @@ static int ide_set_drive_pio_mode(ide_drive_t *drive, byte pio)
 			       drive->name);
 			return 1;
 		}
-
-		OUT_BYTE(drive->ctl, IDE_CONTROL_REG);
+		if (IDE_CONTROL_REG)
+			OUT_BYTE(drive->ctl, IDE_CONTROL_REG);
 	}
 
 	return 0;

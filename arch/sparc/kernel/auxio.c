@@ -13,7 +13,7 @@
 /* Probe and map in the Auxiliary I/O register */
 unsigned char *auxio_register;
 
-__initfunc(void auxio_probe(void))
+void __init auxio_probe(void)
 {
 	int node, auxio_nd;
 	struct linux_prom_registers auxregs[1];
@@ -68,7 +68,7 @@ __initfunc(void auxio_probe(void))
 
 volatile unsigned char * auxio_power_register = NULL;
 
-__initfunc(void auxio_power_probe(void))
+void __init auxio_power_probe(void)
 {
 	struct linux_prom_registers regs;
 	int node;

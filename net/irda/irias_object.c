@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct  1 22:50:04 1998
- * Modified at:   Mon Mar 22 13:22:35 1999
+ * Modified at:   Mon Jun 21 16:11:13 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -35,9 +35,7 @@ hashbin_t *objects = NULL;
 /*
  *  Used when a missing value needs to be returned
  */
-struct ias_value missing = {
-        IAS_MISSING,	0,	0,	{ 0 }
-};
+struct ias_value missing = { IAS_MISSING, 0, 0,	{0}};
 
 /*
  * Function strdup (str)
@@ -45,20 +43,20 @@ struct ias_value missing = {
  *    My own kernel version of strdup!
  *
  */
-char *strdup( char *str)
+char *strdup(char *str)
 {
 	char *new_str;
 	
-	if ( str == NULL)
+	if (str == NULL)
 		return NULL;
 
-	ASSERT( strlen( str) < 64, return NULL;);
+	ASSERT(strlen( str) < 64, return NULL;);
 	
-        new_str = kmalloc( strlen( str)+1, GFP_ATOMIC);
-        if ( new_str == NULL)
+        new_str = kmalloc(strlen(str)+1, GFP_ATOMIC);
+        if (new_str == NULL)
 		return NULL;
 	
-	strcpy( new_str, str);
+	strcpy(new_str, str);
 	
 	return new_str;
 }
@@ -77,17 +75,17 @@ struct ias_object *irias_new_object( char *name, int id)
 
 	obj = (struct ias_object *) kmalloc( sizeof( struct ias_object), 
 					     GFP_ATOMIC);
-	if ( obj == NULL) {
-		DEBUG( 0, __FUNCTION__ "(), Unable to allocate object!\n");
+	if (obj == NULL) {
+		DEBUG(0, __FUNCTION__ "(), Unable to allocate object!\n");
 		return NULL;
 	}
-	memset( obj, 0, sizeof( struct ias_object));
+	memset(obj, 0, sizeof( struct ias_object));
 
 	obj->magic = IAS_OBJECT_MAGIC;
 	obj->name = strdup( name);
 	obj->id = id;
 
-	obj->attribs = hashbin_new( HB_LOCAL);
+	obj->attribs = hashbin_new(HB_LOCAL);
 	
 	return obj;
 }
@@ -98,18 +96,33 @@ struct ias_object *irias_new_object( char *name, int id)
  *    Delete given attribute and deallocate all its memory
  *
  */
-void __irias_delete_attrib( struct ias_attrib *attrib)
+void __irias_delete_attrib(struct ias_attrib *attrib)
 {
-	ASSERT( attrib != NULL, return;);
-	ASSERT( attrib->magic == IAS_ATTRIB_MAGIC, return;);
+	ASSERT(attrib != NULL, return;);
+	ASSERT(attrib->magic == IAS_ATTRIB_MAGIC, return;);
 
-	if ( attrib->name)
-		kfree( attrib->name);
+	if (attrib->name)
+		kfree(attrib->name);
 
-	irias_delete_value( attrib->value);
+	irias_delete_value(attrib->value);
 	attrib->magic = ~IAS_ATTRIB_MAGIC;
 	
-	kfree( attrib);
+	kfree(attrib);
+}
+
+void __irias_delete_object(struct ias_object *obj)
+{
+	ASSERT(obj != NULL, return;);
+	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return;);
+
+	if (obj->name)
+		kfree(obj->name);
+	
+	hashbin_delete(obj->attribs, (FREE_FUNC) __irias_delete_attrib);
+	
+	obj->magic = ~IAS_OBJECT_MAGIC;
+	
+	kfree(obj);
 }
 
 /*
@@ -119,38 +132,20 @@ void __irias_delete_attrib( struct ias_attrib *attrib)
  *    with this object and the object itself
  *
  */
-void __irias_delete_object( struct ias_object *obj) 
+int irias_delete_object(struct ias_object *obj) 
 {
-	ASSERT( obj != NULL, return;);
-	ASSERT( obj->magic == IAS_OBJECT_MAGIC, return;);
-	
-	if ( obj->name)
-		kfree( obj->name);
-	
-	hashbin_delete( obj->attribs, (FREE_FUNC) __irias_delete_attrib);
-	
-	obj->magic = ~IAS_OBJECT_MAGIC;
-	
-	kfree( obj);
-}
+	struct ias_object *node;
 
-/*
- * Function irias_remove_object (obj)
- *
- *    Remove object with give name from the LM-IAS object database
- *
- */
-void irias_delete_object( char *obj_name)
-{
-	struct ias_object *obj;
+	ASSERT(obj != NULL, return -1;);
+	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return -1;);
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	node = hashbin_remove(objects, 0, obj->name);
+	if (!node)
+		return 0; /* Already removed */
 
-	ASSERT( obj_name != NULL, return;);
+	__irias_delete_object(node);
 
-	obj = hashbin_remove( objects, 0, obj_name);
-
-	__irias_delete_object( obj);
+	return 0;
 }
 
 /*
@@ -159,14 +154,14 @@ void irias_delete_object( char *obj_name)
  *    Insert an object into the LM-IAS database
  *
  */
-void irias_insert_object( struct ias_object *obj)
+void irias_insert_object(struct ias_object *obj)
 {
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 	
-	ASSERT( obj != NULL, return;);
-	ASSERT( obj->magic == IAS_OBJECT_MAGIC, return;);
+	ASSERT(obj != NULL, return;);
+	ASSERT(obj->magic == IAS_OBJECT_MAGIC, return;);
 	
-	hashbin_insert( objects, (QUEUE *) obj, 0, obj->name);
+	hashbin_insert(objects, (QUEUE *) obj, 0, obj->name);
 }
 
 /*
@@ -175,11 +170,11 @@ void irias_insert_object( struct ias_object *obj)
  *    Find object with given name
  *
  */
-struct ias_object *irias_find_object( char *name)
+struct ias_object *irias_find_object(char *name)
 {
-	ASSERT( name != NULL, return NULL;);
+	ASSERT(name != NULL, return NULL;);
 
-	return hashbin_find( objects, 0, name);
+	return hashbin_find(objects, 0, name);
 }
 
 /*
@@ -278,8 +273,6 @@ void irias_add_integer_attrib( struct ias_object *obj, char *name, int value)
 {
 	struct ias_attrib *attrib;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
-
 	ASSERT( obj != NULL, return;);
 	ASSERT( obj->magic == IAS_OBJECT_MAGIC, return;);
 	ASSERT( name != NULL, return;);
@@ -315,11 +308,6 @@ void irias_add_octseq_attrib( struct ias_object *obj, char *name,
 {
 	struct ias_attrib *attrib;
 	
-	DEBUG( 0, __FUNCTION__ "()\n");
-	
-	DEBUG( 0, __FUNCTION__ ": name=%s\n", name);
-	DEBUG( 0, __FUNCTION__ ": len=%d\n", len);
-	
 	ASSERT( obj != NULL, return;);
 	ASSERT( obj->magic == IAS_OBJECT_MAGIC, return;);
 	
@@ -354,11 +342,6 @@ void irias_add_string_attrib( struct ias_object *obj, char *name, char *value)
 {
 	struct ias_attrib *attrib;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
-
-	DEBUG( 4, __FUNCTION__ ": name=%s\n", name);
-	DEBUG( 4, __FUNCTION__ ": name=%s\n", value);
-	
 	ASSERT( obj != NULL, return;);
 	ASSERT( obj->magic == IAS_OBJECT_MAGIC, return;);
 

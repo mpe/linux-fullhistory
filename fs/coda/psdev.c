@@ -334,7 +334,7 @@ static struct file_operations coda_psdev_fops = {
 
 
 
-__initfunc(int init_coda(void)) 
+int __init init_coda(void)
 {
 	int status;
 	printk(KERN_INFO "Coda Kernel/Venus communications, v4.6.0, braam@cs.cmu.edu\n");

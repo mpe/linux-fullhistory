@@ -47,7 +47,7 @@ static ctl_table x25_root_table[] = {
 	{0}
 };
 
-__initfunc(void x25_register_sysctl(void))
+void __init x25_register_sysctl(void)
 {
 	x25_table_header = register_sysctl_table(x25_root_table, 1);
 }

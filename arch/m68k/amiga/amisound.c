@@ -40,7 +40,7 @@ u_short amiga_audio_period = MAX_PERIOD;
 
 static u_long clock_constant;
 
-__initfunc(void amiga_init_sound(void))
+void __init amiga_init_sound(void)
 {
 	snd_data = amiga_chip_alloc(sizeof(sine_data));
 	if (!snd_data) {

@@ -93,7 +93,7 @@ static int tfp_user_mode(struct pt_regs *regs)
 	return (regs->cp0_status & ST0_KSU) == KSU_USER;
 }
 
-__initfunc(void ld_mmu_tfp(void))
+void __init ld_mmu_tfp(void)
 {
 	flush_cache_all = tfp_flush_cache_all;
 	flush_cache_mm = tfp_flush_cache_mm;

@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Dec 26 10:59:03 1998
- * Modified at:   Wed May 19 15:29:56 1999
+ * Modified at:   Tue Aug 24 13:33:57 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -73,11 +73,11 @@ static int  uircc_dma_receive(struct irda_device *idev);
 static int  uircc_dma_receive_complete(struct irda_device *idev, int iobase);
 static int  uircc_hard_xmit(struct sk_buff *skb, struct net_device *dev);
 static void uircc_dma_write(struct irda_device *idev, int iobase);
-static void uircc_change_speed(struct irda_device *idev, int baud);
+static void uircc_change_speed(struct irda_device *idev, __u32 baud);
 static void uircc_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void uircc_wait_until_sent(struct irda_device *idev);
 static int  uircc_is_receiving(struct irda_device *idev);
-static int uircc_toshiba_cmd(int *retval, int arg0, int arg1, int arg2);
+static int  uircc_toshiba_cmd(int *retval, int arg0, int arg1, int arg2);
 static int  uircc_net_init(struct net_device *dev);
 static int  uircc_net_open(struct net_device *dev);
 static int  uircc_net_close(struct net_device *dev);
@@ -318,7 +318,7 @@ static int uircc_probe(int iobase, int iobase2, int irq, int dma)
  *    Change the speed of the device
  *
  */
-static void uircc_change_speed(struct irda_device *idev, int speed)
+static void uircc_change_speed(struct irda_device *idev, __u32 speed)
 {
 	struct uircc_cb *self;
 	int iobase; 
@@ -846,9 +846,7 @@ static int uircc_net_open(struct net_device *dev)
 	}
 		
 	/* Ready to play! */
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	irda_device_net_open(dev);
 
 	/* turn on interrupts */
 	
@@ -870,10 +868,6 @@ static int uircc_net_close(struct net_device *dev)
 
 	DEBUG(4, __FUNCTION__ "()\n");
 	
-	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
-
 	ASSERT(dev != NULL, return -1;);
 	idev = (struct irda_device *) dev->priv;
 	
@@ -881,6 +875,8 @@ static int uircc_net_close(struct net_device *dev)
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return 0;);
 	
 	iobase = idev->io.iobase;
+
+	irda_device_net_close(dev);
 
 	disable_dma(idev->io.dma);
 

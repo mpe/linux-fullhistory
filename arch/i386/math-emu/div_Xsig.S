@@ -55,7 +55,7 @@
 	Local storage in a static area:
 	Accumulator:	FPU_accum_3:FPU_accum_2:FPU_accum_1:FPU_accum_0
  */
-	.align 2,0
+	.align 4,0
 FPU_accum_3:
 	.long	0
 FPU_accum_2:

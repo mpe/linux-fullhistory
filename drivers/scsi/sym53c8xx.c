@@ -134,8 +134,8 @@
 #ifndef	__initdata
 #define	__initdata
 #endif
-#ifndef	__initfunc
-#define	__initfunc(__arginit) __arginit
+#ifndef	__init
+#define	__init
 #endif
 #endif
 
@@ -576,9 +576,7 @@ spinlock_t sym53c8xx_lock;
 #define pcivtobus(p)			(p)
 
 #if !defined(NCR_IOMAPPED) || defined(__i386__)
-__initfunc(
-static u_long remap_pci_mem(u_long base, u_long size)
-)
+static u_long __init remap_pci_mem(u_long base, u_long size)
 {
 	u_long page_base	= ((u_long) base) & PAGE_MASK;
 	u_long page_offs	= ((u_long) base) - page_base;
@@ -587,9 +585,7 @@ static u_long remap_pci_mem(u_long base, u_long size)
 	return page_remapped? (page_remapped + page_offs) : 0UL;
 }
 
-__initfunc(
-static void unmap_pci_mem(u_long vaddr, u_long size)
-)
+static void __init unmap_pci_mem(u_long vaddr, u_long size)
 {
 	if (vaddr)
 		iounmap((void *) (vaddr & PAGE_MASK));
@@ -3802,9 +3798,7 @@ static	struct scripth scripth0 __initdata = {
 **==========================================================
 */
 
-__initfunc(
-void ncr_script_fill (struct script * scr, struct scripth * scrh)
-)
+void __init ncr_script_fill (struct script * scr, struct scripth * scrh)
 {
 	int	i;
 	ncrcmd	*p;
@@ -3868,9 +3862,7 @@ void ncr_script_fill (struct script * scr, struct scripth * scrh)
 **==========================================================
 */
 
-__initfunc(
-static void ncr_script_copy_and_bind (ncb_p np,ncrcmd *src,ncrcmd *dst,int len)
-)
+static void __init ncr_script_copy_and_bind (ncb_p np,ncrcmd *src,ncrcmd *dst,int len)
 {
 	ncrcmd  opcode, new, old, tmp1, tmp2;
 	ncrcmd	*start, *end;
@@ -4138,10 +4130,8 @@ static inline void ncr_init_burst(ncb_p np, u_char bc)
 **	Get target set-up from Symbios format NVRAM.
 */
 
-__initfunc(
-static void
+static void __init
 	ncr_Symbios_setup_target(ncb_p np, int target, Symbios_nvram *nvram)
-)
 {
 	tcb_p tp = &np->target[target];
 	Symbios_target *tn = &nvram->target[target];
@@ -4161,10 +4151,8 @@ static void
 **	Get target set-up from Tekram format NVRAM.
 */
 
-__initfunc(
-static void
+static void __init
 	ncr_Tekram_setup_target(ncb_p np, int target, Tekram_nvram *nvram)
-)
 {
 	tcb_p tp = &np->target[target];
 	struct Tekram_target *tn = &nvram->target[target];
@@ -4190,9 +4178,7 @@ static void
 }
 #endif /* SCSI_NCR_NVRAM_SUPPORT */
 
-__initfunc(
-static int ncr_prepare_setting(ncb_p np, ncr_nvram *nvram)
-)
+static int __init ncr_prepare_setting(ncb_p np, ncr_nvram *nvram)
 {
 	u_char	burst_max;
 	u_long	period;
@@ -4514,9 +4500,7 @@ static int ncr_prepare_setting(ncb_p np, ncr_nvram *nvram)
 
 #ifdef SCSI_NCR_DEBUG_NVRAM
 
-__initfunc(
-void ncr_display_Symbios_nvram(ncb_p np, Symbios_nvram *nvram)
-)
+void __init ncr_display_Symbios_nvram(ncb_p np, Symbios_nvram *nvram)
 {
 	int i;
 
@@ -4546,9 +4530,7 @@ void ncr_display_Symbios_nvram(ncb_p np, Symbios_nvram *nvram)
 
 static u_char Tekram_boot_delay[7] __initdata = {3, 5, 10, 20, 30, 60, 120};
 
-__initfunc(
-void ncr_display_Tekram_nvram(ncb_p np, Tekram_nvram *nvram)
-)
+void __init ncr_display_Tekram_nvram(ncb_p np, Tekram_nvram *nvram)
 {
 	int i, tags, boot_delay;
 	char *rem;
@@ -4607,9 +4589,7 @@ void ncr_display_Tekram_nvram(ncb_p np, Tekram_nvram *nvram)
 **	start the timer daemon.
 */
 
-__initfunc(
-static int ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
-)
+static int __init ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 {
         struct host_data *host_data;
 	ncb_p np = 0;
@@ -9202,9 +9182,7 @@ static int ncr_scatter(ccb_p cp, Scsi_Cmnd *cmd)
 */
 
 #ifndef NCR_IOMAPPED
-__initfunc(
-static int ncr_regtest (struct ncb* np)
-)
+static int __init ncr_regtest (struct ncb* np)
 {
 	register volatile u_int32 data;
 	/*
@@ -9228,9 +9206,7 @@ static int ncr_regtest (struct ncb* np)
 }
 #endif
 
-__initfunc(
-static int ncr_snooptest (struct ncb* np)
-)
+static int __init ncr_snooptest (struct ncb* np)
 {
 	u_int32	ncr_rd, ncr_wr, ncr_bk, host_rd, host_wr, pc;
 	int	i, err=0;
@@ -9460,9 +9436,7 @@ static void ncr_selectclock(ncb_p np, u_char scntl3)
 /*
  *	calculate NCR SCSI clock frequency (in KHz)
  */
-__initfunc(
-static unsigned ncrgetfreq (ncb_p np, int gen)
-)
+static unsigned __init ncrgetfreq (ncb_p np, int gen)
 {
 	unsigned ms = 0;
 
@@ -9510,9 +9484,7 @@ static unsigned ncrgetfreq (ncb_p np, int gen)
 /*
  *	Get/probe NCR SCSI clock frequency
  */
-__initfunc(
-static void ncr_getclock (ncb_p np, int mult)
-)
+static void __init ncr_getclock (ncb_p np, int mult)
 {
 	unsigned char scntl3 = INB(nc_scntl3);
 	unsigned char stest1 = INB(nc_stest1);
@@ -9644,9 +9616,7 @@ static char setup_token[] __initdata =
 #define	ARG_SEP	','
 #endif
 
-__initfunc(
-static int get_setup_token(char *p)
-)
+static int __init get_setup_token(char *p)
 {
 	char *cur = setup_token;
 	char *pc;
@@ -9663,9 +9633,7 @@ static int get_setup_token(char *p)
 }
 
 
-__initfunc(
-void sym53c8xx_setup(char *str, int *ints)
-)
+void __init sym53c8xx_setup(char *str, int *ints)
 {
 #ifdef SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT
 	char *cur = str;
@@ -9799,9 +9767,7 @@ static int sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
 **   Returns the number of boards successfully attached.
 */
 
-__initfunc(
-static void ncr_print_driver_setup(void)
-)
+static void __init ncr_print_driver_setup(void)
 {
 #define YesNo(y)	y ? 'y' : 'n'
 	printk (NAME53C8XX ": setup=disc:%c,specf:%d,ultra:%d,tags:%d,sync:%d,"
@@ -9860,9 +9826,7 @@ static ushort	ncr_chip_ids[]   __initdata	= SCSI_NCR_CHIP_IDS;
 #define	SCSI_NCR_MAX_PQS_BUS	16
 static int pqs_bus[SCSI_NCR_MAX_PQS_BUS] __initdata = { 0 };
 
-__initfunc(
-static void ncr_detect_pqs_pds(void)
-)
+static void __init ncr_detect_pqs_pds(void)
 {
 	short index;
 
@@ -9900,9 +9864,7 @@ static void ncr_detect_pqs_pds(void)
 **    the the order they are detected.
 **===================================================================
 */
-__initfunc(
-int sym53c8xx_detect(Scsi_Host_Template *tpnt)
-)
+int __init sym53c8xx_detect(Scsi_Host_Template *tpnt)
 {
 	int i, j, chips, hosts, count;
 	u_char bus, device_fn;
@@ -10090,10 +10052,8 @@ next:
 **===================================================================
 */
 #if LINUX_VERSION_CODE <= LinuxVersionCode(2,1,92)
-__initfunc(
-static int 
+static int  __init
 pci_read_base_address(u_char bus, u_char device_fn, int offset, u_long *base)
-)
 {
 	u_int32 tmp;
 
@@ -10110,10 +10070,8 @@ pci_read_base_address(u_char bus, u_char device_fn, int offset, u_long *base)
 	return offset;
 }
 #else	/* LINUX_VERSION_CODE > LinuxVersionCode(2,1,92) */
-__initfunc(
-static int 
+static int __init
 pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
-)
 {
 	/* FIXME! This is just unbelieably horrible backwards compatibility code */
 	struct resource *res = pdev->resource + index;
@@ -10132,10 +10090,8 @@ pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
 **   been detected.
 **===================================================================
 */
-__initfunc(
-static int sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
+static int __init sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
 			      uchar bus, uchar device_fn, ncr_device *device)
-)
 {
 	u_short vendor_id, device_id, command;
 	u_char cache_line_size, latency_timer;
@@ -10470,7 +10426,7 @@ static int sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
 *===================================================================
 */
 #ifdef SCSI_NCR_NVRAM_SUPPORT
-__initfunc(static void ncr_get_nvram(ncr_device *devp, ncr_nvram *nvp))
+static void __init ncr_get_nvram(ncr_device *devp, ncr_nvram *nvp)
 {
 	devp->nvram = nvp;
 	if (!nvp)
@@ -11335,9 +11291,7 @@ static void nvram_doBit(ncr_slot *np, u_char *read_bit, u_char write_bit, u_char
 static void nvram_stop(ncr_slot *np, u_char *gpreg);
 static void nvram_setBit(ncr_slot *np, u_char write_bit, u_char *gpreg, int bit_mode);
 
-__initfunc(
-static int ncr_get_Symbios_nvram (ncr_slot *np, Symbios_nvram *nvram)
-)
+static int __init ncr_get_Symbios_nvram (ncr_slot *np, Symbios_nvram *nvram)
 {
 	static u_char Symbios_trailer[6] = {0xfe, 0xfe, 0, 0, 0, 0};
 	u_char	gpcntl, gpreg;
@@ -11426,9 +11380,7 @@ out:
 /*
  * Read Symbios NvRAM data and compute checksum.
  */
-__initfunc(
-static u_short nvram_read_data(ncr_slot *np, u_char *data, int len, u_char *gpreg, u_char *gpcntl)
-)
+static u_short __init nvram_read_data(ncr_slot *np, u_char *data, int len, u_char *gpreg, u_char *gpcntl)
 {
 	int	x;
 	u_short	csum;
@@ -11445,9 +11397,7 @@ static u_short nvram_read_data(ncr_slot *np, u_char *data, int len, u_char *gpre
 /*
  * Send START condition to NVRAM to wake it up.
  */
-__initfunc(
-static void nvram_start(ncr_slot *np, u_char *gpreg)
-)
+static void __init nvram_start(ncr_slot *np, u_char *gpreg)
 {
 	nvram_setBit(np, 1, gpreg, SET_BIT);
 	nvram_setBit(np, 0, gpreg, SET_CLK);
@@ -11459,9 +11409,7 @@ static void nvram_start(ncr_slot *np, u_char *gpreg)
  * WRITE a byte to the NVRAM and then get an ACK to see it was accepted OK,
  * GPIO0 must already be set as an output
  */
-__initfunc(
-static void nvram_write_byte(ncr_slot *np, u_char *ack_data, u_char write_data, u_char *gpreg, u_char *gpcntl)
-)
+static void __init nvram_write_byte(ncr_slot *np, u_char *ack_data, u_char write_data, u_char *gpreg, u_char *gpcntl)
 {
 	int x;
 	
@@ -11475,9 +11423,7 @@ static void nvram_write_byte(ncr_slot *np, u_char *ack_data, u_char write_data, 
  * READ a byte from the NVRAM and then send an ACK to say we have got it,
  * GPIO0 must already be set as an input
  */
-__initfunc(
-static void nvram_read_byte(ncr_slot *np, u_char *read_data, u_char ack_data, u_char *gpreg, u_char *gpcntl)
-)
+static void __init nvram_read_byte(ncr_slot *np, u_char *read_data, u_char ack_data, u_char *gpreg, u_char *gpcntl)
 {
 	int x;
 	u_char read_bit;
@@ -11495,9 +11441,7 @@ static void nvram_read_byte(ncr_slot *np, u_char *read_data, u_char ack_data, u_
  * Output an ACK to the NVRAM after reading,
  * change GPIO0 to output and when done back to an input
  */
-__initfunc(
-static void nvram_writeAck(ncr_slot *np, u_char write_bit, u_char *gpreg, u_char *gpcntl)
-)
+static void __init nvram_writeAck(ncr_slot *np, u_char write_bit, u_char *gpreg, u_char *gpcntl)
 {
 	OUTB (nc_gpcntl, *gpcntl & 0xfe);
 	nvram_doBit(np, 0, write_bit, gpreg);
@@ -11508,9 +11452,7 @@ static void nvram_writeAck(ncr_slot *np, u_char write_bit, u_char *gpreg, u_char
  * Input an ACK from NVRAM after writing,
  * change GPIO0 to input and when done back to an output
  */
-__initfunc(
-static void nvram_readAck(ncr_slot *np, u_char *read_bit, u_char *gpreg, u_char *gpcntl)
-)
+static void __init nvram_readAck(ncr_slot *np, u_char *read_bit, u_char *gpreg, u_char *gpcntl)
 {
 	OUTB (nc_gpcntl, *gpcntl | 0x01);
 	nvram_doBit(np, read_bit, 1, gpreg);
@@ -11521,9 +11463,7 @@ static void nvram_readAck(ncr_slot *np, u_char *read_bit, u_char *gpreg, u_char 
  * Read or write a bit to the NVRAM,
  * read if GPIO0 input else write if GPIO0 output
  */
-__initfunc(
-static void nvram_doBit(ncr_slot *np, u_char *read_bit, u_char write_bit, u_char *gpreg)
-)
+static void __init nvram_doBit(ncr_slot *np, u_char *read_bit, u_char write_bit, u_char *gpreg)
 {
 	nvram_setBit(np, write_bit, gpreg, SET_BIT);
 	nvram_setBit(np, 0, gpreg, SET_CLK);
@@ -11536,9 +11476,7 @@ static void nvram_doBit(ncr_slot *np, u_char *read_bit, u_char write_bit, u_char
 /*
  * Send STOP condition to NVRAM - puts NVRAM to sleep... ZZzzzz!!
  */
-__initfunc(
-static void nvram_stop(ncr_slot *np, u_char *gpreg)
-)
+static void __init nvram_stop(ncr_slot *np, u_char *gpreg)
 {
 	nvram_setBit(np, 0, gpreg, SET_CLK);
 	nvram_setBit(np, 1, gpreg, SET_BIT);
@@ -11547,9 +11485,7 @@ static void nvram_stop(ncr_slot *np, u_char *gpreg)
 /*
  * Set/clear data/clock bit in GPIO0
  */
-__initfunc(
-static void nvram_setBit(ncr_slot *np, u_char write_bit, u_char *gpreg, int bit_mode)
-)
+static void __init nvram_setBit(ncr_slot *np, u_char write_bit, u_char *gpreg, int bit_mode)
 {
 	UDELAY (5);
 	switch (bit_mode){
@@ -11600,9 +11536,7 @@ static void Tnvram_Write_Bit(ncr_slot *np, u_char write_bit, u_char *gpreg);
 static void Tnvram_Stop(ncr_slot *np, u_char *gpreg);
 static void Tnvram_Clk(ncr_slot *np, u_char *gpreg);
 
-__initfunc(
-static int ncr_get_Tekram_nvram (ncr_slot *np, Tekram_nvram *nvram)
-)
+static int __init ncr_get_Tekram_nvram (ncr_slot *np, Tekram_nvram *nvram)
 {
 	u_char gpcntl, gpreg;
 	u_char old_gpcntl, old_gpreg;
@@ -11637,9 +11571,7 @@ static int ncr_get_Tekram_nvram (ncr_slot *np, Tekram_nvram *nvram)
 /*
  * Read Tekram NvRAM data and compute checksum.
  */
-__initfunc(
-static u_short Tnvram_read_data(ncr_slot *np, u_short *data, int len, u_char *gpreg)
-)
+static u_short __init Tnvram_read_data(ncr_slot *np, u_short *data, int len, u_char *gpreg)
 {
 	u_char	read_bit;
 	u_short	csum;
@@ -11664,9 +11596,7 @@ static u_short Tnvram_read_data(ncr_slot *np, u_short *data, int len, u_char *gp
 /*
  * Send read command and address to NVRAM
  */
-__initfunc(
-static void Tnvram_Send_Command(ncr_slot *np, u_short write_data, u_char *read_bit, u_char *gpreg)
-)
+static void __init Tnvram_Send_Command(ncr_slot *np, u_short write_data, u_char *read_bit, u_char *gpreg)
 {
 	int x;
 
@@ -11680,9 +11610,7 @@ static void Tnvram_Send_Command(ncr_slot *np, u_short write_data, u_char *read_b
 /*
  * READ a byte from the NVRAM
  */
-__initfunc(
-static void Tnvram_Read_Word(ncr_slot *np, u_short *nvram_data, u_char *gpreg)
-)
+static void __init Tnvram_Read_Word(ncr_slot *np, u_short *nvram_data, u_char *gpreg)
 {
 	int x;
 	u_char read_bit;
@@ -11701,9 +11629,7 @@ static void Tnvram_Read_Word(ncr_slot *np, u_short *nvram_data, u_char *gpreg)
 /* 
  * Read bit from NVRAM
  */
-__initfunc(
-static void Tnvram_Read_Bit(ncr_slot *np, u_char *read_bit, u_char *gpreg)
-)
+static void __init Tnvram_Read_Bit(ncr_slot *np, u_char *read_bit, u_char *gpreg)
 {
 	UDELAY (2);
 	Tnvram_Clk(np, gpreg);
@@ -11713,9 +11639,7 @@ static void Tnvram_Read_Bit(ncr_slot *np, u_char *read_bit, u_char *gpreg)
 /*
  * Write bit to GPIO0
  */
-__initfunc(
-static void Tnvram_Write_Bit(ncr_slot *np, u_char write_bit, u_char *gpreg)
-)
+static void __init Tnvram_Write_Bit(ncr_slot *np, u_char write_bit, u_char *gpreg)
 {
 	if (write_bit & 0x01)
 		*gpreg |= 0x02;
@@ -11733,9 +11657,7 @@ static void Tnvram_Write_Bit(ncr_slot *np, u_char write_bit, u_char *gpreg)
 /*
  * Send STOP condition to NVRAM - puts NVRAM to sleep... ZZZzzz!!
  */
-__initfunc(
-static void Tnvram_Stop(ncr_slot *np, u_char *gpreg)
-)
+static void __init Tnvram_Stop(ncr_slot *np, u_char *gpreg)
 {
 	*gpreg &= 0xef;
 	OUTB (nc_gpreg, *gpreg);
@@ -11747,9 +11669,7 @@ static void Tnvram_Stop(ncr_slot *np, u_char *gpreg)
 /*
  * Pulse clock bit in GPIO0
  */
-__initfunc(
-static void Tnvram_Clk(ncr_slot *np, u_char *gpreg)
-)
+static void __init Tnvram_Clk(ncr_slot *np, u_char *gpreg)
 {
 	OUTB (nc_gpreg, *gpreg | 0x04);
 	UDELAY (2);

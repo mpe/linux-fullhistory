@@ -82,7 +82,7 @@ void prom_apply_sbus_ranges(struct linux_sbus *sbus, struct linux_prom_registers
 	}
 }
 
-__initfunc(void prom_ranges_init(void))
+void __init prom_ranges_init(void)
 {
 	int node, obio_node;
 	int success;
@@ -107,7 +107,7 @@ __initfunc(void prom_ranges_init(void))
 	return;
 }
 
-__initfunc(void prom_sbus_ranges_init(int parentnd, struct linux_sbus *sbus))
+void __init prom_sbus_ranges_init(int parentnd, struct linux_sbus *sbus)
 {
 	int success;
 	

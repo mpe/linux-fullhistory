@@ -74,7 +74,7 @@ volatile int smp_process_available=0;
 volatile int smp_commenced = 0;
 
 /* Not supported on Sparc yet. */
-__initfunc(void smp_setup(char *str, int *ints))
+void __init smp_setup(char *str, int *ints)
 {
 }
 
@@ -83,12 +83,12 @@ __initfunc(void smp_setup(char *str, int *ints))
  *	a given CPU
  */
 
-__initfunc(void smp_store_cpu_info(int id))
+void __init smp_store_cpu_info(int id)
 {
 	cpu_data[id].udelay_val = loops_per_sec; /* this is it on sparc. */
 }
 
-__initfunc(void smp_commence(void))
+void __init smp_commence(void)
 {
 	/*
 	 *	Lets the callin's below out of their loop.
@@ -103,7 +103,7 @@ __initfunc(void smp_commence(void))
 /* Only broken Intel needs this, thus it should not even be referenced
  * globally...
  */
-__initfunc(void initialize_secondary(void))
+void __init initialize_secondary(void)
 {
 }
 
@@ -129,7 +129,7 @@ void cpu_panic(void)
 extern struct prom_cpuinfo linux_cpus[NR_CPUS];
 struct linux_prom_registers smp_penguin_ctable __initdata = { 0 };
 
-__initfunc(void smp_boot_cpus(void))
+void __init smp_boot_cpus(void)
 {
 	extern void smp4m_boot_cpus(void);
 	extern void smp4d_boot_cpus(void);

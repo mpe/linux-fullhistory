@@ -77,17 +77,17 @@ int main(int argc, const char *argv[])
 Contact Information
 
 People keep asking about the WDT watchdog timer hardware: The phone contacts
-for Industrial Computer Source are:
+for ICS Advent are:
  
 US: 619 677 0877 (sales)  0895 (fax)
 UK: 01243 533900
 France (1) 69.18.74.30
 
-Industrial Computer Source 
+ICS Advent 
 9950 Barnes Canyon Road 
 San Diego, CA     
 
-http://www.industry.net/indcompsrc
+http://www.icsadvent.com
 
 and please mention Linux when enquiring.
 

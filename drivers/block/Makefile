@@ -20,7 +20,7 @@ ALL_SUB_DIRS := $(SUB_DIRS) paride
 
 
 L_TARGET := block.a
-L_OBJS   := genhd.o
+L_OBJS   := genhd.o cmos-probe.o
 M_OBJS   :=
 MOD_LIST_NAME := BLOCK_MODULES
 LX_OBJS := ll_rw_blk.o blkpg.o
@@ -154,6 +154,10 @@ ifeq ($(CONFIG_BLK_DEV_HT6560B),y)
 IDE_OBJS += ht6560b.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_IDE_ICSIDE),y)
+IDE_OBJS += icside.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_IDEDMA),y)
 IDE_OBJS += ide-dma.o
 endif
@@ -194,6 +198,10 @@ ifeq ($(CONFIG_BLK_DEV_QD6580),y)
 IDE_OBJS += qd6580.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_IDE_RAPIDE),y)
+IDE_OBJS += rapide.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_RZ1000),y)
 IDE_OBJS += rz1000.o
 endif
@@ -216,14 +224,6 @@ endif
 
 ifeq ($(CONFIG_BLK_DEV_VIA82C586),y)
 IDE_OBJS += via82c586.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDE_ICSIDE),y)
-IDE_OBJS += icside.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDE_RAPIDE),y)
-IDE_OBJS += rapide.o
 endif
 
 ### if CONFIG_BLK_DEV_IDE is n, IDE_OBJS will be ignored
@@ -299,6 +299,14 @@ L_OBJS += cpqarray.o
 else
   ifeq ($(CONFIG_BLK_CPQ_DA),m)
   M_OBJS += cpqarray.o
+  endif
+endif
+
+ifeq ($(CONFIG_BLK_DEV_DAC960),y)
+LX_OBJS += DAC960.o
+else
+  ifeq ($(CONFIG_BLK_DEV_DAC960),m)
+  MX_OBJS += DAC960.o
   endif
 endif
 

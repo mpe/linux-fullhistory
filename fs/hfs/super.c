@@ -493,7 +493,7 @@ bail3:
 	return NULL;	
 }
 
-__initfunc(int init_hfs_fs(void))
+int __init init_hfs_fs(void)
 {
         hfs_cat_init();
 	return register_filesystem(&hfs_fs);

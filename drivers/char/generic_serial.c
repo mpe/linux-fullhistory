@@ -94,7 +94,7 @@ static inline int copy_from_user(void *to,const void *from, int c)
 #ifndef TWO_THREE
 /* These are new in 2.3. The source now uses 2.3 syntax, and here is 
    the compatibility define... */
-#define waitq_head_t struct wait_queue *
+#define wait_queue_head_t struct wait_queue *
 #define DECLARE_MUTEX(name) struct semaphore name = MUTEX
 #define DECLARE_WAITQUEUE(wait, current) struct wait_queue wait = { current, NULL }
 

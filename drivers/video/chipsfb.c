@@ -559,7 +559,7 @@ static void __init init_chips(struct fb_info_chips *p)
 // * 3400 has 1MB (I think).  Don't know if it's expandable.
 // -- Tim Seufert
 	p->fix.smem_len = 0x100000;	// 1MB
-	p->fix.mmio_start = (char *) p->io_base_phys;
+	p->fix.mmio_start = p->io_base_phys;
 	p->fix.type = FB_TYPE_PACKED_PIXELS;
 	p->fix.visual = FB_VISUAL_PSEUDOCOLOR;
 	p->fix.line_length = 800;

@@ -156,6 +156,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_AIRPORT_DONGLE),y)
+L_OBJS += airport.o
+else
+  ifeq ($(CONFIG_AIRPORT_DONGLE),m)
+  M_OBJS += airport.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 clean:

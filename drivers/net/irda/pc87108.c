@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Mon May 24 15:19:21 1999
+ * Modified at:   Wed Aug 11 09:26:26 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -110,7 +110,7 @@ static int  pc87108_dma_receive_complete(struct irda_device *idev, int iobase);
 static int  pc87108_hard_xmit(struct sk_buff *skb, struct net_device *dev);
 static int  pc87108_pio_write(int iobase, __u8 *buf, int len, int fifo_size);
 static void pc87108_dma_write(struct irda_device *idev, int iobase);
-static void pc87108_change_speed(struct irda_device *idev, int baud);
+static void pc87108_change_speed(struct irda_device *idev, __u32 baud);
 static void pc87108_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void pc87108_wait_until_sent(struct irda_device *idev);
 static int  pc87108_is_receiving(struct irda_device *idev);
@@ -615,7 +615,7 @@ static void pc87108_change_dongle_speed( int iobase, int speed, int dongle_id)
  *    Change the speed of the device
  *
  */
-static void pc87108_change_speed( struct irda_device *idev, int speed)
+static void pc87108_change_speed(struct irda_device *idev, __u32 speed)
 {
 	__u8 mcr = MCR_SIR;
 	__u8 bank;
@@ -1391,12 +1391,7 @@ static int pc87108_net_open( struct net_device *dev)
 		free_irq( idev->io.irq, idev);
 		return -EAGAIN;
 	}
-		
-	/* Ready to play! */
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
+	
 	/* Save current bank */
 	bank = inb( iobase+BSR);
 	
@@ -1406,6 +1401,8 @@ static int pc87108_net_open( struct net_device *dev)
 
 	/* Restore bank register */
 	outb( bank, iobase+BSR);
+
+	irda_device_net_open(dev);
 
 	MOD_INC_USE_COUNT;
 
@@ -1424,34 +1421,32 @@ static int pc87108_net_close(struct net_device *dev)
 	int iobase;
 	__u8 bank;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 	
-	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
+	irda_device_net_close(dev);
 
-	ASSERT( dev != NULL, return -1;);
+	ASSERT(dev != NULL, return -1;);
 	idev = (struct irda_device *) dev->priv;
 	
-	ASSERT( idev != NULL, return 0;);
-	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return 0;);
+	ASSERT(idev != NULL, return 0;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return 0;);
 	
 	iobase = idev->io.iobase;
 
-	disable_dma( idev->io.dma);
+	disable_dma(idev->io.dma);
 
 	/* Save current bank */
-	bank = inb( iobase+BSR);
+	bank = inb(iobase+BSR);
 
 	/* Disable interrupts */
-	switch_bank( iobase, BANK0);
-	outb( 0, iobase+IER); 
+	switch_bank(iobase, BANK0);
+	outb(0, iobase+IER); 
        
-	free_irq( idev->io.irq, idev);
-	free_dma( idev->io.dma);
+	free_irq(idev->io.irq, idev);
+	free_dma(idev->io.dma);
 
 	/* Restore bank register */
-	outb( bank, iobase+BSR);
+	outb(bank, iobase+BSR);
 
 	MOD_DEC_USE_COUNT;
 

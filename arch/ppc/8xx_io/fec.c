@@ -790,7 +790,7 @@ static void set_multicast_list(struct net_device *dev)
 
 /* Initialize the FECC Ethernet on 860T.
  */
-__initfunc(int m8xx_enet_init(void))
+int __init m8xx_enet_init(void)
 {
 	struct net_device *dev;
 	struct fec_enet_private *fep;

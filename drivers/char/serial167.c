@@ -1500,7 +1500,7 @@ get_modem_info(struct cyclades_port * info, unsigned int *value)
             | ((status  & CyDCD) ? TIOCM_CAR : 0)
             | ((status  & CyDSR) ? TIOCM_DSR : 0)
             | ((status  & CyCTS) ? TIOCM_CTS : 0);
-    cy_put_user(result,(unsigned long *) value);
+    cy_put_user(result,(unsigned int *) value);
     return 0;
 } /* get_modem_info */
 

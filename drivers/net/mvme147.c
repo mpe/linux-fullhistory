@@ -70,7 +70,7 @@ static struct m147lance_private *root_m147lance_dev = NULL;
 #endif
 
 /* Initialise the one and only on-board 7990 */
-__initfunc(int mvme147lance_probe(struct net_device *dev))
+int __init mvme147lance_probe(struct net_device *dev)
 {
 	static int called = 0;
 	static const char name[] = "MVME147 LANCE";

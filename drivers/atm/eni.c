@@ -1548,7 +1548,7 @@ static const char *media_name[] __initdata = {
   } })
 
 
-__initfunc(static int get_esi_asic(struct atm_dev *dev))
+static int __init get_esi_asic(struct atm_dev *dev)
 {
 	struct eni_dev *eni_dev;
 	unsigned char tonga;
@@ -1640,7 +1640,7 @@ __initfunc(static int get_esi_asic(struct atm_dev *dev))
 #undef GET_SEPROM
 
 
-__initfunc(static int get_esi_fpga(struct atm_dev *dev,unsigned long base))
+static int __init get_esi_fpga(struct atm_dev *dev,unsigned long base)
 {
 	unsigned long mac_base;
 	int i;
@@ -1651,7 +1651,7 @@ __initfunc(static int get_esi_fpga(struct atm_dev *dev,unsigned long base))
 }
 
 
-__initfunc(static int eni_init(struct atm_dev *dev))
+static int __init eni_init(struct atm_dev *dev)
 {
 	struct midway_eprom *eprom;
 	struct eni_dev *eni_dev;
@@ -1666,7 +1666,7 @@ __initfunc(static int eni_init(struct atm_dev *dev))
 	dev->link_rate = ATM_OC3_PCR;
 	eni_dev = ENI_DEV(dev);
 	pci_dev = eni_dev->pci_dev;
-	real_base = pci_dev->base_address[0] & MEM_VALID; /* strip flags */
+	real_base = pci_dev->resource[0].start;
 	eni_dev->irq = pci_dev->irq;
 	error = pci_read_config_byte(pci_dev,PCI_REVISION_ID,&revision);
 	if (error) {
@@ -1740,7 +1740,7 @@ __initfunc(static int eni_init(struct atm_dev *dev))
 }
 
 
-__initfunc(static int eni_start(struct atm_dev *dev))
+static int __init eni_start(struct atm_dev *dev)
 {
 	struct eni_dev *eni_dev;
 	unsigned long buf,buffer_mem;
@@ -2190,7 +2190,7 @@ static const struct atmdev_ops ops = {
 };
 
 
-__initfunc(int eni_detect(void))
+int __init eni_detect(void)
 {
 	struct atm_dev *dev;
 	struct eni_dev *eni_dev;

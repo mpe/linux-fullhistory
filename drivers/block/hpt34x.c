@@ -340,16 +340,16 @@ int hpt34x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
  */
 #define	HPT34X_PCI_INIT_REG		0x80
 
-__initfunc(unsigned int pci_init_hpt34x (struct pci_dev *dev, const char *name))
+unsigned int __init pci_init_hpt34x (struct pci_dev *dev, const char *name)
 {
 	unsigned short cmd;
 
 	pci_write_config_byte(dev, HPT34X_PCI_INIT_REG, 0x00);
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 	if (cmd & PCI_COMMAND_MEMORY) {
-		if (dev->rom_address) {
-			pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->rom_address | PCI_ROM_ADDRESS_ENABLE);
-			printk(KERN_INFO "HPT345: ROM enabled at 0x%08lx\n", dev->rom_address);
+		if (dev->resource[PCI_ROM_RESOURCE].start) {
+			pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
+			printk(KERN_INFO "HPT345: ROM enabled at 0x%08lx\n", dev->resource[PCI_ROM_RESOURCE].start);
 		}
 		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0xF0);
 	} else {
@@ -377,7 +377,7 @@ __initfunc(unsigned int pci_init_hpt34x (struct pci_dev *dev, const char *name))
 	return dev->irq;
 }
 
-__initfunc(void ide_init_hpt34x (ide_hwif_t *hwif))
+void __init ide_init_hpt34x (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &hpt34x_tune_drive;
 	if (hwif->dma_base) {
@@ -385,7 +385,9 @@ __initfunc(void ide_init_hpt34x (ide_hwif_t *hwif))
 
 		pci_read_config_word(hwif->pci_dev, PCI_COMMAND, &pcicmd);
 #ifdef CONFIG_BLK_DEV_HPT34X_DMA
+#if 0
 		hwif->autodma = (pcicmd & PCI_COMMAND_MEMORY) ? 1 : 0;
+#endif
 #endif /* CONFIG_BLK_DEV_HPT34X_DMA */
 		hwif->dmaproc = &hpt34x_dmaproc;
 	} else {

@@ -117,7 +117,7 @@ void pmac_ide_tuneproc(ide_drive_t *drive, byte pio)
 	}
 }
 
-__initfunc(void pmac_ide_probe(void))
+void __init pmac_ide_probe(void)
 {
 	struct device_node *np;
 	int i;

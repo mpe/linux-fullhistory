@@ -118,7 +118,7 @@ static struct busmouse busmouse = {
 	LOGITECH_BUSMOUSE, "busmouse", open_mouse, close_mouse, 7
 };
 
-int __init bus_mouse_init(void)
+int __init logi_busmouse_init(void)
 {
 	if (check_region(LOGIBM_BASE, LOGIBM_EXTENT))
 		return -EIO;
@@ -146,7 +146,7 @@ int __init bus_mouse_init(void)
 
 int init_module(void)
 {
-	return bus_mouse_init();
+	return logi_busmouse_init();
 }
 
 void cleanup_module(void)

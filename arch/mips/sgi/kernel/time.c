@@ -8,7 +8,7 @@
 
 extern void indy_timer_init(void);
 
-__initfunc(void time_init(void))
+void __init time_init(void)
 {
 	/* XXX assume INDY for now XXX */
 	indy_timer_init();

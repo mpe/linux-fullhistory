@@ -1524,9 +1524,11 @@ sony535_init(void)
 		printk(CDU535_MESSAGE_NAME ": my base address is not free!\n");
 		return -EIO;
 	}
+
 	/* look for the CD-ROM, follows the procedure in the DOS driver */
 	inb(select_unit_reg);
 	/* wait for 40 18 Hz ticks (reverse-engineered from DOS driver) */
+	current->state = TASK_INTERRUPTIBLE;
 	schedule_timeout((HZ+17)*40/18);
 	inb(result_reg);
 

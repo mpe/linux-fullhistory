@@ -90,7 +90,7 @@ static int sonic_probe1(struct net_device *dev, unsigned int base_addr, unsigned
  * Probe for a SONIC ethernet controller on a Mips Jazz board.
  * Actually probing is superfluous but we're paranoid.
  */
-__initfunc(int sonic_probe(struct net_device *dev))
+int __init sonic_probe(struct net_device *dev)
 {
     unsigned int base_addr = dev ? dev->base_addr : 0;
     int i;
@@ -115,8 +115,8 @@ __initfunc(int sonic_probe(struct net_device *dev))
     return -ENODEV;
 }
 
-__initfunc(static int sonic_probe1(struct net_device *dev,
-                                   unsigned int base_addr, unsigned int irq))
+static int __init sonic_probe1(struct net_device *dev,
+                               unsigned int base_addr, unsigned int irq)
 {
     static unsigned version_printed = 0;
     unsigned int silicon_revision;

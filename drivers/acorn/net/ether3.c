@@ -199,8 +199,8 @@ ether3_ledon(struct net_device *dev, struct dev_priv *priv)
  * Read the ethernet address string from the on board rom.
  * This is an ascii string!!!
  */
-__initfunc(static void
-ether3_addr(char *addr, struct expansion_card *ec))
+static void __init
+ether3_addr(char *addr, struct expansion_card *ec)
 {
 	struct in_chunk_dir cd;
 	char *s;
@@ -224,8 +224,8 @@ ether3_addr(char *addr, struct expansion_card *ec))
 
 /* --------------------------------------------------------------------------- */
 
-__initfunc(static int
-ether3_ramtest(struct net_device *dev, unsigned char byte))
+static int __init
+ether3_ramtest(struct net_device *dev, unsigned char byte)
 {
 	unsigned char *buffer = kmalloc(RX_END, GFP_KERNEL);
 	int i,ret = 0;
@@ -273,8 +273,8 @@ ether3_ramtest(struct net_device *dev, unsigned char byte))
 
 /* ------------------------------------------------------------------------------- */
 
-__initfunc(static int
-ether3_init_2(struct net_device *dev))
+static int __init
+ether3_init_2(struct net_device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	int i;
@@ -400,8 +400,8 @@ ether3_probe_bus_16(struct net_device *dev, int val)
 /*
  * This is the real probe routine.
  */
-__initfunc(static int
-ether3_probe1(struct net_device *dev))
+static int __init
+ether3_probe1(struct net_device *dev)
 {
 	static unsigned version_printed = 0;
 	struct dev_priv *priv;
@@ -478,8 +478,8 @@ failed:
 	return error;
 }
 
-__initfunc(static void
-ether3_get_dev(struct net_device *dev, struct expansion_card *ec))
+static void __init
+ether3_get_dev(struct net_device *dev, struct expansion_card *ec)
 {
 	ecard_claim(ec);
 
@@ -498,8 +498,8 @@ ether3_get_dev(struct net_device *dev, struct expansion_card *ec))
 }
 
 #ifndef MODULE
-__initfunc(int
-ether3_probe(struct net_device *dev))
+int __init
+ether3_probe(struct net_device *dev)
 {
 	struct expansion_card *ec;
 

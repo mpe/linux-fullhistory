@@ -243,7 +243,7 @@ actual modules (including ipfwadm and ipchains backwards-compatibility
 modules) are currently distributed separately: see
 	http://antarctica.penguincomputing.com/~netfilter/
 	http://www.samba.org/netfilter/
-	http://netfilter.kernenotes.org
+	http://netfilter.kernelnotes.org
 
    DHCP clients for 2.0 do not work with the new networking code in the
 2.2 kernel.  You will need to upgrade your dhcpcd / dhcpclient.

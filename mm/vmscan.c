@@ -17,6 +17,7 @@
 #include <linux/smp_lock.h>
 #include <linux/pagemap.h>
 #include <linux/init.h>
+#include <linux/bigmem.h>
 
 #include <asm/pgtable.h>
 
@@ -63,7 +64,8 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 
 	if (PageReserved(page)
 	    || PageLocked(page)
-	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page)))
+	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page))
+	    || (!(gfp_mask & __GFP_BIGMEM) && PageBIGMEM(page)))
 		goto out_failed_unlock;
 
 	/*
@@ -154,6 +156,9 @@ drop_pte:
 	if (!entry)
 		goto out_failed_unlock; /* No swap space left */
 		
+	if (!(page = prepare_bigmem_swapout(page)))
+		goto out_swap_free_unlock;
+
 	vma->vm_mm->rss--;
 	set_pte(page_table, __pte(entry));
 	spin_unlock(&vma->vm_mm->page_table_lock);
@@ -174,6 +179,11 @@ out_failed_unlock:
 	spin_unlock(&vma->vm_mm->page_table_lock);
 out_failed:
 	return 0;
+out_swap_free_unlock:
+	swap_free(entry);
+	spin_unlock(&vma->vm_mm->page_table_lock);
+	return 0;
+
 }
 
 /*
@@ -316,7 +326,9 @@ static int swap_out(unsigned int priority, int gfp_mask)
 {
 	struct task_struct * p;
 	int counter;
+	int __ret = 0;
 
+	lock_kernel();
 	/* 
 	 * We make one or two passes through the task list, indexed by 
 	 * assign = {0, 1}:
@@ -379,11 +391,13 @@ static int swap_out(unsigned int priority, int gfp_mask)
 
 			if (ret < 0)
 				kill_proc(pid, SIGBUS, 1);
-			return 1;
+			__ret = 1;
+			goto out;
 		}
 	}
 out:
-	return 0;
+	unlock_kernel();
+	return __ret;
 }
 
 /*
@@ -399,8 +413,6 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 {
 	int priority;
 	int count = SWAP_CLUSTER_MAX;
-
-	lock_kernel();
 
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
@@ -429,7 +441,6 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 		shrink_dcache_memory(priority, gfp_mask);
 	} while (--priority >= 0);
 done:
-	unlock_kernel();
 
 	return priority >= 0;
 }
@@ -484,7 +495,9 @@ int kswapd(void *unused)
 		 * up on a more timely basis.
 		 */
 		do {
-			if (nr_free_pages >= freepages.high)
+			/* kswapd is critical to provide GFP_ATOMIC
+			   allocations (not GFP_BIGMEM ones). */
+			if (nr_free_pages - nr_free_bigpages >= freepages.high)
 				break;
 
 			if (!do_try_to_free_pages(GFP_KSWAPD))

@@ -9,17 +9,17 @@
 #include <linux/init.h>
 #include <asm/sgialib.h>
 
-__initfunc(long prom_load(char *name, unsigned long end, unsigned long *pc, unsigned long *eaddr))
+long __init prom_load(char *name, unsigned long end, unsigned long *pc, unsigned long *eaddr)
 {
 	return romvec->load(name, end, pc, eaddr);
 }
 
-__initfunc(long prom_invoke(unsigned long pc, unsigned long sp, long argc, char **argv, char **envp))
+long __init prom_invoke(unsigned long pc, unsigned long sp, long argc, char **argv, char **envp)
 {
 	return romvec->invoke(pc, sp, argc, argv, envp);
 }
 
-__initfunc(long prom_exec(char *name, long argc, char **argv, char **envp))
+long __init prom_exec(char *name, long argc, char **argv, char **envp)
 {
 	return romvec->exec(name, argc, argv, envp);
 }

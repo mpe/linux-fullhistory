@@ -10,7 +10,9 @@
  * The information is exported to the protected code, where this 
  * variable is set to one in case MCA bus was detected.
 */
+#ifndef MCA_bus__is_a_macro
 extern int  MCA_bus;
+#endif
 
 /* maximal number of MCA slots - actually, some machines have less, but
 they all have sufficient number of POS registers to cover 8. */

@@ -460,7 +460,7 @@ toshoboe_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 /* Change the baud rate */
 static void 
-toshoboe_change_speed (struct irda_device *idev, int speed)
+toshoboe_change_speed (struct irda_device *idev, __u32 speed)
 {
   struct toshoboe_cb *self;
   DEBUG (4, __FUNCTION__ "()\n");
@@ -582,10 +582,7 @@ toshoboe_net_open (struct net_device *dev)
 
   sti ();
 
-
-  dev->tbusy = 0;
-  dev->interrupt = 0;
-  dev->start = 1;
+  irda_device_net_open(dev);
 
   MOD_INC_USE_COUNT;
 
@@ -607,9 +604,7 @@ toshoboe_net_close (struct net_device *dev)
   ASSERT (idev != NULL, return 0;);
   ASSERT (idev->magic == IRDA_DEVICE_MAGIC, return 0;);
 
-  dev->tbusy = 1;
-  dev->start = 0;
-
+  irda_device_net_close(dev);
 
   self = idev->priv;
 
@@ -849,7 +844,7 @@ int __init toshoboe_init (void)
                                  PCI_DEVICE_ID_FIR701, pci_dev);
       if (pci_dev)
         {
-          printk (KERN_WARNING "ToshOboe: Found 701 chip at 0x%0lx irq %d\n",
+          printk (KERN_WARNING "ToshOboe: Found 701 chip at 0x%0lx irq %ld\n",
                   pci_dev->resource[0],
                   pci_dev->irq);
 

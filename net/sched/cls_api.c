@@ -433,7 +433,7 @@ errout:
 #endif
 
 
-__initfunc(int tc_filter_init(void))
+int __init tc_filter_init(void)
 {
 #ifdef CONFIG_RTNETLINK
 	struct rtnetlink_link *link_p = rtnetlink_links[PF_UNSPEC];

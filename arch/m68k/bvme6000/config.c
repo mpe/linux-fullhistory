@@ -103,7 +103,7 @@ static int bvme6000_get_hardware_list(char *buffer)
 }
 
 
-__initfunc(void config_bvme6000(void))
+void __init config_bvme6000(void)
 {
     volatile PitRegsPtr pit = (PitRegsPtr)BVME_PIT_BASE;
 

@@ -7,10 +7,10 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-O_TARGET := ircomm_n_vtd.o
-O_OBJS	 := ircomm_common.o irvtd_driver.o
-M_OBJS   := ircomm.o ircomm_tty.o
-MI_OBJS  := ircomm_common.o irvtd_driver.o
+O_TARGET := ircomm_and_tty.o
+O_OBJS	 := ircomm_param.o ircomm_core.o ircomm_event.o ircomm_lmp.o ircomm_ttp.o ircomm_tty.o ircomm_tty_attach.o ircomm_tty_ioctl.c
+M_OBJS   := ircomm.o ircomm-tty.o
+MI_OBJS  := ircomm_param.o ircomm_core.o ircomm_event.o ircomm_lmp.o ircomm_ttp.o ircomm_tty.o ircomm_tty_attach.o ircomm_tty_ioctl.o
 
 OX_OBJS  += 
 
@@ -18,10 +18,12 @@ OX_OBJS  +=
 
 ifeq ($(CONFIG_IRCOMM),m)
 ircomm.o:  $(MI_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ ircomm_common.o
+	$(LD) $(LD_RFLAG) -r -o $@ ircomm_core.o ircomm_event.o ircomm_lmp.o ircomm_ttp.o
 
-ircomm_tty.o: $(MI_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ irvtd_driver.o
+ircomm-tty.o: $(MI_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ ircomm_tty.o ircomm_tty_attach.o ircomm_tty_ioctl.o ircomm_param.o
+
+
 endif
 
 include $(TOPDIR)/Rules.make

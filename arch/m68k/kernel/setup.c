@@ -130,7 +130,7 @@ extern void config_sun3x(void);
 #define MASK_256K 0xfffc0000
 
 
-__initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
+static void __init m68k_parse_bootinfo(const struct bi_record *record)
 {
     while (record->tag != BI_LAST) {
 	int unknown = 0;
@@ -190,8 +190,8 @@ __initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
 #endif
 }
 
-__initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
-			   unsigned long * memory_end_p))
+void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p,
+			   unsigned long * memory_end_p)
 {
 	extern int _etext, _edata, _end;
 	int i;
@@ -467,7 +467,7 @@ long serial_console_init(long kmem_start, long kmem_end)
 #endif
 
 #if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY) || defined(CONFIG_BLK_DEV_FD)
-__initfunc(void floppy_setup(char *str, int *ints))
+void __init floppy_setup(char *str, int *ints)
 {
 	if (mach_floppy_setup)
 		mach_floppy_setup (str, ints);
@@ -481,7 +481,7 @@ void floppy_eject(void)
 #endif
 
 /* for "kbd-reset" cmdline param */
-__initfunc(void kbd_reset_setup(char *str, int *ints))
+void __init kbd_reset_setup(char *str, int *ints)
 {
 }
 

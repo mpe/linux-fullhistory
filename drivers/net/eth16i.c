@@ -171,7 +171,6 @@ static char *version =
 #else
 #define __init
 #define __initdata
-#define __initfunc(x) x
 #endif
 
 #if LINUX_VERSION_CODE < 0x20138

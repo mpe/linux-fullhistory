@@ -3233,7 +3233,7 @@ static int pc_ioctl(struct tty_struct *tty, struct file * file,
 			if (error)
 				return error;
 
-			putUser(mflag, (unsigned long *) arg);
+			putUser(mflag, (unsigned int *) arg);
 
 			break;
 

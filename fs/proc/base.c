@@ -178,7 +178,7 @@ static struct proc_dir_entry proc_pid_cpu = {
 };
 #endif
 
-__initfunc(void proc_base_init(void))
+void __init proc_base_init(void)
 {
 #if CONFIG_AP1000
 	proc_register(&proc_pid, &proc_pid_ringbuf);

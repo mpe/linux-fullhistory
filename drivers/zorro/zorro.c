@@ -153,7 +153,7 @@ void zorro_unconfig_board(u_int key, u_int part)
 u32 zorro_unused_z2ram[4] = { 0, 0, 0, 0 };
 
 
-__initfunc(static void mark_region(u32 addr, u_int size, int flag))
+static void __init mark_region(u32 addr, u_int size, int flag)
 {
     u32 start, end;
 
@@ -183,7 +183,7 @@ __initfunc(static void mark_region(u32 addr, u_int size, int flag))
      *  Initialization
      */
 
-__initfunc(void zorro_init(void))
+void __init zorro_init(void)
 {
     u_int i;
 

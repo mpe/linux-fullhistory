@@ -1028,10 +1028,10 @@ static struct file_system_type ntfs_fs_type = {
 /* When this code is not compiled as a module, this is the main entry point,
  * called by do_sys_setup() in fs/filesystems.c
  *
- * NOTE : __initfunc() is a macro used to remove this function from memory
+ * NOTE : __init is a macro used to remove this function from memory
  * once initialization is done
  */
-__initfunc(int init_ntfs_fs(void))
+int __init init_ntfs_fs(void)
 {
 	/* Comment this if you trust klogd. There are reasons not to trust it
 	 */

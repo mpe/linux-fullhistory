@@ -213,7 +213,7 @@ void release_fiq(struct fiq_handler *f)
 	while (current_fiq->fiq_op(current_fiq->dev_id, 0));
 }
 
-__initfunc(void init_FIQ(void))
+void __init init_FIQ(void)
 {
 	no_fiq_insn = *(unsigned long *)FIQ_VECTOR;
 	set_fs(get_fs());

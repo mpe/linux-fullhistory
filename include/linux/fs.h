@@ -851,6 +851,25 @@ extern ino_t find_inode_number(struct dentry *, struct qstr *);
 #define LOOKUP_SLASHOK		(4)
 #define LOOKUP_CONTINUE		(8)
 
+/*
+ * "descriptor" for what we're up to with a read for sendfile().
+ * This allows us to use the same read code yet
+ * have multiple different users of the data that
+ * we read from a file.
+ *
+ * The simplest case just copies the data to user
+ * mode.
+ */
+typedef struct {
+	size_t written;
+	size_t count;
+	char * buf;
+	int error;
+} read_descriptor_t;
+
+typedef int (*read_actor_t)(read_descriptor_t *, const char *, unsigned long);
+
+
 extern struct dentry * lookup_dentry(const char *, struct dentry *, unsigned int);
 extern struct dentry * __namei(const char *, unsigned int);
 
@@ -904,6 +923,7 @@ extern int block_flushpage(struct inode *, struct page *, unsigned long);
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t generic_file_write(struct file *, const char *, size_t, loff_t *, writepage_t);
+extern void do_generic_file_read(struct file * filp, loff_t *ppos, read_descriptor_t * desc, read_actor_t actor);
 
 
 extern struct super_block *get_super(kdev_t);

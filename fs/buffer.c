@@ -698,7 +698,6 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 	unsigned long flags;
 	struct buffer_head *tmp;
 	struct page *page;
-	int free;
 
 	mark_buffer_uptodate(bh, uptodate);
 
@@ -718,7 +717,7 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 	 * deemed complete once all buffers have been visited
 	 * (b_count==0) and are now unlocked. We must make sure that
 	 * only the _last_ buffer that decrements its count is the one
-	 * that free's the page..
+	 * that unlock the page..
 	 */
 	spin_lock_irqsave(&page_uptodate_lock, flags);
 	unlock_buffer(bh);
@@ -743,25 +742,14 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 
 	/*
 	 * Run the hooks that have to be done when a page I/O has completed.
-	 *
-	 * Note - we need to test the flags before we unlock the page, but
-	 * we must not actually free the page until after the unlock!
 	 */
 	if (test_and_clear_bit(PG_decr_after, &page->flags))
 		atomic_dec(&nr_async_pages);
-
-	if (test_and_clear_bit(PG_free_swap_after, &page->flags))
-		swap_free(page->offset);
-
-	free = test_and_clear_bit(PG_free_after, &page->flags);
 
 	if (page->owner != (void *)-1)
 		PAGE_BUG(page);
 	page->owner = current;
 	UnlockPage(page);
-
-	if (free)
-		__free_page(page);
 
 	return;
 
@@ -1238,7 +1226,7 @@ int block_flushpage(struct inode *inode, struct page *page, unsigned long offset
 	if (!PageLocked(page))
 		BUG();
 	if (!page->buffers)
-		return 0;
+		return 1;
 
 	head = page->buffers;
 	bh = head;
@@ -1279,10 +1267,13 @@ int block_flushpage(struct inode *inode, struct page *page, unsigned long offset
 	 */
 	if (!offset) {
 		if (!try_to_free_buffers(page))
+		{
 			atomic_add(PAGE_CACHE_SIZE, &buffermem);
+			return 0;
+		}
 	}
 
-	return 0;
+	return 1;
 }
 
 static void create_empty_buffers(struct page *page, struct inode *inode, unsigned long blocksize)
@@ -1822,6 +1813,10 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 		for (pageind = 0; pageind < iobuf->nr_pages; pageind++) {
 			page = iobuf->pagelist[pageind];
 			map  = iobuf->maplist[pageind];
+			if (map && PageBIGMEM(map)) {
+				err = -EIO;
+				goto error;
+			}
 
 			while (length > 0) {
 				blocknr = b[bufind++];
@@ -2060,6 +2055,7 @@ int block_read_full_page(struct file * file, struct page * page)
 static int grow_buffers(int size)
 {
 	unsigned long page;
+	struct page * page_map;
 	struct buffer_head *bh, *tmp;
 	struct buffer_head * insert_point;
 	int isize;
@@ -2100,7 +2096,9 @@ static int grow_buffers(int size)
 	free_list[isize].list = bh;
 	spin_unlock(&free_list[isize].lock);
 
-	mem_map[MAP_NR(page)].buffers = bh;
+	page_map = mem_map + MAP_NR(page);
+	page_map->buffers = bh;
+	lru_cache_add(page_map);
 	atomic_add(PAGE_SIZE, &buffermem);
 	return 1;
 

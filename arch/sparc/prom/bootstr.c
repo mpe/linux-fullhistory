@@ -16,8 +16,8 @@ static char fetched __initdata = 0;
 
 extern linux_sun4_romvec *sun4_romvec;
 
-__initfunc(char *
-prom_getbootargs(void))
+char * __init
+prom_getbootargs(void)
 {
 	int iter;
 	char *cp, *arg;

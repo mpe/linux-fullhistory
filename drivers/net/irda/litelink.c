@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri May  7 12:50:33 1999
- * Modified at:   Wed May 19 07:25:15 1999
+ * Modified at:   Sat Jun 26 17:01:05 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -44,12 +44,12 @@
 
 static void litelink_open(struct irda_device *idev, int type);
 static void litelink_close(struct irda_device *dev);
-static void litelink_change_speed(struct irda_device *dev, int baudrate);
+static void litelink_change_speed(struct irda_device *dev, __u32);
 static void litelink_reset(struct irda_device *dev);
 static void litelink_init_qos(struct irda_device *idev, struct qos_info *qos);
 
 /* These are the baudrates supported */
-static int baud_rates[] = { 115200, 57600, 38400, 19200, 9600 };
+static __u32 baud_rates[] = { 115200, 57600, 38400, 19200, 9600 };
 
 static struct dongle dongle = {
 	LITELINK_DONGLE,
@@ -89,12 +89,12 @@ static void litelink_close(struct irda_device *idev)
 }
 
 /*
- * Function litelink_change_speed (tty, baud)
+ * Function litelink_change_speed (idev, speed)
  *
  *    Change speed of the Litelink dongle. To cycle through the available 
  *    baud rates, pulse RTS low for a few ms.  
  */
-static void litelink_change_speed(struct irda_device *idev, int baudrate)
+static void litelink_change_speed(struct irda_device *idev, __u32 speed)
 {
         int i;
 	
@@ -114,7 +114,7 @@ static void litelink_change_speed(struct irda_device *idev, int baudrate)
 	udelay(MIN_DELAY);
 	
 	/* Cycle through avaiable baudrates until we reach the correct one */
-	for (i=0; i<5 && baud_rates[i] != baudrate; i++) {
+	for (i=0; i<5 && baud_rates[i] != speed; i++) {
 
 		/* Set DTR, clear RTS */
 		irda_device_set_dtr_rts(idev, FALSE, TRUE);

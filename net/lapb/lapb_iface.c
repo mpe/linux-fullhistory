@@ -401,7 +401,7 @@ EXPORT_SYMBOL(lapb_disconnect_request);
 EXPORT_SYMBOL(lapb_data_request);
 EXPORT_SYMBOL(lapb_data_received);
 
-__initfunc(void lapb_proto_init(struct net_proto *pro))
+void __init lapb_proto_init(struct net_proto *pro)
 {
 	printk(KERN_INFO "NET4: LAPB for Linux. Version 0.01 for NET4.0\n");
 }

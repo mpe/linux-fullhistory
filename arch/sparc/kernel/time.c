@@ -140,7 +140,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 }
 
 /* Kick start a stopped clock (procedure from the Sun NVRAM/hostid FAQ). */
-__initfunc(static void kick_start_clock(void))
+static void __init kick_start_clock(void)
 {
 	register struct mostek48t02 *regs = mstk48t02_regs;
 	unsigned char sec;
@@ -334,7 +334,7 @@ static __inline__ void clock_probe(void)
 		kick_start_clock();
 }
 
-__initfunc(void sbus_time_init(void))
+void __init sbus_time_init(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
 	struct mostek48t02 *mregs;
@@ -416,7 +416,7 @@ __initfunc(void sbus_time_init(void))
 	__sti();
 }
 
-__initfunc(void time_init(void))
+void __init time_init(void)
 {
 #ifdef CONFIG_PCI
 	extern void pci_time_init(void);

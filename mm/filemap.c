@@ -33,6 +33,8 @@
  *
  * finished 'unifying' the page and buffer cache and SMP-threaded the
  * page-cache, 21.05.1999, Ingo Molnar <mingo@redhat.com>
+ *
+ * SMP-threaded pagemap-LRU 1999, Andrea Arcangeli <andrea@suse.de>
  */
 
 atomic_t page_cache_size = ATOMIC_INIT(0);
@@ -40,6 +42,11 @@ unsigned int page_hash_bits;
 struct page **page_hash_table;
 
 spinlock_t pagecache_lock = SPIN_LOCK_UNLOCKED;
+/*
+ * NOTE: to avoid deadlocking you must never acquire the pagecache_lock with
+ *       the pagemap_lru_lock held.
+ */
+spinlock_t pagemap_lru_lock = SPIN_LOCK_UNLOCKED;
 
 #define CLUSTER_PAGES		(1 << page_cluster)
 #define CLUSTER_SHIFT		(PAGE_CACHE_SHIFT + page_cluster)
@@ -121,6 +128,7 @@ repeat:
 		}
 		if (page_count(page) != 2)
 			printk("hm, busy page invalidated? (not necesserily a bug)\n");
+		lru_cache_del(page);
 
 		remove_page_from_inode_queue(page);
 		remove_page_from_hash_queue(page);
@@ -155,8 +163,9 @@ repeat:
 
 			lock_page(page);
 
-			if (inode->i_op->flushpage)
-				inode->i_op->flushpage(inode, page, 0);
+			if (!inode->i_op->flushpage ||
+			    inode->i_op->flushpage(inode, page, 0))
+				lru_cache_del(page);
 
 			/*
 			 * We remove the page from the page cache
@@ -218,81 +227,62 @@ repeat:
 
 int shrink_mmap(int priority, int gfp_mask)
 {
-	static unsigned long clock = 0;
-	unsigned long limit = num_physpages << 1;
+	int ret = 0, count;
+	LIST_HEAD(young);
+	LIST_HEAD(old);
+	LIST_HEAD(forget);
+	struct list_head * page_lru, * dispose;
 	struct page * page;
-	int count, users;
 
-	count = limit >> priority;
+	count = nr_lru_pages / (priority+1);
 
-	page = mem_map + clock;
-	do {
-		int referenced;
+	spin_lock(&pagemap_lru_lock);
 
-		/* This works even in the presence of PageSkip because
-		 * the first two entries at the beginning of a hole will
-		 * be marked, not just the first.
-		 */
-		page++;
-		clock++;
-		if (clock >= max_mapnr) {
-			clock = 0;
-			page = mem_map;
-		}
-		if (PageSkip(page)) {
-			/* next_hash is overloaded for PageSkip */
-			page = page->next_hash;
-			clock = page - mem_map;
-		}
-		
-		referenced = test_and_clear_bit(PG_referenced, &page->flags);
+	while (count > 0 && (page_lru = lru_cache.prev) != &lru_cache) {
+		page = list_entry(page_lru, struct page, lru);
+		list_del(page_lru);
 
+		dispose = &lru_cache;
+		if (test_and_clear_bit(PG_referenced, &page->flags))
+			/* Roll the page at the top of the lru list,
+			 * we could also be more aggressive putting
+			 * the page in the young-dispose-list, so
+			 * avoiding to free young pages in each pass.
+			 */
+			goto dispose_continue;
+
+		dispose = &old;
+		/* don't account passes over not DMA pages */
 		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
-			continue;
+			goto dispose_continue;
+		if (!(gfp_mask & __GFP_BIGMEM) && PageBIGMEM(page))
+			goto dispose_continue;
 
 		count--;
 
-		/*
-		 * Some common cases that we just short-circuit without
-		 * getting the locks - we need to re-check this once we
-		 * have the lock, but that's fine.
-		 */
-		users = page_count(page);
-		if (!users)
-			continue;
-		if (!page->buffers) {
-			if (!page->inode)
-				continue;
-			if (users > 1)
-				continue;
-		}
+		dispose = &young;
+		if (TryLockPage(page))
+			goto dispose_continue;
 
-		/*
-		 * ok, now the page looks interesting. Re-check things
-		 * and keep the lock.
-		 */
+		/* Release the pagemap_lru lock even if the page is not yet
+		   queued in any lru queue since we have just locked down
+		   the page so nobody else may SMP race with us running
+		   a lru_cache_del() (lru_cache_del() always run with the
+		   page locked down ;). */
+		spin_unlock(&pagemap_lru_lock);
+
+		/* avoid unscalable SMP locking */
+		if (!page->buffers && page_count(page) > 1)
+			goto unlock_noput_continue;
+
+		/* Take the pagecache_lock spinlock held to avoid
+		   other tasks to notice the page while we are looking at its
+		   page count. If it's a pagecache-page we'll free it
+		   in one atomic transaction after checking its page count. */
 		spin_lock(&pagecache_lock);
-		if (!page->inode && !page->buffers) {
-			spin_unlock(&pagecache_lock);
-			continue;
-		}
-		if (!page_count(page)) {
-			spin_unlock(&pagecache_lock);
-			BUG();
-			continue;
-		}
-		get_page(page);
-		if (TryLockPage(page)) {
-			spin_unlock(&pagecache_lock);
-			goto put_continue;
-		}
 
-		/*
-		 * we keep pagecache_lock locked and unlock it in
-		 * each branch, so that the page->inode case doesnt
-		 * have to re-grab it. Here comes the 'real' logic
-		 * to free memory:
-		 */
+		/* avoid freeing the page while it's locked */
+		get_page(page);
 
 		/* Is it a buffer page? */
 		if (page->buffers) {
@@ -300,10 +290,9 @@ int shrink_mmap(int priority, int gfp_mask)
 			if (!try_to_free_buffers(page))
 				goto unlock_continue;
 			/* page was locked, inode can't go away under us */
-			if (!page->inode)
-			{
+			if (!page->inode) {
 				atomic_sub(PAGE_CACHE_SIZE, &buffermem);
-				goto made_progress;
+				goto made_buffer_progress;
 			}
 			spin_lock(&pagecache_lock);
 		}
@@ -313,7 +302,7 @@ int shrink_mmap(int priority, int gfp_mask)
 		 * (count == 2 because we added one ourselves above).
 		 */
 		if (page_count(page) != 2)
-			goto spin_unlock_continue;
+			goto cache_unlock_continue;
 
 		/*
 		 * Is it a page swap page? If so, we want to
@@ -322,35 +311,68 @@ int shrink_mmap(int priority, int gfp_mask)
 		 */
 		if (PageSwapCache(page)) {
 			spin_unlock(&pagecache_lock);
-			if (referenced && swap_count(page->offset) != 2)
-				goto unlock_continue;
 			__delete_from_swap_cache(page);
-			page_cache_release(page);
-			goto made_progress;
+			goto made_inode_progress;
 		}	
 
 		/* is it a page-cache page? */
-		if (!referenced && page->inode && !pgcache_under_min()) {
-			remove_page_from_inode_queue(page);
-			remove_page_from_hash_queue(page);
-			page->inode = NULL;
-			spin_unlock(&pagecache_lock);
-
-			page_cache_release(page);
-			goto made_progress;
+		if (page->inode)
+		{
+			dispose = &old;
+			if (!pgcache_under_min())
+			{
+				remove_page_from_inode_queue(page);
+				remove_page_from_hash_queue(page);
+				page->inode = NULL;
+				spin_unlock(&pagecache_lock);
+				goto made_inode_progress;
+			}
+			goto cache_unlock_continue;
 		}
-spin_unlock_continue:
+
+		dispose = &forget;
+		printk(KERN_ERR "shrink_mmap: unknown LRU page!\n");
+
+cache_unlock_continue:
 		spin_unlock(&pagecache_lock);
 unlock_continue:
 		UnlockPage(page);
-put_continue:
 		put_page(page);
-	} while (count > 0);
-	return 0;
-made_progress:
+dispose_relock_continue:
+		/* even if the dispose list is local, a truncate_inode_page()
+		   may remove a page from its queue so always
+		   synchronize with the lru lock while accesing the
+		   page->lru field */
+		spin_lock(&pagemap_lru_lock);
+		list_add(page_lru, dispose);
+		continue;
+
+unlock_noput_continue:
+		UnlockPage(page);
+		goto dispose_relock_continue;
+
+dispose_continue:
+		list_add(page_lru, dispose);
+	}
+	goto out;
+
+made_inode_progress:
+	page_cache_release(page);
+made_buffer_progress:
 	UnlockPage(page);
 	put_page(page);
-	return 1;
+	ret = 1;
+	spin_lock(&pagemap_lru_lock);
+	/* nr_lru_pages needs the spinlock */
+	nr_lru_pages--;
+
+out:
+	list_splice(&young, &lru_cache);
+	list_splice(&old, lru_cache.prev);
+
+	spin_unlock(&pagemap_lru_lock);
+
+	return ret;
 }
 
 static inline struct page * __find_page_nolock(struct inode * inode, unsigned long offset, struct page *page)
@@ -467,13 +489,14 @@ static inline void __add_to_page_cache(struct page * page,
 {
 	unsigned long flags;
 
-	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error));
-	page->flags = flags |  ((1 << PG_locked) | (1 << PG_referenced));
+	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error) | (1 << PG_referenced));
+	page->flags = flags | (1 << PG_locked);
 	page->owner = current;	/* REMOVEME */
 	get_page(page);
 	page->offset = offset;
 	add_page_to_inode_queue(inode, page);
 	__add_page_to_hash_queue(page, hash);
+	lru_cache_add(page);
 }
 
 void add_to_page_cache(struct page * page, struct inode * inode, unsigned long offset)
@@ -937,23 +960,6 @@ static void generic_file_readahead(int reada_ok,
 	return;
 }
 
-/*
- * "descriptor" for what we're up to with a read.
- * This allows us to use the same read code yet
- * have multiple different users of the data that
- * we read from a file.
- *
- * The simplest case just copies the data to user
- * mode.
- */
-typedef struct {
-	size_t written;
-	size_t count;
-	char * buf;
-	int error;
-} read_descriptor_t;
-
-typedef int (*read_actor_t)(read_descriptor_t *, const char *, unsigned long);
 
 /*
  * This is a generic file read routine, and uses the
@@ -963,7 +969,7 @@ typedef int (*read_actor_t)(read_descriptor_t *, const char *, unsigned long);
  * This is really ugly. But the goto's actually try to clarify some
  * of the logic when it comes to error handling etc.
  */
-static void do_generic_file_read(struct file * filp, loff_t *ppos, read_descriptor_t * desc, read_actor_t actor)
+void do_generic_file_read(struct file * filp, loff_t *ppos, read_descriptor_t * desc, read_actor_t actor)
 {
 	struct dentry *dentry = filp->f_dentry;
 	struct inode *inode = dentry->d_inode;

@@ -36,7 +36,7 @@
 #include <linux/wanrouter.h>	/* WAN router definitions */
 #include <linux/cyclomx.h>	/* cyclomx common user API definitions */
 #include <asm/uaccess.h>	/* kernel <-> user copy */
-#include <linux/init.h>         /* __initfunc (when not using as a module) */
+#include <linux/init.h>         /* __init (when not using as a module) */
 
 #ifdef MODULE
 MODULE_AUTHOR("Arnaldo Carvalho de Melo");
@@ -95,7 +95,7 @@ static cycx_t *card_array = NULL;	/* adapter data space */
 #ifdef MODULE
 int init_module (void)
 #else
-__initfunc(int cyclomx_init (void))
+int __init cyclomx_init (void)
 #endif
 {
 	int cnt, err = 0;

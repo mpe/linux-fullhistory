@@ -2338,8 +2338,8 @@ static int __init amb_probe (void) {
     
     // read resources from PCI configuration space
     u32 * membase = bus_to_virt
-      (pci_dev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK);
-    u32 iobase = pci_dev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
+      (pci_dev->resource[0].start);
+    u32 iobase = pci_dev->resource[1].start;
     u8 irq = pci_dev->irq;
     
     // check IO region

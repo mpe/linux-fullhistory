@@ -460,7 +460,7 @@ static void zatm_clock_sync(unsigned long dummy)
 }
 
 
-__initfunc(static void zatm_clock_init(struct zatm_dev *zatm_dev))
+static void __init zatm_clock_init(struct zatm_dev *zatm_dev)
 {
 	static int start_timer = 1;
 	unsigned long flags;
@@ -1289,8 +1289,8 @@ static void zatm_int(int irq,void *dev_id,struct pt_regs *regs)
 /*----------------------------- (E)EPROM access -----------------------------*/
 
 
-__initfunc(static void eprom_set(struct zatm_dev *zatm_dev,unsigned long value,
-    unsigned short cmd))
+static void __init eprom_set(struct zatm_dev *zatm_dev,unsigned long value,
+    unsigned short cmd)
 {
 	int error;
 
@@ -1300,8 +1300,8 @@ __initfunc(static void eprom_set(struct zatm_dev *zatm_dev,unsigned long value,
 }
 
 
-__initfunc(static unsigned long eprom_get(struct zatm_dev *zatm_dev,
-    unsigned short cmd))
+static unsigned long __init eprom_get(struct zatm_dev *zatm_dev,
+    unsigned short cmd)
 {
 	unsigned int value;
 	int error;
@@ -1313,8 +1313,8 @@ __initfunc(static unsigned long eprom_get(struct zatm_dev *zatm_dev,
 }
 
 
-__initfunc(static void eprom_put_bits(struct zatm_dev *zatm_dev,
-    unsigned long data,int bits,unsigned short cmd))
+static void __init eprom_put_bits(struct zatm_dev *zatm_dev,
+    unsigned long data,int bits,unsigned short cmd)
 {
 	unsigned long value;
 	int i;
@@ -1328,8 +1328,8 @@ __initfunc(static void eprom_put_bits(struct zatm_dev *zatm_dev,
 }
 
 
-__initfunc(static void eprom_get_byte(struct zatm_dev *zatm_dev,
-    unsigned char *byte,unsigned short cmd))
+static void __init eprom_get_byte(struct zatm_dev *zatm_dev,
+    unsigned char *byte,unsigned short cmd)
 {
 	int i;
 
@@ -1344,8 +1344,8 @@ __initfunc(static void eprom_get_byte(struct zatm_dev *zatm_dev,
 }
 
 
-__initfunc(static unsigned char eprom_try_esi(struct atm_dev *dev,
-    unsigned short cmd,int offset,int swap))
+static unsigned char __init eprom_try_esi(struct atm_dev *dev,
+    unsigned short cmd,int offset,int swap)
 {
 	unsigned char buf[ZEPROM_SIZE];
 	struct zatm_dev *zatm_dev;
@@ -1365,7 +1365,7 @@ __initfunc(static unsigned char eprom_try_esi(struct atm_dev *dev,
 }
 
 
-__initfunc(static void eprom_get_esi(struct atm_dev *dev))
+static void __init eprom_get_esi(struct atm_dev *dev)
 {
 	if (eprom_try_esi(dev,ZEPROM_V1_REG,ZEPROM_V1_ESI_OFF,1)) return;
 	(void) eprom_try_esi(dev,ZEPROM_V2_REG,ZEPROM_V2_ESI_OFF,0);
@@ -1375,7 +1375,7 @@ __initfunc(static void eprom_get_esi(struct atm_dev *dev))
 /*--------------------------------- entries ---------------------------------*/
 
 
-__initfunc(static int zatm_init(struct atm_dev *dev))
+static int __init zatm_init(struct atm_dev *dev)
 {
 	struct zatm_dev *zatm_dev;
 	struct pci_dev *pci_dev;
@@ -1387,7 +1387,7 @@ __initfunc(static int zatm_init(struct atm_dev *dev))
 	DPRINTK(">zatm_init\n");
 	zatm_dev = ZATM_DEV(dev);
 	pci_dev = zatm_dev->pci_dev;
-	zatm_dev->base = pci_dev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+	zatm_dev->base = pci_dev->resource[0].start;
 	zatm_dev->irq = pci_dev->irq;
 	if ((error = pci_read_config_word(pci_dev,PCI_COMMAND,&command)) ||
 	    (error = pci_read_config_byte(pci_dev,PCI_REVISION_ID,&revision))) {
@@ -1457,7 +1457,7 @@ __initfunc(static int zatm_init(struct atm_dev *dev))
 }
 
 
-__initfunc(static int zatm_start(struct atm_dev *dev))
+static int __init zatm_start(struct atm_dev *dev)
 {
 	struct zatm_dev *zatm_dev;
 	unsigned long curr;
@@ -1816,7 +1816,7 @@ static const struct atmdev_ops ops = {
 };
 
 
-__initfunc(int zatm_detect(void))
+int __init zatm_detect(void)
 {
 	struct atm_dev *dev;
 	struct zatm_dev *zatm_dev;

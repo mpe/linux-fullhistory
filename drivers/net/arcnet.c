@@ -472,7 +472,7 @@ arcnet_open(struct net_device *dev)
 #ifdef CONFIG_ARCNET_1051
   /* Initialize the RFC1051-encap protocol driver */
   lp->sdev=(struct net_device *)kmalloc(sizeof(struct net_device)+10,GFP_KERNEL);
-  if(lp->sdev = NULL)
+  if(lp->sdev == NULL)
   {
   	if(lp->edev)
   		kfree(lp->edev);

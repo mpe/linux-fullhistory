@@ -171,7 +171,7 @@ int stdma_islocked(void)
  *
  */
 
-__initfunc(void stdma_init(void))
+void __init stdma_init(void)
 {
 	stdma_isr = NULL;
 	request_irq(IRQ_MFP_FDC, stdma_int, IRQ_TYPE_SLOW,

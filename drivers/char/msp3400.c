@@ -992,16 +992,16 @@ msp3400c_mixer_llseek(struct file *file, loff_t offset, int origin)
 }
 
 static /*const*/ struct file_operations msp3400c_mixer_fops = {
-        &msp3400c_mixer_llseek,
+        msp3400c_mixer_llseek,
         NULL,  /* read */
         NULL,  /* write */
         NULL,  /* readdir */
         NULL,  /* poll */
-        &msp3400c_mixer_ioctl,
+        msp3400c_mixer_ioctl,
         NULL,  /* mmap */
-        &msp3400c_mixer_open,
+        msp3400c_mixer_open,
 	NULL,
-        &msp3400c_mixer_release,
+        msp3400c_mixer_release,
         NULL,  /* fsync */
         NULL,  /* fasync */
         NULL,  /* check_media_change */

@@ -74,15 +74,6 @@ extern void wait_for_keypress(void);
 #include <linux/blk.h>
 #include <linux/blkpg.h>
 
-/*
- * We use a block size of 512 bytes in comparision to BLOCK_SIZE
- * defined in include/linux/blk.h. This because of the finer
- * granularity for filling up a RAM disk.
- */
-#define RDBLK_SIZE_BITS		9
-#define RDBLK_SIZE		(1<<RDBLK_SIZE_BITS)
-
-
 /* The RAM disk size is now a parameter */
 #define NUM_RAMDISKS 16		/* This cannot be overridden (yet) */ 
 
@@ -114,6 +105,18 @@ static int rd_kbsize[NUM_RAMDISKS];		/* Size in blocks of 1024 bytes */
  * information). 
  */
 int rd_size = 4096;		/* Size of the RAM disks */
+/*
+ * It would be very desiderable to have a soft-blocksize (that in the case
+ * of the ramdisk driver is also the hardblocksize ;) of PAGE_SIZE because
+ * doing that we'll achieve a far better MM footprint. Using a rd_blocksize of
+ * BLOCK_SIZE in the worst case we'll make PAGE_SIZE/BLOCK_SIZE buffer-pages
+ * unfreeable. With a rd_blocksize of PAGE_SIZE instead we are sure that only
+ * 1 page will be protected. Depending on the size of the ramdisk you
+ * may want to change the ramdisk blocksize to achieve a better or worse MM
+ * behaviour. The default is still BLOCK_SIZE (needed by rd_load_image that
+ * supposes the filesystem in the image uses a BLOCK_SIZE blocksize).
+ */
+int rd_blocksize = BLOCK_SIZE;	/* Size of the RAM disks */
 
 #ifndef MODULE
 
@@ -184,9 +187,6 @@ static void rd_request(void)
 	unsigned long offset, len;
 
 repeat:
-	if (!CURRENT)
-		return;
-
 	INIT_REQUEST;
 	
 	minor = MINOR(CURRENT->rq_dev);
@@ -196,8 +196,8 @@ repeat:
 		goto repeat;
 	}
 	
-	offset = CURRENT->sector << RDBLK_SIZE_BITS;
-	len = CURRENT->current_nr_sectors << RDBLK_SIZE_BITS;
+	offset = CURRENT->sector << 9;
+	len = CURRENT->current_nr_sectors << 9;
 
 	if ((offset + len) > rd_length[minor]) {
 		end_request(0);
@@ -243,7 +243,7 @@ static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
-			return put_user(rd_length[minor] >> RDBLK_SIZE_BITS, (long *) arg);
+			return put_user(rd_kbsize[minor] << 1, (long *) arg);
 
 		case BLKROSET:
 		case BLKROGET:
@@ -347,6 +347,14 @@ int __init rd_init(void)
 {
 	int		i;
 
+	if (rd_blocksize > PAGE_SIZE || rd_blocksize < 512 ||
+	    (rd_blocksize & (rd_blocksize-1)))
+	{
+		printk("RAMDISK: wrong blocksize %d, reverting to defaults\n",
+		       rd_blocksize);
+		rd_blocksize = BLOCK_SIZE;
+	}
+
 	if (register_blkdev(MAJOR_NR, "ramdisk", &fd_fops)) {
 		printk("RAMDISK: Could not get major %d", MAJOR_NR);
 		return -EIO;
@@ -356,18 +364,19 @@ int __init rd_init(void)
 
 	for (i = 0; i < NUM_RAMDISKS; i++) {
 		/* rd_size is given in kB */
-		rd_length[i] = (rd_size << BLOCK_SIZE_BITS);
-		rd_hardsec[i] = RDBLK_SIZE;
-		rd_blocksizes[i] = BLOCK_SIZE;
-		rd_kbsize[i] = (rd_length[i] >> BLOCK_SIZE_BITS);
+		rd_length[i] = rd_size << 10;
+		rd_hardsec[i] = rd_blocksize;
+		rd_blocksizes[i] = rd_blocksize;
+		rd_kbsize[i] = rd_size;
 	}
 
 	hardsect_size[MAJOR_NR] = rd_hardsec;		/* Size of the RAM disk blocks */
 	blksize_size[MAJOR_NR] = rd_blocksizes;		/* Avoid set_blocksize() check */
 	blk_size[MAJOR_NR] = rd_kbsize;			/* Size of the RAM disk in kB  */
 
-	printk("RAM disk driver initialized:  %d RAM disks of %dK size\n",
-							NUM_RAMDISKS, rd_size);
+	printk("RAMDISK driver initialized: "
+	       "%d RAM disks of %dK size %d blocksize\n",
+	       NUM_RAMDISKS, rd_size, rd_blocksize);
 
 	return 0;
 }
@@ -377,7 +386,9 @@ int __init rd_init(void)
 #ifdef MODULE
 
 MODULE_PARM     (rd_size, "1i");
-MODULE_PARM_DESC(rd_size, "Size of each RAM disk.");
+MODULE_PARM_DESC(rd_size, "Size of each RAM disk in kbytes.");
+MODULE_PARM     (rd_blocksize, "i");
+MODULE_PARM_DESC(rd_blocksize, "Blocksize of each RAM disk in bytes.");
 
 int init_module(void)
 {
@@ -564,9 +575,15 @@ static void __init rd_load_image(kdev_t device, int offset, int unit)
 		goto done;
 	}
 
-	if (nblocks > (rd_length[unit] >> RDBLK_SIZE_BITS)) {
+	/*
+	 * NOTE NOTE: nblocks suppose that the blocksize is BLOCK_SIZE, so
+	 * rd_load_image will work only with filesystem BLOCK_SIZE wide!
+	 * So make sure to use 1k blocksize while generating ext2fs
+	 * ramdisk-images.
+	 */
+	if (nblocks > (rd_length[unit] >> BLOCK_SIZE_BITS)) {
 		printk("RAMDISK: image too big! (%d/%ld blocks)\n",
-		       nblocks, rd_length[unit] >> RDBLK_SIZE_BITS);
+		       nblocks, rd_length[unit] >> BLOCK_SIZE_BITS);
 		goto done;
 	}
 		

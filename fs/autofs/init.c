@@ -34,7 +34,7 @@ void cleanup_module(void)
 
 #else /* MODULE */
 
-__initfunc(int init_autofs_fs(void))
+int __init init_autofs_fs(void)
 {
 	return register_filesystem(&autofs_fs_type);
 }

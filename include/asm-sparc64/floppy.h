@@ -525,7 +525,7 @@ static int sun_pci_fd_test_drive(unsigned long port, int drive)
 
 static struct linux_prom_registers fd_regs[2];
 
-__initfunc(static unsigned long sun_floppy_init(void))
+static unsigned long __init sun_floppy_init(void)
 {
 	char state[128];
 	int fd_node, num_regs;

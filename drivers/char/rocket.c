@@ -88,8 +88,6 @@
 #endif
 #if (LINUX_VERSION_CODE >= 131343) /* 2.1.15 -- XX get correct version */
 #include <linux/init.h>
-#else
-#define __initfunc(x)	x
 #endif
 	
 #include "rocket_int.h"

@@ -20,6 +20,7 @@ if [ "$CONFIG_DONGLE" != "n" ]; then
   dep_tristate '   Tekram IrMate 210B dongle' CONFIG_TEKRAM_DONGLE $CONFIG_IRDA
   dep_tristate '   Greenwich GIrBIL dongle' CONFIG_GIRBIL_DONGLE $CONFIG_IRDA
   dep_tristate '   Parallax LiteLink dongle' CONFIG_LITELINK_DONGLE $CONFIG_IRDA
+  dep_tristate '   Adaptec Airport 1000/2000 dongle' CONFIG_AIRPORT_DONGLE $CONFIG_IRDA
 fi
 
 endmenu

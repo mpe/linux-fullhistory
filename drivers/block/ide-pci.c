@@ -130,9 +130,12 @@ extern void ide_init_ali15x3(ide_hwif_t *);
 #endif
 
 #ifdef CONFIG_BLK_DEV_CY82C693
+extern unsigned int pci_init_cy82c693(struct pci_dev *, const char *);
 extern void ide_init_cy82c693(ide_hwif_t *);
+#define PCI_CY82C693	&pci_init_cy82c693
 #define	INIT_CY82C693	&ide_init_cy82c693
 #else
+#define PCI_CY82C693	NULL
 #define	INIT_CY82C693	NULL
 #endif
 
@@ -240,7 +243,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_HPT34X,	"HPT34X",	PCI_HPT34X,	INIT_HPT34X,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	NEVER_BOARD,	0,	16 },
 	{DEVID_HPT366,	"HPT366",	PCI_HPT366,	INIT_HPT366,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	1,	256 },
 	{DEVID_ALI15X3,	"ALI15X3",	PCI_ALI15X3,	INIT_ALI15X3,	NULL,		{{0x09,0x20,0x20}, {0x09,0x10,0x10}},	ON_BOARD,	0,	0 },
-	{DEVID_CY82C693,"CY82C693",	NULL,		INIT_CY82C693,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0,	0 },
+	{DEVID_CY82C693,"CY82C693",	PCI_CY82C693,	INIT_CY82C693,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0,	0 },
 	{DEVID_HINT,	"HINT_IDE",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0,	0 },
 	{DEVID_CX5530,	"CX5530",	NULL,		INIT_CX5530,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0,	0 },
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0,	0 }};
@@ -262,15 +265,6 @@ static unsigned int __init ide_special_settings (struct pci_dev *dev, const char
 				pci_write_config_byte(dev, 0x80, 0x00);
 				pci_read_config_word(dev, PCI_COMMAND, &pcicmd);
 				if (!(pcicmd & PCI_COMMAND_MEMORY)) {
-					/*
-					 * FIXME - this is too ugly, and looks senseless.
-					 * Why not just use resource[4]?
-					 *
-					 * This was a cleaner/quicker way to get the ioports
-					 * that the are not decode do to a flaw in the chipset
-					 * design.
-					 */
-
 					int i;
 					unsigned long hpt34xIoBase = dev->resource[4].start;
 
@@ -491,9 +485,16 @@ check_if_enabled:
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366) && (port))
 			return;
 		if ((dev->class >> 8) != PCI_CLASS_STORAGE_IDE || (dev->class & (port ? 4 : 1)) != 0) {
-			/* FIXME! This really should check that it really gets the IO/MEM part right! */
 			ctl  = dev->resource[(2*port)+1].start;
 			base = dev->resource[2*port].start;
+			if (!(ctl & PCI_BASE_ADDRESS_IO_MASK) ||
+			    !(base & PCI_BASE_ADDRESS_IO_MASK)) {
+				printk("%s: IO baseregs (BIOS) are reported as MEM, report to <andre@suse.com>.\n", d->name);
+#if 0
+				/* FIXME! This really should check that it really gets the IO/MEM part right! */
+				continue;
+#endif
+			}
 		}
 		if ((ctl && !base) || (base && !ctl)) {
 			printk("%s: inconsistent baseregs (BIOS) for port %d, skipping\n", d->name, port);
@@ -579,7 +580,7 @@ bypass_umc_dma:
 		printk("%s: neither IDE port enabled (BIOS)\n", d->name);
 }
 
-__initfunc(static void hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_device_t *d))
+static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_device_t *d)
 {
 	struct pci_dev *dev2;
 	ide_pci_device_t *d2;
@@ -610,7 +611,7 @@ __initfunc(static void hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_d
 		d->name, dev->bus->number, dev->devfn);
 	ide_setup_pci_device(dev, d);
 
-	if (dev2) {
+	if (dev2 && !hpt363_shared_irq) {
 		printk("%s: IDE controller on PCI bus %02x dev %02x\n",
 			d2->name, dev2->bus->number, dev2->devfn);
 		ide_setup_pci_device(dev2, d2);

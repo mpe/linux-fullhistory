@@ -325,7 +325,7 @@ static void ps2kbd_tx(int irq, void *dev_id, struct pt_regs *regs)
 {
 }
 
-__initfunc(int ps2kbd_init_hw(void))
+int __init ps2kbd_init_hw(void)
 {
 	unsigned long flags;
 

@@ -42,8 +42,8 @@ driver from the insmod command line (or by means of an option line in
 /etc/conf.modules).
 
 Examples:
-  insmod soundmodem hw=0 mode=0 iobase=0x220 irq=5 dma=1
-  sethdlc -i sm0 -p hw sbc type afsk1200 io 0x220 irq 5 dma 1
+  insmod soundmodem mode="sbc:afsk1200" iobase=0x220 irq=5 dma=1
+  sethdlc -i sm0 -p mode "sbc:afsk1200" io 0x220 irq 5 dma 1
 
 Both lines configure the first port to drive a soundblaster card
 in 1200 baud AFSK mode.

@@ -1204,7 +1204,7 @@ void fib6_run_gc(unsigned long dummy)
 	spin_unlock_bh(&fib6_gc_lock);
 }
 
-__initfunc(void fib6_init(void))
+void __init fib6_init(void)
 {
 	if (!fib6_node_kmem)
 		fib6_node_kmem = kmem_cache_create("fib6_nodes",

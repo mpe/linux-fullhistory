@@ -44,6 +44,8 @@
  *
  * Al Viro           :  safe handling of mm_struct
  *
+ * Gerhard Wichert   :  added BIGMEM support
+ * Siemens AG           <Gerhard.Wichert@pdb.siemens.de>
  */
 
 #include <linux/types.h>
@@ -247,9 +249,8 @@ static int get_kstat(char * buffer)
 	int i, len;
 	unsigned sum = 0;
 	extern unsigned long total_forks;
-	unsigned long ticks;
+	unsigned long jif = jiffies;
 
-	ticks = jiffies * smp_num_cpus;
 	for (i = 0 ; i < NR_IRQS ; i++)
 		sum += kstat_irqs(i);
 
@@ -259,14 +260,14 @@ static int get_kstat(char * buffer)
 		kstat.cpu_user,
 		kstat.cpu_nice,
 		kstat.cpu_system,
-		jiffies*smp_num_cpus - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system));
+		jif*smp_num_cpus - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system));
 	for (i = 0 ; i < smp_num_cpus; i++)
 		len += sprintf(buffer + len, "cpu%d %u %u %u %lu\n",
 			i,
 			kstat.per_cpu_user[cpu_logical_map(i)],
 			kstat.per_cpu_nice[cpu_logical_map(i)],
 			kstat.per_cpu_system[cpu_logical_map(i)],
-			jiffies - (  kstat.per_cpu_user[cpu_logical_map(i)] \
+			jif - (  kstat.per_cpu_user[cpu_logical_map(i)] \
 			           + kstat.per_cpu_nice[cpu_logical_map(i)] \
 			           + kstat.per_cpu_system[cpu_logical_map(i)]));
 	len += sprintf(buffer + len,
@@ -292,7 +293,7 @@ static int get_kstat(char * buffer)
 		kstat.cpu_user,
 		kstat.cpu_nice,
 		kstat.cpu_system,
-		ticks - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system),
+		jif*smp_num_cpus - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system),
 #endif
 		kstat.dk_drive[0], kstat.dk_drive[1],
 		kstat.dk_drive[2], kstat.dk_drive[3],
@@ -316,7 +317,7 @@ static int get_kstat(char * buffer)
 		"btime %lu\n"
 		"processes %lu\n",
 		kstat.context_swtch,
-		xtime.tv_sec - jiffies / HZ,
+		xtime.tv_sec - jif / HZ,
 		total_forks);
 	return len;
 }
@@ -376,6 +377,8 @@ static int get_meminfo(char * buffer)
 		"MemShared: %8lu kB\n"
 		"Buffers:   %8lu kB\n"
 		"Cached:    %8u kB\n"
+		"BigTotal:  %8lu kB\n"
+		"BigFree:   %8lu kB\n"
 		"SwapTotal: %8lu kB\n"
 		"SwapFree:  %8lu kB\n",
 		i.totalram >> 10,
@@ -383,6 +386,8 @@ static int get_meminfo(char * buffer)
 		i.sharedram >> 10,
 		i.bufferram >> 10,
 		atomic_read(&page_cache_size) << (PAGE_SHIFT - 10),
+		i.totalbig >> 10,
+		i.freebig >> 10,
 		i.totalswap >> 10,
 		i.freeswap >> 10);
 }
@@ -432,6 +437,8 @@ static unsigned long get_phys_addr(struct mm_struct * mm, unsigned long ptr)
 	return pte_page(pte) + (ptr & ~PAGE_MASK);
 }
 
+#include <linux/bigmem.h>
+
 static int get_array(struct mm_struct *mm, unsigned long start, unsigned long end, char * buffer)
 {
 	unsigned long addr;
@@ -444,19 +451,25 @@ static int get_array(struct mm_struct *mm, unsigned long start, unsigned long en
 		addr = get_phys_addr(mm, start);
 		if (!addr)
 			return result;
+		addr = kmap(addr, KM_READ);
 		do {
 			c = *(char *) addr;
 			if (!c)
 				result = size;
 			if (size < PAGE_SIZE)
 				buffer[size++] = c;
-			else
+			else {
+				kunmap(addr, KM_READ);
 				return result;
+			}
 			addr++;
 			start++;
-			if (!c && start >= end)
+			if (!c && start >= end) {
+				kunmap(addr, KM_READ);
 				return result;
+			}
 		} while (addr & ~PAGE_MASK);
+		kunmap(addr, KM_READ);
 	}
 	return result;
 }
@@ -519,12 +532,12 @@ static unsigned long get_wchan(struct task_struct *p)
 
 		stack_page = (unsigned long)p;
 		esp = p->thread.esp;
-		if (!stack_page || esp < stack_page || esp >= 8188+stack_page)
+		if (!stack_page || esp < stack_page || esp > 8188+stack_page)
 			return 0;
 		/* include/asm-i386/system.h:switch_to() pushes ebp last. */
 		ebp = *(unsigned long *) esp;
 		do {
-			if (ebp < stack_page || ebp >= 8188+stack_page)
+			if (ebp < stack_page || ebp > 8184+stack_page)
 				return 0;
 			eip = *(unsigned long *) (ebp+4);
 			if (eip < first_sched || eip >= last_sched)
@@ -1456,8 +1469,7 @@ static int process_unauthorized(int type, int pid)
 	if (!p)
 		return 1;
 
-	switch(type)
-	{
+	switch(type) {
 		case PROC_PID_STATUS:
 		case PROC_PID_STATM:
 		case PROC_PID_STAT:
@@ -1524,8 +1536,7 @@ static ssize_t array_read(struct file * file, char * buf,
 	start = NULL;
 	dp = (struct proc_dir_entry *) inode->u.generic_ip;
 	
-	if (pid && process_unauthorized(type, pid))
-	{
+	if (pid && process_unauthorized(type, pid)) {
 		free_page(page);
 		return -EIO;
 	}

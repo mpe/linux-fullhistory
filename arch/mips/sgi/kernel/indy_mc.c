@@ -47,7 +47,7 @@ static inline char *mconfig_string(unsigned long val)
 	};
 }
 
-__initfunc(void sgimc_init(void))
+void __init sgimc_init(void)
 {
 	unsigned long tmpreg;
 

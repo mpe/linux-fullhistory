@@ -170,7 +170,7 @@ void proc_tty_unregister_driver(struct tty_driver *driver)
 /*
  * Called by proc_root_init() to initialize the /proc/tty subtree
  */
-__initfunc(void proc_tty_init(void))
+void __init proc_tty_init(void)
 {
 	struct proc_dir_entry *ent;
 	

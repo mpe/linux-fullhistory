@@ -73,7 +73,7 @@ asmlinkage int sys_idle(void)
 
 static char reboot_mode = 'h';
 
-__initfunc(void reboot_setup(char *str, int *ints))
+void __init reboot_setup(char *str, int *ints)
 {
 	reboot_mode = str[0];
 }

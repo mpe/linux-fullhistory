@@ -6,6 +6,8 @@
  * for more details.
  *
  * Copyright (C) 1998 Ingo Molnar
+ *
+ * Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999
  */
 
 #ifndef _ASM_FIXMAP_H
@@ -15,6 +17,10 @@
 #include <linux/kernel.h>
 #include <asm/apic.h>
 #include <asm/page.h>
+#ifdef CONFIG_BIGMEM
+#include <linux/tasks.h>
+#include <asm/kmap_types.h>
+#endif
 
 /*
  * Here we define all the compile-time 'special' virtual
@@ -54,6 +60,10 @@ enum fixed_addresses {
 	FIX_CO_APIC,	/* Cobalt APIC Redirection Table */ 
 	FIX_LI_PCIA,	/* Lithium PCI Bridge A */
 	FIX_LI_PCIB,	/* Lithium PCI Bridge B */
+#endif
+#ifdef CONFIG_BIGMEM
+	FIX_KMAP_BEGIN,	/* reserved pte's for temporary kernel mappings */
+	FIX_KMAP_END = FIX_KMAP_BEGIN+(KM_TYPE_NR*NR_CPUS)-1,
 #endif
 	__end_of_fixed_addresses
 };

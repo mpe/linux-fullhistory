@@ -227,8 +227,8 @@ pmac_mksound(unsigned int hz, unsigned int ticks)
 
 static volatile u32 *sysctrl_regs;
 
-__initfunc(void
-pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
+void __init
+pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p)
 {
 	struct device_node *cpu;
 	int *fp;
@@ -308,7 +308,7 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 /*
  * Tweak the PCI-PCI bridge chip on the blue & white G3s.
  */
-__initfunc(static void init_p2pbridge(void))
+static void __init init_p2pbridge(void)
 {
 	struct device_node *p2pbridge;
 	unsigned char bus, devfn;
@@ -330,7 +330,7 @@ __initfunc(static void init_p2pbridge(void))
 	pcibios_read_config_word(bus, devfn, PCI_BRIDGE_CONTROL, &val);
 }
 
-__initfunc(static void ohare_init(void))
+static void __init ohare_init(void)
 {
 	/*
 	 * Turn on the L2 cache.
@@ -355,8 +355,8 @@ int boot_target;
 int boot_part;
 kdev_t boot_dev;
 
-__initfunc(void
-pmac_init2(void))
+void __init
+pmac_init2(void)
 {
 	adb_init();
 	pmac_nvram_init();
@@ -364,8 +364,8 @@ pmac_init2(void))
 }
 
 #ifdef CONFIG_SCSI
-__initfunc(void
-note_scsi_host(struct device_node *node, void *host))
+void __init
+note_scsi_host(struct device_node *node, void *host)
 {
 	int l;
 	char *p;
@@ -399,7 +399,7 @@ extern int pmac_ide_count;
 extern struct device_node *pmac_ide_node[];
 static int ide_majors[] = { 3, 22, 33, 34, 56, 57, 88, 89 };
 
-__initfunc(kdev_t find_ide_boot(void))
+kdev_t __init find_ide_boot(void)
 {
 	char *p;
 	int i, n;
@@ -426,7 +426,7 @@ __initfunc(kdev_t find_ide_boot(void))
 }
 #endif /* CONFIG_BLK_DEV_IDE_PMAC */
 
-__initfunc(void find_boot_device(void))
+void __init find_boot_device(void)
 {
 #ifdef CONFIG_SCSI
 	if (boot_host != NULL) {
@@ -589,9 +589,9 @@ void pmac_ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t 
 #endif
 #endif
 
-__initfunc(void
+void __init
 pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
-	  unsigned long r6, unsigned long r7))
+	  unsigned long r6, unsigned long r7)
 {
 	pmac_setup_pci_ptrs();
 

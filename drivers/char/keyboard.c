@@ -901,7 +901,7 @@ static void kbd_bh(void)
 	}
 }
 
-__initfunc(int kbd_init(void))
+int __init kbd_init(void)
 {
 	int i;
 	struct kbd_struct kbd0;

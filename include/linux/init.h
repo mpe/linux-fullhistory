@@ -17,14 +17,6 @@
  *    extern int z; z = x * y;
  * }
  *
- * Depricated: you can surround the whole function declaration 
- * just before function body into __initfunc() macro, like:
- *
- * __initfunc (static void initme(int x, int y))
- * {
- *    extern int z; z = x * y;
- * }
- *
  * If the function has a prototype somewhere, you can also add
  * __init between closing brace of the prototype and semicolon:
  *
@@ -39,12 +31,6 @@
  *
  * For initialized data not at file scope, i.e. within a function,
  * you should use __initlocaldata instead, due to a bug in GCC 2.7.
- */
-
-/*
- * Disable the __initfunc macros if a file that is a part of a
- * module attempts to use them. We do not want to interfere
- * with module linking.
  */
 
 #ifndef MODULE
@@ -88,10 +74,6 @@ extern struct kernel_param __setup_start, __setup_end;
 #define __initsetup	__attribute__ ((unused,__section__ (".setup.init")))
 #define __init_call	__attribute__ ((unused,__section__ (".initcall.init")))
 
-#define __initfunc(__arginit) \
-	__arginit __init; \
-	__arginit
-
 /* For assembly routines */
 #define __INIT		.section	".text.init","ax"
 #define __FINIT		.previous
@@ -106,7 +88,6 @@ extern struct kernel_param __setup_start, __setup_end;
 #define __exit
 #define __initdata
 #define __exitdata
-#define __initfunc(__arginit) __arginit
 #define __initcall
 /* For assembly routines */
 #define __INIT

@@ -109,11 +109,23 @@ int * max_readahead[MAX_BLKDEV] = { NULL, NULL, };
  */
 int * max_sectors[MAX_BLKDEV] = { NULL, NULL, };
 
+/*
+ * Max number of segments per request
+ */
+int * max_segments[MAX_BLKDEV] = { NULL, NULL, };
+
 static inline int get_max_sectors(kdev_t dev)
 {
 	if (!max_sectors[MAJOR(dev)])
 		return MAX_SECTORS;
 	return max_sectors[MAJOR(dev)][MINOR(dev)];
+}
+
+static inline int get_max_segments(kdev_t dev)
+{
+	if (!max_segments[MAJOR(dev)])
+		return MAX_SEGMENTS;
+	return max_segments[MAJOR(dev)][MINOR(dev)];
 }
 
 /*
@@ -292,24 +304,31 @@ static inline void drive_stat_acct(int cmd, unsigned long nr_sectors,
 
 void add_request(struct blk_dev_struct * dev, struct request * req)
 {
+	int major = MAJOR(req->rq_dev);
+	int minor = MINOR(req->rq_dev);
 	struct request * tmp, **current_request;
 	short		 disk_index;
 	unsigned long flags;
 	int queue_new_request = 0;
 
-	switch (MAJOR(req->rq_dev)) {
+	switch (major) {
+		case DAC960_MAJOR+0:
+			disk_index = (minor & 0x00f8) >> 3;
+			if (disk_index < 4)
+				drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
+			break;
 		case SCSI_DISK0_MAJOR:
-			disk_index = (MINOR(req->rq_dev) & 0x00f0) >> 4;
+			disk_index = (minor & 0x00f0) >> 4;
 			if (disk_index < 4)
 				drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 			break;
 		case IDE0_MAJOR:	/* same as HD_MAJOR */
 		case XT_DISK_MAJOR:
-			disk_index = (MINOR(req->rq_dev) & 0x0040) >> 6;
+			disk_index = (minor & 0x0040) >> 6;
 			drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 			break;
 		case IDE1_MAJOR:
-			disk_index = ((MINOR(req->rq_dev) & 0x0040) >> 6) + 2;
+			disk_index = ((minor & 0x0040) >> 6) + 2;
 			drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 		default:
 			break;
@@ -345,10 +364,12 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	tmp->next = req;
 
 /* for SCSI devices, call request_fn unconditionally */
-	if (scsi_blk_major(MAJOR(req->rq_dev)))
+	if (scsi_blk_major(major))
 		queue_new_request = 1;
-	if (MAJOR(req->rq_dev) >= COMPAQ_SMART2_MAJOR+0 &&
-	    MAJOR(req->rq_dev) <= COMPAQ_SMART2_MAJOR+7)
+	if (major >= COMPAQ_SMART2_MAJOR+0 &&
+	    major <= COMPAQ_SMART2_MAJOR+7)
+		queue_new_request = 1;
+	if (major >= DAC960_MAJOR+0 && major <= DAC960_MAJOR+7)
 		queue_new_request = 1;
 out:
 	if (queue_new_request)
@@ -511,6 +532,14 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	     case SCSI_DISK6_MAJOR:
 	     case SCSI_DISK7_MAJOR:
 	     case SCSI_CDROM_MAJOR:
+	     case DAC960_MAJOR+0:
+	     case DAC960_MAJOR+1:
+	     case DAC960_MAJOR+2:
+	     case DAC960_MAJOR+3:
+	     case DAC960_MAJOR+4:
+	     case DAC960_MAJOR+5:
+	     case DAC960_MAJOR+6:
+	     case DAC960_MAJOR+7:
 	     case I2O_MAJOR:
 	     case COMPAQ_SMART2_MAJOR+0:
 	     case COMPAQ_SMART2_MAJOR+1:

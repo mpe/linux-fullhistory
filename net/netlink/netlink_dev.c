@@ -178,7 +178,7 @@ static struct file_operations netlink_fops = {
 	netlink_release
 };
 
-__initfunc(int init_netlink(void))
+int __init init_netlink(void)
 {
 	if (register_chrdev(NETLINK_MAJOR,"netlink", &netlink_fops)) {
 		printk(KERN_ERR "netlink: unable to get major %d\n", NETLINK_MAJOR);

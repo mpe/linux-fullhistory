@@ -23,7 +23,7 @@ int sun4_dma_physaddr;
 int sun4_esp_physaddr;
 int sun4_ie_physaddr; 
 
-__initfunc(void sun4setup())
+void __init sun4setup(void)
 {
 	printk("Sun4 Hardware Setup v1.0 18/May/98 Chris Davis (cdavis@cois.on.ca). ");
 	/*

@@ -272,7 +272,7 @@ void show_mem(void)
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
 
-__initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
+unsigned long __init paging_init(unsigned long start_mem, unsigned long end_mem)
 {
 	/* Initialize the entire pgd.  */
 	pgd_init((unsigned long)swapper_pg_dir);
@@ -280,7 +280,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 	return free_area_init(start_mem, end_mem);
 }
 
-__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
+void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int codepages = 0;
 	int datapages = 0;
@@ -383,8 +383,8 @@ void si_meminfo(struct sysinfo *val)
 }
 
 /* Fixup an immediate instruction  */
-__initfunc(static void __i_insn_fixup(unsigned int **start, unsigned int **stop,
-                         unsigned int i_const))
+static void __init __i_insn_fixup(unsigned int **start, unsigned int **stop,
+                         unsigned int i_const)
 {
 	unsigned int **p, *ip;
 
@@ -402,9 +402,9 @@ do {									  \
 } while(0)
 
 /* Caller is assumed to flush the caches before the first context switch.  */
-__initfunc(void __asid_setup(unsigned int inc, unsigned int mask,
+void __init __asid_setup(unsigned int inc, unsigned int mask,
                              unsigned int version_mask,
-                             unsigned int first_version))
+                             unsigned int first_version)
 {
 	i_insn_fixup(__asid_inc, inc);
 	i_insn_fixup(__asid_mask, mask);

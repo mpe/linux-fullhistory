@@ -263,7 +263,7 @@ int probe_irq_off(unsigned long irqs)
     return 0;
 }
 
-__initfunc(void init_IRQ(void))
+void __init init_IRQ(void)
 {
     irq_setup();
 }

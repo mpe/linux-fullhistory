@@ -5,14 +5,13 @@
 if [ "$CONFIG_NET" != "n" ] ; then
 
   mainmenu_option next_comment
-  comment 'IrDA subsystem support'
+  comment 'IrDA (infrared) support'
   dep_tristate 'IrDA subsystem support' CONFIG_IRDA $CONFIG_NET
 
   if [ "$CONFIG_IRDA" != "n" ] ; then
     comment 'IrDA protocols'
     source net/irda/irlan/Config.in
     source net/irda/ircomm/Config.in
-    source net/irda/irlpt/Config.in
 
     bool 'IrDA protocol options' CONFIG_IRDA_OPTIONS
     if [ "$CONFIG_IRDA_OPTIONS" != "n" ] ; then

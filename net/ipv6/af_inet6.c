@@ -509,7 +509,7 @@ extern void ipv6_sysctl_unregister(void);
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(void inet6_proto_init(struct net_proto *pro))
+void __init inet6_proto_init(struct net_proto *pro)
 #endif
 {
 	struct sk_buff *dummy_skb;

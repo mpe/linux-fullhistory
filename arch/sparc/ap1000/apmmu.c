@@ -775,7 +775,7 @@ static inline pte_t *apmmu_early_pte_offset(pmd_t *dir, unsigned long address)
 	return (pte_t *) apmmu_early_pmd_page(*dir) + ((address >> PAGE_SHIFT) & (APMMU_PTRS_PER_PTE - 1));
 }
 
-__initfunc(static inline void apmmu_allocate_ptable_skeleton(unsigned long start, unsigned long end))
+static inline void __init apmmu_allocate_ptable_skeleton(unsigned long start, unsigned long end)
 {
 	pgd_t *pgdp;
 	pmd_t *pmdp;
@@ -797,7 +797,7 @@ __initfunc(static inline void apmmu_allocate_ptable_skeleton(unsigned long start
 }
 
 
-__initfunc(static void make_page(unsigned virt_page, unsigned phys_page, unsigned prot))
+static void __init make_page(unsigned virt_page, unsigned phys_page, unsigned prot)
 {
 	pgd_t *pgdp;
 	pmd_t *pmdp;
@@ -819,7 +819,7 @@ __initfunc(static void make_page(unsigned virt_page, unsigned phys_page, unsigne
 }
 
 
-__initfunc(static void make_large_page(unsigned virt_page, unsigned phys_page, unsigned prot))
+static void __init make_large_page(unsigned virt_page, unsigned phys_page, unsigned prot)
 {
 	pgd_t *pgdp;
 	unsigned start = virt_page<<12;
@@ -829,7 +829,7 @@ __initfunc(static void make_large_page(unsigned virt_page, unsigned phys_page, u
 }
 
 
-__initfunc(static void ap_setup_mappings(void))
+static void __init ap_setup_mappings(void)
 {
 	unsigned Srwe = APMMU_PRIV | APMMU_VALID;
 	unsigned SrweUr = 0x14 | APMMU_VALID; /* weird! */
@@ -897,7 +897,7 @@ __initfunc(static void ap_setup_mappings(void))
 	make_page(MSC_REMREPLY_DIRECT_END>>PAGE_SHIFT, 0xa0c004,Srwe);
 }
 
-__initfunc(static void map_kernel(void))
+static void __init map_kernel(void)
 {
 	int phys;
 
@@ -917,7 +917,7 @@ extern unsigned long sparc_context_init(unsigned long, int);
 extern int physmem_mapped_contig;
 extern int linux_num_cpus;
 
-__initfunc(unsigned long apmmu_paging_init(unsigned long start_mem, unsigned long end_mem))
+unsigned long __init apmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int i;
 
@@ -979,7 +979,7 @@ static void apmmu_update_mmu_cache(struct vm_area_struct * vma, unsigned long ad
 {
 }
 
-__initfunc(static void poke_viking(void))
+static void __init poke_viking(void)
 {
 	unsigned long mreg = apmmu_get_mmureg();
 
@@ -991,7 +991,7 @@ __initfunc(static void poke_viking(void))
 	apmmu_set_mmureg(mreg);
 }
 
-__initfunc(static void init_viking(void))
+static void __init init_viking(void)
 {
 	apmmu_name = "TI Viking/AP1000";
 
@@ -1024,7 +1024,7 @@ extern unsigned long srmmu_fault;
 		*iaddr = SPARC_BRANCH((unsigned long) daddr, (unsigned long) iaddr); \
 	} while(0);
 
-__initfunc(static void patch_window_trap_handlers(void))
+static void __init patch_window_trap_handlers(void)
 {
 	unsigned long *iaddr, *daddr;
 	
@@ -1038,7 +1038,7 @@ __initfunc(static void patch_window_trap_handlers(void))
 }
 
 /* Load up routines and constants for apmmu */
-__initfunc(void ld_mmu_apmmu(void))
+void __init ld_mmu_apmmu(void)
 {
 	/* First the constants */
 	BTFIXUPSET_SIMM13(pmd_shift, APMMU_PMD_SHIFT);

@@ -221,7 +221,7 @@ static struct parport_operations pp_amiga_ops = {
 
 /* ----------- Initialisation code --------------------------------- */
 
-__initfunc(int parport_amiga_init(void))
+int __init parport_amiga_init(void)
 {
 	struct parport *p;
 

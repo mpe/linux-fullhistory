@@ -434,7 +434,7 @@ static struct file_system_type umsdos_fs_type =
 	NULL
 };
 
-__initfunc (int init_umsdos_fs (void))
+int __init init_umsdos_fs (void)
 {
 	return register_filesystem (&umsdos_fs_type);
 }

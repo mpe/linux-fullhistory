@@ -18,25 +18,6 @@ extern unsigned int local_bh_count[NR_CPUS];
 #define get_active_bhs()	(bh_mask & bh_active)
 #define clear_active_bhs(x)	atomic_clear_mask((x),&bh_active)
 
-extern inline void init_bh(int nr, void (*routine)(void))
-{
-	bh_base[nr] = routine;
-	atomic_set(&bh_mask_count[nr], 0);
-	bh_mask |= 1 << nr;
-}
-
-extern inline void remove_bh(int nr)
-{
-	bh_mask &= ~(1 << nr);
-	mb();
-	bh_base[nr] = NULL;
-}
-
-extern inline void mark_bh(int nr)
-{
-	set_bit(nr, &bh_active);
-}
-
 #ifdef __SMP__
 
 /*
@@ -46,6 +27,7 @@ extern inline void mark_bh(int nr)
  */
 extern atomic_t global_bh_lock;
 extern atomic_t global_bh_count;
+extern spinlock_t i386_bh_lock;
 
 extern void synchronize_bh(void);
 
@@ -101,21 +83,58 @@ extern inline void end_bh_atomic(void)
 
 #endif	/* SMP */
 
+extern inline void init_bh(int nr, void (*routine)(void))
+{
+	unsigned long flags;
+
+	bh_base[nr] = routine;
+	atomic_set(&bh_mask_count[nr], 0);
+
+	spin_lock_irqsave(&i386_bh_lock, flags);
+	bh_mask |= 1 << nr;
+	spin_unlock_irqrestore(&i386_bh_lock, flags);
+}
+
+extern inline void remove_bh(int nr)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&i386_bh_lock, flags);
+	bh_mask &= ~(1 << nr);
+	spin_unlock_irqrestore(&i386_bh_lock, flags);
+
+	synchronize_bh();
+	bh_base[nr] = NULL;
+}
+
+extern inline void mark_bh(int nr)
+{
+	set_bit(nr, &bh_active);
+}
+
 /*
  * These use a mask count to correctly handle
  * nested disable/enable calls
  */
 extern inline void disable_bh(int nr)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&i386_bh_lock, flags);
 	bh_mask &= ~(1 << nr);
 	atomic_inc(&bh_mask_count[nr]);
+	spin_unlock_irqrestore(&i386_bh_lock, flags);
 	synchronize_bh();
 }
 
 extern inline void enable_bh(int nr)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&i386_bh_lock, flags);
 	if (atomic_dec_and_test(&bh_mask_count[nr]))
 		bh_mask |= 1 << nr;
+	spin_unlock_irqrestore(&i386_bh_lock, flags);
 }
 
 #endif	/* __ASM_SOFTIRQ_H */

@@ -152,10 +152,9 @@ static struct dentry *devpts_root_lookup(struct inode * dir, struct dentry * den
 			unsigned int nentry = *p++ - '0';
 			if ( nentry > 9 )
 				return NULL;
-			nentry += entry * 10;
-			if (nentry < entry)
+			if ( entry >= ~0U/10 )
 				return NULL;
-			entry = nentry;
+			entry = nentry + entry * 10;
 		}
 	}
 

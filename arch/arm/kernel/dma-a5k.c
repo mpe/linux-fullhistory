@@ -91,7 +91,7 @@ int arch_set_dma_speed(dmach_t channel, dma_t *dma, int cycle_ns)
 	return 0;
 }
 
-__initfunc(void arch_dma_init(dma_t *dma))
+void __init arch_dma_init(dma_t *dma)
 {
 	dma[DMA_VIRTUAL_FLOPPY].dma_irq = 64;
 }

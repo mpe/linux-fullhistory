@@ -31,7 +31,7 @@
 #include <linux/atmclip.h>
 #include <linux/atmarp.h>
 #include <linux/if_arp.h>
-#include <linux/init.h> /* for __initfunc */
+#include <linux/init.h> /* for __init */
 #include <asm/uaccess.h>
 #include <asm/param.h> /* for HZ */
 #include "resources.h"
@@ -596,7 +596,7 @@ void atm_proc_dev_deregister(struct atm_dev *dev)
 }
 
 
-__initfunc(int atm_proc_init(void))
+int __init atm_proc_init(void)
 {
 	int error;
 

@@ -173,6 +173,7 @@ EXPORT_SYMBOL(block_write_partial_page);
 EXPORT_SYMBOL(block_write_cont_page);
 EXPORT_SYMBOL(block_flushpage);
 EXPORT_SYMBOL(generic_file_read);
+EXPORT_SYMBOL(do_generic_file_read);
 EXPORT_SYMBOL(generic_file_write);
 EXPORT_SYMBOL(generic_file_mmap);
 EXPORT_SYMBOL(generic_buffer_fdatasync);

@@ -711,7 +711,7 @@ int probe_irq_off(unsigned long mask)
  *
  */
 
-__initfunc(void init_IRQ(void))
+void __init init_IRQ(void)
 {
 	extern void sun4c_init_IRQ( void );
 	extern void sun4m_init_IRQ( void );

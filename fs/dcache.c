@@ -20,6 +20,7 @@
 #include <linux/malloc.h>
 #include <linux/slab.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -473,9 +474,11 @@ void shrink_dcache_memory(int priority, unsigned int gfp_mask)
 {
 	if (gfp_mask & __GFP_IO) {
 		int count = 0;
+		lock_kernel();
 		if (priority)
 			count = dentry_stat.nr_unused / priority;
 		prune_dcache(count);
+		unlock_kernel();
 	}
 }
 

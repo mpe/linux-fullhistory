@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug  3 13:49:59 1997
- * Modified at:   Wed May 19 15:31:16 1999
+ * Modified at:   Sat Jun 26 16:57:03 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -53,7 +53,7 @@ void irport_start(struct irda_device *idev, int iobase);
 void irport_stop(struct irda_device *idev, int iobase);
 int  irport_probe(int iobase);
 
-void irport_change_speed(struct irda_device *idev, int speed);
+void irport_change_speed(struct irda_device *idev, __u32 speed);
 void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
 int  irport_hard_xmit(struct sk_buff *skb, struct net_device *dev);

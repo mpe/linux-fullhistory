@@ -42,7 +42,7 @@ static irq_node_t nodes[NUM_IRQ_NODES];
  * the IRQ handling routines.
  */
 
-__initfunc(void apus_init_IRQ(void))
+void __init apus_init_IRQ(void)
 {
 	int i;
 

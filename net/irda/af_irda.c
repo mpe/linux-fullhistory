@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      af_irda.c
- * Version:       0.6
+ * Version:       0.7
  * Description:   IrDA sockets implementation
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 31 10:12:43 1998
- * Modified at:   Wed May 19 16:12:06 1999
+ * Modified at:   Mon Aug 23 09:44:37 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       af_netroom.c, af_ax25.c, af_rose.c, af_x25.c etc.
  * 
@@ -228,7 +228,6 @@ void irda_connect_response(struct irda_sock *self)
 	irttp_connect_response(self->tsap, self->max_sdu_size_rx, skb);
 }
 
-
 /*
  * Function irda_flow_indication (instance, sap, flow)
  *
@@ -335,10 +334,8 @@ static void irda_discovery_indication(hashbin_t *log)
  */
 static int irda_open_tsap(struct irda_sock *self, __u8 tsap_sel, char *name)
 {
-	struct notify_t notify;
+	notify_t notify;
 	
-	DEBUG(1, __FUNCTION__ "()\n");
-
 	/* Initialize callbacks to be used by the IrDA stack */
 	irda_notify_init(&notify);
 	notify.connect_confirm       = irda_connect_confirm;
@@ -456,8 +453,6 @@ static int irda_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	struct irda_sock *self;
 	__u16 hints = 0;
 	int err;
-
-	DEBUG(1, __FUNCTION__ "()\n");
 
 	self = sk->protinfo.irda;
 	ASSERT(self != NULL, return -1;);
@@ -591,8 +586,6 @@ static int irda_connect(struct socket *sock, struct sockaddr *uaddr,
 
 	self = sk->protinfo.irda;
 
-	DEBUG(1, __FUNCTION__ "()\n");
-
 	if (sk->state == TCP_ESTABLISHED && sock->state == SS_CONNECTING) {
 		sock->state = SS_CONNECTED;
 		return 0;   /* Connect completed during a ERESTARTSYS event */
@@ -703,9 +696,10 @@ static int irda_create(struct socket *sock, int protocol)
 		return -ENOMEM;
 	memset(self, 0, sizeof(struct irda_sock));
 
+	init_waitqueue_head(&self->ias_wait);
+
 	self->sk = sk;
 	sk->protinfo.irda = self;
-
 	sock_init_data(sock, sk);
 
 	if (sock->type == SOCK_STREAM)
@@ -746,7 +740,7 @@ void irda_destroy_socket(struct irda_sock *self)
 
 	/* Unregister with LM-IAS */
 	if (self->ias_obj)
-		irias_delete_object(self->ias_obj->name);
+		irias_delete_object(self->ias_obj);
 
 	if (self->tsap) {
 		irttp_disconnect_request(self->tsap, NULL, P_NORMAL);
@@ -1160,7 +1154,8 @@ static int irda_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		if (sk != NULL) {
 			if (sk->stamp.tv_sec == 0)
 				return -ENOENT;
-			if (copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)))
+			if (copy_to_user((void *)arg, &sk->stamp, 
+					 sizeof(struct timeval)))
 				return -EFAULT;
 			return 0;
 		}
@@ -1200,8 +1195,6 @@ static int irda_setsockopt(struct socket *sock, int level, int optname,
 	struct irda_sock *self;
 	int opt;
 	
-	DEBUG(0, __FUNCTION__ "()\n");
-
 	self = sk->protinfo.irda;
 	ASSERT(self != NULL, return -1;);
 
@@ -1247,8 +1240,6 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 	int len = 0;
 	int i = 0;
 
-	DEBUG(1, __FUNCTION__ "()\n");
-
 	self = sk->protinfo.irda;
 
 	if (level != SOL_IRLMP)
@@ -1259,24 +1250,16 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 
 	switch (optname) {
 	case IRLMP_ENUMDEVICES:
-		DEBUG(1, __FUNCTION__ "(), IRLMP_ENUMDEVICES\n");
-		
 		/* Tell IrLMP we want to be notified */
 		irlmp_update_client(self->ckey, self->mask, NULL, 
 				    irda_discovery_indication);
-
+		
 		/* Do some discovery */
 		irlmp_discovery_request(self->nslots);
-
-		/* Devices my be discovered already */
-		if (!cachelog) {
-			DEBUG(2, __FUNCTION__ "(), no log!\n");
-
-			/* Sleep until device(s) discovered */
-			interruptible_sleep_on(&discovery_wait);
-			if (!cachelog)
-				return -1;
-		}
+		
+		/* Check if the we got some results */
+		if (!cachelog)
+			return -EAGAIN;
 
 		list = (struct irda_device_list *) optbuf;
 		/* 
@@ -1294,7 +1277,8 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 				list->dev[i].charset = discovery->charset;
 				list->dev[i].hints[0] = discovery->hints.byte[0];
 				list->dev[i].hints[1] = discovery->hints.byte[1];
-				strncpy(list->dev[i].info, discovery->info, 22);
+				strncpy(list->dev[i].info, discovery->nickname,
+					NICKNAME_MAX_LEN);
 				if (++i >= 10)
 					break;
 			}
@@ -1439,16 +1423,14 @@ static struct notifier_block irda_dev_notifier = {
  *    Initialize IrDA protocol layer
  *
  */
-__initfunc(void irda_proto_init(struct net_proto *pro))
+void __init irda_proto_init(struct net_proto *pro)
 {
-	DEBUG( 4, __FUNCTION__ "\n");
-
 	sock_register(&irda_family_ops);
 
 	irda_packet_type.type = htons(ETH_P_IRDA);
         dev_add_pack(&irda_packet_type);
 
-	register_netdevice_notifier( &irda_dev_notifier);
+	register_netdevice_notifier(&irda_dev_notifier);
 
 	irda_init();
 }
@@ -1462,8 +1444,6 @@ __initfunc(void irda_proto_init(struct net_proto *pro))
 #ifdef MODULE
 void irda_proto_cleanup(void)
 {
-	DEBUG( 4, __FUNCTION__ "\n");
-
 	irda_packet_type.type = htons(ETH_P_IRDA);
         dev_remove_pack(&irda_packet_type);
 

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct 15 08:37:58 1998
- * Modified at:   Mon May 31 19:57:08 1999
+ * Modified at:   Sun Jun 20 20:23:33 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
@@ -252,9 +252,6 @@ int irlan_eth_receive(void *instance, void *sap, struct sk_buff *skb)
 	struct irlan_cb *self;
 
 	self = (struct irlan_cb *) instance;
-
-	ASSERT(self != NULL, return 0;);
-	ASSERT(self->magic == IRLAN_MAGIC, return 0;);
 
 	if (skb == NULL) {
 		++self->stats.rx_dropped; 

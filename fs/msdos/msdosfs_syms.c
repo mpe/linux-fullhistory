@@ -34,7 +34,7 @@ struct file_system_type msdos_fs_type = {
 	NULL
 };
 
-__initfunc(int init_msdos_fs(void))
+int __init init_msdos_fs(void)
 {
 	return register_filesystem(&msdos_fs_type);
 }

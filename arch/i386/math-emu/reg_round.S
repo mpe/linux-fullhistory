@@ -95,7 +95,7 @@
 /*	Not re-entrant, so we can gain speed by putting
 	local storage in a static area: */
 .data
-	.align 2,0
+	.align 4,0
 FPU_bits_lost:
 	.byte	0
 FPU_denormal:

@@ -123,7 +123,7 @@ void show_mem(void)
 /*
  * paging_init() sets up the page tables...
  */
-__initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
+unsigned long __init paging_init(unsigned long start_mem, unsigned long end_mem)
 {
 	extern unsigned long free_area_init(unsigned long, unsigned long);
 
@@ -156,7 +156,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
  * memory is free.  This is done after various parts of the system have
  * claimed their memory after the kernel image.
  */
-__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
+void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	extern void sound_init(void);
 	int codepages = 0;

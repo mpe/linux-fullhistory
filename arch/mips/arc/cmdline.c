@@ -16,7 +16,7 @@
 
 char arcs_cmdline[CL_SIZE];
 
-__initfunc(char *prom_getcmdline(void))
+char * __init prom_getcmdline(void)
 {
 	return &(arcs_cmdline[0]);
 }
@@ -31,7 +31,7 @@ static char *ignored[] = {
 };
 #define NENTS(foo) ((sizeof((foo)) / (sizeof((foo[0])))))
 
-__initfunc(void prom_init_cmdline(void))
+void __init prom_init_cmdline(void)
 {
 	char *cp;
 	int actr, i;

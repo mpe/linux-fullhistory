@@ -130,7 +130,7 @@ struct file_operations atari_joystick_fops = {
 	release_joystick
 };
 
-__initfunc(int atari_joystick_init(void))
+int __init atari_joystick_init(void)
 {
     joystick[0].active = joystick[1].active = 0;
     joystick[0].ready = joystick[1].ready = 0;

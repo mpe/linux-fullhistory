@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Mon May 10 15:45:50 1999
+ * Modified at:   Tue Aug 24 13:32:24 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -49,6 +49,9 @@ static void irtty_wait_until_sent(struct irda_device *driver);
 static int  irtty_is_receiving(struct irda_device *idev);
 static void irtty_set_dtr_rts(struct irda_device *idev, int dtr, int rts);
 static int  irtty_raw_write(struct irda_device *idev, __u8 *buf, int len);
+static int  irtty_raw_read(struct irda_device *idev, __u8 *buf, int len, 
+			   int timeout);
+static void irtty_set_raw_mode(struct irda_device *dev, int mode);
 static int  irtty_net_init(struct net_device *dev);
 static int  irtty_net_open(struct net_device *dev);
 static int  irtty_net_close(struct net_device *dev);
@@ -57,7 +60,7 @@ static int  irtty_open(struct tty_struct *tty);
 static void irtty_close(struct tty_struct *tty);
 static int  irtty_ioctl(struct tty_struct *, void *, int, void *);
 static int  irtty_receive_room(struct tty_struct *tty);
-static void irtty_change_speed(struct irda_device *dev, int baud);
+static void irtty_change_speed(struct irda_device *dev, __u32 speed);
 static void irtty_write_wakeup(struct tty_struct *tty);
 
 static void irtty_receive_buf(struct tty_struct *, const unsigned char *, 
@@ -91,10 +94,9 @@ int __init irtty_init(void)
 	irda_ldisc.receive_room = irtty_receive_room;
 	irda_ldisc.write_wakeup = irtty_write_wakeup;
 	
-	if (( status = tty_register_ldisc(N_IRDA, &irda_ldisc)) != 0)  {
-		printk(KERN_ERR 
-		       "IrDA: can't register line discipline (err = %d)\n", 
-		       status);
+	if ((status = tty_register_ldisc(N_IRDA, &irda_ldisc)) != 0) {
+		ERROR("IrDA: can't register line discipline (err = %d)\n", 
+		      status);
 	}
 	
 	return status;
@@ -111,9 +113,7 @@ static void irtty_cleanup(void)
 {
 	int ret;
 	
-	/*
-	 *  Unregister tty line-discipline
-	 */
+	/* Unregister tty line-discipline */
 	if ((ret = tty_register_ldisc(N_IRDA, NULL))) {
 		ERROR(__FUNCTION__ 
 		      "(), can't unregister line discipline (err = %d)\n",
@@ -209,9 +209,11 @@ static int irtty_open(struct tty_struct *tty)
 	/* Initialize callbacks */
 	self->idev.change_speed    = irtty_change_speed;
  	self->idev.is_receiving    = irtty_is_receiving;
-	self->idev.set_dtr_rts     = irtty_set_dtr_rts;
-	self->idev.raw_write       = irtty_raw_write;
 	self->idev.wait_until_sent = irtty_wait_until_sent;
+	self->idev.set_dtr_rts     = irtty_set_dtr_rts;
+	self->idev.set_raw_mode    = irtty_set_raw_mode;
+	self->idev.raw_write       = irtty_raw_write;
+	self->idev.raw_read        = irtty_raw_read;
 
 	/* Override the network functions we need to use */
 	self->idev.netdev.init            = irtty_net_init;
@@ -287,19 +289,19 @@ static void irtty_stop_receiver(struct irda_device *idev, int stop)
 }
 
 /* 
- *  Function irtty_change_speed (self, baud)
+ *  Function irtty_change_speed (self, speed)
  *
  *    Change the speed of the serial port. The driver layer must check that
  *    all transmission has finished using the irtty_wait_until_sent() 
  *    function.
  */
-static void irtty_change_speed(struct irda_device *idev, int baud) 
+static void irtty_change_speed(struct irda_device *idev, __u32 speed)
 {
         struct termios old_termios;
 	struct irtty_cb *self;
 	int cflag;
 
-	DEBUG(4,__FUNCTION__ "(), <%ld>\n", jiffies); 
+	DEBUG(4, __FUNCTION__ "(), <%ld>\n", jiffies); 
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
@@ -314,9 +316,9 @@ static void irtty_change_speed(struct irda_device *idev, int baud)
 
 	cflag &= ~CBAUD;
 
-	DEBUG(4, __FUNCTION__ "(), Setting speed to %d\n", baud);
+	DEBUG(4, __FUNCTION__ "(), Setting speed to %d\n", speed);
 
-	switch (baud) {
+	switch (speed) {
 	case 1200:
 		cflag |= B1200;
 		break;
@@ -401,9 +403,7 @@ static void irtty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 {
 	struct irtty_cb *self = (struct irtty_cb *) tty->disc_data;
 
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == IRTTY_MAGIC, return;);
-	
+	DEBUG(5, __FUNCTION__ "(,,,count=%d)\n", count);
 	/* Read the characters out of the buffer */
  	while (count--) {
 		/* 
@@ -411,13 +411,25 @@ static void irtty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 		 */
  		if (fp && *fp++) { 
 			DEBUG( 0, "Framing or parity error!\n");
-			irda_device_set_media_busy( &self->idev, TRUE);
+			irda_device_set_media_busy(&self->idev, TRUE);
 
  			cp++;
  			continue;
  		}
-		/* Unwrap and destuff one byte */
-		async_unwrap_char(&self->idev, *cp++);
+
+		DEBUG(6, __FUNCTION__ " char=0x%02x\n", *cp);
+ 		if (self->idev.raw_mode) {
+			struct irda_device *idev = &self->idev;
+
+			/* What should we do when the buffer is full? */
+			if (idev->rx_buff.len == idev->rx_buff.truesize)
+				idev->rx_buff.len = 0;
+
+			idev->rx_buff.data[idev->rx_buff.len++] = *cp++;
+		} else {
+			/* Unwrap and destuff one byte */
+			async_unwrap_char(&self->idev, *cp++);
+ 		}
 	}
 }
 
@@ -615,6 +627,72 @@ static void irtty_set_dtr_rts(struct irda_device *idev, int dtr, int rts)
 	set_fs(fs);
 }
 
+/*
+ * Function irtty_set_raw_mode (idev, status)
+ *
+ *    For the airport dongle, we need support for reading raw characters
+ *    from the IrDA device. This function switches between those modes. 
+ *    FALSE is the default mode, and will then treat incoming data as IrDA 
+ *    packets.
+ */
+void irtty_set_raw_mode(struct irda_device *idev, int status)
+{
+	struct irtty_cb *self;
+
+	DEBUG(2, __FUNCTION__ "(), status=%s\n", status ? "TRUE" : "FALSE");
+
+	ASSERT(idev != NULL, return;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
+	
+	self = (struct irtty_cb *) idev->priv;
+
+	/* save status for driver */
+	self->idev.raw_mode = status;
+	
+	/* reset the buffer state */
+	idev->rx_buff.data = idev->rx_buff.head;
+	idev->rx_buff.len = 0;
+	idev->rx_buff.state = OUTSIDE_FRAME;
+}
+
+/*
+ * Function irtty_raw_read (idev, buf, len)
+ *
+ *    Receive incomming data. This function sleeps, so it must only be
+ *    called with a process context. Timeout is currently defined to be
+ *    a multiple of 10 ms.
+ */
+static int irtty_raw_read(struct irda_device *idev, __u8 *buf, int len, 
+			  int timeout)
+{
+	int count;
+
+	buf = idev->rx_buff.data;
+
+	/* Wait for the requested amount of data to arrive */
+	while (len < idev->rx_buff.len) {
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(MSECS_TO_JIFFIES(10));
+
+		if (!timeout--)
+			break;
+	}
+	
+	count = idev->rx_buff.len < len ? idev->rx_buff.len : len;
+
+	/* 
+	 * Reset the state, this mean that a raw read is sort of a 
+	 * datagram read, and _not_ a stream style read. Be aware of the
+	 * difference. Implementing it the other way will just be painful ;-)
+	 */
+	idev->rx_buff.data = idev->rx_buff.head;
+	idev->rx_buff.len = 0;
+	idev->rx_buff.state = OUTSIDE_FRAME;
+
+	/* Return the amount we were able to get */
+	return count;
+}
+
 static int irtty_raw_write(struct irda_device *idev, __u8 *buf, int len)
 {
 	struct irtty_cb *self;
@@ -634,6 +712,8 @@ static int irtty_raw_write(struct irda_device *idev, __u8 *buf, int len)
 	return actual;
 }
 
+
+
 static int irtty_net_init(struct net_device *dev)
 {
 	/* Set up to be a normal IrDA network device driver */
@@ -646,12 +726,7 @@ static int irtty_net_init(struct net_device *dev)
 
 static int irtty_net_open(struct net_device *dev)
 {
-	ASSERT(dev != NULL, return -1;);
-
-	/* Ready to play! */
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	irda_device_net_open(dev);
 
 	MOD_INC_USE_COUNT;
 
@@ -660,11 +735,7 @@ static int irtty_net_open(struct net_device *dev)
 
 static int irtty_net_close(struct net_device *dev)
 {
-	ASSERT(dev != NULL, return -1;);
-	
-	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
+	irda_device_net_close(dev);
 
 	MOD_DEC_USE_COUNT;
 
@@ -701,10 +772,3 @@ void cleanup_module(void)
 }
 
 #endif /* MODULE */
-
-
-
-
-
-
-

@@ -240,7 +240,7 @@ static struct video_device vino_dev = {
 	0
 };
 
-__initfunc(int init_vino(struct video_device *dev))
+int __init init_vino(struct video_device *dev)
 {
 	int err;
 

@@ -155,7 +155,7 @@ static struct miscdevice rtc_dev=
 	&rtc_fops
 };
 
-__initfunc(int rtc_MK48T08_init(void))
+int __init rtc_MK48T08_init(void)
 {
 	if (!MACH_IS_MVME16x)
 		return -ENODEV;

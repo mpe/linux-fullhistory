@@ -720,7 +720,7 @@ static struct file_system_type ncp_fs_type = {
 	NULL
 };
 
-__initfunc(int init_ncp_fs(void))
+int __init init_ncp_fs(void)
 {
 	return register_filesystem(&ncp_fs_type);
 }

@@ -192,7 +192,7 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 	if ((status == TD_CTRL_ACTIVE) && (!rval))
 		return USB_ST_DATAUNDERRUN;
 
-	return uhci_map_status(status, usb_pipeout(tmp->info) ^ 1);
+	return uhci_map_status(status, uhci_packetout(tmp->info));
 }
 
 /*
@@ -593,7 +593,7 @@ int uhci_release_irq(struct usb_device *usb, void *handle)
  */
 static int uhci_get_current_frame_number(struct usb_device *usb_dev)
 {
-       return inw (usb_to_uhci(usb_dev)->uhci->io_addr + USBFRNUM) & 0x3ff;
+       return inw (usb_to_uhci(usb_dev)->uhci->io_addr + USBFRNUM);
 }
 
 
@@ -747,26 +747,52 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 		return -EINVAL;
 	}
 
+	/*
+	 * Check start_frame for inside a valid range.
+	 * Only allow transfer requests to be made 1.000 second
+	 * into the future.
+	 */
+	cur_frame = uhci_get_current_frame_number (isocdesc->usb_dev);
+
 	/* if not START_ASAP (i.e., RELATIVE or ABSOLUTE): */
-	if (!pr_isocdesc && (isocdesc->start_type != START_ASAP))
-		if ((isocdesc->start_frame < 0) || (isocdesc->start_frame > 1000)) {
+	if (!pr_isocdesc)
+		if (isocdesc->start_type == START_RELATIVE) {
+			if ((isocdesc->start_frame < 0) || (isocdesc->start_frame > CAN_SCHEDULE_FRAMES)) {
 #ifdef CONFIG_USB_DEBUG_ISOC
-			printk (KERN_DEBUG "uhci_init_isoc: bad start_frame value (%d)\n",
-				isocdesc->start_frame);
+				printk (KERN_DEBUG "uhci_init_isoc: bad start_frame value (%d)\n",
+					isocdesc->start_frame);
 #endif
-			return -EINVAL;
-		}
+				return -EINVAL;
+			}
+		} /* end START_RELATIVE */
+		else
+		if (isocdesc->start_type == START_ABSOLUTE) {
+			if (isocdesc->start_frame > cur_frame) {
+				if ((isocdesc->start_frame - cur_frame) > CAN_SCHEDULE_FRAMES) {
+#ifdef CONFIG_USB_DEBUG_ISOC
+					printk (KERN_DEBUG "uhci_init_isoc: bad start_frame value (%d)\n",
+						isocdesc->start_frame);
+#endif
+					return -EINVAL;
+				}
+			}
+			else /* start_frame <= cur_frame */ {
+				if ((isocdesc->start_frame + UHCI_MAX_SOF_NUMBER + 1
+				    - cur_frame) > CAN_SCHEDULE_FRAMES) {
+#ifdef CONFIG_USB_DEBUG_ISOC
+					printk (KERN_DEBUG "uhci_init_isoc: bad start_frame value (%d)\n",
+						isocdesc->start_frame);
+#endif
+					return -EINVAL;
+				}
+			}
+		} /* end START_ABSOLUTE */
 
 	/*
 	 * Set the start/end frame numbers.
 	 */
-	if (!pr_isocdesc)
-		cur_frame = uhci_get_current_frame_number (isocdesc->usb_dev);
-
 	if (pr_isocdesc) {
 		isocdesc->start_frame = pr_isocdesc->end_frame + 1;
-	} else if (isocdesc->start_type == START_ABSOLUTE) {
-		/* Use start_frame as is. */
 	} else if (isocdesc->start_type == START_RELATIVE) {
 		if (isocdesc->start_frame < START_FRAME_FUDGE)
 			isocdesc->start_frame = START_FRAME_FUDGE;
@@ -774,15 +800,16 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 	} else if (isocdesc->start_type == START_ASAP) {
 		isocdesc->start_frame = cur_frame + START_FRAME_FUDGE;
 	}
+	/* else for start_type == START_ABSOLUTE, use start_frame as is. */
 
 	/* and see if start_frame needs any correction */
-	if (isocdesc->start_frame >= 1000)
-		isocdesc->start_frame -= 1000;
+	if (isocdesc->start_frame >= UHCI_NUMFRAMES)
+		isocdesc->start_frame -= UHCI_NUMFRAMES;
 
 	/* and fix the end_frame value */
 	isocdesc->end_frame = isocdesc->start_frame + isocdesc->frame_count - 1;
-	if (isocdesc->end_frame >= 1000)
-	isocdesc->end_frame -= 1000;
+	if (isocdesc->end_frame >= UHCI_NUMFRAMES)
+		isocdesc->end_frame -= UHCI_NUMFRAMES;
 
 	isocdesc->prev_completed_frame = -1;
 	isocdesc->cur_completed_frame  = -1;
@@ -807,7 +834,7 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 		isocdesc->frame_spacing = 1;
 
 	for (ix = 0, td = isocdesc->td, fd = isocdesc->frames;
-	     ix < isocdesc->frame_count; ix++, td++, fd++, cur_frame++) {
+	     ix < isocdesc->frame_count; ix++, td++, fd++) {
 		frlen = fd->frame_length;
 		if (frlen > isocdesc->frame_size)
 			frlen = isocdesc->frame_size;
@@ -823,7 +850,7 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 		td->info   = destination | ((frlen - 1) << 21);
 		td->buffer = virt_to_bus (bufptr);
 		td->dev    = dev;
-		td->isoc_td_number = ix;        /* 0-based; does not wrap 999 -> 0 */
+		td->isoc_td_number = ix;        /* 0-based; does not wrap/overflow back to 0 */
 
 		if (isocdesc->callback_frames &&
 		    (++cb_frames >= isocdesc->callback_frames)) {
@@ -841,8 +868,8 @@ static int uhci_run_isoc (struct usb_isoc_desc *isocdesc,
 		td->link    = uhci->fl->frame [cur_frame];
 		uhci->fl->frame [cur_frame] = virt_to_bus (td);
 
-		if (cur_frame >= 999)
-			cur_frame = -1;
+		if (++cur_frame >= UHCI_NUMFRAMES)
+			cur_frame = 0;
 	} /* end for ix */
 
 	/*
@@ -872,7 +899,7 @@ static int uhci_kill_isoc (struct usb_isoc_desc *isocdesc)
 	struct uhci_td  *td;
 	int             ix, cur_frame;
 
-	if ((isocdesc->start_frame < 0) || (isocdesc->start_frame >= 1000)) {
+	if ((isocdesc->start_frame < 0) || (isocdesc->start_frame >= UHCI_NUMFRAMES)) {
 #ifdef CONFIG_USB_DEBUG_ISOC
 		printk (KERN_DEBUG "uhci_kill_isoc: invalid start_frame (%d)\n",
 			isocdesc->start_frame);
@@ -885,7 +912,7 @@ static int uhci_kill_isoc (struct usb_isoc_desc *isocdesc)
 		td->status &= ~(TD_CTRL_ACTIVE | TD_CTRL_IOC);
 		uhci->fl->frame [cur_frame] = td->link;
 
-		if (++cur_frame >= 1000)
+		if (++cur_frame >= UHCI_NUMFRAMES)
 			cur_frame = 0;
 	} /* end for ix */
 
@@ -1551,7 +1578,7 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 			usb_dotoggle(usb_dev, usb_pipeendpoint(td->info), usb_pipeout(td->info) ^ 1);
 			td->info &= ~(1 << 19); /* clear data toggle */
 			td->info |= usb_gettoggle(usb_dev, usb_pipeendpoint(td->info),
-				usb_pipeout(td->info) ^ 1) << 19; /* toggle between data0 and data1 */
+				uhci_packetout(td->info)) << 19; /* toggle between data0 and data1 */
 			td->status = (td->status & 0x2F000000) | TD_CTRL_ACTIVE | TD_CTRL_IOC;
 			/* The HC only removes it when it completed */
 			/* successfully, so force remove and readd it */
@@ -1562,7 +1589,7 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 
 			/* marked for removal */
 			td->flags &= ~UHCI_TD_REMOVE;
-			usb_dotoggle(usb_dev, usb_pipeendpoint(td->info), usb_pipeout(td->info) ^ 1);
+			usb_dotoggle(usb_dev, usb_pipeendpoint(td->info), uhci_packetout(td->info));
 			uhci_remove_qh(td->qh->skel, td->qh);
 			uhci_qh_free(td->qh);
 			uhci_td_free(td);

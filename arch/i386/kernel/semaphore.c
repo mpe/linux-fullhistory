@@ -49,8 +49,8 @@ void __down(struct semaphore * sem)
 {
 	struct task_struct *tsk = current;
 	DECLARE_WAITQUEUE(wait, tsk);
-	tsk->state = TASK_UNINTERRUPTIBLE;
-	add_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_UNINTERRUPTIBLE|TASK_EXCLUSIVE;
+	add_wait_queue_exclusive(&sem->wait, &wait);
 
 	spin_lock_irq(&semaphore_lock);
 	sem->sleepers++;
@@ -63,28 +63,28 @@ void __down(struct semaphore * sem)
 		 */
 		if (!atomic_add_negative(sleepers - 1, &sem->count)) {
 			sem->sleepers = 0;
-			wake_up(&sem->wait);
 			break;
 		}
 		sem->sleepers = 1;	/* us - see -1 above */
 		spin_unlock_irq(&semaphore_lock);
 
 		schedule();
-		tsk->state = TASK_UNINTERRUPTIBLE;
+		tsk->state = TASK_UNINTERRUPTIBLE|TASK_EXCLUSIVE;
 		spin_lock_irq(&semaphore_lock);
 	}
 	spin_unlock_irq(&semaphore_lock);
 	remove_wait_queue(&sem->wait, &wait);
 	tsk->state = TASK_RUNNING;
+	wake_up(&sem->wait);
 }
 
 int __down_interruptible(struct semaphore * sem)
 {
-	int retval;
+	int retval = 0;
 	struct task_struct *tsk = current;
 	DECLARE_WAITQUEUE(wait, tsk);
-	tsk->state = TASK_INTERRUPTIBLE;
-	add_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_INTERRUPTIBLE|TASK_EXCLUSIVE;
+	add_wait_queue_exclusive(&sem->wait, &wait);
 
 	spin_lock_irq(&semaphore_lock);
 	sem->sleepers ++;
@@ -98,12 +98,10 @@ int __down_interruptible(struct semaphore * sem)
 		 * it has contention. Just correct the count
 		 * and exit.
 		 */
-		retval = -EINTR;
 		if (signal_pending(current)) {
+			retval = -EINTR;
 			sem->sleepers = 0;
-			if (atomic_add_negative(sleepers, &sem->count))
-				break;
-			wake_up(&sem->wait);
+			atomic_add(sleepers, &sem->count);
 			break;
 		}
 
@@ -114,8 +112,6 @@ int __down_interruptible(struct semaphore * sem)
 		 * the lock.
 		 */
 		if (!atomic_add_negative(sleepers - 1, &sem->count)) {
-			wake_up(&sem->wait);
-			retval = 0;
 			sem->sleepers = 0;
 			break;
 		}
@@ -123,12 +119,13 @@ int __down_interruptible(struct semaphore * sem)
 		spin_unlock_irq(&semaphore_lock);
 
 		schedule();
-		tsk->state = TASK_INTERRUPTIBLE;
+		tsk->state = TASK_INTERRUPTIBLE|TASK_EXCLUSIVE;
 		spin_lock_irq(&semaphore_lock);
 	}
 	spin_unlock_irq(&semaphore_lock);
 	tsk->state = TASK_RUNNING;
 	remove_wait_queue(&sem->wait, &wait);
+	wake_up(&sem->wait);
 	return retval;
 }
 
@@ -142,7 +139,7 @@ int __down_interruptible(struct semaphore * sem)
  */
 int __down_trylock(struct semaphore * sem)
 {
-	int retval, sleepers;
+	int sleepers;
 
 	spin_lock_irq(&semaphore_lock);
 	sleepers = sem->sleepers + 1;

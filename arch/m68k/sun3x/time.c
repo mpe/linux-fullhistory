@@ -72,7 +72,7 @@ static void sun3x_timer_tick(int irq, void *dev_id, struct pt_regs *regs)
     vector(irq, NULL, regs);
 }
 
-__initfunc(void sun3x_sched_init(void (*vector)(int, void *, struct pt_regs *)))
+void __init sun3x_sched_init(void (*vector)(int, void *, struct pt_regs *))
 {
     sys_request_irq(5, sun3x_timer_tick, IRQ_FLG_STD, "timer tick", vector);
 

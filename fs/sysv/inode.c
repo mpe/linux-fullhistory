@@ -1174,7 +1174,7 @@ static struct file_system_type sysv_fs_type[3] = {
 	{"coherent", FS_REQUIRES_DEV, sysv_read_super, NULL}
 };
 
-__initfunc(int init_sysv_fs(void))
+int __init init_sysv_fs(void)
 {
 	int i;
 	int ouch;

@@ -21,8 +21,8 @@ extern void cpu_probe(void);
 extern void clock_stop_probe(void); /* tadpole.c */
 extern void sun4c_probe_memerr_reg(void);
 
-__initfunc(unsigned long
-device_scan(unsigned long mem_start))
+unsigned long __init
+device_scan(unsigned long mem_start)
 {
 	char node_str[128];
 	int thismid;

@@ -138,7 +138,7 @@ static void sun4c_load_profile_irq(int cpu, unsigned int limit)
 	/* Errm.. not sure how to do this.. */
 }
 
-__initfunc(static void sun4c_init_timers(void (*counter_fn)(int, void *, struct pt_regs *)))
+static void __init sun4c_init_timers(void (*counter_fn)(int, void *, struct pt_regs *))
 {
 	int irq;
 
@@ -184,7 +184,7 @@ static void sun4c_nop(void) {}
 
 extern char *sun4m_irq_itoa(unsigned int irq);
 
-__initfunc(void sun4c_init_IRQ(void))
+void __init sun4c_init_IRQ(void)
 {
 	struct linux_prom_registers int_regs[2];
 	int ie_node;

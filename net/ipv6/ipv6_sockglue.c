@@ -458,12 +458,12 @@ extern void ipv6_sysctl_register(void);
 extern void ipv6_sysctl_unregister(void);
 #endif
 
-__initfunc(void ipv6_packet_init(void))
+void __init ipv6_packet_init(void)
 {
 	dev_add_pack(&ipv6_packet_type);
 }
 
-__initfunc(void ipv6_netdev_notif_init(void))
+void __init ipv6_netdev_notif_init(void)
 {
 	register_netdevice_notifier(&ipv6_dev_notf);
 }

@@ -756,7 +756,7 @@ static int ipip6_fb_tunnel_close(struct net_device *dev)
 }
 #endif
 
-__initfunc(int ipip6_fb_tunnel_init(struct net_device *dev))
+int __init ipip6_fb_tunnel_init(struct net_device *dev)
 {
 	struct iphdr *iph;
 
@@ -795,7 +795,7 @@ void sit_cleanup(void)
 }
 #endif
 
-__initfunc(int sit_init(void))
+int __init sit_init(void)
 {
 	printk(KERN_INFO "IPv6 over IPv4 tunneling driver\n");
 

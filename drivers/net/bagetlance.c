@@ -469,7 +469,7 @@ void *slow_memcpy( void *dst, const void *src, size_t len )
 }
 
 
-__initfunc(int bagetlance_probe( struct net_device *dev ))
+int __init bagetlance_probe( struct net_device *dev )
 
 {	int i;
 	static int found = 0;
@@ -493,9 +493,9 @@ __initfunc(int bagetlance_probe( struct net_device *dev ))
 
 /* Derived from hwreg_present() in vme/config.c: */
 
-__initfunc(static int addr_accessible( volatile void *regp, 
-									   int wordflag, 
-									   int writeflag ))
+static int __init addr_accessible( volatile void *regp, 
+				   int wordflag, 
+				   int writeflag )
 {	
 		/* We have a fine function to do it */
 		extern int try_read(unsigned long, int);
@@ -508,8 +508,8 @@ __initfunc(static int addr_accessible( volatile void *regp,
 #define IRQ_TYPE_PRIO SA_INTERRUPT
 #define IRQ_SOURCE_TO_VECTOR(x) (x)
 
-__initfunc(static unsigned long lance_probe1( struct net_device *dev,
-								   struct lance_addr *init_rec ))
+static unsigned long __init lance_probe1( struct net_device *dev,
+					   struct lance_addr *init_rec )
 
 {	volatile unsigned short *memaddr =
 		(volatile unsigned short *)init_rec->memaddr;

@@ -1089,7 +1089,7 @@ static void psched_tick(unsigned long dummy)
 #endif
 
 #if PSCHED_CLOCK_SOURCE == PSCHED_CPU
-__initfunc(int psched_calibrate_clock(void))
+int __init psched_calibrate_clock(void)
 {
 	psched_time_t stamp, stamp1;
 	struct timeval tv, tv1;
@@ -1128,7 +1128,7 @@ __initfunc(int psched_calibrate_clock(void))
 }
 #endif
 
-__initfunc(int pktsched_init(void))
+int __init pktsched_init(void)
 {
 #ifdef CONFIG_RTNETLINK
 	struct rtnetlink_link *link_p;

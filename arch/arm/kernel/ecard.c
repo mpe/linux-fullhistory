@@ -721,8 +721,8 @@ again:
 		printk(KERN_WARNING "Wild interrupt from backplane (masks)\n");
 }
 
-__initfunc(static void
-ecard_probeirqhw(void))
+static void __init
+ecard_probeirqhw(void)
 {
 	ecard_t *ec;
 	int found;
@@ -872,8 +872,8 @@ static void ecard_proc_init(void)
  * If bit 1 of the first byte of the card is set, then the
  * card does not exist.
  */
-__initfunc(static int
-ecard_probe(int slot, card_type_t type))
+static int __init
+ecard_probe(int slot, card_type_t type)
 {
 	ecard_t **ecp;
 	ecard_t *ec;
@@ -1009,7 +1009,7 @@ ecard_t *ecard_find(int cid, const card_ids *cids)
 	return finding_pos;
 }
 
-__initfunc(static void ecard_free_all(void))
+static void __init ecard_free_all(void)
 {
 	ecard_t *ec, *ecn;
 
@@ -1029,7 +1029,7 @@ __initfunc(static void ecard_free_all(void))
  * Locate all hardware - interrupt management and
  * actual cards.
  */
-__initfunc(void ecard_init(void))
+void __init ecard_init(void)
 {
 	int slot;
 

@@ -1469,7 +1469,7 @@ static struct file_system_type iso9660_fs_type = {
 	NULL
 };
 
-__initfunc(int init_iso9660_fs(void))
+int __init init_iso9660_fs(void)
 {
         return register_filesystem(&iso9660_fs_type);
 }

@@ -1008,7 +1008,7 @@ static void ab_cleanup(unsigned long h)
 	mod_timer(&ab_cleanup_timer, jiffies + (HZ*2));
 }
 
-__initfunc(static int aun_udp_initialise(void))
+static int __init aun_udp_initialise(void)
 {
 	int error;
 	struct sockaddr_in sin;
@@ -1106,7 +1106,7 @@ void cleanup_module(void)
 
 int init_module(void)
 #else
-__initfunc(void econet_proto_init(struct net_proto *pro))
+void __init econet_proto_init(struct net_proto *pro)
 #endif
 {
 	spin_lock_init(&edevlist_lock);

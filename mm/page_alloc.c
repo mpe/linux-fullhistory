@@ -3,6 +3,7 @@
  *
  *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
  *  Swap reorganised 29.12.95, Stephen Tweedie
+ *  Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999
  */
 
 #include <linux/config.h>
@@ -13,6 +14,7 @@
 #include <linux/interrupt.h>
 #include <linux/init.h>
 #include <linux/pagemap.h>
+#include <linux/bigmem.h> /* export bigmem vars */
 
 #include <asm/dma.h>
 #include <asm/uaccess.h> /* for copy_to/from_user */
@@ -20,6 +22,8 @@
 
 int nr_swap_pages = 0;
 int nr_free_pages = 0;
+int nr_lru_pages;
+LIST_HEAD(lru_cache);
 
 /*
  * Free area management
@@ -45,7 +49,12 @@ struct free_area_struct {
 
 #define memory_head(x) ((struct page *)(x))
 
+#ifdef CONFIG_BIGMEM
+#define BIGMEM_LISTS_OFFSET	NR_MEM_LISTS
+static struct free_area_struct free_area[NR_MEM_LISTS*2];
+#else
 static struct free_area_struct free_area[NR_MEM_LISTS];
+#endif
 
 static inline void init_mem_queue(struct free_area_struct * head)
 {
@@ -101,6 +110,12 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 
 #define list(x) (mem_map+(x))
 
+#ifdef CONFIG_BIGMEM
+	if (map_nr >= bigmem_mapnr) {
+		area += BIGMEM_LISTS_OFFSET;
+		nr_free_bigpages -= mask;
+	}
+#endif
 	map_nr &= mask;
 	nr_free_pages -= mask;
 	while (mask + (1 << (NR_MEM_LISTS-1))) {
@@ -127,7 +142,6 @@ int __free_page(struct page *page)
 		if (PageLocked(page))
 			PAGE_BUG(page);
 
-		page->flags &= ~(1 << PG_referenced);
 		free_pages_ok(page - mem_map, 0);
 		return 1;
 	}
@@ -145,7 +159,6 @@ int free_pages(unsigned long addr, unsigned long order)
 				PAGE_BUG(map);
 			if (PageLocked(map))
 				PAGE_BUG(map);
-			map->flags &= ~(1 << PG_referenced);
 			free_pages_ok(map_nr, order);
 			return 1;
 		}
@@ -160,6 +173,29 @@ int free_pages(unsigned long addr, unsigned long order)
 	change_bit((index) >> (1+(order)), (area)->map)
 #define CAN_DMA(x) (PageDMA(x))
 #define ADDRESS(x) (PAGE_OFFSET + ((x) << PAGE_SHIFT))
+
+#ifdef CONFIG_BIGMEM
+#define RMQUEUEBIG(order, gfp_mask) \
+if (gfp_mask & __GFP_BIGMEM) { \
+	struct free_area_struct * area = free_area+order+BIGMEM_LISTS_OFFSET; \
+	unsigned long new_order = order; \
+	do { struct page *prev = memory_head(area), *ret = prev->next; \
+		if (memory_head(area) != ret) { \
+			unsigned long map_nr; \
+			(prev->next = ret->next)->prev = prev; \
+			map_nr = ret - mem_map; \
+			MARK_USED(map_nr, new_order, area); \
+			nr_free_pages -= 1 << order; \
+			nr_free_bigpages -= 1 << order; \
+			EXPAND(ret, map_nr, order, new_order, area); \
+			spin_unlock_irqrestore(&page_alloc_lock, flags); \
+			return ADDRESS(map_nr); \
+		} \
+		new_order++; area++; \
+	} while (new_order < NR_MEM_LISTS); \
+}
+#endif
+
 #define RMQUEUE(order, gfp_mask) \
 do { struct free_area_struct * area = free_area+order; \
      unsigned long new_order = order; \
@@ -221,6 +257,7 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		int freed;
 		static int low_on_memory = 0;
 
+#ifndef CONFIG_BIGMEM
 		if (nr_free_pages > freepages.min) {
 			if (!low_on_memory)
 				goto ok_to_allocate;
@@ -231,6 +268,32 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		}
 
 		low_on_memory = 1;
+#else
+		static int low_on_bigmemory = 0;
+
+		if (gfp_mask & __GFP_BIGMEM)
+		{
+			if (nr_free_pages > freepages.min) {
+				if (!low_on_bigmemory)
+					goto ok_to_allocate;
+				if (nr_free_pages >= freepages.high) {
+					low_on_bigmemory = 0;
+					goto ok_to_allocate;
+				}
+			}
+			low_on_bigmemory = 1;
+		} else {
+			if (nr_free_pages-nr_free_bigpages > freepages.min) {
+				if (!low_on_memory)
+					goto ok_to_allocate;
+				if (nr_free_pages-nr_free_bigpages >= freepages.high) {
+					low_on_memory = 0;
+					goto ok_to_allocate;
+				}
+			}
+			low_on_memory = 1;
+		}
+#endif
 		current->flags |= PF_MEMALLOC;
 		freed = try_to_free_pages(gfp_mask);
 		current->flags &= ~PF_MEMALLOC;
@@ -240,6 +303,9 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	}
 ok_to_allocate:
 	spin_lock_irqsave(&page_alloc_lock, flags);
+#ifdef CONFIG_BIGMEM
+	RMQUEUEBIG(order, gfp_mask);
+#endif
 	RMQUEUE(order, gfp_mask);
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
 
@@ -267,9 +333,12 @@ void show_free_areas(void)
  	unsigned long order, flags;
  	unsigned long total = 0;
 
-	printk("Free pages:      %6dkB\n ( ",nr_free_pages<<(PAGE_SHIFT-10));
-	printk("Free: %d (%d %d %d)\n",
+	printk("Free pages:      %6dkB (%6dkB BigMem)\n ( ",
+		nr_free_pages<<(PAGE_SHIFT-10),
+		nr_free_bigpages<<(PAGE_SHIFT-10));
+	printk("Free: %d, lru_cache: %d (%d %d %d)\n",
 		nr_free_pages,
+		nr_lru_pages,
 		freepages.min,
 		freepages.low,
 		freepages.high);
@@ -280,6 +349,13 @@ void show_free_areas(void)
 		for (tmp = free_area[order].next ; tmp != memory_head(free_area+order) ; tmp = tmp->next) {
 			nr ++;
 		}
+#ifdef CONFIG_BIGMEM
+		for (tmp = free_area[BIGMEM_LISTS_OFFSET+order].next;
+		     tmp != memory_head(free_area+BIGMEM_LISTS_OFFSET+order);
+		     tmp = tmp->next) {
+			nr ++;
+		}
+#endif
 		total += nr * ((PAGE_SIZE>>10) << order);
 		printk("%lu*%lukB ", nr, (unsigned long)((PAGE_SIZE>>10) << order));
 	}
@@ -333,6 +409,9 @@ unsigned long __init free_area_init(unsigned long start_mem, unsigned long end_m
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {
 		unsigned long bitmap_size;
 		init_mem_queue(free_area+i);
+#ifdef CONFIG_BIGMEM
+		init_mem_queue(free_area+BIGMEM_LISTS_OFFSET+i);
+#endif
 		mask += mask;
 		end_mem = (end_mem + ~mask) & mask;
 		bitmap_size = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT + i);
@@ -341,6 +420,11 @@ unsigned long __init free_area_init(unsigned long start_mem, unsigned long end_m
 		free_area[i].map = (unsigned int *) start_mem;
 		memset((void *) start_mem, 0, bitmap_size);
 		start_mem += bitmap_size;
+#ifdef CONFIG_BIGMEM
+		free_area[BIGMEM_LISTS_OFFSET+i].map = (unsigned int *) start_mem;
+		memset((void *) start_mem, 0, bitmap_size);
+		start_mem += bitmap_size;
+#endif
 	}
 	return start_mem;
 }

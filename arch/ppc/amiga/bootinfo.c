@@ -24,7 +24,7 @@ extern int amiga_parse_bootinfo(const struct bi_record *);
 extern int atari_parse_bootinfo(const struct bi_record *);
 extern int mac_parse_bootinfo(const struct bi_record *);
 
-__initfunc(void parse_bootinfo(const struct bi_record *record))
+void __init parse_bootinfo(const struct bi_record *record)
 {
     while (record->tag != BI_LAST) {
 	int unknown = 0;

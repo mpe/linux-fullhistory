@@ -10,6 +10,7 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
+#include <linux/bigmem.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
@@ -52,7 +53,11 @@ repeat:
 			dst = src;
 			src = buf;
 		}
+		src = (void *) kmap((unsigned long) src, KM_READ);
+		dst = (void *) kmap((unsigned long) dst, KM_WRITE);
 		memcpy(dst, src, len);
+		kunmap((unsigned long) src, KM_READ);
+		kunmap((unsigned long) dst, KM_WRITE);
 	}
 	flush_page_to_ram(page);
 	return len;

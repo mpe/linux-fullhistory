@@ -30,7 +30,7 @@
 * Dec 22, 1998  Arnaldo Melo    vmalloc/vfree used in device_setup to allocate
 *                               kernel memory and copy configuration data to
 *                               kernel space (for big firmwares)
-* May 19, 1999  Arnaldo Melo    __initfunc in wanrouter_init
+* May 19, 1999  Arnaldo Melo    __init in wanrouter_init
 *****************************************************************************/
 
 #include <linux/config.h>
@@ -46,7 +46,7 @@
 #include <asm/byteorder.h>	/* htons(), etc. */
 #include <asm/uaccess.h>	/* copy_to/from_user */
 #include <linux/wanrouter.h>	/* WAN router API definitions */
-#include <linux/init.h>		/* __initfunc et al. */
+#include <linux/init.h>		/* __init et al. */
 
 /****** Defines and Macros **************************************************/
 
@@ -105,7 +105,7 @@ static unsigned char oui_802_2[] = { 0x00, 0x80, 0xC2 };
 #endif
 
 #ifndef MODULE
-__initfunc(int wanrouter_init(void))
+int __init wanrouter_init(void)
 {
 	int err;
 	extern int wanpipe_init(void),

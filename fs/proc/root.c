@@ -704,7 +704,7 @@ static struct proc_dir_entry proc_root_ppc_htab = {
 };
 #endif
 
-__initfunc(void proc_root_init(void))
+void __init proc_root_init(void)
 {
 	proc_base_init();
 	proc_register(&proc_root, &proc_root_loadavg);

@@ -479,7 +479,7 @@ out:
 	return irq_found;
 }
 
-__initfunc(void init_IRQ(void))
+void __init init_IRQ(void)
 {
 	extern void init_dma(void);
 	int irq;

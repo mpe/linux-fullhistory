@@ -14,8 +14,8 @@ int bootstr_len = BARG_LEN;
 static int bootstr_valid = 0;
 static char bootstr_buf[BARG_LEN] = { 0 };
 
-__initfunc(char *
-prom_getbootargs(void))
+char * __init
+prom_getbootargs(void)
 {
 	/* This check saves us from a panic when bootfd patches args. */
 	if (bootstr_valid) return bootstr_buf;

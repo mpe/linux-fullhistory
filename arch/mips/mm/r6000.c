@@ -169,7 +169,7 @@ static int r6000_user_mode(struct pt_regs *regs)
 	return !(regs->cp0_status & 0x4);
 }
 
-__initfunc(void ld_mmu_r6000(void))
+void __init ld_mmu_r6000(void)
 {
 	flush_cache_all = r6000_flush_cache_all;
 	flush_cache_mm = r6000_flush_cache_mm;

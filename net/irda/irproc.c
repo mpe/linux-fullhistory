@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 21:33:24 1998
- * Modified at:   Fri May  7 08:06:49 1999
+ * Modified at:   Fri Jun  4 09:39:49 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999, Thomas Davis, <ratbert@radiks.net>, 
@@ -41,8 +41,6 @@ extern int irttp_proc_read(char *buf, char **start, off_t offset, int len,
 extern int irias_proc_read(char *buf, char **start, off_t offset, int len,
 			   int unused);
 extern int discovery_proc_read(char *buf, char **start, off_t offset, int len, 
-			       int unused);
-static int proc_discovery_read(char *buf, char **start, off_t offset, int len,
 			       int unused);
 
 /* enum irda_directory_inos { */

@@ -11,12 +11,12 @@
 
 #include <asm/sgialib.h>
 
-__initfunc(char *prom_getenv(char *name))
+char * __init prom_getenv(char *name)
 {
 	return romvec->get_evar(name);
 }
 
-__initfunc(long prom_setenv(char *name, char *value))
+long __init prom_setenv(char *name, char *value)
 {
 	return romvec->set_evar(name, value);
 }

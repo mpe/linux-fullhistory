@@ -993,8 +993,7 @@ static int is_chained_kmem_cache(kmem_cache_t * cachep)
 	/* Find the cache in the chain of caches. */
 	down(&cache_chain_sem);
 	for (searchp = &cache_cache; searchp->c_nextp != &cache_cache;
-	     searchp = searchp->c_nextp)
-	{
+	     searchp = searchp->c_nextp) {
 		if (searchp->c_nextp != cachep)
 			continue;
 
@@ -1054,8 +1053,7 @@ kmem_cache_shrink(kmem_cache_t *cachep)
 		return 2;
 	}
 
-	if (!is_chained_kmem_cache(cachep))
-	{
+	if (!is_chained_kmem_cache(cachep)) {
 		printk(KERN_ERR "kmem_shrink: Invalid cache addr %p\n",
 		       cachep);
 		return 2;
@@ -1087,8 +1085,7 @@ int kmem_cache_destroy(kmem_cache_t * cachep)
 	/* Find the cache in the chain of caches. */
 	down(&cache_chain_sem);
 	for (prev = &cache_cache; prev->c_nextp != &cache_cache;
-	     prev = prev->c_nextp)
-	{
+	     prev = prev->c_nextp) {
 		if (prev->c_nextp != cachep)
 			continue;
 
@@ -1104,15 +1101,13 @@ int kmem_cache_destroy(kmem_cache_t * cachep)
 	}
 	up(&cache_chain_sem);
 
-	if (!ret)
-	{
+	if (!ret) {
 		printk(KERN_ERR "kmem_destroy: Invalid cache addr %p\n",
 		       cachep);
 		return 1;
 	}
 
-	if (__kmem_cache_shrink(cachep))
-	{
+	if (__kmem_cache_shrink(cachep)) {
 		printk(KERN_ERR "kmem_destroy: Can't free all objects %p\n",
 		       cachep);
 		down(&cache_chain_sem);

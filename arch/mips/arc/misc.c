@@ -78,7 +78,7 @@ struct linux_sysid *prom_getsysid(void)
 	return romvec->get_sysid();
 }
 
-__initfunc(void prom_cacheflush(void))
+void __init prom_cacheflush(void)
 {
 	romvec->cache_flush();
 }

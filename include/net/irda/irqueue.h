@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Jun  9 13:26:50 1998
- * Modified at:   Tue May 25 07:54:41 1999
+ * Modified at:   Thu Jul  1 10:18:21 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (C) 1998, Aage Kvalnes <aage@cs.uit.no>
+ *     Copyright (C) 1998-1999, Aage Kvalnes <aage@cs.uit.no>
  *     Copyright (c) 1998, Dag Brattli
  *     All Rights Reserved.
  *      
@@ -70,25 +70,25 @@ struct queue_t {
 };
 
 typedef struct hashbin_t {
-	int    magic;
-	int    hb_type;
-	int    hb_size;
+	__u32      magic;
+	int        hb_type;
+	int        hb_size;
 	spinlock_t hb_mutex[ HASHBIN_SIZE ] ALIGN;
 	QUEUE*     hb_queue[ HASHBIN_SIZE ] ALIGN;
 
 	QUEUE* hb_current;
 } hashbin_t;
 
-hashbin_t *hashbin_new( int type);
-int      hashbin_delete( hashbin_t* hashbin, FREE_FUNC func);
-int      hashbin_clear( hashbin_t* hashbin, FREE_FUNC free_func);
-void     hashbin_insert( hashbin_t* hashbin, QUEUE* entry, __u32 hashv, 
-			 char* name);
-void*    hashbin_find( hashbin_t* hashbin, __u32 hashv, char* name);
-void*    hashbin_remove( hashbin_t* hashbin, __u32 hashv, char* name);
-void*    hashbin_remove_first( hashbin_t *hashbin);
-QUEUE   *hashbin_get_first( hashbin_t *hashbin);
-QUEUE   *hashbin_get_next( hashbin_t *hashbin);
+hashbin_t *hashbin_new(int type);
+int      hashbin_delete(hashbin_t* hashbin, FREE_FUNC func);
+int      hashbin_clear(hashbin_t* hashbin, FREE_FUNC free_func);
+void     hashbin_insert(hashbin_t* hashbin, QUEUE* entry, __u32 hashv, 
+			char* name);
+void*    hashbin_find(hashbin_t* hashbin, __u32 hashv, char* name);
+void*    hashbin_remove(hashbin_t* hashbin, __u32 hashv, char* name);
+void*    hashbin_remove_first(hashbin_t *hashbin);
+QUEUE   *hashbin_get_first(hashbin_t *hashbin);
+QUEUE   *hashbin_get_next(hashbin_t *hashbin);
 
 void enqueue_last(QUEUE **queue, QUEUE* element);
 void enqueue_first(QUEUE **queue, QUEUE* element);
@@ -100,7 +100,7 @@ QUEUE *dequeue_first(QUEUE **queue);
  *    Returns the number of elements in the hashbin
  *
  */
-extern __inline__ int  hashbin_get_size( hashbin_t* hashbin) 
+extern __inline__ int  hashbin_get_size(hashbin_t* hashbin) 
 {
 	return hashbin->hb_size;
 }

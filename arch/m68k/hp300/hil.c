@@ -304,7 +304,7 @@ static void hil_do(unsigned char cmd, unsigned char *data, unsigned int len)
  * Initialise HIL. 
  */
 
-__initfunc(int hp300_keyb_init(void))
+int __init hp300_keyb_init(void)
 {
   unsigned char s, c, kbid;
   unsigned int n = 0;

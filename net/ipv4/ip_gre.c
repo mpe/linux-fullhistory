@@ -1170,7 +1170,7 @@ static int ipgre_fb_tunnel_close(struct net_device *dev)
 }
 #endif
 
-__initfunc(int ipgre_fb_tunnel_init(struct net_device *dev))
+int __init ipgre_fb_tunnel_init(struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = (struct ip_tunnel*)dev->priv;
 	struct iphdr *iph;
@@ -1211,7 +1211,7 @@ static struct inet_protocol ipgre_protocol = {
 #ifdef MODULE
 int init_module(void) 
 #else
-__initfunc(int ipgre_init(void))
+int __init ipgre_init(void)
 #endif
 {
 	printk(KERN_INFO "GRE over IPv4 tunneling driver\n");

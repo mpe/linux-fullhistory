@@ -79,6 +79,7 @@ Code	Seq#	Include File		Comments
 'S'	82-FF	scsi/scsi.h
 'T'	all	linux/soundcard.h	conflict!
 'T'	all	asm-i386/ioctls.h	conflict!
+'U'     all     linux/drivers/usb/usb.h
 'V'	all	linux/vt.h
 'W'	00-1F	linux/router.h		conflict [Please reallocate]
 'W'	00-1F	linux/watchdog.h

@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/hpt366.c		Version 0.11	August 04, 1999
+ * linux/drivers/block/hpt366.c		Version 0.12	August 16, 1999
  *
- * Copyright (C) 1999			Andre Hedrick
+ * Copyright (C) 1999			Andre Hedrick <andre@suse.com>
  *
  * drive_number
  *	= ((HWIF(drive)->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
@@ -29,7 +29,6 @@
 
 const char *bad_ata66_4[] = {
 	"WDC AC310200R",
-	"QUANTUM FIREBALLP KA13.6",
 	NULL
 };
 
@@ -115,7 +114,7 @@ struct chipset_bus_clock_list_entry twenty_five_base [] = {
 };
 
 #define HPT366_DEBUG_DRIVE_INFO		0
-#define HPT366_ALLOW_ATA66_4		1
+#define HPT366_ALLOW_ATA66_4		0
 #define HPT366_ALLOW_ATA66_3		1
 #define HPT366_ALLOW_ATA33_2		1
 #define HPT366_ALLOW_ATA33_1		1
@@ -421,10 +420,9 @@ no_dma_set:
 }
 
 /*
- * hpt34x_dmaproc() initiates/aborts (U)DMA read/write operations on a drive.
+ * hpt366_dmaproc() initiates/aborts (U)DMA read/write operations on a drive.
  *
- * This is specific to the HPT343 UDMA bios-less chipset
- * and HPT345 UDMA bios chipset (stamped HPT363)
+ * This is specific to the HPT366 UDMA bios chipset
  * by HighPoint|Triones Technologies, Inc.
  */
 
@@ -463,7 +461,7 @@ int hpt366_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
 
-__initfunc(unsigned int pci_init_hpt366 (struct pci_dev *dev, const char *name))
+unsigned int __init pci_init_hpt366 (struct pci_dev *dev, const char *name)
 {
 	byte ata66 = 0;
 
@@ -474,7 +472,7 @@ __initfunc(unsigned int pci_init_hpt366 (struct pci_dev *dev, const char *name))
 	return dev->irq;
 }
 
-__initfunc(void ide_init_hpt366 (ide_hwif_t *hwif))
+void __init ide_init_hpt366 (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &hpt366_tune_drive;
 	if (hwif->dma_base) {

@@ -12,7 +12,7 @@ extern int ether1_probe (struct net_device *dev);
 extern int ether3_probe (struct net_device *dev);
 extern int etherh_probe (struct net_device *dev);
 
-__initfunc(int acorn_ethif_probe(struct net_device *dev))
+int __init acorn_ethif_probe(struct net_device *dev)
 {
 	if (1
 #ifdef CONFIG_ARM_ETHERH

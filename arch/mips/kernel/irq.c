@@ -356,7 +356,7 @@ static int i8259_irq_cannonicalize(int irq)
 	return ((irq == 2) ? 9 : irq);
 }
 
-__initfunc(static void i8259_init(void))
+static void __init i8259_init(void)
 {
 	/* Init master interrupt controller */
 	outb(0x11, 0x20); /* Start init sequence */
@@ -376,7 +376,7 @@ __initfunc(static void i8259_init(void))
 	outb(cached_21, 0x21);
 }
 
-__initfunc(void init_IRQ(void))
+void __init init_IRQ(void)
 {
 	irq_cannonicalize = i8259_irq_cannonicalize;
 	/* i8259_init(); */

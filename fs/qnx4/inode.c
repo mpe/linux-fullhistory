@@ -430,7 +430,7 @@ static struct file_system_type qnx4_fs_type =
 	NULL
 };
 
-__initfunc(int init_qnx4_fs(void))
+int __init init_qnx4_fs(void)
 {
 	printk("QNX4 filesystem v0.2 registered.\n");
 	return register_filesystem(&qnx4_fs_type);

@@ -310,7 +310,7 @@ int i2o_delete_controller(struct i2o_controller *c)
 
 			*p=c->next;
 			spin_unlock(&i2o_configuration_lock);
-			if(c->page_frame);
+			if(c->page_frame)
 				kfree(c->page_frame);
 			if(c->hrt)
 				kfree(c->hrt);

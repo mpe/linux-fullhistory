@@ -348,7 +348,7 @@ void devpts_pty_kill(int number)
 	}
 }
 
-__initfunc(int init_devpts_fs(void))
+int __init init_devpts_fs(void)
 {
 	return register_filesystem(&devpts_fs_type);
 

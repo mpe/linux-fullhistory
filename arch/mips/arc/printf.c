@@ -17,7 +17,7 @@ static char ppbuf[1024];
 #ifdef CONFIG_SGI_PROM_CONSOLE
 void prom_printf(char *fmt, ...)
 #else
-__initfunc(void prom_printf(char *fmt, ...))
+void __init prom_printf(char *fmt, ...)
 #endif
 {
 	va_list args;

@@ -57,7 +57,7 @@ void rs_nvram_write_val(int addr,
 	rs_pcNvRAM[addr]=val;
 }
   
-__initfunc(void init_prep_nvram(void))
+void __init init_prep_nvram(void)
 {
 	unsigned char *nvp;
 	int  i;

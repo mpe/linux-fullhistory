@@ -6,10 +6,11 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Mon May 10 19:14:51 1999
+ * Modified at:   Tue Aug 24 09:27:05 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -41,11 +42,11 @@
 #define TTP_PARAMETERS         0x80
 #define TTP_MORE               0x80
 
-#define DEFAULT_INITIAL_CREDIT 22
+#define DEFAULT_INITIAL_CREDIT 14
 
-#define LOW_THRESHOLD   4
-#define HIGH_THRESHOLD  8
-#define TTP_MAX_QUEUE  22
+#define LOW_THRESHOLD           4
+#define HIGH_THRESHOLD         10
+#define TTP_MAX_QUEUE          14
 
 /* Some priorities for disconnect requests */
 #define P_NORMAL    0
@@ -54,13 +55,16 @@
 #define SAR_DISABLE 0
 #define SAR_UNBOUND 0xffffffff
 
+/* Parameters */
+#define TTP_MAX_SDU_SIZE 0x01
+
 /*
  *  This structure contains all data assosiated with one instance of a TTP 
  *  connection.
  */
 struct tsap_cb {
-	QUEUE queue;          /* For linking it into the hashbin */
-	int  magic;           /* Just in case */
+	QUEUE   queue;        /* For linking it into the hashbin */
+	magic_t magic;        /* Just in case */
 
 	__u8 stsap_sel;       /* Source TSAP */
 	__u8 dtsap_sel;       /* Destination TSAP */
@@ -82,7 +86,7 @@ struct tsap_cb {
 	int rx_queue_lock;
 	spinlock_t lock;
 
-	struct notify_t notify;       /* Callbacks to client layer */
+	notify_t notify;       /* Callbacks to client layer */
 
 	struct irda_statistics stats;
 	struct timer_list todo_timer; 
@@ -103,16 +107,14 @@ struct tsap_cb {
 };
 
 struct irttp_cb {
-	int magic;
-	
+	magic_t    magic;	
 	hashbin_t *tsaps;
 };
 
 int  irttp_init(void);
 void irttp_cleanup(void);
 
-struct tsap_cb *irttp_open_tsap(__u8 stsap_sel, int credit, 
-				struct notify_t *notify);
+struct tsap_cb *irttp_open_tsap(__u8 stsap_sel, int credit, notify_t *notify);
 int irttp_close_tsap(struct tsap_cb *self);
 
 int irttp_data_request(struct tsap_cb *self, struct sk_buff *skb);
@@ -122,12 +124,12 @@ int irttp_connect_request(struct tsap_cb *self, __u8 dtsap_sel,
 			  __u32 saddr, __u32 daddr,
 			  struct qos_info *qos, __u32 max_sdu_size, 
 			  struct sk_buff *userdata);
-void irttp_connect_response(struct tsap_cb *self, __u32 max_sdu_size, 
+int irttp_connect_response(struct tsap_cb *self, __u32 max_sdu_size, 
 			    struct sk_buff *userdata);
-struct tsap_cb *irttp_dup(struct tsap_cb *self, void *instance);
-void irttp_disconnect_request(struct tsap_cb *self, struct sk_buff *skb,
-			      int priority);
+int irttp_disconnect_request(struct tsap_cb *self, struct sk_buff *skb,
+			     int priority);
 void irttp_flow_request(struct tsap_cb *self, LOCAL_FLOW flow);
+struct tsap_cb *irttp_dup(struct tsap_cb *self, void *instance);
 
 static __inline __u32 irttp_get_saddr(struct tsap_cb *self)
 {

@@ -2,6 +2,8 @@
  *  linux/arch/i386/mm/init.c
  *
  *  Copyright (C) 1995  Linus Torvalds
+ *
+ *  Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999
  */
 
 #include <linux/config.h>
@@ -20,6 +22,7 @@
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
 #endif
+#include <linux/bigmem.h>
 
 #include <asm/processor.h>
 #include <asm/system.h>
@@ -27,8 +30,10 @@
 #include <asm/pgtable.h>
 #include <asm/dma.h>
 #include <asm/fixmap.h>
+#include <asm/e820.h>
 
 static unsigned long totalram = 0;
+static unsigned long totalbig = 0;
 
 extern void show_net_buffers(void);
 extern unsigned long init_smp_mappings(unsigned long);
@@ -150,6 +155,7 @@ void show_mem(void)
 {
 	int i,free = 0,total = 0,reserved = 0;
 	int shared = 0, cached = 0;
+	int bigmem = 0;
 
 	printk("Mem-info:\n");
 	show_free_areas();
@@ -157,6 +163,8 @@ void show_mem(void)
 	i = max_mapnr;
 	while (i-- > 0) {
 		total++;
+		if (PageBIGMEM(mem_map+i))
+			bigmem++;
 		if (PageReserved(mem_map+i))
 			reserved++;
 		else if (PageSwapCache(mem_map+i))
@@ -167,6 +175,7 @@ void show_mem(void)
 			shared += page_count(mem_map+i) - 1;
 	}
 	printk("%d pages of RAM\n",total);
+	printk("%d pages of BIGMEM\n",bigmem);
 	printk("%d reserved pages\n",reserved);
 	printk("%d pages shared\n",shared);
 	printk("%d pages swap cached\n",cached);
@@ -238,7 +247,7 @@ void set_fixmap (enum fixed_addresses idx, unsigned long phys)
  * This routines also unmaps the page at virtual kernel address 0, so
  * that we can trap those pesky NULL-reference errors in the kernel.
  */
-__initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
+unsigned long __init paging_init(unsigned long start_mem, unsigned long end_mem)
 {
 	pgd_t * pg_dir;
 	pte_t * pg_table;
@@ -315,7 +324,12 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 #endif
 	local_flush_tlb();
 
+#ifndef CONFIG_BIGMEM
 	return free_area_init(start_mem, end_mem);
+#else
+	kmap_init(); /* run after fixmap_init */
+	return free_area_init(start_mem, bigmem_end + PAGE_OFFSET);
+#endif
 }
 
 /*
@@ -324,7 +338,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
  * before and after the test are here to work-around some nasty CPU bugs.
  */
 
-__initfunc(void test_wp_bit(void))
+void __init test_wp_bit(void)
 {
 	unsigned char tmp_reg;
 	unsigned long old = pg0[0];
@@ -353,7 +367,7 @@ __initfunc(void test_wp_bit(void))
 		printk(".\n");
 }
 
-__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
+void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	unsigned long start_low_mem = PAGE_SIZE;
 	int codepages = 0;
@@ -361,11 +375,22 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	int datapages = 0;
 	int initpages = 0;
 	unsigned long tmp;
-	unsigned long endbase;
+	unsigned long addr;
+	int i, avail;
 
 	end_mem &= PAGE_MASK;
+#ifdef CONFIG_BIGMEM
+	bigmem_start = PAGE_ALIGN(bigmem_start);
+	bigmem_end &= PAGE_MASK;
+#endif
 	high_memory = (void *) end_mem;
+#ifndef CONFIG_BIGMEM
 	max_mapnr = num_physpages = MAP_NR(end_mem);
+#else
+	max_mapnr = num_physpages = PHYSMAP_NR(bigmem_end);
+	/* cache the bigmem_mapnr */
+	bigmem_mapnr = PHYSMAP_NR(bigmem_start);
+#endif
 
 	/* clear the zero-page */
 	memset(empty_zero_page, 0, PAGE_SIZE);
@@ -385,23 +410,43 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 #endif
 	start_mem = PAGE_ALIGN(start_mem);
 
-	/*
-	 * IBM messed up *AGAIN* in their thinkpad: 0xA0000 -> 0x9F000.
-	 * They seem to have done something stupid with the floppy
-	 * controller as well..
-	 * The amount of available base memory is in WORD 40:13. Except
-	 * when it isn't.
+	/* walk the whitelist, unreserving good memory
 	 */
-	endbase = PAGE_OFFSET + 0x9f000;
-	while (start_low_mem < endbase) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(start_low_mem)].flags);
-		start_low_mem += PAGE_SIZE;
+	for (avail = i = 0; i < e820.nr_map; i++) {
+		if (e820.map[i].type != 1)	/* not usable memory */
+			continue;
+		printk("memory region: %luk @ %08lx\n",
+				    ((long)(e820.map[i].size)) / 1024,
+				    (long)(e820.map[i].addr) );
+		for (addr=PAGE_ALIGN(((long)(e820.map[i].addr)))+PAGE_OFFSET,
+								     tmp = 0;
+				     tmp < (unsigned long)(e820.map[i].size);
+							    tmp += PAGE_SIZE,
+							   addr += PAGE_SIZE) {
+
+			/* this little bit of grossness is for dealing
+			 * with memory borrowing for system bookkeeping
+			 * (smp stacks, zero page, kernel code, etc)
+			 * without having to go back and edit the e820
+			 * map to compensate.
+			 *
+			 * if we're in low memory (<1024k), we need to
+			 * avoid the smp stack and zero page.
+			 * if we're in high memory, we need to avoid
+			 * the kernel code.
+			 * in any case, we don't want to hack mem_map
+			 * entries above end_mem.
+			 */
+			if ( (addr < start_low_mem)
+			  || (addr >= HIGH_MEMORY && addr <= start_mem)
+			  || (addr > end_mem) )
+				continue;
+
+			avail++;
+			clear_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
+		}
 	}
 
-	while (start_mem < end_mem) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(start_mem)].flags);
-		start_mem += PAGE_SIZE;
-	}
 	for (tmp = PAGE_OFFSET ; tmp < end_mem ; tmp += PAGE_SIZE) {
 		if (tmp >= MAX_DMA_ADDRESS)
 			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
@@ -424,21 +469,33 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		set_page_count(mem_map+MAP_NR(tmp), 1);
 		totalram += PAGE_SIZE;
 #ifdef CONFIG_BLK_DEV_INITRD
-		if (!initrd_start || (tmp < initrd_start || tmp >=
-		    initrd_end))
+		if (!initrd_start || (tmp < initrd_start || tmp >= initrd_end))
 #endif
 			free_page(tmp);
 	}
-	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data, %dk init)\n",
+#ifdef CONFIG_BIGMEM
+	for (tmp = bigmem_start; tmp < bigmem_end;  tmp += PAGE_SIZE) {
+		clear_bit(PG_reserved, &mem_map[PHYSMAP_NR(tmp)].flags);
+		set_bit(PG_BIGMEM, &mem_map[PHYSMAP_NR(tmp)].flags);
+		atomic_set(&mem_map[PHYSMAP_NR(tmp)].count, 1);
+		free_page(tmp + PAGE_OFFSET);
+		totalbig += PAGE_SIZE;
+	}
+	totalram += totalbig;
+#endif
+	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data, %dk init, %dk bigmem)\n",
 		(unsigned long) nr_free_pages << (PAGE_SHIFT-10),
 		max_mapnr << (PAGE_SHIFT-10),
 		codepages << (PAGE_SHIFT-10),
 		reservedpages << (PAGE_SHIFT-10),
 		datapages << (PAGE_SHIFT-10),
-		initpages << (PAGE_SHIFT-10));
+		initpages << (PAGE_SHIFT-10),
+	        (int) (totalbig >> 10)
+	       );
 
 	if (boot_cpu_data.wp_works_ok < 0)
 		test_wp_bit();
+
 }
 
 void free_initmem(void)
@@ -461,5 +518,7 @@ void si_meminfo(struct sysinfo *val)
 	val->sharedram = 0;
 	val->freeram = nr_free_pages << PAGE_SHIFT;
 	val->bufferram = atomic_read(&buffermem);
+	val->totalbig = totalbig;
+	val->freebig = nr_free_bigpages << PAGE_SHIFT;
 	return;
 }

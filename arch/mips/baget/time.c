@@ -52,7 +52,7 @@ void static timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	}
 }
 
-__initfunc(static void timer_enable(void))
+static void __init timer_enable(void)
 {
 	unsigned char ss0cr0 = vic_inb(VIC_SS0CR0);
 	ss0cr0 &= ~VIC_SS0CR0_TIMER_FREQ_MASK;
@@ -63,7 +63,7 @@ __initfunc(static void timer_enable(void))
 		 VIC_INT_LOW|VIC_INT_ENABLE, VIC_LINT2); 
 }
 
-__initfunc(void time_init(void))
+void __init time_init(void)
 {
 	if (request_irq(BAGET_VIC_TIMER_IRQ, timer_interrupt, 
 			SA_INTERRUPT|SA_STATIC_ALLOC, "timer", NULL) < 0) 

@@ -149,7 +149,7 @@ void do_settimeofday(struct timeval *tv)
 	sti();
 }
 
-__initfunc(void time_init(void))
+void __init time_init(void)
 {
 	xtime.tv_usec = 0;
 

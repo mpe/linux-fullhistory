@@ -25,6 +25,7 @@ struct request {
 	int errors;
 	unsigned long sector;
 	unsigned long nr_sectors;
+	unsigned long nr_segments;
 	unsigned long current_nr_sectors;
 	char * buffer;
 	struct semaphore * sem;
@@ -75,14 +76,18 @@ extern int * max_readahead[MAX_BLKDEV];
 
 extern int * max_sectors[MAX_BLKDEV];
 
-#define MAX_SECTORS 244 /* 254 ? */
+extern int * max_segments[MAX_BLKDEV];
+
+#define MAX_SECTORS 128
+
+#define MAX_SEGMENTS MAX_SECTORS
 
 #define PageAlignSize(size) (((size) + PAGE_SIZE -1) & PAGE_MASK)
 #if 0  /* small readahead */
 #define MAX_READAHEAD PageAlignSize(4096*7)
 #define MIN_READAHEAD PageAlignSize(4096*2)
 #else /* large readahead */
-#define MAX_READAHEAD PageAlignSize(4096*18)
+#define MAX_READAHEAD PageAlignSize(4096*31)
 #define MIN_READAHEAD PageAlignSize(4096*3)
 #endif
 

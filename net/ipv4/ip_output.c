@@ -1023,7 +1023,7 @@ static struct proc_dir_entry proc_net_igmp = {
  *	IP registers the packet type and then calls the subprotocol initialisers
  */
 
-__initfunc(void ip_init(void))
+void __init ip_init(void)
 {
 	dev_add_pack(&ip_packet_type);
 

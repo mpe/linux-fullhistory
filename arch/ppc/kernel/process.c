@@ -453,7 +453,7 @@ print_backtrace(unsigned long *sp)
 /*
  * Low level print for debugging - Cort
  */
-__initfunc(int ll_printk(const char *fmt, ...))
+int __init ll_printk(const char *fmt, ...)
 {
         va_list args;
 	char buf[256];
@@ -482,7 +482,7 @@ void puthex(unsigned long val)
 	prom_print(buf);
 }
 
-__initfunc(void ll_puts(const char *s))
+void __init ll_puts(const char *s)
 {
 	int x,y;
 	char *vidmem = (char *)/*(_ISA_MEM_BASE + 0xB8000) */0xD00B8000;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Feb  6 21:02:33 1999
- * Modified at:   Tue Jun  1 08:47:41 1999
+ * Modified at:   Sun Jul 18 12:09:26 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -37,7 +37,7 @@
 static void girbil_reset(struct irda_device *dev);
 static void girbil_open(struct irda_device *dev, int type);
 static void girbil_close(struct irda_device *dev);
-static void girbil_change_speed(struct irda_device *dev, int baud);
+static void girbil_change_speed(struct irda_device *dev, __u32 speed);
 static void girbil_init_qos(struct irda_device *idev, struct qos_info *qos);
 
 /* Control register 1 */
@@ -111,7 +111,7 @@ static void girbil_close(struct irda_device *idev)
  *    function must be called with a process context!
  *
  */
-static void girbil_change_speed(struct irda_device *idev, int speed)
+static void girbil_change_speed(struct irda_device *idev, __u32 speed)
 {
 	__u8 control[2];
 	
@@ -138,6 +138,9 @@ static void girbil_change_speed(struct irda_device *idev, int speed)
 	}
 	control[1] = GIRBIL_LOAD;
 
+	/* Need to reset the dongle and go to 9600 bps before programming */
+	girbil_reset(idev);
+
 	/* Set DTR and Clear RTS to enter command mode */
 	irda_device_set_dtr_rts(idev, FALSE, TRUE);
 
@@ -145,7 +148,7 @@ static void girbil_change_speed(struct irda_device *idev, int speed)
 	irda_device_raw_write(idev, control, 2);
 
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(2);
+	schedule_timeout(MSECS_TO_JIFFIES(100));
 	
 	/* Go back to normal mode */
 	irda_device_set_dtr_rts(idev, TRUE, TRUE);
@@ -168,18 +171,22 @@ void girbil_reset(struct irda_device *idev)
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	
+	/* Make sure the IrDA chip also goes to defalt speed */
+	if (idev->change_speed)
+		idev->change_speed(idev, 9600);
+
 	/* Reset dongle */
 	irda_device_set_dtr_rts(idev, TRUE, FALSE);
 
 	/* Sleep at least 5 ms */
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(20));
+	schedule_timeout(MSECS_TO_JIFFIES(10));
 	
 	/* Set DTR and clear RTS to enter command mode */
 	irda_device_set_dtr_rts(idev, FALSE, TRUE);
 
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(20));
+	schedule_timeout(MSECS_TO_JIFFIES(10));
 
 	/* Write control byte */
 	irda_device_raw_write(idev, &control, 1);
@@ -189,10 +196,6 @@ void girbil_reset(struct irda_device *idev)
 
 	/* Go back to normal mode */
 	irda_device_set_dtr_rts(idev, TRUE, TRUE);
-
-       	/* Make sure the IrDA chip also goes to defalt speed */
-	if (idev->change_speed)
-		idev->change_speed(idev, 9600);
 }
 
 /*

@@ -156,8 +156,6 @@ asmlinkage long sys_setitimer(int which, struct itimerval *value,
 	int error;
 
 	if (value) {
-		if(verify_area(VERIFY_READ, value, sizeof(*value)))
-			return -EFAULT;
 		if(copy_from_user(&set_buffer, value, sizeof(set_buffer)))
 			return -EFAULT;
 	} else

@@ -583,7 +583,7 @@ void debug_print_hooks_ip(unsigned int nf_debug)
 }
 #endif /* CONFIG_NETFILTER_DEBUG */
 
-__initfunc(void netfilter_init(void))
+void __init netfilter_init(void)
 {
 	int i, h;
 

@@ -31,7 +31,7 @@ static int nvram_as1 = NVRAM_AS1;
 static int nvram_as0 = NVRAM_AS0;
 static int nvram_data = NVRAM_DATA;
 
-__initfunc(void chrp_time_init(void))
+void __init chrp_time_init(void)
 {
 	struct device_node *rtcs;
 	int base;
@@ -151,7 +151,7 @@ unsigned long chrp_get_rtc_time(void)
 }
 
 
-__initfunc(void chrp_calibrate_decr(void))
+void __init chrp_calibrate_decr(void)
 {
 	struct device_node *cpu;
 	int *fp, divisor;

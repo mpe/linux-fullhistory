@@ -502,8 +502,8 @@ static int pp_release (struct inode * inode, struct file * file)
 	}
 
 	if (pp->pdev) {
-		kfree (pp->pdev->name);
 		parport_unregister_device (pp->pdev);
+		kfree (pp->pdev->name);
 		pp->pdev = NULL;
 		printk (KERN_DEBUG CHRDEV "%x: unregistered pardevice\n",
 			minor);

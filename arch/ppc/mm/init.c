@@ -606,8 +606,8 @@ mmu_context_overflow(void)
 /*
  * Scan a region for a piece of a given size with the required alignment.
  */
-__initfunc(void *
-find_mem_piece(unsigned size, unsigned align))
+void * __init
+find_mem_piece(unsigned size, unsigned align)
 {
 	int i;
 	unsigned a, e;
@@ -630,9 +630,9 @@ find_mem_piece(unsigned size, unsigned align))
 /*
  * Remove some memory from an array of pieces
  */
-__initfunc(static void
+static void __init
 remove_mem_piece(struct mem_pieces *mp, unsigned start, unsigned size,
-		 int must_exist))
+		 int must_exist)
 {
 	int i, j;
 	unsigned end, rs, re;
@@ -686,7 +686,7 @@ remove_mem_piece(struct mem_pieces *mp, unsigned start, unsigned size,
 	}
 }
 
-__initfunc(static void print_mem_pieces(struct mem_pieces *mp))
+static void __init print_mem_pieces(struct mem_pieces *mp)
 {
 	int i;
 
@@ -699,8 +699,8 @@ __initfunc(static void print_mem_pieces(struct mem_pieces *mp))
 /*
  * Add some memory to an array of pieces
  */
-__initfunc(static void
-	   append_mem_piece(struct mem_pieces *mp, unsigned start, unsigned size))
+static void __init
+	   append_mem_piece(struct mem_pieces *mp, unsigned start, unsigned size)
 {
 	struct reg_property *rp;
 
@@ -744,7 +744,7 @@ unsigned long inline p_mapped_by_bats(unsigned long pa)
 	return 0;
 }
 
-__initfunc(static void sort_mem_pieces(struct mem_pieces *mp))
+static void __init sort_mem_pieces(struct mem_pieces *mp)
 {
 	unsigned long a, s;
 	int i, j;
@@ -762,7 +762,7 @@ __initfunc(static void sort_mem_pieces(struct mem_pieces *mp))
 	}
 }
 
-__initfunc(static void coalesce_mem_pieces(struct mem_pieces *mp))
+static void __init coalesce_mem_pieces(struct mem_pieces *mp)
 {
 	unsigned long a, s, ns;
 	int i, j, d;
@@ -788,7 +788,7 @@ __initfunc(static void coalesce_mem_pieces(struct mem_pieces *mp))
  * Read in a property describing some pieces of memory.
  */
 
-__initfunc(static void get_mem_prop(char *name, struct mem_pieces *mp))
+static void __init get_mem_prop(char *name, struct mem_pieces *mp)
 {
 	struct reg_property *rp;
 	int s;
@@ -815,8 +815,8 @@ __initfunc(static void get_mem_prop(char *name, struct mem_pieces *mp))
  * The parameters are not checked; in particular size must be a power
  * of 2 between 128k and 256M.
  */
-__initfunc(void setbat(int index, unsigned long virt, unsigned long phys,
-       unsigned int size, int flags))
+void __init setbat(int index, unsigned long virt, unsigned long phys,
+       unsigned int size, int flags)
 {
 	unsigned int bl;
 	int wimgxpp;
@@ -870,7 +870,7 @@ __initfunc(void setbat(int index, unsigned long virt, unsigned long phys,
  */
 #define PAGE_KERNEL_RO	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED)
 
-__initfunc(static void mapin_ram(void))
+static void __init mapin_ram(void)
 {
 	int i;
 	unsigned long v, p, s, f;
@@ -966,7 +966,7 @@ static void *MMU_get_page(void)
 	return p;
 }
 
-__initfunc(void free_initmem(void))
+void __init free_initmem(void)
 {
 	unsigned long a;
 	unsigned long num_freed_pages = 0, num_prep_pages = 0,
@@ -1022,7 +1022,7 @@ __initfunc(void free_initmem(void))
  * still be merged.
  * -- Cort
  */
-__initfunc(void MMU_init(void))
+void __init MMU_init(void)
 {
 #ifdef __SMP__
 	if ( first_cpu_booted ) return;
@@ -1114,7 +1114,7 @@ __initfunc(void MMU_init(void))
  * that setup_arch returns, making sure that there are at
  * least 32 pages unused before this for MMU_get_page to use.
  */
-__initfunc(unsigned long find_available_memory(void))
+unsigned long __init find_available_memory(void)
 {
 	int i, rn;
 	unsigned long a, free;
@@ -1150,7 +1150,7 @@ __initfunc(unsigned long find_available_memory(void))
 /*
  * paging_init() sets up the page tables - in fact we've already done this.
  */
-__initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
+unsigned long __init paging_init(unsigned long start_mem, unsigned long end_mem)
 {
 	extern unsigned long free_area_init(unsigned long, unsigned long);
 	/*
@@ -1166,7 +1166,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 	return start_mem;
 }
 
-__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
+void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	unsigned long addr;
 	int i;
@@ -1262,7 +1262,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
  * functions in the image just to get prom_init, all we really need right
  * now is the initialization of the physical memory region.
  */
-__initfunc(unsigned long *mbx_find_end_of_memory(void))
+unsigned long * __init mbx_find_end_of_memory(void)
 {
 	unsigned long kstart, ksize;
 	bd_t	*binfo;
@@ -1307,7 +1307,7 @@ __initfunc(unsigned long *mbx_find_end_of_memory(void))
  * Our text, data, bss use something over 1MB, starting at 0.
  * Open Firmware may be using 1MB at the 4MB point.
  */
-__initfunc(unsigned long *pmac_find_end_of_memory(void))
+unsigned long * __init pmac_find_end_of_memory(void)
 {
 	unsigned long a, total;
 	unsigned long kstart, ksize;
@@ -1399,7 +1399,7 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
  * this will likely stay separate from the pmac.
  * -- Cort
  */
-__initfunc(unsigned long *prep_find_end_of_memory(void))
+unsigned long * __init prep_find_end_of_memory(void)
 {
 	unsigned long kstart, ksize;
 	unsigned long total;
@@ -1427,7 +1427,7 @@ __initfunc(unsigned long *prep_find_end_of_memory(void))
 
 #ifdef CONFIG_APUS
 #define HARDWARE_MAPPED_SIZE (512*1024)
-__initfunc(unsigned long *apus_find_end_of_memory(void))
+unsigned long * __init apus_find_end_of_memory(void)
 {
 	int shadow = 0;
 
@@ -1505,7 +1505,7 @@ __initfunc(unsigned long *apus_find_end_of_memory(void))
 /*
  * Initialize the hash table and patch the instructions in head.S.
  */
-__initfunc(static void hash_init(void))
+static void __init hash_init(void)
 {
 	int Hash_bits;
 	unsigned long h, ramsize;

@@ -1191,7 +1191,7 @@ struct proc_dir_entry ndisc_proc_entry =
 
 
 
-__initfunc(int ndisc_init(struct net_proto_family *ops))
+int __init ndisc_init(struct net_proto_family *ops)
 {
 	struct sock *sk;
         int err;

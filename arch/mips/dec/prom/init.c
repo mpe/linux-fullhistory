@@ -41,7 +41,7 @@ extern void prom_init_cmdline(int, char **, unsigned long);
  * Detect which PROM's the DECSTATION has, and set the callback vectors
  * appropriately.
  */
-__initfunc(void which_prom(unsigned long magic, int *prom_vec))
+void __init which_prom(unsigned long magic, int *prom_vec)
 {
 	/*
 	 * No sign of the REX PROM's magic number means we assume a non-REX
@@ -78,8 +78,8 @@ __initfunc(void which_prom(unsigned long magic, int *prom_vec))
 	}
 } 
 
-__initfunc(int prom_init(int argc, char **argv,
-	       unsigned long magic, int *prom_vec))
+int __init prom_init(int argc, char **argv,
+	       unsigned long magic, int *prom_vec)
 {
 	/* Determine which PROM's we have (and therefore which machine we're on!) */
 	which_prom(magic, prom_vec);

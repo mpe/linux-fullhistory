@@ -104,7 +104,7 @@ int arch_set_dma_speed(dmach_t channel, dma_t *dma, int cycle_ns)
 	return 0;
 }
 
-__initfunc(void arch_dma_init(dma_t *dma))
+void __init arch_dma_init(dma_t *dma)
 {
 #ifdef CONFIG_ISA_DMA
 	has_isa_dma = isa_init_dma();

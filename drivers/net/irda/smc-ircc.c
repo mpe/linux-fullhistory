@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis (tadavis@jps.net)
  * Created at:    
- * Modified at:   Wed May 19 15:30:08 1999
+ * Modified at:   Tue Aug 24 13:33:22 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Thomas Davis, All Rights Reserved.
@@ -65,7 +65,7 @@ static int  ircc_dma_receive( struct irda_device *idev);
 static int  ircc_dma_receive_complete(struct irda_device *idev, int iobase);
 static int  ircc_hard_xmit( struct sk_buff *skb, struct net_device *dev);
 static void ircc_dma_write( struct irda_device *idev, int iobase);
-static void ircc_change_speed( struct irda_device *idev, int baud);
+static void ircc_change_speed( struct irda_device *idev, __u32 speed);
 static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void ircc_wait_until_sent( struct irda_device *idev);
 static int  ircc_is_receiving( struct irda_device *idev);
@@ -348,7 +348,7 @@ static int ircc_probe( int iobase, int iobase2)
  *    Change the speed of the device
  *
  */
-static void ircc_change_speed( struct irda_device *idev, int speed)
+static void ircc_change_speed( struct irda_device *idev, __u32 speed)
 {
 	struct ircc_cb *self;
 	int iobase, ir_mode, select, fast; 
@@ -884,9 +884,7 @@ static int ircc_net_open( struct net_device *dev)
 	}
 		
 	/* Ready to play! */
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	irda_device_net_open(dev);
 
 	/* turn on interrupts */
 	
@@ -909,10 +907,6 @@ static int ircc_net_close(struct net_device *dev)
 
 	DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 	
-	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
-
 	ASSERT( dev != NULL, return -1;);
 	idev = (struct irda_device *) dev->priv;
 	
@@ -920,6 +914,8 @@ static int ircc_net_close(struct net_device *dev)
 	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return 0;);
 	
 	iobase = idev->io.iobase;
+
+	irda_device_net_close(dev);
 
 	disable_dma( idev->io.dma);
 

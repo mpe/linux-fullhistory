@@ -191,20 +191,20 @@ chrp_get_cpuinfo(char *buffer)
      *  for keyboard and mouse
      */
 
-__initfunc(static inline void sio_write(u8 val, u8 index))
+static inline void __init sio_write(u8 val, u8 index)
 {
 	outb(index, 0x15c);
 	outb(val, 0x15d);
 }
 
-__initfunc(static inline u8 sio_read(u8 index))
+static inline u8 __init sio_read(u8 index)
 {
 	outb(index, 0x15c);
 	return inb(0x15d);
 }
 
-__initfunc(static void sio_fixup_irq(const char *name, u8 device, u8 level,
-				     u8 type))
+static void __init sio_fixup_irq(const char *name, u8 device, u8 level,
+				     u8 type)
 {
 	u8 level0, type0, active;
 
@@ -226,7 +226,7 @@ __initfunc(static void sio_fixup_irq(const char *name, u8 device, u8 level,
 
 }
 
-__initfunc(static void sio_init(void))
+static void __init sio_init(void)
 {
 	/* logical device 0 (KBC/Keyboard) */
 	sio_fixup_irq("keyboard", 0, 1, 2);
@@ -235,8 +235,8 @@ __initfunc(static void sio_init(void))
 }
 
 
-__initfunc(void
-	   chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
+void __init
+	   chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	extern char cmd_line[];
 	struct device_node *device;
@@ -434,8 +434,8 @@ out:
                 openpic_eoi(0);
 }
 
-__initfunc(void
-	   chrp_init_IRQ(void))
+void __init
+	   chrp_init_IRQ(void)
 {
 	struct device_node *np;
 	int i;
@@ -468,8 +468,8 @@ __initfunc(void
 #endif	/* __SMP__ */
 }
 
-__initfunc(void
-	   chrp_init2(void))
+void __init
+	   chrp_init2(void)
 {
 	adb_init();
 
@@ -584,9 +584,9 @@ EXPORT_SYMBOL(chrp_ide_probe);
 
 #endif
 
-__initfunc(void
+void __init
 	   chrp_init(unsigned long r3, unsigned long r4, unsigned long r5,
-		     unsigned long r6, unsigned long r7))
+		     unsigned long r6, unsigned long r7)
 {
 	chrp_setup_pci_ptrs();
 #ifdef CONFIG_BLK_DEV_INITRD

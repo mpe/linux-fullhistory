@@ -2650,7 +2650,8 @@ static int zoran_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		{
 			struct video_buffer v;
 
-			if (!capable(CAP_SYS_ADMIN))
+			if (!capable(CAP_SYS_ADMIN)
+			|| !capable(CAP_SYS_RAWIO))
 				return -EPERM;
 
 			if (copy_from_user(&v, arg, sizeof(v)))

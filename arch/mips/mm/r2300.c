@@ -127,7 +127,7 @@ static void r2300_copy_page(unsigned long to, unsigned long from)
 		 "I" (PAGE_SIZE));
 }
 
-__initfunc(static unsigned long size_cache(unsigned long ca_flags))
+static unsigned long __init size_cache(unsigned long ca_flags)
 {
 	unsigned long flags, status, dummy, size;
 	volatile unsigned long *p;
@@ -161,13 +161,13 @@ __initfunc(static unsigned long size_cache(unsigned long ca_flags))
 	return size * sizeof(*p);
 }
 
-__initfunc(static void probe_dcache(void))
+static void __init probe_dcache(void)
 {
 	dcache.size = size_cache(dcache.ca_flags = ST0_DE);
 	printk("Data cache %dkb\n", dcache.size >> 10);
 }
 
-__initfunc(static void probe_icache(void))
+static void __init probe_icache(void)
 {
 	icache.size = size_cache(icache.ca_flags = ST0_DE|ST0_CE);
 	printk("Instruction cache %dkb\n", icache.size >> 10);
@@ -683,7 +683,7 @@ static int r2300_user_mode(struct pt_regs *regs)
 	return !(regs->cp0_status & ST0_KUP);
 }
 
-__initfunc(void ld_mmu_r2300(void))
+void __init ld_mmu_r2300(void)
 {
 	printk("CPU revision is: %08x\n", read_32bit_cp0_register(CP0_PRID));
 

@@ -37,8 +37,8 @@ struct linux_mem_p1275 prom_memlist;
 /* Internal Prom library routine to sort a linux_mlist_p1275 memory
  * list.  Used below in initialization.
  */
-__initfunc(static void
-prom_sortmemlist(struct linux_mlist_p1275 *thislist))
+static void __init
+prom_sortmemlist(struct linux_mlist_p1275 *thislist)
 {
 	int swapi = 0;
 	int i, mitr;
@@ -65,7 +65,7 @@ prom_sortmemlist(struct linux_mlist_p1275 *thislist))
 }
 
 /* Initialize the memory lists based upon the prom version. */
-__initfunc(void prom_meminit(void))
+void __init prom_meminit(void)
 {
 	int node = 0;
 	unsigned int iter, num_regs;

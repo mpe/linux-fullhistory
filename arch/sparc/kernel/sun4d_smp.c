@@ -83,7 +83,7 @@ static void smp_setup_percpu_timer(void);
 extern void cpu_probe(void);
 extern void sun4d_distribute_irqs(void);
 
-__initfunc(void smp4d_callin(void))
+void __init smp4d_callin(void)
 {
 	int cpuid = hard_smp4d_processor_id();
 	extern spinlock_t sun4d_imsk_lock;
@@ -161,7 +161,7 @@ extern unsigned long trapbase_cpu1[];
 extern unsigned long trapbase_cpu2[];
 extern unsigned long trapbase_cpu3[];
 
-__initfunc(void smp4d_boot_cpus(void))
+void __init smp4d_boot_cpus(void)
 {
 	int cpucount = 0;
 	int i = 0;
@@ -499,7 +499,7 @@ void smp4d_percpu_timer_interrupt(struct pt_regs *regs)
 
 extern unsigned int lvl14_resolution;
 
-__initfunc(static void smp_setup_percpu_timer(void))
+static void __init smp_setup_percpu_timer(void)
 {
 	int cpu = hard_smp4d_processor_id();
 
@@ -507,7 +507,7 @@ __initfunc(static void smp_setup_percpu_timer(void))
 	load_profile_irq(cpu, lvl14_resolution);
 }
 
-__initfunc(void smp4d_blackbox_id(unsigned *addr))
+void __init smp4d_blackbox_id(unsigned *addr)
 {
 	int rd = *addr & 0x3e000000;
 	
@@ -516,7 +516,7 @@ __initfunc(void smp4d_blackbox_id(unsigned *addr))
 	addr[2] = 0x01000000;    		/* nop */
 }
 
-__initfunc(void smp4d_blackbox_current(unsigned *addr))
+void __init smp4d_blackbox_current(unsigned *addr)
 {
 	/* We have a nice Linux current register :) */
 	int rd = addr[1] & 0x3e000000;
@@ -525,7 +525,7 @@ __initfunc(void smp4d_blackbox_current(unsigned *addr))
 	addr[1] = 0xc0800820 | rd;		/* lda [%g0] ASI_M_VIKING_TMP2, reg */
 }
 
-__initfunc(void sun4d_init_smp(void))
+void __init sun4d_init_smp(void)
 {
 	int i;
 	extern unsigned int patchme_store_new_current[];

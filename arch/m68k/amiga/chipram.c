@@ -32,7 +32,7 @@ unsigned long amiga_chip_avail( void )
 }
 
 
-__initfunc(void amiga_chip_init (void))
+void __init amiga_chip_init (void)
 {
   struct chip_desc *dp;
 

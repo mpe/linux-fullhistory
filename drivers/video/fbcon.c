@@ -246,7 +246,7 @@ static void cursor_timer_handler(unsigned long dev_addr)
 
 struct display_switch fbcon_dummy;
 
-/* NOTE: fbcon cannot be __initfunc: it may be called from take_over_console later */
+/* NOTE: fbcon cannot be __init: it may be called from take_over_console later */
 
 static const char *fbcon_startup(void)
 {

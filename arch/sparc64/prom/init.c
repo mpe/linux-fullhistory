@@ -31,7 +31,7 @@ extern void prom_meminit(void);
 extern void prom_ranges_init(void);
 extern void prom_cif_init(void *, void *);
 
-__initfunc(void prom_init(void *cif_handler, void *cif_stack))
+void __init prom_init(void *cif_handler, void *cif_stack)
 {
 	char buffer[80], *p;
 	int ints[3];

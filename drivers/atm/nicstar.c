@@ -344,7 +344,7 @@ void cleanup_module(void)
 
 #else
 
-__initfunc(int nicstar_detect(void))
+int __init nicstar_detect(void)
 {
    int i;
    unsigned error = 0;	/* Initialized to remove compile warning */
@@ -454,7 +454,7 @@ static int ns_init_card(int i, struct pci_dev *pcidev)
       
    card->index = i;
    card->pcidev = pcidev;
-   card->membase = (u32) (pcidev->base_address[1] & PCI_BASE_ADDRESS_MEM_MASK);
+   card->membase = (u32) pcidev->resource[1].start;
 #ifdef __powerpc__
    /* Compensate for different memory map between host CPU and PCI bus.
       Shouldn't we use a macro for this? */

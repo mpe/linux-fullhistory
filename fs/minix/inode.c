@@ -1238,7 +1238,7 @@ static struct file_system_type minix_fs_type = {
 	NULL
 };
 
-__initfunc(int init_minix_fs(void))
+int __init init_minix_fs(void)
 {
         return register_filesystem(&minix_fs_type);
 }

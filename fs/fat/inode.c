@@ -622,7 +622,7 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 	sb->s_magic = MSDOS_SUPER_MAGIC;
 	/* set up enough so that it can read an inode */
 	init_waitqueue_head(&MSDOS_SB(sb)->fat_wait);
-	MSDOS_SB(sb)->fat_lock = 0;
+	init_MUTEX(&MSDOS_SB(sb)->fat_lock);
 	MSDOS_SB(sb)->prev_free = 0;
 
 	cp = opts.codepage ? opts.codepage : 437;

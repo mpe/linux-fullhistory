@@ -110,7 +110,7 @@ static void ali15x3_tune_drive (ide_drive_t *drive, byte pio)
 
 }
 
-__initfunc(unsigned int pci_init_ali15x3 (struct pci_dev *dev, const char *name))
+unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 {
 	byte confreg0 = 0, confreg1 =0, progif = 0;
 	int errors = 0;
@@ -194,7 +194,7 @@ int ali15x3_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
 
-__initfunc(void ide_init_ali15x3 (ide_hwif_t *hwif))
+void __init ide_init_ali15x3 (ide_hwif_t *hwif)
 {
 	struct pci_dev *dev;
 	byte ideic, inmir, iderev;

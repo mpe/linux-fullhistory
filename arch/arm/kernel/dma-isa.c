@@ -125,7 +125,7 @@ void isa_disable_dma(int channel, dma_t *dma)
 	outb(channel | 4, isa_dma_port[channel][ISA_DMA_MASK]);
 }
 
-__initfunc(int isa_init_dma(void))
+int __init isa_init_dma(void)
 {
 	int dmac_found;
 

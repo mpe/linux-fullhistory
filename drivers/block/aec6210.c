@@ -50,11 +50,11 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 
-__initfunc(unsigned int pci_init_aec6210 (struct pci_dev *dev, const char *name))
+unsigned int __init pci_init_aec6210 (struct pci_dev *dev, const char *name)
 {
-	if (dev->rom_address) {
-		pci_write_config_dword(dev, PCI_ROM_ADDRESS, dev->rom_address | PCI_ROM_ADDRESS_ENABLE);
-		printk("%s: ROM enabled at 0x%08lx\n", name, dev->rom_address);
+	if (dev->resource[PCI_ROM_RESOURCE].start) {
+		pci_write_config_dword(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
+		printk("%s: ROM enabled at 0x%08lx\n", name, dev->resource[PCI_ROM_RESOURCE].start);
 	}
 	return dev->irq;
 }

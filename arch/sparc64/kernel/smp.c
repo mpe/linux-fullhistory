@@ -83,7 +83,7 @@ int smp_bogo(char *buf)
 	return len;
 }
 
-__initfunc(void smp_store_cpu_info(int id))
+void __init smp_store_cpu_info(int id)
 {
 	int i;
 
@@ -103,7 +103,7 @@ __initfunc(void smp_store_cpu_info(int id))
 		cpu_data[id].irq_worklists[i] = 0;
 }
 
-__initfunc(void smp_commence(void))
+void __init smp_commence(void)
 {
 }
 
@@ -115,7 +115,7 @@ static volatile unsigned long callin_flag = 0;
 extern void inherit_locked_prom_mappings(int save_p);
 extern void cpu_probe(void);
 
-__initfunc(void smp_callin(void))
+void __init smp_callin(void)
 {
 	int cpuid = hard_smp_processor_id();
 
@@ -192,7 +192,7 @@ extern unsigned long smp_trampoline;
  */
 static struct task_struct *cpu_new_task = NULL;
 
-__initfunc(void smp_boot_cpus(void))
+void __init smp_boot_cpus(void)
 {
 	int cpucount = 0, i;
 
@@ -647,7 +647,7 @@ do {	hardirq_enter(cpu);			\
 	} while (tick >= compare);
 }
 
-__initfunc(static void smp_setup_percpu_timer(void))
+static void __init smp_setup_percpu_timer(void)
 {
 	int cpu = smp_processor_id();
 
@@ -661,7 +661,7 @@ __initfunc(static void smp_setup_percpu_timer(void))
 			     : "g1");
 }
 
-__initfunc(void smp_tick_init(void))
+void __init smp_tick_init(void)
 {
 	int i;
 	
@@ -707,7 +707,7 @@ static inline unsigned long find_flush_base(unsigned long size)
 
 cycles_t cacheflush_time;
 
-__initfunc(static void smp_tune_scheduling (void))
+static void __init smp_tune_scheduling (void)
 {
 	unsigned long flush_base, flags, *p;
 	unsigned int ecache_size;

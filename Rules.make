@@ -73,11 +73,11 @@ ifdef O_TARGET
 ALL_O = $(OX_OBJS) $(O_OBJS)
 $(O_TARGET): $(ALL_O)
 	rm -f $@
-ifneq "$(strip $(ALL_O))" ""
-	$(LD) $(EXTRA_LDFLAGS) -r -o $@ $(ALL_O)
-else
-	$(AR) rcs $@
-endif
+    ifneq "$(strip $(ALL_O))" ""
+	$(LD) $(EXTRA_LDFLAGS) -r -o $@ $(filter $(ALL_O), $^)
+    else
+	$(AR) rcs $@ $(filter $(ALL_O), $^)
+    endif
 	@ ( \
 	    echo 'ifeq ($(strip $(subst $(comma),:,$(EXTRA_LDFLAGS) $(ALL_O))),$$(strip $$(subst $$(comma),:,$$(EXTRA_LDFLAGS) $$(ALL_O))))' ; \
 	    echo 'FILES_FLAGS_UP_TO_DATE += $@' ; \

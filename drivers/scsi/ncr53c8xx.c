@@ -146,9 +146,6 @@
 #ifndef	__initdata
 #define	__initdata
 #endif
-#ifndef	__initfunc
-#define	__initfunc(__arginit) __arginit
-#endif
 #endif
 
 #if LINUX_VERSION_CODE <= LinuxVersionCode(2,1,92)
@@ -9578,8 +9575,10 @@ if (ncr53c8xx)
 static int __init 
 pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
 {
-	*base = pdev->resource[++index].start;
-	return index;
+	*base = pdev->resource[index].start;
+	if ((pdev->resource[index].flags & 0x7) == 0x4)
+		++index;
+	return ++index;
 }
 
 /*
@@ -9807,28 +9806,16 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 
 	/*
 	 * Check availability of IO space, memory space and master capability.
+	 * No need to test BARs flags since they are hardwired to the
+	 * expected value.
 	 */
-	if (command & PCI_COMMAND_IO) { 
-		if ((io_port & 3) != 1) {
-			printk("ncr53c8xx: disabling I/O mapping since base address 0 (0x%x)\n"
-				"           bits 0..1 indicate a non-IO mapping\n", (int) io_port);
-			io_port = 0;
-		}
-		else
-			io_port &= PCI_BASE_ADDRESS_IO_MASK;
-	}
+	if (command & PCI_COMMAND_IO)
+		io_port &= PCI_BASE_ADDRESS_IO_MASK;
 	else
 		io_port = 0;
 
-	if (command & PCI_COMMAND_MEMORY) {
-		if ((base & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_MEMORY) {
-			printk("ncr53c8xx: disabling memory mapping since base address 1\n"
-				"            contains a non-memory mapping\n");
-			base = 0;
-		}
-		else 
-			base &= PCI_BASE_ADDRESS_MEM_MASK;
-	}
+	if (command & PCI_COMMAND_MEMORY)
+		base &= PCI_BASE_ADDRESS_MEM_MASK;
 	else
 		base = 0;
 	

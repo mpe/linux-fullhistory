@@ -767,6 +767,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		{ 
 			/* < 8 hops && input itfc not in list */
 			*l = intrfc->if_netnum; /* insert recvd netnum into list */
+			ipx->ipx_tctrl++;
 			/* xmit on all other interfaces... */
 			for(ifcs = ipx_interfaces; ifcs != NULL; ifcs = ifcs->if_next) 
 			{

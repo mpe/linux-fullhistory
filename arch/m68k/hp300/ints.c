@@ -153,7 +153,7 @@ int hp300_get_irq_list(char *buf)
 	return 0;
 }
 
-__initfunc(void hp300_init_IRQ(void))
+void __init hp300_init_IRQ(void)
 {
 	spin_lock_init(&irqlist_lock);
 }

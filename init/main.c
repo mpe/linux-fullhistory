@@ -88,9 +88,7 @@ extern void signals_init(void);
 extern void free_initmem(void);
 extern void filesystem_setup(void);
 
-#ifdef CONFIG_ARCH_ACORN
 extern void ecard_init(void);
-#endif
 
 #if defined(CONFIG_SYSVIPC)
 extern void ipc_init(void);
@@ -655,6 +653,10 @@ static void __init do_basic_setup(void)
 
 	/* .. filesystems .. */
 	filesystem_setup();
+
+#ifdef CONFIG_IRDA
+	irda_device_init(); /* Must be done after protocol initialization */
+#endif
 
 	/* Mount the root filesystem.. */
 	mount_root();

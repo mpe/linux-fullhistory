@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/init.h>
+#include <linux/wait.h>
 
 #include "./ip2/ip2types.h"		
 #include "./ip2/fip_firm.h"		// the meat

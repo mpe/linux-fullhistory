@@ -685,7 +685,7 @@ static u_char mvme2600_openpic_initsenses[] __initdata = {
 int prep_keybd_present = 1;
 int MotMPIC = 0;
 
-__initfunc(int raven_init(void))
+int __init raven_init(void)
 {
 	unsigned int	devid;
 	unsigned int	pci_membase;
@@ -788,7 +788,7 @@ struct mot_info {
 	{0x000, 0x00, 0x00, "",					NULL,			NULL}
 };
 
-__initfunc(unsigned long prep_route_pci_interrupts(void))
+unsigned long __init prep_route_pci_interrupts(void)
 {
 	unsigned char *ibc_pirq = (unsigned char *)0x80800860;
 	unsigned char *ibc_pcicon = (unsigned char *)0x80800840;
@@ -976,9 +976,8 @@ __initfunc(unsigned long prep_route_pci_interrupts(void))
 	return 0;
 }
 
-__initfunc(
-void
-prep_pcibios_fixup(void))
+void __init
+prep_pcibios_fixup(void)
 {
         struct pci_dev *dev;
         extern unsigned char *Motherboard_map;
@@ -1044,9 +1043,8 @@ prep_pcibios_fixup(void))
 
 decl_config_access_method(indirect);
 
-__initfunc(
-void
-prep_setup_pci_ptrs(void))
+void __init
+prep_setup_pci_ptrs(void)
 {
 	PPC_DEVICE *hostbridge;
 

@@ -152,8 +152,8 @@ extern int _etext, _edata, _end;
  * initial ram disk
  */
 #ifdef CONFIG_BLK_DEV_INITRD
-__initfunc(static void
-check_initrd(unsigned long mem_start, unsigned long mem_end))
+static void __init
+check_initrd(unsigned long mem_start, unsigned long mem_end)
 {
 	if (initrd_end > mem_end) {
 		printk ("initrd extends beyond end of memory "
@@ -167,8 +167,8 @@ check_initrd(unsigned long mem_start, unsigned long mem_end))
 #define check_initrd(ms,me)
 #endif
 
-__initfunc(void
-setup_processor(void))
+void __init
+setup_processor(void)
 {
 	armidindex = 0;
 
@@ -187,8 +187,8 @@ static char default_command_line[COMMAND_LINE_SIZE] __initdata = CONFIG_CMDLINE;
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
 
-__initfunc(static void
-setup_mem(char *cmd_line, unsigned long *mem_start, unsigned long *mem_sz))
+static void __init
+setup_mem(char *cmd_line, unsigned long *mem_start, unsigned long *mem_sz)
 {
 	char c = ' ', *to = command_line;
 	int len = 0;
@@ -233,8 +233,8 @@ setup_mem(char *cmd_line, unsigned long *mem_start, unsigned long *mem_sz))
 		*to = '\0';
 }
 
-__initfunc(static void
-setup_ram(int doload, int prompt, int image_start))
+static void __init
+setup_ram(int doload, int prompt, int image_start)
 {
 #ifdef CONFIG_BLK_DEV_RAM
 	extern int rd_doload;
@@ -250,8 +250,8 @@ setup_ram(int doload, int prompt, int image_start))
 /*
  * initial ram disk
  */
-__initfunc(static void
-setup_initrd(unsigned int start, unsigned int size))
+static void __init
+setup_initrd(unsigned int start, unsigned int size)
 {
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (start) {
@@ -277,8 +277,8 @@ unsigned int vram_size;
 static union { char c[4]; unsigned long l; } endian_test __initdata = { { 'l', '?', '?', 'b' } };
 #define ENDIANNESS ((char)endian_test.l)
 
-__initfunc(void
-setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * memory_end_p))
+void __init
+setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	struct param_struct *params = (struct param_struct *)PARAMS_BASE;
 	static unsigned char smptrap;

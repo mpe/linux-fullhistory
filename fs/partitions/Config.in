@@ -2,46 +2,35 @@
 # Partition configuration
 #
 bool 'Advanced partition selection' CONFIG_PARTITION_ADVANCED
-if [ "$CONFIG_PARTITION_ADVANCED" = "n" ]; then
-  define_bool CONFIG_MSDOS_PARTITION y
-  if [ "$ARCH" = "alpha" ]; then
-    define_bool CONFIG_OSF_PARTITION y
-  fi
-  if [ "$CONFIG_AMIGA" = "y" ]; then
-    define_bool CONFIG_AMIGA_PARTITION y
-  fi
-  if [ "$CONFIG_ARM" = "y" ]; then
-    if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
-      define_bool CONFIG_ACORN_PARTITION y
-      define_bool CONFIG_ACORN_PARTITION_ADFS y
-#      define_bool CONFIG_ACORN_PARTITION_CUMANA y
-      define_bool CONFIG_ACORN_PARTITION_ICS y
-      define_bool CONFIG_ACORN_PARTITION_POWERTEC y
-      define_bool CONFIG_ACORN_PARTITION_RISCIX y
-    fi
-  fi
-  if [ "$CONFIG_ATARI" = "y" ]; then
-    define_bool CONFIG_ATARI_PARTITION y
-  fi
-  bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
-  if [ "$ARCH" = "sparc" -o "$CONFIG_SMD_DISKLABEL" = "y" ]; then
-    define_bool CONFIG_SUN_PARTITION y
-  fi
-  bool 'SGI disklabel support' CONFIG_SGI_DISKLABEL
-  if [ "$CONFIG_SGI" = "y" -o "$CONFIG_SGI_DISKLABEL" = "y" ]; then
-    define_bool CONFIG_SGI_PARTITION y
-  fi
-else
+if [ "$CONFIG_PARTITION_ADVANCED" = "y" ]; then
   bool 'Alpha OSF partition support' CONFIG_OSF_PARTITION
   bool 'Macintosh partition map support' CONFIG_MAC_PARTITION
   bool 'PC BIOS (MSDOS partition tables) support' CONFIG_MSDOS_PARTITION
+else
+  if [ "$ARCH" = "alpha" ]; then
+    define_bool CONFIG_OSF_PARTITION y
+  fi
+  if [ "$ARCH" = "ppc" -o "$CONFIG_MAC" = "y" ]; then
+    define_bool CONFIG_MAC_PARTITION y
+  fi
+  define_bool CONFIG_MSDOS_PARTITION y
+fi
+if [ "$CONFIG_MSDOS_PARTITION" = "y" ]; then
+  bool '  BSD disklabel (FreeBSD partition tables) support' CONFIG_BSD_DISKLABEL
+  bool '  Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
+  bool '  Unixware slices support' CONFIG_UNIXWARE_DISKLABEL
+fi
+if [ "$CONFIG_SGI" != "y" ]; then
   bool 'SGI partition support' CONFIG_SGI_PARTITION
-  bool 'BSD disklabel (FreeBSD partition tables) support' CONFIG_BSD_DISKLABEL
-  bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
-  bool 'Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
-  bool 'SGI disklabel support' CONFIG_SGI_DISKLABEL
-
-  bool 'SPARC partition support' CONFIG_SUN_PARTITION
+else
+  define_bool CONFIG_SGI_PARTITION y
+fi
+if [ "$ARCH" != "sparc" -a "$ARCH" != "sparc64" ]; then
+  bool 'Sun partition tables support' CONFIG_SUN_PARTITION
+else
+  define_bool CONFIG_SUN_PARTITION y
+fi
+if [ "$CONFIG_PARTITION_ADVANCED" = "y" ]; then
   bool 'Amiga partition table support' CONFIG_AMIGA_PARTITION
   bool 'Acorn partition support' CONFIG_ACORN_PARTITION
   if [ "$CONFIG_ACORN_PARTITION" != "n" ]; then
@@ -51,4 +40,19 @@ else
     bool '  PowerTec partition support' CONFIG_ACORN_PARTITION_POWERTEC
     bool '  RISCiX partition support' CONFIG_ACORN_PARTITION_RISCIX
   fi
+else
+  if [ "$CONFIG_AMIGA" = "y" ]; then
+    define_bool CONFIG_AMIGA_PARTITION y
+  fi
+  if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
+    define_bool CONFIG_ACORN_PARTITION y
+    define_bool CONFIG_ACORN_PARTITION_ADFS y
+#    define_bool CONFIG_ACORN_PARTITION_CUMANA y
+    define_bool CONFIG_ACORN_PARTITION_ICS y
+    define_bool CONFIG_ACORN_PARTITION_POWERTEC y
+    define_bool CONFIG_ACORN_PARTITION_RISCIX y
+  fi
+fi
+if [ "$CONFIG_ATARI" = "y" ]; then
+  define_bool CONFIG_ATARI_PARTITION y
 fi

@@ -58,7 +58,7 @@ char *sparc_fpu_type[64] = { "fpu-oops", };
 
 unsigned int fsr_storage;
 
-__initfunc(void cpu_probe(void))
+void __init cpu_probe(void)
 {
 	int manuf, impl;
 	unsigned i, cpuid;

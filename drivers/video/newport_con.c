@@ -267,7 +267,7 @@ static void newport_get_revisions(void)
 #ifdef MODULE
 static const char *newport_startup(void)
 #else
-__initfunc(static const char *newport_startup(void))
+static const char * __init newport_startup(void)
 #endif
 {
     struct newport_regs *p;

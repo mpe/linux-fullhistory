@@ -441,7 +441,7 @@ static int via_set_fifoconfig(ide_hwif_t *hwif)
 	return 0;
 }
 
-__initfunc(unsigned int pci_init_via82c568 (struct pci_dev *dev, const char *name))
+unsigned int __init pci_init_via82c568 (struct pci_dev *dev, const char *name)
 {
 	struct pci_dev *host;
 	struct pci_dev *isa;
@@ -567,7 +567,7 @@ __initfunc(unsigned int pci_init_via82c568 (struct pci_dev *dev, const char *nam
 	return 0;
 }
 
-__initfunc(void ide_init_via82c586 (ide_hwif_t *hwif))
+void __init ide_init_via82c586 (ide_hwif_t *hwif)
 {
 	set_via_timings(hwif);
 }

@@ -36,6 +36,7 @@ Return value:
 
 #include <linux/config.h>
 #include <linux/kernel.h>
+#include <linux/locks.h>
 #include <linux/skbuff.h>
 
 #include <net/tcp.h>
@@ -47,6 +48,33 @@ Return value:
 #include "prototypes.h"
 
 static	char	*Block[CONFIG_KHTTPD_NUMCPU];
+
+/*
+
+This send_actor is for use with do_generic_file_read (ie sendfile())
+It sends the data to the socket indicated by desc->buf.
+
+*/
+static int sock_send_actor(read_descriptor_t * desc, const char *area, unsigned long size)
+{
+	int written;
+	unsigned long count = desc->count;
+	struct socket *sock = (struct socket *) desc->buf;
+
+	if (size > count)
+		size = count;
+	written = SendBuffer_async(sock,(char *)area,size);
+
+	if (written < 0) {
+		desc->error = written;
+		written = 0;
+	}
+	desc->count = count - written;
+	desc->written += written;
+	return written;
+}
+
+
 
 
 int DataSending(const int CPUNR)
@@ -62,45 +90,61 @@ int DataSending(const int CPUNR)
 	{
 		int ReadSize,Space;
 		int retval;
-		mm_segment_t oldfs;
 
 
 		/* First, test if the socket has any buffer-space left.
 		   If not, no need to actually try to send something.  */
 		  
 		
-		Space=4096;
-		if (CurrentRequest->sock->sk!=NULL) /* It's impossible */
-		{
-			Space = sock_wspace(CurrentRequest->sock->sk);
-		}
+		Space = sock_wspace(CurrentRequest->sock->sk);
 		
-		ReadSize = min(4096,CurrentRequest->FileLength - CurrentRequest->BytesSent);
+		ReadSize = min(4*4096,CurrentRequest->FileLength - CurrentRequest->BytesSent);
 		ReadSize = min(ReadSize , Space );
-		
-		if (ReadSize>0)
-		{
-			/* This part does a redundant data-copy. To bad for now. 
-			   In the future, we might want to nick the data right out
-			   of the page-cache
 
-			   WHY DO YOU NOT USE SENDFILE?
-			*/
-		
-			CurrentRequest->filp->f_pos = CurrentRequest->BytesSent;
-		
-			oldfs = get_fs(); set_fs(KERNEL_DS);
-			retval = CurrentRequest->filp->f_op->read(CurrentRequest->filp, Block[CPUNR], ReadSize, &CurrentRequest->filp->f_pos);
-			set_fs(oldfs);
-		
-			if (retval>0)
+		if (ReadSize>0)
+		{			
+			struct inode *inode;
+			
+			inode = CurrentRequest->filp->f_dentry->d_inode;
+			
+			if ( (inode!=NULL)&&(inode->i_op!=NULL)&&(inode->i_op->readpage!=NULL))
 			{
-				retval = SendBuffer_async(CurrentRequest->sock,Block[CPUNR],(size_t)retval);
+				/* This does the actual transfer using sendfile */		
+				read_descriptor_t desc;
+				loff_t *ppos;
+		
+				CurrentRequest->filp->f_pos = CurrentRequest->BytesSent;
+
+				ppos = &CurrentRequest->filp->f_pos;
+
+				desc.written = 0;
+				desc.count = ReadSize;
+				desc.buf = (char *) CurrentRequest->sock;
+				desc.error = 0;
+				do_generic_file_read(CurrentRequest->filp, ppos, &desc, sock_send_actor);
+				if (desc.written>0)
+				{	
+					CurrentRequest->BytesSent += desc.written;
+					count++;
+				}			
+			} 
+			else  /* FS doesn't support sendfile() */
+			{
+				mm_segment_t oldfs;
+				CurrentRequest->filp->f_pos = CurrentRequest->BytesSent;
+				
+				oldfs = get_fs(); set_fs(KERNEL_DS);
+				retval = CurrentRequest->filp->f_op->read(CurrentRequest->filp, Block[CPUNR], ReadSize, &CurrentRequest->filp->f_pos);
+				set_fs(oldfs);
+		
 				if (retval>0)
 				{
-					CurrentRequest->BytesSent += retval;
-					count++;
-				
+					retval = SendBuffer_async(CurrentRequest->sock,Block[CPUNR],(size_t)retval);
+					if (retval>0)
+					{
+						CurrentRequest->BytesSent += retval;
+						count++;				
+					}
 				}
 			}
 		

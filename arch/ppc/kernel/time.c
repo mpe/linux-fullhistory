@@ -176,7 +176,7 @@ void do_settimeofday(struct timeval *tv)
 }
 
 
-__initfunc(void time_init(void))
+void __init time_init(void)
 {
         if (ppc_md.time_init != NULL)
         {

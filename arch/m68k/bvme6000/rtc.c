@@ -164,7 +164,7 @@ static struct miscdevice rtc_dev=
 	&rtc_fops
 };
 
-__initfunc(int rtc_DP8570A_init(void))
+int __init rtc_DP8570A_init(void)
 {
 	if (!MACH_IS_BVME6000)
 		return -ENODEV;
