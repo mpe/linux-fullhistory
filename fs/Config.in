@@ -35,9 +35,11 @@ fi
 tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
-tristate 'Amiga FFS filesystem support (EXPERIMENTAL)' CONFIG_AFFS_FS
-if [ "$CONFIG_AFFS_FS" = "y" -o "$CONFIG_AFFS_FS" = "m" ]; then
-  define_bool CONFIG_AMIGA_PARTITION y
+if [ "$CONFIG_EXPERIMENTAL = "y" ]; then
+  tristate 'Amiga FFS filesystem support (EXPERIMENTAL)' CONFIG_AFFS_FS
+  if [ "$CONFIG_AFFS_FS" != "n" ]; then
+    define_bool CONFIG_AMIGA_PARTITION y
+  fi
 fi
 tristate 'UFS filesystem support (read only)' CONFIG_UFS_FS
 if [ "$CONFIG_UFS_FS" != "n" ]; then

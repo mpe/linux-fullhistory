@@ -18,6 +18,9 @@
  *		Matthew Dillon, <dillon@apollo.west.oic.com>
  *		Arnt Gulbrandsen, <agulbra@nvg.unit.no>
  *		Jorge Cwik, <jorge@laser.satlink.net>
+ *
+ * Fixes:	Eric Schenk	: avoid multiple retransmissions in one
+ *				: round trip timeout.
  */
 
 #include <linux/config.h>
@@ -175,7 +178,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		if (before(sk->window_seq, sk->write_queue.next->end_seq) &&
 		    sk->send_head == NULL && sk->ack_backlog == 0)
 			tcp_reset_xmit_timer(sk, TIME_PROBE0, sk->rto);
-	} 
+	}
 	else 
 	{
 		/*
@@ -198,9 +201,9 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		sk->prot->queue_xmit(sk, skb->dev, skb, 0);
 		
 		/*
-		 *	Set for next retransmit based on expected ACK time.
-		 *	FIXME: We set this every time which means our 
-		 *	retransmits are really about a window behind.
+		 *	Set for next retransmit based on expected ACK time
+		 *	of the first packet in the resend queue.
+		 *	This is no longer a window behind.
 		 */
 
 		tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
@@ -364,10 +367,6 @@ void tcp_write_xmit(struct sock *sk)
 
 			clear_delayed_acks(sk);
 
-			/*
-			 *	Again we slide the timer wrongly
-			 */
-			 
 			tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 		}
 	}
@@ -384,10 +383,17 @@ void tcp_do_retransmit(struct sock *sk, int all)
 	struct sk_buff * skb;
 	struct proto *prot;
 	struct device *dev;
-	int ct=0;
 	struct rtable *rt;
 
 	prot = sk->prot;
+	if (!all) {
+		/*
+		 * If we are just retransmitting one packet reset
+		 * to the start of the queue.
+		 */
+		sk->send_next = sk->send_head;
+		sk->packets_out = 0;
+	}
 	skb = sk->send_head;
 
 	while (skb != NULL)
@@ -399,7 +405,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		dev = skb->dev;
 		IS_SKB(skb);
 		skb->when = jiffies;
-		
+
 		/* dl1bke 960201 - @%$$! Hope this cures strange race conditions    */
 		/*		   with AX.25 mode VC. (esp. DAMA)		    */
 		/*		   if the buffer is locked we should not retransmit */
@@ -523,17 +529,15 @@ void tcp_do_retransmit(struct sock *sk, int all)
 					/* Now queue it */
 					ip_statistics.IpOutRequests++;
 					dev_queue_xmit(skb, dev, sk->priority);
+					sk->packets_out++;
 				}
 			}
 		}
-		
 
 		/*
 		 *	Count retransmissions
 		 */
 		 
-		ct++;
-		sk->retransmits++;
 		sk->prot->retransmits++;
 		tcp_statistics.TcpRetransSegs++;
 
@@ -544,6 +548,11 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		if (sk->retransmits)
 			sk->high_seq = sk->sent_seq;
 		
+		/*
+	         * Advance the send_next pointer so we don't keep
+		 * retransmitting the same stuff every time we get an ACK.
+		 */
+		sk->send_next = skb->link3;
 
 		/*
 		 *	Only one retransmit requested.
@@ -556,8 +565,9 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 *	This should cut it off before we send too many packets.
 		 */
 
-		if (ct >= sk->cong_window)
+		if (sk->packets_out >= sk->cong_window)
 			break;
+
 		skb = skb->link3;
 	}
 }
@@ -888,10 +898,10 @@ void tcp_send_ack(struct sock *sk)
 	    && skb_queue_empty(&sk->write_queue)
 	    && sk->ip_xmit_timeout == TIME_WRITE)
 	{
-		if(sk->keepopen)
+		if (sk->keepopen)
 			tcp_reset_xmit_timer(sk,TIME_KEEPOPEN,TCP_TIMEOUT_LEN);
 		else
-			delete_timer(sk);
+			del_timer(&sk->retransmit_timer);
 	}
 
 	/*
@@ -946,7 +956,7 @@ void tcp_send_ack(struct sock *sk)
 
   	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), buff);
   	if (sk->debug)
-  		 printk("\rtcp_ack: seq %x ack %x\n", sk->sent_seq, sk->acked_seq);
+  		 printk(KERN_ERR "\rtcp_ack: seq %x ack %x\n", sk->sent_seq, sk->acked_seq);
   	sk->prot->queue_xmit(sk, dev, buff, 1);
   	tcp_statistics.TcpOutSegs++;
 }

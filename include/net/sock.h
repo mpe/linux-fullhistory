@@ -196,6 +196,7 @@ struct sock
 	struct sock		*prev; /* Doubly linked chain.. */
 	struct sock		*pair;
 	struct sk_buff		* volatile send_head;
+	struct sk_buff		* volatile send_next;
 	struct sk_buff		* volatile send_tail;
 	struct sk_buff_head	back_log;
 	struct sk_buff		*partial;

@@ -248,6 +248,9 @@ static inline int DRIVE(kdev_t x) {
 
 #define CLEARSTRUCT(x) memset((x), 0, sizeof(*(x)))
 
+#define INT_OFF save_flags(flags); cli()
+#define INT_ON  restore_flags(flags)
+
 /* read/write */
 #define COMMAND raw_cmd->cmd[0]
 #define DR_SELECT raw_cmd->cmd[1]
@@ -371,7 +374,7 @@ static struct floppy_struct floppy_type[32] = {
 	{ 1440, 9,2,80,0,0x23,0x01,0xDF,0x50,"h720"  },	/*  6 720KB AT      */
 	{ 2880,18,2,80,0,0x1B,0x00,0xCF,0x6C,"H1440" },	/*  7 1.44MB 3.5"   */
 	{ 5760,36,2,80,0,0x1B,0x43,0xAF,0x54,"E2880" },	/*  8 2.88MB 3.5"   */
-	{ 5760,36,2,80,0,0x1B,0x43,0xAF,0x54,"CompaQ"},	/*  9 2.88MB 3.5"   */
+	{ 6240,39,2,80,0,0x1B,0x43,0xAF,0x28,"E3120"},	/*  9 3.12MB 3.5"   */
 
 	{ 2880,18,2,80,0,0x25,0x00,0xDF,0x02,"h1440" }, /* 10 1.44MB 5.25"  */
 	{ 3360,21,2,80,0,0x1C,0x00,0xCF,0x0C,"H1680" }, /* 11 1.68MB 3.5"   */
@@ -795,20 +798,22 @@ static void set_fdc(int drive)
 /* locks the driver */
 static int lock_fdc(int drive, int interruptible)
 {
+	unsigned long flags;
+
 	if (!usage_count){
 		printk("trying to lock fdc while usage count=0\n");
 		return -1;
 	}
 	floppy_grab_irq_and_dma();
-	cli();
+	INT_OFF;
 	while (fdc_busy && NO_SIGNAL)
 		interruptible_sleep_on(&fdc_wait);
 	if (fdc_busy){
-		sti();
+		INT_ON;
 		return -EINTR;
 	}
 	fdc_busy = 1;
-	sti();
+	INT_ON;
 	command_status = FD_COMMAND_NONE;
 	reschedule_timeout(drive, "lock fdc", 0);
 	set_fdc(drive);
@@ -974,34 +979,36 @@ static int hlt_disabled=0;
 static void floppy_disable_hlt(void)
 {
 	unsigned long flags;
-	save_flags(flags);
-	cli();
+
+	INT_OFF;
 	if (!hlt_disabled){
 		hlt_disabled=1;
 #ifdef HAVE_DISABLE_HLT
 		disable_hlt();
 #endif
 	}
-	restore_flags(flags);
+	INT_ON;
 }
 
 static void floppy_enable_hlt(void)
 {
 	unsigned long flags;
-	save_flags(flags);
-	cli();
+
+	INT_OFF;
 	if (hlt_disabled){
 		hlt_disabled=0;
 #ifdef HAVE_DISABLE_HLT
 		enable_hlt();
 #endif
 	}
-	restore_flags(flags);
+	INT_ON;
 }
 
 
 static void setup_DMA(void)
 {
+	unsigned long flags;
+
 #ifdef FLOPPY_SANITY_CHECK
 	if (raw_cmd->length == 0){
 		int i;
@@ -1029,7 +1036,7 @@ static void setup_DMA(void)
 		return;
 	}
 #endif
-	cli();
+	INT_OFF;
 	fd_disable_dma();
 	fd_clear_dma_ff();
 	fd_set_dma_mode((raw_cmd->flags & FD_RAW_READ)?
@@ -1038,7 +1045,7 @@ static void setup_DMA(void)
 	fd_set_dma_count(raw_cmd->length);
 	virtual_dma_port = FDCS->address;
 	fd_enable_dma();
-	sti();
+	INT_ON;
 	floppy_disable_hlt();
 }
 
@@ -1915,11 +1922,12 @@ static struct cont_t intr_cont={
 static int wait_til_done(void (*handler)(void), int interruptible)
 {
 	int ret;
+	unsigned long flags;
 
 	floppy_tq.routine = (void *)(void *) handler;
 	queue_task(&floppy_tq, &tq_timer);
 
-	cli();
+	INT_OFF;
 	while(command_status < 2 && NO_SIGNAL){
 		is_alive("wait_til_done");
 		if (interruptible)
@@ -1931,10 +1939,10 @@ static int wait_til_done(void (*handler)(void), int interruptible)
 		cancel_activity();
 		cont = &intr_cont;
 		reset_fdc();
-		sti();
+		INT_ON;
 		return -EINTR;
 	}
-	sti();
+	INT_ON;
 
 	if (FDCS->reset)
 		command_status = FD_COMMAND_ERROR;
@@ -3940,8 +3948,6 @@ int floppy_init(void)
 
 	raw_cmd = 0;
 
-	sti();
-
 	if (register_blkdev(MAJOR_NR,"fd",&floppy_fops)) {
 		printk("Unable to get major %d for floppy\n",MAJOR_NR);
 		return -EBUSY;
@@ -4037,12 +4043,14 @@ int floppy_init(void)
 static int floppy_grab_irq_and_dma(void)
 {
 	int i;
-	cli();
+	unsigned long flags;
+
+	INT_OFF;
 	if (usage_count++){
-		sti();
+		INT_ON;
 		return 0;
 	}
-	sti();
+	INT_ON;
 	MOD_INC_USE_COUNT;
 	for (i=0; i< N_FDC; i++){
 		if (fdc_state[i].address != -1){
@@ -4080,13 +4088,14 @@ static void floppy_release_irq_and_dma(void)
 #endif
 	long tmpsize;
 	unsigned long tmpaddr;
+	unsigned long flags;
 
-	cli();
+	INT_OFF;
 	if (--usage_count){
-		sti();
+		INT_ON;
 		return;
 	}
-	sti();
+	INT_ON;
 	MOD_DEC_USE_COUNT;
 	fd_disable_dma();
 	fd_free_dma();

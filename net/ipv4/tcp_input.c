@@ -25,6 +25,9 @@
  *		Eric Schenk	:	Yet another double ACK bug.
  *		Eric Schenk	:	Delayed ACK bug fixes.
  *		Eric Schenk	:	Floyd style fast retrans war avoidance.
+ *		Eric Schenk	: 	Skip fast retransmit on small windows.
+ *		Eric schenk	:	Fixes to retransmission code to
+ *				:	avoid extra retransmission.
  */
 
 #include <linux/config.h>
@@ -404,6 +407,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	skb_queue_head_init(&newsk->receive_queue);
 	newsk->send_head = NULL;
 	newsk->send_tail = NULL;
+	newsk->send_next = NULL;
 	skb_queue_head_init(&newsk->back_log);
 	newsk->rtt = 0;
 	newsk->rto = TCP_TIMEOUT_INIT;
@@ -562,6 +566,7 @@ void tcp_window_shrunk(struct sock * sk, u32 window_seq)
 	skb2 = sk->send_head;
 	sk->send_head = NULL;
 	sk->send_tail = NULL;
+	sk->send_next = NULL;
 
 	/*
 	 *	This is an artifact of a flawed concept. We want one
@@ -595,6 +600,7 @@ void tcp_window_shrunk(struct sock * sk, u32 window_seq)
 			{
 				sk->send_head = skb;
 				sk->send_tail = skb;
+				sk->send_next = skb;
 			}
 			else
 			{
@@ -685,6 +691,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	{
 		sk->send_head = NULL;
 		sk->send_tail = NULL;
+		sk->send_next = NULL;
 		sk->packets_out= 0;
 	}
 
@@ -745,8 +752,8 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 *     The packet acked data after high_seq;
 	 * I've tried to order these in occurrence of most likely to fail
 	 * to least likely to fail.
-	 * [These are the rules BSD stacks use to determine if an ACK is a
-	 *  duplicate.]
+	 * [These are an extension of the rules BSD stacks use to
+	 *  determine if an ACK is a duplicate.]
 	 */
 
 	if (sk->rcv_ack_seq == ack
@@ -755,22 +762,23 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		&& before(ack, sk->sent_seq)
 		&& after(ack, sk->high_seq))
 	{
+		/* Prevent counting of duplicate ACKs if the congestion
+		 * window is smaller than 3. Note that since we reduce
+		 * the congestion window when we do a fast retransmit,
+		 * we must be careful to keep counting if we were already
+		 * counting. The idea behind this is to avoid doing
+		 * fast retransmits if the congestion window is so small
+		 * that we cannot get 3 ACKs due to the loss of a packet
+		 * unless we are getting ACKs for retransmitted packets.
+		 */
+		if (sk->cong_window >= 3 || sk->rcv_ack_cnt > MAX_DUP_ACKS+1)
+			sk->rcv_ack_cnt++;
 		/* See draft-stevens-tcpca-spec-01 for explanation
 		 * of what we are doing here.
 		 */
-		sk->rcv_ack_cnt++;
 		if (sk->rcv_ack_cnt == MAX_DUP_ACKS+1) {
 			sk->ssthresh = max(sk->cong_window >> 1, 2);
 			sk->cong_window = sk->ssthresh+MAX_DUP_ACKS+1;
-			/* FIXME:
-			 * reduce the count. We don't want to be
-			 * seen to be in "retransmit" mode if we
-			 * are doing a fast retransmit.
-			 * This is also a signal to tcp_do_retransmit
-			 * not to set sk->high_seq.
-			 * This is a horrible ugly hack.
-			 */
-			sk->retransmits--;
 			tcp_do_retransmit(sk,0);
 		} else if (sk->rcv_ack_cnt > MAX_DUP_ACKS+1) {
 			sk->cong_window++;
@@ -878,6 +886,13 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 			sk->send_tail = NULL;
 			sk->retransmits = 0;
 		}
+
+		/*
+		 * advance the send_next pointer if needed.
+		 */
+		if (sk->send_next == skb)
+			sk->send_next = sk->send_head;
+
 		/*
 		 * Note that we only reset backoff and rto in the
 		 * rtt recomputation code.  And that doesn't happen
@@ -916,86 +931,97 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	}
 
 	/*
-	 * XXX someone ought to look at this too.. at the moment, if skb_peek()
-	 * returns non-NULL, we complete ignore the timer stuff in the else
-	 * clause.  We ought to organize the code so that else clause can
-	 * (should) be executed regardless, possibly moving the PROBE timer
-	 * reset over.  The skb_peek() thing should only move stuff to the
-	 * write queue, NOT also manage the timer functions.
-	 */
-
-	/*
 	 * Maybe we can take some stuff off of the write queue,
 	 * and put it onto the xmit queue.
+	 * FIXME: (?) There is bizzare case being tested here, to check if
+	 * the data at the head of the queue ends before the start of
+	 * the sequence we already ACKed. This does not appear to be
+	 * a case that can actually occur. Why are we testing it?
 	 */
-	if (skb_peek(&sk->write_queue) != NULL) 
-	{
-		if (!before(sk->window_seq, sk->write_queue.next->end_seq) &&
-			(sk->retransmits == 0 || 
-			 sk->ip_xmit_timeout != TIME_WRITE ||
-			 !after(sk->write_queue.next->end_seq, sk->rcv_ack_seq))
-			&& sk->packets_out < sk->cong_window) 
-		{
-			/*
-			 *	Add more data to the send queue.
-			 */
-			flag |= 1;
-			tcp_write_xmit(sk);
-		}
-		else if (before(sk->window_seq, sk->write_queue.next->end_seq) &&
- 			sk->send_head == NULL &&
- 			sk->ack_backlog == 0 &&
- 			sk->state != TCP_TIME_WAIT) 
- 		{
- 			/*
- 			 *	Data to queue but no room.
- 			 */
- 			tcp_reset_xmit_timer(sk, TIME_PROBE0, sk->rto);
- 		}		
-	}
-	else
+
+	if (!skb_queue_empty(&sk->write_queue) &&
+	    	!before(sk->window_seq, sk->write_queue.next->end_seq) &&
+		(sk->retransmits == 0 || 
+		 sk->ip_xmit_timeout != TIME_WRITE ||
+		 !after(sk->write_queue.next->end_seq, sk->rcv_ack_seq)) &&
+		sk->packets_out < sk->cong_window)
 	{
 		/*
-		 * from TIME_WAIT we stay in TIME_WAIT as long as we rx packets
-		 * from TCP_CLOSE we don't do anything
-		 *
-		 * from anything else, if there is write data (or fin) pending,
-		 * we use a TIME_WRITE timeout, else if keepalive we reset to
-		 * a KEEPALIVE timeout, else we delete the timer.
-		 *
-		 * We do not set flag for nominal write data, otherwise we may
-		 * force a state where we start to write itsy bitsy tidbits
-		 * of data.
+		 *	Add more data to the send queue.
 		 */
+		flag |= 1;
+		tcp_write_xmit(sk);
+	}
 
-		switch(sk->state) {
-		case TCP_TIME_WAIT:
-			/*
-			 * keep us in TIME_WAIT until we stop getting packets,
-			 * reset the timeout.
+	/*
+	 * Reset timers to reflect the new state.
+	 *
+	 * from TIME_WAIT we stay in TIME_WAIT as long as we rx packets
+	 * from TCP_CLOSE we don't do anything
+	 *
+	 * from anything else, if there is queued data (or fin) pending,
+	 * we use a TIME_WRITE timeout, if there is data to write but
+	 * no room in the window we use TIME_PROBE0, else if keepalive
+	 * we reset to a KEEPALIVE timeout, else we delete the timer.
+	 *
+	 * We do not set flag for nominal write data, otherwise we may
+	 * force a state where we start to write itsy bitsy tidbits
+	 * of data.
+	 */
+
+	switch(sk->state) {
+	case TCP_TIME_WAIT:
+		/*
+		 * keep us in TIME_WAIT until we stop getting packets,
+		 * reset the timeout.
+		 */
+		tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+		break;
+	case TCP_CLOSE:
+		/*
+		 * don't touch the timer.
+		 */
+		break;
+	default:
+		/*
+		 * 	Must check send_head and write_queue
+		 * 	to determine which timeout to use.
+		 */
+		if (sk->send_head) {
+			tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
+		} else if (!skb_queue_empty(&sk->write_queue)
+			&& sk->ack_backlog == 0)
+		{
+			/* 
+			 * if the write queue is not empty when we get here
+			 * then we failed to move any data to the retransmit
+			 * queue above. (If we had send_head would be non-NULL).
+			 * Furthermore, since the send_head is NULL here
+			 * we must not be in retransmit mode at this point.
+			 * This implies we have no packets in flight,
+			 * hence sk->packets_out < sk->cong_window.
+			 * Examining the conditions for the test to move
+			 * data to the retransmission queue we find that
+			 * we must therefore have a zero window.
+			 * Hence, if the ack_backlog is 0 we should initiate
+			 * a zero probe.
+			 * We don't do a zero probe if we have a delayed
+			 * ACK in hand since the other side may have a
+			 * window opening, but they are waiting to hear
+			 * from us before they tell us about it.
+			 * (They are applying Nagle's rule).
+			 * So, we don't set up the zero window probe
+			 * just yet. We do have to clear the timer
+			 * though in this case...
 			 */
-			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
-			break;
-		case TCP_CLOSE:
-			/*
-			 * don't touch the timer.
-			 */
-			break;
-		default:
-			/*
-			 * 	Must check send_head and write_queue
-			 * 	to determine which timeout to use.
-			 */
-			if (sk->send_head || !skb_queue_empty(&sk->write_queue)) {
-				tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
-			} else if (sk->keepopen) {
-				tcp_reset_xmit_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
-			} else {
-				del_timer(&sk->retransmit_timer);
-				sk->ip_xmit_timeout = 0;
-			}
-			break;
+			tcp_reset_xmit_timer(sk, TIME_PROBE0, sk->rto);
+		} else if (sk->keepopen) {
+			tcp_reset_xmit_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+		} else {
+			del_timer(&sk->retransmit_timer);
+			sk->ip_xmit_timeout = 0;
 		}
+		break;
 	}
 
 	/*
@@ -1053,6 +1079,12 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 			flag |= 1;
 			sk->shutdown |= SEND_SHUTDOWN;
 			tcp_set_state(sk, TCP_FIN_WAIT2);
+			/* If the socket is dead, then there is no
+			 * user process hanging around using it.
+			 * We want to set up a FIN_WAIT2 timeout ala BSD.
+			 */
+			if (sk->dead)
+				tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_FIN_TIMEOUT);
 		}
 	}
 
@@ -1094,45 +1126,18 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	}
 	
 	/*
-	 * I make no guarantees about the first clause in the following
-	 * test, i.e. "(!flag) || (flag&4)".  I'm not entirely sure under
-	 * what conditions "!flag" would be true.  However I think the rest
-	 * of the conditions would prevent that from causing any
-	 * unnecessary retransmission. 
-	 *   Clearly if the first packet has expired it should be 
-	 * retransmitted.  The other alternative, "flag&2 && retransmits", is
-	 * harder to explain:  You have to look carefully at how and when the
-	 * timer is set and with what timeout.  The most recent transmission always
-	 * sets the timer.  So in general if the most recent thing has timed
-	 * out, everything before it has as well.  So we want to go ahead and
-	 * retransmit some more.  If we didn't explicitly test for this
-	 * condition with "flag&2 && retransmits", chances are "when + rto < jiffies"
-	 * would not be true.  If you look at the pattern of timing, you can
-	 * show that rto is increased fast enough that the next packet would
-	 * almost never be retransmitted immediately.  Then you'd end up
-	 * waiting for a timeout to send each packet on the retransmission
-	 * queue.  With my implementation of the Karn sampling algorithm,
-	 * the timeout would double each time.  The net result is that it would
-	 * take a hideous amount of time to recover from a single dropped packet.
-	 * It's possible that there should also be a test for TIME_WRITE, but
-	 * I think as long as "send_head != NULL" and "retransmit" is on, we've
-	 * got to be in real retransmission mode.
-	 *   Note that tcp_do_retransmit is called with all==1.  Setting cong_window
-	 * back to 1 at the timeout will cause us to send 1, then 2, etc. packets.
-	 * As long as no further losses occur, this seems reasonable.
+	 * The following code has been greatly simplified from the
+	 * old hacked up stuff. The wonders of properly setting the
+	 * retransmission timeouts.
+	 *
+	 * If we are retransmitting, and we acked a packet on the retransmit
+	 * queue, and there is still something in the retransmit queue,
+	 * then we can output some retransmission packets.
 	 */
-	
-	if (((!flag) || (flag&4)) && sk->send_head != NULL &&
-	       (((flag&2) && sk->retransmits) ||
-	       (sk->send_head->when + sk->rto < jiffies)))
+
+	if (sk->send_head != NULL && (flag&2) && sk->retransmits)
 	{
-		if(sk->send_head->when + sk->rto < jiffies)
-			tcp_retransmit(sk,0);	
-		else
-		{
-			tcp_do_retransmit(sk, 1);
-			tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
-		}
+		tcp_do_retransmit(sk, 1);
 	}
 
 	return 1;
@@ -1230,8 +1235,12 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			 * for handling this timeout.
 			 */
 
-			if(sk->ip_xmit_timeout != TIME_WRITE)
-				tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
+			if (sk->ip_xmit_timeout != TIME_WRITE) {
+				if (sk->send_head)
+					tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
+				else
+					printk(KERN_ERR "send_head NULL in FIN_WAIT1\n");
+			}
 			tcp_set_state(sk,TCP_CLOSING);
 			break;
 		case TCP_FIN_WAIT2:
@@ -1965,7 +1974,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Note most of these are inline now. I'll inline the lot when
 	 *	I have time to test it hard and look at what gcc outputs 
 	 */
-	
+
 	if (!tcp_sequence(sk, skb->seq, skb->end_seq-th->syn))
 	{
 		bad_tcp_sequence(sk, th, skb->end_seq-th->syn, dev);

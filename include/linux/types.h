@@ -4,7 +4,7 @@
 #include <linux/posix_types.h>
 #include <asm/types.h>
 
-#ifndef _LINUX_TYPES_DONT_EXPORT
+#ifndef __KERNEL_STRICT_NAMES
 
 typedef __kernel_fd_set		fd_set;
 typedef __kernel_dev_t		dev_t;
@@ -67,7 +67,7 @@ typedef unsigned short		ushort;
 typedef unsigned int		uint;
 typedef unsigned long		ulong;
 
-#endif /* _LINUX_TYPES_DONT_EXPORT */
+#endif /* __KERNEL_STRICT_NAMES */
 
 /*
  * Below are truly Linux-specific types that should never collide with

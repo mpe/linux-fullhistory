@@ -1,4 +1,4 @@
-/* $Id: card.c,v 1.5 1996/05/17 03:45:02 fritz Exp $
+/* $Id: card.c,v 1.7 1996/05/31 01:02:21 fritz Exp $
  *
  * card.c     low level stuff for the Teles S0 isdn card
  * 
@@ -7,6 +7,12 @@
  * Beat Doebeli         log all D channel traffic
  * 
  * $Log: card.c,v $
+ * Revision 1.7  1996/05/31 01:02:21  fritz
+ * Cosmetic changes.
+ *
+ * Revision 1.6  1996/05/26 14:58:10  fritz
+ * Bugfix: Did not show port correctly, when no card found.
+ *
  * Revision 1.5  1996/05/17 03:45:02  fritz
  * Made error messages more clearly.
  * Bugfix: Only 31 bytes of 32-byte audio frames
@@ -379,11 +385,11 @@ hscx_fill_fifo(struct HscxState *hsp)
 
 	ibh = hsp->xmtibh;
 	if (!ibh)
-		return;
+                return;
 
 	count = ibh->datasize - hsp->sendptr;
 	if (count <= 0)
-		return;
+                return;
 
 	more = (hsp->mode == 1)?1:0;
 	if (count > 32) {
@@ -1700,8 +1706,8 @@ teles_inithardware(void)
 			  break;
 		  case (-2):
 			  release_region(cards[i].iobase, 8);
-                          teles_shiftcards(i);
 			  printk(KERN_WARNING "NO Teles card found at 0x%x!\n", cards[i].iobase);
+                          teles_shiftcards(i);
 			  break;
 		}
         }

@@ -1,6 +1,10 @@
-/* $Id: buffers.c,v 1.2 1996/04/29 22:48:14 fritz Exp $
+/* $Id: buffers.c,v 1.3 1996/05/31 00:56:53 fritz Exp $
  *
  * $Log: buffers.c,v $
+ * Revision 1.3  1996/05/31 00:56:53  fritz
+ * removed cli() from BufPoolAdd, since it is called
+ * with interrupts off anyway.
+ *
  * Revision 1.2  1996/04/29 22:48:14  fritz
  * Removed compatibility-macros. No longer needed.
  *
@@ -41,7 +45,6 @@ int
 BufPoolAdd(struct BufPool *bp, int priority)
 {
 	struct Pages   *ptr;
-	long            flags;
 	byte           *bptr;
 	int             i;
 	struct BufHeader *bh = NULL, *prev, *first;
@@ -79,11 +82,8 @@ BufPoolAdd(struct BufPool *bp, int priority)
 		bptr += PART_SIZE(bp->pageorder, bp->bpps);
 	}
 
-	save_flags(flags);
-	cli();
 	first->next = bp->freelist;
 	bp->freelist = bh;
-	restore_flags(flags);
 	return (0);
 }
 

@@ -127,7 +127,7 @@ int ftape_init(void)
 #ifdef MODULE
 	printk(KERN_INFO "ftape-2.08 960314\n"
 	       KERN_INFO " (c) 1993-1995 Bas Laarhoven (bas@vimec.nl)\n"
-	       KERN_INFO " (c) 1995-1996 Kai Harrekilde-Petersen (khp@pip.dknet.dk)\n"
+	       KERN_INFO " (c) 1995-1996 Kai Harrekilde-Petersen (khp@dolphinics.no)\n"
 	KERN_INFO " QIC-117 driver for QIC-40/80/3010/3020 tape drives\n"
 	       KERN_INFO " Compiled for kernel version %s"
 #ifdef MODVERSIONS

@@ -2024,6 +2024,7 @@ void atalk_proto_init(struct net_proto *pro)
 	register_netdevice_notifier(&ddp_notifier);
 	aarp_proto_init();
 
+#ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_ATALK, 9, "appletalk",
 		S_IFREG | S_IRUGO, 1, 0, 0,
@@ -2042,6 +2043,7 @@ void atalk_proto_init(struct net_proto *pro)
 		0, &proc_net_inode_operations,
 		atalk_if_get_info
 	});
+#endif	
 
 	printk(KERN_INFO "Appletalk 0.17 for Linux NET3.035\n");
 }
@@ -2095,9 +2097,11 @@ void cleanup_module(void)
 
 	aarp_cleanup_module();
 
+#ifdef CONFIG_PROC_FS
 	proc_net_unregister(PROC_NET_ATALK);
 	proc_net_unregister(PROC_NET_AT_ROUTE);
 	proc_net_unregister(PROC_NET_ATIF);
+#endif	
 	unregister_netdevice_notifier(&ddp_notifier);
 	dev_remove_pack(&ltalk_packet_type);
 	dev_remove_pack(&ppptalk_packet_type);

@@ -14,13 +14,19 @@ if [ "$CONFIG_STALDRV" = "y" ]; then
 fi
 tristate 'SDL RISCom/8 card support' CONFIG_RISCOM8
 tristate 'Parallel printer support' CONFIG_PRINTER
-tristate 'Logitech busmouse support' CONFIG_BUSMOUSE
-tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
-if [ "$CONFIG_PSMOUSE" != "n" ]; then
-  bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
+
+
+bool 'Bus Mouse Support' CONFIG_MOUSE
+if [ "$CONFIG_MOUSE" = "y" ]; then
+	tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE
+	tristate 'Logitech busmouse support' CONFIG_BUSMOUSE
+	tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE
+	tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
+	if [ "$CONFIG_PSMOUSE" != "n" ]; then
+	  bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
+	fi
 fi
-tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE
-tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE
+
 bool 'Support for user misc device modules' CONFIG_UMISC
 
 bool 'QIC-02 tape support' CONFIG_QIC02_TAPE

@@ -1145,6 +1145,7 @@ int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int b
 	if (!PageLocked(page))
 		panic("brw_page: page not locked for I/O");
 	clear_bit(PG_uptodate, &page->flags);
+	clear_bit(PG_error, &page->flags);
 	/*
 	 * Allocate buffer heads pointing to this page, just for I/O.
 	 * They do _not_ show up in the buffer hash table!

@@ -450,7 +450,12 @@ static int nfs_mknod(struct inode *dir, const char *name, int len,
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 		name, &sattr, &fhandle, &fattr);
 	if (!error)
+	{
 		nfs_lookup_cache_add(dir, name, &fhandle, &fattr);
+		/* The parent dir inode count may have changed ! */
+		nfs_lookup_cache_remove( NULL, dir, NULL);
+	}
+		
 	iput(dir);
 	return error;
 }

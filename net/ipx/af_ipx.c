@@ -757,7 +757,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		} 
 		else 
 		{
-			printk(KERN_WARNING "IPX: Network number collision %lx\n\t%s %s and %s %s\n",
+			printk(KERN_WARNING "IPX: Network number collision %lx\n        %s %s and %s %s\n",
 				htonl(ipx->ipx_source.net), 
 				ipx_device_name(i),
 				ipx_frame_name(i->if_dlink_type),
@@ -2365,10 +2365,11 @@ ipx_proto_init(struct net_proto *pro)
 		printk(KERN_CRIT "IPX: Unable to register with SNAP\n");
 	
 	register_netdevice_notifier(&ipx_dev_notifier);
-
+#ifdef CONFIG_PROC_FS
 	proc_net_register(&ipx_procinfo);
 	proc_net_register(&ipx_if_procinfo);
 	proc_net_register(&ipx_rt_procinfo);
+#endif	
 		
 	printk(KERN_INFO "Swansea University Computer Society IPX 0.34 for NET3.035\n");
 	printk(KERN_INFO "IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
@@ -2399,9 +2400,11 @@ ipx_proto_finito(void)
 		ipxitf_down(ifc);
 	}
 
+#ifdef CONFIG_PROC_FS
 	proc_net_unregister(PROC_NET_IPX_ROUTE);
 	proc_net_unregister(PROC_NET_IPX_INTERFACE);
 	proc_net_unregister(PROC_NET_IPX);
+#endif	
 
 	unregister_netdevice_notifier(&ipx_dev_notifier);
 

@@ -306,6 +306,14 @@ S: 5800 Corporate Drive
 S: Pittsburgh, Pennsylvania 15237-5829
 S: USA
 
+N: Eddie C. Dost
+E: ecd@skynet.be
+D: Linux/Sparc kernel hacker
+D: New Linux/Sparc maintainer (while davem is at SGI)
+S: Rue de la Chapelle 51
+S: 4850 Moresnet
+S: Belgium
+
 N: Thomas Dunbar
 E: tdunbar@vtaix.cc.vt.edu
 D: TeX & METAFONT hacking/maintenance
@@ -512,11 +520,11 @@ S: United Kingdom
 
 N: Kai Harrekilde-Petersen
 E: khp@dolphinics.no
-W: http://www.pip.dknet.dk/~pip93
-D: ftape-HOWTO, i82078 fdc detection code, various ftape related stuff.
-S: Dolphin Interconnect Solutions A/S
-S: P.O. Box 70, Borgerud
-S: N-0621 Oslo
+W: http://www.dolphinics.no/~khp
+P: 1024/D2CDF895 F6 33 E0 4E 01 17 85 8C  4F 7F 1F F8 14 E7 86 1D
+D: ftape-HOWTO, i82078 fdc detection code, ftape maintainer.
+S: Peder Holters vei 13
+S: 1168 Oslo
 S: Norway
 
 N: Andrew Haylett
@@ -876,6 +884,14 @@ S: RWTH-Aachen
 S: D-52056 Aachen
 S: Germany
 
+N: Nigel Metheringham
+E: Nigel.Metheringham@ThePLAnet.net
+D: IP Masquerading work and minor fixes
+S: Planet Online
+S: The White House, Melbourne Street, LEEDS
+S: LS2  7PS,   UK
+P: 1024/31455639 B7 99 BD B8 00 17 BD 46  C1 15 B8 AB 87 BC 25 FA
+
 N: Craig Metz
 E: cmetz@tjhsst.edu
 D: Some of PAS 16 mixer & PCM support
@@ -1015,11 +1031,14 @@ S: CANADA P7C 5M9
 
 N: Kai Petzke
 E: wpp@marie.physik.tu-berlin.de
+W: http://physik.tu-berlin.de/~wpp
+P: 1024/B42868C1 D9 59 B9 98 BB 93 05 38  2E 3E 31 79 C3 65 5D E1 
 D: Driver for Laser Magnetic Storage CD-ROM
-D: Some kernel bug fixes, new swapping routine
+D: Some kernel bug fixes
 D: Port of the database Postgres
-S: Stresemannstr. 62
-S: 10963 Berlin
+D: "Unix fuer Jedermann" a German introduction to linux (see my web page)
+S: M"ullerstr. 69
+S: 13349 Berlin
 S: Germany
 
 N: Ken Pizzini
@@ -1113,6 +1132,16 @@ D: Kernel sound drivers
 S: Hiekkalaiturintie 3 A 8
 S: 00980 Helsinki
 S: Finland
+
+N: Eric Schenk
+E: schenk@cs.toronto.edu
+D: Random kernel debugging.
+D: SYSV Semaphore code rewrite.
+D: Network layer debugging.
+D: Dial on demand facility (diald).
+S: 7 Borden Street
+S: Toronto, Ontario
+S: Canada M5S 2M8
 
 N: Peter De Schrijver
 E: stud11@cc4.kuleuven.ac.be

@@ -1079,7 +1079,7 @@ static int root_nfs_name(char *name)
 						sizeof(nfs_data.hostname)-1);
 
 	/* Set the name of the directory to mount */
-	if (nfs_path[0] == '\0' || !strncmp(name, "default", 7))
+	if (nfs_path[0] == '\0' || strncmp(name, "default", 7))
 		strncpy(buf, name, NFS_MAXPATHLEN);
 	else
 		strncpy(buf, nfs_path, NFS_MAXPATHLEN);

@@ -185,12 +185,7 @@ struct page_descriptor * kmalloc_cache[MAX_CACHE_ORDER];
 static inline struct page_descriptor * get_kmalloc_pages(unsigned long priority,
 	unsigned long order, int dma)
 {
-	struct page_descriptor * tmp;
-
-	tmp = (struct page_descriptor *) __get_free_pages(priority, order, dma);
-	if (!tmp && !dma && order < MAX_CACHE_ORDER)
-		tmp = xchg(kmalloc_cache+order, tmp);
-	return tmp;
+	return (struct page_descriptor *) __get_free_pages(priority, order, dma);
 }
 
 static inline void free_kmalloc_pages(struct page_descriptor * page,
@@ -227,6 +222,10 @@ long kmalloc_init(long start_mem, long end_mem)
 }
 
 
+/*
+ * Ugh, this is ugly, but we want the default case to run
+ * straight through, which is why we have the ugly goto's
+ */
 void *kmalloc(size_t size, int priority)
 {
 	unsigned long flags;
@@ -234,6 +233,7 @@ void *kmalloc(size_t size, int priority)
 	int order, dma;
 	struct block_header *p;
 	struct page_descriptor *page, **pg;
+	struct size_descriptor *bucket = sizes;
 
 	/* Get order */
 	order = 0;
@@ -244,6 +244,7 @@ void *kmalloc(size_t size, int priority)
 			if (realsize <= ordersize)
 				break;
 			order++;
+			bucket++;
 			if (ordersize)
 				continue;
 			printk("kmalloc of too large a block (%d bytes).\n", (int) size);
@@ -253,11 +254,11 @@ void *kmalloc(size_t size, int priority)
 
 	dma = 0;
 	type = MF_USED;
-	pg = &sizes[order].firstfree;
+	pg = &bucket->firstfree;
 	if (priority & GFP_DMA) {
 		dma = 1;
 		type = MF_DMA;
-		pg = &sizes[order].dmafree;
+		pg = &bucket->dmafree;
 	}
 
 	priority &= GFP_LEVEL_MASK;
@@ -275,15 +276,36 @@ void *kmalloc(size_t size, int priority)
 	save_flags(flags);
 	cli();
 	page = *pg;
-	if (page) {
-		p = page->firstfree;
-		if (p->bh_flags != MF_FREE)
-			goto not_free_on_freelist;
-		goto found_it;
-	}
+	if (!page)
+		goto no_bucket_page;
 
-	/* We need to get a new free page..... */
-	/* This can be done with ints on: This is private to this invocation */
+	p = page->firstfree;
+	if (p->bh_flags != MF_FREE)
+		goto not_free_on_freelist;
+
+found_it:
+	page->firstfree = p->bh_next;
+	page->nfree--;
+	if (!page->nfree)
+		*pg = page->next;
+	restore_flags(flags);
+	bucket->nmallocs++;
+	bucket->nbytesmalloced += size;
+	p->bh_flags = type;	/* As of now this block is officially in use */
+	p->bh_length = size;
+#ifdef SADISTIC_KMALLOC
+	memset(p+1, 0xf0, size);
+#endif
+	return p + 1;		/* Pointer arithmetic: increments past header */
+
+
+no_bucket_page:
+	/*
+	 * If we didn't find a page already allocated for this
+	 * bucket size, we need to get one..
+	 *
+	 * This can be done with ints on: it is private to this invocation
+	 */
 	restore_flags(flags);
 
 	{
@@ -292,23 +314,27 @@ void *kmalloc(size_t size, int priority)
 		/* sz is the size of the blocks we're dealing with */
 		sz = BLOCKSIZE(order);
 
-		page = get_kmalloc_pages(priority, sizes[order].gfporder, dma);
-
+		page = get_kmalloc_pages(priority, bucket->gfporder, dma);
 		if (!page)
 			goto no_free_page;
-		sizes[order].npages++;
+found_cached_page:
 
+		bucket->npages++;
+
+		page->order = order;
 		/* Loop for all but last block: */
-		for (i = NBLOCKS(order), p = BH(page + 1); i > 1; i--, p = p->bh_next) {
+		i = (page->nfree = bucket->nblocks) - 1;
+		p = BH(page + 1);
+		while (i > 0) {
+			i--;
 			p->bh_flags = MF_FREE;
 			p->bh_next = BH(((long) p) + sz);
+			p = p->bh_next;
 		}
 		/* Last block: */
 		p->bh_flags = MF_FREE;
 		p->bh_next = NULL;
 
-		page->order = order;
-		page->nfree = NBLOCKS(order);
 		p = BH(page+1);
 	}
 
@@ -319,23 +345,19 @@ void *kmalloc(size_t size, int priority)
 	cli();
 	page->next = *pg;
 	*pg = page;
+	goto found_it;
 
-found_it:
-	page->firstfree = p->bh_next;
-	page->nfree--;
-	if (!page->nfree)
-		*pg = page->next;
-	restore_flags(flags);
-	sizes[order].nmallocs++;
-	sizes[order].nbytesmalloced += size;
-	p->bh_flags = type;	/* As of now this block is officially in use */
-	p->bh_length = size;
-#ifdef SADISTIC_KMALLOC
-	memset(p+1, 0xf0, size);
-#endif
-	return p + 1;		/* Pointer arithmetic: increments past header */
 
 no_free_page:
+	/*
+	 * No free pages, check the kmalloc cache of
+	 * pages to see if maybe we have something available
+	 */
+	if (!dma && order < MAX_CACHE_ORDER) {
+		page = xchg(kmalloc_cache+order, page);
+		if (page)
+			goto found_cached_page;
+	}
 	{
 		static unsigned long last = 0;
 		if (priority != GFP_BUFFER && (last + 10 * HZ < jiffies)) {

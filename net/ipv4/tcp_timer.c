@@ -18,6 +18,10 @@
  *		Matthew Dillon, <dillon@apollo.west.oic.com>
  *		Arnt Gulbrandsen, <agulbra@nvg.unit.no>
  *		Jorge Cwik, <jorge@laser.satlink.net>
+ *
+ * Fixes:
+ *
+ *		Eric Schenk	: Fix retransmission timeout counting.
  */
 
 #include <net/tcp.h>
@@ -35,12 +39,33 @@ void tcp_reset_xmit_timer(struct sock *sk, int why, unsigned long when)
 {
 	del_timer(&sk->retransmit_timer);
 	sk->ip_xmit_timeout = why;
-	if((long)when < 0)
-	{
-		when=3;
-		printk(KERN_ERR "Error: Negative timer in xmit_timer\n");
+	if (why == TIME_WRITE) {
+		/* In this case we want to timeout on the first packet
+		 * in the resend queue. If the resend queue is empty,
+		 * then the packet we are sending hasn't made it there yet,
+		 * so we timeout from the current time.
+		 */
+		if (sk->send_head) {
+			sk->retransmit_timer.expires =
+				sk->send_head->when + when;
+		} else {
+			/* This should never happen!
+		 	 */
+			printk(KERN_ERR "Error: send_head NULL in xmit_timer\n");
+			sk->ip_xmit_timeout = 0;
+			return;
+		}
+	} else {
+		sk->retransmit_timer.expires = jiffies+when;
 	}
-	sk->retransmit_timer.expires=jiffies+when;
+
+	if (sk->retransmit_timer.expires < jiffies) {
+		/* We can get here if we reset the timer on an event
+		 * that could not fire because the interupts where disabled.
+		 * make sure it happens soon.
+		 */
+		sk->retransmit_timer.expires = jiffies+2;
+	}
 	add_timer(&sk->retransmit_timer);
 }
 
@@ -56,6 +81,15 @@ void tcp_reset_xmit_timer(struct sock *sk, int why, unsigned long when)
 
 static void tcp_retransmit_time(struct sock *sk, int all)
 {
+	/*
+	 * record how many times we've timed out.
+	 * This determines when we should quite trying.
+	 * This needs to be counted here, because we should not be
+	 * counting one per packet we send, but rather one per round
+	 * trip timeout.
+	 */
+	sk->retransmits++;
+
 	tcp_do_retransmit(sk, all);
 
 	/*
@@ -77,7 +111,12 @@ static void tcp_retransmit_time(struct sock *sk, int all)
 
 	sk->backoff++;
 	sk->rto = min(sk->rto << 1, 120*HZ);
-	tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
+
+	/* be paranoid about the data structure... */
+	if (sk->send_head)
+		tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
+	else
+		printk(KERN_ERR "send_head NULL in tcp_retransmit_time\n");
 }
 
 /*
@@ -101,7 +140,6 @@ void tcp_retransmit(struct sock *sk, int all)
 	sk->ssthresh = sk->cong_window >> 1; /* remember window where we lost */
 	/* sk->ssthresh in theory can be zero.  I guess that's OK */
 	sk->cong_count = 0;
-
 	sk->cong_window = 1;
 
 	/* Do the actual retransmit. */

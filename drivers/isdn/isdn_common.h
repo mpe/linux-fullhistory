@@ -1,4 +1,4 @@
-/* $Id: isdn_common.h,v 1.2 1996/04/20 16:20:40 fritz Exp $
+/* $Id: isdn_common.h,v 1.3 1996/05/19 00:13:05 fritz Exp $
  *
  * header for Linux ISDN subsystem, common used functions and debugging-switches (linklevel).
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_common.h,v $
+ * Revision 1.3  1996/05/19 00:13:05  fritz
+ * Removed debug flag.
+ *
  * Revision 1.2  1996/04/20 16:20:40  fritz
  * Misc. typos.
  *

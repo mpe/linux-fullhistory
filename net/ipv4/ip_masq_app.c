@@ -21,6 +21,7 @@
  *	
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -438,24 +439,25 @@ int ip_masq_app_getinfo(char *buffer, char **start, off_t offset, int length, in
         struct ip_masq_app * mapp;
         unsigned idx;
 
-	if (offset < 22)
-		len=sprintf(buffer,"%-21s\n", "prot port    n_attach");
-	pos = 22;
+	if (offset < 40)
+		len=sprintf(buffer,"%-39s\n", "prot port    n_attach name");
+	pos = 40;
 
         for (idx=0 ; idx < IP_MASQ_APP_TAB_SIZE; idx++)
                 for (mapp = ip_masq_app_base[idx]; mapp ; mapp = mapp->next) {
 			/* 
 			 * If you change the length of this sprintf, then all
 			 * the length calculations need fixing too!
-			 * Line length = 22 (3 + 2 + 7 + 1 + 7 + 1 + 1)
+			 * Line length = 40 (3 + 2 + 7 + 1 + 7 + 1 + 2 + 17)
 			 */
-			pos += 22;
+			pos += 40;
 			if (pos < offset)
 				continue;
 
-                        len += sprintf(buffer+len, "%-3s  %-7u %-7d \n",
+                        len += sprintf(buffer+len, "%-3s  %-7u %-7d  %-17s\n",
                                        masq_proto_name(IP_MASQ_APP_PROTO(mapp->type)),
-                                       IP_MASQ_APP_PORT(mapp->type), mapp->n_attach);
+                                       IP_MASQ_APP_PORT(mapp->type), mapp->n_attach,
+				       mapp->name);
 
                         if(len >= length)
                                 goto done;
@@ -478,14 +480,14 @@ int ip_masq_app_init(void)
 {
         
         register_symtab (&ip_masq_app_syms);
-        
+#ifdef CONFIG_PROC_FS        
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IP_MASQ_APP, 11, "ip_masq_app",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		ip_masq_app_getinfo
  	});
-        
+#endif        
         return 0;
 }
 

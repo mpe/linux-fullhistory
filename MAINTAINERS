@@ -180,6 +180,7 @@ S:	Maintained
 FTAPE/QIC-117:
 P:	Kai Harrekilde-Petersen
 M:	khp@dolphinics.no
+W:	http://www.dolphinics.no/~khp/ftape.html
 L:	linux-tape@vger.rutgers.edu
 S:	Maintained
 
@@ -263,8 +264,8 @@ L:	linux-smp@vger.rutgers.edu
 S:	Maintained
 
 SPARC:
-P:	David S. Miller
-M:	davem@caip.rutgers.edu
+P:	Eddie C. Dost
+M:	ecd@skynet.be
 L:	sparclinux@vger.rutgers.edu
 S:	Maintained
 

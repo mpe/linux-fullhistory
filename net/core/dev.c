@@ -332,7 +332,7 @@ int unregister_netdevice_notifier(struct notifier_block *nb)
  *	rest of the magic.
  */
 
-void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
+static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 {
 	unsigned long flags;
 	struct sk_buff_head *list;
@@ -443,15 +443,12 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 			}
 		}
 	}
-	start_bh_atomic();
 	if (dev->hard_start_xmit(skb, dev) == 0) {
 		/*
 		 *	Packet is now solely the responsibility of the driver
 		 */
-		end_bh_atomic();
 		return;
 	}
-	end_bh_atomic();
 
 	/*
 	 *	Transmission failed, put skb back into a list. Once on the list it's safe and
@@ -461,6 +458,13 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	skb_device_unlock(skb);
 	__skb_queue_head(list,skb);
 	restore_flags(flags);
+}
+
+void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
+{
+	start_bh_atomic();
+	do_dev_queue_xmit(skb, dev, pri);
+	end_bh_atomic();
 }
 
 /*
@@ -521,7 +525,7 @@ void netif_rx(struct sk_buff *skb)
  *	This routine causes all interfaces to try to send some data. 
  */
  
-void dev_transmit(void)
+static void dev_transmit(void)
 {
 	struct device *dev;
 
@@ -758,7 +762,7 @@ void dev_tint(struct device *dev)
 			 *	Feed them to the output stage and if it fails
 			 *	indicate they re-queue at the front.
 			 */
-			dev_queue_xmit(skb,dev,-i - 1);
+			do_dev_queue_xmit(skb,dev,-i - 1);
 			/*
 			 *	If we can take no more then stop here.
 			 */

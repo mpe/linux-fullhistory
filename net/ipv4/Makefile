@@ -40,7 +40,7 @@ endif
 
 ifeq ($(CONFIG_IP_MASQUERADE),y)
 IPV4_OBJS += ip_masq.o ip_masq_app.o
-M_OBJS += ip_masq_ftp.o ip_masq_irc.o
+M_OBJS += ip_masq_ftp.o ip_masq_irc.o ip_masq_raudio.o
 endif
 
 ifeq ($(CONFIG_IP_ALIAS),y)

@@ -1053,6 +1053,7 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 	struct ip_fw *i;
 	unsigned long flags;
 	int len, p;
+	int last_len = 0;
 	
 
 	switch(stage)
@@ -1110,14 +1111,18 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 			len=0;
 			begin=pos;
 		}
+		else if(pos>offset+length)
+		{
+			len = last_len;
+			break;		
+		}
 		else if(reset)
 		{
 			/* This needs to be done at this specific place! */
 			i->fw_pcnt=0L;
 			i->fw_bcnt=0L;
 		}
-		if(pos>offset+length)
-			break;
+		last_len = len;
 		i=i->fw_next;
 	}
 	restore_flags(flags);
@@ -1239,6 +1244,7 @@ static struct notifier_block ipfw_dev_notifier={
 
 void ip_fw_init(void)
 {
+#ifdef CONFIG_PROC_FS
 #ifdef CONFIG_IP_ACCT
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPACCT, 7, "ip_acct",
@@ -1247,11 +1253,13 @@ void ip_fw_init(void)
 		ip_acct_procinfo
 	});
 #endif
+#endif
 #ifdef CONFIG_IP_FIREWALL
 
 	if(register_firewall(PF_INET,&ipfw_ops)<0)
 		panic("Unable to register IP firewall.\n");
-		
+
+#ifdef CONFIG_PROC_FS		
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPFWIN, 8, "ip_input",
 		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
@@ -1271,7 +1279,7 @@ void ip_fw_init(void)
 		ip_fw_fwd_procinfo
 	});
 #endif
-
+#endif
 #ifdef CONFIG_IP_MASQUERADE
         
         /*

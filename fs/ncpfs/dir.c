@@ -963,6 +963,7 @@ ncp_mkdir(struct inode *dir, const char *name, int len, int mode)
 		|| (   (len == 2)
 		    && (name[1] == '.'))))
 	{
+		iput(dir);
 		return -EEXIST;
 	}
 

@@ -24,6 +24,7 @@
  *		Resolve IFF_ALLMULTI for rest of cards
  */
 
+#include <linux/config.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <linux/types.h>
@@ -910,6 +911,7 @@ void ip_mr_init(void)
 {
 	printk(KERN_INFO "Linux IP multicast router 0.05.\n");
 	register_netdevice_notifier(&ip_mr_notifier);
+#ifdef CONFIG_PROC_FS	
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPMR_VIF, 9 ,"ip_mr_vif",
 		S_IFREG | S_IRUGO, 1, 0, 0,
@@ -922,4 +924,5 @@ void ip_mr_init(void)
 		0, &proc_net_inode_operations,
 		ipmr_mfc_info
 	});
+#endif	
 }

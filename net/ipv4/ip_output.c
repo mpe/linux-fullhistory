@@ -450,6 +450,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 		{
 			sk->send_tail = skb;
 			sk->send_head = skb;
+			sk->send_next = skb;
 		}
 		else
 		{
@@ -1115,12 +1116,14 @@ void ip_init(void)
 	ip_udp_init();*/
 
 #ifdef CONFIG_IP_MULTICAST
+#ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IGMP, 4, "igmp",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		ip_mc_procinfo
 	});
+#endif	
 #endif
 }
 

@@ -49,13 +49,13 @@ static unsigned long do_fast_gettimeoffset(void)
 	register unsigned long edx asm("dx");
 	unsigned long tmp, quotient, low_timer, missing_time;
 
-	/* Last jiffie when do_fast_gettimeoffset() was called.. */
+	/* Last jiffy when do_fast_gettimeoffset() was called.. */
 	static unsigned long last_jiffies=0;
 
 	/* Cached "clocks per usec" value.. */
 	static unsigned long cached_quotient=0;
 
-	/* The "clocks per usec" value is calculated once each jiffie */
+	/* The "clocks per usec" value is calculated once each jiffy */
 	tmp = jiffies;
 	quotient = cached_quotient;
 	low_timer = last_timer_cc.low;
@@ -174,7 +174,7 @@ static unsigned long do_slow_gettimeoffset(void)
 	static unsigned long jiffies_p = 0;
 
 	/*
-	 * cache volatile jiffies temporaly, we have IRQs turned off. 
+	 * cache volatile jiffies temporarily; we have IRQs turned off. 
 	 */
 	unsigned long jiffies_t;
 

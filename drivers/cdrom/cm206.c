@@ -98,7 +98,7 @@ History:
  * - Philips/LMS cm260 product specification
  *
  *                       David van Leeuwen, david@tm.tno.nl.  */
-#define VERSION "$Id: cm206.c,v 0.99 1996/04/14 20:26:26 david Exp $"
+#define VERSION "$Id: cm206.c,v 0.99 1996/04/14 20:26:26 david Exp david $"
 
 #include <linux/module.h>	
 
@@ -1189,6 +1189,11 @@ int cm206_init(void)
   else printk(" IRQ %d found\n", cm206_irq);
 #else
   reset_cm260();
+  /* Now, the problem here is that reset_cm260 can generate an
+     interrupt. It seems that this can cause a kernel oops some time
+     later. So we wait a while and `service' this interrupt. */
+  udelay(10);
+  outw(dc_normal | READ_AHEAD, r_data_control);
   printk(" using IRQ %d\n", cm206_irq);
 #endif
   if (send_receive_polled(c_drive_configuration) != c_drive_configuration) 

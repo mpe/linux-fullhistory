@@ -455,6 +455,17 @@ int isofs_bmap(struct inode * inode,int block)
 	return (inode->u.isofs_i.i_first_extent >> ISOFS_BUFFER_BITS(inode)) + block;
 }
 
+
+static void test_and_set_uid(uid_t *p, uid_t value)
+{
+	if(value) {
+		*p = value;
+#if 0
+		printk("Resetting to %d\n", value);
+#endif
+	}
+}
+
 void isofs_read_inode(struct inode * inode)
 {
 	unsigned long bufsize = ISOFS_BUFFER_SIZE(inode);
@@ -593,8 +604,11 @@ void isofs_read_inode(struct inode * inode)
 /* Now test for possible Rock Ridge extensions which will override some of
    these numbers in the inode structure. */
 
-	if (!high_sierra)
+	if (!high_sierra) {
 	  parse_rock_ridge_inode(raw_inode, inode);
+	  /* hmm..if we want uid or gid set, override the rock ridge setting */
+	 test_and_set_uid(&inode->i_uid, inode->i_sb->u.isofs_sb.s_uid);
+	}
 	
 #ifdef DEBUG
 	printk("Inode: %x extent: %x\n",inode->i_ino, inode->u.isofs_i.i_first_extent);

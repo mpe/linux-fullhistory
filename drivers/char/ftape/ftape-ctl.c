@@ -371,7 +371,7 @@ void ftape_log_vendor_id(void)
 		TRACEx1(-1, "   Vendor id     : 0x%04x", drive_type.vendor_id);
 		TRACEx1(-1, "   Wakeup method : %s", methods[drive_type.wake_up].name);
 		TRACE(-1, "And a description of your tape drive to:");
-		TRACE(-1, "Kai Harrekilde-Petersen <khp@pip.dknet.dk>");
+		TRACE(-1, "Kai Harrekilde-Petersen <khp@dolphinics.no>");
 		TRACE(-1, "==========================================");
 		drive_type.speed = 500;		/* deci-ips: very safe value */
 	} else {
@@ -393,7 +393,7 @@ void ftape_log_vendor_id(void)
 			TRACEx2(-1, "found: %s, expected: %s",
 				methods[drive_type.wake_up].name,
 			    methods[vendors[vendor_index].wake_up].name);
-			TRACE(-1, "please report this to <khp@pip.dknet.dk>");
+			TRACE(-1, "please report this to <khp@dolphinics.no>");
 			TRACE(-1, "==========================================");
 		}
 	}
@@ -456,7 +456,7 @@ void ftape_calc_timeouts(void)
 		TRACEx1(-1, "drive : %s", drive_type.name);
 		TRACEx2(-1, "delta time = %d, length = %d", dt, length);
 		TRACEx1(-1, "has max tape speed of %d ips", drive_type.speed);
-		TRACE(-1, "please report this to <khp@pip.dknet.dk>");
+		TRACE(-1, "please report this to <khp@dolphinics.no>");
 		TRACE(-1, "==========================================");
 	}
 	/*  time to go from bot to eot at normal speed (data rate):

@@ -833,7 +833,8 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 void skb_device_lock(struct sk_buff *skb)
 {
 	if(skb->lock)
-		printk("double lock on device queue!\n");
+		printk("double lock on device queue, lock=%d caller=%p\n",
+			skb->lock, (&skb)[-1]);
 	else
 		net_locked++;
 	skb->lock++;

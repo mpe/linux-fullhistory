@@ -382,6 +382,8 @@ void destroy_sock(struct sock *sk)
 		skb = skb2;
 	}
 	sk->send_head = NULL;
+	sk->send_tail = NULL;
+	sk->send_next = NULL;
 	sti();
 
   	/*

@@ -1,7 +1,7 @@
 ===== Release notes for ftape-2.08, 14/03/96 =====
 
 If you correct a problem with ftape, please send your patch to
-khp@pip.dknet.dk too.
+khp@dolphinics.no too.
 
 - Updated to reflect that NR_MEM_LISTS is gone in 1.3.74
 - Teac 700 added to list of known drives.
@@ -104,7 +104,7 @@ kernel deadlock (which is worse than a panic).
 
 ===== Release notes for ftape-2.04, 01/01/96 =====
 
-This version by Kai Harrekilde-Petersen <khp@pip.dknet.dk>
+This version by Kai Harrekilde-Petersen <khp@dolphinics.no>
 
 - ALERT! Support for Kernels earlier then v1.1.85 is about to go away.
   I intend to clean up some of the code (getting rid of an annoyingly
@@ -139,7 +139,7 @@ Bas offline linux-tape
 For reasons only known to the majordomo mail list processor, Bas was
 kicked off the linux-tape list sometime during the summer.  Being
 overworked at his for-pay job, he didn't notice it much.  Instead I
-(Kai, khp@pip.dknet.dk) has worked on ftape to produce the 2.04(beta)
+(Kai, khp@dolphinics.no) has worked on ftape to produce the 2.04(beta)
 version.
 
 zftape

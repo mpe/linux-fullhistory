@@ -66,8 +66,10 @@ static struct sun_floppy_ops sun_fdops;
 #define fd_cacheflush(addr, size) /* nothing... */
 #define fd_request_irq()          sun_fd_request_irq()
 #define fd_free_irq()             /* nothing... */
+#if 0  /* P3: added by Alain, these cause a MMU corruption. 19960524 XXX */
 #define fd_dma_mem_alloc(size)    ((unsigned long) vmalloc(size))
 #define fd_dma_mem_free(addr,size) (vfree((void *)(addr)))
+#endif
 
 #define FLOPPY_MOTOR_MASK         0x10
 
@@ -110,10 +112,7 @@ static unsigned char sun_82072_fd_inb(int port)
 	case 5: /* FD_DATA */
 		return sun_fdc->data_82072;
 	case 7: /* FD_DIR */
-		/* Always return 0, the disk never changes
-		 * without the kernel explicitly doing so.
-		 */
-		return 0;
+		return (*AUXREG & AUXIO_FLPY_DCHG)? 0x80: 0;
 	};
 	panic("sun_82072_fd_inb: How did I get here?");
 }
@@ -164,10 +163,8 @@ static unsigned char sun_82077_fd_inb(int port)
 	case 5: /* FD_DATA */
 		return sun_fdc->data_82077;
 	case 7: /* FD_DIR */
-		/* Always return 0, the disk never changes
-		 * without the kernel explicitly ejecting it.
-		 */
-		return 0;
+		/* XXX: Is DCL on 0x80 in sun4m? */
+		return sun_fdc->dir_82077;
 	};
 	panic("sun_82072_fd_inb: How did I get here?");
 }

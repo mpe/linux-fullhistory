@@ -1766,6 +1766,19 @@ static void tcp_close(struct sock *sk, unsigned long timeout)
 	 * free'ing up the memory.
 	 */
 	tcp_cache_zap();	/* Kill the cache again. */
+
+	/* Now that the socket is dead, if we are in the FIN_WAIT2 state
+	 * we may need to set up a timer.
+         */
+	if (sk->state==TCP_FIN_WAIT2)
+	{
+		int timer_active=del_timer(&sk->timer);
+		if(timer_active)
+			add_timer(&sk->timer);
+		else
+			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_FIN_TIMEOUT);
+	}
+
 	release_sock(sk);
 	sk->dead = 1;
 }
@@ -2003,10 +2016,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	sk->delack_timer.data = (unsigned long) sk;
 	sk->retransmit_timer.function = tcp_retransmit_timer;
 	sk->retransmit_timer.data = (unsigned long)sk;
-	tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);	/* Timer for repeating the SYN until an answer  */
-	sk->retransmits = 0;				/* Now works the right way instead of a hacked
-											initial setting */
-
+	sk->retransmits = 0;
 	sk->prot->queue_xmit(sk, dev, buff, 0);
 	tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 	tcp_statistics.TcpActiveOpens++;

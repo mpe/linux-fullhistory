@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.10 1996/05/18 01:37:18 fritz Exp $
+/* $Id: isdn.h,v 1.11 1996/05/31 01:37:47 fritz Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.11  1996/05/31 01:37:47  fritz
+ * Minor changes, due to changes in isdn_tty.c
+ *
  * Revision 1.10  1996/05/18 01:37:18  fritz
  * Added spelling corrections and some minor changes
  * to stay in sync with kernel.
@@ -443,12 +446,11 @@ typedef struct modem_info {
   int                   drv_index;       /* Index to dev->usage            */
   int                   ncarrier;        /* Flag: schedule NO CARRIER      */
   struct timer_list     nc_timer;        /* Timer for delayed NO CARRIER   */
-#define FUTURE 1
-#if FUTURE
   int                   send_outstanding;/* # of outstanding send-requests */
-#endif
   int                   xmit_size;       /* max. # of chars in xmit_buf    */
   int                   xmit_count;      /* # of chars in xmit_buf         */
+  unsigned char         *xmit_buf;       /* transmit buffer                */
+  struct sk_buff_head   xmit_queue;      /* transmit queue                 */
   struct tty_struct 	*tty;            /* Pointer to corresponding tty   */
   atemu                 emu;             /* AT-emulator data               */
   void                  *adpcms;         /* state for adpcm decompression  */
@@ -457,7 +459,6 @@ typedef struct modem_info {
   struct termios	callout_termios;
   struct wait_queue	*open_wait;
   struct wait_queue	*close_wait;
-  struct sk_buff_head   *xmit_buf;       /* transmit-buffer queue          */
 } modem_info;
 
 #define ISDN_MODEM_WINSIZE 8
@@ -468,8 +469,8 @@ typedef struct {
   struct tty_driver  tty_modem;			   /* tty-device             */
   struct tty_driver  cua_modem;			   /* cua-device             */
   struct tty_struct  *modem_table[ISDN_MAX_CHANNELS]; /* ?? copied from Orig */
-  struct termios     modem_termios[ISDN_MAX_CHANNELS];
-  struct termios     modem_termios_locked[ISDN_MAX_CHANNELS];
+  struct termios     *modem_termios[ISDN_MAX_CHANNELS];
+  struct termios     *modem_termios_locked[ISDN_MAX_CHANNELS];
   modem_info         info[ISDN_MAX_CHANNELS];	   /* Private data           */
 } modem;
 

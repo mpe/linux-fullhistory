@@ -267,7 +267,7 @@ CONFIG_BLK_DEV_ALI14XX
   of the chipset, and permits faster I/O speeds to be set as well.
   See the README.ide and ali14xx.c files for more info.
 
-PROMISE DC4030 support (ALPHA)
+PROMISE DC4030 support (EXPERIMENTAL)
 CONFIG_BLK_DEV_PROMISE
   This driver is enabled at runtime using the "ide0=dc4030" kernel
   boot parameter.  It enables support for the secondary IDE interface
@@ -866,14 +866,14 @@ CONFIG_IP_FIREWALL_VERBOSE
   packets it received. The information is handled by the klogd demon
   which is responsible for kernel messages ("man klogd").
 
-IP: transparent proxying (ALPHA)
+IP: transparent proxying (EXPERIMENTAL)
 CONFIG_IP_TRANSPARENT_PROXY
   This enables you to redirect any network traffic to a local server,
   acting as a "transparent proxy server".  Redirection is activated
   by defining special input firewall rules (using the ipfwadm utility)
   and/or by doing an appropriate bind() system call.
 
-IP: masquerading (ALPHA)
+IP: masquerading (EXPERIMENTAL)
 CONFIG_IP_MASQUERADE
   If one of the computers on your local network for which your Linux
   box acts as a firewall wants to send something to the outside, your
@@ -888,14 +888,12 @@ CONFIG_IP_MASQUERADE
   even if they don't have officially registered IP addresses.  (This
   last problem can also be solved by connecting the Linux box to the
   Internet using SLiRP [SLiRP is a SLIP/PPP emulator that works if you
-  have a regular dial up shell account on some UNIX computer; get if
-  via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/system/Network/serial/]).  Details on how
-  to set things up are contained in the IP Masquerading FAQ, available
-  via ftp (user: anonymous) from ftp.eves.com:/pub/masq/.  This is
-  ALPHA code, which means that it need not be completely stable; it
-  has nothing to do with the computer architecture of the same
-  name. If you want this, say Y.
+  have a regular dial up shell account on some UNIX computer; get it
+  from ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/
+  Details on how to set things up are contained in the
+  IP Masquerading FAQ, available at http://www.indyramp.com/masq/
+  This is EXPERIMENTAL code, which means that it need not be completely
+  stable. If you want this, say Y.
 
 IP: always defragment
 CONFIG_IP_ALWAYS_DEFRAG
@@ -909,7 +907,10 @@ CONFIG_IP_ALWAYS_DEFRAG
    have a more reliable firewall (otherwise second and further fragments
    will always be accepted by the firewall).  When using transparent
    proxying (CONFIG_IP_TRANSPARENT_PROXY), this option is implicit,
-   although it is safe to say Y here.
+   although it is safe to say Y here. Do not say Y to this option except
+   when running either a firewall that is the sole link to your network or
+   a transparent proxy. Never ever say Y to this for a normal router or
+   host.
 
 IP: aliasing support
 CONFIG_IP_ALIAS
@@ -1142,7 +1143,7 @@ CONFIG_BRIDGE
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. The Bridging code is
   still in test. If unsure, say N.
 
-Kernel/User network link driver(ALPHA)
+Kernel/User network link driver (EXPERIMENTAL)
 CONFIG_NETLINK
   This driver allows for two-way communication between certain parts
   of the kernel or modules and user processes; the user processes are
@@ -1150,8 +1151,7 @@ CONFIG_NETLINK
   directory having major mode 36. So far, the kernel uses it to
   publish some network related information if you enable "Routing
   messages", below. Say Y if you want to experiment with it; this is
-  ALPHA code, which means that it need not be completely stable; it
-  has nothing to do with the computer architecture of the same name.
+  EXPERIMENTAL code, which means that it need not be completely stable.
   You need to include this if you want to use arpd, a daemon that
   helps keep the internal ARP cache (a mapping between IP addresses
   and hardware addresses on the local network) small. If unsure, say

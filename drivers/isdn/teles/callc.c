@@ -1,6 +1,9 @@
-/* $Id: callc.c,v 1.7 1996/05/17 03:40:37 fritz Exp $
+/* $Id: callc.c,v 1.8 1996/05/31 01:00:38 fritz Exp $
  *
  * $Log: callc.c,v $
+ * Revision 1.8  1996/05/31 01:00:38  fritz
+ * Changed return code of teles_writebuf, when out of memory.
+ *
  * Revision 1.7  1996/05/17 03:40:37  fritz
  * General cleanup.
  *
@@ -1387,7 +1390,7 @@ teles_writebuf(int id, int chan, const u_char * buf, int count, int user)
 
         err = BufPoolGet(&ibh, st->l1.sbufpool, GFP_ATOMIC, st, 21);
         if (err)
-                return (0);
+                return -ENOMEM;
 
         ptr = DATAPTR(ibh);
         if (chanp->lc_b.l2_establish)

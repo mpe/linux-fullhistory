@@ -1,7 +1,7 @@
 #ifndef _ALPHA_STATFS_H
 #define _ALPHA_STATFS_H
 
-#ifndef _LINUX_TYPES_DONT_EXPORT
+#ifndef __KERNEL_STRICT_NAMES
 
 #include <linux/posix_types.h>
 

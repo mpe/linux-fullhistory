@@ -90,7 +90,7 @@ function help () {
      then
 	  echo; echo "  Sorry, no help available for this option yet.";echo
      else
-	  (echo; echo "$text"; echo) | more
+	  (echo; echo "$text"; echo) | ${PAGER:-more}
      fi
   else
      echo;

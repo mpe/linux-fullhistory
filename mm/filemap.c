@@ -852,10 +852,13 @@ no_cached_page:
 page_read_error:
 	/*
 	 * Umm, take care of errors if the page isn't up-to-date.
-	 * Try to re-read it _once_.
+	 * Try to re-read it _once_. We do this synchronously,
+	 * because there really aren't any performance issues here
+	 * and we need to check for errors.
 	 */
 	if (inode->i_op->readpage(inode, page) != 0)
 		goto failure;
+	wait_on_page(page);
 	if (PageError(page))
 		goto failure;
 	if (PageUptodate(page))

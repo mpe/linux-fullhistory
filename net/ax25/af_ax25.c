@@ -2395,7 +2395,7 @@ void ax25_proto_init(struct net_proto *pro)
 	dev_add_pack(&bpq_packet_type);
 #endif
 	register_netdevice_notifier(&ax25_dev_notifier);
-			  
+#ifdef CONFIG_PROC_FS			  
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_AX25_ROUTE, 10, "ax25_route",
 		S_IFREG | S_IRUGO, 1, 0, 0,
@@ -2414,8 +2414,9 @@ void ax25_proto_init(struct net_proto *pro)
 		0, &proc_net_inode_operations,
 		ax25_cs_get_info
 	});
+#endif	
 
-	printk(KERN_INFO "G4KLX/GW4PTS AX.25 for Linux. Version 0.32 BETA for Linux NET3.035 (Linux 2.0)\n");
+	printk(KERN_INFO "G4KLX/GW4PTS AX.25 for Linux. Version 0.32 for Linux NET3.035 (Linux 2.0)\n");
 
 #ifdef CONFIG_BPQETHER
 	proc_net_register(&(struct proc_dir_entry) {

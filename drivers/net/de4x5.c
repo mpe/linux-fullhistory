@@ -2675,7 +2675,7 @@ de4x5_free_rx_buffs(struct device *dev)
     int i;
 
     for (i=0; i<lp->rxRingSize; i++) {
-	if (lp->rx_skb[i]) {
+	if ((unsigned long) lp->rx_skb[i] > 1) {
 	    dev_kfree_skb(lp->rx_skb[i], FREE_WRITE);
 	}
 	lp->rx_ring[i].status = 0;

@@ -14,7 +14,11 @@ Boldt's (boldt@math.ucsb.edu) Configure.help file, among other sources,
 and was originally written and maintained by Alessandro Sigala
 (ssigala@globalnet.it).
 
-Last updated: May 20, 1996.
+   There is now a web page based on this material, thanks to John
+Taylor.  Check out http://www.cviog.uga.edu/LinuxBleed.html if you
+prefer a HTML-ized shopping list.
+
+Last updated: June 1, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -29,7 +33,7 @@ Current Releases
 - Linux C++ Library	 2.7.1.4
 - Termcap		 2.0.8
 - Procps		 0.99a
-- Gpm			 1.06
+- Gpm			 1.09
 - SysVinit		 2.60
 - Util-linux		 2.5
 
@@ -39,11 +43,17 @@ Upgrade notes
 Network errors with recent kernels
 ==================================
 
-   Many default network scripts are set up add a route to the localhost
-at 127.0.0.1 at startup.  However, they do this incorrectly.  To fix
-the error, which is now spotted by the kernel, look for a line like
-`route add -net 127.0.0.1' in your network configuration files and
-change it to `route add -net 127.0.0.0'.
+   Many default network scripts are set up to add a route to the
+localhost at 127.0.0.1 at startup.  However, they do this incorrectly.
+To fix the error, which is now spotted by the kernel (causing many
+daemons to quit working), look for a line like `route add -net
+127.0.0.1' in your network configuration files and change it to `route
+add -net 127.0.0.0'.
+
+   This error is present in all Red Hat distributions (and derivative
+distributions like Caldera).  If you're running one of these, edit
+/etc/sysconfig/network-scripts/ifup-lo, changing the line `route add
+-net $(IPADDR)' to `route add -net 127.0.0.0' and you should be fine.
 
 The Linux C Library
 ===================
@@ -128,15 +138,14 @@ people don't need to upgrade past 1.3.57.
    Another little tip: you can't have both a.out *and* ELF support
 compiled as modules.  Otherwise, you get a nice Catch-22 when you try
 to run insmod to install a.out/ELF support so you can run insmod ;-).
-If you have an all-ELF system, but need a.out for the occasional
-Netscape session, then you can do a.out support as a module.
-Otherwise, you should probably leave it in the kernel, and if you
-haven't gone ELF yet, you can probably say no to ELF support.
-Similarly, any partitions that you have to mount at startup have to
-have their necessary file system and device drivers compiled into the
-kernel, so don't get grandiose ideas about going completely modular and
-then forget to compile ext2fs support and ide drive support into your
-kernel ;-).
+If you have an all-ELF system, but need a.out for the occasional legacy
+app, then you can do a.out support as a module.  Otherwise, you should
+probably leave it in the kernel, and if you haven't gone ELF yet, you
+can probably say no to ELF support.  Similarly, any partitions that you
+have to mount at startup have to have their necessary file system and
+device drivers compiled into the kernel, so don't get grandiose ideas
+about going completely modular and then forget to compile ext2fs
+support and ide drive support into your kernel ;-).
 
 PPP driver
 ==========
@@ -183,6 +192,12 @@ Uugetty
 fix this problem, upgrade to
 ftp://sunsite.unc.edu/pub/Linux/system/Serial/getty_ps-2.0.7h.tar.gz.
 
+Kbd
+===
+
+   For those of you needing non-ASCII character/font support, you should
+upgrade to ftp.funet.fi:/pub/OS/Linux/PEOPLE/Linus/kbd-0.91.tar.gz.
+
 Console
 =======
 
@@ -197,6 +212,11 @@ the following as root:
 
    Better yet, just get the latest official Linux termcap from
 ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.8.tar.gz
+
+   Also, the console driver is now responsible for keeping track of
+correspondence between character codes and glyph bitmaps.  If you
+encounter problems, try `loadunimap def' to get back the default
+correspondence.
 
 Hdparm
 ======
@@ -254,7 +274,7 @@ Networking
 to the latest net-tools in
 ftp://ftp.inka.de:/pub/comp/Linux/networking/net-tools.  The last
 official release there is net-tools-1.2.0.tar.gz, and the latest
-release is net-tools-1.3.6-BETA5.tar.gz.  If you need the upgrade, you
+release is net-tools-1.32-alpha.tar.gz.  If you need the upgrade, you
 probably need the latest beta release.
 
 Xntpd
@@ -269,7 +289,9 @@ Sound driver
 
    The sound driver was upgraded in the 1.3.x kernels, breaking vplay.
 To fix this problem, get a new version of the sndkit from
-ftp://ftp.best.com/pub/front/tasd/snd-util-3.5.tar.gz
+ftp://ftp.best.com/pub/front/tasd/snd-util-3.5.tar.gz.  Some users
+report that various other sound utils (cdd2wav-sbpcd, for example) need
+to be recompiled before they will work with the new kernels.
 
 Tcsh
 ====
@@ -299,7 +321,7 @@ Loop device
 file as a file system, which can allow for all sorts of cool things
 like encrypted file systems and such.  To use it, you'll need a
 modified version of mount from
-ftp://ftp.win.tue.nl:/pub/linux/util/mount-2.5X.tar.gz and preliminary
+ftp://ftp.win.tue.nl/pub/linux/util/mount-2.5X.tar.gz and preliminary
 work on encrypted file system support can be found in
 ftp.funet.fi:/pub/OS/Linux/BETA/loop/des.1.tar.gz.
 
@@ -389,7 +411,7 @@ installed programs and libraries.
 GNU CC: gcc -v and gcc --version
 PPP: pppd -h (wrong but it show the version)
 Libc: ls -l /lib/libc.so.5
-LibC++: ls -l /usr/lib/libg++.so
+Libc++: ls -l /usr/lib/libg++.so
 Binutils: ld -v
 ldd: ldd -v and ldd -V
 termcap: ls -l /lib/libtermcap.so.*
@@ -470,8 +492,8 @@ ftp://sunsite.unc.edu/pub/Linux/system/Status/ps/procps-0.99a.tgz
 Gpm mouse utilities
 ===================
 
-ftp://iride.unipv.it/pub/gpm/gpm-1.06.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/system/Daemons/gpm-1.06.tar.gz
+ftp://iride.unipv.it/pub/gpm/gpm-1.09.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/Daemons/gpm-1.09.tar.gz
 
 SysVinit utilities
 ==================
@@ -500,13 +522,16 @@ Other Info
 favorite local linux mirror.  If you can, please get them from a closer
 site before checking sunsite.
 
-   Also, for those of you running Red Hat, most of these are available
-in RPM format.  Check around your favorite Red Hat mirror site before
-installing the non-RPM version.  Remember, you might need to use the
--force option to get the upgrade to install.
+   Also, for those of you running Red Hat (or RPM on a different
+distribution), most of these are available in RPM format.  Check around
+your favorite Red Hat mirror site before installing the non-RPM
+version.  Remember, you might need to use the -force option to get the
+upgrade to install.
 
+Please send info about any other packages that 1.3.x "broke" or about
+any new features of 1.3.x that require extra or new packages for use to
+Chris Ricker (gt1355b@prism.gatech.edu).  I generate this from a
+modified texinfo setup, so you don't need to bother generating a diff
+against the current version before you send the additional information
+to me.
 
-isdn-utils
-==========
-
-ftp://ftp.franken.de/pub/isdn4linux/isdn4k-utils-1.3.97.tar.gz

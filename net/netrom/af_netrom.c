@@ -1418,6 +1418,7 @@ void nr_proto_init(struct net_proto *pro)
 	nr_default.window     = NR_DEFAULT_WINDOW;
 	nr_default.paclen     = NR_DEFAULT_PACLEN;
 
+#ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_NR, 2, "nr",
 		S_IFREG | S_IRUGO, 1, 0, 0,
@@ -1436,6 +1437,7 @@ void nr_proto_init(struct net_proto *pro)
 		0, &proc_net_inode_operations, 
 		nr_nodes_get_info
 	});
+#endif	
 }
 
 #endif

@@ -529,25 +529,26 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		}
 
 #endif
+
 #ifdef CONFIG_IP_MASQUERADE
-	{
 		/*
 		 * Do we need to de-masquerade this packet?
 		 */
-		int ret = ip_fw_demasquerade(&skb,dev);
-		if (ret < 0) {
-			kfree_skb(skb, FREE_WRITE);
-			return 0;
-		}
-
-		if (ret)
 		{
-			struct iphdr *iph=skb->h.iph;
-			if (ip_forward(skb, dev, IPFWD_MASQUERADED, iph->daddr))
+			int ret = ip_fw_demasquerade(&skb,dev);
+			if (ret < 0) {
 				kfree_skb(skb, FREE_WRITE);
-			return 0;
+				return 0;
+			}
+
+			if (ret)
+			{
+				struct iphdr *iph=skb->h.iph;
+				if (ip_forward(skb, dev, IPFWD_MASQUERADED, iph->daddr))
+					kfree_skb(skb, FREE_WRITE);
+				return 0;
+			}
 		}
-	}
 #endif
 
 		/*
