@@ -56,12 +56,15 @@ atomic_t nr_async_pages = ATOMIC_INIT(0);
  * Constants for the page aging mechanism: the maximum age (actually,
  * the maximum "youthfulness"); the quanta by which pages rejuvenate
  * and age; and the initial age for new pages. 
+ *
+ * The "pageout_weight" is strictly a fixedpoint number with the
+ * ten low bits being the fraction (ie 8192 really means "8.0").
  */
-
 swap_control_t swap_control = {
 	20, 3, 1, 3,		/* Page aging */
 	32, 4,			/* Aging cluster */
-	8192, 8192,		/* Pageout and bufferout weights */
+	8192,			/* sc_pageout_weight aka PAGEOUT_WEIGHT */
+	8192,			/* sc_bufferout_weight aka BUFFEROUT_WEIGHT */
 };
 
 swapstat_t swapstats = {0};
@@ -69,11 +72,11 @@ swapstat_t swapstats = {0};
 buffer_mem_t buffer_mem = {
 	5,	/* minimum percent buffer */
 	25,	/* borrow percent buffer */
-	50	/* maximum percent buffer */
+	60	/* maximum percent buffer */
 };
 
 buffer_mem_t page_cache = {
-	10,	/* minimum percent page cache */
+	5,	/* minimum percent page cache */
 	30,	/* borrow percent page cache */
 	75	/* maximum */
 };

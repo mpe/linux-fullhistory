@@ -67,6 +67,12 @@
  *                     settings (not sure if this should be standard)
  *                     Fixed many references: f_flags should be f_mode
  *                     -- Gerald Britton <gbritton@mit.edu>
+ *    03.08.98   0.11  Now mixer behaviour can basically be selected between
+ *                     "OSS documented" and "OSS actual" behaviour
+ *                     Fixed mixer table thanks to Hakan.Lennestal@lu.erisoft.se
+ *                     On module startup, set DAC2 to 11kSPS instead of 5.5kSPS,
+ *                     as it produces an annoying ssssh in the lower sampling rate
+ *                     Do not include modversions.h
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -91,7 +97,6 @@
       
 #include <linux/version.h>
 #include <linux/module.h>
-#include <linux/modversions.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/sched.h>
@@ -107,6 +112,10 @@
 #include <asm/spinlock.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
+
+/* --------------------------------------------------------------------- */
+
+#undef OSS_DOCUMENTED_MIXER_SEMANTICS
 
 /* --------------------------------------------------------------------- */
 
@@ -316,7 +325,7 @@ struct es1370_state {
 
 /* --------------------------------------------------------------------- */
 
-struct es1370_state *devs = NULL;
+static struct es1370_state *devs = NULL;
 
 /* --------------------------------------------------------------------- */
 
@@ -464,9 +473,8 @@ static void start_adc(struct es1370_state *s)
 
 /* --------------------------------------------------------------------- */
 
-#define DMABUF_DEFAULTORDER 8
+#define DMABUF_DEFAULTORDER (17-PAGE_SHIFT)
 #define DMABUF_MINORDER 1
-
 
 extern inline void dealloc_dmabuf(struct dmabuf *db)
 {
@@ -478,6 +486,7 @@ extern inline void dealloc_dmabuf(struct dmabuf *db)
 		for (map = MAP_NR(db->rawbuf); map <= mapend; map++)
 			clear_bit(PG_reserved, &mem_map[map].flags);	
 		free_pages((unsigned long)db->rawbuf, db->buforder);
+		printk(KERN_DEBUG "es: freeing dmabuf %8.8lx order %d\n", (unsigned long)db->rawbuf, db->buforder);
 	}
 	db->rawbuf = NULL;
 	db->mapped = db->ready = 0;
@@ -502,6 +511,7 @@ static int prog_dmabuf(struct es1370_state *s, struct dmabuf *db, unsigned rate,
 		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
 		for (map = MAP_NR(db->rawbuf); map <= mapend; map++)
 			set_bit(PG_reserved, &mem_map[map].flags);
+		printk(KERN_DEBUG "es: allocating dmabuf %8.8lx order %d\n", (unsigned long)db->rawbuf, db->buforder);
 	}
 	fmt &= ES1370_FMT_MASK;
 	bytepersec = rate << sample_shift[fmt];
@@ -734,26 +744,56 @@ static const struct {
 	[SOUND_MIXER_CD]     = { 3, 0x6, 0x7, 1, 0x0006, 1 },   /* CD */
 	[SOUND_MIXER_LINE]   = { 4, 0x8, 0x9, 1, 0x0018, 1 },   /* Line */
 	[SOUND_MIXER_LINE1]  = { 5, 0xa, 0xb, 1, 0x1800, 1 },   /* AUX */
-	[SOUND_MIXER_LINE2]  = { 6, 0xc, 0x0, 1, 0x0100, 1 },   /* Mono1 */
-	[SOUND_MIXER_LINE3]  = { 7, 0xd, 0x0, 1, 0x0200, 1 },   /* Mono2 */
-	[SOUND_MIXER_MIC]    = { 8, 0xe, 0x0, 1, 0x0001, 1 },   /* Mic */
-	[SOUND_MIXER_OGAIN]  = { 9, 0xf, 0x0, 1, 0x0000, 1 }    /* mono out */
+	[SOUND_MIXER_LINE2]  = { 6, 0xc, 0x0, 0, 0x0100, 1 },   /* Mono1 */
+	[SOUND_MIXER_LINE3]  = { 7, 0xd, 0x0, 0, 0x0200, 1 },   /* Mono2 */
+	[SOUND_MIXER_MIC]    = { 8, 0xe, 0x0, 0, 0x0001, 1 },   /* Mic */
+	[SOUND_MIXER_OGAIN]  = { 9, 0xf, 0x0, 0, 0x0000, 1 }    /* mono out */
 };
 
 static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long arg)
 {
+	unsigned long flags;
 	int i, val, j;
-	unsigned char l, r, rl, rr, sr, sl;
+	unsigned char l, r, rl, rr;
 
 	VALIDATE_STATE(s);
 
 	if (cmd == SOUND_MIXER_PRIVATE1) {
+		/* enable/disable/query mixer preamp */
 		get_user_ret(val, (int *)arg, -EFAULT);
 		if (val != -1) {
 			s->mix.micpreamp = !!val;
 			wrcodec(s, 0x19, s->mix.micpreamp);
 		}
 		return put_user(s->mix.micpreamp, (int *)arg);
+	}
+	if (cmd == SOUND_MIXER_PRIVATE2) {
+		/* enable/disable/query use of linein as second lineout */
+		get_user_ret(val, (int *)arg, -EFAULT);
+		if (val != -1) {
+			spin_lock_irqsave(&s->lock, flags);
+			if (val)
+				s->ctrl |= CTRL_XCTL0;
+			else
+				s->ctrl &= ~CTRL_XCTL0;
+			outl(s->ctrl, s->io+ES1370_REG_CONTROL);
+			spin_unlock_irqrestore(&s->lock, flags);
+		}
+		return put_user((s->ctrl & CTRL_XCTL0) ? 1 : 0, (int *)arg);
+	}
+	if (cmd == SOUND_MIXER_PRIVATE3) {
+		/* enable/disable/query microphone impedance setting */
+		get_user_ret(val, (int *)arg, -EFAULT);
+		if (val != -1) {
+			spin_lock_irqsave(&s->lock, flags);
+			if (val)
+				s->ctrl |= CTRL_XCTL1;
+			else
+				s->ctrl &= ~CTRL_XCTL1;
+			outl(s->ctrl, s->io+ES1370_REG_CONTROL);
+			spin_unlock_irqrestore(&s->lock, flags);
+		}
+		return put_user((s->ctrl & CTRL_XCTL1) ? 1 : 0, (int *)arg);
 	}
         if (cmd == SOUND_MIXER_INFO) {
 		mixer_info info;
@@ -842,12 +882,10 @@ static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long a
 		l = val & 0xff;
 		if (l > 100)
 			l = 100;
-		sl = sr = l;
 		if (mixtable[i].stereo) {
 			r = (val >> 8) & 0xff;
 			if (r > 100)
 				r = 100;
-			sr = r;
 			if (l < 10) {
 				rl = 0x80;
 				l = 0;
@@ -881,9 +919,13 @@ static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long a
 					r = l = (15 - rl) * 6 + 10;
 				}
 			}
-		}			
+		}
 		wrcodec(s, mixtable[i].left, rl);
-		s->mix.vol[mixtable[i].volidx] = ((unsigned int)sr << 8) | sl;
+#ifdef OSS_DOCUMENTED_MIXER_SEMANTICS
+		s->mix.vol[mixtable[i].volidx] = ((unsigned int)r << 8) | l;
+#else
+		s->mix.vol[mixtable[i].volidx] = val;
+#endif
                 return put_user(s->mix.vol[mixtable[i].volidx], (int *)arg);
 	}
 }
@@ -2267,7 +2309,7 @@ __initfunc(int init_es1370(void))
 			goto err_irq;
 		}
 		/* initialize codec registers */
-		s->ctrl = CTRL_CDC_EN | CTRL_SERR_DIS | (DAC2_SRTODIV(8000) << CTRL_SH_PCLKDIV);
+		s->ctrl = CTRL_CDC_EN | CTRL_SERR_DIS | (DAC2_SRTODIV(8000) << CTRL_SH_PCLKDIV) | (1 << CTRL_SH_WTSRSEL);
 		if (joystick[index]) {
 			if (check_region(0x200, JOY_EXTENT))
 				printk(KERN_ERR "es1370: io port 0x200 in use\n");
@@ -2356,7 +2398,7 @@ void cleanup_module(void)
 
 	while ((s = devs)) {
 		devs = devs->next;
-		outl(CTRL_SERR_DIS, s->io+ES1370_REG_CONTROL); /* switch everything off */
+		outl(CTRL_SERR_DIS | (1 << CTRL_SH_WTSRSEL), s->io+ES1370_REG_CONTROL); /* switch everything off */
 		outl(0, s->io+ES1370_REG_SERIAL_CONTROL); /* clear serial interrupts */
 		synchronize_irq();
 		free_irq(s->irq, s);

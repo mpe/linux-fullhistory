@@ -485,16 +485,18 @@ static unsigned long get_wchan(struct task_struct *p)
 		return 0;
 #if defined(__i386__)
 	{
-		unsigned long ebp, eip;
+		unsigned long ebp, esp, eip;
 		unsigned long stack_page;
 		int count = 0;
 
-		stack_page = 4096 + (unsigned long)p;
-		if (!stack_page)
+		stack_page = (unsigned long)p;
+		esp = p->tss.esp;
+		if (!stack_page || esp < stack_page || esp >= 8188+stack_page)
 			return 0;
-		ebp = p->tss.ebp;
+		/* include/asm-i386/system.h:switch_to() pushes ebp last. */
+		ebp = *(unsigned long *) esp;
 		do {
-			if (ebp < stack_page || ebp >= 4092+stack_page)
+			if (ebp < stack_page || ebp >= 8188+stack_page)
 				return 0;
 			eip = *(unsigned long *) (ebp+4);
 			if (eip < first_sched || eip >= last_sched)

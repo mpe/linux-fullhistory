@@ -3142,6 +3142,7 @@ void gus_wave_init(struct address_info *hw_config)
 			return;
 		}
 
+		hw_config->slots[4] = gus_devnum;
 		audio_devs[gus_devnum]->min_fragment = 9;	/* 512k */
 		audio_devs[gus_devnum]->max_fragment = 11;	/* 8k (must match size of bounce_buf */
 		audio_devs[gus_devnum]->mixer_dev = -1;	/* Next mixer# */

@@ -25,7 +25,8 @@
 void attach_sb_card(struct address_info *hw_config)
 {
 #if defined(CONFIG_AUDIO) || defined(CONFIG_MIDI)
-	sb_dsp_init(hw_config);
+	if(!sb_dsp_init(hw_config))
+		hw_config->slots[0] = -1;
 #endif
 }
 
@@ -41,7 +42,8 @@ int probe_sb(struct address_info *hw_config)
 
 void unload_sb(struct address_info *hw_config)
 {
-	sb_dsp_unload(hw_config);
+	if(hw_config->slots[0]!=-1)
+		sb_dsp_unload(hw_config);
 }
 
 int sb_be_quiet=0;
@@ -92,7 +94,7 @@ int init_module(void)
 	{
 		if (io == -1 || dma == -1 || irq == -1)
 		{
-			printk(KERN_ERR "I/O, IRQ, and DMA are mandatory\n");
+			printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
 			return -EINVAL;
 		}
 		config.io_base = io;
@@ -104,6 +106,9 @@ int init_module(void)
 		if (!probe_sb(&config))
 			return -ENODEV;
 		attach_sb_card(&config);
+		
+		if(config.slots[0]==-1)
+			return -ENODEV;
 #ifdef CONFIG_MIDI
 		config_mpu.io_base = mpu_io;
 		if (mpu_io && probe_sbmpu(&config_mpu))

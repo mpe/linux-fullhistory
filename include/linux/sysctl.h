@@ -2,6 +2,23 @@
  * sysctl.h: General linux system control interface
  *
  * Begun 24 March 1995, Stephen Tweedie
+ *
+ ****************************************************************
+ ****************************************************************
+ **
+ **  WARNING:  
+ **  The values in this file are exported to user space via 
+ **  the sysctl() binary interface.  Do *NOT* change the 
+ **  numbering of any existing values here, and do not change
+ **  any numbers within any one set of values.  If you have
+ **  to redefine an existing interface, use a new number for it.
+ **  The kernel will then return ENOTDIR to any application using
+ **  the old binary interface.
+ **
+ **  --sct
+ **
+ ****************************************************************
+ ****************************************************************
  */
 
 #include <linux/lists.h>
@@ -33,32 +50,32 @@ struct __sysctl_args {
 
 enum
 {
-	CTL_KERN=1,		/* General kernel info and control */
+/*1*/	CTL_KERN=1,		/* General kernel info and control */
 	CTL_VM,			/* VM management */
 	CTL_NET,		/* Networking */
 	CTL_PROC,		/* Process info */
 	CTL_FS,			/* Filesystems */
 	CTL_DEBUG,		/* Debugging */
-	CTL_DEV,		/* Devices */
+/*7*/	CTL_DEV,		/* Devices */
 };
 
 
 /* CTL_KERN names: */
 enum
 {
-	KERN_OSTYPE=1,		/* string: system version */
+/*1*/	KERN_OSTYPE=1,		/* string: system version */
 	KERN_OSRELEASE,		/* string: system release */
 	KERN_OSREV,		/* int: system revision */
 	KERN_VERSION,		/* string: compile time info */
 	KERN_SECUREMASK,	/* struct: maximum rights mask */
 	KERN_PROF,		/* table: profiling information */
 	KERN_NODENAME,
-	KERN_DOMAINNAME,
-	KERN_SECURELVL,		/* int: system security level */
+/*8*/	KERN_DOMAINNAME,
+/*14*/	KERN_SECURELVL=14,	/* int: system security level */
 	KERN_PANIC,		/* int: panic timeout */
-	KERN_REALROOTDEV,	/* real root device to mount after initrd */
-	KERN_JAVA_INTERPRETER,	/* path to Java(tm) interpreter */
-	KERN_JAVA_APPLETVIEWER,	/* path to Java(tm) appletviewer */
+/*16*/	KERN_REALROOTDEV,	/* real root device to mount after initrd */
+/*19*/	KERN_JAVA_INTERPRETER=19,/* path to Java(tm) interpreter */
+/*20*/	KERN_JAVA_APPLETVIEWER,	/* path to Java(tm) appletviewer */
 	KERN_SPARC_REBOOT,	/* reboot command on Sparc */
 	KERN_CTLALTDEL,		/* int: allow ctl-alt-del to reboot */
 	KERN_PRINTK,            /* sturct: control printk logging parameters */
@@ -67,14 +84,14 @@ enum
 	KERN_PPC_ZEROPAGED,	/* turn idle page zeroing on/off on PPC */
 	KERN_PPC_POWERSAVE_NAP,	/* use nap mode for power saving */
 	KERN_MODPROBE,
-	KERN_SG_BIG_BUFF
+/*29*/	KERN_SG_BIG_BUFF
 };
 
 
 /* CTL_VM names: */
 enum
 {
-	VM_SWAPCTL=1,		/* struct: Set vm swapping control */
+/*1*/	VM_SWAPCTL=1,		/* struct: Set vm swapping control */
 	VM_SWAPOUT,		/* int: Background pageout interval */
 	VM_FREEPG,		/* struct: Set free page thresholds */
 	VM_BDFLUSH,		/* struct: Control buffer cache flushing */
@@ -82,14 +99,14 @@ enum
 	VM_BUFFERMEM,		/* struct: Set buffer memory thresholds */
 	VM_PAGECACHE,		/* struct: Set cache memory thresholds */
 	VM_PAGERDAEMON,		/* struct: Control kswapd behaviour */
-	VM_PGT_CACHE		/* struct: Set page table cache parameters */
+/*9*/	VM_PGT_CACHE		/* struct: Set page table cache parameters */
 };
 
 
 /* CTL_NET names: */
 enum
 {
-	NET_CORE=1,
+/*1*/	NET_CORE=1,
 	NET_ETHER,
 	NET_802,
 	NET_UNIX,
@@ -98,19 +115,19 @@ enum
 	NET_ATALK,
 	NET_NETROM,
 	NET_AX25,
-	NET_BRIDGE,
-	NET_IPV6,
+/*10*/	NET_BRIDGE,
 	NET_ROSE,
+	NET_IPV6,
 	NET_X25,
 	NET_TR,
-	NET_DECNET
+/*15*/	NET_DECNET
 };
 
 
 /* /proc/sys/net/core */
 enum
 {
-	NET_CORE_WMEM_MAX=1,
+/*1*/	NET_CORE_WMEM_MAX=1,
 	NET_CORE_RMEM_MAX,
 	NET_CORE_WMEM_DEFAULT,
 	NET_CORE_RMEM_DEFAULT,
@@ -119,7 +136,7 @@ enum
 	NET_CORE_FASTROUTE,
 	NET_CORE_MSG_COST,
 	NET_CORE_MSG_BURST,
-	NET_CORE_OPTMEM_MAX,
+/*10*/	NET_CORE_OPTMEM_MAX,
 };
 
 /* /proc/sys/net/ethernet */
@@ -130,23 +147,23 @@ enum
 
 enum
 {
-	NET_UNIX_DESTROY_DELAY=1,
-	NET_UNIX_DELETE_DELAY,
+/*1*/	NET_UNIX_DESTROY_DELAY=1,
+/*2*/	NET_UNIX_DELETE_DELAY,
 };
 
 /* /proc/sys/net/ipv4 */
 enum
 {
 	/* v2.0 compatibile variables */
-	NET_IPV4_FORWARD = 8,
+/*8*/	NET_IPV4_FORWARD = 8,
 	NET_IPV4_DYNADDR = 9,
 
-	NET_IPV4_CONF = 16,
+/*16*/	NET_IPV4_CONF = 16,
 	NET_IPV4_NEIGH = 17,
 	NET_IPV4_ROUTE = 18,
 	NET_IPV4_FIB_HASH = 19,
 
-	NET_IPV4_TCP_HOE_RETRANSMITS=32,
+/*32*/	NET_IPV4_TCP_HOE_RETRANSMITS=32,
 	NET_IPV4_TCP_TIMESTAMPS,
 	NET_IPV4_TCP_WINDOW_SCALING,
 	NET_IPV4_TCP_SACK,
@@ -154,7 +171,7 @@ enum
 	NET_IPV4_DEFAULT_TTL,
 	NET_IPV4_AUTOCONFIG,
 	NET_IPV4_NO_PMTU_DISC,
-	NET_IPV4_TCP_SYN_RETRIES,
+/*40*/	NET_IPV4_TCP_SYN_RETRIES,
 	NET_IPV4_IPFRAG_HIGH_THRESH,
 	NET_IPV4_IPFRAG_LOW_THRESH,
 	NET_IPV4_IPFRAG_TIME,
@@ -164,7 +181,7 @@ enum
 	NET_IPV4_TCP_RETRIES1,
 	NET_IPV4_TCP_RETRIES2,
 	NET_IPV4_TCP_FIN_TIMEOUT,
-	NET_IPV4_IP_MASQ_DEBUG,
+/*50*/	NET_IPV4_IP_MASQ_DEBUG,
 	NET_TCP_SYNCOOKIES,
 	NET_TCP_STDURG,
 	NET_TCP_RFC1337,
@@ -174,14 +191,14 @@ enum
 	NET_IPV4_ICMP_ECHO_IGNORE_ALL,
 	NET_IPV4_ICMP_ECHO_IGNORE_BROADCASTS,
 	NET_IPV4_ICMP_SOURCEQUENCH_RATE,
-	NET_IPV4_ICMP_DESTUNREACH_RATE,
+/*60*/	NET_IPV4_ICMP_DESTUNREACH_RATE,
 	NET_IPV4_ICMP_TIMEEXCEED_RATE,
 	NET_IPV4_ICMP_PARAMPROB_RATE,
-	NET_IPV4_ICMP_ECHOREPLY_RATE,
+/*63*/	NET_IPV4_ICMP_ECHOREPLY_RATE,
 };
 
 enum {
-	NET_IPV4_ROUTE_FLUSH = 1,
+/*1*/	NET_IPV4_ROUTE_FLUSH = 1,
 	NET_IPV4_ROUTE_MIN_DELAY,
 	NET_IPV4_ROUTE_MAX_DELAY,
 	NET_IPV4_ROUTE_GC_THRESH,
@@ -190,24 +207,24 @@ enum {
 	NET_IPV4_ROUTE_GC_TIMEOUT,
 	NET_IPV4_ROUTE_GC_INTERVAL,
 	NET_IPV4_ROUTE_REDIRECT_LOAD,
-	NET_IPV4_ROUTE_REDIRECT_NUMBER,
+/*10*/	NET_IPV4_ROUTE_REDIRECT_NUMBER,
 	NET_IPV4_ROUTE_REDIRECT_SILENCE,
 	NET_IPV4_ROUTE_ERROR_COST,
 	NET_IPV4_ROUTE_ERROR_BURST,
-	NET_IPV4_ROUTE_GC_ELASTICITY,
+/*14*/	NET_IPV4_ROUTE_GC_ELASTICITY,
 };
 
 enum
 {
-	NET_PROTO_CONF_ALL = -2,
-	NET_PROTO_CONF_DEFAULT = -3,
+/*-2*/	NET_PROTO_CONF_ALL = -2,
+/*-3*/	NET_PROTO_CONF_DEFAULT = -3,
 
 	/* And device ifindices ... */
 };
 
 enum
 {
-	NET_IPV4_CONF_FORWARDING = 1,
+/*1*/	NET_IPV4_CONF_FORWARDING = 1,
 	NET_IPV4_CONF_MC_FORWARDING,
 	NET_IPV4_CONF_PROXY_ARP,
 	NET_IPV4_CONF_ACCEPT_REDIRECTS,
@@ -216,29 +233,29 @@ enum
 	NET_IPV4_CONF_SHARED_MEDIA,
 	NET_IPV4_CONF_RP_FILTER,
 	NET_IPV4_CONF_ACCEPT_SOURCE_ROUTE,
-	NET_IPV4_CONF_BOOTP_RELAY,
-	NET_IPV4_CONF_LOG_MARTIANS,
+/*10*/	NET_IPV4_CONF_BOOTP_RELAY,
+/*11*/	NET_IPV4_CONF_LOG_MARTIANS,
 };
 
 /* /proc/sys/net/ipv6 */
 enum {
-	NET_IPV6_CONF = 16,
+/*16*/	NET_IPV6_CONF = 16,
 	NET_IPV6_NEIGH = 17,
-	NET_IPV6_ROUTE = 18,
+/*18*/	NET_IPV6_ROUTE = 18,
 };
 
 enum {
-	NET_IPV6_ROUTE_FLUSH = 1,
+/*1*/	NET_IPV6_ROUTE_FLUSH = 1,
 	NET_IPV6_ROUTE_GC_THRESH,
 	NET_IPV6_ROUTE_MAX_SIZE,
 	NET_IPV6_ROUTE_GC_MIN_INTERVAL,
 	NET_IPV6_ROUTE_GC_TIMEOUT,
 	NET_IPV6_ROUTE_GC_INTERVAL,
-	NET_IPV6_ROUTE_GC_ELASTICITY,
+/*7*/	NET_IPV6_ROUTE_GC_ELASTICITY,
 };
 
 enum {
-	NET_IPV6_FORWARDING = 1,
+/*1*/	NET_IPV6_FORWARDING = 1,
 	NET_IPV6_HOP_LIMIT,
 	NET_IPV6_MTU,
 	NET_IPV6_ACCEPT_RA,
@@ -247,12 +264,12 @@ enum {
 	NET_IPV6_DAD_TRANSMITS,
 	NET_IPV6_RTR_SOLICITS,
 	NET_IPV6_RTR_SOLICIT_INTERVAL,
-	NET_IPV6_RTR_SOLICIT_DELAY,
+/*10*/	NET_IPV6_RTR_SOLICIT_DELAY,
 };
 
 /* /proc/sys/net/<protocol>/neigh/<dev> */
 enum {
-	NET_NEIGH_MCAST_SOLICIT=1,
+/*1*/	NET_NEIGH_MCAST_SOLICIT=1,
 	NET_NEIGH_UCAST_SOLICIT,
 	NET_NEIGH_APP_SOLICIT,
 	NET_NEIGH_RETRANS_TIME,
@@ -261,13 +278,13 @@ enum {
 	NET_NEIGH_GC_STALE_TIME,
 	NET_NEIGH_UNRES_QLEN,
 	NET_NEIGH_PROXY_QLEN,
-	NET_NEIGH_ANYCAST_DELAY,
+/*10*/	NET_NEIGH_ANYCAST_DELAY,
 	NET_NEIGH_PROXY_DELAY,
 	NET_NEIGH_LOCKTIME,
 	NET_NEIGH_GC_INTERVAL,
 	NET_NEIGH_GC_THRESH1,
 	NET_NEIGH_GC_THRESH2,
-	NET_NEIGH_GC_THRESH3
+/*16*/	NET_NEIGH_GC_THRESH3
 };
 
 /* /proc/sys/net/ipx */
@@ -275,16 +292,16 @@ enum {
 
 /* /proc/sys/net/appletalk */
 enum {
-	NET_ATALK_AARP_EXPIRY_TIME = 1,
+/*1*/	NET_ATALK_AARP_EXPIRY_TIME = 1,
 	NET_ATALK_AARP_TICK_TIME,
 	NET_ATALK_AARP_RETRANSMIT_LIMIT,
-	NET_ATALK_AARP_RESOLVE_TIME,
+/*4*/	NET_ATALK_AARP_RESOLVE_TIME,
 };
 
 
 /* /proc/sys/net/netrom */
 enum {
-	NET_NETROM_DEFAULT_PATH_QUALITY = 1,
+/*1*/	NET_NETROM_DEFAULT_PATH_QUALITY = 1,
 	NET_NETROM_OBSOLESCENCE_COUNT_INITIALISER,
 	NET_NETROM_NETWORK_TTL_INITIALISER,
 	NET_NETROM_TRANSPORT_TIMEOUT,
@@ -293,13 +310,13 @@ enum {
 	NET_NETROM_TRANSPORT_BUSY_DELAY,
 	NET_NETROM_TRANSPORT_REQUESTED_WINDOW_SIZE,
 	NET_NETROM_TRANSPORT_NO_ACTIVITY_TIMEOUT,
-	NET_NETROM_ROUTING_CONTROL,
-	NET_NETROM_LINK_FAILS_COUNT
+/*10*/	NET_NETROM_ROUTING_CONTROL,
+/*11*/	NET_NETROM_LINK_FAILS_COUNT
 };
 
 /* /proc/sys/net/ax25 */
 enum {
-	NET_AX25_IP_DEFAULT_MODE = 1,
+/*1*/	NET_AX25_IP_DEFAULT_MODE = 1,
 	NET_AX25_DEFAULT_MODE,
 	NET_AX25_BACKOFF_TYPE,
 	NET_AX25_CONNECT_MODE,
@@ -308,50 +325,50 @@ enum {
 	NET_AX25_T1_TIMEOUT,
 	NET_AX25_T2_TIMEOUT,
 	NET_AX25_T3_TIMEOUT,
-	NET_AX25_IDLE_TIMEOUT,
+/*10*/	NET_AX25_IDLE_TIMEOUT,
 	NET_AX25_N2,
 	NET_AX25_PACLEN,
 	NET_AX25_PROTOCOL,
-	NET_AX25_DAMA_SLAVE_TIMEOUT
+/*14*/	NET_AX25_DAMA_SLAVE_TIMEOUT
 };
 
 /* /proc/sys/net/rose */
 enum {
-	NET_ROSE_RESTART_REQUEST_TIMEOUT = 1,
+/*1*/	NET_ROSE_RESTART_REQUEST_TIMEOUT = 1,
 	NET_ROSE_CALL_REQUEST_TIMEOUT,
 	NET_ROSE_RESET_REQUEST_TIMEOUT,
 	NET_ROSE_CLEAR_REQUEST_TIMEOUT,
-	NET_ROSE_NO_ACTIVITY_TIMEOUT,
 	NET_ROSE_ACK_HOLD_BACK_TIMEOUT,
 	NET_ROSE_ROUTING_CONTROL,
 	NET_ROSE_LINK_FAIL_TIMEOUT,
 	NET_ROSE_MAX_VCS,
-	NET_ROSE_WINDOW_SIZE
+	NET_ROSE_WINDOW_SIZE,
+/*10*/	NET_ROSE_NO_ACTIVITY_TIMEOUT,
 };
 
 /* /proc/sys/net/x25 */
 enum {
-	NET_X25_RESTART_REQUEST_TIMEOUT = 1,
+/*1*/	NET_X25_RESTART_REQUEST_TIMEOUT = 1,
 	NET_X25_CALL_REQUEST_TIMEOUT,
 	NET_X25_RESET_REQUEST_TIMEOUT,
 	NET_X25_CLEAR_REQUEST_TIMEOUT,
-	NET_X25_ACK_HOLD_BACK_TIMEOUT
+/*5*/	NET_X25_ACK_HOLD_BACK_TIMEOUT
 };
 
 /* /proc/sys/net/token-ring */
 enum
 {
-	NET_TR_RIF_TIMEOUT=1
+/*1*/	NET_TR_RIF_TIMEOUT=1
 };
 
 /* /proc/sys/net/decnet */
 enum {
-	NET_DECNET_DEF_T3_BROADCAST = 1,
+/*1*/	NET_DECNET_DEF_T3_BROADCAST = 1,
 	NET_DECNET_DEF_T3_POINTTOPOINT,
 	NET_DECNET_DEF_T1,
 	NET_DECNET_DEF_BCT1,
 	NET_DECNET_CACHETIMEOUT,
-	NET_DECNET_DEBUG_LEVEL
+/*6*/	NET_DECNET_DEBUG_LEVEL
 };
 
 /* CTL_PROC names: */
@@ -359,7 +376,7 @@ enum {
 /* CTL_FS names: */
 enum
 {
-	FS_NRINODE=1,		/* int: current number of allocated inodes */
+/*1*/	FS_NRINODE=1,		/* int: current number of allocated inodes */
 	FS_STATINODE,
 	FS_MAXINODE,		/* int: maximum number of inodes that can be allocated */
 	FS_NRDQUOT,		/* int: current number of allocated dquots */
@@ -367,18 +384,21 @@ enum
 	FS_NRFILE,		/* int: current number of allocated filedescriptors */
 	FS_MAXFILE,		/* int: maximum number of filedescriptors that can be allocated */
 	FS_DENTRY,
+	FS_NRSUPER,		/* int: current number of allocated super_blocks */
+/*10*/	FS_MAXSUPER,		/* int: maximum number of super_blocks that can be allocated */
 };
 
 /* CTL_DEBUG names: */
 
 /* CTL_DEV names: */
 enum {
-	DEV_CDROM = 1,
+/*1*/	DEV_CDROM = 1,
+/*2*/	DEV_HWMON,
 };
 
 /* /proc/sys/dev/cdrom */
 enum {
-	DEV_CDROM_INFO = 1,
+/*1*/	DEV_CDROM_INFO = 1,
 };
 
 #ifdef __KERNEL__

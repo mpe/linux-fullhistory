@@ -1888,6 +1888,41 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 		        return vgrab(btv, &vm);
 		}
+		
+		case VIDIOCGMBUF:
+		{
+			struct video_mbuf vm;
+			memset(&vm, 0 , sizeof(vm));
+			vm.size=BTTV_MAX_FBUF*2;
+			vm.frames=2;
+			vm.offsets[0]=0;
+			vm.offsets[1]=BTTV_MAX_FBUF;
+			if(copy_to_user((void *)arg, (void *)&vm, sizeof(vm)))
+				return -EFAULT;
+			return 0;
+		}
+		
+		case VIDIOCGUNIT:
+		{
+			struct video_unit vu;
+			vu.video=btv->video_dev.minor;
+			vu.vbi=btv->vbi_dev.minor;
+			if(btv->radio_dev.minor!=-1)
+				vu.radio=btv->radio_dev.minor;
+			else
+				vu.radio=VIDEO_NO_UNIT;
+			vu.audio=VIDEO_NO_UNIT;
+			if(btv->have_msp3400)
+			{
+				i2c_control_device(&(btv->i2c), I2C_DRIVERID_MSP3400,
+					MSP_GET_UNIT, &vu.audio);
+			}
+			vu.teletext=VIDEO_NO_UNIT;
+			if(copy_to_user((void *)arg, (void *)&vu, sizeof(vu)))
+				return -EFAULT;
+			return 0;
+		}
+		
 		default:
 			return -ENOIOCTLCMD;
 	}
@@ -1949,7 +1984,7 @@ static struct video_device bttv_template=
 	bttv_init_done,
 	NULL,
 	0,
-	0
+	-1
 };
 
 
@@ -2054,7 +2089,7 @@ static struct video_device vbi_template=
 	bttv_init_done,
 	NULL,
 	0,
-	0
+	-1
 };
 
 
@@ -2151,7 +2186,7 @@ static struct video_device radio_template=
 	bttv_init_done,      /* just returns 0 */
 	NULL,
 	0,
-	0
+	-1
 };
 
 
@@ -2979,9 +3014,11 @@ static void release_bttv(void)
 		if (btv->bt848_mem)
 			iounmap(btv->bt848_mem);
 
-		video_unregister_device(&btv->video_dev);
-		video_unregister_device(&btv->vbi_dev);
-		if (radio)
+		if(btv->video_dev.minor!=-1)
+			video_unregister_device(&btv->video_dev);
+		if(btv->vbi_dev.minor!=-1)
+			video_unregister_device(&btv->vbi_dev);
+		if (radio && btv->radio_dev.minor != -1)
 			video_unregister_device(&btv->radio_dev);
 	}
 }

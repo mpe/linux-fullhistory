@@ -45,8 +45,9 @@
  *                     should be detected. This results in strange behaviour of some mixer
  *                     settings, like master volume and mic.
  *    08.06.98   0.2   First release using Alan Cox' soundcore instead of miscdevice
- *
- *
+ *    03.08.98   0.3   Do not include modversions.h
+ *                     Now mixer behaviour can basically be selected between
+ *                     "OSS documented" and "OSS actual" behaviour
  *
  */
 
@@ -54,7 +55,6 @@
       
 #include <linux/version.h>
 #include <linux/module.h>
-#include <linux/modversions.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/sched.h>
@@ -70,6 +70,10 @@
 #include <asm/spinlock.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
+
+/* --------------------------------------------------------------------- */
+
+#undef OSS_DOCUMENTED_MIXER_SEMANTICS
 
 /* --------------------------------------------------------------------- */
 
@@ -325,6 +329,9 @@ struct es1371_state {
 	struct {
 		unsigned short codec_id;
 		unsigned int modcnt;
+#ifndef OSS_DOCUMENTED_MIXER_SEMANTICS
+		unsigned short vol[13];
+#endif /* OSS_DOCUMENTED_MIXER_SEMANTICS */
 	} mix;
 
 	/* wave stuff */
@@ -373,7 +380,7 @@ struct es1371_state {
 
 /* --------------------------------------------------------------------- */
 
-struct es1371_state *devs = NULL;
+static struct es1371_state *devs = NULL;
 
 /* --------------------------------------------------------------------- */
 
@@ -704,7 +711,7 @@ static void start_adc(struct es1371_state *s)
 
 /* --------------------------------------------------------------------- */
 
-#define DMABUF_DEFAULTORDER 8
+#define DMABUF_DEFAULTORDER (17-PAGE_SHIFT)
 #define DMABUF_MINORDER 1
 
 
@@ -982,7 +989,7 @@ static const unsigned int recsrc[8] =
 	SOUND_MASK_PHONEIN
 };
 
-static const unsigned char volreg[] = 
+static const unsigned char volreg[SOUND_MIXER_NRDEVICES] = 
 {
 	/* 5 bit stereo */
 	[SOUND_MIXER_LINE] = 0x10,
@@ -1005,6 +1012,8 @@ static const unsigned char volreg[] =
 	/* 4 bit mono */
 	[SOUND_MIXER_IGAIN] = 0x1e
 };
+
+#ifdef OSS_DOCUMENTED_MIXER_SEMANTICS
 
 #define swab(x) ((((x) >> 8) & 0xff) | (((x) << 8) & 0xff00))
 
@@ -1092,6 +1101,34 @@ static int mixer_rdch(struct es1371_state *s, unsigned int ch, int *arg)
 		return -EINVAL;
 	}
 }
+
+#else /* OSS_DOCUMENTED_MIXER_SEMANTICS */
+
+static const unsigned char volidx[SOUND_MIXER_NRDEVICES] = 
+{
+	/* 5 bit stereo */
+	[SOUND_MIXER_LINE] = 1,
+	[SOUND_MIXER_CD] = 2,
+	[SOUND_MIXER_VIDEO] = 3,
+	[SOUND_MIXER_LINE1] = 4,
+	[SOUND_MIXER_PCM] = 5,
+	/* 6 bit stereo */
+	[SOUND_MIXER_VOLUME] = 6,
+	[SOUND_MIXER_PHONEOUT] = 7,
+	/* 6 bit mono */
+	[SOUND_MIXER_OGAIN] = 8,
+	[SOUND_MIXER_PHONEIN] = 9,
+	/* 4 bit mono but shifted by 1 */
+	[SOUND_MIXER_SPEAKER] = 10,
+	/* 6 bit mono + preamp */
+	[SOUND_MIXER_MIC] = 11,
+	/* 4 bit stereo */
+	[SOUND_MIXER_RECLEV] = 12,
+	/* 4 bit mono */
+	[SOUND_MIXER_IGAIN] = 13
+};
+
+#endif /* OSS_DOCUMENTED_MIXER_SEMANTICS */
 
 static int mixer_wrch(struct es1371_state *s, unsigned int ch, int val)
 {
@@ -1295,7 +1332,13 @@ static int mixer_ioctl(struct es1371_state *s, unsigned int cmd, unsigned long a
 			i = _IOC_NR(cmd);
                         if (i >= SOUND_MIXER_NRDEVICES)
                                 return -EINVAL;
+#ifdef OSS_DOCUMENTED_MIXER_SEMANTICS
 			return mixer_rdch(s, i, (int *)arg);
+#else /* OSS_DOCUMENTED_MIXER_SEMANTICS */
+			if (!volidx[i])
+				return -EINVAL;
+			return put_user(s->mix.vol[volidx[i]-1], (int *)arg);
+#endif /* OSS_DOCUMENTED_MIXER_SEMANTICS */
 		}
 	}
         if (_IOC_DIR(cmd) != (_IOC_READ|_IOC_WRITE)) 
@@ -1324,7 +1367,14 @@ static int mixer_ioctl(struct es1371_state *s, unsigned int cmd, unsigned long a
 		get_user_ret(val, (int *)arg, -EFAULT);
 		if (mixer_wrch(s, i, val))
 			return -EINVAL;
+#ifdef OSS_DOCUMENTED_MIXER_SEMANTICS
 		return mixer_rdch(s, i, (int *)arg);
+#else /* OSS_DOCUMENTED_MIXER_SEMANTICS */
+		if (!volidx[i])
+			return -EINVAL;
+		s->mix.vol[volidx[i]-1] = val;
+		return put_user(s->mix.vol[volidx[i]-1], (int *)arg);
+#endif /* OSS_DOCUMENTED_MIXER_SEMANTICS */
 	}
 }
 
@@ -2662,7 +2712,7 @@ __initfunc(int init_es1371(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.2 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.3 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 
@@ -2818,11 +2868,7 @@ __initfunc(int init_es1371(void))
 #ifdef MODULE
 
 MODULE_PARM(joystick, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(joystick, "if 1 enables joystick interface (still need separate driver)");
-MODULE_PARM(lineout, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(lineout, "if 1 the LINE input is converted to LINE out");
-MODULE_PARM(micz, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(micz, "changes (??) the microphone impedance");
+MODULE_PARM_DESC(joystick, "sets address and enables joystick interface (still need separate driver)");
 
 MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
 MODULE_DESCRIPTION("ES1371 AudioPCI97 Driver");

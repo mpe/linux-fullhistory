@@ -68,7 +68,10 @@ static int do_remount_sb(struct super_block *sb, int flags, char * data);
 /* this is initialized in init/main.c */
 kdev_t ROOT_DEV;
 
-struct super_block super_blocks[NR_SUPER];
+int nr_super_blocks = 0;
+int max_super_blocks = NR_SUPER;
+LIST_HEAD(super_blocks);
+
 static struct file_system_type *file_systems = (struct file_system_type *) NULL;
 struct vfsmount *vfsmntlist = (struct vfsmount *) NULL;
 static struct vfsmount *vfsmnttail = (struct vfsmount *) NULL,
@@ -446,7 +449,9 @@ void sync_supers(kdev_t dev)
 {
 	struct super_block * sb;
 
-	for (sb = super_blocks + 0 ; sb < super_blocks + NR_SUPER ; sb++) {
+	for (sb = sb_entry(super_blocks.next);
+	     sb != sb_entry(&super_blocks); 
+	     sb = sb_entry(sb->s_list.next)) {
 		if (!sb->s_dev)
 			continue;
 		if (dev && sb->s_dev != dev)
@@ -471,15 +476,15 @@ struct super_block * get_super(kdev_t dev)
 	if (!dev)
 		return NULL;
 restart:
-	s = 0+super_blocks;
-	while (s < NR_SUPER+super_blocks)
+	s = sb_entry(super_blocks.next);
+	while (s != sb_entry(&super_blocks))
 		if (s->s_dev == dev) {
 			wait_on_super(s);
 			if (s->s_dev == dev)
 				return s;
 			goto restart;
 		} else
-			s++;
+			s = sb_entry(s->s_list.next);
 	return NULL;
 }
 
@@ -519,16 +524,28 @@ out:
  */
 static struct super_block *get_empty_super(void)
 {
-	struct super_block *s = 0+super_blocks;
+	struct super_block *s;
 
-	for (; s < NR_SUPER+super_blocks; s++) {
+	for (s  = sb_entry(super_blocks.next);
+	     s != sb_entry(&super_blocks); 
+	     s  = sb_entry(s->s_list.next)) {
 		if (s->s_dev)
 			continue;
 		if (!s->s_lock)
 			return s;
 		printk("VFS: empty superblock %p locked!\n", s);
 	}
-	return NULL;
+	/* Need a new one... */
+	if (nr_super_blocks >= max_super_blocks)
+		return NULL;
+	s = kmalloc(sizeof(struct super_block),  GFP_USER);
+	nr_super_blocks++;
+	if (s) {
+		memset(s, 0, sizeof(struct super_block));
+		INIT_LIST_HEAD(&s->s_dirty);
+		list_add (&s->s_list, super_blocks.prev);
+	}
+	return s;
 }
 
 static struct super_block * read_super(kdev_t dev,const char *name,int flags,
@@ -1112,7 +1129,7 @@ clean_up:
 	goto dput_and_out;
 }
 
-__initfunc(static void do_mount_root(void))
+__initfunc(void mount_root(void))
 {
 	struct file_system_type * fs_type;
 	struct super_block * sb;
@@ -1120,7 +1137,7 @@ __initfunc(static void do_mount_root(void))
 	struct inode * d_inode = NULL;
 	struct file filp;
 	int retval;
-  
+
 #ifdef CONFIG_ROOT_NFS
 	if (MAJOR(ROOT_DEV) == UNNAMED_MAJOR) {
 		ROOT_DEV = 0;
@@ -1207,22 +1224,6 @@ __initfunc(static void do_mount_root(void))
 }
 
 
-__initfunc(void mount_root(void))
-{
-	struct super_block * sb = super_blocks;
-	int i;
-
-	memset(super_blocks, 0, sizeof(super_blocks));
-	/*
-	 * Initialize the dirty inode list headers for the super blocks
-	 */
-	for (i = NR_SUPER ; i-- ; sb++)
-		INIT_LIST_HEAD(&sb->s_dirty);
-
-	do_mount_root();
-}
-
-
 #ifdef CONFIG_BLK_DEV_INITRD
 
 extern int initmem_freed;
@@ -1242,7 +1243,7 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 		return -EBUSY;
 	}
 	ROOT_DEV = new_root_dev;
-	do_mount_root();
+	mount_root();
 	dput(old_root);
 	dput(old_pwd);
 #if 1

@@ -1070,6 +1070,10 @@ static int msp3400c_command(struct i2c_device *device,
 			(int)msp3400c_read(msp->bus, I2C_MSP3400C_DFP, 0x1c);
 		UNLOCK_I2C_BUS(msp->bus);
 		break;
+		
+	case MSP_GET_UNIT:
+		*iarg = msp->mixer;
+		break;
 	
 	default:
 		return -EINVAL;

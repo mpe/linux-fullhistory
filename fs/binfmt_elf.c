@@ -1193,8 +1193,9 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	notes[1].type = NT_PRPSINFO;
 	notes[1].datasz = sizeof(psinfo);
 	notes[1].data = &psinfo;
-	psinfo.pr_state = current->state;
-	psinfo.pr_sname = (current->state < 0 || current->state > 5) ? '.' : "RSDZTD"[current->state];
+	i = current->state ? ffz(~current->state) + 1 : 0;
+	psinfo.pr_state = i;
+	psinfo.pr_sname = (i < 0 || i > 5) ? '.' : "RSDZTD"[i];
 	psinfo.pr_zomb = psinfo.pr_sname == 'Z';
 	psinfo.pr_nice = current->priority-15;
 	psinfo.pr_flag = current->flags;

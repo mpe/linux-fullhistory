@@ -169,7 +169,7 @@ int opl3_detect(int ioaddr, int *osp)
 
 	if (devc == NULL)
 	{
-		printk(KERN_ERR "OPL3: Can't allocate memory for the device control "
+		printk(KERN_ERR "opl3: Can't allocate memory for the device control "
 			"structure \n ");
 		return 0;
 	}
@@ -495,7 +495,7 @@ static int opl3_start_note (int dev, int voice, int note, int volume)
 
 	if (instr->channel < 0)
 	{
-		printk(KERN_WARNING "OPL3: Initializing voice %d with undefined instrument\n", voice);
+		printk(KERN_WARNING "opl3: Initializing voice %d with undefined instrument\n", voice);
 		return 0;
 	}
 
@@ -1091,7 +1091,7 @@ int opl3_init(int ioaddr, int *osp)
 
 	if (devc == NULL)
 	{
-		printk(KERN_ERR "opl3_init: Device control structure not initialized.\n");
+		printk(KERN_ERR "opl3: Device control structure not initialized.\n");
 		return -1;
 	}
 
@@ -1137,16 +1137,15 @@ int opl3_init(int ioaddr, int *osp)
 
 	if (devc->model == 2)
 	{
-		if (devc->is_opl4)
-			conf_printf2("Yamaha OPL4/OPL3 FM", ioaddr, 0, -1, -1);
-		else
-			conf_printf2("Yamaha OPL3 FM", ioaddr, 0, -1, -1);
+		if (devc->is_opl4) 
+			strcpy(devc->fm_info.name, "Yamaha OPL4/OPL3 FM");
+		else 
+			strcpy(devc->fm_info.name, "Yamaha OPL3");
 
 		devc->v_alloc->max_voice = devc->nr_voice = 18;
 		devc->fm_info.nr_drums = 0;
 		devc->fm_info.synth_subtype = FM_TYPE_OPL3;
 		devc->fm_info.capabilities |= SYNTH_CAP_OPL3;
-		strcpy(devc->fm_info.name, "Yamaha OPL-3");
 
 		for (i = 0; i < 18; i++)
 		{
@@ -1160,13 +1159,14 @@ int opl3_init(int ioaddr, int *osp)
 	}
 	else
 	{
-		conf_printf2("Yamaha OPL2 FM", ioaddr, 0, -1, -1);
+		strcpy(devc->fm_info.name, "Yamaha OPL2");
 		devc->v_alloc->max_voice = devc->nr_voice = 9;
 		devc->fm_info.nr_drums = 0;
 
 		for (i = 0; i < 18; i++)
 			pv_map[i].ioaddr = devc->left_io;
 	};
+	conf_printf2(devc->fm_info.name, ioaddr, 0, -1, -1);
 
 	for (i = 0; i < SBFM_MAXINSTR; i++)
 		devc->i_map[i].channel = -1;
@@ -1185,14 +1185,21 @@ int me;
 
 int init_module (void)
 {
-	printk("YM3812 and OPL-3 driver Copyright (C) by Hannu Savolainen, Rob Hooft 1993-1996\n");
+	printk(KERN_INFO "YM3812 and OPL-3 driver Copyright (C) by Hannu Savolainen, Rob Hooft 1993-1996\n");
 	if (io != -1)	/* User loading pure OPL3 module */
 	{
+    		if (check_region(io, 4))
+    		{
+			printk(KERN_WARNING "opl3: I/O port 0x%x already in use\n", io);
+			return 0;
+    		}
 		if (!opl3_detect(io, NULL))
 		{
 			return -ENODEV;
 		}
 		me = opl3_init(io, NULL);
+		request_region(io,4,devc->fm_info.name);
+
 	}
 	SOUND_LOCK;
 	return 0;
@@ -1202,6 +1209,8 @@ void cleanup_module(void)
 {
 	if (devc)
 	{
+		if(devc->base)
+			release_region(devc->base,4);
 		kfree(devc);
 		devc = NULL;
 		sound_unload_synthdev(me);

@@ -7,7 +7,7 @@
 /*
  * This file handles the generic file mmap semantics used by
  * most "normal" filesystems (but you don't /have/ to use this:
- * the NFS filesystem does this differently, for example)
+ * the NFS filesystem used to do this differently, for example)
  */
 #include <linux/stat.h>
 #include <linux/sched.h>
@@ -172,12 +172,10 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 				break;
 			}
 			age_page(page);
-#if 0
 			if (page->age)
 				break;
 			if (page_cache_size * 100 < (page_cache.min_percent * num_physpages))
 				break;
-#endif
 			if (PageSwapCache(page)) {
 				delete_from_swap_cache(page);
 				return 1;
@@ -213,8 +211,8 @@ int shrink_mmap(int priority, int gfp_mask)
 	struct page * page;
 	int count_max, count_min;
 
-	count_max = (limit<<1) >> (priority>>1);
-	count_min = (limit<<1) >> (priority);
+	count_max = (limit<<2) >> (priority>>1);
+	count_min = (limit<<2) >> (priority);
 
 	page = mem_map + clock;
 	do {

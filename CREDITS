@@ -1193,13 +1193,12 @@ S: D-90453 Nuernberg
 S: Germany
 
 N: Michael Meskes
-E: meskes@topsystem.de
+E: meskes@debian.org
 P: 1024/04B6E8F5 6C 77 33 CA CC D6 22 03  AB AB 15 A3 AE AD 39 7D
-D: Kernel hacker. Software watchdog daemon.
+D: Kernel hacker. PostgreSQL hacker. Software watchdog daemon.
 D: Maintainer of several Debian packages
-S: topsystem Systemhaus GmbH
-S: Europark A2, Adenauerstr. 20
-S: D-52146 Wuerselen
+S: Th.-Heuss-Str. 61 
+S: D-41812 Erkelenz
 S: Germany
 
 N: Nigel Metheringham
@@ -1944,6 +1943,14 @@ D: ALS-007 sound card extensions to Sound Blaster driver
 S: 4/36 Trevelyan St
 S: Wayville SA 5034
 S: Australia
+
+N: Clifford Wolf
+E: god@clifford.at
+W: http://www.clifford.at/
+D: Menuconfig/lxdialog improvement
+S: Foehrengasse 16
+S: A-2333 Leopoldsdorf b. Wien
+S: Austria
 
 N: Roger E. Wolff
 E: R.E.Wolff@BitWizard.nl

@@ -36,7 +36,7 @@
  * Note: on machines with low memory we should probably use a smaller
  * MAXREQS value: At 32 outstanding reqs with 8 megs of RAM, fragment
  * reassembly will frequently run out of memory.
- * Come Linux 2.1, we'll handle fragments directly.
+ * Come Linux 2.3, we'll handle fragments directly.
  */
 #define RPC_MAXCONG		16
 #define RPC_MAXREQS		(RPC_MAXCONG + 1)
@@ -103,6 +103,12 @@ struct rpc_rqst {
 	 * For authentication (e.g. auth_des)
 	 */
 	u32			rq_creddata[2];
+	
+	/*
+	 * Partial send handling
+	 */
+	
+	u32			rq_bytes_sent;	/* Bytes we have sent */
 
 #ifdef RPC_PROFILE
 	unsigned long		rq_xtime;	/* when transmitted */
@@ -166,6 +172,8 @@ struct rpc_xprt {
 	 */
 	struct rpc_iov		snd_buf;	/* send buffer */
 	struct rpc_task *	snd_task;	/* Task blocked in send */
+	u32			snd_sent;	/* Bytes we have sent */
+
 
 	void			(*old_data_ready)(struct sock *, int);
 	void			(*old_state_change)(struct sock *);

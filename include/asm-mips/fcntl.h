@@ -29,6 +29,8 @@
 
 #define F_SETOWN	24	/*  for sockets. */
 #define F_GETOWN	23	/*  for sockets. */
+#define F_SETSIG	10	/*  for sockets. */
+#define F_GETSIG	11	/*  for sockets. */
 
 /* for F_[GET|SET]FL */
 #define FD_CLOEXEC	1	/* actually anything with low bit set goes */

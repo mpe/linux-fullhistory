@@ -286,6 +286,10 @@
 #define BT848_RISC_COUNT       0x120
 #define BT848_GPIO_DATA        0x200
 
+/* Bt878 register */
+
+#define BT878_DEVCTRL 0x40
+#define BT878_NTBF 0x02
 
 /* Bt848 RISC commands */
 

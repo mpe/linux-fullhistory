@@ -846,12 +846,16 @@ static int      sound[20] = {
 
 #ifdef MODULE
 
+int traceinit = 0;
+MODULE_PARM(traceinit, "i");
+
 int init_module(void)
 {
 	int             err;
 	int             ints[21];
 	int             i;
 
+	trace_init=traceinit;
 	/*
 	 * "sound=" command line handling by Harald Milz.
 	 */

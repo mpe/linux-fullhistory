@@ -751,7 +751,7 @@ static inline void handle_bridge(struct sk_buff *skb, unsigned short type)
 
 		if(br_receive_frame(skb))
 			return;
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 	return;
 }

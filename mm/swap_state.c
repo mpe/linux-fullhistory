@@ -85,7 +85,7 @@ int add_to_swap_cache(struct page *page, unsigned long entry)
 }
 
 /*
- * If swap_map[] reaches 127, the entries are treated as "permanent".
+ * If swap_map[] reaches SWAP_MAP_MAX the entries are treated as "permanent".
  */
 void swap_duplicate(unsigned long entry)
 {
@@ -105,14 +105,14 @@ void swap_duplicate(unsigned long entry)
 		goto bad_offset;
 	if (!p->swap_map[offset])
 		goto bad_unused;
-	if (p->swap_map[offset] < 126)
+	if (p->swap_map[offset] < SWAP_MAP_MAX)
 		p->swap_map[offset]++;
 	else {
 		static int overflow = 0;
 		if (overflow++ < 5)
 			printk("swap_duplicate: entry %08lx map count=%d\n",
 				entry, p->swap_map[offset]);
-		p->swap_map[offset] = 127;
+		p->swap_map[offset] = SWAP_MAP_MAX;
 	}
 #ifdef DEBUG_SWAP
 	printk("DebugVM: swap_duplicate(entry %08lx, count now %d)\n",

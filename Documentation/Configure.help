@@ -4354,6 +4354,58 @@ CONFIG_WAVELAN
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+AIMSlab RadioTrack (aka RadioReveal) support
+CONFIG_RADIO_RTRACK
+  Choose Y here if you have one of these FM radio cards, and then fill
+  in the port address below.
+
+  In order to control your radio card, you will need to use programs
+  that are compatible with the Video for Linux API.  Information on 
+  this API and pointers to "v4l" programs may be found on the WWW at
+  http://roadrunner.swansea.uk.linux.org/v4l.shtml; to browse the WWW,
+  you need to have access to a machine on the Internet that has a 
+  program like lynx or netscape.
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called radio-aimslab.o.
+
+RadioTrack i/o port
+CONFIG_RADIO_RTRACK_PORT
+  Enter either 0x30f or 0x20f here.  The card default is 0x30f, if you
+  haven't changed the jumper setting on the card.
+
+Aztech/Packard Bell Radio
+CONFIG_RADIO_AZTECH
+  Choose Y here if you have one of these FM radio cards, and then fill
+  in the port address below.
+  
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called radio-aztech.o.
+
+Aztech/Packard Bell radio card i/o port
+CONFIG_RADIO_AZTECH_PORT
+  Enter either 0x350 or 0x358 here.  The card default is 0x350, if you
+  haven't changed the setting of jumper JP3 on the card.  Removing the
+  jumper sets the card to 0x358.
+
+SF16FMI Radio
+CONFIG_RADIO_SF16FMI
+  Choose Y here if you have one of these FM radio cards, and then fill
+  in the port address below.
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called radio-sf16fmi.o
+
+SF16FMI I/O port (0x284 or 0x384)
+CONFIG_RADIO_SF16FMI_PORT
+  Enter the I/O port of your SF16FMI radio card.
+
 LAPB over Ethernet driver
 CONFIG_LAPBETHER
   This is a driver for a pseudo device (typically called /dev/lapb0)
@@ -9244,6 +9296,10 @@ CONFIG_RADIO_RTRACK
   Choose Y here if you have one of these FM radio cards, and then fill
   in the port address below.
 
+  Note that newer AIMSlab RadioTrack cards have a different chipset,
+  not supported by this driver.  For these cards, use the RadioTrack II
+  driver below.  
+
   In order to control your radio card, you will need to use programs
   that are compatible with the Video for Linux API.  Information on 
   this API and pointers to "v4l" programs may be found on the WWW at
@@ -9259,6 +9315,28 @@ CONFIG_RADIO_RTRACK
 RadioTrack i/o port
 CONFIG_RADIO_RTRACK_PORT
   Enter either 0x30f or 0x20f here.  The card default is 0x30f, if you
+  haven't changed the jumper setting on the card.
+
+AIMSlab RadioTrack II support
+CONFIG_RADIO_RTRACK2
+  Choose Y here if you have this FM radio card, and then fill in the 
+  port address below.
+
+  In order to control your radio card, you will need to use programs
+  that are compatible with the Video for Linux API.  Information on 
+  this API and pointers to "v4l" programs may be found on the WWW at
+  http://roadrunner.swansea.uk.linux.org/v4l.shtml; to browse the WWW,
+  you need to have access to a machine on the Internet that has a 
+  program like lynx or netscape.
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called radio-rtrack2.o.
+
+RadioTrack II i/o port
+CONFIG_RADIO_RTRACK2_PORT
+  Enter either 0x30c or 0x20c here.  The card default is 0x30c, if you
   haven't changed the jumper setting on the card.
 
 Aztech/Packard Bell Radio

@@ -39,16 +39,17 @@ struct poll_table_struct;
 #undef NR_OPEN
 #define NR_OPEN 1024
 
-#define NR_SUPER 64
 #define BLOCK_SIZE_BITS 10
 #define BLOCK_SIZE (1<<BLOCK_SIZE_BITS)
 
 /* And dynamically-tunable limits and defaults: */
 extern int max_inodes;
 extern int max_files, nr_files, nr_free_files;
+extern int max_super_blocks, nr_super_blocks;
 
 #define NR_FILE  4096	/* this can well be larger on a larger system */
 #define NR_RESERVED_FILES 10 /* reserved for root */
+#define NR_SUPER 256
 
 #define MAY_EXEC 1
 #define MAY_WRITE 2
@@ -400,6 +401,7 @@ static inline void mark_inode_dirty(struct inode *inode)
 struct fown_struct {
 	int pid;		/* pid or -pgrp where SIGIO should be sent */
 	uid_t uid, euid;	/* uid/euid of process setting the owner */
+	int signum;		/* posix.1b rt signal to be delivered on IO */
 };
 
 struct file {
@@ -509,13 +511,14 @@ extern inline int locks_verify_area(int read_write, struct inode *inode,
 
 struct fasync_struct {
 	int    magic;
+	int    fa_fd;
 	struct fasync_struct	*fa_next; /* singly linked list */
 	struct file 		*fa_file;
 };
 
 #define FASYNC_MAGIC 0x4601
 
-extern int fasync_helper(struct file *, int, struct fasync_struct **);
+extern int fasync_helper(int, struct file *, int, struct fasync_struct **);
 
 #include <linux/minix_fs_sb.h>
 #include <linux/ext2_fs_sb.h>
@@ -532,7 +535,11 @@ extern int fasync_helper(struct file *, int, struct fasync_struct **);
 #include <linux/hfs_fs_sb.h>
 #include <linux/adfs_fs_sb.h>
 
+extern struct list_head super_blocks;
+
+#define sb_entry(list)	list_entry((list), struct super_block, s_list)
 struct super_block {
+	struct list_head	s_list;		/* Keep this first */
 	kdev_t			s_dev;
 	unsigned long		s_blocksize;
 	unsigned char		s_blocksize_bits;
@@ -591,7 +598,7 @@ struct file_operations {
 	int (*open) (struct inode *, struct file *);
 	int (*release) (struct inode *, struct file *);
 	int (*fsync) (struct file *, struct dentry *);
-	int (*fasync) (struct file *, int);
+	int (*fasync) (int, struct file *, int);
 	int (*check_media_change) (kdev_t dev);
 	int (*revalidate) (kdev_t dev);
 	int (*lock) (struct file *, int, struct file_lock *);
@@ -704,7 +711,6 @@ extern int fs_may_remount_ro(struct super_block *);
 extern int fs_may_mount(kdev_t dev);
 
 extern struct file *inuse_filps;
-extern struct super_block super_blocks[NR_SUPER];
 
 extern void refile_buffer(struct buffer_head * buf);
 extern void set_writetime(struct buffer_head * buf, int flag);

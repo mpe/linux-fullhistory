@@ -352,6 +352,7 @@ __rpc_atrun(struct rpc_task *task)
 /*
  * This is the RPC `scheduler' (or rather, the finite state machine).
  */
+
 static int
 __rpc_execute(struct rpc_task *task)
 {
@@ -415,10 +416,16 @@ __rpc_execute(struct rpc_task *task)
 				printk("RPC: rpciod waiting on sync task!\n");
 			current->timeout = 0;
 			sleep_on(&task->tk_wait);
-
+			
 			/* When the task received a signal, remove from
-			 * any queues etc, and make runnable again. */
-			if (0 && signalled())
+			 * any queues etc, and make runnable again.
+			 *
+			 * The "intr" property isnt handled here. rpc_do_call
+			 * has changed the signal mask of the process for
+			 * a synchronous rpc call. If a signal gets through
+			 * this then its real.
+			 */
+			if (signalled())
 				__rpc_wake_up(task);
 
 			dprintk("RPC: %4d sync task resuming\n",
@@ -432,7 +439,7 @@ __rpc_execute(struct rpc_task *task)
 		 * clean up after sleeping on some queue, we don't
 		 * break the loop here, but go around once more.
 		 */
-		if (0 && !RPC_IS_ASYNC(task) && signalled()) {
+		if (!RPC_IS_ASYNC(task) && signalled()) {
 			dprintk("RPC: %4d got signal\n", task->tk_pid);
 			rpc_exit(task, -ERESTARTSYS);
 		}

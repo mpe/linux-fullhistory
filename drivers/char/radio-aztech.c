@@ -218,6 +218,7 @@ static int az_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			else
 				v.mode=VIDEO_SOUND_MONO;
 			v.volume=az->curvol;
+			v.step=16384;
 			strcpy(v.name, "Radio");
 			if(copy_to_user(arg,&v, sizeof(v)))
 				return -EFAULT;

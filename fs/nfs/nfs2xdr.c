@@ -5,6 +5,9 @@
  *
  * Copyright (C) 1992, 1993, 1994  Rick Sladkey
  * Copyright (C) 1996 Olaf Kirch
+ *
+ * 04 Aug 1998  Ion Badulescu <ionut@cs.columbia.edu>     
+ *	        FIFO's need special handling in NFSv2
  */
 
 #define NFS_NEED_XDR_TYPES
@@ -114,6 +117,11 @@ xdr_decode_fattr(u32 *p, struct nfs_fattr *fattr)
 	fattr->mtime.useconds = ntohl(*p++);
 	fattr->ctime.seconds = ntohl(*p++);
 	fattr->ctime.useconds = ntohl(*p++);
+	if (fattr->type == NFCHR && fattr->rdev == NFS_FIFO_DEV) {
+		fattr->type = NFFIFO;
+		fattr->mode = (fattr->mode & ~S_IFMT) | S_IFIFO;
+		fattr->rdev = 0;
+	}
 	return p;
 }
 

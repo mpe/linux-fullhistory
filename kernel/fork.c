@@ -356,8 +356,9 @@ static inline int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
 	return 0;
 }
 
-/* return value is only accurate by +-sizeof(long)*8 fds */ 
-/* XXX make this architecture specific */
+/*
+ * Copy a fd_set and compute the maximum fd it contains. 
+ */
 static inline int __copy_fdset(unsigned long *d, unsigned long *src)
 {
 	int i; 
@@ -411,7 +412,6 @@ static int copy_files(unsigned long clone_flags, struct task_struct * tsk)
 		new_fds = (struct file **) kmalloc(size, GFP_KERNEL);
 	if (!new_fds)
 		goto out_release;
-	memset((void *) new_fds, 0, size);
 
 	atomic_set(&newf->count, 1);
 	newf->max_fds = NR_OPEN;
@@ -421,13 +421,15 @@ static int copy_files(unsigned long clone_flags, struct task_struct * tsk)
 
 	old_fds = oldf->fd;
 	for (; i != 0; i--) {
-		struct file * f = *old_fds;
-		old_fds++;
+		struct file *f = *old_fds++;
 		*new_fds = f;
 		if (f)
 			f->f_count++;
 		new_fds++;
 	}
+	/* This is long word aligned thus could use a optimized version */ 
+	memset(new_fds, 0, (char *)newf->fd + size - (char *)new_fds); 
+      
 	tsk->files = newf;
 	error = 0;
 out:
@@ -639,20 +641,13 @@ bad_fork_free:
 	goto bad_fork;
 }
 
-static void files_ctor(void *fp, kmem_cache_t *cachep, unsigned long flags)
-{
-	struct files_struct *f = fp;
-
-	memset(f, 0, sizeof(*f));
-}
-
 __initfunc(void filescache_init(void))
 {
 	files_cachep = kmem_cache_create("files_cache", 
 					 sizeof(struct files_struct),
 					 0, 
 					 SLAB_HWCACHE_ALIGN,
-					 files_ctor, NULL);
+					 NULL, NULL);
 	if (!files_cachep) 
 		panic("Cannot create files cache"); 
 }

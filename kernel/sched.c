@@ -1588,11 +1588,13 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 static void show_task(int nr,struct task_struct * p)
 {
 	unsigned long free = 0;
+	int state;
 	static const char * stat_nam[] = { "R", "S", "D", "Z", "T", "W" };
 
 	printk("%-8s %3d ", p->comm, (p == current) ? -nr : nr);
-	if (((unsigned) p->state) < sizeof(stat_nam)/sizeof(char *))
-		printk(stat_nam[p->state]);
+	state = p->state ? ffz(~p->state) + 1 : 0;
+	if (((unsigned) state) < sizeof(stat_nam)/sizeof(char *))
+		printk(stat_nam[state]);
 	else
 		printk(" ");
 #if (BITS_PER_LONG == 32)

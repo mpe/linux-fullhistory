@@ -176,6 +176,7 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.flags|=VIDEO_AUDIO_MUTABLE;
 			v.mode=VIDEO_SOUND_MONO;
 			v.volume=fmi->curvol;
+			v.step=65535;
 			strcpy(v.name, "Radio");
 			if(copy_to_user(arg,&v, sizeof(v)))
 				return -EFAULT;

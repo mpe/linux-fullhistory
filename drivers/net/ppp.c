@@ -1977,8 +1977,8 @@ ppp_rcv_rx(struct ppp *ppp, __u16 proto, struct sk_buff *skb)
 	 */
 	skb->dev      = ppp2dev(ppp);	/* We are the device */
 	skb->protocol = htons(proto);
-	skb->mac.raw  = skb->data;
 	skb_pull(skb, PPP_HDRLEN);	/* pull off ppp header */
+	skb->mac.raw   = skb->data;
 	ppp->last_recv = jiffies;
 	netif_rx (skb);
 	return 1;

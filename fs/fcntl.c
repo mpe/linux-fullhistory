@@ -84,7 +84,7 @@ asmlinkage int sys_dup(unsigned int fildes)
 
 #define SETFL_MASK (O_APPEND | O_NONBLOCK | O_NDELAY | FASYNC)
 
-static int setfl(struct file * filp, unsigned long arg)
+static int setfl(int fd, struct file * filp, unsigned long arg)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
 
@@ -98,7 +98,7 @@ static int setfl(struct file * filp, unsigned long arg)
 	/* Did FASYNC state change? */
 	if ((arg ^ filp->f_flags) & FASYNC) {
 		if (filp->f_op->fasync)
-			filp->f_op->fasync(filp, (arg & FASYNC) != 0);
+			filp->f_op->fasync(fd, filp, (arg & FASYNC) != 0);
 	}
 
 	/* required for strict SunOS emulation */
@@ -137,7 +137,7 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			err = filp->f_flags;
 			break;
 		case F_SETFL:
-			err = setfl(filp, arg);
+			err = setfl(fd, filp, arg);
 			break;
 		case F_GETLK:
 			err = fcntl_getlk(fd, (struct flock *) arg);
@@ -166,6 +166,17 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			if (S_ISSOCK (filp->f_dentry->d_inode->i_mode))
 				err = sock_fcntl (filp, F_SETOWN, arg);
 			break;
+		case F_GETSIG:
+			err = filp->f_owner.signum;
+			break;
+		case F_SETSIG:
+			if (arg <= 0 || arg > _NSIG) {
+				err = -EINVAL;
+				break;
+			}
+			err = 0;
+			filp->f_owner.signum = arg;
+			break;
 		default:
 			/* sockets need a few special fcntls. */
 			if (S_ISSOCK (filp->f_dentry->d_inode->i_mode))
@@ -180,10 +191,13 @@ out:
 	return err;
 }
 
-static void send_sigio(int pid, uid_t uid, uid_t euid)
+static void send_sigio(struct fown_struct *fown, struct fasync_struct *fa)
 {
 	struct task_struct * p;
-
+	int   pid	= fown->pid;
+	uid_t uid	= fown->uid;
+	uid_t euid	= fown->euid;
+	
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
 		int match = p->pid;
@@ -195,9 +209,27 @@ static void send_sigio(int pid, uid_t uid, uid_t euid)
 		    (euid ^ p->suid) && (euid ^ p->uid) &&
 		    (uid ^ p->suid) && (uid ^ p->uid))
 			continue;
-		send_sig(SIGIO, p, 1);
-		if (p->state == TASK_INTERRUPTIBLE && signal_pending(p))
-			wake_up_process(p);
+		switch (fown->signum) {
+			siginfo_t si;
+		default:
+			/* Queue a rt signal with the appropriate fd as its
+			   value.  We use SI_SIGIO as the source, not 
+			   SI_KERNEL, since kernel signals always get 
+			   delivered even if we can't queue.  Failure to
+			   queue in this case _should_ be reported; we fall
+			   back to SIGIO in that case. --sct */
+			si.si_signo = fown->signum;
+			si.si_errno = 0;
+		        si.si_code  = SI_SIGIO;
+			si.si_pid   = pid;
+			si.si_uid   = uid;
+			si.si_fd    = fa->fa_fd;
+			if (!send_sig_info(fown->signum, &si, p))
+				break;
+		/* fall-through: fall back on the old plain SIGIO signal */
+		case 0:
+			send_sig(SIGIO, p, 1);
+		}
 	}
 	read_unlock(&tasklist_lock);
 }
@@ -213,7 +245,7 @@ void kill_fasync(struct fasync_struct *fa, int sig)
 		}
 		fown = &fa->fa_file->f_owner;
 		if (fown->pid)
-			send_sigio(fown->pid, fown->uid, fown->euid);
+			send_sigio(fown, fa);
 		fa = fa->fa_next;
 	}
 }

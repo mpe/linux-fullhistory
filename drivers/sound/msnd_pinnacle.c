@@ -29,7 +29,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd_pinnacle.c,v 1.5 1998/07/18 00:12:16 andrewtv Exp $
+ * $Id: msnd_pinnacle.c,v 1.8 1998/08/06 21:06:14 andrewtv Exp $
  *
  ********************************************************************/
 
@@ -396,11 +396,13 @@ static int mixer_set(int d, int value)
 
 static unsigned long set_recsrc(unsigned long recsrc)
 {
+	if (dev.recsrc == recsrc)
+		return dev.recsrc;
 #ifdef HAVE_NORECSRC
-	if (recsrc == 0)
+	else if (recsrc == 0)
 		dev.recsrc = 0;
-	else
 #endif
+	else
 		dev.recsrc ^= recsrc;
 
 #ifndef MSND_CLASSIC
@@ -415,6 +417,13 @@ static unsigned long set_recsrc(unsigned long recsrc)
 		if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_SYNTH_IN) == 0)
 			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
 
+	}
+	else if ((dev.recsrc & SOUND_MASK_DIGITAL1) && test_bit(F_HAVEDIGITAL, &dev.flags)) {
+
+		if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_DAT_IN) == 0) {
+			udelay(50);
+      			msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ);
+		}
 	}
 	else {
 #ifdef HAVE_NORECSRC
@@ -431,11 +440,27 @@ static unsigned long set_recsrc(unsigned long recsrc)
 	return dev.recsrc;
 }
 
+#define set_mixer_info()							\
+		strncpy(info.id, "MSNDMIXER", sizeof(info.id));			\
+		strncpy(info.name, "MultiSound Mixer", sizeof(info.name));
+
 static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 {
-	int val = 0;
-
-	if (((cmd >> 8) & 0xff) == 'M') {
+	if (cmd == SOUND_MIXER_INFO) {
+		mixer_info info;
+		set_mixer_info();
+		info.modify_counter = dev.mixer_mod_count;
+		return copy_to_user((void *)arg, &info, sizeof(info));
+	}
+	else if (cmd == SOUND_OLD_MIXER_INFO) {
+		_old_mixer_info info;
+		set_mixer_info();
+		return copy_to_user((void *)arg, &info, sizeof(info));
+	}
+	else if (cmd == OSS_GETVERSION)
+		return put_user(SOUND_VERSION, (int *)arg);
+	else if (((cmd >> 8) & 0xff) == 'M') {
+		int val = 0;
 		
 		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
 
@@ -452,6 +477,8 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 				val = mixer_set(cmd & 0xff, val);
 				break;
 			}
+
+			++dev.mixer_mod_count;
 
 			return put_user(val, (int *)arg);
 		}
@@ -479,6 +506,8 @@ static int mixer_ioctl(unsigned int cmd, unsigned long arg)
 #else
 				val =   SOUND_MASK_LINE |
 					SOUND_MASK_SYNTH;
+				if (test_bit(F_HAVEDIGITAL, &dev.flags))
+					val |= SOUND_MASK_DIGITAL1;
 #endif
 				break;
 				  
@@ -1309,7 +1338,14 @@ __initfunc(static int attach_multisound(void))
 	printk(KERN_INFO LOGNAME ": Using DSP minor %d, mixer minor %d\n", MIXERMINOR, DSPMINOR);
 
 	calibrate_adc(dev.sample_rate);
-	set_recsrc(0);
+#ifndef MSND_CLASSIC
+	printk(KERN_INFO LOGNAME ": Setting recording source to Line In\n");
+	if (msnd_send_word(&dev, 0, 0, HDEXAR_SET_ANA_IN) != 0 ||
+	    msnd_send_dsp_cmd(&dev, HDEX_AUX_REQ) != 0) {
+		printk(KERN_DEBUG LOGNAME ": Error setting Line In as recording source\n");
+	}
+	dev.recsrc = SOUND_MASK_LINE;
+#endif
 	
 	return 0;
 }
@@ -1342,10 +1378,16 @@ MODULE_PARM				(mem, "i");
 MODULE_PARM				(major, "i");
 MODULE_PARM				(fifosize, "i");
 MODULE_PARM				(calibrate_signal, "i");
+#ifndef MSND_CLASSIC
+MODULE_PARM				(digital, "i");
+#endif
 
 static int io __initdata =		-1;
 static int irq __initdata =		-1;
 static int mem __initdata =		-1;
+#ifndef MSND_CLASSIC
+static int digital __initdata;
+#endif
 static int fifosize __initdata =	DEFFIFOSIZE;
 static int calibrate_signal __initdata;
 
@@ -1355,13 +1397,24 @@ int init_module(void)
 static int io __initdata =		CONFIG_MSNDCLAS_IO;
 static int irq __initdata =		CONFIG_MSNDCLAS_IRQ;
 static int mem __initdata =		CONFIG_MSNDCLAS_MEM;
-#else
+#else /* Pinnacle/Fiji */
 static int io __initdata =		CONFIG_MSNDPIN_IO;
 static int irq __initdata =		CONFIG_MSNDPIN_IRQ;
 static int mem __initdata =		CONFIG_MSNDPIN_MEM;
+#ifndef CONFIG_MSNDPIN_DIGITAL
+#  define CONFIG_MSNDPIN_DIGITAL	0
 #endif
-static int fifosize __initdata =	DEFFIFOSIZE;
-static int calibrate_signal __initdata;
+static int digital __initdata =		CONFIG_MSNDPIN_DIGITAL;
+#endif /* MSND_CLASSIC */
+#ifndef CONFIG_MSND_FIFOSIZE
+#  define CONFIG_MSND_FIFOSIZE		DEFFIFOSIZE
+#endif /* CONFIG_MSND_FIFOSIZE */
+static int fifosize __initdata =	CONFIG_MSND_FIFOSIZE;
+#ifndef CONFIG_MSND_CALSIGNAL
+#  define CONFIG_MSND_CALSIGNAL		0
+#endif /* CONFIG_MSND_CALSIGNAL */
+static int
+calibrate_signal __initdata =		CONFIG_MSND_CALSIGNAL;
 
 #ifdef MSND_CLASSIC
 __initfunc(int msnd_classic_init(void))
@@ -1459,6 +1512,13 @@ __initfunc(int msnd_pinnacle_init(void))
 	dev.recsrc = 0;
 	dev.inc_ref = mod_inc_ref;
 	dev.dec_ref = mod_dec_ref;
+
+#ifndef MSND_CLASSIC
+	if (digital) {
+		set_bit(F_HAVEDIGITAL, &dev.flags);
+		printk(KERN_INFO LOGNAME ": Digital I/O access enabled\n");
+	}
+#endif
 
 	init_waitqueue(&dev.writeblock);
 	init_waitqueue(&dev.readblock);

@@ -43,6 +43,8 @@ EXPORT_SYMBOL(rpc_shutdown_client);
 EXPORT_SYMBOL(rpc_killall_tasks);
 EXPORT_SYMBOL(rpc_do_call);
 EXPORT_SYMBOL(rpc_call_setup);
+EXPORT_SYMBOL(rpc_clnt_sigmask);
+EXPORT_SYMBOL(rpc_clnt_sigunmask);
 EXPORT_SYMBOL(rpc_delay);
 EXPORT_SYMBOL(rpc_restart_call);
 

@@ -146,6 +146,8 @@ void *		rpc_allocate(unsigned int flags, unsigned int);
 void		rpc_free(void *);
 int		rpciod_up(void);
 void		rpciod_down(void);
+void		rpciod_wake_up(void);
+void		rpciod_tcp_dispatcher(void);
 #ifdef RPC_DEBUG
 void		rpc_show_tasks(void);
 #endif

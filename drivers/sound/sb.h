@@ -121,7 +121,7 @@ int sb_dsp_reset (sb_devc *devc);
 void sb_setmixer (sb_devc *devc, unsigned int port, unsigned int value);
 unsigned int sb_getmixer (sb_devc *devc, unsigned int port);
 int sb_dsp_detect (struct address_info *hw_config);
-void sb_dsp_init (struct address_info *hw_config);
+int sb_dsp_init (struct address_info *hw_config);
 void sb_dsp_unload(struct address_info *hw_config);
 int sb_mixer_init(sb_devc *devc);
 void sb_mixer_set_stereo (sb_devc *devc, int mode);

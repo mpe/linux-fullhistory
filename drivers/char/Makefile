@@ -391,6 +391,14 @@ else
   endif
 endif                                             
 
+ifeq ($(CONFIG_RADIO_RTRACK2),y)
+L_OBJS += radio-rtrack2.o
+else
+  ifeq ($(CONFIG_RADIO_RTRACK2),m)
+  M_OBJS += radio-rtrack2.o
+  endif
+endif                                             
+
 ifeq ($(CONFIG_RADIO_ZOLTRIX),y)
 L_OBJS += radio-zoltrix.o
 else

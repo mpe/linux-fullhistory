@@ -128,7 +128,7 @@ static int tty_open(struct inode *, struct file *);
 static int tty_release(struct inode *, struct file *);
 static int tty_ioctl(struct inode * inode, struct file * file,
 		     unsigned int cmd, unsigned long arg);
-static int tty_fasync(struct file * filp, int on);
+static int tty_fasync(int fd, struct file * filp, int on);
 #ifdef CONFIG_8xx
 extern long console_8xx_init(void);
 extern int rs_8xx_init(void);
@@ -409,7 +409,7 @@ void do_tty_hangup(void *data)
 			continue;
 		if (filp->f_op != &tty_fops)
 			continue;
-		tty_fasync(filp, 0);
+		tty_fasync(-1, filp, 0);
 		filp->f_op = &hung_up_tty_fops;
 	}
 	
@@ -983,7 +983,7 @@ static void release_dev(struct file * filp)
 
 	check_tty_count(tty, "release_dev");
 
-	tty_fasync(filp, 0);
+	tty_fasync(-1, filp, 0);
 
 	idx = MINOR(tty->device) - tty->driver.minor_start;
 	pty_master = (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
@@ -1352,7 +1352,7 @@ static unsigned int tty_poll(struct file * filp, poll_table * wait)
  * to set up the fasync queue. It returns negative on error, 0 if it did
  * no changes and positive if it added/deleted the entry.
  */
-int fasync_helper(struct file * filp, int on, struct fasync_struct **fapp)
+int fasync_helper(int fd, struct file * filp, int on, struct fasync_struct **fapp)
 {
 	struct fasync_struct *fa, **fp;
 	unsigned long flags;
@@ -1363,13 +1363,16 @@ int fasync_helper(struct file * filp, int on, struct fasync_struct **fapp)
 	}
 
 	if (on) {
-		if (fa)
+		if (fa) {
+			fa->fa_fd = fd;
 			return 0;
+		}
 		fa = (struct fasync_struct *)kmalloc(sizeof(struct fasync_struct), GFP_KERNEL);
 		if (!fa)
 			return -ENOMEM;
 		fa->magic = FASYNC_MAGIC;
 		fa->fa_file = filp;
+		fa->fa_fd = fd;
 		save_flags(flags);
 		cli();
 		fa->fa_next = *fapp;
@@ -1387,7 +1390,7 @@ int fasync_helper(struct file * filp, int on, struct fasync_struct **fapp)
 	return 1;
 }
 
-static int tty_fasync(struct file * filp, int on)
+static int tty_fasync(int fd, struct file * filp, int on)
 {
 	struct tty_struct * tty;
 	int retval;
@@ -1396,7 +1399,7 @@ static int tty_fasync(struct file * filp, int on)
 	if (tty_paranoia_check(tty, filp->f_dentry->d_inode->i_rdev, "tty_fasync"))
 		return 0;
 	
-	retval = fasync_helper(filp, on, &tty->fasync);
+	retval = fasync_helper(fd, filp, on, &tty->fasync);
 	if (retval <= 0)
 		return retval;
 

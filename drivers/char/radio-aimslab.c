@@ -261,6 +261,7 @@ static int rt_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			memset(&v,0, sizeof(v));
 			v.flags|=VIDEO_AUDIO_MUTABLE|VIDEO_AUDIO_VOLUME;
 			v.volume=rt->curvol * 6554;
+			v.step=6554;
 			strcpy(v.name, "Radio");
 			if(copy_to_user(arg,&v, sizeof(v)))
 				return -EFAULT;

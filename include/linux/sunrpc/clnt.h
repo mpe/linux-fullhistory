@@ -118,6 +118,9 @@ int		rpc_do_call(struct rpc_clnt *clnt, u32 proc,
 				void *argp, void *resp, int flags,
 				rpc_action callback, void *clntdata);
 void		rpc_restart_call(struct rpc_task *);
+void		rpc_clnt_sigmask(struct rpc_clnt *clnt, sigset_t *oldset);
+void		rpc_clnt_sigunmask(struct rpc_clnt *clnt, sigset_t *oldset);
+
 #define rpc_call(clnt, proc, argp, resp, flags)	\
 		rpc_do_call(clnt, proc, argp, resp, flags, NULL, NULL)
 

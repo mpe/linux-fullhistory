@@ -360,11 +360,11 @@ static ssize_t read_mouse(struct file * file, char * buffer,
 	return count;
 }
 
-static int fasync_mouse(struct file *filp, int on)
+static int fasync_mouse(int fd, struct file *filp, int on)
 {
         int retval;
 
-        retval = fasync_helper(filp, on, &mouse_fasyncptr);
+        retval = fasync_helper(fd, filp, on, &mouse_fasyncptr);
         if (retval < 0)
                 return retval;
         return 0;
@@ -373,7 +373,7 @@ static int fasync_mouse(struct file *filp, int on)
 
 static int release_mouse(struct inode * inode, struct file * file)
 {
-        fasync_mouse(file, 0);
+        fasync_mouse(-1, file, 0);
         if (--mouse_active)
                 return 0;
         MSE_UPDATE_OFF();

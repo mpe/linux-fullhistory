@@ -28,6 +28,8 @@
 
 #define F_SETOWN	8	/*  for sockets. */
 #define F_GETOWN	9	/*  for sockets. */
+#define F_SETSIG	10	/*  for sockets. */
+#define F_GETSIG	11	/*  for sockets. */
 
 /* for F_[GET|SET]FL */
 #define FD_CLOEXEC	1	/* actually anything with low bit set goes */

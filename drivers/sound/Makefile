@@ -79,7 +79,7 @@ obj-$(CONFIG_SOUND_SOFTOSS)	+= softoss2.o
 obj-$(CONFIG_SOUND_SGALAXY)	+= sgalaxy.o
 obj-$(CONFIG_SOUND_SSCAPE)	+= sscape.o ad1848.o mpu401.o
 obj-$(CONFIG_SOUND_TRIX)	+= trix.o ad1848.o sb.o uart401.o
-obj-$(CONFIG_SOUND_UART6850)	+= uart6850.c
+obj-$(CONFIG_SOUND_UART6850)	+= uart6850.o
 obj-$(CONFIG_SOUND_VMIDI)	+= v_midi.o
 obj-$(CONFIG_SOUND_YM3812)	+= adlib_card.o opl3.o
 obj-$(CONFIG_VIDC_SOUND)	+= vidc_mod.o
@@ -91,7 +91,6 @@ obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
 
 endif
 endif
-
 
 # Declare multi-part drivers.
 

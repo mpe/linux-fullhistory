@@ -105,7 +105,7 @@ static unsigned int sock_poll(struct file *file,
 			      struct poll_table_struct *wait);
 static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg);
-static int sock_fasync(struct file *filp, int on);
+static int sock_fasync(int fd, struct file *filp, int on);
 
 
 /*
@@ -483,7 +483,7 @@ int sock_close(struct inode *inode, struct file *filp)
 		printk(KERN_DEBUG "sock_close: NULL inode\n");
 		return 0;
 	}
-	sock_fasync(filp, 0);
+	sock_fasync(-1, filp, 0);
 	sock_release(socki_lookup(inode));
 	return 0;
 }
@@ -492,7 +492,7 @@ int sock_close(struct inode *inode, struct file *filp)
  *	Update the socket async list
  */
 
-static int sock_fasync(struct file *filp, int on)
+static int sock_fasync(int fd, struct file *filp, int on)
 {
 	struct fasync_struct *fa, *fna=NULL, **prev;
 	struct socket *sock;
@@ -520,11 +520,13 @@ static int sock_fasync(struct file *filp, int on)
 	{
 		if(fa!=NULL)
 		{
+			fa->fa_fd=fd;
 			kfree_s(fna,sizeof(struct fasync_struct));
 			restore_flags(flags);
 			return 0;
 		}
 		fna->fa_file=filp;
+		fna->fa_fd=fd;
 		fna->magic=FASYNC_MAGIC;
 		fna->fa_next=sock->fasync_list;
 		sock->fasync_list=fna;

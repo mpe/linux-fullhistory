@@ -191,22 +191,15 @@ rpc_default_callback(struct rpc_task *task)
 }
 
 /*
- * New rpc_call implementation
+ *	Export the signal mask handling for aysnchronous code that
+ *	sleeps on RPC calls
  */
-int
-rpc_do_call(struct rpc_clnt *clnt, u32 proc, void *argp, void *resp,
-				int flags, rpc_action func, void *data)
+ 
+void rpc_clnt_sigmask(struct rpc_clnt *clnt, sigset_t *oldset)
 {
-	struct rpc_task	my_task, *task = &my_task;
 	unsigned long	sigallow = sigmask(SIGKILL);
-	sigset_t	oldset;
 	unsigned long	irqflags;
-	int		async, status;
-
-	/* If this client is slain all further I/O fails */
-	if (clnt->cl_dead) 
-		return -EIO;
-		
+	
 	/* Turn off various signals */
 	if (clnt->cl_intr) {
 		struct k_sigaction *action = current->sig->action;
@@ -216,10 +209,38 @@ rpc_do_call(struct rpc_clnt *clnt, u32 proc, void *argp, void *resp,
 			sigallow |= sigmask(SIGQUIT);
 	}
 	spin_lock_irqsave(&current->sigmask_lock, irqflags);
-	oldset = current->blocked;
-	siginitsetinv(&current->blocked, sigallow & ~oldset.sig[0]);
+	*oldset = current->blocked;
+	siginitsetinv(&current->blocked, sigallow & ~oldset->sig[0]);
 	recalc_sigpending(current);
 	spin_unlock_irqrestore(&current->sigmask_lock, irqflags);
+}
+
+void rpc_clnt_sigunmask(struct rpc_clnt *clnt, sigset_t *oldset)
+{
+	unsigned long	irqflags;
+	
+	spin_lock_irqsave(&current->sigmask_lock, irqflags);
+	current->blocked = *oldset;
+	recalc_sigpending(current);
+	spin_unlock_irqrestore(&current->sigmask_lock, irqflags);
+}
+
+/*
+ * New rpc_call implementation
+ */
+int
+rpc_do_call(struct rpc_clnt *clnt, u32 proc, void *argp, void *resp,
+				int flags, rpc_action func, void *data)
+{
+	struct rpc_task	my_task, *task = &my_task;
+	sigset_t	oldset;
+	int		async, status;
+
+	/* If this client is slain all further I/O fails */
+	if (clnt->cl_dead) 
+		return -EIO;
+
+	rpc_clnt_sigmask(clnt, &oldset);		
 
 	/* Create/initialize a new RPC task */
 	if ((async = (flags & RPC_TASK_ASYNC)) != 0) {
@@ -248,10 +269,7 @@ rpc_do_call(struct rpc_clnt *clnt, u32 proc, void *argp, void *resp,
 	}
 
 out:
-	spin_lock_irqsave(&current->sigmask_lock, irqflags);
-	current->blocked = oldset;
-	recalc_sigpending(current);
-	spin_unlock_irqrestore(&current->sigmask_lock, irqflags);
+	rpc_clnt_sigunmask(clnt, &oldset);		
 
 	return status;
 }

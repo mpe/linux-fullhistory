@@ -162,7 +162,7 @@ static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
 				break;
 
 			default:
-				/* printk( "Sound Blaster: Unexpected interrupt\n"); */
+				/* printk(KERN_WARN "Sound Blaster: Unexpected interrupt\n"); */
 				;
 		}
 	}
@@ -242,7 +242,7 @@ static int sb16_set_dma_hw(sb_devc * devc)
 
 	if (devc->dma8 != 0 && devc->dma8 != 1 && devc->dma8 != 3)
 	{
-		printk(KERN_ERR "sb16: Invalid 8 bit DMA (%d)\n", devc->dma8);
+		printk(KERN_ERR "SB16: Invalid 8 bit DMA (%d)\n", devc->dma8);
 		return 0;
 	}
 	bits = (1 << devc->dma8);
@@ -298,7 +298,7 @@ static int sb16_set_irq_hw(sb_devc * devc, int level)
 			ival = 8;
 			break;
 		default:
-			printk(KERN_ERR "SB16 IRQ%d is not possible\n", level);
+			printk(KERN_ERR "SB16: Invalid IRQ%d\n", level);
 			return 0;
 	}
 	sb_setmixer(devc, IRQ_NR, ival);
@@ -694,7 +694,7 @@ int sb_dsp_detect(struct address_info *hw_config)
 	return 1;
 }
 
-void sb_dsp_init(struct address_info *hw_config)
+static int sb_dsp_init(struct address_info *hw_config)
 {
 	sb_devc *devc;
 	char name[100];
@@ -710,7 +710,7 @@ void sb_dsp_init(struct address_info *hw_config)
 	if (detected_devc == NULL)
 	{
 		MDB(printk("No detected device\n"));
-		return;
+		return 0;
 	}
 	devc = detected_devc;
 	detected_devc = NULL;
@@ -718,7 +718,7 @@ void sb_dsp_init(struct address_info *hw_config)
 	if (devc->base != hw_config->io_base)
 	{
 		DDB(printk("I/O port mismatch\n"));
-		return;
+		return 0;
 	}
 	/*
 	 * Now continue initialization of the device
@@ -731,7 +731,7 @@ void sb_dsp_init(struct address_info *hw_config)
 		if (request_irq(hw_config->irq, sbintr, 0, "soundblaster", devc) < 0)
 		{
 			printk(KERN_ERR "SB: Can't allocate IRQ%d\n", hw_config->irq);
-			return;
+			return 0;
 		}
 		devc->irq_ok = 0;
 
@@ -739,7 +739,7 @@ void sb_dsp_init(struct address_info *hw_config)
 			if (!sb16_set_irq_hw(devc, devc->irq))	/* Unsupported IRQ */
 			{
 				free_irq(devc->irq, devc);
-				return;
+				return 0;
 			}
 		if ((devc->type == 0 || devc->type == MDL_ESS) &&
 			devc->major == 3 && devc->minor == 1)
@@ -853,7 +853,11 @@ void sb_dsp_init(struct address_info *hw_config)
 			else
 				devc->dma16 = hw_config->dma2;
 
-			sb16_set_dma_hw(devc);
+			if(!sb16_set_dma_hw(devc)) {
+				free_irq(devc->irq, devc);
+				return 0;
+			}
+
 			devc->caps |= SB_NO_MIDI;
 	}
 
@@ -903,7 +907,7 @@ void sb_dsp_init(struct address_info *hw_config)
 	{
 		if (sound_alloc_dma(devc->dma8, "SoundBlaster8"))
 		{
-			printk(KERN_WARNING "SB: Can't allocate 8 bit DMA channel %d\n", devc->dma8);
+			printk(KERN_WARNING "Sound Blaster: Can't allocate 8 bit DMA channel %d\n", devc->dma8);
 		}
 		if (devc->dma16 >= 0 && devc->dma16 != devc->dma8)
 		{
@@ -917,6 +921,7 @@ void sb_dsp_init(struct address_info *hw_config)
 	{
 		MDB(printk("Sound Blaster:  no audio devices found.\n"));
 	}
+	return 1;
 }
 
 void sb_dsp_disable_midi(int io_base)
@@ -1160,7 +1165,9 @@ static int ess_midi_init(sb_devc * devc, struct address_info *hw_config)
 
 	tmp = 1;		/* MPU enabled without interrupts */
 
-	switch (hw_config->irq)
+	/* May be shared: if so the value is -ve */
+	
+	switch(abs(hw_config->irq))
 	{
 		case 9:
 			tmp = 0x4;

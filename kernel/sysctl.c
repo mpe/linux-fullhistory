@@ -25,6 +25,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/fs.h>
 
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
@@ -227,6 +228,10 @@ static ctl_table fs_table[] = {
 	{FS_NRFILE, "file-nr", &nr_files, 3*sizeof(int),
 	 0444, NULL, &proc_dointvec},
 	{FS_MAXFILE, "file-max", &max_files, sizeof(int),
+	 0644, NULL, &proc_dointvec},
+	{FS_NRSUPER, "super-nr", &nr_super_blocks, sizeof(int),
+	 0444, NULL, &proc_dointvec},
+	{FS_MAXSUPER, "super-max", &max_super_blocks, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 	{FS_NRDQUOT, "dquot-nr", &nr_dquots, 2*sizeof(int),
 	 0444, NULL, &proc_dointvec},

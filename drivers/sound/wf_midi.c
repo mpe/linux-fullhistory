@@ -454,12 +454,12 @@ wf_mpu_open (int dev, int mode,
 	struct wf_mpu_config *devc;
 
 	if (dev < 0 || dev >= num_midis || midi_devs[dev]==NULL)
-		return -ENXIO;
+		return -(ENXIO);
 
 	devc = &dev_conf[dev];
 
 	if (devc->opened) {
-		return -EBUSY;
+		return -(EBUSY);
 	}
 
 	devc->mode = MODE_MIDI;
@@ -678,8 +678,8 @@ static struct synth_operations wf_mpu_synth_proto =
 	midi_synth_send_sysex
 };
 
-static struct synth_operations wf_mpu_synth_operations[WAVEFRONT_MAX_DEVICES*2];
-static struct midi_operations  wf_mpu_midi_operations[WAVEFRONT_MAX_DEVICES*2];
+static struct synth_operations wf_mpu_synth_operations[2];
+static struct midi_operations  wf_mpu_midi_operations[2];
 static int wfmpu_cnt = 0;
 
 static struct midi_operations wf_mpu_midi_proto =
@@ -707,9 +707,8 @@ config_wf_mpu (int dev, struct address_info *hw_config)
 	struct wf_mpu_config *devc;
 	int                internal;
 
-	if (wfmpu_cnt >= WAVEFRONT_MAX_DEVICES * 2) {
-		printk (KERN_ERR "WF-MPU: eh ? more MPU devices "
-			"than cards ?!!\n");
+	if (wfmpu_cnt >= 2) {
+		printk (KERN_ERR "WF-MPU: more MPU devices than cards ?!!\n");
 		return (-1);
 	}
   

@@ -205,7 +205,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
   dep_tristate 'Loopback MIDI device support' CONFIG_SOUND_VMIDI $CONFIG_SOUND_OSS
   
   dep_tristate '6850 UART support' CONFIG_SOUND_UART6850 $CONFIG_SOUND_OSS
-  if [ "$CONFIG_UART6850" = "y" ]; then
+  if [ "$CONFIG_SOUND_UART6850" = "y" ]; then
       hex 'I/O base for UART 6850 MIDI port (Unknown)' CONFIG_U6850_BASE 0
       int 'UART6850 IRQ (Unknown)' CONFIG_U6850_IRQ -1
   fi

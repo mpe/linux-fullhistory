@@ -47,6 +47,7 @@ extern void video_unregister_device(struct video_device *);
 #define VID_TYPE_FRAMERAM	64	/* Uses the frame buffer memory */
 #define VID_TYPE_SCALES		128	/* Scalable */
 #define VID_TYPE_MONOCHROME	256	/* Monochrome only */
+#define VID_TYPE_SUBCAPTURE	512	/* Can capture subareas of the image */
 
 struct video_capability
 {
@@ -72,6 +73,7 @@ struct video_channel
 	__u16  type;
 #define VIDEO_TYPE_TV		1
 #define VIDEO_TYPE_CAMERA	2	
+	__u16 norm;			/* Norm set by channel */
 };
 
 struct video_tuner
@@ -84,6 +86,7 @@ struct video_tuner
 #define VIDEO_TUNER_NTSC	2
 #define VIDEO_TUNER_SECAM	4
 #define VIDEO_TUNER_LOW		8	/* Uses KHz not MHz */
+#define VIDEO_TUNER_NORM	16	/* Tuner can set norm */
 #define VIDEO_TUNER_STEREO_ON	128	/* Tuner is seeing stereo */
 	__u16 mode;			/* PAL/NTSC/SECAM/OTHER */
 #define VIDEO_MODE_PAL		0
@@ -135,6 +138,8 @@ struct video_audio
 #define VIDEO_SOUND_LANG1	3
 #define VIDEO_SOUND_LANG2	4
         __u16   mode;
+        __u16	balance;	/* Stereo balance */
+        __u16	step;		/* Step actual volume uses */
 };
 
 struct video_clip
@@ -146,13 +151,23 @@ struct video_clip
 
 struct video_window
 {
-	__u32	x,y;
-	__u32	width,height;
+	__u32	x,y;			/* Position of window */
+	__u32	width,height;		/* Its size */
 	__u32	chromakey;
 	__u32	flags;
 	struct	video_clip *clips;	/* Set only */
 	int	clipcount;
 #define VIDEO_WINDOW_INTERLACE	1
+};
+
+struct video_capture
+{
+	__u32 	x,y;			/* Offsets into image */
+	__u32	width, height;		/* Area to capture */
+	__u16	decimation;		/* Decimation divder */
+	__u16	flags;			/* Flags for capture */
+#define VIDEO_CAPTURE_ODD		0	/* Temporal */
+#define VIDEO_CAPTURE_EVEN		1
 };
 
 struct video_buffer
@@ -165,9 +180,9 @@ struct video_buffer
 
 struct video_mmap
 {
-	unsigned int frame;		/* Frame (0 or 1) for double buffer */
-	int height,width;
-	unsigned int format;	/* should be VIDEO_PALETTE_* */
+	unsigned	int frame;		/* Frame (0 - n) for double buffer */
+	int		height,width;
+	unsigned	int format;		/* should be VIDEO_PALETTE_* */
 };
 
 struct video_key
@@ -175,7 +190,30 @@ struct video_key
 	__u8	key[8];
 	__u32	flags;
 };
+
+
+#define VIDEO_MAX_FRAME		32
+
+struct video_mbuf
+{
+	int	size;		/* Total memory to map */
+	int	frames;		/* Frames */
+	int	offsets[VIDEO_MAX_FRAME];
+};
 	
+
+#define 	VIDEO_NO_UNIT	(-1)
+
+	
+struct video_unit
+{
+	int 	video;		/* Video minor */
+	int	vbi;		/* VBI minor */
+	int	radio;		/* Radio minor */
+	int	audio;		/* Audio minor */
+	int	teletext;	/* Teletext minor */
+};
+
 #define VIDIOCGCAP		_IOR('v',1,struct video_capability)	/* Get capabilities */
 #define VIDIOCGCHAN		_IOWR('v',2,struct video_channel)	/* Get channel info (sources) */
 #define VIDIOCSCHAN		_IOW('v',3,int)				/* Set channel 	*/
@@ -193,9 +231,12 @@ struct video_key
 #define VIDIOCSFREQ		_IOW('v',15, unsigned long)		/* Set tuner */
 #define VIDIOCGAUDIO		_IOR('v',16, struct video_audio)	/* Get audio info */
 #define VIDIOCSAUDIO		_IOW('v',17, struct video_audio)	/* Audio source, mute etc */
-#define VIDIOCSYNC		_IO('v',18)				/* Sync with mmap grabbing */
+#define VIDIOCSYNC		_IOW('v',18, int)			/* Sync with mmap grabbing */
 #define VIDIOCMCAPTURE		_IOW('v',19, struct video_mmap)		/* Grab frames */
-
+#define VIDIOCGMBUF		_IOR('v', 20, struct video_mbuf)	/* Memory map buffer info */
+#define VIDIOCGUNIT		_IOR('v', 21, struct video_unit)	/* Get attached units */
+#define VIDIOCGCAPTURE		_IOR('v',22, struct video_capture)	/* Get frame buffer */
+#define VIDIOCSCAPTURE		_IOW('v',23, struct video_capture)	/* Set frame buffer - root only */
 
 #define BASE_VIDIOCPRIVATE	192		/* 192-255 are private */
 
@@ -213,6 +254,8 @@ struct video_key
 #define VID_HARDWARE_SAA7146    11
 #define VID_HARDWARE_VIDEUM	12	/* Reserved for Winnov videum */
 #define VID_HARDWARE_RTRACK2	13
+#define VID_HARDWARE_PERMEDIA2	14	/* Reserved for Permedia2 */
+#define VID_HARDWARE_RIVA128	15	/* Reserved for RIVA 128 */
 
 /*
  *	Initialiser list

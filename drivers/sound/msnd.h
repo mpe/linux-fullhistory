@@ -24,13 +24,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.h,v 1.6 1998/07/18 00:12:15 andrewtv Exp $
+ * $Id: msnd.h,v 1.9 1998/08/06 21:06:14 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_H
 #define __MSND_H
 
-#define VERSION			"0.7.0"
+#define VERSION			"0.7.2"
 
 #define DEFSAMPLERATE		DSP_DEFAULT_SPEED
 #define DEFSAMPLESIZE		8
@@ -236,12 +236,14 @@ typedef struct multisound_dev {
 #define F_EXT_MIDI_INUSE		7
 #define F_INT_MIDI_INUSE		8
 #define F_WRITEFLUSH			9
+#define F_HAVEDIGITAL			10
 
 	struct wait_queue *writeblock, *readblock;
 	struct wait_queue *writeflush;
 	unsigned long recsrc;
 	int left_levels[16];
 	int right_levels[16];
+	int mixer_mod_count;
 	int calibrate_signal;
 	int sample_size;
 	int sample_rate;

@@ -20,4 +20,6 @@
 #define MSP_GET_TREBLE     _IOR('m',11,int)
 #define MSP_SET_TREBLE     _IOW('m',12,int)
 
+#define MSP_GET_UNIT	   _IOR('m',13,int)
+
 #endif /* MSP3400_H */

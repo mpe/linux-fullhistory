@@ -14,6 +14,13 @@
  *              Following Linus comments on my original hack, this version
  *              depends only on the dcache stuff and doesn't touch the inode
  *              layer (iput() and friends).
+ * 04 Aug 1998  Ion Badulescu <ionut@cs.columbia.edu>     
+ *	        FIFO's need special handling in NFSv2
+ */
+
+/*
+ * Fixes:
+ *    Ion Badulescu <ionut@cs.columbia.edu>     : FIFO's need special handling in NFSv2
  */
 
 #include <linux/sched.h>
@@ -645,7 +652,10 @@ static int nfs_create(struct inode *dir, struct dentry *dentry, int mode)
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		goto out;
 
-	sattr.mode = mode;
+ 	if (mode & S_IFIFO)
+ 		sattr.mode = (mode & ~S_IFMT) | S_IFCHR;
+ 	else
+ 		sattr.mode = mode;
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 
@@ -655,6 +665,15 @@ static int nfs_create(struct inode *dir, struct dentry *dentry, int mode)
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
 			dentry->d_name.name, &sattr, &fhandle, &fattr);
+	/*
+	 *	Retry invalid FIFO creates as the original object
+	 *	to cover for NFS servers that don't cope.
+	 */
+	if (error == -EINVAL && (mode & S_IFIFO)) {
+		sattr.mode = mode;
+		error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
+					dentry->d_name.name, &sattr, &fhandle, &fattr);
+	}
 	if (!error)
 		error = nfs_instantiate(dentry, &fhandle, &fattr);
 	if (error)
@@ -684,7 +703,10 @@ static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rde
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
 
-	sattr.mode = mode;
+	if (mode & S_IFIFO)
+		sattr.mode = (mode & ~S_IFMT) | S_IFCHR;
+	else
+		sattr.mode = mode;
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	if (S_ISCHR(mode) || S_ISBLK(mode))
 		sattr.size = rdev; /* get out your barf bag */
@@ -693,6 +715,11 @@ static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rde
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
 				dentry->d_name.name, &sattr, &fhandle, &fattr);
+	if (error == -EINVAL && (mode & S_IFIFO)) {
+		sattr.mode = mode;
+		error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
+					dentry->d_name.name, &sattr, &fhandle, &fattr);
+	}
 	if (!error)
 		error = nfs_instantiate(dentry, &fhandle, &fattr);
 	if (error)

@@ -1061,7 +1061,10 @@ int sequencer_open(int dev, struct file *file)
 		setup_mode2();
 	}
 	if (!max_synthdev && !max_mididev)
+	{
+		sequencer_busy=0;
 		return -ENXIO;
+	}
 
 	synth_open_mask = 0;
 

@@ -7,6 +7,23 @@
 
 #define MAX_SWAPFILES 8
 
+union swap_header {
+	struct 
+	{
+		char reserved[PAGE_SIZE - 10];
+		char magic[10];
+	} magic;
+	struct 
+	{
+		char	     bootbits[1024];	/* Space for disklabel etc. */
+		unsigned int version;
+		unsigned int last_page;
+		unsigned int nr_badpages;
+		unsigned int padding[125];
+		unsigned int badpages[1];
+	} info;
+};
+
 #ifdef __KERNEL__
 
 #undef DEBUG_SWAP
@@ -18,11 +35,14 @@
 
 #define SWAP_CLUSTER_MAX 32
 
+#define SWAP_MAP_MAX	0x7fff
+#define SWAP_MAP_BAD	0x8000
+
 struct swap_info_struct {
 	unsigned int flags;
 	kdev_t swap_device;
 	struct dentry * swap_file;
-	unsigned char * swap_map;
+	unsigned short * swap_map;
 	unsigned char * swap_lockmap;
 	unsigned int lowest_bit;
 	unsigned int highest_bit;

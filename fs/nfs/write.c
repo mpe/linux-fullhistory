@@ -468,7 +468,9 @@ wait_on_write_request(struct nfs_wreq *req)
 	struct wait_queue	wait = { current, NULL };
 	struct page		*page = req->wb_page;
 	int			retval;
+	sigset_t		oldmask;
 
+	rpc_clnt_sigmask(NFS_CLIENT(req->wb_inode), &oldmask);
 	add_wait_queue(&page->wait, &wait);
 	atomic_inc(&page->count);
 	for (;;) {
@@ -477,7 +479,8 @@ wait_on_write_request(struct nfs_wreq *req)
 		if (!PageLocked(page))
 			break;
 		retval = -ERESTARTSYS;
-		if (IS_SOFT && signalled())
+		/* IS_SOFT is a timeout item .. */
+		if (signalled())
 			break;
 		schedule();
 	}
@@ -485,6 +488,7 @@ wait_on_write_request(struct nfs_wreq *req)
 	current->state = TASK_RUNNING;
 	/* N.B. page may have been unused, so we must use free_page() */
 	free_page(page_address(page));
+	rpc_clnt_sigunmask(NFS_CLIENT(req->wb_inode), &oldmask);
 	return retval;
 }
 
@@ -534,6 +538,10 @@ nfs_updatepage(struct file *file, struct page *page, const char *buffer,
 	if ((req = find_write_request(inode, page)) != NULL) {
 		if (update_write_request(req, offset, count)) {
 			/* N.B. check for a fault here and cancel the req */
+			/*
+			 *	SECURITY - copy_from_user must zero the
+			 *	rest of the data after a fault!
+			 */
 			copy_from_user(page_addr + offset, buffer, count);
 			goto updated;
 		}
@@ -889,6 +897,9 @@ nfs_wback_result(struct rpc_task *task)
 		/* Update attributes as result of writeback. 
 		 * Beware: when UDP replies arrive out of order, we
 		 * may end up overwriting a previous, bigger file size.
+		 *
+		 * When the file size shrinks we cancel all pending
+		 * writebacks. 
 		 */
 		if (fattr->mtime.seconds >= inode->i_mtime) {
 			if (fattr->size < inode->i_size)

@@ -16,6 +16,10 @@
  * on the miroSOUND PCM12 card. Support for miro sound cards with
  * additional ACI functions can easily be added later.
  *
+ * / NOTE / When compiling as a module, make sure to load the module 
+ * after loading the mad16 module. The initialisation code expects the
+ * MAD16 default mixer to be already available.
+ *
  * Revision history:
  *
  *   1995-11-10  Markus Kuhn <mskuhn@cip.informatik.uni-erlangen.de>
@@ -27,6 +31,8 @@
  *   1996-05-28  Markus Kuhn
  *        Initialize CS4231A mixer, make ACI first mixer,
  *        use new private mixer API for solo mode.
+ *   1998-08-04  Ruurd Reitsma <R.A.Reitsma@wbmt.tudelft.nl>
+ *	  Small modification to complete modularisation.
  */
 
 /*
@@ -59,10 +65,11 @@
  */
 
 #include <linux/config.h> /* for CONFIG_ACI_MIXER */
+#include <linux/module.h> 
 #include "lowlevel.h"
 #include "../sound_config.h"
-#include "lowlevel.h"
-#ifdef CONFIG_ACI_MIXER
+
+#if defined(CONFIG_ACI_MIXER) || defined(CONFIG_ACI_MIXER_MODULE)
 
 #undef  DEBUG             /* if defined, produce a verbose report via syslog */
 
@@ -606,3 +613,17 @@ void unload_aci(void)
 }
 
 #endif
+
+#if defined(MODULE)
+
+int init_module(void) {
+	attach_aci();
+	return(0);
+}
+
+void cleanup_module(void) {
+	unload_aci();
+}
+
+#endif /* MODULE */
+ 

@@ -1771,8 +1771,6 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 	MSDOS_I(new_inode)->i_logstart = MSDOS_I(old_inode)->i_logstart;
 	MSDOS_I(new_inode)->i_attrs = MSDOS_I(old_inode)->i_attrs;
 
-	old_inode->i_nlink = 0;
-
 	fat_cache_inval_inode(old_inode);
 	mark_inode_dirty(new_inode);
 
@@ -1815,6 +1813,16 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 		iput(dotdot_inode);
 		fat_brelse(sb, dotdot_bh);
 	}
+
+	/*
+	 * This convinces the VFS layer to drop the old inode,
+	 * but at the same time fools the VFAT layer to not
+	 * actually delete any of the blocks in the old file
+	 * (because they are very much used by the renamed file)
+	 */
+	MSDOS_I(old_inode)->i_start = 0;
+	MSDOS_I(old_inode)->i_logstart = 0;
+	old_inode->i_nlink = 0;
 
 	if (res > 0) res = 0;
 

@@ -177,14 +177,13 @@ static inline void sync_list(struct list_head *head)
  */
 void sync_inodes(kdev_t dev)
 {
-	struct super_block * sb = super_blocks + 0;
-	int i;
+	struct super_block * sb = sb_entry(super_blocks.next);
 
 	/*
 	 * Search the super_blocks array for the device(s) to sync.
 	 */
 	spin_lock(&inode_lock);
-	for (i = NR_SUPER ; i-- ; sb++) {
+	for (; sb != sb_entry(&super_blocks); sb = sb_entry(sb->s_list.next)) {
 		if (!sb->s_dev)
 			continue;
 		if (dev && sb->s_dev != dev)
