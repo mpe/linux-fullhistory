@@ -215,6 +215,14 @@ long pps_stbcnt;		/* stability limit exceeded */
 /* hook for a loadable hardpps kernel module */
 void (*hardpps_ptr)(struct timeval *);
 
+/* we call this to notify the arch when the clock is being
+ * controlled.  If no such arch routine, do nothing.
+ */
+void __attribute__ ((weak)) notify_arch_cmos_timer(void)
+{
+	return;
+}
+
 /* adjtimex mainly allows reading (and writing, if superuser) of
  * kernel time-keeping variables. used by xntpd.
  */
@@ -398,6 +406,7 @@ leave:	if ((time_status & (STA_UNSYNC|STA_CLOCKERR)) != 0
 	txc->stbcnt	   = pps_stbcnt;
 	write_sequnlock_irq(&xtime_lock);
 	do_gettimeofday(&txc->time);
+	notify_arch_cmos_timer();
 	return(result);
 }
 
