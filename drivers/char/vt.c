@@ -27,6 +27,10 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
+#if defined(__mc68000__) || defined(CONFIG_APUS)
+#include <asm/machdep.h>
+#endif
+
 #include <linux/kbd_kern.h>
 #include <linux/vt_kern.h>
 #include <linux/kbd_diacr.h>
@@ -491,6 +495,27 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	case KDDISABIO:
 		return sys_ioperm(GPFIRST, GPNUM,
 				  (cmd == KDENABIO)) ? -ENXIO : 0;
+#endif
+
+#if defined(__mc68000__) || defined(CONFIG_APUS)
+	/* Linux/m68k interface for setting the keyboard delay/repeat rate */
+		
+	case KDKBDREP:
+	{
+		struct kbd_repeat kbrep;
+		
+		if (!mach_kbdrate) return( -EINVAL );
+		if (!suser()) return( -EPERM );
+
+		if (copy_from_user(&kbrep, (void *)arg,
+				   sizeof(struct kbd_repeat)))
+			return -EFAULT;
+		if ((i = mach_kbdrate( &kbrep ))) return( i );
+		if (copy_to_user((void *)arg, &kbrep,
+				 sizeof(struct kbd_repeat)))
+			return -EFAULT;
+		return 0;
+	}
 #endif
 
 	case KDSETMODE:

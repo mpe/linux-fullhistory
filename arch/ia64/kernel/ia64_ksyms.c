@@ -24,9 +24,8 @@ EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(strtok);
 
-#include <linux/pci.h>
-EXPORT_SYMBOL(pci_alloc_consistent);
-EXPORT_SYMBOL(pci_free_consistent);
+#include <asm/hw_irq.h>
+EXPORT_SYMBOL(isa_irq_to_vector_map);
 
 #include <linux/in6.h>
 #include <asm/checksum.h>
@@ -48,14 +47,6 @@ EXPORT_SYMBOL(disable_irq_nosync);
 
 #include <asm/page.h>
 EXPORT_SYMBOL(clear_page);
-
-#include <asm/pci.h>
-EXPORT_SYMBOL(pci_dma_sync_sg);
-EXPORT_SYMBOL(pci_dma_sync_single);
-EXPORT_SYMBOL(pci_map_sg);
-EXPORT_SYMBOL(pci_map_single);
-EXPORT_SYMBOL(pci_unmap_sg);
-EXPORT_SYMBOL(pci_unmap_single);
 
 #include <asm/processor.h>
 EXPORT_SYMBOL(cpu_data);
@@ -92,6 +83,9 @@ EXPORT_SYMBOL(__global_restore_flags);
 #include <asm/uaccess.h>
 EXPORT_SYMBOL(__copy_user);
 EXPORT_SYMBOL(__do_clear_user);
+EXPORT_SYMBOL(__strlen_user);
+EXPORT_SYMBOL(__strncpy_from_user);
+EXPORT_SYMBOL(__strnlen_user);
 
 #include <asm/unistd.h>
 EXPORT_SYMBOL(__ia64_syscall);

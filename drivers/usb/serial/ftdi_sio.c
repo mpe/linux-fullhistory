@@ -92,8 +92,8 @@
 
 
 static __devinitdata struct usb_device_id id_table_sio [] = {
-    { idVendor: FTDI_VID, idProduct: FTDI_SIO_PID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(FTDI_VID, FTDI_SIO_PID) },
+	{ }						/* Terminating entry */
 };
 
 /* THe 8U232AM has the same API as the sio - but it can support MUCH 
@@ -102,15 +102,15 @@ static __devinitdata struct usb_device_id id_table_sio [] = {
 
    
 static __devinitdata struct usb_device_id id_table_8U232AM [] = {
-    { idVendor: FTDI_VID, idProduct: FTDI_8U232AM_PID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(FTDI_VID, FTDI_8U232AM_PID) },
+	{ }						/* Terminating entry */
 };
 
 
 static __devinitdata struct usb_device_id id_table_combined [] = {
-    { idVendor: FTDI_VID, idProduct: FTDI_SIO_PID },
-    { idVendor: FTDI_VID, idProduct: FTDI_8U232AM_PID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(FTDI_VID, FTDI_SIO_PID) },
+	{ USB_DEVICE(FTDI_VID, FTDI_8U232AM_PID) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, id_table_combined);

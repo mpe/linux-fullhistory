@@ -489,15 +489,6 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum,
 	int readsize, ctrlsize, minor, i;
 	unsigned char *buf;
 
-/*
- * Since 0 is treated as a wildcard by the USB pattern matching,
- * we explicitly check bDeviceSubClass and bDeviceProtocol here.
- */
-
-	if (dev->descriptor.bDeviceSubClass != 0 ||
-	    dev->descriptor.bDeviceProtocol != 0)
-		return NULL;
-
 	for (i = 0; i < dev->descriptor.bNumConfigurations; i++) {
 
 		cfacm = dev->config + i;
@@ -632,7 +623,7 @@ static void acm_disconnect(struct usb_device *dev, void *ptr)
  */
 
 static struct usb_device_id acm_ids[] = {
-	{ bDeviceClass: 2, bDeviceSubClass: 0, bDeviceProtocol: 0},
+	{ USB_DEVICE_INFO(2, 0, 0) },
 	{ }
 };
 

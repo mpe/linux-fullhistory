@@ -473,19 +473,19 @@ static int digi_read_oob_callback( struct urb *urb );
 /* Statics */
 
 static __devinitdata struct usb_device_id id_table_combined [] = {
-    { idVendor: DIGI_VENDOR_ID, idProduct: DIGI_2_ID },
-    { idVendor: DIGI_VENDOR_ID, idProduct: DIGI_4_ID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(DIGI_VENDOR_ID, DIGI_2_ID) },
+	{ USB_DEVICE(DIGI_VENDOR_ID, DIGI_4_ID) },
+	{ }						/* Terminating entry */
 };
 
 static __devinitdata struct usb_device_id id_table_2 [] = {
-    { idVendor: DIGI_VENDOR_ID, idProduct: DIGI_2_ID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(DIGI_VENDOR_ID, DIGI_2_ID) },
+	{ }						/* Terminating entry */
 };
 
 static __devinitdata struct usb_device_id id_table_4 [] = {
-    { idVendor: DIGI_VENDOR_ID, idProduct: DIGI_4_ID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(DIGI_VENDOR_ID, DIGI_4_ID) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, id_table_combined);

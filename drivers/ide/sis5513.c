@@ -48,6 +48,7 @@ static const struct {
 	{ "SiS540",	PCI_DEVICE_ID_SI_540,	SIS5513_FLAG_ATA_66, },
 	{ "SiS620",	PCI_DEVICE_ID_SI_620,	SIS5513_FLAG_ATA_66|SIS5513_FLAG_LATENCY, },
 	{ "SiS630",	PCI_DEVICE_ID_SI_630,	SIS5513_FLAG_ATA_66|SIS5513_FLAG_LATENCY, },
+	{ "SiS730",	PCI_DEVICE_ID_SI_730,	SIS5513_FLAG_ATA_66|SIS5513_FLAG_LATENCY, },
 	{ "SiS5591",	PCI_DEVICE_ID_SI_5591,	SIS5513_FLAG_ATA_33, },
 	{ "SiS5597",	PCI_DEVICE_ID_SI_5597,	SIS5513_FLAG_ATA_33, },
 	{ "SiS5600",	PCI_DEVICE_ID_SI_5600,	SIS5513_FLAG_ATA_33, },
@@ -337,6 +338,7 @@ static int sis5513_tune_chipset (ide_drive_t *drive, byte speed)
 			case PCI_DEVICE_ID_SI_540:
 			case PCI_DEVICE_ID_SI_620:
 			case PCI_DEVICE_ID_SI_630:
+			case PCI_DEVICE_ID_SI_730:
 				unmask   = 0xF0;
 				four_two = 0x01;
 				break;
@@ -370,7 +372,7 @@ static int sis5513_tune_chipset (ide_drive_t *drive, byte speed)
 
 	switch(speed) {
 #ifdef CONFIG_BLK_DEV_IDEDMA
-		case XFER_UDMA_5: /* can not do ultra mode 5 yet */
+		case XFER_UDMA_5: mask = 0x80; break;
 		case XFER_UDMA_4: mask = 0x90; break;
 		case XFER_UDMA_3: mask = 0xA0; break;
 		case XFER_UDMA_2: mask = (four_two) ? 0xB0 : 0xA0; break;
@@ -417,20 +419,26 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 
 	byte unit		= (drive->select.b.unit & 0x01);
 	byte udma_66		= eighty_ninty_three(drive);
+	byte ultra_100		= 0;
 
 	if (host_dev) {
 		switch(host_dev->device) {
+			case PCI_DEVICE_ID_SI_730:
+				ultra_100 = 1;
 			case PCI_DEVICE_ID_SI_530:
 			case PCI_DEVICE_ID_SI_540:
 			case PCI_DEVICE_ID_SI_620:
 			case PCI_DEVICE_ID_SI_630:
-				four_two = 0x01; break;
+				four_two = 0x01;
+				break;
 			default:
 				four_two = 0x00; break;
 		}
 	}
 
-	if ((id->dma_ultra & 0x0010) && (ultra) && (udma_66) && (four_two))
+	if ((id->dma_ultra & 0x0020) && (ultra) && (udma_66) && (four_two) && (ultra_100))
+		speed = XFER_UDMA_5;
+	else if ((id->dma_ultra & 0x0010) && (ultra) && (udma_66) && (four_two))
 		speed = XFER_UDMA_4;
 	else if ((id->dma_ultra & 0x0008) && (ultra) && (udma_66) && (four_two))
 		speed = XFER_UDMA_3;
@@ -590,6 +598,7 @@ unsigned int __init ata66_sis5513 (ide_hwif_t *hwif)
 			case PCI_DEVICE_ID_SI_540:
 			case PCI_DEVICE_ID_SI_620:
 			case PCI_DEVICE_ID_SI_630:
+			case PCI_DEVICE_ID_SI_730:
 				ata66 = (reg48h & mask) ? 0 : 1;
 			default:
 				break;
@@ -616,6 +625,7 @@ void __init ide_init_sis5513 (ide_hwif_t *hwif)
 			case PCI_DEVICE_ID_SI_540:
 			case PCI_DEVICE_ID_SI_620:
 			case PCI_DEVICE_ID_SI_630:
+			case PCI_DEVICE_ID_SI_730:
 			case PCI_DEVICE_ID_SI_5600:
 			case PCI_DEVICE_ID_SI_5597:
 			case PCI_DEVICE_ID_SI_5591:

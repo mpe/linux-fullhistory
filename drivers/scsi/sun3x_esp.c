@@ -6,13 +6,13 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/delay.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/blk.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/delay.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -288,3 +288,7 @@ static void dma_advance_sg (Scsi_Cmnd *sp)
 {
     sp->SCp.ptr = (char *)((unsigned long)sp->SCp.buffer->dvma_address);
 }
+
+static Scsi_Host_Template driver_template = SCSI_SUN3X_ESP;
+
+#include "scsi_module.c"

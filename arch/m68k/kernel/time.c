@@ -126,13 +126,13 @@ extern rwlock_t xtime_lock;
  */
 void do_gettimeofday(struct timeval *tv)
 {
-	extern volatile unsigned long lost_ticks;
+	extern unsigned long wall_jiffies;
 	unsigned long flags;
 	unsigned long usec, sec, lost;
 
 	read_lock_irqsave(&xtime_lock, flags);
 	usec = mach_gettimeoffset();
-	lost = lost_ticks;
+	lost = jiffies - wall_jiffies;
 	if (lost)
 		usec += lost * (1000000/HZ);
 	sec = xtime.tv_sec;

@@ -6,7 +6,6 @@
  * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
 
@@ -32,20 +31,11 @@
 
 #define IA64_REGION_ID_KERNEL	0 /* the kernel's region id (tlb.c depends on this being 0) */
 
-#define IA64_REGION_ID_BITS	18
-
-#ifdef CONFIG_IA64_TLB_CHECKS_REGION_NUMBER
-# define IA64_HW_CONTEXT_BITS	IA64_REGION_ID_BITS
-#else
-# define IA64_HW_CONTEXT_BITS	(IA64_REGION_ID_BITS - 3)
-#endif
-
-#define IA64_HW_CONTEXT_MASK	((1UL << IA64_HW_CONTEXT_BITS) - 1)
-
 struct ia64_ctx {
 	spinlock_t lock;
 	unsigned int next;	/* next context number to use */
 	unsigned int limit;	/* next >= limit => must call wrap_mmu_context() */
+	unsigned int max_ctx;	/* max. context value supported by all CPUs */
 };
 
 extern struct ia64_ctx ia64_ctx;
@@ -60,11 +50,7 @@ enter_lazy_tlb (struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
 static inline unsigned long
 ia64_rid (unsigned long context, unsigned long region_addr)
 {
-# ifdef CONFIG_IA64_TLB_CHECKS_REGION_NUMBER
-	return context;
-# else
 	return context << 3 | (region_addr >> 61);
-# endif
 }
 
 static inline void
@@ -108,12 +94,8 @@ reload_context (struct mm_struct *mm)
 	unsigned long rid_incr = 0;
 	unsigned long rr0, rr1, rr2, rr3, rr4;
 
-	rid = mm->context;
-
-#ifndef CONFIG_IA64_TLB_CHECKS_REGION_NUMBER
-	rid <<= 3;	/* make space for encoding the region number */
+	rid = mm->context << 3;	/* make space for encoding the region number */
 	rid_incr = 1 << 8;
-#endif
 
 	/* encode the region id, preferred page size, and VHPT enable bit: */
 	rr0 = (rid << 8) | (PAGE_SHIFT << 2) | 1;
@@ -132,11 +114,10 @@ reload_context (struct mm_struct *mm)
 }
 
 /*
- * Switch from address space PREV to address space NEXT.  Note that
- * TSK may be NULL.
+ * Switch from address space PREV to address space NEXT.
  */
 static inline void
-switch_mm (struct mm_struct *prev, struct mm_struct *next, struct task_struct *tsk, unsigned cpu)
+activate_mm (struct mm_struct *prev, struct mm_struct *next)
 {
 	/*
 	 * We may get interrupts here, but that's OK because interrupt
@@ -147,7 +128,6 @@ switch_mm (struct mm_struct *prev, struct mm_struct *next, struct task_struct *t
 	reload_context(next);
 }
 
-#define activate_mm(prev,next)					\
-	switch_mm((prev), (next), NULL, smp_processor_id())
+#define switch_mm(prev_mm,next_mm,next_task,cpu)	activate_mm(prev_mm, next_mm)
 
 #endif /* _ASM_IA64_MMU_CONTEXT_H */

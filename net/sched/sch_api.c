@@ -1203,7 +1203,7 @@ int __init pktsched_init(void)
 
 #define INIT_QDISC(name) { \
           extern struct Qdisc_ops name##_qdisc_ops; \
-          register_qdisc(&##name##_qdisc_ops); \
+          register_qdisc(& name##_qdisc_ops);       \
 	}
 
 	INIT_QDISC(pfifo);

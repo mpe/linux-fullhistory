@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.103 2000/11/10 05:44:33 davem Exp $
+/* $Id: ioctl32.c,v 1.104 2001/01/03 09:28:19 anton Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -2274,7 +2274,8 @@ static int do_lvm_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		}
 		karg = v;
 		memset(v->pv, 0, sizeof(v->pv) + sizeof(v->lv));
-		if (v->pv_max > ABS_MAX_PV || v->lv_max == ABS_MAX_LV) return -EPERM;
+		if (v->pv_max > ABS_MAX_PV || v->lv_max > ABS_MAX_LV)
+			return -EPERM;
 		for (i = 0; i < v->pv_max; i++) {
 			err = __get_user(ptr, &((vg32_t *)arg)->pv[i]);
 			if (err) break;

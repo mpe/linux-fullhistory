@@ -89,8 +89,6 @@ static struct fasync_struct *rtc_async_queue;
 
 static DECLARE_WAIT_QUEUE_HEAD(rtc_wait);
 
-extern spinlock_t rtc_lock;
-
 static struct timer_list rtc_irq_timer;
 
 static loff_t rtc_llseek(struct file *file, loff_t offset, int origin);

@@ -160,7 +160,7 @@
 #define __NR_nanosleep			1168
 #define __NR_nfsservctl			1169
 #define __NR_prctl			1170
-#define __NR_getpagesize		1171
+/* 1171 is reserved for backwards compatibility with old __NR_getpagesize */
 #define __NR_mmap2			1172
 #define __NR_pciconfig_read		1173
 #define __NR_pciconfig_write		1174
@@ -196,7 +196,7 @@
 #define __NR_getsockopt			1204
 #define __NR_sendmsg			1205
 #define __NR_recvmsg			1206
-#define __NR_sys_pivot_root		1207
+#define __NR_pivot_root			1207
 #define __NR_mincore			1208
 #define __NR_madvise			1209
 #define __NR_stat			1210

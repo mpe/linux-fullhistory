@@ -40,9 +40,6 @@
 extern void clear_page (void *page);
 extern void copy_page (void *to, void *from);
 
-#define clear_user_page(page, vaddr)	clear_page(page)
-#define copy_user_page(to, from, vaddr)	copy_page(to, from)
-
 #  ifdef STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..
@@ -58,7 +55,6 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 #define pgprot_val(x)	((x).pgprot)
 
 #define __pte(x)	((pte_t) { (x) } )
-#define __pgd(x)	((pgd_t) { (x) } )
 #define __pgprot(x)	((pgprot_t) { (x) } )
 
 #  else /* !STRICT_MM_TYPECHECKS */
@@ -93,21 +89,17 @@ typedef unsigned long pgprot_t;
  */
 #define MAP_NR_DENSE(addr)	(((unsigned long) (addr) - PAGE_OFFSET) >> PAGE_SHIFT)
 
-/*
- * This variant works well for the SGI SN1 architecture (which does have huge
- * holes in the memory address space).
- */
-#define MAP_NR_SN1(addr)	(((unsigned long) (addr) - PAGE_OFFSET) >> PAGE_SHIFT)
-
 #ifdef CONFIG_IA64_GENERIC
 # include <asm/machvec.h>
-# define virt_to_page(kaddr)   (mem_map + platform_map_nr(kaddr))
-#elif defined (CONFIG_IA64_SN_SN1)
-# define virt_to_page(kaddr)   (mem_map + MAP_NR_SN1(kaddr))
+# define virt_to_page(kaddr)	(mem_map + platform_map_nr(kaddr))
+#elif defined (CONFIG_IA64_SGI_SN1)
+# ifndef CONFIG_DISCONTIGMEM
+#  define virt_to_page(kaddr)	(mem_map + MAP_NR_DENSE(kaddr))
+# endif
 #else
-# define virt_to_page(kaddr)   (mem_map + MAP_NR_DENSE(kaddr))
+# define virt_to_page(kaddr)	(mem_map + MAP_NR_DENSE(kaddr))
 #endif
-#define VALID_PAGE(page)       ((page - mem_map) < max_mapnr)
+#define VALID_PAGE(page)	((page - mem_map) < max_mapnr)
 
 typedef union ia64_va {
 	struct {

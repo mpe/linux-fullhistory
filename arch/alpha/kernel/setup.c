@@ -1089,7 +1089,8 @@ int get_cpuinfo(char *buffer)
 		       hwrpb->pagesize,
 		       hwrpb->pa_bits,
 		       hwrpb->max_asn,
-		       loops_per_sec / 500000, (loops_per_sec / 5000) % 100,
+		       loops_per_jiffy / (500000/HZ),
+		       (loops_per_jiffy / (5000/HZ)) % 100,
 		       unaligned[0].count, unaligned[0].pc, unaligned[0].va,
 		       unaligned[1].count, unaligned[1].pc, unaligned[1].va,
 		       platform_string(), nr_processors);

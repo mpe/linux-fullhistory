@@ -157,7 +157,7 @@ static struct pci_device_id rcpci45_pci_table[] __devinitdata = {
 	{ RC_PCI45_VENDOR_ID, RC_PCI45_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
 	{0, }
 };
-MODULE_DEVICE_TABLE(pci, rcpci_pci_table);
+MODULE_DEVICE_TABLE(pci, rcpci45_pci_table);
 
 static void rcpci45_remove_one(struct pci_dev *pdev)
 {

@@ -617,7 +617,6 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 	struct switch_stack *sw;
 	struct unw_frame_info info;
 	struct pt_regs *pt;
-	unsigned long pmd_tmp;
 
 	pt = ia64_task_regs(child);
 	sw = (struct switch_stack *) (child->thread.ksp + 16);
@@ -794,11 +793,7 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 				addr);
 			return -1;
 		}
-	} else 
-#ifdef CONFIG_PERFMON
-		if (addr < PT_PMD) 
-#endif
-		{
+	} else {
 		/* access debug registers */
 
 		if (!(child->thread.flags & IA64_THREAD_DBG_VALID)) {
@@ -820,33 +815,14 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 		}
 
 		ptr += regnum;
+
+		if (write_access)
+			/* don't let the user set kernel-level breakpoints... */
+			*ptr = *data & ~(7UL << 56);
+		else
+			*data = *ptr;
+		return 0;
 	}
-#ifdef CONFIG_PERFMON
-	else {
-		/*
-		 * XXX: will eventually move back to perfmonctl()
-		 */
-		unsigned long pmd = (addr - PT_PMD) >> 3;
-		extern unsigned long perf_ovfl_val;
-
-		/* we just use ptrace to read */
-		if (write_access) return -1;
-
-		if (pmd > 3) {
-			printk("ptrace: rejecting access to PMD[%ld] address 0x%lx\n", pmd, addr);
-			return -1;
-		}
-
-		/* 
-		 * We always need to mask upper 32bits of pmd because value is random
-		 */
-		pmd_tmp = child->thread.pmod[pmd]+(child->thread.pmd[pmd]& perf_ovfl_val);
-
-		/*printk(__FUNCTION__" child=%d reading pmd[%ld]=%lx\n", child->pid, pmd, pmd_tmp);*/
-
-		ptr = &pmd_tmp;
-	}
-#endif
 	if (write_access)
 		*ptr = *data;
 	else
@@ -861,7 +837,6 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 {
 	unsigned long *ptr = NULL, *rbs, *bspstore, ndirty, regnum;
 	struct switch_stack *sw;
-	unsigned long pmd_tmp;
 	struct pt_regs *pt;
 
 	if ((addr & 0x7) != 0)
@@ -977,11 +952,7 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 			/* disallow accessing anything else... */
 			return -1;
 		}
-	} else 
-#ifdef CONFIG_PERFMON
-		if (addr < PT_PMD) 
-#endif
-		{
+	} else {
 
 		/* access debug registers */
 
@@ -1002,34 +973,14 @@ access_uarea (struct task_struct *child, unsigned long addr, unsigned long *data
 			return -1;
 
 		ptr += regnum;
+
+		if (write_access)
+			/* don't let the user set kernel-level breakpoints... */
+			*ptr = *data & ~(7UL << 56);
+		else
+			*data = *ptr;
+		return 0;
 	}
-#ifdef CONFIG_PERFMON
-	else {
-		/*
-		 * XXX: will eventually move back to perfmonctl()
-		 */
-		unsigned long pmd = (addr - PT_PMD) >> 3;
-		extern unsigned long perf_ovfl_val;
-
-		/* we just use ptrace to read */
-		if (write_access) return -1;
-
-		if (pmd > 3) {
-			printk("ptrace: rejecting access to PMD[%ld] address 0x%lx\n", pmd, addr);
-			return -1;
-		}
-
-		/* 
-		 * We always need to mask upper 32bits of pmd because value is random
-		 */
-		pmd_tmp = child->thread.pmod[pmd]+(child->thread.pmd[pmd]& perf_ovfl_val);
-
-		/*printk(__FUNCTION__" child=%d reading pmd[%ld]=%lx\n", child->pid, pmd, pmd_tmp);*/
-
-		ptr = &pmd_tmp;
-	}
-#endif
-
 	if (write_access)
 		*ptr = *data;
 	else
@@ -1107,7 +1058,7 @@ sys_ptrace (long request, pid_t pid, unsigned long addr, unsigned long data,
 		goto out_tsk;
 
 	if (child->state != TASK_STOPPED) {
-		if (request != PTRACE_KILL && request != PTRACE_PEEKUSR)
+		if (request != PTRACE_KILL)
 			goto out_tsk;
 	}
 

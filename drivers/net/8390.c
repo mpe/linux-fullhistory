@@ -1054,7 +1054,9 @@ void NS8390_init(struct net_device *dev, int startp)
 	long e8390_base = dev->base_addr;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
 	int i;
-	int endcfg = ei_local->word16 ? (0x48 | ENDCFG_WTS) : 0x48;
+	int endcfg = ei_local->word16
+	    ? (0x48 | ENDCFG_WTS | (ei_local->bigendian ? ENDCFG_BOS : 0))
+	    : 0x48;
     
 	if(sizeof(struct e8390_pkt_hdr)!=4)
     		panic("8390.c: header struct mispacked\n");    

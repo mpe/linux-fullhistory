@@ -511,7 +511,7 @@ static void seq_chn_voice_event(unsigned char *event_rec)
 			synth_devs[dev]->aftertouch(dev, voice, parm);
 			break;
 
-		default:
+		default:;
 	}
 #undef dev
 #undef cmd
@@ -614,7 +614,7 @@ static void seq_chn_common_event(unsigned char *event_rec)
 				synth_devs[dev]->bender(dev, chn, w14);
 			break;
 
-		default:
+		default:;
 	}
 }
 
@@ -684,7 +684,7 @@ static int seq_timing_event(unsigned char *event_rec)
 			}
 			break;
 
-		default:
+		default:;
 	}
 
 	return TIMER_NOT_ARMED;
@@ -701,7 +701,7 @@ static void seq_local_event(unsigned char *event_rec)
 			DMAbuf_start_devices(parm);
 			break;
 
-		default:
+		default:;
 	}
 }
 
@@ -859,7 +859,7 @@ static int play_event(unsigned char *q)
 			seq_sysex_message(q);
 			break;
 
-		default:
+		default:;
 	}
 	return 0;
 }

@@ -5,15 +5,10 @@
 # Copyright (C) Srinivasa Thirumalachar (sprasad@engr.sgi.com)
 #
 
-CFLAGS          :=     $(CFLAGS) -DCONFIG_SGI_SN1 -DSN1 -DSN -DSOFTSDV \
-			-DLANGUAGE_C=1 -D_LANGUAGE_C=1
-AFLAGS          :=      $(AFLAGS) -DCONFIG_SGI_SN1 -DSN1 -DSOFTSDV
-
-.S.s:
-	$(CPP) $(AFLAGS) -o $*.s $<
-.S.o:
-	$(CC) $(AFLAGS) -c -o $*.o $<
-
+EXTRA_CFLAGS	:= -DSN -DLANGUAGE_C=1 -D_LANGUAGE_C=1 -I. -DBRINGUP \
+		   -DDIRECT_L1_CONSOLE -DNUMA_BASE -DSIMULATED_KLGRAPH \
+		   -DNUMA_MIGR_CONTROL -DLITTLE_ENDIAN -DREAL_HARDWARE \
+		   -DNEW_INTERRUPTS -DCONFIG_IA64_SGI_IO
 all: sn.a
 
 O_TARGET        = sn.a

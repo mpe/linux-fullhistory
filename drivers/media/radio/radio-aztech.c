@@ -289,7 +289,7 @@ static int __init aztech_init(void)
 		return -EINVAL;
 	}
 
-	if (request_region(io, 2, "aztech")) 
+	if (!request_region(io, 2, "aztech")) 
 	{
 		printk(KERN_ERR "aztech: port 0x%x already in use\n", io);
 		return -EBUSY;

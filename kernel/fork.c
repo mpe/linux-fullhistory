@@ -192,6 +192,8 @@ fail_nomem:
 	return retval;
 }
 
+spinlock_t mmlist_lock __cacheline_aligned = SPIN_LOCK_UNLOCKED;
+
 #define allocate_mm()	(kmem_cache_alloc(mm_cachep, SLAB_KERNEL))
 #define free_mm(mm)	(kmem_cache_free(mm_cachep, (mm)))
 
@@ -242,7 +244,9 @@ inline void __mmdrop(struct mm_struct *mm)
  */
 void mmput(struct mm_struct *mm)
 {
-	if (atomic_dec_and_test(&mm->mm_users)) {
+	if (atomic_dec_and_lock(&mm->mm_users, &mmlist_lock)) {
+		list_del(&mm->mmlist);
+		spin_unlock(&mmlist_lock);
 		exit_mmap(mm);
 		mmdrop(mm);
 	}
@@ -272,9 +276,9 @@ void mm_release(void)
 	}
 }
 
-static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
+static int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 {
-	struct mm_struct * mm;
+	struct mm_struct * mm, *oldmm;
 	int retval;
 
 	tsk->min_flt = tsk->maj_flt = 0;
@@ -289,12 +293,13 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	 *
 	 * We need to steal a active VM for that..
 	 */
-	mm = current->mm;
-	if (!mm)
+	oldmm = current->mm;
+	if (!oldmm)
 		return 0;
 
 	if (clone_flags & CLONE_VM) {
-		atomic_inc(&mm->mm_users);
+		atomic_inc(&oldmm->mm_users);
+		mm = oldmm;
 		goto good_mm;
 	}
 
@@ -304,16 +309,25 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		goto fail_nomem;
 
 	/* Copy the current MM stuff.. */
-	memcpy(mm, current->mm, sizeof(*mm));
+	memcpy(mm, oldmm, sizeof(*mm));
 	if (!mm_init(mm))
 		goto fail_nomem;
 
-	tsk->mm = mm;
-	tsk->active_mm = mm;
-
-	down(&current->mm->mmap_sem);
+	down(&oldmm->mmap_sem);
 	retval = dup_mmap(mm);
-	up(&current->mm->mmap_sem);
+	up(&oldmm->mmap_sem);
+
+	/*
+	 * Add it to the mmlist after the parent.
+	 *
+	 * Doing it this way means that we can order
+	 * the list, and fork() won't mess up the
+	 * ordering significantly.
+	 */
+	spin_lock(&mmlist_lock);
+	list_add(&mm->mmlist, &oldmm->mmlist);
+	spin_unlock(&mmlist_lock);
+
 	if (retval)
 		goto free_pt;
 

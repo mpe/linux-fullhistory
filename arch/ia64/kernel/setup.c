@@ -235,6 +235,12 @@ setup_arch (char **cmdline_p)
 	machvec_init(acpi_get_sysname());
 #endif
 
+#ifdef	CONFIG_ACPI20
+	if (efi.acpi20) {
+		/* Parse the ACPI 2.0 tables */
+		acpi20_parse(efi.acpi20);
+	} else 
+#endif
 	if (efi.acpi) {
 		/* Parse the ACPI tables */
 		acpi_parse(efi.acpi);
@@ -255,13 +261,6 @@ setup_arch (char **cmdline_p)
 
 	paging_init();
 	platform_setup(cmdline_p);
-
-#ifdef CONFIG_SWIOTLB
-	{
-		extern void setup_swiotlb (void);
-		setup_swiotlb();
-	}
-#endif
 }
 
 /*
@@ -271,9 +270,9 @@ int
 get_cpuinfo (char *buffer)
 {
 #ifdef CONFIG_SMP
-#	define lps	c->loops_per_sec
+#	define lpj	c->loops_per_jiffy
 #else
-#	define lps	loops_per_sec
+#	define lpj	loops_per_jiffy
 #endif
 	char family[32], model[32], features[128], *cp, *p = buffer;
 	struct cpuinfo_ia64 *c;
@@ -325,7 +324,7 @@ get_cpuinfo (char *buffer)
 			     features,
 			     c->ppn, c->number, c->proc_freq / 1000000, c->proc_freq % 1000000,
 			     c->itc_freq / 1000000, c->itc_freq % 1000000,
-			     lps / 500000, (lps / 5000) % 100);
+			     lpj*HZ/500000, (lpj*HZ/5000) % 100);
         }
 	return p - buffer;
 }
@@ -376,15 +375,7 @@ identify_cpu (struct cpuinfo_ia64 *c)
 
 	status = ia64_pal_vm_summary(&vm1, &vm2);
 	if (status == PAL_STATUS_SUCCESS) {
-#if 1
-		/*
-		 * XXX the current PAL code returns IMPL_VA_MSB==60, which is dead-wrong.
-		 * --davidm 00/05/26
-		 s*/
-		impl_va_msb = 50;
-#else
 		impl_va_msb = vm2.pal_vm_info_2_s.impl_va_msb;
-#endif
 		phys_addr_size = vm1.pal_vm_info_1_s.phys_add_size;
 	}
 	printk("CPU %d: %lu virtual and %lu physical address bits\n",
@@ -408,6 +399,8 @@ cpu_init (void)
 {
 	extern void __init ia64_rid_init (void);
 	extern void __init ia64_tlb_init (void);
+	pal_vm_info_2_u_t vmi;
+	unsigned int max_ctx;
 
 	identify_cpu(&my_cpu_data);
 
@@ -415,15 +408,12 @@ cpu_init (void)
 	memset(ia64_task_regs(current), 0, sizeof(struct pt_regs));
 
 	/*
-	 * Initialize default control register to defer speculative
-	 * faults.  On a speculative load, we want to defer access
-	 * right, key miss, and key permission faults.  We currently
-	 * do NOT defer TLB misses, page-not-present, access bit, or
-	 * debug faults but kernel code should not rely on any
-	 * particular setting of these bits.
-	ia64_set_dcr(IA64_DCR_DR | IA64_DCR_DK | IA64_DCR_DX | IA64_DCR_PP);
+	 * Initialize default control register to defer all speculative faults.  The
+	 * kernel MUST NOT depend on a particular setting of these bits (in other words,
+	 * the kernel must have recovery code for all speculative accesses).
 	 */
-	ia64_set_dcr(IA64_DCR_DR | IA64_DCR_DK | IA64_DCR_DX );
+	ia64_set_dcr(  IA64_DCR_DM | IA64_DCR_DP | IA64_DCR_DK | IA64_DCR_DX | IA64_DCR_DR
+		     | IA64_DCR_DA | IA64_DCR_DD);
 #ifndef CONFIG_SMP
 	ia64_set_fpu_owner(0);		/* initialize ar.k5 */
 #endif
@@ -444,4 +434,17 @@ cpu_init (void)
 #ifdef CONFIG_SMP
 	normal_xtp();
 #endif
+
+	/* set ia64_ctx.max_rid to the maximum RID that is supported by all CPUs: */
+	if (ia64_pal_vm_summary(NULL, &vmi) == 0)
+		max_ctx = (1U << (vmi.pal_vm_info_2_s.rid_size - 3)) - 1;
+	else {
+		printk("ia64_rid_init: PAL VM summary failed, assuming 18 RID bits\n");
+		max_ctx = (1U << 15) - 1;	/* use architected minimum */
+	}
+	while (max_ctx < ia64_ctx.max_ctx) {
+		unsigned int old = ia64_ctx.max_ctx;
+		if (cmpxchg(&ia64_ctx.max_ctx, old, max_ctx) == old)
+			break;
+	}
 }

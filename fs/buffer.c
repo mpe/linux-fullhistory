@@ -118,8 +118,7 @@ union bdflush_param {
 				wake-cycle */
 		int nrefill; /* Number of clean buffers to try to obtain
 				each time we call refill */
-		int nref_dirt; /* Dirty buffer threshold for activating bdflush
-				  when trying to refill buffers. */
+		int dummy1;   /* unused */
 		int interval; /* jiffies delay between kupdate flushes */
 		int age_buffer;  /* Time for normal buffer to age before we flush it */
 		int nfract_sync; /* Percentage of buffer cache dirty to 
@@ -128,7 +127,7 @@ union bdflush_param {
 		int dummy3;    /* unused */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{40, 500, 64, 256, 5*HZ, 30*HZ, 80, 0, 0}};
+} bdf_prm = {{30, 64, 64, 256, 5*HZ, 30*HZ, 60, 0, 0}};
 
 /* These are the min and max parameter values that we will allow to be assigned */
 int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   1*HZ,   0, 0, 0};
@@ -755,11 +754,15 @@ void set_blocksize(kdev_t dev, int size)
 
 /*
  * We used to try various strange things. Let's not.
+ * We'll just try to balance dirty buffers, and possibly
+ * launder some pages.
  */
 static void refill_freelist(int size)
 {
-	if (!grow_buffers(size)) 
-		wakeup_bdflush(1);  /* Sets task->state to TASK_RUNNING */
+	balance_dirty(NODEV);
+	if (free_shortage())
+		page_launder(GFP_BUFFER, 0);
+	grow_buffers(size);
 }
 
 void init_buffer(struct buffer_head *bh, bh_end_io_t *handler, void *private)
@@ -1090,8 +1093,10 @@ void __mark_buffer_dirty(struct buffer_head *bh)
 
 void mark_buffer_dirty(struct buffer_head *bh)
 {
-	__mark_buffer_dirty(bh);
-	balance_dirty(bh->b_dev);
+	if (!atomic_set_buffer_dirty(bh)) {
+		__mark_dirty(bh);
+		balance_dirty(bh->b_dev);
+	}
 }
 
 /*
@@ -2528,34 +2533,6 @@ void __init buffer_init(unsigned long mempages)
  * response to dirty buffers.  Once this process is activated, we write back
  * a limited number of buffers to the disks and then go back to sleep again.
  */
-static DECLARE_WAIT_QUEUE_HEAD(bdflush_done);
-struct task_struct *bdflush_tsk = 0;
-
-void wakeup_bdflush(int block)
-{
-	DECLARE_WAITQUEUE(wait, current);
-
-	if (current == bdflush_tsk)
-		return;
-
-	if (!block) {
-		wake_up_process(bdflush_tsk);
-		return;
-	}
-
-	/* bdflush can wakeup us before we have a chance to
-	   go to sleep so we must be smart in handling
-	   this wakeup event from bdflush to avoid deadlocking in SMP
-	   (we are not holding any lock anymore in these two paths). */
-	__set_current_state(TASK_UNINTERRUPTIBLE);
-	add_wait_queue(&bdflush_done, &wait);
-
-	wake_up_process(bdflush_tsk);
-	schedule();
-
-	remove_wait_queue(&bdflush_done, &wait);
-	__set_current_state(TASK_RUNNING);
-}
 
 /* This is the _only_ function that deals with flushing async writes
    to disk.
@@ -2609,6 +2586,18 @@ static int flush_dirty_buffers(int check_flushtime)
 	spin_unlock(&lru_list_lock);
 
 	return flushed;
+}
+
+struct task_struct *bdflush_tsk = 0;
+
+void wakeup_bdflush(int block)
+{
+	if (current != bdflush_tsk) {
+		wake_up_process(bdflush_tsk);
+
+		if (block)
+			flush_dirty_buffers(0);
+	}
 }
 
 /* 
@@ -2725,23 +2714,14 @@ int bdflush(void *sem)
 
 		flushed = flush_dirty_buffers(0);
 		if (free_shortage())
-			flushed += page_launder(GFP_BUFFER, 0);
+			flushed += page_launder(GFP_KERNEL, 0);
 
-		/* If wakeup_bdflush will wakeup us
-		   after our bdflush_done wakeup, then
-		   we must make sure to not sleep
-		   in schedule_timeout otherwise
-		   wakeup_bdflush may wait for our
-		   bdflush_done wakeup that would never arrive
-		   (as we would be sleeping) and so it would
-		   deadlock in SMP. */
-		__set_current_state(TASK_INTERRUPTIBLE);
-		wake_up_all(&bdflush_done);
 		/*
 		 * If there are still a lot of dirty buffers around,
 		 * skip the sleep and flush some more. Otherwise, we
 		 * go to sleep waiting a wakeup.
 		 */
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (!flushed || balance_dirty_state(NODEV) < 0) {
 			run_task_queue(&tq_disk);
 			schedule();

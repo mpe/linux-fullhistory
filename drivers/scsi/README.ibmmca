@@ -1,5 +1,4 @@
 
-
                -=< The IBM Microchannel SCSI-Subsystem >=-
 	       
 	                 for the IBM PS/2 series
@@ -8,13 +7,22 @@
 		 
      Copyright (c) 1995 Strom Systems, Inc. under the terms of the GNU 
   General Public License. Originally written by Martin Kolinek, December 1995.
-         Officially maintained by Michael Lang since January 1999.
+   Officially modified and maintained by Michael Lang since January 1999.
 	   
- 	                       Version 4.0
+ 	                       Version 4.0a
 	
-	
-   Last update: 28 December 2000
-
+   Last update: January 3, 2001
+   
+   Before you Start
+   ----------------
+   This is the common README.ibmmca file for all driver releases of the 
+   IBM MCA SCSI driver for Linux. Please note, that driver releases 4.0
+   or newer do not work with kernel versions older than 2.4.0, while driver
+   versions older than 4.0 do not work with kernels 2.4.0 or later! If you
+   try to compile your kernel with the wrong driver source, the 
+   compilation is aborted and you get a corresponding error message. This is
+   no bug in the driver. It prevents you from using the wrong sourcecode
+   with the wrong kernel version.
 
    Authors of this Driver
    ----------------------
@@ -22,9 +30,10 @@
     - Martin Kolinek (origin, first release of this driver)
     - Klaus Kudielka (multiple SCSI-host management/detection, adaption to
                       Linux Kernel 2.1.x, module support)
-    - Michael Lang (assigning original pun,lun mapping, dynamical ldn 
-                    assignment, this file, patch, official driver maintenance
-		    and subsequent pains related with the driver :-))
+    - Michael Lang (assigning original pun/lun mapping, dynamical ldn
+                    assignment, rewritten adapter detection, this file, 
+		    patches, official driver maintenance and subsequent 
+		    debugging, related with the driver)
 
    Table of Contents
    -----------------
@@ -362,7 +371,7 @@
    The following IBM SCSI-subsystems are supported by this driver:
    
      - IBM Fast/Wide SCSI-2 Adapter
-     - IBM 7568 Industrial Computer SCSI Adapter w/cache
+     - IBM 7568 Industrial Computer SCSI Adapter w/Cache
      - IBM Expansion Unit SCSI Controller
      - IBM SCSI Adapter w/Cache
      - IBM SCSI Adapter
@@ -377,7 +386,11 @@
    are fully implemented up from version 3.1e of the driver. This means, that
    you just need the latest ibmmca.h and ibmmca.c file and copy it in the
    linux/drivers/scsi directory. The code is automatically adapted during 
-   kernel compilation.
+   kernel compilation. This is different from kernel 2.4.0! Here version 
+   4.0 or later of the driver must be used for kernel 2.4.0 or later. Version
+   4.0 or later does not work together with older kernels! Driver versions
+   older than 4.0 do not work together with kernel 2.4.0 or later. They work
+   on all older kernels.
 
    3 Code History
    --------------
@@ -890,31 +903,50 @@
    2) Inquiry requests can be shorter than 255 bytes of return buffer. Due
       to a bug in the ibmmca_queuecommand routine, this buffer was forced
       to 255 at minimum. If the memory address, this return buffer is pointing
-      does not offer more space, invalid memory accesses destabilized the
+      to does not offer more space, invalid memory accesses destabilized the
       kernel.
    3) version 4.0 is only valid for kernel 2.4.0 or later. This is necessary
       to remove old kernel version dependant waste from the driver. 3.2d is
       only distributed with older kernels but keeps compatibility with older
-      kernel versions.
+      kernel versions. 4.0 and higher versions cannot be used with older 
+      kernels anymore!! You must have at least kernel 2.4.0!!
    4) The commandline argument 'bypass' and all its functionality got removed
-      in version 4.0. This was never really necessary and is kept in 3.2X for
-      debugging reasons.
-   5) Dynamical reassignment of ldns was again verified and should work now.
+      in version 4.0. This was never really necessary, as all troubles were
+      based on non-command related reasons up to now, so bypassing commands
+      did not help to avoid any bugs. It is kept in 3.2X for debugging reasons.
+   5) Dynamical reassignment of ldns was again verified and analyzed to be
+      completely inoperational. This is corrected and should work now.
    6) All commands that get sent to the SCSI adapter were verified and
       completed in such a way, that they are now completely conform to the
       demands in the technical description of IBM. Main candidates were the
       DEVICE_INQUIRY, REQUEST_SENSE and DEVICE_CAPACITY commands. They must
       be tranferred by bypassing the internal command buffer of the adapter
-      or else the response is a random result.
+      or else the response can be a random result. GET_POS_INFO would be more
+      safe in usage, if one could use the SUPRESS_EXCEPTION_SHORT, but this
+      is not allowed by the technical references of IBM. (Sorry, folks, the
+      model 80 problem is still a task to be solved in a different way.)
    7) v3.2d is still hold back for some days for testing, while 4.0 is 
       released.
+   - Michael Lang
+   
+   January 3, 2001 (v4.0a)
+   1) A lot of complains after the 2.4.0-prerelease kernel came in about
+      the impossibility to compile the driver as a module. This problem is
+      solved. In combination with that problem, some unprecise declaration
+      of the function option_setup() gave some warnings during compilation.
+      This is solved, too by a forward declaration in ibmmca.c.
+   2) #ifdef argument concerning CONFIG_SCSI_IBMMCA is no longer needed and
+      was entirely removed.
+   3) Some switch statements got optimized in code, as some minor variables
+      in internal SCSI-command handlers.
    - Michael Lang
 
    4 To do
    -------
-        - IBM SCSI-2 F/W external SCSI bus support in seperate mode.
+        - IBM SCSI-2 F/W external SCSI bus support in seperate mode!
 	- It seems that the handling of bad disks is really bad -
-	  non-existent, in fact.
+	  non-existent, in fact. However, a low-level driver cannot help
+	  much, if such things happen.
 
    5 Users' Manual
    ---------------
@@ -1032,6 +1064,7 @@
    should try first to remove your commandline arguments of such type with a 
    newer driver. I bet, it will be recognized correctly. Even multiple and 
    different types of IBM SCSI-adapters should be recognized correctly, too.
+   Use the forced detection method only as last solution!
    
    Examples:
    
@@ -1079,6 +1112,10 @@
 	was: http://www.uni-mainz.de/~langm000/linux.html
      Q: My SCSI-adapter is not recognized by the driver, what can I do?
      A: Just force it to be recognized by kernel parameters. See section 5.1.
+        If this really happens, do also send e-mail to the maintainer, as
+	forced detection should be never necessary. Forced detection is in
+	principal some flaw of the driver adapter detection and goes into 
+	bugreports.
      Q: The driver screws up, if it starts to probe SCSI-devices, is there
         some way out of it?
      A: Yes, that was some recognition problem of the correct SCSI-adapter
@@ -1142,7 +1179,7 @@
 	is NULL. From version 3.2, it is taken care of this.
      Q: I have a F/W adapter and the driver sees my internal SCSI-devices,
         but ignores the external ones.
-     A: Select combined busmode in the config-program and check for that
+     A: Select combined busmode in the IBM config-program and check for that
         no SCSI-id on the external devices appears on internal devices.
         Reboot afterwards. Dual busmode is supported, but works only for the
 	internal bus, yet. External bus is still ignored. Take care for your
@@ -1173,7 +1210,8 @@
 	everything is running smoothly.
      A: No real answer, yet. In any case, one should force the kernel to
         present SCBs only below the 16 MBytes barrier. Maybe this solves the
-	problem. Not yet tried, but guessing that it could work.
+	problem. Not yet tried, but guessing that it could work. To get this,
+	set unchecked_isa_dma argument of ibmmca.h from 0 to 1.
 
    5.3 Bugreports
    --------------
@@ -1215,7 +1253,7 @@
    Here you can find info about the background of this driver, patches,
    troubleshooting support, news and a bugreport form. Please check that
    WWW-page regularly for latest hints. If ever this URL changes, please 
-   refer to the MAINTAINERS File in order to get the latest address.
+   refer to the MAINTAINERS file in order to get the latest address.
    
    For the bugreport, please fill out the formular on the corresponding
    WWW-page. Read the dedicated instructions and write as much as you
@@ -1310,7 +1348,7 @@
    Erik Weber
                 for the great deal we made about a model 9595 and the nice
                 surrounding equipment and the cool trip to Mannheim
-                second-hand computer market. In addition, I would like to 
+                second-hand computer market. In addition, I would like
 		to thank him for his exhaustive SCSI-driver testing on his 
 		95er PS/2 park.
    Anthony Hogbin
@@ -1326,7 +1364,7 @@
                 for his model 30, which serves me as part of my teststand
 		and his cool remark about how you make an ordinary diskette
 		drive working and how to connect it to an IBM-diskette port.
-   Johannes Gutenberg-University, Mainz &
+   Johannes Gutenberg-Universitaet, Mainz &
    Institut fuer Kernphysik, Mainz Microtron (MAMI)
                 for the offered space, the link, placed on the central
                 homepage and the space to store and offer the driver and 

@@ -9,20 +9,20 @@
 
 all: kernel.o head.o init_task.o
 
-obj-y := acpi.o entry.o gate.o efi.o efi_stub.o irq.o irq_ia64.o irq_sapic.o ivt.o		\
-	 machvec.o pal.o pci-dma.o process.o perfmon.o ptrace.o sal.o semaphore.o setup.o	\
-	 signal.o sys_ia64.o traps.o time.o unaligned.o unwind.o
+O_TARGET := kernel.o
 
-obj-$(CONFIG_IA64_GENERIC) += machvec.o
+obj-y := acpi.o entry.o gate.o efi.o efi_stub.o irq.o irq_ia64.o irq_sapic.o ivt.o \
+	 machvec.o pal.o process.o perfmon.o ptrace.o sal.o semaphore.o setup.o	\
+	 signal.o sys_ia64.o traps.o time.o unaligned.o unwind.o
+obj-$(CONFIG_IA64_GENERIC) += machvec.o iosapic.o
+obj-$(CONFIG_IA64_DIG) += iosapic.o
 obj-$(CONFIG_IA64_PALINFO) += palinfo.o
 obj-$(CONFIG_PCI) += pci.o
 obj-$(CONFIG_SMP) += smp.o smpboot.o
 obj-$(CONFIG_IA64_MCA) += mca.o mca_asm.o
 obj-$(CONFIG_IA64_BRL_EMU) += brl_emu.o
 
-O_TARGET := kernel.o
-O_OBJS	 :=  $(obj-y)
-OX_OBJS  := ia64_ksyms.o
+export-objs := ia64_ksyms.o
 
 clean::
 

@@ -292,7 +292,7 @@ static int arp_constructor(struct neighbour *neigh)
 			neigh->output = neigh->ops->output;
 			return 0;
 #endif
-		}
+		;}
 #endif
 		if (neigh->type == RTN_MULTICAST) {
 			neigh->nud_state = NUD_NOARP;

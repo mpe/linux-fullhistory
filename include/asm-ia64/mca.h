@@ -18,6 +18,7 @@
 #include <asm/param.h>
 #include <asm/sal.h>
 #include <asm/processor.h>
+#include <asm/hw_irq.h>
 
 /* These are the return codes from all the IA64_MCA specific interfaces */
 typedef	int ia64_mca_return_code_t;
@@ -30,9 +31,9 @@ enum {
 #define IA64_MCA_RENDEZ_TIMEOUT		(100 * HZ)	/* 1000 milliseconds */
 
 /* Interrupt vectors reserved for MC handling. */
-#define IA64_MCA_RENDEZ_INT_VECTOR	0xF3	/* Rendez interrupt */
-#define IA64_MCA_WAKEUP_INT_VECTOR	0x12	/* Wakeup interrupt */
-#define IA64_MCA_CMC_INT_VECTOR		0xF2	/* Correctable machine check interrupt */
+#define IA64_MCA_RENDEZ_INT_VECTOR	MCA_RENDEZ_IRQ	/* Rendez interrupt */
+#define IA64_MCA_WAKEUP_INT_VECTOR	MCA_WAKEUP_IRQ	/* Wakeup interrupt */
+#define IA64_MCA_CMC_INT_VECTOR		CMC_IRQ	/* Correctable machine check interrupt */
 
 #define IA64_CMC_INT_DISABLE		0
 #define IA64_CMC_INT_ENABLE		1
@@ -45,11 +46,11 @@ typedef union cmcv_reg_u {
 	u64	cmcv_regval;
 	struct	{
 		u64  	cmcr_vector		: 8;
-		u64	cmcr_ignored1		: 47;
+		u64	cmcr_reserved1		: 4;
+		u64	cmcr_ignored1		: 1;
+		u64	cmcr_reserved2		: 3;
 		u64	cmcr_mask		: 1;
-		u64	cmcr_reserved1		: 3;
-		u64	cmcr_ignored2		: 1;
-		u64	cmcr_reserved2		: 4;
+		u64	cmcr_ignored2		: 47;
 	} cmcv_reg_s;
 
 } cmcv_reg_t;

@@ -145,9 +145,12 @@ static inline pgprot_t pgprot_noncached(pgprot_t _prot)
 #elif defined(__powerpc__)
 	prot |= _PAGE_NO_CACHE | _PAGE_GUARDED;
 #elif defined(__mc68000__)
+#ifdef SUN3_PAGE_NOCACHE
 	if (MMU_IS_SUN3)
 		prot |= SUN3_PAGE_NOCACHE;
-	else if (MMU_IS_851 || MMU_IS_030)
+	else
+#endif
+	if (MMU_IS_851 || MMU_IS_030)
 		prot |= _PAGE_NOCACHE030;
 	/* Use no-cache mode, serialized */
 	else if (MMU_IS_040 || MMU_IS_060)

@@ -1,10 +1,12 @@
 #ifndef _M68K_DELAY_H
 #define _M68K_DELAY_H
 
+#include <asm/param.h>
+
 /*
  * Copyright (C) 1994 Hamish Macdonald
  *
- * Delay routines, using a pre-computed "loops_per_second" value.
+ * Delay routines, using a pre-computed "loops_per_jiffy" value.
  */
 
 extern __inline__ void __delay(unsigned long loops)
@@ -13,6 +15,8 @@ extern __inline__ void __delay(unsigned long loops)
 		: "=d" (loops) : "0" (loops));
 }
 
+extern void __bad_udelay(void);
+
 /*
  * Use only for very small delays ( < 1 msec).  Should probably use a
  * lookup table, really, as the multiplications take much too long with
@@ -20,16 +24,24 @@ extern __inline__ void __delay(unsigned long loops)
  * first constant multiplications gets optimized away if the delay is
  * a constant)  
  */
-extern __inline__ void udelay(unsigned long usecs)
+static inline void __const_udelay(unsigned long xloops)
 {
 	unsigned long tmp;
 
-	usecs *= 4295;		/* 2**32 / 1000000 */
 	__asm__ ("mulul %2,%0:%1"
-		: "=d" (usecs), "=d" (tmp)
-		: "d" (usecs), "1" (loops_per_sec));
-	__delay(usecs);
+		: "=d" (xloops), "=d" (tmp)
+		: "d" (xloops), "1" (loops_per_jiffy));
+	__delay(xloops * HZ);
 }
+
+static inline void __udelay(unsigned long usecs)
+{
+	__const_udelay(usecs * 4295);	/* 2**32 / 1000000 */
+}
+
+#define udelay(n) (__builtin_constant_p(n) ? \
+	((n) > 20000 ? __bad_udelay() : __const_udelay((n) * 4295)) : \
+	__udelay(n))
 
 extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
 {

@@ -57,7 +57,7 @@
       <title>Introduction</title>
   <para>
 	The Z85x30 family synchronous/asynchronous controller chips are
-	used on a larg number of cheap network interface cards. The
+	used on a large number of cheap network interface cards. The
 	kernel provides a core interface layer that is designed to make
 	it easy to provide WAN services using this chip.
   </para>
@@ -124,7 +124,7 @@
 	for allocating the interrupt line. The interrupt handler should be
 	set to <function>z8530_interrupt</function>. The device id should
 	be set to the z8530_dev structure pointer. Whether the interrupt can
-	be shared or not is board dependant, and up to you to initialise.
+	be shared or not is board dependent, and up to you to initialise.
   </para>
   <para>
 	The structure holds two channel structures. 
@@ -143,19 +143,19 @@
   </para>
   <para>
 	Repeat the same operation with the B channel if your chip has
-	both channels wired to something useful. This isnt always the
+	both channels wired to something useful. This isn't always the
 	case. If it is not wired then the I/O values do not matter, but
 	you must initialise chanB.dev.
   </para>
   <para>
 	If your board has DMA facilities then initialise the txdma and
 	rxdma fields for the relevant channels. You must also allocate the
-	ISA DMA channels and do any neccessary board level initialisation
+	ISA DMA channels and do any necessary board level initialisation
 	to configure them. The low level driver will do the Z8530 and
 	DMA controller programming but not board specific magic.
   </para>
   <para>
-	Having intialised the device you can then call
+	Having initialised the device you can then call
 	<function>z8530_init</function>. This will probe the chip and 
 	reset it into a known state. An identification sequence is then
 	run to identify the chip type. If the checks fail to pass the
@@ -167,7 +167,7 @@
   <para>
 	Once you have called z8530_init you can also make use of the utility
 	function <function>z8530_describe</function>. This provides a 
-	consistant reporting format for the Z8530 devices, and allows all
+	consistent reporting format for the Z8530 devices, and allows all
 	the drivers to provide consistent reporting.
   </para>
   </chapter>
@@ -191,7 +191,7 @@
 	to the syncppp structures.
   </para>
   <para>
-	The way most drivers approach this paticular problem is to
+	The way most drivers approach this particular problem is to
 	create a structure holding the Z8530 device definition and
 	put that and the syncppp pointer into the private field of
 	the network device. The network device fields of the channels
@@ -330,7 +330,7 @@
   <para>
 	The Z8530 driver is written to be portable. In DMA mode it makes
 	assumptions about the use of ISA DMA. These are probably warranted
-	in most cases as the Z85230 in paticular was designed to glue to PC
+	in most cases as the Z85230 in particular was designed to glue to PC
 	type machines. The PIO mode makes no real assumptions.
   </para>
   <para>

@@ -1971,7 +1971,6 @@ static ssize_t cs_read(struct file *file, char *buffer, size_t count, loff_t *pp
 			start_adc(state);
 			if (file->f_flags & O_NONBLOCK) {
 				if (!ret) ret = -EAGAIN;
-				remove_wait_queue(&state->dmabuf.wait, &wait);
 				break;
  			}
 			schedule();

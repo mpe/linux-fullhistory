@@ -127,7 +127,9 @@ struct lance_private
          */
         void (*writerap)(void *, unsigned short);
         void (*writerdp)(void *, unsigned short);
-        unsigned short (*readrdp)(struct lance_private *);
+        unsigned short (*readrdp)(void *);
+	spinlock_t devlock;
+	char tx_full;
 };
 
 #define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */
@@ -252,5 +254,6 @@ extern int lance_close (struct net_device *dev);
 extern int lance_start_xmit (struct sk_buff *skb, struct net_device *dev);
 extern struct net_device_stats *lance_get_stats (struct net_device *dev);
 extern void lance_set_multicast (struct net_device *dev);
+extern void lance_tx_timeout(struct net_device *dev);
 
 #endif /* ndef _7990_H */

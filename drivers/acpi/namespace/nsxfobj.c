@@ -695,3 +695,4 @@ acpi_get_devices (
 
 	return (status);
 }
+

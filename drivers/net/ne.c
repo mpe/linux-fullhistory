@@ -540,6 +540,8 @@ static void ne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, i
 
 	outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
 	ei_status.dmaing &= ~0x01;
+
+	le16_to_cpus(&hdr->count);
 }
 
 /* Block input and output, similar to the Crynwr packet driver.  If you

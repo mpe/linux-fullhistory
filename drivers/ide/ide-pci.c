@@ -561,7 +561,7 @@ check_if_enabled:
 	if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT34X)) {
 		/* see comments in hpt34x.c on why..... */
 		char *chipset_names[] = {"HPT343", "HPT345"};
-		strcpy(d->name, chipset_names[(pcicmd & PCI_COMMAND_MEMORY)]);
+		strcpy(d->name, chipset_names[(pcicmd & PCI_COMMAND_MEMORY) ? 1 : 0]);
 		d->bootable = (pcicmd & PCI_COMMAND_MEMORY) ? OFF_BOARD : NEVER_BOARD;
 	}
 

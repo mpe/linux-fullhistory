@@ -175,9 +175,9 @@ static struct cam_list clist[] = {
 };
 
 static __devinitdata struct usb_device_id device_table [] = {
-	{ idVendor: 0x05a9, idProduct: 0x0511 },  /* OV511 */
-	{ idVendor: 0x05a9, idProduct: 0xA511 },  /* OV511+ */
-	{ idVendor: 0x0813, idProduct: 0x0002 },  /* Intel Play Me2Cam OV511+ */
+	{ USB_DEVICE(0x05a9, 0x0511) },  /* OV511 */
+	{ USB_DEVICE(0x05a9, 0xA511) },  /* OV511+ */
+	{ USB_DEVICE(0x0813, 0x0002) },  /* Intel Play Me2Cam OV511+ */
 	{ }  /* Terminating entry */
 };
 
@@ -3228,7 +3228,7 @@ error:
  *
  ***************************************************************************/
 
-static void * __devinit
+static void *
 ov511_probe(struct usb_device *dev, unsigned int ifnum,
 	const struct usb_device_id *id)
 {
@@ -3340,7 +3340,7 @@ error:
 }
 
 
-static void __devexit 
+static void
 ov511_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct usb_ov511 *ov511 = (struct usb_ov511 *) ptr;

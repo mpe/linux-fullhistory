@@ -9,13 +9,11 @@
 #include <linux/init.h>
 #include <linux/netlink.h>
 
-extern int mkiss_init_ctrl_dev(void);
 extern int slip_init_ctrl_dev(void);
 extern int strip_init_ctrl_dev(void);
 extern int x25_asy_init_ctrl_dev(void);
   
 extern int dmascc_init(void);
-extern int yam_init(void);
 
 extern int awc4500_pci_probe(void);
 extern int awc4500_isa_probe(void);
@@ -102,13 +100,6 @@ struct net_probe pci_probes[] __initdata = {
 #endif
 
 #endif
-/*
- *	Amateur Radio Drivers
- */	
-
-#ifdef CONFIG_YAM
-	{yam_init, 0},
-#endif	/* CONFIG_YAM */
 
 /*
  *	Token Ring Drivers
@@ -148,9 +139,6 @@ static void __init network_ldisc_init(void)
 #endif
 #if defined(CONFIG_X25_ASY)
 	x25_asy_init_ctrl_dev();
-#endif
-#if defined(CONFIG_MKISS)
-	mkiss_init_ctrl_dev();
 #endif
 #if defined(CONFIG_STRIP)
 	strip_init_ctrl_dev();

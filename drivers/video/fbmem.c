@@ -200,9 +200,6 @@ static struct {
 	 * management!
 	 */
 
-#ifdef CONFIG_FB_STI
-	{ "stifb", stifb_init, stifb_setup },
-#endif
 #ifdef CONFIG_FB_OF
 	{ "offb", offb_init, NULL },
 #endif
@@ -267,6 +264,9 @@ static struct {
 #ifdef CONFIG_FB_VGA16
 	{ "vga16", vga16fb_init, vga16fb_setup },
 #endif 
+#ifdef CONFIG_FB_STI
+	{ "stifb", stifb_init, stifb_setup },
+#endif
 
 #ifdef CONFIG_GSP_RESOLVER
 	/* Not a real frame buffer device... */

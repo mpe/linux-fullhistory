@@ -1264,7 +1264,7 @@ static void isofs_read_inode(struct inode * inode)
 	    (volume_seq_no != 0) && (volume_seq_no != 1)) {
 		printk(KERN_WARNING "Multi-volume CD somehow got mounted.\n");
 	} else
-#endif IGNORE_WRONG_MULTI_VOLUME_SPECS
+#endif /*IGNORE_WRONG_MULTI_VOLUME_SPECS */
 	{
 		if (S_ISREG(inode->i_mode)) {
 			inode->i_fop = &generic_ro_fops;

@@ -35,6 +35,9 @@
 #define FOURPORT_FLAGS ASYNC_FOURPORT
 #define ACCENT_FLAGS 0
 #define BOCA_FLAGS 0
+#define RS_TABLE_SIZE  64
+#else
+#define RS_TABLE_SIZE  4
 #endif
 	
 #define STD_SERIAL_PORT_DEFNS			\

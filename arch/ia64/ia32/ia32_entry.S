@@ -133,7 +133,7 @@ ia32_syscall_table:
 	data8 sys32_ni_syscall /* sys_stime is not supported on IA64 */  /* 25 */
 	data8 sys32_ptrace
 	data8 sys32_alarm
-	data8 sys32_ni_syscall
+	data8 sys_pause
 	data8 sys32_ni_syscall
 	data8 ia32_utime	  /* 30 */
 	data8 sys32_ni_syscall	  /* old stty syscall holder */
@@ -291,11 +291,43 @@ ia32_syscall_table:
 	data8 sys_getcwd
 	data8 sys_capget
 	data8 sys_capset	  /* 185 */
-	data8 sys_sigaltstack
+	data8 sys32_sigaltstack
 	data8 sys_sendfile
 	data8 sys32_ni_syscall		  /* streams1 */
 	data8 sys32_ni_syscall		  /* streams2 */
 	data8 sys32_vfork	  /* 190 */
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall	  /* 195 */
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall	  /* 200 */
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall	  /* 205 */
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall	  /* 210 */
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall	  /* 215 */
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall	  /* 220 */
+	data8 sys_ni_syscall
+	data8 sys_ni_syscall
 	/*
 	 *  CAUTION: If any system calls are added beyond this point
 	 *	then the check in `arch/ia64/kernel/ivt.S' will have

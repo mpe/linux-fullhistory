@@ -23,6 +23,12 @@
  *                     Optimized "0(ecx)" -> "(ecx)" (the assembler does not
  *                     do this). Changed calling sequences from push/jmp to
  *                     traditional call/ret.
+ * Modified 2001-01-01 Andreas Franck <afranck@gmx.de>
+ *		       Some hacks to ensure compatibility with recent
+ *		       GCC snapshots, to avoid stack corruption when compiling
+ *		       with -fomit-frame-pointer. It's not sure if this will
+ *		       be fixed in GCC, as our previous implementation was a
+ *		       bit dubious.
  *
  * If you would like to see an analysis of this implementation, please
  * ftp to gcom.com and download the file
@@ -113,14 +119,14 @@ static inline void down(struct semaphore * sem)
 
 	__asm__ __volatile__(
 		"# atomic down operation\n\t"
-		LOCK "decl (%0)\n\t"     /* --sem->count */
+		LOCK "decl %0\n\t"     /* --sem->count */
 		"js 2f\n"
 		"1:\n"
 		".section .text.lock,\"ax\"\n"
 		"2:\tcall __down_failed\n\t"
 		"jmp 1b\n"
 		".previous"
-		:/* no outputs */
+		:"=m" (sem->count)
 		:"c" (sem)
 		:"memory");
 }
@@ -135,7 +141,7 @@ static inline int down_interruptible(struct semaphore * sem)
 
 	__asm__ __volatile__(
 		"# atomic interruptible down operation\n\t"
-		LOCK "decl (%1)\n\t"     /* --sem->count */
+		LOCK "decl %1\n\t"     /* --sem->count */
 		"js 2f\n\t"
 		"xorl %0,%0\n"
 		"1:\n"
@@ -143,7 +149,7 @@ static inline int down_interruptible(struct semaphore * sem)
 		"2:\tcall __down_failed_interruptible\n\t"
 		"jmp 1b\n"
 		".previous"
-		:"=a" (result)
+		:"=a" (result), "=m" (sem->count)
 		:"c" (sem)
 		:"memory");
 	return result;
@@ -159,7 +165,7 @@ static inline int down_trylock(struct semaphore * sem)
 
 	__asm__ __volatile__(
 		"# atomic interruptible down operation\n\t"
-		LOCK "decl (%1)\n\t"     /* --sem->count */
+		LOCK "decl %1\n\t"     /* --sem->count */
 		"js 2f\n\t"
 		"xorl %0,%0\n"
 		"1:\n"
@@ -167,7 +173,7 @@ static inline int down_trylock(struct semaphore * sem)
 		"2:\tcall __down_failed_trylock\n\t"
 		"jmp 1b\n"
 		".previous"
-		:"=a" (result)
+		:"=a" (result), "=m" (sem->count)
 		:"c" (sem)
 		:"memory");
 	return result;
@@ -186,14 +192,14 @@ static inline void up(struct semaphore * sem)
 #endif
 	__asm__ __volatile__(
 		"# atomic up operation\n\t"
-		LOCK "incl (%0)\n\t"     /* ++sem->count */
+		LOCK "incl %0\n\t"     /* ++sem->count */
 		"jle 2f\n"
 		"1:\n"
 		".section .text.lock,\"ax\"\n"
 		"2:\tcall __up_wakeup\n\t"
 		"jmp 1b\n"
 		".previous"
-		:/* no outputs */
+		:"=m" (sem->count)
 		:"c" (sem)
 		:"memory");
 }
@@ -315,14 +321,15 @@ static inline void __up_read(struct rw_semaphore *sem)
 {
 	__asm__ __volatile__(
 		"# up_read\n\t"
-		LOCK "incl (%%eax)\n\t"
+		LOCK "incl %0\n\t"
 		"jz 2f\n"			/* only do the wake if result == 0 (ie, a writer) */
 		"1:\n\t"
 		".section .text.lock,\"ax\"\n"
 		"2:\tcall __rwsem_wake\n\t"
 		"jmp 1b\n"
 		".previous"
-		::"a" (sem)
+		:"=m" (sem->count)
+		:"a" (sem)
 		:"memory"
 		);
 }
@@ -334,14 +341,15 @@ static inline void __up_write(struct rw_semaphore *sem)
 {
 	__asm__ __volatile__(
 		"# up_write\n\t"
-		LOCK "addl $" RW_LOCK_BIAS_STR ",(%%eax)\n"
+		LOCK "addl $" RW_LOCK_BIAS_STR ",%0\n"
 		"jc 2f\n"			/* only do the wake if the result was -'ve to 0/+'ve */
 		"1:\n\t"
 		".section .text.lock,\"ax\"\n"
 		"2:\tcall __rwsem_wake\n\t"
 		"jmp 1b\n"
 		".previous"
-		::"a" (sem)
+		:"=m" (sem->count)
+		:"a" (sem)
 		:"memory"
 		);
 }

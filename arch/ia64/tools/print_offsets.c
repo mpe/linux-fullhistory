@@ -149,7 +149,7 @@ tab[] =
     { "IA64_SWITCH_STACK_AR_UNAT_OFFSET",	offsetof (struct switch_stack, ar_unat) },
     { "IA64_SWITCH_STACK_AR_RNAT_OFFSET",	offsetof (struct switch_stack, ar_rnat) },
     { "IA64_SWITCH_STACK_AR_BSPSTORE_OFFSET",	offsetof (struct switch_stack, ar_bspstore) },
-    { "IA64_SWITCH_STACK_PR_OFFSET",	offsetof (struct switch_stack, b0) },
+    { "IA64_SWITCH_STACK_PR_OFFSET",	offsetof (struct switch_stack, pr) },
     { "IA64_SIGCONTEXT_AR_BSP_OFFSET",	offsetof (struct sigcontext, sc_ar_bsp) },
     { "IA64_SIGCONTEXT_AR_RNAT_OFFSET",	offsetof (struct sigcontext, sc_ar_rnat) },
     { "IA64_SIGCONTEXT_FLAGS_OFFSET",	offsetof (struct sigcontext, sc_flags) },

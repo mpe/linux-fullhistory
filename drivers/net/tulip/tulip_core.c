@@ -28,7 +28,7 @@
 #include <asm/unaligned.h>
 
 static char version[] __devinitdata =
-	"Linux Tulip driver version 0.9.12 (December 17, 2000)\n";
+	"Linux Tulip driver version 0.9.13 (January 2, 2001)\n";
 
 
 /* A few user-configurable values. */
@@ -1044,11 +1044,52 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 	if (tulip_debug > 0  &&  did_version++ == 0)
 		printk (KERN_INFO "%s", version);
 
+	/*
+	 *	Lan media wire a tulip chip to a wan interface. Needs a very
+	 *	different driver (lmc driver)
+	 */
+	 
         if( pdev->subsystem_vendor == 0x1376 ){
 		printk (KERN_ERR PFX "skipping LMC card.\n");
 		return -ENODEV;
 	}
-
+	
+	/*
+	 *	Early DM9100's need software CRC and the DMFE driver
+	 */
+	 
+	if (pdev->vendor == 0x1282 && pdev->device == 0x9100)
+	{
+		u32 dev_rev;
+		/* Read Chip revision */
+		pci_read_config_dword(pdev, PCI_REVISION_ID, &dev_rev);
+		if(dev_rev < 0x02000030)
+		{
+			printk(KERN_ERR PFX "skipping early DM9100 with Crc bug (use dmfe)\n");
+			return -ENODEV;
+		}
+	}
+		
+	/*
+	 *	Looks for early PCI chipsets where people report hangs 
+	 *	without the workarounds being on.
+	 */
+	 
+	/* Intel Saturn. Switch to 8 long words burst, 8 long word cache aligned 
+	   Aries might need this too. The Saturn errata are not pretty reading but
+	   thankfully its an old 486 chipset.
+	*/
+	
+	if (pci_find_device(PCI_VENDOR_ID_INTEL, 0x0483, NULL))
+		csr0 = 0x00A04800;
+	/* The dreaded SiS496 486 chipset. Same workaround as above. */
+	if (pci_find_device(PCI_VENDOR_ID_SI, 0x0496, NULL))
+		csr0 = 0x00A04800;
+		
+	/*
+	 *	And back to business
+	 */
+ 
 	ioaddr = pci_resource_start (pdev, 0);
 	irq = pdev->irq;
 

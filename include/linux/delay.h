@@ -13,7 +13,7 @@ extern unsigned long loops_per_jiffy;
 
 /*
  * Using udelay() for intervals greater than a few milliseconds can
- * risk overflow for high loops_per_sec (high bogomips) machines. The
+ * risk overflow for high loops_per_jiffy (high bogomips) machines. The
  * mdelay() provides a wrapper to prevent this.  For delays greater
  * than MAX_UDELAY_MS milliseconds, the wrapper is used.  Architecture
  * specific values can be defined in asm-???/delay.h as an override.

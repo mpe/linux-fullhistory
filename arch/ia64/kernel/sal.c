@@ -104,9 +104,11 @@ ia64_sal_init (struct ia64_sal_systab *systab)
 	if (strncmp(systab->signature, "SST_", 4) != 0)
 		printk("bad signature in system table!");
 
-	printk("SAL v%u.%02u: ia32bios=%s, oem=%.32s, product=%.32s\n",
+	/* 
+	 * revisions are coded in BCD, so %x does the job for us
+	 */
+	printk("SAL v%x.%02x: oem=%.32s, product=%.32s\n",
 	       systab->sal_rev_major, systab->sal_rev_minor,
-	       systab->ia32_bios_present ? "present" : "absent",
 	       systab->oem_id, systab->product_id);
 
 	min = ~0UL;

@@ -70,8 +70,8 @@ static int  omninet_write_room		(struct usb_serial_port *port);
 static void omninet_shutdown		(struct usb_serial *serial);
 
 static __devinitdata struct usb_device_id id_table [] = {
-    { idVendor: ZYXEL_VENDOR_ID, idProduct: ZYXEL_OMNINET_ID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(ZYXEL_VENDOR_ID, ZYXEL_OMNINET_ID) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, id_table);

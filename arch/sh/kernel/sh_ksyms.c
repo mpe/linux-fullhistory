@@ -37,11 +37,14 @@ EXPORT_SYMBOL(no_irq_type);
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);
 
+EXPORT_SYMBOL(simple_strtol);
+
 EXPORT_SYMBOL(strtok);
 EXPORT_SYMBOL(strpbrk);
 EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(strlen);
 EXPORT_SYMBOL(strchr);
+EXPORT_SYMBOL(strcat);
 
 /* mem exports */
 EXPORT_SYMBOL(memchr);

@@ -282,6 +282,7 @@ void update_mmu_cache(struct vm_area_struct * vma,
 	unsigned long flags;
 	unsigned long pteval;
 	unsigned long pteaddr;
+	unsigned long ptea;
 
 	save_and_cli(flags);
 
@@ -307,9 +308,17 @@ void update_mmu_cache(struct vm_area_struct * vma,
 	pteaddr = (address & MMU_VPN_MASK) | get_asid();
 	ctrl_outl(pteaddr, MMU_PTEH);
 
-	/* Set PTEL register */
+	/* Set PTEA register */
+	/* TODO: make this look less hacky */
 	pteval = pte_val(pte);
+#if defined(__SH4__)
+	ptea = ((pteval >> 28) & 0xe) | (pteval & 0x1);
+	ctrl_outl(ptea, MMU_PTEA);
+#endif
+
+	/* Set PTEL register */
 	pteval &= _PAGE_FLAGS_HARDWARE_MASK; /* drop software flags */
+	/* conveniently, we want all the software flags to be 0 anyway */
 	ctrl_outl(pteval, MMU_PTEL);
 
 	/* Load the TLB */

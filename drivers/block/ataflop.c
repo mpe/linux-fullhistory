@@ -355,7 +355,7 @@ static void fd_select_side( int side );
 static void fd_select_drive( int drive );
 static void fd_deselect( void );
 static void fd_motor_off_timer( unsigned long dummy );
-static void check_change( unsigned long dummy );
+static void check_change( void );
 static __inline__ void set_head_settle_flag( void );
 static __inline__ int get_head_settle_flag( void );
 static void floppy_irq (int irq, void *dummy, struct pt_regs *fp);
@@ -409,7 +409,7 @@ start_motor_off_timer(void)
 }
 
 static inline void
-start_check_change_timer(unsigned long dummy)
+start_check_change_timer( void )
 {
 	mod_timer(&fd_timer, jiffies + CHECK_CHANGE_DELAY);
 }

@@ -463,8 +463,8 @@ file_operations usb_rio_fops = {
 };
 
 static struct usb_device_id rio_table [] = {
-    { idVendor: 0x0841, idProduct: 1 },		/* Rio 500 */
-    { }						/* Terminating entry */
+	{ USB_DEVICE(0x0841, 1) }, 		/* Rio 500 */
+	{ }					/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, rio_table);

@@ -6,6 +6,8 @@
  *
  * 08/02/00 A. Mallick <asit.k.mallick@intel.com>	
  *		Modified RID allocation for SMP 
+ *          Goutham Rao <goutham.rao@intel.com>
+ *              IPI based ptc implementation and A-step IPI implementation.
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -17,6 +19,7 @@
 #include <asm/mmu_context.h>
 #include <asm/pgalloc.h>
 #include <asm/pal.h>
+#include <asm/delay.h>
 
 #define SUPPORTED_PGBITS (			\
 		1 << _PAGE_SIZE_256M |		\
@@ -33,14 +36,9 @@
 struct ia64_ctx ia64_ctx = {
 	lock:	SPIN_LOCK_UNLOCKED,
 	next:	1,
-	limit:	(1UL << IA64_HW_CONTEXT_BITS)
+	limit:	(1 << 15) - 1,		/* start out with the safe (architected) limit */
+	max_ctx: ~0U
 };
-
- /*
-  * Put everything in a struct so we avoid the global offset table whenever
-  * possible.
-  */
-ia64_ptce_info_t ia64_ptce_info;
 
 /*
  * Seralize usage of ptc.g 
@@ -99,9 +97,22 @@ flush_tlb_no_ptcg (unsigned long start, unsigned long end, unsigned long nbits)
 	/*
 	 * Wait for other CPUs to finish purging entries.
 	 */
+#if (defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_BSTEP_SPECIFIC))
+	{
+		unsigned long start = ia64_get_itc();
+		while (atomic_read(&flush_cpu_count) > 0) {
+			if ((ia64_get_itc() - start) > 40000UL) {
+				atomic_set(&flush_cpu_count, smp_num_cpus - 1);
+				smp_send_flush_tlb();
+				start = ia64_get_itc();
+			}
+		}
+	}
+#else
 	while (atomic_read(&flush_cpu_count)) {
 		/* Nothing */
 	}
+#endif
 	if (!(flags & IA64_PSR_I)) {
 		local_irq_disable();
 		ia64_set_tpr(saved_tpr);
@@ -117,12 +128,12 @@ flush_tlb_no_ptcg (unsigned long start, unsigned long end, unsigned long nbits)
 void
 wrap_mmu_context (struct mm_struct *mm)
 {
+	unsigned long tsk_context, max_ctx = ia64_ctx.max_ctx;
 	struct task_struct *tsk;
-	unsigned long tsk_context;
 
-	if (ia64_ctx.next >= (1UL << IA64_HW_CONTEXT_BITS)) 
+	if (ia64_ctx.next > max_ctx)
 		ia64_ctx.next = 300;	/* skip daemons */
-	ia64_ctx.limit = (1UL << IA64_HW_CONTEXT_BITS);
+	ia64_ctx.limit = max_ctx + 1;
 
 	/*
 	 * Scan all the task's mm->context and set proper safe range
@@ -137,9 +148,9 @@ wrap_mmu_context (struct mm_struct *mm)
 		if (tsk_context == ia64_ctx.next) {
 			if (++ia64_ctx.next >= ia64_ctx.limit) {
 				/* empty range: reset the range limit and start over */
-				if (ia64_ctx.next >= (1UL << IA64_HW_CONTEXT_BITS)) 
+				if (ia64_ctx.next > max_ctx) 
 					ia64_ctx.next = 300;
-				ia64_ctx.limit = (1UL << IA64_HW_CONTEXT_BITS);
+				ia64_ctx.limit = max_ctx + 1;
 				goto repeat;
 			}
 		}
@@ -153,12 +164,13 @@ wrap_mmu_context (struct mm_struct *mm)
 void
 __flush_tlb_all (void)
 {
-	unsigned long i, j, flags, count0, count1, stride0, stride1, addr = ia64_ptce_info.base;
+	unsigned long i, j, flags, count0, count1, stride0, stride1, addr;
 
-	count0  = ia64_ptce_info.count[0];
-	count1  = ia64_ptce_info.count[1];
-	stride0 = ia64_ptce_info.stride[0];
-	stride1 = ia64_ptce_info.stride[1];
+	addr    = my_cpu_data.ptce_base;
+	count0  = my_cpu_data.ptce_count[0];
+	count1  = my_cpu_data.ptce_count[1];
+	stride0 = my_cpu_data.ptce_stride[0];
+	stride1 = my_cpu_data.ptce_stride[1];
 
 	local_irq_save(flags);
 	for (i = 0; i < count0; ++i) {
@@ -182,7 +194,11 @@ flush_tlb_range (struct mm_struct *mm, unsigned long start, unsigned long end)
 
 	if (mm != current->active_mm) {
 		/* this does happen, but perhaps it's not worth optimizing for? */
+#ifdef CONFIG_SMP
+		flush_tlb_all();
+#else
 		mm->context = 0;
+#endif
 		return;
 	}
 
@@ -230,6 +246,14 @@ flush_tlb_range (struct mm_struct *mm, unsigned long start, unsigned long end)
 void __init
 ia64_tlb_init (void)
 {
-	ia64_get_ptce(&ia64_ptce_info);
+	ia64_ptce_info_t ptce_info;
+
+	ia64_get_ptce(&ptce_info);
+	my_cpu_data.ptce_base = ptce_info.base;
+	my_cpu_data.ptce_count[0] = ptce_info.count[0];
+	my_cpu_data.ptce_count[1] = ptce_info.count[1];
+	my_cpu_data.ptce_stride[0] = ptce_info.stride[0];
+	my_cpu_data.ptce_stride[1] = ptce_info.stride[1];
+
 	__flush_tlb_all();		/* nuke left overs from bootstrapping... */
 }

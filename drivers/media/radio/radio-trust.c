@@ -300,7 +300,7 @@ static int __init trust_init(void)
 		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
 		return -EINVAL;
 	}
-	if(request_region(io, 2, "Trust FM Radio")) {
+	if(!request_region(io, 2, "Trust FM Radio")) {
 		printk(KERN_ERR "trust: port 0x%x already in use\n", io);
 		return -EBUSY;
 	}

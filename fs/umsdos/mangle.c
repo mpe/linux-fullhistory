@@ -435,7 +435,7 @@ struct MANG_TEST tb[] =
 	"HELLO", 1, "hello",
 	"Hello.1", 1, "hello.1",
 	"Hello.c", 1, "hello.c",
-#elseif
+#else
 /*
  * I find the three examples below very unfortunate.  I propose to
  * convert them to lower case in a quick preliminary pass, then test

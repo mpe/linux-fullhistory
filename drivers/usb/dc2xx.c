@@ -91,29 +91,28 @@
 
 /* table of cameras that work through this driver */
 static struct usb_device_id camera_table [] = {
-
 	/* These have the same application level protocol */  
-    { idVendor: 0x040a, idProduct: 0x0120 },		// Kodak DC-240
-    { idVendor: 0x040a, idProduct: 0x0130 },		// Kodak DC-280
-    { idVendor: 0x040a, idProduct: 0x0131 },		// Kodak DC-5000
-    { idVendor: 0x040a, idProduct: 0x0132 },		// Kodak DC-3400
+	{ USB_DEVICE(0x040a, 0x0120) },		// Kodak DC-240
+	{ USB_DEVICE(0x040a, 0x0130) },		// Kodak DC-280
+	{ USB_DEVICE(0x040a, 0x0131) },		// Kodak DC-5000
+	{ USB_DEVICE(0x040a, 0x0132) },		// Kodak DC-3400
 
 	/* These have a different application level protocol which
 	 * is part of the Flashpoint "DigitaOS".  That supports some
 	 * non-camera devices, and some non-Kodak cameras.
 	 */  
-    { idVendor: 0x040a, idProduct: 0x0100 },		// Kodak DC-220
-    { idVendor: 0x040a, idProduct: 0x0110 },		// Kodak DC-260
-    { idVendor: 0x040a, idProduct: 0x0111 },		// Kodak DC-265
-    { idVendor: 0x040a, idProduct: 0x0112 },		// Kodak DC-290
-    { idVendor: 0xf003, idProduct: 0x6002 },		// HP PhotoSmart C500
+	{ USB_DEVICE(0x040a, 0x0100) },		// Kodak DC-220
+	{ USB_DEVICE(0x040a, 0x0110) },		// Kodak DC-260
+	{ USB_DEVICE(0x040a, 0x0111) },		// Kodak DC-265
+	{ USB_DEVICE(0x040a, 0x0112) },		// Kodak DC-290
+	{ USB_DEVICE(0xf003, 0x6002) },		// HP PhotoSmart C500
 
 	/* Other USB devices may well work here too, so long as they
 	 * just stick to half duplex bulk packet exchanges.  That
 	 * means, among other things, no iso or interrupt endpoints.
 	 */
 
-    { }						/* Terminating entry */
+	{ }					/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, camera_table);
@@ -353,7 +352,7 @@ static /* const */ struct file_operations usb_camera_fops = {
 
 
 
-static void * __devinit
+static void *
 camera_probe (struct usb_device *dev, unsigned int ifnum, const struct usb_device_id *camera_info)
 {
 	int				i;
@@ -451,7 +450,7 @@ bye:
 	return camera;
 }
 
-static void __devexit camera_disconnect(struct usb_device *dev, void *ptr)
+static void camera_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct camera_state	*camera = (struct camera_state *) ptr;
 	int			subminor = camera->subminor;

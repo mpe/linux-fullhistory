@@ -116,6 +116,7 @@ static int read_regs(struct hpsb_host *host, int nodeid, quadlet_t *buf,
 {
         int csraddr = addr - CSR_REGISTER_BASE;
         int oldcycle;
+        quadlet_t ret;
         
         if ((csraddr | length) & 0x3) {
                 return RCODE_TYPE_ERROR;
@@ -181,16 +182,36 @@ static int read_regs(struct hpsb_host *host, int nodeid, quadlet_t *buf,
                 return RCODE_ADDRESS_ERROR;
 
         case CSR_BUS_MANAGER_ID:
-                *(buf++) = cpu_to_be32(host->csr.bus_manager_id);
+                if (host->template->hw_csr_reg)
+                        ret = host->template->hw_csr_reg(host, 0, 0, 0);
+                else
+                        ret = host->csr.bus_manager_id;
+
+                *(buf++) = cpu_to_be32(ret);
                 out;
         case CSR_BANDWIDTH_AVAILABLE:
-                *(buf++) = cpu_to_be32(host->csr.bandwidth_available);
+                if (host->template->hw_csr_reg)
+                        ret = host->template->hw_csr_reg(host, 1, 0, 0);
+                else
+                        ret = host->csr.bandwidth_available;
+
+                *(buf++) = cpu_to_be32(ret);
                 out;
         case CSR_CHANNELS_AVAILABLE_HI:
-                *(buf++) = cpu_to_be32(host->csr.channels_available_hi);
+                if (host->template->hw_csr_reg)
+                        ret = host->template->hw_csr_reg(host, 2, 0, 0);
+                else
+                        ret = host->csr.channels_available_hi;
+
+                *(buf++) = cpu_to_be32(ret);
                 out;
         case CSR_CHANNELS_AVAILABLE_LO:
-                *(buf++) = cpu_to_be32(host->csr.channels_available_lo);
+                if (host->template->hw_csr_reg)
+                        ret = host->template->hw_csr_reg(host, 3, 0, 0);
+                else
+                        ret = host->csr.channels_available_lo;
+
+                *(buf++) = cpu_to_be32(ret);
                 out;
 
                 /* address gap to end - fall through to default */
@@ -282,66 +303,60 @@ static int write_regs(struct hpsb_host *host, int nodeid, quadlet_t *data,
 #undef out
 
 
-/* helper function for lock_regs */
-inline static void compare_swap(quadlet_t *old, quadlet_t data, quadlet_t arg)
-{
-        if (*old == be32_to_cpu(arg)) {
-                *old = be32_to_cpu(data);
-        }
-}
-
 static int lock_regs(struct hpsb_host *host, int nodeid, quadlet_t *store,
                      u64 addr, quadlet_t data, quadlet_t arg, int extcode)
 {
         int csraddr = addr - CSR_REGISTER_BASE;
         unsigned long flags;
+        quadlet_t *regptr = NULL;
 
-        if (csraddr & 0x3) {
-                return RCODE_TYPE_ERROR;
+        if (csraddr & 0x3) return RCODE_TYPE_ERROR;
+
+        if (csraddr < CSR_BUS_MANAGER_ID || csraddr > CSR_CHANNELS_AVAILABLE_LO
+            || extcode != EXTCODE_COMPARE_SWAP)
+                goto unsupported_lockreq;
+
+        data = be32_to_cpu(data);
+        arg = be32_to_cpu(arg);
+
+        if (host->template->hw_csr_reg) {
+                quadlet_t old;
+
+                old = host->template->
+                        hw_csr_reg(host, (csraddr - CSR_BUS_MANAGER_ID) >> 2,
+                                   data, arg);
+
+                *store = cpu_to_be32(old);
+                return RCODE_COMPLETE;
         }
 
-        if ((csraddr >= CSR_BUS_MANAGER_ID)
-            && (csraddr <= CSR_CHANNELS_AVAILABLE_LO)) {
-                if (extcode == EXTCODE_COMPARE_SWAP) {
-                        spin_lock_irqsave(&host->csr.lock, flags);
+        spin_lock_irqsave(&host->csr.lock, flags);
 
-                        switch (csraddr) {
-                        case CSR_BUS_MANAGER_ID:
-                                *store = cpu_to_be32(host->csr.bus_manager_id);
-                                compare_swap(&host->csr.bus_manager_id,
-                                             data, arg);
-                                break;
+        switch (csraddr) {
+        case CSR_BUS_MANAGER_ID:
+                regptr = &host->csr.bus_manager_id;
+                break;
 
-                        case CSR_BANDWIDTH_AVAILABLE:
-                                *store = cpu_to_be32(host->
-                                                     csr.bandwidth_available);
-                                compare_swap(&host->csr.bandwidth_available,
-                                             data, arg);
-                                break;
+        case CSR_BANDWIDTH_AVAILABLE:
+                regptr = &host->csr.bandwidth_available;
+                break;
 
-                        case CSR_CHANNELS_AVAILABLE_HI:
-                                *store = cpu_to_be32(host->
-                                                     csr.channels_available_hi);
-                                compare_swap(&host->csr.channels_available_hi,
-                                             data, arg);
-                                break;
+        case CSR_CHANNELS_AVAILABLE_HI:
+                regptr = &host->csr.channels_available_hi;
+                break;
 
-                        case CSR_CHANNELS_AVAILABLE_LO:
-                                *store = cpu_to_be32(host->
-                                                     csr.channels_available_lo);
-                                compare_swap(&host->csr.channels_available_lo,
-                                             data, arg);
-                                break;
-                        }
-
-                        spin_unlock_irqrestore(&host->csr.lock, flags);
-                        return RCODE_COMPLETE;
-                } else {
-                        return RCODE_TYPE_ERROR;
-                }
+        case CSR_CHANNELS_AVAILABLE_LO:
+                regptr = &host->csr.channels_available_lo;
+                break;
         }
 
-        /* no locking for anything else yet */
+        *store = cpu_to_be32(*regptr);
+        if (*regptr == arg) *regptr = data;
+        spin_unlock_irqrestore(&host->csr.lock, flags);
+
+        return RCODE_COMPLETE;
+
+ unsupported_lockreq:
         switch (csraddr) {
         case CSR_STATE_CLEAR:
         case CSR_STATE_SET:
@@ -351,6 +366,10 @@ static int lock_regs(struct hpsb_host *host, int nodeid, quadlet_t *store,
         case CSR_SPLIT_TIMEOUT_LO:
         case CSR_CYCLE_TIME:
         case CSR_BUS_TIME:
+        case CSR_BUS_MANAGER_ID:
+        case CSR_BANDWIDTH_AVAILABLE:
+        case CSR_CHANNELS_AVAILABLE_HI:
+        case CSR_CHANNELS_AVAILABLE_LO:
                 return RCODE_TYPE_ERROR;
 
         case CSR_BUSY_TIMEOUT:

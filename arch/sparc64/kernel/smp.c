@@ -79,8 +79,8 @@ int smp_bogo(char *buf)
 		if(cpu_present_map & (1UL << i))
 			len += sprintf(buf + len,
 				       "Cpu%dBogo\t: %lu.%02lu\n",
-				       i, cpu_data[i].udelay_val / 500000,
-				       (cpu_data[i].udelay_val / 5000) % 100);
+				       i, cpu_data[i].udelay_val / (500000/HZ),
+				       (cpu_data[i].udelay_val / (5000/HZ)) % 100);
 	return len;
 }
 
@@ -90,7 +90,7 @@ void __init smp_store_cpu_info(int id)
 
 	/* multiplier and counter set by
 	   smp_setup_percpu_timer()  */
-	cpu_data[id].udelay_val			= loops_per_sec;
+	cpu_data[id].udelay_val			= loops_per_jiffy;
 
 	cpu_data[id].pgcache_size		= 0;
 	cpu_data[id].pte_cache[0]		= NULL;

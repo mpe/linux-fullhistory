@@ -97,13 +97,10 @@ void amiga_mksound( unsigned int hz, unsigned int ticks )
 		/* turn on DMA for audio channel 2 */
 		custom.dmacon = DMAF_SETCLR | DMAF_AUD2;
 
-		restore_flags(flags);
-		return;
-	} else {
+	} else
 		nosound( 0 );
-		restore_flags(flags);
-		return;
-	}
+
+	restore_flags(flags);
 }
 
 
@@ -113,4 +110,4 @@ static void nosound( unsigned long ignored )
 	custom.dmacon = DMAF_AUD2;
 	/* restore period to previous value after beeping */
 	custom.aud[2].audper = amiga_audio_period;
-}	
+}

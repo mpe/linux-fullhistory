@@ -291,7 +291,7 @@ static int __init fmi_init(void)
 		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
 		return -EINVAL;
 	}
-	if (request_region(io, 2, "fmi")) 
+	if (!request_region(io, 2, "fmi")) 
 	{
 		printk(KERN_ERR "fmi: port 0x%x already in use\n", io);
 		return -EBUSY;

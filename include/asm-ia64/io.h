@@ -29,6 +29,7 @@
 
 # ifdef __KERNEL__
 
+#include <asm/machvec.h>
 #include <asm/page.h>
 #include <asm/system.h>
 
@@ -54,8 +55,7 @@ phys_to_virt(unsigned long address)
 #define bus_to_virt	phys_to_virt
 #define virt_to_bus	virt_to_phys
 
-# else /* !KERNEL */
-# endif /* !KERNEL */
+# endif /* KERNEL */
 
 /*
  * Memory fence w/accept.  This should never be used in code that is
@@ -100,7 +100,7 @@ __ia64_mk_io_addr (unsigned long port)
  */
 
 static inline unsigned int
-__inb (unsigned long port)
+__ia64_inb (unsigned long port)
 {
 	volatile unsigned char *addr = __ia64_mk_io_addr(port);
 	unsigned char ret;
@@ -111,7 +111,7 @@ __inb (unsigned long port)
 }
 
 static inline unsigned int
-__inw (unsigned long port)
+__ia64_inw (unsigned long port)
 {
 	volatile unsigned short *addr = __ia64_mk_io_addr(port);
 	unsigned short ret;
@@ -122,7 +122,7 @@ __inw (unsigned long port)
 }
 
 static inline unsigned int
-__inl (unsigned long port)
+__ia64_inl (unsigned long port)
 {
 	volatile unsigned int *addr = __ia64_mk_io_addr(port);
 	unsigned int ret;
@@ -133,112 +133,148 @@ __inl (unsigned long port)
 }
 
 static inline void
-__insb (unsigned long port, void *dst, unsigned long count)
+__ia64_outb (unsigned char val, unsigned long port)
 {
 	volatile unsigned char *addr = __ia64_mk_io_addr(port);
+
+	*addr = val;
+	__ia64_mf_a();
+}
+
+static inline void
+__ia64_outw (unsigned short val, unsigned long port)
+{
+	volatile unsigned short *addr = __ia64_mk_io_addr(port);
+
+	*addr = val;
+	__ia64_mf_a();
+}
+
+static inline void
+__ia64_outl (unsigned int val, unsigned long port)
+{
+	volatile unsigned int *addr = __ia64_mk_io_addr(port);
+
+	*addr = val;
+	__ia64_mf_a();
+}
+
+static inline void
+__insb (unsigned long port, void *dst, unsigned long count)
+{
 	unsigned char *dp = dst;
 
-	__ia64_mf_a();
-	while (count--) {
-		*dp++ = *addr;
-	}
-	__ia64_mf_a();
+	if (platform_inb == __ia64_inb) {
+		volatile unsigned char *addr = __ia64_mk_io_addr(port);
+
+		__ia64_mf_a();
+		while (count--)
+			*dp++ = *addr;
+		__ia64_mf_a();
+	} else
+		while (count--)
+			*dp++ = platform_inb(port);
 	return;
 }
 
 static inline void
 __insw (unsigned long port, void *dst, unsigned long count)
 {
-	volatile unsigned short *addr = __ia64_mk_io_addr(port);
 	unsigned short *dp = dst;
 
-	__ia64_mf_a();
-	while (count--) {
-		*dp++ = *addr;
-	}
-	__ia64_mf_a();
+	if (platform_inw == __ia64_inw) {
+		volatile unsigned short *addr = __ia64_mk_io_addr(port);
+
+		__ia64_mf_a();
+		while (count--)
+			*dp++ = *addr;
+		__ia64_mf_a();
+	} else
+		while (count--)
+			*dp++ = platform_inw(port);
 	return;
 }
 
 static inline void
 __insl (unsigned long port, void *dst, unsigned long count)
 {
-	volatile unsigned int *addr = __ia64_mk_io_addr(port);
 	unsigned int *dp = dst;
 
-	__ia64_mf_a();
-	while (count--) {
-		*dp++ = *addr;
-	}
-	__ia64_mf_a();
+	if (platform_inl == __ia64_inl) {
+		volatile unsigned int *addr = __ia64_mk_io_addr(port);
+
+		__ia64_mf_a();
+		while (count--)
+			*dp++ = *addr;
+		__ia64_mf_a();
+	} else
+		while (count--)
+			*dp++ = platform_inl(port);
 	return;
-}
-
-static inline void
-__outb (unsigned char val, unsigned long port)
-{
-	volatile unsigned char *addr = __ia64_mk_io_addr(port);
-
-	*addr = val;
-	__ia64_mf_a();
-}
-
-static inline void
-__outw (unsigned short val, unsigned long port)
-{
-	volatile unsigned short *addr = __ia64_mk_io_addr(port);
-
-	*addr = val;
-	__ia64_mf_a();
-}
-
-static inline void
-__outl (unsigned int val, unsigned long port)
-{
-	volatile unsigned int *addr = __ia64_mk_io_addr(port);
-
-	*addr = val;
-	__ia64_mf_a();
 }
 
 static inline void
 __outsb (unsigned long port, const void *src, unsigned long count)
 {
-	volatile unsigned char *addr = __ia64_mk_io_addr(port);
 	const unsigned char *sp = src;
 
-	while (count--) {
-		*addr = *sp++;
-	}
-	__ia64_mf_a();
+	if (platform_outb == __ia64_outb) {
+		volatile unsigned char *addr = __ia64_mk_io_addr(port);
+
+		while (count--)
+			*addr = *sp++;
+		__ia64_mf_a();
+	} else
+		while (count--)
+			platform_outb(*sp++, port);
 	return;
 }
 
 static inline void
 __outsw (unsigned long port, const void *src, unsigned long count)
 {
-	volatile unsigned short *addr = __ia64_mk_io_addr(port);
 	const unsigned short *sp = src;
 
-	while (count--) {
-		*addr = *sp++;
-	}
-	__ia64_mf_a();
+	if (platform_outw == __ia64_outw) {
+		volatile unsigned short *addr = __ia64_mk_io_addr(port);
+
+		while (count--)
+			*addr = *sp++;
+		__ia64_mf_a();
+	} else
+		while (count--)
+			platform_outw(*sp++, port);
 	return;
 }
 
 static inline void
 __outsl (unsigned long port, void *src, unsigned long count)
 {
-	volatile unsigned int *addr = __ia64_mk_io_addr(port);
 	const unsigned int *sp = src;
 
-	while (count--) {
-		*addr = *sp++;
-	}
-	__ia64_mf_a();
+	if (platform_outl == __ia64_outl) {
+		volatile unsigned int *addr = __ia64_mk_io_addr(port);
+
+		while (count--)
+			*addr = *sp++;
+		__ia64_mf_a();
+	} else
+		while (count--)
+			platform_outl(*sp++, port);
 	return;
 }
+
+/*
+ * Unfortunately, some platforms are broken and do not follow the
+ * IA-64 architecture specification regarding legacy I/O support.
+ * Thus, we have to make these operations platform dependent...
+ */
+#define __inb		platform_inb
+#define __inw		platform_inw
+#define __inl		platform_inl
+#define __outb		platform_outb
+#define __outw		platform_outw
+#define __outl		platform_outl
 
 #define inb		__inb
 #define inw		__inw

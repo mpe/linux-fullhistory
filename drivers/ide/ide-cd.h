@@ -478,6 +478,7 @@ struct cdrom_info {
 	struct request request_sense_request;
 	struct packet_command request_sense_pc;
 	int dma;
+	int cmd;
 	unsigned long last_block;
 	unsigned long start_seek;
 	/* Buffer to hold mechanism status and changer slot table. */

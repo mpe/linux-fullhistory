@@ -1822,9 +1822,12 @@ static void rc_release_drivers(void)
  * addresses in this case.
  *
  */ 
-static void __init riscom8_setup(char *str, int * ints)
+static int __init riscom8_setup(char *str)
 {
+	int ints[RC_NBOARD];
 	int i;
+
+	str = get_options(str, ARRAY_SIZE(ints), ints);
 
 	for (i = 0; i < RC_NBOARD; i++) {
 		if (i < ints[0])
@@ -1832,6 +1835,7 @@ static void __init riscom8_setup(char *str, int * ints)
 		else 
 			rc_board[i].base = 0;
 	}
+	return 1;
 }
 
 __setup("riscom8=", riscom8_setup);

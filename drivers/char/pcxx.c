@@ -1823,7 +1823,7 @@ static void doevent(int crd)
  */
 static void pcxxdelay(int msec)
 {
-	mdelay(mseconds);
+	mdelay(msec);
 }
 
 

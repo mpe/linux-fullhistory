@@ -403,6 +403,12 @@ static int exec_mmap(void)
 			mmdrop(mm);
 			return -ENOMEM;
 		}
+
+		/* Add it to the list of mm's */
+		spin_lock(&mmlist_lock);
+		list_add(&mm->mmlist, &init_mm.mmlist);
+		spin_unlock(&mmlist_lock);
+
 		task_lock(current);
 		current->mm = mm;
 		current->active_mm = mm;

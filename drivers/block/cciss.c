@@ -113,7 +113,7 @@ static int cciss_proc_get_info(char *buffer, char **start, off_t offset,
 static void cciss_procinit(int i);
 #else
 static int cciss_proc_get_info(char *buffer, char **start, off_t offset, 
-		int length, int *eof, void *data) {}
+		int length, int *eof, void *data) { return 0;}
 static void cciss_procinit(int i) {}
 #endif /* CONFIG_PROC_FS */
 

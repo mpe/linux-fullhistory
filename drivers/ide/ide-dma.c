@@ -90,6 +90,8 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 
+#undef CONFIG_BLK_DEV_IDEDMA_TIMEOUT
+
 extern char *ide_dmafunc_verbose(ide_dma_action_t dmafunc);
 
 #ifdef CONFIG_IDEDMA_NEW_DRIVE_LISTINGS
@@ -264,6 +266,12 @@ int ide_build_dmatable (ide_drive_t *drive, ide_dma_action_t func)
 
 		cur_addr = sg_dma_address(sg);
 		cur_len = sg_dma_len(sg);
+
+		/*
+		 * Fill in the dma table, without crossing any 64kB boundaries.
+		 * Most hardware requires 16-bit alignment of all blocks,
+		 * but the trm290 requires 32-bit alignment.
+		 */
 
 		while (cur_len) {
 			if (++count >= PRD_ENTRIES) {
@@ -515,9 +523,17 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			return check_drive_lists(drive, (func == ide_dma_good_drive));
 		case ide_dma_verbose:
 			return report_drive_dmaing(drive);
+		case ide_dma_timeout:
+#ifdef CONFIG_BLK_DEV_IDEDMA_TIMEOUT
+			/*
+			 * Have to issue an abort and requeue the request
+			 * DMA engine got turned off by a goofy ASIC, and
+			 * we have to clean up the mess, and here is as good
+			 * as any.  Do it globally for all chipsets.
+			 */
+#endif /* CONFIG_BLK_DEV_IDEDMA_TIMEOUT */
 		case ide_dma_retune:
 		case ide_dma_lostirq:
-		case ide_dma_timeout:
 			printk("ide_dmaproc: chipset supported %s func only: %d\n", ide_dmafunc_verbose(func),  func);
 			return 1;
 		default:

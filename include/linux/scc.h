@@ -8,7 +8,7 @@
 /* selection of hardware types */
 
 #define PA0HZP		0x00	/* hardware type for PA0HZP SCC card and compatible */
-#define EAGLE         	0x01    /* hardware type for EAGLE card */
+#define EAGLE		0x01    /* hardware type for EAGLE card */
 #define PC100		0x02	/* hardware type for PC100 card */
 #define PRIMUS		0x04	/* hardware type for PRIMUS-PC (DG9BL) card */
 #define DRSI		0x08	/* hardware type for DRSI PC*Packet card */
@@ -27,10 +27,6 @@ enum SCC_ioctl_cmds {
 	SIOCSCCGSTAT,
 	SIOCSCCCAL
 };
-
-/* magic number */
-
-#define SCC_MAGIC	0x8530		/* ;-) */
 
 /* Device parameter control (from WAMPES) */
 
@@ -218,7 +214,7 @@ struct scc_kiss {
 
 struct scc_channel {
 	int magic;			/* magic word */
-	
+
 	int init;			/* channel exists? */
 
 	struct net_device *dev;		/* link to device control structure */
@@ -226,12 +222,12 @@ struct scc_channel {
 
 	char brand;			/* manufacturer of the board */
 	long clock;			/* used clock */
-	
+
 	io_port ctrl;			/* I/O address of CONTROL register */
 	io_port	data;			/* I/O address of DATA register */
 	io_port special;		/* I/O address of special function port */
 	int irq;			/* Number of Interrupt */
-	
+
 	char option;
 	char enhanced;			/* Enhanced SCC support */
 
@@ -242,17 +238,15 @@ struct scc_channel {
         struct scc_kiss kiss;		/* control structure for KISS params */
         struct scc_stat stat;		/* statistical information */
         struct scc_modem modem; 	/* modem information */
-        
+
         struct sk_buff_head tx_queue;	/* next tx buffer */
         struct sk_buff *rx_buff;	/* pointer to frame currently received */
         struct sk_buff *tx_buff;	/* pointer to frame currently transmitted */
 
 	/* Timer */
-
 	struct timer_list tx_t;		/* tx timer for this channel */
 	struct timer_list tx_wdog;	/* tx watchdogs */
 };
 
-int scc_init(void);
 #endif /* defined(__KERNEL__) */
 #endif /* defined(_SCC_H) */

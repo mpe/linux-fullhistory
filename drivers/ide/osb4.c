@@ -60,14 +60,13 @@
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
 
-static byte osb4_revision = 0;
 static struct pci_dev *bmide_dev;
 
-static int osb4_get_info(char *, char **, off_t, int, int);
-extern int (*osb4_display_info)(char *, char **, off_t, int, int); /* ide-proc.c */
+static int osb4_get_info(char *, char **, off_t, int);
+extern int (*osb4_display_info)(char *, char **, off_t, int); /* ide-proc.c */
 extern char *ide_media_verbose(ide_drive_t *);
 
-static int osb4_get_info (char *buffer, char **addr, off_t offset, int count, int dummy)
+static int osb4_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	char *p = buffer;
 	u32 bibma = pci_resource_start(bmide_dev, 4);
@@ -113,116 +112,202 @@ static int osb4_get_info (char *buffer, char **addr, off_t offset, int count, in
 }
 #endif  /* defined(DISPLAY_OSB4_TIMINGS) && defined(CONFIG_PROC_FS) */
 
+static byte osb4_revision = 0;
+
 byte osb4_proc = 0;
 
 extern char *ide_xfer_verbose (byte xfer_rate);
 
-static void osb4_tune_drive (ide_drive_t *drive, byte pio)
-{
-        /* command/recover widths */
-	byte timings[]	= { 0x5d, 0x47, 0x34, 0x22, 0x20 };
-	int port		= HWIF(drive)->index ? 0x42 : 0x40;
+static struct pci_dev *isa_dev;
 
-	pio = ide_get_best_pio_mode(drive, pio, 4, NULL);
-	if (&HWIF(drive)->drives[0] == drive)  /* master drive */
-		port++;
-	pci_write_config_byte(HWIF(drive)->pci_dev, port, timings[pio]);
-}
-
-#if defined(CONFIG_BLK_DEV_IDEDMA) && defined(CONFIG_BLK_DEV_OSB4)
 static int osb4_tune_chipset (ide_drive_t *drive, byte speed)
 {
+	byte udma_modes[]	= { 0x00, 0x01, 0x02 };
+	byte dma_modes[]	= { 0x77, 0x21, 0x20 };
+	byte pio_modes[]	= { 0x5d, 0x47, 0x34, 0x22, 0x20 };
+
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
-	byte is_slave           = (&HWIF(drive)->drives[1] == drive) ? 1 : 0;
-	byte bit8, enable;
-	int err;
-	
-	/* clear udma register if we don't want udma */
-	if (speed < XFER_UDMA_0) {
-		enable = 0x1 << (is_slave + (hwif->channel ? 2 : 0));
-		pci_read_config_byte(dev, 0x54, &bit8);
-		pci_write_config_byte(dev, 0x54, bit8 & ~enable);
-	}
-
+	byte unit		= (drive->select.b.unit & 0x01);
 #ifdef CONFIG_BLK_DEV_IDEDMA
-	if (speed >= XFER_MW_DMA_0) {
-		byte channel = hwif->channel ? 0x46 : 0x44;
-		if (!is_slave)
-			channel++;
+	unsigned long dma_base	= hwif->dma_base;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+	int err;
 
-		switch (speed) {
-		case XFER_MW_DMA_0:
-			bit8 = 0x77;
+	byte drive_pci		= 0x00;
+	byte drive_pci2		= 0x00;
+	byte drive_pci3		= hwif->channel ? 0x57 : 0x56;
+
+	byte ultra_enable	= 0x00;
+	byte ultra_timing	= 0x00;
+	byte dma_timing		= 0x00;
+	byte pio_timing		= 0x00;
+
+	byte pio	= ide_get_best_pio_mode(drive, 255, 5, NULL);
+
+        switch (drive->dn) {
+		case 0: drive_pci = 0x41; drive_pci2 = 0x45; break;
+		case 1: drive_pci = 0x40; drive_pci2 = 0x44; break;
+		case 2: drive_pci = 0x43; drive_pci2 = 0x47; break;
+		case 3: drive_pci = 0x42; drive_pci2 = 0x46; break;
+		default:
+			return -1;
+	}
+
+	pci_read_config_byte(dev, drive_pci, &pio_timing);
+	pci_read_config_byte(dev, drive_pci2, &dma_timing);
+	pci_read_config_byte(dev, drive_pci3, &ultra_timing);
+	pci_read_config_byte(dev, 0x54, &ultra_enable);
+
+#ifdef DEBUG
+	printk("%s: UDMA 0x%02x DMAPIO 0x%02x PIO 0x%02x ",
+		drive->name, ultra_timing, dma_timing, pio_timing);
+#endif
+
+	pio_timing	&= ~0xFF;
+	dma_timing	&= ~0xFF;
+	ultra_timing	&= ~(0x0F << (4*unit));
+	ultra_enable	&= ~(0x01 << drive->dn);
+
+	switch(speed) {
+		case XFER_PIO_4:
+		case XFER_PIO_3:
+		case XFER_PIO_2:
+		case XFER_PIO_1:
+		case XFER_PIO_0:
+			pio_timing |= pio_modes[speed - XFER_PIO_0];
 			break;
-		case XFER_MW_DMA_1:
-			bit8 = 0x21;
-			break;
+#ifdef CONFIG_BLK_DEV_IDEDMA
 		case XFER_MW_DMA_2:
-		default:
-			bit8 = 0x20;
+		case XFER_MW_DMA_1:
+		case XFER_MW_DMA_0:
+			pio_timing |= pio_modes[pio];
+			dma_timing |= dma_modes[speed - XFER_MW_DMA_0];
 			break;
-		}
-		pci_write_config_byte(dev, channel, bit8);
-	}
 
-	if (speed >= XFER_UDMA_0) {
-		byte channel = hwif->channel ? 0x57 : 0x56;
-		int slave = is_slave ? 4 : 0;
-
-		pci_read_config_byte(dev, channel, &bit8);
-		bit8 &= ~(0xf << slave);
-		switch (speed) {
-		case XFER_UDMA_0:
-			break;
-		case XFER_UDMA_1:
-			bit8 |= 0x1 << slave;
-			break;
+//		case XFER_UDMA_5:
+//		case XFER_UDMA_4:
+//		case XFER_UDMA_3:
 		case XFER_UDMA_2:
+		case XFER_UDMA_1:
+		case XFER_UDMA_0:
+			pio_timing |= pio_modes[pio];
+			dma_timing |= dma_modes[2];
+			ultra_timing |= ((udma_modes[speed - XFER_UDMA_0]) << (4*unit));
+			ultra_enable |= (0x01 << drive->dn);
+#endif
 		default:
-			bit8 |= 0x2 << slave;
 			break;
-		}
-		pci_write_config_byte(dev, channel, bit8);
-
-		enable = 0x1 << (is_slave + (hwif->channel ? 2 : 0));
-		pci_read_config_byte(dev, 0x54, &bit8);
-		pci_write_config_byte(dev, 0x54, bit8 | enable);
 	}
+
+#ifdef DEBUG
+	printk("%s: UDMA 0x%02x DMAPIO 0x%02x PIO 0x%02x ",
+		drive->name, ultra_timing, dma_timing, pio_timing);
 #endif
 
 #if OSB4_DEBUG_DRIVE_INFO
 	printk("%s: %s drive%d\n", drive->name, ide_xfer_verbose(speed), drive->dn);
 #endif /* OSB4_DEBUG_DRIVE_INFO */
+
 	if (!drive->init_speed)
 		drive->init_speed = speed;
+
+	pci_write_config_byte(dev, drive_pci, pio_timing);
+#ifdef CONFIG_BLK_DEV_IDEDMA
+	pci_write_config_byte(dev, drive_pci2, dma_timing);
+	pci_write_config_byte(dev, drive_pci3, ultra_timing);
+	pci_write_config_byte(dev, 0x54, ultra_enable);
+	
+	if (speed > XFER_PIO_4) {
+		outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
+	} else {
+		outb(inb(dma_base+2) & ~(1<<(5+unit)), dma_base+2);
+	}
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+
 	err = ide_config_drive_speed(drive, speed);
 	drive->current_speed = speed;
 	return err;
 }
 
-static int osb4_config_drive_for_dma (ide_drive_t *drive)
+static void config_chipset_for_pio (ide_drive_t *drive)
+{
+	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
+	unsigned short xfer_pio = drive->id->eide_pio_modes;
+	byte			timing, speed, pio;
+
+	pio = ide_get_best_pio_mode(drive, 255, 5, NULL);
+
+	if (xfer_pio> 4)
+		xfer_pio = 0;
+
+	if (drive->id->eide_pio_iordy > 0) {
+		for (xfer_pio = 5;
+			xfer_pio>0 &&
+			drive->id->eide_pio_iordy>eide_pio_timing[xfer_pio];
+			xfer_pio--);
+	} else {
+		xfer_pio = (drive->id->eide_pio_modes & 4) ? 0x05 :
+			   (drive->id->eide_pio_modes & 2) ? 0x04 :
+			   (drive->id->eide_pio_modes & 1) ? 0x03 :
+			   (drive->id->tPIO & 2) ? 0x02 :
+			   (drive->id->tPIO & 1) ? 0x01 : xfer_pio;
+	}
+
+	timing = (xfer_pio >= pio) ? xfer_pio : pio;
+
+	switch(timing) {
+		case 4: speed = XFER_PIO_4;break;
+		case 3: speed = XFER_PIO_3;break;
+		case 2: speed = XFER_PIO_2;break;
+		case 1: speed = XFER_PIO_1;break;
+		default:
+			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;
+			break;
+	}
+	(void) osb4_tune_chipset(drive, speed);
+	drive->current_speed = speed;
+}
+
+static void osb4_tune_drive (ide_drive_t *drive, byte pio)
+{
+	byte speed;
+	switch(pio) {
+		case 4:		speed = XFER_PIO_4;break;
+		case 3:		speed = XFER_PIO_3;break;
+		case 2:		speed = XFER_PIO_2;break;
+		case 1:		speed = XFER_PIO_1;break;
+		default:	speed = XFER_PIO_0;break;
+	}
+	(void) osb4_tune_chipset(drive, speed);
+}
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
+static int config_chipset_for_dma (ide_drive_t *drive)
 {
 	struct hd_driveid *id	= drive->id;
 	byte			speed;
 
+#if 0
 	byte udma_66		= eighty_ninty_three(drive);
 	/* need specs to figure out if osb4 is capable of ata/66/100 */
 	int ultra100		= 0;
 	int ultra66		= 0;
-	int ultra		= 1;
 
 	if ((id->dma_ultra & 0x0020) && (udma_66) && (ultra100)) {
 		speed = XFER_UDMA_5;
-	} else if ((id->dma_ultra & 0x0010) && (ultra)) {
+	} else if (id->dma_ultra & 0x0010) {
 		speed = ((udma_66) && (ultra66)) ? XFER_UDMA_4 : XFER_UDMA_2;
-	} else if ((id->dma_ultra & 0x0008) && (ultra)) {
+	} else if (id->dma_ultra & 0x0008) {
 		speed = ((udma_66) && (ultra66)) ? XFER_UDMA_3 : XFER_UDMA_1;
-	} else if ((id->dma_ultra & 0x0004) && (ultra)) {
+	} else if (id->dma_ultra & 0x0004) {
+#else
+	if (id->dma_ultra & 0x0004) {
+#endif
 		speed = XFER_UDMA_2;
-	} else if ((id->dma_ultra & 0x0002) && (ultra)) {
+	} else if (id->dma_ultra & 0x0002) {
 		speed = XFER_UDMA_1;
-	} else if ((id->dma_ultra & 0x0001) && (ultra)) {
+	} else if (id->dma_ultra & 0x0001) {
 		speed = XFER_UDMA_0;
 	} else if (id->dma_mword & 0x0004) {
 		speed = XFER_MW_DMA_2;
@@ -243,45 +328,87 @@ static int osb4_config_drive_for_dma (ide_drive_t *drive)
 						     ide_dma_off_quietly);
 }
 
+static int config_drive_xfer_rate (ide_drive_t *drive)
+{
+	struct hd_driveid *id = drive->id;
+	ide_dma_action_t dma_func = ide_dma_on;
+
+	if (id && (id->capability & 1) && HWIF(drive)->autodma) {
+		/* Consult the list of known "bad" drives */
+		if (ide_dmaproc(ide_dma_bad_drive, drive)) {
+			dma_func = ide_dma_off;
+			goto fast_ata_pio;
+		}
+		dma_func = ide_dma_off_quietly;
+		if (id->field_valid & 4) {
+			if (id->dma_ultra & 0x002F) {
+				/* Force if Capable UltraDMA */
+				dma_func = config_chipset_for_dma(drive);
+				if ((id->field_valid & 2) &&
+				    (dma_func != ide_dma_on))
+					goto try_dma_modes;
+			}
+		} else if (id->field_valid & 2) {
+try_dma_modes:
+			if ((id->dma_mword & 0x0007) ||
+			    (id->dma_1word & 0x007)) {
+				/* Force if Capable regular DMA modes */
+				dma_func = config_chipset_for_dma(drive);
+				if (dma_func != ide_dma_on)
+					goto no_dma_set;
+			}
+		} else if (ide_dmaproc(ide_dma_good_drive, drive)) {
+			if (id->eide_dma_time > 150) {
+				goto no_dma_set;
+			}
+			/* Consult the list of known "good" drives */
+			dma_func = config_chipset_for_dma(drive);
+			if (dma_func != ide_dma_on)
+				goto no_dma_set;
+		} else {
+			goto fast_ata_pio;
+		}
+	} else if ((id->capability & 8) || (id->field_valid & 2)) {
+fast_ata_pio:
+		dma_func = ide_dma_off_quietly;
+no_dma_set:
+		config_chipset_for_pio(drive);
+	}
+	return HWIF(drive)->dmaproc(dma_func, drive);
+}
+
 static int osb4_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 {
 	switch (func) {
 		case ide_dma_check:
-			 return ide_dmaproc((ide_dma_action_t) osb4_config_drive_for_dma(drive), drive);
+			return config_drive_xfer_rate(drive);
 		default :
 			break;
 	}
 	/* Other cases are done by generic IDE-DMA code. */
 	return ide_dmaproc(func, drive);
 }
-#endif /* defined(CONFIG_BLK_DEV_IDEDMA) && (CONFIG_BLK_DEV_OSB4) */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 unsigned int __init pci_init_osb4 (struct pci_dev *dev, const char *name)
 {
-	u16 word;
-	byte bit8;
+	unsigned int reg64;
 
 	pci_read_config_byte(dev, PCI_REVISION_ID, &osb4_revision);
 
-	/* setup command register. just make sure that bus master and
-	 * i/o ports are on. */
-	pci_read_config_word(dev, PCI_COMMAND, &word);
-	if ((word & (PCI_COMMAND_MASTER | PCI_COMMAND_IO)) !=
-	     (PCI_COMMAND_MASTER | PCI_COMMAND_IO))
-		pci_write_config_word(dev, PCI_COMMAND, word |
-				      PCI_COMMAND_MASTER | PCI_COMMAND_IO);
-	
-	/* make sure that we're in pci native mode for both the primary
-	 * and secondary channel. */
-	pci_read_config_byte(dev, PCI_CLASS_PROG, &bit8);
-	if ((bit8 & 0x5) != 0x5)
-		pci_write_config_byte(dev, PCI_CLASS_PROG, bit8 | 0x5);
+	isa_dev = pci_find_device(PCI_VENDOR_ID_SERVERWORKS, PCI_DEVICE_ID_SERVERWORKS_OSB4, NULL);
 
-	/* setup up our latency. the default is 255 which is a bit large.
-	 * set it to 64 instead. */
-	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &bit8);
-	if (bit8 != 0x40)
-	    pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x40);
+	pci_read_config_dword(isa_dev, 0x64, &reg64);
+#ifdef DEBUG
+	printk("%s: reg64 == 0x%08x\n", name, reg64);
+#endif
+	reg64 &= ~0x0000A000;
+#ifdef CONFIG_SMP
+	reg64 |= 0x00008000;
+#endif
+	pci_write_config_dword(isa_dev, 0x64, reg64);
+
+	pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x40);
 
 #if defined(DISPLAY_OSB4_TIMINGS) && defined(CONFIG_PROC_FS)
 	if (!osb4_proc) {
@@ -304,19 +431,22 @@ void __init ide_init_osb4 (ide_hwif_t *hwif)
 		hwif->irq = hwif->channel ? 15 : 14;
 
 	hwif->tuneproc = &osb4_tune_drive;
-	hwif->drives[0].autotune = 1;
-	hwif->drives[1].autotune = 1;
-
-	if (!hwif->dma_base)
-		return;
+	hwif->speedproc = &osb4_tune_chipset;
 
 #ifndef CONFIG_BLK_DEV_IDEDMA
+	hwif->drives[0].autotune = 1;
+	hwif->drives[1].autotune = 1;
 	hwif->autodma = 0;
+	return;
 #else /* CONFIG_BLK_DEV_IDEDMA */
-#ifdef CONFIG_BLK_DEV_OSB4
-	hwif->autodma = 1;
-	hwif->dmaproc = &osb4_dmaproc;
-	hwif->speedproc = &osb4_tune_chipset;
-#endif /* CONFIG_BLK_DEV_OSB4 */
+
+	if (hwif->dma_base) {
+		hwif->autodma = 1;
+		hwif->dmaproc = &osb4_dmaproc;
+	} else {
+		hwif->autodma = 0;
+		hwif->drives[0].autotune = 1;
+		hwif->drives[1].autotune = 1;
+	}
 #endif /* !CONFIG_BLK_DEV_IDEDMA */
 }

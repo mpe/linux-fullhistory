@@ -542,7 +542,7 @@ int icmpv6_rcv(struct sk_buff *skb, unsigned long len)
 				ntohs(daddr->in6_u.u6_addr16[7]));
 			goto discard_it;
 		}
-	default:
+	default:;
 		/* CHECKSUM_UNNECESSARY */
 	};
 

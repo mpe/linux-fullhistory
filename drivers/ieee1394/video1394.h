@@ -41,6 +41,9 @@ enum {
 	VIDEO1394_TALK_WAIT_BUFFER
 };
 
+#define VIDEO1394_SYNC_FRAMES         0x00000001
+#define VIDEO1394_INCLUDE_ISO_HEADERS 0x00000002
+
 struct video1394_mmap {
 	int channel;
 	int sync_tag;
@@ -48,6 +51,7 @@ struct video1394_mmap {
 	int buf_size;
 	int packet_size;
 	int fps;
+	int flags;
 };
 
 struct video1394_wait {

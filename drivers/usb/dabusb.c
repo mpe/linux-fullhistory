@@ -787,9 +787,9 @@ static void dabusb_disconnect (struct usb_device *usbdev, void *ptr)
 }
 
 static struct usb_device_id dabusb_ids [] = {
-    { idVendor: 0x0547, idProduct: 0x2131 },
-    { idVendor: 0x0547, idProduct: 0x9999 },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(0x0547, 0x2131) },
+	{ USB_DEVICE(0x0547, 0x9999) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, dabusb_ids);

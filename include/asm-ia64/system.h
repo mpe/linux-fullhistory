@@ -27,7 +27,8 @@
 
 #define GATE_ADDR		(0xa000000000000000 + PAGE_SIZE)
 
-#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_BSTEP_SPECIFIC)
+#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) \
+    || defined(CONFIG_ITANIUM_B0_SPECIFIC) || defined(CONFIG_ITANIUM_B1_SPECIFIC)
   /* Workaround for Errata 97.  */
 # define IA64_SEMFIX_INSN	mf;
 # define IA64_SEMFIX	"mf;"

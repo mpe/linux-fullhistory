@@ -3,6 +3,7 @@
  */
 #include <linux/config.h>
 #include <linux/ide.h>
+#include <linux/mc146818rtc.h>
 #include <asm/io.h>
 
 /*
@@ -46,13 +47,15 @@ void probe_cmos_for_drives (ide_hwif_t *hwif)
 	extern struct drive_info_struct drive_info;
 	byte cmos_disks, *BIOS = (byte *) &drive_info;
 	int unit;
+	unsigned long flags;
 
 #ifdef CONFIG_BLK_DEV_PDC4030
 	if (hwif->chipset == ide_pdc4030 && hwif->channel != 0)
 		return;
 #endif /* CONFIG_BLK_DEV_PDC4030 */
-	outb_p(0x12,0x70);		/* specify CMOS address 0x12 */
-	cmos_disks = inb_p(0x71);	/* read the data from 0x12 */
+	spin_lock_irqsave(&rtc_lock, flags);
+	cmos_disks = CMOS_READ(0x12);
+	spin_unlock_irqrestore(&rtc_lock, flags);
 	/* Extract drive geometry from CMOS+BIOS if not already setup */
 	for (unit = 0; unit < MAX_DRIVES; ++unit) {
 		ide_drive_t *drive = &hwif->drives[unit];

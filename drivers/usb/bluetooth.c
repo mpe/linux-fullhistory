@@ -193,12 +193,8 @@ static void usb_bluetooth_disconnect	(struct usb_device *dev, void *ptr);
 
 
 static struct usb_device_id usb_bluetooth_ids [] = {
-    {
-	bDeviceClass: WIRELESS_CLASS_CODE,
-	bDeviceSubClass: RF_SUBCLASS_CODE,
-	bDeviceProtocol: BLUETOOTH_PROGRAMMING_PROTOCOL_CODE
-    },
-    { }						/* Terminating entry */
+	{ USB_DEVICE_INFO(WIRELESS_CLASS_CODE, RF_SUBCLASS_CODE, BLUETOOTH_PROGRAMMING_PROTOCOL_CODE) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, usb_bluetooth_ids);

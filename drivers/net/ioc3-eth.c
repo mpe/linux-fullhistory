@@ -50,7 +50,6 @@
 #include <linux/errno.h>
 #include <linux/module.h>
 #include <linux/pci.h>
-#include <linux/pci_ids.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

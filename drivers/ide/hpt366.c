@@ -346,6 +346,9 @@ static void hpt370_tune_chipset (ide_drive_t *drive, byte speed, int direction)
 
 static int hpt3xx_tune_chipset (ide_drive_t *drive, byte speed)
 {
+	if ((drive->media != ide_disk) && (speed < XFER_SW_DMA_0))
+		return -1;
+
 	if (!drive->init_speed)
 		drive->init_speed = speed;
 
@@ -427,6 +430,9 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 	byte speed		= 0x00;
 	byte ultra66		= eighty_ninty_three(drive);
 	int  rval;
+
+	if ((drive->media != ide_disk) && (speed < XFER_SW_DMA_0))
+		return ((int) ide_dma_off_quietly);
 
 	if ((id->dma_ultra & 0x0020) &&
 	    (!check_in_drive_lists(drive, bad_ata100_5)) &&
@@ -617,8 +623,14 @@ unsigned int __init pci_init_hpt366 (struct pci_dev *dev, const char *name)
 		pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
 
 	pci_read_config_byte(dev, PCI_CACHE_LINE_SIZE, &test);
+
+#if 0
 	if (test != 0x08)
 		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, 0x08);
+#else
+	if (test != (L1_CACHE_BYTES / 4))
+		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, (L1_CACHE_BYTES / 4));
+#endif
 
 	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &test);
 	if (test != 0x78)

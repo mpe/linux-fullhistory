@@ -1,10 +1,12 @@
 #include <linux/config.h>
+
+#ifdef CONFIG_IA64_GENERIC
+
 #include <linux/kernel.h>
+#include <linux/string.h>
 
 #include <asm/page.h>
 #include <asm/machvec.h>
-
-#ifdef CONFIG_IA64_GENERIC
 
 struct ia64_machine_vector ia64_mv;
 

@@ -56,7 +56,7 @@
 #define access_ok(type,addr,size) (__range_ok(addr,size) == 0)
 #define __access_ok(addr,size) (__range_ok(addr,size) == 0)
 
-extern inline int verify_area(int type, const void * addr, unsigned long size)
+static inline int verify_area(int type, const void * addr, unsigned long size)
 {
 	return access_ok(type,addr,size) ? 0 : -EFAULT;
 }
@@ -66,7 +66,7 @@ extern inline int verify_area(int type, const void * addr, unsigned long size)
  * They automatically use the right size if we just have the right
  * pointer type ...
  *
- * As MIPS uses the same address space for kernel and user data, we
+ * As SuperH uses the same address space for kernel and user data, we
  * can just do these as direct assignments.
  *
  * Careful to not

@@ -12,29 +12,33 @@
 	.psr lsb
 	.lsb
 
-GLOBAL_ENTRY(ia64_flush_icache_page)
+	/*
+	 * flush_icache_range(start,end)
+	 *	Must flush range from start to end-1 but nothing else (need to
+	 *	be careful not to touch addresses that may be unmapped).
+	 */
+GLOBAL_ENTRY(flush_icache_range)
 	UNW(.prologue)
-	alloc r2=ar.pfs,1,0,0,0
+	alloc r2=ar.pfs,2,0,0,0
+	sub r8=in1,in0,1
+	;;
+	shr.u r8=r8,5			// we flush 32 bytes per iteration
 	UNW(.save ar.lc, r3)
 	mov r3=ar.lc			// save ar.lc	
+	;;
 
 	.body
 
-	mov r8=PAGE_SIZE/64-1		// repeat/until loop
-	;;
 	mov ar.lc=r8
-	add r8=32,in0
 	;;
-.Loop1:	fc in0				// issuable on M0 only
-	add in0=64,in0
-	fc r8
-	add r8=64,r8
-	br.cloop.sptk.few .Loop1
+.Loop:	fc in0				// issuable on M0 only
+	add in0=32,in0
+	br.cloop.sptk.few .Loop
 	;;
 	sync.i
 	;;
 	srlz.i
 	;;	
 	mov ar.lc=r3			// restore ar.lc
-	br.ret.sptk.few rp
-END(ia64_flush_icache_page)
+	br.ret.sptk.many rp
+END(flush_icache_range)

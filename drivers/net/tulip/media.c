@@ -263,6 +263,24 @@ void tulip_select_media(struct net_device *dev, int startup)
 			tulip_mdio_write(dev, tp->phys[phy_num], 4, to_advertise);
 			break;
 		}
+		case 5: case 6: {
+			u16 setup[5];
+			u32 csr13val, csr14val, csr15dir, csr15val;
+			for (i = 0; i < 5; i++)
+				setup[i] = get_u16(&p[i*2 + 1]);
+
+			if (startup && mtable->has_reset) {
+				struct medialeaf *rleaf = &mtable->mleaf[mtable->has_reset];
+				unsigned char *rst = rleaf->leafdata;
+				if (tulip_debug > 1)
+					printk(KERN_DEBUG "%s: Resetting the transceiver.\n",
+						   dev->name);
+				for (i = 0; i < rst[0]; i++)
+					outl(get_u16(rst + 1 + (i<<1)) << 16, ioaddr + CSR15);
+			}
+
+			break;
+		}
 		default:
 			printk(KERN_DEBUG "%s:  Invalid media table selection %d.\n",
 					   dev->name, mleaf->type);

@@ -32,6 +32,7 @@
 #include <linux/delay.h>
 #include <linux/reboot.h>
 #include <linux/init.h>
+#include <linux/mc146818rtc.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -257,6 +258,8 @@ static inline void kb_wait(void)
  */
 void machine_real_restart(unsigned char *code, int length)
 {
+	unsigned long flags;
+
 	cli();
 
 	/* Write zero to CMOS register number 0x0f, which the BIOS POST
@@ -266,10 +269,12 @@ void machine_real_restart(unsigned char *code, int length)
 	   disable NMIs by setting the top bit in the CMOS address register,
 	   as we're about to do peculiar things to the CPU.  I'm not sure if
 	   `outb_p' is needed instead of just `outb'.  Use it to be on the
-	   safe side. */
+	   safe side.  (Yes, CMOS_WRITE does outb_p's. -  Paul G.)
+	 */
 
-	outb_p (0x8f, 0x70);
-	outb_p (0x00, 0x71);
+	spin_lock_irqsave(&rtc_lock, flags);
+	CMOS_WRITE(0x00, 0x8f);
+	spin_unlock_irqrestore(&rtc_lock, flags);
 
 	/* Remap the kernel at virtual address zero, as well as offset zero
 	   from the kernel segment.  This assumes the kernel segment starts at
@@ -379,13 +384,14 @@ void machine_power_off(void)
 		pm_power_off();
 }
 
+extern void show_trace(unsigned long* esp);
 
 void show_regs(struct pt_regs * regs)
 {
 	unsigned long cr0 = 0L, cr2 = 0L, cr3 = 0L, cr4 = 0L;
 
 	printk("\n");
-	printk("EIP: %04x:[<%08lx>]",0xffff & regs->xcs,regs->eip);
+	printk("EIP: %04x:[<%08lx>] CPU: %d",0xffff & regs->xcs,regs->eip, smp_processor_id());
 	if (regs->xcs & 3)
 		printk(" ESP: %04x:%08lx",0xffff & regs->xss,regs->esp);
 	printk(" EFLAGS: %08lx\n",regs->eflags);
@@ -407,6 +413,7 @@ void show_regs(struct pt_regs * regs)
 		".previous			\n"
 		: "=r" (cr4): "0" (0));
 	printk("CR0: %08lx CR2: %08lx CR3: %08lx CR4: %08lx\n", cr0, cr2, cr3, cr4);
+	show_trace(&regs->esp);
 }
 
 /*

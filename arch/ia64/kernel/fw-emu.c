@@ -402,7 +402,6 @@ sys_fw_init (const char *args, int arglen)
 	sal_systab->sal_rev_minor = 1;
 	sal_systab->sal_rev_major = 0;
 	sal_systab->entry_count = 1;
-	sal_systab->ia32_bios_present = 0;
 
 #ifdef CONFIG_IA64_GENERIC
         strcpy(sal_systab->oem_id, "Generic");

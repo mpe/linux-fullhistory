@@ -557,7 +557,7 @@ fail_alloc_0:
 static void cpia_disconnect(struct usb_device *dev, void *ptr);
 
 static struct usb_device_id cpia_id_table [] = {
-	{ idVendor: 0x0553, idProduct: 0x0002 },
+	{ USB_DEVICE(0x0553, 0x0002) },
 	{ }					/* Terminating entry */
 };
 

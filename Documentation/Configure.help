@@ -15512,14 +15512,15 @@ CONFIG_ARIADNE
   want). The module is called ariadne.o. If you want to compile it as
   a module, say M here and read Documentation/modules.txt.
 
-Ariadne II support
+Ariadne II and X-Surf support
 CONFIG_ARIADNE2
-  If you have a Village Tronic Ariadne II Ethernet adapter, say Y.
+  This driver is for the Village Tronic Ariadne II and the Individual
+  Computers X-Surf Ethernet cards. If you have such a card, say Y.
   Otherwise, say N.
 
   This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you
-  want). The module is called ariadne2.o. If you want to compile it as
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called ariadne2.o. If you want to compile it as
   a module, say M here and read Documentation/modules.txt.
 
 A2065 support
@@ -16993,12 +16994,6 @@ CONFIG_ITANIUM_ASTEP_SPECIFIC
   Select this option to build a kernel for an Itanium prototype system
   with an A-step CPU.  You have an A-step CPU if the "revision" field in
   /proc/cpuinfo is 0.
-
-Enable Itanium A1-step specific code
-CONFIG_ITANIUM_A1_SPECIFIC
-  Select this option to build a kernel for an Itanium prototype system
-  with an A1-step CPU.  If you don't know whether you have an A1-step CPU,
-  you probably don't and you can answer "no" here.
 
 Enable Itanium B-step specific code
 CONFIG_ITANIUM_BSTEP_SPECIFIC

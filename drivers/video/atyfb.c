@@ -1722,7 +1722,7 @@ static void aty_set_pll18818(const struct fb_info_aty *info,
     aty_st_8(CRTC_GEN_CNTL + 3, old_crtc_ext_disp | (CRTC_EXT_DISP_EN >> 24),
 	     info);
 
-    udelay(15000); /* delay for 50 (15) ms */
+    mdelay(15); /* delay for 50 (15) ms */
 
     program_bits = pll->program_bits;
     locationAddr = pll->locationAddr;
@@ -1754,7 +1754,7 @@ static void aty_set_pll18818(const struct fb_info_aty *info,
     aty_st_8(CLOCK_CNTL + info->clk_wr_offset, old_clock_cntl | CLOCK_STROBE,
 	     info);
 
-    udelay(50000); /* delay for 50 (15) ms */
+    mdelay(50); /* delay for 50 (15) ms */
     aty_st_8(CLOCK_CNTL + info->clk_wr_offset,
 	     ((pll->locationAddr & 0x0F) | CLOCK_STROBE), info);
 

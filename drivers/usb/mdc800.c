@@ -870,8 +870,8 @@ static struct file_operations mdc800_device_ops =
 
 
 static struct usb_device_id mdc800_table [] = {
-    { idVendor: MDC800_VENDOR_ID, idProduct: MDC800_PRODUCT_ID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(MDC800_VENDOR_ID, MDC800_PRODUCT_ID) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, mdc800_table);

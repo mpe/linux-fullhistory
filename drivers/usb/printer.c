@@ -613,10 +613,10 @@ static struct file_operations usblp_fops = {
 };
 
 static struct usb_device_id usblp_ids [] = {
-    { bInterfaceClass: 7, bInterfaceSubClass: 1, bInterfaceProtocol: 1},
-    { bInterfaceClass: 7, bInterfaceSubClass: 1, bInterfaceProtocol: 2},
-    { bInterfaceClass: 7, bInterfaceSubClass: 1, bInterfaceProtocol: 3},
-    { }						/* Terminating entry */
+	{ USB_INTERFACE_INFO(7, 1, 1) },
+	{ USB_INTERFACE_INFO(7, 1, 2) },
+	{ USB_INTERFACE_INFO(7, 1, 3) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, usblp_ids);

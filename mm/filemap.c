@@ -219,13 +219,12 @@ static inline void truncate_complete_page(struct page *page)
 	page_cache_release(page);
 }
 
-void truncate_list_pages(struct list_head *head, unsigned long start, unsigned partial)
+static int FASTCALL(truncate_list_pages(struct list_head *, unsigned long, unsigned *));
+static int truncate_list_pages(struct list_head *head, unsigned long start, unsigned *partial)
 {
 	struct list_head *curr;
 	struct page * page;
 
-repeat:
-	spin_lock(&pagecache_lock);
 	curr = head->next;
 	while (curr != head) {
 		unsigned long offset;
@@ -235,37 +234,29 @@ repeat:
 		offset = page->index;
 
 		/* Is one of the pages to truncate? */
-		if ((offset >= start) || (partial && (offset + 1) == start)) {
+		if ((offset >= start) || (*partial && (offset + 1) == start)) {
 			if (TryLockPage(page)) {
 				page_cache_get(page);
 				spin_unlock(&pagecache_lock);
 				wait_on_page(page);
 				page_cache_release(page);
-				goto repeat;
+				return 1;
 			}
 			page_cache_get(page);
 			spin_unlock(&pagecache_lock);
 
-			if (partial && (offset + 1) == start) {
-				truncate_partial_page(page, partial);
-				partial = 0;
+			if (*partial && (offset + 1) == start) {
+				truncate_partial_page(page, *partial);
+				*partial = 0;
 			} else 
 				truncate_complete_page(page);
 
 			UnlockPage(page);
 			page_cache_release(page);
-
-			/*
-			 * We have done things without the pagecache lock,
-			 * so we'll have to repeat the scan.
-			 * It's not possible to deadlock here because
-			 * we are guaranteed to make progress. (ie. we have
-			 * just removed a page)
-			 */
-			goto repeat;
+			return 1;
 		}
 	}
-	spin_unlock(&pagecache_lock);
+	return 0;
 }
 
 
@@ -283,9 +274,15 @@ void truncate_inode_pages(struct address_space * mapping, loff_t lstart)
 	unsigned long start = (lstart + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 	unsigned partial = lstart & (PAGE_CACHE_SIZE - 1);
 
-	truncate_list_pages(&mapping->clean_pages, start, partial);
-	truncate_list_pages(&mapping->dirty_pages, start, partial);
-	truncate_list_pages(&mapping->locked_pages, start, partial);
+repeat:
+	spin_lock(&pagecache_lock);
+	if (truncate_list_pages(&mapping->clean_pages, start, &partial))
+		goto repeat;
+	if (truncate_list_pages(&mapping->dirty_pages, start, &partial))
+		goto repeat;
+	if (truncate_list_pages(&mapping->locked_pages, start, &partial))
+		goto repeat;
+	spin_unlock(&pagecache_lock);
 }
 
 static inline struct page * __find_page_nolock(struct address_space *mapping, unsigned long offset, struct page *page)
@@ -2498,6 +2495,7 @@ generic_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 	while (count) {
 		unsigned long bytes, index, offset;
 		char *kaddr;
+		int deactivate = 1;
 
 		/*
 		 * Try to find the page in the cache. If it isn't there,
@@ -2506,8 +2504,10 @@ generic_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 		offset = (pos & (PAGE_CACHE_SIZE -1)); /* Within page */
 		index = pos >> PAGE_CACHE_SHIFT;
 		bytes = PAGE_CACHE_SIZE - offset;
-		if (bytes > count)
+		if (bytes > count) {
 			bytes = count;
+			deactivate = 0;
+		}
 
 		/*
 		 * Bring in the user page that we will copy from _first_.
@@ -2551,7 +2551,8 @@ generic_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 unlock:
 		/* Mark it unlocked again and drop the page.. */
 		UnlockPage(page);
-		deactivate_page(page);
+		if (deactivate)
+			deactivate_page(page);
 		page_cache_release(page);
 
 		if (status < 0)

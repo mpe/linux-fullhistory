@@ -143,12 +143,12 @@ static unsigned int video_poll(struct file *file, poll_table * wait)
 static int video_open(struct inode *inode, struct file *file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
-	int err;
+	int err, retval = 0;
 	struct video_device *vfl;
 	
 	if(minor>=VIDEO_NUM_DEVICES)
 		return -ENODEV;
-		
+	lock_kernel();		
 	vfl=video_device[minor];
 	if(vfl==NULL) {
 		char modname[20];
@@ -156,12 +156,17 @@ static int video_open(struct inode *inode, struct file *file)
 		sprintf (modname, "char-major-%d-%d", VIDEO_MAJOR, minor);
 		request_module(modname);
 		vfl=video_device[minor];
-		if (vfl==NULL)
-			return -ENODEV;
+		if (vfl==NULL) {
+			retval = -ENODEV;
+			goto error_out;
+		}
 	}
-	if(vfl->busy)
-		return -EBUSY;
+	if(vfl->busy) {
+		retval = -EBUSY;
+		goto error_out;
+	}
 	vfl->busy=1;		/* In case vfl->open sleeps */
+	unlock_kernel();
 	
 	if(vfl->open)
 	{
@@ -173,6 +178,9 @@ static int video_open(struct inode *inode, struct file *file)
 		}
 	}
 	return 0;
+error_out:
+	unlock_kernel();
+	return retval;
 }
 
 /*

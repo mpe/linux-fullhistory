@@ -15,6 +15,7 @@
 
 asmlinkage void floppy_hardint(int irq, void *dev_id, struct pt_regs * regs);
 
+#undef MAX_DMA_ADDRESS
 #define MAX_DMA_ADDRESS   0x00  /* nothing like that */
 
 extern spinlock_t  dma_spin_lock;

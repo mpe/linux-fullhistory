@@ -524,7 +524,8 @@ int parport_negotiate (struct parport *port, int mode)
 					     PARPORT_STATUS_PAPEROUT,
 					     PARPORT_STATUS_PAPEROUT);
 		if (r)
-			DPRINTK (KERN_INFO "%s: Timeout at event 31\n");
+			DPRINTK (KERN_INFO "%s: Timeout at event 31\n",
+				 port->name);
 
 		port->ieee1284.phase = IEEE1284_PH_FWD_IDLE;
 		DPRINTK (KERN_DEBUG "%s: ECP direction: forward\n",

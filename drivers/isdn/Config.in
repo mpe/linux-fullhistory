@@ -23,7 +23,7 @@ fi
 mainmenu_option next_comment
 comment 'ISDN feature submodules'
    dep_tristate 'isdnloop support' CONFIG_ISDN_DRV_LOOP $CONFIG_ISDN
-   dep_tristate 'Support isdn diversion services' CONFIG_ISDN_DIVERSION $CONFIG_ISDN
+   dep_tristate 'Support isdn diversion services' CONFIG_ISDN_DIVERSION $CONFIG_ISDN m
 endmenu
 
 comment 'low-level hardware drivers'

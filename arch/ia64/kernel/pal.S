@@ -52,10 +52,9 @@ END(ia64_pal_default_handler)
 /*
  * Make a PAL call using the static calling convention.
  *
- * in0         Pointer to struct ia64_pal_retval
- * in1         Index of PAL service
- * in2 - in4   Remaining PAL arguments
- * in5	       1 ==> clear psr.ic,  0 ==> don't clear psr.ic
+ * in0         Index of PAL service
+ * in1 - in3   Remaining PAL arguments
+ * in4	       1 ==> clear psr.ic,  0 ==> don't clear psr.ic
  *
  */
 GLOBAL_ENTRY(ia64_pal_call_static)
@@ -69,7 +68,7 @@ GLOBAL_ENTRY(ia64_pal_call_static)
 	}
 	;;
 	ld8 loc2 = [loc2]		// loc2 <- entry point
-	tbit.nz p6,p7 = in5, 0
+	tbit.nz p6,p7 = in4, 0
 	adds r8 = 1f-1b,r8
 	;;
 	mov loc3 = psr

@@ -57,11 +57,9 @@
 
 
 static const struct usb_device_id	products [] = {
-	{		// reference design
-	    idProduct:		0x1080,
-	    idVendor:		0x0525,
-	    driver_info:	(unsigned long) "NetChip TurboCONNECT",
-	},
+	// reference design
+	{ USB_DEVICE(0x1080, 0x525), 
+	  driver_info: (unsigned long) "NetChip TurboCONNECT" },
 	// Belkin, ...
 	{ },		// END
 };

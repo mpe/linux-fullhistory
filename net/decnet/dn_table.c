@@ -902,6 +902,10 @@ void __init dn_fib_table_init(void)
 
 void __exit dn_fib_table_cleanup(void)
 {
+	int i;
+
+	for (i = 0; i < DN_NUM_TABLES + 1; ++i)
+		dn_fib_del_tree(i);
+
 	return;
 }
-

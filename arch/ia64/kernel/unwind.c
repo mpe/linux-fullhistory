@@ -46,16 +46,6 @@
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 #define p5		5
 
-/*
- * The unwind tables are supposed to be sorted, but the GNU toolchain
- * currently fails to produce a sorted table in the presence of
- * functions that go into sections other than .text.  For example, the
- * kernel likes to put initialization code into .text.init, which
- * messes up the sort order.  Hopefully, this will get fixed sometime
- * soon.  --davidm 00/05/23
- */
-#define UNWIND_TABLE_SORT_BUG
-
 #define UNW_LOG_CACHE_SIZE	7	/* each unw_script is ~256 bytes in size */
 #define UNW_CACHE_SIZE		(1 << UNW_LOG_CACHE_SIZE)
 
@@ -531,6 +521,10 @@ push (struct unw_state_record *sr)
 	struct unw_reg_state *rs;
 
 	rs = alloc_reg_state();
+	if (!rs) {
+		printk("unwind: cannot stack reg state!\n");
+		return;
+	}
 	memcpy(rs, &sr->curr, sizeof(*rs));
 	rs->next = sr->stack;
 	sr->stack = rs;
@@ -1964,23 +1958,6 @@ init_unwind_table (struct unw_table *table, const char *name, unsigned long segm
 {
 	struct unw_table_entry *start = table_start, *end = table_end;
 
-#ifdef UNWIND_TABLE_SORT_BUG
-	{
-		struct unw_table_entry *e1, *e2, tmp;
-
-		/* stupid bubble sort... */
-
-		for (e1 = start; e1 < end; ++e1) {
-			for (e2 = e1 + 1; e2 < end; ++e2) {
-				if (e2->start_offset < e1->start_offset) {
-					tmp = *e1;
-					*e1 = *e2;
-					*e2 = tmp;
-				}
-			}
-		}
-	}
-#endif
 	table->name = name;
 	table->segment_base = segment_base;
 	table->gp = gp;
@@ -2023,8 +2000,8 @@ unw_add_unwind_table (const char *name, unsigned long segment_base, unsigned lon
 void
 unw_remove_unwind_table (void *handle)
 {
-	struct unw_table *table, *prevt;
-	struct unw_script *tmp, *prev;
+	struct unw_table *table, *prev;
+	struct unw_script *tmp;
 	unsigned long flags;
 	long index;
 
@@ -2043,41 +2020,35 @@ unw_remove_unwind_table (void *handle)
 	{
 		/* first, delete the table: */
 
-		for (prevt = (struct unw_table *) &unw.tables; prevt; prevt = prevt->next)
-			if (prevt->next == table)
+		for (prev = (struct unw_table *) &unw.tables; prev; prev = prev->next)
+			if (prev->next == table)
 				break;
-		if (!prevt) {
+		if (!prev) {
 			dprintk("unwind: failed to find unwind table %p\n", (void *) table);
 			spin_unlock_irqrestore(&unw.lock, flags);
 			return;
 		}
-		prevt->next = table->next;
-
-		/* next, remove hash table entries for this table */
-
-		for (index = 0; index <= UNW_HASH_SIZE; ++index) {
-			if (unw.hash[index] >= UNW_CACHE_SIZE)
-				continue;
-
-			tmp = unw.cache + unw.hash[index];
-			prev = 0;
-			while (1) {
-				write_lock(&tmp->lock);
-				{
-					if (tmp->ip >= table->start && tmp->ip < table->end) {
-						if (prev)
-							prev->coll_chain = tmp->coll_chain;
-						else
-							unw.hash[index] = -1;
-						tmp->ip = 0;
-					} else
-						prev = tmp;
-				}
-				write_unlock(&tmp->lock);
-			}
-		}
+		prev->next = table->next;
 	}
 	spin_unlock_irqrestore(&unw.lock, flags);
+
+	/* next, remove hash table entries for this table */
+
+	for (index = 0; index <= UNW_HASH_SIZE; ++index) {
+		tmp = unw.cache + unw.hash[index];
+		if (unw.hash[index] >= UNW_CACHE_SIZE
+		    || tmp->ip < table->start || tmp->ip >= table->end)
+			continue;
+
+		write_lock(&tmp->lock);
+		{
+			if (tmp->ip >= table->start && tmp->ip < table->end) {
+				unw.hash[index] = tmp->coll_chain;
+				tmp->ip = 0;
+			}
+		}
+		write_unlock(&tmp->lock);
+	}
 
 	kfree(table);
 }

@@ -137,23 +137,6 @@ cpu_idle (void *unused)
 		check_pgt_cache();
 		if (pm_idle)
 			(*pm_idle)();
-#ifdef CONFIG_ITANIUM_ASTEP_SPECIFIC
-		local_irq_disable();
-		{
-			u64 itc, itm;
-
-			itc = ia64_get_itc();
-			itm = ia64_get_itm();
-			if (time_after(itc, itm + 1000)) {
-				extern void ia64_reset_itm (void);
-
-				printk("cpu_idle: ITM in past (itc=%lx,itm=%lx:%lums)\n",
-				       itc, itm, (itc - itm)/500000);
-				ia64_reset_itm();
-			}
-		}
-		local_irq_enable();
-#endif
 	}
 }
 
@@ -164,7 +147,7 @@ ia64_save_extra (struct task_struct *task)
 		ia64_save_debug_regs(&task->thread.dbr[0]);
 #ifdef CONFIG_PERFMON
 	if ((task->thread.flags & IA64_THREAD_PM_VALID) != 0)
-		ia64_save_pm_regs(&task->thread);
+		ia64_save_pm_regs(task);
 #endif
 	if (IS_IA32_PROCESS(ia64_task_regs(task)))
 		ia32_save_state(&task->thread);
@@ -177,7 +160,7 @@ ia64_load_extra (struct task_struct *task)
 		ia64_load_debug_regs(&task->thread.dbr[0]);
 #ifdef CONFIG_PERFMON
 	if ((task->thread.flags & IA64_THREAD_PM_VALID) != 0)
-		ia64_load_pm_regs(&task->thread);
+		ia64_load_pm_regs(task);
 #endif
 	if (IS_IA32_PROCESS(ia64_task_regs(task)))
 		ia32_load_state(&task->thread);
@@ -299,6 +282,14 @@ copy_thread (int nr, unsigned long clone_flags,
 #	define THREAD_FLAGS_TO_SET	0
 	p->thread.flags = ((current->thread.flags & ~THREAD_FLAGS_TO_CLEAR)
 			   | THREAD_FLAGS_TO_SET);
+#ifdef CONFIG_IA32_SUPPORT
+	/*
+	 * If we're cloning an IA32 task then save the IA32 extra
+	 * state from the current task to the new task
+	 */
+	if (IS_IA32_PROCESS(ia64_task_regs(current)))
+		ia32_save_state(&p->thread);
+#endif
 	return 0;
 }
 
@@ -554,7 +545,7 @@ exit_thread (void)
 		 * we garantee no race.  this call we also stop
 		 * monitoring
 		 */
-		ia64_save_pm_regs(&current->thread);
+		ia64_save_pm_regs(current);
 		/*
 		 * make sure that switch_to() will not save context again
 		 */

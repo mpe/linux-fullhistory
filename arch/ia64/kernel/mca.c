@@ -19,6 +19,7 @@
 #include <linux/irq.h>
 #include <linux/smp_lock.h>
 
+#include <asm/machvec.h>
 #include <asm/page.h>
 #include <asm/ptrace.h>
 #include <asm/system.h>
@@ -26,7 +27,6 @@
 #include <asm/mca.h>
 
 #include <asm/irq.h>
-#include <asm/machvec.h>
 
  
 typedef struct ia64_fptr {
@@ -365,7 +365,7 @@ ia64_mca_wakeup_ipi_wait(void)
 void
 ia64_mca_wakeup(int cpu)
 {
-	ipi_send(cpu, IA64_MCA_WAKEUP_INT_VECTOR, IA64_IPI_DM_INT, 0);
+	platform_send_ipi(cpu, IA64_MCA_WAKEUP_INT_VECTOR, IA64_IPI_DM_INT, 0);
 	ia64_mc_info.imi_rendez_checkin[cpu] = IA64_MCA_RENDEZ_CHECKIN_NOTDONE;
 	
 }

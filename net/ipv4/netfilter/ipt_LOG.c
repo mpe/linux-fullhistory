@@ -288,7 +288,7 @@ ipt_log_target(struct sk_buff **pskb,
 	if (in && !out) {
 		/* MAC logging for input chain only. */
 		printk("MAC=");
-		if ((*pskb)->dev && (*pskb)->dev->hard_header_len && (*pskb)->mac.raw != iph) {
+		if ((*pskb)->dev && (*pskb)->dev->hard_header_len && (*pskb)->mac.raw != (void*)iph) {
 			int i;
 			unsigned char *p = (*pskb)->mac.raw;
 			for (i = 0; i < (*pskb)->dev->hard_header_len; i++,p++)

@@ -152,19 +152,7 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	int cpu = smp_processor_id();
 	unsigned long new_itm;
-#if 0
-	static unsigned long last_time;
-	static unsigned char count;
-	int printed = 0;
-#endif
 
-	/*
-	 * Here we are in the timer irq handler. We have irqs locally
-	 * disabled, but we don't know if the timer_bh is running on
-	 * another CPU. We need to avoid to SMP race by acquiring the
-	 * xtime_lock.
-	 */
-	write_lock(&xtime_lock);
 	new_itm = itm.next[cpu].count;
 
 	if (!time_after(ia64_get_itc(), new_itm))
@@ -173,48 +161,33 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	while (1) {
 		/*
-		 * Do kernel PC profiling here.  We multiply the
-		 * instruction number by four so that we can use a
-		 * prof_shift of 2 to get instruction-level instead of
-		 * just bundle-level accuracy.
+		 * Do kernel PC profiling here.  We multiply the instruction number by
+		 * four so that we can use a prof_shift of 2 to get instruction-level
+		 * instead of just bundle-level accuracy.
 		 */
 		if (!user_mode(regs)) 
 			do_profile(regs->cr_iip + 4*ia64_psr(regs)->ri);
 
 #ifdef CONFIG_SMP
 		smp_do_timer(regs);
-		if (smp_processor_id() == 0)
-			do_timer(regs);
-#else
-		do_timer(regs);
 #endif
+		if (smp_processor_id() == 0) {
+			/*
+			 * Here we are in the timer irq handler. We have irqs locally
+			 * disabled, but we don't know if the timer_bh is running on
+			 * another CPU. We need to avoid to SMP race by acquiring the
+			 * xtime_lock.
+			 */
+			write_lock(&xtime_lock);
+			do_timer(regs);
+			write_unlock(&xtime_lock);
+		}
 
 		new_itm += itm.delta;
 		itm.next[cpu].count = new_itm;
 		if (time_after(new_itm, ia64_get_itc()))
 			break;
-
-#if 0
-		/*
-		 * SoftSDV in SMP mode is _slow_, so we do "lose" ticks, 
-		 * but it's really OK...
-		 */
-		if (count > 0 && jiffies - last_time > 5*HZ)
-			count = 0;
-		if (count++ == 0) {
-			last_time = jiffies;
-			if (!printed) {
-				printk("Lost clock tick on CPU %d (now=%lx, next=%lx)!!\n",
-				       cpu, ia64_get_itc(), itm.next[cpu].count);
-				printed = 1;
-# ifdef CONFIG_IA64_DEBUG_IRQ
-				printk("last_cli_ip=%lx\n", last_cli_ip);
-# endif
-			}
-		}
-#endif
 	}
-	write_unlock(&xtime_lock);
 
 	/*
 	 * If we're too close to the next clock tick for comfort, we
@@ -229,7 +202,7 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	ia64_set_itm(new_itm);
 }
 
-#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_IA64_SOFTSDV_HACKS)
+#ifdef CONFIG_IA64_SOFTSDV_HACKS
 
 /*
  * Interrupts must be disabled before calling this routine.
@@ -240,7 +213,7 @@ ia64_reset_itm (void)
 	timer_interrupt(0, 0, ia64_task_regs(current));
 }
 
-#endif /* CONFIG_ITANIUM_ASTEP_SPECIFIC */
+#endif
 
 /*
  * Encapsulate access to the itm structure for SMP.

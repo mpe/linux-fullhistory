@@ -68,16 +68,6 @@ static void __free_pages_ok (struct page *page, unsigned long order)
 	struct page *base;
 	zone_t *zone;
 
-	/*
-	 * Subtle. We do not want to test this in the inlined part of
-	 * __free_page() - it's a rare condition and just increases
-	 * cache footprint unnecesserily. So we do an 'incorrect'
-	 * decrement on page->count for reserved pages, but this part
-	 * makes it safe.
-	 */
-	if (PageReserved(page))
-		return;
-
 	if (page->buffers)
 		BUG();
 	if (page->mapping)
@@ -427,7 +417,9 @@ try_again:
 		if (order > 0 && (gfp_mask & __GFP_WAIT)) {
 			zone = zonelist->zones;
 			/* First, clean some dirty pages. */
+			current->flags |= PF_MEMALLOC;
 			page_launder(gfp_mask, 1);
+			current->flags &= ~PF_MEMALLOC;
 			for (;;) {
 				zone_t *z = *(zone++);
 				if (!z)
@@ -556,7 +548,7 @@ unsigned long get_zeroed_page(int gfp_mask)
 
 void __free_pages(struct page *page, unsigned long order)
 {
-	if (put_page_testzero(page))
+	if (!PageReserved(page) && put_page_testzero(page))
 		__free_pages_ok(page, order);
 }
 

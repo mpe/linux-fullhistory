@@ -152,13 +152,6 @@ void __init trap_init (void)
 }
 
 
-static inline void console_verbose(void)
-{
-	extern int console_loglevel;
-	console_loglevel = 15;
-}
-
-
 static char *vec_names[] = {
 	"RESET SP", "RESET PC", "BUS ERROR", "ADDRESS ERROR",
 	"ILLEGAL INSTRUCTION", "ZERO DIVIDE", "CHK", "TRAPcc",

@@ -12,12 +12,10 @@
 
 all: dig.a
 
-O_TARGET        = dig.a
-O_OBJS          = iosapic.o setup.o
+O_TARGET := dig.a
 
-ifdef CONFIG_IA64_GENERIC
-O_OBJS		+= machvec.o
-endif
+obj-y := setup.o
+obj-$(CONFIG_IA64_GENERIC) += machvec.o
 
 clean::
 

@@ -770,7 +770,7 @@ printk(KERN_INFO "FKS: ess_handle_channel %s irq_mode=%d\n", channel, irq_mode);
 		case IMODE_INIT:
 			break;
 
-		default:
+		default:;
 			/* printk(KERN_WARN "ESS: Unexpected interrupt\n"); */
 	}
 }

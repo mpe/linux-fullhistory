@@ -230,7 +230,7 @@ static int __init rtrack2_init(void)
 		printk(KERN_ERR "You must set an I/O address with io=0x20c or io=0x30c\n");
 		return -EINVAL;
 	}
-	if (request_region(io, 4, "rtrack2")) 
+	if (!request_region(io, 4, "rtrack2")) 
 	{
 		printk(KERN_ERR "rtrack2: port 0x%x already in use\n", io);
 		return -EBUSY;

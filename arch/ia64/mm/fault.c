@@ -94,7 +94,7 @@ ia64_do_page_fault (unsigned long address, unsigned long isr, struct pt_regs *re
 	 * sure we exit gracefully rather than endlessly redo the
 	 * fault.
 	 */
-	switch (handle_mm_fault(mm, vma, address, (mask & VM_WRITE) != 0)) {
+	switch (handle_mm_fault(mm, vma, address, mask) != 0) {
 	      case 1:
 		++current->min_flt;
 		break;
@@ -119,19 +119,27 @@ ia64_do_page_fault (unsigned long address, unsigned long isr, struct pt_regs *re
 	if (!(prev_vma && (prev_vma->vm_flags & VM_GROWSUP) && (address == prev_vma->vm_end))) {
 		if (!(vma->vm_flags & VM_GROWSDOWN))
 			goto bad_area;
+		if (rgn_index(address) != rgn_index(vma->vm_start)
+		    || rgn_offset(address) >= RGN_MAP_LIMIT)
+			goto bad_area;
 		if (expand_stack(vma, address))
 			goto bad_area;
-	} else if (expand_backing_store(prev_vma, address))
-		goto bad_area;
+	} else {
+		vma = prev_vma;
+		if (rgn_index(address) != rgn_index(vma->vm_start)
+		    || rgn_offset(address) >= RGN_MAP_LIMIT)
+			goto bad_area;
+		if (expand_backing_store(vma, address))
+			goto bad_area;
+	}
 	goto good_area;
 
   bad_area:
 	up(&mm->mmap_sem);
 	if (isr & IA64_ISR_SP) {
 		/*
-		 * This fault was due to a speculative load set the
-		 * "ed" bit in the psr to ensure forward progress
-		 * (target register will get a NaT).
+		 * This fault was due to a speculative load set the "ed" bit in the psr to
+		 * ensure forward progress (target register will get a NaT).
 		 */
 		ia64_psr(regs)->ed = 1;
 		return;
@@ -146,6 +154,15 @@ ia64_do_page_fault (unsigned long address, unsigned long isr, struct pt_regs *re
 	}
 
   no_context:
+	if (isr & IA64_ISR_SP) {
+		/*
+		 * This fault was due to a speculative load set the "ed" bit in the psr to
+		 * ensure forward progress (target register will get a NaT).
+		 */
+		ia64_psr(regs)->ed = 1;
+		return;
+	}
+
 	fix = search_exception_table(regs->cr_iip);
 	if (fix) {
 		regs->r8 = -EFAULT;

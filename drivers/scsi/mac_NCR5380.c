@@ -3134,6 +3134,10 @@ static int NCR5380_reset( Scsi_Cmnd *cmd, unsigned int reset_flags)
 #endif /* 1 */
 }
 
+static Scsi_Host_Template driver_template = MAC_NCR5380;
+
+#include "scsi_module.c"
+
 /* Local Variables: */
 /* tab-width: 8     */
 /* End:             */

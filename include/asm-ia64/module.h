@@ -75,10 +75,10 @@ ia64_module_init(struct module *mod)
 	/*
 	 * Pointers are reasonable, add the module unwind table
 	 */
-	archdata->unw_table = unw_add_unwind_table(mod->name, archdata->segment_base,
+	archdata->unw_table = unw_add_unwind_table(mod->name,
+						   (unsigned long) archdata->segment_base,
 						   (unsigned long) archdata->gp,
-						   (unsigned long) archdata->unw_start,
-						   (unsigned long) archdata->unw_end);
+						   archdata->unw_start, archdata->unw_end);
 #endif /* CONFIG_IA64_NEW_UNWIND */
 	return 0;
 }
@@ -98,7 +98,7 @@ ia64_module_unmap(void * addr)
 		archdata = (struct archdata *)(mod->archdata_start);
 
 		if (archdata->unw_table != NULL)
-			unw_remove_unwind_table(archdata->unw_table);
+			unw_remove_unwind_table((void *) archdata->unw_table);
 	}
 #endif /* CONFIG_IA64_NEW_UNWIND */
 

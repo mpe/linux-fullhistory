@@ -2113,6 +2113,9 @@ struct parport *__devinit parport_pc_probe_port (unsigned long int base,
 		printmode(DMA);
 	}
 #undef printmode
+#ifndef CONFIG_PARPORT_1284
+	printk ("(,...)");
+#endif /* CONFIG_PARPORT_1284 */
 	printk("]\n");
 	if (probedirq != PARPORT_IRQ_NONE) 
 		printk(KERN_INFO "%s: irq %d detected\n", p->name, probedirq);
@@ -2182,7 +2185,8 @@ struct parport *__devinit parport_pc_probe_port (unsigned long int base,
 /* Via support maintained by Jeff Garzik <jgarzik@mandrakesoft.com> */
 static int __devinit sio_via_686a_probe (struct pci_dev *pdev)
 {
-	u8 dma, irq, tmp;
+	u8 tmp;
+	int dma, irq;
 	unsigned port1, port2, have_eppecp;
 
 	/*
@@ -2235,21 +2239,19 @@ static int __devinit sio_via_686a_probe (struct pci_dev *pdev)
 	 */
 
 	/* 0x50_3-2: PnP Routing for Parallel Port DRQ */
-	pci_read_config_byte (pdev, 0x50, &dma);
-	dma = ((dma >> 2) & 0x03);
+	pci_read_config_byte (pdev, 0x50, &tmp);
+	dma = ((tmp >> 2) & 0x03);
 	
 	/* 0x51_7-4: PnP Routing for Parallel Port IRQ */
-	pci_read_config_byte (pdev, 0x51, &irq);
-	irq = ((irq >> 4) & 0x0F);
+	pci_read_config_byte (pdev, 0x51, &tmp);
+	irq = ((tmp >> 4) & 0x0F);
 
 	/* filter bogus IRQs */
-	/* 255 means NONE, and is bogus as well */
 	switch (irq) {
 	case 0:
 	case 2:
 	case 8:
 	case 13:
-	case 255:
 		irq = PARPORT_IRQ_NONE;
 		break;
 
@@ -2258,15 +2260,18 @@ static int __devinit sio_via_686a_probe (struct pci_dev *pdev)
 	}
 
 	/* if ECP not enabled, DMA is not enabled, assumed bogus 'dma' value */
-	/* 255 means NONE. Looks like some BIOS don't set the DMA correctly
-	 * even on ECP mode */
-	if (!have_eppecp || dma == 255)
+	if (!have_eppecp)
 		dma = PARPORT_DMA_NONE;
 
 	/* finally, do the probe with values obtained */
 	if (parport_pc_probe_port (port1, port2, irq, dma, NULL)) {
-		printk (KERN_INFO "parport_pc: Via 686A parallel port: io=0x%X, irq=%d, dma=%d\n",
-			port1, irq, dma);
+		printk (KERN_INFO
+			"parport_pc: Via 686A parallel port: io=0x%X", port1);
+		if (irq != PARPORT_IRQ_NONE)
+			printk (", irq=%d", irq);
+		if (dma != PARPORT_DMA_NONE)
+			printk (", dma=%d", dma);
+		printk ("\n");
 		return 1;
 	}
 	

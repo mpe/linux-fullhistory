@@ -6,6 +6,7 @@
  * Copyright (C) 1998-2000 David Mosberger <davidm@hpl.hp.com>
  *
  * 00/08/23 Asit Mallick <asit.k.mallick@intel.com> TLB handling for SMP
+ * 00/12/20 David Mosberger-Tang <davidm@hpl.hp.com> DTLB/ITLB handler now uses virtual PT.
  */
 /*
  * This file defines the interrupt vector table used by the CPU.
@@ -44,23 +45,13 @@
 #include <asm/system.h>
 #include <asm/unistd.h>
 
-#define MINSTATE_START_SAVE_MIN	/* no special action needed */
-#define MINSTATE_END_SAVE_MIN									\
-	or r2=r2,r14;		/* make first base a kernel virtual address */			\
-	or r12=r12,r14;		/* make sp a kernel virtual address */				\
-	or r13=r13,r14;		/* make `current' a kernel virtual address */			\
-	bsw.1;			/* switch back to bank 1 (must be last in insn group) */	\
-	;;
-
+#define MINSTATE_VIRT	/* needed by minstate.h */
 #include "minstate.h"
 
 #define FAULT(n)									\
-	rsm psr.dt;			/* avoid nested faults due to TLB misses... */	\
-	;;										\
-	srlz.d;				/* ensure everyone knows psr.dt is off... */	\
 	mov r31=pr;									\
 	mov r19=n;;			/* prepare to save predicates */		\
-	br.cond.sptk.many dispatch_to_fault_handler
+	br.sptk.many dispatch_to_fault_handler
 
 /*
  * As we don't (hopefully) use the space available, we need to fill it with
@@ -122,15 +113,14 @@ ia64_ivt:
 (p7)	dep r17=r17,r19,(PAGE_SHIFT-3),3	// put region number bits in place
 	srlz.d					// ensure "rsm psr.dt" has taken effect
 (p6)	movl r19=__pa(SWAPPER_PGD_ADDR)		// region 5 is rooted at swapper_pg_dir
-(p6)	shr r21=r21,PGDIR_SHIFT+PAGE_SHIFT-1
-(p7)	shr r21=r21,PGDIR_SHIFT+PAGE_SHIFT-4
+(p6)	shr.u r21=r21,PGDIR_SHIFT+PAGE_SHIFT
+(p7)	shr.u r21=r21,PGDIR_SHIFT+PAGE_SHIFT-3
 	;;
 (p6)	dep r17=r18,r19,3,(PAGE_SHIFT-3)	// r17=PTA + IFA(33,42)*8
 (p7)	dep r17=r18,r17,3,(PAGE_SHIFT-6)	// r17=PTA + (((IFA(61,63) << 7) | IFA(33,39))*8)
 	cmp.eq p7,p6=0,r21			// unused address bits all zeroes?
 	shr.u r18=r16,PMD_SHIFT			// shift L2 index into position
 	;;
-(p6)	cmp.eq p7,p6=-1,r21			// unused address bits all ones?
 	ld8 r17=[r17]				// fetch the L1 entry (may be 0)
 	;;
 (p7)	cmp.eq p6,p7=r17,r0			// was L1 entry NULL?
@@ -145,7 +135,7 @@ ia64_ivt:
 (p7)	ld8 r18=[r21]				// read the L3 PTE
 	mov r19=cr.isr				// cr.isr bit 0 tells us if this is an insn miss
 	;;
-(p7)	tbit.z p6,p7=r18,0			// page present bit cleared?
+(p7)	tbit.z p6,p7=r18,_PAGE_P_BIT		// page present bit cleared?
 	mov r22=cr.iha				// get the VHPT address that caused the TLB miss
 	;;					// avoid RAW on p7
 (p7)	tbit.nz.unc p10,p11=r19,32		// is it an instruction TLB miss?
@@ -153,7 +143,7 @@ ia64_ivt:
 	;;
 (p10)	itc.i r18				// insert the instruction TLB entry
 (p11)	itc.d r18				// insert the data TLB entry
-(p6)	br.spnt.few page_fault			// handle bad address/page not present (page fault)
+(p6)	br.spnt.many page_fault			// handle bad address/page not present (page fault)
 	mov cr.ifa=r22
 
 	// Now compute and insert the TLB entry for the virtual page table.
@@ -183,212 +173,117 @@ ia64_ivt:
 
 	mov pr=r31,-1				// restore predicate registers
 	rfi
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x0400 Entry 1 (size 64 bundles) ITLB (21)
 	/*
-	 * The ITLB basically does the same as the VHPT handler except
-	 * that we always insert exactly one instruction TLB entry.
+	 * The ITLB handler accesses the L3 PTE via the virtually mapped linear
+	 * page table.  If a nested TLB miss occurs, we switch into physical
+	 * mode, walk the page table, and then re-execute the L3 PTE read
+	 * and go on normally after that.
 	 */
-	/*
-	 * Attempt to lookup PTE through virtual linear page table.
-	 * The speculative access will fail if there is no TLB entry
-	 * for the L3 page table page we're trying to access.
-	 */
+itlb_fault:
 	mov r16=cr.ifa				// get virtual address
-	mov r19=cr.iha				// get virtual address of L3 PTE
-	;;
-	ld8.s r17=[r19]				// try to read L3 PTE
+	mov r29=b0				// save b0
 	mov r31=pr				// save predicates
+	mov r17=cr.iha				// get virtual address of L3 PTE
+	movl r30=1f				// load nested fault continuation point
 	;;
-	tnat.nz p6,p0=r17			// did read succeed?
-(p6)	br.cond.spnt.many 1f
+1:	ld8 r18=[r17]				// read L3 PTE
 	;;
-	itc.i r17
+	tbit.z p6,p0=r18,_PAGE_P_BIT		// page present bit cleared?
+(p6)	br.cond.spnt.many page_fault
+	;;
+	itc.i r18
 	;;
 #ifdef CONFIG_SMP
-	ld8.s r18=[r19]				// try to read L3 PTE again and see if same
+	ld8 r19=[r17]				// read L3 PTE again and see if same
 	mov r20=PAGE_SHIFT<<2			// setup page size for purge
 	;;
-	cmp.eq p6,p7=r17,r18
+	cmp.ne p7,p0=r18,r19
 	;;
 (p7)	ptc.l r16,r20
 #endif
 	mov pr=r31,-1
 	rfi
-
-#ifdef CONFIG_DISABLE_VHPT
-itlb_fault:
-#endif
-1:	rsm psr.dt				// use physical addressing for data
-	mov r19=ar.k7				// get page table base address
-	shl r21=r16,3				// shift bit 60 into sign bit
-	shr.u r17=r16,61			// get the region number into r17
 	;;
-	cmp.eq p6,p7=5,r17			// is IFA pointing into to region 5?
-	shr.u r18=r16,PGDIR_SHIFT		// get bits 33-63 of the faulting address
-	;;
-(p7)	dep r17=r17,r19,(PAGE_SHIFT-3),3	// put region number bits in place
-	srlz.d					// ensure "rsm psr.dt" has taken effect
-(p6)	movl r19=__pa(SWAPPER_PGD_ADDR)		// region 5 is rooted at swapper_pg_dir
-(p6)	shr r21=r21,PGDIR_SHIFT+PAGE_SHIFT-1
-(p7)	shr r21=r21,PGDIR_SHIFT+PAGE_SHIFT-4
-	;;
-(p6)	dep r17=r18,r19,3,(PAGE_SHIFT-3)	// r17=PTA + IFA(33,42)*8
-(p7)	dep r17=r18,r17,3,(PAGE_SHIFT-6)	// r17=PTA + (((IFA(61,63) << 7) | IFA(33,39))*8)
-	cmp.eq p7,p6=0,r21			// unused address bits all zeroes?
-	shr.u r18=r16,PMD_SHIFT			// shift L2 index into position
-	;;
-(p6)	cmp.eq p7,p6=-1,r21			// unused address bits all ones?
-	ld8 r17=[r17]				// fetch the L1 entry (may be 0)
-	;;
-(p7)	cmp.eq p6,p7=r17,r0			// was L1 entry NULL?
-	dep r17=r18,r17,3,(PAGE_SHIFT-3)	// compute address of L2 page table entry
-	;;
-(p7)	ld8 r17=[r17]				// fetch the L2 entry (may be 0)
-	shr.u r19=r16,PAGE_SHIFT		// shift L3 index into position
-	;;
-(p7)	cmp.eq.or.andcm p6,p7=r17,r0		// was L2 entry NULL?
-	dep r17=r19,r17,3,(PAGE_SHIFT-3)	// compute address of L3 page table entry
-	;;
-(p7)	ld8 r18=[r17]				// read the L3 PTE
-	;;
-(p7)	tbit.z p6,p7=r18,0			// page present bit cleared?
-	;;
-(p7)	itc.i r18				// insert the instruction TLB entry
-(p6)	br.spnt.few page_fault			// handle bad address/page not present (page fault)
-	;;
-#ifdef CONFIG_SMP
-	ld8 r19=[r17]				// re-read the PTE and check if same
-	;;
-	cmp.eq p6,p7=r18,r19
-	mov r20=PAGE_SHIFT<<2
-	;;
-(p7)	ptc.l r16,r20				// PTE changed purge translation
-#endif
-
-	mov pr=r31,-1				// restore predicate registers
-	rfi
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x0800 Entry 2 (size 64 bundles) DTLB (9,48)
 	/*
-	 * The DTLB basically does the same as the VHPT handler except
-	 * that we always insert exactly one data TLB entry.
+	 * The DTLB handler accesses the L3 PTE via the virtually mapped linear
+	 * page table.  If a nested TLB miss occurs, we switch into physical
+	 * mode, walk the page table, and then re-execute the L3 PTE read
+	 * and go on normally after that.
 	 */
-	/*
-	 * Attempt to lookup PTE through virtual linear page table.
-	 * The speculative access will fail if there is no TLB entry
-	 * for the L3 page table page we're trying to access.
-	 */
+dtlb_fault:
 	mov r16=cr.ifa				// get virtual address
-	mov r19=cr.iha				// get virtual address of L3 PTE
-	;;
-	ld8.s r17=[r19]				// try to read L3 PTE
+	mov r29=b0				// save b0
 	mov r31=pr				// save predicates
+	mov r17=cr.iha				// get virtual address of L3 PTE
+	movl r30=1f				// load nested fault continuation point
 	;;
-	tnat.nz p6,p0=r17			// did read succeed?
-(p6)	br.cond.spnt.many 1f
+1:	ld8 r18=[r17]				// read L3 PTE
 	;;
-	itc.d r17
+	tbit.z p6,p0=r18,_PAGE_P_BIT		// page present bit cleared?
+(p6)	br.cond.spnt.many page_fault
+	;;
+	itc.d r18
 	;;
 #ifdef CONFIG_SMP
-	ld8.s r18=[r19]				// try to read L3 PTE again and see if same
+	ld8 r19=[r17]				// read L3 PTE again and see if same
 	mov r20=PAGE_SHIFT<<2			// setup page size for purge
 	;;
-	cmp.eq p6,p7=r17,r18
+	cmp.ne p7,p0=r18,r19
 	;;
 (p7)	ptc.l r16,r20
 #endif
 	mov pr=r31,-1
 	rfi
-
-#ifdef CONFIG_DISABLE_VHPT
-dtlb_fault:
-#endif
-1:	rsm psr.dt				// use physical addressing for data
-	mov r19=ar.k7				// get page table base address
-	shl r21=r16,3				// shift bit 60 into sign bit
-	shr.u r17=r16,61			// get the region number into r17
 	;;
-	cmp.eq p6,p7=5,r17			// is IFA pointing into to region 5?
-	shr.u r18=r16,PGDIR_SHIFT		// get bits 33-63 of the faulting address
-	;;
-(p7)	dep r17=r17,r19,(PAGE_SHIFT-3),3	// put region number bits in place
-	srlz.d					// ensure "rsm psr.dt" has taken effect
-(p6)	movl r19=__pa(SWAPPER_PGD_ADDR)		// region 5 is rooted at swapper_pg_dir
-(p6)	shr r21=r21,PGDIR_SHIFT+PAGE_SHIFT-1
-(p7)	shr r21=r21,PGDIR_SHIFT+PAGE_SHIFT-4
-	;;
-(p6)	dep r17=r18,r19,3,(PAGE_SHIFT-3)	// r17=PTA + IFA(33,42)*8
-(p7)	dep r17=r18,r17,3,(PAGE_SHIFT-6)	// r17=PTA + (((IFA(61,63) << 7) | IFA(33,39))*8)
-	cmp.eq p7,p6=0,r21			// unused address bits all zeroes?
-	shr.u r18=r16,PMD_SHIFT			// shift L2 index into position
-	;;
-(p6)	cmp.eq p7,p6=-1,r21			// unused address bits all ones?
-	ld8 r17=[r17]				// fetch the L1 entry (may be 0)
-	;;
-(p7)	cmp.eq p6,p7=r17,r0			// was L1 entry NULL?
-	dep r17=r18,r17,3,(PAGE_SHIFT-3)	// compute address of L2 page table entry
-	;;
-(p7)	ld8 r17=[r17]				// fetch the L2 entry (may be 0)
-	shr.u r19=r16,PAGE_SHIFT		// shift L3 index into position
-	;;
-(p7)	cmp.eq.or.andcm p6,p7=r17,r0		// was L2 entry NULL?
-	dep r17=r19,r17,3,(PAGE_SHIFT-3)	// compute address of L3 page table entry
-	;;
-(p7)	ld8 r18=[r17]				// read the L3 PTE
-	;;
-(p7)	tbit.z p6,p7=r18,0			// page present bit cleared?
-	;;
-(p7)	itc.d r18				// insert the instruction TLB entry
-(p6)	br.spnt.few page_fault			// handle bad address/page not present (page fault)
-	;;
-#ifdef CONFIG_SMP
-	ld8 r19=[r17]				// re-read the PTE and check if same
-	;;
-	cmp.eq p6,p7=r18,r19
-	mov r20=PAGE_SHIFT<<2
-	;;
-(p7)	ptc.l r16,r20				// PTE changed purge translation
-#endif
-	mov pr=r31,-1				// restore predicate registers
-	rfi
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x0c00 Entry 3 (size 64 bundles) Alt ITLB (19)
 	mov r16=cr.ifa		// get address that caused the TLB miss
-#ifdef CONFIG_DISABLE_VHPT
+	movl r17=__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RWX
+	mov r21=cr.ipsr
 	mov r31=pr
 	;;
-	shr.u r21=r16,61			// get the region number into r21
+#ifdef CONFIG_DISABLE_VHPT
+	shr.u r22=r16,61			// get the region number into r21
 	;;
-	cmp.gt p6,p0=6,r21			// user mode 
-(p6)	br.cond.dptk.many itlb_fault
+	cmp.gt p8,p0=6,r22			// user mode 
 	;;
-	mov pr=r31,-1
+(p8)	thash r17=r16
+	;;
+(p8)	mov cr.iha=r17
+(p8)	br.cond.dptk.many itlb_fault
 #endif
-	movl r17=__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RX
-	;;
+	extr.u r23=r21,IA64_PSR_CPL0_BIT,2	// extract psr.cpl
 	shr.u r18=r16,57	// move address bit 61 to bit 4
-	dep r16=0,r16,IA64_MAX_PHYS_BITS,(64-IA64_MAX_PHYS_BITS)	// clear ed & reserved bits
+	dep r19=0,r16,IA64_MAX_PHYS_BITS,(64-IA64_MAX_PHYS_BITS)	// clear ed & reserved bits
 	;;
 	andcm r18=0x10,r18	// bit 4=~address-bit(61)
-	dep r16=r17,r16,0,12	// insert PTE control bits into r16
+	cmp.ne p8,p0=r0,r23	// psr.cpl != 0?
+	dep r19=r17,r19,0,12	// insert PTE control bits into r19
 	;;
-	or r16=r16,r18		// set bit 4 (uncached) if the access was to region 6
+	or r19=r19,r18		// set bit 4 (uncached) if the access was to region 6
+(p8)	br.cond.spnt.many page_fault
 	;;
-	itc.i r16		// insert the TLB entry
+	itc.i r19		// insert the TLB entry
+	mov pr=r31,-1
 	rfi
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x1000 Entry 4 (size 64 bundles) Alt DTLB (7,46)
 	mov r16=cr.ifa		// get address that caused the TLB miss
-	movl r17=__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RW
+	movl r17=__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RWX
 	mov r20=cr.isr
 	mov r21=cr.ipsr
 	mov r31=pr
@@ -396,29 +291,40 @@ dtlb_fault:
 #ifdef CONFIG_DISABLE_VHPT
 	shr.u r22=r16,61			// get the region number into r21
 	;;
-	cmp.gt p8,p0=6,r22			// user mode
+	cmp.gt p8,p0=6,r22			// access to region 0-5
+	;;
+(p8)	thash r17=r16
+	;;
+(p8)	mov cr.iha=r17
 (p8)	br.cond.dptk.many dtlb_fault
 #endif
+	extr.u r23=r21,IA64_PSR_CPL0_BIT,2	// extract psr.cpl
 	tbit.nz p6,p7=r20,IA64_ISR_SP_BIT	// is speculation bit on?
 	shr.u r18=r16,57	// move address bit 61 to bit 4
-	dep r16=0,r16,IA64_MAX_PHYS_BITS,(64-IA64_MAX_PHYS_BITS) // clear ed & reserved bits
+	dep r19=0,r16,IA64_MAX_PHYS_BITS,(64-IA64_MAX_PHYS_BITS) // clear ed & reserved bits
 	;;
-	dep r21=-1,r21,IA64_PSR_ED_BIT,1
 	andcm r18=0x10,r18	// bit 4=~address-bit(61)
-	dep r16=r17,r16,0,12	// insert PTE control bits into r16
+	cmp.ne p8,p0=r0,r23
+(p8)	br.cond.spnt.many page_fault
+
+	dep r21=-1,r21,IA64_PSR_ED_BIT,1
+	dep r19=r17,r19,0,12	// insert PTE control bits into r19
 	;;
-	or r16=r16,r18		// set bit 4 (uncached) if the access was to region 6
+	or r19=r19,r18		// set bit 4 (uncached) if the access was to region 6
 (p6)	mov cr.ipsr=r21
 	;;
-(p7)	itc.d r16		// insert the TLB entry
+(p7)	itc.d r19		// insert the TLB entry
 	mov pr=r31,-1
 	rfi
-
 	;;
 
 	//-----------------------------------------------------------------------------------
-	// call do_page_fault (predicates are in r31, psr.dt is off, r16 is faulting address)
+	// call do_page_fault (predicates are in r31, psr.dt may be off, r16 is faulting address)
 page_fault:
+	ssm psr.dt
+	;;
+	srlz.i
+	;;
 	SAVE_MIN_WITH_COVER
 	//
 	// Copy control registers to temporary registers, then turn on psr bits,
@@ -430,7 +336,7 @@ page_fault:
 	mov r9=cr.isr
 	adds r3=8,r2				// set up second base pointer
 	;;
-	ssm psr.ic | psr.dt
+	ssm psr.ic
 	;;
 	srlz.i					// guarantee that interrupt collection is enabled
 	;;
@@ -445,36 +351,37 @@ page_fault:
 	mov rp=r14
 	;;
 	adds out2=16,r12			// out2 = pointer to pt_regs
-	br.call.sptk.few b6=ia64_do_page_fault	// ignore return address
+	br.call.sptk.many b6=ia64_do_page_fault	// ignore return address
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x1400 Entry 5 (size 64 bundles) Data nested TLB (6,45)
 	//
-	// In the absence of kernel bugs, we get here when the Dirty-bit, Instruction
-	// Access-bit, or Data Access-bit faults cause a nested fault because the
-	// dTLB entry for the virtual page table isn't present.  In such a case,
-	// we lookup the pte for the faulting address by walking the page table
-	// and return to the continuation point passed in register r30.
-	// In accessing the page tables, we don't need to check for NULL entries
-	// because if the page tables didn't map the faulting address, it would not
-	// be possible to receive one of the above faults.
+	// In the absence of kernel bugs, we get here when the virtually mapped linear page
+	// table is accessed non-speculatively (e.g.,  in the Dirty-bit, Instruction
+	// Access-bit, or Data Access-bit faults).  If the DTLB entry for the virtual page
+	// table is missing, a nested TLB miss fault is triggered and control is transferred
+	// to this point.  When this happens, we lookup the pte for the faulting address
+	// by walking the page table in physical mode and return to the continuation point
+	// passed in register r30 (or call page_fault if the address is not mapped).
 	//
 	// Input:	r16:	faulting address
 	//		r29:	saved b0
 	//		r30:	continuation address
+	//		r31:	saved pr
 	//
 	// Output:	r17:	physical address of L3 PTE of faulting address
 	//		r29:	saved b0
 	//		r30:	continuation address
+	//		r31:	saved pr
 	//
-	// Clobbered:	b0, r18, r19, r21, r31, psr.dt (cleared)
+	// Clobbered:	b0, r18, r19, r21, psr.dt (cleared)
 	//
 	rsm psr.dt				// switch to using physical data addressing
 	mov r19=ar.k7				// get the page table base address
 	shl r21=r16,3				// shift bit 60 into sign bit
 	;;
-	mov r31=pr				// save the predicate registers
 	shr.u r17=r16,61			// get the region number into r17
 	;;
 	cmp.eq p6,p7=5,r17			// is faulting address in region 5?
@@ -482,26 +389,30 @@ page_fault:
 	;;
 (p7)	dep r17=r17,r19,(PAGE_SHIFT-3),3	// put region number bits in place
 	srlz.d
-(p6)	movl r17=__pa(SWAPPER_PGD_ADDR)		// region 5 is rooted at swapper_pg_dir
-(p6)	shr r21=r21,PGDIR_SHIFT+PAGE_SHIFT-1
-(p7)	shr r21=r21,PGDIR_SHIFT+PAGE_SHIFT-4
+(p6)	movl r19=__pa(SWAPPER_PGD_ADDR)		// region 5 is rooted at swapper_pg_dir
+(p6)	shr.u r21=r21,PGDIR_SHIFT+PAGE_SHIFT
+(p7)	shr.u r21=r21,PGDIR_SHIFT+PAGE_SHIFT-3
 	;;
-(p6)	dep r17=r18,r17,3,(PAGE_SHIFT-3)	// r17=PTA + IFA(33,42)*8
+(p6)	dep r17=r18,r19,3,(PAGE_SHIFT-3)	// r17=PTA + IFA(33,42)*8
 (p7)	dep r17=r18,r17,3,(PAGE_SHIFT-6)	// r17=PTA + (((IFA(61,63) << 7) | IFA(33,39))*8)
+	cmp.eq p7,p6=0,r21			// unused address bits all zeroes?
 	shr.u r18=r16,PMD_SHIFT			// shift L2 index into position
 	;;
-	ld8 r17=[r17]				// fetch the L1 entry
+	ld8 r17=[r17]				// fetch the L1 entry (may be 0)
 	mov b0=r30
 	;;
+(p7)	cmp.eq p6,p7=r17,r0			// was L1 entry NULL?
 	dep r17=r18,r17,3,(PAGE_SHIFT-3)	// compute address of L2 page table entry
 	;;
-	ld8 r17=[r17]				// fetch the L2 entry
+(p7)	ld8 r17=[r17]				// fetch the L2 entry (may be 0)
 	shr.u r19=r16,PAGE_SHIFT		// shift L3 index into position
 	;;
+(p7)	cmp.eq.or.andcm p6,p7=r17,r0		// was L2 entry NULL?
 	dep r17=r19,r17,3,(PAGE_SHIFT-3)	// compute address of L3 page table entry
 	;;
-	mov pr=r31,-1				// restore predicates
-	br.cond.sptk.few b0			// return to continuation point
+(p6)	br.cond.spnt.many page_fault
+	br.sptk.many b0				// return to continuation point
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -526,33 +437,19 @@ page_fault:
 	// a nested TLB miss hit where we look up the physical address of the L3 PTE
 	// and then continue at label 1 below.
 	//
-#ifndef CONFIG_SMP
 	mov r16=cr.ifa				// get the address that caused the fault
 	movl r30=1f				// load continuation point in case of nested fault
 	;;
 	thash r17=r16				// compute virtual address of L3 PTE
 	mov r29=b0				// save b0 in case of nested fault
-	;;
-1:	ld8 r18=[r17]
-	;;					// avoid RAW on r18
-	or r18=_PAGE_D,r18			// set the dirty bit
-	mov b0=r29				// restore b0
-	;;
-	st8 [r17]=r18				// store back updated PTE
-	itc.d r18				// install updated PTE
-#else
-	mov r16=cr.ifa				// get the address that caused the fault
-	movl r30=1f				// load continuation point in case of nested fault
-	;;
-	thash r17=r16				// compute virtual address of L3 PTE
+	mov r31=pr				// save pr
+#ifdef CONFIG_SMP
 	mov r28=ar.ccv				// save ar.ccv
-	mov r29=b0				// save b0 in case of nested fault
-	mov r27=pr
 	;;
 1:	ld8 r18=[r17]
 	;;					// avoid RAW on r18
 	mov ar.ccv=r18				// set compare value for cmpxchg
-	or r25=_PAGE_D,r18			// set the dirty bit
+	or r25=_PAGE_D|_PAGE_A,r18		// set the dirty and accessed bits
 	;;
 	cmpxchg8.acq r26=[r17],r25,ar.ccv
 	mov r24=PAGE_SHIFT<<2
@@ -568,70 +465,46 @@ page_fault:
 (p7)	ptc.l r16,r24
 	mov b0=r29				// restore b0
 	mov ar.ccv=r28
-	mov pr=r27,-1
+#else
+	;;
+1:	ld8 r18=[r17]
+	;;					// avoid RAW on r18
+	or r18=_PAGE_D|_PAGE_A,r18		// set the dirty and accessed bits
+	mov b0=r29				// restore b0
+	;;
+	st8 [r17]=r18				// store back updated PTE
+	itc.d r18				// install updated PTE
 #endif
+	mov pr=r31,-1				// restore pr
 	rfi
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x2400 Entry 9 (size 64 bundles) Instruction Access-bit (27)
 	// Like Entry 8, except for instruction access
 	mov r16=cr.ifa				// get the address that caused the fault
+	movl r30=1f				// load continuation point in case of nested fault
+	mov r31=pr				// save predicates
 #ifdef CONFIG_ITANIUM
 	/*
-	 * Erratum 10 (IFA may contain incorrect address) now has
-	 * "NoFix" status.  There are no plans for fixing this.
+	 * Erratum 10 (IFA may contain incorrect address) has "NoFix" status.
 	 */
 	mov r17=cr.ipsr
-	mov r31=pr				// save predicates
 	;;
 	mov r18=cr.iip
 	tbit.z p6,p0=r17,IA64_PSR_IS_BIT	// IA64 instruction set?
 	;;
 (p6)	mov r16=r18				// if so, use cr.iip instead of cr.ifa
-	mov pr=r31,-1
 #endif /* CONFIG_ITANIUM */
-
-#ifndef CONFIG_SMP
-	movl r30=1f				// load continuation point in case of nested fault
 	;;
 	thash r17=r16				// compute virtual address of L3 PTE
 	mov r29=b0				// save b0 in case of nested fault)
-	;;
-1:	ld8 r18=[r17]
-#if defined(CONFIG_IA32_SUPPORT) && \
-    (defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_B0_SPECIFIC))
-	//
-	// Erratum 85 (Access bit fault could be reported before page not present fault)
-	//   If the PTE is indicates the page is not present, then just turn this into a
-	//   page fault.
-	//
-	mov r31=pr				// save predicates
-	;;
-	tbit.nz p6,p0=r18,0			// page present bit set?
-(p6)	br.cond.sptk 1f
-	;;					// avoid WAW on p6
-	mov pr=r31,-1
-	br.cond.sptk page_fault			// page wasn't present
-1:	mov pr=r31,-1
-#else
-	;;					// avoid RAW on r18
-#endif
-	or r18=_PAGE_A,r18			// set the accessed bit
-	mov b0=r29				// restore b0
-	;;
-	st8 [r17]=r18				// store back updated PTE
-	itc.i r18				// install updated PTE
-#else
-	movl r30=1f				// load continuation point in case of nested fault
-	;;
-	thash r17=r16				// compute virtual address of L3 PTE
+#ifdef CONFIG_SMP
 	mov r28=ar.ccv				// save ar.ccv
-	mov r29=b0				// save b0 in case of nested fault)
-	mov r27=pr
 	;;
 1:	ld8 r18=[r17]
-#if defined(CONFIG_IA32_SUPPORT) && \
+# if defined(CONFIG_IA32_SUPPORT) && \
     (defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_B0_SPECIFIC))
 	//
 	// Erratum 85 (Access bit fault could be reported before page not present fault)
@@ -639,15 +512,9 @@ page_fault:
 	//   page fault.
 	//
 	;;
-	tbit.nz p6,p0=r18,0			// page present bit set?
-(p6)	br.cond.sptk 1f
-	;;					// avoid WAW on p6
-	mov pr=r27,-1
-	br.cond.sptk page_fault			// page wasn't present
-1:	
-#else
-	;;					// avoid RAW on r18
-#endif
+	tbit.z p6,p0=r18,_PAGE_P_BIT		// page present bit cleared?
+(p6)	br.sptk page_fault			// page wasn't present
+# endif
 	mov ar.ccv=r18				// set compare value for cmpxchg
 	or r25=_PAGE_A,r18			// set the accessed bit
 	;;
@@ -665,36 +532,42 @@ page_fault:
 (p7)	ptc.l r16,r24
 	mov b0=r29				// restore b0
 	mov ar.ccv=r28
-	mov pr=r27,-1
-#endif
+#else /* !CONFIG_SMP */
+	;;
+1:	ld8 r18=[r17]
+	;;
+# if defined(CONFIG_IA32_SUPPORT) && \
+    (defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_B0_SPECIFIC))
+	//
+	// Erratum 85 (Access bit fault could be reported before page not present fault)
+	//   If the PTE is indicates the page is not present, then just turn this into a
+	//   page fault.
+	//
+	tbit.z p6,p0=r18,_PAGE_P_BIT		// page present bit cleared?
+(p6)	br.sptk page_fault			// page wasn't present
+# endif
+	or r18=_PAGE_A,r18			// set the accessed bit
+	mov b0=r29				// restore b0
+	;;
+	st8 [r17]=r18				// store back updated PTE
+	itc.i r18				// install updated PTE
+#endif /* !CONFIG_SMP */
+	mov pr=r31,-1
 	rfi
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x2800 Entry 10 (size 64 bundles) Data Access-bit (15,55)
 	// Like Entry 8, except for data access
-#ifndef CONFIG_SMP
 	mov r16=cr.ifa				// get the address that caused the fault
 	movl r30=1f				// load continuation point in case of nested fault
 	;;
 	thash r17=r16				// compute virtual address of L3 PTE
+	mov r31=pr
 	mov r29=b0				// save b0 in case of nested fault)
-	;;
-1:	ld8 r18=[r17]
-	;;					// avoid RAW on r18
-	or r18=_PAGE_A,r18			// set the accessed bit
-	mov b0=r29				// restore b0
-	;;
-	st8 [r17]=r18				// store back updated PTE
-	itc.d r18				// install updated PTE
-#else
-	mov r16=cr.ifa				// get the address that caused the fault
-	movl r30=1f				// load continuation point in case of nested fault
-	;;
-	thash r17=r16				// compute virtual address of L3 PTE
+#ifdef CONFIG_SMP
 	mov r28=ar.ccv				// save ar.ccv
-	mov r29=b0				// save b0 in case of nested fault
-	mov r27=pr
 	;;
 1:	ld8 r18=[r17]
 	;;					// avoid RAW on r18
@@ -713,11 +586,20 @@ page_fault:
 	cmp.eq p6,p7=r18,r25			// is it same as the newly installed
 	;;
 (p7)	ptc.l r16,r24
-	mov b0=r29				// restore b0
 	mov ar.ccv=r28
-	mov pr=r27,-1
+#else
+	;;
+1:	ld8 r18=[r17]
+	;;					// avoid RAW on r18
+	or r18=_PAGE_A,r18			// set the accessed bit
+	;;
+	st8 [r17]=r18				// store back updated PTE
+	itc.d r18				// install updated PTE
 #endif
+	mov b0=r29				// restore b0
+	mov pr=r31,-1
 	rfi
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -725,16 +607,14 @@ page_fault:
 	mov r16=cr.iim
 	mov r17=__IA64_BREAK_SYSCALL
 	mov r31=pr		// prepare to save predicates
-	rsm psr.dt		// avoid nested faults due to TLB misses...
 	;;
-	srlz.d			// ensure everyone knows psr.dt is off...
 	cmp.eq p0,p7=r16,r17	// is this a system call? (p7 <- false, if so)
 (p7)	br.cond.spnt.many non_syscall
 
 	SAVE_MIN				// uses r31; defines r2:
 
-	// turn interrupt collection and data translation back on:
-	ssm psr.ic | psr.dt
+	// turn interrupt collection back on:
+	ssm psr.ic
 	;;
 	srlz.i					// guarantee that interrupt collection is enabled
 	cmp.eq pSys,pNonSys=r0,r0		// set pSys=1, pNonSys=0
@@ -746,14 +626,13 @@ page_fault:
 	adds r3=8,r2		// set up second base pointer for SAVE_REST
 	;;
 	SAVE_REST
-	;;			// avoid WAW on r2 & r3
+	br.call.sptk rp=demine_args		// clear NaT bits in (potential) syscall args
 
 	mov r3=255
 	adds r15=-1024,r15			// r15 contains the syscall number---subtract 1024
 	adds r2=IA64_TASK_PTRACE_OFFSET,r13	// r2 = &current->ptrace
-
 	;;
-	cmp.geu.unc p6,p7=r3,r15		// (syscall > 0 && syscall <= 1024+255) ?
+	cmp.geu p6,p7=r3,r15		// (syscall > 0 && syscall <= 1024+255) ?
 	movl r16=sys_call_table
 	;;
 (p6)	shladd r16=r15,3,r16
@@ -788,40 +667,61 @@ page_fault:
 	;;
 	st8 [r16]=r18				// store new value for cr.isr
 
-(p8)	br.call.sptk.few b6=b6			// ignore this return addr 
-	br.call.sptk.few rp=ia64_trace_syscall	// rp will be overwritten (ignored)
+(p8)	br.call.sptk.many b6=b6			// ignore this return addr 
+	br.call.sptk.many rp=ia64_trace_syscall	// rp will be overwritten (ignored)
 	// NOT REACHED
+
+	.proc demine_args
+demine_args:
+	alloc r2=ar.pfs,8,0,0,0
+	tnat.nz p8,p0=in0
+	tnat.nz p9,p0=in1
+	;;
+(p8)	mov in0=-1
+	tnat.nz p10,p0=in2
+	tnat.nz p11,p0=in3
+
+(p9)	mov in1=-1
+	tnat.nz p12,p0=in4
+	tnat.nz p13,p0=in5
+	;;
+(p10)	mov in2=-1
+	tnat.nz p14,p0=in6
+	tnat.nz p15,p0=in7
+
+(p11)	mov in3=-1
+(p12)	mov in4=-1
+(p13)	mov in5=-1
+	;;
+(p14)	mov in6=-1
+(p15)	mov in7=-1
+	br.ret.sptk.many rp
+	.endp demine_args
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x3000 Entry 12 (size 64 bundles) External Interrupt (4)
-	rsm psr.dt		// avoid nested faults due to TLB misses...
-	;;
-	srlz.d			// ensure everyone knows psr.dt is off...
 	mov r31=pr		// prepare to save predicates
 	;;
 
 	SAVE_MIN_WITH_COVER	// uses r31; defines r2 and r3
-	ssm psr.ic | psr.dt	// turn interrupt collection and data translation back on
+	ssm psr.ic		// turn interrupt collection
 	;;
 	adds r3=8,r2		// set up second base pointer for SAVE_REST
-	srlz.i			// ensure everybody knows psr.ic and psr.dt are back on
+	srlz.i			// ensure everybody knows psr.ic is back on
 	;;
 	SAVE_REST
 	;;
 	alloc r14=ar.pfs,0,0,2,0 // must be first in an insn group
-#ifdef CONFIG_ITANIUM_A1_SPECIFIC
-	mov out0=r0		// defer reading of cr.ivr to handle_irq...
-#else
 	mov out0=cr.ivr		// pass cr.ivr as first arg
-#endif
 	add out1=16,sp		// pass pointer to pt_regs as second arg
 	;;
 	srlz.d			// make  sure we see the effect of cr.ivr
 	movl r14=ia64_leave_kernel
 	;;
 	mov rp=r14
-	br.call.sptk.few b6=ia64_handle_irq
+	br.call.sptk.many b6=ia64_handle_irq
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -855,7 +755,7 @@ dispatch_illegal_op_fault:
 	// The "alloc" can cause a mandatory store which could lead to
 	// an "Alt DTLB" fault which we can handle only if psr.ic is on.
 	//
-	ssm psr.ic | psr.dt
+	ssm psr.ic
 	;;
 	srlz.i		// guarantee that interrupt collection is enabled
 	;;
@@ -867,7 +767,7 @@ dispatch_illegal_op_fault:
 	;;
 	SAVE_REST
 	;;
-	br.call.sptk.few rp=ia64_illegal_op_fault
+	br.call.sptk.many rp=ia64_illegal_op_fault
 .ret0:	;;
 	alloc r14=ar.pfs,0,0,3,0	// must be first in insn group
 	mov out0=r9
@@ -881,6 +781,7 @@ dispatch_illegal_op_fault:
 	cmp.ne p6,p0=0,r8
 (p6)	br.call.dpnt b6=b6		// call returns to ia64_leave_kernel
 	br.sptk ia64_leave_kernel
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -900,7 +801,7 @@ dispatch_to_ia32_handler:
 	SAVE_MIN
 	;;
 	mov r14=cr.isr
-	ssm psr.ic | psr.dt
+	ssm psr.ic
 	;;
 	srlz.i					// guarantee that interrupt collection is enabled
 	;;
@@ -913,7 +814,7 @@ dispatch_to_ia32_handler:
 	shr r14=r14,16          // Get interrupt number
 	;; 
 	cmp.ne p6,p0=r14,r15
-(p6)    br.call.dpnt.few b6=non_ia32_syscall
+(p6)    br.call.dpnt.many b6=non_ia32_syscall
 
 	adds r14=IA64_PT_REGS_R8_OFFSET + 16,sp	// 16 byte hole per SW conventions
 	adds r15=IA64_PT_REGS_R1_OFFSET + 16,sp
@@ -924,7 +825,7 @@ dispatch_to_ia32_handler:
 	alloc r15=ar.pfs,0,0,6,0	// must first in an insn group
 	;; 
 	ld4 r8=[r14],8          // r8 == EAX (syscall number)
-	mov r15=190		// sys_vfork - last implemented system call
+	mov r15=222		// sys_vfork - last implemented system call
 	;;
 	cmp.leu.unc p6,p7=r8,r15
 	ld4 out1=[r14],8        // r9 == ecx
@@ -961,11 +862,12 @@ non_ia32_syscall:
 	mov out0=r14                            // interrupt #
 	add out1=16,sp                          // pointer to pt_regs
 	;;			// avoid WAW on CFM
-	br.call.sptk.few rp=ia32_bad_interrupt
+	br.call.sptk.many rp=ia32_bad_interrupt
 .ret1:	movl r15=ia64_leave_kernel
 	;;
 	mov rp=r15
 	br.ret.sptk.many rp
+	;;
 
 #endif /* CONFIG_IA32_SUPPORT */
 
@@ -985,8 +887,8 @@ non_syscall:
 	mov r8=cr.iim			// get break immediate (must be done while psr.ic is off)
 	adds r3=8,r2			// set up second base pointer for SAVE_REST
 
-	// turn interrupt collection and data translation back on:
-	ssm psr.ic | psr.dt
+	// turn interrupt collection back on:
+	ssm psr.ic
 	;;
 	srlz.i				// guarantee that interrupt collection is enabled
 	;;
@@ -1000,7 +902,8 @@ non_syscall:
 	SAVE_REST
 	mov rp=r15
 	;;
-	br.call.sptk.few b6=ia64_bad_break	// avoid WAW on CFM and ignore return addr
+	br.call.sptk.many b6=ia64_bad_break	// avoid WAW on CFM and ignore return addr
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1023,7 +926,7 @@ dispatch_unaligned_handler:
 	// wouldn't get the state to recover.
 	//
 	mov r15=cr.ifa
-	ssm psr.ic | psr.dt
+	ssm psr.ic
 	;;
 	srlz.i					// guarantee that interrupt collection is enabled
 	;;
@@ -1039,7 +942,8 @@ dispatch_unaligned_handler:
 	adds out1=16,sp				// out1 = pointer to pt_regs
 	;;
 	mov rp=r14
-	br.sptk.few ia64_prepare_handle_unaligned
+	br.sptk.many ia64_prepare_handle_unaligned
+	;;
 
 	.align 1024
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1055,7 +959,6 @@ dispatch_to_fault_handler:
 	//
 	// Input:
 	//	psr.ic:	off
-	//	psr.dt:	off
 	//	r19:	fault vector number (e.g., 24 for General Exception)
 	//	r31:	contains saved predicates (pr)
 	//
@@ -1071,7 +974,7 @@ dispatch_to_fault_handler:
 	mov r10=cr.iim
 	mov r11=cr.itir
 	;;
-	ssm psr.ic | psr.dt
+	ssm psr.ic
 	;;
 	srlz.i					// guarantee that interrupt collection is enabled
 	;;
@@ -1089,7 +992,9 @@ dispatch_to_fault_handler:
 	movl r14=ia64_leave_kernel
 	;;
 	mov rp=r14
-	br.call.sptk.few b6=ia64_fault
+	br.call.sptk.many b6=ia64_fault
+	;;
+
 //
 // --- End of long entries, Beginning of short entries
 //
@@ -1099,16 +1004,16 @@ dispatch_to_fault_handler:
 // 0x5000 Entry 20 (size 16 bundles) Page Not Present (10,22,49)
 	mov r16=cr.ifa
 	rsm psr.dt
-#if 1
-	// If you disable this, you MUST re-enable to update_mmu_cache() code in pgtable.h
+	// The Linux page fault handler doesn't expect non-present pages to be in
+	// the TLB.  Flush the existing entry now, so we meet that expectation.
 	mov r17=_PAGE_SIZE_4K<<2
 	;;
 	ptc.l r16,r17
-#endif
 	;;
 	mov r31=pr
 	srlz.d
-	br.cond.sptk.many page_fault
+	br.sptk.many page_fault
+	;;
 
 	.align 256
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1118,7 +1023,8 @@ dispatch_to_fault_handler:
 	mov r31=pr
 	;;
 	srlz.d
-	br.cond.sptk.many page_fault
+	br.sptk.many page_fault
+	;;
 
 	.align 256
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1128,7 +1034,8 @@ dispatch_to_fault_handler:
 	mov r31=pr
 	;;
 	srlz.d
-	br.cond.sptk.many page_fault
+	br.sptk.many page_fault
+	;;
 
 	.align 256
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1138,31 +1045,32 @@ dispatch_to_fault_handler:
 	mov r31=pr
 	;;
 	srlz.d
-	br.cond.sptk.many page_fault
+	br.sptk.many page_fault
+	;;
 
 	.align 256
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x5400 Entry 24 (size 16 bundles) General Exception (5,32,34,36,38,39)
 	mov r16=cr.isr
 	mov r31=pr
-	rsm psr.dt		// avoid nested faults due to TLB misses...
 	;;
-	srlz.d			// ensure everyone knows psr.dt is off...
 	cmp4.eq p6,p0=0,r16
 (p6)	br.sptk dispatch_illegal_op_fault
 	;;
 	mov r19=24		// fault number
-	br.cond.sptk.many dispatch_to_fault_handler
+	br.sptk.many dispatch_to_fault_handler
+	;;
 
 	.align 256
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x5500 Entry 25 (size 16 bundles) Disabled FP-Register (35)
-	rsm psr.dt | psr.dfh			// ensure we can access fph
+	rsm psr.dfh		// ensure we can access fph
 	;;
 	srlz.d
 	mov r31=pr
 	mov r19=25
-	br.cond.sptk.many dispatch_to_fault_handler
+	br.sptk.many dispatch_to_fault_handler
+	;;
 
 	.align 256
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1204,6 +1112,7 @@ dispatch_to_fault_handler:
 	;;
 
 	rfi				// and go back
+	;;
 
 	.align 256
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1218,12 +1127,11 @@ dispatch_to_fault_handler:
 	.align 256
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x5a00 Entry 30 (size 16 bundles) Unaligned Reference (57)
-	rsm psr.dt		// avoid nested faults due to TLB misses...
 	mov r16=cr.ipsr
 	mov r31=pr		// prepare to save predicates
 	;;									
-	srlz.d			// ensure everyone knows psr.dt is off
-	br.cond.sptk.many dispatch_unaligned_handler
+	br.sptk.many dispatch_unaligned_handler
+	;;
 
 	.align 256
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1304,9 +1212,6 @@ dispatch_to_fault_handler:
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x6a00 Entry 46 (size 16 bundles) IA-32 Intercept  (30,31,59,70,71)
 #ifdef	CONFIG_IA32_SUPPORT
-	rsm psr.dt
-	;;
-	srlz.d
 	mov r31=pr
 	mov r16=cr.isr
 	;;
@@ -1325,7 +1230,7 @@ dispatch_to_fault_handler:
 	;;
 	mov pr=r31,-1		// restore predicate registers
 	rfi
-
+	;;
 1:
 #endif	// CONFIG_IA32_SUPPORT
 	FAULT(46)
@@ -1334,11 +1239,9 @@ dispatch_to_fault_handler:
 /////////////////////////////////////////////////////////////////////////////////////////
 // 0x6b00 Entry 47 (size 16 bundles) IA-32 Interrupt  (74)
 #ifdef CONFIG_IA32_SUPPORT
-	rsm psr.dt
-	;;
-	srlz.d
 	mov r31=pr
-	br.cond.sptk.many dispatch_to_ia32_handler
+	br.sptk.many dispatch_to_ia32_handler
+	;;
 #else
 	FAULT(47)
 #endif

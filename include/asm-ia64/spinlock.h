@@ -18,8 +18,9 @@
 #undef NEW_LOCK
 
 #ifdef NEW_LOCK
+
 typedef struct { 
-	volatile unsigned char lock;
+	volatile unsigned int lock;
 } spinlock_t;
 
 #define SPIN_LOCK_UNLOCKED			(spinlock_t) { 0 }
@@ -38,7 +39,7 @@ typedef struct {
 		"mov r30=1\n"								\
 		"mov ar.ccv=r0\n"							\
 		";;\n"									\
-		IA64_SEMFIX"cmpxchg1.acq r30=[%0],r30,ar.ccv\n"				\
+		IA64_SEMFIX"cmpxchg4.acq r30=[%0],r30,ar.ccv\n"				\
 		";;\n"									\
 		"cmp.ne p15,p0=r30,r0\n"						\
 		"(p15) br.call.spnt.few b7=ia64_spinlock_contention\n"			\
@@ -48,18 +49,16 @@ typedef struct {
 		: "ar.ccv", "ar.pfs", "b7", "p15", "r28", "r29", "r30", "memory");	\
 }
 
-#define spin_trylock(x)								\
-({										\
-	register char *addr __asm__ ("r31") = (char *) &(x)->lock;		\
-	register long result;							\
-										\
-	__asm__ __volatile__ (							\
-		"mov r30=1\n"							\
-		"mov ar.ccv=r0\n"						\
-		";;\n"								\
-		IA64_SEMFIX"cmpxchg1.acq %0=[%1],r30,ar.ccv\n"			\
-		: "=r"(result) : "r"(addr) : "ar.ccv", "r30", "memory");	\
-	(result == 0);								\
+#define spin_trylock(x)									\
+({											\
+	register long result;								\
+											\
+	__asm__ __volatile__ (								\
+		"mov ar.ccv=r0\n"							\
+		";;\n"									\
+		IA64_SEMFIX"cmpxchg4.acq %0=[%2],%1,ar.ccv\n"				\
+		: "=r"(result) : "r"(1), "r"(&(x)->lock) : "ar.ccv", "memory");		\
+	(result == 0);									\
 })
 
 #define spin_is_locked(x)	((x)->lock != 0)

@@ -115,6 +115,7 @@ d_iput:		no		no		yes
 					 * If this dentry points to a directory, then
 					 * s_nfsd_free_path semaphore will be down
 					 */
+#define DCACHE_REFERENCED	0x0008  /* Recently used, don't discard. */
 
 extern spinlock_t dcache_lock;
 

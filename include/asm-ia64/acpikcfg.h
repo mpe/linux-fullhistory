@@ -1,3 +1,5 @@
+#include <linux/config.h>
+#ifdef	CONFIG_ACPI_KERNEL_CONFIG
 /*
  *  acpikcfg.h - ACPI based Kernel Configuration Manager External Interfaces
  *
@@ -5,9 +7,6 @@
  *  Copyright (C) 2000 J.I. Lee  <jung-ik.lee@intel.com>
  */
 
-#include <linux/config.h>
-
-#ifdef	CONFIG_ACPI_KERNEL_CONFIG
 
 u32	__init acpi_cf_init (void * rsdp);
 u32	__init acpi_cf_terminate (void );

@@ -11862,7 +11862,7 @@ out_reject:
 out_clrack:
 	OUTL (nc_dsp, NCB_SCRIPT_PHYS (np, clrack));
 	return;
-out_stuck:
+out_stuck:;
 }
 
 
@@ -14830,10 +14830,10 @@ out:
 	return retv;
 }
 
-#undef SET_BIT 0
-#undef CLR_BIT 1
-#undef SET_CLK 2
-#undef CLR_CLK 3
+#undef SET_BIT /* 0 */
+#undef CLR_BIT /* 1 */
+#undef SET_CLK /* 2 */
+#undef CLR_CLK /* 3 */
 
 /*
  *  Try reading Symbios NVRAM.

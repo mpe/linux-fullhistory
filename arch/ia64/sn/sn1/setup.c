@@ -14,12 +14,13 @@
 #include <linux/timex.h>
 #include <linux/sched.h>
 #include <linux/ioport.h>
+#include <linux/mm.h>
 
+#include <asm/sn/mmzone_sn1.h>
 #include <asm/io.h>
 #include <asm/machvec.h>
 #include <asm/system.h>
 #include <asm/processor.h>
-
 
 /*
  * The format of "screen_info" is strange, and due to early i386-setup
@@ -50,29 +51,48 @@ char drive_info[4*16];
 unsigned long
 sn1_map_nr (unsigned long addr)
 {
+#ifdef CONFIG_DISCONTIGMEM
 	return MAP_NR_SN1(addr);
+#else
+	return MAP_NR_DENSE(addr);
+#endif
 }
 
-void
+void __init
 sn1_setup(char **cmdline_p)
 {
-
+	extern void init_sn1_smp_config(void);
 	ROOT_DEV = to_kdev_t(0x0301);		/* default to first IDE drive */
 
+	init_sn1_smp_config();
+#ifdef ZZZ
 #if !defined (CONFIG_IA64_SOFTSDV_HACKS)
-	/* 
-	 * Program the timer to deliver timer ticks.  0x40 is the I/O port
-	 * address of PIT counter 0, 0x43 is the I/O port address of the 
-	 * PIT control word. 
-	 */
-	request_region(0x40,0x20,"timer");
-	outb(0x34, 0x43);            /* Control word */
-	outb(LATCH & 0xff , 0x40);   /* LSB */
-	outb(LATCH >> 8, 0x40);	     /* MSB */
-	printk("PIT: LATCH at 0x%x%x for %d HZ\n", LATCH >> 8, LATCH & 0xff, HZ);
+        /*
+         * Program the timer to deliver timer ticks.  0x40 is the I/O port
+         * address of PIT counter 0, 0x43 is the I/O port address of the
+         * PIT control word.
+         */
+        request_region(0x40,0x20,"timer");
+        outb(0x34, 0x43);            /* Control word */
+        outb(LATCH & 0xff , 0x40);   /* LSB */
+        outb(LATCH >> 8, 0x40);      /* MSB */
+        printk("PIT: LATCH at 0x%x%x for %d HZ\n", LATCH >> 8, LATCH & 0xff, HZ);
+#endif
 #endif
 #ifdef CONFIG_SMP
 	init_smp_config();
 #endif
 	screen_info = sn1_screen_info;
+}
+
+int
+IS_RUNNING_ON_SIMULATOR(void)
+{
+#ifdef CONFIG_IA64_SGI_SN1_SIM
+	long sn;
+	asm("mov %0=cpuid[%1]" : "=r"(sn) : "r"(2));
+	return(sn == SNMAGIC);
+#else
+	return(0);
+#endif
 }

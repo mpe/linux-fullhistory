@@ -12,6 +12,7 @@
  * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
+#include <linux/config.h>
 #include <asm/mman.h>
 #include <asm/page.h>
 #include <asm/processor.h>
@@ -24,7 +25,11 @@
  * matches the VHPT short format, the firt doubleword of the VHPD long
  * format, and the first doubleword of the TLB insertion format.
  */
-#define _PAGE_P			(1 <<  0)	/* page present bit */
+#define _PAGE_P_BIT		0
+#define _PAGE_A_BIT		5
+#define _PAGE_D_BIT		6
+
+#define _PAGE_P			(1 << _PAGE_P_BIT)	/* page present bit */
 #define _PAGE_MA_WB		(0x0 <<  2)	/* write back memory attribute */
 #define _PAGE_MA_UC		(0x4 <<  2)	/* uncacheable memory attribute */
 #define _PAGE_MA_UCE		(0x5 <<  2)	/* UC exported attribute */
@@ -46,8 +51,8 @@
 #define _PAGE_AR_X_RX		(7 <<  9)	/* exec & promote / read & exec */
 #define _PAGE_AR_MASK		(7 <<  9)
 #define _PAGE_AR_SHIFT		9
-#define _PAGE_A			(1 <<  5)	/* page accessed bit */
-#define _PAGE_D			(1 <<  6)	/* page dirty bit */
+#define _PAGE_A			(1 << _PAGE_A_BIT)	/* page accessed bit */
+#define _PAGE_D			(1 << _PAGE_D_BIT)	/* page dirty bit */
 #define _PAGE_PPN_MASK		(((__IA64_UL(1) << IA64_MAX_PHYS_BITS) - 1) & ~0xfffUL)
 #define _PAGE_ED		(__IA64_UL(1) << 52)	/* exception deferral */
 #define _PAGE_PROTNONE		(__IA64_UL(1) << 63)
@@ -79,7 +84,7 @@
 #define PGDIR_SIZE		(__IA64_UL(1) << PGDIR_SHIFT)
 #define PGDIR_MASK		(~(PGDIR_SIZE-1))
 #define PTRS_PER_PGD		(__IA64_UL(1) << (PAGE_SHIFT-3))
-#define USER_PTRS_PER_PGD	PTRS_PER_PGD
+#define USER_PTRS_PER_PGD	(5*PTRS_PER_PGD/8)	/* regions 0-4 are user regions */
 #define FIRST_USER_PGD_NR	0
 
 /*
@@ -98,9 +103,6 @@
  */
 #define PTRS_PER_PTE	(__IA64_UL(1) << (PAGE_SHIFT-3))
 
-/* Number of pointers that fit on a page:  this will go away. */
-#define PTRS_PER_PAGE	(__IA64_UL(1) << (PAGE_SHIFT-3))
-
 # ifndef __ASSEMBLY__
 
 #include <asm/bitops.h>
@@ -110,12 +112,17 @@
 /*
  * All the normal masks have the "page accessed" bits on, as any time
  * they are used, the page is accessed. They are cleared only by the
- * page-out routines
+ * page-out routines.  On the other hand, we do NOT turn on the
+ * execute bit on pages that are mapped writable.  For those pages, we
+ * turn on the X bit only when the program attempts to actually
+ * execute code in such a page (it's a "lazy execute bit", if you
+ * will).  This lets reduce the amount of i-cache flushing we have to
+ * do for data pages such as stack and heap pages.
  */
 #define PAGE_NONE	__pgprot(_PAGE_PROTNONE | _PAGE_A)
 #define PAGE_SHARED	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_RW)
 #define PAGE_READONLY	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_R)
-#define PAGE_COPY	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_RX)
+#define PAGE_COPY	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_R)
 #define PAGE_GATE	__pgprot(__ACCESS_BITS | _PAGE_PL_0 | _PAGE_AR_X_RX)
 #define PAGE_KERNEL	__pgprot(__DIRTY_BITS  | _PAGE_PL_0 | _PAGE_AR_RWX)
 
@@ -132,19 +139,19 @@
 #define __P001	PAGE_READONLY
 #define __P010	PAGE_READONLY	/* write to priv pg -> copy & make writable */
 #define __P011	PAGE_READONLY	/* ditto */
-#define __P100	__pgprot(_PAGE_ED | _PAGE_A | _PAGE_P | _PAGE_PL_3 | _PAGE_AR_X_RX)
-#define __P101	__pgprot(_PAGE_ED | _PAGE_A | _PAGE_P | _PAGE_PL_3 | _PAGE_AR_RX)
-#define __P110	__pgprot(_PAGE_ED | _PAGE_A | _PAGE_P | _PAGE_PL_3 | _PAGE_AR_RX)
-#define __P111	__pgprot(_PAGE_ED | _PAGE_A | _PAGE_P | _PAGE_PL_3 | _PAGE_AR_RX)
+#define __P100	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_X_RX)
+#define __P101	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_RX)
+#define __P110	PAGE_COPY
+#define __P111	PAGE_COPY
 
 #define __S000	PAGE_NONE
 #define __S001	PAGE_READONLY
 #define __S010	PAGE_SHARED	/* we don't have (and don't need) write-only */
 #define __S011	PAGE_SHARED
-#define __S100	__pgprot(_PAGE_ED | _PAGE_A | _PAGE_P | _PAGE_PL_3 | _PAGE_AR_X_RX)
-#define __S101	__pgprot(_PAGE_ED | _PAGE_A | _PAGE_P | _PAGE_PL_3 | _PAGE_AR_RX)
-#define __S110	__pgprot(_PAGE_ED | _PAGE_A | _PAGE_P | _PAGE_PL_3 | _PAGE_AR_RWX)
-#define __S111	__pgprot(_PAGE_ED | _PAGE_A | _PAGE_P | _PAGE_PL_3 | _PAGE_AR_RWX)
+#define __S100	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_X_RX)
+#define __S101	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_RX)
+#define __S110	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_RW)
+#define __S111	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_RW)
 
 #define pgd_ERROR(e)	printk("%s:%d: bad pgd %016lx.\n", __FILE__, __LINE__, pgd_val(e))
 #define pmd_ERROR(e)	printk("%s:%d: bad pmd %016lx.\n", __FILE__, __LINE__, pmd_val(e))
@@ -162,30 +169,8 @@
  */
 #define page_address(page)	((page)->virtual)
 
-/*
- * Now for some cache flushing routines.  This is the kind of stuff
- * that can be very expensive, so try to avoid them whenever possible.
- */
-
-/* Caches aren't brain-dead on the ia-64. */
-#define flush_cache_all()			do { } while (0)
-#define flush_cache_mm(mm)			do { } while (0)
-#define flush_cache_range(mm, start, end)	do { } while (0)
-#define flush_cache_page(vma, vmaddr)		do { } while (0)
-#define flush_page_to_ram(page)			do { } while (0)
-#define flush_dcache_page(page)			do { } while (0)
-#define flush_icache_range(start, end)		do { } while (0)
-
-extern void ia64_flush_icache_page (unsigned long addr);
-
-#define flush_icache_page(vma,pg)				\
-do {								\
-	if ((vma)->vm_flags & PROT_EXEC)			\
-		ia64_flush_icache_page((unsigned long) page_address(pg));	\
-} while (0)
-
 /* Quick test to see if ADDR is a (potentially) valid physical address. */
-static __inline__ long
+static inline long
 ia64_phys_addr_valid (unsigned long addr)
 {
 	return (addr & (my_cpu_data.unimpl_pa_mask)) == 0;
@@ -213,13 +198,17 @@ ia64_phys_addr_valid (unsigned long addr)
 
 /*
  * On some architectures, special things need to be done when setting
- * the PTE in a page table.  Nothing special needs to be on ia-64.
+ * the PTE in a page table.  Nothing special needs to be on IA-64.
  */
 #define set_pte(ptep, pteval)	(*(ptep) = (pteval))
 
-#define VMALLOC_START		(0xa000000000000000+2*PAGE_SIZE)
+#define RGN_SIZE	(1UL << 61)
+#define RGN_MAP_LIMIT	(1UL << (4*PAGE_SHIFT - 12))	/* limit of mappable area in region */
+#define RGN_KERNEL	7
+
+#define VMALLOC_START		(0xa000000000000000 + 2*PAGE_SIZE)
 #define VMALLOC_VMADDR(x)	((unsigned long)(x))
-#define VMALLOC_END		0xbfffffffffffffff
+#define VMALLOC_END		(0xa000000000000000 + RGN_MAP_LIMIT)
 
 /*
  * BAD_PAGETABLE is used when we need a bogus page-table, while
@@ -280,19 +269,19 @@ extern pmd_t *ia64_bad_pagetable (void);
  * The following have defined behavior only work if pte_present() is true.
  */
 #define pte_read(pte)		(((pte_val(pte) & _PAGE_AR_MASK) >> _PAGE_AR_SHIFT) < 6)
-#define pte_write(pte)	((unsigned) (((pte_val(pte) & _PAGE_AR_MASK) >> _PAGE_AR_SHIFT) - 2) < 4)
-#define pte_dirty(pte)		(pte_val(pte) & _PAGE_D)
-#define pte_young(pte)		(pte_val(pte) & _PAGE_A)
+#define pte_write(pte)	((unsigned) (((pte_val(pte) & _PAGE_AR_MASK) >> _PAGE_AR_SHIFT) - 2) <= 4)
+#define pte_exec(pte)		((pte_val(pte) & _PAGE_AR_RX) != 0)
+#define pte_dirty(pte)		((pte_val(pte) & _PAGE_D) != 0)
+#define pte_young(pte)		((pte_val(pte) & _PAGE_A) != 0)
 /*
- * Note: we convert AR_RWX to AR_RX and AR_RW to AR_R by clearing the
- * 2nd bit in the access rights:
+ * Note: we convert AR_RWX to AR_RX and AR_RW to AR_R by clearing the 2nd bit in the
+ * access rights:
  */
 #define pte_wrprotect(pte)	(__pte(pte_val(pte) & ~_PAGE_AR_RW))
 #define pte_mkwrite(pte)	(__pte(pte_val(pte) | _PAGE_AR_RW))
-
+#define pte_mkexec(pte)		(__pte(pte_val(pte) | _PAGE_AR_RX))
 #define pte_mkold(pte)		(__pte(pte_val(pte) & ~_PAGE_A))
 #define pte_mkyoung(pte)	(__pte(pte_val(pte) | _PAGE_A))
-
 #define pte_mkclean(pte)	(__pte(pte_val(pte) & ~_PAGE_D))
 #define pte_mkdirty(pte)	(__pte(pte_val(pte) | _PAGE_D))
 
@@ -317,7 +306,7 @@ extern pmd_t *ia64_bad_pagetable (void);
 /*
  * Return the region index for virtual address ADDRESS.
  */
-static __inline__ unsigned long
+static inline unsigned long
 rgn_index (unsigned long address)
 {
 	ia64_va a;
@@ -329,7 +318,7 @@ rgn_index (unsigned long address)
 /*
  * Return the region offset for virtual address ADDRESS.
  */
-static __inline__ unsigned long
+static inline unsigned long
 rgn_offset (unsigned long address)
 {
 	ia64_va a;
@@ -338,10 +327,7 @@ rgn_offset (unsigned long address)
 	return a.f.off;
 }
 
-#define RGN_SIZE	(1UL << 61)
-#define RGN_KERNEL	7
-
-static __inline__ unsigned long
+static inline unsigned long
 pgd_index (unsigned long address)
 {
 	unsigned long region = address >> 61;
@@ -352,7 +338,7 @@ pgd_index (unsigned long address)
 
 /* The offset in the 1-level directory is given by the 3 region bits
    (61..63) and the seven level-1 bits (33-39).  */
-static __inline__ pgd_t*
+static inline pgd_t*
 pgd_offset (struct mm_struct *mm, unsigned long address)
 {
 	return mm->pgd + pgd_index(address);
@@ -371,56 +357,102 @@ pgd_offset (struct mm_struct *mm, unsigned long address)
 #define pte_offset(dir,addr) \
 	((pte_t *) pmd_page(*(dir)) + (((addr) >> PAGE_SHIFT) & (PTRS_PER_PTE - 1)))
 
+/* atomic versions of the some PTE manipulations: */
+
+static inline int
+ptep_test_and_clear_young (pte_t *ptep)
+{
+#ifdef CONFIG_SMP
+	return test_and_clear_bit(_PAGE_A_BIT, ptep);
+#else
+	pte_t pte = *ptep;
+	if (!pte_young(pte))
+		return 0;
+	set_pte(ptep, pte_mkold(pte));
+	return 1;
+#endif
+}
+
+static inline int
+ptep_test_and_clear_dirty (pte_t *ptep)
+{
+#ifdef CONFIG_SMP
+	return test_and_clear_bit(_PAGE_D_BIT, ptep);
+#else
+	pte_t pte = *ptep;
+	if (!pte_dirty(pte))
+		return 0;
+	set_pte(ptep, pte_mkclean(pte));
+	return 1;
+#endif
+}
+
+static inline pte_t
+ptep_get_and_clear (pte_t *ptep)
+{
+#ifdef CONFIG_SMP
+	return __pte(xchg((long *) ptep, 0));
+#else
+	pte_t pte = *ptep;
+	pte_clear(ptep);
+	return pte;
+#endif
+}
+
+static inline void
+ptep_set_wrprotect (pte_t *ptep)
+{
+#ifdef CONFIG_SMP
+	unsigned long new, old;
+
+	do {
+		old = pte_val(*ptep);
+		new = pte_val(pte_wrprotect(__pte (old)));
+	} while (cmpxchg((unsigned long *) ptep, old, new) != old);
+#else
+	pte_t old_pte = *ptep;
+	set_pte(ptep, pte_wrprotect(old_pte));
+#endif
+}
+
+static inline void
+ptep_mkdirty (pte_t *ptep)
+{
+#ifdef CONFIG_SMP
+	set_bit(_PAGE_D_BIT, ptep);
+#else
+	pte_t old_pte = *ptep;
+	set_pte(ptep, pte_mkdirty(old_pte));
+#endif
+}
+
+static inline int
+pte_same (pte_t a, pte_t b)
+{
+	return pte_val(a) == pte_val(b);
+}
+
+/*
+ * Macros to check the type of access that triggered a page fault.
+ */
+
+static inline int
+is_write_access (int access_type)
+{
+	return (access_type & 0x2);
+}
+
+static inline int
+is_exec_access (int access_type)
+{
+	return (access_type & 0x4);
+}
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 extern void paging_init (void);
 
-/*
- * IA-64 doesn't have any external MMU info: the page tables contain
- * all the necessary information.  However, we can use this macro
- * to pre-install (override) a PTE that we know is needed anyhow.
- *
- * Asit says that on Itanium, it is generally faster to let the VHPT
- * walker pick up a newly installed PTE (and VHPT misses should be
- * extremely rare compared to normal misses).  Also, since
- * pre-installing the PTE has the problem that we may evict another
- * TLB entry needlessly because we don't know for sure whether we need
- * to update the iTLB or dTLB, I tend to prefer this solution, too.
- * Also, this avoids nasty issues with forward progress (what if the
- * newly installed PTE gets replaced before we return to the previous
- * execution context?).
- *
- */
-#if 1
-# define update_mmu_cache(vma,address,pte)
-#else
-# define update_mmu_cache(vma,address,pte)							\
-do {												\
-	/*											\
-	 * XXX fix me!!										\
-	 *											\
-	 * It's not clear this is a win.  We may end up pollute the				\
-	 * dtlb with itlb entries and vice versa (e.g., consider stack				\
-	 * pages that are normally marked executable).  It would be				\
-	 * better to insert the TLB entry for the TLB cache that we				\
-	 * know needs the new entry.  However, the update_mmu_cache()				\
-	 * arguments don't tell us whether we got here through a data				\
-	 * access or through an instruction fetch.  Talk to Linus to				\
-	 * fix this.										\
-	 *											\
-	 * If you re-enable this code, you must disable the ptc code in				\
-	 * Entry 20 of the ivt.									\
-	 */											\
-	unsigned long flags;									\
-												\
-	ia64_clear_ic(flags);									\
-	ia64_itc((vma->vm_flags & PROT_EXEC) ? 0x3 : 0x2, address, pte_val(pte), PAGE_SHIFT);	\
-	__restore_flags(flags);									\
-} while (0)
-#endif
-
 #define SWP_TYPE(entry)			(((entry).val >> 1) & 0xff)
-#define SWP_OFFSET(entry)		((entry).val >> 9)
+#define SWP_OFFSET(entry)		(((entry).val << 1) >> 10)
 #define SWP_ENTRY(type,offset)		((swp_entry_t) { ((type) << 1) | ((offset) << 9) })
 #define pte_to_swp_entry(pte)		((swp_entry_t) { pte_val(pte) })
 #define swp_entry_to_pte(x)		((pte_t) { (x).val })
@@ -437,7 +469,8 @@ do {												\
 extern unsigned long empty_zero_page[PAGE_SIZE/sizeof(unsigned long)];
 #define ZERO_PAGE(vaddr) (virt_to_page(empty_zero_page))
 
-#include <asm-generic/pgtable.h>
+/* We provide our own get_unmapped_area to cope with VA holes for userland */
+#define HAVE_ARCH_UNMAPPED_AREA
 
 # endif /* !__ASSEMBLY__ */
 

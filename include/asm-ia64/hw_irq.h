@@ -6,8 +6,10 @@
  * Copyright (C) 2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
+#include <linux/sched.h>
 #include <linux/types.h>
 
+#include <asm/machvec.h>
 #include <asm/ptrace.h>
 #include <asm/smp.h>
 
@@ -29,13 +31,22 @@
 
 #define IA64_SPURIOUS_INT	0x0f
 
-#define IA64_MIN_VECTORED_IRQ	 16
-#define IA64_MAX_VECTORED_IRQ	255
+/*
+ * Vectors 0x10-0x1f are used for low priority interrupts, e.g. CMCI.
+ */
+#define PCE_IRQ			0x1e	/* platform corrected error interrupt vector */
+#define CMC_IRQ			0x1f	/* correctable machine-check interrupt vector */
+/*
+ * Vectors 0x20-0x2f are reserved for legacy ISA IRQs.
+ */
+#define FIRST_DEVICE_IRQ	0x30
+#define LAST_DEVICE_IRQ		0xe7
 
-#define PERFMON_IRQ		0x28	/* performanc monitor interrupt vector */
+#define MCA_RENDEZ_IRQ		0xe8	/* MCA rendez interrupt */
+#define PERFMON_IRQ		0xee	/* performanc monitor interrupt vector */
 #define TIMER_IRQ		0xef	/* use highest-prio group 15 interrupt for timer */
+#define	MCA_WAKEUP_IRQ		0xf0	/* MCA wakeup interrupt (must be higher than MCA_RENDEZ_IRQ) */
 #define IPI_IRQ			0xfe	/* inter-processor interrupt vector */
-#define CMC_IRQ			0xff	/* correctable machine-check interrupt vector */
 
 /* IA64 inter-cpu interrupt related definitions */
 
@@ -60,12 +71,13 @@ extern unsigned long ipi_base_addr;
 
 extern struct hw_interrupt_type irq_type_ia64_sapic;	/* CPU-internal interrupt controller */
 
-extern void ipi_send (int cpu, int vector, int delivery_mode, int redirect);
+extern int ia64_alloc_irq (void);	/* allocate a free irq */
+extern void ia64_send_ipi (int cpu, int vector, int delivery_mode, int redirect);
 
 static inline void
 hw_resend_irq (struct hw_interrupt_type *h, unsigned int vector)
 {
-	ipi_send(smp_processor_id(), vector, IA64_IPI_DM_INT, 0);
+	platform_send_ipi(smp_processor_id(), vector, IA64_IPI_DM_INT, 0);
 }
 
 #endif /* _ASM_IA64_HW_IRQ_H */

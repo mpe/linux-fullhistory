@@ -76,7 +76,7 @@ static void empeg_write_bulk_callback	(struct urb *urb);
 static void empeg_read_bulk_callback	(struct urb *urb);
 
 static __devinitdata struct usb_device_id id_table [] = {
-        { idVendor: EMPEG_VENDOR_ID, idProduct: EMPEG_PRODUCT_ID },
+	{ USB_DEVICE(EMPEG_VENDOR_ID, EMPEG_PRODUCT_ID) },
         { }                                     /* Terminating entry */
 };
 

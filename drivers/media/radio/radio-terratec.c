@@ -309,7 +309,7 @@ static int __init terratec_init(void)
 		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
 		return -EINVAL;
 	}
-	if (request_region(io, 2, "terratec")) 
+	if (!request_region(io, 2, "terratec")) 
 	{
 		printk(KERN_ERR "TerraTec: port 0x%x already in use\n", io);
 		return -EBUSY;

@@ -257,8 +257,8 @@ static void usb_kbd_disconnect(struct usb_device *dev, void *ptr)
 }
 
 static struct usb_device_id usb_kbd_id_table [] = {
-    { bInterfaceClass: 3, bInterfaceSubClass: 1, bInterfaceProtocol: 1},
-    { }						/* Terminating entry */
+	{ USB_INTERFACE_INFO(3, 1, 1) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, usb_kbd_id_table);

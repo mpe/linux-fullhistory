@@ -570,47 +570,48 @@ usb_match_id(struct usb_device *dev, struct usb_interface *interface,
 	for (; id->idVendor || id->bDeviceClass || id->bInterfaceClass ||
 	       id->driver_info; id++) {
 
-		if (id->idVendor &&
+		if ((id->match_flags & USB_DEVICE_ID_MATCH_VENDOR) &&
 		    id->idVendor != dev->descriptor.idVendor)
 			continue;
 
-		if (id->idProduct &&
+		if ((id->match_flags & USB_DEVICE_ID_MATCH_PRODUCT) &&
 		    id->idProduct != dev->descriptor.idProduct)
 			continue;
 
 		/* No need to test id->bcdDevice_lo != 0, since 0 is never
 		   greater than any unsigned number. */
-		if (id->bcdDevice_lo > dev->descriptor.bcdDevice)
+		if ((id->match_flags & USB_DEVICE_ID_MATCH_DEV_LO) &&
+		    (id->bcdDevice_lo > dev->descriptor.bcdDevice))
 			continue;
 
-		if (id->bcdDevice_hi &&
-		    id->bcdDevice_hi < dev->descriptor.bcdDevice)
+		if ((id->match_flags & USB_DEVICE_ID_MATCH_DEV_HI) &&
+		    (id->bcdDevice_hi < dev->descriptor.bcdDevice))
 			continue;
 
-		if (id->bDeviceClass &&
-		    id->bDeviceClass != dev->descriptor.bDeviceClass)
+		if ((id->match_flags & USB_DEVICE_ID_MATCH_DEV_CLASS) &&
+		    (id->bDeviceClass != dev->descriptor.bDeviceClass))
 			continue;
 
-		if (id->bDeviceSubClass &&
-		    id->bDeviceSubClass!= dev->descriptor.bDeviceSubClass)
+		if ((id->match_flags & USB_DEVICE_ID_MATCH_DEV_SUBCLASS) &&
+		    (id->bDeviceSubClass!= dev->descriptor.bDeviceSubClass))
 			continue;
 
-		if (id->bDeviceProtocol &&
-		    id->bDeviceProtocol != dev->descriptor.bDeviceProtocol)
+		if ((id->match_flags & USB_DEVICE_ID_MATCH_DEV_PROTOCOL) &&
+		    (id->bDeviceProtocol != dev->descriptor.bDeviceProtocol))
 			continue;
 
 		intf = &interface->altsetting [interface->act_altsetting];
 
-		if (id->bInterfaceClass
-		    && id->bInterfaceClass != intf->bInterfaceClass)
+		if ((id->match_flags & USB_DEVICE_ID_MATCH_INT_CLASS) &&
+		    (id->bInterfaceClass != intf->bInterfaceClass))
 			continue;
 
-		if (id->bInterfaceSubClass &&
-		    id->bInterfaceSubClass != intf->bInterfaceSubClass)
+		if ((id->match_flags & USB_DEVICE_ID_MATCH_INT_SUBCLASS) &&
+		    (id->bInterfaceSubClass != intf->bInterfaceSubClass))
 		    continue;
 
-		if (id->bInterfaceProtocol
-		    && id->bInterfaceProtocol != intf->bInterfaceProtocol)
+		if ((id->match_flags & USB_DEVICE_ID_MATCH_INT_PROTOCOL) &&
+		    (id->bInterfaceProtocol != intf->bInterfaceProtocol))
 		    continue;
 
 		return id;

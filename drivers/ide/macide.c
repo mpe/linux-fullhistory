@@ -11,6 +11,7 @@
  *  more details.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
@@ -18,100 +19,129 @@
 #include <linux/hdreg.h>
 #include <linux/delay.h>
 #include <linux/ide.h>
-#include <linux/init.h>
 
 #include <asm/machw.h>
 #include <asm/macintosh.h>
 #include <asm/macints.h>
+#include <asm/mac_baboon.h>
 
-    /*
-     *  Base of the IDE interface (see ATAManager ROM code)
-     */
+#define IDE_BASE 0x50F1A000	/* Base address of IDE controller */
 
-#define MAC_HD_BASE	0x50f1a000
+/*
+ * Generic IDE registers as offsets from the base
+ * These match MkLinux so they should be correct.
+ */
 
-    /*
-     *  Offsets from the above base (scaling 4)
-     */
+#define IDE_DATA	0x00
+#define IDE_ERROR	0x04	/* see err-bits */
+#define IDE_NSECTOR	0x08	/* nr of sectors to read/write */
+#define IDE_SECTOR	0x0c	/* starting sector */
+#define IDE_LCYL	0x10	/* starting cylinder */
+#define IDE_HCYL	0x14	/* high byte of starting cyl */
+#define IDE_SELECT	0x18	/* 101dhhhh , d=drive, hhhh=head */
+#define IDE_STATUS	0x1c	/* see status-bits */
+#define IDE_CONTROL	0x38	/* control/altstatus */
 
-#define MAC_HD_DATA	0x00
-#define MAC_HD_ERROR	0x04		/* see err-bits */
-#define MAC_HD_NSECTOR	0x08		/* nr of sectors to read/write */
-#define MAC_HD_SECTOR	0x0c		/* starting sector */
-#define MAC_HD_LCYL	0x10		/* starting cylinder */
-#define MAC_HD_HCYL	0x14		/* high byte of starting cyl */
-#define MAC_HD_SELECT	0x18		/* 101dhhhh , d=drive, hhhh=head */
-#define MAC_HD_STATUS	0x1c		/* see status-bits */
-#define MAC_HD_CONTROL	0x38		/* control/altstatus */
+/*
+ * Mac-specific registers
+ */
 
-static int __init macide_offsets[IDE_NR_PORTS] = {
-    MAC_HD_DATA, MAC_HD_ERROR, MAC_HD_NSECTOR, MAC_HD_SECTOR, MAC_HD_LCYL,
-    MAC_HD_HCYL, MAC_HD_SELECT, MAC_HD_STATUS, MAC_HD_CONTROL
+/*
+ * this register is odd; it doesn't seem to do much and it's
+ * not word-aligned like virtually every other hardware register
+ * on the Mac...
+ */
+
+#define IDE_IFR		0x101	/* (0x101) IDE interrupt flags on Quadra:
+				 *
+				 * Bit 0+1: some interrupt flags
+				 * Bit 2+3: some interrupt enable
+				 * Bit 4:   ??
+				 * Bit 5:   IDE interrupt flag (any hwif)
+				 * Bit 6:   maybe IDE interrupt enable (any hwif) ??
+				 * Bit 7:   Any interrupt condition
+				 */
+
+volatile unsigned char *ide_ifr = (unsigned char *) (IDE_BASE + IDE_IFR);
+
+static int macide_offsets[IDE_NR_PORTS] = {
+    IDE_DATA, IDE_ERROR,  IDE_NSECTOR, IDE_SECTOR, IDE_LCYL,
+    IDE_HCYL, IDE_SELECT, IDE_STATUS,  IDE_CONTROL
 };
 
-	/*
-	 * Other registers
-	 */
-
-	/* 
-	 * IDE interrupt status register for both (?) hwifs on Quadra
-	 * Initial setting: 0xc
-	 * Guessing again:
-	 * Bit 0+1: some interrupt flags
-	 * Bit 2+3: some interrupt enable
-	 * Bit 4:   ??
-	 * Bit 5:   IDE interrupt flag (any hwif)
-	 * Bit 6:   maybe IDE interrupt enable (any hwif) ??
-	 * Bit 7:   Any interrupt condition
-	 *
-	 * Only relevant item: bit 5, to be checked by mac_ack_intr
-	 */
-
-#define MAC_HD_ISR	0x101
-
-static int mac_ack_intr(ide_hwif_t* hwif)
+int macide_ack_intr(ide_hwif_t* hwif)
 {
-	unsigned char isr;
-	isr = readb(MAC_HD_BASE + MAC_HD_ISR);
-	if (isr & (1<<5)) {
-		writeb(isr & ~(1<<5), MAC_HD_BASE + MAC_HD_ISR);
+	if (*ide_ifr & 0x20) {
+		*ide_ifr &= ~0x20;
 		return 1;
 	}
-
 	return 0;
 }
 
-    /*
-     *  Probe for a Macintosh IDE interface
-     */
+#ifdef CONFIG_BLK_DEV_MAC_MEDIABAY
+static void macide_mediabay_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+	int state = baboon->mb_status & 0x04;
 
-void __init macide_init(void)
+	printk("macide: media bay %s detected\n", state? "removal":"insertion");
+}
+#endif
+
+/*
+ * Probe for a Macintosh IDE interface
+ */
+
+void macide_init(void)
 {
 	hw_regs_t hw;
 	int index = -1;
 
-	if (!MACH_IS_MAC || macintosh_config->ide_type == 0)
-		return;
-
 	switch (macintosh_config->ide_type) {
 	case MAC_IDE_QUADRA:
-		ide_setup_ports(&hw, (ide_ioreg_t)MAC_HD_BASE, macide_offsets,
-				0, (ide_ioreg_t)(MAC_HD_BASE+MAC_HD_ISR),
-				mac_ack_intr, IRQ_NUBUS_F);
+		ide_setup_ports(&hw, (ide_ioreg_t)IDE_BASE, macide_offsets,
+				0, 0, macide_ack_intr, IRQ_NUBUS_F);
 		index = ide_register_hw(&hw, NULL);
+		break;
+	case MAC_IDE_PB:
+		ide_setup_ports(&hw, (ide_ioreg_t)IDE_BASE, macide_offsets,
+				0, 0, macide_ack_intr, IRQ_NUBUS_C);
+		index = ide_register_hw(&hw, NULL);
+		break;
+	case MAC_IDE_BABOON:
+		ide_setup_ports(&hw, (ide_ioreg_t)BABOON_BASE, macide_offsets,
+				0, 0, NULL, IRQ_BABOON_1);
+		index = ide_register_hw(&hw, NULL);
+		if (index == -1) break;
+		if (macintosh_config->ident == MAC_MODEL_PB190) {
+
+			/* Fix breakage in ide-disk.c: drive capacity	*/
+			/* is not initialized for drives without a 	*/
+			/* hardware ID, and we cna't get that without	*/
+			/* probing the drive which freezes a 190.	*/
+
+			ide_drive_t *drive = &ide_hwifs[index].drives[0];
+        		drive->capacity = drive->cyl*drive->head*drive->sect;
+
+#ifdef CONFIG_BLK_DEV_MAC_MEDIABAY
+			request_irq(IRQ_BABOON_2, macide_mediabay_interrupt,
+					IRQ_FLG_FAST, "mediabay",
+					macide_mediabay_interrupt);
+#endif
+		}
 		break;
 
 	default:
-	    ide_setup_ports(&hw, (ide_ioreg_t)MAC_HD_BASE, macide_offsets,
-	    		    0, 0, NULL, IRQ_NUBUS_C);
-	    index = ide_register_hw(&hw, NULL);
-	    break;
+	    return;
 	}
 
         if (index != -1) {
 		if (macintosh_config->ide_type == MAC_IDE_QUADRA)
 			printk("ide%d: Macintosh Quadra IDE interface\n", index);
-		else
+		else if (macintosh_config->ide_type == MAC_IDE_PB)
 			printk("ide%d: Macintosh Powerbook IDE interface\n", index);
+		else if (macintosh_config->ide_type == MAC_IDE_BABOON)
+			printk("ide%d: Macintosh Powerbook Baboon IDE interface\n", index);
+		else
+			printk("ide%d: Unknown Macintosh IDE interface\n", index);
 	}
 }

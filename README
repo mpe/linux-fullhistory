@@ -1,25 +1,8 @@
-	Linux kernel release 2.3.xx
+	Linux kernel release 2.4.xx
 
-These are the release notes for Linux version 2.3.  Read them carefully,
+These are the release notes for Linux version 2.4.  Read them carefully,
 as they tell you what this is all about, explain how to install the
 kernel, and what to do if something goes wrong. 
-
-Linux version 2.3 is a DEVELOPMENT kernel, and not intended for general
-public use.  Different releases may have various and sometimes severe
-bugs.  It is *strongly* recommended that you back up the previous kernel
-before installing any new 2.3.xx release.
-
-If you need to use a proven and stable Linux kernel, please use 2.0.38
-or 2.2.xx.  All features which will be in the 2.3.xx releases will be
-contained in 2.4.xx when the code base has stabilized again. 
-
-If you decide to use 2.3, it is recommended that you join the kernel mailing
-list.  To do this, e-mail majordomo@vger.kernel.org, and put in the body
-of the message "subscribe linux-kernel" or "subscribe linux-kernel-digest"
-for a daily digest of the mailing list (it is a high-traffic list.)
-
-However, please make sure you don't ask questions which are already answered
-in various files in the Documentation directory.  See DOCUMENTATION below.
 
 WHAT IS LINUX?
 
@@ -63,7 +46,7 @@ INSTALLING the kernel:
    directory where you have permissions (eg. your home directory) and
    unpack it:
 
-		gzip -cd linux-2.3.XX.tar.gz | tar xvf -
+		gzip -cd linux-2.4.XX.tar.gz | tar xvf -
 
    Replace "XX" with the version number of the latest kernel.
 
@@ -72,7 +55,7 @@ INSTALLING the kernel:
    files.  They should match the library, and not get messed up by
    whatever the kernel-du-jour happens to be.
 
- - You can also upgrade between 2.3.xx releases by patching.  Patches are
+ - You can also upgrade between 2.4.xx releases by patching.  Patches are
    distributed in the traditional gzip and the new bzip2 format.  To
    install by patching, get all the newer patch files, enter the
    directory in which you unpacked the kernel source and execute:
@@ -107,7 +90,7 @@ INSTALLING the kernel:
 
 SOFTWARE REQUIREMENTS
 
-   Compiling and running the 2.3.xx kernels requires up-to-date
+   Compiling and running the 2.4.xx kernels requires up-to-date
    versions of various software packages.  Consult
    ./Documentation/Changes for the minimum version numbers required
    and how to get updates for these packages.  Beware that using

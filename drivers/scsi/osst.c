@@ -31,6 +31,7 @@ const char * osst_version = "0.9.4.3";
 #define OSST_FW_NEED_POLL_MAX 10708 /*(108D)*/
 #define OSST_FW_NEED_POLL(x,d) ((x) >= OSST_FW_NEED_POLL_MIN && (x) <= OSST_FW_NEED_POLL_MAX && d->host->this_id != 7)
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/fs.h>

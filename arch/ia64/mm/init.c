@@ -1,8 +1,8 @@
 /*
  * Initialize MMU support.
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -19,6 +19,7 @@
 #include <asm/efi.h>
 #include <asm/ia32.h>
 #include <asm/io.h>
+#include <asm/machvec.h>
 #include <asm/pgalloc.h>
 #include <asm/sal.h>
 #include <asm/system.h>
@@ -303,7 +304,7 @@ put_gate_page (struct page *page, unsigned long address)
 		return 0;
 	}
 	flush_page_to_ram(page);
-	set_pte(pte, page_pte_prot(page, PAGE_GATE));
+	set_pte(pte, mk_pte(page, PAGE_GATE));
 	/* no need for flush_tlb */
 	return page;
 }
@@ -311,7 +312,12 @@ put_gate_page (struct page *page, unsigned long address)
 void __init
 ia64_rid_init (void)
 {
-	unsigned long flags, rid, pta, impl_va_msb;
+	unsigned long flags, rid, pta, impl_va_bits;
+#ifdef CONFIG_DISABLE_VHPT
+#	define VHPT_ENABLE_BIT	0
+#else
+#	define VHPT_ENABLE_BIT	1
+#endif
 
 	/* Set up the kernel identity mappings (regions 6 & 7) and the vmalloc area (region 5): */
 	ia64_clear_ic(flags);
@@ -328,44 +334,46 @@ ia64_rid_init (void)
 	__restore_flags(flags);
 
 	/*
-	 * Check if the virtually mapped linear page table (VMLPT)
-	 * overlaps with a mapped address space.  The IA-64
-	 * architecture guarantees that at least 50 bits of virtual
-	 * address space are implemented but if we pick a large enough
-	 * page size (e.g., 64KB), the VMLPT is big enough that it
-	 * will overlap with the upper half of the kernel mapped
-	 * region.  I assume that once we run on machines big enough
-	 * to warrant 64KB pages, IMPL_VA_MSB will be significantly
-	 * bigger, so we can just adjust the number below to get
-	 * things going.  Alternatively, we could truncate the upper
-	 * half of each regions address space to not permit mappings
-	 * that would overlap with the VMLPT.  --davidm 99/11/13
+	 * Check if the virtually mapped linear page table (VMLPT) overlaps with a mapped
+	 * address space.  The IA-64 architecture guarantees that at least 50 bits of
+	 * virtual address space are implemented but if we pick a large enough page size
+	 * (e.g., 64KB), the mapped address space is big enough that it will overlap with
+	 * VMLPT.  I assume that once we run on machines big enough to warrant 64KB pages,
+	 * IMPL_VA_MSB will be significantly bigger, so this is unlikely to become a
+	 * problem in practice.  Alternatively, we could truncate the top of the mapped
+	 * address space to not permit mappings that would overlap with the VMLPT.
+	 * --davidm 00/12/06
 	 */
-#	define ld_pte_size		3
-#	define ld_max_addr_space_pages	3*(PAGE_SHIFT - ld_pte_size) /* max # of mappable pages */
-#	define ld_max_addr_space_size	(ld_max_addr_space_pages + PAGE_SHIFT)
-#	define ld_max_vpt_size		(ld_max_addr_space_pages + ld_pte_size)
+#	define pte_bits			3
+#	define mapped_space_bits	(3*(PAGE_SHIFT - pte_bits) + PAGE_SHIFT)
+	/*
+	 * The virtual page table has to cover the entire implemented address space within
+	 * a region even though not all of this space may be mappable.  The reason for
+	 * this is that the Access bit and Dirty bit fault handlers perform
+	 * non-speculative accesses to the virtual page table, so the address range of the
+	 * virtual page table itself needs to be covered by virtual page table.
+	 */
+#	define vmlpt_bits		(impl_va_bits - PAGE_SHIFT + pte_bits)
 #	define POW2(n)			(1ULL << (n))
-	impl_va_msb = ffz(~my_cpu_data.unimpl_va_mask) - 1;
 
-	if (impl_va_msb < 50 || impl_va_msb > 60)
-		panic("Bogus impl_va_msb value of %lu!\n", impl_va_msb);
+	impl_va_bits = ffz(~my_cpu_data.unimpl_va_mask);
 
-	if (POW2(ld_max_addr_space_size - 1) + POW2(ld_max_vpt_size) > POW2(impl_va_msb))
+	if (impl_va_bits < 51 || impl_va_bits > 61)
+		panic("CPU has bogus IMPL_VA_MSB value of %lu!\n", impl_va_bits - 1);
+
+	/* place the VMLPT at the end of each page-table mapped region: */
+	pta = POW2(61) - POW2(vmlpt_bits);
+
+	if (POW2(mapped_space_bits) >= pta)
 		panic("mm/init: overlap between virtually mapped linear page table and "
 		      "mapped kernel space!");
-	pta = POW2(61) - POW2(impl_va_msb);
-#ifndef CONFIG_DISABLE_VHPT
 	/*
 	 * Set the (virtually mapped linear) page table address.  Bit
 	 * 8 selects between the short and long format, bits 2-7 the
 	 * size of the table, and bit 0 whether the VHPT walker is
 	 * enabled.
 	 */
-	ia64_set_pta(pta | (0<<8) | ((3*(PAGE_SHIFT-3)+3)<<2) | 1);
-#else
-	ia64_set_pta(pta | (0<<8) | ((3*(PAGE_SHIFT-3)+3)<<2) | 0);
-#endif
+	ia64_set_pta(pta | (0 << 8) | (vmlpt_bits << 2) | VHPT_ENABLE_BIT);
 }
 
 /*
@@ -420,6 +428,15 @@ mem_init (void)
 {
 	extern char __start_gate_section[];
 	long reserved_pages, codesize, datasize, initsize;
+
+#ifdef CONFIG_PCI
+	/*
+	 * This needs to be called _after_ the command line has been parsed but _before_
+	 * any drivers that may need the PCI DMA interface are initialized or bootmem has
+	 * been freed.
+	 */
+	platform_pci_dma_init();
+#endif
 
 	if (!mem_map)
 		BUG();

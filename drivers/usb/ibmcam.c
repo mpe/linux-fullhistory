@@ -3110,19 +3110,9 @@ static void usb_ibmcam_disconnect(struct usb_device *dev, void *ptr)
 }
 
 static struct usb_device_id ibmcam_table [] = {
-    {
-	idVendor: 0x0545,
-	idProduct: 0x8080,
-	bcdDevice_lo: 0x0002,
-	bcdDevice_hi: 0x0002
-    },
-    {
-	idVendor: 0x0545,
-	idProduct: 0x8080,
-	bcdDevice_lo: 0X030a,
-	bcdDevice_hi: 0x030a
-    },
-    { }						/* Terminating entry */
+	{ USB_DEVICE_VER(0x0545, 0x8080, 0x0002, 0x0002) },
+	{ USB_DEVICE_VER(0x0545, 0x8080, 0x030a, 0x030a) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, ibmcam_table);

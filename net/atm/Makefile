@@ -11,7 +11,7 @@ include ../../.config
 
 O_TARGET= atm.o
 
-export-objs = common.o atm_misc.o raw.o resources.o ipcommon.o proc.o lane_mpoa_init.o
+export-objs = common.o atm_misc.o raw.o resources.o ipcommon.o proc.o
 
 multi-list = mpoa.o
 mpoa-objs = mpc.o mpoa_caches.o mpoa_proc.o
@@ -33,7 +33,7 @@ ifeq ($(CONFIG_PROC_FS),y)
 obj-y += proc.o
 endif
 
-obj-$(CONFIG_ATM_LANE) += lec.o lane_mpoa_init.o
+obj-$(CONFIG_ATM_LANE) += lec.o
 obj-$(CONFIG_ATM_MPOA) += mpoa.o
 
 include $(TOPDIR)/Rules.make

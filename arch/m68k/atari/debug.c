@@ -94,7 +94,7 @@ static int ata_par_out (char c)
 {
     unsigned char tmp;
     /* This a some-seconds timeout in case no printer is connected */
-    unsigned long i = loops_per_sec > 1 ? loops_per_sec : 10000000;
+    unsigned long i = loops_per_jiffy > 1 ? loops_per_jiffy : 10000000/HZ;
 
     while( (mfp.par_dt_reg & 1) && --i ) /* wait for BUSY == L */
 	;
@@ -196,7 +196,7 @@ void atari_init_mfp_port( int cflag )
 	MFPDELAY();					\
     } while(0)
 
-/* loops_per_sec isn't initialized yet, so we can't use udelay(). This does a
+/* loops_per_jiffy isn't initialized yet, so we can't use udelay(). This does a
  * delay of ~ 60us. */
 #define LONG_DELAY()				\
     do {					\

@@ -10,7 +10,7 @@
 
 struct semaphore {
 	atomic_t count;
-	atomic_t waking;
+	int sleepers;
 	wait_queue_head_t wait;
 #if WAITQUEUE_DEBUG
 	long __magic;
@@ -25,7 +25,7 @@ struct semaphore {
 #endif
 
 #define __SEMAPHORE_INITIALIZER(name,count) \
-{ ATOMIC_INIT(count), ATOMIC_INIT(0), __WAIT_QUEUE_HEAD_INITIALIZER((name).wait) \
+{ ATOMIC_INIT(count), 0, __WAIT_QUEUE_HEAD_INITIALIZER((name).wait) \
 	__SEM_DEBUG_INIT(name) }
 
 #define __MUTEX_INITIALIZER(name) \
@@ -37,10 +37,10 @@ struct semaphore {
 #define DECLARE_MUTEX(name) __DECLARE_SEMAPHORE_GENERIC(name,1)
 #define DECLARE_MUTEX_LOCKED(name) __DECLARE_SEMAPHORE_GENERIC(name,0)
 
-extern inline void sema_init (struct semaphore *sem, int val)
+static inline void sema_init (struct semaphore *sem, int val)
 {
 	atomic_set(&sem->count, val);
-	atomic_set(&sem->waking, 0);
+	sem->sleepers = 0;
 	init_waitqueue_head(&sem->wait);
 #if WAITQUEUE_DEBUG
 	sem->__magic = (long)&sem->__magic;
@@ -62,7 +62,7 @@ extern int __down_interruptible(struct semaphore * sem);
 extern int __down_trylock(struct semaphore * sem);
 extern void __up(struct semaphore * sem);
 
-extern inline void down(struct semaphore * sem)
+static inline void down(struct semaphore * sem)
 {
 	register atomic_t *ptr asm("g1");
 	register int increment asm("g2");
@@ -97,7 +97,7 @@ extern inline void down(struct semaphore * sem)
 	: "g3", "g4", "g7", "memory", "cc");
 }
 
-extern inline int down_interruptible(struct semaphore * sem)
+static inline int down_interruptible(struct semaphore * sem)
 {
 	register atomic_t *ptr asm("g1");
 	register int increment asm("g2");
@@ -135,7 +135,7 @@ extern inline int down_interruptible(struct semaphore * sem)
 	return increment;
 }
 
-extern inline int down_trylock(struct semaphore * sem)
+static inline int down_trylock(struct semaphore * sem)
 {
 	register atomic_t *ptr asm("g1");
 	register int increment asm("g2");
@@ -173,7 +173,7 @@ extern inline int down_trylock(struct semaphore * sem)
 	return increment;
 }
 
-extern inline void up(struct semaphore * sem)
+static inline void up(struct semaphore * sem)
 {
 	register atomic_t *ptr asm("g1");
 	register int increment asm("g2");
@@ -262,7 +262,7 @@ struct rw_semaphore {
 #define DECLARE_RWSEM_READ_LOCKED(name) __DECLARE_RWSEM_GENERIC(name,RW_LOCK_BIAS-1)
 #define DECLARE_RWSEM_WRITE_LOCKED(name) __DECLARE_RWSEM_GENERIC(name,0)
 
-extern inline void init_rwsem(struct rw_semaphore *sem)
+static inline void init_rwsem(struct rw_semaphore *sem)
 {
 	sem->count = RW_LOCK_BIAS;
 	sem->lock = 0;
@@ -282,7 +282,7 @@ extern void ___down_write(/* Special calling convention */ void);
 extern void ___up_read(/* Special calling convention */ void);
 extern void ___up_write(/* Special calling convention */ void);
 
-extern inline void down_read(struct rw_semaphore *sem)
+static inline void down_read(struct rw_semaphore *sem)
 {
 	register atomic_t *ptr asm("g1");
 
@@ -308,7 +308,7 @@ extern inline void down_read(struct rw_semaphore *sem)
 #endif
 }
 
-extern inline void down_write(struct rw_semaphore *sem)
+static inline void down_write(struct rw_semaphore *sem)
 {
 	register atomic_t *ptr asm("g1");
 
@@ -342,7 +342,7 @@ extern inline void down_write(struct rw_semaphore *sem)
  * case is when there was a writer waiting, and we've
  * bumped the count to 0: we must wake the writer up.
  */
-extern inline void __up_read(struct rw_semaphore *sem)
+static inline void __up_read(struct rw_semaphore *sem)
 {
 	register atomic_t *ptr asm("g1");
 
@@ -360,7 +360,7 @@ extern inline void __up_read(struct rw_semaphore *sem)
 /* releasing the writer is easy -- just release it and
  * wake up any sleepers.
  */
-extern inline void __up_write(struct rw_semaphore *sem)
+static inline void __up_write(struct rw_semaphore *sem)
 {
 	register atomic_t *ptr asm("g1");
 
@@ -375,7 +375,7 @@ extern inline void __up_write(struct rw_semaphore *sem)
 	: "g2", "g3", "g4", "g7", "memory", "cc");
 }
 
-extern inline void up_read(struct rw_semaphore *sem)
+static inline void up_read(struct rw_semaphore *sem)
 {
 #if WAITQUEUE_DEBUG
 	if (!sem->write_not_granted)
@@ -387,7 +387,7 @@ extern inline void up_read(struct rw_semaphore *sem)
 	__up_read(sem);
 }
 
-extern inline void up_write(struct rw_semaphore *sem)
+static inline void up_write(struct rw_semaphore *sem)
 {
 #if WAITQUEUE_DEBUG
 	if (!sem->read_not_granted)

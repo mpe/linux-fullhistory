@@ -61,6 +61,10 @@
 #define virt_to_page(x) MAP_NR(x)
 #endif
 
+#ifndef vmalloc_32
+#define vmalloc_32(x) vmalloc(x)
+#endif
+
 struct it_dma_prg {
 	struct dma_cmd begin;
 	quadlet_t data[4];
@@ -438,14 +442,19 @@ static void reset_ir_status(struct dma_iso_ctx *d, int n)
 	d->ir_prg[n][i].status = d->left_size;
 }
 
-static void initialize_dma_ir_prg(struct dma_iso_ctx *d, int n)
+static void initialize_dma_ir_prg(struct dma_iso_ctx *d, int n, int flags)
 {
 	struct dma_cmd *ir_prg = d->ir_prg[n];
 	unsigned long buf = (unsigned long)d->buf+n*d->buf_size;
 	int i;
-	
-	/* the first descriptor will sync and read only 4 bytes */
-	ir_prg[0].control = (0x280F << 16) | 4;
+
+	/* the first descriptor will read only 4 bytes */
+	ir_prg[0].control = (0x280C << 16) | 4;
+
+	/* set the sync flag */
+	if (flags & VIDEO1394_SYNC_FRAMES)
+		ir_prg[0].control |= 0x00030000;
+
 	ir_prg[0].address = kvirt_to_bus(buf);
 	ir_prg[0].branchAddress =  (virt_to_bus(&(ir_prg[1].control)) 
 				    & 0xfffffff0) | 0x1;
@@ -470,7 +479,7 @@ static void initialize_dma_ir_prg(struct dma_iso_ctx *d, int n)
 	ir_prg[i].address = kvirt_to_bus(buf+(i-1)*PAGE_SIZE);
 }
 	
-static void initialize_dma_ir_ctx(struct dma_iso_ctx *d, int tag)
+static void initialize_dma_ir_ctx(struct dma_iso_ctx *d, int tag, int flags)
 {
 	struct ti_ohci *ohci = (struct ti_ohci *)d->ohci;
 	int i;
@@ -478,13 +487,20 @@ static void initialize_dma_ir_ctx(struct dma_iso_ctx *d, int tag)
 	ohci1394_stop_context(ohci, d->ctrlClear, NULL);
 
 	for (i=0;i<d->num_desc;i++) {
-		initialize_dma_ir_prg(d, i);
+		initialize_dma_ir_prg(d, i, flags);
 		reset_ir_status(d, i);
 	}
-	
-	/* Set bufferFill, no header */
+
+	/* reset the ctrl register */
+	reg_write(ohci, d->ctrlClear, 0xf0000000);
+
+	/* Set bufferFill */
 	reg_write(ohci, d->ctrlSet, 0x80000000);
-			
+
+	/* Set isoch header */
+	if (flags & VIDEO1394_INCLUDE_ISO_HEADERS) 
+		reg_write(ohci, d->ctrlSet, 0x40000000);
+
 	/* Set the context match register to match on all tags, 
 	   sync for sync tag, and listen to d->channel */
 	reg_write(ohci, d->ctxMatch, 0xf0000000|((tag&0xf)<<8)|d->channel);
@@ -683,6 +699,7 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 	case VIDEO1394_TALK_CHANNEL:
 	{
 		struct video1394_mmap v;
+		u64 mask;
 		int i;
 
 		if(copy_from_user(&v, (void *)arg, sizeof(v)))
@@ -692,12 +709,18 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 			      "iso channel %d out of bound", v.channel);
 			return -EFAULT;
 		}
-                if (test_and_set_bit(v.channel, &ohci->IR_channel_usage)) {
+		mask = (u64)0x1<<v.channel;
+		printk("mask: %08X%08X usage: %08X%08X\n",
+		       (u32)(mask>>32),(u32)(mask&0xffffffff),
+		       (u32)(ohci->ISO_channel_usage>>32),
+		       (u32)(ohci->ISO_channel_usage&0xffffffff));
+		if (ohci->ISO_channel_usage & mask) {
 			PRINT(KERN_ERR, ohci->id, 
 			      "channel %d is already taken", v.channel);
 			return -EFAULT;
 		}
-
+		ohci->ISO_channel_usage |= mask;
+		
 		if (v.buf_size<=0) {
 			PRINT(KERN_ERR, ohci->id,
 			      "Invalid %d length buffer requested",v.buf_size);
@@ -739,7 +762,7 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 				return -EFAULT;
 			}
 			initialize_dma_ir_ctx(video->ir_context[i], 
-					      v.sync_tag);
+					      v.sync_tag, v.flags);
 
 			video->current_ctx = video->ir_context[i];
 
@@ -791,16 +814,24 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 	case VIDEO1394_UNTALK_CHANNEL:
 	{
 		int channel;
+		u64 mask;
 		int i;
 
 		if(copy_from_user(&channel, (void *)arg, sizeof(int)))
 			return -EFAULT;
 
-                if (!test_and_clear_bit(channel, &ohci->IR_channel_usage)) {
+		if (channel<0 || channel>(ISO_CHANNELS-1)) {
+			PRINT(KERN_ERR, ohci->id, 
+			      "iso channel %d out of bound", channel);
+			return -EFAULT;
+		}
+		mask = (u64)0x1<<channel;
+		if (!(ohci->ISO_channel_usage & mask)) {
 			PRINT(KERN_ERR, ohci->id, 
 			      "channel %d is not being used", channel);
 			return -EFAULT;
 		}
+		ohci->ISO_channel_usage &= ~mask;
 
 		if (cmd == VIDEO1394_UNLISTEN_CHANNEL) {
 			i = ir_ctx_listening(video, channel);
@@ -1131,34 +1162,35 @@ static int video1394_release(struct inode *inode, struct file *file)
 {
 	struct video_card *video = &video_cards[MINOR(inode->i_rdev)];
 	struct ti_ohci *ohci= video->ohci;
+	u64 mask;
 	int i;
 
 	lock_kernel();
 	for (i=0;i<ohci->nb_iso_rcv_ctx-1;i++) 
 		if (video->ir_context[i]) {
-			if (!test_and_clear_bit(
-				video->ir_context[i]->channel,
-				&ohci->IR_channel_usage)) {
+			mask = (u64)0x1<<video->ir_context[i]->channel;
+			if (!(ohci->ISO_channel_usage & mask))
 				PRINT(KERN_ERR, ohci->id, 
 				      "channel %d is not being used", 
 				      video->ir_context[i]->channel);
-			}
+			else
+				ohci->ISO_channel_usage &= ~mask;
 			PRINT(KERN_INFO, ohci->id, 
 			      "iso receive context %d stop listening "
 			      "on channel %d", i+1, 
 			      video->ir_context[i]->channel);
 			free_dma_iso_ctx(&video->ir_context[i]);
 		}
-
+	
 	for (i=0;i<ohci->nb_iso_xmit_ctx;i++) 
 		if (video->it_context[i]) {
-			if (!test_and_clear_bit(
-				video->it_context[i]->channel,
-				&ohci->IR_channel_usage)) {
+			mask = (u64)0x1<<video->it_context[i]->channel;
+			if (!(ohci->ISO_channel_usage & mask))
 				PRINT(KERN_ERR, ohci->id, 
 				      "channel %d is not being used", 
 				      video->it_context[i]->channel);
-			}
+			else
+				ohci->ISO_channel_usage &= ~mask;
 			PRINT(KERN_INFO, ohci->id, 
 			      "iso transmit context %d stop talking "
 			      "on channel %d", i+1, 

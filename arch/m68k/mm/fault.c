@@ -26,7 +26,9 @@ int send_fault_sig(struct pt_regs *regs)
 	siginfo.si_signo = current->thread.signo;
 	siginfo.si_code = current->thread.code;
 	siginfo.si_addr = (void *)current->thread.faddr;
+#ifdef DEBUG
 	printk("send_fault_sig: %p,%d,%d\n", siginfo.si_addr, siginfo.si_signo, siginfo.si_code);
+#endif
 
 	if (user_mode(regs)) {
 		force_sig_info(siginfo.si_signo,

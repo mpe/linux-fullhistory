@@ -16,7 +16,37 @@
 #include <linux/smp_lock.h>
 #include <linux/highuid.h>
 
+#include <asm/shmparam.h>
 #include <asm/uaccess.h>
+
+#define COLOR_ALIGN(addr)	(((addr) + SHMLBA - 1) & ~(SHMLBA - 1))
+
+unsigned long
+get_unmapped_area (unsigned long addr, unsigned long len)
+{
+	struct vm_area_struct * vmm;
+
+	if (len > RGN_MAP_LIMIT)
+		return 0;
+	if (!addr)
+		addr = TASK_UNMAPPED_BASE;
+
+	if (current->thread.flags & IA64_THREAD_MAP_SHARED)
+		addr = COLOR_ALIGN(addr);
+	else
+		addr = PAGE_ALIGN(addr);
+
+	for (vmm = find_vma(current->mm, addr); ; vmm = vmm->vm_next) {
+		/* At this point:  (!vmm || addr < vmm->vm_end). */
+		if (TASK_SIZE - len < addr)
+			return 0;
+		if (rgn_offset(addr) + len > RGN_MAP_LIMIT)	/* no risk of overflow here... */
+			return 0;
+		if (!vmm || addr + len <= vmm->vm_start)
+			return addr;
+		addr = vmm->vm_end;
+	}
+}
 
 asmlinkage long
 ia64_getpriority (int which, int who, long arg2, long arg3, long arg4, long arg5, long arg6, 
@@ -34,6 +64,7 @@ ia64_getpriority (int which, int who, long arg2, long arg3, long arg4, long arg5
 	return prio;
 }
 
+/* XXX obsolete, but leave it here until the old libc is gone... */
 asmlinkage unsigned long
 sys_getpagesize (void)
 {
@@ -58,16 +89,61 @@ ia64_shmat (int shmid, void *shmaddr, int shmflg, long arg3, long arg4, long arg
 }
 
 asmlinkage unsigned long
-ia64_brk (long brk, long arg1, long arg2, long arg3,
+ia64_brk (unsigned long brk, long arg1, long arg2, long arg3,
 	  long arg4, long arg5, long arg6, long arg7, long stack)
 {
-	extern unsigned long sys_brk (unsigned long brk);
+	extern int vm_enough_memory (long pages);
 	struct pt_regs *regs = (struct pt_regs *) &stack;
-	unsigned long retval;
+	unsigned long rlim, retval, newbrk, oldbrk;
+	struct mm_struct *mm = current->mm;
 
-	retval = sys_brk(brk);
+	/*
+	 * Most of this replicates the code in sys_brk() except for an additional safety
+	 * check and the clearing of r8.  However, we can't call sys_brk() because we need
+	 * to acquire the mmap_sem before we can do the test...
+	 */
+	down(&mm->mmap_sem);
 
-	regs->r8 = 0;	/* ensure large retval isn't mistaken as error code */
+	if (brk < mm->end_code)
+		goto out;
+	newbrk = PAGE_ALIGN(brk);
+	oldbrk = PAGE_ALIGN(mm->brk);
+	if (oldbrk == newbrk)
+		goto set_brk;
+
+	/* Always allow shrinking brk. */
+	if (brk <= mm->brk) {
+		if (!do_munmap(mm, newbrk, oldbrk-newbrk))
+			goto set_brk;
+		goto out;
+	}
+
+	/* Check against unimplemented/unmapped addresses: */
+	if ((newbrk - oldbrk) > RGN_MAP_LIMIT || rgn_offset(newbrk) > RGN_MAP_LIMIT)
+		goto out;
+
+	/* Check against rlimit.. */
+	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
+	if (rlim < RLIM_INFINITY && brk - mm->start_data > rlim)
+		goto out;
+
+	/* Check against existing mmap mappings. */
+	if (find_vma_intersection(mm, oldbrk, newbrk+PAGE_SIZE))
+		goto out;
+
+	/* Check if we have enough memory.. */
+	if (!vm_enough_memory((newbrk-oldbrk) >> PAGE_SHIFT))
+		goto out;
+
+	/* Ok, looks good - let it rip. */
+	if (do_brk(oldbrk, newbrk-oldbrk) != oldbrk)
+		goto out;
+set_brk:
+	mm->brk = brk;
+out:
+	retval = mm->brk;
+	up(&mm->mmap_sem);
+	regs->r8 = 0;		/* ensure large retval isn't mistaken as error code */
 	return retval;
 }
 
@@ -95,10 +171,8 @@ sys_pipe (long arg0, long arg1, long arg2, long arg3,
 static inline unsigned long
 do_mmap2 (unsigned long addr, unsigned long len, int prot, int flags, int fd, unsigned long pgoff)
 {
-	unsigned long loff, hoff;
+	unsigned long roff;
 	struct file *file = 0;
-	/* the virtual address space that is mappable in each region: */
-#	define OCTANT_SIZE	((PTRS_PER_PGD<<PGDIR_SHIFT)/8)
 
 	/*
 	 * A zero mmap always succeeds in Linux, independent of
@@ -107,15 +181,12 @@ do_mmap2 (unsigned long addr, unsigned long len, int prot, int flags, int fd, un
 	if (PAGE_ALIGN(len) == 0)
 		return addr;
 
-	/* Don't permit mappings into or across the address hole in a region: */
-	loff = rgn_offset(addr);
-	hoff = loff - (RGN_SIZE - OCTANT_SIZE/2);
-	if ((len | loff | (loff + len)) >= OCTANT_SIZE/2
-	    && (len | hoff | (hoff + len)) >= OCTANT_SIZE/2)
+	/* don't permit mappings into unmapped space or the virtual page table of a region: */
+	roff = rgn_offset(addr);
+	if ((len | roff | (roff + len)) >= RGN_MAP_LIMIT)
 		return -EINVAL;
 
-	/* Don't permit mappings that would cross a region boundary: */
-
+	/* don't permit mappings that would cross a region boundary: */
 	if (rgn_index(addr) != rgn_index(addr + len))
 		return -EINVAL;
 
@@ -126,9 +197,14 @@ do_mmap2 (unsigned long addr, unsigned long len, int prot, int flags, int fd, un
 			return -EBADF;
 	}
 
+	if (flags & MAP_SHARED)
+		current->thread.flags |= IA64_THREAD_MAP_SHARED;
+
 	down(&current->mm->mmap_sem);
 	addr = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
 	up(&current->mm->mmap_sem);
+
+	current->thread.flags &= ~IA64_THREAD_MAP_SHARED;
 
 	if (file)
 		fput(file);

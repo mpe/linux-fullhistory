@@ -171,7 +171,7 @@ static void usb_mouse_disconnect(struct usb_device *dev, void *ptr)
 }
 
 static struct usb_device_id usb_mouse_id_table [] = {
-    { bInterfaceClass: 3, bInterfaceSubClass: 1, bInterfaceProtocol: 2},
+	{ USB_INTERFACE_INFO(3, 1, 2) },
     { }						/* Terminating entry */
 };
 

@@ -91,7 +91,7 @@ ia64_rt_sigsuspend (sigset_t *uset, size_t sigsetsize, struct sigscratch *scr)
 		scr->pt.r10 = -1;
 	}
 	while (1) {
-		set_current_state(TASK_INTERRUPTIBLE);
+		current->state = TASK_INTERRUPTIBLE;
 		schedule();
 		if (ia64_do_signal(&oldset, scr, 1))
 			return -EINTR;
@@ -499,9 +499,10 @@ ia64_do_signal (sigset_t *oldset, struct sigscratch *scr, long in_syscall)
 			/* Let the debugger run.  */
 			current->exit_code = signr;
 			current->thread.siginfo = &info;
-			set_current_state(TASK_STOPPED);
+			current->state = TASK_STOPPED;
 			notify_parent(current, SIGCHLD);
 			schedule();
+
 			signr = current->exit_code;
 			current->thread.siginfo = 0;
 
@@ -557,7 +558,7 @@ ia64_do_signal (sigset_t *oldset, struct sigscratch *scr, long in_syscall)
 				/* FALLTHRU */
 
 			      case SIGSTOP:
-				set_current_state(TASK_STOPPED);
+				current->state = TASK_STOPPED;
 				current->exit_code = signr;
 				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa.sa_flags
 				      & SA_NOCLDSTOP))

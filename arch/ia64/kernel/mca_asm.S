@@ -3,11 +3,11 @@
 //
 // Mods by cfleck to integrate into kernel build
 // 00/03/15 davidm Added various stop bits to get a clean compile
-// 00/03/29 cfleck Added code to save INIT handoff state in pt_regs format, switch to temp kstack,
-//		   switch modes, jump to C INIT handler
+//
+// 00/03/29 cfleck Added code to save INIT handoff state in pt_regs format, switch to temp
+//		   kstack, switch modes, jump to C INIT handler
 //
 #include <linux/config.h>
-
 #include <asm/pgtable.h>
 #include <asm/processor.h>
 #include <asm/mca_asm.h>
@@ -17,14 +17,7 @@
  * When we get an machine check, the kernel stack pointer is no longer
  * valid, so we need to set a new stack pointer.
  */
-#define MINSTATE_START_SAVE_MIN							\
-(pKern) movl sp=ia64_init_stack+IA64_STK_OFFSET-IA64_PT_REGS_SIZE;		\
-	;;
-
-#define MINSTATE_END_SAVE_MIN							\
-	or r12=r12,r14;		/* make sp a kernel virtual address */		\
-	or r13=r13,r14;		/* make `current' a kernel virtual address */	\
-	;;
+#define	MINSTATE_PHYS	/* Make sure stack access is physical for MINSTATE */ 
 
 #include "minstate.h"
 	

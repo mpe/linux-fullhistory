@@ -67,6 +67,7 @@ struct ei_device {
 	unsigned char mcfilter[8];
 	unsigned open:1;
 	unsigned word16:1;  		/* We have the 16-bit (vs 8-bit) version of the card. */
+	unsigned bigendian:1;		/* 16-bit big endian mode */
 	unsigned txing:1;		/* Transmit Active */
 	unsigned irqlock:1;		/* 8390's intrs disabled when '1'. */
 	unsigned dmaing:1;		/* Remote DMA Active */
@@ -117,7 +118,8 @@ struct ei_device {
  */
  
 #if defined(CONFIG_MAC) || defined(CONFIG_AMIGA_PCMCIA) || \
-    defined(CONFIG_ARIADNE2) || defined(CONFIG_ARIADNE2_MODULE)
+    defined(CONFIG_ARIADNE2) || defined(CONFIG_ARIADNE2_MODULE) || \
+    defined(CONFIG_HYDRA) || defined(CONFIG_HYDRA_MODULE)
 #define EI_SHIFT(x)	(ei_local->reg_offset[x])
 #else
 #define EI_SHIFT(x)	(x)
@@ -165,6 +167,7 @@ struct ei_device {
 
 /* Bits in EN0_DCFG - Data config register */
 #define ENDCFG_WTS	0x01	/* word transfer mode selection */
+#define ENDCFG_BOS	0x02	/* byte order selection */
 
 /* Page 1 register offsets. */
 #define EN1_PHYS   EI_SHIFT(0x01)	/* This board's physical enet addr RD WR */

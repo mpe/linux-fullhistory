@@ -338,7 +338,7 @@ static int __init rtrack_init(void)
 		return -EINVAL;
 	}
 
-	if (request_region(io, 2, "rtrack")) 
+	if (!request_region(io, 2, "rtrack")) 
 	{
 		printk(KERN_ERR "rtrack: port 0x%x already in use\n", io);
 		return -EBUSY;

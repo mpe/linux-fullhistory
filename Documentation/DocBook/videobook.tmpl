@@ -486,7 +486,7 @@ static int radio_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
   <para>
         We copy the user supplied structure into kernel memory so we can examine it. 
         If the user has selected a tuner other than zero we reject the request. If 
-        they wanted tuner 0 then, suprisingly enough, that is the current tuner already.
+        they wanted tuner 0 then, surprisingly enough, that is the current tuner already.
   </para>
   <para>
         The next two ioctls we need to provide are to get and set the frequency of
@@ -652,7 +652,7 @@ static int current_volume=0;
   </para>
   <para>
         The VIDIOCSAUDIO ioctl allows the user to set the audio parameters in the
-        video_audio stucture. The driver does its best to honour the request.
+        video_audio structure. The driver does its best to honour the request.
   </para>
   <programlisting>
 
@@ -812,7 +812,7 @@ void cleanup_module(void)
         Chroma keying is a technique used by cards to get around this. It is an old
         television mixing trick where you mark all the areas you wish to replace
         with a single clear colour that isn't used in the image - TV people use an
-        incredibly bright blue while computing people often use a paticularly
+        incredibly bright blue while computing people often use a particularly
         virulent purple. Bright blue occurs on the desktop. Anyone with virulent
         purple windows has another problem besides their TV overlay.
   </para>
@@ -1259,7 +1259,7 @@ static int camera_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
    </row><row>
         <entry>VIDEO_MODE_NTSC</><>NTSC (US) encoded Television</entry>
    </row><row>
-        <entry>VIDEO_MODE_SECAM</><>SECAM (French) Televison </entry>
+        <entry>VIDEO_MODE_SECAM</><>SECAM (French) Television </entry>
    </row><row>
         <entry>VIDEO_MODE_AUTO</><>Automatic switching, or format does not
                                 matter</entry>
@@ -1269,7 +1269,7 @@ static int camera_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
     </table>
     <para>
         The corresponding VIDIOCSCHAN ioctl allows a user to change channel and to
-        request the norm is changed - for exaple to switch between a PAL or an NTSC
+        request the norm is changed - for example to switch between a PAL or an NTSC
         format camera.
   </para>
   <programlisting>
@@ -1332,7 +1332,7 @@ static int camera_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
         it make a best effort attempt.
   </para>
   <para>
-        Our depth is 24, as this is in bits. We will be returing RGB24 format. This
+        Our depth is 24, as this is in bits. We will be returning RGB24 format. This
         has one byte of red, then one of green, then one of blue. This then repeats
         for every other pixel in the image. The other common formats the interface 
         defines are

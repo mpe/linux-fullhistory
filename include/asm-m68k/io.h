@@ -14,7 +14,7 @@
 #include <asm/virtconvert.h>
 
 /*
- * These are for ISA/PCI shared memory _only_ and should never be used
+ * These are for PCI shared memory _only_ and should never be used
  * on any other type of memory, including Zorro memory. They are meant to
  * access the bus in the bus byte order which is little-endian!.
  *
@@ -47,8 +47,11 @@
 #define outb(x,addr) ((void) writeb(x,addr))
 #define outb_p(x,addr) outb(x,addr)
 
+#ifndef CONFIG_SUN3
 #define IO_SPACE_LIMIT 0xffff
-
+#else
+#define IO_SPACE_LIMIT 0x0fffffff
+#endif
 
 /* Values for nocacheflag and cmode */
 #define IOMAP_FULL_CACHING		0

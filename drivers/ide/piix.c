@@ -399,11 +399,65 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 						     ide_dma_off_quietly);
 }
 
+static void config_chipset_for_pio (ide_drive_t *drive)
+{
+	piix_tune_drive(drive, ide_get_best_pio_mode(drive, 255, 5, NULL));
+}
+
+static int config_drive_xfer_rate (ide_drive_t *drive)
+{
+	struct hd_driveid *id = drive->id;
+	ide_dma_action_t dma_func = ide_dma_on;
+
+	if (id && (id->capability & 1) && HWIF(drive)->autodma) {
+		/* Consult the list of known "bad" drives */
+		if (ide_dmaproc(ide_dma_bad_drive, drive)) {
+			dma_func = ide_dma_off;
+			goto fast_ata_pio;
+		}
+		dma_func = ide_dma_off_quietly;
+		if (id->field_valid & 4) {
+			if (id->dma_ultra & 0x002F) {
+				/* Force if Capable UltraDMA */
+				dma_func = piix_config_drive_for_dma(drive);
+				if ((id->field_valid & 2) &&
+				    (dma_func != ide_dma_on))
+					goto try_dma_modes;
+			}
+		} else if (id->field_valid & 2) {
+try_dma_modes:
+			if ((id->dma_mword & 0x0007) ||
+			    (id->dma_1word & 0x007)) {
+				/* Force if Capable regular DMA modes */
+				dma_func = piix_config_drive_for_dma(drive);
+				if (dma_func != ide_dma_on)
+					goto no_dma_set;
+			}
+		} else if (ide_dmaproc(ide_dma_good_drive, drive)) {
+			if (id->eide_dma_time > 150) {
+				goto no_dma_set;
+			}
+			/* Consult the list of known "good" drives */
+			dma_func = piix_config_drive_for_dma(drive);
+			if (dma_func != ide_dma_on)
+				goto no_dma_set;
+		} else {
+			goto fast_ata_pio;
+		}
+	} else if ((id->capability & 8) || (id->field_valid & 2)) {
+fast_ata_pio:
+		dma_func = ide_dma_off_quietly;
+no_dma_set:
+		config_chipset_for_pio(drive);
+	}
+	return HWIF(drive)->dmaproc(dma_func, drive);
+}
+
 static int piix_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 {
 	switch (func) {
 		case ide_dma_check:
-			 return ide_dmaproc((ide_dma_action_t) piix_config_drive_for_dma(drive), drive);
+			return config_drive_xfer_rate(drive);
 		default :
 			break;
 	}

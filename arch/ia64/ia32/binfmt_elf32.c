@@ -9,6 +9,7 @@
 
 #include <linux/types.h>
 
+#include <asm/param.h>
 #include <asm/signal.h>
 #include <asm/ia32.h>
 
@@ -30,6 +31,9 @@
 #ifdef CONFIG_BINFMT_ELF32_MODULE
 # define CONFIG_BINFMT_ELF_MODULE	CONFIG_BINFMT_ELF32_MODULE
 #endif
+
+#undef CLOCKS_PER_SEC
+#define CLOCKS_PER_SEC	IA32_CLOCKS_PER_SEC
 
 extern void ia64_elf32_init(struct pt_regs *regs);
 extern void put_dirty_page(struct task_struct * tsk, struct page *page, unsigned long address);
@@ -89,8 +93,8 @@ void ia64_elf32_init(struct pt_regs *regs)
 	
 	/* Do all the IA-32 setup here */
 
-	current->thread.map_base = 0x40000000;
-
+	current->thread.map_base  =  0x40000000;
+	current->thread.task_size =  0xc0000000;	/* use what Linux/x86 uses... */
  
 	/* setup ia32 state for ia32_load_state */
 
@@ -239,6 +243,12 @@ elf_map32 (struct file *filep, unsigned long addr, struct elf_phdr *eppnt, int p
 	if (eppnt->p_memsz >= (1UL<<32) || addr > (1UL<<32) - eppnt->p_memsz)
 		return -EINVAL;
 
+	/*
+	 *  Make sure the elf interpreter doesn't get loaded at location 0
+	 *    so that NULL pointers correctly cause segfaults.
+	 */
+	if (addr == 0)
+		addr += PAGE_SIZE;
 #if 1
 	set_brk(ia32_mm_addr(addr), addr + eppnt->p_memsz);
 	memset((char *) addr + eppnt->p_filesz, 0, eppnt->p_memsz - eppnt->p_filesz);

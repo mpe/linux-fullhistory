@@ -52,7 +52,7 @@ o  Gnu C                  2.91.66                 # gcc --version
 o  Gnu make               3.77                    # make --version
 o  binutils               2.9.1.0.25              # ld -v
 o  util-linux             2.10o                   # fdformat --version
-o  modutils               2.3.21                  # insmod -V
+o  modutils               2.4.0                   # insmod -V
 o  e2fsprogs              1.19                    # tune2fs --version
 o  pcmcia-cs              3.1.21                  # cardmgr -V
 o  PPP                    2.4.0                   # pppd --version
@@ -153,7 +153,7 @@ You'll probably want to upgrade.
 Ksymoops
 --------
 
-If the unthinkable happens and your kernel oopses, you'll need a 2.3
+If the unthinkable happens and your kernel oopses, you'll need a 2.4
 version of ksymoops to decode the report; see REPORTING-BUGS in the
 root of the Linux source for more information.
 
@@ -287,11 +287,11 @@ o  <ftp://ftp.win.tue.nl/pub/linux-local/utils/util-linux/util-linux-2.10o.tar.g
 
 Ksymoops
 --------
-o  <ftp://ftp.kernel.org/pub/linux/utils/kernel/ksymoops/v2.3>
+o  <ftp://ftp.kernel.org/pub/linux/utils/kernel/ksymoops/v2.4>
 
 Modutils
 --------
-o  <ftp://ftp.kernel.org/pub/linux/utils/kernel/modutils/v2.3/modutils-2.3.21.tar.bz2>
+o  <ftp://ftp.kernel.org/pub/linux/utils/kernel/modutils/v2.4/>
 
 Mkinitrd
 --------

@@ -21,6 +21,7 @@ obj-y	:= process.o signal.o entry.o traps.o irq.o irq_ipr.o \
 obj-$(CONFIG_CF_ENABLER)	+= cf-enabler.o
 obj-$(CONFIG_CPU_SH4)		+= fpu.o
 obj-$(CONFIG_PCI)		+= pci-sh.o 
+obj-$(CONFIG_SH_RTC)            += rtc.o
 obj-$(CONFIG_SH_STANDARD_BIOS)	+= sh_bios.o
 
 obj-$(CONFIG_SH_HP600)		+= mach_hp600.o

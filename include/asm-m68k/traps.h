@@ -151,7 +151,7 @@ extern e_vector vectors[];
 # define MMU060_RW_W	(0x00800000)	/* write */
 # define MMU060_RW_R	(0x01000000)	/* read */
 # define MMU060_RW_RMW	(0x01800000)	/* read/modify/write */
-# define MMU060_W		(0x00800000)	/* general write, includes rmw */
+# define MMU060_W	(0x00800000)	/* general write, includes rmw */
 #define	MMU060_SIZ	(0x00600000)	/* transfer size */
 #define	MMU060_TT	(0x00180000)	/* transfer type (TT) bits */
 #define	MMU060_TM	(0x00070000)	/* transfer modifier (TM) bits */
@@ -172,12 +172,11 @@ extern e_vector vectors[];
 #define	MMU060_SEE	(0x00000001)	/* software emulated error */
 
 /* cases of missing or invalid descriptors */
-#define MMU060_DESC_ERR	(MMU060_TWE | MMU060_PTA | MMU060_PTB | \
-						 MMU060_IL  | MMU060_PF)
+#define MMU060_DESC_ERR (MMU060_PTA | MMU060_PTB | \
+			 MMU060_IL  | MMU060_PF)
 /* bits that indicate real errors */
-#define MMU060_ERR_BITS	(MMU060_PBE | MMU060_SBE | MMU060_DESC_ERR | \
-						 MMU060_SP  | MMU060_WP  | MMU060_RE | \
-						 MMU060_WE)
+#define MMU060_ERR_BITS (MMU060_PBE | MMU060_SBE | MMU060_DESC_ERR | MMU060_SP | \
+			 MMU060_WP  | MMU060_TWE | MMU060_RE       | MMU060_WE)
 
 /* structure for stack frames */
 

@@ -384,7 +384,7 @@ static void tcp_retransmit_timer(struct sock *sk)
 	if (tp->retransmits > sysctl_tcp_retries1)
 		__sk_dst_reset(sk);
 
-out:
+out:;
 }
 
 static void tcp_write_timer(unsigned long data)

@@ -84,3 +84,14 @@ dig_setup (char **cmdline_p)
 	screen_info.orig_video_isVGA = 1;	/* XXX fake */
 	screen_info.orig_video_ega_bx = 3;	/* XXX fake */
 }
+
+void
+dig_irq_init (void)
+{
+	/*
+	 * Disable the compatibility mode interrupts (8259 style), needs IN/OUT support
+	 * enabled.
+	 */
+	outb(0xff, 0xA1);
+	outb(0xff, 0x21);
+}

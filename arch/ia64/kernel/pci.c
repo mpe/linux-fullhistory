@@ -1,10 +1,8 @@
 /*
- * pci.c - Low-Level PCI Access in IA64
+ * pci.c - Low-Level PCI Access in IA-64
  * 
  * Derived from bios32.c of i386 tree.
- *
  */
-
 #include <linux/config.h>
 
 #include <linux/types.h>
@@ -44,19 +42,16 @@
  * This interrupt-safe spinlock protects all accesses to PCI
  * configuration space.
  */
-
 spinlock_t pci_lock = SPIN_LOCK_UNLOCKED;
 
-struct pci_fixup pcibios_fixups[] = { { 0 } };
-
-#define PCI_NO_CHECKS		0x400
-#define PCI_NO_PEER_FIXUP	0x800
-
-static unsigned int pci_probe = PCI_NO_CHECKS;
+struct pci_fixup pcibios_fixups[] = {
+	{ 0 }
+};
 
 /* Macro to build a PCI configuration address to be passed as a parameter to SAL. */
 
-#define PCI_CONFIG_ADDRESS(dev, where) (((u64) dev->bus->number << 16) | ((u64) (dev->devfn & 0xff) << 8) | (where & 0xff))
+#define PCI_CONFIG_ADDRESS(dev, where) \
+	(((u64) dev->bus->number << 16) | ((u64) (dev->devfn & 0xff) << 8) | (where & 0xff))
 
 static int 
 pci_conf_read_config_byte(struct pci_dev *dev, int where, u8 *value)
@@ -109,8 +104,7 @@ pci_conf_write_config_dword (struct pci_dev *dev, int where, u32 value)
 	return ia64_sal_pci_config_write(PCI_CONFIG_ADDRESS(dev, where), 4, value);
 }
 
-
-static struct pci_ops pci_conf = {
+struct pci_ops pci_conf = {
       pci_conf_read_config_byte,
       pci_conf_read_config_word,
       pci_conf_read_config_dword,
@@ -120,36 +114,21 @@ static struct pci_ops pci_conf = {
 };
 
 /*
- * Try to find PCI BIOS.  This will always work for IA64.
- */
-
-static struct pci_ops * __init
-pci_find_bios(void)
-{
-	return &pci_conf;
-}
-
-/*
  * Initialization. Uses the SAL interface
  */
-
-#define PCI_BUSES_TO_SCAN 255
-
 void __init 
-pcibios_init(void)
+pcibios_init (void)
 {
-	struct pci_ops *ops = NULL;
+#	define PCI_BUSES_TO_SCAN 255
 	int i;
 
-	if ((ops = pci_find_bios()) == NULL) {
-		printk("PCI: No PCI bus detected\n");
-		return;
-	}
+	platform_pci_fixup(0);	/* phase 0 initialization (before PCI bus has been scanned) */
 
 	printk("PCI: Probing PCI hardware\n");
 	for (i = 0; i < PCI_BUSES_TO_SCAN; i++) 
-		pci_scan_bus(i, ops, NULL);
-	platform_pci_fixup();
+		pci_scan_bus(i, &pci_conf, NULL);
+
+	platform_pci_fixup(1);	/* phase 1 initialization (after PCI bus has been scanned) */
 	return;
 }
 
@@ -157,16 +136,15 @@ pcibios_init(void)
  *  Called after each bus is probed, but before its children
  *  are examined.
  */
-
 void __init
-pcibios_fixup_bus(struct pci_bus *b)
+pcibios_fixup_bus (struct pci_bus *b)
 {
 	return;
 }
 
 void __init
-pcibios_update_resource(struct pci_dev *dev, struct resource *root,
-			struct resource *res, int resource)
+pcibios_update_resource (struct pci_dev *dev, struct resource *root,
+			 struct resource *res, int resource)
 {
         unsigned long where, size;
         u32 reg;
@@ -181,7 +159,7 @@ pcibios_update_resource(struct pci_dev *dev, struct resource *root,
 }
 
 void __init
-pcibios_update_irq(struct pci_dev *dev, int irq)
+pcibios_update_irq (struct pci_dev *dev, int irq)
 {
 	pci_write_config_byte(dev, PCI_INTERRUPT_LINE, irq);
 
@@ -204,18 +182,16 @@ pcibios_enable_device (struct pci_dev *dev)
 	return 0;
 }
 
-/*
- * PCI BIOS setup, always defaults to SAL interface
- */
-
-char * __init 
-pcibios_setup(char *str)
-{
-	pci_probe =  PCI_NO_CHECKS;
-	return NULL;
-}
-
 void
 pcibios_align_resource (void *data, struct resource *res, unsigned long size)
 {
+}
+
+/*
+ * PCI BIOS setup, always defaults to SAL interface
+ */
+char * __init 
+pcibios_setup (char *str)
+{
+	return NULL;
 }

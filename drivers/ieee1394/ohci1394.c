@@ -44,6 +44,10 @@
 /* 
  * Acknowledgments:
  *
+ * Adam J Richter <adam@yggdrasil.com>
+ *  . Use of pci_class to find device
+ * Andreas Tobler <toa@pop.agri.ch>
+ *  . Updated proc_fs calls
  * Emilie Chung	<emilie.chung@axis.com>
  *  . Tip on Async Request Filter
  * Pascal Drolet <pascal.drolet@informission.ca>
@@ -85,6 +89,7 @@
 #include <linux/types.h>
 #include <linux/wrapper.h>
 #include <linux/vmalloc.h>
+#include <linux/init.h>
 
 #include "ieee1394.h"
 #include "ieee1394_types.h"
@@ -121,10 +126,13 @@ printk(level "ohci1394_%d: " fmt "\n" , card , ## args)
 	    remove_card(ohci); \
 	      return 1;
 
+#if USE_DEVICE
+
 int supported_chips[][2] = {
 	{ PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_OHCI1394_LV22 },
 	{ PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_OHCI1394_LV23 },
 	{ PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_OHCI1394_LV26 },
+	{ PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_OHCI1394_PCI4450 },
 	{ PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_OHCI1394 },
 	{ PCI_VENDOR_ID_SONY, PCI_DEVICE_ID_SONY_CXD3222 },
 	{ PCI_VENDOR_ID_NEC, PCI_DEVICE_ID_NEC_UPD72862 },
@@ -135,6 +143,30 @@ int supported_chips[][2] = {
 	{ PCI_VENDOR_ID_LUCENT, PCI_DEVICE_ID_LUCENT_FW323 },
 	{ -1, -1 }
 };
+
+#else
+
+#define PCI_CLASS_FIREWIRE_OHCI     ((PCI_CLASS_SERIAL_FIREWIRE << 8) | 0x10)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,4,0)
+static struct pci_device_id ohci1394_pci_tbl[] __initdata = {
+	{
+		class: 		PCI_CLASS_FIREWIRE_OHCI,
+		class_mask: 	0x00ffffff,
+		vendor:		PCI_ANY_ID,
+		device:		PCI_ANY_ID,
+		subvendor:	PCI_ANY_ID,
+		subdevice:	PCI_ANY_ID,
+	},
+	{ 0, },
+};
+MODULE_DEVICE_TABLE(pci, ohci1394_pci_tbl);
+#endif
+
+#endif /* USE_DEVICE */
+
+MODULE_PARM(attempt_root,"i");
+static int attempt_root = 0;
 
 static struct ti_ohci cards[MAX_OHCI1394_CARDS];
 static int num_of_cards = 0;
@@ -640,12 +672,19 @@ static void insert_packet(struct ti_ohci *ohci,
 	else 
 		d->prg_cpu[idx]->begin.status = 0;
 
-	d->prg_cpu[idx]->data[0] = packet->speed_code<<16 |
-		(packet->header[0] & 0xFFFF);
-	d->prg_cpu[idx]->data[1] = (packet->header[1] & 0xFFFF) | 
-		(packet->header[0] & 0xFFFF0000);
-	d->prg_cpu[idx]->data[2] = packet->header[2];
-	d->prg_cpu[idx]->data[3] = packet->header[3];
+        if (packet->type == raw) {
+		d->prg_cpu[idx]->data[0] = OHCI1394_TCODE_PHY<<4;
+		d->prg_cpu[idx]->data[1] = packet->header[0];
+		d->prg_cpu[idx]->data[2] = packet->header[1];
+        }
+        else {
+		d->prg_cpu[idx]->data[0] = packet->speed_code<<16 |
+			(packet->header[0] & 0xFFFF);
+		d->prg_cpu[idx]->data[1] = (packet->header[1] & 0xFFFF) | 
+			(packet->header[0] & 0xFFFF0000);
+		d->prg_cpu[idx]->data[2] = packet->header[2];
+		d->prg_cpu[idx]->data[3] = packet->header[3];
+        }
 
 	if (packet->data_size) { /* block transmit */
 		d->prg_cpu[idx]->begin.control = OUTPUT_MORE_IMMEDIATE | 0x10;
@@ -673,8 +712,13 @@ static void insert_packet(struct ti_ohci *ohci,
 		d->branchAddrPtr = &(d->prg_cpu[idx]->end.branchAddress);
 	}
 	else { /* quadlet transmit */
-		d->prg_cpu[idx]->begin.control = 
-			OUTPUT_LAST_IMMEDIATE | packet->header_size;
+                if (packet->type == raw)
+                        d->prg_cpu[idx]->begin.control =
+				OUTPUT_LAST_IMMEDIATE|(packet->header_size+4);
+                else
+                        d->prg_cpu[idx]->begin.control =
+                                OUTPUT_LAST_IMMEDIATE|packet->header_size;
+
 		if (d->branchAddrPtr) 
 			*(d->branchAddrPtr) = d->prg_bus[idx] | 0x2;
 		d->branchAddrPtr = &(d->prg_cpu[idx]->begin.branchAddress);
@@ -788,12 +832,12 @@ static int ohci_devctl(struct hpsb_host *host, enum devctl_cmd cmd, int arg)
 		/*
 		 * FIXME: this flag might be necessary in some case
 		 */
-		/* host->attempt_root = 1; */
 		PRINT(KERN_INFO, ohci->id, "resetting bus on request%s",
-		      (host->attempt_root ? " and attempting to become root"
-		       : ""));
+		      ((host->attempt_root || attempt_root) ? 
+		       " and attempting to become root" : ""));
 		reg_write(ohci, OHCI1394_PhyControl, 
-			  (host->attempt_root) ? 0x000041ff : 0x0000417f);
+			  (host->attempt_root || attempt_root) ? 
+			  0x000041ff : 0x0000417f);
 		break;
 
 	case GET_CYCLE_COUNTER:
@@ -842,62 +886,74 @@ static int ohci_devctl(struct hpsb_host *host, enum devctl_cmd cmd, int arg)
 
 	case ISO_LISTEN_CHANNEL:
         {
-                int *isochannels, offset= OHCI1394_IRMultiChanMaskLoSet;
-                unsigned int channel= (unsigned int)arg;
-                unsigned int channelbit= channel;
-                u32 setMask= 0x00000001;
+		u64 mask;
 
-                /* save people from themselves */
-                if (channel > 63)
-                        break;
+		if (arg<0 || arg>63) {
+			PRINT(KERN_ERR, ohci->id, __FUNCTION__
+			      "IS0_LISTEN_CHANNEL channel %d out of range", 
+			      arg);
+			return -EFAULT;
+		}
 
-                if (channel > 31) {
-                        isochannels= &(((int*)&ohci->IR_channel_usage)[0]);
-                        channelbit-= 32;
-                        offset= OHCI1394_IRMultiChanMaskHiSet;
-                }
-                else
-                        isochannels= &(((int*)&ohci->IR_channel_usage)[1]);
-
-                while(channelbit--) setMask= setMask << 1;
-
+		mask = (u64)0x1<<arg;
+		
                 spin_lock_irqsave(&ohci->IR_channel_lock, flags);
 
-                if (!test_and_set_bit(channelbit, isochannels))
-                        reg_write(ohci, offset, setMask);
+		if (ohci->ISO_channel_usage & mask) {
+			PRINT(KERN_ERR, ohci->id, __FUNCTION__
+			      "IS0_LISTEN_CHANNEL channel %d already used", 
+			      arg);
+			spin_unlock_irqrestore(&ohci->IR_channel_lock, flags);
+			return -EFAULT;
+		}
+		
+		ohci->ISO_channel_usage |= mask;
+
+		if (arg>31) 
+			reg_write(ohci, OHCI1394_IRMultiChanMaskHiSet, 
+				  1<<(arg-32));			
+		else
+			reg_write(ohci, OHCI1394_IRMultiChanMaskLoSet, 
+				  1<<arg);			
 
                 spin_unlock_irqrestore(&ohci->IR_channel_lock, flags);
-                DBGMSG(ohci->id, "listening enabled on channel %u", channel);
+                DBGMSG(ohci->id, "listening enabled on channel %d", arg);
                 break;
         }
 	case ISO_UNLISTEN_CHANNEL:
         {
-                int *isochannels, offset= OHCI1394_IRMultiChanMaskLoClear;
-                unsigned int channel= (unsigned int)arg;
-                unsigned int channelbit= channel;
-                u32 clearMask= 0x00000001;
+		u64 mask;
 
-                /* save people from themselves */
-                if (channel > 63)
-                        break;
+		if (arg<0 || arg>63) {
+			PRINT(KERN_ERR, ohci->id, __FUNCTION__
+			      "IS0_UNLISTEN_CHANNEL channel %d out of range", 
+			      arg);
+			return -EFAULT;
+		}
 
-                if (channel > 31) {
-                        isochannels= &(((int*)&ohci->IR_channel_usage)[0]);
-                        channelbit-= 32;
-                        offset= OHCI1394_IRMultiChanMaskHiClear;
-                }
-                else
-                        isochannels= &(((int*)&ohci->IR_channel_usage)[1]);
-
-                while(channelbit--) clearMask= clearMask << 1;
-
+		mask = (u64)0x1<<arg;
+		
                 spin_lock_irqsave(&ohci->IR_channel_lock, flags);
 
-                if (!test_and_clear_bit(channelbit, isochannels))
-                        reg_write(ohci, offset, clearMask);
+		if (!(ohci->ISO_channel_usage & mask)) {
+			PRINT(KERN_ERR, ohci->id, __FUNCTION__
+			      "IS0_UNLISTEN_CHANNEL channel %d not used", 
+			      arg);
+			spin_unlock_irqrestore(&ohci->IR_channel_lock, flags);
+			return -EFAULT;
+		}
+		
+		ohci->ISO_channel_usage &= ~mask;
+
+		if (arg>31) 
+			reg_write(ohci, OHCI1394_IRMultiChanMaskHiClear, 
+				  1<<(arg-32));			
+		else
+			reg_write(ohci, OHCI1394_IRMultiChanMaskLoClear, 
+				  1<<arg);			
 
                 spin_unlock_irqrestore(&ohci->IR_channel_lock, flags);
-                DBGMSG(ohci->id, "listening disabled on channel %u", channel);
+                DBGMSG(ohci->id, "listening disabled on channel %d", arg);
                 break;
         }
 	default:
@@ -1750,7 +1806,7 @@ static int add_card(struct pci_dev *dev)
 	 * is to allocate 8192 bytes instead of 2048
 	 */
 	ohci->selfid_buf_cpu = 
-		pci_alloc_consistent(ohci->dev, 2048, &ohci->selfid_buf_bus);
+		pci_alloc_consistent(ohci->dev, 8192, &ohci->selfid_buf_bus);
 	if (ohci->selfid_buf_cpu == NULL) {
 		FAIL("failed to allocate DMA buffer for self-id packets");
 	}
@@ -1827,7 +1883,7 @@ static int add_card(struct pci_dev *dev)
 		FAIL("failed to allocate IR context");
 	}
 
-        ohci->IR_channel_usage= 0x0000000000000000;
+        ohci->ISO_channel_usage= 0;
         spin_lock_init(&ohci->IR_channel_lock);
 
 	if (!request_irq(dev->irq, ohci_irq_handler, SA_SHIRQ,
@@ -1852,12 +1908,7 @@ static int add_card(struct pci_dev *dev)
 p += sprintf(p,fmt,reg_read(ohci, reg0),\
 	       reg_read(ohci, reg1),reg_read(ohci, reg2));
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
 static int ohci_get_status(char *buf)
-#else
-int ohci_get_info(char *buf, char **start, off_t fpos, 
-		  int length, int dummy)
-#endif
 {
 	struct ti_ohci *ohci=&cards[0];
 	struct hpsb_host *host=ohci->host;
@@ -2074,7 +2125,6 @@ int ohci_get_info(char *buf, char **start, off_t fpos,
 	return  p - buf;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
 static int ohci1394_read_proc(char *page, char **start, off_t off,
 			      int count, int *eof, void *data)
 {
@@ -2086,20 +2136,9 @@ static int ohci1394_read_proc(char *page, char **start, off_t off,
         if (len<0) len = 0;
         return len;
 }
-#else
-struct proc_dir_entry ohci_proc_entry = 
-{
-	0,			/* Inode number - dynamic */
-	8,			/* Length of the file name */
-	"ohci1394",		/* The file name */
-	S_IFREG | S_IRUGO,	/* File mode */
-	1,			/* Number of links */
-	0, 0,			/* The uid and gid for the file */
-	0,			/* The size of the file reported by ls. */
-	NULL,			/* functions which can be done on the inode */
-	ohci_get_info,		/* The read function for this file */
-	NULL
-}; 
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
+struct proc_dir_entry *ohci_proc_entry;
 #endif /* LINUX_VERSION_CODE */
 #endif /* CONFIG_PROC_FS */
 
@@ -2147,8 +2186,9 @@ static int init_driver()
 {
 	struct pci_dev *dev = NULL;
 	int success = 0;
+#if USE_DEVICE
 	int i;
-
+#endif
 	if (num_of_cards) {
 		PRINT_G(KERN_DEBUG, __PRETTY_FUNCTION__ " called again");
 		return 0;
@@ -2156,6 +2196,7 @@ static int init_driver()
 
 	PRINT_G(KERN_INFO, "looking for Ohci1394 cards");
 
+#if USE_DEVICE
 	for (i = 0; supported_chips[i][0] != -1; i++) {
 		while ((dev = pci_find_device(supported_chips[i][0],
 					      supported_chips[i][1], dev)) 
@@ -2165,7 +2206,11 @@ static int init_driver()
 			}
 		}
 	}
-
+#else
+	while ((dev = pci_find_class(PCI_CLASS_FIREWIRE_OHCI, dev)) != NULL ) {
+		if (add_card(dev) == 0) success = 1;
+ 	}
+#endif /* USE_DEVICE */
 	if (success == 0) {
 		PRINT_G(KERN_WARNING, "no operable Ohci1394 cards found");
 		return -ENXIO;
@@ -2175,10 +2220,8 @@ static int init_driver()
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
 	create_proc_read_entry ("ohci1394", 0, NULL, ohci1394_read_proc, NULL);
 #else
-	if (proc_register(&proc_root, &ohci_proc_entry)) {
-		PRINT_G(KERN_ERR, "unable to register proc file");
-		return -EIO;
-	}
+	if ((ohci_proc_entry = create_proc_entry("ohci1394", 0, NULL)))
+		ohci_proc_entry->read_proc = ohci1394_read_proc;
 #endif
 #endif
 	return 0;
@@ -2195,6 +2238,24 @@ static size_t get_ohci_rom(struct hpsb_host *host, const quadlet_t **ptr)
 	return sizeof(ohci_csr_rom);
 }
 
+static quadlet_t ohci_hw_csr_reg(struct hpsb_host *host, int reg,
+				 quadlet_t data, quadlet_t compare)
+{
+	struct ti_ohci *ohci=host->hostdata;
+	int timeout = 255;
+
+	reg_write(ohci, OHCI1394_CSRData, data);
+	reg_write(ohci, OHCI1394_CSRCompareData, compare);
+	reg_write(ohci, OHCI1394_CSRControl, reg&0x3);
+
+	while (timeout-- && !(reg_read(ohci, OHCI1394_CSRControl)&0x80000000));
+
+	if (!timeout)
+		PRINT(KERN_ERR, ohci->id, __FUNCTION__ "timeout!");
+
+	return reg_read(ohci, OHCI1394_CSRData);
+}
+		
 struct hpsb_host_template *get_ohci_template(void)
 {
 	static struct hpsb_host_template tmpl;
@@ -2211,7 +2272,7 @@ struct hpsb_host_template *get_ohci_template(void)
 		tmpl.get_rom = get_ohci_rom;
 		tmpl.transmit_packet = ohci_transmit;
 		tmpl.devctl = ohci_devctl;
-
+		tmpl.hw_csr_reg = ohci_hw_csr_reg;
 		initialized = 1;
 	}
 
@@ -2343,11 +2404,7 @@ void cleanup_module(void)
 {
 	hpsb_unregister_lowlevel(get_ohci_template());
 #ifdef CONFIG_PROC_FS
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
 	remove_proc_entry ("ohci1394", NULL);
-#else
-	proc_unregister(&proc_root, ohci_proc_entry.low_ino);
-#endif
 #endif
 
 	PRINT_G(KERN_INFO, "removed " OHCI1394_DRIVER_NAME " module");

@@ -572,7 +572,8 @@ getreg(unsigned long regnum, unsigned long *val, int *nat, struct pt_regs *regs)
 	 */
 	if (regnum == 0) {
 		*val = 0;
-		*nat = 0;
+		if (nat)
+			*nat = 0;
 		return;
 	}
 
@@ -1563,9 +1564,13 @@ ia64_handle_unaligned(unsigned long ifa, struct pt_regs *regs)
 
 	DPRINT(("ret=%d\n", ret));
 	if (ret) {
-		lock_kernel();
-	        force_sig(SIGSEGV, current);
-	        unlock_kernel();
+		struct siginfo si;
+
+		si.si_signo = SIGBUS;
+		si.si_errno = 0;
+		si.si_code = BUS_ADRALN;
+		si.si_addr = (void *) ifa;
+	        force_sig_info(SIGBUS, &si, current);
 	} else {
 		/*
 	 	 * given today's architecture this case is not likely to happen

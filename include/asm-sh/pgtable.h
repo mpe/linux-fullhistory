@@ -105,8 +105,23 @@ extern unsigned long empty_zero_page[1024];
 #define _PAGE_ACCESSED 	0x400  /* software: page referenced */
 #define _PAGE_U0_SHARED 0x800  /* software: page is shared in user space */
 
+
+/* software: moves to PTEA.TC (Timing Control) */
+#define _PAGE_PCC_AREA5	0x00000000	/* use BSC registers for area5 */
+#define _PAGE_PCC_AREA6	0x80000000	/* use BSC registers for area6 */
+
+/* software: moves to PTEA.SA[2:0] (Space Attributes) */
+#define _PAGE_PCC_IODYN 0x00000001	/* IO space, dynamically sized bus */
+#define _PAGE_PCC_IO8	0x20000000	/* IO space, 8 bit bus */
+#define _PAGE_PCC_IO16	0x20000001	/* IO space, 16 bit bus */
+#define _PAGE_PCC_COM8	0x40000000	/* Common Memory space, 8 bit bus */
+#define _PAGE_PCC_COM16	0x40000001	/* Common Memory space, 16 bit bus */
+#define _PAGE_PCC_ATR8	0x60000000	/* Attribute Memory space, 8 bit bus */
+#define _PAGE_PCC_ATR16	0x60000001	/* Attribute Memory space, 6 bit bus */
+
+
 /* Mask which drop software flags */
-#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff1ff
+#define _PAGE_FLAGS_HARDWARE_MASK	0x1ffff1fe
 /* Hardware flags: SZ=1 (4k-byte) */
 #define _PAGE_FLAGS_HARD		0x00000010
 
@@ -126,6 +141,8 @@ extern unsigned long empty_zero_page[1024];
 #define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_CACHABLE | _PAGE_ACCESSED | _PAGE_FLAGS_HARD)
 #define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_CACHABLE | _PAGE_DIRTY | _PAGE_ACCESSED | _PAGE_HW_SHARED | _PAGE_FLAGS_HARD)
 #define PAGE_KERNEL_RO	__pgprot(_PAGE_PRESENT | _PAGE_CACHABLE | _PAGE_DIRTY | _PAGE_ACCESSED | _PAGE_HW_SHARED | _PAGE_FLAGS_HARD)
+#define PAGE_KERNEL_PCC(slot, type) \
+			__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | _PAGE_ACCESSED | _PAGE_FLAGS_HARD | (slot ? _PAGE_PCC_AREA5 : _PAGE_PCC_AREA6) | (type))
 
 /*
  * As i386 and MIPS, SuperH can't do page protection for execute, and
@@ -178,23 +195,23 @@ extern void __handle_bad_pmd_kernel(pmd_t * pmd);
  * The following only work if pte_present() is true.
  * Undefined behaviour if not..
  */
-extern inline int pte_read(pte_t pte) { return pte_val(pte) & _PAGE_USER; }
-extern inline int pte_exec(pte_t pte) { return pte_val(pte) & _PAGE_USER; }
-extern inline int pte_dirty(pte_t pte){ return pte_val(pte) & _PAGE_DIRTY; }
-extern inline int pte_young(pte_t pte){ return pte_val(pte) & _PAGE_ACCESSED; }
-extern inline int pte_write(pte_t pte){ return pte_val(pte) & _PAGE_RW; }
-extern inline int pte_shared(pte_t pte){ return pte_val(pte) & _PAGE_SHARED; }
+static inline int pte_read(pte_t pte) { return pte_val(pte) & _PAGE_USER; }
+static inline int pte_exec(pte_t pte) { return pte_val(pte) & _PAGE_USER; }
+static inline int pte_dirty(pte_t pte){ return pte_val(pte) & _PAGE_DIRTY; }
+static inline int pte_young(pte_t pte){ return pte_val(pte) & _PAGE_ACCESSED; }
+static inline int pte_write(pte_t pte){ return pte_val(pte) & _PAGE_RW; }
+static inline int pte_shared(pte_t pte){ return pte_val(pte) & _PAGE_SHARED; }
 
-extern inline pte_t pte_rdprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_USER)); return pte; }
-extern inline pte_t pte_exprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_USER)); return pte; }
-extern inline pte_t pte_mkclean(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_DIRTY)); return pte; }
-extern inline pte_t pte_mkold(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_ACCESSED)); return pte; }
-extern inline pte_t pte_wrprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_RW)); return pte; }
-extern inline pte_t pte_mkread(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_USER)); return pte; }
-extern inline pte_t pte_mkexec(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_USER)); return pte; }
-extern inline pte_t pte_mkdirty(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_DIRTY)); return pte; }
-extern inline pte_t pte_mkyoung(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_ACCESSED)); return pte; }
-extern inline pte_t pte_mkwrite(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_RW)); return pte; }
+static inline pte_t pte_rdprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_USER)); return pte; }
+static inline pte_t pte_exprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_USER)); return pte; }
+static inline pte_t pte_mkclean(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_DIRTY)); return pte; }
+static inline pte_t pte_mkold(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_ACCESSED)); return pte; }
+static inline pte_t pte_wrprotect(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) & ~_PAGE_RW)); return pte; }
+static inline pte_t pte_mkread(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_USER)); return pte; }
+static inline pte_t pte_mkexec(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_USER)); return pte; }
+static inline pte_t pte_mkdirty(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_DIRTY)); return pte; }
+static inline pte_t pte_mkyoung(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_ACCESSED)); return pte; }
+static inline pte_t pte_mkwrite(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | _PAGE_RW)); return pte; }
 
 /*
  * Conversion functions: convert a page and protection to a page entry,
@@ -215,7 +232,7 @@ extern inline pte_t pte_mkwrite(pte_t pte)	{ set_pte(&pte, __pte(pte_val(pte) | 
 #define mk_pte_phys(physpage, pgprot) \
 ({ pte_t __pte; set_pte(&__pte, __pte(physpage + pgprot_val(pgprot))); __pte; })
 
-extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
+static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { set_pte(&pte, __pte((pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot))); return pte; }
 
 #define page_pte(page) page_pte_prot(page, __pgprot(0))

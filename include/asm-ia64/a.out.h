@@ -7,14 +7,13 @@
  * probably would be better to clean up binfmt_elf.c so it does not
  * necessarily depend on there being a.out support.
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
 #include <linux/types.h>
 
-struct exec
-{
+struct exec {
 	unsigned long a_info;
 	unsigned long a_text;
 	unsigned long a_data;
@@ -31,7 +30,7 @@ struct exec
 #define N_TXTOFF(x)	0
 
 #ifdef __KERNEL__
-# define STACK_TOP	0xa000000000000000UL
+# define STACK_TOP	(0x8000000000000000UL + (1UL << (4*PAGE_SHIFT - 12)))
 # define IA64_RBS_BOT	(STACK_TOP - 0x80000000L)	/* bottom of register backing store */
 #endif
 

@@ -19,8 +19,8 @@ struct spinlock_debug
 struct rwlock_debug
 {
 	rwlock_t l;
-	int read_locked_map;
-	int write_locked_map;
+	long read_locked_map;
+	long write_locked_map;
 };
 
 #define DECLARE_LOCK(l) 						\

@@ -23,9 +23,13 @@
 
 #include "ieee1394_types.h"
 
-#define IEEE1394_USE_BOTTOM_HALVES 0
+#define IEEE1394_USE_BOTTOM_HALVES 1
 
 #define OHCI1394_DRIVER_NAME      "ohci1394"
+
+#define USE_DEVICE 0
+
+#if USE_DEVICE
 
 #ifndef PCI_DEVICE_ID_TI_OHCI1394_LV22
 #define PCI_DEVICE_ID_TI_OHCI1394_LV22 0x8009
@@ -37,6 +41,10 @@
 
 #ifndef PCI_DEVICE_ID_TI_OHCI1394_LV26
 #define PCI_DEVICE_ID_TI_OHCI1394_LV26 0x8020
+#endif
+
+#ifndef PCI_DEVICE_ID_TI_OHCI1394_PCI4450
+#define PCI_DEVICE_ID_TI_OHCI1394_PCI4450 0x8011
 #endif
 
 #ifndef PCI_DEVICE_ID_VIA_OHCI1394
@@ -82,6 +90,9 @@
 #ifndef PCI_DEVICE_ID_LUCENT_FW323
 #define PCI_DEVICE_ID_LUCENT_FW323 0x5811
 #endif
+
+#endif /* USE_DEVICE */
+
 
 #define MAX_OHCI1394_CARDS        4
 
@@ -218,12 +229,13 @@ struct ti_ohci {
 
         /* iso receive */
 	struct dma_rcv_ctx *ir_context;
-        u64 IR_channel_usage;
         spinlock_t IR_channel_lock;
 	int nb_iso_rcv_ctx;
 
         /* iso transmit */
 	int nb_iso_xmit_ctx;
+
+        u64 ISO_channel_usage;
 
         /* IEEE-1394 part follows */
         struct hpsb_host *host;
@@ -450,6 +462,8 @@ quadlet_t ohci_csr_rom[] = {
 #define DMA_SPEED_100                    0x0
 #define DMA_SPEED_200                    0x1
 #define DMA_SPEED_400                    0x2
+
+#define OHCI1394_TCODE_PHY               0xE
 
 void ohci1394_stop_context(struct ti_ohci *ohci, int reg, char *msg);
 struct ti_ohci *ohci1394_get_struct(int card_num);

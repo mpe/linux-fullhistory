@@ -38,7 +38,7 @@
 #include <linux/config.h>
 
 /* current version of this driver-source: */
-#define IBMMCA_SCSI_DRIVER_VERSION "4.0"
+#define IBMMCA_SCSI_DRIVER_VERSION "4.0a"
 
 #define IBMLOCK spin_lock_irqsave(&io_request_lock, flags);
 #define IBMUNLOCK spin_unlock_irqrestore(&io_request_lock, flags);
@@ -490,6 +490,7 @@ static int probe_bus_mode(int);
 static int device_exists (int, int, int *, int *);
 static struct Scsi_Host *ibmmca_register(Scsi_Host_Template *,
 					 int, int, int, char *);
+static int option_setup(char *);
 /* local functions needed for proc_info */
 static int ldn_access_load(int, int);
 static int ldn_access_total_read_write(int);
@@ -750,7 +751,7 @@ static void internal_done (Scsi_Cmnd * cmd)
 /* SCSI-SCB-command for device_inquiry */
 static int device_inquiry(int host_index, int ldn)
 {
-   int retries;
+   int retr;
    struct im_scb *scb;
    struct im_tsb *tsb;
    unsigned char *buf;
@@ -759,14 +760,14 @@ static int device_inquiry(int host_index, int ldn)
    tsb = &(ld(host_index)[ldn].tsb);
    buf = (unsigned char *)(&(ld(host_index)[ldn].buf));
    ld(host_index)[ldn].tsb.dev_status = 0; /* prepare statusblock */
-   for (retries = 0; retries < 3; retries++) {
+   for (retr=0; retr<3; retr++) {
       /* fill scb with inquiry command */
       scb->command = IM_DEVICE_INQUIRY_CMD | IM_NO_DISCONNECT;
       scb->enable = IM_REPORT_TSB_ONLY_ON_ERROR | IM_READ_CONTROL | IM_SUPRESS_EXCEPTION_SHORT | IM_RETRY_ENABLE | IM_BYPASS_BUFFER;
       last_scsi_command(host_index)[ldn] = IM_DEVICE_INQUIRY_CMD;
       last_scsi_type(host_index)[ldn] = IM_SCB;
       scb->sys_buf_adr = virt_to_bus(buf);
-      scb->sys_buf_length = 0xff; /* maximum bufferlength gives max info */
+      scb->sys_buf_length = 255; /* maximum bufferlength gives max info */
       scb->tsb_adr = virt_to_bus(tsb);
       /* issue scb to passed ldn, and busy wait for interrupt */
       got_interrupt(host_index) = 0;
@@ -780,7 +781,7 @@ static int device_inquiry(int host_index, int ldn)
 	return 1;
    }
    /*if all three retries failed, return "no device at this ldn" */
-   if (retries >= 3)
+   if (retr >= 3)
      return 0;
    else
      return 1;
@@ -788,7 +789,7 @@ static int device_inquiry(int host_index, int ldn)
 
 static int read_capacity(int host_index, int ldn)
 {
-   int retries;
+   int retr;
    struct im_scb *scb;
    struct im_tsb *tsb;
    unsigned char *buf;
@@ -797,7 +798,7 @@ static int read_capacity(int host_index, int ldn)
    tsb = &(ld(host_index)[ldn].tsb);
    buf = (unsigned char *)(&(ld(host_index)[ldn].buf));
    ld(host_index)[ldn].tsb.dev_status = 0;
-   for (retries = 0; retries < 3; retries++) {
+   for (retr=0; retr<3; retr++) {
       /*fill scb with read capacity command */
       scb->command = IM_READ_CAPACITY_CMD;
       scb->enable = IM_REPORT_TSB_ONLY_ON_ERROR | IM_READ_CONTROL | IM_RETRY_ENABLE | IM_BYPASS_BUFFER;
@@ -818,7 +819,7 @@ static int read_capacity(int host_index, int ldn)
 	return 1;
    }
    /*if all three retries failed, return "no device at this ldn" */
-   if (retries >= 3)
+   if (retr >= 3)
      return 0;
    else
      return 1;
@@ -826,7 +827,7 @@ static int read_capacity(int host_index, int ldn)
 
 static int get_pos_info(int host_index)
 {
-   int retries;
+   int retr;
    struct im_scb *scb;
    struct im_tsb *tsb;
    unsigned char *buf;
@@ -835,7 +836,7 @@ static int get_pos_info(int host_index)
    tsb = &(ld(host_index)[MAX_LOG_DEV].tsb);
    buf = (unsigned char *)(&(ld(host_index)[MAX_LOG_DEV].buf));
    ld(host_index)[MAX_LOG_DEV].tsb.dev_status = 0;
-   for (retries = 0; retries < 3; retries++) {
+   for (retr=0; retr<3; retr++) {
       /*fill scb with get_pos_info command */
       scb->command = IM_GET_POS_INFO_CMD;
       scb->enable = IM_READ_CONTROL | IM_REPORT_TSB_ONLY_ON_ERROR | IM_RETRY_ENABLE | IM_BYPASS_BUFFER;
@@ -859,7 +860,7 @@ static int get_pos_info(int host_index)
 	return 1;
    }
    /* if all three retries failed, return "no device at this ldn" */
-   if (retries >= 3)
+   if (retr >= 3)
      return 0;
    else
      return 1;
@@ -872,33 +873,33 @@ static int immediate_assign(int host_index, unsigned int pun,
                             unsigned int lun, unsigned int ldn,
                             unsigned int operation)
 {
-   int retries;
-   unsigned long imm_command;
+   int retr;
+   unsigned long imm_cmd;
 
-   for (retries=0; retries<3; retries ++) {
+   for (retr=0; retr<3; retr++) {
       /* select mutation level of the SCSI-adapter */
       switch (special(host_index)) {
        case IBM_SCSI2_FW:
-	 imm_command = (unsigned long)(IM_ASSIGN_IMM_CMD);
-	 imm_command |= (unsigned long)((lun & 7) << 24);
-	 imm_command |= (unsigned long)((operation & 1) << 23);
-	 imm_command |= (unsigned long)((pun & 7)<< 20)|((pun & 8)<< 24);
-	 imm_command |= (unsigned long)((ldn & 15) << 16);
+	 imm_cmd = (unsigned long)(IM_ASSIGN_IMM_CMD);
+	 imm_cmd |= (unsigned long)((lun & 7) << 24);
+	 imm_cmd |= (unsigned long)((operation & 1) << 23);
+	 imm_cmd |= (unsigned long)((pun & 7)<< 20)|((pun & 8)<< 24);
+	 imm_cmd |= (unsigned long)((ldn & 15) << 16);
 	 break;
        default:
-	 imm_command = inl(IM_CMD_REG(host_index));
-	 imm_command &= (unsigned long)(0xF8000000); /* keep reserved bits */
-	 imm_command |= (unsigned long)(IM_ASSIGN_IMM_CMD);
-	 imm_command |= (unsigned long)((lun & 7) << 24);
-	 imm_command |= (unsigned long)((operation & 1) << 23);
-	 imm_command |= (unsigned long)((pun & 7) << 20);
-	 imm_command |= (unsigned long)((ldn & 15) << 16);
+	 imm_cmd = inl(IM_CMD_REG(host_index));
+	 imm_cmd &= (unsigned long)(0xF8000000); /* keep reserved bits */
+	 imm_cmd |= (unsigned long)(IM_ASSIGN_IMM_CMD);
+	 imm_cmd |= (unsigned long)((lun & 7) << 24);
+	 imm_cmd |= (unsigned long)((operation & 1) << 23);
+	 imm_cmd |= (unsigned long)((pun & 7) << 20);
+	 imm_cmd |= (unsigned long)((ldn & 15) << 16);
 	 break;
       }
       last_scsi_command(host_index)[MAX_LOG_DEV] = IM_ASSIGN_IMM_CMD;
       last_scsi_type(host_index)[MAX_LOG_DEV] = IM_IMM_CMD;
       got_interrupt(host_index) = 0;
-      issue_cmd (host_index, (unsigned long)(imm_command), IM_IMM_CMD | MAX_LOG_DEV);
+      issue_cmd (host_index, (unsigned long)(imm_cmd), IM_IMM_CMD | MAX_LOG_DEV);
       while (!got_interrupt(host_index))
 	barrier ();
 
@@ -906,7 +907,7 @@ static int immediate_assign(int host_index, unsigned int pun,
       if (stat_result(host_index) == IM_IMMEDIATE_CMD_COMPLETED)
 	return 1;
    }
-   if (retries >= 3)
+   if (retr >= 3)
      return 0;
    else
      return 1;
@@ -915,21 +916,21 @@ static int immediate_assign(int host_index, unsigned int pun,
 static int immediate_feature(int host_index, unsigned int speed,
 			     unsigned int timeout)
 {
-   int retries;
-   unsigned long imm_command;
+   int retr;
+   unsigned long imm_cmd;
 
-   for (retries=0; retries<3; retries ++) {
+   for (retr=0; retr<3; retr++) {
       /* select mutation level of the SCSI-adapter */
-      imm_command  = IM_FEATURE_CTR_IMM_CMD;
-      imm_command |= (unsigned long)((speed & 0x7) << 29);
-      imm_command |= (unsigned long)((timeout & 0x1fff) << 16);
+      imm_cmd  = IM_FEATURE_CTR_IMM_CMD;
+      imm_cmd |= (unsigned long)((speed & 0x7) << 29);
+      imm_cmd |= (unsigned long)((timeout & 0x1fff) << 16);
       last_scsi_command(host_index)[MAX_LOG_DEV] = IM_FEATURE_CTR_IMM_CMD;
       last_scsi_type(host_index)[MAX_LOG_DEV] = IM_IMM_CMD;
       got_interrupt(host_index) = 0;
       /* we need to run into command errors in order to probe for the
        * right speed! */
       global_command_error_excuse = 1;
-      issue_cmd (host_index, (unsigned long)(imm_command), IM_IMM_CMD | MAX_LOG_DEV);
+      issue_cmd (host_index, (unsigned long)(imm_cmd), IM_IMM_CMD | MAX_LOG_DEV);
       while (!got_interrupt(host_index))
 	barrier ();
       if (global_command_error_excuse == CMD_FAIL) {
@@ -941,7 +942,7 @@ static int immediate_feature(int host_index, unsigned int speed,
       if (stat_result(host_index) == IM_IMMEDIATE_CMD_COMPLETED)
 	return 1;
    }
-   if (retries >= 3)
+   if (retr >= 3)
      return 0;
    else
      return 1;
@@ -988,33 +989,31 @@ static int immediate_reset(int host_index, unsigned int ldn)
 #endif
 
 /* type-interpreter for physical device numbers */
-static char *ti_p(int value)
+static char *ti_p(int dev)
 {
-   switch (value) {
-    case TYPE_IBM_SCSI_ADAPTER: return("A"); break;
-    case TYPE_DISK:             return("D"); break;
-    case TYPE_TAPE:             return("T"); break;
-    case TYPE_PROCESSOR:        return("P"); break;
-    case TYPE_WORM:             return("W"); break;
-    case TYPE_ROM:              return("R"); break;
-    case TYPE_SCANNER:          return("S"); break;
-    case TYPE_MOD:              return("M"); break;
-    case TYPE_MEDIUM_CHANGER:   return("C"); break;
-    case TYPE_NO_LUN:           return("+"); break; /* show NO_LUN */
-    case TYPE_NO_DEVICE:
-    default:                    return("-"); break;
+   switch (dev) {
+    case TYPE_IBM_SCSI_ADAPTER: return("A");
+    case TYPE_DISK:             return("D");
+    case TYPE_TAPE:             return("T");
+    case TYPE_PROCESSOR:        return("P");
+    case TYPE_WORM:             return("W");
+    case TYPE_ROM:              return("R");
+    case TYPE_SCANNER:          return("S");
+    case TYPE_MOD:              return("M");
+    case TYPE_MEDIUM_CHANGER:   return("C");
+    case TYPE_NO_LUN:           return("+"); /* show NO_LUN */
    }
-   return("-");
+   return("-"); /* TYPE_NO_DEVICE and others */
 }
 
 /* interpreter for logical device numbers (ldn) */
-static char *ti_l(int value)
+static char *ti_l(int val)
 {
    const char hex[16] = "0123456789abcdef";
    static char answer[2];
 
    answer[1] = (char)(0x0);
-   if (value<=MAX_LOG_DEV) answer[0] = hex[value]; else answer[0] = '-';
+   if (val<=MAX_LOG_DEV) answer[0] = hex[val]; else answer[0] = '-';
    return (char *)&answer;
 }
 
@@ -1022,14 +1021,14 @@ static char *ti_l(int value)
 static char *ibmrate(unsigned int speed, int i)
 {
    switch (speed) {
-    case 0: if (i) return "5.00"; else return "10.00"; break;
-    case 1: if (i) return "4.00"; else return "8.00"; break;
-    case 2: if (i) return "3.33"; else return "6.66"; break;
-    case 3: if (i) return "2.86"; else return "5.00"; break;
-    case 4: if (i) return "2.50"; else return "4.00"; break;
-    case 5: if (i) return "2.22"; else return "3.10"; break;
-    case 6: if (i) return "2.00"; else return "2.50"; break;
-    case 7: if (i) return "1.82"; else return "2.00"; break;
+    case 0: return i ? "5.00" : "10.00";
+    case 1: return i ? "4.00" : "8.00";
+    case 2: return i ? "3.33" : "6.66";
+    case 3: return i ? "2.86" : "5.00";
+    case 4: return i ? "2.50" : "4.00";
+    case 5: return i ? "2.22" : "3.10";
+    case 6: return i ? "2.00" : "2.50";
+    case 7: return i ? "1.82" : "2.00";
    }
    return "---";
 }
@@ -1399,7 +1398,6 @@ static int device_exists (int host_index, int ldn, int *block_length,
    return 0;
 }
 
-#ifdef CONFIG_SCSI_IBMMCA
 void internal_ibmmca_scsi_setup (char *str, int *ints)
 {
    int i, j, io_base, id_base;
@@ -1436,7 +1434,6 @@ void internal_ibmmca_scsi_setup (char *str, int *ints)
    }
    return;
 }
-#endif
 
 static int ibmmca_getinfo (char *buf, int slot, void *dev)
 {

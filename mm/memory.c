@@ -483,9 +483,10 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 			goto out_unlock;
 		}
 		map = get_page_map(map);
-		if (map)
+		if (map) {
+			flush_dcache_page(map);
 			atomic_inc(&map->count);
-		else
+		} else
 			printk (KERN_INFO "Mapped page missing [%d]\n", i);
 		spin_unlock(&mm->page_table_lock);
 		iobuf->maplist[i] = map;

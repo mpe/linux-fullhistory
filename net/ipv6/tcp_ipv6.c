@@ -1639,7 +1639,7 @@ do_time_wait:
 		break;
 	case TCP_TW_RST:
 		goto no_tcp_socket;
-	case TCP_TW_SUCCESS:
+	case TCP_TW_SUCCESS:;
 	}
 	goto discard_it;
 }

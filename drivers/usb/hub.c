@@ -765,7 +765,8 @@ static int usb_hub_thread(void *__hub)
 }
 
 static struct usb_device_id hub_id_table [] = {
-    { bInterfaceClass: USB_CLASS_HUB},
+    { match_flags: USB_DEVICE_ID_MATCH_INT_CLASS,
+      bInterfaceClass: USB_CLASS_HUB},
     { }						/* Terminating entry */
 };
 

@@ -29,7 +29,7 @@ enum cpu_type {
 
 struct sh_cpuinfo {
 	enum cpu_type type;
-	unsigned long loops_per_sec;
+	unsigned long loops_per_jiffy;
 
 	char	hard_math;
 
@@ -164,9 +164,9 @@ extern __inline__ void release_fpu(void)
 	unsigned long __dummy;
 
 	/* Set FD flag in SR */
-	__asm__ __volatile__("stc	$sr, %0\n\t"
+	__asm__ __volatile__("stc	sr, %0\n\t"
 			     "or	%1, %0\n\t"
-			     "ldc	%0, $sr"
+			     "ldc	%0, sr"
 			     : "=&r" (__dummy)
 			     : "r" (SR_FD));
 }
@@ -176,9 +176,9 @@ extern __inline__ void grab_fpu(void)
 	unsigned long __dummy;
 
 	/* Clear out FD flag in SR */
-	__asm__ __volatile__("stc	$sr, %0\n\t"
+	__asm__ __volatile__("stc	sr, %0\n\t"
 			     "and	%1, %0\n\t"
-			     "ldc	%0, $sr"
+			     "ldc	%0, sr"
 			     : "=&r" (__dummy)
 			     : "r" (~SR_FD));
 }

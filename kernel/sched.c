@@ -1151,17 +1151,13 @@ static void show_task(struct task_struct * p)
 	else
 		printk("\n");
 
+#ifdef CONFIG_X86
+/* This is very useful, but only works on x86 right now */
 	{
-		struct sigqueue *q;
-		char s[sizeof(sigset_t)*2+1], b[sizeof(sigset_t)*2+1]; 
-
-		render_sigset_t(&p->pending.signal, s);
-		render_sigset_t(&p->blocked, b);
-		printk("   sig: %d %s %s :", signal_pending(p), s, b);
-		for (q = p->pending.head; q ; q = q->next)
-			printk(" %d", q->info.si_signo);
-		printk(" X\n");
+		extern void show_trace(unsigned long);
+		show_trace(p->thread.esp);
 	}
+#endif
 }
 
 char * render_sigset_t(sigset_t *set, char *buffer)

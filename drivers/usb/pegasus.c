@@ -70,7 +70,8 @@ static struct usb_eth_dev usb_dev_id[] = {
 };
 
 static struct usb_device_id pegasus_ids[] = {
-#define	PEGASUS_DEV(pn, vid, pid, flags) {idVendor:vid, idProduct:pid},
+#define	PEGASUS_DEV(pn, vid, pid, flags) \
+	{match_flags: USB_DEVICE_ID_MATCH_DEVICE, idVendor:vid, idProduct:pid},
 #include "pegasus.h"
 #undef	PEGASUS_DEV
 	{ }

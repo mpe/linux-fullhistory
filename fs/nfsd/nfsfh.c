@@ -346,7 +346,7 @@ find_fh_dentry(struct super_block *sb, ino_t ino, int generation, ino_t dirino, 
 	struct dentry *dentry, *result = NULL;
 	struct dentry *tmp;
 	int  found =0;
-	int err;
+	int err = -ESTALE;
 	/* the sb->s_nfsd_free_path_sem semaphore is needed to make sure that only one unconnected (free)
 	 * dcache path ever exists, as otherwise two partial paths might get
 	 * joined together, which would be very confusing.
@@ -360,19 +360,18 @@ find_fh_dentry(struct super_block *sb, ino_t ino, int generation, ino_t dirino, 
 	 * Attempt to find the inode.
 	 */
  retry:
+	down(&sb->s_nfsd_free_path_sem);
 	result = nfsd_iget(sb, ino, generation);
-	err = PTR_ERR(result);
-	if (IS_ERR(result))
-		goto err_out;
-	err = -ESTALE;
-	if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED))
-		return result;
-
-	/* result is now an anonymous dentry, which may be adequate as it stands, or else
-	 * will get spliced into the dcache tree */
-
-	if (!S_ISDIR(result->d_inode->i_mode) && ! needpath) {
-		nfsdstats.fh_anon++;
+	if (IS_ERR(result)
+	    || !(result->d_flags & DCACHE_NFSD_DISCONNECTED)
+	    || (!S_ISDIR(result->d_inode->i_mode) && ! needpath)) {
+		up(&sb->s_nfsd_free_path_sem);
+	    
+		err = PTR_ERR(result);
+		if (IS_ERR(result))
+			goto err_out;
+		if ((result->d_flags & DCACHE_NFSD_DISCONNECTED))
+			nfsdstats.fh_anon++;
 		return result;
 	}
 
@@ -380,14 +379,6 @@ find_fh_dentry(struct super_block *sb, ino_t ino, int generation, ino_t dirino, 
 	 * location in the tree.
 	 */
 	dprintk("nfs_fh: need to look harder for %d/%ld\n",sb->s_dev,ino);
-	down(&sb->s_nfsd_free_path_sem);
-
-	/* claiming the semaphore might have allowed things to get fixed up */
-	if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED)) {
-		up(&sb->s_nfsd_free_path_sem);
-		return result;
-	}
-
 
 	found = 0;
 	if (!S_ISDIR(result->d_inode->i_mode)) {

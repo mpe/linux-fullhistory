@@ -217,11 +217,8 @@ static void iforce_usb_disconnect(struct usb_device *dev, void *ptr)
 }
 
 static struct usb_device_id iforce_usb_ids [] = {
-    {
-	idVendor: USB_VENDOR_ID_LOGITECH,
-	idProduct: USB_DEVICE_ID_LOGITECH_WMFORCE
-    },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(USB_VENDOR_ID_LOGITECH, USB_DEVICE_ID_LOGITECH_WMFORCE) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, iforce_usb_ids);

@@ -361,7 +361,7 @@ static int __init zoltrix_init(void)
 	}
 
 	zoltrix_radio.priv = &zoltrix_unit;
-	if (request_region(io, 2, "zoltrix")) {
+	if (!request_region(io, 2, "zoltrix")) {
 		printk(KERN_ERR "zoltrix: port 0x%x already in use\n", io);
 		return -EBUSY;
 	}

@@ -11,6 +11,17 @@
  * Copyright (C) 1999 Don Dugger <Don.Dugger@intel.com>
  */
 /*
+ * ia64_switch_to now places correct virtual mapping in in TR2 for
+ * kernel stack. This allows us to handle interrupts without changing
+ * to physical mode.
+ *
+ * ar.k4 is now used to hold last virtual map address
+ * 
+ * Jonathan Nickin	<nicklin@missioncriticallinux.com>
+ * Patrick O'Rourke	<orourke@missioncriticallinux.com>
+ * 11/07/2000
+ /
+/*
  * Global (preserved) predicate usage on syscall entry/exit path:
  *
  *	pKern:		See entry.h.
@@ -27,7 +38,8 @@
 #include <asm/processor.h>
 #include <asm/unistd.h>
 #include <asm/asmmacro.h>
-
+#include <asm/pgtable.h>
+	
 #include "entry.h"
 
 	.text
@@ -98,6 +110,8 @@ GLOBAL_ENTRY(sys_clone)
 	br.ret.sptk.many rp
 END(sys_clone)
 
+#define KSTACK_TR	2
+
 /*
  * prev_task <- ia64_switch_to(struct task_struct *next)
  */
@@ -108,22 +122,55 @@ GLOBAL_ENTRY(ia64_switch_to)
 	UNW(.body)
 
 	adds r22=IA64_TASK_THREAD_KSP_OFFSET,r13
-	dep r18=-1,r0,0,61	// build mask 0x1fffffffffffffff
+	mov r27=ar.k4
+	dep r20=0,in0,61,3		// physical address of "current"
+	;;
+	st8 [r22]=sp			// save kernel stack pointer of old task
+	shr.u r26=r20,_PAGE_SIZE_256M
+	;;
+	cmp.eq p7,p6=r26,r0		// check < 256M
 	adds r21=IA64_TASK_THREAD_KSP_OFFSET,in0
 	;;
-	st8 [r22]=sp		// save kernel stack pointer of old task
-	ld8 sp=[r21]		// load kernel stack pointer of new task
-	and r20=in0,r18		// physical address of "current"
+	/*
+	 * If we've already mapped this task's page, we can skip doing it
+	 * again.
+	 */
+(p6)	cmp.eq p7,p6=r26,r27
+(p6)	br.cond.dpnt.few .map
 	;;
-	mov ar.k6=r20		// copy "current" into ar.k6
-	mov r8=r13		// return pointer to previously running task
-	mov r13=in0		// set "current" pointer
+.done:	ld8 sp=[r21]			// load kernel stack pointer of new task
+(p6)	ssm psr.ic			// if we we had to map, renable the psr.ic bit FIRST!!!
 	;;
+(p6)	srlz.d
+	mov ar.k6=r20			// copy "current" into ar.k6
+	mov r8=r13			// return pointer to previously running task
+	mov r13=in0			// set "current" pointer
+	;;
+(p6)	ssm psr.i			// renable psr.i AFTER the ic bit is serialized
 	DO_LOAD_SWITCH_STACK( )
+
 #ifdef CONFIG_SMP
-	sync.i			// ensure "fc"s done by this CPU are visible on other CPUs
-#endif
-	br.ret.sptk.few rp
+	sync.i				// ensure "fc"s done by this CPU are visible on other CPUs
+#endif 
+	br.ret.sptk.few rp		// boogie on out in new context
+
+.map:
+	rsm psr.i | psr.ic
+	movl r25=__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RWX
+	;;
+	srlz.d
+	or r23=r25,r20			// construct PA | page properties
+	mov r25=_PAGE_SIZE_256M<<2
+	;;
+	mov cr.itir=r25
+	mov cr.ifa=in0			// VA of next task...
+	;;
+	mov r25=KSTACK_TR		// use tr entry #2...
+	mov ar.k4=r26			// remember last page we mapped...
+	;;
+	itr.d dtr[r25]=r23		// wire in new mapping...
+	br.cond.sptk.many .done
+	;;
 END(ia64_switch_to)
 
 #ifndef CONFIG_IA64_NEW_UNWIND
@@ -503,7 +550,7 @@ GLOBAL_ENTRY(ia64_leave_kernel)
 	;;
 	ld4 r2=[r2]
 	;;
-	shl r2=r2,SMP_LOG_CACHE_BYTES	// can't use shladd here...
+	shl r2=r2,SMP_CACHE_SHIFT	// can't use shladd here...
 	;;
 	add r3=r2,r3
 #else
@@ -542,7 +589,7 @@ back_from_resched:
 	// check & deliver pending signals:
 (p2)	br.call.spnt.few rp=handle_signal_delivery
 .ret9:
-#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_IA64_SOFTSDV_HACKS)
+#ifdef CONFIG_IA64_SOFTSDV_HACKS
 	// Check for lost ticks
 	rsm psr.i
 	mov r2 = ar.itc
@@ -611,14 +658,13 @@ restore_all:
 	mov ar.ccv=r1
 	mov ar.fpsr=r13
 	mov b0=r14
-	// turn off interrupts, interrupt collection, & data translation
-	rsm psr.i | psr.ic | psr.dt
+	// turn off interrupts, interrupt collection
+	rsm psr.i | psr.ic
 	;;
 	srlz.i			// EAS 2.5
 	mov b7=r15
 	;;
 	invala			// invalidate ALAT
-	dep r12=0,r12,61,3	// convert sp to physical address
 	bsw.0;;			// switch back to bank 0 (must be last in insn group)
 	;;
 #ifdef CONFIG_ITANIUM_ASTEP_SPECIFIC
@@ -757,7 +803,7 @@ END(invoke_schedule_tail)
 
 #endif /* CONFIG_SMP */
 
-#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_IA64_SOFTSDV_HACKS)
+#ifdef CONFIG_IA64_SOFTSDV_HACKS
 
 ENTRY(invoke_ia64_reset_itm)
 	UNW(.prologue ASM_UNW_PRLG_RP|ASM_UNW_PRLG_PFS, ASM_UNW_PRLG_GRSAVE(8))
@@ -772,7 +818,7 @@ ENTRY(invoke_ia64_reset_itm)
 	br.ret.sptk.many rp
 END(invoke_ia64_reset_itm)
 
-#endif /* CONFIG_ITANIUM_ASTEP_SPECIFIC || CONFIG_IA64_SOFTSDV_HACKS */
+#endif /* CONFIG_IA64_SOFTSDV_HACKS */
 
 	/*
 	 * Invoke do_softirq() while preserving in0-in7, which may be needed
@@ -1091,7 +1137,7 @@ sys_call_table:
 	data8 sys_setpriority
 	data8 sys_statfs
 	data8 sys_fstatfs
-	data8 ia64_ni_syscall
+	data8 ia64_ni_syscall			// 1105
 	data8 sys_semget
 	data8 sys_semop
 	data8 sys_semctl

@@ -18,7 +18,6 @@ mainmenu_option next_comment
 comment 'General setup'
 
 define_bool CONFIG_IA64 y
-define_bool CONFIG_SWIOTLB y	# for now...
 
 define_bool CONFIG_ISA n
 define_bool CONFIG_EISA n
@@ -41,20 +40,22 @@ if [ "$CONFIG_IA64_DIG" = "y" ]; then
 	define_bool CONFIG_ITANIUM y
 	define_bool CONFIG_IA64_BRL_EMU y
 	bool '  Enable Itanium A-step specific code' CONFIG_ITANIUM_ASTEP_SPECIFIC
-	if [ "$CONFIG_ITANIUM_ASTEP_SPECIFIC" = "y" ]; then
-	  bool '   Enable Itanium A1-step specific code' CONFIG_ITANIUM_A1_SPECIFIC
-	fi
 	bool '  Enable Itanium B-step specific code' CONFIG_ITANIUM_BSTEP_SPECIFIC
 	if [ "$CONFIG_ITANIUM_BSTEP_SPECIFIC" = "y" ]; then
 	  bool '   Enable Itanium B0-step specific code' CONFIG_ITANIUM_B0_SPECIFIC
+	  bool '   Enable Itanium B1-step specific code' CONFIG_ITANIUM_B1_SPECIFIC
+	  bool '   Enable Itanium B2-step specific code' CONFIG_ITANIUM_B2_SPECIFIC
+	fi
+	bool '  Enable Itanium C-step specific code' CONFIG_ITANIUM_CSTEP_SPECIFIC
+	if [ "$CONFIG_ITANIUM_CSTEP_SPECIFIC" = "y" ]; then
+	  bool '   Enable Itanium C0-step specific code' CONFIG_ITANIUM_C0_SPECIFIC
 	fi
 	bool '  Force interrupt redirection' CONFIG_IA64_HAVE_IRQREDIR
 	bool '  Enable use of global TLB purge instruction (ptc.g)' CONFIG_ITANIUM_PTCG
 	bool '  Enable SoftSDV hacks' CONFIG_IA64_SOFTSDV_HACKS
 	bool '  Enable AzusA hacks' CONFIG_IA64_AZUSA_HACKS
 	bool '  Enable IA-64 Machine Check Abort' CONFIG_IA64_MCA
-	bool '  Force socket buffers below 4GB?' CONFIG_SKB_BELOW_4GB
-
+	bool '  Enable ACPI 2.0 with errata 1.3' CONFIG_ACPI20
 	bool '  ACPI kernel configuration manager (EXPERIMENTAL)' CONFIG_ACPI_KERNEL_CONFIG
 	if [ "$CONFIG_ACPI_KERNEL_CONFIG" = "y" ]; then
 	  define_bool CONFIG_PM y
@@ -70,13 +71,16 @@ if [ "$CONFIG_IA64_SGI_SN1" = "y" ]; then
 	  bool '    Enable Itanium B0-step specific code' CONFIG_ITANIUM_B0_SPECIFIC
 	fi
 	bool '  Enable SGI Medusa Simulator Support' CONFIG_IA64_SGI_SN1_SIM n
-        bool '  Enable SGI hack for version 1.0 syngery bugs' CONFIG_IA64_SGI_SYNERGY_1_0_HACKS n
 	define_bool CONFIG_DEVFS_DEBUG y
 	define_bool CONFIG_DEVFS_FS y
 	define_bool CONFIG_IA64_BRL_EMU y
 	define_bool CONFIG_IA64_MCA y
-	define_bool CONFIG_IA64_SGI_IO y
 	define_bool CONFIG_ITANIUM y
+	define_bool CONFIG_SGI_IOC3_ETH y
+	define_bool CONFIG_PERCPU_IRQ y
+	define_int  CONFIG_CACHE_LINE_SHIFT 7
+	bool '  Enable DISCONTIGMEM support' CONFIG_DISCONTIGMEM y
+	bool '	Enable NUMA support' CONFIG_NUMA y
 fi
 
 define_bool CONFIG_KCORE_ELF y	# On IA-64, we always want an ELF /proc/kcore.

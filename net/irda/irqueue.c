@@ -8,6 +8,8 @@
  * Created at:    Tue Jun  9 13:29:31 1998
  * Modified at:   Sun Dec 12 13:48:22 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
+ * Modified at:   Thu Jan  4 14:29:10 CET 2001
+ * Modified by:   Marc Zyngier <mzyngier@freesurf.fr>
  * 
  *     Copyright (C) 1998-1999, Aage Kvalnes <aage@cs.uit.no>
  *     Copyright (C) 1998, Dag Brattli, 
@@ -142,69 +144,6 @@ int hashbin_delete( hashbin_t* hashbin, FREE_FUNC free_func)
 }
 
 /*
- * Function hashbin_lock (hashbin, hashv, name)
- *
- *    Lock the hashbin
- *
- */
-void hashbin_lock(hashbin_t* hashbin, __u32 hashv, char* name, 
-		  unsigned long flags)
-{
-	int bin;
-	
-	IRDA_DEBUG(0, "hashbin_lock\n");
-
-	ASSERT(hashbin != NULL, return;);
-	ASSERT(hashbin->magic == HB_MAGIC, return;);
-
-	/*
-	 * Locate hashbin
-	 */
-	if (name)
-		hashv = hash(name);
-	bin = GET_HASHBIN(hashv);
-	
-	/* Synchronize */
-	if ( hashbin->hb_type & HB_GLOBAL )
-		spin_lock_irqsave(&hashbin->hb_mutex[ bin], flags);
-	else {
-		save_flags(flags);
-		cli();
-	}
-}
-
-/*
- * Function hashbin_unlock (hashbin, hashv, name)
- *
- *    Unlock the hashbin
- *
- */
-void hashbin_unlock(hashbin_t* hashbin, __u32 hashv, char* name, 
-		    unsigned long flags)
-{
-	int bin;
-
-	IRDA_DEBUG(0, "hashbin_unlock()\n");
-
-	ASSERT(hashbin != NULL, return;);
-	ASSERT(hashbin->magic == HB_MAGIC, return;);
-	
-	/*
-	 * Locate hashbin
-	 */
-	if (name )
-		hashv = hash(name);
-	bin = GET_HASHBIN(hashv);
-	
-	/* Release lock */
-	if ( hashbin->hb_type & HB_GLOBAL)
-		spin_unlock_irq( &hashbin->hb_mutex[ bin]);
-	else if (hashbin->hb_type & HB_LOCAL) {
-		restore_flags( flags);
-	}
-}
-
-/*
  * Function hashbin_insert (hashbin, entry, name)
  *
  *    Insert an entry into the hashbin
@@ -258,7 +197,7 @@ void hashbin_insert(hashbin_t* hashbin, irda_queue_t* entry, __u32 hashv, char* 
 	/* Release lock */
 	if ( hashbin->hb_type & HB_GLOBAL) {
 
-		spin_unlock_irq( &hashbin->hb_mutex[ bin]);
+		spin_unlock_irqrestore( &hashbin->hb_mutex[ bin], flags);
 
 	} else if ( hashbin->hb_type & HB_LOCAL) {
 		restore_flags( flags);
@@ -327,7 +266,7 @@ void* hashbin_find( hashbin_t* hashbin, __u32 hashv, char* name )
 	
 	/* Release lock */
 	if ( hashbin->hb_type & HB_GLOBAL) {
-		spin_unlock_irq( &hashbin->hb_mutex[ bin]);
+		spin_unlock_irqrestore( &hashbin->hb_mutex[ bin], flags);
 
 	} else if ( hashbin->hb_type & HB_LOCAL) {
 		restore_flags( flags);
@@ -436,7 +375,7 @@ void* hashbin_remove( hashbin_t* hashbin, __u32 hashv, char* name)
 
 	/* Release lock */
 	if ( hashbin->hb_type & HB_GLOBAL) {
-		spin_unlock_irq( &hashbin->hb_mutex[ bin]);
+		spin_unlock_irqrestore( &hashbin->hb_mutex[ bin], flags);
 
 	} else if ( hashbin->hb_type & HB_LOCAL) {
 		restore_flags( flags);
@@ -511,7 +450,7 @@ void* hashbin_remove_this( hashbin_t* hashbin, irda_queue_t* entry)
 
 	/* Release lock */
 	if ( hashbin->hb_type & HB_GLOBAL) {
-		spin_unlock_irq( &hashbin->hb_mutex[ bin]);
+		spin_unlock_irqrestore( &hashbin->hb_mutex[ bin], flags);
 
 	} else if ( hashbin->hb_type & HB_LOCAL) {
 		restore_flags( flags);

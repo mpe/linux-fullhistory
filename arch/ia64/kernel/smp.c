@@ -6,11 +6,13 @@
  * 
  * Lots of stuff stolen from arch/alpha/kernel/smp.c
  *
- *  00/09/11 David Mosberger <davidm@hpl.hp.com> Do loops_per_sec calibration on each CPU.
+ *  00/09/11 David Mosberger <davidm@hpl.hp.com> Do loops_per_jiffy calibration on each CPU.
  *  00/08/23 Asit Mallick <asit.k.mallick@intel.com> fixed logical processor id
  *  00/03/31 Rohit Seth <rohit.seth@intel.com>	Fixes for Bootstrap Processor & cpu_online_map
  *			now gets done here (instead of setup.c)
  *  99/10/05 davidm	Update to bring it in sync with new command-line processing scheme.
+ *  10/13/00 Goutham Rao <goutham.rao@intel.com> Updated smp_call_function and
+ *		smp_call_function_single to resend IPI on timeouts
  */
 #define __KERNEL_SYSCALLS__
 
@@ -30,6 +32,7 @@
 #include <asm/current.h>
 #include <asm/delay.h>
 #include <asm/efi.h>
+#include <asm/machvec.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -77,10 +80,6 @@ struct smp_call_struct {
 	atomic_t unfinished_count;
 };
 static volatile struct smp_call_struct *smp_call_function_data;
-
-#ifdef	CONFIG_ITANIUM_A1_SPECIFIC
-extern spinlock_t ivr_read_lock;
-#endif
 
 #define IPI_RESCHEDULE	        0
 #define IPI_CALL_FUNC	        1
@@ -269,14 +268,14 @@ handle_IPI(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static inline void
-send_IPI_single(int dest_cpu, int op) 
+send_IPI_single (int dest_cpu, int op) 
 {
 	
 	if (dest_cpu == -1) 
                 return;
         
 	set_bit(op, &ipi_op[dest_cpu]);
-	ipi_send(dest_cpu, IPI_IRQ, IA64_IPI_DM_INT, 0);
+	platform_send_ipi(dest_cpu, IPI_IRQ, IA64_IPI_DM_INT, 0);
 }
 
 static inline void
@@ -358,6 +357,7 @@ smp_call_function_single (int cpuid, void (*func) (void *info), void *info, int 
 	if (pointer_lock(&smp_call_function_data, &data, retry))
 		return -EBUSY;
 
+resend:
 	/*  Send a message to all other CPUs and wait for them to respond  */
 	send_IPI_single(cpuid, IPI_CALL_FUNC);
 
@@ -366,8 +366,12 @@ smp_call_function_single (int cpuid, void (*func) (void *info), void *info, int 
 	while ((atomic_read(&data.unstarted_count) > 0) && time_before(jiffies, timeout))
 		barrier();
 	if (atomic_read(&data.unstarted_count) > 0) {
+#if (defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_BSTEP_SPECIFIC))
+		goto resend;
+#else
 		smp_call_function_data = NULL;
 		return -ETIMEDOUT;
+#endif
 	}
 	if (wait)
 		while (atomic_read(&data.unfinished_count) > 0)
@@ -411,13 +415,23 @@ smp_call_function (void (*func) (void *info), void *info, int retry, int wait)
 	/*  Send a message to all other CPUs and wait for them to respond  */
 	send_IPI_allbutself(IPI_CALL_FUNC);
 
+retry:
 	/*  Wait for response  */
 	timeout = jiffies + HZ;
 	while ((atomic_read(&data.unstarted_count) > 0) && time_before(jiffies, timeout))
 		barrier();
 	if (atomic_read(&data.unstarted_count) > 0) {
+#if (defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_BSTEP_SPECIFIC))
+		int i;
+		for (i = 0; i < smp_num_cpus; i++) {
+			if (i != smp_processor_id())
+				platform_send_ipi(i, IPI_IRQ, IA64_IPI_DM_INT, 0);
+		}
+		goto retry;
+#else
 		smp_call_function_data = NULL;
 		return -ETIMEDOUT;
+#endif
 	}
 	if (wait)
 		while (atomic_read(&data.unfinished_count) > 0)
@@ -430,8 +444,6 @@ smp_call_function (void (*func) (void *info), void *info, int retry, int wait)
 /*
  * Flush all other CPU's tlb and then mine.  Do this with smp_call_function() as we
  * want to ensure all TLB's flushed before proceeding.
- *
- * XXX: Is it OK to use the same ptc.e info on all cpus?
  */
 void
 smp_flush_tlb_all(void)
@@ -502,7 +514,7 @@ smp_callin (void)
 	local_irq_enable();		/* Interrupts have been off until now */
 
 	calibrate_delay();
-	my_cpu_data.loops_per_sec = loops_per_sec;
+	my_cpu_data.loops_per_jiffy = loops_per_jiffy;
 
 	/* allow the master to continue */
 	set_bit(cpu, &cpu_callin_map);
@@ -569,7 +581,7 @@ smp_boot_one_cpu(int cpu)
 	cpu_now_booting = cpu;
 
 	/* Kick the AP in the butt */
-	ipi_send(cpu, ap_wakeup_vector, IA64_IPI_DM_INT, 0);
+	platform_send_ipi(cpu, ap_wakeup_vector, IA64_IPI_DM_INT, 0);
 
 	/* wait up to 10s for the AP to start  */
 	for (timeout = 0; timeout < 100000; timeout++) {
@@ -603,7 +615,7 @@ smp_boot_cpus(void)
 	__cpu_physical_id[0] = hard_smp_processor_id();
 
 	/* on the BP, the kernel already called calibrate_delay_loop() in init/main.c */
-	my_cpu_data.loops_per_sec = loops_per_sec;
+	my_cpu_data.loops_per_jiffy = loops_per_jiffy;
 #if 0
 	smp_tune_scheduling();
 #endif
@@ -653,13 +665,11 @@ smp_boot_cpus(void)
 	bogosum = 0;
         for (i = 0; i < NR_CPUS; i++) {
 		if (cpu_online_map & (1L << i))
-			bogosum += cpu_data[i].loops_per_sec;
+			bogosum += cpu_data[i].loops_per_jiffy;
         }
 
-	printk(KERN_INFO "SMP: Total of %d processors activated "
-	       "(%lu.%02lu BogoMIPS).\n",
-	       cpu_count, (bogosum + 2500) / 500000,
-	       ((bogosum + 2500) / 5000) % 100);
+	printk(KERN_INFO "SMP: Total of %d processors activated (%lu.%02lu BogoMIPS).\n",
+	       cpu_count, bogosum*HZ/500000, (bogosum*HZ/5000) % 100);
 
 	smp_num_cpus = cpu_count;
 }

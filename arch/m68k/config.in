@@ -53,9 +53,9 @@ bool 'HP9000/300 support' CONFIG_HP300
 if [ "$CONFIG_HP300" = "y" ]; then
    bool '  DIO bus support' CONFIG_DIO
 fi
+bool 'Sun3 support' CONFIG_SUN3
 bool 'Sun3x support' CONFIG_SUN3X
   
-define_bool CONFIG_SUN3 n
 bool 'Q40/Q60 support' CONFIG_Q40
 
 comment 'Processor type'
@@ -73,7 +73,11 @@ fi
 bool 'Advanced configuration options' CONFIG_ADVANCED
 if [ "$CONFIG_ADVANCED" = "y" ]; then
    bool 'Use read-modify-write instructions' CONFIG_RMW_INSNS
-   bool 'Use one physical chunk of memory only' CONFIG_SINGLE_MEMORY_CHUNK
+   if [ "$CONFIG_SUN3" = "y" ]; then
+      define_bool CONFIG_SINGLE_MEMORY_CHUNK n
+   else
+      bool 'Use one physical chunk of memory only' CONFIG_SINGLE_MEMORY_CHUNK
+   fi
    if [ "$CONFIG_M68060" = "y" ]; then
       bool 'Use write-through caching for 68060 supervisor accesses' CONFIG_060_WRITETHROUGH
    fi
@@ -120,13 +124,12 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    tristate 'Parallel port support (EXPERIMENTAL)' CONFIG_PARPORT
    if [ "$CONFIG_PARPORT" != "n" ]; then
       if [ "$CONFIG_AMIGA" != "n" ]; then
-         dep_tristate '   Amiga builtin port' CONFIG_PARPORT_AMIGA $CONFIG_PARPORT
+         dep_tristate '  Amiga builtin port' CONFIG_PARPORT_AMIGA $CONFIG_PARPORT
 	 if [ "$CONFIG_ZORRO" != "n" ]; then
-            dep_tristate '    Multiface III parallel port' CONFIG_PARPORT_MFC3 $CONFIG_PARPORT
+            dep_tristate '  Multiface III parallel port' CONFIG_PARPORT_MFC3 $CONFIG_PARPORT
 	 fi
       fi
       if [ "$CONFIG_Q40" != "n" ]; then
-	 tristate '    Q40 Parallel port' CONFIG_PARPORT
 	 if [ "$CONFIG_PARPORT" != "n" ]; then
 	    define_bool CONFIG_PARPORT_PC y
 	 fi
@@ -154,6 +157,10 @@ source drivers/md/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
    source net/Config.in
+fi
+
+if [ "$CONFIG_MAC" = "y" ]; then
+   source drivers/input/Config.in
 fi
 
 mainmenu_option next_comment
@@ -254,6 +261,10 @@ if [ "$CONFIG_SCSI" != "n" ]; then
       bool 'NCR53C710 SCSI driver for BVME6000' CONFIG_BVME6000_SCSI
    fi
 
+   if [ "$CONFIG_SUN3" = "y" ]; then
+	dep_tristate 'Sun3 NCR5380 SCSI' CONFIG_SUN3_SCSI $CONFIG_SCSI
+   fi
+
    if [ "$CONFIG_SUN3X" = "y" ]; then
       bool 'ESP SCSI driver' CONFIG_SUN3X_ESP
    fi
@@ -322,16 +333,17 @@ if [ "$CONFIG_NET" = "y" ]; then
 	    tristate '  PAMsNet support' CONFIG_ATARI_PAMSNET
 	 fi
       fi
-      if [ "$CONFIG_SUN3X" = "y" ]; then
-	 bool '  Sun3x Lance support' CONFIG_SUNLANCE
+      if [ "$CONFIG_SUN3" = "y" -o "$CONFIG_SUN3X" = "y" ]; then
+	tristate '  Sun3/Sun3x on-board LANCE support' CONFIG_SUN3LANCE
       fi
       if [ "$CONFIG_HP300" = "y" ]; then
 	 bool '  HP on-board LANCE support' CONFIG_HPLANCE
       fi
       if [ "$CONFIG_Q40" = "y" ]; then
-	 if [ ! "$CONFIG_PARPORT" = "n" ]; then
+         if [  "$CONFIG_PARPORT" != "n" ]; then
 	    dep_tristate '  PLIP (parallel port) support' CONFIG_PLIP $CONFIG_PARPORT
 	 fi
+         tristate 'NE2000/NE1000 support' CONFIG_NE2000
       fi
    fi
    endmenu
@@ -404,29 +416,39 @@ if [ "$CONFIG_PARPORT" = "n" ]; then
       dep_tristate '  GVP IO-Extender parallel printer support' CONFIG_GVPIOEXT_LP $CONFIG_GVPIOEXT
       dep_tristate '  GVP IO-Extender PLIP support' CONFIG_GVPIOEXT_PLIP $CONFIG_GVPIOEXT
       tristate 'Multiface Card III serial support' CONFIG_MULTIFACE_III_TTY
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+        tristate 'Commodore A2232 serial support (EXPERIMENTAL)' CONFIG_A2232
+      fi
    fi
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
    tristate 'Macintosh serial support' CONFIG_MAC_SCC
    bool 'Apple Desktop Bus (ADB) support' CONFIG_ADB
    if [ "$CONFIG_ADB" = "y" ]; then
-      bool '   Support for ADB keyboard' CONFIG_ADB_KEYBOARD 
-      bool '   Support for ADB mouse' CONFIG_ADBMOUSE
       bool '   Include Mac II ADB driver' CONFIG_ADB_MACII
       bool '   Include Mac IIsi ADB driver' CONFIG_ADB_MACIISI
       bool '   Include CUDA ADB driver' CONFIG_ADB_CUDA
       bool '   Include IOP (IIfx/Quadra 9x0) ADB driver' CONFIG_ADB_IOP
       bool '   Include PMU (Powerbook) ADB driver' CONFIG_ADB_PMU68K
    fi
-   if [ "$CONFIG_ADBMOUSE" = "y" ]; then
-      define_bool CONFIG_BUSMOUSE y
+   dep_bool '   Use input layer for ADB devices' CONFIG_INPUT_ADBHID $CONFIG_INPUT
+   if [ "$CONFIG_INPUT_ADBHID" = "y" ]; then
+      define_bool CONFIG_MAC_HID y
+      bool '     Support for ADB raw keycodes' CONFIG_MAC_ADBKEYCODES
+      bool '     Support for mouse button 2+3 emulation' CONFIG_MAC_EMUMOUSEBTN
+   else
+      bool '   Support for ADB keyboard (old driver)' CONFIG_ADB_KEYBOARD
    fi
 fi
 if [ "$CONFIG_HP300" = "y" -a "$CONFIG_DIO" = "y" ]; then
    tristate 'HP DCA serial support' CONFIG_HPDCA
 fi
 
-dep_bool 'Sun3x builtin serial support' CONFIG_SUN3X_ZS $CONFIG_SUN3X
+if [ "$CONFIG_SUN3" = "y" -o "$CONFIG_SUN3X" = "y" ]; then
+   bool 'Sun3/3x builtin serial support' CONFIG_SUN3X_ZS
+else
+   define_bool CONFIG_SUN3X_ZS n
+fi
 dep_bool '  Sun keyboard support' CONFIG_SUN_KEYBOARD $CONFIG_SUN3X_ZS
 dep_bool '  Sun mouse support' CONFIG_SUN_MOUSE $CONFIG_SUN3X_ZS
 if [ "$CONFIG_SUN_MOUSE" = "y" ]; then
@@ -442,7 +464,7 @@ fi
 
 if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_ATARI" = "y" -o \
      "$CONFIG_MAC" = "y" -o "$CONFIG_HP300" = "y" -o \
-     "$CONFIG_SUN3X" = "y" ]; then
+     "$CONFIG_SUN3" = "y" -o "$CONFIG_SUN3X" = "y" ]; then
    if [ "$CONFIG_ATARI_MFPSER" = "y" -o "$CONFIG_ATARI_SCC" = "y" -o \
         "$CONFIG_ATARI_MIDI" = "y" -o "$CONFIG_MAC_SCC" = "y" -o \
         "$CONFIG_AMIGA_BUILTIN_SERIAL" = "y" -o \
@@ -476,6 +498,15 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
    bool 'Enhanced Real Time Clock Support' CONFIG_RTC
+else
+   if [ "$CONFIG_SUN3" = "y" ]; then
+      define_bool CONFIG_GEN_RTC y
+   else
+      bool 'Generic /dev/rtc emulation' CONFIG_GEN_RTC
+   fi
+fi
+if [ "$CONFIG_Q40" = "y" ]; then
+  bool 'Q40 Real Time Clock Support' CONFIG_Q40RTC
 fi
 bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
@@ -498,11 +529,6 @@ source fs/Config.in
 if [ "$CONFIG_VME" = "n" ]; then
    mainmenu_option next_comment
    comment 'Console drivers'
-   if [ "$CONFIG_HP300" = "y" ]; then
-      bool 'Frame buffer support' CONFIG_FB
-   else
-      define_bool CONFIG_FB y
-   fi
    source drivers/video/Config.in
    endmenu
 fi

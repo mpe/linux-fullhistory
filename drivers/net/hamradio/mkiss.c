@@ -690,13 +690,12 @@ static void ax25_close(struct tty_struct *tty)
 	if (ax == NULL || ax->magic != AX25_MAGIC)
 		return;
 
-	dev_close(ax->dev);
+	unregister_netdev(ax->dev);
 
 	tty->disc_data = 0;
 	ax->tty        = NULL;
 
 	ax_free(ax);
-	unregister_netdev(ax->dev);
 	MOD_DEC_USE_COUNT;
 }
 

@@ -5,6 +5,8 @@
 
 #ifdef CONFIG_IA32_SUPPORT
 
+#include <linux/param.h>
+
 /*
  * 32 bit structures for IA32 support.
  */
@@ -32,6 +34,8 @@ typedef __kernel_fsid_t	       __kernel_fsid_t32;
 
 #define IA32_PAGE_SHIFT		12	/* 4KB pages */
 #define IA32_PAGE_SIZE		(1ULL << IA32_PAGE_SHIFT)
+#define IA32_CLOCKS_PER_SEC	100	/* Cast in stone for IA32 Linux */
+#define IA32_TICK(tick)		((unsigned long long)(tick) * IA32_CLOCKS_PER_SEC / CLOCKS_PER_SEC)
 
 /* fcntl.h */
 struct flock32 {

@@ -333,6 +333,9 @@ efi_init (void)
 		if (efi_guidcmp(config_tables[i].guid, MPS_TABLE_GUID) == 0) {
 			efi.mps = __va(config_tables[i].table);
 			printk(" MPS=0x%lx", config_tables[i].table);
+		} else if (efi_guidcmp(config_tables[i].guid, ACPI_20_TABLE_GUID) == 0) {
+			efi.acpi20 = __va(config_tables[i].table);
+			printk(" ACPI 2.0=0x%lx", config_tables[i].table);
 		} else if (efi_guidcmp(config_tables[i].guid, ACPI_TABLE_GUID) == 0) {
 			efi.acpi = __va(config_tables[i].table);
 			printk(" ACPI=0x%lx", config_tables[i].table);
@@ -364,7 +367,7 @@ efi_init (void)
 #if EFI_DEBUG
 	/* print EFI memory map: */
 	{
-		efi_memory_desc_t *md = p;
+		efi_memory_desc_t *md;
 		void *p;
 
 		for (i = 0, p = efi_map_start; p < efi_map_end; ++i, p += efi_desc_size) {

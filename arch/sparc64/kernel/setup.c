@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.57 2000/10/14 10:09:00 davem Exp $
+/*  $Id: setup.c,v 1.58 2001/01/01 01:46:15 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -600,7 +600,7 @@ int get_cpuinfo(char *buffer)
             prom_rev, prom_prev >> 16, (prom_prev >> 8) & 0xff, prom_prev & 0xff,
 	    linux_num_cpus, smp_num_cpus
 #ifndef CONFIG_SMP
-            , loops_per_sec/500000, (loops_per_sec/5000) % 100
+            , loops_per_jiffy/(500000/HZ), (loops_per_jiffy/(5000/HZ)) % 100
 #endif
 	    );
 #ifdef CONFIG_SMP

@@ -66,9 +66,9 @@ extern __u32 irda_debug;
 #define IRDA_DEBUG(n, args...) (irda_debug >= (n)) ? (printk(KERN_DEBUG args)) : 0
 #define ASSERT(expr, func) \
 if(!(expr)) { \
-        printk( "Assertion failed! %s,%s,%s,line=%d\n",\
-        #expr,__FILE__,__FUNCTION__,__LINE__); \
-        ##func}
+        printk( "Assertion failed! %s:%s:%d %s\n", \
+        __FILE__,__FUNCTION__,__LINE__,(#expr));  \
+        func }
 #else
 #define IRDA_DEBUG(n, args...)
 #define ASSERT(expr, func)

@@ -1449,7 +1449,7 @@ static int mpu_timer_event(int dev, unsigned char *event)
 			}
 			break;
 
-		default:
+		default:;
 	}
 	return TIMER_NOT_ARMED;
 }
@@ -1559,7 +1559,7 @@ static int mpu_timer_ioctl(int dev, unsigned int command, caddr_t arg)
 			setup_metronome(midi_dev);
 			return 0;
 
-		default:
+		default:;
 	}
 	return -EINVAL;
 }

@@ -101,7 +101,7 @@ struct ip_conntrack
 	struct ip_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];
 
 	/* Have we seen traffic both ways yet? (bitset) */
-	volatile unsigned int status;
+	volatile unsigned long status;
 
 	/* Timer function; drops refcnt when it goes off. */
 	struct timer_list timeout;

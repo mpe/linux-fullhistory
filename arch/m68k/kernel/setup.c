@@ -432,7 +432,7 @@ int get_cpuinfo(char * buffer)
     else
 	mmu = "unknown";
 
-    clockfreq = loops_per_sec*clockfactor;
+    clockfreq = loops_per_jiffy*HZ*clockfactor;
 
     return(sprintf(buffer, "CPU:\t\t%s\n"
 		   "MMU:\t\t%s\n"
@@ -442,8 +442,8 @@ int get_cpuinfo(char * buffer)
 		   "Calibration:\t%lu loops\n",
 		   cpu, mmu, fpu,
 		   clockfreq/1000000,(clockfreq/100000)%10,
-		   loops_per_sec/500000,(loops_per_sec/5000)%100,
-		   loops_per_sec));
+		   loops_per_jiffy/(500000/HZ),(loops_per_jiffy/(5000/HZ))%100,
+		   loops_per_jiffy));
 
 }
 

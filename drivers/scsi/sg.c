@@ -650,6 +650,11 @@ static int sg_common_write(Sg_fd * sfp, Sg_request * srp,
     }
 /*  SCSI_LOG_TIMEOUT(7, printk("sg_write: allocating device\n")); */
     SRpnt = scsi_allocate_request(sdp->device);
+    if(SRpnt == NULL) {
+    	SCSI_LOG_TIMEOUT(1, printk("sg_write: no mem\n"));
+    	sg_finish_rem_req(srp);
+    	return -ENOMEM;
+    }
 
 /*  SCSI_LOG_TIMEOUT(7, printk("sg_write: device allocated\n")); */
     srp->my_cmdp = SRpnt;

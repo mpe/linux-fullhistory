@@ -1899,7 +1899,7 @@ static void __init init_vgachip (struct clgenfb_info *fb_info)
 		break;
 	case BT_PICASSO4:
 		vga_wcrt (fb_info->regs, CL_CRT51, 0x00);	/* disable flickerfixer */
-		udelay (100000);
+		mdelay (100);
 		vga_wgfx (fb_info->regs, CL_GR2F, 0x00);	/* from Klaus' NetBSD driver: */
 		vga_wgfx (fb_info->regs, CL_GR33, 0x00);	/* put blitter into 542x compat */
 		vga_wgfx (fb_info->regs, CL_GR31, 0x00);	/* mode */

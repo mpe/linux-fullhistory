@@ -896,7 +896,7 @@ toshoboe_gotosleep (struct toshoboe_cb *self)
 /*FIXME: can't sleep here wait one second */
 
   while ((i--) && (self->txpending))
-    udelay (100000);
+    mdelay (100);
 
   toshoboe_stopchip (self);
   toshoboe_disablebm (self);

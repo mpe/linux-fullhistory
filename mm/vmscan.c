@@ -49,8 +49,10 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	if ((!VALID_PAGE(page)) || PageReserved(page))
 		goto out_failed;
 
-	if (mm->swap_cnt)
-		mm->swap_cnt--;
+	if (!mm->swap_cnt)
+		return 1;
+
+	mm->swap_cnt--;
 
 	onlist = PageActive(page);
 	/* Don't look at this pte if it's been accessed recently. */
@@ -79,6 +81,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	 * bits in hardware.
 	 */
 	pte = ptep_get_and_clear(page_table);
+	flush_tlb_page(vma, address);
 
 	/*
 	 * Is the page already in the swap cache? If so, then
@@ -98,7 +101,6 @@ set_swap_pte:
 drop_pte:
 		UnlockPage(page);
 		mm->rss--;
-		flush_tlb_page(vma, address);
 		deactivate_page(page);
 		page_cache_release(page);
 out_failed:
@@ -193,8 +195,6 @@ static inline int swap_out_pmd(struct mm_struct * mm, struct vm_area_struct * vm
 		result = try_to_swap_out(mm, vma, address, pte, gfp_mask);
 		if (result)
 			return result;
-		if (!mm->swap_cnt)
-			return 0;
 		address += PAGE_SIZE;
 		pte++;
 	} while (address && (address < end));
@@ -224,8 +224,6 @@ static inline int swap_out_pgd(struct mm_struct * mm, struct vm_area_struct * vm
 		int result = swap_out_pmd(mm, vma, pmd, address, end, gfp_mask);
 		if (result)
 			return result;
-		if (!mm->swap_cnt)
-			return 0;
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
 	} while (address && (address < end));
@@ -250,8 +248,6 @@ static int swap_out_vma(struct mm_struct * mm, struct vm_area_struct * vma, unsi
 		int result = swap_out_pgd(mm, vma, pgdir, address, end, gfp_mask);
 		if (result)
 			return result;
-		if (!mm->swap_cnt)
-			return 0;
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		pgdir++;
 	} while (address && (address < end));
@@ -260,29 +256,28 @@ static int swap_out_vma(struct mm_struct * mm, struct vm_area_struct * vma, unsi
 
 static int swap_out_mm(struct mm_struct * mm, int gfp_mask)
 {
+	int result = 0;
 	unsigned long address;
 	struct vm_area_struct* vma;
 
 	/*
 	 * Go through process' page directory.
 	 */
-	address = mm->swap_address;
 
 	/*
 	 * Find the proper vm-area after freezing the vma chain 
 	 * and ptes.
 	 */
 	spin_lock(&mm->page_table_lock);
+	address = mm->swap_address;
 	vma = find_vma(mm, address);
 	if (vma) {
 		if (address < vma->vm_start)
 			address = vma->vm_start;
 
 		for (;;) {
-			int result = swap_out_vma(mm, vma, address, gfp_mask);
+			result = swap_out_vma(mm, vma, address, gfp_mask);
 			if (result)
-				return result;
-			if (!mm->swap_cnt)
 				goto out_unlock;
 			vma = vma->vm_next;
 			if (!vma)
@@ -296,9 +291,7 @@ static int swap_out_mm(struct mm_struct * mm, int gfp_mask)
 
 out_unlock:
 	spin_unlock(&mm->page_table_lock);
-
-	/* We didn't find anything for the process */
-	return 0;
+	return result;
 }
 
 /*
@@ -309,13 +302,11 @@ out_unlock:
 #define SWAP_SHIFT 5
 #define SWAP_MIN 8
 
-static int swap_out(unsigned int priority, int gfp_mask, unsigned long idle_time)
+static int swap_out(unsigned int priority, int gfp_mask)
 {
-	struct task_struct * p;
 	int counter;
 	int __ret = 0;
 
-	lock_kernel();
 	/* 
 	 * We make one or two passes through the task list, indexed by 
 	 * assign = {0, 1}:
@@ -335,23 +326,17 @@ static int swap_out(unsigned int priority, int gfp_mask, unsigned long idle_time
 		counter = 1;
 
 	for (; counter >= 0; counter--) {
+		struct list_head *p;
 		unsigned long max_cnt = 0;
 		struct mm_struct *best = NULL;
-		int pid = 0;
 		int assign = 0;
 		int found_task = 0;
 	select:
-		read_lock(&tasklist_lock);
-		p = init_task.next_task;
-		for (; p != &init_task; p = p->next_task) {
-			struct mm_struct *mm = p->mm;
-			if (!p->swappable || !mm)
-				continue;
+		spin_lock(&mmlist_lock);
+		p = init_mm.mmlist.next;
+		for (; p != &init_mm.mmlist; p = p->next) {
+			struct mm_struct *mm = list_entry(p, struct mm_struct, mmlist);
 	 		if (mm->rss <= 0)
-				continue;
-			/* Skip tasks which haven't slept long enough yet when idle-swapping. */
-			if (idle_time && !assign && (!(p->state & TASK_INTERRUPTIBLE) ||
-					time_after(p->sleep_time + idle_time * HZ, jiffies)))
 				continue;
 			found_task++;
 			/* Refresh swap_cnt? */
@@ -363,29 +348,32 @@ static int swap_out(unsigned int priority, int gfp_mask, unsigned long idle_time
 			if (mm->swap_cnt > max_cnt) {
 				max_cnt = mm->swap_cnt;
 				best = mm;
-				pid = p->pid;
 			}
 		}
-		read_unlock(&tasklist_lock);
+
+		/* Make sure it doesn't disappear */
+		if (best)
+			atomic_inc(&best->mm_users);
+		spin_unlock(&mmlist_lock);
+
+		/*
+		 * We have dropped the tasklist_lock, but we
+		 * know that "mm" still exists: we are running
+		 * with the big kernel lock, and exit_mm()
+		 * cannot race with us.
+		 */
 		if (!best) {
 			if (!assign && found_task > 0) {
 				assign = 1;
 				goto select;
 			}
-			goto out;
+			break;
 		} else {
-			int ret;
-
-			atomic_inc(&best->mm_count);
-			ret = swap_out_mm(best, gfp_mask);
-			mmdrop(best);
-
-			__ret = 1;
-			goto out;
+			__ret = swap_out_mm(best, gfp_mask);
+			mmput(best);
+			break;
 		}
 	}
-out:
-	unlock_kernel();
 	return __ret;
 }
 
@@ -848,7 +836,6 @@ int inactive_shortage(void)
 static int refill_inactive(unsigned int gfp_mask, int user)
 {
 	int priority, count, start_count, made_progress;
-	unsigned long idle_time;
 
 	count = inactive_shortage() + free_shortage();
 	if (user)
@@ -857,17 +844,6 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
-
-	/*
-	 * Calculate the minimum time (in seconds) a process must
-	 * have slept before we consider it for idle swapping.
-	 * This must be the number of seconds it takes to go through
-	 * all of the cache. Doing this idle swapping makes the VM
-	 * smoother once we start hitting swap.
-	 */
-	idle_time = atomic_read(&page_cache_size);
-	idle_time += atomic_read(&buffermem_pages);
-	idle_time /= (inactive_target + 1);
 
 	priority = 6;
 	do {
@@ -878,8 +854,7 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 			schedule();
 		}
 
-		while (refill_inactive_scan(priority, 1) ||
-				swap_out(priority, gfp_mask, idle_time)) {
+		while (refill_inactive_scan(priority, 1)) {
 			made_progress = 1;
 			if (--count <= 0)
 				goto done;
@@ -896,7 +871,7 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 		/*
 		 * Then, try to page stuff out..
 		 */
-		while (swap_out(priority, gfp_mask, 0)) {
+		while (swap_out(priority, gfp_mask)) {
 			made_progress = 1;
 			if (--count <= 0)
 				goto done;

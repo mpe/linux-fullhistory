@@ -1139,7 +1139,7 @@ static void packet_dev_mc(struct net_device *dev, struct packet_mclist *i, int w
 	case PACKET_MR_ALLMULTI:
 		dev_set_allmulti(dev, what);
 		break;
-	default:
+	default:;
 	}
 }
 

@@ -102,8 +102,8 @@ static struct video_device usb_dsbr100_radio=
 static int users = 0;
 
 static struct usb_device_id usb_dsbr100_table [] = {
-    { idVendor: DSB100_VENDOR, idProduct: DSB100_PRODUCT },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(DSB100_VENDOR, DSB100_PRODUCT) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, usb_dsbr100_table);

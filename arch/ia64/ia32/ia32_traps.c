@@ -119,6 +119,6 @@ ia32_exception (struct pt_regs *regs, unsigned long isr)
 	      default:
 		return -1;
 	}
-	force_sig_info(SIGTRAP, &siginfo, current);
+	force_sig_info(siginfo.si_signo, &siginfo, current);
 	return 0;
 }

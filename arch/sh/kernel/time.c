@@ -3,6 +3,7 @@
  *  linux/arch/sh/kernel/time.c
  *
  *  Copyright (C) 1999  Tetsuya Okada & Niibe Yutaka
+ *  Copyright (C) 2000  Philipp Rumpf <prumpf@tux.org>
  *
  *  Some code taken from i386 version.
  *    Copyright (C) 1991, 1992, 1995  Linus Torvalds
@@ -27,6 +28,7 @@
 #include <asm/irq.h>
 #include <asm/delay.h>
 #include <asm/machvec.h>
+#include <asm/rtc.h>
 
 #include <linux/timex.h>
 #include <linux/irq.h>
@@ -35,19 +37,7 @@
 #define TMU0_TCR_INIT	0x0020
 #define TMU_TSTR_INIT	1
 
-/* RCR1 Bits */
-#define RCR1_CF		0x80	/* Carry Flag             */
-#define RCR1_CIE	0x10	/* Carry Interrupt Enable */
-#define RCR1_AIE	0x08	/* Alarm Interrupt Enable */
-#define RCR1_AF		0x01	/* Alarm Flag             */
-
-/* RCR2 Bits */
-#define RCR2_PEF	0x80	/* PEriodic interrupt Flag */
-#define RCR2_PESMASK	0x70	/* Periodic interrupt Set  */
-#define RCR2_RTCEN	0x08	/* ENable RTC              */
-#define RCR2_ADJ	0x04	/* ADJustment (30-second)  */
-#define RCR2_RESET	0x02	/* Reset bit               */
-#define RCR2_START	0x01	/* Start bit               */
+#define TMU0_TCR_CALIB	0x0000
 
 #if defined(__sh3__)
 #define TMU_TOCR	0xfffffe90	/* Byte access */
@@ -58,25 +48,6 @@
 #define TMU0_TCR	0xfffffe9c	/* Word access */
 
 #define FRQCR		0xffffff80
-
-/* SH-3 RTC */
-#define R64CNT  	0xfffffec0
-#define RSECCNT 	0xfffffec2
-#define RMINCNT 	0xfffffec4
-#define RHRCNT  	0xfffffec6
-#define RWKCNT  	0xfffffec8
-#define RDAYCNT 	0xfffffeca
-#define RMONCNT 	0xfffffecc
-#define RYRCNT  	0xfffffece
-#define RSECAR  	0xfffffed0
-#define RMINAR  	0xfffffed2
-#define RHRAR   	0xfffffed4
-#define RWKAR   	0xfffffed6
-#define RDAYAR  	0xfffffed8
-#define RMONAR  	0xfffffeda
-#define RCR1    	0xfffffedc
-#define RCR2    	0xfffffede
-
 #elif defined(__SH4__)
 #define TMU_TOCR	0xffd80000	/* Byte access */
 #define TMU_TSTR	0xffd80004	/* Byte access */
@@ -86,37 +57,60 @@
 #define TMU0_TCR	0xffd80010	/* Word access */
 
 #define FRQCR		0xffc00000
-
-/* SH-4 RTC */
-#define R64CNT  	0xffc80000
-#define RSECCNT 	0xffc80004
-#define RMINCNT 	0xffc80008
-#define RHRCNT  	0xffc8000c
-#define RWKCNT  	0xffc80010
-#define RDAYCNT 	0xffc80014
-#define RMONCNT 	0xffc80018
-#define RYRCNT  	0xffc8001c  /* 16bit */
-#define RSECAR  	0xffc80020
-#define RMINAR  	0xffc80024
-#define RHRAR   	0xffc80028
-#define RWKAR   	0xffc8002c
-#define RDAYAR  	0xffc80030
-#define RMONAR  	0xffc80034
-#define RCR1    	0xffc80038
-#define RCR2    	0xffc8003c
-#endif
-
-#ifndef BCD_TO_BIN
-#define BCD_TO_BIN(val) ((val)=((val)&15) + ((val)>>4)*10)
-#endif
-
-#ifndef BIN_TO_BCD
-#define BIN_TO_BCD(val) ((val)=(((val)/10)<<4) + (val)%10)
 #endif
 
 extern rwlock_t xtime_lock;
 extern unsigned long wall_jiffies;
 #define TICK_SIZE tick
+
+static unsigned long do_gettimeoffset(void)
+{
+	int count;
+
+	static int count_p = 0x7fffffff;    /* for the first call after boot */
+	static unsigned long jiffies_p = 0;
+
+	/*
+	 * cache volatile jiffies temporarily; we have IRQs turned off. 
+	 */
+	unsigned long jiffies_t;
+
+	/* timer count may underflow right here */
+	count = ctrl_inl(TMU0_TCNT);	/* read the latched count */
+
+ 	jiffies_t = jiffies;
+
+	/*
+	 * avoiding timer inconsistencies (they are rare, but they happen)...
+	 * there is one kind of problem that must be avoided here:
+	 *  1. the timer counter underflows
+	 */
+
+	if( jiffies_t == jiffies_p ) {
+		if( count > count_p ) {
+			/* the nutcase */
+
+			if(ctrl_inw(TMU0_TCR) & 0x100) { /* Check UNF bit */
+				/*
+				 * We cannot detect lost timer interrupts ... 
+				 * well, that's why we call them lost, don't we? :)
+				 * [hmm, on the Pentium and Alpha we can ... sort of]
+				 */
+				count -= LATCH;
+			} else {
+				printk("do_slow_gettimeoffset(): hardware timer problem?\n");
+			}
+		}
+	} else
+		jiffies_p = jiffies_t;
+
+	count_p = count;
+
+	count = ((LATCH-1) - count) * TICK_SIZE;
+	count = (count + LATCH/2) / LATCH;
+
+	return count;
+}
 
 void do_gettimeofday(struct timeval *tv)
 {
@@ -124,7 +118,7 @@ void do_gettimeofday(struct timeval *tv)
 	unsigned long usec, sec;
 
 	read_lock_irqsave(&xtime_lock, flags);
-	usec = 0;
+	usec = do_gettimeoffset();
 	{
 		unsigned long lost = jiffies - wall_jiffies;
 		if (lost)
@@ -142,11 +136,6 @@ void do_gettimeofday(struct timeval *tv)
 	tv->tv_sec = sec;
 	tv->tv_usec = usec;
 }
-
-/*
- * Could someone please implement this...
- */
-#define do_gettimeoffset() 0
 
 void do_settimeofday(struct timeval *tv)
 {
@@ -171,45 +160,6 @@ void do_settimeofday(struct timeval *tv)
 	time_maxerror = NTP_PHASE_LIMIT;
 	time_esterror = NTP_PHASE_LIMIT;
 	write_unlock_irq(&xtime_lock);
-}
-
-static int set_rtc_time(unsigned long nowtime)
-{
-	int retval = 0;
-	int real_seconds, real_minutes, cmos_minutes;
-
-	ctrl_outb(RCR2_RESET, RCR2);  /* Reset pre-scaler & stop RTC */
-
-	cmos_minutes = ctrl_inb(RMINCNT);
-	BCD_TO_BIN(cmos_minutes);
-
-	/*
-	 * since we're only adjusting minutes and seconds,
-	 * don't interfere with hour overflow. This avoids
-	 * messing with unknown time zones but requires your
-	 * RTC not to be off by more than 15 minutes
-	 */
-	real_seconds = nowtime % 60;
-	real_minutes = nowtime / 60;
-	if (((abs(real_minutes - cmos_minutes) + 15)/30) & 1)
-		real_minutes += 30;	/* correct for half hour time zone */
-	real_minutes %= 60;
-
-	if (abs(real_minutes - cmos_minutes) < 30) {
-		BIN_TO_BCD(real_seconds);
-		BIN_TO_BCD(real_minutes);
-		ctrl_outb(real_seconds, RSECCNT);
-		ctrl_outb(real_minutes, RMINCNT);
-	} else {
-		printk(KERN_WARNING
-		       "set_rtc_time: can't update from %d to %d\n",
-		       cmos_minutes, real_minutes);
-		retval = -1;
-	}
-
-	ctrl_outb(RCR2_RTCEN|RCR2_START, RCR2);  /* Start RTC */
-
-	return retval;
 }
 
 /* last time the RTC clock got updated */
@@ -241,7 +191,7 @@ static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *reg
 	    xtime.tv_sec > last_rtc_update + 660 &&
 	    xtime.tv_usec >= 500000 - ((unsigned) tick) / 2 &&
 	    xtime.tv_usec <= 500000 + ((unsigned) tick) / 2) {
-		if (set_rtc_time(xtime.tv_sec) == 0)
+		if (sh_mv.mv_rtc_settimeofday(&xtime) == 0)
 			last_rtc_update = xtime.tv_sec;
 		else
 			last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
@@ -274,173 +224,114 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	write_unlock(&xtime_lock);
 }
 
-static unsigned long get_rtc_time(void)
+static unsigned int __init get_timer_frequency(void)
 {
-	unsigned int sec, min, hr, wk, day, mon, yr, yr100;
+	u32 freq;
+	struct timeval tv1, tv2;
+	unsigned long diff_usec;
+	unsigned long factor;
 
- again:
+	/* Setup the timer:  We don't want to generate interrupts, just
+	 * have it count down at its natural rate.
+	 */
+	ctrl_outb(0, TMU_TSTR);
+	ctrl_outb(TMU_TOCR_INIT, TMU_TOCR);
+	ctrl_outw(TMU0_TCR_CALIB, TMU0_TCR);
+	ctrl_outl(0xffffffff, TMU0_TCOR);
+	ctrl_outl(0xffffffff, TMU0_TCNT);
+
+	rtc_gettimeofday(&tv2);
+
 	do {
-		ctrl_outb(0, RCR1);  /* Clear CF-bit */
-		sec = ctrl_inb(RSECCNT);
-		min = ctrl_inb(RMINCNT);
-		hr  = ctrl_inb(RHRCNT);
-		wk  = ctrl_inb(RWKCNT);
-		day = ctrl_inb(RDAYCNT);
-		mon = ctrl_inb(RMONCNT);
-#if defined(__SH4__)
-		yr  = ctrl_inw(RYRCNT);
-		yr100 = (yr >> 8);
-		yr &= 0xff;
-#else
-		yr  = ctrl_inb(RYRCNT);
-		yr100 = (yr == 0x99) ? 0x19 : 0x20;
-#endif
-	} while ((ctrl_inb(RCR1) & RCR1_CF) != 0);
+		rtc_gettimeofday(&tv1);
+	} while (tv1.tv_usec == tv2.tv_usec && tv1.tv_sec == tv2.tv_sec);
 
-	BCD_TO_BIN(yr100);
-	BCD_TO_BIN(yr);
-	BCD_TO_BIN(mon);
-	BCD_TO_BIN(day);
-	BCD_TO_BIN(hr);
-	BCD_TO_BIN(min);
-	BCD_TO_BIN(sec);
+	/* actually start the timer */
+	ctrl_outb(TMU_TSTR_INIT, TMU_TSTR);
 
-	if (yr > 99 || mon < 1 || mon > 12 || day > 31 || day < 1 ||
-	    hr > 23 || min > 59 || sec > 59) {
-		printk(KERN_ERR
-		       "SH RTC: invalid value, resetting to 1 Jan 2000\n");
-		ctrl_outb(RCR2_RESET, RCR2);  /* Reset & Stop */
-		ctrl_outb(0, RSECCNT);
-		ctrl_outb(0, RMINCNT);
-		ctrl_outb(0, RHRCNT);
-		ctrl_outb(6, RWKCNT);
-		ctrl_outb(1, RDAYCNT);
-		ctrl_outb(1, RMONCNT);
-#if defined(__SH4__)
-		ctrl_outw(0x2000, RYRCNT);
-#else
-		ctrl_outb(0, RYRCNT);
-#endif
-		ctrl_outb(RCR2_RTCEN|RCR2_START, RCR2);  /* Start */
-		goto again;
+	do {
+		rtc_gettimeofday(&tv2);
+	} while (tv1.tv_usec == tv2.tv_usec && tv1.tv_sec == tv2.tv_sec);
+
+	freq = 0xffffffff - ctrl_inl(TMU0_TCNT);
+	if (tv2.tv_usec < tv1.tv_usec) {
+		tv2.tv_usec += 1000000;
+		tv2.tv_sec--;
 	}
 
-	return mktime(yr100 * 100 + yr, mon, day, hr, min, sec);
-}
+	diff_usec = (tv2.tv_sec - tv1.tv_sec) * 1000000 + (tv2.tv_usec - tv1.tv_usec);
 
-static __init unsigned int get_cpu_mhz(void)
-{
-	unsigned int count;
-	unsigned long __dummy;
+	/* this should work well if the RTC has a precision of n Hz, where
+	 * n is an integer.  I don't think we have to worry about the other
+	 * cases. */
+	factor = (1000000 + diff_usec/2) / diff_usec;
 
-	sti();
-	do {} while (ctrl_inb(R64CNT) != 0);
-	ctrl_outb(RCR1_CIE, RCR1); /* Enable carry interrupt */
-	asm volatile(
-		"1:\t"
-		"tst	%1,%1\n\t"
-		"bt/s	1b\n\t"
-		" add	#1,%0"
-		: "=r"(count), "=z" (__dummy)
-		: "0" (0), "1" (0)
-		: "t");
-	cli();
-	/*
-	 * SH-3:
-	 * CPU clock = 4 stages * loop
-	 * tst    rm,rm      if id ex
-	 * bt/s   1b            if id ex
-	 * add    #1,rd            if id ex
-         *                            (if) pipe line stole
-	 * tst    rm,rm                  if id ex
-         * ....
-	 *
-	 *
-	 * SH-4:
-	 * CPU clock = 6 stages * loop
-	 * I don't know why.
-         * ....
-	 */
-#if defined(__SH4__)
-	return count*6;
-#else
-	return count*4;
-#endif
-}
+	if (factor * diff_usec > 1100000 ||
+	    factor * diff_usec <  900000)
+		panic("weird RTC (diff_usec %ld)", diff_usec);
 
-static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
-{
-	ctrl_outb(0, RCR1);	/* Disable Carry Interrupts */
-	regs->regs[0] = 1;
+	return freq * factor;
 }
 
 static struct irqaction irq0  = { timer_interrupt, SA_INTERRUPT, 0, "timer", NULL, NULL};
-static struct irqaction irq1  = { rtc_interrupt, SA_INTERRUPT, 0, "rtc", NULL, NULL};
 
 void __init time_init(void)
 {
 	unsigned int cpu_clock, master_clock, bus_clock, module_clock;
-	unsigned short frqcr, ifc, pfc;
+	unsigned int timer_freq;
+	unsigned short frqcr, ifc, pfc, bfc;
 	unsigned long interval;
 #if defined(__sh3__)
 	static int ifc_table[] = { 1, 2, 4, 1, 3, 1, 1, 1 };
 	static int pfc_table[] = { 1, 2, 4, 1, 3, 6, 1, 1 };
-	static int stc_table[] = { 1, 2, 3, 4, 6, 8, 1, 1 };
+	static int stc_table[] = { 1, 2, 4, 8, 3, 6, 1, 1 };
 #elif defined(__SH4__)
 	static int ifc_table[] = { 1, 2, 3, 4, 6, 8, 1, 1 };
 #define bfc_table ifc_table	/* Same */
 	static int pfc_table[] = { 2, 3, 4, 6, 8, 2, 2, 2 };
 #endif
 
-	xtime.tv_sec = get_rtc_time();
-	xtime.tv_usec = 0;
+	rtc_gettimeofday(&xtime);
 
 	setup_irq(TIMER_IRQ, &irq0);
-	setup_irq(RTC_IRQ, &irq1);
 
-	/* Check how fast it is.. */
-	cpu_clock = get_cpu_mhz();
-	disable_irq(RTC_IRQ);
+	timer_freq = get_timer_frequency();
 
-	printk("CPU clock: %d.%02dMHz\n",
-	       (cpu_clock / 1000000), (cpu_clock % 1000000)/10000);
+	module_clock = timer_freq * 4;
+
 #if defined(__sh3__)
 	{
-		unsigned short tmp, stc;
+		unsigned short tmp;
+
 		frqcr = ctrl_inw(FRQCR);
 		tmp  = (frqcr & 0x8000) >> 13;
 		tmp |= (frqcr & 0x0030) >>  4;
-		stc = stc_table[tmp];
+		bfc = stc_table[tmp];
 		tmp  = (frqcr & 0x4000) >> 12;
 		tmp |= (frqcr & 0x000c) >> 2;
 		ifc  = ifc_table[tmp];
 		tmp  = (frqcr & 0x2000) >> 11;
 		tmp |= frqcr & 0x0003;
 		pfc = pfc_table[tmp];
-		if (MACH_HP600) {
-			master_clock = cpu_clock/6;
-		} else {
-			master_clock = cpu_clock;
-		}
-		bus_clock = master_clock/pfc;
 	}
 #elif defined(__SH4__)
 	{
-		unsigned short bfc;
 		frqcr = ctrl_inw(FRQCR);
 		ifc  = ifc_table[(frqcr>> 6) & 0x0007];
 		bfc  = bfc_table[(frqcr>> 3) & 0x0007];
 		pfc = pfc_table[frqcr & 0x0007];
-		master_clock = cpu_clock * ifc;
-		bus_clock = master_clock/bfc;
 	}
 #endif
+	master_clock = module_clock * pfc;
+	bus_clock = master_clock / bfc;
+	cpu_clock = master_clock / ifc;
+	printk("CPU clock: %d.%02dMHz\n",
+	       (cpu_clock / 1000000), (cpu_clock % 1000000)/10000);
 	printk("Bus clock: %d.%02dMHz\n",
 	       (bus_clock/1000000), (bus_clock % 1000000)/10000);
-	module_clock = master_clock/pfc;
 	printk("Module clock: %d.%02dMHz\n",
 	       (module_clock/1000000), (module_clock % 1000000)/10000);
-	interval = (module_clock/(HZ*4));
+	interval = (module_clock/4 + HZ/2) / HZ;
 
 	printk("Interval = %ld\n", interval);
 
@@ -450,6 +341,7 @@ void __init time_init(void)
 	current_cpu_data.module_clock = module_clock;
 
 	/* Start TMU0 */
+	ctrl_outb(0, TMU_TSTR);
 	ctrl_outb(TMU_TOCR_INIT, TMU_TOCR);
 	ctrl_outw(TMU0_TCR_INIT, TMU0_TCR);
 	ctrl_outl(interval, TMU0_TCOR);

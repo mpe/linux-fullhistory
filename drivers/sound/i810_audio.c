@@ -144,13 +144,13 @@ struct i810_channel
 
 #define ENUM_ENGINE(PRE,DIG) 									\
 enum {												\
-	##PRE##_BDBAR =	0x##DIG##0,		/* Buffer Descriptor list Base Address */	\
-	##PRE##_CIV =	0x##DIG##4,		/* Current Index Value */			\
-	##PRE##_LVI =	0x##DIG##5,		/* Last Valid Index */				\
-	##PRE##_SR =	0x##DIG##6,		/* Status Register */				\
-	##PRE##_PICB =	0x##DIG##8,		/* Position In Current Buffer */		\
-	##PRE##_PIV =	0x##DIG##a,		/* Prefetched Index Value */			\
-	##PRE##_CR =	0x##DIG##b		/* Control Register */				\
+	PRE##_BDBAR =	0x##DIG##0,		/* Buffer Descriptor list Base Address */	\
+	PRE##_CIV =	0x##DIG##4,		/* Current Index Value */			\
+	PRE##_LVI =	0x##DIG##5,		/* Last Valid Index */				\
+	PRE##_SR =	0x##DIG##6,		/* Status Register */				\
+	PRE##_PICB =	0x##DIG##8,		/* Position In Current Buffer */		\
+	PRE##_PIV =	0x##DIG##a,		/* Prefetched Index Value */			\
+	PRE##_CR =	0x##DIG##b		/* Control Register */				\
 }
 
 ENUM_ENGINE(OFF,0);	/* Offsets */
@@ -770,7 +770,10 @@ static void i810_clear_tail(struct i810_state *state)
 	swptr = dmabuf->swptr;
 	spin_unlock_irqrestore(&state->card->lock, flags);
 
-	len = swptr % (dmabuf->dmasize/SG_LEN);
+	if(dmabuf->dmasize)
+		len = swptr % (dmabuf->dmasize/SG_LEN);
+	else
+		len = 0;
 	
 	memset(dmabuf->rawbuf + swptr, silence, len);
 
@@ -1800,7 +1803,7 @@ static int __init i810_ac97_init(struct i810_card *card)
 			if(!(i810_ac97_get(codec, AC97_EXTENDED_STATUS)&1))
 			{
 				printk(KERN_WARNING "i810_audio: Codec refused to allow VRA, using 48Khz only.\n");
-					card->ac97_features&=~1;
+				card->ac97_features&=~1;
 			}
 		}
    		
@@ -1894,12 +1897,6 @@ static int __init i810_probe(struct pci_dev *pci_dev, const struct pci_device_id
 	}
 	pci_dev->driver_data = card;
 	pci_dev->dma_mask = I810_DMA_MASK;
-
-//	printk("resetting codec?\n");
-	outl(0, card->iobase + GLOB_CNT);
-	udelay(500);
-//	printk("bringing it back?\n");
-	outl(1<<1, card->iobase + GLOB_CNT);
 	return 0;
 }
 

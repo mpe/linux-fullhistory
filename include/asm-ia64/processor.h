@@ -4,7 +4,7 @@
 /*
  * Copyright (C) 1998-2000 Hewlett-Packard Co
  * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
- * Copyright (C) 1998, 1999 Stephane Eranian <eranian@hpl.hp.com>
+ * Copyright (C) 1998-2000 Stephane Eranian <eranian@hpl.hp.com>
  * Copyright (C) 1999 Asit Mallick <asit.k.mallick@intel.com>
  * Copyright (C) 1999 Don Dugger <don.dugger@intel.com>
  *
@@ -19,15 +19,21 @@
 #include <asm/types.h>
 
 #define IA64_NUM_DBG_REGS	8
-#define IA64_NUM_PM_REGS	4
+/*
+ * Limits for PMC and PMD are set to less than maximum architected values
+ * but should be sufficient for a while
+ */
+#define IA64_NUM_PMC_REGS	32
+#define IA64_NUM_PMD_REGS	32
+#define IA64_NUM_PMD_COUNTERS	4
 
 /*
  * TASK_SIZE really is a mis-named.  It really is the maximum user
- * space address (plus one).  On ia-64, there are five regions of 2TB
+ * space address (plus one).  On IA-64, there are five regions of 2TB
  * each (assuming 8KB page size), for a total of 8TB of user virtual
  * address space.
  */
-#define TASK_SIZE		0xa000000000000000
+#define TASK_SIZE		(current->thread.task_size)
 
 /*
  * This decides where the kernel will search for a free chunk of vm
@@ -157,6 +163,7 @@
 #define IA64_THREAD_UAC_NOPRINT	(__IA64_UL(1) << 3)	/* don't log unaligned accesses */
 #define IA64_THREAD_UAC_SIGBUS	(__IA64_UL(1) << 4)	/* generate SIGBUS on unaligned acc. */
 #define IA64_THREAD_KRBS_SYNCED	(__IA64_UL(1) << 5)	/* krbs synced with process vm? */
+#define IA64_THREAD_MAP_SHARED	(__IA64_UL(1) << 6)	/* ugly: just a tmp flag for mmap() */
 #define IA64_KERNEL_DEATH	(__IA64_UL(1) << 63)	/* see die_if_kernel()... */
 
 #define IA64_THREAD_UAC_SHIFT	3
@@ -242,8 +249,11 @@ struct cpuinfo_ia64 {
 	__u64 usec_per_cyc;	/* 2^IA64_USEC_PER_CYC_SHIFT*1000000/itc_freq */
 	__u64 unimpl_va_mask;	/* mask of unimplemented virtual address bits (from PAL) */
 	__u64 unimpl_pa_mask;	/* mask of unimplemented physical address bits (from PAL) */
+	__u64 ptce_base;
+	__u32 ptce_count[2];
+	__u32 ptce_stride[2];
 #ifdef CONFIG_SMP
-	__u64 loops_per_sec;
+	__u64 loops_per_jiffy;
 	__u64 ipi_count;
 	__u64 prof_counter;
 	__u64 prof_multiplier;
@@ -251,12 +261,6 @@ struct cpuinfo_ia64 {
 };
 
 #define my_cpu_data		cpu_data[smp_processor_id()]
-
-#ifdef CONFIG_SMP
-# define ia64_loops_per_sec()	my_cpu_data.loops_per_sec
-#else
-# define ia64_loops_per_sec()	loops_per_sec
-#endif
 
 extern struct cpuinfo_ia64 cpu_data[NR_CPUS];
 
@@ -288,14 +292,20 @@ struct thread_struct {
 	__u64 dbr[IA64_NUM_DBG_REGS];
 	__u64 ibr[IA64_NUM_DBG_REGS];
 #ifdef CONFIG_PERFMON
-	__u64 pmc[IA64_NUM_PM_REGS];
-	__u64 pmd[IA64_NUM_PM_REGS];
-	__u64 pmod[IA64_NUM_PM_REGS];
-# define INIT_THREAD_PM		{0, }, {0, }, {0, },
+	__u64 pmc[IA64_NUM_PMC_REGS];
+	__u64 pmd[IA64_NUM_PMD_REGS];
+	struct {
+		__u64		val;	/* virtual 64bit counter */
+		__u64		rval;	/* reset value on overflow */
+		int		sig;	/* signal used to notify */
+		int		pid;	/* process to notify */
+	} pmu_counters[IA64_NUM_PMD_COUNTERS];
+# define INIT_THREAD_PM		{0, }, {0, }, {{ 0, 0, 0, 0}, },
 #else
 # define INIT_THREAD_PM
 #endif
-	__u64 map_base;			/* base address for mmap() */
+	__u64 map_base;			/* base address for get_unmapped_area() */
+	__u64 task_size;		/* limit for task size */
 #ifdef CONFIG_IA32_SUPPORT
 	__u64 eflag;			/* IA32 EFLAGS reg */
 	__u64 fsr;			/* IA32 floating pt status reg */
@@ -309,7 +319,7 @@ struct thread_struct {
 	union {
 		__u64 sigmask;		/* aligned mask for sigsuspend scall */
 	} un;
-# define INIT_THREAD_IA32	, 0, 0, 0x17800000037fULL, 0, 0, 0, 0, 0, 0, {0}
+# define INIT_THREAD_IA32	0, 0, 0x17800000037fULL, 0, 0, 0, 0, 0, 0, {0},
 #else
 # define INIT_THREAD_IA32
 #endif /* CONFIG_IA32_SUPPORT */
@@ -328,8 +338,9 @@ struct thread_struct {
 	{0, },				/* dbr */	\
 	{0, },				/* ibr */	\
 	INIT_THREAD_PM					\
-	0x2000000000000000		/* map_base */	\
-	INIT_THREAD_IA32,				\
+	0x2000000000000000,		/* map_base */	\
+	0xa000000000000000,		/* task_size */	\
+	INIT_THREAD_IA32				\
 	0				/* siginfo */	\
 }
 
@@ -422,8 +433,8 @@ extern void ia32_load_state (struct thread_struct *thread);
 #endif
 
 #ifdef CONFIG_PERFMON
-extern void ia64_save_pm_regs (struct thread_struct *thread);
-extern void ia64_load_pm_regs (struct thread_struct *thread);
+extern void ia64_save_pm_regs (struct task_struct *task);
+extern void ia64_load_pm_regs (struct task_struct *task);
 #endif
 
 #define ia64_fph_enable()	__asm__ __volatile__ (";; rsm psr.dfh;; srlz.d;;" ::: "memory");

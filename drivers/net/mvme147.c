@@ -63,7 +63,7 @@ static unsigned short m147lance_readrdp(struct m147lance_private *lp);
 
 typedef void (*writerap_t)(void *, unsigned short);
 typedef void (*writerdp_t)(void *, unsigned short);
-typedef void (*readrdp_t)(void *);
+typedef unsigned short (*readrdp_t)(void *);
 
 #ifdef MODULE
 static struct m147lance_private *root_m147lance_dev = NULL;
@@ -79,7 +79,7 @@ int __init mvme147lance_probe(struct net_device *dev)
 	u_long address;
 
 	if (!MACH_IS_MVME147 || called)
-		return(-ENODEV);
+		return -ENODEV;
 	called++;
 
 	SET_MODULE_OWNER(dev);
@@ -96,6 +96,7 @@ int __init mvme147lance_probe(struct net_device *dev)
 	dev->hard_start_xmit = &lance_start_xmit;
 	dev->get_stats = &lance_get_stats;
 	dev->set_multicast_list = &lance_set_multicast;
+	dev->tx_timeout = &lance_tx_timeout;
 	dev->dma = 0;
 
 	addr=(u_long *)ETHERNET_ADDRESS;

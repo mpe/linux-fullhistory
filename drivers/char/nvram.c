@@ -107,8 +107,6 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
-extern spinlock_t rtc_lock;
-
 static int nvram_open_cnt;	/* #times opened */
 static int nvram_open_mode;		/* special open modes */
 #define	NVRAM_WRITE		1		/* opened for writing (exclusive) */

@@ -382,6 +382,7 @@ static void exit_notify(void)
 	 */
 
 	write_lock_irq(&tasklist_lock);
+	current->state = TASK_ZOMBIE;
 	do_notify_parent(current, current->exit_signal);
 	while (current->p_cptr != NULL) {
 		p = current->p_cptr;
@@ -415,9 +416,6 @@ static void exit_notify(void)
 		}
 	}
 	write_unlock_irq(&tasklist_lock);
-
-	if (current->leader)
-		disassociate_ctty(1);
 }
 
 NORET_TYPE void do_exit(long code)
@@ -437,20 +435,26 @@ fake_volatile:
 #ifdef CONFIG_BSD_PROCESS_ACCT
 	acct_process(code);
 #endif
+	__exit_mm(tsk);
+
 	lock_kernel();
 	sem_exit();
-	__exit_mm(tsk);
 	__exit_files(tsk);
 	__exit_fs(tsk);
 	exit_sighand(tsk);
 	exit_thread();
-	tsk->state = TASK_ZOMBIE;
-	tsk->exit_code = code;
-	exit_notify();
+
+	if (current->leader)
+		disassociate_ctty(1);
+
 	put_exec_domain(tsk->exec_domain);
 	if (tsk->binfmt && tsk->binfmt->module)
 		__MOD_DEC_USE_COUNT(tsk->binfmt->module);
+
+	tsk->exit_code = code;
+	exit_notify();
 	schedule();
+	BUG();
 /*
  * In order to get rid of the "volatile function does return" message
  * I did this little loop that confuses gcc to think do_exit really

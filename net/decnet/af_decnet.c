@@ -2133,6 +2133,9 @@ __setup("decnet=", decnet_setup);
 
 static void __exit decnet_exit(void)
 {
+	sock_unregister(AF_DECnet);
+	dev_remove_pack(&dn_dix_packet_type);
+
 #ifdef CONFIG_SYSCTL
 	dn_unregister_sysctl();
 #endif /* CONFIG_SYSCTL */
@@ -2148,9 +2151,6 @@ static void __exit decnet_exit(void)
 #endif /* CONFIG_DECNET_ROUTER */
 
 	proc_net_remove("decnet");
-
-	dev_remove_pack(&dn_dix_packet_type);
-	sock_unregister(AF_DECnet);
 }
 
 module_init(decnet_init);

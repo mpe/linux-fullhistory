@@ -39,6 +39,7 @@ static unsigned char bridge_ula_lec[] = {0x01, 0x80, 0xc2, 0x00, 0x00};
 
 /* Modular too */
 #include <linux/module.h>
+#include <linux/init.h>
 
 #include "lec.h"
 #include "lec_arpc.h"
@@ -828,8 +829,7 @@ void atm_lane_init_ops(struct atm_lane_ops *ops)
 	return;
 }
 
-#ifdef MODULE
-int init_module(void)
+static int __init lane_module_init(void)
 {
         extern struct atm_lane_ops atm_lane_ops;
 
@@ -838,16 +838,11 @@ int init_module(void)
         return 0;
 }
 
-void cleanup_module(void)
+static void __exit lane_module_cleanup(void)
 {
         int i;
         extern struct atm_lane_ops atm_lane_ops;
         struct lec_priv *priv;
-
-        if (MOD_IN_USE) {
-                printk(KERN_NOTICE "lec.c: module in use\n");
-                return;
-        }
 
         atm_lane_ops.lecd_attach = NULL;
         atm_lane_ops.mcast_attach = NULL;
@@ -857,7 +852,9 @@ void cleanup_module(void)
         for (i = 0; i < MAX_LEC_ITF; i++) {
                 if (dev_lec[i] != NULL) {
                         priv = (struct lec_priv *)dev_lec[i]->priv;
+#if defined(CONFIG_TR)
                         unregister_trdev(dev_lec[i]);
+#endif
                         kfree(dev_lec[i]);
                         dev_lec[i] = NULL;
                 }
@@ -865,7 +862,9 @@ void cleanup_module(void)
 
         return;                                    
 }
-#endif /* MODULE */
+
+module_init(lane_module_init);
+module_exit(lane_module_cleanup);
 
 /*
  * LANE2: 3.1.3, LE_RESOLVE.request
@@ -2170,4 +2169,3 @@ lec_arp_check_empties(struct lec_priv *priv,
         lec_arp_put(priv->lec_arp_tables,entry);
         lec_arp_unlock(priv);  
 }
-

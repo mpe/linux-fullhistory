@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.117 2000/10/16 14:32:50 anton Exp $
+/* $Id: fault.c,v 1.118 2000/12/29 07:52:41 anton Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -371,7 +371,7 @@ vmalloc_fault:
 		if (!pgd_present(*pgd)) {
 			if (!pgd_present(*pgd_k))
 				goto bad_area_nosemaphore;
-			pgd_set(pgd, *pgd_k);
+			pgd_val(*pgd) = pgd_val(*pgd_k);
 			return;
 		}
 
@@ -380,7 +380,7 @@ vmalloc_fault:
 
 		if (pmd_present(*pmd) || !pmd_present(*pmd_k))
 			goto bad_area_nosemaphore;
-		pmd_set(pmd, *pmd_k);
+		pmd_val(*pmd) = pmd_val(*pmd_k);
 		return;
 	}
 }

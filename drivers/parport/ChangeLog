@@ -1,3 +1,21 @@
+2001-01-04  Peter Osterlund  <peter.osterlund@mailbox.swipnet.se>
+
+	* ieee1284.c (parport_negotiate): Fix missing printk argument.
+
+2001-01-03  Paul Schleger  <Paul.Schleger@t-online.de>
+
+	* probe.c (parse_data): Get rid of trailing blanks in values.
+	Needed for XEROX XJ8C printer.
+
+2001-01-03  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c (parport_pc_probe_port): Say something when probes
+	are omitted.
+
+2001-01-03  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c (sio_via_686a_probe): Correct dma=255 fix.
+
 2000-11-21  Tim Waugh  <twaugh@redhat.com>
 
 	* parport_pc.c (parport_pc_ecp_write_block_pio): Fix

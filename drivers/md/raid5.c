@@ -1096,8 +1096,11 @@ static void handle_stripe(struct stripe_head *sh)
 				bh->b_rdev = bh->b_dev;
 				bh->b_rsector = bh->b_blocknr * (bh->b_size>>9);
 				generic_make_request(action[i]-1, bh);
-			} else
+			} else {
 				PRINTK("skip op %d on disc %d for sector %ld\n", action[i]-1, i, sh->sector);
+				clear_bit(BH_Lock, &bh->b_state);
+				set_bit(STRIPE_HANDLE, &sh->state);
+			}
 		}
 }
 

@@ -350,7 +350,7 @@ static int __init typhoon_init(void)
 
 	printk(KERN_INFO BANNER);
 	io = typhoon_unit.iobase;
-	if (request_region(io, 8, "typhoon")) {
+	if (!request_region(io, 8, "typhoon")) {
 		printk(KERN_ERR "radio-typhoon: port 0x%x already in use\n",
 		       typhoon_unit.iobase);
 		return -EBUSY;

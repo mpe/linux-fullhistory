@@ -104,6 +104,7 @@ extern __inline__ void destroy_context(struct mm_struct *mm)
 #define MMU_PTEL	0xFF000004	/* Page table entry register LOW */
 #define MMU_TTB		0xFF000008	/* Translation table base register */
 #define MMU_TEA		0xFF00000C	/* TLB Exception Address */
+#define MMU_PTEA	0xFF000034	/* Page table entry assistance register */
 
 #define MMUCR		0xFF000010	/* MMU Control Register */
 

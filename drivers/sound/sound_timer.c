@@ -165,7 +165,7 @@ static int timer_event(int dev, unsigned char *event)
 			seq_copy_to_input(event, 8);
 			break;
 
-		default:
+		default:;
 	}
 	return TIMER_NOT_ARMED;
 }

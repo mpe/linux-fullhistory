@@ -16,10 +16,10 @@
 
 static void __init check_bugs(void)
 {
-	extern unsigned long loops_per_sec;
+	extern unsigned long loops_per_jiffy;
 	char *p= &system_utsname.machine[2]; /* "sh" */
 
-	cpu_data->loops_per_sec = loops_per_sec;
+	cpu_data->loops_per_jiffy = loops_per_jiffy;
 	
 	switch (cpu_data->type) {
 	case CPU_SH7708:

@@ -625,10 +625,10 @@ static void uss720_disconnect(struct usb_device *usbdev, void *ptr)
 
 /* table of cables that work through this driver */
 static struct usb_device_id uss720_table [] = {
-    { idVendor: 0x047e, idProduct: 0x1001},
-    { idVendor: 0x0557, idProduct: 0x2001},
-    { idVendor: 0x0729, idProduct: 0x1284},
-    { }						/* Terminating entry */
+	{ USB_DEVICE(0x047e, 0x1001) },
+	{ USB_DEVICE(0x0557, 0x2001) },
+	{ USB_DEVICE(0x0729, 0x1284) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, uss720_table);

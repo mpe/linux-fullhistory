@@ -15,6 +15,8 @@
 #include <linux/rtc.h>			/* get the user-level API */
 #include <asm/mc146818rtc.h>		/* register access macros */
 
+extern spinlock_t rtc_lock;		/* serialize CMOS RAM access */
+
 /**********************************************************************
  * register summary
  **********************************************************************/

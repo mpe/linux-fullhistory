@@ -738,6 +738,7 @@ static void __init hd_geninit(void)
 	if (!NR_HD) {
 		extern struct drive_info drive_info;
 		unsigned char *BIOS = (unsigned char *) &drive_info;
+		unsigned long flags;
 		int cmos_disks;
 
 		for (drive=0 ; drive<2 ; drive++) {
@@ -773,10 +774,15 @@ static void __init hd_geninit(void)
 		Needless to say, a non-zero value means we have 
 		an AT controller hard disk for that drive.
 
-		
+		Currently the rtc_lock is a bit academic since this
+		driver is non-modular, but someday... ?         Paul G.
 	*/
 
-		if ((cmos_disks = CMOS_READ(0x12)) & 0xf0) {
+		spin_lock_irqsave(&rtc_lock, flags);
+		cmos_disks = CMOS_READ(0x12);
+		spin_unlock_irqrestore(&rtc_lock, flags);
+
+		if (cmos_disks & 0xf0) {
 			if (cmos_disks & 0x0f)
 				NR_HD = 2;
 			else

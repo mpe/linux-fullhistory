@@ -7,7 +7,7 @@
 
 L_TARGET = lib.a
 
-obj-y		:= ashrdi3.o lshrdi3.o checksum.o memcpy.o memcmp.o memset.o \
-		    semaphore.o muldi3.o
+obj-y		:= ashldi3.o ashrdi3.o lshrdi3.o muldi3.o \
+			checksum.o memcmp.o memcpy.o memset.o semaphore.o
 
 include $(TOPDIR)/Rules.make

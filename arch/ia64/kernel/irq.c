@@ -541,6 +541,18 @@ void enable_irq(unsigned int irq)
 	spin_unlock_irqrestore(&desc->lock, flags);
 }
 
+void do_IRQ_per_cpu(unsigned long irq, struct pt_regs *regs)
+{
+	irq_desc_t *desc = irq_desc + irq;
+	int cpu = smp_processor_id();
+
+	kstat.irqs[cpu][irq]++;
+
+	desc->handler->ack(irq);
+	handle_IRQ_event(irq, regs, desc->action);
+	desc->handler->end(irq);
+}
+
 /*
  * do_IRQ handles all normal device IRQ's (the special
  * SMP cross-CPU interrupts have their own specific
@@ -581,8 +593,7 @@ unsigned int do_IRQ(unsigned long irq, struct pt_regs *regs)
 	if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
 		action = desc->action;
 		status &= ~IRQ_PENDING; /* we commit to handling */
-		if (!(status & IRQ_PER_CPU))
-			status |= IRQ_INPROGRESS; /* we are handling it */
+		status |= IRQ_INPROGRESS; /* we are handling it */
 	}
 	desc->status = status;
 

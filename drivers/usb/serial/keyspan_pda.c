@@ -97,21 +97,21 @@ struct keyspan_pda_private {
 #define KEYSPAN_PDA_ID			0x0104 /* no clue */
 
 static __devinitdata struct usb_device_id id_table_combined [] = {
-    { idVendor: KEYSPAN_VENDOR_ID, idProduct: KEYSPAN_PDA_FAKE_ID },
-    { idVendor: KEYSPAN_VENDOR_ID, idProduct: KEYSPAN_PDA_ID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(KEYSPAN_VENDOR_ID, KEYSPAN_PDA_FAKE_ID) },
+	{ USB_DEVICE(KEYSPAN_VENDOR_ID, KEYSPAN_PDA_ID) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, id_table_combined);
 
 static __devinitdata struct usb_device_id id_table_std [] = {
-    { idVendor: KEYSPAN_VENDOR_ID, idProduct: KEYSPAN_PDA_ID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(KEYSPAN_VENDOR_ID, KEYSPAN_PDA_ID) },
+	{ }						/* Terminating entry */
 };
 
 static __devinitdata struct usb_device_id id_table_fake [] = {
-    { idVendor: KEYSPAN_VENDOR_ID, idProduct: KEYSPAN_PDA_FAKE_ID },
-    { }						/* Terminating entry */
+	{ USB_DEVICE(KEYSPAN_VENDOR_ID, KEYSPAN_PDA_FAKE_ID) },
+	{ }						/* Terminating entry */
 };
 
 static void keyspan_pda_wakeup_write( struct usb_serial_port *port )

@@ -110,7 +110,7 @@ static void visor_read_bulk_callback	(struct urb *urb);
 
 
 static __devinitdata struct usb_device_id id_table [] = {
-	{ idVendor: HANDSPRING_VENDOR_ID, idProduct: HANDSPRING_VISOR_ID },
+	{ USB_DEVICE(HANDSPRING_VENDOR_ID, HANDSPRING_VISOR_ID) },
 	{ }					/* Terminating entry */
 };
 

@@ -430,10 +430,8 @@ EXPORT_SYMBOL(xtime);
 EXPORT_SYMBOL(do_gettimeofday);
 EXPORT_SYMBOL(do_settimeofday);
 
-#ifdef CONFIG_X86
+#if !defined(__ia64__)
 EXPORT_SYMBOL(loops_per_jiffy);
-#elif !defined(__ia64__)
-EXPORT_SYMBOL(loops_per_sec);
 #endif
 
 EXPORT_SYMBOL(kstat);

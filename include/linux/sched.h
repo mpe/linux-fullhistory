@@ -136,6 +136,7 @@ struct sched_param {
  */
 extern rwlock_t tasklist_lock;
 extern spinlock_t runqueue_lock;
+extern spinlock_t mmlist_lock;
 
 extern void sched_init(void);
 extern void init_idle(void);
@@ -209,6 +210,9 @@ struct mm_struct {
 	int map_count;				/* number of VMAs */
 	struct semaphore mmap_sem;
 	spinlock_t page_table_lock;
+
+	struct list_head mmlist;		/* List of all active mm's */
+
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack;
 	unsigned long arg_start, arg_end, env_start, env_end;
@@ -233,6 +237,7 @@ struct mm_struct {
 	map_count:	1, 				\
 	mmap_sem:	__MUTEX_INITIALIZER(name.mmap_sem), \
 	page_table_lock: SPIN_LOCK_UNLOCKED, 		\
+	mmlist:		LIST_HEAD_INIT(name.mmlist),	\
 }
 
 struct signal_struct {

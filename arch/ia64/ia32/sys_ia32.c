@@ -236,8 +236,6 @@ do_mmap_fake(struct file *file, unsigned long addr, unsigned long len,
 
 	if (OFFSET4K(addr) || OFFSET4K(off))
 		return -EINVAL;
-	if (prot & PROT_WRITE)
-		prot |= PROT_EXEC;
 	prot |= PROT_WRITE;
 	front = NULL;
 	back = NULL;
@@ -287,23 +285,20 @@ ia32_do_mmap (struct file *file, unsigned int addr, unsigned int len, unsigned i
 	unsigned int poff;
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	prot |= PROT_EXEC;
 
  	if ((flags & MAP_FIXED) && ((addr & ~PAGE_MASK) || (offset & ~PAGE_MASK)))
  		error = do_mmap_fake(file, addr, len, prot, flags, (loff_t)offset);
- 	else if (!addr && (offset & ~PAGE_MASK)) {
+	else {
  		poff = offset & PAGE_MASK;
  		len += offset - poff;
 
  		down(&current->mm->mmap_sem);
- 		error = do_mmap(file, addr, len, prot, flags, poff);
+ 		error = do_mmap_pgoff(file, addr, len, prot, flags, poff >> PAGE_SHIFT);
   		up(&current->mm->mmap_sem);
 
  		if (!IS_ERR((void *) error))
  			error += offset - poff;
- 	} else {
-  		down(&current->mm->mmap_sem);
-  		error = do_mmap(file, addr, len, prot, flags, offset);
- 		up(&current->mm->mmap_sem);
  	}
 	return error;
 }
@@ -2032,14 +2027,14 @@ sys32_times(struct tms32 *tbuf)
 	ret = sys_times(tbuf ? &t : NULL);
 	set_fs (old_fs);
 	if (tbuf) {
-		err = put_user (t.tms_utime, &tbuf->tms_utime);
-		err |= __put_user (t.tms_stime, &tbuf->tms_stime);
-		err |= __put_user (t.tms_cutime, &tbuf->tms_cutime);
-		err |= __put_user (t.tms_cstime, &tbuf->tms_cstime);
+		err = put_user (IA32_TICK(t.tms_utime), &tbuf->tms_utime);
+		err |= __put_user (IA32_TICK(t.tms_stime), &tbuf->tms_stime);
+		err |= __put_user (IA32_TICK(t.tms_cutime), &tbuf->tms_cutime);
+		err |= __put_user (IA32_TICK(t.tms_cstime), &tbuf->tms_cstime);
 		if (err)
 			ret = -EFAULT;
 	}
-	return ret;
+	return IA32_TICK(ret);
 }
 
 unsigned int
@@ -2617,6 +2612,53 @@ sys_ioperm (unsigned long from, unsigned long num, int on)
 	 *	manipulating the page protections...
 	 */
 	return(sys_iopl(3, 0, 0, 0));
+}
+
+typedef struct {
+	unsigned int	ss_sp;
+	unsigned int	ss_flags;
+	unsigned int	ss_size;
+} ia32_stack_t;
+
+asmlinkage long
+sys32_sigaltstack (const ia32_stack_t *uss32, ia32_stack_t *uoss32,
+long arg2, long arg3, long arg4,
+long arg5, long arg6, long arg7,
+long stack)
+{
+	struct pt_regs *pt = (struct pt_regs *) &stack;
+	stack_t uss, uoss;
+	ia32_stack_t buf32;
+	int ret;
+	mm_segment_t old_fs = get_fs();
+
+	if (uss32)
+		if (copy_from_user(&buf32, (void *)A(uss32), sizeof(ia32_stack_t)))
+			return(-EFAULT);
+	uss.ss_sp = (void *) (long) buf32.ss_sp;
+	uss.ss_flags = buf32.ss_flags;
+	uss.ss_size = buf32.ss_size;
+	set_fs(KERNEL_DS);
+	ret = do_sigaltstack(uss32 ? &uss : NULL, &uoss, pt->r12);
+	set_fs(old_fs);
+	if (ret < 0)
+		return(ret);
+	if (uoss32) {
+		buf32.ss_sp = (long) uoss.ss_sp;
+		buf32.ss_flags = uoss.ss_flags;
+		buf32.ss_size = uoss.ss_size;
+		if (copy_to_user((void*)A(uoss32), &buf32, sizeof(ia32_stack_t)))
+			return(-EFAULT);
+	}
+	return(ret);
+}
+
+asmlinkage int
+sys_pause (void)
+{
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+	return -ERESTARTNOHAND;
 }
 
 #ifdef	NOTYET  /* UNTESTED FOR IA64 FROM HERE DOWN */

@@ -17,17 +17,31 @@
 
 #include <asm/asmmacro.h>
 
+#if defined(CONFIG_ITANIUM_B0_SPECIFIC) || defined(CONFIG_ITANIUM_B1_SPECIFIC)
+# define BRP(args...)	nop.b 0
+#else
+# define BRP(args...)	brp.loop.imp args
+#endif
+
 GLOBAL_ENTRY(bcopy)
 	.regstk 3,0,0,0
 	mov r8=in0
 	mov in0=in1
 	;;
 	mov in1=r8
+	// gas doesn't handle control flow across procedures, so it doesn't
+	// realize that a stop bit is needed before the "alloc" instruction
+	// below
+{
+	nop.m 0
+	nop.f 0
+	nop.i 0
+}	;;
 END(bcopy)
 	// FALL THROUGH
 GLOBAL_ENTRY(memcpy)
 
-#	define MEM_LAT	2		/* latency to L1 cache */
+#	define MEM_LAT	21		/* latency to memory */
 
 #	define dst	r2
 #	define src	r3
@@ -57,19 +71,16 @@ GLOBAL_ENTRY(memcpy)
 	UNW(.prologue)
 	UNW(.save ar.pfs, saved_pfs)
 	alloc saved_pfs=ar.pfs,3,Nrot,0,Nrot
-#if !(defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_BSTEP_SPECIFIC))
-	lfetch [in1]
-#else
-	nop.m 0
-#endif
+	UNW(.save ar.lc, saved_lc)
+	mov saved_lc=ar.lc
 	or t0=in0,in1
 	;;
 
 	or t0=t0,in2
-	UNW(.save ar.lc, saved_lc)
-	mov saved_lc=ar.lc
 	UNW(.save pr, saved_pr)
 	mov saved_pr=pr
+
+	UNW(.body)
 
 	cmp.eq p6,p0=in2,r0	// zero length?
 	mov retval=in0		// return dst
@@ -83,7 +94,6 @@ GLOBAL_ENTRY(memcpy)
 
 	adds cnt=-1,cnt		// br.ctop is repeat/until
 	cmp.gtu p7,p0=16,in2	// copying less than 16 bytes?
-	UNW(.body)
 	mov ar.ec=N
 	;;
 
@@ -96,12 +106,26 @@ GLOBAL_ENTRY(memcpy)
 (p7)	br.cond.spnt.few memcpy_short
 (p6)	br.cond.spnt.few memcpy_long
 	;;
+	nop.m	0
+	;;
+	nop.m	0
+	nop.i	0
+	;;
+	nop.m	0
+	;;
 	.rotr val[N]
 	.rotp p[N]
-1:
+	.align 32
+1: { .mib
 (p[0])	ld8 val[0]=[src],8
+	nop.i 0
+	BRP(1b, 2f)
+}
+2: { .mfb
 (p[N-1])st8 [dst]=val[N-1],8
+	nop.f 0
 	br.ctop.dptk.few 1b
+}
 	;;
 	mov ar.lc=saved_lc
 	mov pr=saved_pr,-1
@@ -118,19 +142,34 @@ GLOBAL_ENTRY(memcpy)
 memcpy_short:
 	adds cnt=-1,in2		// br.ctop is repeat/until
 	mov ar.ec=MEM_LAT
+	BRP(1f, 2f)
 	;;
 	mov ar.lc=cnt
+	;;
+	nop.m	0			
+	;;
+	nop.m	0
+	nop.i	0
+	;;
+	nop.m	0
+	;;
+	nop.m	0
 	;;
 	/*
 	 * It is faster to put a stop bit in the loop here because it makes
 	 * the pipeline shorter (and latency is what matters on short copies).
 	 */
-1:
+	.align 32
+1: { .mib
 (p[0])	ld1 val[0]=[src],1
-	;;
+	nop.i 0
+	BRP(1b, 2f)
+} ;;
+2: { .mfb
 (p[MEM_LAT-1])st1 [dst]=val[MEM_LAT-1],1
+	nop.f 0
 	br.ctop.dptk.few 1b
-	;;
+} ;;
 	mov ar.lc=saved_lc
 	mov pr=saved_pr,-1
 	mov ar.pfs=saved_pfs
@@ -227,6 +266,13 @@ memcpy_long:
 	mov pr=cnt,0x38			// set (p5,p4,p3) to # of bytes last-word bytes to copy
 	mov ar.lc=t2
 	;;
+	nop.m	0			
+	;;
+	nop.m	0
+	nop.i	0
+	;;
+	nop.m	0
+	;;
 (p6)	ld8 val[1]=[src2],8		// prime the pump...
 	mov b6=t4
 	br.sptk.few b6
@@ -251,17 +297,16 @@ memcpy_tail:
 	.align 64
 
 #define COPY(shift,index)									\
- 1:												\
-  { .mfi											\
+ 1: { .mib											\
 	(p[0])		ld8 val[0]=[src2],8;							\
-			nop.f 0;								\
 	(p[MEM_LAT+3])	shrp w[0]=val[MEM_LAT+3],val[MEM_LAT+4-index],shift;			\
-  };												\
-  { .mbb											\
+			BRP(1b, 2f)								\
+    };												\
+ 2: { .mfb											\
 	(p[MEM_LAT+4])	st8 [dst]=w[1],8;							\
-			nop.b 0;								\
+			nop.f 0;								\
 			br.ctop.dptk.few 1b;							\
-  };												\
+    };												\
 			;;									\
 			ld8 val[N-1]=[src_end];	/* load last word (may be same as val[N]) */	\
 			;;									\

@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 #
 
-L_TARGET := ieee1394.a
+O_TARGET := ieee1394drv.o
 
 export-objs := ieee1394_syms.o
 
@@ -23,7 +23,7 @@ obj-$(CONFIG_IEEE1394_OHCI1394) += ohci1394.o
 obj-$(CONFIG_IEEE1394_VIDEO1394) += video1394.o
 obj-$(CONFIG_IEEE1394_RAWIO) += raw1394.o
 
+include $(TOPDIR)/Rules.make
+
 ieee1394.o: $(ieee1394-objs)
 	$(LD) -r -o $@ $(ieee1394-objs)
-
-include $(TOPDIR)/Rules.make

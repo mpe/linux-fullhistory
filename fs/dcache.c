@@ -339,9 +339,17 @@ void prune_dcache(int count)
 
 		if (tmp == &dentry_unused)
 			break;
-		dentry_stat.nr_unused--;
 		list_del_init(tmp);
 		dentry = list_entry(tmp, struct dentry, d_lru);
+
+		/* If the dentry was recently referenced, don't free it. */
+		if (dentry->d_flags & DCACHE_REFERENCED) {
+			dentry->d_flags &= ~DCACHE_REFERENCED;
+			list_add(&dentry->d_lru, &dentry_unused);
+			count--;
+			continue;
+		}
+		dentry_stat.nr_unused--;
 
 		/* Unused dentry with a count? */
 		if (atomic_read(&dentry->d_count))
@@ -732,6 +740,7 @@ struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
 				continue;
 		}
 		__dget_locked(dentry);
+		dentry->d_flags |= DCACHE_REFERENCED;
 		spin_unlock(&dcache_lock);
 		return dentry;
 	}

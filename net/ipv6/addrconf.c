@@ -206,7 +206,7 @@ static void addrconf_mod_timer(struct inet6_ifaddr *ifp,
 	case AC_RS:
 		ifp->timer.function = addrconf_rs_timer;
 		break;
-	default:
+	default:;
 	}
 	ifp->timer.expires = jiffies + when;
 	add_timer(&ifp->timer);
@@ -2015,7 +2015,7 @@ void __init addrconf_init(void)
 		case ARPHRD_IEEE802_TR:	
 			addrconf_dev_config(dev);
 			break;
-		default:
+		default:;
 			/* Ignore all other */
 		}
 	}

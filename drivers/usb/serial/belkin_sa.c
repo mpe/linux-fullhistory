@@ -87,24 +87,24 @@ static void belkin_sa_break_ctl		(struct usb_serial_port *port, int break_state 
 
 
 static __devinitdata struct usb_device_id id_table_combined [] = {
-	{ idVendor: BELKIN_SA_VID,	idProduct: BELKIN_SA_PID },
-	{ idVendor: BELKIN_OLD_VID,	idProduct: BELKIN_OLD_PID },
-	{ idVendor: PERACOM_VID,	idProduct: PERACOM_PID },
+	{ USB_DEVICE(BELKIN_SA_VID, BELKIN_SA_PID) },
+	{ USB_DEVICE(BELKIN_OLD_VID, BELKIN_OLD_PID) },
+	{ USB_DEVICE(PERACOM_VID, PERACOM_PID) },
 	{ }							/* Terminating entry */
 };
 
 static __devinitdata struct usb_device_id belkin_sa_table [] = {
-	{ idVendor: BELKIN_SA_VID,	idProduct: BELKIN_SA_PID },
+	{ USB_DEVICE(BELKIN_SA_VID, BELKIN_SA_PID) },
 	{ }							/* Terminating entry */
 };
 
 static __devinitdata struct usb_device_id belkin_old_table [] = {
-	{ idVendor: BELKIN_OLD_VID,	idProduct: BELKIN_OLD_PID },
+	{ USB_DEVICE(BELKIN_OLD_VID, BELKIN_OLD_PID) },
 	{ }							/* Terminating entry */
 };
 
 static __devinitdata struct usb_device_id peracom_table [] = {
-	{ idVendor: PERACOM_VID,	idProduct: PERACOM_PID },
+	{ USB_DEVICE(PERACOM_VID, PERACOM_PID) },
 	{ }							/* Terminating entry */
 };
 

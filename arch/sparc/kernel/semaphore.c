@@ -1,34 +1,24 @@
-/* $Id: semaphore.c,v 1.4 2000/11/10 04:02:03 davem Exp $
- * Generic semaphore code. Buyer beware. Do your own
- * specific changes in <asm/semaphore-helper.h>
- */
+/* $Id: semaphore.c,v 1.5 2000/12/29 10:35:05 anton Exp $ */
+
+/* sparc32 semaphore implementation, based on i386 version */
 
 #include <linux/sched.h>
-#include <asm/semaphore-helper.h>
+
+#include <asm/semaphore.h>
 
 /*
  * Semaphores are implemented using a two-way counter:
  * The "count" variable is decremented for each process
- * that tries to sleep, while the "waking" variable is
- * incremented when the "up()" code goes to wake up waiting
- * processes.
+ * that tries to acquire the semaphore, while the "sleeping"
+ * variable is a count of such acquires.
  *
  * Notably, the inline "up()" and "down()" functions can
  * efficiently test if they need to do any extra work (up
  * needs to do something only if count was negative before
  * the increment operation.
  *
- * waking_non_zero() (from asm/semaphore.h) must execute
- * atomically.
- *
- * When __up() is called, the count was negative before
- * incrementing it, and we need to wake up somebody.
- *
- * This routine adds one to the count of processes that need to
- * wake up and exit.  ALL waiting processes actually wake up but
- * only the one that gets to the "waking" field first will gate
- * through and acquire the semaphore.  The others will go back
- * to sleep.
+ * "sleeping" and the contention routine ordering is
+ * protected by the semaphore spinlock.
  *
  * Note that these functions are only called when there is
  * contention on the lock, and as such all this is the
@@ -36,95 +26,130 @@
  * critical part is the inline stuff in <asm/semaphore.h>
  * where we want to avoid any extra jumps and calls.
  */
+
+/*
+ * Logic:
+ *  - only on a boundary condition do we need to care. When we go
+ *    from a negative count to a non-negative, we wake people up.
+ *  - when we go from a non-negative count to a negative do we
+ *    (a) synchronize with the "sleeper" count and (b) make sure
+ *    that we're on the wakeup list before we synchronize so that
+ *    we cannot lose wakeup events.
+ */
+
 void __up(struct semaphore *sem)
 {
-	wake_one_more(sem);
 	wake_up(&sem->wait);
 }
 
-/*
- * Perform the "down" function.  Return zero for semaphore acquired,
- * return negative for signalled out of the function.
- *
- * If called from __down, the return is ignored and the wait loop is
- * not interruptible.  This means that a task waiting on a semaphore
- * using "down()" cannot be killed until someone does an "up()" on
- * the semaphore.
- *
- * If called from __down_interruptible, the return value gets checked
- * upon return.  If the return value is negative then the task continues
- * with the negative value in the return register (it can be tested by
- * the caller).
- *
- * Either form may be used in conjunction with "up()".
- *
- */
-
-#define DOWN_VAR				\
-	struct task_struct *tsk = current;	\
-	DECLARE_WAITQUEUE(wait, tsk);
-
-#define DOWN_HEAD(task_state)						\
-									\
-									\
-	tsk->state = (task_state);					\
-	add_wait_queue(&sem->wait, &wait);				\
-									\
-	/*								\
-	 * Ok, we're set up.  sem->count is known to be less than zero	\
-	 * so we must wait.						\
-	 *								\
-	 * We can let go the lock for purposes of waiting.		\
-	 * We re-acquire it after awaking so as to protect		\
-	 * all semaphore operations.					\
-	 *								\
-	 * If "up()" is called before we call waking_non_zero() then	\
-	 * we will catch it right away.  If it is called later then	\
-	 * we will have to go through a wakeup cycle to catch it.	\
-	 *								\
-	 * Multiple waiters contend for the semaphore lock to see	\
-	 * who gets to gate through and who has to wait some more.	\
-	 */								\
-	for (;;) {
-
-#define DOWN_TAIL(task_state)			\
-		tsk->state = (task_state);	\
-	}					\
-	tsk->state = TASK_RUNNING;		\
-	remove_wait_queue(&sem->wait, &wait);
+static spinlock_t semaphore_lock = SPIN_LOCK_UNLOCKED;
 
 void __down(struct semaphore * sem)
 {
-	DOWN_VAR
-	DOWN_HEAD(TASK_UNINTERRUPTIBLE)
-	if (waking_non_zero(sem))
-		break;
-	schedule();
-	DOWN_TAIL(TASK_UNINTERRUPTIBLE)
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+	tsk->state = TASK_UNINTERRUPTIBLE;
+	add_wait_queue_exclusive(&sem->wait, &wait);
+
+	spin_lock_irq(&semaphore_lock);
+	sem->sleepers++;
+	for (;;) {
+		int sleepers = sem->sleepers;
+
+		/*
+		 * Add "everybody else" into it. They aren't
+		 * playing, because we own the spinlock.
+		 */
+		if (!atomic_add_negative(sleepers - 1, &sem->count)) {
+			sem->sleepers = 0;
+			break;
+		}
+		sem->sleepers = 1;	/* us - see -1 above */
+		spin_unlock_irq(&semaphore_lock);
+
+		schedule();
+		tsk->state = TASK_UNINTERRUPTIBLE;
+		spin_lock_irq(&semaphore_lock);
+	}
+	spin_unlock_irq(&semaphore_lock);
+	remove_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_RUNNING;
+	wake_up(&sem->wait);
 }
 
 int __down_interruptible(struct semaphore * sem)
 {
-	int ret = 0;
-	DOWN_VAR
-	DOWN_HEAD(TASK_INTERRUPTIBLE)
+	int retval = 0;
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+	tsk->state = TASK_INTERRUPTIBLE;
+	add_wait_queue_exclusive(&sem->wait, &wait);
 
-	ret = waking_non_zero_interruptible(sem, tsk);
-	if (ret)
-	{
-		if (ret == 1)
-			/* ret != 0 only if we get interrupted -arca */
-			ret = 0;
-		break;
+	spin_lock_irq(&semaphore_lock);
+	sem->sleepers ++;
+	for (;;) {
+		int sleepers = sem->sleepers;
+
+		/*
+		 * With signals pending, this turns into
+		 * the trylock failure case - we won't be
+		 * sleeping, and we* can't get the lock as
+		 * it has contention. Just correct the count
+		 * and exit.
+		 */
+		if (signal_pending(current)) {
+			retval = -EINTR;
+			sem->sleepers = 0;
+			atomic_add(sleepers, &sem->count);
+			break;
+		}
+
+		/*
+		 * Add "everybody else" into it. They aren't
+		 * playing, because we own the spinlock. The
+		 * "-1" is because we're still hoping to get
+		 * the lock.
+		 */
+		if (!atomic_add_negative(sleepers - 1, &sem->count)) {
+			sem->sleepers = 0;
+			break;
+		}
+		sem->sleepers = 1;	/* us - see -1 above */
+		spin_unlock_irq(&semaphore_lock);
+
+		schedule();
+		tsk->state = TASK_INTERRUPTIBLE;
+		spin_lock_irq(&semaphore_lock);
 	}
-	schedule();
-	DOWN_TAIL(TASK_INTERRUPTIBLE)
-	return ret;
+	spin_unlock_irq(&semaphore_lock);
+	tsk->state = TASK_RUNNING;
+	remove_wait_queue(&sem->wait, &wait);
+	wake_up(&sem->wait);
+	return retval;
 }
 
+/*
+ * Trylock failed - make sure we correct for
+ * having decremented the count.
+ */
 int __down_trylock(struct semaphore * sem)
 {
-	return waking_non_zero_trylock(sem);
+	int sleepers;
+	unsigned long flags;
+
+	spin_lock_irqsave(&semaphore_lock, flags);
+	sleepers = sem->sleepers + 1;
+	sem->sleepers = 0;
+
+	/*
+	 * Add "everybody else" and us into it. They aren't
+	 * playing, because we own the spinlock.
+	 */
+	if (!atomic_add_negative(sleepers, &sem->count))
+		wake_up(&sem->wait);
+
+	spin_unlock_irqrestore(&semaphore_lock, flags);
+	return 1;
 }
 
 /* rw mutexes
@@ -138,6 +163,10 @@ extern inline int ldstub(unsigned char *p)
 	asm volatile("ldstub %1, %0" : "=r" (ret) : "m" (*p) : "memory");
 	return ret;
 }
+
+#define DOWN_VAR				\
+	struct task_struct *tsk = current;	\
+	DECLARE_WAITQUEUE(wait, tsk);
 
 void down_read_failed_biased(struct rw_semaphore *sem)
 {

@@ -709,3 +709,7 @@ static void dma_setup_quick(struct NCR_ESP * esp, __u32 addr, int count, int wri
 	printk("mac_esp: dma_setup_quick\n");
 #endif
 }
+
+static Scsi_Host_Template driver_template = SCSI_MAC_ESP;
+
+#include "scsi_module.c"

@@ -78,7 +78,7 @@ void
 die_if_kernel (char *str, struct pt_regs *regs, long err)
 {
 	if (user_mode(regs)) {
-#if 1
+#if 0
 		/* XXX for debugging only */
 		printk ("!!die_if_kernel: %s(%d): %s %ld\n",
 			current->comm, current->pid, str, err);
@@ -484,6 +484,20 @@ ia64_fault (unsigned long vector, unsigned long isr, unsigned long ifa,
 		sprintf(buf, "Disabled FPL fault---not supposed to happen!");
 		break;
 
+	      case 26: /* NaT Consumption */
+	      case 31: /* Unsupported Data Reference */
+		if (user_mode(regs)) {
+			siginfo.si_signo = SIGILL;
+			siginfo.si_code = ILL_ILLOPN;
+			siginfo.si_errno = 0;
+			siginfo.si_addr = (void *) (regs->cr_iip + ia64_psr(regs)->ri);
+			siginfo.si_imm = vector;
+			force_sig_info(SIGILL, &siginfo, current);
+			return;
+		}
+		sprintf(buf, (vector == 26) ? "NaT consumption" : "Unsupported data reference");
+		break;
+
 	      case 29: /* Debug */
 	      case 35: /* Taken Branch Trap */
 	      case 36: /* Single Step Trap */
@@ -522,10 +536,10 @@ ia64_fault (unsigned long vector, unsigned long isr, unsigned long ifa,
 
 	      case 34:		/* Unimplemented Instruction Address Trap */
 		if (user_mode(regs)) {
-			printk("Woah! Unimplemented Instruction Address Trap!\n");
-			siginfo.si_code = ILL_BADIADDR;
 			siginfo.si_signo = SIGILL;
+			siginfo.si_code = ILL_BADIADDR;
 			siginfo.si_errno = 0;
+			siginfo.si_addr = (void *) (regs->cr_iip + ia64_psr(regs)->ri);
 			force_sig_info(SIGILL, &siginfo, current);
 			return;
 		}
@@ -544,7 +558,8 @@ ia64_fault (unsigned long vector, unsigned long isr, unsigned long ifa,
 
 	      case 46:
 		printk("Unexpected IA-32 intercept trap (Trap 46)\n");
-		printk("  iip - 0x%lx, ifa - 0x%lx, isr - 0x%lx\n", regs->cr_iip, ifa, isr);
+		printk("  iip - 0x%lx, ifa - 0x%lx, isr - 0x%lx, iim - 0x%lx\n",
+		       regs->cr_iip, ifa, isr, iim);
 		force_sig(SIGSEGV, current);
 		return;
 

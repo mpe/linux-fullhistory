@@ -19,22 +19,28 @@ AFLAGS_KERNEL := -mconstant-gp
 EXTRA	=
 
 CFLAGS := $(CFLAGS) -pipe $(EXTRA) -Wa,-x -ffixed-r13 -mfixed-range=f10-f15,f32-f127 \
-	  -funwind-tables
+	  -funwind-tables -falign-functions=32
+# -frename-registers
 CFLAGS_KERNEL := -mconstant-gp
 
 ifeq ($(CONFIG_ITANIUM_ASTEP_SPECIFIC),y)
 	CFLAGS += -ma-step
+endif
+ifeq ($(CONFIG_ITANIUM_BSTEP_SPECIFIC),y)
+	CFLAGS += -mb-step
 endif
 
 ifdef CONFIG_IA64_GENERIC
 	CORE_FILES      :=      arch/$(ARCH)/hp/hp.a	\
 				arch/$(ARCH)/sn/sn.a	\
 				arch/$(ARCH)/dig/dig.a	\
+				arch/$(ARCH)/sn/io/sgiio.o \
 				$(CORE_FILES)
 	SUBDIRS		:=	arch/$(ARCH)/hp		\
 				arch/$(ARCH)/sn/sn1	\
 				arch/$(ARCH)/sn		\
 				arch/$(ARCH)/dig	\
+				arch/$(ARCH)/sn/io	\
 				$(SUBDIRS)
 
 else # !GENERIC
@@ -47,10 +53,7 @@ ifdef CONFIG_IA64_HP_SIM
 endif
 
 ifdef CONFIG_IA64_SGI_SN1
-CFLAGS := $(CFLAGS) -DSN -I. -DBRINGUP -DDIRECT_L1_CONSOLE \
-		-DNUMA_BASE -DSIMULATED_KLGRAPH -DNUMA_MIGR_CONTROL  \
-		-DLITTLE_ENDIAN -DREAL_HARDWARE -DLANGUAGE_C=1 	     \
-		-D_LANGUAGE_C=1
+CFLAGS += -DBRINGUP
         SUBDIRS         :=      arch/$(ARCH)/sn/sn1	\
 				arch/$(ARCH)/sn		\
 				arch/$(ARCH)/sn/io	\
@@ -96,7 +99,7 @@ vmlinux: arch/$(ARCH)/vmlinux.lds
 
 arch/$(ARCH)/vmlinux.lds: arch/$(ARCH)/vmlinux.lds.S FORCE
 	$(CPP) -D__ASSEMBLY__ -C -P -I$(HPATH) -I$(HPATH)/asm-$(ARCH) \
-		arch/$(ARCH)/vmlinux.lds.S > $@
+		-traditional arch/$(ARCH)/vmlinux.lds.S > $@
 
 FORCE: ;
 

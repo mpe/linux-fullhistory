@@ -168,6 +168,9 @@ typedef void efi_reset_system_t (int reset_type, efi_status_t status,
 #define ACPI_TABLE_GUID    \
     ((efi_guid_t) { 0xeb9d2d30, 0x2d88, 0x11d3, { 0x9a, 0x16, 0x0, 0x90, 0x27, 0x3f, 0xc1, 0x4d }})
 
+#define ACPI_20_TABLE_GUID    \
+    ((efi_guid_t) { 0x8868e871, 0xe4f1, 0x11d3, { 0xbc, 0x22, 0x0, 0x80, 0xc7, 0x3c, 0x88, 0x81 }})
+
 #define SMBIOS_TABLE_GUID    \
     ((efi_guid_t) { 0xeb9d2d31, 0x2d88, 0x11d3, { 0x9a, 0x16, 0x0, 0x90, 0x27, 0x3f, 0xc1, 0x4d }})
 	
@@ -204,7 +207,8 @@ typedef struct {
 extern struct efi {
 	efi_system_table_t *systab;	/* EFI system table */
 	void *mps;			/* MPS table */
-	void *acpi;			/* ACPI table */
+	void *acpi;			/* ACPI table  (IA64 ext 0.71) */
+	void *acpi20;			/* ACPI table  (ACPI 2.0) */
 	void *smbios;			/* SM BIOS table */
 	void *sal_systab;		/* SAL system table */
 	void *boot_info;		/* boot info table */

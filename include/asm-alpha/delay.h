@@ -2,12 +2,13 @@
 #define __ALPHA_DELAY_H
 
 #include <linux/config.h>
+#include <asm/param.h>
 #include <asm/smp.h>
 
 /*
  * Copyright (C) 1993, 2000 Linus Torvalds
  *
- * Delay routines, using a pre-computed "loops_per_second" value.
+ * Delay routines, using a pre-computed "loops_per_jiffy" value.
  */
 
 /*
@@ -32,16 +33,16 @@ __delay(int loops)
 }
 
 extern __inline__ void
-__udelay(unsigned long usecs, unsigned long lps)
+__udelay(unsigned long usecs, unsigned long lpj)
 {
-	usecs *= ((1UL << 32) / 1000000) * lps;
+	usecs *= (((unsigned long)HZ << 32) / 1000000) * lpj;
 	__delay((long)usecs >> 32);
 }
 
 #ifdef CONFIG_SMP
-#define udelay(u)  __udelay((u), cpu_data[smp_processor_id()].loops_per_sec)
+#define udelay(u)  __udelay((u), cpu_data[smp_processor_id()].loops_per_jiffy)
 #else
-#define udelay(u)  __udelay((u), loops_per_sec)
+#define udelay(u)  __udelay((u), loops_per_jiffy)
 #endif
 
 #endif /* defined(__ALPHA_DELAY_H) */

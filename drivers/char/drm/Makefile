@@ -26,6 +26,11 @@ export-objs     := $(patsubst %.o,%_drv.o,$(module-list))
 # memory waste (in the dual-head case) for greatly improved long-term
 # maintainability.
 #
+# NOTE: lib-objs will be eliminated in future versions, thereby
+# eliminating the need to compile the .o files into every module, but
+# for now we still need them.
+#
+
 lib-objs   := init.o memory.o proc.o auth.o context.o drawable.o bufs.o
 lib-objs   += lists.o lock.o ioctl.o fops.o vm.o dma.o ctxbitmap.o
 
@@ -39,7 +44,7 @@ endif
 
 gamma-objs := gamma_drv.o gamma_dma.o
 tdfx-objs  := tdfx_drv.o                tdfx_context.o
-r128-objs  := r128_drv.o  r128_dma.o    r128_context.o r128_bufs.o
+r128-objs  := r128_drv.o  r128_cce.o    r128_context.o r128_bufs.o r128_state.o
 ffb-objs   := ffb_drv.o                 ffb_context.o
 mga-objs   := mga_drv.o   mga_dma.o     mga_context.o  mga_bufs.o  mga_state.o
 i810-objs  := i810_drv.o  i810_dma.o    i810_context.o i810_bufs.o
@@ -55,13 +60,22 @@ obj-$(CONFIG_DRM_I810)  += i810.o
 # When linking into the kernel, link the library just once. 
 # If making modules, we include the library into each module
 
+lib-objs-mod := $(patsubst %.o,%-mod.o,$(lib-objs))
+
 ifdef MAKING_MODULES
-  lib = drmlib.a
+  lib = drmlib-mod.a
 else
   obj-y += drmlib.a
 endif
 
 include $(TOPDIR)/Rules.make
+
+$(patsubst %.o,%.c,$(lib-objs-mod)): 
+	@ln -sf $(subst -mod,,$@) $@
+
+drmlib-mod.a: $(lib-objs-mod)
+	rm -f $@
+	$(AR) $(EXTRA_ARFLAGS) rcs $@ $(lib-objs-mod)
 
 drmlib.a: $(lib-objs)
 	rm -f $@

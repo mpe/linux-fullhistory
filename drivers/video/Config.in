@@ -16,7 +16,7 @@ if [ "$CONFIG_FB" = "y" ]; then
       if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_PCI" = "y" ]; then
 	 tristate '  Cirrus Logic support (EXPERIMENTAL)' CONFIG_FB_CLGEN
 	 tristate '  Permedia2 support (EXPERIMENTAL)' CONFIG_FB_PM2
-	 if [ "$CONFIG_FB_PM2" = "y" ]; then
+	 if [ "$CONFIG_FB_PM2" = "y" -o "$CONFIG_FB_PM2" = "m" ]; then
 	    if [ "$CONFIG_PCI" = "y" ]; then
 	       bool '    enable FIFO disconnect feature' CONFIG_FB_PM2_FIFO_DISCONNECT
 	       bool '    generic Permedia2 PCI board support' CONFIG_FB_PM2_PCI
@@ -92,10 +92,10 @@ if [ "$CONFIG_FB" = "y" ]; then
       define_bool CONFIG_BUS_I2C y
    fi
    if [ "$CONFIG_SUN3" = "y" -o "$CONFIG_SUN3X" = "y" ]; then
-      bool 'Sun3 framebuffer support' CONFIG_FB_SUN3
+      bool '  Sun3 framebuffer support' CONFIG_FB_SUN3
       if [ "$CONFIG_FB_SUN3" != "n" ]; then
-         bool '  BWtwo support' CONFIG_FB_BWTWO
-         bool '  CGsix (GX,TurboGX) support' CONFIG_FB_CGSIX
+         bool '    BWtwo support' CONFIG_FB_BWTWO
+         bool '    CGsix (GX,TurboGX) support' CONFIG_FB_CGSIX
       fi
    fi
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

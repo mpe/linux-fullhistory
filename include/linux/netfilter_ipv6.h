@@ -54,7 +54,7 @@
 #define NF_IP6_NUMHOOKS		5
 
 
-enum nf_ip_hook_priorities {
+enum nf_ip6_hook_priorities {
 	NF_IP6_PRI_FIRST = INT_MIN,
 	NF_IP6_PRI_CONNTRACK = -200,
 	NF_IP6_PRI_MANGLE = -150,

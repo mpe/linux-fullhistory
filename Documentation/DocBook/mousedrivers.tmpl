@@ -335,7 +335,7 @@ static int close_mouse(struct inode *inode, struct file *file)
   <para>
     We count off a user and provided that there are still other users need 
     take no further action. The last person closing the mouse causes us to 
-    free up the interrupt. This stopps interrupts from the mouse from using 
+    free up the interrupt. This stops interrupts from the mouse from using 
     our CPU time, and lets us use <function>MOD_DEC_USE_COUNT</function> so 
     that the mouse can now be unloaded.
   </para>
@@ -404,7 +404,7 @@ static void ourmouse_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     play with them.
   </para>
   <para>
-    If a change has occured we also need to wake sleeping processes, so we 
+    If a change has occurred we also need to wake sleeping processes, so we 
     add a wakeup call and a <structname>wait_queue</structname> to use when 
     we wish to await a mouse event.
   </para>
@@ -426,7 +426,7 @@ static unsigned int mouse_poll(struct file *file, poll_table *wait)
   <para>
     This is fairly standard poll code. First we add the wait queue to the 
     list of queues we want to monitor for an event. Secondly we check if an 
-    event has occured. We only have one kind of event - the 
+    event has occurred. We only have one kind of event - the 
     <varname>mouse_event</varname> flag tells us that something happened. 
     We know that this something can only be mouse data. We return the flags 
     indicating input and normal reading will succeed.
@@ -476,7 +476,7 @@ static ssize_t mouse_read(struct file *file, char *buffer,
   </para>
   <para>
     Next we wait for an event to occur. The loop is fairly standard event
-    waiting in Linux. Having checked that the event has not yet occured, we
+    waiting in Linux. Having checked that the event has not yet occurred, we
     then check if an event is pending and if not we need to sleep. 
   </para>
   <para>
@@ -488,7 +488,7 @@ static ssize_t mouse_read(struct file *file, char *buffer,
     Next we sleep until the mouse or a signal awakens us. A signal will 
     awaken us as we have used <function>wakeup_interruptible</function>. 
     This is important as it means a user can kill processes waiting for 
-    the mouse - clearly a desireable property. If we are interrupted we 
+    the mouse - clearly a desirable property. If we are interrupted we 
     exit the call and the kernel will then process signals and maybe 
     restart the call again - from the beginning.
   </para>

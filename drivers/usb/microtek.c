@@ -824,15 +824,15 @@ const static struct vendor_product mts_supported_products[] =
 
 static struct usb_device_id mts_usb_ids [] =
 {
-	{idVendor: 0x4ce, idProduct: 0x0300},
-	{idVendor: 0x5da, idProduct: 0x0094},
-	{idVendor: 0x5da, idProduct: 0x0099},
-	{idVendor: 0x5da, idProduct: 0x009a},
-	{idVendor: 0x5da, idProduct: 0x00a0},
-	{idVendor: 0x5da, idProduct: 0x00a3},
-	{idVendor: 0x5da, idProduct: 0x80a3},
-	{idVendor: 0x5da, idProduct: 0x80ac},
-    { }						/* Terminating entry */
+	{ USB_DEVICE(0x4ce, 0x0300) },
+	{ USB_DEVICE(0x5da, 0x0094) },
+	{ USB_DEVICE(0x5da, 0x0099) },
+	{ USB_DEVICE(0x5da, 0x009a) },
+	{ USB_DEVICE(0x5da, 0x00a0) },
+	{ USB_DEVICE(0x5da, 0x00a3) },
+	{ USB_DEVICE(0x5da, 0x80a3) },
+	{ USB_DEVICE(0x5da, 0x80ac) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, mts_usb_ids);

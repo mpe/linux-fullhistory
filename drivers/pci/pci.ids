@@ -734,6 +734,7 @@
 	0601  85C601
 	0620  620 Host
 	0630  630 Host
+	0730  730 Host
 	0900  SiS900 10/100 Ethernet
 		1039 0900  SiS900 10/100 Ethernet Adapter
 	3602  83C602

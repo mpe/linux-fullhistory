@@ -45,15 +45,15 @@
 #ifdef UDFFS_DEBUG
 #define udf_debug(f, a...) \
 	{ \
-		printk (KERN_DEBUG "UDF-fs DEBUG (%s, %d): %s: ", \
+		printk (KERN_DEBUG "UDF-fs DEBUG %s:%d:%s: ", \
 			__FILE__, __LINE__, __FUNCTION__); \
-		printk (## f, ## a); \
+		printk (f, ##a); \
 	}
 #else
 #define udf_debug(f, a...) /**/
 #endif
 
 #define udf_info(f, a...) \
-		printk (KERN_INFO "UDF-fs INFO " ## f, ## a);
+		printk (KERN_INFO "UDF-fs INFO " f, ##a);
 
 #endif /* !defined(_LINUX_UDF_FS_H) */

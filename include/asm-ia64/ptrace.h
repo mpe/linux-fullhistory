@@ -2,8 +2,8 @@
 #define _ASM_IA64_PTRACE_H
 
 /*
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  * Copyright (C) 1998, 1999 Stephane Eranian <eranian@hpl.hp.com>
  *
  * 12/07/98	S. Eranian	added pt_regs & switch_stack
@@ -73,6 +73,9 @@
 #define INIT_TASK_SIZE			IA64_STK_OFFSET
 
 #ifndef __ASSEMBLY__
+
+#include <asm/current.h>
+#include <asm/page.h>
 
 /*
  * This struct defines the way the registers are saved on system
@@ -236,7 +239,14 @@ struct switch_stack {
 
   extern void ia64_increment_ip (struct pt_regs *pt);
   extern void ia64_decrement_ip (struct pt_regs *pt);
-#endif
+
+static inline void
+force_successful_syscall_return (void)
+{
+	ia64_task_regs(current)->r8 = 0;
+}
+
+#endif /* !__KERNEL__ */
 
 #endif /* !__ASSEMBLY__ */
 

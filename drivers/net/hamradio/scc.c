@@ -1,7 +1,6 @@
 #define RCS_ID "$Id: scc.c,v 1.75 1998/11/04 15:15:01 jreuter Exp jreuter $"
 
 #define VERSION "3.0"
-#define BANNER  "AX.25: Z8530 SCC driver version "VERSION".dl1bke\n"
 
 /*
  * Please use z8530drv-utils-3.0 with this version.
@@ -142,8 +141,6 @@
 
 #define SCC_MAXCHIPS	4       /* number of max. supported chips */
 #define SCC_BUFSIZE	384     /* must not exceed 4096 */
-#undef  SCC_DISABLE_ALL_INTS	/* use cli()/sti() in ISR instead of */
-				/* enable_irq()/disable_irq()        */
 #undef	SCC_DEBUG
 
 #define SCC_DEFAULT_CLOCK	4915200 
@@ -187,12 +184,7 @@
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
 
-#ifdef MODULE
-int init_module(void);
-void cleanup_module(void);
-#endif
-
-int scc_init(void);
+static const char banner[] __initdata = KERN_INFO "AX.25: Z8530 SCC driver version "VERSION".dl1bke\n";
 
 static void t_dwait(unsigned long);
 static void t_txdelay(unsigned long);
@@ -220,7 +212,6 @@ static void scc_net_rx(struct scc_channel *scc, struct sk_buff *skb);
 static int scc_net_tx(struct sk_buff *skb, struct net_device *dev);
 static int scc_net_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 static int scc_net_set_mac_address(struct net_device *dev, void *addr);
-static int scc_net_header(struct sk_buff *skb, struct net_device *dev, unsigned short type, void *daddr, void *saddr, unsigned len);
 static struct net_device_stats * scc_net_get_stats(struct net_device *dev);
 
 static unsigned char *SCC_DriverName = "scc";
@@ -235,9 +226,9 @@ static struct scc_ctrl {
 	int irq;
 } SCC_ctrl[SCC_MAXCHIPS+1];
 
-static unsigned char Driver_Initialized = 0;
-static int Nchips = 0;
-static io_port Vector_Latch = 0;
+static unsigned char Driver_Initialized;
+static int Nchips;
+static io_port Vector_Latch;
 
 
 /* ******************************************************************** */
@@ -297,18 +288,6 @@ static inline void cl(struct scc_channel *scc, unsigned char reg, unsigned char 
 {
 	OutReg(scc->ctrl, reg, (scc->wreg[reg] &= ~val));
 }
-
-#ifdef SCC_DISABLE_ALL_INTS
-static inline void scc_cli(int irq)
-{ cli(); }
-static inline void scc_sti(int irq)
-{ sti(); }
-#else
-static inline void scc_cli(int irq)
-{ disable_irq(irq); }
-static inline void scc_sti(int irq)
-{ enable_irq(irq); }
-#endif
 
 /* ******************************************************************** */
 /* *			Some useful macros			      * */
@@ -1427,7 +1406,6 @@ static unsigned long scc_get_param(struct scc_channel *scc, unsigned int cmd)
 }
 
 #undef CAST
-#undef SVAL
 
 /* ******************************************************************* */
 /* *			Send calibration pattern		     * */
@@ -1572,12 +1550,12 @@ static int scc_net_setup(struct scc_channel *scc, unsigned char *name, int addev
 	dev->priv = (void *) scc;
 	dev->init = scc_net_init;
 
-	if ((addev? register_netdevice(dev) : register_netdev(dev)) != 0)
-	{
+	if ((addev? register_netdevice(dev) : register_netdev(dev)) != 0) {
 		kfree(dev);
                 return -EIO;
         }
 
+	SET_MODULE_OWNER(dev);
 	return 0;
 }
 
@@ -1604,7 +1582,7 @@ static int scc_net_init(struct net_device *dev)
 	dev->stop	     = scc_net_close;
 
 	dev->hard_start_xmit = scc_net_tx;
-	dev->hard_header     = scc_net_header;
+	dev->hard_header     = ax25_encapsulate;
 	dev->rebuild_header  = ax25_rebuild_header;
 	dev->set_mac_address = scc_net_set_mac_address;
 	dev->get_stats       = scc_net_get_stats;
@@ -1632,8 +1610,6 @@ static int scc_net_open(struct net_device *dev)
 
  	if (!scc->init)
 		return -EINVAL;
-
-	MOD_INC_USE_COUNT;
 
 	scc->tx_buff = NULL;
 	skb_queue_head_init(&scc->tx_queue);
@@ -1667,7 +1643,6 @@ static int scc_net_close(struct net_device *dev)
 	
 	scc_discard_buffers(scc);
 
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1675,8 +1650,7 @@ static int scc_net_close(struct net_device *dev)
 
 static void scc_net_rx(struct scc_channel *scc, struct sk_buff *skb)
 {
-	if (skb->len == 0)
-	{
+	if (skb->len == 0) {
 		dev_kfree_skb_irq(skb);
 		return;
 	}
@@ -1700,8 +1674,7 @@ static int scc_net_tx(struct sk_buff *skb, struct net_device *dev)
 	unsigned long flags;
 	char kisscmd;
 
-	if (skb->len > scc->stat.bufsize || skb->len < 2)
-	{
+	if (skb->len > scc->stat.bufsize || skb->len < 2) {
 		scc->dev_stat.tx_dropped++;	/* bogus frame */
 		dev_kfree_skb(skb);
 		return 0;
@@ -1713,8 +1686,7 @@ static int scc_net_tx(struct sk_buff *skb, struct net_device *dev)
 	kisscmd = *skb->data & 0x1f;
 	skb_pull(skb, 1);
 
-	if (kisscmd)
-	{
+	if (kisscmd) {
 		scc_set_param(scc, kisscmd, *skb->data);
 		dev_kfree_skb(skb);
 		return 0;
@@ -1723,8 +1695,7 @@ static int scc_net_tx(struct sk_buff *skb, struct net_device *dev)
 	save_flags(flags);
 	cli();
 	
-	if (skb_queue_len(&scc->tx_queue) > scc->dev->tx_queue_len)
-	{
+	if (skb_queue_len(&scc->tx_queue) > scc->dev->tx_queue_len) {
 		struct sk_buff *skb_del;
 		skb_del = skb_dequeue(&scc->tx_queue);
 		dev_kfree_skb(skb_del);
@@ -1739,8 +1710,7 @@ static int scc_net_tx(struct sk_buff *skb, struct net_device *dev)
 	 * algorithm for normal halfduplex operation.
 	 */
 
-	if(scc->stat.tx_state == TXS_IDLE || scc->stat.tx_state == TXS_IDLE2)
-	{
+	if(scc->stat.tx_state == TXS_IDLE || scc->stat.tx_state == TXS_IDLE2) {
 		scc->stat.tx_state = TXS_BUSY;
 		if (scc->kiss.fulldup == KISS_DUPLEX_HALF)
 			scc_start_tx_timer(scc, t_dwait, scc->kiss.waittime);
@@ -1804,8 +1774,12 @@ static int scc_net_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 					Ivec[hwcfg.irq].used = 1;
 			}
 
-			if (hwcfg.vector_latch) 
-				Vector_Latch = hwcfg.vector_latch;
+			if (hwcfg.vector_latch) {
+				if (!request_region(Vector_Latch, 1, "scc vector latch"))
+					printk(KERN_WARNING "z8530drv: warning, cannot reserve vector latch port 0x%x\n, disabled.", hwcfg.vector_latch);
+				else
+					Vector_Latch = hwcfg.vector_latch;
+			}
 
 			if (hwcfg.clock == 0)
 				hwcfg.clock = SCC_DEFAULT_CLOCK;
@@ -2001,14 +1975,6 @@ static int scc_net_set_mac_address(struct net_device *dev, void *addr)
 	return 0;
 }
 
-/* ----> "hard" header <---- */
-
-static int  scc_net_header(struct sk_buff *skb, struct net_device *dev, 
-	unsigned short type, void *daddr, void *saddr, unsigned len)
-{
-	return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
-}
-
 /* ----> get statistics <---- */
 
 static struct net_device_stats *scc_net_get_stats(struct net_device *dev)
@@ -2133,41 +2099,18 @@ done:
         return len;
 }
 
-#ifdef CONFIG_PROC_FS
-#define scc_net_procfs_init() proc_net_create("z8530drv",0,scc_net_get_info)
-#define scc_net_procfs_remove() proc_net_remove("z8530drv")
-#else
-#define scc_net_procfs_init()
-#define scc_net_procfs_remove()
-#endif
-
-  
+ 
 /* ******************************************************************** */
 /* * 			Init SCC driver 			      * */
 /* ******************************************************************** */
 
 static int __init scc_init_driver (void)
 {
-	int chip, chan, k, result;
+	int result;
 	char devname[10];
 	
-	printk(KERN_INFO BANNER);
+	printk(banner);
 	
-	memset(&SCC_ctrl, 0, sizeof(SCC_ctrl));
-	
-	/* pre-init channel information */
-	
-	for (chip = 0; chip < SCC_MAXCHIPS; chip++)
-	{
-		memset((char *) &SCC_Info[2*chip  ], 0, sizeof(struct scc_channel));
-		memset((char *) &SCC_Info[2*chip+1], 0, sizeof(struct scc_channel));
-		
-		for (chan = 0; chan < 2; chan++)
-			SCC_Info[2*chip+chan].magic = SCC_MAGIC;
-	}
-
-	for (k = 0; k < 16; k++) Ivec[k].used = 0;
-
 	sprintf(devname,"%s0", SCC_DriverName);
 	
 	result = scc_net_setup(SCC_Info, devname, 0);
@@ -2177,7 +2120,7 @@ static int __init scc_init_driver (void)
 		return result;
 	}
 
-	scc_net_procfs_init();
+	proc_net_create("z8530drv", 0, scc_net_get_info);
 
 	return 0;
 }
@@ -2193,7 +2136,10 @@ static void __exit scc_cleanup_driver(void)
 	cli();
 
 	if (Nchips == 0)
+	{
 		unregister_netdev(SCC_Info[0].dev);
+		kfree(SCC_Info[0].dev);
+	}
 
 	for (k = 0; k < Nchips; k++)
 		if ( (ctrl = SCC_ctrl[k].chan_A) )
@@ -2206,24 +2152,27 @@ static void __exit scc_cleanup_driver(void)
 	for (k = 0; k < Nchips*2; k++)
 	{
 		scc = &SCC_Info[k];
-		if (scc)
+		if (scc->ctrl)
 		{
 			release_region(scc->ctrl, 1);
 			release_region(scc->data, 1);
-			if (scc->dev)
-			{
-				unregister_netdev(scc->dev);
-				kfree(scc->dev);
-			}
+		}
+		if (scc->dev)
+		{
+			unregister_netdev(scc->dev);
+			kfree(scc->dev);
 		}
 	}
 	
 	for (k=0; k < 16 ; k++)
 		if (Ivec[k].used) free_irq(k, NULL);
 		
+	if (Vector_Latch)
+		release_region(Vector_Latch, 1);
+
 	restore_flags(flags);
 
-	scc_net_procfs_remove();
+	proc_net_remove("z8530drv");
 }
 
 MODULE_AUTHOR("Joerg Reuter <jreuter@yaina.de>");

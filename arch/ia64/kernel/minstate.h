@@ -20,6 +20,72 @@
 #define rR1		r20
 
 /*
+ * Here start the source dependent macros.
+ */
+
+/*
+ * For ivt.s we want to access the stack virtually so we dont have to disable translation
+ * on interrupts.
+ */
+#define MINSTATE_START_SAVE_MIN_VIRT								\
+	dep r1=-1,r1,61,3;				/* r1 = current (virtual) */		\
+(p7)	mov ar.rsc=r0;		/* set enforced lazy mode, pl 0, little-endian, loadrs=0 */	\
+	;;											\
+(p7)	addl rKRBS=IA64_RBS_OFFSET,r1;			/* compute base of RBS */		\
+(p7)	mov rARRNAT=ar.rnat;									\
+(pKern) mov r1=sp;					/* get sp  */				\
+	;;											\
+(p7)	addl r1=IA64_STK_OFFSET-IA64_PT_REGS_SIZE,r1;	/* compute base of memory stack */	\
+(p7)	mov rARBSPSTORE=ar.bspstore;			/* save ar.bspstore */			\
+	;;											\
+(pKern) addl r1=-IA64_PT_REGS_SIZE,r1;			/* if in kernel mode, use sp (r12) */	\
+(p7)	mov ar.bspstore=rKRBS;				/* switch to kernel RBS */		\
+	;;											\
+(p7)	mov r18=ar.bsp;										\
+(p7)	mov ar.rsc=0x3;		/* set eager mode, pl 0, little-endian, loadrs=0 */		\
+
+#define MINSTATE_END_SAVE_MIN_VIRT								\
+	or r13=r13,r14;		/* make `current' a kernel virtual address */			\
+	bsw.1;			/* switch back to bank 1 (must be last in insn group) */	\
+	;;
+
+/*
+ * For mca_asm.S we want to access the stack physically since the state is saved before we
+ * go virtual and dont want to destroy the iip or ipsr.
+ */
+#define MINSTATE_START_SAVE_MIN_PHYS								\
+(pKern) movl sp=ia64_init_stack+IA64_STK_OFFSET-IA64_PT_REGS_SIZE;				\
+(p7)	mov ar.rsc=r0;		/* set enforced lazy mode, pl 0, little-endian, loadrs=0 */	\
+(p7)	addl rKRBS=IA64_RBS_OFFSET,r1;		/* compute base of register backing store */	\
+	;;											\
+(p7)	mov rARRNAT=ar.rnat;									\
+(pKern) dep r1=0,sp,61,3;				/* compute physical addr of sp	*/	\
+(p7)	addl r1=IA64_STK_OFFSET-IA64_PT_REGS_SIZE,r1;	/* compute base of memory stack */	\
+(p7)	mov rARBSPSTORE=ar.bspstore;			/* save ar.bspstore */			\
+(p7)	dep rKRBS=-1,rKRBS,61,3;			/* compute kernel virtual addr of RBS */\
+	;;											\
+(pKern) addl r1=-IA64_PT_REGS_SIZE,r1;		/* if in kernel mode, use sp (r12) */		\
+(p7)	mov ar.bspstore=rKRBS;			/* switch to kernel RBS */			\
+	;;											\
+(p7)	mov r18=ar.bsp;										\
+(p7)	mov ar.rsc=0x3;		/* set eager mode, pl 0, little-endian, loadrs=0 */		\
+
+#define MINSTATE_END_SAVE_MIN_PHYS								\
+	or r12=r12,r14;		/* make sp a kernel virtual address */				\
+	or r13=r13,r14;		/* make `current' a kernel virtual address */			\
+	;;
+
+#ifdef MINSTATE_VIRT
+# define MINSTATE_START_SAVE_MIN	MINSTATE_START_SAVE_MIN_VIRT
+# define MINSTATE_END_SAVE_MIN		MINSTATE_END_SAVE_MIN_VIRT
+#endif
+
+#ifdef MINSTATE_PHYS
+# define MINSTATE_START_SAVE_MIN	MINSTATE_START_SAVE_MIN_PHYS
+# define MINSTATE_END_SAVE_MIN		MINSTATE_END_SAVE_MIN_PHYS
+#endif
+
+/*
  * DO_SAVE_MIN switches to the kernel stacks (if necessary) and saves
  * the minimum state necessary that allows us to turn psr.ic back
  * on.
@@ -31,7 +97,6 @@
  *
  * Upon exit, the state is as follows:
  *	psr.ic: off
- *	psr.dt: off
  *	r2 = points to &pt_regs.r16
  *	r12 = kernel sp (kernel virtual address)
  *	r13 = points to current task_struct (kernel virtual address)
@@ -50,7 +115,7 @@
 	mov rCRIPSR=cr.ipsr;									  \
 	mov rB6=b6;		/* rB6 = branch reg 6 */					  \
 	mov rCRIIP=cr.iip;									  \
-	mov r1=ar.k6;		/* r1 = current */						  \
+	mov r1=ar.k6;		/* r1 = current (physical) */					  \
 	;;											  \
 	invala;											  \
 	extr.u r16=rCRIPSR,32,2;		/* extract psr.cpl */				  \
@@ -58,25 +123,11 @@
 	cmp.eq pKern,p7=r0,r16;			/* are we in kernel mode already? (psr.cpl==0) */ \
 	/* switch from user to kernel RBS: */							  \
 	COVER;											  \
-	;; 									                  \
+	;;											  \
 	MINSTATE_START_SAVE_MIN									  \
-(p7)	mov ar.rsc=r0;		/* set enforced lazy mode, pl 0, little-endian, loadrs=0 */	  \
-(p7)	addl rKRBS=IA64_RBS_OFFSET,r1;		/* compute base of register backing store */	  \
 	;;											  \
-(p7)	mov rARRNAT=ar.rnat;									  \
-(pKern)	dep r1=0,sp,61,3;				/* compute physical addr of sp  */	  \
-(p7)	addl r1=IA64_STK_OFFSET-IA64_PT_REGS_SIZE,r1;	/* compute base of memory stack */	  \
-(p7)	mov rARBSPSTORE=ar.bspstore;			/* save ar.bspstore */			  \
-(p7)	dep rKRBS=-1,rKRBS,61,3;			/* compute kernel virtual addr of RBS */  \
-	;;											  \
-(pKern)	addl r1=-IA64_PT_REGS_SIZE,r1;		/* if in kernel mode, use sp (r12) */		  \
-(p7)	mov ar.bspstore=rKRBS;			/* switch to kernel RBS */			  \
-	;;											  \
-(p7)	mov r18=ar.bsp;										  \
-(p7)	mov ar.rsc=0x3;		/* set eager mode, pl 0, little-endian, loadrs=0 */		  \
-												  \
-	mov r16=r1;		/* initialize first base pointer */				  \
-	adds r17=8,r1;		/* initialize second base pointer */				  \
+	mov r16=r1;					/* initialize first base pointer */	  \
+	adds r17=8,r1;					/* initialize second base pointer */	  \
 	;;											  \
 	st8 [r16]=rCRIPSR,16;	/* save cr.ipsr */						  \
 	st8 [r17]=rCRIIP,16;	/* save cr.iip */						  \

@@ -88,19 +88,19 @@
    just for the purpose of exporting the autoloading information.
 */
 static __devinitdata struct usb_device_id id_table_std [] = {
-    {idVendor: CONNECT_TECH_VENDOR_ID, idProduct: CONNECT_TECH_WHITE_HEAT_ID},
-    { }						/* Terminating entry */
+	{ USB_DEVICE(CONNECT_TECH_VENDOR_ID, CONNECT_TECH_WHITE_HEAT_ID) },
+	{ }						/* Terminating entry */
 };
 
 static __devinitdata struct usb_device_id id_table_prerenumeration [] = {
-    {idVendor: CONNECT_TECH_VENDOR_ID, idProduct: CONNECT_TECH_WHITE_HEAT_ID},
-    { }						/* Terminating entry */
+	{ USB_DEVICE(CONNECT_TECH_VENDOR_ID, CONNECT_TECH_WHITE_HEAT_ID) },
+	{ }						/* Terminating entry */
 };
 
 static __devinitdata struct usb_device_id id_table_combined [] = {
-    {idVendor: CONNECT_TECH_VENDOR_ID, idProduct: CONNECT_TECH_WHITE_HEAT_ID},
-    {idVendor: CONNECT_TECH_VENDOR_ID, idProduct: CONNECT_TECH_FAKE_WHITE_HEAT_ID},
-    { }						/* Terminating entry */
+	{ USB_DEVICE(CONNECT_TECH_VENDOR_ID, CONNECT_TECH_WHITE_HEAT_ID) },
+	{ USB_DEVICE(CONNECT_TECH_VENDOR_ID, CONNECT_TECH_FAKE_WHITE_HEAT_ID) },
+	{ }						/* Terminating entry */
 };
 
 MODULE_DEVICE_TABLE (usb, id_table_combined);

@@ -157,25 +157,7 @@ static int pirq_ali_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
 {
 	static unsigned char irqmap[16] = { 0, 9, 3, 10, 4, 5, 7, 6, 1, 11, 0, 12, 0, 14, 0, 15 };
 
-	switch (pirq) {
-	case 0x00:
-		return 0;
-	default:
-		return irqmap[read_config_nybble(router, 0x48, pirq-1)];
-	case 0xfe:
-		return irqmap[read_config_nybble(router, 0x44, 0)];
-	case 0xff:
-		return irqmap[read_config_nybble(router, 0x75, 0)];
-	}
-}
-
-static void pirq_ali_ide_interrupt(struct pci_dev *router, unsigned reg, unsigned val, unsigned irq)
-{
-	u8 x;
-
-	pci_read_config_byte(router, reg, &x);
-	x = (x & 0xe0) | val;	/* clear the level->edge transform */
-	pci_write_config_byte(router, reg, x);
+	return irqmap[read_config_nybble(router, 0x48, pirq-1)];
 }
 
 static int pirq_ali_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
@@ -184,17 +166,7 @@ static int pirq_ali_set(struct pci_dev *router, struct pci_dev *dev, int pirq, i
 	unsigned int val = irqmap[irq];
 		
 	if (val) {
-		switch (pirq) {
-		default:
-			write_config_nybble(router, 0x48, pirq-1, val);
-			break;
-		case 0xfe:
-			pirq_ali_ide_interrupt(router, 0x44, val, irq);
-			break;
-		case 0xff:
-			pirq_ali_ide_interrupt(router, 0x75, val, irq);
-			break;
-		}
+		write_config_nybble(router, 0x48, pirq-1, val);
 		return 1;
 	}
 	return 0;
@@ -202,40 +174,25 @@ static int pirq_ali_set(struct pci_dev *router, struct pci_dev *dev, int pirq, i
 
 /*
  * The Intel PIIX4 pirq rules are fairly simple: "pirq" is
- * just a pointer to the config space. However, something
- * funny is going on with 0xfe/0xff, and apparently they
- * should handle IDE irq routing. Ignore them for now.
+ * just a pointer to the config space.
  */
 static int pirq_piix_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
 {
 	u8 x;
 
-	switch (pirq) {
-	case 0xfe:
-	case 0xff:
-		return 0;
-	default:
-		pci_read_config_byte(router, pirq, &x);
-		return (x < 16) ? x : 0;
-	}
+	pci_read_config_byte(router, pirq, &x);
+	return (x < 16) ? x : 0;
 }
 
 static int pirq_piix_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
 {
-	switch (pirq) {
-	case 0xfe:
-	case 0xff:
-		return 0;
-	default:
-		pci_write_config_byte(router, pirq, irq);
-		return 1;
-	}
+	pci_write_config_byte(router, pirq, irq);
+	return 1;
 }
 
 /*
  * The VIA pirq rules are nibble-based, like ALI,
- * but without the ugly irq number munging or the
- * strange special cases..
+ * but without the ugly irq number munging.
  */
 static int pirq_via_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
 {
@@ -500,8 +457,16 @@ static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 	}
 	DBG(" -> newirq=%d", newirq);
 
-	/* Try to get current IRQ */
-	if (r->get && (irq = r->get(pirq_router_dev, dev, pirq))) {
+	/* Check if it is hardcoded */
+	if ((pirq & 0xf0) == 0xf0) {
+		irq = pirq & 0xf;
+		DBG(" -> hardcoded IRQ %d\n", irq);
+		msg = "Hardcoded";
+		if (dev->irq && dev->irq != irq) {
+			printk("IRQ routing conflict in pirq table! Try 'pci=autoirq'\n");
+			return 0;
+		}
+	} else if (r->get && (irq = r->get(pirq_router_dev, dev, pirq))) {
 		DBG(" -> got IRQ %d\n", irq);
 		msg = "Found";
 		/* We refuse to override the dev->irq information. Give a warning! */

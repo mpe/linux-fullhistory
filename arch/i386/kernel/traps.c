@@ -89,33 +89,18 @@ int kstack_depth_to_print = 24;
 
 /*
  * These constants are for searching for possible module text
- * segments. MODULE_RANGE is a guess of how much space is likely
- * to be vmalloced.
+ * segments.
  */
-#define MODULE_RANGE (8*1024*1024)
 
-void show_stack(unsigned long * esp)
+void show_trace(unsigned long * stack)
 {
-	unsigned long *stack, addr, module_start, module_end;
 	int i;
+	unsigned long addr, module_start, module_end;
 
-	// debugging aid: "show_stack(NULL);" prints the
-	// back trace for this cpu.
+	if (!stack)
+		stack = (unsigned long*)&stack;
 
-	if(esp==NULL)
-		esp=(unsigned long*)&esp;
-
-	stack = esp;
-	for(i=0; i < kstack_depth_to_print; i++) {
-		if (((long) stack & (THREAD_SIZE-1)) == 0)
-			break;
-		if (i && ((i % 8) == 0))
-			printk("\n       ");
-		printk("%08lx ", *stack++);
-	}
-
-	printk("\nCall Trace: ");
-	stack = esp;
+	printk("Call Trace: ");
 	i = 1;
 	module_start = VMALLOC_START;
 	module_end = VMALLOC_END;
@@ -138,6 +123,30 @@ void show_stack(unsigned long * esp)
 			i++;
 		}
 	}
+	printk("\n");
+}
+
+void show_stack(unsigned long * esp)
+{
+	unsigned long *stack;
+	int i;
+
+	// debugging aid: "show_stack(NULL);" prints the
+	// back trace for this cpu.
+
+	if(esp==NULL)
+		esp=(unsigned long*)&esp;
+
+	stack = esp;
+	for(i=0; i < kstack_depth_to_print; i++) {
+		if (((long) stack & (THREAD_SIZE-1)) == 0)
+			break;
+		if (i && ((i % 8) == 0))
+			printk("\n       ");
+		printk("%08lx ", *stack++);
+	}
+	printk("\n");
+	show_trace(esp);
 }
 
 static void show_registers(struct pt_regs *regs)

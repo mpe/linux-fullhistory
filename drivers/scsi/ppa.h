@@ -10,7 +10,7 @@
 #ifndef _PPA_H
 #define _PPA_H
 
-#define   PPA_VERSION   "2.06 (for Linux 2.2.x)"
+#define   PPA_VERSION   "2.07 (for Linux 2.4.x)"
 
 /* 
  * this driver has been hacked by Matteo Frigo (athena@theory.lcs.mit.edu)
@@ -56,11 +56,20 @@
  * Add ppa_wait() calls to ppa_completion()
  *  by Peter Cherriman <pjc@ecs.soton.ac.uk> and
  *     Tim Waugh <twaugh@redhat.com>
- *                                                      [2.04]
+ *							[2.04]
+ *
  * Fix kernel panic on scsi timeout, 2000-08-18		[2.05]
  *
  * Avoid io_request_lock problems.
  * John Cavan <johncavan@home.com>			[2.06]
+ *
+ * Busy wait for connected status bit in ppa_completion()
+ *  in order to cope with some hardware that has this bit low
+ *  for short periods of time.
+ * Add udelay() to ppa_select()
+ *  by Peter Cherriman <pjc@ecs.soton.ac.uk> and
+ *     Oleg Makarenko <omakarenko@cyberplat.ru>         
+ *                                                      [2.07]
  */
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */
 
@@ -116,6 +125,7 @@ int ppa_sg = SG_ALL;		/* enable/disable scatter-gather. */
 #define PPA_BURST_SIZE	512	/* data burst size */
 #define PPA_SELECT_TMO  5000	/* how long to wait for target ? */
 #define PPA_SPIN_TMO    50000	/* ppa_wait loop limiter */
+#define PPA_RECON_TMO   500	/* scsi reconnection loop limiter */
 #define PPA_DEBUG	0	/* debuging option */
 #define IN_EPP_MODE(x) (x == PPA_EPP_8 || x == PPA_EPP_16 || x == PPA_EPP_32)
 

@@ -1,7 +1,7 @@
 /*
- *  Amiga Linux/m68k Ariadne II Ethernet Driver
+ *  Amiga Linux/m68k and Linux/PPC Ariadne II and X-Surf Ethernet Driver
  *
- *  (C) Copyright 1998 by some Elitist 680x0 Users(TM)
+ *  (C) Copyright 1998-2000 by some Elitist 680x0 Users(TM)
  *
  *  ---------------------------------------------------------------------------
  *
@@ -15,8 +15,8 @@
  *
  *  ---------------------------------------------------------------------------
  *
- *  The Ariadne II is a Zorro-II board made by Village Tronic. It contains a
- *  Realtek RTL8019AS Ethernet Controller.
+ *  The Ariadne II and X-Surf are Zorro-II boards containing Realtek RTL8019AS
+ *  Ethernet Controllers.
  */
 
 #include <linux/module.h>
@@ -36,10 +36,6 @@
 #include <asm/amigahw.h>
 
 #include "8390.h"
-
-
-#define ARIADNE2_BASE		0x0300
-#define ARIADNE2_BOOTROM	0xc000
 
 
 #define NE_BASE		(dev->base_addr)
@@ -65,12 +61,24 @@
 
 #define WORDSWAP(a)	((((a)>>8)&0xff) | ((a)<<8))
 
-int ariadne2_probe(struct net_device *dev);
-static int ariadne2_init(struct net_device *dev, unsigned long board);
+#ifdef MODULE
+static struct net_device *root_ariadne2_dev = NULL;
+#endif
 
+static const struct card_info {
+    zorro_id id;
+    const char *name;
+    unsigned int offset;
+} cards[] __initdata = {
+    { ZORRO_PROD_VILLAGE_TRONIC_ARIADNE2, "Ariadne II", 0x0600 },
+    { ZORRO_PROD_INDIVIDUAL_COMPUTERS_X_SURF, "X-Surf", 0x8600 },
+};
+
+static int __init ariadne2_probe(void);
+static int __init ariadne2_init(struct net_device *dev, unsigned long board,
+				const char *name, unsigned long ioaddr);
 static int ariadne2_open(struct net_device *dev);
 static int ariadne2_close(struct net_device *dev);
-
 static void ariadne2_reset_8390(struct net_device *dev);
 static void ariadne2_get_8390_hdr(struct net_device *dev,
 				  struct e8390_pkt_hdr *hdr, int ring_page);
@@ -79,40 +87,56 @@ static void ariadne2_block_input(struct net_device *dev, int count,
 static void ariadne2_block_output(struct net_device *dev, const int count,
 				  const unsigned char *buf,
 				  const int start_page);
+static void __exit ariadne2_cleanup(void);
 
-int __init ariadne2_probe(struct net_device *dev)
+static int __init ariadne2_probe(void)
 {
+    struct net_device *dev;
     struct zorro_dev *z = NULL;
     unsigned long board, ioaddr;
-    int err;
+    int err = -ENODEV;
+    int i;
 
-    SET_MODULE_OWNER(dev);
-
-    while ((z = zorro_find_device(ZORRO_PROD_VILLAGE_TRONIC_ARIADNE2, z))) {
-	board = z->resource.start;
-	ioaddr = board+ARIADNE2_BASE*2;
-	if (!request_mem_region(ioaddr, NE_IO_EXTENT*2, dev->name))
+    while ((z = zorro_find_device(ZORRO_WILDCARD, z))) {
+	for (i = ARRAY_SIZE(cards)-1; i >= 0; i--)
+	    if (z->id == cards[i].id)
+		break;
+	if (i < 0)
 	    continue;
-	if ((err = ariadne2_init(dev, ZTWO_VADDR(board)))) {
+	board = z->resource.start;
+	ioaddr = board+cards[i].offset;
+	dev = init_etherdev(0, 0);
+	SET_MODULE_OWNER(dev);
+	if (!dev)
+	    return -ENOMEM;
+	if (!request_mem_region(ioaddr, NE_IO_EXTENT*2, dev->name)) {
+	    kfree(dev);
+	    continue;
+	}
+	if ((err = ariadne2_init(dev, board, cards[i].name,
+				 ZTWO_VADDR(ioaddr)))) {
 	    release_mem_region(ioaddr, NE_IO_EXTENT*2);
+	    kfree(dev);
 	    return err;
 	}
-	return 0;
+	err = 0;
     }
-    return -ENODEV;
+
+    if (err == -ENODEV)
+	printk("No Ariadne II or X-Surf ethernet card found.\n");
+    return err;
 }
 
-static int __init ariadne2_init(struct net_device *dev, unsigned long board)
+static int __init ariadne2_init(struct net_device *dev, unsigned long board,
+				const char *name, unsigned long ioaddr)
 {
     int i;
     unsigned char SA_prom[32];
-    const char *name = NULL;
     int start_page, stop_page;
     static u32 ariadne2_offsets[16] = {
 	0x00, 0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c, 0x0e,
 	0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e,
     };
-    unsigned long ioaddr = board+ARIADNE2_BASE*2;
 
     /* Reset card. Who knows what dain-bramaged state it was left in. */
     {
@@ -166,8 +190,6 @@ static int __init ariadne2_init(struct net_device *dev, unsigned long board)
     start_page = NESM_START_PG;
     stop_page = NESM_STOP_PG;
 
-    name = "NE2000";
-
     dev->base_addr = ioaddr;
     dev->irq = IRQ_AMIGA_PORTS;
 
@@ -188,8 +210,8 @@ static int __init ariadne2_init(struct net_device *dev, unsigned long board)
 	dev->dev_addr[i] = SA_prom[i];
     }
 
-    printk("%s: AriadNE2 at 0x%08lx, Ethernet Address "
-	   "%02x:%02x:%02x:%02x:%02x:%02x\n", dev->name, board,
+    printk("%s: %s at 0x%08lx, Ethernet Address "
+	   "%02x:%02x:%02x:%02x:%02x:%02x\n", dev->name, name, board,
 	   dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
 	   dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
 
@@ -207,6 +229,10 @@ static int __init ariadne2_init(struct net_device *dev, unsigned long board)
     ei_status.reg_offset = ariadne2_offsets;
     dev->open = &ariadne2_open;
     dev->stop = &ariadne2_close;
+#ifdef MODULE
+    ei_status.priv = (unsigned long)root_ariadne2_dev;
+    root_ariadne2_dev = dev;
+#endif
     NS8390_init(dev, 0);
     return 0;
 }
@@ -379,26 +405,21 @@ static void ariadne2_block_output(struct net_device *dev, int count,
     return;
 }
 
+static void __exit ariadne2_cleanup(void)
+{
 #ifdef MODULE
-static struct net_device ariadne2_dev;
+    struct net_device *dev, *next;
 
-int init_module(void)
-{
-    int err;
-
-    ariadne2_dev.init = ariadne2_probe;
-    if ((err = register_netdev(&ariadne2_dev))) {
-	printk(KERN_WARNING "No AriadNE2 ethernet card found.\n");
-	return err;
+    while ((dev = root_ariadne2_dev)) {
+	next = (struct net_device *)(ei_status.priv);
+	unregister_netdev(dev);
+	free_irq(IRQ_AMIGA_PORTS, dev);
+	release_mem_region(ZTWO_PADDR(dev->base_addr), NE_IO_EXTENT*2);
+	kfree(dev);
+	root_ariadne2_dev = next;
     }
-    return 0;
+#endif
 }
 
-void cleanup_module(void)
-{
-    free_irq(IRQ_AMIGA_PORTS, &ariadne2_dev);
-    release_mem_region(ZTWO_PADDR(ariadne2_dev.base_addr), NE_IO_EXTENT*2);
-    unregister_netdev(&ariadne2_dev);
-}
-
-#endif	/* MODULE */
+module_init(ariadne2_probe);
+module_exit(ariadne2_cleanup);

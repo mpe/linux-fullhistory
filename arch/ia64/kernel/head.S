@@ -74,8 +74,8 @@ GLOBAL_ENTRY(_start)
 	;;
 
 #ifdef CONFIG_IA64_EARLY_PRINTK
-	mov r2=6
-	mov r3=(8<<8) | (28<<2)
+	mov r3=(6<<8) | (28<<2)
+	movl r2=6<<61
 	;;
 	mov rr[r2]=r3
 	;;
@@ -168,6 +168,11 @@ GLOBAL_ENTRY(ia64_save_debug_regs)
 	add r19=IA64_NUM_DBG_REGS*8,in0
 	;;
 1:	mov r16=dbr[r18]
+#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_BSTEP_SPECIFIC) \
+    || defined(CONFIG_ITANIUM_C0_SPECIFIC)
+	;;
+	srlz.d
+#endif
 	mov r17=ibr[r18]
 	add r18=1,r18
 	;;
@@ -181,7 +186,8 @@ END(ia64_save_debug_regs)
 
 GLOBAL_ENTRY(ia64_load_debug_regs)
 	alloc r16=ar.pfs,1,0,0,0
-#if !(defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_BSTEP_SPECIFIC))
+#if !(defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) \
+   || defined(CONFIG_ITANIUM_B0_SPECIFIC) || defined(CONFIG_ITANIUM_B1_SPECIFIC))
 	lfetch.nta [in0]
 #endif
 	mov r20=ar.lc			// preserve ar.lc
@@ -194,6 +200,11 @@ GLOBAL_ENTRY(ia64_load_debug_regs)
 	add r18=1,r18
 	;;
 	mov dbr[r18]=r16
+#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_ITANIUM_BSTEP_SPECIFIC) \
+    || defined(CONFIG_ITANIUM_C0_SPECIFIC)
+	;;
+	srlz.d
+#endif
 	mov ibr[r18]=r17
 	br.cloop.sptk.few 1b
 	;;
@@ -754,7 +765,7 @@ GLOBAL_ENTRY(ia64_spinlock_contention)
 	mov tmp=ar.itc
 (p15)	br.cond.sptk .wait
 	;;
-	ld1 tmp=[r31]
+	ld4 tmp=[r31]
 	;;
 	cmp.ne p15,p0=tmp,r0
 	mov tmp=ar.itc
@@ -764,7 +775,7 @@ GLOBAL_ENTRY(ia64_spinlock_contention)
 	mov tmp=1
 	;;
 	IA64_SEMFIX_INSN
-	cmpxchg1.acq tmp=[r31],tmp,ar.ccv
+	cmpxchg4.acq tmp=[r31],tmp,ar.ccv
 	;;
 	cmp.eq p15,p0=tmp,r0
 

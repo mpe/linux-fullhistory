@@ -125,46 +125,28 @@ extern void __get_user_unknown (void);
 struct __large_struct { unsigned long buf[100]; };
 #define __m(x) (*(struct __large_struct *)(x))
 
-#define __get_user_64(addr)								\
+/* We need to declare the __ex_table section before we can use it in .xdata.  */
+__asm__ (".section \"__ex_table\", \"a\"\n\t.previous");
+
+#define __get_user_64(addr)									\
 	__asm__ ("\n1:\tld8 %0=%2%P2\t// %0 and %1 get overwritten by exception handler\n"	\
-		 "2:\n"									\
-		 "\t.section __ex_table,\"a\"\n"					\
-		 "\t\tdata4 @gprel(1b)\n"						\
-		 "\t\tdata4 (2b-1b)|1\n"						\
-		 "\t.previous"								\
-		: "=r"(__gu_val), "=r"(__gu_err)					\
-		: "m"(__m(addr)), "1"(__gu_err));
+		 "2:\n\t.xdata4 \"__ex_table\", @gprel(1b), (2b-1b)|1\n"			\
+		: "=r"(__gu_val), "=r"(__gu_err) : "m"(__m(addr)), "1"(__gu_err));
 
-#define __get_user_32(addr)								\
+#define __get_user_32(addr)									\
 	__asm__ ("\n1:\tld4 %0=%2%P2\t// %0 and %1 get overwritten by exception handler\n"	\
-		 "2:\n"									\
-		 "\t.section __ex_table,\"a\"\n"					\
-		 "\t\tdata4 @gprel(1b)\n"						\
-		 "\t\tdata4 (2b-1b)|1\n"						\
-		 "\t.previous"								\
-		: "=r"(__gu_val), "=r"(__gu_err)					\
-		: "m"(__m(addr)), "1"(__gu_err));
+		 "2:\n\t.xdata4 \"__ex_table\", @gprel(1b), (2b-1b)|1\n"			\
+		: "=r"(__gu_val), "=r"(__gu_err) : "m"(__m(addr)), "1"(__gu_err));
 
-#define __get_user_16(addr)								\
+#define __get_user_16(addr)									\
 	__asm__ ("\n1:\tld2 %0=%2%P2\t// %0 and %1 get overwritten by exception handler\n"	\
-		 "2:\n"									\
-		 "\t.section __ex_table,\"a\"\n"					\
-		 "\t\tdata4 @gprel(1b)\n"						\
-		 "\t\tdata4 (2b-1b)|1\n"						\
-		 "\t.previous"								\
-		: "=r"(__gu_val), "=r"(__gu_err)					\
-		: "m"(__m(addr)), "1"(__gu_err));
+		 "2:\n\t.xdata4 \"__ex_table\", @gprel(1b), (2b-1b)|1\n"			\
+		: "=r"(__gu_val), "=r"(__gu_err) : "m"(__m(addr)), "1"(__gu_err));
 
-#define __get_user_8(addr)								\
+#define __get_user_8(addr)									\
 	__asm__ ("\n1:\tld1 %0=%2%P2\t// %0 and %1 get overwritten by exception handler\n"	\
-		 "2:\n"									\
-		 "\t.section __ex_table,\"a\"\n"					\
-		 "\t\tdata4 @gprel(1b)\n"						\
-		 "\t\tdata4 (2b-1b)|1\n"						\
-		 "\t.previous"								\
-		: "=r"(__gu_val), "=r"(__gu_err)					\
-		: "m"(__m(addr)), "1"(__gu_err));
-
+		 "2:\n\t.xdata4 \"__ex_table\", @gprel(1b), (2b-1b)|1\n"			\
+		: "=r"(__gu_val), "=r"(__gu_err) : "m"(__m(addr)), "1"(__gu_err));
 
 extern void __put_user_unknown (void);
 
@@ -206,46 +188,26 @@ extern void __put_user_unknown (void);
 #define __put_user_64(x,addr)								\
 	__asm__ __volatile__ (								\
 		 "\n1:\tst8 %1=%r2%P1\t// %0 gets overwritten by exception handler\n"	\
-		 "2:\n"									\
-		 "\t.section __ex_table,\"a\"\n"					\
-		 "\t\tdata4 @gprel(1b)\n"						\
-		 "\t\tdata4 2b-1b\n"							\
-		 "\t.previous"								\
-		: "=r"(__pu_err)							\
-		: "m"(__m(addr)), "rO"(x), "0"(__pu_err))
+		 "2:\n\t.xdata4 \"__ex_table\", @gprel(1b), (2b-1b)\n"			\
+		: "=r"(__pu_err) : "m"(__m(addr)), "rO"(x), "0"(__pu_err))
 
 #define __put_user_32(x,addr)								\
 	__asm__ __volatile__ (								\
 		 "\n1:\tst4 %1=%r2%P1\t// %0 gets overwritten by exception handler\n"	\
-		 "2:\n"									\
-		 "\t.section __ex_table,\"a\"\n"					\
-		 "\t\tdata4 @gprel(1b)\n"						\
-		 "\t\tdata4 2b-1b\n"							\
-		 "\t.previous"								\
-		: "=r"(__pu_err)							\
-		: "m"(__m(addr)), "rO"(x), "0"(__pu_err))
+		 "2:\n\t.xdata4 \"__ex_table\", @gprel(1b), (2b-1b)\n"			\
+		: "=r"(__pu_err) : "m"(__m(addr)), "rO"(x), "0"(__pu_err))
 
 #define __put_user_16(x,addr)								\
 	__asm__ __volatile__ (								\
 		 "\n1:\tst2 %1=%r2%P1\t// %0 gets overwritten by exception handler\n"	\
-		 "2:\n"									\
-		 "\t.section __ex_table,\"a\"\n"					\
-		 "\t\tdata4 @gprel(1b)\n"						\
-		 "\t\tdata4 2b-1b\n"							\
-		 "\t.previous"								\
-		: "=r"(__pu_err)							\
-		: "m"(__m(addr)), "rO"(x), "0"(__pu_err))
+		 "2:\n\t.xdata4 \"__ex_table\", @gprel(1b), (2b-1b)\n"			\
+		: "=r"(__pu_err) : "m"(__m(addr)), "rO"(x), "0"(__pu_err))
 
 #define __put_user_8(x,addr)								\
 	__asm__ __volatile__ (								\
 		 "\n1:\tst1 %1=%r2%P1\t// %0 gets overwritten by exception handler\n"	\
-		 "2:\n"									\
-		 "\t.section __ex_table,\"a\"\n"					\
-		 "\t\tdata4 @gprel(1b)\n"						\
-		 "\t\tdata4 2b-1b\n"							\
-		 "\t.previous"								\
-		: "=r"(__pu_err)							\
-		: "m"(__m(addr)), "rO"(x), "0"(__pu_err))
+		 "2:\n\t.xdata4 \"__ex_table\", @gprel(1b), (2b-1b)\n"			\
+		: "=r"(__pu_err) : "m"(__m(addr)), "rO"(x), "0"(__pu_err))
 
 /*
  * Complex access routines
