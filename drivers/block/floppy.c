@@ -92,8 +92,6 @@
 
 #include <linux/config.h>
 
-#ifdef CONFIG_BLK_DEV_FD
-
 #ifndef FD_MODULE
 /* the following is the mask of allowed drives. By default units 2 and
  * 3 of both floppy controllers are disabled, because switching on the
@@ -3393,4 +3391,3 @@ static void floppy_release_irq_and_dma(void)
 #endif
 }
 
-#endif

@@ -68,7 +68,7 @@ __res; })
 static char * number(char * str, long num, int base, int size, int precision
 	,int type)
 {
-	char c,sign,tmp[36];
+	char c,sign,tmp[66];
 	const char *digits="0123456789abcdefghijklmnopqrstuvwxyz";
 	int i;
 

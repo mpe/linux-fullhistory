@@ -47,6 +47,9 @@ void trap_init(void)
 {
 	unsigned long gptr;
 
+	/*
+	 * Tell PAL-code what global pointer we want in the kernel..
+	 */
 	__asm__("br %0,___tmp\n"
 		"___tmp:\tldgp %0,0(%0)"
 		: "=r" (gptr));

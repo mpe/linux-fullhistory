@@ -606,6 +606,7 @@ static int tcp_write_timeout(struct sock *sk)
 	if (sk->retransmits > TCP_RETR2) 
 	{
 		sk->err = ETIMEDOUT;
+		sk->error_report(sk);
 		/*
 		 *	Time wait the socket 
 		 */

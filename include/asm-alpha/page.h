@@ -16,15 +16,22 @@ __asm__ __volatile__( \
 	: : :"$1", "$16", "$17", "$22","$23","$24","$25")
 
 /* PAGE_SHIFT determines the page size */
-#define PAGE_SHIFT			13
-#define PGDIR_SHIFT			23
-#define PAGE_SIZE			(1UL << PAGE_SHIFT)
-#define PGDIR_SIZE			(1UL << PGDIR_SHIFT)
+#define PAGE_SHIFT	13
+#define PMD_SHIFT	23
+#define PGDIR_SHIFT	33
+
+#define PAGE_SIZE	(1UL << PAGE_SHIFT)
+#define PMD_SIZE	(1UL << PMD_SHIFT)
+#define PGDIR_SIZE	(1UL << PGDIR_SHIFT)
+
+#define PAGE_MASK	(~(PAGE_SIZE-1))
+#define PMD_MASK	(~(PMD_SIZE-1))
+#define PGDIR_MASK	(~(PGDIR_SIZE-1))
 
 #ifdef __KERNEL__
 
 #define PAGE_OFFSET 0xFFFFFC0000000000
-#define MAP_NR(addr) (((addr) - PAGE_OFFSET) >> PAGE_SHIFT)
+#define MAP_NR(addr) ((((unsigned long) (addr)) - PAGE_OFFSET) >> PAGE_SHIFT)
 #define MAP_PAGE_RESERVED (1<<31)
 
 typedef unsigned int mem_map_t;
@@ -37,10 +44,12 @@ typedef unsigned int mem_map_t;
  * These are used to make use of C type-checking..
  */
 typedef struct { unsigned long pte; } pte_t;
+typedef struct { unsigned long pmd; } pmd_t;
 typedef struct { unsigned long pgd; } pgd_t;
 typedef struct { unsigned long pgprot; } pgprot_t;
 
 #define pte_val(x)	((x).pte)
+#define pmd_val(x)	((x).pmd)
 #define pgd_val(x)	((x).pgd)
 #define pgprot_val(x)	((x).pgprot)
 
@@ -53,10 +62,12 @@ typedef struct { unsigned long pgprot; } pgprot_t;
  * .. while these make it easier on the compiler
  */
 typedef unsigned long pte_t;
+typedef unsigned long pmd_t;
 typedef unsigned long pgd_t;
 typedef unsigned long pgprot_t;
 
 #define pte_val(x)	(x)
+#define pmd_val(x)	(x)
 #define pgd_val(x)	(x)
 #define pgprot_val(x)	(x)
 
@@ -141,7 +152,7 @@ typedef unsigned long pgprot_t;
  * for zero-mapped memory areas etc..
  */
 extern pte_t __bad_page(void);
-extern pte_t * __bad_pagetable(void);
+extern pmd_t * __bad_pagetable(void);
 
 extern unsigned long __zero_page(void);
 
@@ -151,12 +162,6 @@ extern unsigned long __zero_page(void);
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))
-
-/* to mask away the intra-page address bits */
-#define PAGE_MASK			(~(PAGE_SIZE-1))
-
-/* to mask away the intra-page address bits */
-#define PGDIR_MASK			(~(PGDIR_SIZE-1))
 
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)		(((addr)+PAGE_SIZE-1)&PAGE_MASK)
@@ -171,23 +176,12 @@ extern unsigned long __zero_page(void);
 #define PAGE_PTR(address)		\
   ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
 
-/* the no. of pointers that fit on a page */
-#define PTRS_PER_PAGE			(PAGE_SIZE/sizeof(void*))
+/* This one will go away */
+#define PTRS_PER_PAGE	1024
 
-/* to set the page-dir */
-extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
-{
-	tsk->tss.ptbr = ((unsigned long) pgdir - PAGE_OFFSET) >> PAGE_SHIFT;
-	if (tsk == current)
-		invalidate();
-}
-
-/* to find an entry in a page-table-directory */
-extern inline pgd_t * PAGE_DIR_OFFSET(struct task_struct * tsk, unsigned long address)
-{
-	return (pgd_t *) ((tsk->tss.ptbr << PAGE_SHIFT) + PAGE_OFFSET) +
-		((address >> 33) & PTR_MASK);
-}
+#define PTRS_PER_PTE	1024
+#define PTRS_PER_PMD	1024
+#define PTRS_PER_PGD	1024
 
 extern unsigned long high_memory;
 
@@ -196,23 +190,37 @@ extern unsigned long high_memory;
  * and a page entry and page directory to the page they refer to.
  */
 extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
-{ pte_t pte; pte_val(pte) = (page << (32-PAGE_SHIFT)) | pgprot_val(pgprot); return pte; }
+{ pte_t pte; pte_val(pte) = ((page-PAGE_OFFSET) << (32-PAGE_SHIFT)) | pgprot_val(pgprot); return pte; }
 
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
 
-extern inline void pgd_set(pgd_t * pgdp, pte_t * ptep)
-{ pgd_val(*pgdp) = _PAGE_TABLE | (((unsigned long) ptep) << (32-PAGE_SHIFT)); }
+extern inline void pmd_set(pmd_t * pmdp, pte_t * ptep)
+{ pmd_val(*pmdp) = _PAGE_TABLE | ((((unsigned long) ptep) - PAGE_OFFSET) << (32-PAGE_SHIFT)); }
 
-extern inline unsigned long pte_page(pte_t pte)	{ return (pte_val(pte) & _PFN_MASK) >> (32-PAGE_SHIFT); }
-extern inline unsigned long pgd_page(pgd_t pgd)	{ return (pgd_val(pgd) & _PFN_MASK) >> (32-PAGE_SHIFT); }
+extern inline void pgd_set(pgd_t * pgdp, pmd_t * pmdp)
+{ pgd_val(*pgdp) = _PAGE_TABLE | ((((unsigned long) pmdp) - PAGE_OFFSET) << (32-PAGE_SHIFT)); }
+
+extern inline unsigned long pte_page(pte_t pte)
+{ return PAGE_OFFSET + ((pte_val(pte) & _PFN_MASK) >> (32-PAGE_SHIFT)); }
+
+extern inline pte_t * pmd_page(pmd_t pmd)
+{ return (pte_t *) (PAGE_OFFSET + ((pmd_val(pmd) & _PFN_MASK) >> (32-PAGE_SHIFT))); }
+
+extern inline pmd_t * pgd_page(pgd_t pgd)
+{ return (pmd_t *) (PAGE_OFFSET + ((pgd_val(pgd) & _PFN_MASK) >> (32-PAGE_SHIFT))); }
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_VALID; }
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
 
+extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
+extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~_PFN_MASK) != _PAGE_TABLE || (unsigned long) pmd_page(pmd) > high_memory; }
+extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_VALID; }
+extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
+
 extern inline int pgd_none(pgd_t pgd)		{ return !pgd_val(pgd); }
-extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & ~_PFN_MASK) != _PAGE_TABLE || pgd_page(pgd) > high_memory; }
+extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & ~_PFN_MASK) != _PAGE_TABLE || (unsigned long) pgd_page(pgd) > high_memory; }
 extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd) & _PAGE_VALID; }
 extern inline void pgd_clear(pgd_t * pgdp)	{ pgd_val(*pgdp) = 0; }
 
@@ -239,6 +247,83 @@ extern inline pte_t pte_mkexec(pte_t pte)	{ pte_val(pte) &= _PAGE_FOE; return pt
 extern inline pte_t pte_mkdirty(pte_t pte)	{ pte_val(pte) |= __DIRTY_BITS; return pte; }
 extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= __ACCESS_BITS; return pte; }
 extern inline pte_t pte_mkcow(pte_t pte)	{ pte_val(pte) |= _PAGE_COW; return pte; }
+
+/* to set the page-dir */
+extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
+{
+	tsk->tss.ptbr = ((unsigned long) pgdir - PAGE_OFFSET) >> PAGE_SHIFT;
+	if (tsk == current)
+		invalidate();
+}
+
+/* to find an entry in a page-table-directory */
+extern inline pgd_t * PAGE_DIR_OFFSET(struct task_struct * tsk, unsigned long address)
+{
+	return (pgd_t *) ((tsk->tss.ptbr << PAGE_SHIFT) + PAGE_OFFSET) +
+		((address >> 33) & (PTRS_PER_PGD - 1));
+}
+
+/* to find an entry in the second-level page-table-directory */
+extern inline pmd_t * PAGE_MIDDLE_OFFSET(pgd_t * dir, unsigned long address)
+{
+	return pgd_page(*dir) + ((address >> 23) & (PTRS_PER_PMD - 1));
+}
+
+/* to find an entry in the third-level page-table-directory */
+extern inline pte_t * PAGE_ENTRY_OFFSET(pmd_t * dir, unsigned long address)
+{
+	return pmd_page(*dir) + ((address >> 13) & (PTRS_PER_PTE - 1));
+}
+
+extern inline pte_t * pte_alloc(pmd_t *pmd, unsigned long address)
+{
+	unsigned long page;
+
+	address = (address >> 13) & (PTRS_PER_PTE - 1);
+	if (pmd_none(*pmd)) {
+		pte_t *page = (pte_t *) get_free_page(GFP_KERNEL);
+		if (pmd_none(*pmd)) {
+			if (page) {
+				pmd_set(pmd, page);
+				return page + address;
+			}
+			pmd_set(pmd, BAD_PAGETABLE);
+			return NULL;
+		}
+		free_page((unsigned long) page);
+	}
+	if (pmd_bad(*pmd)) {
+		printk("pte_alloc: bad pmd\n");
+		pmd_set(pmd, BAD_PAGETABLE);
+		return NULL;
+	}
+	return pmd_page(*pmd) + address;
+}
+
+extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
+{
+	unsigned long page;
+
+	address = (address >> 23) & (PTRS_PER_PMD - 1);
+	if (pgd_none(*pgd)) {
+		pmd_t *page = (pmd_t *) get_free_page(GFP_KERNEL);
+		if (pgd_none(*pgd)) {
+			if (page) {
+				pgd_set(pgd, page);
+				return page + address;
+			}
+			pgd_set(pgd, BAD_PAGETABLE);
+			return NULL;
+		}
+		free_page((unsigned long) page);
+	}
+	if (pgd_bad(*pgd)) {
+		printk("pmd_alloc: bad pgd\n");
+		pgd_set(pgd, BAD_PAGETABLE);
+		return NULL;
+	}
+	return pgd_page(*pgd) + address;
+}
 
 #endif /* __KERNEL__ */
 

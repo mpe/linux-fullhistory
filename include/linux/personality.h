@@ -20,7 +20,7 @@
 #define PER_WYSEV386		(0x0004 | STICKY_TIMEOUTS)
 #define PER_ISCR4		(0x0005 | STICKY_TIMEOUTS)
 #define PER_BSD			(0x0006)
-
+#define PER_XENIX		(0x0007 | STICKY_TIMEOUTS)
 
 /* Prototype for an lcall7 syscall handler. */
 typedef asmlinkage void (*lcall7_func)(struct pt_regs *);

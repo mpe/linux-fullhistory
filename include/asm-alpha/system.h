@@ -18,12 +18,11 @@
 #define BOOT_SIZE	(16*1024)
 
 #define KERNEL_START	0xfffffc0000300000
-#define INIT_PCB	0xfffffc0000300000
+#define SWAPPER_PGD	0xfffffc0000300000
 #define INIT_STACK	0xfffffc0000302000
 #define EMPTY_PGT	0xfffffc0000304000
 #define EMPTY_PGE	0xfffffc0000308000
 #define ZERO_PGE	0xfffffc000030A000
-#define SWAPPER_PGD	0xfffffc000030C000
 
 #define START_ADDR	0xfffffc0000310000
 #define START_SIZE	(1024*1024)

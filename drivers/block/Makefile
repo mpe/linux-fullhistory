@@ -21,8 +21,13 @@
 # In the future, some of these should be built conditionally.
 #
 
-OBJS := ll_rw_blk.o floppy.o ramdisk.o genhd.o 
-SRCS := ll_rw_blk.c floppy.c ramdisk.c genhd.c 
+OBJS := ll_rw_blk.o ramdisk.o genhd.o 
+SRCS := ll_rw_blk.c ramdisk.c genhd.c 
+
+ifdef CONFIG_BLK_DEV_FD
+OBJS := $(OBJS) floppy.o
+SRCS := $(SRCS) floppy.c
+endif
 
 ifdef CONFIG_CDU31A
 OBJS := $(OBJS) cdu31a.o

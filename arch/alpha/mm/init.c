@@ -86,17 +86,25 @@ void show_mem(void)
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
 
+static void load_PCB(struct thread_struct * pcb)
+{
+	__asm__ __volatile__(
+		"stq $30,0(%0)\n\t"
+		"bis %0,%0,$16\n\t"
+		".long %1"
+		: /* no outputs */
+		: "r" (pcb), "i" (PAL_swpctx)
+		: "$0", "$1", "$16", "$22", "$23", "$24", "$25");
+}
+
 /*
  * paging_init() sets up the page tables: in the alpha version this actually
  * unmaps the bootup page table (as we're now in KSEG, so we don't need it).
- *
- * The bootup sequence put the virtual page table into high memory: that
- * means that we can change the L1 page table by just using VL1p below.
  */
-#define VL1p ((unsigned long *) 0xffffffffffffe000)
 unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int i;
+	unsigned long newptbr;
 	struct memclust_struct * cluster;
 	struct memdesc_struct * memdesc;
 
@@ -122,8 +130,14 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	}
 
 	/* unmap the console stuff: we don't need it, and we don't want it */
-	for (i = 0; i < 1023; i++)
-		VL1p[i] = 0;
+	/* Also set up the real kernel PCB while we're at it.. */
+	memset((void *) ZERO_PGE, 0, PAGE_SIZE);
+	memset(swapper_pg_dir, 0, PAGE_SIZE);
+	newptbr = ((unsigned long) swapper_pg_dir - PAGE_OFFSET) >> PAGE_SHIFT;
+	pgd_val(swapper_pg_dir[1023]) = (newptbr << 32) | pgprot_val(PAGE_KERNEL);
+	init_task.tss.ptbr = newptbr;
+	load_PCB(&init_task.tss);
+
 	invalidate_all();
 	return start_mem;
 }

@@ -31,5 +31,11 @@ head.s: head.S $(TOPDIR)/include/linux/tasks.h
 piggy.o:	$(SYSTEM) xtract piggyback
 		./xtract $(SYSTEM) | gzip -9 | ./piggyback > piggy.o
 
+xtract: xtract.c
+	$(HOSTCC) $(CFLAGS) -o xtract xtract.c
+
+piggyback: xtract.c
+	$(HOSTCC) $(CFLAGS) -o piggyback piggyback.c
+
 clean:
 	rm -f xtract piggyback vmlinux

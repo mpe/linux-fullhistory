@@ -41,7 +41,7 @@ bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS n
 if [ "$CONFIG_NET" = "y" ]; then
 comment 'Networking options'
 bool 'TCP/IP networking' CONFIG_INET y
-if [ "$CONFIG_INET" "=" "y" ]; then
+if [ "$CONFIG_INET" = "y" ]; then
 bool 'IP forwarding/gatewaying' CONFIG_IP_FORWARD n
 bool 'IP multicasting (ALPHA)' CONFIG_IP_MULTICAST n
 bool 'IP firewalling' CONFIG_IP_FIREWALL n

@@ -162,42 +162,17 @@ static inline long load(long dev, unsigned long addr, unsigned long count)
 }
 
 /*
- * Start the kernel:
- * - switch to the proper PCB structure
- * - switch to the proper ptbr
- * - switch to the new kernel stack
+ * Start the kernel.
  */
 static void runkernel(void)
 {
-	struct pcb_struct * init_pcb = (struct pcb_struct *) INIT_PCB;
-	unsigned long oldptbr, *oldL1;
-	unsigned long newptbr, *newL1;
-
-	oldptbr = pcb_va->ptbr;
-	oldL1 = (unsigned long *) (PAGE_OFFSET + (oldptbr << PAGE_SHIFT));
-
-	newptbr = (SWAPPER_PGD - PAGE_OFFSET) >> PAGE_SHIFT;
-	newL1 = (unsigned long *) SWAPPER_PGD;
-
-	memcpy(newL1, oldL1, PAGE_SIZE);
-	newL1[1023] = (newptbr << 32) | pgprot_val(PAGE_KERNEL);
-
-	*init_pcb = *pcb_va;
-	init_pcb->ksp = PAGE_SIZE + INIT_STACK;
-	init_pcb->ptbr = newptbr;
-	
 	__asm__ __volatile__(
+		"bis %1,%1,$30\n\t"
 		"bis %0,%0,$26\n\t"
-		"bis %1,%1,$16\n\t"
-		".long %2\n\t"
-		"lda $16,-2($31)\n\t"
-		".long 51\n\t"
 		"ret ($26)"
 		: /* no outputs: it doesn't even return */
 		: "r" (START_ADDR),
-		  "r" (init_pcb),
-		  "i" (PAL_swpctx)
-		: "$16","$26");
+		  "r" (PAGE_SIZE + INIT_STACK));
 }
 
 void start_kernel(void)

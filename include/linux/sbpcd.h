@@ -526,7 +526,6 @@ Read XA Parameter:
  */
 #define CMD1_RESET	0x0a
 #define CMD2_RESET	0x01
-#define CMDL_RESET	0x0a
 #define CMDT_RESET	0xc0
 #define CMD1_LOCK_CTL	0x0c
 #define CMD2_LOCK_CTL	0x1e
@@ -537,7 +536,6 @@ Read XA Parameter:
 #define CMDL_TRAY_CTL	0x0d
 #define CMDT_TRAY_CTL	0x1b
 #define CMD1_MULTISESS	0x8d
-#define CMD2_MULTISESS	0x43
 #define CMDL_MULTISESS	0x8c
 #define CMD1_SUBCHANINF	0x11
 #define CMD2_SUBCHANINF	0x
@@ -628,7 +626,7 @@ Read XA Parameter:
 #define CMD0_DISKCODE	0x8a
 #define CMD0_DISKINFO	0x8b
 #define CMD1_DISKINFO	0x8b
-#define CMD2_DISKINFO	0x
+#define CMD2_DISKINFO	0x43
 #define CMDL_DISKINFO	0x8b
 #define CMDT_DISKINFO	0x43
 #define CMD0_READTOC	0x8c

@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Wed Jan 11 22:02:20 1995 by root@kai.home
+  Last modified: Thu Jan 19 23:28:05 1995 by makisara@kai.home
 */
 
 #include <linux/fs.h>
@@ -1546,7 +1546,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
      STp->moves_after_eof = 0;
    else
      STp->moves_after_eof = 1;
-   if (!ioctl_result) {
+   if (!ioctl_result) {  /* SCSI command successful */
      if (cmd_in != MTSEEK) {
        STp->drv_block = blkno;
        (STp->mt_status)->mt_fileno = fileno;
@@ -1587,9 +1587,11 @@ st_int_ioctl(struct inode * inode,struct file * file,
        STp->eof = ST_NOEOF;
        STp->eof_hit = 0;
      }
-   } else {
+   } else {  /* SCSI command was not completely successful */
      if (SCpnt->sense_buffer[2] & 0x40) {
-       STp->eof = ST_EOM_OK;
+       if (cmd_in != MTBSF && cmd_in != MTBSFM &&
+	   cmd_in != MTBSR && cmd_in != MTBSS)
+	 STp->eof = ST_EOM_OK;
        STp->eof_hit = 0;
        STp->drv_block = 0;
      }
@@ -1884,7 +1886,6 @@ static void st_init()
 {
   int i;
   Scsi_Tape * STp;
-  Scsi_Device * SDp;
   static int st_registered = 0;
 
   if (st_template.dev_noticed == 0) return;

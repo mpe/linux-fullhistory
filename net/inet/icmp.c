@@ -162,9 +162,6 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 				icmph->type == ICMP_PARAMETERPROB)
 				return;
 		}
-  
-		return;
-
 	}
 	icmp_statistics.IcmpOutMsgs++;
 	
