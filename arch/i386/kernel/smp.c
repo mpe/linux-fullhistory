@@ -57,8 +57,6 @@
 
 #include "irq.h"
 
-spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
-
 extern unsigned long start_kernel, _etext;
 extern void update_one_process( struct task_struct *p,
 				unsigned long ticks, unsigned long user,

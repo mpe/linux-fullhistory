@@ -315,7 +315,7 @@ applications, please refer to the following documentation:
 
 All necessary files can be found at
 
-    ftp://ftp.uni-erlangen.de/pub/Linux/LOCAL/680x0/
+    ftp://ftp.uni-erlangen.de/pub/Linux/680x0/
 
 and on its mirrors.
 

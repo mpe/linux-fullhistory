@@ -46,6 +46,8 @@
 #endif
 #include "irq.h"
 
+spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
+
 struct task_struct *last_task_used_math = NULL;
 
 #ifdef __SMP__

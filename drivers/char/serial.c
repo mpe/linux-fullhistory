@@ -154,7 +154,7 @@
 #endif
 	
 static char *serial_name = "Serial driver";
-static char *serial_version = "4.25";
+static char *serial_version = "4.26";
 
 static DECLARE_TASK_QUEUE(tq_serial);
 
@@ -830,13 +830,14 @@ static void rs_timer(void)
 	static unsigned long last_strobe = 0;
 	struct async_struct *info;
 	unsigned int	i;
+	unsigned long flags;
 
 	if ((jiffies - last_strobe) >= RS_STROBE_TIME) {
 		for (i=1; i < NR_IRQS; i++) {
 			info = IRQ_ports[i];
 			if (!info)
 				continue;
-			cli();
+			save_flags(flags); cli();
 #ifdef CONFIG_SERIAL_SHARE_IRQ
 			if (info->next_port) {
 				do {
@@ -854,7 +855,7 @@ static void rs_timer(void)
 			} else
 #endif /* CONFIG_SERIAL_SHARE_IRQ */
 				rs_interrupt_single(i, NULL, NULL);
-			sti();
+			restore_flags(flags);
 		}
 	}
 	last_strobe = jiffies;
@@ -862,13 +863,13 @@ static void rs_timer(void)
 	timer_active |= 1 << RS_TIMER;
 
 	if (IRQ_ports[0]) {
-		cli();
+		save_flags(flags); cli();
 #ifdef CONFIG_SERIAL_SHARE_IRQ
 		rs_interrupt(0, NULL, NULL);
 #else
 		rs_interrupt_single(0, NULL, NULL);
 #endif
-		sti();
+		restore_flags(flags);
 
 		timer_table[RS_TIMER].expires = jiffies + IRQ_timeout[0] - 2;
 	}
@@ -1501,12 +1502,13 @@ static int rs_chars_in_buffer(struct tty_struct *tty)
 static void rs_flush_buffer(struct tty_struct *tty)
 {
 	struct async_struct *info = (struct async_struct *)tty->driver_data;
-				
+	unsigned long flags;
+	
 	if (serial_paranoia_check(info, tty->device, "rs_flush_buffer"))
 		return;
-	cli();
+	save_flags(flags); cli();
 	info->xmit_cnt = info->xmit_head = info->xmit_tail = 0;
-	sti();
+	restore_flags(flags);
 	wake_up_interruptible(&tty->write_wait);
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 	    tty->ldisc.write_wakeup)
@@ -1543,6 +1545,7 @@ static void rs_send_xchar(struct tty_struct *tty, char ch)
 static void rs_throttle(struct tty_struct * tty)
 {
 	struct async_struct *info = (struct async_struct *)tty->driver_data;
+	unsigned long flags;
 #ifdef SERIAL_DEBUG_THROTTLE
 	char	buf[64];
 	
@@ -1559,14 +1562,15 @@ static void rs_throttle(struct tty_struct * tty)
 	if (tty->termios->c_cflag & CRTSCTS)
 		info->MCR &= ~UART_MCR_RTS;
 
-	cli();
+	save_flags(flags); cli();
 	serial_out(info, UART_MCR, info->MCR);
-	sti();
+	restore_flags(flags);
 }
 
 static void rs_unthrottle(struct tty_struct * tty)
 {
 	struct async_struct *info = (struct async_struct *)tty->driver_data;
+	unsigned long flags;
 #ifdef SERIAL_DEBUG_THROTTLE
 	char	buf[64];
 	
@@ -1585,9 +1589,9 @@ static void rs_unthrottle(struct tty_struct * tty)
 	}
 	if (tty->termios->c_cflag & CRTSCTS)
 		info->MCR |= UART_MCR_RTS;
-	cli();
+	save_flags(flags); cli();
 	serial_out(info, UART_MCR, info->MCR);
-	sti();
+	restore_flags(flags);
 }
 
 /*
@@ -1656,7 +1660,9 @@ static int set_serial_info(struct async_struct * info,
 	new_serial.irq = irq_cannonicalize(new_serial.irq);
 
 	if ((new_serial.irq >= NR_IRQS) || (new_serial.port > 0xffff) ||
-	    (new_serial.type < PORT_UNKNOWN) || (new_serial.type > PORT_MAX)) {
+	    (new_serial.type < PORT_UNKNOWN) ||
+	    (new_serial.type > PORT_MAX) ||
+	    (new_serial.xmit_fifo_size == 0)) {
 		return -EINVAL;
 	}
 
@@ -1745,10 +1751,11 @@ static int get_lsr_info(struct async_struct * info, unsigned int *value)
 {
 	unsigned char status;
 	unsigned int result;
+	unsigned long flags;
 
-	cli();
+	save_flags(flags); cli();
 	status = serial_in(info, UART_LSR);
-	sti();
+	restore_flags(flags);
 	result = ((status & UART_LSR_TEMT) ? TIOCSER_TEMT : 0);
 	return put_user(result,value);
 }
@@ -1758,11 +1765,12 @@ static int get_modem_info(struct async_struct * info, unsigned int *value)
 {
 	unsigned char control, status;
 	unsigned int result;
+	unsigned long flags;
 
 	control = info->MCR;
-	cli();
+	save_flags(flags); cli();
 	status = serial_in(info, UART_MSR);
-	sti();
+	restore_flags(flags);
 	result =  ((control & UART_MCR_RTS) ? TIOCM_RTS : 0)
 		| ((control & UART_MCR_DTR) ? TIOCM_DTR : 0)
 #ifdef TIOCM_OUT1
@@ -1781,6 +1789,7 @@ static int set_modem_info(struct async_struct * info, unsigned int cmd,
 {
 	int error;
 	unsigned int arg;
+	unsigned long flags;
 
 	error = get_user(arg, value);
 	if (error)
@@ -1827,9 +1836,9 @@ static int set_modem_info(struct async_struct * info, unsigned int cmd,
 	default:
 		return -EINVAL;
 	}
-	cli();
+	save_flags(flags); cli();
 	serial_out(info, UART_MCR, info->MCR);
-	sti();
+	restore_flags(flags);
 	return 0;
 }
 
@@ -1846,7 +1855,9 @@ static int do_autoconfig(struct async_struct * info)
 	shutdown(info);
 
 	autoconfig(info->state);
-	if ((info->state->flags & ASYNC_AUTO_IRQ) && (info->state->port != 0))
+	if ((info->state->flags & ASYNC_AUTO_IRQ) &&
+	    (info->state->port != 0) &&
+	    (info->state->type != PORT_UNKNOWN))
 		info->state->irq = detect_uart_irq(info->state);
 
 	retval = startup(info);
@@ -2000,7 +2011,8 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 	struct async_struct * info = (struct async_struct *)tty->driver_data;
 	struct async_icount cprev, cnow;	/* kernel counter temps */
 	struct serial_icounter_struct *p_cuser;	/* user space */
-
+	unsigned long flags;
+	
 	if (serial_paranoia_check(info, tty->device, "rs_ioctl"))
 		return -ENODEV;
 
@@ -2052,18 +2064,18 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 		 * Caller should use TIOCGICOUNT to see which one it was
 		 */
 		case TIOCMIWAIT:
-			cli();
+			save_flags(flags); cli();
 			/* note the counters on entry */
 			cprev = info->state->icount;
-			sti();
+			restore_flags(flags);
 			while (1) {
 				interruptible_sleep_on(&info->delta_msr_wait);
 				/* see if a signal did it */
 				if (signal_pending(current))
 					return -ERESTARTSYS;
-				cli();
+				save_flags(flags); cli();
 				cnow = info->state->icount; /* atomic copy */
-				sti();
+				restore_flags(flags);
 				if (cnow.rng == cprev.rng && cnow.dsr == cprev.dsr && 
 				    cnow.dcd == cprev.dcd && cnow.cts == cprev.cts)
 					return -EIO; /* no change => error */
@@ -2084,9 +2096,9 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 		 *     RI where only 0->1 is counted.
 		 */
 		case TIOCGICOUNT:
-			cli();
+			save_flags(flags); cli();
 			cnow = info->state->icount;
-			sti();
+			restore_flags(flags);
 			p_cuser = (struct serial_icounter_struct *) arg;
 			error = put_user(cnow.cts, &p_cuser->cts);
 			if (error) return error;
@@ -2096,6 +2108,26 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			if (error) return error;
 			error = put_user(cnow.dcd, &p_cuser->dcd);
 			if (error) return error;
+			error = put_user(cnow.rx, &p_cuser->rx);
+			if (error) return error;
+			error = put_user(cnow.tx, &p_cuser->tx);
+			if (error) return error;
+			error = put_user(cnow.frame, &p_cuser->frame);
+			if (error) return error;
+			error = put_user(cnow.overrun, &p_cuser->overrun);
+			if (error) return error;
+			error = put_user(cnow.parity, &p_cuser->parity);
+			if (error) return error;
+			error = put_user(cnow.brk, &p_cuser->brk);
+			if (error) return error;
+			error = put_user(cnow.buf_overrun, &p_cuser->buf_overrun);
+			if (error) return error;			
+			return 0;
+
+		case TIOCSERGWILD:
+		case TIOCSERSWILD:
+			/* "setserial -W" is called in Debian boot */
+			printk ("TIOCSER?WILD ioctl obsolete, ignored.\n");
 			return 0;
 
 		default:
@@ -2107,7 +2139,8 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 {
 	struct async_struct *info = (struct async_struct *)tty->driver_data;
-
+	unsigned long flags;
+	
 	if (   (tty->termios->c_cflag == old_termios->c_cflag)
 	    && (   RELEVANT_IFLAG(tty->termios->c_iflag) 
 		== RELEVANT_IFLAG(old_termios->c_iflag)))
@@ -2119,9 +2152,9 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 	if ((old_termios->c_cflag & CBAUD) &&
 	    !(tty->termios->c_cflag & CBAUD)) {
 		info->MCR &= ~(UART_MCR_DTR|UART_MCR_RTS);
-		cli();
+		save_flags(flags); cli();
 		serial_out(info, UART_MCR, info->MCR);
-		sti();
+		restore_flags(flags);
 	}
 	
 	/* Handle transition away from B0 status */
@@ -2132,9 +2165,9 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 		    !test_bit(TTY_THROTTLED, &tty->flags)) {
 			info->MCR |= UART_MCR_RTS;
 		}
-		cli();
+		save_flags(flags); cli();
 		serial_out(info, UART_MCR, info->MCR);
-		sti();
+		restore_flags(flags);
 	}
 	
 	/* Handle turning off CRTSCTS */
@@ -2284,6 +2317,9 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 	if (info->state->type == PORT_UNKNOWN)
 		return;
 
+	if (info->xmit_fifo_size == 0)
+		return; /* Just in case.... */
+
 	orig_jiffies = jiffies;
 	/*
 	 * Set the check interval to be 1/5 of the estimated time to
@@ -2355,7 +2391,8 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	struct wait_queue wait = { current, NULL };
 	struct serial_state *state = info->state;
 	int		retval;
-	int		do_clocal = 0;
+	int		do_clocal = 0, extra_count = 0;
+	unsigned long	flags;
 
 	/*
 	 * If the device is in the middle of being closed, then block
@@ -2425,19 +2462,21 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	printk("block_til_ready before block: ttys%d, count = %d\n",
 	       state->line, state->count);
 #endif
-	cli();
-	if (!tty_hung_up_p(filp)) 
+	save_flags(flags); cli();
+	if (!tty_hung_up_p(filp)) {
+		extra_count = 1;
 		state->count--;
-	sti();
+	}
+	restore_flags(flags);
 	info->blocked_open++;
 	while (1) {
-		cli();
+		save_flags(flags); cli();
 		if (!(info->flags & ASYNC_CALLOUT_ACTIVE) &&
 		    (tty->termios->c_cflag & CBAUD))
 			serial_out(info, UART_MCR,
 				   serial_inp(info, UART_MCR) |
 				   (UART_MCR_DTR | UART_MCR_RTS));
-		sti();
+		restore_flags(flags);
 		current->state = TASK_INTERRUPTIBLE;
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ASYNC_INITIALIZED)) {
@@ -2468,7 +2507,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	}
 	current->state = TASK_RUNNING;
 	remove_wait_queue(&info->open_wait, &wait);
-	if (!tty_hung_up_p(filp))
+	if (extra_count)
 		state->count++;
 	info->blocked_open--;
 #ifdef SERIAL_DEBUG_OPEN
@@ -2619,6 +2658,7 @@ static inline int line_info(char *buf, struct serial_state *state)
 	struct async_struct *info = state->info, scr_info;
 	char	stat_buf[30], control, status;
 	int	ret;
+	unsigned long flags;
 
 	ret = sprintf(buf, "%d: uart:%s port:%X irq:%d",
 		      state->line, uart_config[state->type].name, 
@@ -2641,10 +2681,10 @@ static inline int line_info(char *buf, struct serial_state *state)
 		info->quot = 0;
 		info->tty = 0;
 	}
-	cli();
+	save_flags(flags); cli();
 	status = serial_in(info, UART_MSR);
 	control = info ? info->MCR : serial_in(info, UART_MCR);
-	sti();
+	restore_flags(flags); 
 	
 	stat_buf[0] = 0;
 	stat_buf[1] = 0;
@@ -2691,12 +2731,13 @@ static inline int line_info(char *buf, struct serial_state *state)
 int rs_read_proc(char *page, char **start, off_t off, int count,
 		 int *eof, void *data)
 {
-	int i, len = 0;
+	int i, len = 0, l;
 	off_t	begin = 0;
 
 	len += sprintf(page, "serinfo:1.0 driver:%s\n", serial_version);
 	for (i = 0; i < NR_PORTS && len < 4000; i++) {
-		len += line_info(page + len, &rs_table[i]);
+		l = line_info(page + len, &rs_table[i]);
+		len += l;
 		if (len+begin > off+count)
 			goto done;
 		if (len+begin < off) {
@@ -2742,10 +2783,11 @@ static _INLINE_ void show_serial_version(void)
 #endif
 #ifdef CONFIG_SERIAL_SHARE_IRQ
 	printk(" SHARE_IRQ");
-#endif
 #define SERIAL_OPT
+#endif
 #ifdef CONFIG_SERIAL_DETECT_IRQ
 	printk(" DETECT_IRQ");
+#define SERIAL_OPT
 #endif
 #ifdef SERIAL_OPT
 	printk(" enabled\n");
@@ -2766,7 +2808,7 @@ static unsigned detect_uart_irq (struct serial_state * state)
 {
 	int irq;
 	unsigned long irqs;
-	unsigned char save_mcr;
+	unsigned char save_mcr, save_ier;
 	struct async_struct scr_info; /* serial_{in,out} because HUB6 */
 
 #ifdef CONFIG_SERIAL_MANY_PORTS
@@ -2790,15 +2832,30 @@ static unsigned detect_uart_irq (struct serial_state * state)
 	/* forget possible initially masked and pending IRQ */
 	probe_irq_off(probe_irq_on());
 	save_mcr = serial_inp(&scr_info, UART_MCR);
-
+	save_ier = serial_inp(&scr_info, UART_IER);
 	serial_outp(&scr_info, UART_MCR, UART_MCR_OUT1 | UART_MCR_OUT2);
+	
 	irqs = probe_irq_on();
 	serial_outp(&scr_info, UART_MCR, 0);
-	udelay (1);
+	udelay (10);
+	if (state->flags & ASYNC_FOURPORT)  {
+		serial_outp(&scr_info, UART_MCR,
+			    UART_MCR_DTR | UART_MCR_RTS);
+	} else {
+		serial_outp(&scr_info, UART_MCR,
+			    UART_MCR_DTR | UART_MCR_RTS | UART_MCR_OUT2);
+	}
+	serial_outp(&scr_info, UART_IER, 0x0f);	/* enable all intrs */
+	(void)serial_inp(&scr_info, UART_LSR);
+	(void)serial_inp(&scr_info, UART_RX);
+	(void)serial_inp(&scr_info, UART_IIR);
+	(void)serial_inp(&scr_info, UART_MSR);
+	serial_outp(&scr_info, UART_TX, 0xFF);
+	udelay (20);
 	irq = probe_irq_off(irqs);
 
 	serial_outp(&scr_info, UART_MCR, save_mcr);
-
+	serial_outp(&scr_info, UART_IER, save_ier);
 #ifdef CONFIG_SERIAL_MANY_PORTS
 	if (state->flags & ASYNC_FOURPORT)
 		outb_p(save_ICP, ICP);
@@ -2866,11 +2923,9 @@ static void autoconfig(struct serial_state * state)
 	if (!(state->flags & ASYNC_SKIP_TEST)) {
 		scratch = serial_inp(info, UART_MCR);
 		serial_outp(info, UART_MCR, UART_MCR_LOOP | scratch);
-		scratch2 = serial_inp(info, UART_MSR);
 		serial_outp(info, UART_MCR, UART_MCR_LOOP | 0x0A);
 		status1 = serial_inp(info, UART_MSR) & 0xF0;
 		serial_outp(info, UART_MCR, scratch);
-		serial_outp(info, UART_MSR, scratch2);
 		if (status1 != 0x90) {
 			restore_flags(flags);
 			return;
@@ -3083,12 +3138,9 @@ __initfunc(int rs_init(void))
 		state->icount.frame = state->icount.parity = 0;
 		state->icount.overrun = state->icount.brk = 0;
 		state->irq = irq_cannonicalize(state->irq);
-		if (check_region(state->port,8)) {
-			state->type = PORT_UNKNOWN;
+		if (check_region(state->port,8))
 			continue;
-		}
-		if (   (state->type == PORT_UNKNOWN)
-		    && (state->flags & ASYNC_BOOT_AUTOCONF))
+		if (state->flags & ASYNC_BOOT_AUTOCONF)
 			autoconfig(state);
 	}
 	/*

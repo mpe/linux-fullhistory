@@ -595,7 +595,7 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
 	performed, so there should be no Host Adapter state lost by a
 	Soft Reset in response to a Command Invalid condition.
       */
-      mdelay(1);
+      udelay(1000);
       StatusRegister.All = BusLogic_ReadStatusRegister(HostAdapter);
       if (StatusRegister.Bits.CommandInvalid ||
 	  StatusRegister.Bits.Reserved ||
@@ -607,7 +607,7 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
 	  StatusRegister.Bits.DiagnosticFailure)
 	{
 	  BusLogic_SoftReset(HostAdapter);
-	  mdelay(1);
+	  udelay(1000);
 	}
       BusLogic_CommandFailureReason = "Command Invalid";
       Result = -1;

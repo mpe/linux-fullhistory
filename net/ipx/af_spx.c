@@ -630,7 +630,7 @@ void spx_rcv(struct sock *sk, int bytes)
                                 && (pdata->state != SPX_CONNECTED))
                         {
                                 pdata->state = SPX_CONNECTED;
-				pdatat->dest_connid = ipxh->spx.sconn;
+				pdata->dest_connid = ipxh->spx.sconn;
 
 				if(spx_retransmit_chk(pdata, 0, CONACK) < 0)
 					goto toss_skb;

@@ -467,7 +467,7 @@ S: Italy
 
 N: Rik Faith
 E: faith@cs.unc.edu
-E: r.faith@ieee.org
+E: faith@acm.org
 D: Author: Future Domain TMC-16x0 SCSI driver
 D: Debugging: SCSI code; Cyclades serial driver; APM driver
 D: Debugging: XFree86 Mach 32 server, accelerated server code

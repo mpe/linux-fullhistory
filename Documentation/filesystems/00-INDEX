@@ -5,8 +5,7 @@ affs.txt
 coda.txt
 	- description of the CODA filesystem.
 fat_cvf.txt
-	- Description of the Compressed Volume Files extension to the FAT
-	  filesystem
+	- info on the Compressed Volume Files extension to the FAT filesystem
 hpfs.txt
 	- info and mount options for the OS/2 HPFS.
 isofs.txt

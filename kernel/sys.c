@@ -448,7 +448,7 @@ asmlinkage int sys_setuid(uid_t uid)
 	if (current->euid != old_euid)
 		current->dumpable = 0;
 
-	if(new_ruid != old_ruid) {
+       if (new_ruid != old_ruid) {
 		/* See comment above about NPROC rlimit issues... */
 		charge_uid(current, -1);
 		current->uid = new_ruid;
@@ -473,7 +473,7 @@ asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 	int old_ruid = current->uid;
 	int old_euid = current->euid;
 	int old_suid = current->suid;
-	if (current->uid != 0 && current->euid != 0 && current->suid != 0) {
+       if (!capable(CAP_SETUID)) {
 		if ((ruid != (uid_t) -1) && (ruid != current->uid) &&
 		    (ruid != current->euid) && (ruid != current->suid))
 			return -EPERM;
@@ -523,7 +523,7 @@ asmlinkage int sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
  */
 asmlinkage int sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 {
-	if (current->uid != 0 && current->euid != 0 && current->suid != 0) {
+       if (!capable(CAP_SETGID)) {
 		if ((rgid != (gid_t) -1) && (rgid != current->gid) &&
 		    (rgid != current->egid) && (rgid != current->sgid))
 			return -EPERM;
@@ -578,13 +578,13 @@ asmlinkage int sys_setfsuid(uid_t uid)
 		current->dumpable = 0;
 
 	/* We emulate fsuid by essentially doing a scaled-down version
-         * of what we did in setresuid and friends. However, we only
-         * operate on the fs-specific bits of the process' effective
-         * capabilities 
-         *
-         * FIXME - is fsuser used for all CAP_FS_MASK capabilities?
-         *          if not, we might be a bit too harsh here.
-         */
+	 * of what we did in setresuid and friends. However, we only
+	 * operate on the fs-specific bits of the process' effective
+	 * capabilities 
+	 *
+	 * FIXME - is fsuser used for all CAP_FS_MASK capabilities?
+	 *          if not, we might be a bit too harsh here.
+	 */
 	
 	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
 		if (old_fsuid == 0 && current->fsuid != 0) {
@@ -749,7 +749,7 @@ asmlinkage int sys_setsid(void)
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
 		if (p->pgrp == current->pid)
-		        goto out;
+			goto out;
 	}
 
 	current->leader = 1;
@@ -779,7 +779,7 @@ asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist)
 	i = current->ngroups;
 	if (gidsetsize) {
 		if (i > gidsetsize)
-		        return -EINVAL;
+			return -EINVAL;
 		if (copy_to_user(grouplist, current->groups, sizeof(gid_t)*i))
 			return -EFAULT;
 	}
@@ -994,7 +994,7 @@ asmlinkage int sys_umask(int mask)
 }
     
 asmlinkage int sys_prctl(int option, unsigned long arg2, unsigned long arg3,
-                         unsigned long arg4, unsigned long arg5)
+			 unsigned long arg4, unsigned long arg5)
 {
 	int error = 0;
 	int sig;
@@ -1003,15 +1003,15 @@ asmlinkage int sys_prctl(int option, unsigned long arg2, unsigned long arg3,
 		case PR_SET_PDEATHSIG:
 			sig = arg2;
 			if (sig > _NSIG) {
-                        	error = -EINVAL;
-                                break;
-                        }
-                        current->pdeath_signal = sig;
-                        break;
+				error = -EINVAL;
+				break;
+			}
+			current->pdeath_signal = sig;
+			break;
 		default:
 			error = -EINVAL;
 			break;
-        }
-        return error;
+	}
+	return error;
 }
 

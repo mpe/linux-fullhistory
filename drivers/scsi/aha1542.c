@@ -319,8 +319,7 @@ static int aha1542_test_port(int bse, struct Scsi_Host * shpnt)
 
     outb(SRST|IRST/*|SCRST*/, CONTROL(bse));
 
-    i = jiffies + 2;
-    while (i>jiffies); /* Wait a little bit for things to settle down. */
+    mdelay(20);	/* Wait a little bit for things to settle down. */
     
     debug = 1;
     /* Expect INIT and IDLE, any of the others are bad */

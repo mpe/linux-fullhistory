@@ -1,4 +1,4 @@
-/* $Revision: 2.3 $$Date: 1998/03/16 18:01:12 $
+/* $Revision: 2.4 $$Date: 1998/06/01 12:09:53 $
  * linux/include/linux/cyclades.h
  *
  * This file is maintained by Ivan Passos <ivan@cyclades.com>, 
@@ -7,10 +7,14 @@
  *
  * This file contains the general definitions for the cyclades.c driver
  *$Log: cyclades.h,v $
+ *Revision 2.4  1998/06/01 12:09:53  ivan
+ *removed closing_wait2 from cyclades_port structure;
+ *
  *Revision 2.3  1998/03/16 18:01:12  ivan
  *changes in the cyclades_port structure to get it closer to the 
  *standard serial port structure;
  *added constants for new ioctls;
+ *
  *Revision 2.2  1998/02/17 16:50:00  ivan
  *changes in the cyclades_port structure (addition of shutdown_wait and 
  *chip_rev variables);
@@ -89,8 +93,8 @@ struct cyclades_monitor {
 #define CZ_DEF_POLL	(HZ/25)
 
 #define MAX_BOARD       4       /* Max number of boards */
-#define MAX_PORT        128     /* Max number of ports per board */
 #define MAX_DEV         256     /* Max number of ports total */
+#define	CYZ_MAX_SPEED	921600
 
 #define	CYZ_FIFO_SIZE	16
 
@@ -508,7 +512,6 @@ struct cyclades_port {
 	int                     x_char; /* to be pushed out ASAP */
 	int			close_delay;
 	unsigned short		closing_wait;
-	unsigned short		closing_wait2;
 	unsigned long		event;
 	unsigned long		last_active;
 	int			count;	/* # of fd on device */
@@ -544,11 +547,15 @@ struct cyclades_port {
 #define Cy_EVENT_OPEN_WAKEUP		4
 #define Cy_EVENT_SHUTDOWN_WAKEUP	5
 
-#define	CLOSING_WAIT_DELAY	30
+#define	CLOSING_WAIT_DELAY	30*HZ
+#define CY_CLOSING_WAIT_NONE	65535
+#define CY_CLOSING_WAIT_INF	0
+
 
 #define CyMAX_CHIPS_PER_CARD	8
 #define CyMAX_CHAR_FIFO		12
 #define CyPORTS_PER_CHIP	4
+#define	CD1400_MAX_SPEED	115200
 
 #define	CyISA_Ywin	0x2000
 

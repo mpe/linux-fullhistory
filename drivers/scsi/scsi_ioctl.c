@@ -6,6 +6,7 @@
 #include <asm/system.h>
 #include <asm/page.h>
 
+#include <linux/interrupt.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -107,15 +108,17 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd,
     Scsi_Cmnd * SCpnt;
     Scsi_Device * SDpnt;
 
+    spin_lock_irqsave(&io_request_lock, flags);
+
     SCSI_LOG_IOCTL(1, printk("Trying ioctl with scsi command %d\n", cmd[0]));
     SCpnt = scsi_allocate_device(NULL, dev, 1);
     {
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
-	spin_lock_irqsave(&io_request_lock, flags);
 	scsi_do_cmd(SCpnt,  cmd, NULL,  0, scsi_ioctl_done,  timeout, retries);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	down(&sem);
+        spin_lock_irqsave(&io_request_lock, flags);
         SCpnt->request.sem = NULL;
     }
     
@@ -163,6 +166,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd,
 	(*SDpnt->scsi_request_fn)();
 
     wake_up(&SDpnt->device_wait);
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return result;
 }
 
@@ -276,13 +280,14 @@ int scsi_ioctl_send_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
       }
 
 #ifndef DEBUG_NO_CMD
+
+    spin_lock_irqsave(&io_request_lock, flags);
     
     SCpnt = scsi_allocate_device(NULL, dev, 1);
 
     {
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
-	spin_lock_irqsave(&io_request_lock, flags);
 	scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,
 		    timeout, retries);
 	spin_unlock_irqrestore(&io_request_lock, flags);
@@ -308,6 +313,8 @@ int scsi_ioctl_send_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
     }
     result = SCpnt->result;
 
+    spin_lock_irqsave(&io_request_lock, flags);
+
     wake_up(&SCpnt->device->device_wait);
     SDpnt = SCpnt->device;
     scsi_release_command(SCpnt);
@@ -318,6 +325,7 @@ int scsi_ioctl_send_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
     if(SDpnt->scsi_request_fn)
 	(*SDpnt->scsi_request_fn)();
     
+    spin_unlock_irqrestore(&io_request_lock, flags);
     return result;
 #else
     {

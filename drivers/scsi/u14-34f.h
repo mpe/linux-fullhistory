@@ -15,7 +15,7 @@ int u14_34f_reset(Scsi_Cmnd *);
 int u14_34f_old_reset(Scsi_Cmnd *, unsigned int);
 int u14_34f_biosparam(Disk *, kdev_t, int *);
 
-#define U14_34F_VERSION "4.31.00"
+#define U14_34F_VERSION "4.32.00"
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 

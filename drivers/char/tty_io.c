@@ -1022,6 +1022,10 @@ static void release_dev(struct file * filp)
 		}
 	}
 #endif
+
+	if (tty->driver.close)
+		tty->driver.close(tty, filp);
+
 	/*
 	 * Sanity check: if tty->count is going to zero, there shouldn't be
 	 * any waiters on tty->read_wait or tty->write_wait.  We test the
@@ -1078,9 +1082,6 @@ static void release_dev(struct file * filp)
 	 * both sides, and we've completed the last operation that could 
 	 * block, so it's safe to proceed with closing.
 	 */
-
-	if (tty->driver.close)
-		tty->driver.close(tty, filp);
 
 	if (pty_master) {
 		if (--o_tty->count < 0) {

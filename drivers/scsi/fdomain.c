@@ -1,6 +1,6 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Wed Oct  2 11:10:55 1996 by r.faith@ieee.org
+ * Revised: Wed Oct  2 11:10:55 1996 by faith@acm.org
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995, 1996 Rickard E. Faith
  *
@@ -956,14 +956,14 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 	 if (retcode == -EINVAL) {
 	    printk( "fdomain: IRQ %d is bad!\n", interrupt_level );
 	    printk( "         This shouldn't happen!\n" );
-	    printk( "         Send mail to faith@cs.unc.edu\n" );
+	    printk( "         Send mail to faith@acm.org\n" );
 	 } else if (retcode == -EBUSY) {
 	    printk( "fdomain: IRQ %d is already in use!\n", interrupt_level );
 	    printk( "         Please use another IRQ!\n" );
 	 } else {
 	    printk( "fdomain: Error getting IRQ %d\n", interrupt_level );
 	    printk( "         This shouldn't happen!\n" );
-	    printk( "         Send mail to faith@cs.unc.edu\n" );
+	    printk( "         Send mail to faith@acm.org\n" );
 	 }
 	 panic( "fdomain: Driver requires interruptions\n" );
       }

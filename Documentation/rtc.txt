@@ -129,7 +129,7 @@ fprintf(stderr, "\nAgain, from using select(2) on /dev/rtc:");
 fflush(stderr);
 for (i=1; i<6; i++) {
 	struct timeval tv = {5, 0};	/* 5 second timeout on select */
-	struct fd_set readfds;
+	fd_set readfds;
 
 	FD_ZERO(&readfds);
 	FD_SET(fd, &readfds);

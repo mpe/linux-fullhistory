@@ -72,14 +72,12 @@ Flag Dependencies
     modular, 'make' will notice that the foo.o was not compiled
     with -DMODULE and will recompile foo.c.
 
-    Flag dependencies also work with per-source-file flags such
-    as those in drivers/net/CONFIG.
-
     All .a and .o files made from C source or with 'ld' or 'ar'
     have flag dependencies.  .S files do not have flag dependencies.
 
 Per-source-file Flags
 
+    Flag dependencies also work with per-source-file flags.
     You can specify compilation flags for individual source files
     like this:
 

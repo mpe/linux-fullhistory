@@ -1,9 +1,10 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 1.03, last modified 26-Apr-97
+ * Version 1.04, last modified 26-Apr-98
  * 
- * Copyright Theodore Ts'o, 1994, 1995, 1996, 1997.  All rights reserved.
+ * Copyright Theodore Ts'o, 1994, 1995, 1996, 1997, 1998.  All rights
+ * reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -73,12 +74,12 @@
  * an *estimate* of how many bits of randomness have been stored into
  * the random number generator's internal state.
  * 
- * When random bytes are desired, they are obtained by taking the MD5
- * hash of the contents of the "entropy pool".  The MD5 hash avoids
+ * When random bytes are desired, they are obtained by taking the SHA
+ * hash of the contents of the "entropy pool".  The SHA hash avoids
  * exposing the internal state of the entropy pool.  It is believed to
  * be computationally infeasible to derive any useful information
- * about the input of MD5 from its output.  Even if it is possible to
- * analyze MD5 in some clever way, as long as the amount of data
+ * about the input of SHA from its output.  Even if it is possible to
+ * analyze SHA in some clever way, as long as the amount of data
  * returned from the generator is less than the inherent entropy in
  * the pool, the output data is totally unpredictable.  For this
  * reason, the routine decreases its internal estimate of how many
@@ -88,7 +89,7 @@
  * If this estimate goes to zero, the routine can still generate
  * random numbers; however, an attacker may (at least in theory) be
  * able to infer the future output of the generator from prior
- * outputs.  This requires successful cryptanalysis of MD5, which is
+ * outputs.  This requires successful cryptanalysis of SHA, which is
  * not believed to be feasible, but there is a remote possibility.
  * Nonetheless, these numbers should be useful for the vast majority
  * of purposes.
@@ -162,12 +163,14 @@
  * sequence: 
  *
  *	echo "Initializing random number generator..."
+ * 	random_seed=/var/run/random-seed
  *	# Carry a random seed from start-up to start-up
  *	# Load and then save 512 bytes, which is the size of the entropy pool
- * 	if [ -f /etc/random-seed ]; then
- *		cat /etc/random-seed >/dev/urandom
+ * 	if [ -f $random_seed ]; then
+ *		cat $random_seed >/dev/urandom
  * 	fi
- *	dd if=/dev/urandom of=/etc/random-seed count=1
+ *	dd if=/dev/urandom of=$random_seed count=1
+ * 	chmod 600 $random_seed
  *
  * and the following lines in an appropriate script which is run as
  * the system is shutdown:
@@ -175,10 +178,14 @@
  *	# Carry a random seed from shut-down to start-up
  *	# Save 512 bytes, which is the size of the entropy pool
  *	echo "Saving random seed..."
- *	dd if=/dev/urandom of=/etc/random-seed count=1
+ * 	random_seed=/var/run/random-seed
+ *	dd if=/dev/urandom of=$random_seed count=1
+ * 	chmod 600 $random_seed
  * 
- * For example, on many Linux systems, the appropriate scripts are
- * usually /etc/rc.d/rc.local and /etc/rc.d/rc.0, respectively.
+ * For example, on most modern systems using the System V init
+ * scripts, such code fragments would be found in
+ * /etc/rc.d/init.d/random.  On older Linux systems, the correct script
+ * location might be in /etc/rcb.d/rc.local or /etc/rc.d/rc.0.
  * 
  * Effectively, these commands cause the contents of the entropy pool
  * to be saved at shut-down time and reloaded into the entropy pool at
@@ -204,18 +211,17 @@
  * =================
  *
  * Ideas for constructing this random number generator were derived
- * from the Pretty Good Privacy's random number generator, and from
- * private discussions with Phil Karn.  Colin Plumb provided a faster
- * random number generator, which speed up the mixing function of the
- * entropy pool, taken from PGP 3.0 (under development).  It has since
- * been modified by myself to provide better mixing in the case where
- * the input values to add_entropy_word() are mostly small numbers.
- * Dale Worley has also contributed many useful ideas and suggestions
- * to improve this driver.
+ * from Pretty Good Privacy's random number generator, and from private
+ * discussions with Phil Karn.  Colin Plumb provided a faster random
+ * number generator, which speed up the mixing function of the entropy
+ * pool, taken from PGPfone.  Dale Worley has also contributed many
+ * useful ideas and suggestions to improve this driver.
  * 
  * Any flaws in the design are solely my responsibility, and should
  * not be attributed to the Phil, Colin, or any of authors of PGP.
  * 
+ * The code for SHA transform was taken from Peter Gutmann's
+ * implementation, which has been placed in the public domain.
  * The code for MD5 transform was taken from Colin Plumb's
  * implementation, which has been placed in the public domain.  The
  * MD5 cryptographic checksum was devised by Ronald Rivest, and is
@@ -246,26 +252,66 @@
  */
 #undef RANDOM_BENCHMARK
 #undef BENCHMARK_NOINT
+#define ROTATE_PARANOIA
 
-/*
- * The pool is stirred with a primitive polynomial of degree 128
- * over GF(2), namely x^128 + x^99 + x^59 + x^31 + x^9 + x^7 + 1.
- * For a pool of size 64, try x^64+x^62+x^38+x^10+x^6+x+1.
- */
 #define POOLWORDS 128    /* Power of 2 - note that this is 32-bit words */
 #define POOLBITS (POOLWORDS*32)
-#if POOLWORDS == 128
-#define TAP1    99     /* The polynomial taps */
-#define TAP2    59
-#define TAP3    31
-#define TAP4    9
-#define TAP5    7
-#elif POOLWORDS == 64
-#define TAP1    62      /* The polynomial taps */
-#define TAP2    38
-#define TAP3    10
-#define TAP4    6
-#define TAP5    1
+/*
+ * The pool is stirred with a primitive polynomial of degree POOLWORDS
+ * over GF(2).  The taps for various sizes are defined below.  They are
+ * chosen to be evenly spaced (minimum RMS distance from evenly spaced;
+ * the numbers in the comments are a scaled squared error sum) except
+ * for the last tap, which is 1 to get the twisting happening as fast
+ * as possible.
+ */
+#if POOLWORDS == 2048	/* 115 x^2048+x^1638+x^1231+x^819+x^411+x^1+1 */
+#define TAP1	1638
+#define TAP2	1231
+#define TAP3	819
+#define TAP4	411
+#define TAP5	1
+#elif POOLWORDS == 1024	/* 290 x^1024+x^817+x^615+x^412+x^204+x^1+1 */
+/* Alt: 115 x^1024+x^819+x^616+x^410+x^207+x^2+1 */
+#define TAP1	817
+#define TAP2	615
+#define TAP3	412
+#define TAP4	204
+#define TAP5	1
+#elif POOLWORDS == 512	/* 225 x^512+x^411+x^308+x^208+x^104+x+1 */
+/* Alt: 95 x^512+x^409+x^307+x^206+x^102+x^2+1
+ *      95 x^512+x^409+x^309+x^205+x^103+x^2+1 */
+#define TAP1	411
+#define TAP2	308
+#define TAP3	208
+#define TAP4	104
+#define TAP5	1
+#elif POOLWORDS == 256	/* 125 x^256+x^205+x^155+x^101+x^52+x+1 */
+#define TAP1	205
+#define TAP2	155
+#define TAP3	101
+#define TAP4	52
+#define TAP5	1
+#elif POOLWORDS == 128	/* 105 x^128+x^103+x^76+x^51+x^25+x+1 */
+/* Alt: 70 x^128+x^103+x^78+x^51+x^27+x^2+1 */
+#define TAP1	103
+#define TAP2	76
+#define TAP3	51
+#define TAP4	25
+#define TAP5	1
+#elif POOLWORDS == 64	/* 15 x^64+x^52+x^39+x^26+x^14+x+1 */
+#define TAP1	52
+#define TAP2	39
+#define TAP3	26
+#define TAP4	14
+#define TAP5	1
+#elif POOLWORDS == 32	/* 15 x^32+x^26+x^20+x^14+x^7+x^1+1 */
+#define TAP1	26
+#define TAP2	20
+#define TAP3	14
+#define TAP4	7
+#define TAP5	1
+#elif POOLWORDS & (POOLWORDS-1)
+#error POOLWORDS must be a power of 2
 #else
 #error No primitive polynomial available for chosen POOLWORDS
 #endif
@@ -279,11 +325,38 @@
  * Also see M. Matsumoto & Y. Kurita, 1994.  Twisted GFSR generators
  * II.  ACM Transactions on Mdeling and Computer Simulation 4:254-266)
  *
- * Thanks to Colin Plumb for suggesting this.  (Note that the behavior
- * of the 1.0 version of the driver was equivalent to using a second
- * element of 0x80000000).
+ * Thanks to Colin Plumb for suggesting this.
+ * We have not analyzed the resultant polynomial to prove it primitive;
+ * in fact it almost certainly isn't.  Nonetheless, the irreducible factors
+ * of a random large-degree polynomial over GF(2) are more than large enough
+ * that periodicity is not a concern.
+ *
+ * The input hash is much less sensitive than the output hash.  All that
+ * we want of it is that it be a good non-cryptographic hash; i.e. it
+ * not produce collisions when fed "random" data of the sort we expect
+ * to see.  As long as the pool state differs for different inputs, we
+ * have preserved the input entropy and done a good job.  The fact that an
+ * intelligent attacker can construct inputs that will produce controlled
+ * alterations to the pool's state is not important because we don't
+ * consider such inputs to contribute any randomness.
+ * The only property we need with respect to them is
+ * that the attacker can't increase his/her knowledge of the pool's state.
+ * Since all additions are reversible (knowing the final state and the
+ * input, you can reconstruct the initial state), if an attacker has
+ * any uncertainty about the initial state, he/she can only shuffle that
+ * uncertainty about, but never cause any collisions (which would
+ * decrease the uncertainty).
+ *
+ * The chosen system lets the state of the pool be (essentially) the input
+ * modulo the generator polymnomial.  Now, for random primitive polynomials,
+ * this is a universal class of hash functions, meaning that the chance
+ * of a collision is limited by the attacker's knowledge of the generator
+ * polynomail, so if it is chosen at random, an attacker can never force
+ * a collision.  Here, we use a fixed polynomial, but we *can* assume that
+ * ###--> it is unknown to the processes generating the input entropy. <-###
+ * Because of this important property, this is a good, collision-resistant
+ * hash; hash collisions will occur no more often than chance.
  */
-static __u32 twist_table[2] = { 0, 0xEDB88320 };
 
 /*
  * The minimum number of bits to release a "wait on input".  Should
@@ -303,7 +376,9 @@ static __u32 twist_table[2] = { 0, 0xEDB88320 };
 struct random_bucket {
 	unsigned add_ptr;
 	unsigned entropy_count;
+#ifdef ROTATE_PARANOIA	
 	int input_rotate;
+#endif
 	__u32 pool[POOLWORDS];
 };
 
@@ -332,8 +407,8 @@ struct random_benchmark timer_benchmark;
 
 /* There is one of these per entropy source */
 struct timer_rand_state {
-	unsigned long	last_time;
-	int 		last_delta,last_delta2;
+	__u32		last_time;
+	__s32		last_delta,last_delta2;
 	int		dont_count_entropy:1;
 };
 
@@ -356,11 +431,10 @@ static ssize_t random_write(struct file * file, const char * buffer,
 static int random_ioctl(struct inode * inode, struct file * file,
 			unsigned int cmd, unsigned long arg);
 
-static inline void fast_add_entropy_word(struct random_bucket *r,
-					 const __u32 input);
+static inline void fast_add_entropy_words(struct random_bucket *r,
+					 __u32 x, __u32 y);
 
-static void add_entropy_word(struct random_bucket *r,
-				    const __u32 input);
+static void add_entropy_words(struct random_bucket *r, __u32 x, __u32 y);
 
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
@@ -391,33 +465,36 @@ extern inline __u32 rotate_left(int i, __u32 word)
  * More asm magic....
  * 
  * For entropy estimation, we need to do an integral base 2
- * logarithm.  By default, use an open-coded C version, although we do
- * have a version which takes advantage of the Intel's x86's "bsr"
- * instruction.
+ * logarithm.  
+ *
+ * Note the "12bits" suffix - this is used for numbers between
+ * 0 and 4095 only.  This allows a few shortcuts.
  */
-#if (!defined (__i386__))
-static inline __u32 int_ln(__u32 word)
+#if 0	/* Slow but clear version */
+static inline __u32 int_ln_12bits(__u32 word)
 {
 	__u32 nbits = 0;
 	
-	while (1) {
-		word >>= 1;
-		if (!word)
-			break;
+	while (word >>= 1)
 		nbits++;
-	}
 	return nbits;
 }
-#else
-static inline __u32 int_ln(__u32 word)
+#else	/* Faster (more clever) version, courtesy Colin Plumb */
+static inline __u32 int_ln_12bits(__u32 word)
 {
-	__asm__("bsrl %1,%0\n\t"
-		"jnz 1f\n\t"
-		"movl $0,%0\n"
-		"1:"
-		:"=r" (word)
-		:"r" (word));
-	return word;
+	/* Smear msbit right to make an n-bit mask */
+	word |= word >> 8;
+	word |= word >> 4;
+	word |= word >> 2;
+	word |= word >> 1;
+	/* Remove one bit to make this a logarithm */
+	word >>= 1;
+	/* Count the bits set in the word */
+	word -= (word >> 1) & 0x555;
+	word = (word & 0x333) + ((word >> 2) & 0x333);
+	word += (word >> 4);
+	word += (word >> 8);
+	return word & 15;
 }
 #endif
 
@@ -429,19 +506,18 @@ static inline __u32 int_ln(__u32 word)
  */
 static void init_std_data(struct random_bucket *r)
 {
-	__u32 word, *p;
+	__u32 words[2], *p;
 	int i;
 	struct timeval 	tv;
 
 	do_gettimeofday(&tv);
-	add_entropy_word(r, tv.tv_sec);
-	add_entropy_word(r, tv.tv_usec);
+	add_entropy_words(r, tv.tv_sec, tv.tv_usec);
 
-	for (p = (__u32 *) &system_utsname,
-	     i = sizeof(system_utsname) / sizeof(__u32);
-	     i ; i--, p++) {
-		memcpy(&word, p, sizeof(__u32));
-		add_entropy_word(r, word);
+	p = (__u32 *)&system_utsname;
+	for (i = sizeof(system_utsname) / sizeof(words); i; i--) {
+		memcpy(words, p, sizeof(words));
+		add_entropy_words(r, words[0], words[1]);
+		p += sizeof(words)/sizeof(*words);
 	}
 	
 }
@@ -513,54 +589,90 @@ void rand_initialize_blkdev(int major, int mode)
  * This function adds a byte into the entropy "pool".  It does not
  * update the entropy estimate.  The caller must do this if appropriate.
  *
- * The pool is stirred with a primitive polynomial of degree 128
- * over GF(2), namely x^128 + x^99 + x^59 + x^31 + x^9 + x^7 + 1.
- * For a pool of size 64, try x^64+x^62+x^38+x^10+x^6+x+1.
- * 
- * We rotate the input word by a changing number of bits, to help
- * assure that all bits in the entropy get toggled.  Otherwise, if we
- * consistently feed the entropy pool small numbers (like jiffies and
- * scancodes, for example), the upper bits of the entropy pool don't
- * get affected. --- TYT, 10/11/95
+ * This function is tuned for speed above most other considerations.
+ *
+ * The pool is stirred with a primitive polynomial of the appropriate degree,
+ * and then twisted.  We twist by three bits at a time because it's
+ * cheap to do so and helps slightly in the expected case where the
+ * entropy is concentrated in the low-order bits.
  */
-static inline void fast_add_entropy_word(struct random_bucket *r,
-					 const __u32 input)
+#define MASK(x) ((x) & (POOLWORDS-1))	/* Convenient abreviation */
+static inline void fast_add_entropy_words(struct random_bucket *r,
+					 __u32 x, __u32 y)
 {
-	unsigned i;
-	int new_rotate;
-	__u32 w;
+	static __u32 const twist_table[8] = {
+		         0, 0x3b6e20c8, 0x76dc4190, 0x4db26158,
+		0xedb88320, 0xd6d6a3e8, 0x9b64c2b0, 0xa00ae278 };
+	unsigned i, j;
+
+	i = MASK(r->add_ptr - 2);	/* i is always even */
+	r->add_ptr = i;
+
+#ifdef ROTATE_PARANOIA
+	j = r->input_rotate + 14;
+	if (i)
+		j -= 7;
+	r->input_rotate = j & 31;
+
+	x = rotate_left(r->input_rotate, x);
+	y = rotate_left(r->input_rotate, y);
+#endif
 
 	/*
-	 * Normally, we add 7 bits of rotation to the pool.  At the
-	 * beginning of the pool, add an extra 7 bits rotation, so
-	 * that successive passes spread the input bits across the
-	 * pool evenly.
+	 * XOR in the various taps.  Even though logically, we compute
+	 * x and then compute y, we read in y then x order because most
+	 * caches work slightly better with increasing read addresses.
+	 * If a tap is even then we can use the fact that i is even to
+	 * avoid a masking operation.  Every polynomial has at least one
+	 * even tap, so j is always used.
+	 * (Is there a nicer way to arrange this code?)
 	 */
-	new_rotate = r->input_rotate + 14;
-	if ((i = r->add_ptr--))
-		new_rotate -= 7;
-	r->input_rotate = new_rotate & 31;
-
-	w = rotate_left(r->input_rotate, input);
-	
-	/* XOR in the various taps */
-	w ^= r->pool[(i+TAP1)&(POOLWORDS-1)];
-	w ^= r->pool[(i+TAP2)&(POOLWORDS-1)];
-	w ^= r->pool[(i+TAP3)&(POOLWORDS-1)];
-	w ^= r->pool[(i+TAP4)&(POOLWORDS-1)];
-	w ^= r->pool[(i+TAP5)&(POOLWORDS-1)];
-	w ^= r->pool[i&(POOLWORDS-1)];
-	/* Use a twisted GFSR for the mixing operation */
-	r->pool[i&(POOLWORDS-1)] = (w >> 1) ^ twist_table[w & 1];
+#if TAP1 & 1
+	y ^= r->pool[MASK(i+TAP1)];	x ^= r->pool[MASK(i+TAP1+1)];
+#else
+	j = MASK(i+TAP1);	y ^= r->pool[j];	x ^= r->pool[j+1];
+#endif
+#if TAP2 & 1
+	y ^= r->pool[MASK(i+TAP2)];	x ^= r->pool[MASK(i+TAP2+1)];
+#else
+	j = MASK(i+TAP2);	y ^= r->pool[j];	x ^= r->pool[j+1];
+#endif
+#if TAP3 & 1
+	y ^= r->pool[MASK(i+TAP3)];	x ^= r->pool[MASK(i+TAP3+1)];
+#else
+	j = MASK(i+TAP3);	y ^= r->pool[j];	x ^= r->pool[j+1];
+#endif
+#if TAP4 & 1
+	y ^= r->pool[MASK(i+TAP4)];	x ^= r->pool[MASK(i+TAP4+1)];
+#else
+	j = MASK(i+TAP4);	y ^= r->pool[j];	x ^= r->pool[j+1];
+#endif
+#if TAP5 == 1
+	/* We need to pretend to write pool[i+1] before computing y */
+	y ^= r->pool[i];
+	x ^= r->pool[i+1];
+	x ^= r->pool[MASK(i+TAP5+1)];
+	y ^= r->pool[i+1] = x = (x >> 3) ^ twist_table[x & 7];
+	r->pool[i] = (y >> 3) ^ twist_table[y & 7];
+#else
+# if TAP5 & 1
+	y ^= r->pool[MASK(i+TAP5)];	x ^= r->pool[MASK(i+TAP5+1)];
+# else
+	j = MASK(i+TAP5);	y ^= r->pool[j];	x ^= r->pool[j+1];
+# endif
+	y ^= r->pool[i];
+	x ^= r->pool[i+1];
+	r->pool[i] = (y >> 3) ^ twist_table[y & 7];
+	r->pool[i+1] = (x >> 3) ^ twist_table[x & 7];
+#endif
 }
 
 /*
  * For places where we don't need the inlined version
  */
-static void add_entropy_word(struct random_bucket *r,
-				    const __u32 input)
+static void add_entropy_words(struct random_bucket *r, __u32 x, __u32 y)
 {
-	fast_add_entropy_word(r, input);
+	fast_add_entropy_words(r, x, y);
 }
 
 /*
@@ -578,19 +690,18 @@ static void add_entropy_word(struct random_bucket *r,
 static void add_timer_randomness(struct random_bucket *r,
 				 struct timer_rand_state *state, unsigned num)
 {
-	int	delta, delta2, delta3;
 	__u32		time;
+	__s32		delta, delta2, delta3;
 
 #ifdef RANDOM_BENCHMARK
 	begin_benchmark(&timer_benchmark);
 #endif
 #if defined (__i386__)
 	if (boot_cpu_data.x86_capability & 16) {
-		unsigned long low, high;
+		__u32 high;
 		__asm__(".byte 0x0f,0x31"
-			:"=a" (low), "=d" (high));
-		time = (__u32) low;
-		num ^= (__u32) high;
+			:"=a" (time), "=d" (high));
+		num ^= high;
 	} else {
 		time = jiffies;
 	}
@@ -598,42 +709,53 @@ static void add_timer_randomness(struct random_bucket *r,
 	time = jiffies;
 #endif
 
-	fast_add_entropy_word(r, (__u32) num);
-	fast_add_entropy_word(r, time);
+	fast_add_entropy_words(r, (__u32)num, time);
 	
 	/*
-	 * Calculate number of bits of randomness we probably
-	 * added.  We take into account the first and second order
-	 * deltas in order to make our estimate.
+	 * Calculate number of bits of randomness we probably added.
+	 * We take into account the first, second and third-order deltas
+	 * in order to make our estimate.
 	 */
-	if (!state->dont_count_entropy &&
-	    (r->entropy_count < POOLBITS)) {
+	if ((r->entropy_count < POOLBITS) && !state->dont_count_entropy) {
 		delta = time - state->last_time;
 		state->last_time = time;
-		if (delta < 0) delta = -delta;
 
 		delta2 = delta - state->last_delta;
 		state->last_delta = delta;
-		if (delta2 < 0) delta2 = -delta2;
 
 		delta3 = delta2 - state->last_delta2;
 		state->last_delta2 = delta2;
-		if (delta3 < 0) delta3 = -delta3;
 
-		delta = MIN(MIN(delta, delta2), delta3) >> 1;
-		/* Limit entropy estimate to 12 bits */
+		if (delta < 0)
+			delta = -delta;
+		if (delta2 < 0)
+			delta2 = -delta2;
+		if (delta3 < 0)
+			delta3 = -delta3;
+		if (delta > delta2)
+			delta = delta2;
+		if (delta > delta3)
+			delta = delta3;
+
+		/*
+		 * delta is now minimum absolute delta.
+		 * Round down by 1 bit on general principles,
+		 * and limit entropy entimate to 12 bits.
+		 */
+		delta >>= 1;
 		delta &= (1 << 12) - 1;
 
-		r->entropy_count += int_ln(delta);
+		r->entropy_count += int_ln_12bits(delta);
 
 		/* Prevent overflow */
 		if (r->entropy_count > POOLBITS)
 			r->entropy_count = POOLBITS;
+
+		/* Wake up waiting processes, if we have enough entropy. */
+		if (r->entropy_count >= WAIT_INPUT_BITS)
+			wake_up_interruptible(&random_read_wait);
 	}
 		
-	/* Wake up waiting processes, if we have enough entropy. */
-	if (r->entropy_count >= WAIT_INPUT_BITS)
-		wake_up_interruptible(&random_read_wait);
 #ifdef RANDOM_BENCHMARK
 	end_benchmark(&timer_benchmark);
 #endif
@@ -672,52 +794,84 @@ void add_blkdev_randomness(int major)
 			     0x200+major);
 }
 
+/*
+ * This chunk of code defines a function
+ * void HASH_TRANSFORM(__u32 digest[HASH_BUFFER_SIZE + HASH_EXTRA_SIZE],
+ * 		__u32 const data[16])
+ * 
+ * The function hashes the input data to produce a digest in the first
+ * HASH_BUFFER_SIZE words of the digest[] array, and uses HASH_EXTRA_SIZE
+ * more words for internal purposes.  (This buffer is exported so the
+ * caller can wipe it once rather than this code doing it each call,
+ * and tacking it onto the end of the digest[] array is the quick and
+ * dirty way of doing it.)
+ *
+ * It so happens that MD5 and SHA share most of the initial vector
+ * used to initialize the digest[] array before the first call:
+ * 1) 0x67452301
+ * 2) 0xefcdab89
+ * 3) 0x98badcfe
+ * 4) 0x10325476
+ * 5) 0xc3d2e1f0 (SHA only)
+ *
+ * For /dev/random purposes, the length of the data being hashed is
+ * fixed in length (at POOLWORDS words), so appending a bit count in
+ * the usual way is not cryptographically necessary.
+ */
 #define USE_SHA
 
 #ifdef USE_SHA
 
-#define SMALL_VERSION		/* Optimize for space over time */
-
 #define HASH_BUFFER_SIZE 5
+#define HASH_EXTRA_SIZE 80
 #define HASH_TRANSFORM SHATransform
 
+/* Various size/speed tradeoffs are available.  Choose 0..3. */
+#define SHA_CODE_SIZE 0
+
 /*
- * SHA transform algorithm, taken from code written by Peter Gutman,
- * and apparently in the public domain.
+ * SHA transform algorithm, taken from code written by Peter Gutmann,
+ * and placed in the public domain.
  */
 
 /* The SHA f()-functions.  */
 
-#define f1(x,y,z)   ( z ^ ( x & ( y ^ z ) ) )           /* Rounds  0-19 */
-#define f2(x,y,z)   ( x ^ y ^ z )                       /* Rounds 20-39 */
-#define f3(x,y,z)   ( ( x & y ) | ( z & ( x | y ) ) )   /* Rounds 40-59 */
-#define f4(x,y,z)   ( x ^ y ^ z )                       /* Rounds 60-79 */
+#define f1(x,y,z)   ( z ^ (x & (y^z)) )		/* Rounds  0-19: x ? y : z */
+#define f2(x,y,z)   (x ^ y ^ z)			/* Rounds 20-39: XOR */
+#define f3(x,y,z)   ( (x & y) + (z & (x ^ y)) )	/* Rounds 40-59: majority */
+#define f4(x,y,z)   (x ^ y ^ z)			/* Rounds 60-79: XOR */
 
 /* The SHA Mysterious Constants */
 
-#define K1  0x5A827999L                                 /* Rounds  0-19 */
-#define K2  0x6ED9EBA1L                                 /* Rounds 20-39 */
-#define K3  0x8F1BBCDCL                                 /* Rounds 40-59 */
-#define K4  0xCA62C1D6L                                 /* Rounds 60-79 */
+#define K1  0x5A827999L			/* Rounds  0-19: sqrt(2) * 2^30 */
+#define K2  0x6ED9EBA1L			/* Rounds 20-39: sqrt(3) * 2^30 */
+#define K3  0x8F1BBCDCL			/* Rounds 40-59: sqrt(5) * 2^30 */
+#define K4  0xCA62C1D6L			/* Rounds 60-79: sqrt(10) * 2^30 */
 
 #define ROTL(n,X)  ( ( ( X ) << n ) | ( ( X ) >> ( 32 - n ) ) )
-
-#define expand(W,i) ( W[ i & 15 ] = \
-		     ROTL( 1, ( W[ i & 15 ] ^ W[ (i - 14) & 15 ] ^ \
-			        W[ (i - 8) & 15 ] ^ W[ (i - 3) & 15 ] ) ) )
 
 #define subRound(a, b, c, d, e, f, k, data) \
     ( e += ROTL( 5, a ) + f( b, c, d ) + k + data, b = ROTL( 30, b ) )
 
 
-static void SHATransform(__u32 *digest, __u32 *data)
-    {
+static void SHATransform(__u32 digest[85], __u32 const data[16])
+{
     __u32 A, B, C, D, E;     /* Local vars */
-    __u32 eData[ 16 ];       /* Expanded data */
-#ifdef SMALL_VERSION
-    int	i;
     __u32 TEMP;
-#endif
+    int	i;
+#define W (digest + HASH_BUFFER_SIZE)	/* Expanded data array */
+
+    /*
+     * Do the preliminary expansion of 16 to 80 words.  Doing it
+     * out-of-line line this is faster than doing it in-line on
+     * register-starved machines like the x86, and not really any
+     * slower on real processors.
+     */
+    memcpy(W, data, 16*sizeof(__u32));
+    for (i = 0; i < 64; i++) {
+	    TEMP = W[i] ^ W[i+2] ^ W[i+8] ^ W[i+13];
+	    W[i+16] = ROTL(1, TEMP);
+    }
 
     /* Set up first buffer and local data buffer */
     A = digest[ 0 ];
@@ -725,112 +879,161 @@ static void SHATransform(__u32 *digest, __u32 *data)
     C = digest[ 2 ];
     D = digest[ 3 ];
     E = digest[ 4 ];
-    memcpy( eData, data, 16*sizeof(__u32));
 
-#ifdef SMALL_VERSION
+    /* Heavy mangling, in 4 sub-rounds of 20 iterations each. */
+#if SHA_CODE_SIZE == 0
     /*
-     * Approximately 50% of the speed of the optimized version, but
+     * Approximately 50% of the speed of the largest version, but
      * takes up 1/16 the space.  Saves about 6k on an i386 kernel.
      */
-    for (i=0; i < 80; i++) {
+    for (i = 0; i < 80; i++) {
+	if (i < 40) {
 	    if (i < 20)
-		    TEMP = f1(B, C, D) + K1;
-	    else if (i < 40)
-		    TEMP = f2(B, C, D) + K2;
-	    else if (i < 60)
-		    TEMP = f3(B, C, D) + K3;
+		TEMP = f1(B, C, D) + K1;
 	    else
-		    TEMP = f4(B, C, D) + K4;
-	    TEMP += ROTL (5, A) + E +
-		    ((i > 15) ? expand(eData, i) : eData[i]);
-	    E = D; D = C; C = ROTL(30, B); B = A; A = TEMP;
+		TEMP = f2(B, C, D) + K2;
+	} else {
+	    if (i < 60)
+		TEMP = f3(B, C, D) + K3;
+	    else
+		TEMP = f4(B, C, D) + K4;
+	}
+	TEMP += ROTL(5, A) + E + W[i];
+	E = D; D = C; C = ROTL(30, B); B = A; A = TEMP;
     }
+#elif SHA_CODE_SIZE == 1
+    for (i = 0; i < 20; i++) {
+	TEMP = f1(B, C, D) + K1 + ROTL(5, A) + E + W[i];
+	E = D; D = C; C = ROTL(30, B); B = A; A = TEMP;
+    }
+    for (; i < 40; i++) {
+	TEMP = f2(B, C, D) + K2 + ROTL(5, A) + E + W[i];
+	E = D; D = C; C = ROTL(30, B); B = A; A = TEMP;
+    }
+    for (; i < 60; i++) {
+	TEMP = f3(B, C, D) + K3 + ROTL(5, A) + E + W[i];
+	E = D; D = C; C = ROTL(30, B); B = A; A = TEMP;
+    }
+    for (; i < 80; i++) {
+	TEMP = f4(B, C, D) + K4 + ROTL(5, A) + E + W[i];
+	E = D; D = C; C = ROTL(30, B); B = A; A = TEMP;
+    }
+#elif SHA_CODE_SIZE == 2
+    for (i = 0; i < 20; i += 5) {
+	subRound( A, B, C, D, E, f1, K1, W[ i   ] );
+	subRound( E, A, B, C, D, f1, K1, W[ i+1 ] );
+	subRound( D, E, A, B, C, f1, K1, W[ i+2 ] );
+	subRound( C, D, E, A, B, f1, K1, W[ i+3 ] );
+	subRound( B, C, D, E, A, f1, K1, W[ i+4 ] );
+    }
+    for (; i < 40; i += 5) {
+	subRound( A, B, C, D, E, f2, K2, W[ i   ] );
+	subRound( E, A, B, C, D, f2, K2, W[ i+1 ] );
+	subRound( D, E, A, B, C, f2, K2, W[ i+2 ] );
+	subRound( C, D, E, A, B, f2, K2, W[ i+3 ] );
+	subRound( B, C, D, E, A, f2, K2, W[ i+4 ] );
+    }
+    for (; i < 60; i += 5) {
+	subRound( A, B, C, D, E, f3, K3, W[ i   ] );
+	subRound( E, A, B, C, D, f3, K3, W[ i+1 ] );
+	subRound( D, E, A, B, C, f3, K3, W[ i+2 ] );
+	subRound( C, D, E, A, B, f3, K3, W[ i+3 ] );
+	subRound( B, C, D, E, A, f3, K3, W[ i+4 ] );
+    }
+    for (; i < 80; i += 5) {
+	subRound( A, B, C, D, E, f4, K4, W[ i   ] );
+	subRound( E, A, B, C, D, f4, K4, W[ i+1 ] );
+	subRound( D, E, A, B, C, f4, K4, W[ i+2 ] );
+	subRound( C, D, E, A, B, f4, K4, W[ i+3 ] );
+	subRound( B, C, D, E, A, f4, K4, W[ i+4 ] );
+    }
+#elif SHA_CODE_SIZE == 3 /* Really large version */
+    subRound( A, B, C, D, E, f1, K1, W[  0 ] );
+    subRound( E, A, B, C, D, f1, K1, W[  1 ] );
+    subRound( D, E, A, B, C, f1, K1, W[  2 ] );
+    subRound( C, D, E, A, B, f1, K1, W[  3 ] );
+    subRound( B, C, D, E, A, f1, K1, W[  4 ] );
+    subRound( A, B, C, D, E, f1, K1, W[  5 ] );
+    subRound( E, A, B, C, D, f1, K1, W[  6 ] );
+    subRound( D, E, A, B, C, f1, K1, W[  7 ] );
+    subRound( C, D, E, A, B, f1, K1, W[  8 ] );
+    subRound( B, C, D, E, A, f1, K1, W[  9 ] );
+    subRound( A, B, C, D, E, f1, K1, W[ 10 ] );
+    subRound( E, A, B, C, D, f1, K1, W[ 11 ] );
+    subRound( D, E, A, B, C, f1, K1, W[ 12 ] );
+    subRound( C, D, E, A, B, f1, K1, W[ 13 ] );
+    subRound( B, C, D, E, A, f1, K1, W[ 14 ] );
+    subRound( A, B, C, D, E, f1, K1, W[ 15 ] );
+    subRound( E, A, B, C, D, f1, K1, W[ 16 ] );
+    subRound( D, E, A, B, C, f1, K1, W[ 17 ] );
+    subRound( C, D, E, A, B, f1, K1, W[ 18 ] );
+    subRound( B, C, D, E, A, f1, K1, W[ 19 ] );
+
+    subRound( A, B, C, D, E, f2, K2, W[ 20 ] );
+    subRound( E, A, B, C, D, f2, K2, W[ 21 ] );
+    subRound( D, E, A, B, C, f2, K2, W[ 22 ] );
+    subRound( C, D, E, A, B, f2, K2, W[ 23 ] );
+    subRound( B, C, D, E, A, f2, K2, W[ 24 ] );
+    subRound( A, B, C, D, E, f2, K2, W[ 25 ] );
+    subRound( E, A, B, C, D, f2, K2, W[ 26 ] );
+    subRound( D, E, A, B, C, f2, K2, W[ 27 ] );
+    subRound( C, D, E, A, B, f2, K2, W[ 28 ] );
+    subRound( B, C, D, E, A, f2, K2, W[ 29 ] );
+    subRound( A, B, C, D, E, f2, K2, W[ 30 ] );
+    subRound( E, A, B, C, D, f2, K2, W[ 31 ] );
+    subRound( D, E, A, B, C, f2, K2, W[ 32 ] );
+    subRound( C, D, E, A, B, f2, K2, W[ 33 ] );
+    subRound( B, C, D, E, A, f2, K2, W[ 34 ] );
+    subRound( A, B, C, D, E, f2, K2, W[ 35 ] );
+    subRound( E, A, B, C, D, f2, K2, W[ 36 ] );
+    subRound( D, E, A, B, C, f2, K2, W[ 37 ] );
+    subRound( C, D, E, A, B, f2, K2, W[ 38 ] );
+    subRound( B, C, D, E, A, f2, K2, W[ 39 ] );
+    
+    subRound( A, B, C, D, E, f3, K3, W[ 40 ] );
+    subRound( E, A, B, C, D, f3, K3, W[ 41 ] );
+    subRound( D, E, A, B, C, f3, K3, W[ 42 ] );
+    subRound( C, D, E, A, B, f3, K3, W[ 43 ] );
+    subRound( B, C, D, E, A, f3, K3, W[ 44 ] );
+    subRound( A, B, C, D, E, f3, K3, W[ 45 ] );
+    subRound( E, A, B, C, D, f3, K3, W[ 46 ] );
+    subRound( D, E, A, B, C, f3, K3, W[ 47 ] );
+    subRound( C, D, E, A, B, f3, K3, W[ 48 ] );
+    subRound( B, C, D, E, A, f3, K3, W[ 49 ] );
+    subRound( A, B, C, D, E, f3, K3, W[ 50 ] );
+    subRound( E, A, B, C, D, f3, K3, W[ 51 ] );
+    subRound( D, E, A, B, C, f3, K3, W[ 52 ] );
+    subRound( C, D, E, A, B, f3, K3, W[ 53 ] );
+    subRound( B, C, D, E, A, f3, K3, W[ 54 ] );
+    subRound( A, B, C, D, E, f3, K3, W[ 55 ] );
+    subRound( E, A, B, C, D, f3, K3, W[ 56 ] );
+    subRound( D, E, A, B, C, f3, K3, W[ 57 ] );
+    subRound( C, D, E, A, B, f3, K3, W[ 58 ] );
+    subRound( B, C, D, E, A, f3, K3, W[ 59 ] );
+
+    subRound( A, B, C, D, E, f4, K4, W[ 60 ] );
+    subRound( E, A, B, C, D, f4, K4, W[ 61 ] );
+    subRound( D, E, A, B, C, f4, K4, W[ 62 ] );
+    subRound( C, D, E, A, B, f4, K4, W[ 63 ] );
+    subRound( B, C, D, E, A, f4, K4, W[ 64 ] );
+    subRound( A, B, C, D, E, f4, K4, W[ 65 ] );
+    subRound( E, A, B, C, D, f4, K4, W[ 66 ] );
+    subRound( D, E, A, B, C, f4, K4, W[ 67 ] );
+    subRound( C, D, E, A, B, f4, K4, W[ 68 ] );
+    subRound( B, C, D, E, A, f4, K4, W[ 69 ] );
+    subRound( A, B, C, D, E, f4, K4, W[ 70 ] );
+    subRound( E, A, B, C, D, f4, K4, W[ 71 ] );
+    subRound( D, E, A, B, C, f4, K4, W[ 72 ] );
+    subRound( C, D, E, A, B, f4, K4, W[ 73 ] );
+    subRound( B, C, D, E, A, f4, K4, W[ 74 ] );
+    subRound( A, B, C, D, E, f4, K4, W[ 75 ] );
+    subRound( E, A, B, C, D, f4, K4, W[ 76 ] );
+    subRound( D, E, A, B, C, f4, K4, W[ 77 ] );
+    subRound( C, D, E, A, B, f4, K4, W[ 78 ] );
+    subRound( B, C, D, E, A, f4, K4, W[ 79 ] );
 #else
-    /* Heavy mangling, in 4 sub-rounds of 20 iterations each. */
-    subRound( A, B, C, D, E, f1, K1, eData[  0 ] );
-    subRound( E, A, B, C, D, f1, K1, eData[  1 ] );
-    subRound( D, E, A, B, C, f1, K1, eData[  2 ] );
-    subRound( C, D, E, A, B, f1, K1, eData[  3 ] );
-    subRound( B, C, D, E, A, f1, K1, eData[  4 ] );
-    subRound( A, B, C, D, E, f1, K1, eData[  5 ] );
-    subRound( E, A, B, C, D, f1, K1, eData[  6 ] );
-    subRound( D, E, A, B, C, f1, K1, eData[  7 ] );
-    subRound( C, D, E, A, B, f1, K1, eData[  8 ] );
-    subRound( B, C, D, E, A, f1, K1, eData[  9 ] );
-    subRound( A, B, C, D, E, f1, K1, eData[ 10 ] );
-    subRound( E, A, B, C, D, f1, K1, eData[ 11 ] );
-    subRound( D, E, A, B, C, f1, K1, eData[ 12 ] );
-    subRound( C, D, E, A, B, f1, K1, eData[ 13 ] );
-    subRound( B, C, D, E, A, f1, K1, eData[ 14 ] );
-    subRound( A, B, C, D, E, f1, K1, eData[ 15 ] );
-    subRound( E, A, B, C, D, f1, K1, expand( eData, 16 ) );
-    subRound( D, E, A, B, C, f1, K1, expand( eData, 17 ) );
-    subRound( C, D, E, A, B, f1, K1, expand( eData, 18 ) );
-    subRound( B, C, D, E, A, f1, K1, expand( eData, 19 ) );
-
-    subRound( A, B, C, D, E, f2, K2, expand( eData, 20 ) );
-    subRound( E, A, B, C, D, f2, K2, expand( eData, 21 ) );
-    subRound( D, E, A, B, C, f2, K2, expand( eData, 22 ) );
-    subRound( C, D, E, A, B, f2, K2, expand( eData, 23 ) );
-    subRound( B, C, D, E, A, f2, K2, expand( eData, 24 ) );
-    subRound( A, B, C, D, E, f2, K2, expand( eData, 25 ) );
-    subRound( E, A, B, C, D, f2, K2, expand( eData, 26 ) );
-    subRound( D, E, A, B, C, f2, K2, expand( eData, 27 ) );
-    subRound( C, D, E, A, B, f2, K2, expand( eData, 28 ) );
-    subRound( B, C, D, E, A, f2, K2, expand( eData, 29 ) );
-    subRound( A, B, C, D, E, f2, K2, expand( eData, 30 ) );
-    subRound( E, A, B, C, D, f2, K2, expand( eData, 31 ) );
-    subRound( D, E, A, B, C, f2, K2, expand( eData, 32 ) );
-    subRound( C, D, E, A, B, f2, K2, expand( eData, 33 ) );
-    subRound( B, C, D, E, A, f2, K2, expand( eData, 34 ) );
-    subRound( A, B, C, D, E, f2, K2, expand( eData, 35 ) );
-    subRound( E, A, B, C, D, f2, K2, expand( eData, 36 ) );
-    subRound( D, E, A, B, C, f2, K2, expand( eData, 37 ) );
-    subRound( C, D, E, A, B, f2, K2, expand( eData, 38 ) );
-    subRound( B, C, D, E, A, f2, K2, expand( eData, 39 ) );
-
-    subRound( A, B, C, D, E, f3, K3, expand( eData, 40 ) );
-    subRound( E, A, B, C, D, f3, K3, expand( eData, 41 ) );
-    subRound( D, E, A, B, C, f3, K3, expand( eData, 42 ) );
-    subRound( C, D, E, A, B, f3, K3, expand( eData, 43 ) );
-    subRound( B, C, D, E, A, f3, K3, expand( eData, 44 ) );
-    subRound( A, B, C, D, E, f3, K3, expand( eData, 45 ) );
-    subRound( E, A, B, C, D, f3, K3, expand( eData, 46 ) );
-    subRound( D, E, A, B, C, f3, K3, expand( eData, 47 ) );
-    subRound( C, D, E, A, B, f3, K3, expand( eData, 48 ) );
-    subRound( B, C, D, E, A, f3, K3, expand( eData, 49 ) );
-    subRound( A, B, C, D, E, f3, K3, expand( eData, 50 ) );
-    subRound( E, A, B, C, D, f3, K3, expand( eData, 51 ) );
-    subRound( D, E, A, B, C, f3, K3, expand( eData, 52 ) );
-    subRound( C, D, E, A, B, f3, K3, expand( eData, 53 ) );
-    subRound( B, C, D, E, A, f3, K3, expand( eData, 54 ) );
-    subRound( A, B, C, D, E, f3, K3, expand( eData, 55 ) );
-    subRound( E, A, B, C, D, f3, K3, expand( eData, 56 ) );
-    subRound( D, E, A, B, C, f3, K3, expand( eData, 57 ) );
-    subRound( C, D, E, A, B, f3, K3, expand( eData, 58 ) );
-    subRound( B, C, D, E, A, f3, K3, expand( eData, 59 ) );
-
-    subRound( A, B, C, D, E, f4, K4, expand( eData, 60 ) );
-    subRound( E, A, B, C, D, f4, K4, expand( eData, 61 ) );
-    subRound( D, E, A, B, C, f4, K4, expand( eData, 62 ) );
-    subRound( C, D, E, A, B, f4, K4, expand( eData, 63 ) );
-    subRound( B, C, D, E, A, f4, K4, expand( eData, 64 ) );
-    subRound( A, B, C, D, E, f4, K4, expand( eData, 65 ) );
-    subRound( E, A, B, C, D, f4, K4, expand( eData, 66 ) );
-    subRound( D, E, A, B, C, f4, K4, expand( eData, 67 ) );
-    subRound( C, D, E, A, B, f4, K4, expand( eData, 68 ) );
-    subRound( B, C, D, E, A, f4, K4, expand( eData, 69 ) );
-    subRound( A, B, C, D, E, f4, K4, expand( eData, 70 ) );
-    subRound( E, A, B, C, D, f4, K4, expand( eData, 71 ) );
-    subRound( D, E, A, B, C, f4, K4, expand( eData, 72 ) );
-    subRound( C, D, E, A, B, f4, K4, expand( eData, 73 ) );
-    subRound( B, C, D, E, A, f4, K4, expand( eData, 74 ) );
-    subRound( A, B, C, D, E, f4, K4, expand( eData, 75 ) );
-    subRound( E, A, B, C, D, f4, K4, expand( eData, 76 ) );
-    subRound( D, E, A, B, C, f4, K4, expand( eData, 77 ) );
-    subRound( C, D, E, A, B, f4, K4, expand( eData, 78 ) );
-    subRound( B, C, D, E, A, f4, K4, expand( eData, 79 ) );
-#endif /* SMALL_VERSION */
+#error Illegal SHA_CODE_SIZE
+#endif
 
     /* Build message digest */
     digest[ 0 ] += A;
@@ -838,7 +1041,10 @@ static void SHATransform(__u32 *digest, __u32 *data)
     digest[ 2 ] += C;
     digest[ 3 ] += D;
     digest[ 4 ] += E;
-    }
+
+	/* W is wiped by the caller */
+#undef W
+}
 
 #undef ROTL
 #undef f1
@@ -849,11 +1055,12 @@ static void SHATransform(__u32 *digest, __u32 *data)
 #undef K2
 #undef K3	
 #undef K4	
-#undef expand
 #undef subRound
 	
-#else
+#else /* !USE_SHA - Use MD5 */
+
 #define HASH_BUFFER_SIZE 4
+#define HASH_EXTRA_SIZE 0
 #define HASH_TRANSFORM MD5Transform
 	
 /*
@@ -881,8 +1088,7 @@ static void SHATransform(__u32 *digest, __u32 *data)
  * reflect the addition of 16 longwords of new data.  MD5Update blocks
  * the data and converts bytes into longwords for this routine.
  */
-static void MD5Transform(__u32 buf[4],
-			 __u32 const in[16])
+static void MD5Transform(__u32 buf[HASH_BUFFER_SIZE], __u32 const in[16])
 {
 	__u32 a, b, c, d;
 
@@ -971,10 +1177,10 @@ static void MD5Transform(__u32 buf[4],
 #undef F4
 #undef MD5STEP
 
-#endif
+#endif /* !USE_SHA */
 
 
-#if POOLWORDS % 16
+#if POOLWORDS % 16 != 0
 #error extract_entropy() assumes that POOLWORDS is a multiple of 16 words.
 #endif
 /*
@@ -987,8 +1193,8 @@ static ssize_t extract_entropy(struct random_bucket *r, char * buf,
 			       size_t nbytes, int to_user)
 {
 	ssize_t ret, i;
-	__u32 tmp[HASH_BUFFER_SIZE];
-	char *cp,*dp;
+	__u32 tmp[HASH_BUFFER_SIZE + HASH_EXTRA_SIZE];
+	__u32 x;
 
 	add_timer_randomness(r, &extract_timer_state, nbytes);
 	
@@ -1016,31 +1222,33 @@ static ssize_t extract_entropy(struct random_bucket *r, char * buf,
 #endif
 		for (i = 0; i < POOLWORDS; i += 16)
 			HASH_TRANSFORM(tmp, r->pool+i);
-		/* Modify pool so next hash will produce different results */
-		add_entropy_word(r, tmp[0]);
-		add_entropy_word(r, tmp[1]);
-		add_entropy_word(r, tmp[2]);
-		add_entropy_word(r, tmp[3]);
-#ifdef USE_SHA
-		add_entropy_word(r, tmp[4]);
-#endif
-		/*
-		 * Run the hash transform one more time, since we want
-		 * to add at least minimal obscuring of the inputs to
-		 * add_entropy_word().
-		 */
-		HASH_TRANSFORM(tmp, r->pool);
 
 		/*
-		 * In case the hash function has some recognizable
-		 * output pattern, we fold it in half.
+		 * The following code does two separate things that happen
+		 * to both work two words at a time, so are convenient
+		 * to do together.
+		 *
+		 * First, this feeds the output back into the pool so
+		 * that the next call will return different results.
+		 * Any perturbation of the pool's state would do, even
+		 * changing one bit, but this mixes the pool nicely.
+		 *
+		 * Second, this folds the output in half to hide the data
+		 * fed back into the pool from the user and further mask
+		 * any patterns in the hash output.  (The exact folding
+		 * pattern is not important; the one used here is quick.)
 		 */
-		cp = (char *) tmp;
-		dp = cp + (HASH_BUFFER_SIZE*sizeof(__u32)) - 1;
-		for (i=0; i <  HASH_BUFFER_SIZE*sizeof(__u32)/2; i++) {
-			*cp ^= *dp;
-			cp++;  dp--;
+		for (i = 0; i <  HASH_BUFFER_SIZE/2; i++) {
+			x = tmp[i + (HASH_BUFFER_SIZE+1)/2];
+			add_entropy_words(r, tmp[i], x);
+			tmp[i] ^= x;
 		}
+#if HASH_BUFFER_SIZE & 1	/* There's a middle word to deal with */
+		x = tmp[HASH_BUFFER_SIZE/2];
+		add_entropy_words(r, x, (__u32)buf);
+		x ^= (x >> 16);		/* Fold it in half */
+		((__u16 *)tmp)[HASH_BUFFER_SIZE-1] = (__u16)x;
+#endif
 		
 		/* Copy data to destination buffer */
 		i = MIN(nbytes, HASH_BUFFER_SIZE*sizeof(__u32)/2);
@@ -1059,7 +1267,7 @@ static ssize_t extract_entropy(struct random_bucket *r, char * buf,
 			schedule();
 	}
 
-	/* Wipe data from memory */
+	/* Wipe data just returned from memory */
 	memset(tmp, 0, sizeof(tmp));
 	
 	return ret;
@@ -1105,8 +1313,7 @@ random_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
 		}
 		n = extract_entropy(&random_state, buf, n, 1);
 		if (n < 0) {
-			if (count == 0)
-				retval = n;
+			retval = n;
 			break;
 		}
 		count += n;
@@ -1154,33 +1361,36 @@ static ssize_t
 random_write(struct file * file, const char * buffer,
 	     size_t count, loff_t *ppos)
 {
-	ssize_t		i, bytes, ret = 0;
+	int		ret = 0;
+	size_t		bytes;
+	unsigned	i;
 	__u32 		buf[16];
 	const char 	*p = buffer;
-	ssize_t		c = count;
+	size_t		c = count;
 
 	while (c > 0) {
 		bytes = MIN(c, sizeof(buf));
 
 		bytes -= copy_from_user(&buf, p, bytes);
 		if (!bytes) {
-			if (!ret)
-				ret = -EFAULT;
+			ret = -EFAULT;
 			break;
 		}
 		c -= bytes;
 		p += bytes;
-		ret += bytes;
 		
-		i = (bytes+sizeof(__u32)-1) / sizeof(__u32);
-		while (i--)
-			add_entropy_word(&random_state, buf[i]);
+		i = (unsigned)((bytes-1) / (2 * sizeof(__u32)));
+		do {
+			add_entropy_words(&random_state, buf[2*i], buf[2*i+1]);
+		} while (i--);
 	}
-	if (ret > 0) {
+	if (p == buffer) {
+		return (ssize_t)ret;
+	} else {
 		file->f_dentry->d_inode->i_mtime = CURRENT_TIME;
 		mark_inode_dirty(file->f_dentry->d_inode);
+		return (ssize_t)(p - buffer);
 	}
-	return ret;
 }
 
 static int
@@ -1344,19 +1554,17 @@ struct file_operations urandom_fops = {
 #define G(x, y, z) (((x) & (y)) + (((x) ^ (y)) & (z)))
 #define H(x, y, z) ((x) ^ (y) ^ (z))
 
-#define ROTL(n,X)  ( ( ( X ) << n ) | ( ( X ) >> ( 32 - n ) ) )
-
-/* FF, GG and HH are MD4 transformations for rounds 1, 2 and 3 */
-/* Rotation is separate from addition to prevent recomputation */
-#define FF(a, b, c, d, x, s) \
-  {(a) += F ((b), (c), (d)) + (x); \
-   (a) = ROTL ((s), (a));}
-#define GG(a, b, c, d, x, s) \
-  {(a) += G ((b), (c), (d)) + (x) + 013240474631UL; \
-   (a) = ROTL ((s), (a));}
-#define HH(a, b, c, d, x, s) \
-  {(a) += H ((b), (c), (d)) + (x) + 015666365641UL; \
-   (a) = ROTL ((s), (a));}
+/*
+ * The generic round function.  The application is so specific that
+ * we don't bother protecting all the arguments with parens, as is generally
+ * good macro practice, in favor of extra legibility.
+ * Rotation is separate from addition to prevent recomputation
+ */
+#define ROUND(f, a, b, c, d, x, s)	\
+	(a += f(b, c, d) + x, a = (a << s) | (a >> (32-s)))
+#define K1 0
+#define K2 013240474631UL
+#define K3 015666365641UL
 
 /*
  * Basic cut-down MD4 transform.  Returns only 32 bits of result.
@@ -1366,38 +1574,99 @@ static __u32 halfMD4Transform (__u32 const buf[4], __u32 const in[8])
 	__u32	a = buf[0], b = buf[1], c = buf[2], d = buf[3];
 
 	/* Round 1 */
-	FF (a, b, c, d, in[ 0],  3);
-	FF (d, a, b, c, in[ 1],  7);
-	FF (c, d, a, b, in[ 2], 11);
-	FF (b, c, d, a, in[ 3], 19);
-	FF (a, b, c, d, in[ 4],  3);
-	FF (d, a, b, c, in[ 5],  7);
-	FF (c, d, a, b, in[ 6], 11);
-	FF (b, c, d, a, in[ 7], 19);
+	ROUND(F, a, b, c, d, in[0] + K1,  3);
+	ROUND(F, d, a, b, c, in[1] + K1,  7);
+	ROUND(F, c, d, a, b, in[2] + K1, 11);
+	ROUND(F, b, c, d, a, in[3] + K1, 19);
+	ROUND(F, a, b, c, d, in[4] + K1,  3);
+	ROUND(F, d, a, b, c, in[5] + K1,  7);
+	ROUND(F, c, d, a, b, in[6] + K1, 11);
+	ROUND(F, b, c, d, a, in[7] + K1, 19);
 
 	/* Round 2 */
-	GG (a, b, c, d, in[ 0],  3);
-	GG (d, a, b, c, in[ 4],  5);
-	GG (c, d, a, b, in[ 1],  9);
-	GG (b, c, d, a, in[ 5], 13);
-	GG (a, b, c, d, in[ 2],  3);
-	GG (d, a, b, c, in[ 6],  5);
-	GG (c, d, a, b, in[ 3],  9);
-	GG (b, c, d, a, in[ 7], 13);
+	ROUND(G, a, b, c, d, in[1] + K2,  3);
+	ROUND(G, d, a, b, c, in[3] + K2,  5);
+	ROUND(G, c, d, a, b, in[5] + K2,  9);
+	ROUND(G, b, c, d, a, in[7] + K2, 13);
+	ROUND(G, a, b, c, d, in[0] + K2,  3);
+	ROUND(G, d, a, b, c, in[2] + K2,  5);
+	ROUND(G, c, d, a, b, in[4] + K2,  9);
+	ROUND(G, b, c, d, a, in[6] + K2, 13);
 
 	/* Round 3 */
-	HH (a, b, c, d, in[ 0],  3);
-	HH (d, a, b, c, in[ 4],  9);
-	HH (c, d, a, b, in[ 2], 11);
-	HH (b, c, d, a, in[ 6], 15);
-	HH (a, b, c, d, in[ 1],  3);
-	HH (d, a, b, c, in[ 5],  9);
-	HH (c, d, a, b, in[ 3], 11);
-	HH (b, c, d, a, in[ 7], 15);
+	ROUND(H, a, b, c, d, in[3] + K3,  3);
+	ROUND(H, d, a, b, c, in[7] + K3,  9);
+	ROUND(H, c, d, a, b, in[2] + K3, 11);
+	ROUND(H, b, c, d, a, in[6] + K3, 15);
+	ROUND(H, a, b, c, d, in[1] + K3,  3);
+	ROUND(H, d, a, b, c, in[5] + K3,  9);
+	ROUND(H, c, d, a, b, in[0] + K3, 11);
+	ROUND(H, b, c, d, a, in[4] + K3, 15);
 
 	return buf[1] + b;	/* "most hashed" word */
 	/* Alternative: return sum of all words? */
 }
+
+#if 0	/* May be needed for IPv6 */
+
+static __u32 twothirdsMD4Transform (__u32 const buf[4], __u32 const in[12])
+{
+	__u32	a = buf[0], b = buf[1], c = buf[2], d = buf[3];
+
+	/* Round 1 */
+	ROUND(F, a, b, c, d, in[ 0] + K1,  3);
+	ROUND(F, d, a, b, c, in[ 1] + K1,  7);
+	ROUND(F, c, d, a, b, in[ 2] + K1, 11);
+	ROUND(F, b, c, d, a, in[ 3] + K1, 19);
+	ROUND(F, a, b, c, d, in[ 4] + K1,  3);
+	ROUND(F, d, a, b, c, in[ 5] + K1,  7);
+	ROUND(F, c, d, a, b, in[ 6] + K1, 11);
+	ROUND(F, b, c, d, a, in[ 7] + K1, 19);
+	ROUND(F, a, b, c, d, in[ 8] + K1,  3);
+	ROUND(F, d, a, b, c, in[ 9] + K1,  7);
+	ROUND(F, c, d, a, b, in[10] + K1, 11);
+	ROUND(F, b, c, d, a, in[11] + K1, 19);
+
+	/* Round 2 */
+	ROUND(G, a, b, c, d, in[ 1] + K2,  3);
+	ROUND(G, d, a, b, c, in[ 3] + K2,  5);
+	ROUND(G, c, d, a, b, in[ 5] + K2,  9);
+	ROUND(G, b, c, d, a, in[ 7] + K2, 13);
+	ROUND(G, a, b, c, d, in[ 9] + K2,  3);
+	ROUND(G, d, a, b, c, in[11] + K2,  5);
+	ROUND(G, c, d, a, b, in[ 0] + K2,  9);
+	ROUND(G, b, c, d, a, in[ 2] + K2, 13);
+	ROUND(G, a, b, c, d, in[ 4] + K2,  3);
+	ROUND(G, d, a, b, c, in[ 6] + K2,  5);
+	ROUND(G, c, d, a, b, in[ 8] + K2,  9);
+	ROUND(G, b, c, d, a, in[10] + K2, 13);
+
+	/* Round 3 */
+	ROUND(H, a, b, c, d, in[ 3] + K3,  3);
+	ROUND(H, d, a, b, c, in[ 7] + K3,  9);
+	ROUND(H, c, d, a, b, in[11] + K3, 11);
+	ROUND(H, b, c, d, a, in[ 2] + K3, 15);
+	ROUND(H, a, b, c, d, in[ 6] + K3,  3);
+	ROUND(H, d, a, b, c, in[10] + K3,  9);
+	ROUND(H, c, d, a, b, in[ 1] + K3, 11);
+	ROUND(H, b, c, d, a, in[ 5] + K3, 15);
+	ROUND(H, a, b, c, d, in[ 9] + K3,  3);
+	ROUND(H, d, a, b, c, in[ 0] + K3,  9);
+	ROUND(H, c, d, a, b, in[ 4] + K3, 11);
+	ROUND(H, b, c, d, a, in[ 8] + K3, 15);
+
+	return buf[1] + b;	/* "most hashed" word */
+	/* Alternative: return sum of all words? */
+}
+#endif
+
+#undef ROUND
+#undef F
+#undef G
+#undef H
+#undef K1
+#undef K2
+#undef K3
 
 /* This should not be decreased so low that ISNs wrap too fast. */
 #define REKEY_INTERVAL	300
@@ -1417,8 +1686,7 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 	 */
 	do_gettimeofday(&tv);	/* We need the usecs below... */
 
-	if (!rekey_time ||
-	    (tv.tv_sec - rekey_time) > REKEY_INTERVAL) {
+	if (!rekey_time || (tv.tv_sec - rekey_time) > REKEY_INTERVAL) {
 		rekey_time = tv.tv_sec;
 		/* First three words are overwritten below. */
 		get_random_bytes(&secret+3, sizeof(secret)-12);
@@ -1439,7 +1707,7 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 	secret[2]=(sport << 16) + dport;
 
 	seq = (halfMD4Transform(secret+8, secret) &
-	       ((1<<HASH_BITS)-1)) + (count << HASH_BITS);
+	       ((1<<HASH_BITS)-1)) + count;
 
 	/*
 	 *	As close as possible to RFC 793, which
@@ -1463,53 +1731,97 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
  * Dan Bernstein and Eric Schenk.
  *
  * For linux I implement the 1 minute counter by looking at the jiffies clock.
- * The count is passed in as a parameter;
- *
+ * The count is passed in as a parameter, so this code doesn't much care.
  */
-__u32 secure_tcp_syn_cookie(__u32 saddr, __u32 daddr,
-		 __u16 sport, __u16 dport, __u32 sseq, __u32 count)
+
+#define COOKIEBITS 24	/* Upper bits store count */
+#define COOKIEMASK (((__u32)1 << COOKIEBITS) - 1)
+
+static int	syncookie_init = 0;
+static __u32	syncookie_secret[2][16-3+HASH_BUFFER_SIZE];
+
+__u32 secure_tcp_syn_cookie(__u32 saddr, __u32 daddr, __u16 sport,
+		__u16 dport, __u32 sseq, __u32 count, __u32 data)
 {
-	static int	is_init = 0;
-	static __u32	secret[2][16];
-	__u32 		tmp[16];
-	__u32		seq;
+	__u32 	tmp[16 + HASH_BUFFER_SIZE + HASH_EXTRA_SIZE];
+	__u32	seq;
 
 	/*
-	 * Pick two random secret the first time we open a TCP connection.
+	 * Pick two random secrets the first time we need a cookie.
 	 */
-	if (is_init == 0) {
-		get_random_bytes(&secret[0], sizeof(secret[0]));
-		get_random_bytes(&secret[1], sizeof(secret[1]));
-		is_init = 1;
+	if (syncookie_init == 0) {
+		get_random_bytes(syncookie_secret, sizeof(syncookie_secret));
+		syncookie_init = 1;
 	}
 
 	/*
 	 * Compute the secure sequence number.
 	 * The output should be:
-   	 *   MD5(sec1,saddr,sport,daddr,dport,sec1) + their sequence number
-         *      + (count * 2^24)
-	 *      + (MD5(sec2,saddr,sport,daddr,dport,count,sec2) % 2^24).
-	 * Where count increases every minute by 1.
+   	 *   HASH(sec1,saddr,sport,daddr,dport,sec1) + sseq + (count * 2^24)
+	 *      + (HASH(sec2,saddr,sport,daddr,dport,count,sec2) % 2^24).
+	 * Where sseq is their sequence number and count increases every
+	 * minute by 1.
+	 * As an extra hack, we add a small "data" value that encodes the
+	 * MSS into the second hash value.
 	 */
 
-	memcpy(tmp, secret[0], sizeof(tmp));
-	tmp[8]=saddr;
-	tmp[9]=daddr;
-	tmp[10]=(sport << 16) + dport;
-	HASH_TRANSFORM(tmp, tmp);
-	seq = tmp[1];
+	memcpy(tmp+3, syncookie_secret[0], sizeof(syncookie_secret[0]));
+	tmp[0]=saddr;
+	tmp[1]=daddr;
+	tmp[2]=(sport << 16) + dport;
+	HASH_TRANSFORM(tmp+16, tmp);
+	seq = tmp[17] + sseq + (count << COOKIEBITS);
 
-	memcpy(tmp, secret[1], sizeof(tmp));
-	tmp[8]=saddr;
-	tmp[9]=daddr;
-	tmp[10]=(sport << 16) + dport;
-	tmp[11]=count;	/* minute counter */
-	HASH_TRANSFORM(tmp, tmp);
+	memcpy(tmp+3, syncookie_secret[1], sizeof(syncookie_secret[1]));
+	tmp[0]=saddr;
+	tmp[1]=daddr;
+	tmp[2]=(sport << 16) + dport;
+	tmp[3] = count;	/* minute counter */
+	HASH_TRANSFORM(tmp+16, tmp);
 
-	seq += sseq + (count << 24) + (tmp[1] & 0x00ffffff);
+	/* Add in the second hash and the data */
+	return seq + ((tmp[17] + data) & COOKIEMASK);
+}
 
-	/* Zap lower 3 bits to leave room for the MSS representation */
-	return (seq & 0xfffff8);
+/*
+ * This retrieves the small "data" value from the syncookie.
+ * If the syncookie is bad, the data returned will be out of
+ * range.  This must be checked by the caller.
+ *
+ * The count value used to generate the cookie must be within
+ * "maxdiff" if the current (passed-in) "count".  The return value
+ * is (__u32)-1 if this test fails.
+ */
+__u32 check_tcp_syn_cookie(__u32 cookie, __u32 saddr, __u32 daddr, __u16 sport,
+		__u16 dport, __u32 sseq, __u32 count, __u32 maxdiff)
+{
+	__u32 	tmp[16 + HASH_BUFFER_SIZE + HASH_EXTRA_SIZE];
+	__u32	diff;
+
+	if (syncookie_init == 0)
+		return (__u32)-1;	/* Well, duh! */
+
+	/* Strip away the layers from the cookie */
+	memcpy(tmp+3, syncookie_secret[0], sizeof(syncookie_secret[0]));
+	tmp[0]=saddr;
+	tmp[1]=daddr;
+	tmp[2]=(sport << 16) + dport;
+	HASH_TRANSFORM(tmp+16, tmp);
+	cookie -= tmp[17] + sseq;
+	/* Cookie is now reduced to (count * 2^24) ^ (hash % 2^24) */
+
+	diff = (count - (cookie >> COOKIEBITS)) & ((__u32)-1 >> COOKIEBITS);
+	if (diff >= maxdiff)
+		return (__u32)-1;
+
+	memcpy(tmp+3, syncookie_secret[1], sizeof(syncookie_secret[1]));
+	tmp[0] = saddr;
+	tmp[1] = daddr;
+	tmp[2] = (sport << 16) + dport;
+	tmp[3] = count - diff;	/* minute counter */
+	HASH_TRANSFORM(tmp+16, tmp);
+
+	return (cookie - tmp[17]) & COOKIEMASK;	/* Leaving the data behind */
 }
 #endif
 
@@ -1532,7 +1844,7 @@ static inline unsigned long long get_clock_cnt(void)
 {
 	unsigned long low, high;
 	__asm__(".byte 0x0f,0x31" :"=a" (low), "=d" (high));
-	return (((unsigned long long) high << 31) | low); 
+	return (((unsigned long long) high << 32) | low); 
 }
 
 __initfunc(static void

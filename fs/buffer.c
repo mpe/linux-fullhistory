@@ -10,7 +10,6 @@
  * data, of course), but instead letting the caller do it.
  */
 
-/* Some bdflush() changes for the dynamic ramdisk - Paul Gortmaker, 12/94 */
 /* Start bdflush() with kernel_thread not syscall - Paul Gortmaker, 12/95 */
 
 /* Removed a lot of unnecessary code and simplified things now that
@@ -19,6 +18,10 @@
 
 /* Speed up hash, lru, and free list operations.  Use gfp() for allocating
  * hash table, use SLAB cache for buffer heads. -DaveM
+ */
+
+/* Added 32k buffer block sizes - these are required older ARM systems.
+ * - RMK
  */
 
 #include <linux/sched.h>
@@ -46,9 +49,13 @@
 #include <asm/io.h>
 #include <asm/bitops.h>
 
-#define NR_SIZES 5
-static char buffersize_index[17] =
-{-1,  0,  1, -1,  2, -1, -1, -1, 3, -1, -1, -1, -1, -1, -1, -1, 4};
+#define NR_SIZES 7
+static char buffersize_index[65] =
+{-1,  0,  1, -1,  2, -1, -1, -1, 3, -1, -1, -1, -1, -1, -1, -1,
+  4, -1, -1, -1, -1, -1, -1, -1, -1,-1, -1, -1, -1, -1, -1, -1,
+  5, -1, -1, -1, -1, -1, -1, -1, -1,-1, -1, -1, -1, -1, -1, -1,
+ -1, -1, -1, -1, -1, -1, -1, -1, -1,-1, -1, -1, -1, -1, -1, -1,
+  6};
 
 #define BUFSIZE_INDEX(X) ((int) buffersize_index[(X)>>9])
 #define MAX_BUF_PER_PAGE (PAGE_SIZE / 512)
@@ -637,13 +644,9 @@ void set_blocksize(kdev_t dev, int size)
 	if (!blksize_size[MAJOR(dev)])
 		return;
 
-	if (size > PAGE_SIZE)
-		size = 0;
-
-	switch (size) {
-		default: panic("Invalid blocksize passed to set_blocksize");
-		case 512: case 1024: case 2048: case 4096: case 8192: ;
-	}
+	/* Size must be a power of two, and between 512 and PAGE_SIZE */
+	if (size > PAGE_SIZE || size < 512 || (size & (size-1)))
+		panic("Invalid blocksize passed to set_blocksize");
 
 	if (blksize_size[MAJOR(dev)][MINOR(dev)] == 0 && size == BLOCK_SIZE) {
 		blksize_size[MAJOR(dev)][MINOR(dev)] = size;

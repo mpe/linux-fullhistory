@@ -168,6 +168,7 @@ static __inline__ void lp_schedule(int minor)
 	register unsigned long int timeslip = (jiffies - dev->time);
 	if ((timeslip > dev->timeslice) && (dev->port->waithead != NULL)) {
 		lp_parport_release(minor);
+		lp_table[minor].irq_missed = 1;
 		schedule ();
 		lp_parport_claim(minor);
 	} else

@@ -1,7 +1,8 @@
 This is a brief list of all the files in ./linux/Documentation and what
 they contain. If you add a documentation file, please list it here in 
 alphabetical order as well, or risk being hunted down like a rabid dog. 
-Note that subdirectories have their own index files too.
+Note that subdirectories have their own index files too. Please try and
+keep the descriptions small enough to fit on one line.
 							 Thanks -- Paul G.
 
 00-INDEX
@@ -56,6 +57,8 @@ java.txt
 	- info on the in-kernel binary support for Java(tm)
 joystick.txt
 	- info on using joystick devices (and driver) with linux.
+kmod.txt
+	- - info on the kernel module loader/unloader (kerneld replacement)
 locks.txt
 	- info on file locking implementations, flock() vs. fcntl(), etc.
 logo.gif
@@ -76,6 +79,8 @@ memory.txt
 	- info on typical Linux memory problems.
 modules.txt
 	- short guide on how to make kernel parts into loadable modules
+mtrr.txt
+	- how to use PPro Memory Type Range Registers to increase performance
 nbd.txt
 	- info on a TCP implementation of a network block device.
 networking/

@@ -1,6 +1,10 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      28 May 1998 Rev. 4.32 for linux 2.0.33 and 2.1.104
+ *          Increased busy timeout from 10 msec. to 200 msec. while
+ *          processing interrupts.
+ *
  *      18 May 1998 Rev. 4.31 for linux 2.0.33 and 2.1.102
  *          Improved abort handling during the eh recovery process.
  *
@@ -9,7 +13,7 @@
  *          abort and reset routines.
  *          Added command line options (eh:[y|n]) to choose between
  *          new_eh_code and the old scsi code.
- *          If linux verion >= 2.1.101 the default is eh:y, while the eh
+ *          If linux version >= 2.1.101 the default is eh:y, while the eh
  *          option is ignored for previous releases and the old scsi code
  *          is used.
  *
@@ -1733,7 +1737,7 @@ static inline void ihdlr(int irq, unsigned int j) {
                         HD(j)->iocount);
 
    /* Check if this board is still busy */
-   if (wait_on_busy(sh[j]->io_port, MAXLOOP)) {
+   if (wait_on_busy(sh[j]->io_port, 20 * MAXLOOP)) {
       outb(CMD_CLR_INTR, sh[j]->io_port + REG_SYS_INTR);
       printk("%s: ihdlr, busy timeout error,  irq %d, reg 0x%x, count %d.\n",
              BN(j), irq, reg, HD(j)->iocount);

@@ -142,6 +142,22 @@ static inline void move_last_runqueue(struct task_struct * p)
 	prev->next_run = p;
 }
 
+static inline void move_first_runqueue(struct task_struct * p)
+{
+	struct task_struct *next = p->next_run;
+	struct task_struct *prev = p->prev_run;
+
+	/* remove from list */
+	next->prev_run = prev;
+	prev->next_run = next;
+	/* add back to list */
+	p->prev_run = &init_task;
+	next = init_task.next_run;
+	init_task.next_run = p;
+	p->next_run = next;
+	next->prev_run = p;
+}
+
 /*
  * The tasklist_lock protects the linked list of processes.
  *
@@ -1329,7 +1345,7 @@ static int setscheduler(pid_t pid, int policy,
 	p->policy = policy;
 	p->rt_priority = lp.sched_priority;
 	if (p->next_run)
-		move_last_runqueue(p);
+		move_first_runqueue(p);
 
 	need_resched = 1;
 

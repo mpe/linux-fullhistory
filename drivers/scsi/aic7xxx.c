@@ -209,7 +209,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.0.17"
+#define AIC7XXX_C_VERSION  "5.0.18"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -874,9 +874,10 @@ struct aic7xxx_host {
   unsigned char            dev_commands_sent[MAX_TARGETS];
 
   /*
-   * The next 64 (or 128 on 64 bit machines)....
+   * The next 128 (or 256 on 64 bit machines)....
    */
-  Scsi_Cmnd               *dev_negotiation_cmnd[MAX_TARGETS];
+  Scsi_Cmnd               *dev_wdtr_cmnd[MAX_TARGETS];
+  Scsi_Cmnd               *dev_sdtr_cmnd[MAX_TARGETS];
 
   /*
    * The next 64.... 
@@ -1050,7 +1051,6 @@ static int aic7xxx_7895_irq_hack = -1;       /* This enables a hack to fix
                                               *   1 == Use the Channel B IRQ
                                               */
 static unsigned int aic7xxx_extended = 0;    /* extended translation on? */
-static unsigned int aic7xxx_no_reset = 0;    /* no resetting of SCSI bus */
 static int aic7xxx_irq_trigger = -1;         /*
                                               * -1 use board setting
                                               *  0 use edge triggered
@@ -1222,7 +1222,6 @@ aic7xxx_setup(char *s, int *dummy)
     unsigned int *flag;
   } options[] = {
     { "extended",    &aic7xxx_extended },
-    { "no_reset",    &aic7xxx_no_reset },
     { "irq_trigger", &aic7xxx_irq_trigger },
     { "verbose",     &aic7xxx_verbose },
     { "reverse_scan",&aic7xxx_reverse_scan },
@@ -6408,7 +6407,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
       scsi_conf |= p->scsi_id_b;
       aic_outb(p, scsi_conf | (term) ? TERM_ENB : 0, SCSICONF + 1);
     }
-    if ((scsi_conf & RESET_SCSI) && (aic7xxx_no_reset == 0))
+    if (scsi_conf & RESET_SCSI)
     {
       /* Reset SCSI bus B. */
       if (aic7xxx_verbose & VERBOSE_PROBE)
@@ -6444,7 +6443,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p,
   }
 
 
-  if ((scsi_conf & RESET_SCSI) && (aic7xxx_no_reset == 0))
+  if (scsi_conf & RESET_SCSI)
   {
     /* Reset SCSI bus A. */
     if (aic7xxx_verbose & VERBOSE_PROBE)
@@ -6843,8 +6842,10 @@ aic7xxx_free(struct aic7xxx_host *p)
    */
   for (i = 0; i < MAX_TARGETS; i++)
   {
-    if(p->dev_negotiation_cmnd[i])
-      kfree(p->dev_negotiation_cmnd[i]);
+    if(p->dev_wdtr_cmnd[i])
+      kfree(p->dev_wdtr_cmnd[i]);
+    if(p->dev_sdtr_cmnd[i])
+      kfree(p->dev_sdtr_cmnd[i]);
   }
 
   /*
@@ -8165,31 +8166,60 @@ aic7xxx_build_negotiation_cmnd(struct aic7xxx_host *p, Scsi_Cmnd *old_cmd,
   int tindex)
 {
 
-  if(p->dev_negotiation_cmnd[tindex] == NULL)
+  if ( (p->needwdtr & (1<<tindex)) && !(p->wdtr_pending & (1<<tindex)) )
   {
-    Scsi_Cmnd *cmd;
-
-    if (!(p->dev_negotiation_cmnd[tindex] =
-          kmalloc(sizeof(Scsi_Cmnd), GFP_ATOMIC)) )
+    if(p->dev_wdtr_cmnd[tindex] == NULL)
     {
-      return;
+      Scsi_Cmnd *cmd;
+
+      if (!(p->dev_wdtr_cmnd[tindex] = kmalloc(sizeof(Scsi_Cmnd), GFP_ATOMIC)) )
+      {
+        return;
+      }
+      cmd = p->dev_wdtr_cmnd[tindex];
+      memset(cmd, 0, sizeof(Scsi_Cmnd));
+      memcpy(cmd, old_cmd, sizeof(Scsi_Cmnd));
+      memset(&cmd->cmnd[0], 0, sizeof(cmd->cmnd));
+      memset(&cmd->data_cmnd[0], 0, sizeof(cmd->data_cmnd));
+      cmd->lun = 0;
+      cmd->request_bufflen = 0;
+      cmd->request_buffer = NULL;
+      cmd->use_sg = cmd->old_use_sg = cmd->sglist_len = 0;
+      cmd->bufflen = 0;
+      cmd->buffer = NULL;
+      cmd->underflow = 0;
+      cmd->cmd_len = 6;
     }
-    cmd = p->dev_negotiation_cmnd[tindex];
-    memset(cmd, 0, sizeof(Scsi_Cmnd));
-    memcpy(cmd, old_cmd, sizeof(Scsi_Cmnd));
-    memset(&cmd->cmnd[0], 0, sizeof(cmd->cmnd));
-    memset(&cmd->data_cmnd[0], 0, sizeof(cmd->data_cmnd));
-    cmd->lun = 0;
-    cmd->request_bufflen = 0;
-    cmd->request_buffer = NULL;
-    cmd->use_sg = cmd->old_use_sg = cmd->sglist_len = 0;
-    cmd->bufflen = 0;
-    cmd->buffer = NULL;
-    cmd->underflow = 0;
-    cmd->cmd_len = 6;
+    aic7xxx_queue(p->dev_wdtr_cmnd[tindex], 
+                  aic7xxx_negotiation_complete);
   }
-  aic7xxx_queue(p->dev_negotiation_cmnd[tindex], 
-                aic7xxx_negotiation_complete);
+  else if ( (p->needsdtr & (1<<tindex)) && !(p->sdtr_pending & (1<<tindex)) )
+  {
+    if(p->dev_sdtr_cmnd[tindex] == NULL)
+    {
+      Scsi_Cmnd *cmd;
+
+      if (!(p->dev_sdtr_cmnd[tindex] = kmalloc(sizeof(Scsi_Cmnd), GFP_ATOMIC)) )
+      {
+        return;
+      }
+      cmd = p->dev_sdtr_cmnd[tindex];
+      memset(cmd, 0, sizeof(Scsi_Cmnd));
+      memcpy(cmd, old_cmd, sizeof(Scsi_Cmnd));
+      memset(&cmd->cmnd[0], 0, sizeof(cmd->cmnd));
+      memset(&cmd->data_cmnd[0], 0, sizeof(cmd->data_cmnd));
+      cmd->lun = 0;
+      cmd->request_bufflen = 0;
+      cmd->request_buffer = NULL;
+      cmd->use_sg = cmd->old_use_sg = cmd->sglist_len = 0;
+      cmd->bufflen = 0;
+      cmd->buffer = NULL;
+      cmd->underflow = 0;
+      cmd->cmd_len = 6;
+    }
+    aic7xxx_queue(p->dev_sdtr_cmnd[tindex], 
+                  aic7xxx_negotiation_complete);
+  }
 }
 
 /*+F*************************************************************************
@@ -8245,26 +8275,32 @@ aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
   }
   if (p->dev_flags[TARGET_INDEX(cmd)] & DEVICE_SCANNED)
   {
-    if ( ((p->needwdtr & mask) || (p->needsdtr & mask)) &&
-        !((p->wdtr_pending & mask) || (p->sdtr_pending & mask)) )
+    if ( (p->needwdtr & mask) && !(p->wdtr_pending & mask) )
     {
-      if (cmd == p->dev_negotiation_cmnd[TARGET_INDEX(cmd)])
+      if (cmd == p->dev_wdtr_cmnd[TARGET_INDEX(cmd)])
       {
-        if (p->needwdtr & mask)
-        {
-          p->wdtr_pending |= mask;
-          scb->flags |= SCB_MSGOUT_WDTR_16BIT;
-        }
-        else
-        {
-          p->sdtr_pending |= mask;
-          scb->flags |= SCB_MSGOUT_SDTR;
-        }
+        p->wdtr_pending |= mask;
+        scb->flags |= SCB_MSGOUT_WDTR_16BIT;
         hscb->control &= DISCENB;
         hscb->control |= MK_MESSAGE;
         scb->tag_action = 0;
       }
       else
+      {
+        aic7xxx_build_negotiation_cmnd(p, cmd, TARGET_INDEX(cmd));
+      }
+    }
+    if ( (p->needsdtr & mask) && !(p->sdtr_pending & mask) )
+    {
+      if (cmd == p->dev_sdtr_cmnd[TARGET_INDEX(cmd)])
+      {
+        p->sdtr_pending |= mask;
+        scb->flags |= SCB_MSGOUT_SDTR;
+        hscb->control &= DISCENB;
+        hscb->control |= MK_MESSAGE;
+        scb->tag_action = 0;
+      }
+      else if (cmd != p->dev_wdtr_cmnd[TARGET_INDEX(cmd)])
       {
         aic7xxx_build_negotiation_cmnd(p, cmd, TARGET_INDEX(cmd));
       }

@@ -22,6 +22,7 @@ EXPORT_SYMBOL(in_group_p);
 EXPORT_SYMBOL(proc_dir_inode_operations);
 EXPORT_SYMBOL(proc_net_inode_operations);
 EXPORT_SYMBOL(proc_net);
+EXPORT_SYMBOL(proc_bus);
 
 /*
  * This is required so that if we load scsi later, that the

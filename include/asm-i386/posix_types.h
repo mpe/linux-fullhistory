@@ -37,6 +37,8 @@ typedef struct {
 #endif /* !defined(__KERNEL__) && !defined(__USE_ALL) */
 } __kernel_fsid_t;
 
+#if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)
+
 #undef	__FD_SET
 #define __FD_SET(fd,fdsetp) \
 		__asm__ __volatile__("btsl %1,%0": \
@@ -61,5 +63,7 @@ typedef struct {
 			:"=m" (*(__kernel_fd_set *) (fdsetp)) \
 			:"a" (0), "c" (__FDSET_LONGS), \
 			"D" ((__kernel_fd_set *) (fdsetp)) :"cx","di")
+
+#endif /* defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2) */
 
 #endif

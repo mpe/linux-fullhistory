@@ -565,7 +565,7 @@ extern inline int fsuser(void)
 
 extern inline int capable(int cap)
 {
-#if 0 /* not yet */
+#if 1 /* ok now */
 	if (cap_raised(current->cap_effective, cap))
 #else
 	if (cap_is_fs_cap(cap) ? current->fsuid == 0 : current->euid == 0)

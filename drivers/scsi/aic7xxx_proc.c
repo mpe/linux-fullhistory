@@ -243,8 +243,6 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
             p->adapter_control);
   size += sprintf(BLS, "   Extended Translation: %sabled\n",
       (p->flags & AHC_EXTEND_TRANS_A) ? "En" : "Dis");
-  size += sprintf(BLS, "         SCSI Bus Reset: %sabled\n",
-      aic7xxx_no_reset ? "Dis" : "En");
   size += sprintf(BLS, "Disconnect Enable Flags: 0x%04x\n", p->discenable);
   if (p->type & AHC_ULTRA)
   {

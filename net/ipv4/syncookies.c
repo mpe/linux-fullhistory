@@ -26,104 +26,74 @@ extern int sysctl_tcp_syncookies;
 static unsigned long tcp_lastsynq_overflow;
 
 /* 
- * This table has to be sorted. Only 8 entries are allowed and the
- * last entry has to be duplicated.
+ * This table has to be sorted and terminated with (__u16)-1.
  * XXX generate a better table.
  * Unresolved Issues: HIPPI with a 64k MSS is not well supported.
  */
 static __u16 const msstab[] = {
-	64,
-	256,	
-	512,	
-	536,
-	1024,	
-	1440,	
-	1460,	
-	4312,
-	4312 
+	64-1,
+	256-1,	
+	512-1,
+	536-1,
+	1024-1,	
+	1440-1,
+	1460-1,
+	4312-1,
+	(__u16)-1
 };
-
-static __u32 make_syncookie(struct sk_buff *skb,  __u32 counter, __u32 seq)
-{
-	__u32 z;
-
-	z = secure_tcp_syn_cookie(skb->nh.iph->saddr, skb->nh.iph->daddr,
-				  skb->h.th->source, skb->h.th->dest,
-				  seq, 
-				  counter);
-
-#if 0
-	printk(KERN_DEBUG 
-	       "msc: z=%u,cnt=%u,seq=%u,sadr=%u,dadr=%u,sp=%u,dp=%u\n",
-	       z,counter,seq,
-	       skb->nh.iph->saddr,skb->nh.iph->daddr,
-	       ntohs(skb->h.th->source), ntohs(skb->h.th->dest));
-#endif
-
-	return z;
-}
+/* The number doesn't include the -1 terminator */
+#define NUM_MSS (sizeof(msstab)/sizeof(msstab[0]) - 1)
 
 /*
- * Generate a syncookie. 
+ * Generate a syncookie.  mssp points to the mss, which is returned
+ * rounded down to the value encoded in the cookie.
  */
 __u32 cookie_v4_init_sequence(struct sock *sk, struct sk_buff *skb, 
 			      __u16 *mssp)
 {
-	int i; 
-	__u32 isn; 
-	const __u16 mss = *mssp, *w; 
+	int mssind;
+	const __u16 mss = *mssp;
 
 	tcp_lastsynq_overflow = jiffies;
-
-	isn = make_syncookie(skb, (jiffies/HZ) >> 6, ntohl(skb->h.th->seq));
-	
-	/* XXX sort msstab[] by probability? */
-	w = msstab;
-	for (i = 0; i < 8; i++) 
-		if (mss >= *w && mss < *++w)
-			goto found;
-	i--;
-found:
-	*mssp = w[-1]; 
+	/* XXX sort msstab[] by probability?  Binary search? */
+	for (mssind = 0; mss > msstab[mssind+1]; mssind++)
+		;
+	*mssp = msstab[mssind]+1;
 
 	net_statistics.SyncookiesSent++;
 
-	isn |= i; 
-	return isn; 
+	return secure_tcp_syn_cookie(skb->nh.iph->saddr, skb->nh.iph->daddr,
+				     skb->h.th->source, skb->h.th->dest,
+				     ntohl(skb->h.th->seq),
+				     jiffies / (HZ*60), mssind);
 }
 
-/* This value should be dependent on TCP_TIMEOUT_INIT and 
- * sysctl_tcp_retries1. It's a rather complicated formula 
- * (exponential backoff) to compute at runtime so it's currently hardcoded
- * here.
+/* 
+ * This (misnamed) value is the age of syncookie which is permitted.
+ * Its ideal value should be dependent on TCP_TIMEOUT_INIT and
+ * sysctl_tcp_retries1. It's a rather complicated formula (exponential
+ * backoff) to compute at runtime so it's currently hardcoded here.
  */
 #define COUNTER_TRIES 4
-
 /*  
  * Check if a ack sequence number is a valid syncookie. 
+ * Return the decoded mss if it is, or 0 if not.
  */
 static inline int cookie_check(struct sk_buff *skb, __u32 cookie) 
 {
-	int mssind; 
-	int i; 
-	__u32 counter; 
 	__u32 seq; 
+	__u32 mssind;
 
-  	if ((jiffies - tcp_lastsynq_overflow) > TCP_TIMEOUT_INIT
-	    && tcp_lastsynq_overflow) {
+  	if ((jiffies - tcp_lastsynq_overflow) > TCP_TIMEOUT_INIT)
 		return 0; 
-	}
 
-	mssind = cookie & 7;
-	cookie &= ~7;
-
-	counter = (jiffies/HZ)>>6; 
 	seq = ntohl(skb->h.th->seq)-1; 
-	for (i = 0; i < COUNTER_TRIES; i++)
-	    if (make_syncookie(skb, counter-i, seq) == cookie)
-		    return msstab[mssind];	
+	mssind = check_tcp_syn_cookie(cookie,
+				      skb->nh.iph->saddr, skb->nh.iph->daddr,
+				      skb->h.th->source, skb->h.th->dest,
+				      seq, jiffies/(HZ*60), COUNTER_TRIES);
 
-	return 0;
+	return mssind < NUM_MSS ? msstab[mssind]+1 : 0;
 }
 
 extern struct or_calltable or_ipv4;

@@ -15,7 +15,7 @@ int eata2x_old_abort(Scsi_Cmnd *);
 int eata2x_reset(Scsi_Cmnd *);
 int eata2x_old_reset(Scsi_Cmnd *, unsigned int);
 
-#define EATA_VERSION "4.31.00"
+#define EATA_VERSION "4.32.00"
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 

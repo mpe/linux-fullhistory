@@ -1,6 +1,8 @@
 #ifndef _LINUX_SOCKET_H
 #define _LINUX_SOCKET_H
 
+#if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)
+
 #include <asm/socket.h>			/* arch-dependent defines	*/
 #include <linux/sockios.h>		/* the SIOCxxx I/O controls	*/
 #include <linux/uio.h>			/* iovec support		*/
@@ -256,4 +258,5 @@ extern int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen);
 extern int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr);
 extern int put_cmsg(struct msghdr*, int level, int type, int len, void *data);
 #endif
+#endif /* not kernel and not glibc */
 #endif /* _LINUX_SOCKET_H */

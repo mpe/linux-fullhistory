@@ -38,10 +38,15 @@ do_revalidate(struct dentry *dentry)
  */
 static int cp_old_stat(struct inode * inode, struct __old_kernel_stat * statbuf)
 {
+	static int warncount = 5;
 	struct __old_kernel_stat tmp;
 
-	printk("VFS: Warning: %s using old stat() call. Recompile your binary.\n",
-		current->comm);
+	if (warncount) {
+		warncount--;
+		printk("VFS: Warning: %s using old stat() call. Recompile your binary.\n",
+			current->comm);
+	}
+
 	tmp.st_dev = kdev_t_to_nr(inode->i_dev);
 	tmp.st_ino = inode->i_ino;
 	tmp.st_mode = inode->i_mode;

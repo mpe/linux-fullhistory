@@ -93,7 +93,7 @@ Installation
 
 First, the "normal" root file system has to be prepared as follows:
 
-# mknod /dev/initrd b 0 250 
+# mknod /dev/initrd b 1 250 
 # chmod 400 /dev/initrd
 # mkdir /initrd
 
