@@ -10,6 +10,8 @@
  * 1995-03-26    Markus Kuhn
  *      fixed 500 ms bug at call to set_rtc_mmss, fixed DS12887
  *      precision CMOS clock update
+ * 1996-05-03    Ingo Molnar
+ *      fixed time warps in do_[slow|fast]_gettimeoffset()
  */
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -31,57 +33,102 @@ extern int setup_x86_irq(int, struct irqaction *);
 
 #ifndef	CONFIG_APM	/* cycle counter may be unreliable */
 /* Cycle counter value at the previous timer interrupt.. */
-static unsigned long long last_timer_cc = 0;
-static unsigned long long init_timer_cc = 0;
+static struct {
+	unsigned long low;
+	unsigned long high;
+} init_timer_cc, last_timer_cc;
 
+/*
+ * This is more assembly than C, but it's also rather
+ * timing-critical and we have to use assembler to get
+ * reasonable 64-bit arithmetic
+ */
 static unsigned long do_fast_gettimeoffset(void)
 {
-	unsigned long time_low, time_high;
-	unsigned long quotient, remainder;
+	register unsigned long eax asm("ax");
+	register unsigned long edx asm("dx");
+	unsigned long tmp, quotient, low_timer, missing_time;
 
-	/* Get last timer tick in absolute kernel time */
-	__asm__("subl %2,%0\n\t"
-		"sbbl %3,%1"
-		:"=r" (time_low), "=r" (time_high)
-		:"m" (*(0+(long *)&init_timer_cc)),
-		 "m" (*(1+(long *)&init_timer_cc)),
-		 "0" (*(0+(long *)&last_timer_cc)),
-		 "1" (*(1+(long *)&last_timer_cc)));
-	/*
-	 * Divide the 64-bit time with the 32-bit jiffy counter,
-	 * getting the quotient in clocks.
-	 *
-	 * Giving quotient = "average internal clocks per jiffy"
-	 */
-	__asm__("divl %2"
-		:"=a" (quotient), "=d" (remainder)
-		:"r" (jiffies),
-		 "0" (time_low), "1" (time_high));
+	/* Last jiffie when do_fast_gettimeoffset() was called.. */
+	static unsigned long last_jiffies=0;
+
+	/* Cached "clocks per usec" value.. */
+	static unsigned long cached_quotient=0;
+
+	/* The "clocks per usec" value is calculated once each jiffie */
+	tmp = jiffies;
+	quotient = cached_quotient;
+	low_timer = last_timer_cc.low;
+	missing_time = 0;
+	if (last_jiffies != tmp) {
+		last_jiffies = tmp;
+		/*
+		 * test for hanging bottom handler (this means xtime is not 
+		 * updated yet)
+		 */
+		if (test_bit(TIMER_BH, &bh_active) )
+		{
+			missing_time = 997670/HZ;
+		}
+
+		/* Get last timer tick in absolute kernel time */
+		eax = low_timer;
+		edx = last_timer_cc.high;
+		__asm__("subl "SYMBOL_NAME_STR(init_timer_cc)",%0\n\t"
+			"sbbl "SYMBOL_NAME_STR(init_timer_cc)"+4,%1"
+			:"=a" (eax), "=d" (edx)
+			:"0" (eax), "1" (edx));
+
+		/*
+		 * Divide the 64-bit time with the 32-bit jiffy counter,
+		 * getting the quotient in clocks.
+		 *
+		 * Giving quotient = "average internal clocks per usec"
+		 */
+		__asm__("divl %2"
+			:"=a" (eax), "=d" (edx)
+			:"r" (tmp),
+			 "0" (eax), "1" (edx));
+
+		edx = 997670/HZ;
+		tmp = eax;
+		eax = 0;
+
+		__asm__("divl %2"
+			:"=a" (eax), "=d" (edx)
+			:"r" (tmp),
+			 "0" (eax), "1" (edx));
+		cached_quotient = eax;
+		quotient = eax;
+	}
 
 	/* Read the time counter */
 	__asm__(".byte 0x0f,0x31"
-		:"=a" (time_low), "=d" (time_high));
+		:"=a" (eax), "=d" (edx));
 
 	/* .. relative to previous jiffy (32 bits is enough) */
-	time_low -= (unsigned long) last_timer_cc;
+	edx = 0;
+	eax -= low_timer;
 
 	/*
-	 * Time offset = (1000000/HZ * remainder) / quotient.
+	 * Time offset = (997670/HZ * time_low) / quotient.
 	 */
-	__asm__("mull %1\n\t"
-		"divl %2"
-		:"=a" (quotient), "=d" (remainder)
+
+	__asm__("mull %2"
+		:"=a" (eax), "=d" (edx)
 		:"r" (quotient),
-		 "0" (time_low), "1" (1000000/HZ));
+		 "0" (eax), "1" (edx));
 
 	/*
-	 * Due to rounding errors (and jiffies inconsistencies),
+ 	 * Due to rounding errors (and jiffies inconsistencies),
 	 * we need to check the result so that we'll get a timer
 	 * that is monotonous.
 	 */
-	if (quotient >= 1000000/HZ)
-		quotient = 1000000/HZ-1;
-	return quotient;
+	if (edx >= 997670/HZ)
+		edx = 997670/HZ-1;
+
+	eax = edx + missing_time;
+	return eax;
 }
 #endif
 
@@ -122,21 +169,63 @@ static unsigned long do_fast_gettimeoffset(void)
 static unsigned long do_slow_gettimeoffset(void)
 {
 	int count;
+	static int count_p = 0;
 	unsigned long offset = 0;
+	static unsigned long jiffies_p = 0;
+
+	/*
+	 * cache volatile jiffies temporaly, we have IRQs turned off. 
+	 */
+	unsigned long jiffies_t;
 
 	/* timer count may underflow right here */
 	outb_p(0x00, 0x43);	/* latch the count ASAP */
 	count = inb_p(0x40);	/* read the latched count */
 	count |= inb(0x40) << 8;
-	/* we know probability of underflow is always MUCH less than 1% */
-	if (count > (LATCH - LATCH/100)) {
-		/* check for pending timer interrupt */
-		outb_p(0x0a, 0x20);
-		if (inb(0x20) & 1)
-			offset = TICK_SIZE;
-	}
+
+ 	jiffies_t = jiffies;
+
+	/*
+	 * avoiding timer inconsistencies (they are rare, but they happen)...
+	 * there are three kinds of problems that must be avoided here:
+	 *  1. the timer counter underflows
+	 *  2. hardware problem with the timer, not giving us continuous time,
+	 *     the counter does small "jumps" upwards on some Pentium systems,
+	 *     thus causes time warps
+	 *  3. we are after the timer interrupt, but the bottom half handler
+	 *     hasn't executed yet.
+	 */
+	if( count > count_p ) {
+		if( jiffies_t == jiffies_p ) {
+			if( count > LATCH-LATCH/100 )
+				offset = TICK_SIZE;
+			else
+				/*
+				 * argh, the timer is bugging we cant do nothing 
+				 * but to give the previous clock value.
+				 */
+				count = count_p;
+		} else {
+			if( test_bit(TIMER_BH, &bh_active) ) {
+				/*
+				 * we have detected a counter underflow.
+			 	 */
+				offset = TICK_SIZE;
+				count_p = count;		
+			} else {
+				count_p = count;
+				jiffies_p = jiffies_t;
+			}
+		}
+	} else {
+		count_p = count;
+		jiffies_p = jiffies_t;
+ 	}
+
+
 	count = ((LATCH-1) - count) * TICK_SIZE;
 	count = (count + LATCH/2) / LATCH;
+
 	return offset + count;
 }
 
@@ -283,8 +372,8 @@ static void pentium_timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	/* read Pentium cycle counter */
 	__asm__(".byte 0x0f,0x31"
-		:"=a" (((unsigned long *) &last_timer_cc)[0]),
-		 "=d" (((unsigned long *) &last_timer_cc)[1]));
+		:"=a" (last_timer_cc.low),
+		 "=d" (last_timer_cc.high));
 	timer_interrupt(irq, NULL, regs);
 }
 #endif
@@ -375,8 +464,8 @@ void time_init(void)
 		do_gettimeoffset = do_fast_gettimeoffset;
 		/* read Pentium cycle counter */
 		__asm__(".byte 0x0f,0x31"
-			:"=a" (((unsigned long *) &init_timer_cc)[0]),
-			 "=d" (((unsigned long *) &init_timer_cc)[1]));
+			:"=a" (init_timer_cc.low),
+			 "=d" (init_timer_cc.high));
 		irq0.handler = pentium_timer_interrupt;
 	}
 #endif

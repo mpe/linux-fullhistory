@@ -1,5 +1,5 @@
 #ifndef _PPC_POSIX_TYPES_H
-#define _PPc_POSIX_TYPES_H
+#define _PPC_POSIX_TYPES_H
 
 /*
  * This file is generally used by user-level software, so you need to
@@ -95,4 +95,4 @@ static __inline__ void __FD_ZERO(__kernel_fd_set *p)
 
 #endif /* __GNUC__ */
 
-#endif /* _PPc_POSIX_TYPES_H */
+#endif /* _PPC_POSIX_TYPES_H */

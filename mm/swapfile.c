@@ -318,12 +318,13 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	struct inode * inode;
 	struct file filp;
 	int i, type, prev;
+	int err;
 
 	if (!suser())
 		return -EPERM;
-	i = namei(specialfile,&inode);
-	if (i)
-		return i;
+	err = namei(specialfile,&inode);
+	if (err)
+		return err;
 	prev = -1;
 	for (type = swap_list.head; type >= 0; type = swap_info[type].next) {
 		p = swap_info + type;
@@ -353,13 +354,21 @@ asmlinkage int sys_swapoff(const char * specialfile)
 		swap_list.next = swap_list.head;
 	}
 	p->flags = SWP_USED;
-	i = try_to_unuse(type);
-	if (i) {
+	err = try_to_unuse(type);
+	if (err) {
 		iput(inode);
+		/* re-insert swap space back into swap_list */
+		for (prev = -1, i = swap_list.head; i >= 0; prev = i, i = swap_info[i].next)
+			if (p->prio >= swap_info[i].prio)
+				break;
+		p->next = i;
+		if (prev < 0)
+			swap_list.head = swap_list.next = p - swap_info;
+		else
+			swap_info[prev].next = p - swap_info;
 		p->flags = SWP_WRITEOK;
-		return i;
+		return err;
 	}
-
 	if(p->swap_device){
 		memset(&filp, 0, sizeof(filp));		
 		filp.f_inode = inode;

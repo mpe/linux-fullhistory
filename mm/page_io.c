@@ -76,10 +76,10 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 	else
 		kstat.pswpout++;
 	page = mem_map + MAP_NR(buf);
+	atomic_inc(&page->count);
 	wait_on_page(page);
 	if (p->swap_device) {
 		if (!wait) {
-			page->count++;
 			set_bit(PG_free_after, &page->flags);
 			set_bit(PG_decr_after, &page->flags);
 			set_bit(PG_swap_unlock_after, &page->flags);
@@ -87,6 +87,11 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 			nr_async_pages++;
 		}
 		ll_rw_page(rw,p->swap_device,offset,buf);
+		/*
+		 * NOTE! We don't decrement the page count if we
+		 * don't wait - that will happen asynchronously
+		 * when the IO completes.
+		 */
 		if (!wait)
 			return;
 		wait_on_page(page);
@@ -130,6 +135,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		ll_rw_swap_file(rw,swapf->i_dev, zones, i,buf);
 	} else
 		printk("rw_swap_page: no swap file or device\n");
+	atomic_dec(&page->count);
 	if (offset && !clear_bit(offset,p->swap_lockmap))
 		printk("rw_swap_page: lock already cleared\n");
 	wake_up(&lock_queue);

@@ -30,11 +30,10 @@
  *
  */
 
-#define RTC_VERSION		"1.06"
+#define RTC_VERSION		"1.07"
 
 #define RTC_IRQ 	8	/* Can't see this changing soon.	*/
-#define RTC_IO_BASE	0x70	/* Or this...				*/
-#define RTC_IO_EXTENT	0x10	/* Only really 0x70 to 0x71, but...	*/
+#define RTC_IO_EXTENT	0x10	/* Only really two ports, but...	*/
 
 /*
  *	Note that *all* calls to CMOS_READ and CMOS_WRITE are done with
@@ -539,7 +538,7 @@ int rtc_init(void)
 	}
 	misc_register(&rtc_dev);
 	/* Check region? Naaah! Just snarf it up. */
-	request_region(RTC_IO_BASE, RTC_IO_EXTENT, "rtc");
+	request_region(RTC_PORT(0), RTC_IO_EXTENT, "rtc");
 	init_timer(&rtc_irq_timer);
 	rtc_irq_timer.function = rtc_dropped_irq;
 	rtc_wait = NULL;

@@ -2,7 +2,7 @@
  *  linux/arch/ppc/kernel/process.c
  *
  *  Copyright (C) 1995  Linus Torvalds
- *  Adapted for PowerPC by Gary THomas
+ *  Adapted for PowerPC by Gary Thomas
  */
 
 /*

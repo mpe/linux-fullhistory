@@ -171,6 +171,38 @@ struct size_descriptor sizes[] =
 #define BLOCKSIZE(order)        (blocksize[order])
 #define AREASIZE(order)		(PAGE_SIZE<<(sizes[order].gfporder))
 
+/*
+ * Create a small cache of page allocations: this helps a bit with
+ * those pesky 8kB+ allocations for NFS when we're temporarily
+ * out of memory..
+ *
+ * This is a _truly_ small cache, we just cache one single page
+ * order (for orders 0, 1 and 2, that is  4, 8 and 16kB on x86).
+ */
+#define MAX_CACHE_ORDER 3
+struct page_descriptor * kmalloc_cache[MAX_CACHE_ORDER];
+
+static inline struct page_descriptor * get_kmalloc_pages(unsigned long priority,
+	unsigned long order, int dma)
+{
+	struct page_descriptor * tmp;
+
+	tmp = (struct page_descriptor *) __get_free_pages(priority, order, dma);
+	if (!tmp && !dma && order < MAX_CACHE_ORDER)
+		tmp = xchg(kmalloc_cache+order, tmp);
+	return tmp;
+}
+
+static inline void free_kmalloc_pages(struct page_descriptor * page,
+	unsigned long order, int dma)
+{
+	if (!dma && order < MAX_CACHE_ORDER) {
+		page = xchg(kmalloc_cache+order, page);
+		if (!page)
+			return;
+	}
+	free_pages((unsigned long) page, order);
+}
 
 long kmalloc_init(long start_mem, long end_mem)
 {
@@ -260,8 +292,7 @@ void *kmalloc(size_t size, int priority)
 		/* sz is the size of the blocks we're dealing with */
 		sz = BLOCKSIZE(order);
 
-		page = (struct page_descriptor *) __get_free_pages(priority,
-				sizes[order].gfporder, dma);
+		page = get_kmalloc_pages(priority, sizes[order].gfporder, dma);
 
 		if (!page)
 			goto no_free_page;
@@ -322,7 +353,7 @@ not_free_on_freelist:
 
 void kfree(void *ptr)
 {
-	int size;
+	int size, dma;
 	unsigned long flags;
 	int order;
 	register struct block_header *p;
@@ -331,10 +362,12 @@ void kfree(void *ptr)
 	if (!ptr)
 		return;
 	p = ((struct block_header *) ptr) - 1;
+	dma = 0;
 	page = PAGE_DESC(p);
 	order = page->order;
 	pg = &sizes[order].firstfree;
 	if (p->bh_flags == MF_DMA) {
+		dma = 1;
 		p->bh_flags = MF_USED;
 		pg = &sizes[order].dmafree;
 	}
@@ -378,7 +411,7 @@ void kfree(void *ptr)
 			pg = &tmp->next;
 		}
 		sizes[order].npages--;
-		free_pages((long) page, sizes[order].gfporder);
+		free_kmalloc_pages(page, sizes[order].gfporder, dma);
 	}
 	sizes[order].nfrees++;
 	sizes[order].nbytesmalloced -= size;

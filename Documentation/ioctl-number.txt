@@ -55,7 +55,6 @@ This table is current to Linux 1.3.98.
 Ioctl	Include File		Comments
 ========================================================
 0x00	linux/fs.h		only FIBMAP, FIGETBSZ
-0x00	linux/mc146818rtc.h	conflict!
 0x02	linux/fd.h
 0x03	linux/hdreg.h
 0x04	linux/umsdos_fs.h
@@ -90,6 +89,7 @@ Ioctl	Include File		Comments
 'm'	linux/mtio.h		conflict!
 'm'	linux/soundcard.h	conflict!
 'n'	linux/ncp_fs.h
+'p'	linux/mc146818rtc.h
 'r'	linux/msdos_fs.h
 's'	linux/cdk.h
 't'	linux/if_ppp.h		no conflict

@@ -42,6 +42,19 @@ struct page * page_hash_table[PAGE_HASH_SIZE];
  */
 
 /*
+ * This is a special fast page-free routine that _only_ works
+ * on page-cache pages that we are currently using. We can
+ * just decrement the page count, because we know that the page
+ * has a count > 1 (the page cache itself counts as one, and
+ * we're currently using it counts as one). So we don't need
+ * the full free_page() stuff..
+ */
+static inline void release_page(struct page * page)
+{
+	atomic_dec(&page->count);
+}
+
+/*
  * Invalidate the pages of an inode, removing all pages that aren't
  * locked down (those are sure to be up-to-date anyway, so we shouldn't
  * invalidate them).
@@ -228,12 +241,9 @@ void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, 
 			len = count;
 		page = find_page(inode, pos);
 		if (page) {
-			unsigned long addr;
-
 			wait_on_page(page);
-			addr = page_address(page);
-			memcpy((void *) (offset + addr), buf, len);
-			free_page(addr);
+			memcpy((void *) (offset + page_address(page)), buf, len);
+			release_page(page);
 		}
 		count -= len;
 		buf += len;
@@ -273,7 +283,7 @@ static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offse
 #if 1
 	page = find_page(inode, offset);
 	if (page) {
-		page->count--;
+		release_page(page);
 		return page_cache;
 	}
 	/*
@@ -291,12 +301,15 @@ static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offse
 
 /* 
  * Wait for IO to complete on a locked page.
+ *
+ * This must be called with the caller "holding" the page,
+ * ie with increased "page->count" so that the page won't
+ * go away during the wait..
  */
 void __wait_on_page(struct page *page)
 {
 	struct wait_queue wait = { current, NULL };
 
-	page->count++;
 	add_wait_queue(&page->wait, &wait);
 repeat:
 	run_task_queue(&tq_disk);
@@ -306,7 +319,6 @@ repeat:
 		goto repeat;
 	}
 	remove_wait_queue(&page->wait, &wait);
-	page->count--;
 	current->state = TASK_RUNNING;
 }
 
@@ -558,9 +570,6 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 	unsigned long pos, ppos, page_cache;
 	int reada_ok;
 
-	if (count <= 0)
-		return 0;
-
 	error = 0;
 	read = 0;
 	page_cache = 0;
@@ -608,45 +617,18 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 
 	for (;;) {
 		struct page *page;
-		unsigned long offset, addr, nr;
 
 		if (pos >= inode->i_size)
 			break;
-		offset = pos & ~PAGE_MASK;
-		nr = PAGE_SIZE - offset;
+
 		/*
 		 * Try to find the data in the page cache..
 		 */
 		page = find_page(inode, pos & PAGE_MASK);
-		if (page)
-			goto found_page;
-
-		/*
-		 * Ok, it wasn't cached, so we need to create a new
-		 * page..
-		 */
-		if (page_cache)
-			goto new_page;
-
-		error = -ENOMEM;
-		page_cache = __get_free_page(GFP_KERNEL);
-		if (!page_cache)
-			break;
-		error = 0;
-
-		/*
-		 * That could have slept, so we need to check again..
-		 */
-		if (pos >= inode->i_size)
-			break;
-		page = find_page(inode, pos & PAGE_MASK);
 		if (!page)
-			goto new_page;
+			goto no_cached_page;
 
 found_page:
-		addr = page_address(page);
-		if (nr > count)
-			nr = count;
 /*
  * Try to read ahead only if the current page is filled or being filled.
  * Otherwise, if we were reading ahead, decrease max read ahead size to
@@ -659,15 +641,27 @@ found_page:
 		else if (reada_ok && filp->f_ramax > MIN_READAHEAD)
 				filp->f_ramax = MIN_READAHEAD;
 
-		if (PageLocked(page))
-			__wait_on_page(page);
+		wait_on_page(page);
 
 		if (!PageUptodate(page))
-			goto read_page;
+			goto page_read_error;
+
+success:
+		/*
+		 * Ok, we have the page, it's up-to-date and ok,
+		 * so now we can finally copy it to user space...
+		 */
+	{
+		unsigned long offset, nr;
+		offset = pos & ~PAGE_MASK;
+		nr = PAGE_SIZE - offset;
+		if (nr > count)
+			nr = count;
+
 		if (nr > inode->i_size - pos)
 			nr = inode->i_size - pos;
-		memcpy_tofs(buf, (void *) (addr + offset), nr);
-		free_page(addr);
+		memcpy_tofs(buf, (void *) (page_address(page) + offset), nr);
+		release_page(page);
 		buf += nr;
 		pos += nr;
 		read += nr;
@@ -675,13 +669,28 @@ found_page:
 		if (count)
 			continue;
 		break;
-	
+	}
 
-new_page:
+no_cached_page:
+		/*
+		 * Ok, it wasn't cached, so we need to create a new
+		 * page..
+		 */
+		if (!page_cache) {
+			page_cache = __get_free_page(GFP_KERNEL);
+			/*
+			 * That could have slept, so go around to the
+			 * very beginning..
+			 */
+			if (page_cache)
+				continue;
+			error = -ENOMEM;
+			break;
+		}
+
 		/*
 		 * Ok, add the new page to the hash-queues...
 		 */
-		addr = page_cache;
 		page = mem_map + MAP_NR(page_cache);
 		page_cache = 0;
 		add_to_page_cache(page, inode, pos & PAGE_MASK);
@@ -694,7 +703,6 @@ new_page:
 		 * identity of the reader can decide if we can read the
 		 * page or not..
 		 */
-read_page:
 /*
  * We have to read the page.
  * If we were reading ahead, we had previously tried to read this page,
@@ -706,12 +714,25 @@ read_page:
 			filp->f_ramax = MIN_READAHEAD;
 
 		error = inode->i_op->readpage(inode, page);
+		if (!error)
+			goto found_page;
+		release_page(page);
+		break;
+
+page_read_error:
+		/*
+		 * We found the page, but it wasn't up-to-date.
+		 * Try to re-read it _once_. We do this synchronously,
+		 * because this happens only if there were errors.
+		 */
+		error = inode->i_op->readpage(inode, page);
 		if (!error) {
-			if (!PageError(page))
-				goto found_page;
-			error = -EIO;
+			wait_on_page(page);
+			if (PageUptodate(page) && !PageError(page))
+				goto success;
+			error = -EIO; /* Some unspecified error occurred.. */
 		}
-		free_page(addr);
+		release_page(page);
 		break;
 	}
 
@@ -729,78 +750,125 @@ read_page:
 }
 
 /*
- * Find a cached page and wait for it to become up-to-date, return
- * the page address.  Increments the page count.
- */
-static inline unsigned long fill_page(struct inode * inode, unsigned long offset)
-{
-	struct page * page;
-	unsigned long new_page;
-
-	page = find_page(inode, offset);
-	if (page)
-		goto found_page_dont_free;
-	new_page = __get_free_page(GFP_KERNEL);
-	page = find_page(inode, offset);
-	if (page)
-		goto found_page;
-	if (!new_page)
-		goto failure;
-	page = mem_map + MAP_NR(new_page);
-	new_page = 0;
-	add_to_page_cache(page, inode, offset);
-	inode->i_op->readpage(inode, page);
-	if (PageLocked(page))
-		new_page = try_to_read_ahead(inode, offset + PAGE_SIZE, 0);
-found_page:
-	if (new_page)
-		free_page(new_page);
-found_page_dont_free:
-	wait_on_page(page);
-	if (PageUptodate(page)) {
-success:	
-		return page_address(page);
-	}
-	/* If not marked as error, try _once_ to read it again */
-	if (!PageError(page)) {
-		inode->i_op->readpage(inode, page);
-		wait_on_page(page);
-		if (PageUptodate(page))
-			goto success;
-	}
-	page->count--;
-failure:
-	return 0;
-}
-
-/*
  * Semantics for shared and private memory areas are different past the end
  * of the file. A shared mapping past the last page of the file is an error
  * and results in a SIGBUS, while a private mapping just maps in a zero page.
+ *
+ * The goto's are kind of ugly, but this streamlines the normal case of having
+ * it in the page cache, and handles the special cases reasonably without
+ * having a lot of duplicated code.
  */
 static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long address, int no_share)
 {
 	unsigned long offset;
+	struct page * page;
 	struct inode * inode = area->vm_inode;
-	unsigned long page;
+	unsigned long old_page, new_page;
 
+	new_page = 0;
 	offset = (address & PAGE_MASK) - area->vm_start + area->vm_offset;
 	if (offset >= inode->i_size && (area->vm_flags & VM_SHARED) && area->vm_mm == current->mm)
-		return 0;
+		goto no_page;
 
-	page = fill_page(inode, offset);
-	if (page && no_share) {
-		unsigned long new_page = __get_free_page(GFP_KERNEL);
-		if (new_page) {
-			memcpy((void *) new_page, (void *) page, PAGE_SIZE);
-			flush_page_to_ram(new_page);
-		}
-		free_page(page);
-		return new_page;
+	/*
+	 * Do we have something in the page cache already?
+	 */
+	page = find_page(inode, offset);
+	if (!page)
+		goto no_cached_page;
+
+found_page:
+	/*
+	 * Ok, found a page in the page cache, now we need to check
+	 * that it's up-to-date
+	 */
+	wait_on_page(page);
+	if (!PageUptodate(page))
+		goto page_read_error;
+
+success:
+	/*
+	 * Found the page, need to check sharing and possibly
+	 * copy it over to another page..
+	 */
+	old_page = page_address(page);
+	if (!no_share) {
+		/*
+		 * Ok, we can share the cached page directly.. Get rid
+		 * of any potential extra pages.
+		 */
+		if (new_page)
+			free_page(new_page);
+
+		flush_page_to_ram(old_page);
+		return old_page;
 	}
+
+	/*
+	 * Check that we have another page to copy it over to..
+	 */
+	if (!new_page) {
+		new_page = __get_free_page(GFP_KERNEL);
+		if (!new_page)
+			goto failure;
+	}
+	memcpy((void *) new_page, (void *) old_page, PAGE_SIZE);
+	flush_page_to_ram(new_page);
+	release_page(page);
+	return new_page;
+
+no_cached_page:
+	new_page = __get_free_page(GFP_KERNEL);
+	if (!new_page)
+		goto no_page;
+
+	/*
+	 * During getting the above page we might have slept,
+	 * so we need to re-check the situation with the page
+	 * cache.. The page we just got may be useful if we
+	 * can't share, so don't get rid of it here.
+	 */
+	page = find_page(inode, offset);
 	if (page)
-		flush_page_to_ram(page);
-	return page;
+		goto found_page;
+
+	/*
+	 * Now, create a new page-cache page from the page we got
+	 */
+	page = mem_map + MAP_NR(new_page);
+	new_page = 0;
+	add_to_page_cache(page, inode, offset);
+
+	if (inode->i_op->readpage(inode, page) != 0)
+		goto failure;
+
+	/*
+	 * Do a very limited read-ahead if appropriate
+	 */
+	if (PageLocked(page))
+		new_page = try_to_read_ahead(inode, offset + PAGE_SIZE, 0);
+	goto found_page;
+
+page_read_error:
+	/*
+	 * Umm, take care of errors if the page isn't up-to-date.
+	 * Try to re-read it _once_.
+	 */
+	if (inode->i_op->readpage(inode, page) != 0)
+		goto failure;
+	if (PageError(page))
+		goto failure;
+	if (PageUptodate(page))
+		goto success;
+
+	/*
+	 * Uhhuh.. Things didn't work out. Return zero to tell the
+	 * mm layer so, possibly freeing the page cache page first.
+	 */
+failure:
+	release_page(page);
+no_page:
+	return 0;
 }
 
 /*

@@ -68,6 +68,12 @@ S: Status, one of the following:
 			it has been replaced by a better system and you
 			should be using that.
 
+EXT2 FILE SYSTEM
+P:	Remy Card
+M:	Remy.Card@linux.org
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 3C501 NETWORK DRIVER
 P:	Alan Cox
 M:	net-patches@lxorguk.ukuu.org.uk

@@ -9,7 +9,7 @@ Wed Mar  8 18:14:37 1995  Michael Meissner  <meissner@tiktok.cygnus.com>
 
 Tue Feb 14 13:59:13 1995  Michael Meissner  <meissner@tiktok.cygnus.com>
 
-	* common.h (EM_PPC): Use offical value of 20, not 17.
+	* common.h (EM_PPC): Use official value of 20, not 17.
 	(EM_PPC_OLD): Define this to be the old value of EM_PPC.
 
 
@@ -108,7 +108,7 @@ Thu Apr 29 12:12:20 1993  Ken Raeburn  (raeburn@deneb.cygnus.com)
 	* common.h (EM_HPPA, NT_VERSION, STN_UNDEF, DT_*): New macros.
 	* external.h (Elf_External_Dyn): New type.
 
-	* internal.h (Elf_Intenral_Shdr): New field `size'.
+	* internal.h (Elf_Internal_Shdr): New field `size'.
 	(Elf_Internal_Dyn): New type.
 
 Tue Apr 20 16:03:45 1993  Fred Fish  (fnf@cygnus.com)

@@ -1,4 +1,4 @@
-/* $Id: eexpress.c,v 1.12 1996/04/15 17:27:30 phil Exp $
+/* $Id: eexpress.c,v 1.13 1996/05/19 15:59:51 phil Exp $
  *
  * Intel EtherExpress device driver for Linux
  *
@@ -86,7 +86,7 @@
 
 static char version[] = 
 "eexpress.c: v0.10 04-May-95 John Sullivan <js10039@cam.ac.uk>\n"
-"            v0.13 10-Apr-96 Philip Blundell <phil@tazenda.demon.co.uk>\n";
+"            v0.14 19-May-96 Philip Blundell <phil@tazenda.demon.co.uk>\n";
 
 #include <linux/module.h>
 
@@ -103,6 +103,7 @@ static char version[] =
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
+#include <linux/delay.h>
 #include <linux/errno.h>
 
 #include <linux/netdevice.h>
@@ -1060,15 +1061,25 @@ static void eexp_hw_init586(struct device *dev)
         printk("%s: eexp_hw_init586()\n", dev->name);
 #endif
 
-	PRIV(dev)->started = 0;
+	lp->started = 0;
 	set_loopback;
 
 	outb(SIRQ_dis|irqrmap[dev->irq],ioaddr+SET_IRQ);
 	outb_p(i586_RST,ioaddr+EEPROM_Ctrl);
+	udelay(2000);  /* delay 20ms */
+        {
+		unsigned short ofs, i;
+		for (ofs = 0; ofs < lp->rx_buf_end; ofs += 32) {
+			outw_p(ofs, ioaddr+SM_PTR);
+			for (i = 0; i < 16; i++) {
+				outw_p(0, ioaddr+SM_ADDR(i<<1));
+			}
+		}
+	}
 
 	outw_p(lp->rx_buf_end,ioaddr+WRITE_PTR);
 	start_code[28] = (dev->flags & IFF_PROMISC)?(start_code[28] | 1):(start_code[28] & ~1);
-	PRIV(dev)->promisc = dev->flags & IFF_PROMISC;
+	lp->promisc = dev->flags & IFF_PROMISC;
 	/* We may die here */
 	outsw(ioaddr, start_code, sizeof(start_code)>>1);
 	outw(CONF_HW_ADDR,ioaddr+WRITE_PTR);
@@ -1205,8 +1216,8 @@ static char namelist[NAMELEN * EEXP_MAX_CARDS] = { 0, };
 
 static struct device dev_eexp[EEXP_MAX_CARDS] = 
 {
-        NULL,         /* will allocate dynamically */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe 
+        { NULL,         /* will allocate dynamically */
+	  0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe },  
 };
 
 int irq[EEXP_MAX_CARDS] = {0, };

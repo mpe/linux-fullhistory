@@ -100,7 +100,7 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 	return 0;
 }
 
-asmlinkage int sys_read(unsigned int fd,char * buf,unsigned int count)
+asmlinkage int sys_read(unsigned int fd,char * buf,int count)
 {
 	int error;
 	struct file * file;
@@ -112,7 +112,7 @@ asmlinkage int sys_read(unsigned int fd,char * buf,unsigned int count)
 		return -EBADF;
 	if (!file->f_op || !file->f_op->read)
 		return -EINVAL;
-	if (!count)
+	if (count <= 0)
 		return 0;
 	error = locks_verify_area(FLOCK_VERIFY_READ,inode,file,file->f_pos,count);
 	if (error)

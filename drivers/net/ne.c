@@ -229,6 +229,12 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	}
     }
 
+    /* We should have a "dev" from Space.c or the static module table. */
+    if (dev == NULL) {
+	printk(KERN_ERR "ne.c: Passed a NULL device.\n");
+	dev = init_etherdev(0, 0);
+    }
+
     if (ei_debug  &&  version_printed++ == 0)
 	printk(version);
 
@@ -344,12 +350,6 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	return ENXIO;
 #endif
 
-    }
-
-    /* We should have a "dev" from Space.c or the static module table. */
-    if (dev == NULL) {
-	printk("ne.c: Passed a NULL device.\n");
-	dev = init_etherdev(0, 0);
     }
 
     if (pci_irq_line) {

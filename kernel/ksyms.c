@@ -163,7 +163,6 @@ struct symbol_table symbol_table = {
 	X(__bforget),
 	X(ll_rw_block),
 	X(__wait_on_buffer),
-	X(__wait_on_page),
 	X(mark_buffer_uptodate),
 	X(unlock_buffer),
 	X(dcache_lookup),

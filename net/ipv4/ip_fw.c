@@ -541,7 +541,13 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 			if (policy&IP_FW_F_REDIR) {
 				if (redirport)
-					*redirport = htons(f->fw_pts[f->fw_nsp+f->fw_ndp]);
+					if ((*redirport = htons(f->fw_pts[f->fw_nsp+f->fw_ndp])) == 0) {
+						/* Wildcard redirection.
+						 * Note that redirport will become
+						 * 0xFFFF for non-TCP/UDP packets.
+						 */
+						*redirport = dst_port;
+					}
 				answer = FW_REDIRECT;
 			} else
 #endif

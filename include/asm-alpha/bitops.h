@@ -31,7 +31,7 @@ extern __inline__ unsigned long set_bit(unsigned long nr, void * addr)
 		:"=&r" (temp),
 		 "=m" (*m),
 		 "=&r" (oldbit)
-		:"r" (1UL << (nr & 31)),
+		:"Ir" (1UL << (nr & 31)),
 		 "m" (*m));
 	return oldbit != 0;
 }
@@ -54,7 +54,7 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void * addr)
 		:"=&r" (temp),
 		 "=m" (*m),
 		 "=&r" (oldbit)
-		:"r" (1UL << (nr & 31)),
+		:"Ir" (1UL << (nr & 31)),
 		 "m" (*m));
 	return oldbit != 0;
 }
@@ -75,7 +75,7 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
 		:"=&r" (temp),
 		 "=m" (*m),
 		 "=&r" (oldbit)
-		:"r" (1UL << (nr & 31)),
+		:"Ir" (1UL << (nr & 31)),
 		 "m" (*m));
 	return oldbit != 0;
 }

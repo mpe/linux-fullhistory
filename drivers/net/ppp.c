@@ -6,7 +6,7 @@
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
  *
- *  ==FILEVERSION 960303==
+ *  ==FILEVERSION 960528==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the

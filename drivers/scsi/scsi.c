@@ -580,7 +580,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   printk("\n");
 #endif
 
-if (host_byte(SCpnt->result) != DID_OK) {
+  if (SCpnt->result) {
     if (((driver_byte (SCpnt->result) & DRIVER_SENSE) ||
          (status_byte (SCpnt->result) & CHECK_CONDITION)) &&
         ((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
@@ -1569,9 +1569,15 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		    case SUGGEST_IS_OK:
 			break;
 		    case SUGGEST_REMAP:
+#ifdef DEBUG
+			printk("SENSE SUGGEST REMAP - status = FINISHED\n");
+#endif
+			status = FINISHED;
+			exit = DRIVER_SENSE | SUGGEST_ABORT;
+			break;
 		    case SUGGEST_RETRY:
 #ifdef DEBUG
-			printk("SENSE SUGGEST REMAP or SUGGEST RETRY - status = MAYREDO\n");
+			printk("SENSE SUGGEST RETRY - status = MAYREDO\n");
 #endif
 			status = MAYREDO;
 			exit = DRIVER_SENSE | SUGGEST_RETRY;
@@ -1606,6 +1612,9 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		    status = REDO;
 		    break;
 		case SUGGEST_REMAP:
+		    status = FINISHED;
+		    exit =  DRIVER_SENSE | SUGGEST_ABORT;
+		    break;
 		case SUGGEST_RETRY:
 		    status = MAYREDO;
 		    exit = DRIVER_SENSE | SUGGEST_RETRY;

@@ -1,5 +1,5 @@
 /*
- * Miscallaneous support routines
+ * Miscellaneous support routines
  */
 
 #include <asm/bitops.h>

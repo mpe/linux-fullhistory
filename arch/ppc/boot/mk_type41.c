@@ -40,7 +40,7 @@ main(int argc, char *argv[])
 	}
 	if ((out_fd = creat(argv[2], 0666)) < 0)
 	{
-		fprintf(stderr, "Can't create outpue file: '%s': %s\n", argv[2], strerror(errno));
+		fprintf(stderr, "Can't create output file: '%s': %s\n", argv[2], strerror(errno));
 		exit(2);
 	}
 	if (fstat(in_fd, &info) < 0)
@@ -185,7 +185,7 @@ write_prep_boot_partition(int out_fd)
      * the next two.
      *   - size of the diskette is (assumed to be)
      *     (2 tracks/cylinder)(18 sectors/tracks)(80 cylinders/diskette)
-     *   - unlike the above sector nunbers, the beginning sector is zero-based!
+     *   - unlike the above sector numbers, the beginning sector is zero-based!
      */
 #if 0     
     pe->beginning_sector  = LeDword(1);
