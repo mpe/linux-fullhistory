@@ -1566,8 +1566,9 @@ static int __devinit nvidiafb_probe(struct pci_dev *pd,
 
       err_out_iounmap_fb:
 	iounmap(info->screen_base);
-      err_out_free_base1:
 	fb_destroy_modedb(info->monspecs.modedb);
+	nvidia_delete_i2c_busses(par);
+      err_out_free_base1:
 	iounmap(par->REGS);
       err_out_free_base0:
 	pci_release_regions(pd);
@@ -1597,9 +1598,10 @@ static void __exit nvidiafb_remove(struct pci_dev *pd)
 			 info->fix.smem_len);
 #endif				/* CONFIG_MTRR */
 
-	fb_destroy_modedb(info->monspecs.modedb);
-	iounmap(par->REGS);
 	iounmap(info->screen_base);
+	fb_destroy_modedb(info->monspecs.modedb);
+	nvidia_delete_i2c_busses(par);
+	iounmap(par->REGS);
 	pci_release_regions(pd);
 	pci_disable_device(pd);
 	kfree(info->pixmap.addr);
