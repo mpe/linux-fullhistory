@@ -1,5 +1,5 @@
 /*
- *  linux/kernel/chr_drv/pty.c
+ *  linux/drivers/char/pty.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */

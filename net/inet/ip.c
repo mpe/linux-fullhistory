@@ -1803,11 +1803,9 @@ void ip_do_retransmit(struct sock *sk, int all)
 	struct sk_buff * skb;
 	struct proto *prot;
 	struct device *dev;
-	int retransmits;
 
 	prot = sk->prot;
 	skb = sk->send_head;
-	retransmits = sk->retransmits;
 
 	while (skb != NULL)
 	{
@@ -1869,7 +1867,7 @@ void ip_do_retransmit(struct sock *sk, int all)
 		/*
 		 *	Count retransmissions
 		 */
-		retransmits++;
+		sk->retransmits++;
 		sk->prot->retransmits ++;
 
 		/*
@@ -1881,7 +1879,7 @@ void ip_do_retransmit(struct sock *sk, int all)
 		/*
 		 *	This should cut it off before we send too many packets.
 		 */
-		if (sk->retransmits > sk->cong_window)
+		if (sk->retransmits >= sk->cong_window)
 			break;
 		skb = skb->link3;
 	}

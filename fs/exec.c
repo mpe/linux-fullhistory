@@ -60,9 +60,16 @@ static int aout_core_dump(long signr, struct pt_regs * regs);
  * Here are the actual binaries that will be accepted:
  * add more with "register_binfmt()"..
  */
+extern struct linux_binfmt elf_format;
+
 static struct linux_binfmt aout_format = {
-	NULL, NULL, load_aout_binary, load_aout_library, aout_core_dump
+#ifndef CONFIG_BINFMT_ELF
+ 	NULL, NULL, load_aout_binary, load_aout_library, aout_core_dump
+#else
+ 	&elf_format, NULL, load_aout_binary, load_aout_library, aout_core_dump
+#endif
 };
+
 static struct linux_binfmt *formats = &aout_format;
 
 int register_binfmt(struct linux_binfmt * fmt)

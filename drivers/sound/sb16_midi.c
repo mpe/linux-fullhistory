@@ -282,7 +282,6 @@ int
 probe_sb16midi (struct address_info *hw_config)
 {
   int             ok = 0;
-  int             i;
   extern int      sbc_major;
 
   if (sbc_major < 4)

@@ -1745,6 +1745,7 @@ static void redo_format(void)
 	raw_cmd.track = format_req.track << floppy->stretch;
 	buffer_track = -1;
 	setup_format_params();
+	clear_bit(current_drive, &changed_floppies);
 	floppy_start();
 #ifdef DEBUGT
 	debugt("queue format request");

@@ -226,7 +226,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 		  SCpnt->request.sector, this_count);
 	  }
       }
-    end_scsi_request(SCpnt, 1, this_count);
+    SCpnt = end_scsi_request(SCpnt, 1, this_count);
     requeue_sd_request(SCpnt);
     return;
   }
@@ -284,7 +284,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	      /* further access.					*/
 	      
 		rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->changed = 1;
-		end_scsi_request(SCpnt, 0, this_count);
+		SCpnt = end_scsi_request(SCpnt, 0, this_count);
 		requeue_sd_request(SCpnt);
 		return;
 	      }
@@ -316,7 +316,7 @@ of the 	disk.
 
 		if (driver_byte(result) & DRIVER_SENSE)
 			print_sense("sd", SCpnt);
-		end_scsi_request(SCpnt, 0, SCpnt->request.current_nr_sectors);
+		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.current_nr_sectors);
 		requeue_sd_request(SCpnt);
 		return;
 	}
@@ -406,7 +406,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 
 repeat:
 
-	if(SCpnt->request.dev <= 0) {
+	if(!SCpnt || SCpnt->request.dev <= 0) {
 	  do_sd_request();
 	  return;
 	}
@@ -423,7 +423,7 @@ repeat:
 	    !rscsi_disks[DEVICE_NR(dev)].device ||
 	    block + SCpnt->request.nr_sectors > sd[dev].nr_sects)
 		{
-		end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		goto repeat;
 		}
 
@@ -436,7 +436,7 @@ repeat:
  * quietly refuse to do anything to a changed disc until the changed bit has been reset
  */
 		/* printk("SCSI disk has been changed.  Prohibiting further I/O.\n");	*/
-		end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		goto repeat;
 		}
 
@@ -449,7 +449,7 @@ repeat:
 		case WRITE :
 			if (!rscsi_disks[dev].device->writeable)
 				{
-				end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+				SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 				goto repeat;
 				}
 			cmd[0] = WRITE_6;

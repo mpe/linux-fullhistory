@@ -175,7 +175,11 @@ void proc_read_inode(struct inode * inode)
 				return;
 			inode->i_op = &proc_link_inode_operations;
 			inode->i_size = 64;
-			inode->i_mode = S_IFLNK | S_IRWXU;
+			inode->i_mode = S_IFLNK;
+			if (p->files->fd[ino]->f_mode & 1)
+				inode->i_mode |= S_IRUSR | S_IXUSR;
+			if (p->files->fd[ino]->f_mode & 2)
+				inode->i_mode |= S_IWUSR | S_IXUSR;
 			return;
 	}
 	return;

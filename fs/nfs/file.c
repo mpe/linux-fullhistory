@@ -7,7 +7,9 @@
  *   - Do not copy data too often around in the kernel.
  *   - In nfs_file_read the return value of kmalloc wasn't checked.
  *   - Put in a better version of read look-ahead buffering. Original idea
- *     and implementation by Wai S Kok elekokw@ee.nus.sg.
+ *     and implementation by Wai S Kok elekokws@ee.nus.sg.
+ *
+ *  Expire cache on write to a file by Wai S Kok (Oct 1994).
  *
  *  nfs regular file handling functions
  */
@@ -201,6 +203,14 @@ static int nfs_file_write(struct inode *inode, struct file *file, char *buf,
 	}
 	if (count <= 0)
 		return 0;
+
+	cli();
+	/* If hit, cache is dirty and must be expired. */
+	for (i = 0; i < READ_CACHE_SIZE; i++)
+		if(cache[i].inode_num == inode->i_ino)
+			cache[i].time -= EXPIRE_CACHE;
+        sti();
+
 	pos = file->f_pos;
 	if (file->f_flags & O_APPEND)
 		pos = inode->i_size;

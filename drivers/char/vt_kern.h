@@ -18,8 +18,12 @@ extern struct vt_struct {
 	int		vt_pid;
 	int		vt_newvt;
 	struct wait_queue *paste_wait;
-} vt_cons[NR_CONSOLES];
+} *vt_cons[MAX_NR_CONSOLES];
 
 void kd_mksound(unsigned int count, unsigned int ticks);
+int vc_allocate(unsigned int console);
+int vc_cons_allocated(unsigned int console);
+int vc_resize(unsigned long lines, unsigned long cols);
+void vc_disallocate(unsigned int console);
 
 #endif /* _VT_KERN_H */

@@ -15,13 +15,30 @@
 #include <linux/stat.h>
 
 static int proc_readlink(struct inode *, char *, int);
-static int proc_follow_link(struct inode *, struct inode *, int, int, struct inode **);
+static int proc_follow_link(struct inode *, struct inode *, int, int,
+			    struct inode **);
+static int proc_fd_dupf(struct inode * inode, struct file * f);
+
+#define PLAN9_SEMANTICS
 
 /*
  * links can't do much...
  */
+static struct file_operations proc_fd_link_operations = {
+	NULL,			/* lseek - default */
+	NULL,			/* read - bad */
+	NULL,			/* write - bad */
+	NULL,			/* readdir - bad */
+	NULL,			/* select - default */
+	NULL,			/* ioctl - default */
+	NULL,			/* mmap */
+	proc_fd_dupf,		/* very special open code */
+	NULL,			/* no special release code */
+	NULL			/* can't fsync */
+};
+
 struct inode_operations proc_link_inode_operations = {
-	NULL,			/* no file-operations */
+	&proc_fd_link_operations,/* file-operations */
 	NULL,			/* create */
 	NULL,			/* lookup */
 	NULL,			/* link */
@@ -38,11 +55,53 @@ struct inode_operations proc_link_inode_operations = {
 	NULL			/* permission */
 };
 
+/*
+ * This open routine is somewhat of a hack.... what we are doing is
+ * looking up the file structure of the newly opened proc fd file, and
+ * replacing it with the actual file structure of the process's file
+ * descriptor.  This allows plan 9 semantics, so that the returned
+ * file descriptor is an dup of the target file descriptor.
+ */
+static int proc_fd_dupf(struct inode * inode, struct file * f)
+{
+	unsigned int pid, ino;
+	int	i, fd;
+	struct task_struct * p;
+	struct file *new_f;
+	
+	for(fd=0 ; fd<NR_OPEN ; fd++)
+		if (current->files->fd[fd] == f)
+			break;
+	if (fd>=NR_OPEN)
+		return -ENOENT;	/* should never happen */
+
+	ino = inode->i_ino;
+	pid = ino >> 16;
+	ino &= 0x0000ffff;
+
+	for (i = 0 ; i < NR_TASKS ; i++)
+		if ((p = task[i]) && p->pid == pid)
+			break;
+
+	if ((i >= NR_TASKS) ||
+	    ((ino >> 8) != 1) || !(new_f = p->files->fd[ino & 0x0ff]))
+		return -ENOENT;
+
+	if (new_f->f_mode && !f->f_mode && 3)
+		return -EPERM;
+
+	new_f->f_count++;
+	current->files->fd[fd] = new_f;
+	f->f_count--;
+	return 0;
+}
+
 static int proc_follow_link(struct inode * dir, struct inode * inode,
 	int flag, int mode, struct inode ** res_inode)
 {
 	unsigned int pid, ino;
 	struct task_struct * p;
+	struct inode * new_inode;
 	int i;
 
 	*res_inode = NULL;
@@ -57,25 +116,26 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 	ino = inode->i_ino;
 	pid = ino >> 16;
 	ino &= 0x0000ffff;
-	iput(inode);
 	for (i = 0 ; i < NR_TASKS ; i++)
 		if ((p = task[i]) && p->pid == pid)
 			break;
-	if (i >= NR_TASKS)
+	if (i >= NR_TASKS) {
+		iput(inode);
 		return -ENOENT;
-	inode = NULL;
+	}
+	new_inode = NULL;
 	switch (ino) {
 		case PROC_PID_CWD:
-			inode = p->fs->pwd;
+			new_inode = p->fs->pwd;
 			break;
 		case PROC_PID_ROOT:
-			inode = p->fs->root;
+			new_inode = p->fs->root;
 			break;
 		case PROC_PID_EXE: {
 			struct vm_area_struct * vma = p->mm->mmap;
 			while (vma) {
 				if (vma->vm_flags & VM_EXECUTABLE) {
-					inode = vma->vm_inode;
+					new_inode = vma->vm_inode;
 					break;
 				}
 				vma = vma->vm_next;
@@ -84,17 +144,25 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 		}
 		default:
 			switch (ino >> 8) {
-				case PROC_PID_FD_DIR:
-					ino &= 0xff;
-					if (ino < NR_OPEN && p->files->fd[ino])
-						inode = p->files->fd[ino]->f_inode;
-					break;
+			case PROC_PID_FD_DIR:
+				ino &= 0xff;
+				if (ino < NR_OPEN && p->files->fd[ino]) {
+#ifdef PLAN9_SEMANTICS
+					if (dir) {
+						*res_inode = inode;
+						return 0;
+					}
+#endif
+					new_inode = p->files->fd[ino]->f_inode;
+				}
+				break;
 			}
 	}
-	if (!inode)
+	iput(inode);
+	if (!new_inode)
 		return -ENOENT;
-	*res_inode = inode;
-	inode->i_count++;
+	*res_inode = new_inode;
+	new_inode->i_count++;
 	return 0;
 }
 

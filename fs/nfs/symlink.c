@@ -71,7 +71,7 @@ static int nfs_follow_link(struct inode *dir, struct inode *inode,
 	}
 	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,
 		&res, &len, NFS_MAXPATHLEN);
-#if 1
+#if 0
 	if ((res2 = (char *) kmalloc(NFS_MAXPATHLEN + 1, GFP_KERNEL)) == NULL) {
 		printk("NFS: no memory in nfs_follow_link\n");
 		error = -EIO;

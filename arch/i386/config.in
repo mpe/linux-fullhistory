@@ -11,6 +11,7 @@ bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'Networking support' CONFIG_NET y
 bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
 bool 'System V IPC' CONFIG_SYSVIPC y
+bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
 
 if [ "$CONFIG_NET" = "y" ]; then

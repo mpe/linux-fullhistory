@@ -1,5 +1,5 @@
 /*
- *  linux/kernel/drivers/char/tty_ioctl.c
+ *  linux/drivers/char/tty_ioctl.c
  *
  *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
  *
@@ -314,32 +314,22 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 					    (unsigned long *) arg);
 			return 0;
 		case TIOCGLCKTRMIOS:
-			retval = verify_area(VERIFY_READ, (void *) arg,
-					     sizeof (unsigned long));
-			if (retval)
-				return retval;
-			arg = get_fs_long((unsigned long *) arg);
 			retval = verify_area(VERIFY_WRITE, (void *) arg,
 					     sizeof (struct termios));
 			if (retval)
 				return retval;
 			memcpy_tofs((struct termios *) arg,
-				    &real_tty->termios_locked,
+				    real_tty->termios_locked,
 				    sizeof (struct termios));
 			return 0;
 		case TIOCSLCKTRMIOS:
 			if (!suser())
 				return -EPERM;
 			retval = verify_area(VERIFY_READ, (void *) arg,
-					     sizeof (unsigned long));
-			if (retval)
-				return retval;
-			arg = get_fs_long((unsigned long *) arg);
-			retval = verify_area(VERIFY_READ, (void *) arg,
 					     sizeof (struct termios));
 			if (retval)
 				return retval;
-			memcpy_fromfs(&real_tty->termios_locked,
+			memcpy_fromfs(real_tty->termios_locked,
 				      (struct termios *) arg,
 				      sizeof (struct termios));
 			return 0;

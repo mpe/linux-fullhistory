@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/psaux.c
+ * linux/drivers/char/psaux.c
  *
  * Driver for PS/2 type mouse by Johan Myreen.
  *

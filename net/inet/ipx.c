@@ -155,11 +155,11 @@ int ipx_get_info(char *buffer, char **start, off_t offset, int length)
 	for (s = ipx_socket_list; s != NULL; s = s->next)
 	{
 		len += sprintf (buffer+len,"%02X   ", s->ipx_type);
-		len += sprintf (buffer+len,"%08lX:%02X%02X%02X%02X%02X%02X:%02X ", htonl(s->ipx_source_addr.net),
+		len += sprintf (buffer+len,"%08lX:%02X%02X%02X%02X%02X%02X:%04X ", htonl(s->ipx_source_addr.net),
 			s->ipx_source_addr.node[0], s->ipx_source_addr.node[1], s->ipx_source_addr.node[2],
 			s->ipx_source_addr.node[3], s->ipx_source_addr.node[4], s->ipx_source_addr.node[5],
 			htons(s->ipx_source_addr.sock));
-		len += sprintf (buffer+len,"%08lX:%02X%02X%02X%02X%02X%02X:%02X ", htonl(s->ipx_dest_addr.net),
+		len += sprintf (buffer+len,"%08lX:%02X%02X%02X%02X%02X%02X:%04X ", htonl(s->ipx_dest_addr.net),
 			s->ipx_dest_addr.node[0], s->ipx_dest_addr.node[1], s->ipx_dest_addr.node[2],
 			s->ipx_dest_addr.node[3], s->ipx_dest_addr.node[4], s->ipx_dest_addr.node[5],
 			htons(s->ipx_dest_addr.sock));
@@ -643,10 +643,13 @@ static unsigned short first_free_socketnum(void)
 {
 	static unsigned short	socketNum = 0x4000;
 
-	while (ipx_find_socket(htons(socketNum)) != NULL)
-		if (socketNum > 0x7ffc) socketNum = 0x4000;
+	while (ipx_find_socket(ntohs(socketNum)) != NULL)
+		if (socketNum > 0x7ffc)
+			socketNum = 0x4000;
+		else
+			socketNum++;
 
-	return	htons(socketNum++);
+	return	ntohs(socketNum);
 }
 	
 static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
@@ -726,8 +729,8 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 	
 	sk->state = TCP_CLOSE;	
 	sock->state = SS_UNCONNECTED;
-	
-	if(addr_len!=sizeof(addr))
+
+	if(addr_len!=sizeof(*addr))
 		return(-EINVAL);
 	addr=(struct sockaddr_ipx *)uaddr;
 	
@@ -748,6 +751,7 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 	memcpy(sk->ipx_dest_addr.node,addr->sipx_node,sizeof(sk->ipx_source_addr.node));
 	if(ipxrtr_get_dev(sk->ipx_dest_addr.net)==NULL)
 		return -ENETUNREACH;
+	sk->ipx_type=addr->sipx_type;
 	sock->state = SS_CONNECTED;
 	sk->state=TCP_ESTABLISHED;
 	return(0);
@@ -786,6 +790,7 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 		addr=&sk->ipx_source_addr;
 		
 	sipx.sipx_family = AF_IPX;
+	sipx.sipx_type = sk->ipx_type;
 	sipx.sipx_port = addr->sock;
 	sipx.sipx_network = addr->net;
 	memcpy(sipx.sipx_node,addr->node,sizeof(sipx.sipx_node));
@@ -856,7 +861,7 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		int free_it=0;
 		
 		/* Rule: Don't forward packets that have exceeded the hop limit. This is fixed at 16 in IPX */
-		if(ipx->ipx_tctrl==16)
+		if((ipx->ipx_tctrl==16) || (dev->flags & IFF_PROMISC))
 		{
 			kfree_skb(skb,FREE_READ);
 			return(0);
@@ -998,6 +1003,7 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 			return -ENOTCONN;
 		usipx=&local_sipx;
 		usipx->sipx_family=AF_IPX;
+		usipx->sipx_type=sk->ipx_type;
 		usipx->sipx_port=sk->ipx_dest_addr.sock;
 		usipx->sipx_network=sk->ipx_dest_addr.net;
 		memcpy(usipx->sipx_node,sk->ipx_dest_addr.node,sizeof(usipx->sipx_node));

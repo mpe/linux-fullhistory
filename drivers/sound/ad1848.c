@@ -71,8 +71,9 @@ static char     irq2dev[16] =
 {-1, -1, -1, -1, -1, -1, -1, -1,
  -1, -1, -1, -1, -1, -1, -1, -1};
 
-static int      ad_format_mask[2 /*devc->mode*/ ] =
+static int      ad_format_mask[3 /*devc->mode*/ ] =
 {
+  0,
   AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW,
   AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_U16_LE | AFMT_IMA_ADPCM
 };

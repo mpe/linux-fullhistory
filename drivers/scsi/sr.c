@@ -195,7 +195,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 				  SCpnt->request.sector, this_count);
 			}
 
-		  end_scsi_request(SCpnt, 1, this_count);  /* All done */
+		  SCpnt = end_scsi_request(SCpnt, 1, this_count);  /* All done */
 		  requeue_sr_request(SCpnt);
 		  return;
 		} /* Normal completion */
@@ -225,7 +225,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 				/* further access.					*/
 		    
 				scsi_CDs[DEVICE_NR(SCpnt->request.dev)].device->changed = 1;
-				end_scsi_request(SCpnt, 0, this_count);
+				SCpnt = end_scsi_request(SCpnt, 0, this_count);
 			        requeue_sr_request(SCpnt);
 				return;
 			}
@@ -240,7 +240,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 				return;
 			} else {
 			  printk("CD-ROM error: Drive reports %d.\n", SCpnt->sense_buffer[2]);				
-			  end_scsi_request(SCpnt, 0, this_count);
+			  SCpnt = end_scsi_request(SCpnt, 0, this_count);
 			  requeue_sr_request(SCpnt); /* Do next request */
 			  return;
 			}
@@ -249,7 +249,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 
 		if (SCpnt->sense_buffer[2] == NOT_READY) {
 			printk("CDROM not ready.  Make sure you have a disc in the drive.\n");
-			end_scsi_request(SCpnt, 0, this_count);
+			SCpnt = end_scsi_request(SCpnt, 0, this_count);
 			requeue_sr_request(SCpnt); /* Do next request */
 			return;
 		};
@@ -266,7 +266,7 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 	  if (status_byte(result) == CHECK_CONDITION)
 		  print_sense("sr", SCpnt);
 	  
-	  end_scsi_request(SCpnt, 0, SCpnt->request.current_nr_sectors);
+	  SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.current_nr_sectors);
 	  requeue_sr_request(SCpnt);
   }
 }
@@ -369,7 +369,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	tries = 2;
 
       repeat:
-	if(SCpnt->request.dev <= 0) {
+	if(!SCpnt || SCpnt->request.dev <= 0) {
 	  do_sr_request();
 	  return;
 	}
@@ -382,7 +382,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	if (dev >= sr_template.nr_dev)
 		{
 		/* printk("CD-ROM request error: invalid device.\n");			*/
-		end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
 		}
@@ -390,7 +390,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	if (!scsi_CDs[dev].use)
 		{
 		/* printk("CD-ROM request error: device marked not in use.\n");		*/
-		end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
 		}
@@ -401,7 +401,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
  * quietly refuse to do anything to a changed disc until the changed bit has been reset
  */
 		/* printk("CD-ROM has been changed.  Prohibiting further I/O.\n");	*/
-		end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 		tries = 2;
 		goto repeat;
 		}
@@ -409,7 +409,7 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	switch (SCpnt->request.cmd)
 		{
 		case WRITE: 		
-			end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+			SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 			goto repeat;
 			break;
 		case READ : 

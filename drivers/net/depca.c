@@ -160,11 +160,13 @@
       0.351 30-apr-94     Added EISA support. Added DE422 recognition.
       0.36  16-may-94     DE422 fix released.
       0.37  22-jul-94     Added MODULE support
+      0.38  15-aug-94     Added DBR ROM switch in depca_close(). 
+                          Multi DEPCA bug fix.
 
     =========================================================================
 */
 
-static char *version = "depca.c:v0.37 7/22/94 davies@wanton.lkg.dec.com\n";
+static char *version = "depca.c:v0.38 8/15/94 davies@wanton.lkg.dec.com\n";
 
 #include <stdarg.h>
 #include <linux/config.h>
@@ -289,7 +291,7 @@ struct depca_init {
 };
 
 struct depca_private {
-    char devname[8];            /* Not used */
+    char devname[8];            /* Device Product String */
     struct depca_rx_head *rx_ring; /* Pointer to start of RX descriptor ring */
     struct depca_tx_head *tx_ring; /* Pointer to start of TX descriptor ring */
     struct depca_init	init_block;/* Initialization block */
@@ -338,7 +340,7 @@ static struct device *isa_probe(struct device *dev);
 static struct device *eisa_probe(struct device *dev);
 static struct device *alloc_device(struct device *dev, int ioaddr);
 
-static int num_depcas = 0, num_eth = 0;;
+static int num_depcas = 0, num_eth = 0, autoprobed = 0;
 
 #else
 int  init_module(void);
@@ -370,15 +372,20 @@ int depca_probe(struct device *dev)
       }
     } else if (base_addr > 0) {	      /* Don't probe at all. */
       status = -ENXIO;
-    } else {                          /* First probe for the DEPCA test */
 
-#ifdef MODULE                         /* pattern in ROM */
+#ifdef MODULE
+    } else {
       printk("Autoprobing is not supported when loading a module based driver.\n");
       status = -EIO;
 #else
+    } else if (!autoprobed) {         /* First probe for the DEPCA test */
+                                      /* pattern in ROM */
       eth0=isa_probe(dev);
       eth0=eisa_probe(eth0);
       if (dev->priv) status=0;
+      autoprobed = 1;
+    } else {
+      status = -ENXIO;
 #endif /* MODULE */
 
     }
@@ -416,19 +423,18 @@ depca_probe1(struct device *dev, short ioaddr)
     ** shortens the search time a little for multiple DEPCAs.
     */
 
-      for (j = 0, i = 0; mem_base[i] && (j == 0);) {
+      for (j = 0, i = 0; mem_base[i] && (j == 0);i++) {
 	if (((mem_chkd >> i) & 0x01) == 0) { /* has the memory been checked? */
 	  name = DepcaSignature(mem_base[i]);/* check for a DEPCA here */
 	  mem_chkd |= (0x01 << i);           /* mark location checked */
-	  if (*name != '\0') {			/* one found? */
+	  if (*name != '\0') {               /* one found? */
 	    j = 1;                           /* set exit flag */
-	  } else {
-	    i++;                             /* increment search index */
+	    --i;
 	  }
 	}
       }
 
-      if (*name != '\0') {		/* found a DEPCA device */
+      if (*name != '\0') {                   /* found a DEPCA device */
 	mem_start = mem_base[i];
 	dev->base_addr = ioaddr;
 
@@ -448,7 +454,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	 read the ROM info.
       */
 
-	if (strstr(name,"DE100") != NULL) {
+	if (strstr(name,"DE100")!= NULL) {
 	  j = 1;
 	} else {
 	  j = 0;
@@ -471,7 +477,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	/*
 	** Set up the maximum amount of network RAM(kB)
 	*/
-	if (strstr(name,"DEPCA") == NULL) {
+	if (strstr(name,"DEPCA")== NULL) {
 	  netRAM=64;
 	} else {
 	  netRAM=48;
@@ -542,6 +548,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	dev->priv = (void *)((mem_start + 0x07) & ~0x07);      
 	lp = (struct depca_private *)dev->priv;
 	memset(dev->priv, 0, sizeof(struct depca_private));
+	strcpy(lp->devname,name);
 
 	/* Tx & Rx descriptors (aligned to a quadword boundary) */
 	mem_start = ((((unsigned long)dev->priv + 
@@ -675,6 +682,14 @@ depca_open(struct device *dev)
     STOP_DEPCA;
     nicsr = inb(DEPCA_NICSR);
 
+    /*
+    ** Make sure the shadow RAM is enabled
+    */
+    if (strstr(lp->devname,"DEPCA") == NULL) {
+      nicsr |= SHE;
+      outb(nicsr, DEPCA_NICSR);
+    }
+
     /* 
     ** Re-initialize the DEPCA... 
     */
@@ -721,9 +736,9 @@ depca_open(struct device *dev)
     }
 
     /*
-    ** Enable DEPCA board interrupts
+    ** Enable DEPCA board interrupts and turn off LED
     */
-    nicsr = ((nicsr & ~IM & ~LED)|SHE|IEN);
+    nicsr = ((nicsr & ~IM & ~LED)|IEN);
     outb(nicsr, DEPCA_NICSR);
     outw(CSR0,DEPCA_ADDR);
 
@@ -1121,33 +1136,43 @@ depca_tx(struct device *dev)
 static int
 depca_close(struct device *dev)
 {
-    int ioaddr = dev->base_addr;
+  struct depca_private *lp = (struct depca_private *)dev->priv;
+  int nicsr, ioaddr = dev->base_addr;
 
-    dev->start = 0;
-    dev->tbusy = 1;
+  dev->start = 0;
+  dev->tbusy = 1;
 
-    outw(CSR0, DEPCA_ADDR);
+  outw(CSR0, DEPCA_ADDR);
 
-    if (depca_debug > 1) {
-      printk("%s: Shutting down ethercard, status was %2.2x.\n",
-	     dev->name, inw(DEPCA_DATA));
-    }
+  if (depca_debug > 1) {
+    printk("%s: Shutting down ethercard, status was %2.2x.\n",
+	   dev->name, inw(DEPCA_DATA));
+  }
 
-    /* 
-    ** We stop the DEPCA here -- it occasionally polls
-    ** memory if we don't. 
-    */
-    outw(STOP, DEPCA_DATA);
+  /* 
+  ** We stop the DEPCA here -- it occasionally polls
+  ** memory if we don't. 
+  */
+  outw(STOP, DEPCA_DATA);
 
-    free_irq(dev->irq);
+  /*
+  ** Give back the ROM in case the user wants to go to DOS
+  */
+  if (strstr(lp->devname,"DEPCA") == NULL) {
+    nicsr = inb(DEPCA_NICSR);
+    nicsr &= ~SHE;
+    outb(nicsr, DEPCA_NICSR);
+  }
 
-    irq2dev_map[dev->irq] = 0;
+  free_irq(dev->irq);
+
+  irq2dev_map[dev->irq] = 0;
 
 #ifdef MODULE
-    MOD_DEC_USE_COUNT;
+  MOD_DEC_USE_COUNT;
 #endif    
 
-    return 0;
+  return 0;
 }
 
 static void LoadCSRs(struct device *dev)
@@ -1373,12 +1398,12 @@ static struct device *alloc_device(struct device *dev, int ioaddr)
   */
   if ((dev->next != NULL) &&
       (num_eth > 0) && (num_eth < 9999)) {
-    dev = dev->next;			/* point to the new device */
+    dev = dev->next;                    /* point to the new device */
     dev->name = (char *)(dev + 1);
     sprintf(dev->name,"eth%d", num_eth);/* New device name */
-    dev->base_addr = ioaddr;		/* assign the io address */
-    dev->next = NULL;			/* mark the end of list */
-    dev->init = &depca_probe;		/* initialisation routine */
+    dev->base_addr = ioaddr;            /* assign the io address */
+    dev->next = NULL;                   /* mark the end of list */
+    dev->init = &depca_probe;           /* initialisation routine */
     num_depcas++;
   }
 
@@ -1401,10 +1426,10 @@ static char *DepcaSignature(unsigned long mem_addr)
   for (i=0;i<16;i++) {                  /* copy the first 16 bytes of ROM to */
     tmpstr[i] = *(unsigned char *)(mem_addr+0xc000+i); /* a temporary string */
   }
-  tmpstr[i] = '\0';
+  tmpstr[i]='\0';
 
   strcpy(thisName,"");
-  for (i = 0 ; *signatures[i] != '\0' && *thisName == '\0' ; i++) {
+  for (i=0;*signatures[i]!='\0' && *thisName=='\0';i++) {
     for (j=0,k=0;j<16 && k<strlen(signatures[i]);j++) {
       if (signatures[i][k] == tmpstr[j]) {              /* track signature */
 	k++;
@@ -1521,7 +1546,7 @@ static char asc2hex(char value)
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
 static struct device thisDepca = {
-  "        ", /* device name inserted by /linux/drivers/net/net_init.c */
+  "        ",  /* device name inserted by /linux/drivers/net/net_init.c */
   0, 0, 0, 0,
   0x200, 7,   /* I/O address, IRQ <--- EDIT THIS LINE FOR YOUR CONFIGURATION */
   0, 0, 0, NULL, depca_probe };
@@ -1548,8 +1573,8 @@ cleanup_module(void)
 
 /*
  * Local variables:
- *  kernel-compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c depca.c"
+ *  kernel-compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O2 -m486 -c depca.c"
  *
- *  module-compile-command: "gcc -D__KERNEL__ -DMODULE -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c depca.c"
+ *  module-compile-command: "gcc -D__KERNEL__ -DMODULE -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O2 -m486 -c depca.c"
  * End:
  */

@@ -19,7 +19,14 @@ const char *buslogic_info(void);
 int buslogic_reset(Scsi_Cmnd *);
 int buslogic_biosparam(Disk *, int, int *);
 
-#define BUSLOGIC_CMDLUN 4	/* ??? */
+#define BUSLOGIC_CMDLUN 1	/* Do not set this too high.  It sucks
+				   up lots of memory on machines with > 16Mb
+				   because of the huge number of bounce
+				   buffers that need to be allocated.
+				   For boards that use non-ISA bus, we can
+				   bump this in the board detect routine.  
+				   			10/8/94 ERY */
+				   
 
 #define BUSLOGIC { NULL, 			\
 		   "BusLogic",			\

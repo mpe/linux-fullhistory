@@ -515,7 +515,7 @@ extern int scsi_reset (Scsi_Cmnd *);
 extern int max_scsi_hosts;
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
-static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
+static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 {
 	struct request * req;
 	struct buffer_head * bh;
@@ -547,7 +547,7 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 	} while(sectors && bh);
 	if (req->bh){
 	  req->buffer = bh->b_data;
-	  return;
+	  return SCpnt;
 	};
 	DEVICE_OFF(req->dev);
 	if (req->sem != NULL) {
@@ -555,7 +555,7 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 	}
 	req->dev = -1;
 	wake_up(&SCpnt->device->device_wait);
-	return;
+	return NULL;
 }
 
 

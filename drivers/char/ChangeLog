@@ -1,0 +1,84 @@
+Sun Oct  9 23:46:03 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* tty_io.c (do_tty_hangup): If the tty driver flags
+		TTY_DRIVER_RESET_TERMIOS is set, then reset the termios
+		settings back to the driver's initial configuration.  This
+		allows the termios settings to be reset even if a process
+		has hung up file descriptors keeping a pty's termios from
+		being freed and reset.
+
+	* tty_io.c (release_dev): Fix memory leak.  The pty's other
+		termios structure should also be freed.
+
+	* serial.c (rs_close, shutdown): Change how we wait for the
+		transmitter to completely drain before shutting down the
+		serial port.  We now do it by scheduling in another
+		process instead of busy looping with the interrupts turned
+		on.  This may eliminate some race condition problems that
+		some people seem to be reporting.
+
+Sun Sep 25 14:18:14 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* tty_io.c (release_dev): When freeing a tty make sure that both
+		the tty and the o_tty (if present) aren't a process's
+		controlling tty.  (Previously, we only checked the tty.)
+
+	* serial.c (change_speed): Only enable the Modem Status
+		Interrupt for a port if CLOCAL is not set or CRTSCTS
+		is set.  If we're not checking the carrier detect and
+		CTS line, there's no point in enabling the modem
+		status interrupt.  This will save spurious interrupts
+		from slowing down systems who have terminals that
+		don't support either line.  (Of course, if you want
+		only one of CD and CTS support, you will need a
+		properly wired serial cable.)
+
+Thu Sep 22 08:32:48 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* tty_io.c (do_SAK): Return if tty is null.
+
+	* tty_io.c (_tty_name): Return "NULL tty" if the passed in tty is
+		NULL.
+
+Sat Sep 17 13:19:25 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* tty_ioctl.c (n_tty_ioctl): Fix TIOCGLCKTRMIOS and
+		TIOCSLCKTRMIOS, which were totally broken.  Remove
+		extra indirection from argument; it should be a struct
+		termios *, not a struct termios **.
+		&real_tty->termios_locked should have been
+		real_tty->termios_locked.  This caused us to be
+		reading and writing the termios_locked structure to
+		random places in kernel memory.  
+
+	* tty_io.c (release_dev): Oops!  Forgot to delete a critical kfree
+		of the locked_termios.  This leaves the locked_termios
+		structure pointed at a freed object.  
+
+Fri Sep 16 08:13:25 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* tty_io.c (tty_open): Don't check for an exclusive open until
+		after the device specific open routine has been called.
+		Otherwise, the serial device ref counting will be screwed
+		up.
+
+	* serial.c (rs_open, block_til_ready): Don't set termios structure
+		until after block_til_ready has returned successfully.
+		Modify block_til_ready to check the normal_termios
+		structure directly, so it doesn't rely on termios being
+		set before its called.
+
+Thu Sep 15 23:34:01 1994  Theodore Y. Ts'o  (tytso@rt-11)
+
+	* serial.c (rs_close): Turn off interrupts during rs_close() to
+		prevent a race condition with the hangup code (which
+		runs during a software interrupt).
+
+	* tty_io.c (release_dev): Don't free the locked_termios structure;
+		its state must be retained across device opens.
+
+
+	* tty_io.c (tty_unregister_driver): Added function to unregister a
+		tty driver.  (For loadable device drivers.)
+
+

@@ -43,6 +43,12 @@ ifdef CONFIG_HPFS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) hpfs
 endif
 
+ifdef CONFIG_BINFMT_ELF
+BINFMTS := $(BINFMTS) binfmt_elf.o
+else
+MODULES := $(MODULES) binfmt_elf.o
+endif
+
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 .c.o:
@@ -54,7 +60,7 @@ OBJS=	open.o read_write.o inode.o devices.o file_table.o buffer.o super.o \
 	block_dev.o stat.o exec.o pipe.o namei.o fcntl.o ioctl.o \
 	select.o fifo.o locks.o filesystems.o dcache.o $(BINFMTS)
 
-all: fs.o filesystems.a
+all: fs.o filesystems.a modules
 
 fs.o: $(OBJS)
 	$(LD) -r -o fs.o $(OBJS)
@@ -64,6 +70,18 @@ filesystems.a: dummy
 	set -e; for i in $(FS_SUBDIRS); do \
 	  test ! -d $$i || \
 	    { $(MAKE) -C $$i; $(AR) rcs filesystems.a $$i/$$i.o; }; done
+
+ifdef MODULES
+
+modules:
+	$(MAKE) CFLAGS="$(CFLAGS) -DMODULE" $(MODULES)
+	(cd ../modules;for i in $(MODULES); do ln -sf ../fs/$$i .; done)
+
+else
+
+modules:
+
+endif
 
 depend dep:
 	$(CPP) -M *.c > .depend

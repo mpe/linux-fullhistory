@@ -30,5 +30,13 @@ struct vt_stat {
 
 #define VT_ACTIVATE	0x5606	/* make vt active */
 #define VT_WAITACTIVE	0x5607	/* wait for vt active */
+#define VT_DISALLOCATE	0x5608  /* free memory associated to vt */
+
+struct vt_sizes {
+	ushort v_rows;		/* number of rows */
+	ushort v_cols;		/* number of columns */
+	ushort v_scrollsize;	/* number of lines of scrollback */
+};
+#define VT_RESIZE	0x5609	/* set kernel's idea of screensize */
 
 #endif /* _LINUX_VT_H */

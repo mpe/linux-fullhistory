@@ -1135,7 +1135,7 @@ do_cdu31a_request(void)
    unsigned int dev;
    int nsect;
    unsigned char params[10];
-   unsigned char res_reg[2];
+   unsigned char res_reg[12];
    unsigned int res_size;
    int copyoff;
    int spin_up_retry;
@@ -1263,6 +1263,14 @@ try_read_again:
              * next block to read.
              */
             copyoff = (block - sony_first_block) * 512;
+            /*
+             * Bugfix: get_data calls handle_sony_cd_attention
+             *         there the buffer may be declared invalid
+             *         if the CD ist changed by setting sony_first_block = -1
+             *         This would cause a segfault in memcpy
+             */ 
+            if(sony_first_block <0) goto cdu31a_request_startover;
+ 
             memcpy(CURRENT->buffer, sony_buffer+copyoff, 512);
                
             block += 1;

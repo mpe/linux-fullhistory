@@ -282,7 +282,7 @@ struct pci_chip {
     int min_revision;
 };
 
-static struct pci_chip pci_chip_ids[2] = { 
+static struct pci_chip pci_chip_ids[3] = { 
     {PCI_DEVICE_ID_NCR_53C810, 810, 1, 1}, 
     {PCI_DEVICE_ID_NCR_53C820, 820, -1, -1},
     {PCI_DEVICE_ID_NCR_53C825, 825, -1, -1},
@@ -413,6 +413,7 @@ static int NCR53c7x0_init (struct Scsi_Host *host) {
     switch (hostdata->chip) {
     case 810:
     case 815:
+    case 825:
     	hostdata->dstat_sir_intr = NCR53c8x0_dstat_sir_intr;
     	hostdata->init_save_regs = NULL;
     	hostdata->dsa_fixup = NCR53c8xx_dsa_fixup;

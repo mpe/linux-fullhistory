@@ -132,6 +132,45 @@ void hd_setup(char *str, int *ints)
 	NR_HD = hdind+1;
 }
 
+static void dump_status (char *msg, unsigned int stat)
+{
+	unsigned long flags;
+	char dev;
+
+	dev  = CURRENT ? 'a' + DEVICE_NR(CURRENT->dev) : '?';
+	save_flags (flags);
+	sti();
+	printk("hd%c: %s: status=0x%02x { ", dev, msg, stat & 0xff);
+	if (stat & BUSY_STAT)	printk("Busy ");
+	if (stat & READY_STAT)	printk("DriveReady ");
+	if (stat & WRERR_STAT)	printk("WriteFault ");
+	if (stat & SEEK_STAT)	printk("SeekComplete ");
+	if (stat & DRQ_STAT)	printk("DataRequest ");
+	if (stat & ECC_STAT)	printk("CorrectedError ");
+	if (stat & INDEX_STAT)	printk("Index ");
+	if (stat & ERR_STAT)	printk("Error ");
+	printk("}\n");
+	if (stat & ERR_STAT) {
+		unsigned int err = inb(HD_ERROR);
+		printk("hd%c: %s: error=0x%02x { ", dev, msg, err & 0xff);
+		if (err & BBD_ERR)	printk("BadSector ");
+		if (err & ECC_ERR)	printk("UncorrectableError ");
+		if (err & ID_ERR)	printk("SectorIdNotFound ");
+		if (err & ABRT_ERR)	printk("DriveStatusError ");
+		if (err & TRK0_ERR)	printk("TrackZeroNotFound ");
+		if (err & MARK_ERR)	printk("AddrMarkNotFound ");
+		printk("}");
+		if (err & (BBD_ERR|ECC_ERR|ID_ERR|MARK_ERR)) {
+			if (CURRENT)
+				printk(", sector=%ld", CURRENT->sector);
+			printk(", CHS=%d/%d/%d", (inb(HD_HCYL)<<8) + inb(HD_LCYL),
+				inb(HD_CURRENT) & 0xf, inb(HD_SECTOR));
+		}
+		printk("\n");
+	}
+	restore_flags (flags);
+}
+
 static int win_result(void)
 {
 	int i=inb_p(HD_STATUS);
@@ -141,11 +180,7 @@ static int win_result(void)
 	        hd_error = 0;
 		return 0; /* ok */
 	}
-	printk("HD: win_result: status = 0x%02x\n",i);
-	if (i&1) {
-		hd_error = inb(HD_ERROR);
-		printk("HD: win_result: error = 0x%02x\n",hd_error);
-	}	
+	dump_status("win_result", i);
 	return 1;
 }
 
@@ -280,7 +315,7 @@ static void identify_intr(void)
 	if (unmask_intr[dev])
 		sti();
 	if (stat & (BUSY_STAT|ERR_STAT)) {
-		printk ("  hd%c: non-IDE device, CHS=%d%d%d\n", dev+'a',
+		printk ("  hd%c: non-IDE device, CHS=%d/%d/%d\n", dev+'a',
 			hd_info[dev].cyl, hd_info[dev].head, hd_info[dev].sect);
 		if (id != NULL) {
 			hd_ident_info[dev] = NULL;
@@ -331,7 +366,7 @@ static void set_multmode_intr(void)
 		sti();
 	if (stat & (BUSY_STAT|ERR_STAT)) {
 		mult_req[dev] = mult_count[dev] = 0;
-		printk ("  hd%c: set multiple mode failed\n", dev+'a');
+		dump_status("set multiple mode failed", stat);
 	} else {
 		if ((mult_count[dev] = mult_req[dev]))
 			printk ("  hd%c: enabled %d-sector multiple mode\n",
@@ -357,7 +392,7 @@ static int drive_busy(void)
 		if (c == (READY_STAT | SEEK_STAT))
 			return 0;
 	}
-	printk("HD controller times out, status = 0x%02x\n",c);
+	dump_status("reset timed out", c);
 	return 1;
 }
 
@@ -409,16 +444,24 @@ repeat:
 		hd_request();
 }
 
+
 /*
  * Ok, don't know what to do with the unexpected interrupts: on some machines
  * doing a reset and a retry seems to result in an eternal loop. Right now I
  * ignore it, and just set the timeout.
+ *
+ * On laptops (and "green" PCs), an unexpected interrupt occurs whenever the
+ * drive enters "idle", "standby", or "sleep" mode, so if the status looks
+ * "good", we just ignore the interrupt completely.
  */
 void unexpected_hd_interrupt(void)
 {
-	sti();
-	printk(KERN_DEBUG "Unexpected HD interrupt\n");
-	SET_TIMER;
+	unsigned int stat = inb_p(HD_STATUS);
+
+	if (stat & (BUSY_STAT|DRQ_STAT|ECC_STAT|ERR_STAT)) {
+		dump_status ("unexpected interrupt", stat);
+		SET_TIMER;
+	}
 }
 
 /*
@@ -445,11 +488,12 @@ static void bad_rw_intr(void)
 
 static inline int wait_DRQ(void)
 {
-	int retries = 100000;
+	int retries = 100000, stat;
 
 	while (--retries > 0)
-		if (inb_p(HD_STATUS) & DRQ_STAT)
+		if ((stat = inb_p(HD_STATUS)) & DRQ_STAT)
 			return 0;
+	dump_status("wait_DRQ", stat);
 	return -1;
 }
 
@@ -472,14 +516,8 @@ static void read_intr(void)
 		if (i & DRQ_STAT)
 			goto ok_to_read;
 	} while (--retries > 0);
-	sti();
-	printk("hd%c: read_intr: status = 0x%02x\n",dev+'a',i);
-	if (i & ERR_STAT) {
-		hd_error = (unsigned) inb(HD_ERROR);
-		printk("hd%c: read_intr: error = 0x%02x\n",dev+'a',hd_error);
-	}
+	dump_status("read_intr", i);
 	bad_rw_intr();
-	cli();
 	hd_request();
 	return;
 ok_to_read:
@@ -565,14 +603,8 @@ static void multwrite_intr(void)
 			}
 		}
 	}
-	sti();
-	printk("hd%c: multwrite_intr: status = 0x%02x\n",dev+'a',i);
-	if (i & ERR_STAT) {
-		hd_error = (unsigned) inb(HD_ERROR);
-		printk("hd:%c multwrite_intr: error = 0x%02x\n",dev+'a',hd_error);
-	}
+	dump_status("multwrite_intr", i);
 	bad_rw_intr();
-	cli();
 	hd_request();
 }
 
@@ -592,14 +624,8 @@ static void write_intr(void)
 		if ((CURRENT->nr_sectors <= 1) || (i & DRQ_STAT))
 			goto ok_to_write;
 	} while (--retries > 0);
-	sti();
-	printk("HD: write_intr: status = 0x%02x\n",i);
-	if (i & ERR_STAT) {
-		hd_error = (unsigned) inb(HD_ERROR);
-		printk("HD: write_intr: error = 0x%02x\n",hd_error);
-	}
+	dump_status("write_intr", i);
 	bad_rw_intr();
-	cli();
 	hd_request();
 	return;
 ok_to_write:
@@ -644,13 +670,13 @@ static void hd_times_out(void)
 		return;
 	reset = 1;
 	printk(KERN_DEBUG "HD timeout\n");
-	cli();
 	if (++CURRENT->errors >= MAX_ERRORS) {
 #ifdef DEBUG
 		printk("hd : too many errors.\n");
 #endif
 		end_request(0);
 	}
+	cli();
 
 	hd_request();
 }
@@ -763,7 +789,6 @@ repeat:
 			CURRENT->sector+nsect-1, (long) CURRENT->buffer);
 #endif
 		if (wait_DRQ()) {
-			printk("hd%c: hd_request: no DRQ\n", dev+'a');
 			bad_rw_intr();
 			goto repeat;
 		}

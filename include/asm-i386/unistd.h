@@ -15,67 +15,69 @@ errno = -__res; \
 return -1; \
 }
 
-#define _syscall1(type,name,atype,a) \
-type name(atype a) \
+#define _syscall1(type,name,type1,arg1) \
+type name(type1 arg1) \
 { \
 long __res; \
 __asm__ volatile ("int $0x80" \
 	: "=a" (__res) \
-	: "0" (__NR_##name),"b" ((long)(a))); \
+	: "0" (__NR_##name),"b" ((long)(arg1))); \
 if (__res >= 0) \
 	return (type) __res; \
 errno = -__res; \
 return -1; \
 }
 
-#define _syscall2(type,name,atype,a,btype,b) \
-type name(atype a,btype b) \
+#define _syscall2(type,name,type1,arg1,type2,arg2) \
+type name(type1 arg1,type2 arg2) \
 { \
 long __res; \
 __asm__ volatile ("int $0x80" \
 	: "=a" (__res) \
-	: "0" (__NR_##name),"b" ((long)(a)),"c" ((long)(b))); \
+	: "0" (__NR_##name),"b" ((long)(arg1)),"c" ((long)(arg2))); \
 if (__res >= 0) \
 	return (type) __res; \
 errno = -__res; \
 return -1; \
 }
 
-#define _syscall3(type,name,atype,a,btype,b,ctype,c) \
-type name(atype a,btype b,ctype c) \
+#define _syscall3(type,name,type1,arg1,type2,arg2,type3,arg3) \
+type name(type1 arg1,type2 arg2,type3 arg3) \
 { \
 long __res; \
 __asm__ volatile ("int $0x80" \
 	: "=a" (__res) \
-	: "0" (__NR_##name),"b" ((long)(a)),"c" ((long)(b)),"d" ((long)(c))); \
+	: "0" (__NR_##name),"b" ((long)(arg1)),"c" ((long)(arg2)), \
+		  "d" ((long)(arg3))); \
 if (__res>=0) \
 	return (type) __res; \
 errno=-__res; \
 return -1; \
 }
 
-#define _syscall4(type,name,atype,a,btype,b,ctype,c,dtype,d) \
-type name (atype a, btype b, ctype c, dtype d) \
+#define _syscall4(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4) \
+type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4) \
 { \
 long __res; \
 __asm__ volatile ("int $0x80" \
 	: "=a" (__res) \
-	: "0" (__NR_##name),"b" ((long)(a)),"c" ((long)(b)), \
-	  "d" ((long)(c)),"S" ((long)(d))); \
+	: "0" (__NR_##name),"b" ((long)(arg1)),"c" ((long)(arg2)), \
+	  "d" ((long)(arg3)),"S" ((long)(arg4))); \
 if (__res>=0) \
 	return (type) __res; \
 errno=-__res; \
 return -1; \
-}
+} 
 
-#define _syscall5(type,name,atype,a,btype,b,ctype,c,dtype,d,etype,e) \
-type name (atype a,btype b,ctype c,dtype d,etype e) \
+#define _syscall5(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4, \
+	  type5,arg5) \
+type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
 { \
 long __res; \
 __asm__ volatile ("int $0x80" \
 	: "=a" (__res) \
-	: "0" (__NR_##name),"b" ((long)(a)),"c" ((long)(b)), \
-	  "d" ((long)(c)),"S" ((long)(d)),"D" ((long)(e))); \
+	: "0" (__NR_##name),"b" ((long)(arg1)),"c" ((long)(arg2)), \
+	  "d" ((long)(arg3)),"S" ((long)(arg4)),"D" ((long)(arg5))); \
 if (__res>=0) \
 	return (type) __res; \
 errno=-__res; \

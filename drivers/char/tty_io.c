@@ -1,5 +1,5 @@
 /*
- *  linux/kernel/tty_io.c
+ *  linux/drivers/char/tty_io.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
@@ -109,9 +109,12 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on);
  */
 char *_tty_name(struct tty_struct *tty, char *buf)
 {
-	sprintf(buf, "%s%d", tty->driver.name,
-		MINOR(tty->device) - tty->driver.minor_start +
-		tty->driver.name_base);
+	if (tty)
+		sprintf(buf, "%s%d", tty->driver.name,
+			MINOR(tty->device) - tty->driver.minor_start +
+			tty->driver.name_base);
+	else
+		strcpy(buf, "NULL tty");
 	return buf;
 }
 
@@ -363,6 +366,8 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 		if (p->tty == tty)
 			p->tty = NULL;
 	}
+	if (tty->driver.flags & TTY_DRIVER_RESET_TERMIOS)
+		*tty->termios = tty->driver.init_termios;
 	if (tty->driver.hangup)
 		(tty->driver.hangup)(tty);
 }
@@ -439,6 +444,19 @@ int vt_waitactive(void)
 
 #define vt_wake_waitactive() wake_up(&vt_activate_queue)
 
+void reset_vc(unsigned int new_console)
+{
+	vt_cons[new_console]->vc_mode = KD_TEXT;
+	kbd_table[new_console].kbdmode = VC_XLATE;
+	vt_cons[new_console]->vt_mode.mode = VT_AUTO;
+	vt_cons[new_console]->vt_mode.waitv = 0;
+	vt_cons[new_console]->vt_mode.relsig = 0;
+	vt_cons[new_console]->vt_mode.acqsig = 0;
+	vt_cons[new_console]->vt_mode.frsig = 0;
+	vt_cons[new_console]->vt_pid = -1;
+	vt_cons[new_console]->vt_newvt = -1;
+}
+
 /*
  * Performs the back end of a vt switch
  */
@@ -446,15 +464,17 @@ void complete_change_console(unsigned int new_console)
 {
 	unsigned char old_vc_mode;
 
-	if (new_console == fg_console || new_console >= NR_CONSOLES)
-		return;
+        if (new_console == fg_console)
+                return;
+        if (!vc_cons_allocated(new_console))
+                return;
 
 	/*
 	 * If we're switching, we could be going from KD_GRAPHICS to
 	 * KD_TEXT mode or vice versa, which means we need to blank or
 	 * unblank the screen later.
 	 */
-	old_vc_mode = vt_cons[fg_console].vc_mode;
+	old_vc_mode = vt_cons[fg_console]->vc_mode;
 	update_screen(new_console);
 
 	/*
@@ -462,15 +482,15 @@ void complete_change_console(unsigned int new_console)
 	 * telling it that it has acquired. Also check if it has died and
 	 * clean up (similar to logic employed in change_console())
 	 */
-	if (vt_cons[new_console].vt_mode.mode == VT_PROCESS)
+	if (vt_cons[new_console]->vt_mode.mode == VT_PROCESS)
 	{
 		/*
 		 * Send the signal as privileged - kill_proc() will
 		 * tell us if the process has gone or something else
 		 * is awry
 		 */
-		if (kill_proc(vt_cons[new_console].vt_pid,
-			      vt_cons[new_console].vt_mode.acqsig,
+		if (kill_proc(vt_cons[new_console]->vt_pid,
+			      vt_cons[new_console]->vt_mode.acqsig,
 			      1) != 0)
 		{
 		/*
@@ -482,16 +502,7 @@ void complete_change_console(unsigned int new_console)
 		 * this outside of VT_PROCESS but there is no single process
 		 * to account for and tracking tty count may be undesirable.
 		 */
-			vt_cons[new_console].vc_mode = KD_TEXT;
-			clr_vc_kbd_mode(kbd_table + new_console, VC_RAW);
-			clr_vc_kbd_mode(kbd_table + new_console, VC_MEDIUMRAW);
- 			vt_cons[new_console].vt_mode.mode = VT_AUTO;
- 			vt_cons[new_console].vt_mode.waitv = 0;
- 			vt_cons[new_console].vt_mode.relsig = 0;
-			vt_cons[new_console].vt_mode.acqsig = 0;
-			vt_cons[new_console].vt_mode.frsig = 0;
-			vt_cons[new_console].vt_pid = -1;
-			vt_cons[new_console].vt_newvt = -1;
+		        reset_vc(new_console);
 		}
 	}
 
@@ -499,9 +510,9 @@ void complete_change_console(unsigned int new_console)
 	 * We do this here because the controlling process above may have
 	 * gone, and so there is now a new vc_mode
 	 */
-	if (old_vc_mode != vt_cons[new_console].vc_mode)
+	if (old_vc_mode != vt_cons[new_console]->vc_mode)
 	{
-		if (vt_cons[new_console].vc_mode == KD_TEXT)
+		if (vt_cons[new_console]->vc_mode == KD_TEXT)
 			unblank_screen();
 		else {
 			timer_active &= ~(1<<BLANK_TIMER);
@@ -521,7 +532,9 @@ void complete_change_console(unsigned int new_console)
  */
 void change_console(unsigned int new_console)
 {
-	if (new_console == fg_console || new_console >= NR_CONSOLES)
+        if (new_console == fg_console)
+                return;
+        if (!vc_cons_allocated(new_console))
 		return;
 
 	/*
@@ -539,15 +552,15 @@ void change_console(unsigned int new_console)
 	 * the user waits just the right amount of time :-) and revert the
 	 * vt to auto control.
 	 */
-	if (vt_cons[fg_console].vt_mode.mode == VT_PROCESS)
+	if (vt_cons[fg_console]->vt_mode.mode == VT_PROCESS)
 	{
 		/*
 		 * Send the signal as privileged - kill_proc() will
 		 * tell us if the process has gone or something else
 		 * is awry
 		 */
-		if (kill_proc(vt_cons[fg_console].vt_pid,
-			      vt_cons[fg_console].vt_mode.relsig,
+		if (kill_proc(vt_cons[fg_console]->vt_pid,
+			      vt_cons[fg_console]->vt_mode.relsig,
 			      1) == 0)
 		{
 			/*
@@ -555,7 +568,7 @@ void change_console(unsigned int new_console)
 			 * return. The process needs to send us a
 			 * VT_RELDISP ioctl to complete the switch.
 			 */
-			vt_cons[fg_console].vt_newvt = new_console;
+			vt_cons[fg_console]->vt_newvt = new_console;
 			return;
 		}
 
@@ -568,16 +581,8 @@ void change_console(unsigned int new_console)
 		 * this outside of VT_PROCESS but there is no single process
 		 * to account for and tracking tty count may be undesirable.
 		 */
-		vt_cons[fg_console].vc_mode = KD_TEXT;
-		clr_vc_kbd_mode(kbd_table + fg_console, VC_RAW);
-		clr_vc_kbd_mode(kbd_table + fg_console, VC_MEDIUMRAW);
-		vt_cons[fg_console].vt_mode.mode = VT_AUTO;
-		vt_cons[fg_console].vt_mode.waitv = 0;
-		vt_cons[fg_console].vt_mode.relsig = 0;
-		vt_cons[fg_console].vt_mode.acqsig = 0;
-		vt_cons[fg_console].vt_mode.frsig = 0;
-		vt_cons[fg_console].vt_pid = -1;
-		vt_cons[fg_console].vt_newvt = -1;
+		reset_vc(fg_console);
+
 		/*
 		 * Fall through to normal (VT_AUTO) handling of the switch...
 		 */
@@ -586,7 +591,7 @@ void change_console(unsigned int new_console)
 	/*
 	 * Ignore all switches in KD_GRAPHICS+VT_AUTO mode
 	 */
-	if (vt_cons[fg_console].vc_mode == KD_GRAPHICS)
+	if (vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
 		return;
 
 	complete_change_console(new_console);
@@ -971,26 +976,30 @@ static void release_dev(struct file * filp)
 	if (tty->count)
 		return;
 	
-	/*
-	 * Make sure there aren't any processes that still think this
-	 * tty is their controlling tty.
-	 */
-	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
-		if ((*p) && (*p)->tty == tty)
-		(*p)->tty = NULL;
-	}
-
 	if (o_tty) {
 		if (o_tty->count)
 			return;
 		tty->driver.other->table[idx] = NULL;
 		tty->driver.other->termios[idx] = NULL;
-		tty->driver.other->termios_locked[idx] = NULL;
+		kfree_s(o_tp, sizeof(struct termios));
 	}
 	
 #ifdef TTY_DEBUG_HANGUP
 	printk("freeing tty structure...");
 #endif
+
+	/*
+	 * Make sure there aren't any processes that still think this
+	 * tty is their controlling tty.
+	 */
+	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+		if (*p == 0)
+			continue;
+		if ((*p)->tty == tty)
+			(*p)->tty = NULL;
+		if (o_tty && (*p)->tty == o_tty)
+			(*p)->tty = NULL;
+	}
 
 	/*
 	 * Shutdown the current line discipline, and reset it to
@@ -1004,9 +1013,7 @@ static void release_dev(struct file * filp)
 	tty->driver.table[idx] = NULL;
 	if (tty->driver.flags & TTY_DRIVER_RESET_TERMIOS) {
 		tty->driver.termios[idx] = NULL;
-		tty->driver.termios_locked[idx] = NULL;
 		kfree_s(tp, sizeof(struct termios));
-		kfree_s(ltp, sizeof(struct termios));
 	}
 	if (tty == redirect || o_tty == redirect)
 		redirect = NULL;
@@ -1037,10 +1044,6 @@ static void release_dev(struct file * filp)
 		(*o_tty->driver.refcount)--;
 		free_page((unsigned long) o_tty);
 	}
-	if (o_tp)
-		kfree_s(o_tp, sizeof(struct termios));
-	if (o_ltp)
-		kfree_s(o_ltp, sizeof(struct termios));
 }
 
 /*
@@ -1087,12 +1090,13 @@ retry_open:
 #ifdef TTY_DEBUG_HANGUP
 	printk("opening %s...", tty_name(tty));
 #endif
-	if (test_bit(TTY_EXCLUSIVE, &tty->flags) && !suser())
-		retval = -EBUSY;
-	else if (tty->driver.open)
+	if (tty->driver.open)
 		retval = tty->driver.open(tty, filp);
 	else
 		retval = -ENODEV;
+
+	if (!retval && test_bit(TTY_EXCLUSIVE, &tty->flags) && !suser())
+		retval = -EBUSY;
 
 	if (retval) {
 #ifdef TTY_DEBUG_HANGUP
@@ -1396,12 +1400,18 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					return set_selection(arg, tty);
 				case 3:
 					return paste_selection(tty);
+#endif /* CONFIG_SELECTION */
 				case 4:
 					unblank_screen();
 					return 0;
+#ifdef CONFIG_SELECTION
 				case 5:
 					return sel_loadlut(arg);
 				case 6:
+			/* Make it possible to react to Shift+Mousebutton */
+			/* Note that shift_state is an undocumented
+			   kernel-internal variable; programs not closely
+			   related to the kernel should not use this. */
 					put_fs_byte(shift_state,arg);
 					return 0;
 				case 7:
@@ -1451,6 +1461,8 @@ void do_SAK( struct tty_struct *tty)
 	int		i;
 	struct file	*filp;
 	
+	if (!tty)
+		return;
 	if (tty->ldisc.flush_buffer)
 		tty->ldisc.flush_buffer(tty);
 	if (tty->driver.flush_buffer)
@@ -1562,6 +1574,44 @@ int tty_register_driver(struct tty_driver *driver)
 	tty_drivers = driver;
 	return error;
 }
+
+/*
+ * Called by a tty driver to unregister itself.
+ */
+int tty_unregister_driver(struct tty_driver *driver)
+{
+	int	retval;
+	struct tty_driver *p;
+	int	found = 0;
+	int	major_inuse = 0;
+	
+	if (driver->refcount)
+		return -EBUSY;
+
+	for (p = tty_drivers; p; p = p->next) {
+		if (p == driver)
+			found++;
+		else if (p->major == driver->major)
+			major_inuse++;
+	}
+
+	if (!major_inuse) {
+		retval = unregister_chrdev(driver->major, driver->name);
+		if (retval)
+			return retval;
+	}
+
+	if (driver->prev)
+		driver->prev->next = driver->next;
+	else
+		tty_drivers = driver->next;
+	
+	if (driver->next)
+		driver->next = driver->next->prev;
+
+	return 0;
+}
+
 
 /*
  * Initialize the console device. This is called *early*, so

@@ -309,7 +309,7 @@ static inline int find_and_clear_bit_16(unsigned short *field)
 static inline unsigned char xchgb(unsigned char reg,
 				  volatile unsigned char *mem)
 {
-  asm ("xchgb %0, (%2)" : "=q" (reg) : "0" (reg), "q" (mem) : "m");
+  __asm__ ("xchgb %0,%1" : "=q" (reg), "=m" (*mem) : "0" (reg));
   return reg;
 }
 

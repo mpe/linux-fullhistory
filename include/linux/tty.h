@@ -18,8 +18,14 @@
 /*
  * Note: don't mess with NR_PTYS until you understand the tty minor 
  * number allocation game...
+ * (Note: the *_driver.minor_start values 1, 64, 128, 192 are
+ * hardcoded at present.)
  */
-#define NR_CONSOLES	8
+#define MIN_NR_CONSOLES	1	/* must be at least 1 */
+#define MAX_NR_CONSOLES	63	/* serial lines start at 64 */
+#define MAX_NR_USER_CONSOLES 63	/* must be root to allocate above this */
+		/* Note: the ioctl VT_GETSTATE does not work for
+		   consoles 16 and higher (since it returns a short) */
 #define NR_PTYS		64
 #define NR_LDISCS	16
 
@@ -257,8 +263,6 @@ extern struct termios tty_std_termios;
 extern struct tty_struct * redirect;
 extern struct tty_ldisc ldiscs[];
 extern int fg_console;
-extern unsigned long video_num_columns;
-extern unsigned long video_num_lines;
 extern struct wait_queue * keypress_wait;
 
 /*	intr=^C		quit=^|		erase=del	kill=^U

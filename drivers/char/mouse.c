@@ -1,5 +1,5 @@
 /*
- * linux/kernel/chr_drv/mouse.c
+ * linux/drivers/char/mouse.c
  *
  * Generic mouse open routine by Johan Myreen
  *

@@ -75,13 +75,13 @@
 
 
 
-struct dynamic{
+typedef struct dynamic{
   int d_tag;
   union{
     int d_val;
     char * d_ptr;
   } d_un;
-};
+} Elf32_Dyn;
 
 /* The following are used with relocations */
 #define ELF32_R_SYM(x) ((x) >> 8)
@@ -100,27 +100,27 @@ struct dynamic{
 #define R_386_GOTPC	10
 #define R_386_NUM	11
 
-struct Elf32_Rel{
+typedef struct elf32_rel {
   unsigned int * offset;
   int info;
-};
+} Elf32_Rel;
 
-struct Elf32_Rela{
+typedef struct elf32_rela{
   unsigned int * offset;
   int info;
   int addend;
-};
+} Elf32_Rela;
 
-struct Elf32_Sym{
+typedef struct elf32_sym{
   int st_name;
   unsigned int st_value;
   int st_size;
   unsigned char st_info;
   unsigned char st_other;
   short int st_shndx;
-};
+} Elf32_Sym;
 
-struct elfhdr{
+typedef struct elfhdr{
   char	e_ident[16];
   short int e_type;
   short int e_machine;
@@ -135,9 +135,9 @@ struct elfhdr{
   short int e_shentsize;
   short int e_shnum;
   short int e_shstrndx;
-};
+} Elf32_Ehdr;
 
-struct elf_phdr{
+typedef struct elf_phdr{
   int p_type;
   int p_offset;
   int p_vaddr;
@@ -146,7 +146,7 @@ struct elf_phdr{
   int p_memsz;
   int p_flags;
   int p_align;
-};
+} Elf32_Phdr;
 
 #define ELF_START_MMAP 0x80000000
 

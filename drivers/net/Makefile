@@ -190,8 +190,14 @@ ifdef MODULES
 
 modules:
 	echo $(MODULES) > ../../modules/NET_MODULES
-	$(MAKE) CFLAGS="$(CFLAGS) -DMODULE" $(MODULES)
-	(cd ../../modules;for i in $(MODULES); do ln -sf ../drivers/net/$$i .; done)
+	@(cd ../../modules; \
+		for i in $(MODULES:.o=.c); \
+			do ln -sf ../drivers/net/$$i .; \
+			done ; \
+		ln -sf ../drivers/net/CONFIG . ; \
+		$(MAKE) -f../drivers/net/Makefile -I../drivers/net \
+			CFLAGS="$(CFLAGS) -I../net/inet -I../drivers/net -DMODULE" $(MODULES); \
+		rm $(MODULES:.o=.c) CONFIG)
 
 else
 

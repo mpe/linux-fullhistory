@@ -374,8 +374,8 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 		  printk("scsi: unknown type %d\n", type);
 		  print_inquiry(scsi_result);
 #endif
-#endif
 		  type = -1;
+#endif
 		}
 	      
 	      SDpnt->soft_reset = 

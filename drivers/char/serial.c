@@ -1,5 +1,5 @@
 /*
- *  linux/kernel/serial.c
+ *  linux/drivers/char/serial.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
@@ -987,7 +987,6 @@ static int startup(struct async_struct * info)
 static void shutdown(struct async_struct * info)
 {
 	unsigned long	flags;
-	unsigned long timeout;
 	int		retval;
 
 	if (!(info->flags & ASYNC_INITIALIZED))
@@ -1038,24 +1037,6 @@ static void shutdown(struct async_struct * info)
 		/* reset interrupts on the AST Fourport board */
 		(void) inb((info->port & 0xFE0) | 0x01F);
 	}
-	
-	/*
-	 * Before we drop DTR, make sure the UART transmitter has
-	 * completely drained; this is especially important if there
-	 * is a transmit FIFO!
-	 * 
-	 * We busy loop here, which is not great; unfortunately the
-	 * UART does not provide an interrupt for TEMT, and putting it
-	 * in the interrupt handler would slow down normal accesses
-	 * anyway.
-	 */
-	sti();
-	timeout = jiffies + info->timeout;
-	while (!(serial_inp(info, UART_LSR) & UART_LSR_TEMT)) {
-		if (jiffies > timeout)
-			break;
-	}
-	cli();
 	
 	if (!info->tty || (info->tty->termios->c_cflag & HUPCL)) {
 		info->MCR &= ~(UART_MCR_DTR|UART_MCR_RTS);
@@ -1142,15 +1123,20 @@ static void change_speed(struct async_struct *info)
 	} else
 		fcr = 0;
 	
-	/* CTS flow control flag */
-	if (cflag & CRTSCTS)
+	/* CTS flow control flag and modem status interrupts */
+	info->IER &= ~UART_IER_MSI;
+	if (cflag & CRTSCTS) {
 		info->flags |= ASYNC_CTS_FLOW;
-	else
+		info->IER |= UART_IER_MSI;
+	} else
 		info->flags &= ~ASYNC_CTS_FLOW;
 	if (cflag & CLOCAL)
 		info->flags &= ~ASYNC_CHECK_CD;
-	else
+	else {
 		info->flags |= ASYNC_CHECK_CD;
+		info->IER |= UART_IER_MSI;
+	}
+	serial_out(info, UART_IER, info->IER);
 
 	/*
 	 * Set up parity check flag
@@ -1749,12 +1735,17 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 static void rs_close(struct tty_struct *tty, struct file * filp)
 {
 	struct async_struct * info = (struct async_struct *)tty->driver_data;
+	unsigned long flags;
 
 	if (!info || serial_paranoia_check(info, tty->device, "rs_close"))
 		return;
 	
-	if (tty_hung_up_p(filp))
+	save_flags(flags); cli();
+	
+	if (tty_hung_up_p(filp)) {
+		restore_flags(flags);
 		return;
+	}
 	
 #ifdef SERIAL_DEBUG_OPEN
 	printk("rs_close ttys%d, count = %d\n", info->line, info->count);
@@ -1776,8 +1767,10 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		       info->line, info->count);
 		info->count = 0;
 	}
-	if (info->count)
+	if (info->count) {
+		restore_flags(flags);
 		return;
+	}
 	info->flags |= ASYNC_CLOSING;
 	/*
 	 * Save the termios structure, since this port may have
@@ -1787,8 +1780,19 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		info->normal_termios = *tty->termios;
 	if (info->flags & ASYNC_CALLOUT_ACTIVE)
 		info->callout_termios = *tty->termios;
-	if (info->flags & ASYNC_INITIALIZED)
+	if (info->flags & ASYNC_INITIALIZED) {
 		wait_until_sent(tty, 3000); /* 30 seconds timeout */
+		/*
+		 * Before we drop DTR, make sure the UART transmitter
+		 * has completely drained; this is especially
+		 * important if there is a transmit FIFO!
+		 */
+		while (!(serial_inp(info, UART_LSR) & UART_LSR_TEMT)) {
+			current->state = TASK_INTERRUPTIBLE;
+			current->timeout = jiffies + info->timeout;
+			schedule();
+		}
+	}
 	shutdown(info);
 	if (tty->driver.flush_buffer)
 		tty->driver.flush_buffer(tty);
@@ -1815,6 +1819,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	info->flags &= ~(ASYNC_NORMAL_ACTIVE|ASYNC_CALLOUT_ACTIVE|
 			 ASYNC_CLOSING);
 	wake_up_interruptible(&info->close_wait);
+	restore_flags(flags);
 }
 
 /*
@@ -1845,7 +1850,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 {
 	struct wait_queue wait = { current, NULL };
 	int		retval;
-	int		do_clocal = C_CLOCAL(tty);
+	int		do_clocal = 0;
 
 	/*
 	 * If the device is in the middle of being closed, then block
@@ -1892,6 +1897,9 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		info->flags |= ASYNC_NORMAL_ACTIVE;
 		return 0;
 	}
+
+	if (info->normal_termios.c_cflag & CLOCAL)
+		do_clocal = 1;
 
 	/*
 	 * Block waiting for the carrier detect and the line to become
@@ -1990,12 +1998,6 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 			return -ENOMEM;
 	}
 	
-	if ((info->count == 1) && (info->flags & ASYNC_SPLIT_TERMIOS)) {
-		if (tty->driver.subtype == SERIAL_TYPE_NORMAL)
-			*tty->termios = info->normal_termios;
-		else 
-			*tty->termios = info->callout_termios;
-	}
 	/*
 	 * Start up serial port
 	 */
@@ -2010,6 +2012,14 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 		       retval);
 #endif
 		return retval;
+	}
+
+	if ((info->count == 1) && (info->flags & ASYNC_SPLIT_TERMIOS)) {
+		if (tty->driver.subtype == SERIAL_TYPE_NORMAL)
+			*tty->termios = info->normal_termios;
+		else 
+			*tty->termios = info->callout_termios;
+		change_speed(info);
 	}
 
 	info->session = current->session;
