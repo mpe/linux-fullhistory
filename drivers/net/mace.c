@@ -445,7 +445,7 @@ static int mace_xmit_start(struct sk_buff *skb, struct net_device *dev)
     if (next >= N_TX_RING)
 	next = 0;
     if (next == mp->tx_empty) {
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 	mp->tx_fullup = 1;
 	restore_flags(flags);
 	return 1;		/* can't take it at the moment */
@@ -480,7 +480,7 @@ static int mace_xmit_start(struct sk_buff *skb, struct net_device *dev)
     if (++next >= N_TX_RING)
 	next = 0;
     if (next == mp->tx_empty)
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
     restore_flags(flags);
 
     return 0;
@@ -695,8 +695,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
     if (i != mp->tx_empty) {
 	mp->tx_fullup = 0;
-	dev->tbusy = 0;
-	mark_bh(NET_BH);
+	netif_wake_queue(dev);
     }
     mp->tx_empty = i;
     i += mp->tx_active;
@@ -765,8 +764,7 @@ static void mace_tx_timeout(unsigned long data)
 	mp->tx_empty = i;
     }
     mp->tx_fullup = 0;
-    dev->tbusy = 0;
-    mark_bh(NET_BH);
+    netif_wake_queue(dev);
     if (i != mp->tx_fill) {
 	cp = mp->tx_cmds + NCMDS_TX * i;
 	out_le16(&cp->xfer_status, 0);

@@ -806,6 +806,7 @@ QNX4 FILESYSTEM
 P:	Anders Larsen
 M:	al@alarsen.net
 L:	linux-kernel@vger.rutgers.edu
+W:	http://www.alarsen.net/linux/qnx4fs/
 S:	Maintained
 
 REAL TIME CLOCK DRIVER

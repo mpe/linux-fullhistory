@@ -458,6 +458,9 @@ static const char *version = "de4x5.c:V0.545 1999/11/28 davies@maniac.ultranet.c
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
 #include <asm/uaccess.h>
+#ifdef CONFIG_PPC
+#include <asm/machdep.h>
+#endif /* CONFIG_PPC */
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -4186,20 +4189,24 @@ get_hw_addr(struct net_device *dev)
     /* If possible, try to fix a broken card - SMC only so far */
     srom_repair(dev, broken);
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
     /* 
     ** If the address starts with 00 a0, we have to bit-reverse
     ** each byte of the address.
     */
-    if (dev->dev_addr[0] == 0 && dev->dev_addr[1] == 0xa0) {
-	for (i = 0; i < ETH_ALEN; ++i) {
-	    int x = dev->dev_addr[i];
-	    x = ((x & 0xf) << 4) + ((x & 0xf0) >> 4);
-	    x = ((x & 0x33) << 2) + ((x & 0xcc) >> 2);
-	    dev->dev_addr[i] = ((x & 0x55) << 1) + ((x & 0xaa) >> 1);
-	}
+    if ( (ppc_md.ppc_machine & _MACH_Pmac) &&
+	 (dev->dev_addr[0] == 0) &&
+	 (dev->dev_addr[1] == 0xa0) )
+    {
+	    for (i = 0; i < ETH_ALEN; ++i)
+	    {
+		    int x = dev->dev_addr[i];
+		    x = ((x & 0xf) << 4) + ((x & 0xf0) >> 4);
+		    x = ((x & 0x33) << 2) + ((x & 0xcc) >> 2);
+		    dev->dev_addr[i] = ((x & 0x55) << 1) + ((x & 0xaa) >> 1);
+	    }
     }
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
     /* Test for a bad enet address */
     status = test_bad_enet(dev, status);

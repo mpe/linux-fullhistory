@@ -40,6 +40,10 @@
  *   it passes the underlying device's block number instead of the
  *   offset. This makes it change for a given block when the file is 
  *   moved/restored/copied and also doesn't work over NFS. 
+ * AV, Feb 11, 2000: for files we pass the page index now. It should fix the
+ *   problem above. Since the granularity is PAGE_CACHE_SIZE now it seems to
+ *   be correct way. OTOH, taking the thing from x86 to Alpha may become
+ *   interesting, so we might want to rethink it.
  */ 
 
 #include <linux/module.h>
@@ -76,10 +80,6 @@ static int *loop_blksizes;
 
 #define FALSE 0
 #define TRUE (!FALSE)
-
-/* Forward declaration of function to create missing blocks in the 
-   backing file (can happen if the backing file is sparse) */
-static int create_missing_block(struct loop_device *lo, int block, int blksize);
 
 /*
  * Transfer functions
@@ -164,14 +164,109 @@ static void figure_loop_size(struct loop_device *lo)
 	loop_sizes[lo->lo_number] = size;
 }
 
+static int lo_send(struct loop_device *lo, char *data, int len, loff_t pos)
+{
+	struct file *file = lo->lo_backing_file; /* kudos to NFsckingS */
+	struct address_space *mapping = lo->lo_dentry->d_inode->i_mapping;
+	struct address_space_operations *aops = mapping->a_ops;
+	struct page *page;
+	char *kaddr;
+	unsigned long index;
+	unsigned size, offset;
+
+	index = pos >> PAGE_CACHE_SHIFT;
+	offset = pos & (PAGE_CACHE_SIZE - 1);
+	while (len > 0) {
+		size = PAGE_CACHE_SIZE - offset;
+		if (size > len)
+			size = len;
+
+		page = grab_cache_page(mapping, index);
+		if (!page)
+			goto fail;
+		if (aops->prepare_write(page, offset, offset+size))
+			goto unlock;
+		kaddr = (char*)page_address(page);
+		if ((lo->transfer)(lo, WRITE, kaddr+offset, data, size, index))
+			goto write_fail;
+		if (aops->commit_write(file, page, offset, offset+size))
+			goto unlock;
+		data += size;
+		len -= size;
+		offset = 0;
+		index++;
+		pos += size;
+		if (pos > lo->lo_dentry->d_inode->i_size)
+			lo->lo_dentry->d_inode->i_size = pos;
+		UnlockPage(page);
+		page_cache_release(page);
+	}
+	return 0;
+
+write_fail:
+	printk(KERN_ERR "loop: transfer error block %ld\n", index);
+	ClearPageUptodate(page);
+	kunmap(page);
+unlock:
+	UnlockPage(page);
+	page_cache_release(page);
+fail:
+	return -1;
+}
+
+struct lo_read_data {
+	struct loop_device *lo;
+	char *data;
+};
+
+static int lo_read_actor(read_descriptor_t * desc, struct page *page, unsigned long offset, unsigned long size)
+{
+	char *kaddr;
+	unsigned long count = desc->count;
+	struct lo_read_data *p = (struct lo_read_data*)desc->buf;
+	struct loop_device *lo = p->lo;
+
+	if (size > count)
+		size = count;
+
+	kaddr = (char*)kmap(page);
+	if ((lo->transfer)(lo,READ,kaddr+offset,p->data,size,page->index)) {
+		size = 0;
+		printk(KERN_ERR "loop: transfer error block %ld\n",page->index);
+		desc->error = -EINVAL;
+	}
+	kunmap(page);
+	
+	desc->count = count - size;
+	desc->written += size;
+	p->data += size;
+	return size;
+}
+
+static int lo_receive(struct loop_device *lo, char *data, int len, loff_t pos)
+{
+	struct file *file = lo->lo_backing_file;
+	struct lo_read_data cookie;
+	read_descriptor_t desc;
+
+	cookie.lo = lo;
+	cookie.data = data;
+	desc.written = 0;
+	desc.count = len;
+	desc.buf = (char*)&cookie;
+	desc.error = 0;
+	do_generic_file_read(file, &pos, &desc, lo_read_actor);
+	return desc.error;
+}
+
 static void do_lo_request(request_queue_t * q)
 {
-	int	real_block, block, offset, len, blksize, size;
+	int	block, offset, len, blksize, size;
 	char	*dest_addr;
 	struct loop_device *lo;
 	struct buffer_head *bh;
 	struct request *current_request;
-	int	block_present;
+	loff_t pos;
 
 repeat:
 	INIT_REQUEST;
@@ -182,6 +277,18 @@ repeat:
 	lo = &loop_dev[MINOR(current_request->rq_dev)];
 	if (!lo->lo_dentry || !lo->transfer)
 		goto error_out;
+	if (current_request->cmd == WRITE) {
+		if (lo->lo_flags & LO_FLAGS_READ_ONLY)
+			goto error_out;
+	} else if (current_request->cmd != READ) {
+		printk(KERN_ERR "unknown loop device command (%d)?!?", current_request->cmd);
+		goto error_out;
+	}
+
+	dest_addr = current_request->buffer;
+	len = current_request->current_nr_sectors << 9;
+	if (lo->lo_flags & LO_FLAGS_DO_BMAP)
+		goto file_backed;
 
 	blksize = BLOCK_SIZE;
 	if (blksize_size[MAJOR(lo->lo_device)]) {
@@ -189,9 +296,6 @@ repeat:
 	    if (!blksize)
 	      blksize = BLOCK_SIZE;
 	}
-
-	dest_addr = current_request->buffer;
-	
 	if (blksize < 512) {
 		block = current_request->sector * (512/blksize);
 		offset = 0;
@@ -201,87 +305,68 @@ repeat:
 	}
 	block += lo->lo_offset / blksize;
 	offset += lo->lo_offset % blksize;
-	if (offset > blksize) {
+	if (offset >= blksize) {
 		block++;
 		offset -= blksize;
 	}
-	len = current_request->current_nr_sectors << 9;
-
-	if (current_request->cmd == WRITE) {
-		if (lo->lo_flags & LO_FLAGS_READ_ONLY)
-			goto error_out;
-	} else if (current_request->cmd != READ) {
-		printk(KERN_ERR "unknown loop device command (%d)?!?", current_request->cmd);
-		goto error_out;
-	}
 	spin_unlock_irq(&io_request_lock);
+
 	while (len > 0) {
 
 		size = blksize - offset;
 		if (size > len)
 			size = len;
 
-		real_block = block;
-		block_present = TRUE;
-
-		if (lo->lo_flags & LO_FLAGS_DO_BMAP) {
-			real_block = bmap(lo->lo_dentry->d_inode, block);
-			if (!real_block) {
-
-				/* The backing file is a sparse file and this block
-				   doesn't exist.  If reading, return zeros.  If
-				   writing, force the underlying FS to create
-				   the block */
-				if (current_request->cmd == READ) {
-					memset(dest_addr, 0, size);
-					block_present = FALSE;
-				} else {
-					if (!create_missing_block(lo, block, blksize)) {
-						goto error_out_lock;
-					}
-					real_block = bmap(lo->lo_dentry->d_inode, block);
-				}
-
-			}
+		bh = getblk(lo->lo_device, block, blksize);
+		if (!bh) {
+			printk(KERN_ERR "loop: device %s: getblk(-, %d, %d) returned NULL",
+				kdevname(lo->lo_device),
+				block, blksize);
+			goto error_out_lock;
 		}
-
-		if (block_present) {
-			bh = getblk(lo->lo_device, real_block, blksize);
-			if (!bh) {
-				printk(KERN_ERR "loop: device %s: getblk(-, %d, %d) returned NULL",
-					kdevname(lo->lo_device),
-					block, blksize);
-				goto error_out_lock;
-			}
-			if (!buffer_uptodate(bh) && ((current_request->cmd == READ) ||
-						(offset || (len < blksize)))) {
-				ll_rw_block(READ, 1, &bh);
-				wait_on_buffer(bh);
-				if (!buffer_uptodate(bh)) {
-					brelse(bh);
-					goto error_out_lock;
-				}
-			}
-
-			if ((lo->transfer)(lo, current_request->cmd, bh->b_data + offset,
-					dest_addr, size, real_block)) {
-				printk(KERN_ERR "loop: transfer error block %d\n", block);
+		if (!buffer_uptodate(bh) && ((current_request->cmd == READ) ||
+					(offset || (len < blksize)))) {
+			ll_rw_block(READ, 1, &bh);
+			wait_on_buffer(bh);
+			if (!buffer_uptodate(bh)) {
 				brelse(bh);
 				goto error_out_lock;
 			}
-
-			if (current_request->cmd == WRITE) {
-				mark_buffer_uptodate(bh, 1);
-				mark_buffer_dirty(bh, 1);
-			}
-			brelse(bh);
 		}
+
+		if ((lo->transfer)(lo, current_request->cmd, bh->b_data + offset,
+				dest_addr, size, block)) {
+			printk(KERN_ERR "loop: transfer error block %d\n", block);
+			brelse(bh);
+			goto error_out_lock;
+		}
+
+		if (current_request->cmd == WRITE) {
+			mark_buffer_uptodate(bh, 1);
+			mark_buffer_dirty(bh, 1);
+		}
+		brelse(bh);
 		dest_addr += size;
 		len -= size;
 		offset = 0;
 		block++;
 	}
+	goto done;
+
+file_backed:
+	pos = ((loff_t)current_request->sector << 9) + lo->lo_offset;
+	spin_unlock_irq(&io_request_lock);
+	if (current_request->cmd == WRITE) {
+		if (lo_send(lo, dest_addr, len, pos))
+			goto error_out_lock;
+	} else {
+		if (lo_receive(lo, dest_addr, len, pos))
+			goto error_out_lock;
+	}
+done:
 	spin_lock_irq(&io_request_lock);
+	current_request->sector += current_request->current_nr_sectors;
+	current_request->nr_sectors -= current_request->current_nr_sectors;
 	current_request->next=CURRENT;
 	CURRENT=current_request;
 	end_request(1);
@@ -293,61 +378,6 @@ error_out:
 	CURRENT=current_request;
 	end_request(0);
 	goto repeat;
-}
-
-static int create_missing_block(struct loop_device *lo, int block, int blksize)
-{
-	struct file     *file;
-	loff_t          new_offset;
-	char            zero_buf[1] = { 0 };
-	ssize_t         retval;
-	mm_segment_t	old_fs;
-	struct inode	*inode;
-
-	file = lo->lo_backing_file;
-	if (file == NULL) {
-		printk(KERN_WARNING "loop: cannot create block - no backing file\n");
-		return FALSE;
-	}
-
-	if (file->f_op == NULL) {
-		printk(KERN_WARNING "loop: cannot create block - no file ops\n");
-		return FALSE;
-	}
-
-	new_offset = block * blksize;
-
-	if (file->f_op->llseek != NULL) {
-		file->f_op->llseek(file, new_offset, 0);
-	} else {
-		/* Do what the default llseek() code would have done */
-		file->f_pos = new_offset;
-		file->f_reada = 0;
-		file->f_version = ++event;
-	}
-
-	if (file->f_op->write == NULL) {
-		printk(KERN_WARNING "loop: cannot create block - file not writeable\n");
-		return FALSE;
-	}
-
-	old_fs = get_fs();
-	set_fs(get_ds());
-
-	inode = file->f_dentry->d_inode;
-	down(&inode->i_sem); 
-	retval = file->f_op->write(file, zero_buf, 1, &file->f_pos);
-	up(&inode->i_sem);
-	
-	set_fs(old_fs);
-
-	if (retval < 0) {
-		printk(KERN_WARNING "loop: cannot create block - FS write failed: code %Zi\n",
-			retval);
-		return FALSE;
-	} else {
-		return TRUE;
-	}
 }
 
 static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
@@ -386,22 +416,12 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		   a file structure */
 		lo->lo_backing_file = NULL;
 	} else if (S_ISREG(inode->i_mode)) {
-		/*
-		 * Total crap. We should just use pagecache instead of trying
-		 * to redirect on block level.
-		 */
-		if (!inode->i_mapping->a_ops->bmap) {
-			printk(KERN_ERR "loop: device has no block access/not implemented\n");
-			goto out_putf;
-		}
-
-		/* Backed by a regular file - we need to hold onto
-		   a file structure for this file.  We'll use it to
-		   write to blocks that are not already present in 
-		   a sparse file.  We create a new file structure
-		   based on the one passed to us via 'arg'.  This is
-		   to avoid changing the file structure that the
-		   caller is using */
+		/* Backed by a regular file - we need to hold onto a file
+		   structure for this file.  Friggin' NFS can't live without
+		   it on write and for reading we use do_generic_file_read(),
+		   so...  We create a new file structure based on the one
+		   passed to us via 'arg'.  This is to avoid changing the file
+		   structure that the caller is using */
 
 		lo->lo_device = inode->i_dev;
 		lo->lo_flags = LO_FLAGS_DO_BMAP;
@@ -432,7 +452,6 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		lo->lo_flags |= LO_FLAGS_READ_ONLY;
 		set_device_ro(dev, 1);
 	} else {
-		vmtruncate (inode, 0);
 		set_device_ro(dev, 0);
 	}
 

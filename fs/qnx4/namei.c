@@ -120,7 +120,8 @@ struct dentry * qnx4_lookup(struct inode *dir, struct dentry *dentry)
 	/* The entry is linked, let's get the real info */
 	if ((de->di_status & QNX4_FILE_LINK) == QNX4_FILE_LINK) {
 		lnk = (struct qnx4_link_info *) de;
-		ino = (lnk->dl_inode_blk - 1) * QNX4_INODES_PER_BLOCK +
+		ino = (le32_to_cpu(lnk->dl_inode_blk) - 1) *
+                    QNX4_INODES_PER_BLOCK +
 		    lnk->dl_inode_ndx;
 	}
 	brelse(bh);

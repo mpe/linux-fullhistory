@@ -4049,7 +4049,7 @@ int __init atyfb_setup(char *options)
 		default_pll = simple_strtoul(this_opt+4, NULL, 0);
 	else if (!strncmp(this_opt, "mclk:", 5))
 		default_mclk = simple_strtoul(this_opt+5, NULL, 0);
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 	else if (!strncmp(this_opt, "vmode:", 6)) {
 	    unsigned int vmode = simple_strtoul(this_opt+6, NULL, 0);
 	    if (vmode > 0 && vmode <= VMODE_MAX)
@@ -4186,7 +4186,7 @@ static void atyfbcon_blank(int blank, struct fb_info *fb)
     struct fb_info_aty *info = (struct fb_info_aty *)fb;
     u8 gen_cntl;
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
     if ((_machine == _MACH_Pmac) && blank)
     	pmu_enable_backlight(0);
 #endif
@@ -4211,7 +4211,7 @@ static void atyfbcon_blank(int blank, struct fb_info *fb)
 	gen_cntl &= ~(0x4c);
     aty_st_8(CRTC_GEN_CNTL, gen_cntl, info);
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
     if ((_machine == _MACH_Pmac) && !blank)
     	pmu_enable_backlight(1);
 #endif

@@ -98,15 +98,15 @@ static void qnx4_write_inode(struct inode *inode)
 	}
 	raw_inode = ((struct qnx4_inode_entry *) bh->b_data) +
 	    (ino % QNX4_INODES_PER_BLOCK);
-	raw_inode->di_mode = inode->i_mode;
-	raw_inode->di_uid = fs_high2lowuid(inode->i_uid);
-	raw_inode->di_gid = fs_high2lowgid(inode->i_gid);
-	raw_inode->di_nlink = inode->i_nlink;
-	raw_inode->di_size = inode->i_size;
-	raw_inode->di_mtime = inode->i_mtime;
-	raw_inode->di_atime = inode->i_atime;
-	raw_inode->di_ctime = inode->i_ctime;
-	raw_inode->di_first_xtnt.xtnt_size = inode->i_blocks;
+	raw_inode->di_mode  = cpu_to_le16(inode->i_mode);
+	raw_inode->di_uid   = cpu_to_le16(fs_high2lowuid(inode->i_uid));
+	raw_inode->di_gid   = cpu_to_le16(fs_high2lowgid(inode->i_gid));
+	raw_inode->di_nlink = cpu_to_le16(inode->i_nlink);
+	raw_inode->di_size  = cpu_to_le32(inode->i_size);
+	raw_inode->di_mtime = cpu_to_le32(inode->i_mtime);
+	raw_inode->di_atime = cpu_to_le32(inode->i_atime);
+	raw_inode->di_ctime = cpu_to_le32(inode->i_ctime);
+	raw_inode->di_first_xtnt.xtnt_size = cpu_to_le32(inode->i_blocks);
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
 }
@@ -224,15 +224,15 @@ unsigned long qnx4_block_map( struct inode *inode, long iblock )
 	struct buffer_head *bh = 0;
 	struct qnx4_xblk *xblk = 0;
 	struct qnx4_inode_info *qnx4_inode = &inode->u.qnx4_i;
-	qnx4_nxtnt_t nxtnt = qnx4_inode->i_num_xtnts;
+	qnx4_nxtnt_t nxtnt = le16_to_cpu(qnx4_inode->i_num_xtnts);
 
-	if ( iblock < qnx4_inode->i_first_xtnt.xtnt_size ) {
+	if ( iblock < le32_to_cpu(qnx4_inode->i_first_xtnt.xtnt_size) ) {
 		// iblock is in the first extent. This is easy.
-		block = qnx4_inode->i_first_xtnt.xtnt_blk + iblock - 1;
+		block = le32_to_cpu(qnx4_inode->i_first_xtnt.xtnt_blk) + iblock - 1;
 	} else {
 		// iblock is beyond first extent. We have to follow the extent chain.
 		i_xblk = qnx4_inode->i_xblk;
-		offset = iblock - qnx4_inode->i_first_xtnt.xtnt_size;
+		offset = iblock - le32_to_cpu(qnx4_inode->i_first_xtnt.xtnt_size);
 		ix = 0;
 		while ( --nxtnt > 0 ) {
 			if ( ix == 0 ) {
@@ -248,14 +248,14 @@ unsigned long qnx4_block_map( struct inode *inode, long iblock )
 					return -EIO;
 				}
 			}
-			if ( offset < xblk->xblk_xtnts[ix].xtnt_size ) {
+			if ( offset < le32_to_cpu(xblk->xblk_xtnts[ix].xtnt_size) ) {
 				// got it!
-				block = xblk->xblk_xtnts[ix].xtnt_blk + offset - 1;
+				block = le32_to_cpu(xblk->xblk_xtnts[ix].xtnt_blk) + offset - 1;
 				break;
 			}
-			offset -= xblk->xblk_xtnts[ix].xtnt_size;
+			offset -= le32_to_cpu(xblk->xblk_xtnts[ix].xtnt_size);
 			if ( ++ix >= xblk->xblk_num_xtnts ) {
-				i_xblk = xblk->xblk_next_xblk;
+				i_xblk = le32_to_cpu(xblk->xblk_next_xblk);
 				ix = 0;
 				brelse( bh );
 				bh = 0;
@@ -304,8 +304,8 @@ static const char *qnx4_checkroot(struct super_block *sb)
 		return "no qnx4 filesystem (no root dir).";
 	} else {
 		QNX4DEBUG(("QNX4 filesystem found on dev %s.\n", kdevname(sb->s_dev)));
-		rd = sb->u.qnx4_sb.sb->RootDir.di_first_xtnt.xtnt_blk - 1;
-		rl = sb->u.qnx4_sb.sb->RootDir.di_first_xtnt.xtnt_size;
+		rd = le32_to_cpu(sb->u.qnx4_sb.sb->RootDir.di_first_xtnt.xtnt_blk) - 1;
+		rl = le32_to_cpu(sb->u.qnx4_sb.sb->RootDir.di_first_xtnt.xtnt_size);
 		for (j = 0; j < rl; j++) {
 			bh = bread(sb->s_dev, rd + j, QNX4_BLOCK_SIZE);	/* root dir, first block */
 			if (bh == NULL) {
@@ -347,7 +347,7 @@ static struct super_block *qnx4_read_super(struct super_block *s,
 	lock_super(s);
 	set_blocksize(dev, QNX4_BLOCK_SIZE);
 	s->s_blocksize = QNX4_BLOCK_SIZE;
-	s->s_blocksize_bits = 9;
+	s->s_blocksize_bits = QNX4_BLOCK_SIZE_BITS;
 	s->s_dev = dev;
 
 	/* Check the boot signature. Since the qnx4 code is
@@ -474,15 +474,15 @@ static void qnx4_read_inode(struct inode *inode)
 	raw_inode = ((struct qnx4_inode_entry *) bh->b_data) +
 	    (ino % QNX4_INODES_PER_BLOCK);
 
-	inode->i_mode = raw_inode->di_mode;
-	inode->i_uid = (uid_t)raw_inode->di_uid;
-	inode->i_gid = (gid_t)raw_inode->di_gid;
-	inode->i_nlink = raw_inode->di_nlink;
-	inode->i_size = raw_inode->di_size;
-	inode->i_mtime = raw_inode->di_mtime;
-	inode->i_atime = raw_inode->di_atime;
-	inode->i_ctime = raw_inode->di_ctime;
-	inode->i_blocks = raw_inode->di_first_xtnt.xtnt_size;
+	inode->i_mode    = le16_to_cpu(raw_inode->di_mode);
+	inode->i_uid     = (uid_t)le16_to_cpu(raw_inode->di_uid);
+	inode->i_gid     = (gid_t)le16_to_cpu(raw_inode->di_gid);
+	inode->i_nlink   = le16_to_cpu(raw_inode->di_nlink);
+	inode->i_size    = le32_to_cpu(raw_inode->di_size);
+	inode->i_mtime   = le32_to_cpu(raw_inode->di_mtime);
+	inode->i_atime   = le32_to_cpu(raw_inode->di_atime);
+	inode->i_ctime   = le32_to_cpu(raw_inode->di_ctime);
+	inode->i_blocks  = le32_to_cpu(raw_inode->di_first_xtnt.xtnt_size);
 	inode->i_blksize = QNX4_DIR_ENTRY_SIZE;
 
 	memcpy(&inode->u.qnx4_i, (struct qnx4_inode_info *) raw_inode, QNX4_DIR_ENTRY_SIZE);
@@ -497,9 +497,7 @@ static void qnx4_read_inode(struct inode *inode)
 		inode->i_mapping->a_ops = &qnx4_aops;
 		inode->u.qnx4_i.mmu_private = inode->i_size;
 	} else
-		/* HUH??? Where is device number? Oh, well... */
-		init_special_inode(inode, inode->i_mode, 0);
-
+		printk("qnx4: bad inode %d on dev %s\n",ino,kdevname(inode->i_dev));
 	brelse(bh);
 }
 
@@ -513,7 +511,7 @@ static struct file_system_type qnx4_fs_type =
 
 int __init init_qnx4_fs(void)
 {
-	printk("QNX4 filesystem 0.2.1 registered.\n");
+	printk("QNX4 filesystem 0.2.2 registered.\n");
 	return register_filesystem(&qnx4_fs_type);
 }
 

@@ -61,11 +61,11 @@ void count_bits(const register char *bmPart, register int size,
 
 unsigned long qnx4_count_free_blocks(struct super_block *sb)
 {
-	int start = sb->u.qnx4_sb.BitMap->di_first_xtnt.xtnt_blk - 1;
+	int start = le32_to_cpu(sb->u.qnx4_sb.BitMap->di_first_xtnt.xtnt_blk) - 1;
 	int total = 0;
 	int total_free = 0;
 	int offset = 0;
-	int size = sb->u.qnx4_sb.BitMap->di_size;
+	int size = le32_to_cpu(sb->u.qnx4_sb.BitMap->di_size);
 	struct buffer_head *bh;
 
 	while (total < size) {
@@ -86,8 +86,8 @@ unsigned long qnx4_count_free_blocks(struct super_block *sb)
 
 int qnx4_is_free(struct super_block *sb, long block)
 {
-	int start = sb->u.qnx4_sb.BitMap->di_first_xtnt.xtnt_blk - 1;
-	int size = sb->u.qnx4_sb.BitMap->di_size;
+	int start = le32_to_cpu(sb->u.qnx4_sb.BitMap->di_first_xtnt.xtnt_blk) - 1;
+	int size = le32_to_cpu(sb->u.qnx4_sb.BitMap->di_size);
 	struct buffer_head *bh;
 	const char *g;
 	int ret = -EIO;
@@ -115,8 +115,8 @@ int qnx4_is_free(struct super_block *sb, long block)
 
 int qnx4_set_bitmap(struct super_block *sb, long block, int busy)
 {
-	int start = sb->u.qnx4_sb.BitMap->di_first_xtnt.xtnt_blk - 1;
-	int size = sb->u.qnx4_sb.BitMap->di_size;
+	int start = le32_to_cpu(sb->u.qnx4_sb.BitMap->di_first_xtnt.xtnt_blk) - 1;
+	int size = le32_to_cpu(sb->u.qnx4_sb.BitMap->di_size);
 	struct buffer_head *bh;
 	char *g;
 

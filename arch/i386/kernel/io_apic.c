@@ -252,7 +252,7 @@ int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pci_pin)
 				best_guess = irq;
 		}
 	}
-	return -1;
+	return best_guess;
 }
 
 /*

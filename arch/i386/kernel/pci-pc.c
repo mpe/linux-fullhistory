@@ -883,6 +883,18 @@ static void __init pci_fixup_i450nx(struct pci_dev *d)
 	}
 }
 
+static void __init pci_fixup_i450gx(struct pci_dev *d)
+{
+	/*
+	 * i450GX and i450KX -- Find and scan all secondary buses.
+	 * (called separately for each PCI bridge found)
+	 */
+	u8 busno;
+	pci_read_config_byte(d, 0x4a, &busno);
+	printk("PCI: i440KX/GX host bridge %s: secondary bus %02x\n", d->slot_name, busno);
+	pci_scan_bus(busno, pci_root_ops, NULL);
+}
+
 static void __init pci_fixup_rcc(struct pci_dev *d)
 {
 	/*
@@ -954,6 +966,7 @@ static void __init pci_fixup_ide_trash(struct pci_dev *d)
 
 struct pci_fixup pcibios_fixups[] = {
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82451NX,	pci_fixup_i450nx },
+	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82454GX,	pci_fixup_i450gx },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_RCC,	PCI_DEVICE_ID_RCC_HE,		pci_fixup_rcc },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_RCC,	PCI_DEVICE_ID_RCC_LE,		pci_fixup_rcc },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_COMPAQ,	PCI_DEVICE_ID_COMPAQ_6010,	pci_fixup_compaq },
@@ -1036,6 +1049,18 @@ static void __init pcibios_irq_peer_trick(struct irq_routing_table *rt)
  *  table, but unfortunately we have to know the interrupt router chip.
  */
 
+/*
+ * Never use: 0, 1, 2 (timer, keyboard, and cascade)
+ * Avoid using: 13, 14 and 15 (FP error and IDE).
+ * Penalize: 3, 4, 7, 12 (known ISA uses: serial, parallel and mouse)
+ */
+static unsigned int pcibios_irq_mask = 0xfff8;
+
+static unsigned pcibios_irq_penalty[16] = {
+	1000, 1000, 1000, 10, 10, 0, 0, 10,
+	0, 0, 0, 0, 10, 100, 100, 100
+};
+
 static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *rt, int pin, int assign)
 {
 	struct irq_info *q;
@@ -1043,6 +1068,7 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 	int i, pirq, newirq;
 	u32 rtrid, mask;
 	u8 x;
+	char *msg = NULL;
 
 	pin--;
 	DBG("IRQ for %s(%d)", dev->slot_name, pin);
@@ -1066,10 +1092,15 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 		return NULL;
 	}
 	DBG(" -> PIRQ %02x, mask %04x", pirq, mask);
-	if (!assign || (dev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
-		newirq = 0;
-	else for(newirq = 13; newirq && !(mask & (1 << newirq)); newirq--)
-		;
+	newirq = 0;
+	if (assign && (dev->class >> 8) != PCI_CLASS_DISPLAY_VGA) {
+		for (i = 0; i < 16; i++) {
+			if (!(mask & pcibios_irq_mask & (1 << i)))
+				continue;
+			if (pcibios_irq_penalty[i] < pcibios_irq_penalty[newirq])
+				newirq = i;
+		}
+	}
 	if (!(router = pci_find_slot(rt->rtr_bus, rt->rtr_devfn))) {
 		DBG(" -> router not found\n");
 		return NULL;
@@ -1094,27 +1125,30 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 		pci_read_config_byte(router, pirq, &x);
 		if (x < 16) {
 			DBG(" -> [PIIX] %02x\n", x);
-			dev->irq = x;
-			return "PIIX";
+			newirq = x;
+			msg = "PIIX";
 		} else if (newirq) {
 			DBG(" -> [PIIX] set to %02x\n", newirq);
 			pci_write_config_byte(router, pirq, newirq);
-			dev->irq = newirq;
-			return "PIIX-NEW";
-		}
-		DBG(" -> [PIIX] sink\n");
-		return NULL;
+			msg = "PIIX-NEW";
+		} else
+			DBG(" -> [PIIX] sink\n");
+		break;
 	case ID(PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533):
 	default:
 		DBG(" -> unknown router %04x/%04x\n", rt->rtr_vendor, rt->rtr_device);
 		if (newirq && mask == (1 << newirq)) {
 			/* Only one IRQ available -> use it */
-			dev->irq = newirq;
-			return "guess";
+			msg = "guess";
 		}
-		return NULL;
 	}
 #undef ID
+
+	if (msg) {
+		dev->irq = newirq;
+		pcibios_irq_penalty[newirq]++;
+	}
+	return msg;
 }
 
 static void __init pcibios_fixup_irqs(void)
@@ -1132,6 +1166,18 @@ static void __init pcibios_fixup_irqs(void)
 
 	if (rtable)
 		pcibios_irq_peer_trick(rtable);
+
+	pci_for_each_dev(dev) {
+		/*
+		 * If the BIOS has set an out of range IRQ number, just ignore it.
+		 * Also keep track of which IRQ's are already in use.
+		 */
+		if (dev->irq >= 16) {
+			DBG("%s: ignoring bogus IRQ %d\n", dev->slot_name, dev->irq);
+			dev->irq = 0;
+		}
+		pcibios_irq_penalty[dev->irq]++;
+	}
 
 	pci_for_each_dev(dev) {
 		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
@@ -1171,10 +1217,8 @@ static void __init pcibios_fixup_irqs(void)
 		}
 #endif
 		/*
-		 * Fix out-of-range IRQ numbers and missing IRQs.
+		 * Still no IRQ? Try to assign one...
 		 */
-		if (dev->irq >= NR_IRQS)
-			dev->irq = 0;
 		if (pin && !dev->irq && pirq_table) {
 			char *msg = pcibios_lookup_irq(dev, pirq_table, pin, 0);
 			if (msg)
@@ -1279,6 +1323,9 @@ char * __init pcibios_setup(char *str)
 		return NULL;
 	} else if (!strcmp(str, "rom")) {
 		pci_probe |= PCI_ASSIGN_ROMS;
+		return NULL;
+	} else if (!strncmp(str, "irqmask=", 8)) {
+		pcibios_irq_mask = simple_strtol(str+8, NULL, 0);
 		return NULL;
 	}
 	return str;

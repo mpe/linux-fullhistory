@@ -1669,10 +1669,10 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
     var = default_var;
 #else
     memset(&var, 0, sizeof(var));
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
     if (default_vmode == VMODE_CHOOSE) {
         var = default_var;
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,1)
     if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0,
@@ -1680,11 +1680,11 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
         var = default_var;
 #endif
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
     } else {
         if (mac_vmode_to_var(default_vmode, default_cmode, &var))
             var = default_var;
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 #endif /* MODULE */
 
     if (noaccel)
