@@ -522,7 +522,7 @@ qh_urb_transaction (
 	else
 		buf = 0;
 
-	// FIXME this 'buf' check break some zlps...
+	/* for zero length DATA stages, STATUS is always IN */
 	if (!buf || is_input)
 		token |= (1 /* "in" */ << 8);
 	/* else it's already initted to "out" pid (0 << 8) */

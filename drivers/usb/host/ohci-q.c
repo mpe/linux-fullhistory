@@ -663,7 +663,7 @@ static void td_submit_urb (
 			/* NOTE:  mishandles transfers >8K, some >4K */
 			td_fill (ohci, info, data, data_len, urb, cnt++);
 		}
-		info = is_out
+		info = (is_out || data_len == 0)
 			? TD_CC | TD_DP_IN | TD_T_DATA1
 			: TD_CC | TD_DP_OUT | TD_T_DATA1;
 		td_fill (ohci, info, data, 0, urb, cnt++);
