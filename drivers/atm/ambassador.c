@@ -345,7 +345,7 @@ static inline u32 rd_plain (const amb_dev * dev, size_t addr) {
 }
 
 static inline void wr_mem (const amb_dev * dev, size_t addr, u32 data) {
-  u32 be = cpu_to_be32 (data);
+  __be32 be = cpu_to_be32 (data);
   PRINTD (DBG_FLOW|DBG_REGS, "wr: %08zx <- %08x b[%08x]", addr, data, be);
 #ifdef AMB_MMIO
   dev->membase[addr / sizeof(u32)] = be;
@@ -356,9 +356,9 @@ static inline void wr_mem (const amb_dev * dev, size_t addr, u32 data) {
 
 static inline u32 rd_mem (const amb_dev * dev, size_t addr) {
 #ifdef AMB_MMIO
-  u32 be = dev->membase[addr / sizeof(u32)];
+  __be32 be = dev->membase[addr / sizeof(u32)];
 #else
-  u32 be = inl (dev->iobase + addr);
+  __be32 be = inl (dev->iobase + addr);
 #endif
   u32 data = be32_to_cpu (be);
   PRINTD (DBG_FLOW|DBG_REGS, "rd: %08zx -> %08x b[%08x]", addr, data, be);
@@ -2007,7 +2007,7 @@ static int __devinit ucode_init (loader_block * lb, amb_dev * dev) {
 
 /********** give adapter parameters **********/
   
-static inline u32 bus_addr(void * addr) {
+static inline __be32 bus_addr(void * addr) {
     return cpu_to_be32 (virt_to_bus (addr));
 }
 
