@@ -74,45 +74,6 @@ unsigned int video_scan_lines;
 #define GPNUM (GPLAST - GPFIRST + 1)
 
 /*
- * This function is called when the size of the physical screen has been
- * changed.  If either the row or col argument is nonzero, set the appropriate
- * entry in each winsize structure for all the virtual consoles, then
- * send SIGWINCH to all processes with a virtual console as controlling
- * tty.
- */
-
-static int
-kd_size_changed(int row, int col)
-{
-  struct task_struct *p;
-  int i;
-
-  if ( !row && !col ) return 0;
-
-  for ( i = 0 ; i < MAX_NR_CONSOLES ; i++ )
-    {
-      if ( console_driver.table[i] )
-	{
-	  if ( row ) console_driver.table[i]->winsize.ws_row = row;
-	  if ( col ) console_driver.table[i]->winsize.ws_col = col;
-	}
-    }
-
-  read_lock(&tasklist_lock);
-  for_each_task(p)
-    {
-      if ( p->tty && MAJOR(p->tty->device) == TTY_MAJOR &&
-	   MINOR(p->tty->device) <= MAX_NR_CONSOLES && MINOR(p->tty->device) )
-	{
-	  send_sig(SIGWINCH, p, 1);
-	}
-    }
-  read_unlock(&tasklist_lock);
-
-  return 0;
-}
-
-/*
  * Generates sound of some frequency for some number of clock ticks
  *
  * If freq is 0, will turn off sound, else will turn it on for that time.
@@ -553,7 +514,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		 * explicitly blank/unblank the screen if switching modes
 		 */
 		if (arg == KD_TEXT)
-			do_unblank_screen();
+			unblank_screen();
 		else
 			do_blank_screen(1);
 		return 0;
@@ -781,7 +742,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if (arg == 0 || arg > MAX_NR_CONSOLES)
 			return -ENXIO;
 		arg--;
-		i = vc_allocate(arg, 0);
+		i = vc_allocate(arg);
 		if (i)
 			return i;
 		set_console(arg);
@@ -833,7 +794,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 				 */
 				int newvt = vt_cons[console]->vt_newvt;
 				vt_cons[console]->vt_newvt = -1;
-				i = vc_allocate(newvt, 0);
+				i = vc_allocate(newvt);
 				if (i)
 					return i;
 				/*
@@ -893,8 +854,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return i;
 		__get_user(ll, &vtsizes->v_rows);
 		__get_user(cc, &vtsizes->v_cols);
-		i = vc_resize_all(ll, cc);
-		return i ? i : 	kd_size_changed(ll, cc);
+		return vc_resize_all(ll, cc);
 	}
 
 	case VT_RESIZEX:
@@ -942,12 +902,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if ( clin )
 		  video_font_height = clin;
 		
-		i = vc_resize_all(ll, cc);
-		if (i)
-			return i;
-
-		kd_size_changed(ll, cc);
-		return 0;
+		return vc_resize_all(ll, cc);
   	}
 
 	case PIO_FONT: {
@@ -1201,7 +1156,7 @@ void complete_change_console(unsigned int new_console)
 	 * unblank the screen later.
 	 */
 	old_vc_mode = vt_cons[fg_console]->vc_mode;
-	update_screen(new_console);
+	switch_screen(new_console);
 
 	/*
 	 * If this new console is under process control, send it a signal
@@ -1239,14 +1194,10 @@ void complete_change_console(unsigned int new_console)
 	if (old_vc_mode != vt_cons[new_console]->vc_mode)
 	{
 		if (vt_cons[new_console]->vc_mode == KD_TEXT)
-			do_unblank_screen();
+			unblank_screen();
 		else
 			do_blank_screen(1);
 	}
-
-	/* Set the colour palette for this VT */
-	if (vt_cons[new_console]->vc_mode == KD_TEXT)
-		set_palette() ;
 
 	/*
 	 * Wake anyone waiting for their VT to activate

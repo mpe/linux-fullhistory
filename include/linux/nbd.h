@@ -35,7 +35,6 @@ nbd_end_request(struct request *req)
 }
 
 #define MAX_NBD 128
-#endif
 
 struct nbd_device {
 	int refcnt;	
@@ -51,6 +50,7 @@ struct nbd_device {
 	struct request *tail;
 	struct semaphore queue_lock;
 };
+#endif
 
 /* This now IS in some kind of include file...	*/
 

@@ -92,7 +92,7 @@ static ssize_t pipe_write(struct file * filp, const char * buf,
 			  size_t count, loff_t *ppos)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
-	ssize_t chars = 0, free = 0, written = 0;
+	ssize_t chars = 0, free = 0, written = 0, err=0;
 	char *pipebuf;
 
 	if (ppos != &filp->f_pos)
@@ -107,16 +107,26 @@ static ssize_t pipe_write(struct file * filp, const char * buf,
 		free = count;
 	else
 		free = 1; /* can't do it atomically, wait for any free space */
+	up(&inode->i_sem);
+	if (down_interruptible(&inode->i_atomic_write)) {
+		down(&inode->i_sem);
+		return -ERESTARTSYS;
+	}
 	while (count>0) {
 		while ((PIPE_FREE(*inode) < free) || PIPE_LOCK(*inode)) {
 			if (!PIPE_READERS(*inode)) { /* no readers */
 				send_sig(SIGPIPE,current,0);
-				return written? :-EPIPE;
+				err = -EPIPE;
+				goto errout;
 			}
-			if (signal_pending(current))
-				return written? :-ERESTARTSYS;
-			if (filp->f_flags & O_NONBLOCK)
-				return written? :-EAGAIN;
+			if (signal_pending(current)) {
+				err = -ERESTARTSYS;
+				goto errout;
+			}
+			if (filp->f_flags & O_NONBLOCK) {
+				err = -EAGAIN;
+				goto errout;
+			}
 			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		}
 		PIPE_LOCK(*inode)++;
@@ -139,7 +149,10 @@ static ssize_t pipe_write(struct file * filp, const char * buf,
 	}
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(inode);
-	return written;
+errout:
+	up(&inode->i_atomic_write);
+	down(&inode->i_sem);
+	return written ? written : err;
 }
 
 static long long pipe_lseek(struct file * file, long long offset, int orig)

@@ -27,7 +27,7 @@ struct qstr {
 #define init_name_hash()		0
 
 /* partial hash update function. Assume roughly 4 bits per character */
-static __inline__ unsigned long partial_name_hash(unsigned char c, unsigned long prevhash)
+static __inline__ unsigned long partial_name_hash(unsigned long c, unsigned long prevhash)
 {
 	prevhash = (prevhash << 4) | (prevhash >> (8*sizeof(unsigned long)-4));
 	return prevhash ^ c;

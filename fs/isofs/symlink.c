@@ -19,7 +19,7 @@
 #include <asm/uaccess.h>
 
 static int isofs_readlink(struct dentry *, char *, int);
-static struct dentry * isofs_follow_link(struct dentry *, struct dentry *);
+static struct dentry * isofs_follow_link(struct dentry *, struct dentry *, unsigned int);
 
 /*
  * symlinks can't do much...
@@ -66,7 +66,8 @@ static int isofs_readlink(struct dentry * dentry, char * buffer, int buflen)
 }
 
 static struct dentry * isofs_follow_link(struct dentry * dentry,
-					struct dentry *base)
+					struct dentry *base,
+					unsigned int follow)
 {
 	char * pnt;
 
@@ -76,7 +77,7 @@ static struct dentry * isofs_follow_link(struct dentry * dentry,
 		return ERR_PTR(-ELOOP);
 	}
 
-	base = lookup_dentry(pnt, base, 1);
+	base = lookup_dentry(pnt, base, follow);
 
 	kfree(pnt);
 	return base;

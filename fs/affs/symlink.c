@@ -20,7 +20,7 @@
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 
 static int		 affs_readlink(struct dentry *, char *, int);
-static struct dentry	*affs_follow_link(struct dentry *dentry, struct dentry *base);
+static struct dentry	*affs_follow_link(struct dentry *dentry, struct dentry *base, unsigned int);
 
 struct inode_operations affs_symlink_inode_operations = {
 	NULL,			/* no file-operations */
@@ -98,7 +98,7 @@ affs_readlink(struct dentry *dentry, char *buffer, int buflen)
 }
 
 static struct dentry *
-affs_follow_link(struct dentry *dentry, struct dentry *base)
+affs_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
 {
 	struct inode *inode = dentry->d_inode;
 	struct buffer_head	*bh;
@@ -150,7 +150,7 @@ affs_follow_link(struct dentry *dentry, struct dentry *base)
 	}
 	buffer[i] = '\0';
 	affs_brelse(bh);
-	base = lookup_dentry(buffer,base,1);
+	base = lookup_dentry(buffer,base,follow);
 	kfree(buffer);
 	return base;
 }

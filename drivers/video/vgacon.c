@@ -64,8 +64,6 @@
  */
 #undef TRIDENT_GLITCH
 
-#undef VGA_CAN_DO_64KB
-
 #define dac_reg		0x3c8
 #define dac_val		0x3c9
 #define attrib_port	0x3c0
@@ -115,6 +113,7 @@ static int	       vga_palette_blanked;
 static int	       vga_is_gfx;
 static int	       vga_512_chars;
 static int	       vga_video_font_height;
+static unsigned int    vga_rolled_over = 0;
 
 
 void no_scroll(char *str, int *ints)
@@ -190,7 +189,7 @@ __initfunc(static const char *vgacon_startup(void))
 			display_desc = "*MDA";
 			request_region(0x3b0,12,"mda");
 			request_region(0x3bf, 1,"mda");
-			vga_video_font_height = 16;
+			vga_video_font_height = 14;
 		}
 	}
 	else				/* If not, it is color. */
@@ -453,9 +452,8 @@ static int vgacon_switch(struct vc_data *c)
 	 */
 	vga_video_num_columns = c->vc_cols;
 	vga_video_num_lines = c->vc_rows;
-	if (vga_is_gfx)
-		return 1;
-	scr_memcpyw_to((u16 *) c->vc_origin, (u16 *) c->vc_screenbuf, c->vc_screenbuf_size);
+	if (!vga_is_gfx)
+		scr_memcpyw_to((u16 *) c->vc_origin, (u16 *) c->vc_screenbuf, c->vc_screenbuf_size);
 	return 0;	/* Redrawing not needed */
 }
 
@@ -474,8 +472,7 @@ static void vga_set_palette(struct vc_data *c, unsigned char *table)
 static int vgacon_set_palette(struct vc_data *c, unsigned char *table)
 {
 #ifdef CAN_LOAD_PALETTE
-
-	if (vga_video_type != VIDEO_TYPE_VGAC || vga_palette_blanked)
+	if (vga_video_type != VIDEO_TYPE_VGAC || vga_palette_blanked || !CON_IS_VISIBLE(c))
 		return -EINVAL;
 	vga_set_palette(c, table);
 	return 0;
@@ -637,10 +634,11 @@ static int vgacon_blank(struct vc_data *c, int blank)
 			vga_palette_blanked = 1;
 			return 0;
 		}
-		scr_memsetw((void *)vga_vram_base, BLANK, vc_cons[0].d->vc_screenbuf_size);
+		vgacon_set_origin(c);
+		scr_memsetw((void *)vga_vram_base, BLANK, c->vc_screenbuf_size);
 		return 1;
 	case -1:			/* Entering graphic mode */
-		scr_memsetw((void *)vga_vram_base, BLANK, vc_cons[0].d->vc_screenbuf_size);
+		scr_memsetw((void *)vga_vram_base, BLANK, c->vc_screenbuf_size);
 		vga_is_gfx = 1;
 		return 1;
 	default:			/* VESA blanking */
@@ -899,14 +897,24 @@ static int vgacon_scrolldelta(struct vc_data *c, int lines)
 	if (!lines)			/* Turn scrollback off */
 		c->vc_visible_origin = c->vc_origin;
 	else {
-		int p = c->vc_visible_origin - vga_vram_base;
-		int margin = c->vc_rows/4 * c->vc_size_row;
-		p += lines * c->vc_size_row;
-		if (lines < 0 && p < margin)
+		int vram_size = vga_vram_end - vga_vram_base;
+		int margin = c->vc_size_row * 4;
+		int ul, we, p, st;
+
+		if (vga_rolled_over > (c->vc_scr_end - vga_vram_base) + margin) {
+			ul = c->vc_scr_end - vga_vram_base;
+			we = vga_rolled_over + c->vc_size_row;
+		} else {
+			ul = 0;
+			we = vram_size;
+		}
+		p = (c->vc_visible_origin - vga_vram_base - ul + we) % we + lines * c->vc_size_row;
+		st = (c->vc_origin - vga_vram_base - ul + we) % we;
+		if (p < margin)
 			p = 0;
-		c->vc_visible_origin = p + vga_vram_base;
-		if (lines > 0 && c->vc_visible_origin > c->vc_origin - margin)
-			c->vc_visible_origin = c->vc_origin;
+		if (p > st - margin)
+			p = st;
+		c->vc_visible_origin = vga_vram_base + (p + ul) % we;
 	}
 	vga_set_mem_top(c);
 	return 1;
@@ -919,6 +927,7 @@ static int vgacon_set_origin(struct vc_data *c)
 		return 0;
 	c->vc_origin = c->vc_visible_origin = vga_vram_base;
 	vga_set_mem_top(c);
+	vga_rolled_over = 0;
 	return 1;
 }
 
@@ -935,9 +944,8 @@ static void vgacon_save_screen(struct vc_data *c)
 		c->vc_x = ORIG_X;
 		c->vc_y = ORIG_Y;
 	}
-	if (vga_is_gfx)
-		return;
-	scr_memcpyw_from((u16 *) c->vc_screenbuf, (u16 *) c->vc_origin, c->vc_screenbuf_size);
+	if (!vga_is_gfx)
+		scr_memcpyw_from((u16 *) c->vc_screenbuf, (u16 *) c->vc_origin, c->vc_screenbuf_size);
 }
 
 static int vgacon_scroll(struct vc_data *c, int t, int b, int dir, int lines)
@@ -962,6 +970,7 @@ static int vgacon_scroll(struct vc_data *c, int t, int b, int dir, int lines)
 				    (u16 *)(oldo + delta),
 				    c->vc_screenbuf_size - delta);
 			c->vc_origin = vga_vram_base;
+			vga_rolled_over = oldo - vga_vram_base;
 		} else
 			c->vc_origin += delta;
 		scr_memsetw((u16 *)(c->vc_origin + c->vc_screenbuf_size - delta), c->vc_video_erase_char, delta);
@@ -971,6 +980,7 @@ static int vgacon_scroll(struct vc_data *c, int t, int b, int dir, int lines)
 				     (u16 *)oldo,
 				     c->vc_screenbuf_size - delta);
 			c->vc_origin = vga_vram_end - c->vc_screenbuf_size;
+			vga_rolled_over = 0;
 		} else
 			c->vc_origin -= delta;
 		c->vc_scr_end = c->vc_origin + c->vc_screenbuf_size;

@@ -17,7 +17,7 @@
 #include <linux/stat.h>
 
 static int proc_readlink(struct dentry *, char *, int);
-static struct dentry * proc_follow_link(struct dentry *, struct dentry *);
+static struct dentry * proc_follow_link(struct dentry *, struct dentry *, unsigned int);
 
 /*
  * links can't do much...
@@ -57,7 +57,8 @@ struct inode_operations proc_link_inode_operations = {
 };
 
 static struct dentry * proc_follow_link(struct dentry *dentry,
-					struct dentry *base)
+					struct dentry *base,
+					unsigned int follow)
 {
 	struct inode *inode = dentry->d_inode;
 	struct task_struct *p;
@@ -172,7 +173,7 @@ static int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
 	int error;
 
-	dentry = proc_follow_link(dentry, NULL);
+	dentry = proc_follow_link(dentry, NULL, 1);
 	error = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
 		error = -ENOENT;

@@ -26,8 +26,6 @@
 #define utf		(vc_cons[currcons].d->vc_utf)
 #define utf_count	(vc_cons[currcons].d->vc_utf_count)
 #define utf_char	(vc_cons[currcons].d->vc_utf_char)
-#define video_mem_start (vc_cons[currcons].d->vc_video_mem_start)
-#define video_mem_end	(vc_cons[currcons].d->vc_video_mem_end)
 #define video_erase_char (vc_cons[currcons].d->vc_video_erase_char)
 #define disp_ctrl	(vc_cons[currcons].d->vc_disp_ctrl)
 #define toggle_meta	(vc_cons[currcons].d->vc_toggle_meta)
@@ -64,6 +62,7 @@
 #define cursor_type	(vc_cons[currcons].d->vc_cursor_type)
 #define display_fg	(vc_cons[currcons].d->vc_display_fg)
 #define complement_mask (vc_cons[currcons].d->vc_complement_mask)
+#define s_complement_mask (vc_cons[currcons].d->vc_s_complement_mask)
 #define hi_font_mask	(vc_cons[currcons].d->vc_hi_font_mask)
 
 #define vcmode		(vt_cons[currcons]->vc_mode)

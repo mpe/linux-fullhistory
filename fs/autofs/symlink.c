@@ -27,12 +27,13 @@ static int autofs_readlink(struct dentry *dentry, char *buffer, int buflen)
 }
 
 static struct dentry * autofs_follow_link(struct dentry *dentry,
-					struct dentry *base)
+					struct dentry *base,
+					unsigned int follow)
 {
 	struct autofs_symlink *sl;
 
 	sl = (struct autofs_symlink *)dentry->d_inode->u.generic_ip;
-	return lookup_dentry(sl->data, base, 1);
+	return lookup_dentry(sl->data, base, follow);
 }
 
 struct inode_operations autofs_symlink_inode_operations = {

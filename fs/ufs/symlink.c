@@ -43,7 +43,7 @@
 
 
 static struct dentry * ufs_follow_link(struct dentry * dentry,
-	struct dentry * base)
+	struct dentry * base, unsigned int follow)
 {
 	struct inode * inode;
 	struct buffer_head * bh;
@@ -67,7 +67,7 @@ static struct dentry * ufs_follow_link(struct dentry * dentry,
 		link = (char *) inode->u.ufs_i.i_u1.i_symlink;
 	}
 	UPDATE_ATIME(inode);
-	base = lookup_dentry(link, base, 1);
+	base = lookup_dentry(link, base, follow);
 	if (bh)
 		brelse(bh);
 	UFSD(("EXIT\n"))

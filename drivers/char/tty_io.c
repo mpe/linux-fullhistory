@@ -126,11 +126,11 @@ static ssize_t tty_write(struct file *, const char *, size_t, loff_t *);
 static unsigned int tty_poll(struct file *, poll_table *);
 static int tty_open(struct inode *, struct file *);
 static int tty_release(struct inode *, struct file *);
-static int tty_ioctl(struct inode * inode, struct file * file,
-		     unsigned int cmd, unsigned long arg);
+int tty_ioctl(struct inode * inode, struct file * file,
+	      unsigned int cmd, unsigned long arg);
 static int tty_fasync(int fd, struct file * filp, int on);
 #ifdef CONFIG_8xx
-extern long console_8xx_init(void);
+extern long console_8xx_init(long, long);
 extern int rs_8xx_init(void);
 #endif /* CONFIG_8xx */
 
@@ -640,7 +640,13 @@ static inline ssize_t do_tty_write(
 	size_t count)
 {
 	ssize_t ret = 0, written = 0;
-
+	struct inode *inode = file->f_dentry->d_inode;
+	
+	up(&inode->i_sem);
+	if (down_interruptible(&inode->i_atomic_write)) {
+		down(&inode->i_sem);
+		return -ERESTARTSYS;
+	}
 	for (;;) {
 		unsigned long size = PAGE_SIZE*2;
 		if (size > count)
@@ -663,6 +669,8 @@ static inline ssize_t do_tty_write(
 		file->f_dentry->d_inode->i_mtime = CURRENT_TIME;
 		ret = written;
 	}
+	up(&inode->i_atomic_write);
+	down(&inode->i_sem);
 	return ret;
 }
 
@@ -1604,8 +1612,8 @@ static int send_break(struct tty_struct *tty, int duration)
 /*
  * Split this up, as gcc can choke on it otherwise..
  */
-static int tty_ioctl(struct inode * inode, struct file * file,
-		     unsigned int cmd, unsigned long arg)
+int tty_ioctl(struct inode * inode, struct file * file,
+	      unsigned int cmd, unsigned long arg)
 {
 	struct tty_struct *tty, *real_tty;
 	int retval;
@@ -2004,7 +2012,11 @@ long __init console_init(long kmem_start, long kmem_end)
 	kmem_start = con_init(kmem_start);
 #endif
 #ifdef CONFIG_SERIAL_CONSOLE
+#ifdef CONFIG_8xx
+	kmem_start = console_8xx_init(kmem_start, kmem_end);
+#else 	
 	kmem_start = serial_console_init(kmem_start, kmem_end);
+#endif /* CONFIG_8xx */
 #endif
 	return kmem_start;
 }

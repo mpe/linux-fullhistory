@@ -25,7 +25,7 @@
 #include <linux/stat.h>
 
 static int ext2_readlink (struct dentry *, char *, int);
-static struct dentry *ext2_follow_link(struct dentry *, struct dentry *);
+static struct dentry *ext2_follow_link(struct dentry *, struct dentry *, unsigned int);
 
 /*
  * symlinks can't do much...
@@ -52,7 +52,8 @@ struct inode_operations ext2_symlink_inode_operations = {
 };
 
 static struct dentry * ext2_follow_link(struct dentry * dentry,
-					struct dentry *base)
+					struct dentry *base,
+					unsigned int follow)
 {
 	struct inode *inode = dentry->d_inode;
 	struct buffer_head * bh = NULL;
@@ -68,7 +69,7 @@ static struct dentry * ext2_follow_link(struct dentry * dentry,
 		link = bh->b_data;
 	}
 	UPDATE_ATIME(inode);
-	base = lookup_dentry(link, base, 1);
+	base = lookup_dentry(link, base, follow);
 	if (bh)
 		brelse(bh);
 	return base;

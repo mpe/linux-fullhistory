@@ -19,7 +19,7 @@
 #include <asm/uaccess.h>
 
 static int nfs_readlink(struct dentry *, char *, int);
-static struct dentry *nfs_follow_link(struct dentry *, struct dentry *);
+static struct dentry *nfs_follow_link(struct dentry *, struct dentry *, unsigned int);
 
 /*
  * symlinks can't do much...
@@ -68,7 +68,7 @@ static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 }
 
 static struct dentry *
-nfs_follow_link(struct dentry * dentry, struct dentry *base)
+nfs_follow_link(struct dentry * dentry, struct dentry *base, unsigned int follow)
 {
 	int error;
 	unsigned int len;
@@ -94,7 +94,7 @@ nfs_follow_link(struct dentry * dentry, struct dentry *base)
 	path[len] = 0;
 	kfree(mem);
 
-	result = lookup_dentry(path, base, 1);
+	result = lookup_dentry(path, base, follow);
 	kfree(path);
 out:
 	return result;

@@ -348,6 +348,7 @@ struct inode {
 	unsigned long		i_version;
 	unsigned long		i_nrpages;
 	struct semaphore	i_sem;
+	struct semaphore	i_atomic_write;
 	struct inode_operations	*i_op;
 	struct super_block	*i_sb;
 	struct wait_queue	*i_wait;
@@ -622,7 +623,7 @@ struct inode_operations {
 	int (*rename) (struct inode *, struct dentry *,
 			struct inode *, struct dentry *);
 	int (*readlink) (struct dentry *, char *,int);
-	struct dentry * (*follow_link) (struct dentry *, struct dentry *);
+	struct dentry * (*follow_link) (struct dentry *, struct dentry *, unsigned int);
 	int (*readpage) (struct file *, struct page *);
 	int (*writepage) (struct file *, struct page *);
 	int (*bmap) (struct inode *,int);
@@ -783,8 +784,8 @@ extern ino_t find_inode_number(struct dentry *, struct qstr *);
 #define PTR_ERR(ptr)	((long)(ptr))
 #define IS_ERR(ptr)	((unsigned long)(ptr) > (unsigned long)(-1000))
 
-extern struct dentry * lookup_dentry(const char *, struct dentry *, int);
-extern struct dentry * __namei(const char *, int);
+extern struct dentry * lookup_dentry(const char *, struct dentry *, unsigned int);
+extern struct dentry * __namei(const char *, unsigned int);
 
 #define namei(pathname)		__namei(pathname, 1)
 #define lnamei(pathname)	__namei(pathname, 0)

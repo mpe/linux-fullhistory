@@ -42,7 +42,7 @@ static int property_read_proc(char *page, char **start, off_t off,
  */
 
 static int devtree_readlink(struct dentry *, char *, int);
-static struct dentry *devtree_follow_link(struct dentry *, struct dentry *);
+static struct dentry *devtree_follow_link(struct dentry *, struct dentry *, unsigned int);
 
 struct inode_operations devtree_symlink_inode_operations = {
 	NULL,			/* no file-operations */
@@ -66,7 +66,8 @@ struct inode_operations devtree_symlink_inode_operations = {
 };
 
 static struct dentry *devtree_follow_link(struct dentry *dentry,
-					  struct dentry *base)
+					  struct dentry *base,
+					  unsigned int follow)
 {
 	struct inode *inode = dentry->d_inode;
 	struct proc_dir_entry * de;
@@ -74,7 +75,7 @@ static struct dentry *devtree_follow_link(struct dentry *dentry,
 
 	de = (struct proc_dir_entry *) inode->u.generic_ip;
 	link = (char *) de->data;
-	return lookup_dentry(link, base, 1);
+	return lookup_dentry(link, base, follow);
 }
 
 static int devtree_readlink(struct dentry *dentry, char *buffer, int buflen)

@@ -77,7 +77,7 @@ extern long console_init(long, long);
 extern void sock_init(void);
 extern void uidcache_init(void);
 extern void mca_init(void);
-extern long sbus_init(long, long);
+extern long sbus_init(void);
 extern long powermac_init(unsigned long, unsigned long);
 extern void sysctl_init(void);
 extern void filescache_init(void);

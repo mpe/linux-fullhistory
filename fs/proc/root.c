@@ -55,9 +55,6 @@ static struct file_operations proc_dir_operations = {
 	NULL			/* can't fsync */
 };
 
-int proc_readlink(struct dentry * dentry, char * buffer, int buflen);
-struct dentry * proc_follow_link(struct dentry *dentry, struct dentry *base);
-
 /*
  * proc directories can do almost nothing..
  */
@@ -388,12 +385,13 @@ static int proc_self_readlink(struct dentry *dentry, char *buffer, int buflen)
 }
 
 static struct dentry * proc_self_follow_link(struct dentry *dentry,
-						struct dentry *base)
+						struct dentry *base,
+						unsigned int follow)
 {
 	char tmp[30];
 
 	sprintf(tmp, "%d", current->pid);
-	return lookup_dentry(tmp, base, 1);
+	return lookup_dentry(tmp, base, follow);
 }	
 
 int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
@@ -420,7 +418,7 @@ int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
 	return len;
 }
 
-struct dentry * proc_follow_link(struct dentry * dentry, struct dentry *base)
+struct dentry * proc_follow_link(struct dentry * dentry, struct dentry *base, unsigned int follow)
 {
 	struct inode *inode = dentry->d_inode;
 	struct proc_dir_entry * de;
@@ -435,7 +433,7 @@ struct dentry * proc_follow_link(struct dentry * dentry, struct dentry *base)
 	if (de->readlink_proc)
 		len = de->readlink_proc(de, page);
 
-	d = lookup_dentry(page, base, 1);
+	d = lookup_dentry(page, base, follow);
 	free_page((unsigned long) page);
 	return d;
 }

@@ -19,7 +19,6 @@ struct vc_data {
 	struct consw	*vc_sw;
 	unsigned short	*vc_screenbuf;		/* In-memory character/attribute buffer */
 	unsigned int	vc_screenbuf_size;
-	unsigned short	vc_video_erase_char;	/* Background erase character */
 	unsigned char	vc_attr;		/* Current attributes */
 	unsigned char	vc_def_color;		/* Default colors */
 	unsigned char	vc_color;		/* Foreground & background */
@@ -28,6 +27,8 @@ struct vc_data {
 	unsigned char	vc_halfcolor;		/* Color for half intensity mode */
 	unsigned short	vc_complement_mask;	/* [#] Xor mask for mouse pointer */
 	unsigned short	vc_hi_font_mask;	/* [#] Attribute set for upper 256 chars of font or 0 if not supported */
+	unsigned short	vc_video_erase_char;	/* Background erase character */
+	unsigned short	vc_s_complement_mask;	/* Saved mouse pointer mask */
 	unsigned int	vc_x, vc_y;		/* Cursor position */
 	unsigned int	vc_top, vc_bottom;	/* Scrolling region */
 	unsigned int	vc_state;		/* Escape sequence parser state */
@@ -104,3 +105,5 @@ extern struct vc vc_cons [MAX_NR_CONSOLES];
 #define CUR_SWMASK	0xfff0
 
 #define CUR_DEFAULT CUR_UNDERLINE
+
+#define CON_IS_VISIBLE(conp) (*conp->vc_display_fg == conp)

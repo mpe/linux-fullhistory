@@ -35,27 +35,29 @@ void (*kd_mksound)(unsigned int hz, unsigned int ticks);
 /* console.c */
 
 struct console_font_op;
+struct consw;
 
-int vc_allocate(unsigned int console, int init);
+int vc_allocate(unsigned int console);
 int vc_cons_allocated(unsigned int console);
 int vc_resize(unsigned int lines, unsigned int cols,
 	      unsigned int first, unsigned int last);
 #define vc_resize_all(l, c) vc_resize(l, c, 0, MAX_NR_CONSOLES-1)
 #define vc_resize_con(l, c, x) vc_resize(l, c, x, x)
 void vc_disallocate(unsigned int console);
-void poke_blanked_console(void);
-void set_vesa_blanking(unsigned long arg);
-void vesa_blank(void);
-void vesa_powerdown(void);
 void reset_palette(int currcons);
-void set_palette(void);
-void do_blank_screen(int nopowersave);
+void set_palette(int currcons);
+void do_blank_screen(int gfx_mode);
+void unblank_screen(void);
+void poke_blanked_console(void);
 int con_font_op(int currcons, struct console_font_op *op);
 int con_set_cmap(unsigned char *cmap);
 int con_get_cmap(unsigned char *cmap);
 void scrollback(int);
 void scrollfront(int);
 void update_region(int currcons, unsigned long start, int count);
+void redraw_screen(int new_console, int is_switch);
+#define update_screen(x) redraw_screen(x, 0)
+#define switch_screen(x) redraw_screen(x, 1)
 
 struct tty_struct;
 int tioclinux(struct tty_struct *tty, unsigned long arg);
@@ -75,6 +77,7 @@ int con_get_unimap(int currcons, ushort ct, ushort *uct, struct unipair *list);
 int con_set_default_unimap(int currcons);
 void con_free_unimap(int currcons);
 void con_protect_unimap(int currcons, int rdonly);
+int con_copy_unimap(int dstcons, int srccons);
 
 /* vt.c */
 

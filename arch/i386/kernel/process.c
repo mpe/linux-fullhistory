@@ -540,10 +540,10 @@ void release_thread(struct task_struct *dead_task)
 static inline void unlazy_fpu(struct task_struct *tsk)
 {
 	if (tsk->flags & PF_USEDFPU) {
-		tsk->flags &= ~PF_USEDFPU;
 		__asm__("fnsave %0":"=m" (tsk->tss.i387));
-		stts();
 		asm volatile("fwait");
+		tsk->flags &= ~PF_USEDFPU;
+		stts();
 	}
 }
 
@@ -737,8 +737,11 @@ void __switch_to(struct task_struct *prev, struct task_struct *next)
 		asm volatile("lldt %0": :"g" (*(unsigned short *)&next->tss.ldt));
 
 	/* Re-load page tables */
-	if (next->tss.cr3 != prev->tss.cr3)
-		asm volatile("movl %0,%%cr3": :"r" (next->tss.cr3));
+	{
+		unsigned long new_cr3 = next->tss.cr3;
+		if (new_cr3 != prev->tss.cr3) 
+			asm volatile("movl %0,%%cr3": :"r" (new_cr3));
+	}
 
 	/*
 	 * Restore %fs and %gs.

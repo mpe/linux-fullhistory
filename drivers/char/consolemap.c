@@ -576,6 +576,24 @@ con_set_default_unimap(int con)
 }
 
 int
+con_copy_unimap(int dstcon, int srccon)
+{
+	struct vc_data *sconp = vc_cons[srccon].d;
+	struct vc_data *dconp = vc_cons[dstcon].d;
+	struct uni_pagedir *q;
+	
+	if (!vc_cons_allocated(srccon) || !*sconp->vc_uni_pagedir_loc)
+		return -EINVAL;
+	if (*dconp->vc_uni_pagedir_loc == *sconp->vc_uni_pagedir_loc)
+		return 0;
+	con_free_unimap(dstcon);
+	q = (struct uni_pagedir *)*sconp->vc_uni_pagedir_loc;
+	q->refcount++;
+	*dconp->vc_uni_pagedir_loc = (long)q;
+	return 0;
+}
+
+int
 con_get_unimap(int con, ushort ct, ushort *uct, struct unipair *list)
 {
 	int i, j, k, ect;

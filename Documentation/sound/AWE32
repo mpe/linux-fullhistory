@@ -51,7 +51,7 @@ Then WaveTable goes. For some reason Plug-n-Play detects only one I/O port,
 but the wavetable needs THREE! My working string is:
 
 "(CONFIGURE CTL044/1132685 (LD 2 (IO 0 (BASE 0x0620)) (IO 1 (BASE 0x0A20)) 
-(IO 3 (BASE 0x0E20)) (ACT Y) ))"
+(IO 2 (BASE 0x0E20)) (ACT Y) ))"
 
 Resources 0x0620, 0x0A20 and 0x0E20 should work. Other on-board devices: 
 Gameport and StereoEnhance are not required to be inited.

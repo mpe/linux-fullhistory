@@ -415,15 +415,6 @@ asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struct
 	struct wait_queue wait = { current, NULL };
 	struct task_struct *p;
 
-	if (stat_addr) {
-		if(verify_area(VERIFY_WRITE, stat_addr, sizeof(*stat_addr)))
-			return -EFAULT;
-	}
-	if (ru) {
-		if(verify_area(VERIFY_WRITE, ru, sizeof(*ru)))
-			return -EFAULT;
-	}
-
 	if (options & ~(WNOHANG|WUNTRACED|__WCLONE))
 		return -EINVAL;
 
@@ -453,21 +444,23 @@ repeat:
 				if (!(options & WUNTRACED) && !(p->flags & PF_PTRACED))
 					continue;
 				read_unlock(&tasklist_lock);
-				if (ru != NULL)
-					getrusage(p, RUSAGE_BOTH, ru);
-				if (stat_addr)
-					__put_user((p->exit_code << 8) | 0x7f, stat_addr);
-				p->exit_code = 0;
-				retval = p->pid;
+				retval = ru ? getrusage(p, RUSAGE_BOTH, ru) : 0; 
+				if (!retval && stat_addr) 
+					retval = put_user((p->exit_code << 8) | 0x7f, stat_addr);
+				if (!retval) {
+					p->exit_code = 0;
+					retval = p->pid;
+				}
 				goto end_wait4;
 			case TASK_ZOMBIE:
 				current->times.tms_cutime += p->times.tms_utime + p->times.tms_cutime;
 				current->times.tms_cstime += p->times.tms_stime + p->times.tms_cstime;
 				read_unlock(&tasklist_lock);
-				if (ru != NULL)
-					getrusage(p, RUSAGE_BOTH, ru);
-				if (stat_addr)
-					__put_user(p->exit_code, stat_addr);
+				retval = ru ? getrusage(p, RUSAGE_BOTH, ru) : 0;
+				if (!retval && stat_addr)
+					retval = put_user(p->exit_code, stat_addr);
+				if (retval)
+					goto end_wait4; 
 				retval = p->pid;
 				if (p->p_opptr != p->p_pptr) {
 					write_lock_irq(&tasklist_lock);

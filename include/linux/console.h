@@ -53,15 +53,11 @@ extern struct consw compat_con;	/* console wrapper */
 extern struct consw prom_con;	/* SPARC PROM console */
 
 void take_over_console(struct consw *sw, int first, int last, int deflt);
-
-/* flag bits */
-#define CON_INITED  (1)
+void give_up_console(struct consw *sw);
 
 /* scroll */
 #define SM_UP       (1)
 #define SM_DOWN     (2)
-#define SM_LEFT     (3)
-#define SM_RIGHT    (4)
 
 /* cursor */
 #define CM_DRAW     (1)

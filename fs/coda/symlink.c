@@ -26,7 +26,7 @@
 #include <linux/coda_proc.h>
 
 static int coda_readlink(struct dentry *de, char *buffer, int length);
-static struct dentry *coda_follow_link(struct dentry *, struct dentry *);
+static struct dentry *coda_follow_link(struct dentry *, struct dentry *, unsigned int);
 
 struct inode_operations coda_symlink_inode_operations = {
 	NULL,			/* no file-operations */
@@ -86,7 +86,8 @@ static int coda_readlink(struct dentry *de, char *buffer, int length)
 }
 
 static struct dentry *coda_follow_link(struct dentry *de, 
-				       struct dentry *base)
+				       struct dentry *base,
+				       unsigned int follow)
 {
 	struct inode *inode = de->d_inode;
 	int error;
@@ -116,7 +117,7 @@ static struct dentry *coda_follow_link(struct dentry *de,
 	memcpy(path, mem, len);
 	path[len] = 0;
 
-	base = lookup_dentry(path, base, 1);
+	base = lookup_dentry(path, base, follow);
 	kfree(path);
 	return base;
 }

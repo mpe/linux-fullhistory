@@ -64,7 +64,8 @@ static int UMSDOS_readlink (struct dentry *dentry, char *buffer, int buflen)
 
 /* this one mostly stolen from romfs :) */
 static struct dentry *UMSDOS_followlink (struct dentry *dentry, 
-					struct dentry *base)
+					struct dentry *base,
+					unsigned int follow)
 {
 	struct inode *inode = dentry->d_inode;
 	char *symname;
@@ -91,7 +92,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name));
 	}
 
 	symname[len] = 0;
-	dentry = lookup_dentry (symname, base, 1);
+	dentry = lookup_dentry (symname, base, follow);
 	kfree (symname);
 
 	if (0) {

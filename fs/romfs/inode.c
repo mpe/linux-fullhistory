@@ -451,7 +451,8 @@ out:
 }
 
 static struct dentry *romfs_follow_link(struct dentry *dentry,
-					struct dentry *base)
+					struct dentry *base,
+					unsigned int follow)
 {
 	struct inode *inode = dentry->d_inode;
 	char *link;
@@ -470,7 +471,7 @@ static struct dentry *romfs_follow_link(struct dentry *dentry,
 	} else
 		link[len] = 0;
 
-	dentry = lookup_dentry(link, base, 1);
+	dentry = lookup_dentry(link, base, follow);
 	kfree(link);
 
 	if (0) {

@@ -21,7 +21,6 @@ extern void mouse_report(struct tty_struct * tty, int butt, int mrx, int mry);
 #define video_num_columns	(vc_cons[currcons].d->vc_cols)
 #define video_num_lines		(vc_cons[currcons].d->vc_rows)
 #define video_size_row		(vc_cons[currcons].d->vc_size_row)
-#define video_screen_size	(vc_cons[currcons].d->vc_screenbuf_size)
 #define can_do_color		(vc_cons[currcons].d->vc_can_do_color)
 
 extern int console_blanked;
@@ -31,7 +30,6 @@ extern int default_red[];
 extern int default_grn[];
 extern int default_blu[];
 
-extern void do_unblank_screen(void);
 extern unsigned short *screen_pos(int currcons, int w_offset, int viewed);
 extern u16 screen_glyph(int currcons, int offset);
 extern void complement_pos(int currcons, int offset);

@@ -280,7 +280,18 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 	return result;
 }
 
-static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry)
+/*
+ * The bitmask for a follow event: normal
+ * follow, and follow requires a directory
+ * entry due to a slash ('/') after the
+ * name, and whether to continue to parse
+ * the name..
+ */
+#define FOLLOW_LINK		(1)
+#define FOLLOW_DIRECTORY	(2)
+#define FOLLOW_CONTINUE		(4)
+
+static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry, unsigned int follow)
 {
 	struct inode * inode = dentry->d_inode;
 
@@ -290,7 +301,7 @@ static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry
 
 			current->link_count++;
 			/* This eats the base */
-			result = inode->i_op->follow_link(dentry, base);
+			result = inode->i_op->follow_link(dentry, base, follow);
 			current->link_count--;
 			dput(dentry);
 			return result;
@@ -320,9 +331,10 @@ static inline struct dentry * follow_mount(struct dentry * dentry)
  * This is the basic name resolution function, turning a pathname
  * into the final dentry.
  */
-struct dentry * lookup_dentry(const char * name, struct dentry * base, int follow_link)
+struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned int follow_link)
 {
 	struct dentry * dentry;
+	struct inode *inode;
 
 	if (*name == '/') {
 		if (base)
@@ -338,35 +350,34 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 	if (!*name)
 		goto return_base;
 
+	inode = base->d_inode;
+	follow_link &= FOLLOW_LINK | FOLLOW_DIRECTORY;
+
 	/* At this point we know we have a real path component. */
 	for(;;) {
 		int err;
 		unsigned long hash;
 		struct qstr this;
-		struct inode *inode;
-		char c, follow;
+		unsigned int follow;
+		unsigned int c;
 
 		dentry = ERR_PTR(-ENOENT);
-		inode = base->d_inode;
 		if (!inode)
 			break;
-
-		dentry = ERR_PTR(-ENOTDIR);
-		if (!inode->i_op || !inode->i_op->lookup)
-			break;
-
+			
 		err = permission(inode, MAY_EXEC);
 		dentry = ERR_PTR(err);
  		if (err)
 			break;
 
 		this.name = name;
-		c = *name;
+		c = *(const unsigned char *)name;
 
 		hash = init_name_hash();
 		do {
+			name++;
 			hash = partial_name_hash(c, hash);
-			c = *++name;
+			c = *(const unsigned char *)name;
 		} while (c && (c != '/'));
 		this.len = name - (const char *) this.name;
 		this.hash = end_name_hash(hash);
@@ -374,10 +385,14 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 		/* remove trailing slashes? */
 		follow = follow_link;
 		if (c) {
-			follow |= c;
+			char tmp;
+
+			follow |= FOLLOW_DIRECTORY;
 			do {
-				c = *++name;
-			} while (c == '/');
+				tmp = *++name;
+			} while (tmp == '/');
+			if (tmp)
+				follow |= FOLLOW_CONTINUE;
 		}
 
 		/*
@@ -410,8 +425,18 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 		if (!follow)
 			break;
 
-		base = do_follow_link(base, dentry);
-		if (c && !IS_ERR(base))
+		base = do_follow_link(base, dentry, follow);
+		if (IS_ERR(base))
+			goto return_base;
+
+		dentry = ERR_PTR(-ENOTDIR);
+		inode = base->d_inode;
+		if (follow & FOLLOW_DIRECTORY) {
+			if (!inode || !inode->i_op || !inode->i_op->lookup)
+				break;
+		}
+
+		if (follow & FOLLOW_CONTINUE)
 			continue;
 
 return_base:
@@ -431,7 +456,7 @@ return_base:
  * namei exists in two versions: namei/lnamei. The only difference is
  * that namei follows links, while lnamei does not.
  */
-struct dentry * __namei(const char *pathname, int follow_link)
+struct dentry * __namei(const char *pathname, unsigned int follow_link)
 {
 	char *name;
 	struct dentry *dentry;
