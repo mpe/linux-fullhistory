@@ -31,7 +31,7 @@ struct path_struct {
 	int len;
 	char buffer[256-sizeof(int)];
 } path_array[2] = {
-	{ 23, "/usr/src/linux/include/" },
+	{  0, "" },
 	{  0, "" }
 };
 
@@ -462,8 +462,11 @@ int main(int argc, char **argv)
 	char *hpath;
 
 	hpath = getenv("HPATH");
-	if (!hpath)
-		hpath = "/usr/src/linux/include";
+	if (!hpath) {
+		fputs("mkdep: HPATH not set in environment.  "
+		      "Don't bypass the top level Makefile.\n", stderr);
+		return 1;
+	}
 	len = strlen(hpath);
 	memcpy(path_array[0].buffer, hpath, len);
 	if (len && hpath[len-1] != '/')

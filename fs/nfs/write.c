@@ -583,29 +583,6 @@ nfs_wb_pid(struct inode *inode, pid_t pid)
 	NFS_WB(inode, req->wb_pid == pid);
 }
 
-/*
- * Write back and invalidate. Sometimes we can't leave the stuff
- * hanging if we can't write it out.
- */
-int
-nfs_wbinval(struct inode *inode)
-{
-	int retval = nfs_wb_all(inode);
-
-	if (retval)
-		nfs_cancel_dirty(inode,0);
-	return retval;
-}
-
-int nfs_wbinval_pid(struct inode *inode, pid_t pid)
-{
-	int retval = nfs_wb_pid(inode, pid);
-	
-	if (retval)
-		nfs_cancel_dirty(inode,pid);
-	return retval;
-}
-
 void
 nfs_inval(struct inode *inode)
 {

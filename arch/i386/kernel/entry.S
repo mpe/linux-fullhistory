@@ -237,14 +237,13 @@ ret_from_intr:
 
 	ALIGN
 handle_bottom_half:
-	pushl $ret_from_intr
-	jmp SYMBOL_NAME(do_bottom_half)
+	call SYMBOL_NAME(do_bottom_half)
+	jmp ret_from_intr
 
 	ALIGN
 reschedule:
-	pushl $ret_from_sys_call
-	jmp SYMBOL_NAME(schedule)    # test
-
+	call SYMBOL_NAME(schedule)    # test
+	jmp ret_from_sys_call
 
 ENTRY(divide_error)
 	pushl $0		# no error code

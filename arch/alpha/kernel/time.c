@@ -60,6 +60,8 @@ static struct {
 	unsigned long scaled_ticks_per_cycle;
 	/* last time the CMOS clock got updated */
 	time_t last_rtc_update;
+	/* partial unused tick */
+	unsigned long partial_tick;
 } state;
 
 unsigned long est_cycle_freq;
@@ -79,8 +81,6 @@ static inline __u32 rpcc(void)
  */
 void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 {
-	const unsigned long half = 1UL << (FIX_SHIFT - 1);
-	const unsigned long mask = (1UL << (FIX_SHIFT + 1)) - 1;
 	unsigned long delta;
 	__u32 now;
 	long nticks;
@@ -96,22 +96,21 @@ void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 #endif
 
 	/*
-	 * Estimate how many ticks have passed since the last update.
-	 * Round the result, .5 to even.  When we loose ticks due to
-	 * say using IDE, the clock has been seen to run up to 15% slow
-	 * if we truncate.
+	 * Calculate how many ticks have passed since the last update,
+	 * including any previous partial leftover.  Save any resulting
+	 * fraction for the next pass.
 	 */
 	now = rpcc();
 	delta = now - state.last_time;
 	state.last_time = now;
-	delta = delta * state.scaled_ticks_per_cycle;
-	if ((delta & mask) != half)
-		delta += half;
+	delta = delta * state.scaled_ticks_per_cycle + state.partial_tick;
+	state.partial_tick = delta & ((1UL << FIX_SHIFT) - 1); 
 	nticks = delta >> FIX_SHIFT;
 
-	do {
+	while (nticks > 0) {
 		do_timer(regs);
-	} while (--nticks > 0);
+		nticks--;
+	}
 
 	/*
 	 * If we have an externally synchronized Linux clock, then update
@@ -325,6 +324,7 @@ time_init(void)
 	state.scaled_ticks_per_cycle
 		= ((unsigned long) HZ << FIX_SHIFT) / cycle_freq;
 	state.last_rtc_update = 0;
+	state.partial_tick = 0L;
 
 	/* setup timer */ 
         irq_handler = timer_interrupt;
@@ -366,7 +366,7 @@ do_gettimeofday(struct timeval *tv)
 	 */
 
 	delta_usec = delta_cycles * state.scaled_ticks_per_cycle * 15625;
-	delta_usec = ((delta_usec / ((1UL << (FIX_SHIFT-6)) * HZ)) + 1) / 2;
+	delta_usec = ((delta_usec / ((1UL << (FIX_SHIFT-6-1)) * HZ)) + 1) / 2;
 
 	usec += delta_usec;
 	if (usec >= 1000000) {

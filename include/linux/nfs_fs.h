@@ -228,9 +228,6 @@ extern int  nfs_wb_pid(struct inode *, pid_t);
  * back first..
  */
 extern void nfs_inval(struct inode *);
-extern int  nfs_wbinval(struct inode *);
-extern int  nfs_wbinval_pid(struct inode *, pid_t);
-
 extern int  nfs_truncate_dirty_pages(struct inode *, unsigned long);
 extern int  nfs_updatepage(struct file *, struct page *, unsigned long, unsigned int, int);
 
