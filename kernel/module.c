@@ -30,7 +30,7 @@ sys_create_module(char *module_name, unsigned long size)
 
 	if (!suser())
 		return -EPERM;
-	if (name == NULL || size == 0)
+	if (module_name == NULL || size == 0)
 		return -EINVAL;
 	if ((error = get_mod_name(module_name, name)) != 0)
 		return error;

@@ -17,7 +17,9 @@
  *		Matt Dillon	:	Printable slip (borrowed from NET2E)
  *	Pauline Middelink	:	Slip driver fixes.
  *		Alan Cox	:	Honours the old SL_COMPRESSED flag
+ *		Alan Cox	:	KISS AX.25 and AXUI IP support
  */
+ 
 #include <asm/segment.h>
 #include <asm/system.h>
 
@@ -38,6 +40,9 @@
 #include <linux/in.h>
 #include "inet.h"
 #include "dev.h"
+#ifdef CONFIG_AX25
+#include "ax25.h"
+#endif
 #include "eth.h"
 #include "ip.h"
 #include "route.h"
@@ -507,6 +512,18 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 
   /* We were not, so we are now... :-) */
   if (skb != NULL) {
+#ifdef CONFIG_AX25  
+  	if(sl->mode & SL_MODE_AX25)
+  	{
+  		if(!skb->arp && dev->rebuild_header(skb+1,dev))
+  		{
+  			skb->dev=dev;
+  			arp_queue(skb);
+  			return 0;
+  		}
+  		skb->arp=1;
+  	}
+#endif  	
 	sl_lock(sl);
 	sl_encaps(sl, (unsigned char *) (skb + 1), skb->len);
 	if (skb->free) kfree_skb(skb, FREE_WRITE);
@@ -515,10 +532,15 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 
-/* Return the frame type ID.  This is always IP. */
+/* Return the frame type ID.  This is normally IP but maybe be AX.25. */
 static unsigned short
 sl_type_trans (struct sk_buff *skb, struct device *dev)
 {
+#ifdef CONFIG_AX25
+	struct slip *sl=&sl_ctrl[dev->base_addr];
+	if(sl->mode&SL_MODE_AX25)
+		return(NET16(ETH_P_AX25));
+#endif
   return(NET16(ETH_P_IP));
 }
 
@@ -528,6 +550,61 @@ static int
 sl_header(unsigned char *buff, struct device *dev, unsigned short type,
 	  unsigned long daddr, unsigned long saddr, unsigned len)
 {
+#ifdef CONFIG_AX25
+  struct slip *sl=&sl_ctrl[dev->base_addr];
+  unsigned long flags;
+  if((sl->mode&SL_MODE_AX25) && type!=NET16(ETH_P_AX25))
+  {
+  	/* header is an AX.25 UI frame from us to them */
+  	if(chk_addr(daddr) == IS_BROADCAST)
+  	{
+  		*buff++=0;
+	  	memcpy(buff,dev->broadcast,dev->addr_len);	/* QST-0 */
+	}
+	else
+	{
+		if(type!=ETH_P_IP)
+			printk("AX25 Encap: Non IP frame to encapsulate directed\n");
+		save_flags(flags);
+		cli();
+		*buff++=0;	/* KISS DATA */
+		memcpy(buff,&daddr,4);	/* In case arp fails */
+		if(arp_find(buff,daddr,dev, saddr))
+		{
+			memcpy(buff+7,&saddr,4);
+			buff+=14;
+		  	*buff++=LAPB_UI;	/* UI */
+  			/* Append a suitable AX.25 PID */
+  			*buff++=PID_IP;	/* AX25 IP */
+			restore_flags(flags);
+			return ( -dev->hard_header_len);
+		}
+	}
+  	buff[6]&=~LAPB_C;
+  	buff[6]&=~LAPB_E;
+  	buff+=7;
+  	memcpy(buff,dev->dev_addr,dev->addr_len);
+  	buff[6]&=~LAPB_C;
+  	buff[6]|=LAPB_E;
+  	buff+=7;
+  	*buff++=LAPB_UI;	/* UI */
+  	/* Append a suitable AX.25 PID */
+  	switch(type)
+  	{
+  		case ETH_P_IP:
+  			*buff++=PID_IP;	/* AX25 IP */
+ 			break;
+  		case ETH_P_ARP:
+  			*buff++=PID_ARP;
+  			break;
+  		default:
+  			*buff++=0;
+ 	}
+  	
+  	return (17);
+  }
+#endif  
+
   return(0);
 }
 
@@ -536,6 +613,12 @@ sl_header(unsigned char *buff, struct device *dev, unsigned short type,
 static void
 sl_add_arp(unsigned long addr, struct sk_buff *skb, struct device *dev)
 {
+#ifdef CONFIG_AX25
+	struct slip *sl=&sl_ctrl[dev->base_addr];
+	
+	if(sl->mode&SL_MODE_AX25)
+		arp_add(addr,((char *)(skb+1))+8,dev);
+#endif		
 }
 
 
@@ -543,6 +626,24 @@ sl_add_arp(unsigned long addr, struct sk_buff *skb, struct device *dev)
 static int
 sl_rebuild_header(void *buff, struct device *dev)
 {
+#ifdef CONFIG_AX25
+  struct slip *sl=&sl_ctrl[dev->base_addr];
+  
+  if(sl->mode&SL_MODE_AX25)
+  {
+  	unsigned char *bp=(unsigned char *)buff;
+  	long dest=*(long *)(bp+1);
+  	long src=*(long *)(bp+8);
+  	if(arp_find(bp+1,dest,dev,src))
+  		return 1;
+  	memcpy(bp+8,dev->dev_addr,7);
+  	bp[7]&=~LAPB_C;
+  	bp[7]&=~LAPB_E;
+  	bp[14]&=~LAPB_C;
+  	bp[14]|=LAPB_E;
+  	return(0);
+  }
+#endif  
   return(0);
 }
 
@@ -939,6 +1040,20 @@ slip_close(struct tty_struct *tty)
      	sl->flags |= SLF_ERROR;
  }
 
+
+#ifdef CONFIG_AX25
+
+int sl_set_mac_address(struct device *dev, void *addr)
+{
+	int err=verify_area(VERIFY_READ,addr,7);
+	if(err)
+		return err;
+	memcpy_fromfs(dev->dev_addr,addr,7);	/* addr is an AX.25 shifted ASCII mac address */
+	return 0;
+}
+#endif
+
+
 /* Perform I/O control on an active SLIP channel. */
 static int
 slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
@@ -967,7 +1082,25 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 	case SIOCSIFENCAP:
 		err=verify_area(VERIFY_READ,arg,sizeof(long));
 		sl->mode=get_fs_long((long *)arg);
+#ifdef CONFIG_AX25		
+		if(sl->mode & SL_MODE_AX25)
+		{
+			sl->dev->addr_len=7;	/* sizeof an AX.25 addr */
+			sl->dev->hard_header_len=17;	/* We don't do digipeaters */
+			sl->dev->type=3;		/* AF_AX25 not an AF_INET device */
+		}
+		else
+		{
+			sl->dev->addr_len=0;	/* No mac addr in slip mode */
+			sl->dev->hard_header_len=0;
+			sl->dev->type=0;
+		}
+#endif		
 		return(0);
+	case SIOCSIFHWADDR:
+#ifdef CONFIG_AX25	
+		return sl_set_mac_address(sl->dev,arg);
+#endif
 	default:
 		return(-EINVAL);
   }
@@ -981,6 +1114,10 @@ slip_init(struct device *dev)
 {
   struct slip *sl;
   int i;
+#ifdef CONFIG_AX25  
+  static char ax25_bcast[7]={'Q'<<1,'S'<<1,'T'<<1,' '<<1,' '<<1,' '<<1,'0'<<1};
+  static char ax25_test[7]={'L'<<1,'I'<<1,'N'<<1,'U'<<1,'X'<<1,' '<<1,'1'<<1};
+#endif
 
   sl = &sl_ctrl[dev->base_addr];
 
@@ -988,6 +1125,9 @@ slip_init(struct device *dev)
 	printk("SLIP: version %s (%d channels)\n",
 				SLIP_VERSION, SL_NRUNIT);
 	printk("CSLIP: code copyright 1989 Regents of the University of California\n");
+#ifdef CONFIG_AX25
+	printk("AX25: KISS encapsulation enabled\n");
+#endif	
 	/* Fill in our LDISC request block. */
 	sl_ldisc.flags	= 0;
 	sl_ldisc.open	= slip_open;
@@ -997,8 +1137,8 @@ slip_init(struct device *dev)
 	sl_ldisc.ioctl	= (int (*)(struct tty_struct *, struct file *,
 				   unsigned int, unsigned long)) slip_ioctl;
 	sl_ldisc.handler = slip_recv;
-	if ((i = tty_register_ldisc(N_SLIP, &sl_ldisc)) == 0) printk("OK\n");
-	  else printk("ERROR: %d\n", i);
+	if ((i = tty_register_ldisc(N_SLIP, &sl_ldisc)) != 0)
+		printk("ERROR: %d\n", i);
   }
 
   /* Set up the "SLIP Control Block". */
@@ -1020,9 +1160,18 @@ slip_init(struct device *dev)
   dev->hard_header	= sl_header;
   dev->add_arp		= sl_add_arp;
   dev->type_trans	= sl_type_trans;
+#ifdef HAVE_SET_MAC_ADDR
+#ifdef CONFIG_AX25
+  dev->set_mac_address  = sl_set_mac_address;
+#endif
+#endif
   dev->hard_header_len	= 0;
   dev->addr_len		= 0;
   dev->type		= 0;
+#ifdef CONFIG_AX25  
+  memcpy(dev->broadcast,ax25_bcast,7);		/* Only activated in AX.25 mode */
+  memcpy(dev->dev_addr,ax25_test,7);		/*    ""      ""       ""    "" */
+#endif  
   dev->queue_xmit	= dev_queue_xmit;
   dev->rebuild_header	= sl_rebuild_header;
   for (i = 0; i < DEV_NUMBUFFS; i++)

@@ -11,11 +11,13 @@
  *	Fixes:
  *		Alan Cox	:	Tracks memory and number of buffers for kernel memory report
  *					and memory leak hunting.
+ *		Alan Cox	:	More generic kfree handler
  */
  
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/sched.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <linux/mm.h>
@@ -384,15 +386,30 @@ void kfree_skb(struct sk_buff *skb, int rw)
   if(skb->list)
   	printk("Warning: kfree_skb passed an skb still on a list.\n");
   skb->magic = 0;
-  if (skb->sk) {
-	if (rw) {
-	     skb->sk->prot->rfree(skb->sk, skb->mem_addr, skb->mem_len);
-	} else {
-	     skb->sk->prot->wfree(skb->sk, skb->mem_addr, skb->mem_len);
+  if (skb->sk) 
+  {
+        if(skb->sk->prot!=NULL)
+        {
+		if (rw)
+	     		skb->sk->prot->rfree(skb->sk, skb->mem_addr, skb->mem_len);
+	     	else
+	     		skb->sk->prot->wfree(skb->sk, skb->mem_addr, skb->mem_len);
+
 	}
-  } else {
+	else
+	{
+		/* Non INET - default wmalloc/rmalloc handler */
+		if (rw)
+			skb->sk->rmem_alloc-=skb->mem_len;
+		else
+			skb->sk->wmem_alloc-=skb->mem_len;
+		if(!skb->sk->dead)
+			wake_up(skb->sk->sleep);
+		kfree_skbmem(skb->mem_addr,skb->mem_len);
+	}
+  } 
+  else 
 	kfree_skbmem(skb->mem_addr, skb->mem_len);
-  }
 }
 
 /*

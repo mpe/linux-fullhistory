@@ -18,6 +18,7 @@
 OBJS	= sock.o utils.o route.o proc.o timer.o protocol.o loopback.o \
 	  eth.o packet.o arp.o dev.o ip.o raw.o icmp.o tcp.o udp.o \
 	  datagram.o skbuff.o
+#	  ipx.o ax25.o ax25_in.o ax25_out.o ax25_subr.o ax25_timer.o
 
 ifdef CONFIG_INET
 

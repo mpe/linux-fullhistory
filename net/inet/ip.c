@@ -29,6 +29,8 @@
  *		Gerhard Koerting:	Forward fragmented frames correctly.
  *		Gerhard Koerting: 	Fixes to my fix of the above 8-).
  *		Gerhard Koerting:	IP interface addressing fix.
+ *		Linus Torvalds	:	More robustness checks
+ *		Alan Cox	:	Even more checks: Still not as robust as it ought to be
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
@@ -1108,6 +1110,7 @@ ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	return;
   }
 
+
   /*
    * Gosh.  Not only is the packet valid; we even know how to
    * forward it onto its final destination.  Can we say this
@@ -1128,6 +1131,7 @@ ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	if (rt->rt_gateway != 0) raddr = rt->rt_gateway;
   } else raddr = iph->daddr;
   dev2 = rt->rt_dev;
+
 
   if (dev == dev2)
 	return;
@@ -1191,7 +1195,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   DPRINTF((DBG_IP, "<<\n"));
 
   /* Is the datagram acceptable? */
-  if (iph->version != 4 || ip_fast_csum((unsigned char *)iph, iph->ihl) !=0) {
+  if (skb->len<sizeof(struct iphdr) || iph->ihl<5 || iph->version != 4 || ip_fast_csum((unsigned char *)iph, iph->ihl) !=0) {
 	DPRINTF((DBG_IP, "\nIP: *** datagram error ***\n"));
 	DPRINTF((DBG_IP, "    SRC = %s   ", in_ntoa(iph->saddr)));
 	DPRINTF((DBG_IP, "    DST = %s (ignored)\n", in_ntoa(iph->daddr)));

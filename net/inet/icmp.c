@@ -13,6 +13,7 @@
  *
  * Fixes:	
  *		Alan Cox	:	Generic queue usage.
+ *		Gerhard Koerting:	ICMP addressing corrected
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -106,7 +107,7 @@ icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
   iph = (struct iphdr *) ((unsigned char *) iph + dev->hard_header_len);
 
   /* Build Layer 2-3 headers for message back to source. */
-  offset = ip_build_header(skb, iph->daddr, iph->saddr,
+  offset = ip_build_header(skb, dev->pa_addr, iph->saddr,
 			   &dev, IPPROTO_ICMP, NULL, len);
   if (offset < 0) {
 	skb->sk = NULL;

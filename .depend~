@@ -1,0 +1,29 @@
+init/main.o : init/main.c /usr/lib/gcc-lib/i486-linux/2.5.4/include/stdarg.h /usr/include/asm/system.h \
+  /usr/include/linux/segment.h /usr/include/asm/io.h /usr/include/linux/types.h \
+  /usr/include/linux/fcntl.h /usr/include/linux/config.h /usr/include/linux/autoconf.h \
+  /usr/include/linux/sched.h /usr/include/linux/tasks.h /usr/include/linux/head.h \
+  /usr/include/linux/fs.h /usr/include/linux/linkage.h /usr/include/linux/limits.h \
+  /usr/include/linux/wait.h /usr/include/linux/dirent.h /usr/include/linux/vfs.h \
+  /usr/include/linux/net.h /usr/include/linux/socket.h /usr/include/linux/sockios.h \
+  /usr/include/linux/pipe_fs_i.h /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h \
+  /usr/include/linux/ext2_fs_i.h /usr/include/linux/hpfs_fs_i.h /usr/include/linux/msdos_fs_i.h \
+  /usr/include/linux/iso_fs_i.h /usr/include/linux/nfs_fs_i.h /usr/include/linux/nfs.h \
+  /usr/include/linux/xia_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
+  /usr/include/linux/ext2_fs_sb.h /usr/include/linux/hpfs_fs_sb.h /usr/include/linux/msdos_fs_sb.h \
+  /usr/include/linux/iso_fs_sb.h /usr/include/linux/nfs_fs_sb.h /usr/include/linux/xia_fs_sb.h \
+  /usr/include/linux/mm.h /usr/include/linux/page.h /usr/include/linux/kernel.h \
+  /usr/include/linux/signal.h /usr/include/linux/time.h /usr/include/linux/param.h \
+  /usr/include/linux/resource.h /usr/include/linux/vm86.h /usr/include/linux/math_emu.h \
+  /usr/include/linux/tty.h /usr/include/linux/termios.h /usr/include/linux/unistd.h \
+  /usr/include/linux/string.h /usr/include/linux/timer.h /usr/include/linux/ctype.h \
+  /usr/include/linux/delay.h /usr/include/linux/utsname.h /usr/include/linux/ioport.h 
+tools/build.o : tools/build.c /usr/include/stdio.h /usr/include/features.h /usr/include/sys/cdefs.h \
+  /usr/include/_G_config.h /usr/include/string.h /usr/lib/gcc-lib/i486-linux/2.5.4/include/stddef.h \
+  /usr/include/stdlib.h /usr/include/errno.h /usr/include/linux/errno.h /usr/lib/gcc-lib/i486-linux/2.5.4/include/float.h \
+  /usr/include/alloca.h /usr/include/sys/types.h /usr/include/linux/types.h /usr/include/sys/stat.h \
+  /usr/include/linux/stat.h /usr/include/sys/sysmacros.h /usr/include/unistd.h \
+  /usr/include/posix_opt.h /usr/include/gnu/types.h /usr/include/fcntl.h /usr/include/linux/fcntl.h \
+  /usr/include/linux/config.h /usr/include/linux/autoconf.h /usr/include/linux/a.out.h \
+  /usr/include/linux/page.h 
+tools/version.o : tools/version.c /usr/include/linux/config.h /usr/include/linux/autoconf.h \
+  /usr/include/linux/utsname.h tools/./version.h 

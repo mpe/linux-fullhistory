@@ -205,6 +205,16 @@ static int mmap_zero(struct inode * inode, struct file * file,
 	return 0;
 }
 
+static int read_full(struct inode * node,struct file * file,char * buf,int count)
+{
+	return count;
+}
+
+static int write_full(struct inode * inode,struct file * file,char * buf, int count)
+{
+	return -ENOSPC;
+}
+
 /*
  * Special lseek() function for /dev/null and /dev/zero.  Most notably, you can fopen()
  * both devices with "a" now.  This was previously impossible.  SRB.
@@ -321,6 +331,18 @@ static struct file_operations zero_fops = {
 	NULL		/* no special release code */
 };
 
+static struct file_operations full_fops = {
+	memory_lseek,
+	read_full,
+	write_full,
+	NULL,		/* full_readdir */
+	NULL,		/* full_select */
+	NULL,		/* full_ioctl */	
+	NULL,		/* full_mmap */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
+};
+
 static int memory_open(struct inode * inode, struct file * filp)
 {
 	switch (MINOR(inode->i_rdev)) {
@@ -341,6 +363,9 @@ static int memory_open(struct inode * inode, struct file * filp)
 			break;
 		case 5:
 			filp->f_op = &zero_fops;
+			break;
+		case 7:
+			filp->f_op = &full_fops;
 			break;
 		default:
 			return -ENODEV;

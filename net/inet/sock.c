@@ -46,6 +46,8 @@
  *	Pauline Middelink	:	Pidentd support
  *		Alan Cox	:	Fixed connect() taking signals I think.
  *		Alan Cox	:	SO_LINGER supported
+ *		Alan Cox	:	Error reporting fixes
+ *		Anonymous	:	inet_create tidied up (sk->reuse setting)
  *
  * To Fix:
  *
@@ -708,7 +710,7 @@ inet_create(struct socket *sock, int protocol)
   if (sk == NULL) 
   	return(-ENOMEM);
   sk->num = 0;
-
+  sk->reuse = 0;
   switch(sock->type) {
 	case SOCK_STREAM:
 	case SOCK_SEQPACKET:
@@ -794,7 +796,7 @@ inet_create(struct socket *sock, int protocol)
   sk->intr = 0;
   sk->linger = 0;
   sk->destroy = 0;
-  sk->reuse = 0;
+
   sk->priority = 1;
   sk->shutdown = 0;
   sk->urg = 0;
@@ -1077,7 +1079,9 @@ inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	{
 		sti();
 		sock->state = SS_UNCONNECTED;
-		return -sk->err; /* set by tcp_err() */
+		err = -sk->err;
+		sk->err=0;
+		return err; /* set by tcp_err() */
 	}
   }
   sti();
@@ -1085,7 +1089,9 @@ inet_connect(struct socket *sock, struct sockaddr * uaddr,
 
   if (sk->state != TCP_ESTABLISHED && sk->err) {
 	sock->state = SS_UNCONNECTED;
-	return(-sk->err);
+	err=sk->err;
+	sk->err=0;
+	return(err);
   }
   return(0);
 }
@@ -1773,7 +1779,7 @@ void inet_proto_init(struct ddi_proto *pro)
   struct inet_protocol *p;
   int i;
 
-  printk("Swansea University Computer Society Net2Debugged [1.24]\n");
+  printk("Swansea University Computer Society Net2Debugged [1.27]\n");
   /* Set up our UNIX VFS major device. */
   if (register_chrdev(AF_INET_MAJOR, "af_inet", &inet_fops) < 0) {
 	printk("%s: cannot register major device %d!\n",

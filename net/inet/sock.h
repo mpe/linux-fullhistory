@@ -36,6 +36,12 @@
 
 #include "skbuff.h"		/* struct sk_buff */
 #include "protocol.h"		/* struct inet_protocol */
+#ifdef CONFIG_AX25
+#include "ax25.h"
+#endif
+#ifdef CONFIG_IPX
+#include "ipx.h"
+#endif
 
 #define SOCK_ARRAY_SIZE	64
 
@@ -74,7 +80,7 @@ struct sock {
 				ack_timed,
 				no_check,
 				exp_growth,
-				zapped,	/* In ipx means not linked */
+				zapped,	/* In ax25 & ipx means not linked */
 				broadcast;
   unsigned long		        lingertime;
   int				proc;
@@ -114,7 +120,23 @@ struct sock {
   unsigned char			debug;
   unsigned short		rcvbuf;
   unsigned short		sndbuf;
-  unsigned short		type;	/* IPX type field */
+  unsigned short		type;
+#ifdef CONFIG_IPX
+  ipx_address			ipx_source_addr,ipx_dest_addr;
+  unsigned short		ipx_type;
+#endif
+#ifdef CONFIG_AX25
+/* Really we want to add a per protocol private area */
+  ax25_address			ax25_source_addr,ax25_dest_addr;
+  struct sk_buff *volatile	ax25_retxq[8];
+  char				ax25_state,ax25_vs,ax25_vr,ax25_lastrxnr,ax25_lasttxnr;
+  char				ax25_condition;
+  char				ax25_retxcnt;
+  char				ax25_xx;
+  char				ax25_retxqi;
+  char				ax25_rrtimer;
+  char				ax25_timer;
+#endif  
   struct tcphdr			dummy_th;
 
   /* This part is used for the timeout functions (timer.c). */

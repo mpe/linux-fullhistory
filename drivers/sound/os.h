@@ -41,10 +41,10 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/dma.h>
-#include <sys/kd.h>
+#include <linux/kd.h>
 #include <linux/wait.h>
 #include <linux/malloc.h>
-#include "soundcard.h"
+#include <linux/soundcard.h>
 
 typedef char snd_rw_buf;
 

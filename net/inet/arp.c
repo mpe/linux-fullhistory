@@ -34,6 +34,8 @@
  *		Alan Cox	:	'Bad Packet' only reported on debugging
  *		Alan Cox	:	Proxy arp.
  *		Alan Cox	:	skb->link3 maintained by letting the other xmit queue kill the packet.
+ *		Alan Cox	:	Knows about type 3 devices (AX.25) using an AX.25 protocol ID not the ethernet
+ *					one.
  *
  * To Fix:
  *				:	arp response allocates an skbuff to send. However there is a perfectly
@@ -482,7 +484,7 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   }
 
   /* For now we will only deal with IP addresses. */
-  if (arp->ar_pro != NET16(ETH_P_IP) || arp->ar_pln != 4) 
+  if (((arp->ar_pro != NET16(0x00CC) && dev->type==3) || (arp->ar_pro != NET16(ETH_P_IP) && dev->type!=3) ) || arp->ar_pln != 4) 
   {
 	if (arp->ar_op != NET16(ARPOP_REQUEST))
 		DPRINTF((DBG_ARP,"ARP: Non-IP request on device \"%s\" !\n", dev->name));
@@ -601,7 +603,10 @@ arp_send(unsigned long paddr, struct device *dev, unsigned long saddr)
   }
   arp = (struct arphdr *) ((unsigned char *) (skb+1) + tmp);
   arp->ar_hrd = htons(dev->type);
-  arp->ar_pro = htons(ETH_P_IP);
+  if(dev->type!=3)	/* AX.25 */
+  	arp->ar_pro = htons(ETH_P_IP);
+  else
+  	arp->ar_pro = htons(0xCC);
   arp->ar_hln = dev->addr_len;
   arp->ar_pln = 4;
   arp->ar_op = htons(ARPOP_REQUEST);

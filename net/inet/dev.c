@@ -21,6 +21,11 @@
  *		Alan Cox:	Supports Donald Beckers new hardware 
  *				multicast layer, but not yet multicast lists.
  *		Alan Cox:	ip_addr_match problems with class A/B nets.
+ *		C.E.Hawkins	IP 0.0.0.0 and also same net route fix. [FIXME: Ought to cause ICMP_REDIRECT]
+ *		Alan Cox:	Removed bogus subnet check now the subnet code
+ *				a) actually works for all A/B nets
+ *				b) doesn't forward off the same interface.
+ *		Alan Cox:	Multiple extra protocols
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -52,6 +57,45 @@
 #include "skbuff.h"
 #include "sock.h"
 #include "arp.h"
+#ifdef CONFIG_AX25
+#include "ax25.h"
+#endif
+
+
+#ifdef CONFIG_IPX
+
+static struct packet_type ipx_8023_type = {
+  NET16(ETH_P_802_3),
+  0,
+  ipx_rcv,
+  NULL,
+  NULL
+};
+
+static struct packet_type ipx_packet_type = {
+  NET16(ETH_P_IPX),
+  0,
+  ipx_rcv,
+  NULL,
+  &ipx_8023_type
+};
+
+#endif
+
+#ifdef CONFIG_AX25
+
+static struct packet_type ax25_packet_type = {
+  NET16(ETH_P_AX25),
+  0,
+  ax25_rcv,
+  NULL,
+#ifdef CONFIG_IPX
+  &ipx_packet_type
+#else
+  NULL
+#endif
+};
+#endif
 
 
 static struct packet_type arp_packet_type = {
@@ -59,7 +103,15 @@ static struct packet_type arp_packet_type = {
   0,		/* copy */
   arp_rcv,
   NULL,
+#ifdef CONFIG_IPX
+#ifndef CONFIG_AX25
+  &ipx_packet_type
+#else
+  &ax25_packet_type
+#endif
+#else
   NULL		/* next */
+#endif
 };
 
 
@@ -161,14 +213,10 @@ chk_addr(unsigned long addr)
 
   /* OK, now check the interface addresses. */
   for (dev = dev_base; dev != NULL; dev = dev->next) {
-	if (dev->pa_addr == 0)
-	{
-		if(dev->flags&IFF_PROMISC)	/* This allows all addresses through */
-			return(IS_MYADDR);
-		else
-			continue;
-	}
-
+        if (!(dev->flags&IFF_UP))
+	        continue;
+	if ((dev->pa_addr == 0)/* || (dev->flags&IFF_PROMISC)*/)
+	        return(IS_MYADDR);
 	/* Is it the exact IP address? */
 	if (addr == dev->pa_addr) {
 		DPRINTF((DBG_DEV, "MYADDR\n"));
@@ -187,15 +235,30 @@ chk_addr(unsigned long addr)
 			return(IS_BROADCAST);
 		}
 	}
+
+	/* Nope. Check for Network broadcast. */
+	if(IN_CLASSA(dst)) {
+	  if( addr == (dev->pa_addr | 0xffffff00)) {
+	    DPRINTF((DBG_DEV, "CLASS A BROADCAST-1\n"));
+	    return(IS_BROADCAST);
+	  }
+	}
+	else if(IN_CLASSB(dst)) {
+	  if( addr == (dev->pa_addr | 0xffff0000)) {
+	    DPRINTF((DBG_DEV, "CLASS B BROADCAST-1\n"));
+	    return(IS_BROADCAST);
+	  }
+	}
+	else {   /* IN_CLASSC */
+	  if( addr == (dev->pa_addr | 0xff000000)) {
+	    DPRINTF((DBG_DEV, "CLASS C BROADCAST-1\n"));
+	    return(IS_BROADCAST);
+	  }
+	}
   }
 
   DPRINTF((DBG_DEV, "NONE\n"));
   
-  if ((addr & 0xFF) == 0xFF)
-  {
-  	/* Wrong subnetted IS_BROADCAST */
-  	return(IS_INVBCAST);
-  }
   return(0);		/* no match at all */
 }
 

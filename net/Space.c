@@ -29,11 +29,23 @@
 #ifdef	CONFIG_INET
 #  include "inet/inet.h"
 #endif
+#ifdef CONFIG_IPX
+#include "inet/ipxcall.h"
+#endif
+#ifdef CONFIG_AX25
+#include "inet/ax25call.h"
+#endif
 
 struct ddi_proto protocols[] = {
 #ifdef	CONFIG_UNIX
   { "UNIX",	unix_proto_init	},
 #endif
+#ifdef  CONFIG_IPX
+  { "IPX",	ipx_proto_init },
+#endif
+#ifdef CONFIG_AX25  
+  { "AX.25",	ax25_proto_init },
+#endif  
 #ifdef	CONFIG_INET
   { "INET",	inet_proto_init	},
 #endif

@@ -18,6 +18,7 @@
  *					library. No more peek crashes, no more backlogs
  *		Alan Cox	:	Checks sk->broadcast.
  *		Alan Cox	:	Uses skb_free_datagram/skb_copy_datagram
+ *		Alan Cox	:	Raw passes ip options too
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License

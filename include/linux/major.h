@@ -41,6 +41,7 @@
  * 21 - scsi generic
  * 22 -                                               UNUSED
  * 23 -                        mitsumi cdrom
+ * 24 -	                       sony535 cdrom
  */
 
 #define UNNAMED_MAJOR	0
@@ -66,6 +67,7 @@
 #define SCSI_GENERIC_MAJOR 21
 /* unused: 22 */
 #define MITSUMI_CDROM_MAJOR 23
+#define SONY535_CDROM_MAJOR 24
 
 /*
  * Tests for SCSI devices.

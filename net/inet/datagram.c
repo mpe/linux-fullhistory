@@ -11,6 +11,8 @@
  *	Fixes:
  *		Alan Cox	:	NULL return from skb_peek_copy() understood
  *		Alan Cox	:	Rewrote skb_read_datagram to avoid the skb_peek_copy stuff.
+ *		Alan Cox	:	Added support for SOCK_SEQPACKET. IPX can no longer use the SO_TYPE hack but
+ *					AX.25 now works right, and SPX is feasible.
  */
 
 #include <linux/config.h>
@@ -60,6 +62,22 @@ restart:
 			return NULL;
 		}
 
+		if(sk->err)
+		{
+			release_sock(sk);
+			*err=-sk->err;
+			sk->err=0;
+			return NULL;
+		}
+		
+		/* Sequenced packets can come disconnected. If so we report the problem */
+		if(sk->type==SOCK_SEQPACKET && sk->state!=TCP_ESTABLISHED)
+		{
+			release_sock(sk);
+			*err=-ENOTCONN;
+			return NULL;
+		}
+		
 		/* User doesn't want to wait */
 		if (noblock) 
 		{
@@ -145,6 +163,7 @@ void skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
 
 /*
  *	Datagram select: Again totally generic. Moved from udp.c
+ *	Now does seqpacket.
  */
  
 int datagram_select(struct sock *sk, int sel_type, select_table *wait)
@@ -153,6 +172,11 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 	switch(sel_type) 
 	{
 		case SEL_IN:
+			if (sk->type==SOCK_SEQPACKET && sk->state==TCP_CLOSE)
+			{
+				/* Connection closed: Wake up */
+				return(1);
+			}
 			if (sk->rqueue != NULL || sk->err != 0) 
 			{	/* This appears to be consistent
 				   with other stacks */
@@ -168,7 +192,7 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 			return(0);
 	
 		case SEL_EX:
-			if (sk->err) 
+			if (sk->err)
 				return(1); /* Socket has gone into error state (eg icmp error) */
 			return(0);
   	}

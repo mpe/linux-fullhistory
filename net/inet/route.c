@@ -70,19 +70,26 @@ rt_del(unsigned long dst)
   unsigned long flags;
   
   DPRINTF((DBG_RT, "RT: flushing for dst %s\n", in_ntoa(dst)));
-  if ((r = rt_base) == NULL) return;
+  if ((r = rt_base) == NULL) 
+  	return;
 
   save_flags(flags);
   cli();
   p = NULL;
-  while(r != NULL) {
-	if (r->rt_dst == dst) {
-		if (p == NULL) rt_base = r->rt_next;
-		  else p->rt_next = r->rt_next;
+  while(r != NULL) 
+  {
+	if (r->rt_dst == dst) 
+	{
+		if (p == NULL)
+			rt_base = r->rt_next;
+		else 
+			p->rt_next = r->rt_next;
 		x = r->rt_next;
 		kfree_s(r, sizeof(struct rtable));
 		r = x;
-	} else {
+	} 
+	else 
+	{
 		p = r;
 		r = r->rt_next;
 	}
@@ -105,14 +112,20 @@ rt_flush(struct device *dev)
   save_flags(flags);
   
   p = NULL;
-  while(r != NULL) {
-	if (r->rt_dev == dev) {
-		if (p == NULL) rt_base = r->rt_next;
-		  else p->rt_next = r->rt_next;
+  while(r != NULL) 
+  {
+	if (r->rt_dev == dev)
+	{
+		if (p == NULL) 
+			rt_base = r->rt_next;
+		else 
+		  	p->rt_next = r->rt_next;
 		x = r->rt_next;
 		kfree_s(r, sizeof(struct rtable));
 		r = x;
-	} else {
+	} 
+	else 
+	{
 		p = r;
 		r = r->rt_next;
 	}
@@ -126,7 +139,7 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
 {
   struct rtable *r, *r1;
   struct rtable *rt;
-  int mask;
+  int mask=0;
   unsigned long cpuflags;
 
   /* Allocate an entry. */
@@ -139,7 +152,18 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
   /* Fill in the fields. */
   memset(rt, 0, sizeof(struct rtable));
   rt->rt_flags = (flags | RTF_UP);
-  if (gw != 0) rt->rt_flags |= RTF_GATEWAY;
+  
+  /*
+   *	Gateway to our own interface is really direct
+   */
+  if (gw==dev->pa_addr || gw==dst)
+  {
+  	gw=0;
+  	rt->rt_flags&=~RTF_GATEWAY;
+  }
+  
+  if (gw != 0) 
+  	rt->rt_flags |= RTF_GATEWAY;
   rt->rt_dev = dev;
   rt->rt_gateway = gw;
 
@@ -148,23 +172,31 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
    * the TARGET if we are creating an entry for a NETWORK. Use
    * an Internet class C network mask.  Yuck :-(
    */
-  if (flags & RTF_DYNAMIC) {
+  if (flags & RTF_DYNAMIC) 
+  {
 	if (flags & RTF_HOST)
 		rt->rt_dst = dst;
-	else{
+	else
+	{
+		/* Cut down to the route at interface mask level */
 		rt->rt_dst = (dst & dev->pa_mask);
+		mask=dev->pa_mask;
 		/* We don't want new routes to our own net*/
-		if(rt->rt_dst == (dev->pa_addr & dev->pa_mask)){
+		if(rt->rt_dst == (dev->pa_addr & dev->pa_mask))
+		{
 			kfree_s(rt, sizeof(struct rtable));
 			/*printk("Dynamic route to my own net rejected\n");*/
 			return;
 		}
 	}
-  } else rt->rt_dst = dst;
+  } 
+  else 
+  	rt->rt_dst = dst;
 
   rt_print(rt);
 
-  if (rt_base == NULL) {
+  if (rt_base == NULL) 
+  {
 	rt->rt_next = NULL;
 	rt_base = rt;
 	return;
@@ -175,26 +207,38 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
    * found the first address which has the same generality
    * as the one in rt.  Then we can put rt in after it.
    */
-  for (mask = 0xff000000L; mask != 0xffffffffL; mask = (mask >> 8) | mask) {
-	if (mask & dst) {
-		mask = mask << 8;
-		break;
-	}
+   
+  if(mask==0)	/* Dont figure out masks for DYNAMIC routes. The mask is (our should be!)
+  		   the device mask (obtained above) */
+  {
+	  for (mask = 0xff000000L; mask != 0xffffffffL; mask = (mask >> 8) | mask) 
+	  {
+		if (mask & dst) 
+		{
+			mask = mask << 8;
+			break;
+		}
+	  }
+	  DPRINTF((DBG_RT, "RT: mask = %X\n", mask));
   }
-  DPRINTF((DBG_RT, "RT: mask = %X\n", mask));
-  
+    
   save_flags(cpuflags);
   cli();
   
   r1 = rt_base;
 
   /* See if we are getting a duplicate. */
-  for (r = rt_base; r != NULL; r = r->rt_next) {
-	if (r->rt_dst == dst) {
-		if (r == rt_base) {
+  for (r = rt_base; r != NULL; r = r->rt_next) 
+  {
+	if (r->rt_dst == dst) 
+	{
+		if (r == rt_base) 
+		{
 			rt->rt_next = r->rt_next;
 			rt_base = rt;
-		} else {
+		} 
+		else 
+		{
 			rt->rt_next = r->rt_next;
 			r1->rt_next = rt;
 		}
@@ -206,11 +250,16 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
   }
 
   r1 = rt_base;
-  for (r = rt_base; r != NULL; r = r->rt_next) {
-	if (! (r->rt_dst & mask)) {
+  for (r = rt_base; r != NULL; r = r->rt_next) 
+  {
+  	/* When we find a route more general than ourselves, and we are not a gateway or it is a gateway then use it 
+  	   This puts gateways after direct links in the table and sorts (most) of the bit aligned subnetting out */
+	if (! (r->rt_dst & mask) && (gw==0 || r->rt_flags&RTF_GATEWAY)) 
+	{
 		DPRINTF((DBG_RT, "RT: adding before r=%X\n", r));
 		rt_print(r);
-		if (r == rt_base) {
+		if (r == rt_base) 
+		{
 			rt->rt_next = rt_base;
 			rt_base = rt;
 			restore_flags(cpuflags);
@@ -315,11 +364,12 @@ struct rtable *
 rt_route(unsigned long daddr, struct options *opt)
 {
   struct rtable *rt;
+  int type;
 
   /*
    * This is a hack, I think. -FvK
    */
-  if (chk_addr(daddr) == IS_MYADDR) daddr = my_addr();
+  if ((type=chk_addr(daddr)) == IS_MYADDR) daddr = my_addr();
 
   /*
    * Loop over the IP routing table to find a route suitable
@@ -342,7 +392,7 @@ rt_route(unsigned long daddr, struct options *opt)
 		rt->rt_use++;
 		return(rt);
 	}
-	if ((rt->rt_dev->flags & IFF_BROADCAST) &&
+	if (type==IS_BROADCAST && (rt->rt_dev->flags & IFF_BROADCAST) &&
 	    ip_addr_match(rt->rt_dev->pa_brdaddr, daddr)) {
 		DPRINTF((DBG_RT, "%s (BCAST %s)\n",
 			rt->rt_dev->name, in_ntoa(rt->rt_dev->pa_brdaddr)));
