@@ -166,12 +166,6 @@ static int lp_preempt(void *handle)
 	       return 0;
        }
 
-       if (!(lps->flags & LP_PORT_BUSY)) {
-	       /* Let the port go. */
-	       clear_bit (LP_HAVE_PORT_BIT, &lps->flags);
-	       return 0;
-       }
-
        /* Don't actually release the port now */
        return 1;
 }

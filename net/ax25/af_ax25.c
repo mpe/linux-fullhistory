@@ -1574,8 +1574,10 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 				return -EPERM;
 			return ax25_ctl_ioctl(cmd, (void *)arg);
 
-		case SIOCAX25GETINFO: {
+		case SIOCAX25GETINFO: 
+		case SIOCAX25GETINFOOLD: {
 			struct ax25_info_struct ax25_info;
+
 			ax25_info.t1        = sk->protinfo.ax25->t1   / HZ;
 			ax25_info.t2        = sk->protinfo.ax25->t2   / HZ;
 			ax25_info.t3        = sk->protinfo.ax25->t3   / HZ;
@@ -1589,8 +1591,28 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			ax25_info.state     = sk->protinfo.ax25->state;
 			ax25_info.rcv_q     = atomic_read(&sk->rmem_alloc);
 			ax25_info.snd_q     = atomic_read(&sk->wmem_alloc);
-			if (copy_to_user((void *)arg, &ax25_info, sizeof(ax25_info)))
-				return -EFAULT;
+			ax25_info.vs        = sk->protinfo.ax25->vs;
+			ax25_info.vr        = sk->protinfo.ax25->vr;
+			ax25_info.va        = sk->protinfo.ax25->va;
+			ax25_info.vs_max    = sk->protinfo.ax25->vs; /* reserved */
+			ax25_info.paclen    = sk->protinfo.ax25->paclen;
+			ax25_info.window    = sk->protinfo.ax25->window;
+
+			/* old structure? */
+			if (cmd == SIOCAX25GETINFOOLD) {
+				static int warned = 0;
+				if (!warned) {
+					printk(KERN_INFO "%s uses old SIOCAX25GETINFO\n",
+						current->comm);
+					warned=1;
+				}
+
+				if (copy_to_user((void *)arg, &ax25_info, sizeof(struct ax25_info_struct_depreciated)))
+					return -EFAULT;
+			} else {
+				if (copy_to_user((void *)arg, &ax25_info, sizeof(struct ax25_info_struct)))
+					return -EINVAL;
+			} 
 			return 0;
 		}
 

@@ -1363,7 +1363,7 @@ static void* hid_probe(struct usb_device *dev, unsigned int ifnum)
 	hid_init_input(hid);
 	input_register_device(&hid->input);
 
-	printk(KERN_INFO "input%d: USB HID v%d.%d %s\n",
+	printk(KERN_INFO "input%d: USB HID v%x.%02x %s\n",
 		hid->input.number, hid->version >> 8, hid->version & 0xff,
 		(hid->application & 0xffff) <= 8 ? hid_name[hid->application & 0xffff] : "device");
 

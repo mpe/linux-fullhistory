@@ -240,7 +240,7 @@ enum CSCRBits {
 	CSCR_LinkStatusBits=0x0f000, CSCR_LinkDownOffCmd=0x003c0,
 	CSCR_LinkDownCmd=0x0f3c0,
 };
-unsigned long param[4][4]={
+static const unsigned long param[4][4]={
 	{0x0cb39de43,0x0cb39ce43,0x0fb38de03,0x0cb38de43},
 	{0x0cb39de43,0x0cb39ce43,0x0cb39ce83,0x0cb39ce83},
 	{0x0cb39de43,0x0cb39ce43,0x0cb39ce83,0x0cb39ce83},

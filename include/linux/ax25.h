@@ -29,9 +29,11 @@
 #define SIOCAX25NOUID		(SIOCPROTOPRIVATE+3)
 #define SIOCAX25OPTRT		(SIOCPROTOPRIVATE+7)
 #define SIOCAX25CTLCON		(SIOCPROTOPRIVATE+8)
-#define SIOCAX25GETINFO		(SIOCPROTOPRIVATE+9)
+#define SIOCAX25GETINFOOLD	(SIOCPROTOPRIVATE+9)
 #define SIOCAX25ADDFWD		(SIOCPROTOPRIVATE+10)
 #define SIOCAX25DELFWD		(SIOCPROTOPRIVATE+11)
+#define SIOCAX25DEVCTL          (SIOCPROTOPRIVATE+12)
+#define SIOCAX25GETINFO         (SIOCPROTOPRIVATE+13)
 
 #define AX25_SET_RT_IPMODE	2
 
@@ -80,6 +82,17 @@ struct ax25_ctl_struct {
         ax25_address            digi_addr[AX25_MAX_DIGIS];
 };
 
+/* this will go away. Please do not export to user land */
+struct ax25_info_struct_depreciated {
+	unsigned int	n2, n2count;
+	unsigned int	t1, t1timer;
+	unsigned int	t2, t2timer;
+	unsigned int	t3, t3timer;
+	unsigned int	idle, idletimer;
+	unsigned int	state;
+	unsigned int	rcv_q, snd_q;
+};
+
 struct ax25_info_struct {
 	unsigned int	n2, n2count;
 	unsigned int	t1, t1timer;
@@ -88,6 +101,9 @@ struct ax25_info_struct {
 	unsigned int	idle, idletimer;
 	unsigned int	state;
 	unsigned int	rcv_q, snd_q;
+	unsigned int	vs, vr, va, vs_max;
+	unsigned int	paclen;
+	unsigned int	window;
 };
 
 struct ax25_fwd_struct {

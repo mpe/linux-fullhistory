@@ -138,6 +138,7 @@
 
 static const char *version = "ewrk3.c:v0.43 96/8/16 davies@maniac.ultranet.com\n";
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>

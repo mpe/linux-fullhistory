@@ -15,9 +15,7 @@ extern int strip_init_ctrl_dev(void);
 extern int x25_asy_init_ctrl_dev(void);
 extern int slhc_install(void);
   
-extern int bpq_init(void);
 extern int dmascc_init(void);
-extern int scc_init(void);
 extern int yam_init(void);
 
 extern int awc4500_pci_probe(void);
@@ -59,15 +57,9 @@ struct net_probe pci_probes[] __initdata = {
 	 *	Early setup devices
 	 */
 
-#if defined(CONFIG_SCC)
-	{scc_init, 0},
-#endif
 #if defined(CONFIG_DMASCC)
 	{dmascc_init, 0},
 #endif	
-#if defined(CONFIG_BPQETHER)
-	{bpq_init, 0},
-#endif
 #if defined(CONFIG_DLCI)
 	{dlci_setup, 0},
 #endif

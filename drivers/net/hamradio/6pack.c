@@ -158,24 +158,6 @@ sp_free(struct sixpack *sp)
 }
 
 
-/* Set the "sending" flag. */
-static inline void
-sp_lock(struct sixpack *sp)
-{
-	if (test_and_set_bit(0, (void *) &sp->dev->tbusy))  
-		printk(KERN_WARNING "%s: trying to lock already locked device!\n", sp->dev->name);
-}
-
-
-/* Clear the "sending" flag. */
-static inline void
-sp_unlock(struct sixpack *sp)
-{
-	if (!test_and_clear_bit(0, (void *)&sp->dev->tbusy))  
-		printk(KERN_WARNING "%s: trying to unlock already unlocked device!\n", sp->dev->name);
-}
-
-
 /* Send one completely decapsulated IP datagram to the IP layer. */
 
 /* This is the routine that sends the received data to the kernel AX.25.
@@ -226,7 +208,7 @@ sp_encaps(struct sixpack *sp, unsigned char *icp, int len)
 		len = sp->mtu;
 		printk(KERN_DEBUG "%s: truncating oversized transmit packet!\n", sp->dev->name);
 		sp->tx_dropped++;
-		sp_unlock(sp);
+		netif_start_queue(sp->dev);
 		return;
 	}
 
@@ -235,21 +217,21 @@ sp_encaps(struct sixpack *sp, unsigned char *icp, int len)
 	if (p[0] > 5)
 	{
 		printk(KERN_DEBUG "%s: invalid KISS command -- dropped\n", sp->dev->name);
-		sp_unlock(sp);
+		netif_start_queue(sp->dev);
 		return;
 	}
 
 	if ((p[0] != 0) && (len > 2))
 	{
 		printk(KERN_DEBUG "%s: KISS control packet too long -- dropped\n", sp->dev->name);
-		sp_unlock(sp);
+		netif_start_queue(sp->dev);
 		return;
 	}
 
 	if ((p[0] == 0) && (len < 15))
 	{
 		printk(KERN_DEBUG "%s: bad AX.25 packet to transmit -- dropped\n", sp->dev->name);
-		sp_unlock(sp);
+		netif_start_queue(sp->dev);
 		sp->tx_dropped++;
 		return;
 	}
@@ -301,17 +283,17 @@ static void sixpack_write_wakeup(struct tty_struct *tty)
 	struct sixpack *sp = (struct sixpack *) tty->disc_data;
 
 	/* First make sure we're connected. */
-	if (!sp || sp->magic != SIXPACK_MAGIC || !sp->dev->start) {
+	if (!sp || sp->magic != SIXPACK_MAGIC || !test_bit(LINK_STATE_START, &sp->dev->state)) {
 		return;
 	}
+
 	if (sp->xleft <= 0)  {
 		/* Now serial buffer is almost free & we can start
 		 * transmission of another packet */
 		sp->tx_packets++;
 		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
-		sp_unlock(sp);
 		sp->tx_enable = 0;
-		mark_bh(NET_BH);
+		netif_wake_queue(sp->dev);
 		return;
 	}
 
@@ -331,18 +313,9 @@ sp_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct sixpack *sp = (struct sixpack*)(dev->priv);
 
-	if (!dev->start)  
-	{
-		printk(KERN_WARNING "%s: xmit call when iface is down\n", dev->name);
-		return 1;
-	}
-
-	if (dev->tbusy)
-		return 1;
-
 	/* We were not busy, so we are now... :-) */
 	if (skb != NULL) {
-		sp_lock(sp);
+		netif_stop_queue(dev);
 		sp->tx_bytes+=skb->len; /*---2.1.x---*/
 		sp_encaps(sp, skb->data, skb->len);
 		dev_kfree_skb(skb);
@@ -458,8 +431,7 @@ sp_open(struct net_device *dev)
 	sp->tnc_ok      = 0;
 	sp->tx_enable   = 0;
 	
-	dev->tbusy  = 0;
-	dev->start  = 1;
+	netif_start_queue(dev);
 
 	init_timer(&sp->tx_t);
 	init_timer(&sp->resync_t);
@@ -477,9 +449,8 @@ sp_close(struct net_device *dev)
 		return -EBUSY;
 	}
 	sp->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
-	dev->tbusy = 1;
-	dev->start = 0;
 	
+	netif_stop_queue(dev);
 	return 0;
 }
 
@@ -506,7 +477,7 @@ sixpack_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, i
 
 	struct sixpack *sp = (struct sixpack *) tty->disc_data;
 
-	if (!sp || sp->magic != SIXPACK_MAGIC || !sp->dev->start || !count)
+	if (!sp || sp->magic != SIXPACK_MAGIC || !test_bit(LINK_STATE_START, &sp->dev->state) || !count)
 		return;
 
 	save_flags(flags);
@@ -723,17 +694,13 @@ static int sp_open_dev(struct net_device *dev)
 
 /* Initialize 6pack control device -- register 6pack line discipline */
 
-#ifdef MODULE
-static int sixpack_init_ctrl_dev(void)
-#else	/* !MODULE */
-int __init sixpack_init_ctrl_dev(struct net_device *dummy)
-#endif	/* !MODULE */
+static int __init sixpack_init_ctrl_dev(void)
 {
 	int status;
 
 	if (sixpack_maxdev < 4) sixpack_maxdev = 4; /* Sanity */
 
-	printk(KERN_INFO "6pack: %s (dynamic channels, max=%d)\n",
+	printk(KERN_INFO "AX.25: 6pack driver, %s (dynamic channels, max=%d)\n",
 	       SIXPACK_VERSION, sixpack_maxdev);
 
 	sixpack_ctrls = (sixpack_ctrl_t **) kmalloc(sizeof(void*)*sixpack_maxdev, GFP_KERNEL);
@@ -766,15 +733,39 @@ int __init sixpack_init_ctrl_dev(struct net_device *dummy)
 		printk(KERN_WARNING "6pack: can't register line discipline (err = %d)\n", status);
 	}
 
-#ifdef MODULE
 	return status;
-#else
-	/* Return "not found", so that dev_init() will unlink
-	 * the placeholder device entry for us.
-	 */
-	return ENODEV;
-#endif
 }
+
+static void __exit sixpack_cleanup_driver(void)
+{
+	int i;
+
+	if (sixpack_ctrls != NULL) 
+	{
+		for (i = 0; i < sixpack_maxdev; i++)  
+		{
+			if (sixpack_ctrls[i])
+			{
+				/*
+				 * VSV = if dev->start==0, then device
+				 * unregistered while close proc.
+				 */ 
+				if (test_bit(LINK_STATE_START, &sixpack_ctrls[i]->dev.state))
+					unregister_netdev(&(sixpack_ctrls[i]->dev));
+
+				kfree(sixpack_ctrls[i]);
+				sixpack_ctrls[i] = NULL;
+			}
+		}
+		kfree(sixpack_ctrls);
+		sixpack_ctrls = NULL;
+	}
+	if ((i = tty_register_ldisc(N_6PACK, NULL)))  
+	{
+		printk(KERN_WARNING "6pack: can't unregister line discipline (err = %d)\n", i);
+	}
+}
+
 
 /* Initialize the 6pack driver.  Called by DDI. */
 int
@@ -809,6 +800,7 @@ sixpack_init(struct net_device *dev)
 	dev->type		= ARPHRD_AX25;
 	dev->tx_queue_len	= 10;
 	dev->rebuild_header	= sp_rebuild_header;
+	dev->tx_timeout		= NULL;
 
 	memcpy(dev->broadcast, ax25_bcast, AX25_ADDR_LEN);	/* Only activated in AX.25 mode */
 	memcpy(dev->dev_addr, ax25_test, AX25_ADDR_LEN);	/*    ""      ""       ""    "" */
@@ -821,45 +813,8 @@ sixpack_init(struct net_device *dev)
 	return 0;
 }
 
-#ifdef MODULE
 
-int
-init_module(void)
-{
-	return sixpack_init_ctrl_dev();
-}
 
-void
-cleanup_module(void)
-{
-	int i;
-
-	if (sixpack_ctrls != NULL) 
-	{
-		for (i = 0; i < sixpack_maxdev; i++)  
-		{
-			if (sixpack_ctrls[i])
-			{
-				/*
-				 * VSV = if dev->start==0, then device
-				 * unregistered while close proc.
-				 */ 
-				if (sixpack_ctrls[i]->dev.start)
-					unregister_netdev(&(sixpack_ctrls[i]->dev));
-
-				kfree(sixpack_ctrls[i]);
-				sixpack_ctrls[i] = NULL;
-			}
-		}
-		kfree(sixpack_ctrls);
-		sixpack_ctrls = NULL;
-	}
-	if ((i = tty_register_ldisc(N_6PACK, NULL)))  
-	{
-		printk(KERN_WARNING "6pack: can't unregister line discipline (err = %d)\n", i);
-	}
-}
-#endif /* MODULE */
 
 /* ----> 6pack timer interrupt handler and friends. <---- */
 static void 
@@ -1127,3 +1082,9 @@ void decode_data(byte inbyte, struct sixpack *sp)
 		sp->rx_count = 0;
 	}
 }
+
+
+MODULE_AUTHOR("Andreas Könsgen <ajk@ccac.rwth-aachen.de>");
+MODULE_DESCRIPTION("6pack driver for AX.25");
+module_init(sixpack_init_ctrl_dev);
+module_exit(sixpack_cleanup_driver);

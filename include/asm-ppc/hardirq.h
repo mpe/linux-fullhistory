@@ -1,6 +1,7 @@
 #ifndef __ASM_HARDIRQ_H
 #define __ASM_HARDIRQ_H
 
+#include <linux/config.h>
 #include <asm/smp.h>
 
 extern unsigned int local_irq_count[NR_CPUS];

@@ -805,8 +805,6 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    /* There's room in the FIFO for a full-sized packet. */
 	    outw(AckIntr | TxAvailable, ioaddr + EL3_CMD);
 	    netif_wake_queue (dev);
-	} else {
-	    netif_stop_queue (dev);
 	}
 	
 	if (status & TxComplete)

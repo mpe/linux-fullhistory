@@ -222,7 +222,7 @@ static int bpq_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_ty
 
 	dev = bpq_get_ax25_dev(dev);
 
-	if (dev == NULL || test_bit(LINK_STATE_START, &dev->state) == 0) {
+	if (dev == NULL || !test_bit(LINK_STATE_START, &dev->state)) {
 		kfree_skb(skb);
 		return 0;
 	}
@@ -275,7 +275,8 @@ static int bpq_xmit(struct sk_buff *skb, struct net_device *dev)
 	 * Just to be *really* sure not to send anything if the interface
 	 * is down, the ethernet device may have gone.
 	 */
-	if (!test_bit(LINK_STATE_START, &dev->state)) {
+	if (!test_bit(LINK_STATE_START, &dev->state))
+	{
 		bpq_check_devices(dev);
 		kfree_skb(skb);
 		return -ENODEV;
@@ -324,7 +325,7 @@ static int bpq_xmit(struct sk_buff *skb, struct net_device *dev)
 	bpq->stats.tx_bytes+=skb->len;
   
 	dev_queue_xmit(skb);
-
+	netif_wake_queue(dev);
 	return 0;
 }
 
@@ -407,7 +408,9 @@ static int bpq_open(struct net_device *dev)
 {
 	if (bpq_check_devices(dev))
 		return -ENODEV;		/* oops, it's gone */
+	
 	MOD_INC_USE_COUNT;
+
 	netif_start_queue(dev);
 	return 0;
 }
@@ -614,7 +617,7 @@ static int bpq_device_event(struct notifier_block *this,unsigned long event, voi
  * Initialize driver. To be called from af_ax25 if not compiled as a
  * module
  */
-int __init bpq_init(void)
+static int __init bpq_init_driver(void)
 {
 	struct net_device *dev;
 
@@ -623,7 +626,7 @@ int __init bpq_init(void)
 
 	register_netdevice_notifier(&bpq_dev_notifier);
 
-	printk(KERN_INFO "AX.25 ethernet driver version 0.01\n");
+	printk(KERN_INFO "AX.25: bpqether driver version 0.01\n");
 
 	proc_net_create ("bpqether", 0, bpq_get_info);
 
@@ -636,22 +639,10 @@ int __init bpq_init(void)
 		}
 	}
 	read_unlock_bh(&dev_base_lock);
-out:
 	return 0;
 }
 
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-
-MODULE_AUTHOR("Joerg Reuter DL1BKE <jreuter@lykos.oche.de>");
-MODULE_DESCRIPTION("Transmit and receive AX.25 packets over Ethernet");
-
-int init_module(void)
-{
-	return bpq_init();
-}
-
-void cleanup_module(void)
+static void __exit bpq_cleanup_driver(void)
 {
 	struct bpqdev *bpq;
 
@@ -664,4 +655,8 @@ void cleanup_module(void)
 	for (bpq = bpq_devices; bpq != NULL; bpq = bpq->next)
 		unregister_netdev(&bpq->axdev);
 }
-#endif
+
+MODULE_AUTHOR("Joerg Reuter DL1BKE <jreuter@poboxes.com>");
+MODULE_DESCRIPTION("Transmit and receive AX.25 packets over Ethernet");
+module_init(bpq_init_driver);
+module_exit(bpq_cleanup_driver);
