@@ -966,7 +966,6 @@ dev_ioctl(unsigned int cmd, void *arg)
 {
   struct iflink iflink;
   struct ddi_device *dev;
-  int ret;
 
   switch(cmd) {
 	case IP_SET_DEV:

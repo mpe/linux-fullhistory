@@ -192,8 +192,8 @@ asmlinkage void math_emulate(long arg)
 
 #endif /* CONFIG_MATH_EMULATION */
 
-static unsigned long itimer_ticks = 0;
-static unsigned long itimer_next = ~0;
+unsigned long itimer_ticks = 0;
+unsigned long itimer_next = ~0;
 static unsigned long lost_ticks = 0;
 
 /*

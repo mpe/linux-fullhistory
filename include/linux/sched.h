@@ -302,6 +302,8 @@ extern struct task_struct *task[NR_TASKS];
 extern struct task_struct *last_task_used_math;
 extern struct task_struct *current;
 extern unsigned long volatile jiffies;
+extern unsigned long itimer_ticks;
+extern unsigned long itimer_next;
 extern struct timeval xtime;
 extern int need_resched;
 

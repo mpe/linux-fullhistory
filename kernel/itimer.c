@@ -81,14 +81,23 @@ int _setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 		return k;
 	switch (which) {
 		case ITIMER_REAL:
+			if (j) {
+				j += 1+itimer_ticks;
+				if (j < itimer_next)
+					itimer_next = j;
+			}
 			current->it_real_value = j;
 			current->it_real_incr = i;
 			break;
 		case ITIMER_VIRTUAL:
+			if (j)
+				j++;
 			current->it_virt_value = j;
 			current->it_virt_incr = i;
 			break;
 		case ITIMER_PROF:
+			if (j)
+				j++;
 			current->it_prof_value = j;
 			current->it_prof_incr = i;
 			break;

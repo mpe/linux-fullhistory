@@ -122,12 +122,6 @@ int ei_open(struct device *dev)
     
     irq2dev_map[dev->irq] = dev;
     NS8390_init(dev, 1);
-    ei_local->tx1 = ei_local->tx2 = 0;
-    /* The old local flags... */
-    ei_local->txing = 0;
-    /* ... are now global. */
-    dev->tbusy = 0;
-    dev->interrupt = 0;
     dev->start = 1;
     ei_local->irqlock = 0;
     return 0;
@@ -684,6 +678,10 @@ void NS8390_init(struct device *dev, int startp)
     outb_p(ei_local->rx_start_page,	 e8390_base + EN1_CURPAG);
     outb_p(E8390_NODMA+E8390_PAGE0+E8390_STOP, e8390_base);
     sti();
+    dev->tbusy = 0;
+    dev->interrupt = 0;
+    ei_local->tx1 = ei_local->tx2 = 0;
+    ei_local->txing = 0;
     if (startp) {
 		outb_p(0xff,  e8390_base + EN0_ISR);
 		outb_p(ENISR_ALL,  e8390_base + EN0_IMR);

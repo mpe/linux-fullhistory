@@ -1,6 +1,6 @@
 VERSION = 0.99
 PATCHLEVEL = 15
-ALPHA = g
+ALPHA = h
 
 all:	Version zImage
 
@@ -188,7 +188,9 @@ zdisk: zImage
 
 zlilo: $(CONFIGURE) zImage
 	if [ -f /vmlinuz ]; then mv /vmlinuz /vmlinuz.old; fi
+	if [ -f /zSystem.map ]; then mv /zSystem.map /zSystem.old; fi
 	cat zImage > /vmlinuz
+	cp zSystem.map /
 	if [ -x /sbin/lilo ]; then /sbin/lilo; else /etc/lilo/install; fi
 
 tools/zSystem:	boot/head.o init/main.o tools/version.o linuxsubdirs

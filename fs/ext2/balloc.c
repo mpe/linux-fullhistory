@@ -605,6 +605,7 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 	struct buffer_head * bh;
 	struct ext2_super_block * es;
 	unsigned long desc_count, bitmap_count, x;
+	unsigned long desc_blocks;
 	int bitmap_nr;
 	struct ext2_group_desc * gdp;
 	int i, j;
@@ -614,11 +615,23 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 	desc_count = 0;
 	bitmap_count = 0;
 	gdp = NULL;
+	desc_blocks = (sb->u.ext2_sb.s_groups_count + EXT2_DESC_PER_BLOCK(sb) - 1) /
+		      EXT2_DESC_PER_BLOCK(sb);
 	for (i = 0; i < sb->u.ext2_sb.s_groups_count; i++) {
 		gdp = get_group_desc (sb, i, NULL);
 		desc_count += gdp->bg_free_blocks_count;
 		bitmap_nr = load_block_bitmap (sb, i);
 		bh = sb->u.ext2_sb.s_block_bitmap[bitmap_nr];
+
+		if (!test_bit (0, bh->b_data))
+			ext2_error (sb, "ext2_check_blocks_bitmap",
+				    "Superblock in group %d is marked free", i);
+
+		for (j = 0; j < desc_blocks; j++)
+			if (!test_bit (j + 1, bh->b_data))
+				ext2_error (sb, "ext2_check_blocks_bitmap",
+					    "Descriptor block #%d in group "
+					    "%d is marked free", j, i);
 
 		if (!block_in_use (gdp->bg_block_bitmap, sb, bh->b_data))
 			ext2_error (sb, "ext2_check_blocks_bitmap",
@@ -632,9 +645,9 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 
 		for (j = 0; j < sb->u.ext2_sb.s_itb_per_group; j++)
 			if (!block_in_use (gdp->bg_inode_table + j, sb, bh->b_data))
-			ext2_error (sb, "ext2_check_blocks_bitmap",
-				    "Block #%d of the inode table in group %d "
-				    "is marked free", j, i);
+				ext2_error (sb, "ext2_check_blocks_bitmap",
+					    "Block #%d of the inode table in "
+					    "group %d is marked free", j, i);
 
 		x = ext2_count_free (bh, sb->s_blocksize);
 		if (gdp->bg_free_blocks_count != x)

@@ -12,6 +12,11 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+/*
+ * Real random numbers for secure rm added 94/02/18
+ * Idea from Pierre del Perugia <delperug@gla.ecoledoc.ibp.fr>
+ */
+
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
@@ -27,6 +32,10 @@
 		: \
 		:"a" (value), "c" (size / 4), "D" ((long) (addr)) \
 		:"cx", "di")
+
+static int ext2_secrm_seed = 152;	/* Random generator base */
+
+#define RANDOM_INT (ext2_secrm_seed = ext2_secrm_seed * 69069l +1)
 
 /*
  * Truncate has the most races in the whole filesystem: coding it is
@@ -80,7 +89,7 @@ repeat:
 		inode->i_dirt = 1;
 		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL) {
 			clear_block (bh->b_data, inode->i_sb->s_blocksize,
-				     CURRENT_TIME);
+				     RANDOM_INT);
 			bh->b_dirt = 1;
 		}
 		brelse (bh);
@@ -156,7 +165,7 @@ repeat:
 		ind_bh->b_dirt = 1;
 		if (inode->u.ext2_i.i_flags & EXT2_SECRM_FL) {
 			clear_block (bh->b_data, inode->i_sb->s_blocksize,
-				     CURRENT_TIME);
+				     RANDOM_INT);
 			bh->b_dirt = 1;
 		}
 		brelse (bh);

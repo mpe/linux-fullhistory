@@ -382,12 +382,18 @@ static void set_origin(int currcons)
 	__set_origin(__real_origin);
 }
 
-static inline void hide_cursor(int currcons)
+/*
+ * Put the cursor just beyond the end of the display adaptor memory.
+ */
+static inline void hide_cursor(void)
 {
+  /* This is inefficient, we could just put the cursor at 0xffff,
+     but perhaps the delays due to the inefficiency are useful for
+     some hardware... */
 	outb_p(14, video_port_reg);
-	outb_p(0xff&((scr_end-video_mem_base)>>9), video_port_val);
+	outb_p(0xff&((video_mem_term-video_mem_base)>>9), video_port_val);
 	outb_p(15, video_port_reg);
-	outb_p(0xff&((scr_end-video_mem_base)>>1), video_port_val);
+	outb_p(0xff&((video_mem_term-video_mem_base)>>1), video_port_val);
 }
 
 static inline void set_cursor(int currcons)
@@ -405,7 +411,7 @@ static inline void set_cursor(int currcons)
 		outb_p(15, video_port_reg);
 		outb_p(0xff&((pos-video_mem_base)>>1), video_port_val);
 	} else
-		hide_cursor(currcons);
+		hide_cursor();
 	restore_flags(flags);
 }
 
@@ -1546,7 +1552,7 @@ void blank_screen(void)
 		return;
 	timer_table[BLANK_TIMER].fn = unblank_screen;
 	get_scrmem(fg_console);
-	hide_cursor(fg_console);
+	hide_cursor();
 	console_blanked = 1;
 	memsetw((void *)video_mem_base, 0x0020, video_mem_term-video_mem_base );
 }

@@ -76,7 +76,7 @@ bool 'AT1500 and NE2100 (LANCE and PCnet-ISA) support' CONFIG_LANCE n
 bool 'AT1700 support' CONFIG_AT1700 n
 #bool 'Zenith Z-Note support' CONFIG_ZNET n
 #bool 'EtherExpress support' CONFIG_EEXPRESS n
-#bool 'DEPCA support' CONFIG_DEPCA n
+bool 'DEPCA support' CONFIG_DEPCA n
 #bool 'NI52** support' CONFIG_NI52 n
 #bool 'NI65** support' CONFIG_NI65 n
 #bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n

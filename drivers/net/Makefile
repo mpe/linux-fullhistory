@@ -105,6 +105,8 @@ NETDRV_OBJS := $(NETDRV_OBJS) net.a(znet.o)
 endif
 ifdef CONFIG_DEPCA
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(depca.o)
+depca.o: depca.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEPCA_OPTS) -c $<
 endif
 ifdef CONFIG_ATP
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(atp.o)
