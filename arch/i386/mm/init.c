@@ -209,7 +209,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 	pgd_val(pg_dir[0]) = 0;
 
 	/* Map whole memory from 0xC0000000 */
-
+	pg_dir += 768;
 	while (address < end_mem) {
 		/*
 		 * If we're running on a Pentium CPU, we can use the 4MB
@@ -224,13 +224,13 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 
 			set_in_cr4(X86_CR4_PSE);
 			wp_works_ok = 1;
-			__pe = _PAGE_TABLE + _PAGE_4M + __pa(address);
+			__pe = _KERNPG_TABLE + _PAGE_4M + __pa(address);
 			/* Make it "global" too if supported */
 			if (x86_capability & X86_FEATURE_PGE) {
 				set_in_cr4(X86_CR4_PGE);
 				__pe += _PAGE_GLOBAL;
 			}
-			pgd_val(pg_dir[768]) = __pe;
+			pgd_val(*pg_dir) = __pe;
 			pg_dir++;
 			address += 4*1024*1024;
 			continue;
@@ -239,13 +239,13 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 		 * We're on a [34]86, use normal page tables.
 		 * pg_table is physical at this point
 		 */
-		pg_table = (pte_t *) (PAGE_MASK & pgd_val(pg_dir[768]));
+		pg_table = (pte_t *) (PAGE_MASK & pgd_val(*pg_dir));
 		if (!pg_table) {
 			pg_table = (pte_t *) __pa(start_mem);
 			start_mem += PAGE_SIZE;
 		}
 
-		pgd_val(pg_dir[768]) = _PAGE_TABLE | (unsigned long) pg_table;
+		pgd_val(*pg_dir) = _PAGE_TABLE | (unsigned long) pg_table;
 		pg_dir++;
 		/* now change pg_table to kernel virtual addresses */
 		pg_table = (pte_t *) __va(pg_table);
