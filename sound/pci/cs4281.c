@@ -1848,7 +1848,6 @@ static int __devinit snd_cs4281_midi(cs4281_t * chip, int device, snd_rawmidi_t 
 static irqreturn_t snd_cs4281_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	cs4281_t *chip = dev_id;
-	unsigned long flags;
 	unsigned int status, dma, val;
 	cs4281_dma_t *cdma;
 
@@ -1864,7 +1863,7 @@ static irqreturn_t snd_cs4281_interrupt(int irq, void *dev_id, struct pt_regs *r
 		for (dma = 0; dma < 4; dma++)
 			if (status & BA0_HISR_DMA(dma)) {
 				cdma = &chip->dma[dma];
-				spin_lock_irqsave(&chip->reg_lock, flags);
+				spin_lock(&chip->reg_lock);
 				/* ack DMA IRQ */
 				val = snd_cs4281_peekBA0(chip, cdma->regHDSR);
 				/* workaround, sometimes CS4281 acknowledges */
@@ -1873,16 +1872,16 @@ static irqreturn_t snd_cs4281_interrupt(int irq, void *dev_id, struct pt_regs *r
 				if ((val & BA0_HDSR_DHTC) && !(cdma->frag & 1)) {
 					cdma->frag--;
 					chip->spurious_dhtc_irq++;
-					spin_unlock_irqrestore(&chip->reg_lock, flags);
+					spin_unlock(&chip->reg_lock);
 					continue;
 				}
 				if ((val & BA0_HDSR_DTC) && (cdma->frag & 1)) {
 					cdma->frag--;
 					chip->spurious_dtc_irq++;
-					spin_unlock_irqrestore(&chip->reg_lock, flags);
+					spin_unlock(&chip->reg_lock);
 					continue;
 				}
-				spin_unlock_irqrestore(&chip->reg_lock, flags);
+				spin_unlock(&chip->reg_lock);
 				snd_pcm_period_elapsed(cdma->substream);
 			}
 	}
@@ -1890,7 +1889,7 @@ static irqreturn_t snd_cs4281_interrupt(int irq, void *dev_id, struct pt_regs *r
 	if ((status & BA0_HISR_MIDI) && chip->rmidi) {
 		unsigned char c;
 		
-		spin_lock_irqsave(&chip->reg_lock, flags);
+		spin_lock(&chip->reg_lock);
 		while ((snd_cs4281_peekBA0(chip, BA0_MIDSR) & BA0_MIDSR_RBE) == 0) {
 			c = snd_cs4281_peekBA0(chip, BA0_MIDRP);
 			if ((chip->midcr & BA0_MIDCR_RIE) == 0)
@@ -1907,7 +1906,7 @@ static irqreturn_t snd_cs4281_interrupt(int irq, void *dev_id, struct pt_regs *r
 			}
 			snd_cs4281_pokeBA0(chip, BA0_MIDWP, c);
 		}
-		spin_unlock_irqrestore(&chip->reg_lock, flags);
+		spin_unlock(&chip->reg_lock);
 	}
 
 	/* EOI to the PCI part... reenables interrupts */
