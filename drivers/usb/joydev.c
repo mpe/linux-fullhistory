@@ -51,6 +51,7 @@
 
 struct joydev {
 	int used;
+	int open;
 	int minor;
 	char name[32];
 	struct input_handle handle;
@@ -165,6 +166,9 @@ static int joydev_release(struct inode * inode, struct file * file)
 	while (*listptr && (*listptr != list))
 		listptr = &((*listptr)->next);
 	*listptr = (*listptr)->next;
+
+	if (!--list->joydev->open)
+		input_close_device(&list->joydev->handle);
 	
 	if (!--list->joydev->used) {
 		input_unregister_minor(list->joydev->devfs);
@@ -201,6 +205,9 @@ static int joydev_open(struct inode *inode, struct file *file)
 	file->private_data = list;
 
 	list->joydev->used++;
+
+	if (!list->joydev->open++)
+		input_open_device(&list->joydev->handle);
 
 	return 0;
 }
@@ -371,7 +378,7 @@ static struct file_operations joydev_fops = {
 	fasync:		joydev_fasync,
 };
 
-static int joydev_connect(struct input_handler *handler, struct input_dev *dev)
+static struct input_handle *joydev_connect(struct input_handler *handler, struct input_dev *dev)
 {
 	struct joydev *joydev;
 	int i, j, minor;
@@ -379,16 +386,16 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev)
 	if (!(test_bit(EV_KEY, dev->evbit) && test_bit(EV_ABS, dev->evbit) &&
 	      test_bit(ABS_X, dev->absbit) && test_bit(ABS_Y, dev->absbit) &&
 	     (test_bit(BTN_TRIGGER, dev->keybit) || test_bit(BTN_A, dev->keybit)
-		|| test_bit(BTN_1, dev->keybit)))) return -1;
+		|| test_bit(BTN_1, dev->keybit)))) return NULL; 
 
 	for (minor = 0; minor < JOYDEV_MINORS && joydev_table[minor]; minor++);
 	if (joydev_table[minor]) {
 		printk(KERN_ERR "joydev: no more free joydev devices\n");
-		return -1;
+		return NULL;
 	}
 
 	if (!(joydev = kmalloc(sizeof(struct joydev), GFP_KERNEL)))
-		return -1;
+		return NULL;
 	memset(joydev, 0, sizeof(struct joydev));
 
 	init_waitqueue_head(&joydev->wait);
@@ -439,19 +446,19 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev)
 		joydev->corr[i].coef[3] = (1 << 29) / ((dev->absmax[j] - dev->absmin[j]) / 2 - 2 * dev->absflat[j]);
 	}
 
-	input_open_device(&joydev->handle);	
 	joydev->devfs = input_register_minor("js%d", minor, JOYDEV_MINOR_BASE);
 
 	printk("js%d: Joystick device for input%d\n", minor, dev->number);
 
-	return 0;
+	return &joydev->handle;
 }
 
 static void joydev_disconnect(struct input_handle *handle)
 {
 	struct joydev *joydev = handle->private;
 
-	input_close_device(handle);
+	if (joydev->open)
+		input_close_device(handle);	
 
 	if (!--joydev->used) {
 		input_unregister_minor(joydev->devfs);

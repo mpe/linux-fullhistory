@@ -130,7 +130,6 @@ nfsctl_getfs(struct nfsctl_fsparm *data, struct knfsd_fh *res)
 	else
 		err = exp_rootfh(clp, 0, 0, data->gd_path, res, data->gd_maxlen);
 	exp_unlock();
-	/*HACK*/ res->fh_size = NFS_FHSIZE; /* HACK until lockd handles var-length handles */
 	return err;
 }
 

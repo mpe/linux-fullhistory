@@ -68,9 +68,12 @@ struct input_id {
 
 #define EVIOCGVERSION		_IOR('E', 0x01, __u32)                  /* get driver version */
 #define EVIOCGID		_IOR('E', 0x02, struct input_id)	/* get device ID */
+#define EVIOCGREP		_IOR('E', 0x03, int[2])			/* get repeat settings */
+#define EVIOCSREP		_IOW('E', 0x03, int[2])			/* get repeat settings */
 #define EVIOCGNAME(len)		_IOC(_IOC_READ, 'E', 0x03, len)		/* get device name */
 #define EVIOCGBIT(ev,len)	_IOC(_IOC_READ, 'E', 0x20 + ev, len)	/* get event bits */
-#define EVIOCGABSLIM(num)	_IOR('E', 0x40 + num, 4 * sizeof(int))	/* get abs event limits */ 
+#define EVIOCGABSLIM(num)	_IOR('E', 0x40 + num, int[4])		/* get abs event limits */ 
+#define EVIOCGABS(num)		_IOR('E', 0x80 + num, int)		/* get abs value */
 
 /*
  * Event types
@@ -299,11 +302,12 @@ struct input_id {
 #define BTN_THUMB2		0x122
 #define BTN_TOP			0x123
 #define BTN_TOP2		0x124
-#define BTN_BASE		0x125
-#define BTN_BASE2		0x126
-#define BTN_BASE3		0x127
-#define BTN_BASE4		0x128
-#define BTN_BASE5		0x129
+#define BTN_PINKIE		0x125
+#define BTN_BASE		0x126
+#define BTN_BASE2		0x127
+#define BTN_BASE3		0x128
+#define BTN_BASE4		0x129
+#define BTN_BASE5		0x12a
 
 #define BTN_GAMEPAD		0x130
 #define BTN_A			0x130
@@ -459,7 +463,7 @@ struct input_handler {
 	void *private;
 
 	void (*event)(struct input_handle *handle, unsigned int type, unsigned int code, int value);
-	int (*connect)(struct input_handler *handler, struct input_dev *dev);
+	struct input_handle* (*connect)(struct input_handler *handler, struct input_dev *dev);
 	void (*disconnect)(struct input_handle *handle);
 
 	struct file_operations *fops;
@@ -472,6 +476,8 @@ struct input_handler {
 struct input_handle {
 
 	void *private;
+
+	int open;
 	
 	struct input_dev *dev;
 	struct input_handler *handler;
@@ -486,7 +492,7 @@ void input_unregister_device(struct input_dev *);
 void input_register_handler(struct input_handler *);
 void input_unregister_handler(struct input_handler *);
 
-void input_open_device(struct input_handle *);
+int input_open_device(struct input_handle *);
 void input_close_device(struct input_handle *);
 
 devfs_handle_t input_register_minor(char *name, int minor, int minor_base);

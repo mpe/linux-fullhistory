@@ -70,22 +70,28 @@ startup_32:
  */
 #define cr4_bits mmu_cr4_features-__PAGE_OFFSET
 	cmpl $0,cr4_bits
-	je 1f
-	movl %cr4,%eax		# Turn on 4Mb pages
+	je 3f
+	movl %cr4,%eax		# Turn on paging options (PSE,PAE,..)
 	orl cr4_bits,%eax
 	movl %eax,%cr4
+	jmp 3f
+1:
 #endif
 /*
- * Setup paging (intialize tables, then switch them on)
+ * Initialize page tables
  */
-1:
 	movl $pg0-__PAGE_OFFSET,%edi /* initialize page tables */
 	movl $007,%eax		/* "007" doesn't mean with right to kill, but
 				   PRESENT+RW+USER */
-1:	stosl
+2:	stosl
 	add $0x1000,%eax
 	cmp $empty_zero_page-__PAGE_OFFSET,%edi
-	jne 1b
+	jne 2b
+
+/*
+ * Enable paging
+ */
+3:
 	movl $swapper_pg_dir-__PAGE_OFFSET,%eax
 	movl %eax,%cr3		/* set the page table pointer.. */
 	movl %cr0,%eax

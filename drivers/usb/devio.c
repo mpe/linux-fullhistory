@@ -41,9 +41,9 @@
 #include <linux/signal.h>
 #include <linux/poll.h>
 #include <linux/usb.h>
+#include <linux/usbdevice_fs.h>
 #include <asm/uaccess.h>
 
-#include "usbdevice_fs.h"
 
 struct async {
         struct list_head asynclist;

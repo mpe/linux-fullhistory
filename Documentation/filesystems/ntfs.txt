@@ -4,10 +4,13 @@ NTFS Overview
 To mount an NTFS volume, use the filesystem type 'ntfs'. The driver
 currently works only in read-only mode, with no fault-tolerance
 supported.  If you enable the experimental write support, make sure
-you can recover from a complete loss of data. For ftdisk support,
-limited success was reported with volume sets on top of the md driver,
-although mirror and stripe sets should work as well - if the md
-driver can be talked into using the same layout as Windows NT.
+you can recover from a complete loss of data and also always run
+chkdsk from within Microsoft Windows NT after performing a write to
+a NTFS partition from Linux to detect any problems as early as 
+possible. For ftdisk support, limited success was reported with 
+volume sets on top of the md driver, although mirror and stripe 
+sets should work as well - if the md driver can be talked into 
+using the same layout as Windows NT.
 
 The ntfs driver supports the following mount options:
 iocharset=name      Character set to use when returning file names.

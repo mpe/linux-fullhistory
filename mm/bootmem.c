@@ -24,6 +24,7 @@
  * true for the boot process anyway)
  */
 unsigned long max_low_pfn;
+unsigned long min_low_pfn;
 
 /* return the number of _pages_ that will be allocated for the boot bitmap */
 unsigned long __init bootmem_bootmap_pages (unsigned long pages)
@@ -282,6 +283,7 @@ unsigned long __init free_all_bootmem_node (int nid)
 unsigned long __init init_bootmem (unsigned long start, unsigned long pages)
 {
 	max_low_pfn = pages;
+	min_low_pfn = start;
 	return(init_bootmem_core(NODE_DATA(0)->bdata, start, 0, pages));
 }
 

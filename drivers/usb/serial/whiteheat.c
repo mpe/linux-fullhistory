@@ -43,7 +43,7 @@
 
 #include "usb-serial.h"
 
-#include "whiteheat.h"		/* firmware for the ConnectTech WhiteHEAT device */
+#include "whiteheat_fw.h"		/* firmware for the ConnectTech WhiteHEAT device */
 
 
 #define CONNECT_TECH_VENDOR_ID		0x0710
@@ -217,7 +217,7 @@ static int  whiteheat_startup (struct usb_serial *serial)
 	}
 	while (record->address != 0xffff) {
 		response = ezusb_writememory (serial, record->address, 
-				(unsigned char *)record->data, record->data_size, 0xa0);
+				(unsigned char *)record->data, record->data_size, 0xa3);
 		if (response < 0) {
 			err("ezusb_writememory failed for first firmware step (%d %04X %p %d)", 
 				response, record->address, record->data, record->data_size);

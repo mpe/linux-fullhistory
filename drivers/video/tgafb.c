@@ -362,7 +362,7 @@ static int tgafb_decode_var(const struct fb_var_screeninfo *var, void *fb_par,
 	var->yres_virtual != var->yres ||
 	var->nonstd || (1000000000/var->pixclock) > TGA_PLL_MAX_FREQ ||
 	(var->vmode & FB_VMODE_MASK) != FB_VMODE_NONINTERLACED
-#if 0	
+#if 0	/* fbmon not done.  uncomment for 2.5.x -brad */
 	|| !fbmon_valid_timings(var->pixclock, var->htotal, var->vtotal, info))
 #else
 	)

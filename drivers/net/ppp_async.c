@@ -119,9 +119,11 @@ ppp_asynctty_open(struct tty_struct *tty)
 	struct asyncppp *ap;
 	int err;
 
+	MOD_INC_USE_COUNT;
+	err = -ENOMEM;
 	ap = kmalloc(sizeof(*ap), GFP_KERNEL);
 	if (ap == 0)
-		return -ENOMEM;
+		goto out;
 
 	/* initialize the asyncppp structure */
 	memset(ap, 0, sizeof(*ap));
@@ -140,15 +142,18 @@ ppp_asynctty_open(struct tty_struct *tty)
 	ap->chan.ops = &async_ops;
 	ap->chan.mtu = PPP_MRU;
 	err = ppp_register_channel(&ap->chan);
-	if (err) {
-		kfree(ap);
-		return err;
-	}
+	if (err)
+		goto out_free;
 
 	tty->disc_data = ap;
 
-	MOD_INC_USE_COUNT;
 	return 0;
+
+ out_free:
+	kfree(ap);
+ out:
+	MOD_DEC_USE_COUNT;
+	return err;
 }
 
 /*

@@ -315,7 +315,7 @@ static int udf_release_file(struct inode * inode, struct file * filp)
  */
 static int udf_open_file(struct inode * inode, struct file * filp)
 {
-	if ((inode->i_size & 0xFFFFFFFF00000000UL) && !(filp->f_flags & O_LARGEFILE))
+	if ((inode->i_size & 0xFFFFFFFF00000000ULL) && !(filp->f_flags & O_LARGEFILE))
 		return -EFBIG;
 	return 0;
 }

@@ -333,7 +333,8 @@ static int rd_open(struct inode * inode, struct file * filp)
 	 * Immunize device against invalidate_buffers() and prune_icache().
 	 */
 	if (rd_inode[DEVICE_NR(inode->i_rdev)] == NULL) {
-		if((rd_inode[DEVICE_NR(inode->i_rdev)] = igrab(inode)) != NULL)
+		if (!inode->i_bdev) return -ENXIO;
+		if ((rd_inode[DEVICE_NR(inode->i_rdev)] = igrab(inode)) != NULL)
 			atomic_inc(&rd_inode[DEVICE_NR(inode->i_rdev)]->i_bdev->bd_openers);
 	}
 

@@ -740,6 +740,12 @@ M:	emoenke@gwdg.de
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+NTFS FILESYSTEM
+P:	Anton Altaparmakov
+M:	aia21@cus.cam.ac.uk
+L:	linux-kernel@vger.rutgers.edu
+S:	Odd Fixes
+
 NVIDIA (RIVA) FRAMEBUFFER DRIVER
 P:	Jeff Garzik
 M:	jgarzik@mandrakesoft.com

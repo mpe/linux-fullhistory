@@ -1084,7 +1084,7 @@ int usb_parse_configuration(struct usb_device *dev, struct usb_config_descriptor
 	int size;
 	struct usb_descriptor_header *header;
 
-	memcpy(config, buffer, USB_DT_INTERFACE_SIZE);
+	memcpy(config, buffer, USB_DT_CONFIG_SIZE);
 	le16_to_cpus(&config->wTotalLength);
 	size = config->wTotalLength;
 
@@ -1512,6 +1512,8 @@ int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 		return ret;
 
 	iface->act_altsetting = alternate;
+	dev->toggle[0] = 0;	/* 9.1.1.5 says to do this */
+	dev->toggle[1] = 0;
 	usb_set_maxpacket(dev);
 	return 0;
 }
@@ -1876,6 +1878,7 @@ EXPORT_SYMBOL(usb_driver_release_interface);
 EXPORT_SYMBOL(usb_init_root_hub);
 EXPORT_SYMBOL(usb_root_hub_string);
 EXPORT_SYMBOL(usb_new_device);
+EXPORT_SYMBOL(usb_reset_device);
 EXPORT_SYMBOL(usb_connect);
 EXPORT_SYMBOL(usb_disconnect);
 EXPORT_SYMBOL(usb_release_bandwidth);

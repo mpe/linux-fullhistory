@@ -46,9 +46,9 @@ dep_tristate '  Linear (append) mode' CONFIG_MD_LINEAR $CONFIG_BLK_DEV_MD
 dep_tristate '  RAID-0 (striping) mode' CONFIG_MD_STRIPED $CONFIG_BLK_DEV_MD
 #dep_tristate '  RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING $CONFIG_BLK_DEV_MD
 #dep_tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5 $CONFIG_BLK_DEV_MD
-#if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_STRIPED" = "y" ]; then
-#   bool '    Boot support (linear, striped)' CONFIG_MD_BOOT
-#fi
+if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_STRIPED" = "y" ]; then
+   bool '    Boot support (linear, striped)' CONFIG_MD_BOOT
+fi
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 dep_bool '  Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD $CONFIG_BLK_DEV_RAM
 

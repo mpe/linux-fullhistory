@@ -256,7 +256,7 @@ mainmenu_option next_comment
 comment 'Sound'
 tristate 'Sound card support' CONFIG_SOUND
 if [ "$CONFIG_SOUND" != "n" ]; then
-  dep_tristate 'Amiga or PowerMac DMA sound support' CONFIG_DMASOUND $CONFIG_SOUND
+  source drivers/sound/dmasound/Config.in
   source drivers/sound/Config.in
 fi
 

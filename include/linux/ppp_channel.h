@@ -21,6 +21,7 @@
 
 #include <linux/list.h>
 #include <linux/skbuff.h>
+#include <linux/poll.h>
 
 struct ppp_channel;
 

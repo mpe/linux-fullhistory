@@ -710,6 +710,7 @@ static inline unsigned int __default_pipe(struct usb_device *dev)
  * Send and receive control messages..
  */
 int usb_new_device(struct usb_device *dev);
+int usb_reset_device(struct usb_device *dev);
 int usb_set_address(struct usb_device *dev);
 int usb_get_descriptor(struct usb_device *dev, unsigned char desctype,
 	unsigned char descindex, void *buf, int size);

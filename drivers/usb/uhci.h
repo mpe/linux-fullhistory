@@ -97,6 +97,10 @@ struct s_nested_lock {
 #define UHCI_MAX_SOF_NUMBER	2047	/* in an SOF packet */
 #define CAN_SCHEDULE_FRAMES	1000	/* how far future frames can be scheduled */
 
+struct uhci_framelist {
+	__u32 frame[UHCI_NUMFRAMES];
+} __attribute__((aligned(4096)));
+
 struct uhci_td;
 
 struct uhci_qh {
@@ -106,22 +110,19 @@ struct uhci_qh {
 
 	/* Software fields */
 	/* Can't use list_head since we want a specific order */
-	struct uhci_qh *prevqh, *nextqh;
-
 	struct usb_device *dev;			/* The owning device */
+
+	struct uhci_qh *prevqh, *nextqh;
 
 	struct list_head remove_list;
 } __attribute__((aligned(16)));
-
-struct uhci_framelist {
-	__u32 frame[UHCI_NUMFRAMES];
-} __attribute__((aligned(4096)));
 
 /*
  * for TD <status>:
  */
 #define TD_CTRL_SPD		(1 << 29)	/* Short Packet Detect */
 #define TD_CTRL_C_ERR_MASK	(3 << 27)	/* Error Counter bits */
+#define TD_CTRL_C_ERR_SHIFT	27
 #define TD_CTRL_LS		(1 << 26)	/* Low Speed Device */
 #define TD_CTRL_IOS		(1 << 25)	/* Isochronous Select */
 #define TD_CTRL_IOC		(1 << 24)	/* Interrupt on Complete */
@@ -184,10 +185,8 @@ struct uhci_td {
 
 	struct usb_device *dev;
 	struct urb *urb;		/* URB this TD belongs to */
-	/* We can't use list_head since we need a specific order */
-	struct ut_list {
-		struct uhci_td *prev, *next;
-	} list;
+
+	struct list_head list;
 } __attribute__((aligned(16)));
 
 /*
@@ -336,9 +335,12 @@ struct uhci {
 };
 
 struct urb_priv {
+	struct urb *urb;
+
 	struct uhci_qh *qh;		/* QH for this URB */
 
-	int fsbr;			/* Did this URB turn on FSBR? */
+	int fsbr : 1;			/* Did this URB turn on FSBR? */
+	int queued : 1;			/* 0 if QH was linked in */
 
 	char short_control_packet;	/* If we get a short packet during */
 					/*  a control transfer, retrigger */
@@ -346,15 +348,16 @@ struct urb_priv {
 
 	unsigned long inserttime;	/* In jiffies */
 
-	struct up_list {
-		struct uhci_td *begin, *end;
-	} list;
+	struct list_head list;
+
+	struct list_head urb_queue_list;	/* URB's linked together */
 };
 
 /* -------------------------------------------------------------------------
    Virtual Root HUB
    ------------------------------------------------------------------------- */
 /* destination of request */
+#define RH_DEVICE		0x00
 #define RH_INTERFACE		0x01
 #define RH_ENDPOINT		0x02
 #define RH_OTHER		0x03

@@ -510,16 +510,14 @@ asmlinkage void __init start_kernel(void)
 	kmem_cache_init();
 	sti();
 	calibrate_delay();
-#if 0000
 #ifdef CONFIG_BLK_DEV_INITRD
-	// FIXME, use the bootmem.h interface.
-	if (initrd_start && !initrd_below_start_ok && initrd_start < memory_start) {
+	if (initrd_start && !initrd_below_start_ok &&
+			initrd_start < min_low_pfn << PAGE_SHIFT) {
 		printk(KERN_CRIT "initrd overwritten (0x%08lx < 0x%08lx) - "
-		    "disabling it.\n",initrd_start,memory_start);
+		    "disabling it.\n",initrd_start,min_low_pfn << PAGE_SHIFT);
 		initrd_start = 0;
 	}
 #endif
-#endif /* 0000 */
 	mem_init();
 	kmem_cache_sizes_init();
 #ifdef CONFIG_PROC_FS
@@ -571,14 +569,6 @@ static int do_linuxrc(void * shell)
 	(void) dup(0);
 	return execve(shell, argv, envp_init);
 }
-
-static int __init no_initrd(char *s)
-{
-	mount_initrd = 0;
-	return 1;
-}
-
-__setup("noinitrd", no_initrd);
 
 #endif
 

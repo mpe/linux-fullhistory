@@ -2539,7 +2539,7 @@ static int atyfb_decode_var(const struct fb_var_screeninfo *var,
     else
 	par->accel_flags = 0;
 
-#if 0
+#if 0 /* fbmon is not done. uncomment for 2.5.x -brad */
     if (!fbmon_valid_timings(var->pixclock, htotal, vtotal, info))
 	return -EINVAL;
 #endif

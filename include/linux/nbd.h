@@ -15,6 +15,7 @@
 #define NBD_CLEAR_QUE	_IO( 0xab, 5 )
 #define NBD_PRINT_DEBUG	_IO( 0xab, 6 )
 #define NBD_SET_SIZE_BLOCKS	_IO( 0xab, 7 )
+#define NBD_DISCONNECT  _IO( 0xab, 8 )
 
 #ifdef MAJOR_NR
 

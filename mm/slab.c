@@ -1019,6 +1019,16 @@ static int __kmem_cache_shrink(kmem_cache_t *cachep)
 		slabp = cachep->c_lastp;
 		if (slabp->s_inuse || slabp == kmem_slab_end(cachep))
 			break;
+		/*
+		 * If this slab is the first slab with free objects
+		 * (c_freep), and as we are walking the slab chain
+		 * backwards, it is also the last slab with free
+		 * objects.  After unlinking it, there will be no
+		 * slabs with free objects, so point c_freep into the
+		 * cache structure.
+		 */
+		if (cachep->c_freep == slabp)
+			cachep->c_freep = kmem_slab_end(cachep);
 		kmem_slab_unlink(slabp);
 		spin_unlock_irq(&cachep->c_spinlock);
 		kmem_slab_destroy(cachep, slabp);

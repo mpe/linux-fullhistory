@@ -36,17 +36,63 @@
 #include <linux/module.h>
 #include <linux/kbd_kern.h>
 
-#if defined(CONFIG_X86) || defined(CONFIG_IA64)
+#if defined(CONFIG_X86) || defined(CONFIG_IA64) || defined(CONFIG_ALPHA) || defined(CONFIG_MIPS)
 
-static unsigned char keybdev_x86_e0s[] = 
-	{ 0x1c, 0x1d, 0x35, 0x2a, 0x38, 0x39, 0x47, 0x48,
-	  0x49, 0x4b, 0x4d, 0x4f, 0x50, 0x51, 0x52, 0x53,
-	  0x26, 0x25, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x00,
-	  0x23, 0x24, 0x25, 0x26, 0x27 };
+static int x86_sysrq_alt = 0;
 
-#elif CONFIG_ADB_KEYBOARD
+static unsigned short x86_keycodes[256] =
+	{ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,
+	 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+	 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+	 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
+	 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+	 80, 81, 82, 83, 89, 85, 86, 87, 88,115,119,120,121,375,123, 90,
+	284,285,309,298,312, 91,327,328,329,331,333,335,336,337,338,339,
+	367,294,293,286,350, 92,334,512,116,377,109,111,373,347,348,349,
+	360, 93, 94, 95, 98,376,100,101,357,316,354,304,289,102,351,355,
+	103,104,105,275,281,272,306,106,274,107,288,364,358,363,362,361,
+	291,108,381,290,287,292,279,305,280, 99,112,257,258,113,270,114,
+	118,117,125,374,379,259,260,261,262,263,264,265,266,267,268,269,
+	271,273,276,277,278,282,283,295,296,297,299,300,301,302,303,307,
+	308,310,313,314,315,317,318,319,320,321,322,323,324,325,326,330,
+	332,340,341,342,343,344,345,346,356,359,365,368,369,370,371,372 };
 
-static unsigned char keybdev_mac_codes[256] =
+static int emulate_raw(unsigned int keycode, int down)
+{
+	if (keycode > 255 || !x86_keycodes[keycode])
+		return -1; 
+
+	if (keycode == KEY_PAUSE) {
+		handle_scancode(0xe1, 1);
+		handle_scancode(0x1d, down);
+		handle_scancode(0x45, down);
+		return 0;
+	} 
+
+	if (keycode == KEY_SYSRQ && x86_sysrq_alt) {
+		handle_scancode(0x54, down);
+		return 0;
+	}
+
+	if (x86_keycodes[keycode] & 0x100)
+		handle_scancode(0xe0, 1);
+
+	handle_scancode(x86_keycodes[keycode] & 0x7f, down);
+
+	if (keycode == KEY_SYSRQ) {
+		handle_scancode(0xe0, 1);
+		handle_scancode(0x37, down);
+	}
+
+	if (keycode == KEY_LEFTALT || keycode == KEY_RIGHTALT)
+		x86_sysrq_alt = down;
+
+	return 0;
+}
+
+#elif defined(CONFIG_ADB_KEYBOARD)
+
+static unsigned char mac_keycodes[128] =
 	{ 0, 53, 18, 19, 20, 21, 23, 22, 26, 28, 25, 29, 27, 24, 51, 48,
 	 12, 13, 14, 15, 17, 16, 32, 34, 31, 35, 33, 30, 36, 54,128,  1,
 	  2,  3,  5,  4, 38, 40, 37, 41, 39, 50, 56, 42,  6,  7,  8,  9,
@@ -56,10 +102,19 @@ static unsigned char keybdev_mac_codes[256] =
 	 76,125, 75,105,124,  0,115, 62,116, 59, 60,119, 61,121,114,117,
 	  0,  0,  0,  0,127, 81,  0,113,  0,  0,  0,  0,  0, 55, 55 };
 
+static int emulate_raw(unsigned int code, unsigned char upflag)
+{
+	if (keycode > 127 || !mac_keycodes[keycode])
+		return -1;
+
+	handle_scancode(mac_keycodes[keycode] & 0x7f, down);
+
+	return 0;
+}
+
 #endif
 
 static struct input_handler keybdev_handler;
-static int keybdev_alt = 0;
 
 void keybdev_ledfunc(unsigned int led)
 {
@@ -76,70 +131,30 @@ void keybdev_ledfunc(unsigned int led)
 
 void keybdev_event(struct input_handle *handle, unsigned int type, unsigned int code, int down)
 {
-	if (type != EV_KEY || code > 255) return;
+	if (type != EV_KEY) return;
 
-#if defined(CONFIG_X86) || defined(CONFIG_IA64)
-
-	if (code >= 189) {
-  		printk(KERN_WARNING "keybdev.c: can't emulate keycode %d\n", code);
-		return; 
-	} else if (code >= 162) {
-		handle_scancode(0xe0, 1);
-		handle_scancode(code - 161, down);
-	} else if (code >= 125) {
-		handle_scancode(0xe0, 1);
-		handle_scancode(code - 34, down);
-	} else if (code == 119) {
-		handle_scancode(0xe1, 1);
-		handle_scancode(0x1d, down);
-		handle_scancode(0x45, down);
-	} else if (code >= 96) {
-		if (code == 99 && keybdev_alt) {
-			 handle_scancode(84, down);
-		} else {
-			handle_scancode(0xe0, 1);
-			handle_scancode(keybdev_x86_e0s[code - 96], down);
-			if (code == 99) {
-				handle_scancode(0xe0, 1);
-				handle_scancode(0x37, down);
-			}
-		}
-	} else if (code == 84) {
-		handle_scancode(43, down);
-	} else handle_scancode(code, down);
-
-	if (code == 56 || code == 100) keybdev_alt = down;
-
-#elif CONFIG_ADB_KEYBOARD
-
-	if (code < 128 && keybdev_mac_codes[code]) 
-		handle_scancode(keybdev_mac_codes[code] & 0x7f, down);
-	else
-		printk(KERN_WARNING "keybdev.c: can't emulate keycode %d\n", code);
-
-#else
-#error "Cannot generate rawmode keyboard for your architecture yet."
-#endif
+	if (emulate_raw(code, down))
+		printk(KERN_WARNING "keyboard.c: can't emulate rawmode for keycode %d\n", code);
 
 	tasklet_schedule(&keyboard_tasklet);
 }
 
-static int keybdev_connect(struct input_handler *handler, struct input_dev *dev)
+static struct input_handle *keybdev_connect(struct input_handler *handler, struct input_dev *dev)
 {
 	struct input_handle *handle;
 	int i;
 
 	if (!test_bit(EV_KEY, dev->evbit))
-		return -1;
+		return NULL;
 
 	for (i = KEY_RESERVED; i < BTN_MISC; i++)
 		if (test_bit(i, dev->keybit)) break;
 
 	if (i == BTN_MISC)
- 		return -1;
+ 		return NULL;
 
 	if (!(handle = kmalloc(sizeof(struct input_handle), GFP_KERNEL)))
-		return -1;
+		return NULL;
 	memset(handle, 0, sizeof(struct input_handle));
 
 	handle->dev = dev;
@@ -149,15 +164,13 @@ static int keybdev_connect(struct input_handler *handler, struct input_dev *dev)
 
 	printk("keybdev.c: Adding keyboard: input%d\n", dev->number);
 
-	return 0;
+	return handle;
 }
 
 static void keybdev_disconnect(struct input_handle *handle)
 {
 	printk("keybdev.c: Removing keyboard: input%d\n", handle->dev->number);
-
 	input_close_device(handle);
-
 	kfree(handle);
 }
 	

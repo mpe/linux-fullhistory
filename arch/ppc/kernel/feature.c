@@ -184,14 +184,14 @@ feature_init(void)
 	if (controller_count)
 		printk(KERN_INFO "Registered %d feature controller(s)\n", controller_count);
 
-#ifdef CONFIG_PMAC_PBOOK
-#ifdef CONFIG_DMASOUND_MODULE
-	/* On PowerBooks, we disable the sound chip when dmasound is a module */
+#if defined(CONFIG_PMAC_PBOOK) && !defined(CONFIG_DMASOUND_AWACS)
+	/* On PowerBooks, we disable the sound chip when dmasound is a module
+	 * or not used at all
+	 */
 	if (controller_count && find_devices("via-pmu") != NULL) {
 		feature_clear(controllers[0].device, FEATURE_Sound_power);
 		feature_clear(controllers[0].device, FEATURE_Sound_CLK_enable);
 	}
-#endif	
 #endif
 }
 

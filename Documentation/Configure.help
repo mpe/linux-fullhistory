@@ -10227,11 +10227,10 @@ CONFIG_NFSD
   The module is called nfsd.o. If you want to compile it as a module,
   say M here and read Documentation/modules.txt. If unsure, say N.
 
-Provide NFSv3 server support (EXPERIMENTAL)
+Provide NFSv3 server support
 CONFIG_NFSD_V3
   If you would like to include the NFSv3 server as well as the NFSv2
-  server, say Y here.  File locking, via the NLMv4 protocol, is not
-  supported yet. If unsure, say N.
+  server, say Y here.  In unsure, say Y.
 
 OS/2 HPFS file system support
 CONFIG_HPFS_FS
@@ -10263,11 +10262,13 @@ CONFIG_NTFS_FS
 
 NTFS write support (DANGEROUS)
 CONFIG_NTFS_RW
-  If you say Y here, you will (hopefully) be able to write to NTFS
-  file systems as well as read from them. The read-write support
-  in NTFS is far from being complete and is not well tested. If you
+  If you say Y here, you will (maybe) be able to write to NTFS file
+  systems as well as read from them. The read-write support in
+  NTFS is far from being complete and is not well tested. If you
   enable this, back up your NTFS volume first since it may get
-  damaged.
+  damaged. Also, make sure to run chkdsk from within Microsoft
+  Windows NT after having performed any writes to a NTFS partition
+  from Linux to detect any problems as early as possible.
 
   If unsure, say N.
 
@@ -14424,12 +14425,44 @@ CONFIG_MULTIFACE_III_TTY
   If you want to compile it as a module, say M here and read
   Documentation/modules.txt.
 
-Amiga or Atari DMA sound support
-CONFIG_DMASOUND
-  If you want to use the internal audio of your Atari or Amiga in
-  Linux, answer Y to this question. This will provide a Sun-like
-  /dev/audio, compatible with the Linux/i386 sound system. Otherwise,
-  say N.
+Atari DMA sound support
+CONFIG_DMASOUND_ATARI
+  If you want to use the internal audio of your Atari in Linux, answer
+  Y to this question. This will provide a Sun-like /dev/audio,
+  compatible with the Linux/i386 sound system. Otherwise, say N.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+PowerMac DMA sound support
+CONFIG_DMASOUND_AWACS
+  If you want to use the internal audio of your PowerMac in Linux,
+  answer Y to this question. This will provide a Sun-like /dev/audio,
+  compatible with the Linux/i386 sound system. Otherwise, say N.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Amiga DMA sound support
+CONFIG_DMASOUND_PAULA
+  If you want to use the internal audio of your Amiga in Linux, answer
+  Y to this question. This will provide a Sun-like /dev/audio,
+  compatible with the Linux/i386 sound system. Otherwise, say N.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Q40 sound support
+CONFIG_DMASOUND_Q40
+  If you want to use the internal audio of your Q40 in Linux, answer
+  Y to this question. This will provide a Sun-like /dev/audio,
+  compatible with the Linux/i386 sound system. Otherwise, say N.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you

@@ -78,7 +78,9 @@ void udf_put_inode(struct inode * inode)
 	{
 		lock_kernel();
 		udf_discard_prealloc(inode);
-		write_inode_now(inode);
+		/* write the root inode on put, if dirty */
+		if (!inode->i_sb->s_root && inode->i_state & I_DIRTY)
+			udf_update_inode(inode, IS_SYNC(inode));
 		unlock_kernel();
 	}
 }
@@ -111,7 +113,7 @@ void udf_delete_inode(struct inode * inode)
 
 	inode->i_size = 0;
 	udf_truncate(inode);
-	write_inode_now(inode);
+	udf_update_inode(inode, IS_SYNC(inode));
 	udf_free_inode(inode);
 out:
 	unlock_kernel();
@@ -1005,10 +1007,6 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 		inode->i_nlink = 1;
 	
 	inode->i_size = le64_to_cpu(fe->informationLength);
-#if BITS_PER_LONG < 64
-	if (le64_to_cpu(fe->informationLength) & 0xFFFFFFFF00000000ULL)
-		inode->i_size = (Uint32)-1;
-#endif
 
 	inode->i_mode = udf_convert_permissions(fe);
 	inode->i_mode &= ~UDF_SB(inode->i_sb)->s_umask;

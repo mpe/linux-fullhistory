@@ -521,16 +521,15 @@ static int __emul_lookup_dentry(const char *name, int lookup_flags,
 static inline int
 walk_init_root(const char *name, unsigned flags, struct nameidata *nd)
 {
-	if (current->personality) {
+	if (current->personality != PER_LINUX)
 		if (__emul_lookup_dentry(name,flags,nd));
 			return 0;
-	}
 	nd->mnt = mntget(current->fs->rootmnt);
 	nd->dentry = dget(current->fs->root);
 	return 1;
 }
 
-int walk_init(const char *name,unsigned flags,struct nameidata *nd)
+int walk_init(const char *name,unsigned int flags,struct nameidata *nd)
 {
 	nd->last.len = 0;
 	if (*name=='/')

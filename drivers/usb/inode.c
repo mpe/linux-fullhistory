@@ -38,9 +38,8 @@
 #include <linux/init.h>
 #include <linux/proc_fs.h>
 #include <linux/usb.h>
+#include <linux/usbdevice_fs.h>
 #include <asm/uaccess.h>
-
-#include "usbdevice_fs.h"
 
 /* --------------------------------------------------------------------- */
 

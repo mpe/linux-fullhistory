@@ -216,7 +216,6 @@ static const char *version = "defxx.c:v1.05 2000/03/26  Lawrence V. Stefani (ste
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/init.h>
-#include <linux/module.h>
 #include <asm/byteorder.h>
 #include <asm/bitops.h>
 #include <asm/io.h>

@@ -74,22 +74,11 @@ decode_fh(u32 *p, struct svc_fh *fhp)
 static inline u32 *
 encode_fh(u32 *p, struct svc_fh *fhp)
 {
-#if 0
 	int size = fhp->fh_handle.fh_size;
 	*p++ = htonl(size);
 	if (size) p[XDR_QUADLEN(size)-1]=0;
 	memcpy(p, &fhp->fh_handle.fh_base, size);
 	return p + XDR_QUADLEN(size);
-#else
-	/* until locked knows about var-length file handles,
-	 * we always return NFS_FHSIZE handles
-	 */
-	int size = fhp->fh_handle.fh_size;
-	*p++ = htonl(NFS_FHSIZE);
-	memset(p, 0, NFS_FHSIZE);
-	memcpy(p, &fhp->fh_handle.fh_base, size);
-	return p + XDR_QUADLEN(NFS_FHSIZE);
-#endif
 }
 
 /*

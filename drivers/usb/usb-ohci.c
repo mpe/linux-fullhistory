@@ -1647,10 +1647,10 @@ static int hc_reset (ohci_t * ohci)
 	int timeout = 30;
 	int smm_timeout = 50; /* 0,5 sec */
 	 	
-	if (readl (&ohci->regs->control) & OHCI_CTRL_RWC) { /* SMM owns the HC */
+	if (readl (&ohci->regs->control) & OHCI_CTRL_IR) { /* SMM owns the HC */
 		writel (OHCI_OCR, &ohci->regs->cmdstatus); /* request ownership */
 		dbg("USB HC TakeOver from SMM");
-		while (readl (&ohci->regs->control) & OHCI_CTRL_RWC) {
+		while (readl (&ohci->regs->control) & OHCI_CTRL_IR) {
 			wait_ms (10);
 			if (--smm_timeout == 0) {
 				err("USB HC TakeOver failed!");

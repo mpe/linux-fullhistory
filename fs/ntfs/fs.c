@@ -1,7 +1,8 @@
 /*
  *  fs.c
- *  NTFS driver for Linux 2.1
+ *  NTFS driver for Linux 2.3.x
  *
+ *  Copyright (C) 2000, Anton Altaparmakov
  *  Copyright (C) 1995-1997, 1999 Martin von Löwis
  *  Copyright (C) 1996 Richard Russon
  *  Copyright (C) 1996-1997 Régis Duchesne
@@ -53,7 +54,6 @@ static void ntfs_getuser_update_vm (void *dest, ntfs_io *src, ntfs_size_t len)
 {
 	struct ntfs_getuser_update_vm_s *p = src->param;
 	copy_from_user (dest, p->user, len);
-	update_vm_cache (p->ino, p->off, dest, len);
 	p->user += len;
 	p->off += len;
 }

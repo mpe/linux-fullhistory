@@ -1,7 +1,7 @@
 
-                      MAGIC SYSRQ KEY DOCUMENTATION v1.31
+                      MAGIC SYSRQ KEY DOCUMENTATION v1.32
                      ------------------------------------
-                        [Mon Mar 13 21:45:48 EST 2000]
+                        [Sat Apr  8 22:15:03 CEST 2000]
 
 *  What is the magic SysRQ key?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -113,13 +113,13 @@ virtual console (ALT+Fn) and then back again should also help.
 
 *  I hit SysRQ, but nothing seems to happen, what's wrong?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-There are some keyboards which do not support 'SysRQ', you can try running
-'showkey -s' and pressing SysRQ or alt-SysRQ to see if it generates any
-0x54 codes. If it doesn't, you may define the magic sysrq sequence to a
-different key. Find the keycode with showkey, and change the define of
-'#define SYSRQ_KEY 0x54' in [/usr/src/linux/]include/asm/keyboard.h to
-the keycode of the key you wish to use, then recompile. Oh, and by the way,
-you exit 'showkey' by not typing anything for ten seconds.
+There are some keyboards that send different scancodes for SysRQ than the
+pre-defined 0x54. So if SysRQ doesn't work out of the box for a certain 
+keyboard, run 'showkey -s' to find out the proper scancode sequence. Then 
+use 'setkeycodes <sequence> 84' to define this sequence to the usual SysRQ 
+code (84 is decimal for 0x54). It's probably best to put this command in a
+boot script. Oh, and by the way, you exit 'showkey' by not typing anything 
+for ten seconds.
 
 *  I have more questions, who can I ask?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -56,12 +56,4 @@
 #define udf_info(f, a...) \
 		printk (KERN_INFO "UDF-fs INFO " ## f, ## a);
 
-#ifdef __KERNEL__
-/*
- * Function prototypes (all other prototypes included in udfdecl.h)
- */
-extern int init_udf_fs(void);
-
-#endif /* __KERNEL__ */
-
 #endif /* !defined(_LINUX_UDF_FS_H) */

@@ -278,7 +278,7 @@ static int
 region_locked(struct inode *inode, struct nfs_page *req)
 {
 	struct file_lock	*fl;
-	unsigned long		rqstart, rqend;
+	loff_t			rqstart, rqend;
 
 	/* Don't optimize writes if we don't use NLM */
 	if (NFS_SERVER(inode)->flags & NFS_MOUNT_NONLM)
@@ -1321,7 +1321,7 @@ nfs_commit_rpcsetup(struct list_head *head, struct nfs_write_data *data)
 	struct nfs_page		*req;
 	struct dentry		*dentry;
 	struct inode		*inode;
-	unsigned long		start, end, len;
+	loff_t			start, end, len;
 
 	/* Set up the RPC argument and reply structs
 	 * NB: take care not to mess about with data->commit et al. */
@@ -1335,7 +1335,7 @@ nfs_commit_rpcsetup(struct list_head *head, struct nfs_write_data *data)
 	inode = dentry->d_inode;
 	while (!list_empty(head)) {
 		struct nfs_page	*req;
-		unsigned long	rqstart, rqend;
+		loff_t	rqstart, rqend;
 		req = nfs_list_entry(head->next);
 		nfs_list_remove_request(req);
 		nfs_list_add_request(req, &data->pages);
@@ -1349,6 +1349,7 @@ nfs_commit_rpcsetup(struct list_head *head, struct nfs_write_data *data)
 	data->args.fh     = NFS_FH(dentry);
 	data->args.offset = start;
 	len = end - start;
+	/* If 'len' is not a 32-bit quantity, pass '0' in the COMMIT call */
 	if (end >= inode->i_size || len > (~((u32)0) >> 1))
 		len = 0;
 	data->res.count   = data->args.count = (u32)len;

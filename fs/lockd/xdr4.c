@@ -84,36 +84,24 @@ static u32 *
 nlm4_decode_fh(u32 *p, struct nfs_fh *f)
 {
 	memset(f->data, 0, sizeof(f->data));
-#ifdef NFS_MAXFHSIZE
 	f->size = ntohl(*p++);
 	if (f->size > NFS_MAXFHSIZE) {
 		printk(KERN_NOTICE
-			"lockd: bad fhandle size %x (should be %d)\n",
+			"lockd: bad fhandle size %d (should be <=%d)\n",
 			f->size, NFS_MAXFHSIZE);
 		return NULL;
 	}
       	memcpy(f->data, p, f->size);
 	return p + XDR_QUADLEN(f->size);
-#else
-	if (ntohl(*p++) != NFS_FHSIZE)
-		return NULL; /* for now, all filehandles are 32 bytes */
-	memcpy(f->data, p, NFS_FHSIZE);
-	return p + XDR_QUADLEN(NFS_FHSIZE);
-#endif
 }
 
 static u32 *
 nlm4_encode_fh(u32 *p, struct nfs_fh *f)
 {
-#ifdef NFS_MAXFHSIZE
 	*p++ = htonl(f->size);
+	if (f->size) p[XDR_QUADLEN(f->size)-1] = 0; /* don't leak anything */
 	memcpy(p, f->data, f->size);
 	return p + XDR_QUADLEN(f->size);
-#else
-	*p++ = htonl(NFS_FHSIZE);
-	memcpy(p, f->data, NFS_FHSIZE);
-	return p + XDR_QUADLEN(NFS_FHSIZE);
-#endif
 }
 
 /*

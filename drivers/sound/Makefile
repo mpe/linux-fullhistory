@@ -35,7 +35,6 @@ obj-		:=
 # Each configuration option enables a list of files.
 
 obj-$(CONFIG_SOUND)		+= soundcore.o
-obj-$(CONFIG_DMASOUND)		+= dmasound.o
 obj-$(CONFIG_SOUND_OSS)		+= sound.o
 obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o 
 
@@ -80,6 +79,17 @@ obj-$(CONFIG_SOUND_ES1371)	+= es1371.o ac97_codec.o
 obj-$(CONFIG_SOUND_ESSSOLO1)	+= esssolo1.o
 obj-$(CONFIG_SOUND_MAESTRO)	+= maestro.o
 obj-$(CONFIG_SOUND_TRIDENT)	+= trident.o ac97_codec.o
+
+ifeq ($(CONFIG_DMASOUND),y)
+  SUB_DIRS += dmasound
+  MOD_SUB_DIRS += dmasound
+  obj-y += dmasound/dmasound.o
+else
+  ifeq ($(CONFIG_DMASOUND),m)
+    MOD_SUB_DIRS += dmasound
+  endif
+endif
+
 
 # Declare multi-part drivers.
 

@@ -176,9 +176,11 @@ ppp_sync_open(struct tty_struct *tty)
 	struct syncppp *ap;
 	int err;
 
+	MOD_INC_USE_COUNT;
 	ap = kmalloc(sizeof(*ap), GFP_KERNEL);
+	err = -ENOMEM;
 	if (ap == 0)
-		return -ENOMEM;
+		goto out;
 
 	/* initialize the syncppp structure */
 	memset(ap, 0, sizeof(*ap));
@@ -193,16 +195,20 @@ ppp_sync_open(struct tty_struct *tty)
 	ap->chan.private = ap;
 	ap->chan.ops = &sync_ops;
 	ap->chan.mtu = PPP_MRU;
+	ap->chan.hdrlen = 2;	/* for A/C bytes */
 	err = ppp_register_channel(&ap->chan);
-	if (err) {
-		kfree(ap);
-		return err;
-	}
+	if (err)
+		goto out_free;
 
 	tty->disc_data = ap;
 
-	MOD_INC_USE_COUNT;
 	return 0;
+
+ out_free:
+	kfree(ap);
+ out:
+	MOD_DEC_USE_COUNT;
+	return err;
 }
 
 /*

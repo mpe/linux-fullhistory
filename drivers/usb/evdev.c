@@ -40,6 +40,7 @@
 
 struct evdev {
 	int used;
+	int open;
 	int minor;
 	struct input_handle handle;
 	wait_queue_head_t wait;
@@ -98,6 +99,9 @@ static int evdev_release(struct inode * inode, struct file * file)
 	while (*listptr && (*listptr != list))
 		listptr = &((*listptr)->next);
 	*listptr = (*listptr)->next;
+
+	if (!--list->evdev->open)
+		input_close_device(&list->evdev->handle);	
 	
 	if (!--list->evdev->used) {
 		input_unregister_minor(list->evdev->devfs);
@@ -134,6 +138,9 @@ static int evdev_open(struct inode * inode, struct file * file)
 	file->private_data = list;
 
 	list->evdev->used++;
+
+	if (!list->evdev->open++)
+		input_open_device(&list->evdev->handle);	
 
 	return 0;
 }
@@ -250,7 +257,7 @@ static struct file_operations evdev_fops = {
 	fasync:		evdev_fasync,
 };
 
-static int evdev_connect(struct input_handler *handler, struct input_dev *dev)
+static struct input_handle *evdev_connect(struct input_handler *handler, struct input_dev *dev)
 {
 	struct evdev *evdev;
 	int minor;
@@ -258,11 +265,11 @@ static int evdev_connect(struct input_handler *handler, struct input_dev *dev)
 	for (minor = 0; minor < EVDEV_MINORS && evdev_table[minor]; minor++);
 	if (evdev_table[minor]) {
 		printk(KERN_ERR "evdev: no more free evdev devices\n");
-		return -1;
+		return NULL;
 	}
 
 	if (!(evdev = kmalloc(sizeof(struct evdev), GFP_KERNEL)))
-		return -1;
+		return NULL;
 	memset(evdev, 0, sizeof(struct evdev));
 
 	init_waitqueue_head(&evdev->wait);
@@ -276,19 +283,19 @@ static int evdev_connect(struct input_handler *handler, struct input_dev *dev)
 
 	evdev->used = 1;
 
-	input_open_device(&evdev->handle);
 	evdev->devfs = input_register_minor("event%d", minor, EVDEV_MINOR_BASE);
 
 	printk("event%d: Event device for input%d\n", minor, dev->number);
 
-	return 0;
+	return &evdev->handle;
 }
 
 static void evdev_disconnect(struct input_handle *handle)
 {
 	struct evdev *evdev = handle->private;
 
-	input_close_device(handle);
+	if (evdev->open)
+		input_close_device(handle);
 
 	if (!--evdev->used) {
 		input_unregister_minor(evdev->devfs);

@@ -16,7 +16,7 @@
 #include <linux/usb.h>
 
 
-static const char *version = __FILE__ ": v0.3.8 2000/04/04 Written by Petko Manolov (petkan@spct.net)\n";
+static const char *version = __FILE__ ": v0.3.9 2000/04/11 Written by Petko Manolov (petkan@spct.net)\n";
 
 
 #define	PEGASUS_MTU		1500
@@ -178,8 +178,9 @@ static int pegasus_start_net(struct net_device *dev, struct usb_device *usb)
 		return 2;
 
 	if ((~temp & 4) && !loopback) {
-		err("link NOT established - %x", temp);
-		return 3;
+		warn("%s: link NOT established (0x%x), check the cable.",
+			dev->name, temp);
+		/* return 3; FIXME */
 	}
 
 	if (pegasus_read_phy_word(usb, 5, &partmedia))
@@ -384,7 +385,7 @@ static void pegasus_set_rx_mode(struct net_device *net)
 
 	if (net->flags & IFF_PROMISC) {
 		info("%s: Promiscuous mode enabled", net->name);
-		pegasus_set_register(pegasus->usb, 2, 0x04);
+/*		pegasus_set_register(pegasus->usb, 2, 0x04); FIXME */
 	} else if ((net->mc_count > multicast_filter_limit) ||
 			(net->flags & IFF_ALLMULTI)) {
 		pegasus_set_register(pegasus->usb, 0, 0xfa);
@@ -407,7 +408,7 @@ static int check_device_ids( __u16 vendor, __u16 product )
 			return i;
 		i++;
 	}
-	return	0;
+	return	-1;
 }
 
 static void * pegasus_probe(struct usb_device *dev, unsigned int ifnum)
@@ -416,7 +417,7 @@ static void * pegasus_probe(struct usb_device *dev, unsigned int ifnum)
 	struct pegasus *pegasus;
 	int	dev_indx;
 
-	if ( !(dev_indx = check_device_ids(dev->descriptor.idVendor, dev->descriptor.idProduct)) ) {
+	if ( (dev_indx = check_device_ids(dev->descriptor.idVendor, dev->descriptor.idProduct)) == -1 ) {
 		return NULL;
 	}
 
@@ -459,7 +460,7 @@ static void * pegasus_probe(struct usb_device *dev, unsigned int ifnum)
 	FILL_BULK_URB(&pegasus->tx_urb, dev, usb_sndbulkpipe(dev, 2),
 			pegasus->tx_buff, PEGASUS_MAX_MTU, pegasus_write_bulk,
 			pegasus);
-	FILL_INT_URB(&pegasus->intr_urb, dev, usb_rcvintpipe(dev, 0),
+	FILL_INT_URB(&pegasus->intr_urb, dev, usb_rcvintpipe(dev, 3),
 			pegasus->intr_buff, 8, pegasus_irq, pegasus, 250);
 
 

@@ -350,6 +350,7 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 {
 	struct nbd_device *lo;
 	int dev, error, temp;
+	struct request sreq ;
 
 	/* Anyone capable of this syscall can do *real bad* things */
 
@@ -363,6 +364,13 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 
 	lo = &nbd_dev[dev];
 	switch (cmd) {
+	case NBD_DISCONNECT:
+	        printk("NBD_DISCONNECT\n") ;
+                sreq.cmd=2 ; /* shutdown command */
+                if (!lo->sock) return -EINVAL ;
+                nbd_send_req(lo->sock,&sreq) ;
+                return 0 ;
+ 
 	case NBD_CLEAR_SOCK:
 		down(&lo->queue_lock);
 		nbd_clear_que(lo);

@@ -1805,6 +1805,136 @@ out:
 
 #undef OUT
 
+/* support old ioctls/init - cold add only */
+int do_md_add(mddev_t *mddev, kdev_t dev)
+{
+	int err;
+	mdk_rdev_t *rdev;
+	
+	if (mddev->sb || mddev->pers)
+		return -EBUSY;
+	err = md_import_device(dev, 0);
+	if (err) return err;
+	rdev = find_rdev_all(dev);
+	if (!rdev) {
+		MD_BUG();
+		return -EINVAL;
+	}
+	rdev->old_dev = dev;
+	rdev->desc_nr = mddev->nb_dev;
+	bind_rdev_to_array(rdev, mddev);
+	return 0;
+}
+
+#define SET_SB(x,v) mddev->sb->x = v
+#define SET_RSB(x,y) mddev->sb->disks[nr].x = y
+static void autorun_array (mddev_t *mddev);
+int do_md_start(mddev_t *mddev, int info)
+{
+	int pers = (info & 0xFF0000UL)>>16;
+//	int fault= (info & 0x00FF00UL)>>8;
+	int factor=(info & 0x0000FFUL);
+
+	struct md_list_head *tmp;
+	mdk_rdev_t *rdev, *rdev0=NULL;
+	int err = 0;
+
+	if (mddev->sb) {
+		printk("array md%d already has superbloc!!\n",
+		       mdidx(mddev));
+		return -EBUSY;
+	}
+	if (pers==1 || pers==2) {
+		/* non-persistant super block */
+		int devs = mddev->nb_dev;
+		if (alloc_array_sb(mddev))
+			return -ENOMEM;
+		mddev->sb->major_version = MD_MAJOR_VERSION;
+		mddev->sb->minor_version = MD_MINOR_VERSION;
+		mddev->sb->patch_version = MD_PATCHLEVEL_VERSION;
+		mddev->sb->ctime = CURRENT_TIME;
+
+		SET_SB(level,pers_to_level(pers));
+		SET_SB(size,0);
+		SET_SB(nr_disks, devs);
+		SET_SB(raid_disks, devs);
+		SET_SB(md_minor,mdidx(mddev));
+		SET_SB(not_persistent, 1);
+
+		
+		SET_SB(state, 1<<MD_SB_CLEAN);
+		SET_SB(active_disks, devs);
+		SET_SB(working_disks, devs);
+		SET_SB(failed_disks, 0);
+		SET_SB(spare_disks, 0);
+
+		SET_SB(layout,0);
+		SET_SB(chunk_size, 1<<(factor+PAGE_SHIFT));
+
+		mddev->sb->md_magic = MD_SB_MAGIC;
+
+		/*
+		 * Generate a 128 bit UUID
+		 */
+		get_random_bytes(&mddev->sb->set_uuid0, 4);
+		get_random_bytes(&mddev->sb->set_uuid1, 4);
+		get_random_bytes(&mddev->sb->set_uuid2, 4);
+		get_random_bytes(&mddev->sb->set_uuid3, 4);
+
+		/* add each disc */
+		ITERATE_RDEV(mddev,rdev,tmp) {
+			int nr, size;
+			nr = rdev->desc_nr;
+			SET_RSB(number,nr);
+			SET_RSB(major,MAJOR(rdev->dev));
+			SET_RSB(minor,MINOR(rdev->dev));
+			SET_RSB(raid_disk,nr);
+			SET_RSB(state,6); /* ACTIVE|SYNC */
+			size = calc_dev_size(rdev->dev, mddev, 0);
+			rdev->sb_offset = calc_dev_sboffset(rdev->dev, mddev, 0);
+
+			if (!mddev->sb->size || (mddev->sb->size > size))
+				mddev->sb->size = size;			
+		}
+		sync_sbs(mddev);
+		err = do_md_run(mddev);
+		if (err)
+			do_md_stop(mddev, 0);
+	} else {
+		/* persistant super block - ignore the info and read the superblocks */
+		ITERATE_RDEV(mddev,rdev,tmp) {
+			if ((err = read_disk_sb(rdev))) {
+				printk("md: could not read %s's sb, not importing!\n",
+				       partition_name(rdev->dev));
+				break;
+			}
+			if ((err = check_disk_sb(rdev))) {
+				printk("md: %s has invalid sb, not importing!\n",
+				       partition_name(rdev->dev));
+				break;
+			}
+			rdev->desc_nr = rdev->sb->this_disk.number;
+			if (!rdev0) rdev0=rdev;
+			if (!uuid_equal(rdev0, rdev)) {
+				printk("%s has different UUID to %s .. dropping\n",
+				       partition_name(rdev->dev),
+				       partition_name(rdev0->dev));
+				err = -EINVAL;
+				break;
+			}
+			if (!sb_equal(rdev0->sb, rdev->sb)) {
+				printk("%s has same UUID as %s, but superblocks differ ...\n", partition_name(rdev->dev), partition_name(rdev0->dev));
+				err = -EINVAL;
+				break;
+			}
+		}
+		if (!err)
+			autorun_array(mddev);
+	}
+	return err;
+}
+#undef SET_SB
+#undef SET_RSB
 /*
  * We have to safely support old arrays too.
  */
@@ -2573,6 +2703,58 @@ static int md_ioctl (struct inode *inode, struct file *file,
 			}
 		default:
 	}
+	/* handle "old style" ioctls */
+	switch (cmd)
+	{
+	case START_MD:
+		if (!mddev)
+			return -ENODEV;
+		err = lock_mddev(mddev);
+		if (err) {
+			printk("ioctl lock interrupted, reason %d, cmd %d\n",err, cmd);
+			goto abort;
+		}
+		err = do_md_start(mddev, (int) arg);
+		if (err) {
+			printk("couldn't mdstart\n");
+			goto abort_unlock;
+		}
+		goto done_unlock;
+	case STOP_MD:
+		if (!mddev)
+			return -ENODEV;
+		err = lock_mddev(mddev);
+		if (err) {
+			printk("ioctl lock interrupted, reason %d, cmd %d\n",err, cmd);
+			goto abort_unlock;
+		}
+		err =  do_md_stop(mddev, 0);
+		if (err) {
+			printk("couldn't mdstop\n");
+			goto abort_unlock;
+		}
+		goto done_unlock;
+	case REGISTER_DEV:
+		/* add this device to an unstarted array,
+		 * create the array if needed */
+		if (!mddev)
+			mddev = alloc_mddev(dev);
+		if (!mddev) {
+			err = -ENOMEM;
+			goto abort;
+		}
+		err = lock_mddev(mddev);
+		if (err) {
+			printk("ioctl, reason %d, cmd %d\n", err, cmd);
+			goto abort;
+		}
+		err = do_md_add(mddev, to_kdev_t((dev_t) arg));
+		if (err) {
+			printk("do_md_add failed %d\n", err);
+			goto abort_unlock;
+		}
+		goto done_unlock;
+	}
 
 	switch (cmd)
 	{
@@ -2593,7 +2775,7 @@ static int md_ioctl (struct inode *inode, struct file *file,
 			err = set_array_info(mddev, (void *)arg);
 			if (err) {
 				printk("couldnt set array info. %d\n", err);
-				goto abort;
+				goto abort_unlock;
 			}
 			goto done_unlock;
 
@@ -3188,10 +3370,11 @@ void md__init raid_setup(char *str, int *ints)
 }
 
 #ifdef CONFIG_MD_BOOT
+#define MAX_MD_BOOT_DEVS	16
 struct {
 	unsigned long set;
-	int pers[MAX_MD_DEVS];
-	kdev_t devices[MAX_MD_DEVS][MAX_REAL];
+	int pers[MAX_MD_BOOT_DEVS];
+	kdev_t devices[MAX_MD_BOOT_DEVS][MAX_REAL];
 } md_setup_args md__initdata = {
 	0,{0},{{0}}
 };
@@ -3219,7 +3402,7 @@ static int __init md_setup(char *str)
 	   get_option(&str, &fault) != 2) {
 		printk("md: Too few arguments supplied to md=.\n");
 		return 0;
-	} else if (minor >= MAX_MD_DEVS) {
+	} else if (minor >= MAX_MD_BOOT_DEVS) {
  		printk ("md: Minor device number too high.\n");
 		return 0;
 	} else if (md_setup_args.set & (1 << minor)) {
@@ -3229,13 +3412,13 @@ static int __init md_setup(char *str)
 	switch(level) {
 #ifdef CONFIG_MD_LINEAR
 	case -1:
-		level = LINEAR;
+		level = LINEAR<<16;
 		pername = "linear";
  		break;
 #endif
 #ifdef CONFIG_MD_STRIPED
 	case 0:
-		level = STRIPED;
+		level = STRIPED<<16;
 		pername = "striped";
  		break;
 #endif
@@ -3263,7 +3446,7 @@ static int __init md_setup(char *str)
 	printk ("md: Will configure md%d (%s) from %s, below.\n",
 		minor, pername, devnames);
 	md_setup_args.devices[minor][i] = (kdev_t) 0;
-	md_setup_args.pers[minor] = level | factor | (fault << FAULT_SHIFT);
+	md_setup_args.pers[minor] = level | factor | (fault << 8);
 	md_setup_args.set |= (1 << minor);
 	return 1;
 }
@@ -3273,7 +3456,7 @@ static void md_geninit (void)
 {
 	int i;
 
-	for(i = 0; i < MAX_MD_DEVS; i++) {
+	for(i = 0; i < MAX_MD_BOOT_DEVS; i++) {
 		md_blocksizes[i] = 1024;
 		md_size[i] = 0;
 		md_maxreadahead[i] = MD_READAHEAD;
@@ -3344,20 +3527,20 @@ int md__init md_init (void)
 }
 
 #ifdef CONFIG_MD_BOOT
-static void __init md_setup_drive(void)
+void __init md_setup_drive(void)
 {
-	if(md_setup_args.set)
-		do_md_setup(md_setup_args.str, md_setup_args.ints);
 	int minor, i;
 	kdev_t dev;
+	mddev_t*mddev;
 
-	for (minor = 0; minor < MAX_MD_DEVS; minor++) {
+	for (minor = 0; minor < MAX_MD_BOOT_DEVS; minor++) {
 		if ((md_setup_args.set & (1 << minor)) == 0)
 			continue;
 		printk("md: Loading md%d.\n", minor);
+		mddev = alloc_mddev(MKDEV(MD_MAJOR,minor));
 		for (i = 0; (dev = md_setup_args.devices[minor][i]); i++)
-			do_md_add (minor, dev);
-		do_md_run (minor, md_setup_args.pers[minor]);
+			do_md_add (mddev, dev);
+		do_md_start (mddev, md_setup_args.pers[minor]);
 	}
 }
 

@@ -27,6 +27,8 @@ while (<STDIN>) {
     push(@records, [$addr, \@bytes]);
 }
 
+@sorted_records = sort { $a->[0] <=> $b->[0] } @records;
+
 print <<"EOF";
 /*
  * ${basename}_fw.h
@@ -39,7 +41,7 @@ print <<"EOF";
 EOF
 
 print "static const struct ezusb_hex_record ${basename}_firmware[] = {\n";
-foreach $r (@records) {
+foreach $r (@sorted_records) {
     printf("{ 0x%04x,\t%d,\t{", $r->[0], scalar(@{$r->[1]}));
     print join(", ", map {sprintf('0x%02x', $_);} @{$r->[1]});
     print "} },\n";

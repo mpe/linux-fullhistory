@@ -484,7 +484,7 @@ comment 'Sound support'
 
 tristate 'Sound support' CONFIG_SOUND
 if [ "$CONFIG_SOUND" != "n" ]; then
-   dep_tristate '  Amiga or Atari DMA sound support' CONFIG_DMASOUND $CONFIG_SOUND
+   source drivers/sound/dmasound/Config.in
 fi
 endmenu
 

@@ -28,7 +28,7 @@ nlm_fopen(struct svc_rqst *rqstp, struct nfs_fh *f, struct file *filp)
 	/* must initialize before using! but maxsize doesn't matter */
 	fh_init(&fh,0);
 	fh.fh_handle.fh_size = f->size;
-	memcpy((char*)&fh.fh_handle.fh_base, f->data, NFS_FHSIZE);
+	memcpy((char*)&fh.fh_handle.fh_base, f->data, f->size);
 	fh.fh_export = NULL;
 
 	nfserr = nfsd_open(rqstp, &fh, S_IFREG, MAY_LOCK, filp);

@@ -68,6 +68,13 @@ static int	      shm_readdir  (struct file *, void *, filldir_t);
 #define SHM_FMT ".IPC_%08x"
 #define SHM_FMT_LEN 13
 
+/* shm_mode upper byte flags */
+/* SHM_DEST and SHM_LOCKED are used in ipcs(8) */
+#define PRV_DEST	0010000	/* segment will be destroyed on last detach */
+#define PRV_LOCKED	0020000	/* segment will not be swapped */
+#define SHM_UNLK	0040000	/* filename is unlinked */
+#define SHM_SYSV	0100000	/* It is a SYSV shm segment */
+
 struct shmid_kernel /* private to the kernel */
 {	
 	struct kern_ipc_perm	shm_perm;
@@ -83,7 +90,6 @@ struct shmid_kernel /* private to the kernel */
 			time_t			ctime;
 			pid_t			cpid;
 			pid_t			lpid;
-			int			unlinked;
 			int			nlen;
 			char			nm[0];
 		} shmem;
@@ -101,7 +107,7 @@ struct shmid_kernel /* private to the kernel */
 #define shm_lprid	permap.shmem.lpid
 #define shm_namelen	permap.shmem.nlen
 #define shm_name	permap.shmem.nm
-#define shm_unlinked	permap.shmem.unlinked
+#define shm_flags	shm_perm.mode
 #define zsem		permap.zero.sema
 #define zero_list	permap.zero.list
 
@@ -112,8 +118,6 @@ static struct ipc_ids shm_ids;
 #define shm_lockall()	ipc_lockall(&shm_ids)
 #define shm_unlockall()	ipc_unlockall(&shm_ids)
 #define shm_get(id)	((struct shmid_kernel*)ipc_get(&shm_ids,id))
-#define shm_checkid(s, id)	\
-	ipc_checkid(&shm_ids,&s->shm_perm,id)
 #define shm_buildid(id, seq) \
 	ipc_buildid(&shm_ids, id, seq)
 
@@ -317,6 +321,15 @@ static int shm_remount_fs (struct super_block *sb, int *flags, char *data)
 	return 0;
 }
 
+static inline int shm_checkid(struct shmid_kernel *s, int id)
+{
+	if (!(s->shm_flags & SHM_SYSV))
+		return -EINVAL;
+	if (ipc_checkid(&shm_ids,&s->shm_perm,id))
+		return -EIDRM;
+	return 0;
+}
+
 static inline struct shmid_kernel *shm_rmid(int id)
 {
 	return (struct shmid_kernel *)ipc_rmid(&shm_ids,id);
@@ -384,7 +397,7 @@ static void shm_read_inode(struct inode * inode)
 	if (id < SEQ_MULTIPLIER) {
 		if (!(shp = shm_lock (id)))
 			return;
-		inode->i_mode = shp->shm_perm.mode | S_IFREG;
+		inode->i_mode = (shp->shm_flags & S_IALLUGO) | S_IFREG;
 		inode->i_uid  = shp->shm_perm.uid;
 		inode->i_gid  = shp->shm_perm.gid;
 		inode->i_size = shp->shm_segsz;
@@ -456,7 +469,7 @@ static int shm_readdir (struct file *filp, void *dirent, filldir_t filldir)
 				continue;
 			if (!(shp = shm_get (nr-2))) 
 				continue;
-			if (shp->shm_unlinked)
+			if (shp->shm_flags & SHM_UNLK)
 				continue;
 			if (filldir(dirent, shp->shm_name, shp->shm_namelen, nr, nr) < 0 )
 				break;;
@@ -485,7 +498,7 @@ static struct dentry *shm_lookup (struct inode *dir, struct dentry *dent)
 			continue;
 		if (!(shp = shm_lock(i)))
 			continue;
-		if (!(shp->shm_unlinked) &&
+		if (!(shp->shm_flags & SHM_UNLK) &&
 		    dent->d_name.len == shp->shm_namelen &&
 		    strncmp(dent->d_name.name, shp->shm_name, shp->shm_namelen) == 0)
 			goto found;
@@ -523,8 +536,7 @@ static int shm_unlink (struct inode *dir, struct dentry *dent)
 	down (&shm_ids.sem);
 	if (!(shp = shm_lock (inode->i_ino)))
 		BUG();
-	shp->shm_unlinked = 1;
-	shp->shm_perm.mode |= SHM_DEST;
+	shp->shm_flags |= SHM_UNLK | PRV_DEST;
 	shp->shm_perm.key = IPC_PRIVATE; /* Do not find it any more */
 	shm_unlock (inode->i_ino);
 	up (&shm_ids.sem);
@@ -743,18 +755,18 @@ static int newseg (key_t key, const char *name, int namelen,
 		return -ENOSPC;
 	}
 	shp->shm_perm.key = key;
-	shp->shm_perm.mode = (shmflg & S_IRWXUGO);
+	shp->shm_flags = (shmflg & S_IRWXUGO);
 	shp->shm_segsz = size;
 	shp->shm_cprid = current->pid;
 	shp->shm_lprid = 0;
 	shp->shm_atim = shp->shm_dtim = 0;
 	shp->shm_ctim = CURRENT_TIME;
 	shp->id = shm_buildid(id,shp->shm_perm.seq);
-	shp->shm_unlinked = 0;
 	if (namelen != 0) {
 		shp->shm_namelen = namelen;
 		memcpy (shp->shm_name, name, namelen);		  
 	} else {
+		shp->shm_flags |= SHM_SYSV;
 		shp->shm_namelen = sprintf (shp->shm_name, SHM_FMT, shp->id);
 	}
 	shm_unlock(id);
@@ -863,7 +875,7 @@ static inline unsigned long copy_shmid_from_user(struct shm_setbuf *out, void *b
 
 		out->uid	= tbuf.shm_perm.uid;
 		out->gid	= tbuf.shm_perm.gid;
-		out->mode	= tbuf.shm_perm.mode;
+		out->mode	= tbuf.shm_flags;
 
 		return 0;
 	    }
@@ -876,7 +888,7 @@ static inline unsigned long copy_shmid_from_user(struct shm_setbuf *out, void *b
 
 		out->uid	= tbuf_old.shm_perm.uid;
 		out->gid	= tbuf_old.shm_perm.gid;
-		out->mode	= tbuf_old.shm_perm.mode;
+		out->mode	= tbuf_old.shm_flags;
 
 		return 0;
 	    }
@@ -980,12 +992,13 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 			return -EINVAL;
 		if(cmd==SHM_STAT) {
 			err = -EINVAL;
-			if (shmid > shm_ids.max_id)
+			if (!(shp->shm_flags & SHM_SYSV) ||
+			    shmid > shm_ids.max_id)
 				goto out_unlock;
 			result = shm_buildid(shmid, shp->shm_perm.seq);
 		} else {
-			err = -EIDRM;
-			if(shm_checkid(shp,shmid))
+			err = shm_checkid(shp,shmid);
+			if(err)
 				goto out_unlock;
 			result = 0;
 		}
@@ -993,6 +1006,13 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		if (ipcperms (&shp->shm_perm, S_IRUGO))
 			goto out_unlock;
 		kernel_to_ipc64_perm(&shp->shm_perm, &tbuf.shm_perm);
+		/* ugly hack to keep binary compatibility for ipcs */
+		tbuf.shm_flags &= PRV_DEST | PRV_LOCKED | S_IRWXUGO;
+		if (tbuf.shm_flags & PRV_DEST)
+			tbuf.shm_flags |= SHM_DEST;
+		if (tbuf.shm_flags & PRV_LOCKED)
+			tbuf.shm_flags |= SHM_LOCKED;
+		tbuf.shm_flags &= SHM_DEST | SHM_LOCKED | S_IRWXUGO;
 		tbuf.shm_segsz	= shp->shm_segsz;
 		tbuf.shm_atime	= shp->shm_atim;
 		tbuf.shm_dtime	= shp->shm_dtim;
@@ -1011,7 +1031,6 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 /* Allow superuser to lock segment in memory */
 /* Should the pages be faulted in here or leave it to user? */
 /* need to determine interaction with current->swappable */
-		struct kern_ipc_perm *ipcp;
 		if ((shmid % SEQ_MULTIPLIER)== zero_id)
 			return -EINVAL;
 		if (!capable(CAP_IPC_LOCK))
@@ -1020,21 +1039,13 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		shp = shm_lock(shmid);
 		if(shp==NULL)
 			return -EINVAL;
-		err=-EIDRM;
-		if(shm_checkid(shp,shmid))
+		err = shm_checkid(shp,shmid);
+		if(err)
 			goto out_unlock;
-		ipcp = &shp->shm_perm;
-		if(cmd==SHM_LOCK) {
-			if (!(ipcp->mode & SHM_LOCKED)) {
-				ipcp->mode |= SHM_LOCKED;
-				err = 0;
-			}
-		} else {
-			if (ipcp->mode & SHM_LOCKED) {
-				ipcp->mode &= ~SHM_LOCKED;
-				err = 0;
-			}
-		}
+		if(cmd==SHM_LOCK)
+			shp->shm_flags |= PRV_LOCKED;
+		else
+			shp->shm_flags &= ~PRV_LOCKED;
 		shm_unlock(shmid);
 		return err;
 	}
@@ -1058,9 +1069,10 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 			up(&shm_ids.sem);
 			return -EINVAL;
 		}
-		err = -EIDRM;
-		if (shm_checkid(shp, shmid) == 0) {
-			if (shp->shm_nattch == 0) {
+		err = shm_checkid(shp, shmid);
+		if (err == 0) {
+			if (shp->shm_nattch == 0 && 
+			    !(shp->shm_flags & SHM_UNLK)) {
 				int id=shp->id;
 				shm_unlock(shmid);
 				up(&shm_ids.sem);
@@ -1071,10 +1083,9 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 				 */
 				return shm_remove_name(id);
 			}
-			/* Do not find me any more */
-			shp->shm_perm.mode |= SHM_DEST;
-			shp->shm_perm.key = IPC_PRIVATE; /* Do not find it any more */
-			err = 0;
+			shp->shm_flags |= PRV_DEST;
+			/* Do not find it any more */
+			shp->shm_perm.key = IPC_PRIVATE;
 		}
 		/* Unlock */
 		shm_unlock(shmid);
@@ -1094,8 +1105,8 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		err=-EINVAL;
 		if(shp==NULL)
 			goto out_up;
-		err=-EIDRM;
-		if(shm_checkid(shp,shmid))
+		err = shm_checkid(shp,shmid);
+		if(err)
 			goto out_unlock_up;
 		err=-EPERM;
 		if (current->euid != shp->shm_perm.uid &&
@@ -1106,7 +1117,7 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 
 		shp->shm_perm.uid = setbuf.uid;
 		shp->shm_perm.gid = setbuf.gid;
-		shp->shm_perm.mode = (shp->shm_perm.mode & ~S_IRWXUGO)
+		shp->shm_flags = (shp->shm_flags & ~S_IRWXUGO)
 			| (setbuf.mode & S_IRWXUGO);
 		shp->shm_ctim = CURRENT_TIME;
 		break;
@@ -1248,7 +1259,16 @@ static int shm_remove_name(int id)
 	dentry = lookup_one(name, dget(dir));
 	error = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
-		error = vfs_unlink(dir->d_inode, dentry);
+		/*
+		 * We have to do our own unlink to prevent the vfs
+		 * permission check. The SYSV IPC layer has already
+		 * checked the permissions which do not comply to the
+		 * vfs rules.
+		 */
+		struct inode *inode = dir->d_inode;
+		down(&inode->i_zombie);
+		error = shm_unlink(inode, dentry);
+		up(&inode->i_zombie);
 		dput(dentry);
 	}
 	unlock_dir(dir);
@@ -1273,7 +1293,9 @@ static void shm_close (struct vm_area_struct *shmd)
 	shp->shm_lprid = current->pid;
 	shp->shm_dtim = CURRENT_TIME;
 	shp->shm_nattch--;
-	if(shp->shm_nattch == 0 && shp->shm_perm.mode & SHM_DEST) {
+	if(shp->shm_nattch == 0 && 
+	   shp->shm_flags & PRV_DEST &&
+	   !(shp->shm_flags & SHM_UNLK)) {
 		int pid=shp->id;
 		int err;
 		shm_unlock(id);
@@ -1487,7 +1509,7 @@ int shm_swap (int prio, int gfp_mask, zone_t *zone)
 	shm_lockall();
 check_id:
 	shp = shm_get(swap_id);
-	if(shp==NULL || shp->shm_perm.mode & SHM_LOCKED) {
+	if(shp==NULL || shp->shm_flags & SHM_LOCKED) {
 next_id:
 		swap_idx = 0;
 		if (++swap_id > shm_ids.max_id) {
@@ -1605,7 +1627,7 @@ static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int l
 			len += sprintf(buffer + len, format,
 				shp->shm_perm.key,
 				shm_buildid(i, shp->shm_perm.seq),
-				shp->shm_perm.mode,
+				shp->shm_flags,
 				shp->shm_segsz,
 				shp->shm_cprid,
 				shp->shm_lprid,
@@ -1619,7 +1641,7 @@ static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int l
 				shp->shm_ctim,
 				shp->shm_namelen,
 				shp->shm_name,
-				shp->shm_unlinked ? " (deleted)" : "");
+				shp->shm_flags & SHM_UNLK ? " (deleted)" : "");
 			shm_unlock(i);
 
 			pos += len;
