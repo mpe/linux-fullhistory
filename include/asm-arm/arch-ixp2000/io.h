@@ -17,10 +17,6 @@
 
 #define IO_SPACE_LIMIT		0xffffffff
 #define __mem_pci(a)		(a)
-
-/*
- * Pick up VMALLOC_END
- */
 #define ___io(p)		((void __iomem *)((p)+IXP2000_PCI_IO_VIRT_BASE))
 
 /*
