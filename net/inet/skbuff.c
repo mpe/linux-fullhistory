@@ -464,6 +464,7 @@ void kfree_skb(struct sk_buff *skb, int rw)
 
  	skb->free = 2;	/* Invalid so we pick up forgetful users */
 	skb->lock = 0;
+	skb->pkt_type = PACKET_HOST;	/* Default type */
  	skb->truesize = size;
  	skb->mem_len = size;
  	skb->mem_addr = skb;

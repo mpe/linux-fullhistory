@@ -12,16 +12,14 @@
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
  *		Fred Baumgarten, <dc6iq@insu1.etec.uni-karlsruhe.de>
+ *		Erik Schoenfelder, <schoenfr@ibr.cs.tu-bs.de>
  *
  * Fixes:
  *		Alan Cox	:	UDP sockets show the rxqueue/txqueue
  *					using hint flag for the netinfo.
  *	Pauline Middelink	:	Pidentd support
  *		Alan Cox	:	Make /proc safer.
- *
- * To Do:
- *		Put the creating userid in the proc/net/... files. This will
- *		allow us to write an RFC931 daemon for Linux
+ *	Erik Schoenfelder	:	/proc/net/snmp
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -39,6 +37,7 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include "ip.h"
+#include "icmp.h"
 #include "protocol.h"
 #include "tcp.h"
 #include "udp.h"
@@ -141,3 +140,73 @@ int raw_get_info(char *buffer, char **start, off_t offset, int length)
 {
   return get__netinfo(&raw_prot, buffer,1, start, offset, length);
 }
+
+
+/* 
+ *	Called from the PROCfs module. This outputs /proc/net/snmp.
+ */
+ 
+int snmp_get_info(char *buffer, char **start, off_t offset, int length)
+{
+  extern struct tcp_mib tcp_statistics;
+  extern struct udp_mib udp_statistics;
+  int len;
+
+  len = sprintf (buffer,
+	"Ip: Forwarding DefaultTTL InReceives InHdrErrors InAddrErrors ForwDatagrams InUnknownProtos InDiscards InDelivers OutRequests OutDiscards OutNoRoutes ReasmTimeout ReasmReqds ReasmOKs ReasmFails FragOKs FragFails FragCreates\n"
+	"Ip: %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
+	    ip_statistics.IpForwarding, ip_statistics.IpDefaultTTL, 
+	    ip_statistics.IpInReceives, ip_statistics.IpInHdrErrors, 
+	    ip_statistics.IpInAddrErrors, ip_statistics.IpForwDatagrams, 
+	    ip_statistics.IpInUnknownProtos, ip_statistics.IpInDiscards, 
+	    ip_statistics.IpInDelivers, ip_statistics.IpOutRequests, 
+	    ip_statistics.IpOutDiscards, ip_statistics.IpOutNoRoutes, 
+	    ip_statistics.IpReasmTimeout, ip_statistics.IpReasmReqds, 
+	    ip_statistics.IpReasmOKs, ip_statistics.IpReasmFails, 
+	    ip_statistics.IpFragOKs, ip_statistics.IpFragFails, 
+	    ip_statistics.IpFragCreates);
+	
+  len += sprintf (buffer + len,
+	"Icmp: InMsgs InErrors InDestUnreachs InTimeExcds InParmProbs InSrcQuenchs InRedirects InEchos InEchoReps InTimestamps InTimestampReps InAddrMasks InAddrMaskReps OutMsgs OutErrors OutDestUnreachs OutTimeExcds OutParmProbs OutSrcQuenchs OutRedirects OutEchos OutEchoReps OutTimestamps OutTimestampReps OutAddrMasks OutAddrMaskReps\n"
+	"Icmp: %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
+	    icmp_statistics.IcmpInMsgs, icmp_statistics.IcmpInErrors,
+	    icmp_statistics.IcmpInDestUnreachs, icmp_statistics.IcmpInTimeExcds,
+	    icmp_statistics.IcmpInParmProbs, icmp_statistics.IcmpInSrcQuenchs,
+	    icmp_statistics.IcmpInRedirects, icmp_statistics.IcmpInEchos,
+	    icmp_statistics.IcmpInEchoReps, icmp_statistics.IcmpInTimestamps,
+	    icmp_statistics.IcmpInTimestampReps, icmp_statistics.IcmpInAddrMasks,
+	    icmp_statistics.IcmpInAddrMaskReps, icmp_statistics.IcmpOutMsgs,
+	    icmp_statistics.IcmpOutErrors, icmp_statistics.IcmpOutDestUnreachs,
+	    icmp_statistics.IcmpOutTimeExcds, icmp_statistics.IcmpOutParmProbs,
+	    icmp_statistics.IcmpOutSrcQuenchs, icmp_statistics.IcmpOutRedirects,
+	    icmp_statistics.IcmpOutEchos, icmp_statistics.IcmpOutEchoReps,
+	    icmp_statistics.IcmpOutTimestamps, icmp_statistics.IcmpOutTimestampReps,
+	    icmp_statistics.IcmpOutAddrMasks, icmp_statistics.IcmpOutAddrMaskReps);
+
+   len += sprintf (buffer + len,
+	"Tcp: RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens PassiveOpens AttemptFails EstabResets CurrEstab InSegs OutSegs RetransSegs\n"
+	"Tcp: %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
+	    tcp_statistics.TcpRtoAlgorithm, tcp_statistics.TcpRtoMin,
+	    tcp_statistics.TcpRtoMax, tcp_statistics.TcpMaxConn,
+	    tcp_statistics.TcpActiveOpens, tcp_statistics.TcpPassiveOpens,
+	    tcp_statistics.TcpAttemptFails, tcp_statistics.TcpEstabResets,
+	    tcp_statistics.TcpCurrEstab, tcp_statistics.TcpInSegs,
+	    tcp_statistics.TcpOutSegs, tcp_statistics.TcpRetransSegs);
+	
+	  len += sprintf (buffer + len,
+	"Udp: InDatagrams NoPorts InErrors OutDatagrams\nUdp: %lu %lu %lu %lu\n",
+	    udp_statistics.UdpInDatagrams, udp_statistics.UdpNoPorts,
+	    udp_statistics.UdpInErrors, udp_statistics.UdpOutDatagrams);
+	
+  if (offset >= len)
+    {
+	      *start = buffer;
+	      return 0;
+    }
+  *start = buffer + offset;
+  len -= offset;
+  if (len > length)
+    len = length;
+  return len;
+}
+

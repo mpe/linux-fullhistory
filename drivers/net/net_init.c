@@ -165,6 +165,23 @@ void ether_setup(struct device *dev)
 	dev->pa_alen	= sizeof(unsigned long);
 }
 
+int ether_config(struct device *dev, struct ifmap *map)
+{
+	if (map->mem_start != (u_long)(-1))
+		dev->mem_start = map->mem_start;
+	if (map->mem_end != (u_long)(-1))
+		dev->mem_end = map->mem_end;
+	if (map->base_addr != (u_short)(-1))
+		dev->base_addr = map->base_addr;
+	if (map->irq != (u_char)(-1))
+		dev->irq = map->irq;
+	if (map->dma != (u_char)(-1))
+		dev->dma = map->dma;
+	if (map->port != (u_char)(-1))
+		dev->if_port = map->port;
+	return 0;
+}
+
 int register_netdev(struct device *dev)
 {
 	struct device *d = dev_base;

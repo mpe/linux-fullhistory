@@ -41,6 +41,11 @@ static char *version =
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
+#ifdef MODULE
+#include <linux/module.h>
+#include "../../tools/version.h"
+#endif
+
 #ifndef HAVE_AUTOIRQ
 /* From auto_irq.c, should be in a *.h file. */
 extern void autoirq_setup(int waittime);
@@ -223,6 +228,9 @@ el_open(struct device *dev)
   outb(AX_RX, AX_CMD);	/* Aux control, irq and receive enabled */
   if (el_debug > 2)
      printk("finished el_open().\n");
+#ifdef MODULE
+  MOD_INC_USE_COUNT;
+#endif       
   return (0);
 }
 
@@ -463,6 +471,9 @@ el1_close(struct device *dev)
     outb(AX_RESET, AX_CMD);	/* Reset the chip */
     irq2dev_map[dev->irq] = 0;
 
+#ifdef MODULE
+    MOD_DEC_USE_COUNT;
+#endif    
     return 0;
 }
 
@@ -499,3 +510,31 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
  *  kept-new-versions: 5
  * End:
  */
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_3c501 = {
+	"" /*"3c501"*/, 
+		0, 0, 0, 0,
+	 	0x280, 7,
+	 	0, 0, 0, NULL, el1_probe };
+	
+int
+init_module(void)
+{
+	if (register_netdev(&dev_3c501) != 0)
+		return -EIO;
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("3c501: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_3c501);
+	}
+}
+#endif /* MODULE */

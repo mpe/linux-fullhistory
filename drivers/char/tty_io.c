@@ -180,18 +180,18 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 	tty->termios->c_line = ldisc;
 	if (tty->ldisc.open) {
 		retval = (tty->ldisc.open)(tty);
-		if (!retval)
-			return 0;
+		if (retval >= 0)
+			return retval;
 		
 		tty->ldisc = o_ldisc;
 		tty->termios->c_line = tty->ldisc.num;
-		if (tty->ldisc.open && tty->ldisc.open(tty)) {
+		if (tty->ldisc.open && (tty->ldisc.open(tty) < 0)) {
 			tty->ldisc = ldiscs[N_TTY];
 			tty->termios->c_line = N_TTY;
 			if (tty->ldisc.open) {
 				int r = tty->ldisc.open(tty);
 
-				if (r)
+				if (r < 0)
 					panic("Couldn't open N_TTY ldisc for "
 					      "%s --- error %d.",
 					      tty_name(tty), r);
@@ -344,9 +344,9 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 		tty->termios->c_line = N_TTY;
 		if (tty->ldisc.open) {
 			i = (tty->ldisc.open)(tty);
-			if (i)
+			if (i < 0)
 				printk("do_tty_hangup: N_TTY open: error %d\n",
-				       i);
+				       -i);
 		}
 	}
 	
@@ -815,7 +815,7 @@ repeat:
 		(*driver->refcount)++;
 		if (tty->ldisc.open) {
 			retval = (tty->ldisc.open)(tty);
-			if (retval)
+			if (retval < 0)
 				goto end_init;
 		}
 		tty = NULL;
@@ -836,7 +836,7 @@ repeat:
 			(*driver->other->refcount)++;
 			if (o_tty->ldisc.open) {
 				retval = (o_tty->ldisc.open)(o_tty);
-				if (retval)
+				if (retval < 0)
 					goto end_init;
 			}
 			o_tty = NULL;

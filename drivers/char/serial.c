@@ -1006,8 +1006,8 @@ static void shutdown(struct async_struct * info)
 	cli();
 	
 	if (!info->tty || (info->tty->termios->c_cflag & HUPCL)) {
-		info->MCR &= ~UART_MCR_DTR;
-		info->MCR_noint &= ~UART_MCR_DTR;
+		info->MCR &= ~(UART_MCR_DTR|UART_MCR_RTS);
+		info->MCR_noint &= ~(UART_MCR_DTR|UART_MCR_RTS);
 	}
 	serial_outp(info, UART_MCR, info->MCR_noint);
 

@@ -292,7 +292,10 @@ int dev_close(struct device *dev)
 		 */
 #ifdef CONFIG_INET		 
 		ip_rt_flush(dev);
-#endif		
+#endif	
+#ifdef CONFIG_IPX
+		ipxrtr_device_down(dev);
+#endif	
 		/*
 		 *	Blank the IP addresses
 		 */

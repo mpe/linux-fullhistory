@@ -167,7 +167,21 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 {
 	struct ethhdr *eth = (struct ethhdr *) skb->data;
 	char *rawp;
-
+	
+	if(*eth->h_dest&1)
+	{
+		if(memcmp(eth->h_dest,dev->broadcast, ETH_ALEN)==0)
+			skb->pkt_type=PACKET_BROADCAST;
+		else
+			skb->pkt_type=PACKET_MULTICAST;
+	}
+	
+	if(dev->flags&IFF_PROMISC)
+	{
+		if(memcmp(eth->h_dest,dev->dev_addr, ETH_ALEN))
+			skb->pkt_type=PACKET_OTHERHOST;
+	}
+	
 	if (ntohs(eth->h_proto) >= 1536)
 		return eth->h_proto;
 		

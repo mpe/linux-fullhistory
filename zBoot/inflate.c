@@ -237,15 +237,7 @@ DEBG1("3 ");
         z = 1 << j;             /* table entries for j-bit table */
 
         /* allocate and link in new table */
-        if ((q = (struct huft *)malloc((z + 1)*sizeof(struct huft))) ==
-            (struct huft *)NULL)
-        {
-DEBG1("31 ");
-	  error("malloc failed\n");
-          if (h)
-            huft_free(u[0]);
-          return 3;             /* not enough memory */
-        }
+        q = (struct huft *)malloc((z + 1)*sizeof(struct huft));
 DEBG1("4 ");
         hufts += z + 1;         /* track memory usage */
         *t = q + 1;             /* link to list for huft_free() */

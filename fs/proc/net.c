@@ -17,6 +17,8 @@
  *	      Renamed "route_get_info()" to "rt_get_info()" for consistency.
  * Alan Cox (gw4pts@gw4pts.ampr.org) 4/94
  *	      Dusted off the code and added IPX. Fixed the 4K limit.
+ * Erik Schoenfelder (schoenfr@ibr.cs.tu-bs.de)
+ *	      /proc/net/snmp.
  *
  *  proc net directory handling functions
  */
@@ -47,6 +49,7 @@ extern int arp_get_info(char *, char **, off_t, int);
 extern int rarp_get_info(char *, char **, off_t, int);
 extern int dev_get_info(char *, char **, off_t, int);
 extern int rt_get_info(char *, char **, off_t, int);
+extern int snmp_get_info(char *, char **, off_t, int);
 #endif /* CONFIG_INET */
 #ifdef CONFIG_IPX
 extern int ipx_get_info(char *, char **, off_t, int);
@@ -107,22 +110,23 @@ static struct proc_dir_entry net_dir[] = {
 	{ 131,3,"dev" },
 	{ 132,3,"raw" },
 	{ 133,3,"tcp" },
-	{ 134,3,"udp" }
+	{ 134,3,"udp" },
+	{ 135,4,"snmp" }
 #ifdef CONFIG_INET_RARP
-	,{ 135,4,"rarp"}
+	,{ 136,4,"rarp"}
 #endif
 #endif	/* CONFIG_INET */
 #ifdef CONFIG_IPX
-	,{ 136,9,"ipx_route" },
-	{ 137,3,"ipx" }
+	,{ 137,9,"ipx_route" },
+	{ 138,3,"ipx" }
 #endif /* CONFIG_IPX */
 #ifdef CONFIG_AX25
-	,{ 138,10,"ax25_route" },
-	{ 139,4,"ax25" }
+	,{ 139,10,"ax25_route" },
+	{ 140,4,"ax25" }
 #ifdef CONFIG_NETROM
-	,{ 140,8,"nr_nodes" },
-	{ 141,8,"nr_neigh" },
-	{ 142,2,"nr" }
+	,{ 141,8,"nr_nodes" },
+	{ 142,8,"nr_neigh" },
+	{ 143,2,"nr" }
 #endif /* CONFIG_NETROM */
 #endif /* CONFIG_AX25 */
 };
@@ -235,35 +239,38 @@ static int proc_readnet(struct inode * inode, struct file * file,
 			case 134:
 				length = udp_get_info(page,&start,file->f_pos,thistime);
 				break;
-#ifdef CONFIG_INET_RARP				
 			case 135:
+				length = snmp_get_info(page, &start, file->f_pos,thistime);
+				break;
+#ifdef CONFIG_INET_RARP				
+			case 136:
 				length = rarp_get_info(page,&start,file->f_pos,thistime);
 				break;
 #endif /* CONFIG_INET_RARP */				
 #endif /* CONFIG_INET */
 #ifdef CONFIG_IPX
-			case 136:
+			case 137:
 				length = ipx_rt_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 137:
+			case 138:
 				length = ipx_get_info(page,&start,file->f_pos,thistime);
 				break;
 #endif /* CONFIG_IPX */
 #ifdef CONFIG_AX25
-			case 138:
+			case 139:
 				length = ax25_rt_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 139:
+			case 140:
 				length = ax25_get_info(page,&start,file->f_pos,thistime);
 				break;
 #ifdef CONFIG_NETROM
-			case 140:
+			case 141:
 				length = nr_nodes_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 141:
+			case 142:
 				length = nr_neigh_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 142:
+			case 143:
 				length = nr_get_info(page,&start,file->f_pos,thistime);
 				break;
 #endif /* CONFIG_NETROM */

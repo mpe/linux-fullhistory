@@ -24,7 +24,9 @@
  *	Revision 0.24:	Supports new /proc with no 4K limit
  *	Revision 0.25:	Add ephemeral sockets, passive local network 
  *			identification, support for local net 0 and
- *			multiple datalinks
+ *			multiple datalinks <Greg Page>
+ *	Revision 0.26:  Device drop kills IPX routes via it. (needed for modules)
+ *
  *			
  *
  */
@@ -350,48 +352,52 @@ static int ipxrtr_create(struct ipx_route_def *r)
 
 static int ipxrtr_delete_localnet(ipx_route *d)
 {
-	ipx_route *r=ipx_localnet_list;
-	if(r==d)
-	{
-		ipx_localnet_list=r->next;
-		return 0;
-	}
-	while(r->next!=NULL)
-	{
-		if(r->nextlocal==d)
-		{
-			r->nextlocal=d->nextlocal;
+	ipx_route **r = &ipx_localnet_list;
+	ipx_route *tmp;
+
+	while ((tmp = *r) != NULL) {
+		if (tmp == d) {
+			*r = tmp->next;
 			return 0;
 		}
-		r=r->nextlocal;
+		r = &tmp->nextlocal;
 	}
 	return -ENOENT;
 }
 
 static int ipxrtr_delete(long net)
 {
-	ipx_route *r=ipx_router_list;
-	if(r->net==net)
-	{
-		ipx_router_list=r->next;
-		kfree_s(r,sizeof(ipx_route));
-		return 0;
-	}
-	while(r->next!=NULL)
-	{
-		if(r->next->net==net)
-		{
-			ipx_route *d=r->next;
-			r->next=d->next;
-			if (d->router_net == 0) {
-				ipxrtr_delete_localnet(d);
+	ipx_route **r = &ipx_router_list;
+	ipx_route *tmp;
+
+	while ((tmp = *r) != NULL) {
+		if (tmp->net == net) {
+			*r = tmp->next;
+			if (tmp->router_net == 0) {
+				ipxrtr_delete_localnet(tmp);
 			}
-			kfree_s(d,sizeof(ipx_route));
+			kfree_s(tmp, sizeof(ipx_route));
 			return 0;
 		}
-		r=r->next;
+		r = &tmp->next;
 	}
 	return -ENOENT;
+}
+
+void ipxrtr_device_down(struct device *dev)
+{
+	ipx_route **r = &ipx_router_list;
+	ipx_route *tmp;
+
+	while ((tmp = *r) != NULL) {
+		if (tmp->dev == dev) {
+			*r = tmp->next;
+			if(tmp->router_net == 0)
+				ipxrtr_delete_localnet(tmp);
+			kfree_s(tmp, sizeof(ipx_route));
+		}
+		r = &tmp->next;
+	}
 }
 
 static int ipxrtr_ioctl(unsigned int cmd, void *arg)

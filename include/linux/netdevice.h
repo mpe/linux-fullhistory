@@ -193,9 +193,10 @@ extern int		dev_ioctl(unsigned int cmd, void *);
 
 extern void		dev_init(void);
 
-/* This function lives elsewhere (drivers/net/net_init.c but is related) */
+/* These functions live elsewhere (drivers/net/net_init.c, but related) */
 
 extern void		ether_setup(struct device *dev);
+extern int		ether_config(struct device *dev, struct ifmap *map);
 /* Support for loadable net-drivers */
 extern int		register_netdev(struct device *dev);
 extern void		unregister_netdev(struct device *dev);

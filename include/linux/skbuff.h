@@ -68,7 +68,11 @@ struct sk_buff {
 				used,
 				free,
 				arp;
-  unsigned char			tries,lock,localroute;
+  unsigned char			tries,lock,localroute,pkt_type;
+#define PACKET_HOST		0		/* To us */
+#define PACKET_BROADCAST	1
+#define PACKET_MULTICAST	2
+#define PACKET_OTHERHOST	3		/* Unmatched promiscuous */
   unsigned short		users;		/* User count - see datagram.c (and soon seqpacket.c/stream.c) */
 #ifdef CONFIG_SLAVE_BALANCING
   unsigned short		in_dev_queue;

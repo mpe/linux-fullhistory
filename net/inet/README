@@ -1,5 +1,18 @@
 This is snapshot 014
 
+Fixes added for 1.1.15
+o	Modular PLIP and 3c501 drivers. Now you -can- have multiple 3c501's
+	(sort of).
+o	Integrated new AX.25 - this will be ready for the big time in a few
+	releases.
+
+Fixes added for 1.1.14
+
+o	Compiles properly on the whole 8)
+o	Yet more Unix /proc protection.
+o	Modular PLIP and 3c501 drivers. Now you -can- have multiple 3c501's
+	(sort of).
+
 This fixes the following from the 1.1.12 release (see the relevant files
 for the credits to authors).
 

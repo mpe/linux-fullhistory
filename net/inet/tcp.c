@@ -172,7 +172,7 @@ min(unsigned int a, unsigned int b)
    Better heuristics welcome
 */
    
-static int tcp_select_window(struct sock *sk)
+int tcp_select_window(struct sock *sk)
 {
 	int new_window = sk->prot->rspace(sk);
 	
@@ -572,13 +572,14 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	}
 
 	tcp_statistics.TcpOutSegs++;  
-	/* We need to complete and send the packet. */
-	tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
 
 	skb->h.seq = ntohl(th->seq) + size - 4*th->doff;
 	if (after(skb->h.seq, sk->window_seq) ||
 	    (sk->retransmits && sk->timeout == TIME_WRITE) ||
 	     sk->packets_out >= sk->cong_window) {
+		/* checksum will be supplied by tcp_write_xmit.  So
+		 * we shouldn't need to set it at all.  I'm being paraoid */
+		th->check = 0;
 		if (skb->next != NULL) {
 			printk("tcp_send_partial: next != NULL\n");
 			skb_unlink(skb);
@@ -589,6 +590,11 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		    sk->ack_backlog == 0)
 		  reset_timer(sk, TIME_PROBE0, sk->rto);
 	} else {
+		th->ack_seq = ntohl(sk->acked_seq);
+		th->window = ntohs(tcp_select_window(sk));
+
+		tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
+
 		sk->sent_seq = sk->write_seq;
 		sk->prot->queue_xmit(sk, skb->dev, skb, 0);
 	}
@@ -2237,6 +2243,26 @@ tcp_write_xmit(struct sock *sk)
 			kfree_skb(skb, FREE_WRITE);
 			if (!sk->dead) sk->write_space(sk);
 		} else {
+			struct tcphdr *th;
+			struct iphdr *iph;
+			int size;
+/*
+ * put in the ack seq and window at this point rather than earlier,
+ * in order to keep them monotonic.  We really want to avoid taking
+ * back window allocations.  That's legal, but RFC1122 says it's frowned on.
+ * Ack and window will in general have changed since this packet was put
+ * on the write queue.
+ */
+			iph = (struct iphdr *)(skb->data +
+					       skb->dev->hard_header_len);
+			th = (struct tcphdr *)(((char *)iph) +(iph->ihl << 2));
+			size = skb->len - (((unsigned char *) th) - skb->data);
+			
+			th->ack_seq = ntohl(sk->acked_seq);
+			th->window = ntohs(tcp_select_window(sk));
+
+			tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
+
 			sk->sent_seq = skb->h.seq;
 			sk->prot->queue_xmit(sk, skb->dev, skb, skb->free);
 		}
@@ -3197,7 +3223,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 		sk->mtu = rt->rt_mtu;
 	else 
 	{
-#ifdef SUBNETSARELOCAL
+#ifdef CONFIG_INET_SNARL
 		if ((sk->saddr ^ sk->daddr) & default_mask(sk->saddr))
 #else
 		if ((sk->saddr ^ sk->daddr) & dev->pa_mask)
@@ -3318,6 +3344,12 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   }
   
   tcp_statistics.TcpInSegs++;
+  
+  if(skb->pkt_type!=PACKET_HOST)
+  {
+  	kfree_skb(skb,FREE_READ);
+  	return(0);
+  }
   
   th = skb->h.th;
 

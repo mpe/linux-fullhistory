@@ -17,7 +17,9 @@
  *     Tested this against ncsa-telnet 2.3 and pcip_pkt using plip.com (which
  *     contains "version	equ	0" and ";History:562,1" in the firts 2
  *    source-lines						28-Mar-94
- *	
+ *
+ *	Modularised it (Alan Cox). Will upgrade to Niibe's PLIP once its settled
+ *	down better.
  *	
  *
  *  This is parallel port packet pusher.  It's actually more general
@@ -40,10 +42,17 @@
  *  Info:
  *     	I <Alan> got 15K/second NFS throughput (about 20-25K second IP). I also got some ethernet cards
  *	so don't ask me for help. This code needs a real major rewrite. Any volunteers ?
+ *
+ ***** So we can all compare loads of different PLIP drivers for a bit I've modularised this beastie too.
+ ***** In addition a seperate bidirectional plip module can be done.
  */
 
 static char *version =
-    "NET3 PLIP.010 (from plip.c:v0.15 for 0.99pl12+, 8/11/93)\n";
+    "NET3 "
+#ifdef MODULE
+    "MODULAR "    
+#endif    
+    "PLIP.010 (from plip.c:v0.15 for 0.99pl12+, 8/11/93)\n";
 
 #include <linux/config.h>
 
@@ -94,6 +103,11 @@ make one yourself.  The wiring is:
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+
+#ifdef MODULE
+#include <linux/module.h>
+#include "../../tools/version.h"
+#endif
 
 #ifdef PRINTK
 #undef PRINTK
@@ -219,8 +233,8 @@ plip_init(struct device *dev)
    This routine gets exclusive access to the parallel port by allocating
    its IRQ line.
    */
-static int
-plip_open(struct device *dev)
+   
+static int plip_open(struct device *dev)
 {
     if (dev->irq == 0)
 	dev->irq = 7;
@@ -237,6 +251,9 @@ plip_open(struct device *dev)
     dev->tbusy = 0;
     dev->interrupt = 0;
     dev->start = 1;
+#ifdef MODULE
+    MOD_INC_USE_COUNT;
+#endif        
     return 0;
 }
 
@@ -251,6 +268,9 @@ plip_close(struct device *dev)
     irq2dev_map[dev->irq] = NULL;
     sti();
     outb(0x00, dev->base_addr);		/* Release the interrupt. */
+#ifdef MODULE
+    MOD_DEC_USE_COUNT;
+#endif        
     return 0;
 }
 
@@ -746,3 +766,76 @@ plip_get_stats(struct device *dev)
  *  kept-new-versions: 5
  * End:
  */
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+
+static struct device dev_plip0 = 
+{
+	"plip0" /*"plip"*/,
+	0, 0, 0, 0,		/* memory */
+	0x3BC, 5,		/* base, irq */
+	0, 0, 0, NULL, plip_init 
+};
+
+static struct device dev_plip1 = 
+{
+	"plip1" /*"plip"*/,
+	0, 0, 0, 0,		/* memory */
+	0x378, 7,		/* base, irq */
+	0, 0, 0, NULL, plip_init 
+};
+
+static struct device dev_plip2 = 
+{
+	"plip2" /*"plip"*/,
+	0, 0, 0, 0,		/* memory */
+	0x278, 2,		/* base, irq */
+	0, 0, 0, NULL, plip_init 
+};
+
+int
+init_module(void)
+{
+	int err;
+
+	if ( ((err=register_netdev(&dev_plip0)) == 0) &&
+	     ((err=register_netdev(&dev_plip1)) == 0) &&
+	     ((err=register_netdev(&dev_plip2)) == 0)
+	   )
+	{
+		if(err==-EEXIST)
+			printk("plip devices already present. Module not loaded.\n");
+		return err;
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("plip: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_plip0);
+		if(dev_plip0.priv)
+		{
+			kfree_s(dev_plip0.priv,sizeof(struct netstats));
+			dev_plip0.priv=NULL;
+		}
+		unregister_netdev(&dev_plip1);
+		if(dev_plip1.priv)
+		{
+			kfree_s(dev_plip1.priv,sizeof(struct netstats));
+			dev_plip0.priv=NULL;
+		}
+		unregister_netdev(&dev_plip2);
+		if(dev_plip2.priv)
+		{
+			kfree_s(dev_plip2.priv,sizeof(struct netstats));
+			dev_plip2.priv=NULL;
+		}
+	}
+}
+#endif /* MODULE */

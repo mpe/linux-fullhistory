@@ -4,7 +4,7 @@
  * This is a collection of several routines from gzip-1.0.3 
  * adapted for Linux.
  *
- * malloc by Hannu Savolainen 1993
+ * malloc by Hannu Savolainen 1993 and Matthias Urlichs 1994
  * puts by Nick Holloway 1993
  */
 
@@ -78,6 +78,8 @@ local int get_method(int);
 char *vidmem = (char *)0xb8000;
 int lines, cols;
 
+static void puts(const char *);
+
 void *malloc(int size)
 {
 	void *p;
@@ -85,16 +87,29 @@ void *malloc(int size)
 	if (size <0) error("Malloc error\n");
 	if (free_mem_ptr <= 0) error("Memory error\n");
 
+   while(1) {
 	free_mem_ptr = (free_mem_ptr + 3) & ~3;	/* Align */
 
 	p = (void *)free_mem_ptr;
-
 	free_mem_ptr += size;
 
-	if (free_mem_ptr > 0x90000) error("\nOut of memory\n");
+	/*
+  	 * The part of the compresed kernel which has already been expanded
+	 * is no longer needed. Therefore we can reuse it for malloc.
+	 * With bigger kernels, this is necessary.
+	 */
+          
+	if (free_mem_ptr < (long)&end) {
+		if (free_mem_ptr > (long)&input_data[input_ptr])
+			error("\nOut of memory\n");
 
-	if (p == NULL) error("malloc = NULL\n");
+		return p;
+	}
+	if (free_mem_ptr < 0x90000)
 	return p;
+	puts("memory is tight...");
+	free_mem_ptr = (long)input_data;
+	}
 }
 
 void free(void *where)
@@ -110,7 +125,7 @@ static void scroll()
 		vidmem[i] = ' ';
 }
 
-static void puts(char *s)
+static void puts(const char *s)
 {
 	int x,y;
 	char c;
@@ -309,7 +324,7 @@ void decompress_kernel()
 
 	if (EXT_MEM_K < 1024) error("<2M of mem\n");
 
-	output_data = (char *)1048576;	/* Points to 1M */
+	output_data = (char *)0x100000;	/* Points to 1M */
 	output_ptr = 0;
 
 	exit_code = 0;
@@ -361,16 +376,10 @@ local int get_method(in)
 	work = unzip;
 	method = (int)get_byte();
 	flags  = (uch)get_byte();
-	if ((flags & ENCRYPTED) != 0) {
+	if ((flags & ENCRYPTED) != 0)
 	    error("Input is encrypted\n");
-	    exit_code = ERROR;
-	    return -1;
-	}
-	if ((flags & CONTINUATION) != 0) {
+	if ((flags & CONTINUATION) != 0)
 	       error("Multi part input\n");
-	    exit_code = ERROR;
-	    if (force <= 1) return -1;
-	}
 	if ((flags & RESERVED) != 0) {
 	    error("Input has invalid flags\n");
 	    exit_code = ERROR;
@@ -384,13 +393,6 @@ local int get_method(in)
 	(void)get_byte();  /* Ignore extra flags for the moment */
 	(void)get_byte();  /* Ignore OS type for the moment */
 
-	if ((flags & CONTINUATION) != 0) {
-	    unsigned part = (unsigned)get_byte();
-	    part |= ((unsigned)get_byte())<<8;
-	    if (verbose) {
-		error("Input is not part number 1\n");
-	    }
-	}
 	if ((flags & EXTRA_FIELD) != 0) {
 	    unsigned len = (unsigned)get_byte();
 	    len |= ((unsigned)get_byte())<<8;
@@ -410,28 +412,7 @@ local int get_method(in)
 	if ((flags & COMMENT) != 0) {
 	    while (get_byte() != 0) /* null */ ;
 	}
-
-    } else if (memcmp(magic, PKZIP_MAGIC, 2) == 0 && inptr == 2
-	    && memcmp(inbuf, PKZIP_MAGIC, 4) == 0) {
-	/* To simplify the code, we support a zip file when alone only.
-         * We are thus guaranteed that the entire local header fits in inbuf.
-         */
-        inptr = 0;
-	work = unzip;
-	if (check_zipfile(in) == -1) return -1;
-	/* check_zipfile may get ofname from the local header */
-	last_member = 1;
-
-    } else if (memcmp(magic, PACK_MAGIC, 2) == 0) {
-    	error("packed input");
-    } else if (memcmp(magic, LZW_MAGIC, 2) == 0) {
-	error("compressed input");
-	last_member = 1;
-    }
-    if (method == -1) {
-	error("Corrupted input\n");
-	if (exit_code != ERROR) exit_code = part_nb == 1 ? ERROR : WARNING;
-	return part_nb == 1 ? -1 : -2;
-    }
+    } else
+	error("unknown compression method");
     return method;
 }

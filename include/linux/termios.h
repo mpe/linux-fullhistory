@@ -1,6 +1,8 @@
 #ifndef _LINUX_TERMIOS_H
 #define _LINUX_TERMIOS_H
 
+#include <linux/types.h>
+
 /* 0x54 is just a magic number to make these relatively uniqe ('T') */
 
 #define TCGETS		0x5401

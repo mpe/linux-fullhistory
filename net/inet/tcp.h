@@ -123,6 +123,9 @@ extern int	tcp_rcv(struct sk_buff *skb, struct device *dev,
 
 extern int	tcp_ioctl(struct sock *sk, int cmd, unsigned long arg);
 
+extern int tcp_select_window(struct sock *sk);
+extern void tcp_send_check(struct tcphdr *th, unsigned long saddr, 
+		unsigned long daddr, int len, struct sock *sk);
 extern void tcp_send_probe0(struct sock *sk);
 extern void tcp_enqueue_partial(struct sk_buff *, struct sock *);
 extern struct sk_buff * tcp_dequeue_partial(struct sock *);

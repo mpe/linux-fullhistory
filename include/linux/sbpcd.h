@@ -107,13 +107,13 @@
 /*
  * disk states (bits of diskstate_flags):
  */
-#define upc_valid (DS[d].diskstate_flags&upc_bit)
-#define volume_valid (DS[d].diskstate_flags&volume_bit)
-#define toc_valid (DS[d].diskstate_flags&toc_bit)
-#define multisession_valid (DS[d].diskstate_flags&multisession_bit)
-#define cd_size_valid (DS[d].diskstate_flags&cd_size_bit)
-#define subq_valid (DS[d].diskstate_flags&subq_bit)
-#define frame_size_valid (DS[d].diskstate_flags&frame_size_bit)
+#define upc_valid (DriveStruct[d].diskstate_flags&upc_bit)
+#define volume_valid (DriveStruct[d].diskstate_flags&volume_bit)
+#define toc_valid (DriveStruct[d].diskstate_flags&toc_bit)
+#define multisession_valid (DriveStruct[d].diskstate_flags&multisession_bit)
+#define cd_size_valid (DriveStruct[d].diskstate_flags&cd_size_bit)
+#define subq_valid (DriveStruct[d].diskstate_flags&subq_bit)
+#define frame_size_valid (DriveStruct[d].diskstate_flags&frame_size_bit)
 
 
 /*
@@ -137,13 +137,13 @@
 /*
  * used drive states:
  */
-#define st_door_closed (DS[d].status_byte&p_door_closed)
-#define st_caddy_in (DS[d].status_byte&p_caddy_in)
-#define st_spinning (DS[d].status_byte&p_spinning)
-#define st_check (DS[d].status_byte&p_check)
-#define st_busy (DS[d].status_byte&p_busy_new)
-#define st_door_locked (DS[d].status_byte&p_door_locked)
-#define st_diskok (DS[d].status_byte&p_disk_ok)
+#define st_door_closed (DriveStruct[d].status_byte&p_door_closed)
+#define st_caddy_in (DriveStruct[d].status_byte&p_caddy_in)
+#define st_spinning (DriveStruct[d].status_byte&p_spinning)
+#define st_check (DriveStruct[d].status_byte&p_check)
+#define st_busy (DriveStruct[d].status_byte&p_busy_new)
+#define st_door_locked (DriveStruct[d].status_byte&p_door_locked)
+#define st_diskok (DriveStruct[d].status_byte&p_disk_ok)
 
 /*
  * bits of the CDi_status register:
@@ -175,7 +175,7 @@
 /*
  * drv_099 and drv_100 are the "new" drives
  */
-#define new_drive (DS[d].drv_type&0x10)
+#define new_drive (DriveStruct[d].drv_type&0x10)
 
 /*
  * audio states:

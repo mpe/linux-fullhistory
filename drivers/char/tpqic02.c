@@ -302,7 +302,7 @@ static char *format_names[] = {
  * Exception 16 (BOM) is added for beginning-of-media (catch BOM).
  */
 static struct exception_list_type {
-	short mask, code;
+	unsigned short mask, code;
 	char *msg;
 } exception_list[] = {
 	{0, 0,
@@ -1008,7 +1008,7 @@ static int ll_do_qic_cmd(int cmd, time_t timeout)
 		stat = TE_OK;
 	}
 	if (stat != TE_OK) {
-		printk(TPQIC_NAME ": ll_do_qic_cmd(%x, %d) failed\n", cmd, timeout);
+		printk(TPQIC_NAME ": ll_do_qic_cmd(%x, %ld) failed\n", cmd, timeout);
 		return -EIO;
 	}
 
@@ -1044,7 +1044,7 @@ static int ll_do_qic_cmd(int cmd, time_t timeout)
 	/* sense() will set eof/eom as required */
 	if (stat==TE_EX) {
 		if (tp_sense(TP_WRP|TP_BOM|TP_EOM|TP_FIL)!=TE_OK) {
-			printk(TPQIC_NAME ": Exception persist in ll_do_qic_cmd[1](%x, %d)", cmd, timeout);
+			printk(TPQIC_NAME ": Exception persist in ll_do_qic_cmd[1](%x, %ld)", cmd, timeout);
 			status_dead = YES;
 			return -ENXIO;
 			/* if rdstatus fails too, we're in trouble */
@@ -1065,7 +1065,7 @@ static int ll_do_qic_cmd(int cmd, time_t timeout)
 		if (tp_sense((cmd==QCMD_SEEK_EOD ?		/*****************************/
 		      TP_EOR|TP_NDT|TP_UDA|TP_BNL|TP_WRP|TP_BOM|TP_EOM|TP_FIL :
 		      TP_WRP|TP_BOM|TP_EOM|TP_FIL))!=TE_OK) {
-			printk(TPQIC_NAME ": Exception persist in ll_do_qic_cmd[2](%x, %d)\n", cmd, timeout);
+			printk(TPQIC_NAME ": Exception persist in ll_do_qic_cmd[2](%x, %ld)\n", cmd, timeout);
 			if (cmd!=QCMD_RD_FM)
 				status_dead = YES;
 			return -ENXIO;
@@ -1816,7 +1816,7 @@ static int tape_qic02_read(struct inode * inode, struct file * filp, char * buf,
 	int stat;
 
 	if (TP_DIAGS(current_tape_dev))
-		printk(TPQIC_NAME ": request READ, minor=%x, buf=%p, count=%x, pos=%x, flags=%x\n",
+		printk(TPQIC_NAME ": request READ, minor=%x, buf=%p, count=%x, pos=%lx, flags=%x\n",
 			MINOR(dev), buf, count, filp->f_pos, flags);
 
 	if (count % TAPE_BLKSIZE) {	/* Only allow mod 512 bytes at a time. */
@@ -1849,7 +1849,7 @@ static int tape_qic02_read(struct inode * inode, struct file * filp, char * buf,
 
 		/* Must ensure that user program sees exactly one EOF token (==0) */
 		if (return_read_eof==YES) {
-			printk("read: return_read_eof==%d, reported_read_eof==%d, total_bytes_done==%d\n", return_read_eof, reported_read_eof, total_bytes_done);
+			printk("read: return_read_eof==%d, reported_read_eof==%d, total_bytes_done==%ld\n", return_read_eof, reported_read_eof, total_bytes_done);
 
 			if (reported_read_eof==NO) {
 				/* have not yet returned EOF to user program */
@@ -1985,7 +1985,7 @@ static int tape_qic02_write(struct inode * inode, struct file * filp, char * buf
 	unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
 
 	if (TP_DIAGS(current_tape_dev))
-		printk(TPQIC_NAME ": request WRITE, minor=%x, buf=%p, count=%x, pos=%x, flags=%x\n",
+		printk(TPQIC_NAME ": request WRITE, minor=%x, buf=%p, count=%x, pos=%lx, flags=%x\n",
 			MINOR(dev), buf, count, filp->f_pos, flags);
 
 	if (count % TAPE_BLKSIZE) {	/* only allow mod 512 bytes at a time */
@@ -2107,7 +2107,7 @@ static int tape_qic02_write(struct inode * inode, struct file * filp, char * buf
 		}
 	}
 	tpqputs("write request for <0 bytes");
-	printk(TPQIC_NAME ": status_bytes_wr %x, buf %p, total_bytes_done %x, count %x\n", status_bytes_wr, buf, total_bytes_done, count);
+	printk(TPQIC_NAME ": status_bytes_wr %x, buf %p, total_bytes_done %lx, count %x\n", status_bytes_wr, buf, total_bytes_done, count);
 	return -EINVAL;
 } /* tape_qic02_write */
 
@@ -2337,7 +2337,7 @@ static int tape_qic02_ioctl(struct inode * inode, struct file * filp,
 #endif
 
 	if (TP_DIAGS(current_tape_dev))
-		printk(TPQIC_NAME ": ioctl(%4x, %4x, %4x)\n", dev_maj, iocmd, ioarg);
+		printk(TPQIC_NAME ": ioctl(%4x, %4x, %4lx)\n", dev_maj, iocmd, ioarg);
 
 	if (!inode || !ioarg)
 		return -EINVAL;

@@ -177,6 +177,7 @@ static int ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct dev
 	return mac;
 }
 
+int ip_id_count = 0;
 
 /*
  * This routine builds the appropriate hardware/IP headers for
@@ -192,7 +193,6 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
   	struct rtable *rt;
   	unsigned char *buff;
   	unsigned long raddr;
-  	static int count = 0;
   	int tmp;
   	unsigned long src;
 
@@ -295,8 +295,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	iph->saddr    = saddr;
 	iph->protocol = type;
 	iph->ihl      = 5;
-	iph->id       = htons(count++);
-
+  
 	/* Setup the IP options. */
 #ifdef Not_Yet_Avail
 	build_options(iph, opt);
@@ -1250,25 +1249,6 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	unsigned char *ptr;	/* Data pointer */
 	unsigned long raddr;	/* Router IP address */
 
-	/*
-	 * Only forward packets that were fired at us when we are in promiscuous
-	 * mode. In standard mode we rely on the driver to filter for us.
-	 *
-	 * This is a mess. When the drivers class packets on the upcall this
-	 * will tidy up!
-	 */
-   
-	if(dev->flags&IFF_PROMISC)
-	{
-  		if(memcmp(skb->data,dev->dev_addr,dev->addr_len))
-  			return;
-	}
-	
-	if(!memcmp(skb->data,dev->broadcast, dev->addr_len))
-		return;
-	
-
-  
   	/*
   	 *	According to the RFC, we must first decrease the TTL field. If
   	 *	that reaches zero, we must reply an ICMP control message telling
@@ -1516,7 +1496,16 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 	if ((brd = ip_chk_addr(iph->daddr)) == 0) 
 	{
+		/*
+		 *	Don't forward multicast or broadcast frames.
+		 */
 	
+		if(skb->pkt_type!=PACKET_HOST)
+		{
+			kfree_skb(skb,FREE_WRITE);
+			return 0;
+		}
+		
 		/*
 		 *	The packet is for another target. Forward the frame
 		 */
@@ -1683,6 +1672,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	iph = (struct iphdr *)ptr;
 	skb->ip_hdr = iph;
 	iph->tot_len = ntohs(skb->len-dev->hard_header_len);
+	iph->id      = htons(ip_id_count++);
 
 	/*
 	 *	Do we need to fragment. Again this is inefficient. 
@@ -1813,27 +1803,34 @@ void ip_do_retransmit(struct sock *sk, int all)
 	{
 		dev = skb->dev;
 		IS_SKB(skb);
-#if 0
-	/********** THIS IS NOW DONE BY THE DEVICE LAYER **********/	
-		/*
-		 * 	The rebuild_header function sees if the ARP is done.
-		 * 	If not it sends a new ARP request, and if so it builds
-		 * 	the header. It isn't really needed here, and with the
-		 *	new ARP pretty much will not happen.
-		 */
-		 
-		if (!skb->arp) 
-		{
-			if (dev->rebuild_header(skb->data, dev, skb->raddr, NULL)) 
-			{
-				if (!all) 
-					break;
-				skb = skb->link3;
-				continue;
-			}
-		}
-#endif
 		skb->when = jiffies;
+
+		/* 
+		 * In general it's OK just to use the old packet.  However we
+		 * need to use the current ack and window fields.  Urg and 
+		 * urg_ptr could possibly stand to be updated as well, but we 
+		 * don't keep the necessary data.  That shouldn't be a problem,
+		 * if the other end is doing the right thing.  Since we're 
+		 * changing the packet, we have to issue a new IP identifier.
+		 */
+
+		/* this check may be unnecessary - retransmit only for TCP */
+		if (sk->protocol == IPPROTO_TCP) {
+		  struct tcphdr *th;
+		  struct iphdr *iph;
+		  int size;
+
+		  iph = (struct iphdr *)(skb->data + dev->hard_header_len);
+		  th = (struct tcphdr *)(((char *)iph) + (iph->ihl << 2));
+		  size = skb->len - (((unsigned char *) th) - skb->data);
+
+		  iph->id = htons(ip_id_count++);
+		  ip_send_check(iph);
+
+		  th->ack_seq = ntohl(sk->acked_seq);
+		  th->window = ntohs(tcp_select_window(sk));
+		  tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
+		}
 
 		/* 
 		 *	If the interface is (still) up and running, kick it. 

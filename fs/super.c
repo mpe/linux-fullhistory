@@ -662,5 +662,6 @@ void mount_root(void)
 			return;
 		}
 	}
-	panic("VFS: Unable to mount root");
+	panic("VFS: Unable to mount root fs on %02x:%02x",
+		MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
 }

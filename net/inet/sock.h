@@ -148,6 +148,8 @@ struct sock {
   char				ax25_retxqi;
   char				ax25_rrtimer;
   char				ax25_timer;
+  unsigned char			ax25_n2;
+  unsigned short		ax25_t1,ax25_t3;
   ax25_digi			*ax25_digipeat;
 #endif  
 /* IP 'private area' or will be eventually */

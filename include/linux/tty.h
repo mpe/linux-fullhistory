@@ -5,6 +5,7 @@
  * 'tty.h' defines some structures used by tty_io.c and some defines.
  */
 
+#include <linux/fs.h>
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 #include <linux/tty_driver.h>

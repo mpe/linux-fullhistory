@@ -5,6 +5,9 @@
  * Definitions for the tty line discipline
  */
 
+#include <linux/fs.h>
+#include <linux/wait.h>
+
 struct tty_ldisc {
 	int	magic;
 	int	num;

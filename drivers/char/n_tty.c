@@ -482,6 +482,10 @@ static inline void n_tty_receive_char(struct tty_struct *tty, unsigned char c)
 			put_tty_queue(c, tty);
 			tty->canon_head = tty->read_head;
 			tty->canon_data++;
+			if (tty->fasync)
+				kill_fasync(tty->fasync, SIGIO);
+			if (tty->read_wait)
+				wake_up_interruptible(&tty->read_wait);
 			return;
 		}
 	}
@@ -560,8 +564,7 @@ static void n_tty_receive_buf(struct tty_struct *tty, unsigned char *cp,
 			tty->driver.flush_chars(tty);
 	}
 
-	if (tty->icanon ? tty->canon_data :
-	    (tty->read_cnt >= tty->minimum_to_wake)) {
+	if (!tty->icanon && (tty->read_cnt >= tty->minimum_to_wake)) {
 		if (tty->fasync)
 			kill_fasync(tty->fasync, SIGIO);
 		if (tty->read_wait)
