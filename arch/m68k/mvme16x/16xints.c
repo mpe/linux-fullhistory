@@ -106,9 +106,12 @@ void mvme16x_free_irq(unsigned int irq, void *dev_id)
 void mvme16x_process_int (unsigned long vec, struct pt_regs *fp)
 {
 	if (vec < 64 || vec > 255)
-		panic ("mvme16x_process_int: Illegal vector %ld", vec);
-	irq_tab[vec-64].count++;
-	irq_tab[vec-64].handler(vec, irq_tab[vec-64].dev_id, fp);
+		printk ("mvme16x_process_int: Illegal vector %ld", vec);
+	else
+	{
+		irq_tab[vec-64].count++;
+		irq_tab[vec-64].handler(vec, irq_tab[vec-64].dev_id, fp);
+	}
 }
 
 int mvme16x_get_irq_list (char *buf)

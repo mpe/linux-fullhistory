@@ -8,6 +8,7 @@
 #include <linux/mm.h>
 #include <linux/kernel.h>
 #include <linux/ptrace.h>
+#include <linux/interrupt.h>
 
 #include <asm/setup.h>
 #include <asm/traps.h>
@@ -32,8 +33,7 @@ extern const int frame_extra_sizes[]; /* in m68k/kernel/signal.c */
 asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
 			      unsigned long error_code)
 {
-	struct task_struct *tsk = current;
-	struct mm_struct *mm = tsk->mm;
+	struct mm_struct *mm = current->mm;
 	struct vm_area_struct * vma;
 	unsigned long fixup;
 	int write;
@@ -41,8 +41,16 @@ asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
 #ifdef DEBUG
 	printk ("regs->sr=%#x, regs->pc=%#lx, address=%#lx, %ld, %p\n",
 		regs->sr, regs->pc, address, error_code,
-		tsk->mm->pgd);
+		current->mm->pgd);
 #endif
+
+
+	/*
+	 * If we're in an interrupt or have no user
+	 * context, we must not take the fault..
+	 */
+	if (in_interrupt() || mm == &init_mm)
+		goto no_context;
 
 	down(&mm->mmap_sem);
 
@@ -86,7 +94,14 @@ good_area:
 			if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 				goto bad_area;
 	}
-	handle_mm_fault(current, vma, address, write);
+
+	/*
+	 * If for any reason at all we couldn't handle the fault,
+	 * make sure we exit gracefully rather than endlessly redo
+	 * the fault.
+	 */
+	if (!handle_mm_fault(current, vma, address, write))
+		goto do_sigbus;
 
 	/* There seems to be a missing invalidate somewhere in do_no_page.
 	 * Until I found it, this one cures the problem and makes
@@ -106,10 +121,15 @@ bad_area:
 
 	/* User mode accesses just cause a SIGSEGV */
 	if (user_mode(regs)) {
-		force_sig (SIGSEGV, tsk);
+		siginfo_t info;
+		info.si_signo = SIGSEGV;
+		info.si_code = SEGV_MAPERR;
+		info.si_addr = (void *)address;
+		force_sig_info(SIGSEGV, &info, current);
 		return 1;
 	}
 
+no_context:
 	/* Are we prepared to handle this kernel fault?  */
 	if ((fixup = search_exception_table(regs->pc)) != 0) {
 		struct pt_regs *tregs;
@@ -135,6 +155,23 @@ bad_area:
 	printk(" at virtual address %08lx\n",address);
 	die_if_kernel("Oops", regs, error_code);
 	do_exit(SIGKILL);
+
+/*
+ * We ran out of memory, or some other thing happened to us that made
+ * us unable to handle the page fault gracefully.
+ */
+do_sigbus:
+	up(&mm->mmap_sem);
+
+	/*
+	 * Send a sigbus, regardless of whether we were in kernel
+	 * or user mode.
+	 */
+	force_sig(SIGBUS, current);
+
+	/* Kernel mode? Handle exceptions or die */
+	if (!user_mode(regs))
+		goto no_context;
 
 	return 1;
 }

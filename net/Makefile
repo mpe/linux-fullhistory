@@ -10,7 +10,7 @@
 MOD_SUB_DIRS := ipv4
 ALL_SUB_DIRS := 802 ax25 bridge core ethernet ipv4 ipv6 ipx unix appletalk \
 		netrom rose lapb x25 wanrouter netlink sched packet sunrpc \
-		econet #decnet
+		econet irda #decnet
 SUB_DIRS     := core ethernet sched
 MOD_LIST_NAME := NET_MISC_MODULES
 
@@ -125,6 +125,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_IRDA),y)
+SUB_DIRS += irda
+else
+  ifeq ($(CONFIG_IRDA),m)
+  MOD_SUB_DIRS += irda
+  endif
+endif
+
 ifeq ($(CONFIG_SUNRPC),y)
 SUB_DIRS += sunrpc
 else
@@ -168,7 +176,9 @@ L_OBJS	     := $(SOCK) protocols.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
 M_OBJS	     :=
 
 ifeq ($(CONFIG_SYSCTL),y)
+ifeq ($(CONFIG_NET),y)
 L_OBJS += sysctl_net.o
+endif
 endif
 
 include $(TOPDIR)/Rules.make

@@ -24,14 +24,19 @@ typedef enum {
 	DMA_MODE_WRITE
 } dmamode_t;
 
-#define MAX_DMA_CHANNELS	4
+#ifdef CONFIG_ARCH_ARC
+#define MAX_DMA_CHANNELS	3
 
-#define DMA_0			0
-#define DMA_1			1
-#define DMA_VIRTUAL_FLOPPY	2
-#define DMA_VIRTUAL_SOUND	3
+#define DMA_VIRTUAL_FLOPPY0	0
+#define DMA_VIRTUAL_FLOPPY1	1
+#define DMA_VIRTUAL_SOUND	2
+#endif
 
 #ifdef CONFIG_ARCH_A5K
+#define MAX_DMA_CHANNELS	2
+
+#define DMA_VIRTUAL_FLOPPY	0
+#define DMA_VIRTUAL_SOUND	1
 #define DMA_FLOPPY		DMA_VIRTUAL_FLOPPY
 #endif
 

@@ -223,7 +223,8 @@ static int autofs_root_lookup(struct inode *dir, struct dentry * dentry)
 	sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 
 	oz_mode = autofs_oz_mode(sbi);
-	DPRINTK(("autofs_lookup: pid = %u, pgrp = %u, catatonic = %d, oz_mode = %d\n", current->pid, current->pgrp, sbi->catatonic, oz_mode));
+	DPRINTK(("autofs_lookup: pid = %u, pgrp = %u, catatonic = %d, oz_mode = %d\n",
+		 current->pid, current->pgrp, sbi->catatonic, oz_mode));
 
 	/*
 	 * Mark the dentry incomplete, but add it. This is needed so
@@ -395,6 +396,7 @@ static int autofs_root_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	struct autofs_sb_info *sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
 	struct autofs_dirhash *dh = &sbi->dirhash;
 	struct autofs_dir_ent *ent;
+	ino_t ino;
 
 	if ( !autofs_oz_mode(sbi) )
 		return -EPERM;
@@ -407,6 +409,7 @@ static int autofs_root_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		printk("autofs: Out of inode numbers -- what the heck did you do??\n");
 		return -ENOSPC;
 	}
+	ino = sbi->next_dir_ino++;
 
 	ent = kmalloc(sizeof(struct autofs_dir_ent), GFP_KERNEL);
 	if ( !ent )
@@ -418,14 +421,14 @@ static int autofs_root_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		return -ENOSPC;
 	}
 
-	dir->i_nlink++;
-	d_instantiate(dentry, iget(dir->i_sb,ent->ino));
-
 	ent->hash = dentry->d_name.hash;
 	memcpy(ent->name, dentry->d_name.name, 1+(ent->len = dentry->d_name.len));
-	ent->ino = sbi->next_dir_ino++;
+	ent->ino = ino;
 	ent->dentry = dentry;
 	autofs_hash_insert(dh,ent);
+
+	dir->i_nlink++;
+	d_instantiate(dentry, iget(dir->i_sb,ino));
 
 	return 0;
 }

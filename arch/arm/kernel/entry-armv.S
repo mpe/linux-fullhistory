@@ -231,60 +231,68 @@ irq_prio_ebsa110:
 		.macro	disable_fiq
 		.endm
 
+		.equ	pci_iack_high, PCI_IACK & 0xff000000
+		.equ	pci_iack_low,  PCI_IACK & 0x00ff0000
+
 		.macro	get_irqnr_and_base, irqnr, irqstat, base
 		mov	r4, #IO_BASE_ARM_CSR
-		ldr	\irqstat, [r4, #IRQ_STATUS]	@ just show us the unmasked ones
+		ldr	\irqstat, [r4, #CSR_IRQ_STATUS]	@ just show us the unmasked ones
 
 		@ run through hard priorities
 		@ timer
 		tst	\irqstat, #IRQ_MASK_TIMER0
 		movne	\irqnr, #IRQ_TIMER0
-		bne	1f
+		bne	1001f
 
 		@ ether10
 		tst	\irqstat, #IRQ_MASK_ETHER10
 		movne	\irqnr, #IRQ_ETHER10
-		bne	1f
+		bne	1001f
 
 		@ ether100
 		tst	\irqstat, #IRQ_MASK_ETHER100
 		movne	\irqnr, #IRQ_ETHER100
-		bne	1f
+		bne	1001f
 
 		@ video compressor
-		tst	\irqstat, #IRQ_VIDCOMP_MASK
+		tst	\irqstat, #IRQ_MASK_VIDCOMP
 		movne	\irqnr, #IRQ_VIDCOMP
-		bne	1f
+		bne	1001f
 
 		@ now try all the PIC sources
 		@ determine whether we have an irq
 		tst	\irqstat, #IRQ_MASK_EXTERN_IRQ
-		beq	3f
-		mov	r4, #(IO_BASE_PCI_IACK & 0xff000000)
-		orr	r4, r4, #(IO_BASE_PCI_IACK & 0x00ff0000)
+		beq	1002f
+		mov	r4, #pci_iack_high
+		orr	r4, r4, #pci_iack_low
 		ldrb	\irqnr, [r4]			@ get the IACK byte
-		b	1f
+		b	1001f
 
-3:		@ PCI errors
+1002:		@ PCI errors
 		tst	\irqstat, #IRQ_MASK_PCI_ERR
 		movne	\irqnr, #IRQ_PCI_ERR
-		bne	1f
+		bne	1001f
 
 		@ softint
-		tst	\irqstat, #IRQ_MASK_SOFT_IRQ
-		movne	\irqnr, #IRQ_SOFT_IRQ
-		bne	1f
+		tst	\irqstat, #IRQ_MASK_SOFTIRQ
+		movne	\irqnr, #IRQ_SOFTIRQ
+		bne	1001f
 
 		@ debug uart
 		tst	\irqstat, #IRQ_MASK_UART_DEBUG
-		movne	\irqnr, #IRQ_UART_DEBUG
-		bne	1f
+		movne	\irqnr, #IRQ_CONRX
+		bne	1001f
 
 		@ watchdog
-		tst	\irqstat, #IRQ_WATCHDOG_MASK
+		tst	\irqstat, #IRQ_MASK_WATCHDOG
 		movne	\irqnr, #IRQ_WATCHDOG
 
-1:		@ If Z is set, then we will not enter an interrupt
+1001:		@ If Z is set, then we will not enter an interrupt
+		.endm
+
+		.macro	irq_prio_table
+		.endm
+
 #else
 #error Unknown architecture
 #endif
@@ -696,8 +704,8 @@ __und_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		adrsvc	al, lr, fpundefinstr		@ lr  = undefined instr return
 
 1:		get_current_task r10
-		mov	lr, #1
-		strb	lr, [r10, #TSK_USED_MATH]	@ set current->used_math
+		mov	r8, #1
+		strb	r8, [r10, #TSK_USED_MATH]	@ set current->used_math
 		add	r10, r10, #TSS_FPESAVE		@ r10 = workspace
 		ldr	r4, .LC2
 		ldr	pc, [r4]			@ Call FP module USR entry point
@@ -741,6 +749,43 @@ __und_invalid:	sub	sp, sp, #S_FRAME_SIZE
 		mov	r1, #BAD_UNDEFINSTR		@ int reason
 		and	r2, r6, #31			@ int mode
 		b	SYMBOL_NAME(bad_mode)		@ Does not ever return...
+
+/* We get here if an undefined instruction happens and the floating
+ * point emulator is not present.  If the offending instruction was
+ * a WFS, we just perform a normal return as if we had emulated the
+ * operation.  This is a hack to allow some basic userland binaries
+ * to run so that the emulator module proper can be loaded. --philb
+ */
+fpe_not_present:
+		adr	r10, wfs_mask_data
+		ldmia	r10, {r4, r5, r6, r7, r8}
+		ldr	r10, [sp, #S_PC]		@ Load PC
+		sub	r10, r10, #4
+		mask_pc	r10, r10
+		ldrt	r10, [r10]			@ get instruction
+		and	r5, r10, r5
+		teq	r5, r4				@ Is it WFS?
+		moveq	pc, r9
+		and	r5, r10, r8
+		teq	r5, r6				@ Is it LDF/STF on sp or fp?
+		teqne	r5, r7
+		movne	pc, lr
+		tst	r10, #0x00200000		@ Does it have WB
+		moveq	pc, r9
+		and	r4, r10, #255			@ get offset
+		and	r6, r10, #0x000f0000
+		tst	r10, #0x00800000		@ +/-
+		rsbeq	r4, r4, #0
+		ldr	r5, [sp, r6, lsr #14]		@ Load reg
+		add	r5, r5, r4, lsl #2
+		str	r5, [sp, r6, lsr #14]		@ Save reg
+		mov	pc, r9
+
+wfs_mask_data:	.word	0x0e200110			@ WFS
+		.word	0x0fff0fff
+		.word	0x0d0d0100			@ LDF [sp]/STF [sp]
+		.word	0x0d0b0100			@ LDF [fp]/STF [fp]
+		.word	0x0f0f0f00
 
 #include "entry-common.S"
 

@@ -57,13 +57,15 @@
 #endif
 
 #ifndef CONFIG_CMDLINE
-#define CONFIG_CMDLINE	"root=nfs rw console=ttyS1,38400n8"
+#define CONFIG_CMDLINE	"root=/dev/nfs rw"
 #endif
 #define MEM_SIZE	(16*1024*1024)
 #define COMMAND_LINE_SIZE 256
 
 struct drive_info_struct { char dummy[32]; } drive_info;
 struct screen_info screen_info = {
+ orig_video_lines:	30,
+ orig_video_cols:	80,
  orig_video_mode:	0,
  orig_video_ega_bx:	0,
  orig_video_isVGA:	1,
@@ -210,6 +212,8 @@ setup_params(unsigned long *mem_end_p))
 
 #ifdef CONFIG_ARCH_ACORN
 	*mem_end_p = GET_MEMORY_END(params);
+#elif defined(CONFIG_ARCH_EBSA285)
+	*mem_end_p = PAGE_OFFSET + params->u1.s.page_size * params->u1.s.nr_pages;
 #else
 	*mem_end_p = PAGE_OFFSET + MEM_SIZE;
 #endif
@@ -305,18 +309,18 @@ static char command_line[COMMAND_LINE_SIZE] = { 0, };
 __initfunc(static void
 setup_mem(char *cmd_line, unsigned long *mem_start, unsigned long *mem_end))
 {
-	char c = ' ', *to = command_line;
+	char c, *to = command_line;
 	int len = 0;
 
 	*mem_start = (unsigned long)&_end;
 
 	for (;;) {
-		if (c == ' ' &&
-		    cmd_line[0] == 'm' &&
-		    cmd_line[1] == 'e' &&
-		    cmd_line[2] == 'm' &&
-		    cmd_line[3] == '=') {
-			*mem_end = simple_strtoul(cmd_line+4, &cmd_line, 0);
+		if (cmd_line[0] == ' ' &&
+		    cmd_line[1] == 'm' &&
+		    cmd_line[2] == 'e' &&
+		    cmd_line[3] == 'm' &&
+		    cmd_line[4] == '=') {
+			*mem_end = simple_strtoul(cmd_line+5, &cmd_line, 0);
 			switch(*cmd_line) {
 			case 'M':
 			case 'm':
@@ -336,7 +340,7 @@ setup_mem(char *cmd_line, unsigned long *mem_start, unsigned long *mem_end))
 		*to++ = c;
 	}
 
-	*to = '\0';		
+	*to = '\0';
 }
 
 __initfunc(void
@@ -381,8 +385,20 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * mem
 	conswitchp = &dummy_con;
 #endif
 #endif
-printascii("setup_arch done\n");
 }
+
+static const struct {
+	char *machine_name;
+	char *bus_name;
+} machine_desc[] = {
+	{ "DEC-EBSA110",	"DEC"		},
+	{ "Acorn-RiscPC",	"Acorn"		},
+	{ "Nexus-NexusPCI",	"PCI"		},
+	{ "DEC-EBSA285",	"PCI"		},
+	{ "Corel-Netwinder",	"PCI/ISA"	},
+	{ "Chalice-CATS",	"PCI"		},
+	{ "unknown-TBOX",	"PCI"		}
+};
 
 #if defined(CONFIG_ARCH_ARC)
 #define HARDWARE "Acorn-Archimedes"
@@ -390,24 +406,6 @@ printascii("setup_arch done\n");
 #elif defined(CONFIG_ARCH_A5K)
 #define HARDWARE "Acorn-A5000"
 #define IO_BUS	 "Acorn"
-#elif defined(CONFIG_ARCH_RPC)
-#define HARDWARE "Acorn-RiscPC"
-#define IO_BUS	 "Acorn"
-#elif defined(CONFIG_ARCH_EBSA110)
-#define HARDWARE "DEC-EBSA110"
-#define IO_BUS	 "DEC"
-#elif defined(CONFIG_ARCH_EBSA285)
-#define HARDWARE "DEC-EBSA285"
-#define IO_BUS   "PCI"
-#elif defined(CONFIG_ARCH_NEXUSPCI)
-#define HARDWARE "Nexus-NexusPCI"
-#define IO_BUS   "PCI"
-#elif defined(CONFIG_ARCH_VNC)
-#define HARDWARE "Corel-VNC"
-#define IO_BUS   "PCI"
-#else
-#define HARDWARE "unknown"
-#define IO_BUS   "unknown"
 #endif
 
 #if defined(CONFIG_CPU_ARM2)
@@ -439,8 +437,17 @@ int get_cpuinfo(char * buffer)
 		(int)processor_id & 15,
 		(loops_per_sec+2500) / 500000,
 		((loops_per_sec+2500) / 5000) % 100,
+#ifdef HARDWARE
 		HARDWARE,
+#else
+		machine_desc[machine_type].machine_name,
+#endif
 		OPTIMISATION,
-		IO_BUS);
+#ifdef IO_BUS
+		IO_BUS
+#else
+		machine_desc[machine_type].bus_name
+#endif
+		);
 	return len;
 }

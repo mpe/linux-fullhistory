@@ -154,7 +154,7 @@
 #endif
 	
 static char *serial_name = "Serial driver";
-static char *serial_version = "4.26";
+static char *serial_version = "4.27";
 
 static DECLARE_TASK_QUEUE(tq_serial);
 
@@ -180,7 +180,7 @@ static struct console sercons;
 
 static unsigned detect_uart_irq (struct serial_state * state);
 static void autoconfig(struct serial_state * info);
-static void change_speed(struct async_struct *info);
+static void change_speed(struct async_struct *info, struct termios *old);
 static void rs_wait_until_sent(struct tty_struct *tty, int timeout);
 
 /*
@@ -1110,7 +1110,7 @@ static int startup(struct async_struct * info)
 	/*
 	 * and set the speed of the serial port
 	 */
-	change_speed(info);
+	change_speed(info, 0);
 
 	info->flags |= ASYNC_INITIALIZED;
 	restore_flags(flags);
@@ -1233,7 +1233,8 @@ static void shutdown(struct async_struct * info)
  * This routine is called to set the UART divisor registers to match
  * the specified baud rate for a serial port.
  */
-static void change_speed(struct async_struct *info)
+static void change_speed(struct async_struct *info,
+			 struct termios *old_termios)
 {
 	unsigned short port;
 	int	quot = 0, baud_base, baud;
@@ -1284,7 +1285,25 @@ static void change_speed(struct async_struct *info)
 		else if (baud)
 			quot = baud_base / baud;
 	}
-	/* If the quotient is ever zero, default to 9600 bps */
+	/* If the quotient is zero refuse the change */
+	if (!quot && old_termios) {
+		info->tty->termios->c_cflag &= ~CBAUD;
+		info->tty->termios->c_cflag |= (old_termios->c_cflag & CBAUD);
+		baud = tty_get_baud_rate(info->tty);
+		if (!baud)
+			baud = 9600;
+		if (baud == 38400 &&
+		    ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST))
+			quot = info->state->custom_divisor;
+		else {
+			if (baud == 134)
+				/* Special case since 134 is really 134.5 */
+				quot = (2*baud_base / 269);
+			else if (baud)
+				quot = baud_base / baud;
+		}
+	}
+	/* As a last resort, if the quotient is zero, default to 9600 bps */
 	if (!quot)
 		quot = baud_base / 9600;
 	info->quot = quot;
@@ -1653,7 +1672,7 @@ static int set_serial_info(struct async_struct * info,
 			return -EPERM;
 		state->flags = ((state->flags & ~ASYNC_USR_MASK) |
 			       (new_serial.flags & ASYNC_USR_MASK));
-		info->flags = ((state->flags & ~ASYNC_USR_MASK) |
+		info->flags = ((info->flags & ~ASYNC_USR_MASK) |
 			       (info->flags & ASYNC_USR_MASK));
 		state->custom_divisor = new_serial.custom_divisor;
 		goto check_and_exit;
@@ -1733,7 +1752,7 @@ check_and_exit:
 				info->tty->alt_speed = 230400;
 			if ((state->flags & ASYNC_SPD_MASK) == ASYNC_SPD_WARP)
 				info->tty->alt_speed = 460800;
-			change_speed(info);
+			change_speed(info, 0);
 		}
 	} else
 		retval = startup(info);
@@ -2003,7 +2022,6 @@ static int set_multiport_struct(struct async_struct * info,
 			       "driver!!\n");
 		}
 	}
-
 	return 0;
 }
 #endif
@@ -2150,7 +2168,7 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 		== RELEVANT_IFLAG(old_termios->c_iflag)))
 	  return;
 
-	change_speed(info);
+	change_speed(info, old_termios);
 
 	/* Handle transition to B0 status */
 	if ((old_termios->c_cflag & CBAUD) &&
@@ -2645,13 +2663,13 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 			*tty->termios = info->state->normal_termios;
 		else 
 			*tty->termios = info->state->callout_termios;
-		change_speed(info);
+		change_speed(info, 0);
 	}
 #ifdef CONFIG_SERIAL_CONSOLE
 	if (sercons.cflag && sercons.index == line) {
 		tty->termios->c_cflag = sercons.cflag;
 		sercons.cflag = 0;
-		change_speed(info);
+		change_speed(info, 0);
 	}
 #endif
 	info->session = current->session;

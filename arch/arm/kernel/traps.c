@@ -51,7 +51,7 @@ static int verify_stack_pointer (unsigned long stackptr, int size)
 	if (stackptr < 0x02048000 || stackptr + size > 0x03000000)
         	return -EFAULT;
 #else
-	if (stackptr < 0xc0000000 || stackptr + size > (unsigned long)high_memory)
+	if (stackptr < PAGE_OFFSET || stackptr + size > (unsigned long)high_memory)
 		return -EFAULT;
 #endif
 		return 0;
@@ -175,7 +175,7 @@ void die_if_kernel(char *str, struct pt_regs *regs, int err, int ret)
 		printk("(sp underflow)");
 	printk("\n");
 
-	dump_mem(cstack, sstack + 4096);
+	dump_mem(cstack - 16, sstack + 4096);
 
 	frameptr = regs->ARM_fp;
 	if (frameptr) {

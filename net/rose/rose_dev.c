@@ -56,6 +56,7 @@ int rose_rx_ip(struct sk_buff *skb, struct device *dev)
 {
 	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 
+#ifdef CONFIG_INET
 	if (!dev->start) {
 		stats->rx_errors++;
 		return 0;
@@ -73,7 +74,9 @@ int rose_rx_ip(struct sk_buff *skb, struct device *dev)
 	skb->pkt_type = PACKET_HOST;
 
 	ip_rcv(skb, skb->dev, NULL);
-
+#else
+	kfree_skb(skb);
+#endif
 	return 1;
 }
 
@@ -101,11 +104,8 @@ static int rose_rebuild_header(struct sk_buff *skb)
 	unsigned char *bp = (unsigned char *)skb->data;
 	struct sk_buff *skbn;
 
+#ifdef CONFIG_INET
 	if (arp_find(bp + 7, skb)) {
-#if 0
-		/* BUGGGG! If arp_find returned 1, skb does not exist. --ANK*/
-		kfree_skb(skb);
-#endif
 		return 1;
 	}
 
@@ -126,7 +126,7 @@ static int rose_rebuild_header(struct sk_buff *skb)
 
 	stats->tx_packets++;
 	stats->tx_bytes += skbn->len;
-
+#endif
 	return 1;
 }
 

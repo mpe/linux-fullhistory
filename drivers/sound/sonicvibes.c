@@ -47,6 +47,7 @@
  *                     Now mixer behaviour can basically be selected between
  *                     "OSS documented" and "OSS actual" behaviour
  *    31.08.98   0.7   Fix realplayer problems - dac.count issues
+ *    10.12.98   0.8   Fix drain_dac trying to wait on not yet initialized DMA
  *
  */
 
@@ -1226,7 +1227,7 @@ static int drain_dac(struct sv_state *s, int nonblock)
 	unsigned long flags;
 	int count, tmo;
 
-	if (s->dma_dac.mapped)
+	if (s->dma_dac.mapped || !s->dma_dac.ready)
 		return 0;
         current->state = TASK_INTERRUPTIBLE;
         add_wait_queue(&s->dma_dac.wait, &wait);
@@ -2277,7 +2278,7 @@ __initfunc(int init_sonicvibes(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.7 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.8 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");

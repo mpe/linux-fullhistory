@@ -35,3 +35,5 @@ extern unsigned char a5kkbd_sysrq_xlate[NR_SCANCODES];
 #define kbd_sysrq_xlate			a5kkbd_sysrq_xlate
 #define kbd_disable_irq()		disable_irq(IRQ_KEYBOARDRX)
 #define kbd_enable_irq()		enable_irq(IRQ_KEYBOARDRX)
+
+#define SYSRQ_KEY	13

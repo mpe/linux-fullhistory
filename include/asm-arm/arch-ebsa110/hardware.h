@@ -28,9 +28,8 @@
 /*
  * Mapping areas
  */
-#define IO_END			0xffffffff
 #define IO_BASE			0xe0000000
-#define IO_SIZE			(IO_END - IO_BASE)
+#define IO_SIZE			0x20000000
 #define IO_START		0xe0000000
 
 /*

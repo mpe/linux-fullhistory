@@ -6,6 +6,7 @@
  */
 
 #include <asm/ptrace.h>
+#include <asm/proc/elf.h>
 #include <asm/procinfo.h>
 
 typedef unsigned long elf_greg_t;
@@ -20,7 +21,7 @@ typedef struct { void *null; } elf_fpregset_t;
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
-#define elf_check_arch(x) ( ((x) == EM_ARM) )
+#define elf_check_arch(x) ( ((x)->e_machine == EM_ARM) && (ELF_PROC_OK((x))) )
 
 /*
  * These are used to set parameters in the core dumps.
@@ -30,7 +31,6 @@ typedef struct { void *null; } elf_fpregset_t;
 #define ELF_ARCH	EM_ARM
 
 #define USE_ELF_CORE_DUMP
-#define ELF_EXEC_PAGESIZE	4096
 
 /* This is the location that an ET_DYN program is loaded if exec'ed.  Typical
    use of this is to invoke "./ld.so someprog" to test out a new version of
@@ -64,10 +64,5 @@ typedef struct { void *null; } elf_fpregset_t;
 #define ELF_PLATFORM_SIZE 8
 extern char elf_platform[];
 #define ELF_PLATFORM	(elf_platform)
-
-#ifdef __KERNEL__
-#define SET_PERSONALITY(ex,ibcs2) \
-	current->personality = PER_LINUX_32BIT
-#endif
 
 #endif

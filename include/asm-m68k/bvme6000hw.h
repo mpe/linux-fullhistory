@@ -98,7 +98,7 @@ typedef struct {
 
 #define BVME_CONFIG_REG	0xff500003
 
-#define config_reg_ptr	(unsigned char *)BVME_CONFIG_REG
+#define config_reg_ptr	(volatile unsigned char *)BVME_CONFIG_REG
 
 #define BVME_CONFIG_SW1	0x08
 #define BVME_CONFIG_SW2	0x04
@@ -125,5 +125,25 @@ typedef struct {
 #define BVME_IRQ_SCCA_STAT		0x4a
 #define BVME_IRQ_SCCA_RX		0x4c
 #define BVME_IRQ_SCCA_SPCOND		0x4e
+
+/* Address control registers */
+
+#define BVME_ACR_A32VBA		0xff400003
+#define BVME_ACR_A32MSK		0xff410003
+#define BVME_ACR_A24VBA		0xff420003
+#define BVME_ACR_A24MSK		0xff430003
+#define BVME_ACR_A16VBA		0xff440003
+#define BVME_ACR_A32LBA		0xff450003
+#define BVME_ACR_A24LBA		0xff460003
+#define BVME_ACR_ADDRCTL	0xff470003
+
+#define bvme_acr_a32vba		*(volatile unsigned char *)BVME_ACR_A32VBA
+#define bvme_acr_a32msk		*(volatile unsigned char *)BVME_ACR_A32MSK
+#define bvme_acr_a24vba		*(volatile unsigned char *)BVME_ACR_A24VBA
+#define bvme_acr_a24msk		*(volatile unsigned char *)BVME_ACR_A24MSK
+#define bvme_acr_a16vba		*(volatile unsigned char *)BVME_ACR_A16VBA
+#define bvme_acr_a32lba		*(volatile unsigned char *)BVME_ACR_A32LBA
+#define bvme_acr_a24lba		*(volatile unsigned char *)BVME_ACR_A24LBA
+#define bvme_acr_addrctl	*(volatile unsigned char *)BVME_ACR_ADDRCTL
 
 #endif

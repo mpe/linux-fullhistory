@@ -13,6 +13,19 @@ L_TARGET := acorn-char.a
 M_OBJS   :=
 L_OBJS   :=
 
+ifeq ($(MACHINE),rpc)
+  MOUSE_OBJS += mouse_rpc.o
+  L_OBJS += keyb_ps2.o
+endif
+
+ifeq ($(CONFIG_MOUSE),y)
+  LX_OBJS += $(MOUSE_OBJS)
+else
+  ifeq ($(CONFIG_MOUSE),m)
+    MX_OBJS += $(MOUSE_OBJS)
+  endif
+endif
+
 ifeq ($(CONFIG_ATOMWIDE_SERIAL),y)
   L_OBJS += serial-atomwide.o
 else

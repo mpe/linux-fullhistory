@@ -7,6 +7,7 @@
  *   22-08-1998	RMK	Restructured IRQ routines
  */
 
+#include <asm/dec21285.h>
 #include <asm/irq.h>
 
 /*
@@ -39,7 +40,7 @@ static void vnc_mask_csr_irq(unsigned int irq)
 
 static void vnc_unmask_csr_irq(unsigned int irq)
 {
-	*CSR_IRQ_DISABLE = fb_irq_mask[irq];
+	*CSR_IRQ_ENABLE = fb_irq_mask[irq];
 }
 
 static void vnc_mask_pic_lo_irq(unsigned int irq)
@@ -49,11 +50,19 @@ static void vnc_mask_pic_lo_irq(unsigned int irq)
 	outb(inb(PIC_MASK_LO) | mask, PIC_MASK_LO);
 }
 
-static void vnc_unmask_pic_lo_irq(unsigned int irq)
+static void vnc_mask_ack_pic_lo_irq(unsigned int irq)
 {
 	unsigned int mask = 1 << (irq & 7);
 
-	outb(inb(PIC_MASK_LO) & ~mask, PIC_MASK_LO);
+	outb(inb(PIC_MASK_LO) | mask, PIC_MASK_LO);
+	outb(0x20, PIC_LO);
+}
+
+static void vnc_unmask_pic_lo_irq(unsigned int irq)
+{
+	unsigned int mask = ~(1 << (irq & 7));
+
+	outb(inb(PIC_MASK_LO) & mask, PIC_MASK_LO);
 }
 
 static void vnc_mask_pic_hi_irq(unsigned int irq)
@@ -63,12 +72,27 @@ static void vnc_mask_pic_hi_irq(unsigned int irq)
 	outb(inb(PIC_MASK_HI) | mask, PIC_MASK_HI);
 }
 
+static void vnc_mask_ack_pic_hi_irq(unsigned int irq)
+{
+	unsigned int mask = 1 << (irq & 7);
+
+	outb(inb(PIC_MASK_HI) | mask, PIC_MASK_HI);
+	outb(0x62, PIC_LO);
+	outb(0x20, PIC_HI);
+}
+
 static void vnc_unmask_pic_hi_irq(unsigned int irq)
 {
 	unsigned int mask = 1 << (irq & 7);
 
 	outb(inb(PIC_MASK_HI) & ~mask, PIC_MASK_HI);
 }
+
+static void no_action(int irq, void *dev_id, struct pt_regs *regs)
+{
+}
+
+static struct irqaction irq_cascade = { no_action, 0, 0, "cascade", NULL, NULL };
 
 static __inline__ void irq_init_irq(void)
 {
@@ -97,13 +121,36 @@ static __inline__ void irq_init_irq(void)
 			irq_desc[irq].mask	= vnc_mask_csr_irq;
 			irq_desc[irq].unmask	= vnc_unmask_csr_irq;
 		} else if (irq < 24) {
-			irq_desc[irq].mask_ack	= vnc_mask_pic_lo_irq;
+irq_desc[irq].probe_ok = 0;
+			irq_desc[irq].mask_ack	= vnc_mask_ack_pic_lo_irq;
 			irq_desc[irq].mask	= vnc_mask_pic_lo_irq;
 			irq_desc[irq].unmask	= vnc_unmask_pic_lo_irq;
 		} else {
-			irq_desc[irq].mask_ack	= vnc_mask_pic_hi_irq;
+irq_desc[irq].probe_ok = 0;
+			irq_desc[irq].mask_ack	= vnc_mask_ack_pic_hi_irq;
 			irq_desc[irq].mask	= vnc_mask_pic_hi_irq;
 			irq_desc[irq].unmask	= vnc_unmask_pic_hi_irq;
 		}
 	}
+
+	irq_desc[0].probe_ok = 0;
+	irq_desc[IRQ_SOFTIRQ].probe_ok = 0;
+	irq_desc[IRQ_CONRX].probe_ok = 0;
+	irq_desc[IRQ_CONTX].probe_ok = 0;
+	irq_desc[IRQ_TIMER0].probe_ok = 0;
+	irq_desc[IRQ_TIMER1].probe_ok = 0;
+	irq_desc[IRQ_TIMER2].probe_ok = 0;
+	irq_desc[IRQ_WATCHDOG].probe_ok = 0;
+	irq_desc[IRQ_DMA1].probe_ok = 0;
+	irq_desc[13].probe_ok = 0;
+	irq_desc[14].probe_ok = 0;
+	irq_desc[IRQ_PCI_ERR].probe_ok = 0;
+	irq_desc[IRQ_PIC_HI].probe_ok = 0;
+	irq_desc[29].probe_ok = 0;
+	irq_desc[31].probe_ok = 0;
+
+	outb(0xff, PIC_MASK_LO);
+	outb(0xff, PIC_MASK_HI);
+
+	setup_arm_irq(IRQ_PIC_HI, &irq_cascade);
 }

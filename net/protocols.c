@@ -57,6 +57,10 @@ extern void packet_proto_init(struct net_proto *pro);
 #endif
 #endif
 
+#ifdef CONFIG_IRDA
+#include <net/irda/irdacall.h>
+#endif
+
 #if defined(CONFIG_DECNET)
 #include <net/decnet_call.h>
 #endif
@@ -159,6 +163,10 @@ struct net_proto protocols[] = {
 
 #ifdef CONFIG_ECONET
   { "Econet",	econet_proto_init },			/* Acorn Econet */
+#endif
+
+#ifdef CONFIG_IRDA
+  { "IrDA",     irda_proto_init },                     /* IrDA protocols */
 #endif
 
   { NULL,	NULL		}			/* End marker			*/

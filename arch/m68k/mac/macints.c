@@ -163,7 +163,7 @@ static unsigned long nubus_irqs[8];
 static unsigned long *mac_irqs[8];
 
 /*
- * VIA2 / RBV register base pointers
+ * VIA/RBV/OSS/PSC register base pointers
  */
 
 volatile unsigned char *via2_regp=(volatile unsigned char *)VIA2_BAS;
@@ -247,7 +247,7 @@ void mac_init_IRQ(void)
 
 		/* yes, this is messy - the IIfx deserves a class of his own */
 		if (macintosh_config->ident == MAC_MODEL_IIFX) {
-			/* no real VIA2, the OSS seems _very_different */	
+			/* no real VIA2, the OSS seems _very_ different */	
 			via2_is_oss = 1;
 			/* IIfx has OSS, at a different base address than RBV */
 			rbv_regp = (unsigned char *) OSS_BAS;
@@ -459,7 +459,7 @@ int mac_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_re
 	if (irq == IRQ_IDX(IRQ_MAC_SCSI)) {
 		/*
 		 * Set vPCR for SCSI interrupts. (what about RBV here?)
-		 * 980429 MS: RBV is ok, OSS seems to be differentt
+		 * 980429 MS: RBV is ok, OSS seems to be different
 		 */
 		if (!via2_is_oss)
 			if (macintosh_config->scsi_type == MAC_SCSI_OLD) {
@@ -602,7 +602,10 @@ void mac_disable_irq (unsigned int irq)
 
 /*
  * In opposite to {en,dis}able_irq, requests between turn{off,on}_irq are not
- * "stored". This is done with the VIA interrupt enable register
+ * "stored". This is done with the VIA interrupt enable register on VIAs.
+ *
+ * Note: Using these functions on non-VIA/OSS/PSC ints will panic, or at least 
+ * have undesired side effects.
  */
 
 void mac_turnon_irq( unsigned int irq )
@@ -615,14 +618,14 @@ void mac_turnon_irq( unsigned int irq )
 	if (!via) 
 		return;
 
-	if (srcidx == SRC_VIA2 && via2_is_rbv)
+	if (srcidx == SRC_VIA2 && via2_is_rbv)		/* RBV as VIA2 */
 	        via_write(via, rIER, via_read(via, rIER)|0x80|(1<<(irqidx)));
-	else if (srcidx == SRC_VIA2 && via2_is_oss)
+	else if (srcidx == SRC_VIA2 && via2_is_oss)	/* OSS */
 		via_write(oss_regp, oss_map[irqidx]+8, 2);
-	else if (srcidx > SRC_VIA2)
+	else if (srcidx > SRC_VIA2)			/* hope AVs have VIA2 */
 	        via_write(via, (0x104 + 0x10*srcidx), 
 	        	via_read(via, (0x104 + 0x10*srcidx))|0x80|(1<<(irqidx)));
-	else
+	else						/* VIA1+2 */
 	        via_write(via, vIER, via_read(via, vIER)|0x80|(1<<(irqidx)));
 
 }
@@ -637,9 +640,9 @@ void mac_turnoff_irq( unsigned int irq )
 	if (!via) 
 		return;
 
-	if (srcidx == SRC_VIA2 && via2_is_rbv)
+	if (srcidx == SRC_VIA2 && via2_is_rbv)		/* RBV as VIA2 */
 		via_write(via, rIER, (via_read(via, rIER)&(1<<irqidx)));
-	else if (srcidx == SRC_VIA2 && via2_is_oss)
+	else if (srcidx == SRC_VIA2 && via2_is_oss)	/* OSS */
 		via_write(oss_regp, oss_map[irqidx]+8, 0);
 	/*
 	 *	VIA2 is fixed. The stuff above VIA2 is for later
@@ -648,7 +651,7 @@ void mac_turnoff_irq( unsigned int irq )
 	else if (srcidx > SRC_VIA2)
 	        via_write(via, (0x104 + 0x10*srcidx), 
 	        	via_read(via, (0x104 + 0x10*srcidx))|(1<<(irqidx)));
-	else
+	else						/* VIA1+2 */
 		via_write(via, vIER, (via_read(via, vIER)&(1<<irqidx)));
 }
 
@@ -785,7 +788,7 @@ void via_scsi_clear(void)
 void mac_default_handler(int irq, void *dev_id, struct pt_regs *regs)
 {
 #ifdef DEBUG_VIA
-	printk("Unexpected IRQ %d\n", irq);
+	printk("Unexpected IRQ %d on device %p\n", irq, dev_id);
 #endif
 }
 
@@ -1310,7 +1313,7 @@ void psc_irq(int irq, void *dev_id, struct pt_regs *regs)
 	if(events==0)
 	{
 #ifdef DEBUG_VIA
-		printk("rbv_irq: nothing pending, flags %x mask %x!\n",
+		printk("psc_irq: nothing pending, flags %x mask %x!\n",
 			via_read(via, pIFR), via_read(via,pIER));
 #endif
 		mac_irqs[srcidx][7]++;
@@ -1319,7 +1322,7 @@ void psc_irq(int irq, void *dev_id, struct pt_regs *regs)
 
 #ifdef DEBUG_VIA	
 	/*
-	 * limited verbosity for RBV interrupts (add more if needed)
+	 * limited verbosity for PSC interrupts (add more if needed)
 	 */
 	if ( srcidx == 1 && events != 1<<3 && events != 1<<1 )		/* SCSI IRQ */
 		printk("psc_irq: irq %d srcidx+1 %d events %x !\n", irq, srcidx+1, events);
@@ -1506,6 +1509,10 @@ static void via_do_nubus(int slot, void *via, struct pt_regs *regs)
 		else
 			map = ~via_read(via2_regp, vBufA);
 		
+#ifdef DEBUG_NUBUS_INT
+		printk("nubus_irq: map %x mask %x\n", map, nubus_active);
+#endif
+
 		if( (map = (map&nubus_active)) ==0 ) {
 #ifdef DEBUG_NUBUS_INT
 			printk("nubus_irq: nothing pending, map %x mask %x\n", 
@@ -1514,9 +1521,6 @@ static void via_do_nubus(int slot, void *via, struct pt_regs *regs)
 			nubus_irqs[7]++;
 			break;
 		}
-#ifdef DEBUG_NUBUS_INT
-		printk("nubus_irq: map %x mask %x\n", map, nubus_active);
-#endif
 
 		if(ct++>2)
 		{

@@ -2,9 +2,10 @@
  * linux/include/asm-arm/arch-ebsa285/irqs.h
  *
  * Copyright (C) 1998 Russell King
+ * Copyright (C) 1998 Phil Blundell
  */
 
-#define NR_IRQS			32
+#define NR_IRQS			48
 
 /*
  * This is a list of all interrupts that the 21285
@@ -39,10 +40,18 @@
 #define IRQ_PCITARGETABORT	30
 #define IRQ_PCIPARITY		31
 
+/* IRQs 32-47 are the 16 ISA interrupts on a CATS board.  */
+#define IRQ_ISA_PIC	IRQ_IN2
+#define IRQ_IS_ISA(_x)	(((_x) >= 32) && ((_x) <= 47))
+#define IRQ_ISA(_x)	((_x) + 0x20)
+#define IRQ_ISA_CASCADE		IRQ_ISA(2)
+
 /*
  * Now map them to the Linux interrupts
  */
 #define IRQ_TIMER		IRQ_TIMER1
+#define IRQ_FLOPPYDISK		IRQ_ISA(6)
+#define IRQ_HARDDISK		IRQ_ISA(14)
+#define IRQ_HARDDISK_SECONDARY	IRQ_ISA(15)
 
-#define irq_cannonicalize(i)	(i)
-
+#define irq_cannonicalize(_i)	(((_i) == IRQ_ISA_CASCADE) ? IRQ_ISA(9) : _i)

@@ -16,7 +16,7 @@
 
 #include "dma.h"
 
-static struct fiq_handler fh = { "floppydma", NULL };
+static struct fiq_handler fh = { NULL, "floppydma", NULL, NULL };
 
 int arch_request_dma(dmach_t channel, dma_t *dma, const char *dev_id)
 {

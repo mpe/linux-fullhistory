@@ -359,7 +359,7 @@ void alloc586(struct device *dev)
 	DELAY(2);
 
 	p->scp = (struct scp_struct *) (p->base + SCP_DEFAULT_ADDRESS);
-	p->scb = (struct scb_struct *) (dev->mem_start);
+	p->scb = (struct scb_struct *) phys_to_virt(dev->mem_start);
 	p->iscp = (struct iscp_struct *) ((char *) p->scp - sizeof(struct iscp_struct));
 
 	memset((char *) p->iscp, 0, sizeof(struct iscp_struct));
@@ -523,7 +523,7 @@ __initfunc(int elmc_probe(struct device *dev))
 	   Which we don't care much about here.  We'll just tell Linux that
 	   we're using 16K.  MCA won't permit adress space conflicts caused
 	   by not mapping the other 8K. */
-	dev->mem_start = phys_to_virt(shm_table[(status & ELMC_STATUS_MEMORY_SELECT) >> 3]);
+	dev->mem_start = shm_table[(status & ELMC_STATUS_MEMORY_SELECT) >> 3];
 
 	/* We're using MCA, so it's a given that the information about memory
 	   size is correct.  The Crynwr drivers do something like this. */
@@ -531,7 +531,7 @@ __initfunc(int elmc_probe(struct device *dev))
 	elmc_id_reset586();	/* seems like a good idea before checking it... */
 
 	size = 0x4000;		/* check for 16K mem */
-	if (!check586(dev, (char *) dev->mem_start, size)) {
+	if (!check586(dev, (char *) phys_to_virt(dev->mem_start), size)) {
 		printk("%s: memprobe, Can't find memory at 0x%lx!\n", dev->name,
 		       dev->mem_start);
 		release_region(dev->base_addr, ELMC_IO_EXTENT);
@@ -539,7 +539,7 @@ __initfunc(int elmc_probe(struct device *dev))
 	}
 	dev->mem_end = dev->mem_start + size;	/* set mem_end showed by 'ifconfig' */
 
-	((struct priv *) (dev->priv))->base = dev->mem_start + size - 0x01000000;
+	((struct priv *) (dev->priv))->base = phys_to_virt(dev->mem_start + size - 0x01000000);
 	alloc586(dev);
 
 	elmc_id_reset586();	/* make sure it doesn't generate spurious ints */
@@ -550,8 +550,7 @@ __initfunc(int elmc_probe(struct device *dev))
 	/* dump all the assorted information */
 	printk("%s: IRQ %d, %sternal xcvr, memory %#lx-%#lx.\n", dev->name,
 	       dev->irq, dev->if_port ? "ex" : "in", 
-	       virt_to_phys(dev->mem_start), 
-	       virt_to_phys(dev->mem_end - 1));
+	       dev->mem_start, dev->mem_end - 1);
 
 	/* The hardware address for the 3c523 is stored in the first six
 	   bytes of the IO address. */
@@ -628,7 +627,7 @@ static int init586(struct device *dev)
 
 	s = jiffies;		/* warning: only active with interrupts on !! */
 	while (!(cfg_cmd->cmd_status & STAT_COMPL)) {
-		if (jiffies - s > 30)
+		if (jiffies - s > 30*HZ/100)
 			break;
 	}
 
@@ -654,7 +653,7 @@ static int init586(struct device *dev)
 
 	s = jiffies;
 	while (!(ias_cmd->cmd_status & STAT_COMPL)) {
-		if (jiffies - s > 30)
+		if (jiffies - s > 30*HZ/100)
 			break;
 	}
 
@@ -679,7 +678,7 @@ static int init586(struct device *dev)
 
 	s = jiffies;
 	while (!(tdr_cmd->cmd_status & STAT_COMPL)) {
-		if (jiffies - s > 30) {
+		if (jiffies - s > 30*HZ/100) {
 			printk("%s: %d Problems while running the TDR.\n", dev->name, __LINE__);
 			result = 1;
 			break;
@@ -768,7 +767,7 @@ static int init586(struct device *dev)
 			elmc_id_attn586();
 			s = jiffies;
 			while (!(mc_cmd->cmd_status & STAT_COMPL)) {
-				if (jiffies - s > 30)
+				if (jiffies - s > 30*HZ/100)
 					break;
 			}
 			if (!(mc_cmd->cmd_status & STAT_COMPL)) {

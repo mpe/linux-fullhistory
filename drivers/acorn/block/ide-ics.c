@@ -27,6 +27,7 @@
 
 #define ICS_IDENT_OFFSET		0x8a0
 
+#define ICS_ARCIN_V5_INTRSTAT		0x000
 #define ICS_ARCIN_V5_INTROFFSET		0x001
 #define ICS_ARCIN_V5_IDEOFFSET		0xa00
 #define ICS_ARCIN_V5_IDEALTOFFSET	0xae0
@@ -34,9 +35,11 @@
 
 #define ICS_ARCIN_V6_IDEOFFSET_1	0x800
 #define ICS_ARCIN_V6_INTROFFSET_1	0x880
+#define ICS_ARCIN_V6_INTRSTAT_1		0x8a4
 #define ICS_ARCIN_V6_IDEALTOFFSET_1	0x8e0
 #define ICS_ARCIN_V6_IDEOFFSET_2	0xc00
 #define ICS_ARCIN_V6_INTROFFSET_2	0xc80
+#define ICS_ARCIN_V6_INTRSTAT_2		0xca4
 #define ICS_ARCIN_V6_IDEALTOFFSET_2	0xce0
 #define ICS_ARCIN_V6_IDESTEPPING	4
 
@@ -199,6 +202,8 @@ static inline void icside_register (struct expansion_card *ec, int index)
 
 	case ics_if_arcin_v5:
 		port = ecard_address (ec, ECARD_MEMC, 0);
+		ec->irqaddr = ioaddr(port + ICS_ARCIN_V5_INTRSTAT);
+		ec->irqmask = 1;
 		ec->irq_data = (void *)port;
 		ec->ops = (expansioncard_ops_t *)&icside_ops_arcin_v5;
 
@@ -210,10 +215,13 @@ static inline void icside_register (struct expansion_card *ec, int index)
 							port + ICS_ARCIN_V5_IDEALTOFFSET,
 							ICS_ARCIN_V5_IDESTEPPING,
 							ec->irq);
+		result[index][1] = -1;
 		break;
 
 	case ics_if_arcin_v6:
 		port = ecard_address (ec, ECARD_IOC, ECARD_FAST);
+		ec->irqaddr = ioaddr(port + ICS_ARCIN_V6_INTRSTAT_1);
+		ec->irqmask = 1;
 		ec->irq_data = (void *)port;
 		ec->ops = (expansioncard_ops_t *)&icside_ops_arcin_v6;
 

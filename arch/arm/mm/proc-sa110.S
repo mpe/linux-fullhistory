@@ -10,6 +10,11 @@
 #include <asm/assembler.h>
 #include "../lib/constants.h"
 
+/* This is the maximum size of an area which will be flushed.  If the area
+ * is larger than this, then we flush the whole cache
+ */
+#define MAX_AREA_SIZE	32768
+
 		.data
 Lclean_switch:	.long	0
 		.text
@@ -52,7 +57,7 @@ _sa110_flush_cache_all_r2:
 		.align	5
 _sa110_flush_cache_area:
 		sub	r3, r1, r0
-		cmp	r3, #32768
+		cmp	r3, #MAX_AREA_SIZE
 		bgt	_sa110_flush_cache_all_r2
 1:		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
 		mcr	p15, 0, r0, c7, c6, 1		@ flush D entry
@@ -79,16 +84,17 @@ _sa110_flush_cache_area:
 		.align	5
 _sa110_cache_wback_area:
 		sub	r3, r1, r0
-		cmp	r3, #32768
-		movgt	r2, #0
-		bgt	_sa110_flush_cache_all
+		cmp	r3, #MAX_AREA_SIZE
+		mov	r2, #0
+		bgt	_sa110_flush_cache_all_r2
+		bic	r0, r0, #31
 1:		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
 		add	r0, r0, #32
 		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
 		add	r0, r0, #32
 		cmp	r0, r1
 		blt	1b
-		mcr	p15, 0, r0, c7, c10, 4		@ drain WB
+		mcr	p15, 0, r2, c7, c10, 4		@ drain WB
 		mov	pc, lr
 
 /*

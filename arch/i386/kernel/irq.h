@@ -37,7 +37,8 @@ typedef struct {
 	unsigned int status;			/* IRQ status - IRQ_INPROGRESS, IRQ_DISABLED */
 	struct hw_interrupt_type *handler;	/* handle/enable/disable functions */
 	struct irqaction *action;		/* IRQ action list */
-	unsigned int unused[3];
+	unsigned int depth;			/* Disable depth for nested irq disables */
+	unsigned int unused[2];
 } irq_desc_t;
 
 #define IRQ0_TRAP_VECTOR 0x51

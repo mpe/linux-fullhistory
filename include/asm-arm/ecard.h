@@ -31,6 +31,9 @@
 #define MANU_ATOMWIDE		0x0017
 #define PROD_ATOMWIDE_3PSERIAL		0x0090
 
+#define MANU_IRLAM_INSTRUMENTS	0x001f
+#define MANU_IRLAM_INSTRUMENTS_ETHERN	0x5678
+
 #define MANU_OAK		0x0021
 #define PROD_OAK_SCSI			0x0058
 
@@ -75,50 +78,47 @@
 
 #define MAX_ECARDS	8
 
-/* Type of card's address space */
-typedef enum {
+typedef enum {				/* Cards address space		*/
 	ECARD_IOC,
 	ECARD_MEMC,
-	ECARD_DEBI
+	ECARD_EASI
 } card_type_t;
 
-/* Speed of card for ECARD_IOC address space */
-typedef enum {
+typedef enum {				/* Speed for ECARD_IOC space	*/
 	ECARD_SLOW	 = 0,
 	ECARD_MEDIUM	 = 1,
 	ECARD_FAST	 = 2,
 	ECARD_SYNC	 = 3
 } card_speed_t;
 
-/* Card ID structure */
-typedef struct  {
+typedef struct  {			/* Card ID structure		*/
 	unsigned short manufacturer;
 	unsigned short product;
 } card_ids;
 
-/* External view of card ID information */
-struct in_ecld {
-	unsigned short	product;
-	unsigned short	manufacturer;
-	unsigned char	ecld;
-	unsigned char	country;
-	unsigned char	fiqmask;
-	unsigned char	irqmask;
-	unsigned long	fiqaddr;
-	unsigned long	irqaddr;
+struct in_ecid {			/* Packed card ID information	*/
+	unsigned short	product;	/* Product code			*/
+	unsigned short	manufacturer;	/* Manufacturer code		*/
+	unsigned char	id:4;		/* Simple ID			*/
+	unsigned char	cd:1;		/* Chunk dir present		*/
+	unsigned char	is:1;		/* Interrupt status pointers	*/
+	unsigned char	w:2;		/* Width			*/
+	unsigned char	country;	/* Country			*/
+	unsigned char	irqmask;	/* IRQ mask			*/
+	unsigned char	fiqmask;	/* FIQ mask			*/
+	unsigned long	irqoff;		/* IRQ offset			*/
+	unsigned long	fiqoff;		/* FIQ offset			*/
 };
 
 typedef struct expansion_card ecard_t;
+typedef unsigned long *loader_t;
 
-/* Card handler routines */
-typedef struct {
+typedef struct {			/* Card handler routines	*/
 	void (*irqenable)(ecard_t *ec, int irqnr);
 	void (*irqdisable)(ecard_t *ec, int irqnr);
 	void (*fiqenable)(ecard_t *ec, int fiqnr);
 	void (*fiqdisable)(ecard_t *ec, int fiqnr);
 } expansioncard_ops_t;
-
-typedef unsigned long *loader_t;
 
 /*
  * This contains all the info needed on an expansion card
@@ -131,17 +131,19 @@ struct expansion_card {
 	unsigned char		fiqmask;	/* FIQ mask			*/
 	unsigned char  		claimed;	/* Card claimed?		*/
 
-	CONST unsigned char	slot_no;	/* Slot number			*/
-	CONST unsigned char	dma;		/* DMA number (for request_dma)	*/
-	CONST unsigned char	irq;		/* IRQ number (for request_irq)	*/
-	CONST unsigned char	fiq;		/* FIQ number (for request_irq)	*/
-
-	CONST struct in_ecld	cld;		/* Card Identification		*/
 	void			*irq_data;	/* Data for use for IRQ by card	*/
 	void			*fiq_data;	/* Data for use for FIQ by card	*/
 	expansioncard_ops_t	*ops;		/* Enable/Disable Ops for card	*/
 
+	CONST unsigned char	slot_no;	/* Slot number			*/
+	CONST unsigned char	dma;		/* DMA number (for request_dma)	*/
+	CONST unsigned char	irq;		/* IRQ number (for request_irq)	*/
+	CONST unsigned char	fiq;		/* FIQ number (for request_irq)	*/
+	CONST card_type_t	type;		/* Type of card			*/
+	CONST struct in_ecid	cid;		/* Card Identification		*/
+
 	/* Private internal data */
+	const char		*card_desc;	/* Card description		*/
 	CONST unsigned int	podaddr;	/* Base Linux address for card	*/
 	CONST loader_t		loader;		/* loader program */
 };
@@ -170,9 +172,9 @@ struct in_chunk_dir {
 extern void ecard_startfind (void);
 
 /*
- * Find an expansion card with the correct cld, product and manufacturer code
+ * Find an expansion card with the correct cid, product and manufacturer code
  */
-extern struct expansion_card *ecard_find (int cld, const card_ids *ids);
+extern struct expansion_card *ecard_find (int cid, const card_ids *ids);
  
 /*
  * Read a chunk from an expansion card
@@ -193,25 +195,31 @@ extern unsigned int ecard_address (struct expansion_card *ec, card_type_t card_t
  *
  * External expansion card header as read from the card
  */
-struct ex_ecld {
-	unsigned char  r_ecld;
-	unsigned char  r_reserved[2];
-	unsigned char  r_product[2];
-	unsigned char  r_manufacturer[2];
-	unsigned char  r_country;
-	         long  r_fiqs;
-	         long  r_irqs;
-#define e_ecld(x)	((x)->r_ecld)
-#define e_cd(x)		((x)->r_reserved[0] & 1)
-#define e_is(x)		((x)->r_reserved[0] & 2)
-#define e_w(x)		(((x)->r_reserved[0] & 12)>>2)
-#define e_prod(x)	((x)->r_product[0]|((x)->r_product[1]<<8))
-#define e_manu(x)	((x)->r_manufacturer[0]|((x)->r_manufacturer[1]<<8))
-#define e_country(x)	((x)->r_country)
-#define e_fiqmask(x)	((x)->r_fiqs & 0xff)
-#define e_fiqaddr(x)	((x)->r_fiqs >> 8)
-#define e_irqmask(x)	((x)->r_irqs & 0xff)
-#define e_irqaddr(x)	((x)->r_irqs >> 8)
+struct ex_ecid {
+	unsigned char	r_irq:1;
+	unsigned char	r_zero:1;
+	unsigned char	r_fiq:1;
+	unsigned char	r_id:4;
+	unsigned char	r_a:1;
+
+	unsigned char	r_cd:1;
+	unsigned char	r_is:1;
+	unsigned char	r_w:2;
+	unsigned char	r_r1:4;
+
+	unsigned char	r_r2:8;
+
+	unsigned char	r_prod[2];
+
+	unsigned char	r_manu[2];
+
+	unsigned char	r_country;
+
+	unsigned char	r_irqmask;
+	unsigned char	r_irqoff[3];
+
+	unsigned char	r_fiqmask;
+	unsigned char	r_fiqoff[3];
 };
 
 /*

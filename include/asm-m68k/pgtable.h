@@ -428,7 +428,7 @@ extern pte_t * __bad_pagetable(void);
 #define mk_pte(page, pgprot) \
 ({ pte_t __pte; pte_val(__pte) = virt_to_phys((void *)page) + pgprot_val(pgprot); __pte; })
 #define mk_pte_phys(physpage, pgprot) \
-({ pte_t __pte; pte_val(__pte) = virt_to_phys((void *)physpage) + pgprot_val(pgprot); __pte; })
+({ pte_t __pte; pte_val(__pte) = (unsigned long)physpage + pgprot_val(pgprot); __pte; })
 
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }

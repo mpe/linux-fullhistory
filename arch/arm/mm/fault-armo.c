@@ -174,7 +174,7 @@ bad_area:
 	}
 
 	/* Are we prepared to handle this kernel fault?  */
-	if ((fixup = search_exception_table(regs->ARM_pc)) != 0) {
+	if ((fixup = search_exception_table(instruction_pointer(regs))) != 0) {
 		printk(KERN_DEBUG "%s: Exception at [<%lx>] addr=%lx (fixup: %lx)\n",
 			tsk->comm, regs->ARM_pc, addr, fixup);
 		regs->ARM_pc = fixup;

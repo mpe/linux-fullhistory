@@ -3,7 +3,10 @@
 
 #include <asm/types.h>
 
-#ifdef __GNUC__
+#if defined(__GNUC__) && __GNUC__ == 2 && __GNUC_MINOR__ < 80
+
+/* Recent versions of GCC can do as well or better than this
+   on their own - we shouldn't interfere.  */
 
 static __inline__ __const__ __u32 ___arch__swab32(__u32 x)
 {

@@ -39,8 +39,10 @@
 #include <asm/byteorder.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/uaccess.h>
 
 #include "rrunner.h"
+
 
 /*
  * Implementation notes:
@@ -57,7 +59,7 @@
  * stack will need to know about I/O vectors or something similar.
  */
 
-static const char *version = "rrunner.c: v0.06 09/02/98  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
+static const char *version = "rrunner.c: v0.09 12/14/98  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
 
 static unsigned int read_eeprom(struct rr_private *rrpriv,
 				unsigned long offset,
@@ -67,6 +69,14 @@ static u32 read_eeprom_word(struct rr_private *rrpriv,
 			    void * offset);
 static int rr_load_firmware(struct device *dev);
 
+
+/*
+ * These are checked at init time to see if they are at least 256KB
+ * and increased to 256KB if they are not. This is done to avoid ending
+ * up with socket buffers smaller than the MTU size,
+ */
+extern __u32 sysctl_wmem_max;
+extern __u32 sysctl_rmem_max;
 
 __initfunc(int rr_hippi_probe (struct device *dev))
 {
@@ -115,6 +125,9 @@ __initfunc(int rr_hippi_probe (struct device *dev))
 
 		if (dev == NULL)
 			break;
+
+		if (!dev->priv)
+			dev->priv = kmalloc(sizeof(*rrpriv), GFP_KERNEL);
 
 		rrpriv = (struct rr_private *)dev->priv;
 
@@ -194,12 +207,8 @@ __initfunc(int rr_hippi_probe (struct device *dev))
 		rr_init(dev);
 
 		boards_found++;
-
-		/*
-		 * This is bollocks, but we need to tell the net-init
-		 * code that it shall go for the next device.
-		 */
 		dev->base_addr = 0;
+		dev = NULL;
 	}
 
 	/*
@@ -347,6 +356,7 @@ static int rr_reset(struct device *dev)
 	return 0;
 }
 
+
 /*
  * Read a string from the EEPROM.
  */
@@ -356,18 +366,21 @@ static unsigned int read_eeprom(struct rr_private *rrpriv,
 				unsigned long length)
 {
 	struct rr_regs *regs = rrpriv->regs;
-	u32 misc, io, i;
+	u32 misc, io, host, i;
 
 	io = regs->ExtIo;
 	regs->ExtIo = 0;
 	misc = regs->LocalCtrl;
 	regs->LocalCtrl = 0;
+	host = regs->HostCtrl;
+	regs->HostCtrl |= HALT_NIC;
 
 	for (i = 0; i < length; i++){
 		regs->WinBase = (EEPROM_BASE + ((offset+i) << 3));
 		buf[i] = (regs->WinData >> 24) & 0xff;
 	}
 
+	regs->HostCtrl = host;
 	regs->LocalCtrl = misc;
 	regs->ExtIo = io;
 
@@ -391,6 +404,58 @@ static u32 read_eeprom_word(struct rr_private *rrpriv,
 }
 
 
+/*
+ * Write a string to the EEPROM.
+ *
+ * This is only called when the firmware is not running.
+ */
+static unsigned int write_eeprom(struct rr_private *rrpriv,
+				unsigned long offset,
+				unsigned char *buf,
+				unsigned long length)
+{
+	struct rr_regs *regs = rrpriv->regs;
+	u32 misc, io, data, i, j, ready, error = 0;
+
+	io = regs->ExtIo;
+	regs->ExtIo = 0;
+	misc = regs->LocalCtrl;
+	regs->LocalCtrl = ENABLE_EEPROM_WRITE;
+
+	for (i = 0; i < length; i++){
+		regs->WinBase = (EEPROM_BASE + ((offset+i) << 3));
+		data = buf[i] << 24;
+		/*
+		 * Only try to write the data if it is not the same
+		 * value already.
+		 */
+		if ((regs->WinData & 0xff000000) != data){
+			regs->WinData = data;
+			ready = 0;
+			j = 0;
+			mb();
+			while(!ready){
+				udelay(1000);
+				if ((regs->WinData & 0xff000000) == data)
+					ready = 1;
+				if (j++ > 5000){
+					printk("data mismatch: %08x, "
+					       "WinData %08x\n", data,
+					       regs->WinData);
+					ready = 1;
+					error = 1;
+				}
+			}
+		}
+	}
+
+	regs->LocalCtrl = misc;
+	regs->ExtIo = io;
+
+	return error;
+}
+
+
 __initfunc(static int rr_init(struct device *dev))
 {
 	struct rr_private *rrpriv;
@@ -404,8 +469,13 @@ __initfunc(static int rr_init(struct device *dev))
 	if (rev > 0x00020024)
 		printk("  Firmware revision: %i.%i.%i\n", (rev >> 16),
 		       ((rev >> 8) & 0xff), (rev & 0xff));
-	else{
-		printk("  Firmware revision too old: %i.%i.%i, please upgrade to 2.0.37 or later.\n",
+	else if (rev >= 0x00020000) {
+		printk("  Firmware revision: %i.%i.%i (2.0.37 or "
+		       "later is recommended)\n", (rev >> 16),
+		       ((rev >> 8) & 0xff), (rev & 0xff));
+	}else{
+		printk("  Firmware revision too old: %i.%i.%i, please "
+		       "upgrade to 2.0.37 or later.\n",
 		       (rev >> 16), ((rev >> 8) & 0xff), (rev & 0xff));
 		return -EFAULT;
 		
@@ -415,6 +485,18 @@ __initfunc(static int rr_init(struct device *dev))
 
 	sram_size = read_eeprom_word(rrpriv, (void *)8);
 	printk("  SRAM size 0x%06x\n", sram_size);
+
+	if (sysctl_rmem_max < 262144){
+		printk("  Receive socket buffer limit too low (%i), "
+		       "setting to 262144\n", sysctl_rmem_max);
+		sysctl_rmem_max = 262144;
+	}
+
+	if (sysctl_wmem_max < 262144){
+		printk("  Transmit socket buffer limit too low (%i), "
+		       "setting to 262144\n", sysctl_wmem_max);
+		sysctl_wmem_max = 262144;
+	}
 
 	return 0;
 }
@@ -574,7 +656,9 @@ static int rr_init1(struct device *dev)
 }
 #endif
 	dev->tbusy = 0;
+#if 0
 	dev->interrupt = 0;
+#endif
 	dev->start = 1;
 	return 0;
 }
@@ -590,9 +674,6 @@ static u32 rr_handle_event(struct device *dev, u32 prodidx)
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
 	u32 tmp, eidx;
-#if 0
-	short i;
-#endif
 
 	rrpriv = (struct rr_private *)dev->priv;
 	regs = rrpriv->regs;
@@ -710,7 +791,8 @@ static int rx_int(struct device *dev, u32 rxlimit)
 			if (pkt_len < PKT_COPY_THRESHOLD) {
 				skb = alloc_skb(pkt_len, GFP_ATOMIC);
 				if (skb == NULL){
-					printk("%s: Out of memory deferring packet\n", dev->name);
+					printk("%s: Out of memory deferring "
+					       "packet\n", dev->name);
 					rrpriv->stats.rx_dropped++;
 					goto defer;
 				}else
@@ -720,14 +802,16 @@ static int rx_int(struct device *dev, u32 rxlimit)
 			}else{
 				struct sk_buff *newskb;
 
-				newskb = alloc_skb(dev->mtu + HIPPI_HLEN, GFP_ATOMIC);
+				newskb = alloc_skb(dev->mtu + HIPPI_HLEN,
+						   GFP_ATOMIC);
 				if (newskb){
 					skb = rrpriv->rx_skbuff[index];
 					skb_put(skb, pkt_len);
 					rrpriv->rx_skbuff[index] = newskb;
 					rrpriv->rx_ring[index].addr = virt_to_bus(newskb->data);
 				}else{
-					printk("%s: Out of memory, deferring packet\n", dev->name);
+					printk("%s: Out of memory, deferring "
+					       "packet\n", dev->name);
 					rrpriv->stats.rx_dropped++;
 					goto defer;
 				}
@@ -766,18 +850,15 @@ static void rr_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 	rrpriv = (struct rr_private *)dev->priv;
 	regs = rrpriv->regs;
 
-	if (!(regs->HostCtrl & RR_INT)){
-#if 0
-		/* These are harmless */
-		printk("%s: spurious interrupt detected\n", dev->name);
-#endif
+	if (!(regs->HostCtrl & RR_INT))
 		return;
-	}
 
+#if 0
 	if (test_and_set_bit(0, (void*)&dev->interrupt) != 0) {
 		printk("%s: Re-entering the interrupt handler.\n", dev->name);
 		return;
 	}
+#endif
 
 	spin_lock_irqsave(&rrpriv->lock, flags);
 
@@ -828,7 +909,9 @@ static void rr_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 
 	spin_unlock_irqrestore(&rrpriv->lock, flags);
 
+#if 0
 	dev->interrupt = 0;
+#endif
 }
 
 
@@ -844,7 +927,7 @@ static int rr_open(struct device *dev)
 	regs->HostCtrl |= (HALT_NIC | RR_CLEAR_INT);
 #endif
 
-	if (request_irq(dev->irq, rr_interrupt, 0, rrpriv->name, dev))
+	if (request_irq(dev->irq, rr_interrupt, SA_SHIRQ, rrpriv->name, dev))
 	{
 		printk(KERN_WARNING "%s: Requested IRQ %d is busy\n",
 		       dev->name, dev->irq);
@@ -858,7 +941,9 @@ static int rr_open(struct device *dev)
 	rr_init1(dev);
 
 	dev->tbusy = 0;
+#if 0
 	dev->interrupt = 0;
+#endif
 	dev->start = 1;
 
 	MOD_INC_USE_COUNT;
@@ -942,6 +1027,12 @@ static int rr_close(struct device *dev)
 	rrpriv = (struct rr_private *)dev->priv;
 	regs = rrpriv->regs;
 
+	/*
+	 * Lock to make sure we are not cleaning up while another CPU
+	 * handling interrupts.
+	 */
+	spin_lock(&rrpriv->lock);
+
 	tmp = regs->HostCtrl;
 	if (tmp & NIC_HALTED){
 		printk("%s: NIC already halted\n", dev->name);
@@ -950,11 +1041,7 @@ static int rr_close(struct device *dev)
 		tmp |= HALT_NIC;
 	regs->HostCtrl = tmp;
 
-	/*
-	 * Lock to make sure we are not cleaning up while another CPU
-	 * handling interrupts.
-	 */
-	spin_lock(&rrpriv->lock);
+	rrpriv->fw_running = 0;
 
 	regs->TxPi = 0;
 	regs->IpRxPi = 0;
@@ -1080,9 +1167,6 @@ static int rr_load_firmware(struct device *dev)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;
-#if 0
-	unsigned long flags;
-#endif
 	int i, j;
 	u32 localctrl, eptr, sptr, segptr, len, tmp;
 	u32 p2len, p2size, nr_seg, revision, io, sram_size;
@@ -1179,30 +1263,117 @@ out:
 static int rr_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 {
 	struct rr_private *rrpriv;
+	unsigned char *image, *oldimage;
+	unsigned int i;
+	int error = -EOPNOTSUPP;
 
 	rrpriv = (struct rr_private *)dev->priv;
 
+	spin_lock(&rrpriv->lock);
+
 	switch(cmd){
-	case SIOCRRPFW:
-		if (!suser())
-			return -EPERM;
+	case SIOCRRGFW:
+		if (!suser()){
+			error = -EPERM;
+			goto out;
+		}
 
 		if (rrpriv->fw_running){
-			printk("%s: firmware already running\n", dev->name);
-			return -EPERM;
+			printk("%s: Firmware already running\n", dev->name);
+			error = -EPERM;
+			goto out;
 		}
-		printk("%s: updating firmware", dev->name);
+
+		image = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
+		if (!image){
+			printk(KERN_ERR "%s: Unable to allocate memory "
+			       "for EEPROM image\n", dev->name);
+			error = -ENOMEM;
+			goto out;
+		}
+		i = read_eeprom(rrpriv, 0, image, EEPROM_BYTES);
+		if (i != EEPROM_BYTES){
+			kfree(image);
+			printk(KERN_ERR "%s: Error reading EEPROM\n",
+			       dev->name);
+			error = -EFAULT;
+			goto out;
+		}
+		error = copy_to_user(rq->ifr_data, image, EEPROM_BYTES);
+		if (error)
+			error = -EFAULT;
+		kfree(image);
+		break;
+	case SIOCRRPFW:
+		if (!suser()){
+			error = -EPERM;
+			goto out;
+		}
+
+		if (rrpriv->fw_running){
+			printk("%s: Firmware already running\n", dev->name);
+			error = -EPERM;
+			goto out;
+		}
+
+		image = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
+		if (!image){
+			printk(KERN_ERR "%s: Unable to allocate memory "
+			       "for EEPROM image\n", dev->name);
+			error = -ENOMEM;
+			goto out;
+		}
+
+		oldimage = kmalloc(EEPROM_WORDS * sizeof(u32), GFP_KERNEL);
+		if (!image){
+			printk(KERN_ERR "%s: Unable to allocate memory "
+			       "for old EEPROM image\n", dev->name);
+			error = -ENOMEM;
+			goto out;
+		}
+
+		error = copy_from_user(image, rq->ifr_data, EEPROM_BYTES);
+		if (error)
+			error = -EFAULT;
+
+		printk("%s: Updating EEPROM firmware\n", dev->name);
+
+		error = write_eeprom(rrpriv, 0, image, EEPROM_BYTES);
+		if (error)
+			printk(KERN_ERR "%s: Error writing EEPROM\n",
+			       dev->name);
+
+		i = read_eeprom(rrpriv, 0, oldimage, EEPROM_BYTES);
+		if (i != EEPROM_BYTES)
+			printk(KERN_ERR "%s: Error reading back EEPROM "
+			       "image\n", dev->name);
+
+		error = memcmp(image, oldimage, EEPROM_BYTES);
+		if (error){
+			printk(KERN_ERR "%s: Error verifying EEPROM image\n",
+			       dev->name);
+			error = -EFAULT;
+		}
+
+		kfree(image);
+		kfree(oldimage);
+		break;
+	case SIOCRRID:
+		error = put_user(0x52523032, (int *)(&rq->ifr_data[0]));
+		if (error)
+			error = -EFAULT;
 		break;
 	default:
-		return -EOPNOTSUPP;
 	}
 
-	return 0;
+ out:
+	spin_unlock(&rrpriv->lock);
+	return error;
 }
 
 
 /*
  * Local variables:
- * compile-command: "gcc -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -pipe -fomit-frame-pointer -fno-strength-reduce -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=686 -c rrunner.c"
+ * compile-command: "gcc -D__SMP__ -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -pipe -fomit-frame-pointer -fno-strength-reduce -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=686 -c rrunner.c"
  * End:
  */

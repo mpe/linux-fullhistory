@@ -100,17 +100,15 @@ extern void mac_debug_init(void);
 extern void mac_debugging_long(int, long);
 
 #ifdef CONFIG_MAGIC_SYSRQ
-
-/* XXX FIXME: Atari scancodes still */
 static char mac_sysrq_xlate[128] =
-	"\000\0331234567890-=\177\t"				/* 0x00 - 0x0f */
-	"qwertyuiop[]\r\000as"					/* 0x10 - 0x1f */
-	"dfghjkl;'`\000\\zxcv"					/* 0x20 - 0x2f */
-	"bnm,./\000\000\000 \000\201\202\203\204\205"		/* 0x30 - 0x3f */
-	"\206\207\210\211\212\000\000\000\000\000-\000\000\000+\000"/* 0x40 - 0x4f */
-	"\000\000\000\177\000\000\000\000\000\000\000\000\000\000\000\000" /* 0x50 - 0x5f */
-	"\000\000\000()/*789456123"				/* 0x60 - 0x6f */
-	"0.\r\000\000\000\000\000\000\000\000\000\000\000\000\000";	/* 0x70 - 0x7f */
+	"\000sdfghzxcv\000bqwer"				/* 0x00 - 0x0f */
+	"yt123465=97-80)o"					/* 0x10 - 0x1f */
+	"u(ip\rlj'k;\\,/nm."					/* 0x20 - 0x2f */
+	"\t `\000\033\000\000\000\000\000\000\000\000\000\000\000"	/* 0x30 - 0x3f */
+	"\000.\000*\000+\000\000\000\000\000/\r\000-\000"	/* 0x40 - 0x4f */
+	"\000\00001234567a89\000\000\000"			/* 0x50 - 0x5f */
+	"\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"  /* 0x60 - 0x6f */
+	"\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"; /* 0x70 - 0x7f */
 #endif
 
 extern void (*kd_mksound)(unsigned int, unsigned int);
@@ -336,7 +334,7 @@ __initfunc(void config_mac(void))
 #endif
     kd_mksound		 = mac_mksound;
 #ifdef CONFIG_MAGIC_SYSRQ
-    mach_sysrq_key = 98;          /* HELP */
+    mach_sysrq_key = 114;         /* HELP */
     mach_sysrq_shift_state = 8;   /* Alt */
     mach_sysrq_shift_mask = 0xff; /* all modifiers except CapsLock */
     mach_sysrq_xlate = mac_sysrq_xlate;
@@ -399,10 +397,10 @@ static struct mac_model mac_data_table[]=
 	 *	
 	 */
 	 
-	{	MAC_MODEL_II,	"II",		MAC_ADB_II,	MAC_VIA_II,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_NUBUS},
-	{	MAC_MODEL_IIX,	"IIx",		MAC_ADB_II,	MAC_VIA_II,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_NUBUS},
-	{	MAC_MODEL_IICX,	"IIcx",		MAC_ADB_II,	MAC_VIA_II,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_NUBUS},
-	{	MAC_MODEL_SE30, "SE/30",	MAC_ADB_II,	MAC_VIA_II,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_NUBUS},
+	{	MAC_MODEL_II,	"II",		MAC_ADB_II,	MAC_VIA_II,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_IIX,	"IIx",		MAC_ADB_II,	MAC_VIA_II,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_IICX,	"IIcx",		MAC_ADB_II,	MAC_VIA_II,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_SE30, "SE/30",	MAC_ADB_II,	MAC_VIA_II,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
 	
 	/*
 	 *	Weirdified MacII hardware - all subtley different. Gee thanks
@@ -461,11 +459,11 @@ static struct mac_model mac_data_table[]=
 	 *	Performa - more LC type machines
 	 */
 
-	{	MAC_MODEL_P460,  "Performa 460", MAC_ADB_IISI, MAC_VIA_IIci,   MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_P460,  "Performa 460", MAC_ADB_IISI, MAC_VIA_IIci,   MAC_SCSI_OLD,    MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
 	{	MAC_MODEL_P475,  "Performa 475", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE, MAC_NUBUS},
 	{	MAC_MODEL_P475F, "Performa 475", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE, MAC_NUBUS},
 	{	MAC_MODEL_P520,  "Performa 520", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_P550,  "Performa 550", MAC_ADB_CUDA, MAC_VIA_IIci,   MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_P550,  "Performa 550", MAC_ADB_CUDA, MAC_VIA_IIci,   MAC_SCSI_OLD,    MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
 	{	MAC_MODEL_P575,  "Performa 575", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
 	{	MAC_MODEL_P588,  "Performa 588", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
 	{	MAC_MODEL_TV,    "TV",           MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_OLD,	MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
@@ -551,7 +549,7 @@ void mac_identify(void)
 			m++;
 		}
 		if(m->ident==-1)
-			mac_boom(5);
+			panic("mac model config data corrupt!\n");
 	}
 
 	/*

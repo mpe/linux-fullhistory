@@ -109,10 +109,11 @@ asmlinkage int old_select(struct sel_arg_struct *arg)
  * This is really horribly ugly.
  */
 asmlinkage int sys_ipc (uint call, int first, int second,
-                        int third, void *ptr, long fifth)
+			int third, void *ptr, long fifth)
 {
 	int version, ret;
 
+	version = call >> 16; /* hack for backward compatibility */
 	call &= 0xffff;
 
 	if (call <= SEMCTL)
@@ -126,14 +127,13 @@ asmlinkage int sys_ipc (uint call, int first, int second,
 			if (!ptr)
 				return -EINVAL;
 			if (get_user(fourth.__pad, (void **) ptr))
-                            return -EFAULT;
+				return -EFAULT;
 			return sys_semctl (first, second, third, fourth);
 			}
 		default:
 			return -EINVAL;
 		}
 
-	version = call >> 16; /* hack for backward compatibility      */
 	if (call <= MSGCTL) 
 		switch (call) {
 		case MSGSND:
@@ -144,25 +144,25 @@ asmlinkage int sys_ipc (uint call, int first, int second,
 			case 0: {
 				struct ipc_kludge tmp;
 				if (!ptr)
-                                        return -EINVAL;
+					return -EINVAL;
 				
 				if (copy_from_user(&tmp,
-                                                   (struct ipc_kludge *) ptr, 
-                                                   sizeof (tmp)))
+						   (struct ipc_kludge *) ptr, 
+						   sizeof (tmp)))
 					return -EFAULT;
 				return sys_msgrcv (first, tmp.msgp, second,
-                                                   tmp.msgtyp, third);
+						   tmp.msgtyp, third);
 				}
 			default:
 				return sys_msgrcv (first,
-                                                   (struct msgbuf *) ptr,
-                                                   second, fifth, third);
+						   (struct msgbuf *) ptr,
+						   second, fifth, third);
 			}
 		case MSGGET:
 			return sys_msgget ((key_t) first, second);
 		case MSGCTL:
 			return sys_msgctl (first, second,
-                                           (struct msqid_ds *) ptr);
+					   (struct msqid_ds *) ptr);
 		default:
 			return -EINVAL;
 		}
@@ -170,10 +170,10 @@ asmlinkage int sys_ipc (uint call, int first, int second,
 		switch (call) {
 		case SHMAT:
 			switch (version) {
-                        default: {
+			default: {
 				ulong raddr;
 				ret = sys_shmat (first, (char *) ptr,
-                                                 second, &raddr);
+						 second, &raddr);
 				if (ret)
 					return ret;
 				return put_user (raddr, (ulong *) third);
@@ -182,7 +182,7 @@ asmlinkage int sys_ipc (uint call, int first, int second,
 				if (!segment_eq(get_fs(), get_ds()))
 					return -EINVAL;
 				return sys_shmat (first, (char *) ptr,
-                                                  second, (ulong *) third);
+						  second, (ulong *) third);
 			}
 		case SHMDT: 
 			return sys_shmdt ((char *)ptr);
@@ -190,12 +190,12 @@ asmlinkage int sys_ipc (uint call, int first, int second,
 			return sys_shmget (first, second, third);
 		case SHMCTL:
 			return sys_shmctl (first, second,
-                                           (struct shmid_ds *) ptr);
+					   (struct shmid_ds *) ptr);
 		default:
 			return -EINVAL;
 		}
-        
-        return -EINVAL;
+	
+	return -EINVAL;
 }
 
 /*

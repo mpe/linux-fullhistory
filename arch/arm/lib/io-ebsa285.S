@@ -104,24 +104,75 @@ ENTRY(outswb)
 ENTRY(outsw)
 		add	r0, r0, #0xff000000
 		add	r0, r0, #0x00e00000
-1:		teq	r2, #0
-		ldrneh	r3, [r1], #2
-		strneh	r3, [r0]
-		subne	r2, r2, #1
-		bne	1b
+1:		subs	r2, r2, #1
+		ldrgeh	r3, [r1], #2
+		strgeh	r3, [r0]
+		bgt	1b
 		mov	pc, lr
 
 ENTRY(inswb)
 		mov	r2, r2, lsr #1
 ENTRY(insw)
+		stmfd	sp!, {r4, r5, lr}
 		add	r0, r0, #0xff000000
 		add	r0, r0, #0x00e00000
-1:		teq	r2, #0
+						@ + 8 + 9 +10 +11 +12 +13 +14 +15 +16 +17
+		subs	ip, r2, #8
+		blo	too_little
+						@ + 0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9
+		ands	lr, r1, #3		@ check alignment
+		beq	1f
+
+		ldrh	r3, [r0]
+		strh	r3, [r1], #2
+		sub	ip, ip, #1
+		cmn	ip, #8
+		blo	too_little
+
+1:		ldrh	r2, [r0]
+		ldrh	r3, [r0]
+		orr	r2, r2, r3, lsl #16
+		ldrh	r3, [r0]
+		ldrh	r4, [r0]
+		orr	r3, r3, r4, lsl #16
+		ldrh	r4, [r0]
+		ldrh	r5, [r0]
+		orr	r4, r4, r5, lsl #16
+		ldrh	r5, [r0]
+		ldrh	lr, [r0]
+		orr	r5, r5, lr, lsl #16
+		stmia	r1!, {r2, r3, r4, r5}
+		subs	ip, ip, #8
+						@ - 8 - 7 - 6 - 5 - 4 - 3 - 2 - 1 + 0 + 1
+		bhs	1b
+						@ - 8 - 7 - 6 - 5 - 4 - 3 - 2 - 1 - 8 - 7
+		cmn	ip, #4
+		ldrhsh	r2, [r0]		@ ... ... ... ... - 4 - 3 - 2 - 1 ... ...
+		ldrhsh	r3, [r0]
+		orrhs	r2, r2, r3, lsl #16
+		ldrhsh	r3, [r0]
+		ldrhsh	r4, [r0]
+		orrhs	r3, r3, r4, lsl #16
+		stmhsia	r1!, {r2, r3}
+
+		tst	ip, #2
+		ldrneh	r2, [r0]		@ ... ... - 6 - 5 ... ... - 2 - 1 ... ...
 		ldrneh	r3, [r0]
-		strneh	r3, [r1], #2
-		subne	r2, r2, #1
-		bne	1b
-		mov	pc, lr
+		orrne	r2, r2, r3, lsl #16
+		strne	r2, [r1], #4
+
+		tst	ip, #1
+		ldrneh	r2, [r0]
+		strneh	r2, [r1], #2
+
+		ldmfd	sp!, {r4, r5, pc}
+
+too_little:	subs	r2, r2, #1
+		ldrgeh	r3, [r0]
+		strgeh	r3, [r1], #2
+		bgt	too_little
+
+		ldmfd	sp!, {r4, r5, pc}
 
 
 ENTRY(insb)

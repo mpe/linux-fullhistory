@@ -116,6 +116,7 @@ endif
 
 archclean:
 	rm -f vmlinux.gz
+	rm -f kernel/m68k_defs.h kernel/m68k_defs.d
 
 archmrproper:
 

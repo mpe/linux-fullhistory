@@ -24,29 +24,45 @@
 #define HAS_MEMC1A
 #define HAS_VIDC
 
-#ifdef CONFIG_ARCH_A5K
-#define HAS_PCIO
-#endif
-
 /*
  * Optional hardware
  */
 #define HAS_EXPMASK
+
+/* Hardware addresses of major areas.
+ *  *_START is the physical address
+ *  *_SIZE  is the size of the region
+ *  *_BASE  is the virtual address
+ */
+#define IO_START		0x03000000
+#define IO_SIZE			0x01000000
+#define IO_BASE			0x03000000
+
+/*
+ * Screen mapping information
+ */
+#define SCREEN_START		0x02000000
+#define SCREEN2_END		0x02078000
+#define SCREEN2_BASE		0x02000000
+#define SCREEN1_END		0x02000000
+#define SCREEN1_BASE		0x01f88000
+
 
 #ifndef __ASSEMBLER__
 
 /*
  * for use with inb/outb
  */
-#define VIDC_BASE		0x80100000
-#define IOCEC4IO_BASE		0x8009c000
+#define IO_VIDC_BASE		0x80100000
 #ifdef CONFIG_ARCH_ARC
 #define LATCHAADDR		0x80094010
 #define LATCHBADDR		0x80094006
 #endif
-#define IOCECIO_BASE		0x80090000
 #define IOC_BASE		0x80080000
-#define MEMCECIO_BASE		0x80000000
+
+#define IO_EC_IOC4_BASE		0x8009c000
+#define IO_EC_IOC_BASE		0x80090000
+#define IO_EC_MEMC_BASE		0x80000000
 
 /*
  * IO definitions
@@ -55,23 +71,6 @@
 #define IOEB_BASE		((volatile unsigned char *)0x03350050)
 #define PCIO_FLOPPYDMABASE	((volatile unsigned char *)0x0302a000)
 #define PCIO_BASE		0x03010000
-
-/*
- * Mapping areas
- */
-#define IO_END			0x03ffffff
-#define IO_BASE			0x03000000
-#define IO_SIZE			(IO_END - IO_BASE)
-#define IO_START		0x03000000
-
-/*
- * Screen mapping information
- */
-#define SCREEN2_END		0x02078000
-#define SCREEN2_BASE		0x02000000
-#define SCREEN1_END		SCREEN2_BASE
-#define SCREEN1_BASE		0x01f88000
-#define SCREEN_START		0x02000000
 
 /*
  * RAM definitions
@@ -88,7 +87,6 @@
 #define IOC_BASE		0x03200000
 #define PCIO_FLOPPYDMABASE	0x0302a000
 #define PCIO_BASE		0x03010000
-#define IO_BASE			0x03000000
 
 #endif
 #endif

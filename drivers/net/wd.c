@@ -508,7 +508,6 @@ cleanup_module(void)
 			int ioaddr = dev->base_addr - WD_NIC_OFFSET;
 			free_irq(dev->irq, dev);
 			release_region(ioaddr, WD_IO_EXTENT);
-			dev->priv = NULL;
 			unregister_netdev(dev);
 			kfree(priv);
 			unlock_8390_module();

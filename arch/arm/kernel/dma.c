@@ -26,6 +26,26 @@
 #include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/dma.h>
+#include <asm/spinlock.h>
+
+
+/* A note on resource allocation:
+ *
+ * All drivers needing DMA channels, should allocate and release them
+ * through the public routines `request_dma()' and `free_dma()'.
+ *
+ * In order to avoid problems, all processes should allocate resources in
+ * the same sequence and release them in the reverse order.
+ *
+ * So, when allocating DMAs and IRQs, first allocate the IRQ, then the DMA.
+ * When releasing them, first release the DMA, then release the IRQ.
+ * If you don't, you may cause allocation requests to fail unnecessarily.
+ * This doesn't really matter now, but it will once we get real semaphores
+ * in the kernel.
+ */
+
+
+spinlock_t dma_spin_lock = SPIN_LOCK_UNLOCKED;
 
 #include "dma.h"
 

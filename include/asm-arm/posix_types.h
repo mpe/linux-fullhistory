@@ -1,15 +1,13 @@
 /*
  * linux/include/asm-arm/posix_types.h
  *
- * Copyright (c) 1996 Russell King.
+ * Copyright (c) 1996-1998 Russell King.
  *
  * Changelog:
  *  27-06-1996	RMK	Created
  */
 #ifndef __ARCH_ARM_POSIX_TYPES_H
 #define __ARCH_ARM_POSIX_TYPES_H
-
-#include <linux/config.h>
 
 /*
  * This file is generally used by user-level software, so you need to
@@ -26,11 +24,7 @@ typedef int			__kernel_pid_t;
 typedef unsigned short		__kernel_ipc_pid_t;
 typedef unsigned short		__kernel_uid_t;
 typedef unsigned short		__kernel_gid_t;
-#ifdef CONFIG_BINUTILS_NEW
-typedef long unsigned int	__kernel_size_t;
-#else
 typedef unsigned int		__kernel_size_t;
-#endif
 typedef int			__kernel_ssize_t;
 typedef int			__kernel_ptrdiff_t;
 typedef long			__kernel_time_t;

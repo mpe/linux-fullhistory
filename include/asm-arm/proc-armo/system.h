@@ -19,6 +19,7 @@ extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int 
 		case 4:	return processor.u.armv2._xchg_4(x, ptr);
 		default: arm_invalidptr(xchg_str, size);
 	}
+	return 0;
 }
 
 /*

@@ -19,8 +19,8 @@
 #define __phys_to_virt(ppage) ((ppage) + PAGE_OFFSET)
 
 #define __virt_to_bus__is_a_macro
-#define __virt_to_bus(x)	(x)
+#define __virt_to_bus(x)	(x - 0xe0000000)
 #define __bus_to_virt__is_a_macro
-#define __bus_to_virt(x)	(x)
+#define __bus_to_virt(x)	(x + 0xe0000000)
 
 #endif

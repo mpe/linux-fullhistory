@@ -1,5 +1,12 @@
 /*
- *  linux/arch/m68k/mac/mackeyb.c
+ * linux/arch/m68k/mac/mackeyb.c
+ *
+ * Keyboard driver for Macintosh computers.
+ *
+ * Adapted from drivers/macintosh/key_mac.c and arch/m68k/atari/akakeyb.c 
+ * (see that file for its authors and contributors).
+ *
+ * Copyright (C) 1997 Michael Schmitz.
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive
@@ -59,8 +66,15 @@ extern void put_queue(int);
 static void mac_leds_done(struct adb_request *);
 static void keyboard_input(unsigned char *, int, struct pt_regs *);
 static void mouse_input(unsigned char *, int, struct pt_regs *);
-/* Hook for mouse driver */
-void (*adb_mouse_interrupt_hook) (char *, int);
+
+#ifdef CONFIG_ADBMOUSE
+/* XXX: Hook for mouse driver */
+void (*adb_mouse_interrupt_hook)(unsigned char *, int);
+int adb_emulate_buttons = 0;
+int adb_button2_keycode = 0x7d;	/* right control key */
+int adb_button3_keycode = 0x7c; /* right option key */
+#endif
+
 /* The mouse driver - for debugging */
 extern void adb_mouse_interrupt(char *, int);
 /* end keyb */
@@ -275,9 +289,11 @@ input_keycode(int keycode, int repeat)
  	kbd = kbd_table + fg_console;
 	up_flag = (keycode & 0x80);
         keycode &= 0x7f;
+
 	if (!repeat)
 		del_timer(&repeat_timer);
 
+#ifdef CONFIG_ADBMOUSE
 	/*
 	 * XXX: Add mouse button 2+3 fake codes here if mouse open.
 	 *	As we only report up/down events, keep track of faked buttons.
@@ -289,7 +305,8 @@ input_keycode(int keycode, int repeat)
 	 *	(wanted: command and alt/option, or KP= and KP( ...)
 	 *	Debug version; might be rewritten to be faster on normal keys.
 	 */
-	if (adb_mouse_interrupt_hook || console_loglevel >= 8) {
+	if (adb_emulate_buttons 
+	    && (adb_mouse_interrupt_hook || console_loglevel >= 8)) {
 		unsigned char button, button2, button3, fake_event;
 		static unsigned char button2state=0, button3state=0; /* up */
 		/* faked ADB packet */
@@ -297,21 +314,20 @@ input_keycode(int keycode, int repeat)
 
 		button = 0;
 		fake_event = 0;
-		switch (keycode) {	/* which 'button' ? */
-			case 0x7c:	/* R-option */
-				button2 = (!up_flag);		/* new state */
-				if (button2 != button2state)	/* change ? */
-					button = 2; 
-				button2state = button2;		/* save state */
-				fake_event = 2;
-				break; 
-			case 0x7d:	/* R-control */
-				button3 = (!up_flag);		/* new state */
-				if (button3 != button3state)	/* change ? */ 
-					button = 3; 
-				button3state = button3; 	/* save state */
-				fake_event = 3;
-				break; 
+		if (keycode == adb_button2_keycode) {	/* which 'button' ? */
+			/* R-option */
+			button2 = (!up_flag);		/* new state */
+			if (button2 != button2state)	/* change ? */
+				button = 2; 
+			button2state = button2;		/* save state */
+			fake_event = 2;
+		} else if (keycode == adb_button3_keycode) {
+			/* R-control */
+			button3 = (!up_flag);		/* new state */
+			if (button3 != button3state)	/* change ? */ 
+				button = 3; 
+			button3state = button3; 	/* save state */
+			fake_event = 3;
 		}
 #ifdef DEBUG_ADBMOUSE
 		if (fake_event && console_loglevel >= 8)
@@ -340,6 +356,7 @@ input_keycode(int keycode, int repeat)
 		if (fake_event)
 			return;
 	}
+#endif /* CONFIG_ADBMOUSE */
 
 	/*
 	 * Convert R-shift/control/option to L version.
@@ -365,16 +382,18 @@ input_keycode(int keycode, int repeat)
 		 * transition into a key-down transition.
 		 * MSch: need to turn each caps-lock event into a down-up
 		 * double event (keyboard code assumes caps-lock is a toggle)
+		 * 981127: fix LED behavior (kudos atong!)
 		 */
-#if 0
-		if (keycode == 0x39 && up_flag && vc_kbd_led(kbd, VC_CAPSLOCK))
-			up_flag = 0;
-#else
-		if (keycode == 0x39) {
+		switch (keycode) {
+		case 0x39:
 			handle_scancode(keycode);	/* down */
 			up_flag = 0x80;			/* see below ... */
+		 	mark_bh(KEYBOARD_BH);
+			break;
+		 case 0x47:
+		 	mark_bh(KEYBOARD_BH);
+		 	break;
 		}
-#endif
 	}
 
 	handle_scancode(keycode + up_flag);

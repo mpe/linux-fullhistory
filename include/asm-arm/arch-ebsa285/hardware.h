@@ -20,11 +20,9 @@
  * 
  */
  
-#define IO_END			0xffffffff
 #define IO_BASE			0xe0000000
-#define IO_SIZE			(IO_END - IO_BASE)
-
-#define HAS_PCIO
+#define PCIO_BASE		0xffe00000
+ 
 
 #define XBUS_LEDS		((volatile unsigned char *)0xfff12000)
 #define XBUS_LED_AMBER		(1 << 0)
@@ -38,8 +36,6 @@
 #define XBUS_SWITCH_J17_11	((*XBUS_SWITCH) & (1 << 5))
 #define XBUS_SWITCH_J17_9	((*XBUS_SWITCH) & (1 << 6))
 
-#define PCIO_BASE		0xffe00000
- 
 #define CSR_SA110_CNTL		((volatile unsigned long *)0xfe00013c)
 #define CSR_PCIADDR_EXTN	((volatile unsigned long *)0xfe000140)
 #define CSR_PREFETCHMEMRANGE	((volatile unsigned long *)0xfe000144)

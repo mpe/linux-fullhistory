@@ -39,6 +39,9 @@ bool 'PCI support' CONFIG_PCI
 if [ "$CONFIG_PCI" = "y" ]; then
   bool '   PCI BIOS support' CONFIG_PCI_BIOS
   bool '   PCI direct access support' CONFIG_PCI_DIRECT
+  if [ "$CONFIG_PCI_BIOS" = "n" -a "$CONFIG_PCI_DIRECT" = "n" ]; then
+    define_bool CONFIG_PCI_BIOS "y"
+  fi
   bool '   PCI quirks' CONFIG_PCI_QUIRKS
   if [ "$CONFIG_PCI_QUIRKS" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
@@ -108,12 +111,15 @@ fi
 
 source net/ax25/Config.in
 
+source net/irda/Config.in
+
 mainmenu_option next_comment
 comment 'ISDN subsystem'
-
-tristate 'ISDN support' CONFIG_ISDN
-if [ "$CONFIG_ISDN" != "n" ]; then
-  source drivers/isdn/Config.in
+if [ "$CONFIG_NET" != "n" ]; then
+  tristate 'ISDN support' CONFIG_ISDN
+  if [ "$CONFIG_ISDN" != "n" ]; then
+    source drivers/isdn/Config.in
+  fi
 fi
 endmenu
 

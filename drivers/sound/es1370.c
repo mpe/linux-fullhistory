@@ -79,6 +79,7 @@
  *    31.08.98   0.13  Fix realplayer problems - dac.count issues
  *    08.10.98   0.14  Joystick support fixed
  *		       -- Oliver Neukum <c188@org.chemie.uni-muenchen.de>
+ *    10.12.98   0.15  Fix drain_dac trying to wait on not yet initialized DMA
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -998,7 +999,7 @@ static int drain_dac1(struct es1370_state *s, int nonblock)
 	unsigned long flags;
 	int count, tmo;
 	
-	if (s->dma_dac1.mapped)
+	if (s->dma_dac1.mapped || !s->dma_dac1.ready)
 		return 0;
         current->state = TASK_INTERRUPTIBLE;
         add_wait_queue(&s->dma_dac1.wait, &wait);
@@ -1033,7 +1034,7 @@ static int drain_dac2(struct es1370_state *s, int nonblock)
 	unsigned long flags;
 	int count, tmo;
 
-	if (s->dma_dac2.mapped)
+	if (s->dma_dac2.mapped || !s->dma_dac2.ready)
 		return 0;
         current->state = TASK_INTERRUPTIBLE;
         add_wait_queue(&s->dma_dac2.wait, &wait);
@@ -2276,7 +2277,7 @@ __initfunc(int init_es1370(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.13 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.15 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 

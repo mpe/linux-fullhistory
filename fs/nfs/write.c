@@ -583,39 +583,22 @@ nfs_wb_pid(struct inode *inode, pid_t pid)
 	NFS_WB(inode, req->wb_pid == pid);
 }
 
+/*
+ * Flush all write requests for truncation:
+ * 	Simplification of the comparison has the side-effect of
+ *	causing all writes in an infested page to be waited upon.
+ */
+int
+nfs_flush_trunc(struct inode *inode, unsigned long from)
+{
+	from &= PAGE_MASK;
+	NFS_WB(inode, req->wb_page->offset >= from);
+}
+
 void
 nfs_inval(struct inode *inode)
 {
 	nfs_cancel_dirty(inode,0);
-}
-
-/*
- * Cancel any pending write requests after a given offset
- * (called from nfs_notify_change).
- */
-int
-nfs_truncate_dirty_pages(struct inode *inode, unsigned long offset)
-{
-	struct nfs_wreq *req, *head;
-	unsigned long	rqoffset;
-
-	dprintk("NFS:      truncate_dirty_pages(%d/%ld, %ld)\n",
-		inode->i_dev, inode->i_ino, offset);
-
-	req = head = NFS_WRITEBACK(inode);
-	while (req != NULL) {
-		rqoffset = req->wb_page->offset + req->wb_offset;
-
-		if (rqoffset >= offset) {
-			nfs_cancel_request(req);
-		} else if (rqoffset + req->wb_bytes >= offset) {
-			req->wb_bytes = offset - rqoffset;
-		}
-		if ((req = WB_NEXT(req)) == head)
-			break;
-	}
-
-	return 0;
 }
 
 /*
@@ -648,6 +631,7 @@ nfs_wback_begin(struct rpc_task *task)
 	task->tk_status = 0;
 
 	/* Setup the task struct for a writeback call */
+	req->wb_flags |= NFS_WRITE_INPROGRESS;
 	req->wb_args.fh     = NFS_FH(dentry);
 	req->wb_args.offset = page->offset + req->wb_offset;
 	req->wb_args.count  = req->wb_bytes;
@@ -655,7 +639,6 @@ nfs_wback_begin(struct rpc_task *task)
 
 	rpc_call_setup(task, NFSPROC_WRITE, &req->wb_args, &req->wb_fattr, 0);
 
-	req->wb_flags |= NFS_WRITE_INPROGRESS;
 	return;
 }
 

@@ -58,6 +58,3 @@ Loldparams:	mov	r4, #0x02000000
 		cmp	r4, r3
 		blt	1b
 		movs	pc, lr
-
-		.align	13
-ENTRY(this_must_match_init_task)

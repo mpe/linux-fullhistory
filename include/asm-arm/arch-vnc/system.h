@@ -2,19 +2,36 @@
  * linux/include/asm-arm/arch-ebsa285/system.h
  *
  * Copyright (c) 1996,1997,1998 Russell King.
+ * Copyright (c) 1998 Corel Computer Corp.
  */
 #include <asm/hardware.h>
+#include <asm/dec21285.h>
 #include <asm/leds.h>
+#include <asm/io.h>
 
-/* To reboot, we set up the 21285 watchdog and enable it.
- * We then wait for it to timeout.
- */
 extern __inline__ void arch_hard_reset (void)
 {
 	cli();
-	*CSR_TIMER4_LOAD = 0x8000;
-	*CSR_TIMER4_CNTL = TIMER_CNTL_ENABLE | TIMER_CNTL_AUTORELOAD | TIMER_CNTL_DIV16;
-	*CSR_SA110_CNTL |= 1 << 13;
+
+	/* open up the SuperIO chip
+	 */
+	outb(0x87, 0x370);
+	outb(0x87, 0x370);
+
+	/* aux function group 1 (Logical Device 7)
+	 */
+	outb(0x07, 0x370);
+	outb(0x07, 0x371);
+
+	/* set GP16 for WD-TIMER output
+	 */
+	outb(0xE6, 0x370);
+	outb(0x00, 0x371);
+
+	/* set a RED LED and toggle WD_TIMER for rebooting...
+	 */
+	outb(0xC4, 0x338);
+	
 	while(1);
 }
 

@@ -691,8 +691,10 @@ void disable_irq(unsigned int irq)
 	unsigned long flags;
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	irq_desc[irq].status |= IRQ_DISABLED;
-	irq_desc[irq].handler->disable(irq);
+	if (!irq_desc[irq].depth++) {
+		irq_desc[irq].status |= IRQ_DISABLED;
+		irq_desc[irq].handler->disable(irq);
+	}
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
 
 	if (irq_desc[irq].status & IRQ_INPROGRESS)
@@ -704,16 +706,10 @@ void enable_irq(unsigned int irq)
 	unsigned long flags;
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	/*
-	 * In contrast to the above, we should _not_ have any concurrent
-	 * interrupt activity here, so we just clear both disabled bits.
-	 *
-	 * This allows us to have IRQ_INPROGRESS set until we actually
-	 * install a handler for this interrupt (make irq autodetection
-	 * work by just looking at the status field for the irq)
-	 */
-	irq_desc[irq].status &= ~(IRQ_DISABLED | IRQ_INPROGRESS);
-	irq_desc[irq].handler->enable(irq);
+	if (!--irq_desc[irq].depth) {
+		irq_desc[irq].status &= ~IRQ_DISABLED;
+		irq_desc[irq].handler->enable(irq);
+	}
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
 }
 
@@ -798,6 +794,7 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 	*p = new;
 
 	if (!shared) {
+		irq_desc[irq].depth = 0;
 		irq_desc[irq].status &= ~(IRQ_DISABLED | IRQ_INPROGRESS);
 		irq_desc[irq].handler->startup(irq);
 	}

@@ -233,7 +233,8 @@ __generic_copy_to_user(void *to, const void *from, unsigned long n)
 	 "   .long 5b,8b\n"
 	 ".previous"
 	 : "=a"(to), "=a"(from), "=d"(n), "=&d"(tmp)
-	 : "r"(n & 3), "0"(to), "1"(from), "2"(n / 4));
+	 : "r"(n & 3), "0"(to), "1"(from), "2"(n / 4)
+	 : "memory");
     return n;
 }
 
@@ -514,7 +515,7 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	 "13:"						\
 	 : "=a"(to), "=a"(from), "=d"(n)		\
 	 : "0"(to), "1"(from), "2"(n/4)			\
-	 : "d0")
+	 : "d0", "memory")
 
 static inline unsigned long
 __constant_copy_to_user(void *to, const void *from, unsigned long n)

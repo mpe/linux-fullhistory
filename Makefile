@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 131
+SUBLEVEL = 132
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -180,6 +180,18 @@ ifdef CONFIG_HAMRADIO
 DRIVERS := $(DRIVERS) drivers/net/hamradio/hamradio.a
 endif
 
+ifeq ($(CONFIG_USB),y)
+DRIVERS := $(DRIVERS) drivers/uusbd/usb.a
+endif
+
+ifeq ($(CONFIG_I2O),y)
+DRIVERS := $(DRIVERS) drivers/i2o/i2o.a
+endif
+
+ifeq ($(CONFIG_IRDA),y)
+DRIVERS := $(DRIVERS) drivers/net/irda/irda_drivers.a
+endif
+
 include arch/$(ARCH)/Makefile
 
 .S.s:
@@ -195,11 +207,13 @@ boot: vmlinux
 
 vmlinux: $(CONFIGURATION) init/main.o init/version.o linuxsubdirs
 	$(LD) $(LINKFLAGS) $(HEAD) init/main.o init/version.o \
+		--start-group \
 		$(CORE_FILES) \
 		$(FILESYSTEMS) \
 		$(NETWORKS) \
 		$(DRIVERS) \
 		$(LIBS) \
+		--end-group \
 		-o vmlinux
 	$(NM) vmlinux | grep -v '\(compiled\)\|\(\.o$$\)\|\( [aU] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)' | sort > System.map
 
@@ -307,6 +321,7 @@ modules_install:
 		mkdir -p $$MODLIB/$$2; cp $$These $$MODLIB/$$2; \
 		echo Installing modules under $$MODLIB/$$2; \
 	}; \
+	mkdir -p $$MODLIB; \
 	\
 	if [ -f BLOCK_MODULES ]; then inst_mod BLOCK_MODULES block; fi; \
 	if [ -f NET_MODULES   ]; then inst_mod NET_MODULES   net;   fi; \
@@ -320,6 +335,7 @@ modules_install:
 	if [ -f SOUND_MODULES ]; then inst_mod SOUND_MODULES sound; fi; \
 	if [ -f VIDEO_MODULES ]; then inst_mod VIDEO_MODULES video; fi; \
 	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
+	if [ -f IRDA_MODULES  ]; then inst_mod IRDA_MODULES  net;   fi; \
 	\
 	ls *.o > $$MODLIB/.allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 $$MODLIB/.allmods - > $$MODLIB/.misc; \

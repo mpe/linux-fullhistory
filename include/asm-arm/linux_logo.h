@@ -11,13 +11,16 @@
 
 #define linux_logo_banner "ARM Linux version " UTS_RELEASE
 
-#define LINUX_LOGO_COLORS	221
+#define LINUX_LOGO_COLORS	214
 
 #ifdef INCLUDE_LINUX_LOGO_DATA
 
+#define INCLUDE_LINUX_LOGOBW
 #define INCLUDE_LINUX_LOGO16
+
 #include <linux/linux_logo.h>
 
+#else
 
 /* prototypes only */
 extern unsigned char linux_logo_red[];

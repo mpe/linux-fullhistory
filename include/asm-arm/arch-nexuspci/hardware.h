@@ -27,9 +27,7 @@
 /*
  * Mapping areas
  */
-#define IO_END			0xffffffff
 #define IO_BASE			0xfe000000
-#define IO_SIZE			(IO_END - IO_BASE)
 
 /*
  * RAM definitions

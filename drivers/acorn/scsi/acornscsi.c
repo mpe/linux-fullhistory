@@ -148,10 +148,11 @@
 #include "../../scsi/hosts.h"
 #include "../../scsi/constants.h"
 #include "acornscsi.h"
+#include "msgqueue.h"
 
 #define VER_MAJOR 2
 #define VER_MINOR 0
-#define VER_PATCH 5
+#define VER_PATCH 6
 
 #ifndef ABORT_TAG
 #define ABORT_TAG 0xd
@@ -176,6 +177,8 @@
 #define DMAC_READ	(MODECON_READ)
 #define DMAC_WRITE	(MODECON_WRITE)
 #define INIT_SBICDMA	(CTRL_DMABURST)
+
+#define scsi_xferred	have_data_in
 
 /*
  * Size of on-board DMA buffer
@@ -258,6 +261,29 @@ unsigned int dmac_address (unsigned int io_port)
     return dmac_read (io_port, TXADRHI) << 16 |
 	   dmac_read (io_port, TXADRMD) << 8 |
 	   dmac_read (io_port, TXADRLO);
+}
+
+static
+void acornscsi_dumpdma (AS_Host *host, char *where)
+{
+	unsigned int mode, addr, len;
+
+	mode = dmac_read (host->dma.io_port, MODECON);
+	addr = dmac_address (host->dma.io_port);
+	len  = dmac_read (host->dma.io_port, TXCNTHI) << 8 |
+	       dmac_read (host->dma.io_port, TXCNTLO);
+
+	printk ("scsi%d: %s: DMAC %02x @%06x+%04x msk %02x, ",
+		host->host->host_no, where,
+		mode, addr, (len + 1) & 0xffff,
+		dmac_read (host->dma.io_port, MASKREG));
+
+	printk ("DMA @%06x, ", host->dma.start_addr);
+	printk ("BH @%p +%04x, ", host->scsi.SCp.ptr,
+		host->scsi.SCp.this_residual);
+	printk ("DT @+%04x ST @+%04x", host->dma.transferred,
+		host->scsi.SCp.scsi_xferred);
+	printk ("\n");
 }
 #endif
 
@@ -345,15 +371,13 @@ void acornscsi_resetcard (AS_Host *host)
     host->card.page_reg = 0x40;
     outb (host->card.page_reg, host->card.io_page);
 
-#ifdef USE_DMAC
     /* setup dmac - uPC71071 */
-    dmac_write (host->dma.io_port, INIT, 0);
-    dmac_write (host->dma.io_port, INIT, INIT_8BIT);
-    dmac_write (host->dma.io_port, CHANNEL, CHANNEL_0);
-    dmac_write (host->dma.io_port, DEVCON0, INIT_DEVCON0);
-    dmac_write (host->dma.io_port, DEVCON1, INIT_DEVCON1);
-#else
-    dmac_write (host->dma.io_port, INIT, 0);
+    dmac_write(host->dma.io_port, INIT, 0);
+#ifdef USE_DMAC
+    dmac_write(host->dma.io_port, INIT, INIT_8BIT);
+    dmac_write(host->dma.io_port, CHANNEL, CHANNEL_0);
+    dmac_write(host->dma.io_port, DEVCON0, INIT_DEVCON0);
+    dmac_write(host->dma.io_port, DEVCON1, INIT_DEVCON1);
 #endif
 
     host->SCpnt = NULL;
@@ -516,31 +540,6 @@ char acornscsi_target (AS_Host *host)
 		return '0' + host->SCpnt->target;
 	return 'H';
 }
-
-#ifdef USE_DMAC
-static
-void acornscsi_dumpdma (AS_Host *host, char *where)
-{
-	unsigned int mode, addr, len;
-
-	mode = dmac_read (host->dma.io_port, MODECON);
-	addr = dmac_address (host->dma.io_port);
-	len  = dmac_read (host->dma.io_port, TXCNTHI) << 8 |
-	       dmac_read (host->dma.io_port, TXCNTLO);
-
-	printk ("scsi%d: %s: DMAC %02x @%06x+%04x msk %02x, ",
-		host->host->host_no, where,
-		mode, addr, (len + 1) & 0xffff,
-		dmac_read (host->dma.io_port, MASKREG));
-
-	printk ("DMA @%06x, ", host->dma.start_addr);
-	printk ("BH @%p +%04x, ", host->scsi.SCp.ptr,
-		host->scsi.SCp.this_residual);
-	printk ("DT @+%04x ST @+%04x", host->dma.transferred,
-		host->scsi.SCp.have_data_in);
-	printk ("\n");
-}
-#endif
 
 /*
  * Prototype: cmdtype_t acornscsi_cmdtype (int command)
@@ -1051,7 +1050,7 @@ void acornscsi_dma_cleanup (AS_Host *host)
 	host->dma.xfer_setup = 0;
 
 #if (DEBUG & DEBUG_DMA)
-	DBG(host->SCpnt, acornscsi_dumpdma (host, "clup"));
+	DBG(host->SCpnt, acornscsi_dumpdma(host, "cupi"));
 #endif
 
 	/*
@@ -1068,6 +1067,9 @@ void acornscsi_dma_cleanup (AS_Host *host)
 	 * Update SCSI pointers
 	 */
 	acornscsi_data_updateptr (host, &host->scsi.SCp, transferred);
+#if (DEBUG & DEBUG_DMA)
+	DBG(host->SCpnt, acornscsi_dumpdma(host, "cupo"));
+#endif
     }
 }
 
@@ -1193,15 +1195,15 @@ void acornscsi_dma_adjust (AS_Host *host)
 	/*
 	 * Calculate correct DMA address - DMA is ahead of SCSI bus while
 	 * writing.
-	 *  host->scsi.SCp.have_data_in is the number of bytes
+	 *  host->scsi.SCp.scsi_xferred is the number of bytes
 	 *  actually transferred to/from the SCSI bus.
 	 *  host->dma.transferred is the number of bytes transferred
 	 *  over DMA since host->dma.start_addr was last set.
 	 *
-	 * real_dma_addr = host->dma.start_addr + host->scsi.SCp.have_data_in
+	 * real_dma_addr = host->dma.start_addr + host->scsi.SCp.scsi_xferred
 	 *		   - host->dma.transferred
 	 */
-	transferred = host->scsi.SCp.have_data_in - host->dma.transferred;
+	transferred = host->scsi.SCp.scsi_xferred - host->dma.transferred;
 	if (transferred < 0)
 	    printk ("scsi%d.%c: Ack! DMA write correction %ld < 0!\n",
 		    host->host->host_no, acornscsi_target (host), transferred);
@@ -1259,8 +1261,8 @@ static
 void acornscsi_sendmessage (AS_Host *host)
 {
     unsigned int message_length = msgqueue_msglength (&host->scsi.msgs);
-    int msglen;
-    char *msg;
+    int msgnr;
+    struct message *msg;
 
 #if (DEBUG & DEBUG_MESSAGES)
     printk ("scsi%d.%c: sending message ",
@@ -1280,12 +1282,12 @@ void acornscsi_sendmessage (AS_Host *host)
 
     case 1:
 	acornscsi_sbic_issuecmd (host, CMND_XFERINFO | CMND_SBT);
-	msg = msgqueue_getnextmsg (&host->scsi.msgs, &msglen);
+	msg = msgqueue_getmsg(&host->scsi.msgs, 0);
 	while ((sbic_arm_read (host->scsi.io_port, ASR) & ASR_DBR) == 0);
-	sbic_arm_write (host->scsi.io_port, DATA, msg[0]);
-	host->scsi.last_message = msg[0];
+	sbic_arm_write (host->scsi.io_port, DATA, msg->msg[0]);
+	host->scsi.last_message = msg->msg[0];
 #if (DEBUG & DEBUG_MESSAGES)
-	print_msg (msg);
+	print_msg(msg->msg);
 #endif
 	break;
 
@@ -1303,21 +1305,22 @@ void acornscsi_sendmessage (AS_Host *host)
 	sbic_arm_writenext (host->scsi.io_port, message_length);
 	acornscsi_sbic_issuecmd (host, CMND_XFERINFO);
 
-	while ((msg = msgqueue_getnextmsg (&host->scsi.msgs, &msglen)) != NULL) {
+	msgnr = 0;
+	while ((msg = msgqueue_getmsg(&host->scsi.msgs, msgnr++)) != NULL) {
 	    unsigned int asr, i;
 #if (DEBUG & DEBUG_MESSAGES)
 	    print_msg (msg);
 #endif
-	    for (i = 0; i < msglen;) {
+	    for (i = 0; i < msg->length;) {
 		asr = sbic_arm_read (host->scsi.io_port, ASR);
 		if (asr & ASR_DBR)
-		    sbic_arm_write (host->scsi.io_port, DATA, msg[i++]);
+		    sbic_arm_write (host->scsi.io_port, DATA, msg->msg[i++]);
 		if (asr & ASR_INT)
 		    break;
 	    }
-	    host->scsi.last_message = msg[0];
-	    if (msg[0] == EXTENDED_MESSAGE)
-		host->scsi.last_message |= msg[2] << 8;
+	    host->scsi.last_message = msg->msg[0];
+	    if (msg->msg[0] == EXTENDED_MESSAGE)
+		host->scsi.last_message |= msg->msg[2] << 8;
 	    if (asr & ASR_INT)
 		break;
 	}
@@ -1401,10 +1404,10 @@ void acornscsi_message (AS_Host *host)
     } while (msgidx < msglen);
 
 #if (DEBUG & DEBUG_MESSAGES)
-    printk (KERN_DEBUG "scsi%d.%c: message in: ",
+    printk("scsi%d.%c: message in: ",
 	    host->host->host_no, acornscsi_target (host));
-    print_msg (message);
-    printk ("\n");
+    print_msg(message);
+    printk("\n");
 #endif
 
     if (host->scsi.phase == PHASE_RECONNECTED) {
@@ -1424,9 +1427,11 @@ void acornscsi_message (AS_Host *host)
     case ABORT:
     case ABORT_TAG:
     case COMMAND_COMPLETE:
-	if (host->scsi.phase != PHASE_STATUSIN)
-	    printk (KERN_ERR "scsi%d.%c: command complete following non-status in phase?\n",
+	if (host->scsi.phase != PHASE_STATUSIN) {
+	    printk(KERN_ERR "scsi%d.%c: command complete following non-status in phase?\n",
 		    host->host->host_no, acornscsi_target (host));
+	    acornscsi_dumplog(host, host->SCpnt->target);
+	}
 	host->scsi.phase = PHASE_DONE;
 	host->scsi.SCp.Message = message[0];
 	break;
@@ -1594,7 +1599,7 @@ void acornscsi_message (AS_Host *host)
 	 */
 	if (0) {
 #if (DEBUG & DEBUG_LINK)
-	    printk (KERN_DEBUG "scsi%d.%c: lun %d tag %d linked command complete\n",
+	    printk("scsi%d.%c: lun %d tag %d linked command complete\n",
 		    host->host->host_no, acornscsi_target(host), host->SCpnt->tag);
 #endif
 	    /*
@@ -1704,7 +1709,7 @@ int acornscsi_starttransfer (AS_Host *host)
 	return 0;
     }
 
-    residual = host->SCpnt->request_bufflen - host->scsi.SCp.have_data_in;
+    residual = host->SCpnt->request_bufflen - host->scsi.SCp.scsi_xferred;
 
     sbic_arm_write (host->scsi.io_port, SYNCHTRANSFER, host->device[host->SCpnt->target].sync_xfer);
     sbic_arm_writenext (host->scsi.io_port, residual >> 16);
@@ -1833,7 +1838,7 @@ int acornscsi_reconnect_finish (AS_Host *host)
     printk ("\n");
 #endif
 
-    host->dma.transferred = host->scsi.SCp.have_data_in;
+    host->dma.transferred = host->scsi.SCp.scsi_xferred;
 
     return host->SCpnt != NULL;
 }
@@ -1935,7 +1940,7 @@ intr_ret_t acornscsi_sbicintr (AS_Host *host, int in_irq)
 	    /* BUS FREE -> SELECTION */
 	    host->scsi.phase = PHASE_CONNECTED;
 	    msgqueue_flush (&host->scsi.msgs);
-	    host->dma.transferred = host->scsi.SCp.have_data_in;
+	    host->dma.transferred = host->scsi.SCp.scsi_xferred;
 	    /* 33C93 gives next interrupt indicating bus phase */
 	    asr = sbic_arm_read (host->scsi.io_port, ASR);
 	    if (!(asr & ASR_INT))
@@ -2178,7 +2183,7 @@ intr_ret_t acornscsi_sbicintr (AS_Host *host, int in_irq)
 	case 0x4b:			/* -> PHASE_STATUSIN				*/
 	case 0x1b:			/* -> PHASE_STATUSIN				*/
 	    /* DATA IN -> STATUS */
-	    host->scsi.SCp.have_data_in = host->SCpnt->request_bufflen -
+	    host->scsi.SCp.scsi_xferred = host->SCpnt->request_bufflen -
 					  acornscsi_sbic_xfcount (host);
 	    acornscsi_dma_stop (host);
 	    acornscsi_readstatusbyte (host);
@@ -2188,7 +2193,7 @@ intr_ret_t acornscsi_sbicintr (AS_Host *host, int in_irq)
 	case 0x1e:			/* -> PHASE_MSGOUT				*/
 	case 0x4e:			/* -> PHASE_MSGOUT				*/
 	    /* DATA IN -> MESSAGE OUT */
-	    host->scsi.SCp.have_data_in = host->SCpnt->request_bufflen -
+	    host->scsi.SCp.scsi_xferred = host->SCpnt->request_bufflen -
 					  acornscsi_sbic_xfcount (host);
 	    acornscsi_dma_stop (host);
 	    acornscsi_sendmessage (host);
@@ -2197,7 +2202,7 @@ intr_ret_t acornscsi_sbicintr (AS_Host *host, int in_irq)
 	case 0x1f:			/* message in					*/
 	case 0x4f:			/* message in					*/
 	    /* DATA IN -> MESSAGE IN */
-	    host->scsi.SCp.have_data_in = host->SCpnt->request_bufflen -
+	    host->scsi.SCp.scsi_xferred = host->SCpnt->request_bufflen -
 					  acornscsi_sbic_xfcount (host);
 	    acornscsi_dma_stop (host);
 	    acornscsi_message (host);	/* -> PHASE_MSGIN, PHASE_DISCONNECT		*/
@@ -2223,7 +2228,7 @@ intr_ret_t acornscsi_sbicintr (AS_Host *host, int in_irq)
 	case 0x4b:			/* -> PHASE_STATUSIN				*/
 	case 0x1b:			/* -> PHASE_STATUSIN				*/
 	    /* DATA OUT -> STATUS */
-	    host->scsi.SCp.have_data_in = host->SCpnt->request_bufflen -
+	    host->scsi.SCp.scsi_xferred = host->SCpnt->request_bufflen -
 					  acornscsi_sbic_xfcount (host);
 	    acornscsi_dma_stop (host);
 	    acornscsi_dma_adjust (host);
@@ -2234,7 +2239,7 @@ intr_ret_t acornscsi_sbicintr (AS_Host *host, int in_irq)
 	case 0x1e:			/* -> PHASE_MSGOUT				*/
 	case 0x4e:			/* -> PHASE_MSGOUT				*/
 	    /* DATA OUT -> MESSAGE OUT */
-	    host->scsi.SCp.have_data_in = host->SCpnt->request_bufflen -
+	    host->scsi.SCp.scsi_xferred = host->SCpnt->request_bufflen -
 					  acornscsi_sbic_xfcount (host);
 	    acornscsi_dma_stop (host);
 	    acornscsi_dma_adjust (host);
@@ -2244,7 +2249,7 @@ intr_ret_t acornscsi_sbicintr (AS_Host *host, int in_irq)
 	case 0x1f:			/* message in					*/
 	case 0x4f:			/* message in					*/
 	    /* DATA OUT -> MESSAGE IN */
-	    host->scsi.SCp.have_data_in = host->SCpnt->request_bufflen -
+	    host->scsi.SCp.scsi_xferred = host->SCpnt->request_bufflen -
 					  acornscsi_sbic_xfcount (host);
 	    acornscsi_dma_stop (host);
 	    acornscsi_dma_adjust (host);
@@ -2426,7 +2431,7 @@ int acornscsi_queuecmd (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
     SCpnt->tag = 0;
     SCpnt->SCp.phase = (int)acornscsi_datadirection (SCpnt->cmnd[0]);
     SCpnt->SCp.sent_command = 0;
-    SCpnt->SCp.have_data_in = 0;
+    SCpnt->SCp.scsi_xferred = 0;
     SCpnt->SCp.Status = 0;
     SCpnt->SCp.Message = 0;
 
@@ -2592,7 +2597,7 @@ int acornscsi_reset (Scsi_Cmnd *SCpnt, unsigned int reset_flags)
 	SCpnt->result = DID_RESET << 16;
 	SCpnt->scsi_done (SCpnt);
     }
-while (1);
+
     return SCSI_RESET_BUS_RESET | SCSI_RESET_HOST_RESET | SCSI_RESET_SUCCESS;
 }
 
@@ -2657,6 +2662,9 @@ int acornscsi_detect(Scsi_Host_Template * tpnt)
 	host->card.io_ram	= ioaddr (instance->io_port);
 	host->dma.io_port	= instance->io_port + 0xc00;
 	host->dma.io_intr_clear = POD_SPACE(instance->io_port) + 0x800;
+
+	ecs[count]->irqaddr	= (char *)ioaddr(host->card.io_intr);
+	ecs[count]->irqmask	= 0x0a;
 
 	request_region (instance->io_port + 0x800,  2, "acornscsi(sbic)");
 	request_region (host->card.io_intr,  1, "acornscsi(intr)");

@@ -38,15 +38,22 @@ if [ "$CONFIG_ARCH_TBOX" = "y" ]; then
   define_bool CONFIG_BUS_I2C y
 fi
 
-#  These machines have PCI/may have PCI
+#  These machines always have PCI
 
 if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
      "$CONFIG_ARCH_VNC" = "y" ]; then
   define_bool CONFIG_PCI y
+fi
+if [ "$CONFIG_ARCH_EBSA285" = "y" ]; then
+  bool "PCI support" CONFIG_PCI
+fi
+
+# These machines have ISA-DMA
+if [ "$CONFIG_CATS" = "y" -o \
+     "$CONFIG_ARCH_VNC" = "y" ]; then
+  define_bool CONFIG_ISA_DMA y
 else
-  if [ "$CONFIG_ARCH_EBSA285" = "y" ]; then
-    bool "PCI support" CONFIG_PCI
-  fi
+  define_bool CONFIG_ISA_DMA n
 fi
 
 # Figure out whether this system uses 26-bit or 32-bit CPUs.  Nobody has
@@ -122,6 +129,11 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
     fi
   fi
 fi
+if [ "$CONFIG_ARCH_EBSA285" = "y" -o \
+     "$CONFIG_ARCH_EBSA110" = "y" -o \
+     "$CONFIG_ARCH_VNC" = "y" ]; then
+  string 'Initial kernel command string' CONFIG_CMDLINE
+fi
 endmenu
 
 source drivers/pnp/Config.in
@@ -132,16 +144,20 @@ if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
   source drivers/acorn/block/Config.in
 fi
 
-source arch/arm/drivers/char/Config.in
+if [ "$CONFIG_VGA_CONSOLE" = "n" -a "$CONFIG_FB" = "n" ]; then
+  source arch/arm/drivers/char/Config.in
+else
+  source drivers/char/Config.in
+fi
+if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
+  source drivers/acorn/char/Config.in
+fi
 
 if [ "$CONFIG_VT" = "y" ]; then
   mainmenu_option next_comment
   comment 'Console drivers'
   if [ "$CONFIG_ARCH_ACORN" != "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
     bool 'VGA text console' CONFIG_VGA_CONSOLE
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      bool 'Video mode selection support' CONFIG_VIDEO_SELECT
-    fi
   fi
   bool 'Support Frame buffer devices' CONFIG_FB
   source drivers/video/Config.in

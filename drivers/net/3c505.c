@@ -266,12 +266,12 @@ static inline unsigned int backlog_next(unsigned int n)
 
 static inline int get_status(unsigned int base_addr)
 {
-	int timeout = jiffies + 10;
+	int timeout = jiffies + 10*HZ/100;
 	register int stat1;
 	do {
 		stat1 = inb_status(base_addr);
-	} while (stat1 != inb_status(base_addr) && jiffies < timeout);
-	if (jiffies >= timeout)
+	} while (stat1 != inb_status(base_addr) && time_before(jiffies, timeout));
+	if (time_after_eq(jiffies, timeout))
 		TIMEOUT_MSG(__LINE__);
 	return stat1;
 }
@@ -296,23 +296,23 @@ inline static void adapter_reset(struct device *dev)
 	if (inb_status(dev->base_addr) & ACRF) {
 		do {
 			inb_command(dev->base_addr);
-			timeout = jiffies + 2;
-			while ((jiffies <= timeout) && !(inb_status(dev->base_addr) & ACRF));
+			timeout = jiffies + 2*HZ/100;
+			while (time_before_eq(jiffies, timeout) && !(inb_status(dev->base_addr) & ACRF));
 		} while (inb_status(dev->base_addr) & ACRF);
 		set_hsf(dev, HSF_PCB_NAK);
 	}
 	outb_control(adapter->hcr_val | ATTN | DIR, dev);
-	timeout = jiffies + 1;
-	while (jiffies <= timeout);
+	timeout = jiffies + 1*HZ/100;
+	while (time_before_eq(jiffies, timeout));
 	outb_control(adapter->hcr_val & ~ATTN, dev);
-	timeout = jiffies + 1;
-	while (jiffies <= timeout);
+	timeout = jiffies + 1*HZ/100;
+	while (time_before_eq(jiffies, timeout));
 	outb_control(adapter->hcr_val | FLSH, dev);
-	timeout = jiffies + 1;
-	while (jiffies <= timeout);
+	timeout = jiffies + 1*HZ/100;
+	while (time_before_eq(jiffies, timeout));
 	outb_control(adapter->hcr_val & ~FLSH, dev);
-	timeout = jiffies + 1;
-	while (jiffies <= timeout);
+	timeout = jiffies + 1*HZ/100;
+	while (time_before_eq(jiffies, timeout));
 
 	outb_control(orig_hcr, dev);
 	if (!start_receive(dev, &adapter->tx_pcb))
@@ -326,7 +326,7 @@ inline static void adapter_reset(struct device *dev)
 static inline void check_3c505_dma(struct device *dev)
 {
 	elp_device *adapter = dev->priv;
-	if (adapter->dmaing && (jiffies > (adapter->current_dma.start_time + 10))) {
+	if (adapter->dmaing && time_after(jiffies, adapter->current_dma.start_time + 10)) {
 		unsigned long flags, f;
 		printk("%s: DMA %s timed out, %d bytes left\n", dev->name, adapter->current_dma.direction ? "download" : "upload", get_dma_residue(dev->dma));
 		save_flags(flags);
@@ -350,7 +350,7 @@ static inline unsigned int send_pcb_slow(unsigned int base_addr, unsigned char b
 {
 	unsigned int timeout;
 	outb_command(byte, base_addr);
-	for (timeout = jiffies + 5; jiffies < timeout;) {
+	for (timeout = jiffies + 5*HZ/100; time_before(jiffies, timeout);) {
 		if (inb_status(base_addr) & HCRE)
 			return FALSE;
 	}
@@ -448,7 +448,7 @@ static int send_pcb(struct device *dev, pcb_struct * pcb)
 	/* now wait for the acknowledgement */
 	sti();
 
-	for (timeout = jiffies + 5; jiffies < timeout;) {
+	for (timeout = jiffies + 5*HZ/100; time_before(jiffies, timeout);) {
 		switch (GET_ASF(dev->base_addr)) {
 		case ASF_PCB_ACK:
 			adapter->send_pcb_semaphore = 0;
@@ -499,18 +499,18 @@ static int receive_pcb(struct device *dev, pcb_struct * pcb)
 	set_hsf(dev, 0);
 
 	/* get the command code */
-	timeout = jiffies + 2;
-	while (((stat = get_status(dev->base_addr)) & ACRF) == 0 && jiffies < timeout);
-	if (jiffies >= timeout) {
+	timeout = jiffies + 2*HZ/100;
+	while (((stat = get_status(dev->base_addr)) & ACRF) == 0 && time_before(jiffies, timeout));
+	if (time_after_eq(jiffies, timeout)) {
 		TIMEOUT_MSG(__LINE__);
 		return FALSE;
 	}
 	pcb->command = inb_command(dev->base_addr);
 
 	/* read the data length */
-	timeout = jiffies + 3;
-	while (((stat = get_status(dev->base_addr)) & ACRF) == 0 && jiffies < timeout);
-	if (jiffies >= timeout) {
+	timeout = jiffies + 3*HZ/100;
+	while (((stat = get_status(dev->base_addr)) & ACRF) == 0 && time_before(jiffies, timeout));
+	if (time_after_eq(jiffies, timeout)) {
 		TIMEOUT_MSG(__LINE__);
 		printk("%s: status %02x\n", dev->name, stat);
 		return FALSE;
@@ -738,8 +738,8 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 		/*
 		 * receive a PCB from the adapter
 		 */
-		timeout = jiffies + 3;
-		while ((inb_status(dev->base_addr) & ACRF) != 0 && jiffies < timeout) {
+		timeout = jiffies + 3*HZ/100;
+		while ((inb_status(dev->base_addr) & ACRF) != 0 && time_before(jiffies, timeout)) {
 			if (receive_pcb(dev, &adapter->irx_pcb)) {
 				switch (adapter->irx_pcb.command) {
 				case 0:
@@ -971,8 +971,8 @@ static int elp_open(struct device *dev)
 		printk("%s: couldn't send memory configuration command\n", dev->name);
 	else {
 		int timeout = jiffies + TIMEOUT;
-		while (adapter->got[CMD_CONFIGURE_ADAPTER_MEMORY] == 0 && jiffies < timeout);
-		if (jiffies >= timeout)
+		while (adapter->got[CMD_CONFIGURE_ADAPTER_MEMORY] == 0 && time_before(jiffies, timeout));
+		if (time_after_eq(jiffies, timeout))
 			TIMEOUT_MSG(__LINE__);
 	}
 
@@ -990,8 +990,8 @@ static int elp_open(struct device *dev)
 		printk("%s: couldn't send 82586 configure command\n", dev->name);
 	else {
 		int timeout = jiffies + TIMEOUT;
-		while (adapter->got[CMD_CONFIGURE_82586] == 0 && jiffies < timeout);
-		if (jiffies >= timeout)
+		while (adapter->got[CMD_CONFIGURE_82586] == 0 && time_before(jiffies, timeout));
+		if (time_after_eq(jiffies, timeout))
 			TIMEOUT_MSG(__LINE__);
 	}
 
@@ -1177,8 +1177,8 @@ static struct net_device_stats *elp_get_stats(struct device *dev)
 		printk("%s: couldn't send get statistics command\n", dev->name);
 	else {
 		int timeout = jiffies + TIMEOUT;
-		while (adapter->got[CMD_NETWORK_STATISTICS] == 0 && jiffies < timeout);
-		if (jiffies >= timeout) {
+		while (adapter->got[CMD_NETWORK_STATISTICS] == 0 && time_before(jiffies, timeout));
+		if (time_after_eq(jiffies, timeout)) {
 			TIMEOUT_MSG(__LINE__);
 			return &adapter->stats;
 		}
@@ -1270,8 +1270,8 @@ static void elp_set_mc_list(struct device *dev)
 			printk("%s: couldn't send set_multicast command\n", dev->name);
 		else {
 			int timeout = jiffies + TIMEOUT;
-			while (adapter->got[CMD_LOAD_MULTICAST_LIST] == 0 && jiffies < timeout);
-			if (jiffies >= timeout) {
+			while (adapter->got[CMD_LOAD_MULTICAST_LIST] == 0 && time_before(jiffies, timeout));
+			if (time_after_eq(jiffies, timeout)) {
 				TIMEOUT_MSG(__LINE__);
 			}
 		}
@@ -1294,8 +1294,8 @@ static void elp_set_mc_list(struct device *dev)
 		printk("%s: couldn't send 82586 configure command\n", dev->name);
 	else {
 		int timeout = jiffies + TIMEOUT;
-		while (adapter->got[CMD_CONFIGURE_82586] == 0 && jiffies < timeout);
-		if (jiffies >= timeout)
+		while (adapter->got[CMD_CONFIGURE_82586] == 0 && time_before(jiffies, timeout));
+		if (time_after_eq(jiffies, timeout))
 			TIMEOUT_MSG(__LINE__);
 	}
 }
@@ -1371,8 +1371,8 @@ __initfunc(static int elp_sense(struct device *dev))
 	if (orig_HSR & DIR) {
 		/* If HCR.DIR is up, we pull it down. HSR.DIR should follow. */
 		outb(0, dev->base_addr + PORT_CONTROL);
-		timeout = jiffies + 30;
-		while (jiffies < timeout);
+		timeout = jiffies + 30*HZ/100;
+		while (time_before(jiffies, timeout));
 		restore_flags(flags);
 		if (inb_status(addr) & DIR) {
 			if (elp_debug > 0)
@@ -1382,8 +1382,8 @@ __initfunc(static int elp_sense(struct device *dev))
 	} else {
 		/* If HCR.DIR is down, we pull it up. HSR.DIR should follow. */
 		outb(DIR, dev->base_addr + PORT_CONTROL);
-		timeout = jiffies + 30;
-		while (jiffies < timeout);
+		timeout = jiffies + 30*HZ/100;
+		while (time_before(jiffies, timeout));
 		restore_flags(flags);
 		if (!(inb_status(addr) & DIR)) {
 			if (elp_debug > 0)
@@ -1479,13 +1479,13 @@ __initfunc(int elplus_probe(struct device *dev))
 		/* First try to write just one byte, to see if the card is
 		 * responding at all normally.
 		 */
-		timeout = jiffies + 5;
+		timeout = jiffies + 5*HZ/100;
 		okay = 0;
-		while (jiffies < timeout && !(inb_status(dev->base_addr) & HCRE));
+		while (time_before(jiffies, timeout) && !(inb_status(dev->base_addr) & HCRE));
 		if ((inb_status(dev->base_addr) & HCRE)) {
 			outb_command(0, dev->base_addr);	/* send a spurious byte */
-			timeout = jiffies + 5;
-			while (jiffies < timeout && !(inb_status(dev->base_addr) & HCRE));
+			timeout = jiffies + 5*HZ/100;
+			while (time_before(jiffies, timeout) && !(inb_status(dev->base_addr) & HCRE));
 			if (inb_status(dev->base_addr) & HCRE)
 				okay = 1;
 		}
@@ -1499,8 +1499,8 @@ __initfunc(int elplus_probe(struct device *dev))
 				 * Give it the benefit of the doubt for 10 seconds.
 				 */
 				printk("assuming 3c505 still starting\n");
-				timeout = jiffies + 10 * HZ;
-				while (jiffies < timeout && (inb_status(dev->base_addr) & 7));
+				timeout = jiffies + 10*HZ;
+				while (time_before(jiffies, timeout) && (inb_status(dev->base_addr) & 7));
 				if (inb_status(dev->base_addr) & 7) {
 					printk("%s: 3c505 failed to start\n", dev->name);
 				} else {

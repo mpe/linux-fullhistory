@@ -91,8 +91,7 @@ void bvme6000_reset()
 
 static void bvme6000_get_model(char *model)
 {
-    /* XXX Need to detect if BVME4000 or BVME6000 */
-    sprintf(model, "BVME6000");
+    sprintf(model, "BVME%d000", m68k_cputype == CPU_68060 ? 6 : 4);
 }
 
 
@@ -152,13 +151,17 @@ __initfunc(void config_bvme6000(void))
     pit->pbddr	= 0xf3;	/* Mostly outputs */
     pit->pcdr	= 0x01;	/* PA transceiver disabled */
     pit->pcddr	= 0x03;	/* WDOG disable */
+
+    /* Disable snooping for Ethernet and VME accesses */
+
+    bvme_acr_addrctl = 0;
 }
 
 
 void bvme6000_abort_int (int irq, void *dev_id, struct pt_regs *fp)
 {
         unsigned long *new = (unsigned long *)vectors;
-        unsigned long *old = (unsigned long *)0xf8000000;;
+        unsigned long *old = (unsigned long *)0xf8000000;
 
         /* Wait for button release */
 	while (*config_reg_ptr & BVME_ABORT_STATUS)

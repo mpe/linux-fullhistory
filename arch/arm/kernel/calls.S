@@ -9,7 +9,7 @@
 #define NR_syscalls 256
 #else
 
-/* 0 */		.long	SYMBOL_NAME(sys_setup)
+/* 0 */		.long	SYMBOL_NAME(sys_ni_syscall)
 		.long	SYMBOL_NAME(sys_exit)
 		.long	SYMBOL_NAME(sys_fork_wrapper)
 		.long	SYMBOL_NAME(sys_read)

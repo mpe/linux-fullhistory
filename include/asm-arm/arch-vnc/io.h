@@ -163,12 +163,12 @@ static inline unsigned short readw(unsigned int addr)
 	return *(volatile unsigned short *)(0xe0000000 + (addr));
 }
 
-static inline void writew(unsigned long b, unsigned int addr)
+static inline void writel(unsigned long b, unsigned int addr)
 {
 	*(volatile unsigned long *)(0xe0000000 + (addr)) = b;
 }
 
-static inline unsigned long readw(unsigned int addr)
+static inline unsigned long readl(unsigned int addr)
 {
 	return *(volatile unsigned long *)(0xe0000000 + (addr));
 }

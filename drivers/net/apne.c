@@ -119,22 +119,26 @@ static int init_pcmcia(void);
 static const char *version =
     "apne.c:v1.1 7/10/98 Alain Malek (Alain.Malek@cryogen.ch)\n";
 
+static int apne_owned = 0;	/* signal if card already owned */
 
 __initfunc(int apne_probe(struct device *dev))
 {
 #ifndef MANUAL_CONFIG
 	char tuple[8];
 #endif
+
+	if (apne_owned)
+		return -ENODEV;
         
 	if ( !(AMIGAHW_PRESENT(PCMCIA)) )
-		return (ENODEV);
+		return (-ENODEV);
                                 
 	printk("Looking for PCMCIA ethernet card : ");
                                         
 	/* check if a card is inserted */
 	if (!(PCMCIA_INSERTED)) {
 		printk("NO PCMCIA card inserted\n");
-		return (ENODEV);
+		return (-ENODEV);
 	}
                                                                                                 
 	/* disable pcmcia irq for readtuple */
@@ -144,7 +148,7 @@ __initfunc(int apne_probe(struct device *dev))
 	if ((pcmcia_copy_tuple(CISTPL_FUNCID, tuple, 8) < 3) ||
 		(tuple[2] != CISTPL_FUNCID_NETWORK)) {
 		printk("not an ethernet card\n");
-		return (ENODEV);
+		return (-ENODEV);
 	}
 #endif
 
@@ -153,7 +157,7 @@ __initfunc(int apne_probe(struct device *dev))
 	if (init_pcmcia())
 		return apne_probe1(dev, IOBASE+GAYLE_IO);
 	else
-		return (ENODEV);
+		return (-ENODEV);
 
 }
 
@@ -169,7 +173,7 @@ __initfunc(static int apne_probe1(struct device *dev, int ioaddr))
     int neX000, ctron;
 #endif
     static unsigned version_printed = 0;
-    static int pcmcia_offsets[16]={
+    static u32 pcmcia_offsets[16]={
                 0,   1+GAYLE_ODD,   2,   3+GAYLE_ODD,
                 4,   5+GAYLE_ODD,   6,   7+GAYLE_ODD,
                 8,   9+GAYLE_ODD, 0xa, 0xb+GAYLE_ODD,
@@ -197,7 +201,7 @@ __initfunc(static int apne_probe1(struct device *dev, int ioaddr))
 	while ((readb(ioaddr + NE_EN0_ISR) & ENISR_RESET) == 0)
 		if (jiffies - reset_start_time > 2*HZ/100) {
 			printk(" not found (no reset ack).\n");
-			return ENODEV;
+			return -ENODEV;
 		}
 
 	writeb(0xff, ioaddr + NE_EN0_ISR);		/* Ack all intr. */
@@ -328,6 +332,8 @@ __initfunc(static int apne_probe1(struct device *dev, int ioaddr))
     pcmcia_ack_int(pcmcia_get_intreq());		/* ack PCMCIA int req */
     pcmcia_enable_irq();
 
+    apne_owned = 1;
+
     return 0;
 }
 
@@ -390,7 +396,7 @@ apne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_get_8390_hdr "
-	   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
+	   "[DMAstat:%d][irqlock:%d][intr:%ld].\n",
 	   dev->name, ei_status.dmaing, ei_status.irqlock,
 	   dev->interrupt);
 	return;
@@ -439,7 +445,7 @@ apne_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_of
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_block_input "
-	   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
+	   "[DMAstat:%d][irqlock:%d][intr:%ld].\n",
 	   dev->name, ei_status.dmaing, ei_status.irqlock,
 	   dev->interrupt);
 	return;
@@ -488,7 +494,7 @@ apne_block_output(struct device *dev, int count,
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
 	printk("%s: DMAing conflict in ne_block_output."
-	   "[DMAstat:%d][irqlock:%d][intr:%d]\n",
+	   "[DMAstat:%d][irqlock:%d][intr:%ld]\n",
 	   dev->name, ei_status.dmaing, ei_status.irqlock,
 	   dev->interrupt);
 	return;
@@ -577,15 +583,17 @@ int init_module(void)
 
 void cleanup_module(void)
 {
+	unregister_netdev(&apne_dev);
+
 	pcmcia_disable_irq();
 
 	free_irq(IRQ_AMIGA_PORTS, &apne_dev);
 
 	pcmcia_reset();
 
-	unregister_netdev(&apne_dev);
-
 	unlock_8390_module();
+
+	apne_owned = 0;
 }
 
 #endif

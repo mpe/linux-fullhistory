@@ -3,13 +3,22 @@
  *
  * Copyright (C) 1998 Russell King, Phil Blundell
  */
+#include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
+#include <linux/ptrace.h>
+#include <linux/interrupt.h>
 #include <linux/init.h>
 
+#include <asm/irq.h>
 #include <asm/system.h>
 
 #define MAX_SLOTS		20
+
+extern void pcibios_fixup_ebsa285(struct pci_dev *dev);
+extern void pcibios_init_ebsa285(void);
+extern void pcibios_fixup_vnc(struct pci_dev *dev);
+extern void pcibios_init_vnc(void);
 
 int
 pcibios_present(void)
@@ -24,12 +33,11 @@ pcibios_base_address(unsigned char bus, unsigned char dev_fn)
 		int slot = PCI_SLOT(dev_fn);
 		
 		if (slot < MAX_SLOTS)
-			return 0xf8c00000 + (slot << 11);
+			return 0xf8c00000 + (slot << 11) + (PCI_FUNC(dev_fn) << 8);
 		else
 			return 0;
-	} else {
+	} else
 		return 0xf9000000 | (bus << 16) | (dev_fn << 8);
-	}
 }
 
 int
@@ -119,56 +127,35 @@ pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-static int irqmap_ebsa[] __initdata = { 9, 8, 18, 11 };
-static int irqmap_cats[] __initdata = { 18, 8, 9, 11 };
-
-__initfunc(static int ebsa_irqval(struct pci_dev *dev))
+__initfunc(void pci_set_cmd(struct pci_dev *dev, unsigned short clear, unsigned short set))
 {
-	unsigned char pin;
-	
-	pcibios_read_config_byte(dev->bus->number,
-				 dev->devfn,
-				 PCI_INTERRUPT_PIN,
-				 &pin);
-	
-	return irqmap_ebsa[(PCI_SLOT(dev->devfn) + pin) & 3];
+	unsigned short cmd;
+
+	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+	cmd = (cmd & ~clear) | set;
+	pci_write_config_word(dev, PCI_COMMAND, cmd);
 }
 
-__initfunc(static int cats_irqval(struct pci_dev *dev))
+__initfunc(void pci_set_base_addr(struct pci_dev *dev, int idx, unsigned int addr))
 {
-	if (dev->irq >= 128)
-		return 32 + (dev->irq & 0x1f);
+	int reg = PCI_BASE_ADDRESS_0 + (idx << 2);
 
-	switch (dev->irq) {
-	case 1:
-	case 2:
-	case 3:
-	case 4:
-		return irqmap_cats[dev->irq - 1];
-	case 0:
-		return 0;
-	}
+	pci_write_config_dword(dev, reg, addr);
+	pci_read_config_dword(dev, reg, &addr);
 
-	printk("PCI: device %02x:%02x has unknown irq line %x\n",
-	       dev->bus->number, dev->devfn, dev->irq);
-	return 0;
+	dev->base_address[idx] = addr;
 }
 
 __initfunc(void pcibios_fixup(void))
 {
 	struct pci_dev *dev;
-	unsigned char cmd;
 
 	for (dev = pci_devices; dev; dev = dev->next) {
-		/* sort out the irq mapping for this device */
-		switch (machine_type) {
-		case MACH_TYPE_EBSA285:
-			dev->irq = ebsa_irqval(dev);
-			break;
-		case MACH_TYPE_CATS:
-			dev->irq = cats_irqval(dev);
-			break;
-		}
+		if (machine_is_ebsa285() || machine_is_cats())
+			pcibios_fixup_ebsa285(dev);
+		if (machine_is_netwinder())
+			pcibios_fixup_vnc(dev);
+
 		pcibios_write_config_byte(dev->bus->number, dev->devfn,
 					  PCI_INTERRUPT_LINE, dev->irq);
 
@@ -176,34 +163,19 @@ __initfunc(void pcibios_fixup(void))
 		       "PCI: %02x:%02x [%04x/%04x] on irq %d\n",
 			dev->bus->number, dev->devfn,
 			dev->vendor, dev->device, dev->irq);
-
-		/* Turn on bus mastering - boot loader doesn't
-		 * - perhaps it should! - dag
-		 */
-		pcibios_read_config_byte(dev->bus->number, dev->devfn,
-					 PCI_COMMAND, &cmd);
-		cmd |= PCI_COMMAND_MASTER;
-		pcibios_write_config_byte(dev->bus->number, dev->devfn,
-					  PCI_COMMAND, cmd);
 	}
+	if (machine_is_netwinder())
+		hw_init();
 }
 
 __initfunc(void pcibios_init(void))
 {
-	int rev;
+	if (machine_is_ebsa285() || machine_is_cats())
+		pcibios_init_ebsa285();
+	if (machine_is_netwinder())
+		pcibios_init_vnc();
 
-	rev = *(unsigned char *)0xfe000008;
-	printk("DEC21285 PCI revision %02X\n", rev);
-
-	/*
-	 * Map our SDRAM at a known address in PCI space, just in case
-	 * the firmware had other ideas.  Using a nonzero base is slightly
-	 * bizarre but apparently necessary to avoid problems with some
-	 * video cards.
-	 *
-	 * We should really only do this if we are the configuration master.
-	 */
-	*((unsigned long *)0xfe000018) = 0x10000000;
+	printk("DEC21285 PCI revision %02X\n", *(unsigned char *)0xfe000008);
 }
 
 __initfunc(void pcibios_fixup_bus(struct pci_bus *bus))

@@ -5,7 +5,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) hamradio
+ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda
 
 L_TARGET := net.a
 L_OBJS   := auto_irq.o
@@ -752,6 +752,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_COSA),y)
+L_OBJS += cosa.o
+CONFIG_SYNCPPP_BUILTIN = y
+else
+  ifeq ($(CONFIG_COSA),m)
+  CONFIG_SYNCPPP_MODULE = y
+  M_OBJS += cosa.o
+  endif
+endif
+
 # If anything built-in uses syncppp, then build it into the kernel also.
 # If not, but a module uses it, build as a module.
 
@@ -1026,6 +1036,14 @@ L_OBJS += rrunner.o
 else
   ifeq ($(CONFIG_ROADRUNNER),m)
   M_OBJS += rrunner.o
+  endif
+endif
+
+ifeq ($(CONFIG_IRDA),y)
+SUB_DIRS += irda
+else
+  ifeq ($(CONFIG_IRDA),m)
+  MOD_SUB_DIRS += irda
   endif
 endif
 

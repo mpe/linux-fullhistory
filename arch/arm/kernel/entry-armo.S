@@ -271,26 +271,18 @@ vector_undefinstr:
 		mov	fp, #0
 		teqp	pc, #I_BIT | MODE_SVC
 .Lbug_undef:
-		adr	r1, .LC2
-		ldmia	r1, {r1, r4}
-		ldr	r1, [r1]
-		get_current_task r2
-		teq	r1, r2
-		stmnefd	sp!, {ip, lr}
-		blne	SYMBOL_NAME(math_state_restore)
-		ldmnefd	sp!, {ip, lr}
+		ldr	r4, .LC2
 		ldr	pc, [r4]			@ Call FP module USR entry point
 
 		.globl	SYMBOL_NAME(fpundefinstr)
 SYMBOL_NAME(fpundefinstr):				@ Called by FP module on undefined instr
-SYMBOL_NAME(fpundefinstrsvc):
 		mov	r0, lr
 		mov	r1, sp
 		teqp	pc, #MODE_SVC
 		bl	SYMBOL_NAME(do_undefinstr)
 		b	ret_from_exception		@ Normal FP exit
 
-__und_svc:	SVC_SAVE_ALL			@ Non-user mode
+__und_svc:	SVC_SAVE_ALL				@ Non-user mode
 		mask_pc	r0, lr
 		and	r2, lr, #3
 		sub	r0, r0, #4
@@ -298,8 +290,44 @@ __und_svc:	SVC_SAVE_ALL			@ Non-user mode
 		bl	SYMBOL_NAME(do_undefinstr)
 		SVC_RESTORE_ALL
 
-.LC2:		.word	SYMBOL_NAME(last_task_used_math)
-		.word	SYMBOL_NAME(fp_enter)
+/* We get here if an undefined instruction happens and the floating
+ * point emulator is not present.  If the offending instruction was
+ * a WFS, we just perform a normal return as if we had emulated the
+ * operation.  This is a hack to allow some basic userland binaries
+ * to run so that the emulator module proper can be loaded. --philb
+ */
+fpe_not_present:
+		adr	r10, wfs_mask_data
+		ldmia	r10, {r4, r5, r6, r7, r8}
+		ldr	r10, [sp, #S_PC]		@ Load PC
+		sub	r10, r10, #4
+		mask_pc	r10, r10
+		ldrt	r10, [r10]			@ get instruction
+		and	r5, r10, r5
+		teq	r5, r4				@ Is it WFS?
+		beq	ret_from_exception
+		and	r5, r10, r8
+		teq	r5, r6				@ Is it LDF/STF on sp or fp?
+		teqne	r5, r7
+		bne	fpundefinstr
+		tst	r10, #0x00200000		@ Does it have WB
+		beq	ret_from_exception
+		and	r4, r10, #255			@ get offset
+		and	r6, r10, #0x000f0000
+		tst	r10, #0x00800000		@ +/-
+		rsbeq	r4, r4, #0
+		ldr	r5, [sp, r6, lsr #14]		@ Load reg
+		add	r5, r5, r4, lsl #2
+		str	r5, [sp, r6, lsr #14]		@ Save reg
+		b	ret_from_exception
+
+wfs_mask_data:	.word	0x0e200110			@ WFS
+		.word	0x0fff0fff
+		.word	0x0d0d0100			@ LDF [sp]/STF [sp]
+		.word	0x0d0b0100			@ LDF [fp]/STF [fp]
+		.word	0x0f0f0f00
+
+.LC2:		.word	SYMBOL_NAME(fp_enter)
 
 /*=============================================================================
  * Prefetch abort handler

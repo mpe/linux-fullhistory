@@ -77,7 +77,8 @@ asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 		goto out;
 	if (!(a.flags & MAP_ANONYMOUS)) {
 		error = -EBADF;
-		if (a.fd >= NR_OPEN || !(file = current->files->fd[a.fd]))
+		if (a.fd >= current->files->max_fds || 
+		    !(file = current->files->fd[a.fd]))
 			goto out;
 	}
 	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);

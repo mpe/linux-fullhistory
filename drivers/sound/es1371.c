@@ -49,6 +49,7 @@
  *    31.08.98   0.4   Fix realplayer problems - dac.count issues
  *    27.10.98   0.5   Fix joystick support
  *                     -- Oliver Neukum (c188@org.chemie.uni-muenchen.de)
+ *    10.12.98   0.6   Fix drain_dac trying to wait on not yet initialized DMA
  *
  */
 
@@ -1444,7 +1445,7 @@ static int drain_dac1(struct es1371_state *s, int nonblock)
 	unsigned long flags;
 	int count, tmo;
 	
-	if (s->dma_dac1.mapped)
+	if (s->dma_dac1.mapped || !s->dma_dac1.ready)
 		return 0;
         current->state = TASK_INTERRUPTIBLE;
         add_wait_queue(&s->dma_dac1.wait, &wait);
@@ -1479,7 +1480,7 @@ static int drain_dac2(struct es1371_state *s, int nonblock)
 	unsigned long flags;
 	int count, tmo;
 
-	if (s->dma_dac2.mapped)
+	if (s->dma_dac2.mapped || !s->dma_dac2.ready)
 		return 0;
         current->state = TASK_INTERRUPTIBLE;
         add_wait_queue(&s->dma_dac2.wait, &wait);
@@ -2715,7 +2716,7 @@ __initfunc(int init_es1371(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.4 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.6 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 

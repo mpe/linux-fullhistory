@@ -53,22 +53,11 @@ bool '68020 support' CONFIG_M68020
 bool '68030 support' CONFIG_M68030
 bool '68040 support' CONFIG_M68040
 bool '68060 support' CONFIG_M68060
-if [ "$CONFIG_M68020" = "n" -a "$CONFIG_M68030" = "n" ]; then
-  if [ "$CONFIG_M68040" = "y" -a "$CONFIG_M68060" = "n" ]; then
-    bool 'Use 68040 specific optimizations' CONFIG_OPTIMIZE_040
-  fi
-  if [ "$CONFIG_M68040" = "n" -a "$CONFIG_M68060" = "y" ]; then
-    bool 'Use 68060 specific optimizations' CONFIG_OPTIMIZE_060
-  fi
-fi
-if [ "$CONFIG_VME" = "y" -a "$CONFIG_M68060" = "y" ]; then
-  define_bool CONFIG_060_WRITETHROUGH y
-fi
 bool 'Advanced configuration options' CONFIG_ADVANCED
 if [ "$CONFIG_ADVANCED" = "y" ]; then
   bool 'Use read-modify-write instructions' CONFIG_RMW_INSNS
   bool 'Use one physical chunk of memory only' CONFIG_SINGLE_MEMORY_CHUNK
-  if [ "$CONFIG_M68060" = "y" -a "$CONFIG_VME" = "n" ]; then
+  if [ "$CONFIG_M68060" = "y" ]; then
     bool 'Use write-through caching for 68060 supervisor accesses' CONFIG_060_WRITETHROUGH
   fi
 fi
@@ -157,7 +146,7 @@ if [ "$CONFIG_ZORRO" = "y" ]; then
     bool 'A4091 SCSI support' CONFIG_A4091_SCSI
     bool 'WarpEngine SCSI support' CONFIG_WARPENGINE_SCSI
     bool 'Blizzard PowerUP 603e+ SCSI' CONFIG_BLZ603EPLUS_SCSI
-    bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
+#    bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
 #    bool 'GVP Turbo 040/060 SCSI support' CONFIG_GVP_TURBO_SCSI
   fi
 fi
@@ -230,10 +219,10 @@ if [ "$CONFIG_MAC" = "y" ]; then
   bool 'Macintosh onboard SONIC ethernet' CONFIG_MACSONIC
 fi
 if [ "$CONFIG_VME" = "y" -a "$CONFIG_MVME16x" = "y" ]; then
-  bool 'MVME16x Ethernet support' CONFIG_MVME16x_NET
+  tristate 'MVME16x Ethernet support' CONFIG_MVME16x_NET
 fi
 if [ "$CONFIG_VME" = "y" -a "$CONFIG_BVME6000" = "y" ]; then
-  bool 'BVME6000 Ethernet support' CONFIG_BVME6000_NET
+  tristate 'BVME6000 Ethernet support' CONFIG_BVME6000_NET
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari Lance support' CONFIG_ATARILANCE

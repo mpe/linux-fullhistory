@@ -14,6 +14,7 @@
 
 #include <linux/types.h>
 #include <linux/sched.h>
+#include <linux/timer.h>
 #include <asm/amigayle.h>
 #include <asm/amipcmcia.h>
 
@@ -26,7 +27,7 @@ void pcmcia_reset(void)
 	unsigned char b;
 
 	gayle_reset = 0x00;
-	while (jiffies - reset_start_time < 1*HZ/100);
+	while (time_before(jiffies, reset_start_time + 1*HZ/100));
 	b = gayle_reset;
 }
 

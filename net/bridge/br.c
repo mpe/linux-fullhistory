@@ -50,6 +50,7 @@
  *	
  */
  
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -71,6 +72,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <net/br.h>
+#include <linux/proc_fs.h>
 
 #ifndef min
 #define min(a, b) (((a) <= (b)) ? (a) : (b))
@@ -802,6 +804,40 @@ static void hold_timer_expiry(int port_no)	  /* (4.7.8)	 */
 	}					  /* (4.6.1.2.3)	 */
 }
 
+/* Vova Oksman: Write the buffer (contents of the Bridge table) */
+/* to a PROCfs file                                             */
+int br_tree_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+{
+	int size;
+	int len=0;
+	off_t pos=0;
+	char* pbuffer;
+
+	if(0==offset)
+	{
+		/* first time write the header */
+		size = sprintf(buffer,"%s","MAC address           Device     Flags     Age (sec.)\n");
+		len=size;
+	}
+
+	pbuffer=&buffer[len];
+	sprintf_avl(&pbuffer,NULL,&pos,&len,offset,length);
+
+	*start = buffer+len-(pos-offset);	/* Start of wanted data */
+	len = pos-offset;			/* Start slop */
+	if (len>length)
+		len = length;			/* Ending slop */
+
+	return len;
+}
+#ifdef CONFIG_PROC_FS
+struct proc_dir_entry proc_net_bridge= {
+	PROC_NET_BRIDGE, 6, "bridge",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	br_tree_get_info
+};
+#endif
 __initfunc(void br_init(void))
 {						  /* (4.8.1)	 */
 	int port_no;
@@ -857,6 +893,10 @@ __initfunc(void br_init(void))
 	br_stats.policy = BR_ACCEPT;			/* Enable bridge to accpet all protocols */
 	br_stats.exempt_protocols = 0;
 	/*start_hello_timer();*/
+	/* Vova Oksman: register the function for the PROCfs "bridge" file */
+#ifdef CONFIG_PROC_FS
+	proc_net_register(&proc_net_bridge);
+#endif
 }
 
 static inline unsigned short make_port_id(int port_no)

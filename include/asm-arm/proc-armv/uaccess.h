@@ -11,6 +11,8 @@
  *  DOMAIN_USER   - domain 0 includes all user memory only
  */
 
+#include <asm/hardware.h>
+
 #define DOMAIN_CLIENT	1
 #define DOMAIN_MANAGER	3
  
@@ -35,7 +37,7 @@
  * Note that this is actually 0x1,0000,0000
  */
 #define KERNEL_DS	0x00000000
-#define USER_DS		0xc0000000
+#define USER_DS		PAGE_OFFSET
 
 #define get_ds()	(KERNEL_DS)
 #define get_fs()	(current->addr_limit)
@@ -50,13 +52,10 @@ extern __inline__ void set_fs (mm_segment_t fs)
 		: "r" (fs ? USER_DOMAIN : KERNEL_DOMAIN));
 }
 
-/*
- * a + s   <= 2^32  -> C = 0 || Z = 0 (LS)
- * (a + s) <= l     -> C = 0 || Z = 0 (LS)
- */
+/* We use 33-bit arithmetic here... */
 #define __range_ok(addr,size) ({ \
 	unsigned long flag, sum; \
-	__asm__ __volatile__("adds %1, %2, %3; cmpls %1, %0; movls %0, #0" \
+	__asm__ __volatile__("adds %1, %2, %3; sbccs %1, %1, %0; movcc %0, #0" \
 		: "=&r" (flag), "=&r" (sum) \
 		: "r" (addr), "Ir" (size), "0" (current->addr_limit) \
 		: "cc"); \

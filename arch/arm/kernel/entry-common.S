@@ -288,4 +288,4 @@ ENTRY(trap_init)
 		.data
 
 ENTRY(fp_enter)
-		.word	fpundefinstr
+		.word	fpe_not_present

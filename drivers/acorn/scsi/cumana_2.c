@@ -156,8 +156,6 @@ cumanascsi_2_intr(int irq, void *dev_id, struct pt_regs *regs)
 static void
 cumanascsi_2_invalidate(char *addr, long len, fasdmadir_t direction)
 {
-	unsigned int page;
-
 	if (direction == DMA_OUT)
 		dma_cache_wback((unsigned long)addr, (unsigned long)len);
 	else

@@ -912,7 +912,7 @@ int atif_ioctl(int cmd, void *arg)
 			break;			
 
 		case SIOCSARP:
-			if(!suser())
+			if(!capable(CAP_NET_ADMIN))
                                 return (-EPERM);
                         if(sa->sat_family != AF_APPLETALK)
                                 return (-EINVAL);
@@ -961,7 +961,7 @@ int atif_ioctl(int cmd, void *arg)
                         break;
 
                 case SIOCDARP:
-                        if(!suser())
+                        if(!capable(CAP_NET_ADMIN))
                                 return (-EPERM);
                         if(sa->sat_family != AF_APPLETALK)
                                 return (-EINVAL);

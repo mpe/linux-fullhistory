@@ -1,0 +1,16 @@
+mainmenu_option next_comment
+comment 'Infrared-port device drivers'
+
+dep_tristate 'IrTTY (uses serial driver)' CONFIG_IRTTY_SIR $CONFIG_IRDA
+if [ "$CONFIG_IRTTY_SIR" != "n" ]; then
+  comment '   Dongle support' 
+  bool '   Serial dongle support' CONFIG_DONGLE
+  if [ "$CONFIG_DONGLE" != "n" ]; then
+    dep_tristate '   ESI JetEye PC dongle' CONFIG_ESI_DONGLE $CONFIG_IRTTY_SIR
+    dep_tristate '   ACTiSYS IR-220L and IR220L+ dongle' CONFIG_ACTISYS_DONGLE $CONFIG_IRTTY_SIR
+    dep_tristate '   Tekram IrMate 210B dongle' CONFIG_TEKRAM_DONGLE $CONFIG_IRTTY_SIR
+  fi
+fi
+dep_tristate '  NSC PC87108' CONFIG_NSC_FIR  $CONFIG_IRDA
+dep_tristate '  Winbond W83977AF (IR)' CONFIG_WINBOND_FIR $CONFIG_IRDA
+endmenu

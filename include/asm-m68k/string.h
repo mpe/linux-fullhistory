@@ -1,7 +1,7 @@
 #ifndef _M68K_STRING_H_
 #define _M68K_STRING_H_
 
-#include <linux/config.h>
+#include <asm/setup.h>
 #include <asm/page.h>
 
 #define __HAVE_ARCH_STRCPY
@@ -315,7 +315,7 @@ extern inline void * __memset_page(void * s,int c,size_t count)
   data = c | (c << 8);
   data |= data << 16;
 
-#if defined(CONFIG_OPTIMIZE_040) || defined(CONFIG_OPTIMIZE_060)
+#ifdef CPU_M68040_OR_M68060_ONLY
 
   if (((unsigned long) s) & 0x0f)
 	  memset(s, c, count);
@@ -386,7 +386,7 @@ extern inline void * __memcpy_page(void * to, const void * from, size_t count)
   unsigned long tmp;
   void *xto = to;
 
-#if defined(CONFIG_OPTIMIZE_040) || defined(CONFIG_OPTIMIZE_060)
+#ifdef CPU_M68040_OR_M68060_ONLY
 
   if (((unsigned long) to | (unsigned long) from) & 0x0f)
 	  return memcpy(to, from, count);

@@ -9,6 +9,7 @@
  *  26-09-1996	RMK	Added 'EXTRA_THREAD_STRUCT*'
  *  28-09-1996	RMK	Moved start_thread into the processor dependencies
  *  11-01-1998	RMK	Added new uaccess_t
+ *  09-09-1998	PJB	Delete redundant `wp_works_ok'
  */
 #ifndef __ASM_PROC_PROCESSOR_H
 #define __ASM_PROC_PROCESSOR_H
@@ -19,12 +20,6 @@
 #include <linux/string.h>
 
 #define KERNEL_STACK_SIZE 4096
-
-/*
- * on arm2,3 wp does not work
- */
-#define wp_works_ok 0
-#define wp_works_ok__is_a_macro /* for versions in ksyms.c */
 
 struct context_save_struct {
 	unsigned long r4;

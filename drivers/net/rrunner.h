@@ -550,6 +550,7 @@ struct rx_desc{
 
 #define SIOCRRPFW	SIOCDEVPRIVATE		/* put firmware */
 #define SIOCRRGFW	SIOCDEVPRIVATE+1	/* get firmware */
+#define SIOCRRID	SIOCDEVPRIVATE+2	/* identify */
 
 
 struct seg_hdr {
@@ -560,6 +561,8 @@ struct seg_hdr {
 
 
 #define EEPROM_BASE 0x80000000
+#define EEPROM_WORDS 8192
+#define EEPROM_BYTES (EEPROM_WORDS * sizeof(u32))
 
 struct eeprom_boot {
 	u32	key1;

@@ -26,10 +26,13 @@ endif
 
 head.o: head.S m68k_defs.h
 
-m68k_defs.h: m68k_defs.c m68k_defs.head $(TOPDIR)/include/linux/sched.h
-	$(CC) ${CFLAGS} -S m68k_defs.c
+m68k_defs.h: m68k_defs.c m68k_defs.head
+	rm -f m68k_defs.d
+	SUNPRO_DEPENDENCIES="m68k_defs.d m68k_defs.h" \
+	$(CC) $(filter-out -MD,$(CFLAGS)) -S m68k_defs.c
 	cp m68k_defs.head m68k_defs.h
-	sed -n < m68k_defs.s >> m68k_defs.h '/^#define/s/ #/ /p'
+	grep '^#define' m68k_defs.s >> m68k_defs.h
 	rm m68k_defs.s
+-include m68k_defs.d
 
 include $(TOPDIR)/Rules.make

@@ -119,7 +119,9 @@ int get_irq_list(char *buf)
 		*p++ = '\n';
 	}
 
+#ifdef CONFIG_ACORN
 	p += get_fiq_list(p);
+#endif
 	return p - buf;
 }
 
@@ -424,6 +426,8 @@ __initfunc(void init_IRQ(void))
 	}
 
 	irq_init_irq();
+#ifdef CONFIG_ARCH_ACORN
 	init_FIQ();
+#endif
 	init_dma();
 }

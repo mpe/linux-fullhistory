@@ -7,6 +7,7 @@
  *  20-10-1996	RMK	Created
  *  31-12-1997	RMK	Fixed definitions to reduce warnings
  *  17-05-1998	DAG	Added __virt_to_bus and __bus_to_virt functions.
+ *  21-11-1998	RMK	Changed __virt_to_bus and __bus_to_virt to macros.
  */
 #ifndef __ASM_ARCH_MMU_H
 #define __ASM_ARCH_MMU_H
@@ -19,7 +20,9 @@
 #define __phys_to_virt__is_a_macro
 #define __phys_to_virt(ppage) ((ppage) + PAGE_OFFSET)
 
-extern unsigned long __virt_to_bus(unsigned long);
-extern unsigned long __bus_to_virt(unsigned long);
+#define __virt_to_bus__is_a_macro
+#define __virt_to_bus(x)	(x - 0xe0000000)
+#define __bus_to_virt__is_a_macro
+#define __bus_to_virt(x)	(x + 0xe0000000)
 
 #endif

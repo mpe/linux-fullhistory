@@ -120,6 +120,7 @@ COMPRESSED_HEAD	 = head-nexuspci.o
 endif
 
 ifeq ($(CONFIG_ARCH_VNC),y)
+TEXTADDR	 = 0xC000C000
 MACHINE		 = vnc
 ARCHDIR		 = vnc
 endif
@@ -141,7 +142,7 @@ OBJCOPY		 = $(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 OBJDUMP		 = $(CROSS_COMPILE)objdump
 CPP		 = $(CC) -E
 ARCHCC		:= $(word 1,$(CC))
-GCCLIB		:= `$(ARCHCC) $(CFLAGS_PROC) --print-libgcc-file-name`
+GCCLIB		:= `$(CC) $(CFLAGS_PROC) --print-libgcc-file-name`
 #GCCARCH		:= -B/usr/bin/arm-linuxelf- 
 HOSTCFLAGS	:= $(CFLAGS:-fomit-frame-pointer=)
 ifeq ($(CONFIG_FRAME_POINTER),y)
@@ -160,10 +161,10 @@ LIBS		:= arch/arm/lib/lib.a $(LIBS) $(GCCLIB)
 BLOCK_DRIVERS	:= drivers/block/block.a
 CDROM_DRIVERS	:= drivers/cdrom/cdrom.a
 ifeq ($(CONFIG_FB),y)
-CHAR_DRIVERS	:= arch/arm/drivers/char1/char.a
+CHAR_DRIVERS	:= arch/arm/drivers/char1/char1.a drivers/char/char.a arch/arm/drivers/char1/char1.a
 else
 ifeq ($(CONFIG_VGA_CONSOLE),y)
-CHAR_DRIVERS	:= arch/arm/drivers/char1/char.a
+CHAR_DRIVERS	:= arch/arm/drivers/char1/char1.a drivers/char/char.a arch/arm/drivers/char1/char1.a
 else
 CHAR_DRIVERS	:= arch/arm/drivers/char/char.a
 endif

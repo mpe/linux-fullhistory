@@ -142,6 +142,8 @@ struct ace_regs {
 #define ACE_JUMBO_MTU 9000
 #define ACE_STD_MTU 1500
 
+#define ACE_TRACE_SIZE 0x8000
+
 /*
  * Host control register bits.
  */
@@ -205,17 +207,10 @@ struct ace_regs {
 #define DMA_WRITE_MAX_128	0xa0
 #define DMA_WRITE_MAX_256	0xc0
 #define DMA_WRITE_MAX_1K	0xe0
+#define MEM_READ_MULTIPLE	0x00020000
 #define DMA_WRITE_ALL_ALIGN	0x00800000
 #define READ_CMD_MEM		0x06000000
 #define WRITE_CMD_MEM		0x70000000
-
-
-/*
- * Transmit status.
- */
-
-#define ENA_XMIT		0x01
-#define PERM_CON		0x02
 
 
 /*
@@ -580,9 +575,11 @@ struct ace_private
 				__attribute__ ((aligned (L1_CACHE_BYTES)));
 	struct device		*next
 				__attribute__ ((aligned (L1_CACHE_BYTES)));
+	unsigned char		*trace_buf;
 	int			fw_running, fw_up, jumbo, promisc;
 	int			version;
-	int			vendor;
+	int			flags;
+	u16			vendor;
 	u16			pci_command;
 	u8			pci_bus;
 	u8			pci_dev_fun;
@@ -593,7 +590,7 @@ struct ace_private
 /*
  * Prototypes
  */
-static int ace_init(struct device *dev);
+static int ace_init(struct device *dev, int board_idx);
 static int ace_load_std_rx_ring(struct device *dev);
 static int ace_load_jumbo_rx_ring(struct device *dev);
 static int ace_flush_jumbo_rx_ring(struct device *dev);
@@ -603,6 +600,7 @@ static int ace_open(struct device *dev);
 static int ace_start_xmit(struct sk_buff *skb, struct device *dev);
 static int ace_close(struct device *dev);
 static void ace_timer(unsigned long data);
+static void ace_dump_trace(struct ace_private *ap);
 static void ace_set_multicast_list(struct device *dev);
 static int ace_change_mtu(struct device *dev, int new_mtu);
 static int ace_set_mac_addr(struct device *dev, void *p);

@@ -26,6 +26,10 @@ ifeq ($(MACHINE),ebsa110)
   L_OBJS += io-ebsa110.o
 endif
 
+ifeq ($(MACHINE),vnc)
+  L_OBJS += io-ebsa285.o
+endif
+
 ifeq ($(MACHINE),ebsa285)
   L_OBJS += io-ebsa285.o
 endif

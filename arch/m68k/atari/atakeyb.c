@@ -825,7 +825,7 @@ __initfunc(int atari_keyb_init(void))
     /* wait for a period of inactivity (here: 0.25s), then assume the IKBD's
      * self-test is finished */
     self_test_last_rcv = jiffies;
-    while( jiffies < self_test_last_rcv + HZ/4 )
+    while (time_before(jiffies, self_test_last_rcv + HZ/4))
 	barrier();
     /* if not incremented: no 0xf1 received */
     if (ikbd_self_test == 1)

@@ -293,6 +293,8 @@ void requeue_fdb(struct fdb *node, int new_port);
 
 struct fdb *br_avl_find_addr(unsigned char addr[6]);
 struct fdb *br_avl_insert (struct fdb * new_node);
+void sprintf_avl (char **pbuffer, struct fdb * tree, off_t *pos,int* len, off_t offset, int length);
+int br_tree_get_info(char *buffer, char **start, off_t offset, int length, int dummy);
 
 /* externs */
 

@@ -19,8 +19,6 @@
 
 #include <asm/arch/keyboard.h>
 
-#define SYSRQ_KEY 13
-
 #endif /* __KERNEL__ */
 
 #endif /* __ASM_ARM_KEYBOARD_H */

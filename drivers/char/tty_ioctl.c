@@ -52,7 +52,6 @@ void tty_wait_until_sent(struct tty_struct * tty, long timeout)
 	if (!tty->driver.chars_in_buffer)
 		return;
 	add_wait_queue(&tty->write_wait, &wait);
-	current->counter = 0;	/* make us low-priority */
 	if (!timeout)
 		timeout = MAX_SCHEDULE_TIMEOUT;
 	do {

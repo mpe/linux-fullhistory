@@ -300,8 +300,11 @@ static void autofs_read_inode(struct inode *inode)
 	struct autofs_sb_info *sbi =
 		(struct autofs_sb_info *) inode->i_sb->u.generic_sbp;
 
+	/* Initialize to the default case (stub directory) */
+
 	inode->i_op = NULL;
-	inode->i_mode = 0;
+	inode->i_op = &autofs_dir_inode_operations;
+	inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 	inode->i_nlink = 2;
 	inode->i_size = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
@@ -324,7 +327,7 @@ static void autofs_read_inode(struct inode *inode)
 
 		n = ino - AUTOFS_FIRST_SYMLINK;
 		if ( n >= AUTOFS_MAX_SYMLINKS || !test_bit(n,sbi->symlink_bitmap)) {
-			printk("autofs: Looking for bad symlink inode 0x%08x\n", (unsigned int) ino);
+			printk("autofs: Looking for bad symlink inode %u\n", (unsigned int) ino);
 			return;
 		}
 		
@@ -335,10 +338,6 @@ static void autofs_read_inode(struct inode *inode)
 		inode->i_mtime = inode->i_ctime = sl->mtime;
 		inode->i_size = sl->len;
 		inode->i_nlink = 1;
-	} else {
-		/* All non-root directory inodes look the same */
-		inode->i_op = &autofs_dir_inode_operations;
-		inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 	}
 }
 

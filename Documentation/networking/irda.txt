@@ -1,0 +1,13 @@
+To use the IrDA protocols within Linux you will need to get a suitable copy
+of the IrDA Utilities. More detailed information about these and associated
+programs can be found on http://www.cs.uit.no/~dagb/irda/.
+
+For more information about the IrDA protocol stack, see the IR-HOWTO
+written by Werner Heuser <r2d2c3po@zedat.fu-berlin.de>
+
+There is an active mailing list for discussing Linux IrDA matters called
+linux-irda. To subscribe to it, send a message to Majordomo@list.uit.no
+with the words "subscribe linux-irda" in the body of the message, the
+subject field is ignored.
+
+Dag Brattli <dagb@cs.uit.no>

@@ -192,6 +192,15 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		 reservedpages << (PAGE_SHIFT-10),
 		 datapages << (PAGE_SHIFT-10),
 		 initpages << (PAGE_SHIFT-10));
+
+#ifdef CONFIG_CPU_26
+	if (max_mapnr <= 128) {
+		extern int sysctl_overcommit_memory;
+		/* On a machine this small we won't get anywhere without
+		   overcommit, so turn it on by default.  */
+		sysctl_overcommit_memory = 1;
+	}
+#endif
 }
 
 void free_initmem (void)

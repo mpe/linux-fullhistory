@@ -91,7 +91,8 @@ init_dram_banks(struct param_struct *params))
 
 #define MAPPING \
 	{ SCREEN2_BASE,	SCREEN_START,	2*1048576, DOMAIN_IO, 0, 1 },	/* VRAM		*/ \
-	{ IO_BASE,	IO_START,	IO_SIZE	 , DOMAIN_IO, 0, 1 }	/* IO space	*/
+	{ IO_BASE,	IO_START,	IO_SIZE	 , DOMAIN_IO, 0, 1 },	/* IO space	*/ \
+	{ EASI_BASE,	EASI_START,	EASI_SIZE, DOMAIN_IO, 0, 1 }	/* EASI space	*/
 /*
  * Include common routine to set up page tables
  */

@@ -186,7 +186,7 @@ etherh_block_output (struct device *dev, int count, const unsigned char *buf, in
 	
 	if (ei_status.dmaing) {
 		printk ("%s: DMAing conflict in etherh_block_input: "
-			" DMAstat %d irqlock %d intr %d\n", dev->name,
+			" DMAstat %d irqlock %d intr %ld\n", dev->name,
 			ei_status.dmaing, ei_status.irqlock, dev->interrupt);
 		return;
 	}
@@ -246,7 +246,7 @@ etherh_block_input (struct device *dev, int count, struct sk_buff *skb, int ring
 
 	if (ei_status.dmaing) {
 		printk ("%s: DMAing conflict in etherh_block_input: "
-			" DMAstat %d irqlock %d intr %d\n", dev->name,
+			" DMAstat %d irqlock %d intr %ld\n", dev->name,
 			ei_status.dmaing, ei_status.irqlock, dev->interrupt);
 		return;
 	}
@@ -288,7 +288,7 @@ etherh_get_header (struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 
 	if (ei_status.dmaing) {
 		printk ("%s: DMAing conflict in etherh_get_header: "
-			" DMAstat %d irqlock %d intr %d\n", dev->name,
+			" DMAstat %d irqlock %d intr %ld\n", dev->name,
 			ei_status.dmaing, ei_status.irqlock, dev->interrupt);
 		return;
 	}
@@ -469,9 +469,9 @@ static void etherh_initdev (ecard_t *ec, struct device *dev)
 	ecard_claim (ec);
 	
 	dev->irq = ec->irq;
-	dev->mem_end = ec->cld.product;
+	dev->mem_end = ec->cid.product;
 
-	switch (ec->cld.product) {
+	switch (ec->cid.product) {
 	case PROD_I3_ETHERLAN500:
 		dev->base_addr = ecard_address (ec, ECARD_MEMC, 0) + ETHERH500_NS8390;
 		dev->mem_start = dev->base_addr + ETHERH500_DATAPORT;

@@ -2,3 +2,14 @@ if [ "$CONFIG_SERIAL" != "n" ]; then
   tristate '   Atomwide serial port support' CONFIG_ATOMWIDE_SERIAL
   tristate '   Dual serial port support' CONFIG_DUALSP_SERIAL
 fi
+
+if [ "$CONFIG_MOUSE" = "y" ]; then
+  if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
+    if [ "$CONFIG_ARCH_RPC" != "y" ]; then
+      define_bool CONFIG_KBDMOUSE y
+    else
+      define_bool CONFIG_RPCMOUSE y
+    fi
+  fi
+fi
+

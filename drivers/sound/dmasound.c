@@ -90,7 +90,7 @@ History:
 #include <linux/sound.h>
 #include <linux/init.h>
 
-#ifdef __mc68000__
+#if defined(__mc68000__) || defined(CONFIG_APUS)
 #include <asm/setup.h>
 #endif
 #include <asm/system.h>
@@ -686,9 +686,9 @@ static struct sound_settings sound;
 
 
 #ifdef CONFIG_ATARI
-static void *AtaAlloc(unsigned int size, int flags) __init;
-static void AtaFree(void *, unsigned int size) __init;
-static int AtaIrqInit(void) __init;
+static void *AtaAlloc(unsigned int size, int flags);
+static void AtaFree(void *, unsigned int size);
+static int AtaIrqInit(void);
 #ifdef MODULE
 static void AtaIrqCleanUp(void);
 #endif /* MODULE */
@@ -709,9 +709,9 @@ static void ata_sq_interrupt(int irq, void *dummy, struct pt_regs *fp);
 #endif /* CONFIG_ATARI */
 
 #ifdef CONFIG_AMIGA
-static void *AmiAlloc(unsigned int size, int flags) __init;
-static void AmiFree(void *, unsigned int) __init;
-static int AmiIrqInit(void) __init;
+static void *AmiAlloc(unsigned int size, int flags);
+static void AmiFree(void *, unsigned int);
+static int AmiIrqInit(void);
 #ifdef MODULE
 static void AmiIrqCleanUp(void);
 #endif /* MODULE */
@@ -726,9 +726,9 @@ static void ami_sq_interrupt(int irq, void *dummy, struct pt_regs *fp);
 #endif /* CONFIG_AMIGA */
 
 #ifdef CONFIG_PPC
-static void *PMacAlloc(unsigned int size, int flags) __init;
-static void PMacFree(void *ptr, unsigned int size) __init;
-static int PMacIrqInit(void) __init;
+static void *PMacAlloc(unsigned int size, int flags);
+static void PMacFree(void *ptr, unsigned int size);
+static int PMacIrqInit(void);
 #ifdef MODULE
 static void PMacIrqCleanup(void);
 #endif /* MODULE */
@@ -2223,7 +2223,7 @@ static void AtaFree(void *obj, unsigned int size)
 	atari_stram_free( obj );
 }
 
-static int AtaIrqInit(void)
+static int __init AtaIrqInit(void)
 {
 	/* Set up timer A. Timer A
 	   will receive a signal upon end of playing from the sound
@@ -2720,7 +2720,7 @@ static void AmiFree(void *obj, unsigned int size)
 	amiga_chip_free (obj);
 }
 
-static int AmiIrqInit(void)
+static int __init AmiIrqInit(void)
 {
 	/* turn off DMA for audio channels */
 	custom.dmacon = AMI_AUDIO_OFF;
@@ -2988,7 +2988,7 @@ static void PMacFree(void *ptr, unsigned int size)
 	kfree(ptr);
 }
 
-static int PMacIrqInit(void)
+static int __init PMacIrqInit(void)
 {
 	if (request_irq(awacs_irq, pmac_awacs_intr, 0, "AWACS", 0)
 	    || request_irq(awacs_tx_irq, pmac_awacs_tx_intr, 0, "AWACS out", 0))
@@ -3850,7 +3850,7 @@ static struct file_operations mixer_fops =
 };
 
 
-__initfunc(static void mixer_init(void))
+static void __init mixer_init(void)
 {
 #ifndef MODULE
 	int mixer_unit;
@@ -3898,6 +3898,42 @@ __initfunc(static void mixer_init(void))
  */
 
 
+static int sq_allocate_buffers(void)
+{
+	int i;
+
+	if (sound_buffers)
+		return 0;
+	sound_buffers = kmalloc (numBufs * sizeof(char *), GFP_KERNEL);
+	if (!sound_buffers)
+		return -ENOMEM;
+	for (i = 0; i < numBufs; i++) {
+		sound_buffers[i] = sound.mach.dma_alloc (bufSize << 10, GFP_KERNEL);
+		if (!sound_buffers[i]) {
+			while (i--)
+				sound.mach.dma_free (sound_buffers[i], bufSize << 10);
+			kfree (sound_buffers);
+			sound_buffers = 0;
+			return -ENOMEM;
+		}
+	}
+	return 0;
+}
+
+
+static void sq_release_buffers(void)
+{
+	int i;
+
+	if (sound_buffers) {
+		for (i = 0; i < numBufs; i++)
+			sound.mach.dma_free (sound_buffers[i], bufSize << 10);
+		kfree (sound_buffers);
+		sound_buffers = 0;
+	}
+}
+
+
 static void sq_setup(int numBufs, int bufSize, char **buffers)
 {
 #ifdef CONFIG_PPC
@@ -3913,7 +3949,6 @@ static void sq_setup(int numBufs, int bufSize, char **buffers)
 	sq.front = sq.count = 0;
 	sq.rear = -1;
 	sq.write_queue = sq.open_queue = sq.sync_queue = 0;
-	sq.busy = 0;
 	sq.syncing = 0;
 
 	sq.playing = 0;
@@ -4033,9 +4068,12 @@ static int sq_open(struct inode *inode, struct file *file)
 		}
 		rc = 0;
 	}
+	sq.busy = 1;
+	rc = sq_allocate_buffers();
+	if (rc)
+		goto err_out_nobusy;
 	sq_setup(numBufs, bufSize << 10, sound_buffers);
 	sq.open_mode = file->f_flags;
-	sq.busy = 1;
 #ifdef CONFIG_ATARI
 	sq.ignore_int = 1;
 #endif /* CONFIG_ATARI */
@@ -4049,6 +4087,9 @@ static int sq_open(struct inode *inode, struct file *file)
 		sound_set_format(AFMT_MU_LAW);
 	}
 	return 0;
+err_out_nobusy:
+	sq.busy = 0;
+	WAKE_UP(sq.open_queue);
 err_out:
 	MOD_DEC_USE_COUNT;
 	return rc;
@@ -4101,8 +4142,10 @@ static int sq_release(struct inode *inode, struct file *file)
 	sound.soft = sound.dsp;
 	sound.hard = sound.dsp;
 	sound_silence();
-	if (rc == 0)
+	if (rc == 0) {
+		sq_release_buffers();
 		MOD_DEC_USE_COUNT;
+	}
 	return rc;
 }
 
@@ -4212,7 +4255,7 @@ static struct file_operations sq_fops =
 };
 
 
-__initfunc(static void sq_init(void))
+static void __init sq_init(void)
 {
 #ifndef MODULE
 	int sq_unit;
@@ -4407,7 +4450,7 @@ static struct file_operations state_fops =
 };
 
 
-__initfunc(static void state_init(void))
+static void __init state_init(void)
 {
 #ifndef MODULE
 	int state_unit;
@@ -4430,15 +4473,14 @@ static long long sound_lseek(struct file *file, long long offset, int orig)
 /*** Config & Setup **********************************************************/
 
 
-__initfunc(void dmasound_init(void))
+void __init dmasound_init(void)
 {
 	int has_sound = 0;
-	int i;
 #ifdef CONFIG_PPC
 	struct device_node *np;
 #endif
 
-#ifdef __mc68000__
+#if defined(__mc68000__) || defined(CONFIG_APUS)
 	switch (m68k_machtype) {
 #ifdef CONFIG_ATARI
 	case MACH_ATARI:
@@ -4466,7 +4508,7 @@ __initfunc(void dmasound_init(void))
 		break;
 #endif /* CONFIG_AMIGA */
 	}
-#endif /* __mc68000__ */
+#endif /* __mc68000__||CONFIG_APUS */
 
 #ifdef CONFIG_PPC
 	awacs_subframe = 0;
@@ -4501,8 +4543,10 @@ __initfunc(void dmasound_init(void))
 		awacs_rx_irq = np->intrs[2].line;
 		awacs_tx_cmd_space = kmalloc((numBufs + 4) * sizeof(struct dbdma_cmd),
 					     GFP_KERNEL);
-		if (awacs_tx_cmd_space == NULL)
-			goto out_of_memory;
+		if (awacs_tx_cmd_space == NULL) {
+			printk("DMA sound driver: Not enough buffer memory, driver disabled!\n");
+			return;
+		}
 		awacs_tx_cmds = (volatile struct dbdma_cmd *)
 			DBDMA_ALIGN(awacs_tx_cmd_space);
 		awacs_reg[0] = MASK_MUX_CD;
@@ -4543,24 +4587,6 @@ __initfunc(void dmasound_init(void))
 		return;
 
 	/* Set up sound queue, /dev/audio and /dev/dsp. */
-	sound_buffers = kmalloc (numBufs * sizeof(char *), GFP_KERNEL);
-	if (!sound_buffers) {
-	out_of_memory:
-		printk("DMA sound driver: Not enough buffer memory, driver disabled!\n");
-		return;
-	}
-	for (i = 0; i < numBufs; i++) {
-		sound_buffers[i] = sound.mach.dma_alloc (bufSize << 10, GFP_KERNEL);
-		if (!sound_buffers[i]) {
-			while (i--)
-				sound.mach.dma_free (sound_buffers[i], bufSize << 10);
-			kfree (sound_buffers);
-			sound_buffers = 0;
-			goto out_of_memory;
-		}
-	}
-
-	sq_setup(numBufs, bufSize << 10, sound_buffers);
 
 	/* Set default settings. */
 	sq_init();
@@ -4588,7 +4614,7 @@ __initfunc(void dmasound_init(void))
 
 #define MAXARGS		8	/* Should be sufficient for now */
 
-__initfunc(void dmasound_setup(char *str, int *ints))
+void __init dmasound_setup(char *str, int *ints)
 {
 	/* check the bootstrap parameter for "dmasound=" */
 
@@ -4628,18 +4654,12 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	int i;
-
 	if (irq_installed) {
 		sound_silence();
 		sound.mach.irqcleanup();
 	}
 
-	if (sound_buffers) {
-		for (i = 0; i < numBufs; i++)
-			sound.mach.dma_free(sound_buffers[i], bufSize << 10);
-		kfree(sound_buffers);
-	}
+	sq_release_buffers();
 
 	if (mixer_unit >= 0)
 		unregister_sound_mixer(mixer_unit);

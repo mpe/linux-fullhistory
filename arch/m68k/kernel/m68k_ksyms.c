@@ -49,6 +49,7 @@ EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
+EXPORT_SYMBOL(kernel_set_cachemode);
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);

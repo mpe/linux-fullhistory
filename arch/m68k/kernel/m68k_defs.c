@@ -12,7 +12,7 @@
 #include <linux/sched.h>
 
 #define DEFINE(sym, val) \
-	asm volatile("\n#define " #sym " %0" : : "i" (val))
+	asm volatile("\n#define " #sym " %c0" : : "i" (val))
 
 int main(void)
 {

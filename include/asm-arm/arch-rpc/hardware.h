@@ -13,33 +13,45 @@
  * What hardware must be present
  */
 #define HAS_IOMD
-#define HAS_PCIO
 #define HAS_VIDC20
 
-/*
- * Optional hardware
+/* Hardware addresses of major areas.
+ *  *_START is the physical address
+ *  *_SIZE  is the size of the region
+ *  *_BASE  is the virtual address
  */
-#define HAS_EXPMASK
-
-/*
- * Physical definitions
- */
+#define RAM_SIZE		0x10000000
 #define RAM_START		0x10000000
-#define IO_START		0x03000000
+
+#define EASI_SIZE		0x08000000	/* EASI I/O */
+#define EASI_START		0x08000000
+#define EASI_BASE		0xe8000000
+
+#define IO_START		0x03000000	/* I/O */
+#define IO_SIZE			0x01000000
+#define IO_BASE			0xe0000000
+
 #define SCREEN_START		0x02000000	/* VRAM */
+#define SCREEN2_END		0xe0000000
+#define SCREEN2_BASE		0xd8000000
+#define SCREEN1_END		0xd8000000
+#define SCREEN1_BASE		0xd0000000
+
 
 #ifndef __ASSEMBLER__
 
 /*
  * for use with inb/outb
  */
-#define VIDC_AUDIO_BASE		0x80140000
-#define VIDC_BASE		0x80100000
-#define IOCEC4IO_BASE		0x8009c000
-#define IOCECIO_BASE		0x80090000
-#define IOMD_BASE		0x80080000
-#define MEMCEC8IO_BASE		0x8000ac00
-#define MEMCECIO_BASE		0x80000000
+#define IO_VIDC_AUDIO_BASE	0x80140000
+#define IO_VIDC_BASE		0x80100000
+#define IO_IOMD_BASE		0x80080000
+
+#define IO_EC_EASI_BASE		0x82000000
+#define IO_EC_IOC4_BASE		0x8009c000
+#define IO_EC_IOC_BASE		0x80090000
+#define IO_EC_MEMC8_BASE	0x8000ac00
+#define IO_EC_MEMC_BASE		0x80000000
 
 /*
  * IO definitions
@@ -49,21 +61,6 @@
 #define IOC_BASE		((volatile unsigned char *)0xe0200000)
 #define PCIO_FLOPPYDMABASE	((volatile unsigned char *)0xe002a000)
 #define PCIO_BASE		0xe0010000
-
-/*
- * Mapping areas
- */
-#define IO_END			0xe1000000
-#define IO_BASE			0xe0000000
-#define IO_SIZE			(IO_END - IO_BASE)
-
-/*
- * Screen mapping information
- */
-#define SCREEN2_END		0xe0000000
-#define SCREEN2_BASE		0xd8000000
-#define SCREEN1_END		SCREEN2_BASE
-#define SCREEN1_BASE		0xd0000000
 
 /*
  * Offsets from RAM base
@@ -95,7 +92,6 @@
 #define IOC_BASE		0xe0200000
 #define PCIO_FLOPPYDMABASE	0xe002a000
 #define PCIO_BASE		0xe0010000
-#define IO_BASE			0xe0000000
 
 #endif
 #endif

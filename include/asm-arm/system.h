@@ -1,6 +1,8 @@
 #ifndef __ASM_ARM_SYSTEM_H
 #define __ASM_ARM_SYSTEM_H
 
+#include <linux/config.h>
+
 /* The type of machine we're running on */
 extern unsigned int machine_type;
 #define MACH_TYPE_EBSA110	0
@@ -10,6 +12,29 @@ extern unsigned int machine_type;
 #define MACH_TYPE_NETWINDER	5
 #define MACH_TYPE_CATS		6
 #define MACH_TYPE_TBOX		7
+
+#ifdef CONFIG_ARCH_EBSA285
+#define machine_is_ebsa285()	(1)
+#else
+#define machine_is_ebsa285()	(0)
+#endif
+
+#ifdef CONFIG_ARCH_VNC
+#define machine_is_netwinder()	(1)
+#else
+#define machine_is_netwinder()	(0)
+#endif
+
+#if defined(CONFIG_CATS)
+#define machine_is_cats()	(machine_type == MACH_TYPE_CATS)
+#else
+#define machine_is_cats()	(0)
+#endif
+
+#if 0
+#define machine_is_ebsa285()	(machine_type == MACH_TYPE_EBSA285)
+#define machine_is_netwinder()	(machine_type == MACH_TYPE_NETWINDER)
+#endif
 
 #include <linux/kernel.h>
 #include <asm/proc-fns.h>

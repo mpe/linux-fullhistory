@@ -689,12 +689,10 @@ static int delete_interface (wan_device_t* wandev, char* name, int force)
 	return 0;
 }
 
-#ifdef MODULE
 EXPORT_SYMBOL(register_wan_device);
 EXPORT_SYMBOL(unregister_wan_device);
 EXPORT_SYMBOL(wanrouter_encapsulate);
 EXPORT_SYMBOL(wanrouter_type_trans);
-#endif
 
 /*
  *	End

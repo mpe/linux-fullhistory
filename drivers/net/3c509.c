@@ -63,6 +63,7 @@ static char *version = "3c509.c:1.12 6/4/97 becker@cesdis.gsfc.nasa.gov\n";
 #include <asm/spinlock.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 
 #ifdef EL3_DEBUG
 int el3_debug = EL3_DEBUG;
@@ -407,7 +408,7 @@ el3_open(struct device *dev)
 	/* Set the spinlock before grabbing IRQ! */
 	((struct el3_private *)dev->priv)->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
 
-	if (request_irq(dev->irq, &el3_interrupt, 0, "3c509", dev)) {
+	if (request_irq(dev->irq, &el3_interrupt, 0, dev->name, dev)) {
 		return -EAGAIN;
 	}
 
@@ -526,10 +527,21 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
-		unsigned long flags;
+		/*
+		 *	We lock the driver against other processors. Note
+		 *	we don't need to lock versus the IRQ as we suspended
+		 *	that. This means that we lose the ability to take
+		 *	an RX during a TX upload. That sucks a bit with SMP
+		 *	on an original 3c509 (2K buffer)
+		 *
+		 *	Using disable_irq stops us crapping on other
+		 *	time sensitive devices.
+		 */
 
-	    	/* Spin on the lock, until we're clear of an IRQ */
-	    	spin_lock_irqsave(&lp->lock, flags);
+#ifdef __SMP__
+		disable_irq(dev->irq);
+	    	spin_lock(&lp->lock);
+#endif	    	
 	    
 		/* Put out the doubleword header... */
 		outw(skb->len, ioaddr + TX_FIFO);
@@ -547,8 +559,10 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		} else
 			/* Interrupt us when the FIFO has room for max-sized packet. */
 			outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
-
-		spin_unlock_irqrestore(&lp->lock, flags);
+#ifdef __SMP__
+		spin_unlock(&lp->lock);
+		enable_irq(dev->irq);
+#endif		
 	}
 
 	dev_kfree_skb (skb);
@@ -658,10 +672,14 @@ el3_get_stats(struct device *dev)
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	/*
+	 *	This is fast enough not to bother with disable IRQ
+	 *	stuff.
+	 */
+	 
+	spin_lock_irqsave(&lp->lock, flags);
 	update_stats(dev);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&lp->lock, flags);
 	return &lp->stats;
 }
 
@@ -683,13 +701,13 @@ static void update_stats(struct device *dev)
 	EL3WINDOW(6);
 	lp->stats.tx_carrier_errors 	+= inb(ioaddr + 0);
 	lp->stats.tx_heartbeat_errors	+= inb(ioaddr + 1);
-	/* Multiple collisions. */	   	inb(ioaddr + 2);
-	lp->stats.collisions			+= inb(ioaddr + 3);
-	lp->stats.tx_window_errors		+= inb(ioaddr + 4);
-	lp->stats.rx_fifo_errors		+= inb(ioaddr + 5);
-	lp->stats.tx_packets			+= inb(ioaddr + 6);
-	/* Rx packets	*/				inb(ioaddr + 7);
-	/* Tx deferrals */				inb(ioaddr + 8);
+	/* Multiple collisions. */	   inb(ioaddr + 2);
+	lp->stats.collisions		+= inb(ioaddr + 3);
+	lp->stats.tx_window_errors	+= inb(ioaddr + 4);
+	lp->stats.rx_fifo_errors	+= inb(ioaddr + 5);
+	lp->stats.tx_packets		+= inb(ioaddr + 6);
+	/* Rx packets	*/		   inb(ioaddr + 7);
+	/* Tx deferrals */		   inb(ioaddr + 8);
 	inw(ioaddr + 10);	/* Total Rx and Tx octets. */
 	inw(ioaddr + 12);
 

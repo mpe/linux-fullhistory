@@ -85,7 +85,7 @@ do {								\
 
 #ifdef HAS_IOMD
 #ifndef __ASSEMBLER__
-#define __IOMD(offset)	(IOMD_BASE + (offset >> 2))
+#define __IOMD(offset)	(IO_IOMD_BASE + (offset >> 2))
 #else
 #define __IOMD(offset)	offset
 #endif

@@ -36,6 +36,9 @@ extern unsigned long mac_videobase;
 extern unsigned long mac_videodepth;
 extern unsigned long mac_rowbytes;
 
+extern void mac_serial_print(char *);
+
+#define DEBUG_HEADS
 #define DEBUG_SCREEN
 #define DEBUG_SERIAL
 
@@ -129,121 +132,6 @@ void mac_debugging_long(int pos, long addr)
 #endif
 }
 
-/*
- * Penguin - used by head.S console; obsolete
- */
-char that_penguin[]={
-#include "that_penguin.h"
-};
-
-#ifdef DEBUG_SCREEN
-/* 
- * B/W version of penguin, unfinished - any takers??
- */
-static char bw_penguin[]={
-#include "bw_penguin.h"
-};
-#endif
-
-void mac_debugging_penguin(int peng)
-{
-#ifdef DEBUG_SCREEN
-	unsigned char *pengoffset;
-	unsigned char *pptr;
-	unsigned char *bwpdptr=bw_penguin;
-	int i;
-#endif
-
-#ifdef DEBUG_SERIAL
-	printk("Penguin: #%d !\n", peng);
-#endif
-
-#ifdef DEBUG_SCREEN
-	if (!MACH_IS_MAC) 
-		return;
-
-	if (mac_videodepth ==1) 
-		pengoffset=(unsigned char *)(mac_videobase+80*mac_rowbytes)
-			   +5*peng;
-	else
-		pengoffset=(unsigned char *)(mac_videobase+80*mac_rowbytes)
-			   +20*peng;
-	
-	pptr=pengoffset;
-	
-	for(i=0;i<36;i++)
-	{
-		memcpy(pptr,bwpdptr,4);
-		bwpdptr+=4;
-		pptr+=mac_rowbytes;
-	}
-#endif
-}
-
-#ifdef DEBUG_SCREEN
-/*
- * B/W version of flaming Mac, unfinished (see above).
- */
-static char bw_kaboom_map[]={
-#include "bw_mac.h"
-};
-#endif
-
-#ifdef DEBUG_SCREEN
-static void mac_boom_boom(void)
-{
-	static unsigned char *boomoffset=NULL;
-	unsigned char *pptr;
-	unsigned char *bwpdptr=bw_kaboom_map;
-	int i;
-	
-#ifdef DEBUG_SERIAL
-	printk("BOOM !\n");
-#endif
-
-	if (!MACH_IS_MAC) 
-		return;
-
-	if(!boomoffset)
-		if (mac_videodepth == 1) {
-			boomoffset=(unsigned char *)(mac_videobase+160*mac_rowbytes);
-		} else {
-			boomoffset=(unsigned char *)(mac_videobase+256*mac_rowbytes);
-		}
-	else
-		if (mac_videodepth == 1)
-			boomoffset+=5;
-		else
-			boomoffset+=32;	
-
-	pptr=boomoffset;
-	
-	for(i=0;i<36;i++)
-	{
-		memcpy(pptr,bwpdptr,4);
-		bwpdptr+=4;
-		pptr+=mac_rowbytes;
-	}
-}
-#endif
-
-void mac_boom(int booms)
-{
-#ifdef DEBUG_SCREEN
-	int i;
-#endif
-
-	if (!MACH_IS_MAC) 
-		return;
-
-#ifdef DEBUG_SCREEN
-	for(i=0;i<booms;i++)
-		mac_boom_boom();
-	while(1);
-#endif
-}
-
-
 #ifdef DEBUG_SERIAL
 /*
  * TODO: serial debug code
@@ -283,6 +171,29 @@ static struct console mac_console_driver = {
 	0,
 	NULL
 };
+
+/*
+ * Crude hack to get console output to the screen before the framebuffer
+ * is initialized (happens a lot later in 2.1!).
+ * We just use the console routines declared in head.S, this will interfere
+ * with regular framebuffer console output and should be used exclusively
+ * to debug kernel problems manifesting before framebuffer init (aka WSOD)
+ *
+ * To keep this hack from interfering with the regular console driver, either
+ * deregister this driver before/on framebuffer console init, or silence this
+ * function after the fbcon driver is running (will lose console messages!?).
+ * To debug real early bugs, need to write a 'mac_register_console_hack()'
+ * that is called from start_kernel() before setup_arch() and just registers
+ * this driver if Mac.
+ */
+
+void mac_debug_console_write (struct console *co, const char *str,
+			      unsigned int count)
+{
+	mac_serial_print(str);
+}
+
+
 
 /* Mac: loops_per_sec min. 1900000 ^= .5 us; MFPDELAY was 0.6 us*/
 
@@ -496,9 +407,16 @@ __initfunc(void mac_debug_init(void))
 	mac_console_driver.wait_key = mac_sccb_console_wait_key;
 	scc_port = 1;
     }
+#endif
+#ifdef DEBUG_HEADS
+    if (   !strcmp( m68k_debug_device, "scn"  )
+        || !strcmp( m68k_debug_device, "con" )) {
+	/* display, using head.S console routines */
+	mac_console_driver.write = mac_debug_console_write;
+    }
+#endif
     if (mac_console_driver.write)
 	register_console(&mac_console_driver);
-#endif
 }
 
 /*

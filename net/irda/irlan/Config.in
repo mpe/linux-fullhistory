@@ -1,0 +1,7 @@
+
+dep_tristate 'IrLAN protocol' CONFIG_IRLAN $CONFIG_IRDA
+
+if [ "$CONFIG_IRLAN" != "n" ]; then
+  dep_tristate '   IrLAN client support' CONFIG_IRLAN_CLIENT $CONFIG_IRLAN
+  dep_tristate '   IrLAN server support' CONFIG_IRLAN_SERVER $CONFIG_IRLAN
+fi

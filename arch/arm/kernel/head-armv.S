@@ -8,8 +8,22 @@
 #include <linux/config.h>
 #include <linux/linkage.h>
 
+#ifndef CONFIG_ARCH_VNC
 #if (TEXTADDR & 0xffff) != 0x8000
 #error TEXTADDR must start at 0xXXXX8000
+#endif
+#else
+		.text
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, #0
+		mov	r1, #5
 #endif
 
 #define DEBUG
@@ -97,6 +111,15 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		add	r3, r3, #1 << 20
 		teq	r0, r2
 		bne	1b
+#ifdef CONFIG_ARCH_VNC
+		add	r0, r4, #0x3f00
+		add	r0, r0, #0x00f8
+		mov	r3, #0x7c000000
+		orr	r3, r3, r8
+		str	r3, [r0], #4
+		add	r3, r3, #1 << 20
+		str	r3, [r0], #4
+#endif
 #endif
 #ifdef CONFIG_ARCH_RPC
 /* Map in screen at 0x02000000 & SCREEN2_BASE
@@ -339,7 +362,7 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		beq	1001b
 		.endm
 
-#elif defined(CONFIG_ARCH_EBSA285) || defined(CONFIG_ARCH_VNC)
+#elif defined(CONFIG_ARCH_EBSA285)
 		.macro	addruart,rx
 		mov	\rx, #0xfe000000
 		.endm
@@ -373,6 +396,30 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		.endm
 
 		.macro	waituart,rd,rx
+		.endm
+
+#elif defined(CONFIG_ARCH_VNC)
+		.macro	addruart,rx
+		mov	\rx, #0xff000000
+		orr	\rx, \rx, #0x00e00000
+		orr	\rx, \rx, #0x000003f8
+		.endm
+
+		.macro	senduart,rd,rx
+		strb	\rd, [\rx]
+		.endm
+
+		.macro	busyuart,rd,rx
+1002:		ldrb	\rd, [\rx, #0x5]
+		and	\rd, \rd, #0x60
+		teq	\rd, #0x60
+		bne	1002b
+		.endm
+
+		.macro	waituart,rd,rx
+1001:		ldrb	\rd, [\rx, #0x6]
+		tst	\rd, #0x10
+		beq	1001b
 		.endm
 #else
 #error Unknown architecture

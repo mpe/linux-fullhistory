@@ -39,16 +39,8 @@ static int max_interrupt_work = 20;
 #define RX_RING_SIZE	16
 #define PKT_BUF_SZ		1536			/* Size of each temporary Rx buffer.*/
 
-#ifdef MODULE
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
 #include <linux/module.h>
 #include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -67,12 +59,9 @@ static int max_interrupt_work = 20;
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-#if (LINUX_VERSION_CODE >= 0x10344)
+
 #define NEW_MULTICAST
 #include <linux/delay.h>
-#else
-#define udelay(microsec)	do { int _i = 4*microsec; while (--_i > 0) { __SLOW_DOWN_IO; }} while (0)
-#endif
 
 /* Kernel version compatibility functions. */
 #define RUN_AT(x) (jiffies + (x))

@@ -119,9 +119,12 @@ void bvme6000_free_irq(unsigned int irq, void *dev_id)
 void bvme6000_process_int (unsigned long vec, struct pt_regs *fp)
 {
 	if (vec > 255)
-		panic ("bvme6000_process_int: Illegal vector %ld", vec);
-	irq_tab[vec].count++;
-	irq_tab[vec].handler(vec, irq_tab[vec].dev_id, fp);
+		printk ("bvme6000_process_int: Illegal vector %ld", vec);
+	else
+	{
+		irq_tab[vec].count++;
+		irq_tab[vec].handler(vec, irq_tab[vec].dev_id, fp);
+	}
 }
 
 int bvme6000_get_irq_list (char *buf)

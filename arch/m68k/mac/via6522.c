@@ -304,10 +304,11 @@ void mac_reset(void)
 		unsigned long flags;
 		unsigned long *reset_hook;
 
-		save_flags(flags);
-		cli();
-
 		/* need ROMBASE in booter */
+		/* indeed, plus need to MAP THE ROM !! */
+
+		if (mac_bi_data.rombase == 0)
+			mac_bi_data.rombase = 0x40800000;
 
 		/* works on some */
 		rom_reset = (void *) (mac_bi_data.rombase + 0xa);
@@ -318,12 +319,22 @@ void mac_reset(void)
 		printk("ROM reset hook: %p\n", *reset_hook);
 		rom_reset = *reset_hook;
 #endif
+		if (macintosh_config->ident == MAC_MODEL_SE30) {
+			/*
+			 * MSch: Machines known to crash on ROM reset ...
+			 */
+			printk("System halted.\n");
+			while(1);
+		} else {
+			save_flags(flags);
+			cli();
 
-		rom_reset();
+			rom_reset();
 
-		restore_flags(flags);
+			restore_flags(flags);
+		}
 
-		/* We never make it this far... */
+		/* We never make it this far... it usually panics above. */
 		printk ("Restart failed.  Please restart manually.\n");
 
 		/* XXX - delay do we need to spin here ? */

@@ -106,14 +106,7 @@ void set_fiq_handler(void *start, unsigned int length)
 	memcpy((void *)FIQ_VECTOR, start, length);
 
 	protect_page_0();
-#if 0
-	/* This doesn'w work correctly.  Ok, it's a misuse
-	 * of the DMA flushing code, but it ought to work.
-	 * More investigation required.  Maybe it really
-	 * needs the cache flushed.
-	 */
-	dma_cache_wback(FIQ_VECTOR, length);
-#else
+#ifdef CONFIG_CPU_32
 	processor.u.armv3v4._flush_cache_area(FIQ_VECTOR, FIQ_VECTOR + length, 1);
 #endif
 }

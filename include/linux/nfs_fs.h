@@ -222,13 +222,13 @@ extern int  nfs_check_error(struct inode *);
 extern int  nfs_wb_all(struct inode *);
 extern int  nfs_wb_page(struct inode *, struct page *);
 extern int  nfs_wb_pid(struct inode *, pid_t);
+extern int  nfs_flush_trunc(struct inode *, unsigned long);
 
 /*
  * Invalidate write-backs, possibly trying to write them
  * back first..
  */
 extern void nfs_inval(struct inode *);
-extern int  nfs_truncate_dirty_pages(struct inode *, unsigned long);
 extern int  nfs_updatepage(struct file *, struct page *, unsigned long, unsigned int, int);
 
 /*
