@@ -385,9 +385,6 @@ static loff_t memory_lseek(struct file * file, loff_t offset, int orig)
 		default:
 			return -EINVAL;
 	}
-	if (file->f_pos < 0)
-		return 0;
-	return file->f_pos;
 }
 
 #define mmap_kmem	mmap_mem

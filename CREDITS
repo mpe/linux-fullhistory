@@ -438,8 +438,8 @@ E: bj0rn@blox.se
 W: http://www.pi.se/blox/
 D: Extended support for loadable modules
 D: D-Link pocket adapter drivers
-S: Myrstuguv. 83
-S: S-143 32 VARBY
+S: Grevgatan 11
+S: S-114 53 Stockholm
 S: Sweden
 
 N: Paal-Kristian Engstad
@@ -1625,11 +1625,13 @@ S: F-35042 Rennes Cedex
 S: France
 
 N: Jon Tombs
-E: jon@gtex02.us.es
+E: jon@gte.esi.us.es
+W: http://www.esi.us.es/~jon
 D: NFS mmap()
 D: XF86_S3
 D: Kernel modules
-S: C/ Carlos de Cepeda 36 2-5
+D: Parts of varios other programs (xfig, open, ...)
+S: C/ Federico Garcia Lorca 1 10-A
 S: Sevilla 41005
 S: Spain
 

@@ -47,7 +47,7 @@
  * kernel variables
  */
 
-int securelevel = 0;			/* system security level */
+unsigned securebits = SECUREBITS_DEFAULT; /* systemwide security settings */
 
 long tick = (1000000 + HZ/2) / HZ;	/* timer interrupt period */
 

@@ -1,5 +1,5 @@
 /*
- *  $Id: debug.c,v 1.2 1996/11/20 17:49:50 fritz Exp $
+ *  $Id: debug.c,v 1.3 1997/10/01 09:22:20 fritz Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -29,13 +29,8 @@
 
 #define NULL	0x0
 
-#if LINUX_VERSION_CODE < 66363	/* Linux 1.3.59 there was a change to interrupts */
-	#define REQUEST_IRQ(a,b,c,d,e) request_irq(a,b,c,d)
-	#define FREE_IRQ(a,b) free_irq(a)
-#else
-	#define REQUEST_IRQ(a,b,c,d,e) request_irq(a,b,c,d,e)
-	#define FREE_IRQ(a,b) free_irq(a,b)
-#endif
+#define REQUEST_IRQ(a,b,c,d,e) request_irq(a,b,c,d,e)
+#define FREE_IRQ(a,b) free_irq(a,b)
 
 inline char *strcpy(char *, const char *);
 

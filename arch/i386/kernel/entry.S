@@ -543,6 +543,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_pread)		/* 180 */
 	.long SYMBOL_NAME(sys_pwrite)
 	.long SYMBOL_NAME(sys_chown)
+	.long SYMBOL_NAME(sys_getcwd)
 	
 	.rept NR_syscalls-182
 		.long SYMBOL_NAME(sys_ni_syscall)

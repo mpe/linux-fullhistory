@@ -83,12 +83,8 @@
 
 #include <asm/atomic.h>
 
-/*
- *	The AF_UNIX specific socket options
- */
- 
-struct unix_opt
-{
+/* The AF_UNIX specific socket options */
+struct unix_opt {
 	int 			family;
 	char *			name;
 	int  			locks;
@@ -105,8 +101,7 @@ struct unix_opt
 #ifdef CONFIG_NETLINK
 struct netlink_callback;
 
-struct netlink_opt
-{
+struct netlink_opt {
 	pid_t			pid;
 	unsigned		groups;
 	pid_t			dst_pid;
@@ -117,13 +112,9 @@ struct netlink_opt
 };
 #endif
 
-/*
- *	Once the IPX ncpd patches are in these are going into protinfo
- */
-
+/* Once the IPX ncpd patches are in these are going into protinfo. */
 #if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
-struct ipx_opt
-{
+struct ipx_opt {
 	ipx_address		dest_addr;
 	ipx_interface		*intrfc;
 	unsigned short		port;
@@ -141,8 +132,7 @@ struct ipx_opt
 #endif
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-struct ipv6_pinfo
-{
+struct ipv6_pinfo {
 	struct in6_addr 	saddr;
 	struct in6_addr 	rcv_saddr;
 	struct in6_addr		daddr;
@@ -213,7 +203,7 @@ struct tcp_opt {
 	__u32	lrcvtime;	/* timestamp of last received data packet*/
 	__u32	srtt;		/* smothed round trip time << 3		*/
 
-	__u32	ato;		/* delayed ack timeout */
+	__u32	ato;		/* delayed ack timeout			*/
 	__u32	snd_wl1;	/* Sequence for window update		*/
 
 	__u32	snd_wl2;	/* Ack sequence for update		*/
@@ -231,12 +221,11 @@ struct tcp_opt {
 	__u32	packets_out;	/* Packets which are "in flight"	*/
 	__u32	fackets_out;	/* Non-retrans SACK'd packets		*/
 	__u32	retrans_out;	/* Fast-retransmitted packets out	*/
-	__u32	high_seq;	/* highest sequence number sent by onset of congestion */
+	__u32	high_seq;	/* snd_nxt at onset of congestion	*/
 /*
  *	Slow start and congestion control (see also Nagle, and Karn & Partridge)
  */
  	__u32	snd_ssthresh;	/* Slow start size threshold		*/
-	__u16	snd_cwnd_cnt;
 	__u8	dup_acks;	/* Consequetive duplicate acks seen from other end */
 	__u8	delayed_acks;
 
@@ -276,7 +265,6 @@ struct tcp_opt {
 	struct tcp_sack_block selective_acks[4]; /* The SACKS themselves*/
 
  	struct timer_list	probe_timer;		/* Probes	*/
-	__u32	basertt;	/* Vegas baseRTT			*/
 	__u32	window_clamp;	/* XXX Document this... -DaveM		*/
 	__u32	probes_out;	/* unanswered 0 window probes		*/
 	__u32	syn_seq;
@@ -287,7 +275,6 @@ struct tcp_opt {
 	struct open_request	*syn_wait_queue;
 	struct open_request	**syn_wait_last;
 	int syn_backlog;
-
 };
 
  	
@@ -336,12 +323,7 @@ struct tcp_opt {
 #define SOCK_DEBUG(sk, msg...) do { } while (0)
 #endif
 
-/*
- *  TCP will start to use the new protinfo while *still using the old* fields 
- */
-
-struct sock 
-{
+struct sock {
 	/* This must be first. */
 	struct sock		*sklist_next;
 	struct sock		*sklist_prev;
@@ -350,28 +332,29 @@ struct sock
 	struct sock		*bind_next;
 	struct sock		**bind_pprev;
 
+	/* Socket demultiplex comparisons on incoming packets. */
+	__u32			daddr;		/* Foreign IPv4 addr			*/
+	__u32			rcv_saddr;	/* Bound local IPv4 addr		*/
+	__u16			dport;		/* Destination port			*/
+	unsigned short		num;		/* Local port				*/
+	int			bound_dev_if;	/* Bound device index if != 0		*/
+
 	/* Main hash linkage for various protocol lookup tables. */
 	struct sock		*next;
 	struct sock		**pprev;
 
-	/* Socket demultiplex comparisons on incoming packets. */
-	__u32			daddr;		/* Foreign IPv4 addr			*/
-	__u32			rcv_saddr;	/* Bound local IPv4 addr		*/
-	int			bound_dev_if;	/* Bound device index if != 0		*/
-	unsigned short		num;		/* Local port				*/
 	volatile unsigned char	state,		/* Connection state			*/
 				zapped;		/* In ax25 & ipx means not linked	*/
 	__u16			sport;		/* Source port				*/
-	__u16			dport;		/* Destination port			*/
 
-	unsigned short		family;
-	unsigned char		reuse,
-				nonagle;
+	unsigned short		family;		/* Address family			*/
+	unsigned char		reuse,		/* SO_REUSEADDR setting			*/
+				nonagle;	/* Disable Nagle algorithm?		*/
 
-	int			sock_readers;	/* user count				*/
-	int			rcvbuf;
+	int			sock_readers;	/* User count				*/
+	int			rcvbuf;		/* Size of receive buffer in bytes	*/
 
-	struct wait_queue	**sleep;
+	struct wait_queue	**sleep;	/* Sock wait queue			*/
 	struct dst_entry	*dst_cache;	/* Destination cache			*/
 	atomic_t		rmem_alloc;	/* Receive queue bytes committed	*/
 	struct sk_buff_head	receive_queue;	/* Incoming packets			*/
@@ -380,13 +363,12 @@ struct sock
 	atomic_t		omem_alloc;	/* "o" is "option" or "other" */
 	__u32			saddr;		/* Sending source			*/
 	unsigned int		allocation;	/* Allocation mode			*/
-	int			sndbuf;
+	int			sndbuf;		/* Size of send buffer in bytes		*/
 	struct sock		*prev;
 
-  /*
-   *	Not all are volatile, but some are, so we
-   * 	might as well say they all are.
-   */
+	/* Not all are volatile, but some are, so we might as well say they all are.
+	 * XXX Make this a flag word -DaveM
+	 */
 	volatile char		dead,
 				done,
 				urginline,
@@ -409,9 +391,9 @@ struct sock
 
 	struct proto		*prot;
 
-/*
- *	mss is min(mtu, max_window) 
- */
+	/* mss is min(mtu, max_window)
+	 * XXX Fix this, mtu only used in one TCP place and that is it -DaveM
+	 */
 	unsigned short		mtu;       /* mss negotiated in the syn's */
 	unsigned short		mss;       /* current eff. mss - can change */
 	unsigned short		user_mss;  /* mss requested by user in ioctl */
@@ -451,13 +433,10 @@ struct sock
 	struct sock_filter      *filter_data;
 #endif /* CONFIG_FILTER */
 
-/*
- *	This is where all the private (optional) areas that don't
- *	overlap will eventually live. 
- */
-
-	union
-	{
+	/* This is where all the private (optional) areas that don't
+	 * overlap will eventually live. 
+	 */
+	union {
 		void *destruct_hook;
 	  	struct unix_opt	af_unix;
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
@@ -489,9 +468,7 @@ struct sock
 #endif
 	} protinfo;  		
 
-/* 
- *	IP 'private area' or will be eventually 
- */
+	/* IP 'private area' or will be eventually. */
 	int			ip_ttl;			/* TTL setting */
 	int			ip_tos;			/* TOS */
 	unsigned	   	ip_cmsg_flags;
@@ -505,31 +482,18 @@ struct sock
 	__u32			ip_mc_addr;
 	struct ip_mc_socklist	*ip_mc_list;		/* Group array */
 
-/*
- *	This part is used for the timeout functions (timer.c). 
- */
- 
+	/* This part is used for the timeout functions (timer.c). */
 	int			timeout;	/* What are we waiting for? */
-	struct timer_list	timer;		/* This is the TIME_WAIT/receive timer
-						 * when we are doing IP
-						 */
+	struct timer_list	timer;		/* This is the sock cleanup timer. */
 	struct timeval		stamp;
 
- /*
-  *	Identd 
-  */
-  
+	/* Identd */
 	struct socket		*socket;
 
-  /*
-   *	RPC layer private data
-   */
+	/* RPC layer private data */
 	void			*user_data;
   
-  /*
-   *	Callbacks 
-   */
-   
+	/* Callbacks */
 	void			(*state_change)(struct sock *sk);
 	void			(*data_ready)(struct sock *sk,int bytes);
 	void			(*write_space)(struct sock *sk);
@@ -540,14 +504,11 @@ struct sock
 	void                    (*destruct)(struct sock *sk);
 };
 
-/*
- *	IP protocol blocks we attach to sockets.
- *	socket layer -> transport layer interface
- *	transport -> network interface is defined by struct inet_proto
+/* IP protocol blocks we attach to sockets.
+ * socket layer -> transport layer interface
+ * transport -> network interface is defined by struct inet_proto
  */
- 
-struct proto 
-{
+struct proto {
 	/* These must be first. */
 	struct sock		*sklist_next;
 	struct sock		*sklist_prev;
@@ -609,16 +570,10 @@ struct proto
 #define TIME_DONE	7	/* Used to absorb those last few packets */
 #define TIME_PROBE0	8
 
-/*
- *	About 10 seconds 
- */
-
+/* About 10 seconds */
 #define SOCK_DESTROY_TIME (10*HZ)
 
-/*
- *	Sockets 0-1023 can't be bound to unless you are superuser 
- */
- 
+/* Sockets 0-1023 can't be bound to unless you are superuser */
 #define PROT_SOCK	1024
 
 #define SHUTDOWN_MASK	3

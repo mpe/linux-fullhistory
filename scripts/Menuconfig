@@ -44,6 +44,9 @@
 #
 # 160198 Michael Chastain (mec@shout.net) - fix bug with 'c' command
 # (complement existing value) when used on virgin uninitialized variables.
+#
+# 090398 Axel Boldt (boldt@math.ucsb.edu) - allow for empty lines in help
+# texts.
 #----------------------------------------------------------------------------
 
 
@@ -278,9 +281,11 @@ function extract_help () {
      var=$(echo "$1"|sed 's/[][\/.^$*]/\\&/g')
      #now pick out the right help text:
      text=$(sed -n "/^$var[ 	]*\$/,\${
-                        /^$var[ 	]*\$/d
-                        /^#.*/d
-			/^[ 	]*\$/q
+                        /^$var[ 	]*\$/c\\
+${var}:\\
+
+                        /^#/b
+                        /^[^ 	]/q
                         s/^  //
                         p
                     }" Documentation/Configure.help)

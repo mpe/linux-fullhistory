@@ -73,7 +73,6 @@ extern void destroy_8023_client(struct datalink_proto *);
 /* Skbuff symbols. */
 EXPORT_SYMBOL(skb_push_errstr);
 EXPORT_SYMBOL(skb_put_errstr);
-EXPORT_SYMBOL(skb_queue_lock);
 
 /* Socket layer registration */
 EXPORT_SYMBOL(sock_register);
@@ -121,6 +120,7 @@ EXPORT_SYMBOL(put_cmsg);
 EXPORT_SYMBOL(net_families);
 EXPORT_SYMBOL(sock_kmalloc);
 EXPORT_SYMBOL(sock_kfree_s);
+EXPORT_SYMBOL(skb_queue_lock);
 
 #ifdef CONFIG_FILTER
 EXPORT_SYMBOL(sk_run_filter);

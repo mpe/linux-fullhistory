@@ -1,5 +1,5 @@
 /*
- *  $Id: interrupt.c,v 1.3 1997/02/11 22:53:43 fritz Exp $
+ *  $Id: interrupt.c,v 1.4 1998/01/31 22:10:52 keil Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  This program is free software; you can redistribute it and/or modify

@@ -1,5 +1,5 @@
 /*
- *  $Id: message.c,v 1.2 1996/11/20 17:49:54 fritz Exp $
+ *  $Id: message.c,v 1.3 1998/01/31 22:10:55 keil Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  message.c - functions for sending and receiving control messages
@@ -33,7 +33,6 @@
 #include "hardware.h"
 #include "message.h"
 #include "card.h"
-#include <asm/io.h>
 
 extern board *adapter[];
 extern unsigned int cinst;
@@ -203,7 +202,7 @@ int sendmessage(int card,
 	 * wait for an empty slot in the queue
 	 */
 	while (!(inb(adapter[card]->ioport[FIFO_STATUS]) & WF_NOT_FULL))
-		__SLOW_DOWN_IO;
+		udelay(1);
 
 	/*
 	 * Disable interrupts and map in shared memory

@@ -1,5 +1,5 @@
 /*
- *  $Id: packet.c,v 1.2 1996/11/20 17:49:55 fritz Exp $
+ *  $Id: packet.c,v 1.4 1998/02/12 23:08:50 keil Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -36,7 +36,7 @@ extern board *adapter[];
 extern unsigned int cinst;
 
 extern int get_card_from_id(int);
-extern int indicate_status(int, int,ulong,char*);
+extern int indicate_status(int, int,ulong, char*);
 extern void *memcpy_toshmem(int, void *, const void *, size_t);
 extern void *memcpy_fromshmem(int, void *, const void *, size_t);
 extern int sendmessage(int, unsigned int, unsigned int, unsigned int,
@@ -47,6 +47,7 @@ int sndpkt(int devId, int channel, struct sk_buff *data)
 	LLData	ReqLnkWrite;
 	int status;
 	int card;
+	unsigned long len;
 
 	card = get_card_from_id(devId);
 
@@ -89,6 +90,7 @@ int sndpkt(int devId, int channel, struct sk_buff *data)
 
 	status = sendmessage(card, CEPID, ceReqTypeLnk, ceReqClass1, ceReqLnkWrite,
 				channel+1, sizeof(LLData), (unsigned int*)&ReqLnkWrite);
+	len = data->len;
 	if(status) {
 		pr_debug("%s: Failed to send packet, status = %d\n", adapter[card]->devicename, status);
 		return -1;
@@ -101,9 +103,9 @@ int sndpkt(int devId, int channel, struct sk_buff *data)
 			adapter[card]->channel[channel].next_sendbuf;
 			pr_debug("%s: Packet sent successfully\n", adapter[card]->devicename);
 		dev_kfree_skb(data);
-		indicate_status(card,ISDN_STAT_BSENT,channel,NULL);
+		indicate_status(card,ISDN_STAT_BSENT,channel, (char *)&len);
 	}
-	return data->len;
+	return len;
 }
 
 void rcvpkt(int card, RspMessage *rcvmsg)

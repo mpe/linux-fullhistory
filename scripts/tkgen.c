@@ -61,6 +61,14 @@
  *                    user switches from one configuration method to
  *                    another.
  *
+ * 1998 03 09
+ * Axel Boldt - Smaller layout of main menu - it's still too big for 800x600.
+ *            - Display help in text window to allow for cut and paste.
+ *            - Allow for empty lines in help texts.
+ *            - update_define should not set all variables unconditionally to
+ *              0: they may have been set to 1 elsewhere. CONFIG_NETLINK is
+ *              an example.
+ *
  * TO DO:
  *   - clean up - there are useless ifdef's everywhere.
  *   - better comments throughout - C code generating tcl is really cryptic.
@@ -73,9 +81,6 @@
  *   - make choice and int/hex input types line up vertically with
  *           bool/tristate.
  *   - general speedups - how?  The canvas seems to slow it down a lot.
- *   - choice buttons should default to the first menu option, rather than a
- *           blank.  Also look up the right variable when the help button
- *           is pressed.
  *   - clean up +/- 16 confusion for enabling/disabling variables; causes
  *           (theoretical, at the moment) problems with dependencies.
  *   
@@ -1124,7 +1129,7 @@ void dump_tk_script(struct kconfig *scfg)
   for(cfg = scfg; cfg != NULL; cfg = cfg->next)
     {
       if( cfg->tok != tok_define ) continue;
-      printf("\tglobal %s; set %s 0\n",  cfg->optionname,  cfg->optionname);
+      printf("\tglobal %s\n",  cfg->optionname);
       cfg->flags |= GLOBAL_WRITTEN;
     }
   for(cfg = scfg; cfg != NULL; cfg = cfg->next)

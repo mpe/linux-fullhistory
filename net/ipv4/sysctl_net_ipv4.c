@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.30 1998/03/23 23:56:29 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.31 1998/03/30 08:41:41 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -70,9 +70,6 @@ extern int sysctl_icmp_echoreply_time;
 
 int tcp_retr1_max = 255; 
 
-extern int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
-				void *buffer, size_t *lenp);
-
 struct ipv4_config ipv4_config;
 
 extern ctl_table ipv4_route_table[];
@@ -108,9 +105,6 @@ ctl_table ipv4_table[] = {
         {NET_IPV4_TCP_SACK, "tcp_sack",
          &sysctl_tcp_sack, sizeof(int), 0644, NULL,
          &proc_dointvec},
-	{NET_IPV4_TCP_VEGAS_CONG_AVOID, "tcp_vegas_cong_avoid",
-	 &sysctl_tcp_cong_avoidance, sizeof(int), 0644,
-	 NULL, &tcp_sysctl_congavoid },
         {NET_IPV4_FORWARD, "ip_forward",
          &ipv4_devconf.forwarding, sizeof(int), 0644, NULL,
          &ipv4_sysctl_forward},

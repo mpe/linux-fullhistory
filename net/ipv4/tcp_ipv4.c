@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.123 1998/03/28 00:55:30 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.127 1998/03/30 08:41:25 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -347,7 +347,9 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 					   u32 saddr, u16 sport,
 					   u32 daddr, u16 dport, int dif)
 {
-	unsigned short hnum = ntohs(dport);
+	TCP_V4_ADDR_COOKIE(acookie, saddr, daddr)
+	__u16 hnum = ntohs(dport);
+	__u32 ports = TCP_COMBINED_PORTS(sport, hnum);
 	struct sock *sk;
 	int hash;
 
@@ -359,12 +361,7 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 
 	/* Check TCP register quick cache first. */
 	sk = TCP_RHASH(sport);
-	if(sk						&&
-	   sk->daddr		== saddr		&& /* remote address */
-	   sk->dport		== sport		&& /* remote port    */
-	   sk->num		== hnum			&& /* local port     */
-	   sk->rcv_saddr	== daddr		&& /* local address  */
-	   (!sk->bound_dev_if || sk->bound_dev_if == dif))
+	if(sk && TCP_IPV4_MATCH(sk, acookie, saddr, daddr, ports, dif))
 		goto hit;
 
 	/* Optimize here for direct hit, only listening connections can
@@ -372,25 +369,16 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 	 */
 	hash = tcp_hashfn(daddr, hnum, saddr, sport);
 	for(sk = tcp_established_hash[hash]; sk; sk = sk->next) {
-		if(sk->daddr		== saddr		&& /* remote address */
-		   sk->dport		== sport		&& /* remote port    */
-		   sk->num		== hnum			&& /* local port     */
-		   sk->rcv_saddr	== daddr		&& /* local address  */
-		   (!sk->bound_dev_if || sk->bound_dev_if == dif)) {
+		if(TCP_IPV4_MATCH(sk, acookie, saddr, daddr, ports, dif)) {
 			if (sk->state == TCP_ESTABLISHED)
 				TCP_RHASH(sport) = sk;
 			goto hit; /* You sunk my battleship! */
 		}
 	}
 	/* Must check for a TIME_WAIT'er before going to listener hash. */
-	for(sk = tcp_established_hash[hash+(TCP_HTABLE_SIZE/2)]; sk; sk = sk->next) {
-		if(sk->daddr		== saddr		&& /* remote address */
-		   sk->dport		== sport		&& /* remote port    */
-		   sk->num		== hnum			&& /* local port     */
-		   sk->rcv_saddr	== daddr		&& /* local address  */
-		   (!sk->bound_dev_if || sk->bound_dev_if == dif))
+	for(sk = tcp_established_hash[hash+(TCP_HTABLE_SIZE/2)]; sk; sk = sk->next)
+		if(TCP_IPV4_MATCH(sk, acookie, saddr, daddr, ports, dif))
 			goto hit;
-	}
 #ifdef USE_QUICKSYNS
 listener_shortcut:
 #endif
@@ -771,8 +759,8 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	switch (type) {
 	case ICMP_SOURCE_QUENCH:
 #ifndef OLD_SOURCE_QUENCH /* This is deprecated */
-		tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
-		tp->snd_cwnd = tp->snd_ssthresh;
+		tp->snd_ssthresh = max(tp->snd_cwnd >> (1 + TCP_CWND_SHIFT), 2);
+		tp->snd_cwnd = (tp->snd_ssthresh << TCP_CWND_SHIFT);
 		tp->high_seq = tp->snd_nxt;
 #endif
 		return;
@@ -1203,14 +1191,13 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newtp->last_ack_sent = req->rcv_isn + 1;
 		newtp->backoff = 0;
 		newtp->mdev = TCP_TIMEOUT_INIT;
-		newtp->snd_cwnd = 1;
+		newtp->snd_cwnd = (1 << TCP_CWND_SHIFT);
 		newtp->rto = TCP_TIMEOUT_INIT;
 		newtp->packets_out = 0;
 		newtp->fackets_out = 0;
 		newtp->retrans_out = 0;
 		newtp->high_seq = 0;
 		newtp->snd_ssthresh = 0x7fffffff;
-		newtp->snd_cwnd_cnt = 0;
 		newtp->dup_acks = 0;
 		newtp->delayed_acks = 0;
 		init_timer(&newtp->retransmit_timer);
@@ -1659,7 +1646,7 @@ static int tcp_v4_init_sock(struct sock *sk)
 	/* See draft-stevens-tcpca-spec-01 for discussion of the
 	 * initialization of these values.
 	 */
-	tp->snd_cwnd = 1;
+	tp->snd_cwnd = (1 << TCP_CWND_SHIFT);
 	tp->snd_ssthresh = 0x7fffffff;	/* Infinity */
 
 	sk->priority = 1;
@@ -1687,11 +1674,11 @@ static int tcp_v4_destroy_sock(struct sock *sk)
 		tcp_dec_slow_timer(TCP_SLT_KEEPALIVE);
 
 	/* Cleanup up the write buffer. */
-  	while((skb = skb_dequeue(&sk->write_queue)) != NULL)
+  	while((skb = __skb_dequeue(&sk->write_queue)) != NULL)
 		kfree_skb(skb);
 
 	/* Cleans up our, hopefuly empty, out_of_order_queue. */
-  	while((skb = skb_dequeue(&tp->out_of_order_queue)) != NULL)
+  	while((skb = __skb_dequeue(&tp->out_of_order_queue)) != NULL)
 		kfree_skb(skb);
 
 	/* Clean up a locked TCP bind bucket, this only happens if a

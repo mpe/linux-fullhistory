@@ -1,11 +1,42 @@
 /*
- * $Id: capidrv.c,v 1.3 1997/05/18 09:24:15 calle Exp $
+ * $Id: capidrv.c,v 1.11 1998/02/13 07:09:15 calle Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.11  1998/02/13 07:09:15  calle
+ * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
+ *
+ * Revision 1.10  1998/02/02 19:52:23  calle
+ * Fixed vbox (audio) acceptb.
+ *
+ * Revision 1.9  1998/01/31 11:14:45  calle
+ * merged changes to 2.0 tree, prepare 2.1.82 to work.
+ *
+ * Revision 1.8  1997/11/04 06:12:09  calle
+ * capi.c: new read/write in file_ops since 2.1.60
+ * capidrv.c: prepared isdnlog interface for d2-trace in newer firmware.
+ * capiutil.c: needs config.h (CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON)
+ * compat.h: added #define LinuxVersionCode
+ *
+ * Revision 1.7  1997/10/11 10:36:34  calle
+ * Added isdnlog support. patch to isdnlog needed.
+ *
+ * Revision 1.6  1997/10/11 10:25:55  calle
+ * New interface for lowlevel drivers. BSENT with nr. of bytes sent,
+ * allow sending without ACK.
+ *
+ * Revision 1.5  1997/10/01 09:21:16  fritz
+ * Removed old compatibility stuff for 2.0.X kernels.
+ * From now on, this code is for 2.1.X ONLY!
+ * Old stuff is still in the separate branch.
+ *
+ * Revision 1.4  1997/07/13 12:22:43  calle
+ * bug fix for more than one controller in connect_req.
+ * debugoutput now with contrnr.
+ *
  * Revision 1.3  1997/05/18 09:24:15  calle
  * added verbose disconnect reason reporting to avmb1.
  * some fixes in capi20 interface.
@@ -48,13 +79,11 @@
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.3 $";
+static char *revision = "$Revision: 1.11 $";
 int debugmode = 0;
 
-#ifdef HAS_NEW_SYMTAB
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
 MODULE_PARM(debugmode, "i");
-#endif
 
 /* -------- type definitions ----------------------------------------- */
 
@@ -116,13 +145,25 @@ struct capidrv_contr {
 				int oldstate;
 				/* */
 				__u16 datahandle;
+				struct ncci_datahandle_queue {
+				    struct ncci_datahandle_queue *next;
+				    __u16                         datahandle;
+				    int                           len;
+				} *ackqueue;
 			} *ncci_list;
 		} *plcip;
 		struct capidrv_ncci *nccip;
 	} *bchans;
 
 	struct capidrv_plci *plci_list;
+
+	/* for q931 data */
+	__u8  q931_buf[4096];
+	__u8 *q931_read;
+	__u8 *q931_write;
+	__u8 *q931_end;
 };
+
 
 struct capidrv_data {
 	__u16 appid;
@@ -140,6 +181,9 @@ typedef struct capidrv_bchan capidrv_bchan;
 
 static capidrv_data global;
 static struct capi_interface *capifuncs;
+
+static void handle_dtrace_data(capidrv_contr *card,
+	int send, int level2, __u8 *data, __u16 len);
 
 /* -------- convert functions ---------------------------------------- */
 
@@ -167,9 +211,8 @@ static inline __u32 b2prot(int l2, int l3)
 	default:
 		return 0;
 	case ISDN_PROTO_L2_HDLC:
-		return 1;
 	case ISDN_PROTO_L2_TRANS:
-		return 0;
+		return 1;
 	}
 }
 
@@ -410,6 +453,42 @@ static void free_ncci(capidrv_contr * card, struct capidrv_ncci *nccip)
 	kfree(nccip);
 }
 
+static int capidrv_add_ack(struct capidrv_ncci *nccip,
+		           __u16 datahandle, int len)
+{
+	struct ncci_datahandle_queue *n, **pp;
+
+	n = (struct ncci_datahandle_queue *)
+		kmalloc(sizeof(struct ncci_datahandle_queue), GFP_ATOMIC);
+	if (!n) {
+	   printk(KERN_ERR "capidrv: kmalloc ncci_datahandle failed\n");
+	   return -1;
+	}
+	n->next = 0;
+	n->datahandle = datahandle;
+	n->len = len;
+	for (pp = &nccip->ackqueue; *pp; pp = &(*pp)->next) ;
+	*pp = n;
+	return 0;
+}
+
+static int capidrv_del_ack(struct capidrv_ncci *nccip, __u16 datahandle)
+{
+	struct ncci_datahandle_queue **pp, *p;
+	int len;
+
+	for (pp = &nccip->ackqueue; *pp; pp = &(*pp)->next) {
+ 		if ((*pp)->datahandle == datahandle) {
+			p = *pp;
+			len = p->len;
+			*pp = (*pp)->next;
+		        kfree(p);
+			return len;
+		}
+	}
+	return -1;
+}
+
 /* -------- convert and send capi message ---------------------------- */
 
 static void send_message(capidrv_contr * card, _cmsg * cmsg)
@@ -419,7 +498,6 @@ static void send_message(capidrv_contr * card, _cmsg * cmsg)
 	capi_cmsg2message(cmsg, cmsg->buf);
 	len = CAPIMSG_LEN(cmsg->buf);
 	skb = dev_alloc_skb(len);
-        SET_SKB_FREE(skb);
 	memcpy(skb_put(skb, len), cmsg->buf, len);
 	(*capifuncs->capi_put_message) (global.appid, skb);
 }
@@ -686,8 +764,53 @@ static void handle_controller(_cmsg * cmsg)
 		break;
 
 	case CAPI_MANUFACTURER_IND:	/* Controller */
+		if (   cmsg->ManuID == 0x214D5641
+		    && cmsg->Class == 0
+		    && cmsg->Function == 1) {
+		   __u8  *data = cmsg->ManuData+3;
+		   __u16  len = cmsg->ManuData[0];
+		   __u16 layer;
+		   int direction;
+		   if (len == 255) {
+		      len = (cmsg->ManuData[1] | (cmsg->ManuData[2] << 8));
+		      data += 2;
+		   }
+		   len -= 2;
+		   layer = ((*(data-1)) << 8) | *(data-2);
+		   if (layer & 0x300)
+			direction = (layer & 0x200) ? 0 : 1;
+		   else direction = (layer & 0x800) ? 0 : 1;
+		   if (layer & 0x0C00) {
+		   	if ((layer & 0xff) == 0x80) {
+		           handle_dtrace_data(card, direction, 1, data, len);
+		           break;
+		   	}
+		   } else if ((layer & 0xff) < 0x80) {
+		      handle_dtrace_data(card, direction, 0, data, len);
+		      break;
+		   }
+	           printk(KERN_INFO "capidrv: %s from controller 0x%x layer 0x%x, ignored\n",
+			capi_cmd2str(cmsg->Command, cmsg->Subcommand),
+			cmsg->adr.adrController, layer);
+                   break;
+		}
 		goto ignored;
 	case CAPI_MANUFACTURER_CONF:	/* Controller */
+		if (cmsg->ManuID == 0x214D5641) {
+		   char *s = 0;
+		   switch (cmsg->Class) {
+		      case 0: break;
+		      case 1: s = "unknown class"; break;
+		      case 2: s = "unknown function"; break;
+		      default: s = "unkown error"; break;
+		   }
+		   if (s)
+	           printk(KERN_INFO "capidrv: %s from controller 0x%x function %d: %s\n",
+			capi_cmd2str(cmsg->Command, cmsg->Subcommand),
+			cmsg->adr.adrController,
+			cmsg->Function, s);
+		   break;
+		}
 		goto ignored;
 	case CAPI_FACILITY_IND:	/* Controller/plci/ncci */
 		goto ignored;
@@ -996,6 +1119,7 @@ static void handle_ncci(_cmsg * cmsg)
 	capidrv_plci *plcip;
 	capidrv_ncci *nccip;
 	isdn_ctrl cmd;
+	int len;
 
 	if (!card) {
 		printk(KERN_ERR "capidrv: %s from unknown controller 0x%x\n",
@@ -1093,11 +1217,14 @@ static void handle_ncci(_cmsg * cmsg)
 		if (!(nccip = find_ncci(card, cmsg->adr.adrNCCI)))
 			goto notfound;
 
-		cmd.command = ISDN_STAT_BSENT;
-		cmd.driver = card->myid;
-		cmd.arg = nccip->chan;
-		card->interface.statcallb(&cmd);
-
+		len = capidrv_del_ack(nccip, cmsg->DataHandle);
+		if (len < 0)
+			break;
+	        cmd.command = ISDN_STAT_BSENT;
+	        cmd.driver = card->myid;
+	        cmd.arg = nccip->chan;
+		cmd.parm.length = len;
+	        card->interface.statcallb(&cmd);
 		break;
 
 	case CAPI_DISCONNECT_B3_IND:	/* ncci */
@@ -1206,6 +1333,60 @@ static void capidrv_signal(__u16 applid, __u32 dummy)
 
 /* ------------------------------------------------------------------- */
 
+#define PUTBYTE_TO_STATUS(card, byte) \
+	do { \
+		*(card)->q931_write++ = (byte); \
+        	if ((card)->q931_write > (card)->q931_end) \
+	  		(card)->q931_write = (card)->q931_buf; \
+	} while (0)
+
+static void handle_dtrace_data(capidrv_contr *card,
+			     int send, int level2, __u8 *data, __u16 len)
+{
+    long flags;
+    __u8 *p, *end;
+    isdn_ctrl cmd;
+
+    if (!len) {
+       printk(KERN_DEBUG "avmb1_q931_data: len == %d\n", len);
+       return;
+    }
+
+    save_flags(flags);
+    cli();
+
+    if (level2) {
+        PUTBYTE_TO_STATUS(card, 'D');
+        PUTBYTE_TO_STATUS(card, '2');
+        PUTBYTE_TO_STATUS(card, send ? '>' : '<');
+        PUTBYTE_TO_STATUS(card, ':');
+    } else {
+        PUTBYTE_TO_STATUS(card, 'D');
+        PUTBYTE_TO_STATUS(card, '3');
+        PUTBYTE_TO_STATUS(card, send ? '>' : '<');
+        PUTBYTE_TO_STATUS(card, ':');
+    }
+
+    for (p = data, end = data+len; p < end; p++) {
+       __u8 w;
+       PUTBYTE_TO_STATUS(card, ' ');
+       w = (*p >> 4) & 0xf;
+       PUTBYTE_TO_STATUS(card, (w < 10) ? '0'+w : 'A'-10+w);
+       w = *p & 0xf;
+       PUTBYTE_TO_STATUS(card, (w < 10) ? '0'+w : 'A'-10+w);
+    }
+    PUTBYTE_TO_STATUS(card, '\n');
+
+    restore_flags(flags);
+    
+    cmd.command = ISDN_STAT_STAVAIL;
+    cmd.driver = card->myid;
+    cmd.arg = len*3+5;
+    card->interface.statcallb(&cmd);
+}
+
+/* ------------------------------------------------------------------- */
+
 static _cmsg cmdcmsg;
 
 static int capidrv_ioctl(isdn_ctrl * c, capidrv_contr * card)
@@ -1270,7 +1451,7 @@ static int capidrv_command(isdn_ctrl * c, capidrv_contr * card)
 			capi_fill_CONNECT_REQ(&cmdcmsg,
 					      global.appid,
 					      card->msgid++,
-					      1,	/* adr */
+					      card->contrnr,	/* adr */
 					  si2cip(bchan->si1, bchan->si2),	/* cipvalue */
 					      called,	/* CalledPartyNumber */
 					      calling,	/* CallingPartyNumber */
@@ -1471,7 +1652,7 @@ static int if_command(isdn_ctrl * c)
 
 static _cmsg sendcmsg;
 
-static int if_sendbuf(int id, int channel, struct sk_buff *skb)
+static int if_sendbuf(int id, int channel, int doack, struct sk_buff *skb)
 {
 	capidrv_contr *card = findcontrbydriverid(id);
 	capidrv_bchan *bchan;
@@ -1479,6 +1660,7 @@ static int if_sendbuf(int id, int channel, struct sk_buff *skb)
 	int len = skb->len;
 	size_t msglen;
 	__u16 errcode;
+	__u16 datahandle;
 
 	if (!card) {
 		printk(KERN_ERR "capidrv: if_sendbuf called with invalid driverId %d!\n",
@@ -1492,51 +1674,128 @@ static int if_sendbuf(int id, int channel, struct sk_buff *skb)
 		       card->name, channel);
 		return 0;
 	}
+	datahandle = nccip->datahandle;
 	capi_fill_DATA_B3_REQ(&sendcmsg, global.appid, card->msgid++,
 			      nccip->ncci,	/* adr */
 			      (__u32) skb->data,	/* Data */
 			      skb->len,		/* DataLength */
-			      nccip->datahandle++,	/* DataHandle */
+			      datahandle,	/* DataHandle */
 			      0	/* Flags */
 	    );
+
+	if (capidrv_add_ack(nccip, datahandle, doack ? skb->len : -1) < 0)
+	   return 0;
+
 	capi_cmsg2message(&sendcmsg, sendcmsg.buf);
 	msglen = CAPIMSG_LEN(sendcmsg.buf);
 	if (skb_headroom(skb) < msglen) {
 		struct sk_buff *nskb = dev_alloc_skb(msglen + skb->len);
 		if (!nskb) {
 			printk(KERN_ERR "capidrv: if_sendbuf: no memory\n");
+		        (void)capidrv_del_ack(nccip, datahandle);
 			return 0;
 		}
 #if 0
 		printk(KERN_DEBUG "capidrv: only %d bytes headroom\n",
 		       skb_headroom(skb));
 #endif
-                SET_SKB_FREE(nskb);
 		memcpy(skb_put(nskb, msglen), sendcmsg.buf, msglen);
 		memcpy(skb_put(nskb, skb->len), skb->data, skb->len);
 		errcode = (*capifuncs->capi_put_message) (global.appid, nskb);
-		switch (errcode) {
-		case CAPI_NOERROR:
+		if (errcode == CAPI_NOERROR) {
 			dev_kfree_skb(skb);
+			nccip->datahandle++;
 			return len;
-		case CAPI_SENDQUEUEFULL:
-			dev_kfree_skb(nskb);
-			return 0;
-		default:
-			return -1;
 		}
+	        (void)capidrv_del_ack(nccip, datahandle);
+	        dev_kfree_skb(nskb);
+		return errcode == CAPI_SENDQUEUEFULL ? 0 : -1;
 	} else {
 		memcpy(skb_push(skb, msglen), sendcmsg.buf, msglen);
 		errcode = (*capifuncs->capi_put_message) (global.appid, skb);
-		switch (errcode) {
-		case CAPI_NOERROR:
+		if (errcode == CAPI_NOERROR) {
+			nccip->datahandle++;
 			return len;
-		case CAPI_SENDQUEUEFULL:
-			return 0;
-		default:
-			return -1;
 		}
+	        (void)capidrv_del_ack(nccip, datahandle);
+		return errcode == CAPI_SENDQUEUEFULL ? 0 : -1;
 	}
+}
+
+static int if_readstat(__u8 *buf, int len, int user, int id, int channel)
+{
+	capidrv_contr *card = findcontrbydriverid(id);
+	int count;
+	__u8 *p;
+
+	if (!card) {
+		printk(KERN_ERR "capidrv: if_readstat called with invalid driverId %d!\n",
+		       id);
+		return -ENODEV;
+	}
+
+	for (p=buf, count=0; count < len; p++, count++) {
+	        if (user)
+	                put_user(*card->q931_read++, p);
+	        else
+	                *p = *card->q931_read++;
+	        if (card->q931_read > card->q931_end)
+	                card->q931_read = card->q931_buf;
+	}
+	return count;
+
+}
+
+static void enable_dchannel_trace(capidrv_contr *card)
+{
+        __u8 manufacturer[CAPI_MANUFACTURER_LEN];
+        capi_version version;
+	__u16 contr = card->contrnr;
+	__u16 errcode;
+	__u16 avmversion[3];
+
+        errcode = (*capifuncs->capi_get_manufacturer)(contr, manufacturer);
+        if (errcode != CAPI_NOERROR) {
+	   printk(KERN_ERR "%s: can't get manufacturer (0x%x)\n",
+			card->name, errcode);
+	   return;
+	}
+	if (strstr(manufacturer, "AVM") == 0) {
+	   printk(KERN_ERR "%s: not from AVM, no d-channel trace possible\n",
+			card->name);
+	   return;
+	}
+        errcode = (*capifuncs->capi_get_version)(contr, &version);
+        if (errcode != CAPI_NOERROR) {
+	   printk(KERN_ERR "%s: can't get version (0x%x)\n",
+			card->name, errcode);
+	   return;
+	}
+	avmversion[0] = (version.majormanuversion >> 4) & 0x0f;
+	avmversion[1] = (version.majormanuversion << 4) & 0xf0;
+	avmversion[1] |= (version.minormanuversion >> 4) & 0x0f;
+	avmversion[2] |= version.minormanuversion & 0x0f;
+
+        if (avmversion[0] > 3 || (avmversion[0] == 3 && avmversion[1] > 5)) {
+		printk(KERN_INFO "%s: D2 trace enabled\n", card->name);
+		capi_fill_MANUFACTURER_REQ(&cmdcmsg, global.appid,
+					   card->msgid++,
+					   contr,
+					   0x214D5641,  /* ManuID */
+					   0,           /* Class */
+					   1,           /* Function */
+					   (_cstruct)"\004\200\014\000\000");
+	} else {
+		printk(KERN_INFO "%s: D3 trace enabled\n", card->name);
+		capi_fill_MANUFACTURER_REQ(&cmdcmsg, global.appid,
+					   card->msgid++,
+					   contr,
+					   0x214D5641,  /* ManuID */
+					   0,           /* Class */
+					   1,           /* Function */
+					   (_cstruct)"\004\002\003\000\000");
+	}
+	send_message(card, &cmdcmsg);
 }
 
 static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
@@ -1568,7 +1827,7 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 	card->interface.command = if_command;
 	card->interface.writebuf_skb = if_sendbuf;
 	card->interface.writecmd = 0;
-	card->interface.readstat = 0;
+	card->interface.readstat = if_readstat;
 	card->interface.features = ISDN_FEATURE_L2_X75I |
 	    ISDN_FEATURE_L2_X75UI |
 	    ISDN_FEATURE_L2_X75BUI |
@@ -1581,6 +1840,9 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 	card->next = global.contr_list;
 	global.contr_list = card;
 	global.ncontr++;
+	card->q931_read = card->q931_buf;
+	card->q931_write = card->q931_buf;
+	card->q931_end = card->q931_buf + sizeof(card->q931_buf) - 1;
 
 	if (!register_isdn(&card->interface)) {
 		global.contr_list = global.contr_list->next;
@@ -1600,7 +1862,7 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 	cmd.command = ISDN_STAT_RUN;
 	card->interface.statcallb(&cmd);
 
-	card->cipmask = 1;	/* any */
+	card->cipmask = 0x1FFF03FF;	/* any */
 	card->cipmask2 = 0;
 
 	capi_fill_LISTEN_REQ(&cmdcmsg, global.appid,
@@ -1615,6 +1877,8 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 
 	printk(KERN_INFO "%s: now up (%d B channels)\n",
 		card->name, card->nbchan);
+
+        enable_dchannel_trace(card);
 
 	return 0;
 }
@@ -1693,11 +1957,6 @@ int capidrv_init(void)
 
 	if (!capifuncs)
 		return -EIO;
-
-#ifndef HAS_NEW_SYMTAB
-	/* No symbols to export, hide all symbols */
-	register_symtab(NULL);
-#endif
 
 	if ((p = strchr(revision, ':'))) {
 		strcpy(rev, p + 1);

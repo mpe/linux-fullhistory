@@ -1,4 +1,10 @@
-/* $Id: isdn.h,v 1.29 1997/05/27 15:18:02 fritz Exp $
+/* Changes for X.25 support:
+   Added ISDN_NET_ENCAP_X25IFACE macro.
+   Additional field in isdn_net_dev_s and isdn_net_local to support
+   generic encapsulation protocols. 
+*/
+
+/* $Id: isdn.h,v 1.37 1998/02/22 19:45:24 fritz Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +27,37 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.37  1998/02/22 19:45:24  fritz
+ * Some changes regarding V.110
+ *
+ * Revision 1.36  1998/02/20 17:35:55  fritz
+ * Added V.110 stuff.
+ *
+ * Revision 1.35  1998/01/31 22:14:14  keil
+ * changes for 2.1.82
+ *
+ * Revision 1.34  1997/10/09 21:28:11  fritz
+ * New HL<->LL interface:
+ *   New BSENT callback with nr. of bytes included.
+ *   Sending without ACK.
+ *   New L1 error status (not yet in use).
+ *   Cleaned up obsolete structures.
+ * Implemented Cisco-SLARP.
+ * Changed local net-interface data to be dynamically allocated.
+ * Removed old 2.0 compatibility stuff.
+ *
+ * Revision 1.33  1997/08/21 14:44:22  fritz
+ * Moved triggercps to end of struct for backwards-compatibility.
+ *
+ * Revision 1.32  1997/08/21 09:49:46  fritz
+ * Increased NET_DV
+ *
+ * Revision 1.31  1997/06/22 11:57:07  fritz
+ * Added ability to adjust slave triggerlevel.
+ *
+ * Revision 1.30  1997/06/17 13:07:23  hipp
+ * compression changes , MP changes
+ *
  * Revision 1.29  1997/05/27 15:18:02  fritz
  * Added changes for recent 2.1.x kernels:
  *   changed return type of isdn_close
@@ -181,13 +218,15 @@
 #define IIOCDRVCTL  _IO('I',128)
 
 /* Packet encapsulations for net-interfaces */
-#define ISDN_NET_ENCAP_ETHER     0
-#define ISDN_NET_ENCAP_RAWIP     1
-#define ISDN_NET_ENCAP_IPTYP     2
-#define ISDN_NET_ENCAP_CISCOHDLC 3
-#define ISDN_NET_ENCAP_SYNCPPP   4
-#define ISDN_NET_ENCAP_UIHDLC    5
-
+#define ISDN_NET_ENCAP_ETHER      0
+#define ISDN_NET_ENCAP_RAWIP      1
+#define ISDN_NET_ENCAP_IPTYP      2
+#define ISDN_NET_ENCAP_CISCOHDLC  3 /* Without SLARP and keepalive */
+#define ISDN_NET_ENCAP_SYNCPPP    4
+#define ISDN_NET_ENCAP_UIHDLC     5
+#define ISDN_NET_ENCAP_CISCOHDLCK 6 /* With SLARP and keepalive    */
+#define ISDN_NET_ENCAP_X25IFACE   7 /* Documentation/networking/x25-iface.txt*/
+#define ISDN_NET_ENCAP_MAX_ENCAP  ISDN_NET_ENCAP_X25IFACE
 /* Facility which currently uses an ISDN-channel */
 #define ISDN_USAGE_NONE       0
 #define ISDN_USAGE_RAW        1
@@ -219,7 +258,7 @@ typedef struct {
   int  outgoing;
 } isdn_net_ioctl_phone;
 
-#define NET_DV 0x02 /* Data version for net_cfg     */
+#define NET_DV 0x04 /* Data version for net_cfg     */
 #define TTY_DV 0x04 /* Data version for iprofd etc. */
 
 typedef struct {
@@ -244,6 +283,7 @@ typedef struct {
   int  cbhup;        /* Flag: Reject Call before Callback     */
   int  pppbind;      /* ippp device for bindings              */
   int  chargeint;    /* Use fixed charge interval length      */
+  int  triggercps;   /* BogoCPS needed for triggering slave   */
 } isdn_net_ioctl_cfg;
 
 #ifdef __KERNEL__
@@ -287,6 +327,10 @@ typedef struct {
 #include <linux/isdn_ppp.h>
 #endif
 
+#ifdef CONFIG_ISDN_X25
+#  include <linux/concap.h>
+#endif
+
 #include <linux/isdnif.h>
 
 #define ISDN_DRVIOCTL_MASK       0x7f  /* Mask for Device-ioctl */
@@ -317,21 +361,23 @@ typedef struct {
                              ((x & ISDN_USAGE_MASK)==ISDN_USAGE_VOICE)     )
 
 /* Timer-delays and scheduling-flags */
-#define ISDN_TIMER_RES       3                     /* Main Timer-Resolution  */
-#define ISDN_TIMER_02SEC     (HZ/(ISDN_TIMER_RES+1)/5) /* Slow-Timer1 .2 sec */
-#define ISDN_TIMER_1SEC      (HZ/(ISDN_TIMER_RES+1)) /* Slow-Timer2 1 sec   */
-#define ISDN_TIMER_RINGING   5 /* tty RINGs = ISDN_TIMER_1SEC * this factor */
-#define ISDN_TIMER_MODEMREAD 1
-#define ISDN_TIMER_MODEMPLUS 2
-#define ISDN_TIMER_MODEMRING 4
-#define ISDN_TIMER_MODEMXMIT 8
-#define ISDN_TIMER_NETDIAL   16
-#define ISDN_TIMER_NETHANGUP 32
-#define ISDN_TIMER_IPPP      64
+#define ISDN_TIMER_RES         3                         /* Main Timer-Resolution   */
+#define ISDN_TIMER_02SEC       (HZ/(ISDN_TIMER_RES+1)/5) /* Slow-Timer1 .2 sec      */
+#define ISDN_TIMER_1SEC        (HZ/(ISDN_TIMER_RES+1))   /* Slow-Timer2 1 sec       */
+#define ISDN_TIMER_RINGING     5 /* tty RINGs = ISDN_TIMER_1SEC * this factor       */
+#define ISDN_TIMER_KEEPINT    10 /* Cisco-Keepalive = ISDN_TIMER_1SEC * this factor */
+#define ISDN_TIMER_MODEMREAD   1
+#define ISDN_TIMER_MODEMPLUS   2
+#define ISDN_TIMER_MODEMRING   4
+#define ISDN_TIMER_MODEMXMIT   8
+#define ISDN_TIMER_NETDIAL    16 
+#define ISDN_TIMER_NETHANGUP  32
+#define ISDN_TIMER_IPPP       64 
+#define ISDN_TIMER_KEEPALIVE 128 /* Cisco-Keepalive */
 #define ISDN_TIMER_FAST      (ISDN_TIMER_MODEMREAD | ISDN_TIMER_MODEMPLUS | \
                               ISDN_TIMER_MODEMXMIT)
 #define ISDN_TIMER_SLOW      (ISDN_TIMER_MODEMRING | ISDN_TIMER_NETHANGUP | \
-                              ISDN_TIMER_NETDIAL)
+                              ISDN_TIMER_NETDIAL | ISDN_TIMER_KEEPALIVE)
 
 /* Timeout-Values for isdn_net_dial() */
 #define ISDN_TIMER_DTIMEOUT10 (10*HZ/(ISDN_TIMER_02SEC*(ISDN_TIMER_RES+1)))
@@ -361,6 +407,15 @@ typedef struct {
   void *next;
   char num[ISDN_MSNLEN];
 } isdn_net_phone;
+
+/*
+   Principles when extending structures for generic encapsulation protocol
+   ("concap") support:
+   - Stuff which is hardware specific (here i4l-specific) goes in 
+     the netdev -> local structure (here: isdn_net_local)
+   - Stuff which is encapsulation protocol specific goes in the structure
+     which holds the linux device structure (here: isdn_net_device)
+*/
 
 /* Local interface-data */
 typedef struct isdn_net_local_s {
@@ -413,6 +468,7 @@ typedef struct isdn_net_local_s {
   int                    sqfull;       /* Flag: netdev-queue overloaded    */
   ulong                  sqfull_stamp; /* Start-Time of overload           */
   ulong                  slavedelay;   /* Dynamic bundling delaytime       */
+  int                    triggercps;   /* BogoCPS needed for trigger slave */
   struct device          *srobin;      /* Ptr to Master device for slaves  */
   isdn_net_phone         *phone[2];    /* List of remote-phonenumbers      */
 				       /* phone[0] = Incoming Numbers      */
@@ -425,16 +481,21 @@ typedef struct isdn_net_local_s {
   struct isdn_net_dev_s  *netdev;      /* Ptr to netdev                    */
   struct sk_buff         *first_skb;   /* Ptr to skb that triggers dialing */
   struct sk_buff         *sav_skb;     /* Ptr to skb, rejected by LL-driver*/
-
                                        /* Ptr to orig. hard_header_cache   */
-  int                    (*org_hhc)(struct neighbour *neigh,
+  int                    (*org_hhc)(
+				    struct neighbour *neigh,
 				    struct hh_cache *hh);
-
                                        /* Ptr to orig. header_cache_update */
   void                   (*org_hcu)(struct hh_cache *,
 				    struct device *,
                                     unsigned char *);
   int  pppbind;                        /* ippp device for bindings         */
+#ifdef CONFIG_ISDN_X25
+  struct concap_device_ops *dops;      /* callbacks used by encapsulator   */
+#endif
+  int  cisco_loop;                     /* Loop counter for Cisco-SLARP     */
+  ulong cisco_myseq;                   /* Local keepalive seq. for Cisco   */
+  ulong cisco_yourseq;                 /* Remote keepalive seq. for Cisco  */
 } isdn_net_local;
 
 #ifdef CONFIG_ISDN_PPP
@@ -451,14 +512,18 @@ struct ippp_bundle {
 
 /* the interface itself */
 typedef struct isdn_net_dev_s {
-  isdn_net_local  local;
+  isdn_net_local *local;
   isdn_net_local *queue;
   void           *next;                /* Pointer to next isdn-interface   */
-  struct device   dev;	               /* interface to upper levels        */
+  struct device   dev;	       /* interface to upper levels        */
 #ifdef CONFIG_ISDN_PPP
   struct mpqueue *mp_last; 
   struct ippp_bundle ib;
 #endif
+#ifdef CONFIG_ISDN_X25
+  struct concap_proto  *cprot; /* connection oriented encapsulation protocol */
+#endif
+
 } isdn_net_dev;
 
 /*===================== End of ip-over-ISDN stuff ===========================*/
@@ -477,7 +542,8 @@ typedef struct isdn_net_dev_s {
 #define ISDN_ASYNC_PGRP_LOCKOUT       0x0200 /* Lock cua opens on pgrp       */
 #define ISDN_ASYNC_CALLOUT_NOHUP      0x0400 /* No hangup for cui            */
 #define ISDN_ASYNC_SPLIT_TERMIOS      0x0008 /* Sep. termios for dialin/out  */
-#define ISDN_SERIAL_XMIT_SIZE           4000 /* Maximum bufsize for write    */
+#define ISDN_SERIAL_XMIT_SIZE           1024 /* Default bufsize for write    */
+#define ISDN_SERIAL_XMIT_MAX            4000 /* Maximum bufsize for write    */
 #define ISDN_SERIAL_TYPE_NORMAL            1
 #define ISDN_SERIAL_TYPE_CALLOUT           2
 
@@ -499,18 +565,19 @@ typedef struct isdn_audio_skb {
 
 /* Private data of AT-command-interpreter */
 typedef struct atemu {
-  u_char              profile[ISDN_MODEM_ANZREG]; /* Modem-Regs. Profile 0 */
-  u_char              mdmreg[ISDN_MODEM_ANZREG];  /* Modem-Registers       */
-  char                pmsn[ISDN_MSNLEN]; /* EAZ/MSNs Profile 0             */
-  char                msn[ISDN_MSNLEN];/* EAZ/MSN                          */
+	u_char       profile[ISDN_MODEM_ANZREG]; /* Modem-Regs. Profile 0              */
+	u_char       mdmreg[ISDN_MODEM_ANZREG];  /* Modem-Registers                    */
+	char         pmsn[ISDN_MSNLEN];          /* EAZ/MSNs Profile 0                 */
+	char         msn[ISDN_MSNLEN];           /* EAZ/MSN                            */
 #ifdef CONFIG_ISDN_AUDIO
-  u_char              vpar[10];        /* Voice-parameters                 */
-  int                 lastDLE;         /* Flag for voice-coding: DLE seen  */
+	u_char       vpar[10];                   /* Voice-parameters                   */
+	int          lastDLE;                    /* Flag for voice-coding: DLE seen    */
 #endif
-  int                 mdmcmdl;         /* Length of Modem-Commandbuffer    */
-  int                 pluscount;       /* Counter for +++ sequence         */
-  int                 lastplus;        /* Timestamp of last +              */
-  char                mdmcmd[255];     /* Modem-Commandbuffer              */
+	int          mdmcmdl;                    /* Length of Modem-Commandbuffer      */
+	int          pluscount;                  /* Counter for +++ sequence           */
+	int          lastplus;                   /* Timestamp of last +                */
+	char         mdmcmd[255];                /* Modem-Commandbuffer                */
+	unsigned int charge;                     /* Charge units of current connection */
 } atemu;
 
 /* Private data (similar to async_struct in <linux/serial.h>) */
@@ -590,8 +657,8 @@ typedef struct {
 
 struct sqqueue {
   struct sqqueue *next;
-  int sqno_start;
-  int sqno_end;
+  long sqno_start;
+  long sqno_end;
   struct sk_buff *skb;
   long timer;
 };
@@ -599,7 +666,7 @@ struct sqqueue {
 struct mpqueue {
   struct mpqueue *next;
   struct mpqueue *last;
-  int    sqno;
+  long sqno;
   struct sk_buff *skb;
   int BEbyte;
   unsigned long time;
@@ -638,18 +705,44 @@ struct ippp_struct {
   struct slcompress *slcomp;
 #endif
   unsigned long debug;
-  struct isdn_ppp_compressor *compressor;
+  struct isdn_ppp_compressor *compressor,*link_compressor;
+  void *decomp_stat,*comp_stat,*link_decomp_stat,*link_comp_stat;
 };
 
 #endif
 
 /*======================== End of sync-ppp stuff ===========================*/
 
+/*======================== Start of V.110 stuff ============================*/
+#define V110_BUFSIZE 1024
+
+typedef struct {
+	int nbytes;                    /* 1 Matrixbyte -> nbytes in stream     */
+	int nbits;                     /* Number of used bits in streambyte    */
+	unsigned char key;             /* Bitmask in stream eg. 11 (nbits=2)   */
+	int decodelen;                 /* Amount of data in decodebuf          */
+	int SyncInit;                  /* Number of sync frames to send        */
+	unsigned char *OnlineFrame;    /* Precalculated V110 idle frame        */
+	unsigned char *OfflineFrame;   /* Precalculated V110 sync Frame        */
+	int framelen;                  /* Length of frames                     */
+	int skbuser;                   /* Number of unacked userdata skbs      */
+	int skbidle;                   /* Number of unacked idle/sync skbs     */
+	int introducer;                /* Local vars for decoder               */
+	int dbit;
+	unsigned char b;
+	int skbres;                    /* space to reserve in outgoing skb     */
+	int maxsize;                   /* maxbufsize of lowlevel driver        */
+	unsigned char *encodebuf;      /* temporary buffer for encoding        */
+	unsigned char decodebuf[V110_BUFSIZE]; /* incomplete V110 matrices     */
+} isdn_v110_stream;
+
+/*========================= End of V.110 stuff =============================*/
+
 /*======================= Start of general stuff ===========================*/
 
 typedef struct {
-  char *next;
-  char *private;
+	char *next;
+	char *private;
 } infostruct;
 
 /* Description of hardware-level-driver */
@@ -704,6 +797,9 @@ typedef struct isdn_devt {
   isdn_net_dev      *st_netdev[ISDN_MAX_CHANNELS]; /* stat netdev-pointers   */
   ulong             ibytes[ISDN_MAX_CHANNELS]; /* Statistics incoming bytes  */
   ulong             obytes[ISDN_MAX_CHANNELS]; /* Statistics outgoing bytes  */
+  int               v110emu[ISDN_MAX_CHANNELS];/* V.110 emulator-mode 0=none */
+  atomic_t          v110use[ISDN_MAX_CHANNELS];/* Usage-Semaphore for stream */
+  isdn_v110_stream  *v110[ISDN_MAX_CHANNELS];  /* V.110 private data         */
 } isdn_dev;
 
 extern isdn_dev *dev;

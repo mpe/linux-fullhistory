@@ -327,6 +327,7 @@ extern struct inode * proc_get_inode(struct super_block *, int, struct proc_dir_
 extern int proc_statfs(struct super_block *, struct statfs *, int);
 extern void proc_read_inode(struct inode *);
 extern void proc_write_inode(struct inode *);
+extern int proc_permission(struct inode *, int);
 
 extern int proc_match(int, const char *,struct proc_dir_entry *);
 

@@ -163,14 +163,22 @@ static inline int lp_char(char lpchar, int minor)
 	unsigned long count = 0;
 	struct lp_stats *stats;
 
-	do {
-		status = r_str (minor);
-		count++;
+	for (;;) {
 		lp_yield(minor);
-	} while (!LP_READY(minor, status) && count < LP_CHAR(minor));
-
-	if (count == LP_CHAR(minor))
-		return 0;
+		status = r_str (minor);
+		if (++count == LP_CHAR(minor))
+			return 0;
+		if (LP_POLLING(minor))
+		{
+			if (LP_READY(minor, status))
+				break;
+		} else {
+			if (!LP_READY(minor, status))
+				return 0;
+			else
+				break;
+		}
+	}
 
 	w_dtr(minor, lpchar);
 	stats = &LP_STAT(minor);

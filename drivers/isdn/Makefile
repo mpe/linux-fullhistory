@@ -1,6 +1,6 @@
 SUB_DIRS     :=
 MOD_SUB_DIRS :=
-ALL_SUB_DIRS := icn pcbit hisax avmb1
+ALL_SUB_DIRS := icn pcbit hisax avmb1 act2000
 
 L_OBJS :=
 LX_OBJS :=
@@ -13,10 +13,14 @@ O_TARGET :=
 
 ifeq ($(CONFIG_ISDN),y)
   L_TARGET := isdn.a
-  L_OBJS += isdn_common.o isdn_net.o isdn_tty.o isdn_cards.o
-  LX_OBJS += isdn_syms.o
+  L_OBJS += isdn_net.o isdn_tty.o isdn_cards.o isdn_v110.o
+  LX_OBJS += isdn_common.o 
   ifdef CONFIG_ISDN_PPP
     L_OBJS += isdn_ppp.o
+  endif
+  ifdef CONFIG_ISDN_X25
+    L_OBJS += isdn_x25iface.o
+    L_OBJS += isdn_concap.o
   endif
   ifdef CONFIG_ISDN_AUDIO
     L_OBJS += isdn_audio.o
@@ -25,11 +29,15 @@ else
   ifeq ($(CONFIG_ISDN),m)
     M_OBJS += isdn.o
     O_TARGET += isdn.o
-    O_OBJS += isdn_common.o isdn_net.o isdn_tty.o
-    OX_OBJS += isdn_syms.o
+    O_OBJS += isdn_net.o isdn_tty.o isdn_v110.o
+    OX_OBJS += isdn_common.o
     ifdef CONFIG_ISDN_PPP
       O_OBJS += isdn_ppp.o
     endif
+    ifdef CONFIG_ISDN_X25
+      O_OBJS += isdn_x25iface.o
+      O_OBJS += isdn_concap.o
+    endif  
     ifdef CONFIG_ISDN_AUDIO
       O_OBJS += isdn_audio.o
     endif
@@ -93,6 +101,16 @@ ifeq ($(CONFIG_ISDN_DRV_LOOP),y)
 else
   ifeq ($(CONFIG_ISDN_DRV_LOOP),m)
     MOD_SUB_DIRS += isdnloop
+  endif
+endif
+
+ifeq ($(CONFIG_ISDN_DRV_ACT2000),y)
+  L_OBJS += act2000/act2000.o
+  SUB_DIRS += act2000
+  MOD_SUB_DIRS += act2000
+else
+  ifeq ($(CONFIG_ISDN_DRV_ACT2000),m)
+    MOD_SUB_DIRS += act2000
   endif
 endif
 

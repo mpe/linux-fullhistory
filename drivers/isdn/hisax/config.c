@@ -1,58 +1,53 @@
-/* $Id: config.c,v 1.15 1997/04/06 22:57:24 keil Exp $
+/* $Id: config.c,v 2.12 1998/02/11 17:28:02 keil Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
- * Revision 1.15  1997/04/06 22:57:24  keil
- * Hisax version 2.1
+ * Revision 2.12  1998/02/11 17:28:02  keil
+ * Niccy PnP/PCI support
  *
- * Revision 1.14  1997/03/25 23:11:22  keil
- * US NI-1 protocol
+ * Revision 2.11  1998/02/09 21:26:13  keil
+ * fix export module for 2.1
  *
- * Revision 1.13  1997/03/23 21:45:49  keil
- * Add support for ELSA PCMCIA
+ * Revision 2.10  1998/02/09 18:46:05  keil
+ * Support for Sedlbauer PCMCIA (Marcus Niemann)
  *
- * Revision 1.12  1997/03/11 21:01:43  keil
- * nzproto is only used with modules
+ * Revision 2.9  1998/02/03 23:31:28  keil
+ * add AMD7930 support
  *
- * Revision 1.11  1997/02/14 12:23:12  fritz
- * Added support for new insmod parameter handling.
+ * Revision 2.8  1998/02/02 13:32:59  keil
+ * New card support
  *
- * Revision 1.10  1997/02/14 09:22:09  keil
- * Final 2.0 version
+ * Revision 2.7  1998/01/31 21:41:44  keil
+ * changes for newer 2.1 kernels
  *
- * Revision 1.9  1997/02/10 11:45:09  fritz
- * More changes for Kernel 2.1.X compatibility.
+ * Revision 2.6  1997/11/08 21:35:43  keil
+ * new l1 init
  *
- * Revision 1.8  1997/02/09 00:28:05  keil
- * new interface handling, one interface per card
- * default protocol now works again
+ * Revision 2.5  1997/11/06 17:15:08  keil
+ * New 2.1 init; PCMCIA wrapper changes
  *
- * Revision 1.7  1997/01/27 15:56:57  keil
- * Teles PCMCIA ITK ix1 micro added
+ * Revision 2.4  1997/10/29 19:07:52  keil
+ * changes for 2.1
  *
- * Revision 1.6  1997/01/21 22:17:56  keil
- * new module load syntax
+ * Revision 2.3  1997/10/01 09:21:33  fritz
+ * Removed old compatibility stuff for 2.0.X kernels.
+ * From now on, this code is for 2.1.X ONLY!
+ * Old stuff is still in the separate branch.
  *
- * Revision 1.5  1997/01/09 18:28:20  keil
- * cosmetic cleanups
+ * Revision 2.2  1997/09/11 17:24:46  keil
+ * Add new cards
  *
- * Revision 1.4  1996/11/05 19:35:17  keil
- * using config.h; some spelling fixes
+ * Revision 2.1  1997/07/27 21:41:35  keil
+ * version change
  *
- * Revision 1.3  1996/10/23 17:23:28  keil
- * default config changes
+ * Revision 2.0  1997/06/26 11:06:28  keil
+ * New card and L1 interface.
+ * Eicon.Diehl Diva and Dynalink IS64PH support
  *
- * Revision 1.2  1996/10/23 11:58:48  fritz
- * Changed default setup to reflect user's selection of supported
- * cards/protocols.
- *
- * Revision 1.1  1996/10/13 20:04:51  keil
- * Initial revision
- *
- *
+ * old changes removed /KKe
  *
  */
 #include <linux/types.h>
@@ -68,16 +63,30 @@
  * { type, protocol, p0, p1, p2, NULL }
  *
  * type
- *    1 Teles 16.0      p0=irq p1=membase p2=iobase
- *    2 Teles  8.0      p0=irq p1=membase
- *    3 Teles 16.3      p0=irq p1=iobase
- *    4 Creatix PNP     p0=irq p1=IO0 (ISAC)  p2=IO1 (HSCX)
- *    5 AVM A1 (Fritz)  p0=irq p1=iobase
- *    6 ELSA PC         [p0=iobase] or nothing (autodetect)
- *    7 ELSA Quickstep  p0=irq p1=iobase
- *      ELSA PCMCIA     p0=irq p1=iobase
- *    8 Teles PCMCIA    p0=irq p1=iobase
- *    9 ITK ix1-micro   p0=irq p1=iobase
+ *    1 Teles 16.0       p0=irq p1=membase p2=iobase
+ *    2 Teles  8.0       p0=irq p1=membase
+ *    3 Teles 16.3       p0=irq p1=iobase
+ *    4 Creatix PNP      p0=irq p1=IO0 (ISAC)  p2=IO1 (HSCX)
+ *    5 AVM A1 (Fritz)   p0=irq p1=iobase
+ *    6 ELSA PC          [p0=iobase] or nothing (autodetect)
+ *    7 ELSA Quickstep   p0=irq p1=iobase
+ *    8 Teles PCMCIA     p0=irq p1=iobase
+ *    9 ITK ix1-micro    p0=irq p1=iobase
+ *   10 ELSA PCMCIA      p0=irq p1=iobase
+ *   11 Eicon.Diehl Diva p0=irq p1=iobase
+ *   12 Asuscom ISDNLink p0=irq p1=iobase
+ *   13 Teleint          p0=irq p1=iobase
+ *   14 Teles 16.3c      p0=irq p1=iobase
+ *   15 Sedlbauer speed  p0=irq p1=iobase
+ *   16 USR Sportster internal  p0=irq  p1=iobase
+ *   17 MIC card                p0=irq  p1=iobase
+ *   18 ELSA Quickstep 1000PCI  no parameter
+ *   19 Compaq ISDN S0 ISA card p0=irq  p1=IO0 (HSCX)  p2=IO1 (ISAC) p3=IO2
+ *   20 Travers Technologies NETjet PCI card
+ *   21 reserved TELES PCI
+ *   22 Sedlbauer Speed Star    p0=irq p1=iobase
+ *   23 reserved
+ *   24 Dr Neuhaus Niccy PnP/PCI card p0=irq p1=IO0 p2=IO1 (PnP only)
  *
  *
  * protocol can be either ISDN_PTYPE_EURO or ISDN_PTYPE_1TR6 or ISDN_PTYPE_NI1
@@ -85,38 +94,108 @@
  *
  */
 
-#ifdef CONFIG_HISAX_ELSA_PCC
+#ifdef CONFIG_HISAX_ELSA
 #define DEFAULT_CARD ISDN_CTYPE_ELSA
-#define DEFAULT_CFG {0,0,0}
-#endif
-#ifdef CONFIG_HISAX_ELSA_PCMCIA
-#define DEFAULT_CARD ISDN_CTYPE_ELSA_QS1000
-#define DEFAULT_CFG {3,0x2f8,0}
+#define DEFAULT_CFG {0,0,0,0}
+int elsa_init_pcmcia(void*, int, int*, int);
+EXPORT_SYMBOL(elsa_init_pcmcia);
 #endif
 #ifdef CONFIG_HISAX_AVM_A1
 #undef DEFAULT_CARD
 #undef DEFAULT_CFG
 #define DEFAULT_CARD ISDN_CTYPE_A1
-#define DEFAULT_CFG {10,0x340,0}
+#define DEFAULT_CFG {10,0x340,0,0}
 #endif
 #ifdef CONFIG_HISAX_16_3
 #undef DEFAULT_CARD
 #undef DEFAULT_CFG
 #define DEFAULT_CARD ISDN_CTYPE_16_3
-#define DEFAULT_CFG {15,0x180,0}
+#define DEFAULT_CFG {15,0x180,0,0}
 #endif
 #ifdef CONFIG_HISAX_16_0
 #undef DEFAULT_CARD
 #undef DEFAULT_CFG
 #define DEFAULT_CARD ISDN_CTYPE_16_0
-#define DEFAULT_CFG {15,0xd0000,0xd80}
+#define DEFAULT_CFG {15,0xd0000,0xd80,0}
 #endif
 
 #ifdef CONFIG_HISAX_IX1MICROR2
 #undef DEFAULT_CARD
 #undef DEFAULT_CFG
 #define DEFAULT_CARD ISDN_CTYPE_IX1MICROR2
-#define DEFAULT_CFG {5,0x390,0}
+#define DEFAULT_CFG {5,0x390,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_DIEHLDIVA
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_DIEHLDIVA
+#define DEFAULT_CFG {0,0x0,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_ASUSCOM
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_ASUSCOM
+#define DEFAULT_CFG {5,0x200,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_TELEINT
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_TELEINT
+#define DEFAULT_CFG {5,0x300,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_SEDLBAUER
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_SEDLBAUER
+#define DEFAULT_CFG {11,0x270,0,0}
+int sedl_init_pcmcia(void*, int, int*, int);
+EXPORT_SYMBOL(sedl_init_pcmcia);
+#endif
+
+#ifdef CONFIG_HISAX_SPORTSTER
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_SPORTSTER
+#define DEFAULT_CFG {7,0x268,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_MIC
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_MIC
+#define DEFAULT_CFG {12,0x3e0,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_NETJET
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_NETJET
+#define DEFAULT_CFG {0,0,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_TELES3C
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_TELES3C
+#define DEFAULT_CFG {5,0x500,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_AMD7930
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_AMD7930
+#define DEFAULT_CFG {12,0x3e0,0,0}
+#endif
+
+#ifdef CONFIG_HISAX_NICCY
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_NICCY
+#define DEFAULT_CFG {0,0x0,0,0}
 #endif
 
 #ifdef CONFIG_HISAX_1TR6
@@ -150,7 +229,7 @@
   NULL, \
 }
 
-#define EMPTY_CARD	{0, DEFAULT_PROTO, {0, 0, 0}, NULL}
+#define EMPTY_CARD	{0, DEFAULT_PROTO, {0, 0, 0, 0}, NULL}
 
 struct IsdnCard cards[] =
 {
@@ -172,55 +251,63 @@ struct IsdnCard cards[] =
 	EMPTY_CARD,
 };
 
-static char HiSaxID[96] = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0" \
+static char HiSaxID[96] HISAX_INITDATA = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0" \
 "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0" \
 "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0" \
 "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-char *HiSax_id = HiSaxID;
+char *HiSax_id HISAX_INITDATA = HiSaxID;
 #ifdef MODULE
 /* Variables for insmod */
-static int type[] =
+static int type[] HISAX_INITDATA =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-static int protocol[] =
+static int protocol[] HISAX_INITDATA =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-static int io[] =
+static int io[] HISAX_INITDATA =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-#ifdef CONFIG_HISAX_16_3	/* For Creatix/Teles PnP */
-static int io0[] =
+#undef IO0_IO1
+#ifdef CONFIG_HISAX_16_3
+#define IO0_IO1
+#endif
+#ifdef CONFIG_HISAX_NICCY
+#undef IO0_IO1
+#define IO0_IO1
+#endif
+#ifdef IO0_IO1
+static int io0[] HISAX_INITDATA =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-static int io1[] =
+static int io1[] HISAX_INITDATA =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #endif
-static int irq[] =
+static int irq[] HISAX_INITDATA =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-static int mem[] =
+static int mem[] HISAX_INITDATA =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-static char *id = HiSaxID;
+static char *id HISAX_INITDATA = HiSaxID;
 
-#if (LINUX_VERSION_CODE > 0x020111)
 MODULE_AUTHOR("Karsten Keil");
-MODULE_PARM(type, "1-16i");
-MODULE_PARM(protocol, "1-16i");
-MODULE_PARM(io, "1-16i");
-MODULE_PARM(irq, "1-16i");
-MODULE_PARM(mem, "1-16i");
+MODULE_PARM(type, "1-3i");
+MODULE_PARM(protocol, "1-2i");
+MODULE_PARM(io, "1-8i");
+MODULE_PARM(irq, "1-2i");
+MODULE_PARM(mem, "1-12i");
 MODULE_PARM(id, "s");
 #ifdef CONFIG_HISAX_16_3	/* For Creatix/Teles PnP */
-MODULE_PARM(io0, "1-16i");
-MODULE_PARM(io1, "1-16i");
-#endif
+MODULE_PARM(io0, "1-8i");
+MODULE_PARM(io1, "1-8i");
 #endif
 
 #endif
+
+int nrcards;
 
 extern char *l1_revision;
 extern char *l2_revision;
 extern char *l3_revision;
-extern char *l4_revision;
+extern char *lli_revision;
 extern char *tei_revision;
 
-char *
-HiSax_getrev(const char *revision)
+HISAX_INITFUNC(char *
+HiSax_getrev(const char *revision))
 {
 	char *rev;
 	char *p;
@@ -234,7 +321,27 @@ HiSax_getrev(const char *revision)
 	return rev;
 }
 
-int nrcards;
+HISAX_INITFUNC(void
+HiSaxVersion(void))
+{
+	char tmp[64], rev[64];
+	char *r = rev;
+
+	strcpy(tmp, l1_revision);
+	r += sprintf(r, "%s/", HiSax_getrev(tmp));
+	strcpy(tmp, l2_revision);
+	r += sprintf(r, "%s/", HiSax_getrev(tmp));
+	strcpy(tmp, l3_revision);
+	r += sprintf(r, "%s/", HiSax_getrev(tmp));
+	strcpy(tmp, lli_revision);
+	r += sprintf(r, "%s/", HiSax_getrev(tmp));
+	strcpy(tmp, tei_revision);
+	r += sprintf(r, "%s", HiSax_getrev(tmp));
+
+	printk(KERN_INFO "HiSax: Driver for Siemens chip set ISDN cards\n");
+	printk(KERN_INFO "HiSax: Version 2.8\n");
+	printk(KERN_INFO "HiSax: Revisions %s\n", rev);
+}
 
 void
 HiSax_mod_dec_use_count(void)
@@ -251,8 +358,8 @@ HiSax_mod_inc_use_count(void)
 #ifdef MODULE
 #define HiSax_init init_module
 #else
-void
-HiSax_setup(char *str, int *ints)
+__initfunc(void
+HiSax_setup(char *str, int *ints))
 {
 	int i, j, argc;
 
@@ -297,31 +404,28 @@ HiSax_setup(char *str, int *ints)
 }
 #endif
 
-int
-HiSax_init(void)
+__initfunc(int
+HiSax_init(void))
 {
 	int i;
-	char tmp[64], rev[64];
-	char *r = rev;
+	
 #ifdef MODULE
 	int nzproto = 0;
+#ifdef CONFIG_HISAX_ELSA
+	if (type[0] == ISDN_CTYPE_ELSA_PCMCIA) {
+		/* we have exported  and return in this case */
+		return 0;
+	}
 #endif
+#ifdef CONFIG_HISAX_SEDLBAUER
+	if (type[0] == ISDN_CTYPE_SEDLBAUER_PCMCIA) {
+		/* we have to export  and return in this case */
+		return 0;
+	}
+#endif
+#endif
+	HiSaxVersion();
 	nrcards = 0;
-	strcpy(tmp, l1_revision);
-	r += sprintf(r, "%s/", HiSax_getrev(tmp));
-	strcpy(tmp, l2_revision);
-	r += sprintf(r, "%s/", HiSax_getrev(tmp));
-	strcpy(tmp, l3_revision);
-	r += sprintf(r, "%s/", HiSax_getrev(tmp));
-	strcpy(tmp, l4_revision);
-	r += sprintf(r, "%s/", HiSax_getrev(tmp));
-	strcpy(tmp, tei_revision);
-	r += sprintf(r, "%s", HiSax_getrev(tmp));
-
-	printk(KERN_NOTICE "HiSax: Driver for Siemens chip set ISDN cards\n");
-	printk(KERN_NOTICE "HiSax: Version 2.1\n");
-	printk(KERN_NOTICE "HiSax: Revisions %s\n", rev);
-
 #ifdef MODULE
 	if (id)			/* If id= string used */
 		HiSax_id = id;
@@ -343,37 +447,44 @@ HiSax_init(void)
 				cards[i].para[1] = mem[i];
 				break;
 
-			case ISDN_CTYPE_16_3:
-			case ISDN_CTYPE_TELESPCMCIA:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io[i];
-				break;
-
-#ifdef CONFIG_HISAX_16_3	/* For Creatix/Teles PnP */
+#ifdef IO0_IO1
 			case ISDN_CTYPE_PNP:
+			case ISDN_CTYPE_NICCY:
 				cards[i].para[0] = irq[i];
 				cards[i].para[1] = io0[i];
 				cards[i].para[2] = io1[i];
 				break;
-#endif
-			case ISDN_CTYPE_A1:
+			case ISDN_CTYPE_COMPAQ_ISA:
 				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io[i];
+				cards[i].para[1] = io0[i];
+				cards[i].para[2] = io1[i];
+				cards[i].para[3] = io[i];
 				break;
-
+#endif
 			case ISDN_CTYPE_ELSA:
 				cards[i].para[0] = io[i];
 				break;
-			case ISDN_CTYPE_ELSA_QS1000:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io[i];
-				break;
-
+			case ISDN_CTYPE_16_3:
+			case ISDN_CTYPE_TELESPCMCIA:
+			case ISDN_CTYPE_A1:
+			case ISDN_CTYPE_ELSA_PNP:
+			case ISDN_CTYPE_ELSA_PCMCIA:
 			case ISDN_CTYPE_IX1MICROR2:
+			case ISDN_CTYPE_DIEHLDIVA:
+			case ISDN_CTYPE_ASUSCOM:
+			case ISDN_CTYPE_TELEINT:
+			case ISDN_CTYPE_SEDLBAUER:
+			case ISDN_CTYPE_SEDLBAUER_PCMCIA:
+			case ISDN_CTYPE_SPORTSTER:
+			case ISDN_CTYPE_MIC:
+			case ISDN_CTYPE_TELES3C:
 				cards[i].para[0] = irq[i];
 				cards[i].para[1] = io[i];
 				break;
-
+			case ISDN_CTYPE_ELSA_PCI:
+			case ISDN_CTYPE_NETJET:
+			case ISDN_CTYPE_AMD7930:
+				break;
 		}
 	}
 	if (!nzproto) {
@@ -394,20 +505,20 @@ HiSax_init(void)
 
 	CallcNew();
 	Isdnl2New();
-	if (HiSax_inithardware()) {
+	TeiNew();
+	Isdnl1New();
+	if (HiSax_inithardware(NULL)) {
 		/* Install only, if at least one card found */
 		/* No symbols to export, hide all symbols */
 
 #ifdef MODULE
-#if (LINUX_VERSION_CODE < 0x020111)
-		register_symtab(NULL);
-#else
 		EXPORT_NO_SYMBOLS;
-#endif
-		printk(KERN_NOTICE "HiSax: module installed\n");
+		printk(KERN_INFO "HiSax: module installed\n");
 #endif
 		return (0);
 	} else {
+		Isdnl1Free();
+		TeiFree();
 		Isdnl2Free();
 		CallcFree();
 		return -EIO;
@@ -419,7 +530,101 @@ void
 cleanup_module(void)
 {
 	HiSax_closehardware();
-	printk(KERN_NOTICE "HiSax module removed\n");
+	printk(KERN_INFO "HiSax module removed\n");
 }
 
+#ifdef CONFIG_HISAX_ELSA
+int elsa_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
+{
+	int i;
+	int nzproto = 0;
+
+	nrcards = 0;
+	HiSaxVersion();
+	if (id)			/* If id= string used */
+		HiSax_id = id;
+	/* Initialize all 16 structs, even though we only accept
+	   two pcmcia cards
+	   */
+	for (i = 0; i < 16; i++) {
+		cards[i].para[0] = irq[i];
+		cards[i].para[1] = io[i];
+		cards[i].typ = type[i];
+		if (protocol[i]) {
+			cards[i].protocol = protocol[i];
+			nzproto++;
+		}
+	}
+	cards[0].para[0] = pcm_irq;
+	cards[0].para[1] = (int)pcm_iob;
+	cards[0].protocol = prot;
+	cards[0].typ = 10;
+	nzproto = 1;
+
+	if (!HiSax_id)
+		HiSax_id = HiSaxID;
+	if (!HiSaxID[0])
+		strcpy(HiSaxID, "HiSax");
+	for (i = 0; i < 16; i++)
+		if (cards[i].typ > 0)
+			nrcards++;
+	printk(KERN_DEBUG "HiSax: Total %d card%s defined\n",
+	       nrcards, (nrcards > 1) ? "s" : "");
+
+	Isdnl1New();
+	CallcNew();
+	Isdnl2New();
+	TeiNew();
+	HiSax_inithardware(busy_flag);
+	printk(KERN_NOTICE "HiSax: module installed\n");
+	return (0);
+}
 #endif
+#ifdef CONFIG_HISAX_SEDLBAUER
+int sedl_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
+{
+	int i;
+	int nzproto = 0;
+
+	nrcards = 0;
+	HiSaxVersion();
+	if (id)			/* If id= string used */
+		HiSax_id = id;
+	/* Initialize all 16 structs, even though we only accept
+	   two pcmcia cards
+	   */
+	for (i = 0; i < 16; i++) {
+		cards[i].para[0] = irq[i];
+		cards[i].para[1] = io[i];
+		cards[i].typ = type[i];
+		if (protocol[i]) {
+			cards[i].protocol = protocol[i];
+			nzproto++;
+		}
+	}
+	cards[0].para[0] = pcm_irq;
+	cards[0].para[1] = (int)pcm_iob;
+	cards[0].protocol = prot;
+	cards[0].typ = ISDN_CTYPE_SEDLBAUER_PCMCIA;
+	nzproto = 1;
+
+	if (!HiSax_id)
+		HiSax_id = HiSaxID;
+	if (!HiSaxID[0])
+		strcpy(HiSaxID, "HiSax");
+	for (i = 0; i < 16; i++)
+		if (cards[i].typ > 0)
+			nrcards++;
+	printk(KERN_DEBUG "HiSax: Total %d card%s defined\n",
+	       nrcards, (nrcards > 1) ? "s" : "");
+
+	Isdnl1New();
+	CallcNew();
+	Isdnl2New();
+	TeiNew();
+	HiSax_inithardware(busy_flag);
+	printk(KERN_NOTICE "HiSax: module installed\n");
+	return (0);
+}
+#endif
+#endif 

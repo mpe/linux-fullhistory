@@ -389,7 +389,6 @@ EXPORT_SYMBOL(is_bad_inode);
 EXPORT_SYMBOL(event);
 EXPORT_SYMBOL(__down);
 EXPORT_SYMBOL(__up);
-EXPORT_SYMBOL(securelevel);
 
 /* all busmice */
 EXPORT_SYMBOL(add_mouse_randomness);

@@ -9,24 +9,44 @@ if [ "$CONFIG_INET" != "n" ]; then
   fi
 fi
 bool 'Support audio via ISDN' CONFIG_ISDN_AUDIO
+if [ "$CONFIG_X25" != "n" ]; then
+  bool 'X.25 PLP on top of ISDN (EXPERIMENTAL)' CONFIG_ISDN_X25
+fi
 dep_tristate 'ICN 2B and 4B support' CONFIG_ISDN_DRV_ICN $CONFIG_ISDN
+dep_tristate 'isdnloop support' CONFIG_ISDN_DRV_LOOP $CONFIG_ISDN
 dep_tristate 'PCBIT-D support' CONFIG_ISDN_DRV_PCBIT $CONFIG_ISDN
 dep_tristate 'HiSax SiemensChipSet driver support' CONFIG_ISDN_DRV_HISAX $CONFIG_ISDN
 if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
+    bool 'HiSax Support for EURO/DSS1' CONFIG_HISAX_EURO
+    if [ "$CONFIG_HISAX_EURO" != "n" ]; then
+	    bool 'Support for german tarifinfo' CONFIG_DE_AOC
+	    bool 'Support for australian Microlink service (not for std. EURO)' CONFIG_HISAX_ML
+    fi
+    bool 'HiSax Support for german 1TR6' CONFIG_HISAX_1TR6
     bool 'HiSax Support for Teles 16.0/8.0' CONFIG_HISAX_16_0
     bool 'HiSax Support for Teles 16.3 or PNP or PCMCIA' CONFIG_HISAX_16_3
+    bool 'HiSax Support for Teles 16.3c' CONFIG_HISAX_TELES3C 
     bool 'HiSax Support for AVM A1 (Fritz)' CONFIG_HISAX_AVM_A1
-    bool 'HiSax Support for Elsa ISA cards' CONFIG_HISAX_ELSA_PCC
-    bool 'HiSax Support for Elsa PCMCIA card' CONFIG_HISAX_ELSA_PCMCIA
+    bool 'HiSax Support for Elsa cards' CONFIG_HISAX_ELSA
     bool 'HiSax Support for ITK ix1-micro Revision 2' CONFIG_HISAX_IX1MICROR2
-    bool 'HiSax Support for EURO/DSS1' CONFIG_HISAX_EURO
-    bool 'HiSax Support for US/NI-1' CONFIG_HISAX_NI1
-    bool 'HiSax Support for german 1TR6' CONFIG_HISAX_1TR6
+    bool 'HiSax Support for Eicon.Diehl Diva cards' CONFIG_HISAX_DIEHLDIVA
+    bool 'HiSax Support for ASUSCOM cards' CONFIG_HISAX_ASUSCOM
+    bool 'HiSax Support for TELEINT cards' CONFIG_HISAX_TELEINT
+    bool 'HiSax Support for Sedlbauer speed card/win/star' CONFIG_HISAX_SEDLBAUER
+    bool 'HiSax Support for USR Sportster internal TA' CONFIG_HISAX_SPORTSTER
+    bool 'HiSax Support for MIC card' CONFIG_HISAX_MIC
+    bool 'HiSax Support for NETjet card' CONFIG_HISAX_NETJET
+    bool 'HiSax Support for Niccy PnP/PCI card' CONFIG_HISAX_NICCY
+    if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
+        bool 'HiSax Support for Am7930' CONFIG_HISAX_AMD7930
+    fi
 fi
 if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
 	dep_tristate 'Spellcaster support (EXPERIMENTAL)' CONFIG_ISDN_DRV_SC $CONFIG_ISDN
+	dep_tristate 'IBM Active 2000 support (EXPERIMENTAL)' CONFIG_ISDN_DRV_ACT2000 $CONFIG_ISDN
 fi
 dep_tristate 'AVM-B1 with CAPI2.0 support' CONFIG_ISDN_DRV_AVMB1 $CONFIG_ISDN
 if [ "$CONFIG_ISDN_DRV_AVMB1" != "n" ]; then
     bool 'Verbose reason code reporting (kernel size +=7K)' CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON
 fi
+

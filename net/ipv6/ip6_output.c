@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.10 1998/03/20 09:12:17 davem Exp $
+ *	$Id: ip6_output.c,v 1.11 1998/03/28 08:29:39 davem Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -265,7 +265,6 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 		return err;
 
 	last_skb->dst = dst_clone(dst);
-	last_skb->when = jiffies;
 
 	skb_reserve(last_skb, (dst->dev->hard_header_len + 15) & ~15);
 	
@@ -460,8 +459,6 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 
 		dev = dst->dev;
 		skb->dst = dst_clone(dst);
-
-		skb->when = jiffies;
 
 		skb_reserve(skb, (dev->hard_header_len + 15) & ~15);
 

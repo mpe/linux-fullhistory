@@ -648,7 +648,7 @@ int ext2_notify_change(struct dentry *dentry, struct iattr *iattr)
 	     (ATTR_FLAG_APPEND | ATTR_FLAG_IMMUTABLE)) ^
 	    (inode->u.ext2_i.i_flags &
 	     (EXT2_APPEND_FL | EXT2_IMMUTABLE_FL))) {
-		if (securelevel > 0 || !fsuser())
+		if (!fsuser())
 			goto out;
 	} else if ((current->fsuid != inode->i_uid) && !fsuser())
 		goto out;

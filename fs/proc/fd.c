@@ -50,7 +50,7 @@ struct inode_operations proc_fd_inode_operations = {
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	proc_permission		/* permission */
 };
 
 /*

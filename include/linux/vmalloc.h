@@ -16,7 +16,7 @@ struct vm_struct {
 struct vm_struct * get_vm_area(unsigned long size);
 void vfree(void * addr);
 void * vmalloc(unsigned long size);
-int vread(char *buf, char *addr, int count);
+long vread(char *buf, char *addr, unsigned long count);
 void vmfree_area_pages(unsigned long address, unsigned long size);
 int vmalloc_area_pages(unsigned long address, unsigned long size);
 

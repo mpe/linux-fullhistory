@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 1.8 1997/04/07 22:59:08 keil Exp $
+/* $Id: tei.c,v 2.7 1998/02/12 23:08:11 keil Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
@@ -7,52 +7,112 @@
  *              Fritz Elfert
  *
  * $Log: tei.c,v $
+ * Revision 2.7  1998/02/12 23:08:11  keil
+ * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
+ *
+ * Revision 2.6  1998/02/02 13:41:42  keil
+ * fix MDL_ASSIGN for PtP
+ *
+ * Revision 2.5  1997/11/06 17:09:12  keil
+ * New 2.1 init code
+ *
+ * Revision 2.4  1997/10/29 19:04:46  keil
+ * changes for 2.1
+ *
+ * Revision 2.3  1997/10/01 09:21:43  fritz
+ * Removed old compatibility stuff for 2.0.X kernels.
+ * From now on, this code is for 2.1.X ONLY!
+ * Old stuff is still in the separate branch.
+ *
+ * Revision 2.2  1997/07/31 19:24:39  keil
+ * fixed a warning
+ *
+ * Revision 2.1  1997/07/31 11:50:16  keil
+ * ONE TEI and FIXED TEI handling
+ *
+ * Revision 2.0  1997/07/27 21:13:30  keil
+ * New TEI managment
+ *
+ * Revision 1.9  1997/06/26 11:18:02  keil
+ * New managment
+ *
  * Revision 1.8  1997/04/07 22:59:08  keil
  * GFP_KERNEL --> GFP_ATOMIC
  *
  * Revision 1.7  1997/04/06 22:54:03  keil
  * Using SKB's
  *
- * Revision 1.6  1997/02/09 00:25:12  keil
- * new interface handling, one interface per card
- *
- * Revision 1.5  1997/01/27 15:57:51  keil
- * cosmetics
- *
- * Revision 1.4  1997/01/21 22:32:44  keil
- * Tei verify request
- *
- * Revision 1.3  1997/01/04 13:45:02  keil
- * cleanup,adding remove tei request (thanks to Sim Yskes)
- *
- * Revision 1.2  1996/12/08 19:52:39  keil
- * minor debug fix
- *
- * Revision 1.1  1996/10/13 20:04:57  keil
- * Initial revision
- *
- *
+ * Old log removed/ KKe
  *
  */
 #define __NO_VERSION__
 #include "hisax.h"
+#include "isdnl2.h"
+#include <linux/random.h>
 
-extern struct IsdnCard cards[];
-extern int nrcards;
+const char *tei_revision = "$Revision: 2.7 $";
 
-const char *tei_revision = "$Revision: 1.8 $";
+#define ID_REQUEST	1
+#define ID_ASSIGNED	2
+#define ID_DENIED	3
+#define ID_CHK_REQ	4
+#define ID_CHK_RES	5
+#define ID_REMOVE	6
+#define ID_VERIFY	7
 
-static struct PStack *
-findces(struct PStack *st, int ces)
+#define TEI_ENTITY_ID	0xf
+
+static
+struct Fsm teifsm =
+{NULL, 0, 0, NULL, NULL};
+
+void tei_handler(struct PStack *st, u_char pr, struct sk_buff *skb);
+
+enum {
+	ST_TEI_NOP,
+	ST_TEI_IDREQ,
+	ST_TEI_IDVERIFY,
+};
+
+#define TEI_STATE_COUNT (ST_TEI_IDVERIFY+1)
+
+static char *strTeiState[] =
 {
-	struct PStack *ptr = *(st->l1.stlistp);
+	"ST_TEI_NOP",
+	"ST_TEI_IDREQ",
+	"ST_TEI_IDVERIFY",
+};
 
-	while (ptr)
-		if (ptr->l2.ces == ces)
-			return (ptr);
-		else
-			ptr = ptr->next;
-	return (NULL);
+enum {
+	EV_IDREQ,
+	EV_ASSIGN,
+	EV_DENIED,
+	EV_CHKREQ,
+	EV_REMOVE,
+	EV_VERIFY,
+	EV_T202,
+};
+
+#define TEI_EVENT_COUNT (EV_T202+1)
+
+static char *strTeiEvent[] =
+{
+	"EV_IDREQ",
+	"EV_ASSIGN",
+	"EV_DENIED",
+	"EV_CHKREQ",
+	"EV_REMOVE",
+	"EV_VERIFY",
+	"EV_T202",
+};
+
+unsigned int
+random_ri(void)
+{
+	unsigned int x;
+
+	get_random_bytes(&x, sizeof(x));
+	return (x & 0xffff);
 }
 
 static struct PStack *
@@ -72,246 +132,357 @@ findtei(struct PStack *st, int tei)
 }
 
 static void
-mdl_unit_data_res(struct PStack *st, unsigned int ri, u_char mt, u_char ai)
+put_tei_msg(struct PStack *st, u_char m_id, unsigned int ri, u_char tei)
 {
 	struct sk_buff *skb;
 	u_char *bp;
 
-	if (!(skb = alloc_skb(6 + MAX_HEADER_LEN, GFP_ATOMIC))) {
+	if (!(skb = alloc_skb(8, GFP_ATOMIC))) {
 		printk(KERN_WARNING "HiSax: No skb for TEI manager\n");
 		return;
 	}
-	skb_reserve(skb, MAX_HEADER_LEN);
+	bp = skb_put(skb, 3);
+	bp[0] = (TEI_SAPI << 2);
+	bp[1] = (GROUP_TEI << 1) | 0x1;
+	bp[2] = UI;
 	bp = skb_put(skb, 5);
-	bp[0] = 0xf;
+	bp[0] = TEI_ENTITY_ID;
 	bp[1] = ri >> 8;
 	bp[2] = ri & 0xff;
-	bp[3] = mt;
-	bp[4] = (ai << 1) | 1;
-	st->l3.l3l2(st, DL_UNIT_DATA, skb);
+	bp[3] = m_id;
+	bp[4] = (tei << 1) | 1;
+	st->l2.l2l1(st, PH_DATA_REQ, skb);
 }
 
 static void
-mdl_unit_data_ind(struct PStack *st, unsigned int ri, u_char mt, u_char ai)
+tei_id_request(struct FsmInst *fi, int event, void *arg)
 {
-	unsigned int tces;
-	struct PStack *otsp, *ptr;
+	struct PStack *st = fi->userdata;
 	char tmp[64];
 
-	switch (mt) {
-		case (2):
-			tces = ri;
-			if (st->l3.debug) {
-				sprintf(tmp, "identity assign ces %d ai %d", tces, ai);
-				st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-			}
-			if ((otsp = findces(st, tces))) {
-				if (st->l3.debug) {
-					sprintf(tmp, "ces %d --> tei %d", tces, ai);
-					st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-				}
-				otsp->ma.teil2(otsp, MDL_ASSIGN, (void *) (int) ai);
-			}
-			break;
-		case (3):
-			tces = ri;
-			if (st->l3.debug) {
-				sprintf(tmp, "identity denied for ces %d ai %d", tces, ai);
-				st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-			}
-			if ((otsp = findces(st, tces))) {
-				if (st->l3.debug) {
-					sprintf(tmp, "ces %d denied tei %d", tces, ai);
-					st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-				}
-				otsp->l2.tei = 255;
-				otsp->l2.ces = randomces();
-				otsp->ma.teil2(otsp, MDL_REMOVE, 0);
-			}
-			break;
-		case (4):
-			if (st->l3.debug) {
-				sprintf(tmp, "checking identity for %d", ai);
-				st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-			}
-			if (ai == 0x7f) {
-				ptr = *(st->l1.stlistp);
-				while (ptr) {
-					if ((ptr->l2.tei & 0x7f) != 0x7f) {
-						if (st->l3.debug) {
-							sprintf(tmp, "check response for ces %d with tei %d",
-								ptr->l2.ces, ptr->l2.tei);
-							st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-						}
-						/* send identity check response (user->network) */
-						mdl_unit_data_res(st, ptr->l2.ces, 5, ptr->l2.tei);
-					}
-					ptr = ptr->next;
-				}
-			} else {
-				otsp = findtei(st, ai);
-				if (!otsp)
-					break;
-				if (st->l3.debug) {
-					sprintf(tmp, "check response for ces %d with tei %d",
-					     otsp->l2.ces, otsp->l2.tei);
-					st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-				}
-				/* send identity check response (user->network) */
-				mdl_unit_data_res(st, otsp->l2.ces, 5, otsp->l2.tei);
-			}
-			break;
-		case (6):
-			if (st->l3.debug) {
-				sprintf(tmp, "removal for %d", ai);
-				st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-			}
-			if (ai == 0x7f) {
-				ptr = *(st->l1.stlistp);
-				while (ptr) {
-					if ((ptr->l2.tei & 0x7f) != 0x7f) {
-						if (st->l3.debug) {
-							sprintf(tmp, "rem ces %d with tei %d",
-								ptr->l2.ces, ptr->l2.tei);
-							st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-						}
-						ptr->ma.teil2(ptr, MDL_REMOVE, 0);
-					}
-					ptr = ptr->next;
-				}
-			} else {
-				otsp = findtei(st, ai);
-				if (!otsp)
-					break;
-				if (st->l3.debug) {
-					sprintf(tmp, "rem ces %d with tei %d",
-					     otsp->l2.ces, otsp->l2.tei);
-					st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-				}
-				otsp->ma.teil2(otsp, MDL_REMOVE, 0);
-			}
-			break;
-		default:
-			if (st->l3.debug) {
-				sprintf(tmp, "message unknown %d ai %d", mt, ai);
-				st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-			}
+	if (st->l2.tei != -1) {
+		sprintf(tmp, "assign request for allready asigned tei %d",
+			st->l2.tei);
+		st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+		return;
 	}
-}
-
-void
-tei_handler(struct PStack *st,
-	    u_char pr, struct sk_buff *skb)
-{
-	u_char *bp;
-	unsigned int data;
-	char tmp[32];
-
-	switch (pr) {
-		case (MDL_ASSIGN):
-			data = (unsigned int) skb;
-			if (st->l3.debug) {
-				sprintf(tmp, "ces %d assign request", data);
-				st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-			}
-			mdl_unit_data_res(st, data, 1, 127);
-			break;
-		case (MDL_VERIFY):
-			data = (unsigned int) skb;
-			if (st->l3.debug) {
-				sprintf(tmp, "%d id verify request", data);
-				st->l2.l2m.printdebug(&st->l2.l2m, tmp);
-			}
-			mdl_unit_data_res(st, 0, 7, data);
-			break;
-		case (DL_UNIT_DATA):
-			bp = skb->data;
-			if (bp[0] != 0xf) {
-				/* wrong management entity identifier, ignore */
-				/* shouldn't ibh be released??? */
-				printk(KERN_WARNING "tei handler wrong entity id %x\n", bp[0]);
-			} else
-				mdl_unit_data_ind(st, (bp[1] << 8) | bp[2], bp[3], bp[4] >> 1);
-			SET_SKB_FREE(skb);
-			dev_kfree_skb(skb);
-			break;
-		default:
-			break;
+	st->ma.ri = random_ri();
+	if (st->ma.debug) {
+		sprintf(tmp, "assign request ri %d", st->ma.ri);
+		st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
 	}
-}
-
-unsigned int
-randomces(void)
-{
-	int x = jiffies & 0xffff;
-
-	return (x);
+	put_tei_msg(st, ID_REQUEST, st->ma.ri, 127);
+	FsmChangeState(&st->ma.tei_m, ST_TEI_IDREQ);
+	FsmAddTimer(&st->ma.t202, st->ma.T202, EV_T202, NULL, 1);
+	st->ma.N202 = 3;
 }
 
 static void
-tei_man(struct PStack *sp, int i, void *v)
+tei_id_assign(struct FsmInst *fi, int event, void *arg)
 {
+	struct PStack *ost, *st = fi->userdata;
+	struct sk_buff *skb = arg;
+	struct IsdnCardState *cs;
+	int ri, tei;
+	char tmp[64];
 
-	printk(KERN_DEBUG "tei_man\n");
+	ri = ((unsigned int) skb->data[1] << 8) + skb->data[2];
+	tei = skb->data[4] >> 1;
+	if (st->ma.debug) {
+		sprintf(tmp, "identity assign ri %d tei %d", ri, tei);
+		st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+	}
+	if ((ost = findtei(st, tei))) {		/* same tei is in use */
+		if (ri != ost->ma.ri) {
+			sprintf(tmp, "possible duplicate assignment tei %d", tei);
+			st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+			ost->l2.l2tei(ost, MDL_ERROR_REQ, NULL);
+		}
+	} else if (ri == st->ma.ri) {
+		FsmDelTimer(&st->ma.t202, 1);
+		FsmChangeState(&st->ma.tei_m, ST_TEI_NOP);
+		st->ma.manl2(st, MDL_ASSIGN_REQ, (void *) (int) tei);
+		cs = (struct IsdnCardState *) st->l1.hardware;
+		cs->cardmsg(cs, MDL_ASSIGN_REQ, NULL);
+	}
+}
+
+static void
+tei_id_denied(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+	struct sk_buff *skb = arg;
+	int ri, tei;
+	char tmp[64];
+
+	ri = ((unsigned int) skb->data[1] << 8) + skb->data[2];
+	tei = skb->data[4] >> 1;
+	if (st->ma.debug) {
+		sprintf(tmp, "identity denied ri %d tei %d", ri, tei);
+		st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+	}
+}
+
+static void
+tei_id_chk_req(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+	struct sk_buff *skb = arg;
+	int tei;
+	char tmp[64];
+
+	tei = skb->data[4] >> 1;
+	if (st->ma.debug) {
+		sprintf(tmp, "identity check req tei %d", tei);
+		st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+	}
+	if ((st->l2.tei != -1) && ((tei == GROUP_TEI) || (tei == st->l2.tei))) {
+		FsmDelTimer(&st->ma.t202, 4);
+		FsmChangeState(&st->ma.tei_m, ST_TEI_NOP);
+		put_tei_msg(st, ID_CHK_RES, random_ri(), st->l2.tei);
+	}
+}
+
+static void
+tei_id_remove(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+	struct sk_buff *skb = arg;
+	struct IsdnCardState *cs;
+	int tei;
+	char tmp[64];
+
+	tei = skb->data[4] >> 1;
+	if (st->ma.debug) {
+		sprintf(tmp, "identity remove tei %d", tei);
+		st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+	}
+	if ((st->l2.tei != -1) && ((tei == GROUP_TEI) || (tei == st->l2.tei))) {
+		FsmDelTimer(&st->ma.t202, 5);
+		FsmChangeState(&st->ma.tei_m, ST_TEI_NOP);
+		st->ma.manl2(st, MDL_REMOVE_REQ, 0);
+		cs = (struct IsdnCardState *) st->l1.hardware;
+		cs->cardmsg(cs, MDL_REMOVE_REQ, NULL);
+	}
+}
+
+static void
+tei_id_verify(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+	char tmp[64];
+
+	if (st->ma.debug) {
+		sprintf(tmp, "id verify request for tei %d", st->l2.tei);
+		st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+	}
+	put_tei_msg(st, ID_VERIFY, 0, st->l2.tei);
+	FsmChangeState(&st->ma.tei_m, ST_TEI_IDVERIFY);
+	FsmAddTimer(&st->ma.t202, st->ma.T202, EV_T202, NULL, 2);
+	st->ma.N202 = 2;
+}
+
+static void
+tei_id_req_tout(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+	char tmp[64];
+	struct IsdnCardState *cs;
+
+	if (--st->ma.N202) {
+		st->ma.ri = random_ri();
+		if (st->ma.debug) {
+			sprintf(tmp, "assign req(%d) ri %d",
+				4 - st->ma.N202, st->ma.ri);
+			st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+		}
+		put_tei_msg(st, ID_REQUEST, st->ma.ri, 127);
+		FsmAddTimer(&st->ma.t202, st->ma.T202, EV_T202, NULL, 3);
+	} else {
+		sprintf(tmp, "assign req failed");
+		st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+		st->ma.manl2(st, MDL_ERROR_IND, 0);
+		cs = (struct IsdnCardState *) st->l1.hardware;
+		cs->cardmsg(cs, MDL_REMOVE_REQ, NULL);
+		FsmChangeState(fi, ST_TEI_NOP);
+	}
+}
+
+static void
+tei_id_ver_tout(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+	char tmp[64];
+	struct IsdnCardState *cs;
+
+	if (--st->ma.N202) {
+		if (st->ma.debug) {
+			sprintf(tmp, "id verify req(%d) for tei %d",
+				3 - st->ma.N202, st->l2.tei);
+			st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+		}
+		put_tei_msg(st, ID_VERIFY, 0, st->l2.tei);
+		FsmAddTimer(&st->ma.t202, st->ma.T202, EV_T202, NULL, 4);
+	} else {
+		sprintf(tmp, "verify req for tei %d failed", st->l2.tei);
+		st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+		st->ma.manl2(st, MDL_REMOVE_REQ, 0);
+		cs = (struct IsdnCardState *) st->l1.hardware;
+		cs->cardmsg(cs, MDL_REMOVE_REQ, NULL);
+		FsmChangeState(fi, ST_TEI_NOP);
+	}
+}
+
+static void
+tei_l1l2(struct PStack *st, int pr, void *arg)
+{
+	struct sk_buff *skb = arg;
+	int mt;
+	char tmp[64];
+
+	if (pr == PH_DATA_IND) {
+		if (skb->len < 3) {
+			sprintf(tmp, "short mgr frame %d/3", skb->len);
+			st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+		} else if (((skb->data[0] >> 2) != TEI_SAPI) ||
+			   ((skb->data[1] >> 1) != GROUP_TEI)) {
+			sprintf(tmp, "wrong mgr sapi/tei %x/%x",
+				skb->data[0], skb->data[1]);
+			st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+		} else if ((skb->data[2] & 0xef) != UI) {
+			sprintf(tmp, "mgr frame is not ui %x",
+				skb->data[2]);
+			st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+		} else {
+			skb_pull(skb, 3);
+			if (skb->len < 5) {
+				sprintf(tmp, "short mgr frame %d/5", skb->len);
+				st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+			} else if (skb->data[0] != TEI_ENTITY_ID) {
+				/* wrong management entity identifier, ignore */
+				sprintf(tmp, "tei handler wrong entity id %x\n",
+					skb->data[0]);
+				st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+			} else {
+				mt = skb->data[3];
+				if (mt == ID_ASSIGNED)
+					FsmEvent(&st->ma.tei_m, EV_ASSIGN, skb);
+				else if (mt == ID_DENIED)
+					FsmEvent(&st->ma.tei_m, EV_DENIED, skb);
+				else if (mt == ID_CHK_REQ)
+					FsmEvent(&st->ma.tei_m, EV_CHKREQ, skb);
+				else if (mt == ID_REMOVE)
+					FsmEvent(&st->ma.tei_m, EV_REMOVE, skb);
+				else {
+					sprintf(tmp, "tei handler wrong mt %x\n",
+						mt);
+					st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+				}
+			}
+		}
+	} else {
+		sprintf(tmp, "tei handler wrong pr %x\n", pr);
+		st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+	}
+	dev_kfree_skb(skb);
 }
 
 static void
 tei_l2tei(struct PStack *st, int pr, void *arg)
 {
-	struct IsdnCardState *sp = st->l1.hardware;
+	switch (pr) {
+		case (MDL_ASSIGN_IND):
+#ifdef TEI_FIXED
+			if (st->ma.debug) {
+				char tmp[64];
+				sprintf(tmp, "fixed assign tei %d", TEI_FIXED);
+				st->ma.tei_m.printdebug(&st->ma.tei_m, tmp);
+			}
+			st->ma.manl2(st, MDL_ASSIGN_REQ, (void *) (int) TEI_FIXED);
+#else
+			FsmEvent(&st->ma.tei_m, EV_IDREQ, arg);
+#endif
+			break;
+		case (MDL_ERROR_REQ):
+			FsmEvent(&st->ma.tei_m, EV_VERIFY, arg);
+			break;
+		default:
+			break;
+	}
+}
 
-	tei_handler(sp->teistack, pr, arg);
+static void
+tei_debug(struct FsmInst *fi, char *s)
+{
+	struct PStack *st = fi->userdata;
+	char tm[32], str[256];
+
+	jiftime(tm, jiffies);
+	sprintf(str, "%s Tei %s\n", tm, s);
+	HiSax_putstatus(st->l1.hardware, str);
 }
 
 void
 setstack_tei(struct PStack *st)
 {
 	st->l2.l2tei = tei_l2tei;
+	st->ma.T202 = 2000;	/* T202  2000 milliseconds */
+	st->l1.l1tei = tei_l1l2;
+	st->ma.debug = 1;
+	st->ma.tei_m.fsm = &teifsm;
+	st->ma.tei_m.state = ST_TEI_NOP;
+	st->ma.tei_m.debug = 1;
+	st->ma.tei_m.userdata = st;
+	st->ma.tei_m.userint = 0;
+	st->ma.tei_m.printdebug = tei_debug;
+	FsmInitTimer(&st->ma.tei_m, &st->ma.t202);
 }
 
 void
 init_tei(struct IsdnCardState *sp, int protocol)
 {
-	struct PStack *st;
-	char tmp[128];
 
-	st = (struct PStack *) kmalloc(sizeof(struct PStack), GFP_ATOMIC);
-	setstack_HiSax(st, sp);
-	st->l2.extended = !0;
-	st->l2.laptype = LAPD;
-	st->l2.window = 1;
-	st->l2.orig = !0;
-	st->protocol = protocol;
-/*
- * the following is not necessary for tei mng. (broadcast only)
- */
-	st->l2.t200 = 500;	/* 500 milliseconds */
-	st->l2.n200 = 4;	/* try 4 times */
-
-	st->l2.sap = 63;
-	st->l2.tei = 127;
-
-	sprintf(tmp, "Card %d tei", sp->cardnr + 1);
-	setstack_isdnl2(st, tmp);
-	st->l2.debug = 0;
-	st->l3.debug = 0;
-
-	st->ma.manl2(st, MDL_NOTEIPROC, NULL);
-
-	st->l2.l2l3 = (void *) tei_handler;
-	st->l1.l1man = tei_man;
-	st->l2.l2man = tei_man;
-	st->l4.l2writewakeup = NULL;
-
-	HiSax_addlist(sp, st);
-	sp->teistack = st;
 }
 
 void
-release_tei(struct IsdnCardState *sp)
+release_tei(struct IsdnCardState *cs)
 {
-	struct PStack *st = sp->teistack;
+	struct PStack *st = cs->stlist;
 
-	HiSax_rmlist(sp, st);
-	kfree((void *) st);
+	while (st) {
+		FsmDelTimer(&st->ma.t202, 1);
+		st = st->next;
+	}
+}
+
+static struct FsmNode TeiFnList[] HISAX_INITDATA =
+{
+	{ST_TEI_NOP, EV_IDREQ, tei_id_request},
+	{ST_TEI_NOP, EV_VERIFY, tei_id_verify},
+	{ST_TEI_NOP, EV_REMOVE, tei_id_remove},
+	{ST_TEI_NOP, EV_CHKREQ, tei_id_chk_req},
+	{ST_TEI_IDREQ, EV_T202, tei_id_req_tout},
+	{ST_TEI_IDREQ, EV_ASSIGN, tei_id_assign},
+	{ST_TEI_IDREQ, EV_DENIED, tei_id_denied},
+	{ST_TEI_IDVERIFY, EV_T202, tei_id_ver_tout},
+	{ST_TEI_IDVERIFY, EV_REMOVE, tei_id_remove},
+	{ST_TEI_IDVERIFY, EV_CHKREQ, tei_id_chk_req},
+};
+
+#define TEI_FN_COUNT (sizeof(TeiFnList)/sizeof(struct FsmNode))
+
+HISAX_INITFUNC(void
+TeiNew(void))
+{
+	teifsm.state_count = TEI_STATE_COUNT;
+	teifsm.event_count = TEI_EVENT_COUNT;
+	teifsm.strEvent = strTeiEvent;
+	teifsm.strState = strTeiState;
+	FsmNew(&teifsm, TeiFnList, TEI_FN_COUNT);
+}
+
+void
+TeiFree(void)
+{
+	FsmFree(&teifsm);
 }

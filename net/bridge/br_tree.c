@@ -1,6 +1,7 @@
 /*
- * this code is derived from the avl functions in mmap.c
+ *	This code is derived from the avl functions in mmap.c
  */
+
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/string.h>
@@ -16,6 +17,10 @@
  * Written by Bruno Haible <haible@ma2s2.mathematik.uni-karlsruhe.de>.
  * Taken from mmap.c, extensively modified by John Hayes 
  * <hayes@netplumbing.com>
+ * 98-02 Modified by Jean-Rene Peulve jr.peulve@aix.pacwan.net
+ *		update port number when topology change
+ *		return oldfdb when updating, for broadcast storm checking
+ *		call addr_cmp once per node
  */
 
 static struct fdb fdb_head;
@@ -50,8 +55,7 @@ static int addr_cmp(unsigned char *a1, unsigned char *a2);
  *    foreach node in tree->fdb_avl_right: node->fdb_avl_key >= tree->fdb_avl_key.
  */
 
-static int
-fdb_init(void)
+static int fdb_init(void)
 {
 	fdb_head.fdb_avl_height = 0;
 	fdb_head.fdb_avl_left = (struct fdb *)0;
@@ -109,7 +113,6 @@ struct fdb *br_avl_find_addr(unsigned char addr[6])
 }
 
 
-#if (0)
 /*
  * Rebalance a tree.
  * After inserting or deleting a node of a tree we have a sequence of subtrees
@@ -196,10 +199,14 @@ static void br_avl_rebalance (struct fdb *** nodeplaces_ptr, int count)
 	printk_avl(&fdb_head);
 #endif /* DEBUG_AVL */
 }
-#endif /* (0) */
 
-/* Insert a node into a tree. */
-int br_avl_insert (struct fdb * new_node)
+/* Insert a node into a tree.
+ * Performance improvement:
+ *	 call addr_cmp() only once per node and use result in a switch.
+ * Return old node address if we knew that MAC address already
+ * Return NULL if we insert the new node
+ */
+struct fdb *br_avl_insert (struct fdb * new_node)
 {
 	struct fdb ** nodeplace = fhpp;
 	struct fdb ** stack[avl_maxheight];
@@ -214,15 +221,38 @@ int br_avl_insert (struct fdb * new_node)
 		if (node == avl_br_empty)
 			break;
 		*stack_ptr++ = nodeplace; stack_count++;
-		if (addr_cmp(new_node->ula, node->ula) == 0) { /* update */
+		switch(addr_cmp(new_node->ula, node->ula)) {
+		case 0: /* update */
+                   if (node->port == new_node->port) {
 			node->flags = new_node->flags;
 			node->timer = new_node->timer;	
-			return(0);
-		}
-		if (addr_cmp(new_node->ula, node->ula) < 0) {
-			nodeplace = &node->fdb_avl_left;
-		} else {
-			nodeplace = &node->fdb_avl_right;
+		   } else if (!(node->flags & FDB_ENT_VALID) &&
+				node->port) {
+			/* update fdb but never for local interfaces */
+#if (DEBUG_AVL)
+			printk("node 0x%x:port changed old=%d new=%d\n",
+				(unsigned int)node, node->port,new_node->port);
+#endif
+			/* JRP: update port as well if the topology change !
+			 * Don't do this while entry is still valid otherwise
+			 * a broadcast that we flooded and is reentered by another
+			 * port would mess up the good port number.
+			 * The fdb list per port needs to be updated as well.
+			 */
+			requeue_fdb(node, new_node->port);
+			node->flags = new_node->flags;
+			node->timer = new_node->timer;	
+#if (DEBUG_AVL)
+			printk_avl(&fdb_head);
+#endif /* DEBUG_AVL */
+		   }
+		   return node;		/* pass old fdb to caller */
+
+		case 1: /* new_node->ula > node->ula */
+		   nodeplace = &node->fdb_avl_right;
+		   break;
+		default: /* -1 => new_node->ula < node->ula */
+		   nodeplace = &node->fdb_avl_left;
 		}
 	}
 #if (DEBUG_AVL)
@@ -239,17 +269,14 @@ int br_avl_insert (struct fdb * new_node)
 	new_node->fdb_avl_right = avl_br_empty;
 	new_node->fdb_avl_height = 1;
 	*nodeplace = new_node;
-#if (0)	
 	br_avl_rebalance(stack_ptr,stack_count);
-#endif /* (0) */
 #ifdef DEBUG_AVL
 	printk_avl(&fdb_head);
 #endif /* DEBUG_AVL */
-	return(1);
+	return NULL;		/* this is a new node */
 }
 
 
-#if (0)
 /* Removes a node out of a tree. */
 static int br_avl_remove (struct fdb * node_to_delete)
 {
@@ -302,7 +329,6 @@ static int br_avl_remove (struct fdb * node_to_delete)
 	br_avl_rebalance(stack_ptr,stack_count);
 	return(0);
 }
-#endif /* (0) */
 
 #ifdef DEBUG_AVL
 
@@ -311,13 +337,14 @@ static void printk_avl (struct fdb * tree)
 {
 	if (tree != avl_br_empty) {
 		printk("(");
-		printk("%02x:%02x:%02x:%02x:%02x:%02x",
+		printk("%02x:%02x:%02x:%02x:%02x:%02x(%d)",
 			tree->ula[0],
 			tree->ula[1],
 			tree->ula[2],
 			tree->ula[3],
 			tree->ula[4],
-			tree->ula[5]);
+			tree->ula[5],
+			tree->port);
 		if (tree->fdb_avl_left != avl_br_empty) {
 			printk_avl(tree->fdb_avl_left);
 			printk("<");
@@ -330,7 +357,6 @@ static void printk_avl (struct fdb * tree)
 	}
 }
 
-#if (0)
 static char *avl_check_point = "somewhere";
 
 /* check a tree's consistency and balancing */
@@ -387,7 +413,6 @@ static void avl_checkorder (struct fdb * tree)
 	avl_checkright(tree->fdb_avl_right,tree->fdb_avl_key);
 }
 
-#endif /* (0) */
 #endif /* DEBUG_AVL */
 
 static int addr_cmp(unsigned char a1[], unsigned char a2[])

@@ -1,12 +1,13 @@
-/* $Id: l3_1tr6.h,v 1.1 1996/10/13 20:03:48 keil Exp $
+/* $Id: l3_1tr6.h,v 2.0 1997/07/27 21:15:47 keil Exp $
  *
  *  German 1TR6 D-channel protocol defines
  *
  * $Log: l3_1tr6.h,v $
+ * Revision 2.0  1997/07/27 21:15:47  keil
+ * New Callref based layer3
+ *
  * Revision 1.1  1996/10/13 20:03:48  keil
  * Initial revision
- *
- *
  *
  */
 #ifndef l3_1tr6
@@ -28,7 +29,6 @@
 #define MT_N0_INF_REJ 0x68
 #define MT_N0_CLOSE   0x75
 #define MT_N0_CLO_ACK 0x77
-
 
 /*
  * MsgType N1
@@ -64,8 +64,6 @@
 #define MT_N1_REG_ACK 0x6C
 #define MT_N1_REG_REJ 0x6F
 #define MT_N1_STAT 0x63
-
-
 
 /*
  * W Elemente
@@ -156,5 +154,13 @@
 #define CAUSE_RemoteUserResumed 0x73
 #define CAUSE_UserInfoDiscarded 0x7F
 
+#define T303	4000
+#define T304	20000
+#define T305	4000
+#define T308	4000
+#define T310	120000
+#define T313	4000
+#define T318	4000
+#define T319	4000
 
 #endif

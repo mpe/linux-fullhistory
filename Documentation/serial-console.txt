@@ -19,10 +19,10 @@ The format of this option is:
 			9600n8. The maximum baudrate is 115200.
 
 You can specify multiple console= options on the kernel command line.
-Output will appear on all of them. The first device will be used when
+Output will appear on all of them. The last device will be used when
 you open /dev/console. So, for example:
 
-	console=tty0 console=ttyS1,9600
+	console=ttyS1,9600 console=tty0
 
 defines that opening /dev/console will get you the current foreground
 virtual console, and kernel messages will appear on both the VGA
@@ -91,4 +91,4 @@ Replace the sample values as needed.
    for porting the patches from 2.1.4x to 2.1.6x for taking care of
    the integration of these patches into m68k, ppc and alpha.
 
-Miquel van Smoorenburg <miquels@cistron.nl>, 03-Dec-1997
+Miquel van Smoorenburg <miquels@cistron.nl>, 21-Mar-1998

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.69 1998/03/28 00:55:36 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.72 1998/03/30 08:41:52 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -240,8 +240,9 @@ static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
 					   struct in6_addr *daddr, u16 dport,
 					   int dif)
 {
-	unsigned short hnum = ntohs(dport);
 	struct sock *sk;
+	__u16 hnum = ntohs(dport);
+	__u32 ports = TCP_COMBINED_PORTS(sport, hnum);
 	int hash;
 
 #ifdef USE_QUICKSYNS
@@ -252,13 +253,7 @@ static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
 
 	/* Check TCP register quick cache first. */
 	sk = TCP_RHASH(sport);
-	if(sk						&&
-	   sk->num		== hnum			&& /* local port     */
-	   sk->family		== AF_INET6		&& /* address family */
-	   sk->dport		== sport		&& /* remote port    */
-	   !ipv6_addr_cmp(&sk->net_pinfo.af_inet6.daddr, saddr)	&&
-	   !ipv6_addr_cmp(&sk->net_pinfo.af_inet6.rcv_saddr, daddr) &&
-	   (!sk->bound_dev_if || sk->bound_dev_if == dif))
+	if(sk && TCP_IPV6_MATCH(sk, saddr, daddr, ports, dif))
 		goto hit;
 
 	/* Optimize here for direct hit, only listening connections can
@@ -267,28 +262,23 @@ static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
 	hash = tcp_v6_hashfn(daddr, hnum, saddr, sport);
 	for(sk = tcp_established_hash[hash]; sk; sk = sk->next) {
 		/* For IPV6 do the cheaper port and family tests first. */
-		if(sk->num		== hnum			&& /* local port     */
-		   sk->family		== AF_INET6		&& /* address family */
-		   sk->dport		== sport		&& /* remote port    */
-		   !ipv6_addr_cmp(&sk->net_pinfo.af_inet6.daddr, saddr)	&&
-		   !ipv6_addr_cmp(&sk->net_pinfo.af_inet6.rcv_saddr, daddr) &&
-		   (!sk->bound_dev_if || sk->bound_dev_if == dif)) {
+		if(TCP_IPV6_MATCH(sk, saddr, daddr, ports, dif)) {
 			if (sk->state == TCP_ESTABLISHED)
 				TCP_RHASH(sport) = sk;
 			goto hit; /* You sunk my battleship! */
 		}
 	}
 	/* Must check for a TIME_WAIT'er before going to listener hash. */
-	for(sk = tcp_established_hash[hash+(TCP_HTABLE_SIZE/2)]; sk; sk = sk->next)
-		if(sk->num		== hnum			&& /* local port     */
-		   sk->family		== AF_INET6		&& /* address family */
-		   sk->dport		== sport) {		   /* remote port    */
+	for(sk = tcp_established_hash[hash+(TCP_HTABLE_SIZE/2)]; sk; sk = sk->next) {
+		if(*((__u32 *)&(sk->dport))	== ports	&&
+		   sk->family			== AF_INET6) {
 			struct tcp_tw_bucket *tw = (struct tcp_tw_bucket *)sk;
 			if(!ipv6_addr_cmp(&tw->v6_daddr, saddr)	&&
 			   !ipv6_addr_cmp(&tw->v6_rcv_saddr, daddr) &&
 			   (!sk->bound_dev_if || sk->bound_dev_if == dif))
 				goto hit;
 		}
+	}
 #ifdef USE_QUICKSYNS
 listener_shortcut:
 #endif
@@ -1302,7 +1292,7 @@ static int tcp_v6_init_sock(struct sock *sk)
 	/* See draft-stevens-tcpca-spec-01 for discussion of the
 	 * initialization of these values.
 	 */
-	tp->snd_cwnd = 1;
+	tp->snd_cwnd = (1 << TCP_CWND_SHIFT);
 	tp->snd_ssthresh = 0x7fffffff;
 
 	sk->priority = 1;
@@ -1333,14 +1323,14 @@ static int tcp_v6_destroy_sock(struct sock *sk)
 	 *	Cleanup up the write buffer.
 	 */
 
-  	while((skb = skb_dequeue(&sk->write_queue)) != NULL)
+  	while((skb = __skb_dequeue(&sk->write_queue)) != NULL)
 		kfree_skb(skb);
 
 	/*
 	 *  Cleans up our, hopefuly empty, out_of_order_queue
 	 */
 
-  	while((skb = skb_dequeue(&tp->out_of_order_queue)) != NULL)
+  	while((skb = __skb_dequeue(&tp->out_of_order_queue)) != NULL)
 		kfree_skb(skb);
 
 	/*

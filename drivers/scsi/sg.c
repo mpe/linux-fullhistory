@@ -28,6 +28,8 @@
 #include <scsi/scsi_ioctl.h>
 #include <scsi/sg.h>
 
+int sg_big_buff = SG_BIG_BUFF;		/* for now, sg_big_buff is read-only through sysctl */
+
 static int sg_init(void);
 static int sg_attach(Scsi_Device *);
 static int sg_detect(Scsi_Device *);

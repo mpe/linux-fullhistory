@@ -80,7 +80,7 @@ extern struct console_cmdline console_list[MAX_CMDLINECONSOLES];
  */
 
 #define CON_PRINTBUFFER	(1)
-#define CON_FIRST	(2)
+#define CON_CONSDEV	(2) /* Last on the command line */
 #define CON_ENABLED	(4)
 
 struct console

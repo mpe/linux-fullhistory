@@ -605,6 +605,45 @@ int prepare_binprm(struct linux_binprm *bprm)
 			id_change = 1;
 	}
 
+	/* We don't have VFS support for capabilities yet */
+	cap_clear(bprm->cap_inheritable);
+	cap_clear(bprm->cap_permitted);
+	cap_clear(bprm->cap_effective);
+
+	/*  To support inheritance of root-permissions and suid-root
+         *  executables under compatibility mode, we raise the
+         *  effective and inherited bitmasks of the executable file
+         *  (translation: we set the executable "capability dumb" and
+         *  set the allowed set to maximum). We don't set any forced
+         *  bits.
+         *
+         *  If only the real uid is 0, we only raise the inheritable
+         *  bitmask of the executable file (translation: we set the
+         *  allowed set to maximum and the application to "capability
+         *  smart"). 
+         */
+
+	if (!issecure(SECURE_NOROOT)) {
+		if (bprm->e_uid == 0 || current->uid == 0)
+			cap_set_full(bprm->cap_inheritable);
+		if (bprm->e_uid == 0) 
+			cap_set_full(bprm->cap_effective);
+	}
+
+        /* We use a conservative definition of suid for capabilities.
+         * The process is suid if the permitted set is not a subset of
+         * the current permitted set after the exec call.
+         *         new permitted set = forced | (allowed & inherited)
+         *                       pP' = fP     | (fI      & pI)
+         */
+
+        if ((bprm->cap_permitted.cap |
+	     (current->cap_inheritable.cap &
+	      bprm->cap_inheritable.cap)) &
+	    ~current->cap_permitted.cap) {
+		id_change = 1;
+	}
+
 	if (id_change) {
 		/* We can't suid-execute if we're sharing parts of the executable */
 		/* or if we're being traced (or if suid execs are not allowed)    */
@@ -622,6 +661,45 @@ int prepare_binprm(struct linux_binprm *bprm)
 	memset(bprm->buf,0,sizeof(bprm->buf));
 	return read_exec(bprm->dentry,0,bprm->buf,128,1);
 }
+
+/*
+ * This function is used to produce the new IDs and capabilities
+ * from the old ones and the file's capabilities.
+ *
+ * The formula used for evolving capabilities is:
+ *
+ *       pI' = pI
+ *       pP' = fP | (fI & pI)
+ *       pE' = pP' & fE          [NB. fE is 0 or ~0]
+ *
+ * I=Inheritable, P=Permitted, E=Effective // p=process, f=file
+ * ' indicates post-exec().
+ */
+
+void compute_creds(struct linux_binprm *bprm) 
+{
+	int new_permitted = bprm->cap_permitted.cap |
+		(bprm->cap_inheritable.cap & current->cap_inheritable.cap);
+
+	current->cap_permitted.cap = new_permitted;
+	current->cap_effective.cap = new_permitted & bprm->cap_effective.cap;
+	
+        /* XXX - Audit candidate */
+        if (!cap_isclear(current->cap_effective)) {
+                printk(KERN_NOTICE
+		       "raising capabilities on `%s'(pid=%d) [%04x]:%lu\n",
+		       current->comm, current->pid,
+		       kdev_t_to_nr(bprm->dentry->d_inode->i_dev), 
+		       bprm->dentry->d_inode->i_ino);
+        }
+	
+        current->suid = current->euid = current->fsuid = bprm->e_uid;
+        current->sgid = current->egid = current->fsgid = bprm->e_gid;
+        if (current->euid != current->uid || current->egid != current->gid ||
+	    !cap_isclear(current->cap_permitted))
+                current->dumpable = 0;
+}
+
 
 void remove_arg_zero(struct linux_binprm *bprm)
 {

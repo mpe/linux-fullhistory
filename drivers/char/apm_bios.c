@@ -1159,8 +1159,10 @@ __initfunc(void apm_bios_init(void))
 	static struct proc_dir_entry *ent;
 
 #ifdef __SMP__
-	printk(KERN_NOTICE "APM disabled: APM is not SMP safe.\n");
-	return;
+	if (smp_num_cpus > 1) {
+		printk(KERN_NOTICE "APM disabled: APM is not SMP safe.\n");
+		return;
+	}
 #endif
 	if (apm_bios_info.version == 0) {
 		printk(KERN_INFO "APM BIOS not found.\n");

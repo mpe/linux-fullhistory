@@ -1,0 +1,217 @@
+ 
+X25 support within isdn4linux
+
+
+This is experimental code and should be used with linux version 2.1.72.
+or later. Use it completely on your own risk.
+
+
+As new versions appear, the stuff described here might suddenly change
+or become invalid without notice.
+
+Keep in mind:
+
+You are using an experimental kernel (2.1.x series) with an experimental
+x25 protocol implementation and experimental x25-on-top-of-isdn extensions.
+Thus, be prepared to face problems related therefrom.
+
+- If you connect to an x25 neighbour not operated by yourself, ASK the
+  other side first. Be prepared that bugs in the protocol implementation
+  might result in problems (even crashing the peer, however such ugly events
+  should only happen if your peer's protocol implementation has serious bugs).
+
+- This implementation has never wiped out my whole hard disk yet. But as
+  this is experimental code, don't blame me if that happened to you. Take
+  appropriate actions (such as backing up important data) before
+  trying this code.
+
+- Monitor your isdn connections while using this software. This should
+  prevent you from undesired phone bills in case of driver problems.
+  
+ 
+
+
+How to configure the kernel
+
+ 
+The ITU-T (former CCITT) X.25 network protocol layer has been implemented
+in the Linux source tree since version 2.1.16. The isdn subsystem might be 
+useful to run X.25 on top of ISDN. If you want to try it, select
+
+   "CCITT X.25 Packet Layer"
+
+from the networking options as well as
+
+   "ISDN Support" and "X.25 PLP on Top of ISDN"
+
+from the ISDN subsystem options when you configure your kernel for
+compilation. You currently also need to enable
+"Prompt for development and/or incomplete code/drivers" from the
+"Code maturity level options" menu. For the x25trace utility to work
+you also need to enable "Packet socket" (I recommend to choose "y",
+not "m" for testing) from the networking options.
+
+
+For testing you should also select the isdnloop driver from the
+isdn subsystem's configuration menu.
+
+
+
+What's it for? How to use it?
+
+
+X25 on top of isdn might be useful with two different scenarios:
+
+- You might want to access a public X.25 data network from your Linux box.
+  You can use i4l if you were physically connected to the X.25 switch
+  by an ISDN line (leased line as well as dial up connection should work,
+  but connecting to x.25 network switches is currently untested. Testing
+  needs to be done by somebody with access to such a switch.) 
+
+- Or you might want to operate certain ISDN teleservices on 
+  your linux box. A lot of those teleservices run on top of the ISO-8208 
+  network layer protocol. ISO-8208 is essentially the same as ITU-T X.25.
+
+  Popular candidates of such teleservices are EUROFILE transfer or any
+  teleservice applying ITU-T recommendation T.90 (i.e., AFAIK, G4 Fax).
+
+To use the X.25 protocol on top of isdn, just create an isdn network
+interface as usual, configure your own and/or peer's ISDN numbers,
+and choose x25iface encapsulation by
+
+   isdnctrl encap <iface-name> x25iface.
+
+Once encap is set like this, the device can be used by the x25 packet layer.
+
+All the stuff needed for x25 is implemented inside the isdn link
+level (mainly isdn_net.c and some new source files). Thus, it should
+work with every existing HL driver. I was able to successfully open x25
+connections on top of the isdnloop driver and the hisax driver.
+"x25iface"-encapsulation bypasses demand dialing. Dialing will be
+initiated when the upper (x25 packet) layer requests the lapb datalink to
+be established. But hangup timeout is still active. The connection
+will not automatically be re-established by the isdn_net module
+itself when new data arrives after the hangup timeout. But
+the x25 network code will re-establish the datalink connection
+(resulting in re-dialing and an x25 protocol reset) when new data is
+to be transmitted. (This currently does not work properly with the
+isdnloop driver, see "known problems" below)
+
+
+In order to set up a conforming protocol stack you also need to
+specify the proper l2_prot parameter:
+
+To operate in ISO-8208  X.25 DTE-DTE mode, use
+
+   isdnctrl l2_prot <iface-name> x75i
+
+To access an X.25 network switch via isdn (your linux box is the DTE), use
+
+   isdnctrl l2_prot <iface-name> x25dte
+
+To mimic an X.25 network switch (DCE side of the connection), use
+
+   isdnctrl l2_prot <iface-name> x25dce
+
+However, x25dte or x25dce is currently not supported by any real HL
+level driver. The main difference between x75 and x25dte/dce is that
+x25d[tc]e uses fixed lap_b addresses. With x75i, the side which
+initiates the isdn connection uses the DTE's lap_b address while the
+called side used the DCE's lap_b address. Thus, l2_prot x75i will
+probably work if you access a public x25 network as long as the
+corresponding isdn connection is set up by you. However, I've never
+tested this.
+
+
+
+How to use the test installation?
+
+
+To test x25 on top of isdn, you need to get
+
+- a patched version of the "isdnctrl" program that supports setting the new
+  x25 specific parameters.
+
+- the x25-utils-2.1.x package from ftp.pspt.fi/pub/ham/linux/ax25
+  or any mirror site (i.e. ftp://ftp.gwdg.de/pub/linux/misc/ax25/).
+
+- a kernel patch that enhances isdn4linux to provide x25 network
+  interface support. (This file is part of that kernel patch).
+
+- an application that uses linux AF_X25 sockets program. 
+
+Before compiling the user level utilities make sure that the compiler/
+preprocessor will fetch the proper (patched) kernel header files. Either make
+/usr/include/linux a symbolic link pointing to your developer kernel's
+include/linux directory or set the appropriate compiler flags.
+
+It is recommended that all isdn drivers and the x25 PLP protocol 
+are compiled as loadable modules. Like this, you can recover
+from certain errors by simply unloading and reloading the modules.
+
+When all drivers and interfaces are loaded and configured you need to
+ifconfig the network interfaces up and add x25-routes to them. Use
+the usual ifconfig tool.
+
+ifconfig <iface-name> up
+
+But a special x25route tool (distributed with the x25-util package)
+is needed to set up x25 routes. I.e. 
+
+x25route add 01 <iface-name>
+
+will cause all x.25 connections to the destination x.25-address
+"01" beeing routed to your created isdn network interface.
+
+
+There are currently no real x25 applications available. However, for
+tests, the x25-utils package contains a modified version of telnet
+and telnetd that uses x25 sockets instead of tcp/ip sockets. Use
+this for your first tests. Furthermore, there is an x25.echod and a client
+named "eftp" (which contains some experimental code to download files
+from a remote eft server using the EUROfile transfer protocol).
+It available at ftp://ftp.hamburg.pop.de/pub/LOCAL/linux/i4l-eft/eftp4linux-*
+
+The x25-utility package also contains an x25trace tool that can be
+used to monitor x25 packets received by the network interfaces.
+The /proc/net/x25* files also contain useful information. 
+
+The eftp4linux test release also contains an "ix25test" script that can
+be used for testing x25 on top of isdn4linux. Edit
+this script according to your local needs and then call it as
+
+ix25test start
+
+This will set up a sample configuration using the isdnloop and hisax
+driver and create some isdn network interfaces.
+It is recommended that all other isdn drivers and the
+x25 module is unloaded before calling this script.
+
+
+
+Known problems and deficiencies:
+
+The isdnloop HL driver apparently has problems to re-establish a
+connection that has been hang up from the outgoing device. You have to
+unload the isdnloop driver after the faked isdn-connection is closed
+and insmod it again. With the Hisax driver, this problem is not present.
+
+Sometimes the x25 module cannot be unloaded (decrementation of its use
+count seems to get lost occasionally).
+
+Using the x25 based telnet and telnetd programm to establish connection
+from your own to your own computer repeatedly sometimes totally locked
+up my system. However, this kernel patch also modifies
+net/x25/af_x25.c to include a workaround. With this workaround
+enabled, my system is stable. (If you want to disable the
+workaround, just undefine ISDN_X25_FIXES in af_x25.c).
+
+The latter problem could be reproduced by using hisax as well as the
+isdnloop driver. It seems that it is not caused by the isdn code.
+Somehow, the inode of a socket is freed while a process still refers
+the socket's wait queue. This causes problems when the process tries to
+remove itsself from the wait queue (refered by the dangling
+sock->sleep pointer) before returning from a select() system call.
+
+- Henner
+

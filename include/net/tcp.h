@@ -154,16 +154,16 @@ struct tcp_tw_bucket {
 	struct sock		*sklist_prev;
 	struct sock		*bind_next;
 	struct sock		**bind_pprev;
-	struct sock		*next;
-	struct sock		**pprev;
 	__u32			daddr;
 	__u32			rcv_saddr;
-	int			bound_dev_if;
+	__u16			dport;
 	unsigned short		num;
+	int			bound_dev_if;
+	struct sock		*next;
+	struct sock		**pprev;
 	unsigned char		state,
 				zapped;
 	__u16			sport;
-	__u16			dport;
 	unsigned short		family;
 	unsigned char		reuse,
 				nonagle;
@@ -180,6 +180,43 @@ struct tcp_tw_bucket {
 };
 
 extern kmem_cache_t *tcp_timewait_cachep;
+
+/* Socket demux engine toys. */
+#ifdef __BIG_ENDIAN
+#define TCP_COMBINED_PORTS(__sport, __dport) \
+	(((__u32)(__sport)<<16) | (__u32)(__dport))
+#else /* __LITTLE_ENDIAN */
+#define TCP_COMBINED_PORTS(__sport, __dport) \
+	(((__u32)(__dport)<<16) | (__u32)(__sport))
+#endif
+
+#if defined(__alpha__) || defined(__sparc_v9__)
+#ifdef __BIG_ENDIAN
+#define TCP_V4_ADDR_COOKIE(__name, __saddr, __daddr) \
+	__u64 __name = (((__u64)(__saddr))<<32)|((__u64)(__daddr));
+#else /* __LITTLE_ENDIAN */
+#define TCP_V4_ADDR_COOKIE(__name, __saddr, __daddr) \
+	__u64 __name = (((__u64)(__daddr))<<32)|((__u64)(__saddr));
+#endif /* __BIG_ENDIAN */
+#define TCP_IPV4_MATCH(__sk, __cookie, __saddr, __daddr, __ports, __dif)\
+	(((*((__u64 *)&((__sk)->daddr)))== (__cookie))	&&		\
+	 ((*((__u32 *)&((__sk)->dport)))== (__ports))   &&		\
+	 (!((__sk)->bound_dev_if) || ((__sk)->bound_dev_if == (__dif))))
+#else /* 32-bit arch */
+#define TCP_V4_ADDR_COOKIE(__name, __saddr, __daddr)
+#define TCP_IPV4_MATCH(__sk, __cookie, __saddr, __daddr, __ports, __dif)\
+	(((__sk)->daddr			== (__saddr))	&&		\
+	 ((__sk)->rcv_saddr		== (__daddr))	&&		\
+	 ((*((__u32 *)&((__sk)->dport)))== (__ports))   &&		\
+	 (!((__sk)->bound_dev_if) || ((__sk)->bound_dev_if == (__dif))))
+#endif /* 64-bit arch */
+
+#define TCP_IPV6_MATCH(__sk, __saddr, __daddr, __ports, __dif)			   \
+	(((*((__u32 *)&((__sk)->dport)))== (__ports))   			&& \
+	 ((__sk)->family		== AF_INET6)				&& \
+	 !ipv6_addr_cmp(&(__sk)->net_pinfo.af_inet6.daddr, (__saddr))		&& \
+	 !ipv6_addr_cmp(&(__sk)->net_pinfo.af_inet6.rcv_saddr, (__daddr))	&& \
+	 (!((__sk)->bound_dev_if) || ((__sk)->bound_dev_if == (__dif))))
 
 /* tcp_ipv4.c: These sysctl variables need to be shared between v4 and v6
  * because the v6 tcp code to intialize a connection needs to interoperate
@@ -302,14 +339,6 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 #define TCPOLEN_SACK_BASE		2
 #define TCPOLEN_SACK_BASE_ALIGNED	4
 #define TCPOLEN_SACK_PERBLOCK		8
-
-/*
- *	TCP Vegas constants
- */
-
-#define TCP_VEGAS_ALPHA		2	/*  v_cong_detect_top_nseg */
-#define TCP_VEGAS_BETA		4	/*  v_cong_detect_bot_nseg */
-#define TCP_VEGAS_GAMMA		1	/*  v_exp_inc_nseg	   */
 
 struct open_request;
 
@@ -682,6 +711,12 @@ struct tcp_skb_cb {
 
 #define TCP_SKB_CB(__skb)	((struct tcp_skb_cb *)&((__skb)->cb[0]))
 
+/* We store the congestion window as a packet count, shifted by
+ * a factor so that implementing the 1/2 MSS ssthresh rules
+ * is easy.
+ */
+#define TCP_CWND_SHIFT	1
+
 /* This determines how many packets are "in the network" to the best
  * or our knowledge.  In many cases it is conservative, but where
  * detailed information is available from the receiver (via SACK
@@ -726,7 +761,8 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 	    !(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_URG))
 		nagle_check = 0;
 
-	return (nagle_check && tcp_packets_in_flight(tp) < tp->snd_cwnd &&
+	return (nagle_check &&
+		(tcp_packets_in_flight(tp) < (tp->snd_cwnd>>TCP_CWND_SHIFT)) &&
 		!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una + tp->snd_wnd) &&
 		tp->retransmits == 0);
 }

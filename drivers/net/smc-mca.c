@@ -306,9 +306,9 @@ static int ultramca_close_card(struct device *dev)
 
 #define MAX_ULTRAMCA_CARDS  4   /* Max number of Ultra cards per module */
 #define NAMELEN     8   /* # of chars for storing dev->name */
-static char namelist[NAMELEN * MAX_ULTRA_CARDS] = { 0, };
+static char namelist[NAMELEN * MAX_ULTRAMCA_CARDS] = { 0, };
 
-static struct device dev_ultra[MAX_ULTRA_CARDS] =
+static struct device dev_ultra[MAX_ULTRAMCA_CARDS] =
 {
 	{
 		NULL,       /* assign a chunk of namelist[] below */
@@ -318,11 +318,11 @@ static struct device dev_ultra[MAX_ULTRA_CARDS] =
 	},
 };
 
-static int io[MAX_ULTRA_CARDS] = { 0, };
-static int irq[MAX_ULTRA_CARDS]  = { 0, };
+static int io[MAX_ULTRAMCA_CARDS] = { 0, };
+static int irq[MAX_ULTRAMCA_CARDS]  = { 0, };
 
-MODULE_PARM(io, "1-" __MODULE_STRING(MAX_ULTRA_CARDS) "i");
-MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_ULTRA_CARDS) "i");
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_ULTRAMCA_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_ULTRAMCA_CARDS) "i");
 
 /* This is set up so that only a single autoprobe takes place per call.
 ISA device autoprobes on a running machine are not recommended. */
@@ -331,7 +331,7 @@ int init_module(void)
 {
 	int this_dev, found = 0;
 
-	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++)
+	for (this_dev = 0; this_dev < MAX_ULTRAMCA_CARDS; this_dev++)
 	{
 		struct device *dev = &dev_ultra[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
@@ -360,7 +360,7 @@ void cleanup_module(void)
 {
 	int this_dev;
 
-	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++)
+	for (this_dev = 0; this_dev < MAX_ULTRAMCA_CARDS; this_dev++)
 	{
 		struct device *dev = &dev_ultra[this_dev];
         	if (dev->priv != NULL)

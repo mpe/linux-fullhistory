@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.107 1998/03/28 00:55:28 davem Exp $
+ * Version:	$Id: tcp.c,v 1.108 1998/03/29 08:43:51 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1407,7 +1407,7 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 	 *  descriptor close, not protocol-sourced closes, because the
 	 *  reader process may not have drained the data yet!
 	 */
-	while((skb=skb_dequeue(&sk->receive_queue))!=NULL) {
+	while((skb=__skb_dequeue(&sk->receive_queue))!=NULL) {
 		data_was_unread++;
 		kfree_skb(skb);
 	}

@@ -1,4 +1,4 @@
-/* $Id: isdn_net.h,v 1.5 1997/02/10 20:12:47 fritz Exp $
+/* $Id: isdn_net.h,v 1.6 1997/10/09 21:28:54 fritz Exp $
 
  * header for Linux ISDN subsystem, network related functions (linklevel).
  *
@@ -21,6 +21,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.h,v $
+ * Revision 1.6  1997/10/09 21:28:54  fritz
+ * New HL<->LL interface:
+ *   New BSENT callback with nr. of bytes included.
+ *   Sending without ACK.
+ *   New L1 error status (not yet in use).
+ *   Cleaned up obsolete structures.
+ * Implemented Cisco-SLARP.
+ * Changed local net-interface data to be dynamically allocated.
+ * Removed old 2.0 compatibility stuff.
+ *
  * Revision 1.5  1997/02/10 20:12:47  fritz
  * Changed interface for reporting incoming calls.
  *
@@ -45,11 +55,46 @@
 #define ISDN_INHUP       8      /* Even if incoming, close after huptimeout */
 #define ISDN_MANCHARGE  16      /* Charge Interval manually set             */
 
+/*
+ * Definitions for Cisco-HDLC header.
+ */
+
+typedef struct cisco_hdr {
+	__u8  addr; /* unicast/broadcast */
+	__u8  ctrl; /* Always 0          */
+	__u16 type; /* IP-typefield      */
+} cisco_hdr;
+
+typedef struct cisco_slarp {
+	__u32 code;                     /* SLREQ/SLREPLY/KEEPALIVE */
+	union {
+		struct {
+			__u32 ifaddr;   /* My interface address     */
+			__u32 netmask;  /* My interface netmask     */
+		} reply;
+		struct {
+			__u32 my_seq;   /* Packet sequence number   */
+			__u32 your_seq;
+		} keepalive;
+	} slarp;
+	__u16 rel;                      /* Always 0xffff            */
+	__u16 t1;                       /* Uptime in usec >> 16     */
+	__u16 t0;                       /* Uptime in usec & 0xffff  */
+} cisco_slarp;
+
+#define CISCO_ADDR_UNICAST    0x0f
+#define CISCO_ADDR_BROADCAST  0x8f
+#define CISCO_TYPE_INET       0x0800
+#define CISCO_TYPE_SLARP      0x8035
+#define CISCO_SLARP_REPLY     0
+#define CISCO_SLARP_REQUEST   1
+#define CISCO_SLARP_KEEPALIVE 2
+
 extern char *isdn_net_new(char *, struct device *);
 extern char *isdn_net_newslave(char *);
 extern int isdn_net_rm(char *);
 extern int isdn_net_rmall(void);
-extern int isdn_net_stat_callback(int, int);
+extern int isdn_net_stat_callback(int, isdn_ctrl *);
 extern int isdn_net_setcfg(isdn_net_ioctl_cfg *);
 extern int isdn_net_getcfg(isdn_net_ioctl_cfg *);
 extern int isdn_net_addphone(isdn_net_ioctl_phone *);
@@ -65,3 +110,4 @@ extern isdn_net_dev *isdn_net_findif(char *);
 extern int isdn_net_send_skb(struct device *, isdn_net_local *,
 			     struct sk_buff *);
 extern int isdn_net_rcv_skb(int, struct sk_buff *);
+extern void isdn_net_slarp_out(void);

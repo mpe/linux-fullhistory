@@ -45,6 +45,9 @@ extern int sysctl_overcommit_memory;
 extern char modprobe_path[];
 extern int kmod_unload_delay;
 #endif
+#ifdef CONFIG_CHR_DEV_SG
+extern int sg_big_buff;
+#endif
 
 #ifdef __sparc__
 extern char reboot_command [];
@@ -52,8 +55,6 @@ extern char reboot_command [];
 
 static int parse_table(int *, int, void *, size_t *, void *, size_t,
 		       ctl_table *, void **);
-static int do_securelevel_strategy (ctl_table *, int *, int, void *, size_t *,
-				    void *, size_t, void **);
 
 
 static ctl_table root_table[];
@@ -156,8 +157,6 @@ static ctl_table kern_table[] = {
 	 0644, NULL, &proc_dointvec},
 	{KERN_DENTRY, "dentry-state", &dentry_stat, 6*sizeof(int),
 	 0444, NULL, &proc_dointvec},
-	{KERN_SECURELVL, "securelevel", &securelevel, sizeof(int),
-	 0444, NULL, &proc_dointvec, (ctl_handler *)&do_securelevel_strategy},
 	{KERN_PANIC, "panic", &panic_timeout, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 #ifdef CONFIG_BLK_DEV_INITRD
@@ -183,6 +182,10 @@ static ctl_table kern_table[] = {
 	 0644, NULL, &proc_dostring, &sysctl_string },
 	{KERN_KMOD_UNLOAD_DELAY, "kmod_unload_delay", &kmod_unload_delay,
 	sizeof(int), 0644, NULL, &proc_dointvec},
+#endif
+#ifdef CONFIG_CHR_DEV_SG
+	{KERN_NRFILE, "sg-big-buff", &sg_big_buff, sizeof (int),
+	 0444, NULL, &proc_dointvec},
 #endif
 	{0}
 };
@@ -404,29 +407,6 @@ int do_sysctl_strategy (ctl_table *table,
 			if(copy_from_user(table->data, newval, len))
 				return -EFAULT;
 		}
-	}
-	return 0;
-}
-
-/*
- * This function only checks permission for changing the security level
- * If the tests are successful, the actual change is done by
- * do_sysctl_strategy
- */
-static int do_securelevel_strategy (ctl_table *table, 
-				    int *name, int nlen,
-				    void *oldval, size_t *oldlenp,
-				    void *newval, size_t newlen, void **context)
-{
-	int level;
-
-	if (newval && newlen) {
-		if (newlen != sizeof (int))
-			return -EINVAL;
-		if(copy_from_user (&level, newval, newlen))
-			return -EFAULT;
-		if (level < securelevel && current->pid != 1)
-			return -EPERM;
 	}
 	return 0;
 }

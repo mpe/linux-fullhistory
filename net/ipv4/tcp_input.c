@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.100 1998/03/28 00:55:31 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.103 1998/03/30 08:41:12 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -50,15 +50,6 @@
 #include <net/tcp.h>
 #include <linux/ipsec.h>
 
-typedef void			(*tcp_sys_cong_ctl_t)(struct sock *sk,
-						      u32 seq, u32 ack,
-						      u32 seq_rtt);
-
-static void tcp_cong_avoid_vanj(struct sock *sk, u32 seq, u32 ack,
-				u32 seq_rtt);
-static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
-				 u32 seq_rtt);
-
 #ifdef CONFIG_SYSCTL
 #define SYNC_INIT 0 /* let the user enable it */
 #else
@@ -79,8 +70,6 @@ int sysctl_tcp_cong_avoidance;
 int sysctl_tcp_syncookies = SYNC_INIT; 
 int sysctl_tcp_stdurg;
 int sysctl_tcp_rfc1337;
-
-static tcp_sys_cong_ctl_t tcp_sys_cong_ctl_f = &tcp_cong_avoid_vanj;
 
 /* There is something which you must keep in mind when you analyze the
  * behavior of the tp->ato delayed ack timeout interval.  When a
@@ -164,7 +153,7 @@ static __inline__ void tcp_rtt_estimator(struct tcp_opt *tp, __u32 mrtt)
 static __inline__ void tcp_set_rto(struct tcp_opt *tp)
 {
 	tp->rto = (tp->srtt >> 3) + tp->mdev;
-	tp->rto += (tp->rto >> 2) + (tp->rto >> (tp->snd_cwnd-1));
+	tp->rto += (tp->rto >> 2) + (tp->rto >> ((tp->snd_cwnd>>TCP_CWND_SHIFT)-1));
 }
  
 
@@ -450,7 +439,7 @@ static void tcp_compute_tsack(struct sock *sk, struct tcp_opt *tp)
 static __inline__ void clear_fast_retransmit(struct tcp_opt *tp)
 {
 	if (tp->dup_acks > 3)
-		tp->snd_cwnd = tp->snd_ssthresh;
+		tp->snd_cwnd = (tp->snd_ssthresh << TCP_CWND_SHIFT);
 
 	tp->dup_acks = 0;
 }
@@ -490,8 +479,8 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 			tp->dup_acks++;
 			if ((tp->fackets_out > 3) || (tp->dup_acks == 3)) {
 				tp->dup_acks++;
-                                tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
-                                tp->snd_cwnd = tp->snd_ssthresh + 3;
+                                tp->snd_ssthresh = max(tp->snd_cwnd >> (TCP_CWND_SHIFT + 1), 2);
+                                tp->snd_cwnd = (tp->snd_ssthresh + 3) << TCP_CWND_SHIFT;
 				tp->high_seq = tp->snd_nxt;
 				if(!tp->fackets_out)
 					tcp_retransmit_skb(sk, skb_peek(&sk->write_queue));
@@ -511,7 +500,7 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
                  */
                 if (tp->dup_acks > 3) {
 			if(!tp->fackets_out) {
-				tp->snd_cwnd++;
+				tp->snd_cwnd += (1 << TCP_CWND_SHIFT);
 			} else {
 				/* Fill any further holes which may have appeared.
 				 * We may want to change this to run every further
@@ -572,121 +561,25 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 	}
 }
 
-/*
- *      TCP slow start and congestion avoidance in two flavors:
- *      RFC 1122 and TCP Vegas.
+/* This is Jacobson's slow start and congestion avoidance. 
+ * SIGCOMM '88, p. 328.
  *
- *      This is a /proc/sys configurable option. 
+ * FIXME: What happens when the congestion window gets larger
+ * than the maximum receiver window by some large factor
+ * Suppose the pipeline never looses packets for a long
+ * period of time, then traffic increases causing packet loss.
+ * The congestion window should be reduced, but what it should
+ * be reduced to is not clear, since 1/2 the old window may
+ * still be larger than the maximum sending rate we ever achieved.
  */
-
-#define SHIFT_FACTOR 16
-
-static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
-				 u32 seq_rtt)
+static void tcp_cong_avoid(struct tcp_opt *tp, u32 seq, u32 ack, u32 seq_rtt)
 {
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	unsigned int actual, expected;
-	unsigned int inv_rtt, inv_basertt, inv_basebd;
-	u32 snt_bytes;
-
-	/*	From:
-	 *      TCP Vegas: New Techniques for Congestion 
-	 *	Detection and Avoidance.
-	 *
-	 *	Warning: This code is a scratch implementation taken
-	 *	from the paper only. The code they distribute seams
-	 *	to have improved several things over the initial spec.
-	 */
-
-	if (!seq_rtt)
-		seq_rtt = 1;
-
-	if (tp->basertt)
-		tp->basertt = min(seq_rtt, tp->basertt);
-	else
-		tp->basertt = seq_rtt;
-
-	/*	actual	 = throughput for this segment.
-	 *	expected = number_of_bytes in transit / BaseRTT
-	 */
-
-	snt_bytes = ack - seq;
-
-	inv_rtt = (1 << SHIFT_FACTOR) / seq_rtt;
-	inv_basertt = (1 << SHIFT_FACTOR) / tp->basertt;
-
-	actual =  snt_bytes * inv_rtt;
-
-	expected = (tp->snd_nxt - tp->snd_una) * inv_basertt;
-
-	inv_basebd = sk->mss * inv_basertt;
-
-	/* Slow Start */
-	if (tp->snd_cwnd < tp->snd_ssthresh &&
-	    (seq == tp->snd_nxt ||
-	     (expected - actual <= TCP_VEGAS_GAMMA * inv_basebd))) {
-		/* "Vegas allows exponential growth only every other RTT" */
-		if (tp->snd_cwnd_cnt++) {
-			tp->snd_cwnd++;
-			tp->snd_cwnd_cnt = 0;
-		}
-	} else {
-		/* Congestion Avoidance */
-		if (expected - actual <= TCP_VEGAS_ALPHA * inv_basebd) {
-			/* Increase Linearly */
-			if (tp->snd_cwnd_cnt++ >= tp->snd_cwnd) {
-				tp->snd_cwnd++;
-				tp->snd_cwnd_cnt = 0;
-			}
-		}
-
-		if (expected - actual >= TCP_VEGAS_BETA * inv_basebd) {
-			/* Decrease Linearly */
-			if (tp->snd_cwnd_cnt++ >= tp->snd_cwnd) {
-				tp->snd_cwnd--;
-				tp->snd_cwnd_cnt = 0;
-			}
-
-			/* Never less than 2 segments. */
-			if (tp->snd_cwnd < 2)
-				tp->snd_cwnd = 2;
-		}
-	}
-}
-
-static void tcp_cong_avoid_vanj(struct sock *sk, u32 seq, u32 ack, u32 seq_rtt)
-{
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	
-        /* This is Jacobson's slow start and congestion avoidance. 
-         * SIGCOMM '88, p. 328.  Because we keep cong_window in 
-         * integral mss's, we can't do cwnd += 1 / cwnd.  
-         * Instead, maintain a counter and increment it once every 
-         * cwnd times.  
-	 * FIXME: Check to be sure the mathematics works out right
-	 * on this trick when we have to reduce the congestion window.
-	 * The snd_cwnd_cnt has to be reset properly when reduction events
-	 * happen.
-	 * FIXME: What happens when the congestion window gets larger
-	 * than the maximum receiver window by some large factor
-	 * Suppose the pipeline never looses packets for a long
-	 * period of time, then traffic increases causing packet loss.
-	 * The congestion window should be reduced, but what it should
-	 * be reduced to is not clear, since 1/2 the old window may
-	 * still be larger than the maximum sending rate we ever achieved.
-         */
-        if (tp->snd_cwnd <= tp->snd_ssthresh) {
+        if ((tp->snd_cwnd>>TCP_CWND_SHIFT) <= tp->snd_ssthresh) {
                 /* In "safe" area, increase. */
-                tp->snd_cwnd++;
+                tp->snd_cwnd += (1 << TCP_CWND_SHIFT);
 	} else {
-                /* In dangerous area, increase slowly.  In theory this is
-                 * tp->snd_cwnd += 1 / tp->snd_cwnd
-                 */
-                if (tp->snd_cwnd_cnt >= tp->snd_cwnd) {
-                        tp->snd_cwnd++;
-                        tp->snd_cwnd_cnt = 0;
-                } else 
-                        tp->snd_cwnd_cnt++;
+                /* In dangerous area, increase slowly. */
+		tp->snd_cwnd += 1;
         }       
 }
 
@@ -738,7 +631,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 		tp->packets_out--;
 		*seq = TCP_SKB_CB(skb)->seq;
 		*seq_rtt = now - TCP_SKB_CB(skb)->when;
-		skb_unlink(skb);
+		__skb_unlink(skb, skb->list);
 		kfree_skb(skb);
 	}
 
@@ -791,7 +684,7 @@ static void tcp_ack_saw_tstamp(struct sock *sk, struct tcp_opt *tp,
 	} else {
 		tcp_set_rto(tp);
 		if (flag & FLAG_DATA_ACKED)
-			(*tcp_sys_cong_ctl_f)(sk, seq, ack, seq_rtt);
+			tcp_cong_avoid(tp, seq, ack, seq_rtt);
 	}
 	/* NOTE: safe here so long as cong_ctl doesn't use rto */
 	tcp_bound_rto(tp);
@@ -910,7 +803,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 					tcp_set_rto(tp);
 					tcp_bound_rto(tp);
 				}
-				(*tcp_sys_cong_ctl_f)(sk, seq, ack, seq_rtt);
+				tcp_cong_avoid(tp, seq, ack, seq_rtt);
 			}
 		}
 	}
@@ -1326,9 +1219,13 @@ static void tcp_sack_remove_skb(struct tcp_opt *tp, struct sk_buff *skb)
 	int num_sacks = tp->num_sacks;
 	int this_sack;
 
-	/* We know this removed SKB will eat from the front of a SACK. */
+	/* This is an in order data segment _or_ an out-of-order SKB being
+	 * moved to the receive queue, so we know this removed SKB will eat
+	 * from the front of a SACK.
+	 */
 	for(this_sack = 0; this_sack < num_sacks; this_sack++, sp++) {
-		if(sp->start_seq == TCP_SKB_CB(skb)->seq)
+		if(!after(sp->start_seq, TCP_SKB_CB(skb)->seq) &&
+		   before(sp->start_seq, TCP_SKB_CB(skb)->end_seq))
 			break;
 	}
 
@@ -1380,7 +1277,7 @@ static void tcp_ofo_queue(struct sock *sk)
 
 		if (!after(TCP_SKB_CB(skb)->end_seq, tp->rcv_nxt)) {
 			SOCK_DEBUG(sk, "ofo packet was already received \n");
-			skb_unlink(skb);
+			__skb_unlink(skb, skb->list);
 			kfree_skb(skb);
 			continue;
 		}
@@ -1390,8 +1287,8 @@ static void tcp_ofo_queue(struct sock *sk)
 
 		if(tp->sack_ok)
 			tcp_sack_remove_skb(tp, skb);
-		skb_unlink(skb);
-		skb_queue_tail(&sk->receive_queue, skb);
+		__skb_unlink(skb, skb->list);
+		__skb_queue_tail(&sk->receive_queue, skb);
 		tp->rcv_nxt = TCP_SKB_CB(skb)->end_seq;
 		if(skb->h.th->fin)
 			tcp_fin(skb, sk, skb->h.th);
@@ -1411,7 +1308,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 		/* Ok. In sequence. */
 	queue_and_out:
 		dst_confirm(sk->dst_cache);
-		skb_queue_tail(&sk->receive_queue, skb);
+		__skb_queue_tail(&sk->receive_queue, skb);
 		tp->rcv_nxt = TCP_SKB_CB(skb)->end_seq;
 		if(skb->h.th->fin) {
 			tcp_fin(skb, sk, skb->h.th);
@@ -1468,7 +1365,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 			tp->selective_acks[0].start_seq = TCP_SKB_CB(skb)->seq;
 			tp->selective_acks[0].end_seq = TCP_SKB_CB(skb)->end_seq;
 		}
-		skb_queue_head(&tp->out_of_order_queue,skb);
+		__skb_queue_head(&tp->out_of_order_queue,skb);
 	} else {
 		for(skb1=tp->out_of_order_queue.prev; ; skb1 = skb1->prev) {
 			/* Already there. */
@@ -1476,8 +1373,8 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 				if (skb->len >= skb1->len) {
 					if(tp->sack_ok)
 						tcp_sack_extend(tp, skb1, skb);
-					skb_append(skb1, skb);
-					skb_unlink(skb1);
+					__skb_append(skb1, skb);
+					__skb_unlink(skb1, skb1->list);
 					kfree_skb(skb1);
 				} else {
 					/* A duplicate, smaller than what is in the
@@ -1489,7 +1386,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 			}
 			
 			if (after(TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb1)->seq)) {
-				skb_append(skb1,skb);
+				__skb_append(skb1, skb);
 				if(tp->sack_ok)
 					tcp_sack_new_ofo_skb(sk, skb);
 				break;
@@ -1497,7 +1394,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 
                         /* See if we've hit the start. If so insert. */
 			if (skb1 == skb_peek(&tp->out_of_order_queue)) {
-				skb_queue_head(&tp->out_of_order_queue,skb);
+				__skb_queue_head(&tp->out_of_order_queue,skb);
 				if(tp->sack_ok)
 					tcp_sack_new_ofo_skb(sk, skb);
 				break;
@@ -1550,7 +1447,7 @@ static void tcp_data_snd_check(struct sock *sk)
 
 	if ((skb = tp->send_head)) {
 		if (!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una + tp->snd_wnd) &&
-		    tcp_packets_in_flight(tp) < tp->snd_cwnd) {
+		    tcp_packets_in_flight(tp) < (tp->snd_cwnd >> TCP_CWND_SHIFT)) {
 			/* Put more data onto the wire. */
 			tcp_write_xmit(sk);
 		} else if (tp->packets_out == 0 && !tp->pending) {
@@ -1695,7 +1592,7 @@ static void prune_queue(struct sock *sk)
 	/* Start with the end because there are probably the least
 	 * useful packets (crossing fingers).
 	 */
-	while ((skb = skb_dequeue_tail(&tp->out_of_order_queue))) { 
+	while ((skb = __skb_dequeue_tail(&tp->out_of_order_queue))) { 
 		kfree_skb(skb);
 		if (atomic_read(&sk->rmem_alloc) <= sk->rcvbuf)
 			return;
@@ -1715,7 +1612,7 @@ static void prune_queue(struct sock *sk)
 				tp->copied_seq, TCP_SKB_CB(skb)->end_seq, tp->last_ack_sent);
 			break; 
 		}
-		skb_unlink(skb);
+		__skb_unlink(skb, skb->list);
 		tp->rcv_nxt = TCP_SKB_CB(skb)->seq;
 		SOCK_DEBUG(sk, "prune_queue: removing %x-%x (c=%x)\n",
 			   TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq,
@@ -1796,7 +1693,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			/* DO NOT notify forward progress here.
 			 * It saves dozen of CPU instructions in fast path. --ANK
 			 */
-			skb_queue_tail(&sk->receive_queue, skb);
+			__skb_queue_tail(&sk->receive_queue, skb);
 			tp->rcv_nxt = TCP_SKB_CB(skb)->end_seq;
 
 			/* FIN bit check is not done since if FIN is set in
@@ -2248,27 +2145,4 @@ discard:
 		kfree_skb(skb);
 	}
 	return 0;
-}
-
-int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
-			 void *buffer, size_t *lenp)
-{
-	int val = sysctl_tcp_cong_avoidance;
-	int retv;
-	static tcp_sys_cong_ctl_t tab[] = { 
-		tcp_cong_avoid_vanj, 
-		tcp_cong_avoid_vegas
-	};
-
-	retv = proc_dointvec(ctl, write, filp, buffer, lenp);
-
-	if (write) {
-		if ((unsigned)sysctl_tcp_cong_avoidance > 1) {
-			retv = -EINVAL;
-			sysctl_tcp_cong_avoidance = val;
-		} else {
-			tcp_sys_cong_ctl_f = tab[sysctl_tcp_cong_avoidance];
-		}
-	}
-	return retv;
 }

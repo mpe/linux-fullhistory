@@ -188,6 +188,7 @@
 #define __NR_pread		180
 #define __NR_pwrite		181
 #define __NR_chown		182
+#define __NR_getcwd		183
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-i386/errno.h> */
 

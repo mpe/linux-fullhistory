@@ -75,8 +75,10 @@ struct sk_buff {
 
 	struct  dst_entry *dst;
 
-#if (defined(__alpha__) || defined(__sparc64__)) && (defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE))
+#if (defined(__alpha__) || defined(__sparc_v9__)) && (defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE))
 	char		cb[48];	   /* sorry. 64bit pointers have a price */
+#elif (defined(__alpha__) || defined(__sparc_v9__))
+	char		cb[40];
 #else
 	char    	cb[36];
 #endif
@@ -370,12 +372,17 @@ extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
  *	Place a packet after a given packet in a list.
  */
 
+extern __inline__ void __skb_append(struct sk_buff *old, struct sk_buff *newsk)
+{
+	__skb_insert(newsk, old, old->next, old->list);
+}
+
 extern __inline__ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&skb_queue_lock, flags);
-	__skb_insert(newsk, old, old->next, old->list);
+	__skb_append(old, newsk);
 	spin_unlock_irqrestore(&skb_queue_lock, flags);
 }
 

@@ -120,12 +120,35 @@ README for the ISDN-subsystem
                AT&D3    Same as AT&D2 but also resets all registers.
 	       AT&Ex    Set the EAZ/MSN for this channel to x.
 	       AT&F     Reset all registers and profile to "factory-defaults"
+	       AT&Rx    Select V.110 bitrate adaption.
+                        This command enables V.110 protocol with 9600 baud
+                        (x=9600), 19200 baud (x=19200) or 38400 baud
+                        (x=38400). A value of x=0 disables V.110 switching
+                        back to default X.75. This command sets the following
+                        Registers:
+                          Reg 14 (Layer-2 protocol):
+                            x = 0:     0
+                            x = 9600:  7
+                            x = 19200: 8
+                            x = 38400: 9
+                          Reg 18.2 = 1
+                          Reg 19 (Additional Service Indicator):
+                            x = 0:       0
+                            x = 9600:  197
+                            x = 19200: 199
+                            x = 38400: 198
+                          Note on value in Reg 19:
+                            There is _NO_ common convention for 38400 baud.
+                            The value 198 is choosen arbitrarily. Users
+                            _MUST_ negotiate this value before establishing
+                            a connection.
 	       AT&Sx    Set window-size (x = 1..8) (not yet implemented)
 	       AT&V     Show all settings.
                AT&W0    Write registers and EAZ/MSN to profile. See also
                         iprofd (5.c in this README).
-               AT&X0	BTX-mode off (default)
-	       AT&X1    BTX-mode on. (S13.1=1, S14=0, S16=7, S18=7, S19=0)
+               AT&X0	BTX-mode and T.70-mode off (default)
+	       AT&X1    BTX-mode on. (S13.1=1, S13.5=0 S14=0, S16=7, S18=7, S19=0)
+	       AT&X2    T.70-mode on. (S13.1=1, S13.5=1, S14=0, S16=7, S18=7, S19=0)
 
            For voice-mode commands refer to README.audio
 
@@ -184,12 +207,23 @@ README for the ISDN-subsystem
 				      1 = Extended response messages
                             Bit 4:    0 = CALLER NUMBER before every RING.
                                       1 = CALLER NUMBER after first RING.
+                            Bit 5:    0 = T.70 extended protocol off
+                                      1 = T.70 extended protocol on
+                            Bit 6:    0 = Special RUNG Message off
+                                      1 = Special RUNG Message on
+                                          "RUNG" is delivered on a ttyI, if
+                                          an incoming call happened (RING) and
+                                          the remote party hung up before any
+                                          local ATA was given.
 	     14   0         Layer-2 protocol:
 				      0 = X75/LAPB with I-frames
 				      1 = X75/LAPB with UI-frames
                                       2 = X75/LAPB with BUI-frames
                                       3 = HDLC
                                       4 = Transparent (audio)
+                                      7 = V.110, 9600 baud
+                                      8 = V.110, 19200 baud
+                                      9 = V.110, 38400 baud
              15   0         Layer-3 protocol: (at the moment always 0)
                                       0 = transparent
 	     16   250       Send-Packet-size/16
@@ -406,6 +440,9 @@ README for the ISDN-subsystem
             are stripped off.  
    ip       IP with type-field. Same as IP but the type-field of the MAC-header
             is preserved.
+   x25iface x25 interface encapsulation (first byte semantics as defined in
+	    ../networking/x25-iface.txt). Use this for running the linux
+	    x25 network protocol stack (AF_X25 sockets) on top of isdn.
    cisco-h  A special-mode for communicating with a Cisco, which is configured
             to do "hdlc"
    ethernet No stripping. Packets are sent with full MAC-header.
@@ -415,6 +452,11 @@ README for the ISDN-subsystem
 
    uihdlc   HDLC with UI-frame-header (for use with DOS ISPA, option -h1)
 
+
+   NOTE:    x25iface encapsulation is currently experimental. Please
+	    read README.x25 for further details    
+
+
    Watching packets, using standard-tcpdump will fail for all encapsulations
    except ethernet because tcpdump does not know how to handle packets
    without MAC-header. A patch for tcpdump is included in the utility-package
@@ -423,7 +465,8 @@ README for the ISDN-subsystem
    "isdnctrl l2_prot <InterfaceName> <L2-ProtocolName>" 
    Selects a layer-2-protocol. 
    (With the ICN-driver and the HiSax-driver, "x75i" and "hdlc" is available.
-   With other drivers, "x75ui", "x75bui" may be possible too.)
+   With other drivers, "x75ui", "x75bui", "x25dte", "x25dce" may be
+   possible too. See README.x25 for x25 related l2 protocols.)
 
    isdnctrl l3_prot <InterfaceName> <L3-ProtocolName> 
    The same for layer-3. (At the moment only "trans" is allowed)

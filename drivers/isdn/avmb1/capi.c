@@ -1,11 +1,34 @@
 /*
- * $Id: capi.c,v 1.4 1997/05/27 15:17:50 fritz Exp $
+ * $Id: capi.c,v 1.10 1998/02/13 07:09:13 calle Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.10  1998/02/13 07:09:13  calle
+ * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
+ *
+ * Revision 1.9  1998/01/31 11:14:44  calle
+ * merged changes to 2.0 tree, prepare 2.1.82 to work.
+ *
+ * Revision 1.8  1997/11/04 06:12:08  calle
+ * capi.c: new read/write in file_ops since 2.1.60
+ * capidrv.c: prepared isdnlog interface for d2-trace in newer firmware.
+ * capiutil.c: needs config.h (CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON)
+ * compat.h: added #define LinuxVersionCode
+ *
+ * Revision 1.7  1997/10/11 10:29:34  calle
+ * llseek() parameters changed in 2.1.56.
+ *
+ * Revision 1.6  1997/10/01 09:21:15  fritz
+ * Removed old compatibility stuff for 2.0.X kernels.
+ * From now on, this code is for 2.1.X ONLY!
+ * Old stuff is still in the separate branch.
+ *
+ * Revision 1.5  1997/08/21 23:11:55  fritz
+ * Added changes for kernels >= 2.1.45
+ *
  * Revision 1.4  1997/05/27 15:17:50  fritz
  * Added changes for recent 2.1.x kernels:
  *   changed return type of isdn_close
@@ -45,26 +68,22 @@
 #include <linux/timer.h>
 #include <linux/wait.h>
 #include <linux/skbuff.h>
+#include <linux/poll.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
-#include <linux/poll.h>
 
 #include "compat.h"
 #include "capiutil.h"
 #include "capicmd.h"
 #include "capidev.h"
 
-#ifdef HAS_NEW_SYMTAB
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
-#endif
 
 /* -------- driver information -------------------------------------- */
 
 int capi_major = 68;		/* allocated */
 
-#ifdef HAS_NEW_SYMTAB
 MODULE_PARM(capi_major, "i");
-#endif
 
 /* -------- global variables ---------------------------------------- */
 
@@ -94,20 +113,24 @@ static void capi_signal(__u16 applid, __u32 minor)
 
 /* -------- file_operations ----------------------------------------- */
 
-static loff_t capi_llseek(struct file *file, loff_t offset, int origin)
+static long long capi_llseek(struct file *file,
+			     long long offset, int origin)
 {
 	return -ESPIPE;
 }
 
-static ssize_t capi_read(struct file *file,
-		      char *buf, size_t count,
-		      loff_t *off)
+static ssize_t capi_read(struct file *file, char *buf,
+		      size_t count, loff_t *ppos)
 {
-	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
+        struct inode *inode = file->f_dentry->d_inode;
+	unsigned int minor = MINOR(inode->i_rdev);
 	struct capidev *cdev;
 	struct sk_buff *skb;
 	int retval;
 	size_t copied;
+
+       if (ppos != &file->f_pos)
+		return -ESPIPE;
 
 	if (!minor || minor > CAPI_MAXMINOR || !capidevs[minor].is_registered)
 		return -ENODEV;
@@ -149,17 +172,20 @@ static ssize_t capi_read(struct file *file,
 	return copied;
 }
 
-static ssize_t capi_write(struct file *file,
-		       const char *buf, size_t count,
-		       loff_t *off)
+static ssize_t capi_write(struct file *file, const char *buf,
+		       size_t count, loff_t *ppos)
 {
-	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
+        struct inode *inode = file->f_dentry->d_inode;
+	unsigned int minor = MINOR(inode->i_rdev);
 	struct capidev *cdev;
 	struct sk_buff *skb;
 	int retval;
 	__u8 cmd;
 	__u8 subcmd;
 	__u16 mlen;
+
+       if (ppos != &file->f_pos)
+		return -ESPIPE;
 
 	if (!minor || minor > CAPI_MAXMINOR || !capidevs[minor].is_registered)
 		return -ENODEV;
@@ -200,7 +226,11 @@ static unsigned int
 capi_poll(struct file *file, poll_table * wait)
 {
 	unsigned int mask = 0;
+#if (LINUX_VERSION_CODE >= 0x02012d)
 	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
+#else
+	unsigned int minor = MINOR(file->f_inode->i_rdev);
+#endif
 	struct capidev *cdev;
 
 	if (!minor || minor > CAPI_MAXMINOR || !capidevs[minor].is_registered)
@@ -394,7 +424,7 @@ static int capi_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static CLOSETYPE
+static int
 capi_release(struct inode *inode, struct file *file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
@@ -403,7 +433,7 @@ capi_release(struct inode *inode, struct file *file)
 
 	if (minor >= CAPI_MAXMINOR || !capidevs[minor].is_open) {
 		printk(KERN_ERR "capi20: release minor %d ???\n", minor);
-		return CLOSEVAL;
+		return 0;
 	}
 	cdev = &capidevs[minor];
 
@@ -421,7 +451,7 @@ capi_release(struct inode *inode, struct file *file)
 	cdev->is_open = 0;
 
 	MOD_DEC_USE_COUNT;
-	return CLOSEVAL;
+	return 0;
 }
 
 static struct file_operations capi_fops =

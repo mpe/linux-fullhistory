@@ -7066,6 +7066,12 @@ CONFIG_ISDN_AUDIO
   is the only voice-supporting driver. See
   Documentation/isdn/README.audio for more information.
 
+X.25 PLP on top of ISDN (EXPERIMENTAL)
+CONFIG_ISDN_X25
+  This experimental feature provides X.25 over ISDN. See
+  Documentation/isdn/README.x25 for more information about how to
+  configure and what other options must be enabled for using X.25.
+
 ICN 2B and 4B support
 CONFIG_ISDN_DRV_ICN
   This enables support for two kinds of ISDN-cards made by a German
@@ -7078,6 +7084,14 @@ CONFIG_ISDN_DRV_ICN
   can be inserted in and removed from the running kernel whenever you
   want), say M here and read Documentation/modules.txt. The module
   will be called icn.o.
+
+isdnloop support
+CONFIG_ISDN_DRV_LOOP
+  This driver provides a virtual ISDN card. It's primary purpose is
+  testing of linklevel features or configuration without getting
+  charged by your service-provider for lots of phone calls.
+  You need will need the loopctrl utility from the latest isdn4k-utils
+  package to set up this driver.
 
 HiSax SiemensChipSet driver support
 CONFIG_ISDN_DRV_HISAX
@@ -7104,36 +7118,95 @@ CONFIG_HISAX_16_3
   the Teles/Creatix PnP and the Teles PCMCIA.
   See Documentation/isdn/README.HiSax on how to configure it 
   using the different cards, a different D-channel protocol, or
-  non-standard IRQ/port/shmem settings.
+  non-standard irq/port settings.
+
+HiSax Support for Teles 16.3c
+CONFIG_HISAX_TELES3C
+  This enables HiSax support for the Teles ISDN-cards 16.3c.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port settings.
 
 HiSax Support for AVM A1 (Fritz)
 CONFIG_HISAX_AVM_A1
   This enables HiSax support for the AVM A1 (aka "Fritz").
   See Documentation/isdn/README.HiSax on how to configure it
   using the different cards, a different D-channel protocol, or
-  non-standard IRQ/port/shmem settings.
+  non-standard irq/port settings.
 
 HiSax Support for Elsa ISA cards
-CONFIG_HISAX_ELSA_PCC
-  This enables HiSax support for the Elsa Mircolink ISA cards and
-  for the Elsa Quickstep series cards.
+CONFIG_HISAX_ELSA
+  This enables HiSax support for the Elsa Mircolink ISA cards,
+  for the Elsa Quickstep series cards and Elsa PCMCIA.
   See Documentation/isdn/README.HiSax on how to configure it 
   using the different cards, a different D-channel protocol, or
-  non-standard IRQ/port/shmem settings.
-
-HiSax Support for Elsa PCMCIA card
-CONFIG_HISAX_ELSA_PCMCIA
-  This enables HiSax support for the Elsa PCMCIA cards.
-  See Documentation/isdn/README.HiSax on how to configure it 
-  using the different cards, a different D-channel protocol, or
-  non-standard IRQ/port/shmem settings.
+  non-standard irq/port settings.
 
 HiSax Support for ITK ix1-micro Revision 2
 CONFIG_HISAX_IX1MICROR2
   This enables HiSax support for the ITK ix1-micro Revision 2 card.
   See Documentation/isdn/README.HiSax on how to configure it 
   using the different cards, a different D-channel protocol, or
-  non-standard IRQ/port/shmem settings.
+  non-standard irq/port settings.
+
+HiSax Support for Eicon.Diehl Diva cards
+CONFIG_HISAX_DIEHLDIVA
+  This enables HiSax support for the Eicon.Diehl Diva none PRO versions
+  passive ISDN cards.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port settings.
+
+HiSax Support for ASUSCOM cards
+CONFIG_HISAX_ASUSCOM
+  This enables HiSax support for the AsusCom and their OEM versions
+  passive ISDN cards.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port settings.
+
+HiSax Support for TELEINT cards
+CONFIG_HISAX_TELEINT
+  This enables HiSax support for the TELEINT SA1 semiactiv ISDN card.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port settings.
+
+HiSax Support for Sedlbauer speed card/win-star
+CONFIG_HISAX_SEDLBAUER
+  This enables HiSax support for the Sedlbauer passive ISDN cards.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port settings.
+
+HiSax Support for USR Sportster internal TA
+CONFIG_HISAX_SPORTSTER
+  This enables HiSax support for the USR Sportster internal TA card.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using a different D-channel protocol, or non-standard irq/port settings.
+
+HiSax Support for MIC card
+CONFIG_HISAX_MIC
+  This enables HiSax support for the ITH MIC card.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using a different D-channel protocol, or non-standard irq/port settings.
+
+HiSax Support for NETjet card
+CONFIG_HISAX_NETJET
+  This enables HiSax support for the NetJet from Traverse Technologies.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using a different D-channel protocol, or non-standard irq/port settings.
+
+HiSax Support for Niccy PnP/PCI card
+CONFIG_HISAX_NICCY
+  This enables HiSax support for the Dr. Neuhaus Niccy PnP or PCI.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using a different D-channel protocol, or non-standard irq/port settings.
+
+HiSax Support for Am7930 (EXPERIMENTAL)
+CONFIG_HISAX_AMD7930
+  This enables HiSax support for the AMD7930 chips on some sparcs.
+  This code is not finished yet.
 
 HiSax Support for EURO/DSS1
 CONFIG_HISAX_EURO
@@ -7142,7 +7215,18 @@ CONFIG_HISAX_EURO
   NOTE: This is mutually exclusive with HiSax Support for
   German 1TR6 if you have only one ISDN card installed.
 
-HiSax Support for US/NI-1
+Support for german tarifinfo
+CONFIG_DE_AOC
+  If you want, that HiSax send messages to the linklevel on each
+  AOCD/AOCE, enable this. This works only in Germany.
+
+Support for australian Microlink service (not for std. EURO)
+CONFIG_HISAX_ML
+  If you are in Australia and connected on the Microlink telephone
+  network enable this, because here are little differences in protocol.
+  Please don't enable this in other countries.
+
+HiSax Support for US/NI-1 (not released yet)
 CONFIG_HISAX_NI1
   You should choose the D-channel protocol your local
   telephone service provider uses here by saying Y or N.
@@ -7198,6 +7282,14 @@ CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON
   If you say Y here, the AVM B1 driver will give verbose reasons for
   disconnecting. This will increase the size of the kernel by 7K. If
   unsure, say Y.
+
+IBM Active 2000 support (EXPERIMENTAL)
+CONFIG_ISDN_DRV_ACT2000
+  This enables support for IBM Active 2000 ISDN card. In order to use
+  this card, additional firmware is necessary, which has to be loaded
+  into the card using a utility which is part of the latest isdn4k-utils
+  package. Please read the file Documentation/isdn/README.act2000 for
+  more information.
 
 Support for AP1000 multicomputer
 CONFIG_AP1000

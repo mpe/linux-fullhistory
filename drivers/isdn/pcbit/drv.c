@@ -61,7 +61,7 @@ static char* pcbit_devname[MAX_PCBIT_CARDS] = {
 
 int pcbit_command(isdn_ctrl* ctl);
 int pcbit_stat(u_char* buf, int len, int user, int, int);
-int pcbit_xmit(int driver, int chan, struct sk_buff *skb);
+int pcbit_xmit(int driver, int chan, int ack, struct sk_buff *skb);
 int pcbit_writecmd(const u_char*, int, int, int, int);
 
 static int set_protocol_running(struct pcbit_dev * dev);
@@ -164,7 +164,6 @@ int pcbit_init_dev(int board, int mem_base, int irq)
 			    ISDN_FEATURE_L2_HDLC | ISDN_FEATURE_L2_TRANS );
 
 	dev_if->writebuf_skb = pcbit_xmit;
-	dev_if->writebuf  = NULL;
 	dev_if->hl_hdrlen = 10;
 
 	dev_if->maxbufsize = MAXBUFSIZE;
@@ -330,7 +329,7 @@ static void pcbit_block_timer(unsigned long data)
 }
 #endif
 
-int pcbit_xmit(int driver, int chnum, struct sk_buff *skb)
+int pcbit_xmit(int driver, int chnum, int ack, struct sk_buff *skb)
 {
 	ushort hdrlen;
 	int refnum, len;
@@ -730,8 +729,6 @@ void pcbit_l3_receive(struct pcbit_dev * dev, ulong msg,
 		break;
 #endif
 	}
-
-	SET_SKB_FREE(skb);
 
 	kfree_skb(skb);
 

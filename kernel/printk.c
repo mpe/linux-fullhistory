@@ -54,7 +54,7 @@ static char log_buf[LOG_BUF_LEN];
 static unsigned long log_start = 0;
 static unsigned long logged_chars = 0;
 struct console_cmdline console_cmdline[MAX_CMDLINECONSOLES];
-static int selected_console = 0;
+static int preferred_console = -1;
 
 /*
  *	Setup a list of consoles. Called from init/main.c
@@ -95,11 +95,13 @@ __initfunc(void console_setup(char *str, int *ints))
 	 */
 	for(i = 0; i < MAX_CMDLINECONSOLES && console_cmdline[i].name[0]; i++)
 		if (strcmp(console_cmdline[i].name, name) == 0 &&
-			  console_cmdline[i].index == idx)
+			  console_cmdline[i].index == idx) {
+				preferred_console = i;
 				return;
+		}
 	if (i == MAX_CMDLINECONSOLES)
 		return;
-	selected_console = 1;
+	preferred_console = i;
 	c = &console_cmdline[i];
 	memcpy(c->name, name, sizeof(c->name));
 	c->options = options;
@@ -336,13 +338,13 @@ void register_console(struct console * console)
 	 *	didn't select a console we take the first one
 	 *	that registers here.
 	 */
-	if (selected_console == 0) {
+	if (preferred_console < 0) {
 		if (console->index < 0)
 			console->index = 0;
 		if (console->setup == NULL ||
 		    console->setup(console, NULL) == 0) {
-			console->flags |= CON_ENABLED | CON_FIRST;
-			selected_console = 1;
+			console->flags |= CON_ENABLED | CON_CONSDEV;
+			preferred_console = 0;
 		}
 	}
 
@@ -362,8 +364,8 @@ void register_console(struct console * console)
 			break;
 		console->flags |= CON_ENABLED;
 		console->index = console_cmdline[i].index;
-		if (i == 0)
-			console->flags |= CON_FIRST;
+		if (i == preferred_console)
+			console->flags |= CON_CONSDEV;
 		break;
 	}
 
@@ -374,7 +376,7 @@ void register_console(struct console * console)
 	 *	Put this console in the list - keep the
 	 *	preferred driver at the head of the list.
 	 */
-	if ((console->flags & CON_FIRST) || console_drivers == NULL) {
+	if ((console->flags & CON_CONSDEV) || console_drivers == NULL) {
 		console->next = console_drivers;
 		console_drivers = console;
 	} else {

@@ -705,8 +705,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 #ifndef VM_STACK_FLAGS
 	current->executable = dget(bprm->dentry);
 #endif
-	current->suid = current->euid = current->fsuid = bprm->e_uid;
-	current->sgid = current->egid = current->fsgid = bprm->e_gid;
+	compute_creds(bprm);
 	current->flags &= ~PF_FORKNOEXEC;
 	bprm->p = (unsigned long)
 	  create_elf_tables((char *)bprm->p,

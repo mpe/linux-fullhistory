@@ -129,6 +129,108 @@ static int parse_options(char *options,uid_t *uid,gid_t *gid)
 	return 1;
 }
 
+/*
+ * The standard rules, copied from fs/namei.c:permission().
+ */
+static int standard_permission(struct inode *inode, int mask)
+{
+	int mode = inode->i_mode;
+
+	if ((mask & S_IWOTH) && IS_RDONLY(inode) &&
+	    (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode)))
+		return -EROFS; /* Nobody gets write access to a read-only fs */
+	else if ((mask & S_IWOTH) && IS_IMMUTABLE(inode))
+		return -EACCES; /* Nobody gets write access to an immutable file */
+	else if (current->fsuid == inode->i_uid)
+		mode >>= 6;
+	else if (in_group_p(inode->i_gid))
+		mode >>= 3;
+	if (((mode & mask & 0007) == mask) || fsuser())
+		return 0;
+	return -EACCES;
+}
+
+/* 
+ * Set up permission rules for processes looking at other processes.
+ * You're not allowed to see a process unless it has the same or more
+ * restricted root than your own.  This prevents a chrooted processes
+ * from escaping through the /proc entries of less restricted
+ * processes, and thus allows /proc to be safely mounted in a chrooted
+ * area.
+ *
+ * Note that root (uid 0) doesn't get permission for this either,
+ * since chroot is stronger than root.
+ *
+ * XXX TODO: use the dentry mechanism to make off-limits procs simply
+ * invisible rather than denied?  Does each namespace root get its own
+ * dentry tree?
+ *
+ * This also applies the default permissions checks, as it only adds
+ * restrictions.
+ *
+ * Jeremy Fitzhardinge <jeremy@zip.com.au>
+ */
+int proc_permission(struct inode *inode, int mask)
+{
+	struct task_struct *p;
+	unsigned long ino = inode->i_ino;
+	unsigned long pid;
+	struct dentry *de, *base;
+
+	if (standard_permission(inode, mask) != 0)
+		return -EACCES;
+
+	/* 
+	 * Find the root of the processes being examined (if any).
+	 * XXX Surely there's a better way of doing this?
+	 */
+	if (ino >= PROC_OPENPROM_FIRST && 
+	    ino <  PROC_OPENPROM_FIRST + PROC_NOPENPROM)
+		return 0;		/* already allowed */
+
+	pid = ino >> 16;
+	if (pid == 0)
+		return 0;		/* already allowed */
+	
+	de = NULL;
+	base = current->fs->root;
+
+	read_lock(&tasklist_lock);
+	p = find_task_by_pid(pid);
+
+	if (p != NULL)
+		de = p->fs->root;
+	read_unlock(&tasklist_lock);
+
+	if (p == NULL)
+		return -EACCES;		/* ENOENT? */
+
+	if (de == NULL)
+	{
+		/* kswapd and bdflush don't have proper root or cwd... */
+		return -EACCES;
+	}
+	
+	/* XXX locking? */
+	for(;;)
+	{
+		struct dentry *parent;
+
+		if (de == base)
+			return 0;	/* already allowed */
+
+		de = de->d_covers;
+		parent = de->d_parent;
+
+		if (de == parent)
+			break;
+
+		de = parent;
+	}
+
+	return -EACCES;			/* incompatible roots */
+}
+
 struct inode * proc_get_inode(struct super_block * sb, int ino,
 				struct proc_dir_entry * de)
 {

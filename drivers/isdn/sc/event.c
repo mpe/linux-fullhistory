@@ -1,5 +1,5 @@
 /*
- *  $Id: event.c,v 1.3 1997/02/11 22:53:41 fritz Exp $
+ *  $Id: event.c,v 1.4 1997/10/09 22:30:58 fritz Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -62,10 +62,16 @@ int indicate_status(int card, int event,ulong Channel,char *Data)
 	if (Data != NULL){
 		pr_debug("%s: Event data: %s\n", adapter[card]->devicename,
 			Data);
-		if (event == ISDN_STAT_ICALL)
-			memcpy(&cmd.parm.setup, Data, sizeof(cmd.parm.setup));
-		else
-			strcpy(cmd.parm.num, Data);
+		switch (event) {
+			case ISDN_STAT_BSENT:
+				memcpy(&cmd.parm.length, Data, sizeof(cmd.parm.length));
+				break;
+			case ISDN_STAT_ICALL:
+				memcpy(&cmd.parm.setup, Data, sizeof(cmd.parm.setup));
+				break;
+			default:
+				strcpy(cmd.parm.num, Data);
+		}
 	}
 
 	cmd.command = event;

@@ -482,8 +482,9 @@ static int parport_SPP_supported(struct parport *pb)
  */
 static int parport_ECR_present(struct parport *pb)
 {
-	unsigned char r, octr = parport_pc_read_control(pb), 
-	  oecr = parport_pc_read_econtrol(pb);
+	unsigned char r, octr = parport_pc_read_control(pb);
+	unsigned char oecr = parport_pc_read_econtrol(pb);
+	unsigned char tmp;
 
 	r = parport_pc_read_control(pb);	
 	if ((parport_pc_read_econtrol(pb) & 0x3) == (r & 0x3)) {
@@ -500,12 +501,14 @@ static int parport_ECR_present(struct parport *pb)
 		return 0;
 
 	parport_pc_write_econtrol(pb, 0x34);
-	if (parport_pc_read_econtrol(pb) != 0x35)
-		return 0;
+	tmp = parport_pc_read_econtrol(pb);
 
 	parport_pc_write_econtrol(pb, oecr);
 	parport_pc_write_control(pb, octr);
 	
+	if (tmp != 0x35)
+		return 0;
+
 	return PARPORT_MODE_PCECR;
 }
 
@@ -735,6 +738,7 @@ static int irq_probe_EPP(struct parport *pb)
 {
 	int irqs;
 	unsigned char octr = parport_pc_read_control(pb);
+	unsigned char oecr = parport_pc_read_econtrol(pb);
 
 #ifndef ADVANCED_DETECT
 	return PARPORT_IRQ_NONE;
@@ -758,6 +762,7 @@ static int irq_probe_EPP(struct parport *pb)
 	udelay(20);
 
 	pb->irq = close_intr_election(irqs);
+	parport_pc_write_econtrol(pb, oecr);
 	parport_pc_write_control(pb, octr);
 	return pb->irq;
 }
@@ -766,6 +771,7 @@ static int irq_probe_SPP(struct parport *pb)
 {
 	int irqs;
 	unsigned char octr = parport_pc_read_control(pb);
+	unsigned char oecr = parport_pc_read_econtrol(pb);
 
 #ifndef ADVANCED_DETECT
 	return PARPORT_IRQ_NONE;
@@ -794,6 +800,7 @@ static int irq_probe_SPP(struct parport *pb)
 	if (pb->irq <= 0)
 		pb->irq = PARPORT_IRQ_NONE;	/* No interrupt detected */
 	
+	parport_pc_write_econtrol(pb, oecr);
 	parport_pc_write_control(pb, octr);
 	return pb->irq;
 }
@@ -815,7 +822,7 @@ static int parport_irq_probe(struct parport *pb)
 			
 	if (pb->irq == PARPORT_IRQ_NONE && 
 	    (pb->modes & PARPORT_MODE_PCECPEPP)) {
-		int oecr = parport_pc_read_econtrol(pb);
+		unsigned char oecr = parport_pc_read_econtrol(pb);
 		parport_pc_write_econtrol(pb, 0x80);
 		pb->irq = irq_probe_EPP(pb);
 		parport_pc_write_econtrol(pb, oecr);

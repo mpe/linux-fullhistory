@@ -9,6 +9,7 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/proc_fs.h>
 
 #include <asm/page.h>
 #include <asm/uaccess.h>
@@ -336,5 +337,5 @@ struct inode_operations proc_mem_inode_operations = {
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	proc_permission		/* permission */
 };

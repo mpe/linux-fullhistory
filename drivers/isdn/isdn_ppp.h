@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.h,v 1.9 1997/02/11 18:32:59 fritz Exp $
+/* $Id: isdn_ppp.h,v 1.12 1998/01/31 22:07:48 keil Exp $
 
  * header for Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,21 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.h,v $
+ * Revision 1.12  1998/01/31 22:07:48  keil
+ * changes for newer kernels
+ *
+ * Revision 1.11  1997/10/01 09:20:44  fritz
+ * Removed old compatibility stuff for 2.0.X kernels.
+ * From now on, this code is for 2.1.X ONLY!
+ * Old stuff is still in the separate branch.
+ *
+ * Revision 1.10  1997/06/17 13:06:00  hipp
+ * Applied Eric's underflow-patches (slightly modified)
+ * more compression changes (but disabled at the moment)
+ * changed one copy_to_user() to run with enabled IRQs
+ * a few MP changes
+ * changed 'proto' handling in the isdn_ppp receive code
+ *
  * Revision 1.9  1997/02/11 18:32:59  fritz
  * Bugfix in isdn_ppp_free_mpqueue().
  *
@@ -63,11 +78,7 @@ extern int isdn_ppp_bind(isdn_net_local *);
 extern int isdn_ppp_xmit(struct sk_buff *, struct device *);
 extern void isdn_ppp_receive(isdn_net_dev *, isdn_net_local *, struct sk_buff *);
 extern int isdn_ppp_dev_ioctl(struct device *, struct ifreq *, int);
-#if (LINUX_VERSION_CODE < 0x020117)
-extern int isdn_ppp_select(int, struct file *, int, select_table *);
-#else
-extern unsigned int isdn_ppp_poll(struct file *, poll_table *);
-#endif
+extern unsigned int isdn_ppp_poll(struct file *, struct poll_table_struct *);
 extern int isdn_ppp_ioctl(int, struct file *, unsigned int, unsigned long);
 extern void isdn_ppp_release(int, struct file *);
 extern int isdn_ppp_dial_slave(char *);
@@ -78,3 +89,7 @@ extern void isdn_ppp_wakeup_daemon(isdn_net_local *);
 #define IPPP_CLOSEWAIT	0x04
 #define IPPP_NOBLOCK	0x08
 #define IPPP_ASSIGNED	0x10
+
+#define IPPP_MAX_HEADER 10
+
+

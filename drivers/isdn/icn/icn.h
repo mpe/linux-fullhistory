@@ -1,4 +1,4 @@
-/* $Id: icn.h,v 1.26 1997/02/14 12:23:16 fritz Exp $
+/* $Id: icn.h,v 1.28 1997/10/10 15:56:18 fritz Exp $
 
  * ISDN lowlevel-module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.h,v $
+ * Revision 1.28  1997/10/10 15:56:18  fritz
+ * New HL<->LL interface:
+ *   New BSENT callback with nr. of bytes included.
+ *   Sending without ACK.
+ *
+ * Revision 1.27  1997/10/01 09:21:56  fritz
+ * Removed old compatibility stuff for 2.0.X kernels.
+ * From now on, this code is for 2.1.X ONLY!
+ * Old stuff is still in the separate branch.
+ *
  * Revision 1.26  1997/02/14 12:23:16  fritz
  * Added support for new insmod parameter handling.
  *
@@ -265,6 +275,9 @@ typedef struct icn_card {
 	char *msg_buf_read;     /* Readpointer for statusbuffer     */
 	char *msg_buf_end;      /* Pointer to end of statusbuffer   */
 	int sndcount[ICN_BCH];  /* Byte-counters for B-Ch.-send     */
+	int xlen[ICN_BCH];      /* Byte-counters/Flags for sent-ACK */
+	struct sk_buff *xskb[ICN_BCH];
+	                        /* Current transmitted skb          */
 	struct sk_buff_head
 	 spqueue[ICN_BCH];      /* Sendqueue                        */
 	char regname[35];       /* Name used for request_region     */
@@ -303,7 +316,6 @@ static char *icn_id = "\0";
 static char *icn_id2 = "\0";
 
 #ifdef MODULE
-#if (LINUX_VERSION_CODE > 0x020111)
 MODULE_AUTHOR("Fritz Elfert");
 MODULE_PARM(portbase, "i");
 MODULE_PARM_DESC(portbase, "Port adress of first card");
@@ -313,7 +325,6 @@ MODULE_PARM(icn_id, "s");
 MODULE_PARM_DESC(icn_id, "ID-String of first card");
 MODULE_PARM(icn_id2, "s");
 MODULE_PARM_DESC(icn_id2, "ID-String of first card, second S0 (4B only)");
-#endif
 #endif
 
 #endif                          /* __KERNEL__ */

@@ -1,4 +1,4 @@
-/* $Id: isdn_audio.c,v 1.8 1997/03/02 14:29:16 fritz Exp $
+/* $Id: isdn_audio.c,v 1.10 1998/02/20 17:09:40 fritz Exp $
 
  * Linux ISDN subsystem, audio conversion and compression (linklevel).
  *
@@ -20,6 +20,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_audio.c,v $
+ * Revision 1.10  1998/02/20 17:09:40  fritz
+ * Changes for recent kernels.
+ *
+ * Revision 1.9  1997/10/01 09:20:25  fritz
+ * Removed old compatibility stuff for 2.0.X kernels.
+ * From now on, this code is for 2.1.X ONLY!
+ * Old stuff is still in the separate branch.
+ *
  * Revision 1.8  1997/03/02 14:29:16  fritz
  * More ttyI related cleanup.
  *
@@ -53,7 +61,7 @@
 #include "isdn_audio.h"
 #include "isdn_common.h"
 
-char *isdn_audio_revision = "$Revision: 1.8 $";
+char *isdn_audio_revision = "$Revision: 1.10 $";
 
 /*
  * Misc. lookup-tables.
@@ -531,7 +539,6 @@ isdn_audio_goertzel(int *sample, modem_info * info)
 		       info->line);
 		return;
 	}
-	SET_SKB_FREE(skb);
 	result = (int *) skb_put(skb, sizeof(int) * NCOEFF);
 	for (k = 0; k < NCOEFF; k++) {
 		sk = sk1 = sk2 = 0;

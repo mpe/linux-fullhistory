@@ -50,6 +50,9 @@
 # 300397 Phil Blundell (pjb27@cam.ac.uk) - added support for min/max 
 # arguments to "int", allow dep_tristate to take a list of dependencies
 # rather than just one.
+#
+# 090398 Axel Boldt (boldt@math.ucsb.edu) - allow for empty lines in help
+# texts.
 
 #
 # Make sure we're really running bash.
@@ -89,16 +92,18 @@ function help () {
      var=$(echo "$1"|sed 's/[][\/.^$*]/\\&/g')
      #now pick out the right help text:
      text=$(sed -n "/^$var[ 	]*\$/,\${
-			/^$var[ 	]*\$/b
-			/^#.*/b
-			/^[ 	]*\$/q
+			/^$var[ 	]*\$/c\\
+${var}:\\
+
+			/^#/b
+			/^[^ 	]/q
 			p
 		    }" Documentation/Configure.help)
      if [ -z "$text" ]
      then
 	  echo; echo "  Sorry, no help available for this option yet.";echo
      else
-	  (echo; echo "$text"; echo) | ${PAGER:-more}
+	  (echo; echo "$text") | ${PAGER:-more}
      fi
   else
      echo;

@@ -380,10 +380,8 @@ pcbit_receive(struct pcbit_dev *dev)
 			return;
 #else
 			/* discard previous queued frame */
-			if (dev->read_frame->skb) {
-				SET_SKB_FREE(dev->read_frame->skb);
+			if (dev->read_frame->skb)
 				kfree_skb(dev->read_frame->skb);
-			}
 			kfree(dev->read_frame);
 			dev->read_frame = NULL;
 #endif
@@ -648,10 +646,8 @@ pcbit_l2_err_recover(unsigned long data)
 	dev->w_busy = dev->r_busy = 1;
 
 	if (dev->read_frame) {
-		if (dev->read_frame->skb) {
-			SET_SKB_FREE(dev->read_frame->skb);
+		if (dev->read_frame->skb)
 			kfree_skb(dev->read_frame->skb);
-		}
 		kfree(dev->read_frame);
 		dev->read_frame = NULL;
 	}

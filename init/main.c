@@ -1144,6 +1144,13 @@ static int init(void * unused)
 	smp_begin();
 #endif	
 
+#ifdef CONFIG_KMOD
+	{
+		extern int kmod_init(void);
+		kmod_init();
+	}
+#endif
+
 #ifdef CONFIG_UMSDOS_FS
 	{
 		/*
@@ -1176,13 +1183,6 @@ static int init(void * unused)
 				printk(KERN_ERR "Change root to /initrd: "
 				    "error %d\n",error);
 		}
-	}
-#endif
-
-#ifdef CONFIG_KMOD
-	{
-		extern int kmod_init(void);
-		kmod_init();
 	}
 #endif
 

@@ -36,14 +36,14 @@ if { [cget .ref -disabledforeground] == "" } {
 # Define some macros we will need to parse the config.in file.
 #
 proc mainmenu_name { text } {
-	message .header.message -width 400 -relief raised -text "$text"
-	pack .header.label .header.message -side left -padx 15
-        wm title . "$text"
+	message .header.message -width 400 -text "$text"
+	pack .header.message -side left -padx 15
+	wm title . "$text"
 }
 
 proc menu_option { w menu_num text } {
 	button .f0.x$menu_num -text "$text" -width 50 -command "$w .$w \"$text\""
-	pack .f0.x$menu_num -pady 1 -expand on
+	pack .f0.x$menu_num -pady 0 -expand on
 }
 
 #
@@ -370,21 +370,19 @@ proc dohelp {w var }  {
 
 	if { [file readable Documentation/Configure.help] == 1} then {
 		set filefound 1
+		# First escape sed regexp special characters in var:
+		set var [exec echo "$var" | sed s/\[\]\[\/.^$*\]/\\\\&/g]
+		# Now pick out right help text:
 		set message [exec sed -n "
 			/^$var\[ 	\]*\$/,\${
 				/^$var\[ 	\]*\$/c\\
 ${var}:\\
 
-				/^#.*/d
-				/^\[ 	\]*\$/bL
-                		H
+				/^#/b
+				/^\[^ 	\]/q
+				s/^  //
+				p
 			}
-			d
-			:L x
-			s/\\n  //
-			s/\\n  / /g
-			p
-			q
 			" Documentation/Configure.help]
 		set found [expr [string length "$message"] > 0]
 	}
@@ -402,8 +400,10 @@ ${var}:\\
 		label $w.f1.bm -bitmap error
 		wm title $w "RTFM"
 	} else {
-		message $w.f1.m -width 400 -aspect 300 -text $message \
-			 -relief flat
+		text $w.f1.m -width 73 -relief flat -wrap word
+		$w.f1.m insert 0.0 $message
+		$w.f1.m conf -state disabled  -height [$w.f1.m index end]
+
 		label $w.f1.bm -bitmap info
 		wm title $w "Configuration help" 
 	}
@@ -416,7 +416,7 @@ ${var}:\\
 	frame $w.f2
 	button $w.f2.ok -text "OK" \
 		-width 10 -command "destroy $w; focus $oldFocus"
-	pack $w.f2.ok -side bottom -pady 10 -anchor s
+	pack $w.f2.ok -side bottom -pady 6 -anchor n
 	pack $w.f2 -side bottom -padx 10 -anchor s
 
 	# Finish off the window
@@ -454,7 +454,6 @@ proc wrapup {w }  {
 # buttons which we will stick down at the bottom.
 #
 frame .header
-label .header.label 
 
 frame .f0 
 

@@ -20,6 +20,8 @@ extern unsigned long event;
 #include <linux/tty.h>
 #include <linux/sem.h>
 #include <linux/signal.h>
+#include <linux/capability.h>
+#include <linux/securebits.h>
 
 /*
  * cloning flags:
@@ -220,8 +222,6 @@ struct task_struct {
 	pid_t session;
 	/* boolean value for session group leader */
 	int leader;
-	int ngroups;
-	gid_t groups[NGROUPS];
 	/* 
 	 * pointers to (original) parent process, youngest child, younger sibling,
 	 * older sibling, respectively.  (p->father can be replaced with 
@@ -237,8 +237,6 @@ struct task_struct {
 	struct task_struct **tarray_ptr;
 
 	struct wait_queue *wait_chldexit;	/* for wait4() */
-	uid_t uid,euid,suid,fsuid;
-	gid_t gid,egid,sgid,fsgid;
 	unsigned long timeout, policy, rt_priority;
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
@@ -253,6 +251,12 @@ struct task_struct {
 	unsigned long old_maj_flt;	/* old value of maj_flt */
 	unsigned long dec_flt;		/* page fault count of the last time */
 	unsigned long swap_cnt;		/* number of pages to swap on next pass */
+/* process credentials */
+	uid_t uid,euid,suid,fsuid;
+	gid_t gid,egid,sgid,fsgid;
+	int ngroups;
+	gid_t	groups[NGROUPS];
+        kernel_cap_t   cap_effective, cap_inheritable, cap_permitted;
 /* limits */
 	struct rlimit rlim[RLIM_NLIMITS];
 	unsigned short used_math;
@@ -334,18 +338,20 @@ struct task_struct {
 /* schedlink */	&init_task,&init_task, &init_task, &init_task, \
 /* ec,brk... */	0,0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0,0, \
-/* suppl grps*/ 0, {0,}, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL, \
 /* pidhash */	NULL, NULL, \
 /* tarray */	&task[0], \
 /* chld wait */	NULL, \
-/* uid etc */	0,0,0,0,0,0,0,0, \
 /* timeout */	0,SCHED_OTHER,0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
 /* utime */	{0,0,0,0},0, \
 /* per cpu times */ {0, }, {0, }, \
 /* flt */	0,0,0,0,0,0, \
 /* swp */	0,0,0,0,0, \
+/* process credentials */					\
+/* uid etc */	0,0,0,0,0,0,0,0,				\
+/* suppl grps*/ 0, {0,},					\
+/* caps */      CAP_FULL_SET, CAP_FULL_SET, CAP_FULL_SET,    \
 /* rlimits */   INIT_RLIMITS, \
 /* math */	0, \
 /* comm */	"swapper", \
@@ -444,8 +450,6 @@ extern unsigned int * prof_buffer;
 extern unsigned long prof_len;
 extern unsigned long prof_shift;
 
-extern int securelevel;	/* system security level */
-
 #define CURRENT_TIME (xtime.tv_sec)
 
 extern void FASTCALL(__wake_up(struct wait_queue ** p, unsigned int mode));
@@ -530,10 +534,13 @@ extern void free_irq(unsigned int irq, void *dev_id);
  * For correctness, the above considerations need to be extended to
  * fsuser(). This is done, along with moving fsuser() checks to be
  * last.
+ *
+ * These will be removed, but in the mean time, when the SECURE_NOROOT 
+ * flag is set, uids don't grant privilege.
  */
 extern inline int suser(void)
 {
-	if (current->euid == 0) {
+	if (!issecure(SECURE_NOROOT) && current->euid == 0) { 
 		current->flags |= PF_SUPERPRIV;
 		return 1;
 	}
@@ -542,7 +549,27 @@ extern inline int suser(void)
 
 extern inline int fsuser(void)
 {
-	if (current->fsuid == 0) {
+	if (!issecure(SECURE_NOROOT) && current->fsuid == 0) {
+		current->flags |= PF_SUPERPRIV;
+		return 1;
+	}
+	return 0;
+}
+
+/*
+ * capable() checks for a particular capability.  
+ * New privilege checks should use this interface, rather than suser() or
+ * fsuser(). See include/linux/capability.h for defined capabilities.
+ */
+
+extern inline int capable(int cap)
+{
+#if 0 /* not yet */
+	if (cap_raised(current->cap_effective, cap))
+#else
+	if (cap_is_fs_cap(cap) ? current->fsuid == 0 : current->euid == 0)
+#endif
+        {
 		current->flags |= PF_SUPERPRIV;
 		return 1;
 	}

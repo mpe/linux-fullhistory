@@ -1,11 +1,35 @@
 /*
- * $Id: b1lli.c,v 1.1 1997/03/04 21:50:28 calle Exp $
+ * $Id: b1lli.c,v 1.6 1998/02/13 07:09:11 calle Exp $
  * 
  * ISDN lowlevel-module for AVM B1-card.
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1lli.c,v $
+ * Revision 1.6  1998/02/13 07:09:11  calle
+ * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
+ *
+ * Revision 1.5  1998/01/31 11:14:41  calle
+ * merged changes to 2.0 tree, prepare 2.1.82 to work.
+ *
+ * Revision 1.4  1997/12/10 20:00:48  calle
+ * get changes from 2.0 version
+ *
+ * Revision 1.1.2.2  1997/11/26 10:46:55  calle
+ * prepared for M1 (Mobile) and T1 (PMX) cards.
+ * prepared to set configuration after load to support other D-channel
+ * protocols, point-to-point and leased lines.
+ *
+ * Revision 1.3  1997/10/01 09:21:13  fritz
+ * Removed old compatibility stuff for 2.0.X kernels.
+ * From now on, this code is for 2.1.X ONLY!
+ * Old stuff is still in the separate branch.
+ *
+ * Revision 1.2  1997/07/13 12:22:42  calle
+ * bug fix for more than one controller in connect_req.
+ * debugoutput now with contrnr.
+ *
+ *
  * Revision 1.1  1997/03/04 21:50:28  calle
  * Frirst version in isdn4linux
  *
@@ -66,6 +90,9 @@
 					   * B3Length data .... 
 					 */
 
+#define SEND_CONFIG		0x21    /*
+                                         */
+
 /*
  * LLI Messages from the ISDN-ControllerISDN Controller 
  */
@@ -110,6 +137,9 @@
 					   * int32 AppllID int32 0xffffffff 
 					 */
 
+#define WRITE_REGISTER		0x00
+#define READ_REGISTER		0x01
+
 /*
  * port offsets
  */
@@ -120,7 +150,11 @@
 #define B1_OUTSTAT		0x03
 #define B1_RESET		0x10
 #define B1_ANALYSE		0x04
+#define B1_IDENT		0x17  /* Hema card T1 */
+#define B1_IRQ_MASTER		0x12  /* Hema card T1 */
 
+#define B1_STAT0(cardtype)  ((cardtype) == AVM_CARDTYPE_M1 ? 0x81200000l : 0x80A00000l)
+#define B1_STAT1(cardtype)  (0x80E00000l)
 
 
 static inline unsigned char b1outp(unsigned short base,
@@ -129,87 +163,6 @@ static inline unsigned char b1outp(unsigned short base,
 {
 	outb(value, base + offset);
 	return inb(base + B1_ANALYSE);
-}
-
-static int irq_table[16] =
-{0,
- 0,
- 0,
- 192,				/* irq 3 */
- 32,				/* irq 4 */
- 160,				/* irq 5 */
- 96,				/* irq 6 */
- 224,				/* irq 7 */
- 0,
- 64,				/* irq 9 */
- 80,				/* irq 10 */
- 208,				/* irq 11 */
- 48,				/* irq 12 */
- 0,
- 0,
- 112,				/* irq 15 */
-};
-
-int B1_valid_irq(unsigned irq)
-{
-	return irq_table[irq] != 0;
-}
-
-unsigned char B1_assign_irq(unsigned short base, unsigned irq)
-{
-	return b1outp(base, B1_RESET, irq_table[irq]);
-}
-
-unsigned char B1_enable_irq(unsigned short base)
-{
-	return b1outp(base, B1_INSTAT, 0x02);
-}
-
-unsigned char B1_disable_irq(unsigned short base)
-{
-	return b1outp(base, B1_INSTAT, 0x00);
-}
-
-void B1_reset(unsigned short base)
-{
-	b1outp(base, B1_RESET, 0);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
-
-	b1outp(base, B1_RESET, 1);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
-
-	b1outp(base, B1_RESET, 0);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
-}
-
-int B1_detect(unsigned short base)
-{
-	/*
-	 * Statusregister 0000 00xx 
-	 */
-	if ((inb(base + B1_INSTAT) & 0xfc)
-	    || (inb(base + B1_OUTSTAT) & 0xfc))
-		return 1;
-
-	/*
-	 * Statusregister 0000 001x 
-	 */
-	b1outp(base, B1_INSTAT, 0x2);	/* enable irq */
-	b1outp(base, B1_OUTSTAT, 0x2);
-	if ((inb(base + B1_INSTAT) & 0xfe) != 0x2
-	    || (inb(base + B1_OUTSTAT) & 0xfe) != 0x2)
-		return 2;
-
-	/*
-	 * Statusregister 0000 000x 
-	 */
-	b1outp(base, B1_INSTAT, 0x0);	/* disable irq */
-	b1outp(base, B1_OUTSTAT, 0x0);
-	if ((inb(base + B1_INSTAT) & 0xfe)
-	    || (inb(base + B1_OUTSTAT) & 0xfe))
-		return 3;
-
-	return 0;
 }
 
 static inline int B1_rx_full(unsigned short base)
@@ -275,6 +228,151 @@ static inline void B1_put_slice(unsigned short base,
 		B1_put_byte(base, *dp++);
 }
 
+static void b1_wr_reg(unsigned short base,
+                      unsigned int reg,
+		      unsigned int value)
+{
+	B1_put_byte(base, WRITE_REGISTER);
+        B1_put_word(base, reg);
+        B1_put_word(base, value);
+}
+
+static inline unsigned int b1_rd_reg(unsigned short base,
+                                     unsigned int reg)
+{
+	B1_put_byte(base, READ_REGISTER);
+        B1_put_word(base, reg);
+        return B1_get_word(base);
+	
+}
+
+static inline void b1_set_test_bit(unsigned short base,
+				   int cardtype,
+				   int onoff)
+{
+    b1_wr_reg(base, B1_STAT0(cardtype), onoff ? 0x21 : 0x20);
+}
+
+static inline int b1_get_test_bit(unsigned short base,
+                                  int cardtype)
+{
+    return (b1_rd_reg(base, B1_STAT0(cardtype)) & 0x01) != 0;
+}
+
+static int irq_table[16] =
+{0,
+ 0,
+ 0,
+ 192,				/* irq 3 */
+ 32,				/* irq 4 */
+ 160,				/* irq 5 */
+ 96,				/* irq 6 */
+ 224,				/* irq 7 */
+ 0,
+ 64,				/* irq 9 */
+ 80,				/* irq 10 */
+ 208,				/* irq 11 */
+ 48,				/* irq 12 */
+ 0,
+ 0,
+ 112,				/* irq 15 */
+};
+
+int B1_valid_irq(unsigned irq, int cardtype)
+{
+	switch (cardtype) {
+	   default:
+	   case AVM_CARDTYPE_M1:
+	   case AVM_CARDTYPE_M2:
+	   case AVM_CARDTYPE_B1:
+	   	return irq_table[irq] != 0;
+	   case AVM_CARDTYPE_T1:
+	   	return irq == 5;
+	}
+}
+
+unsigned char B1_assign_irq(unsigned short base, unsigned irq, int cardtype)
+{
+	switch (cardtype) {
+	   case AVM_CARDTYPE_T1:
+	      return b1outp(base, B1_IRQ_MASTER, 0x08);
+	   default:
+	   case AVM_CARDTYPE_M1:
+	   case AVM_CARDTYPE_M2:
+	   case AVM_CARDTYPE_B1:
+	      return b1outp(base, B1_RESET, irq_table[irq]);
+	 }
+}
+
+unsigned char B1_enable_irq(unsigned short base)
+{
+	return b1outp(base, B1_INSTAT, 0x02);
+}
+
+unsigned char B1_disable_irq(unsigned short base)
+{
+	return b1outp(base, B1_INSTAT, 0x00);
+}
+
+void B1_reset(unsigned short base)
+{
+	b1outp(base, B1_RESET, 0);
+	udelay(55 * 2 * 1000);	/* 2 TIC's */
+
+	b1outp(base, B1_RESET, 1);
+	udelay(55 * 2 * 1000);	/* 2 TIC's */
+
+	b1outp(base, B1_RESET, 0);
+	udelay(55 * 2 * 1000);	/* 2 TIC's */
+}
+
+int B1_detect(unsigned short base, int cardtype)
+{
+	int onoff, i;
+
+	if (cardtype == AVM_CARDTYPE_T1)
+	   return 0;
+
+	/*
+	 * Statusregister 0000 00xx 
+	 */
+	if ((inb(base + B1_INSTAT) & 0xfc)
+	    || (inb(base + B1_OUTSTAT) & 0xfc))
+		return 1;
+	/*
+	 * Statusregister 0000 001x 
+	 */
+	b1outp(base, B1_INSTAT, 0x2);	/* enable irq */
+	/* b1outp(base, B1_OUTSTAT, 0x2); */
+	if ((inb(base + B1_INSTAT) & 0xfe) != 0x2
+	    /* || (inb(base + B1_OUTSTAT) & 0xfe) != 0x2 */)
+		return 2;
+	/*
+	 * Statusregister 0000 000x 
+	 */
+	b1outp(base, B1_INSTAT, 0x0);	/* disable irq */
+	b1outp(base, B1_OUTSTAT, 0x0);
+	if ((inb(base + B1_INSTAT) & 0xfe)
+	    || (inb(base + B1_OUTSTAT) & 0xfe))
+		return 3;
+        
+	for (onoff = !0, i= 0; i < 10 ; i++) {
+		b1_set_test_bit(base, cardtype, onoff);
+		if (b1_get_test_bit(base, cardtype) != onoff)
+		   return 4;
+		onoff = !onoff;
+	}
+
+	if (cardtype == AVM_CARDTYPE_M1)
+	   return 0;
+
+        if ((b1_rd_reg(base, B1_STAT1(cardtype)) & 0x0f) != 0x01)
+	   return 5;
+
+	return 0;
+}
+
+
 extern int loaddebug;
 
 int B1_load_t4file(unsigned short base, avmb1_t4file * t4file)
@@ -310,6 +408,62 @@ int B1_load_t4file(unsigned short base, avmb1_t4file * t4file)
 			printk(KERN_DEBUG "b1capi: loading: %d bytes ..", left);
 		for (i = 0; i < left; i++)
 			B1_put_byte(base, buf[i]);
+		if (loaddebug)
+		   printk("ok\n");
+	}
+	return 0;
+}
+
+int B1_load_config(unsigned short base, avmb1_t4file * config)
+{
+	/*
+	 * Data is in user space !!!
+	 */
+	unsigned char buf[256];
+	unsigned char *dp;
+	int i, j, left, retval;
+
+
+	dp = config->data;
+	left = config->len;
+	if (left) {
+		B1_put_byte(base, SEND_CONFIG);
+        	B1_put_word(base, 1);
+		B1_put_byte(base, SEND_CONFIG);
+        	B1_put_word(base, left);
+	}
+	while (left > sizeof(buf)) {
+		retval = copy_from_user(buf, dp, sizeof(buf));
+		if (retval)
+			return -EFAULT;
+		if (loaddebug)
+			printk(KERN_DEBUG "b1capi: conf load: %d bytes ..", sizeof(buf));
+		for (i = 0; i < sizeof(buf); ) {
+			B1_put_byte(base, SEND_CONFIG);
+			for (j=0; j < 4; j++) {
+				B1_put_byte(base, buf[i++]);
+			}
+		}
+		if (loaddebug)
+		   printk("ok\n");
+		left -= sizeof(buf);
+		dp += sizeof(buf);
+	}
+	if (left) {
+		retval = copy_from_user(buf, dp, left);
+		if (retval)
+			return -EFAULT;
+		if (loaddebug)
+			printk(KERN_DEBUG "b1capi: conf load: %d bytes ..", left);
+		for (i = 0; i < left; ) {
+			B1_put_byte(base, SEND_CONFIG);
+			for (j=0; j < 4; j++) {
+				if (i < left)
+					B1_put_byte(base, buf[i++]);
+				else
+					B1_put_byte(base, 0);
+			}
+		}
 		if (loaddebug)
 		   printk("ok\n");
 	}
@@ -428,7 +582,9 @@ void B1_send_message(unsigned short port, struct sk_buff *skb)
 				       CAPIMSG_APPID(skb->data),
 				       capi_cmd2str(cmd, subcmd), len);
 			} else {
-				printk(KERN_DEBUG "b1lli: Put %s\n", capi_message2str(skb->data));
+				printk(KERN_DEBUG "b1lli: Put [0x%lx] %s\n",
+						(unsigned long) contr,
+						capi_message2str(skb->data));
 			}
 
 		}
@@ -447,7 +603,7 @@ void B1_send_message(unsigned short port, struct sk_buff *skb)
 				       CAPIMSG_APPID(skb->data),
 				       capi_cmd2str(cmd, subcmd), len);
 			} else {
-				printk(KERN_DEBUG "b1lli: Put %s\n", capi_message2str(skb->data));
+				printk(KERN_DEBUG "b1lli: Put [0x%lx] %s\n", (unsigned long)contr, capi_message2str(skb->data));
 			}
 		}
 		save_flags(flags);
@@ -499,13 +655,12 @@ void B1_handle_interrupt(avmb1_card * card)
 				       capi_cmd2str(cmd, subcmd),
 				       MsgLen, DataB3Len);
 			} else {
-				printk(KERN_DEBUG "b1lli: Got %s\n", capi_message2str(card->msgbuf));
+				printk(KERN_DEBUG "b1lli: Got [0x%lx] %s\n", (unsigned long)contr, capi_message2str(card->msgbuf));
 			}
 		}
 		if (!(skb = dev_alloc_skb(DataB3Len + MsgLen))) {
 			printk(KERN_ERR "b1lli: incoming packet dropped\n");
 		} else {
-			SET_SKB_FREE(skb);
 			memcpy(skb_put(skb, MsgLen), card->msgbuf, MsgLen);
 			memcpy(skb_put(skb, DataB3Len), card->databuf, DataB3Len);
 			CAPIMSG_SETDATA(skb->data, skb->data + MsgLen);
@@ -528,14 +683,15 @@ void B1_handle_interrupt(avmb1_card * card)
 				       capi_cmd2str(cmd, subcmd),
 				       MsgLen);
 			} else {
-				printk(KERN_DEBUG "b1lli: Got %s\n", capi_message2str(card->msgbuf));
+				printk(KERN_DEBUG "b1lli: Got [0x%lx] %s\n",
+						(unsigned long) contr,
+						capi_message2str(card->msgbuf));
 			}
 
 		}
 		if (!(skb = dev_alloc_skb(MsgLen))) {
 			printk(KERN_ERR "b1lli: incoming packet dropped\n");
 		} else {
-			SET_SKB_FREE(skb);
 			memcpy(skb_put(skb, MsgLen), card->msgbuf, MsgLen);
 			avmb1_handle_capimsg(card, ApplId, skb);
 		}
@@ -581,10 +737,9 @@ void B1_handle_interrupt(avmb1_card * card)
 		card->versionlen = B1_get_slice(card->port, card->versionbuf);
 		card->cardstate = CARD_ACTIVE;
 		parse_version(card);
-		printk(KERN_INFO "b1lli: %s-card (%s) with %s now active\n",
+		printk(KERN_INFO "b1lli: %s-card (%s) now active\n",
 		       card->version[VER_CARDTYPE],
-		       card->version[VER_DRIVER],
-		       card->version[VER_PROTO]);
+		       card->version[VER_DRIVER]);
 		avmb1_card_ready(card);
 		break;
 	default:

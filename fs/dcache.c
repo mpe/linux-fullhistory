@@ -19,6 +19,8 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 
+#include <asm/uaccess.h>
+
 #define DCACHE_PARANOIA 1
 /* #define DCACHE_DEBUG 1 */
 
@@ -669,7 +671,7 @@ void d_add(struct dentry * entry, struct inode * inode)
 	d_instantiate(entry, inode);
 }
 
-#define switch(x,y) do { \
+#define do_switch(x,y) do { \
 	__typeof__ (x) __tmp = x; \
 	x = y; y = __tmp; } while (0)
 
@@ -705,10 +707,10 @@ void d_move(struct dentry * dentry, struct dentry * target)
 	list_del(&target->d_child);
 
 	/* Switch the parents and the names.. */
-	switch(dentry->d_parent, target->d_parent);
-	switch(dentry->d_name.name, target->d_name.name);
-	switch(dentry->d_name.len, target->d_name.len);
-	switch(dentry->d_name.hash, target->d_name.hash);
+	do_switch(dentry->d_parent, target->d_parent);
+	do_switch(dentry->d_name.name, target->d_name.name);
+	do_switch(dentry->d_name.len, target->d_name.len);
+	do_switch(dentry->d_name.hash, target->d_name.hash);
 	list_add(&target->d_child, &target->d_parent->d_subdirs);
 	list_add(&dentry->d_child, &dentry->d_parent->d_subdirs);
 }
@@ -755,6 +757,41 @@ char * d_path(struct dentry *dentry, char *buffer, int buflen)
 		dentry = parent;
 	}
 	return retval;
+}
+
+/*
+ * NOTE! The user-level library version returns a
+ * character pointer. The kernel system call just
+ * returns the length of the buffer filled (which
+ * includes the ending '\0' character), or a negative
+ * error value. So libc would do something like
+ *
+ *	char *getcwd(char * buf, size_t size)
+ *	{
+ *		int retval;
+ *
+ *		retval = sys_getcwd(buf, size);
+ *		if (retval >= 0)
+ *			return buf;
+ *		errno = -retval;
+ *		return NULL;
+ *	}
+ */
+asmlinkage int sys_getcwd(char *buf, unsigned long size)
+{
+	int error;
+	unsigned long len;
+	char * page = (char *) __get_free_page(GFP_USER);
+	char * cwd = d_path(current->fs->pwd, page, PAGE_SIZE);
+
+	error = -ERANGE;
+	len = PAGE_SIZE + page - cwd;
+	if (len <= size) {
+		error = len;
+		if (copy_to_user(buf, cwd, len))
+			error = -EFAULT;
+	}
+	return error;
 }
 
 /*

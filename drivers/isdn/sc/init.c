@@ -20,7 +20,7 @@ static int sup_irq[] = { 11, 10, 9, 5, 12, 14, 7, 3, 4, 6 };
 #define MAX_IRQS	10
 
 extern void interrupt_handler(int, void *, struct pt_regs *);
-extern int sndpkt(int, int, struct sk_buff *);
+extern int sndpkt(int, int, int, struct sk_buff *);
 extern int command(isdn_ctrl *);
 extern int indicate_status(int, int, ulong, char*);
 extern int reset(int);
@@ -38,12 +38,10 @@ int irq_supported(int irq_x)
 }
 
 #ifdef MODULE
-#if (LINUX_VERSION_CODE > 0x020111)
 MODULE_PARM(io, "1-4i");
 MODULE_PARM(irq, "1-4i");
 MODULE_PARM(ram, "1-4i");
 MODULE_PARM(do_reset, "i");
-#endif
 #define init_sc init_module
 #else
 /*

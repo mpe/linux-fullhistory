@@ -506,7 +506,7 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
         struct sk_buff *n_skb;
 	int offset;
 
-	maxsize = skb->truesize - sizeof(struct sk_buff);
+	maxsize = skb->truesize;
 
         diff = n_len - o_len;
         o_offset = o_buf - (char*) skb->data;
@@ -547,7 +547,6 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
                 offset = n_skb->data - skb->data;
                 n_skb->nh.raw = skb->nh.raw + offset;
                 n_skb->h.raw = skb->h.raw + offset;
-                n_skb->when = skb->when;
                 n_skb->dev = skb->dev;
                 n_skb->mac.raw = skb->mac.raw + offset;
                 n_skb->pkt_type = skb->pkt_type;

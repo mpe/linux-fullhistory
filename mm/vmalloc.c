@@ -208,11 +208,15 @@ void * vmalloc(unsigned long size)
 	return addr;
 }
 
-int vread(char *buf, char *addr, int count)
+long vread(char *buf, char *addr, unsigned long count)
 {
 	struct vm_struct **p, *tmp;
 	char *vaddr, *buf_start = buf;
 	int n;
+
+	/* Don't allow overflow */
+	if ((unsigned long) addr + count < count)
+		count = -(unsigned long) addr;
 
 	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
 		vaddr = (char *) tmp->addr;

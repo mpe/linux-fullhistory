@@ -8,6 +8,9 @@ Thomas Bogendörfer (tsbogend@bigbug.franken.de)
 Alan Cox (alan@cymru.net)
   For help getting into standard-kernel.
 
+Henner Eisen (eis@baty.hanse.de)
+  For X.25 implementation.
+
 Volker Götz (volker@oops.franken.de)
   For contribution of man-pages, the imontty-tool and a perfect
   maintaining of the mailing-list at hub-wue.
@@ -37,18 +40,24 @@ Pedro Roque Marques (roque@di.fc.ul.pt)
 Eberhard Moenkeberg (emoenke@gwdg.de)
   For testing and help to get into kernel.
 
+Thomas Neumann (tn@ruhr.de)
+  For help with Cisco-SLARP and keepalive
+
 Jan den Ouden (denouden@groovin.xs4all.nl)
-  For contribution of the teles-driver
+  For contribution of the original teles-driver
+
+Carsten Paeth (calle@calle.in-berlin.de)
+  For the AVM-B1-CAPI2.0 driver
+
+Thomas Pfeiffer (pfeiffer@pds.de)
+  For V.110, extended T.70 and Hylafax extensions in isdn_tty.c
 
 Max Riegel (riegel@max.franken.de)
   For making the ICN hardware-documentation and test-equipment available.
 
-Gerhard 'Fido' Schneider (fido@wuff.franken.de)
+Gerhard 'Fido' Schneider (fido@wuff.mayn.de)
   For heavy-duty-beta-testing with his BBS ;)
 
 Thomas Uhl (uhl@think.de)
   For distributing the cards.
   For pushing me to work ;-)
-
-Carsten Paeth (calle@calle.in-berlin.de)
-  For the AVM-B1-CAPI2.0 driver

@@ -1141,6 +1141,9 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 	return NULL;
 }
 
+/*
+ * Note: the caller should wake up the buffer_wait list if needed.
+ */
 static void put_unused_buffer_head(struct buffer_head * bh)
 {
 	if (nr_unused_buffer_heads >= MAX_UNUSED_BUFFERS) {
@@ -1153,9 +1156,6 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 	nr_unused_buffer_heads++;
 	bh->b_next_free = unused_list;
 	unused_list = bh;
-	if (!waitqueue_active(&buffer_wait))
-		return;
-	wake_up(&buffer_wait);
 }
 
 /* 
@@ -1165,18 +1165,26 @@ static void put_unused_buffer_head(struct buffer_head * bh)
  * fields after the final unlock.  So, the device driver puts them on
  * the reuse_list instead once IO completes, and we recover these to
  * the unused_list here.
+ *
+ * Note that we don't do a wakeup here, but return a flag indicating
+ * whether we got any buffer heads. A task ready to sleep can check
+ * the returned value, and any tasks already sleeping will have been
+ * awakened when the buffer heads were added to the reuse list.
  */
-static inline void recover_reusable_buffer_heads(void)
+static inline int recover_reusable_buffer_heads(void)
 {
-	struct buffer_head *head;
-
-	head = xchg(&reuse_list, NULL);
+	struct buffer_head *head = xchg(&reuse_list, NULL);
+	int found = 0;
 	
-	while (head) {
-		struct buffer_head *bh = head;
-		head = head->b_next_free;
-		put_unused_buffer_head(bh);
+	if (head) {
+		do {
+			struct buffer_head *bh = head;
+			head = head->b_next_free;
+			put_unused_buffer_head(bh);
+		} while (head);
+		found = 1;
 	}
+	return found;
 }
 
 /*
@@ -1275,11 +1283,15 @@ try_again:
  * In case anything failed, we just free everything we got.
  */
 no_grow:
-	bh = head;
-	while (bh) {
-		head = bh;
-		bh = bh->b_this_page;
-		put_unused_buffer_head(head);
+	if (head) {
+		do {
+			bh = head;
+			head = head->b_this_page;
+			put_unused_buffer_head(bh);
+		} while (head);
+
+		/* Wake up any waiters ... */
+		wake_up(&buffer_wait);
 	}
 
 	/*
@@ -1305,8 +1317,8 @@ no_grow:
 	 */
 	add_wait_queue(&buffer_wait, &wait);
 	current->state = TASK_UNINTERRUPTIBLE;
-	recover_reusable_buffer_heads();
-	schedule();
+	if (!recover_reusable_buffer_heads())
+		schedule();
 	remove_wait_queue(&buffer_wait, &wait);
 	current->state = TASK_RUNNING;
 	goto try_again;
@@ -1333,14 +1345,24 @@ static inline void after_unlock_page (struct page * page)
  */
 static inline void free_async_buffers (struct buffer_head * bh)
 {
-	struct buffer_head * tmp;
+	struct buffer_head *tmp, *tail;
 
-	tmp = bh;
-	do {
-		tmp->b_next_free = xchg(&reuse_list, NULL);
-		reuse_list = tmp;
-		tmp = tmp->b_this_page;
-	} while (tmp != bh);
+	/*
+	 * Link all the buffers into the b_next_free list,
+	 * so we only have to do one xchg() operation ...
+	 */
+	tail = bh;
+	while ((tmp = tail->b_this_page) != bh) {
+		tail->b_next_free = tmp;
+		tail = tmp;
+	};
+
+	/* Update the reuse list */
+	tail->b_next_free = xchg(&reuse_list, NULL);
+	reuse_list = bh;
+
+	/* Wake up any waiters ... */
+	wake_up(&buffer_wait);
 }
 
 static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
@@ -1390,7 +1412,6 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 	after_unlock_page(page);
-	wake_up(&buffer_wait);
 	return;
 
 still_busy:
@@ -1636,6 +1657,7 @@ int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
 			return 0;
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);
+
 	tmp = bh;
 	do {
 		p = tmp;
@@ -1649,6 +1671,9 @@ int try_to_free_buffer(struct buffer_head * bh, struct buffer_head ** bhp,
 		remove_from_queues(p);
 		put_unused_buffer_head(p);
 	} while (tmp != bh);
+	/* Wake up anyone waiting for buffer heads */
+	wake_up(&buffer_wait);
+
 	buffermem -= PAGE_SIZE;
 	mem_map[MAP_NR(page)].buffers = NULL;
 	free_page(page);

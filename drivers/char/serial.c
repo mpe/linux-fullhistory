@@ -3212,7 +3212,7 @@ __initfunc(int rs_init(void))
 	 *	The interrupt of the serial console port
 	 *	can't be shared.
 	 */
-	if (sercons.flags & CON_FIRST) {
+	if (sercons.flags & CON_CONSDEV) {
 		for(i = 0; i < NR_PORTS; i++)
 			if (i != sercons.index &&
 			    rs_table[i].irq == rs_table[sercons.index].irq)

@@ -76,8 +76,6 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int turn_on)
 	return 0;
 }
 
-unsigned int *stack;
-
 /*
  * sys_iopl has to be used when you want to access the IO ports
  * beyond the 0x3ff range: to get the full 65536 ports bitmapped

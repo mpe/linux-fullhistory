@@ -58,7 +58,7 @@ struct inode_operations proc_link_inode_operations = {
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
-	NULL			/* permission */
+	proc_permission		/* permission */
 };
 
 static struct dentry * proc_follow_link(struct dentry *dentry,

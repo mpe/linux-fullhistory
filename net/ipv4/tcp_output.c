@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.79 1998/03/28 00:55:33 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.81 1998/03/30 08:41:36 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -138,7 +138,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb, int force_queue)
 
 	/* Advance write_seq and place onto the write_queue. */
 	tp->write_seq += (TCP_SKB_CB(skb)->end_seq - TCP_SKB_CB(skb)->seq);
-	skb_queue_tail(&sk->write_queue, skb);
+	__skb_queue_tail(&sk->write_queue, skb);
 
 	if (!force_queue && tp->send_head == NULL && tcp_snd_test(sk, skb)) {
 		/* Send it out now. */
@@ -215,7 +215,7 @@ static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 	skb->csum = csum_partial(skb->data, skb->len, 0);
 
 	/* Link BUFF into the send queue. */
-	skb_append(skb, buff);
+	__skb_append(skb, buff);
 
 	return 0;
 }
@@ -396,7 +396,7 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb, int m
 			return;
 
 		/* Ok.  We will be able to collapse the packet. */
-		skb_unlink(next_skb);
+		__skb_unlink(next_skb, next_skb->list);
 
 		if(skb->len % 4) {
 			/* Must copy and rechecksum all data. */
@@ -548,7 +548,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 			/* Stop retransmitting if we've hit the congestion
 			 * window limit.
 			 */
-			if (tp->retrans_out >= tp->snd_cwnd)
+			if (tp->retrans_out >= (tp->snd_cwnd >> TCP_CWND_SHIFT))
 				break;
 		}
 		update_retrans_head(sk);
@@ -577,7 +577,7 @@ void tcp_fack_retransmit(struct sock *sk)
 		if(tcp_retransmit_skb(sk, skb))
 			break;
 
-		if(tcp_packets_in_flight(tp) >= tp->snd_cwnd)
+		if(tcp_packets_in_flight(tp) >= (tp->snd_cwnd >> TCP_CWND_SHIFT))
 			break;
 next_packet:
 		packet_cnt++;
@@ -687,7 +687,7 @@ int tcp_send_synack(struct sock *sk)
 	/* SYN eats a sequence byte. */
 	TCP_SKB_CB(skb)->seq = tp->snd_una;
 	TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(skb)->seq + 1;
-	skb_queue_tail(&sk->write_queue, skb);
+	__skb_queue_tail(&sk->write_queue, skb);
 	TCP_SKB_CB(skb)->when = jiffies;
 	tp->packets_out++;
 	tcp_transmit_skb(sk, skb_clone(skb, GFP_ATOMIC));
@@ -838,7 +838,7 @@ void tcp_connect(struct sock *sk, struct sk_buff *buff, int mss)
 	tp->retrans_out = 0;
 
 	/* Send it off. */
-	skb_queue_tail(&sk->write_queue, buff);
+	__skb_queue_tail(&sk->write_queue, buff);
 	TCP_SKB_CB(buff)->when = jiffies;
 	tp->packets_out++;
 	tcp_transmit_skb(sk, skb_clone(buff, GFP_KERNEL));

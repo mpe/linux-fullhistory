@@ -1,4 +1,4 @@
-$Id: INTERFACE,v 1.6 1997/02/10 22:40:57 fritz Exp $
+$Id: INTERFACE,v 1.8 1998/02/20 17:38:20 fritz Exp $
 
 Description of the Interface between Linklevel and Hardwarelevel
   of isdn4linux:
@@ -22,7 +22,7 @@ Description of the Interface between Linklevel and Hardwarelevel
   got a separate version number. These numbers are shown at initialization,
   separated by slashes:
 
-     c.c/t.t/n.n/p.p/a.a
+     c.c/t.t/n.n/p.p/a.a/v.v
 
   where
 
@@ -31,11 +31,13 @@ Description of the Interface between Linklevel and Hardwarelevel
    n.n is the revision of the network related code.
    p.p is the revision of the ppp related code.
    a.a is the revision of the audio related code.
+   v.v is the revision of the V.110 related code.
 
   Changes in this document are marked with '***CHANGEx' where x representing
   the version number. If that number starts with 0, it refers to the old,
   separately distributed package. If it starts with one of the letters
   above, it refers to the revision of the corresponding module. 
+  ***CHANGEIx refers to the revision number of the isdnif.h  
 
 1. Description of the fields of isdn_if:
 
@@ -65,32 +67,16 @@ Description of the Interface between Linklevel and Hardwarelevel
 
   unsigned short hl_hdrlen;
 
-    ***CHANGED.7.4: New field.
+    ***CHANGE0.7.4: New field.
 
     To be preset by the HL-driver, if it supports sk_buff's. The driver
     should put here the amount of additional space needed in sk-buff's for
     its internal purposes. Drivers not supporting sk_buff's should put
     initialize this field to 0.
 
-  void (*rcvcallb)(int, int, u_char*, int);
-
-    ***CHANGEc1.14: Declared obsolete. Do NOT use this field/function
-                    anymore, since it will be removed when all current
-                    LL drivers have been changed accordingly. Use
-                    rcvcallb_skb instead.
-
-    This field will be set by LL. The HL-driver delivers received data-
-    packets by calling this function.
-
-    Parameter:
-      int    driver-Id
-      int    Channel-number locally to the driver. (starting with 0)
-      u_char Pointer to received data. (in kernel-space)
-      int    length of data-packet.
-
   void (*rcvcallb_skb)(int, int, struct sk_buff *)
 
-    ***CHANGED.7.4: New field.
+    ***CHANGE0.7.4: New field.
 
     This field will be set by LL. The HL-driver delivers received data-
     packets by calling this function. Upon calling, the HL-driver must
@@ -138,41 +124,22 @@ Description of the Interface between Linklevel and Hardwarelevel
     Returnvalue:
       >=0 on success, else error-code (-ENODEV etc.)
 
-  int (*writebuf)(int, int, u_char*, int, int);
+  int (*writebuf_skb)(int, int, int, struct sk_buff *)
 
-    ***CHANGED1.14: Declared obsolete. Do NOT use this field/function
-                    anymore, since it will be removed when all current
-                    LL drivers have been changed accordingly. Set this
-                    field to NULL and use writebuf_skb instead.
-
-    This field has to be preset by the HL-driver. The given function will
-    be called by the LL for delivering data to be send via B-Channel.
-
-    Parameter:
-      int     driver-Id ***CHANGE.7.4: New parameter.
-      int     channel-number locally to the HL-driver. (starts with 0)
-      u_char* pointer to data.
-      int     length of data-packet.
-      int     flag: 0 = call from within kernel-space. (HL-driver must use
-                        memcpy, may NOT use schedule())
-                    1 = call from user-space. (HL-driver must use
-                        memcpy_fromfs, use of schedule() allowed)
-
-    Returnvalue:
-      Length of data accepted on success, else error-code (-EINVAL on
-      oversized packets etc.)
-
-  int (*writebuf_skb)(int, int, struct sk_buff *)
-
-    ***CHANGED.7.4: New field.
+    ***CHANGE0.7.4: New field.
+    ***CHANGEI.1.21: New field.
 
     This field has to be preset by the HL-driver. The given function will
     be called by the LL for delivering data to be send via B-Channel.
 
  
     Parameter:
-      int              driver-Id ***CHANGE.7.4: New parameter.
+      int              driver-Id ***CHANGE0.7.4: New parameter.
       int              channel-number locally to the HL-driver. (starts with 0)
+      int	       ack ***ChangeI1.21: New parameter
+		       If this is !0, the driver has to signal the delivery
+		       by sending an ISDN_STAT_BSENT. If this is 0, the driver
+		       MUST NOT send an ISDN_STAT_BSENT.
       struct sk_buff * Pointer to sk_buff containing data to be send via
                        B-channel.
 
@@ -199,7 +166,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       int     driver-Id.
       int     channel-number locally to the HL-driver. (starts with 0)
 
-***CHANGED1.14: The driver-Id and channel-number are new since this revision.
+***CHANGEI1.14: The driver-Id and channel-number are new since this revision.
 
     Returnvalue:
       Length of data accepted on success, else error-code (-EINVAL etc.)
@@ -223,7 +190,7 @@ Description of the Interface between Linklevel and Hardwarelevel
       int     driver-Id.
       int     channel-number locally to the HL-driver. (starts with 0)
 
-***CHANGED1.14: The driver-Id and channel-number are new since this revision.
+***CHANGEI1.14: The driver-Id and channel-number are new since this revision.
 
     Returnvalue:
       Length of data on success, else error-code (-EINVAL etc.)
@@ -249,7 +216,7 @@ Description of the Interface between Linklevel and Hardwarelevel
 
    Until now, the following commands are defined:
 
-***CHANGED1.34: The parameter "num" has been replaced by a union "para" containing
+***CHANGEI1.34: The parameter "num" has been replaced by a union "para" containing
                 the old "num" and a new setup_type struct used for ISDN_CMD_DIAL
                 and ISDN_STAT_ICALL callback.
 
@@ -552,6 +519,9 @@ Description of the Interface between Linklevel and Hardwarelevel
    a B-Channel-connection. (Response to ISDN_CMD_ACCEPTB or because the
    remote-station has initiated establishment)
 
+   The HL driver should call this when the logical l2/l3 protocol 
+   connection on top of the physical B-channel is esatblished .
+
     Parameter:
       driver      = driver-Id
       command     = ISDN_STAT_BCONN
@@ -576,6 +546,9 @@ Description of the Interface between Linklevel and Hardwarelevel
    With this call, the HL-driver signals the shutdown of a
    B-Channel-connection. This could be a response to a prior ISDN_CMD_HANGUP,
    or caused by a remote-hangup.
+
+   The HL driver should call this as soon as the logical l2/l3 protocol 
+   connection on top of the physical B-channel is released.
 
     Parameter:
       driver      = driver-Id
@@ -617,7 +590,9 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_BSENT
       arg         = channel-number, locally to the driver. (starting with 0)
-      para        = unused.
+      para.length = ***CHANGEI.1.21: New field.
+		    the driver has to set this to the original length
+		    of the skb at the time of receiving it from the linklevel.
 
   ISDN_STAT_NODCH:
 
@@ -657,3 +632,16 @@ Description of the Interface between Linklevel and Hardwarelevel
       arg         = channel-number, locally to the driver. (starting with 0)
       para.num    = ASCII string containing CAUSE-message.
 
+  ISDN_STAT_L1ERR:
+
+    ***CHANGEI1.21 new status message.
+    A signal can be sent to the linklevel if an Layer1-error results in
+    packet-loss on receive or send. The field errcode of the cmd.parm
+    union describes the error more precisely.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_L1ERR
+      arg         = channel-number, locally to the driver. (starting with 0)
+      para.errcode= ISDN_STAT_L1ERR_SEND:     Packet lost while sending.
+		    ISDN_STAT_L1ERR_RECV:     Packet lost while receiving.

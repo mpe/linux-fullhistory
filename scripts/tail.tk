@@ -1,7 +1,3 @@
-
-pack .header -side top -padx 10 -pady 10 -expand on
-pack .f0 -side top -padx 15 -pady 10 -fill y -expand on
-
 #
 # Misc buttons to save/restore state and so forth.
 # 
@@ -46,13 +42,19 @@ button .f0_bot.l.load -text "Load Configuration from File" -width 25 -command {
 	load_configfile .load "Load Configuration from file" read_config_file
 }
 
-pack  .f0_bot.r.save .f0_bot.r.quit -padx 25 -ipadx 10 -ipady 2 -expand on
-pack  .f0_bot.l.load .f0_bot.l.store -padx 25 -ipadx 10 -ipady 2 -expand on
+#
+# Now pack everything, important things first because of small screens.
+#
+pack  .f0_bot.r.save .f0_bot.r.quit -padx 25 -ipadx 10 -expand on
+pack  .f0_bot.l.load .f0_bot.l.store -padx 25 -ipadx 10 -expand on
 
-pack .f0_bot.r -side left -padx 15 -pady 10 -expand on -fill y
-pack .f0_bot.l -side right -padx 15 -pady 10 -expand on -fill y
+pack .f0_bot.r -side left -padx 15 -expand on -fill y
+pack .f0_bot.l -side right -padx 15 -expand on -fill y
 
-pack .f0_bot -fill both -expand on
+pack .f0_bot -side bottom -fill both -expand on -pady 4
+pack .f0 -side bottom -padx 15 -pady 0 -fill y -expand on
+pack .header -padx 10 -pady 7 -expand on
+
 
 #
 # If we cannot write our config files, disable the write button.
