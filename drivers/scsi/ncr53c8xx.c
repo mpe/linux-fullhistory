@@ -8086,7 +8086,7 @@ static int copy_info(struct info_str *info, char *fmt, ...)
 }
 
 /*
-**	Copy formatted profile informations into the input buffer.
+**	Copy formatted profile information into the input buffer.
 */
 
 static int ncr_host_info(ncb_p np, char *ptr, off_t offset, int len)
@@ -8098,7 +8098,7 @@ static int ncr_host_info(ncb_p np, char *ptr, off_t offset, int len)
 	info.offset	= offset;
 	info.pos	= 0;
 
-	copy_info(&info, "General informations:\n");
+	copy_info(&info, "General information:\n");
 	copy_info(&info, "  Chip NCR53C%03d, ",	np->chip);
 	copy_info(&info, "device id 0x%x, ",	np->device_id);
 	copy_info(&info, "revision id 0x%x\n",	np->revision_id);
@@ -8113,7 +8113,7 @@ static int ncr_host_info(ncb_p np, char *ptr, off_t offset, int len)
 #endif
 
 #ifdef SCSI_NCR_PROFILE
-	copy_info(&info, "Profiling informations:\n");
+	copy_info(&info, "Profiling information:\n");
 	copy_info(&info, "  %-12s = %lu\n", "num_trans",np->profile.num_trans);
 	copy_info(&info, "  %-12s = %lu\n", "num_kbytes",np->profile.num_kbytes);
 	copy_info(&info, "  %-12s = %lu\n", "num_disc",	np->profile.num_disc);

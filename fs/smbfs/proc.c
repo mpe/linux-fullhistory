@@ -1739,7 +1739,7 @@ smb_proc_reconnect(struct smb_server *server)
 	DPRINTK("smb_proc_connect: Server wants %s protocol.\n",
                 prots[i].name);
 
-        if (server->protocol > PROTOCOL_LANMAN1) {
+        if (server->protocol >= PROTOCOL_LANMAN1) {
 
                 word passlen = strlen(server->m.password);
                 word userlen = strlen(server->m.username);

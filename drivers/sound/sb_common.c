@@ -642,8 +642,11 @@ void
 sb_dsp_init (struct address_info *hw_config)
 {
   sb_devc        *devc;
-  int             n;
   char            name[100];
+
+#ifndef NO_SB_IRQ_TEST
+  int             n;
+#endif
 
 /*
  * Check if we had detected a SB device earlier
@@ -701,12 +704,13 @@ sb_dsp_init (struct address_info *hw_config)
 	  }
     }
 
+#ifndef NO_SB_IRQ_TEST
   for (n = 0; n < 3 && devc->irq_ok == 0; n++)
     if (sb_dsp_command (devc, 0xf2))	/* Cause interrupt immediately */
       {
 	int             i;
 
-	for (i = 0; !devc->irq_ok && i < 10000000; i++);
+	for (i = 0; !devc->irq_ok && i < 10000; i++);
       }
 
   if (!devc->irq_ok)
@@ -719,6 +723,7 @@ sb_dsp_init (struct address_info *hw_config)
     {
       DDB (printk ("IRQ test OK (IRQ%d)\n", devc->irq));
     }
+#endif
 
   request_region (hw_config->io_base, 16, "sound blaster");
 

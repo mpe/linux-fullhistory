@@ -139,28 +139,6 @@ unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum)
 }
 
 /*
- * the same as csum_partial, but copies from src while it
- * checksums
- *
- * here even more important to align src and dst on a 32-bit (or even
- * better 64-bit) boundary
- */
-
-unsigned int csum_partial_copy(char *src, char *dst, int len, int sum)
-{
-	/*
-	 * The whole idea is to do the copy and the checksum at
-	 * the same time, but we do it the easy way now.
-	 *
-	 * At least csum on the source, not destination, for cache
-	 * reasons..
-	 */
-	sum = csum_partial(src, len, sum);
-	memcpy(dst, src, len);
-	return sum;
-}
-
-/*
  * this routine is used for miscellaneous IP-like checksums, mainly
  * in icmp.c
  */

@@ -3,7 +3,7 @@
 #
 
 OBJS  = __divqu.o __remqu.o __divlu.o __remlu.o memset.o memcpy.o io.o \
-	checksum.o strlen.o
+	checksum.o csum_partial_copy.o strlen.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)

@@ -289,7 +289,7 @@ sound_mmap (inode_handle * inode, file_handle * file, vm_area_handle * vma)
 	      size, dmap->bytes_in_use);
     }
 
-  if (remap_page_range (vma_get_start (vma), dmap->raw_buf_phys,
+  if (remap_page_range (vma_get_start (vma), virt_to_phys(dmap->raw_buf),
 			vma_get_end (vma) - vma_get_start (vma),
 			vma_get_page_prot (vma)))
     return -EAGAIN;
@@ -487,6 +487,10 @@ int
 snd_set_irq_handler (int interrupt_level, void (*iproc) (int, void *, struct pt_regs *), char *name, int *osp)
 {
   int             retcode;
+  unsigned long   flags;
+
+  save_flags (flags);
+  cli ();
 
   retcode = request_irq (interrupt_level, iproc, 0 /* SA_INTERRUPT */ , name, NULL);
   if (retcode < 0)
@@ -496,6 +500,7 @@ snd_set_irq_handler (int interrupt_level, void (*iproc) (int, void *, struct pt_
   else
     irqs |= (1ul << interrupt_level);
 
+  restore_flags (flags);
   return retcode;
 }
 

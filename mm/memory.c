@@ -298,10 +298,8 @@ int copy_page_range(struct mm_struct *dst, struct mm_struct *src,
 	return error;
 }
 
-static inline void forget_pte(pte_t page)
+static inline void free_pte(pte_t page)
 {
-	if (pte_none(page))
-		return;
 	if (pte_present(page)) {
 		unsigned long addr = pte_page(page);
 		if (addr >= high_memory || PageReserved(mem_map+MAP_NR(addr)))
@@ -315,10 +313,17 @@ static inline void forget_pte(pte_t page)
 	swap_free(pte_val(page));
 }
 
+static inline void forget_pte(pte_t page)
+{
+	if (!pte_none(page)) {
+		printk("forget_pte: old mapping existed!\n");
+		free_pte(page);
+	}
+}
+
 static inline void zap_pte_range(pmd_t * pmd, unsigned long address, unsigned long size)
 {
 	pte_t * pte;
-	unsigned long end;
 
 	if (pmd_none(*pmd))
 		return;
@@ -329,16 +334,21 @@ static inline void zap_pte_range(pmd_t * pmd, unsigned long address, unsigned lo
 	}
 	pte = pte_offset(pmd, address);
 	address &= ~PMD_MASK;
-	end = address + size;
-	if (end >= PMD_SIZE)
-		end = PMD_SIZE;
-	do {
-		pte_t page = *pte;
-		pte_clear(pte);
-		forget_pte(page);
-		address += PAGE_SIZE;
+	if (address + size > PMD_SIZE)
+		size = PMD_SIZE - address;
+	size >>= PAGE_SHIFT;
+	for (;;) {
+		pte_t page;
+		if (!size)
+			break;
+		page = *pte;
 		pte++;
-	} while (address < end);
+		size--;
+		if (pte_none(page))
+			continue;
+		pte_clear(pte-1);
+		free_pte(page);
+	}
 }
 
 static inline void zap_pmd_range(pgd_t * dir, unsigned long address, unsigned long size)
@@ -934,7 +944,7 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		force_sig(SIGBUS, current);
 		flush_cache_page(vma, address);
 		put_page(page_table, BAD_PAGE);
-		flush_tlb_page(vma, address);
+		/* no need to invalidate, wasn't present */
 		return;
 	}
 	/*
@@ -955,7 +965,7 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		entry = pte_wrprotect(entry);
 	flush_cache_page(vma, address);
 	put_page(page_table, entry);
-	flush_tlb_page(vma, address);
+	/* no need to invalidate: a not-present page shouldn't be cached */
 }
 
 /*

@@ -43,10 +43,10 @@ The original driver has been written for 386bsd and FreeBSD by
           Wolfgang Stanglmeier        <wolf@cologne.de>
           Stefan Esser                <se@mi.Uni-Koeln.de>
 
-You can find technical informations about the NCR 8xx family in the PCI-HOWTO 
+You can find technical information about the NCR 8xx family in the PCI-HOWTO 
 written by Michael Will and in the SCSI-HOWTO written by Drew Eckhardt.
 
-Informations about new chips is available at SYMBIOS web server:
+Information about new chips is available at SYMBIOS web server:
           http://www.symbios.com
 
 This short documentation only describes the features of the NCR53C8XX driver, 
@@ -153,16 +153,16 @@ Generally, only 1 board is used on hardware configuration, and the device is:
 However, if the driver has been made as module, the number of the host is 
 incremented each time the driver is loaded.
 
-In order to display profiling informations, just enter:
+In order to display profiling information, just enter:
          cat /proc/scsi/ncr53c8xx/0
 and you will get something like the following text:
 
 -------------------------------------------------------
-General informations:
+General information:
   Chip NCR53C810, device id 0x1, revision id 0x2
   IO port address 0x6000, IRQ number 10
   Using memory mapped IO at virtual address 0x282c000
-Profiling informations:
+Profiling information:
   num_trans    = 18014
   num_kbytes   = 671314
   num_disc     = 25763
@@ -175,8 +175,8 @@ Profiling informations:
   ms_post      = 1320
 -------------------------------------------------------
 
-General informations are easy to understand. The device id and the 
-revision id identify the scsi chip as follow:
+General information is easy to understand. The device id and the 
+revision id identify the scsi chip as follows:
 
 Chip    Device id     Revision Id
 ----    ---------     -----------
@@ -188,7 +188,7 @@ Chip    Device id     Revision Id
 825A      0x3            >= 0x10
 875       0xf
 
-The profiling informations are updated upon completion of scsi commands.
+The profiling information is updated upon completion of scsi commands.
 The data structure is allocated and zeroed when the host adapter is 
 attached. So, if the driver is a module, the profile counters are cleared each 
 time the driver is loaded.
@@ -316,10 +316,10 @@ Available commands:
         result:  print sense data on CHECK CONDITION status
         scatter: print infos about the scatter process
         scripts: print infos about the script binding process
-	tiny:    print minimal debugging informations
-	timing:  print timing informations of the ncr chip.
-	nego:    print informations about scsi negotiations
-	phase:   print informations on script interruptions
+	tiny:    print minimal debugging information
+	timing:  print timing information of the ncr chip.
+	nego:    print information about scsi negotiations
+	phase:   print information on script interruptions
 
 
 8.6 Clear profile counters
@@ -399,7 +399,7 @@ SCSI_NCR_DISABLE_PARITY_CHECK	(default: not defined)
 	If defined, scsi parity checking is disabled.
 
 SCSI_NCR_PROFILE		(default: defined)
-	If defined, profile informations are gathered
+	If defined, profile information are gathered
 
 SCSI_NCR_MAX_SCATTER		(default: 128)
 	Scatter list size of the driver ccb.
