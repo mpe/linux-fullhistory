@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl.c,v 1.29 1997/09/18 10:37:31 rth Exp $
+/* $Id: sunos_ioctl.c,v 1.30 1998/01/21 06:17:32 ecd Exp $
  * sunos_ioctl.c: The Linux Operating system: SunOS ioctl compatibility.
  * 
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -114,7 +114,7 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 		ret = sys_ioctl(fd, SIOCGIFBRDADDR, arg);
 		goto out;
 	case _IOW('i', 24, struct ifreq):
-		ret = sys_ioctl(fd, SIOCGIFBRDADDR, arg);
+		ret = sys_ioctl(fd, SIOCSIFBRDADDR, arg);
 		goto out;
 	case _IOWR('i', 25, struct ifreq):
 		ret = sys_ioctl(fd, SIOCGIFNETMASK, arg);

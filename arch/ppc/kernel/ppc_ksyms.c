@@ -4,9 +4,7 @@
 #include <linux/elfcore.h>
 #include <linux/sched.h>
 #include <linux/string.h>
-#include <linux/bios32.h>
 #include <linux/interrupt.h>
-#include <linux/pci.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -18,9 +16,11 @@
 #include <asm/pgtable.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
+#include <asm/pmu.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pci-bridge.h>
+#include <asm/irq.h>
 
 extern void transfer_to_handler(void);
 extern void int_return(void);
@@ -49,9 +49,13 @@ EXPORT_SYMBOL(sys_sigreturn);
 EXPORT_SYMBOL(lost_interrupts);
 EXPORT_SYMBOL(do_lost_interrupts);
 EXPORT_SYMBOL(__ppc_bh_counter);
+EXPORT_SYMBOL(enable_irq);
+EXPORT_SYMBOL(disable_irq);
 
-#if !defined(CONFIG_MACH_SPECIFIC)
+#if !defined(CONFIG_MACH_SPECIFIC) || defined(CONFIG_PMAC)
 EXPORT_SYMBOL(isa_io_base);
+#endif
+#if !defined(CONFIG_MACH_SPECIFIC)
 EXPORT_SYMBOL(pci_dram_offset);
 #endif
 
@@ -114,11 +118,15 @@ EXPORT_SYMBOL(outw);
 EXPORT_SYMBOL(outl);
 EXPORT_SYMBOL(outsl);*/
 
+EXPORT_SYMBOL(_insb);
+EXPORT_SYMBOL(_outsb);
 EXPORT_SYMBOL(_insw);
 EXPORT_SYMBOL(_outsw);
 EXPORT_SYMBOL(_insl);
 EXPORT_SYMBOL(_outsl);
 EXPORT_SYMBOL(ioremap);
+EXPORT_SYMBOL(__ioremap);
+EXPORT_SYMBOL(iounmap);
 
 EXPORT_SYMBOL(start_thread);
 
@@ -140,6 +148,10 @@ EXPORT_SYMBOL(adb_autopoll);
 EXPORT_SYMBOL(adb_register);
 EXPORT_SYMBOL(cuda_request);
 EXPORT_SYMBOL(cuda_send_request);
+EXPORT_SYMBOL(cuda_poll);
+EXPORT_SYMBOL(pmu_request);
+EXPORT_SYMBOL(pmu_send_request);
+EXPORT_SYMBOL(pmu_poll);
 EXPORT_SYMBOL(abort);
 EXPORT_SYMBOL(find_devices);
 EXPORT_SYMBOL(find_type_devices);
@@ -148,7 +160,3 @@ EXPORT_SYMBOL(get_property);
 EXPORT_SYMBOL(pci_io_base);
 EXPORT_SYMBOL(pci_device_loc);
 EXPORT_SYMBOL(note_scsi_host);
-
-#if CONFIG_PCI
-EXPORT_SYMBOL(pci_devices);
-#endif

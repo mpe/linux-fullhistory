@@ -18,9 +18,10 @@ void gunzip(void *, int, unsigned char *, int *);
 #define get_32be(x)	(*(unsigned *)(x))
 
 #define RAM_START	0xc0000000
-#define RAM_END		0xc0800000	/* only 8M mapped with BATs */
+#define PROG_START	RAM_START
+#define RAM_END		(RAM_START + 0x800000)	/* only 8M mapped with BATs */
 
-#define RAM_FREE	0xc0540000	/* after image of coffboot */
+#define RAM_FREE	(RAM_START + 0x540000)	/* after image of coffboot */
 
 char *avail_ram;
 char *end_avail;
@@ -47,7 +48,7 @@ coffboot(int a1, int a2, void *prom)
 	printf("error getting load-base\n");
 	exit();
     }
-    setup_bats();
+    setup_bats(RAM_START);
 
     eh = (struct external_filehdr *) loadbase;
     ns = get_16be(eh->f_nscns);
@@ -82,7 +83,7 @@ coffboot(int a1, int a2, void *prom)
 	
     im = (unsigned char *)(loadbase + get_32be(isect->s_scnptr));
     len = get_32be(isect->s_size);
-    dst = (void *) RAM_START;
+    dst = (void *) PROG_START;
 
     if (im[0] == 0x1f && im[1] == 0x8b) {
 	void *cp = (void *) RAM_FREE;
@@ -98,7 +99,7 @@ coffboot(int a1, int a2, void *prom)
 
     flush_cache(dst, len);
 
-    sa = *(unsigned *)dst + RAM_START;
+    sa = *(unsigned *)dst + PROG_START;
     printf("start address = 0x%x\n", sa);
 
 #if 0

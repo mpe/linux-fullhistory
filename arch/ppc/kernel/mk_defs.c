@@ -19,6 +19,7 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <asm/io.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/processor.h>
@@ -29,9 +30,11 @@
 void
 main(void)
 {
+	DEFINE(KERNELBASE, KERNELBASE);
 	DEFINE(STATE, offsetof(struct task_struct, state));
 	DEFINE(NEXT_TASK, offsetof(struct task_struct, next_task));
 	DEFINE(COUNTER, offsetof(struct task_struct, counter));
+	DEFINE(PROCESSOR, offsetof(struct task_struct, processor));
 	DEFINE(SIGPENDING, offsetof(struct task_struct, sigpending));
 	DEFINE(TSS, offsetof(struct task_struct, tss));
 	DEFINE(MM, offsetof(struct task_struct, mm));
@@ -45,6 +48,7 @@ main(void)
 	DEFINE(TASK_FLAGS, offsetof(struct task_struct, flags));
 	DEFINE(TSS_FPR0, offsetof(struct thread_struct, fpr[0]));
 	DEFINE(TSS_FPSCR, offsetof(struct thread_struct, fpscr));
+	DEFINE(TSS_SMP_FORK_RET, offsetof(struct thread_struct, smp_fork_ret));
 	/* Interrupt register frame */
 	DEFINE(TASK_UNION_SIZE, sizeof(union task_union));
 	DEFINE(STACK_FRAME_OVERHEAD, STACK_FRAME_OVERHEAD);

@@ -1,4 +1,3 @@
-
 /*
  *  linux/arch/ppc/kernel/process.c
  *
@@ -77,8 +76,13 @@ struct task_struct *current_set[NR_CPUS] = {&init_task, };
 int
 dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs)
 {
+#ifdef __SMP__
+	if ( regs->msr & MSR_FP )
+		smp_giveup_fpu(current);
+#else
 	if (last_task_used_math == current)
 		giveup_fpu();
+#endif	
 	memcpy(fpregs, &current->tss.fpr[0], sizeof(*fpregs));
 	return 1;
 }
@@ -98,7 +102,7 @@ int check_stack(struct task_struct *tsk)
 		printk("tss.magic bad: %08x\n", tsk->tss.magic);
 	}
 #endif
-	
+
 	if ( !tsk )
 		printk("check_stack(): tsk bad tsk %p\n",tsk);
 	
@@ -157,17 +161,21 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 #endif
 
 #ifdef SHOW_TASK_SWITCHES
-	printk("%s/%d -> %s/%d cpu %d\n",
+	printk("%s/%d -> %s/%d NIP %08lx cpu %d sfr %d lock %x\n",
 	       prev->comm,prev->pid,
-	       new->comm,new->pid,new->processor);
+	       new->comm,new->pid,new->tss.regs->nip,new->processor,
+	       new->tss.smp_fork_ret,scheduler_lock.lock);
 #endif
 #ifdef __SMP__
-	/* bad news if last_task_used_math changes processors right now -- Cort */
-	if ( (last_task_used_math == new) &&
-	     (new->processor != new->last_processor) )
-		panic("last_task_used_math switched processors");
+	/* avoid complexity of lazy save/restore of fpu
+	 * by just saving it every time we switch out -- Cort
+	 */
+	if ( prev->tss.regs->msr & MSR_FP )
+		smp_giveup_fpu(prev);
+
 	/* be noisy about processor changes for debugging -- Cort */
-	if ( new->last_processor != new->processor )
+	if ( (new->last_processor != NO_PROC_ID) &&
+	     (new->last_processor != new->processor) )
 		printk("switch_to(): changing cpu's %d -> %d %s/%d\n",
 		       new->last_processor,new->processor,
 		       new->comm,new->pid);
@@ -179,11 +187,6 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 	old_tss = &current->tss;
 	_switch(old_tss, new_tss, new->mm->context);
 	_enable_interrupts(s);
-}
-
-asmlinkage int sys_debug(long a, long b, long c, long d, long e, long f,struct pt_regs *regs)
-{
-	return 0;
 }
 
 void show_regs(struct pt_regs * regs)
@@ -257,12 +260,11 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 		     ((unsigned long)p + sizeof(union task_union)
 		      - STACK_FRAME_OVERHEAD)) - 2;
 	*childregs = *regs;
-
 	if ((childregs->msr & MSR_PR) == 0)
 		childregs->gpr[2] = (unsigned long) p;	/* `current' in new task */
 	childregs->gpr[3] = 0;  /* Result from fork() */
 	p->tss.ksp = (unsigned long) childregs - STACK_FRAME_OVERHEAD;
-	p->tss.regs = childregs;
+	p->tss.regs = childregs;	
 	if (usp >= (unsigned long) regs) {
 		/* Stack is in kernel space - must adjust */
 		childregs->gpr[1] = (unsigned long)(childregs + 1);
@@ -271,18 +273,28 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 		childregs->gpr[1] = usp;
 	}
 	p->tss.last_syscall = -1;
-
+	  
 	/*
 	 * copy fpu info - assume lazy fpu switch now always
 	 *  -- Cort
 	 */
+#ifdef __SMP__
+	if ( regs->msr & MSR_FP )
+		smp_giveup_fpu(current);
+#else	
 	if ( last_task_used_math == current )
 		giveup_fpu();
+#endif	  
 
 	memcpy(&p->tss.fpr, &current->tss.fpr, sizeof(p->tss.fpr));
 	p->tss.fpscr = current->tss.fpscr;
 	childregs->msr &= ~MSR_FP;
 
+#ifdef __SMP__
+	if ( (p->pid != 0) || !(clone_flags & CLONE_PID) )
+		p->tss.smp_fork_ret = 1;
+	p->last_processor = NO_PROC_ID;
+#endif /* __SMP__ */
 	return 0;
 }
 
@@ -337,20 +349,48 @@ void start_thread(struct pt_regs *regs, unsigned long nip, unsigned long sp)
 	shove_aux_table(sp);
 }
 
+asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6,
+			 struct pt_regs *regs)
+{
+	unsigned long clone_flags = p1;
+	int res;
+	lock_kernel();
+	res = do_fork(clone_flags, regs->gpr[1], regs);
+	/*
+	 * only parent returns here, child returns to either
+	 * syscall_ret_1() or kernel_thread()
+	 * -- Cort
+	 */
+#ifdef __SMP__
+	/* When we clone the idle task we keep the same pid but
+	 * the return value of 0 for both causes problems.
+	 * -- Cort
+	 */
+	if ((current->pid == 0) && (current == &init_task))
+		res = 1;
+#endif /* __SMP__ */
+	unlock_kernel();
+	return res;
+}
 
 asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
 			struct pt_regs *regs)
 {
-	int ret;
 
+	int res;
 	lock_kernel();
-	ret = do_fork(SIGCHLD, regs->gpr[1], regs);
-#if 0/*def __SMP__*/
-	if ( ret ) /* drop scheduler lock in child */
-		scheduler_lock.lock = 0L;
-#endif /* __SMP__ */	
+	res = do_fork(SIGCHLD, regs->gpr[1], regs);
+	/* only parent returns here */
+#ifdef __SMP__
+	/* When we clone the idle task we keep the same pid but
+	 * the return value of 0 for both causes problems.
+	 * -- Cort
+	 */
+	if ((current->pid == 0) && (current == &init_task))
+		res = 1;
+#endif /* __SMP__ */
 	unlock_kernel();
-	return ret;
+	return res;
 }
 
 asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
@@ -372,28 +412,6 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 out:
 	unlock_kernel();
 	return error;
-}
-
-asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6,
-			 struct pt_regs *regs)
-{
-	unsigned long clone_flags = p1;
-	int res;
-
-	lock_kernel();
-	res = do_fork(clone_flags, regs->gpr[1], regs);
-#ifdef __SMP__
-	/* When we clone the idle task we keep the same pid but
-	 * the return value of 0 for both causes problems.
-	 * -- Cort
-	 */
-	if ((current->pid == 0) && (current == &init_task))
-		res = 1;
-	if ( 0 /*res*/ ) /* drop scheduler lock in child */
-		scheduler_lock.lock = 0L;
-#endif /* __SMP__ */	
-	unlock_kernel();
-	return res;
 }
 
 void

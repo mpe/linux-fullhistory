@@ -85,8 +85,10 @@ struct serial_uart_config {
 #define ASYNC_SPD_SHI	0x1000	/* Use 230400 instead of 38400 bps */
 #define ASYNC_SPD_WARP	0x1010	/* Use 460800 instead of 38400 bps */
 
-#define ASYNC_FLAGS	0x1FFF	/* Possible legal async flags */
-#define ASYNC_USR_MASK 0x1430	/* Legal flags that non-privileged
+#define ASYNC_LOW_LATENCY 0x2000 /* Request low latency behaviour */
+
+#define ASYNC_FLAGS	0x2FFF	/* Possible legal async flags */
+#define ASYNC_USR_MASK	0x3430	/* Legal flags that non-privileged
 				 * users can set or reset */
 
 /* Internal flags used only by kernel/chr_drv/serial.c */

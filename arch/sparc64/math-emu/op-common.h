@@ -1,3 +1,4 @@
+
 #define _FP_DECL(wc, X)			\
   _FP_I_TYPE X##_c, X##_s, X##_e;	\
   _FP_FRAC_DECL_##wc(X)
@@ -507,6 +508,29 @@ do {									\
  * Convert from FP to integer
  */
 
+/* "When a NaN, infinity, large positive argument >= 2147483648.0, or 
+ * large negative argument <= -2147483649.0 is converted to an integer,
+ * the invalid_current bit...should be set and fp_exception_IEEE_754 should
+ * be raised. If the floating point invalid trap is disabled, no trap occurs
+ * and a numerical result is generated: if the sign bit of the operand
+ * is 0, the result is 2147483647; if the sign bit of the operand is 1,
+ * the result is -2147483648."
+ * Similarly for conversion to extended ints, except that the boundaries
+ * are >= 2^63, <= -(2^63 + 1), and the results are 2^63 + 1 for s=0 and
+ * -2^63 for s=1.
+ * -- SPARC Architecture Manual V9, Appendix B, which specifies how
+ * SPARCs resolve implementation dependencies in the IEEE-754 spec.
+ * I don't believe that the code below follows this. I'm not even sure
+ * it's right! 
+ * It doesn't cope with needing to convert to an n bit integer when there
+ * is no n bit integer type. Fortunately gcc provides long long so this
+ * isn't a problem for sparc32.
+ * I have, however, fixed its NaN handling to conform as above.
+ *         -- PMM 02/1998
+ * NB: rsigned is not 'is r declared signed?' but 'should the value stored
+ * in r be signed or unsigned?'. r is always(?) declared unsigned.
+ * Comments below are mine, BTW -- PMM 
+ */
 #define _FP_TO_INT(fs, wc, r, X, rsize, rsigned)				\
   do {										\
     switch (X##_c)								\
@@ -514,13 +538,14 @@ do {									\
       case FP_CLS_NORMAL:							\
 	if (X##_e < 0)								\
 	  {									\
-	  case FP_CLS_NAN:							\
+	  /* case FP_CLS_NAN: see above! */					\
 	  case FP_CLS_ZERO:							\
 	    r = 0;								\
 	  }									\
 	else if (X##_e >= rsize - (rsigned != 0))				\
-	  {									\
-	  case FP_CLS_INF:							\
+	  {	/* overflow */							\
+	  case FP_CLS_NAN:                                                      \
+          case FP_CLS_INF:							\
 	    if (rsigned)							\
 	      {									\
 		r = 1;								\
@@ -604,6 +629,23 @@ do {									\
 /* Count leading zeros in a word.  */
 
 #ifndef __FP_CLZ
+#if _FP_W_TYPE_SIZE < 64
+/* this is just to shut the compiler up about shifts > word length -- PMM 02/1998 */
+#define __FP_CLZ(r, x)				\
+  do {						\
+    _FP_W_TYPE _t = (x);			\
+    r = _FP_W_TYPE_SIZE - 1;			\
+    if (_t > 0xffff) r -= 16;			\
+    if (_t > 0xffff) _t >>= 16;			\
+    if (_t > 0xff) r -= 8;			\
+    if (_t > 0xff) _t >>= 8;			\
+    if (_t & 0xf0) r -= 4;			\
+    if (_t & 0xf0) _t >>= 4;			\
+    if (_t & 0xc) r -= 2;			\
+    if (_t & 0xc) _t >>= 2;			\
+    if (_t & 0x2) r -= 1;			\
+  } while (0)
+#else /* not _FP_W_TYPE_SIZE < 64 */
 #define __FP_CLZ(r, x)				\
   do {						\
     _FP_W_TYPE _t = (x);			\
@@ -620,9 +662,11 @@ do {									\
     if (_t & 0xc) _t >>= 2;			\
     if (_t & 0x2) r -= 1;			\
   } while (0)
-#endif
+#endif /* not _FP_W_TYPE_SIZE < 64 */
+#endif /* ndef __FP_CLZ */
 
 #define _FP_DIV_HELP_imm(q, r, n, d)		\
   do {						\
     q = n / d, r = n % d;			\
   } while (0)
+

@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.10 1997/09/24 16:20:36 jj Exp $
+/* $Id: namei.h,v 1.11 1998/01/15 12:58:24 jj Exp $
  * linux/include/asm-sparc/namei.h
  *
  * Routines to handle famous /usr/gnemul/s*.
@@ -18,8 +18,11 @@ __sparc_lookup_dentry(const char *name, int follow_link)
 	char *emul;
 
 	switch (current->personality) {
+#if 0
+/* Until we solve, why SunOS apps sometime crash, disable gnemul support for SunOS */
 	case PER_BSD:
 		emul = SPARC_BSD_EMUL; break;
+#endif
 	case PER_SVR4:
 		emul = SPARC_SOL_EMUL; break;
 	default:

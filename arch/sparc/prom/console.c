@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.14 1997/05/14 20:44:58 davem Exp $
+/* $Id: console.c,v 1.17 1998/03/09 14:04:21 jj Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
@@ -10,12 +10,12 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <asm/openprom.h>
+#include <asm/sun4prom.h>
 #include <asm/oplib.h>
 #include <asm/system.h>
 #include <linux/string.h>
 
-/* XXX Let's get rid of this thing if we can... */
-extern struct task_struct *current_set[NR_CPUS];
+extern void restore_current(void);
 
 /* Non blocking get character from console input device, returns -1
  * if no input was taken.  This can be used for polling.
@@ -30,6 +30,7 @@ prom_nbgetchar(void)
 	save_flags(flags); cli();
 	switch(prom_vers) {
 	case PROM_V0:
+	case PROM_SUN4:
 		i = (*(romvec->pv_nbgetchar))();
 		break;
 	case PROM_V2:
@@ -45,9 +46,7 @@ prom_nbgetchar(void)
 		i = -1;
 		break;
 	};
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 	return i; /* Ugh, we could spin forever on unsupported proms ;( */
 }
@@ -65,6 +64,7 @@ prom_nbputchar(char c)
 	save_flags(flags); cli();
 	switch(prom_vers) {
 	case PROM_V0:
+	case PROM_SUN4:
 		i = (*(romvec->pv_nbputchar))(c);
 		break;
 	case PROM_V2:
@@ -89,9 +89,7 @@ prom_nbputchar(char c)
 		i = -1;
 		break;
 	};
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 	return i; /* Ugh, we could spin forever on unsupported proms ;( */
 }
@@ -125,6 +123,7 @@ prom_query_input_device()
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_V2:
+	case PROM_SUN4:
 	default:
 		switch(*romvec->pv_stdin) {
 		case PROMDEV_KBD:	return PROMDEV_IKBD;
@@ -136,9 +135,7 @@ prom_query_input_device()
 	case PROM_V3:
 		save_flags(flags); cli();
 		st_p = (*romvec->pv_v2devops.v2_inst2pkg)(*romvec->pv_v2bootargs.fd_stdin);
-		__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-				     "r" (&current_set[hard_smp_processor_id()]) :
-				     "memory");
+		restore_current();
 		restore_flags(flags);
 		if(prom_node_has_property(st_p, "keyboard"))
 			return PROMDEV_IKBD;
@@ -173,6 +170,7 @@ prom_query_output_device()
 
 	switch(prom_vers) {
 	case PROM_V0:
+	case PROM_SUN4:
 		switch(*romvec->pv_stdin) {
 		case PROMDEV_SCREEN:	return PROMDEV_OSCREEN;
 		case PROMDEV_TTYA:	return PROMDEV_OTTYA;
@@ -183,9 +181,7 @@ prom_query_output_device()
 	case PROM_V3:
 		save_flags(flags); cli();
 		st_p = (*romvec->pv_v2devops.v2_inst2pkg)(*romvec->pv_v2bootargs.fd_stdout);
-		__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-				     "r" (&current_set[hard_smp_processor_id()]) :
-				     "memory");
+		restore_current();
 		restore_flags(flags);
 		propl = prom_getproperty(st_p, "device_type", propb, sizeof(propb));
 		if (propl >= 0 && propl == sizeof("display") &&

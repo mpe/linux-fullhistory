@@ -14,6 +14,14 @@
  * instead of just grabbing them. Thus setups with different IRQ numbers
  * shouldn't result in any weird surprises, and installing new handlers
  * should be easier.
+ *
+ * The MPC8xx has an interrupt mask in the SIU.  If a bit is set, the
+ * interrupt is _enabled_.  As expected, IRQ0 is bit 0 in the 32-bit
+ * mask register (of which only 16 are defined), hence the weird shifting
+ * and compliment of the cached_irq_mask.  I want to be able to stuff
+ * this right into the SIU SMASK register.
+ * Many of the prep/chrp functions are conditional compiled on CONFIG_8xx
+ * to reduce code space and undefined function references.
  */
 
 
@@ -30,30 +38,41 @@
 #include <linux/malloc.h>
 #include <linux/openpic.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/openpic.h>
 
 #include <asm/hydra.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/irq.h>
 #include <asm/bitops.h>
 #include <asm/gg2.h>
+#include <asm/cache.h>
+#ifdef CONFIG_8xx
+#include <asm/8xx_immap.h>
+#include <asm/mbx.h>
+#endif
 
 #undef SHOW_IRQ
 
 unsigned lost_interrupts = 0;
 unsigned int local_irq_count[NR_CPUS];
-static struct irqaction irq_action[NR_IRQS];
+static struct irqaction *irq_action[NR_IRQS];
 static int spurious_interrupts = 0;
+#ifndef CONFIG_8xx
 static unsigned int cached_irq_mask = 0xffffffff;
+#else
+static unsigned int cached_irq_mask = 0xffffffff;
+#endif
 static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
-spinlock_t irq_controller_lock;
+/*spinlock_t irq_controller_lock = SPIN_LOCK_UNLOCKED;*/
 #ifdef __SMP__
 atomic_t __ppc_bh_counter = ATOMIC_INIT(0);
 #else
 int __ppc_bh_counter = 0;
 #endif
+static volatile unsigned char *gg2_int_ack_special;
+extern volatile unsigned long ipi_count;
 
 #define cached_21	(((char *)(&cached_irq_mask))[3])
 #define cached_A1	(((char *)(&cached_irq_mask))[2])
@@ -61,9 +80,19 @@ int __ppc_bh_counter = 0;
 /*
  * These are set to the appropriate functions by init_IRQ()
  */
+#ifndef CONFIG_8xx
 void (*mask_and_ack_irq)(int irq_nr);
 void (*mask_irq)(unsigned int irq_nr);
 void (*unmask_irq)(unsigned int irq_nr);
+#else /* CONFIG_8xx */
+/* init_IRQ() happens too late for the MBX because we initialize the
+ * CPM early and it calls request_irq() before we have these function
+ * pointers initialized.
+ */
+#define mask_and_ack_irq(irq)	mbx_mask_irq(irq)
+#define mask_irq(irq) mbx_mask_irq(irq)
+#define unmask_irq(irq) mbx_unmask_irq(irq)
+#endif /* CONFIG_8xx */
 
 
 /* prep */
@@ -79,9 +108,46 @@ extern unsigned long route_pci_interrupts(void);
 #define PMAC_IRQ_MASK	(~ld_le32(IRQ_ENABLE))
 
 
+
+/* nasty hack for shared irq's since we need to do kmalloc calls but
+ * can't very very early in the boot when we need to do a request irq.
+ * this needs to be removed.
+ * -- Cort
+ */
+static char cache_bitmask = 0;
+static struct irqaction malloc_cache[4];
+extern int mem_init_done;
+
+void *irq_kmalloc(size_t size, int pri)
+{
+	unsigned int i;
+	if ( mem_init_done )
+		return kmalloc(size,pri);
+	for ( i = 0; i <= 3 ; i++ )
+		if ( ! ( cache_bitmask & (1<<i) ) )
+		{
+			cache_bitmask |= (1<<i);
+			return (void *)(&malloc_cache[i]);
+		}
+	return 0;
+}
+
+void irq_kfree(void *ptr)
+{
+	unsigned int i;
+	for ( i = 0 ; i <= 3 ; i++ )
+		if ( ptr == &malloc_cache[i] )
+		{
+			cache_bitmask &= ~(1<<i);
+			return;
+		}
+	kfree(ptr);
+}
+
+#ifndef CONFIG_8xx	
 void i8259_mask_and_ack_irq(int irq_nr)
 {
-	spin_lock(&irq_controller_lock);
+  /*	spin_lock(&irq_controller_lock);*/
 	cached_irq_mask |= 1 << irq_nr;
 	if (irq_nr > 7) {
 		inb(0xA1);	/* DUMMY */
@@ -96,20 +162,22 @@ void i8259_mask_and_ack_irq(int irq_nr)
 		outb(0x60|irq_nr,0x20); /* specific eoi */
 		  
 	}
-	spin_unlock(&irq_controller_lock);
+	/*	spin_unlock(&irq_controller_lock);*/
 }
 
 void pmac_mask_and_ack_irq(int irq_nr)
 {
 	unsigned long bit = 1UL << irq_nr;
 
-	spin_lock(&irq_controller_lock);
+	/*	spin_lock(&irq_controller_lock);*/
 	cached_irq_mask |= bit;
 	lost_interrupts &= ~bit;
 	out_le32(IRQ_ACK, bit);
 	out_le32(IRQ_ENABLE, ~cached_irq_mask);
 	out_le32(IRQ_ACK, bit);
-	spin_unlock(&irq_controller_lock);
+	/*	spin_unlock(&irq_controller_lock);*/
+	/*if ( irq_controller_lock.lock )
+  panic("irq controller lock still held in mask and ack\n");*/
 }
 
 void chrp_mask_and_ack_irq(int irq_nr)
@@ -188,44 +256,96 @@ static void chrp_unmask_irq(unsigned int irq_nr)
 	else
 		openpic_enable_irq(irq_to_openpic(irq_nr));
 }
+#else /* CONFIG_8xx */
+static void mbx_mask_irq(unsigned int irq_nr)
+{
+	cached_irq_mask &= ~(1 << (31-irq_nr));
+	((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_simask =
+							cached_irq_mask;
+}
+
+static void mbx_unmask_irq(unsigned int irq_nr)
+{
+	cached_irq_mask |= (1 << (31-irq_nr));
+	((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_simask =
+							cached_irq_mask;
+}
+#endif /* CONFIG_8xx */
 
 void disable_irq(unsigned int irq_nr)
 {
-	unsigned long flags;
+	/*unsigned long flags;*/
 
-	spin_lock_irqsave(&irq_controller_lock, flags);
+	/*	spin_lock_irqsave(&irq_controller_lock, flags);*/
 	mask_irq(irq_nr);
-	spin_unlock_irqrestore(&irq_controller_lock, flags);
+	/*	spin_unlock_irqrestore(&irq_controller_lock, flags);*/
 	synchronize_irq();
 }
 
 void enable_irq(unsigned int irq_nr)
 {
-	unsigned long flags;
+	/*unsigned long flags;*/
 
-	spin_lock_irqsave(&irq_controller_lock, flags);
+	/*	spin_lock_irqsave(&irq_controller_lock, flags);*/
 	unmask_irq(irq_nr);
-	spin_unlock_irqrestore(&irq_controller_lock, flags);
+	/*	spin_unlock_irqrestore(&irq_controller_lock, flags);*/
 }
 
 int get_irq_list(char *buf)
 {
-	int i, len = 0;
+	int i, len = 0, j;
 	struct irqaction * action;
 
+	len += sprintf(buf+len, "           ");
+	for (j=0; j<smp_num_cpus; j++)
+		len += sprintf(buf+len, "CPU%d       ",j);
+	*(char *)(buf+len++) = '\n';
+
 	for (i = 0 ; i < NR_IRQS ; i++) {
-		action = irq_action + i;
+		action = irq_action[i];
 		if (!action || !action->handler)
 			continue;
-		len += sprintf(buf+len, "%2d: %10u   %s",
-			i, kstat.interrupts[i], action->name);
+		len += sprintf(buf+len, "%3d: ", i);		
+#ifdef __SMP__
+		for (j = 0; j < smp_num_cpus; j++)
+			len += sprintf(buf+len, "%10u ",
+				kstat.irqs[cpu_logical_map(j)][i]);
+#else		
+		len += sprintf(buf+len, "%10u ", kstat_irqs(i));
+#endif /* __SMP__ */
+		switch( _machine )
+		{
+		case _MACH_prep:
+			len += sprintf(buf+len, "    82c59 ");
+			break;
+		case _MACH_Pmac:
+			len += sprintf(buf+len, " PMAC-PIC ");
+			break;
+		case _MACH_chrp:
+			if ( is_8259_irq(i) )
+				len += sprintf(buf+len, "    82c59 ");
+			else
+				len += sprintf(buf+len, "  OpenPIC ");
+			break;
+		}
+
+		len += sprintf(buf+len, "   %s",action->name);
 		for (action=action->next; action; action = action->next) {
 			len += sprintf(buf+len, ", %s", action->name);
 		}
 		len += sprintf(buf+len, "\n");
 	}
-	len += sprintf(buf+len, "99: %10u   spurious or short\n",
-		       spurious_interrupts);
+#ifdef __SMP__
+	/* should this be per processor send/receive? */
+	len += sprintf(buf+len, "IPI: %10lu\n", ipi_count);
+	for ( i = 0 ; i <= smp_num_cpus-1; i++ )
+		len += sprintf(buf+len,"          ");
+	len += sprintf(buf+len, "    interprocessor messages received\n");
+#endif		
+	len += sprintf(buf+len, "BAD: %10u",spurious_interrupts);
+	for ( i = 0 ; i <= smp_num_cpus-1; i++ )
+		len += sprintf(buf+len,"          ");
+	len += sprintf(buf+len, "    spurious or short\n");
 	return len;
 }
 
@@ -394,20 +514,31 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 	int status;
 	int openpic_eoi_done = 0;
 
+	/* save the HID0 in case dcache was off - see idle.c
+	 * this hack should leave for a better solution -- Cort */
+	unsigned dcache_locked;
+	
+	dcache_locked = unlock_dcache();	
+	hardirq_enter(cpu);
+#ifndef CONFIG_8xx		  
 #ifdef __SMP__
 	if ( cpu != 0 )
-		panic("cpu %d received interrupt", cpu);
-#endif /* __SMP__ */		
+	{
+		if ( !lost_interrupts )
+		{
+			extern smp_message_recv(void);
+			goto out;
+			
+			ipi_count++;
+			smp_message_recv();
+			goto out;
+		}
+		/* could be here due to a do_fake_interrupt call but we don't
+		   mess with the controller from the second cpu -- Cort */
+		goto out;
+	}
+#endif /* __SMP__ */			
 
-	hardirq_enter(cpu);
-
-	/*
-	 * I'll put this ugly mess of code into a function
-	 * such as get_pending_irq() or some such clear thing
-	 * so we don't have a switch in the irq code and
-	 * the chrp code is merged a bit with the prep.
-	 * -- Cort
-	 */
 	switch ( _machine )
 	{
 	case _MACH_Pmac:
@@ -425,7 +556,7 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 			 * 
 			 * This should go in the above mask/ack code soon. -- Cort
 			 */
-			irq = *(volatile unsigned char *)GG2_INT_ACK_SPECIAL;
+			irq = *gg2_int_ack_special;
 			/*
 			 * Acknowledge as soon as possible to allow i8259
 			 * interrupt nesting
@@ -456,7 +587,6 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 		}
 		break;
 	case _MACH_prep:
-#if 1
 		outb(0x0C, 0x20);
 		irq = inb(0x20) & 7;
 		if (irq == 2)
@@ -470,23 +600,6 @@ retry_cascade:
 			irq = (irq&7) + 8;
 		}
 		bits = 1UL << irq;
-#else
-		/*
-		 * get the isr from the intr controller since
-		 * the bit in the irr has been cleared
-		 */
-		outb(0x0a, 0x20);
-		bits = inb(0x20)&0xff;
-		/* handle cascade */
-		if ( bits & 4 )
-		{
-			bits &= ~4UL;
-			outb(0x0a, 0xA0);
-			bits |= inb(0xA0)<<8;
-		}
-		/* ignore masked irqs */
-		bits &= ~cached_irq_mask;
-#endif		
 		break;
 	}
 	
@@ -494,43 +607,62 @@ retry_cascade:
 		printk("Bogus interrupt from PC = %lx\n", regs->nip);
 		goto out;
 	}
+	
+#else /* CONFIG_8xx */
+	/* For MPC8xx, read the SIVEC register and shift the bits down
+	 * to get the irq number.
+	 */
+	bits = ((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_sivec;
+	irq = bits >> 26;
+#endif /* CONFIG_8xx */
 
 	mask_and_ack_irq(irq);
 
 	status = 0;
-	action = irq_action + irq;
-	kstat.interrupts[irq]++;
-	if (action->handler) {
+	action = irq_action[irq];
+	kstat.irqs[cpu][irq]++;
+	if ( action && action->handler) {
 		if (!(action->flags & SA_INTERRUPT))
 			__sti();
-		status |= action->flags;
-		action->handler(irq, action->dev_id, regs);
-		/*if (status & SA_SAMPLE_RANDOM)
-			add_interrupt_randomness(irq);*/
-		__cli(); /* in case the handler turned them on */
-		spin_lock(&irq_controller_lock);
+		do { 
+			status |= action->flags;
+			action->handler(irq, action->dev_id, regs);
+			/*if (status & SA_SAMPLE_RANDOM)
+				  add_interrupt_randomness(irq);*/
+			action = action->next;
+		} while ( action );
+		__cli();
+		/*		spin_lock(&irq_controller_lock);*/
 		unmask_irq(irq);
-		spin_unlock(&irq_controller_lock);
+		/*		spin_unlock(&irq_controller_lock);*/
 	} else {
+#ifndef CONFIG_8xx	  
 		if ( irq == 7 ) /* i8259 gives us irq 7 on 'short' intrs */
+#endif		  
 			spurious_interrupts++;
 		disable_irq( irq );
 	}
 	
 	/* make sure we don't miss any cascade intrs due to eoi-ing irq 2 */
+#ifndef CONFIG_8xx	
 	if ( is_prep && (irq > 7) )
 		goto retry_cascade;
 	/* do_bottom_half is called if necessary from int_return in head.S */
 out:
 	if (_machine == _MACH_chrp && !openpic_eoi_done)
 		openpic_eoi(0);
+#endif /* CONFIG_8xx */
 	hardirq_exit(cpu);
+	
+	/* restore the HID0 in case dcache was off - see idle.c
+	 * this hack should leave for a better solution -- Cort */
+	lock_dcache(dcache_locked);
 }
 
 int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 	unsigned long irqflags, const char * devname, void *dev_id)
 {
-	struct irqaction * action;
+	struct irqaction *old, **p, *action;
 	unsigned long flags;
 
 #ifdef SHOW_IRQ
@@ -540,49 +672,58 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 
 	if (irq >= NR_IRQS)
 		return -EINVAL;
-	action = irq + irq_action;
-	if (action->handler)
-		return -EBUSY;
+
 	if (!handler)
-		return -EINVAL;
+	{
+		/* Free */
+		for (p = irq + irq_action; (action = *p) != NULL; p = &action->next)
+		{
+			/* Found it - now free it */
+			save_flags(flags);
+			cli();
+			*p = action->next;
+			restore_flags(flags);
+			irq_kfree(action);
+			return 0;
+		}
+		return -ENOENT;
+	}
+	
+	action = (struct irqaction *)
+		irq_kmalloc(sizeof(struct irqaction), GFP_KERNEL);
+	if (!action)
+		return -ENOMEM;
 	save_flags(flags);
 	cli();
+	
 	action->handler = handler;
 	action->flags = irqflags;
 	action->mask = 0;
 	action->name = devname;
 	action->dev_id = dev_id;
+	action->next = NULL;
 	enable_irq(irq);
-	restore_flags(flags);
+	p = irq_action + irq;
+	
+	if ((old = *p) != NULL) {
+		/* Can't share interrupts unless both agree to */
+		if (!(old->flags & action->flags & SA_SHIRQ))
+			return -EBUSY;
+		/* add new interrupt at end of irq queue */
+		do {
+			p = &old->next;
+			old = *p;
+		} while (old);
+	}
+	*p = action;
+	
+	restore_flags(flags);	
 	return 0;
 }
 
 void free_irq(unsigned int irq, void *dev_id)
 {
-	struct irqaction * action = irq + irq_action;
-	unsigned long flags;
-
-#ifdef SHOW_IRQ
-	printk("free_irq(): irq %d dev_id %04x\n", irq, dev_id);
-#endif /* SHOW_IRQ */
-
-	if (irq >= NR_IRQS) {
-		printk("Trying to free IRQ%d\n",irq);
-		return;
-	}
-	if (!action->handler) {
-		printk("Trying to free free IRQ%d\n",irq);
-		return;
-	}
-	disable_irq(irq);
-	save_flags(flags);
-	cli();
-	action->handler = NULL;
-	action->flags = 0;
-	action->mask = 0;
-	action->name = NULL;
-	action->dev_id = NULL;
-	restore_flags(flags);
+	request_irq(irq, NULL, 0, NULL, dev_id);
 }
 
 unsigned long probe_irq_on (void)
@@ -595,6 +736,7 @@ int probe_irq_off (unsigned long irqs)
 	return 0;
 }
 
+#ifndef CONFIG_8xx 
 __initfunc(static void i8259_init(void))
 {
 	/* init master interrupt controller */
@@ -616,11 +758,17 @@ __initfunc(static void i8259_init(void))
 		panic("Could not allocate cascade IRQ!");
 	enable_irq(2);  /* Enable cascade interrupt */
 }
+#endif /* CONFIG_8xx */
 
+/* On MBX8xx, the interrupt control (SIEL) was set by EPPC-bug.  External
+ * interrupts can be either edge or level triggered, but there is no
+ * reason for us to change the EPPC-bug values (it would not work if we did).
+ */
 __initfunc(void init_IRQ(void))
 {
 	extern void xmon_irq(int, void *, struct pt_regs *);
 
+#ifndef CONFIG_8xx
 	switch (_machine)
 	{
 	case _MACH_Pmac:
@@ -637,7 +785,8 @@ __initfunc(void init_IRQ(void))
 		mask_and_ack_irq = chrp_mask_and_ack_irq;
 		mask_irq = chrp_mask_irq;
 		unmask_irq = chrp_unmask_irq;
-		ioremap(GG2_INT_ACK_SPECIAL, 1);
+		gg2_int_ack_special = (volatile unsigned char *)
+			ioremap(GG2_INT_ACK_SPECIAL, 1);
 		openpic_init();
 		i8259_init();
 #ifdef CONFIG_XMON
@@ -653,7 +802,7 @@ __initfunc(void init_IRQ(void))
 		i8259_init();
 		route_pci_interrupts();
 		/*
-		 * According to the Carolina spec from ibm irq's 0,1,2, and 8
+		 * According to the Carolina spec from ibm irqs 0,1,2, and 8
 		 * must be edge triggered.  Also, the pci intrs must be level
 		 * triggered and _only_ isa intrs can be level sensitive
 		 * which are 3-7,9-12,14-15. 13 is special - it can be level.
@@ -686,5 +835,6 @@ __initfunc(void init_IRQ(void))
 
 		}
 		break;
-	}
+	}	
+#endif /* CONFIG_8xx */
 }

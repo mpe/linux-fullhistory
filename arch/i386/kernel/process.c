@@ -488,7 +488,7 @@ void copy_segments(int nr, struct task_struct *p, struct mm_struct *new_mm)
 			memcpy(ldt, old_mm->segments, LDT_ENTRIES*LDT_ENTRY_SIZE);
 		}
 	}
-	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY, ldt, LDT_ENTRIES);
+	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY, ldt, ldt_size);
 }
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,

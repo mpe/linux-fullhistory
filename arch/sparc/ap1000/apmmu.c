@@ -36,16 +36,10 @@
 #include <asm/viking.h>
 
 
-static unsigned long (*mmu_getpage)(void);
-static void (*ctxd_set)(ctxd_t *ctxp, pgd_t *pgdp);
-static void (*pmd_set)(pmd_t *pmdp, pte_t *ptep);
-
-static void (*flush_page_for_dma)(unsigned long page);
-static void (*flush_cache_page_to_uncache)(unsigned long page);
-static void (*flush_tlb_page_for_cbit)(unsigned long page);
-
 extern void mc_tlb_flush_all(void);
 
+static void poke_viking(void);
+static void viking_flush_tlb_page_for_cbit)(unsigned long page);
 
 static struct apmmu_stats {
 	int invall;
@@ -103,11 +97,6 @@ static inline unsigned long apmmu_swap(unsigned long *addr, unsigned long value)
 static unsigned int apmmu_pmd_align(unsigned int addr) { return APMMU_PMD_ALIGN(addr); }
 static unsigned int apmmu_pgdir_align(unsigned int addr) { return APMMU_PGDIR_ALIGN(addr); }
 
-static unsigned long apmmu_vmalloc_start(void)
-{
-	return APMMU_VMALLOC_START;
-}
-
 static inline int apmmu_device_memory(unsigned long x) 
 {
 	return ((x & 0xF0000000) != 0);
@@ -152,13 +141,6 @@ static int apmmu_pgd_present(pgd_t pgd)
 
 static void apmmu_pgd_clear(pgd_t * pgdp)     { set_pte((pte_t *)pgdp, __pte(0)); }
 
-static int apmmu_pte_write(pte_t pte)         { return pte_val(pte) & APMMU_WRITE; }
-static int apmmu_pte_dirty(pte_t pte)         { return pte_val(pte) & APMMU_DIRTY; }
-static int apmmu_pte_young(pte_t pte)         { return pte_val(pte) & APMMU_REF; }
-
-static pte_t apmmu_pte_wrprotect(pte_t pte)   { return __pte(pte_val(pte) & ~APMMU_WRITE);}
-static pte_t apmmu_pte_mkclean(pte_t pte)     { return __pte(pte_val(pte) & ~APMMU_DIRTY);}
-static pte_t apmmu_pte_mkold(pte_t pte)       { return __pte(pte_val(pte) & ~APMMU_REF);}
 static pte_t apmmu_pte_mkwrite(pte_t pte)     { return __pte(pte_val(pte) | APMMU_WRITE);}
 static pte_t apmmu_pte_mkdirty(pte_t pte)     { return __pte(pte_val(pte) | APMMU_DIRTY);}
 static pte_t apmmu_pte_mkyoung(pte_t pte)     { return __pte(pte_val(pte) | APMMU_REF);}
@@ -221,7 +203,7 @@ static void apmmu_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 {
 	if(tsk->mm->context != NO_CONTEXT) {
 		flush_cache_mm(current->mm);
-		ctxd_set(&apmmu_context_table[tsk->mm->context], pgdp);
+		apmmu_ctxd_set(&apmmu_context_table[tsk->mm->context], pgdp);
 		flush_tlb_mm(current->mm);
 	}
 }
@@ -311,8 +293,6 @@ static inline unsigned long apmmu_hwprobe(unsigned long vaddr)
 	return retval;
 }
 
-
-
 static inline void apmmu_uncache_page(unsigned long addr)
 {
 	pgd_t *pgdp = apmmu_pgd_offset(init_task.mm, addr);
@@ -330,9 +310,8 @@ static inline void apmmu_uncache_page(unsigned long addr)
 		}
 	}
 
-	flush_cache_page_to_uncache(addr);
 	set_pte(ptep, __pte((pte_val(*ptep) & ~APMMU_CACHE)));
-	flush_tlb_page_for_cbit(addr);
+	viking_flush_tlb_page_for_cbit(addr);
 }
 
 static inline void apmmu_recache_page(unsigned long addr)
@@ -352,10 +331,10 @@ static inline void apmmu_recache_page(unsigned long addr)
 		}
 	}
 	set_pte(ptep, __pte((pte_val(*ptep) | APMMU_CACHE)));
-	flush_tlb_page_for_cbit(addr);
+	viking_flush_tlb_page_for_cbit(addr);
 }
 
-static unsigned long apmmu_getpage(void)
+static inline unsigned long apmmu_getpage(void)
 {
 	unsigned long page = get_free_page(GFP_KERNEL);
 
@@ -368,12 +347,43 @@ static inline void apmmu_putpage(unsigned long page)
 }
 
 /* The easy versions. */
-#define NEW_PGD() (pgd_t *) mmu_getpage()
-#define NEW_PMD() (pmd_t *) mmu_getpage()
-#define NEW_PTE() (pte_t *) mmu_getpage()
+#define NEW_PGD() (pgd_t *) apmmu_getpage()
+#define NEW_PMD() (pmd_t *) apmmu_getpage()
+#define NEW_PTE() (pte_t *) apmmu_getpage()
 #define FREE_PGD(chunk) apmmu_putpage((unsigned long)(chunk))
 #define FREE_PMD(chunk) apmmu_putpage((unsigned long)(chunk))
 #define FREE_PTE(chunk) apmmu_putpage((unsigned long)(chunk))
+
+static pte_t *apmmu_get_pte_fast(void)
+{
+	return (pte_t *)0;
+}
+
+static pmd_t *apmmu_get_pmd_fast(void)
+{
+	return (pmd_t *)0;
+}
+
+static pgd_t *apmmu_get_pgd_fast(void)
+{
+	return (pgd_t *)0;
+}
+
+static void apmmu_free_pte_slow(pte_t *pte)
+{
+/* TBD */
+}
+
+static void apmmu_free_pmd_slow(pmd_t *pmd)
+{
+/* TBD */
+}
+
+static void apmmu_free_pgd_slow(pgd_t *pgd)
+{
+/* TBD */
+}
+
 
 /*
  * Allocate and free page tables. The xxx_kernel() versions are
@@ -392,17 +402,17 @@ static pte_t *apmmu_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 		pte_t *page = NEW_PTE();
 		if(apmmu_pmd_none(*pmd)) {
 			if(page) {
-				pmd_set(pmd, page);
+				apmmu_pmd_set(pmd, page);
 				return page + address;
 			}
-			pmd_set(pmd, BAD_PAGETABLE);
+			apmmu_pmd_set(pmd, BAD_PAGETABLE);
 			return NULL;
 		}
 		FREE_PTE(page);
 	}
 	if(apmmu_pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_set(pmd, BAD_PAGETABLE);
+		apmmu_pmd_set(pmd, BAD_PAGETABLE);
 		return NULL;
 	}
 	return (pte_t *) apmmu_pmd_page(*pmd) + address;
@@ -449,17 +459,17 @@ static pte_t *apmmu_pte_alloc(pmd_t * pmd, unsigned long address)
 		pte_t *page = NEW_PTE();
 		if(apmmu_pmd_none(*pmd)) {
 			if(page) {
-				pmd_set(pmd, page);
+				apmmu_pmd_set(pmd, page);
 				return page + address;
 			}
-			pmd_set(pmd, BAD_PAGETABLE);
+			apmmu_pmd_set(pmd, BAD_PAGETABLE);
 			return NULL;
 		}
 		FREE_PTE(page);
 	}
 	if(apmmu_pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_set(pmd, BAD_PAGETABLE);
+		apmmu_pmd_set(pmd, BAD_PAGETABLE);
 		return NULL;
 	}
 	return ((pte_t *) apmmu_pmd_page(*pmd)) + address;
@@ -525,7 +535,7 @@ static inline void alloc_context(struct task_struct *tsk)
 	struct mm_struct *mm = tsk->mm;
 	struct ctx_list *ctxp;
 
-        if (tsk->taskid >= MPP_TASK_BASE) {
+	if (tsk->taskid >= MPP_TASK_BASE) {
 		mm->context = MPP_CONTEXT_BASE + (tsk->taskid - MPP_TASK_BASE);
 		return;
 	}
@@ -570,7 +580,7 @@ static void apmmu_switch_to_context(struct task_struct *tsk)
 	if(tsk->mm->context == NO_CONTEXT) {
 		alloc_context(tsk);
 		flush_cache_mm(current->mm);
-		ctxd_set(&apmmu_context_table[tsk->mm->context], tsk->mm->pgd);
+		apmmu_ctxd_set(&apmmu_context_table[tsk->mm->context], tsk->mm->pgd);
 		flush_tlb_mm(current->mm);
 	}
 	apmmu_set_context(tsk->mm->context);
@@ -590,27 +600,9 @@ struct task_struct *apmmu_alloc_task_struct(void)
 	return (struct task_struct *) kmalloc(sizeof(struct task_struct), GFP_KERNEL);
 }
 
-static unsigned long apmmu_alloc_kernel_stack(struct task_struct *tsk)
-{
-	unsigned long kstk = __get_free_pages(GFP_KERNEL, 1);
-
-	if(!kstk)
-		kstk = (unsigned long) vmalloc(PAGE_SIZE << 1);
-
-	return kstk;
-}
-
 static void apmmu_free_task_struct(struct task_struct *tsk)
 {
 	kfree(tsk);
-}
-
-static void apmmu_free_kernel_stack(unsigned long stack)
-{
-	if(stack < VMALLOC_START)
-		free_pages(stack, 1);
-	else
-		vfree((char *)stack);
 }
 
 static void apmmu_null_func(void)
@@ -925,22 +917,20 @@ extern unsigned long sparc_context_init(unsigned long, int);
 extern int physmem_mapped_contig;
 extern int linux_num_cpus;
 
-void (*poke_apmmu)(void);
-
 __initfunc(unsigned long apmmu_paging_init(unsigned long start_mem, unsigned long end_mem))
 {
 	int i;
 
 	physmem_mapped_contig = 1;   /* for init.c:taint_real_pages()   */
 
-        num_contexts = AP_NUM_CONTEXTS;
+	num_contexts = AP_NUM_CONTEXTS;
 	mempool = PAGE_ALIGN(start_mem);
 	memset(swapper_pg_dir, 0, PAGE_SIZE);
 
 	apmmu_allocate_ptable_skeleton(KERNBASE, end_mem);
 	mempool = PAGE_ALIGN(mempool);
 	map_kernel();
-        ap_setup_mappings();
+	ap_setup_mappings();
 
 	/* the MSC wants this aligned on a 16k boundary */
 	apmmu_context_table = 
@@ -950,14 +940,14 @@ __initfunc(unsigned long apmmu_paging_init(unsigned long start_mem, unsigned lon
 			   num_contexts*sizeof(ctxd_t));
 	apmmu_ctx_table_phys = (ctxd_t *) apmmu_v2p((unsigned long) apmmu_context_table);
 	for(i = 0; i < num_contexts; i++)
-		ctxd_set(&apmmu_context_table[i], swapper_pg_dir);
+		apmmu_ctxd_set(&apmmu_context_table[i], swapper_pg_dir);
 
 	start_mem = PAGE_ALIGN(mempool);
 
 	flush_cache_all();
 	apmmu_set_ctable_ptr((unsigned long) apmmu_ctx_table_phys);
 	flush_tlb_all();
-	poke_apmmu();
+	poke_viking();
 
 	/* on the AP we don't put the top few contexts into the free
 	   context list as these are reserved for parallel tasks */
@@ -967,11 +957,10 @@ __initfunc(unsigned long apmmu_paging_init(unsigned long start_mem, unsigned lon
 	return PAGE_ALIGN(start_mem);
 }
 
-static char apmmuinfo[512];
-
-static char *apmmu_mmu_info(void)
+static int apmmu_mmu_info(char *buf)
 {
-	sprintf(apmmuinfo, "MMU type\t: %s\n"
+	return sprintf(buf, 
+		"MMU type\t: %s\n"
 		"invall\t\t: %d\n"
 		"invmm\t\t: %d\n"
 		"invrnge\t\t: %d\n"
@@ -984,33 +973,10 @@ static char *apmmu_mmu_info(void)
 		module_stats.invpg,
 		num_contexts
 		);
-	return apmmuinfo;
 }
 
 static void apmmu_update_mmu_cache(struct vm_area_struct * vma, unsigned long address, pte_t pte)
 {
-}
-
-static void apmmu_exit_hook(void)
-{
-	struct mm_struct *mm = current->mm;
-
-	if(mm->context != NO_CONTEXT && mm->count == 1) {
-		ctxd_set(&apmmu_context_table[mm->context], swapper_pg_dir);
-		viking_flush_tlb_mm(mm);
-		free_context(mm->context);
-		mm->context = NO_CONTEXT;
-	}
-}
-
-static void apmmu_flush_hook(void)
-{
-	if(current->tss.flags & SPARC_FLAG_KTHREAD) {
-		alloc_context(current);
-		ctxd_set(&apmmu_context_table[current->mm->context], current->mm->pgd);
-		viking_flush_tlb_mm(current->mm);
-		apmmu_set_context(current->mm->context);
-	}
 }
 
 __initfunc(static void poke_viking(void))
@@ -1020,7 +986,7 @@ __initfunc(static void poke_viking(void))
 	mreg |= VIKING_SPENABLE;
 	mreg |= (VIKING_ICENABLE | VIKING_DCENABLE);
 	mreg &= ~VIKING_ACENABLE;
-        mreg &= ~VIKING_SBENABLE;
+	mreg &= ~VIKING_SBENABLE;
 	mreg |= VIKING_TCENABLE;
 	apmmu_set_mmureg(mreg);
 }
@@ -1029,24 +995,18 @@ __initfunc(static void init_viking(void))
 {
 	apmmu_name = "TI Viking/AP1000";
 
-	flush_cache_page_to_uncache = apmmu_null_func;
-	flush_page_for_dma = apmmu_null_func;
+	BTFIXUPSET_CALL(flush_cache_all, apmmu_null_func, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_cache_mm, apmmu_null_func, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_cache_page, apmmu_null_func, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_cache_range, apmmu_null_func, BTFIXUPCALL_NOP);
 
-	flush_cache_all = apmmu_null_func;
-	flush_cache_mm = apmmu_null_func;
-	flush_cache_page = apmmu_null_func;
-	flush_cache_range = apmmu_null_func;
+	BTFIXUPSET_CALL(flush_tlb_all, viking_flush_tlb_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_mm, viking_flush_tlb_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_page, viking_flush_tlb_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_range, viking_flush_tlb_range, BTFIXUPCALL_NORM);
 
-	flush_tlb_all = viking_flush_tlb_all;
-	flush_tlb_mm = viking_flush_tlb_mm;
-	flush_tlb_page = viking_flush_tlb_page;
-	flush_tlb_range = viking_flush_tlb_range;
-
-	flush_page_to_ram = apmmu_null_func;
-	flush_sig_insns = apmmu_null_func;
-	flush_tlb_page_for_cbit = viking_flush_tlb_page_for_cbit;
-
-	poke_apmmu = poke_viking;
+	BTFIXUPSET_CALL(flush_page_to_ram, apmmu_null_func, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_sig_insns, apmmu_null_func, BTFIXUPCALL_NOP);
 }
 
 
@@ -1062,7 +1022,7 @@ extern unsigned long srmmu_fault;
 		iaddr = &(insn); \
 		daddr = &(dest); \
 		*iaddr = SPARC_BRANCH((unsigned long) daddr, (unsigned long) iaddr); \
-        } while(0);
+	} while(0);
 
 __initfunc(static void patch_window_trap_handlers(void))
 {
@@ -1077,113 +1037,109 @@ __initfunc(static void patch_window_trap_handlers(void))
 	PATCH_BRANCH(sparc_ttable[SP_TRAP_DACC].inst_three, srmmu_fault);
 }
 
-/* Load up routines and constants for sun4m mmu */
+/* Load up routines and constants for apmmu */
 __initfunc(void ld_mmu_apmmu(void))
 {
 	/* First the constants */
-	pmd_shift = APMMU_PMD_SHIFT;
-	pmd_size = APMMU_PMD_SIZE;
-	pmd_mask = APMMU_PMD_MASK;
-	pgdir_shift = APMMU_PGDIR_SHIFT;
-	pgdir_size = APMMU_PGDIR_SIZE;
-	pgdir_mask = APMMU_PGDIR_MASK;
+	BTFIXUPSET_SIMM13(pmd_shift, APMMU_PMD_SHIFT);
+	BTFIXUPSET_SETHI(pmd_size, APMMU_PMD_SIZE);
+	BTFIXUPSET_SETHI(pmd_mask, APMMU_PMD_MASK);
+	BTFIXUPSET_SIMM13(pgdir_shift, APMMU_PGDIR_SHIFT);
+	BTFIXUPSET_SETHI(pgdir_size, APMMU_PGDIR_SIZE);
+	BTFIXUPSET_SETHI(pgdir_mask, APMMU_PGDIR_MASK);
 
-	ptrs_per_pte = APMMU_PTRS_PER_PTE;
-	ptrs_per_pmd = APMMU_PTRS_PER_PMD;
-	ptrs_per_pgd = APMMU_PTRS_PER_PGD;
+	BTFIXUPSET_SIMM13(ptrs_per_pte, APMMU_PTRS_PER_PTE);
+	BTFIXUPSET_SIMM13(ptrs_per_pmd, APMMU_PTRS_PER_PMD);
+	BTFIXUPSET_SIMM13(ptrs_per_pgd, APMMU_PTRS_PER_PGD);
 
-	page_none = APMMU_PAGE_NONE;
-	page_shared = APMMU_PAGE_SHARED;
-	page_copy = APMMU_PAGE_COPY;
-	page_readonly = APMMU_PAGE_RDONLY;
-	page_kernel = APMMU_PAGE_KERNEL;
+	BTFIXUPSET_INT(page_none, pgprot_val(APMMU_PAGE_NONE));
+	BTFIXUPSET_INT(page_shared, pgprot_val(APMMU_PAGE_SHARED));
+	BTFIXUPSET_INT(page_copy, pgprot_val(APMMU_PAGE_COPY));
+	BTFIXUPSET_INT(page_readonly, pgprot_val(APMMU_PAGE_RDONLY));
+	BTFIXUPSET_INT(page_kernel, pgprot_val(APMMU_PAGE_KERNEL));
 	pg_iobits = APMMU_VALID | APMMU_WRITE | APMMU_REF;
 	    
 	/* Functions */
-	mmu_getpage = apmmu_getpage;
-	set_pte = apmmu_set_pte_cacheable;
-	switch_to_context = apmmu_switch_to_context;
-	pmd_align = apmmu_pmd_align;
-	pgdir_align = apmmu_pgdir_align;
-	vmalloc_start = apmmu_vmalloc_start;
+	BTFIXUPSET_CALL(get_pte_fast, apmmu_get_pte_fast, BTFIXUPCALL_RETINT(0));
+	BTFIXUPSET_CALL(get_pmd_fast, apmmu_get_pmd_fast, BTFIXUPCALL_RETINT(0));
+	BTFIXUPSET_CALL(get_pgd_fast, apmmu_get_pgd_fast, BTFIXUPCALL_RETINT(0));
+	BTFIXUPSET_CALL(free_pte_slow, apmmu_free_pte_slow, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(free_pmd_slow, apmmu_free_pmd_slow, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(free_pgd_slow, apmmu_free_pgd_slow, BTFIXUPCALL_NOP);
 
-	pte_page = apmmu_pte_page;
-	pmd_page = apmmu_pmd_page;
-	pgd_page = apmmu_pgd_page;
+	BTFIXUPSET_CALL(set_pte, apmmu_set_pte_cacheable, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(switch_to_context, apmmu_switch_to_context, BTFIXUPCALL_NORM);
 
-	sparc_update_rootmmu_dir = apmmu_update_rootmmu_dir;
+	BTFIXUPSET_CALL(pte_page, apmmu_pte_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_page, apmmu_pmd_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_page, apmmu_pgd_page, BTFIXUPCALL_NORM);
 
-	pte_none = apmmu_pte_none;
-	pte_present = apmmu_pte_present;
-	pte_clear = apmmu_pte_clear;
+	BTFIXUPSET_CALL(sparc_update_rootmmu_dir, apmmu_update_rootmmu_dir, BTFIXUPCALL_NORM);
 
-	pmd_none = apmmu_pmd_none;
-	pmd_bad = apmmu_pmd_bad;
-	pmd_present = apmmu_pmd_present;
-	pmd_clear = apmmu_pmd_clear;
+	BTFIXUPSET_SETHI(none_mask, 0xF0000000);
 
-	pgd_none = apmmu_pgd_none;
-	pgd_bad = apmmu_pgd_bad;
-	pgd_present = apmmu_pgd_present;
-	pgd_clear = apmmu_pgd_clear;
+	BTFIXUPSET_CALL(pte_present, apmmu_pte_present, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_clear, apmmu_pte_clear, BTFIXUPCALL_NORM);
 
-	mk_pte = apmmu_mk_pte;
-	mk_pte_phys = apmmu_mk_pte_phys;
-	pgd_set = apmmu_pgd_set;
-	mk_pte_io = apmmu_mk_pte_io;
-	pte_modify = apmmu_pte_modify;
-	pgd_offset = apmmu_pgd_offset;
-	pmd_offset = apmmu_pmd_offset;
-	pte_offset = apmmu_pte_offset;
-	pte_free_kernel = apmmu_pte_free_kernel;
-	pmd_free_kernel = apmmu_pmd_free_kernel;
-	pte_alloc_kernel = apmmu_pte_alloc_kernel;
-	pmd_alloc_kernel = apmmu_pmd_alloc_kernel;
-	pte_free = apmmu_pte_free;
-	pte_alloc = apmmu_pte_alloc;
-	pmd_free = apmmu_pmd_free;
-	pmd_alloc = apmmu_pmd_alloc;
-	pgd_free = apmmu_pgd_free;
-	pgd_alloc = apmmu_pgd_alloc;
-	pgd_flush = apmmu_pgd_flush;
+	BTFIXUPSET_CALL(pmd_bad, apmmu_pmd_bad, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_present, apmmu_pmd_present, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_clear, apmmu_pmd_clear, BTFIXUPCALL_NORM);
 
-	pte_write = apmmu_pte_write;
-	pte_dirty = apmmu_pte_dirty;
-	pte_young = apmmu_pte_young;
-	pte_wrprotect = apmmu_pte_wrprotect;
-	pte_mkclean = apmmu_pte_mkclean;
-	pte_mkold = apmmu_pte_mkold;
-	pte_mkwrite = apmmu_pte_mkwrite;
-	pte_mkdirty = apmmu_pte_mkdirty;
-	pte_mkyoung = apmmu_pte_mkyoung;
-	update_mmu_cache = apmmu_update_mmu_cache;
-	mmu_exit_hook = apmmu_exit_hook;
-	mmu_flush_hook = apmmu_flush_hook;
-	mmu_lockarea = apmmu_lockarea;
-	mmu_unlockarea = apmmu_unlockarea;
+	BTFIXUPSET_CALL(pgd_none, apmmu_pgd_none, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_bad, apmmu_pgd_bad, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_present, apmmu_pgd_present, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_clear, apmmu_pgd_clear, BTFIXUPCALL_NORM);
 
-	mmu_get_scsi_one = NULL;
-	mmu_get_scsi_sgl = NULL;
-	mmu_release_scsi_one = NULL;
-	mmu_release_scsi_sgl = NULL;
+	BTFIXUPSET_CALL(mk_pte, apmmu_mk_pte, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mk_pte_phys, apmmu_mk_pte_phys, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mk_pte_io, apmmu_mk_pte_io, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_set, apmmu_pgd_set, BTFIXUPCALL_NORM);
+	
+	BTFIXUPSET_INT(pte_modify_mask, APMMU_CHG_MASK);
+	BTFIXUPSET_CALL(pgd_offset, apmmu_pgd_offset, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_offset, apmmu_pmd_offset, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_offset, apmmu_pte_offset, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_free_kernel, apmmu_pte_free_kernel, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_free_kernel, apmmu_pmd_free_kernel, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_alloc_kernel, apmmu_pte_alloc_kernel, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_alloc_kernel, apmmu_pmd_alloc_kernel, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_free, apmmu_pte_free, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_alloc, apmmu_pte_alloc, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_free, apmmu_pmd_free, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_alloc, apmmu_pmd_alloc, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_free, apmmu_pgd_free, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_alloc, apmmu_pgd_alloc, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_flush, apmmu_pgd_flush, BTFIXUPCALL_NORM);
 
-	mmu_info = apmmu_mmu_info;
-        mmu_v2p = apmmu_v2p;
-        mmu_p2v = apmmu_p2v;
+	BTFIXUPSET_HALF(pte_writei, APMMU_WRITE);
+	BTFIXUPSET_HALF(pte_dirtyi, APMMU_DIRTY);
+	BTFIXUPSET_HALF(pte_youngi, APMMU_REF);
+	BTFIXUPSET_HALF(pte_wrprotecti, APMMU_WRITE);
+	BTFIXUPSET_HALF(pte_mkcleani, APMMU_DIRTY);
+	BTFIXUPSET_HALF(pte_mkoldi, APMMU_REF);
+	BTFIXUPSET_CALL(pte_mkwrite, apmmu_pte_mkwrite, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_mkdirty, apmmu_pte_mkdirty, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_mkyoung, apmmu_pte_mkyoung, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(update_mmu_cache, apmmu_update_mmu_cache, BTFIXUPCALL_NOP);
+
+	BTFIXUPSET_CALL(mmu_lockarea, apmmu_lockarea, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_unlockarea, apmmu_unlockarea, BTFIXUPCALL_NORM);
+
+	BTFIXUPSET_CALL(mmu_get_scsi_one, apmmu_null_func, BTFIXUPCALL_RETO0);
+	BTFIXUPSET_CALL(mmu_get_scsi_sgl, apmmu_null_func, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(mmu_release_scsi_one, apmmu_null_func, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(mmu_release_scsi_sgl, apmmu_null_func, BTFIXUPCALL_NOP);
+
+	BTFIXUPSET_CALL(mmu_info, apmmu_mmu_info, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_v2p, apmmu_v2p, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_p2v, apmmu_p2v, BTFIXUPCALL_NORM);
 
 	/* Task struct and kernel stack allocating/freeing. */
-	alloc_kernel_stack = apmmu_alloc_kernel_stack;
-	alloc_task_struct = apmmu_alloc_task_struct;
-	free_kernel_stack = apmmu_free_kernel_stack;
-	free_task_struct = apmmu_free_task_struct;
+	BTFIXUPSET_CALL(alloc_task_struct, apmmu_alloc_task_struct, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(free_task_struct, apmmu_free_task_struct, BTFIXUPCALL_NORM);
 
-	quick_kernel_fault = apmmu_quick_kernel_fault;
-
-	ctxd_set = apmmu_ctxd_set;
-	pmd_set = apmmu_pmd_set;
+	BTFIXUPSET_CALL(quick_kernel_fault, apmmu_quick_kernel_fault, BTFIXUPCALL_NORM);
 
 	init_viking();
 	patch_window_trap_handlers();
 }
-
-

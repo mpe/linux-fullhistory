@@ -1,10 +1,11 @@
-/* $Id: entry.S,v 1.142 1998/01/07 06:33:47 baccala Exp $
+/* $Id: entry.S,v 1.149 1998/03/19 15:36:30 jj Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
- * Copyright (C) 1996 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1998 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997 Anton Blanchard (anton@progsoc.uts.edu.au)
  */
 
 #include <linux/config.h>
@@ -21,9 +22,15 @@
 #include <asm/vaddrs.h>
 #include <asm/memreg.h>
 #include <asm/page.h>
+#ifdef CONFIG_SUN4
+#include <asm/pgtsun4.h>
+#else
 #include <asm/pgtsun4c.h>
+#endif
 #include <asm/winmacro.h>
 #include <asm/signal.h>
+#include <asm/obio.h>
+#include <asm/mxcc.h>
 
 #include <asm/asmmacro.h>
 
@@ -288,10 +295,14 @@ real_irq_entry:
 	SAVE_ALL
 
 #ifdef __SMP__
+	.globl	patchme_maybe_smp_msg
+
 	cmp	%l7, 12
-	bgu	maybe_smp_msg
+patchme_maybe_smp_msg:
+	bgu	maybe_smp4m_msg
 	 nop
 #endif
+
 real_irq_continue:
 	or	%l0, PSR_PIL, %g2
 	wr	%g2, 0x0, %psr
@@ -309,14 +320,14 @@ patch_handler_irq:
 
 #ifdef __SMP__
 	/* SMP per-cpu ticker interrupts are handled specially. */
-smp_ticker:
-	bne	real_irq_continue
+smp4m_ticker:
+	bne	real_irq_continue+4
 	 or	%l0, PSR_PIL, %g2
 	wr	%g2, 0x0, %psr
 	WRITE_PAUSE
 	wr	%g2, PSR_ET, %psr
 	WRITE_PAUSE
-	call	C_LABEL(smp_percpu_timer_interrupt)
+	call	C_LABEL(smp4m_percpu_timer_interrupt)
 	 add	%sp, REGWIN_SZ, %o0
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
@@ -326,7 +337,7 @@ smp_ticker:
 	 * on some level other than 15 which is the NMI and only used
 	 * for cross calls.  That has a seperate entry point below.
 	 */
-maybe_smp_msg:
+maybe_smp4m_msg:
 	GET_PROCESSOR_MID(o3, o2)
 	set	C_LABEL(sun4m_interrupts), %l5
 	ld	[%l5], %o5
@@ -334,7 +345,7 @@ maybe_smp_msg:
 	sll	%o3, 12, %o3
 	ld	[%o5 + %o3], %o1
 	andcc	%o1, %o4, %g0
-	be,a	smp_ticker
+	be,a	smp4m_ticker
 	 cmp	%l7, 14
 	cmp	%l7, 13
 	add	%o5, %o3, %o5
@@ -383,7 +394,7 @@ linux_trap_ipi15_sun4m:
 	WRITE_PAUSE
 	wr	%l4, PSR_ET, %psr
 	WRITE_PAUSE
-	call	C_LABEL(smp_cross_call_irq)
+	call	C_LABEL(smp4m_cross_call_irq)
 	 nop
 	b	ret_trap_lockless_ipi
 	 clr	%l6
@@ -409,6 +420,64 @@ linux_trap_ipi15_sun4m:
 	ld	[%l5], %g0
 	WRITE_PAUSE
 	RESTORE_ALL
+
+	.globl	smp4d_ticker
+	/* SMP per-cpu ticker interrupts are handled specially. */
+smp4d_ticker:
+	SAVE_ALL
+	or	%l0, PSR_PIL, %g2
+	sethi	%hi(CC_ICLR), %o0
+	sethi	%hi(1 << 14), %o1
+	or	%o0, %lo(CC_ICLR), %o0
+	stha	%o1, [%o0] ASI_M_MXCC	/* Clear PIL 14 in MXCC's ICLR */
+	wr	%g2, 0x0, %psr
+	WRITE_PAUSE
+	wr	%g2, PSR_ET, %psr
+	WRITE_PAUSE
+	call	C_LABEL(smp4d_percpu_timer_interrupt)
+	 add	%sp, REGWIN_SZ, %o0
+	wr	%l0, PSR_ET, %psr
+	WRITE_PAUSE
+	RESTORE_ALL
+
+	.align	4
+	.globl	linux_trap_ipi15_sun4d
+linux_trap_ipi15_sun4d:
+	SAVE_ALL
+	sethi	%hi(CC_BASE), %o4
+	sethi	%hi(MXCC_ERR_ME|MXCC_ERR_PEW|MXCC_ERR_ASE|MXCC_ERR_PEE), %o2
+	or	%o4, (CC_EREG - CC_BASE), %o0
+	ldda	[%o0] ASI_M_MXCC, %o0
+	andcc	%o0, %o2, %g0
+	bne	1f
+	 sethi	%hi(BB_STAT2), %o2
+	lduba	[%o2] ASI_M_CTL, %o2
+	andcc	%o2, BB_STAT2_MASK, %g0
+	bne	2f
+	 or	%o4, (CC_ICLR - CC_BASE), %o0
+	sethi	%hi(1 << 15), %o1
+	stha	%o1, [%o0] ASI_M_MXCC	/* Clear PIL 15 in MXCC's ICLR */
+	or	%l0, PSR_PIL, %l4
+	wr	%l4, 0x0, %psr
+	WRITE_PAUSE
+	wr	%l4, PSR_ET, %psr
+	WRITE_PAUSE
+	call	C_LABEL(smp4d_cross_call_irq)
+	 nop
+	b	ret_trap_lockless_ipi
+	 clr	%l6
+
+1:	/* MXCC error */
+2:	/* BB error */
+	/* Disable PIL 15 */
+	set	CC_IMSK, %l4
+	lduha	[%l4] ASI_M_MXCC, %l5
+	sethi	%hi(1 << 15), %l7
+	or	%l5, %l7, %l5
+	stha	%l5, [%l4] ASI_M_MXCC
+	/* FIXME */
+1:	b,a	1b
+
 #endif /* __SMP__ */
 
 	/* This routine handles illegal instructions and privileged
@@ -417,6 +486,12 @@ linux_trap_ipi15_sun4m:
 	.align	4
 	.globl	bad_instruction
 bad_instruction:
+	sethi	%hi(0xc1f80000), %l4
+	ld	[%l1], %l5
+	sethi	%hi(0x81d80000), %l7
+	and	%l5, %l4, %l5
+	cmp	%l5, %l7
+	be	1f
 	SAVE_ALL
 
 	wr	%l0, PSR_ET, %psr		! re-enable traps
@@ -429,6 +504,10 @@ bad_instruction:
 	 mov	%l0, %o3
 
 	RESTORE_ALL
+
+1:	/* unimplemented flush - just skip */
+	jmpl	%l2, %g0
+	 rett	%l2 + 4
 
 	.align	4
 	.globl	priv_instruction
@@ -601,23 +680,6 @@ do_cp_disabled:
 
 	RESTORE_ALL
 
-	/* This routine handles Unimplemented FLUSH Exceptions. */
-	.align	4
-	.globl	do_bad_flush
-do_bad_flush:
-	SAVE_ALL
-
-	wr	%l0, PSR_ET, %psr		! re-enable traps
-	WRITE_PAUSE
-
-	add	%sp, REGWIN_SZ, %o0
-	mov	%l1, %o1
-	mov	%l2, %o2
-	call	C_LABEL(handle_bad_flush)
-	 mov	%l0, %o3
-
-	RESTORE_ALL
-
 	/* This routine handles Co-Processor Exceptions. */
 	.align	4
 	.globl	do_cp_exception
@@ -766,6 +828,12 @@ C_LABEL(invalid_segment_patch1_ff):	cmp	%l4, 0xff
 C_LABEL(invalid_segment_patch2_ff):	mov	0xff, %l4
 
 	.align	4
+	.globl	C_LABEL(invalid_segment_patch1_1ff)
+	.globl	C_LABEL(invalid_segment_patch2_1ff)
+C_LABEL(invalid_segment_patch1_1ff):	cmp	%l4, 0x1ff
+C_LABEL(invalid_segment_patch2_1ff):	mov	0x1ff, %l4
+
+	.align	4
 	.globl	C_LABEL(num_context_patch1_16), C_LABEL(num_context_patch2_16)
 C_LABEL(num_context_patch1_16):		mov	0x10, %l7
 C_LABEL(num_context_patch2_16):		mov	0x10, %l7
@@ -776,7 +844,17 @@ C_LABEL(vac_linesize_patch_32):		subcc	%l7, 32, %l7
 
 	.align	4
 	.globl	C_LABEL(vac_hwflush_patch1_on), C_LABEL(vac_hwflush_patch2_on)
+
+/*
+ * Ugly, but we cant use hardware flushing on the sun4 and we'd require
+ * two instructions (Anton)
+ */
+#ifdef CONFIG_SUN4
+C_LABEL(vac_hwflush_patch1_on):		nop
+#else
 C_LABEL(vac_hwflush_patch1_on):		subcc	%l7, (PAGE_SIZE - 4), %l7
+#endif
+
 C_LABEL(vac_hwflush_patch2_on):		sta	%g0, [%l3 + %l7] ASI_HWFLUSHSEG
 
 	.globl	C_LABEL(invalid_segment_patch1), C_LABEL(invalid_segment_patch2)
@@ -786,11 +864,50 @@ C_LABEL(vac_hwflush_patch2_on):		sta	%g0, [%l3 + %l7] ASI_HWFLUSHSEG
 
 	.align	4
 	.globl	sun4c_fault
+
+! %l0 = %psr
+! %l1 = %pc
+! %l2 = %npc
+! %l3 = %wim
+! %l7 = 1 for textfault
+! We want error in %l5, vaddr in %l6
 sun4c_fault:
+#ifdef CONFIG_SUN4
+	sethi	C_LABEL(sun4c_memerr_reg), %l4
+	ld	[%l4+%lo(C_LABEL(sun4c_memerr_reg))], %l4  ! memerr ctrl reg addr
+	ld	[%l4], %l6		! memerr ctrl reg
+	ld	[%l4 + 4], %l5		! memerr vaddr reg
+	andcc	%l6, 0x80, %g0		! check for error type
+	st	%g0, [%l4 + 4]		! clear the error
+	be	0f			! normal error
+	 sethi	%hi(AC_BUS_ERROR), %l4	! bus err reg addr
+
+	call	C_LABEL(prom_halt)	! something weird happened
+					! what exactly did happen?
+					! what should we do here?
+
+0:	or	%l4, %lo(AC_BUS_ERROR), %l4	! bus err reg addr
+	lduba	[%l4] ASI_CONTROL, %l6	! bus err reg
+
+	cmp    %l7, 1			! text fault?
+	be	1f			! yes
+	 nop
+
+	ld     [%l1], %l4		! load instruction that caused fault
+	srl	%l4, 21, %l4
+	andcc	%l4, 1, %g0		! store instruction?
+
+	be	1f			! no
+	 sethi	%hi(SUN4C_SYNC_BADWRITE), %l4 ! yep
+					! %lo(SUN4C_SYNC_BADWRITE) = 0
+	or	%l4, %l6, %l6		! set write bit to emulate sun4c
+1:
+#else
 	sethi	%hi(AC_SYNC_ERR), %l4
 	add	%l4, 0x4, %l6			! AC_SYNC_VA in %l6
 	lda	[%l6] ASI_CONTROL, %l5		! Address
 	lda	[%l4] ASI_CONTROL, %l6		! Error, retained for a bit
+#endif
 
 	andn	%l5, 0xfff, %l5			! Encode all info into l7
 	srl	%l6, 14, %l4
@@ -830,17 +947,21 @@ sun4c_fault:
 	sethi   %hi(SUN4C_VMALLOC_START), %l4
 	cmp     %l5, %l4
 	blu,a   C_LABEL(invalid_segment_patch1)
-	 lduba  [%l5] ASI_SEGMAP, %l4
+	 lduXa	[%l5] ASI_SEGMAP, %l4
 
-	srl     %l5, SUN4C_PGDIR_SHIFT, %l6
 	sethi   %hi(C_LABEL(swapper_pg_dir)), %l4
+	srl     %l5, SUN4C_PGDIR_SHIFT, %l6
 	or      %l4, %lo(C_LABEL(swapper_pg_dir)), %l4
 	sll     %l6, 2, %l6
 	ld      [%l4 + %l6], %l4
+#ifdef CONFIG_SUN4
+	sethi	PAGE_MASK, %l6
+	andcc	%l4, %l6, %g0
+#else
 	andcc   %l4, PAGE_MASK, %g0
-
+#endif
 	be      sun4c_fault_fromuser
-	 lduba  [%l5] ASI_SEGMAP, %l4
+	 lduXa  [%l5] ASI_SEGMAP, %l4
 
 C_LABEL(invalid_segment_patch1):
 	cmp	%l4, 0x7f
@@ -889,7 +1010,11 @@ C_LABEL(invalid_segment_patch1):
 	ld	[%l6 + 0x08], %l3	! tmp = entry->vaddr
 
 	! Flush segment from the cache.
+#ifdef CONFIG_SUN4
+	sethi	%hi((128 * 1024)), %l7
+#else
 	sethi	%hi((64 * 1024)), %l7
+#endif
 9:
 C_LABEL(vac_hwflush_patch1):
 C_LABEL(vac_linesize_patch):
@@ -928,7 +1053,7 @@ C_LABEL(invalid_segment_patch2):
 	deccc	%l7
 	stba	%l7, [%l3] ASI_CONTROL
 	bne	3b
-	 stba	%l4, [%l5] ASI_SEGMAP
+	 stXa	%l4, [%l5] ASI_SEGMAP
 
 	stba	%l6, [%l3] ASI_CONTROL
 
@@ -952,7 +1077,7 @@ C_LABEL(num_context_patch2):
 	deccc	%l7
 	stba	%l7, [%l3] ASI_CONTROL
 	bne	3b
-	 stba	%l4, [%l5] ASI_SEGMAP
+	 stXa	%l4, [%l5] ASI_SEGMAP
 
 	stba	%l6, [%l3] ASI_CONTROL
 
@@ -988,7 +1113,12 @@ C_LABEL(num_context_patch2):
 	or	%l4, %lo(C_LABEL(swapper_pg_dir)), %l4
 	sll	%l3, 2, %l3
 	ld	[%l4 + %l3], %l4
+#ifndef CONFIG_SUN4
 	and	%l4, PAGE_MASK, %l4
+#else
+	sethi	PAGE_MASK, %l6
+	and	%l4, %l6, %l4
+#endif
 
 	srl	%l5, (PAGE_SHIFT - 2), %l6
 	and	%l6, ((SUN4C_PTRS_PER_PTE - 1) << 2), %l6
@@ -1640,9 +1770,8 @@ C_LABEL(udelay):
 	call	.umul
 	 ld	[%o3 + %lo(C_LABEL(loops_per_sec))], %o1
 #else
-	GET_PROCESSOR_OFFSET(o4)
+	GET_PROCESSOR_OFFSET(o4, o2)
 	set	C_LABEL(cpu_data), %o3
-	sll	%o4, 1, %o4
 	call	.umul
 	 ld	[%o3 + %o4], %o1
 #endif
@@ -1717,5 +1846,12 @@ kuw_patch1:
 3:
 	retl					! return
 	 st	%g0, [%g6 + AOFF_task_tss + AOFF_thread_w_saved]	! no windows saved
+
+	.align	4
+	.globl	C_LABEL(restore_current)
+C_LABEL(restore_current):
+	LOAD_CURRENT(g6, o0)
+	retl
+	 nop
 
 /* End of entry.S */

@@ -35,11 +35,11 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
-#ifdef CONFIG_XMON
-extern void xmon(struct pt_regs *);
-extern void (*xmon_fault_handler)(struct pt_regs *);
-extern int xmon_dabr_match(struct pt_regs *);
-int xmon_kernel_faults = 0;
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+extern void (*debugger)(struct pt_regs *);
+extern void (*debugger_fault_handler)(struct pt_regs *);
+extern int (*debugger_dabr_match)(struct pt_regs *);
+int debugger_kernel_faults = 0;
 #endif
 
 unsigned long htab_reloads = 0; /* updated by head.S:hash_page() */
@@ -72,14 +72,14 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 	       (regs->trap == 0x400)?"instr":"data"
 	       );*/
 	       
-#ifdef CONFIG_XMON
-	if (xmon_fault_handler && regs->trap == 0x300) {
-		xmon_fault_handler(regs);
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+	if (debugger_fault_handler && regs->trap == 0x300) {
+		debugger_fault_handler(regs);
 		return;
 	}
 	if (error_code & 0x00400000) {
 		/* DABR match */
-		if (xmon_dabr_match(regs))
+		if (debugger_dabr_match(regs))
 			return;
 	}
 #endif
@@ -90,9 +90,9 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 			printk("page fault in interrupt handler, addr=%lx\n",
 			       address);
 			show_regs(regs);
-#ifdef CONFIG_XMON
-			if (xmon_kernel_faults)
-				xmon(regs);
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+			if (debugger_kernel_faults)
+				debugger(regs);
 #endif
 		}
 	}
@@ -112,10 +112,21 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 		goto bad_area;
 
 good_area:
+#ifdef CONFIG_6xx
 	if (error_code & 0x95700000)
 		/* an error such as lwarx to I/O controller space,
 		   address matching DABR, eciwx, etc. */
+#endif /* CONFIG_6xx */
+#ifdef CONFIG_8xx
+        /* The MPC8xx seems to always set 0x80000000, which is
+         * "undefined".  Of those that can be set, this is the only
+         * one which seems bad.
+         */
+	if (error_code & 0x10000000)
+                /* Guarded storage error. */
+#endif /* CONFIG_8xx */
 		goto bad_area;
+	
 	
 	/* a write */
 	if (error_code & 0x02000000) {
@@ -190,12 +201,45 @@ bad_page_fault(struct pt_regs *regs, unsigned long address)
 	/* kernel has accessed a bad area */
 	show_regs(regs);
 	print_backtrace( (unsigned long *)regs->gpr[1] );
-#ifdef CONFIG_XMON
-	if (xmon_kernel_faults)
-		xmon(regs);
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+	if (debugger_kernel_faults)
+		debugger(regs);
 #endif
 	panic("kernel access of bad area pc %lx lr %lx address %lX tsk %s/%d",
 	      regs->nip,regs->link,address,current->comm,current->pid);
+}
+
+/*
+ * I need a va to pte function for the MPC8xx so I can set the cache
+ * attributes on individual pages used by the Communication Processor
+ * Module.
+ */
+pte_t *va_to_pte(struct task_struct *tsk, unsigned long address)
+{
+        pgd_t *dir;
+        pmd_t *pmd;
+        pte_t *pte;
+        
+        dir = pgd_offset(tsk->mm, address & PAGE_MASK);
+        if (dir)
+        {
+                pmd = pmd_offset(dir, address & PAGE_MASK);
+                if (pmd && pmd_present(*pmd))
+                {
+                        pte = pte_offset(pmd, address & PAGE_MASK);
+                        if (pte && pte_present(*pte))
+                        {
+                                return(pte);
+                        }
+                } else
+                {
+                        return (0);
+                }
+        } else
+        {
+                return (0);
+        }
+        return (0);
 }
 
 unsigned long va_to_phys(unsigned long address)
@@ -224,6 +268,57 @@ unsigned long va_to_phys(unsigned long address)
 		return (0);
 	}
 	return (0);
+}
+
+void
+print_8xx_pte(struct mm_struct *mm, unsigned long addr)
+{
+        pgd_t * pgd;
+        pmd_t * pmd;
+        pte_t * pte;
+
+        printk(" pte @ 0x%8lx: ", addr);
+        pgd = pgd_offset(mm, addr & PAGE_MASK);
+        if (pgd) {
+                pmd = pmd_offset(pgd, addr & PAGE_MASK);
+                if (pmd && pmd_present(*pmd)) {
+                        pte = pte_offset(pmd, addr & PAGE_MASK);
+                        if (pte) {
+                                printk(" (0x%08lx)->(0x%08lx)->0x%08lx\n",
+                                        (long)pgd, (long)pte, (long)pte_val(*pte));
+                        }
+                        else {
+                                printk("no pte\n");
+                        }
+                }
+                else {
+                        printk("no pmd\n");
+                }
+        }
+        else {
+                printk("no pgd\n");
+        }
+}
+
+int
+get_8xx_pte(struct mm_struct *mm, unsigned long addr)
+{
+        pgd_t * pgd;
+        pmd_t * pmd;
+        pte_t * pte;
+        int     retval = 0;
+
+        pgd = pgd_offset(mm, addr & PAGE_MASK);
+        if (pgd) {
+                pmd = pmd_offset(pgd, addr & PAGE_MASK);
+                if (pmd && pmd_present(*pmd)) {
+                        pte = pte_offset(pmd, addr & PAGE_MASK);
+                        if (pte) {
+                                        retval = (int)pte_val(*pte);
+                        }
+                }
+        }
+        return(retval);
 }
 
 #if 0

@@ -1,4 +1,4 @@
-/* $Id: asi.h,v 1.17 1997/06/24 15:48:10 jj Exp $ */
+/* $Id: asi.h,v 1.18 1998/03/09 14:04:46 jj Exp $ */
 #ifndef _SPARC_ASI_H
 #define _SPARC_ASI_H
 
@@ -102,6 +102,9 @@
 #define ASI_M_DC_FLCLEAR   0x37
 
 #define ASI_M_DCDR         0x39   /* Data Cache Diagnostics Register rw, ss */
+
+#define ASI_M_VIKING_TMP1  0x40	  /* Emulation temporary 1 on Viking */
+#define ASI_M_VIKING_TMP2  0x41	  /* Emulation temporary 2 on Viking */
 
 #define ASI_M_ACTION       0x4c   /* Breakpoint Action Register (GNU/Viking) */
 

@@ -1,6 +1,7 @@
 /* pluto.c: SparcSTORAGE Array SCSI host adapter driver.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ *
  */
 
 #include <linux/kernel.h>
@@ -12,6 +13,10 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/init.h>
+#include <linux/config.h>
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 #include <asm/irq.h>
 
@@ -45,9 +50,9 @@ static struct ctrl_inquiry {
 	Scsi_Cmnd cmd;
 	char inquiry[256];
 	fc_channel *fc;
-} *fcs __initdata;
-static int fcscount __initdata;
-static atomic_t fcss __initdata;
+} *fcs __initdata = { 0 };
+static int fcscount __initdata = 0;
+static atomic_t fcss __initdata = ATOMIC_INIT(0);
 static struct timer_list fc_timer __initdata = { 0 };
 struct semaphore fc_sem __initdata = MUTEX_LOCKED;
 
@@ -98,8 +103,16 @@ __initfunc(int pluto_detect(Scsi_Host_Template *tpnt))
 	for_each_online_fc_channel(fc)
 		fcscount++;
 	PLND(("%d channels online\n", fcscount))
-	if (!fcscount)
-		return 0;
+	if (!fcscount) {
+#if defined(MODULE) && defined(CONFIG_FC4_SOC_MODULE) && defined(CONFIG_KERNELD)
+		request_module("soc");
+		
+		for_each_online_fc_channel(fc)
+			fcscount++;
+		if (!fcscount)
+#endif
+			return 0;
+	}
 	fcs = (struct ctrl_inquiry *) scsi_init_malloc (sizeof (struct ctrl_inquiry) * fcscount, GFP_DMA);
 	if (!fcs) {
 		printk ("PLUTO: Not enough memory to probe\n");
@@ -213,6 +226,8 @@ __initfunc(int pluto_detect(Scsi_Host_Template *tpnt))
 				
 				nplutos++;
 				
+				if (fc->module) __MOD_INC_USE_COUNT(fc->module);
+				
 				pluto = (struct pluto *)host->hostdata;
 				
 				host->max_id = inq->targets;
@@ -256,9 +271,13 @@ int pluto_release(struct Scsi_Host *host)
 {
 	struct pluto *pluto = (struct pluto *)host->hostdata;
 	fc_channel *fc = pluto->fc;
+
+	if (fc->module) __MOD_DEC_USE_COUNT(fc->module);
 	
 	fc->fcp_register(fc, TYPE_SCSI_FCP, 1);
+	PLND((" releasing pluto.\n"));
 	kfree (fc->ages);
+	PLND(("released pluto!\n"));
 	return 0;
 }
 
@@ -288,7 +307,7 @@ const char *pluto_info(struct Scsi_Host *host)
 static int pluto_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr)
 {
 	PLND(("encode addr %d %d %d\n", SCpnt->channel, SCpnt->target, SCpnt->cmnd[1] & 0xe0))
-	/* We don't support LUNs */
+	/* We don't support LUNs - neither does SSA :) */
 	if (SCpnt->cmnd[1] & 0xe0) return -EINVAL;
 	if (!SCpnt->channel) {
 		if (SCpnt->target) return -EINVAL;

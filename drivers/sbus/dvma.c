@@ -16,7 +16,7 @@
 struct Linux_SBus_DMA *dma_chain;
 
 /* Print out the current values in the DMA control registers */
-static __inline__ void
+extern __inline__ void
 dump_dma_regs(struct sparc_dma_registers *dregs)
 {
 	printk("DMA CONTROL<%08lx>  ADDR<%08lx> CNT<%08lx> TEST<%08lx>\n",
@@ -27,6 +27,50 @@ dump_dma_regs(struct sparc_dma_registers *dregs)
 	return;
 }
 
+__initfunc(void
+init_one_dvma(struct Linux_SBus_DMA *dma, int num_dma))
+{
+	printk("dma%d: ", num_dma);
+	
+	dma->next = 0;
+	dma->running=0;      /* No transfers going on as of yet */
+	dma->allocated=0;    /* No one has allocated us yet */
+	switch((dma->regs->cond_reg)&DMA_DEVICE_ID) {
+	case DMA_VERS0:
+		dma->revision=dvmarev0;
+		printk("Revision 0 ");
+		break;
+	case DMA_ESCV1:
+		dma->revision=dvmaesc1;
+		printk("ESC Revision 1 ");
+		break;
+	case DMA_VERS1:
+		dma->revision=dvmarev1;
+		printk("Revision 1 ");
+		break;
+	case DMA_VERS2:
+		dma->revision=dvmarev2;
+		printk("Revision 2 ");
+		break;
+	case DMA_VERHME:
+		dma->revision=dvmahme;
+		printk("HME DVMA gate array ");
+		break;
+	case DMA_VERSPLUS:
+		dma->revision=dvmarevplus;
+		printk("Revision 1 PLUS ");
+		break;
+	default:
+		printk("unknown dma version %x",
+		       (dma->regs->cond_reg)&DMA_DEVICE_ID);
+		dma->allocated = 1;
+		break;
+	}
+	printk("\n");
+#if 0 /* Clutters up the screen */
+	dump_dma_regs(dma->regs);
+#endif
+}
 
 /* Probe this SBus DMA module(s) */
 __initfunc(unsigned long
@@ -40,11 +84,11 @@ dvma_init(struct linux_sbus *sbus, unsigned long memory_start))
 	for_each_sbusdev(this_dev, sbus) {
 		int hme = 0;
 
-		if(!strcmp(this_dev->prom_name, "SUNW,fas")) {
+		if(!strcmp(this_dev->prom_name, "SUNW,fas"))
 			hme = 1;
-		} else if(strcmp(this_dev->prom_name, "dma") &&
-			  strcmp(this_dev->prom_name, "ledma") &&
-			  strcmp(this_dev->prom_name, "espdma"))
+		else if(strcmp(this_dev->prom_name, "dma") &&
+			strcmp(this_dev->prom_name, "ledma") &&
+			strcmp(this_dev->prom_name, "espdma"))
 			continue;
 
 		/* Found one... */
@@ -62,10 +106,6 @@ dvma_init(struct linux_sbus *sbus, unsigned long memory_start))
 			/* We're the first in line */
 			dma_chain=dma;
 		}
-		dma->next = 0;
-
-		printk("dma%d: ", num_dma);
-		num_dma++;
 
 		/* The constant PAGE_SIZE that is passed to sparc_alloc_io makes the
 		 * routine only alloc 1 page, that was what the original code did
@@ -82,45 +122,42 @@ dvma_init(struct linux_sbus *sbus, unsigned long memory_start))
 					dma->SBus_dev->reg_addrs[0].which_io, 0x0);
 
 		dma->node = dma->SBus_dev->prom_node;
-		dma->running=0;      /* No transfers going on as of yet */
-		dma->allocated=0;    /* No one has allocated us yet */
-		switch((dma->regs->cond_reg)&DMA_DEVICE_ID) {
-		case DMA_VERS0:
-			dma->revision=dvmarev0;
-			printk("Revision 0 ");
-			break;
-		case DMA_ESCV1:
-			dma->revision=dvmaesc1;
-			printk("ESC Revision 1 ");
-			break;
-		case DMA_VERS1:
-			dma->revision=dvmarev1;
-			printk("Revision 1 ");
-			break;
-		case DMA_VERS2:
-			dma->revision=dvmarev2;
-			printk("Revision 2 ");
-			break;
-		case DMA_VERHME:
-			dma->revision=dvmahme;
-			printk("HME DVMA gate array ");
-			break;
-		case DMA_VERSPLUS:
-			dma->revision=dvmarevplus;
-			printk("Revision 1 PLUS ");
-			break;
-		default:
-			printk("unknown dma version %x",
-			       (dma->regs->cond_reg)&DMA_DEVICE_ID);
-			dma->allocated = 1;
-			break;
-		}
-		printk("\n");
-#if 0 /* Clutters up the screen */
-		dump_dma_regs(dma->regs);
-#endif
+		
+		init_one_dvma(dma, num_dma++);
+		
 	};  /* while(this_dev) */
 
 	return memory_start;
 }
 
+#ifdef CONFIG_SUN4
+
+#include <asm/sun4paddr.h>
+
+__initfunc(unsigned long
+sun4_dvma_init(unsigned long memory_start))
+{
+	struct Linux_SBus_DMA *dma;
+	struct Linux_SBus_DMA *dchain;
+
+	dma = (struct Linux_SBus_DMA *) memory_start;
+	memory_start += sizeof(struct Linux_SBus_DMA);
+
+	/* No SBUS */
+	dma->SBus_dev = 0x0;
+
+	/* Only one DMA device */
+	dma_chain=dma;
+
+	dma->regs = (struct sparc_dma_registers *)
+		sparc_alloc_io (SUN4_300_DMA_PHYSADDR, 0,
+				PAGE_SIZE, "dma", 0x0, 0x0);
+
+	/* No prom node */
+	dma->node = 0x0;
+
+	init_one_dvma(dma, 0);
+	return memory_start;
+}
+
+#endif

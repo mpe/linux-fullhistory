@@ -18,6 +18,7 @@
 #include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/system.h>
 
 static volatile unsigned char *via;
@@ -98,7 +99,7 @@ via_cuda_init()
 	printk(" %x(%x)", vias->addrs[i].address, vias->addrs[i].size);
     printk(", intrs =");
     for (i = 0; i < vias->n_intrs; ++i)
-	printk(" %x", vias->intrs[i]);
+	printk(" %x", vias->intrs[i].line);
     printk("\n"); }
 #endif
 
@@ -108,7 +109,7 @@ via_cuda_init()
 	if (vias->n_addrs < 1 || vias->n_intrs < 1)
 	    return;
     }
-    via = (volatile unsigned char *) vias->addrs->address;
+    via = (volatile unsigned char *) ioremap(vias->addrs->address, 0x2000);
 
     if (!init_via()) {
 	printk(KERN_ERR "init_via failed\n");
@@ -117,8 +118,8 @@ via_cuda_init()
 
     cuda_state = idle;
 
-    if (request_irq(vias->intrs[0], via_interrupt, 0, "VIA", (void *)0)) {
-	printk(KERN_ERR "VIA: can't get irq %d\n", vias->intrs[0]);
+    if (request_irq(vias->intrs[0].line, via_interrupt, 0, "VIA", (void *)0)) {
+	printk(KERN_ERR "VIA: can't get irq %d\n", vias->intrs[0].line);
 	return;
     }
 
@@ -238,6 +239,14 @@ cuda_send_request(struct adb_request *req)
 {
     unsigned long flags;
 
+    if (via == NULL) {
+	req->complete = 1;
+	return -ENXIO;
+    }
+    if (req->nbytes < 2 || req->data[0] > CUDA_PACKET) {
+	req->complete = 1;
+	return -EINVAL;
+    }
     req->next = 0;
     req->sent = 0;
     req->complete = 0;
@@ -388,6 +397,17 @@ via_interrupt(int irq, void *arg, struct pt_regs *regs)
 	if (reading_reply) {
 	    req = current_req;
 	    req->reply_len = reply_ptr - req->reply;
+	    if (req->data[0] == ADB_PACKET) {
+		/* Have to adjust the reply from ADB commands */
+		if (req->reply_len <= 2 || (req->reply[1] & 2) != 0) {
+		    /* the 0x2 bit indicates no response */
+		    req->reply_len = 0;
+		} else {
+		    /* leave just the command and result bytes in the reply */
+		    req->reply_len -= 2;
+		    memmove(req->reply, req->reply + 2, req->reply_len);
+		}
+	    }
 	    req->complete = 1;
 	    current_req = req->next;
 	    if (req->done)

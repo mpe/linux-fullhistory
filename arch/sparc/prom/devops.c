@@ -1,4 +1,4 @@
-/* $Id: devops.c,v 1.10 1997/05/14 20:44:59 davem Exp $
+/* $Id: devops.c,v 1.11 1998/03/09 14:04:24 jj Exp $
  * devops.c:  Device operations using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -10,8 +10,7 @@
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 
-/* XXX Let's get rid of this thing if we can... */
-extern struct task_struct *current_set[NR_CPUS];
+extern void restore_current(void);
 
 /* Open the device described by the string 'dstr'.  Returns the handle
  * to that device used for subsequent operations on that device.
@@ -37,9 +36,7 @@ prom_devopen(char *dstr)
 		handle = -1;
 		break;
 	};
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 
 	return handle;
@@ -63,9 +60,7 @@ prom_devclose(int dhandle)
 	default:
 		break;
 	};
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 	return 0;
 }
@@ -90,9 +85,7 @@ prom_seek(int dhandle, unsigned int seekhi, unsigned int seeklo)
 	default:
 		break;
 	};
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 
 	return;

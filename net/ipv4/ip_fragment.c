@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.33 1998/03/19 08:34:08 davem Exp $
+ * Version:	$Id: ip_fragment.c,v 1.36 1998/04/18 02:13:07 davem Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -346,10 +346,9 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	memcpy(ptr, qp->iph, qp->ihlen);
 	ptr += qp->ihlen;
 
-	count = 0;
-
 	/* Copy the data portions of all fragments into the new buffer. */
 	fp = qp->fragments;
+	count = qp->ihlen;
 	while(fp) {
 		if (fp->len < 0 || count+fp->len > skb->len) {
 			NETDEBUG(printk(KERN_ERR "Invalid fragment list: "
@@ -360,7 +359,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 			return NULL;
 		}
 		memcpy((ptr + fp->offset), fp->ptr, fp->len);
-		if (!count) {
+		if (count == qp->ihlen) {
 			skb->dst = dst_clone(fp->skb->dst);
 			skb->dev = fp->skb->dev;
 		}
@@ -376,7 +375,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	/* Done with all fragments. Fixup the new IP header. */
 	iph = skb->nh.iph;
 	iph->frag_off = 0;
-	iph->tot_len = htons((iph->ihl * 4) + count);
+	iph->tot_len = htons(count);
 
 	ip_statistics.IpReasmOKs++;
 	return skb;

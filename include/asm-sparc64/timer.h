@@ -1,4 +1,4 @@
-/* $Id: timer.h,v 1.1 1997/07/23 10:38:00 davem Exp $
+/* $Id: timer.h,v 1.2 1998/03/15 17:23:52 ecd Exp $
  * timer.h: System timer definitions for sun5.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -47,5 +47,10 @@ struct sun5_timer {
  * gets delivered that often.
  */
 #define SUN5_HZ_TO_LIMIT(__hz)  (1000000/(__hz))
+
+#ifdef __SMP__
+extern unsigned long timer_tick_offset;
+extern void timer_tick_interrupt(struct pt_regs *);
+#endif
 
 #endif /* _SPARC64_TIMER_H */

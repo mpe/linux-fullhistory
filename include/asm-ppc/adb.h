@@ -18,13 +18,15 @@
 #define ADB_MODEM	5
 #define ADB_MISC	7	/* maybe a monitor */
 
+#define ADB_RET_OK	0
+#define ADB_RET_TIMEOUT	3
 
 #ifdef __KERNEL__
 
 struct adb_request {
-    unsigned char data[16];
+    unsigned char data[32];
     int nbytes;
-    unsigned char reply[16];
+    unsigned char reply[32];
     int reply_len;
     unsigned char reply_expected;
     unsigned char sent;
@@ -32,6 +34,11 @@ struct adb_request {
     void (*done)(struct adb_request *);
     void *arg;
     struct adb_request *next;
+};
+
+struct adb_ids {
+    int nids;
+    unsigned char id[16];
 };
 
 extern enum adb_hw {
@@ -48,7 +55,7 @@ extern int (*adb_autopoll)(int on);
 void adb_init(void);
 int adb_request(struct adb_request *req, void (*done)(struct adb_request *),
 		int flags, int nbytes, ...);
-int adb_register(int default_id,
+int adb_register(int default_id,int handler_id,struct adb_ids *ids,
 		 void (*handler)(unsigned char *, int, struct pt_regs *, int));
 void adb_input(unsigned char *, int, struct pt_regs *, int);
 

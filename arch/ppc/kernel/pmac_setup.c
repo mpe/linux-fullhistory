@@ -47,15 +47,10 @@
 #include <asm/ide.h>
 #include <asm/pci-bridge.h>
 #include <asm/adb.h>
+#include <asm/mediabay.h>
+#include <asm/ohare.h>
+#include <asm/mediabay.h>
 #include "time.h"
-
-/*
- * A magic address and value to put into it on machines with the
- * "ohare" I/O controller.  This makes the IDE CD work on Starmaxes.
- * Contributed by Harry Eaton.
- */
-#define OMAGICPLACE	((volatile unsigned *) 0xf3000038)
-#define OMAGICCONT	0xbeff7a
 
 extern int root_mountflags;
 
@@ -63,7 +58,7 @@ unsigned char drive_info;
 
 #define DEFAULT_ROOT_DEVICE 0x0801	/* sda1 - slightly silly choice */
 
-static void gc_init(const char *, int);
+static void ohare_init(void);
 
 void
 pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p)
@@ -91,27 +86,44 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p)
 			loops_per_sec = 50000000;
 	}
 
-	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
-	gc_init("gc", 0);
-	gc_init("ohare", 1);
+	/* this area has the CPU identification register
+	   and some registers used by smp boards */
+	ioremap(0xf8000000, 0x1000);
 
-#ifdef CONFIG_ABSTRACT_CONSOLE
+	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
+
+	ohare_init();
+
+#ifdef CONFIG_FB
 	/* Frame buffer device based console */
 	conswitchp = &fb_con;
 #endif
 }
 
-static void gc_init(const char *name, int isohare)
+static volatile u32 *feature_addr;
+
+static void ohare_init(void)
 {
 	struct device_node *np;
 
-	for (np = find_devices(name); np != NULL; np = np->next) {
-		if (np->n_addrs > 0)
-			ioremap(np->addrs[0].address, np->addrs[0].size);
-		if (isohare) {
-			printk(KERN_INFO "Twiddling the magic ohare bits\n");
-			out_le32(OMAGICPLACE, OMAGICCONT);
-		}
+	np = find_devices("ohare");
+	if (np == 0)
+		return;
+	if (np->next != 0)
+		printk(KERN_WARNING "only using the first ohare\n");
+	if (np->n_addrs == 0) {
+		printk(KERN_ERR "No addresses for %s\n", np->full_name);
+		return;
+	}
+	feature_addr = (volatile u32 *)
+		ioremap(np->addrs[0].address + OHARE_FEATURE_REG, 4);
+
+	if (find_devices("via-pmu") == 0) {
+		printk(KERN_INFO "Twiddling the magic ohare bits\n");
+		out_le32(feature_addr, STARMAX_FEATURES);
+	} else {
+		out_le32(feature_addr, in_le32(feature_addr) | PBOOK_FEATURES);
+		printk(KERN_DEBUG "feature reg = %x\n", in_le32(feature_addr));
 	}
 }
 
@@ -125,10 +137,15 @@ kdev_t boot_dev;
 unsigned long
 powermac_init(unsigned long mem_start, unsigned long mem_end)
 {
-	pmac_nvram_init();
+#ifdef CONFIG_KGDB
+	extern void zs_kgdb_hook(int tty_num);
+	zs_kgdb_hook(0);
+#endif
 	adb_init();
+	pmac_nvram_init();
 	if (_machine == _MACH_Pmac) {
 		pmac_read_rtc_time();
+		media_bay_init();
 	}
 #ifdef CONFIG_PMAC_CONSOLE
 	pmac_find_display();
@@ -175,7 +192,7 @@ note_scsi_host(struct device_node *node, void *host)
 #include "../../../drivers/scsi/sd.h"
 #include "../../../drivers/scsi/hosts.h"
 
-int sd_find_target(void *host, int tgt)
+kdev_t sd_find_target(void *host, int tgt)
 {
     Scsi_Disk *dp;
     int i;
@@ -190,7 +207,7 @@ int sd_find_target(void *host, int tgt)
 
 void find_boot_device(void)
 {
-	int dev;
+	kdev_t dev;
 
 	if (kdev_t_to_nr(ROOT_DEV) != 0)
 		return;
@@ -201,7 +218,7 @@ void find_boot_device(void)
 	dev = sd_find_target(boot_host, boot_target);
 	if (dev == 0)
 		return;
-	boot_dev = to_kdev_t(dev + boot_part);
+	boot_dev = MKDEV(MAJOR(dev), MINOR(dev) + boot_part);
 #endif
 	/* XXX should cope with booting from IDE also */
 }
@@ -221,39 +238,92 @@ void note_bootable_part(kdev_t dev, int part)
 	}
 }
 
+#ifdef CONFIG_BLK_DEV_IDE
+int pmac_ide_ports_known;
+ide_ioreg_t pmac_ide_regbase[MAX_HWIFS];
+int pmac_ide_irq[MAX_HWIFS];
+
 void pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
-	struct device_node *np;
 	int i;
-	static struct device_node *atas;
-	static int atas_valid;
 
 	*p = 0;
-	*irq = 0;
-	if (!atas_valid) {
-		atas = find_devices("ATA");
-		atas_valid = 1;
-	}
-	for (i = (int)base, np = atas; i > 0 && np != NULL; --i, np = np->next)
-		;
-	if (np == NULL)
+	if (base == 0)
 		return;
-	if (np->n_addrs == 0) {
-		printk("ide: no addresses for device %s\n", np->full_name);
+	if (base == mb_cd_base && !check_media_bay(MB_CD)) {
+		mb_cd_index = -1;
 		return;
 	}
-	if (np->n_intrs == 0) {
-		printk("ide: no intrs for device %s, using 13\n",
-		       np->full_name);
-		*irq = 13;
-	} else {
-		*irq = np->intrs[0];
-	}
-	base = (unsigned long) ioremap(np->addrs[0].address, 0x200);
 	for (i = 0; i < 8; ++i)
 		*p++ = base + i * 0x10;
 	*p = base + 0x160;
+	if (irq != NULL) {
+		*irq = 0;
+		for (i = 0; i < MAX_HWIFS; ++i) {
+			if (base == pmac_ide_regbase[i]) {
+				*irq = pmac_ide_irq[i];
+				break;
+			}
+		}
+	}
 }
+
+void pmac_ide_probe(void)
+{
+	struct device_node *np;
+	int i;
+	struct device_node *atas;
+	struct device_node *p, **pp, *removables, **rp;
+
+	pp = &atas;
+	rp = &removables;
+	p = find_devices("ATA");
+	if (p == NULL)
+		p = find_devices("IDE");
+	/* Move removable devices such as the media-bay CDROM
+	   on the PB3400 to the end of the list. */
+	for (; p != NULL; p = p->next) {
+		if (p->parent && p->parent->name
+		    && strcasecmp(p->parent->name, "media-bay") == 0) {
+			*rp = p;
+			rp = &p->next;
+		} else {
+			*pp = p;
+			pp = &p->next;
+		}
+	}
+	*rp = NULL;
+	*pp = removables;
+
+	for (i = 0, np = atas; i < MAX_HWIFS && np != NULL; np = np->next) {
+		if (np->n_addrs == 0) {
+			printk(KERN_WARNING "ide: no address for device %s\n",
+			       np->full_name);
+			continue;
+		}
+		pmac_ide_regbase[i] = (unsigned long)
+			ioremap(np->addrs[0].address, 0x200);
+		if (np->n_intrs == 0) {
+			printk("ide: no intrs for device %s, using 13\n",
+			       np->full_name);
+			pmac_ide_irq[i] = 13;
+		} else {
+			pmac_ide_irq[i] = np->intrs[0].line;
+		}
+
+		if (np->parent && np->parent->name
+		    && strcasecmp(np->parent->name, "media-bay") == 0) {
+			mb_cd_index = i;
+			mb_cd_base = pmac_ide_regbase[i];
+			mb_cd_irq = pmac_ide_irq[i];
+		}
+
+		++i;
+	}
+
+	pmac_ide_ports_known = 1;
+}
+#endif /* CONFIG_BLK_DEV_IDE */
 
 int
 pmac_get_cpuinfo(char *buffer)

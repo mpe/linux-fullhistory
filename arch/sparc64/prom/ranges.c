@@ -1,4 +1,4 @@
-/* $Id: ranges.c,v 1.8 1997/08/17 22:39:45 ecd Exp $
+/* $Id: ranges.c,v 1.10 1998/03/24 05:54:29 ecd Exp $
  * ranges.c: Handle ranges in newer proms for obio/sbus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -140,16 +140,60 @@ __initfunc(void prom_ebus_ranges_init(struct linux_ebus *ebus))
 		ebus->num_ebus_ranges = (success/sizeof(struct linux_prom_ebus_ranges));
 }
 
+__initfunc(void prom_ebus_intmap_init(struct linux_ebus *ebus))
+{
+	int success;
+
+	ebus->num_ebus_intmap = 0;
+	success = prom_getproperty(ebus->prom_node, "interrupt-map",
+				   (char *)ebus->ebus_intmap,
+				   sizeof(ebus->ebus_intmap));
+	if (success == -1)
+		return;
+
+	ebus->num_ebus_intmap = (success/sizeof(struct linux_prom_ebus_intmap));
+
+	success = prom_getproperty(ebus->prom_node, "interrupt-map-mask",
+				   (char *)&ebus->ebus_intmask,
+				   sizeof(ebus->ebus_intmask));
+	if (success == -1) {
+		prom_printf("%s: can't get interrupt-map-mask\n", __FUNCTION__);
+		prom_halt();
+	}
+}
+
 __initfunc(void prom_pbm_ranges_init(int pnode, struct linux_pbm_info *pbm))
 {
 	int success;
 
 	pbm->num_pbm_ranges = 0;
-	success = prom_getproperty(pbm->prom_node, "ranges",
+	success = prom_getproperty(pnode, "ranges",
 				   (char *)&pbm->pbm_ranges,
 				   sizeof(pbm->pbm_ranges));
 	if(success != -1)
 		pbm->num_pbm_ranges = (success/sizeof(struct linux_prom_pci_ranges));
+}
+
+__initfunc(void prom_pbm_intmap_init(int pnode, struct linux_pbm_info *pbm))
+{
+	int success;
+
+	pbm->num_pbm_intmap = 0;
+	success = prom_getproperty(pnode, "interrupt-map",
+				   (char *)pbm->pbm_intmap,
+				   sizeof(pbm->pbm_intmap));
+	if (success == -1)
+		return;
+
+	pbm->num_pbm_intmap = (success/sizeof(struct linux_prom_pci_intmap));
+
+	success = prom_getproperty(pnode, "interrupt-map-mask",
+				   (char *)&pbm->pbm_intmask,
+				   sizeof(pbm->pbm_intmask));
+	if (success == -1) {
+		prom_printf("%s: can't get interrupt-map-mask\n", __FUNCTION__);
+		prom_halt();
+	}
 }
 #endif
 

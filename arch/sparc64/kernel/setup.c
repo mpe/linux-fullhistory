@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.18 1997/12/18 02:43:00 ecd Exp $
+/*  $Id: setup.c,v 1.20 1998/02/24 17:02:39 jj Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -54,11 +54,6 @@ struct screen_info screen_info = {
 };
 
 unsigned int phys_bytes_of_ram, end_of_phys_memory;
-
-unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
-{
-	return memory_start;
-}
 
 /* Typing sync at the prom prompt calls the function pointed to by
  * the sync callback which I set to the following function.
@@ -413,14 +408,17 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
 extern char *sparc_cpu_type[];
 extern char *sparc_fpu_type[];
 
-extern char *smp_info(void);
-extern char *mmu_info(void);
+extern int smp_info(char *);
+extern int smp_bogo(char *);
+extern int mmu_info(char *);
 
 int get_cpuinfo(char *buffer)
 {
 	int cpuid=smp_processor_id();
+	int len;
 
-	return sprintf(buffer, "cpu\t\t: %s\n"
+	len = sprintf(buffer, 
+	    "cpu\t\t: %s\n"
             "fpu\t\t: %s\n"
             "promlib\t\t: Version 3 Revision %d\n"
             "prom\t\t: %d.%d.%d\n"
@@ -429,33 +427,22 @@ int get_cpuinfo(char *buffer)
 	    "ncpus active\t: %d\n"
 #ifndef __SMP__
             "BogoMips\t: %lu.%02lu\n"
-#else
-	    "Cpu0Bogo\t: %lu.%02lu\n"
-	    "Cpu1Bogo\t: %lu.%02lu\n"
-	    "Cpu2Bogo\t: %lu.%02lu\n"
-	    "Cpu3Bogo\t: %lu.%02lu\n"
-#endif
-	    "%s"
-#ifdef __SMP__
-	    "%s"
 #endif
 	    ,
             sparc_cpu_type[cpuid],
             sparc_fpu_type[cpuid],
             prom_rev, prom_prev >> 16, (prom_prev >> 8) & 0xff, prom_prev & 0xff,
-	    linux_num_cpus, smp_num_cpus,
+	    linux_num_cpus, smp_num_cpus
 #ifndef __SMP__
-            loops_per_sec/500000, (loops_per_sec/5000) % 100,
-#else
-	    cpu_data[0].udelay_val/500000, (cpu_data[0].udelay_val/5000)%100,
-	    cpu_data[1].udelay_val/500000, (cpu_data[1].udelay_val/5000)%100,
-	    cpu_data[2].udelay_val/500000, (cpu_data[2].udelay_val/5000)%100,
-	    cpu_data[3].udelay_val/500000, (cpu_data[3].udelay_val/5000)%100,
+            , loops_per_sec/500000, (loops_per_sec/5000) % 100
 #endif
-	    mmu_info()
+	    );
 #ifdef __SMP__
-	    , smp_info()
+	len += smp_bogo(buffer + len);
 #endif
-            );
-
+	len += mmu_info(buffer + len);
+#ifdef __SMP__
+	len += smp_info(buffer + len);
+#endif
+	return len;
 }

@@ -32,6 +32,7 @@ SECTIONS
   . = ALIGN(4096);
   __init_begin = .;
   .text.init : { *(.text.init) }
+  __init_text_end = .;
   .data.init : { *(.data.init) }
   . = ALIGN(4096);
   __init_end = .;

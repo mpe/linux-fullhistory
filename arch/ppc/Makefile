@@ -12,14 +12,7 @@
 # Rewritten by Cort Dougan and Paul Mackerras
 #
 
-ifdef CONFIG_CHRP
-# XXX for now
-KERNELBASE	=0x90000000
-KERNELLOAD	=0x90010000
-else
-KERNELBASE	=0xc0000000 
-KERNELLOAD	=0xc0000000 
-endif
+KERNELLOAD	=0xc0000000
 
 # PowerPC (cross) tools
 ifneq ($(shell uname -m),ppc)
@@ -32,21 +25,13 @@ ASFLAGS		=
 LINKFLAGS	= -T arch/ppc/vmlinux.lds -Ttext $(KERNELLOAD) -Bstatic
 CFLAGSINC	= -D__KERNEL__ -I$(TOPDIR)/include -D__powerpc__
 CFLAGS		:= $(CFLAGS) -D__powerpc__ -fsigned-char -msoft-float -pipe \
-		-fno-builtin -ffixed-r2 -Wno-uninitialized -mmultiple -mstring \
-		-DKERNELBASE=$(KERNELBASE)
+		-fno-builtin -ffixed-r2 -Wno-uninitialized -mmultiple -mstring
 CPP		= $(CC) -E $(CFLAGS)
 
-ifdef CONFIG_601
-CFLAGS := $(CFLAGS) -mcpu=601 -DCPU=601
+ifdef CONFIG_8xx
+CFLAGS := $(CFLAGS) -mcpu=860
 endif
 
-ifdef CONFIG_603
-CFLAGS := $(CFLAGS) -mcpu=603 -DCPU=603
-endif
-
-ifdef CONFIG_604
-CFLAGS := $(CFLAGS) -mcpu=604 -DCPU=604
-endif
 
 HEAD := arch/ppc/kernel/head.o
 
@@ -63,6 +48,11 @@ endif
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 MAKECOFFBOOT = $(MAKE) -C arch/$(ARCH)/coffboot
 MAKECHRPBOOT = $(MAKE) -C arch/$(ARCH)/chrpboot
+
+ifdef CONFIG_8xx
+SUBDIRS += arch/ppc/8xx_io
+DRIVERS += arch/ppc/8xx_io/8xx_io.a drivers/net/net.a
+endif
 
 checks:
 	@$(MAKE) -C arch/$(ARCH)/kernel checks
@@ -82,6 +72,19 @@ pmac_config:
 prep_config:
 	rm -f .config arch/ppc/defconfig
 	ln -s prep_defconfig arch/ppc/defconfig
+
+chrp_config:
+	rm -f .config arch/ppc/defconfig
+	ln -s chrp_defconfig arch/ppc/defconfig
+
+common_config:
+	rm -f .config arch/ppc/common_defconfig
+	ln -s common_defconfig arch/ppc/defconfig
+
+mbx_config:
+	rm -f .config arch/ppc/defconfig
+	ln -s mbx_defconfig arch/ppc/defconfig
+
 
 tags:
 	etags */*.c include/{asm,linux}/*.h arch/ppc/kernel/*.{c,h}

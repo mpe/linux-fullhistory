@@ -64,7 +64,7 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 	 */
 	if (!mm->segments) {
 		for (i=1 ; i<NR_TASKS ; i++) {
-			if (task[i]->mm == mm) {
+			if (task[i] == current) {
 				if (!(mm->segments = (void *) vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE)))
 					return -ENOMEM;
 				memset(mm->segments, 0, LDT_ENTRIES*LDT_ENTRY_SIZE);

@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.36 1997/12/14 23:24:43 ecd Exp $ */
+/* $Id: unistd.h,v 1.38 1998/03/27 07:01:56 davem Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -29,12 +29,12 @@
 #define __NR_unlink              10 /* Common                                      */
 #define __NR_execv               11 /* SunOS Specific                              */
 #define __NR_chdir               12 /* Common                                      */
-/* #define __NR_ni_syscall       13    ENOSYS under SunOS                          */
+#define __NR_xstat		 13 /* Linux Specific				   */
 #define __NR_mknod               14 /* Common                                      */
 #define __NR_chmod               15 /* Common                                      */
 #define __NR_chown               16 /* Common                                      */
 #define __NR_brk                 17 /* Common                                      */
-/* #define __NR_ni_syscall       18    ENOSYS under SunOS                          */
+#define __NR_xmknod		 18 /* Linux Specific				   */
 #define __NR_lseek               19 /* Common                                      */
 #define __NR_getpid              20 /* Common                                      */
 /* #define __NR_ni_syscall       21    ENOSYS under SunOS                          */

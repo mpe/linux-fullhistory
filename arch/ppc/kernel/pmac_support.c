@@ -7,8 +7,11 @@
 #include <linux/nvram.h>
 #include <asm/ptrace.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/prom.h>
+#include <asm/adb.h>
+#include <asm/pmu.h>
 
 /*
  * Read and write the non-volatile RAM on PowerMacs and CHRP machines.
@@ -32,8 +35,7 @@ void pmac_nvram_init(void)
 	}
 	nvram_naddrs = dp->n_addrs;
 	if (_machine == _MACH_chrp && nvram_naddrs == 1) {
-		/* XXX for now */
-		nvram_data = ioremap(0xf70e0000, NVRAM_SIZE);
+		nvram_data = ioremap(dp->addrs[0].address, dp->addrs[0].size);
 		nvram_mult = 1;
 	} else if (nvram_naddrs == 1) {
 		nvram_data = ioremap(dp->addrs[0].address, dp->addrs[0].size);
@@ -41,6 +43,8 @@ void pmac_nvram_init(void)
 	} else if (nvram_naddrs == 2) {
 		nvram_addr = ioremap(dp->addrs[0].address, dp->addrs[0].size);
 		nvram_data = ioremap(dp->addrs[1].address, dp->addrs[1].size);
+	} else if (nvram_naddrs == 0 && adb_hardware == ADB_VIAPMU) {
+		nvram_naddrs = -1;
 	} else {
 		printk(KERN_ERR "Don't know how to access NVRAM with %d addresses\n",
 		       nvram_naddrs);
@@ -49,7 +53,16 @@ void pmac_nvram_init(void)
 
 unsigned char nvram_read_byte(int addr)
 {
+	struct adb_request req;
+
 	switch (nvram_naddrs) {
+	case -1:
+		if (pmu_request(&req, NULL, 3, PMU_READ_NVRAM,
+				(addr >> 8) & 0xff, addr & 0xff))
+			break;
+		while (!req.complete)
+			pmu_poll();
+		return req.reply[1];
 	case 1:
 		return nvram_data[(addr & (NVRAM_SIZE - 1)) * nvram_mult];
 	case 2:
@@ -62,7 +75,16 @@ unsigned char nvram_read_byte(int addr)
 
 void nvram_write_byte(unsigned char val, int addr)
 {
+	struct adb_request req;
+
 	switch (nvram_naddrs) {
+	case -1:
+		if (pmu_request(&req, NULL, 4, PMU_WRITE_NVRAM,
+				(addr >> 8) & 0xff, addr & 0xff, val))
+			break;
+		while (!req.complete)
+			pmu_poll();
+		break;
 	case 1:
 		nvram_data[(addr & (NVRAM_SIZE - 1)) * nvram_mult] = val;
 		break;

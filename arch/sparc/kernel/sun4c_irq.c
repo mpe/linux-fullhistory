@@ -9,6 +9,7 @@
  *  Copyright (C) 1996 Dave Redman (djhr@tadpole.co.uk)
  */
 
+#include <linux/config.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/linkage.h>
@@ -30,6 +31,9 @@
 #include <asm/traps.h>
 #include <asm/irq.h>
 #include <asm/io.h>
+#include <asm/sun4paddr.h>
+#include <asm/idprom.h>
+#include <asm/machines.h>
 
 /* Pointer to the interrupt enable byte
  *
@@ -128,7 +132,7 @@ __initfunc(static void sun4c_init_timers(void (*counter_fn)(int, void *, struct 
 	/* Map the Timer chip, this is implemented in hardware inside
 	 * the cache chip on the sun4c.
 	 */
-	sun4c_timers = sparc_alloc_io (SUN4C_TIMER_PHYSADDR, 0,
+	sun4c_timers = sparc_alloc_io (SUN_TIMER_PHYSADDR, 0,
 				       sizeof(struct sun4c_timer_info),
 				       "timer", 0x0, 0x0);
     
@@ -160,30 +164,41 @@ __initfunc(void sun4c_init_IRQ(void))
 {
 	struct linux_prom_registers int_regs[2];
 	int ie_node;
-    
-	ie_node = prom_searchsiblings (prom_getchild(prom_root_node),
-				       "interrupt-enable");
-	if(ie_node == 0)
-		panic("Cannot find /interrupt-enable node");
 
-	/* Depending on the "address" property is bad news... */
-	prom_getproperty(ie_node, "reg", (char *) int_regs, sizeof(int_regs));
-	interrupt_enable = (char *) sparc_alloc_io(int_regs[0].phys_addr, 0,
-						   int_regs[0].reg_size,
-						   "sun4c_interrupts",
-						   int_regs[0].which_io, 0x0);
-	enable_irq = sun4c_enable_irq;
-	disable_irq = sun4c_disable_irq;
-	enable_pil_irq = sun4c_enable_irq;
-	disable_pil_irq = sun4c_disable_irq;
-	clear_clock_irq = sun4c_clear_clock_irq;
-	clear_profile_irq = sun4c_clear_profile_irq;
-	load_profile_irq = sun4c_load_profile_irq;
+	if (ARCH_SUN4) {
+		interrupt_enable =
+			(char *) sparc_alloc_io(SUN4_IE_PHYSADDR, 0,
+					   	PAGE_SIZE,
+					   	"sun4c_interrupts",
+					   	0x0, 0x0);
+	} else {
+    
+		ie_node = prom_searchsiblings (prom_getchild(prom_root_node),
+				       	"interrupt-enable");
+		if(ie_node == 0)
+			panic("Cannot find /interrupt-enable node");
+
+		/* Depending on the "address" property is bad news... */
+		prom_getproperty(ie_node, "reg", (char *) int_regs, sizeof(int_regs));
+		interrupt_enable =
+			(char *) sparc_alloc_io(int_regs[0].phys_addr, 0,
+					   	int_regs[0].reg_size,
+					   	"sun4c_interrupts",
+					   	int_regs[0].which_io, 0x0);
+	}
+
+	BTFIXUPSET_CALL(enable_irq, sun4c_enable_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(disable_irq, sun4c_disable_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(enable_pil_irq, sun4c_enable_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(disable_pil_irq, sun4c_disable_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(clear_clock_irq, sun4c_clear_clock_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(clear_profile_irq, sun4c_clear_profile_irq, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(load_profile_irq, sun4c_load_profile_irq, BTFIXUPCALL_NOP);
 	init_timers = sun4c_init_timers;
 #ifdef __SMP__
-	set_cpu_int = (void (*) (int, int))sun4c_nop;
-	clear_cpu_int = (void (*) (int, int))sun4c_nop;
-	set_irq_udt = (void (*) (int))sun4c_nop;
+	BTFIXUPSET_CALL(set_cpu_int, sun4c_nop, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(clear_cpu_int, sun4c_nop, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(set_irq_udt, sun4c_nop, BTFIXUPCALL_NOP);
 #endif
 	*interrupt_enable = (SUN4C_INT_ENABLE);
 	/* Cannot enable interrupts until OBP ticker is disabled. */

@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.77 1997/12/19 07:32:59 ecd Exp $
+/* $Id: suncons.c,v 1.79 1998/01/30 10:59:23 jj Exp $
  * suncons.c: Sparc platform console generic layer.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -28,6 +28,9 @@ fbinfo_t *fbinfo;
 int fbinfos;
 unsigned int linux_logo_colors __initdata = LINUX_LOGO_COLORS;
 char logo_banner[] __initdata = linux_logo_banner;
+#ifdef CONFIG_PCI
+static int cons_type __initdata = 0;
+#endif
 
 extern struct console vt_console_driver;
 
@@ -344,6 +347,7 @@ __initfunc(unsigned long sun_console_init(unsigned long memory_start))
 
 	if(sbus_console_probe()) {
 #ifdef CONFIG_PCI
+		cons_type = 1;
 		pci_console_inithook();
 		return memory_start;
 #else
@@ -363,6 +367,11 @@ __initfunc(unsigned long pci_console_init(unsigned long memory_start))
 	/* Nothing to do in this case. */
 	if (!con_is_present())
 		return memory_start;
+		
+	if (!cons_type) {
+		/* Some console was already found on SBUS or UPA */
+		return memory_start;
+	}
 
 	if(pci_console_probe()) {
 		prom_printf("Could not probe PCI console, bailing out...\n");

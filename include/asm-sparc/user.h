@@ -1,4 +1,4 @@
-/* $Id: user.h,v 1.4 1996/07/24 23:17:14 miguel Exp $
+/* $Id: user.h,v 1.5 1998/02/23 01:49:22 rth Exp $
  * asm-sparc/user.h: Core file definitions for the Sparc.
  *
  * Keep in sync with reg.h.  Actually, we could get rid of this
@@ -50,11 +50,11 @@ struct user {
 	unsigned long sigcode;   /* Special sigcontext subcode, if any */
 };
 
-#define NBPG                   PAGE_SIZE
+#define NBPG                   0x2000
 #define UPAGES                 1
 #define HOST_TEXT_START_ADDR   (u.start_code)
-#define HOST_DATA_START_ADDR   (u.start_data)
-#define HOST_STACK_END_ADDR    (u.start_stack + u.u_ssize * NBPG)
+#define HOST_DATA_START_ADDR   (u.uexec.a_data)
+#define HOST_STACK_END_ADDR    (- u.u_ssize * NBPG)
 #define SUNOS_CORE_MAGIC       0x080456
 
 #endif /* !(_SPARC_USER_H) */

@@ -19,25 +19,33 @@ extern unsigned long cpu_present_map;
 struct cpuinfo_PPC {
 	unsigned long loops_per_sec;
 	unsigned long pvr;
+	unsigned long *pgd_quick;
+	unsigned long *pte_quick;
+	unsigned long pgtable_cache_sz;
 };
 
 extern struct cpuinfo_PPC cpu_data[NR_CPUS];
 
-struct klock_info {
-	unsigned char kernel_flag;
+struct klock_info_struct {
+	unsigned long kernel_flag;
 	unsigned char akp;
 };
 
-extern struct klock_info klock_info;
+extern struct klock_info_struct klock_info;
 
-#define KLOCK_HELD       0xff
-#define KLOCK_CLEAR      0x00
+#define KLOCK_HELD       0xffffffff
+#define KLOCK_CLEAR      0x0
 
-#define PROC_CHANGE_PENALTY     1000 /* don't change cpu's for now */
+#define PROC_CHANGE_PENALTY     20
 
 extern __volatile__ int cpu_number_map[NR_CPUS];
-extern __volatile__ int cpu_logical_map[NR_CPUS];
+extern __volatile__ int __cpu_logical_map[NR_CPUS];
 extern unsigned long smp_proc_in_lock[NR_CPUS];
+
+extern __inline__ int cpu_logical_map(int cpu)
+{
+	return __cpu_logical_map[cpu];
+}
 
 extern __inline__ int hard_smp_processor_id(void)
 {
@@ -48,8 +56,17 @@ extern __inline__ int hard_smp_processor_id(void)
 
 #define smp_processor_id() (current->processor)
 
+extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
+
 #endif /* __ASSEMBLY__ */
 
+#else /* !(__SMP__) */
+#ifndef __ASSEMBLY__
+extern __inline__ int cpu_logical_map(int cpu)
+{
+	return cpu;
+}
+#endif
 #endif /* !(__SMP__) */
 
 #define NO_PROC_ID               0xFF            /* No processor magic marker */

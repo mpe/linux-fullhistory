@@ -1,4 +1,4 @@
-/* $Id: mach64.h,v 1.4 1997/10/04 08:51:30 ecd Exp $
+/* $Id: mach64.h,v 1.5 1998/04/01 05:52:58 ecd Exp $
  * mach64.h: Ultra/PCI mach64 driver constants etc.
  *
  * Copyright 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -9,12 +9,10 @@
 
 struct mach64_info {
 	unsigned int color_mode;
-	unsigned int flags;
+	unsigned int chip_type;
 	unsigned int total_vram;
 };
 
-/* The mach64_info flag bits. */
-#define MACH64_MASK_VT	0x00000001
 
 /* NON-GUI MEMORY MAPPED Registers - expressed in BYTE offsets */
 
@@ -375,15 +373,6 @@ struct mach64_info {
 #define MEM_BNDRY_512K          0x00020000
 #define MEM_BNDRY_1M            0x00030000
 #define MEM_BNDRY_EN            0x00040000
-
-/* ATI PCI constants */
-#define PCI_ATI_VENDOR_ID	0x1002
-#define PCI_MACH64_GX		0x4758
-#define PCI_MACH64_CX		0x4358
-#define PCI_MACH64_CT		0x4354
-#define PCI_MACH64_ET		0x4554
-#define PCI_MACH64_VT		0x5654
-#define PCI_MACH64_GT		0x4754
 
 /* CONFIG_CHIP_ID register constants */
 #define CFG_CHIP_TYPE		0x0000FFFF

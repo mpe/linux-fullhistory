@@ -80,8 +80,7 @@ prep_get_cpuinfo(char *buffer)
 {
 	extern char *Motherboard_map_name;
 	extern RESIDUAL res;
-	int i;
-	int len;
+	int len, i;
   
 #ifdef __SMP__
 #define CD(X)		(cpu_data[n].X)  
@@ -93,7 +92,7 @@ prep_get_cpuinfo(char *buffer)
 	
 	if ( res.ResidualLength == 0 )
 		return len;
-
+	
 	/* print info about SIMMs */
 	len += sprintf(buffer+len,"simms\t\t: ");
 	for ( i = 0 ; (res.ActualNumMemories) && (i < MAX_MEMS) ; i++ )
@@ -106,6 +105,7 @@ prep_get_cpuinfo(char *buffer)
 	}
 	len += sprintf(buffer+len,"\n");
 
+#if 0	
 	/* TLB */
 	len += sprintf(buffer+len,"tlb\t\t:");
 	switch(res.VitalProductData.TLBAttrib)
@@ -123,7 +123,6 @@ prep_get_cpuinfo(char *buffer)
 		len += sprintf(buffer+len," not present\n");
 		break;
 	}
-
 	/* L1 */
 	len += sprintf(buffer+len,"l1\t\t: ");
 	switch(res.VitalProductData.CacheAttrib)
@@ -144,6 +143,7 @@ prep_get_cpuinfo(char *buffer)
 		len += sprintf(buffer+len,"not present\n");
 		break;
 	}
+#endif
 
 	/* L2 */
 	if ( (inb(IBM_EQUIP_PRESENT) & 1) == 0) /* l2 present */
@@ -201,7 +201,11 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 		}
 	}
 #endif
-
+	/* make the serial port the console */
+	/* strcat(cmd_line,"console=ttyS0,9600n8"); */
+	/* use the normal console but send output to the serial port, too */
+	/*strcat(cmd_line,"console=tty0 console=ttyS0,9600n8");*/
+        sprintf(cmd_line,"%s console=tty0 console=ttyS0,9600n8", cmd_line);
 	printk("Boot arguments: %s\n", cmd_line);
 	
 #ifdef CONFIG_CS4232
@@ -255,10 +259,6 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 #ifdef CONFIG_ABSTRACT_CONSOLE
 #ifdef CONFIG_VGA_CONSOLE
         conswitchp = &vga_con;
-#endif
-#ifdef CONFIG_FB
-	/* Frame buffer device based console */
-	conswitchp = &fb_con;
 #endif
 #endif
 }

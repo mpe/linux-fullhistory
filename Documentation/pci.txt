@@ -53,8 +53,13 @@ have been remapped by the kernel.
 
 4. Obsolete functions
 ~~~~~~~~~~~~~~~~~~~~~
-
 <linux/bios32.h> is obsolete and should not be included in new code.
 
 pcibios_find_(device|class) are also obsolete and should be replaced by
 pci_find_(device|class).
+
+5. Bus mastering
+~~~~~~~~~~~~~~~~
+   If you need to setup a bus-mastering card, just call pci_set_master(). It
+should set PCI_COMMAND_MASTER in the command register and adjust the latency
+timer if needed.

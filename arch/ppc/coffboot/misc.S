@@ -9,24 +9,25 @@
 	.text
 
 /*
- * Use the BAT0 registers to map the 1st 8MB of RAM to 0xc0000000.
+ * Use the BAT0 registers to map the 1st 8MB of RAM to
+ * the address given as the 1st argument.
  */
 	.globl	setup_bats
 setup_bats:
+	mr	4,3
 	mfpvr	3
 	rlwinm	3,3,16,16,31		/* r3 = 1 for 601, 4 for 604 */
 	cmpi	0,3,1
-	lis	4,0xc000
 	bne	4f
 	ori	4,4,4			/* set up BAT registers for 601 */
 	li	5,0x7f
 	b	5f
 4:	ori	4,4,0xff		/* set up BAT registers for 604 */
 	li	5,2
-	mtdbatu	0,4
-	mtdbatl	0,5
-5:	mtibatu	0,4
-	mtibatl	0,5
+	mtdbatu	3,4
+	mtdbatl	3,5
+5:	mtibatu	3,4
+	mtibatl	3,5
 	isync
 	blr
 

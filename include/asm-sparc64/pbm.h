@@ -1,4 +1,4 @@
-/* $Id: pbm.h,v 1.8 1998/01/10 18:26:10 ecd Exp $
+/* $Id: pbm.h,v 1.12 1998/04/10 12:29:55 ecd Exp $
  * pbm.h: U2P PCI bus module pseudo driver software state.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -7,7 +7,6 @@
 #ifndef __SPARC64_PBM_H
 #define __SPARC64_PBM_H
 
-#include <linux/bios32.h>
 #include <linux/pci.h>
 
 #include <asm/psycho.h>
@@ -25,7 +24,7 @@ struct pci_vma {
 	struct linux_pbm_info		*pbm;
 	unsigned int			start;
 	unsigned int			end;
-	unsigned int			base_reg;
+	unsigned int			offset;
 	unsigned int			_pad;
 };
 
@@ -39,6 +38,9 @@ struct linux_pbm_info {
 	char				prom_name[64];
 	struct linux_prom_pci_ranges	pbm_ranges[PROMREG_MAX];
 	int				num_pbm_ranges;
+	struct linux_prom_pci_intmap	pbm_intmap[PROMREG_MAX];
+	int				num_pbm_intmap;
+	struct linux_prom_pci_intmask	pbm_intmask;
 
 	/* Now things for the actual PCI bus probes. */
 	unsigned int			pci_first_busno;
@@ -56,6 +58,11 @@ struct linux_psycho {
 	int				index;
 	struct linux_pbm_info		pbm_A;
 	struct linux_pbm_info		pbm_B;
+
+	/* Now things for the actual PCI bus probes. */
+	unsigned int			pci_first_busno;
+	unsigned int			pci_last_busno;
+	struct pci_bus			*pci_bus;
 };
 
 /* PCI devices which are not bridges have this placed in their pci_dev
@@ -86,7 +93,7 @@ psycho_by_index(int index)
 #define PCI_IRQ_IDENT		0x80000000	/* This tells irq.c what we are        */
 #define PCI_IRQ_IMAP_OFF	0x7ff00000	/* Offset from first PSYCHO imap       */
 #define PCI_IRQ_IMAP_OFF_SHFT	20
-#define PCI_IRQ_BUSNO		0x000fc000	/* PSYCHO instance, currently unused   */
+#define PCI_IRQ_BUSNO		0x000fc000	/* PSYCHO instance                     */
 #define PCI_IRQ_BUSNO_SHFT	14
 #define PCI_IRQ_IGN		0x000007c0	/* PSYCHO "Int Group Number"           */
 #define PCI_IRQ_INO		0x0000003f	/* PSYCHO INO                          */

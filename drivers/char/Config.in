@@ -16,6 +16,7 @@ bool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED
 if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
    bool '   Support more than 4 serial ports' CONFIG_SERIAL_MANY_PORTS
    bool '   Support for sharing serial interrupts' CONFIG_SERIAL_SHARE_IRQ
+   bool '   Autodetect IRQ on standard ports (unsafe)' CONFIG_SERIAL_DETECT_IRQ
    bool '   Support special multiport boards' CONFIG_SERIAL_MULTIPORT
    bool '   Support the Bell Technologies HUB6 card' CONFIG_HUB6
 fi

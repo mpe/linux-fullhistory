@@ -1,4 +1,4 @@
-/* $Id: cgthree.c,v 1.24 1997/08/20 07:38:37 davem Exp $
+/* $Id: cgthree.c,v 1.25 1998/03/10 20:18:27 jj Exp $
  * cgtree.c: cg3 frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -133,7 +133,8 @@ cg3_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		page += map_size;
 	}
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
         return 0;
 }
 

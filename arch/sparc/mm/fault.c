@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.92 1997/05/15 21:14:21 davem Exp $
+/* $Id: fault.c,v 1.93 1998/03/25 10:43:16 jj Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -271,7 +271,7 @@ bad_area:
 #endif
 		tsk->tss.sig_address = address;
 		tsk->tss.sig_desc = SUBSIG_NOMAPPING;
-		send_sig(SIGSEGV, tsk, 1);
+		force_sig(SIGSEGV, tsk);
 		goto out;
 	}
 	unhandled_fault (address, tsk, regs);

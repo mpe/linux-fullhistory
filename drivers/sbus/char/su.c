@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.4 1997/09/07 15:40:19 ecd Exp $
+/* $Id: su.c,v 1.8 1998/04/01 05:07:50 ecd Exp $
  * su.c: Small serial driver for keyboard/mouse interface on Ultra/AX
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -580,7 +580,7 @@ __initfunc(int su_init(void))
 __initfunc(int su_probe (unsigned long *memory_start))
 {
 	struct su_struct *info = su_table;
-        int node, enode, sunode;
+        int node, enode, tnode, sunode;
 	int kbnode = 0, msnode = 0;
 	int devices = 0;
 	char prop[128];
@@ -595,14 +595,18 @@ __initfunc(int su_probe (unsigned long *memory_start))
 		return -ENODEV;
 
 	len = prom_getproperty(node, "keyboard", prop, sizeof(prop));
-	if (len > 0)
-		kbnode = prom_pathtoinode(prop);
+	if (len > 0) {
+		prop[len] = 0;
+		kbnode = prom_finddevice(prop);
+	}
 	if (!kbnode)
 		return -ENODEV;
 
 	len = prom_getproperty(node, "mouse", prop, sizeof(prop));
-	if (len > 0)
-		msnode = prom_pathtoinode(prop);
+	if (len > 0) {
+		prop[len] = 0;
+		msnode = prom_finddevice(prop);
+	}
 	if (!msnode)
 		return -ENODEV;
 
@@ -611,6 +615,15 @@ __initfunc(int su_probe (unsigned long *memory_start))
 	 */
         node = prom_getchild(prom_root_node);
 	node = prom_searchsiblings(node, "pci");
+
+	/*
+	 * Check for SUNW,sabre on Ultra 5/10/AXi.
+	 */
+	len = prom_getproperty(node, "model", prop, sizeof(prop));
+	if ((len > 0) && !strncmp(prop, "SUNW,sabre", len)) {
+        	node = prom_getchild(node);
+		node = prom_searchsiblings(node, "pci");
+	}
 
 	/*
 	 * For each PCI bus...
@@ -624,7 +637,10 @@ __initfunc(int su_probe (unsigned long *memory_start))
 		 */
 		while (enode) {
 			sunode = prom_getchild(enode);
-			sunode = prom_searchsiblings(sunode, "su");
+			tnode = prom_searchsiblings(sunode, "su");
+			if (!tnode)
+				tnode = prom_searchsiblings(sunode, "su_pnp");
+			sunode = tnode;
 
 			/*
 			 * For each 'su' on this EBus...
@@ -651,7 +667,11 @@ __initfunc(int su_probe (unsigned long *memory_start))
 					goto found;
 
 				sunode = prom_getsibling(sunode);
-				sunode = prom_searchsiblings(sunode, "su");
+				tnode = prom_searchsiblings(sunode, "su");
+				if (!tnode)
+					tnode = prom_searchsiblings(sunode,
+								    "su_pnp");
+				sunode = tnode;
 			}
 			enode = prom_getsibling(enode);
 			enode = prom_searchsiblings(enode, "ebus");

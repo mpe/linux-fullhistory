@@ -4,13 +4,13 @@
 
 #include <linux/kernel.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/delay.h>
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/openpic.h>
 
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/irq.h>
 #include <asm/hydra.h>
 #include <asm/prom.h>
@@ -22,8 +22,12 @@
 
 volatile struct Hydra *Hydra = NULL;
 
-
 #if 1
+/*
+ * The VLSI Golden Gate II has only 512K of PCI configuration space, so we
+ * limit the bus number to 3 bits
+ */
+
 int chrp_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 				  unsigned char offset, unsigned char *val)
 {
@@ -32,11 +36,6 @@ int chrp_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_DEVICE_NOT_FOUND;
     }
     *val = in_8((unsigned char *)pci_config_addr(bus, dev_fn, offset));
-    if (offset == PCI_INTERRUPT_LINE) {
-	/* PCI interrupts are controlled by the OpenPIC */
-	if (*val)
-	    *val = openpic_to_irq(*val);
-    }
     return PCIBIOS_SUCCESSFUL;
 }
 
@@ -228,10 +227,11 @@ __initfunc(int w83c553f_init(void))
     unsigned char t8;
     unsigned short t16;
     unsigned int t32;
-    if (pcibios_find_device(PCI_VENDOR_ID_WINBOND,
-			    PCI_DEVICE_ID_WINBOND_83C553, 0, &bus, &dev)
-	== PCIBIOS_SUCCESSFUL) {
-	dev++;
+    struct pci_dev *pdev;
+    if ((pdev = pci_find_device(PCI_VENDOR_ID_WINBOND,
+				PCI_DEVICE_ID_WINBOND_83C553, NULL))) {
+	bus = pdev->bus->number;
+	dev = pdev->devfn + 1;
 	chrp_pcibios_read_config_dword(bus, dev, PCI_VENDOR_ID, &t32);
 	if (t32 == (PCI_DEVICE_ID_WINBOND_82C105<<16) + PCI_VENDOR_ID_WINBOND) {
 #if 0

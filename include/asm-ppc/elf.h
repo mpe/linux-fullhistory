@@ -59,22 +59,6 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 #define ELF_PLATFORM	(NULL)
 
 #ifdef __KERNEL__
-#define SET_PERSONALITY(ibcs2) current->personality = (ibcs2 ? PER_SVR4 : PER_LINUX)
-#endif
-
-
-/* This yields a mask that user programs can use to figure out what
-   instruction set this cpu supports.  */
-
-#define ELF_HWCAP	(0)
-
-/* This yields a string that ld.so will use to load implementation
-   specific libraries for optimization.  This is more specific in
-   intent than poking at uname or /proc/cpuinfo.  */
-
-#define ELF_PLATFORM	(NULL)
-
-#ifdef __KERNEL__
 #define SET_PERSONALITY(ex, ibcs2) \
 	current->personality = (ibcs2 ? PER_SVR4 : PER_LINUX)
 #endif

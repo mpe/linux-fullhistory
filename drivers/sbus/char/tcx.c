@@ -1,4 +1,4 @@
-/* $Id: tcx.c,v 1.20 1997/08/22 15:55:14 jj Exp $
+/* $Id: tcx.c,v 1.22 1998/03/10 20:18:47 jj Exp $
  * tcx.c: SUNW,tcx 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -33,6 +33,8 @@
 /* THC definitions */
 #define TCX_THC_MISC_REV_SHIFT       16
 #define TCX_THC_MISC_REV_MASK        15
+#define TCX_THC_MISC_VSYNC_DIS       (1 << 25)
+#define TCX_THC_MISC_HSYNC_DIS       (1 << 24)
 #define TCX_THC_MISC_RESET           (1 << 12)
 #define TCX_THC_MISC_VIDEO           (1 << 10)
 #define TCX_THC_MISC_SYNC            (1 << 9)
@@ -174,7 +176,8 @@ tcx_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		page += map_size;
 	}
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
         return 0;
 }
 
@@ -246,11 +249,16 @@ static void
 tcx_blank (fbinfo_t *fb)
 {
 	fb->info.tcx.thc->thc_misc &= ~TCX_THC_MISC_VIDEO;
+	/* This should put us in power-save */
+        fb->info.tcx.thc->thc_misc |= TCX_THC_MISC_VSYNC_DIS;
+        fb->info.tcx.thc->thc_misc |= TCX_THC_MISC_HSYNC_DIS;
 }
 
 static void
 tcx_unblank (fbinfo_t *fb)
 {
+        fb->info.tcx.thc->thc_misc &= ~TCX_THC_MISC_VSYNC_DIS;
+        fb->info.tcx.thc->thc_misc &= ~TCX_THC_MISC_HSYNC_DIS;
 	fb->info.tcx.thc->thc_misc |= TCX_THC_MISC_VIDEO;
 }
 

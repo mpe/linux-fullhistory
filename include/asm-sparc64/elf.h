@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.13 1997/10/03 18:44:14 davem Exp $ */
+/* $Id: elf.h,v 1.17 1998/03/23 10:07:06 jj Exp $ */
 #ifndef __ASM_SPARC64_ELF_H
 #define __ASM_SPARC64_ELF_H
 
@@ -20,7 +20,7 @@ typedef unsigned long elf_fpregset_t;
  * These are used to set parameters in the core dumps.
  */
 #ifndef ELF_ARCH
-#define ELF_ARCH		EM_SPARC64
+#define ELF_ARCH		EM_SPARCV9
 #define ELF_CLASS		ELFCLASS64
 #define ELF_DATA		ELFDATA2MSB
 #endif
@@ -29,7 +29,7 @@ typedef unsigned long elf_fpregset_t;
  * This is used to ensure we don't load something for the wrong architecture.
  */
 #ifndef elf_check_arch
-#define elf_check_arch(x) ((x) == ELF_ARCH)	/* Might be EM_SPARC64 or EM_SPARC */
+#define elf_check_arch(x) ((x) == ELF_ARCH)	/* Might be EM_SPARCV9 or EM_SPARC */
 #endif
 
 #define USE_ELF_CORE_DUMP
@@ -50,7 +50,8 @@ typedef unsigned long elf_fpregset_t;
 
 /* On Ultra, we support all of the v8 capabilities. */
 #define ELF_HWCAP	(HWCAP_SPARC_FLUSH | HWCAP_SPARC_STBAR | \
-			 HWCAP_SPARC_SWAP | HWCAP_SPARC_MULDIV)
+			 HWCAP_SPARC_SWAP | HWCAP_SPARC_MULDIV | \
+			 HWCAP_SPARC_V9)
 
 /* This yields a string that ld.so will use to load implementation
    specific libraries for optimization.  This is more specific in

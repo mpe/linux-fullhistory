@@ -17,9 +17,13 @@ __initfunc(void auxio_probe(void))
 	int node, auxio_nd;
 	struct linux_prom_registers auxregs[1];
 
-	if (sparc_cpu_model == sun4d) {
+	switch (sparc_cpu_model) {
+	case sun4d:
+	case sun4:
 		auxio_register = 0;
 		return;
+	default:
+		break;
 	}
 	node = prom_getchild(prom_root_node);
 	auxio_nd = prom_searchsiblings(node, "auxiliary-io");

@@ -5143,8 +5143,8 @@ intr_bf (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 		pci_status &= ~PCI_STATUS_PARITY;
 	    }
 	} else {
-	    printk ("scsi%d : couldn't read status register : %s\n",
-		host->host_no, pcibios_strerror (tmp));
+	    printk ("scsi%d : couldn't read status register : error %d\n",
+		host->host_no, tmp);
 	    retry = NEVER;
 	}
     }

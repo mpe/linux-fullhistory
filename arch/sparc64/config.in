@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.36 1998/01/10 19:04:30 ecd Exp $
+# $Id: config.in,v 1.44 1998/04/06 16:10:35 jj Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -67,9 +67,6 @@ fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Solaris binary emulation' CONFIG_SOLARIS_EMUL
 fi
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'Kernel Quad FPU (long double) and subnormal float/double emulation' CONFIG_MATHEMU
-fi
 endmenu
 
 if [ "$CONFIG_PCI" = "y" ]; then
@@ -84,6 +81,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
       bool '    Support IEEE1284 status readback' CONFIG_PRINTER_READBACK
     fi
   fi
+  tristate 'SUNW,envctrl support' CONFIG_ENVCTRL
 fi
 
 mainmenu_option next_comment
@@ -109,14 +107,16 @@ tristate 'Network block device support' CONFIG_BLK_DEV_NBD
 
 if [ "$CONFIG_PCI" = "y" ]; then
 	tristate 'Ultra/PCI IDE disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
-	if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
+	if [ "$CONFIG_BLK_DEV_IDE" != "n" ]; then
 	  dep_tristate '   Include IDE/ATA-2 DISK support' CONFIG_BLK_DEV_IDEDISK $CONFIG_BLK_DEV_IDE
 	  dep_tristate '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
 	  dep_tristate '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
 	  dep_tristate '   Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE
 	  dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
-	  define_bool CONFIG_IDE_CHIPSETS y
-	  define_bool CONFIG_BLK_DEV_NS87415_AX y
+	  define_bool CONFIG_BLK_DEV_IDEPCI y
+	  define_bool CONFIG_BLK_DEV_IDEDMA y
+	  define_bool CONFIG_BLK_DEV_NS87415 y
+	  define_bool CONFIG_BLK_DEV_CMD646 y
 	fi
 fi
 

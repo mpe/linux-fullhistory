@@ -1,4 +1,4 @@
-/* $Id: vac-ops.h,v 1.12 1996/07/08 15:12:30 ecd Exp $ */
+/* $Id: vac-ops.h,v 1.13 1998/01/30 10:59:59 jj Exp $ */
 #ifndef _SPARC_VAC_OPS_H
 #define _SPARC_VAC_OPS_H
 
@@ -8,6 +8,7 @@
  * Copyright (C) 1994, David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <asm/sysen.h>
 #include <asm/contregs.h>
 #include <asm/asi.h>
@@ -60,9 +61,12 @@
 #define S4CVACTAG_TID      0x0000fffc
 
 /* Sun4c VAC Virtual Address */
+/* These aren't used, why bother? (Anton) */
+#if 0
 #define S4CVACVA_TID       0x3fff0000
 #define S4CVACVA_LINE      0x0000fff0
 #define S4CVACVA_BIL       0x0000000f
+#endif
 
 /* The indexing of cache lines creates a problem.  Because the line
  * field of a virtual address extends past the page offset within
@@ -73,7 +77,12 @@
  * not the case, and thus is a 'bad alias' we must turn off the
  * cacheable bit in the pte's of all such pages.
  */
-#define S4CVAC_BADBITS     0x0000f000
+
+#ifdef CONFIG_SUN4
+#define S4CVAC_BADBITS     0x0001e000
+#else
+#define S4CVAC_BADBITS    0x0000f000
+#endif
 
 /* The following is true if vaddr1 and vaddr2 would cause
  * a 'bad alias'.
@@ -89,6 +98,8 @@ struct sun4c_vac_props {
 	unsigned int num_bytes;     /* Size of the cache */
 	unsigned int num_lines;     /* Number of cache lines */
 	unsigned int do_hwflushes;  /* Hardware flushing available? */
+	enum { NONE, WRITE_THROUGH,
+	    WRITE_BACK } type;      /* What type of VAC? */
 	unsigned int linesize;      /* Size of each line in bytes */
 	unsigned int log2lsize;     /* log2(linesize) */
 	unsigned int on;            /* VAC is enabled */

@@ -1,15 +1,26 @@
 /* soc.c: Sparc SUNW,soc (Serial Optical Channel) Fibre Channel Sbus adapter support.
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
- * Copyright (C) 1997 Jiri Hanika (geo@ff.cuni.cz)
+ * Copyright (C) 1997,1998 Jiri Hanika (geo@ff.cuni.cz)
  *
  * Sources:
  *	Fibre Channel Physical & Signaling Interface (FC-PH), dpANS, 1994
  *	dpANS Fibre Channel Protocol for SCSI (X3.269-199X), Rev. 012, 1995
+ *
+ * Supported hardware:
+ *      Tested on SOC sbus card bought with SS1000 in Linux running on SS5 and Ultra1. 
+ *      Should run on on-board SOC/SOC+ cards of Ex000 servers as well, but it is not
+ *      tested (let us know if you succeed).
+ *      For SOC sbus cards, you have to make sure your FCode is 1.52 or later.
+ *      If you have older FCode, you should try to upgrade or get SOC microcode from Sun
+ *      (the microcode is present in Solaris soc driver as well). In that case you need
+ *      to #define HAVE_SOC_UCODE and format the microcode into soc_asm.c. For the exact
+ *      format mail me and I will tell you. I cannot offer you the actual microcode though,
+ *      unless Sun confirms they don't mind.
  */
 
 static char *version =
-        "soc.c:v1.0 24/Nov/97 Jakub Jelinek (jj@sunsite.mff.cuni.cz), Jiri Hanika (geo@ff.cuni.cz)\n";
+        "soc.c:v1.2 27/Feb/98 Jakub Jelinek (jj@sunsite.mff.cuni.cz), Jiri Hanika (geo@ff.cuni.cz)\n";
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -68,6 +79,7 @@ static inline void soc_enable(struct soc *s)
 	s->regs->sae = 0; s->regs->cfg = s->cfg;
 	s->regs->cmd = SOC_CMD_RSP_QALL; 
 	SOC_SETIMASK(s, SOC_IMASK_RSP_QALL | SOC_IMASK_SAE);
+	SOD(("imask %08lx %08lx\n", s->imask, s->regs->imask));
 }
 
 static void soc_reset(fc_channel *fc)
@@ -148,6 +160,7 @@ static void inline soc_solicited (struct soc *s)
 static void inline soc_request (struct soc *s, u32 cmd)
 {
 	SOC_SETIMASK(s, s->imask & ~(cmd & SOC_CMD_REQ_QALL));
+	SOD(("imask %08lx %08lx\n", s->imask, s->regs->imask));
 
 	SOD(("Queues available %08x OUT %X %X\n", cmd, xram_get_8((xram_p)&s->req[0].hw_cq->out), xram_get_8((xram_p)&s->req[0].hw_cq->out)))
 	if (s->port[s->curr_port].fc.state != FC_STATE_OFFLINE) {
@@ -179,6 +192,7 @@ static void inline soc_unsolicited (struct soc *s)
 	while (sw_cq->in != sw_cq->out) {
 		/* ...real work per entry here... */
 		hwrsp = (soc_rsp *)sw_cq->pool + sw_cq->out;
+
 		hwrspc = NULL;
 		flags = hwrsp->shdr.flags;
 		count = xram_get_8 ((xram_p)&hwrsp->count);
@@ -218,10 +232,12 @@ static void inline soc_unsolicited (struct soc *s)
 			status = xram_get_32low ((xram_p)&hwrsp->status);
 			switch (status) {
 			case SOC_ONLINE:
-				fc->fcp_state_change(fc, FC_STATE_ONLINE);
+				SOD(("State change to ONLINE\n"));
+				fcp_state_change(fc, FC_STATE_ONLINE);
 				break;
 			case SOC_OFFLINE:
-				fc->fcp_state_change(fc, FC_STATE_OFFLINE);
+				SOD(("State change to OFFLINE\n"));
+				fcp_state_change(fc, FC_STATE_OFFLINE);
 				break;
 			default:
 				printk ("%s: Unknown STATUS no %d\n", fc->name, status);
@@ -316,8 +332,10 @@ static int soc_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 	else
 		qno = 0;
 	SOD(("Putting a FCP packet type %d into hw queue %d\n", fcmd->proto, qno))
-	if (s->imask & (SOC_IMASK_REQ_Q0 << qno))
+	if (s->imask & (SOC_IMASK_REQ_Q0 << qno)) {
+		SOD(("EIO %08x\n", s->imask))
 		return -EIO;
+	}
 	sw_cq = s->req + qno;
 	cq_next_in = (sw_cq->in + 1) & sw_cq->last;
 	
@@ -325,7 +343,9 @@ static int soc_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 		    && cq_next_in == (sw_cq->out = xram_get_8((xram_p)&sw_cq->hw_cq->out))) {
 		SOD(("%d IN %d OUT %d LAST %d\n", qno, sw_cq->in, sw_cq->out, sw_cq->last))
 		SOC_SETIMASK(s, s->imask | (SOC_IMASK_REQ_Q0 << qno));
-		return -EBUSY;  // If queue full, just say NO
+		SOD(("imask %08lx %08lx\n", s->imask, s->regs->imask));
+		/* If queue is full, just say NO */
+		return -EBUSY;
 	}
 	
 	request = sw_cq->pool + sw_cq->in;
@@ -478,9 +498,7 @@ static inline void soc_init_bursts(struct soc *s, struct linux_sbus_device *sdev
 
 static inline void soc_init(struct linux_sbus_device *sdev, int no)
 {
-#ifdef __sparc_v9__
         struct devid_cookie dcookie;
-#endif
 	unsigned char tmp[60];
 	int propl;
 	struct soc *s;
@@ -497,7 +515,14 @@ static inline void soc_init(struct linux_sbus_device *sdev, int no)
 	SOD(("socs %08lx soc_intr %08lx soc_hw_enque %08x\n", (long)socs, (long)soc_intr, (long)soc_hw_enque))	
 	if (version_printed++ == 0)
 		printk (version);
-		
+#ifdef MODULE
+	s->port[0].fc.module = &__this_module;
+	s->port[1].fc.module = &__this_module;
+#else
+	s->port[0].fc.module = NULL;
+	s->port[1].fc.module = NULL;
+#endif
+	                                	
 	s->next = socs;
 	socs = s;
 	s->port[0].fc.dev = sdev;
@@ -574,9 +599,22 @@ static inline void soc_init(struct linux_sbus_device *sdev, int no)
 	irq = sdev->irqs[0].pri;
 
 #ifndef __sparc_v9__	
-	if (request_irq (irq, soc_intr, SA_SHIRQ, "SOC", (void *)s)) {
-		soc_printk ("Cannot order irq %d to go\n", irq);
-		return;
+	if (sparc_cpu_model != sun4d) {
+		if (request_irq (irq, soc_intr, SA_SHIRQ, "SOC", (void *)s)) {
+			soc_printk ("Cannot order irq %d to go\n", irq);
+			socs = s->next;
+			return;
+		}
+	} else {
+	        dcookie.real_dev_id = s;
+	        dcookie.bus_cookie = sdev;
+	        if (request_irq(irq, soc_intr, (SA_SHIRQ | SA_DCOOKIE), "SOC", &dcookie)) {
+			soc_printk ("Cannot order irq %d to go\n", irq);
+			socs = s->next;
+			return;
+		}
+		SOD(("IRQ %d %x\n", irq, dcookie.ret_ino))
+		irq = dcookie.ret_ino;
 	}
 #else
 	dcookie.real_dev_id = s;
@@ -585,6 +623,7 @@ static inline void soc_init(struct linux_sbus_device *sdev, int no)
 	dcookie.bus_cookie = sdev->my_bus;
 	if (request_irq (irq, soc_intr, (SA_SHIRQ | SA_SBUS | SA_DCOOKIE), "SOC", &dcookie)) {
 		soc_printk ("Cannot order irq %d to go\n", irq);
+		socs = s->next;
 		return;
 	}
 	irq = dcookie.ret_ino;
@@ -693,10 +732,12 @@ void cleanup_module(void)
 	struct linux_sbus_device *sdev;
 	
 	for_each_soc(s) {
-		/* FIXME: Tell FC layer we say good bye */
 		irq = s->port[0].fc.irq;
 		disable_irq (irq);
 		free_irq (irq, s);
+
+		fcp_release(&(s->port[0].fc), 2);
+
 		sdev = s->port[0].fc.dev;
 		if (sdev->num_registers == 1)
 			sparc_free_io ((char *)s->xram, sdev->reg_addrs [0].reg_size);

@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.68 1997/12/24 17:26:38 ecd Exp $
+/* $Id: systbls.S,v 1.71 1998/03/24 06:25:06 ecd Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -23,9 +23,9 @@ C_LABEL(sys_call_table):
 /*5*/	.long C_LABEL(sys_open), C_LABEL(sys_close), C_LABEL(sys_wait4)
 	.long C_LABEL(sys_creat), C_LABEL(sys_link)
 /*10*/  .long C_LABEL(sys_unlink), C_LABEL(sunos_execv), C_LABEL(sys_chdir)
-	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_mknod)
-/*15*/	.long C_LABEL(sys_chmod), C_LABEL(sys_chown), C_LABEL(sparc_brk)
-	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_lseek)
+	.long C_LABEL(sys_xstat), C_LABEL(sys_mknod)
+/*15*/	.long C_LABEL(sys_chmod), C_LABEL(sys_lchown), C_LABEL(sparc_brk)
+	.long C_LABEL(sys_xmknod), C_LABEL(sys_lseek)
 /*20*/	.long C_LABEL(sys_getpid), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_setuid), C_LABEL(sys_getuid)
 /*25*/	.long C_LABEL(sys_time), C_LABEL(sys_ptrace), C_LABEL(sys_alarm)
@@ -137,7 +137,7 @@ C_LABEL(sunos_sys_table):
 	.long C_LABEL(sys_close), C_LABEL(sunos_wait4), C_LABEL(sys_creat)
 	.long C_LABEL(sys_link), C_LABEL(sys_unlink), C_LABEL(sunos_execv)
 	.long C_LABEL(sys_chdir), C_LABEL(sunos_nosys), C_LABEL(sys_mknod)
-	.long C_LABEL(sys_chmod), C_LABEL(sys_chown), C_LABEL(sunos_brk)
+	.long C_LABEL(sys_chmod), C_LABEL(sys_lchown), C_LABEL(sunos_brk)
 	.long C_LABEL(sunos_nosys), C_LABEL(sys_lseek), C_LABEL(sunos_getpid)
 	.long C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
 	.long C_LABEL(sunos_getuid), C_LABEL(sunos_nosys), C_LABEL(sys_ptrace)
@@ -164,7 +164,7 @@ C_LABEL(sunos_sys_table):
 	.long C_LABEL(sys_getitimer), C_LABEL(sys_gethostname), C_LABEL(sys_sethostname)
 	.long C_LABEL(sunos_getdtablesize), C_LABEL(sys_dup2), C_LABEL(sunos_nop)
 	.long C_LABEL(sys_fcntl), C_LABEL(sunos_select), C_LABEL(sunos_nop)
-	.long C_LABEL(sys_fsync), C_LABEL(sys_setpriority), C_LABEL(sys_socket)
+	.long C_LABEL(sys_fsync), C_LABEL(sys_setpriority), C_LABEL(sunos_socket)
 	.long C_LABEL(sys_connect), C_LABEL(sunos_accept)
 /*100*/	.long C_LABEL(sys_getpriority), C_LABEL(sunos_send), C_LABEL(sunos_recv)
 	.long C_LABEL(sunos_nosys), C_LABEL(sys_bind), C_LABEL(sunos_setsockopt)

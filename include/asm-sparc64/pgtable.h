@@ -1,7 +1,8 @@
-/* $Id: pgtable.h,v 1.59 1997/10/12 06:20:43 davem Exp $
+/* $Id: pgtable.h,v 1.64 1998/02/16 14:06:44 jj Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #ifndef _SPARC64_PGTABLE_H
@@ -34,18 +35,20 @@
 #define PMD_MASK	(~(PMD_SIZE-1))
 
 /* PGDIR_SHIFT determines what a third-level page table entry can map */
-#define PGDIR_SHIFT	(PAGE_SHIFT + 2*(PAGE_SHIFT-3))
+#define PGDIR_SHIFT	(PAGE_SHIFT + (PAGE_SHIFT-3) + (PAGE_SHIFT-2))
 #define PGDIR_SIZE	(1UL << PGDIR_SHIFT)
 #define PGDIR_MASK	(~(PGDIR_SIZE-1))
 
 /* Entries per page directory level. */
-#define PTRS_PER_PTE	(1UL << (PAGE_SHIFT-3))
-#define PTRS_PER_PMD	(1UL << (PAGE_SHIFT-3))
-#define PTRS_PER_PGD	(1UL << (PAGE_SHIFT-3))
+#define PTRS_PER_PTE		(1UL << (PAGE_SHIFT-3))
+#define PTRS_PER_PMD		(1UL << (PAGE_SHIFT-2))
+/* We cannot use the top 16G because a half of mm/ would break, so why to check it */
+#define PTRS_PER_PGD		((1UL << (PAGE_SHIFT-3))-1)
+#define USER_PTRS_PER_PGD	PTRS_PER_PGD	/* Kernel has a separate 44bit address space */
 
 #define PTE_TABLE_SIZE	0x2000	/* 1024 entries 8 bytes each */
-#define PMD_TABLE_SIZE	0x2000	/* 1024 entries 8 bytes each */
-#define PGD_TABLE_SIZE	0x2000	/* 1024 entries 8 bytes each */
+#define PMD_TABLE_SIZE	0x2000	/* 2048 entries 4 bytes each */
+#define PGD_TABLE_SIZE	0x1000	/* 1024 entries 4 bytes each */
 
 /* the no. of pointers that fit on a page */
 #define PTRS_PER_PAGE	(1UL << (PAGE_SHIFT-3))
@@ -141,7 +144,7 @@ extern pte_t *__bad_pte(void);
 #define BAD_PTE		__bad_pte()
 #define BAD_PAGE	__bad_page()
 
-/* First phsical page can be anywhere, the following is needed so that
+/* First physical page can be anywhere, the following is needed so that
  * va-->pa and vice versa conversions work properly without performance
  * hit for all __pa()/__va() operations.
  */
@@ -149,8 +152,8 @@ extern unsigned long phys_base;
 #define ZERO_PAGE	((unsigned long)__va(phys_base))
 
 /* This is for making TLB miss faster to process. */
-extern unsigned long null_pmd_table;
-extern unsigned long null_pte_table;
+#define null_pmd_table (null_pte_table - PAGE_SIZE)
+extern unsigned int null_pte_table;
 
 /* Allocate a block of RAM which is aligned to its size.
    This procedure can be used until the call to mem_init(). */
@@ -198,7 +201,7 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 	struct mm_struct *mm = vma->vm_mm;
 
 	if(mm->context != NO_CONTEXT)
-		__flush_tlb_page(mm->context & 0x1fff, page);
+		__flush_tlb_page(mm->context & 0x1fff, page & PAGE_MASK);
 }
 
 #else /* __SMP__ */
@@ -260,7 +263,7 @@ extern inline unsigned long pmd_page(pmd_t pmd)
 extern inline unsigned long pgd_page(pgd_t pgd)
 { return (unsigned long) __va(pgd_val(pgd)); }
 
-#define PMD_NONE_MAGIC		0x80
+#define PMD_NONE_MAGIC		0x40
 #define PGD_NONE_MAGIC		0x40
 
 extern inline int pte_none(pte_t pte) 		{ return !pte_val(pte); }
@@ -323,18 +326,18 @@ extern inline pte_t pte_mkyoung(pte_t pte)
 
 /* to find an entry in a page-table-directory. */
 extern inline pgd_t *pgd_offset(struct mm_struct *mm, unsigned long address)
-{ return mm->pgd + ((address >> PGDIR_SHIFT) & (PTRS_PER_PAGE - 1)); }
+{ return mm->pgd + ((address >> PGDIR_SHIFT) & (PTRS_PER_PGD)); }
 
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
 /* Find an entry in the second-level page table.. */
 extern inline pmd_t *pmd_offset(pgd_t *dir, unsigned long address)
-{ return (pmd_t *) pgd_page(*dir) + ((address >> PMD_SHIFT) & (PTRS_PER_PAGE - 1)); }
+{ return (pmd_t *) pgd_page(*dir) + ((address >> PMD_SHIFT) & (PTRS_PER_PMD - 1)); }
 
 /* Find an entry in the third-level page table.. */
 extern inline pte_t *pte_offset(pmd_t *dir, unsigned long address)
-{ return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PAGE - 1)); }
+{ return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1)); }
 
 /* Very stupidly, we used to get new pgd's and pmd's, init their contents
  * to point to the NULL versions of the next level page table, later on
@@ -345,79 +348,97 @@ extern inline pte_t *pte_offset(pmd_t *dir, unsigned long address)
 
 #ifdef __SMP__
 /* Sliiiicck */
-#define pgd_quicklist		(cpu_data[smp_processor_id()].pgd_cache)
-#define pmd_quicklist		(cpu_data[smp_processor_id()].pmd_cache)
-#define pte_quicklist		(cpu_data[smp_processor_id()].pte_cache)
-#define pgtable_cache_size	(cpu_data[smp_processor_id()].pgcache_size)
+#define pgt_quicklists	cpu_data[smp_processor_id()]
 #else
-extern unsigned long *pgd_quicklist;
-extern unsigned long *pmd_quicklist;
-extern unsigned long *pte_quicklist;
-extern unsigned long pgtable_cache_size;
+extern struct pgtable_cache_struct {
+	unsigned long *pgd_cache;
+	unsigned long *pmd_cache;
+	unsigned long *pte_cache;
+	unsigned long pgcache_size;
+} pgt_quicklists;
 #endif
+#define pgd_quicklist		(pgt_quicklists.pgd_cache)
+#define pmd_quicklist		(pgt_quicklists.pmd_cache)
+#define pte_quicklist		(pgt_quicklists.pte_cache)
+#define pgtable_cache_size	(pgt_quicklists.pgcache_size)
 
 extern pgd_t *get_pgd_slow(void);
 
 extern __inline__ pgd_t *get_pgd_fast(void)
 {
-	pgd_t *ret;
+	unsigned long *ret;
 
-	if((ret = (pgd_t *)pgd_quicklist) != NULL) {
-		pgd_quicklist = (unsigned long *)pgd_val(*ret);
-		pgd_val(ret[0]) = pgd_val(ret[1]);
-		(pgtable_cache_size)--;
+	if((ret = pgd_quicklist) != NULL) {
+		pgd_quicklist = (unsigned long *)(*ret);
+		ret[0] = ret[1];
+		pgtable_cache_size--;
 	} else
-		ret = get_pgd_slow();
-	return ret;
+		ret = (unsigned long *)get_pgd_slow();
+	return (pgd_t *)ret;
 }
 
 extern __inline__ void free_pgd_fast(pgd_t *pgd)
 {
-	pgd_val(*pgd) = (unsigned long) pgd_quicklist;
+	*(unsigned long *)pgd = (unsigned long) pgd_quicklist;
 	pgd_quicklist = (unsigned long *) pgd;
-	(pgtable_cache_size)++;
+	pgtable_cache_size++;
+}
+
+extern __inline__ void free_pgd_slow(pgd_t *pgd)
+{
+	free_page((unsigned long)pgd);
 }
 
 extern pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long address_premasked);
 
 extern __inline__ pmd_t *get_pmd_fast(void)
 {
-	pmd_t *ret;
+	unsigned long *ret;
 
-	if((ret = (pmd_t *)pmd_quicklist) != NULL) {
-		pmd_quicklist = (unsigned long *)pmd_val(*ret);
-		pmd_val(ret[0]) = pmd_val(ret[1]);
-		(pgtable_cache_size)--;
+	if((ret = (unsigned long *)pmd_quicklist) != NULL) {
+		pmd_quicklist = (unsigned long *)(*ret);
+		ret[0] = ret[1];
+		pgtable_cache_size--;
 	}
-	return ret;
+	return (pmd_t *)ret;
 }
 
 extern __inline__ void free_pmd_fast(pgd_t *pmd)
 {
-	pmd_val(*pmd) = (unsigned long) pmd_quicklist;
+	*(unsigned long *)pmd = (unsigned long) pmd_quicklist;
 	pmd_quicklist = (unsigned long *) pmd;
-	(pgtable_cache_size)++;
+	pgtable_cache_size++;
+}
+
+extern __inline__ void free_pmd_slow(pmd_t *pmd)
+{
+	free_page((unsigned long)pmd);
 }
 
 extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
 
 extern __inline__ pte_t *get_pte_fast(void)
 {
-	pte_t *ret;
+	unsigned long *ret;
 
-	if((ret = (pte_t *)pte_quicklist) != NULL) {
-		pte_quicklist = (unsigned long *)pte_val(*ret);
-		pte_val(ret[0]) = pte_val(ret[1]);
-		(pgtable_cache_size)--;
+	if((ret = (unsigned long *)pte_quicklist) != NULL) {
+		pte_quicklist = (unsigned long *)(*ret);
+		ret[0] = ret[1];
+		pgtable_cache_size--;
 	}
-	return ret;
+	return (pte_t *)ret;
 }
 
 extern __inline__ void free_pte_fast(pte_t *pte)
 {
-	pte_val(*pte) = (unsigned long) pte_quicklist;
+	*(unsigned long *)pte = (unsigned long) pte_quicklist;
 	pte_quicklist = (unsigned long *) pte;
-	(pgtable_cache_size)++;
+	pgtable_cache_size++;
+}
+
+extern __inline__ void free_pte_slow(pte_t *pte)
+{
+	free_page((unsigned long)pte);
 }
 
 #define pte_free_kernel(pte)	free_pte_fast(pte)
@@ -457,6 +478,11 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 
 #define pte_alloc_kernel(pmd, addr)	pte_alloc(pmd, addr)
 #define pmd_alloc_kernel(pgd, addr)	pmd_alloc(pgd, addr)
+
+extern inline void set_pgdir(unsigned long address, pgd_t entry)
+{
+	/* Nothing to do on sparc64 :) */
+}
 
 extern pgd_t swapper_pg_dir[1024];
 
@@ -570,6 +596,10 @@ __get_iospace (unsigned long addr)
 
 extern void * module_map (unsigned long size);
 extern void module_unmap (void *addr);
+extern void module_shrink (void *addr, unsigned long size);
+
+/* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
+#define PageSkip(page)		(test_bit(PG_skip, &(page)->flags))
 
 #endif /* !(__ASSEMBLY__) */
 

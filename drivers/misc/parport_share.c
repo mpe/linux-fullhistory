@@ -398,6 +398,7 @@ void parport_release(struct pardevice *dev)
 {
 	struct parport *port = dev->port;
 	struct pardevice *pd;
+	unsigned long flags;
 
 	/* Make sure that dev is the current device */
 	if (port->cad != dev) {
@@ -405,7 +406,9 @@ void parport_release(struct pardevice *dev)
 		       "when not owner\n", port->name, dev->name);
 		return;
 	}
+	spin_lock_irqsave(&port->lock, flags);
 	port->cad = NULL;
+	spin_unlock_irqrestore(&port->lock, flags);
 
 	/* Save control registers */
 	port->ops->save_state(port, dev->state);
@@ -442,25 +445,23 @@ void parport_release(struct pardevice *dev)
 	}
 }
 
-void parport_parse_irqs(int nports, const char *irqstr, int irqval[])
+void parport_parse_irqs(int nports, const char *irqstr[], int irqval[])
 {
 	unsigned int i;
-	for (i = 0; i < nports && irqstr; i++) {
-		if (!strncmp(irqstr, "auto", 4))
+	for (i = 0; i < nports && irqstr[i]; i++) {
+		if (!strncmp(irqstr[i], "auto", 4))
 			irqval[i] = PARPORT_IRQ_AUTO;
-		else if (!strncmp(irqstr, "none", 4))
+		else if (!strncmp(irqstr[i], "none", 4))
 			irqval[i] = PARPORT_IRQ_NONE;
 		else {
 			char *ep;
-			unsigned long r = simple_strtoul(irqstr, &ep, 0);
-			if (ep != irqstr)
+			unsigned long r = simple_strtoul(irqstr[i], &ep, 0);
+			if (ep != irqstr[i])
 				irqval[i] = r;
 			else {
-				printk("parport: bad irq specifier `%s'\n", irqstr);
+				printk("parport: bad irq specifier `%s'\n", irqstr[i]);
 				return;
 			}
 		}
-		irqstr = strchr(irqstr, ',');
-		if (irqstr) irqstr++;
 	}
 }

@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.14 1997/11/01 10:23:58 ecd Exp $ */
+/* $Id: io.h,v 1.16 1998/03/24 05:54:40 ecd Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -13,14 +13,22 @@
 #define __SLOW_DOWN_IO	do { } while (0)
 #define SLOW_DOWN_IO	do { } while (0)
 
+extern unsigned long pci_dvma_offset;
+extern unsigned long pci_dvma_mask;
+
 extern __inline__ unsigned long virt_to_phys(volatile void *addr)
 {
-	return ((((unsigned long)addr) - PAGE_OFFSET) | 0x80000000UL);
+	unsigned long vaddr = (unsigned long)addr;
+
+	/* Handle kernel variable pointers... */
+	if (vaddr < PAGE_OFFSET)
+		vaddr += PAGE_OFFSET - (unsigned long)&empty_zero_page;
+	return ((vaddr - PAGE_OFFSET) | pci_dvma_offset);
 }
 
 extern __inline__ void *phys_to_virt(unsigned long addr)
 {
-	return ((void *)((addr & ~0x80000000) + PAGE_OFFSET));
+	return ((void *)((addr & pci_dvma_mask) + PAGE_OFFSET));
 }
 
 #define virt_to_bus virt_to_phys
@@ -91,9 +99,9 @@ extern void insw(unsigned long addr, void *dst, unsigned long count);
 extern void insl(unsigned long addr, void *dst, unsigned long count);
 
 /* Memory functions, same as I/O accesses on Ultra. */
-#define readb(addr)		inb((unsigned long)addr)
-#define readw(addr)		inw((unsigned long)addr)
-#define readl(addr)		inl((unsigned long)addr)
+#define readb(addr)		inb((unsigned long)(addr))
+#define readw(addr)		inw((unsigned long)(addr))
+#define readl(addr)		inl((unsigned long)(addr))
 #define writeb(b, addr)		outb((b), (unsigned long)(addr))
 #define writew(w, addr)		outw((w), (unsigned long)(addr))
 #define writel(l, addr)		outl((l), (unsigned long)(addr))

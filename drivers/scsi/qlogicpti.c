@@ -422,36 +422,37 @@ __initfunc(static int qlogicpti_load_firmware(struct qlogicpti *qpti))
 
 	/* Load the firmware. */
 #if !defined(MODULE) && !defined(__sparc_v9__)
-	dvma_addr = (unsigned long) mmu_lockarea((char *)&risc_code01[0],
-						 (sizeof(u_short) * risc_code_length01));
-	param[0] = MBOX_LOAD_RAM;
-	param[1] = risc_code_addr01;
-	param[2] = (dvma_addr >> 16);
-	param[3] = (dvma_addr & 0xffff);
-	param[4] = (sizeof(u_short) * risc_code_length01);
-	if(qlogicpti_mbox_command(qpti, param, 1) ||
-	   (param[0] != MBOX_COMMAND_COMPLETE)) {
-		printk(KERN_EMERG "qlogicpti%d: Firmware dload failed, I'm bolixed!\n",
-		       qpti->qpti_id);
-		restore_flags(flags);
-		return 1;
-	}
-	mmu_unlockarea((char *)dvma_addr, (sizeof(u_short) * risc_code_length01));
-#else
-	/* We need to do it this slow way always on Ultra. */
-	for(i = 0; i < risc_code_length01; i++) {
-		param[0] = MBOX_WRITE_RAM_WORD;
-		param[1] = risc_code_addr01 + i;
-		param[2] = risc_code01[i];
+	if (sparc_cpu_model != sun4d) {
+		dvma_addr = (unsigned long) mmu_lockarea((char *)&risc_code01[0],
+							 (sizeof(u_short) * risc_code_length01));
+		param[0] = MBOX_LOAD_RAM;
+		param[1] = risc_code_addr01;
+		param[2] = (dvma_addr >> 16);
+		param[3] = (dvma_addr & 0xffff);
+		param[4] = (sizeof(u_short) * risc_code_length01);
 		if(qlogicpti_mbox_command(qpti, param, 1) ||
-		   param[0] != MBOX_COMMAND_COMPLETE) {
-			printk("qlogicpti%d: Firmware dload failed, I'm bolixed!\n",
+		   (param[0] != MBOX_COMMAND_COMPLETE)) {
+			printk(KERN_EMERG "qlogicpti%d: Firmware dload failed, I'm bolixed!\n",
 			       qpti->qpti_id);
 			restore_flags(flags);
 			return 1;
 		}
-	}
+		mmu_unlockarea((char *)dvma_addr, (sizeof(u_short) * risc_code_length01));
+	} else
 #endif
+	/* We need to do it this slow way always on Ultra, SS[12]000. */
+		for(i = 0; i < risc_code_length01; i++) {
+			param[0] = MBOX_WRITE_RAM_WORD;
+			param[1] = risc_code_addr01 + i;
+			param[2] = risc_code01[i];
+			if(qlogicpti_mbox_command(qpti, param, 1) ||
+			   param[0] != MBOX_COMMAND_COMPLETE) {
+				printk("qlogicpti%d: Firmware dload failed, I'm bolixed!\n",
+				       qpti->qpti_id);
+				restore_flags(flags);
+				return 1;
+			}
+		}
 
 	/* Reset the ISP again. */
 	qregs->hcctrl = HCCTRL_RESET;
@@ -584,8 +585,13 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 
 	tpnt->proc_dir = &proc_scsi_qlogicpti;
 	qptichain = 0;
-	if(!SBus_chain)
+	if(!SBus_chain) {
+#ifdef __sparc_v9__
+		return 0; /* Could be a PCI-only machine. */
+#else
 		panic("No SBUS in qlogicpti_detect()");
+#endif
+	}
 	for_each_sbus(sbus) {
 		for_each_sbusdev(sbdev_iter, sbus) {
 			qpti_dev = sbdev_iter;
@@ -778,8 +784,9 @@ qpti_irq_acquired:
 			nqptis_in_use++;
 		}
 	}
-	printk("QPTI: Total of %d PTI Qlogic/ISP hosts found, %d actually in use.\n",
-	       nqptis, nqptis_in_use);
+	if (nqptis)
+		printk("QPTI: Total of %d PTI Qlogic/ISP hosts found, %d actually in use.\n",
+		       nqptis, nqptis_in_use);
 	qptis_running = nqptis_in_use;
 	return nqptis;
 }
@@ -931,7 +938,9 @@ static inline u_int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 
 static inline void update_can_queue(struct Scsi_Host *host, u_int in_ptr, u_int out_ptr)
 {
-	int num_free = QLOGICISP_REQ_QUEUE_LEN - REQ_QUEUE_DEPTH(in_ptr, out_ptr);
+	/* Temporary workaround until bug is found and fixed (one bug has been found
+	   already, but fixing it makes things even worse) -jj */
+	int num_free = QLOGICISP_REQ_QUEUE_LEN - REQ_QUEUE_DEPTH(in_ptr, out_ptr) - 64;
 	host->can_queue = host->host_busy + num_free;
 	host->sg_tablesize = QLOGICISP_MAX_SG(num_free);
 }
@@ -1256,4 +1265,6 @@ int qlogicpti_reset(Scsi_Cmnd *Cmnd, unsigned int reset_flags)
 Scsi_Host_Template driver_template = QLOGICPTI;
 
 #include "scsi_module.c"
+
+EXPORT_NO_SYMBOLS;
 #endif /* MODULE */

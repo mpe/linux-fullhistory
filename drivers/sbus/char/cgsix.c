@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.37 1997/08/22 15:55:20 jj Exp $
+/* $Id: cgsix.c,v 1.39 1998/03/10 20:18:25 jj Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -326,7 +326,8 @@ cg6_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		page += map_size;
 	}
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
         return 0;
 }
 
@@ -395,11 +396,14 @@ static void
 cg6_blank (fbinfo_t *fb)
 {
 	fb->info.cg6.thc->thc_misc &= ~CG6_THC_MISC_VIDEO;
+	/* This should put us in power-save */
+	fb->info.cg6.thc->thc_misc &= ~CG6_THC_MISC_SYNC_ENAB;
 }
 
 static void
 cg6_unblank (fbinfo_t *fb)
 {
+	fb->info.cg6.thc->thc_misc |= CG6_THC_MISC_SYNC_ENAB;
 	fb->info.cg6.thc->thc_misc |= CG6_THC_MISC_VIDEO;
 }
 

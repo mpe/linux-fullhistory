@@ -6,8 +6,7 @@
 #define PAGE_SIZE	(1UL << PAGE_SHIFT)
 #define PAGE_MASK	(~(PAGE_SIZE-1))
 
-/* KERNELBASE comes from arch/ppc/Makefile */
-#define PAGE_OFFSET	KERNELBASE
+#define PAGE_OFFSET	0xc0000000
 
 
 #ifndef __ASSEMBLY__
@@ -66,8 +65,15 @@ typedef unsigned long pgprot_t;
 #define clear_page(page)        memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
 /* map phys->virtual and virtual->phys for RAM pages */
+#ifdef CONFIG_APUS
+#include <asm/amigappc.h>
+/* Word at CYBERBASEp has the value (-KERNELBASE+CYBERBASE). */
+#define __pa(x)			((unsigned long)(x)+(*(unsigned long*)CYBERBASEp))
+#define __va(x)			((void *)((unsigned long)(x)-(*(unsigned long*)CYBERBASEp)))
+#else
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
+#endif
 
 #define MAP_NR(addr)		(((unsigned long)addr-PAGE_OFFSET) >> PAGE_SHIFT)
 #define MAP_PAGE_RESERVED	(1<<15)

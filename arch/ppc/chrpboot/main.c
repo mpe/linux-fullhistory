@@ -16,11 +16,11 @@ void gunzip(void *, int, unsigned char *, int *);
 #define get_16be(x)	(*(unsigned short *)(x))
 #define get_32be(x)	(*(unsigned *)(x))
 
-#define RAM_START	0x90000000
-#define RAM_END		0x90800000	/* only 8M mapped with BATs */
+#define RAM_START	0x00000000
+#define RAM_END		0x00800000	/* only 8M mapped with BATs */
 
-#define RAM_FREE	0x90540000	/* after image of chrpboot */
-#define PROG_START	0x90010000
+#define RAM_FREE	0x00540000	/* after image of chrpboot */
+#define PROG_START	0x00010000
 
 char *avail_ram;
 char *end_avail;
@@ -40,7 +40,7 @@ chrpboot(int a1, int a2, void *prom)
     unsigned initrd_start, initrd_size;
     
     printf("chrpboot starting\n\r");
-    setup_bats();
+    /* setup_bats(); */
 
     if (initrd_len) {
 	initrd_size = initrd_len;

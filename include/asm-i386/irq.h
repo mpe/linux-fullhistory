@@ -18,6 +18,11 @@
 
 #define TIMER_IRQ 0
 
+static __inline__ int irq_cannonicalize(int irq)
+{
+	return ((irq == 2) ? 9 : irq);
+}
+
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
 

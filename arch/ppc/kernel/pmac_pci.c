@@ -14,25 +14,15 @@
 
 #include <linux/kernel.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/delay.h>
 #include <linux/string.h>
 #include <linux/init.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
 
-struct bridge_data {
-	volatile unsigned int *cfg_addr;
-	volatile unsigned char *cfg_data;
-	void *io_base;
-	int bus_number;
-	int max_bus;
-	struct bridge_data *next;
-	struct device_node *node;
-};
-
-static struct bridge_data **bridges, *bridge_list;
+struct bridge_data **bridges, *bridge_list;
 static int max_bus;
 
 static void add_bridges(struct device_node *dev, unsigned long *mem_ptr);
@@ -112,9 +102,11 @@ static void add_bridges(struct device_node *dev, unsigned long *mem_ptr)
 	int *bus_range;
 	int len;
 	struct bridge_data *bp;
+	struct reg_property *addr;
 
 	for (; dev != NULL; dev = dev->next) {
-		if (dev->n_addrs < 1) {
+		addr = (struct reg_property *) get_property(dev, "reg", &len);
+		if (addr == NULL || len < sizeof(*addr)) {
 			printk(KERN_WARNING "Can't use %s: no address\n",
 			       dev->full_name);
 			continue;
@@ -130,15 +122,18 @@ static void add_bridges(struct device_node *dev, unsigned long *mem_ptr)
 		else
 			printk(KERN_INFO "PCI buses %d..%d", bus_range[0],
 			       bus_range[1]);
-		printk(" controlled by %s at %x\n",
-		       dev->name, dev->addrs[0].address);
+		printk(" controlled by %s at %x\n", dev->name, addr->address);
 		bp = (struct bridge_data *) *mem_ptr;
 		*mem_ptr += sizeof(struct bridge_data);
 		bp->cfg_addr = (volatile unsigned int *)
-			ioremap(dev->addrs[0].address + 0x800000, 0x1000);
+			ioremap(addr->address + 0x800000, 0x1000);
 		bp->cfg_data = (volatile unsigned char *)
-			ioremap(dev->addrs[0].address + 0xc00000, 0x1000);
-		bp->io_base = (void *) ioremap(dev->addrs[0].address, 0x10000);
+			ioremap(addr->address + 0xc00000, 0x1000);
+		bp->io_base = (void *) ioremap(addr->address, 0x10000);
+#ifdef CONFIG_PMAC
+		if (isa_io_base == 0)
+			isa_io_base = (unsigned long) bp->io_base;
+#endif
 		bp->bus_number = bus_range[0];
 		bp->max_bus = bus_range[1];
 		bp->next = bridge_list;
@@ -180,7 +175,7 @@ int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
 }
 
 int pmac_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
-			     unsigned char offset, unsigned char *val)
+				  unsigned char offset, unsigned char *val)
 {
 	struct bridge_data *bp;
 
@@ -198,32 +193,11 @@ int pmac_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 	}
 	udelay(2);
 	*val = in_8(bp->cfg_data + (offset & 3));
-
-	if (offset == PCI_INTERRUPT_LINE) {
-		/*
-		 * Open Firmware often doesn't initialize this
-		 * register properly, so we find the node and see
-		 * if it has an AAPL,interrupts property.
-		 */
-		struct device_node *node;
-		unsigned int *reg;
-
-		for (node = bp->node->child; node != 0; node = node->sibling) {
-			reg = (unsigned int *) get_property(node, "reg", 0);
-			if (reg == 0 || ((reg[0] >> 8) & 0xff) != dev_fn)
-				continue;
-			/* this is the node, see if it has interrupts */
-			if (node->n_intrs > 0)
-				*val = node->intrs[0];
-			break;
-		}
-	}
-
 	return PCIBIOS_SUCCESSFUL;
 }
 
 int pmac_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
-			     unsigned char offset, unsigned short *val)
+				  unsigned char offset, unsigned short *val)
 {
 	struct bridge_data *bp;
 
@@ -245,7 +219,7 @@ int pmac_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 }
 
 int pmac_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
-			      unsigned char offset, unsigned int *val)
+				   unsigned char offset, unsigned int *val)
 {
 	struct bridge_data *bp;
 
@@ -267,7 +241,7 @@ int pmac_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 }
 
 int pmac_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
-			      unsigned char offset, unsigned char val)
+				   unsigned char offset, unsigned char val)
 {
 	struct bridge_data *bp;
 
@@ -288,7 +262,7 @@ int pmac_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 }
 
 int pmac_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
-			      unsigned char offset, unsigned short val)
+				   unsigned char offset, unsigned short val)
 {
 	struct bridge_data *bp;
 
@@ -309,7 +283,7 @@ int pmac_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 }
 
 int pmac_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
-			       unsigned char offset, unsigned int val)
+				    unsigned char offset, unsigned int val)
 {
 	struct bridge_data *bp;
 

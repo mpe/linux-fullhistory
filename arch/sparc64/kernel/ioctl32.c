@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.26 1997/12/15 15:11:02 jj Exp $
+/* $Id: ioctl32.c,v 1.35 1998/04/10 02:01:46 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -23,9 +23,11 @@
 #include <linux/netlink.h>
 #include <linux/vt.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/fd.h>
 #include <linux/if_ppp.h>
 #include <linux/mtio.h>
+#include <linux/cdrom.h>
 
 #include <scsi/scsi.h>
 /* Ugly hack. */
@@ -64,6 +66,30 @@ static int w_long(unsigned int fd, unsigned int cmd, u32 arg)
 	return err;
 }
  
+struct timeval32 {
+	int tv_sec;
+	int tv_usec;
+};
+
+static int do_siocgstamp(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	struct timeval32 *up = (struct timeval32 *)A(arg);
+	struct timeval ktv;
+	mm_segment_t old_fs = get_fs();
+	int err;
+
+	set_fs(KERNEL_DS);
+	err = sys_ioctl(fd, cmd, (unsigned long)&ktv);
+	set_fs(old_fs);
+	if(!err) {
+		if(!access_ok(VERIFY_WRITE, up, sizeof(*up))	||
+		   __put_user(ktv.tv_sec, &up->tv_sec)		||
+		   __put_user(ktv.tv_usec, &up->tv_usec))
+			err = -EFAULT;
+	}
+	return err;
+}
+
 struct ifmap32 {
 	u32 mem_start;
 	u32 mem_end;
@@ -948,6 +974,90 @@ static int mt_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 	return 0;
 }
 
+struct cdrom_read32 {
+	int			cdread_lba;
+	__kernel_caddr_t32	cdread_bufaddr;
+	int			cdread_buflen;
+};
+
+struct cdrom_read_audio32 {
+	union cdrom_addr	addr;
+	u_char			addr_format;
+	int			nframes;
+	__kernel_caddr_t32	buf;
+};
+
+static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	mm_segment_t old_fs = get_fs();
+	struct cdrom_read cdread;
+	struct cdrom_read_audio cdreadaudio;
+	__kernel_caddr_t32 addr;
+	char *data = 0;
+	void *karg;
+	int err = 0;
+
+	switch(cmd) {
+	case CDROMREADMODE2:
+	case CDROMREADMODE1:
+	case CDROMREADRAW:
+	case CDROMREADCOOKED:
+		karg = &cdread;
+		if (__get_user(cdread.cdread_lba, &((struct cdrom_read32 *)A(arg))->cdread_lba) ||
+		    __get_user(addr, &((struct cdrom_read32 *)A(arg))->cdread_bufaddr) ||
+		    __get_user(cdread.cdread_buflen, &((struct cdrom_read32 *)A(arg))->cdread_buflen))
+			return -EFAULT;
+		data = kmalloc(cdread.cdread_buflen, GFP_KERNEL);
+		if (!data)
+			return -ENOMEM;
+		cdread.cdread_bufaddr = data;
+		break;
+	case CDROMREADAUDIO:
+		karg = &cdreadaudio;
+		if (copy_from_user(&cdreadaudio.addr, &((struct cdrom_read_audio32 *)A(arg))->addr, sizeof(cdreadaudio.addr)) ||
+		    __get_user(cdreadaudio.addr_format, &((struct cdrom_read_audio32 *)A(arg))->addr_format) ||
+		    __get_user(cdreadaudio.nframes, &((struct cdrom_read_audio32 *)A(arg))->nframes) || 
+		    __get_user(addr, &((struct cdrom_read_audio32 *)A(arg))->buf))
+			return -EFAULT;
+		data = kmalloc(cdreadaudio.nframes * 2352, GFP_KERNEL);
+		if (!data)
+			return -ENOMEM;
+		cdreadaudio.buf = data;
+		break;
+	default:
+		printk("cdrom_ioctl: Unknown cmd fd(%d) cmd(%08x) arg(%08x)\n",
+		       (int)fd, (unsigned int)cmd, (unsigned int)arg);
+		return -EINVAL;
+	}
+	set_fs (KERNEL_DS);
+	err = sys_ioctl (fd, cmd, (unsigned long)karg);
+	set_fs (old_fs);
+	if (err) {
+		if (data) kfree(data);
+		return err;
+	}
+	switch (cmd) {
+	case CDROMREADMODE2:
+	case CDROMREADMODE1:
+	case CDROMREADRAW:
+	case CDROMREADCOOKED:
+		if (copy_to_user((char *)A(addr), data, cdread.cdread_buflen)) {
+			kfree(data);
+			return -EFAULT;
+		}
+		break;
+	case CDROMREADAUDIO:
+		if (copy_to_user((char *)A(addr), data, cdreadaudio.nframes * 2352)) {
+			kfree(data);
+			return -EFAULT;
+		}
+		break;
+	default:
+		break;
+	}
+	if (data) kfree(data);
+	return 0;
+}
 
 asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 {
@@ -955,10 +1065,7 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	int error = -EBADF;
 
 	lock_kernel();
-	if(fd >= NR_OPEN)
-		goto out;
-
-	filp = current->files->fd[fd];
+	filp = fcheck(fd);
 	if(!filp)
 		goto out;
 
@@ -966,7 +1073,6 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 		error = sys_ioctl (fd, cmd, (unsigned long)arg);
 		goto out;
 	}
-	error = -EFAULT;
 	switch (cmd) {
 	case SIOCGIFCONF:
 		error = dev_ifconf(fd, arg);
@@ -1012,6 +1118,11 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 			 * the user would have seen just an -EINVAL anyways.
 			 */
 		error = -EINVAL;
+		goto out;
+
+	case SIOCGSTAMP:
+		/* Sorry, timeval in the kernel is different now. */
+		error = do_siocgstamp(fd, cmd, arg);
 		goto out;
 
 	case HDIO_GETGEO:
@@ -1064,6 +1175,15 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case MTIOCGETCONFIG32:
 	case MTIOCSETCONFIG32:
 		error = mt_ioctl_trans(fd, cmd, arg);
+		goto out;
+
+	case CDROMREADMODE2:
+	case CDROMREADMODE1:
+	case CDROMREADRAW:
+	case CDROMREADCOOKED:
+	case CDROMREADAUDIO:
+	case CDROMREADALL:
+		error = cdrom_ioctl_trans(fd, cmd, arg);
 		goto out;
 
 	/* List here exlicitly which ioctl's are known to have
@@ -1170,6 +1290,7 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	
 	/* 0x09 */
 	case REGISTER_DEV:
+	case REGISTER_DEV_NEW:
 	case START_MD:
 	case STOP_MD:
 	
@@ -1219,6 +1340,7 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case SCSI_IOCTL_TAGGED_ENABLE:
 	case SCSI_IOCTL_TAGGED_DISABLE:
 	case SCSI_IOCTL_GET_BUS_NUMBER:
+	case SCSI_IOCTL_SEND_COMMAND:
 	
 	/* Big V */
 	case VT_SETMODE:
@@ -1267,7 +1389,6 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case FIOGETOWN:
 	case SIOCGPGRP:
 	case SIOCATMARK:
-	case SIOCGSTAMP:
 	case SIOCSIFLINK:
 	case SIOCSIFENCAP:
 	case SIOCGIFENCAP:
@@ -1305,6 +1426,36 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case PPPIOCSNPMODE:
 	case PPPIOCGDEBUG:
 	case PPPIOCSDEBUG:
+
+	/* CDROM stuff */
+	case CDROMPAUSE:
+	case CDROMRESUME:
+	case CDROMPLAYMSF:
+	case CDROMPLAYTRKIND:
+	case CDROMREADTOCHDR:
+	case CDROMREADTOCENTRY:
+	case CDROMSTOP:
+	case CDROMSTART:
+	case CDROMEJECT:
+	case CDROMVOLCTRL:
+	case CDROMSUBCHNL:
+	case CDROMEJECT_SW:
+	case CDROMMULTISESSION:
+	case CDROM_GET_MCN:
+	case CDROMRESET:
+	case CDROMVOLREAD:
+	case CDROMSEEK:
+	case CDROMPLAYBLK:
+	case CDROMCLOSETRAY:
+	case CDROM_SET_OPTIONS:
+	case CDROM_CLEAR_OPTIONS:
+	case CDROM_SELECT_SPEED:
+	case CDROM_SELECT_DISC:
+	case CDROM_MEDIA_CHANGED:
+	case CDROM_DRIVE_STATUS:
+	case CDROM_DISC_STATUS:
+	case CDROM_CHANGER_NSLOTS:
+
 		error = sys_ioctl (fd, cmd, (unsigned long)arg);
 		goto out;
 
@@ -1312,7 +1463,6 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 		printk("sys32_ioctl: Unknown cmd fd(%d) cmd(%08x) arg(%08x)\n",
 		       (int)fd, (unsigned int)cmd, (unsigned int)arg);
 		error = -EINVAL;
-		goto out;
 		break;
 	}
 out:

@@ -18,6 +18,7 @@
 #include <asm/io.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
+#include <asm/pgtable.h>
 #include <linux/selection.h>
 #include "pmac-cons.h"
 #include "control.h"
@@ -87,6 +88,10 @@ static unsigned char *frame_buffer;
 static struct cmap_regs *cmap_regs;
 static struct control_regs *disp_regs;
 static int control_use_bank2;
+
+static unsigned long frame_buffer_phys;
+static unsigned long disp_regs_phys;
+static unsigned long cmap_regs_phys;
 
 /*
  * Register initialization tables for the control display.
@@ -317,7 +322,7 @@ map_control_display(struct device_node *dp)
 		printk(" %x(%x)", dp->addrs[i].address, dp->addrs[i].size);
 	printk(", intrs =");
 	for (i = 0; i < dp->n_intrs; ++i)
-		printk(" %x", dp->intrs[i]);
+		printk(" %x", dp->intrs[i].line);
 	printk("\n");
 #endif
 
@@ -329,12 +334,15 @@ map_control_display(struct device_node *dp)
 			/* use the big-endian aperture (??) */
 			addr += 0x800000;
 			/* map at most 8MB for the frame buffer */
-			frame_buffer = ioremap(addr, 0x800000);
+			frame_buffer_phys = addr;
+			frame_buffer = __ioremap(addr, 0x800000, _PAGE_WRITETHRU);
 		} else {
+			disp_regs_phys = addr;
 			disp_regs = ioremap(addr, size);
 		}
 	}
-	cmap_regs = ioremap(0xf301b000, 0x1000);	/* XXX not in prom? */
+	cmap_regs_phys = 0xf301b000;	/* XXX not in prom? */
+	cmap_regs = ioremap(cmap_regs_phys, 0x1000);
 
 	/* Work out which banks of VRAM we have installed. */
 	frame_buffer[0] = 0x5a;
@@ -454,10 +462,10 @@ control_init()
 	display_info.pitch = line_pitch;
 	display_info.mode = video_mode;
 	strncpy(display_info.name, "control", sizeof(display_info.name));
-	display_info.fb_address = (unsigned long) frame_buffer + init->offset[color_mode];
-	display_info.cmap_adr_address = (unsigned long) &cmap_regs->addr;
-	display_info.cmap_data_address = (unsigned long) &cmap_regs->lut;
-	display_info.disp_reg_address = (unsigned long) &disp_regs;
+	display_info.fb_address = frame_buffer_phys + init->offset[color_mode];
+	display_info.cmap_adr_address = cmap_regs_phys;
+	display_info.cmap_data_address = cmap_regs_phys + 0x30;
+	display_info.disp_reg_address = disp_regs_phys;
 }
 
 int

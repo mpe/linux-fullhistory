@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.61 1997/11/19 07:57:44 jj Exp $
+/* $Id: sparc_ksyms.c,v 1.64 1998/03/19 15:36:43 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -15,7 +15,6 @@
 #include <linux/string.h>
 #include <linux/interrupt.h>
 #include <linux/in6.h>
-#include <linux/pci.h>
 
 #include <asm/oplib.h>
 #include <asm/delay.h>
@@ -138,7 +137,6 @@ EXPORT_SYMBOL(page_offset);
 EXPORT_SYMBOL(stack_top);
 
 /* Atomic operations. */
-EXPORT_SYMBOL_PRIVATE(_xchg32);
 EXPORT_SYMBOL_PRIVATE(_atomic_add);
 EXPORT_SYMBOL_PRIVATE(_atomic_sub);
 
@@ -168,13 +166,23 @@ EXPORT_SYMBOL(request_fast_irq);
 EXPORT_SYMBOL(sparc_alloc_io);
 EXPORT_SYMBOL(sparc_free_io);
 EXPORT_SYMBOL(io_remap_page_range);
-EXPORT_SYMBOL(mmu_v2p);
-EXPORT_SYMBOL(mmu_unlockarea);
-EXPORT_SYMBOL(mmu_lockarea);
-EXPORT_SYMBOL(mmu_get_scsi_sgl);
-EXPORT_SYMBOL(mmu_get_scsi_one);
-EXPORT_SYMBOL(mmu_release_scsi_sgl);
-EXPORT_SYMBOL(mmu_release_scsi_one);
+
+/* Btfixup stuff cannot have versions, it would be complicated too much */
+#ifndef __SMP__
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(___xchg32));
+#else
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(__smp_processor_id));
+#endif
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(enable_irq));
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(disable_irq));
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_v2p));
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_unlockarea));
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_lockarea));
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_get_scsi_sgl));
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_get_scsi_one));
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_release_scsi_sgl));
+EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(mmu_release_scsi_one));
+
 EXPORT_SYMBOL(_sparc_dvma_malloc);
 EXPORT_SYMBOL(sun4c_unmapioaddr);
 EXPORT_SYMBOL(srmmu_unmapioaddr);
@@ -272,7 +280,3 @@ EXPORT_SYMBOL_DOT(mul);
 EXPORT_SYMBOL_DOT(umul);
 EXPORT_SYMBOL_DOT(div);
 EXPORT_SYMBOL_DOT(udiv);
-
-#if CONFIG_PCI
-EXPORT_SYMBOL(pci_devices);
-#endif

@@ -11,6 +11,7 @@
 #include <asm/errno.h>
 #include <asm/winmacro.h>
 #include <asm/psr.h>
+#include <asm/page.h>
 
 #define CC_AND_RETT  \
 	set	PSR_C, %l4; \
@@ -94,7 +95,7 @@ LABEL(sunossmask):
 
 	.globl	LABEL(getpagesize)
 LABEL(getpagesize):
-	set	4096, %i0
+	set	PAGE_SIZE, %i0
 	CC_AND_RETT
 
 	/* XXX sys_nice() XXX */

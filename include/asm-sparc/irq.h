@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.21 1997/11/19 15:12:20 jj Exp $
+/* $Id: irq.h,v 1.22 1998/02/05 14:20:05 jj Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -10,6 +10,7 @@
 #include <linux/linkage.h>
 
 #include <asm/system.h>     /* For NCPUS */
+#include <asm/btfixup.h>
 
 /* This is used for sun4d */
 struct devid_cookie {
@@ -66,27 +67,47 @@ extern __inline__ void irq_exit(int cpu, int irq)
 #define irq_exit(cpu, irq)		(local_irq_count[cpu]--)
 #endif
 
+static __inline__ int irq_cannonicalize(int irq)
+{
+	return irq;
+}
+
 /* Dave Redman (djhr@tadpole.co.uk)
  * changed these to function pointers.. it saves cycles and will allow
  * the irq dependencies to be split into different files at a later date
  * sun4c_irq.c, sun4m_irq.c etc so we could reduce the kernel size.
+ * Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Changed these to btfixup entities... It saves cycles :)
  */
-extern void (*disable_irq)(unsigned int);
-extern void (*enable_irq)(unsigned int);
-extern void (*disable_pil_irq)(unsigned int);
-extern void (*enable_pil_irq)(unsigned int);
-extern void (*clear_clock_irq)(void);
-extern void (*clear_profile_irq)(int);
-extern void (*load_profile_irq)(int cpu, unsigned int timeout);
+BTFIXUPDEF_CALL(void, disable_irq, unsigned int)
+BTFIXUPDEF_CALL(void, enable_irq, unsigned int)
+BTFIXUPDEF_CALL(void, disable_pil_irq, unsigned int)
+BTFIXUPDEF_CALL(void, enable_pil_irq, unsigned int)
+BTFIXUPDEF_CALL(void, clear_clock_irq, void)
+BTFIXUPDEF_CALL(void, clear_profile_irq, int)
+BTFIXUPDEF_CALL(void, load_profile_irq, int, unsigned int)
+
+#define disable_irq(irq) BTFIXUP_CALL(disable_irq)(irq)
+#define enable_irq(irq) BTFIXUP_CALL(enable_irq)(irq)
+#define disable_pil_irq(irq) BTFIXUP_CALL(disable_pil_irq)(irq)
+#define enable_pil_irq(irq) BTFIXUP_CALL(enable_pil_irq)(irq)
+#define clear_clock_irq() BTFIXUP_CALL(clear_clock_irq)()
+#define clear_profile_irq(cpu) BTFIXUP_CALL(clear_profile_irq)(cpu)
+#define load_profile_irq(cpu,limit) BTFIXUP_CALL(load_profile_irq)(cpu,limit)
+
 extern void (*init_timers)(void (*lvl10_irq)(int, void *, struct pt_regs *));
 extern void claim_ticker14(void (*irq_handler)(int, void *, struct pt_regs *),
 			   int irq,
 			   unsigned int timeout);
 
 #ifdef __SMP__
-extern void (*set_cpu_int)(int, int);
-extern void (*clear_cpu_int)(int, int);
-extern void (*set_irq_udt)(int);
+BTFIXUPDEF_CALL(void, set_cpu_int, int, int)
+BTFIXUPDEF_CALL(void, clear_cpu_int, int, int)
+BTFIXUPDEF_CALL(void, set_irq_udt, int)
+
+#define set_cpu_int(cpu,level) BTFIXUP_CALL(set_cpu_int)(cpu,level)
+#define clear_cpu_int(cpu,level) BTFIXUP_CALL(clear_cpu_int)(cpu,level)
+#define set_irq_udt(cpu) BTFIXUP_CALL(set_irq_udt)(cpu)
 #endif
 
 extern int request_fast_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *), unsigned long flags, __const__ char *devname);

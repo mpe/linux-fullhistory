@@ -1,4 +1,4 @@
-/* $Id: wof.S,v 1.36 1997/05/01 08:53:35 davem Exp $
+/* $Id: wof.S,v 1.38 1998/02/06 14:14:22 jj Exp $
  * wof.S: Sparc window overflow handler.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -234,9 +234,10 @@ spwin_user_stack_is_bolixed:
 spnwin_patch3:	and	%twin_tmp, 0xff, %twin_tmp	! patched on 7win Sparcs
 		st	%twin_tmp, [%curptr + AOFF_task_tss + AOFF_thread_uwinmask]
 
-	mov	1, %sp
-	sll	%sp, (PAGE_SHIFT + 1), %sp
-	sub	%sp, (TRACEREG_SZ + REGWIN_SZ), %sp
+#define STACK_OFFSET	(TASK_UNION_SIZE - TRACEREG_SZ - REGWIN_SZ)
+
+	sethi	%hi(STACK_OFFSET), %sp
+	or	%sp, %lo(STACK_OFFSET), %sp
 	add	%curptr, %sp, %sp
 
 	/* Restore the saved globals and build a pt_regs frame. */
@@ -244,9 +245,8 @@ spnwin_patch3:	and	%twin_tmp, 0xff, %twin_tmp	! patched on 7win Sparcs
 	mov	%saved_g6, %g6
 	STORE_PT_ALL(sp, t_psr, t_pc, t_npc, g1)
 
-	mov	1, %g6
-	sll	%g6, (PAGE_SHIFT + 1), %g6
-	sub	%g6, (TRACEREG_SZ + REGWIN_SZ), %g6
+	sethi	%hi(STACK_OFFSET), %g6
+	or	%g6, %lo(STACK_OFFSET), %g6
 	sub	%sp, %g6, %g6
 
 	/* Turn on traps and call c-code to deal with it. */
@@ -394,9 +394,8 @@ C_LABEL(spwin_srmmu_stackchk):
 	 * kernel is page aligned, which should always be the case.
 	 */
 	/* Check results of callers andcc %sp, 0x7, %g0 */
-	sethi	%hi(C_LABEL(page_offset)), %glob_tmp
 	bne	spwin_user_stack_is_bolixed
-	 ld	[%glob_tmp + %lo(C_LABEL(page_offset))], %glob_tmp
+	 GET_PAGE_OFFSET(glob_tmp)
 	cmp	%glob_tmp, %sp
 	bleu	spwin_user_stack_is_bolixed
 	 mov	AC_M_SFSR, %glob_tmp

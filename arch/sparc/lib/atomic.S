@@ -10,8 +10,9 @@
 	.text
 	.align	4
 
-	.globl	___xchg32
-___xchg32:
+#ifndef __SMP__
+	.globl	___xchg32_sun4c
+___xchg32_sun4c:
 	rd	%psr, %g3
 	andcc	%g3, PSR_PIL, %g0
 	bne	1f
@@ -27,8 +28,15 @@ ___xchg32:
 	nop; nop; nop
 1:
 	mov	%g7, %g2
-	jmpl	%o7, %g0		/* Note, not + 0x8, see call in system.h */
+	jmpl	%o7 + 8, %g0
 	 mov	%g4, %o7
+
+	.globl	___xchg32_sun4md
+___xchg32_sun4md:
+	swap	[%g1], %g2
+	jmpl	%o7 + 8, %g0
+	 mov	%g4, %o7
+#endif
 
 	/* Read asm-sparc/atomic.h carefully to understand how this works for SMP.
 	 * Really, some things here for SMP are overly clever, go read the header.

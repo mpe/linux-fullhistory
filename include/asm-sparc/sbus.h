@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.13 1997/11/19 15:12:18 jj Exp $
+/* $Id: sbus.h,v 1.14 1998/03/09 14:04:56 jj Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -47,8 +47,7 @@ struct linux_sbus_device {
   struct linux_sbus_device *child;     /* For ledma and espdma on sun4m */
   struct linux_sbus *my_bus;           /* Back ptr to sbus */
   int prom_node;                       /* PROM device tree node for this device */
-  char prom_name[64];                  /* PROM device name */
-  char linux_name[64];                 /* Name used internally by Linux */
+  char prom_name[32];                  /* PROM device name */
 
   struct linux_prom_registers reg_addrs[PROMREG_MAX];
   int num_registers, ranges_applied;

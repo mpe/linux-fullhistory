@@ -23,10 +23,10 @@ setup_bats:
 	b	5f
 4:	ori	4,4,0xff		/* set up BAT registers for 604 */
 	li	5,2
-	mtdbatu	0,4
-	mtdbatl	0,5
-5:	mtibatu	0,4
-	mtibatl	0,5
+	mtdbatu	3,4
+	mtdbatl	3,5
+5:	mtibatu	3,4
+	mtibatl	3,5
 	isync
 	blr
 

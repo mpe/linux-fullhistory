@@ -1,10 +1,10 @@
-/* $Id: srmmu.c,v 1.156 1997/11/28 14:23:42 jj Exp $
+/* $Id: srmmu.c,v 1.170 1998/03/09 14:04:01 jj Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Peter A. Zaitcev (zaitcev@ithil.mcst.ru)
  * Copyright (C) 1996 Eddie C. Dost    (ecd@skynet.be)
- * Copyright (C) 1997 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/config.h>
@@ -30,6 +30,7 @@
 #include <asm/a.out.h>
 #include <asm/mmu_context.h>
 #include <asm/io-unit.h>
+#include <asm/spinlock.h>
 
 /* Now the cpu specific definitions. */
 #include <asm/viking.h>
@@ -39,6 +40,11 @@
 #include <asm/swift.h>
 #include <asm/turbosparc.h>
 
+#include <asm/btfixup.h>
+
+/* #define DEBUG_MAP_KERNEL */
+/* #define PAGESKIP_DEBUG */
+
 enum mbus_module srmmu_modtype;
 unsigned int hwbug_bitmask;
 int vac_cache_size;
@@ -46,10 +52,6 @@ int vac_line_size;
 int vac_badbits;
 
 extern unsigned long sparc_iobase_vaddr;
-
-extern unsigned long sun4d_dma_base;
-extern unsigned long sun4d_dma_size;
-extern unsigned long sun4d_dma_vbase;
 
 #ifdef __SMP__
 #define FLUSH_BEGIN(mm)
@@ -60,16 +62,24 @@ extern unsigned long sun4d_dma_vbase;
 #endif
 
 static int phys_mem_contig;
-long page_contig_offset;
+BTFIXUPDEF_SETHI(page_contig_offset)
 
-static void (*ctxd_set)(ctxd_t *ctxp, pgd_t *pgdp);
-static void (*pmd_set)(pmd_t *pmdp, pte_t *ptep);
+BTFIXUPDEF_CALL(void, ctxd_set, ctxd_t *, pgd_t *)
+BTFIXUPDEF_CALL(void, pmd_set, pmd_t *, pte_t *)
 
-void (*flush_page_for_dma)(unsigned long page);
+#define ctxd_set(ctxp,pgdp) BTFIXUP_CALL(ctxd_set)(ctxp,pgdp)
+#define pmd_set(pmdp,ptep) BTFIXUP_CALL(pmd_set)(pmdp,ptep)
+
+BTFIXUPDEF_CALL(void, flush_page_for_dma, unsigned long)
+BTFIXUPDEF_CALL(void, flush_chunk, unsigned long)
+
+#define flush_page_for_dma(page) BTFIXUP_CALL(flush_page_for_dma)(page)
 int flush_page_for_dma_global = 1;
-static void (*flush_chunk)(unsigned long chunk);
+#define flush_chunk(chunk) BTFIXUP_CALL(flush_chunk)(chunk)
 #ifdef __SMP__
-static void (*local_flush_page_for_dma)(unsigned long page);
+BTFIXUPDEF_CALL(void, local_flush_page_for_dma, unsigned long)
+
+#define local_flush_page_for_dma(page) BTFIXUP_CALL(local_flush_page_for_dma)(page)
 #endif
 
 static struct srmmu_stats {
@@ -79,7 +89,7 @@ static struct srmmu_stats {
 	int invmm;
 } module_stats;
 
-static char *srmmu_name;
+char *srmmu_name;
 
 ctxd_t *srmmu_ctx_table_phys;
 ctxd_t *srmmu_context_table;
@@ -96,8 +106,8 @@ static struct srmmu_trans {
 #define SRMMU_HASHSZ	256
 
 /* Not static, viking.S uses it. */
-struct srmmu_trans *srmmu_v2p_hash[SRMMU_HASHSZ];
-static struct srmmu_trans *srmmu_p2v_hash[SRMMU_HASHSZ];
+unsigned long srmmu_v2p_hash[SRMMU_HASHSZ];
+static unsigned long srmmu_p2v_hash[SRMMU_HASHSZ];
 
 #define srmmu_ahashfn(addr)	((addr) >> 24)
 
@@ -111,20 +121,17 @@ int viking_mxcc_present = 0;
  */
 static inline unsigned long srmmu_v2p(unsigned long vaddr)
 {
-	struct srmmu_trans *tp = srmmu_v2p_hash[srmmu_ahashfn(vaddr)];
-
-	if(tp)
-		return (vaddr - tp->vbase + tp->pbase);
-	else
-		return 0xffffffffUL;
+	unsigned long off = srmmu_v2p_hash[srmmu_ahashfn(vaddr)];
+	
+	return (vaddr + off);
 }
 
 static inline unsigned long srmmu_p2v(unsigned long paddr)
 {
-	struct srmmu_trans *tp = srmmu_p2v_hash[srmmu_ahashfn(paddr)];
-
-	if(tp)
-		return (paddr - tp->pbase + tp->vbase);
+	unsigned long off = srmmu_p2v_hash[srmmu_ahashfn(paddr)];
+	
+	if (off != 0xffffffffUL)
+		return (paddr - off);
 	else
 		return 0xffffffffUL;
 }
@@ -132,16 +139,47 @@ static inline unsigned long srmmu_p2v(unsigned long paddr)
 /* Physical memory on most SS1000/SC2000 can be contiguous, so we handle that case
  * as a special case to make things faster.
  */
+/* FIXME: gcc is stupid here and generates very very bad code in this
+ * heavily used routine. So we help it a bit. */
 static inline unsigned long srmmu_c_v2p(unsigned long vaddr)
 {
+#if KERNBASE != 0xf0000000
 	if (vaddr >= KERNBASE) return vaddr - KERNBASE;
-	return (vaddr - page_contig_offset);
+	return vaddr - BTFIXUP_SETHI(page_contig_offset);
+#else
+	register unsigned long kernbase;
+	
+	__asm__ ("sethi %%hi(0xf0000000), %0" : "=r"(kernbase));
+	return vaddr - ((vaddr >= kernbase) ? kernbase : BTFIXUP_SETHI(page_contig_offset));
+#endif
 }
 
 static inline unsigned long srmmu_c_p2v(unsigned long paddr)
 {
+#if KERNBASE != 0xf0000000
 	if (paddr < (0xfd000000 - KERNBASE)) return paddr + KERNBASE;
-	return (paddr + page_contig_offset);
+	return (paddr + BTFIXUP_SETHI(page_contig_offset));
+#else
+	register unsigned long kernbase;
+	register unsigned long limit;
+	
+	__asm__ ("sethi %%hi(0x0d000000), %0" : "=r"(limit));
+	__asm__ ("sethi %%hi(0xf0000000), %0" : "=r"(kernbase));
+
+	return paddr + ((paddr < limit) ? kernbase : BTFIXUP_SETHI(page_contig_offset));
+#endif
+}
+
+/* On boxes where there is no lots_of_ram, KERNBASE is mapped to PA<0> and highest
+   PA is below 0x0d000000, we can optimize even more :) */
+static inline unsigned long srmmu_s_v2p(unsigned long vaddr)
+{
+	return vaddr - PAGE_OFFSET;
+}
+
+static inline unsigned long srmmu_s_p2v(unsigned long paddr)
+{
+	return paddr + PAGE_OFFSET;
 }
 
 /* In general all page table modifications should use the V8 atomic
@@ -157,19 +195,43 @@ static inline unsigned long srmmu_swap(unsigned long *addr, unsigned long value)
 /* Functions really use this, not srmmu_swap directly. */
 #define srmmu_set_entry(ptr, newentry) srmmu_swap((unsigned long *) (ptr), (newentry))
 
+#ifdef PAGESKIP_DEBUG
+#define PGSKIP_DEBUG(from,to) prom_printf("PG_skip %ld->%ld\n", (long)(from), (long)(to)); printk("PG_skip %ld->%ld\n", (long)(from), (long)(to))
+#else
+#define PGSKIP_DEBUG(from,to) do { } while (0)
+#endif
+
 __initfunc(void srmmu_frob_mem_map(unsigned long start_mem))
 {
-	unsigned long bank_start, bank_end;
+	unsigned long bank_start, bank_end = 0;
 	unsigned long addr;
 	int i;
 
 	/* First, mark all pages as invalid. */
 	for(addr = PAGE_OFFSET; MAP_NR(addr) < max_mapnr; addr += PAGE_SIZE)
 		mem_map[MAP_NR(addr)].flags |= (1<<PG_reserved);
+		
+	/* Next, pg[0-3] is sun4c cruft, so we can free it... */
+	mem_map[MAP_NR(pg0)].flags &= ~(1<<PG_reserved);
+	mem_map[MAP_NR(pg1)].flags &= ~(1<<PG_reserved);
+	mem_map[MAP_NR(pg2)].flags &= ~(1<<PG_reserved);
+	mem_map[MAP_NR(pg3)].flags &= ~(1<<PG_reserved);
 
 	start_mem = PAGE_ALIGN(start_mem);
 	for(i = 0; srmmu_map[i].size; i++) {
 		bank_start = srmmu_map[i].vbase;
+		
+		if (i && bank_start - bank_end > 2 * PAGE_SIZE) {
+			mem_map[MAP_NR(bank_end)].flags |= (1<<PG_skip);
+			mem_map[MAP_NR(bank_end)].next_hash = mem_map + MAP_NR(bank_start);
+			PGSKIP_DEBUG(MAP_NR(bank_end), MAP_NR(bank_start));
+			if (bank_end > KERNBASE && bank_start < KERNBASE) {
+				mem_map[0].flags |= (1<<PG_skip);
+				mem_map[0].next_hash = mem_map + MAP_NR(bank_start);
+				PGSKIP_DEBUG(0, MAP_NR(bank_start));
+			}
+		}
+		
 		bank_end = bank_start + srmmu_map[i].size;
 		while(bank_start < bank_end) {
 			if((bank_start >= KERNBASE) &&
@@ -180,23 +242,28 @@ __initfunc(void srmmu_frob_mem_map(unsigned long start_mem))
 			mem_map[MAP_NR(bank_start)].flags &= ~(1<<PG_reserved);
 			bank_start += PAGE_SIZE;
 		}
+		
+		if (bank_end == 0xfd000000)
+			bank_end = PAGE_OFFSET;
 	}
-	if (sparc_cpu_model == sun4d) {
-		for (addr = PAGE_OFFSET; MAP_NR(addr) < max_mapnr; addr += PAGE_SIZE)
-			if (addr < sun4d_dma_vbase || addr >= sun4d_dma_vbase + sun4d_dma_size)
-				clear_bit(PG_DMA, &mem_map[MAP_NR(addr)].flags);
+	
+	if (bank_end < KERNBASE) {
+		mem_map[MAP_NR(bank_end)].flags |= (1<<PG_skip);
+		mem_map[MAP_NR(bank_end)].next_hash = mem_map + MAP_NR(KERNBASE);
+		PGSKIP_DEBUG(MAP_NR(bank_end), MAP_NR(KERNBASE));
+	} else if (MAP_NR(bank_end) < max_mapnr) {
+		mem_map[MAP_NR(bank_end)].flags |= (1<<PG_skip);
+		if (mem_map[0].flags & (1 << PG_skip)) {
+			mem_map[MAP_NR(bank_end)].next_hash = mem_map[0].next_hash;
+			PGSKIP_DEBUG(MAP_NR(bank_end), mem_map[0].next_hash - mem_map);
+		} else {
+			mem_map[MAP_NR(bank_end)].next_hash = mem_map;
+			PGSKIP_DEBUG(MAP_NR(bank_end), 0);
+		}
 	}
 }
 
 /* The very generic SRMMU page table operations. */
-static unsigned int srmmu_pmd_align(unsigned int addr) { return SRMMU_PMD_ALIGN(addr); }
-static unsigned int srmmu_pgdir_align(unsigned int addr) { return SRMMU_PGDIR_ALIGN(addr); }
-
-static unsigned long srmmu_vmalloc_start(void)
-{
-	return SRMMU_VMALLOC_START;
-}
-
 static inline int srmmu_device_memory(unsigned long x) 
 {
 	return ((x & 0xF0000000) != 0);
@@ -220,44 +287,53 @@ static unsigned long srmmu_c_pmd_page(pmd_t pmd)
 static unsigned long srmmu_c_pte_page(pte_t pte)
 { return srmmu_device_memory(pte_val(pte))?~0:srmmu_c_p2v((pte_val(pte) & SRMMU_PTE_PMASK) << 4); }
 
-static int srmmu_pte_none(pte_t pte)          
+static unsigned long srmmu_s_pgd_page(pgd_t pgd)
+{ return srmmu_device_memory(pgd_val(pgd))?~0:srmmu_s_p2v((pgd_val(pgd) & SRMMU_PTD_PMASK) << 4); }
+
+static unsigned long srmmu_s_pmd_page(pmd_t pmd)
+{ return srmmu_device_memory(pmd_val(pmd))?~0:srmmu_s_p2v((pmd_val(pmd) & SRMMU_PTD_PMASK) << 4); }
+
+static unsigned long srmmu_s_pte_page(pte_t pte)
+{ return srmmu_device_memory(pte_val(pte))?~0:srmmu_s_p2v((pte_val(pte) & SRMMU_PTE_PMASK) << 4); }
+
+static inline int srmmu_pte_none(pte_t pte)
 { return !(pte_val(pte) & 0xFFFFFFF); }
-static int srmmu_pte_present(pte_t pte)
+static inline int srmmu_pte_present(pte_t pte)
 { return ((pte_val(pte) & SRMMU_ET_MASK) == SRMMU_ET_PTE); }
 
-static void srmmu_pte_clear(pte_t *ptep)      { set_pte(ptep, __pte(0)); }
+static inline void srmmu_pte_clear(pte_t *ptep)      { set_pte(ptep, __pte(0)); }
 
-static int srmmu_pmd_none(pmd_t pmd)          
+static inline int srmmu_pmd_none(pmd_t pmd)
 { return !(pmd_val(pmd) & 0xFFFFFFF); }
-static int srmmu_pmd_bad(pmd_t pmd)
+static inline int srmmu_pmd_bad(pmd_t pmd)
 { return (pmd_val(pmd) & SRMMU_ET_MASK) != SRMMU_ET_PTD; }
 
-static int srmmu_pmd_present(pmd_t pmd)
+static inline int srmmu_pmd_present(pmd_t pmd)
 { return ((pmd_val(pmd) & SRMMU_ET_MASK) == SRMMU_ET_PTD); }
 
-static void srmmu_pmd_clear(pmd_t *pmdp)      { set_pte((pte_t *)pmdp, __pte(0)); }
+static inline void srmmu_pmd_clear(pmd_t *pmdp)      { set_pte((pte_t *)pmdp, __pte(0)); }
 
-static int srmmu_pgd_none(pgd_t pgd)          
+static inline int srmmu_pgd_none(pgd_t pgd)          
 { return !(pgd_val(pgd) & 0xFFFFFFF); }
 
-static int srmmu_pgd_bad(pgd_t pgd)
+static inline int srmmu_pgd_bad(pgd_t pgd)
 { return (pgd_val(pgd) & SRMMU_ET_MASK) != SRMMU_ET_PTD; }
 
-static int srmmu_pgd_present(pgd_t pgd)
+static inline int srmmu_pgd_present(pgd_t pgd)
 { return ((pgd_val(pgd) & SRMMU_ET_MASK) == SRMMU_ET_PTD); }
 
-static void srmmu_pgd_clear(pgd_t * pgdp)     { set_pte((pte_t *)pgdp, __pte(0)); }
+static inline void srmmu_pgd_clear(pgd_t * pgdp)     { set_pte((pte_t *)pgdp, __pte(0)); }
 
-static int srmmu_pte_write(pte_t pte)         { return pte_val(pte) & SRMMU_WRITE; }
-static int srmmu_pte_dirty(pte_t pte)         { return pte_val(pte) & SRMMU_DIRTY; }
-static int srmmu_pte_young(pte_t pte)         { return pte_val(pte) & SRMMU_REF; }
+static inline int srmmu_pte_write(pte_t pte)         { return pte_val(pte) & SRMMU_WRITE; }
+static inline int srmmu_pte_dirty(pte_t pte)         { return pte_val(pte) & SRMMU_DIRTY; }
+static inline int srmmu_pte_young(pte_t pte)         { return pte_val(pte) & SRMMU_REF; }
 
-static pte_t srmmu_pte_wrprotect(pte_t pte)   { return __pte(pte_val(pte) & ~SRMMU_WRITE);}
-static pte_t srmmu_pte_mkclean(pte_t pte)     { return __pte(pte_val(pte) & ~SRMMU_DIRTY);}
-static pte_t srmmu_pte_mkold(pte_t pte)       { return __pte(pte_val(pte) & ~SRMMU_REF);}
-static pte_t srmmu_pte_mkwrite(pte_t pte)     { return __pte(pte_val(pte) | SRMMU_WRITE);}
-static pte_t srmmu_pte_mkdirty(pte_t pte)     { return __pte(pte_val(pte) | SRMMU_DIRTY);}
-static pte_t srmmu_pte_mkyoung(pte_t pte)     { return __pte(pte_val(pte) | SRMMU_REF);}
+static inline pte_t srmmu_pte_wrprotect(pte_t pte)   { return __pte(pte_val(pte) & ~SRMMU_WRITE);}
+static inline pte_t srmmu_pte_mkclean(pte_t pte)     { return __pte(pte_val(pte) & ~SRMMU_DIRTY);}
+static inline pte_t srmmu_pte_mkold(pte_t pte)       { return __pte(pte_val(pte) & ~SRMMU_REF);}
+static inline pte_t srmmu_pte_mkwrite(pte_t pte)     { return __pte(pte_val(pte) | SRMMU_WRITE);}
+static inline pte_t srmmu_pte_mkdirty(pte_t pte)     { return __pte(pte_val(pte) | SRMMU_DIRTY);}
+static inline pte_t srmmu_pte_mkyoung(pte_t pte)     { return __pte(pte_val(pte) | SRMMU_REF);}
 
 /*
  * Conversion functions: convert a page and protection to a page entry,
@@ -268,6 +344,9 @@ static pte_t srmmu_mk_pte(unsigned long page, pgprot_t pgprot)
 
 static pte_t srmmu_c_mk_pte(unsigned long page, pgprot_t pgprot)
 { return __pte(((srmmu_c_v2p(page)) >> 4) | pgprot_val(pgprot)); }
+
+static pte_t srmmu_s_mk_pte(unsigned long page, pgprot_t pgprot)
+{ return __pte(((srmmu_s_v2p(page)) >> 4) | pgprot_val(pgprot)); }
 
 static pte_t srmmu_mk_pte_phys(unsigned long page, pgprot_t pgprot)
 { return __pte(((page) >> 4) | pgprot_val(pgprot)); }
@@ -307,39 +386,62 @@ static void srmmu_c_pmd_set(pmd_t * pmdp, pte_t * ptep)
 	set_pte((pte_t *)pmdp, (SRMMU_ET_PTD | (srmmu_c_v2p((unsigned long) ptep) >> 4)));
 }
 
-static pte_t srmmu_pte_modify(pte_t pte, pgprot_t newprot)
+static void srmmu_s_ctxd_set(ctxd_t *ctxp, pgd_t *pgdp)
+{ 
+	set_pte((pte_t *)ctxp, (SRMMU_ET_PTD | (srmmu_s_v2p((unsigned long) pgdp) >> 4)));
+}
+
+static void srmmu_s_pgd_set(pgd_t * pgdp, pmd_t * pmdp)
+{
+	set_pte((pte_t *)pgdp, (SRMMU_ET_PTD | (srmmu_s_v2p((unsigned long) pmdp) >> 4)));
+}
+
+static void srmmu_s_pmd_set(pmd_t * pmdp, pte_t * ptep)
+{
+	set_pte((pte_t *)pmdp, (SRMMU_ET_PTD | (srmmu_s_v2p((unsigned long) ptep) >> 4)));
+}
+
+static inline pte_t srmmu_pte_modify(pte_t pte, pgprot_t newprot)
 {
 	return __pte((pte_val(pte) & SRMMU_CHG_MASK) | pgprot_val(newprot));
 }
 
 /* to find an entry in a top-level page table... */
-static pgd_t *srmmu_pgd_offset(struct mm_struct * mm, unsigned long address)
+static inline pgd_t *srmmu_pgd_offset(struct mm_struct * mm, unsigned long address)
 {
-	return mm->pgd + ((address >> SRMMU_PGDIR_SHIFT) & (SRMMU_PTRS_PER_PGD - 1));
+	return mm->pgd + (address >> SRMMU_PGDIR_SHIFT);
 }
 
 /* Find an entry in the second-level page table.. */
-static pmd_t *srmmu_pmd_offset(pgd_t * dir, unsigned long address)
+static inline pmd_t *srmmu_pmd_offset(pgd_t * dir, unsigned long address)
 {
 	return (pmd_t *) srmmu_pgd_page(*dir) + ((address >> SRMMU_PMD_SHIFT) & (SRMMU_PTRS_PER_PMD - 1));
 }
 
 /* Find an entry in the third-level page table.. */ 
-static pte_t *srmmu_pte_offset(pmd_t * dir, unsigned long address)
+static inline pte_t *srmmu_pte_offset(pmd_t * dir, unsigned long address)
 {
 	return (pte_t *) srmmu_pmd_page(*dir) + ((address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1));
 }
 
-/* Find an entry in the second-level page table.. */
-static pmd_t *srmmu_c_pmd_offset(pgd_t * dir, unsigned long address)
+static inline pmd_t *srmmu_c_pmd_offset(pgd_t * dir, unsigned long address)
 {
 	return (pmd_t *) srmmu_c_pgd_page(*dir) + ((address >> SRMMU_PMD_SHIFT) & (SRMMU_PTRS_PER_PMD - 1));
 }
 
-/* Find an entry in the third-level page table.. */ 
-static pte_t *srmmu_c_pte_offset(pmd_t * dir, unsigned long address)
+static inline pte_t *srmmu_c_pte_offset(pmd_t * dir, unsigned long address)
 {
 	return (pte_t *) srmmu_c_pmd_page(*dir) + ((address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1));
+}
+
+static inline pmd_t *srmmu_s_pmd_offset(pgd_t * dir, unsigned long address)
+{
+	return (pmd_t *) srmmu_s_pgd_page(*dir) + ((address >> SRMMU_PMD_SHIFT) & (SRMMU_PTRS_PER_PMD - 1));
+}
+
+static inline pte_t *srmmu_s_pte_offset(pmd_t * dir, unsigned long address)
+{
+	return (pte_t *) srmmu_s_pmd_page(*dir) + ((address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1));
 }
 
 /* This must update the context table entry for this process. */
@@ -352,334 +454,146 @@ static void srmmu_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 	}
 }
 
-static inline void srmmu_putpage(unsigned long page)
+static inline pte_t *srmmu_get_pte_fast(void)
 {
-	free_page(page);
-}
-
-#define LC_HIGH_WATER	128
-#define BC_HIGH_WATER	32
-
-static unsigned long *lcnks = 0;
-static unsigned long *bcnks = 0;
-static int lcwater = 0;
-static int bcwater = 0;
-static int chunk_pages = 0;
-static int clct_pages = 0;
-
-#define RELAX_JIFFIES	16
-
-static int lcjiffies;
-static int bcjiffies;
-
-struct chunk {
-	struct chunk *next;
-	struct chunk *prev;
-	struct chunk *npage;
-	struct chunk *ppage;
-	int count;
-};
-
-static int garbage_calls = 0;
-
-#define OTHER_PAGE(p,q)	(((unsigned long)(p) ^ (unsigned long)(q)) & PAGE_MASK)
-
-static int garbage_collect(unsigned long **cnks, int n, int cpp)
-{
-	struct chunk *root = (struct chunk *)*cnks;
-	struct chunk *p, *q, *curr, *next;
-	int water = n;
-
-	next = root->next;
-	curr = root->prev = root->next = root->npage = root->ppage = root;
-	root->count = 1;
-
-	garbage_calls++;
-
-	while (--n) {
-		p = next;
-		next = next->next;
-
-		if (OTHER_PAGE(p, curr)) {
-
-			q = curr->npage;
-			while (q != curr) {
-				if (!OTHER_PAGE(p, q))
-					break;
-				q = q->npage;
-			}
-
-			if (q == curr) {
-
-				(p->npage = curr->npage)->ppage = p;
-				curr->npage = p;
-				p->ppage = curr;
-
-				p->next = p->prev = p;
-				p->count = 1;
-
-				curr = p;
-
-				continue;
-			}
-			curr = q;
-		}
-
-		(p->next = curr->next)->prev = p;
-		curr->next = p;
-		p->prev = curr;
-
-		if (++curr->count == cpp) {
-
-			q = curr->npage;
-			if (curr == q) {
-
-				srmmu_putpage((unsigned long)curr & PAGE_MASK);
-				water -= cpp;
-
-				clct_pages++;
-				chunk_pages--;
-
-				if (--n) {
-					p = next;
-					next = next->next;
-
-					curr = root->prev =
-						root->next = root->npage =
-						root->ppage = root = p;
-					root->count = 1;
-
-					continue;
-				}
-				return 0;
-			}
-
-			if (curr == root)
-				root = q;
-
-			curr->ppage->npage = q;
-			q->ppage = curr->ppage;
-
-			srmmu_putpage((unsigned long)curr & PAGE_MASK);
-			water -= cpp;
-
-			clct_pages++;
-			chunk_pages--;
-
-			curr = q;
-		}
+	struct page *ret;
+	
+	spin_lock(&pte_spinlock);
+	if ((ret = (struct page *)pte_quicklist) != NULL) {
+		unsigned int mask = (unsigned int)ret->pprev_hash;
+		unsigned int tmp, off;
+		
+		if (mask & 0xff)
+			for (tmp = 0x001, off = 0; (mask & tmp) == 0; tmp <<= 1, off += 256);
+		else
+			for (tmp = 0x100, off = 2048; (mask & tmp) == 0; tmp <<= 1, off += 256);
+		(unsigned int)ret->pprev_hash = mask & ~tmp;
+		if (!(mask & ~tmp))
+			pte_quicklist = (unsigned long *)ret->next_hash;
+		ret = (struct page *)(PAGE_OFFSET + (ret->map_nr << PAGE_SHIFT) + off);
+		pgtable_cache_size--;
 	}
+	spin_unlock(&pte_spinlock);
+	return (pte_t *)ret;
+}
 
-	p = root;
-	while (p->npage != root) {
-		p->prev->next = p->npage;
-		p = p->npage;
+static inline pte_t *srmmu_get_pte_slow(void)
+{
+	pte_t *ret;
+	struct page *page;
+	
+	ret = (pte_t *)get_free_page(GFP_KERNEL);
+	if (ret) {
+		page = mem_map + MAP_NR(ret);
+		flush_chunk((unsigned long)ret);
+		(unsigned int)page->pprev_hash = 0xfffe;
+		spin_lock(&pte_spinlock);
+		(unsigned long *)page->next_hash = pte_quicklist;
+		pte_quicklist = (unsigned long *)page;
+		pgtable_cache_size += 15;
 	}
-
-	*cnks = (unsigned long *)root;
-	return water;
+	return ret;
 }
 
-static unsigned long *get_small_chunk(void)
+static inline pgd_t *srmmu_get_pgd_fast(void)
 {
-	unsigned long *rval;
-	unsigned long flags;
+	struct page *ret;
 
-	save_and_cli(flags);
-	if(lcwater) {
-		lcwater--;
-		rval = lcnks;
-		lcnks = (unsigned long *) *rval;
-	} else {
-		rval = (unsigned long *) __get_free_page(GFP_KERNEL);
-
-		if(!rval) {
-			restore_flags(flags);
-			return 0;
-		}
-		chunk_pages++;
-
-		lcnks = (rval + 64);
-
-		/* Cache stomping, I know... */
-		*(rval + 64) = (unsigned long) (rval + 128);
-		*(rval + 128) = (unsigned long) (rval + 192);
-		*(rval + 192) = (unsigned long) (rval + 256);
-		*(rval + 256) = (unsigned long) (rval + 320);
-		*(rval + 320) = (unsigned long) (rval + 384);
-		*(rval + 384) = (unsigned long) (rval + 448);
-		*(rval + 448) = (unsigned long) (rval + 512);
-		*(rval + 512) = (unsigned long) (rval + 576);
-		*(rval + 576) = (unsigned long) (rval + 640);
-		*(rval + 640) = (unsigned long) (rval + 704);
-		*(rval + 704) = (unsigned long) (rval + 768);
-		*(rval + 768) = (unsigned long) (rval + 832);
-		*(rval + 832) = (unsigned long) (rval + 896);
-		*(rval + 896) = (unsigned long) (rval + 960);
-		*(rval + 960) = 0;
-		lcwater = 15;
+	spin_lock(&pgd_spinlock);	
+	if ((ret = (struct page *)pgd_quicklist) != NULL) {
+		unsigned int mask = (unsigned int)ret->pprev_hash;
+		unsigned int tmp, off;
+		
+		for (tmp = 0x001, off = 0; (mask & tmp) == 0; tmp <<= 1, off += 1024);
+		(unsigned int)ret->pprev_hash = mask & ~tmp;
+		if (!(mask & ~tmp))
+			pgd_quicklist = (unsigned long *)ret->next_hash;
+		ret = (struct page *)(PAGE_OFFSET + (ret->map_nr << PAGE_SHIFT) + off);
+		pgd_cache_size--;
 	}
-	lcjiffies = jiffies;
-	restore_flags(flags);
-	memset(rval, 0, 256);
-	flush_chunk((unsigned long)rval);
-	return rval;
+	spin_unlock(&pgd_spinlock);
+	return (pte_t *)ret;
 }
 
-static inline void free_small_chunk(unsigned long *it)
+static inline pgd_t *srmmu_get_pgd_slow(void)
 {
-	unsigned long flags;
-
-	save_and_cli(flags);
-	*it = (unsigned long) lcnks;
-	lcnks = it;
-	lcwater++;
-
-	if ((lcwater > LC_HIGH_WATER) &&
-	    (jiffies > lcjiffies + RELAX_JIFFIES))
-		lcwater = garbage_collect(&lcnks, lcwater, 16);
-
-	restore_flags(flags);
-}
-
-static unsigned long *get_big_chunk(void)
-{
-	unsigned long *rval;
-	unsigned long flags;
-
-	save_and_cli(flags);
-	if(bcwater) {
-		bcwater--;
-		rval = bcnks;
-		bcnks = (unsigned long *) *rval;
-	} else {
-		rval = (unsigned long *) __get_free_page(GFP_KERNEL);
-
-		if(!rval) {
-			restore_flags(flags);
-			return 0;
-		}
-		chunk_pages++;
-
-		bcnks = (rval + 256);
-
-		/* Cache stomping, I know... */
-		*(rval + 256) = (unsigned long) (rval + 512);
-		*(rval + 512) = (unsigned long) (rval + 768);
-		*(rval + 768) = 0;
-		bcwater = 3;
+	pgd_t *ret;
+	struct page *page;
+	
+	ret = (pgd_t *)__get_free_page(GFP_KERNEL);
+	if (ret) {
+		pgd_t *init = pgd_offset(&init_mm, 0);
+		memset(ret + (0 * PTRS_PER_PGD), 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
+		memcpy(ret + (0 * PTRS_PER_PGD) + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
+						(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+		memset(ret + (1 * PTRS_PER_PGD), 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
+		memcpy(ret + (1 * PTRS_PER_PGD) + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
+						(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+		memset(ret + (2 * PTRS_PER_PGD), 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
+		memcpy(ret + (2 * PTRS_PER_PGD) + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
+						(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+		memset(ret + (3 * PTRS_PER_PGD), 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
+		memcpy(ret + (3 * PTRS_PER_PGD) + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
+						(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+		page = mem_map + MAP_NR(ret);
+		flush_chunk((unsigned long)ret);
+		(unsigned int)page->pprev_hash = 0xe;
+		spin_lock(&pgd_spinlock);
+		(unsigned long *)page->next_hash = pgd_quicklist;
+		pgd_quicklist = (unsigned long *)page;
+		pgd_cache_size += 3;
+		spin_unlock(&pgd_spinlock);
 	}
-	bcjiffies = jiffies;
-	restore_flags(flags);
-	memset(rval, 0, 1024);
-	flush_chunk((unsigned long)rval);
-	return rval;
+	return ret;
 }
 
-static inline void free_big_chunk(unsigned long *it)
+static void srmmu_free_pte_slow(pte_t *pte)
 {
-	unsigned long flags;
-
-	save_and_cli(flags);
-	*it = (unsigned long) bcnks;
-	bcnks = it;
-	bcwater++;
-
-	if ((bcwater > BC_HIGH_WATER) &&
-	    (jiffies > bcjiffies + RELAX_JIFFIES))
-		bcwater = garbage_collect(&bcnks, bcwater, 4);
-
-	restore_flags(flags);
 }
 
-#define NEW_PGD() (pgd_t *) get_big_chunk()
-#define NEW_PMD() (pmd_t *) get_small_chunk()
-#define NEW_PTE() (pte_t *) get_small_chunk()
-#define FREE_PGD(chunk) free_big_chunk((unsigned long *)(chunk))
-#define FREE_PMD(chunk) free_small_chunk((unsigned long *)(chunk))
-#define FREE_PTE(chunk) free_small_chunk((unsigned long *)(chunk))
-
-/*
- * Allocate and free page tables. The xxx_kernel() versions are
- * used to allocate a kernel page table - this turns on ASN bits
- * if any, and marks the page tables reserved.
- */
-static void srmmu_pte_free_kernel(pte_t *pte)
+static void srmmu_free_pgd_slow(pgd_t *pgd)
 {
-	FREE_PTE(pte);
 }
 
-static pte_t *srmmu_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
+static inline void srmmu_pte_free(pte_t *pte)
 {
-	address = (address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1);
-	if(srmmu_pmd_none(*pmd)) {
-		pte_t *page = NEW_PTE();
-		if(srmmu_pmd_none(*pmd)) {
-			if(page) {
-				pmd_set(pmd, page);
-				return page + address;
-			}
-			pmd_set(pmd, BAD_PAGETABLE);
-			return NULL;
-		}
-		FREE_PTE(page);
+	struct page *page = mem_map + MAP_NR(pte);
+
+	spin_lock(&pte_spinlock);	
+	if (!page->pprev_hash) {
+		(unsigned long *)page->next_hash = pte_quicklist;
+		pte_quicklist = (unsigned long *)page;
 	}
-	if(srmmu_pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_set(pmd, BAD_PAGETABLE);
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + address;
-}
-
-static void srmmu_pmd_free_kernel(pmd_t *pmd)
-{
-	FREE_PMD(pmd);
-}
-
-static pmd_t *srmmu_pmd_alloc_kernel(pgd_t *pgd, unsigned long address)
-{
-	address = (address >> SRMMU_PMD_SHIFT) & (SRMMU_PTRS_PER_PMD - 1);
-	if(srmmu_pgd_none(*pgd)) {
-		pmd_t *page;
-		page = NEW_PMD();
-		if(srmmu_pgd_none(*pgd)) {
-			if(page) {
-				pgd_set(pgd, page);
-				return page + address;
-			}
-			pgd_set(pgd, (pmd_t *) BAD_PAGETABLE);
-			return NULL;
-		}
-		FREE_PMD(page);
-	}
-	if(srmmu_pgd_bad(*pgd)) {
-		printk("Bad pgd in pmd_alloc: %08lx\n", pgd_val(*pgd));
-		pgd_set(pgd, (pmd_t *) BAD_PAGETABLE);
-		return NULL;
-	}
-	return (pmd_t *) pgd_page(*pgd) + address;
-}
-
-static void srmmu_pte_free(pte_t *pte)
-{
-	FREE_PTE(pte);
+	(unsigned int)page->pprev_hash |= (1 << ((((unsigned long)pte) >> 8) & 15));
+	pgtable_cache_size++;
+	spin_unlock(&pte_spinlock);
 }
 
 static pte_t *srmmu_pte_alloc(pmd_t * pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1);
 	if(srmmu_pmd_none(*pmd)) {
-		pte_t *page = NEW_PTE();
+		pte_t *page = srmmu_get_pte_fast();
+		
+		if (page) {
+			pmd_set(pmd, page);
+			return page + address;
+		}
+		page = srmmu_get_pte_slow();
 		if(srmmu_pmd_none(*pmd)) {
 			if(page) {
+				spin_unlock(&pte_spinlock);
 				pmd_set(pmd, page);
 				return page + address;
 			}
 			pmd_set(pmd, BAD_PAGETABLE);
 			return NULL;
 		}
-		FREE_PTE(page);
+		if (page) {
+			(unsigned int)(((struct page *)pte_quicklist)->pprev_hash) = 0xffff;
+			pgtable_cache_size++;
+			spin_unlock(&pte_spinlock);
+		}
 	}
 	if(srmmu_pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
@@ -692,23 +606,34 @@ static pte_t *srmmu_pte_alloc(pmd_t * pmd, unsigned long address)
 /* Real three-level page tables on SRMMU. */
 static void srmmu_pmd_free(pmd_t * pmd)
 {
-	FREE_PMD(pmd);
+	return srmmu_pte_free((pte_t *)pmd);
 }
 
 static pmd_t *srmmu_pmd_alloc(pgd_t * pgd, unsigned long address)
 {
 	address = (address >> SRMMU_PMD_SHIFT) & (SRMMU_PTRS_PER_PMD - 1);
 	if(srmmu_pgd_none(*pgd)) {
-		pmd_t *page = NEW_PMD();
+		pmd_t *page = (pmd_t *)srmmu_get_pte_fast();
+		
+		if (page) {
+			pgd_set(pgd, page);
+			return page + address;
+		}
+		page = (pmd_t *)srmmu_get_pte_slow();
 		if(srmmu_pgd_none(*pgd)) {
 			if(page) {
+				spin_unlock(&pte_spinlock);
 				pgd_set(pgd, page);
 				return page + address;
 			}
 			pgd_set(pgd, (pmd_t *) BAD_PAGETABLE);
 			return NULL;
 		}
-		FREE_PMD(page);
+		if (page) {
+			(unsigned int)(((struct page *)pte_quicklist)->pprev_hash) = 0xffff;
+			pgtable_cache_size++;
+			spin_unlock(&pte_spinlock);
+		}
 	}
 	if(srmmu_pgd_bad(*pgd)) {
 		printk("Bad pgd in pmd_alloc: %08lx\n", pgd_val(*pgd));
@@ -720,12 +645,58 @@ static pmd_t *srmmu_pmd_alloc(pgd_t * pgd, unsigned long address)
 
 static void srmmu_pgd_free(pgd_t *pgd)
 {
-	FREE_PGD(pgd);
+	struct page *page = mem_map + MAP_NR(pgd);
+
+	spin_lock(&pgd_spinlock);
+	if (!page->pprev_hash) {
+		(unsigned long *)page->next_hash = pgd_quicklist;
+		pgd_quicklist = (unsigned long *)page;
+	}
+	(unsigned int)page->pprev_hash |= (1 << ((((unsigned long)pgd) >> 10) & 3));
+	pgd_cache_size++;
+	spin_unlock(&pgd_spinlock);
 }
 
 static pgd_t *srmmu_pgd_alloc(void)
 {
-	return NEW_PGD();
+	pgd_t *ret;
+	
+	ret = srmmu_get_pgd_fast();
+	if (ret) return ret;
+	return srmmu_get_pgd_slow();
+}
+
+
+static void srmmu_set_pgdir(unsigned long address, pgd_t entry)
+{
+	struct task_struct * p;
+	struct page *page;
+
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if (!p->mm)
+			continue;
+		*pgd_offset(p->mm,address) = entry;
+	}
+	read_unlock(&tasklist_lock);
+	spin_lock(&pgd_spinlock);
+	address >>= SRMMU_PGDIR_SHIFT;
+	for (page = (struct page *)pgd_quicklist; page; page = page->next_hash) {
+		pgd_t *pgd = (pgd_t *)(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
+		unsigned int mask = (unsigned int)page->pprev_hash;
+		
+		if (mask & 1)
+			pgd[address + 0 * SRMMU_PTRS_PER_PGD] = entry;
+		if (mask & 2)
+			pgd[address + 1 * SRMMU_PTRS_PER_PGD] = entry;
+		if (mask & 4)
+			pgd[address + 2 * SRMMU_PTRS_PER_PGD] = entry;
+		if (mask & 8)
+			pgd[address + 3 * SRMMU_PTRS_PER_PGD] = entry;
+		if (mask)
+			flush_chunk((unsigned long)pgd);
+	}
+	spin_unlock(&pgd_spinlock);
 }
 
 static void srmmu_set_pte_cacheable(pte_t *ptep, pte_t pteval)
@@ -925,6 +896,19 @@ extern void tsunami_flush_tlb_all(void);
 extern void tsunami_flush_tlb_mm(struct mm_struct *mm);
 extern void tsunami_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end);
 extern void tsunami_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
+
+/* Workaround, until we find what's going on with Swift. When low on memory, it sometimes
+ * loops in fault/handle_mm_fault incl. flush_tlb_page to find out it is already in page tables/
+ * fault again on the same instruction. I really don't understand it, have checked it and contexts
+ * are right, flush_tlb_all is done as well, and it faults again... Strange. -jj
+ */
+static void swift_update_mmu_cache(struct vm_area_struct * vma, unsigned long address, pte_t pte)
+{
+	static unsigned long last;
+
+	if (last == address) viking_hwprobe(address);
+	last = address;
+}
 
 /* Swift flushes.  It has the recommended SRMMU specification flushing
  * facilities, so we can do things in a more fine grained fashion than we
@@ -1191,12 +1175,10 @@ static void cypress_flush_chunk(unsigned long chunk)
 	cypress_flush_page_to_ram(chunk);
 }
 
-#if NOTUSED
 /* Cypress is also IO cache coherent. */
 static void cypress_flush_page_for_dma(unsigned long page)
 {
 }
-#endif
 
 /* Cypress has unified L2 VIPT, from which both instructions and data
  * are stored.  It does not have an onboard icache of any sort, therefore
@@ -1282,9 +1264,8 @@ extern void viking_flush_sig_insns(struct mm_struct *mm, unsigned long addr);
 extern void viking_flush_page(unsigned long page);
 extern void viking_mxcc_flush_page(unsigned long page);
 extern void viking_flush_chunk(unsigned long chunk);
-extern void viking_c_flush_page(unsigned long page);
-extern void viking_c_mxcc_flush_page(unsigned long page);
 extern void viking_c_flush_chunk(unsigned long chunk);
+extern void viking_s_flush_chunk(unsigned long chunk);
 extern void viking_mxcc_flush_chunk(unsigned long chunk);
 extern void viking_flush_tlb_all(void);
 extern void viking_flush_tlb_mm(struct mm_struct *mm);
@@ -1481,7 +1462,7 @@ static inline void srmmu_allocate_ptable_skeleton(unsigned long start, unsigned 
  * looking at the prom's page table directly which is what most
  * other OS's do.  Yuck... this is much better.
  */
-void srmmu_inherit_prom_mappings(unsigned long start,unsigned long end)
+__initfunc(void srmmu_inherit_prom_mappings(unsigned long start,unsigned long end))
 {
 	pgd_t *pgdp;
 	pmd_t *pmdp;
@@ -1539,21 +1520,79 @@ void srmmu_inherit_prom_mappings(unsigned long start,unsigned long end)
 	}
 }
 
-/* #define DEBUG_MAP_KERNEL */
-
 #ifdef DEBUG_MAP_KERNEL
 #define MKTRACE(foo) prom_printf foo
 #else
 #define MKTRACE(foo)
 #endif
 
-static int lots_of_ram = 0;
-static int large_pte_optimize = 1;
+static int lots_of_ram __initdata = 0;
+static int srmmu_low_pa __initdata = 0;
+static unsigned long end_of_phys_memory __initdata = 0;
+
+__initfunc(void srmmu_end_memory(unsigned long memory_size, unsigned long *end_mem_p))
+{
+	unsigned int sum = 0;
+	unsigned long last = 0xff000000;
+	long first, cur;
+	unsigned long pa;
+	unsigned long total = 0;
+	int i;
+
+	pa = srmmu_hwprobe(KERNBASE + PAGE_SIZE);
+	pa = (pa & SRMMU_PTE_PMASK) << 4;
+	if (!sp_banks[0].base_addr && pa == PAGE_SIZE) {
+		for(i = 0; sp_banks[i].num_bytes != 0; i++) {
+			if (sp_banks[i].base_addr + sp_banks[i].num_bytes > 0x0d000000)
+				break;
+		}
+		if (!sp_banks[i].num_bytes) {
+			srmmu_low_pa = 1;
+			end_of_phys_memory = SRMMU_PGDIR_ALIGN(sp_banks[i-1].base_addr + sp_banks[i-1].num_bytes);
+			*end_mem_p = KERNBASE + end_of_phys_memory;
+			if (sp_banks[0].num_bytes >= (6 * 1024 * 1024) || end_of_phys_memory <= 0x06000000) {
+				/* Make sure there will be enough memory for the whole mem_map (even if sparse) */
+				return;
+			}
+		}
+	}
+	for(i = 0; sp_banks[i].num_bytes != 0; i++) {
+		pa = sp_banks[i].base_addr;
+		first = (pa & (~SRMMU_PGDIR_MASK));
+		cur = (sp_banks[i].num_bytes + first - SRMMU_PGDIR_SIZE);
+		if (cur < 0) cur = 0;
+		if (!first || last != (pa & SRMMU_PGDIR_MASK))
+			total += SRMMU_PGDIR_SIZE;
+		sum += sp_banks[i].num_bytes;
+		if (memory_size) {
+			if (sum > memory_size) {
+				sp_banks[i].num_bytes -=
+					(sum - memory_size);
+				cur = (sp_banks[i].num_bytes + first - SRMMU_PGDIR_SIZE);
+				if (cur < 0) cur = 0;
+				total += SRMMU_PGDIR_ALIGN(cur);
+				sum = memory_size;
+				sp_banks[++i].base_addr = 0xdeadbeef;
+				sp_banks[i].num_bytes = 0;
+				break;
+			}
+		}
+		total += SRMMU_PGDIR_ALIGN(cur);
+		last = (sp_banks[i].base_addr + sp_banks[i].num_bytes - 1) & SRMMU_PGDIR_MASK;
+	}
+	if (total <= 0x0d000000)
+		*end_mem_p = KERNBASE + total;
+	else {
+		*end_mem_p = 0xfd000000;
+		lots_of_ram = 1;
+	}
+	end_of_phys_memory = total;
+}
 
 #define KERNEL_PTE(page_shifted) ((page_shifted)|SRMMU_CACHE|SRMMU_PRIV|SRMMU_VALID)
 
 /* Create a third-level SRMMU 16MB page mapping. */
-static inline void do_large_mapping(unsigned long vaddr, unsigned long phys_base)
+__initfunc(static void do_large_mapping(unsigned long vaddr, unsigned long phys_base))
 {
 	pgd_t *pgdp = srmmu_pgd_offset(init_task.mm, vaddr);
 	unsigned long big_pte;
@@ -1561,47 +1600,6 @@ static inline void do_large_mapping(unsigned long vaddr, unsigned long phys_base
 	MKTRACE(("dlm[v<%08lx>-->p<%08lx>]", vaddr, phys_base));
 	big_pte = KERNEL_PTE(phys_base >> 4);
 	*pgdp = __pgd(big_pte);
-}
-
-/* Create second-level SRMMU 256K medium sized page mappings. */
-static inline void do_medium_mapping(unsigned long vaddr, unsigned long vend,
-				     unsigned long phys_base)
-{
-	pgd_t *pgdp;
-	pmd_t *pmdp;
-	unsigned long medium_pte;
-
-	MKTRACE(("dmm[v<%08lx,%08lx>-->p<%08lx>]", vaddr, vend, phys_base));
-	while(vaddr < vend) {
-		pgdp = srmmu_pgd_offset(init_task.mm, vaddr);
-		pmdp = srmmu_early_pmd_offset(pgdp, vaddr);
-		medium_pte = KERNEL_PTE(phys_base >> 4);
-		*pmdp = __pmd(medium_pte);
-		phys_base += SRMMU_PMD_SIZE;
-		vaddr += SRMMU_PMD_SIZE;
-	}
-}
-
-/* Create a normal set of SRMMU page mappings for the virtual range
- * START to END, using physical pages beginning at PHYS_BASE.
- */
-static inline void do_small_mapping(unsigned long start, unsigned long end,
-				     unsigned long phys_base)
-{
-	pgd_t *pgdp;
-	pmd_t *pmdp;
-	pte_t *ptep;
-
-	MKTRACE(("dsm[v<%08lx,%08lx>-->p<%08lx>]", start, end, phys_base));
-	while(start < end) {
-		pgdp = srmmu_pgd_offset(init_task.mm, start);
-		pmdp = srmmu_early_pmd_offset(pgdp, start);
-		ptep = srmmu_early_pte_offset(pmdp, start);
-
-		*ptep = __pte(KERNEL_PTE(phys_base >> 4));
-		phys_base += PAGE_SIZE;
-		start += PAGE_SIZE;
-	}
 }
 
 /* Look in the sp_bank for the given physical page, return the
@@ -1625,7 +1623,7 @@ static inline int find_in_spbanks(unsigned long phys_page)
  * array of char's, each member indicating if that spbank is mapped
  * yet or not.
  */
-static inline int find_free_spbank(char *taken_vector)
+__initfunc(static int find_free_spbank(char *taken_vector))
 {
 	int entry;
 
@@ -1635,78 +1633,28 @@ static inline int find_free_spbank(char *taken_vector)
 	return entry;
 }
 
-/* Same as above, but with a given bank size limit BLIMIT. */
-static inline int find_free_spbank_limited(char *taken_vector, unsigned long limit)
-{
-	int entry;
-
-	for(entry = 0; sp_banks[entry].num_bytes; entry++)
-		if(!taken_vector[entry] &&
-		   (sp_banks[entry].num_bytes < limit))
-			break;
-	return entry;
-}
+static unsigned long map_spbank_last_pa __initdata = 0xff000000;
 
 /* Map sp_bank entry SP_ENTRY, starting at virtual address VBASE.
- * This routine is expected to update the srmmu_map and try as
- * hard as possible to use 16MB level-one SRMMU pte's when at all
- * possible to get short termination and faster translations.
  */
-static inline unsigned long map_spbank(unsigned long vbase, int sp_entry)
+__initfunc(static unsigned long map_spbank(unsigned long vbase, int sp_entry))
 {
-	unsigned long pstart = sp_banks[sp_entry].base_addr;
-	unsigned long vstart = vbase;
-	unsigned long vend = vbase + sp_banks[sp_entry].num_bytes;
+	unsigned long pstart = (sp_banks[sp_entry].base_addr & SRMMU_PGDIR_MASK);
+	unsigned long vstart = (vbase & SRMMU_PGDIR_MASK);
+	unsigned long vend = SRMMU_PGDIR_ALIGN(vbase + sp_banks[sp_entry].num_bytes);
 	static int srmmu_bank = 0;
 
-	/* If physically not aligned on 16MB boundry, just shortcut
-	 * right here by mapping them with 4k normal pages, and bumping
-	 * the next virtual address to the next 16MB boundry.  You can
-	 * get this with various RAM configurations due to the way in
-	 * which the PROM carves out it's own chunks of memory.
-	 */
-	if(pstart & ~SRMMU_PGDIR_MASK) {
-		do_small_mapping(vstart, vend, pstart);
-		vstart = SRMMU_PGDIR_ALIGN(vend);
-		goto finish_up;
-	}
+	MKTRACE(("map_spbank %d[v<%08lx>p<%08lx>s<%08lx>]", sp_entry, vbase, sp_banks[sp_entry].base_addr, sp_banks[sp_entry].num_bytes));
+	MKTRACE(("map_spbank2 %d[p%08lx v%08lx-%08lx]", sp_entry, pstart, vstart, vend));
 	while(vstart < vend) {
-		unsigned long coverage, next_aligned;
-		if(vstart & ~SRMMU_PMD_MASK) {
-			next_aligned = SRMMU_PMD_ALIGN(vstart);
-			if(next_aligned <= vend) {
-				coverage = (next_aligned - vstart);
-				do_small_mapping(vstart, next_aligned, pstart);
-			} else {
-				coverage = (vend - vstart);
-				do_small_mapping(vstart, vend, pstart);
-			}
-		} else if(vstart & ~SRMMU_PGDIR_MASK) {
-			next_aligned = SRMMU_PGDIR_ALIGN(vstart);
-			if(next_aligned <= vend) {
-				coverage = (next_aligned - vstart);
-				do_medium_mapping(vstart, next_aligned, pstart);
-			} else {
-				coverage = (vend - vstart);
-				do_small_mapping(vstart, vend, pstart);
-			}
-		} else {
-			coverage = SRMMU_PGDIR_SIZE;
-			if(large_pte_optimize || ((vstart+coverage)<=vend)) {
-				do_large_mapping(vstart, pstart);
-			} else {
-				coverage = (vend - vstart);
-				do_small_mapping(vstart, vend, pstart);
-			}
-		}
-		vstart += coverage; pstart += coverage;
+		do_large_mapping(vstart, pstart);
+		vstart += SRMMU_PGDIR_SIZE; pstart += SRMMU_PGDIR_SIZE;
 	}
-finish_up:
 	srmmu_map[srmmu_bank].vbase = vbase;
 	srmmu_map[srmmu_bank].pbase = sp_banks[sp_entry].base_addr;
 	srmmu_map[srmmu_bank].size = sp_banks[sp_entry].num_bytes;
-	MKTRACE(("SRMMUBANK[v<%08lx>p<%08lx>s<%08lx>]", vbase, sp_banks[sp_entry].base_addr, sp_banks[sp_entry].num_bytes));
 	srmmu_bank++;
+	map_spbank_last_pa = pstart - SRMMU_PGDIR_SIZE;
 	return vstart;
 }
 
@@ -1721,10 +1669,10 @@ static inline void memprobe_error(char *msg)
  * is part of a full bank which is at least 4MB in size and begins at
  * 0xf0000000 (ie. KERNBASE).
  */
-static void map_kernel(void)
+static inline void map_kernel(void)
 {
 	unsigned long raw_pte, physpage;
-	unsigned long vaddr, tally, low_base;
+	unsigned long vaddr, low_base;
 	char etaken[SPARC_PHYS_BANKS];
 	int entry;
 
@@ -1735,17 +1683,7 @@ static void map_kernel(void)
 
 	low_base = KERNBASE;
 
-	/* Step 2: Calculate 'lots_of_ram'. */
-	tally = 0;
-	for(entry = 0; sp_banks[entry].num_bytes; entry++)
-		tally += sp_banks[entry].num_bytes;
-	if(tally > (0xfd000000 - KERNBASE))
-		lots_of_ram = 1;
-	else
-		lots_of_ram = 0;
-	MKTRACE(("tally=%08lx lots_of_ram<%d>\n", tally, lots_of_ram));
-
-	/* Step 3: Fill in KERNBASE base pgd.  Lots of sanity checking here. */
+	/* Step 2: Fill in KERNBASE base pgd.  Lots of sanity checking here. */
 	raw_pte = srmmu_hwprobe(KERNBASE + PAGE_SIZE);
 	if((raw_pte & SRMMU_ET_MASK) != SRMMU_ET_PTE)
 		memprobe_error("Wheee, kernel not mapped at all by boot loader.\n");
@@ -1757,11 +1695,10 @@ static void map_kernel(void)
 	if(entry == -1 || (sp_banks[entry].base_addr != physpage))
 		memprobe_error("Kernel mapped in non-existant memory.\n");
 	MKTRACE(("map_kernel: map_spbank(vbase=%08x, entry<%d>)[%08lx,%08lx]\n", KERNBASE, entry, sp_banks[entry].base_addr, sp_banks[entry].num_bytes));
-	if(((KERNBASE + (sp_banks[entry].num_bytes)) > 0xfd000000) ||
-	   ((KERNBASE + (sp_banks[entry].num_bytes)) < KERNBASE)) {
+	if (sp_banks[entry].num_bytes > 0x0d000000) {
 		unsigned long orig_base = sp_banks[entry].base_addr;
 		unsigned long orig_len = sp_banks[entry].num_bytes;
-		unsigned long can_map = (0xfd000000 - KERNBASE);
+		unsigned long can_map = 0x0d000000;
 		
 		/* Map a partial bank in this case, adjust the base
 		 * and the length, but don't mark it used.
@@ -1779,7 +1716,7 @@ static void map_kernel(void)
 	vaddr = map_spbank(KERNBASE, entry);
 	etaken[entry] = 1;
 
-	/* Step 4: Map what we can above KERNBASE. */
+	/* Step 3: Map what we can above KERNBASE. */
 	MKTRACE(("map_kernel: vaddr=%08lx, entering first loop\n", vaddr));
 	for(;;) {
 		unsigned long bank_size;
@@ -1790,8 +1727,14 @@ static void map_kernel(void)
 		MKTRACE(("<%d> base=%08lx bs=%08lx ", entry, sp_banks[entry].base_addr, bank_size));
 		if(!bank_size)
 			break;
-		if(((vaddr + bank_size) > 0xfd000000) ||
-		   ((vaddr + bank_size) < KERNBASE)) {
+		if (srmmu_low_pa)
+			vaddr = KERNBASE + sp_banks[entry].base_addr;
+		else if (sp_banks[entry].base_addr & (~SRMMU_PGDIR_MASK)) {
+			if (map_spbank_last_pa == (sp_banks[entry].base_addr & SRMMU_PGDIR_MASK))
+				vaddr -= SRMMU_PGDIR_SIZE;
+			vaddr += (sp_banks[entry].base_addr & (~SRMMU_PGDIR_MASK));
+		}
+		if ((vaddr + bank_size - KERNBASE) > 0x0d000000) {
 			unsigned long orig_base = sp_banks[entry].base_addr;
 			unsigned long orig_len = sp_banks[entry].num_bytes;
 			unsigned long can_map = (0xfd000000 - vaddr);
@@ -1808,8 +1751,6 @@ static void map_kernel(void)
 			MKTRACE(("adjust[%08lx,%08lx]\n", (orig_base + can_map), (orig_len - can_map)));
 			break;
 		}
-		if(!bank_size)
-			break;
 
 		/* Ok, we can map this one, do it. */
 		MKTRACE(("map_spbank(%08lx,entry<%d>) ", vaddr, entry));
@@ -1823,22 +1764,16 @@ loop_skip:
 	if(!lots_of_ram)
 		goto check_and_return;
 	
-	/* Step 5: Map the rest (if any) right below KERNBASE. */
+	/* Step 4: Map the rest (if any) right below KERNBASE. */
 	MKTRACE(("map_kernel: doing low mappings... "));
-	tally = 0;
-	for(entry = 0; sp_banks[entry].num_bytes; entry++) {
-		if(!etaken[entry])
-			tally += SRMMU_PGDIR_ALIGN(sp_banks[entry].num_bytes);
-	}
-	if(!tally)
-		memprobe_error("Whee, lots_of_ram yet no low pages to map.\n");
-	low_base = (KERNBASE - tally);
-	MKTRACE(("tally=%08lx low_base=%08lx\n", tally, low_base));
+	low_base = (KERNBASE - end_of_phys_memory + 0x0d000000);
+	MKTRACE(("end_of_phys_memory=%08lx low_base=%08lx\n", end_of_phys_memory, low_base));
 
 	/* Ok, now map 'em. */
 	MKTRACE(("map_kernel: Allocate pt skeleton (%08lx, %08x)\n",low_base,KERNBASE));
 	srmmu_allocate_ptable_skeleton(low_base, KERNBASE);
 	vaddr = low_base;
+	map_spbank_last_pa = 0xff000000;
 	MKTRACE(("map_kernel: vaddr=%08lx Entering second loop for low maps.\n", vaddr));
 	for(;;) {
 		unsigned long bank_size;
@@ -1848,19 +1783,22 @@ loop_skip:
 		MKTRACE(("map_kernel: e<%d> base=%08lx bs=%08lx ", entry, sp_banks[entry].base_addr, bank_size));
 		if(!bank_size)
 			break;
+		if (sp_banks[entry].base_addr & (~SRMMU_PGDIR_MASK)) {
+			if (map_spbank_last_pa == (sp_banks[entry].base_addr & SRMMU_PGDIR_MASK))
+				vaddr -= SRMMU_PGDIR_SIZE;
+			vaddr += (sp_banks[entry].base_addr & (~SRMMU_PGDIR_MASK));
+		}
 		if((vaddr + bank_size) > KERNBASE)
 			memprobe_error("Wheee, kernel low mapping overflow.\n");
 		MKTRACE(("map_spbank(%08lx, %d) ", vaddr, entry));
 		vaddr = map_spbank(vaddr, entry);
 		etaken[entry] = 1;
-		tally -= SRMMU_PGDIR_ALIGN(bank_size);
-		MKTRACE(("Now, vaddr=%08lx tally=%08lx\n", vaddr, tally));
+		MKTRACE(("Now, vaddr=%08lx end_of_phys_memory=%08lx\n", vaddr, end_of_phys_memory));
 	}
 	MKTRACE(("\n"));
-	if(tally)
-		memprobe_error("Wheee, did not map all of low mappings.\n");
+
 check_and_return:
-	/* Step 6: Sanity check, make sure we did it all. */
+	/* Step 5: Sanity check, make sure we did it all. */
 	MKTRACE(("check_and_return: "));
 	for(entry = 0; sp_banks[entry].num_bytes; entry++) {
 		MKTRACE(("e[%d]=%d ", entry, etaken[entry]));
@@ -1872,6 +1810,10 @@ check_and_return:
 	MKTRACE(("success\n"));
 	init_task.mm->mmap->vm_start = page_offset = low_base;
 	stack_top = page_offset - PAGE_SIZE;
+	BTFIXUPSET_SETHI(page_offset, low_base);
+	BTFIXUPSET_SETHI(stack_top, page_offset - PAGE_SIZE);
+	BTFIXUPSET_SIMM13(user_ptrs_per_pgd, page_offset / SRMMU_PGDIR_SIZE);
+	
 #if 1
 	for(entry = 0; srmmu_map[entry].size; entry++) {
 		printk("[%d]: v[%08lx,%08lx](%lx) p[%08lx]\n", entry,
@@ -1884,88 +1826,71 @@ check_and_return:
 
 	/* Now setup the p2v/v2p hash tables. */
 	for(entry = 0; entry < SRMMU_HASHSZ; entry++)
-		srmmu_v2p_hash[entry] = srmmu_p2v_hash[entry] = NULL;
+		srmmu_v2p_hash[entry] = ((0xff - entry) << 24);
+	for(entry = 0; entry < SRMMU_HASHSZ; entry++)
+		srmmu_p2v_hash[entry] = 0xffffffffUL;
 	for(entry = 0; srmmu_map[entry].size; entry++) {
 		unsigned long addr;
 
 		for(addr = srmmu_map[entry].vbase;
 		    addr < (srmmu_map[entry].vbase + srmmu_map[entry].size);
 		    addr += (1 << 24))
-			srmmu_v2p_hash[srmmu_ahashfn(addr)] = &srmmu_map[entry];
+			srmmu_v2p_hash[srmmu_ahashfn(addr)] =
+				srmmu_map[entry].pbase - srmmu_map[entry].vbase;
 		for(addr = srmmu_map[entry].pbase;
 		    addr < (srmmu_map[entry].pbase + srmmu_map[entry].size);
 		    addr += (1 << 24))
-			srmmu_p2v_hash[srmmu_ahashfn(addr)] = &srmmu_map[entry];
+			srmmu_p2v_hash[srmmu_ahashfn(addr)] = 
+				srmmu_map[entry].pbase - srmmu_map[entry].vbase;
 	}
 
-	page_contig_offset = page_offset - (0xfd000000 - KERNBASE);
-	phys_mem_contig = 1;
-	for(entry = 0; srmmu_map[entry].size; entry++)
-		if (srmmu_map[entry].pbase != srmmu_c_v2p (srmmu_map[entry].vbase)) {
-			phys_mem_contig = 0;
-			break;
-		}
-	if (phys_mem_contig) {
-		printk ("SRMMU: Physical memory is contiguous, bypassing VA<->PA hashes\n");
-		pte_page = srmmu_c_pte_page;
-		pmd_page = srmmu_c_pmd_page;
-		pgd_page = srmmu_c_pgd_page;
-		mk_pte = srmmu_c_mk_pte;
-		pte_offset = srmmu_c_pte_offset;
-		pmd_offset = srmmu_c_pmd_offset;
-		if (ctxd_set == srmmu_ctxd_set)
-			ctxd_set = srmmu_c_ctxd_set;
-		pgd_set = srmmu_c_pgd_set;
-		pmd_set = srmmu_c_pmd_set;
-		mmu_v2p = srmmu_c_v2p;
-		mmu_p2v = srmmu_c_p2v;
-		if (flush_chunk == viking_flush_chunk)
-			flush_chunk = viking_c_flush_chunk;
-	}
-	
-	if (sparc_cpu_model == sun4d) {
-		int i, j = -1;
-		unsigned long bank_start, bank_end;
-		
-		sun4d_dma_vbase = 0;
-		sun4d_dma_size = IOUNIT_DMA_SIZE - IOUNIT_DVMA_SIZE;
-		for (i = 0; srmmu_map[i].size; i++) {
-			bank_start = srmmu_map[i].vbase;
-			bank_end = bank_start + srmmu_map[i].size;
-			if (bank_start <= KERNBASE && bank_end > KERNBASE)
-				j = i;
-			else if (srmmu_map[i].size >= sun4d_dma_size) {
-				sun4d_dma_vbase = srmmu_map[i].vbase;
+	BTFIXUPSET_SETHI(page_contig_offset, page_offset - (0xfd000000 - KERNBASE));
+	if (srmmu_low_pa)
+		phys_mem_contig = 0;
+	else {
+		phys_mem_contig = 1;
+		for(entry = 0; srmmu_map[entry].size; entry++)
+			if (srmmu_map[entry].pbase != srmmu_c_v2p (srmmu_map[entry].vbase)) {
+				phys_mem_contig = 0;
 				break;
 			}
-		}
-		if (!sun4d_dma_vbase && j != -1) {
-			if (srmmu_map[j].size >= sun4d_dma_size + 0x1000000)
-				sun4d_dma_vbase = srmmu_map[j].vbase + 0x1000000;
-			else {
-				sun4d_dma_vbase = srmmu_map[j].vbase;
-				if (srmmu_map[j].size < sun4d_dma_size)
-					sun4d_dma_size = srmmu_map[j].size;
-			}
-		}
-		sun4d_dma_base = IOUNIT_DMA_BASE - srmmu_v2p(sun4d_dma_vbase);
 	}
+	if (phys_mem_contig) {
+		printk ("SRMMU: Physical memory is contiguous, bypassing VA<->PA hashes.\n");
+		BTFIXUPSET_CALL(pte_page, srmmu_c_pte_page, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pmd_page, srmmu_c_pmd_page, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pgd_page, srmmu_c_pgd_page, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(mk_pte, srmmu_c_mk_pte, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pte_offset, srmmu_c_pte_offset, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pmd_offset, srmmu_c_pmd_offset, BTFIXUPCALL_NORM);
+		if (BTFIXUPVAL_CALL(ctxd_set) == (unsigned long)srmmu_ctxd_set)
+			BTFIXUPSET_CALL(ctxd_set, srmmu_c_ctxd_set, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pgd_set, srmmu_c_pgd_set, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pmd_set, srmmu_c_pmd_set, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(mmu_v2p, srmmu_c_v2p, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(mmu_p2v, srmmu_c_p2v, BTFIXUPCALL_NORM);
+		if (BTFIXUPVAL_CALL(flush_chunk) == (unsigned long)viking_flush_chunk)
+			BTFIXUPSET_CALL(flush_chunk, viking_c_flush_chunk, BTFIXUPCALL_NORM);
+	} else if (srmmu_low_pa) {
+		printk ("SRMMU: Compact physical memory. Using strightforward VA<->PA translations.\n");
+		BTFIXUPSET_CALL(pte_page, srmmu_s_pte_page, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pmd_page, srmmu_s_pmd_page, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pgd_page, srmmu_s_pgd_page, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(mk_pte, srmmu_s_mk_pte, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pte_offset, srmmu_s_pte_offset, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pmd_offset, srmmu_s_pmd_offset, BTFIXUPCALL_NORM);
+		if (BTFIXUPVAL_CALL(ctxd_set) == (unsigned long)srmmu_ctxd_set)
+			BTFIXUPSET_CALL(ctxd_set, srmmu_s_ctxd_set, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pgd_set, srmmu_s_pgd_set, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pmd_set, srmmu_s_pmd_set, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(mmu_v2p, srmmu_s_v2p, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(mmu_p2v, srmmu_s_p2v, BTFIXUPCALL_NORM);
+		if (BTFIXUPVAL_CALL(flush_chunk) == (unsigned long)viking_flush_chunk)
+			BTFIXUPSET_CALL(flush_chunk, viking_s_flush_chunk, BTFIXUPCALL_NORM);
+	}
+	btfixup();
 
 	return; /* SUCCESS! */
-}
-
-unsigned long srmmu_endmem_fixup(unsigned long mem_end_now)
-{
-	unsigned long tally = 0;
-	int i;
-
-	for(i = 0; sp_banks[i].num_bytes; i++)
-		tally += SRMMU_PGDIR_ALIGN(sp_banks[i].num_bytes);
-	if(tally < (0x0d000000UL)) {
-		return KERNBASE + tally;
-	} else {
-		return 0xfd000000UL;
-	}
 }
 
 /* Paging initialization on the Sparc Reference MMU. */
@@ -1975,9 +1900,9 @@ extern unsigned long sparc_context_init(unsigned long, int);
 extern int physmem_mapped_contig;
 extern int linux_num_cpus;
 
-void (*poke_srmmu)(void);
+void (*poke_srmmu)(void) __initdata = NULL;
 
-unsigned long srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(unsigned long srmmu_paging_init(unsigned long start_mem, unsigned long end_mem))
 {
 	unsigned long ptables_start;
 	int i, cpunode;
@@ -2029,7 +1954,7 @@ unsigned long srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 	start_mem = PAGE_ALIGN(mempool);
 
 	flush_cache_all();
-	if(flush_page_for_dma == viking_flush_page) {
+	if(BTFIXUPVAL_CALL(flush_page_for_dma) == (unsigned long)viking_flush_page) {
 		unsigned long start = ptables_start;
 		unsigned long end = start_mem;
 
@@ -2048,37 +1973,22 @@ unsigned long srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 	return PAGE_ALIGN(start_mem);
 }
 
-static char srmmuinfo[512];
-
-static char *srmmu_mmu_info(void)
+static int srmmu_mmu_info(char *buf)
 {
-	sprintf(srmmuinfo, "MMU type\t: %s\n"
+	return sprintf(buf, 
+		"MMU type\t: %s\n"
 		"invall\t\t: %d\n"
 		"invmm\t\t: %d\n"
 		"invrnge\t\t: %d\n"
 		"invpg\t\t: %d\n"
 		"contexts\t: %d\n"
-#ifdef USE_CHUNK_ALLOC
-		"big chunks\t: %d\n"
-		"little chunks\t: %d\n"
-		"chunk pages\t: %d\n"
-		"garbage\t\t: %d\n"
-		"garbage hits\t: %d\n"
-#endif
 		, srmmu_name,
 		module_stats.invall,
 		module_stats.invmm,
 		module_stats.invrnge,
 		module_stats.invpg,
 		num_contexts
-#ifdef USE_CHUNK_ALLOC
-		, bcwater, lcwater,
-		chunk_pages,
-		garbage_calls,
-		clct_pages
-#endif
-		);
-	return srmmuinfo;
+	);
 }
 
 static void srmmu_update_mmu_cache(struct vm_area_struct * vma, unsigned long address, pte_t pte)
@@ -2242,7 +2152,7 @@ __initfunc(static void init_vac_layout(void))
 	       (int)vac_cache_size, (int)vac_line_size);
 }
 
-static void poke_hypersparc(void)
+__initfunc(static void poke_hypersparc(void))
 {
 	volatile unsigned long clear;
 	unsigned long mreg = srmmu_get_mmureg();
@@ -2271,35 +2181,38 @@ __initfunc(static void init_hypersparc(void))
 
 	init_vac_layout();
 
-	set_pte = srmmu_set_pte_nocache_hyper;
-	flush_cache_all = hypersparc_flush_cache_all;
-	flush_cache_mm = hypersparc_flush_cache_mm;
-	flush_cache_range = hypersparc_flush_cache_range;
-	flush_cache_page = hypersparc_flush_cache_page;
+	BTFIXUPSET_CALL(set_pte, srmmu_set_pte_nocache_hyper, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_clear, srmmu_pte_clear, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_clear, srmmu_pmd_clear, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_clear, srmmu_pgd_clear, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_all, hypersparc_flush_cache_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_mm, hypersparc_flush_cache_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_range, hypersparc_flush_cache_range, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_page, hypersparc_flush_cache_page, BTFIXUPCALL_NORM);
 
-	flush_tlb_all = hypersparc_flush_tlb_all;
-	flush_tlb_mm = hypersparc_flush_tlb_mm;
-	flush_tlb_range = hypersparc_flush_tlb_range;
-	flush_tlb_page = hypersparc_flush_tlb_page;
+	BTFIXUPSET_CALL(flush_tlb_all, hypersparc_flush_tlb_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_mm, hypersparc_flush_tlb_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_range, hypersparc_flush_tlb_range, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_page, hypersparc_flush_tlb_page, BTFIXUPCALL_NORM);
 
-	flush_page_to_ram = hypersparc_flush_page_to_ram;
-	flush_sig_insns = hypersparc_flush_sig_insns;
-	flush_page_for_dma = NULL /* hypersparc_flush_page_for_dma */;
+	BTFIXUPSET_CALL(flush_page_to_ram, hypersparc_flush_page_to_ram, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_sig_insns, hypersparc_flush_sig_insns, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_page_for_dma, hypersparc_flush_page_for_dma, BTFIXUPCALL_NOP);
 
-	flush_chunk = hypersparc_flush_chunk; /* local flush _only_ */
+	BTFIXUPSET_CALL(flush_chunk, hypersparc_flush_chunk, BTFIXUPCALL_NORM); /* local flush _only_ */
 
-	ctxd_set = hypersparc_ctxd_set;
-	switch_to_context = hypersparc_switch_to_context;
-	init_new_context = hypersparc_init_new_context;
-	destroy_context = hypersparc_destroy_context;
-	update_mmu_cache = srmmu_vac_update_mmu_cache;
-	sparc_update_rootmmu_dir = hypersparc_update_rootmmu_dir;
+	BTFIXUPSET_CALL(ctxd_set, hypersparc_ctxd_set, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(switch_to_context, hypersparc_switch_to_context, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(init_new_context, hypersparc_init_new_context, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(destroy_context, hypersparc_destroy_context, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(update_mmu_cache, srmmu_vac_update_mmu_cache, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(sparc_update_rootmmu_dir, hypersparc_update_rootmmu_dir, BTFIXUPCALL_NORM);
 	poke_srmmu = poke_hypersparc;
 
 	hypersparc_setup_blockops();
 }
 
-static void poke_cypress(void)
+__initfunc(static void poke_cypress(void))
 {
 	unsigned long mreg = srmmu_get_mmureg();
 	unsigned long faddr, tagval;
@@ -2342,25 +2255,28 @@ __initfunc(static void init_cypress_common(void))
 {
 	init_vac_layout();
 
-	set_pte = srmmu_set_pte_nocache_cypress;
-	flush_cache_all = cypress_flush_cache_all;
-	flush_cache_mm = cypress_flush_cache_mm;
-	flush_cache_range = cypress_flush_cache_range;
-	flush_cache_page = cypress_flush_cache_page;
+	BTFIXUPSET_CALL(set_pte, srmmu_set_pte_nocache_cypress, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_clear, srmmu_pte_clear, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_clear, srmmu_pmd_clear, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_clear, srmmu_pgd_clear, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_all, cypress_flush_cache_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_mm, cypress_flush_cache_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_range, cypress_flush_cache_range, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_page, cypress_flush_cache_page, BTFIXUPCALL_NORM);
 
-	flush_tlb_all = cypress_flush_tlb_all;
-	flush_tlb_mm = cypress_flush_tlb_mm;
-	flush_tlb_page = cypress_flush_tlb_page;
-	flush_tlb_range = cypress_flush_tlb_range;
+	BTFIXUPSET_CALL(flush_tlb_all, cypress_flush_tlb_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_mm, cypress_flush_tlb_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_page, cypress_flush_tlb_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_range, cypress_flush_tlb_range, BTFIXUPCALL_NORM);
 
-	flush_chunk = cypress_flush_chunk; /* local flush _only_ */
+	BTFIXUPSET_CALL(flush_chunk, cypress_flush_chunk, BTFIXUPCALL_NORM); /* local flush _only_ */
 
-	flush_page_to_ram = cypress_flush_page_to_ram;
-	flush_sig_insns = cypress_flush_sig_insns;
-	flush_page_for_dma = NULL /* cypress_flush_page_for_dma */;
-	sparc_update_rootmmu_dir = cypress_update_rootmmu_dir;
+	BTFIXUPSET_CALL(flush_page_to_ram, cypress_flush_page_to_ram, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_sig_insns, cypress_flush_sig_insns, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_page_for_dma, cypress_flush_page_for_dma, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(sparc_update_rootmmu_dir, cypress_update_rootmmu_dir, BTFIXUPCALL_NORM);
 
-	update_mmu_cache = srmmu_vac_update_mmu_cache;
+	BTFIXUPSET_CALL(update_mmu_cache, srmmu_vac_update_mmu_cache, BTFIXUPCALL_NORM);
 	poke_srmmu = poke_cypress;
 }
 
@@ -2388,7 +2304,7 @@ __initfunc(static void init_cypress_605(unsigned long mrev))
 	init_cypress_common();
 }
 
-static void poke_swift(void)
+__initfunc(static void poke_swift(void))
 {
 	unsigned long mreg = srmmu_get_mmureg();
 
@@ -2456,21 +2372,23 @@ __initfunc(static void init_swift(void))
 		break;
 	};
 
-	flush_cache_all = swift_flush_cache_all;
-	flush_cache_mm = swift_flush_cache_mm;
-	flush_cache_page = swift_flush_cache_page;
-	flush_cache_range = swift_flush_cache_range;
+	BTFIXUPSET_CALL(flush_cache_all, swift_flush_cache_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_mm, swift_flush_cache_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_page, swift_flush_cache_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_range, swift_flush_cache_range, BTFIXUPCALL_NORM);
 
-	flush_chunk = swift_flush_chunk; /* local flush _only_ */
+	BTFIXUPSET_CALL(flush_chunk, swift_flush_chunk, BTFIXUPCALL_NOP); /* local flush _only_ */
 
-	flush_tlb_all = swift_flush_tlb_all;
-	flush_tlb_mm = swift_flush_tlb_mm;
-	flush_tlb_page = swift_flush_tlb_page;
-	flush_tlb_range = swift_flush_tlb_range;
+	BTFIXUPSET_CALL(flush_tlb_all, swift_flush_tlb_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_mm, swift_flush_tlb_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_page, swift_flush_tlb_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_range, swift_flush_tlb_range, BTFIXUPCALL_NORM);
 
-	flush_page_to_ram = swift_flush_page_to_ram;
-	flush_sig_insns = swift_flush_sig_insns;
-	flush_page_for_dma = swift_flush_page_for_dma;
+	BTFIXUPSET_CALL(flush_page_to_ram, swift_flush_page_to_ram, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_sig_insns, swift_flush_sig_insns, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_page_for_dma, swift_flush_page_for_dma, BTFIXUPCALL_NORM);
+
+	BTFIXUPSET_CALL(update_mmu_cache, swift_update_mmu_cache, BTFIXUPCALL_NORM);
 
 	/* Are you now convinced that the Swift is one of the
 	 * biggest VLSI abortions of all time?  Bravo Fujitsu!
@@ -2484,8 +2402,9 @@ __initfunc(static void init_swift(void))
 /* turbosparc.S */
 extern void turbosparc_flush_cache_all(void);
 extern void turbosparc_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
+extern void turbosparc_flush_page_for_dma(unsigned long page);
 
-static void poke_turbosparc(void)
+__initfunc(static void poke_turbosparc(void))
 {
 	unsigned long mreg = srmmu_get_mmureg();
 	unsigned long ccreg;
@@ -2529,31 +2448,31 @@ __initfunc(static void init_turbosparc(void))
 	srmmu_name = "Fujitsu TurboSparc";
 	srmmu_modtype = TurboSparc;
 
-	flush_cache_all = turbosparc_flush_cache_all;
-	flush_cache_mm = hypersparc_flush_cache_mm;
-	flush_cache_page = hypersparc_flush_cache_page;
-	flush_cache_range = hypersparc_flush_cache_range;
+	BTFIXUPSET_CALL(flush_cache_all, turbosparc_flush_cache_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_mm, hypersparc_flush_cache_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_page, hypersparc_flush_cache_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_range, hypersparc_flush_cache_range, BTFIXUPCALL_NORM);
 
-	flush_tlb_all = hypersparc_flush_tlb_all;
-	flush_tlb_mm = hypersparc_flush_tlb_mm;
-	flush_tlb_page = hypersparc_flush_tlb_page;
-	flush_tlb_range = hypersparc_flush_tlb_range;
+	BTFIXUPSET_CALL(flush_tlb_all, hypersparc_flush_tlb_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_mm, hypersparc_flush_tlb_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_page, hypersparc_flush_tlb_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_range, hypersparc_flush_tlb_range, BTFIXUPCALL_NORM);
 
 #ifdef TURBOSPARC_WRITEBACK
-	flush_page_to_ram = hypersparc_flush_page_to_ram;
-	flush_chunk = hypersparc_flush_chunk;
+	BTFIXUPSET_CALL(flush_page_to_ram, hypersparc_flush_page_to_ram, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_chunk, hypersparc_flush_chunk, BTFIXUPCALL_NORM);
 #else
-	flush_page_to_ram = swift_flush_page_to_ram;
-	flush_chunk = swift_flush_chunk;
+	BTFIXUPSET_CALL(flush_page_to_ram, swift_flush_page_to_ram, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_chunk, swift_flush_chunk, BTFIXUPCALL_NOP);
 #endif
 
-	flush_sig_insns = turbosparc_flush_sig_insns;
-	flush_page_for_dma = NULL /* turbosparc_flush_page_for_dma */;
+	BTFIXUPSET_CALL(flush_sig_insns, turbosparc_flush_sig_insns, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_page_for_dma, turbosparc_flush_page_for_dma, BTFIXUPCALL_NOP);
 
 	poke_srmmu = poke_turbosparc;
 }
 
-static void poke_tsunami(void)
+__initfunc(static void poke_tsunami(void))
 {
 	unsigned long mreg = srmmu_get_mmureg();
 
@@ -2574,26 +2493,26 @@ __initfunc(static void init_tsunami(void))
 	srmmu_name = "TI Tsunami";
 	srmmu_modtype = Tsunami;
 
-	flush_cache_all = tsunami_flush_cache_all;
-	flush_cache_mm = tsunami_flush_cache_mm;
-	flush_cache_page = tsunami_flush_cache_page;
-	flush_cache_range = tsunami_flush_cache_range;
+	BTFIXUPSET_CALL(flush_cache_all, tsunami_flush_cache_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_mm, tsunami_flush_cache_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_page, tsunami_flush_cache_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_range, tsunami_flush_cache_range, BTFIXUPCALL_NORM);
 
-	flush_chunk = tsunami_flush_chunk; /* local flush _only_ */
+	BTFIXUPSET_CALL(flush_chunk, tsunami_flush_chunk, BTFIXUPCALL_NOP); /* local flush _only_ */
 
-	flush_tlb_all = tsunami_flush_tlb_all;
-	flush_tlb_mm = tsunami_flush_tlb_mm;
-	flush_tlb_page = tsunami_flush_tlb_page;
-	flush_tlb_range = tsunami_flush_tlb_range;
+	BTFIXUPSET_CALL(flush_tlb_all, tsunami_flush_tlb_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_mm, tsunami_flush_tlb_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_page, tsunami_flush_tlb_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_range, tsunami_flush_tlb_range, BTFIXUPCALL_NORM);
 
-	flush_page_to_ram = tsunami_flush_page_to_ram;
-	flush_sig_insns = tsunami_flush_sig_insns;
-	flush_page_for_dma = tsunami_flush_page_for_dma;
+	BTFIXUPSET_CALL(flush_page_to_ram, tsunami_flush_page_to_ram, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_sig_insns, tsunami_flush_sig_insns, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_page_for_dma, tsunami_flush_page_for_dma, BTFIXUPCALL_NORM);
 
 	poke_srmmu = poke_tsunami;
 }
 
-static void poke_viking(void)
+__initfunc(static void poke_viking(void))
 {
 	unsigned long mreg = srmmu_get_mmureg();
 	static int smp_catch = 0;
@@ -2637,13 +2556,14 @@ static void poke_viking(void)
 
 #ifdef __SMP__
 	/* Avoid unnecessary cross calls. */
-	flush_cache_all = local_flush_cache_all;
-	flush_cache_mm = local_flush_cache_mm;
-	flush_cache_range = local_flush_cache_range;
-	flush_cache_page = local_flush_cache_page;
-	flush_page_to_ram = local_flush_page_to_ram;
-	flush_sig_insns = local_flush_sig_insns;
-	flush_page_for_dma = local_flush_page_for_dma;
+	BTFIXUPCOPY_CALL(flush_cache_all, local_flush_cache_all);
+	BTFIXUPCOPY_CALL(flush_cache_mm, local_flush_cache_mm);
+	BTFIXUPCOPY_CALL(flush_cache_range, local_flush_cache_range);
+	BTFIXUPCOPY_CALL(flush_cache_page, local_flush_cache_page);
+	BTFIXUPCOPY_CALL(flush_page_to_ram, local_flush_page_to_ram);
+	BTFIXUPCOPY_CALL(flush_sig_insns, local_flush_sig_insns);
+	BTFIXUPCOPY_CALL(flush_page_for_dma, local_flush_page_for_dma);
+	btfixup();
 #endif
 }
 
@@ -2664,10 +2584,13 @@ __initfunc(static void init_viking(void))
 
 		msi_set_sync();
 
-		set_pte = srmmu_set_pte_nocache_viking;
-		sparc_update_rootmmu_dir = viking_update_rootmmu_dir;
+		BTFIXUPSET_CALL(set_pte, srmmu_set_pte_nocache_viking, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pte_clear, srmmu_pte_clear, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pmd_clear, srmmu_pmd_clear, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(pgd_clear, srmmu_pgd_clear, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(sparc_update_rootmmu_dir, viking_update_rootmmu_dir, BTFIXUPCALL_NORM);
 
-		flush_chunk = viking_flush_chunk; /* local flush _only_ */
+		BTFIXUPSET_CALL(flush_chunk, viking_flush_chunk, BTFIXUPCALL_NORM); /* local flush _only_ */
 
 		/* We need this to make sure old viking takes no hits
 		 * on it's cache for dma snoops to workaround the
@@ -2675,7 +2598,7 @@ __initfunc(static void init_viking(void))
 		 * This is only necessary because of the new way in
 		 * which we use the IOMMU.
 		 */
-		flush_page_for_dma = viking_flush_page;
+		BTFIXUPSET_CALL(flush_page_for_dma, viking_flush_page, BTFIXUPCALL_NORM);
 		/* Also, this is so far the only chip which actually uses
 		   the page argument to flush_page_for_dma */
 		flush_page_for_dma_global = 0;
@@ -2683,24 +2606,25 @@ __initfunc(static void init_viking(void))
 		srmmu_name = "TI Viking/MXCC";
 		viking_mxcc_present = 1;
 
-		flush_chunk = viking_mxcc_flush_chunk; /* local flush _only_ */
+		BTFIXUPSET_CALL(flush_chunk, viking_mxcc_flush_chunk, BTFIXUPCALL_NOP); /* local flush _only_ */
 
 		/* MXCC vikings lack the DMA snooping bug. */
-		flush_page_for_dma = NULL /* viking_flush_page_for_dma */;
+		BTFIXUPSET_CALL(flush_page_for_dma, viking_flush_page_for_dma, BTFIXUPCALL_NOP);
 	}
 
-	flush_cache_all = viking_flush_cache_all;
-	flush_cache_mm = viking_flush_cache_mm;
-	flush_cache_page = viking_flush_cache_page;
-	flush_cache_range = viking_flush_cache_range;
+	/* flush_cache_* are nops */
+	BTFIXUPSET_CALL(flush_cache_all, viking_flush_cache_all, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_cache_mm, viking_flush_cache_mm, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_cache_page, viking_flush_cache_page, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_cache_range, viking_flush_cache_range, BTFIXUPCALL_NOP);
 
-	flush_tlb_all = viking_flush_tlb_all;
-	flush_tlb_mm = viking_flush_tlb_mm;
-	flush_tlb_page = viking_flush_tlb_page;
-	flush_tlb_range = viking_flush_tlb_range;
+	BTFIXUPSET_CALL(flush_tlb_all, viking_flush_tlb_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_mm, viking_flush_tlb_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_page, viking_flush_tlb_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_range, viking_flush_tlb_range, BTFIXUPCALL_NORM);
 
-	flush_page_to_ram = viking_flush_page_to_ram;
-	flush_sig_insns = viking_flush_sig_insns;
+	BTFIXUPSET_CALL(flush_page_to_ram, viking_flush_page_to_ram, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_sig_insns, viking_flush_sig_insns, BTFIXUPCALL_NOP);
 
 	poke_srmmu = poke_viking;
 }
@@ -2798,6 +2722,67 @@ __initfunc(static void get_srmmu_type(void))
 	srmmu_is_bad();
 }
 
+/* Low and high watermarks for page table cache.
+   The system should try to have pgt_water[0] <= cache elements <= pgt_water[1]
+ */
+extern int pgt_cache_water[2];
+
+void srmmu_check_pgt_cache(void)
+{
+	struct page *page, *page2;
+
+	if (pgtable_cache_size > pgt_cache_water[0]) {
+		spin_lock(&pte_spinlock);
+		for (page2 = NULL, page = (struct page *)pte_quicklist; page;) {
+			if ((unsigned int)page->pprev_hash == 0xffff) {
+				if (page2)
+					page2->next_hash = page->next_hash;
+				else
+					(struct page *)pte_quicklist = page->next_hash;
+				page->next_hash = NULL;
+				page->pprev_hash = NULL;
+				pgtable_cache_size -= 16;
+				free_page(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
+				if (page2)
+					page = page2->next_hash;
+				else
+					page = (struct page *)pte_quicklist;
+				if (pgtable_cache_size <= pgt_cache_water[1])
+					break;
+				continue;
+			}
+			page2 = page;
+			page = page->next_hash;
+		}
+		spin_unlock(&pte_spinlock);
+	}
+	if (pgd_cache_size > pgt_cache_water[0] / 4) {
+		spin_lock(&pgd_spinlock);
+		for (page2 = NULL, page = (struct page *)pgd_quicklist; page;) {
+			if ((unsigned int)page->pprev_hash == 0xf) {
+				if (page2)
+					page2->next_hash = page->next_hash;
+				else
+					(struct page *)pgd_quicklist = page->next_hash;
+				page->next_hash = NULL;
+				page->pprev_hash = NULL;
+				pgd_cache_size -= 4;
+				free_page(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
+				if (page2)
+					page = page2->next_hash;
+				else
+					page = (struct page *)pgd_quicklist;
+				if (pgd_cache_size <= pgt_cache_water[1] / 4)
+					break;
+				continue;
+			}
+			page2 = page;
+			page = page->next_hash;
+		}
+		spin_unlock(&pgd_spinlock);
+	}
+}
+
 extern unsigned long spwin_mmu_patchme, fwin_mmu_patchme,
 	tsetup_mmu_patchme, rtrap_mmu_patchme;
 
@@ -2810,7 +2795,7 @@ extern unsigned long srmmu_fault;
 		iaddr = &(insn); \
 		daddr = &(dest); \
 		*iaddr = SPARC_BRANCH((unsigned long) daddr, (unsigned long) iaddr); \
-        } while(0);
+	} while(0);
 
 __initfunc(static void patch_window_trap_handlers(void))
 {
@@ -2829,7 +2814,7 @@ __initfunc(static void patch_window_trap_handlers(void))
 /* Local cross-calls. */
 static void smp_flush_page_for_dma(unsigned long page)
 {
-	xc1((smpfunc_t) local_flush_page_for_dma, page);
+	xc1((smpfunc_t) BTFIXUP_CALL(local_flush_page_for_dma), page);
 }
 
 #endif
@@ -2839,98 +2824,107 @@ __initfunc(void ld_mmu_srmmu(void))
 {
 	extern void ld_mmu_iommu(void);
 	extern void ld_mmu_iounit(void);
+	extern void ___xchg32_sun4md(void);
 	
 	/* First the constants */
-	pmd_shift = SRMMU_PMD_SHIFT;
-	pmd_size = SRMMU_PMD_SIZE;
-	pmd_mask = SRMMU_PMD_MASK;
-	pgdir_shift = SRMMU_PGDIR_SHIFT;
-	pgdir_size = SRMMU_PGDIR_SIZE;
-	pgdir_mask = SRMMU_PGDIR_MASK;
+	BTFIXUPSET_SIMM13(pmd_shift, SRMMU_PMD_SHIFT);
+	BTFIXUPSET_SETHI(pmd_size, SRMMU_PMD_SIZE);
+	BTFIXUPSET_SETHI(pmd_mask, SRMMU_PMD_MASK);
+	BTFIXUPSET_SIMM13(pgdir_shift, SRMMU_PGDIR_SHIFT);
+	BTFIXUPSET_SETHI(pgdir_size, SRMMU_PGDIR_SIZE);
+	BTFIXUPSET_SETHI(pgdir_mask, SRMMU_PGDIR_MASK);
 
-	ptrs_per_pte = SRMMU_PTRS_PER_PTE;
-	ptrs_per_pmd = SRMMU_PTRS_PER_PMD;
-	ptrs_per_pgd = SRMMU_PTRS_PER_PGD;
+	BTFIXUPSET_SIMM13(ptrs_per_pte, SRMMU_PTRS_PER_PTE);
+	BTFIXUPSET_SIMM13(ptrs_per_pmd, SRMMU_PTRS_PER_PMD);
+	BTFIXUPSET_SIMM13(ptrs_per_pgd, SRMMU_PTRS_PER_PGD);
 
-	page_none = SRMMU_PAGE_NONE;
-	page_shared = SRMMU_PAGE_SHARED;
-	page_copy = SRMMU_PAGE_COPY;
-	page_readonly = SRMMU_PAGE_RDONLY;
-	page_kernel = SRMMU_PAGE_KERNEL;
+	BTFIXUPSET_INT(page_none, pgprot_val(SRMMU_PAGE_NONE));
+	BTFIXUPSET_INT(page_shared, pgprot_val(SRMMU_PAGE_SHARED));
+	BTFIXUPSET_INT(page_copy, pgprot_val(SRMMU_PAGE_COPY));
+	BTFIXUPSET_INT(page_readonly, pgprot_val(SRMMU_PAGE_RDONLY));
+	BTFIXUPSET_INT(page_kernel, pgprot_val(SRMMU_PAGE_KERNEL));
 	pg_iobits = SRMMU_VALID | SRMMU_WRITE | SRMMU_REF;
-	    
-	/* Functions */
-	set_pte = srmmu_set_pte_cacheable;
-	init_new_context = srmmu_init_new_context;
-	switch_to_context = srmmu_switch_to_context;
-	pmd_align = srmmu_pmd_align;
-	pgdir_align = srmmu_pgdir_align;
-	vmalloc_start = srmmu_vmalloc_start;
-
-	pte_page = srmmu_pte_page;
-	pmd_page = srmmu_pmd_page;
-	pgd_page = srmmu_pgd_page;
-
-	sparc_update_rootmmu_dir = srmmu_update_rootmmu_dir;
-
-	pte_none = srmmu_pte_none;
-	pte_present = srmmu_pte_present;
-	pte_clear = srmmu_pte_clear;
-
-	pmd_none = srmmu_pmd_none;
-	pmd_bad = srmmu_pmd_bad;
-	pmd_present = srmmu_pmd_present;
-	pmd_clear = srmmu_pmd_clear;
-
-	pgd_none = srmmu_pgd_none;
-	pgd_bad = srmmu_pgd_bad;
-	pgd_present = srmmu_pgd_present;
-	pgd_clear = srmmu_pgd_clear;
-
-	mk_pte = srmmu_mk_pte;
-	mk_pte_phys = srmmu_mk_pte_phys;
-	pgd_set = srmmu_pgd_set;
-	mk_pte_io = srmmu_mk_pte_io;
-	pte_modify = srmmu_pte_modify;
-	pgd_offset = srmmu_pgd_offset;
-	pmd_offset = srmmu_pmd_offset;
-	pte_offset = srmmu_pte_offset;
-	pte_free_kernel = srmmu_pte_free_kernel;
-	pmd_free_kernel = srmmu_pmd_free_kernel;
-	pte_alloc_kernel = srmmu_pte_alloc_kernel;
-	pmd_alloc_kernel = srmmu_pmd_alloc_kernel;
-	pte_free = srmmu_pte_free;
-	pte_alloc = srmmu_pte_alloc;
-	pmd_free = srmmu_pmd_free;
-	pmd_alloc = srmmu_pmd_alloc;
-	pgd_free = srmmu_pgd_free;
-	pgd_alloc = srmmu_pgd_alloc;
-
-	pte_write = srmmu_pte_write;
-	pte_dirty = srmmu_pte_dirty;
-	pte_young = srmmu_pte_young;
-	pte_wrprotect = srmmu_pte_wrprotect;
-	pte_mkclean = srmmu_pte_mkclean;
-	pte_mkold = srmmu_pte_mkold;
-	pte_mkwrite = srmmu_pte_mkwrite;
-	pte_mkdirty = srmmu_pte_mkdirty;
-	pte_mkyoung = srmmu_pte_mkyoung;
-	update_mmu_cache = srmmu_update_mmu_cache;
-	destroy_context = srmmu_destroy_context;
 	
-	mmu_info = srmmu_mmu_info;
-        mmu_v2p = srmmu_v2p;
-        mmu_p2v = srmmu_p2v;
+	/* Functions */
+#ifndef __SMP__	
+	BTFIXUPSET_CALL(___xchg32, ___xchg32_sun4md, BTFIXUPCALL_SWAPG1G2);
+#endif
+	BTFIXUPSET_CALL(get_pte_fast, srmmu_get_pte_fast, BTFIXUPCALL_RETINT(0));
+	BTFIXUPSET_CALL(get_pgd_fast, srmmu_get_pgd_fast, BTFIXUPCALL_RETINT(0));
+	BTFIXUPSET_CALL(free_pte_slow, srmmu_free_pte_slow, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(free_pgd_slow, srmmu_free_pgd_slow, BTFIXUPCALL_NOP);
+	
+	BTFIXUPSET_CALL(set_pgdir, srmmu_set_pgdir, BTFIXUPCALL_NORM);
+	    
+	BTFIXUPSET_CALL(set_pte, srmmu_set_pte_cacheable, BTFIXUPCALL_SWAPO0O1);
+	BTFIXUPSET_CALL(init_new_context, srmmu_init_new_context, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(switch_to_context, srmmu_switch_to_context, BTFIXUPCALL_NORM);
+
+	BTFIXUPSET_CALL(pte_page, srmmu_pte_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_page, srmmu_pmd_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_page, srmmu_pgd_page, BTFIXUPCALL_NORM);
+
+	BTFIXUPSET_CALL(sparc_update_rootmmu_dir, srmmu_update_rootmmu_dir, BTFIXUPCALL_NORM);
+
+	BTFIXUPSET_SETHI(none_mask, 0xF0000000);
+	
+	BTFIXUPSET_CALL(pte_present, srmmu_pte_present, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_clear, srmmu_pte_clear, BTFIXUPCALL_SWAPO0G0);
+
+	BTFIXUPSET_CALL(pmd_bad, srmmu_pmd_bad, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_present, srmmu_pmd_present, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_clear, srmmu_pmd_clear, BTFIXUPCALL_SWAPO0G0);
+
+	BTFIXUPSET_CALL(pgd_none, srmmu_pgd_none, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_bad, srmmu_pgd_bad, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_present, srmmu_pgd_present, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_clear, srmmu_pgd_clear, BTFIXUPCALL_SWAPO0G0);
+
+	BTFIXUPSET_CALL(mk_pte, srmmu_mk_pte, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mk_pte_phys, srmmu_mk_pte_phys, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mk_pte_io, srmmu_mk_pte_io, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_set, srmmu_pgd_set, BTFIXUPCALL_NORM);
+	
+	BTFIXUPSET_INT(pte_modify_mask, SRMMU_CHG_MASK);
+	BTFIXUPSET_CALL(pgd_offset, srmmu_pgd_offset, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_offset, srmmu_pmd_offset, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_offset, srmmu_pte_offset, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_free_kernel, srmmu_pte_free, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_free_kernel, srmmu_pmd_free, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_alloc_kernel, srmmu_pte_alloc, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_alloc_kernel, srmmu_pmd_alloc, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_free, srmmu_pte_free, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pte_alloc, srmmu_pte_alloc, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_free, srmmu_pmd_free, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_alloc, srmmu_pmd_alloc, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_free, srmmu_pgd_free, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pgd_alloc, srmmu_pgd_alloc, BTFIXUPCALL_NORM);
+
+	BTFIXUPSET_HALF(pte_writei, SRMMU_WRITE);
+	BTFIXUPSET_HALF(pte_dirtyi, SRMMU_DIRTY);
+	BTFIXUPSET_HALF(pte_youngi, SRMMU_REF);
+	BTFIXUPSET_HALF(pte_wrprotecti, SRMMU_WRITE);
+	BTFIXUPSET_HALF(pte_mkcleani, SRMMU_DIRTY);
+	BTFIXUPSET_HALF(pte_mkoldi, SRMMU_REF);
+	BTFIXUPSET_CALL(pte_mkwrite, srmmu_pte_mkwrite, BTFIXUPCALL_ORINT(SRMMU_WRITE));
+	BTFIXUPSET_CALL(pte_mkdirty, srmmu_pte_mkdirty, BTFIXUPCALL_ORINT(SRMMU_DIRTY));
+	BTFIXUPSET_CALL(pte_mkyoung, srmmu_pte_mkyoung, BTFIXUPCALL_ORINT(SRMMU_REF));
+	BTFIXUPSET_CALL(update_mmu_cache, srmmu_update_mmu_cache, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(destroy_context, srmmu_destroy_context, BTFIXUPCALL_NORM);
+	
+	BTFIXUPSET_CALL(mmu_info, srmmu_mmu_info, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_v2p, srmmu_v2p, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_p2v, srmmu_p2v, BTFIXUPCALL_NORM);
 
 	/* Task struct and kernel stack allocating/freeing. */
-	alloc_task_struct = srmmu_alloc_task_struct;
-	free_task_struct = srmmu_free_task_struct;
+	BTFIXUPSET_CALL(alloc_task_struct, srmmu_alloc_task_struct, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(free_task_struct, srmmu_free_task_struct, BTFIXUPCALL_NORM);
 
-	quick_kernel_fault = srmmu_quick_kernel_fault;
+	BTFIXUPSET_CALL(quick_kernel_fault, srmmu_quick_kernel_fault, BTFIXUPCALL_NORM);
 
 	/* SRMMU specific. */
-	ctxd_set = srmmu_ctxd_set;
-	pmd_set = srmmu_pmd_set;
+	BTFIXUPSET_CALL(ctxd_set, srmmu_ctxd_set, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(pmd_set, srmmu_pmd_set, BTFIXUPCALL_NORM);
 
 	get_srmmu_type();
 	patch_window_trap_handlers();
@@ -2938,33 +2932,38 @@ __initfunc(void ld_mmu_srmmu(void))
 #ifdef __SMP__
 	/* El switcheroo... */
 
-	local_flush_cache_all = flush_cache_all;
-	local_flush_cache_mm = flush_cache_mm;
-	local_flush_cache_range = flush_cache_range;
-	local_flush_cache_page = flush_cache_page;
-	local_flush_tlb_all = flush_tlb_all;
-	local_flush_tlb_mm = flush_tlb_mm;
-	local_flush_tlb_range = flush_tlb_range;
-	local_flush_tlb_page = flush_tlb_page;
-	local_flush_page_to_ram = flush_page_to_ram;
-	local_flush_sig_insns = flush_sig_insns;
-	local_flush_page_for_dma = flush_page_for_dma;
+	BTFIXUPCOPY_CALL(local_flush_cache_all, flush_cache_all);
+	BTFIXUPCOPY_CALL(local_flush_cache_mm, flush_cache_mm);
+	BTFIXUPCOPY_CALL(local_flush_cache_range, flush_cache_range);
+	BTFIXUPCOPY_CALL(local_flush_cache_page, flush_cache_page);
+	BTFIXUPCOPY_CALL(local_flush_tlb_all, flush_tlb_all);
+	BTFIXUPCOPY_CALL(local_flush_tlb_mm, flush_tlb_mm);
+	BTFIXUPCOPY_CALL(local_flush_tlb_range, flush_tlb_range);
+	BTFIXUPCOPY_CALL(local_flush_tlb_page, flush_tlb_page);
+	BTFIXUPCOPY_CALL(local_flush_page_to_ram, flush_page_to_ram);
+	BTFIXUPCOPY_CALL(local_flush_sig_insns, flush_sig_insns);
+	BTFIXUPCOPY_CALL(local_flush_page_for_dma, flush_page_for_dma);
 
-	flush_cache_all = smp_flush_cache_all;
-	flush_cache_mm = smp_flush_cache_mm;
-	flush_cache_range = smp_flush_cache_range;
-	flush_cache_page = smp_flush_cache_page;
-	flush_tlb_all = smp_flush_tlb_all;
-	flush_tlb_mm = smp_flush_tlb_mm;
-	flush_tlb_range = smp_flush_tlb_range;
-	flush_tlb_page = smp_flush_tlb_page;
-	flush_page_to_ram = smp_flush_page_to_ram;
-	flush_sig_insns = smp_flush_sig_insns;
-	if (flush_page_for_dma)
-		flush_page_for_dma = smp_flush_page_for_dma;
+	BTFIXUPSET_CALL(flush_cache_all, smp_flush_cache_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_mm, smp_flush_cache_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_range, smp_flush_cache_range, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_page, smp_flush_cache_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_all, smp_flush_tlb_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_mm, smp_flush_tlb_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_range, smp_flush_tlb_range, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_page, smp_flush_tlb_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_page_to_ram, smp_flush_page_to_ram, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_sig_insns, smp_flush_sig_insns, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_page_for_dma, smp_flush_page_for_dma, BTFIXUPCALL_NORM);
 #endif
 	if (sparc_cpu_model == sun4d)
 		ld_mmu_iounit();
 	else
 		ld_mmu_iommu();
+#ifdef __SMP__
+	if (sparc_cpu_model == sun4d)
+		sun4d_init_smp();
+	else
+		sun4m_init_smp();
+#endif
 }

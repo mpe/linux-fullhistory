@@ -177,6 +177,8 @@
 #define __NR_setresgid		169
 #define __NR_getresgid		170
 #define __NR_prctl		171
+#define __NR_xstat		172
+#define __NR_xmknod		173
 
 #define __NR(n)	#n
 #define __do_syscall(n) \
@@ -212,10 +214,11 @@ type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
 #ifdef __KERNEL_SYSCALLS__
 
 /*
- * Forking from kernel space will result in NO COPY ON WRITE (!!!),
- * until an execve is executed. This is no problem, but for the stack.
- * This is handled by not letting main() use the stack at all after
- * fork().  On the PowerPC, this means we can only call leaf functions.
+ * Forking from kernel space will result in the child getting a new,
+ * empty kernel stack area.  Thus the child cannot access automatic
+ * variables set in the parent unless they are in registers, and the
+ * procedure where the fork was done cannot return to its caller in
+ * the child.
  */
 
 /*
@@ -241,6 +244,9 @@ int execve(const char *, char **, char **);
 int open(const char *, int, int);
 int close(int);
 pid_t waitpid(pid_t, int *, int);
+pid_t fork(void);
+void _exit(int);
+int delete_module(const char *);
 
 static inline pid_t wait(int * wait_stat) 
 {

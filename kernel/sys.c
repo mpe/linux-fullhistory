@@ -177,7 +177,8 @@ asmlinkage int sys_reboot(int magic1, int magic2, int cmd, void * arg)
 
 	/* For safety, we require "magic" arguments. */
 	if (magic1 != LINUX_REBOOT_MAGIC1 ||
-	    (magic2 != LINUX_REBOOT_MAGIC2 && magic2 != LINUX_REBOOT_MAGIC2A))
+	    (magic2 != LINUX_REBOOT_MAGIC2 && magic2 != LINUX_REBOOT_MAGIC2A &&
+			magic2 != LINUX_REBOOT_MAGIC2B))
 		return -EINVAL;
 
 	lock_kernel();

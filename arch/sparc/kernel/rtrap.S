@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.49 1997/12/14 23:24:24 ecd Exp $
+/* $Id: rtrap.S,v 1.50 1998/02/05 14:18:43 jj Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -296,9 +296,8 @@ sun4c_rett_onepage:
 
 	.globl	C_LABEL(srmmu_rett_stackchk)
 C_LABEL(srmmu_rett_stackchk):
-	sethi	%hi(C_LABEL(page_offset)), %g1
 	bne	ret_trap_user_stack_is_bolixed
-	 ld	[%g1 + %lo(C_LABEL(page_offset))], %g1
+	 GET_PAGE_OFFSET(g1)
 	cmp	%g1, %fp
 	bleu	ret_trap_user_stack_is_bolixed
 	 mov	AC_M_SFSR, %g1

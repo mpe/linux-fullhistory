@@ -544,7 +544,7 @@ __initfunc(int chr_dev_init(void))
 #ifdef CONFIG_JOYSTICK
 	/*
 	 *	Some joysticks only appear when the soundcard they are
-	 *	connected too is confgured. Keep the sound/joystick ordering.
+	 *	connected to is configured. Keep the sound/joystick ordering.
 	 */
 	js_init();
 #endif	

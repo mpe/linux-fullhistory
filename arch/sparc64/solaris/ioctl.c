@@ -1,7 +1,8 @@
-/* $Id: ioctl.c,v 1.4 1997/09/18 10:38:24 rth Exp $
+/* $Id: ioctl.c,v 1.10 1998/03/29 10:11:00 davem Exp $
  * ioctl.c: Solaris ioctl emulation.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998 Patrik Rak (prak3264@ss1000.ms.mff.cuni.cz)
  *
  * Streams & timod emulation based on code
  * Copyright (C) 1995, 1996 Mike Jagdis (jaggy@purplet.demon.co.uk)
@@ -15,14 +16,16 @@
 #include <linux/smp_lock.h>
 #include <linux/ioctl.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/netdevice.h>
 
 #include <asm/uaccess.h>
 #include <asm/termios.h>
 
 #include "conv.h"
+#include "socksys.h"
 
-extern char * getname32(u32 filename);
+extern char *getname32(u32 filename);
 #define putname32 putname
 
 extern asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, 
@@ -30,6 +33,11 @@ extern asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd,
 extern asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd,
 	u32 arg);
 asmlinkage int solaris_ioctl(unsigned int fd, unsigned int cmd, u32 arg);
+
+extern int timod_putmsg(unsigned int fd, char *ctl_buf, int ctl_len,
+			char *data_buf, int data_len, int flags);
+extern int timod_getmsg(unsigned int fd, char *ctl_buf, int ctl_maxlen, int *ctl_len,
+			char *data_buf, int data_maxlen, int *data_len, int *flags);
 
 /* termio* stuff {{{ */
 
@@ -231,31 +239,303 @@ struct strioctl {
 	u32 data;
 };
 
+struct solaris_si_sockparams {
+	int sp_family;
+	int sp_type;
+	int sp_protocol;
+};
+
+struct solaris_o_si_udata {
+	int tidusize;
+	int addrsize;
+	int optsize;
+	int etsdusize;
+	int servtype;
+	int so_state;
+	int so_options;
+	int tsdusize;
+};
+
+struct solaris_si_udata {
+	int tidusize;
+	int addrsize;
+	int optsize;
+	int etsdusize;
+	int servtype;
+	int so_state;
+	int so_options;
+	int tsdusize;
+	struct solaris_si_sockparams sockparams;
+};
+
+#define SOLARIS_MODULE_TIMOD    0
+#define SOLARIS_MODULE_SOCKMOD  1
+#define SOLARIS_MODULE_MAX      2
+
+static struct module_info {
+        const char *name;
+        /* can be expanded further if needed */
+} module_table[ SOLARIS_MODULE_MAX + 1 ] = {
+        /* the ordering here must match the module numbers above! */
+        { "timod" },
+        { "sockmod" },
+        { NULL }
+};
+
+static inline int solaris_sockmod(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	struct inode *ino;
+	/* I wonder which of these tests are superfluous... --patrik */
+	if (! current->files->fd[fd] ||
+	    ! current->files->fd[fd]->f_dentry ||
+	    ! (ino = current->files->fd[fd]->f_dentry->d_inode) ||
+	    ! ino->i_sock)
+		return TBADF;
+	
+	switch (cmd & 0xff) {
+	case 109: /* SI_SOCKPARAMS */
+	{
+		struct solaris_si_sockparams si;
+		if (copy_from_user (&si, (struct solaris_si_sockparams *) A(arg), sizeof(si)))
+			return (EFAULT << 8) | TSYSERR;
+
+		/* Should we modify socket ino->socket_i.ops and type? */
+		return 0;
+	}
+	case 110: /* SI_GETUDATA */
+	{
+		int etsdusize, servtype;
+		switch (ino->u.socket_i.type) {
+		case SOCK_STREAM:
+			etsdusize = 1;
+			servtype = 2;
+			break;
+		default:
+			etsdusize = -2;
+			servtype = 3;
+			break;
+		}
+		if (put_user(16384, &((struct solaris_si_udata *)A(arg))->tidusize) ||
+		    __put_user(sizeof(struct sockaddr), &((struct solaris_si_udata *)A(arg))->addrsize) ||
+		    __put_user(-1, &((struct solaris_si_udata *)A(arg))->optsize) ||
+		    __put_user(etsdusize, &((struct solaris_si_udata *)A(arg))->etsdusize) ||
+		    __put_user(servtype, &((struct solaris_si_udata *)A(arg))->servtype) ||
+		    __put_user(0, &((struct solaris_si_udata *)A(arg))->so_state) ||
+		    __put_user(0, &((struct solaris_si_udata *)A(arg))->so_options) ||
+		    __put_user(16384, &((struct solaris_si_udata *)A(arg))->tsdusize) ||
+		    __put_user(ino->u.socket_i.ops->family, &((struct solaris_si_udata *)A(arg))->sockparams.sp_family) ||
+		    __put_user(ino->u.socket_i.type, &((struct solaris_si_udata *)A(arg))->sockparams.sp_type) ||
+		    __put_user(ino->u.socket_i.ops->family, &((struct solaris_si_udata *)A(arg))->sockparams.sp_protocol))
+			return (EFAULT << 8) | TSYSERR;
+		return 0;
+	}
+	case 101: /* O_SI_GETUDATA */
+	{
+		int etsdusize, servtype;
+		switch (ino->u.socket_i.type) {
+		case SOCK_STREAM:
+			etsdusize = 1;
+			servtype = 2;
+			break;
+		default:
+			etsdusize = -2;
+			servtype = 3;
+			break;
+		}
+		if (put_user(16384, &((struct solaris_o_si_udata *)A(arg))->tidusize) ||
+		    __put_user(sizeof(struct sockaddr), &((struct solaris_o_si_udata *)A(arg))->addrsize) ||
+		    __put_user(-1, &((struct solaris_o_si_udata *)A(arg))->optsize) ||
+		    __put_user(etsdusize, &((struct solaris_o_si_udata *)A(arg))->etsdusize) ||
+		    __put_user(servtype, &((struct solaris_o_si_udata *)A(arg))->servtype) ||
+		    __put_user(0, &((struct solaris_o_si_udata *)A(arg))->so_state) ||
+		    __put_user(0, &((struct solaris_o_si_udata *)A(arg))->so_options) ||
+		    __put_user(16384, &((struct solaris_o_si_udata *)A(arg))->tsdusize))
+			return (EFAULT << 8) | TSYSERR;
+		return 0;
+	}
+	case 102: /* SI_SHUTDOWN */
+	case 103: /* SI_LISTEN */
+	case 104: /* SI_SETMYNAME */
+	case 105: /* SI_SETPEERNAME */
+	case 106: /* SI_GETINTRANSIT */
+	case 107: /* SI_TCL_LINK */
+	case 108: /* SI_TCL_UNLINK */
+	}
+	return TNOTSUPPORT;
+}
+
+static inline int solaris_timod(unsigned int fd, unsigned int cmd, u32 arg,
+                                    int len, int *len_p)
+{
+        struct file *filp;
+        struct inode *ino;
+	int ret;
+
+        filp = current->files->fd[fd];
+        if (! filp ||
+	    ! (ino = filp->f_dentry->d_inode) ||
+	    ! ino->i_sock)
+		return TBADF;
+		
+	switch (cmd & 0xff) {
+	case 141: /* TI_OPTMGMT */
+	{
+		int i;
+		u32 prim;
+		SOLD("TI_OPMGMT entry");
+		ret = timod_putmsg(fd, (char *)A(arg), len, NULL, -1, 0);
+		SOLD("timod_putmsg() returned");
+		if (ret)
+			return (-ret << 8) | TSYSERR;
+		i = MSG_HIPRI;
+		SOLD("calling timod_getmsg()");
+		ret = timod_getmsg(fd, (char *)A(arg), len, len_p, NULL, -1, NULL, &i);
+		SOLD("timod_getmsg() returned");
+		if (ret)
+			return (-ret << 8) | TSYSERR;
+		SOLD("ret ok");
+		if (get_user(prim, (u32 *)A(arg)))
+			return (EFAULT << 8) | TSYSERR;
+		SOLD("got prim");
+		if (prim == T_ERROR_ACK) {
+			u32 tmp, tmp2;
+			SOLD("prim is T_ERROR_ACK");
+			if (get_user(tmp, (u32 *)A(arg)+3) ||
+			    get_user(tmp2, (u32 *)A(arg)+2))
+				return (EFAULT << 8) | TSYSERR;
+			return (tmp2 << 8) | tmp;
+		}
+		SOLD("TI_OPMGMT return 0");
+		return 0;
+	}
+	case 142: /* TI_BIND */
+	{
+		int i;
+		u32 prim;
+		SOLD("TI_BIND entry");
+		ret = timod_putmsg(fd, (char *)A(arg), len, NULL, -1, 0);
+		SOLD("timod_putmsg() returned");
+		if (ret)
+			return (-ret << 8) | TSYSERR;
+		len = 1024; /* Solaris allows arbitrary return size */
+		i = MSG_HIPRI;
+		SOLD("calling timod_getmsg()");
+		ret = timod_getmsg(fd, (char *)A(arg), len, len_p, NULL, -1, NULL, &i);
+		SOLD("timod_getmsg() returned");
+		if (ret)
+			return (-ret << 8) | TSYSERR;
+		SOLD("ret ok");
+		if (get_user(prim, (u32 *)A(arg)))
+			return (EFAULT << 8) | TSYSERR;
+		SOLD("got prim");
+		if (prim == T_ERROR_ACK) {
+			u32 tmp, tmp2;
+			SOLD("prim is T_ERROR_ACK");
+			if (get_user(tmp, (u32 *)A(arg)+3) ||
+			    get_user(tmp2, (u32 *)A(arg)+2))
+				return (EFAULT << 8) | TSYSERR;
+			return (tmp2 << 8) | tmp;
+		}
+		SOLD("no ERROR_ACK requested");
+		if (prim != T_OK_ACK)
+			return TBADSEQ;
+		SOLD("OK_ACK requested");
+		i = MSG_HIPRI;
+		SOLD("calling timod_getmsg()");
+		ret = timod_getmsg(fd, (char *)A(arg), len, len_p, NULL, -1, NULL, &i);
+		SOLD("timod_getmsg() returned");
+		if (ret)
+			return (-ret << 8) | TSYSERR;
+		SOLD("TI_BIND return ok");
+		return 0;
+	}
+	case 140: /* TI_GETINFO */
+	case 143: /* TI_UNBIND */
+	case 144: /* TI_GETMYNAME */
+	case 145: /* TI_GETPEERNAME */
+	case 146: /* TI_SETMYNAME */
+	case 147: /* TI_SETPEERNAME */
+	}
+	return TNOTSUPPORT;
+}
+
 static inline int solaris_S(unsigned int fd, unsigned int cmd, u32 arg)
 {
 	char *p;
 	int ret;
 	mm_segment_t old_fs;
 	struct strioctl si;
-	
+	struct inode *ino;
+        struct file *filp;
+        struct sol_socket_struct *sock;
+        struct module_info *mi;
+
+        filp = current->files->fd[fd];
+        if (! filp ||
+	    ! (ino = filp->f_dentry->d_inode) ||
+	    ! ino->i_sock)
+		return -EBADF;
+        sock = filp->private_data;
+        if (! sock) {
+                printk("solaris_S: NULL private_data\n");
+                return -EBADF;
+        }
+        if (sock->magic != SOLARIS_SOCKET_MAGIC) {
+                printk("solaris_S: invalid magic\n");
+                return -EBADF;
+        }
+        
+
 	switch (cmd & 0xff) {
 	case 1: /* I_NREAD */
 		return -ENOSYS;
 	case 2: /* I_PUSH */
+        {
 		p = getname32 (arg);
 		if (IS_ERR (p))
 			return PTR_ERR(p);
+                ret = -EINVAL;
+                for (mi = module_table; mi->name; mi++) {
+                        if (strcmp(mi->name, p) == 0) {
+                                sol_module m;
+                                if (sock->modcount >= MAX_NR_STREAM_MODULES) {
+                                        ret = -ENXIO;
+                                        break;
+                                }
+                                m = (sol_module) (mi - module_table);
+                                sock->module[sock->modcount++] = m;
+                                ret = 0;
+                                break;
+                        }
+                }
 		putname32 (p);
-		return 0;
+		return ret;
+        }
 	case 3: /* I_POP */
+                if (sock->modcount <= 0) return -EINVAL;
+                sock->modcount--;
 		return 0;
+        case 4: /* I_LOOK */
+        {
+        	const char *p;
+                if (sock->modcount <= 0) return -EINVAL;
+                p = module_table[(unsigned)sock->module[sock->modcount]].name;
+                if (copy_to_user ((char *)A(arg), p, strlen(p)))
+                	return -EFAULT;
+                return 0;
+        }
 	case 5: /* I_FLUSH */
 		return 0;
 	case 8: /* I_STR */
-		if (copy_from_user (&si, (struct strioctl *)A(arg), sizeof(struct strioctl)))
+		if (copy_from_user(&si, (struct strioctl *)A(arg), sizeof(struct strioctl)))
 			return -EFAULT;
+                /* We ignore what module is actually at the top of stack. */
 		switch ((si.cmd >> 8) & 0xff) {
+		case 'I':
+                        return solaris_sockmod(fd, si.cmd, si.data);
 		case 'T':
+                        return solaris_timod(fd, si.cmd, si.data, si.len,
+                                                &((struct strioctl*)A(arg))->len);
 		default:
 			return solaris_ioctl(fd, si.cmd, si.data);
 		}
@@ -269,12 +549,25 @@ static inline int solaris_S(unsigned int fd, unsigned int cmd, u32 arg)
 		if (ret == current->pid) return 0x3ff;
 		else return -EINVAL;
 	case 11: /* I_FIND */
+        {
+                int i;
 		p = getname32 (arg);
 		if (IS_ERR (p))
 			return PTR_ERR(p);
-		ret = !strcmp(p, "timod");
+                ret = 0;
+                for (i = 0; i < sock->modcount; i++) {
+                        unsigned m = sock->module[i];
+                        if (strcmp(module_table[m].name, p) == 0) {
+                                ret = 1;
+                                break;
+                        } 
+                }
 		putname32 (p);
 		return ret;
+        }
+	case 19: /* I_SWROPT */
+	case 32: /* I_SETCLTIME */
+		return 0;	/* Lie */
 	}
 	return -ENOSYS;
 }
@@ -287,7 +580,8 @@ static inline int solaris_s(unsigned int fd, unsigned int cmd, u32 arg)
 		return 0; /* We don't support them */
 	case 1: /* SIOCGHIWAT */
 	case 3: /* SIOCGLOWAT */
-		put_user_ret (0, (u32 *)A(arg), -EFAULT);
+		if (put_user (0, (u32 *)A(arg)))
+			return -EFAULT;
 		return 0; /* Lie */
 	case 7: /* SIOCATMARK */
 		return sys_ioctl(fd, SIOCATMARK, arg);
@@ -368,8 +662,10 @@ static inline int solaris_i(unsigned int fd, unsigned int cmd, u32 arg)
 			ret = sys_socketcall(((cmd & 0xff) == 52) ? SYS_GETSOCKNAME : SYS_GETPEERNAME,
 					args);
 			set_fs(old_fs);
-			if (ret >= 0)
-				copy_to_user_ret((char *)A(arg), &uaddr, uaddr_len, -EFAULT);
+			if (ret >= 0) {
+				if (copy_to_user((char *)A(arg), &uaddr, uaddr_len))
+					return -EFAULT;
+			}
 			return ret;
 		}
 #if 0		
@@ -382,7 +678,8 @@ static inline int solaris_i(unsigned int fd, unsigned int cmd, u32 arg)
 			int i = 0;
 			
 			for (d = dev_base; d; d = d->next) i++;
-			put_user_ret (i, (int *)A(arg), -EFAULT);
+			if (put_user (i, (int *)A(arg)))
+				return -EFAULT;
 			return 0;
 		}
 	}
@@ -393,14 +690,13 @@ static inline int solaris_i(unsigned int fd, unsigned int cmd, u32 arg)
 
 asmlinkage int solaris_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 {
-	struct file * filp;
+	struct file *filp;
 	int error = -EBADF;
 
 	lock_kernel();
-	if(fd >= NR_OPEN) goto out;
-
-	filp = current->files->fd[fd];
-	if(!filp) goto out;
+	filp = fcheck(fd);
+	if (!filp)
+		goto out;
 
 	error = -EFAULT;
 	switch ((cmd >> 8) & 0xff) {
@@ -410,6 +706,7 @@ asmlinkage int solaris_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case 'r': error = solaris_r(fd, cmd, arg); break;
 	case 's': error = solaris_s(fd, cmd, arg); break;
 	case 't': error = solaris_t(fd, cmd, arg); break;
+	case 'f': error = sys_ioctl(fd, cmd, arg); break;
 	default:
 		error = -ENOSYS;
 		break;

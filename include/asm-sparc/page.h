@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.37 1997/11/28 15:59:21 jj Exp $
+/* $Id: page.h,v 1.40 1998/02/06 14:14:46 jj Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -8,7 +8,12 @@
 #ifndef _SPARC_PAGE_H
 #define _SPARC_PAGE_H
 
+#include <linux/config.h>
+#ifdef CONFIG_SUN4
+#define PAGE_SHIFT   13
+#else
 #define PAGE_SHIFT   12
+#endif
 #define PAGE_SIZE    (1 << PAGE_SHIFT)
 #define PAGE_MASK    (~(PAGE_SIZE-1))
 
@@ -16,6 +21,10 @@
 
 #include <linux/config.h>
 #include <asm/head.h>       /* for KERNBASE */
+#include <asm/btfixup.h>
+
+/* This is always 2048*sizeof(long), doesn't change with PAGE_SIZE */
+#define TASK_UNION_SIZE		8192
 
 #ifndef __ASSEMBLY__
 
@@ -24,11 +33,20 @@
 
 extern unsigned long page_offset;
 
-#define PAGE_OFFSET  (page_offset)
+BTFIXUPDEF_SETHI_INIT(page_offset,0xf0000000)
+
+#ifdef MODULE
+#define 	PAGE_OFFSET  (page_offset)
+#else
+#define		PAGE_OFFSET  BTFIXUP_SETHI(page_offset)
+#endif
 
 /* translate between physical and virtual addresses */
-extern unsigned long (*mmu_v2p)(unsigned long);
-extern unsigned long (*mmu_p2v)(unsigned long);
+BTFIXUPDEF_CALL_CONST(unsigned long, mmu_v2p, unsigned long)
+BTFIXUPDEF_CALL_CONST(unsigned long, mmu_p2v, unsigned long)
+
+#define mmu_v2p(vaddr) BTFIXUP_CALL(mmu_v2p)(vaddr)
+#define mmu_p2v(paddr) BTFIXUP_CALL(mmu_p2v)(paddr)
 
 #define __pa(x)    (mmu_v2p((unsigned long)(x)))
 #define __va(x)    ((void *)(mmu_p2v((unsigned long)(x))))
@@ -248,7 +266,9 @@ typedef unsigned long iopgprot_t;
 
 extern unsigned long sparc_unmapped_base;
 
-#define TASK_UNMAPPED_BASE	(sparc_unmapped_base)
+BTFIXUPDEF_SETHI(sparc_unmapped_base)
+
+#define TASK_UNMAPPED_BASE	BTFIXUP_SETHI(sparc_unmapped_base)
 
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)  (((addr)+PAGE_SIZE-1)&PAGE_MASK)

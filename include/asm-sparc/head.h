@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.33 1997/10/04 08:54:22 ecd Exp $ */
+/* $Id: head.h,v 1.35 1998/03/18 09:15:40 jj Exp $ */
 #ifndef __SPARC_HEAD_H
 #define __SPARC_HEAD_H
 
@@ -10,8 +10,7 @@
 
 #define NCPUS            4              /* Architectural limit of sun4m. */
 
-#define SUN4_PROM_VECTOR 0xFFE81000     /* To safely die on a SUN4 */
-#define SUN4_PRINTF      0x84           /* Offset into SUN4_PROM_VECTOR */
+#define SUN4_PROM_VECTOR 0xFFE81000     /* SUN4 PROM needs to be hardwired */
 
 #define WRITE_PAUSE      nop; nop; nop; /* Have to do this after %wim/%psr chg */
 #define NOP_INSN         0x01000000     /* Used to patch sparc_save_state */
@@ -31,6 +30,10 @@
 /* This is for traps we should NEVER get. */
 #define BAD_TRAP(num) \
         rd %psr, %l0; mov num, %l7; b bad_trap_handler; rd %wim, %l3;
+
+/* This is for traps when we want just skip the instruction which caused it */
+#define SKIP_TRAP(type, name) \
+	jmpl %l2, %g0; rett %l2 + 4; nop; nop;
 
 /* Notice that for the system calls we pull a trick.  We load up a
  * different pointer to the system call vector table in %l7, but call

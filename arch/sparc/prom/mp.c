@@ -1,4 +1,4 @@
-/* $Id: mp.c,v 1.9 1997/05/14 20:45:01 davem Exp $
+/* $Id: mp.c,v 1.10 1998/03/09 14:04:26 jj Exp $
  * mp.c:  OpenBoot Prom Multiprocessor support routines.  Don't call
  *        these on a UP or else you will halt and catch fire. ;)
  *
@@ -12,8 +12,7 @@
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 
-/* XXX Let's get rid of this thing if we can... */
-extern struct task_struct *current_set[NR_CPUS];
+extern void restore_current(void);
 
 /* Start cpu with prom-tree node 'cpunode' using context described
  * by 'ctable_reg' in context 'ctx' at program counter 'pc'.
@@ -38,9 +37,7 @@ prom_startcpu(int cpunode, struct linux_prom_registers *ctable_reg, int ctx, cha
 		ret = (*(romvec->v3_cpustart))(cpunode, (int) ctable_reg, ctx, pc);
 		break;
 	};
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 
 	return ret;
@@ -67,9 +64,7 @@ prom_stopcpu(int cpunode)
 		ret = (*(romvec->v3_cpustop))(cpunode);
 		break;
 	};
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 
 	return ret;
@@ -96,9 +91,7 @@ prom_idlecpu(int cpunode)
 		ret = (*(romvec->v3_cpuidle))(cpunode);
 		break;
 	};
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 
 	return ret;
@@ -125,9 +118,7 @@ prom_restartcpu(int cpunode)
 		ret = (*(romvec->v3_cpuresume))(cpunode);
 		break;
 	};
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 
 	return ret;

@@ -1,6 +1,6 @@
 /* io-unit.h: Definitions for the sun4d IO-UNIT.
  *
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 #ifndef _SPARC_IO_UNIT_H
 #define _SPARC_IO_UNIT_H
@@ -22,8 +22,8 @@
  
 #define IOUNIT_DMA_BASE	    0xfc000000 /* TOP - 64M */
 #define IOUNIT_DMA_SIZE	    0x04000000 /* 64M */
-/* We use last 4M for sparc_dvma_malloc */
-#define IOUNIT_DVMA_SIZE    0x00400000 /* 4M */
+/* We use last 1M for sparc_dvma_malloc */
+#define IOUNIT_DVMA_SIZE    0x00100000 /* 1M */
 
 /* The format of an iopte in the external page tables */
 #define IOUPTE_PAGE          0xffffff00 /* Physical page number (PA[35:12]) */
@@ -36,8 +36,18 @@
 #define IOUPTE_PARITY        0x00000001
 
 struct iounit_struct {
-	spinlock_t		iommu_lock;
+	unsigned int		bmap[(IOUNIT_DMA_SIZE >> (PAGE_SHIFT + 3)) / sizeof(unsigned int)];
+	spinlock_t		lock;
 	iopte_t			*page_table;
+	unsigned long		rotor[3];
+	unsigned long		limit[4];
 };
+
+#define IOUNIT_BMAP1_START	0x00000000
+#define IOUNIT_BMAP1_END	(IOUNIT_DMA_SIZE >> (PAGE_SHIFT + 1))
+#define IOUNIT_BMAP2_START	IOUNIT_BMAP1_END
+#define IOUNIT_BMAP2_END	IOUNIT_BMAP2_START + (IOUNIT_DMA_SIZE >> (PAGE_SHIFT + 2))
+#define IOUNIT_BMAPM_START	IOUNIT_BMAP2_END
+#define IOUNIT_BMAPM_END	((IOUNIT_DMA_SIZE - IOUNIT_DVMA_SIZE) >> PAGE_SHIFT)
 
 #endif /* !(_SPARC_IO_UNIT_H) */

@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.17 1998/01/10 18:26:13 ecd Exp $
+/* $Id: ebus.c,v 1.23 1998/03/29 16:27:24 ecd Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -29,13 +29,11 @@
 struct linux_ebus *ebus_chain = 0;
 
 extern void prom_ebus_ranges_init(struct linux_ebus *);
+extern void prom_ebus_intmap_init(struct linux_ebus *);
 extern unsigned long pci_console_init(unsigned long memory_start);
 
 #ifdef CONFIG_SUN_OPENPROMIO
 extern int openprom_init(void);
-#endif
-#ifdef CONFIG_SUN_MOSTEK_RTC
-extern int rtc_init(void);
 #endif
 #ifdef CONFIG_SPARCAUDIO
 extern int sparcaudio_init(void);
@@ -45,6 +43,9 @@ extern void auxio_probe(void);
 #endif
 #ifdef CONFIG_OBP_FLASH
 extern int flash_init(void);
+#endif
+#ifdef CONFIG_ENVCTRL
+extern int envctrl_init(void);
 #endif
 
 extern unsigned int psycho_irq_build(struct linux_pbm_info *pbm,
@@ -62,7 +63,35 @@ ebus_alloc(unsigned long *memory_start, size_t size)
 	return mem;
 }
 
-__initfunc(void fill_ebus_child(int node, struct linux_ebus_child *dev))
+__initfunc(void ebus_intmap_match(struct linux_ebus *ebus,
+				  struct linux_prom_registers *reg,
+				  int *interrupt))
+{
+	unsigned int hi, lo, irq;
+	int i;
+
+	if (!ebus->num_ebus_intmap)
+		return;
+
+	hi = reg->which_io & ebus->ebus_intmask.phys_hi;
+	lo = reg->phys_addr & ebus->ebus_intmask.phys_lo;
+	irq = *interrupt & ebus->ebus_intmask.interrupt;
+	for (i = 0; i < ebus->num_ebus_intmap; i++) {
+		if ((ebus->ebus_intmap[i].phys_hi == hi) &&
+		    (ebus->ebus_intmap[i].phys_lo == lo) &&
+		    (ebus->ebus_intmap[i].interrupt == irq)) {
+			*interrupt = ebus->ebus_intmap[i].cinterrupt;
+			return;
+		}
+	}
+
+	prom_printf("ebus: IRQ [%08x.%08x.%08x] not found in interrupt-map\n",
+		    reg->which_io, reg->phys_addr, *interrupt);
+	prom_halt();
+}
+
+__initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
+				struct linux_ebus_child *dev))
 {
 	int regs[PROMREG_MAX];
 	int irqs[PROMREG_MAX];
@@ -90,8 +119,10 @@ __initfunc(void fill_ebus_child(int node, struct linux_ebus_child *dev))
 		dev->num_irqs = 0;
 	} else {
 		dev->num_irqs = len / sizeof(irqs[0]);
-		for (i = 0; i < dev->num_irqs; i++)
+		for (i = 0; i < dev->num_irqs; i++) {
+			ebus_intmap_match(dev->bus, preg, &irqs[i]);
 			dev->irqs[i] = psycho_irq_build(dev->bus->parent, irqs[i]);
+		}
 	}
 
 #ifdef DEBUG_FILL_EBUS_DEV
@@ -108,7 +139,8 @@ __initfunc(void fill_ebus_child(int node, struct linux_ebus_child *dev))
 #endif
 }
 
-__initfunc(unsigned long fill_ebus_device(int node, struct linux_ebus_device *dev,
+__initfunc(unsigned long fill_ebus_device(int node,
+					  struct linux_ebus_device *dev,
 					  unsigned long memory_start))
 {
 	struct linux_prom_registers regs[PROMREG_MAX];
@@ -142,8 +174,10 @@ __initfunc(unsigned long fill_ebus_device(int node, struct linux_ebus_device *de
 		dev->num_irqs = 0;
 	} else {
 		dev->num_irqs = len / sizeof(irqs[0]);
-		for (i = 0; i < dev->num_irqs; i++)
+		for (i = 0; i < dev->num_irqs; i++) {
+			ebus_intmap_match(dev->bus, &regs[0], &irqs[i]);
 			dev->irqs[i] = psycho_irq_build(dev->bus->parent, irqs[i]);
+		}
 	}
 
 #ifdef DEBUG_FILL_EBUS_DEV
@@ -166,7 +200,7 @@ __initfunc(unsigned long fill_ebus_device(int node, struct linux_ebus_device *de
 		child->next = 0;
 		child->parent = dev;
 		child->bus = dev->bus;
-		fill_ebus_child(node, child);
+		fill_ebus_child(node, &regs[0], child);
 
 		while ((node = prom_getsibling(node))) {
 			child->next = (struct linux_ebus_child *)
@@ -176,12 +210,15 @@ __initfunc(unsigned long fill_ebus_device(int node, struct linux_ebus_device *de
 			child->next = 0;
 			child->parent = dev;
 			child->bus = dev->bus;
-			fill_ebus_child(node, child);
+			fill_ebus_child(node, &regs[0], child);
 		}
 	}
 
 	return memory_start;
 }
+
+extern void sun4u_start_timers(void);
+extern void clock_probe(void);
 
 __initfunc(unsigned long ebus_init(unsigned long memory_start,
 				   unsigned long memory_end))
@@ -199,14 +236,10 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 	int reg, rng, nreg;
 	int num_ebus = 0;
 
-	if (!pcibios_present())
+	if (!pci_present())
 		return memory_start;
 
-	for (pdev = pci_devices; pdev; pdev = pdev->next) {
-		if ((pdev->vendor == PCI_VENDOR_ID_SUN) &&
-		    (pdev->device == PCI_DEVICE_ID_SUN_EBUS))
-			break;
-	}
+	pdev = pci_find_device(PCI_VENDOR_ID_SUN, PCI_DEVICE_ID_SUN_EBUS, 0);
 	if (!pdev) {
 		printk("ebus: No EBus's found.\n");
 #ifdef PROM_DEBUG
@@ -236,11 +269,9 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 		ebus->parent = pbm = cookie->pbm;
 
 		/* Enable BUS Master. */
-		pcibios_read_config_word(pdev->bus->number, pdev->devfn,
-					 PCI_COMMAND, &pci_command);
+		pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 		pci_command |= PCI_COMMAND_MASTER;
-		pcibios_write_config_word(pdev->bus->number, pdev->devfn,
-					  PCI_COMMAND, pci_command);
+		pci_write_config_word(pdev, PCI_COMMAND, pci_command);
 
 		len = prom_getproperty(ebusnd, "reg", (void *)regs,
 				       sizeof(regs));
@@ -285,6 +316,7 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 #endif
 
 		prom_ebus_ranges_init(ebus);
+		prom_ebus_intmap_init(ebus);
 
 		nd = prom_getchild(ebusnd);
 		if (!nd)
@@ -312,11 +344,8 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 		}
 
 	next_ebus:
-		for (pdev = pdev->next; pdev; pdev = pdev->next) {
-			if ((pdev->vendor == PCI_VENDOR_ID_SUN) &&
-			    (pdev->device == PCI_DEVICE_ID_SUN_EBUS))
-				break;
-		}
+		pdev = pci_find_device(PCI_VENDOR_ID_SUN,
+				       PCI_DEVICE_ID_SUN_EBUS, pdev);
 		if (!pdev)
 			break;
 
@@ -335,9 +364,6 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 #ifdef CONFIG_SUN_OPENPROMIO
 	openprom_init();
 #endif
-#ifdef CONFIG_SUN_MOSTEK_RTC
-	rtc_init();
-#endif
 #ifdef CONFIG_SPARCAUDIO
 	sparcaudio_init();
 #endif
@@ -345,20 +371,15 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 	bpp_init();
 #endif
 #ifdef CONFIG_SUN_AUXIO
-	if (sparc_cpu_model == sun4u)
-		auxio_probe();
+	auxio_probe();
+#endif
+#ifdef CONFIG_ENVCTRL
+	envctrl_init();
 #endif
 #ifdef CONFIG_OBP_FLASH
 	flash_init();
 #endif
-#ifdef __sparc_v9__
-	if (sparc_cpu_model == sun4u) {
-		extern void sun4u_start_timers(void);
-		extern void clock_probe(void);
-
-		sun4u_start_timers();
-		clock_probe();
-	}
-#endif
+	sun4u_start_timers();
+	clock_probe();
 	return memory_start;
 }

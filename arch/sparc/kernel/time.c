@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.29 1997/04/18 09:48:44 davem Exp $
+/* $Id: time.c,v 1.32 1998/03/23 08:41:13 jj Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -24,6 +24,10 @@
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/io.h>
+#include <asm/idprom.h>
+#include <asm/machines.h>
+#include <asm/sun4paddr.h>
+#include <asm/page.h>
 
 enum sparc_clock_type sp_clock_typ;
 struct mostek48t02 *mstk48t02_regs = 0;
@@ -88,7 +92,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 }
 
 /* Kick start a stopped clock (procedure from the Sun NVRAM/hostid FAQ). */
-static void kick_start_clock(void)
+__initfunc(static void kick_start_clock(void))
 {
 	register struct mostek48t02 *regs = mstk48t02_regs;
 	unsigned char sec;
@@ -137,7 +141,7 @@ static void kick_start_clock(void)
 }
 
 /* Return nonzero if the clock chip battery is low. */
-static int has_low_battery(void)
+static __inline__ int has_low_battery(void)
 {
 	register struct mostek48t02 *regs = mstk48t02_regs;
 	unsigned char data1, data2;
@@ -150,8 +154,24 @@ static int has_low_battery(void)
 	return (data1 == data2);	/* Was the write blocked? */
 }
 
-/* Probe for the real time clock chip. */
-__initfunc(static void clock_probe(void))
+/* Probe for the real time clock chip on Sun4/300. */
+static __inline__ void sun4_clock_probe(void)
+{
+	sp_clock_typ = MSTK48T02;
+	mstk48t02_regs = (struct mostek48t02 *) 
+		sparc_alloc_io(SUN4_300_MOSTEK_PHYSADDR, 0,
+			       sizeof(*mstk48t02_regs),
+			       "clock", 0x0, 0x0);
+	mstk48t08_regs = 0;  /* To catch weirdness */
+	/* Kick start the clock if it is completely stopped. */
+	if (mstk48t02_regs->sec & MSTK_STOP) {
+		kick_start_clock();
+	}
+
+}
+
+/* Probe for the mostek real time clock chip. */
+static __inline__ void clock_probe(void)
 {
 	struct linux_prom_registers clk_reg[2];
 	char model[128];
@@ -247,7 +267,11 @@ __initfunc(void time_init(void))
         return;
 #endif
 
-	clock_probe();
+	if (ARCH_SUN4)
+		sun4_clock_probe();
+	else
+		clock_probe();
+
 	init_timers(timer_interrupt);
 
 	mregs = mstk48t02_regs;

@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.77 1997/11/19 15:33:05 jj Exp $
+/*  $Id: irq.c,v 1.85 1998/03/09 14:03:40 jj Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -67,21 +67,8 @@ static void irq_panic(void)
     prom_halt();
 }
 
-void (*enable_irq)(unsigned int) = (void (*)(unsigned int)) irq_panic;
-void (*disable_irq)(unsigned int) = (void (*)(unsigned int)) irq_panic;
-void (*enable_pil_irq)(unsigned int) = (void (*)(unsigned int)) irq_panic;
-void (*disable_pil_irq)(unsigned int) = (void (*)(unsigned int)) irq_panic;
-void (*clear_clock_irq)(void) = irq_panic;
-void (*clear_profile_irq)(int) = (void (*)(int)) irq_panic;
-void (*load_profile_irq)(int, unsigned int) =  (void (*)(int, unsigned int)) irq_panic;
 void (*init_timers)(void (*)(int, void *,struct pt_regs *)) =
     (void (*)(void (*)(int, void *,struct pt_regs *))) irq_panic;
-
-#ifdef __SMP__
-void (*set_cpu_int)(int, int);
-void (*clear_cpu_int)(int, int);
-void (*set_irq_udt)(int);
-#endif
 
 /*
  * Dave Redman (djhr@tadpole.co.uk)
@@ -109,6 +96,9 @@ int get_irq_list(char *buf)
 {
 	int i, len = 0;
 	struct irqaction * action;
+#ifdef __SMP__
+	int j;
+#endif
 
 	if (sparc_cpu_model == sun4d) {
 		extern int sun4d_get_irq_list(char *);
@@ -119,8 +109,15 @@ int get_irq_list(char *buf)
 	        action = *(i + irq_action);
 		if (!action) 
 		        continue;
-		len += sprintf(buf+len, "%2d: %8d %c %s",
-			i, kstat.interrupts[i],
+		len += sprintf(buf+len, "%3d: ", i);
+#ifndef __SMP__
+		len += sprintf(buf+len, "%10u ", kstat_irqs(i));
+#else
+		for (j = 0; j < smp_num_cpus; j++)
+			len += sprintf(buf+len, "%10u ",
+				kstat.irqs[cpu_logical_map(j)][i]);
+#endif
+		len += sprintf(buf+len, " %c %s",
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
 		for (action=action->next; action; action = action->next) {
@@ -280,7 +277,7 @@ static inline void get_irqlock(int cpu, unsigned long where)
 			do {
 				STUCK;
 				barrier();
-			} while (*((unsigned char *)&global_irq_lock));
+			} while (*((volatile unsigned char *)&global_irq_lock));
 		} while (!spin_trylock(&global_irq_lock));
 	}
 	/*
@@ -352,7 +349,7 @@ void irq_enter(int cpu, int irq, void *_opaque)
 
 	hardirq_enter(cpu);
 	barrier();
-	while (*((unsigned char *)&global_irq_lock)) {
+	while (*((volatile unsigned char *)&global_irq_lock)) {
 		if ((unsigned char) cpu == global_irq_holder) {
 			struct pt_regs *regs = _opaque;
 			int sbh_cnt = atomic_read(&__sparc_bh_counter);
@@ -436,18 +433,20 @@ void handler_irq(int irq, struct pt_regs * regs)
 	struct irqaction * action;
 	int cpu = smp_processor_id();
 #ifdef __SMP__
-	extern void smp_irq_rotate(int cpu);
+	extern void smp4m_irq_rotate(int cpu);
 #endif
-	
+
 	disable_pil_irq(irq);
+#if 0 /* FIXME: rotating IRQs halts the machine during SCSI probe. -ecd */
 #ifdef __SMP__
 	/* Only rotate on lower priority IRQ's (scsi, ethernet, etc.). */
 	if(irq < 10)
-		smp_irq_rotate(cpu);
+		smp4m_irq_rotate(cpu);
+#endif
 #endif
 	irq_enter(cpu, irq, regs);
 	action = *(irq + irq_action);
-	kstat.interrupts[irq]++;
+	kstat.irqs[cpu][irq]++;
 	do {
 		if (!action || !action->handler)
 			unexpected_irq(irq, 0, regs);
@@ -467,6 +466,7 @@ void sparc_floppy_irq(int irq, void *dev_id, struct pt_regs *regs)
 
 	disable_pil_irq(irq);
 	irq_enter(cpu, irq, regs);
+	kstat.irqs[cpu][irq]++;
 	floppy_interrupt(irq, dev_id, regs);
 	irq_exit(cpu, irq);
 	enable_pil_irq(irq);
@@ -667,6 +667,7 @@ __initfunc(void init_IRQ(void))
     
 	switch(sparc_cpu_model) {
 	case sun4c:
+	case sun4:
 		sun4c_init_IRQ();
 		break;
 
@@ -688,4 +689,5 @@ __initfunc(void init_IRQ(void))
 		prom_printf("Cannot initialize IRQ's on this Sun machine...");
 		break;
 	}
+	btfixup();
 }

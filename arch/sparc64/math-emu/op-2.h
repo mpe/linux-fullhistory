@@ -207,6 +207,12 @@
     R##_f1 = _FP_FRAC_WORD_4(_z,1);					\
   } while (0)
 
+/* This next macro appears to be totally broken. Fortunately nowhere
+ * seems to use it :-> The problem is that we define _z[4] but
+ * then use it in _FP_FRAC_SRS_4, which will attempt to access
+ * _z_f[n] which will cause an error. The fix probably involves 
+ * declaring it with _FP_FRAC_DECL_4, see previous macro. -- PMM 02/1998 
+ */
 #define _FP_MUL_MEAT_2_gmp(fs, R, X, Y)					\
   do {									\
     _FP_W_TYPE _x[2], _y[2], _z[4];					\
@@ -226,6 +232,11 @@
 
 /*
  * Division algorithms:
+ * This seems to be giving me difficulties -- PMM 
+ * Look, NetBSD seems to be able to comment algorithms. Can't you?
+ * I've thrown printks at the problem.
+ * This now appears to work, but I still don't really know why.
+ * Also, I don't think the result is properly normalised...
  */
 
 #define _FP_DIV_MEAT_2_udiv_64(fs, R, X, Y)				\
@@ -236,10 +247,17 @@
     _FP_W_TYPE _n_f3, _n_f2, _n_f1, _n_f0, _r_f1, _r_f0;		\
     _FP_W_TYPE _q_f1, _q_f0, _m_f1, _m_f0;				\
     _FP_W_TYPE _rmem[2], _qmem[2];					\
-									\
+    /* I think this check is to ensure that the result is normalised.   \
+     * Assuming X,Y normalised (ie in [1.0,2.0)) X/Y will be in         \
+     * [0.5,2.0). Furthermore, it will be less than 1.0 iff X < Y.      \
+     * In this case we tweak things. (this is based on comments in      \
+     * the NetBSD FPU emulation code. )                                 \
+     * We know X,Y are normalised because we ensure this as part of     \
+     * the unpacking process. -- PMM                                    \
+     */									\
     if (_FP_FRAC_GT_2(X, Y))						\
       {									\
-	R##_e++;							\
+/*	R##_e++; */							\
 	_n_f3 = X##_f1 >> 1;						\
 	_n_f2 = X##_f1 << (_FP_W_TYPE_SIZE - 1) | X##_f0 >> 1;		\
 	_n_f1 = X##_f0 << (_FP_W_TYPE_SIZE - 1);			\
@@ -247,14 +265,15 @@
       }									\
     else								\
       {									\
+	R##_e--;							\
 	_n_f3 = X##_f1;							\
 	_n_f2 = X##_f0;							\
 	_n_f1 = _n_f0 = 0;						\
       }									\
 									\
     /* Normalize, i.e. make the most significant bit of the 		\
-       denominator set.  */						\
-    _FP_FRAC_SLL_2(Y, _FP_WFRACXBITS_##fs - 1);				\
+       denominator set.  CHANGED: - 1 to nothing -- PMM */		\
+    _FP_FRAC_SLL_2(Y, _FP_WFRACXBITS_##fs /* -1 */);			\
 									\
     /* Do the 256/128 bit division given the 128-bit _fp_udivmodtf4 	\
        primitive snagged from libgcc2.c.  */				\
@@ -295,6 +314,11 @@
 									\
     R##_f1 = _q_f1;							\
     R##_f0 = _q_f0 | ((_r_f1 | _r_f0) != 0);				\
+    /* adjust so answer is normalized again. I'm not sure what the 	\
+     * final sz param should be. In practice it's never used since      \
+     * N is 1 which is always going to be < _FP_W_TYPE_SIZE...		\
+     */									\
+    /* _FP_FRAC_SRS_2(R,1,_FP_WFRACBITS_##fs);	*/			\
   } while (0)
 
 
@@ -406,3 +430,4 @@
     D##_f1 = 0;								\
     _FP_FRAC_SLL_2(D, (_FP_WFRACBITS_##dfs - _FP_WFRACBITS_##sfs));	\
   } while (0)
+

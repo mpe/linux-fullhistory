@@ -434,6 +434,15 @@ CONFIG_BLK_DEV_ALI14XX
   I/O speeds to be set as well.  See the Documentation/ide.txt and
   ali14xx.c files for more info.
 
+Apple Macintosh builtin IDE interface support (EXPERIMENTAL)
+CONFIG_BLK_DEV_MAC_IDE
+  This is the IDE driver for the builtin IDE interface on some Apple
+  Macintosh models.  It supports both the Quadra/Performa/LC 630 and
+  the PowerBook 190 IDE interface.
+  Say Y if you have such a Macintosh model and want to use IDE devices
+  (hard disks, CD-ROM drives, etc.) that are connected to the builtin
+  IDE interface.
+
 XT hard disk support
 CONFIG_BLK_DEV_XD
   Very old 8 bit hard disk controllers used in the IBM XT computer. To
@@ -955,6 +964,19 @@ CONFIG_SERIAL_SHARE_IRQ
   Some serial boards have hardware support which allows multiple dumb
   serial ports on the same board to share a single IRQ.  To enable
   support for this in the serial driver, say Y here.
+
+Autodetect IRQ on standard ports (unsafe)
+CONFIG_SERIAL_DETECT_IRQ
+  Enable this option if you want the kernel to try to guess which IRQ
+  is configured during the boot sequence and you're too lazy to edit
+  the boot scripts to use the setserial command.  This option can be
+  unsafe and should not be enabled on most machines.  It is far
+  better to dynamically request autoconfiguration during the boot-time
+  scripts using the setserial command.  You can change the IRQ and/or 
+  request automatic IRQ configuration at any time by using the 
+  "setserial" program.  I wouldn't include this config option at all except
+  people keep bellyaching about it.  I guess they are really are too lazy 
+  to edit their boot scripts.  :-)   If unsure, say No.
 
 Support special multiport boards
 CONFIG_SERIAL_MULTIPORT
@@ -7301,8 +7323,9 @@ CONFIG_ATARI
 
 Macintosh support
 CONFIG_MAC
-  This option would enable support for the Apple Macintosh if there was
-  any for it.  Say N unless you've coded all the necessary support. ;)
+  This option enables support for the Apple Macintosh series of computers
+  (yes, there is experimental support now, at least for part of the series).  
+  Say N unless you're willing to code the remaining necessary support. ;)
 
 # CONFIG_APOLLO, etc. coming soon (?)
 

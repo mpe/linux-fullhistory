@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.22 1997/09/25 02:19:22 davem Exp $
+/* $Id: tree.c,v 1.24 1998/03/09 14:04:29 jj Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -15,13 +15,7 @@
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 
-/* XXX Let's get rid of this thing if we can... */
-extern struct task_struct *current_set[NR_CPUS];
-
-/* Macro to restore "current" to the g6 register. */
-#define restore_current() __asm__ __volatile__("ld [%0], %%g6\n\t" : : \
-			  "r" (&current_set[hard_smp_processor_id()]) : \
-			  "memory")
+extern void restore_current(void);
 
 static char promlib_buf[128];
 
@@ -95,12 +89,11 @@ int prom_getproplen(int node, char *prop)
 	int ret;
 	unsigned long flags;
 
-	save_flags(flags); cli();
-
 	if((!node) || (!prop))
-		ret = -1;
-	else
-		ret = prom_nodeops->no_proplen(node, prop);
+		return -1;
+		
+	save_flags(flags); cli();
+	ret = prom_nodeops->no_proplen(node, prop);
 	restore_current();
 	restore_flags(flags);
 	return ret;
@@ -115,15 +108,12 @@ int prom_getproperty(int node, char *prop, char *buffer, int bufsize)
 	int plen, ret;
 	unsigned long flags;
 
-	save_flags(flags); cli();
-
 	plen = prom_getproplen(node, prop);
 	if((plen > bufsize) || (plen == 0) || (plen == -1))
-		ret = -1;
-	else {
-		/* Ok, things seem all right. */
-		ret = prom_nodeops->no_getprop(node, prop, buffer);
-	}
+		return -1;
+	/* Ok, things seem all right. */
+	save_flags(flags); cli();
+	ret = prom_nodeops->no_getprop(node, prop, buffer);
 	restore_current();
 	restore_flags(flags);
 	return ret;

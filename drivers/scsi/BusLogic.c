@@ -2,7 +2,7 @@
 
   Linux Driver for BusLogic MultiMaster and FlashPoint SCSI Host Adapters
 
-  Copyright 1995 by Leonard N. Zubkoff <lnz@dandelion.com>
+  Copyright 1995-1998 by Leonard N. Zubkoff <lnz@dandelion.com>
 
   This program is free software; you may redistribute and/or modify it under
   the terms of the GNU General Public License Version 2 as published by the
@@ -26,8 +26,8 @@
 */
 
 
-#define BusLogic_DriverVersion		"2.0.12"
-#define BusLogic_DriverDate		"29 March 1998"
+#define BusLogic_DriverVersion		"2.1.13"
+#define BusLogic_DriverDate		"17 April 1998"
 
 
 #include <linux/version.h>
@@ -41,13 +41,9 @@
 #include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
-
-#include <linux/blk.h>
-
 #include <asm/dma.h>
 #include <asm/io.h>
-#include <asm/irq.h>
+#include <asm/spinlock.h>
 #include <asm/system.h>
 #include "scsi.h"
 #include "hosts.h"
@@ -115,15 +111,6 @@ static BusLogic_HostAdapter_T
 
 
 /*
-  BusLogic_RegisteredHostAdapters is an array of linked lists of all the
-  registered BusLogic Host Adapters, indexed by IRQ Channel.
-*/
-
-static BusLogic_HostAdapter_T
-  *BusLogic_RegisteredHostAdapters[NR_IRQS] =	{ NULL };
-
-
-/*
   BusLogic_ProbeInfoCount is the number of entries in BusLogic_ProbeInfoList.
 */
 
@@ -153,16 +140,6 @@ static char
 
 
 /*
-  BusLogic_FirstCompletedCCB and BusLogic_LastCompletedCCB are pointers
-  to the first and last CCBs that are queued for completion processing.
-*/
-
-static BusLogic_CCB_T
-  *BusLogic_FirstCompletedCCB =			NULL,
-  *BusLogic_LastCompletedCCB =			NULL;
-
-
-/*
   BusLogic_ProcDirectoryEntry is the BusLogic /proc/scsi directory entry.
 */
 
@@ -181,7 +158,7 @@ static void BusLogic_AnnounceDriver(BusLogic_HostAdapter_T *HostAdapter)
   BusLogic_Announce("***** BusLogic SCSI Driver Version "
 		    BusLogic_DriverVersion " of "
 		    BusLogic_DriverDate " *****\n", HostAdapter);
-  BusLogic_Announce("Copyright 1995 by Leonard N. Zubkoff "
+  BusLogic_Announce("Copyright 1995-1998 by Leonard N. Zubkoff "
 		    "<lnz@dandelion.com>\n", HostAdapter);
 }
 
@@ -206,7 +183,7 @@ const char *BusLogic_DriverInfo(SCSI_Host_T *Host)
 
 static void BusLogic_RegisterHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
 {
-  HostAdapter->NextAll = NULL;
+  HostAdapter->Next = NULL;
   if (BusLogic_FirstRegisteredHostAdapter == NULL)
     {
       BusLogic_FirstRegisteredHostAdapter = HostAdapter;
@@ -214,20 +191,9 @@ static void BusLogic_RegisterHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
     }
   else
     {
-      BusLogic_LastRegisteredHostAdapter->NextAll = HostAdapter;
+      BusLogic_LastRegisteredHostAdapter->Next = HostAdapter;
       BusLogic_LastRegisteredHostAdapter = HostAdapter;
     }
-  HostAdapter->Next = NULL;
-  if (BusLogic_RegisteredHostAdapters[HostAdapter->IRQ_Channel] != NULL)
-    {
-      BusLogic_HostAdapter_T *LastHostAdapter =
-	BusLogic_RegisteredHostAdapters[HostAdapter->IRQ_Channel];
-      BusLogic_HostAdapter_T *NextHostAdapter;
-      while ((NextHostAdapter = LastHostAdapter->Next) != NULL)
-	LastHostAdapter = NextHostAdapter;
-      LastHostAdapter->Next = HostAdapter;
-    }
-  else BusLogic_RegisteredHostAdapters[HostAdapter->IRQ_Channel] = HostAdapter;
 }
 
 
@@ -241,7 +207,7 @@ static void BusLogic_UnregisterHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
   if (HostAdapter == BusLogic_FirstRegisteredHostAdapter)
     {
       BusLogic_FirstRegisteredHostAdapter =
-	BusLogic_FirstRegisteredHostAdapter->NextAll;
+	BusLogic_FirstRegisteredHostAdapter->Next;
       if (HostAdapter == BusLogic_LastRegisteredHostAdapter)
 	BusLogic_LastRegisteredHostAdapter = NULL;
     }
@@ -250,24 +216,11 @@ static void BusLogic_UnregisterHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
       BusLogic_HostAdapter_T *PreviousHostAdapter =
 	BusLogic_FirstRegisteredHostAdapter;
       while (PreviousHostAdapter != NULL &&
-	     PreviousHostAdapter->NextAll != HostAdapter)
-	PreviousHostAdapter = PreviousHostAdapter->NextAll;
-      if (PreviousHostAdapter != NULL)
-	PreviousHostAdapter->NextAll = HostAdapter->NextAll;
-    }
-  HostAdapter->NextAll = NULL;
-  if (BusLogic_RegisteredHostAdapters[HostAdapter->IRQ_Channel] != HostAdapter)
-    {
-      BusLogic_HostAdapter_T *PreviousHostAdapter =
-	BusLogic_RegisteredHostAdapters[HostAdapter->IRQ_Channel];
-      while (PreviousHostAdapter != NULL &&
 	     PreviousHostAdapter->Next != HostAdapter)
 	PreviousHostAdapter = PreviousHostAdapter->Next;
       if (PreviousHostAdapter != NULL)
 	PreviousHostAdapter->Next = HostAdapter->Next;
     }
-  else BusLogic_RegisteredHostAdapters[HostAdapter->IRQ_Channel] =
-	 HostAdapter->Next;
   HostAdapter->Next = NULL;
 }
 
@@ -469,7 +422,7 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
   unsigned char *ReplyPointer = (unsigned char *) ReplyData;
   BusLogic_StatusRegister_T StatusRegister;
   BusLogic_InterruptRegister_T InterruptRegister;
-  unsigned long ProcessorFlags = 0;
+  ProcessorFlags_T ProcessorFlags = 0;
   int ReplyBytes = 0, Result;
   long TimeoutCounter;
   /*
@@ -797,12 +750,7 @@ static int BusLogic_InitializeMultiMasterProbeInfo(BusLogic_HostAdapter_T
   boolean ForceBusDeviceScanningOrder = false;
   boolean ForceBusDeviceScanningOrderChecked = false;
   boolean StandardAddressSeen[6];
-  unsigned char Bus, DeviceFunction;
-  unsigned int BaseAddress0, BaseAddress1;
-  unsigned char IRQ_Channel;
-  BusLogic_IO_Address_T IO_Address;
-  BusLogic_PCI_Address_T PCI_Address;
-  unsigned short Index = 0;
+  PCI_Device_T *PCI_Device = NULL;
   int i;
   if (BusLogic_ProbeInfoCount >= BusLogic_MaxHostAdapters) return 0;
   BusLogic_ProbeInfoCount++;
@@ -821,147 +769,148 @@ static int BusLogic_InitializeMultiMasterProbeInfo(BusLogic_HostAdapter_T
     particular standard ISA I/O Address need not be probed.
   */
   PrimaryProbeInfo->IO_Address = 0;
-  while (pcibios_find_device(PCI_VENDOR_ID_BUSLOGIC,
-			     PCI_DEVICE_ID_BUSLOGIC_MULTIMASTER,
-			     Index++, &Bus, &DeviceFunction) == 0)
-    if (pcibios_read_config_dword(Bus, DeviceFunction,
-				  PCI_BASE_ADDRESS_0, &BaseAddress0) == 0 &&
-	pcibios_read_config_dword(Bus, DeviceFunction,
-				  PCI_BASE_ADDRESS_1, &BaseAddress1) == 0 &&
-	pcibios_read_config_byte(Bus, DeviceFunction,
-				 PCI_INTERRUPT_LINE, &IRQ_Channel) == 0)
-      {
-	BusLogic_HostAdapter_T *HostAdapter = PrototypeHostAdapter;
-	BusLogic_PCIHostAdapterInformation_T PCIHostAdapterInformation;
-	BusLogic_ModifyIOAddressRequest_T ModifyIOAddressRequest;
-	unsigned char Device = DeviceFunction >> 3;
-	IO_Address = BaseAddress0 & PCI_BASE_ADDRESS_IO_MASK;
-	PCI_Address = BaseAddress1 & PCI_BASE_ADDRESS_MEM_MASK;
-	if ((BaseAddress0 & PCI_BASE_ADDRESS_SPACE)
-	    != PCI_BASE_ADDRESS_SPACE_IO)
-	  {
-	    BusLogic_Error("BusLogic: Base Address0 0x%X not I/O for "
-			   "MultiMaster Host Adapter\n", NULL, BaseAddress0);
-	    BusLogic_Error("at PCI Bus %d Device %d I/O Address 0x%X\n",
-			   NULL, Bus, Device, IO_Address);
-	    continue;
-	  }
-	if ((BaseAddress1 & PCI_BASE_ADDRESS_SPACE)
-	    != PCI_BASE_ADDRESS_SPACE_MEMORY)
-	  {
-	    BusLogic_Error("BusLogic: Base Address1 0x%X not Memory for "
-			   "MultiMaster Host Adapter\n", NULL, BaseAddress1);
-	    BusLogic_Error("at PCI Bus %d Device %d PCI Address 0x%X\n",
-			   NULL, Bus, Device, PCI_Address);
-	    continue;
-	  }
-	if (IRQ_Channel == 0 || IRQ_Channel >= NR_IRQS)
-	  {
-	    BusLogic_Error("BusLogic: IRQ Channel %d illegal for "
-			   "MultiMaster Host Adapter\n", NULL, IRQ_Channel);
-	    BusLogic_Error("at PCI Bus %d Device %d I/O Address 0x%X\n",
-			   NULL, Bus, Device, IO_Address);
-	    continue;
-	  }
-	if (BusLogic_GlobalOptions.TraceProbe)
-	  {
-	    BusLogic_Notice("BusLogic: PCI MultiMaster Host Adapter "
-			    "detected at\n", NULL);
-	    BusLogic_Notice("BusLogic: PCI Bus %d Device %d I/O Address "
-			    "0x%X PCI Address 0x%X\n", NULL,
-			    Bus, Device, IO_Address, PCI_Address);
-	  }
-	/*
-	  Issue the Inquire PCI Host Adapter Information command to determine
-	  the ISA Compatible I/O Port.  If the ISA Compatible I/O Port is
-	  known and enabled, note that the particular Standard ISA I/O
-	  Address should not be probed.
-	*/
-	HostAdapter->IO_Address = IO_Address;
-	if (BusLogic_Command(HostAdapter,
-			     BusLogic_InquirePCIHostAdapterInformation,
-			     NULL, 0, &PCIHostAdapterInformation,
-			     sizeof(PCIHostAdapterInformation))
-	    == sizeof(PCIHostAdapterInformation))
-	  {
-	    if (PCIHostAdapterInformation.ISACompatibleIOPort < 6)
-	      StandardAddressSeen[PCIHostAdapterInformation
-				  .ISACompatibleIOPort] = true;
-	  }
-	else PCIHostAdapterInformation.ISACompatibleIOPort =
-	       BusLogic_IO_Disable;
-	/*
-	  Issue the Modify I/O Address command to disable the ISA Compatible
-	  I/O Port.
-	*/
-	ModifyIOAddressRequest = BusLogic_IO_Disable;
-	BusLogic_Command(HostAdapter, BusLogic_ModifyIOAddress,
-			 &ModifyIOAddressRequest,
-			 sizeof(ModifyIOAddressRequest), NULL, 0);
-	/*
-	  For the first MultiMaster Host Adapter enumerated, issue the Fetch
-	  Host Adapter Local RAM command to read byte 45 of the AutoSCSI area,
-	  for the setting of the "Use Bus And Device # For PCI Scanning Seq."
-	  option.  Issue the Inquire Board ID command since this option is
-	  only valid for the BT-948/958/958D.
-	*/
-	if (!ForceBusDeviceScanningOrderChecked)
-	  {
-	    BusLogic_FetchHostAdapterLocalRAMRequest_T
-	      FetchHostAdapterLocalRAMRequest;
-	    BusLogic_AutoSCSIByte45_T AutoSCSIByte45;
-	    BusLogic_BoardID_T BoardID;
-	    FetchHostAdapterLocalRAMRequest.ByteOffset =
-	      BusLogic_AutoSCSI_BaseOffset + 45;
-	    FetchHostAdapterLocalRAMRequest.ByteCount =
-	      sizeof(AutoSCSIByte45);
-	    BusLogic_Command(HostAdapter,
-			     BusLogic_FetchHostAdapterLocalRAM,
-			     &FetchHostAdapterLocalRAMRequest,
-			     sizeof(FetchHostAdapterLocalRAMRequest),
-			     &AutoSCSIByte45, sizeof(AutoSCSIByte45));
-	    BusLogic_Command(HostAdapter, BusLogic_InquireBoardID,
-			     NULL, 0, &BoardID, sizeof(BoardID));
-	    if (BoardID.FirmwareVersion1stDigit == '5')
-	      ForceBusDeviceScanningOrder =
-		AutoSCSIByte45.ForceBusDeviceScanningOrder;
-	    ForceBusDeviceScanningOrderChecked = true;
-	  }
-	/*
-	  Determine whether this MultiMaster Host Adapter has its ISA
-	  Compatible I/O Port enabled and is assigned the Primary I/O Address.
-	  If it does, then it is the Primary MultiMaster Host Adapter and must
-	  be recognized first.  If it does not, then it is added to the list
-	  for probing after any Primary MultiMaster Host Adapter is probed.
-	*/
-	if (PCIHostAdapterInformation.ISACompatibleIOPort == BusLogic_IO_330)
-	  {
-	    PrimaryProbeInfo->HostAdapterType = BusLogic_MultiMaster;
-	    PrimaryProbeInfo->HostAdapterBusType = BusLogic_PCI_Bus;
-	    PrimaryProbeInfo->IO_Address = IO_Address;
-	    PrimaryProbeInfo->PCI_Address = PCI_Address;
-	    PrimaryProbeInfo->Bus = Bus;
-	    PrimaryProbeInfo->Device = Device;
-	    PrimaryProbeInfo->IRQ_Channel = IRQ_Channel;
-	    PCIMultiMasterCount++;
-	  }
-	else if (BusLogic_ProbeInfoCount < BusLogic_MaxHostAdapters)
-	  {
-	    BusLogic_ProbeInfo_T *ProbeInfo =
-	      &BusLogic_ProbeInfoList[BusLogic_ProbeInfoCount++];
-	    ProbeInfo->HostAdapterType = BusLogic_MultiMaster;
-	    ProbeInfo->HostAdapterBusType = BusLogic_PCI_Bus;
-	    ProbeInfo->IO_Address = IO_Address;
-	    ProbeInfo->PCI_Address = PCI_Address;
-	    ProbeInfo->Bus = Bus;
-	    ProbeInfo->Device = Device;
-	    ProbeInfo->IRQ_Channel = IRQ_Channel;
-	    NonPrimaryPCIMultiMasterCount++;
-	    PCIMultiMasterCount++;
-	  }
-	else BusLogic_Warning("BusLogic: Too many Host Adapters "
-			      "detected\n", NULL);
-      }
+  while ((PCI_Device = pci_find_device(PCI_VENDOR_ID_BUSLOGIC,
+				       PCI_DEVICE_ID_BUSLOGIC_MULTIMASTER,
+				       PCI_Device)) != NULL)
+    {
+      BusLogic_HostAdapter_T *HostAdapter = PrototypeHostAdapter;
+      BusLogic_PCIHostAdapterInformation_T PCIHostAdapterInformation;
+      BusLogic_ModifyIOAddressRequest_T ModifyIOAddressRequest;
+      unsigned char Bus = PCI_Device->bus->number;
+      unsigned char Device = PCI_Device->devfn >> 3;
+      unsigned int IRQ_Channel = PCI_Device->irq;
+      unsigned long BaseAddress0 = PCI_Device->base_address[0];
+      unsigned long BaseAddress1 = PCI_Device->base_address[1];
+      BusLogic_IO_Address_T IO_Address =
+	BaseAddress0 & PCI_BASE_ADDRESS_IO_MASK;
+      BusLogic_PCI_Address_T PCI_Address =
+	BaseAddress1 & PCI_BASE_ADDRESS_MEM_MASK;
+      if ((BaseAddress0 & PCI_BASE_ADDRESS_SPACE)
+	  != PCI_BASE_ADDRESS_SPACE_IO)
+	{
+	  BusLogic_Error("BusLogic: Base Address0 0x%X not I/O for "
+			 "MultiMaster Host Adapter\n", NULL, BaseAddress0);
+	  BusLogic_Error("at PCI Bus %d Device %d I/O Address 0x%X\n",
+			 NULL, Bus, Device, IO_Address);
+	  continue;
+	}
+      if ((BaseAddress1 & PCI_BASE_ADDRESS_SPACE)
+	  != PCI_BASE_ADDRESS_SPACE_MEMORY)
+	{
+	  BusLogic_Error("BusLogic: Base Address1 0x%X not Memory for "
+			 "MultiMaster Host Adapter\n", NULL, BaseAddress1);
+	  BusLogic_Error("at PCI Bus %d Device %d PCI Address 0x%X\n",
+			 NULL, Bus, Device, PCI_Address);
+	  continue;
+	}
+      if (IRQ_Channel == 0)
+	{
+	  BusLogic_Error("BusLogic: IRQ Channel %d illegal for "
+			 "MultiMaster Host Adapter\n", NULL, IRQ_Channel);
+	  BusLogic_Error("at PCI Bus %d Device %d I/O Address 0x%X\n",
+			 NULL, Bus, Device, IO_Address);
+	  continue;
+	}
+      if (BusLogic_GlobalOptions.TraceProbe)
+	{
+	  BusLogic_Notice("BusLogic: PCI MultiMaster Host Adapter "
+			  "detected at\n", NULL);
+	  BusLogic_Notice("BusLogic: PCI Bus %d Device %d I/O Address "
+			  "0x%X PCI Address 0x%X\n", NULL,
+			  Bus, Device, IO_Address, PCI_Address);
+	}
+      /*
+	Issue the Inquire PCI Host Adapter Information command to determine
+	the ISA Compatible I/O Port.  If the ISA Compatible I/O Port is
+	known and enabled, note that the particular Standard ISA I/O
+	Address should not be probed.
+      */
+      HostAdapter->IO_Address = IO_Address;
+      BusLogic_InterruptReset(HostAdapter);
+      if (BusLogic_Command(HostAdapter,
+			   BusLogic_InquirePCIHostAdapterInformation,
+			   NULL, 0, &PCIHostAdapterInformation,
+			   sizeof(PCIHostAdapterInformation))
+	  == sizeof(PCIHostAdapterInformation))
+	{
+	  if (PCIHostAdapterInformation.ISACompatibleIOPort < 6)
+	    StandardAddressSeen[PCIHostAdapterInformation
+				.ISACompatibleIOPort] = true;
+	}
+      else PCIHostAdapterInformation.ISACompatibleIOPort =
+	     BusLogic_IO_Disable;
+      /*
+	Issue the Modify I/O Address command to disable the ISA Compatible
+	I/O Port.
+      */
+      ModifyIOAddressRequest = BusLogic_IO_Disable;
+      BusLogic_Command(HostAdapter, BusLogic_ModifyIOAddress,
+		       &ModifyIOAddressRequest,
+		       sizeof(ModifyIOAddressRequest), NULL, 0);
+      /*
+	For the first MultiMaster Host Adapter enumerated, issue the Fetch
+	Host Adapter Local RAM command to read byte 45 of the AutoSCSI area,
+	for the setting of the "Use Bus And Device # For PCI Scanning Seq."
+	option.  Issue the Inquire Board ID command since this option is
+	only valid for the BT-948/958/958D.
+      */
+      if (!ForceBusDeviceScanningOrderChecked)
+	{
+	  BusLogic_FetchHostAdapterLocalRAMRequest_T
+	    FetchHostAdapterLocalRAMRequest;
+	  BusLogic_AutoSCSIByte45_T AutoSCSIByte45;
+	  BusLogic_BoardID_T BoardID;
+	  FetchHostAdapterLocalRAMRequest.ByteOffset =
+	    BusLogic_AutoSCSI_BaseOffset + 45;
+	  FetchHostAdapterLocalRAMRequest.ByteCount =
+	    sizeof(AutoSCSIByte45);
+	  BusLogic_Command(HostAdapter,
+			   BusLogic_FetchHostAdapterLocalRAM,
+			   &FetchHostAdapterLocalRAMRequest,
+			   sizeof(FetchHostAdapterLocalRAMRequest),
+			   &AutoSCSIByte45, sizeof(AutoSCSIByte45));
+	  BusLogic_Command(HostAdapter, BusLogic_InquireBoardID,
+			   NULL, 0, &BoardID, sizeof(BoardID));
+	  if (BoardID.FirmwareVersion1stDigit == '5')
+	    ForceBusDeviceScanningOrder =
+	      AutoSCSIByte45.ForceBusDeviceScanningOrder;
+	  ForceBusDeviceScanningOrderChecked = true;
+	}
+      /*
+	Determine whether this MultiMaster Host Adapter has its ISA
+	Compatible I/O Port enabled and is assigned the Primary I/O Address.
+	If it does, then it is the Primary MultiMaster Host Adapter and must
+	be recognized first.  If it does not, then it is added to the list
+	for probing after any Primary MultiMaster Host Adapter is probed.
+      */
+      if (PCIHostAdapterInformation.ISACompatibleIOPort == BusLogic_IO_330)
+	{
+	  PrimaryProbeInfo->HostAdapterType = BusLogic_MultiMaster;
+	  PrimaryProbeInfo->HostAdapterBusType = BusLogic_PCI_Bus;
+	  PrimaryProbeInfo->IO_Address = IO_Address;
+	  PrimaryProbeInfo->PCI_Address = PCI_Address;
+	  PrimaryProbeInfo->Bus = Bus;
+	  PrimaryProbeInfo->Device = Device;
+	  PrimaryProbeInfo->IRQ_Channel = IRQ_Channel;
+	  PCIMultiMasterCount++;
+	}
+      else if (BusLogic_ProbeInfoCount < BusLogic_MaxHostAdapters)
+	{
+	  BusLogic_ProbeInfo_T *ProbeInfo =
+	    &BusLogic_ProbeInfoList[BusLogic_ProbeInfoCount++];
+	  ProbeInfo->HostAdapterType = BusLogic_MultiMaster;
+	  ProbeInfo->HostAdapterBusType = BusLogic_PCI_Bus;
+	  ProbeInfo->IO_Address = IO_Address;
+	  ProbeInfo->PCI_Address = PCI_Address;
+	  ProbeInfo->Bus = Bus;
+	  ProbeInfo->Device = Device;
+	  ProbeInfo->IRQ_Channel = IRQ_Channel;
+	  NonPrimaryPCIMultiMasterCount++;
+	  PCIMultiMasterCount++;
+	}
+      else BusLogic_Warning("BusLogic: Too many Host Adapters "
+			    "detected\n", NULL);
+    }
   /*
     If the AutoSCSI "Use Bus And Device # For PCI Scanning Seq." option is ON
     for the first enumerated MultiMaster Host Adapter, and if that host adapter
@@ -1027,34 +976,32 @@ static int BusLogic_InitializeMultiMasterProbeInfo(BusLogic_HostAdapter_T
     Iterate over the older non-compliant MultiMaster PCI Host Adapters,
     noting the PCI bus location and assigned IRQ Channel.
   */
-  Index = 0;
-  while (pcibios_find_device(PCI_VENDOR_ID_BUSLOGIC,
-			     PCI_DEVICE_ID_BUSLOGIC_MULTIMASTER_NC,
-			     Index++, &Bus, &DeviceFunction) == 0)
-    if (pcibios_read_config_dword(Bus, DeviceFunction,
-				  PCI_BASE_ADDRESS_0, &BaseAddress0) == 0 &&
-	pcibios_read_config_byte(Bus, DeviceFunction,
-				 PCI_INTERRUPT_LINE, &IRQ_Channel) == 0)
-      {
-	unsigned char Device = DeviceFunction >> 3;
-	IO_Address = BaseAddress0 & PCI_BASE_ADDRESS_IO_MASK;
-	if (IO_Address == 0 || IRQ_Channel == 0 || IRQ_Channel >= NR_IRQS)
-	  continue;
-	for (i = 0; i < BusLogic_ProbeInfoCount; i++)
-	  {
-	    BusLogic_ProbeInfo_T *ProbeInfo = &BusLogic_ProbeInfoList[i];
-	    if (ProbeInfo->IO_Address == IO_Address &&
-		ProbeInfo->HostAdapterType == BusLogic_MultiMaster)
-	      {
-		ProbeInfo->HostAdapterBusType = BusLogic_PCI_Bus;
-		ProbeInfo->PCI_Address = 0;
-		ProbeInfo->Bus = Bus;
-		ProbeInfo->Device = Device;
-		ProbeInfo->IRQ_Channel = IRQ_Channel;
-		break;
-	      }
-	  }
-      }
+  PCI_Device = NULL;
+  while ((PCI_Device = pci_find_device(PCI_VENDOR_ID_BUSLOGIC,
+				       PCI_DEVICE_ID_BUSLOGIC_MULTIMASTER_NC,
+				       PCI_Device)) != NULL)
+    {
+      unsigned char Bus = PCI_Device->bus->number;
+      unsigned char Device = PCI_Device->devfn >> 3;
+      unsigned int IRQ_Channel = PCI_Device->irq;
+      BusLogic_IO_Address_T IO_Address =
+	PCI_Device->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+      if (IO_Address == 0 || IRQ_Channel == 0) continue;
+      for (i = 0; i < BusLogic_ProbeInfoCount; i++)
+	{
+	  BusLogic_ProbeInfo_T *ProbeInfo = &BusLogic_ProbeInfoList[i];
+	  if (ProbeInfo->IO_Address == IO_Address &&
+	      ProbeInfo->HostAdapterType == BusLogic_MultiMaster)
+	    {
+	      ProbeInfo->HostAdapterBusType = BusLogic_PCI_Bus;
+	      ProbeInfo->PCI_Address = 0;
+	      ProbeInfo->Bus = Bus;
+	      ProbeInfo->Device = Device;
+	      ProbeInfo->IRQ_Channel = IRQ_Channel;
+	      break;
+	    }
+	}
+    }
   return PCIMultiMasterCount;
 }
 
@@ -1070,87 +1017,82 @@ static int BusLogic_InitializeFlashPointProbeInfo(BusLogic_HostAdapter_T
 						  *PrototypeHostAdapter)
 {
   int FlashPointIndex = BusLogic_ProbeInfoCount, FlashPointCount = 0;
-  unsigned char Bus, DeviceFunction;
-  unsigned int BaseAddress0, BaseAddress1;
-  unsigned char IRQ_Channel;
-  BusLogic_IO_Address_T IO_Address;
-  BusLogic_PCI_Address_T PCI_Address;
-  unsigned short Index = 0;
+  PCI_Device_T *PCI_Device = NULL;
   /*
     Interrogate PCI Configuration Space for any FlashPoint Host Adapters.
   */
-  while (pcibios_find_device(PCI_VENDOR_ID_BUSLOGIC,
-			     PCI_DEVICE_ID_BUSLOGIC_FLASHPOINT,
-			     Index++, &Bus, &DeviceFunction) == 0)
-    if (pcibios_read_config_dword(Bus, DeviceFunction,
-				  PCI_BASE_ADDRESS_0, &BaseAddress0) == 0 &&
-	pcibios_read_config_dword(Bus, DeviceFunction,
-				  PCI_BASE_ADDRESS_1, &BaseAddress1) == 0 &&
-	pcibios_read_config_byte(Bus, DeviceFunction,
-				 PCI_INTERRUPT_LINE, &IRQ_Channel) == 0)
-      {
-	unsigned char Device = DeviceFunction >> 3;
-	IO_Address = BaseAddress0 & PCI_BASE_ADDRESS_IO_MASK;
-	PCI_Address = BaseAddress1 & PCI_BASE_ADDRESS_MEM_MASK;
+  while ((PCI_Device = pci_find_device(PCI_VENDOR_ID_BUSLOGIC,
+				       PCI_DEVICE_ID_BUSLOGIC_FLASHPOINT,
+				       PCI_Device)) != NULL)
+    {
+      unsigned char Bus = PCI_Device->bus->number;
+      unsigned char Device = PCI_Device->devfn >> 3;
+      unsigned int IRQ_Channel = PCI_Device->irq;
+      unsigned long BaseAddress0 = PCI_Device->base_address[0];
+      unsigned long BaseAddress1 = PCI_Device->base_address[1];
+      BusLogic_IO_Address_T IO_Address =
+	BaseAddress0 & PCI_BASE_ADDRESS_IO_MASK;
+      BusLogic_PCI_Address_T PCI_Address =
+	BaseAddress1 & PCI_BASE_ADDRESS_MEM_MASK;
 #ifndef CONFIG_SCSI_OMIT_FLASHPOINT
-	if ((BaseAddress0 & PCI_BASE_ADDRESS_SPACE)
-	    != PCI_BASE_ADDRESS_SPACE_IO)
-	  {
-	    BusLogic_Error("BusLogic: Base Address0 0x%X not I/O for "
-			   "FlashPoint Host Adapter\n", NULL, BaseAddress0);
-	    BusLogic_Error("at PCI Bus %d Device %d I/O Address 0x%X\n",
-			   NULL, Bus, Device, IO_Address);
-	    continue;
-	  }
-	if ((BaseAddress1 & PCI_BASE_ADDRESS_SPACE)
-	    != PCI_BASE_ADDRESS_SPACE_MEMORY)
-	  {
-	    BusLogic_Error("BusLogic: Base Address1 0x%X not Memory for "
-			   "FlashPoint Host Adapter\n", NULL, BaseAddress1);
-	    BusLogic_Error("at PCI Bus %d Device %d PCI Address 0x%X\n",
-			   NULL, Bus, Device, PCI_Address);
-	    continue;
-	  }
-	if (IRQ_Channel == 0 || IRQ_Channel >= NR_IRQS)
-	  {
-	    BusLogic_Error("BusLogic: IRQ Channel %d illegal for "
-			   "FlashPoint Host Adapter\n", NULL, IRQ_Channel);
-	    BusLogic_Error("at PCI Bus %d Device %d I/O Address 0x%X\n",
-			   NULL, Bus, Device, IO_Address);
-	    continue;
-	  }
-	if (BusLogic_GlobalOptions.TraceProbe)
-	  {
-	    BusLogic_Notice("BusLogic: FlashPoint Host Adapter "
-			    "detected at\n", NULL);
-	    BusLogic_Notice("BusLogic: PCI Bus %d Device %d I/O Address "
-			    "0x%X PCI Address 0x%X\n", NULL,
-			    Bus, Device, IO_Address, PCI_Address);
-	  }
-	if (BusLogic_ProbeInfoCount < BusLogic_MaxHostAdapters)
-	  {
-	    BusLogic_ProbeInfo_T *ProbeInfo =
-	      &BusLogic_ProbeInfoList[BusLogic_ProbeInfoCount++];
-	    ProbeInfo->HostAdapterType = BusLogic_FlashPoint;
-	    ProbeInfo->HostAdapterBusType = BusLogic_PCI_Bus;
-	    ProbeInfo->IO_Address = IO_Address;
-	    ProbeInfo->PCI_Address = PCI_Address;
-	    ProbeInfo->Bus = Bus;
-	    ProbeInfo->Device = Device;
-	    ProbeInfo->IRQ_Channel = IRQ_Channel;
-	    FlashPointCount++;
-	  }
-	else BusLogic_Warning("BusLogic: Too many Host Adapters "
-			      "detected\n", NULL);
+      if ((BaseAddress0 & PCI_BASE_ADDRESS_SPACE)
+	  != PCI_BASE_ADDRESS_SPACE_IO)
+	{
+	  BusLogic_Error("BusLogic: Base Address0 0x%X not I/O for "
+			 "FlashPoint Host Adapter\n", NULL, BaseAddress0);
+	  BusLogic_Error("at PCI Bus %d Device %d I/O Address 0x%X\n",
+			 NULL, Bus, Device, IO_Address);
+	  continue;
+	}
+      if ((BaseAddress1 & PCI_BASE_ADDRESS_SPACE)
+	  != PCI_BASE_ADDRESS_SPACE_MEMORY)
+	{
+	  BusLogic_Error("BusLogic: Base Address1 0x%X not Memory for "
+			 "FlashPoint Host Adapter\n", NULL, BaseAddress1);
+	  BusLogic_Error("at PCI Bus %d Device %d PCI Address 0x%X\n",
+			 NULL, Bus, Device, PCI_Address);
+	  continue;
+	}
+      if (IRQ_Channel == 0)
+	{
+	  BusLogic_Error("BusLogic: IRQ Channel %d illegal for "
+			 "FlashPoint Host Adapter\n", NULL, IRQ_Channel);
+	  BusLogic_Error("at PCI Bus %d Device %d I/O Address 0x%X\n",
+			 NULL, Bus, Device, IO_Address);
+	  continue;
+	}
+      if (BusLogic_GlobalOptions.TraceProbe)
+	{
+	  BusLogic_Notice("BusLogic: FlashPoint Host Adapter "
+			  "detected at\n", NULL);
+	  BusLogic_Notice("BusLogic: PCI Bus %d Device %d I/O Address "
+			  "0x%X PCI Address 0x%X\n", NULL,
+			  Bus, Device, IO_Address, PCI_Address);
+	}
+      if (BusLogic_ProbeInfoCount < BusLogic_MaxHostAdapters)
+	{
+	  BusLogic_ProbeInfo_T *ProbeInfo =
+	    &BusLogic_ProbeInfoList[BusLogic_ProbeInfoCount++];
+	  ProbeInfo->HostAdapterType = BusLogic_FlashPoint;
+	  ProbeInfo->HostAdapterBusType = BusLogic_PCI_Bus;
+	  ProbeInfo->IO_Address = IO_Address;
+	  ProbeInfo->PCI_Address = PCI_Address;
+	  ProbeInfo->Bus = Bus;
+	  ProbeInfo->Device = Device;
+	  ProbeInfo->IRQ_Channel = IRQ_Channel;
+	  FlashPointCount++;
+	}
+      else BusLogic_Warning("BusLogic: Too many Host Adapters "
+			    "detected\n", NULL);
 #else
-	BusLogic_Error("BusLogic: FlashPoint Host Adapter detected at "
-		       "PCI Bus %d Device %d\n", NULL, Bus, Device);
-	BusLogic_Error("BusLogic: I/O Address 0x%X PCI Address 0x%X, "
-		       "but FlashPoint\n", NULL, IO_Address, PCI_Address);
-	BusLogic_Error("BusLogic: support was omitted in this kernel "
-		       "configuration.\n", NULL);
+      BusLogic_Error("BusLogic: FlashPoint Host Adapter detected at "
+		     "PCI Bus %d Device %d\n", NULL, Bus, Device);
+      BusLogic_Error("BusLogic: I/O Address 0x%X PCI Address 0x%X, "
+		     "but FlashPoint\n", NULL, IO_Address, PCI_Address);
+      BusLogic_Error("BusLogic: support was omitted in this kernel "
+		     "configuration.\n", NULL);
 #endif
-      }
+    }
   /*
     The FlashPoint BIOS will scan for FlashPoint Host Adapters in the order of
     increasing PCI Bus and Device Number, so sort the probe information into
@@ -1482,12 +1424,11 @@ static boolean BusLogic_HardwareResetHostAdapter(BusLogic_HostAdapter_T
 
 /*
   BusLogic_CheckHostAdapter checks to be sure this really is a BusLogic
-  Host Adapter.  It also determines the IRQ Channel for non-PCI Host Adapters.
+  Host Adapter.
 */
 
 static boolean BusLogic_CheckHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
 {
-  BusLogic_Configuration_T Configuration;
   BusLogic_ExtendedSetupInformation_T ExtendedSetupInformation;
   BusLogic_RequestedReplyLength_T RequestedReplyLength;
   boolean Result = true;
@@ -1495,31 +1436,6 @@ static boolean BusLogic_CheckHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
     FlashPoint Host Adapters do not require this protection.
   */
   if (BusLogic_FlashPointHostAdapterP(HostAdapter)) return true;
-  /*
-    Issue the Inquire Configuration command if the IRQ Channel is unknown.
-  */
-  if (HostAdapter->IRQ_Channel == 0)
-    {
-      if (BusLogic_Command(HostAdapter, BusLogic_InquireConfiguration,
-			   NULL, 0, &Configuration, sizeof(Configuration))
-	  == sizeof(Configuration))
-	{
-	  if (Configuration.IRQ_Channel9)
-	    HostAdapter->IRQ_Channel = 9;
-	  else if (Configuration.IRQ_Channel10)
-	    HostAdapter->IRQ_Channel = 10;
-	  else if (Configuration.IRQ_Channel11)
-	    HostAdapter->IRQ_Channel = 11;
-	  else if (Configuration.IRQ_Channel12)
-	    HostAdapter->IRQ_Channel = 12;
-	  else if (Configuration.IRQ_Channel14)
-	    HostAdapter->IRQ_Channel = 14;
-	  else if (Configuration.IRQ_Channel15)
-	    HostAdapter->IRQ_Channel = 15;
-	  else Result = false;
-	}
-      else Result = false;
-    }
   /*
     Issue the Inquire Extended Setup Information command.  Only genuine
     BusLogic Host Adapters and true clones support this command.  Adaptec 1542C
@@ -1746,11 +1662,27 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   */
   HostAdapter->SCSI_ID = Configuration.HostAdapterID;
   /*
-    Determine the Bus Type and save it in the Host Adapter structure,
-    and determine and save the DMA Channel for ISA Host Adapters.
+    Determine the Bus Type and save it in the Host Adapter structure, determine
+    and save the IRQ Channel if necessary, and determine and save the DMA
+    Channel for ISA Host Adapters.
   */
   HostAdapter->HostAdapterBusType =
     BusLogic_HostAdapterBusTypes[HostAdapter->ModelName[3] - '4'];
+  if (HostAdapter->IRQ_Channel == 0)
+    {
+      if (Configuration.IRQ_Channel9)
+	HostAdapter->IRQ_Channel = 9;
+      else if (Configuration.IRQ_Channel10)
+	HostAdapter->IRQ_Channel = 10;
+      else if (Configuration.IRQ_Channel11)
+	HostAdapter->IRQ_Channel = 11;
+      else if (Configuration.IRQ_Channel12)
+	HostAdapter->IRQ_Channel = 12;
+      else if (Configuration.IRQ_Channel14)
+	HostAdapter->IRQ_Channel = 14;
+      else if (Configuration.IRQ_Channel15)
+	HostAdapter->IRQ_Channel = 15;
+    }
   if (HostAdapter->HostAdapterBusType == BusLogic_ISA_Bus)
     {
       if (Configuration.DMA_Channel5)
@@ -1893,7 +1825,7 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   HostAdapter->MaxTargetDevices = (HostAdapter->HostWideSCSI ? 16 : 8);
   HostAdapter->MaxLogicalUnits = (HostAdapter->ExtendedLUNSupport ? 32 : 8);
   /*
-    Select appropriate values for the Mailbox Count, Driver Queue Depth, 
+    Select appropriate values for the Mailbox Count, Driver Queue Depth,
     Initial CCBs, and Incremental CCBs variables based on whether or not Strict
     Round Robin Mode is supported.  If Strict Round Robin Mode is supported,
     then there is no performance degradation in using the maximum possible
@@ -1985,12 +1917,10 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   */
 Common:
   /*
-    Initialize the Host Adapter Full Model Name and Interrupt Label fields
-    from the Model Name.
+    Initialize the Host Adapter Full Model Name from the Model Name.
   */
   strcpy(HostAdapter->FullModelName, "BusLogic ");
   strcat(HostAdapter->FullModelName, HostAdapter->ModelName);
-  strcpy(HostAdapter->InterruptLabel, HostAdapter->FullModelName);
   /*
     Select an appropriate value for the Tagged Queue Depth either from a
     BusLogic Driver Options specification, or based on whether this Host
@@ -2308,8 +2238,6 @@ static boolean BusLogic_ReportHostAdapterConfiguration(BusLogic_HostAdapter_T
 
 static boolean BusLogic_AcquireResources(BusLogic_HostAdapter_T *HostAdapter)
 {
-  BusLogic_HostAdapter_T *FirstHostAdapter =
-    BusLogic_RegisteredHostAdapters[HostAdapter->IRQ_Channel];
   if (HostAdapter->IRQ_Channel == 0)
     {
       BusLogic_Error("NO LEGAL INTERRUPT CHANNEL ASSIGNED - DETACHING\n",
@@ -2317,24 +2245,14 @@ static boolean BusLogic_AcquireResources(BusLogic_HostAdapter_T *HostAdapter)
       return false;
     }
   /*
-    Acquire exclusive or shared access to the IRQ Channel if necessary.
+    Acquire shared access to the IRQ Channel.
   */
-  if (FirstHostAdapter->Next == NULL)
+  if (request_irq(HostAdapter->IRQ_Channel, BusLogic_InterruptHandler,
+		  SA_SHIRQ, HostAdapter->FullModelName, HostAdapter) < 0)
     {
-      if (request_irq(HostAdapter->IRQ_Channel, BusLogic_InterruptHandler,
-		      SA_INTERRUPT | SA_SHIRQ,
-		      HostAdapter->InterruptLabel, NULL) < 0)
-	{
-	  BusLogic_Error("UNABLE TO ACQUIRE IRQ CHANNEL %d - DETACHING\n",
-			 HostAdapter, HostAdapter->IRQ_Channel);
-	  return false;
-	}
-    }
-  else if (strlen(FirstHostAdapter->InterruptLabel) + 11
-	   < sizeof(FirstHostAdapter->InterruptLabel))
-    {
-      strcat(FirstHostAdapter->InterruptLabel, " + ");
-      strcat(FirstHostAdapter->InterruptLabel, HostAdapter->ModelName);
+      BusLogic_Error("UNABLE TO ACQUIRE IRQ CHANNEL %d - DETACHING\n",
+		     HostAdapter, HostAdapter->IRQ_Channel);
+      return false;
     }
   HostAdapter->IRQ_ChannelAcquired = true;
   /*
@@ -2367,14 +2285,11 @@ static boolean BusLogic_AcquireResources(BusLogic_HostAdapter_T *HostAdapter)
 
 static void BusLogic_ReleaseResources(BusLogic_HostAdapter_T *HostAdapter)
 {
-  BusLogic_HostAdapter_T *FirstHostAdapter =
-    BusLogic_RegisteredHostAdapters[HostAdapter->IRQ_Channel];
   /*
-    Release exclusive or shared access to the IRQ Channel.
+    Release shared access to the IRQ Channel.
   */
   if (HostAdapter->IRQ_ChannelAcquired)
-    if (FirstHostAdapter->Next == NULL)
-      free_irq(HostAdapter->IRQ_Channel, NULL);
+    free_irq(HostAdapter->IRQ_Channel, HostAdapter);
   /*
     Release exclusive access to the DMA Channel.
   */
@@ -2396,6 +2311,12 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
   BusLogic_RoundRobinModeRequest_T RoundRobinModeRequest;
   BusLogic_SetCCBFormatRequest_T SetCCBFormatRequest;
   int TargetID;
+  /*
+    Initialize the pointers to the first and last CCBs that are queued for
+    completion processing.
+  */
+  HostAdapter->FirstCompletedCCB = NULL;
+  HostAdapter->LastCompletedCCB = NULL;
   /*
     Initialize the Bus Device Reset Pending CCB, Tagged Queuing Active,
     Command Successful Flag, Active Commands, and Commands Since Reset
@@ -2776,7 +2697,7 @@ static void BusLogic_SelectQueueDepths(SCSI_Host_T *Host,
   if (HostAdapter == BusLogic_LastRegisteredHostAdapter)
     for (HostAdapter = BusLogic_FirstRegisteredHostAdapter;
 	 HostAdapter != NULL;
-	 HostAdapter = HostAdapter->NextAll)
+	 HostAdapter = HostAdapter->Next)
       BusLogic_ReportTargetDeviceInfo(HostAdapter);
 }
 
@@ -2878,9 +2799,7 @@ int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *HostTemplate)
       Host->select_queue_depths = BusLogic_SelectQueueDepths;
       /*
 	Add Host Adapter to the end of the list of registered BusLogic
-	Host Adapters.  In order for Command Complete Interrupts to be
-	properly dismissed by BusLogic_InterruptHandler, the Host Adapter
-	must be registered.
+	Host Adapters.
       */
       BusLogic_RegisterHostAdapter(HostAdapter);
       /*
@@ -2973,19 +2892,20 @@ int BusLogic_ReleaseHostAdapter(SCSI_Host_T *Host)
 
 static void BusLogic_QueueCompletedCCB(BusLogic_CCB_T *CCB)
 {
+  BusLogic_HostAdapter_T *HostAdapter = CCB->HostAdapter;
   CCB->Status = BusLogic_CCB_Completed;
   CCB->Next = NULL;
-  if (BusLogic_FirstCompletedCCB == NULL)
+  if (HostAdapter->FirstCompletedCCB == NULL)
     {
-      BusLogic_FirstCompletedCCB = CCB;
-      BusLogic_LastCompletedCCB = CCB;
+      HostAdapter->FirstCompletedCCB = CCB;
+      HostAdapter->LastCompletedCCB = CCB;
     }
   else
     {
-      BusLogic_LastCompletedCCB->Next = CCB;
-      BusLogic_LastCompletedCCB = CCB;
+      HostAdapter->LastCompletedCCB->Next = CCB;
+      HostAdapter->LastCompletedCCB = CCB;
     }
-  CCB->HostAdapter->ActiveCommands[CCB->TargetID]--;
+  HostAdapter->ActiveCommands[CCB->TargetID]--;
 }
 
 
@@ -3108,25 +3028,23 @@ static void BusLogic_ScanIncomingMailboxes(BusLogic_HostAdapter_T *HostAdapter)
 
 
 /*
-  BusLogic_ProcessCompletedCCBs iterates over the completed CCBs setting
-  the SCSI Command Result Codes, deallocating the CCBs, and calling the
-  SCSI Subsystem Completion Routines.  Interrupts should already have been
-  disabled by the caller.
+  BusLogic_ProcessCompletedCCBs iterates over the completed CCBs for Host
+  Adapter setting the SCSI Command Result Codes, deallocating the CCBs, and
+  calling the SCSI Subsystem Completion Routines.  The Host Adapter's Lock
+  should already have been acquired by the caller.
 */
 
-static void BusLogic_ProcessCompletedCCBs(void)
+static void BusLogic_ProcessCompletedCCBs(BusLogic_HostAdapter_T *HostAdapter)
 {
-  static boolean ProcessCompletedCCBsActive = false;
-  if (ProcessCompletedCCBsActive) return;
-  ProcessCompletedCCBsActive = true;
-  while (BusLogic_FirstCompletedCCB != NULL)
+  if (HostAdapter->ProcessCompletedCCBsActive) return;
+  HostAdapter->ProcessCompletedCCBsActive = true;
+  while (HostAdapter->FirstCompletedCCB != NULL)
     {
-      BusLogic_CCB_T *CCB = BusLogic_FirstCompletedCCB;
+      BusLogic_CCB_T *CCB = HostAdapter->FirstCompletedCCB;
       SCSI_Command_T *Command = CCB->Command;
-      BusLogic_HostAdapter_T *HostAdapter = CCB->HostAdapter;
-      BusLogic_FirstCompletedCCB = CCB->Next;
-      if (BusLogic_FirstCompletedCCB == NULL)
-	BusLogic_LastCompletedCCB = NULL;
+      HostAdapter->FirstCompletedCCB = CCB->Next;
+      if (HostAdapter->FirstCompletedCCB == NULL)
+	HostAdapter->LastCompletedCCB = NULL;
       /*
 	Process the Completed CCB.
       */
@@ -3262,7 +3180,7 @@ static void BusLogic_ProcessCompletedCCBs(void)
 	  Command->scsi_done(Command);
 	}
     }
-  ProcessCompletedCCBsActive = false;
+  HostAdapter->ProcessCompletedCCBsActive = false;
 }
 
 
@@ -3270,129 +3188,91 @@ static void BusLogic_ProcessCompletedCCBs(void)
   BusLogic_InterruptHandler handles hardware interrupts from BusLogic Host
   Adapters.
 */
-static void do_BusLogic_InterruptHandler(int IRQ_Channel,
-				      void *DeviceIdentifier,
-				      Registers_T *InterruptRegisters)
-{
-  BusLogic_HostAdapter_T *FirstHostAdapter =
-    BusLogic_RegisteredHostAdapters[IRQ_Channel];
-  boolean HostAdapterResetRequired = false;
-  BusLogic_HostAdapter_T *HostAdapter;
-  BusLogic_Lock_T Lock;
-  /*
-    Iterate over the installed BusLogic Host Adapters accepting any Incoming
-    Mailbox entries and saving the completed CCBs for processing.  This
-    interrupt handler is installed as a fast interrupt, so interrupts are
-    disabled when the interrupt handler is entered.
-  */
-  for (HostAdapter = FirstHostAdapter;
-       HostAdapter != NULL;
-       HostAdapter = HostAdapter->Next)
-    {
-      /*
-	Acquire exclusive access to Host Adapter.
-      */
-      BusLogic_AcquireHostAdapterLockID(HostAdapter, &Lock);
-      /*
-	Handle Interrupts appropriately for each Host Adapter type.
-      */
-      if (BusLogic_MultiMasterHostAdapterP(HostAdapter))
-	{
-	  BusLogic_InterruptRegister_T InterruptRegister;
-	  /*
-	    Read the Host Adapter Interrupt Register.
-	  */
-	  InterruptRegister.All = BusLogic_ReadInterruptRegister(HostAdapter);
-	  if (InterruptRegister.Bits.InterruptValid)
-	    {
-	      /*
-		Acknowledge the interrupt and reset the Host Adapter
-		Interrupt Register.
-	      */
-	      BusLogic_InterruptReset(HostAdapter);
-	      /*
-		Process valid External SCSI Bus Reset and Incoming Mailbox
-		Loaded Interrupts.  Command Complete Interrupts are noted,
-		and Outgoing Mailbox Available Interrupts are ignored, as
-		they are never enabled.
-	      */
-	      if (InterruptRegister.Bits.ExternalBusReset)
-		{
-		  HostAdapter->HostAdapterExternalReset = true;
-		  HostAdapterResetRequired = true;
-		}
-	      else if (InterruptRegister.Bits.IncomingMailboxLoaded)
-		BusLogic_ScanIncomingMailboxes(HostAdapter);
-	      else if (InterruptRegister.Bits.CommandComplete)
-		HostAdapter->HostAdapterCommandCompleted = true;
-	    }
-	}
-      else
-	{
-	  /*
-	    Check if there is a pending interrupt for this Host Adapter.
-	  */
-	  if (FlashPoint_InterruptPending(HostAdapter->CardHandle))
-	    switch (FlashPoint_HandleInterrupt(HostAdapter->CardHandle))
-	      {
-	      case FlashPoint_NormalInterrupt:
-		break;
-	      case FlashPoint_ExternalBusReset:
-		HostAdapter->HostAdapterExternalReset = true;
-		HostAdapterResetRequired = true;
-		break;
-	      case FlashPoint_InternalError:
-		BusLogic_Warning("Internal FlashPoint Error detected"
-				 " - Resetting Host Adapter\n", HostAdapter);
-		HostAdapter->HostAdapterInternalError = true;
-		HostAdapterResetRequired = true;
-		break;
-	      }
-	}
-      /*
-	Release exclusive access to Host Adapter.
-      */
-      BusLogic_ReleaseHostAdapterLockID(HostAdapter, &Lock);
-    }
-  /*
-    Process any completed CCBs.
-  */
-  if (BusLogic_FirstCompletedCCB != NULL)
-    BusLogic_ProcessCompletedCCBs();
-  /*
-    Iterate over the Host Adapters performing any requested
-    Host Adapter Resets.
-  */
-  if (HostAdapterResetRequired)
-    for (HostAdapter = FirstHostAdapter;
-	 HostAdapter != NULL;
-	 HostAdapter = HostAdapter->Next)
-      if (HostAdapter->HostAdapterExternalReset ||
-	  HostAdapter->HostAdapterInternalError)
-	{
-	  BusLogic_ResetHostAdapter(HostAdapter, NULL, 0);
-	  HostAdapter->HostAdapterExternalReset = false;
-	  HostAdapter->HostAdapterInternalError = false;
-	  scsi_mark_host_reset(HostAdapter->SCSI_Host);
-	}
-}
 
-/*
- * This is the low-level interrupt handler:
- * we get the io request lock here to guarantee
- * that all of this is atomic wrt the setup
- * functions.
- */
 static void BusLogic_InterruptHandler(int IRQ_Channel,
 				      void *DeviceIdentifier,
 				      Registers_T *InterruptRegisters)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&io_request_lock, flags);
-	do_BusLogic_InterruptHandler(IRQ_Channel, DeviceIdentifier, InterruptRegisters);
-	spin_unlock_irqrestore(&io_request_lock, flags);
+  BusLogic_HostAdapter_T *HostAdapter =
+    (BusLogic_HostAdapter_T *) DeviceIdentifier;
+  ProcessorFlags_T ProcessorFlags;
+  /*
+    Acquire exclusive access to Host Adapter.
+  */
+  BusLogic_AcquireHostAdapterLockIH(HostAdapter, &ProcessorFlags);
+  /*
+    Handle Interrupts appropriately for each Host Adapter type.
+  */
+  if (BusLogic_MultiMasterHostAdapterP(HostAdapter))
+    {
+      BusLogic_InterruptRegister_T InterruptRegister;
+      /*
+	Read the Host Adapter Interrupt Register.
+      */
+      InterruptRegister.All = BusLogic_ReadInterruptRegister(HostAdapter);
+      if (InterruptRegister.Bits.InterruptValid)
+	{
+	  /*
+	    Acknowledge the interrupt and reset the Host Adapter
+	    Interrupt Register.
+	  */
+	  BusLogic_InterruptReset(HostAdapter);
+	  /*
+	    Process valid External SCSI Bus Reset and Incoming Mailbox
+	    Loaded Interrupts.  Command Complete Interrupts are noted,
+	    and Outgoing Mailbox Available Interrupts are ignored, as
+	    they are never enabled.
+	  */
+	  if (InterruptRegister.Bits.ExternalBusReset)
+	    HostAdapter->HostAdapterExternalReset = true;
+	  else if (InterruptRegister.Bits.IncomingMailboxLoaded)
+	    BusLogic_ScanIncomingMailboxes(HostAdapter);
+	  else if (InterruptRegister.Bits.CommandComplete)
+	    HostAdapter->HostAdapterCommandCompleted = true;
+	}
+    }
+  else
+    {
+      /*
+	Check if there is a pending interrupt for this Host Adapter.
+      */
+      if (FlashPoint_InterruptPending(HostAdapter->CardHandle))
+	switch (FlashPoint_HandleInterrupt(HostAdapter->CardHandle))
+	  {
+	  case FlashPoint_NormalInterrupt:
+	    break;
+	  case FlashPoint_ExternalBusReset:
+	    HostAdapter->HostAdapterExternalReset = true;
+	    break;
+	  case FlashPoint_InternalError:
+	    BusLogic_Warning("Internal FlashPoint Error detected"
+			     " - Resetting Host Adapter\n", HostAdapter);
+	    HostAdapter->HostAdapterInternalError = true;
+	    break;
+	  }
+    }
+  /*
+    Process any completed CCBs.
+  */
+  if (HostAdapter->FirstCompletedCCB != NULL)
+    BusLogic_ProcessCompletedCCBs(HostAdapter);
+  /*
+    Reset the Host Adapter if requested.
+  */
+  if (HostAdapter->HostAdapterExternalReset ||
+      HostAdapter->HostAdapterInternalError)
+    {
+      BusLogic_ResetHostAdapter(HostAdapter, NULL, 0);
+      HostAdapter->HostAdapterExternalReset = false;
+      HostAdapter->HostAdapterInternalError = false;
+      scsi_mark_host_reset(HostAdapter->SCSI_Host);
+    }
+  /*
+    Release exclusive access to Host Adapter.
+  */
+  BusLogic_ReleaseHostAdapterLockIH(HostAdapter, &ProcessorFlags);
 }
+
 
 /*
   BusLogic_WriteOutgoingMailbox places CCB and Action Code into an Outgoing
@@ -3454,7 +3334,7 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
   void *BufferPointer = Command->request_buffer;
   int BufferLength = Command->request_bufflen;
   int SegmentCount = Command->use_sg;
-  BusLogic_Lock_T Lock;
+  ProcessorFlags_T ProcessorFlags;
   BusLogic_CCB_T *CCB;
   /*
     SCSI REQUEST_SENSE commands will be executed automatically by the Host
@@ -3470,7 +3350,7 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
   /*
     Acquire exclusive access to Host Adapter.
   */
-  BusLogic_AcquireHostAdapterLock(HostAdapter, &Lock);
+  BusLogic_AcquireHostAdapterLock(HostAdapter, &ProcessorFlags);
   /*
     Allocate a CCB from the Host Adapter's free list.  In the unlikely event
     that there are none available and memory allocation fails, wait 1 second
@@ -3651,13 +3531,13 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
 	been called, or it may still be pending.
       */
       if (CCB->Status == BusLogic_CCB_Completed)
-	BusLogic_ProcessCompletedCCBs();
+	BusLogic_ProcessCompletedCCBs(HostAdapter);
     }
   /*
     Release exclusive access to Host Adapter.
   */
 Done:
-  BusLogic_ReleaseHostAdapterLock(HostAdapter, &Lock);
+  BusLogic_ReleaseHostAdapterLock(HostAdapter, &ProcessorFlags);
   return 0;
 }
 
@@ -3671,7 +3551,7 @@ int BusLogic_AbortCommand(SCSI_Command_T *Command)
   BusLogic_HostAdapter_T *HostAdapter =
     (BusLogic_HostAdapter_T *) Command->host->hostdata;
   int TargetID = Command->target;
-  BusLogic_Lock_T Lock;
+  ProcessorFlags_T ProcessorFlags;
   BusLogic_CCB_T *CCB;
   int Result;
   BusLogic_IncrementErrorCounter(
@@ -3679,7 +3559,7 @@ int BusLogic_AbortCommand(SCSI_Command_T *Command)
   /*
     Acquire exclusive access to Host Adapter.
   */
-  BusLogic_AcquireHostAdapterLock(HostAdapter, &Lock);
+  BusLogic_AcquireHostAdapterLock(HostAdapter, &ProcessorFlags);
   /*
     If this Command has already completed, then no Abort is necessary.
   */
@@ -3772,7 +3652,7 @@ int BusLogic_AbortCommand(SCSI_Command_T *Command)
       Result = SCSI_ABORT_PENDING;
       if (CCB->Status == BusLogic_CCB_Completed)
 	{
-	  BusLogic_ProcessCompletedCCBs();
+	  BusLogic_ProcessCompletedCCBs(HostAdapter);
 	  Result = SCSI_ABORT_SUCCESS;
 	}
     }
@@ -3780,7 +3660,7 @@ int BusLogic_AbortCommand(SCSI_Command_T *Command)
     Release exclusive access to Host Adapter.
   */
 Done:
-  BusLogic_ReleaseHostAdapterLock(HostAdapter, &Lock);
+  BusLogic_ReleaseHostAdapterLock(HostAdapter, &ProcessorFlags);
   return Result;
 }
 
@@ -3794,7 +3674,7 @@ static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *HostAdapter,
 				     SCSI_Command_T *Command,
 				     unsigned int ResetFlags)
 {
-  BusLogic_Lock_T Lock;
+  ProcessorFlags_T ProcessorFlags;
   BusLogic_CCB_T *CCB;
   int TargetID, Result;
   boolean HardReset;
@@ -3818,7 +3698,7 @@ static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *HostAdapter,
   /*
     Acquire exclusive access to Host Adapter.
   */
-  BusLogic_AcquireHostAdapterLock(HostAdapter, &Lock);
+  BusLogic_AcquireHostAdapterLock(HostAdapter, &ProcessorFlags);
   /*
     If this is an Asynchronous Reset and this Command has already completed,
     then no Reset is necessary.
@@ -3941,7 +3821,7 @@ static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *HostAdapter,
     Release exclusive access to Host Adapter.
   */
 Done:
-  BusLogic_ReleaseHostAdapterLock(HostAdapter, &Lock);
+  BusLogic_ReleaseHostAdapterLock(HostAdapter, &ProcessorFlags);
   return Result;
 }
 
@@ -3957,14 +3837,14 @@ static int BusLogic_SendBusDeviceReset(BusLogic_HostAdapter_T *HostAdapter,
 {
   int TargetID = Command->target;
   BusLogic_CCB_T *CCB, *XCCB;
-  BusLogic_Lock_T Lock;
+  ProcessorFlags_T ProcessorFlags;
   int Result = -1;
   BusLogic_IncrementErrorCounter(
     &HostAdapter->TargetStatistics[TargetID].BusDeviceResetsRequested);
   /*
     Acquire exclusive access to Host Adapter.
   */
-  BusLogic_AcquireHostAdapterLock(HostAdapter, &Lock);
+  BusLogic_AcquireHostAdapterLock(HostAdapter, &ProcessorFlags);
   /*
     If this is an Asynchronous Reset and this Command has already completed,
     then no Reset is necessary.
@@ -4116,7 +3996,7 @@ static int BusLogic_SendBusDeviceReset(BusLogic_HostAdapter_T *HostAdapter,
   if (BusLogic_FlashPointHostAdapterP(HostAdapter))
     if (CCB->Status == BusLogic_CCB_Completed)
       {
-	BusLogic_ProcessCompletedCCBs();
+	BusLogic_ProcessCompletedCCBs(HostAdapter);
 	Result = SCSI_RESET_SUCCESS;
       }
   /*
@@ -4129,7 +4009,7 @@ Done:
   /*
     Release exclusive access to Host Adapter.
   */
-  BusLogic_ReleaseHostAdapterLock(HostAdapter, &Lock);
+  BusLogic_ReleaseHostAdapterLock(HostAdapter, &ProcessorFlags);
   return Result;
 }
 
@@ -4325,7 +4205,7 @@ int BusLogic_ProcDirectoryInfo(char *ProcBuffer, char **StartPointer,
   if (WriteFlag) return 0;
   for (HostAdapter = BusLogic_FirstRegisteredHostAdapter;
        HostAdapter != NULL;
-       HostAdapter = HostAdapter->NextAll)
+       HostAdapter = HostAdapter->Next)
     if (HostAdapter->HostNumber == HostNumber) break;
   if (HostAdapter == NULL)
     {

@@ -293,7 +293,7 @@ __asm__ __volatile__ ("movw %3,0(%2)\n\t" \
 	"movb $0,6(%2)\n\t" \
 	"movb %%ah,7(%2)\n\t" \
 	"rorl $16,%%eax" \
-	: "=m"(*(n)) : "a" (addr), "r"(n), "i"(limit), "i"(type))
+	: "=m"(*(n)) : "a" (addr), "r"(n), "g"(limit), "i"(type))
 
 #define set_tss_desc(n,addr) \
 	_set_tssldt_desc(((char *) (n)),((int)(addr)),235,0x89)

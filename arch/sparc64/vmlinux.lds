@@ -52,12 +52,9 @@ SECTIONS
    . += 8192;
    empty_bad_pte_table = .;
    . += 8192;
-   empty_bad_page = .;
-   . += 8192;
    . += 0x40;
    empty_null_pmd_table = .;
    . += 8192;
-   . += 0x40;
    empty_null_pte_table = .;
    . += 8192;
   }

@@ -1,4 +1,4 @@
-/* $Id: mach64.c,v 1.11 1997/10/17 04:13:35 davem Exp $
+/* $Id: mach64.c,v 1.17 1998/04/06 06:42:23 davem Exp $
  * mach64.c: Ultra/PCI Mach64 console driver.
  *
  * Just about all of this is from the PPC/mac driver, see that for
@@ -12,7 +12,6 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/string.h>
 #include <linux/tty.h>
 #include <linux/console.h>
@@ -81,8 +80,8 @@ mach64_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	if (vma->vm_offset & ~PAGE_MASK)
 		return -ENXIO;
 
-	if (vma->vm_offset == mach64_pci_iobase) {
-		addr = __pa(pcivga_iobase);
+	if (vma->vm_offset == (mach64_pci_iobase & PAGE_MASK)) {
+		addr = __pa((pcivga_iobase & PAGE_MASK));
 		size = PAGE_SIZE;
 	} else if (vma->vm_offset >= (mach64_pci_membase + 0x800000)) {
 		addr = __pa(pcivga_membase) - mach64_pci_membase
@@ -102,7 +101,8 @@ mach64_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	if (remap_page_range(vma->vm_start, addr, size, vma->vm_page_prot))
 		return -EAGAIN;
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
 	return 0;
 }
 
@@ -123,6 +123,7 @@ mach64_loadcmap(fbinfo_t *fb, int index, int count)
 		pcivga_writeb(fb->color_map CM(i, 1), MACH64_REGOFF + DAC_DATA);
 		pcivga_writeb(fb->color_map CM(i, 2), MACH64_REGOFF + DAC_DATA);
 	}
+	mach64_idle();
 }
 
 static void
@@ -172,11 +173,11 @@ int mach64_init(fbinfo_t *fb)
 	unsigned int tmp;
 
 	memset(&mach64, 0, sizeof(mach64));
-	for(pdev = pci_devices; pdev; pdev = pdev->next) {
-		if((pdev->vendor == PCI_VENDOR_ID_ATI) &&
-		   (pdev->device == PCI_DEVICE_ID_ATI_264VT))
-			break;
-	}
+
+	pdev = pci_find_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_264VT, 0);
+	if(!pdev)
+		pdev = pci_find_device(PCI_VENDOR_ID_ATI,
+				       PCI_DEVICE_ID_ATI_215GT, 0);
 	if(!pdev)
 		return -1;
 
@@ -222,15 +223,15 @@ int mach64_init(fbinfo_t *fb)
 	fb->info.private = (void *)&mach64;
 	fb->base = pcivga_membase + MACH64_BE_FBOFF;
 
-	if ((pcivga_readl(MACH64_REGOFF + CONFIG_CHIP_ID)
-					& CFG_CHIP_TYPE) == MACH64_VT_ID)
-		mach64.flags |= MACH64_MASK_VT;
+	mach64.chip_type = pcivga_readl(MACH64_REGOFF + CONFIG_CHIP_ID)
+							& CFG_CHIP_TYPE;
 
-	/*
-	 * Fix the PROM's idea of MEM_CNTL settings...
-	 */
-	tmp = pcivga_readl(MACH64_REGOFF + MEM_CNTL);
-	switch (tmp & 0xf) {
+	if (mach64.chip_type == MACH64_VT_ID) {
+		/*
+		 * Fix the PROM's idea of MEM_CNTL settings...
+		 */
+		tmp = pcivga_readl(MACH64_REGOFF + MEM_CNTL);
+		switch (tmp & 0xf) {
 		case 3:
 			tmp = (tmp & ~(0xf)) | 2;
 			break;
@@ -245,11 +246,14 @@ int mach64_init(fbinfo_t *fb)
 			break;
 		default:
 			break;
+		}
+		tmp &= ~(0x00f00000);
+		pcivga_writel(tmp, MACH64_REGOFF + MEM_CNTL);
 	}
-	tmp &= ~(0x00f00000);
-	pcivga_writel(tmp, MACH64_REGOFF + MEM_CNTL);
 
-	switch(tmp & MEM_SIZE_ALIAS) {
+	tmp = pcivga_readl(MACH64_REGOFF + MEM_CNTL);
+	if (mach64.chip_type != MACH64_GT_ID) {
+		switch(tmp & MEM_SIZE_ALIAS) {
 		case MEM_SIZE_512K:
 			mach64.total_vram = 0x80000;
 			break;
@@ -271,10 +275,35 @@ int mach64_init(fbinfo_t *fb)
 		default:
 			mach64.total_vram = 0x80000;
 			break;
+		}
+	} else {
+		switch(tmp & MEM_SIZE_ALIAS_GTB) {
+		case MEM_SIZE_512K_GTB:
+			mach64.total_vram = 0x80000;
+			break;
+		case MEM_SIZE_1M_GTB:
+			mach64.total_vram = 0x100000;
+			break;
+		case MEM_SIZE_2M_GTB:
+			mach64.total_vram = 0x200000;
+			break;
+		case MEM_SIZE_4M_GTB:
+			mach64.total_vram = 0x400000;
+			break;
+		case MEM_SIZE_6M_GTB:
+			mach64.total_vram = 0x600000;
+			break;
+		case MEM_SIZE_8M_GTB:
+			mach64.total_vram = 0x800000;
+			break;
+		default:
+			mach64.total_vram = 0x80000;
+			break;
+		}
 	}
 
-	printk("mach64_init: total_vram[%08x] is_vt_chip[%d]\n",
-		mach64.total_vram, mach64.flags & MACH64_MASK_VT ? 1 : 0);
+	printk("mach64_init: chip_type[%04x], total_vram[%08x]\n",
+		mach64.chip_type, mach64.total_vram);
 
 #if 0
 	mach64_test(fb);

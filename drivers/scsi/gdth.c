@@ -73,7 +73,7 @@
  * Initial revision
  *
  *
- * $Id: gdth.c,v 1.3 1998/02/25 23:52:32 ecd Exp $ 
+ * $Id: gdth.c,v 1.4 1998/04/15 14:35:26 mj Exp $ 
  ************************************************************************/
 
 #ifdef MODULE
@@ -473,8 +473,7 @@ static int gdth_search_pci(ushort device_id,ushort index,gdth_pci_str *pcistr)
 	if ((error = pcibios_read_config_dword(pcistr->bus,pcistr->device_fn,
                                            PCI_ROM_ADDRESS,
                                            (int *) &pcistr->bios))) {
-		printk("GDT-PCI: error %s reading configuration space",
-		       pcibios_strerror(error));
+		printk("GDT-PCI: error %d reading configuration space", error);
 		return -1;
 		}
 	pcistr->irq = pdev->irq;
@@ -499,8 +498,7 @@ static int gdth_search_pci(ushort device_id,ushort index,gdth_pci_str *pcistr)
                                            GDTH_BASEP&pcistr->bios)) ||
         (error = pcibios_read_config_byte(pcistr->bus,pcistr->device_fn,
                                           PCI_INTERRUPT_LINE,&pcistr->irq))) {
-        printk("GDT-PCI: error %s reading configuration space",
-               pcibios_strerror(error));
+        printk("GDT-PCI: error %d reading configuration space", error);
         return -1;
     }
 #endif

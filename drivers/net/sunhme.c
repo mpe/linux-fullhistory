@@ -1408,37 +1408,20 @@ static int happy_meal_is_not_so_happy(struct happy_meal *hp,
 {
 	int reset = 0;
 
-	printk("%s: Error interrupt for happy meal, status = %08lx\n",
-	       hp->dev->name, status);
-
-	if(status &
-	   (GREG_STAT_RCNTEXP|GREG_STAT_ACNTEXP|GREG_STAT_CCNTEXP|GREG_STAT_LCNTEXP)) {
-		/* Some stupid counter expired, we should be not
-		 * have interrupts for this enabled, but we check
-		 * for it anyways.
-		 */
-
-		printk("%s: Happy Meal counters expired [ ", hp->dev->name);
-		if(status & GREG_STAT_RCNTEXP)
-			printk("ReceiveFrame ");
-		if(status & GREG_STAT_ACNTEXP)
-			printk("AlignError ");
-		if(status & GREG_STAT_CCNTEXP)
-			printk("CrcError ");
-		if(status & GREG_STAT_LCNTEXP)
-			printk("LengthError ");
-		printk("]\n");
-	}
+	/* Only print messages for non-counter related interrupts. */
+	if(status & (GREG_STAT_RFIFOVF | GREG_STAT_STSTERR | GREG_STAT_TFIFO_UND |
+		     GREG_STAT_MAXPKTERR | GREG_STAT_NORXD | GREG_STAT_RXERR |
+		     GREG_STAT_RXPERR | GREG_STAT_RXTERR | GREG_STAT_EOPERR |
+		     GREG_STAT_MIFIRQ | GREG_STAT_TXEACK | GREG_STAT_TXLERR |
+		     GREG_STAT_TXPERR | GREG_STAT_TXTERR | GREG_STAT_SLVERR |
+		     GREG_STAT_SLVPERR))
+		printk("%s: Error interrupt for happy meal, status = %08lx\n",
+		       hp->dev->name, status);
 
 	if(status & GREG_STAT_RFIFOVF) {
 		/* The receive FIFO overflowwed, usually a DMA error. */
 		printk("%s: Happy Meal receive FIFO overflow.\n", hp->dev->name);
 		reset = 1;
-	}
-
-	if(status & GREG_STAT_CVCNTEXP) {
-		/* See above about counter expiration... */
-		printk("%s: Code Violation error counter expired.\n", hp->dev->name);
 	}
 
 	if(status & GREG_STAT_STSTERR) {
@@ -1460,32 +1443,6 @@ static int happy_meal_is_not_so_happy(struct happy_meal *hp,
 		 */
 		printk("%s: Happy Meal MAX Packet size error.\n", hp->dev->name);
 		reset = 1;
-	}
-
-	if(status & (GREG_STAT_NCNTEXP|GREG_STAT_ECNTEXP|GREG_STAT_LCCNTEXP|
-		     GREG_STAT_FCNTEXP)) {
-		/* More stupid error counters... */
-		printk("%s: Happy Meal counters expired [ ", hp->dev->name);
-		if(status & GREG_STAT_NCNTEXP)
-			printk("NormalCollision ");
-		if(status & GREG_STAT_ECNTEXP)
-			printk("ExcessCollision ");
-		if(status & GREG_STAT_LCCNTEXP)
-			printk("LateCollision ");
-		if(status & GREG_STAT_FCNTEXP)
-			printk("FirstCollision ");
-		printk("]\n");
-	}
-
-	if(status & GREG_STAT_DTIMEXP) {
-		/* Defer-timer expired.  Probably means the happy meal needed
-		 * to back off too much before it could transmit one frame.
-		 */
-#if 0		/* XXX This isn't worth reporting and is in fact a normal condition. */
-		printk("%s: Transmit defer timer expired, subnet congested?\n",
-		       hp->dev->name);
-		reset = 1;
-#endif
 	}
 
 	if(status & GREG_STAT_NORXD) {

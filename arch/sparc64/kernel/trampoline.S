@@ -1,4 +1,4 @@
-/* $Id: trampoline.S,v 1.2 1997/07/28 02:57:32 davem Exp $
+/* $Id: trampoline.S,v 1.3 1998/02/22 21:06:11 jj Exp $
  * trampoline.S: Jump start slave processors on sparc64.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -172,8 +172,10 @@ bounce:
 	mov	%o2, %g6
 
 	wrpr	%o1, (PSTATE_MG | PSTATE_IE), %pstate
-	sethi	%hi(0x1ff8), %g2
-	or	%g2, %lo(0x1ff8), %g2
+#define KERN_HIGHBITS ((_PAGE_VALID | _PAGE_SZ4MB) ^ 0xfffff80000000000)
+	sethi   %uhi(KERN_HIGHBITS), %g2
+	sllx    %g2, 32, %g2
+#undef KERN_HIGHBITS
 	ldx	[%o2 + AOFF_task_mm], %g6
 	ldx	[%g6 + AOFF_mm_pgd], %g6
 	clr	%g7

@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.48 1997/12/18 02:44:06 ecd Exp $
+/* $Id: bitops.h,v 1.49 1998/02/23 01:46:44 rth Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -60,7 +60,7 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void *addr)
 	return (unsigned long) ADDR;
 }
 
-extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
+extern __inline__ void change_bit(unsigned long nr, void *addr)
 {
 	int mask;
 	unsigned long *ADDR = (unsigned long *) addr;
@@ -76,8 +76,6 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
 	: "=&r" (ADDR)
 	: "0" (ADDR), "r" (mask)
 	: "g2", "g3");
-
-	return (unsigned long) ADDR;
 }
 
 #else /* __KERNEL__ */
@@ -136,7 +134,7 @@ extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, __SMPVOL vo
 	return mask;
 }
 
-extern __inline__ unsigned long clear_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ void clear_bit(unsigned long nr, __SMPVOL void *addr)
 {
 	(void) test_and_clear_bit(nr, addr);
 }
@@ -159,7 +157,7 @@ extern __inline__ unsigned long test_and_change_bit(unsigned long nr, __SMPVOL v
 	return mask;
 }
 
-extern __inline__ unsigned long change_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ void change_bit(unsigned long nr, __SMPVOL void *addr)
 {
 	(void) test_and_change_bit(nr, addr);
 }

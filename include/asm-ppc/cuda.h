@@ -12,6 +12,7 @@
 #define TIMER_PACKET	3
 #define POWER_PACKET	4
 #define MACIIC_PACKET	5
+#define PMU_PACKET	6
 
 /* CUDA commands (2nd byte) */
 #define CUDA_WARM_START		0

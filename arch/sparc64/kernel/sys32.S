@@ -1,4 +1,4 @@
-/* $Id: sys32.S,v 1.4 1997/09/09 17:13:29 jj Exp $
+/* $Id: sys32.S,v 1.5 1998/03/24 05:57:56 ecd Exp $
  * sys32.S: I-cache tricks for 32-bit compatability layer simple
  *          conversions.
  *
@@ -24,7 +24,7 @@ sys32_mmap:
 
 	.align		32
 	.globl		sys32_lseek
-	.globl		sys32_chmod, sys32_chown, sys32_mknod
+	.globl		sys32_chmod, sys32_chown, sys32_lchown, sys32_mknod
 sys32_lseek:
 	sra		%o1, 0, %o1
 	mov		%o7, %g1
@@ -45,6 +45,15 @@ sys32_chown:
 	srl		%o1, 16, %o1
 	srl		%o2, 16, %o2
 	call		sys_chown
+	 mov		%g1, %o7
+sys32_lchown:
+	sll		%o1, 16, %o1
+	mov		%o7, %g1
+	sll		%o2, 16, %o2
+	srl		%o0, 0, %o0
+	srl		%o1, 16, %o1
+	srl		%o2, 16, %o2
+	call		sys_lchown
 	 mov		%g1, %o7
 sys32_mknod:
 	sll		%o2, 16, %o2

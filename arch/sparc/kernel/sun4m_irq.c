@@ -83,9 +83,9 @@ inline unsigned long sun4m_get_irqmask(unsigned int irq)
 		if (!mask)
 			printk("sun4m_get_irqmask: IRQ%d has no valid mask!\n",irq);
 	} else {
-		/* Soft Interrupts will come here
-		 * Currently there is no way to trigger them but I'm sure something
-		 * could be cooked up.
+		/* Soft Interrupts will come here.
+		 * Currently there is no way to trigger them but I'm sure
+		 * something could be cooked up.
 		 */
 		irq &= 0xf;
 		mask = SUN4M_SOFT_INT(irq);
@@ -349,18 +349,18 @@ __initfunc(void sun4m_init_IRQ(void))
 				&sun4m_interrupts->undirected_target;
 		sun4m_interrupts->undirected_target = 0;
 	}
-	enable_irq = sun4m_enable_irq;
-	disable_irq = sun4m_disable_irq;
-	enable_pil_irq = sun4m_enable_pil_irq;
-	disable_pil_irq = sun4m_disable_pil_irq;
-	clear_clock_irq = sun4m_clear_clock_irq;
-	clear_profile_irq = sun4m_clear_profile_irq;
-	load_profile_irq = sun4m_load_profile_irq;
+	BTFIXUPSET_CALL(enable_irq, sun4m_enable_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(disable_irq, sun4m_disable_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(enable_pil_irq, sun4m_enable_pil_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(disable_pil_irq, sun4m_disable_pil_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(clear_clock_irq, sun4m_clear_clock_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(clear_profile_irq, sun4m_clear_profile_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(load_profile_irq, sun4m_load_profile_irq, BTFIXUPCALL_NORM);
 	init_timers = sun4m_init_timers;
 #ifdef __SMP__
-	set_cpu_int = (void (*) (int, int))sun4m_send_ipi;
-	clear_cpu_int = (void (*) (int, int))sun4m_clear_ipi;
-	set_irq_udt = (void (*) (int))sun4m_set_udt;
+	BTFIXUPSET_CALL(set_cpu_int, sun4m_send_ipi, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(clear_cpu_int, sun4m_clear_ipi, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(set_irq_udt, sun4m_set_udt, BTFIXUPCALL_NORM);
 #endif
 	/* Cannot enable interrupts until OBP ticker is disabled. */
 }

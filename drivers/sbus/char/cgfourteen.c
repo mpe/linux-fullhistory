@@ -1,4 +1,4 @@
-/* $Id: cgfourteen.c,v 1.25 1997/08/20 07:38:36 davem Exp $
+/* $Id: cgfourteen.c,v 1.26 1998/03/10 20:18:23 jj Exp $
  * cgfourteen.c: Sun SparcStation console support.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -274,7 +274,8 @@ cg14_mmap (struct inode *inode, struct file *file,
 		page += map_size;
 	}
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
         return 0;
 }
 

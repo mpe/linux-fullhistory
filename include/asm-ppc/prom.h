@@ -20,6 +20,11 @@ struct address_range {
 	unsigned int size;
 };
 
+struct interrupt_info {
+	int	line;
+	int	sense;		/* +ve/-ve logic, edge or level, etc. */
+};
+
 struct reg_property {
 	unsigned int address;
 	unsigned int size;
@@ -46,7 +51,7 @@ struct device_node {
 	int	n_addrs;
 	struct	address_range *addrs;
 	int	n_intrs;
-	int	*intrs;
+	struct	interrupt_info *intrs;
 	char	*full_name;
 	struct	property *properties;
 	struct	device_node *parent;

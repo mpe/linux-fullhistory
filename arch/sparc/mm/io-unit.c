@@ -1,7 +1,7 @@
-/* $Id: io-unit.c,v 1.5 1997/12/22 16:09:26 jj Exp $
+/* $Id: io-unit.c,v 1.10 1998/03/03 12:31:14 jj Exp $
  * io-unit.c:  IO-UNIT specific routines for memory management.
  *
- * Copyright (C) 1997 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
  */
  
 #include <linux/config.h>
@@ -13,28 +13,41 @@
 #include <asm/io.h>
 #include <asm/io-unit.h>
 #include <asm/mxcc.h>
+#include <asm/spinlock.h>
+#include <asm/bitops.h>
+
+/* #define IOUNIT_DEBUG */
+#ifdef IOUNIT_DEBUG
+#define IOD(x) printk(x)
+#else
+#define IOD(x) do { } while (0)
+#endif
 
 #define LONG_ALIGN(x) (((x)+(sizeof(long))-1)&~((sizeof(long))-1))
 
 #define IOPERM        (IOUPTE_CACHE | IOUPTE_WRITE | IOUPTE_VALID)
-#define MKIOPTE(phys) ((((phys)>>4) & IOUPTE_PAGE) | IOPERM)
+#define MKIOPTE(phys) __iopte((((phys)>>4) & IOUPTE_PAGE) | IOPERM)
 
-unsigned long sun4d_dma_base;
-unsigned long sun4d_dma_vbase;
-unsigned long sun4d_dma_size;
 __initfunc(unsigned long
 iounit_init(int sbi_node, int io_node, unsigned long memory_start,
 	    unsigned long memory_end, struct linux_sbus *sbus))
 {
 	iopte_t *xpt, *xptend;
-	unsigned long paddr;
 	struct iounit_struct *iounit;
 	struct linux_prom_registers iommu_promregs[PROMREG_MAX];
 	
 	memory_start = LONG_ALIGN(memory_start);
 	iounit = (struct iounit_struct *)memory_start;
-	memory_start += sizeof(struct iounit_struct);
-
+	memory_start = LONG_ALIGN(memory_start + sizeof(struct iounit_struct));
+	
+	memset(iounit, 0, sizeof(*iounit));
+	iounit->limit[0] = IOUNIT_BMAP1_START;
+	iounit->limit[1] = IOUNIT_BMAP2_START;
+	iounit->limit[2] = IOUNIT_BMAPM_START;
+	iounit->limit[3] = IOUNIT_BMAPM_END;
+	iounit->rotor[1] = IOUNIT_BMAP2_START;
+	iounit->rotor[2] = IOUNIT_BMAPM_START;
+	
 	prom_getproperty(sbi_node, "reg", (void *) iommu_promregs,
 			 sizeof(iommu_promregs));
 	prom_apply_generic_ranges(io_node, 0, iommu_promregs, 3);
@@ -46,11 +59,6 @@ iounit_init(int sbi_node, int io_node, unsigned long memory_start,
 	sbus->iommu = (struct iommu_struct *)iounit;
 	iounit->page_table = xpt;
 	
-	/* Initialize new table. */
-	paddr = IOUNIT_DMA_BASE - sun4d_dma_base;
-	for (xptend = xpt + (sun4d_dma_size >> PAGE_SHIFT);
-	     xpt < xptend; paddr++)
-		*xpt++ = MKIOPTE(paddr);
 	for (xptend = iounit->page_table + (16 * PAGE_SIZE) / sizeof(iopte_t);
 	     xpt < xptend;)
 	     	*xpt++ = 0;
@@ -58,36 +66,108 @@ iounit_init(int sbi_node, int io_node, unsigned long memory_start,
 	return memory_start;
 }
 
+/* One has to hold iounit->lock to call this */
+static unsigned long iounit_get_area(struct iounit_struct *iounit, unsigned long vaddr, int size)
+{
+	int i, j, k, npages;
+	unsigned long rotor, scan, limit;
+	iopte_t iopte;
+
+        npages = ((vaddr & ~PAGE_MASK) + size + (PAGE_SIZE-1)) >> PAGE_SHIFT;
+
+	/* A tiny bit of magic ingredience :) */
+	switch (npages) {
+	case 1: i = 0x0231; break;
+	case 2: i = 0x0132; break;
+	default: i = 0x0213; break;
+	}
+	
+	IOD(("iounit_get_area(%08lx,%d[%d])=", vaddr, size, npages));
+	
+next:	j = (i & 15);
+	rotor = iounit->rotor[j - 1];
+	limit = iounit->limit[j];
+	scan = rotor;
+nexti:	scan = find_next_zero_bit(iounit->bmap, limit, scan);
+	if (scan + npages > limit) {
+		if (limit != rotor) {
+			limit = rotor;
+			scan = iounit->limit[j - 1];
+			goto nexti;
+		}
+		i >>= 4;
+		if (!(i & 15))
+			panic("iounit_get_area: Couldn't find free iopte slots for (%08lx,%d)\n", vaddr, size);
+		goto next;
+	}
+	for (k = 1, scan++; k < npages; k++)
+		if (test_bit(scan++, iounit->bmap))
+			goto nexti;
+	iounit->rotor[j - 1] = (scan < limit) ? scan : iounit->limit[j - 1];
+	scan -= npages;
+	iopte = MKIOPTE(mmu_v2p(vaddr & PAGE_MASK));
+	vaddr = IOUNIT_DMA_BASE + (scan << PAGE_SHIFT) + (vaddr & ~PAGE_MASK);
+	for (k = 0; k < npages; k++, iopte = __iopte(iopte_val(iopte) + 0x100), scan++) {
+		set_bit(scan, iounit->bmap);
+		iounit->page_table[scan] = iopte;
+	}
+	IOD(("%08lx\n", vaddr));
+	return vaddr;
+}
+
 static __u32 iounit_get_scsi_one(char *vaddr, unsigned long len, struct linux_sbus *sbus)
 {
-	/* Viking MXCC is IO coherent, just need to translate the address to DMA handle */
-#ifdef IOUNIT_DEBUG
-	if ((((unsigned long) vaddr) & PAGE_MASK) < sun4d_dma_vaddr || 
-	    (((unsigned long) vaddr) & PAGE_MASK) + len > sun4d_dma_vbase + sun4d_dma_size)
-			panic("Using non-DMA memory for iounit_get_scsi_one");
-#endif	
-	return (__u32)(sun4d_dma_base + mmu_v2p((long)vaddr));
+	unsigned long ret, flags;
+	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
+	
+	spin_lock_irqsave(&iounit->lock, flags);
+	ret = iounit_get_area(iounit, (unsigned long)vaddr, len);
+	spin_unlock_irqrestore(&iounit->lock, flags);
+	return ret;
 }
 
 static void iounit_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
 {
-	/* Viking MXCC is IO coherent, just need to translate the address to DMA handle */
+	unsigned long flags;
+	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
+
+	/* FIXME: Cache some resolved pages - often several sg entries are to the same page */
+	spin_lock_irqsave(&iounit->lock, flags);
 	for (; sz >= 0; sz--) {
-#ifdef IOUNIT_DEBUG
-		unsigned long page = ((unsigned long) sg[sz].addr) & PAGE_MASK;
-		if (page < sun4d_dma_vbase || page + sg[sz].len > sun4d_dma_vbase + sun4d_dma_size)
-			panic("Using non-DMA memory for iounit_get_scsi_sgl");
-#endif	
-		sg[sz].dvma_addr = (__u32) (sun4d_dma_base + mmu_v2p((long)sg[sz].addr));;
+		sg[sz].dvma_addr = iounit_get_area(iounit, (unsigned long)sg[sz].addr, sg[sz].len);
 	}
+	spin_unlock_irqrestore(&iounit->lock, flags);
 }
 
 static void iounit_release_scsi_one(__u32 vaddr, unsigned long len, struct linux_sbus *sbus)
 {
+	unsigned long flags;
+	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
+	
+	spin_lock_irqsave(&iounit->lock, flags);
+	len = ((vaddr & ~PAGE_MASK) + len + (PAGE_SIZE-1)) >> PAGE_SHIFT;
+	vaddr = (vaddr - IOUNIT_DMA_BASE) >> PAGE_SHIFT;
+	IOD(("iounit_release %08lx-%08lx\n", (long)vaddr, (long)len+vaddr));
+	for (len += vaddr; vaddr < len; vaddr++)
+		clear_bit(vaddr, iounit->bmap);
+	spin_unlock_irqrestore(&iounit->lock, flags);
 }
 
 static void iounit_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
 {
+	unsigned long flags;
+	unsigned long vaddr, len;
+	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
+	
+	spin_lock_irqsave(&iounit->lock, flags);
+	for (; sz >= 0; sz--) {
+		len = ((sg[sz].dvma_addr & ~PAGE_MASK) + sg[sz].len + (PAGE_SIZE-1)) >> PAGE_SHIFT;
+		vaddr = (sg[sz].dvma_addr - IOUNIT_DMA_BASE) >> PAGE_SHIFT;
+		IOD(("iounit_release %08lx-%08lx\n", (long)vaddr, (long)len+vaddr));
+		for (len += vaddr; vaddr < len; vaddr++)
+			clear_bit(vaddr, iounit->bmap);
+	}
+	spin_unlock_irqrestore(&iounit->lock, flags);
 }
 
 #ifdef CONFIG_SBUS
@@ -135,24 +215,26 @@ static void iounit_map_dma_area(unsigned long addr, int len)
 
 static char *iounit_lockarea(char *vaddr, unsigned long len)
 {
+/* FIXME: Write this */
 	return vaddr;
 }
 
 static void iounit_unlockarea(char *vaddr, unsigned long len)
 {
+/* FIXME: Write this */
 }
 
 __initfunc(void ld_mmu_iounit(void))
 {
-	mmu_lockarea = iounit_lockarea;
-	mmu_unlockarea = iounit_unlockarea;
+	BTFIXUPSET_CALL(mmu_lockarea, iounit_lockarea, BTFIXUPCALL_RETO0);
+	BTFIXUPSET_CALL(mmu_unlockarea, iounit_unlockarea, BTFIXUPCALL_NOP);
 
-	mmu_get_scsi_one = iounit_get_scsi_one;
-	mmu_get_scsi_sgl = iounit_get_scsi_sgl;
-	mmu_release_scsi_one = iounit_release_scsi_one;
-	mmu_release_scsi_sgl = iounit_release_scsi_sgl;
+	BTFIXUPSET_CALL(mmu_get_scsi_one, iounit_get_scsi_one, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_get_scsi_sgl, iounit_get_scsi_sgl, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_release_scsi_one, iounit_release_scsi_one, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_release_scsi_sgl, iounit_release_scsi_sgl, BTFIXUPCALL_NORM);
 
 #ifdef CONFIG_SBUS
-	mmu_map_dma_area = iounit_map_dma_area;
+	BTFIXUPSET_CALL(mmu_map_dma_area, iounit_map_dma_area, BTFIXUPCALL_NORM);
 #endif
 }

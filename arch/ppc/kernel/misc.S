@@ -19,6 +19,7 @@
 #include "ppc_asm.tmpl"
 #include "ppc_defs.h"
 
+#ifndef CONFIG_8xx
 /* This instruction is not implemented on the PPC 601 or 603 */
 #define tlbia \
 	li	r4,128; \
@@ -27,7 +28,7 @@
 0:	tlbie	r4; \
 	addi	r4,r4,0x1000; \
 	bdnz	0b
-	
+#endif	
 	.text
 
 /*
@@ -323,6 +324,18 @@ _GLOBAL(_get_SP)
 	mr	r3,r1		/* Close enough */
 	blr
 
+_GLOBAL(_get_THRM1)
+	mfspr	r3,THRM1
+	blr
+
+_GLOBAL(_set_THRM1)
+	mtspr	THRM1,r3
+	blr
+	
+_GLOBAL(_get_L2CR)
+	mfspr	r3,L2CR
+	blr
+	
 _GLOBAL(_get_PVR)
 	mfspr	r3,PVR
 	blr
@@ -348,33 +361,6 @@ cvt_df:
 	stfs	0,0(r4)
 	blr
 
-
-_GLOBAL(lock_dcache)
-	mfspr	r3,PVR		/* nop on 601 */
-	rlwinm	r3,r3,16,16,31
-	cmpwi	0,r3,1
-	beqlr-
-	mfspr	r3,HID0
-	ori	r3,r3,HID0_DLOCK
-	mtspr	HID0,r3
-	sync
-	isync
-	blr
-
-_GLOBAL(unlock_dcache)
-	mfspr	r3,PVR		/* nop on 601 */
-	rlwinm	r3,r3,16,16,31
-	cmpwi	0,r3,1
-	beqlr-
-	mfspr	r3,HID0
-	li	r4,HID0_DLOCK
-	andc	r3,r3,r4
-	mtspr	HID0,r3
-	sync
-	isync
-	blr
-	
-
 /*
  * Create a kernel thread
  *   __kernel_thread(flags, fn, arg)
@@ -386,6 +372,16 @@ _GLOBAL(__kernel_thread)
 	bnelr			/* return if parent */
 	mtlr	r4              /* fn addr in lr */
 	mr	r3,r5	        /* load arg and call fn */
+#if 0/*def __SMP__*/
+	/* drop scheduler_lock since schedule() called us */
+	lis	r4,scheduler_lock@ha
+	li	r5,0
+	stw	r5,scheduler_lock@l+4(r4)	/* owner_pc */
+	stw	r5,scheduler_lock@l+8(r4)	/* owner_cpu */
+	stw	r5,scheduler_lock@l(r4)
+	sync
+	isync
+#endif /* __SMP__ */
 	blrl
 	li	r0,__NR_exit	/* exit after child exits */
         li	r3,0
@@ -413,7 +409,9 @@ SYSCALL(execve)
 SYSCALL(open)
 SYSCALL(close)
 SYSCALL(waitpid)
+SYSCALL(fork)
 SYSCALL(delete_module)
+SYSCALL(_exit)
 
 
 /* Why isn't this a) automatic, b) written in 'C'? */	
@@ -593,5 +591,7 @@ sys_call_table:
 	.long sys_setresgid	
 	.long sys_getresgid	/* 170 */
 	.long sys_prctl
-	.space (NR_syscalls-171)*4
+	.long sys_xstat
+	.long sys_xmknod
+	.space (NR_syscalls-173)*4
 

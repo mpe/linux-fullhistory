@@ -70,6 +70,13 @@ static void proc_put_inode(struct inode *inode)
 static void proc_delete_inode(struct inode *inode)
 {
 	struct proc_dir_entry *de = inode->u.generic_ip;
+
+#if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
+	if ((inode->i_ino >= PROC_OPENPROM_FIRST) &&
+	    (inode->i_ino <  PROC_OPENPROM_FIRST + PROC_NOPENPROM))
+		return;
+#endif	
+
 	if (de) {
 		/*
 		 * Call the fill_inode hook to release module counts.

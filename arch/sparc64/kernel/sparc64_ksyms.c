@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.27 1997/11/19 07:57:46 jj Exp $
+/* $Id: sparc64_ksyms.c,v 1.33 1998/04/06 16:09:40 jj Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -50,6 +50,7 @@ struct poll {
 	short revents;
 };
 
+extern unsigned prom_cpu_nodes[NR_CPUS];
 extern void die_if_kernel(char *str, struct pt_regs *regs);
 extern unsigned long sunos_mmap(unsigned long, unsigned long, unsigned long,
 				unsigned long, unsigned long, unsigned long);
@@ -112,6 +113,8 @@ EXPORT_SYMBOL_PRIVATE(global_restore_flags);
 #else
 EXPORT_SYMBOL(local_irq_count);
 #endif
+EXPORT_SYMBOL(enable_irq);
+EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL_PRIVATE(_lock_kernel);
 EXPORT_SYMBOL_PRIVATE(_unlock_kernel);
 
@@ -134,7 +137,9 @@ EXPORT_SYMBOL(dma_chain);
 #endif
 #if CONFIG_PCI
 EXPORT_SYMBOL(ebus_chain);
-EXPORT_SYMBOL(pci_devices);
+EXPORT_SYMBOL(pci_dvma_offset);
+EXPORT_SYMBOL(pci_dvma_mask);
+EXPORT_SYMBOL(empty_zero_page);
 #endif
 
 /* Solaris/SunOS binary compatibility */
@@ -171,7 +176,6 @@ EXPORT_SYMBOL(__prom_getsibling);
 
 /* sparc library symbols */
 EXPORT_SYMBOL(bcopy);
-EXPORT_SYMBOL(memscan);
 EXPORT_SYMBOL(strlen);
 EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strcpy);
@@ -179,7 +183,6 @@ EXPORT_SYMBOL(strncpy);
 EXPORT_SYMBOL(strcat);
 EXPORT_SYMBOL(strncat);
 EXPORT_SYMBOL(strcmp);
-EXPORT_SYMBOL(strncmp);
 EXPORT_SYMBOL(strchr);
 EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(strpbrk);
@@ -201,13 +204,9 @@ EXPORT_SYMBOL(sys_sigsuspend);
 EXPORT_SYMBOL(sys_getppid);
 EXPORT_SYMBOL(svr4_getcontext);
 EXPORT_SYMBOL(svr4_setcontext);
-EXPORT_SYMBOL(linux_cpus);
+EXPORT_SYMBOL(prom_cpu_nodes);
 EXPORT_SYMBOL(sys_ioctl);
 EXPORT_SYMBOL(sys32_ioctl);
-#endif
-
-#ifdef CONFIG_MATHEMU_MODULE
-EXPORT_SYMBOL(handle_mathemu);
 #endif
 
 /* Special internal versions of library functions. */

@@ -2,7 +2,7 @@
 ** hp100.c 
 ** HP CASCADE Architecture Driver for 100VG-AnyLan Network Adapters
 **
-** $Id: hp100.c,v 1.56 1998/03/04 15:23:59 perex Exp perex $
+** $Id: hp100.c,v 1.57 1998/04/10 16:27:23 perex Exp perex $
 **
 ** Based on the HP100 driver written by Jaroslav Kysela <perex@jcu.cz>
 ** Extended for new busmaster capable chipsets by 
@@ -31,10 +31,23 @@
 **       -  some updates for EISA version of card
 **
 **
-** This source/code is public free; you can distribute it and/or modify 
-** it under terms of the GNU General Public License (published by the
-** Free Software Foundation) either version two of this License, or any 
-** later version.
+**   This code is free software; you can redistribute it and/or modify
+**   it under the terms of the GNU General Public License as published by
+**   the Free Software Foundation; either version 2 of the License, or
+**   (at your option) any later version.
+**
+**   This code is distributed in the hope that it will be useful,
+**   but WITHOUT ANY WARRANTY; without even the implied warranty of
+**   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+**   GNU General Public License for more details.
+**
+**   You should have received a copy of the GNU General Public License
+**   along with this program; if not, write to the Free Software
+**   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+**
+**
+** 1.56 -> 1.57
+**   - updates for new PCI interface for 2.1 kernels
 **
 ** 1.55 -> 1.56
 **   - removed printk in misc. interrupt and update statistics to allow
@@ -94,13 +107,15 @@
 #include <linux/config.h>  /* for CONFIG_PCI */
 #include <linux/delay.h>
 
-#if LINUX_VERSION_CODE < 0x020100
+#if LINUX_VERSION_CODE >= 0x020100
+#define LINUX_2_1
+typedef struct net_device_stats hp100_stats_t;
+EXPORT_NO_SYMBOLS;
+#else
+#include <linux/bios32.h>
 #define ioremap vremap
 #define iounmap vfree
 typedef struct enet_statistics hp100_stats_t;
-#else
-#define LINUX_2_1
-typedef struct net_device_stats hp100_stats_t;
 #endif
 
 #ifndef __initfunc
@@ -135,14 +150,14 @@ typedef struct net_device_stats hp100_stats_t;
 #define PCI_DEVICE_ID_COMPEX2_100VG 0x0005
 #endif
 
-#define HP100_REGION_SIZE  0x20 /* for ioports */
+#define HP100_REGION_SIZE	0x20 /* for ioports */
 
-#define HP100_MAX_PACKET_SIZE  (1536+4)
-#define HP100_MIN_PACKET_SIZE  60
+#define HP100_MAX_PACKET_SIZE	(1536+4)
+#define HP100_MIN_PACKET_SIZE	60
 
 #ifndef HP100_DEFAULT_RX_RATIO
 /* default - 75% onboard memory on the card are used for RX packets */
-#define HP100_DEFAULT_RX_RATIO  75
+#define HP100_DEFAULT_RX_RATIO	75
 #endif
 
 #ifndef HP100_DEFAULT_PRIORITY_TX
@@ -175,8 +190,12 @@ struct hp100_private {
   u_short priority_tx;    /* != 0 - priority tx */
   u_short mode;           /* PIO, Shared Mem or Busmaster */
   u_char bus;
+#ifndef LINUX_2_1
   u_char pci_bus;
   u_char pci_device_fn;
+#else
+  struct pci_dev *pci_dev;
+#endif
   short mem_mapped;	  /* memory mapped access */
   u_int *mem_ptr_virt;    /* virtual memory mapped area, maybe NULL */
   u_int *mem_ptr_phys;	  /* physical memory mapped area */
@@ -281,7 +300,11 @@ MODULE_PARM( hp100_mode, "1i" );
  *  prototypes
  */
 
-static int  hp100_probe1( struct device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn  );
+#ifdef LINUX_2_1
+static int  hp100_probe1( struct device *dev, int ioaddr, u_char bus, struct pci_dev *pci_dev );
+#else
+static int  hp100_probe1( struct device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn );
+#endif
 static int  hp100_open( struct device *dev );
 static int  hp100_close( struct device *dev );
 static int  hp100_start_xmit( struct sk_buff *skb, struct device *dev );
@@ -330,9 +353,6 @@ __initfunc(int hp100_probe( struct device *dev ))
   int ioaddr = 0;
 #ifdef CONFIG_PCI
   int pci_start_index = 0;
-#ifdef LINUX_2_1
-  struct pci_dev *pdev;
-#endif
 #endif
 
 #ifdef HP100_DEBUG_B
@@ -344,12 +364,24 @@ __initfunc(int hp100_probe( struct device *dev ))
     {
       if ( check_region( base_addr, HP100_REGION_SIZE ) ) return -EINVAL;
       if ( base_addr < 0x400 )
+#ifdef LINUX_2_1
+        return hp100_probe1( dev, base_addr, HP100_BUS_ISA, NULL );
+#else
         return hp100_probe1( dev, base_addr, HP100_BUS_ISA, 0, 0 );
+#endif
       if ( EISA_bus && base_addr >= 0x1c38 && ( (base_addr - 0x1c38) & 0x3ff ) == 0 )
+#ifdef LINUX_2_1
+        return hp100_probe1( dev, base_addr, HP100_BUS_EISA, NULL );
+#else
         return hp100_probe1( dev, base_addr, HP100_BUS_EISA, 0, 0 );
+#endif
 #ifdef CONFIG_PCI
+#ifdef LINUX_2_1
+      printk( "hp100: %s: You must specify card # in i/o address parameter for PCI bus...", dev->name );
+#else
       printk( "hp100: %s: You may specify card # in i/o address parameter for PCI bus...", dev->name );
       return hp100_probe1( dev, base_addr, HP100_BUS_PCI, 0, 0 );
+#endif
 #else
       return -ENODEV;
 #endif
@@ -365,13 +397,54 @@ __initfunc(int hp100_probe( struct device *dev ))
   /* at first - scan PCI bus(es) */
 
 #ifdef CONFIG_PCI
-  if ( pci_present() )
+  if ( pcibios_present() )
     {
       int pci_index;
+#ifdef LINUX_2_1
+      struct pci_dev *pci_dev = NULL;
+      int pci_id_index;
+      u_short pci_command;
+#endif
 
 #ifdef HP100_DEBUG_PCI
       printk( "hp100: %s: PCI BIOS is present, checking for devices..\n", dev->name );
 #endif
+#ifdef LINUX_2_1
+      pci_index = 0;
+      for ( pci_id_index = 0; pci_id_index < HP100_PCI_IDS_SIZE; pci_id_index++ ) {
+        while ( (pci_dev = pci_find_device( hp100_pci_ids[ pci_id_index ].vendor,
+            			            hp100_pci_ids[ pci_id_index ].device,
+            			            pci_dev )) != NULL ) {
+          if ( pci_index < (pci_start_index & 7) ) {
+            pci_index++;
+            continue;
+          }
+          /* found... */
+          ioaddr = pci_dev -> base_address[ 0 ] & ~3;
+          if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
+          pci_read_config_word( pci_dev, PCI_COMMAND, &pci_command );
+          if ( !( pci_command & PCI_COMMAND_IO ) ) {
+#ifdef HP100_DEBUG
+            printk( "hp100: %s: PCI I/O Bit has not been set. Setting...\n", dev->name );
+#endif
+            pci_command |= PCI_COMMAND_IO;
+            pci_write_config_word( pci_dev, PCI_COMMAND, pci_command );
+          }
+          if ( !( pci_command & PCI_COMMAND_MASTER ) ) {
+#ifdef HP100_DEBUG
+            printk( "hp100: %s: PCI Master Bit has not been set. Setting...\n", dev->name );
+#endif
+            pci_command |= PCI_COMMAND_MASTER;
+            pci_write_config_word( pci_dev, PCI_COMMAND, pci_command );
+          }
+#ifdef HP100_DEBUG
+          printk( "hp100: %s: PCI adapter found at 0x%x\n", dev->name, ioaddr );
+#endif
+	  if ( hp100_probe1( dev, ioaddr, HP100_BUS_PCI, pci_dev ) == 0 )
+	    return 0;
+        }
+      }      
+#else /* old PCI interface */
       for ( pci_index = pci_start_index & 7; pci_index < 8; pci_index++ )
         {
           u_char pci_bus, pci_device_fn;
@@ -386,14 +459,8 @@ __initfunc(int hp100_probe( struct device *dev ))
           break;
 
 	  __pci_found:
-
-#ifdef LINUX_2_1
-	  pdev = pci_find_slot(pci_bus, pci_device_fn);
-	  ioaddr = pdev->base_address[0];
-#else
           pcibios_read_config_dword( pci_bus, pci_device_fn,
                                      PCI_BASE_ADDRESS_0, &ioaddr );
-#endif
 
           ioaddr &= ~3;    /* remove I/O space marker in bit 0. */
 
@@ -425,6 +492,7 @@ __initfunc(int hp100_probe( struct device *dev ))
 	  if ( hp100_probe1( dev, ioaddr, HP100_BUS_PCI, pci_bus, pci_device_fn ) == 0 )
 	    return 0;
         }
+#endif
     }
   if ( pci_start_index > 0 ) return -ENODEV;
 #endif /* CONFIG_PCI */
@@ -433,21 +501,33 @@ __initfunc(int hp100_probe( struct device *dev ))
   for ( ioaddr = 0x1c38; EISA_bus && ioaddr < 0x10000; ioaddr += 0x400 )
     {
       if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
+#ifdef LINUX_2_1
+      if ( hp100_probe1( dev, ioaddr, HP100_BUS_EISA, NULL ) == 0 ) return 0;
+#else
       if ( hp100_probe1( dev, ioaddr, HP100_BUS_EISA, 0, 0 ) == 0 ) return 0;
+#endif
     }
 
   /* Third Probe all ISA possible port regions */
   for ( ioaddr = 0x100; ioaddr < 0x400; ioaddr += 0x20 )
     {
       if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
+#ifdef LINUX_2_1
+      if ( hp100_probe1( dev, ioaddr, HP100_BUS_ISA, NULL ) == 0 ) return 0;
+#else
       if ( hp100_probe1( dev, ioaddr, HP100_BUS_ISA, 0, 0 ) == 0 ) return 0;
+#endif
     }
 
   return -ENODEV;
 }
 
 
+#ifdef LINUX_2_1
+__initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, struct pci_dev *pci_dev ))
+#else
 __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, u_char pci_bus, u_char pci_device_fn ))
+#endif
 {
   int i;
 
@@ -711,15 +791,19 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
   /* Initialise the "private" data structure for this card. */
   if ( (dev->priv=kmalloc(sizeof(struct hp100_private), GFP_KERNEL)) == NULL)
     return -ENOMEM;
-  memset( dev->priv, 0, sizeof(struct hp100_private) );
 
   lp = (struct hp100_private *)dev->priv;
+  memset( lp, 0, sizeof( struct hp100_private ) );
   lp->id = eid;
   lp->chip = chip;
   lp->mode = local_mode;
-  lp->pci_bus = pci_bus;
   lp->bus = bus;
+#ifdef LINUX_2_1
+  lp->pci_dev = pci_dev;
+#else
+  lp->pci_bus = pci_bus;
   lp->pci_device_fn = pci_device_fn;
+#endif
   lp->priority_tx = hp100_priority_tx;
   lp->rx_ratio = hp100_rx_ratio;
   lp->mem_ptr_phys = mem_ptr_phys;
@@ -751,10 +835,18 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
   dev->set_multicast_list = &hp100_set_multicast_list;
 
   /* Ask the card for which IRQ line it is configured */
-  hp100_page( HW_MAP );
-  dev->irq = hp100_inb( IRQ_CHANNEL ) & HP100_IRQMASK;
-  if ( dev->irq == 2 )
-    dev->irq = 9;
+#ifdef LINUX_2_1
+  if ( bus == HP100_BUS_PCI ) {
+    dev->irq = pci_dev->irq;
+  } else {
+#endif
+    hp100_page( HW_MAP );
+    dev->irq = hp100_inb( IRQ_CHANNEL ) & HP100_IRQMASK;
+    if ( dev->irq == 2 )
+      dev->irq = 9;
+#ifdef LINUX_2_1
+  }
+#endif
 
   if(lp->mode==1) /* busmaster */
     dev->dma=4; 

@@ -1,8 +1,11 @@
                  Information about Linux/PPC SMP mode
 =====================================================================
 
-This document and the related code was written by me (Cort Dougan), please
-email me (cort@cs.nmt.edu) if you have questions, comments or corrections.
+This document and the related code was written by me
+(Cort Dougan, cort@cs.nmt.edu) please email me if you have questions,
+comments or corrections.
+
+Last Change: 4.1.98
 
 SMP support for Linux/PPC is still in its early stages and likely to
 be buggy for a while.  If you want to help by writing code or testing
@@ -10,10 +13,16 @@ different hardware please email me!
 
 1. State of Supported Hardware
 
-  UMAX s900
+  PowerSurge Architecture - UMAX s900, Apple 9500/9600/8500/8600/7500/7600
     The second processor on this machine boots up just fine and
     enters its idle loop.  Hopefully a completely working SMP kernel
     on this machine will be done shortly.
+
+    The code makes the assumption of only two processors.  The changes
+    necessary to work with any number would not be overly difficult but
+    I don't have any machines with >2 processors so it's not high on my
+    list of priorities.  If anyone else would like do to the work email
+    me and I can point out the places that need changed.
 
   BeBox
     BeBox support hasn't been added to the 2.1.X kernels from 2.0.X

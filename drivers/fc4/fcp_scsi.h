@@ -1,6 +1,7 @@
 /* fcp_scsi.h: Generic SCSI on top of FC4 - interface defines.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1998 Jiri Hanika (geo@ff.cuni.cz)
  */
 
 #ifndef _FCP_SCSI_H
@@ -21,6 +22,9 @@ typedef u32	dma_handle;
 #else
 #error Need to port FC layer to your architecture
 #endif
+
+/* 0 or 1 */
+#define	FCP_SCSI_USE_NEW_EH_CODE	0
 
 #define FC_CLASS_OUTBOUND	0x01
 #define FC_CLASS_INBOUND	0x02
@@ -62,7 +66,6 @@ typedef struct _fc_channel {
 	int			did;
 	char			name[16];
 	void			(*fcp_register)(struct _fc_channel *, u8, int);
-	void			(*fcp_state_change)(struct _fc_channel *, int);
 	void			(*reset)(struct _fc_channel *);
 	int			(*hw_enque)(struct _fc_channel *, fcp_cmnd *);
 	fc_wwn			wwn_node;
@@ -73,8 +76,10 @@ typedef struct _fc_channel {
 #ifdef __sparc__	
 	struct linux_sbus_device *dev;
 #endif
+	struct module		*module;
 	/* FCP SCSI stuff */
-	int			can_queue;
+	short			can_queue;
+	short			abort_count;
 	int			rsp_size;
 	fcp_cmd			*scsi_cmd_pool;
 	char			*scsi_rsp_pool;
@@ -83,12 +88,13 @@ typedef struct _fc_channel {
 	long			scsi_bitmap_end;
 	int			scsi_free;
 	int			(*encode_addr)(Scsi_Cmnd *cmnd, u16 *addr);
-	fcp_cmnd		*scsi_que[2];
+	fcp_cmnd		*scsi_que;
 	char			scsi_name[4];
 	fcp_cmnd		**token_tab;
 	int			channels;
 	int			targets;
 	long			*ages;
+	Scsi_Cmnd		*rst_pkt;
 	/* LOGIN stuff */
 	fcp_cmnd		*login;
 	void			*ls;
@@ -124,7 +130,9 @@ extern fc_channel *fc_channels;
 
 void fcp_queue_empty(fc_channel *);
 int fcp_init(fc_channel *);
+void fcp_release(fc_channel *fc_chain, int count);
 void fcp_receive_solicited(fc_channel *, int, int, int, fc_hdr *);
+void fcp_state_change(fc_channel *, int);
 
 #define for_each_fc_channel(fc)				\
 	for (fc = fc_channels; fc; fc = fc->next)
@@ -134,7 +142,10 @@ void fcp_receive_solicited(fc_channel *, int, int, int, fc_hdr *);
 		if (fc->state == FC_STATE_ONLINE)
 
 int fcp_scsi_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
+int fcp_old_abort(Scsi_Cmnd *);
 int fcp_scsi_abort(Scsi_Cmnd *);
-int fcp_scsi_reset(Scsi_Cmnd *, unsigned int);
+int fcp_scsi_dev_reset(Scsi_Cmnd *);
+int fcp_scsi_bus_reset(Scsi_Cmnd *);
+int fcp_scsi_host_reset(Scsi_Cmnd *);
 
 #endif /* !(_FCP_SCSI_H) */

@@ -1,7 +1,8 @@
-/* $Id: socksys.c,v 1.2 1997/09/08 11:29:38 jj Exp $
+/* $Id: socksys.c,v 1.7 1998/03/29 10:11:04 davem Exp $
  * socksys.c: /dev/inet/ stuff for Solaris emulation.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997, 1998 Patrik Rak (prak3264@ss1000.ms.mff.cuni.cz)
  * Copyright (C) 1995, 1996 Mike Jagdis (jaggy@purplet.demon.co.uk)
  */
 
@@ -12,14 +13,17 @@
 #include <linux/smp_lock.h>
 #include <linux/ioctl.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/file.h>
+#include <linux/malloc.h>
 
 #include <asm/uaccess.h>
 #include <asm/termios.h>
 
 #include "conv.h"
+#include "socksys.h"
 
 extern asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, 
 	unsigned long arg);
@@ -29,6 +33,20 @@ IPPROTO_ICMP, IPPROTO_ICMP, IPPROTO_IGMP, IPPROTO_IPIP, IPPROTO_TCP,
 IPPROTO_EGP, IPPROTO_PUP, IPPROTO_UDP, IPPROTO_IDP, IPPROTO_RAW,
 0, 0, 0, 0, 0, 0,
 };
+
+#ifndef DEBUG_SOLARIS_KMALLOC
+
+#define mykmalloc kmalloc
+#define mykfree kfree
+
+#else
+
+extern void * mykmalloc(size_t s, int gfp);
+extern void mykfree(void *);
+
+#endif
+
+static unsigned int (*sock_poll)(struct file *, poll_table *);
 
 static struct file_operations socksys_file_ops = {
 	NULL,		/* lseek */
@@ -48,6 +66,7 @@ static int socksys_open(struct inode * inode, struct file * filp)
 	struct dentry *dentry;
 	int (*sys_socket)(int,int,int) =
 		(int (*)(int,int,int))SUNOS(97);
+        struct sol_socket_struct * sock;
 	
 	family = ((MINOR(inode->i_rdev) >> 4) & 0xf);
 	switch (family) {
@@ -68,30 +87,78 @@ static int socksys_open(struct inode * inode, struct file * filp)
 		protocol = 0;
 		break;
 	}
+
 	fd = sys_socket(family, type, protocol);
-	if (fd < 0) return fd;
+	if (fd < 0)
+		return fd;
+	/*
+	 * N.B. The following operations are not legal!
+	 * Try instead:
+	 * d_delete(filp->f_dentry), then d_instantiate with sock inode
+	 */
 	dentry = filp->f_dentry;
-	filp->f_dentry = current->files->fd[fd]->f_dentry;
+	filp->f_dentry = dget(fcheck(fd)->f_dentry);
 	filp->f_dentry->d_inode->i_rdev = inode->i_rdev;
 	filp->f_dentry->d_inode->i_flock = inode->i_flock;
 	filp->f_dentry->d_inode->u.socket_i.file = filp;
 	filp->f_op = &socksys_file_ops;
+        sock = (struct sol_socket_struct*) 
+        	mykmalloc(sizeof(struct sol_socket_struct), GFP_KERNEL);
+        if (!sock) return -ENOMEM;
+	SOLDD(("sock=%016lx(%016lx)\n", sock, filp));
+        sock->magic = SOLARIS_SOCKET_MAGIC;
+        sock->modcount = 0;
+        sock->state = TS_UNBND;
+        sock->offset = 0;
+        sock->pfirst = sock->plast = NULL;
+        filp->private_data = sock;
+	SOLDD(("filp->private_data %016lx\n", filp->private_data));
+
+	sys_close(fd);
 	dput(dentry);
-	FD_CLR(fd, &current->files->close_on_exec);
-	FD_CLR(fd, &current->files->open_fds);
-	put_filp(current->files->fd[fd]);
-	current->files->fd[fd] = NULL;
 	return 0;
 }
 
 static int socksys_release(struct inode * inode, struct file * filp)
 {
+        struct sol_socket_struct * sock;
+        struct T_primsg *it;
+
+	/* XXX: check this */
+	sock = (struct sol_socket_struct *)filp->private_data;
+	SOLDD(("sock release %016lx(%016lx)\n", sock, filp));
+	it = sock->pfirst;
+	while (it) {
+		struct T_primsg *next = it->next;
+		
+		SOLDD(("socksys_release %016lx->%016lx\n", it, next));
+		mykfree((char*)it);
+		it = next;
+	}
+	filp->private_data = NULL;
+	SOLDD(("socksys_release %016lx\n", sock));
+	mykfree((char*)sock);
 	return 0;
 }
 
 static unsigned int socksys_poll(struct file * filp, poll_table * wait)
 {
-	return 0;
+	struct inode *ino;
+	unsigned int mask = 0;
+
+	ino=filp->f_dentry->d_inode;
+	if (ino && ino->i_sock) {
+		struct sol_socket_struct *sock;
+		sock = (struct sol_socket_struct*)filp->private_data;
+		if (sock && sock->pfirst) {
+			mask |= POLLIN | POLLRDNORM;
+			if (sock->pfirst->pri == MSG_HIPRI)
+				mask |= POLLPRI;
+		}
+	}
+	if (sock_poll)
+		mask |= (*sock_poll)(filp, wait);
+	return mask;
 }
 	
 static struct file_operations socksys_fops = {
@@ -110,6 +177,7 @@ __initfunc(int
 init_socksys(void))
 {
 	int ret;
+	struct file * file;
 	int (*sys_socket)(int,int,int) =
 		(int (*)(int,int,int))SUNOS(97);
 	int (*sys_close)(unsigned int) = 
@@ -125,8 +193,11 @@ init_socksys(void))
 		printk ("Couldn't create socket\n");
 		return ret;
 	}
-	socksys_file_ops = *current->files->fd[ret]->f_op;
+	file = fcheck(ret);
+	/* N.B. Is this valid? Suppose the f_ops are in a module ... */
+	socksys_file_ops = *file->f_op;
 	sys_close(ret);
+	sock_poll = socksys_file_ops.poll;
 	socksys_file_ops.poll = socksys_poll;
 	socksys_file_ops.release = socksys_release;
 	return 0;

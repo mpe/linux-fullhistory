@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.14 1997/09/18 10:42:02 rth Exp $
+/* $Id: uaccess.h,v 1.15 1998/02/05 14:19:54 jj Exp $
  * uaccess.h: User space memore access functions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -39,7 +39,7 @@
  * No one can read/write anything from userland in the kernel space by setting
  * large size and address near to page_offset - a fault will break his intentions.
  */
-#define __user_ok(addr,size) ((addr) < stack_top)
+#define __user_ok(addr,size) ((addr) < STACK_TOP)
 #define __kernel_ok (segment_eq(get_fs(), KERNEL_DS))
 #define __access_ok(addr,size) (__user_ok((addr) & get_fs().seg,(size)))
 #define access_ok(type,addr,size) __access_ok((unsigned long)(addr),(size))

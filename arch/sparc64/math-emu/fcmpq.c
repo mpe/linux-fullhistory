@@ -11,11 +11,8 @@ int FCMPQ(void *rd, void *rs2, void *rs1)
 	rd = (void *)(((long)rd)&~3);
 	__FP_UNPACK_Q(A, rs1);
 	__FP_UNPACK_Q(B, rs2);
-	FP_CMP_Q(ret, A, B, 3);
-	switch (ret) {
-	case 1: ret = 2; break;
-	case -1: ret = 1; break;
-	}
+	FP_CMP_Q(ret, B, A, 3);
+	if (ret == -1) ret = 2;
 	fsr = *(unsigned long *)rd;
 	switch (fccno) {
 	case 0: fsr &= ~0xc00; fsr |= (ret << 10); break;

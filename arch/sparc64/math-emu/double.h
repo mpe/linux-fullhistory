@@ -3,7 +3,7 @@
  */
 
 #if _FP_W_TYPE_SIZE < 32
-#error "Here's a nickle kid.  Go buy yourself a real computer."
+#error "Here's a nickel kid.  Go buy yourself a real computer."
 #endif
 
 #if _FP_W_TYPE_SIZE < 64

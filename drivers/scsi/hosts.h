@@ -466,8 +466,15 @@ extern void scsi_unregister_module(int, void *);
  * we need to leave extra room in some of the data structures.	Doing a
  * realloc to enlarge the structures would be riddled with race conditions,
  * so until a better solution is discovered, we use this crude approach
+ *
+ * Even bigger hack for SparcSTORAGE arrays. Those are at least 6 disks, but
+ * usually up to 30 disks, so everyone would need to change this. -jj
  */
-#define SD_EXTRA_DEVS 2
+#ifdef CONFIG_SCSI_PLUTO_MODULE
+#define SD_EXTRA_DEVS 40
+#else
+#define SD_EXTRA_DEVS 4
+#endif
 #define ST_EXTRA_DEVS 2
 #define SR_EXTRA_DEVS 2
 #define SG_EXTRA_DEVS (SD_EXTRA_DEVS + SR_EXTRA_DEVS + ST_EXTRA_DEVS)

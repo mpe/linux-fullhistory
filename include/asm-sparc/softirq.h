@@ -72,7 +72,7 @@ do {	unsigned long flags;				\
 	spin_unlock_irqrestore(&global_bh_lock, flags);	\
 } while(0)
 
-#define softirq_trylock()					\
+#define softirq_trylock(cpu)					\
 ({								\
 	int ret = 1;						\
 	if(atomic_add_return(1, &__sparc_bh_counter) != 1) {	\
@@ -81,7 +81,7 @@ do {	unsigned long flags;				\
 	}							\
 	ret;							\
 })
-#define softirq_endlock()	atomic_dec(&__sparc_bh_counter)
+#define softirq_endlock(cpu)	atomic_dec(&__sparc_bh_counter)
 #define clear_active_bhs(mask)				\
 do {	unsigned long flags;				\
 	spin_lock_irqsave(&global_bh_lock, flags);	\
@@ -96,8 +96,8 @@ extern int __sparc_bh_counter;
 #define start_bh_atomic()	do { __sparc_bh_counter++; barrier(); } while(0)
 #define end_bh_atomic()		do { barrier(); __sparc_bh_counter--; } while(0)
 
-#define softirq_trylock() (__sparc_bh_counter ? 0 : (__sparc_bh_counter=1))
-#define softirq_endlock() (__sparc_bh_counter = 0)
+#define softirq_trylock(cpu) (__sparc_bh_counter ? 0 : (__sparc_bh_counter=1))
+#define softirq_endlock(cpu) (__sparc_bh_counter = 0)
 #define clear_active_bhs(x)	(bh_active &= ~(x))
 
 #define init_bh(nr, routine)	\

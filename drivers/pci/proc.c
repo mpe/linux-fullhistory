@@ -1,5 +1,5 @@
 /*
- *	$Id: proc.c,v 1.8 1998/03/12 14:32:51 mj Exp $
+ *	$Id: proc.c,v 1.10 1998/04/16 20:48:30 mj Exp $
  *
  *	Procfs interface for the PCI bus.
  *
@@ -250,6 +250,13 @@ get_pci_dev_info(char *buf, char **start, off_t pos, int count, int wr)
 						"\t%016lx",
 #endif
 					dev->base_address[i]);
+		len += sprintf(buf+len,
+#if BITS_PER_LONG == 32
+					"\t%08lx",
+#else
+					"\t%016lx",
+#endif
+			       dev->rom_address);
 		buf[len++] = '\n';
 		at += len;
 		if (at >= pos) {
@@ -298,7 +305,7 @@ __initfunc(void proc_bus_pci_add(struct pci_bus *bus, struct proc_dir_entry *pro
 	}
 }
 
-__initfunc(void proc_bus_pci_init(void))
+__initfunc(void pci_proc_init(void))
 {
 	struct proc_dir_entry *proc_pci;
 
@@ -307,4 +314,8 @@ __initfunc(void proc_bus_pci_init(void))
 	proc_pci = create_proc_entry("pci", S_IFDIR, proc_bus);
 	proc_register(proc_pci, &proc_pci_devices);
 	proc_bus_pci_add(&pci_root, proc_pci);
+
+#ifdef CONFIG_PCI_OLD_PROC
+	proc_old_pci_init();
+#endif
 }

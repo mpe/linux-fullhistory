@@ -2,7 +2,7 @@
 
   Linux Driver for BusLogic MultiMaster and FlashPoint SCSI Host Adapters
 
-  Copyright 1995 by Leonard N. Zubkoff <lnz@dandelion.com>
+  Copyright 1995-1998 by Leonard N. Zubkoff <lnz@dandelion.com>
 
   This program is free software; you may redistribute and/or modify it under
   the terms of the GNU General Public License Version 2 as published by the
@@ -36,8 +36,10 @@
 
 typedef kdev_t KernelDevice_T;
 typedef struct proc_dir_entry PROC_DirectoryEntry_T;
+typedef unsigned long ProcessorFlags_T;
 typedef struct pt_regs Registers_T;
 typedef struct partition PartitionTable_T;
+typedef struct pci_dev PCI_Device_T;
 typedef Scsi_Host_Template SCSI_Host_Template_T;
 typedef struct Scsi_Host SCSI_Host_T;
 typedef struct scsi_device SCSI_Device_T;
@@ -966,16 +968,6 @@ typedef unsigned char BusLogic_RequestedReplyLength_T;
 
 
 /*
-  Define the Lock data structure.  Until a true symmetric multiprocessing
-  kernel with fine grained locking is available, acquiring the lock is
-  implemented as saving the processor flags and disabling interrupts, and
-  releasing the lock restores the saved processor flags.
-*/
-
-typedef unsigned long BusLogic_Lock_T;
-
-
-/*
   Define the Outgoing Mailbox Action Codes.
 */
 
@@ -1374,7 +1366,6 @@ typedef struct BusLogic_HostAdapter
   unsigned char ModelName[9];
   unsigned char FirmwareVersion[6];
   unsigned char FullModelName[18];
-  unsigned char InterruptLabel[68];
   unsigned char Bus;
   unsigned char Device;
   unsigned char IRQ_Channel;
@@ -1401,7 +1392,8 @@ typedef struct BusLogic_HostAdapter
   boolean HostAdapterInitialized:1;
   boolean HostAdapterExternalReset:1;
   boolean HostAdapterInternalError:1;
-  volatile boolean HostAdapterCommandCompleted:1;
+  boolean ProcessCompletedCCBsActive;
+  volatile boolean HostAdapterCommandCompleted;
   unsigned short HostAdapterScatterGatherLimit;
   unsigned short DriverScatterGatherLimit;
   unsigned short MaxTargetDevices;
@@ -1430,9 +1422,10 @@ typedef struct BusLogic_HostAdapter
   FlashPoint_Info_T FlashPointInfo;
   FlashPoint_CardHandle_T CardHandle;
   struct BusLogic_HostAdapter *Next;
-  struct BusLogic_HostAdapter *NextAll;
   BusLogic_CCB_T *All_CCBs;
   BusLogic_CCB_T *Free_CCBs;
+  BusLogic_CCB_T *FirstCompletedCCB;
+  BusLogic_CCB_T *LastCompletedCCB;
   BusLogic_CCB_T *BusDeviceResetPendingCCB[BusLogic_MaxTargetDevices];
   BusLogic_ErrorRecoveryStrategy_T
     ErrorRecoveryStrategy[BusLogic_MaxTargetDevices];
@@ -1514,10 +1507,8 @@ SCSI_Inquiry_T;
 
 static inline
 void BusLogic_AcquireHostAdapterLock(BusLogic_HostAdapter_T *HostAdapter,
-				     BusLogic_Lock_T *Lock)
+				     ProcessorFlags_T *ProcessorFlags)
 {
-  save_flags(*Lock);
-  cli();
 }
 
 
@@ -1527,33 +1518,36 @@ void BusLogic_AcquireHostAdapterLock(BusLogic_HostAdapter_T *HostAdapter,
 
 static inline
 void BusLogic_ReleaseHostAdapterLock(BusLogic_HostAdapter_T *HostAdapter,
-				     BusLogic_Lock_T *Lock)
-{
-  restore_flags(*Lock);
-}
-
-
-/*
-  BusLogic_AcquireHostAdapterLockID acquires exclusive access to Host Adapter,
-  but is only called when interrupts are disabled.
-*/
-
-static inline
-void BusLogic_AcquireHostAdapterLockID(BusLogic_HostAdapter_T *HostAdapter,
-				       BusLogic_Lock_T *Lock)
+				     ProcessorFlags_T *ProcessorFlags)
 {
 }
 
 
 /*
-  BusLogic_ReleaseHostAdapterLockID releases exclusive access to Host Adapter,
-  but is only called when interrupts are disabled.
+  BusLogic_AcquireHostAdapterLockIH acquires exclusive access to Host Adapter,
+  but is only called from the interrupt handler.
 */
 
 static inline
-void BusLogic_ReleaseHostAdapterLockID(BusLogic_HostAdapter_T *HostAdapter,
-				       BusLogic_Lock_T *Lock)
+void BusLogic_AcquireHostAdapterLockIH(BusLogic_HostAdapter_T *HostAdapter,
+				       ProcessorFlags_T *ProcessorFlags)
 {
+  extern spinlock_t io_request_lock;
+  spin_lock_irqsave(&io_request_lock, *ProcessorFlags);
+}
+
+
+/*
+  BusLogic_ReleaseHostAdapterLockIH releases exclusive access to Host Adapter,
+  but is only called from the interrupt handler.
+*/
+
+static inline
+void BusLogic_ReleaseHostAdapterLockIH(BusLogic_HostAdapter_T *HostAdapter,
+				       ProcessorFlags_T *ProcessorFlags)
+{
+  extern spinlock_t io_request_lock;
+  spin_unlock_irqrestore(&io_request_lock, *ProcessorFlags);
 }
 
 
@@ -1685,8 +1679,8 @@ static inline void *Bus_to_Virtual(BusLogic_BusAddress_T BusAddress)
 
 /*
   Virtual_to_32Bit_Virtual maps between Kernel Virtual Addresses and
-  32 Bit Kernel Virtual Addresses.  This avoids compilation warnings
-  on 64 Bit architectures.
+  32 bit Kernel Virtual Addresses.  This avoids compilation warnings
+  on 64 bit architectures.
 */
 
 static inline
@@ -1748,17 +1742,6 @@ static inline void BusLogic_IncrementSizeBucket(BusLogic_CommandSizeBuckets_T
   else Index = (Amount < 256*1024 ? 8 : 9);
   CommandSizeBuckets[Index]++;
 }
-
-
-/*
-  Define compatibility macros between Linux 2.0 and Linux 2.1.
-*/
-
-#if LINUX_VERSION_CODE < 0x20100
-
-#define MODULE_PARM(Variable, Type)
-
-#endif
 
 
 /*

@@ -10,6 +10,7 @@
 #include <asm/prom.h>
 #include <asm/adb.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/hydra.h>
 #include <asm/irq.h>
 #include <asm/system.h>
@@ -71,7 +72,7 @@ void macio_adb_init(void)
 	if (adbs == 0)
 		return;
 
-#if 1
+#if 0
 	{ int i;
 
 	printk("macio_adb_init: node = %p, addrs =", adbs->node);
@@ -79,16 +80,17 @@ void macio_adb_init(void)
 		printk(" %x(%x)", adbs->addrs[i].address, adbs->addrs[i].size);
 	printk(", intrs =");
 	for (i = 0; i < adbs->n_intrs; ++i)
-		printk(" %x", adbs->intrs[i]);
+		printk(" %x", adbs->intrs[i].line);
 	printk("\n"); }
 #endif
 	
-	adb = (volatile struct adb_regs *) adbs->addrs->address;
+	adb = (volatile struct adb_regs *)
+		ioremap(adbs->addrs->address, sizeof(struct adb_regs));
 
-	if (request_irq(openpic_to_irq(adbs->intrs[0]), macio_adb_interrupt,
+	if (request_irq(adbs->intrs[0].line, macio_adb_interrupt,
 			0, "ADB", (void *)0)) {
 		printk(KERN_ERR "ADB: can't get irq %d\n",
-		       openpic_to_irq(adbs->intrs[0]));
+		       adbs->intrs[0].line);
 		return;
 	}
 

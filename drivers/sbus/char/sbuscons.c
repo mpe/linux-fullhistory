@@ -1,11 +1,11 @@
-/* $Id: sbuscons.c,v 1.10 1998/01/07 06:37:22 baccala Exp $
+/* $Id: sbuscons.c,v 1.15 1998/03/31 01:49:50 davem Exp $
  * sbuscons.c: Routines specific to SBUS frame buffer consoles.
  *
  * Copyright (C) 1995 Peter Zaitcev (zaitcev@lab.ipmce.su)
  * Copyright (C) 1995,1996,1997 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1995, 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
  * Copyright (C) 1996 Dave Redman (djhr@tadpole.co.uk)
- * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  * Copyright (C) 1996 Eddie C. Dost (ecd@skynet.be)
  *
  * Added font loading Nov/21, Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -72,6 +72,9 @@
 #include <asm/fbio.h>
 #include <asm/io.h>
 #include <asm/smp.h>
+#ifndef __sparc_v9__
+#include <asm/sun4paddr.h>
+#endif
 
 #include <linux/kbd_kern.h>
 #include <linux/vt_kern.h>
@@ -96,7 +99,6 @@ static int sbus_blitc(uint, unsigned long);
 
 static void sbus_install_consops(void);
 
-extern void register_console(void (*proc)(const char *));
 extern void console_print(const char *);
 extern void putconsxy(int, char *);
 extern unsigned char vga_font[];
@@ -277,14 +279,15 @@ static void sbus_set_cursor(int currcons)
 	int j, idx, oldpos;
 	unsigned long flags;
 
-	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
+	if (currcons != fg_console || console_blanked || 
+	    vt_cons[currcons]->vc_mode == KD_GRAPHICS)
 		return;
 
 	if (fbinfo[0].setcursor) {
-		if (!deccm)
+		if (!vc_cons[currcons].d->vc_deccm)
 			sbus_hide_cursor();
 		else {
-			idx = (pos - video_mem_base) >> 1;
+			idx = (vc_cons[currcons].d->vc_pos - video_mem_base) >> 1;
 			
 			sbus_hw_set_cursor(x_margin + ((idx % video_num_columns) << 3), y_margin + ((idx / video_num_columns) * CHAR_HEIGHT));
 		}
@@ -293,9 +296,9 @@ static void sbus_set_cursor(int currcons)
 
 	__save_and_cli(flags);
 
-	idx = (pos - video_mem_base) >> 1;
+	idx = (vc_cons[currcons].d->vc_pos - video_mem_base) >> 1;
 	oldpos = cursor_pos;
-	if (!deccm) {
+	if (!vc_cons[currcons].d->vc_deccm) {
 		sbus_hide_cursor ();
 		__restore_flags (flags);
 		return;
@@ -420,7 +423,7 @@ __initfunc(static void sbus_con_type_init_finish(void))
 
 	p = logo_banner;
 	for (; *p; p++, ush++) {
-		*ush = (attr << 8) + *p;
+		*ush = (vc_cons[currcons].d->vc_attr << 8) + *p;
 		sbus_blitc (*ush, (unsigned long) ush);
 	}
 	for (i = 0; i < 5; i++) {
@@ -435,24 +438,34 @@ __initfunc(static void sbus_con_type_init_finish(void))
  */
 static void sbus_get_scrmem(int currcons)
 {
+	struct vc_data *vcd = vc_cons[currcons].d;
+	
 	memcpyw((unsigned short *)vc_scrbuf[currcons],
-		(unsigned short *)origin, video_screen_size);
-	origin = video_mem_start = (unsigned long)vc_scrbuf[currcons];
-	scr_end = video_mem_end = video_mem_start + video_screen_size;
-	pos = origin + y*video_size_row + (x<<1);
+		(unsigned short *)vcd->vc_origin, 
+		video_screen_size);
+	vcd->vc_origin = vcd->vc_video_mem_start = 
+		(unsigned long)vc_scrbuf[currcons];
+	vcd->vc_scr_end = vcd->vc_video_mem_end = 
+		vcd->vc_video_mem_start + video_screen_size;
+	vcd->vc_pos = 
+		vcd->vc_origin + vcd->vc_y*video_size_row + (vcd->vc_x<<1);
 }
 
 static void sbus_set_scrmem(int currcons, long offset)
 {
+	struct vc_data *vcd = vc_cons[currcons].d;
+	
 	if (video_mem_term - video_mem_base < offset + video_screen_size)
 		offset = 0;
 	memcpyw((unsigned short *)(video_mem_base + offset),
-		(unsigned short *) origin, video_screen_size);
-	video_mem_start = video_mem_base;
-	video_mem_end = video_mem_term;
-	origin = video_mem_base + offset;
-	scr_end = origin + video_screen_size;
-	pos = origin + y*video_size_row + (x<<1);
+		(unsigned short *) vcd->vc_origin, 
+		video_screen_size);
+	vcd->vc_video_mem_start = video_mem_base;
+	vcd->vc_video_mem_end = video_mem_term;
+	vcd->vc_origin = video_mem_base + offset;
+	vcd->vc_scr_end = vcd->vc_origin + video_screen_size;
+	vcd->vc_pos = 
+		vcd->vc_origin + vcd->vc_y*video_size_row + (vcd->vc_x<<1);
 }
 
 /*
@@ -545,7 +558,20 @@ static int sbus_set_get_cmap(unsigned char * arg, int set)
 	return 0;
 }
 
-static void sbus_clear_screen(void)
+#ifdef CONFIG_SUN4
+extern __inline__ void memset_screen(void *s, unsigned c, size_t n)
+{
+	unsigned *p = (unsigned *)s;
+	int i;
+	
+	for (i = n / 4; i > 0; i--)
+		*p++ = c;
+}
+#else
+#define memset_screen memset
+#endif
+
+void sbus_clear_screen(void)
 {
 	if (fbinfo[0].fill) {
 		int rects [4];
@@ -556,7 +582,7 @@ static void sbus_clear_screen(void)
 		rects [3] = con_height;
 		(*fbinfo[0].fill)(reverse_color_table[0], 1, rects);
 	} else if (fbinfo[0].base && fbinfo[0].base_depth)
-		memset (con_fb_base,
+		memset_screen(con_fb_base,
 			(con_depth == 1) ? ~(0) : reverse_color_table[0],
 			(con_depth * con_height * con_width) / 8);
 	/* also clear out the "shadow" screen memory */
@@ -769,8 +795,7 @@ __initfunc(static void
 	fbinfo [n].type.fb_height = prom_getintdefault(con_node, "height", 900);
 	fbinfo [n].type.fb_width  = prom_getintdefault(con_node, "width", 1152);
 	fbinfo [n].type.fb_depth  = (type == FBTYPE_SUN2BW) ? 1 : 8;
-	linebytes = prom_getint(con_node, "linebytes");
-	if (linebytes == -1) linebytes = fbinfo [n].type.fb_width;
+	linebytes = prom_getintdefault(con_node, "linebytes", fbinfo[n].type.fb_width * fbinfo[n].type.fb_depth / 8);
 	fbinfo [n].type.fb_size   = PAGE_ALIGN((linebytes) * (fbinfo [n].type.fb_height));
 	fbinfo [n].space = io;
 	fbinfo [n].blanked = 0;
@@ -925,12 +950,22 @@ __initfunc(int sbus_console_probe(void))
 	u32 tmp;
 	u32 prom_console_node = 0;
 
-	if(SBus_chain == 0)
-		return -1;
-
-	sbdprom = 0;
-	switch(prom_vers) {
-	case PROM_V0:
+	if(SBus_chain == 0) {
+#ifdef CONFIG_SUN4
+		sparc_framebuffer_setup (1,0,FBTYPE_SUN2BW,NULL,SUN4_300_BWTWO_PHYSADDR,0,0,0);
+#else	
+		creator = creator_present();
+		if (!creator)
+			return -1;
+		sparc_framebuffer_setup (1, creator, FBTYPE_CREATOR,
+					 0, 0, 0, 0, prom_root_node);
+#endif
+	} else {
+		sbdprom = 0;
+		
+		switch(prom_vers) {
+		
+		case PROM_V0:
 		/* V0 proms are at sun4c only. Can skip many checks. */
 		con_type = FBTYPE_NOTYPE;
 		for_each_sbusdev(sbdp, SBus_chain) {
@@ -965,9 +1000,10 @@ __initfunc(int sbus_console_probe(void))
 				break;
 		}
 		break;
-	case PROM_V2:
-	case PROM_V3:
-	case PROM_P1275:
+		
+		case PROM_V2:
+		case PROM_V3:
+		case PROM_P1275:
 		if (console_fb_path) {
 			char *q, c;
 
@@ -1073,8 +1109,10 @@ __initfunc(int sbus_console_probe(void))
 						 prom_root_node);
 		}
 		break;
-	default:
+		
+		default:
 		return -1;
+		}
 	}
 	
 	if (fbinfo [0].type.fb_type == FBTYPE_NOTYPE) {

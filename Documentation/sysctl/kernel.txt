@@ -1,6 +1,6 @@
 
 Documentation for /proc/sys/kernel/*	version 0.1
-	(c) 1998, Rik van Riel <H.H.vanRiel@fys.ruu.nl>
+	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
 
 For general info and legal blurb, please look in README.
 

@@ -16,13 +16,18 @@
 #include "fcp_scsi.h"
 
 EXPORT_SYMBOL(fcp_init);
+EXPORT_SYMBOL(fcp_release);
 EXPORT_SYMBOL(fcp_queue_empty);
 EXPORT_SYMBOL(fcp_receive_solicited);
 EXPORT_SYMBOL(fc_channels);
+EXPORT_SYMBOL(fcp_state_change);
 
 /* SCSI stuff */
 EXPORT_SYMBOL(fcp_scsi_queuecommand);
+EXPORT_SYMBOL(fcp_old_abort);
 EXPORT_SYMBOL(fcp_scsi_abort);
-EXPORT_SYMBOL(fcp_scsi_reset);
+EXPORT_SYMBOL(fcp_scsi_dev_reset);
+EXPORT_SYMBOL(fcp_scsi_bus_reset);
+EXPORT_SYMBOL(fcp_scsi_host_reset);
 
 #endif /* CONFIG_MODULES */

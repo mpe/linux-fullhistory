@@ -1,7 +1,7 @@
-/* $Id: entry64.S,v 1.4 1997/09/09 17:13:50 jj Exp $
+/* $Id: entry64.S,v 1.5 1998/03/26 08:46:15 jj Exp $
  * entry64.S:  Solaris syscall emulation entry point.
  *
- * Copyright (C) 1996,1997 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1997,1998 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Miguel de Icaza      (miguel@nuclecu.unam.mx)
  */
@@ -29,8 +29,11 @@ solaris_syscall_trace:
 	mov		%i4, %o4
 	srl		%i1, 0, %o1
 	mov		%i5, %o5
-	b,pt		%xcc, 2f
+	andcc		%l3, 1, %g0
+	be,pt		%icc, 2f
 	 srl		%i2, 0, %o2
+	b,pt		%xcc, 2f
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 
 solaris_sucks:
 /* Solaris is a big system which needs to be able to do all the things
@@ -59,9 +62,9 @@ solaris_reg:
 	 mov		%i4, %o4
 
 linux_syscall_for_solaris:
-	sll		%l7, 2, %l4
+	sll		%l3, 2, %l4
 	ba,pt		%xcc, 10f
-	 lduw		[%l6 + %l4], %l7
+	 lduw		[%l6 + %l4], %l3
 
 	/* Solaris system calls enter here... */
 	.align	32
@@ -78,18 +81,18 @@ solaris_sparc_syscall:
 	cmp		%l0, 1
 	bne,pn		%icc, solaris_reg
 1:	 srl		%i0, 0, %o0
-	lduw		[%l7 + %l4], %l7
+	lduw		[%l7 + %l4], %l3
 	srl		%i1, 0, %o1
 	ldx		[%g6 + AOFF_task_flags], %l5
-	cmp		%l7, NR_SYSCALLS
+	cmp		%l3, NR_SYSCALLS
 	bleu,a,pn	%xcc, linux_syscall_for_solaris
 	 sethi		%hi(sys_call_table32), %l6
-	andcc		%l7, 1, %g0
+	andcc		%l3, 1, %g0
 	bne,a,pn	%icc, 10f
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 10:	srl		%i2, 0, %o2
 	mov		%i5, %o5
-	andn		%l7, 3, %l7
+	andn		%l3, 3, %l7
 	andcc		%l5, 0x20, %g0				
 	bne,pn		%icc, solaris_syscall_trace		
 	 mov		%i0, %l5
@@ -110,12 +113,20 @@ ret_from_solaris:
 	andn		%g3, %g2, %g3
 	stx		%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TSTATE]	
 	bne,pn		%icc, solaris_syscall_trace2
-	 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1 ! pc = npc
-	add		%l1, 0x4, %l2				         !npc = npc+4
-	stx		%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]
-	clr		%l6
+	 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1
+	andcc		%l1, 1, %g0
+	bne,pn		%icc, 2f
+	 clr		%l6
+	add		%l1, 0x4, %l2				         
+	stx		%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]	 ! pc = npc
 	call		rtrap
-	 stx		%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC]
+	 stx		%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC] !npc = npc+4
+
+	/* When tnpc & 1, this comes from setcontext and we don't want to advance pc */
+2:	andn		%l1, 3, %l1
+	call		rtrap
+	 stx		%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC] !npc = npc&~3
+
 1:
 	/* System call failure, set Carry condition code.
 	 * Also, get abs(errno) to return to the process.
@@ -134,15 +145,20 @@ ret_from_solaris:
 	mov		1, %l6
 	stx		%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TSTATE]
 	bne,pn		%icc, solaris_syscall_trace2
-	 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1 ! pc = npc
-	add		%l1, 0x4, %l2				         !npc = npc+4
-
-	stx		%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]
+	 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1
+	andcc		%l1, 1, %g0
+	bne,pn		%icc, 2b
+	 add		%l1, 0x4, %l2
+	stx		%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]  ! pc = npc
 	call		rtrap
-	 stx		%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC]
+	 stx		%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC] !npc = npc+4 
+
 solaris_syscall_trace2:
 	call		syscall_trace
 	 add		%l1, 0x4, %l2			/* npc = npc+4 */
+	andcc		%l1, 1, %g0
+	bne,pn		%icc, 2b
+	 nop
 	stx		%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]
 	call		rtrap
 	 stx		%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC]

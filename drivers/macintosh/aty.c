@@ -18,12 +18,12 @@
 #include <linux/string.h>
 #include <linux/vc_ioctl.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/nvram.h>
 #include <linux/selection.h>
 #include <linux/vt_kern.h>
 #include <asm/prom.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/pci-bridge.h>
 #include "pmac-cons.h"
 #include "aty.h"
@@ -61,10 +61,12 @@ static int aty_vram_reqd(int vmode, int cmode);
 static aty_regvals *get_aty_struct(void);
 
 static unsigned char *frame_buffer;
+static unsigned long frame_buffer_phys;
 static int total_vram;		/* total amount of video memory, bytes */
 static int chip_type;		/* what chip type was detected */
 
 static unsigned long ati_regbase;
+static unsigned long ati_regbase_phys;
 static struct aty_cmap_regs *aty_cmap_regs;
 
 #if 0
@@ -126,7 +128,8 @@ static struct aty_regvals *aty_gx_reg_init[20] = {
 	&aty_gx_reg_init_15,
 	NULL,
 	&aty_gx_reg_init_17,
-	NULL, NULL,
+	&aty_gx_reg_init_18,
+	NULL,
 	&aty_gx_reg_init_20
 };
 
@@ -323,7 +326,8 @@ map_aty_display(struct device_node *dp)
 	printk("Warning: expecting 1 or 3 addresses for ATY (got %d)",
 	       dp->n_addrs);
 
-	ati_regbase = (int) ioremap((0x7ffc00 + dp->addrs[0].address), 0x1000);
+	ati_regbase_phys = 0x7ffc00 + dp->addrs[0].address;
+	ati_regbase = (int) ioremap(ati_regbase_phys, 0x1000);
 	aty_cmap_regs = (struct aty_cmap_regs *) (ati_regbase + 0xC0);
 
 	/* enable memory-space accesses using config-space command register */
@@ -384,12 +388,12 @@ map_aty_display(struct device_node *dp)
 			total_vram = 0x80000;
 		}
 
-#if 1
+#if 0
 	printk("aty_display_init: node = %p, addrs = ", dp->node);
 	printk(" %x(%x)", dp->addrs[0].address, dp->addrs[0].size);
 	printk(", intrs =");
 	for (i = 0; i < dp->n_intrs; ++i)
-	printk(" %x", dp->intrs[i]);
+	printk(" %x", dp->intrs[i].line);
 	printk("\nregbase: %x pci loc: %x:%x total_vram: %x cregs: %x\n", (int) ati_regbase,
 		bus, devfn, total_vram, (int) aty_cmap_regs);
 #endif
@@ -398,10 +402,11 @@ map_aty_display(struct device_node *dp)
 
 	/* use the big-endian aperture (??) */
 	addr += 0x800000;
-	frame_buffer = ioremap(addr, 0x800000);
+	frame_buffer_phys = addr;
+	frame_buffer = __ioremap(addr, 0x800000, _PAGE_WRITETHRU);
 
 	sense = read_aty_sense();
-	printk("monitor sense = %x\n", sense);
+	printk(KERN_INFO "monitor sense = %x\n", sense);
 	if (video_mode == VMODE_NVRAM) {
 		video_mode = nvram_read_byte(NV_VMODE);
 		init = get_aty_struct();
@@ -720,11 +725,11 @@ aty_init()
 		break;
 	}
 	display_info.fb_address = (chip_type != MACH64_GT_ID) ?
-		(unsigned long) frame_buffer + init->offset[color_mode] :
-		(unsigned long) frame_buffer;
-	display_info.cmap_adr_address = (unsigned long) &aty_cmap_regs->windex;
-	display_info.cmap_data_address = (unsigned long) &aty_cmap_regs->lut;
-	display_info.disp_reg_address = ati_regbase;
+		frame_buffer_phys + init->offset[color_mode] :
+		frame_buffer_phys;
+	display_info.cmap_adr_address = ati_regbase_phys + 0xc0;
+	display_info.cmap_data_address = ati_regbase_phys + 0xc1;
+	display_info.disp_reg_address = ati_regbase_phys;
 }
 
 int

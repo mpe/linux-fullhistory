@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.20 1997/08/04 16:16:51 davem Exp $
+/* $Id: fault.c,v 1.21 1998/03/25 10:43:20 jj Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -209,7 +209,7 @@ bad_area:
 		} else {
 			current->tss.sig_address = address;
 			current->tss.sig_desc = SUBSIG_NOMAPPING;
-			send_sig(SIGSEGV, current, 1);
+			force_sig(SIGSEGV, current);
 			goto out;
 		}
 		unhandled_fault (address, current, regs);

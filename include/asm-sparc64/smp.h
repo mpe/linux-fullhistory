@@ -74,7 +74,12 @@ extern void smp_boot_cpus(void);
 extern void smp_store_cpu_info(int id);
 
 extern __volatile__ int cpu_number_map[NR_CPUS];
-extern __volatile__ int cpu_logical_map[NR_CPUS];
+extern __volatile__ int __cpu_logical_map[NR_CPUS];
+
+extern __inline__ int cpu_logical_map(int cpu)
+{
+	return __cpu_logical_map[cpu];
+}
 
 extern __inline__ int hard_smp_processor_id(void)
 {
@@ -88,10 +93,19 @@ extern __inline__ int hard_smp_processor_id(void)
 
 #define smp_processor_id() (current->processor)
 
+extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
+
 #endif /* !(__ASSEMBLY__) */
 
 #define PROC_CHANGE_PENALTY	20
 
+#else /* !(__SMP__) */
+#ifndef __ASSEMBLY__ 
+extern __inline__ int cpu_logical_map(int cpu)
+{
+	return cpu;
+}
+#endif 
 #endif /* !(__SMP__) */
 
 #define NO_PROC_ID		0xFF

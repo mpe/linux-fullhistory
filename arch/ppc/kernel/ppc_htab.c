@@ -1,5 +1,5 @@
 /*
- * $Id: ppc_htab.c,v 1.16 1997/11/17 18:25:04 cort Exp $
+ * $Id: ppc_htab.c,v 1.17 1998/03/14 07:52:49 cort Exp $
  *
  * PowerPC hash table management proc entry.  Will show information
  * about the current hash table and will allow changes to it.
@@ -88,6 +88,7 @@ struct inode_operations proc_ppc_htab_inode_operations = {
 #define PMC1 953
 #define PMC2 954
 
+#ifndef CONFIG_8xx
 char *pmc1_lookup(unsigned long mmcr0)
 {
 	switch ( mmcr0 & (0x7f<<7) )
@@ -123,7 +124,7 @@ char *pmc2_lookup(unsigned long mmcr0)
 		return "unknown";
 	}
 }	
-
+#endif /* CONFIG_8xx */
 
 /*
  * print some useful info about the hash table.  This function
@@ -133,6 +134,7 @@ char *pmc2_lookup(unsigned long mmcr0)
 static ssize_t ppc_htab_read(struct file * file, char * buf,
 			     size_t count, loff_t *ppos)
 {
+#ifndef CONFIG_8xx
 	unsigned long mmcr0 = 0, pmc1 = 0, pmc2 = 0;
 	int n = 0, valid;
 	unsigned int kptes = 0, overflow = 0, uptes = 0, zombie_ptes = 0;
@@ -249,6 +251,9 @@ return_string:
 	copy_to_user(buf, buffer + *ppos, n);
 	*ppos += n;
 	return n;
+#else /* CONFIG_8xx */
+	return 0;
+#endif /* CONFIG_8xx */
 }
 
 /*
@@ -257,6 +262,7 @@ return_string:
 static ssize_t ppc_htab_write(struct file * file, const char * buffer,
 			      size_t count, loff_t *ppos)
 {
+#ifndef CONFIG_8xx
 	unsigned long tmp;
 	if ( current->uid != 0 )
 		return -EACCES;
@@ -493,6 +499,9 @@ static ssize_t ppc_htab_write(struct file * file, const char * buffer,
 	reset_SDR1();
 #endif	
 	return count;
+#else /* CONFIG_8xx */
+	return 0;
+#endif /* CONFIG_8xx */
 }
 
 
@@ -512,4 +521,3 @@ ppc_htab_lseek(struct file * file, loff_t offset, int orig)
 	return(-EINVAL);
     }
 }
-

@@ -14,7 +14,7 @@
 #include <asm/smp.h>
 #include <asm/system.h>
 
-struct prom_cpuinfo linux_cpus[NCPUS];
+struct prom_cpuinfo linux_cpus[NR_CPUS];
 int linux_num_cpus;
 
 extern void cpu_probe(void);
@@ -26,7 +26,7 @@ device_scan(unsigned long mem_start))
 {
 	char node_str[128];
 	int nd, prom_node_cpu, thismid;
-	int cpu_nds[NCPUS];  /* One node for each cpu */
+	int cpu_nds[NR_CPUS];  /* One node for each cpu */
 	int cpu_ctr = 0;
 
 	prom_getstring(prom_root_node, "device_type", node_str, sizeof(node_str));
@@ -62,11 +62,9 @@ device_scan(unsigned long mem_start))
 					prom_getstring(node, "device_type", node_str, sizeof(node_str));
 					if (strcmp(node_str, "cpu") == 0) {
 						prom_getproperty(node, "cpu-id", (char *) &thismid, sizeof(thismid));
-						if (cpu_ctr < NCPUS) {
-							cpu_nds[cpu_ctr] = node;
-							linux_cpus[cpu_ctr].prom_node = node;
-							linux_cpus[cpu_ctr].mid = thismid;
-						}
+						cpu_nds[cpu_ctr] = node;
+						linux_cpus[cpu_ctr].prom_node = node;
+						linux_cpus[cpu_ctr].mid = thismid;
 						prom_printf("Found CPU %d <node=%08lx,mid=%d>\n",
 							    cpu_ctr, (unsigned long) node,
 							    thismid);
@@ -74,8 +72,6 @@ device_scan(unsigned long mem_start))
 					}
 				}
 			}
-			if (cpu_ctr > NCPUS)
-				cpu_ctr = NCPUS;
 		}
 		if(cpu_ctr == 0) {
 			printk("No CPU nodes found, cannot continue.\n");
@@ -99,7 +95,7 @@ device_scan(unsigned long mem_start))
 #endif
 	clock_stop_probe();
 
-	if (sparc_cpu_model == sun4c)
+	if (ARCH_SUN4C_SUN4)
 		sun4c_probe_memerr_reg();
 
 	return mem_start;

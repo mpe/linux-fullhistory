@@ -1,7 +1,8 @@
-/* $Id: ide.h,v 1.4 1997/08/30 16:29:29 davem Exp $
+/* $Id: ide.h,v 1.6 1998/03/15 13:29:13 ecd Exp $
  * ide.h: Ultra/PCI specific IDE glue.
  *
- * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1997  David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1998  Eddie C. Dost   (ecd@skynet.be)
  */
 
 #ifndef _SPARC64_IDE_H
@@ -14,42 +15,31 @@ typedef unsigned long ide_ioreg_t;
 #undef  MAX_HWIFS
 #define MAX_HWIFS	2
 
-extern int sparc64_ide_ports_known;
-extern ide_ioreg_t sparc64_ide_regbase[MAX_HWIFS];
-extern ide_ioreg_t sparc64_idedma_regbase; /* one for both channels */
-extern unsigned int sparc64_ide_irq;
-
-extern void sparc64_ide_probe(void);
-
 #define	ide_sti()	sti()
 
 static __inline__ int ide_default_irq(ide_ioreg_t base)
 {
-	if(sparc64_ide_ports_known == 0)
-		sparc64_ide_probe();
-	return sparc64_ide_irq;
+	return 0;
 }
 
 static __inline__ ide_ioreg_t ide_default_io_base(int index)
 {
-	if(sparc64_ide_ports_known == 0)
-		sparc64_ide_probe();
-	return sparc64_ide_regbase[index];
+	return 0;
 }
 
 static __inline__ void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
-	ide_ioreg_t port = base;
-	int i = 9;
+	int i;
 
-	while(i--)
-		*p++ = port++;
-	if(base == sparc64_ide_regbase[0])
-		*p = sparc64_idedma_regbase + 0x2;
-	else
-		*p = sparc64_idedma_regbase + 0xa;
+	/* These are simply offsets from base. */
+	for (i = 0; i < 8; i++)
+		*p++ = base++;
+	/* PCI code needs to figure out these. */
+	for ( ; i < 10; i++)
+		*p++ = 0;
+	/* PCI code needs to figure out this. */
 	if(irq != NULL)
-		*irq = sparc64_ide_irq;
+		*irq = 0;
 }
 
 typedef union {
@@ -102,13 +92,7 @@ static __inline__ void ide_release_region(ide_ioreg_t base, unsigned int size)
 
 static __inline__ int ide_ack_intr(ide_ioreg_t status_port, ide_ioreg_t irq_port)
 {
-	unsigned char stat = inb(irq_port);
-
-	if(stat & 0x4) {
-		outb((inb(irq_port) & 0x60) | 4, irq_port);
-		return 1;
-	}
-	return 0;
+	return 1;
 }
 
 /* From m68k code... */

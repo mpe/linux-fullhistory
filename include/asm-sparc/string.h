@@ -1,4 +1,4 @@
-/* $Id: string.h,v 1.33 1997/11/19 07:57:48 jj Exp $
+/* $Id: string.h,v 1.34 1998/01/30 10:59:55 jj Exp $
  * string.h: External definitions for optimized assembly string
  *           routines for the Linux Kernel.
  *
@@ -8,6 +8,8 @@
 
 #ifndef __SPARC_STRING_H__
 #define __SPARC_STRING_H__
+
+#include <asm/page.h>
 
 /* Really, userland/ksyms should not see any of this stuff. */
 
@@ -40,7 +42,7 @@ extern inline void *__constant_memcpy(void *to, const void *from, __kernel_size_
 		__builtin_memcpy(to, from, n);
 	} else {
 		switch(n) {
-		case 4096:
+		case PAGE_SIZE:
 			__copy_1page(to, from);
 			break;
 		default:
@@ -71,7 +73,7 @@ extern inline void *__constant_c_and_count_memset(void *s, char c, __kernel_size
 	extern __kernel_size_t __bzero(void *, __kernel_size_t);
 
 	if(!c) {
-		if(count == 4096)
+		if(count == PAGE_SIZE)
 			bzero_1page(s);
 		else
 			__bzero(s, count);

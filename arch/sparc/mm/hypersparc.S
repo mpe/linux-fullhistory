@@ -1,4 +1,4 @@
-/* $Id: hypersparc.S,v 1.12 1997/11/27 15:42:30 jj Exp $
+/* $Id: hypersparc.S,v 1.13 1998/02/13 15:35:09 jj Exp $
  * hypersparc.S: High speed Hypersparc mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -301,14 +301,13 @@ hypersparc_flush_tlb_range:
 	cmp	%o3, -1
 	be	hypersparc_flush_tlb_range_out
 #endif
-	 srl	%o1, SRMMU_PGDIR_SHIFT, %o1
+	 sethi	%hi(~((1 << SRMMU_PGDIR_SHIFT) - 1)), %o4
 	sta	%o3, [%g1] ASI_M_MMUREGS
-	sll	%o1, SRMMU_PGDIR_SHIFT, %o1
-	sethi	%hi(1 << SRMMU_PGDIR_SHIFT), %o4
+	and	%o1, %o4, %o1
 	add	%o1, 0x200, %o1
 	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
 1:
-	add	%o1, %o4, %o1
+	sub	%o1, %o4, %o1
 	cmp	%o1, %o2
 	blu,a	1b
 	 sta	%g0, [%o1] ASI_M_FLUSH_PROBE

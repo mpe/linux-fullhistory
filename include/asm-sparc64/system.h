@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.37 1997/10/20 00:14:22 davem Exp $ */
+/* $Id: system.h,v 1.38 1998/01/30 11:00:11 jj Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -22,7 +22,10 @@ enum sparc_cpu {
 };
                   
 #define sparc_cpu_model sun4u
-                  
+
+/* This cannot ever be a sun4c nor sun4 :) That's just history. */
+#define ARCH_SUN4C_SUN4 0
+#define ARCH_SUN4 0
 
 extern unsigned long empty_bad_page;
 extern unsigned long empty_bad_pmd_table;

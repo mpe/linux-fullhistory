@@ -1,29 +1,36 @@
-# $Id: config.in,v 1.36 1997/12/29 21:36:52 geert Exp $
+# $Id: config.in,v 1.47 1998/04/10 10:19:04 geert Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
 mainmenu_name "Linux/PowerPC Kernel Configuration"
 
+
+
 mainmenu_option next_comment
 comment 'Platform support'
 define_bool CONFIG_PPC y
-if [ "`uname`" != "Linux" -o "`uname -m`" != "ppc" ]; then
-  define_bool CONFIG_CROSSCOMPILE y
-else
-  define_bool CONFIG_NATIVE y
-fi
-
-define_bool CONFIG_MACH_SPECIFIC y
-bool 'Build PowerMac Kernel (not PReP or CHRP)?' CONFIG_PMAC
-bool 'Build PReP Kernel (not PowerMac or CHRP)?' CONFIG_PREP
-bool 'Build CHRP Kernel (not PReP or PowerMac)?' CONFIG_CHRP
+#if [ "`uname`" != "Linux" -o "`uname -m`" != "ppc" ]; then
+#  define_bool CONFIG_CROSSCOMPILE y
+#else
+#  define_bool CONFIG_NATIVE y
+#fi
 
 choice 'Processor type' \
-	"Common		CONFIG_COMMON \
-	 601		CONFIG_601	\
-	 603		CONFIG_603	\
-	 604		CONFIG_604" Common
+	"6xx/7xx	CONFIG_6xx \
+	 860/821	CONFIG_8xx" 6xx/7xx
+
+choice 'Machine Type' \
+	"PowerMac	CONFIG_PMAC \
+	 PReP		CONFIG_PREP \
+	 CHRP		CONFIG_CHRP \
+	 PowerMac/PReP/CHRP	CONFIG_ALL_PPC \
+  	 APUS           CONFIG_APUS \
+	 MBX		CONFIG_MBX" PReP
 endmenu
+
+if [ "$CONFIG_ALL_PPC" != "y" ]; then
+  define_bool CONFIG_MACH_SPECIFIC y
+fi
 
 mainmenu_option next_comment
 comment 'General setup'
@@ -35,7 +42,11 @@ if [ "$CONFIG_MODULES" = "y" ]; then
   bool 'Kernel module loader' CONFIG_KMOD
 fi
 
-define_bool CONFIG_PCI y
+if [ "$CONFIG_APUS" = "y" ]; then
+  define_bool CONFIG_PCI n
+else
+  define_bool CONFIG_PCI y
+fi
 if [ "$CONFIG_PREP" = "y" ]; then
   bool 'PCI bridge optimization' CONFIG_PCI_OPTIMIZE
 fi
@@ -50,6 +61,14 @@ define_bool CONFIG_BINFMT_ELF y
 define_bool CONFIG_KERNEL_ELF y
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
+
+tristate 'Parallel port support' CONFIG_PARPORT
+if [ "$CONFIG_PARPORT" != "n" ]; then
+  dep_tristate '   PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
+  if [ "$CONFIG_PARPORT_PC" != "n" ]; then
+    bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
+  fi
+fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'New unified console driver (EXPERIMENTAL)' CONFIG_ABSTRACT_CONSOLE
@@ -68,6 +87,7 @@ else
 # if compiling specifically for prep or chrp, or supporting all arch's
   if [ "$CONFIG_ABSTRACT_CONSOLE" = "y" ]; then
     bool 'Support for frame buffer devices' CONFIG_FB
+    bool 'Support for VGA devices' CONFIG_VGA_CONSOLE
     bool 'Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
   else
     bool 'Support for PowerMac console' CONFIG_PMAC_CONSOLE
@@ -79,13 +99,10 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'Support for PowerMac mouse (EXPERIMENTAL)' CONFIG_MACMOUSE
 fi
 bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
+bool 'Include kgdb kernel debugger' CONFIG_KGDB
 bool 'Include xmon kernel debugger' CONFIG_XMON
 
-if [ "$CONFIG_ABSTRACT_CONSOLE" = "y" ]; then
-  if [ "$CONFIG_FB" != "y" ]; then
-    define_bool CONFIG_VGA_CONSOLE y
-  fi
-else
+if [ "$CONFIG_ABSTRACT_CONSOLE" != "y" ]; then
   if [ "$CONFIG_PMAC_CONSOLE" = "y" ]; then
     bool 'Support for Apple "control" display' CONFIG_CONTROL_VIDEO
     bool 'Support for Apple "platinum" display' CONFIG_PLATINUM_VIDEO

@@ -1,10 +1,10 @@
-/* $Id: iommu.c,v 1.4 1997/11/21 17:31:31 jj Exp $
+/* $Id: iommu.c,v 1.7 1998/02/22 10:32:26 ecd Exp $
  * iommu.c:  IOMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Peter A. Zaitcev (zaitcev@ithil.mcst.ru)
  * Copyright (C) 1996 Eddie C. Dost    (ecd@skynet.be)
- * Copyright (C) 1997 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
  */
  
 #include <linux/config.h>
@@ -18,8 +18,10 @@
 
 /* srmmu.c */
 extern int viking_mxcc_present;
-extern void (*flush_page_for_dma)(unsigned long page);
+BTFIXUPDEF_CALL(void, flush_page_for_dma, unsigned long)
+#define flush_page_for_dma(page) BTFIXUP_CALL(flush_page_for_dma)(page)
 extern int flush_page_for_dma_global;
+static int viking_flush = 0;
 /* viking.S */
 extern void viking_flush_page(unsigned long page);
 extern void viking_mxcc_flush_page(unsigned long page);
@@ -113,7 +115,7 @@ iommu_init(int iommund, unsigned long memory_start,
 			viking_mxcc_flush_page(start);
 			start += PAGE_SIZE;
 		}
-	} else if(flush_page_for_dma == viking_flush_page) {
+	} else if (viking_flush) {
 		unsigned long start = (unsigned long) iommu->page_table;
 		unsigned long end = (start + ptsize);
 		while(start < end) {
@@ -199,7 +201,7 @@ static void iommu_map_dma_area(unsigned long addr, int len)
 	pgprot_t dvma_prot;
 	struct iommu_struct *iommu = SBus_chain->iommu;
 	iopte_t *iopte = iommu->page_table;
-	iopte_t *iopte_first = iopte;
+	iopte_t *first;
 
 	if(viking_mxcc_present)
 		dvma_prot = __pgprot(SRMMU_CACHE | SRMMU_ET_PTE | SRMMU_PRIV);
@@ -207,6 +209,7 @@ static void iommu_map_dma_area(unsigned long addr, int len)
 		dvma_prot = __pgprot(SRMMU_ET_PTE | SRMMU_PRIV);
 
 	iopte += ((addr - iommu->start) >> PAGE_SHIFT);
+	first = iopte;
 	end = PAGE_ALIGN((addr + len));
 	while(addr < end) {
 		page = get_free_page(GFP_KERNEL);
@@ -223,21 +226,20 @@ static void iommu_map_dma_area(unsigned long addr, int len)
 			ptep = pte_offset(pmdp, addr);
 
 			set_pte(ptep, pte_val(mk_pte(page, dvma_prot)));
-
 			iopte_val(*iopte++) = MKIOPTE(mmu_v2p(page));
 		}
 		addr += PAGE_SIZE;
 	}
 	flush_cache_all();
 	if(viking_mxcc_present) {
-		unsigned long start = ((unsigned long) iopte_first) & PAGE_MASK;
+		unsigned long start = ((unsigned long) first) & PAGE_MASK;
 		unsigned long end = PAGE_ALIGN(((unsigned long) iopte));
 		while(start < end) {
 			viking_mxcc_flush_page(start);
 			start += PAGE_SIZE;
 		}
-	} else if(flush_page_for_dma == viking_flush_page) {
-		unsigned long start = ((unsigned long) iopte_first) & PAGE_MASK;
+	} else if(viking_flush) {
+		unsigned long start = ((unsigned long) first) & PAGE_MASK;
 		unsigned long end = PAGE_ALIGN(((unsigned long) iopte));
 		while(start < end) {
 			viking_flush_page(start);
@@ -260,25 +262,26 @@ static void iommu_unlockarea(char *vaddr, unsigned long len)
 
 __initfunc(void ld_mmu_iommu(void))
 {
-	mmu_lockarea = iommu_lockarea;
-	mmu_unlockarea = iommu_unlockarea;
+	viking_flush = (BTFIXUPVAL_CALL(flush_page_for_dma) == (unsigned long)viking_flush_page);
+	BTFIXUPSET_CALL(mmu_lockarea, iommu_lockarea, BTFIXUPCALL_RETO0);
+	BTFIXUPSET_CALL(mmu_unlockarea, iommu_unlockarea, BTFIXUPCALL_NOP);
 
-	if (!flush_page_for_dma) {
+	if (!BTFIXUPVAL_CALL(flush_page_for_dma)) {
 		/* IO coherent chip */
-		mmu_get_scsi_one = iommu_get_scsi_one_noflush;
-		mmu_get_scsi_sgl = iommu_get_scsi_sgl_noflush;
+		BTFIXUPSET_CALL(mmu_get_scsi_one, iommu_get_scsi_one_noflush, BTFIXUPCALL_RETO0);
+		BTFIXUPSET_CALL(mmu_get_scsi_sgl, iommu_get_scsi_sgl_noflush, BTFIXUPCALL_NORM);
 	} else if (flush_page_for_dma_global) {
 		/* flush_page_for_dma flushes everything, no matter of what page is it */
-		mmu_get_scsi_one = iommu_get_scsi_one_gflush;
-		mmu_get_scsi_sgl = iommu_get_scsi_sgl_gflush;
+		BTFIXUPSET_CALL(mmu_get_scsi_one, iommu_get_scsi_one_gflush, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(mmu_get_scsi_sgl, iommu_get_scsi_sgl_gflush, BTFIXUPCALL_NORM);
 	} else {
-		mmu_get_scsi_one = iommu_get_scsi_one_pflush;
-		mmu_get_scsi_sgl = iommu_get_scsi_sgl_pflush;
+		BTFIXUPSET_CALL(mmu_get_scsi_one, iommu_get_scsi_one_pflush, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(mmu_get_scsi_sgl, iommu_get_scsi_sgl_pflush, BTFIXUPCALL_NORM);
 	}
-	mmu_release_scsi_one = iommu_release_scsi_one;
-	mmu_release_scsi_sgl = iommu_release_scsi_sgl;
+	BTFIXUPSET_CALL(mmu_release_scsi_one, iommu_release_scsi_one, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(mmu_release_scsi_sgl, iommu_release_scsi_sgl, BTFIXUPCALL_NOP);
 
 #ifdef CONFIG_SBUS
-	mmu_map_dma_area = iommu_map_dma_area;
+	BTFIXUPSET_CALL(mmu_map_dma_area, iommu_map_dma_area, BTFIXUPCALL_NORM);
 #endif
 }

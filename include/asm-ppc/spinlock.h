@@ -57,26 +57,23 @@ typedef struct { } rwlock_t;
  * We make no fairness assumptions. They have a cost.
  */
 
-struct _spinlock_debug {
+typedef struct {
 	volatile unsigned long lock;
 	volatile unsigned long owner_pc;
-};
+	volatile unsigned long owner_cpu;
+} spinlock_t;
 
-typedef struct _spinlock_debug spinlock_t;
-
-#define SPIN_LOCK_UNLOCKED { 0, 0 }
-
-#define SPIN_LOCK_UNLOCKED	{ 0, 0 }
-#define spin_lock_init(lp)	do { (lp)->owner_pc = 0; (lp)->lock = 0; } while(0)
+#define SPIN_LOCK_UNLOCKED	{ 0, 0, 0 }
+#define spin_lock_init(lp) \
+do { spinlock_t *p = (lp); p->owner_pc = p->owner_cpu = p->lock = 0; } while(0)
 #define spin_unlock_wait(lp)	do { barrier(); } while((lp)->lock)
 
 extern void _spin_lock(spinlock_t *lock);
 extern void _spin_unlock(spinlock_t *lock);
+extern int spin_trylock(spinlock_t *lock);
 
 #define spin_lock(lp)			_spin_lock(lp)
 #define spin_unlock(lp)			_spin_unlock(lp)
-
-#define spin_trylock(l) (!test_and_set_bit(0, &((l)->lock) ))
 
 #define spin_lock_irq(lock) \
 	do { __cli(); spin_lock(lock); } while (0)

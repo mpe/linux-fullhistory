@@ -1,5 +1,5 @@
 #
-# Makefile for the FPU Quad (long double) instruction emulation.
+# Makefile for the FPU instruction emulation.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -16,18 +16,10 @@ O_OBJS   := math.o fabsq.o faddq.o fdivq.o fdmulq.o fitoq.o 		\
 		fmuls.o fmuld.o fdivs.o fdivd.o fsmuld.o		\
 		fstoi.o fdtoi.o fstox.o fdtox.o fstod.o fdtos.o
 
-ifeq ($(CONFIG_MATHEMU),m)
-M_OBJS   := $(O_TARGET)
-endif
-
 .S.s:
 	$(CPP) -D__ASSEMBLY__ -ansi $< -o $*.s
 
 .S.o:
 	$(CC) -D__ASSEMBLY__ -ansi -c $< -o $*.o
-
-ifneq ($(CONFIG_MATHEMU),y)
-do_it_all:
-endif
 
 include $(TOPDIR)/Rules.make

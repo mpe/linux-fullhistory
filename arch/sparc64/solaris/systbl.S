@@ -1,4 +1,4 @@
-/* $Id: systbl.S,v 1.5 1997/09/04 15:46:24 jj Exp $
+/* $Id: systbl.S,v 1.6 1998/03/26 08:46:08 jj Exp $
  * systbl.S: System call entry point table for Solaris compatibility.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -14,11 +14,9 @@
 #define REGS(name)	name+1
 
 /* Hack till all be implemented */
-#define solaris_getmsg		solaris_unimplemented
 #define solaris_getpmsg		solaris_unimplemented
 #define solaris_hrtsys		solaris_unimplemented
 #define solaris_msgsys		solaris_unimplemented
-#define solaris_putmsg		solaris_unimplemented
 #define solaris_putpmsg		solaris_unimplemented
 #define solaris_semsys		solaris_unimplemented
 
@@ -115,8 +113,8 @@ solaris_sys_table:
 	.word solaris_unimplemented	/* libattach		82	*/
 	.word solaris_unimplemented	/* libdetach		83	*/
 	.word CHAIN(sysfs)		/* sysfs	dxx	84	*/
-	.word REGS(solaris_getmsg)	/* getmsg	dxxx	85	*/
-	.word REGS(solaris_putmsg)	/* putmsg	dxxd	86	*/
+	.word solaris_getmsg		/* getmsg	dxxx	85	*/
+	.word solaris_putmsg		/* putmsg	dxxd	86	*/
 	.word CHAIN(poll)		/* poll		xdd	87	*/
 	.word solaris_lstat		/* lstat	sp	88	*/
 	.word CHAIN(symlink)		/* symlink	ss	89	*/
@@ -186,7 +184,7 @@ solaris_sys_table:
 	.word solaris_unimplemented	/* fchroot	d	153	*/
 	.word solaris_unimplemented	/* lvlproc	dx	154	*/
 	.word solaris_unimplemented	/* ?			155	*/
-	.word CHAIN(gettimeofday)	/* gettimeofday	xx	156	*/
+	.word solaris_gettimeofday	/* gettimeofday	x	156	*/
 	.word CHAIN(getitimer)		/* getitimer	dx	157	*/
 	.word CHAIN(setitimer)		/* setitimer	dxx	158	*/
 	.word solaris_unimplemented	/* lwp-xxx		159	*/

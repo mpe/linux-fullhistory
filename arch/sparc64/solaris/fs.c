@@ -1,11 +1,13 @@
-/* $Id: fs.c,v 1.6 1997/10/13 03:54:05 davem Exp $
+/* $Id: fs.c,v 1.8 1998/03/29 10:11:02 davem Exp $
  * fs.c: fs related syscall emulation for Solaris
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/types.h>
+#include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/stat.h>
 #include <linux/smp_lock.h>
 #include <linux/limits.h>
@@ -339,9 +341,12 @@ asmlinkage int solaris_fstatvfs(unsigned int fd, u32 buf)
 	int error;
 
 	lock_kernel();
-	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-		error = -EBADF;
-	else if (!(dentry = file->f_dentry))
+	error = -EBADF;
+	file = fget(fd);
+	if (!file)
+		goto out;
+
+	if (!(dentry = file->f_dentry))
 		error = -ENOENT;
 	else if (!(inode = dentry->d_inode))
 		error = -ENOENT;
@@ -351,6 +356,8 @@ asmlinkage int solaris_fstatvfs(unsigned int fd, u32 buf)
 		error = -ENOSYS;
 	else
 		error = report_statvfs(inode, buf);
+	fput(file);
+out:
 	unlock_kernel();
 	return error;
 }
@@ -516,7 +523,7 @@ static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
-	DQUOT_TRANSFER(inode, newattrs);
+	DQUOT_TRANSFER(dentry, newattrs);
 out:
 	return error;
 }
@@ -563,13 +570,15 @@ asmlinkage int solaris_pread(int fd, u32 buf, u32 nbyte, s32 offset)
 	
 	lock_kernel();
 	retval = -EBADF;
-	if (fd >= NR_OPEN ||
-            !(file = current->files->fd[fd]))
+	file = fget(fd);
+	if (!file)
 		goto bad;
+
 	temp = file->f_pos;
 	if (temp != offset) {
 		retval = sys_lseek(fd, offset, 0);
-		if (retval < 0) goto bad;
+		if (retval < 0)
+			goto out_putf;
 	}
 	retval = sys_read(fd, (char *)A(buf), nbyte);
 	if (file->f_pos != temp) {
@@ -578,6 +587,9 @@ asmlinkage int solaris_pread(int fd, u32 buf, u32 nbyte, s32 offset)
 		else
 			sys_lseek(fd, temp, 0);
 	}
+
+out_putf:
+	fput(file);
 bad:
 	unlock_kernel();
 	return retval;
@@ -595,13 +607,15 @@ asmlinkage int solaris_pwrite(int fd, u32 buf, u32 nbyte, s32 offset)
 	
 	lock_kernel();
 	retval = -EBADF;
-	if (fd >= NR_OPEN ||
-            !(file = current->files->fd[fd]))
+        file = fget(fd);
+	if (!file)
 		goto bad;
+
 	temp = file->f_pos;
 	if (temp != offset) {
 		retval = sys_lseek(fd, offset, 0);
-		if (retval < 0) goto bad;
+		if (retval < 0)
+			goto out_putf;
 	}
 	retval = sys_write(fd, (char *)A(buf), nbyte);
 	if (file->f_pos != temp) {
@@ -610,6 +624,9 @@ asmlinkage int solaris_pwrite(int fd, u32 buf, u32 nbyte, s32 offset)
 		else
 			sys_lseek(fd, temp, 0);
 	}
+
+out_putf:
+	fput(file);
 bad:
 	unlock_kernel();
 	return retval;

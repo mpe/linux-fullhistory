@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.15 1997/05/14 20:45:00 davem Exp $
+/* $Id: misc.c,v 1.16 1998/03/09 14:04:25 jj Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -13,8 +13,7 @@
 #include <asm/oplib.h>
 #include <asm/auxio.h>
 
-/* XXX Let's get rid of this thing if we can... */
-extern struct task_struct *current_set[NR_CPUS];
+extern void restore_current(void);
 
 /* Reset and reboot the machine with the command 'bcommand'. */
 void
@@ -24,9 +23,7 @@ prom_reboot(char *bcommand)
 	save_flags(flags); cli();
 	(*(romvec->pv_reboot))(bcommand);
 	/* Never get here. */
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 }
 
@@ -42,9 +39,7 @@ prom_feval(char *fstring)
 		(*(romvec->pv_fortheval.v0_eval))(strlen(fstring), fstring);
 	else
 		(*(romvec->pv_fortheval.v2_eval))(fstring);
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 }
 
@@ -74,9 +69,7 @@ prom_cmdline(void)
 	install_obp_ticker();
 	save_flags(flags); cli();
 	(*(romvec->pv_abort))();
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 	install_linux_ticker();
 #ifdef CONFIG_SUN_AUXIO
@@ -99,9 +92,7 @@ again:
 	save_flags(flags); cli();
 	(*(romvec->pv_halt))();
 	/* Never get here. */
-	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
-			     "r" (&current_set[hard_smp_processor_id()]) :
-			     "memory");
+	restore_current();
 	restore_flags(flags);
 	goto again; /* PROM is out to get me -DaveM */
 }

@@ -15,8 +15,11 @@
 #include <linux/mm.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
+#include <asm/pmu.h>
 #include <asm/prom.h>
 #include <asm/system.h>
+#include <asm/io.h>
+#include <asm/pgtable.h>
 
 #include "time.h"
 
@@ -44,7 +47,11 @@
 /* Bits in IFR and IER */
 #define T1_INT		0x40		/* Timer 1 interrupt */
 
-static int via_calibrate_decr(void)
+/*
+ * Calibrate the decrementer register using VIA timer 1.
+ * This is used both on powermacs and CHRP machines.
+ */
+int via_calibrate_decr(void)
 {
 	struct device_node *vias;
 	volatile unsigned char *via;
@@ -54,9 +61,12 @@ static int via_calibrate_decr(void)
 	vias = find_devices("via-cuda");
 	if (vias == 0)
 		vias = find_devices("via-pmu");
+	if (vias == 0)
+		vias = find_devices("via");
 	if (vias == 0 || vias->n_addrs == 0)
 		return 0;
-	via = (volatile unsigned char *) vias->addrs[0].address;
+	via = (volatile unsigned char *)
+		ioremap(vias->addrs[0].address, vias->addrs[0].size);
 
 	/* set timer 1 for continuous interrupts */
 	out_8(&via[ACR], (via[ACR] & ~T1MODE) | T1MODE_CONT);
@@ -123,14 +133,30 @@ pmac_get_rtc_time(void)
 	struct adb_request req;
 
 	/* Get the time from the RTC */
-	cuda_request(&req, NULL, 2, CUDA_PACKET, CUDA_GET_TIME);
-	while (!req.complete)
-		cuda_poll();
-	if (req.reply_len != 7)
-		printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
-		      req.reply_len);
-	return (req.reply[3] << 24) + (req.reply[4] << 16)
-		+ (req.reply[5] << 8) + req.reply[6] - RTC_OFFSET;
+	switch (adb_hardware) {
+	case ADB_VIACUDA:
+		if (cuda_request(&req, NULL, 2, CUDA_PACKET, CUDA_GET_TIME) < 0)
+			return 0;
+		while (!req.complete)
+			cuda_poll();
+		if (req.reply_len != 7)
+			printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
+			       req.reply_len);
+		return (req.reply[3] << 24) + (req.reply[4] << 16)
+			+ (req.reply[5] << 8) + req.reply[6] - RTC_OFFSET;
+	case ADB_VIAPMU:
+		if (pmu_request(&req, NULL, 1, PMU_READ_RTC) < 0)
+			return 0;
+		while (!req.complete)
+			pmu_poll();
+		if (req.reply_len != 5)
+			printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
+			       req.reply_len);
+		return (req.reply[1] << 24) + (req.reply[2] << 16)
+			+ (req.reply[3] << 8) + req.reply[4] - RTC_OFFSET;
+	default:
+		return 0;
+	}
 }
 
 int pmac_set_rtc_time(unsigned long nowtime)

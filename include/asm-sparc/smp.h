@@ -6,7 +6,9 @@
 #ifndef _SPARC_SMP_H
 #define _SPARC_SMP_H
 
+#include <linux/tasks.h>
 #include <asm/head.h>
+#include <asm/btfixup.h>
 
 #ifndef __ASSEMBLY__
 /* PROM provided per-processor information we need
@@ -25,7 +27,10 @@ extern int linux_num_cpus;	/* number of CPUs probed  */
 
 #ifndef __ASSEMBLY__
 
-extern struct prom_cpuinfo linux_cpus[NCPUS];
+#include <asm/ptrace.h>
+#include <asm/asi.h>
+
+extern struct prom_cpuinfo linux_cpus[NR_CPUS];
 
 /* Per processor Sparc parameters we need. */
 
@@ -36,6 +41,7 @@ struct cpuinfo_sparc {
 };
 
 extern struct cpuinfo_sparc cpu_data[NR_CPUS];
+extern unsigned long cpu_offset[NR_CPUS];
 
 struct klock_info {
 	unsigned char kernel_flag;
@@ -61,12 +67,28 @@ typedef void (*smpfunc_t)(unsigned long, unsigned long, unsigned long,
 /*
  *	General functions that each host system must provide.
  */
+ 
+void sun4m_init_smp(void);
+void sun4d_init_smp(void);
 
-extern void smp_callin(void);
-extern void smp_boot_cpus(void);
-extern void smp_store_cpu_info(int id);
-extern void smp_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
-			   unsigned long arg3, unsigned long arg4, unsigned long arg5);
+void smp_callin(void);
+void smp_boot_cpus(void);
+void smp_store_cpu_info(int);
+
+BTFIXUPDEF_CALL(void, smp_cross_call, smpfunc_t, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long)
+BTFIXUPDEF_CALL(void, smp_message_pass, int, int, unsigned long, int)
+BTFIXUPDEF_CALL(int, __smp_processor_id, void)
+BTFIXUPDEF_BLACKBOX(smp_processor_id)
+BTFIXUPDEF_BLACKBOX(load_current)
+
+#define smp_cross_call(func,arg1,arg2,arg3,arg4,arg5) BTFIXUP_CALL(smp_cross_call)(func,arg1,arg2,arg3,arg4,arg5)
+#define smp_message_pass(target,msg,data,wait) BTFIXUP_CALL(smp_message_pass)(target,msg,data,wait)
+
+BTFIXUPDEF_CALL(int, smp_bogo_info, char *)
+BTFIXUPDEF_CALL(int, smp_info, char *)
+
+#define smp_bogo_info(buf) BTFIXUP_CALL(smp_bogo_info)(buf)
+#define smp_info(buf) BTFIXUP_CALL(smp_info)(buf)
 
 extern __inline__ void xc0(smpfunc_t func) { smp_cross_call(func, 0, 0, 0, 0, 0); }
 extern __inline__ void xc1(smpfunc_t func, unsigned long arg1)
@@ -84,10 +106,15 @@ extern __inline__ void xc5(smpfunc_t func, unsigned long arg1, unsigned long arg
 { smp_cross_call(func, arg1, arg2, arg3, arg4, arg5); }
 
 extern __volatile__ int cpu_number_map[NR_CPUS];
-extern __volatile__ int cpu_logical_map[NR_CPUS];
+extern __volatile__ int __cpu_logical_map[NR_CPUS];
 extern unsigned long smp_proc_in_lock[NR_CPUS];
 
-extern __inline__ int hard_smp_processor_id(void)
+extern __inline__ int cpu_logical_map(int cpu)
+{
+	return __cpu_logical_map[cpu];
+}
+
+extern __inline__ int hard_smp4m_processor_id(void)
 {
 	int cpuid;
 
@@ -97,6 +124,49 @@ extern __inline__ int hard_smp_processor_id(void)
 			     "=&r" (cpuid));
 	return cpuid;
 }
+
+extern __inline__ int hard_smp4d_processor_id(void)
+{
+	int cpuid;
+
+	__asm__ __volatile__("lda [%%g0] %1, %0\n\t" :
+			     "=&r" (cpuid) : "i" (ASI_M_VIKING_TMP1));
+	return cpuid;
+}
+
+#ifndef MODULE
+extern __inline__ int hard_smp_processor_id(void)
+{
+	int cpuid;
+
+	/* Black box - sun4m
+		__asm__ __volatile__("rd %%tbr, %0\n\t"
+				     "srl %0, 12, %0\n\t"
+				     "and %0, 3, %0\n\t" :
+				     "=&r" (cpuid));
+	             - sun4d
+	   	__asm__ __volatile__("lda [%g0] ASI_M_VIKING_TMP1, %0\n\t"
+	   			     "nop; nop" :
+	   			     "=&r" (cpuid));
+	   See btfixup.h and btfixupprep.c to understand how a blackbox works.
+	 */
+	__asm__ __volatile__("sethi %%hi(___b_smp_processor_id), %0\n\t"
+			     "sethi %%hi(boot_cpu_id), %0\n\t"
+			     "ldub [%0 + %%lo(boot_cpu_id)], %0\n\t" :
+			     "=&r" (cpuid));
+	return cpuid;
+}
+#else
+extern __inline__ int hard_smp_processor_id(void)
+{
+	int cpuid __asm__ ("g2");
+	
+	__asm__ __volatile__("mov %%o7, %%g1\n\t"
+			     "call ___f___smp_processor_id\n\t"
+			     " nop\n\t" : "=r"(cpuid) : : "g1");
+	return cpuid;
+}
+#endif
 
 #define smp_processor_id() hard_smp_processor_id()
 
@@ -121,6 +191,13 @@ extern __inline__ int hard_smp_processor_id(void)
 #define SMP_FROM_INT		1
 #define SMP_FROM_SYSCALL	2
 
+#else /* !(__SMP__) */
+#ifndef __ASSEMBLY__ 
+extern __inline__ int cpu_logical_map(int cpu)
+{
+	return cpu;
+}
+#endif 
 #endif /* !(__SMP__) */
 
 #define NO_PROC_ID            0xFF

@@ -42,7 +42,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       fi
     fi
     tristate '3c509/3c579 support' CONFIG_EL3
-    tristate '3c590 series (592/595/597) "Vortex" support' CONFIG_VORTEX
+    tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
   fi
   bool 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
   bool 'Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC

@@ -226,7 +226,7 @@ static int proc_ide_write_config
 						restore_flags(flags);
 						printk("proc_ide_write_config: error writing %s at bus %02x dev %02x reg 0x%x value 0x%x\n",
 							msg, dev->bus->number, dev->devfn, reg, val);
-						printk("proc_ide_write_config: %s\n", pcibios_strerror(rc));
+						printk("proc_ide_write_config: error %d\n", rc);
 						return -EIO;
 					}
 #endif	/* CONFIG_BLK_DEV_IDEPCI */
@@ -271,7 +271,7 @@ static int proc_ide_read_config
 		if (rc) {
 			printk("proc_ide_read_config: error reading bus %02x dev %02x reg 0x%02x\n",
 				dev->bus->number, dev->devfn, reg);
-			printk("proc_ide_read_config: %s\n", pcibios_strerror(rc));
+			printk("proc_ide_read_config: error %d\n", rc);
 			return -EIO;
 			out += sprintf(out, "??%c", (++reg & 0xf) ? ' ' : '\n');
 		} else

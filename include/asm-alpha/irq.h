@@ -52,6 +52,14 @@
 
 #endif
 
+static __inline__ int irq_cannonicalize(int irq)
+{
+	/*
+	 * XXX is this true for all Alpha's?  The old serial driver
+	 * did it this way for years without any complaints, so....
+	 */
+	return ((irq == 2) ? 9 : irq);
+}
 
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);

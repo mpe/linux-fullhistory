@@ -1,4 +1,4 @@
-/* $Id: sbi.h,v 1.1 1997/11/19 15:12:16 jj Exp $
+/* $Id: sbi.h,v 1.2 1998/03/09 14:04:48 jj Exp $
  * sbi.h:  SBI (Sbus Interface on sun4d) definitions
  *
  * Copyright (C) 1997 Jakub Jelinek <jj@sunsite.mff.cuni.cz>
@@ -80,6 +80,14 @@ extern __inline__ void release_sbi(int devid, int mask)
 	__asm__ __volatile__ ("sta %0, [%1] %2" : :
 			      "r" (mask),
 			      "r" (ECSR_DEV_BASE(devid) | SBI_INTR_STATE),
+			      "i" (ASI_M_CTL));
+}
+
+extern __inline__ void set_sbi_tid(int devid, int targetid)
+{
+	__asm__ __volatile__ ("sta %0, [%1] %2" : :
+			      "r" (targetid),
+			      "r" (ECSR_DEV_BASE(devid) | SBI_INTR_TID),
 			      "i" (ASI_M_CTL));
 }
 

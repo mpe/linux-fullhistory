@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.24 1997/05/08 17:45:26 davem Exp $
+# $Id: Makefile,v 1.25 1998/01/30 10:58:43 jj Exp $
 # Makefile for Sparc library files..
 #
 
@@ -16,19 +16,19 @@ lib.a: $(OBJS)
 	sync
 
 checksum.o: checksum.S
-	$(CC) -ansi -c -o checksum.o checksum.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o checksum.o checksum.S
 
 memcpy.o: memcpy.S
 	$(CC) -D__ASSEMBLY__ -ansi -c -o memcpy.o memcpy.S
 
 memcmp.o: memcmp.S
-	$(CC) -ansi -c -o memcmp.o memcmp.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o memcmp.o memcmp.S
 
 memscan.o: memscan.S
-	$(CC) -ansi -c -o memscan.o memscan.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o memscan.o memscan.S
 
 strncmp.o: strncmp.S
-	$(CC) -ansi -c -o strncmp.o strncmp.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o strncmp.o strncmp.S
 
 strncpy_from_user.o: strncpy_from_user.S
 	$(CC) -D__ASSEMBLY__ -ansi -c -o strncpy_from_user.o strncpy_from_user.S
@@ -40,7 +40,7 @@ copy_user.o: copy_user.S
 	$(CC) -D__ASSEMBLY__ -ansi -c -o copy_user.o copy_user.S
 
 blockops.o: blockops.S
-	$(CC) -ansi -c -o blockops.o blockops.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o blockops.o blockops.S
 
 memset.o: memset.S
 	$(CC) -D__ASSEMBLY__ -ansi -c -o memset.o memset.S
@@ -73,34 +73,34 @@ bitops.o: bitops.S
 endif
 
 strlen.o: strlen.S
-	$(CC) -ansi -c -o strlen.o strlen.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o strlen.o strlen.S
 
 divdi3.o: divdi3.S
-	$(CC) -ansi -c -o divdi3.o divdi3.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o divdi3.o divdi3.S
 
 udivdi3.o: udivdi3.S
-	$(CC) -ansi -c -o udivdi3.o udivdi3.S
+	$(CC) -D__ASSEMBLY__ -ansi -c -o udivdi3.o udivdi3.S
 
 mul.o: mul.S
-	$(CC) -c -o mul.o mul.S
+	$(CC) -D__ASSEMBLY__ -c -o mul.o mul.S
 
 rem.o: rem.S
-	$(CC) -DST_DIV0=0x2 -c -o rem.o rem.S
+	$(CC) -D__ASSEMBLY__ -DST_DIV0=0x2 -c -o rem.o rem.S
 
 sdiv.o: sdiv.S
-	$(CC) -DST_DIV0=0x2 -c -o sdiv.o sdiv.S
+	$(CC) -D__ASSEMBLY__ -DST_DIV0=0x2 -c -o sdiv.o sdiv.S
 
 udiv.o: udiv.S
-	$(CC) -DST_DIV0=0x2 -c -o udiv.o udiv.S
+	$(CC) -D__ASSEMBLY__ -DST_DIV0=0x2 -c -o udiv.o udiv.S
 
 umul.o: umul.S
-	$(CC) -c -o umul.o umul.S
+	$(CC) -D__ASSEMBLY__ -c -o umul.o umul.S
 
 urem.o: urem.S
-	$(CC) -DST_DIV0=0x2 -c -o urem.o urem.S
+	$(CC) -D__ASSEMBLY__ -DST_DIV0=0x2 -c -o urem.o urem.S
 
 ashrdi3.o: ashrdi3.S
-	$(CC) -c -o ashrdi3.o ashrdi3.S
+	$(CC) -D__ASSEMBLY__ -c -o ashrdi3.o ashrdi3.S
 
 dep:
 

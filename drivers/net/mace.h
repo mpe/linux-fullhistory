@@ -164,7 +164,7 @@ struct mace {
 /* Bits in UTR */
 #define RTRE		0x80	/* reserved test register enable. DON'T SET. */
 #define RTRD		0x40	/* reserved test register disable.  Sticky */
-#define RPA		0x20	/* accept runt packets */
+#define RPAC		0x20	/* accept runt packets */
 #define FCOLL		0x10	/* force collision */
 #define RCVFCSE		0x08	/* receive FCS enable */
 #define LOOP_NONE	0x00	/* no loopback */

@@ -1,5 +1,5 @@
 /*
- *	$Id: pci.h,v 1.62 1998/03/15 13:50:05 ecd Exp $
+ *	$Id: pci.h,v 1.67 1998/04/16 20:48:33 mj Exp $
  *
  *	PCI defines and function prototypes
  *	Copyright 1994, Drew Eckhardt
@@ -105,10 +105,10 @@
 #define PCI_CARDBUS_CIS		0x28
 #define PCI_SUBSYSTEM_VENDOR_ID	0x2c
 #define PCI_SUBSYSTEM_ID	0x2e  
-#define PCI_ROM_ADDRESS		0x30	/* 32 bits */
-#define  PCI_ROM_ADDRESS_ENABLE	0x01	/* Write 1 to enable ROM,
-					   bits 31..11 are address,
-					   10..2 are reserved */
+#define PCI_ROM_ADDRESS		0x30	/* Bits 31..11 are address, 10..1 reserved */
+#define  PCI_ROM_ADDRESS_ENABLE	0x01
+#define PCI_ROM_ADDRESS_MASK	(~0x7ffUL)
+
 /* 0x34-0x3b are reserved */
 #define PCI_INTERRUPT_LINE	0x3c	/* 8 bits */
 #define PCI_INTERRUPT_PIN	0x3d	/* 8 bits */
@@ -178,8 +178,8 @@
 #define PCI_CB_IO_LIMIT_1_HI	0x3a
 /* 0x3c-0x3d are same as for htype 0 */
 /* 0x3e-0x3f are same as for htype 1 */
-#define PCI_CB_SUBSYSTEM_ID	0x40
-#define PCI_CB_SUBSYSTEM_VENDOR_ID 0x42
+#define PCI_CB_SUBSYSTEM_VENDOR_ID 0x40
+#define PCI_CB_SUBSYSTEM_ID	0x42
 #define PCI_CB_LEGACY_MODE_BASE	0x44	/* 16-bit PC Card legacy mode base address (ExCa) */
 /* 0x48-0x7f reserved */
 
@@ -979,8 +979,7 @@
 #ifdef __KERNEL__
 
 /*
- * Error values that may be returned by the PCI bios.  Use
- * pcibios_strerror() to convert to a printable string.
+ * Error values that may be returned by the PCI bios.
  */
 #define PCIBIOS_SUCCESSFUL		0x00
 #define PCIBIOS_FUNC_NOT_SUPPORTED	0x81
@@ -1008,7 +1007,6 @@ int pcibios_write_config_word (unsigned char bus, unsigned char dev_fn,
 			       unsigned char where, unsigned short val);
 int pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
 				unsigned char where, unsigned int val);
-const char *pcibios_strerror (int error);
 
 /* Don't use these in new code, use pci_find_... instead */
 
@@ -1051,6 +1049,7 @@ struct pci_dev {
 	 * pcibios_fixup() as necessary.
 	 */
 	unsigned long	base_address[6];
+	unsigned long	rom_address;
 };
 
 struct pci_bus {
@@ -1076,8 +1075,9 @@ void pci_init(void);
 void pci_setup(char *str, int *ints);
 void pci_quirks_init(void);
 unsigned int pci_scan_bus(struct pci_bus *bus);
-void proc_bus_pci_init(void);
+void pci_proc_init(void);
 void proc_old_pci_init(void);
+int get_pci_list(char *buf);
 
 struct pci_dev *pci_find_device (unsigned int vendor, unsigned int device, struct pci_dev *from);
 struct pci_dev *pci_find_class (unsigned int class, struct pci_dev *from);
@@ -1090,8 +1090,7 @@ struct pci_dev *pci_find_slot (unsigned int bus, unsigned int devfn);
 #define pci_write_config_byte(dev, where, val) pcibios_write_config_byte(dev->bus->number, dev->devfn, where, val)
 #define pci_write_config_word(dev, where, val) pcibios_write_config_word(dev->bus->number, dev->devfn, where, val)
 #define pci_write_config_dword(dev, where, val) pcibios_write_config_dword(dev->bus->number, dev->devfn, where, val)
-
-int get_pci_list (char *buf);
+void pci_set_master(struct pci_dev *);
 
 #endif /* __KERNEL__ */
 #endif /* LINUX_PCI_H */

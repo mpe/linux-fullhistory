@@ -1,10 +1,11 @@
-/* $Id: conv.h,v 1.2 1997/09/03 12:29:13 jj Exp $
+/* $Id: conv.h,v 1.3 1998/03/26 08:46:13 jj Exp $
  * conv.h: Utility macros for Solaris emulation
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
  
 /* #define DEBUG_SOLARIS */
+#define DEBUG_SOLARIS_KMALLOC
 
 #ifndef __ASSEMBLY__
 
@@ -24,5 +25,13 @@ extern unsigned sunos_sys_table[];
 
 #define SYS(name) ((long)sys_call_table[__NR_##name])
 #define SUNOS(x) ((long)sunos_sys_table[x])
+
+#ifdef DEBUG_SOLARIS
+#define SOLD(s) printk("%s,%d,%s(): %s\n",__FILE__,__LINE__,__FUNCTION__,(s))
+#define SOLDD(s) printk("solaris: "); printk s
+#else
+#define SOLD(s)
+#define SOLDD(s)
+#endif
 
 #endif /* __ASSEMBLY__ */

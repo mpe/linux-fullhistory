@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.51 1998/01/08 04:16:54 baccala Exp $
+# $Id: config.in,v 1.54 1998/03/27 06:59:39 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -34,6 +34,8 @@ if [ "$CONFIG_AP1000" = "y" ]; then
 	define_bool CONFIG_APBIF y
 	tristate 'OPIU DDV Driver' CONFIG_DDV
 else
+	bool 'Support for SUN4 machines (disables SUN4[CDM] support)' CONFIG_SUN4
+
 	# Global things across all Sun machines.
 	define_bool CONFIG_SBUS y
 	define_bool CONFIG_SBUSCHAR y
@@ -45,8 +47,13 @@ else
 	define_bool CONFIG_SUN_CONSOLE y
 	define_bool CONFIG_SUN_AUXIO y
 	define_bool CONFIG_SUN_IO y
-	source drivers/sbus/char/Config.in
-	source drivers/sbus/audio/Config.in
+	if [ "$CONFIG_SUN4" = "y" ]; then
+		bool 'Sun FB drivers appear in PROCFS' SUN_FBS_IN_PROCFS
+		bool 'bwtwo support' SUN_FB_BWTWO
+	else
+		source drivers/sbus/char/Config.in
+		source drivers/sbus/audio/Config.in
+	fi
 fi
 
 tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS

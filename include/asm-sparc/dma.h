@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.24 1997/04/10 05:13:21 davem Exp $
+/* $Id: dma.h,v 1.25 1998/02/09 13:27:01 jj Exp $
  * include/asm-sparc/dma.h
  *
  * Copyright 1995 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -7,6 +7,7 @@
 #ifndef _ASM_SPARC_DMA_H
 #define _ASM_SPARC_DMA_H
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 
@@ -71,7 +72,13 @@ struct Linux_SBus_DMA {
 extern struct Linux_SBus_DMA *dma_chain;
 
 /* Broken hardware... */
+#ifdef CONFIG_SUN4
+/* Have to sort this out. Does rev0 work fine on sun4[cmd] without isbroken?
+ * Or is rev0 present only on sun4 boxes? -jj */
+#define DMA_ISBROKEN(dma)    ((dma)->revision == dvmarev0 || (dma)->revision == dvmarev1)
+#else
 #define DMA_ISBROKEN(dma)    ((dma)->revision == dvmarev1)
+#endif
 #define DMA_ISESC1(dma)      ((dma)->revision == dvmaesc1)
 
 /* Main routines in dma.c */

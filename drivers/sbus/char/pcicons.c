@@ -1,4 +1,4 @@
-/* $Id: pcicons.c,v 1.10 1997/10/04 08:52:57 ecd Exp $
+/* $Id: pcicons.c,v 1.13 1998/04/01 06:55:11 ecd Exp $
  * pcicons.c: PCI specific probing and console operations layer.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -42,6 +42,7 @@ static __u64 cursor_bits[2];
 static int cursor_pos = -1;
 
 extern int serial_console;
+extern struct console vt_console_driver;
 
 static void pci_install_consops(void);
 static int (*fbuf_offset)(int);
@@ -191,24 +192,32 @@ static unsigned short pci_scr_readw(unsigned short *addr)
 
 static void pci_get_scrmem(int currcons)
 {
+	struct vc_data *vcd = vc_cons[currcons].d;
+	
 	memcpyw((unsigned short *)vc_scrbuf[currcons],
-		(unsigned short *)origin, video_screen_size);
-	origin = video_mem_start = (unsigned long)vc_scrbuf[currcons];
-	scr_end = video_mem_end = video_mem_start + video_screen_size;
-	pos = origin + y * video_size_row + (x << 1);
+		(unsigned short *)vcd->vc_origin, video_screen_size);
+	vcd->vc_origin = vcd->vc_video_mem_start = 
+		(unsigned long)vc_scrbuf[currcons];
+	vcd->vc_scr_end = vcd->vc_video_mem_end = 
+		vcd->vc_video_mem_start + video_screen_size;
+	vcd->vc_pos = 
+		vcd->vc_origin + vcd->vc_y * video_size_row + (vcd->vc_x << 1);
 }
 
 static void pci_set_scrmem(int currcons, long offset)
 {
+	struct vc_data *vcd = vc_cons[currcons].d;
+	
 	if (video_mem_term - video_mem_base < offset + video_screen_size)
 		offset = 0;
 	memcpyw((unsigned short *)(video_mem_base + offset),
-		(unsigned short *) origin, video_screen_size);
-	video_mem_start = video_mem_base;
-	video_mem_end = video_mem_term;
-	origin = video_mem_base + offset;
-	scr_end = origin + video_screen_size;
-	pos = origin + y * video_size_row + (x << 1);
+		(unsigned short *) vcd->vc_origin, video_screen_size);
+	vcd->vc_video_mem_start = video_mem_base;
+	vcd->vc_video_mem_end = video_mem_term;
+	vcd->vc_origin = video_mem_base + offset;
+	vcd->vc_scr_end = vcd->vc_origin + video_screen_size;
+	vcd->vc_pos = 
+		vcd->vc_origin + vcd->vc_y * video_size_row + (vcd->vc_x << 1);
 }
 
 static void pci_invert_cursor(int cpos)
@@ -252,15 +261,17 @@ static void pci_set_cursor(int currcons)
 	unsigned long flags;
 	int old_cursor;
 
-	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
+	if (currcons != fg_console || console_blanked || 
+	    vt_cons[currcons]->vc_mode == KD_GRAPHICS)
 		return;
 
 	save_flags(flags); cli();
-	if (!deccm) {
+	if (!vc_cons[currcons].d->vc_deccm) {
 		pci_hide_cursor();
 	} else {
 		old_cursor = cursor_pos;
-		cursor_pos = (pos - video_mem_base) >> 1;
+		cursor_pos = 
+			(vc_cons[currcons].d->vc_pos - video_mem_base) >> 1;
 		if (old_cursor != -1)
 			pci_invert_cursor(-1);
 		pci_invert_cursor(cursor_pos);
@@ -412,9 +423,12 @@ static void pci_clear_fb(int n)
 {
 	fbinfo_t *fb = &fbinfo[n];
 
+#if 0
 	if (!n) {
 		pci_clear_screen();
-	} else if (fb->base) {
+	} else
+#endif
+	if (fb->base) {
 		memset((void *)fb->base,
 		       (fb->type.fb_depth == 1) ?
 		       ~(0) : reverse_color_table[0],
@@ -545,7 +559,7 @@ __initfunc(static void pci_con_type_init_finish(void))
 				+ 10 * (ncpus - 1);
 
 	for (p = logo_banner; *p; p++, ush++) {
-		*ush = (attr << 8) + *p;
+		*ush = (vc_cons[currcons].d->vc_attr << 8) + *p;
 		pci_blitc(*ush, (unsigned long)ush);
 	}
 
@@ -553,6 +567,8 @@ __initfunc(static void pci_con_type_init_finish(void))
 		ush = (unsigned short *)video_mem_base + i * video_num_columns;
 		memset(ush, 0xff, 20);
 	}
+
+	register_console(&vt_console_driver);
 }
 
 unsigned long pcivga_iobase = 0;

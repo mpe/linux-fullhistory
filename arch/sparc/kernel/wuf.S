@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.34 1997/05/01 08:53:36 davem Exp $
+/* $Id: wuf.S,v 1.37 1998/02/19 21:25:50 ecd Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -138,6 +138,8 @@ fwin_from_user:
 C_LABEL(fwin_mmu_patchme):	b	C_LABEL(sun4c_fwin_stackchk)
 				 andcc	%sp, 0x7, %g0
 
+#define STACK_OFFSET (TASK_UNION_SIZE - TRACEREG_SZ - REGWIN_SZ)
+
 fwin_user_stack_is_bolixed:
 	/* LOCATION: Window 'W' */
 
@@ -146,9 +148,8 @@ fwin_user_stack_is_bolixed:
 	 */
 	LOAD_CURRENT(l4, l5)
 
-	mov	1, %l5
-	sll	%l5, (PAGE_SHIFT + 1), %l5
-	sub	%l5, (TRACEREG_SZ + REGWIN_SZ), %l5
+	sethi	%hi(STACK_OFFSET), %l5
+	or	%l5, %lo(STACK_OFFSET), %l5
 	add	%l4, %l5, %l5
 
 	/* Store globals into pt_regs frame. */
@@ -169,10 +170,9 @@ fwin_user_stack_is_bolixed:
 
 	/* LOCATION: Window 'T' */
 
-	mov	1, %sp
-	sll	%sp, (PAGE_SHIFT + 1), %sp
-	sub	%sp, (TRACEREG_SZ + REGWIN_SZ), %sp
-	add	%curptr, %sp, %sp
+	sethi	%hi(STACK_OFFSET), %l5
+	or	%l5, %lo(STACK_OFFSET), %l5
+	add	%curptr, %l5, %sp
 
 	/* Build rest of pt_regs. */
 	STORE_PT_INS(sp)
@@ -299,9 +299,8 @@ C_LABEL(srmmu_fwin_stackchk):
 	/* LOCATION: Window 'W' */
 
 	/* Caller did 'andcc %sp, 0x7, %g0' */
-	sethi	%hi(C_LABEL(page_offset)), %l5
 	bne	fwin_user_stack_is_bolixed
-	 ld	[%l5 + %lo(C_LABEL(page_offset))], %l5
+	 GET_PAGE_OFFSET(l5)
 
 	/* Check if the users stack is in kernel vma, then our
 	 * trial and error technique below would succeed for

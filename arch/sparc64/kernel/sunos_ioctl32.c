@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl32.c,v 1.5 1997/09/18 10:37:57 rth Exp $
+/* $Id: sunos_ioctl32.c,v 1.9 1998/03/29 10:10:53 davem Exp $
  * sunos_ioctl32.c: SunOS ioctl compatability on sparc64.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -18,6 +18,7 @@
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -88,15 +89,12 @@ extern asmlinkage int sys_setsid(void);
 
 asmlinkage int sunos_ioctl (int fd, u32 cmd, u32 arg)
 {
-	struct file *filp;
 	int ret = -EBADF;
 
 	lock_kernel();
 	if(fd >= SUNOS_NR_OPEN)
 		goto out;
-
-	filp = current->files->fd[fd];
-	if(!filp)
+	if(!fcheck(fd))
 		goto out;
 
 	if(cmd == TIOCSETD) {
@@ -168,7 +166,7 @@ asmlinkage int sunos_ioctl (int fd, u32 cmd, u32 arg)
 		ret = sys32_ioctl(fd, SIOCGIFBRDADDR, arg);
 		goto out;
 	case _IOW('i', 24, struct ifreq32):
-		ret = sys32_ioctl(fd, SIOCGIFBRDADDR, arg);
+		ret = sys32_ioctl(fd, SIOCSIFBRDADDR, arg);
 		goto out;
 	case _IOWR('i', 25, struct ifreq32):
 		ret = sys32_ioctl(fd, SIOCGIFNETMASK, arg);

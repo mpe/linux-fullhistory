@@ -1,4 +1,4 @@
-/* $Id: pgtsun4c.h,v 1.34 1997/03/23 03:47:08 davem Exp $
+/* $Id: pgtsun4c.h,v 1.35 1998/01/30 11:00:05 jj Exp $
  * pgtsun4c.h:  Sun4c specific pgtable.h defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -25,6 +25,13 @@
 #define SUN4C_REAL_PGDIR_SIZE        (1UL << SUN4C_REAL_PGDIR_SHIFT)
 #define SUN4C_REAL_PGDIR_MASK        (~(SUN4C_REAL_PGDIR_SIZE-1))
 #define SUN4C_REAL_PGDIR_ALIGN(addr) (((addr)+SUN4C_REAL_PGDIR_SIZE-1)&SUN4C_REAL_PGDIR_MASK)
+
+/* 16 bit PFN on sun4c */
+#define SUN4C_PFN_MASK 0xffff
+
+/* Don't increase these unless the structures in sun4c.c are fixed */
+#define SUN4C_MAX_SEGMAPS 256
+#define SUN4C_MAX_CONTEXTS 16
 
 /*
  * To be efficient, and not have to worry about allocating such

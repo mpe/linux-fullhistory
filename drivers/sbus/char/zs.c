@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.15 1997/12/22 16:09:34 jj Exp $
+/* $Id: zs.c,v 1.20 1998/02/25 23:51:57 ecd Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -37,7 +37,7 @@
 #ifdef __sparc_v9__
 #include <asm/fhc.h>
 #ifdef CONFIG_PCI
-#include <linux/bios32.h>
+#include <linux/pci.h>
 #endif
 #endif
 
@@ -70,7 +70,12 @@ struct tty_struct *zs_ttys;
 #ifdef CONFIG_SERIAL_CONSOLE
 static struct console zs_console;
 static int zs_console_init(void);
-#endif
+
+/*
+ * Define this to get the zs_fair_output() functionality.
+ */
+#undef SERIAL_CONSOLE_FAIR_OUTPUT
+#endif /* CONFIG_SERIAL_CONSOLE */
 
 static unsigned char kgdb_regs[16] = {
 	0, 0, 0,                     /* write 0, 1, 2 */
@@ -256,14 +261,14 @@ static inline void load_zsregs(struct sun_serial *info, unsigned char *regs)
 	restore_flags(flags);
 }
 
+#define ZS_PUT_CHAR_MAX_DELAY	2000	/* 10 ms */
+
 static inline void zs_put_char(struct sun_zschannel *channel, char ch)
 {
-	int loops = 0;
+	int loops = ZS_PUT_CHAR_MAX_DELAY;
 
-	while((channel->control & Tx_BUF_EMP) == 0 && loops < 10000) {
-		loops++;
+	while((channel->control & Tx_BUF_EMP) == 0 && --loops)
 		udelay(5);
-	}
 	channel->data = ch;
 	udelay(5);
 }
@@ -408,6 +413,10 @@ static _INLINE_ void zs_sched_event(struct sun_serial *info,
 extern void breakpoint(void);  /* For the KGDB frame character */
 #endif
 
+#ifdef CONFIG_MAGIC_SYSRQ
+static int serial_sysrq;
+#endif
+
 static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs)
 {
 	struct tty_struct *tty = info->tty;
@@ -447,8 +456,6 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 		}
 		if(info->is_cons) {
 #ifdef CONFIG_MAGIC_SYSRQ
-			static int serial_sysrq;
-
 			if (!ch) {
 				serial_sysrq = 1;
 				return;
@@ -566,8 +573,13 @@ static _INLINE_ void status_handle(struct sun_serial *info)
 	 * 'break asserted' status change interrupt, call
 	 * the boot prom.
 	 */
-	if((status & BRK_ABRT) && info->break_abort)
+	if((status & BRK_ABRT) && info->break_abort) {
+#ifdef CONFIG_MAGIC_SYSRQ
+		serial_sysrq = 1;
+#else
 		batten_down_hatches();
+#endif
+	}
 
 	/* XXX Whee, put in a buffer somewhere, the status information
 	 * XXX whee whee whee... Where does the information go...
@@ -1037,12 +1049,12 @@ static void zs_flush_chars(struct tty_struct *tty)
 	if (serial_paranoia_check(info, tty->device, "zs_flush_chars"))
 		return;
 
+	save_flags(flags); cli();
 	if (info->xmit_cnt <= 0 || tty->stopped || tty->hw_stopped ||
 	    !info->xmit_buf)
-		return;
+		goto out;
 
 	/* Enable transmitter */
-	save_flags(flags); cli();
 	info->curregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
 	write_zsreg(info->zs_channel, 1, info->curregs[1]);
 	info->curregs[5] |= TxENAB;
@@ -1059,6 +1071,7 @@ static void zs_flush_chars(struct tty_struct *tty)
 	info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE-1);
 	info->xmit_cnt--;
 
+out:
 	restore_flags(flags);
 }
 
@@ -1100,21 +1113,21 @@ static int zs_write(struct tty_struct * tty, int from_user,
 		total += c;
 	}
 
+	cli();		
 	if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped) {
 		/* Enable transmitter */
 		info->curregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
 		write_zsreg(info->zs_channel, 1, info->curregs[1]);
 		info->curregs[5] |= TxENAB;
 		write_zsreg(info->zs_channel, 5, info->curregs[5]);
-	}
 #if 1
-	if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped) {
 		zs_put_char(info->zs_channel,
 			    info->xmit_buf[info->xmit_tail++]);
 		info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE-1);
 		info->xmit_cnt--;
-	}
 #endif
+	}
+
 	restore_flags(flags);
 	return total;
 }
@@ -1819,7 +1832,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.15 $";
+	char *revision = "$Revision: 1.20 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2220,7 +2233,7 @@ __initfunc(int zs_init(void))
 #endif
 
 #ifdef CONFIG_PCI
-	if (pcibios_present())
+	if (pci_present())
 		return 0;
 #endif
 
@@ -2514,6 +2527,7 @@ zs_kgdb_hook(int tty_num))
 static void
 zs_console_putchar(struct sun_serial *info, char ch)
 {
+	int loops = ZS_PUT_CHAR_MAX_DELAY;
 	unsigned long flags;
 
 	if(!info->zs_channel)
@@ -2521,9 +2535,12 @@ zs_console_putchar(struct sun_serial *info, char ch)
 
 	save_flags(flags); cli();
 	zs_put_char(info->zs_channel, ch);
+	while (!(read_zsreg(info->zs_channel, R1) & ALL_SNT) && --loops)
+		udelay(5);
 	restore_flags(flags);
 }
 
+#ifdef SERIAL_CONSOLE_FAIR_OUTPUT
 /*
  * Fair output driver allows a process to speak.
  */
@@ -2557,6 +2574,7 @@ static void zs_fair_output(struct sun_serial *info)
 	restore_flags(flags);
 	return;
 }
+#endif
 
 /*
  * zs_console_write is registered for printk.
@@ -2574,9 +2592,10 @@ zs_console_write(struct console *con, const char *s, unsigned count)
 			zs_console_putchar(info, '\r');
 		zs_console_putchar(info, *s);
 	}
-
+#ifdef SERIAL_CONSOLE_FAIR_OUTPUT
 	/* Comment this if you want to have a strict interrupt-driven output */
 	zs_fair_output(info);
+#endif
 }
 
 static int

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.38 1998/01/09 16:42:48 jj Exp $
+/* $Id: sys_sparc.c,v 1.40 1998/03/28 08:29:26 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -10,8 +10,9 @@
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/config.h>
-#include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/sem.h>
 #include <linux/msg.h>
 #include <linux/shm.h>
@@ -39,7 +40,7 @@ asmlinkage unsigned long sparc_brk(unsigned long brk)
 	unsigned long ret;
 
 	lock_kernel();
-	if(sparc_cpu_model == sun4c) {
+	if(ARCH_SUN4C_SUN4) {
 		if(brk >= 0x20000000 && brk < 0xe0000000) {
 			ret = current->mm->brk;
 			goto out;
@@ -192,31 +193,34 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 
 	lock_kernel();
 	if (!(flags & MAP_ANONYMOUS)) {
-		if (fd >= NR_OPEN || !(file = current->files->fd[fd])){
+		file = fget(fd);
+		if (!file)
 			goto out;
-	    }
 	}
 	retval = -ENOMEM;
 	if(!(flags & MAP_FIXED) && !addr) {
 		addr = get_unmapped_area(addr, len);
-		if(!addr){
-			goto out;
-		}
+		if(!addr)
+			goto out_putf;
 	}
 
 	/* See asm-sparc/uaccess.h */
 	retval = -EINVAL;
 	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
-		goto out;
+		goto out_putf;
 
-	if(sparc_cpu_model == sun4c) {
+	if(ARCH_SUN4C_SUN4) {
 		if(((addr >= 0x20000000) && (addr < 0xe0000000))) {
 			retval = current->mm->brk;
-			goto out;
+			goto out_putf;
 		}
 	}
 
 	retval = do_mmap(file, addr, len, prot, flags, off);
+
+out_putf:
+	if (file)
+		fput(file);
 out:
 	unlock_kernel();
 	return retval;

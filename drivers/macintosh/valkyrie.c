@@ -18,6 +18,7 @@
 #include <asm/io.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
+#include <asm/pgtable.h>
 #include <linux/selection.h>
 #include "pmac-cons.h"
 #include "valkyrie.h"
@@ -61,6 +62,10 @@ static int read_valkyrie_sense(void);
 static unsigned char *frame_buffer;
 static struct cmap_regs *cmap_regs;
 static struct valkyrie_regs *disp_regs;
+
+static unsigned long frame_buffer_phys;
+static unsigned long disp_regs_phys;
+static unsigned long cmap_regs_phys;
 
 /*
  * Register initialization tables for the valkyrie display.
@@ -161,7 +166,7 @@ read_valkyrie_sense()
 	__delay(20000);
 	sense |= (in_8(&disp_regs->msense) & 0x60) >> 5;
 
-	out_8(&disp_regs->msense, 7);
+	out_8(&disp_regs->msense, 0);
 	return sense;
 }
 
@@ -178,9 +183,12 @@ map_valkyrie_display(struct device_node *dp)
 
 	/* Map in frame buffer and registers */
 	addr = dp->addrs[0].address;
-	frame_buffer = ioremap(addr, 0x100000);
-	disp_regs = ioremap(addr + 0x30a000, 4096);
-	cmap_regs = ioremap(addr + 0x304000, 4096);
+	frame_buffer_phys = addr;
+	frame_buffer = __ioremap(addr, 0x100000, _PAGE_WRITETHRU);
+	disp_regs_phys = addr + 0x30a000;
+	disp_regs = ioremap(disp_regs_phys, 4096);
+	cmap_regs_phys = addr + 0x304000;
+	cmap_regs = ioremap(cmap_regs_phys, 4096);
 
 	/* Read the monitor sense value and choose the video mode */
 	sense = read_valkyrie_sense();
@@ -266,10 +274,10 @@ valkyrie_init()
 	display_info.pitch = line_pitch;
 	display_info.mode = video_mode;
 	strncpy(display_info.name, "valkyrie", sizeof(display_info.name));
-	display_info.fb_address = (unsigned long) frame_buffer + 0x1000;
-	display_info.cmap_adr_address = (unsigned long) &cmap_regs->addr;
-	display_info.cmap_data_address = (unsigned long) &cmap_regs->lut;
-	display_info.disp_reg_address = (unsigned long) &disp_regs;
+	display_info.fb_address = frame_buffer_phys + 0x1000;
+	display_info.cmap_adr_address = cmap_regs_phys;
+	display_info.cmap_data_address = cmap_regs_phys + 8;
+	display_info.disp_reg_address = disp_regs_phys;
 }
 
 int

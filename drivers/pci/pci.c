@@ -1,5 +1,5 @@
 /*
- *	$Id: pci.c,v 1.71 1998/03/30 11:14:35 mj Exp $
+ *	$Id: pci.c,v 1.79 1998/04/17 16:25:24 mj Exp $
  *
  *	PCI Bus Services
  *
@@ -17,43 +17,18 @@
 
 #include <asm/page.h>
 
+#undef DEBUG
+
+#ifdef DEBUG
+#define DBG(x...) printk(x)
+#else
+#define DBG(x...)
+#endif
+
 struct pci_bus pci_root;
 struct pci_dev *pci_devices = NULL;
 static struct pci_dev **pci_last_dev_p = &pci_devices;
 static int pci_reverse __initdata = 0;
-
-#undef DEBUG
-
-const char *pcibios_strerror(int error)
-{
-	static char buf[32];
-
-	switch (error) {
-		case PCIBIOS_SUCCESSFUL:
-		case PCIBIOS_BAD_VENDOR_ID:
-			return "SUCCESSFUL";
-
-		case PCIBIOS_FUNC_NOT_SUPPORTED:
-			return "FUNC_NOT_SUPPORTED";
-
-		case PCIBIOS_DEVICE_NOT_FOUND:
-			return "DEVICE_NOT_FOUND";
-
-		case PCIBIOS_BAD_REGISTER_NUMBER:
-			return "BAD_REGISTER_NUMBER";
-
-                case PCIBIOS_SET_FAILED:          
-			return "SET_FAILED";
-
-                case PCIBIOS_BUFFER_TOO_SMALL:    
-			return "BUFFER_TOO_SMALL";
-
-		default:
-			sprintf (buf, "PCI ERROR 0x%x", error);
-			return buf;
-	}
-}
-
 
 struct pci_dev *
 pci_find_slot(unsigned int bus, unsigned int devfn)
@@ -93,6 +68,28 @@ pci_find_class(unsigned int class, struct pci_dev *from)
 }
 
 
+void
+pci_set_master(struct pci_dev *dev)
+{
+	unsigned short cmd;
+	unsigned char lat;
+
+	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+	if (! (cmd & PCI_COMMAND_MASTER)) {
+		printk("PCI: Enabling bus mastering for device %02x:%02x\n",
+			dev->bus->number, dev->devfn);
+		cmd |= PCI_COMMAND_MASTER;
+		pci_write_config_word(dev, PCI_COMMAND, cmd);
+	}
+	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
+	if (lat < 16) {
+		printk("PCI: Increasing latency timer of device %02x:%02x to 64\n",
+			dev->bus->number, dev->devfn);
+		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 64);
+	}
+}
+
+
 __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 {
 	unsigned int devfn, l, max, class;
@@ -101,10 +98,7 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 	struct pci_bus *child;
 	int reg;
 
-#ifdef DEBUG
-	printk("pci_scan_bus for bus %d\n", bus->number);
-#endif
-
+	DBG("pci_scan_bus for bus %d\n", bus->number);
 	max = bus->secondary;
 	for (devfn = 0; devfn < 0xff; ++devfn) {
 		if (PCI_FUNC(devfn) && !is_multi) {
@@ -161,6 +155,8 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 				pcibios_read_config_dword(bus->number, devfn, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
 				dev->base_address[reg] = (l == 0xffffffff) ? 0 : l;
 			}
+			pcibios_read_config_dword(bus->number, devfn, PCI_ROM_ADDRESS, &l);
+			dev->rom_address = (l == 0xffffffff) ? 0 : l;
 			break;
 		case PCI_HEADER_TYPE_BRIDGE:		    /* bridge header */
 			if (class >> 8 != PCI_CLASS_BRIDGE_PCI)
@@ -169,6 +165,8 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 				pcibios_read_config_dword(bus->number, devfn, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
 				dev->base_address[reg] = (l == 0xffffffff) ? 0 : l;
 			}
+			pcibios_read_config_dword(bus->number, devfn, PCI_ROM_ADDRESS1, &l);
+			dev->rom_address = (l == 0xffffffff) ? 0 : l;
 			break;
 		case PCI_HEADER_TYPE_CARDBUS:		    /* CardBus bridge header */
 			if (class >> 16 != PCI_BASE_CLASS_BRIDGE)
@@ -185,10 +183,7 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 			continue;
 		}
 
-#ifdef DEBUG
-		printk("PCI: %02x:%02x [%04x/%04x]\n",
-		       bus->number, dev->devfn, dev->vendor, dev->device);
-#endif
+		DBG("PCI: %02x:%02x [%04x/%04x]\n", bus->number, dev->devfn, dev->vendor, dev->device);
 
 		/*
 		 * Put it into the global PCI device chain. It's used to
@@ -209,16 +204,15 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 		dev->sibling = bus->devices;
 		bus->devices = dev;
 
+#if 0
 		/*
-		 * In case the latency timer value is less than 32,
-		 * which makes everything very sllooowww, set it to
-		 * 32. Pciutils should be used to fine-tune it later.
-		 * Note that we don't check if the device is a bus-master:
-		 * if it isn't, write to the latency timer should be ignored.
+		 * Setting of latency timer in case it was less than 32 was
+		 * a great idea, but it confused several broken devices. Grrr.
 		 */
 		pcibios_read_config_byte(bus->number, dev->devfn, PCI_LATENCY_TIMER, &tmp);
 		if (tmp < 32)
 			pcibios_write_config_byte(bus->number, dev->devfn, PCI_LATENCY_TIMER, 32);
+#endif
 
 		/*
 		 * If it's a bridge, scan the bus behind it.
@@ -303,9 +297,7 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 	 *
 	 * Return how far we've got finding sub-buses.
 	 */
-#ifdef DEBUG
-	printk("PCI: pci_scan_bus returning with max=%02x\n", max);
-#endif
+	DBG("PCI: pci_scan_bus returning with max=%02x\n", max);
 	return max;
 }
 
@@ -331,25 +323,19 @@ __initfunc(void pci_init(void))
 	pci_quirks_init();
 #endif
 
-#ifdef CONFIG_PROC_FS
-	proc_bus_pci_init();
-#ifdef CONFIG_PCI_OLD_PROC
-	proc_old_pci_init();
-#endif
+#ifdef CONFIG_PROC
+	pci_proc_init();
 #endif
 }
 
 
 __initfunc(void pci_setup (char *str, int *ints))
 {
-	str = pcibios_setup(str);
 	while (str) {
 		char *k = strchr(str, ',');
 		if (k)
 			*k++ = 0;
-		if (*str) {
-			if (!(str = pcibios_setup(str)) || !*str)
-				continue;
+		if (*str && (str = pcibios_setup(str)) && *str) {
 			if (!strcmp(str, "reverse"))
 				pci_reverse = 1;
 			else printk(KERN_ERR "PCI: Unknown option `%s'\n", str);

@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.44 1998/01/09 16:39:35 jj Exp $
+/* $Id: traps.c,v 1.49 1998/04/06 16:09:38 jj Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -191,7 +191,7 @@ void bad_trap (struct pt_regs *regs, long lvl)
 		die_if_kernel ("Kernel bad trap", regs);
         current->tss.sig_desc = SUBSIG_BADTRAP(lvl - 0x100);
         current->tss.sig_address = regs->tpc;
-        send_sig(SIGILL, current, 1);
+        force_sig(SIGILL, current);
 	unlock_kernel ();
 }
 
@@ -225,7 +225,9 @@ void data_access_exception (struct pt_regs *regs)
 			return;
 		}
 	}
-	send_sig(SIGSEGV, current, 1);
+	lock_kernel();
+	force_sig(SIGSEGV, current);
+	unlock_kernel();
 }
 
 #ifdef CONFIG_PCI
@@ -235,16 +237,35 @@ extern volatile int pci_poke_in_progress;
 extern volatile int pci_poke_faulted;
 #endif
 
+/* When access exceptions happen, we must do this. */
+static __inline__ void clean_and_reenable_l1_caches(void)
+{
+	unsigned long va;
+
+	/* Clean 'em. */
+	for(va =  0; va < (PAGE_SIZE << 1); va += 32) {
+		spitfire_put_icache_tag(va, 0x0);
+		spitfire_put_dcache_tag(va, 0x0);
+	}
+
+	/* Re-enable. */
+	__asm__ __volatile__("flush %%g6\n\t"
+			     "membar #Sync\n\t"
+			     "stxa %0, [%%g0] %1\n\t"
+			     "membar #Sync"
+			     : /* no outputs */
+			     : "r" (LSU_CONTROL_IC | LSU_CONTROL_DC |
+				    LSU_CONTROL_IM | LSU_CONTROL_DM),
+			     "i" (ASI_LSU_CONTROL)
+			     : "memory");
+}
+
 void do_dae(struct pt_regs *regs)
 {
 #ifdef CONFIG_PCI
-#ifdef DEBUG_PCI_POKES
-	prom_printf(" (POKE ");
-#endif
 	if(pci_poke_in_progress) {
-		unsigned long va;
 #ifdef DEBUG_PCI_POKES
-		prom_printf("tpc[%016lx] tnpc[%016lx] ",
+		prom_printf(" (POKE tpc[%016lx] tnpc[%016lx] ",
 			    regs->tpc, regs->tnpc);
 #endif
 		pci_poke_faulted = 1;
@@ -255,39 +276,30 @@ void do_dae(struct pt_regs *regs)
 		prom_printf("PCI) ");
 		/* prom_halt(); */
 #endif
-		/* Re-enable I/D caches, Ultra turned them off. */
-		for(va =  0; va < (PAGE_SIZE << 1); va += 32) {
-			spitfire_put_icache_tag(va, 0x0);
-			spitfire_put_dcache_tag(va, 0x0);
-		}
-		__asm__ __volatile__("flush %%g6\n\t"
-				     "membar #Sync\n\t"
-				     "stxa %0, [%%g0] %1\n\t"
-				     "membar #Sync"
-				     : /* no outputs */
-				     : "r" (LSU_CONTROL_IC | LSU_CONTROL_DC |
-					    LSU_CONTROL_IM | LSU_CONTROL_DM),
-				       "i" (ASI_LSU_CONTROL)
-				     : "memory");
+		clean_and_reenable_l1_caches();
 		return;
 	}
-#ifdef DEBUG_PCI_POKES
-	prom_printf("USER) ");
-	prom_printf("tpc[%016lx] tnpc[%016lx]\n");
-	prom_halt();
 #endif
-#endif
-	send_sig(SIGSEGV, current, 1);
+	clean_and_reenable_l1_caches();
+	lock_kernel();
+	force_sig(SIGSEGV, current);
+	unlock_kernel();
 }
 
 void instruction_access_exception (struct pt_regs *regs)
 {
-	send_sig(SIGSEGV, current, 1);
+	clean_and_reenable_l1_caches();
+
+	lock_kernel();
+	force_sig(SIGSEGV, current);
+	unlock_kernel();
 }
 
 void do_iae(struct pt_regs *regs)
 {
-	send_sig(SIGSEGV, current, 1);
+	lock_kernel();
+	force_sig(SIGSEGV, current);
+	unlock_kernel();
 }
 
 void do_fpe_common(struct pt_regs *regs)
@@ -312,11 +324,7 @@ void do_fpieee(struct pt_regs *regs)
 	do_fpe_common(regs);
 }
 
-#ifdef CONFIG_MATHEMU_MODULE
-volatile int (*handle_mathemu)(struct pt_regs *, struct fpustate *) = NULL;
-#else
 extern int do_mathemu(struct pt_regs *, struct fpustate *);
-#endif
 
 void do_fpother(struct pt_regs *regs)
 {
@@ -326,18 +334,7 @@ void do_fpother(struct pt_regs *regs)
 	switch ((f->fsr & 0x1c000)) {
 	case (2 << 14): /* unfinished_FPop */
 	case (3 << 14): /* unimplemented_FPop */
-#ifdef CONFIG_MATHEMU_MODULE
-#ifdef CONFIG_KMOD
-		if (!handle_mathemu)
-			request_module("math-emu");
-#endif
-		if (handle_mathemu)
-			ret = handle_mathemu(regs, f);
-#else
-#ifdef CONFIG_MATHEMU
 		ret = do_mathemu(regs, f);
-#endif
-#endif
 		break;
 	}
 	if (ret) return;
@@ -576,27 +573,33 @@ void cache_flush_trap(struct pt_regs *regs)
 #else
 #error SMP not supported on sparc64 yet
 #endif
+
+#if 0
+/* Broken */
 	int size = prom_getintdefault(node, "ecache-size", 512*1024);
 	int i, j;
-	unsigned long addr, page_nr;
+	unsigned long addr;
+	struct page *page, *end;
 
 	regs->tpc = regs->tnpc;
 	regs->tnpc = regs->tnpc + 4;
 	if (!suser()) return;
 	size >>= PAGE_SHIFT;
 	addr = PAGE_OFFSET - PAGE_SIZE;
+	page = mem_map - 1;
+	end = mem_map + max_mapnr;
 	for (i = 0; i < size; i++) {
 		do {
 			addr += PAGE_SIZE;
-			page_nr = MAP_NR(addr);
-			if (page_nr >= max_mapnr) {
+			page++;
+			if (page >= end)
 				return;
-			}
-		} while (!PageReserved (mem_map + page_nr));
+		} while (!PageReserved(page));
 		/* E-Cache line size is 64B. Let us pollute it :)) */
 		for (j = 0; j < PAGE_SIZE; j += 64)
 			__asm__ __volatile__ ("ldx [%0 + %1], %%g1" : : "r" (j), "r" (addr) : "g1");
 	}
+#endif
 }
 #endif
 

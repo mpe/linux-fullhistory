@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.7 1997/09/07 02:56:44 davem Exp $
+/* $Id: irq.h,v 1.8 1998/03/15 17:23:51 ecd Exp $
  * irq.h: IRQ registers on the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -39,7 +39,8 @@ struct devid_cookie {
 
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
-extern void init_timers(void (*lvl10_irq)(int, void *, struct pt_regs *));
+extern void init_timers(void (*lvl10_irq)(int, void *, struct pt_regs *),
+			unsigned long *);
 
 #ifdef __SMP__
 extern void set_cpu_int(int, int);
@@ -73,6 +74,11 @@ extern __inline__ unsigned long get_softint(void)
 	__asm__ __volatile__("rd	%%softint, %0"
 			     : "=r" (retval));
 	return retval;
+}
+
+static __inline__ int irq_cannonicalize(int irq)
+{
+	return irq;
 }
 
 #endif

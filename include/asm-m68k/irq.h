@@ -45,6 +45,11 @@
 
 #define IRQ_SCHED_TIMER	(8)    /* interrupt source for scheduling timer */
 
+static __inline__ int irq_cannonicalize(int irq)
+{
+	return irq;
+}
+
 /*
  * Machine specific interrupt sources.
  *

@@ -17,4 +17,14 @@ void *pci_io_base(unsigned int bus);
 int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
 		   unsigned char *devfn_ptr);
 
+struct bridge_data {
+	volatile unsigned int *cfg_addr;
+	volatile unsigned char *cfg_data;
+	void *io_base;
+	int bus_number;
+	int max_bus;
+	struct bridge_data *next;
+	struct device_node *node;
+};
+
 #endif

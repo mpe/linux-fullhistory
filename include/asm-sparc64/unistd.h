@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.14 1997/12/11 15:16:08 jj Exp $ */
+/* $Id: unistd.h,v 1.17 1998/03/29 12:57:54 ecd Exp $ */
 #ifndef _SPARC64_UNISTD_H
 #define _SPARC64_UNISTD_H
 
@@ -29,19 +29,19 @@
 #define __NR_unlink              10 /* Common                                      */
 #define __NR_execv               11 /* SunOS Specific                              */
 #define __NR_chdir               12 /* Common                                      */
-/* #define __NR_ni_syscall       13    ENOSYS under SunOS                          */
+#define __NR_xstat		 13 /* Linux Specific				   */
 #define __NR_mknod               14 /* Common                                      */
 #define __NR_chmod               15 /* Common                                      */
 #define __NR_chown               16 /* Common                                      */
 #define __NR_brk                 17 /* Common                                      */
-/* #define __NR_ni_syscall       18    ENOSYS under SunOS                          */
+#define __NR_xmknod		 18 /* Linux Specific				   */
 #define __NR_lseek               19 /* Common                                      */
 #define __NR_getpid              20 /* Common                                      */
 /* #define __NR_ni_syscall       21    ENOSYS under SunOS                          */
 /* #define __NR_ni_syscall       22    ENOSYS under SunOS                          */
 #define __NR_setuid              23 /* Implemented via setreuid in SunOS           */
 #define __NR_getuid              24 /* Common                                      */
-/* #define __NR_ni_syscall       25    ENOSYS under SunOS                          */
+/* #define __NR_time alias	 25    ENOSYS under SunOS			   */
 #define __NR_ptrace              26 /* Common                                      */
 #define __NR_alarm               27 /* Implemented via setitimer in SunOS          */
 /* #define __NR_ni_syscall       28    ENOSYS under SunOS                          */
@@ -418,6 +418,7 @@ static __inline__ _syscall1(int,setup,int,magic)
 static __inline__ _syscall0(int,sync)
 static __inline__ _syscall0(pid_t,setsid)
 static __inline__ _syscall3(int,write,int,fd,__const__ char *,buf,off_t,count)
+static __inline__ _syscall3(int,read,int,fd,char *,buf,off_t,count)
 static __inline__ _syscall1(int,dup,int,fd)
 static __inline__ _syscall3(int,execve,__const__ char *,file,char **,argv,char **,envp)
 static __inline__ _syscall3(int,open,__const__ char *,file,int,flag,int,mode)
@@ -443,24 +444,56 @@ static __inline__ pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned lo
 {
 	long retval;
 
-	__asm__ __volatile("mov %4, %%g2\n\t"    /* Set aside fn ptr... */
-			   "mov %5, %%g3\n\t"    /* and arg. */
-			   "mov %1, %%g1\n\t"
-			   "mov %2, %%o0\n\t"    /* Clone flags. */
-			   "mov 0, %%o1\n\t"     /* usp arg == 0 */
-			   "t 0x6d\n\t"          /* Linux/Sparc clone(). */
-			   "brz,a,pn %%o1, 1f\n\t"           /* The parent, just return. */
+	__asm__ __volatile("mov %1, %%g1\n\t"
+			   "mov %2, %%o0\n\t"	   /* Clone flags. */
+			   "mov 0, %%o1\n\t"	   /* usp arg == 0 */
+			   "t 0x6d\n\t"		   /* Linux/Sparc clone(). */
+			   "brz,a,pn %%o1, 1f\n\t" /* Parent, just return. */
 			   " mov %%o0, %0\n\t"
-			   "jmpl %%g2, %%o7\n\t" /* Call the function. */
-			   " mov %%g3, %%o0\n\t" /* Get back the arg in delay. */
+			   "jmpl %4, %%o7\n\t"	   /* Call the function. */
+			   " mov %5, %%o0\n\t"	   /* Set arg in delay. */
 			   "mov %3, %%g1\n\t"
-			   "t 0x6d\n\t"          /* Linux/Sparc exit(). */
+			   "t 0x6d\n\t"		   /* Linux/Sparc exit(). */
 			   /* Notreached by child. */
 			   "1:" :
 			   "=r" (retval) :
 			   "i" (__NR_clone), "r" (flags | CLONE_VM),
 			   "i" (__NR_exit),  "r" (fn), "r" (arg) :
-			   "g1", "g2", "g3", "o0", "o1", "memory", "cc");
+			   "g1", "o0", "o1", "memory", "cc");
+	return retval;
+}
+
+static __inline__ pid_t fork(void)
+{
+	long retval;
+
+	__asm__ __volatile("mov %1, %%g1\n\t"
+			   "t 0x6d\n\t"
+			   "brz,a,pn %%o1, 1f\n\t"
+			   " mov %%o0, %0\n\t"
+			   "mov %%g0, %0\n\t"
+			   "1:" :
+			   "=r" (retval) :
+			   "i" (__NR_fork) :
+			   "g1", "o0", "o1", "memory", "cc");
+	return retval;
+}
+
+static __inline__ pid_t clone(unsigned long flags, char *ksp)
+{
+	long retval;
+
+	__asm__ __volatile("mov %1, %%g1\n\t"
+			   "mov %2, %%o0\n\t"
+			   "mov %3, %%o1\n\t"
+			   "t 0x6d\n\t"
+			   "brz,a,pn %%o1, 1f\n\t"
+			   " mov %%o0, %0\n\t"
+			   "mov %%g0, %0\n\t"
+			   "1:" :
+			   "=r" (retval) :
+			   "i" (__NR_fork), "r" (flags), "r" (ksp) :
+			   "g1", "o0", "o1", "memory", "cc");
 	return retval;
 }
 

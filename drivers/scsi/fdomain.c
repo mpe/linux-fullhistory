@@ -400,7 +400,7 @@ static int               Write_SCSI_Data_port;
 static int               FIFO_Size = 0x2000; /* 8k FIFO for
 						pre-tmc18c30 chips */
 
-extern void              fdomain_16x0_intr( int irq, void *dev_id,
+extern void              do_fdomain_16x0_intr( int irq, void *dev_id,
 					    struct pt_regs * regs );
 
 static unsigned long addresses[] = {
@@ -775,7 +775,7 @@ static int fdomain_pci_bios_detect( int *irq, int *iobase )
 	   PCI_DEVICE_ID_FD_36C70 );
 #endif 
 
-   if ((pdev = pci_find_device(PCI_VENDOR_ID, PCI_DEVICE_ID, pdev)) == NULL)
+   if ((pdev = pci_find_device(PCI_VENDOR_ID_FD, PCI_DEVICE_ID_FD_36C70, pdev)) == NULL)
      return 0;
        
 #if DEBUG_DETECT

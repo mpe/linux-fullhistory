@@ -6,6 +6,8 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/smp.h>
+#include <linux/tasks.h>
 #include <asm/oplib.h>
 #include <asm/page.h>
 #include <asm/head.h>
@@ -116,22 +118,25 @@ struct cpu_iu_info linux_sparc_chips[] = {
 
 #define NSPARCCHIPS  (sizeof(linux_sparc_chips)/sizeof(struct cpu_iu_info))
 
-char *sparc_cpu_type[NCPUS] = { "cpu-oops", "cpu-oops1", "cpu-oops2", "cpu-oops3" };
-char *sparc_fpu_type[NCPUS] = { "fpu-oops", "fpu-oops1", "fpu-oops2", "fpu-oops3" };
+char *sparc_cpu_type[NR_CPUS] = { 0 };
+char *sparc_fpu_type[NR_CPUS] = { 0 };
 
 unsigned int fsr_storage;
 
 __initfunc(void cpu_probe(void))
 {
 	int psr_impl, psr_vers, fpu_vers;
-	int i, cpuid;
+	int i, cpuid, psr;
 
-	cpuid = get_cpuid();
+	cpuid = hard_smp_processor_id();
 
 	psr_impl = ((get_psr()>>28)&0xf);
 	psr_vers = ((get_psr()>>24)&0xf);
 
+	psr = get_psr();
+	put_psr(psr | PSR_EF);
 	fpu_vers = ((get_fsr()>>17)&0x7);
+	put_psr(psr);
 
 	for(i = 0; i<NSPARCCHIPS; i++) {
 		if(linux_sparc_chips[i].psr_impl == psr_impl)

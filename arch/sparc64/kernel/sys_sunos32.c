@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.7 1997/12/11 15:15:19 jj Exp $
+/* $Id: sys_sunos32.c,v 1.11 1998/03/29 10:10:55 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -16,6 +16,7 @@
 #include <linux/mm.h>
 #include <linux/swap.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/resource.h>
 #include <linux/ipc.h>
 #include <linux/shm.h>
@@ -70,22 +71,29 @@ asmlinkage u32 sunos_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 of
 		flags &= ~MAP_NORESERVE;
 	}
 	retval = -EBADF;
-	if(!(flags & MAP_ANONYMOUS))
-		if(fd >= SUNOS_NR_OPEN || !(file = current->files->fd[fd]))
+	if(!(flags & MAP_ANONYMOUS)) {
+		if(fd >= SUNOS_NR_OPEN)
 			goto out;
+ 		file = fget(fd);
+		if (!file)
+			goto out;
+		if (file->f_dentry && file->f_dentry->d_inode) {
+			struct inode * inode = file->f_dentry->d_inode;
+			if(MAJOR(inode->i_rdev) == MEM_MAJOR &&
+			   MINOR(inode->i_rdev) == 5) {
+				flags |= MAP_ANONYMOUS;
+				fput(file);
+				file = NULL;
+			}
+		}
+	}
+
 	retval = -ENOMEM;
 	if(!(flags & MAP_FIXED) && !addr) {
 		unsigned long attempt = get_unmapped_area(addr, len);
 		if(!attempt || (attempt >= 0xf0000000UL))
-			goto out;
+			goto out_putf;
 		addr = (u32) attempt;
-	}
-	if(file->f_dentry && file->f_dentry->d_inode) {
-		if(MAJOR(file->f_dentry->d_inode->i_rdev) == MEM_MAJOR &&
-		   MINOR(file->f_dentry->d_inode->i_rdev) == 5) {
-			flags |= MAP_ANONYMOUS;
-			file = 0;
-		}
 	}
 	if(!(flags & MAP_FIXED))
 		addr = 0;
@@ -98,6 +106,9 @@ asmlinkage u32 sunos_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 of
 			 (unsigned long) off);
 	if(!ret_type)
 		retval = ((retval < 0xf0000000) ? 0 : retval);
+out_putf:
+	if (file)
+		fput(file);
 out:
 	unlock_kernel();
 	return (u32) retval;
@@ -372,6 +383,7 @@ static int sunos_filldir(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdents(unsigned int fd, u32 u_dirent, int cnt)
 {
 	struct file * file;
+	struct inode * inode;
 	struct sunos_dirent * lastdirent;
 	struct sunos_dirent_callback buf;
 	int error = -EBADF;
@@ -381,32 +393,39 @@ asmlinkage int sunos_getdents(unsigned int fd, u32 u_dirent, int cnt)
 	if(fd >= SUNOS_NR_OPEN)
 		goto out;
 
-	file = current->files->fd[fd];
+	file = fget(fd);
 	if(!file)
 		goto out;
 
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		goto out;
+		goto out_putf;
 
 	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_dirent) + 255))
-		goto out;
+		goto out_putf;
 
 	buf.curr = (struct sunos_dirent *) dirent;
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
 
+	inode = file->f_dentry->d_inode;
+	down(&inode->i_sem);
 	error = file->f_op->readdir(file, &buf, sunos_filldir);
+	up(&inode->i_sem);
 	if (error < 0)
-		goto out;
+		goto out_putf;
+
 	lastdirent = buf.previous;
 	error = buf.error;
 	if (lastdirent) {
 		put_user(file->f_pos, &lastdirent->d_off);
 		error = cnt - buf.count;
 	}
+
+out_putf:
+	fput(file);
 out:
 	unlock_kernel();
 	return error;
@@ -454,43 +473,51 @@ static int sunos_filldirentry(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdirentries(unsigned int fd, u32 u_dirent,
 				   int cnt, u32 u_basep)
 {
-	struct file * file;
-	struct sunos_direntry * lastdirent;
-	struct sunos_direntry_callback buf;
-	int error = -EBADF;
 	void *dirent = (void *) A(u_dirent);
 	unsigned int *basep = (unsigned int *)A(u_basep);
+	struct file * file;
+	struct inode * inode;
+	struct sunos_direntry * lastdirent;
+	int error = -EBADF;
+	struct sunos_direntry_callback buf;
 
 	lock_kernel();
 	if(fd >= SUNOS_NR_OPEN)
 		goto out;
 
-	file = current->files->fd[fd];
+	file = fget(fd);
 	if(!file)
 		goto out;
 
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		goto out;
+		goto out_putf;
 
 	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_direntry) + 255))
-		goto out;
+		goto out_putf;
 
 	buf.curr = (struct sunos_direntry *) dirent;
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
 
+	inode = file->f_dentry->d_inode;
+	down(&inode->i_sem);
 	error = file->f_op->readdir(file, &buf, sunos_filldirentry);
+	up(&inode->i_sem);
 	if (error < 0)
-		goto out;
+		goto out_putf;
+
 	lastdirent = buf.previous;
 	error = buf.error;
 	if (lastdirent) {
 		put_user(file->f_pos, basep);
 		error = cnt - buf.count;
 	}
+
+out_putf:
+	fput(file);
 out:
 	unlock_kernel();
 	return error;
@@ -622,14 +649,28 @@ asmlinkage int sunos_pathconf(u32 u_path, int name)
 extern asmlinkage int
 sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp);
 
-asmlinkage int sunos_select(int width, u32 inp, u32 outp, u32 exp, u32 tvp)
+struct timeval32
+{
+	int tv_sec, tv_usec;
+};
+
+asmlinkage int sunos_select(int width, u32 inp, u32 outp, u32 exp, u32 tvp_x)
 {
 	int ret;
 
 	/* SunOS binaries expect that select won't change the tvp contents */
 	lock_kernel();
 	current->personality |= STICKY_TIMEOUTS;
-	ret = sys32_select (width, inp, outp, exp, tvp);
+	ret = sys32_select (width, inp, outp, exp, tvp_x);
+	if (ret == -EINTR && tvp_x) {
+		struct timeval32 *tvp = (struct timeval32 *)A(tvp_x);
+		time_t sec, usec;
+
+		__get_user(sec, &tvp->tv_sec);
+		__get_user(usec, &tvp->tv_usec);
+		if (sec == 0 && usec == 0)
+			ret = 0;
+	}
 	unlock_kernel();
 	return ret;
 }
@@ -1297,8 +1338,11 @@ asmlinkage int sunos_open(u32 filename, int flags, int mode)
 
 static inline int check_nonblock(int ret, int fd)
 {
-	if (ret == -EAGAIN && (current->files->fd[fd]->f_flags & O_NDELAY))
-		return -SUNOS_EWOULDBLOCK;
+	if (ret == -EAGAIN) {
+		struct file * file = fcheck(fd);
+		if (file && (file->f_flags & O_NDELAY))
+			ret = -SUNOS_EWOULDBLOCK;
+	}
 	return ret;
 }
 
@@ -1370,12 +1414,42 @@ asmlinkage int sunos_send(int fd, u32 buff, int len, unsigned flags)
 	return ret;
 }
 
-asmlinkage int sunos_accept(int fd, u32 sa, u32 addrlen)
+extern asmlinkage int sys_setsockopt(int fd, int level, int optname,
+				     char *optval, int optlen);
+
+asmlinkage int sunos_socket(int family, int type, int protocol)
 {
-	int ret;
+	int ret, one = 1;
 
 	lock_kernel();
-	ret = check_nonblock(sys_accept(fd, (struct sockaddr *)A(sa), (int *)A(addrlen)), fd);
+	ret = sys_socket(family, type, protocol);
+	if (ret < 0)
+		goto out;
+
+	sys_setsockopt(ret, SOL_SOCKET, SO_BSDCOMPAT,
+		       (char *)&one, sizeof(one));
+out:
+	unlock_kernel();
+	return ret;
+}
+
+asmlinkage int sunos_accept(int fd, u32 sa, u32 addrlen)
+{
+	int ret, one = 1;
+
+	lock_kernel();
+	while (1) {
+		ret = check_nonblock(sys_accept(fd, (struct sockaddr *)A(sa),
+						(int *)A(addrlen)), fd);
+		if (ret != -ENETUNREACH && ret != -EHOSTUNREACH)
+			break;
+	}
+	if (ret < 0)
+		goto out;
+
+	sys_setsockopt(ret, SOL_SOCKET, SO_BSDCOMPAT,
+		       (char *)&one, sizeof(one));
+out:
 	unlock_kernel();
 	return ret;
 }

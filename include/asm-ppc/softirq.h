@@ -69,8 +69,8 @@ extern inline void end_bh_atomic(void)
 }
 
 /* These are for the irq's testing the lock */
-#define softirq_trylock()	(__ppc_bh_counter? 0: ((__ppc_bh_counter=1),1))
-#define softirq_endlock()	(__ppc_bh_counter = 0)
+#define softirq_trylock(cpu)	(__ppc_bh_counter? 0: ((__ppc_bh_counter=1),1))
+#define softirq_endlock(cpu)	(__ppc_bh_counter = 0)
 
 #else /* __SMP__ */
 
@@ -129,7 +129,7 @@ do {	unsigned long flags;				\
 	spin_unlock_irqrestore(&global_bh_lock, flags);	\
 } while(0)
 
-#define softirq_trylock()					\
+#define softirq_trylock(cpu)					\
 ({								\
 	int ret = 1;						\
 	if(atomic_add_return(1, &__ppc_bh_counter) != 1) {	\
@@ -138,7 +138,7 @@ do {	unsigned long flags;				\
 	}							\
 	ret;							\
 })
-#define softirq_endlock()	atomic_dec(&__ppc_bh_counter)
+#define softirq_endlock(cpu)	atomic_dec(&__ppc_bh_counter)
 #define clear_active_bhs(mask)				\
 do {	unsigned long flags;				\
 	spin_lock_irqsave(&global_bh_lock, flags);	\

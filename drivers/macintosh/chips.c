@@ -14,10 +14,13 @@
 #include <linux/string.h>
 #include <linux/vc_ioctl.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/selection.h>
 #include <asm/prom.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
+#include <asm/adb.h>
+#include <asm/cuda.h>
+#include <asm/pmu.h>
 #include <asm/pci-bridge.h>
 #include "pmac-cons.h"
 #include "chips.h"
@@ -26,6 +29,8 @@
 static unsigned char *frame_buffer;
 static unsigned char *blitter_regs;
 static unsigned char *io_space;
+static unsigned long chips_base_phys;
+static unsigned long chips_io_phys;
 
 void
 map_chips_display(struct device_node *dp)
@@ -35,17 +40,21 @@ map_chips_display(struct device_node *dp)
     unsigned long addr;
 
     addr = dp->addrs[0].address;
-    frame_buffer = ioremap(addr + 0x800000, 0x100000);
+    chips_base_phys = addr;
+    frame_buffer = __ioremap(addr + 0x800000, 0x100000, _PAGE_WRITETHRU);
     blitter_regs = ioremap(addr + 0xC00000, 4096);
     
-    printk("Mapped chips65550 frame buffer at %p, blitter at %p\n", frame_buffer, blitter_regs);
+    printk("Mapped chips65550 frame buffer at %p, blitter at %p\n",
+	   frame_buffer, blitter_regs);
     
     if (pci_device_loc(dp, &bus, &devfn) == 0) {
 	pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd);
 	cmd |= 3;	// enable memory and IO space
 	pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
-	io_space = ioremap((unsigned long) pci_io_base(bus), 4096);
-	printk("Mapped chips65550 IO space at %p\n", io_space);
+	io_space = (unsigned char *) pci_io_base(bus);
+	/* XXX really want the physical address here */
+	chips_io_phys = (unsigned long) pci_io_base(bus);
+	printk("Chips65550 IO space at %p\n", io_space);
     }
 
     video_mode = VMODE_800_600_60;
@@ -65,11 +74,15 @@ chips_init()
     unsigned *p;
     int i, hres;
 
-    if (video_mode != VMODE_800_600_60)
-	panic("chips65550: display mode %d not supported", video_mode);
+    if (video_mode != VMODE_800_600_60) {
+	printk(KERN_ERR "chips65550: display mode %d not supported", video_mode);
+	video_mode = VMODE_800_600_60;
+    }
 
-    if (color_mode != CMODE_8 && color_mode != CMODE_16)
-	panic("chips65550: color mode %d not supported", color_mode);
+    if (color_mode != CMODE_8 && color_mode != CMODE_16) {
+	printk(KERN_ERR "chips65550: color mode %d not supported", color_mode);
+	color_mode = CMODE_8;
+    }
     
     n_scanlines = 600;
     hres        = 800;
@@ -106,15 +119,18 @@ chips_init()
     display_info.pitch = line_pitch;
     display_info.mode = video_mode;
     strncpy(display_info.name, "chips65550", sizeof(display_info.name));
-    display_info.fb_address = (unsigned long) frame_buffer;
-    display_info.cmap_adr_address = 0;
-    display_info.cmap_data_address = 0;
-    display_info.disp_reg_address = 0;
+    display_info.fb_address = chips_base_phys + 0x800000;
+    display_info.cmap_adr_address = chips_io_phys + 0x3c8;
+    display_info.cmap_data_address = chips_io_phys + 0x3c9;
+    display_info.disp_reg_address = chips_base_phys + 0xC00000;
 
     /* Clear screen */
     p = (unsigned *) frame_buffer;
     for (i = n_scanlines * line_pitch / sizeof(unsigned); i != 0; --i)
 	*p++ = 0;
+
+    /* Turn on backlight */
+    pmu_enable_backlight(1);
 }
 
 int
@@ -164,4 +180,5 @@ chips_set_palette(unsigned char red[], unsigned char green[],
 void
 chips_set_blanking(int blank_mode)
 {
+    pmu_enable_backlight(blank_mode == VESA_NO_BLANKING);
 }

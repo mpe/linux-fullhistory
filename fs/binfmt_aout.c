@@ -349,7 +349,7 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 		return retval;
 
 	/* OK, This is the point of no return */
-#ifdef __sparc__
+#if defined(__sparc__) && !defined(__sparc_v9__)
 	memcpy(&current->tss.core_exec, &ex, sizeof(struct exec));
 #endif
 

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.87 1997/12/18 02:42:42 ecd Exp $
+/*  $Id: setup.c,v 1.93 1998/03/09 14:03:18 jj Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -43,6 +43,7 @@
 #include <asm/spinlock.h>
 #include <asm/softirq.h>
 #include <asm/hardirq.h>
+#include <asm/machines.h>
 
 struct screen_info screen_info = {
 	0, 0,			/* orig-x, orig-y */
@@ -57,11 +58,6 @@ struct screen_info screen_info = {
 };
 
 unsigned int phys_bytes_of_ram, end_of_phys_memory;
-
-unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
-{
-	return memory_start;
-}
 
 /* Typing sync at the prom prompt calls the function pointed to by
  * romvec->pv_synchook which I set to the following function.
@@ -127,7 +123,7 @@ unsigned int boot_flags;
 extern char *console_fb_path;
 static int console_fb = 0;
 #endif
-static unsigned long memory_size = 0;
+static unsigned long memory_size __initdata = 0;
 
 void kernel_enter_debugger(void)
 {
@@ -260,7 +256,7 @@ extern void sun4c_probe_vac(void);
 extern char cputypval;
 extern unsigned long start, end;
 extern void panic_setup(char *, int *);
-extern unsigned long srmmu_endmem_fixup(unsigned long);
+extern void srmmu_end_memory(unsigned long, unsigned long *);
 extern unsigned long sun_serial_setup(unsigned long);
 
 extern unsigned short root_flags;
@@ -311,6 +307,13 @@ __initfunc(void setup_arch(char **cmdline_p,
 	if(!strcmp(&cputypval,"sun4d")) { sparc_cpu_model=sun4d; }
 	if(!strcmp(&cputypval,"sun4e")) { sparc_cpu_model=sun4e; }
 	if(!strcmp(&cputypval,"sun4u")) { sparc_cpu_model=sun4u; }
+
+#ifdef CONFIG_SUN4
+	if (sparc_cpu_model != sun4) {
+		prom_printf("This kernel is for Sun4 architecture only.\n");
+		prom_halt();
+	}
+#endif
 #if CONFIG_AP1000
 	sparc_cpu_model=ap1000;
 	strcpy(&cputypval, "ap+");
@@ -320,12 +323,10 @@ __initfunc(void setup_arch(char **cmdline_p,
 	switch(sparc_cpu_model) {
 	case sun4:
 		printk("SUN4\n");
-		sun4c_probe_vac();
 		packed = 0;
 		break;
 	case sun4c:
 		printk("SUN4C\n");
-		sun4c_probe_vac();
 		packed = 0;
 		break;
 	case sun4m:
@@ -356,6 +357,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 	boot_flags_init(*cmdline_p);
 
 	idprom_init();
+	if (ARCH_SUN4C_SUN4)
+		sun4c_probe_vac();
 	load_mmu();
 	total = prom_probe_memory();
 	*memory_start_p = (((unsigned long) &end));
@@ -374,41 +377,37 @@ __initfunc(void setup_arch(char **cmdline_p,
 				}
 			}
 		}
-	} else {
-		unsigned int sum = 0;
+		*memory_end_p = (end_of_phys_memory + KERNBASE);
+	} else
+		srmmu_end_memory(memory_size, memory_end_p);
 
-		for(i = 0; sp_banks[i].num_bytes != 0; i++) {
-			sum += sp_banks[i].num_bytes;
-			if (memory_size) {
-				if (sum > memory_size) {
-					sp_banks[i].num_bytes -=
-							(sum - memory_size);
-					sum = memory_size;
-					sp_banks[++i].base_addr = 0xdeadbeef;
-					sp_banks[i].num_bytes = 0;
-					break;
-				}
-			}
+	if (!root_flags)
+		root_mountflags &= ~MS_RDONLY;
+	ROOT_DEV = to_kdev_t(root_dev);
+#ifdef CONFIG_BLK_DEV_RAM
+	rd_image_start = ram_flags & RAMDISK_IMAGE_START_MASK;
+	rd_prompt = ((ram_flags & RAMDISK_PROMPT_FLAG) != 0);
+	rd_doload = ((ram_flags & RAMDISK_LOAD_FLAG) != 0);	
+#endif
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (ramdisk_image) {
+		initrd_start = ramdisk_image;
+		if (initrd_start < KERNBASE) initrd_start += KERNBASE;
+		initrd_end = initrd_start + ramdisk_size;
+		if (initrd_end > *memory_end_p) {
+			printk(KERN_CRIT "initrd extends beyond end of memory "
+		                 	 "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+		       			 initrd_end,*memory_end_p);
+			initrd_start = 0;
 		}
-		end_of_phys_memory = sum;
+		if (initrd_start >= *memory_start_p && initrd_start < *memory_start_p + 2 * PAGE_SIZE) {
+			initrd_below_start_ok = 1;
+			*memory_start_p = PAGE_ALIGN (initrd_end);
+		}
 	}
-
+#endif	
 	prom_setsync(prom_sync_me);
 
-	*memory_end_p = (end_of_phys_memory + KERNBASE);
-	if((sparc_cpu_model == sun4c) ||
-	   (sparc_cpu_model == sun4))
-		goto not_relevant;
-	if(end_of_phys_memory >= 0x0d000000) {
-		*memory_end_p = 0xfd000000;
-	} else {
-		if((sparc_cpu_model == sun4m) ||
-		   (sparc_cpu_model == sun4d) ||
-		   (sparc_cpu_model == ap1000))
-			*memory_end_p = srmmu_endmem_fixup(*memory_end_p);
-	}
-not_relevant:
-		
 #ifdef CONFIG_SUN_SERIAL
 	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */
 #endif
@@ -459,31 +458,6 @@ not_relevant:
 		breakpoint();
 	}
 
-	if (!root_flags)
-		root_mountflags &= ~MS_RDONLY;
-	ROOT_DEV = to_kdev_t(root_dev);
-#ifdef CONFIG_BLK_DEV_RAM
-	rd_image_start = ram_flags & RAMDISK_IMAGE_START_MASK;
-	rd_prompt = ((ram_flags & RAMDISK_PROMPT_FLAG) != 0);
-	rd_doload = ((ram_flags & RAMDISK_LOAD_FLAG) != 0);	
-#endif
-#ifdef CONFIG_BLK_DEV_INITRD
-	if (ramdisk_image) {
-		initrd_start = ramdisk_image;
-		if (initrd_start < KERNBASE) initrd_start += KERNBASE;
-		initrd_end = initrd_start + ramdisk_size;
-		if (initrd_end > *memory_end_p) {
-			printk(KERN_CRIT "initrd extends beyond end of memory "
-		                 	 "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-		       			 initrd_end,*memory_end_p);
-			initrd_start = 0;
-		}
-		if (initrd_start >= *memory_start_p && initrd_start < *memory_start_p + 2 * PAGE_SIZE) {
-			initrd_below_start_ok = 1;
-			*memory_start_p = PAGE_ALIGN (initrd_end);
-		}
-	}
-#endif	
 
 	/* Due to stack alignment restrictions and assumptions... */
 	init_task.mm->mmap->vm_page_prot = PAGE_SHARED;
@@ -504,13 +478,12 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
 extern char *sparc_cpu_type[];
 extern char *sparc_fpu_type[];
 
-extern char *smp_info(void);
-
 int get_cpuinfo(char *buffer)
 {
-	int cpuid=get_cpuid();
+	int cpuid=hard_smp_processor_id();
+	int len;
 
-	return sprintf(buffer, "cpu\t\t: %s\n"
+	len = sprintf(buffer, "cpu\t\t: %s\n"
             "fpu\t\t: %s\n"
             "promlib\t\t: Version %d Revision %d\n"
             "prom\t\t: %d.%d\n"
@@ -519,34 +492,23 @@ int get_cpuinfo(char *buffer)
 	    "ncpus active\t: %d\n"
 #ifndef __SMP__
             "BogoMips\t: %lu.%02lu\n"
-#else
-	    "Cpu0Bogo\t: %lu.%02lu\n"
-	    "Cpu1Bogo\t: %lu.%02lu\n"
-	    "Cpu2Bogo\t: %lu.%02lu\n"
-	    "Cpu3Bogo\t: %lu.%02lu\n"
-#endif
-	    "%s"
-#ifdef __SMP__
-	    "%s"
 #endif
 	    ,
-            sparc_cpu_type[cpuid],
-            sparc_fpu_type[cpuid],
+	    sparc_cpu_type[cpuid] ? : "undetermined",
+	    sparc_fpu_type[cpuid] ? : "undetermined",
             romvec->pv_romvers, prom_rev, romvec->pv_printrev >> 16, (short)romvec->pv_printrev,
             &cputypval,
-	    linux_num_cpus, smp_num_cpus,
+	    linux_num_cpus, smp_num_cpus
 #ifndef __SMP__
-            loops_per_sec/500000, (loops_per_sec/5000) % 100,
-#else
-	    cpu_data[0].udelay_val/500000, (cpu_data[0].udelay_val/5000)%100,
-	    cpu_data[1].udelay_val/500000, (cpu_data[1].udelay_val/5000)%100,
-	    cpu_data[2].udelay_val/500000, (cpu_data[2].udelay_val/5000)%100,
-	    cpu_data[3].udelay_val/500000, (cpu_data[3].udelay_val/5000)%100,
+	    , loops_per_sec/500000, (loops_per_sec/5000) % 100
 #endif
-	    mmu_info()
+	    );
 #ifdef __SMP__
-	    , smp_info()
+	len += smp_bogo_info(buffer + len);
 #endif
-            );
-
+	len += mmu_info(buffer + len);
+#ifdef __SMP__
+	len += smp_info(buffer + len);
+#endif
+	return len;
 }

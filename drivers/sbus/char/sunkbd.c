@@ -37,7 +37,6 @@
 
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <asm/pbm.h>
 #include <asm/ebus.h>
 #endif

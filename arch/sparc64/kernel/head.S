@@ -1,9 +1,9 @@
-/* $Id: head.S,v 1.46 1997/08/08 08:33:30 jj Exp $
+/* $Id: head.S,v 1.49 1998/03/03 12:31:17 jj Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 David Sitsky (David.Sitsky@anu.edu.au)
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  * Copyright (C) 1997 Miguel de Icaza (miguel@nuclecu.unam.mx)
  */
 
@@ -26,7 +26,7 @@
 /* This section from from _start to sparc64_boot_end should fit into
  * 0x0000.0000.0040.4000 to 0x0000.0000.0040.8000 and will be sharing space
  * with bootup_user_stack, which is from 0x0000.0000.0040.4000 to
- * 0x0000.0000.0040.6000 and bootup_kernel_stack, which is from
+ * 0x0000.0000.0040.6000 and empty_bad_page, which is from
  * 0x0000.0000.0040.6000 to 0x0000.0000.0040.8000. 
  */
 
@@ -326,6 +326,8 @@ sun4u_init:
 	 nop
 	/* Not reached... */
 
+/* IMPORTANT NOTE: Whenever making changes here, check
+ * trampoline.S as well. -jj */
 	.globl	setup_tba
 setup_tba:
 	save	%sp, -160, %sp
@@ -346,9 +348,11 @@ setup_tba:
 	/* Set up MMU globals */
 	wrpr	%o1, (PSTATE_MG|PSTATE_IE), %pstate
 
-	/* PGD/PMD offset mask, used by TLB miss handlers. */
-	sethi	%hi(0x1ff8), %g2
-	or	%g2, %lo(0x1ff8), %g2
+	/* Set KERN_HIGHBITS used by dTLB miss handler. */
+#define KERN_HIGHBITS ((_PAGE_VALID | _PAGE_SZ4MB) ^ 0xfffff80000000000)
+	sethi	%uhi(KERN_HIGHBITS), %g2
+	sllx	%g2, 32, %g2
+#undef KERN_HIGHBITS
 
 	/* Kernel PGDIR used by TLB miss handlers. */
 	mov	%i0, %g6
@@ -391,7 +395,8 @@ sparc64_boot_end:
 	.skip	0x2000 + _start - sparc64_boot_end
 bootup_user_stack_end:
 
-bootup_kernel_stack:
+	.globl	empty_bad_page
+empty_bad_page:
 	.skip	0x2000
 
 ! 0x0000000000408000

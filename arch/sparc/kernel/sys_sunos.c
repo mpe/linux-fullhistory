@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.83 1997/12/14 23:24:28 ecd Exp $
+/* $Id: sys_sunos.c,v 1.87 1998/03/29 03:48:16 shadow Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 #include <linux/swap.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/resource.h>
 #include <linux/ipc.h>
 #include <linux/shm.h>
@@ -77,14 +78,19 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 		flags &= ~MAP_NORESERVE;
 	}
 	retval = -EBADF;
-	if(!(flags & MAP_ANONYMOUS))
-		if (fd >= SUNOS_NR_OPEN || !(file = current->files->fd[fd]))
+	if(!(flags & MAP_ANONYMOUS)) {
+		if (fd >= SUNOS_NR_OPEN)
 			goto out;
+		file = fget(fd);
+		if (!file)
+			goto out;
+	}
+
 	retval = -ENOMEM;
 	if(!(flags & MAP_FIXED) && !addr) {
 		addr = get_unmapped_area(addr, len);
 		if(!addr)
-			goto out;
+			goto out_putf;
 	}
 	/* If this is ld.so or a shared library doing an mmap
 	 * of /dev/zero, transform it into an anonymous mapping.
@@ -105,18 +111,22 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	/* See asm-sparc/uaccess.h */
 	retval = -EINVAL;
 	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
-		goto out;
+		goto out_putf;
 
-	if(sparc_cpu_model == sun4c) {
+	if(ARCH_SUN4C_SUN4) {
 		if(((addr >= 0x20000000) && (addr < 0xe0000000))) {
 			retval = current->mm->brk;
-			goto out;
+			goto out_putf;
 		}
 	}
 
 	retval = do_mmap(file, addr, len, prot, flags, off);
 	if(!ret_type)
 		retval = ((retval < PAGE_OFFSET) ? 0 : retval);
+
+out_putf:
+	if (file)
+		fput(file);
 out:
 	unlock_kernel();
 	return retval;
@@ -139,7 +149,7 @@ asmlinkage int sunos_brk(unsigned long brk)
 	unsigned long newbrk, oldbrk;
 
 	lock_kernel();
-	if(sparc_cpu_model == sun4c) {
+	if(ARCH_SUN4C_SUN4) {
 		if(brk >= 0x20000000 && brk < 0xe0000000) {
 			goto out;
 		}
@@ -423,39 +433,48 @@ static int sunos_filldir(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdents(unsigned int fd, void * dirent, int cnt)
 {
 	struct file * file;
+	struct inode * inode;
 	struct sunos_dirent * lastdirent;
 	struct sunos_dirent_callback buf;
 	int error = -EBADF;
 
 	lock_kernel();
-	if(fd >= SUNOS_NR_OPEN)
+	if (fd >= SUNOS_NR_OPEN)
 		goto out;
 
-	file = current->files->fd[fd];
-	if(!file)
+	file = fget(fd);
+	if (!file)
 		goto out;
 
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		goto out;
+		goto out_putf;
 
 	error = -EINVAL;
-	if(cnt < (sizeof(struct sunos_dirent) + 255))
-		goto out;
+	if (cnt < (sizeof(struct sunos_dirent) + 255))
+		goto out_putf;
 
 	buf.curr = (struct sunos_dirent *) dirent;
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
+
+	inode = file->f_dentry->d_inode;
+	down(&inode->i_sem);
 	error = file->f_op->readdir(file, &buf, sunos_filldir);
+	up(&inode->i_sem);
 	if (error < 0)
-		goto out;
+		goto out_putf;
+
 	lastdirent = buf.previous;
 	error = buf.error;
 	if (lastdirent) {
 		put_user(file->f_pos, &lastdirent->d_off);
 		error = cnt - buf.count;
 	}
+
+out_putf:
+	fput(file);
 out:
 	unlock_kernel();
 	return error;
@@ -503,39 +522,48 @@ static int sunos_filldirentry(void * __buf, const char * name, int namlen,
 asmlinkage int sunos_getdirentries(unsigned int fd, void * dirent, int cnt, unsigned int *basep)
 {
 	struct file * file;
+	struct inode * inode;
 	struct sunos_direntry * lastdirent;
 	struct sunos_direntry_callback buf;
 	int error = -EBADF;
 
 	lock_kernel();
-	if(fd >= SUNOS_NR_OPEN)
+	if (fd >= SUNOS_NR_OPEN)
 		goto out;
 
-	file = current->files->fd[fd];
-	if(!file)
+	file = fget(fd);
+	if (!file)
 		goto out;
 
 	error = -ENOTDIR;
 	if (!file->f_op || !file->f_op->readdir)
-		goto out;
+		goto out_putf;
 
 	error = -EINVAL;
 	if(cnt < (sizeof(struct sunos_direntry) + 255))
-		goto out;
+		goto out_putf;
 
 	buf.curr = (struct sunos_direntry *) dirent;
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
+
+	inode = file->f_dentry->d_inode;
+	down(&inode->i_sem);
 	error = file->f_op->readdir(file, &buf, sunos_filldirentry);
+	up(&inode->i_sem);
 	if (error < 0)
-		goto out;
+		goto out_putf;
+
 	lastdirent = buf.previous;
 	error = buf.error;
 	if (lastdirent) {
 		put_user(file->f_pos, basep);
 		error = cnt - buf.count;
 	}
+
+out_putf:
+	fput(file);
 out:
 	unlock_kernel();
 	return error;
@@ -669,6 +697,15 @@ asmlinkage int sunos_select(int width, fd_set *inp, fd_set *outp, fd_set *exp, s
 	lock_kernel();
 	current->personality |= STICKY_TIMEOUTS;
 	ret = sys_select (width, inp, outp, exp, tvp);
+	if (ret == -EINTR && tvp) {
+		time_t sec, usec;
+
+		__get_user(sec, &tvp->tv_sec);
+		__get_user(usec, &tvp->tv_usec);
+
+		if (sec == 0 && usec == 0)
+			ret = 0;
+	}
 	unlock_kernel();
 	return ret;
 }
@@ -720,7 +757,7 @@ extern asmlinkage int sys_bind(int fd, struct sockaddr *umyaddr, int addrlen);
 
 /* Bind the socket on a local reserved port and connect it to the
  * remote server.  This on Linux/i386 is done by the mount program,
- * not by the kernel. 
+ * not by the kernel.
  */
 static int
 sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
@@ -728,16 +765,16 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 	struct sockaddr_in local;
 	struct sockaddr_in server;
 	int    try_port;
-	int    ret;
 	struct socket *socket;
-	struct dentry *dentry;
 	struct inode  *inode;
 	struct file   *file;
+	int    ret, result = 0;
 
-	file = current->files->fd [fd];
-	dentry = file->f_dentry;
-	if(!dentry || !(inode = dentry->d_inode))
-		return 0;
+	file = fget(fd);
+	if (!file)
+		goto out;
+	if (!file->f_dentry || !(inode = file->f_dentry->d_inode))
+		goto out_putf;
 
 	socket = &inode->u.socket_i;
 	local.sin_family = AF_INET;
@@ -752,7 +789,7 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 	} while (ret && try_port > (1024 / 2));
 
 	if (ret)
-		return 0;
+		goto out_putf;
 
 	server.sin_family = AF_INET;
 	server.sin_addr = addr->sin_addr;
@@ -761,9 +798,13 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 	/* Call sys_connect */
 	ret = socket->ops->connect (socket, (struct sockaddr *) &server,
 				    sizeof (server), file->f_flags);
-	if (ret < 0)
-		return 0;
-	return 1;
+	if (ret >= 0)
+		result = 1;
+
+out_putf:
+	fput(file);
+out:
+	return result;
 }
 
 static int get_default (int value, int def_value)
@@ -1139,10 +1180,13 @@ asmlinkage int sunos_open(const char *filename, int flags, int mode)
    file descriptors that have been set non-blocking 
    using 4.2BSD style calls. (tridge) */
 
-static inline int check_nonblock(int ret,int fd)
+static inline int check_nonblock(int ret, int fd)
 {
-	if (ret == -EAGAIN && (current->files->fd[fd]->f_flags & O_NDELAY))
-		return -SUNOS_EWOULDBLOCK;
+	if (ret == -EAGAIN) {
+		struct file * file = fcheck(fd);
+		if (file && (file->f_flags & O_NDELAY))
+			ret = -SUNOS_EWOULDBLOCK;
+	}
 	return ret;
 }
 
@@ -1215,12 +1259,41 @@ asmlinkage int sunos_send(int fd, void * buff, int len, unsigned flags)
 	return ret;
 }
 
-asmlinkage int sunos_accept(int fd, struct sockaddr *sa, int *addrlen)
+extern asmlinkage int sys_setsockopt(int fd, int level, int optname,
+				     char *optval, int optlen);
+
+asmlinkage int sunos_socket(int family, int type, int protocol)
 {
-	int ret;
+	int ret, one = 1;
 
 	lock_kernel();
-	ret = check_nonblock(sys_accept(fd,sa,addrlen),fd);	
+	ret = sys_socket(family, type, protocol);
+	if (ret < 0)
+		goto out;
+
+	sys_setsockopt(ret, SOL_SOCKET, SO_BSDCOMPAT,
+		       (char *)&one, sizeof(one));
+out:
+	unlock_kernel();
+	return ret;
+}
+
+asmlinkage int sunos_accept(int fd, struct sockaddr *sa, int *addrlen)
+{
+	int ret, one = 1;
+
+	lock_kernel();
+	while (1) {
+		ret = check_nonblock(sys_accept(fd,sa,addrlen),fd);	
+		if (ret != -ENETUNREACH && ret != -EHOSTUNREACH)
+			break;
+	}
+	if (ret < 0)
+		goto out;
+
+	sys_setsockopt(ret, SOL_SOCKET, SO_BSDCOMPAT,
+		       (char *)&one, sizeof(one));
+out:
 	unlock_kernel();
 	return ret;
 }

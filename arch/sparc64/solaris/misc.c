@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.6 1997/12/14 23:40:15 ecd Exp $
+/* $Id: misc.c,v 1.10 1998/04/01 05:16:06 davem Exp $
  * misc.c: Miscelaneous syscall emulation for Solaris
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -106,7 +106,7 @@ static char *machine(void)
 
 static char *platform(char *buffer)
 {
-	int i;
+	int i, len;
 	struct {
 		char *platform;
 		int id_machtype;
@@ -128,7 +128,9 @@ static char *platform(char *buffer)
 	};
 
 	*buffer = 0;
-	prom_getproperty(prom_root_node, "name", buffer, 256);
+	len = prom_getproperty(prom_root_node, "name", buffer, 256);
+	if(len > 0)
+		buffer[len] = 0;
 	if (*buffer) {
 		char *p;
 
@@ -145,10 +147,13 @@ static char *platform(char *buffer)
 static char *serial(char *buffer)
 {
 	int node = prom_getchild(prom_root_node);
+	int len;
 
 	node = prom_searchsiblings(node, "options");
 	*buffer = 0;
-	prom_getproperty(node, "system-board-serial#", buffer, 256);
+	len = prom_getproperty(node, "system-board-serial#", buffer, 256);
+	if(len > 0)
+		buffer[len] = 0;
 	if (!*buffer)
 		return "4512348717234";
 	else
@@ -268,6 +273,8 @@ asmlinkage int solaris_sysinfo(int cmd, u32 buf, s32 count)
 #define	SOLARIS_CONFIG_PHYS_PAGES		26
 #define	SOLARIS_CONFIG_AVPHYS_PAGES		27
 
+extern unsigned prom_cpu_nodes[NR_CPUS];
+
 asmlinkage int solaris_sysconf(int id)
 {
 	switch (id) {
@@ -279,9 +286,8 @@ asmlinkage int solaris_sysconf(int id)
 	case SOLARIS_CONFIG_XOPEN_VER:	return 3;
 	case SOLARIS_CONFIG_CLK_TCK:
 	case SOLARIS_CONFIG_PROF_TCK:
-		return prom_getintdefault(
-			linux_cpus[smp_processor_id()].prom_node,
-			"clock-frequency", 167000000);
+		return prom_getintdefault(prom_cpu_nodes[smp_processor_id()],
+					  "clock-frequency", 167000000);
 #ifdef __SMP__	
 	case SOLARIS_CONFIG_NPROC_CONF:	return NR_CPUS;
 	case SOLARIS_CONFIG_NPROC_ONLN:	return smp_num_cpus;
@@ -362,6 +368,14 @@ asmlinkage int solaris_procids(int cmd, s32 pid, s32 pgid)
 	return -EINVAL;
 }
 
+asmlinkage int solaris_gettimeofday(u32 tim)
+{
+	int (*sys_gettimeofday)(struct timeval *, struct timezone *) =
+		(int (*)(struct timeval *, struct timezone *))SYS(gettimeofday);
+		
+	return sys_gettimeofday((struct timeval *)(u64)tim, NULL);
+}
+
 asmlinkage int do_sol_unimplemented(struct pt_regs *regs)
 {
 	printk ("Unimplemented Solaris syscall %d %08x %08x %08x %08x\n", 
@@ -401,10 +415,13 @@ struct exec_domain solaris_exec_domain = {
 	NULL
 };
 
+extern int init_socksys(void);
+
 #ifdef MODULE
 
-MODULE_AUTHOR("Jakub Jelinek (jj@sunsite.mff.cuni.cz)");
+MODULE_AUTHOR("Jakub Jelinek (jj@ultra.linux.cz), Patrik Rak (prak3264@ss1000.ms.mff.cuni.cz)");
 MODULE_DESCRIPTION("Solaris binary emulation module");
+EXPORT_NO_SYMBOLS;
 
 #ifdef __sparc_v9__
 extern u32 tl0_solaris[8];
@@ -416,12 +433,13 @@ extern u32 tl0_solaris[8];
 
 extern u32 solaris_sparc_syscall[];
 extern u32 solaris_syscall[];
-extern int init_socksys(void);
 extern void cleanup_socksys(void);
 
 int init_module(void)
 {
 	int ret;
+
+	SOLDD(("Solaris module at %p\n", solaris_sparc_syscall));
 	register_exec_domain(&solaris_exec_domain);
 	if ((ret = init_socksys())) {
 		unregister_exec_domain(&solaris_exec_domain);

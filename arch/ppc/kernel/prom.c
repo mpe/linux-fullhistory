@@ -16,6 +16,8 @@
 #include <asm/prom.h>
 #include <asm/page.h>
 #include <asm/processor.h>
+#include <asm/irq.h>
+#include <asm/io.h>
 
 /*
  * Properties whose value is longer than this get excluded from our
@@ -50,6 +52,19 @@ struct pci_range {
 	unsigned size_lo;
 };
 
+struct isa_reg_property {
+	unsigned space;
+	unsigned address;
+	unsigned size;
+};
+
+typedef unsigned long interpret_func(struct device_node *, unsigned long);
+static interpret_func interpret_pci_props;
+static interpret_func interpret_dbdma_props;
+static interpret_func interpret_isa_props;
+static interpret_func interpret_macio_props;
+static interpret_func interpret_root_props;
+
 char *prom_display_paths[FB_MAX] __initdata = { 0, };
 unsigned int prom_num_displays = 0;
 
@@ -60,19 +75,21 @@ extern char *klimit;
 char *bootpath = 0;
 char *bootdevice = 0;
 
-unsigned int rtas_data = 0;
-unsigned int rtas_entry = 0;
+unsigned int rtas_data = 0;   /* virtual pointer */
+unsigned int rtas_entry = 0;  /* physical pointer */
+unsigned int rtas_size = 0;
+char chunk[PAGE_SIZE*64];
 
 static struct device_node *allnodes = 0;
 
 static void *call_prom(const char *service, int nargs, int nret, ...);
-static void prom_print(const char *msg);
+ void prom_print(const char *msg);
 static void prom_exit(void);
 static unsigned long copy_device_tree(unsigned long, unsigned long);
 static unsigned long inspect_node(phandle, struct device_node *, unsigned long,
 				  unsigned long, struct device_node ***);
 static unsigned long finish_node(struct device_node *, unsigned long,
-				 unsigned long);
+				 interpret_func *);
 static unsigned long check_display(unsigned long);
 static int prom_next_node(phandle *);
 
@@ -119,6 +136,18 @@ prom_exit()
 		;
 }
 
+void
+prom_enter(void)
+{
+	struct prom_args args;
+	unsigned long offset = reloc_offset();
+
+	args.service = RELOC("enter");
+	args.nargs = 0;
+	args.nret = 0;
+	RELOC(prom)(&args);
+}
+
 static void *
 call_prom(const char *service, int nargs, int nret, ...)
 {
@@ -140,7 +169,7 @@ call_prom(const char *service, int nargs, int nret, ...)
 	return prom_args.args[nargs];
 }
 
-static void
+void
 prom_print(const char *msg)
 {
 	const char *p, *q;
@@ -160,6 +189,11 @@ prom_print(const char *msg)
 	}
 }
 
+
+#ifdef CONFIG_ALL_PPC
+unsigned char OF_type[16], OF_model[16];
+#endif
+
 /*
  * We enter here early on, when the Open Firmware prom is still
  * handling exceptions and the MMU hash table for us.
@@ -169,11 +203,14 @@ prom_init(int r3, int r4, prom_entry pp)
 {
 	unsigned long mem;
 	ihandle prom_rtas;
-	unsigned int rtas_size;
 	unsigned long offset = reloc_offset();
 	int l;
 	char *p, *d;
 
+	/* check if we're prep, return if we are */
+	if ( *(unsigned long *)(0) == 0xdeadc0de )
+		return;
+	
 	/* First get a handle for the stdout device */
 	RELOC(prom) = pp;
 	RELOC(prom_chosen) = call_prom(RELOC("finddevice"), 1, 1,
@@ -209,27 +246,57 @@ prom_init(int r3, int r4, prom_entry pp)
 
 	prom_rtas = call_prom(RELOC("finddevice"), 1, 1, RELOC("/rtas"));
 	if (prom_rtas != (void *) -1) {
-		rtas_size = 0;
+		RELOC(rtas_size) = 0;
 		call_prom(RELOC("getprop"), 4, 1, prom_rtas,
-			  RELOC("rtas-size"), &rtas_size, sizeof(rtas_size));
+			  RELOC("rtas-size"), &RELOC(rtas_size), sizeof(rtas_size));
 		prom_print(RELOC("instantiating rtas..."));
-		if (rtas_size == 0) {
+		if (RELOC(rtas_size) == 0) {
 			RELOC(rtas_data) = 0;
 		} else {
 			mem = (mem + 4095) & -4096; /* round to page bdry */
 			RELOC(rtas_data) = mem - KERNELBASE;
-			mem += rtas_size;
+			mem += RELOC(rtas_size);
 		}
-		RELOC(rtas_entry) = (unsigned int)
-			call_prom(RELOC("instantiate-rtas"), 1, 1,
-				  RELOC(rtas_data));
-		if (RELOC(rtas_entry) == -1)
+		prom_rtas = call_prom(RELOC("open"), 1, 1, RELOC("/rtas"));
+		RELOC(rtas_data) = ((ulong)chunk+4095)&-4096;
+		{
+			int i, nargs;
+			struct prom_args prom_args;
+			nargs = 3;
+			prom_args.service = RELOC("call-method");
+			prom_args.nargs = nargs;
+			prom_args.nret = 2;
+			prom_args.args[0] = RELOC("instantiate-rtas");
+			prom_args.args[1] = prom_rtas;
+			prom_args.args[2] = ((void *)RELOC(rtas_data)-KERNELBASE);
+			RELOC(prom)(&prom_args);
+			if (prom_args.args[nargs] != 0)
+				i = 0;
+			else
+				i = (int)prom_args.args[nargs+1];
+			RELOC(rtas_entry) = i;
+		}
+		if ((RELOC(rtas_entry) == -1) || (RELOC(rtas_entry) == 0))
 			prom_print(RELOC(" failed\n"));
 		else
 			prom_print(RELOC(" done\n"));
 	}
 
 	RELOC(klimit) = (char *) (mem - offset);
+#ifdef CONFIG_ALL_PPC
+	{
+
+		ihandle prom_root;
+
+		RELOC(prom_root) = call_prom(RELOC("finddevice"), 1, 1, RELOC("/"));
+		call_prom(RELOC("getprop"), 4, 1, RELOC(prom_root),
+			  RELOC("device_type"), RELOC(OF_type),
+			  (void *) 16);
+		call_prom(RELOC("getprop"), 4, 1, RELOC(prom_root),
+			  RELOC("model"), RELOC(OF_model),
+			  (void *) 16);
+	}
+#endif
 }
 
 /*
@@ -397,12 +464,18 @@ inspect_node(phandle node, struct device_node *dad,
 	return mem_start;
 }
 
+/*
+ * finish_device_tree is called once things are running normally
+ * (i.e. with text and data mapped to the address they were linked at).
+ * It traverses the device tree and fills in the name, type,
+ * {n_}addrs and {n_}intrs fields of each node.
+ */
 void
 finish_device_tree(void)
 {
 	unsigned long mem = (unsigned long) klimit;
 
-	mem = finish_node(allnodes, mem, 0UL);
+	mem = finish_node(allnodes, mem, NULL);
 	printk(KERN_INFO "device tree used %lu bytes\n",
 	       mem - (unsigned long) allnodes);
 	klimit = (char *) mem;
@@ -410,23 +483,53 @@ finish_device_tree(void)
 
 static unsigned long
 finish_node(struct device_node *np, unsigned long mem_start,
-	    unsigned long base_address)
+	    interpret_func *ifunc)
 {
-	struct reg_property *rp;
-	struct pci_reg_property *pci_addrs;
-	struct address_range *adr;
 	struct device_node *child;
-	int i, l;
 
 	np->name = get_property(np, "name", 0);
 	np->type = get_property(np, "device_type", 0);
 
-	/* get all the device addresses and interrupts */
-	adr = (struct address_range *) mem_start;
+	/* get the device addresses and interrupts */
+	if (ifunc != NULL)
+		mem_start = ifunc(np, mem_start);
+
+	if (!strcmp(np->name, "device-tree"))
+		ifunc = interpret_root_props;
+	else if (np->type == 0)
+		ifunc = NULL;
+	else if (!strcmp(np->type, "pci") || !strcmp(np->type, "vci"))
+		ifunc = interpret_pci_props;
+	else if (!strcmp(np->type, "dbdma")
+		|| (ifunc == interpret_dbdma_props
+		    && (!strcmp(np->type, "escc")
+			|| !strcmp(np->type, "media-bay"))))
+		ifunc = interpret_dbdma_props;
+	else if (!strcmp(np->type, "mac-io"))
+		ifunc = interpret_macio_props;
+	else if (!strcmp(np->type, "isa"))
+		ifunc = interpret_isa_props;
+	else
+		ifunc = NULL;
+
+	for (child = np->child; child != NULL; child = child->sibling)
+		mem_start = finish_node(child, mem_start, ifunc);
+
+	return mem_start;
+}
+
+static unsigned long
+interpret_pci_props(struct device_node *np, unsigned long mem_start)
+{
+	struct address_range *adr;
+	struct pci_reg_property *pci_addrs;
+	int i, l, *ip;
+
 	pci_addrs = (struct pci_reg_property *)
 		get_property(np, "assigned-addresses", &l);
-	i = 0;
-	if (pci_addrs != 0) {
+	if (pci_addrs != 0 && l >= sizeof(struct pci_reg_property)) {
+		i = 0;
+		adr = (struct address_range *) mem_start;
 		while ((l -= sizeof(struct pci_reg_property)) >= 0) {
 			/* XXX assumes PCI addresses mapped 1-1 to physical */
 			adr[i].space = pci_addrs[i].addr.a_hi;
@@ -434,36 +537,194 @@ finish_node(struct device_node *np, unsigned long mem_start,
 			adr[i].size = pci_addrs[i].size_lo;
 			++i;
 		}
-	} else {
-		rp = (struct reg_property *) get_property(np, "reg", &l);
-		if (rp != 0) {
-			while ((l -= sizeof(struct reg_property)) >= 0) {
-				adr[i].space = 0;
-				adr[i].address = rp[i].address + base_address;
-				adr[i].size = rp[i].size;
-				++i;
-			}
-		}
-	}
-	if (i > 0) {
 		np->addrs = adr;
 		np->n_addrs = i;
 		mem_start += i * sizeof(struct address_range);
 	}
 
-	np->intrs = (int *) get_property(np, "AAPL,interrupts", &l);
-	if (np->intrs == 0)
-		np->intrs = (int *) get_property(np, "interrupts", &l);
-	if (np->intrs != 0)
+	ip = (int *) get_property(np, "AAPL,interrupts", &l);
+	if (ip == 0)
+		ip = (int *) get_property(np, "interrupts", &l);
+	if (ip != 0) {
+		np->intrs = (struct interrupt_info *) mem_start;
 		np->n_intrs = l / sizeof(int);
+		mem_start += np->n_intrs * sizeof(struct interrupt_info);
+		for (i = 0; i < np->n_intrs; ++i) {
+			np->intrs[i].line = *ip++;
+			np->intrs[i].sense = 0;
+		}
+	}
 
-	if (np->type != 0 && np->n_addrs > 0
-	    && (strcmp(np->type, "dbdma") == 0
-		|| strcmp(np->type, "mac-io") == 0))
-		base_address = np->addrs[0].address;
+	return mem_start;
+}
 
-	for (child = np->child; child != NULL; child = child->sibling)
-		mem_start = finish_node(child, mem_start, base_address);
+static unsigned long
+interpret_dbdma_props(struct device_node *np, unsigned long mem_start)
+{
+	struct reg_property *rp;
+	struct address_range *adr;
+	unsigned long base_address;
+	int i, l, *ip;
+	struct device_node *db;
+
+	base_address = 0;
+	for (db = np->parent; db != NULL; db = db->parent) {
+		if (!strcmp(db->type, "dbdma") && db->n_addrs != 0) {
+			base_address = db->addrs[0].address;
+			break;
+		}
+	}
+
+	rp = (struct reg_property *) get_property(np, "reg", &l);
+	if (rp != 0 && l >= sizeof(struct reg_property)) {
+		i = 0;
+		adr = (struct address_range *) mem_start;
+		while ((l -= sizeof(struct reg_property)) >= 0) {
+			adr[i].space = 0;
+			adr[i].address = rp[i].address + base_address;
+			adr[i].size = rp[i].size;
+			++i;
+		}
+		np->addrs = adr;
+		np->n_addrs = i;
+		mem_start += i * sizeof(struct address_range);
+	}
+
+	ip = (int *) get_property(np, "AAPL,interrupts", &l);
+	if (ip == 0)
+		ip = (int *) get_property(np, "interrupts", &l);
+	if (ip != 0) {
+		np->intrs = (struct interrupt_info *) mem_start;
+		np->n_intrs = l / sizeof(int);
+		mem_start += np->n_intrs * sizeof(struct interrupt_info);
+		for (i = 0; i < np->n_intrs; ++i) {
+			np->intrs[i].line = *ip++;
+			np->intrs[i].sense = 0;
+		}
+	}
+
+	return mem_start;
+}
+
+static unsigned long
+interpret_macio_props(struct device_node *np, unsigned long mem_start)
+{
+	struct reg_property *rp;
+	struct address_range *adr;
+	unsigned long base_address;
+	int i, l, *ip;
+	struct device_node *db;
+
+	base_address = 0;
+	for (db = np->parent; db != NULL; db = db->parent) {
+		if (!strcmp(db->type, "mac-io") && db->n_addrs != 0) {
+			base_address = db->addrs[0].address;
+			break;
+		}
+	}
+
+	rp = (struct reg_property *) get_property(np, "reg", &l);
+	if (rp != 0 && l >= sizeof(struct reg_property)) {
+		i = 0;
+		adr = (struct address_range *) mem_start;
+		while ((l -= sizeof(struct reg_property)) >= 0) {
+			adr[i].space = 0;
+			adr[i].address = rp[i].address + base_address;
+			adr[i].size = rp[i].size;
+			++i;
+		}
+		np->addrs = adr;
+		np->n_addrs = i;
+		mem_start += i * sizeof(struct address_range);
+	}
+
+	ip = (int *) get_property(np, "interrupts", &l);
+	if (ip == 0)
+		ip = (int *) get_property(np, "AAPL,interrupts", &l);
+	if (ip != 0) {
+		np->intrs = (struct interrupt_info *) mem_start;
+		np->n_intrs = l / (2 * sizeof(int));
+		mem_start += np->n_intrs * sizeof(struct interrupt_info);
+		for (i = 0; i < np->n_intrs; ++i) {
+			np->intrs[i].line = openpic_to_irq(*ip++);
+			np->intrs[i].sense = *ip++;
+		}
+	}
+
+	return mem_start;
+}
+
+static unsigned long
+interpret_isa_props(struct device_node *np, unsigned long mem_start)
+{
+	struct isa_reg_property *rp;
+	struct address_range *adr;
+	int i, l, *ip;
+
+	rp = (struct isa_reg_property *) get_property(np, "reg", &l);
+	if (rp != 0 && l >= sizeof(struct isa_reg_property)) {
+		i = 0;
+		adr = (struct address_range *) mem_start;
+		while ((l -= sizeof(struct reg_property)) >= 0) {
+			adr[i].space = rp[i].space;
+			adr[i].address = rp[i].address
+				+ (adr[i].space? 0: _ISA_MEM_BASE);
+			adr[i].size = rp[i].size;
+			++i;
+		}
+		np->addrs = adr;
+		np->n_addrs = i;
+		mem_start += i * sizeof(struct address_range);
+	}
+
+	ip = (int *) get_property(np, "interrupts", &l);
+	if (ip != 0) {
+		np->intrs = (struct interrupt_info *) mem_start;
+		np->n_intrs = l / (2 * sizeof(int));
+		mem_start += np->n_intrs * sizeof(struct interrupt_info);
+		for (i = 0; i < np->n_intrs; ++i) {
+			np->intrs[i].line = *ip++;
+			np->intrs[i].sense = *ip++;
+		}
+	}
+
+	return mem_start;
+}
+
+static unsigned long
+interpret_root_props(struct device_node *np, unsigned long mem_start)
+{
+	struct reg_property *rp;
+	struct address_range *adr;
+	int i, l, *ip;
+
+	rp = (struct reg_property *) get_property(np, "reg", &l);
+	if (rp != 0 && l >= sizeof(struct reg_property)) {
+		i = 0;
+		adr = (struct address_range *) mem_start;
+		while ((l -= sizeof(struct reg_property)) >= 0) {
+			adr[i].space = 0;
+			adr[i].address = rp[i].address;
+			adr[i].size = rp[i].size;
+			++i;
+		}
+		np->addrs = adr;
+		np->n_addrs = i;
+		mem_start += i * sizeof(struct address_range);
+	}
+
+	ip = (int *) get_property(np, "AAPL,interrupts", &l);
+	if (ip == 0)
+		ip = (int *) get_property(np, "interrupts", &l);
+	if (ip != 0) {
+		np->intrs = (struct interrupt_info *) mem_start;
+		np->n_intrs = l / sizeof(int);
+		mem_start += np->n_intrs * sizeof(struct interrupt_info);
+		for (i = 0; i < np->n_intrs; ++i) {
+			np->intrs[i].line = *ip++;
+			np->intrs[i].sense = 0;
+		}
+	}
 
 	return mem_start;
 }
@@ -648,14 +909,14 @@ call_rtas(const char *service, int nargs, int nret,
 		printk(KERN_ERR "No RTAS service called %s\n", service);
 		return -1;
 	}
-	u.words[0] = *tokp;
+	u.words[0] = __pa(*tokp);
 	u.words[1] = nargs;
 	u.words[2] = nret;
 	va_start(list, outputs);
 	for (i = 0; i < nargs; ++i)
 		u.words[i+3] = va_arg(list, unsigned long);
 	va_end(list);
-	enter_rtas(&u);
+	enter_rtas((void *)__pa(&u));
 	if (nret > 1 && outputs != NULL)
 		for (i = 0; i < nret-1; ++i)
 			outputs[i] = u.words[i+nargs+4];

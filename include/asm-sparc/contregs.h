@@ -1,4 +1,4 @@
-/* $Id: contregs.h,v 1.6 1995/11/25 02:31:27 davem Exp $ */
+/* $Id: contregs.h,v 1.7 1998/01/30 10:59:48 jj Exp $ */
 #ifndef _SPARC_CONTREGS_H
 #define _SPARC_CONTREGS_H
 
@@ -14,7 +14,7 @@
 #define AC_CONTEXT    0x30000000    /* 4c current mmu-context                */
 #define AC_SENABLE    0x40000000    /* 4c system dvma/cache/reset enable reg */
 #define AC_UDVMA_ENB  0x50000000    /* 4  Not used on Sun boards, byte       */
-#define AC_BUS_ERROR  0x60000000    /* 4  Cleared on read, byte.             */
+#define AC_BUS_ERROR  0x60000000    /* 4  Not cleared on read, byte.         */
 #define AC_SYNC_ERR   0x60000000    /*  c fault type                         */
 #define AC_SYNC_VA    0x60000004    /*  c fault virtual address              */
 #define AC_ASYNC_ERR  0x60000008    /*  c asynchronous fault type            */

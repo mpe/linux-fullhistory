@@ -60,21 +60,6 @@ extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
 #endif
 
-
-int chrp_ide_irq = 0;
-
-void chrp_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
-{
-	ide_ioreg_t port = base;
-	int i = 8;
-
-	while (i--)
-		*p++ = port++;
-	*p++ = base + 0x206;
-	if (irq != NULL)
-		*irq = chrp_ide_irq;
-}
-
 static const char *gg2_memtypes[4] = {
     "FPM", "SDRAM", "EDO", "BEDO"
 };
@@ -88,6 +73,34 @@ static const char *gg2_cachetypes[4] = {
 static const char *gg2_cachemodes[4] = {
     "Disabled", "Write-Through", "Copy-Back", "Transparent Mode"
 };
+
+#if 0
+#ifdef CONFIG_BLK_DEV_IDE
+int chrp_ide_ports_known;
+ide_ioreg_t chrp_ide_regbase[MAX_HWIFS];
+ide_ioreg_t chrp_idedma_regbase; /* one for both channels */
+unsigned int chrp_ide_irq;
+
+void chrp_ide_probe(void)
+{
+}
+
+void chrp_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
+{
+	int i;
+
+	*p = 0;
+	if (base == 0)
+		return;
+	for (i = 0; i < 8; ++i)
+		*p++ = base + i * 0x10;
+	*p = base + 0x160;
+	if (irq != NULL) {
+		*irq = chrp_ide_irq;
+	}
+}
+#endif /* CONFIG_BLK_DEV_IDE */
+#endif
 
 int
 chrp_get_cpuinfo(char *buffer)
@@ -139,11 +152,62 @@ chrp_get_cpuinfo(char *buffer)
 	}
 	/* L2 cache */
 	t = in_le32((unsigned *)(GG2_PCI_CONFIG_BASE+GG2_PCI_CC_CTRL));
-	len += sprintf(buffer+len, "l2\t\t: %s %s (%s)\n",
+	len += sprintf(buffer+len, "board l2\t: %s %s (%s)\n",
 		       gg2_cachesizes[(t>>7) & 3], gg2_cachetypes[(t>>2) & 3],
 		       gg2_cachemodes[t & 3]);
 	return len;
 }
+
+    /*
+     *  Fixes for the National Semiconductor PC78308VUL SuperI/O
+     *
+     *  Some versions of Open Firmware incorrectly initialize the IRQ settings
+     *  for keyboard and mouse
+     */
+
+__initfunc(static inline void sio_write(u8 val, u8 index))
+{
+    outb(index, 0x15c);
+    outb(val, 0x15d);
+}
+
+__initfunc(static inline u8 sio_read(u8 index))
+{
+    outb(index, 0x15c);
+    return inb(0x15d);
+}
+
+__initfunc(static void sio_init(void))
+{
+    u8 irq, type;
+
+    /* select logical device 0 (KBC/Keyboard) */
+    sio_write(0, 0x07);
+    irq = sio_read(0x70);
+    type = sio_read(0x71);
+    printk("sio: Keyboard irq %d, type %d: ", irq, type);
+    if (irq == 1 && type == 3)
+	printk("OK\n");
+    else {
+	printk("remapping to irq 1, type 3\n");
+	sio_write(1, 0x70);
+	sio_write(3, 0x71);
+    }
+
+    /* select logical device 1 (KBC/Mouse) */
+    sio_write(1, 0x07);
+    irq = sio_read(0x70);
+    type = sio_read(0x71);
+    printk("sio: Mouse irq %d, type %d: ", irq, type);
+    if (irq == 12 && type == 3)
+	printk("OK\n");
+    else {
+	printk("remapping to irq 12, type 3\n");
+	sio_write(12, 0x70);
+	sio_write(3, 0x71);
+    }
+}
+
 
 __initfunc(void
 chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
@@ -191,7 +255,12 @@ chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 	hydra_init();		/* Mac I/O */
 	w83c553f_init();	/* PCI-ISA bridge and IDE */
 
-#ifdef CONFIG_ABSTRACT_CONSOLE
+	/*
+	 *  Fix the Super I/O configuration
+	 */
+	sio_init();
+
+#ifdef CONFIG_FB
 	/* Frame buffer device based console */
 	conswitchp = &fb_con;
 #endif

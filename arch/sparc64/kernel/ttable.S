@@ -1,4 +1,4 @@
-/* $Id: ttable.S,v 1.22 1997/10/16 07:07:46 jj Exp $
+/* $Id: ttable.S,v 1.23 1998/03/15 17:23:48 ecd Exp $
  * ttable.S: Sparc V9 Trap Table(s) with SpitFire extensions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -6,7 +6,7 @@
 
 #include <linux/config.h>
 
-	.globl	sparc64_ttable_tl0, sparc64_ttable_tl1
+	.globl	sparc64_ttable_tl0, tl0_itick, sparc64_ttable_tl1,
 
 sparc64_ttable_tl0:
 tl0_resv000:	BOOT_KERNEL BTRAP(0x1) BTRAP(0x2) BTRAP(0x3)
@@ -45,7 +45,7 @@ tl0_irq7:	TRAP_IRQ(handler_irq, 7)  TRAP_IRQ(handler_irq, 8)
 tl0_irq9:	TRAP_IRQ(handler_irq, 9)  TRAP_IRQ(handler_irq, 10)
 tl0_irq11:	TRAP_IRQ(handler_irq, 11) TRAP_IRQ(handler_irq, 12)
 tl0_irq13:	TRAP_IRQ(handler_irq, 13)
-tl0_itick:	TRAP_TICK
+tl0_itick:	TRAP_IRQ(handler_irq, 14)
 tl0_irq15:	TRAP_IRQ(handler_irq, 15)
 tl0_resv050:	BTRAP(0x50) BTRAP(0x51) BTRAP(0x52) BTRAP(0x53) BTRAP(0x54) BTRAP(0x55)
 tl0_resv056:	BTRAP(0x56) BTRAP(0x57) BTRAP(0x58) BTRAP(0x59) BTRAP(0x5a) BTRAP(0x5b)

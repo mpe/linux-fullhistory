@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.9 1997/12/11 15:15:44 jj Exp $
+/* $Id: sys_sparc.c,v 1.13 1998/03/29 10:10:52 davem Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -10,6 +10,7 @@
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/mm.h>
 #include <linux/sem.h>
 #include <linux/msg.h>
@@ -40,7 +41,7 @@ asmlinkage unsigned long sparc_brk(unsigned long brk)
 	unsigned long ret;
 
 	lock_kernel();
-	if(brk >= 0x80000000000ULL) {	/* VM hole */
+	if(brk >= 0x80000000000UL) {	/* VM hole */
 		ret = current->mm->brk;
 		goto out;
 	}
@@ -128,6 +129,16 @@ asmlinkage int sys_ipc (unsigned call, int first, int second, unsigned long thir
 	if (call <= SHMCTL) 
 		switch (call) {
 		case SHMAT:
+			if (first >= 0) {
+				extern struct shmid_ds *shm_segs[];
+				struct shmid_ds *shp = shm_segs[(unsigned int) first % SHMMNI];
+				if (shp == IPC_UNUSED || shp == IPC_NOID) {
+					err = -ENOMEM;
+					if ((unsigned long)ptr >= 0x80000000000UL - shp->shm_segsz &&
+					    (unsigned long)ptr < 0xfffff80000000000UL)
+						goto out; /* Somebody is trying to fool us */
+				}
+			}
 			err = sys_shmat (first, (char *) ptr, second, (ulong *) third);
 			goto out;
 		case SHMDT:
@@ -162,29 +173,39 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 
 	lock_kernel();
 	if (!(flags & MAP_ANONYMOUS)) {
-		if (fd >= NR_OPEN || !(file = current->files->fd[fd])){
+		file = fget(fd);
+		if (!file)
 			goto out;
-	    }
 	}
 	retval = -ENOMEM;
+	len = PAGE_ALIGN(len);
 	if(!(flags & MAP_FIXED) && !addr) {
 		addr = get_unmapped_area(addr, len);
-		if(!addr){
-			goto out;
+		if(!addr)
+			goto out_putf;
+	}
+
+	retval = -EINVAL;
+	if (current->tss.flags & SPARC_FLAG_32BIT) {
+		if (len > 0xf0000000UL || addr > 0xf0000000UL - len)
+			goto out_putf;
+	} else {
+		if (len >= 0x80000000000UL || 
+		    (addr < 0x80000000000UL &&
+		     addr > 0x80000000000UL-len))
+			goto out_putf;
+		if (addr >= 0x80000000000ULL && addr < 0xfffff80000000000UL) {
+			/* VM hole */
+			retval = current->mm->brk;
+			goto out_putf;
 		}
 	}
 
-	/* See asm-sparc64/uaccess.h */
-	retval = -EINVAL;
-	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
-		goto out;
-
-	if(addr >= 0x80000000000ULL) {
-		retval = current->mm->brk;
-		goto out;
-	}
-
 	retval = do_mmap(file, addr, len, prot, flags, off);
+
+out_putf:
+	if (file)
+		fput(file);
 out:
 	unlock_kernel();
 	return retval;

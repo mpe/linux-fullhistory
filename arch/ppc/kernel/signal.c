@@ -201,8 +201,13 @@ int sys_sigreturn(struct pt_regs *regs)
 	if (sc == (struct sigcontext_struct *)(sigctx.regs)) {
 		/* Last stacked signal - restore registers */
 		sr = (struct sigregs *) sigctx.regs;
+#ifdef __SMP__
+		if ( regs->msr & MSR_FP  )
+			smp_giveup_fpu(current);
+#else	
 		if (last_task_used_math == current)
 			giveup_fpu();
+#endif		
 		if (copy_from_user(saved_regs, &sr->gp_regs,
 				   sizeof(sr->gp_regs)))
 			goto badframe;
@@ -249,8 +254,13 @@ setup_frame(struct pt_regs *regs, struct sigregs *frame,
 
 	if (verify_area(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto badframe;
-	if (last_task_used_math == current)
-		giveup_fpu();
+#ifdef __SMP__
+		if ( regs->msr & MSR_FP  )
+			smp_giveup_fpu(current);
+#else	
+		if (last_task_used_math == current)
+			giveup_fpu();
+#endif		
 	if (__copy_to_user(&frame->gp_regs, regs, GP_REGS_SIZE)
 	    || __copy_to_user(&frame->fp_regs, current->tss.fpr,
 			      ELF_NFPREG * sizeof(double))

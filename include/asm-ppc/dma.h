@@ -53,6 +53,11 @@
 #define ISA_DMA_THRESHOLD ~0L
 #endif /* CONFIG_PMAC */
 
+#ifdef CONFIG_APUS
+/* This is bogus and should go away. */
+#define ISA_DMA_THRESHOLD (0x00ffffff)
+#endif
+
 #else
 /* in arch/ppc/kernel/setup.c -- Cort */
 extern unsigned long DMA_MODE_WRITE, DMA_MODE_READ;

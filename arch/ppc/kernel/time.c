@@ -1,9 +1,22 @@
 /*
- * $Id: time.c,v 1.17 1997/12/28 22:47:21 paulus Exp $
+ * $Id: time.c,v 1.28 1998/04/07 18:49:49 cort Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
  * Paul Mackerras' version and mine for PReP and Pmac.
+ * MPC8xx/MBX changes by Dan Malek (dmalek@jlc.net).
+ *
+ * Since the MPC8xx has a programmable interrupt timer, I decided to
+ * use that rather than the decrementer.  Two reasons: 1.) the clock
+ * frequency is low, causing 2.) a long wait in the timer interrupt
+ *		while ((d = get_dec()) == dval)
+ * loop.  The MPC8xx can be driven from a variety of input clocks,
+ * so a number of assumptions have been made here because the kernel
+ * parameter HZ is a constant.  We assume (correctly, today :-) that
+ * the MPC8xx on the MBX board is driven from a 32.768 kHz crystal.
+ * This is then divided by 4, providing a 8192 Hz clock into the PIT.
+ * Since it is not possible to get a nice 100 Hz clock out of this, without
+ * creating a software PLL, I have set HZ to 128.  -- Dan
  */
 
 #include <linux/errno.h>
@@ -22,11 +35,20 @@
 #include <asm/io.h>
 #include <asm/processor.h>
 #include <asm/nvram.h>
+#include <asm/cache.h>
+#ifdef CONFIG_MBX
+#include <asm/mbx.h>
+#endif
+#ifdef CONFIG_8xx
+#include <asm/8xx_immap.h>
+#endif
 
 #include "time.h"
 
 /* this is set to the appropriate pmac/prep/chrp func in init_IRQ() */
 int (*set_rtc_time)(unsigned long);
+
+void smp_local_timer_interrupt(struct pt_regs *);
 
 /* keep track of when we need to update the rtc */
 unsigned long last_rtc_update = 0;
@@ -48,6 +70,14 @@ unsigned count_period_den;	/* count_period_num / count_period_den us */
 void timer_interrupt(struct pt_regs * regs)
 {
 	int dval, d;
+	unsigned long cpu = smp_processor_id();
+	/* save the HID0 in case dcache was off - see idle.c
+	 * this hack should leave for a better solution -- Cort */
+	unsigned dcache_locked = unlock_dcache();
+	
+if ( smp_processor_id() ) printk("SMP 1: timer intr\n");	
+	hardirq_enter(cpu);
+	
 	while ((dval = get_dec()) < 0) {
 		/*
 		 * Wait for the decrementer to change, then jump
@@ -57,17 +87,49 @@ void timer_interrupt(struct pt_regs * regs)
 		while ((d = get_dec()) == dval)
 			;
 		set_dec(d + decrementer_count);
-		do_timer(regs);
-		/*
-		 * update the rtc when needed
-		 */
-		if ( xtime.tv_sec > last_rtc_update + 660 )
-			if (set_rtc_time(xtime.tv_sec) == 0)
-				last_rtc_update = xtime.tv_sec;
-			else
-				last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+		if ( !smp_processor_id() )
+		{
+			do_timer(regs);
+			/*
+			 * update the rtc when needed
+			 */
+			if ( xtime.tv_sec > last_rtc_update + 660 )
+				if (set_rtc_time(xtime.tv_sec) == 0)
+					last_rtc_update = xtime.tv_sec;
+				else
+					last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+		}
 	}
+#ifdef __SMP__
+	smp_local_timer_interrupt(regs);
+#endif		
+	
+	hardirq_exit(cpu);
+	/* restore the HID0 in case dcache was off - see idle.c
+	 * this hack should leave for a better solution -- Cort */
+	lock_dcache(dcache_locked);
 }
+
+#ifdef CONFIG_MBX
+/* A place holder for time base interrupts, if they are ever enabled.
+*/
+void timebase_interrupt(int irq, void * dev, struct pt_regs * regs)
+{
+}
+
+/* The RTC on the MPC8xx is an internal register.
+ * We want to protect this during power down, so we need to unlock,
+ * modify, and re-lock.
+ */
+static int
+mbx_set_rtc_time(unsigned long time)
+{
+	((immap_t *)MBX_IMAP_ADDR)->im_sitk.sitk_rtck = KAPWR_KEY;
+	((immap_t *)MBX_IMAP_ADDR)->im_sit.sit_rtc = time;
+	((immap_t *)MBX_IMAP_ADDR)->im_sitk.sitk_rtck = ~KAPWR_KEY;
+	return(0);
+}
+#endif /* CONFIG_MBX */
 
 /*
  * This version of gettimeofday has microsecond resolution.
@@ -108,6 +170,7 @@ void do_settimeofday(struct timeval *tv)
 void
 time_init(void)
 {
+#ifndef CONFIG_MBX
 	if ((_get_PVR() >> 16) == 1) {
 		/* 601 processor: dec counts down by 128 every 128ns */
 		decrementer_count = DECREMENTER_COUNT_601;
@@ -119,9 +182,10 @@ time_init(void)
 	case _MACH_Pmac:
 		/* can't call pmac_get_rtc_time() yet,
 		   because via-cuda isn't initialized yet. */
-		if ((_get_PVR() >> 16) != 1)
+		if ( (_get_PVR() >> 16) != 1 && (!smp_processor_id()) )
 			pmac_calibrate_decr();
-		set_rtc_time = pmac_set_rtc_time;
+		if ( !smp_processor_id() )
+			set_rtc_time = pmac_set_rtc_time;
 		break;
 	case _MACH_chrp:
 		chrp_time_init();
@@ -135,18 +199,63 @@ time_init(void)
 		prep_calibrate_decr();
 		set_rtc_time = prep_set_rtc_time;
 		break;
+/* ifdef APUS specific stuff until the merge is completed. -jskov */
+#ifdef CONFIG_APUS
+	case _MACH_apus:
+	{
+		xtime.tv_sec = apus_get_rtc_time();
+		apus_calibrate_decr();
+		set_rtc_time = apus_set_rtc_time;
+ 		break;
+	}
+#endif
 	}
 	xtime.tv_usec = 0;
+	set_dec(decrementer_count);
+#else
+	mbx_calibrate_decr();
+	set_rtc_time = mbx_set_rtc_time;
 
-	/*
-	 * mark the rtc/on-chip timer as in sync
+	/* First, unlock all of the registers we are going to modify.
+	 * To protect them from corruption during power down, registers
+	 * that are maintained by keep alive power are "locked".  To
+	 * modify these registers we have to write the key value to
+	 * the key location associated with the register.
+	 */
+	((immap_t *)MBX_IMAP_ADDR)->im_sitk.sitk_tbscrk = KAPWR_KEY;
+	((immap_t *)MBX_IMAP_ADDR)->im_sitk.sitk_rtcsck = KAPWR_KEY;
+
+
+	/* Disable the RTC one second and alarm interrupts.
+	*/
+	((immap_t *)MBX_IMAP_ADDR)->im_sit.sit_rtcsc &=
+						~(RTCSC_SIE | RTCSC_ALE);
+
+	/* Enabling the decrementer also enables the timebase interrupts
+	 * (or from the other point of view, to get decrementer interrupts
+	 * we have to enable the timebase).  The decrementer interrupt
+	 * is wired into the vector table, nothing to do here for that.
+	 */
+	((immap_t *)MBX_IMAP_ADDR)->im_sit.sit_tbscr =
+				((mk_int_int_mask(DEC_INTERRUPT) << 8) |
+					 (TBSCR_TBF | TBSCR_TBE));
+	if (request_irq(DEC_INTERRUPT, timebase_interrupt, 0, "tbint", NULL) != 0)
+		panic("Could not allocate timer IRQ!");
+
+	/* Get time from the RTC.
+	*/
+	xtime.tv_sec = ((immap_t *)MBX_IMAP_ADDR)->im_sit.sit_rtc;
+	xtime.tv_usec = 0;
+
+#endif /* CONFIG_MBX */
+	
+	/* mark the rtc/on-chip timer as in sync
 	 * so we don't update right away
 	 */
 	last_rtc_update = xtime.tv_sec;
-
-	set_dec(decrementer_count);
 }
 
+#ifndef CONFIG_MBX
 /*
  * Uses the on-board timer to calibrate the on-chip decrementer register
  * for prep systems.  On the pmac the OF tells us what the frequency is
@@ -158,6 +267,27 @@ volatile int *done_ptr = &calibrate_done;
 void prep_calibrate_decr(void)
 {
 	unsigned long flags;
+
+	/* the Powerstack II's have trouble with the timer so
+	 * we use a default value -- Cort
+	 */
+	if ( (_prep_type == _PREP_Motorola) &&
+	     ((inb(0x800) & 0xF0) & 0x40) )
+	{
+		unsigned long freq, divisor;
+		static unsigned long t2 = 0;
+		
+		t2 = 998700000/60;
+		freq = t2 * 60;	/* try to make freq/1e6 an integer */
+		divisor = 60;
+		printk("time_init: decrementer frequency = %lu/%lu (%luMHz)\n",
+		       freq, divisor,t2>>20);
+		decrementer_count = freq / HZ / divisor;
+		count_period_num = divisor;
+		count_period_den = freq / 1000000;
+		return;
+	}
+	
 	
 	save_flags(flags);
 
@@ -181,7 +311,7 @@ void prep_calibrate_decr_handler(int irq, void *dev, struct pt_regs * regs)
 {
 	unsigned long freq, divisor;
 	static unsigned long t1 = 0, t2 = 0;
-
+	
 	if ( !t1 )
 		t1 = get_dec();
 	else if (!t2)
@@ -189,11 +319,6 @@ void prep_calibrate_decr_handler(int irq, void *dev, struct pt_regs * regs)
 		t2 = get_dec();
 		t2 = t1-t2;  /* decr's in 1/HZ */
 		t2 = t2*HZ;  /* # decrs in 1s - thus in Hz */
-if ( (t2>>20) > 100 )
-{
-  printk("Decrementer frequency too high: %luMHz.  Using 15MHz.\n",t2>>20);
-  t2 = 998700000/60;
-}
 		freq = t2 * 60;	/* try to make freq/1e6 an integer */
 		divisor = 60;
 		printk("time_init: decrementer frequency = %lu/%lu (%luMHz)\n",
@@ -205,6 +330,32 @@ if ( (t2>>20) > 100 )
 	}
 }
 
+#else /* CONFIG_MBX */
+
+/* The decrementer counts at the system (internal) clock frequency divided by
+ * sixteen, or external oscillator divided by four.  Currently, we only
+ * support the MBX, which is system clock divided by sixteen.
+ */
+void mbx_calibrate_decr(void)
+{
+	int freq, fp, divisor;
+
+	if ((((immap_t *)MBX_IMAP_ADDR)->im_clkrst.car_sccr & 0x02000000) == 0)
+		printk("WARNING: Wrong decrementer source clock.\n");
+
+	/* The manual says the frequency is in Hz, but it is really
+	 * as MHz.  The value 'fp' is the number of decrementer ticks
+	 * per second.
+	 */
+	/*fp = (mbx_board_info.bi_intfreq * 1000000) / 16;*/
+	freq = fp*60;	/* try to make freq/1e6 an integer */
+        divisor = 60;
+        printk("time_init: decrementer frequency = %d/%d\n", freq, divisor);
+        decrementer_count = freq / HZ / divisor;
+        count_period_num = divisor;
+        count_period_den = freq / 1000000;
+}
+#endif /* CONFIG_MBX */
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
  * Assumes input in normal date format, i.e. 1980-12-31 23:59:59

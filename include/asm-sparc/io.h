@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.14 1997/04/10 05:13:22 davem Exp $ */
+/* $Id: io.h,v 1.15 1998/01/30 10:59:51 jj Exp $ */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
 
@@ -99,6 +99,7 @@ extern __inline__ void mapioaddr(unsigned long physaddr, unsigned long virt_addr
 {
 	switch(sparc_cpu_model) {
 	case sun4c:
+	case sun4:
 		sun4c_mapioaddr(physaddr, virt_addr, bus, rdonly);
 		break;
 	case sun4m:
@@ -122,6 +123,7 @@ extern __inline__ void unmapioaddr(unsigned long virt_addr)
 {
 	switch(sparc_cpu_model) {
 	case sun4c:
+	case sun4:
 		sun4c_unmapioaddr(virt_addr);
 		break;
 	case sun4m:

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.40 1997/10/24 11:57:59 jj Exp $
+/* $Id: processor.h,v 1.42 1998/01/28 10:00:04 ecd Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -25,7 +25,11 @@
 #define wp_works_ok__is_a_macro /* for versions in ksyms.c */
 
 /* User lives in his very own context, and cannot reference us. */
-#define TASK_SIZE	((1UL << (PAGE_SHIFT - 3)) * PGDIR_SIZE)
+#ifndef __ASSEMBLY__
+#define TASK_SIZE	((unsigned long)-PGDIR_SIZE)
+#else
+#define TASK_SIZE	0xfffffffc00000000
+#endif
 
 #define COPY_TASK_STRUCT(dst, src)										\
 do {														\

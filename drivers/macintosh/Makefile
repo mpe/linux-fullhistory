@@ -14,7 +14,10 @@ MOD_SUB_DIRS := $(SUB_DIRS)
 
 L_TARGET := macintosh.a
 M_OBJS   :=
-L_OBJS   := via-cuda.o adb.o nvram.o macio-adb.o
+
+ifndef CONFIG_MBX
+L_OBJS   := via-cuda.o adb.o nvram.o macio-adb.o via-pmu.o mediabay.o
+endif
 
 ifeq ($(CONFIG_SERIAL)$(CONFIG_PMAC),yy)
   LX_OBJS += macserial.o
@@ -25,7 +28,7 @@ else
 endif
 
 ifdef CONFIG_MAC_KEYBOARD
-L_OBJS += mac_keyb.o mackeymap.o
+L_OBJS += mac_keyb.o
 endif
 
 ifdef CONFIG_VT
@@ -54,5 +57,7 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-mackeymap.c: mackeymap.map
-	loadkeys --mktable mackeymap.map > mackeymap.c
+# Integrated in mac_keyb.c
+# mackeymap.map is retained for historical reasons
+#mackeymap.c: mackeymap.map
+#	loadkeys --mktable mackeymap.map > mackeymap.c

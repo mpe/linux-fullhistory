@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.13 1998/01/06 06:44:55 cort Exp $
+ * $Id: idle.c,v 1.35 1998/04/07 20:24:23 cort Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -31,41 +31,44 @@
 #include <asm/smp_lock.h>
 #include <asm/processor.h>
 #include <asm/mmu.h>
+#include <asm/cache.h>
+#ifdef CONFIG_PMAC
+#include <asm/mediabay.h>
+#endif
 
-int zero_paged(void *unused);
-void inline power_save(void);
+void zero_paged(void);
+void power_save(void);
 void inline htab_reclaim(void);
+
+unsigned long htab_reclaim_on = 0;
+unsigned long zero_paged_on = 0;
 
 int idled(void *unused)
 {
 	int ret = -EPERM;
 
-	/*
-	 * want one per cpu since it would be nice to have all
-	 * processors who aren't doing anything
-	 * zero-ing pages since this daemon is lock-free
-	 * -- Cort
-	 */
-	/* kernel_thread(zero_paged, NULL, 0); */
-
-#ifdef __SMP__	
-printk("SMP %d: in idle.  current = %s/%d\n",
-       current->processor,current->comm,current->pid);
-#endif /* __SMP__ */
 	for (;;)
 	{
+		__sti();
+		
 		/* endless loop with no priority at all */
 		current->priority = -100;
 		current->counter = -100;
+		
+		check_pgt_cache();
 
-		/* endless idle loop with no priority at all */
-		/* htab_reclaim(); */
-		schedule();
+		if ( !need_resched && zero_paged_on ) zero_paged();
+		if ( !need_resched && htab_reclaim_on ) htab_reclaim();
+
+		/*
+		 * Only processor 1 may sleep now since processor 2 would
+		 * never wake up.  Need to add timer code for processor 2
+		 * then it can sleep. -- Cort
+		 */
 #ifndef __SMP__
-		/* can't do this on smp since second processor
-		   will never wake up -- Cort */
-		/* power_save(); */
-#endif /* __SMP__  */
+		if ( !need_resched ) power_save();
+#endif /* __SMP__ */
+		schedule();
 	}
 	ret = 0;
 	return ret;
@@ -76,13 +79,16 @@ printk("SMP %d: in idle.  current = %s/%d\n",
  * Mark 'zombie' pte's in the hash table as invalid.
  * This improves performance for the hash table reload code
  * a bit since we don't consider unused pages as valid.
- * I haven't done any rigorous performance analysis yet
- * so it's still experimental and turned off here.
  *  -- Cort
  */
+PTE *reclaim_ptr = 0;
 void inline htab_reclaim(void)
 {
+#ifndef CONFIG_8xx		
+#if 0	
 	PTE *ptr, *start;
+	static int dir = 1;
+#endif	
 	struct task_struct *p;
 	unsigned long valid = 0;
 	extern PTE *Hash, *Hash_end;
@@ -91,28 +97,33 @@ void inline htab_reclaim(void)
 	/* if we don't have a htab */
 	if ( Hash_size == 0 )
 		return;
-	/*lock_dcache();*/
-	
+	lock_dcache(1);
+
+#if 0	
 	/* find a random place in the htab to start each time */
-	start = &Hash[jiffies%(Hash_size/sizeof(ptr))];
-	for ( ptr = start; ptr < Hash_end ; ptr++)
+	start = &Hash[jiffies%(Hash_size/sizeof(PTE))];
+	/* go a different direction each time */
+	dir *= -1;
+        for ( ptr = start;
+	      !need_resched && (ptr != Hash_end) && (ptr != Hash);
+	      ptr += dir)
 	{
-		if ( ptr == start )
-			return;
-		if ( ptr == Hash_end )
-			ptr = Hash;
-		valid = 0;
-		if (!ptr->v)
+#else
+	if ( !reclaim_ptr ) reclaim_ptr = Hash;
+	while ( !need_resched )
+	{
+		reclaim_ptr++;
+		if ( reclaim_ptr == Hash_end ) reclaim_ptr = Hash;
+#endif	  
+		if (!reclaim_ptr->v)
 			continue;
+		valid = 0;
 		for_each_task(p)
 		{
 			if ( need_resched )
-			{
-				/*unlock_dcache();*/
-				return;
-			}
+				goto out;
 			/* if this vsid/context is in use */
-			if ( (ptr->vsid >> 4) == p->mm->context )
+			if ( (reclaim_ptr->vsid >> 4) == p->mm->context )
 			{
 				valid = 1;
 				break;
@@ -121,18 +132,27 @@ void inline htab_reclaim(void)
 		if ( valid )
 			continue;
 		/* this pte isn't used */
-		ptr->v = 0;
+		reclaim_ptr->v = 0;
 	}
-	/*unlock_dcache();*/
+out:
+	if ( need_resched ) printk("need_resched: %x\n", need_resched);
+	unlock_dcache();
+#endif /* CONFIG_8xx */
 }
-
+	
 /*
  * Syscall entry into the idle task. -- Cort
  */
 asmlinkage int sys_idle(void)
 {
+	extern int media_bay_task(void *);
 	if(current->pid != 0)
 		return -EPERM;
+
+#ifdef CONFIG_PMAC
+	if (media_bay_present)
+		kernel_thread(media_bay_task, NULL, 0);
+#endif
 
 	idled(NULL);
 	return 0; /* should never execute this but it makes gcc happy -- Cort */
@@ -157,10 +177,8 @@ unsigned long zero_list = 0;	/* head linked list of pre-zero'd pages */
 unsigned long bytecount = 0;	/* pointer into the currently being zero'd page */
 unsigned long zerocount = 0;	/* # currently pre-zero'd pages */
 unsigned long zerototal = 0;	/* # pages zero'd over time -- for ooh's and ahhh's */
-unsigned long pageptr = 0;	/* current page being zero'd */
 unsigned long zeropage_hits = 0;/* # zero'd pages request that we've done */
 unsigned long zeropage_calls = 0;/* # zero'd pages request that've been made */
-static struct wait_queue * page_zerod_wait = NULL;
 #define PAGE_THRESHOLD 96       /* how many pages to keep pre-zero'd */
 
 /*
@@ -189,7 +207,6 @@ unsigned long get_prezerod_page(void)
 		 */
 		atomic_inc((atomic_t *)&zeropage_hits);
 		atomic_dec((atomic_t *)&zerocount);
-		wake_up(&page_zerod_wait);
 		need_resched = 1;
 		
 		/* zero out the pointer to next in the page */
@@ -201,35 +218,18 @@ unsigned long get_prezerod_page(void)
 
 /*
  * Experimental stuff to zero out pages in the idle task
- * to speed up get_free_pages() -- Cort
- * Zero's out pages until we need to resched or
- * we've reached the limit of zero'd pages.
+ * to speed up get_free_pages(). Zero's out pages until
+ * we've reached the limit of zero'd pages.  We handle
+ * reschedule()'s in here so when we return we know we've
+ * zero'd all we need to for now.
  */
-int zero_paged(void *unused)
+void zero_paged(void)
 {
-	extern pte_t *get_pte( struct mm_struct *mm, unsigned long address );
-	pgd_t *dir;
-	pmd_t *pmd;
+	unsigned long pageptr = 0;	/* current page being zero'd */
 	pte_t *pte;
-
-	sprintf(current->comm, "zero_paged (idle)");
-	/* current->blocked = ~0UL; */
 	
-#ifdef __SMP__
-	printk("Started zero_paged (cpu %d)\n", hard_smp_processor_id());
-#else
-	printk("Started zero_paged\n");
-#endif /* __SMP__ */
-	
-	__sti();
-	while ( 1 )
+	while ( zerocount <= PAGE_THRESHOLD )
 	{
-		/* don't want to be pre-empted by swapper or power_save */
-		current->priority = -98;
-		current->counter = -98;
-		/* we don't want to run until we have something to do */
-		while ( zerocount >= PAGE_THRESHOLD )
-			sleep_on(&page_zerod_wait);
 		/*
 		 * Mark a page as reserved so we can mess with it
 		 * If we're interrupted we keep this page and our place in it
@@ -237,7 +237,7 @@ int zero_paged(void *unused)
 		 */
 		pageptr = __get_free_pages(GFP_ATOMIC, 0);
 		if ( !pageptr )
-			goto retry;
+			return;
 		
 		if ( need_resched )
 			schedule();
@@ -245,20 +245,15 @@ int zero_paged(void *unused)
 		/*
 		 * Make the page no cache so we don't blow our cache with 0's
 		 */
-		dir = pgd_offset( init_task.mm, pageptr );
-		if (dir)
+		pte = find_pte(init_task.mm, pageptr);
+		if ( !pte )
 		{
-			pmd = pmd_offset(dir, pageptr & PAGE_MASK);
-			if (pmd && pmd_present(*pmd))
-			{
-				pte = pte_offset(pmd, pageptr & PAGE_MASK);
-				if (pte && pte_present(*pte))
-				{			
-					pte_uncache(*pte);
-					flush_tlb_page(find_vma(init_task.mm,pageptr),pageptr);
-				}
-			}
+			printk("pte NULL in zero_paged()\n");
+			return;
 		}
+		
+		pte_uncache(*pte);
+		flush_tlb_page(find_vma(init_task.mm,pageptr),pageptr);
 	
 		/*
 		 * Important here to not take time away from real processes.
@@ -308,35 +303,34 @@ int zero_paged(void *unused)
 		 */
 		atomic_inc((atomic_t *)&zerocount);
 		atomic_inc((atomic_t *)&zerototal);
-retry:	
-		schedule();
 	}
 }
 
-void inline power_save(void)
+int powersave_mode = HID0_DOZE;
+
+void power_save(void)
 {
 	unsigned long msr, hid0;
 
-	/* no powersaving modes on the 601 */
-	if(  (_get_PVR()>>16) == 1 )
+	/* only sleep on the 603-family/750 processors */
+	switch (_get_PVR() >> 16) {
+	case 3:			/* 603 */
+	case 6:			/* 603e */
+	case 7:			/* 603ev */
+	case 8:			/* 750 */
+		break;
+	default:
 		return;
+	}
 	
-	__sti();
-	asm volatile(
-		/* clear powersaving modes and set nap mode */
-		"mfspr %3,1008 \n\t"
-		"andc  %3,%3,%4 \n\t"
-		"or    %3,%3,%5 \n\t"
-		"mtspr 1008,%3 \n\t"
-		/* enter the mode */
-		"mfmsr %0 \n\t"
-		"oris  %0,%0,%2 \n\t"
-		"sync \n\t"
-		"mtmsr %0 \n\t"
-		"isync \n\t"
-		: "=&r" (msr)
-		: "0" (msr), "i" (MSR_POW>>16),
-		"r" (hid0),
-		"r" (HID0_DOZE|HID0_NAP|HID0_SLEEP),
-		"r" (HID0_NAP));
+	save_flags(msr);
+	cli();
+	if (!need_resched) {
+		asm("mfspr %0,1008" : "=r" (hid0) :);
+		hid0 &= ~(HID0_NAP | HID0_SLEEP | HID0_DOZE);
+		hid0 |= powersave_mode | HID0_DPM;
+		asm("mtspr 1008,%0" : : "r" (hid0));
+		msr |= MSR_POW;
+	}
+	restore_flags(msr);
 }

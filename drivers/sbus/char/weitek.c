@@ -1,4 +1,4 @@
-/* $Id: weitek.c,v 1.15 1997/07/22 06:14:11 davem Exp $
+/* $Id: weitek.c,v 1.16 1998/03/10 20:18:54 jj Exp $
  * weitek.c: Tadpole P9100/P9000 console driver
  *
  * Copyright (C) 1996 David Redman (djhr@tadpole.co.uk)
@@ -84,7 +84,8 @@ weitek_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		page += map_size;
 	}
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
 	return 0;
 }
 #endif

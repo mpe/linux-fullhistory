@@ -24,7 +24,11 @@
 #define MSR_RI		(1<<1)		/* Recoverable Exception */
 #define MSR_LE		(1<<0)		/* Little-Endian enable */
 
+#ifdef CONFIG_APUS
+#define MSR_		MSR_ME|MSR_FE0|MSR_FE1|MSR_IP|MSR_RI
+#else
 #define MSR_		MSR_ME|MSR_FE0|MSR_FE1|MSR_RI
+#endif
 #define MSR_KERNEL      MSR_|MSR_IR|MSR_DR
 #define MSR_USER	MSR_KERNEL|MSR_PR|MSR_EE
 
@@ -58,6 +62,8 @@
 #define _MACH_prep     1
 #define _MACH_Pmac     2 /* pmac or pmac clone (non-chrp) */
 #define _MACH_chrp     4 /* chrp machine */
+#define _MACH_mbx      8 /* Motorola MBX board */
+#define _MACH_apus    16 /* amiga with phase5 powerup */
 
 /* see residual.h for these */
 #define _PREP_Motorola 0x01  /* motorola prep */
@@ -117,6 +123,18 @@ n:
 #define IABR	1010	/* Instruction Address Breakpoint */
 #define DEC	22	/* Decrementer */
 #define EAR	282	/* External Address Register */
+#define L2CR	1017    /* PPC 750 L2 control register */
+
+#define THRM1	1020
+#define THRM2	1021
+#define THRM3	1022
+#define THRM1_TIN 0x1
+#define THRM1_TIV 0x2
+#define THRM1_THRES (0x7f<<2)
+#define THRM1_TID (1<<29)
+#define THRM1_TIE (1<<30)
+#define THRM1_V   (1<<31)
+#define THRM3_E   (1<<31)
 
 /* Segment Registers */
 #define SR0	0
@@ -146,17 +164,35 @@ n:
 #ifdef CONFIG_PREP
 #define _machine (_MACH_prep)
 #define is_prep (1)
+#define is_chrp (0)
+#define have_of (0)
 #endif /* CONFIG_PREP */
 
 #ifdef CONFIG_CHRP
 #define _machine (_MACH_chrp)
 #define is_prep (0)
+#define is_chrp (1)
+#define have_of (1)
 #endif /* CONFIG_CHRP */
 
 #ifdef CONFIG_PMAC
 #define _machine (_MACH_Pmac)
 #define is_prep (0)
+#define is_chrp (0)
+#define have_of (1)
 #endif /* CONFIG_PMAC */
+
+#ifdef CONFIG_MBX
+#define _machine (_MACH_mbx)
+#define is_prep (0)
+#define is_chrp (0)
+#define have_of (0)
+#endif /* CONFIG_MBX */
+
+#ifdef CONFIG_APUS
+#define _machine (_MACH_apus)
+#define is_prep (0)
+#endif /* CONFIG_APUS */
 
 #else /* CONFIG_MACH_SPECIFIC */
 
@@ -165,10 +201,13 @@ extern int _machine;
 /* if we're a prep machine */
 #define is_prep (_machine == _MACH_prep)
 
-#endif /* CONFIG_MACH_SPECIFIC */
+/* if we're a chrp machine */
+#define is_chrp (_machine == _MACH_chrp)
 
 /* if we have openfirmware */
 extern unsigned long have_of;
+#endif /* CONFIG_MACH_SPECIFIC */
+
 /* what kind of prep workstation we are */
 extern int _prep_type;
 
@@ -216,6 +255,7 @@ struct thread_struct {
 	double		fpr[32];	/* Complete floating point set */
 	unsigned long	fpscr_pad;	/* fpr ... fpscr must be contiguous */
 	unsigned long	fpscr;		/* Floating point status */
+	unsigned long	smp_fork_ret;
 };
 
 #define INIT_SP		(sizeof(init_stack) + (unsigned long) &init_stack)
@@ -227,10 +267,14 @@ struct thread_struct {
 	(struct pt_regs *)INIT_SP - 1, /* regs */ \
 	KERNEL_DS, /*fs*/ \
 	0, /* last_syscall */ \
-	{0}, 0, 0 \
+	{0}, 0, 0, 0 \
 }
 
-#define INIT_MMAP { &init_mm, KERNELBASE/*0*/, 0xffffffff/*0x40000000*/, \
+/*
+ * Note: the vm_start and vm_end fields here should *not*
+ * be in kernel space.  (Could vm_end == vm_start perhaps?)
+ */
+#define INIT_MMAP { &init_mm, 0, 0x1000, \
 		      PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
 
 /*

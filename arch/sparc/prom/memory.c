@@ -1,8 +1,9 @@
-/* $Id: memory.c,v 1.12 1997/05/27 06:45:57 davem Exp $
+/* $Id: memory.c,v 1.13 1998/01/30 10:59:03 jj Exp $
  * memory.c: Prom routine for acquiring various bits of information
  *           about RAM on the machine, both virtual and physical.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1997 Michael A. Griffith (grif@acm.org)
  */
 
 #include <linux/config.h>
@@ -10,6 +11,7 @@
 #include <linux/init.h>
 
 #include <asm/openprom.h>
+#include <asm/sun4prom.h>
 #include <asm/oplib.h>
 
 /* This routine, for consistency, returns the ram parameters in the
@@ -177,6 +179,21 @@ __initfunc(void prom_meminit(void))
 		prom_sortmemlist(prom_phys_avail);
 		break;
 
+	case PROM_SUN4:
+#ifdef CONFIG_SUN4	
+		/* how simple :) */
+		prom_phys_total[0].start_adr = 0x0;
+		prom_phys_total[0].num_bytes = *(sun4_romvec->memorysize);
+		prom_phys_total[0].theres_more = 0x0;
+		prom_prom_taken[0].start_adr = 0x0; 
+		prom_prom_taken[0].num_bytes = 0x0;
+		prom_prom_taken[0].theres_more = 0x0;
+		prom_phys_avail[0].start_adr = 0x0;
+		prom_phys_avail[0].num_bytes = *(sun4_romvec->memoryavail);
+		prom_phys_avail[0].theres_more = 0x0;
+#endif
+		break;
+
         case PROM_AP1000:
 #if CONFIG_AP1000
 		/* really simple memory map */
@@ -189,9 +206,6 @@ __initfunc(void prom_meminit(void))
 		prom_phys_avail[0].start_adr = 0x00000000;
 		prom_phys_avail[0].num_bytes = prom_phys_total[0].num_bytes;
 		prom_phys_avail[0].theres_more = 0x0;
-		prom_sortmemlist(prom_phys_total);
-		prom_sortmemlist(prom_prom_taken);
-		prom_sortmemlist(prom_phys_avail);
 #endif
 	default:
 		break;

@@ -1,7 +1,10 @@
 #ifndef _PPC_PGTABLE_H
 #define _PPC_PGTABLE_H
 
+#ifndef __ASSEMBLY__
 #include <linux/mm.h>
+#include <asm/processor.h>		/* For TASK_SIZE */
+#include <asm/mmu.h>
 
 extern void local_flush_tlb_all(void);
 extern void local_flush_tlb_mm(struct mm_struct *mm);
@@ -36,6 +39,9 @@ extern void local_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 extern void flush_icache_range(unsigned long, unsigned long);
 extern void flush_page_to_ram(unsigned long);
 
+extern unsigned long va_to_phys(unsigned long address);
+extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
+#endif /* __ASSEMBLY__ */
 /*
  * The PowerPC MMU uses a hash table containing PTEs, together with
  * a set of 16 segment registers (on 32-bit implementations), to define
@@ -48,6 +54,23 @@ extern void flush_page_to_ram(unsigned long);
  * for extracting ptes from the tree and putting them into the hash table
  * when necessary, and updating the accessed and modified bits in the
  * page table tree.
+ *
+ * The PowerPC MPC8xx uses a TLB with hardware assisted, software tablewalk.
+ * We also use the two level tables, but we can put the real bits in them
+ * needed for the TLB and tablewalk.  These definitions require Mx_CTR.PPM = 0,
+ * Mx_CTR.PPCS = 0, and MD_CTR.TWAM = 1.  The level 2 descriptor has
+ * additional page protection (when Mx_CTR.PPCS = 1) that allows TLB hit
+ * based upon user/super access.  The TLB does not have accessed nor write
+ * protect.  We assume that if the TLB get loaded with an entry it is
+ * accessed, and overload the the changed bit for write protect.  We use
+ * two bits in the software pte that are supposed to be set to zero in
+ * the TLB entry (24 and 25) for these indicators.  Although the level 1
+ * descriptor contains the guarded and writethrough/copyback bits, we can
+ * set these at the page level since they get copied from the Mx_TWC
+ * register when the TLB entry is loaded.  We will use bit 27 for guard, since
+ * that is where it exists in the MD_TWC, and bit 26 for writethrough.
+ * These will get masked from the level 2 descriptor at TLB load time, and
+ * copied to the MD_TWC before it gets loaded.
  */
 
 /* PMD_SHIFT determines the size of the area mapped by the second-level page tables */
@@ -67,6 +90,7 @@ extern void flush_page_to_ram(unsigned long);
 #define PTRS_PER_PTE	1024
 #define PTRS_PER_PMD	1
 #define PTRS_PER_PGD	1024
+#define USER_PTRS_PER_PGD	(TASK_SIZE / PGDIR_SIZE)
 
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 64MB value just means that there will be a 64MB "hole" after the
@@ -89,6 +113,7 @@ extern void flush_page_to_ram(unsigned long);
  * Bits in a linux-style PTE.  These match the bits in the
  * (hardware-defined) PowerPC PTE as closely as possible.
  */
+#ifndef CONFIG_8xx
 #define _PAGE_PRESENT	0x001	/* software: pte contains a translation */
 #define _PAGE_USER	0x002	/* matches one of the PP bits */
 #define _PAGE_RW	0x004	/* software: user write access allowed */
@@ -100,9 +125,34 @@ extern void flush_page_to_ram(unsigned long);
 #define _PAGE_ACCESSED	0x100	/* R: page referenced */
 #define _PAGE_HWWRITE	0x200	/* software: _PAGE_RW & _PAGE_DIRTY */
 
+#else
+#define _PAGE_PRESENT	0x0001	/* Page is valid */
+#define _PAGE_NO_CACHE	0x0002	/* I: cache inhibit */
+#define _PAGE_SHARED	0x0004	/* No ASID (context) compare */
+
+/* These four software bits must be masked out when the entry is loaded
+ * into the TLB.
+ */
+#define _PAGE_GUARDED	0x0010	/* software: guarded access */
+#define _PAGE_WRITETHRU 0x0020	/* software: use writethrough cache */
+#define _PAGE_RW	0x0040	/* software: user write access allowed */
+#define _PAGE_ACCESSED	0x0080	/* software: page referenced */
+
+#define _PAGE_DIRTY	0x0100	/* C: page changed (write protect) */
+#define _PAGE_USER	0x0800	/* One of the PP bits, the other must be 0 */
+
+/* This is used to enable or disable the actual hardware write
+ * protection.
+ */
+#define _PAGE_HWWRITE	_PAGE_DIRTY
+
+#endif /* CONFIG_8xx */
+
 #define _PAGE_CHG_MASK	(PAGE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY)
 
 #define PAGE_NONE	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED)
+
+#ifndef CONFIG_8xx
 #define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | \
 				 _PAGE_ACCESSED)
 #define PAGE_COPY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
@@ -111,7 +161,17 @@ extern void flush_page_to_ram(unsigned long);
 				 _PAGE_HWWRITE | _PAGE_ACCESSED)
 #define PAGE_KERNEL_CI	__pgprot(_PAGE_PRESENT | _PAGE_NO_CACHE | _PAGE_RW | \
 				 _PAGE_HWWRITE | _PAGE_DIRTY | _PAGE_ACCESSED)
-
+#else
+#define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | \
+				 _PAGE_ACCESSED | _PAGE_SHARED)
+#define PAGE_COPY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
+#define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
+#define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | \
+				 _PAGE_SHARED | _PAGE_ACCESSED)
+#define PAGE_KERNEL_CI	__pgprot(_PAGE_PRESENT | _PAGE_NO_CACHE | _PAGE_RW | \
+				 _PAGE_SHARED | _PAGE_DIRTY | _PAGE_ACCESSED)
+#endif /* CONFIG_8xx */
+     
 /*
  * The PowerPC can only do execute protection on a segment (256MB) basis,
  * not on a page basis.  So we consider execute permission the same as read.
@@ -143,11 +203,12 @@ extern void flush_page_to_ram(unsigned long);
  * ZERO_PAGE is a global shared page that is always zero: used
  * for zero-mapped memory areas etc..
  */
+#ifndef __ASSEMBLY__
 extern pte_t __bad_page(void);
 extern pte_t * __bad_pagetable(void);
 
 extern unsigned long empty_zero_page[1024];
-
+#endif __ASSEMBLY__
 #define BAD_PAGETABLE	__bad_pagetable()
 #define BAD_PAGE	__bad_page()
 #define ZERO_PAGE	((unsigned long) empty_zero_page)
@@ -164,9 +225,19 @@ extern unsigned long empty_zero_page[1024];
 
 /* to set the page-dir */
 /* tsk is a task_struct and pgdir is a pte_t */
+#ifndef CONFIG_8xx
 #define SET_PAGE_DIR(tsk,pgdir)  \
 	((tsk)->tss.pg_tables = (unsigned long *)(pgdir))
-
+#else /* CONFIG_8xx */     
+#define SET_PAGE_DIR(tsk,pgdir)  \
+ do { \
+	unsigned long __pgdir = (unsigned long)pgdir; \
+	((tsk)->tss.pg_tables = (unsigned long *)(__pgdir)); \
+	asm("mtspr %0,%1 \n\t" :: "i"(M_TWB), "r"(__pa(__pgdir))); \
+ } while (0)
+#endif /* CONFIG_8xx */
+     
+#ifndef __ASSEMBLY__
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
@@ -197,8 +268,8 @@ extern inline int pte_exec(pte_t pte)		{ return pte_val(pte) & _PAGE_USER; }
 extern inline int pte_dirty(pte_t pte)		{ return pte_val(pte) & _PAGE_DIRTY; }
 extern inline int pte_young(pte_t pte)		{ return pte_val(pte) & _PAGE_ACCESSED; }
 
-extern inline int pte_uncache(pte_t pte)        { return pte_val(pte) |= _PAGE_NO_CACHE; }
-extern inline int pte_cache(pte_t pte)          { return pte_val(pte) &= ~_PAGE_NO_CACHE; }
+extern inline void pte_uncache(pte_t pte)       { pte_val(pte) |= _PAGE_NO_CACHE; }
+extern inline void pte_cache(pte_t pte)         { pte_val(pte) &= ~_PAGE_NO_CACHE; }
 
 extern inline pte_t pte_rdprotect(pte_t pte) {
 	pte_val(pte) &= ~_PAGE_USER; return pte; }
@@ -301,70 +372,123 @@ extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
  * used to allocate a kernel page table, but are actually identical
  * to the xxx() versions.
  */
-extern inline void pte_free_kernel(pte_t * pte)
-{
-	free_page((unsigned long) pte);
-}
+#ifdef __SMP__
+/* Sliiiicck */
+#define pgd_quicklist           (cpu_data[smp_processor_id()].pgd_quick)
+#define pmd_quicklist           ((unsigned long *)0)
+#define pte_quicklist           (cpu_data[smp_processor_id()].pte_quick)
+#define pgtable_cache_size      (cpu_data[smp_processor_id()].pgtable_cache_sz)
+#else
+extern struct pgtable_cache_struct {
+	unsigned long *pgd_cache;
+	unsigned long *pte_cache;
+	unsigned long pgtable_cache_sz;
+} quicklists;
+#define pgd_quicklist (quicklists.pgd_cache)
+#define pmd_quicklist ((unsigned long *)0)
+#define pte_quicklist (quicklists.pte_cache)
+#define pgtable_cache_size (quicklists.pgtable_cache_sz)
+#endif
 
-extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
+
+extern __inline__ pgd_t *get_pgd_slow(void)
 {
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-	if (pmd_none(*pmd)) {
-		pte_t * page = (pte_t *) get_free_page(GFP_KERNEL);
-		if (pmd_none(*pmd)) {
-			if (page) {
-				pmd_val(*pmd) = (unsigned long) page;
-				return page + address;
-			}
-			pmd_val(*pmd) = (unsigned long) BAD_PAGETABLE;
-			return NULL;
-		}
-		free_page((unsigned long) page);
+	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL), *init;
+
+	if (ret) {
+		init = pgd_offset(&init_mm, 0);
+		memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
+		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
+			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 	}
-	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_val(*pmd) = (unsigned long) BAD_PAGETABLE;
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + address;
+	return ret;
 }
 
-/*
- * allocating and freeing a pmd is trivial: the 1-entry pmd is
- * inside the pgd, so has no extra memory associated with it.
- */
-extern inline void pmd_free_kernel(pmd_t * pmd)
+extern __inline__ pgd_t *get_pgd_fast(void)
+{
+        unsigned long *ret;
+
+        if((ret = pgd_quicklist) != NULL) {
+                pgd_quicklist = (unsigned long *)(*ret);
+                ret[0] = ret[1];
+                pgtable_cache_size--;
+        } else
+                ret = (unsigned long *)get_pgd_slow();
+        return (pgd_t *)ret;
+}
+
+extern __inline__ void free_pgd_fast(pgd_t *pgd)
+{
+        *(unsigned long *)pgd = (unsigned long) pgd_quicklist;
+        pgd_quicklist = (unsigned long *) pgd;
+        pgtable_cache_size++;
+}
+
+extern __inline__ void free_pgd_slow(pgd_t *pgd)
+{
+	free_page((unsigned long)pgd);
+}
+
+extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
+
+extern __inline__ pte_t *get_pte_fast(void)
+{
+        unsigned long *ret;
+
+        if((ret = (unsigned long *)pte_quicklist) != NULL) {
+                pte_quicklist = (unsigned long *)(*ret);
+                ret[0] = ret[1];
+                pgtable_cache_size--;
+        }
+        return (pte_t *)ret;
+}
+
+extern __inline__ void free_pte_fast(pte_t *pte)
+{
+        *(unsigned long *)pte = (unsigned long) pte_quicklist;
+        pte_quicklist = (unsigned long *) pte;
+        pgtable_cache_size++;
+}
+
+extern __inline__ void free_pte_slow(pte_t *pte)
+{
+	free_page((unsigned long)pte);
+}
+
+/* We don't use pmd cache, so this is a dummy routine */
+extern __inline__ pmd_t *get_pmd_fast(void)
+{
+	return (pmd_t *)0;
+}
+
+extern __inline__ void free_pmd_fast(pmd_t *pmd)
 {
 }
 
-extern inline pmd_t * pmd_alloc_kernel(pgd_t * pgd, unsigned long address)
+extern __inline__ void free_pmd_slow(pmd_t *pmd)
 {
-	return (pmd_t *) pgd;
 }
 
-extern inline void pte_free(pte_t * pte)
-{
-	free_page((unsigned long) pte);
-}
+extern void __bad_pte(pmd_t *pmd);
+
+#define pte_free_kernel(pte)    free_pte_fast(pte)
+#define pte_free(pte)           free_pte_fast(pte)
+#define pgd_free(pgd)           free_pgd_fast(pgd)
+#define pgd_alloc()             get_pgd_fast()
 
 extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
 	if (pmd_none(*pmd)) {
-		pte_t * page = (pte_t *) get_free_page(GFP_KERNEL);
-		if (pmd_none(*pmd)) {
-			if (page) {
-				pmd_val(*pmd) = (unsigned long) page;
-				return page + address;
-			}
-			pmd_val(*pmd) = (unsigned long) BAD_PAGETABLE;
-			return NULL;
-		}
-		free_page((unsigned long) page);
+		pte_t * page = (pte_t *) get_pte_fast();
+		
+		if (!page)
+			return get_pte_slow(pmd, address);
+		pmd_val(*pmd) = (unsigned long) page;
+		return page + address;
 	}
 	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_val(*pmd) = (unsigned long) BAD_PAGETABLE;
+		__bad_pte(pmd);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + address;
@@ -383,17 +507,63 @@ extern inline pmd_t * pmd_alloc(pgd_t * pgd, unsigned long address)
 	return (pmd_t *) pgd;
 }
 
-extern inline void pgd_free(pgd_t * pgd)
-{
-	free_page((unsigned long) pgd);
-}
+#define pmd_free_kernel		pmd_free
+#define pmd_alloc_kernel	pmd_alloc
+#define pte_alloc_kernel	pte_alloc
 
-extern inline pgd_t * pgd_alloc(void)
+extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
-	return (pgd_t *) get_free_page(GFP_KERNEL);
+	struct task_struct * p;
+	pgd_t *pgd;
+#ifdef __SMP__
+	int i;
+#endif	
+        
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if (!p->mm)
+			continue;
+		*pgd_offset(p->mm,address) = entry;
+	}
+	read_unlock(&tasklist_lock);
+#ifndef __SMP__
+	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
+		pgd[address >> PGDIR_SHIFT] = entry;
+#else
+	/* To pgd_alloc/pgd_free, one holds master kernel lock and so does our callee, so we can
+	   modify pgd caches of other CPUs as well. -jj */
+	for (i = 0; i < NR_CPUS; i++)
+		for (pgd = (pgd_t *)cpu_data[i].pgd_quick; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
+			pgd[address >> PGDIR_SHIFT] = entry;
+#endif
 }
 
 extern pgd_t swapper_pg_dir[1024];
+
+extern __inline__ pte_t *find_pte(struct mm_struct *mm,unsigned long va)
+{
+	pgd_t *dir;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	va &= PAGE_MASK;
+	
+	dir = pgd_offset( mm, va );
+	if (dir)
+	{
+		pmd = pmd_offset(dir, va & PAGE_MASK);
+		if (pmd && pmd_present(*pmd))
+		{
+			pte = pte_offset(pmd, va);
+			if (pte && pte_present(*pte))
+			{			
+				pte_uncache(*pte);
+				flush_tlb_page(find_vma(mm,va),va);
+			}
+		}
+	}
+	return pte;
+}
 
 /*
  * Page tables may have changed.  We don't need to do anything here
@@ -416,5 +586,9 @@ extern void flush_hash_page(unsigned context, unsigned long va);
 
 #define module_map      vmalloc
 #define module_unmap    vfree
+#define module_shrink	vshrink
 
+/* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
+#define PageSkip(page)		(0)
+#endif __ASSEMBLY__
 #endif /* _PPC_PGTABLE_H */

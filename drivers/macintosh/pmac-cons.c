@@ -26,6 +26,7 @@
 #include <linux/selection.h>
 #include <linux/console_struct.h>
 #include <linux/vt_kern.h>
+#include "../char/console_macros.h"
 #include "pmac-cons.h"
 #include "control.h"
 #include "platinum.h"
@@ -95,6 +96,7 @@ struct mon_map {
 	{0x72d, VMODE_832_624_75},	/* 16" RGB (Goldfish) */
 	{0x730, VMODE_768_576_50I},	/* PAL (Alternate) */
 	{0x73a, VMODE_1152_870_75},	/* 3rd party 19" */
+	{0x73f, VMODE_640_480_67},	/* no sense lines connected at all */
 	{-1,	VMODE_640_480_60},	/* catch-all, must be last */
 };
 
@@ -183,12 +185,22 @@ struct display_interface {
 	  aty_setmode, aty_set_palette, aty_set_blanking },
  	{ "ATY,XCLAIMVR", map_aty_display, aty_init,
 	  aty_setmode, aty_set_palette, aty_set_blanking },
- 	{ "ATY,RAGEII_M", map_aty_display, aty_init, // untested!!
+#if 0 /* problematic */
+ 	{ "ATY,RAGEII_M", map_aty_display, aty_init,
+	  aty_setmode, aty_set_palette, aty_set_blanking },
+#endif
+	{ "ATY,XCLAIMVRPro", map_aty_display, aty_init,
+	  aty_setmode, aty_set_palette, aty_set_blanking },
+ 	{ "ATY,mach64_3DU", map_aty_display, aty_init,
 	  aty_setmode, aty_set_palette, aty_set_blanking },
 #endif
 #ifdef CONFIG_IMSTT_VIDEO
-	{ "IMS,tt128mb", map_imstt_display, imstt_init, 
-	  imstt_setmode, imstt_set_palette, imstt_set_blanking },
+	{ "IMS,tt128mb", map_imstt_display_ibm, imstt_init, 
+	  imstt_setmode, imstt_set_palette_ibm, imstt_set_blanking },
+	{ "IMS,tt128mb8", map_imstt_display_tvp, imstt_init, 
+	  imstt_setmode, imstt_set_palette_tvp, imstt_set_blanking },
+	{ "IMS,tt128mb8A", map_imstt_display_tvp, imstt_init, 
+	  imstt_setmode, imstt_set_palette_tvp, imstt_set_blanking },
 #endif
 	{ NULL }
 };
@@ -593,6 +605,16 @@ console_setmode(struct vc_mode *mode, int doit)
 }
 
 int
+console_setcmap(int n_entries, unsigned char *red,
+		unsigned char *green, unsigned char *blue)
+{
+	if (current_display == NULL || current_display->set_palette == NULL)
+		return -EOPNOTSUPP;
+	(*current_display->set_palette)(red, green, blue, 0, n_entries);
+	return 0;
+}
+
+int
 console_powermode(int mode)
 {
 	if (mode == VC_POWERMODE_INQUIRY)
@@ -600,7 +622,7 @@ console_powermode(int mode)
 	if (mode < VESA_NO_BLANKING || mode > VESA_POWERDOWN)
 		return -EINVAL;
 	if (current_display == NULL || current_display->set_blanking == NULL)
-		return -ENXIO;
+		return mode == VESA_NO_BLANKING? 0: -ENXIO;
 	(*current_display->set_blanking)(mode);
 	vesa_blanked = mode;
 	return 0;
@@ -890,6 +912,7 @@ static int unknown_modes[] = {
 static unsigned char *frame_buffer;
 static unsigned char *unknown_cmap_adr;
 static volatile unsigned char *unknown_cmap_data;
+static unsigned long frame_buffer_phys;
 
 static int map_unknown(struct device_node *dp)
 {
@@ -938,7 +961,8 @@ static int map_unknown(struct device_node *dp)
 		address = dp->addrs[i].address;
 	}
 	printk(KERN_INFO "%s: using address %x\n", dp->full_name, address);
-	frame_buffer = ioremap(address, len);
+	frame_buffer_phys = address;
+	frame_buffer = __ioremap(frame_buffer_phys, len, _PAGE_WRITETHRU);
 
 	video_mode = 0;
 	color_mode = CMODE_8;
@@ -961,15 +985,15 @@ static int map_unknown(struct device_node *dp)
 	display_info.pitch = line_pitch;
 	display_info.mode = video_mode;
 	strncpy(display_info.name, dp->name, sizeof(display_info.name));
-	display_info.fb_address = (unsigned long) frame_buffer;
+	display_info.fb_address = frame_buffer_phys;
 	display_info.cmap_adr_address = 0;
 	display_info.cmap_data_address = 0;
 	unknown_cmap_adr = 0;
 	/* XXX kludge for ati */
 	if (strncmp(dp->name, "ATY,", 4) == 0) {
-		display_info.disp_reg_address = address + 0x7ffc00;
-		display_info.cmap_adr_address = address + 0x7ffcc0;
-		display_info.cmap_data_address = address + 0x7ffcc1;
+		display_info.disp_reg_address = frame_buffer_phys + 0x7ffc00;
+		display_info.cmap_adr_address = frame_buffer_phys + 0x7ffcc0;
+		display_info.cmap_data_address = frame_buffer_phys + 0x7ffcc1;
 		unknown_cmap_adr = ioremap(address + 0x7ff000, 0x1000) + 0xcc0;
 		unknown_cmap_data = unknown_cmap_adr + 1;
 	}

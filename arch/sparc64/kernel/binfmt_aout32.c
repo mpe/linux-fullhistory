@@ -20,6 +20,7 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
+#include <linux/file.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
 #include <linux/malloc.h>
@@ -257,7 +258,7 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 	unsigned long p = bprm->p;
 	unsigned long fd_offset;
 	unsigned long rlim;
-int retval;
+	int retval;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
@@ -326,10 +327,10 @@ int retval;
 			printk(KERN_NOTICE "executable not page aligned\n");
 
 		fd = open_dentry(bprm->dentry, O_RDONLY);
-
 		if (fd < 0)
 			return fd;
-		file = current->files->fd[fd];
+		file = fcheck(fd);
+
 		if (!file->f_op || !file->f_op->mmap) {
 			sys_close(fd);
 			do_mmap(NULL, 0, ex.a_text+ex.a_data,
@@ -397,6 +398,7 @@ load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	return retval;
 }
 
+/* N.B. Move to .h file and use code in fs/binfmt_aout.c? */
 static inline int
 do_load_aout32_library(int fd)
 {
@@ -409,7 +411,7 @@ do_load_aout32_library(int fd)
 	unsigned int start_addr;
 	unsigned long error;
 
-	file = current->files->fd[fd];
+	file = fcheck(fd);
 
 	if (!file || !file->f_op)
 		return -EACCES;

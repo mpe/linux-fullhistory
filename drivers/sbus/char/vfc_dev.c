@@ -582,7 +582,8 @@ static int vfc_mmap(struct inode *inode, struct file *file,
 	if(ret)
 		return -EAGAIN;
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
 	return 0;
 }
 

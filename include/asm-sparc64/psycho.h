@@ -1,4 +1,4 @@
-/* $Id: psycho.h,v 1.2 1997/08/11 14:35:40 davem Exp $
+/* $Id: psycho.h,v 1.3 1998/03/15 13:24:28 ecd Exp $
  * psycho.h: UltraSparc AX specific PCI definitions.
  *
  * Copyright (C) 1997 Eddie C. Dost (ecd@skynet.be)
@@ -42,47 +42,47 @@ struct psycho_regs {
 		u64	__pad4[0x13d];
 
 		/* Interrupt mapping/control registers */
-/*0x0c00*/	u64	imap_a_slot0;	/* PCI A Slot 0 Int Mapping */
-/*0x0c08*/	u64	imap_a_slot1;	/* PCI A Slot 1 Int Mapping */
+/*0x0c00*/	u64	imap_a_slot0;	/* PCI A Slot 0 Int Mapping	*/
+/*0x0c08*/	u64	imap_a_slot1;	/* PCI A Slot 1 Int Mapping	*/
+/*0x0c10*/	u64	imap_a_slot2;	/* PCI A Slot 2 Int Mapping (IIi only)*/
+/*0x0c18*/	u64	imap_a_slot3;	/* PCI A Slot 3 Int Mapping (IIi only)*/
 
-		u64	__pad5[0x2];
-
-/*0x0c20*/	u64	imap_b_slot0;	/* PCI B Slot 0 Int Mapping */
-/*0x0c28*/	u64	imap_b_slot1;	/* PCI B Slot 1 Int Mapping */
-/*0x0c30*/	u64	imap_b_slot2;	/* PCI B Slot 2 Int Mapping */
-/*0x0c38*/	u64	imap_b_slot3;	/* PCI B Slot 3 Int Mapping */
+/*0x0c20*/	u64	imap_b_slot0;	/* PCI B Slot 0 Int Mapping	*/
+/*0x0c28*/	u64	imap_b_slot1;	/* PCI B Slot 1 Int Mapping	*/
+/*0x0c30*/	u64	imap_b_slot2;	/* PCI B Slot 2 Int Mapping	*/
+/*0x0c38*/	u64	imap_b_slot3;	/* PCI B Slot 3 Int Mapping	*/
 
 		u64	__pad6[0x78];
 
-/*0x1000*/	u64	imap_scsi;	/* SCSI Int Mapping	*/
-/*0x1008*/	u64	imap_eth;	/* Ethernet Int Mapping	*/
-/*0x1010*/	u64	imap_bpp;	/* Parallel Port Int Mapping */
-/*0x1018*/	u64	imap_au_rec;	/* Audio Record Int Mapping */
-/*0x1020*/	u64	imap_au_play;	/* Audio Playback Int Mapping */
-/*0x1028*/	u64	imap_pfail;	/* Power Fail Int Mapping */
-/*0x1030*/	u64	imap_kms;	/* Kbd/Mouse/Ser Int Mapping */
-/*0x1038*/	u64	imap_flpy;	/* Floppy Int Mapping	 */
-/*0x1040*/	u64	imap_shw;	/* Spare HW Int Mapping	*/
-/*0x1048*/	u64	imap_kbd;	/* Kbd Only Int Mapping	*/
-/*0x1050*/	u64	imap_ms;	/* Mouse Only Int Mapping */
-/*0x1058*/	u64	imap_ser;	/* Serial Only Int Mapping */
-/*0x1060*/	u64	imap_tim0;	/* Timer 0 Int Mapping	*/
-/*0x1068*/	u64	imap_tim1;	/* Timer 1 Int Mapping	*/
-/*0x1070*/	u64	imap_ue;	/* UE Int Mapping	*/
-/*0x1078*/	u64	imap_ce;	/* CE Int Mapping	*/
-/*0x1080*/	u64	imap_a_err;	/* PCI A Err Int Mapping */
-/*0x1088*/	u64	imap_b_err;	/* PCI B Err Int Mapping */
-/*0x1090*/	u64	imap_pmgmt;	/* Power Mgmt Int Mapping */
-/*0x1098*/	u64	imap_gfx;	/* OB Graphics Int Mapping */
-/*0x10a0*/	u64	imap_eupa;	/* UPA Expansion Int Mapping */
+/*0x1000*/	u64	imap_scsi;	/* SCSI Int Mapping		*/
+/*0x1008*/	u64	imap_eth;	/* Ethernet Int Mapping		*/
+/*0x1010*/	u64	imap_bpp;	/* Parallel Port Int Mapping	*/
+/*0x1018*/	u64	imap_au_rec;	/* Audio Record Int Mapping	*/
+/*0x1020*/	u64	imap_au_play;	/* Audio Playback Int Mapping	*/
+/*0x1028*/	u64	imap_pfail;	/* Power Fail Int Mapping	*/
+/*0x1030*/	u64	imap_kms;	/* Kbd/Mouse/Ser Int Mapping	*/
+/*0x1038*/	u64	imap_flpy;	/* Floppy Int Mapping		*/
+/*0x1040*/	u64	imap_shw;	/* Spare HW Int Mapping		*/
+/*0x1048*/	u64	imap_kbd;	/* Kbd Only Int Mapping		*/
+/*0x1050*/	u64	imap_ms;	/* Mouse Only Int Mapping	*/
+/*0x1058*/	u64	imap_ser;	/* Serial Only Int Mapping	*/
+/*0x1060*/	u64	imap_tim0;	/* Timer 0 Int Mapping		*/
+/*0x1068*/	u64	imap_tim1;	/* Timer 1 Int Mapping		*/
+/*0x1070*/	u64	imap_ue;	/* UE Int Mapping		*/
+/*0x1078*/	u64	imap_ce;	/* CE Int Mapping		*/
+/*0x1080*/	u64	imap_a_err;	/* PCI A Err Int Mapping	*/
+/*0x1088*/	u64	imap_b_err;	/* PCI B Err Int Mapping	*/
+/*0x1090*/	u64	imap_pmgmt;	/* Power Mgmt Int Mapping	*/
+/*0x1098*/	u64	imap_gfx;	/* OB Graphics Int Mapping	*/
+/*0x10a0*/	u64	imap_eupa;	/* UPA Expansion Int Mapping	*/
 
 		u64	__pad7[0x6b];
 
 		/* Interrupt Clear Registers */
 /*0x1400*/	u64	iclr_a_slot0[4];	/* PCI A Slot 0 Clear Int Reg */
 /*0x1420*/	u64	iclr_a_slot1[4];	/* PCI A Slot 1 Clear Int Reg */
-
-		u64	__pad8[0x8];
+/*0x1440*/	u64	iclr_a_slot2[4];	/* PCI A Slot 2 Clear Int Reg */
+/*0x1460*/	u64	iclr_a_slot3[4];	/* PCI A Slot 3 Clear Int Reg */
 
 /*0x1480*/	u64	iclr_b_slot0[4];	/* PCI B Slot 0 Clear Int Reg */
 /*0x14a0*/	u64	iclr_b_slot1[4];	/* PCI B Slot 1 Clear Int Reg */
@@ -123,8 +123,9 @@ struct psycho_regs {
 /*0x1c08*/	u64	tim0_lim;
 /*0x1c10*/	u64	tim1_cnt;
 /*0x1c18*/	u64	tim1_lim;
+/*0x1c20*/	u64	pci_dma_wsync;	/* PCI DMA Write Sync Register (IIi) */
 
-		u64	__pad12[0x7c];
+		u64	__pad12[0x7b];
 
 		/* PCI Bus A Registers */
 /*0x2000*/	u64	pci_a_control;	/* PCI Bus A Control Register	*/
@@ -132,8 +133,9 @@ struct psycho_regs {
 /*0x2010*/	u64	pci_a_afsr;	/* PCI Bus A Async Fault Status	*/
 /*0x2018*/	u64	pci_a_afar;	/* PCI Bus A Async Fault Address*/
 /*0x2020*/	u64	pci_a_diag;	/* PCI Bus A Diag Register	*/
+/*0x2028*/	u64	pci_tasr;	/* PCI Target Address Space Reg (IIi) */
 
-		u64	__pad14[0xfb];
+		u64	__pad14[0xfa];
 
 		/* PCI Bus A/IOMMU Streaming Buffer Registers */
 /*0x2800*/	u64	sbuf_a_control;	/* StrBuffer Control		*/

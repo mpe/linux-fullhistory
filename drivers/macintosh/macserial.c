@@ -20,13 +20,21 @@
 #include <linux/mm.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
+#include <linux/init.h>
+#ifdef CONFIG_SERIAL_CONSOLE
+#include <linux/console.h>
+#endif
 
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/irq.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
+#ifdef CONFIG_KGDB
+#include <asm/kgdb.h>
+#endif
 
 #include "macserial.h"
 
@@ -43,7 +51,6 @@
    in the order we want. */
 #define RECOVERY_DELAY	eieio()
 
-struct mac_zschannel *zs_kgdbchan;
 struct mac_zschannel zs_channels[NUM_CHANNELS];
 
 struct mac_serial zs_soft[NUM_CHANNELS];
@@ -51,31 +58,24 @@ int zs_channels_found;
 struct mac_serial *zs_chain;	/* list of all channels */
 
 struct tty_struct zs_ttys[NUM_CHANNELS];
-/** struct tty_struct *zs_constty; **/
 
-/* Console hooks... */
-static int zs_cons_chan = 0;
-struct mac_serial *zs_consinfo = 0;
-struct mac_zschannel *zs_conschan;
+#ifdef CONFIG_SERIAL_CONSOLE
+static struct console sercons;
+#endif
 
-/*
- * Initialization values for when a channel is used for
- * kernel gdb support.
- */
-static unsigned char kgdb_regs[16] = {
-	0, 0, 0,		/* write 0, 1, 2 */
-	(Rx8 | RxENABLE),	/* write 3 */
-	(X16CLK | SB1),		/* write 4 */
-	(Tx8 | TxENAB | RTS),	/* write 5 */
-	0, 0, 0,		/* write 6, 7, 8 */
-	(NV),			/* write 9 */
-	(NRZ),			/* write 10 */
-	(TCBR | RCBR),		/* write 11 */
-	1, 0,			/* 38400 baud divisor, write 12 + 13 */
-	(BRENABL),		/* write 14 */
-	(DCDIE)			/* write 15 */
+#ifdef CONFIG_KGDB
+struct mac_zschannel *zs_kgdbchan;
+static unsigned char scc_inittab[] = {
+	9,  0x80,	/* reset A side (CHRA) */
+	13, 0,		/* set baud rate divisor */
+	12, 1,
+	14, 1,		/* baud rate gen enable, src=rtxc (BRENABL) */
+	11, 0x50,	/* clocks = br gen (RCBR | TCBR) */
+	5,  0x6a,	/* tx 8 bits, assert RTS (Tx8 | TxENAB | RTS) */
+	4,  0x44,	/* x16 clock, 1 stop (SB1 | X16CLK)*/
+	3,  0xc1,	/* rx enable, 8 bits (RxENABLE | Rx8)*/
 };
-
+#endif
 #define ZS_CLOCK         3686400 	/* Z8530 RTxC input clock rate */
 
 DECLARE_TASK_QUEUE(tq_serial);
@@ -90,8 +90,8 @@ static int serial_refcount;
 /* number of characters left in xmit buffer before we ask for more */
 #define WAKEUP_CHARS 256
 
-/* Debugging... DEBUG_INTR is bad to use when one of the zs
- * lines is your console ;(
+/*
+ * Debugging.
  */
 #undef SERIAL_DEBUG_INTR
 #undef SERIAL_DEBUG_OPEN
@@ -233,23 +233,6 @@ static inline void zs_rtsdtr(struct mac_serial *ss, int set)
 	return;
 }
 
-static inline void kgdb_chaninit(struct mac_serial *ss, int intson, int bps)
-{
-	int brg;
-
-	if (intson) {
-		kgdb_regs[R1] = INT_ALL_Rx;
-		kgdb_regs[R9] |= MIE;
-	} else {
-		kgdb_regs[R1] = 0;
-		kgdb_regs[R9] &= ~MIE;
-	}
-	brg = BPS_TO_BRG(bps, ZS_CLOCK/16);
-	kgdb_regs[R12] = brg;
-	kgdb_regs[R13] = brg >> 8;
-	load_zsregs(ss->zs_channel, kgdb_regs);
-}
-
 /* Utility routines for the Zilog */
 static inline int get_zsbaud(struct mac_serial *ss)
 {
@@ -300,8 +283,6 @@ static _INLINE_ void rs_sched_event(struct mac_serial *info,
 	mark_bh(SERIAL_BH);
 }
 
-extern void breakpoint(void);  /* For the KGDB frame character */
-
 static _INLINE_ void receive_chars(struct mac_serial *info,
 				   struct pt_regs *regs)
 {
@@ -313,17 +294,13 @@ static _INLINE_ void receive_chars(struct mac_serial *info,
 		stat = read_zsreg(info->zs_channel, R1);
 		ch = read_zsdata(info->zs_channel);
 
-#if 0	/* KGDB not yet supported */
-		/* Look for kgdb 'stop' character, consult the gdb documentation
-		 * for remote target debugging and arch/sparc/kernel/sparc-stub.c
-		 * to see how all this works.
-		 */
-		if ((info->kgdb_channel) && (ch =='\003')) {
-			breakpoint();
-			continue;
+#ifdef CONFIG_KGDB
+		if (info->kgdb_channel) {
+			if (ch == 0x03 || ch == '$')
+				breakpoint();
+			return;
 		}
 #endif
-
 		if (!tty)
 			continue;
 		tty_flip_buffer_push(tty);
@@ -767,93 +744,6 @@ static void change_speed(struct mac_serial *info)
 	restore_flags(flags);
 }
 
-/* This is for console output over ttya/ttyb */
-static void rs_put_char(char ch)
-{
-	struct mac_zschannel *chan = zs_conschan;
-	int loops = 0;
-	unsigned long flags;
-
-	if(!chan)
-		return;
-
-	save_flags(flags); cli();
-	while ((read_zsreg(chan, 0) & Tx_BUF_EMP) == 0)
-		if (++loops >= 1000000)
-			break;
-	write_zsdata(chan, ch);
-	restore_flags(flags);
-}
-
-/* These are for receiving and sending characters under the kgdb
- * source level kernel debugger.
- */
-void putDebugChar(char kgdb_char)
-{
-	struct mac_zschannel *chan = zs_kgdbchan;
-
-	while ((read_zsreg(chan, 0) & Tx_BUF_EMP) == 0)
-		udelay(5);
-	write_zsdata(chan, kgdb_char);
-}
-
-char getDebugChar(void)
-{
-	struct mac_zschannel *chan = zs_kgdbchan;
-
-	while ((read_zsreg(chan, 0) & Rx_CH_AV) == 0)
-		udelay(5);
-	return read_zsdata(chan);
-}
-
-/*
- * Fair output driver allows a process to speak.
- */
-static void rs_fair_output(void)
-{
-	int left;		/* Output no more than that */
-	unsigned long flags;
-	struct mac_serial *info = zs_consinfo;
-	char c;
-
-	if (info == 0) return;
-	if (info->xmit_buf == 0) return;
-
-	save_flags(flags);  cli();
-	left = info->xmit_cnt;
-	while (left != 0) {
-		c = info->xmit_buf[info->xmit_tail];
-		info->xmit_tail = (info->xmit_tail+1) & (SERIAL_XMIT_SIZE-1);
-		info->xmit_cnt--;
-		restore_flags(flags);
-
-		rs_put_char(c);
-
-		save_flags(flags);  cli();
-		left = MIN(info->xmit_cnt, left-1);
-	}
-
-	restore_flags(flags);
-	return;
-}
-
-/*
- * zs_console_print is registered for printk.
- */
-static void zs_console_print(const char *p)
-{
-	char c;
-
-	while ((c = *(p++)) != 0) {
-		if (c == '\n')
-			rs_put_char('\r');
-		rs_put_char(c);
-	}
-
-	/* Comment this if you want to have a strict interrupt-driven output */
-	rs_fair_output();
-}
-
 static void rs_flush_chars(struct tty_struct *tty)
 {
 	struct mac_serial *info = (struct mac_serial *)tty->driver_data;
@@ -1204,6 +1094,10 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 	int error;
 	struct mac_serial * info = (struct mac_serial *)tty->driver_data;
 
+#ifdef CONFIG_KGDB
+	if (info->kgdb_channel)
+		return -ENODEV;
+#endif
 	if (serial_paranoia_check(info, tty->device, "rs_ioctl"))
 		return -ENODEV;
 
@@ -1340,7 +1234,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	 * At this point we stop accepting input.  To do this, we
 	 * disable the receiver and receive interrupts.
 	 */
-	/** if (!info->iscons) ... **/
 	info->curregs[3] &= ~RxENABLE;
 	info->pendregs[3] = info->curregs[3];
 	write_zsreg(info->zs_channel, 3, info->curregs[3]);
@@ -1580,9 +1473,10 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 		return -ENODEV;
 	info = zs_soft + line;
 
-	/* Is the kgdb running over this line? */
+#ifdef CONFIG_KGDB
 	if (info->kgdb_channel)
 		return -ENODEV;
+#endif
 	if (serial_paranoia_check(info, tty->device, "rs_open"))
 		return -ENODEV;
 #ifdef SERIAL_DEBUG_OPEN
@@ -1632,6 +1526,13 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 			*tty->termios = info->callout_termios;
 		change_speed(info);
 	}
+#ifdef CONFIG_SERIAL_CONSOLE
+	if (sercons.cflag && sercons.index == line) {
+		tty->termios->c_cflag = sercons.cflag;
+		sercons.cflag = 0;
+		change_speed(info);
+	}
+#endif
 
 	info->session = current->session;
 	info->pgrp = current->pgrp;
@@ -1672,15 +1573,15 @@ probe_sccs()
 				continue;
 			}
 			zs_channels[n].control = (volatile unsigned char *)
-				ch->addrs[0].address;
+				ioremap(ch->addrs[0].address, 0x1000);
 			zs_channels[n].data = zs_channels[n].control
 				+ ch->addrs[0].size / 2;
 			zs_soft[n].zs_channel = &zs_channels[n];
-			zs_soft[n].irq = ch->intrs[0];
-			if (request_irq(ch->intrs[0], rs_interrupt, 0,
+			zs_soft[n].irq = ch->intrs[0].line;
+			if (request_irq(ch->intrs[0].line, rs_interrupt, 0,
 					"SCC", &zs_soft[n]))
-				panic("macserial: can't get irq %d",
-				      ch->intrs[0]);
+				printk(KERN_ERR "macserial: can't get irq %d\n",
+				       ch->intrs[0].line);
 			/* XXX this assumes the prom puts chan A before B */
 			if (n & 1)
 				zs_soft[n].zs_chan_a = &zs_channels[n-1];
@@ -1769,6 +1670,11 @@ int rs_init(void)
 	save_flags(flags); cli();
 
 	for (channel = 0; channel < zs_channels_found; ++channel) {
+#ifdef CONFIG_KGDB
+		if (zs_soft[channel].kgdb_channel) {
+			continue;
+		}
+#endif
 		zs_soft[channel].clk_divisor = 16;
 		zs_soft[channel].zs_baud = get_zsbaud(&zs_soft[channel]);
 
@@ -1779,17 +1685,15 @@ int rs_init(void)
 			write_zsreg(zs_soft[channel].zs_channel, R9,
 				    (NV | MIE));
 		}
-		/* If this is the kgdb line, enable interrupts because we
-		 * now want to receive the 'control-c' character from the
-		 * client attached to us asynchronously.
-		 */
-		if (zs_soft[channel].kgdb_channel)
-			kgdb_chaninit(&zs_soft[channel], 1,
-				      zs_soft[channel].zs_baud);
 	}
 
 	for (info = zs_chain, i = 0; info; info = info->zs_next, i++)
 	{
+#ifdef CONFIG_KGDB
+		if (info->kgdb_channel) {
+			continue;
+		}
+#endif
 		info->magic = SERIAL_MAGIC;
 		info->port = (int) info->zs_channel->control;
 		info->line = i;
@@ -1832,84 +1736,212 @@ void unregister_serial(int line)
 	return;
 }
 
-extern void register_console(void (*proc)(const char *));
+/*
+ * ------------------------------------------------------------
+ * Serial console driver
+ * ------------------------------------------------------------
+ */
+#ifdef CONFIG_SERIAL_CONSOLE
+
 
 /*
- * Initialization values for when a channel is used for
- * a serial console.
+ *	Print a string to the serial port trying not to disturb
+ *	any possible real use of the port...
  */
-static unsigned char cons_init_regs[16] = {
-	0, 0, 0,		/* write 0, 1, 2 */
-	(Rx8 | RxENABLE),	/* write 3 */
-	(X16CLK | SB1),		/* write 4 */
-	(Tx8 | TxENAB | RTS),	/* write 5 */
-	0, 0, 0,		/* write 6, 7, 8 */
-	0,			/* write 9 */
-	(NRZ),			/* write 10 */
-	(TCBR | RCBR),		/* write 11 */
-	1, 0,			/* 38400 baud divisor, write 12 + 13 */
-	(BRENABL),		/* write 14 */
-	0			/* write 15 */
+static void serial_console_write(struct console *co, const char *s,
+				 unsigned count)
+{
+}
+
+/*
+ *	Receive character from the serial port
+ */
+static int serial_console_wait_key(struct console *co)
+{
+	return 0;
+}
+
+static kdev_t serial_console_device(struct console *c)
+{
+	return MKDEV(TTY_MAJOR, 64 + c->index);
+}
+
+/*
+ *	Setup initial baud/bits/parity. We do two things here:
+ *	- construct a cflag setting for the first rs_open()
+ *	- initialize the serial port
+ *	Return non-zero if we didn't find a serial port.
+ */
+__initfunc(static int serial_console_setup(struct console *co, char *options))
+{
+	struct serial_state *ser;
+	unsigned cval;
+	int	baud = 9600;
+	int	bits = 8;
+	int	parity = 'n';
+	int	cflag = CREAD | HUPCL | CLOCAL;
+	int	quot = 0;
+	char	*s;
+
+	if (options) {
+		baud = simple_strtoul(options, NULL, 10);
+		s = options;
+		while(*s >= '0' && *s <= '9')
+			s++;
+		if (*s)
+			parity = *s++;
+		if (*s)
+			bits   = *s - '0';
+	}
+
+	/*
+	 *	Now construct a cflag setting.
+	 */
+	switch(baud) {
+	case 1200:
+		cflag |= B1200;
+		break;
+	case 2400:
+		cflag |= B2400;
+		break;
+	case 4800:
+		cflag |= B4800;
+		break;
+	case 19200:
+		cflag |= B19200;
+		break;
+	case 38400:
+		cflag |= B38400;
+		break;
+	case 57600:
+		cflag |= B57600;
+		break;
+	case 115200:
+		cflag |= B115200;
+		break;
+	case 9600:
+	default:
+		cflag |= B9600;
+		break;
+	}
+	switch(bits) {
+	case 7:
+		cflag |= CS7;
+		break;
+	default:
+	case 8:
+		cflag |= CS8;
+		break;
+	}
+	switch(parity) {
+	case 'o': case 'O':
+		cflag |= PARODD;
+		break;
+	case 'e': case 'E':
+		cflag |= PARENB;
+		break;
+	}
+	co->cflag = cflag;
+
+	return 0;
+}
+
+static struct console sercons = {
+	"ttyS",
+	serial_console_write,
+	NULL,
+	serial_console_device,
+	serial_console_wait_key,
+	NULL,
+	serial_console_setup,
+	CON_PRINTBUFFER,
+	-1,
+	0,
+	NULL
 };
 
 /*
- * Hooks for running a serial console.  con_init() calls this if the
- * console is being run over one of the serial ports.
- * 'channel' is decoded as 1=modem, 2=printer.
+ *	Register console.
  */
-void
-rs_cons_hook(int chip, int out, int channel)
+__initfunc (long serial_console_init(long kmem_start, long kmem_end))
+{
+	register_console(&sercons);
+	return kmem_start;
+}
+#endif /* ifdef CONFIG_SERIAL_CONSOLE */
+#ifdef CONFIG_KGDB
+/* These are for receiving and sending characters under the kgdb
+ * source level kernel debugger.
+ */
+void putDebugChar(char kgdb_char)
+{
+	struct mac_zschannel *chan = zs_kgdbchan;
+	while ((read_zsreg(chan, 0) & Tx_BUF_EMP) == 0)
+		udelay(5);
+	write_zsdata(chan, kgdb_char);
+}
+char getDebugChar(void)
+{
+	struct mac_zschannel *chan = zs_kgdbchan;
+	while((read_zsreg(chan, 0) & Rx_CH_AV) == 0)
+		eieio(); /*barrier();*/
+	return read_zsdata(chan);
+}
+void kgdb_interruptible(int yes)
+{
+	struct mac_zschannel *chan = zs_kgdbchan;
+	int one, nine;
+	nine = read_zsreg(chan, 9);
+	if (yes == 1) {
+		one = EXT_INT_ENAB|INT_ALL_Rx;
+		nine |= MIE;
+		printk("turning serial ints on\n");
+	} else {
+		one = RxINT_DISAB;
+		nine &= ~MIE;
+		printk("turning serial ints off\n");
+	}
+	write_zsreg(chan, 1, one);
+	write_zsreg(chan, 9, nine);
+}
+/* This sets up the serial port we're using, and turns on
+ * interrupts for that channel, so kgdb is usable once we're done.
+ */
+static inline void kgdb_chaninit(struct mac_zschannel *ms, int intson, int bps)
 {
 	int brg;
-
-	if (!out)
-		return;
-	if (zs_consinfo != 0) {
-		printk("rs_cons_hook called twice?\n");
-		return;
+	int i, x;
+	volatile char *sccc = ms->control;
+	brg = BPS_TO_BRG(bps, ZS_CLOCK/16);
+	printk("setting bps on kgdb line to %d [brg=%x]\n", bps, brg);
+	for (i = 20000; i != 0; --i) {
+		x = *sccc; eieio();
 	}
-	if (zs_chain == 0)
-		probe_sccs();
-	--channel;
-	if (channel < 0 || channel >= zs_channels_found) {
-		printk("rs_cons_hook: channel = %d?\n", channel);
-		return;
+	for (i = 0; i < sizeof(scc_inittab); ++i) {
+		write_zsreg(ms, scc_inittab[i], scc_inittab[i+1]);
+		i++;
 	}
-
-	zs_cons_chan = channel;
-	zs_consinfo = &zs_soft[channel];
-	zs_conschan = zs_consinfo->zs_channel;
-	zs_consinfo->clk_divisor = 16;
-	zs_consinfo->zs_baud = 38400;
-	zs_consinfo->is_cons = 1;
-
-	memcpy(zs_consinfo->curregs, cons_init_regs, sizeof(cons_init_regs));
-	brg = BPS_TO_BRG(zs_consinfo->zs_baud, ZS_CLOCK/16);
-	zs_consinfo->curregs[R12] = brg;
-	zs_consinfo->curregs[R13] = brg >> 8;
-	load_zsregs(zs_conschan, zs_consinfo->curregs);
-
-	register_console(zs_console_print);
-	printk("zs%d: console I/O\n", channel);
 }
-
 /* This is called at boot time to prime the kgdb serial debugging
- * serial line.  The 'tty_num' argument is 0 for /dev/ttyS0 and 1
- * for /dev/ttyS1 which is determined in setup_arch() from the
+ * serial line.  The 'tty_num' argument is 0 for /dev/ttya and 1
+ * for /dev/ttyb which is determined in setup_arch() from the
  * boot command line flags.
  */
-void
-rs_kgdb_hook(int tty_num)
+__initfunc(void zs_kgdb_hook(int tty_num))
 {
+	/* Find out how many Z8530 SCCs we have */
 	if (zs_chain == 0)
 		probe_sccs();
+	zs_soft[tty_num].zs_channel = &zs_channels[tty_num];
 	zs_kgdbchan = zs_soft[tty_num].zs_channel;
+	zs_soft[tty_num].change_needed = 0;
 	zs_soft[tty_num].clk_divisor = 16;
-	zs_soft[tty_num].zs_baud = get_zsbaud(&zs_soft[tty_num]);
+	zs_soft[tty_num].zs_baud = 38400;
 	zs_soft[tty_num].kgdb_channel = 1;     /* This runs kgdb */
 	zs_soft[tty_num ^ 1].kgdb_channel = 0; /* This does not */
 	/* Turn on transmitter/receiver at 8-bits/char */
-	kgdb_chaninit(&zs_soft[tty_num], 0, 9600);
-	ZS_CLEARERR(zs_kgdbchan);
-	ZS_CLEARFIFO(zs_kgdbchan);
+        kgdb_chaninit(zs_soft[tty_num].zs_channel, 1, 38400);
+	printk("KGDB: on channel %d initialized\n", tty_num);
+	set_debug_traps(); /* init stub */
 }
+#endif /* ifdef CONFIG_KGDB */

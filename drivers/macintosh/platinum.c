@@ -16,6 +16,7 @@
 #include <linux/nvram.h>
 #include <asm/prom.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <linux/selection.h>
 #include "pmac-cons.h"
 #include "platinum.h"
@@ -57,6 +58,10 @@ static unsigned char *frame_buffer;
 static unsigned char *base_frame_buffer;
 static struct cmap_regs *cmap_regs;
 static volatile struct platinum_regs *plat_regs;
+
+static unsigned long frame_buffer_phys;
+static unsigned long cmap_regs_phys;
+static unsigned long plat_regs_phys;
 
 /*
  * Register initialization tables for the platinum display.
@@ -403,14 +408,17 @@ map_platinum(struct device_node *dp)
 		size = dp->addrs[i].size;
 		if (size >= 0x400000) {
 			/* frame buffer - map only 4MB */
-			frame_buffer = ioremap(addr, 0x400000);
+			frame_buffer_phys = addr;
+			frame_buffer = __ioremap(addr, 0x400000, _PAGE_WRITETHRU);
 			base_frame_buffer = frame_buffer;
 		} else {
 			/* registers */
+			plat_regs_phys = addr;
 			plat_regs = ioremap(addr, size);
 		}
 	}
-	cmap_regs = ioremap(0xf301b000, 0x1000);	/* XXX not in prom? */
+	cmap_regs_phys = 0xf301b000;	/* XXX not in prom? */
+	cmap_regs = ioremap(cmap_regs_phys, 0x1000);
 
 	/* Grok total video ram */
 	plat_regs->reg[16].r = (unsigned)frame_buffer;
@@ -560,10 +568,10 @@ platinum_init()
 	display_info.pitch = line_pitch;
 	display_info.mode = video_mode;
 	strncpy(display_info.name, "platinum", sizeof(display_info.name));
-	display_info.fb_address = (unsigned long) frame_buffer + 0x10;
-	display_info.cmap_adr_address = (unsigned long) &cmap_regs->addr;
-	display_info.cmap_data_address = (unsigned long) &cmap_regs->lut;
-	display_info.disp_reg_address = (unsigned long) &plat_regs;
+	display_info.fb_address = frame_buffer_phys + init->fb_offset + 0x10;
+	display_info.cmap_adr_address = cmap_regs_phys;
+	display_info.cmap_data_address = cmap_regs_phys + 0x30;
+	display_info.disp_reg_address = plat_regs_phys;
 }
 
 int

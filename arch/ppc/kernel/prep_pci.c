@@ -1,5 +1,5 @@
 /*
- * $Id: prep_pci.c,v 1.12 1997/10/29 03:35:08 cort Exp $
+ * $Id: prep_pci.c,v 1.16 1998/02/23 02:47:32 davem Exp $
  * PReP pci functions.
  * Originally by Gary Thomas
  * rewritten and updated by Cort Dougan (cort@cs.nmt.edu)
@@ -8,7 +8,6 @@
  */
 
 #include <linux/types.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -271,6 +270,12 @@ static char Nobis_pci_IRQ_routes[] = {
 #define CAROLINA_IRQ_EDGE_MASK_LO   0x00  /* IRQ's 0-7  */
 #define CAROLINA_IRQ_EDGE_MASK_HI   0xA4  /* IRQ's 8-15 [10,13,15] */
 
+/*
+ * FIXME: This code incorrectly assumes there's only bus #0, breaking all
+ *	  PCI-to-PCI bridges. Also multi-function devices are not supported
+ *	  at all. [mj]
+ */
+
 int
 prep_pcibios_read_config_dword (unsigned char bus,
 			   unsigned char dev, unsigned char offset, unsigned int *val)
@@ -319,16 +324,6 @@ prep_pcibios_read_config_byte (unsigned char bus,
 	unsigned char _val;
 	volatile unsigned char *ptr;
 	dev >>= 3;
-	/* Note: the configuration registers don't always have this right! */
-	if (offset == PCI_INTERRUPT_LINE)
-	{
-		*val = Motherboard_routes[Motherboard_map[dev]];
-/*printk("dev %d map %d route %d on board %d\n",
-  dev,Motherboard_map[dev],
-  Motherboard_routes[Motherboard_map[dev]],
-  *(unsigned char *)(0x80800000 | (1<<dev) | (offset ^ 1)));*/
-		return PCIBIOS_SUCCESSFUL;
-	}
 	if ((bus != 0) || (dev > MAX_DEVNR))
 	{
 		*(unsigned long *)val = (unsigned long) 0xFFFFFFFF;
@@ -406,7 +401,7 @@ __initfunc(unsigned long route_pci_interrupts(void))
 	int i;
 	
 	if ( _prep_type == _PREP_Motorola)
-	{ 
+	{
 		switch (inb(0x800) & 0xF0)
 		{
 		case 0x10: /* MVME16xx */
@@ -430,7 +425,6 @@ __initfunc(unsigned long route_pci_interrupts(void))
 			break;
 		case 0x40: /* PowerStack */
 		default: /* Can't hurt, can it? */
-		  
 			Motherboard_map_name = "Blackhawk (Powerstack)";
 			Motherboard_map = Blackhawk_pci_IRQ_map;
 			Motherboard_routes = Blackhawk_pci_IRQ_routes;
@@ -474,3 +468,4 @@ __initfunc(unsigned long route_pci_interrupts(void))
 	*ibc_pcicon |= 0x20;
 	return 0;
 }
+

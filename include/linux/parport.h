@@ -283,6 +283,7 @@ extern __inline__ unsigned int parport_yield_blocking(struct pardevice *dev)
 	if ((dev->port->waithead == NULL) || (timeslip < dev->timeslice))
 		return 0;
 	parport_release(dev);
+	schedule();
 	return parport_claim_or_block(dev);
 }
 
@@ -292,7 +293,7 @@ extern __inline__ unsigned int parport_yield_blocking(struct pardevice *dev)
 
 #define PARPORT_FLAG_COMA		1
 
-extern void parport_parse_irqs(int, const char *, int irqval[]);
+extern void parport_parse_irqs(int, const char *[], int irqval[]);
 extern int parport_ieee1284_nibble_mode_ok(struct parport *, unsigned char);
 extern int parport_wait_peripheral(struct parport *, unsigned char, unsigned
 				   char);

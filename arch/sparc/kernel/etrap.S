@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.26 1997/05/01 08:53:32 davem Exp $
+/* $Id: etrap.S,v 1.29 1998/02/09 13:48:40 jj Exp $
  * etrap.S: Sparc trap window preparation for entry into the
  *          Linux kernel.
  *
@@ -13,6 +13,7 @@
 #include <asm/psr.h>
 #include <asm/ptrace.h>
 #include <asm/winmacro.h>
+#include <asm/asmmacro.h>
 
 /* Registers to not touch at all. */
 #define t_psr        l0 /* Set by caller */
@@ -126,13 +127,13 @@ tsetup_patch2:
 	jmpl	%t_retpc + 0x8, %g0	! return to caller
 	 mov	%t_kstack, %sp		! and onto new kernel stack
 
+#define STACK_OFFSET (TASK_UNION_SIZE - (TRACEREG_SZ + REGWIN_SZ))
 trap_setup_from_user:
 	/* We can't use %curptr yet. */
 	LOAD_CURRENT(t_kstack, t_twinmask)
 
-	mov	1, %t_twinmask
-	sll	%t_twinmask, (PAGE_SHIFT + 1), %t_twinmask
-	sub	%t_twinmask, (TRACEREG_SZ + REGWIN_SZ), %t_twinmask
+	sethi	%hi(STACK_OFFSET), %t_twinmask
+	or	%t_twinmask, %lo(STACK_OFFSET), %t_twinmask
 	add	%t_kstack, %t_twinmask, %t_kstack
 
 	mov	1, %t_twinmask
@@ -141,11 +142,18 @@ trap_setup_from_user:
 	/* Build pt_regs frame. */
 	STORE_PT_ALL(t_kstack, t_psr, t_pc, t_npc, g2)
 
-	/* Clear current->tss.w_saved */
-	mov	1, %curptr
-	sll	%curptr, (PAGE_SHIFT + 1), %curptr
-	sub	%curptr, (TRACEREG_SZ + REGWIN_SZ), %curptr
+#if 0
+	/* If we're sure every task_struct is TASK_UNION_SIZE aligned,
+	   we can speed this up. */
+	sethi	%hi(STACK_OFFSET), %curptr
+	or	%curptr, %lo(STACK_OFFSET), %curptr
 	sub	%t_kstack, %curptr, %curptr
+#else
+	sethi	%hi(~(TASK_UNION_SIZE - 1)), %curptr
+	and	%t_kstack, %curptr, %curptr
+#endif
+
+	/* Clear current->tss.w_saved */
 	st	%g0, [%curptr + AOFF_task_tss + AOFF_thread_w_saved]
 
 	/* See if we are in the trap window. */
@@ -269,9 +277,8 @@ tsetup_sun4c_onepage:
 	.globl	C_LABEL(tsetup_srmmu_stackchk)
 C_LABEL(tsetup_srmmu_stackchk):
 	/* Check results of callers andcc %sp, 0x7, %g0 */
-	sethi	%hi(C_LABEL(page_offset)), %glob_tmp
 	bne	trap_setup_user_stack_is_bolixed
-	 ld	[%glob_tmp + %lo(C_LABEL(page_offset))], %glob_tmp
+	 GET_PAGE_OFFSET(glob_tmp)
 
 	cmp	%glob_tmp, %sp
 	bleu,a	1f

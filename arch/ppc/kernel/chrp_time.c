@@ -38,7 +38,7 @@ void chrp_time_init(void)
 	rtcs = find_compatible_devices("rtc", "pnpPNP,b00");
 	if (rtcs == NULL || rtcs->addrs == NULL)
 		return;
-	base = ((int *)rtcs->addrs)[2];
+	base = rtcs->addrs[0].address;
 	nvram_as1 = 0;
 	nvram_as0 = base;
 	nvram_data = base + 1;
@@ -69,7 +69,7 @@ int chrp_set_rtc_time(unsigned long nowtime)
 	unsigned char save_control, save_freq_select;
 	struct rtc_time tm;
 
-	to_tm(nowtime + 10*60*60, &tm);	/* XXX for now */
+	to_tm(nowtime, &tm);
 
 	save_control = chrp_cmos_clock_read(RTC_CONTROL); /* tell the clock it's being set */
 
@@ -146,7 +146,7 @@ unsigned long chrp_get_rtc_time(void)
 	  }
 	if ((year += 1900) < 1970)
 		year += 100;
-	return mktime(year, mon, day, hour, min, sec) - 10*60*60 /* XXX for now */;
+	return mktime(year, mon, day, hour, min, sec);
 }
 
 
@@ -154,6 +154,9 @@ void chrp_calibrate_decr(void)
 {
 	struct device_node *cpu;
 	int freq, *fp, divisor;
+
+	if (via_calibrate_decr())
+		return;
 
 	/*
 	 * The cpu node should have a timebase-frequency property

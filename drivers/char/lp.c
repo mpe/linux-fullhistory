@@ -20,20 +20,19 @@
 
 /* This driver should, in theory, work with any parallel port that has an
  * appropriate low-level driver; all I/O is done through the parport
- * abstraction layer.  There is a performance penalty for this, but parallel
- * ports are comparitively low-speed devices anyway.
+ * abstraction layer.
  *
  * If this driver is built into the kernel, you can configure it using the
  * kernel command-line.  For example:
  *
- *      lp=parport1,none,parport2	(bind lp0 to parport1, disable lp1 and
+ *	lp=parport1,none,parport2	(bind lp0 to parport1, disable lp1 and
  *					 bind lp2 to parport2)
  *
  *	lp=auto				(assign lp devices to all ports that
  *				         have printers attached, as determined
  *					 by the IEEE-1284 autoprobe)
  * 
- *      lp=reset			(reset the printer during 
+ *	lp=reset			(reset the printer during 
  *					 initialisation)
  *
  *	lp=off				(disable the printer driver entirely)
@@ -41,13 +40,11 @@
  * If the driver is loaded as a module, similar functionality is available
  * using module parameters.  The equivalent of the above commands would be:
  *
- *	# insmod lp.o parport=1,-1,2	(use -1 for disabled ports, since
- *					 module parameters do not allow you
- *					 to mix textual and numeric values)
+ *	# insmod lp.o parport=1,none,2
  *
- *      # insmod lp.o autoprobe=1
+ *	# insmod lp.o parport=auto
  *
- *	# insmod lp.0 reset=1
+ *	# insmod lp.o reset=1
  */
 
 /* COMPATIBILITY WITH OLD KERNELS
@@ -652,13 +649,12 @@ static struct file_operations lp_fops = {
 
 #ifdef MODULE
 
-static int parport[LP_NO] = { [0 ... LP_NO-1] = LP_PARPORT_UNSPEC };
+static int parport_nr[LP_NO] = { [0 ... LP_NO-1] = LP_PARPORT_UNSPEC };
+static char *parport[LP_NO] = { NULL,  };
 static int reset = 0;
-static int autoprobe = 0;
 
-MODULE_PARM(parport, "1-" __MODULE_STRING(LP_NO) "i");
+MODULE_PARM(parport, "1-" __MODULE_STRING(LP_NO) "s");
 MODULE_PARM(reset, "i");
-MODULE_PARM(autoprobe, "i");
 
 #else
 
@@ -720,7 +716,7 @@ int lp_init(void)
 	unsigned int i;
 	struct parport *port;
 
-	switch (parport[0])
+	switch (parport_nr[0])
 	{
 	case LP_PARPORT_OFF:
 		return 0;
@@ -729,7 +725,7 @@ int lp_init(void)
 	case LP_PARPORT_AUTO:
 	        for (port = parport_enumerate(); port; port = port->next) {
 
-			if (parport[0] == LP_PARPORT_AUTO &&
+			if (parport_nr[0] == LP_PARPORT_AUTO &&
 			    port->probe_info.class != PARPORT_CLASS_PRINTER)
 				continue;
 
@@ -739,12 +735,11 @@ int lp_init(void)
 		}
 		break;
 
-	case LP_PARPORT_NONE:
 	default:
 		for (i = 0; i < LP_NO; i++) {
-			if (parport[i] >= 0) {
+			if (parport_nr[i] >= 0) {
 				char buffer[16];
-				sprintf(buffer, "parport%d", parport[i]);
+				sprintf(buffer, "parport%d", parport_nr[i]);
 				for (port = parport_enumerate(); port; 
 				     port = port->next) {
 					if (!strcmp(port->name, buffer)) {
@@ -773,8 +768,28 @@ int lp_init(void)
 #ifdef MODULE
 int init_module(void)
 {
-	if (autoprobe)
-		parport[0] = LP_PARPORT_AUTO;
+	if (parport[0]) {
+		/* The user gave some parameters.  Let's see what they were.  */
+		if (!strncmp(parport[0], "auto", 4))
+			parport_nr[0] = LP_PARPORT_AUTO;
+		else {
+			int n;
+			for (n = 0; n < LP_NO && parport[n]; n++) {
+				if (!strncmp(parport[n], "none", 4))
+					parport_nr[n] = LP_PARPORT_NONE;
+				else {
+					char *ep;
+					unsigned long r = simple_strtoul(parport[n], &ep, 0);
+					if (ep != parport[n]) 
+						parport_nr[n] = r;
+					else {
+						printk(KERN_ERR "lp: bad port specifier `%s'\n", parport[n]);
+						return -ENODEV;
+					}
+				}
+			}
+		}
+	}
 
 	return lp_init();
 }

@@ -1,6 +1,6 @@
 
 Documentation for /proc/sys/*/*		version 0.1
-	(c) 1998, Rik van Riel <H.H.vanRiel@fys.ruu.nl>
+	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
 
 'Why', I hear you ask, 'would anyone even _want_ documentation
 for them sysctl files? If anybody really needs it, it's all in
@@ -32,7 +32,7 @@ it. Not only to have a great laugh, but also to make sure that
 you're the last RTFMing person to screw up.
 
 In short, e-mail your suggestions, corrections and / or horror
-stories to: <H.H.vanRiel@fys.ruu.nl>
+stories to: <H.H.vanRiel@phys.uu.nl>
 
 Rik van Riel.
 

@@ -1183,20 +1183,14 @@ void complete_change_console(unsigned int new_console)
 #ifdef CONFIG_SUN_CONSOLE
 	if (old_vc_mode != vt_cons[new_console]->vc_mode)
 	{
-		extern void set_cursor(int currcons);
-		extern void hide_cursor(void);
-
 	 	if (old_vc_mode == KD_GRAPHICS)
 		{
-			extern void sun_clear_margin(void);
-			extern void render_screen(void);
-			
-			sun_clear_margin();
-			render_screen();
-			set_cursor(fg_console);
+			suncons_ops.clear_margin();
+			suncons_ops.render_screen();
+			suncons_ops.set_cursor(fg_console);
 		}
 		else
-			hide_cursor();
+			suncons_ops.hide_cursor();
 	}
 #endif		
       /*

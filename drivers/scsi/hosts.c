@@ -209,6 +209,10 @@
 #include "psi240i.h"
 #endif
 
+#ifdef CONFIG_SCSI_PLUTO
+#include "pluto.h"
+#endif
+
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
@@ -381,6 +385,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_MAC53C94
     SCSI_MAC53C94,
+#endif
+#ifdef CONFIG_SCSI_PLUTO
+    PLUTO,
 #endif
 #ifdef CONFIG_SCSI_DEBUG
     SCSI_DEBUG,

@@ -68,6 +68,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ENVCTRL),y)
+O_OBJS += envctrl.o
+else
+  ifeq ($(CONFIG_ENVCTRL),m)
+  M_OBJS += envctrl.o
+  endif
+endif
+
 endif # eq($(CONFIG_PCI,y)
 
 ifeq ($(CONFIG_OBP_FLASH),y)

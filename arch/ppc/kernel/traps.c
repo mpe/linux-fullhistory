@@ -39,13 +39,31 @@ extern int fix_alignment(struct pt_regs *);
 extern void bad_page_fault(struct pt_regs *, unsigned long);
 
 #ifdef CONFIG_XMON
+extern void xmon(struct pt_regs *regs);
 extern int xmon_bpt(struct pt_regs *regs);
 extern int xmon_sstep(struct pt_regs *regs);
-extern void xmon(struct pt_regs *regs);
 extern int xmon_iabr_match(struct pt_regs *regs);
+extern int xmon_dabr_match(struct pt_regs *regs);
 extern void (*xmon_fault_handler)(struct pt_regs *regs);
 #endif
 
+#ifdef CONFIG_XMON
+void (*debugger)(struct pt_regs *regs) = xmon;
+int (*debugger_bpt)(struct pt_regs *regs) = xmon_bpt;
+int (*debugger_sstep)(struct pt_regs *regs) = xmon_sstep;
+int (*debugger_iabr_match)(struct pt_regs *regs) = xmon_iabr_match;
+int (*debugger_dabr_match)(struct pt_regs *regs) = xmon_dabr_match;
+void (*debugger_fault_handler)(struct pt_regs *regs);
+#else
+#ifdef CONFIG_KGDB
+void (*debugger)(struct pt_regs *regs);
+int (*debugger_bpt)(struct pt_regs *regs);
+int (*debugger_sstep)(struct pt_regs *regs);
+int (*debugger_iabr_match)(struct pt_regs *regs);
+int (*debugger_dabr_match)(struct pt_regs *regs);
+void (*debugger_fault_handler)(struct pt_regs *regs);
+#endif
+#endif
 /*
  * Trap & Exception support
  */
@@ -61,8 +79,8 @@ _exception(int signr, struct pt_regs *regs)
 	if (!user_mode(regs))
 	{
 		show_regs(regs);
-#ifdef CONFIG_XMON
-		xmon(regs);
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+		debugger(regs);
 #endif
 		print_backtrace((unsigned long *)regs->gpr[1]);
 		panic("Exception in kernel pc %lx signal %d",regs->nip,signr);
@@ -75,9 +93,9 @@ MachineCheckException(struct pt_regs *regs)
 {
 	if ( !user_mode(regs) )
 	{
-#ifdef CONFIG_XMON
-		if (xmon_fault_handler) {
-			xmon_fault_handler(regs);
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+		if (debugger_fault_handler) {
+			debugger_fault_handler(regs);
 			return;
 		}
 #endif
@@ -103,8 +121,8 @@ MachineCheckException(struct pt_regs *regs)
 			printk("Unknown values in msr\n");
 		}
 		show_regs(regs);
-#ifdef CONFIG_XMON
-		xmon(regs);
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+		debugger(regs);
 #endif
 		print_backtrace((unsigned long *)regs->gpr[1]);
 		panic("machine check");
@@ -123,8 +141,8 @@ UnknownException(struct pt_regs *regs)
 void
 InstructionBreakpoint(struct pt_regs *regs)
 {
-#ifdef CONFIG_XMON
-	if (xmon_iabr_match(regs))
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+	if (debugger_iabr_match(regs))
 		return;
 #endif
 	_exception(SIGTRAP, regs);
@@ -144,8 +162,8 @@ ProgramCheckException(struct pt_regs *regs)
 		_exception(SIGFPE, regs);
 	} else if (regs->msr & 0x20000) {
 		/* trap exception */
-#ifdef CONFIG_XMON
-		if (xmon_bpt(regs))
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+		if (debugger_bpt(regs))
 			return;
 #endif
 		_exception(SIGTRAP, regs);
@@ -158,8 +176,8 @@ void
 SingleStepException(struct pt_regs *regs)
 {
 	regs->msr &= ~MSR_SE;  /* Turn off 'trace' bit */
-#ifdef CONFIG_XMON
-	if (xmon_sstep(regs))
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+	if (debugger_sstep(regs))
 		return;
 #endif
 	_exception(SIGTRAP, regs);	
@@ -170,8 +188,13 @@ AlignmentException(struct pt_regs *regs)
 {
 	int fixed;
 
+#ifdef __SMP__
+	if (regs->msr & MSR_FP )
+		smp_giveup_fpu(current);
+#else	
 	if (last_task_used_math == current)
 		giveup_fpu();
+#endif	
 	fixed = fix_alignment(regs);
 	if (fixed == 1) {
 		regs->nip += 4;	/* skip over emulated instruction */
@@ -190,8 +213,8 @@ StackOverflow(struct pt_regs *regs)
 {
 	printk(KERN_CRIT "Kernel stack overflow in process %p, r1=%lx\n",
 	       current, regs->gpr[1]);
-#ifdef CONFIG_XMON
-	xmon(regs);
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+	debugger(regs);
 #endif
 	show_regs(regs);
 	print_backtrace((unsigned long *)regs->gpr[1]);
@@ -204,4 +227,42 @@ trace_syscall(struct pt_regs *regs)
 	printk("Task: %p(%d), PC: %08lX/%08lX, Syscall: %3ld, Result: %s%ld\n",
 	       current, current->pid, regs->nip, regs->link, regs->gpr[0],
 	       regs->ccr&0x10000000?"Error=":"", regs->gpr[3]);
+}
+
+#ifdef CONFIG_8xx
+
+void
+SoftwareEmulation(struct pt_regs *regs)
+{
+	int	errcode;
+	extern int	Soft_emulate_8xx (struct pt_regs *regs);
+
+	if (user_mode(regs)) {
+#if 0
+		printk("(user mode)\n");
+		_exception(SIGTRAP, regs);
+#else
+		if (errcode = Soft_emulate_8xx(regs)) {
+printk("Software Emulation 0x%x: 0x%x ",
+			regs->nip, *((uint *)regs->nip));
+print_8xx_pte(current->mm, regs->nip);
+			if (errcode == EFAULT)
+				_exception(SIGBUS, regs);
+			else
+				_exception(SIGILL, regs);
+		}
+#endif
+	}
+	else {
+		printk("(kernel mode)\n");
+		panic("Kernel Mode Software Emulation");
+	}
+}
+#endif
+
+void
+TAUException(struct pt_regs *regs)
+{
+	printk("TAU trap at PC: %lx, SR: %lx, vector=%lx\n",
+	       regs->nip, regs->msr, regs->trap);
 }

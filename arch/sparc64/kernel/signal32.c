@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.34 1997/12/15 15:04:49 jj Exp $
+/*  $Id: signal32.c,v 1.35 1998/04/01 07:00:43 davem Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -1023,6 +1023,7 @@ static inline void handle_signal32(unsigned long signr, struct k_sigaction *ka,
 		spin_lock_irq(&current->sigmask_lock);
 		sigorsets(&current->blocked,&current->blocked,&ka->sa.sa_mask);
 		sigaddset(&current->blocked,signr);
+		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
 	}
 }

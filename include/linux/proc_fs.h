@@ -182,6 +182,7 @@ enum scsi_directory_inos {
 	PROC_SCSI_IDESCSI,
 	PROC_SCSI_MESH,
 	PROC_SCSI_53C94,
+	PROC_SCSI_PLUTO,
 	PROC_SCSI_SCSI_DEBUG,	
 	PROC_SCSI_NOT_PRESENT,
 	PROC_SCSI_FILE,                        /* I'm assuming here that we */
@@ -350,7 +351,7 @@ struct openpromfs_dev {
  	char name[32];
 };
 extern struct inode_operations *
-proc_openprom_register(int (*readdir)(struct inode *, struct file *, void *, filldir_t),
+proc_openprom_register(int (*readdir)(struct file *, void *, filldir_t),
 		       int (*lookup)(struct inode *, struct dentry *),
 		       void (*use)(struct inode *, int),
 		       struct openpromfs_dev ***);

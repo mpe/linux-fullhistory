@@ -41,8 +41,8 @@ static int property_read_proc(char *page, char **start, off_t off,
  * and "@10" to it.
  */
 
-static int devtree_readlink(struct inode *, char *, int);
-static struct dentry *devtree_follow_link(struct inode *, struct dentry *);
+static int devtree_readlink(struct dentry *, char *, int);
+static struct dentry *devtree_follow_link(struct dentry *, struct dentry *);
 
 struct inode_operations devtree_symlink_inode_operations = {
 	NULL,			/* no file-operations */
@@ -68,21 +68,23 @@ struct inode_operations devtree_symlink_inode_operations = {
 static struct dentry *devtree_follow_link(struct dentry *dentry,
 					  struct dentry *base)
 {
+	struct inode *inode = dentry->d_inode;
 	struct proc_dir_entry * de;
 	char *link;
 
-	de = (struct proc_dir_entry *) dentry->inode->u.generic_ip;
+	de = (struct proc_dir_entry *) inode->u.generic_ip;
 	link = (char *) de->data;
 	return lookup_dentry(link, base, 1);
 }
 
 static int devtree_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
+	struct inode *inode = dentry->d_inode;
 	struct proc_dir_entry * de;
 	char *link;
 	int linklen;
 
-	de = (struct proc_dir_entry *) dentry->inode->u.generic_ip;
+	de = (struct proc_dir_entry *) inode->u.generic_ip;
 	link = (char *) de->data;
 	linklen = strlen(link);
 	if (linklen > buflen)
@@ -206,7 +208,8 @@ static void add_node(struct device_node *np, struct proc_dir_entry *de)
 void proc_device_tree_init(void)
 {
 	struct device_node *root;
-
+	if ( !have_of )
+		return;
 	proc_device_tree = create_proc_entry("device-tree", S_IFDIR, 0);
 	if (proc_device_tree == 0)
 		return;

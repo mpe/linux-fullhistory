@@ -1,7 +1,7 @@
 /*
  * bios32.c - Low-Level PCI Access
  *
- * $Id: bios32.c,v 1.26 1998/02/18 15:21:09 mj Exp $
+ * $Id: bios32.c,v 1.29 1998/04/17 16:31:15 mj Exp $
  *
  * Sponsored by
  *	iX Multiuser Multitasking Magazine
@@ -73,6 +73,7 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 
 #include <asm/page.h>
 #include <asm/segment.h>
@@ -85,6 +86,14 @@
 #include <asm/smp.h>
 
 #include "irq.h"
+
+#undef DEBUG
+
+#ifdef DEBUG
+#define DBG(x...) printk(x)
+#else
+#define DBG(x...)
+#endif
 
 /*
  * Generic PCI access -- indirect calls according to detected HW.
@@ -158,11 +167,13 @@ int pcibios_write_config_dword (unsigned char bus,
 	return access_pci->write_config_dword(bus, device_fn, where, value);
 }
 
-static unsigned int pci_probe = ~0;
-
 #define PCI_PROBE_BIOS 1
 #define PCI_PROBE_CONF1 2
 #define PCI_PROBE_CONF2 4
+#define PCI_NO_SORT 0x100
+#define PCI_BIOS_SORT 0x200
+
+static unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2;
 
 /*
  * Direct access to PCI hardware...
@@ -596,8 +607,10 @@ static int pci_bios_find_class (unsigned int class_code, unsigned short index,
 	return (int) (ret & 0xff00) >> 8;
 }
 
-static int pci_bios_find_device (unsigned short vendor, unsigned short device_id,
-	unsigned short index, unsigned char *bus, unsigned char *device_fn)
+#endif
+
+__initfunc(static int pci_bios_find_device (unsigned short vendor, unsigned short device_id,
+	unsigned short index, unsigned char *bus, unsigned char *device_fn))
 {
 	unsigned short bx;
 	unsigned short ret;
@@ -620,8 +633,6 @@ static int pci_bios_find_device (unsigned short vendor, unsigned short device_id
 	*device_fn = bx & 0xff;
 	return (int) (ret & 0xff00) >> 8;
 }
-
-#endif
 
 static int pci_bios_read_config_byte(unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned char *value)
@@ -803,13 +814,13 @@ __initfunc(static struct pci_access *pci_find_bios(void))
 				check->fields.revision, check);
 			continue;
 		}
-		printk ("PCI: BIOS32 Service Directory structure at 0x%p\n", check);
+		DBG("PCI: BIOS32 Service Directory structure at 0x%p\n", check);
 		if (check->fields.entry >= 0x100000) {
-			printk("PCI: BIOS32 entry in high memory, cannot use.\n");
+			printk("PCI: BIOS32 entry (0x%p) in high memory, cannot use.\n", check);
 			return NULL;
 		} else {
 			bios32_entry = check->fields.entry;
-			printk ("PCI: BIOS32 Service Directory entry at 0x%lx\n", bios32_entry);
+			DBG("PCI: BIOS32 Service Directory entry at 0x%lx\n", bios32_entry);
 			bios32_indirect.address = bios32_entry + PAGE_OFFSET;
 			if (check_pcibios())
 				return &pci_bios_access;
@@ -817,18 +828,104 @@ __initfunc(static struct pci_access *pci_find_bios(void))
 		break;	/* Hopefully more than one BIOS32 cannot happen... */
 	}
 
-	/*
-	 * If we were told to use the PCI BIOS and it's not present, avoid
-	 * touching the hardware.
-	 */
-	pci_probe = 0;
 	return NULL;
+}
+
+/*
+ * Sort the device list according to PCI BIOS.
+ */
+
+__initfunc(void pcibios_sort(void))
+{
+	struct pci_dev *dev = pci_devices;
+	struct pci_dev **last = &pci_devices;
+	struct pci_dev *d, **dd, *e;
+	int idx;
+	unsigned char bus, devfn;
+
+	DBG("PCI: Sorting device list...\n");
+	while ((e = dev)) {
+		idx = 0;
+		while (pci_bios_find_device(e->vendor, e->device, idx, &bus, &devfn) == PCIBIOS_SUCCESSFUL) {
+			idx++;
+			for(dd=&dev; (d = *dd); dd = &d->next) {
+				if (d->bus->number == bus && d->devfn == devfn) {
+					*dd = d->next;
+					*last = d;
+					last = &d->next;
+					break;
+				}
+			}
+			if (!d)
+				printk("PCI: BIOS reporting unknown device %02x:%02x\n", bus, devfn);
+		}
+		if (!idx) {
+			printk("PCI: Device %02x:%02x not found by BIOS\n",
+				dev->bus->number, dev->devfn);
+			d = dev;
+			dev = dev->next;
+			*last = d;
+			last = &d->next;
+		}
+	}
+	*last = NULL;
 }
 
 #endif
 
 /*
- * Arch-dependent fixups.
+ * Several BIOS'es forget to assign addresses to I/O ranges.
+ * We try to fix it here, expecting there are free addresses
+ * starting with 0x5800. Ugly, but until we come with better
+ * resource management, it's the only simple solution.
+ */
+
+static int pci_last_io_addr __initdata = 0x5800;
+
+__initfunc(void pcibios_fixup_io_addr(struct pci_dev *dev, int idx))
+{
+	unsigned short cmd;
+	unsigned int reg = PCI_BASE_ADDRESS_0 + 4*idx;
+	unsigned int size, addr, try;
+	unsigned int bus = dev->bus->number;
+	unsigned int devfn = dev->devfn;
+
+	if (!pci_last_io_addr) {
+		printk("PCI: Unassigned I/O space for %02x:%02x\n", bus, devfn);
+		return;
+	}
+	pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd);
+	pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd & ~PCI_COMMAND_IO);
+	pcibios_write_config_dword(bus, devfn, reg, ~0);
+	pcibios_read_config_dword(bus, devfn, reg, &size);
+	size = (~(size & PCI_BASE_ADDRESS_IO_MASK) & 0xffff) + 1;
+	addr = 0;
+	if (!size || size > 0x100)
+		printk("PCI: Unable to handle I/O allocation for %02x:%02x (%04x), tell <mj@ucw.cz>\n", bus, devfn, size);
+	else {
+		do {
+			addr = (pci_last_io_addr + size - 1) & ~(size-1);
+			pci_last_io_addr = addr + size;
+		} while (check_region(addr, size));
+		printk("PCI: Assigning I/O space %04x-%04x to device %02x:%02x\n", addr, addr+size-1, bus, devfn);
+		pcibios_write_config_dword(bus, devfn, reg, addr | PCI_BASE_ADDRESS_SPACE_IO);
+		pcibios_read_config_dword(bus, devfn, reg, &try);
+		if ((try & PCI_BASE_ADDRESS_IO_MASK) != addr) {
+			addr = 0;
+			printk("PCI: Address setup failed, got %04x\n", try);
+		} else
+			dev->base_address[idx] = try;
+	}
+	if (!addr) {
+		pcibios_write_config_dword(bus, devfn, reg, 0);
+		dev->base_address[idx] = 0;
+	}
+	pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
+}
+
+/*
+ * Arch-dependent fixups. We need to fix here base addresses, I/O
+ * and memory enables and IRQ's as the PCI BIOS'es are buggy as hell.
  */
 
 __initfunc(void pcibios_fixup(void))
@@ -836,7 +933,6 @@ __initfunc(void pcibios_fixup(void))
 	struct pci_dev *dev;
 	int i, has_io, has_mem;
 	unsigned short cmd;
-	unsigned char pin;
 
 	for(dev = pci_devices; dev; dev=dev->next) {
 		/*
@@ -849,18 +945,15 @@ __initfunc(void pcibios_fixup(void))
 		for(i=0; i<6; i++) {
 			unsigned long a = dev->base_address[i];
 			if (a & PCI_BASE_ADDRESS_SPACE_IO) {
-				has_io |= 1;
+				has_io = 1;
 				a &= PCI_BASE_ADDRESS_IO_MASK;
-				if (!a || a == PCI_BASE_ADDRESS_IO_MASK) {
-					printk(KERN_WARNING "PCI: BIOS forgot to assign address #%d to device %02x:%02x,"
-						" please report to <mj@ucw.cz>\n", i, dev->bus->number, dev->devfn);
-					has_io |= 2;
-				}
+				if (!a || a == PCI_BASE_ADDRESS_IO_MASK)
+					pcibios_fixup_io_addr(dev, i);
 			} else if (a & PCI_BASE_ADDRESS_MEM_MASK)
 				has_mem = 1;
 		}
 		pci_read_config_word(dev, PCI_COMMAND, &cmd);
-		if (has_io == 1 && !(cmd & PCI_COMMAND_IO)) {
+		if (has_io && !(cmd & PCI_COMMAND_IO)) {
 			printk("PCI: Enabling I/O for device %02x:%02x\n",
 				dev->bus->number, dev->devfn);
 			cmd |= PCI_COMMAND_IO;
@@ -872,14 +965,15 @@ __initfunc(void pcibios_fixup(void))
 			cmd |= PCI_COMMAND_MEMORY;
 			pci_write_config_word(dev, PCI_COMMAND, cmd);
 		}
-		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
 #ifdef __SMP__
 		/*
 		 * Recalculate IRQ numbers if we use the I/O APIC
 		 */
 		{
 		int irq;
+		unsigned char pin;
 
+		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
 		if (pin) {
 			pin--;		/* interrupt pins are numbered starting from 1 */
 			irq = IO_APIC_get_PCI_irq_vector (dev->bus->number, PCI_SLOT(dev->devfn), pin);
@@ -896,30 +990,38 @@ __initfunc(void pcibios_fixup(void))
 		 */
 		if (dev->irq >= NR_IRQS)
 			dev->irq = 0;
-		if (pin && !dev->irq)
-			printk(KERN_WARNING "PCI: Bogus IRQ for device %02x:%02x [pin=%x], please report to <mj@ucw.cz>\n",
-				dev->bus->number, dev->devfn, pin);
 	}
+
+#ifdef CONFIG_PCI_BIOS
+	if ((pci_probe & PCI_BIOS_SORT) && !(pci_probe & PCI_NO_SORT))
+		pcibios_sort();
+#endif
 }
 
 /*
- * Initialization. Try all known PCI access methods.
+ * Initialization. Try all known PCI access methods. Note that we support
+ * using both PCI BIOS and direct access: in such cases, we use I/O ports
+ * to access config space, but we still keep BIOS order of cards to be
+ * compatible with 2.0.X. This should go away in 2.3.
  */
 
 __initfunc(void pcibios_init(void))
 {
-	struct pci_access *a = NULL;
+	struct pci_access *bios = NULL;
+	struct pci_access *dir = NULL;
 
 #ifdef CONFIG_PCI_BIOS
-	if (pci_probe & PCI_PROBE_BIOS)
-		a = pci_find_bios();
+	if ((pci_probe & PCI_PROBE_BIOS) && ((bios = pci_find_bios())))
+		pci_probe |= PCI_BIOS_SORT;
 #endif
 #ifdef CONFIG_PCI_DIRECT
-	if (!a && (pci_probe & (PCI_PROBE_CONF1 | PCI_PROBE_CONF2)))
-		a = pci_check_direct();
+	if (pci_probe & (PCI_PROBE_CONF1 | PCI_PROBE_CONF2))
+		dir = pci_check_direct();
 #endif
-	if (a)
-		access_pci = a;
+	if (dir)
+		access_pci = dir;
+	else if (bios)
+		access_pci = bios;
 }
 
 #if !defined(CONFIG_PCI_BIOS) && !defined(CONFIG_PCI_DIRECT)
@@ -928,25 +1030,35 @@ __initfunc(void pcibios_init(void))
 
 __initfunc(char *pcibios_setup(char *str))
 {
-	if (!strncmp(str, "off", 3)) {
+	if (!strcmp(str, "off")) {
 		pci_probe = 0;
+		return NULL;
+	} else if (!strncmp(str, "io=", 3)) {
+		char *p;
+		unsigned int x = simple_strtoul(str+3, &p, 16);
+		if (p && *p)
+			return str;
+		pci_last_io_addr = x;
 		return NULL;
 	}
 #ifdef CONFIG_PCI_BIOS
-	else if (!strncmp(str, "bios", 4)) {
+	else if (!strcmp(str, "bios")) {
 		pci_probe = PCI_PROBE_BIOS;
 		return NULL;
-	} else if (!strncmp(str, "nobios", 6)) {
+	} else if (!strcmp(str, "nobios")) {
 		pci_probe &= ~PCI_PROBE_BIOS;
+		return NULL;
+	} else if (!strcmp(str, "nosort")) {
+		pci_probe |= PCI_NO_SORT;
 		return NULL;
 	}
 #endif
 #ifdef CONFIG_PCI_DIRECT
-	else if (!strncmp(str, "conf1", 5)) {
+	else if (!strcmp(str, "conf1")) {
 		pci_probe = PCI_PROBE_CONF1;
 		return NULL;
 	}
-	else if (!strncmp(str, "conf2", 5)) {
+	else if (!strcmp(str, "conf2")) {
 		pci_probe = PCI_PROBE_CONF2;
 		return NULL;
 	}

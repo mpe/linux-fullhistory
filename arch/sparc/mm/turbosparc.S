@@ -1,4 +1,4 @@
-/* $Id: turbosparc.S,v 1.2 1997/11/26 13:27:59 jj Exp $
+/* $Id: turbosparc.S,v 1.3 1998/02/05 14:19:04 jj Exp $
  * turbosparc.S: High speed TurboSparc mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -27,6 +27,7 @@
 
 	.globl	turbosparc_flush_cache_all
 	.globl	turbosparc_flush_sig_insns
+	.globl	turbosparc_flush_page_for_dma
 
 turbosparc_flush_cache_all:
 	WINDOW_FLUSH(%g4, %g5)
@@ -42,5 +43,6 @@ turbosparc_flush_cache_all:
 	 sta	%g0, [%g0] ASI_M_IC_FLCLEAR
 
 turbosparc_flush_sig_insns:
+turbosparc_flush_page_for_dma:
 	retl
 	 nop

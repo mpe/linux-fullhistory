@@ -131,12 +131,13 @@ static int tty_fasync(struct file * filp, int on);
 /*
  * This routine returns the name of tty.
  */
+#define TTY_NUMBER(tty) (MINOR((tty)->device) - (tty)->driver.minor_start + \
+			 (tty)->driver.name_base)
+	
 char *tty_name(struct tty_struct *tty, char *buf)
 {
 	if (tty)
-		sprintf(buf, "%s%d", tty->driver.name,
-			MINOR(tty->device) - tty->driver.minor_start +
-			tty->driver.name_base);
+		sprintf(buf, "%s%d", tty->driver.name, TTY_NUMBER(tty));
 	else
 		strcpy(buf, "NULL tty");
 	return buf;
@@ -1287,9 +1288,17 @@ init_dev_done:
 		tty->pgrp = current->pgrp;
 	}
 	if ((tty->driver.type == TTY_DRIVER_TYPE_SERIAL) &&
-	    (tty->driver.subtype == SERIAL_TYPE_CALLOUT)) {
-		printk(KERN_INFO "Warning, %s opened, is a deprecated tty "
-		       "callout device\n", tty_name(tty, buf));
+	    (tty->driver.subtype == SERIAL_TYPE_CALLOUT) &&
+	    (tty->count == 1)) {
+		static int nr_warns = 0;
+		if (nr_warns < 5) {
+			printk(KERN_WARNING "tty_io.c: "
+				"process %d (%s) used obsolete /dev/%s - " 
+				"update software to use /dev/ttyS%d\n",
+				current->pid, current->comm, 
+				tty_name(tty, buf), TTY_NUMBER(tty));
+			nr_warns++;
+		}
 	}
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* $Id: a.out.h,v 1.11 1996/12/03 08:44:56 jj Exp $ */
+/* $Id: a.out.h,v 1.12 1998/02/05 14:20:00 jj Exp $ */
 #ifndef __SPARC_A_OUT_H__
 #define __SPARC_A_OUT_H__
 
@@ -89,10 +89,31 @@ struct relocation_info /* used when header.a_machtype == M_SPARC */
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
+#include <asm/btfixup.h>
+
+#ifdef CONFIG_SUN4
+
+#define STACK_TOP	(0xefffe000UL)
+
+#else
+
 extern unsigned long	stack_top;
 
-#define STACK_TOP	(stack_top)
+#  ifndef MODULE
 
-#endif
+    BTFIXUPDEF_SETHI_INIT(stack_top,0xeffff000)
+
+#    define STACK_TOP	((unsigned long)BTFIXUP_SETHI(stack_top))
+
+#  else /* MODULE */
+
+#    define STACK_TOP	(stack_top)
+
+#  endif /* MODULE */
+
+#endif /* !CONFIG_SUN4 */
+
+#endif /* __KERNEL__ */
 
 #endif /* __SPARC_A_OUT_H__ */

@@ -1,10 +1,11 @@
-/* $Id: blockops.S,v 1.7 1997/05/20 07:58:28 jj Exp $
+/* $Id: blockops.S,v 1.8 1998/01/30 10:58:44 jj Exp $
  * blockops.S: Common block zero optimized routines.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
 
 #include <asm/cprefix.h>
+#include <asm/page.h>
 
 	/* Zero out 64 bytes of memory at (buf + offset).
 	 * Assumes %g1 contains zero.
@@ -53,7 +54,7 @@ C_LABEL(bzero_1page):
 	/* %o0 = buf */
 	or	%g0, %g0, %g1
 	or	%o0, %g0, %o1
-	or	%g0, 0x10, %g2
+	or	%g0, (PAGE_SIZE >> 8), %g2
 1:
 	BLAST_BLOCK(%o0, 0x00)
 	BLAST_BLOCK(%o0, 0x40)
@@ -70,7 +71,7 @@ C_LABEL(__copy_1page):
 /* NOTE: If you change the number of insns of this routine, please check
  * arch/sparc/mm/hypersparc.S */
 	/* %o0 = dst, %o1 = src */
-	or	%g0, 0x10, %g1
+	or	%g0, (PAGE_SIZE >> 8), %g1
 1:
 	MIRROR_BLOCK(%o0, %o1, 0x00, %o2, %o3, %o4, %o5, %g2, %g3, %g4, %g5)
 	MIRROR_BLOCK(%o0, %o1, 0x20, %o2, %o3, %o4, %o5, %g2, %g3, %g4, %g5)

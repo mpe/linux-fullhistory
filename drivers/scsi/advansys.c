@@ -598,7 +598,7 @@
      Erik Ratcliffe <erik@caldera.com> has done testing of the
      AdvanSys driver in the Caldera releases.
 
-     Rik van Riel <H.H.vanRiel@fys.ruu.nl> provided a patch to
+     Rik van Riel <H.H.vanRiel@phys.uu.nl> provided a patch to
      AscWaitTixISRDone() which he found necessary to make the
      driver work with a SCSI-1 disk.
 

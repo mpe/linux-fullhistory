@@ -333,7 +333,7 @@ __initfunc(void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigne
  */
 __initfunc(unsigned long ide_get_or_set_dma_base (struct pci_dev *dev, ide_hwif_t *hwif, int extra, const char *name))
 {
-	unsigned long new, dma_base = 0;
+	unsigned long dma_base = 0;
 
 	if (hwif->mate && hwif->mate->dma_base) {
 		dma_base = hwif->mate->dma_base - (hwif->channel ? 0 : 8);
@@ -341,19 +341,7 @@ __initfunc(unsigned long ide_get_or_set_dma_base (struct pci_dev *dev, ide_hwif_
 		dma_base = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
 		if (!dma_base || dma_base == PCI_BASE_ADDRESS_IO_MASK) {
 			printk("%s: dma_base is invalid (0x%04lx, BIOS problem), please report to <mj@ucw.cz>\n", name, dma_base);
-			new = ide_find_free_region(16 + extra);
-			hwif->no_autodma = 1;	/* default DMA off if we had to configure it here */
-			if (new) {
-				printk("%s: setting dma_base to 0x%04lx\n", name, new);
-				new |= PCI_BASE_ADDRESS_SPACE_IO;
-				(void) pci_write_config_dword(dev, PCI_BASE_ADDRESS_4, new);
-				dma_base = 0;
-				(void) pci_read_config_dword(dev, PCI_BASE_ADDRESS_4, (unsigned int *) &dma_base);
-				if (dma_base != new) {
-					printk("%s: Operation failed, DMA disabled\n", name);
-					dma_base = 0;
-				}
-			}
+			dma_base = 0;
 		}
 	}
 	if (dma_base) {

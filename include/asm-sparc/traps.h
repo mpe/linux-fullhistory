@@ -1,4 +1,4 @@
-/* $Id: traps.h,v 1.8 1996/05/17 10:38:53 davem Exp $
+/* $Id: traps.h,v 1.9 1998/03/09 14:04:53 jj Exp $
  * traps.h:  Format of entries for the Sparc trap table.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -11,7 +11,7 @@
 
 #ifndef __ASSEMBLY__
 
-/* This is for V8 and V9 compliant Sparc CPUS */
+/* This is for V8 compliant Sparc CPUS */
 struct tt_entry {
 	unsigned long inst_one;
 	unsigned long inst_two;
@@ -21,25 +21,6 @@ struct tt_entry {
 
 /* We set this to _start in system setup. */
 extern struct tt_entry *sparc_ttable;
-
-/* This for V9 compliant Sparc CPUS */
-struct tt_v9_entry {
-	unsigned long inst_one;
-	unsigned long inst_two;
-	unsigned long inst_three;
-	unsigned long inst_four;
-	unsigned long inst_five;
-	unsigned long inst_six;
-	unsigned long inst_seven;
-	unsigned long inst_eight;
-};
-
-/* V9 has multiple trap tables, which one is used depends
- * upon how deep within multiple traps you are.
- * I believe the UltraSparc supports two levels now.
- */
-extern struct tt_v9_entry *sparc_v9_ttablel0;
-extern struct tt_v9_entry *sparc_v9_ttablel1;
 
 extern __inline__ unsigned long get_tbr(void)
 {

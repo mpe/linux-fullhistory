@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.18 1997/09/24 11:34:18 jj Exp $
+/* $Id: oplib.h,v 1.19 1998/01/30 10:59:53 jj Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -20,6 +20,7 @@ enum prom_major_version {
 	PROM_V3,      /* sun4m and later, up to sun4d/sun4e machines V3 */
 	PROM_P1275,   /* IEEE compliant ISA based Sun PROM, only sun4u */
         PROM_AP1000,  /* actually no prom at all */
+	PROM_SUN4,    /* Old sun4 proms are totally different, but we'll shoehorn it to make it fit */
 };
 
 extern enum prom_major_version prom_vers;

@@ -220,7 +220,7 @@ static inline void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 #ifdef CONFIG_HEARTBEAT
 	/* use hard disk LED as a heartbeat instead -- much more useful
 	   for debugging -- Cort */
-	switch(kstat.interrupts[0] % 101)
+	switch(kstat_irqs(0) % 101)
 	{
 	/* act like an actual heart beat -- ie thump-thump-pause... */
 	case 0:

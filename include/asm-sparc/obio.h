@@ -1,4 +1,4 @@
-/* $Id: obio.h,v 1.3 1997/12/18 14:21:41 jj Exp $
+/* $Id: obio.h,v 1.4 1998/03/09 14:04:55 jj Exp $
  * obio.h:  Some useful locations in 0xFXXXXXXXX PA obio space on sun4d.
  *
  * Copyright (C) 1997 Jakub Jelinek <jj@sunsite.mff.cuni.cz>
@@ -66,9 +66,20 @@
 /* Boot Bus */
 #define BB_LOCAL_BASE		0xf0000000
 
+#define BB_STAT1		0x00100000
+#define BB_STAT2		0x00120000
+#define BB_STAT3		0x00140000
 #define BB_LEDS			0x002e0000
 
+/* Bits in BB_STAT2 */
+#define BB_STAT2_AC_INTR	0x04	/* Aiee! 5ms and power is gone... */
+#define BB_STAT2_TMP_INTR	0x10	/* My Penguins are burning. Are you able to smell it? */
+#define BB_STAT2_FAN_INTR	0x20	/* My fan refuses to work */
+#define BB_STAT2_PWR_INTR	0x40	/* On SC2000, one of the two ACs died. Ok, we go on... */
+#define BB_STAT2_MASK		(BB_STAT2_AC_INTR|BB_STAT2_TMP_INTR|BB_STAT2_FAN_INTR|BB_STAT2_PWR_INTR)
+
 /* Cache Controller */
+#define CC_BASE		0x1F00000
 #define CC_DATSTREAM	0x1F00000  /* Data stream register */
 #define CC_DATSIZE	0x1F0003F  /* Size */
 #define CC_SRCSTREAM	0x1F00100  /* Source stream register */
@@ -144,10 +155,13 @@ extern __inline__ void bw_set_ctrl(int cpu, unsigned ctrl)
 			      "i" (ASI_M_CTL));
 }
 
-extern __inline__ void show_leds(int cpuid, unsigned char mask)
+extern unsigned char cpu_leds[32];
+
+extern __inline__ void show_leds(int cpuid)
 {
+	cpuid &= 0x1e;
 	__asm__ __volatile__ ("stba %0, [%1] %2" : :
-			      "r" (mask),
+			      "r" ((cpu_leds[cpuid] << 4) | cpu_leds[cpuid+1]),
 			      "r" (ECSR_BASE(cpuid) | BB_LEDS),
 			      "i" (ASI_M_CTL));
 }
@@ -190,12 +204,44 @@ extern __inline__ void cc_set_imsk(unsigned mask)
 			      "i" (ASI_M_MXCC));
 }
 
+extern __inline__ unsigned cc_get_imsk_other(int cpuid)
+{
+	unsigned mask;
+	
+	__asm__ __volatile__ ("lduha [%1] %2, %0" :
+			      "=r" (mask) :
+			      "r" (ECSR_BASE(cpuid) | CC_IMSK),
+			      "i" (ASI_M_CTL));
+	return mask;
+}
+
+extern __inline__ void cc_set_imsk_other(int cpuid, unsigned mask)
+{
+	__asm__ __volatile__ ("stha %0, [%1] %2" : :
+			      "r" (mask),
+			      "r" (ECSR_BASE(cpuid) | CC_IMSK),
+			      "i" (ASI_M_CTL));
+}
+
 extern __inline__ void cc_set_igen(unsigned gen)
 {
 	__asm__ __volatile__ ("sta %0, [%1] %2" : :
 			      "r" (gen),
 			      "r" (CC_IGEN),
 			      "i" (ASI_M_MXCC));
+}
+
+/* +-------+-------------+-----------+------------------------------------+
+ * | bcast |  devid      |   sid     |              levels mask           |
+ * +-------+-------------+-----------+------------------------------------+
+ *  31      30         23 22       15 14                                 0
+ */
+#define IGEN_MESSAGE(bcast, devid, sid, levels) \
+	(((bcast) << 31) | ((devid) << 23) | ((sid) << 15) | (levels))
+            
+extern __inline__ void sun4d_send_ipi(int cpu, int level)
+{
+	cc_set_igen(IGEN_MESSAGE(0, cpu << 3, 6 + ((level >> 1) & 7), 1 << (level - 1)));
 }
 
 #endif /* !__ASSEMBLY__ */

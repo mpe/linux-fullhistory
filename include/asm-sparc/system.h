@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.65 1997/05/14 20:47:59 davem Exp $ */
+/* $Id: system.h,v 1.68 1998/03/09 14:04:51 jj Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -11,6 +11,7 @@
 #include <asm/oplib.h>
 #include <asm/psr.h>
 #include <asm/ptrace.h>
+#include <asm/btfixup.h>
 
 #define EMPTY_PGT       (&empty_bad_page)
 #define EMPTY_PGE	(&empty_bad_page_table)
@@ -36,6 +37,14 @@ enum sparc_cpu {
 #ifdef __KERNEL__
 
 extern enum sparc_cpu sparc_cpu_model;
+
+#ifndef CONFIG_SUN4
+#define ARCH_SUN4C_SUN4 (sparc_cpu_model==sun4c)
+#define ARCH_SUN4 0
+#else
+#define ARCH_SUN4C_SUN4 1
+#define ARCH_SUN4 1
+#endif
 
 extern unsigned long empty_bad_page;
 extern unsigned long empty_bad_page_table;
@@ -98,6 +107,8 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	"std	%%g4, [%%g6 + %2]\n\t"							\
 	"ldd	[%1 + %2], %%g4\n\t"							\
 	"mov	%1, %%g6\n\t"								\
+	".globl	patchme_store_new_current\n"						\
+"patchme_store_new_current:\n\t"							\
 	"st	%1, [%0]\n\t"								\
 	"wr	%%g4, 0x20, %%psr\n\t"							\
 	"nop\n\t"									\
@@ -237,9 +248,11 @@ extern void __global_restore_flags(unsigned long flags);
 #define restore_flags(flags)	__global_restore_flags(flags)
 #else
 
+#error For combined sun4[md] smp, we need to get rid of the rdtbr.
+
 /* Visit arch/sparc/lib/irqlock.S for all the fun details... */
 #define cli()      __asm__ __volatile__("mov	%%o7, %%g4\n\t"			\
-					"call	___global_cli\n\t"		\
+					"call	___f_global_cli\n\t"		\
 					" rd	%%tbr, %%g7" : :		\
 					: "g1", "g2", "g3", "g4", "g5", "g7",	\
 					  "memory", "cc")
@@ -248,7 +261,7 @@ extern void __global_restore_flags(unsigned long flags);
 do {	register unsigned long bits asm("g7");			\
 	bits = 0;						\
 	__asm__ __volatile__("mov	%%o7, %%g4\n\t"		\
-			     "call	___global_sti\n\t"	\
+			     "call	___f_global_sti\n\t"	\
 			     " rd	%%tbr, %%g2"		\
 			     : /* no outputs */			\
 			     : "r" (bits)			\
@@ -260,7 +273,7 @@ do {	register unsigned long bits asm("g7");			\
 do {	register unsigned long bits asm("g7");				\
 	bits = flags;							\
 	__asm__ __volatile__("mov	%%o7, %%g4\n\t"			\
-			     "call	___global_restore_flags\n\t"	\
+			     "call	___f_global_restore_flags\n\t"	\
 			     " andcc	%%g7, 0x1, %%g0"		\
 			     : "=&r" (bits)				\
 			     : "0" (bits)				\
@@ -285,6 +298,11 @@ do {	register unsigned long bits asm("g7");				\
 
 #define nop() __asm__ __volatile__ ("nop");
 
+/* This has special calling conventions */
+#ifndef __SMP__
+BTFIXUPDEF_CALL(void, ___xchg32, void)
+#endif
+
 extern __inline__ unsigned long xchg_u32(__volatile__ unsigned long *m, unsigned long val)
 {
 #ifdef __SMP__
@@ -299,10 +317,12 @@ extern __inline__ unsigned long xchg_u32(__volatile__ unsigned long *m, unsigned
 	ptr = (unsigned long *) m;
 	ret = val;
 
+	/* Note: this is magic and the nop there is
+	   really needed. */
 	__asm__ __volatile__("
 	mov	%%o7, %%g4
-	call	___xchg32
-	 add	%%o7, 8, %%o7
+	call	___f____xchg32
+	 nop
 "	: "=&r" (ret)
 	: "0" (ret), "r" (ptr)
 	: "g3", "g4", "g7", "memory", "cc");

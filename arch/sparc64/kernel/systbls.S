@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.37 1997/12/24 17:27:31 ecd Exp $
+/* $Id: systbls.S,v 1.41 1998/03/24 05:57:57 ecd Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -19,8 +19,8 @@
 sys_call_table32:
 /*0*/	.word sys_setup, sys_exit, sys_fork, sys_read, sys_write
 /*5*/	.word sys_open, sys_close, sys32_wait4, sys_creat, sys_link
-/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys_nis_syscall, sys32_mknod
-/*15*/	.word sys32_chmod, sys32_chown, sparc_brk, sys_nis_syscall, sys32_lseek
+/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys32_xstat, sys32_mknod
+/*15*/	.word sys32_chmod, sys32_lchown, sparc_brk, sys_xmknod, sys32_lseek
 /*20*/	.word sys_getpid, sys_nis_syscall, sys_nis_syscall, sys_setuid, sys_getuid
 /*25*/	.word sys_time, sys_ptrace, sys_alarm, sys_nis_syscall, sys32_pause
 /*30*/	.word sys32_utime, sys_nis_syscall, sys_nis_syscall, sys_access, sys_nice
@@ -55,7 +55,7 @@ sys_call_table32:
 	.word sys_setsid, sys_fchdir, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 /*180*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_sigpending, sys32_query_module
 	.word sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_newuname
-/*190*/	.word sys32_init_module, sys_personality, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*190*/	.word sys32_init_module, sys32_personality, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 	.word sys_nis_syscall, sys_nis_syscall, sys_getppid, sys32_sigaction, sys_sgetmask
 /*200*/	.word sys_ssetmask, sys_sigsuspend, sys32_newlstat, sys_uselib, old32_readdir
 	.word sys_nis_syscall, sys32_socketcall, sys_syslog, sys_nis_syscall, sys_nis_syscall
@@ -78,8 +78,8 @@ sys_call_table64:
 sys_call_table:
 /*0*/	.word sys_setup, sys_exit, sys_fork, sys_read, sys_write
 /*5*/	.word sys_open, sys_close, sys_wait4, sys_creat, sys_link
-/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys_nis_syscall, sys_mknod
-/*15*/	.word sys_chmod, sys_chown, sparc_brk, sys_nis_syscall, sys_lseek
+/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys_xstat, sys_mknod
+/*15*/	.word sys_chmod, sys_lchown, sparc_brk, sys_xmknod, sys_lseek
 /*20*/	.word sys_getpid, sys_nis_syscall, sys_nis_syscall, sys_setuid, sys_getuid
 /*25*/	.word sys_time, sys_ptrace, sys_alarm, sys_nis_syscall, sys_nis_syscall
 /*30*/	.word sys_utime, sys_nis_syscall, sys_nis_syscall, sys_access, sys_nice
@@ -117,7 +117,7 @@ sys_call_table:
 /*190*/	.word sys_init_module, sys_personality, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 	.word sys_nis_syscall, sys_nis_syscall, sys_getppid, sys_sigaction, sys_sgetmask
 /*200*/	.word sys_ssetmask, sys_sigsuspend, sys_newlstat, sys_uselib, sys_nis_syscall
-	.word sys_nis_syscall, sys_nis_syscall, sys_syslog, sys_nis_syscall, sys_nis_syscall
+	.word sys_nis_syscall, sys_socketcall, sys_syslog, sys_nis_syscall, sys_nis_syscall
 /*210*/	.word sys_idle, sys_nis_syscall, sys_waitpid, sys_swapoff, sys_sysinfo
 	.word sys_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys_adjtimex
 /*220*/	.word sys_sigprocmask, sys_create_module, sys_delete_module, sys_get_kernel_syms, sys_getpgid
@@ -139,7 +139,7 @@ sunos_sys_table:
 	.word sys_close, sunos_wait4, sys_creat
 	.word sys_link, sys_unlink, sunos_execv
 	.word sys_chdir, sunos_nosys, sys32_mknod
-	.word sys32_chmod, sys32_chown, sunos_brk
+	.word sys32_chmod, sys32_lchown, sunos_brk
 	.word sunos_nosys, sys32_lseek, sunos_getpid
 	.word sunos_nosys, sunos_nosys, sunos_nosys
 	.word sunos_getuid, sunos_nosys, sys_ptrace
@@ -166,7 +166,7 @@ sunos_sys_table:
 	.word sys32_getitimer, sys_gethostname, sys_sethostname
 	.word sunos_getdtablesize, sys_dup2, sunos_nop
 	.word sys32_fcntl, sunos_select, sunos_nop
-	.word sys_fsync, sys_setpriority, sys_socket
+	.word sys_fsync, sys_setpriority, sunos_socket
 	.word sys_connect, sunos_accept
 /*100*/	.word sys_getpriority, sunos_send, sunos_recv
 	.word sunos_nosys, sys_bind, sunos_setsockopt

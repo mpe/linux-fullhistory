@@ -1,8 +1,8 @@
-/* $Id: viking.S,v 1.6 1997/11/27 15:42:32 jj Exp $
+/* $Id: viking.S,v 1.11 1998/02/20 18:07:50 jj Exp $
  * viking.S: High speed Viking cache/mmu operations
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
- * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
  */
 
 #include <asm/ptrace.h>
@@ -13,6 +13,7 @@
 #include <asm/pgtsrmmu.h>
 #include <asm/viking.h>
 #include <asm/cprefix.h>
+#include <asm/btfixup.h>
 
 #define WINDOW_FLUSH(tmp1, tmp2)					\
 	mov	0, tmp1;						\
@@ -37,40 +38,33 @@
 	.globl	viking_flush_tlb_all, viking_flush_tlb_mm
 	.globl	viking_flush_tlb_range, viking_flush_tlb_page
 
-	.globl	viking_c_mxcc_flush_page
-	.globl	viking_c_flush_page, viking_c_flush_chunk
+	.globl	viking_c_flush_chunk, viking_s_flush_chunk
 
-viking_c_flush_page:
+viking_s_flush_chunk:
+	sethi	%hi(KERNBASE), %g2
+	ba	2f
+	 sub	%o0, %g2, %g3
+
 viking_c_flush_chunk:
 	sethi	%hi(KERNBASE), %g2
 	cmp	%o0, %g2
 	bgeu	2f
 	 sub	%o0, %g2, %g3
-	sethi	%hi(C_LABEL(page_contig_offset)), %g2
-	ld	[%g2 + %lo(C_LABEL(page_contig_offset))], %g2
+	sethi	BTFIXUP_SETHI(page_contig_offset), %g2
 	ba	2f
 	 sub	%o0, %g2, %g3
 
 viking_flush_page:
 viking_flush_chunk:
 	sethi	%hi(C_LABEL(srmmu_v2p_hash)), %g2
-	or	%g2, %lo(C_LABEL(srmmu_v2p_hash)), %g2
 	srl	%o0, 24, %o1
+	or	%g2, %lo(C_LABEL(srmmu_v2p_hash)), %g2
 	sll	%o1, 2, %o1
-
 	ld	[%g2 + %o1], %g3
-	cmp	%g3, 0
-	bne	1f
-	 and	%o0, PAGE_MASK, %o0
-
-	retl
-	 nop
-
-1:
-	ld	[%g3], %o1
-	sub	%o0, %o1, %g2
-	ld	[%g3 + 4], %o0
-	add	%g2, %o0, %g3
+	and	%o0, PAGE_MASK, %o0
+	cmp	%g3, -1
+	be	9f
+	 add	%o0, %g3, %g3
 2:	srl	%g3, 12, %g1		! ppage >> 12
 
 	clr	%o1			! set counter, 0 - 127
@@ -124,41 +118,22 @@ viking_flush_chunk:
 	ble	5b
 	 clr	%o2
 
-	retl
+9:	retl
 	 nop
-
-viking_c_mxcc_flush_page:
-	sethi	%hi(KERNBASE), %g2
-	cmp	%o0, %g2
-	bgeu	2f
-	 sub	%o0, %g2, %g3
-	sethi	%hi(C_LABEL(page_contig_offset)), %g2
-	ld	[%g2 + %lo(C_LABEL(page_contig_offset))], %g2
-	ba	2f
-	 sub	%o0, %g2, %g3
 
 viking_mxcc_flush_page:
 	sethi	%hi(C_LABEL(srmmu_v2p_hash)), %g2
-	or	%g2, %lo(C_LABEL(srmmu_v2p_hash)), %g2
 	srl	%o0, 24, %o1
+	or	%g2, %lo(C_LABEL(srmmu_v2p_hash)), %g2
 	sll	%o1, 2, %o1
-
 	ld	[%g2 + %o1], %g3
-	cmp	%g3, 0
-	bne	1f
-	 and	%o0, PAGE_MASK, %o0
-
-	retl
-	 nop
-
-1:
-	ld	[%g3], %o1
-	sub	%o0, %o1, %g2
-	ld	[%g3 + 4], %o0
-	add	%g2, %o0, %g3
+	and	%o0, PAGE_MASK, %o0
+	cmp	%g3, -1
+	be	9f
+	 add	%o0, %g3, %g3
 2:	sub	%g3, -PAGE_SIZE, %g3		! ppage + PAGE_SIZE
-	mov	0x10, %g2			! set cacheable bit
 	sethi	%hi(MXCC_SRCSTREAM), %o3	! assume %hi(MXCC_SRCSTREAM) == %hi(MXCC_DESTSTREAM)
+	mov	0x10, %g2			! set cacheable bit
 	or	%o3, %lo(MXCC_SRCSTREAM), %o2
 	or	%o3, %lo(MXCC_DESSTREAM), %o3
 	sub	%g3, MXCC_STREAM_SIZE, %g3
@@ -169,7 +144,7 @@ viking_mxcc_flush_page:
 	bne	6b
 	 sub	%g3, MXCC_STREAM_SIZE, %g3
 
-	retl
+9:	retl
 	 nop
 
 viking_mxcc_flush_chunk:
@@ -212,13 +187,12 @@ viking_flush_tlb_range:
 	cmp	%o3, -1
 	be	2f
 #endif
-	srl	%o1, SRMMU_PGDIR_SHIFT, %o1
+	sethi	%hi(~((1 << SRMMU_PGDIR_SHIFT) - 1)), %o4
 	sta	%o3, [%g1] ASI_M_MMUREGS
-	sll	%o1, SRMMU_PGDIR_SHIFT, %o1
-	sethi	%hi(1 << SRMMU_PGDIR_SHIFT), %o4
+	and	%o1, %o4, %o1
 	add	%o1, 0x200, %o1
 	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
-1:	add	%o1, %o4, %o1
+1:	sub	%o1, %o4, %o1
 	cmp	%o1, %o2
 	blu,a	1b
 	 sta	%g0, [%o1] ASI_M_FLUSH_PROBE

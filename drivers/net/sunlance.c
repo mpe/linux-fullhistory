@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.69 1998/01/09 16:42:52 jj Exp $
+/* $Id: sunlance.c,v 1.74 1998/02/12 07:37:25 davem Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -102,6 +102,9 @@ static char *lancedma = "LANCE DMA";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+
+#include <asm/idprom.h>
+#include <asm/machines.h>
 
 /* Define: 2^4 Tx buffers and 2^4 Rx buffers */
 #ifndef LANCE_LOG_TX_BUFFERS
@@ -1037,7 +1040,7 @@ sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 						  "busmaster-regval",
 						  (LE_C3_BSWP | LE_C3_ACON |
 						   LE_C3_BCON));
-    
+
 	lp->ll = ll;
 	lp->name = lancestr;
 	lp->ledma = ledma;
@@ -1119,8 +1122,9 @@ no_link_test:
 	dev->hard_start_xmit = &lance_start_xmit;
 	dev->get_stats = &lance_get_stats;
 	dev->set_multicast_list = &lance_set_multicast;
-    
+
 	dev->irq = (unsigned char) sdev->irqs [0].pri;
+
 	dev->dma = 0;
 	ether_setup (dev);
 
@@ -1144,6 +1148,31 @@ find_ledma (struct linux_sbus_device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_SUN4
+
+#include <asm/sun4paddr.h>
+
+/* Find all the lance cards on the system and initialize them */
+__initfunc(int sparc_lance_probe (struct device *dev))
+{
+	static struct linux_sbus_device sdev;
+	static int called = 0;
+
+	if(called)
+		return ENODEV;
+	called++;
+
+	if (idprom->id_machtype == (SM_SUN4|SM_4_330)) {
+		memset (&sdev, 0, sizeof(sdev));
+		sdev.reg_addrs[0].phys_addr = SUN4_300_ETH_PHYSADDR;
+		sdev.irqs[0].pri = 6;
+		return sparc_lance_init(dev, &sdev, 0, 0);
+	}
+	return ENODEV;
+}
+
+#else /* !CONFIG_SUN4 */
+
 /* Find all the lance cards on the system and initialize them */
 __initfunc(int sparc_lance_probe (struct device *dev))
 {
@@ -1152,10 +1181,11 @@ __initfunc(int sparc_lance_probe (struct device *dev))
 	struct Linux_SBus_DMA *ledma = 0;
 	static int called = 0;
 	int cards = 0, v;
-    
+
 	if(called)
 		return ENODEV;
 	called++;
+
 	for_each_sbus (bus) {
 		for_each_sbusdev (sdev, bus) {
 			if (cards) dev = NULL;
@@ -1186,6 +1216,7 @@ __initfunc(int sparc_lance_probe (struct device *dev))
 		return ENODEV;
 	return 0;
 }
+#endif /* !CONFIG_SUN4 */
 
 #ifdef MODULE
 

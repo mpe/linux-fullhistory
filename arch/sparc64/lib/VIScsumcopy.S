@@ -1,4 +1,4 @@
-/* $Id: VIScsumcopy.S,v 1.2 1997/08/19 15:25:22 jj Exp $
+/* $Id: VIScsumcopy.S,v 1.4 1998/04/01 08:29:52 davem Exp $
  * VIScsumcopy.S: High bandwidth IP checksumming with simultaneous
  *            copying utilizing the UltraSparc Visual Instruction Set.
  *
@@ -393,22 +393,22 @@ vis0s:	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
 	add		%src, 128, %src		/*  IEU0	Group			*/
 	ldda		[%src-128] %asi, %f0	/*  Load	Group			*/
 	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
-	fmovd		%f48, %f62		/*  FPA		Group			*/
-	faligndata	%f0, %f2, %f48		/*  FPA		Group			*/
-	fcmpgt32	%f32, %f2, %x1		/*  FPM		Group			*/
+	fmovd		%f48, %f62		/*  FPA		Group	f0 available	*/
+	faligndata	%f0, %f2, %f48		/*  FPA		Group	f2 available	*/
+	fcmpgt32	%f32, %f2, %x1		/*  FPM		Group	f4 available	*/
 	fpadd32		%f0, %f62, %f0		/*  FPA					*/
-	fcmpgt32	%f32, %f4, %x2		/*  FPM		Group			*/
+	fcmpgt32	%f32, %f4, %x2		/*  FPM		Group	f6 available	*/
 	faligndata	%f2, %f4, %f50		/*  FPA					*/
-	fcmpgt32	%f62, %f0, %x3		/*  FPM		Group			*/
+	fcmpgt32	%f62, %f0, %x3		/*  FPM		Group	f8 available	*/
 	faligndata	%f4, %f6, %f52		/*  FPA					*/
-	fcmpgt32	%f32, %f6, %x4		/*  FPM		Group			*/
+	fcmpgt32	%f32, %f6, %x4		/*  FPM		Group	f10 available	*/
 	inc		%x1			/*  IEU0				*/
 	faligndata	%f6, %f8, %f54		/*  FPA					*/
-	fcmpgt32	%f32, %f8, %x5		/*  FPM		Group			*/
+	fcmpgt32	%f32, %f8, %x5		/*  FPM		Group	f12 available	*/
 	srl		%x1, 1, %x1		/*  IEU0				*/
 	inc		%x2			/*  IEU1				*/
 	faligndata	%f8, %f10, %f56		/*  FPA					*/
-	fcmpgt32	%f32, %f10, %x6		/*  FPM		Group			*/
+	fcmpgt32	%f32, %f10, %x6		/*  FPM		Group	f14 available	*/
 	srl		%x2, 1, %x2		/*  IEU0				*/
 	add		%sum, %x1, %sum		/*  IEU1				*/
 	faligndata	%f10, %f12, %f58	/*  FPA					*/
@@ -451,6 +451,7 @@ vis1s:	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
 	add		%src, 128 - 8, %src	/*  IEU0	Group			*/
 	ldda		[%src-128] %asi, %f0	/*  Load	Group			*/
 	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	fmovd		%f0, %f58		/*  FPA		Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/
 	fcmpgt32	%f32, %f2, %x2		/*  FPM		Group			*/
 	faligndata	%f2, %f4, %f48		/*  FPA					*/
@@ -503,9 +504,10 @@ vis2s:	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
 	add		%src, 128 - 16, %src	/*  IEU0	Group			*/
 	ldda		[%src-128] %asi, %f0	/*  Load	Group			*/
 	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	fmovd		%f0, %f56		/*  FPA		Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/	
 	sub		%dst, 64, %dst		/*  IEU0				*/
-	fzero		%f2			/*  FPA		Group			*/
+	fpsub32		%f2, %f2, %f2		/*  FPA		Group			*/
 	fcmpgt32	%f32, %f4, %x3		/*  FPM		Group			*/
 	faligndata	%f4, %f6, %f48		/*  FPA					*/
 	fcmpgt32	%f32, %f6, %x4		/*  FPM		Group			*/
@@ -552,10 +554,11 @@ vis3s:	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
 	add		%src, 128 - 24, %src	/*  IEU0	Group			*/
 	ldda		[%src-128] %asi, %f0	/*  Load	Group			*/
 	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	fmovd		%f0, %f54		/*  FPA		Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/
 	sub		%dst, 64, %dst		/*  IEU0				*/
-	fzero		%f2			/*  FPA		Group			*/
-	fzero		%f4			/*  FPA		Group			*/
+	fpsub32		%f2, %f2, %f2		/*  FPA		Group			*/
+	fpsub32		%f4, %f4, %f4		/*  FPA		Group			*/
 	fcmpgt32	%f32, %f6, %x4		/*  FPM		Group			*/
 	faligndata	%f6, %f8, %f48		/*  FPA					*/
 	fcmpgt32	%f32, %f8, %x5		/*  FPM		Group			*/
@@ -597,11 +600,12 @@ vis4s:	wr		%g2, ASI_BLK_XOR, %asi	/*  LSU		Group			*/
 	add		%src, 128 - 32, %src	/*  IEU0	Group			*/
 	ldda		[%src-128] %asi, %f0	/*  Load	Group			*/
 	ldda		[%src-64] %asi, %f16	/*  Load	Group			*/
+	fmovd		%f0, %f52		/*  FPA		Group			*/
 	fmovd		%f48, %f0		/*  FPA		Group			*/
 	sub		%dst, 64, %dst		/*  IEU0				*/
-	fzero		%f2			/*  FPA		Group			*/
-	fzero		%f4			/*  FPA		Group			*/
-	fzero		%f6			/*  FPA		Group			*/
+	fpsub32		%f2, %f2, %f2		/*  FPA		Group			*/
+	fpsub32		%f4, %f4, %f4		/*  FPA		Group			*/
+	fpsub32		%f6, %f6, %f6		/*  FPA		Group			*/
 	clr		%x4			/*  IEU0				*/
 	fcmpgt32	%f32, %f8, %x5		/*  FPM		Group			*/
 	faligndata	%f8, %f10, %f48		/*  FPA					*/
@@ -697,9 +701,9 @@ vis6s:	add		%src, 128 - 48, %src	/*  IEU0	Group			*/
 	clr		%x6			/*  IEU0				*/
 	fcmpgt32	%f32, %f12, %x7		/*  FPM		Group			*/
 	sub		%dst, 64, %dst		/*  IEU0				*/
-	faligndata	%f12, %f14, %f48	/*  FPA					*/
 	fcmpgt32	%f32, %f14, %x8		/*  FPM		Group			*/
-	fmovd		%f14, %f50		/*  FPA					*/
+	faligndata	%f12, %f14, %f48	/*  FPA					*/
+	fmovd		%f14, %f50		/*  FPA		Group			*/
 vis6:	DO_THE_TRICK(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f18,f20,f22,f24,f26,f28,f30,	
 			,f52,f54,f56,f58,f60,f62,f48,f50,f50,
 			,LDBLK(f32),	,,,,,,STBLK,,

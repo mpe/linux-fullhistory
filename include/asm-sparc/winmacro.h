@@ -1,4 +1,4 @@
-/* $Id: winmacro.h,v 1.19 1997/05/01 01:42:05 davem Exp $
+/* $Id: winmacro.h,v 1.20 1998/03/09 14:04:54 jj Exp $
  * winmacro.h: Window loading-unloading macros.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -112,12 +112,25 @@
         st       %scratch, [%cur_reg + AOFF_task_tss + AOFF_thread_w_saved];
 
 #ifdef __SMP__
-#define LOAD_CURRENT(dest_reg, idreg) \
+#define LOAD_CURRENT4M(dest_reg, idreg) \
         rd       %tbr, %idreg; \
 	sethi    %hi(C_LABEL(current_set)), %dest_reg; \
         srl      %idreg, 10, %idreg; \
 	or       %dest_reg, %lo(C_LABEL(current_set)), %dest_reg; \
 	and      %idreg, 0xc, %idreg; \
+	ld       [%idreg + %dest_reg], %dest_reg;
+
+/* Sliiick. We have a Linux current register :) -jj */
+#define LOAD_CURRENT4D(dest_reg) \
+	lda	 [%g0] ASI_M_VIKING_TMP2, %dest_reg;
+
+/* Blackbox - take care with this... - check smp4m and smp4d before changing this. */
+#define LOAD_CURRENT(dest_reg, idreg) 					\
+	sethi	 %hi(___b_load_current), %idreg;			\
+	sethi    %hi(C_LABEL(current_set)), %dest_reg; 			\
+	sethi    %hi(C_LABEL(boot_cpu_id4)), %idreg; 			\
+	or       %dest_reg, %lo(C_LABEL(current_set)), %dest_reg; 	\
+	ldub	 [%idreg + %lo(C_LABEL(boot_cpu_id4))], %idreg;		\
 	ld       [%idreg + %dest_reg], %dest_reg;
 #else
 #define LOAD_CURRENT(dest_reg, idreg) \

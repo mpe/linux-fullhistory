@@ -1,8 +1,8 @@
-/*  $Id: sun4d_irq.c,v 1.3 1997/12/22 16:09:15 jj Exp $
- *  arch/sparc/kernel/sun4d_irq.c: 
+/*  $Id: sun4d_irq.c,v 1.12 1998/03/19 15:36:36 jj Exp $
+ *  arch/sparc/kernel/sun4d_irq.c:
  *			SS1000/SC2000 interrupt handling.
  *
- *  Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ *  Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  *  Heavily based on arch/sparc/kernel/irq.c.
  */
 
@@ -36,32 +36,47 @@
 #include <asm/sbus.h>
 #include <asm/sbi.h>
 
+/* If you trust current SCSI layer to handle different SCSI IRQs, enable this. I don't trust it... -jj */
+/* #define DISTRIBUTE_IRQS */
+
 struct sun4d_timer_regs *sun4d_timers;
 #define TIMER_IRQ	10
 
 #define MAX_STATIC_ALLOC	4
 extern struct irqaction static_irqaction[MAX_STATIC_ALLOC];
 extern int static_irq_count;
+unsigned char cpu_leds[32];
+#ifdef __SMP__
+unsigned char sbus_tid[32];
+#endif
 
 extern struct irqaction *irq_action[];
 
 struct sbus_action {
 	struct irqaction *action;
-	unsigned char	lock;
-	unsigned char	active;
-	unsigned char	disabled;
+	/* For SMP this needs to be extended */
 } *sbus_actions;
 
 static int pil_to_sbus[] = {
 	0, 0, 1, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7, 0, 0,
 };
 
+static int sbus_to_pil[] = {
+	0, 2, 3, 5, 7, 9, 11, 13,
+};
+
 static int nsbi;
+#ifdef __SMP__
+spinlock_t sun4d_imsk_lock = SPIN_LOCK_UNLOCKED;
+#endif
 
 int sun4d_get_irq_list(char *buf)
 {
 	int i, j = 0, k = 0, len = 0, sbusl;
 	struct irqaction * action;
+#ifdef __SMP__
+	int x;
+#endif
 
 	for (i = 0 ; i < NR_IRQS ; i++) {
 		sbusl = pil_to_sbus[i];
@@ -77,8 +92,15 @@ int sun4d_get_irq_list(char *buf)
 			}
 			continue;
 		}
-found_it:	len += sprintf(buf+len, "%2d: %8d %c %s",
-			i, kstat.interrupts[i],
+found_it:	len += sprintf(buf+len, "%3d: ", i);
+#ifndef __SMP__
+		len += sprintf(buf+len, "%10u ", kstat_irqs(i));
+#else
+		for (x = 0; x < smp_num_cpus; x++)
+			len += sprintf(buf+len, "%10u ",
+				       kstat.irqs[cpu_logical_map(x)][i]);
+#endif
+		len += sprintf(buf+len, "%c %s",
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
 		action = action->next;
@@ -172,7 +194,7 @@ void sun4d_handler_irq(int irq, struct pt_regs * regs)
 	cc_set_iclr(1 << irq);
 	
 	irq_enter(cpu, irq, regs);
-	kstat.interrupts[irq]++;
+	kstat.irqs[cpu][irq]++;
 	if (!sbusl) {
 		action = *(irq + irq_action);
 		if (!action)
@@ -183,7 +205,6 @@ void sun4d_handler_irq(int irq, struct pt_regs * regs)
 		} while (action);
 	} else {
 		int bus_mask = bw_get_intr_mask(sbusl) & 0x3ffff;
-		int lock;
 		int sbino;
 		struct sbus_action *actionp;
 		unsigned mask, slot;
@@ -202,19 +223,13 @@ void sun4d_handler_irq(int irq, struct pt_regs * regs)
 					if (mask & slot) {
 						mask &= ~slot;
 						action = actionp->action;
-						__asm__ __volatile__ ("ldstub	[%1 + 4], %0"
-						: "=r" (lock) : "r" (actionp));
 						
-						if (!lock) {
-							if (!action)
-								unexpected_irq(irq, 0, regs);
-							do {
-								action->handler(irq, action->dev_id, regs);
-								action = action->next;
-							} while (action);
-							actionp->lock = 0;
-						} else
-							actionp->active = 1;
+						if (!action)
+							unexpected_irq(irq, 0, regs);
+						do {
+							action->handler(irq, action->dev_id, regs);
+							action = action->next;
+						} while (action);
 						release_sbi(SBI2DEVID(sbino), slot);
 					}
 			}
@@ -305,79 +320,49 @@ int sun4d_request_irq(unsigned int irq,
 	else
 		*actionp = action;
 		
-	if (ret) irq = *ret;
-
-	if (irq > NR_IRQS) {
-		struct sbus_action *s = sbus_actions + irq - (1 << 5);
-	
-		if (s->disabled) {
-			s->disabled = 0;
-			s->active = 0;
-			s->lock = 0;
-		}
-	}
-	
+	enable_irq(irq);
 	restore_flags(flags);
 	return 0;
 }
 
 static void sun4d_disable_irq(unsigned int irq)
 {
-	struct sbus_action *s;
+#ifdef __SMP__
+	int tid = sbus_tid[(irq >> 5) - 1];
+	unsigned long flags;
+#endif	
 	
-	if (irq < NR_IRQS) {
-		/* FIXME */
-		printk ("Unable to disable IRQ %d\n", irq);
-		return;
-	}
-	s = sbus_actions + irq - (1 << 5);
-	
-	if (s->disabled) return;
-	s->disabled = 1;
-	__asm__ __volatile__ ("
-1:		ldstub	[%0 + 4], %%g1
-		orcc	%%g1, 0, %%g0
-		bne	1b"
-		: : "r" (s) : "g1", "cc");
+	if (irq < NR_IRQS) return;
+#ifdef __SMP__
+	spin_lock_irqsave(&sun4d_imsk_lock, flags);
+	cc_set_imsk_other(tid, cc_get_imsk_other(tid) | (1 << sbus_to_pil[(irq >> 2) & 7]));
+	spin_unlock_irqrestore(&sun4d_imsk_lock, flags);
+#else		
+	cc_set_imsk(cc_get_imsk() | (1 << sbus_to_pil[(irq >> 2) & 7]));
+#endif
 }
 
 static void sun4d_enable_irq(unsigned int irq)
 {
-	struct sbus_action *s;
-	struct irqaction *action;
+#ifdef __SMP__
+	int tid = sbus_tid[(irq >> 5) - 1];
+	unsigned long flags;
+#endif	
 	
-	if (irq < NR_IRQS)
-		/* FIXME */
-		return;
-	s = sbus_actions + irq - (1 << 5);
-	
-	if (!s->disabled) return;
-	action = s->action;
-	s->disabled = 0;
-	while (s->active) {
-		s->active = 0;
-		while (action) {
-			/* FIXME: Hope no sbus intr handler uses regs */
-			action->handler(irq, action->dev_id, NULL);
-			action = action->next;
-		}
-	}
-	s->lock = 0;
+	if (irq < NR_IRQS) return;
+#ifdef __SMP__
+	spin_lock_irqsave(&sun4d_imsk_lock, flags);
+	cc_set_imsk_other(tid, cc_get_imsk_other(tid) & ~(1 << sbus_to_pil[(irq >> 2) & 7]));
+	spin_unlock_irqrestore(&sun4d_imsk_lock, flags);
+#else		
+	cc_set_imsk(cc_get_imsk() & ~(1 << sbus_to_pil[(irq >> 2) & 7]));
+#endif
 }
 
 #ifdef __SMP__
-
-/* +-------+-------------+-----------+------------------------------------+
- * | bcast |  devid      |   sid     |              levels mask           |
- * +-------+-------------+-----------+------------------------------------+
- *  31      30         23 22       15 14                                 0
- */
-#define IGEN_MESSAGE(bcast, devid, sid, levels) \
-	(((bcast) << 31) | ((devid) << 23) | ((sid) << 15) | (levels))
-
-static void sun4d_send_ipi(int cpu, int level)
+static void sun4d_set_cpu_int(int cpu, int level)
 {
-	cc_set_igen(IGEN_MESSAGE(0, cpu << 3, 6 + ((level >> 1) & 7), 1 << (level - 1)));
+	sun4d_send_ipi(cpu, level);
 }
 
 static void sun4d_clear_ipi(int cpu, int level)
@@ -386,6 +371,55 @@ static void sun4d_clear_ipi(int cpu, int level)
 
 static void sun4d_set_udt(int cpu)
 {
+}
+
+/* Setup IRQ distribution scheme. */
+__initfunc(void sun4d_distribute_irqs(void))
+{
+#ifdef DISTRIBUTE_IRQS
+	struct linux_sbus *sbus;
+	unsigned long sbus_serving_map;
+
+	sbus_serving_map = cpu_present_map;
+	for_each_sbus(sbus) {
+		if ((sbus->board * 2) == boot_cpu_id && (cpu_present_map & (1 << (sbus->board * 2 + 1))))
+			sbus_tid[sbus->board] = (sbus->board * 2 + 1);
+		else if (cpu_present_map & (1 << (sbus->board * 2)))
+			sbus_tid[sbus->board] = (sbus->board * 2);
+		else if (cpu_present_map & (1 << (sbus->board * 2 + 1)))
+			sbus_tid[sbus->board] = (sbus->board * 2 + 1);
+		else
+			sbus_tid[sbus->board] = 0xff;
+		if (sbus_tid[sbus->board] != 0xff)
+			sbus_serving_map &= ~(1 << sbus_tid[sbus->board]);
+	}
+	for_each_sbus(sbus)
+		if (sbus_tid[sbus->board] == 0xff) {
+			int i = 31;
+				
+			if (!sbus_serving_map)
+				sbus_serving_map = cpu_present_map;
+			while (!(sbus_serving_map & (1 << i)))
+				i--;
+			sbus_tid[sbus->board] = i;
+			sbus_serving_map &= ~(1 << i);
+		}
+	for_each_sbus(sbus) {
+		printk("sbus%d IRQs directed to CPU%d\n", sbus->board, sbus_tid[sbus->board]);
+		set_sbi_tid(sbus->devid, sbus_tid[sbus->board] << 3);
+	}
+#else
+	struct linux_sbus *sbus;
+	int cpuid = cpu_logical_map(1);
+
+	if (cpuid == -1)
+		cpuid = cpu_logical_map(0);
+	for_each_sbus(sbus) {
+		sbus_tid[sbus->board] = cpuid;
+		set_sbi_tid(sbus->devid, cpuid << 3);
+	}
+	printk("All sbus IRQs directed to CPU%d\n", cpuid);
+#endif
 }
 #endif
  
@@ -408,7 +442,7 @@ static void sun4d_load_profile_irq(int cpu, unsigned int limit)
 __initfunc(static void sun4d_init_timers(void (*counter_fn)(int, void *, struct pt_regs *)))
 {
 	int irq;
-	extern struct prom_cpuinfo linux_cpus[NCPUS];
+	extern struct prom_cpuinfo linux_cpus[NR_CPUS];
 	int cpu;
 
 	/* Map the User Timer registers. */
@@ -431,15 +465,39 @@ __initfunc(static void sun4d_init_timers(void (*counter_fn)(int, void *, struct 
 	/* Enable user timer free run for CPU 0 in BW */
 	/* bw_set_ctrl(0, bw_get_ctrl(0) | BW_CTRL_USER_TIMER); */
     
-	for(cpu = 0; cpu < NCPUS; cpu++)
-		sun4d_load_profile_irq(linux_cpus[cpu].mid, 0);
+	for(cpu = 0; cpu < linux_num_cpus; cpu++)
+		sun4d_load_profile_irq((linux_cpus[cpu].mid >> 3), 0);
+		
+#ifdef __SMP__
+	{
+		unsigned long flags;
+		extern unsigned long lvl14_save[4];
+		struct tt_entry *trap_table = &sparc_ttable[SP_TRAP_IRQ1 + (14 - 1)];
+		extern unsigned int real_irq_entry[], smp4d_ticker[];
+		extern unsigned int patchme_maybe_smp_msg[];
+
+		/* Adjust so that we jump directly to smp4d_ticker */
+		lvl14_save[2] += smp4d_ticker - real_irq_entry;
+
+		/* For SMP we use the level 14 ticker, however the bootup code
+		 * has copied the firmwares level 14 vector into boot cpu's
+		 * trap table, we must fix this now or we get squashed.
+		 */
+		__save_and_cli(flags);
+		patchme_maybe_smp_msg[0] = 0x01000000; /* NOP out the branch */
+		trap_table->inst_one = lvl14_save[0];
+		trap_table->inst_two = lvl14_save[1];
+		trap_table->inst_three = lvl14_save[2];
+		trap_table->inst_four = lvl14_save[3];
+		local_flush_cache_all();
+		__restore_flags(flags);
+	}
+#endif
 }
 
 __initfunc(unsigned long sun4d_init_sbi_irq(unsigned long memory_start))
 {
 	struct linux_sbus *sbus;
-	struct sbus_action *s;
-	int i;
 	unsigned mask;
 
 	nsbi = 0;
@@ -449,11 +507,13 @@ __initfunc(unsigned long sun4d_init_sbi_irq(unsigned long memory_start))
 	sbus_actions = (struct sbus_action *)memory_start;
 	memory_start += (nsbi * 8 * 4 * sizeof(struct sbus_action));
 	memset (sbus_actions, 0, (nsbi * 8 * 4 * sizeof(struct sbus_action)));
-	for (i = 0, s = sbus_actions; i < nsbi * 8 * 4; i++, s++) {
-		s->lock = 0xff;
-		s->disabled = 1;
-	}
 	for_each_sbus(sbus) {
+#ifdef __SMP__	
+		extern unsigned char boot_cpu_id;
+		
+		set_sbi_tid(sbus->devid, boot_cpu_id << 3);
+		sbus_tid[sbus->board] = boot_cpu_id;
+#endif
 		/* Get rid of pending irqs from PROM */
 		mask = acquire_sbi(sbus->devid, 0xffffffff);
 		if (mask) {
@@ -468,16 +528,16 @@ __initfunc(void sun4d_init_IRQ(void))
 {
 	__cli();
 
-	enable_irq = sun4d_enable_irq;
-	disable_irq = sun4d_disable_irq;
-	clear_clock_irq = sun4d_clear_clock_irq;
-	clear_profile_irq = sun4d_clear_profile_irq;
-	load_profile_irq = sun4d_load_profile_irq;
+	BTFIXUPSET_CALL(enable_irq, sun4d_enable_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(disable_irq, sun4d_disable_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(clear_clock_irq, sun4d_clear_clock_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(clear_profile_irq, sun4d_clear_profile_irq, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(load_profile_irq, sun4d_load_profile_irq, BTFIXUPCALL_NORM);
 	init_timers = sun4d_init_timers;
 #ifdef __SMP__
-	set_cpu_int = (void (*) (int, int))sun4d_send_ipi;
-	clear_cpu_int = (void (*) (int, int))sun4d_clear_ipi;
-	set_irq_udt = (void (*) (int))sun4d_set_udt;
+	BTFIXUPSET_CALL(set_cpu_int, sun4d_set_cpu_int, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(clear_cpu_int, sun4d_clear_ipi, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(set_irq_udt, sun4d_set_udt, BTFIXUPCALL_NOP);
 #endif
 	/* Cannot enable interrupts until OBP ticker is disabled. */
 }

@@ -1,8 +1,9 @@
-/* $Id: bwtwo.c,v 1.18 1997/07/17 02:21:43 davem Exp $
+/* $Id: bwtwo.c,v 1.20 1998/03/10 20:18:22 jj Exp $
  * bwtwo.c: bwtwo console driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
  * Copyright (C) 1997 Eddie C. Dost   (ecd@skynet.be)
+ * Copyright (C) 1998 Pavel Machek    (pavel@ucw.cz)
  */
 
 #include <linux/kd.h>
@@ -95,7 +96,8 @@ bwtwo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	if (r)
 		return -EAGAIN;
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
 	return 0;
 }
 
@@ -156,15 +158,17 @@ __initfunc(void bwtwo_setup (fbinfo_t *fb, int slot, u32 bwtwo, int bw2_io,
 	fb->loadcmap = 0;
 	fb->ioctl = 0;
 	fb->reset = 0;
+#ifndef CONFIG_SUN4	
 	fb->blank = bwtwo_blank;
 	fb->unblank = bwtwo_unblank;
+#endif
 
 	fb->info.bwtwo.regs =
 		sparc_alloc_io (bwtwo + BWTWO_REGISTER_OFFSET,
 				0, sizeof (struct bwtwo_regs),
 		"bwtwo_regs", bw2_io, 0);
 
-	if (!prom_getbool(sbdp->prom_node, "width")) {
+	if (sbdp && !prom_getbool(sbdp->prom_node, "width")) {
 		/* Ugh, broken PROM didn't initialize us.
 		 * Let's deal with this ourselves.
 		 */

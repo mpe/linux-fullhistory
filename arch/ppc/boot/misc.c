@@ -4,25 +4,35 @@
  * Adapted for PowerPC by Gary Thomas
  *
  * Rewritten by Cort Dougan (cort@cs.nmt.edu)
- * Soon to be replaced by a single bootloader for chrp/prep/pmac. -- Cort
+ * One day to be replaced by a single bootloader for chrp/prep/pmac. -- Cort
  */
 
 #include "../coffboot/zlib.h"
 #include "asm/residual.h"
 #include <elf.h>
+#include <linux/config.h>
+#ifdef CONFIG_MBX
+#include <asm/mbx.h>
+bd_t	hold_board_info;
+#endif
 
 /* this is where the INITRD gets moved to for safe keeping */
-#define INITRD_DESTINATION /*0x00f00000*/ 0x01f00000
+#define INITRD_DESTINATION /*0x00f00000*/ 0x01800000
+#ifdef CONFIG_8xx
+char *avail_ram = (char *) 0x00200000;
+char *end_avail = (char *) 0x00400000;
+#else /* CONFIG_8xx */
 /* this will do for now - Cort */
 char *avail_ram = (char *) 0x00800000; /* start with 8M */
 /* assume 15M max since this is where we copy the initrd to -- Cort */
 char *end_avail = (char *) INITRD_DESTINATION; 
+#endif /* CONFIG_8xx */
 
+char cmd_line[256];
 RESIDUAL hold_residual;
 unsigned long initrd_start = 0, initrd_end = 0;
 char *zimage_start;
 int zimage_size;
-char cmd_line[256];
 
 char *vidmem = (char *)0xC00B8000;
 int lines, cols;
@@ -47,6 +57,7 @@ void exit()
 	while(1); 
 }
 
+#ifndef CONFIG_MBX
 static void clear_screen()
 {
 	int i, j;
@@ -144,6 +155,39 @@ void puts(const char *s)
 	orig_x = x;
 	orig_y = y;
 }
+#else
+/* The MBX is just the serial port.
+*/
+tstc(void)
+{
+        return (serial_tstc());
+}
+
+getc(void)
+{
+        while (1) {
+                if (serial_tstc()) return (serial_getc());
+        }
+}
+
+void 
+putc(const char c)
+{
+        serial_putchar(c);
+}
+
+void puts(const char *s)
+{
+        char c;
+
+        while ( ( c = *s++ ) != '\0' ) {
+                serial_putchar(c);
+                if ( c == '\n' )
+                        serial_putchar('\r');
+        }
+}
+
+#endif /* CONFIG_MBX */
 
 void * memcpy(void * __dest, __const void * __src,
 			    int __n)
@@ -253,6 +297,8 @@ void gunzip(void *dst, int dstlen, unsigned char *src, int *lenp)
 	inflateEnd(&s);
 }
 
+unsigned char sanity[0x2000];
+
 unsigned long
 decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, RESIDUAL *residual)
 {
@@ -260,31 +306,60 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	extern unsigned long start;
 	char *cp, ch;
 	unsigned long i;
-	
-	
+
 	lines = 25;
 	cols = 80;
 	orig_x = 0;
 	orig_y = 24;
 	
 	
-	/* Turn off MMU.  Since we are mapped 1-1, this is OK. */
-	flush_instruction_cache();
-	_put_HID0(_get_HID0() & ~0x0000C000);
-	_put_MSR(_get_MSR() & ~0x0030);
-
+#ifndef CONFIG_8xx
 	vga_init(0xC0000000);
-	/*clear_screen();*/
+	/* copy the residual data */
+	if (residual)
+		memcpy(&hold_residual,residual,sizeof(RESIDUAL));
+#endif /* CONFIG_8xx */
+#ifdef CONFIG_MBX	
+	/* copy board data */
+	if (residual)
+		_bcopy((char *)residual, (char *)&hold_board_info,
+		       sizeof(hold_board_info));
+#endif /* CONFIG_8xx */
+	
 
-	puts("loaded at:    "); puthex(load_addr);
+	puts("loaded at:     "); puthex(load_addr);
 	puts(" "); puthex((unsigned long)(load_addr + (4*num_words))); puts("\n");
-	
-	puts("relocated to: "); puthex((unsigned long)&start);
+	puts("relocated to:  "); puthex((unsigned long)&start);
 	puts(" "); puthex((unsigned long)((unsigned long)&start + (4*num_words))); puts("\n");
-	
+
+	if ( residual )
+	{
+		puts("board data at: "); puthex((unsigned long)residual);
+		puts(" ");
+#ifdef CONFIG_MBX	
+		puthex((unsigned long)((unsigned long)residual + sizeof(bd_t)));
+#else
+		puthex((unsigned long)((unsigned long)residual + sizeof(RESIDUAL)));
+#endif	
+		puts("\n");
+		puts("relocated to:  ");
+#ifdef CONFIG_MBX
+		puthex((unsigned long)&hold_board_info);
+#else
+		puthex((unsigned long)&hold_residual);
+#endif
+		puts(" ");
+#ifdef CONFIG_MBX
+		puthex((unsigned long)((unsigned long)&hold_board_info + sizeof(bd_t)));
+#else
+		puthex((unsigned long)((unsigned long)&hold_residual + sizeof(RESIDUAL)));
+#endif	
+		puts("\n");
+	}
+
 	zimage_start = (char *)(load_addr - 0x10000 + ZIMAGE_OFFSET);
 	zimage_size = ZIMAGE_SIZE;
-	puts("zimage at:    "); puthex((unsigned long)zimage_start);
+	puts("zimage at:     "); puthex((unsigned long)zimage_start);
 	puts(" "); puthex((unsigned long)(zimage_size+zimage_start)); puts("\n");
 
 	if ( INITRD_OFFSET )
@@ -296,18 +371,19 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	/* relocate initrd */
 	if ( initrd_start )
 	{
-		puts("initrd at:    "); puthex(initrd_start);
+		puts("initrd at:     "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
 		
 		memcpy ((void *)INITRD_DESTINATION,(void *)initrd_start,
 			INITRD_SIZE );
 		initrd_end = INITRD_DESTINATION + INITRD_SIZE;
 		initrd_start = INITRD_DESTINATION;
-		puts("Moved initrd to: "); puthex(initrd_start);
+		puts("Moved initrd to:  "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
 	}
-	
+#ifndef CONFIG_MBX
 	CRT_tstc();  /* Forces keyboard to be initialized */
+#endif	
 	puts("\nLinux/PPC load: ");
 	timer = 0;
 	cp = cmd_line;
@@ -339,9 +415,12 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	if ( initrd_start > (16<<20))
 		puts("initrd_start located > 16M\n");
        
-  
 	puts("Uncompressing Linux...");
-	gunzip(0, 0x400000, zimage_start, &zimage_size);  
+
+	/* these _bcopy() calls are here so I can add breakpoints to the boot for mbx -- Cort */
+	/*_bcopy( (char *)0x100,(char *)&sanity, 0x2000-0x100);*/
+	gunzip(0, 0x400000, zimage_start, &zimage_size);
+	/*_bcopy( (char *)&sanity,(char *)0x100,0x2000-0x100);*/
 	puts("done.\n");
 	puts("Now booting the kernel\n");
 	return (unsigned long)&hold_residual;

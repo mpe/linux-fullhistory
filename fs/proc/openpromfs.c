@@ -1,4 +1,4 @@
-/* $Id: openpromfs.c,v 1.21 1997/08/19 02:05:48 davem Exp $
+/* $Id: openpromfs.c,v 1.26 1998/01/28 09:55:32 ecd Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -55,13 +55,14 @@ static struct openpromfs_dev **devices;
 #define NODEP2INO(no) (no + PROC_OPENPROM_FIRST + last_node)
 
 static int openpromfs_create (struct inode *, struct dentry *, int);
-static int openpromfs_readdir(struct inode *, struct file *, void *, filldir_t);
+static int openpromfs_readdir(struct file *, void *, filldir_t);
 static int openpromfs_lookup(struct inode *, struct dentry *dentry);
 static int openpromfs_unlink (struct inode *, struct dentry *dentry);
 
-static long nodenum_read(struct inode *inode, struct file *file,
-			 char *buf, unsigned long count)
+static ssize_t nodenum_read(struct file *file, char *buf,
+			    size_t count, loff_t *ppos)
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	char buffer[10];
 	
 	if (count < 0 || !inode->u.generic_ip)
@@ -76,9 +77,10 @@ static long nodenum_read(struct inode *inode, struct file *file,
 	return count;
 }
 
-static long property_read(struct inode *inode, struct file *filp,
-			  char *buf, unsigned long count)
+static ssize_t property_read(struct file *filp, char *buf,
+			     size_t count, loff_t *ppos)
 {
+	struct inode *inode = filp->f_dentry->d_inode;
 	int i, j, k;
 	u32 node;
 	char *p;
@@ -212,8 +214,8 @@ static long property_read(struct inode *inode, struct file *filp,
 	return count;
 }
 
-static long property_write(struct inode *inode, struct file *filp,
-			   const char *buf, unsigned long count)
+static ssize_t property_write(struct file *filp, const char *buf,
+			      size_t count, loff_t *ppos)
 {
 	int i, j, k;
 	char *p;
@@ -224,7 +226,7 @@ static long property_write(struct inode *inode, struct file *filp,
 	if (filp->f_pos >= 0xffffff)
 		return -EINVAL;
 	if (!filp->private_data) {
-		i = property_read (inode, filp, NULL, 0);
+		i = property_read (filp, NULL, 0, 0);
 		if (i)
 			return i;
 	}
@@ -741,9 +743,9 @@ static int openpromfs_lookup(struct inode * dir, struct dentry *dentry)
 	return 0;
 }
 
-static int openpromfs_readdir(struct inode * inode, struct file * filp,
-	void * dirent, filldir_t filldir)
+static int openpromfs_readdir(struct file * filp, void * dirent, filldir_t filldir)
 {
+	struct inode *inode = filp->f_dentry->d_inode;
 	unsigned int ino;
 	u32 n;
 	int i, j;
@@ -1044,10 +1046,6 @@ EXPORT_NO_SYMBOLS;
 int init_module (void)
 #endif
 {
-#ifndef __sparc_v9__
-	if (!romvec->pv_romvers)
-		return RET(ENODEV);
-#endif
 	nodes = (openpromfs_node *)__get_free_pages(GFP_KERNEL, 0);
 	if (!nodes) {
 		printk (KERN_WARNING "/proc/openprom: can't get free page\n");

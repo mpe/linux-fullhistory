@@ -1,8 +1,9 @@
-/* $Id: init.c,v 1.11 1997/03/18 17:58:24 jj Exp $
+/* $Id: init.c,v 1.12 1998/01/30 10:59:02 jj Exp $
  * init.c:  Initialize internal variables used by the PROM
  *          library functions.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/config.h>
@@ -11,10 +12,12 @@
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
+#include <asm/sun4prom.h>
 
 struct linux_romvec *romvec;
 enum prom_major_version prom_vers;
 unsigned int prom_rev, prom_prev;
+linux_sun4_romvec *sun4_romvec;
 
 /* The root node of the prom device tree. */
 int prom_root_node;
@@ -34,11 +37,14 @@ extern void prom_ranges_init(void);
 
 __initfunc(void prom_init(struct linux_romvec *rp))
 {
+#ifdef CONFIG_SUN4
+	extern struct linux_romvec *sun4_prom_init(void);
+	rp = sun4_prom_init();
+#endif
 #if CONFIG_AP1000
 	extern struct linux_romvec *ap_prom_init(void);
 	rp = ap_prom_init();
 #endif
-
 	romvec = rp;
 
 	switch(romvec->pv_romvers) {
@@ -50,6 +56,9 @@ __initfunc(void prom_init(struct linux_romvec *rp))
 		break;
 	case 3:
 		prom_vers = PROM_V3;
+		break;
+	case 40:
+		prom_vers = PROM_SUN4;
 		break;
 	case 42: /* why not :-) */
 		prom_vers = PROM_AP1000;
@@ -83,8 +92,11 @@ __initfunc(void prom_init(struct linux_romvec *rp))
 
 	prom_ranges_init();
 
+#ifndef CONFIG_SUN4
+	/* SUN4 prints this in sun4_prom_init */
 	printk("PROMLIB: Sun Boot Prom Version %d Revision %d\n",
 	       romvec->pv_romvers, prom_rev);
+#endif
 
 	/* Initialization successful. */
 	return;

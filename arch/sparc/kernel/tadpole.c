@@ -6,6 +6,7 @@
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/init.h>
 
 #include <asm/asi.h>
 #include <asm/oplib.h>
@@ -94,7 +95,7 @@ static void swift_clockstop(void)
 	clk_ctrl[0] = 0;
 }
 
-void clock_stop_probe(void)
+__initfunc(void clock_stop_probe(void))
 {
 	unsigned int node, clk_nd;
 	char name[20];

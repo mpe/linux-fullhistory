@@ -13,6 +13,7 @@
 #include <asm/prom.h>
 #include <asm/dbdma.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include "mace.h"
 
 #define N_RX_RING	8
@@ -117,21 +118,22 @@ mace_probe(struct device *dev)
 
 	mp = (struct mace_data *) dev->priv;
 	dev->base_addr = maces->addrs[0].address;
-	mp->mace = (volatile struct mace *) maces->addrs[0].address;
-	dev->irq = maces->intrs[0];
+	mp->mace = (volatile struct mace *)
+		ioremap(maces->addrs[0].address, 0x1000);
+	dev->irq = maces->intrs[0].line;
 
 	if (request_irq(dev->irq, mace_interrupt, 0, "MACE", dev)) {
 	    printk(KERN_ERR "MACE: can't get irq %d\n", dev->irq);
 	    return -EAGAIN;
 	}
-	if (request_irq(maces->intrs[1], mace_txdma_intr, 0, "MACE-txdma",
+	if (request_irq(maces->intrs[1].line, mace_txdma_intr, 0, "MACE-txdma",
 			dev)) {
-	    printk(KERN_ERR "MACE: can't get irq %d\n", maces->intrs[1]);
+	    printk(KERN_ERR "MACE: can't get irq %d\n", maces->intrs[1].line);
 	    return -EAGAIN;
 	}
-	if (request_irq(maces->intrs[2], mace_rxdma_intr, 0, "MACE-rxdma",
+	if (request_irq(maces->intrs[2].line, mace_rxdma_intr, 0, "MACE-rxdma",
 			dev)) {
-	    printk(KERN_ERR "MACE: can't get irq %d\n", maces->intrs[2]);
+	    printk(KERN_ERR "MACE: can't get irq %d\n", maces->intrs[2].line);
 	    return -EAGAIN;
 	}
 
@@ -155,10 +157,12 @@ mace_probe(struct device *dev)
 
 	mp = (struct mace_data *) dev->priv;
 	mp->maccc = ENXMT | ENRCV;
-	mp->tx_dma = (volatile struct dbdma_regs *) maces->addrs[1].address;
-	mp->tx_dma_intr = maces->intrs[1];
-	mp->rx_dma = (volatile struct dbdma_regs *) maces->addrs[2].address;
-	mp->rx_dma_intr = maces->intrs[2];
+	mp->tx_dma = (volatile struct dbdma_regs *)
+		ioremap(maces->addrs[1].address, 0x1000);
+	mp->tx_dma_intr = maces->intrs[1].line;
+	mp->rx_dma = (volatile struct dbdma_regs *)
+		ioremap(maces->addrs[2].address, 0x1000);
+	mp->rx_dma_intr = maces->intrs[2].line;
 
 	mp->tx_cmds = (volatile struct dbdma_cmd *) DBDMA_ALIGN(mp + 1);
 	mp->rx_cmds = mp->tx_cmds + NCMDS_TX * N_TX_RING + 1;
@@ -168,8 +172,6 @@ mace_probe(struct device *dev)
 	      (NCMDS_TX*N_TX_RING + N_RX_RING + 2) * sizeof(struct dbdma_cmd));
 	init_timer(&mp->tx_timeout);
 	mp->timeout_active = 0;
-
-	mace_reset(dev);
 
 	dev->open = mace_open;
 	dev->stop = mace_close;
@@ -259,6 +261,9 @@ static int mace_open(struct device *dev)
     int i;
     struct sk_buff *skb;
     unsigned char *data;
+
+    /* reset the chip */
+    mace_reset(dev);
 
     /* initialize list of sk_buffs for receiving and set up recv dma */
     memset((char *)mp->rx_cmds, 0, N_RX_RING * sizeof(struct dbdma_cmd));
@@ -410,6 +415,10 @@ static int mace_xmit_start(struct sk_buff *skb, struct device *dev)
 	++mp->tx_active;
 	mace_set_timeout(dev);
     }
+    if (++next >= N_TX_RING)
+	next = 0;
+    if (next == mp->tx_empty)
+	dev->tbusy = 1;
     restore_flags(flags);
 
     return 0;
@@ -520,6 +529,8 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
     i = mp->tx_empty;
     while (mb->pr & XMTSV) {
+	del_timer(&mp->tx_timeout);
+	mp->timeout_active = 0;
 	/*
 	 * Clear any interrupt indication associated with this status
 	 * word.  This appears to unlatch any error indication from
@@ -533,8 +544,6 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    eieio();
 	    mp->tx_bad_runt = 0;
 	    mb->xmtfc = AUTO_PAD_XMIT;
-	    del_timer(&mp->tx_timeout);
-	    mp->timeout_active = 0;
 	    continue;
 	}
 	dstat = ld_le32(&td->status);
@@ -562,7 +571,8 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 	fs = mb->xmtfs;
 	if ((fs & XMTSV) == 0) {
-	    printk(KERN_ERR "mace: xmtfs not valid! (fs=%x xc=%d ds=%x)\n", fs, xcount, dstat);
+	    printk(KERN_ERR "mace: xmtfs not valid! (fs=%x xc=%d ds=%x)\n",
+		   fs, xcount, dstat);
 	}
 	cp = mp->tx_cmds + NCMDS_TX * i;
 	stat = ld_le16(&cp->xfer_status);
@@ -571,6 +581,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	     * Check whether there were in fact 2 bytes written to
 	     * the transmit FIFO.
 	     */
+	    udelay(1);
 	    x = (mb->fifofc >> XMTFC_SH) & XMTFC_MASK;
 	    if (x != 0) {
 		/* there were two bytes with an end-of-packet indication */
@@ -579,17 +590,21 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    } else {
 		/*
 		 * Either there weren't the two bytes buffered up, or they
-		 * didn't have an end-of-packet indication.  Maybe we ought
-		 * to flush the transmit FIFO just in case (by setting the
+		 * didn't have an end-of-packet indication.
+		 * We flush the transmit FIFO just in case (by setting the
 		 * XMTFWU bit with the transmitter disabled).
 		 */
-		mb->xmtfc = AUTO_PAD_XMIT;
-		eieio();
+		out_8(&mb->maccc, mb->maccc & ~ENXMT);
+		out_8(&mb->fifocc, mb->fifocc | XMTFWU);
+		udelay(1);
+		out_8(&mb->maccc, mb->maccc | ENXMT);
+		out_8(&mb->xmtfc, AUTO_PAD_XMIT);
 	    }
 	}
 	/* dma should have finished */
 	if (i == mp->tx_fill) {
-	    printk(KERN_DEBUG "mace: tx ring ran out? (fs=%x xc=%d ds=%x)\n", fs, xcount, dstat);
+	    printk(KERN_DEBUG "mace: tx ring ran out? (fs=%x xc=%d ds=%x)\n",
+		   fs, xcount, dstat);
 	    continue;
 	}
 	/* Update stats */
@@ -607,11 +622,9 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    i = 0;
 	mace_last_fs = fs;
 	mace_last_xcount = xcount;
-	del_timer(&mp->tx_timeout);
-	mp->timeout_active = 0;
     }
 
-    if (i != mp->tx_empty && mp->tx_fullup) {
+    if (i != mp->tx_empty) {
 	mp->tx_fullup = 0;
 	dev->tbusy = 0;
 	mark_bh(NET_BH);
@@ -656,9 +669,6 @@ static void mace_tx_timeout(unsigned long data)
     mace_handle_misc_intrs(mp, mb->ir);
 
     cp = mp->tx_cmds + NCMDS_TX * mp->tx_empty;
-    printk(KERN_DEBUG "mace: tx dmastat=%x %x bad_runt=%d pr=%x fs=%x fc=%x\n",
-	   ld_le32(&td->status), ld_le16(&cp->xfer_status), mp->tx_bad_runt,
-	   mb->pr, mb->xmtfs, mb->fifofc);
 
     /* turn off both tx and rx and reset the chip */
     mb->maccc = 0;
@@ -685,11 +695,9 @@ static void mace_tx_timeout(unsigned long data)
 	    i = 0;
 	mp->tx_empty = i;
     }
-    if (mp->tx_fullup) {
-	mp->tx_fullup = 0;
-	dev->tbusy = 0;
-	mark_bh(NET_BH);
-    }
+    mp->tx_fullup = 0;
+    dev->tbusy = 0;
+    mark_bh(NET_BH);
     if (i != mp->tx_fill) {
 	cp = mp->tx_cmds + NCMDS_TX * i;
 	out_le16(&cp->xfer_status, 0);

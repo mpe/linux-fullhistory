@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.61 1997/10/22 09:25:42 jj Exp $
+/* $Id: processor.h,v 1.62 1998/02/05 14:20:02 jj Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -14,6 +14,8 @@
 #include <asm/head.h>
 #include <asm/signal.h>
 #include <asm/segment.h>
+#include <asm/btfixup.h>
+#include <asm/page.h>
 
 /*
  * Bus types
@@ -33,7 +35,7 @@
  * That one page is used to protect kernel from intruders, so that
  * we can make our access_ok test faster
  */
-#define TASK_SIZE	(page_offset)
+#define TASK_SIZE	PAGE_OFFSET
 
 #define COPY_TASK_STRUCT(dst, src) 	\
 do {					\
@@ -155,8 +157,11 @@ extern __inline__ void start_thread(struct pt_regs * regs, unsigned long pc,
 #ifdef __KERNEL__
 
 /* Allocation and freeing of basic task resources. */
-extern struct task_struct *(*alloc_task_struct)(void);
-extern void (*free_task_struct)(struct task_struct *tsk);
+BTFIXUPDEF_CALL(struct task_struct *, alloc_task_struct, void)
+BTFIXUPDEF_CALL(void, free_task_struct, struct task_struct *)
+
+#define alloc_task_struct() BTFIXUP_CALL(alloc_task_struct)()
+#define free_task_struct(tsk) BTFIXUP_CALL(free_task_struct)(tsk)
 
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)

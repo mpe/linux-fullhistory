@@ -1,4 +1,4 @@
-/* $Id: math.c,v 1.3 1997/10/15 07:28:55 jj Exp $
+/* $Id: math.c,v 1.4 1998/04/06 16:09:57 jj Exp $
  * arch/sparc64/math-emu/math.c
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -7,7 +7,6 @@
  * of glibc and has appropriate copyrights in it.
  */
 
-#include <linux/module.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 
@@ -70,7 +69,6 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 
 	if(tstate & TSTATE_PRIV)
 		die_if_kernel("FPQuad from kernel", regs);
-	MOD_INC_USE_COUNT;
 	if(current->tss.flags & SPARC_FLAG_32BIT)
 		pc = (u32)pc;
 	if (get_user(insn, (u32 *)pc) != -EFAULT) {
@@ -182,28 +180,7 @@ int do_mathemu(struct pt_regs *regs, struct fpustate *f)
 		func(rd, rs2, rs1);
 		regs->tpc = regs->tnpc;
 		regs->tnpc += 4;
-		MOD_DEC_USE_COUNT;
 		return 1;
 	}
-err:	MOD_DEC_USE_COUNT;
-	return 0;
+err:	return 0;
 }
-
-#ifdef MODULE
-
-MODULE_AUTHOR("Jakub Jelinek (jj@sunsite.mff.cuni.cz), Richard Henderson (rth@cygnus.com)");
-MODULE_DESCRIPTION("FPU emulation module");
-
-extern int (*handle_mathemu)(struct pt_regs *, struct fpustate *);
-
-int init_module(void)
-{
-	handle_mathemu = do_mathemu;
-	return 0;
-}
-
-void cleanup_module(void)
-{
-	handle_mathemu = NULL;
-}
-#endif

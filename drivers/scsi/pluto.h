@@ -43,17 +43,23 @@ int pluto_release(struct Scsi_Host *);
 const char * pluto_info(struct Scsi_Host *);
 
 #define PLUTO {							\
+	name:			"Sparc Storage Array 100/200",	\
 	detect:			pluto_detect,			\
 	release:		pluto_release,			\
 	info:			pluto_info,			\
 	queuecommand:		fcp_scsi_queuecommand,		\
-	abort:			fcp_scsi_abort,			\
-	reset:			fcp_scsi_reset,			\
 	can_queue:		PLUTO_CAN_QUEUE,		\
 	this_id:		-1,				\
 	sg_tablesize:		1,				\
 	cmd_per_lun:		1,				\
-	use_clustering:		ENABLE_CLUSTERING		\
+	use_clustering:		ENABLE_CLUSTERING,		\
+	use_new_eh_code:	FCP_SCSI_USE_NEW_EH_CODE,	\
+	abort:			fcp_old_abort,			\
+	eh_abort_handler:	fcp_scsi_abort,			\
+	eh_device_reset_handler:fcp_scsi_dev_reset,		\
+	eh_bus_reset_handler:	fcp_scsi_bus_reset,		\
+	eh_host_reset_handler:	fcp_scsi_host_reset,		\
 }	
 
 #endif /* !(_PLUTO_H) */
+

@@ -28,6 +28,7 @@ struct pt_regs {
 	unsigned long xer;
 	unsigned long ccr;
 	unsigned long mq;	/* 601 only (not used at present) */
+				/* Used on APUS to hold IPL value. */
 	unsigned long trap;	/* Reason for being here */
 	unsigned long dar;	/* Fault registers */
 	unsigned long dsisr;

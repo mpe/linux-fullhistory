@@ -1,7 +1,8 @@
-/* $Id: time.c,v 1.12 1997/08/22 20:12:13 davem Exp $
+/* $Id: time.c,v 1.13 1998/03/15 17:23:47 ecd Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1998 Eddie C. Dost   (ecd@skynet.be)
  *
  * Based largely on code which is:
  *
@@ -42,28 +43,63 @@ static int set_rtc_mmss(unsigned long);
  * NOTE: On SUN5 systems the ticker interrupt comes in using 2
  *       interrupts, one at level14 and one with softint bit 0.
  */
-extern struct sun5_timer *linux_timers;
+unsigned long timer_tick_offset;
+static unsigned long timer_tick_compare;
+static unsigned long timer_ticks_per_usec;
 
-static void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+static __inline__ void timer_check_rtc(void)
 {
 	/* last time the cmos clock got updated */
 	static long last_rtc_update=0;
 
-	__asm__ __volatile__("ldx	[%0], %%g0"
-			     : /* no outputs */
-			     : "r" (&((linux_timers)->limit0)));
-
-	do_timer(regs);
-
 	/* Determine when to update the Mostek clock. */
 	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
 	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1))
-	  if (set_rtc_mmss(xtime.tv_sec) == 0)
-	    last_rtc_update = xtime.tv_sec;
-	  else
-	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+	    xtime.tv_usec < 500000 + (tick >> 1)) {
+		if (set_rtc_mmss(xtime.tv_sec) == 0)
+			last_rtc_update = xtime.tv_sec;
+		else
+			last_rtc_update = xtime.tv_sec - 600;
+			/* do it again in 60 s */
+	}
 }
+
+static void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+{
+	unsigned long ticks;
+
+	do {
+		do_timer(regs);
+
+		__asm__ __volatile__("
+			rd	%%tick_cmpr, %0
+			add	%0, %2, %0
+			wr	%0, 0, %%tick_cmpr
+			rd	%%tick, %1"
+			: "=&r" (timer_tick_compare), "=r" (ticks)
+			: "r" (timer_tick_offset));
+	} while (ticks >= timer_tick_compare);
+
+	timer_check_rtc();
+}
+
+#ifdef __SMP__
+void timer_tick_interrupt(struct pt_regs *regs)
+{
+	do_timer(regs);
+
+	/*
+	 * Only keep timer_tick_offset uptodate, but don't set TICK_CMPR.
+	 */
+	__asm__ __volatile__("
+		rd	%%tick_cmpr, %0
+		add	%0, %1, %0"
+		: "=&r" (timer_tick_compare)
+		: "r" (timer_tick_offset));
+
+	timer_check_rtc();
+}
+#endif
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
  * Assumes input in normal date format, i.e. 1980-12-31 23:59:59
@@ -318,29 +354,32 @@ __initfunc(void time_init(void))
 	 */
 }
 
-extern void init_timers(void (*func)(int, void *, struct pt_regs *));
+extern void init_timers(void (*func)(int, void *, struct pt_regs *),
+			unsigned long *);
 
 __initfunc(void sun4u_start_timers(void))
 {
-	init_timers(timer_interrupt);
+	unsigned long clock;
+
+	init_timers(timer_interrupt, &clock);
+	timer_tick_offset = clock / HZ;
+	timer_ticks_per_usec = clock / 1000000;
 }
 
 static __inline__ unsigned long do_gettimeoffset(void)
 {
-	unsigned long offset = 0;
-	unsigned int count;
+	unsigned long ticks;
 
-	/* XXX -DaveM */
-#if 0
-	count = (*master_l10_counter >> 10) & 0x1fffff;
-#else
-	count = 0;
-#endif
+	__asm__ __volatile__("
+		rd	%%tick, %%g1
+		add	%1, %%g1, %0
+		sub	%0, %2, %0
+"
+		: "=r" (ticks)
+		: "r" (timer_tick_offset), "r" (timer_tick_compare)
+		: "g1", "g2");
 
-	if(test_bit(TIMER_BH, &bh_active))
-		offset = 1000000;
-
-	return offset + count;
+	return ticks / timer_ticks_per_usec;
 }
 
 void do_gettimeofday(struct timeval *tv)
@@ -353,13 +392,16 @@ void do_gettimeofday(struct timeval *tv)
 	 * nucleus atomic quad 128-bit loads.
 	 */
 	__asm__ __volatile__("
-	sethi	%hi(linux_timers), %o1
+	sethi	%hi(timer_tick_offset), %g3
 	sethi	%hi(xtime), %g2
-	ldx	[%o1 + %lo(linux_timers)], %g3
+	sethi	%hi(timer_tick_compare), %g1
+	ldx	[%g3 + %lo(timer_tick_offset)], %g3
 	or	%g2, %lo(xtime), %g2
+	or	%g1, %lo(timer_tick_compare), %g1
 1:	ldda	[%g2] 0x24, %o4
 	membar	#LoadLoad | #MemIssue
-	ldx	[%g3], %o1
+	rd	%tick, %o1
+	ldx	[%g1], %g7
 	membar	#LoadLoad | #MemIssue
 	ldda	[%g2] 0x24, %o2
 	membar	#LoadLoad
@@ -367,24 +409,28 @@ void do_gettimeofday(struct timeval *tv)
 	xor	%o5, %o3, %o3
 	orcc	%o2, %o3, %g0
 	bne,pn	%xcc, 1b
-	 cmp	%o1, 0
-	bge,pt	%icc, 1f
-	 sethi	%hi(tick), %o3
-	ldx	[%o3 + %lo(tick)], %o3
-	sethi	%hi(0x1fffff), %o2
-	or	%o2, %lo(0x1fffff), %o2
-	add	%o5, %o3, %o5
-	and	%o1, %o2, %o1
-1:	add	%o5, %o1, %o5
-	sethi	%hi(1000000), %o2
+	 sethi	%hi(lost_ticks), %o2
+	sethi	%hi(timer_ticks_per_usec), %o3
+	ldx	[%o2 + %lo(lost_ticks)], %o2
+	add	%g3, %o1, %o1
+	ldx	[%o3 + %lo(timer_ticks_per_usec)], %o3
+	sub	%o1, %g7, %o1
+	brz,pt	%o2, 1f
+	 udivx	%o1, %o3, %o1
+	sethi	%hi(10000), %g2
+	or	%g2, %lo(10000), %g2
+	add	%o1, %g2, %o1
+1:	sethi	%hi(1000000), %o2
+	srlx	%o5, 32, %o5
 	or	%o2, %lo(1000000), %o2
+	add	%o5, %o1, %o5
 	cmp	%o5, %o2
 	bl,a,pn	%xcc, 1f
 	 stx	%o4, [%o0 + 0x0]
 	add	%o4, 0x1, %o4
 	sub	%o5, %o2, %o5
 	stx	%o4, [%o0 + 0x0]
-1:	stx	%o5, [%o0 + 0x8]");
+1:	st	%o5, [%o0 + 0x8]");
 }
 
 void do_settimeofday(struct timeval *tv)
@@ -401,6 +447,7 @@ void do_settimeofday(struct timeval *tv)
 	time_state = TIME_BAD;
 	time_maxerror = 0x70000000;
 	time_esterror = 0x70000000;
+
 	sti();
 }
 

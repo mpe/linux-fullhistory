@@ -1,4 +1,4 @@
-/* $Id: timer.h,v 1.15 1997/12/18 14:21:43 jj Exp $
+/* $Id: timer.h,v 1.16 1998/01/30 10:59:59 jj Exp $
  * timer.h:  Definitions for the timer chips on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -7,6 +7,7 @@
 #define _SPARC_TIMER_H
 
 #include <asm/system.h>  /* For NCPUS */
+#include <asm/sun4paddr.h>
 
 /* Timer structures. The interrupt timer has two properties which
  * are the counter (which is handled in do_timer in sched.c) and the limit.
@@ -31,6 +32,11 @@ struct sun4c_timer_info {
 };
 
 #define SUN4C_TIMER_PHYSADDR   0xf3000000
+#ifdef CONFIG_SUN4
+#define SUN_TIMER_PHYSADDR SUN4_300_TIMER_PHYSADDR
+#else
+#define SUN_TIMER_PHYSADDR SUN4C_TIMER_PHYSADDR
+#endif
 
 /* A sun4m has two blocks of registers which are probably of the same
  * structure. LSI Logic's L64851 is told to _decrement_ from the limit

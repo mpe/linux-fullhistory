@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.50 1998/01/09 16:39:33 jj Exp $
+/*  $Id: process.c,v 1.52 1998/03/29 12:57:53 ecd Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -41,9 +41,6 @@
 
 /* #define VERBOSE_SHOWREGS */
 
-#define PGTCACHE_HIGH_WATER		50
-#define PGTCACHE_LOW_WATER		25
-
 #ifndef __SMP__
 
 /*
@@ -58,16 +55,7 @@ asmlinkage int sys_idle(void)
 	current->priority = -100;
 	current->counter = -100;
 	for (;;) {
-		if(pgtable_cache_size > PGTCACHE_LOW_WATER) {
-			do {
-				if(pgd_quicklist)
-					free_page((unsigned long) get_pgd_fast());
-				if(pmd_quicklist)
-					free_page((unsigned long) get_pmd_fast());
-				if(pte_quicklist)
-					free_page((unsigned long) get_pte_fast());
-			} while(pgtable_cache_size > PGTCACHE_HIGH_WATER);
-		}
+		check_pgt_cache();
 		run_task_queue(&tq_scheduler);
 		schedule();
 	}
@@ -83,16 +71,7 @@ asmlinkage int cpu_idle(void)
 {
 	current->priority = -100;
 	while(1) {
-		if(pgtable_cache_size > PGTCACHE_LOW_WATER) {
-			do {
-				if(pgd_quicklist)
-					free_page((unsigned long) get_pgd_fast());
-				if(pmd_quicklist)
-					free_page((unsigned long) get_pmd_fast());
-				if(pte_quicklist)
-					free_page((unsigned long) get_pte_fast());
-			} while(pgtable_cache_size > PGTCACHE_HIGH_WATER);
-		}
+		check_pgt_cache();
 		if(tq_scheduler) {
 			lock_kernel();
 			run_task_queue(&tq_scheduler);
@@ -592,6 +571,10 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		p->tss.flags |= SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = KERNEL_DS;
 		p->tss.ctx = 0;
+		__asm__ __volatile__("flushw");
+		memcpy((void *)(p->tss.ksp + STACK_BIAS),
+		       (void *)(regs->u_regs[UREG_FP] + STACK_BIAS),
+		       sizeof(struct reg_window));
 		p->tss.kregs->u_regs[UREG_G6] = (unsigned long) p;
 	} else {
 		if(current->tss.flags & SPARC_FLAG_32BIT) {

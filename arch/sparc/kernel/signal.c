@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.77 1997/12/22 03:06:32 ecd Exp $
+/*  $Id: signal.c,v 1.79 1998/04/04 07:11:41 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -78,9 +78,20 @@ struct new_signal_frame {
 	__siginfo_fpu_t		fpu_state;
 };
 
+struct rt_signal_frame {
+	struct sparc_stackf	ss;
+	siginfo_t		info;
+	struct pt_regs		regs;
+	sigset_t		mask;
+	__siginfo_fpu_t		*fpu_save;
+	unsigned int		insns [2];
+	__siginfo_fpu_t		fpu_state;
+};
+
 /* Align macros */
 #define SF_ALIGNEDSZ  (((sizeof(struct signal_sframe) + 7) & (~7)))
 #define NF_ALIGNEDSZ  (((sizeof(struct new_signal_frame) + 7) & (~7)))
+#define RT_ALIGNEDSZ  (((sizeof(struct rt_signal_frame) + 7) & (~7)))
 
 /*
  * atomically swap in the new signal mask, and wait for a signal.
@@ -318,7 +329,60 @@ segv_and_exit:
 
 asmlinkage void do_rt_sigreturn(struct pt_regs *regs)
 {
-	printk("XXX: FIXME: write do_rt_sigreturn\n");
+	struct rt_signal_frame *sf;
+	unsigned int psr, pc, npc;
+	__siginfo_fpu_t *fpu_save;
+	sigset_t set;
+
+	synchronize_user_stack();
+	sf = (struct rt_signal_frame *) regs->u_regs[UREG_FP];
+	if(verify_area(VERIFY_READ, sf, sizeof(*sf)) ||
+	   (((unsigned long) sf) & 0x03))
+		goto segv;
+
+	get_user(pc, &sf->regs.pc);
+	__get_user(npc, &sf->regs.npc);
+	if((pc | npc) & 0x03)
+		goto segv;
+
+	regs->pc = pc;
+	regs->npc = npc;
+
+	__get_user(regs->y, &sf->regs.y);
+	__get_user(psr, &sf->regs.psr);
+
+	__get_user(regs->u_regs[UREG_G1], &sf->regs.u_regs[UREG_G1]);
+	__get_user(regs->u_regs[UREG_G2], &sf->regs.u_regs[UREG_G2]);
+	__get_user(regs->u_regs[UREG_G3], &sf->regs.u_regs[UREG_G3]);
+	__get_user(regs->u_regs[UREG_G4], &sf->regs.u_regs[UREG_G4]);
+	__get_user(regs->u_regs[UREG_G5], &sf->regs.u_regs[UREG_G5]);
+	__get_user(regs->u_regs[UREG_G6], &sf->regs.u_regs[UREG_G6]);
+	__get_user(regs->u_regs[UREG_G7], &sf->regs.u_regs[UREG_G7]);
+	__get_user(regs->u_regs[UREG_I0], &sf->regs.u_regs[UREG_I0]);
+	__get_user(regs->u_regs[UREG_I1], &sf->regs.u_regs[UREG_I1]);
+	__get_user(regs->u_regs[UREG_I2], &sf->regs.u_regs[UREG_I2]);
+	__get_user(regs->u_regs[UREG_I3], &sf->regs.u_regs[UREG_I3]);
+	__get_user(regs->u_regs[UREG_I4], &sf->regs.u_regs[UREG_I4]);
+	__get_user(regs->u_regs[UREG_I5], &sf->regs.u_regs[UREG_I5]);
+	__get_user(regs->u_regs[UREG_I6], &sf->regs.u_regs[UREG_I6]);
+	__get_user(regs->u_regs[UREG_I7], &sf->regs.u_regs[UREG_I7]);
+
+	regs->psr = (regs->psr & ~PSR_ICC) | (psr & PSR_ICC);
+
+	__get_user(fpu_save, &sf->fpu_save);
+	if(fpu_save)
+		restore_fpu_state(regs, &sf->fpu_state);
+	if(copy_from_user(&set, &sf->mask, sizeof(sigset_t)))
+		goto segv;
+	sigdelsetmask(&set, ~_BLOCKABLE);
+	spin_lock_irq(&current->sigmask_lock);
+	current->blocked = set;
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);
+	return;
+segv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 /* Checks if the fp is valid */
@@ -514,7 +578,63 @@ static inline void
 new_setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 		   int signo, sigset_t *oldset, siginfo_t *info)
 {
-	printk("XXX: FIXME: new_setup_rt_frame unimplemented\n");
+	struct rt_signal_frame *sf;
+	int sigframe_size;
+	unsigned int psr;
+	int i;
+
+	synchronize_user_stack();
+	sigframe_size = RT_ALIGNEDSZ;
+	if(!current->used_math)
+		sigframe_size -= sizeof(__siginfo_fpu_t);
+	sf = (struct rt_signal_frame *)(regs->u_regs[UREG_FP] - sigframe_size);
+	if(invalid_frame_pointer(sf, sigframe_size))
+		goto sigill;
+	if(current->tss.w_saved != 0)
+		goto sigill;
+
+	put_user(regs->pc, &sf->regs.pc);
+	__put_user(regs->npc, &sf->regs.npc);
+	__put_user(regs->y, &sf->regs.y);
+	psr = regs->psr;
+	if(current->used_math)
+		psr |= PSR_EF;
+	__put_user(psr, &sf->regs.psr);
+	for(i = 0; i < 16; i++)
+		__put_user(regs->u_regs[i], &sf->regs.u_regs[i]);
+	if(psr & PSR_EF) {
+		save_fpu_state(regs, &sf->fpu_state);
+		__put_user(&sf->fpu_state, &sf->fpu_save);
+	} else {
+		__put_user(0, &sf->fpu_save);
+	}
+	__copy_to_user(&sf->mask, &oldset->sig[0], sizeof(sigset_t));
+	copy_to_user(sf, (char *) regs->u_regs [UREG_FP],
+		     sizeof (struct reg_window));	
+
+	regs->u_regs[UREG_FP] = (unsigned long) sf;
+	regs->u_regs[UREG_I0] = signo;
+	regs->u_regs[UREG_I1] = (unsigned long) &sf->info;
+
+	regs->pc = (unsigned long) ka->sa.sa_handler;
+	regs->npc = (regs->pc + 4);
+
+	if(ka->ka_restorer)
+		regs->u_regs[UREG_I7] = (unsigned long)ka->ka_restorer;
+	else {
+		regs->u_regs[UREG_I7] = (unsigned long)(&(sf->insns[0]) - 2);
+
+		__put_user(0x821020d8, &sf->insns[0]); /* mov __NR_sigreturn, %g1 */
+		__put_user(0x91d02010, &sf->insns[1]); /* t 0x10 */
+
+		/* Flush instruction space. */
+		flush_sig_insns(current->mm, (unsigned long) &(sf->insns[0]));
+	}
+	return;
+
+sigill:
+	lock_kernel();
+	do_exit(SIGILL);
 }
 
 /* Setup a Solaris stack frame */
@@ -783,6 +903,7 @@ handle_signal(unsigned long signr, struct k_sigaction *ka,
 		spin_lock_irq(&current->sigmask_lock);
 		sigorsets(&current->blocked,&current->blocked,&ka->sa.sa_mask);
 		sigaddset(&current->blocked, signr);
+		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
 	}
 }

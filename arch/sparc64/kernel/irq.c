@@ -1,7 +1,8 @@
-/* $Id: irq.c,v 1.47 1998/01/10 18:26:17 ecd Exp $
+/* $Id: irq.c,v 1.52 1998/03/19 00:22:54 ecd Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
- * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
+ * Copyright (C) 1998  Eddie C. Dost    (ecd@skynet.be)
  */
 
 #include <linux/config.h>
@@ -98,12 +99,22 @@ int get_irq_list(char *buf)
 {
 	int i, len = 0;
 	struct irqaction *action;
+#ifdef __SMP__
+	int j;
+#endif
 
 	for(i = 0; i < (NR_IRQS + 1); i++) {
 		if(!(action = *(i + irq_action)))
 			continue;
-		len += sprintf(buf + len, "%2d: %8d %c %s",
-			       i, kstat.interrupts[i],
+		len += sprintf(buf + len, "%3d: ", i);
+#ifndef __SMP__
+		len += sprintf(buf + len, "%10u ", kstat_irqs(i));
+#else
+		for (j = 0; j < smp_num_cpus; j++)
+			len += sprintf(buf + len, "%10u ",
+				kstat.irqs[cpu_logical_map(j)][i]);
+#endif
+		len += sprintf(buf + len, "%c %s",
 			       (action->flags & SA_INTERRUPT) ? '+' : ' ',
 			       action->name);
 		for(action = action->next; action; action = action->next) {
@@ -113,19 +124,6 @@ int get_irq_list(char *buf)
 		}
 		len += sprintf(buf + len, "\n");
 	}
-#if 0
-#ifdef CONFIG_PCI
-	{
-		struct linux_psycho *p;
-		for (p = psycho_root; p; p = p->next)
-			len += sprintf(buf + len,
-				       "ISTAT[%d]: PCI[%016lx] OBIO[%016lx]\n",
-				       p->index,
-				       p->psycho_regs->pci_istate,
-				       p->psycho_regs->obio_istate);
-	}
-#endif
-#endif
 	return len;
 }
 
@@ -197,8 +195,7 @@ static unsigned int *sysio_irq_to_imap(unsigned int irq)
 	unsigned long offset;
 	struct sysio_regs *sregs;
 
-	if((irq == 14) ||
-	   (irq >= NUM_SYSIO_OFFSETS) ||
+	if((irq >= NUM_SYSIO_OFFSETS) ||
 	   ((offset = sysio_irq_offsets[irq]) == ((unsigned long)-1)))
 		return NULL;
 	sregs = SBus_chain->iommu->sysio_regs;
@@ -224,8 +221,8 @@ static unsigned int *sysio_imap_to_iclr(unsigned int *imap)
 unsigned char psycho_ino_to_pil[] = {
 	7, 5, 5, 2,			/* PCI A slot 0  Int A, B, C, D */
 	7, 5, 5, 2,			/* PCI A slot 1  Int A, B, C, D */
-	0, 0, 0, 0,
-	0, 0, 0, 0,
+	7, 5, 5, 2,			/* PCI A slot 2  Int A, B, C, D */
+	7, 5, 5, 2,			/* PCI A slot 3  Int A, B, C, D */
 	6, 4, 3, 1,			/* PCI B slot 0  Int A, B, C, D */
 	6, 4, 3, 1,			/* PCI B slot 1  Int A, B, C, D */
 	6, 4, 3, 1,			/* PCI B slot 2  Int A, B, C, D */
@@ -255,13 +252,13 @@ unsigned char psycho_ino_to_pil[] = {
  */
 #define psycho_offset(x) ((unsigned long)(&(((struct psycho_regs *)0)->x)))
 
-#define psycho_imap_offset(ino)							\
-	((ino & 0x20) ? (psycho_offset(imap_scsi) + (((ino) & 0x1f) << 3)) :	\
+#define psycho_imap_offset(ino)						      \
+	((ino & 0x20) ? (psycho_offset(imap_scsi) + (((ino) & 0x1f) << 3)) :  \
 			(psycho_offset(imap_a_slot0) + (((ino) & 0x3c) << 1)))
 
-#define psycho_iclr_offset(ino)							\
-	((ino & 0x20) ? (psycho_offset(iclr_scsi) + (((ino) & 0x1f) << 3)) :	\
-			(psycho_offset(iclr_a_slot0[0]) + (((ino) & 0x1f) << 3)))
+#define psycho_iclr_offset(ino)						      \
+	((ino & 0x20) ? (psycho_offset(iclr_scsi) + (((ino) & 0x1f) << 3)) :  \
+			(psycho_offset(iclr_a_slot0[0]) + (((ino) & 0x1f)<<3)))
 
 #endif
 
@@ -529,7 +526,7 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	unsigned long flags;
 	unsigned int *imap, *iclr;
 	void *bus_id = NULL;
-	int ivindex, ivindex_fixup, cpu_irq = -1, pending;
+	int ivindex = -1, ivindex_fixup, cpu_irq = -1, pending = 0;
 	
 	if(!handler)
 	    return -EINVAL;
@@ -537,43 +534,47 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	imap = iclr = NULL;
 
 	ivindex_fixup = 0;
-#ifdef CONFIG_PCI
-	if(PCI_IRQ_P(irq)) {
-		pci_irq_frobnicate(&cpu_irq, &ivindex_fixup, &imap, &iclr, irq);
-	} else
-#endif
-	if(irqflags & SA_DCOOKIE) {
-		if(!dev_id) {
-			printk("request_irq: SA_DCOOKIE but dev_id is NULL!\n");
-			panic("Bogus irq registry.");
-		}
-		dcookie		= dev_id;
-		dev_id		= dcookie->real_dev_id;
-		cpu_irq		= dcookie->pil;
-		imap		= dcookie->imap;
-		iclr		= dcookie->iclr;
-		bus_id		= dcookie->bus_cookie;
-		get_irq_translations(&cpu_irq, &ivindex_fixup, &imap,
-				     &iclr, bus_id, irqflags, irq);
+
+	if (irq == 0) {
+		cpu_irq = irq;
+		irqflags &= ~(SA_IMAP_MASKED);
 	} else {
-		/* XXX NOTE: This code is maintained for compatability until I can
-		 * XXX       verify that all drivers sparc64 will use are updated
-		 * XXX       to use the new IRQ registry dcookie interface.  -DaveM
-		 */
-		if(irq == 14)
-			cpu_irq = irq;
-		else
+		irqflags |= SA_IMAP_MASKED;
+#ifdef CONFIG_PCI
+		if(PCI_IRQ_P(irq)) {
+			pci_irq_frobnicate(&cpu_irq, &ivindex_fixup, &imap, &iclr, irq);
+		} else
+#endif
+		if(irqflags & SA_DCOOKIE) {
+			if(!dev_id) {
+				printk("request_irq: SA_DCOOKIE but dev_id is NULL!\n");
+				panic("Bogus irq registry.");
+			}
+			dcookie		= dev_id;
+			dev_id		= dcookie->real_dev_id;
+			cpu_irq		= dcookie->pil;
+			imap		= dcookie->imap;
+			iclr		= dcookie->iclr;
+			bus_id		= dcookie->bus_cookie;
+			get_irq_translations(&cpu_irq, &ivindex_fixup, &imap,
+					     &iclr, bus_id, irqflags, irq);
+		} else {
+			/* XXX NOTE: This code is maintained for compatability until I can
+			 * XXX       verify that all drivers sparc64 will use are updated
+			 * XXX       to use the new IRQ registry dcookie interface.  -DaveM
+			 */
 			cpu_irq = sysio_ino_to_pil[irq];
-		imap = sysio_irq_to_imap(irq);
-		if(!imap) {
-			printk("request_irq: BAD, null imap for old style "
-			       "irq registry IRQ[%x].\n", irq);
-			panic("Bad IRQ registery...");
+			imap = sysio_irq_to_imap(irq);
+			if(!imap) {
+				printk("request_irq: BAD, null imap for old style "
+				       "irq registry IRQ[%x].\n", irq);
+				panic("Bad IRQ registery...");
+			}
+			iclr = sysio_imap_to_iclr(imap);
 		}
-		iclr = sysio_imap_to_iclr(imap);
+		ivindex = (*imap & (SYSIO_IMAP_IGN | SYSIO_IMAP_INO));
+		ivindex += ivindex_fixup;
 	}
-	ivindex = (*imap & (SYSIO_IMAP_IGN | SYSIO_IMAP_INO));
-	ivindex += ivindex_fixup;
 
 	action = *(cpu_irq + irq_action);
 	if(action) {
@@ -612,26 +613,28 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 		return -ENOMEM;
 	}
 
-	bucket = add_ino_hash(ivindex, imap, iclr, irqflags);
-	if(!bucket) {
-		kfree(action);
-		restore_flags(flags);
-		return -ENOMEM;
-	}
+	if (irqflags & SA_IMAP_MASKED) {
+		bucket = add_ino_hash(ivindex, imap, iclr, irqflags);
+		if(!bucket) {
+			kfree(action);
+			restore_flags(flags);
+			return -ENOMEM;
+		}
 
-	pending = ((ivector_to_mask[ivindex] & 0x80000000) != 0);
-	ivector_to_mask[ivindex] = (1 << cpu_irq);
-	if(pending)
-		ivector_to_mask[ivindex] |= 0x80000000;
+		pending = ((ivector_to_mask[ivindex] & 0x80000000) != 0);
+		ivector_to_mask[ivindex] = (1 << cpu_irq);
+		if(pending)
+			ivector_to_mask[ivindex] |= 0x80000000;
 
-	if(dcookie) {
-		dcookie->ret_ino = ivindex;
-		dcookie->ret_pil = cpu_irq;
+		if(dcookie) {
+			dcookie->ret_ino = ivindex;
+			dcookie->ret_pil = cpu_irq;
+		}
 	}
 
 	action->mask = (unsigned long) bucket;
 	action->handler = handler;
-	action->flags = irqflags | SA_IMAP_MASKED;
+	action->flags = irqflags;
 	action->name = name;
 	action->next = NULL;
 	action->dev_id = dev_id;
@@ -664,7 +667,7 @@ void free_irq(unsigned int irq, void *dev_id)
 	unsigned int cpu_irq;
 	int ivindex = -1;
 
-	if(irq == 14) {
+	if(irq == 0) {
 		cpu_irq = irq;
 	} else {
 #ifdef CONFIG_PCI
@@ -951,34 +954,43 @@ void unexpected_irq(int irq, void *dev_cookie, struct pt_regs *regs)
 void handler_irq(int irq, struct pt_regs *regs)
 {
 	struct ino_bucket *bucket = NULL;
-	struct irqaction *action;
+	struct irqaction *action, *act;
 	int cpu = smp_processor_id();
 
+#ifndef __SMP__
+	/*
+	 * Check for TICK_INT on level 14 softint.
+	 */
+	if ((irq == 14) && get_softint() & (1UL << 0))
+		irq = 0;
+#endif
 	clear_softint(1 << irq);
 
 	irq_enter(cpu, irq);
 	action = *(irq + irq_action);
-	kstat.interrupts[irq]++;
+	kstat.irqs[cpu][irq]++;
 	if(!action) {
 		unexpected_irq(irq, 0, regs);
 	} else {
+		act = action;
 		do {
-			unsigned long *swmask = NULL;
-
-			if(action->flags & SA_IMAP_MASKED) {
-				bucket = (struct ino_bucket *)action->mask;
-
-				swmask = &ivector_to_mask[bucket->ino];
-				if(!(*swmask & 0x80000000))
+			if(act->flags & SA_IMAP_MASKED) {
+				bucket = (struct ino_bucket *)act->mask;
+				if(!(ivector_to_mask[bucket->ino] & 0x80000000))
 					continue;
 			}
-
-			action->handler(irq, action->dev_id, regs);
-			if(swmask) {
-				*swmask &= ~(0x80000000);
+			act->handler(irq, act->dev_id, regs);
+		} while((act = act->next) != NULL);
+		act = action;
+		do {
+			if(act->flags & SA_IMAP_MASKED) {
+				bucket = (struct ino_bucket *)act->mask;
+				if(!(ivector_to_mask[bucket->ino] & 0x80000000))
+					continue;
+				ivector_to_mask[bucket->ino] &= ~(0x80000000);
 				*(bucket->iclr) = SYSIO_ICLR_IDLE;
 			}
-		} while((action = action->next) != NULL);
+		} while((act = act->next) != NULL);
 	}
 	irq_exit(cpu, irq);
 }
@@ -993,6 +1005,7 @@ void sparc_floppy_irq(int irq, void *dev_cookie, struct pt_regs *regs)
 	int cpu = smp_processor_id();
 
 	irq_enter(cpu, irq);
+	kstat.irqs[cpu][irq]++;
 	bucket = (struct ino_bucket *)action->mask;
 	floppy_interrupt(irq, dev_cookie, regs);
 	ivector_to_mask[bucket->ino] &= ~(0x80000000);
@@ -1036,13 +1049,19 @@ int request_fast_irq(unsigned int irq,
 	unsigned long flags;
 	unsigned int *imap, *iclr;
 	void *bus_id = NULL;
-	int ivindex, ivindex_fixup, cpu_irq = -1;
+	int ivindex = -1, ivindex_fixup, cpu_irq = -1;
 
 	if(!handler)
 		return -EINVAL;
 
 	imap = iclr = NULL;
 	ivindex_fixup = 0;
+
+	if ((irq == 0) || (irq == 14)) {
+		printk("request_fast_irq: Trying to register shared IRQ 0 or 14.\n");
+		return -EBUSY;
+	}
+
 #ifdef CONFIG_PCI
 	if(PCI_IRQ_P(irq)) {
 		pci_irq_frobnicate(&cpu_irq, &ivindex_fixup, &imap, &iclr, irq);
@@ -1066,10 +1085,7 @@ int request_fast_irq(unsigned int irq,
 		 * XXX       verify that all drivers sparc64 will use are updated
 		 * XXX       to use the new IRQ registry dcookie interface.  -DaveM
 		 */
-		if(irq == 14)
-			cpu_irq = irq;
-		else
-			cpu_irq = sysio_ino_to_pil[irq];
+		cpu_irq = sysio_ino_to_pil[irq];
 		imap = sysio_irq_to_imap(irq);
 		if(!imap) {
 			printk("request_irq: BAD, null imap for old style "
@@ -1153,85 +1169,100 @@ int probe_irq_off(unsigned long mask)
 	return 0;
 }
 
-struct sun5_timer *linux_timers = NULL;
-
-/* This is gets the master level10 timer going. */
-void init_timers(void (*cfunc)(int, void *, struct pt_regs *))
+/* This is gets the master TICK_INT timer going. */
+void init_timers(void (*cfunc)(int, void *, struct pt_regs *),
+		 unsigned long *clock)
 {
-	struct linux_prom64_registers pregs[3];
-	struct devid_cookie dcookie;
-	unsigned int *imap, *iclr;
-	u32 pirqs[2];
+	unsigned long flags;
+	unsigned long timer_tick_offset;
 	int node, err;
 
-	node = prom_finddevice("/counter-timer");
-	if(node == 0 || node == -1) {
-		prom_printf("init_timers: Cannot find counter-timer PROM node.\n");
-		prom_halt();
-	}
-	err = prom_getproperty(node, "reg", (char *)&pregs[0], sizeof(pregs));
-	if(err == -1) {
-		prom_printf("init_timers: Cannot obtain 'reg' for counter-timer.\n");
-		prom_halt();
-	}
-	err = prom_getproperty(node, "interrupts", (char *)&pirqs[0], sizeof(pirqs));
-	if(err == -1) {
-		prom_printf("init_timers: Cannot obtain 'interrupts' "
-			    "for counter-timer.\n");
-		prom_halt();
-	}
-	linux_timers = (struct sun5_timer *) __va(pregs[0].phys_addr);
-	iclr = (((unsigned int *)__va(pregs[1].phys_addr))+1);
-	imap = (((unsigned int *)__va(pregs[2].phys_addr))+1);
-
-	/* Shut it up first. */
-	linux_timers->limit0 = 0;
+	node = linux_cpus[0].prom_node;
+	*clock = prom_getint(node, "clock-frequency");
+	timer_tick_offset = *clock / HZ;
 
 	/* Register IRQ handler. */
-	dcookie.real_dev_id = NULL;
-	dcookie.imap = imap;
-	dcookie.iclr = iclr;
-	dcookie.pil = 10;
-	dcookie.bus_cookie = NULL;
-
-	err = request_irq(pirqs[0], cfunc,
-			  (SA_DCOOKIE | SA_INTERRUPT | SA_STATIC_ALLOC),
-			  "timer", &dcookie);
+	err = request_irq(0, cfunc, (SA_INTERRUPT | SA_STATIC_ALLOC),
+			  "timer", NULL);
 
 	if(err) {
-		prom_printf("Serious problem, cannot register timer interrupt\n");
+		prom_printf("Serious problem, cannot register TICK_INT\n");
 		prom_halt();
-	} else {
-		unsigned long flags;
-
-		save_and_cli(flags);
-
-		/* Set things up so user can access tick register for profiling
-		 * purposes.
-		 */
-		__asm__ __volatile__("
-	sethi	%%hi(0x80000000), %%g1
-	sllx	%%g1, 32, %%g1
-	rd	%%tick, %%g2
-	add	%%g2, 6, %%g2
-	andn	%%g2, %%g1, %%g2
-	wrpr	%%g2, 0, %%tick
-"		: /* no outputs */
-		: /* no inputs */
-		: "g1", "g2");
-
-		linux_timers->limit0 =
-			(SUN5_LIMIT_ENABLE | SUN5_LIMIT_ZRESTART | SUN5_LIMIT_TOZERO |
-			 (SUN5_HZ_TO_LIMIT(HZ) & SUN5_LIMIT_CMASK));
-
-		restore_flags(flags);
 	}
 
+	save_and_cli(flags);
+
+	/* Set things up so user can access tick register for profiling
+	 * purposes.
+	 */
+	__asm__ __volatile__("
+		sethi	%%hi(0x80000000), %%g1
+		sllx	%%g1, 32, %%g1
+		rd	%%tick, %%g2
+		add	%%g2, 6, %%g2
+		andn	%%g2, %%g1, %%g2
+		wrpr	%%g2, 0, %%tick
+"	: /* no outputs */
+	: /* no inputs */
+	: "g1", "g2");
+
+	__asm__ __volatile__("
+		rd	%%tick, %%g1
+		add	%%g1, %0, %%g1
+		wr	%%g1, 0x0, %%tick_cmpr"
+	: /* no outputs */
+	: "r" (timer_tick_offset)
+	: "g1");
+
+	restore_flags(flags);
 	sti();
 }
 
-struct sun5_timer *prom_timers;
+#ifdef __SMP__
+/* Called from smp_commence, when we know how many cpus are in the system
+ * and can have device IRQ's directed at them.
+ */
+void distribute_irqs(void)
+{
+	unsigned long flags;
+	int cpu, level;
 
+	printk("SMP: redistributing interrupts...\n");
+	save_and_cli(flags);
+	cpu = 0;
+	for(level = 0; level < NR_IRQS; level++) {
+		struct irqaction *p = irq_action[level];
+
+		while(p) {
+			if(p->flags & SA_IMAP_MASKED) {
+				struct ino_bucket *bucket = (struct ino_bucket *)p->mask;
+				unsigned int *imap = bucket->imap;
+				unsigned int val;
+				unsigned long tid = __cpu_logical_map[cpu] << 9;
+
+				val = *imap;
+				*imap = SYSIO_IMAP_VALID | (tid & SYSIO_IMAP_TID);
+
+				printk("SMP: Redirecting IGN[%x] INO[%x] "
+				       "to cpu %d [%s]\n",
+				       (val & SYSIO_IMAP_IGN) >> 6,
+				       (val & SYSIO_IMAP_INO), cpu,
+				       p->name);
+
+				cpu++;
+				if (cpu >= NR_CPUS || __cpu_logical_map[cpu] == -1)
+					cpu = 0;
+			}
+			p = p->next;
+		}
+	}
+	restore_flags(flags);
+	irqs_have_been_distributed = 1;
+}
+#endif
+
+
+struct sun5_timer *prom_timers;
 static u64 prom_limit0, prom_limit1;
 
 static void map_prom_timers(void)
@@ -1245,9 +1276,8 @@ static void map_prom_timers(void)
 	/* Assume if node is not present, PROM uses different tick mechanism
 	 * which we should not care about.
 	 */
-	if(tnode == 0) {
+	if(tnode == 0 || tnode == -1) {
 		prom_timers = (struct sun5_timer *) 0;
-		prom_printf("AIEEE, no timers\n");
 		return;
 	}
 
@@ -1299,52 +1329,6 @@ void enable_prom_timer(void)
 	prom_timers->limit0 = prom_limit0;
 	prom_timers->count0 = 0;
 }
-
-#ifdef __SMP__
-/* Called from smp_commence, when we know how many cpus are in the system
- * and can have device IRQ's directed at them.
- */
-void distribute_irqs(void)
-{
-	unsigned long flags;
-	int cpu, level;
-
-	printk("SMP: redistributing interrupts...\n");
-	save_and_cli(flags);
-	cpu = 0;
-	for(level = 0; level < NR_IRQS; level++) {
-		struct irqaction *p = irq_action[level];
-
-		while(p) {
-			if(p->flags & SA_IMAP_MASKED) {
-				struct ino_bucket *bucket = (struct ino_bucket *)p->mask;
-				unsigned int *imap = bucket->imap;
-				unsigned int val;
-				unsigned long tid = linux_cpus[cpu].mid << 9;
-
-				val = *imap;
-				*imap = SYSIO_IMAP_VALID | (tid & SYSIO_IMAP_TID);
-
-				printk("SMP: Redirecting IGN[%x] INO[%x] "
-				       "to cpu %d [%s]\n",
-				       (val & SYSIO_IMAP_IGN) >> 6,
-				       (val & SYSIO_IMAP_INO), cpu,
-				       p->name);
-
-				cpu += 1;
-				while(!(cpu_present_map & (1UL << cpu))) {
-					cpu += 1;
-					if(cpu >= smp_num_cpus)
-						cpu = 0;
-				}
-			}
-			p = p->next;
-		}
-	}
-	restore_flags(flags);
-	irqs_have_been_distributed = 1;
-}
-#endif
 
 __initfunc(void init_IRQ(void))
 {

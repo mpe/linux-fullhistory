@@ -186,11 +186,9 @@ extern unsigned long iommu_init(int iommu_node, unsigned long memstart,
 				unsigned long memend, struct linux_sbus *sbus);
 extern unsigned long iounit_init(int sbi_node, int iounit_node, unsigned long memstart,
 				unsigned long memend, struct linux_sbus *sbus);
+unsigned long sun4_init(unsigned long memory_start, unsigned long memory_end);
 #ifdef CONFIG_SUN_OPENPROMIO
 extern int openprom_init(void);
-#endif
-#ifdef CONFIG_SUN_MOSTEK_RTC
-extern int rtc_init(void);
 #endif
 #ifdef CONFIG_SUN_AUXIO
 extern void auxio_probe(void);
@@ -234,8 +232,6 @@ sbus_do_child_siblings(unsigned long memory_start, int start_node,
 	return memory_start;
 }
 
-/* #define E3000_DEBUG */
-
 __initfunc(unsigned long
 sbus_init(unsigned long memory_start, unsigned long memory_end))
 {
@@ -244,10 +240,11 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 	struct linux_sbus *sbus;
 	struct linux_sbus_device *this_dev;
 	int num_sbus = 0;  /* How many did we find? */
-
-#ifdef E3000_DEBUG
-	prom_printf("sbus_init: Radek, record following output for me. -DaveM\n");
+	
+#ifdef CONFIG_SUN4
+	return sun4_init(memory_start, memory_end);
 #endif
+
 	memory_start = ((memory_start + 7) & (~7));
 
 	topnd = prom_getchild(prom_root_node);
@@ -280,9 +277,6 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 		}
 	}
 
-#ifdef E3000_DEBUG
-	prom_printf("sbus_init: 1st sbus node(%x)\n", nd);
-#endif
 	/* Ok, we've found the first one, allocate first SBus struct
 	 * and place in chain.
 	 */
@@ -299,9 +293,6 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 	/* Loop until we find no more SBUS's */
 	while(this_sbus) {
 		/* IOMMU hides inside SBUS/SYSIO prom node on Ultra. */
-#ifdef E3000_DEBUG
-		prom_printf("sbus%d: [ii()", num_sbus);
-#endif
 		if(sparc_cpu_model == sun4u)
 			memory_start = iommu_init(this_sbus,
 						  memory_start, memory_end,
@@ -312,9 +303,6 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 						   memory_start, memory_end,
 						   sbus);
 #endif						   
-#ifdef E3000_DEBUG
-		prom_printf("1");
-#endif
 		printk("sbus%d: ", num_sbus);
 		sbus_clock = prom_getint(this_sbus, "clock-frequency");
 		if(sbus_clock==-1) sbus_clock = (25*1000*1000);
@@ -334,15 +322,9 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 		}
 #endif
 		
-#ifdef E3000_DEBUG
-		prom_printf("psri()");
-#endif
 		prom_sbus_ranges_init (iommund, sbus);
 
 		sbus_devs = prom_getchild(this_sbus);
-#ifdef E3000_DEBUG
-		prom_printf("chld(%x)", sbus_devs);
-#endif
 
 		sbus->devices = (struct linux_sbus_device *) memory_start;
 		memory_start += sizeof(struct linux_sbus_device);
@@ -350,9 +332,6 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 		this_dev = sbus->devices;
 		this_dev->next = 0;
 
-#ifdef E3000_DEBUG
-		prom_printf("fsd()");
-#endif
 		fill_sbus_device(sbus_devs, this_dev);
 		this_dev->my_bus = sbus;
 
@@ -362,14 +341,9 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			this_dev->child = (struct linux_sbus_device *) memory_start;
 			memory_start += sizeof(struct linux_sbus_device);
 			/* Fill it */
-#ifdef E3000_DEBUG
-			prom_printf("fsd(chld)");
-#endif
+
 			fill_sbus_device(prom_getchild(sbus_devs), this_dev->child);
 			this_dev->child->my_bus = sbus;
-#ifdef E3000_DEBUG
-			prom_printf("sdcs()");
-#endif
 			memory_start = sbus_do_child_siblings(memory_start,
 							      prom_getchild(sbus_devs),
 							      this_dev->child,
@@ -378,9 +352,6 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			this_dev->child = 0;
 		}
 
-#ifdef E3000_DEBUG
-		prom_printf("2");
-#endif
 		while((sbus_devs = prom_getsibling(sbus_devs)) != 0) {
 			/* Allocate device node */
 			this_dev->next = (struct linux_sbus_device *) memory_start;
@@ -389,9 +360,6 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			this_dev->next=0;
 
 			/* Fill it */
-#ifdef E3000_DEBUG
-			prom_printf("fsd()");
-#endif
 			fill_sbus_device(sbus_devs, this_dev);
 			this_dev->my_bus = sbus;
 
@@ -403,15 +371,9 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 				memory_start += sizeof(struct linux_sbus_device);
 
 				/* Fill it */
-#ifdef E3000_DEBUG
-				prom_printf("fsd()");
-#endif
 				fill_sbus_device(prom_getchild(sbus_devs),
 						 this_dev->child);
 				this_dev->child->my_bus = sbus;
-#ifdef E3000_DEBUG
-				prom_printf("sdcs()");
-#endif
 				memory_start = sbus_do_child_siblings(
 						     memory_start,
 						     prom_getchild(sbus_devs),
@@ -422,26 +384,14 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			}
 		}
 
-#ifdef E3000_DEBUG
-		prom_printf("di()");
-#endif
 		memory_start = dvma_init(sbus, memory_start);
 
 		num_sbus++;
-#ifdef E3000_DEBUG
-		prom_printf("3, off to next sbus\n");
-#endif
 		if(sparc_cpu_model == sun4u) {
 			this_sbus = prom_getsibling(this_sbus);
-#ifdef E3000_DEBUG
-			prom_printf("sbus_init: sibling(%x), ", this_sbus);
-#endif
 			if(!this_sbus)
 				break;
 			this_sbus = prom_searchsiblings(this_sbus, "sbus");
-#ifdef E3000_DEBUG
-			prom_printf("next sbus node(%x),", this_sbus);
-#endif
 		} else if(sparc_cpu_model == sun4d) {
 			iommund = prom_getsibling(iommund);
 			if(!iommund) break;
@@ -454,9 +404,6 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 			this_sbus = prom_searchsiblings(this_sbus, "sbus");
 		}
 		if(this_sbus) {
-#ifdef E3000_DEBUG
-			prom_printf(" scanning another sbus\n");
-#endif
 			sbus->next = (struct linux_sbus *) memory_start;
 			memory_start += sizeof(struct linux_sbus);
 			sbus = sbus->next;
@@ -471,18 +418,9 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 		memory_start = sun4d_init_sbi_irq(memory_start);
 	}
 	
-#ifdef E3000_DEBUG
-	prom_printf("sbus_init: No more sbus's, calling sun_console_init()\n");
-#endif
 	memory_start = sun_console_init(memory_start); /* whee... */
-#ifdef E3000_DEBUG
-	prom_printf("sbus_init: back from sun_console_init()\n");
-#endif
 #ifdef CONFIG_SUN_OPENPROMIO
 	openprom_init();
-#endif
-#ifdef CONFIG_SUN_MOSTEK_RTC
-	rtc_init();
 #endif
 #ifdef CONFIG_SUN_BPP
 	bpp_init();
@@ -505,3 +443,20 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 #endif
 	return memory_start;
 }
+
+#ifdef CONFIG_SUN4
+
+extern unsigned long sun4_dvma_init(unsigned long);
+
+__initfunc(unsigned long
+sun4_init(unsigned long memory_start, unsigned long memory_end))
+{
+	memory_start = ((memory_start + 7) & (~7));
+	
+	memory_start = sun_console_init(memory_start);
+	
+	memory_start = sun4_dvma_init(memory_start);
+	
+	return memory_start;
+}
+#endif

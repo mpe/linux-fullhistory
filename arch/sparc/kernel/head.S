@@ -1,10 +1,11 @@
-/* $Id: head.S,v 1.84 1997/11/19 15:12:01 jj Exp $
+/* $Id: head.S,v 1.90 1998/03/24 18:12:05 jj Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Peter Zaitcev   (Zaitcev@ipmce.su)
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
  * Copyright (C) 1997 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997 Michael A. Griffith (grif@acm.org)
  */
 
 #include <linux/version.h>
@@ -60,9 +61,16 @@ C_LABEL(cputypvar_sun4m):
 	.asciz "compatible"
 
 	.align 4
+
+#ifndef CONFIG_SUN4
 sun4_notsup:
-	.asciz  "Sparc-Linux sun4 support not implemented yet\n\n"
+	.asciz	"Sparc-Linux sun4 needs a specially compiled kernel, turn CONFIG_SUN4 on.\n\n"
 	.align 4
+#else
+sun4cdm_notsup:
+	.asciz	"Kernel compiled with CONFIG_SUN4 cannot run on SUN4C/SUN4M/SUN4D\nTurn CONFIG_SUN4 off.\n\n"
+	.align 4
+#endif
 
 sun4e_notsup:
         .asciz  "Sparc-Linux sun4e support does not exist\n\n"
@@ -111,13 +119,14 @@ t_irq14:TRAP_ENTRY_INTERRUPT(14)            /* IRQ Timer #2                  */
 #ifndef __SMP__
 t_nmi:	NMI_TRAP                            /* Level 15 (NMI)                */
 #else
-	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
+	.globl	t_nmi
+t_nmi:	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
 #endif
 t_racc:	TRAP_ENTRY(0x20, do_reg_access)     /* General Register Access Error */
 t_iacce:BAD_TRAP(0x21)                      /* Instr Access Error            */
 t_bad22:BAD_TRAP(0x22) BAD_TRAP(0x23)
 t_cpdis:TRAP_ENTRY(0x24, do_cp_disabled)    /* Co-Processor Disabled         */
-t_uflsh:TRAP_ENTRY(0x25, do_bad_flush)      /* Unimplemented FLUSH inst.     */
+t_uflsh:SKIP_TRAP(0x25, unimp_flush)        /* Unimplemented FLUSH inst.     */
 t_bad26:BAD_TRAP(0x26) BAD_TRAP(0x27)
 t_cpexc:TRAP_ENTRY(0x28, do_cp_exception)   /* Co-Processor Exception        */
 t_dacce:SPARC_DFAULT                        /* Data Access Error             */
@@ -205,7 +214,7 @@ C_LABEL(trapbase_cpu1):
 	TRAP_ENTRY_INTERRUPT(13) TRAP_ENTRY_INTERRUPT(14)
 	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
 	TRAP_ENTRY(0x20, do_reg_access) BAD_TRAP(0x21) BAD_TRAP(0x22)
-	BAD_TRAP(0x23) TRAP_ENTRY(0x24, do_cp_disabled) TRAP_ENTRY(0x25, do_bad_flush)
+	BAD_TRAP(0x23) TRAP_ENTRY(0x24, do_cp_disabled) SKIP_TRAP(0x25, unimp_flush)
 	BAD_TRAP(0x26) BAD_TRAP(0x27) TRAP_ENTRY(0x28, do_cp_exception)
 	SRMMU_DFAULT TRAP_ENTRY(0x2a, do_hw_divzero) BAD_TRAP(0x2b) BAD_TRAP(0x2c)
 	BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
@@ -273,7 +282,7 @@ C_LABEL(trapbase_cpu2):
 	TRAP_ENTRY_INTERRUPT(13) TRAP_ENTRY_INTERRUPT(14)
 	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
 	TRAP_ENTRY(0x20, do_reg_access) BAD_TRAP(0x21) BAD_TRAP(0x22)
-	BAD_TRAP(0x23) TRAP_ENTRY(0x24, do_cp_disabled) TRAP_ENTRY(0x25, do_bad_flush)
+	BAD_TRAP(0x23) TRAP_ENTRY(0x24, do_cp_disabled) SKIP_TRAP(0x25, unimp_flush)
 	BAD_TRAP(0x26) BAD_TRAP(0x27) TRAP_ENTRY(0x28, do_cp_exception)
 	SRMMU_DFAULT TRAP_ENTRY(0x2a, do_hw_divzero) BAD_TRAP(0x2b) BAD_TRAP(0x2c)
 	BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
@@ -341,7 +350,7 @@ C_LABEL(trapbase_cpu3):
 	TRAP_ENTRY_INTERRUPT(13) TRAP_ENTRY_INTERRUPT(14)
 	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
 	TRAP_ENTRY(0x20, do_reg_access) BAD_TRAP(0x21) BAD_TRAP(0x22)
-	BAD_TRAP(0x23) TRAP_ENTRY(0x24, do_cp_disabled) TRAP_ENTRY(0x25, do_bad_flush)
+	BAD_TRAP(0x23) TRAP_ENTRY(0x24, do_cp_disabled) SKIP_TRAP(0x25, unimp_flush)
 	BAD_TRAP(0x26) BAD_TRAP(0x27) TRAP_ENTRY(0x28, do_cp_exception)
 	SRMMU_DFAULT TRAP_ENTRY(0x2a, do_hw_divzero) BAD_TRAP(0x2b) BAD_TRAP(0x2c)
 	BAD_TRAP(0x2d) BAD_TRAP(0x2e) BAD_TRAP(0x2f) BAD_TRAP(0x30) BAD_TRAP(0x31)
@@ -394,28 +403,26 @@ C_LABEL(trapbase_cpu3):
 	BAD_TRAP(0xfc) BAD_TRAP(0xfd) BAD_TRAP(0xfe) BAD_TRAP(0xff)
 
 #endif
-	.skip 4096
+	.align 4096
 
 /* This was the only reasonable way I could think of to properly align
  * these page-table data structures.
  */
 	.globl C_LABEL(bootup_user_stack)
-	.globl C_LABEL(bootup_kernel_stack)
 	.globl C_LABEL(pg0), C_LABEL(pg1), C_LABEL(pg2), C_LABEL(pg3)
 	.globl C_LABEL(empty_bad_page)
 	.globl C_LABEL(empty_bad_page_table)
 	.globl C_LABEL(empty_zero_page)
 	.globl C_LABEL(swapper_pg_dir)
 C_LABEL(bootup_user_stack):		.skip 0x2000
-C_LABEL(bootup_kernel_stack):		.skip 0x2000
-C_LABEL(swapper_pg_dir):		.skip 0x1000
-C_LABEL(pg0):				.skip 0x1000
-C_LABEL(pg1):				.skip 0x1000
-C_LABEL(pg2):				.skip 0x1000
-C_LABEL(pg3):				.skip 0x1000
-C_LABEL(empty_bad_page):		.skip 0x1000
-C_LABEL(empty_bad_page_table):		.skip 0x1000
-C_LABEL(empty_zero_page):		.skip 0x1000
+C_LABEL(swapper_pg_dir):		.skip PAGE_SIZE
+C_LABEL(pg0):				.skip PAGE_SIZE
+C_LABEL(pg1):				.skip PAGE_SIZE
+C_LABEL(pg2):				.skip PAGE_SIZE
+C_LABEL(pg3):				.skip PAGE_SIZE
+C_LABEL(empty_bad_page):		.skip PAGE_SIZE
+C_LABEL(empty_bad_page_table):		.skip PAGE_SIZE
+C_LABEL(empty_zero_page):		.skip PAGE_SIZE
 
 	.global C_LABEL(root_flags)
 	.global C_LABEL(ram_flags)
@@ -778,18 +785,24 @@ execute_in_high_mem:
  * your code. Sun probably still does that because they don't even
  * trust their own "OpenBoot" specifications.
  */
-
 		set	LOAD_ADDR, %g6
 		cmp	%o0, %g6		! an old sun4?
-		be	no_sun4_here
+		be	sun4_init
 		 nop
 
 found_version:
-
+#ifdef CONFIG_SUN4
+/* For people who try sun4 kernels, even if Configure.help advises them. */
+		ld	[%g7 + 0x68], %o1
+		set	sun4cdm_notsup, %o0
+		call	%o1
+		 nop
+		b	halt_me
+		 nop
+#endif
 /* Get the machine type via the mysterious romvec node operations. */
 
-		or	%g0, %g7, %l1
-		add	%l1, 0x1c, %l1		
+		add	%g7, 0x1c, %l1		
 		ld	[%l1], %l0
 		ld	[%l0], %l0
 		call 	%l0
@@ -825,10 +838,11 @@ got_prop:
 		set	C_LABEL(cputypval), %o2
 		ldub	[%o2 + 0x4], %l1
 
-		cmp	%l1, 'c'		! We already know we are not
-		be	1f			! on a plain sun4 because of
-		 				! the check for 0x4000 in %o0
-		 cmp	%l1, 'm'		! at start
+		cmp	%l1, ' '
+		be	1f
+		 cmp	%l1, 'c'
+		be	1f
+		 cmp	%l1, 'm'
 		be	1f
 		 cmp	%l1, 'd'
 		be	1f
@@ -853,6 +867,9 @@ got_prop:
 		b	sun4c_continue_boot
 		 nop
 
+/* CPUID in bootbus can be found at PA 0xff0140000 */
+#define SUN4D_BOOTBUS_CPUID     0xf0140000
+
 sun4d_init:
 	/* Need to patch call to handler_irq */
 	set	C_LABEL(patch_handler_irq), %g4
@@ -862,6 +879,21 @@ sun4d_init:
 	srl	%g5, 2, %g5
 	or	%g5, %g3, %g5
 	st	%g5, [%g4]
+
+#ifdef __SMP__
+	/* Get our CPU id out of bootbus */
+	set     SUN4D_BOOTBUS_CPUID, %g3
+	lduba   [%g3] ASI_M_CTL, %g3
+	and     %g3, 0xf8, %g3
+	srl     %g3, 3, %g4
+	sta     %g4, [%g0] ASI_M_VIKING_TMP1
+	sethi	%hi(boot_cpu_id), %g5
+	stb	%g4, [%g5 + %lo(boot_cpu_id)]
+	sll	%g4, 2, %g4
+	sethi	%hi(boot_cpu_id4), %g5
+	stb	%g4, [%g5 + %lo(boot_cpu_id4)]
+#endif
+
 	/* Fall through to sun4m_init */
 
 sun4m_init:
@@ -974,7 +1006,8 @@ sun4c_continue_boot:
 
 		/* I want a kernel stack NOW! */
 		set	C_LABEL(bootup_user_stack), %g1
-		add	%g1, (PAGE_SIZE - REGWIN_SZ), %sp
+		set	(0x2000 - REGWIN_SZ), %g2
+		add	%g1, %g2, %sp
 		mov	0, %fp			/* And for good luck */
 
 		/* Zero out our BSS section. */
@@ -988,10 +1021,16 @@ sun4c_continue_boot:
 		 add	%o0, 0x1, %o0
 
 		/* Initialize the umask value for init_task just in case.
-		 * But first make current_set[0] point to something useful.
+		 * But first make current_set[boot_cpu_id] point to something useful.
 		 */
 		set	C_LABEL(init_task_union), %g6
 		set	C_LABEL(current_set), %g2
+#ifdef __SMP__
+		sethi	%hi(C_LABEL(boot_cpu_id4)), %g3
+		ldub	[%g3 + %lo(C_LABEL(boot_cpu_id4))], %g3
+		st	%g6, [%g2]
+		add	%g2, %g3, %g2
+#endif
 		st	%g6, [%g2]
 
 		st	%g0, [%g6 + AOFF_task_tss + AOFF_thread_uwinmask]
@@ -1114,19 +1153,28 @@ sun4c_continue_boot:
 		call	halt_me
 		 nop
 
+sun4_init:
+#ifdef CONFIG_SUN4
 /* There, happy now Adrian? */
+		set	C_LABEL(cputypval), %o2		! Let everyone know we
+		set	' ', %o0			! are a "sun4 " architecture
+		stb	%o0, [%o2 + 0x4]		
 
-		/* XXX Fix this... XXX */
-no_sun4_here:
-		sethi	%hi(SUN4_PROM_VECTOR+SUN4_PRINTF), %o1
-		ld	[%o1 + %lo(SUN4_PROM_VECTOR+SUN4_PRINTF)], %o1
-		set	sun4_notsup, %o0
-		call	%o1
+		b got_prop 
 		 nop
-1:
-		ba	1b			! Cannot exit into KMON
+#else
+		sethi   %hi(SUN4_PROM_VECTOR+0x84), %o1
+		ld      [%o1 + %lo(SUN4_PROM_VECTOR+0x84)], %o1
+		set     sun4_notsup, %o0
+		call    %o1	/* printf */
 		 nop
-
+		sethi   %hi(SUN4_PROM_VECTOR+0xc4), %o1
+		ld      [%o1 + %lo(SUN4_PROM_VECTOR+0xc4)], %o1
+		call    %o1	/* exittomon */
+		 nop
+1:		ba      1b                      ! Cannot exit into KMON
+		 nop
+#endif
 no_sun4e_here:
 		ld	[%g7 + 0x68], %o1
 		set	sun4e_notsup, %o0

@@ -1,5 +1,5 @@
 /*
- *	$Id: pcisyms.c,v 1.2 1998/02/16 10:35:57 mj Exp $
+ *	$Id: pcisyms.c,v 1.4 1998/04/17 16:34:19 mj Exp $
  *
  *	PCI Bus Services -- Exported Symbols
  *
@@ -16,11 +16,12 @@ EXPORT_SYMBOL(pcibios_read_config_dword);
 EXPORT_SYMBOL(pcibios_write_config_byte);
 EXPORT_SYMBOL(pcibios_write_config_word);
 EXPORT_SYMBOL(pcibios_write_config_dword);
-EXPORT_SYMBOL(pcibios_strerror);
 EXPORT_SYMBOL(pci_devices);
+EXPORT_SYMBOL(pci_root);
 EXPORT_SYMBOL(pci_find_class);
 EXPORT_SYMBOL(pci_find_device);
 EXPORT_SYMBOL(pci_find_slot);
+EXPORT_SYMBOL(pci_set_master);
 
 /* Backward compatibility */
 

@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.16 1997/11/28 15:59:34 jj Exp $ */
+/* $Id: page.h,v 1.17 1998/01/14 17:16:28 jj Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -31,16 +31,16 @@ extern void copy_page(unsigned long to, unsigned long from);
 /* These are used to make use of C type-checking.. */
 typedef struct { unsigned long pte; } pte_t;
 typedef struct { unsigned long iopte; } iopte_t;
-typedef struct { unsigned long pmd; } pmd_t;
-typedef struct { unsigned long pgd; } pgd_t;
+typedef struct { unsigned int pmd; } pmd_t;
+typedef struct { unsigned int pgd; } pgd_t;
 typedef struct { unsigned long ctxd; } ctxd_t;
 typedef struct { unsigned long pgprot; } pgprot_t;
 typedef struct { unsigned long iopgprot; } iopgprot_t;
 
 #define pte_val(x)	((x).pte)
 #define iopte_val(x)	((x).iopte)
-#define pmd_val(x)      ((x).pmd)
-#define pgd_val(x)	((x).pgd)
+#define pmd_val(x)      ((unsigned long)(x).pmd)
+#define pgd_val(x)	((unsigned long)(x).pgd)
 #define ctxd_val(x)	((x).ctxd)
 #define pgprot_val(x)	((x).pgprot)
 #define iopgprot_val(x)	((x).iopgprot)
@@ -57,16 +57,16 @@ typedef struct { unsigned long iopgprot; } iopgprot_t;
 /* .. while these make it easier on the compiler */
 typedef unsigned long pte_t;
 typedef unsigned long iopte_t;
-typedef unsigned long pmd_t;
-typedef unsigned long pgd_t;
+typedef unsigned int pmd_t;
+typedef unsigned int pgd_t;
 typedef unsigned long ctxd_t;
 typedef unsigned long pgprot_t;
 typedef unsigned long iopgprot_t;
 
 #define pte_val(x)	(x)
 #define iopte_val(x)	(x)
-#define pmd_val(x)      (x)
-#define pgd_val(x)	(x)
+#define pmd_val(x)      ((unsigned long)(x))
+#define pgd_val(x)	((unsigned long)(x))
 #define ctxd_val(x)	(x)
 #define pgprot_val(x)	(x)
 #define iopgprot_val(x)	(x)
@@ -83,7 +83,7 @@ typedef unsigned long iopgprot_t;
 
 #define TASK_UNMAPPED_BASE	((current->tss.flags & SPARC_FLAG_32BIT) ? \
 				 (0x0000000070000000UL) : \
-				 (0x0000030000000000UL))
+				 (0xfffff80000000000UL))
 
 #endif /* !(__ASSEMBLY__) */
 

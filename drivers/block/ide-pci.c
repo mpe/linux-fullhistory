@@ -116,31 +116,6 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} }};
 
 /*
- * Search for an (apparently) unused block of I/O space
- * of "size" bytes in length.  Ideally we ought to do a pass
- * through pcicfg space to eliminate ports already allocated
- * by the BIOS, to avoid conflicts later in the init cycle,
- * but we don't.	FIXME
- */
-unsigned long ide_find_free_region (unsigned short size) /* __init */
-{
-	static unsigned short base = 0x5800;	/* it works for me */
-	unsigned short i;
-
-	for (; base > 0; base -= 0x200) {
-		if (!check_region(base,size)) {
-			for (i = 0; i < size; i++) {
-				if (inb(base+i) != 0xff)
-					goto next;
-			}
-			return base;	/* success */
-		}
-	next:
-	}
-	return 0;	/* failure */
-}
-
-/*
  * Match a PCI IDE port against an entry in ide_hwifs[],
  * based on io_base port if possible.
  */
@@ -197,7 +172,6 @@ __initfunc(static ide_hwif_t *ide_match_hwif (unsigned long io_base, const char 
 
 __initfunc(static int ide_setup_pci_baseregs (struct pci_dev *dev, const char *name))
 {
-	unsigned int base, readback;
 	byte reg, progif = 0;
 
 	/*
@@ -218,16 +192,11 @@ __initfunc(static int ide_setup_pci_baseregs (struct pci_dev *dev, const char *n
 	/*
 	 * Setup base registers for IDE command/control spaces for each interface:
 	 */
-	if (!(base = ide_find_free_region(32)))
-		return 1;
-	for (reg = 0; reg < 4; reg++, base += 8) {
-		(void) pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + reg, base | PCI_BASE_ADDRESS_SPACE_IO);
-		if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + reg, &readback) ||
-		    readback != (base | PCI_BASE_ADDRESS_SPACE_IO)) {
-			printk("%s: readback failed for basereg 0x%02x: wrote 0x%04x, read 0x%x04\n", name, reg, base, readback);
+	for (reg = 0; reg < 4; reg++)
+		if (!dev->base_address[reg]) {
+			printk("%s: Missing I/O address #%d, please report to <mj@ucw.cz>\n", name, reg);
 			return 1;
 		}
-	}
 	return 0;
 }
 

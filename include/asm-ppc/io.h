@@ -5,6 +5,8 @@
 #include <asm/page.h>
 #include <asm/byteorder.h>
 
+#define KERNELBASE	0xc0000000
+
 /* from the Carolina Technical Spec -- Cort */
 #define IBM_ACORN 0x82A
 #define SIO_CONFIG_RA	0x398
@@ -18,7 +20,6 @@
 
 #define SLOW_DOWN_IO
 
-#define PMAC_ISA_IO_BASE 	0
 #define PMAC_ISA_MEM_BASE 	0
 #define PMAC_PCI_DRAM_OFFSET 	0
 #define CHRP_ISA_IO_BASE 	0xf8000000
@@ -43,10 +44,17 @@
 #endif /* CONFIG_CHRP */
 
 #ifdef CONFIG_PMAC
-#define _IO_BASE	PMAC_ISA_IO_BASE
+extern unsigned long isa_io_base;
+#define _IO_BASE 	isa_io_base	/* well, PCI i/o base really */
 #define _ISA_MEM_BASE	PMAC_ISA_MEM_BASE
 #define PCI_DRAM_OFFSET PMAC_PCI_DRAM_OFFSET
 #endif /* CONFIG_PMAC */
+
+#ifdef CONFIG_MBX
+#define _IO_BASE        0
+#define _ISA_MEM_BASE   0
+#define PCI_DRAM_OFFSET 0x80000000
+#endif /* CONFIG_MBX8xx */
 
 #else /* CONFIG_MACH_SPECIFIC */
 extern unsigned long isa_io_base;
@@ -122,8 +130,11 @@ extern inline void * bus_to_virt(unsigned long address)
  * Map in an area of physical address space, for accessing
  * I/O devices etc.
  */
+extern void *__ioremap(unsigned long address, unsigned long size,
+		       unsigned long flags);
 extern void *ioremap(unsigned long address, unsigned long size);
-extern void iounmap(unsigned long *addr);
+extern void iounmap(void *addr);
+extern unsigned long iopa(unsigned long addr);
 
 /*
  * Change virtual addresses to physical addresses and vv, for

@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.53 1997/01/25 02:43:05 miguel Exp $
+/* $Id: traps.c,v 1.56 1998/04/06 16:08:32 jj Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -57,6 +57,14 @@ void sun4m_nmi(struct pt_regs *regs)
 			     "lda [%%g1] 0x4, %1\n\t" :
 			     "=r" (afsr), "=r" (afar));
 	printk("afsr=%08lx afar=%08lx\n", afsr, afar);
+	printk("you lose buddy boy...\n");
+	show_regs(regs);
+	prom_halt();
+}
+
+void sun4d_nmi(struct pt_regs *regs)
+{
+	printk("Aieee: sun4d NMI received!\n");
 	printk("you lose buddy boy...\n");
 	show_regs(regs);
 	prom_halt();
@@ -229,10 +237,13 @@ static unsigned long fake_fsr;
 static unsigned long fake_queue[32] __attribute__ ((aligned (8)));
 static unsigned long fake_depth;
 
+extern int do_mathemu(struct pt_regs *, struct task_struct *);
+
 void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		 unsigned long psr)
 {
 	static calls = 0;
+	int ret;
 #ifndef __SMP__
 	struct task_struct *fpt = last_task_used_math;
 #else
@@ -255,6 +266,40 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 	}
 	fpsave(&fpt->tss.float_regs[0], &fpt->tss.fsr,
 	       &fpt->tss.fpqueue[0], &fpt->tss.fpqdepth);
+#ifdef DEBUG_FPU
+	printk("Hmm, FP exception, fsr was %016lx\n", fpt->tss.fsr);
+#endif
+
+	switch ((fpt->tss.fsr & 0x1c000)) {
+	/* switch on the contents of the ftt [floating point trap type] field */
+#ifdef DEBUG_FPU
+	case (1 << 14):
+		printk("IEEE_754_exception\n");
+		break;
+#endif
+	case (2 << 14):  /* unfinished_FPop (underflow & co) */
+	case (3 << 14):  /* unimplemented_FPop (quad stuff, maybe sqrt) */
+		ret = do_mathemu(regs, fpt);
+		break;
+#ifdef DEBUG_FPU
+	case (4 << 14):
+		printk("sequence_error (OS bug...)\n");
+		break;
+	case (5 << 14):
+		printk("hardware_error (uhoh!)\n");
+		break;
+	case (6 << 14):
+		printk("invalid_fp_register (user error)\n");
+		break;
+#endif /* DEBUG_FPU */
+	}
+	/* If we successfully emulated the FPop, we pretend the trap never happened :-> */
+	if (ret) {
+		fpload(&current->tss.float_regs[0], &current->tss.fsr);
+		return;
+	}
+	/* nope, better SIGFPE the offending process... */
+	       
 	fpt->tss.sig_address = pc;
 	fpt->tss.sig_desc = SUBSIG_FPERROR; /* as good as any */
 #ifdef __SMP__
@@ -327,19 +372,6 @@ void handle_cp_disabled(struct pt_regs *regs, unsigned long pc, unsigned long np
 			unsigned long psr)
 {
 	lock_kernel();
-	send_sig(SIGILL, current, 1);
-	unlock_kernel();
-}
-
-void handle_bad_flush(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		      unsigned long psr)
-{
-	lock_kernel();
-#ifdef TRAP_DEBUG
-	printk("Unimplemented FLUSH Exception at PC %08lx NPC %08lx PSR %08lx\n",
-	       pc, npc, psr);
-#endif
-	printk("INSTRUCTION=%08lx\n", *((unsigned long *) regs->pc));
 	send_sig(SIGILL, current, 1);
 	unlock_kernel();
 }

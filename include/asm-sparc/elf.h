@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.11 1997/09/26 18:37:32 tdyas Exp $ */
+/* $Id: elf.h,v 1.15 1998/03/23 08:41:32 jj Exp $ */
 #ifndef __ASMSPARC_ELF_H
 #define __ASMSPARC_ELF_H
 
@@ -6,6 +6,7 @@
  * ELF register definitions..
  */
 
+#include <linux/config.h>
 #include <asm/ptrace.h>
 #include <asm/mbus.h>
 
@@ -29,7 +30,12 @@ typedef unsigned long elf_fpregset_t;
 #define ELF_DATA	ELFDATA2MSB
 
 #define USE_ELF_CORE_DUMP
+#ifndef CONFIG_SUN4
 #define ELF_EXEC_PAGESIZE	4096
+#else
+#define ELF_EXEC_PAGESIZE	8192
+#endif
+
 
 /* This is the location that an ET_DYN program is loaded if exec'ed.  Typical
    use of this is to invoke "./ld.so someprog" to test out a new version of
@@ -45,7 +51,7 @@ typedef unsigned long elf_fpregset_t;
 /* Sun4c has none of the capabilities, most sun4m's have them all.
  * XXX This is gross, set some global variable at boot time. -DaveM
  */
-#define ELF_HWCAP	((sparc_cpu_model == sun4c) ? 0 : \
+#define ELF_HWCAP	((ARCH_SUN4C_SUN4) ? 0 : \
 			 (HWCAP_SPARC_FLUSH | HWCAP_SPARC_STBAR | \
 			  HWCAP_SPARC_SWAP | \
 			  ((srmmu_modtype != Cypress && \
@@ -55,7 +61,7 @@ typedef unsigned long elf_fpregset_t;
 
 /* This yields a string that ld.so will use to load implementation
    specific libraries for optimization.  This is more specific in
-   intent than poking at uname or /proc/cpuinfo.  */
+   intent than poking at uname or /proc/cpuinfo. */
 
 #define ELF_PLATFORM	(NULL)
 

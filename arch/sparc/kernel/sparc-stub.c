@@ -1,4 +1,4 @@
-/* $Id: sparc-stub.c,v 1.22 1998/01/07 06:33:48 baccala Exp $
+/* $Id: sparc-stub.c,v 1.24 1998/02/08 07:58:44 ecd Exp $
  * sparc-stub.c:  KGDB support for the Linux kernel.
  *
  * Modifications to run under Linux
@@ -165,9 +165,10 @@ unsigned long get_sun4csegmap(unsigned long addr)
 	return entry;
 }
 
-static void flush_cache_all_nop(void)
-{
-}
+#if 0
+/* Have to sort this out. This cannot be done after initialization. */
+static void flush_cache_all_nop(void) {}
+#endif
 
 /* Place where we save old trap entries for restoration */
 struct tt_entry kgdb_savettable[256];
@@ -398,10 +399,12 @@ set_debug_traps(void)
 {
 	struct hard_trap_info *ht;
 	unsigned long flags;
-	unsigned char c;
 
 	save_and_cli(flags);
-	flush_cache_all = flush_cache_all_nop;
+#if 0	
+/* Have to sort this out. This cannot be done after initialization. */
+	BTFIXUPSET_CALL(flush_cache_all, flush_cache_all_nop, BTFIXUPCALL_NOP);
+#endif
 
 	/* Initialize our copy of the Linux Sparc trap table */
 	eh_init();

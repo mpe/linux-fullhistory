@@ -72,14 +72,14 @@ extern void show_regs(struct pt_regs * regs);
 extern void flush_instruction_cache(void);
 extern void hard_reset_now(void);
 extern void poweroff_now(void);
-/*extern void note_bootable_part(kdev_t, int);*/
-extern int sd_find_target(void *, int);
 extern int _get_PVR(void);
+extern long _get_L2CR(void);
 extern void via_cuda_init(void);
 extern void pmac_nvram_init(void);
 extern void read_rtc_time(void);
 extern void pmac_find_display(void);
 extern void giveup_fpu(void);
+extern void smp_giveup_fpu(struct task_struct *);
 extern void cvt_fd(float *from, double *to);
 extern void cvt_df(double *from, float *to);
 
@@ -102,6 +102,7 @@ extern void dump_regs(struct pt_regs *);
 #define sti()	__sti()
 #define save_flags(flags)	__save_flags(flags)
 #define restore_flags(flags)	__restore_flags(flags)
+#define save_and_cli(flags)	__save_and_cli(flags)
 
 #else /* __SMP__ */
 

@@ -13,7 +13,8 @@
 #include <asm/system.h>
 #include <asm/smp.h>
 
-struct prom_cpuinfo linux_cpus[NR_CPUS];
+struct prom_cpuinfo linux_cpus[NR_CPUS] __initdata = { { 0 } };
+unsigned prom_cpu_nodes[NR_CPUS];
 int linux_num_cpus = 0;
 
 extern void cpu_probe(void);
@@ -64,6 +65,8 @@ device_scan(unsigned long mem_start))
 	prom_node_cpu = cpu_nds[0];
 
 	linux_num_cpus = cpu_ctr;
+	
+	prom_cpu_nodes[0] = prom_node_cpu;
 
 	cpu_probe();
 	return central_probe(mem_start);

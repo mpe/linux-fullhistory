@@ -1,4 +1,4 @@
-/* $Id: ranges.c,v 1.10 1997/12/19 12:37:18 jj Exp $
+/* $Id: ranges.c,v 1.11 1998/01/30 10:59:05 jj Exp $
  * ranges.c: Handle ranges in newer proms for obio/sbus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -68,7 +68,7 @@ prom_apply_obio_ranges(struct linux_prom_registers *regs, int nregs)
 void prom_apply_sbus_ranges(struct linux_sbus *sbus, struct linux_prom_registers *regs,
 			    int nregs, struct linux_sbus_device *sdev)
 {
-	if(sbus->num_sbus_ranges) {
+	if(sbus && sbus->num_sbus_ranges) {
 		if(sdev && (sdev->ranges_applied == 0)) {
 			sdev->ranges_applied = 1;
 			prom_adjust_regs(regs, nregs, sbus->sbus_ranges,

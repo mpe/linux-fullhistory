@@ -1,4 +1,4 @@
-/* $Id: ttable.h,v 1.5 1997/10/14 16:21:34 jj Exp $ */
+/* $Id: ttable.h,v 1.6 1998/03/15 17:23:54 ecd Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
 
@@ -133,20 +133,6 @@
 	call	routine;				\
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o1;	\
 	ba,a,pt	%xcc, rtrap_clr_l6;
-
-#ifdef __SMP__
-#define TRAP_TICK					\
-	rdpr	%pil, %g2;				\
-	wrpr	%g0, 15, %pil;				\
-	b,pt	%xcc, etrap_irq;			\
-	 rd	%pc, %g7;				\
-	call	smp_percpu_timer_interrupt;		\
-	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
-	b,pt	%xcc, rtrap;				\
-	 clr	%l6;
-#else
-#define TRAP_TICK	TRAP_IRQ(handler_irq, 14)
-#endif
 
 #define TRAP_IVEC TRAP_NOSAVE(do_ivec)
 

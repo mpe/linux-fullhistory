@@ -1,4 +1,4 @@
-/* $Id: creator.c,v 1.13 1997/10/17 04:14:40 davem Exp $
+/* $Id: creator.c,v 1.14 1998/03/10 20:18:32 jj Exp $
  * creator.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -244,7 +244,8 @@ ffb_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		page += map_size;
 	}
 
-	vma->vm_dentry = dget(file->f_dentry);
+	vma->vm_file = file;
+	file->f_count++;
         return 0;
 }
 
@@ -702,8 +703,8 @@ static void ffb_fill(int attrib, int count, int *boxes)
 	while (count-- > 0) {
 		ffb->by = boxes[1];
 		ffb->bx = boxes[0];
-		ffb->bw = boxes[2];
 		ffb->bh = boxes[3];
+		ffb->bw = boxes[2];
 		boxes += 4;
 	}
 	FFB_FILL_END

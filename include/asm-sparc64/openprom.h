@@ -1,4 +1,4 @@
-/* $Id: openprom.h,v 1.6 1997/08/17 22:40:09 ecd Exp $ */
+/* $Id: openprom.h,v 1.7 1998/03/15 10:14:47 ecd Exp $ */
 #ifndef __SPARC64_OPENPROM_H
 #define __SPARC64_OPENPROM_H
 
@@ -232,6 +232,24 @@ struct linux_prom_pci_ranges {
 	unsigned int size_lo;
 };
 
+struct linux_prom_pci_intmap {
+	unsigned int phys_hi;
+	unsigned int phys_mid;
+	unsigned int phys_lo;
+
+	unsigned int interrupt;
+
+	int          cnode;
+	unsigned int cinterrupt;
+};
+
+struct linux_prom_pci_intmask {
+	unsigned int phys_hi;
+	unsigned int phys_mid;
+	unsigned int phys_lo;
+	unsigned int interrupt;
+};
+
 struct linux_prom_ebus_ranges {
 	unsigned int child_phys_hi;
 	unsigned int child_phys_lo;
@@ -243,6 +261,21 @@ struct linux_prom_ebus_ranges {
 	unsigned int size;
 };
 
+struct linux_prom_ebus_intmap {
+	unsigned int phys_hi;
+	unsigned int phys_lo;
+
+	unsigned int interrupt;
+
+	int          cnode;
+	unsigned int cinterrupt;
+};
+
+struct linux_prom_ebus_intmask {
+	unsigned int phys_hi;
+	unsigned int phys_lo;
+	unsigned int interrupt;
+};
 #endif /* !(__ASSEMBLY__) */
 
 #endif /* !(__SPARC64_OPENPROM_H) */

@@ -11,13 +11,31 @@
 	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c $< -o $*.o
 
 O_TARGET := kernel.o
-O_OBJS := misc.o traps.o process.o signal.o syscalls.o \
-	  align.o ptrace.o irq.o openpic.o bitops.o ppc_htab.o idle.o \
-	  time.o prep_time.o pmac_time.o chrp_time.o \
-	  setup.o prep_setup.o pmac_setup.o pmac_support.o chrp_setup.o \
-	  pci.o prep_pci.o pmac_pci.o chrp_pci.o \
-	  residual.o prom.o
 OX_OBJS := ppc_ksyms.o
+
+
+O_OBJS := traps.o irq.o idle.o time.o process.o signal.o syscalls.o misc.o \
+	  bitops.o ppc_htab.o setup.o ptrace.o align.o
+
+ifdef CONFIG_PCI
+O_OBJS += pci.o
+endif
+ifdef CONFIG_KGDB
+O_OBJS += ppc-stub.o
+endif
+
+ifeq ($(CONFIG_MBX),y)
+O_OBJS += mbx_setup.o mbx_pci.o softemu8xx.o
+else
+ifeq ($(CONFIG_APUS),y)
+O_OBJS += prom.o openpic.o
+else
+O_OBJS += prep_time.o pmac_time.o chrp_time.o \
+	  prep_setup.o pmac_setup.o pmac_support.o chrp_setup.o \
+	  prep_pci.o pmac_pci.o chrp_pci.o \
+	  residual.o prom.o openpic.o
+endif
+endif
 
 ifdef SMP
 O_OBJS += smp.o
@@ -38,10 +56,10 @@ ppc_defs.h: mk_defs.c ppc_defs.head \
 	rm mk_defs.s
 
 find_name : find_name.c
-	$(HOSTCC) -DKERNELBASE=$(KERNELBASE) -o find_name find_name.c
+	$(HOSTCC) -o find_name find_name.c
 
 checks: checks.c
-	$(HOSTCC) -DKERNELBASE=$(KERNELBASE) -fno-builtin -I$(TOPDIR)/include -D__KERNEL__ -o checks checks.c
+	$(HOSTCC) -fno-builtin -I$(TOPDIR)/include -D__KERNEL__ -o checks checks.c
 	./checks
 
 include $(TOPDIR)/Rules.make

@@ -1,4 +1,4 @@
-/* $Id: flash.c,v 1.5 1997/11/01 10:22:13 ecd Exp $
+/* $Id: flash.c,v 1.7 1998/03/10 20:19:05 jj Exp $
  * flash.c: Allow mmap access to the OBP Flash, for OBP updates.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -71,7 +71,9 @@ flash_mmap(struct file *file, struct vm_area_struct *vma)
 
 	if (remap_page_range(vma->vm_start, addr, size, vma->vm_page_prot))
 		return -EAGAIN;
-	vma->vm_dentry = dget(file->f_dentry);
+		
+	vma->vm_file = file;
+	file->f_count++;
 	return 0;
 }
 
