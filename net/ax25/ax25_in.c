@@ -72,8 +72,7 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb, unsigned char *ifr
 #ifdef CONFIG_INET
 		case AX25_P_IP:
 			ax25_ip_mode_set(&ax25->dest_addr, ax25->device, 'V');
-			skb->h.raw = ((char *)(iframe)) + 2;
-			skb->len  -= 2;
+			skb->h.raw = skb->data;
 			ip_rcv(skb, skb->dev, NULL);	/* Wrong ptype */
 			queued = 1;
 			break;
@@ -559,6 +558,12 @@ int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type)
 	int queued = 0, frametype;
 	unsigned char *frame;
 
+	if (ax25->state != AX25_STATE_1 && ax25->state != AX25_STATE_2 &&
+	    ax25->state != AX25_STATE_3 && ax25->state != AX25_STATE_4) {
+		printk("ax25_process_rx_frame: frame received - state = %d\n", ax25->state);
+		return queued;
+	}
+
 	del_timer(&ax25->timer);
 
 	frame = skb->h.raw;
@@ -578,14 +583,11 @@ int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type)
 		case AX25_STATE_4:
 			queued = ax25_state4_machine(ax25, skb, frame, frametype, type);
 			break;
-		default:
-			printk("ax25_process_rx_frame: frame received - state = %d\n", ax25->state);
-			break;
 	}
 
 	ax25_set_timer(ax25);
 
-	return(queued);
+	return queued;
 }
 
 #endif

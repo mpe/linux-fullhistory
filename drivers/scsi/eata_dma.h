@@ -112,6 +112,6 @@ int eata_release(struct Scsi_Host *);
  * c-continued-statement-offset: 4
  * c-continued-brace-offset: 0
  * indent-tabs-mode: nil
- * tab-width: 4
+ * tab-width: 8
  * End:
  */

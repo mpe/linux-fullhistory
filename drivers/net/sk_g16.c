@@ -1570,7 +1570,7 @@ static void SK_rxintr(struct device *dev)
 	    int len = (rmdp->mlen & 0x0fff);  /* extract message length from receive buffer */
 	    struct sk_buff *skb;
 
-	    skb = alloc_skb(len, GFP_ATOMIC); /* allocate socket buffer */ 
+	    skb = dev_alloc_skb(len); /* allocate socket buffer */ 
 
 	    if (skb == NULL)                /* Could not get mem ? */
 	    {
@@ -1590,7 +1590,6 @@ static void SK_rxintr(struct device *dev)
 	    
 	    /* Prepare sk_buff to queue for upper layers */
 
-            skb->len = len;
 	    skb->dev = dev;
 	    
 	    /* 
@@ -1600,7 +1599,7 @@ static void SK_rxintr(struct device *dev)
 	     * ignore status fields) 
 	     */
 
-	    memcpy(skb->data, (unsigned char *) (rmdp->u.buffer & 0x00ffffff),
+	    memcpy(skb_put(skb,len), (unsigned char *) (rmdp->u.buffer & 0x00ffffff),
 		   len);
 
 

@@ -342,7 +342,7 @@ i596_rx(struct device *dev)
 	{
 	    /* a good frame */
 	    int pkt_len = lp->scb.rfd->count & 0x3fff;
-	    struct sk_buff *skb = alloc_skb(pkt_len, GFP_ATOMIC);
+	    struct sk_buff *skb = dev_alloc_skb(pkt_len);
 
 	    frames++;
 
@@ -353,9 +353,8 @@ i596_rx(struct device *dev)
 		break;
 	    }
 
-	    skb->len = pkt_len;
   	    skb->dev = dev;		
-	    memcpy(skb->data, lp->scb.rfd->data, pkt_len);
+	    memcpy(skb_put(skb,pkt_len), lp->scb.rfd->data, pkt_len);
 
 	    skb->protocol=eth_type_trans(skb,dev);
 	    netif_rx(skb);

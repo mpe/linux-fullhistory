@@ -380,11 +380,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 				struct sk_buff *skb2;
 				if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
 					break;
-				/*
-				 *	The protocol knows this has (for other paths) been taken off
-				 *	and adds it back.
-				 */
-				skb2->len-=skb->dev->hard_header_len;
+				skb2->h.raw = skb2->data + dev->hard_header_len;
 				ptype->func(skb2, skb->dev, ptype);
 				nitcount--;
 			}
@@ -521,7 +517,7 @@ int dev_rint(unsigned char *buff, long len, int flags, struct device *dev)
 		 *	in effect handle the incoming data as if it were from a circular buffer
 		 */
 
-		to = skb->data;
+		to = skb_put(skb,len);
 		left = len;
 
 		len2 = len;
@@ -543,7 +539,6 @@ int dev_rint(unsigned char *buff, long len, int flags, struct device *dev)
 	 *	Tag the frame and kick it to the proper receive routine
 	 */
 	 
-	skb->len = len;
 	skb->dev = dev;
 	skb->free = 1;
 
@@ -647,13 +642,12 @@ void net_bh(void *tmp)
 		
 	       /*
 		*	Bump the pointer to the next structure.
-		*	This assumes that the basic 'skb' pointer points to
-		*	the MAC header, if any (as indicated by its "length"
-		*	field).  Take care now!
+		*
+		*	On entry to the protocol layer. skb->data and
+		*	skb->h.raw point to the MAC and encapsulated data
 		*/
 
-		skb->h.raw = skb->data + skb->dev->hard_header_len;
-		skb->len -= skb->dev->hard_header_len;
+		skb->h.raw = skb->data+skb->dev->hard_header_len;
 
 	       /*
 		* 	Fetch the packet protocol ID. 
@@ -841,19 +835,19 @@ static int dev_ifconf(char *arg)
 		(*(struct sockaddr_in *) &ifr.ifr_addr).sin_addr.s_addr = dev->pa_addr;
 
 		/*
-		 *	Write this block to the caller's space. 
-		 */
-		 
-		memcpy_tofs(pos, &ifr, sizeof(struct ifreq));
-		pos += sizeof(struct ifreq);
-		len -= sizeof(struct ifreq);
-		
-		/*
 		 *	Have we run out of space here ?
 		 */
 	
 		if (len < sizeof(struct ifreq)) 
 			break;
+
+		/*
+		 *	Write this block to the caller's space. 
+		 */
+		 
+		memcpy_tofs(pos, &ifr, sizeof(struct ifreq));
+		pos += sizeof(struct ifreq);
+		len -= sizeof(struct ifreq);		
   	}
 
 	/*
@@ -1065,9 +1059,6 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			(*(struct sockaddr_in *)
 				&ifr.ifr_broadaddr).sin_port = 0;
 			goto rarok;
-			memcpy_tofs(arg, &ifr, sizeof(struct ifreq));
-			ret = 0;
-			break;
 
 		case SIOCSIFBRDADDR:	/* Set the broadcast address */
 			dev->pa_brdaddr = (*(struct sockaddr_in *)
@@ -1082,9 +1073,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				&ifr.ifr_dstaddr).sin_family = dev->family;
 			(*(struct sockaddr_in *)
 				&ifr.ifr_dstaddr).sin_port = 0;
-				memcpy_tofs(arg, &ifr, sizeof(struct ifreq));
-			ret = 0;
-			break;
+			goto rarok;
 	
 		case SIOCSIFDSTADDR:	/* Set the destination address (for point-to-point links) */
 			dev->pa_dstaddr = (*(struct sockaddr_in *)
@@ -1175,9 +1164,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			ifr.ifr_map.irq=dev->irq;
 			ifr.ifr_map.dma=dev->dma;
 			ifr.ifr_map.port=dev->if_port;
-			memcpy_tofs(arg,&ifr,sizeof(struct ifreq));
-			ret=0;
-			break;
+			goto rarok;
 			
 		case SIOCSIFMAP:
 			if(dev->set_config==NULL)

@@ -11,7 +11,7 @@ CFLAGS	:= $(CFLAGS) $(PARANOID) $(DEBUG) -fno-builtin
 	$(CC) $(CFLAGS) $(MATH_EMULATION) -c $<
 
 .S.o:
-	$(CC) -D__ASSEMBLER__ $(PARANOID) -c $<
+	$(CC) -D__ASSEMBLY__ $(PARANOID) -c $<
 
 .s.o:
 	$(CC) -c $<
@@ -35,7 +35,7 @@ math.a: $(OBJS)
 
 dep:
 	$(CPP) -M *.c > .depend
-	$(CPP) -D__ASSEMBLER__ -M *.S >> .depend
+	$(CPP) -D__ASSEMBLY__ -M *.S >> .depend
 
 proto:
 	cproto -e -DMAKING_PROTO *.c >fpu_proto.h

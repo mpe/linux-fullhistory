@@ -1035,12 +1035,11 @@ ewrk3_rx(struct device *dev)
 	} else {
 	  struct sk_buff *skb;
 
-          if ((skb = alloc_skb(pkt_len, GFP_ATOMIC)) != NULL) {
-	    skb->len = pkt_len;
+          if ((skb = dev_alloc_skb(pkt_len)) != NULL) {
 	    skb->dev = dev;
 
 	    if (lp->shmem_length == IO_ONLY) {
-	      unsigned char *p = skb->data;
+	      unsigned char *p = skb_put(skb,pkt_len);
 
 	      *p = inb(EWRK3_DATA);         /* dummy read */
 	      for (i=0; i<skb->len; i++) {
@@ -1618,6 +1617,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     unsigned char addr[HASH_TABLE_LEN * ETH_ALEN];
     unsigned short val[(HASH_TABLE_LEN * ETH_ALEN) >> 1];
   } tmp;
+  int err;
 
   switch(ioc->cmd) {
   case EWRK3_GET_HWADDR:             /* Get the hardware address */
@@ -1625,6 +1625,9 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
       tmp.addr[i] = dev->dev_addr[i];
     }
     ioc->len = ETH_ALEN;
+
+    err = verify_area(VERIFY_WRITE, (void *)ioc->data, ETH_ALEN);
+    if (err) return err;
     memcpy_tofs(ioc->data, tmp.addr, ioc->len);
 
     break;
@@ -1634,6 +1637,8 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
       csr |= (TXD|RXD);
       outb(csr, EWRK3_CSR);                  /* Disable the TX and RX */
 
+      err = verify_area(VERIFY_READ, (void *)ioc->data, ETH_ALEN);
+      if (err) return err;
       memcpy_fromfs(tmp.addr,ioc->data,ETH_ALEN);
       for (i=0; i<ETH_ALEN; i++) {
 	dev->dev_addr[i] = tmp.addr[i];
@@ -1673,6 +1678,9 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     break;
   case EWRK3_GET_MCA:                /* Get the multicast address table */
+    err = verify_area(VERIFY_WRITE, (void *)ioc->data, HASH_TABLE_LEN >> 3);
+    if (err) return err;
+
     while (set_bit(0, (void *)&lp->lock) != 0); /* Wait for lock to free */
     if (lp->shmem_length == IO_ONLY) {
       outb(0, EWRK3_IOPR);
@@ -1691,6 +1699,9 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     break;
   case EWRK3_SET_MCA:                /* Set a multicast address */
     if (suser()) {
+      err = verify_area(VERIFY_READ, (void *)ioc->data, ETH_ALEN * ioc->len);
+      if (err) return err;
+
       if (ioc->len != HASH_TABLE_LEN) {         /* MCA changes */
 	memcpy_fromfs(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
       }
@@ -1720,6 +1731,9 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     break;
   case EWRK3_GET_STATS:              /* Get the driver statistics */
+    err = verify_area(VERIFY_WRITE, (void *)ioc->data, sizeof(lp->pktStats)));
+    if (err) return err;
+
     cli();
     memcpy_tofs(ioc->data, &lp->pktStats, sizeof(lp->pktStats)); 
     ioc->len = EWRK3_PKT_STAT_SZ;
@@ -1737,11 +1751,17 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     break;
   case EWRK3_GET_CSR:                /* Get the CSR Register contents */
+    err = verify_area(VERIFY_WRITE, (void *)ioc->data, 1);
+    if (err) return err;
+
     tmp.addr[0] = inb(EWRK3_CSR);
     memcpy_tofs(ioc->data, tmp.addr, 1);
 
     break;
   case EWRK3_SET_CSR:                /* Set the CSR Register contents */
+    err = verify_area(VERIFY_READ, (void *)ioc->data, 1);
+    if (err) return err;
+
     if (suser()) {
       memcpy_fromfs(tmp.addr, ioc->data, 1);
       outb(tmp.addr[0], EWRK3_CSR);
@@ -1752,6 +1772,9 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     break;
   case EWRK3_GET_EEPROM:             /* Get the EEPROM contents */
     if (suser()) {
+      err = verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len);
+      if (err) return err;
+
       for (i=0; i<(EEPROM_MAX>>1); i++) {
 	tmp.val[i] = (short)Read_EEPROM(iobase, i);
       }
@@ -1769,6 +1792,9 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     break;
   case EWRK3_SET_EEPROM:             /* Set the EEPROM contents */
     if (suser()) {
+      err = verify_area(VERIFY_READ, (void *)ioc->data, EEPROM_MAX);
+      if (err) return err;
+
       memcpy_fromfs(tmp.addr, ioc->data, EEPROM_MAX);
       for (i=0; i<(EEPROM_MAX>>1); i++) {
 	Write_EEPROM(tmp.val[i], iobase, i);
@@ -1779,6 +1805,9 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     break;
   case EWRK3_GET_CMR:                /* Get the CMR Register contents */
+    err = verify_area(VERIFY_WRITE, (void *)ioc->data, 1);
+    if (err) return err;
+
     tmp.addr[0] = inb(EWRK3_CMR);
     memcpy_tofs(ioc->data, tmp.addr, 1);
 

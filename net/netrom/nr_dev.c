@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 002
+ *	NET/ROM release 003
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -73,9 +73,10 @@ int nr_rx_ip(struct sk_buff *skb, struct device *dev)
  * packet so that the transmit routine can identify it, and throw it away.
  */
 
-static int nr_header(unsigned char *buff, struct device *dev, unsigned short type,
-	void *daddr, void *saddr, unsigned len, struct sk_buff *skb)
+static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+	void *daddr, void *saddr, unsigned len)
 {
+	unsigned char *buff=skb_push(skb,37);
 	if (type == ETH_P_ARP) {
 		*buff++ = 0xFF;		/* Mark it */
 		*buff++ = 0xFE;

@@ -204,7 +204,7 @@ print_ip(iph);
 	 */
 
 	newlen = (skb->len + ip_header_len);
-	if ( !(skb2 = alloc_skb(newlen, GFP_ATOMIC)) ) 
+	if ( !(skb2 = dev_alloc_skb(newlen)) ) 
 	{
 		printk("%s: No free memory.\n",dev->name);
   		dev_kfree_skb(skb, FREE_WRITE);
@@ -215,7 +215,7 @@ print_ip(iph);
 
 	/* Copy the packet to a new buffer, adding a new ip header */
 	skb2->free=1;
-	skb2->len=newlen;
+	skb_put(skb2,newlen);
 	iph=skb2->h.iph=(struct iphdr *)skb2->data;
 	memcpy(skb2->h.iph, skb->data, ip_header_len );
 	memcpy(skb2->data + ip_header_len, skb->data, skb->len);

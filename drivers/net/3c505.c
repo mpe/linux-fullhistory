@@ -560,7 +560,7 @@ receive_packet (struct device * dev, int len)
 
 	rlen = (len+1) & ~1;
 
-	skb = alloc_skb(rlen, GFP_ATOMIC);
+	skb = dev_alloc_skb(rlen);
 
 	/*
 	 * make sure the data register is going the right way
@@ -587,13 +587,12 @@ receive_packet (struct device * dev, int len)
 		adapter->stats.rx_dropped++;
 
 	} else {
-		skb->len = rlen;
 		skb->dev = dev;
 
 		/*
 		 * now read the data from the adapter
 		 */
-		ptr = (unsigned short *)(skb->data);
+		ptr = (unsigned short *)skb_put(skb,len);
 		for (i = 0; i < (rlen/2); i++) { 
 			timeout = 0;
 			while ((inb_status(dev->base_addr)&HRDY) == 0 && timeout++ < 20000) 

@@ -486,7 +486,7 @@ asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struct
 	struct task_struct *p;
 
 	if (stat_addr) {
-		flag = verify_area(VERIFY_WRITE, stat_addr, 4);
+		flag = verify_area(VERIFY_WRITE, stat_addr, sizeof(*stat_addr));
 		if (flag)
 			return flag;
 	}

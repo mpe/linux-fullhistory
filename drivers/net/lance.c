@@ -984,7 +984,7 @@ lance_rx(struct device *dev)
 			short pkt_len = (lp->rx_ring[entry].msg_length & 0xfff)-4;
 			struct sk_buff *skb;
 
-			skb = alloc_skb(pkt_len, GFP_ATOMIC);
+			skb = dev_alloc_skb(pkt_len);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, deferring packet.\n", dev->name);
 				for (i=0; i < RX_RING_SIZE; i++)
@@ -998,9 +998,8 @@ lance_rx(struct device *dev)
 				}
 				break;
 			}
-			skb->len = pkt_len;
 			skb->dev = dev;
-			memcpy(skb->data,
+			memcpy(skb_put(skb,pkt_len),
 				   (unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
 				   pkt_len);
 			skb->protocol=eth_type_trans(skb,dev);

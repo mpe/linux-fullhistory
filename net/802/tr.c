@@ -41,9 +41,9 @@ static struct timer_list rif_timer={ NULL,NULL,RIF_CHECK_INTERVAL,0L,rif_check_e
 int tr_header(unsigned char *buff, struct device *dev, unsigned short type,
               void *daddr, void *saddr, unsigned len, struct sk_buff *skb) {
 
-	struct trh_hdr *trh=(struct trh_hdr *)buff;
+	struct trh_hdr *trh=(struct trh_hdr *)skb_push(skb,dev->hard_header_len);
 	struct trllc *trllc=(struct trllc *)(buff+sizeof(struct trh_hdr));
-	
+
 	trh->ac=AC;
 	trh->fc=LLC_FRAME;
 

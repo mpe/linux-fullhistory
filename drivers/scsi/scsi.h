@@ -454,30 +454,30 @@ typedef struct scsi_cmnd {
     
     /* These elements define the operation we are about to perform */
     unsigned char cmnd[12];
-    unsigned request_bufflen;   /* Actual request size */
+    unsigned request_bufflen;	/* Actual request size */
     
-    void * request_buffer;      /* Actual requested buffer */
+    void * request_buffer;	/* Actual requested buffer */
     
     /* These elements define the operation we ultimately want to perform */
     unsigned char data_cmnd[12];
-    unsigned short old_use_sg;  /* We save  use_sg here when requesting
+    unsigned short old_use_sg;	/* We save  use_sg here when requesting
 				 * sense info */
-    unsigned short use_sg;      /* Number of pieces of scatter-gather */
-    unsigned short sglist_len;  /* size of malloc'd scatter-gather list */
+    unsigned short use_sg;	/* Number of pieces of scatter-gather */
+    unsigned short sglist_len;	/* size of malloc'd scatter-gather list */
     unsigned short abort_reason;/* If the mid-level code requests an
 				 * abort, this is the reason. */
-    unsigned bufflen;           /* Size of data buffer */
-    void *buffer;               /* Data buffer */
+    unsigned bufflen;		/* Size of data buffer */
+    void *buffer;		/* Data buffer */
     
-    unsigned underflow;         /* Return error if less than this amount is 
+    unsigned underflow;		/* Return error if less than this amount is 
 				 * transfered */
     
-    unsigned transfersize;      /* How much we are guaranteed to transfer with
+    unsigned transfersize;	/* How much we are guaranteed to transfer with
 				 * each SCSI transfer (ie, between disconnect /
-				 * reconnects.   Probably == sector size */
+				 * reconnects.	 Probably == sector size */
     
     
-    struct request request;     /* A copy of the command we are working on */
+    struct request request;	/* A copy of the command we are working on */
 
     unsigned char sense_buffer[16];  /* Sense for this command, if needed */
 
@@ -487,8 +487,8 @@ typedef struct scsi_cmnd {
     int timeout_per_command, timeout_total, timeout;
 
     /*
-     *  We handle the timeout differently if it happens when a reset, 
-     *  abort, etc are in process. 
+     *	We handle the timeout differently if it happens when a reset, 
+     *	abort, etc are in process. 
      */
     unsigned volatile char internal_timeout;
     
@@ -500,7 +500,7 @@ typedef struct scsi_cmnd {
     /* End of special cdrom variables */
     
     /* Low-level done function - can be used by low-level driver to point
-     *  to completion function.  Not used by mid/upper level code. */
+     *	to completion function.	 Not used by mid/upper level code. */
     void (*scsi_done)(struct scsi_cmnd *);  
     void (*done)(struct scsi_cmnd *);  /* Mid-level done function */
     
@@ -509,21 +509,21 @@ typedef struct scsi_cmnd {
      * Everything else should be left alone. 
      */
     
-    Scsi_Pointer SCp;   /* Scratchpad used by some host adapters */
+    Scsi_Pointer SCp;	/* Scratchpad used by some host adapters */
     
     unsigned char * host_scribble; /* The host adapter is allowed to
 				    * call scsi_malloc and get some memory
-				    * and hang it here.  The host adapter
+				    * and hang it here.	 The host adapter
 				    * is also expected to call scsi_free
 				    * to release this memory.  (The memory
 				    * obtained by scsi_malloc is guaranteed
 				    * to be at an address < 16Mb). */
     
-    int result;                    /* Status code from lower level driver */
+    int result;			   /* Status code from lower level driver */
     
-    unsigned char tag;             /* SCSI-II queued command tag */
-    unsigned long pid;             /* Process ID, starts at 0 */
-} Scsi_Cmnd;         
+    unsigned char tag;		   /* SCSI-II queued command tag */
+    unsigned long pid;		   /* Process ID, starts at 0 */
+} Scsi_Cmnd;	     
 
 /*
  *  scsi_abort aborts the current command that is executing on host host.
@@ -549,9 +549,9 @@ extern int max_scsi_hosts;
 extern void build_proc_dir_entries(void);
 
 extern int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
-extern int        scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
+extern int	  scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 extern void print_command(unsigned char *);
-extern void print_sense(char *,  Scsi_Cmnd *);
+extern void print_sense(char *,	 Scsi_Cmnd *);
 
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
@@ -618,7 +618,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 #define INIT_SCSI_REQUEST \
     if (!CURRENT) {\
 	CLEAR_INTR; \
-	restore_flags(flags);   \
+	restore_flags(flags);	\
 	return; \
     } \
     if (MAJOR(CURRENT->dev) != MAJOR_NR) \
@@ -629,23 +629,23 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
     }
 #endif
 
-#define SCSI_SLEEP(QUEUE, CONDITION) {              \
-    if (CONDITION) {                    \
+#define SCSI_SLEEP(QUEUE, CONDITION) {		    \
+    if (CONDITION) {			\
 	struct wait_queue wait = { current, NULL};  \
-	add_wait_queue(QUEUE, &wait);           \
-	for(;;) {                           \
-	current->state = TASK_UNINTERRUPTIBLE;      \
-	if (CONDITION) {                \
-		   if (intr_count)                              \
+	add_wait_queue(QUEUE, &wait);		\
+	for(;;) {			    \
+	current->state = TASK_UNINTERRUPTIBLE;	    \
+	if (CONDITION) {		\
+		   if (intr_count)				\
 		      panic("scsi: trying to call schedule() in interrupt" \
 			    ", file %s, line %d.\n", __FILE__, __LINE__);  \
-	   schedule();                  \
-	   }                            \
-	    else                        \
-		   break;                                       \
-	}                       \
-	remove_wait_queue(QUEUE, &wait);        \
-	current->state = TASK_RUNNING;          \
+	   schedule();			\
+	   }				\
+	    else			\
+		   break;					\
+	}			\
+	remove_wait_queue(QUEUE, &wait);	\
+	current->state = TASK_RUNNING;		\
     }; }
 
 #endif
@@ -665,6 +665,6 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
  * c-continued-statement-offset: 4
  * c-continued-brace-offset: 0
  * indent-tabs-mode: nil
- * tab-width: 4
+ * tab-width: 8
  * End:
  */

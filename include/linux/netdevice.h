@@ -139,13 +139,12 @@ struct device
   int			  (*stop)(struct device *dev);
   int			  (*hard_start_xmit) (struct sk_buff *skb,
 					      struct device *dev);
-  int			  (*hard_header) (unsigned char *buff,
+  int			  (*hard_header) (struct sk_buff *skb,
 					  struct device *dev,
 					  unsigned short type,
 					  void *daddr,
 					  void *saddr,
-					  unsigned len,
-					  struct sk_buff *skb);
+					  unsigned len);
   int			  (*rebuild_header)(void *eth, struct device *dev,
 				unsigned long raddr, struct sk_buff *skb);
 #define HAVE_MULTICAST			 

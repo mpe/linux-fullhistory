@@ -1272,7 +1272,7 @@ void sock_init(void)
 {
 	int i;
 
-	printk("Swansea University Computer Society NET3.029 Snap #6 for Linux 1.3.0\n");
+	printk("Swansea University Computer Society NET3.030 Snap #1 for Linux 1.3.4\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 

@@ -314,7 +314,7 @@ struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int
 				unsigned long flags;
 				save_flags(flags);
 				cli();
-				sk->wmem_alloc+= c->mem_len;
+				sk->wmem_alloc+= c->truesize;
 				restore_flags(flags); /* was sti(); */
 			}
 			return c;
@@ -337,7 +337,7 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
 				unsigned long flags;
 				save_flags(flags);
 				cli();
-				sk->rmem_alloc += c->mem_len;
+				sk->rmem_alloc += c->truesize;
 				restore_flags(flags); /* was sti(); */
 			}
 			return(c);
@@ -379,18 +379,19 @@ unsigned long sock_wspace(struct sock *sk)
 }
 
 
-void sock_wfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
+void sock_wfree(struct sock *sk, struct sk_buff *skb)
 {
+	int s=skb->truesize;
 #ifdef CONFIG_SKB_CHECK
 	IS_SKB(skb);
 #endif
-	kfree_skbmem(skb, size);
+	kfree_skbmem(skb);
 	if (sk) 
 	{
 		unsigned long flags;
 		save_flags(flags);
 		cli();
-		sk->wmem_alloc -= size;
+		sk->wmem_alloc -= s;
 		restore_flags(flags);
 		/* In case it might be waiting for more memory. */
 		sk->write_space(sk);
@@ -399,18 +400,19 @@ void sock_wfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
 }
 
 
-void sock_rfree(struct sock *sk, struct sk_buff *skb, unsigned long size)
+void sock_rfree(struct sock *sk, struct sk_buff *skb)
 {
+	int s=skb->truesize;
 #ifdef CONFIG_SKB_CHECK
 	IS_SKB(skb);
 #endif	
-	kfree_skbmem(skb, size);
+	kfree_skbmem(skb);
 	if (sk) 
 	{
 		unsigned long flags;
 		save_flags(flags);
 		cli();
-		sk->rmem_alloc -= size;
+		sk->rmem_alloc -= s;
 		restore_flags(flags);
 	}
 }

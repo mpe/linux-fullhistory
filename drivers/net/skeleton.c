@@ -416,17 +416,16 @@ net_rx(struct device *dev)
 			/* Malloc up new buffer. */
 			struct sk_buff *skb;
 
-			skb = alloc_skb(pkt_len, GFP_ATOMIC);
+			skb = dev_alloc_skb(pkt_len);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 				lp->stats.rx_dropped++;
 				break;
 			}
-			skb->len = pkt_len;
 			skb->dev = dev;
 
 			/* 'skb->data' points to the start of sk_buff data area. */
-			memcpy(skb->data, (void*)dev->rmem_start,
+			memcpy(skb_put(skb,pkt_len), (void*)dev->rmem_start,
 				   pkt_len);
 			/* or */
 			insw(ioaddr, skb->data, (pkt_len + 1) >> 1);

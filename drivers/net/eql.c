@@ -144,9 +144,9 @@ static int eql_ioctl(struct device *dev, struct ifreq *ifr, int cmd); /*  */
 static int eql_slave_xmit(struct sk_buff *skb, struct device *dev); /*  */
 
 static struct enet_statistics *eql_get_stats(struct device *dev); /*  */
-static int eql_header(unsigned char *buff, struct device *dev, 
+static int eql_header(struct sk_buff *skb, struct device *dev, 
 		      unsigned short type, void *daddr, void *saddr, 
-		      unsigned len, struct sk_buff *skb); /*  */
+		      unsigned len); /*  */
 static int eql_rebuild_header(void *buff, struct device *dev, 
 			      unsigned long raddr, struct sk_buff *skb); /*  */
 
@@ -395,9 +395,9 @@ eql_get_stats(struct device *dev)
 
 static 
 int 
-eql_header(unsigned char *buff, struct device *dev, 
+eql_header(struct sk_buff *skb, struct device *dev, 
 	   unsigned short type, void *daddr, void *saddr, 
-	   unsigned len, struct sk_buff *skb)
+	   unsigned len)
 {
   return 0;
 }
@@ -424,6 +424,10 @@ eql_enslave(struct device *dev, slaving_request_t *srqp)
   struct device *master_dev;
   struct device *slave_dev;
   slaving_request_t srq;
+  int err;
+
+  err = verify_area(VERIFY_READ, (void *)srqp, sizeof (slaving_request_t));
+  if (err) return err;
 
   memcpy_fromfs (&srq, srqp, sizeof (slaving_request_t));
 
@@ -469,6 +473,10 @@ eql_emancipate(struct device *dev, slaving_request_t *srqp)
   struct device *master_dev;
   struct device *slave_dev;
   slaving_request_t srq;
+  int err;
+
+  err = verify_area(VERIFY_READ, (void *)srqp, sizeof (slaving_request_t));
+  if (err) return err;
 
   memcpy_fromfs (&srq, srqp, sizeof (slaving_request_t));
 
@@ -502,6 +510,10 @@ eql_g_slave_cfg(struct device *dev, slave_config_t *scp)
   equalizer_t *eql;
   struct device *slave_dev;
   slave_config_t sc;
+  int err;
+
+  err = verify_area(VERIFY_READ, (void *)scp, sizeof (slave_config_t));
+  if (err) return err;
 
   memcpy_fromfs (&sc, scp, sizeof (slave_config_t));
 
@@ -519,6 +531,10 @@ eql_g_slave_cfg(struct device *dev, slave_config_t *scp)
       if (slave != 0)
 	{
 	  sc.priority = slave->priority;
+
+          err = verify_area(VERIFY_WRITE, (void *)scp, sizeof (slave_config_t));
+          if (err) return err;
+
 	  memcpy_tofs (scp, &sc, sizeof (slave_config_t));
 	  return 0;
 	}
@@ -535,6 +551,10 @@ eql_s_slave_cfg(struct device *dev, slave_config_t *scp)
   equalizer_t *eql;
   struct device *slave_dev;
   slave_config_t sc;
+  int err;
+
+  err = verify_area(VERIFY_READ, (void *)scp, sizeof (slave_config_t));
+  if (err) return err;
 
 #ifdef EQL_DEBUG
   if (eql_debug >= 20)
@@ -575,6 +595,11 @@ eql_g_master_cfg(struct device *dev, master_config_t *mcp)
 
   if ( eql_is_master (dev) )
     {
+      int err;
+
+      err = verify_area(VERIFY_WRITE, (void *)mcp, sizeof (master_config_t));
+      if (err) return err;
+
       eql = (equalizer_t *) dev->priv;
       mc.max_slaves = eql->max_slaves;
       mc.min_slaves = eql->min_slaves;
@@ -591,6 +616,10 @@ eql_s_master_cfg(struct device *dev, master_config_t *mcp)
 {
   equalizer_t *eql;
   master_config_t mc;
+ int err;
+
+ err = verify_area(VERIFY_READ, (void *)mcp, sizeof (master_config_t));
+ if (err) return err;
 
 #if EQL_DEBUG
   if (eql_debug >= 20)

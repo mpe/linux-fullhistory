@@ -553,6 +553,9 @@ asmlinkage int sys_setgroups(int gidsetsize, gid_t *grouplist)
 		return -EPERM;
 	if (gidsetsize > NGROUPS)
 		return -EINVAL;
+	i = verify_area(VERIFY_READ, grouplist, sizeof(gid_t) * gidsetsize);
+	if (i)
+		return i;
 	for (i = 0; i < gidsetsize; i++, grouplist++) {
 		current->groups[i] = get_user(grouplist);
 	}
@@ -669,17 +672,17 @@ asmlinkage int sys_gethostname(char *name, int len)
  */
 asmlinkage int sys_setdomainname(char *name, int len)
 {
-	int	i;
+	int error;
 	
 	if (!suser())
 		return -EPERM;
 	if (len > __NEW_UTS_LEN)
 		return -EINVAL;
-	for (i=0; i < len; i++) {
-		if ((system_utsname.domainname[i] = get_user(name+i)) == 0)
-			return 0;
-	}
-	system_utsname.domainname[i] = 0;
+	error = verify_area(VERIFY_READ, name, len);
+	if (error)
+		return error;
+	memcpy_fromfs(system_utsname.domainname, name, len);
+	system_utsname.domainname[len] = 0;
 	return 0;
 }
 

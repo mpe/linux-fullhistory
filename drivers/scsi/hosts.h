@@ -1,13 +1,13 @@
 /*
  *  hosts.h Copyright (C) 1992 Drew Eckhardt 
- *  mid to low-level SCSI driver interface header by    
- *      Drew Eckhardt 
+ *  mid to low-level SCSI driver interface header by	
+ *	Drew Eckhardt 
  *
  *  <drew@colorado.edu>
  *
- *       Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
- *       add scatter-gather, multiple outstanding request, and other
- *       enhancements.
+ *	 Modified by Eric Youngdale eric@tantalus.nrl.navy.mil to
+ *	 add scatter-gather, multiple outstanding request, and other
+ *	 enhancements.
  * 
  *  Further modified by Eric Youngdale to support multiple host adapters
  *  of the same type.
@@ -31,23 +31,23 @@
 #define ENABLE_CLUSTERING 1
 
 /* The various choices mean:
- * NONE: Self evident.  Host adapter is not capable of scatter-gather.
- * ALL:  Means that the host adapter module can do scatter-gather,
- *       and that there is no limit to the size of the table to which
- *       we scatter/gather data.
+ * NONE: Self evident.	Host adapter is not capable of scatter-gather.
+ * ALL:	 Means that the host adapter module can do scatter-gather,
+ *	 and that there is no limit to the size of the table to which
+ *	 we scatter/gather data.
  * Anything else:  Indicates the maximum number of chains that can be
- *       used in one scatter-gather request.
+ *	 used in one scatter-gather request.
  */
 
 /*
  * The Scsi_Host_Template type has all that is needed to interface with a SCSI
- * host in a device independent matter.  There is one entry for each different
+ * host in a device independent matter.	 There is one entry for each different
  * type of host adapter that is supported on the system.
  */
 
 typedef struct scsi_disk Disk;
 
-typedef struct  SHT
+typedef struct	SHT
 {
     
     /* Used with loadable modules so we can construct a linked list. */
@@ -78,7 +78,7 @@ typedef struct  SHT
     /*
      * The detect function shall return non zero on detection,
      * indicating the number of host adapters of this particular
-     * type were found.  It should also
+     * type were found.	 It should also
      * initialize all data necessary for this particular
      * SCSI driver.  It is passed the host number, so this host
      * knows where the first entry is in the scsi_hosts[] array.
@@ -121,9 +121,9 @@ typedef struct  SHT
 
     /*
      * The QueueCommand function works in a similar manner
-     * to the command function.  It takes an additional parameter,
+     * to the command function.	 It takes an additional parameter,
      * void (* done)(int host, int code) which is passed the host 
-     * # and exit result when the command is complete.  
+     * # and exit result when the command is complete.	
      * Host number is the POSITION IN THE hosts array of THIS
      * host adapter.
      */
@@ -132,7 +132,7 @@ typedef struct  SHT
     /*
      * Since the mid level driver handles time outs, etc, we want to 
      * be able to abort the current command.  Abort returns 0 if the 
-     * abortion was successful.  The field SCpnt->abort reason
+     * abortion was successful.	 The field SCpnt->abort reason
      * can be filled in with the appropriate reason why we wanted
      * the abort in the first place, and this will be used
      * in the mid-level code instead of the host_byte().
@@ -141,7 +141,7 @@ typedef struct  SHT
      * DID_ABORT  should be returned.
      * 
      * Note that the scsi driver should "clean up" after itself, 
-     * resetting the bus, etc.  if necessary. 
+     * resetting the bus, etc.	if necessary. 
      */
     int (* abort)(Scsi_Cmnd *);
 
@@ -151,7 +151,7 @@ typedef struct  SHT
      * The Scsi_Cmnd  is passed so that the reset routine can figure
      * out which host adapter should be reset, and also which command
      * within the command block was responsible for the reset in
-     * the first place.  Some hosts do not implement a reset function,
+     * the first place.	 Some hosts do not implement a reset function,
      * and these hosts must call scsi_request_sense(SCpnt) to keep
      * the command alive.
      */ 
@@ -249,10 +249,10 @@ struct Scsi_Host
     Scsi_Host_Template * hostt;
     
     /*
-     *  These three parameters can be used to allow for wide scsi,
-     *  and for host adapters that support multiple busses 
-     *  The first two should be set to 1 more than the actual max id
-     *  or lun (i.e. 8 for normal systems).
+     *	These three parameters can be used to allow for wide scsi,
+     *	and for host adapters that support multiple busses 
+     *	The first two should be set to 1 more than the actual max id
+     *	or lun (i.e. 8 for normal systems).
      */
     unsigned int max_id;
     unsigned int max_lun;
@@ -311,7 +311,7 @@ extern Scsi_Host_Template * scsi_hosts;
 
 /* 
  * We use these goofy things because the MM is not set up when we init
- * the scsi subsystem.  By using these functions we can write code that
+ * the scsi subsystem.	By using these functions we can write code that
  * looks normal.  Also, it makes it possible to use the same code for a
  * loadable module. 
  */
@@ -320,7 +320,7 @@ extern void * scsi_init_malloc(unsigned int size, int priority);
 extern void scsi_init_free(char * ptr, unsigned int size);
 
 void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
-		 unchar hchannel, unchar hid, unchar hlun);
+	 unchar hchannel, unchar hid, unchar hlun);
 
 extern int next_scsi_host;
 
@@ -337,17 +337,17 @@ struct Scsi_Device_Template
     struct Scsi_Device_Template * next;
     char * name;
     char * tag;
-    int * usage_count;            /* Used for loadable modules */
+    int * usage_count;		  /* Used for loadable modules */
     unsigned char scsi_type;
     unsigned char major;
-    unsigned char nr_dev;         /* Number currently attached */
-    unsigned char dev_noticed;    /* Number of devices detected. */
-    unsigned char dev_max;        /* Current size of arrays */
-    unsigned blk:1;               /* 0 if character device */
+    unsigned char nr_dev;	  /* Number currently attached */
+    unsigned char dev_noticed;	  /* Number of devices detected. */
+    unsigned char dev_max;	  /* Current size of arrays */
+    unsigned blk:1;		  /* 0 if character device */
     int (*detect)(Scsi_Device *); /* Returns 1 if we can attach this device */
-    void (*init)(void);           /* Sizes arrays based upon number of devices
-				   *  detected */
-    void (*finish)(void);         /* Perform initialization after attachment */
+    void (*init)(void);		  /* Sizes arrays based upon number of devices
+		   *  detected */
+    void (*finish)(void);	  /* Perform initialization after attachment */
     int (*attach)(Scsi_Device *); /* Attach devices to arrays */
     void (*detach)(Scsi_Device *);
 };
@@ -372,7 +372,7 @@ extern void scsi_unregister_module(int, void *);
 
 /*
  * This is an ugly hack.  If we expect to be able to load devices at run time,
- * we need to leave extra room in some of the data structures.  Doing a 
+ * we need to leave extra room in some of the data structures.	Doing a 
  * realloc to enlarge the structures would be riddled with race conditions, 
  * so until a better solution is discovered, we use this crude approach
  */
@@ -397,6 +397,6 @@ extern void scsi_unregister_module(int, void *);
  * c-continued-statement-offset: 4
  * c-continued-brace-offset: 0
  * indent-tabs-mode: nil
- * tab-width: 4
+ * tab-width: 8
  * End:
  */

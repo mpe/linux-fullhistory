@@ -114,7 +114,7 @@ typedef struct ax25_cb {
 	struct device		*device;
 	unsigned char		state;
 	unsigned short		vs, vr, va;
-	unsigned char		condition;
+	unsigned char		condition, backoff;
 	unsigned char		n2, n2count;
 	unsigned short		t1, t2, t3, rtt;
 	unsigned short		t1timer, t2timer, t3timer;
@@ -133,8 +133,8 @@ extern int  ax25_send_frame(struct sk_buff *, ax25_address *, ax25_address *, st
 extern int  ax25_rcv(struct sk_buff *,struct device *,struct packet_type *);
 extern void ax25_destroy_socket(ax25_cb *);
 extern struct device *ax25rtr_get_dev(ax25_address *);
-extern int  ax25_encapsulate(unsigned char *, struct device *, unsigned short,
-	void *, void *, unsigned int, struct sk_buff *);
+extern int  ax25_encapsulate(struct sk_buff *, struct device *, unsigned short,
+	void *, void *, unsigned int);
 extern int  ax25_rebuild_header(unsigned char *, struct device *, unsigned long, struct sk_buff *);
 extern int  ax25_get_info(char *, char **, off_t, int);
 extern ax25_uid_assoc *ax25_uid_list;

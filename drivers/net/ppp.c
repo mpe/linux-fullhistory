@@ -1,5 +1,4 @@
-/*
-   PPP for Linux
+/* PPP for Linux
 */
 
 /*
@@ -116,7 +115,6 @@ static void ppp_doframe(struct ppp *);
 static int ppp_do_ip(struct ppp *, unsigned short, unsigned char *, int);
 static int ppp_us_queue(struct ppp *, unsigned short, unsigned char *, int);
 static int ppp_xmit(struct sk_buff *, struct device *);
-static unsigned short ppp_type_trans(struct sk_buff *, struct device *);
 
 #ifdef NET02D
 static int ppp_header(unsigned char *buff, struct device *dev,
@@ -126,8 +124,8 @@ static int ppp_rebuild_header(void *buff, struct device *dev);
 static void ppp_add_arp(unsigned long addr, struct sk_buff *skb,
 			struct device *dev);
 #else
-static int ppp_header(unsigned char *, struct device *, unsigned short,
-		      void *, void *, unsigned, struct sk_buff *);
+static int ppp_header(struct sk_buff *, struct device *, unsigned short,
+		      void *, void *, unsigned);
 static int ppp_rebuild_header(void *, struct device *, unsigned long,
 			      struct sk_buff *);
 #endif
@@ -630,7 +628,7 @@ static int ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
     struct slcompress slhc;
   } *result;
 
-  error = verify_area (VERIFY_READ,
+  error = verify_area (VERIFY_WRITE,
 		       ifr->ifr_ifru.ifru_data,
 		       sizeof (struct stats));
 
@@ -1152,10 +1150,10 @@ ppp_do_ip (struct ppp *ppp, unsigned short proto, unsigned char *c,
 
   /* receive the frame through the network software */
   
-  skb=alloc_skb(count, GFP_ATOMIC);
+  skb=dev_alloc_skb(count);
   if(skb)
   {
-  	memcpy(skb->data, c,count);
+  	memcpy(skb_put(skb,count), c,count);
   	skb->protocol=htons(ETH_P_IP);
   	skb->dev=ppp->dev;
   	skb->len=count;
@@ -1866,8 +1864,8 @@ ppp_add_arp(unsigned long addr, struct sk_buff *skb, struct device *dev)
 #else
 
 static int
-ppp_header(unsigned char *buff, struct device *dev, unsigned short type,
-	   void *daddr, void *saddr, unsigned len, struct sk_buff *skb)
+ppp_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+	   void *daddr, void *saddr, unsigned len)
 {
   return(0);
 }

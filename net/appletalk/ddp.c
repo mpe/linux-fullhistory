@@ -9,6 +9,9 @@
  *	
  *		Wesley Craig <netatalk@umich.edu>
  *
+ *	Fixes:
+ *		Michael Callahan	:	Made routing work
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -16,7 +19,6 @@
  *
  *	TODO
  *		ASYNC I/O
- *		Testing.
  */
  
 #include <asm/segment.h>
@@ -1330,6 +1332,11 @@ int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	struct ddpehdr *ddp=(void *)skb->h.raw;
 	struct atalk_iface *atif;
 	struct sockaddr_at tosat;
+        int origlen;
+	
+	/* First strip the MAC header */
+	
+	skb_pull(skb,dev->hard_header_len);
 	
 	/* Size check */
 	if(skb->len<sizeof(*ddp))
@@ -1351,7 +1358,9 @@ int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	Trim buffer in case of stray trailing data
 	 */
 	   
-	skb->len=min(skb->len,ddp->deh_len);
+	origlen = skb->len;
+	
+	skb_trim(skb,min(skb->len,ddp->deh_len));
 
 	/*
 	 *	Size check to see if ddp->deh_len was crap
@@ -1389,8 +1398,18 @@ int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	{
 		struct atalk_route *rt;
 		struct at_addr ta;
+
+		/* Don't route multicast, etc., packets, or packets
+		   sent to "this network" */
+		if (skb->pkt_type != PACKET_HOST || ddp->deh_dnet == 0) 
+		{
+			kfree_skb(skb, FREE_READ);
+			return(0);
+		}
+
 		ta.s_net=ddp->deh_dnet;
 		ta.s_node=ddp->deh_dnode;
+
 		/* Route the packet */
 		rt=atrtr_find(&ta);
 		if(rt==NULL || ddp->deh_hops==15)
@@ -1399,11 +1418,16 @@ int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			return(0);
 		}
 		ddp->deh_hops++;
+
+                /* Fix up skb->len field */
+                skb_trim(skb,min(origlen, rt->dev->hard_header_len + 
+			ddp_dl->header_length + ddp->deh_len));
+
 		*((__u16 *)ddp)=ntohs(*((__u16 *)ddp));		/* Mend the byte order */
 		/*
 		 *	Send the buffer onwards
 		 */
-		if(aarp_send_ddp(dev,skb, &ta, NULL)==-1)
+		if(aarp_send_ddp(rt->dev, skb, &ta, NULL)==-1)
 			kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -1523,14 +1547,16 @@ static int atalk_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	skb->sk=sk;
 	skb->free=1;
 	skb->arp=1;
-	skb->len=size;
+	skb_reserve(skb,ddp_dl->header_length);
+	skb_reserve(skb,dev->hard_header_len);
+	skb_put(skb,size);
 
 	skb->dev=dev;
 	
 	if(sk->debug)
 		printk("SK %p: Begin build.\n", sk);
 	
-	skb->h.raw=skb->data+ddp_dl->header_length+dev->hard_header_len;	
+	skb->h.raw=skb->data;	
 	
 	ddp=(struct ddpehdr *)skb->h.raw;
 	ddp->deh_pad=0;
@@ -1587,12 +1613,12 @@ static int atalk_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 		if(sk->debug)
 			printk("SK %p: Loop back.\n", sk);
 		/* loop back */
-		sk->wmem_alloc-=skb->mem_len;
+		sk->wmem_alloc-=skb->truesize;
 		ddp_dl->datalink_header(ddp_dl, skb, dev->dev_addr);
 		skb->sk = NULL;
 		skb->h.raw = skb->data + ddp_dl->header_length + dev->hard_header_len;
-		skb->len -= ddp_dl->header_length ;
-		skb->len -= dev->hard_header_len ;
+		skb_pull(skb,dev->hard_header_len);
+		skb_pull(skb,ddp_dl->header_length);
 		atalk_rcv(skb,dev,NULL);
 	}
 	else 
@@ -1837,7 +1863,7 @@ void atalk_proto_init(struct net_proto *pro)
 		printk("Unable to register DDP with SNAP.\n");
 	register_netdevice_notifier(&ddp_notifier);
 	aarp_proto_init();
-	printk("Appletalk ALPHA 0.08 for Linux NET3.029\n");
+	printk("Appletalk BETA 0.11 for Linux NET3.030\n");
 	
 }
 #endif

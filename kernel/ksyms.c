@@ -37,6 +37,7 @@
 #ifdef CONFIG_NET
 #include <linux/net.h>
 #include <linux/netdevice.h>
+#include <net/eth.h>
 #ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/etherdevice.h>
@@ -315,6 +316,7 @@ struct symbol_table symbol_table = {
 	X(eth_type_trans),
 	X(alloc_skb),
 	X(kfree_skb),
+	X(dev_alloc_skb),
 	X(dev_kfree_skb),
 	X(netif_rx),
 	X(dev_rint),

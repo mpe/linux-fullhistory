@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 5
+SUBLEVEL = 6
 
 ARCH = i386
 
@@ -113,7 +113,7 @@ include arch/$(ARCH)/Makefile
 .c.o:
 	$(CC) $(CFLAGS) -c -o $*.o $<
 .S.s:
-	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
+	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.s $<
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
 

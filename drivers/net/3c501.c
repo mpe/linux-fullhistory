@@ -572,7 +572,7 @@ el_receive(struct device *dev)
      
     outb(AX_SYS, AX_CMD);
 
-    skb = alloc_skb(pkt_len, GFP_ATOMIC);
+    skb = dev_alloc_skb(pkt_len);
     /*
      *	Start of frame
      */
@@ -582,7 +582,6 @@ el_receive(struct device *dev)
 	lp->stats.rx_dropped++;
 	return;
     } else {
-	skb->len = pkt_len;
 	skb->dev = dev;
 
 	/*
@@ -591,7 +590,7 @@ el_receive(struct device *dev)
 	 *	receive mode.
 	 */
 	 
-	insb(DATAPORT, skb->data, pkt_len);
+	insb(DATAPORT, skb_put(skb,pkt_len), pkt_len);
 	skb->protocol=eth_type_trans(skb,dev);
 	netif_rx(skb);
 	lp->stats.rx_packets++;

@@ -18,7 +18,7 @@
 #include <linux/time.h>
 #include <linux/config.h>
 
-#undef CONFIG_SKB_CHECK
+/* #define CONFIG_SKB_CHECK 1 */
 
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
 
@@ -47,7 +47,6 @@ struct sk_buff {
   volatile unsigned long	when;			/* used to compute rtt's			*/
   struct timeval		stamp;			/* Time we arrived				*/
   struct device			*dev;			/* Device we arrived on/are leaving by		*/
-  struct sk_buff		*mem_addr;		/* Self reference (obsolete)			*/
   union {
 	struct tcphdr	*th;
 	struct ethhdr	*eth;
@@ -57,11 +56,7 @@ struct sk_buff {
 	unsigned long	seq;
   } h;
   struct iphdr			*ip_hdr;		/* For IPPROTO_RAW 				*/
-  unsigned long			mem_len;		/* Length of allocated memory			*/
   unsigned long 		len;			/* Length of actual data			*/
-  unsigned long			fraglen;		/* Unused (yet)					*/
-  struct sk_buff		*fraglist;		/* Fragment list 				*/
-  unsigned long			truesize;		/* True buffer size (obsolete)			*/
   unsigned long 		saddr;			/* IP source address				*/
   unsigned long 		daddr;			/* IP target address				*/
   unsigned long			raddr;			/* IP next hop address				*/
@@ -79,11 +74,11 @@ struct sk_buff {
 #define PACKET_OTHERHOST	3			/* To someone else 				*/
   unsigned short		users;			/* User count - see datagram.c,tcp.c 		*/
   unsigned short		protocol;		/* Packet protocol from driver. 		*/
-#ifdef CONFIG_SLAVE_BALANCING
-  unsigned short		in_dev_queue;
-#endif  
-  unsigned long			padding[0];		/* Force long word alignment			*/
-  unsigned char			data[0];		/* Data follows					*/
+  unsigned short		truesize;		/* Buffer size 					*/
+  unsigned char			*head;			/* Head of buffer 				*/
+  unsigned char			*data;			/* Data head pointer				*/
+  unsigned char			*tail;			/* Tail pointer					*/
+  unsigned char 		*end;			/* End pointer					*/
 };
 
 #define SK_WMEM_MAX	32767
@@ -115,12 +110,21 @@ extern void			skb_append(struct sk_buff *old,struct sk_buff *newsk);
 extern void			skb_unlink(struct sk_buff *buf);
 extern struct sk_buff *		skb_peek_copy(struct sk_buff_head *list);
 extern struct sk_buff *		alloc_skb(unsigned int size, int priority);
-extern void			kfree_skbmem(struct sk_buff *skb, unsigned size);
+extern struct sk_buff *		dev_alloc_skb(unsigned int size);
+extern void			kfree_skbmem(struct sk_buff *skb);
 extern struct sk_buff *		skb_clone(struct sk_buff *skb, int priority);
 extern void			skb_device_lock(struct sk_buff *skb);
 extern void			skb_device_unlock(struct sk_buff *skb);
 extern void			dev_kfree_skb(struct sk_buff *skb, int mode);
 extern int			skb_device_locked(struct sk_buff *skb);
+extern unsigned char *		skb_put(struct sk_buff *skb, int len);
+extern unsigned char *		skb_push(struct sk_buff *skb, int len);
+extern int			skb_pull(struct sk_buff *skb, int len);
+extern int			skb_headroom(struct sk_buff *skb);
+extern int			skb_tailroom(struct sk_buff *skb);
+extern void			skb_reserve(struct sk_buff *skb, int len);
+extern void 			skb_trim(struct sk_buff *skb, int len);
+
 /*
  *	Peek an sk_buff. Unlike most other operations you _MUST_
  *	be careful with this one. A peek leaves the buffer on the
@@ -281,6 +285,63 @@ extern __inline__ void skb_unlink(struct sk_buff *skb)
 		skb->prev = NULL;
 	}
 	restore_flags(flags);
+}
+
+/*
+ *	Add data to an sk_buff
+ */
+ 
+extern __inline__ unsigned char *skb_put(struct sk_buff *skb, int len)
+{
+	unsigned char *tmp=skb->tail;
+	skb->tail+=len;
+	skb->len+=len;
+	if(skb->tail>skb->end)
+		panic("skput:over: %p:%d", __builtin_return_address(0),len);
+	return tmp;
+}
+
+extern __inline__ unsigned char *skb_push(struct sk_buff *skb, int len)
+{
+	skb->data-=len;
+	skb->len+=len;
+	if(skb->data<skb->head)
+		panic("skpush:under: %p:%d", __builtin_return_address(0),len);
+	return skb->data;
+}
+
+extern __inline__ int skb_pull(struct sk_buff *skb, int len)
+{
+	if(len>skb->len)
+		len=skb->len;
+	skb->data+=len;
+	skb->len-=len;
+	return len;
+}
+
+extern __inline__ int skb_headroom(struct sk_buff *skb)
+{
+	return skb->data-skb->head;
+}
+
+extern __inline__ int skb_tailroom(struct sk_buff *skb)
+{
+	return skb->end-skb->tail;
+}
+
+extern __inline__ void skb_reserve(struct sk_buff *skb, int len)
+{
+	skb->data+=len;
+	skb->tail+=len;
+}
+
+extern __inline__ void skb_trim(struct sk_buff *skb, int len)
+{
+	if(skb->len>len)
+	{
+		skb->len=len;
+		skb->tail=skb->data+len;
+	}
 }
 
 #endif

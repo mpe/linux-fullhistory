@@ -98,7 +98,7 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, long saddr
 {
 	/* Now we need to copy this into memory. */
 	skb->sk = sk;
-	skb->len = ntohs(skb->ip_hdr->tot_len);
+	skb_trim(skb,ntohs(skb->ip_hdr->tot_len));
 	skb->h.raw = (unsigned char *) skb->ip_hdr;
 	skb->dev = dev;
 	skb->saddr = daddr;

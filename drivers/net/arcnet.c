@@ -383,8 +383,8 @@ static struct enet_statistics *arcnet_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 
 	/* annoying functions for header/arp/etc building */
-int arc_header(unsigned char *buff,struct device *dev,unsigned short type,
-		void *daddr,void *saddr,unsigned len,struct sk_buff *skb);
+int arc_header(struct sk_buff *skb,struct device *dev,unsigned short type,
+		void *daddr,void *saddr,unsigned len);
 int arc_rebuild_header(void *eth,struct device *dev,unsigned long raddr,
 		struct sk_buff *skb);
 unsigned short arc_type_trans(struct sk_buff *skb,struct device *dev);
@@ -1597,16 +1597,15 @@ arcnet_rx(struct device *dev,int recbuf)
         	
         	in->sequence=arcsoft->sequence;
 
-         	skb = alloc_skb(length, GFP_ATOMIC);
+         	skb = dev_alloc_skb(length);
          	if (skb == NULL) {
          		printk("%s: Memory squeeze, dropping packet.\n", 
          			dev->name);
          		lp->stats.rx_dropped++;
          		return;
          	}
-         	soft=(struct ClientData *)skb->data;
+         	soft=(struct ClientData *)skb_put(skb,length);
          	
-         	skb->len = length;
          	skb->dev = dev;
          	
          	memcpy((u_char *)soft+EXTRA_CLIENTDATA,
@@ -1731,9 +1730,8 @@ arcnet_rx(struct device *dev,int recbuf)
 	        		return;
 	        	}
 	        
-                	in->skb=skb=alloc_skb(508*in->numpackets
-                			+ sizeof(struct ClientData),
-	                		GFP_ATOMIC);
+                	in->skb=skb=dev_alloc_skb(508*in->numpackets
+                			+ sizeof(struct ClientData));
                 	if (skb == NULL) {
                 		printk("%s: (split) memory squeeze, dropping packet.\n", 
                 			dev->name);
@@ -1746,9 +1744,8 @@ arcnet_rx(struct device *dev,int recbuf)
 	                 */
 	                skb->free=1;
 	                
-                	soft=(struct ClientData *)skb->data;
+                	soft=(struct ClientData *)skb_put(skb,sizeof(struct ClientData));
                 	
-                	skb->len=sizeof(struct ClientData);
                 	skb->dev=dev;
 
 	         	memcpy((u_char *)soft+EXTRA_CLIENTDATA,
@@ -1791,17 +1788,15 @@ arcnet_rx(struct device *dev,int recbuf)
 	        		return;
 	        	}
 
-	               	soft=(struct ClientData *)in->skb->data;
+	               	soft=(struct ClientData *)skb->data;
 	        }
 	        
 	        skb=in->skb;
 	        
-	        memcpy(skb->data+skb->len,
+	        memcpy(skb_put(skb,length-sizeof(struct ClientData)),
 	               (u_char *)arcsoft+sizeof(struct ClientData),
 	               length-sizeof(struct ClientData));
 
-         	skb->len+=length-sizeof(struct ClientData);
-         	
          	soft->daddr=daddr;
          	soft->saddr=saddr;
          	
@@ -1974,10 +1969,11 @@ int arcnet_reset(struct device *dev)
  *	saddr=NULL	means use device source address (always will anyway)
  *	daddr=NULL	means leave destination address (eg unresolved arp)
  */
-int arc_header(unsigned char *buff,struct device *dev,unsigned short type,
-		void *daddr,void *saddr,unsigned len,struct sk_buff *skb)
+int arc_header(struct sk_buff *skb,struct device *dev,unsigned short type,
+		void *daddr,void *saddr,unsigned len)
 {
-	struct ClientData *head = (struct ClientData *)buff;
+	struct ClientData *head = (struct ClientData *)
+		skb_push(skb,dev->hard_header_len);
 	struct arcnet_local *lp=(struct arcnet_local *)(dev->priv);
 
 	/* set the protocol ID according to RFC-1201 */

@@ -591,16 +591,15 @@ el3_rx(struct device *dev)
 			short pkt_len = rx_status & 0x7ff;
 			struct sk_buff *skb;
 
-			skb = alloc_skb(pkt_len+3, GFP_ATOMIC);
+			skb = dev_alloc_skb(pkt_len+3);
 			if (el3_debug > 4)
 				printk("Receiving packet size %d status %4.4x.\n",
 					   pkt_len, rx_status);
 			if (skb != NULL) {
-				skb->len = pkt_len;
 				skb->dev = dev;
 
 				/* 'skb->data' points to the start of sk_buff data area. */
-				insl(ioaddr+RX_FIFO, skb->data,
+				insl(ioaddr+RX_FIFO, skb_put(skb,pkt_len),
 							(pkt_len + 3) >> 2);
 
 				skb->protocol=eth_type_trans(skb,dev);

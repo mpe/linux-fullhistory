@@ -609,7 +609,7 @@ de600_rx_intr(struct device *dev)
 		return;
 	}
 
-	skb = alloc_skb(size, GFP_ATOMIC);
+	skb = dev_alloc_skb(size);
 	sti();
 	if (skb == NULL) {
 		printk("%s: Couldn't allocate a sk_buff of size %d.\n",
@@ -618,9 +618,10 @@ de600_rx_intr(struct device *dev)
 	}
 	/* else */
 
-	skb->lock = 0;
+	skb->dev = dev;
+	
 	/* 'skb->data' points to the start of sk_buff data area. */
-	buffer = skb->data;
+	buffer = skb_put(skb,size);
 
 	/* copy the packet into the buffer */
 	de600_setup_address(read_from, RW_ADDR);
@@ -630,10 +631,10 @@ de600_rx_intr(struct device *dev)
 	((struct netstats *)(dev->priv))->rx_packets++; /* count all receives */
 
 	skb->protocol=eth_type_trans(skb,dev);
-	if (dev_rint((unsigned char *)skb, size, IN_SKBUFF, dev))
-		printk("%s: receive buffers full.\n", dev->name);
+	
+	netif_rx(skb);
 	/*
-	 * If any worth-while packets have been received, dev_rint()
+	 * If any worth-while packets have been received, netif_rx()
 	 * has done a mark_bh(INET_BH) for us and will work on them
 	 * when we get to the bottom-half routine.
 	 */

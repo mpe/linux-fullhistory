@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 002
+ *	NET/ROM release 003
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -14,6 +14,8 @@
  *
  *	History
  *	NET/ROM 001	Jonathan(G4KLX)	First attempt.
+ *	NET/ROM	003	Jonathan(G4KLX)	Use SIOCADDRT/SIOCDELRT ioctl values
+ *					for NET/ROM routes.
  *
  *	TO DO
  *	Sort out the which pointer when shuffling entries in the routes
@@ -538,45 +540,48 @@ struct device *nr_dev_get(ax25_address *addr)
  */
 int nr_rt_ioctl(unsigned int cmd, void *arg)
 {
-	struct nr_node_struct  nr_node;
-	struct nr_neigh_struct nr_neigh;
+	struct nr_route_struct nr_route;
 	struct device *dev;
 	int err;
 
 	switch (cmd) {
 
-		case SIOCNRADDNODE:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct nr_node_struct))) != 0)
+		case SIOCADDRT:
+			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct nr_route_struct))) != 0)
 				return err;
-			memcpy_fromfs(&nr_node, arg, sizeof(struct nr_node_struct));
-			if ((dev = nr_ax25_dev_get(nr_node.device)) == NULL)
+			memcpy_fromfs(&nr_route, arg, sizeof(struct nr_route_struct));
+			if ((dev = nr_ax25_dev_get(nr_route.device)) == NULL)
 				return -EINVAL;
-			return nr_add_node(&nr_node.callsign, nr_node.mnemonic,
-					   &nr_node.neighbour, dev, nr_node.quality, nr_node.obs_count);
+			switch (nr_route.type) {
+				case NETROM_NODE:
+					return nr_add_node(&nr_route.callsign,
+						nr_route.mnemonic,
+						&nr_route.neighbour,
+						dev, nr_route.quality,
+						nr_route.obs_count);
+				case NETROM_NEIGH:
+					return nr_add_neigh(&nr_route.callsign,
+						dev, nr_route.quality);
+				default:
+					return -EINVAL;
+			}
 
-		case SIOCNRDELNODE:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct nr_node_struct))) != 0)
+		case SIOCDELRT:
+			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct nr_route_struct))) != 0)
 				return err;
-			memcpy_fromfs(&nr_node, arg, sizeof(struct nr_node_struct));
-			if ((dev = nr_ax25_dev_get(nr_node.device)) == NULL)
+			memcpy_fromfs(&nr_route, arg, sizeof(struct nr_route_struct));
+			if ((dev = nr_ax25_dev_get(nr_route.device)) == NULL)
 				return -EINVAL;
-			return nr_del_node(&nr_node.callsign, &nr_node.neighbour, dev);
-
-		case SIOCNRADDNEIGH:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct nr_neigh_struct))) != 0)
-				return err;
-			memcpy_fromfs(&nr_neigh, arg, sizeof(struct nr_neigh_struct));
-			if ((dev = nr_ax25_dev_get(nr_neigh.device)) == NULL)
-				return -EINVAL;
-			return nr_add_neigh(&nr_neigh.callsign, dev, nr_neigh.quality);
-
-		case SIOCNRDELNEIGH:
-			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct nr_neigh_struct))) != 0)
-				return err;
-			memcpy_fromfs(&nr_neigh, arg, sizeof(struct nr_neigh_struct));
-			if ((dev = nr_ax25_dev_get(nr_neigh.device)) == NULL)
-				return -EINVAL;
-			return nr_del_neigh(&nr_neigh.callsign, dev, nr_neigh.quality);
+			switch (nr_route.type) {
+				case NETROM_NODE:
+					return nr_del_node(&nr_route.callsign,
+						&nr_route.neighbour, dev);
+				case NETROM_NEIGH:
+					return nr_del_neigh(&nr_route.callsign,
+						dev, nr_route.quality);
+				default:
+					return -EINVAL;
+			}
 
 		case SIOCNRDECOBS:
 			return nr_dec_obs();
@@ -649,9 +654,10 @@ int nr_route_frame(struct sk_buff *skb, struct device *device)
 	if ((dev = nr_dev_first()) == NULL)
 		return 0;
 
-	if (device != NULL)
-		skb->len += dev->hard_header_len;
+/*	if (device != NULL)
+		skb->len += dev->hard_header_len;*/
 
+	skb_push(skb,17);
 	ax25_send_frame(skb, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->dev);
 
 	return 1;

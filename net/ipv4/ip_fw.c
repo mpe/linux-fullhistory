@@ -612,13 +612,13 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
  		if (!ftp->init_seq)
  			ftp->init_seq = th->seq;
  
-		skb2 = alloc_skb(skb->mem_len-sizeof(struct sk_buff)+ftp->delta, GFP_ATOMIC);
+		skb2 = alloc_skb(skb->len+ftp->delta, GFP_ATOMIC);
  		if (skb2 == NULL) {
  			printk("MASQUERADE: No memory available\n");
  			return skb;
  		}
  		skb2->free = skb->free;
- 		skb2->len = skb->len + ftp->delta;
+ 		skb_put(skb2,skb->len + ftp->delta);
  		skb2->h.raw = &skb2->data[skb->h.raw - skb->data];
  
  		/*
@@ -628,7 +628,7 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
  		memcpy(skb2->data, skb->data, (p - (char *)skb->data));
  		memcpy(&skb2->data[(p - (char *)skb->data)], buf, strlen(buf));
 		memcpy(&skb2->data[(p - (char *)skb->data) + strlen(buf)], data,
-			skb->mem_len - sizeof(struct sk_buff) - ((char *)skb->h.raw - data));
+			skb->len - ((char *)skb->h.raw - data));
 
 		/*
 		 * Problem, how to replace the new skb with old one,
@@ -648,7 +648,7 @@ static void recalc_check(struct udphdr *uh, unsigned long saddr,
 	uh->check=csum_tcpudp_magic(saddr,daddr,len,
 		IPPROTO_UDP, csum_partial((char *)uh,len,0));
 	if(uh->check==0)
-		uh->check=-0xFFFF;
+		uh->check=0xFFFF;
 }
 	
 void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)

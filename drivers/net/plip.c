@@ -522,12 +522,12 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 			return ERROR;
 		}
 		/* Malloc up new buffer. */
-		rcv->skb = alloc_skb(rcv->length.h, GFP_ATOMIC);
+		rcv->skb = dev_alloc_skb(rcv->length.h);
 		if (rcv->skb == NULL) {
 			printk("%s: Memory squeeze.\n", dev->name);
 			return ERROR;
 		}
-		rcv->skb->len = rcv->length.h;
+		skb_put(rcv->skb,rcv->length.h);
 		rcv->skb->dev = dev;
 		rcv->state = PLIP_PK_DATA;
 		rcv->byte = 0;

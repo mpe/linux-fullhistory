@@ -7,6 +7,7 @@
  *
  * Authors:	Jorge Cwik, <jorge@laser.satlink.net>
  *		Arnt Gulbrandsen, <agulbra@nvg.unit.no>
+ *		Tom May, <ftom@netcom.com>
  *		Lots of code moved from tcp.c and ip.c; see those files
  *		for more names.
  *
@@ -23,62 +24,74 @@
  */
 
 unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum) {
-#ifdef __i386__
+	  /*
+	   * Experiments with ethernet and slip connections show that buff
+	   * is aligned on either a 2-byte or 4-byte boundary.  We get at
+	   * least a 2x speedup on 486 and Pentium if it is 4-byte aligned.
+	   * Fortunately, it is easy to convert 2-byte alignment to 4-byte
+	   * alignment for the unrolled loop.
+	   */
 	__asm__("
+	    testl $2, %%esi		# Check alignment.
+	    jz 2f			# Jump if alignment is ok.
+	    subl $2, %%ecx		# Alignment uses up two bytes.
+	    jae 1f			# Jump if we had at least two bytes.
+	    addl $2, %%ecx		# ecx was < 2.  Deal with it.
+	    jmp 4f
+1:	    movw (%%esi), %%bx
+	    addl $2, %%esi
+	    addw %%bx, %%ax
+	    adcl $0, %%eax
+2:
 	    movl %%ecx, %%edx
-	    cld
 	    shrl $5, %%ecx
 	    jz 2f
-	    orl %%ecx, %%ecx
-1:	    movl (%%esi), %%eax
-	    adcl %%eax, %%ebx
-	    movl 4(%%esi), %%eax
-	    adcl %%eax, %%ebx
-	    movl 8(%%esi), %%eax
-	    adcl %%eax, %%ebx
-	    movl 12(%%esi), %%eax
-	    adcl %%eax, %%ebx
-	    movl 16(%%esi), %%eax
-	    adcl %%eax, %%ebx
-	    movl 20(%%esi), %%eax
-	    adcl %%eax, %%ebx
-	    movl 24(%%esi), %%eax
-	    adcl %%eax, %%ebx
-	    movl 28(%%esi), %%eax
-	    adcl %%eax, %%ebx
+	    testl %%esi, %%esi
+1:	    movl (%%esi), %%ebx
+	    adcl %%ebx, %%eax
+	    movl 4(%%esi), %%ebx
+	    adcl %%ebx, %%eax
+	    movl 8(%%esi), %%ebx
+	    adcl %%ebx, %%eax
+	    movl 12(%%esi), %%ebx
+	    adcl %%ebx, %%eax
+	    movl 16(%%esi), %%ebx
+	    adcl %%ebx, %%eax
+	    movl 20(%%esi), %%ebx
+	    adcl %%ebx, %%eax
+	    movl 24(%%esi), %%ebx
+	    adcl %%ebx, %%eax
+	    movl 28(%%esi), %%ebx
+	    adcl %%ebx, %%eax
 	    lea 32(%%esi), %%esi
 	    dec %%ecx
 	    jne 1b
-	    adcl $0, %%ebx
+	    adcl $0, %%eax
 2:	    movl %%edx, %%ecx
-	    andl $28, %%ecx
+	    andl $0x1c, %%edx
 	    je 4f
-	    shrl $2, %%ecx
-	    orl %%ecx, %%ecx
-3:	    adcl (%%esi), %%ebx
+	    shrl $2, %%edx
+	    testl %%esi, %%esi
+3:	    adcl (%%esi), %%eax
 	    lea 4(%%esi), %%esi
-	    dec %%ecx
+	    dec %%edx
 	    jne 3b
-	    adcl $0, %%ebx
-4:	    movl $0, %%eax
-	    testw $2, %%dx
-	    je 5f
-	    lodsw
-	    addl %%eax, %%ebx
-	    adcl $0, %%ebx
-	    movw $0, %%ax
-5:	    test $1, %%edx
+	    adcl $0, %%eax
+4:	    andl $3, %%ecx
+	    jz 7f
+	    cmpl $2, %%ecx
+	    jb 5f
+	    movw (%%esi),%%cx
+	    leal 2(%%esi),%%esi
 	    je 6f
-	    lodsb
-	    addl %%eax, %%ebx
-	    adcl $0, %%ebx
-6:	    "
-	: "=b"(sum)
+	    shll $16,%%ecx
+5:	    movb (%%esi),%%cl
+6:	    addl %%ecx,%%eax
+	    adcl $0, %%eax
+7:	    "
+	: "=a"(sum)
 	: "0"(sum), "c"(len), "S"(buff)
-	: "ax", "bx", "cx", "dx", "si" );
-#else
-#error Not implemented for this CPU
-#endif
+	: "bx", "cx", "dx", "si");
 	return(sum);
 }
 
@@ -90,90 +103,93 @@ unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum) {
 
 unsigned int csum_partial_copyffs( char *src, char *dst, 
 				  int len, int sum) {
-#ifdef __i386__
     __asm__("
-	push %%ds
-	push %%es
-	movw %%ds, %%dx
-	movw %%dx, %%es
-	movw %%fs, %%dx
-	movw %%dx, %%ds
-	cld
-	cmpl $32, %%ecx
-	jb 2f
-	pushl %%ecx
+	testl $2, %%edi		# Check alignment.
+	jz 2f			# Jump if alignment is ok.
+	subl $2, %%ecx		# Alignment uses up two bytes.
+	jae 1f			# Jump if we had at least two bytes.
+	addl $2, %%ecx		# ecx was < 2.  Deal with it.
+	jmp 4f
+1:	movw %%fs:(%%esi), %%bx
+	addl $2, %%esi
+	movw %%bx, (%%edi)
+	addl $2, %%edi
+	addw %%bx, %%ax
+	adcl $0, %%eax
+2:
+	movl %%ecx, %%edx
 	shrl $5, %%ecx
-	orl %%ecx, %%ecx
-1:	movl (%%esi), %%eax
-	movl 4(%%esi), %%edx
-	adcl %%eax, %%ebx
-	movl %%eax, %%es:(%%edi)
-	adcl %%edx, %%ebx
-	movl %%edx, %%es:4(%%edi)
+	jz 2f
+	testl %%esi, %%esi
+1:	movl %%fs:(%%esi), %%ebx
+	adcl %%ebx, %%eax
+	movl %%ebx, (%%edi)
 
-	movl 8(%%esi), %%eax
-	movl 12(%%esi), %%edx
-	adcl %%eax, %%ebx
-	movl %%eax, %%es:8(%%edi)
-	adcl %%edx, %%ebx
-	movl %%edx, %%es:12(%%edi)
+	movl %%fs:4(%%esi), %%ebx
+	adcl %%ebx, %%eax
+	movl %%ebx, 4(%%edi)
 
-	movl 16(%%esi), %%eax
-	movl 20(%%esi), %%edx
-	adcl %%eax, %%ebx
-	movl %%eax, %%es:16(%%edi)
-	adcl %%edx, %%ebx
-	movl %%edx, %%es:20(%%edi)
+	movl %%fs:8(%%esi), %%ebx
+	adcl %%ebx, %%eax
+	movl %%ebx, 8(%%edi)
 
-	movl 24(%%esi), %%eax
-	movl 28(%%esi), %%edx
-	adcl %%eax, %%ebx
-	movl %%eax, %%es:24(%%edi)
-	adcl %%edx, %%ebx
-	movl %%edx, %%es:28(%%edi)
+	movl %%fs:12(%%esi), %%ebx
+	adcl %%ebx, %%eax
+	movl %%ebx, 12(%%edi)
+
+	movl %%fs:16(%%esi), %%ebx
+	adcl %%ebx, %%eax
+	movl %%ebx, 16(%%edi)
+
+	movl %%fs:20(%%esi), %%ebx
+	adcl %%ebx, %%eax
+	movl %%ebx, 20(%%edi)
+
+	movl %%fs:24(%%esi), %%ebx
+	adcl %%ebx, %%eax
+	movl %%ebx, 24(%%edi)
+
+	movl %%fs:28(%%esi), %%ebx
+	adcl %%ebx, %%eax
+	movl %%ebx, 28(%%edi)
 
 	lea 32(%%esi), %%esi
 	lea 32(%%edi), %%edi
 	dec %%ecx
 	jne 1b
-	adcl $0, %%ebx
-	popl %%ecx
-2:	movl %%ecx, %%edx
-	andl $28, %%ecx
+	adcl $0, %%eax
+2:	movl %%edx, %%ecx
+	andl $28, %%edx
 	je 4f
-	shrl $2, %%ecx
-	orl %%ecx, %%ecx
-3:	movl (%%esi), %%eax
-	adcl %%eax, %%ebx
-	movl %%eax, %%es:(%%edi)
+	shrl $2, %%edx
+	testl %%esi, %%esi
+3:	movl %%fs:(%%esi), %%ebx
+	adcl %%ebx, %%eax
+	movl %%ebx, (%%edi)
 	lea 4(%%esi), %%esi
 	lea 4(%%edi), %%edi
-	dec %%ecx
+	dec %%edx
 	jne 3b
-	adcl $0, %%ebx
-4:	movl $0, %%eax
-	testl $2, %%edx
-	je 5f
-	lodsw
-	stosw
-	addl %%eax, %%ebx
-	movw $0, %%ax
-	adcl %%eax, %%ebx
-5:	test $1, %%edx
+	adcl $0, %%eax
+4:	andl $3, %%ecx
+	jz 7f
+	cmpl $2, %%ecx
+	jb 5f
+	movw %%fs:(%%esi), %%dx
+	leal 2(%%esi), %%esi
+	movw %%dx, (%%edi)
+	leal 2(%%edi), %%edi
 	je 6f
-	lodsb
-	stosb
-	addl %%eax, %%ebx
-	adcl $0, %%ebx
-6:	pop %%es
-	pop %%ds
+	shll $16,%%edx
+5:	movb %%fs:(%%esi), %%dl
+	movb %%dl, (%%edi)
+6:	addl %%edx, %%eax
+	adcl $0, %%eax
+7:
 	"
-	: "=b"(sum)
-	: "0"(sum), "c"(len), "S"(src), "D"(dst)
-	: "ax", "bx", "cx", "dx", "si", "di" );
-#else
-#error Not implemented for this CPU
-#endif
+	: "=a" (sum)
+	: "0"(sum), "c"(len), "S"(src), "D" (dst)
+	: "bx", "cx", "dx", "si", "di" );
     return(sum);
 }
 

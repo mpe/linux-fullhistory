@@ -28,7 +28,7 @@
  */
 #define PECULIAR_486
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 #include "fpu_asm.h"
 #define	Const(x)	$##x
 #else
@@ -55,7 +55,7 @@
 #define TW_Empty	Const(7)	/* empty */
 
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/math_emu.h>
 #include <linux/linkage.h>
@@ -166,6 +166,6 @@ asmlinkage void round_reg(FPU_REG *arg, unsigned int extent,
 #include "fpu_proto.h"
 #endif
 
-#endif __ASSEMBLER__
+#endif __ASSEMBLY__
 
 #endif _FPU_EMU_H_

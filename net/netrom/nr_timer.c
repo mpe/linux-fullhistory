@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 002
+ *	NET/ROM release 003
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 

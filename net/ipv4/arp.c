@@ -333,7 +333,8 @@ void arp_send(int type, int ptype, unsigned long dest_ip,
 		printk("ARP: no memory to send an arp packet\n");
 		return;
 	}
-	skb->len = sizeof(struct arphdr) + dev->hard_header_len + 2*(dev->addr_len+4);
+	skb_reserve(skb, dev->hard_header_len);
+	arp = (struct arphdr *) skb_put(skb,sizeof(struct arphdr) + 2*(dev->addr_len+4));
 	skb->arp = 1;
 	skb->dev = dev;
 	skb->free = 1;
@@ -342,10 +343,9 @@ void arp_send(int type, int ptype, unsigned long dest_ip,
 	 *	Fill the device header for the ARP frame
 	 */
 
-	dev->hard_header(skb->data,dev,ptype,dest_hw?dest_hw:dev->broadcast,src_hw?src_hw:NULL,skb->len,skb);
+	dev->hard_header(skb,dev,ptype,dest_hw?dest_hw:dev->broadcast,src_hw?src_hw:NULL,skb->len);
 
 	/* Fill out the arp protocol part. */
-	arp = (struct arphdr *) (skb->data + dev->hard_header_len);
 	arp->ar_hrd = htons(dev->type);
 #ifdef CONFIG_AX25
 #ifdef CONFIG_NETROM
@@ -573,7 +573,12 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	unsigned char ha[MAX_ADDR_LEN];	/* So we can enable ints again. */
 	long sip,tip;
 	unsigned char *sha,*tha;
-
+	
+/*
+ *	ARP carries the MAC addresses wrapped in the packet. We can't sanity
+ *	check this as proxy arp has them different.
+ */
+	skb_pull(skb,dev->hard_header_len);
 /*
  *	The hardware length of the packet should match the hardware length
  *	of the device.  Similarly, the hardware types should match.  The

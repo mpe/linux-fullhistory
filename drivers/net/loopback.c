@@ -86,7 +86,7 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	  	 */
 		save_flags(flags);
 	  	cli();
-	  	skb->sk->wmem_alloc-=skb->mem_len;
+	  	skb->sk->wmem_alloc-=skb->truesize;
 	  	skb->sk->write_space(skb->sk);
 	  	restore_flags(flags);
 	}

@@ -585,7 +585,12 @@ static void hp100_rx( struct device *dev )
       printk( "hp100_rx: new packet - length = %d, errors = 0x%x, dest = 0x%x\n",
       	header & HP100_PKT_LEN_MASK, ( header >> 16 ) & 0xfff8, ( header >> 16 ) & 7 );
 #endif
-      skb = alloc_skb( ( pkt_len + 3 ) & ~3, GFP_ATOMIC );
+      /*
+       * NOTE! This (and the skb_put() below) depends on the skb-functions
+       * allocating more than asked (notably, aligning the request up to
+       * the next 16-byte length).
+       */
+      skb = dev_alloc_skb(pkt_len);
       if ( skb == NULL )
         {
 #ifdef HP100_DEBUG
@@ -595,9 +600,8 @@ static void hp100_rx( struct device *dev )
         }
        else
         {
-          skb -> len = pkt_len;
           skb -> dev = dev;
-          insl( ioaddr + HP100_REG_DATA32, skb -> data, ( pkt_len + 3 ) >> 2 );
+          insl( ioaddr + HP100_REG_DATA32, skb_put(pkt_len), ( pkt_len + 3 ) >> 2 );
           skb->protocol=eth_type_trans(skb,dev);
           netif_rx( skb );
           lp -> stats.rx_packets++;

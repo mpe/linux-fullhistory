@@ -44,7 +44,7 @@ typedef struct {
 	ax25_address		user_addr, source_addr, dest_addr;
 	unsigned char		my_index,    my_id;
 	unsigned char		your_index,  your_id;
-	unsigned char		state;
+	unsigned char		state, bpqext;
 	unsigned short		vs, vr, va, vl;
 	unsigned char		condition;
 	unsigned char		n2, n2count;

@@ -428,7 +428,7 @@ int udp_recvfrom(struct sock *sk, unsigned char *to, int len,
 	if(skb==NULL)
   		return er;
   
-  	truesize = skb->len;
+  	truesize = skb->len - sizeof(struct udphdr);
   	copied = min(len, truesize);
 
   	/*
@@ -448,7 +448,7 @@ int udp_recvfrom(struct sock *sk, unsigned char *to, int len,
   
   	skb_free_datagram(skb);
   	release_sock(sk);
-  	return(truesize);
+  	return(copied);
 }
 
 /*
@@ -623,7 +623,7 @@ static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, 
 {
 	skb->sk = sk;
 	skb->dev = dev;
-	skb->len = len;
+	skb_trim(skb,len);
 
 	/*
 	 *	These are supposed to be switched. 
@@ -637,8 +637,6 @@ static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, 
 	 *	Charge it to the socket, dropping if the queue is full.
 	 */
 
-	skb->len = len - sizeof(*uh);  
-	 
 	if (sock_queue_rcv_skb(sk,skb)<0) 
 	{
 		udp_statistics.UdpInErrors++;

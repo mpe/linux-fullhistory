@@ -81,11 +81,10 @@ void eth_setup(char *str, int *ints)
  *	daddr=NULL	means leave destination address (eg unresolved arp)
  */
 
-int eth_header(unsigned char *buff, struct device *dev, unsigned short type,
-	   void *daddr, void *saddr, unsigned len,
-	   struct sk_buff *skb)
+int eth_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+	   void *daddr, void *saddr, unsigned len)
 {
-	struct ethhdr *eth = (struct ethhdr *)buff;
+	struct ethhdr *eth = (struct ethhdr *)skb_push(skb,14);
 
 	/* 
 	 *	Set the protocol type. For a packet of type ETH_P_802_3 we put the length

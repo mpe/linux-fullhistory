@@ -1561,17 +1561,16 @@ wavelan_receive(device *dev)
 
 			sksize = pkt_len;
 
-			if ((skb = alloc_skb(sksize, GFP_ATOMIC)) == (struct sk_buff *)0)
+			if ((skb = dev_alloc_skb(sksize)) == (struct sk_buff *)0)
 			{
 				printk("%s: could not alloc_skb(%d, GFP_ATOMIC).\n", dev->name, sksize);
 				lp->stats.rx_dropped++;
 			}
 			else
 			{
-				skb->len = pkt_len;
 				skb->dev = dev;
 
-				obram_read(ioaddr, rbd.rbd_bufl, skb->data, pkt_len);
+				obram_read(ioaddr, rbd.rbd_bufl, skb_put(skb,pkt_len), pkt_len);
 
 				if (wavelan_debug > 5)
 				{

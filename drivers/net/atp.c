@@ -670,16 +670,15 @@ static void net_rx(struct device *dev)
 		int pkt_len = (rx_head.rx_count & 0x7ff) - 4; 		/* The "-4" is omits the FCS (CRC). */
 		struct sk_buff *skb;
 		
-		skb = alloc_skb(pkt_len, GFP_ATOMIC);
+		skb = dev_alloc_skb(pkt_len);
 		if (skb == NULL) {
 			printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 			lp->stats.rx_dropped++;
 			goto done;
 		}
-		skb->len = pkt_len;
 		skb->dev = dev;
 		
-		read_block(ioaddr, pkt_len, skb->data, dev->if_port);
+		read_block(ioaddr, pkt_len, skb_put(skb,pkt_len), dev->if_port);
 
 		if (net_debug > 6) {
 			unsigned char *data = skb->data;

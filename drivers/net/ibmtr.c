@@ -1073,7 +1073,7 @@ DPRINTK("ssap: %02X dsap: %02X saddr: %02X:%02X:%02X:%02X:%02X:%02X daddr: %02X:
 #endif
 
 
-	if(!(skb=alloc_skb(ntohs(rec_req->frame_len)-lan_hdr_len+sizeof(struct trh_hdr), GFP_ATOMIC))) {
+	if(!(skb=dev_alloc_skb(ntohs(rec_req->frame_len)-lan_hdr_len+sizeof(struct trh_hdr)))) {
 		DPRINTK("out of memory. frame dropped.\n");	
 		ti->tr_stats.rx_dropped++;
 		rec_resp->ret_code=DATA_LOST;
@@ -1081,7 +1081,7 @@ DPRINTK("ssap: %02X dsap: %02X saddr: %02X:%02X:%02X:%02X:%02X:%02X daddr: %02X:
 		return;
 	}
 
-	skb->len=ntohs(rec_req->frame_len)-lan_hdr_len+sizeof(struct trh_hdr);
+	skb_put(skb,ntohs(rec_req->frame_len)-lan_hdr_len+sizeof(struct trh_hdr));
 	skb->dev=dev;
 
 #if 0

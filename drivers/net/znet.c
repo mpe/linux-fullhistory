@@ -548,23 +548,22 @@ static void znet_rx(struct device *dev)
 			/* Malloc up new buffer. */
 			struct sk_buff *skb;
 
-			skb = alloc_skb(pkt_len, GFP_ATOMIC);
+			skb = dev_alloc_skb(pkt_len);
 			if (skb == NULL) {
 				if (znet_debug)
 				  printk(KERN_WARNING "%s: Memory squeeze, dropping packet.\n", dev->name);
 				lp->stats.rx_dropped++;
 				break;
 			}
-			skb->len = pkt_len;
 			skb->dev = dev;
 
 			if (&zn.rx_cur[(pkt_len+1)>>1] > zn.rx_end) {
 				int semi_cnt = (zn.rx_end - zn.rx_cur)<<1;
-				memcpy((unsigned char *) (skb + 1), zn.rx_cur, semi_cnt);
-				memcpy((unsigned char *) (skb + 1) + semi_cnt, zn.rx_start,
+				memcpy(skb_put(skb,semi_cnt), zn.rx_cur, semi_cnt);
+				memcpy(skb_put(skb,pkt_len-semi_cnt), zn.rx_start,
 					   pkt_len - semi_cnt);
 			} else {
-				memcpy((unsigned char *) (skb + 1), zn.rx_cur, pkt_len);
+				memcpy(skb_put(skb,pkt_len), zn.rx_cur, pkt_len);
 				if (znet_debug > 6) {
 					unsigned int *packet = (unsigned int *) (skb + 1);
 					printk(KERN_DEBUG "Packet data is %08x %08x %08x %08x.\n", packet[0],

@@ -287,7 +287,7 @@ static int ni65_probe1(struct device *dev,int ioaddr)
 
    for(i=0;i<RMDNUM;i++)
    {
-     if( (p->recv_skb[i] = (struct sk_buff *) alloc_skb(R_BUF_SIZE,GFP_ATOMIC)) == NULL) {
+     if( (p->recv_skb[i] = dev_alloc_skb(R_BUF_SIZE)) == NULL) {
        printk("%s: unable to alloc recv-mem\n",dev->name);
        return EAGAIN;
      }
@@ -526,21 +526,20 @@ static void recv_intr(struct device *dev)
     else
     {
       len = (rmdp->mlen & 0x0fff) - 4; /* -4: ignore FCS */
-      skb = alloc_skb(R_BUF_SIZE,GFP_ATOMIC);
+      skb = dev_alloc_skb(R_BUF_SIZE);
       if(skb != NULL)
       {
         if( (unsigned long) (skb->data + R_BUF_SIZE) & 0xff000000) {
-          memcpy(skb->data,p->recv_skb[p->rmdnum]->data,len);
+          memcpy(skb_put(skb,len),p->recv_skb[p->rmdnum]->data,len);
 	  skb1 = skb;
         }
         else {
           skb1 = p->recv_skb[p->rmdnum];
           p->recv_skb[p->rmdnum] = skb;
-          rmdp->u.buffer = (unsigned long) (skb->data);
+          rmdp->u.buffer = (unsigned long) skb_put(skb1,len);
         }
         rmdp->u.s.status = RCV_OWN;
         rmdp->mlen = 0;   /* not necc ???? */
-        skb1->len = len;
         skb1->dev = dev;
         p->stats.rx_packets++;
         skb1->protocol=eth_type_trans(skb1,dev);

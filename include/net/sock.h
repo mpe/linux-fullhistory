@@ -213,10 +213,8 @@ struct proto {
   struct sk_buff *	(*rmalloc)(struct sock *sk,
 				    unsigned long size, int force,
 				    int priority);
-  void			(*wfree)(struct sock *sk, struct sk_buff *skb,
-				 unsigned long size);
-  void			(*rfree)(struct sock *sk, struct sk_buff *skb,
-				 unsigned long size);
+  void			(*wfree)(struct sock *sk, struct sk_buff *skb);
+  void			(*rfree)(struct sock *sk, struct sk_buff *skb);
   unsigned long		(*rspace)(struct sock *sk);
   unsigned long		(*wspace)(struct sock *sk);
   void			(*close)(struct sock *sk, int timeout);
@@ -303,10 +301,8 @@ extern struct sk_buff		*sock_wmalloc(struct sock *sk,
 extern struct sk_buff		*sock_rmalloc(struct sock *sk,
 					      unsigned long size, int force,
 					      int priority);
-extern void			sock_wfree(struct sock *sk, struct sk_buff *skb,
-					   unsigned long size);
-extern void			sock_rfree(struct sock *sk, struct sk_buff *skb,
-					   unsigned long size);
+extern void			sock_wfree(struct sock *sk, struct sk_buff *skb);
+extern void			sock_rfree(struct sock *sk, struct sk_buff *skb);
 extern unsigned long		sock_rspace(struct sock *sk);
 extern unsigned long		sock_wspace(struct sock *sk);
 
@@ -326,11 +322,11 @@ extern struct sk_buff 		*sock_alloc_send_skb(struct sock *skb, unsigned long siz
 extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
 	unsigned long flags;
-	if(sk->rmem_alloc + skb->mem_len >= sk->rcvbuf)
+	if(sk->rmem_alloc + skb->truesize >= sk->rcvbuf)
 		return -ENOMEM;
 	save_flags(flags);
 	cli();
-	sk->rmem_alloc+=skb->mem_len;
+	sk->rmem_alloc+=skb->truesize;
 	skb->sk=sk;
 	restore_flags(flags);
 	skb_queue_tail(&sk->receive_queue,skb);

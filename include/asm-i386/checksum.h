@@ -35,32 +35,29 @@ unsigned int csum_partial_copyffs( char *src, char *dst, int len, int sum);
  */
 static inline unsigned short ip_fast_csum(unsigned char * iph,
 					  unsigned int ihl) {
-	unsigned short int sum;
+	unsigned int sum;
 
 	__asm__("
-	    movl (%%esi), %%eax
-	    andl $15, %%ecx
-	    subl $4, %%ecx
+	    movl (%1), %0
+	    subl $4, %2
 	    jbe 2f
-	    addl 4(%%esi), %%eax
-	    adcl 8(%%esi), %%eax
-	    adcl 12(%%esi), %%eax
-1:	    adcl 16(%%esi), %%eax
-	    lea 4(%%esi), %%esi
-	    decl %%ecx
+	    addl 4(%1), %0
+	    adcl 8(%1), %0
+	    adcl 12(%1), %0
+1:	    adcl 16(%1), %0
+	    lea 4(%1), %1
+	    decl %2
 	    jne	1b
-	    adcl $0, %%eax
-	    movl %%eax, %%ecx
-	    shrl $16, %%eax
-	    addw %%ecx, %%eax
-	    adcl $0, %%eax
-	    notl %%eax
-	    andl $65535, %%eax
+	    adcl $0, %0
+	    movl %0, %2
+	    shrl $16, %0
+	    addw %w2, %w0
+	    adcl $0, %0
+	    notl %0
 2:
 	    "
-	: "=a" (sum)
-	: "S" (iph), "c"(ihl)
-	: "ax", "cx", "si");
+	: "=&r" (sum), "=&r" (iph), "=&r" (ihl)
+	: "1" (iph), "2" (ihl));
 	return(sum);
 }
 
@@ -78,20 +75,18 @@ static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
 						   unsigned short proto,
 						   unsigned int sum) {
     __asm__("
-	addl %2, %0
-	adcl %3, %0
+	addl %1, %0
 	adcl %4, %0
+	adcl %5, %0
 	adcl $0, %0
-	movl %0, %2
-	shrl $16, %2
-	addw %2, %0
+	movl %0, %1
+	shrl $16, %1
+	addw %w1, %w0
 	adcl $0, %0
 	notl %0
-	andl $65535, %0
 	"
-	: "=r" (sum)
-	: "0" (daddr), "S"(saddr), "r"((ntohs(len)<<16)+proto*256), "r"(sum)
-	: "si" );
+	: "=&r" (sum), "=&r" (saddr)
+	: "0" (daddr), "1"(saddr), "r"((ntohs(len)<<16)+proto*256), "r"(sum));
 	return((unsigned short)sum);
 }
 
@@ -101,19 +96,18 @@ static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
  */
 
 static inline unsigned short ip_compute_csum(unsigned char * buff, int len) {
-    unsigned short int sum;
+    unsigned int sum;
 
+    unsigned int scratch;
     __asm__("
-	movl %%eax, %%ecx
-	shrl $16, %%ecx
-	addw %%cx, %%ax
-	adcl $0, %%eax
-	notl %%eax
-	andl $65535, %%eax
+	movl %0, %1
+	shrl $16, %1
+	addw %w1, %w0
+	adcl $0, %0
+	notl %0
 	"
-	: "=a"(sum)
-	: "a" (csum_partial(buff, len, 0))
-	: "cx");
+	: "=a"(sum), "=r" (scratch)
+	: "0" (csum_partial(buff, len, 0)));
 	return(sum);
 }
 

@@ -924,7 +924,6 @@ depca_rx(struct device *dev)
   struct depca_private *lp = (struct depca_private *)dev->priv;
   int i, entry;
   s32 status;
-  char *buf;
 
   for (entry=lp->rx_new; 
        !(readl(&lp->rx_ring[entry].base) & R_OWN);
@@ -944,16 +943,16 @@ depca_rx(struct device *dev)
 	short len, pkt_len = readw(&lp->rx_ring[entry].msg_length);
 	struct sk_buff *skb;
 
-	skb = alloc_skb(pkt_len, GFP_ATOMIC);
+	skb = dev_alloc_skb(pkt_len);
 	if (skb != NULL) {
-	  skb->len = pkt_len;
+	  unsigned char * buf = skb_put(skb,pkt_len);
 	  skb->dev = dev;
 	  if (entry < lp->rx_old) {         /* Wrapped buffer */
 	    len = (lp->rxRingMask - lp->rx_old + 1) * RX_BUFF_SZ;
-	    memcpy_fromio(skb->data, lp->rx_memcpy[lp->rx_old], len);
-	    memcpy_fromio(skb->data+len, lp->rx_memcpy[0], pkt_len-len);
+	    memcpy_fromio(buf, lp->rx_memcpy[lp->rx_old], len);
+	    memcpy_fromio(buf + len, lp->rx_memcpy[0], pkt_len-len);
 	  } else {                          /* Linear buffer */
-	    memcpy_fromio(skb->data, lp->rx_memcpy[lp->rx_old], pkt_len);
+	    memcpy_fromio(buf, lp->rx_memcpy[lp->rx_old], pkt_len);
 	  }
 
 	  /* 
@@ -973,7 +972,6 @@ depca_rx(struct device *dev)
 	      i = DEPCA_PKT_STAT_SZ;
 	    }
 	  }
-	  buf = skb->data;                  /* Look at the dest addr */
 	  if (buf[0] & 0x01) {              /* Multicast/Broadcast */
 	    if ((*(s32 *)&buf[0] == -1) && (*(s16 *)&buf[4] == -1)) {
 	      lp->pktStats.broadcast++;

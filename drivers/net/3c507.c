@@ -835,7 +835,7 @@ el16_rx(struct device *dev)
 			struct sk_buff *skb;
 
 			pkt_len &= 0x3fff;
-			skb = alloc_skb(pkt_len, GFP_ATOMIC);
+			skb = dev_alloc_skb(pkt_len);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 				lp->stats.rx_dropped++;
@@ -845,7 +845,7 @@ el16_rx(struct device *dev)
 			skb->dev = dev;
 
 			/* 'skb->data' points to the start of sk_buff data area. */
-			memcpy(skb->data, data_frame + 5, pkt_len);
+			memcpy(skb_put(skb,pkt_len), data_frame + 5, pkt_len);
 		
 			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb);

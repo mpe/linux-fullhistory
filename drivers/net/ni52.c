@@ -803,12 +803,11 @@ static void ni52_rcv_int(struct device *dev)
         {
           totlen &= RBD_MASK; /* length of this frame */
           rbd->status = 0;
-          skb = (struct sk_buff *) alloc_skb(totlen, GFP_ATOMIC);
+          skb = (struct sk_buff *) dev_alloc_skb(totlen);
           if(skb != NULL)
           {
-            skb->len = totlen;
             skb->dev = dev;
-            memcpy( (char *) skb->data,(char *) p->base+(unsigned long) rbd->buffer, totlen);
+            memcpy(skb_put(skb,totlen),(char *) p->base+(unsigned long) rbd->buffer, totlen);
             skb->protocol=eth_type_trans(skb,dev);
             netif_rx(skb);
             p->stats.rx_packets++;

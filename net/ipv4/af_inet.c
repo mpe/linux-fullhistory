@@ -39,6 +39,7 @@
  *		Alan Cox	:	Allow large numbers of pending sockets
  *					(eg for big web sites), but only if
  *					specifically application requested.
+ *		Alan Cox	:	New buffering throughout IP. Used dumbly.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -1539,7 +1540,7 @@ void inet_proto_init(struct net_proto *pro)
 	int i;
 
 
-	printk("Swansea University Computer Society TCP/IP for NET3.029 (Snapshot #6)\n");
+	printk("Swansea University Computer Society TCP/IP for NET3.030 (Snapshot #1)\n");
 
 	/*
 	 *	Tell SOCKET that we are alive... 

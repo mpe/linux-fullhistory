@@ -28,12 +28,11 @@
 #include <linux/if_ether.h>
 
 #ifdef __KERNEL__
-extern int		eth_header(unsigned char *buff, struct device *dev,
+extern int		eth_header(struct sk_buff *skb, struct device *dev,
 				   unsigned short type, void *daddr,
-				   void *saddr, unsigned len,
-				   struct sk_buff *skb);
+				   void *saddr, unsigned len);
 extern int		eth_rebuild_header(void *buff, struct device *dev,
-			unsigned long raddr, struct sk_buff *skb);
+			unsigned long dst, struct sk_buff *skb);
 extern unsigned short	eth_type_trans(struct sk_buff *skb, struct device *dev);
 
 #endif

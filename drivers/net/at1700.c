@@ -527,7 +527,7 @@ net_rx(struct device *dev)
 				lp->stats.rx_errors++;
 				break;
 			}
-			skb = alloc_skb(pkt_len+1, GFP_ATOMIC);
+			skb = dev_alloc_skb(pkt_len+1);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet (len %d).\n",
 					   dev->name, pkt_len);
@@ -540,7 +540,7 @@ net_rx(struct device *dev)
 			skb->len = pkt_len;
 			skb->dev = dev;
 
-			insw(ioaddr + DATAPORT, skb->data, (pkt_len + 1) >> 1);
+			insw(ioaddr + DATAPORT, skb_put(skb,pkt_len), (pkt_len + 1) >> 1);
 			skb->protocol=eth_type_trans(skb, dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;

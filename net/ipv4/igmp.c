@@ -89,14 +89,14 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 	if(skb==NULL)
 		return;
 	tmp=ip_build_header(skb, INADDR_ANY, address, &dev, IPPROTO_IGMP, NULL,
-				skb->mem_len, 0, 1);
+				skb->truesize, 0, 1);
 	if(tmp<0)
 	{
 		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
 	dp=skb->data+tmp;
-	skb->len=tmp+sizeof(struct igmphdr);
+	skb_put(skb,sizeof(struct igmphdr));
 	
 	*dp++=type;
 	*dp++=0;

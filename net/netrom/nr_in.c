@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 002
+ *	NET/ROM release 003
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -135,8 +135,8 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 	unsigned short nr, ns;
 	int queued = 0;
 
-	nr = skb->data[35];
-	ns = skb->data[34];
+	nr = skb->data[18];
+	ns = skb->data[17];
 
 	switch (frametype) {
 
@@ -241,7 +241,7 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			do {
 				save_vr = sk->nr->vr;
 				while ((skbn = skb_dequeue(&sk->nr->reseq_queue)) != NULL) {
-					ns = skbn->data[34];
+					ns = skbn->data[17];
 					if (ns == sk->nr->vr) {
 						if (sock_queue_rcv_skb(sk, skbn) == 0) {
 							sk->nr->vr = (sk->nr->vr + 1) % NR_MODULUS;
@@ -285,9 +285,15 @@ int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 {
 	int queued = 0, frametype;
 
+	if (sk->nr->state != NR_STATE_1 && sk->nr->state != NR_STATE_2 &&
+	    sk->nr->state != NR_STATE_3) {
+		printk("nr_process_rx_frame: frame received - state: %d\n", sk->nr->state);
+		return queued;
+	}
+
 	del_timer(&sk->timer);
 
-	frametype = skb->data[36];
+	frametype = skb->data[19];
 
 	switch (sk->nr->state)
 	{
@@ -300,14 +306,11 @@ int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 		case NR_STATE_3:
 			queued = nr_state3_machine(sk, skb, frametype);
 			break;
-		default:
-			printk("nr_process_rx_frame: frame received - state: %d\n", sk->nr->state);
-			break;
 	}
 
 	nr_set_timer(sk);
 
-	return(queued);
+	return queued;
 }
 
 #endif

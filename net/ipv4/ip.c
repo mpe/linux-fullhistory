@@ -185,7 +185,8 @@ static int ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct dev
 		 *	Build a hardware header. Source address is our mac, destination unknown
 		 *  	(rebuild header will sort this out)
 		 */
-		mac = dev->hard_header(skb->data, dev, ETH_P_IP, NULL, NULL, len, skb);
+		skb_reserve(skb,dev->hard_header_len);
+		mac = dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, len);
 		if (mac < 0)
 		{
 			mac = -mac;
@@ -208,13 +209,10 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 		struct device **dev, int type, struct options *opt, int len, int tos, int ttl)
 {
 	struct rtable *rt;
-	unsigned char *buff;
 	unsigned long raddr;
 	int tmp;
 	unsigned long src;
 	struct iphdr *iph;
-
-	buff = skb->data;
 
 	/*
 	 *	See if we need to look up the device.
@@ -282,8 +280,6 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	 */
 
 	tmp = ip_send(skb, raddr, len, *dev, saddr);
-	buff += tmp;
-	len -= tmp;
 
 	/*
 	 *	Book keeping
@@ -310,7 +306,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	 *	Build the IP addresses
 	 */
 	 
-	iph=(struct iphdr *)buff;
+	iph=(struct iphdr *)skb_put(skb,sizeof(struct iphdr));
 	
 	iph->version  = 4;
 	iph->tos      = tos;
@@ -444,9 +440,6 @@ static void ip_free(struct ipq *qp)
 		fp = xp;
 	}
 
-	/* Release the MAC header. */
-	kfree_s(qp->mac, qp->maclen);
-
 	/* Release the IP header. */
 	kfree_s(qp->iph, 64 + 8);
 
@@ -494,7 +487,6 @@ static void ip_expire(unsigned long arg)
 static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct device *dev)
 {
 	struct ipq *qp;
-	int maclen;
 	int ihlen;
 
 	qp = (struct ipq *) kmalloc(sizeof(struct ipq), GFP_ATOMIC);
@@ -507,22 +499,6 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
 	memset(qp, 0, sizeof(struct ipq));
 
 	/*
-	 *	Allocate memory for the MAC header.
-	 *
-	 *	FIXME: We have a maximum MAC address size limit and define
-	 *	elsewhere. We should use it here and avoid the 3 kmalloc() calls
-	 */
-
-	maclen = ((unsigned long) iph) - ((unsigned long) skb->data);
-	qp->mac = (unsigned char *) kmalloc(maclen, GFP_ATOMIC);
-	if (qp->mac == NULL)
-	{
-		NETDEBUG(printk("IP: create: no memory left !\n"));
-		kfree_s(qp, sizeof(struct ipq));
-		return(NULL);
-	}
-
-	/*
 	 *	Allocate memory for the IP header (plus 8 octets for ICMP).
 	 */
 
@@ -531,17 +507,13 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
 	if (qp->iph == NULL)
 	{
 		NETDEBUG(printk("IP: create: no memory left !\n"));
-		kfree_s(qp->mac, maclen);
 		kfree_s(qp, sizeof(struct ipq));
 		return(NULL);
 	}
 
-	/* Fill in the structure. */
-	memcpy(qp->mac, skb->data, maclen);
 	memcpy(qp->iph, iph, ihlen + 8);
 	qp->len = 0;
 	qp->ihlen = ihlen;
-	qp->maclen = maclen;
 	qp->fragments = NULL;
 	qp->dev = dev;
 
@@ -597,8 +569,7 @@ static int ip_done(struct ipq *qp)
  *
  *	FIXME: We copy here because we lack an effective way of handling lists
  *	of bits on input. Until the new skb data handling is in I'm not going
- *	to touch this with a bargepole. This also causes a 4Kish limit on
- *	packet sizes.
+ *	to touch this with a bargepole. 
  */
 
 static struct sk_buff *ip_glue(struct ipq *qp)
@@ -612,10 +583,9 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	/*
 	 *	Allocate a new buffer for the datagram.
 	 */
+	len = qp->ihlen + qp->len;
 
-	len = qp->maclen + qp->ihlen + qp->len;
-
-	if ((skb = alloc_skb(len,GFP_ATOMIC)) == NULL)
+	if ((skb = dev_alloc_skb(len)) == NULL)
 	{
 		ip_statistics.IpReasmFails++;
 		NETDEBUG(printk("IP: queue_glue: no memory for gluing queue %p\n", qp));
@@ -624,17 +594,14 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	}
 
 	/* Fill in the basic details. */
-	skb->len = (len - qp->maclen);
+	skb_put(skb,len);
 	skb->h.raw = skb->data;
 	skb->free = 1;
 
-	/* Copy the original MAC and IP headers into the new buffer. */
+	/* Copy the original IP headers into the new buffer. */
 	ptr = (unsigned char *) skb->h.raw;
-	memcpy(ptr, ((unsigned char *) qp->mac), qp->maclen);
-	ptr += qp->maclen;
 	memcpy(ptr, ((unsigned char *) qp->iph), qp->ihlen);
 	ptr += qp->ihlen;
-	skb->h.raw += qp->maclen;
 
 	count = 0;
 
@@ -740,7 +707,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
 	 *	Point into the IP datagram 'data' part.
 	 */
 
-	ptr = skb->data + dev->hard_header_len + ihl;
+	ptr = skb->data + ihl;
 
 	/*
 	 *	Is this the final fragment?
@@ -866,6 +833,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  *	**Protocol Violation**
  *	We copy all the options to each fragment. !FIXME!
  */
+ 
 void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int is_frag)
 {
 	struct iphdr *iph;
@@ -974,7 +942,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		if(skb->free==0)
 			printk("IP fragmenter: BUG free!=1 in fragmenter\n");
 		skb2->free = 1;
-		skb2->len = len + hlen;
+		skb_put(skb2,len + hlen);
 		skb2->h.raw=(char *) skb2->data;
 		/*
 		 *	Charge the memory for the fragment to any owner
@@ -985,7 +953,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		if (sk)
 		{
 			cli();
-			sk->wmem_alloc += skb2->mem_len;
+			sk->wmem_alloc += skb2->truesize;
 			skb2->sk=sk;
 		}
 		restore_flags(flags);
@@ -1193,27 +1161,31 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 		 */
 
 		skb2 = alloc_skb(dev2->hard_header_len + skb->len, GFP_ATOMIC);
+		
 		/*
 		 *	This is rare and since IP is tolerant of network failures
 		 *	quite harmless.
 		 */
+		
 		if (skb2 == NULL)
 		{
 			NETDEBUG(printk("\nIP: No memory available for IP forward\n"));
 			return;
 		}
-		ptr = skb2->data;
+		
+
+		/* Now build the MAC header. */
+		(void) ip_send(skb2, raddr, skb->len, dev2, dev2->pa_addr);
+
+		ptr = skb_put(skb2,skb->len);
 		skb2->free = 1;
-		skb2->len = skb->len + dev2->hard_header_len;
 		skb2->h.raw = ptr;
 
 		/*
 		 *	Copy the packet data into the new buffer.
 		 */
-		memcpy(ptr + dev2->hard_header_len, skb->h.raw, skb->len);
+		memcpy(ptr, skb->h.raw, skb->len);
 
-		/* Now build the MAC header. */
-		(void) ip_send(skb2, raddr, skb->len, dev2, dev2->pa_addr);
 
 		ip_statistics.IpForwDatagrams++;
 
@@ -1258,6 +1230,9 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 
 /*
  *	This function receives all incoming IP datagrams.
+ *
+ *	On entry skb->data points to the start of the IP header and
+ *	the MAC header has been removed.
  */
 
 int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
@@ -1275,6 +1250,13 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	int err;
 #endif	
 
+	/*
+	 *	IP is layered, throw away the
+	 *	MAC addresses.
+	 */
+	 
+	skb_pull(skb,dev->hard_header_len);
+	
 	ip_statistics.IpInReceives++;
 
 	/*
@@ -1309,7 +1291,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	is IP we can trim to the true length of the frame.
 	 */
 
-	skb->len=ntohs(iph->tot_len);
+	skb_trim(skb,ntohs(iph->tot_len));
 	
 	/*
 	 *	See if the firewall wants to dispose of the packet. 
@@ -1683,7 +1665,7 @@ static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
 	extern struct device loopback_dev;
 	struct device *dev=&loopback_dev;
 	int len=skb->len-old_dev->hard_header_len;
-	struct sk_buff *newskb=alloc_skb(len+dev->hard_header_len, GFP_ATOMIC);
+	struct sk_buff *newskb=dev_alloc_skb(len+dev->hard_header_len);
 	
 	if(newskb==NULL)
 		return;
@@ -1698,10 +1680,18 @@ static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
 	newskb->lock=0;
 	newskb->users=0;
 	newskb->pkt_type=skb->pkt_type;
-	newskb->len=len+dev->hard_header_len;
 	
-	
-	newskb->ip_hdr=(struct iphdr *)(newskb->data+ip_send(newskb, skb->ip_hdr->daddr, len, dev, skb->ip_hdr->saddr));
+	/*
+	 *	Put a MAC header on the packet
+	 */
+	ip_send(newskb, skb->ip_hdr->daddr, len, dev, skb->ip_hdr->saddr);
+	/*
+	 *	Add the rest of the data space.	
+	 */
+	newskb->ip_hdr=(struct iphdr *)skb_put(skb, len);
+	/*
+	 *	Copy the data
+	 */
 	memcpy(newskb->ip_hdr,skb->ip_hdr,len);
 
 	/* Recurse. The device check against IFF_LOOPBACK will stop infinite recursion */
@@ -2504,7 +2494,8 @@ int ip_build_xmit(struct sock *sk,
 		skb->arp = 0;
 		skb->saddr = saddr;
 		skb->raddr = (rt&&rt->rt_gateway) ? rt->rt_gateway : daddr;
-		skb->len = fraglen;
+		skb_reserve(skb,dev->hard_header_len);
+		data = skb_put(skb, fraglen-dev->hard_header_len);
 
 		/*
 		 *	Save us ARP and stuff. In the optimal case we do no route lookup (route cache ok)
@@ -2520,8 +2511,8 @@ int ip_build_xmit(struct sock *sk,
 		}
 		else if (dev->hard_header)
 		{
-			if(dev->hard_header(skb->data, dev, ETH_P_IP, 
-						NULL, NULL, 0,  NULL)>0)
+			if(dev->hard_header(skb, dev, ETH_P_IP, 
+						NULL, NULL, 0)>0)
 				skb->arp=1;
 		}
 		
@@ -2529,7 +2520,6 @@ int ip_build_xmit(struct sock *sk,
 		 *	Find where to start putting bytes.
 		 */
 		 
-		data = (char *)skb->data + dev->hard_header_len;
 		iph = (struct iphdr *)data;
 
 		/*

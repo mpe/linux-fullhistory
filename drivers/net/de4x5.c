@@ -1153,16 +1153,15 @@ de4x5_rx(struct device *dev)
 	struct sk_buff *skb;
 	short pkt_len = (short)(lp->rx_ring[entry].status >> 16) - 4;
 
-	if ((skb = alloc_skb(pkt_len, GFP_ATOMIC)) != NULL) {
-	  skb->len = pkt_len;
+	if ((skb = dev_alloc_skb(pkt_len)) != NULL) {
 	  skb->dev = dev;
 	
 	  if (entry < lp->rx_old) {         /* Wrapped buffer */
 	    short len = (lp->rxRingSize - lp->rx_old) * RX_BUFF_SZ;
-	    memcpy(skb->data, bus_to_virt(lp->rx_ring[lp->rx_old].buf), len);
-	    memcpy(skb->data + len, bus_to_virt(lp->rx_ring[0].buf), pkt_len - len);
+	    memcpy(skb_put(skb,len), bus_to_virt(lp->rx_ring[lp->rx_old].buf), len);
+	    memcpy(skb_put(skb,pkt_len-len), bus_to_virt(lp->rx_ring[0].buf), pkt_len - len);
 	  } else {                          /* Linear buffer */
-	    memcpy(skb->data, bus_to_virt(lp->rx_ring[lp->rx_old].buf), pkt_len);
+	    memcpy(skb_put(skb,pkt_len), bus_to_virt(lp->rx_ring[lp->rx_old].buf), pkt_len);
 	  }
 
 	  /* Push up the protocol stack */
@@ -2498,39 +2497,41 @@ static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
   switch(ioc->cmd) {
   case DE4X5_GET_HWADDR:             /* Get the hardware address */
+    ioc->len = ETH_ALEN;
+    status = verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len);
+    if (status)
+      break;
     for (i=0; i<ETH_ALEN; i++) {
       tmp.addr[i] = dev->dev_addr[i];
     }
-    ioc->len = ETH_ALEN;
-    if (!(status = verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, tmp.addr, ioc->len);
-    }
-
+    memcpy_tofs(ioc->data, tmp.addr, ioc->len);
+    
     break;
   case DE4X5_SET_HWADDR:             /* Set the hardware address */
-    if (suser()) {
-      if (!(status = verify_area(VERIFY_READ, (void *)ioc->data, ETH_ALEN))) {
-	memcpy_fromfs(tmp.addr, ioc->data, ETH_ALEN);
-	for (i=0; i<ETH_ALEN; i++) {
-	  dev->dev_addr[i] = tmp.addr[i];
-	}
-	build_setup_frame(dev, PHYS_ADDR_ONLY);
-	/* Set up the descriptor and give ownership to the card */
-	while (set_bit(0, (void *)&dev->tbusy) != 0);/* Wait for lock to free*/
-	if (lp->setup_f == HASH_PERF) {
-	  load_packet(dev, lp->setup_frame, TD_IC | HASH_F | TD_SET | 
-		                                        SETUP_FRAME_LEN, NULL);
-	} else {
-	  load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
-		                                        SETUP_FRAME_LEN, NULL);
-	}
-	lp->tx_new = (++lp->tx_new) % lp->txRingSize;
-	outl(POLL_DEMAND, DE4X5_TPD);                /* Start the TX */
-	dev->tbusy = 0;                              /* Unlock the TX ring */
-      }
-    } else {
-      status = -EPERM;
+    status = verify_area(VERIFY_READ, (void *)ioc->data, ETH_ALEN);
+    if (status)
+      break;
+    status = -EPERM;
+    if (!suser())
+      break;
+    status = 0;
+    memcpy_fromfs(tmp.addr, ioc->data, ETH_ALEN);
+    for (i=0; i<ETH_ALEN; i++) {
+      dev->dev_addr[i] = tmp.addr[i];
     }
+    build_setup_frame(dev, PHYS_ADDR_ONLY);
+    /* Set up the descriptor and give ownership to the card */
+    while (set_bit(0, (void *)&dev->tbusy) != 0);/* Wait for lock to free*/
+    if (lp->setup_f == HASH_PERF) {
+      load_packet(dev, lp->setup_frame, TD_IC | HASH_F | TD_SET | 
+    	                                        SETUP_FRAME_LEN, NULL);
+    } else {
+      load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
+    	                                        SETUP_FRAME_LEN, NULL);
+    }
+    lp->tx_new = (++lp->tx_new) % lp->txRingSize;
+    outl(POLL_DEMAND, DE4X5_TPD);                /* Start the TX */
+    dev->tbusy = 0;                              /* Unlock the TX ring */
 
     break;
   case DE4X5_SET_PROM:               /* Set Promiscuous Mode */
@@ -2559,9 +2560,10 @@ static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     break;
   case DE4X5_GET_MCA:                /* Get the multicast address table */
     ioc->len = (HASH_TABLE_LEN >> 3);
-    if (!(status = verify_area(VERIFY_WRITE, ioc->data, 192))) {
-      memcpy_tofs(ioc->data, lp->setup_frame, 192); 
-    }
+    status = verify_area(VERIFY_WRITE, ioc->data, ioc->len);
+    if (status)
+      break;
+    memcpy_tofs(ioc->data, lp->setup_frame, ioc->len); 
 
     break;
   case DE4X5_SET_MCA:                /* Set a multicast address */
@@ -2598,11 +2600,13 @@ static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     break;
   case DE4X5_GET_STATS:              /* Get the driver statistics */
-    cli();
     ioc->len = sizeof(lp->pktStats);
-    if (!(status = verify_area(VERIFY_WRITE, (void *)ioc->data, sizeof(lp->pktStats)))) {
-      memcpy_tofs(ioc->data, &lp->pktStats, ioc->len); 
-    }
+    status = verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len);
+    if (status)
+      break;
+
+    cli();
+    memcpy_tofs(ioc->data, &lp->pktStats, ioc->len); 
     sti();
 
     break;

@@ -168,15 +168,15 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 		bool 'EtherExpress support' CONFIG_EEXPRESS n
 		bool 'NI5210 support' CONFIG_NI52 n
 		bool 'NI6510 support' CONFIG_NI65 n
+		if [ "$CONFIG_AX25" = "y" ]; then
+			bool 'Ottawa PI and PI/2 support' CONFIG_PI y
+		fi
 		bool 'WaveLAN support' CONFIG_WAVELAN n
 	fi
 	bool 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS n
 	bool 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN n
 	bool 'HP 10/100VG PCLAN (257X series) support' CONFIG_HP100 y
 	bool 'NE2000/NE1000 support' CONFIG_NE2000 y
-	if [ "$CONFIG_AX25" = "y" ]; then
-		bool 'Ottawa PI and PI/2 support' CONFIG_PI y
-	fi
 	bool 'SK_G16 support' CONFIG_SK_G16 n
 fi
 bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA n

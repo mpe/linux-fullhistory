@@ -140,6 +140,11 @@
  *		Alan Cox	:	Cache last socket.
  *		Alan Cox	:	Per route irtt.
  *		Matt Day	:	Select() match BSD precisely on error
+ *		Alan Cox	:	New buffers
+ *		Mark Tamsky	:	Various sk->prot->retransmits and 
+ *					sk->retransmits misupdating fixed.
+ *					Fixed tcp_write_timeout: stuck close,
+ *					and TCP syn retries gets used now.
  *
  *
  * To Fix:
@@ -517,6 +522,8 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 
 		ct++;
 		sk->prot->retransmits ++;
+		tcp_statistics.TcpRetransSegs++;
+		
 
 		/*
 		 *	Only one retransmit requested.
@@ -582,6 +589,7 @@ void tcp_retransmit_time(struct sock *sk, int all)
 	 */
 
 	sk->retransmits++;
+	sk->prot->retransmits++;
 	sk->backoff++;
 	sk->rto = min(sk->rto << 1, 120*HZ);
 	reset_xmit_timer(sk, TIME_WRITE, sk->rto);
@@ -632,6 +640,22 @@ static int tcp_write_timeout(struct sock *sk)
 		arp_destroy (sk->daddr, 0);
 		/*ip_route_check (sk->daddr);*/
 	}
+	
+	/*
+	 *	Have we tried to SYN too many times (repent repent 8))
+	 */
+	 
+	if(sk->retransmits > TCP_SYN_RETRIES && sk->state==TCP_SYN_SENT)
+	{
+		sk->err=ETIMEDOUT;
+		sk->error_report(sk);
+		del_timer(&sk->retransmit_timer);
+		tcp_statistics.TcpAttemptFails++;	/* Is this right ??? - FIXME - */
+		tcp_set_state(sk,TCP_CLOSE);
+		/* Don't FIN, we got nothing back */
+		release_sock(sk);
+		return 0;
+	}
 	/*
 	 *	Has it gone just too far ?
 	 */
@@ -654,6 +678,7 @@ static int tcp_write_timeout(struct sock *sk)
 			 *	Clean up time.
 			 */
 			tcp_set_state(sk, TCP_CLOSE);
+			release_sock(sk);
 			return 0;
 		}
 	}
@@ -759,6 +784,7 @@ static void retransmit_timer(unsigned long data)
 			if (sk->prot->write_wakeup)
 				  sk->prot->write_wakeup (sk);
 			sk->retransmits++;
+			sk->prot->retransmits++;
 			tcp_write_timeout(sk);
 			break;
 		default:
@@ -1291,10 +1317,8 @@ static void tcp_send_ack(u32 sequence, u32 ack,
 	 *	Assemble a suitable TCP frame
 	 */
 	 
-	buff->len = sizeof(struct tcphdr);
 	buff->sk = sk;
 	buff->localroute = sk->localroute;
-	t1 =(struct tcphdr *) buff->data;
 
 	/* 
 	 *	Put in the IP header and routing stuff. 
@@ -1305,11 +1329,10 @@ static void tcp_send_ack(u32 sequence, u32 ack,
 	if (tmp < 0) 
 	{
   		buff->free = 1;
-		sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
+		sk->prot->wfree(sk, buff);
 		return;
 	}
-	buff->len += tmp;
-	t1 =(struct tcphdr *)((char *)t1 +tmp);
+	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
 
 	memcpy(t1, th, sizeof(*t1));
 
@@ -1403,7 +1426,6 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 	int tmp;
 	struct sk_buff *skb;
 	struct sk_buff *send_tmp;
-	unsigned char *buff;
 	struct proto *prot;
 	struct device *dev = NULL;
 
@@ -1533,8 +1555,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 			  		copy = 0;
 				}
 	  
-				memcpy_fromfs(skb->data + skb->len, from, copy);
-				skb->len += copy;
+				memcpy_fromfs(skb_put(skb,copy), from, copy);
 				from += copy;
 				copied += copy;
 				len -= copy;
@@ -1639,12 +1660,9 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 			continue;
 		}
 
-		skb->len = 0;
 		skb->sk = sk;
 		skb->free = 0;
 		skb->localroute = sk->localroute|(flags&MSG_DONTROUTE);
-	
-		buff = skb->data;
 	
 		/*
 		 * FIXME: we need to optimize this.
@@ -1652,23 +1670,21 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 		 */
 		
 		tmp = prot->build_header(skb, sk->saddr, sk->daddr, &dev,
-				 IPPROTO_TCP, sk->opt, skb->mem_len,sk->ip_tos,sk->ip_ttl);
+				 IPPROTO_TCP, sk->opt, skb->truesize,sk->ip_tos,sk->ip_ttl);
 		if (tmp < 0 ) 
 		{
-			prot->wfree(sk, skb->mem_addr, skb->mem_len);
+			prot->wfree(sk, skb);
 			release_sock(sk);
 			if (copied) 
 				return(copied);
 			return(tmp);
 		}
-		skb->len += tmp;
 		skb->dev = dev;
-		buff += tmp;
-		skb->h.th =(struct tcphdr *) buff;
-		tmp = tcp_build_header((struct tcphdr *)buff, sk, len-copy);
+		skb->h.th =(struct tcphdr *)skb_put(skb,sizeof(struct tcphdr));
+		tmp = tcp_build_header(skb->h.th, sk, len-copy);
 		if (tmp < 0) 
 		{
-			prot->wfree(sk, skb->mem_addr, skb->mem_len);
+			prot->wfree(sk, skb);
 			release_sock(sk);
 			if (copied) 
 				return(copied);
@@ -1677,16 +1693,15 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 
 		if (flags & MSG_OOB) 
 		{
-			((struct tcphdr *)buff)->urg = 1;
-			((struct tcphdr *)buff)->urg_ptr = ntohs(copy);
+			skb->h.th->urg = 1;
+			skb->h.th->urg_ptr = ntohs(copy);
 		}
-		skb->len += tmp;
-		memcpy_fromfs(buff+tmp, from, copy);
 
+		memcpy_fromfs(skb_put(skb,copy), from, copy);
+		
 		from += copy;
 		copied += copy;
 		len -= copy;
-		skb->len += copy;
 		skb->free = 0;
 		sk->write_seq += copy;
 	
@@ -1778,7 +1793,6 @@ static void tcp_read_wakeup(struct sock *sk)
 		return;
  	}
 
-	buff->len = sizeof(struct tcphdr);
 	buff->sk = sk;
 	buff->localroute = sk->localroute;
 	
@@ -1791,12 +1805,11 @@ static void tcp_read_wakeup(struct sock *sk)
 	if (tmp < 0) 
 	{
   		buff->free = 1;
-		sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
+		sk->prot->wfree(sk, buff);
 		return;
 	}
 
-	buff->len += tmp;
-	t1 =(struct tcphdr *)(buff->data +tmp);
+	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
 
 	memcpy(t1,(void *) &sk->dummy_th, sizeof(*t1));
 	t1->seq = htonl(sk->sent_seq);
@@ -2285,9 +2298,7 @@ static void tcp_send_fin(struct sock *sk)
 	 */
 	 
 	buff->sk = sk;
-	buff->len = sizeof(*t1);
 	buff->localroute = sk->localroute;
-	t1 =(struct tcphdr *) buff->data;
 
 	/*
 	 *	Put in the IP header and routing stuff. 
@@ -2305,7 +2316,7 @@ static void tcp_send_fin(struct sock *sk)
   		 */
   		 
 	  	buff->free = 1;
-		prot->wfree(sk,buff->mem_addr, buff->mem_len);
+		prot->wfree(sk,buff);
 		sk->write_seq++;
 		t=del_timer(&sk->timer);
 		if(t)
@@ -2320,8 +2331,7 @@ static void tcp_send_fin(struct sock *sk)
 	 *	if so simply add the fin to that buffer, not send it ahead.
 	 */
 
-	t1 =(struct tcphdr *)((char *)t1 +tmp);
-	buff->len += tmp;
+	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
 	buff->dev = dev;
 	memcpy(t1, th, sizeof(*t1));
 	t1->seq = ntohl(sk->write_seq);
@@ -2473,12 +2483,9 @@ static void tcp_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *t
 	if (buff == NULL) 
 	  	return;
 
-	buff->len = sizeof(*t1);
 	buff->sk = NULL;
 	buff->dev = dev;
 	buff->localroute = 0;
-
-	t1 =(struct tcphdr *) buff->data;
 
 	/*
 	 *	Put in the IP header and routing stuff. 
@@ -2489,12 +2496,11 @@ static void tcp_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *t
 	if (tmp < 0) 
 	{
   		buff->free = 1;
-		prot->wfree(NULL, buff->mem_addr, buff->mem_len);
+		prot->wfree(NULL, buff);
 		return;
 	}
 
-	t1 =(struct tcphdr *)((char *)t1 +tmp);
-	buff->len += tmp;
+	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
 	memcpy(t1, th, sizeof(*t1));
 
 	/*
@@ -2825,11 +2831,8 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		return;
 	}
   
-	buff->len = sizeof(struct tcphdr)+4;
 	buff->sk = newsk;
 	buff->localroute = newsk->localroute;
-
-	t1 =(struct tcphdr *) buff->data;
 
 	/*
 	 *	Put in the IP header and routing stuff. 
@@ -2856,8 +2859,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		return;
 	}
 
-	buff->len += tmp;
-	t1 =(struct tcphdr *)((char *)t1 +tmp);
+	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
   
 	memcpy(t1, skb->h.th, sizeof(*t1));
 	buff->h.seq = newsk->write_seq;
@@ -2879,7 +2881,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	t1->syn = 1;
 	t1->ack_seq = ntohl(skb->h.th->seq+1);
 	t1->doff = sizeof(*t1)/4+1;
-	ptr =(unsigned char *)(t1+1);
+	ptr = skb_put(buff,4);
 	ptr[0] = 2;
 	ptr[1] = 4;
 	ptr[2] = ((newsk->mtu) >> 8) & 0xff;
@@ -2894,8 +2896,8 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 *	Charge the sock_buff to newsk. 
 	 */
 	 
-	sk->rmem_alloc -= skb->mem_len;
-	newsk->rmem_alloc += skb->mem_len;
+	sk->rmem_alloc -= skb->truesize;
+	newsk->rmem_alloc += skb->truesize;
 	
 	skb_queue_tail(&sk->receive_queue,skb);
 	sk->ack_backlog++;
@@ -3766,7 +3768,8 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 	u32 new_seq, shut_seq;
 
 	th = skb->h.th;
-	skb->len = len -(th->doff*4);
+	skb_pull(skb,th->doff*4);
+	skb_trim(skb,len-(th->doff*4));
 
 	/*
 	 *	The bytes in the receive read/assembly queue has increased. Needed for the
@@ -4265,12 +4268,10 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 		return(-ENOMEM);
 	}
 	sk->inuse = 1;
-	buff->len = 24;
 	buff->sk = sk;
 	buff->free = 0;
 	buff->localroute = sk->localroute;
 	
-	t1 = (struct tcphdr *) buff->data;
 
 	/*
 	 *	Put in the IP header and routing stuff. 
@@ -4287,13 +4288,12 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 					IPPROTO_TCP, NULL, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl);
 	if (tmp < 0) 
 	{
-		sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
+		sk->prot->wfree(sk, buff);
 		release_sock(sk);
 		return(-ENETUNREACH);
 	}
 
-	buff->len += tmp;
-	t1 = (struct tcphdr *)((char *)t1 +tmp);
+	t1 = (struct tcphdr *) skb_put(buff,sizeof(struct tcphdr));
 
 	memcpy(t1,(void *)&(sk->dummy_th), sizeof(*t1));
 	t1->seq = ntohl(sk->write_seq++);
@@ -4344,7 +4344,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	 *	Put in the TCP options to say MTU. 
 	 */
 
-	ptr = (unsigned char *)(t1+1);
+	ptr = skb_put(buff,4);
 	ptr[0] = 2;
 	ptr[1] = 4;
 	ptr[2] = (sk->mtu) >> 8;
@@ -4365,7 +4365,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	sk->retransmit_timer.function=&retransmit_timer;
 	sk->retransmit_timer.data = (unsigned long)sk;
 	reset_xmit_timer(sk, TIME_WRITE, sk->rto);	/* Timer for repeating the SYN until an answer */
-	sk->retransmits = TCP_SYN_RETRIES;
+	sk->retransmits = 0;	/* Now works the right way instead of a hacked initial setting */
 
 	sk->prot->queue_xmit(sk, dev, buff, 0);  
 	reset_xmit_timer(sk, TIME_WRITE, sk->rto);
@@ -4464,6 +4464,7 @@ static int tcp_std_reset(struct sock *sk, struct sk_buff *skb)
 
 /*
  *	A TCP packet has arrived.
+ *		skb->h.raw is the TCP header.
  */
  
 int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
@@ -4514,6 +4515,10 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 	if (!redo) 
 	{
+		/*
+		 *	Pull up the IP header.
+		 */
+		skb_pull(skb, skb->h.raw-skb->data);
 		if (tcp_check(th, len, saddr, daddr )) 
 		{
 			skb->sk = NULL;
@@ -4541,7 +4546,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			return(0);
 		}
 
-		skb->len = len;
+/*		skb->len = len;*/
 		skb->acked = 0;
 		skb->used = 0;
 		skb->free = 0;
@@ -4582,7 +4587,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Charge the memory to the socket. 
 	 */
 	 
-	if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) 
+	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf) 
 	{
 		kfree_skb(skb, FREE_READ);
 		release_sock(sk);
@@ -4590,7 +4595,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	}
 
 	skb->sk=sk;
-	sk->rmem_alloc += skb->mem_len;
+	sk->rmem_alloc += skb->truesize;
 
 	/*
 	 *	This basically follows the flow suggested by RFC793, with the corrections in RFC1122. We
@@ -4754,7 +4759,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			if(sk->debug)
 				printk("Doing a BSD time wait\n");
 			tcp_statistics.TcpEstabResets++;	   
-			sk->rmem_alloc -= skb->mem_len;
+			sk->rmem_alloc -= skb->truesize;
 			skb->sk = NULL;
 			sk->err=ECONNRESET;
 			tcp_set_state(sk, TCP_CLOSE);
@@ -4765,7 +4770,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			{
 				sk->inuse=1;
 				skb->sk = sk;
-				sk->rmem_alloc += skb->mem_len;
+				sk->rmem_alloc += skb->truesize;
 				tcp_conn_request(sk, skb, daddr, saddr,opt, dev,seq+128000);
 				release_sock(sk);
 				return 0;
@@ -4885,8 +4890,7 @@ static void tcp_write_wakeup(struct sock *sk)
 	{
 		return;
 	}
-
-	if (before(sk->sent_seq, sk->window_seq) && 
+	if ( before(sk->sent_seq, sk->window_seq) && 
 	    (skb=skb_peek(&sk->write_queue)))
 	{
 		/*
@@ -4901,11 +4905,23 @@ static void tcp_write_wakeup(struct sock *sk)
 	    	unsigned long win_size, ow_size;
 	    	void * tcp_data_start;
 	
+		/*
+		 *	How many bytes can we send ?
+		 */
+		 
 		win_size = sk->window_seq - sk->sent_seq;
 
+		/*
+		 *	Recover the buffer pointers
+		 */
+		 
 	    	iph = (struct iphdr *)(skb->data + skb->dev->hard_header_len);
 	    	th = (struct tcphdr *)(((char *)iph) +(iph->ihl << 2));
 
+		/*
+		 *	Grab the data for a temporary frame
+		 */
+		 
 	    	buff = sk->prot->wmalloc(sk, win_size + th->doff * 4 + 
 				     (iph->ihl << 2) +
 				     skb->dev->hard_header_len, 
@@ -4913,46 +4929,67 @@ static void tcp_write_wakeup(struct sock *sk)
 	    	if ( buff == NULL )
 	    		return;
 
-	    	buff->len = 0;
-
 	 	/* 
 	 	 *	If we strip the packet on the write queue we must
 	 	 *	be ready to retransmit this one 
 	 	 */
 	    
-	    	buff->free = 0;
+	    	buff->free = /*0*/1;
 
 	    	buff->sk = sk;
 	    	buff->localroute = sk->localroute;
+	    	
+	    	/*
+	    	 *	Put headers on the new packet
+	    	 */
 
 	    	tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
-					 IPPROTO_TCP, sk->opt, buff->mem_len,
+					 IPPROTO_TCP, sk->opt, buff->truesize,
 					 sk->ip_tos,sk->ip_ttl);
 	    	if (tmp < 0) 
 	    	{
-			sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
+			sk->prot->wfree(sk, buff);
 			return;
 		}
+		
+		/*
+		 *	Move the TCP header over
+		 */
 
-		buff->len += tmp;
 		buff->dev = dev;
 
-		nth = (struct tcphdr *) (buff->data + buff->len);
-		buff->len += th->doff * 4;
+		nth = (struct tcphdr *) skb_put(buff,th->doff*4);
 
 		memcpy(nth, th, th->doff * 4);
-
+		
+		/*
+		 *	Correct the new header
+		 */
+		 
 		nth->ack = 1; 
 		nth->ack_seq = ntohl(sk->acked_seq);
 		nth->window = ntohs(tcp_select_window(sk));
 		nth->check = 0;
 
+		/*
+		 *	Find the first data byte.
+		 */
+		 
 		tcp_data_start = skb->data + skb->dev->hard_header_len + 
 				(iph->ihl << 2) + th->doff * 4;
 
-		memcpy(buff->data + buff->len, tcp_data_start, win_size);
-		buff->len += win_size;
+		/*
+		 *	Add it to our new buffer
+		 */
+		memcpy(skb_put(buff,win_size), tcp_data_start, win_size);
+		
+		/*
+		 *	Remember our right edge sequence number.
+		 */
+		 
 	    	buff->h.seq = sk->sent_seq + win_size;
+	    	sk->sent_seq = buff->h.seq;		/* Hack */
+#if 0
 
 	    	/*
 	    	 *	now: shrink the queue head segment 
@@ -4963,10 +5000,9 @@ static void tcp_write_wakeup(struct sock *sk)
 	    		((unsigned long) (tcp_data_start - (void *) skb->data));
 
 		memmove(tcp_data_start, tcp_data_start + win_size, ow_size);
-	    	skb->len -= win_size;
+	    	skb_trim(skb,skb->len-win_size);
 	    	sk->sent_seq += win_size;
 	    	th->seq = htonl(sk->sent_seq);
-
 	    	if (th->urg)
 	    	{
 			unsigned short urg_ptr;
@@ -4981,22 +5017,27 @@ static void tcp_write_wakeup(struct sock *sk)
 		    		nth->urg_ptr = htons(win_size);
 		  	}
 	      	}
+#else
+		if(th->urg && ntohs(th->urg_ptr) < win_size)
+			nth->urg = 0;
+#endif	      	
 
+		/*
+		 *	Checksum the split buffer
+		 */
+		 
 	    	tcp_send_check(nth, sk->saddr, sk->daddr, 
 			   nth->doff * 4 + win_size , sk);
 	}
 	else
-	{
+	{	
 		buff = sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
 		if (buff == NULL) 
 			return;
 
-		buff->len = sizeof(struct tcphdr);
 		buff->free = 1;
 		buff->sk = sk;
 		buff->localroute = sk->localroute;
-
-		t1 = (struct tcphdr *) buff->data;
 
 		/*
 		 *	Put in the IP header and routing stuff. 
@@ -5006,13 +5047,11 @@ static void tcp_write_wakeup(struct sock *sk)
 				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl);
 		if (tmp < 0) 
 		{
-			sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
+			sk->prot->wfree(sk, buff);
 			return;
 		}
 
-		buff->len += tmp;
-		t1 = (struct tcphdr *)((char *)t1 +tmp);
-
+		t1 = (struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
 		memcpy(t1,(void *) &sk->dummy_th, sizeof(*t1));
 
 		/*

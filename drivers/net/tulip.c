@@ -600,7 +600,7 @@ tulip_rx(struct device *dev)
 			short pkt_len = lp->rx_ring[entry].status >> 16;
 			struct sk_buff *skb;
 
-			skb = alloc_skb(pkt_len, GFP_ATOMIC);
+			skb = dev_alloc_skb(pkt_len);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, deferring packet.\n", dev->name);
 				/* Check that at least two ring entries are free.
@@ -616,9 +616,8 @@ tulip_rx(struct device *dev)
 				}
 				break;
 			}
-			skb->len = pkt_len;
 			skb->dev = dev;
-			memcpy(skb->data, lp->rx_ring[entry].buffer1, pkt_len);
+			memcpy(skb_put(skb,pkt_len), lp->rx_ring[entry].buffer1, pkt_len);
 			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;

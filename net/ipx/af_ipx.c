@@ -33,9 +33,10 @@
  *			Asynchronous I/O support.
  *			Changed to use notifiers and the newer packet_type stuff.
  *			Assorted major fixes <Alejandro Liu>
- *	Revision 0.30:	Moved to net/ipx/...
+ *	Revision 0.30:	Moved to net/ipx/...	<Alan Cox>
  *			Don't set address length on recvfrom that errors.
  *			Incorrect verify_area.
+ *	Revision 0.31:	New sk_buffs. This still needs a lot of testing. <Alan Cox>
  *
  *	TODO:	use sock_alloc_send_skb to allocate sending buffers. Check with Caldera first
  *
@@ -344,7 +345,6 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 	ipx_packet	*ipx = (ipx_packet *)(skb->h.raw);
 	ipx_socket	*sock1 = NULL, *sock2 = NULL;
 	struct sk_buff	*skb1 = NULL, *skb2 = NULL;
-	int		ipx_offset;
 
 	sock1 = ipxitf_find_socket(intrfc, ipx->ipx_dest.sock);
 
@@ -381,8 +381,6 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 		return 0;
 	}
 
-	ipx_offset = (char *)(skb->h.raw) - (char *)(skb->data);
-
 	/* This next segment of code is a little awkward, but it sets it up
 	 * so that the appropriate number of copies of the SKB are made and 
 	 * that skb1 and skb2 point to it (them) so that it (they) can be 
@@ -392,7 +390,6 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 	if (copy) {
 		skb1 = skb_clone(skb, GFP_ATOMIC);
 		if (skb1 != NULL) {
-			skb1->h.raw = (unsigned char *)&(skb1->data[ipx_offset]);
 			skb1->arp = skb1->free = 1;
 		}
 	} else {
@@ -405,7 +402,6 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 	if (sock1 && sock2) {
 		skb2 = skb_clone(skb1, GFP_ATOMIC);
 		if (skb2 != NULL) {
-			skb2->h.raw = (unsigned char *)&(skb2->data[ipx_offset]);
 			skb2->arp = skb2->free = 1;
 		}
 	} else {
@@ -431,16 +427,19 @@ ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 	struct sk_buff	*skb2;
 	int	in_offset = skb->h.raw - skb->data;
 	int	out_offset = intrfc->if_ipx_offset;
+#if 0
 	char	*oldraw;
+#endif	
 	int	len;
 
 	/* Hopefully, most cases */
-	if (in_offset == out_offset) {
-		skb->len += out_offset;
+	if (in_offset >= out_offset) {
+/*		skb_push(skb,out_offset);*/
 		skb->arp = skb->free = 1;
 		return skb;
 	}
 
+#if 0
 	/* Existing SKB will work, just need to move things around a little */
 	if (in_offset > out_offset) {
 		oldraw = skb->h.raw;
@@ -450,13 +449,14 @@ ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 		skb->arp = skb->free = 1;
 		return skb;
 	}
+#endif	
 
 	/* Need new SKB */
 	len = skb->len + out_offset;
 	skb2 = alloc_skb(len, GFP_ATOMIC);
 	if (skb2 != NULL) {
-		skb2->h.raw = &(skb2->data[out_offset]);
-		skb2->len = len;
+		skb_reserve(skb2,out_offset);
+		skb2->h.raw=skb_put(skb2,skb->len);
 		skb2->free=1;
 		skb2->arp=1;
 		memcpy(skb2->h.raw, skb->h.raw, skb->len);
@@ -530,7 +530,7 @@ ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 		/* This is an outbound packet from this host.  We need to 
 		 * increment the write count.
 		 */
-		skb->sk->wmem_alloc += skb->mem_len;
+		skb->sk->wmem_alloc += skb->truesize;
 	}
 
 	/* Send it out */
@@ -1011,12 +1011,12 @@ ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, void *ubuf, int 
 	if(skb==NULL) return -ENOMEM;
 		
 	skb->sk=sk;
-	skb->len=size;
+	skb_reserve(skb,ipx_offset);
 	skb->free=1;
 	skb->arp=1;
 
 	/* Fill in IPX header */
-	ipx=(ipx_packet *)&(skb->data[ipx_offset]);
+	ipx=(ipx_packet *)skb_put(skb,sizeof(ipx_packet));
 	ipx->ipx_checksum=0xFFFF;
 	ipx->ipx_pktsize=htons(len+sizeof(ipx_packet));
 	ipx->ipx_tctrl=0;
@@ -1030,7 +1030,7 @@ ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, void *ubuf, int 
 	memcpy(ipx->ipx_dest.node,usipx->sipx_node,IPX_NODE_LEN);
 	ipx->ipx_dest.sock=usipx->sipx_port;
 
-	memcpy_fromfs((char *)(ipx+1),ubuf,len);
+	memcpy_fromfs(skb_put(skb,len),ubuf,len);
 	return ipxitf_send(intrfc, skb, (rt && rt->ir_routed) ? 
 				rt->ir_router_node : ipx->ipx_dest.node);
 }
@@ -1634,6 +1634,13 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	ipx_interface	*intrfc;
 	ipx_packet *ipx;
 	
+	
+	/*
+	 *	Throw away the MAC layer
+	 */
+	 
+	skb_pull(skb,dev->hard_header_len);
+	
 	ipx=(ipx_packet *)skb->h.raw;
 	
 	if(ipx->ipx_checksum!=IPX_NO_CHECKSUM) {
@@ -1947,7 +1954,7 @@ void ipx_proto_init(struct net_proto *pro)
 	
 	register_netdevice_notifier(&ipx_dev_notifier);
 		
-	printk("Swansea University Computer Society IPX 0.30 for NET3.029\n");
+	printk("Swansea University Computer Society IPX 0.31 for NET3.030\n");
 	printk("IPX Portions Copyright (c) 1995 Caldera, Inc.\n");
 }
 #endif

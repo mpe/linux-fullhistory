@@ -510,6 +510,7 @@ static void a_rxint(struct device *dev, struct pi_local *lp)
     struct sk_buff *skb;
     int sksize, pkt_len;
     struct mbuf *cur_buf;
+    unsigned char *cfix;
 
     save_flags(flags);
     cli();			/* disable interrupts */
@@ -550,22 +551,23 @@ static void a_rxint(struct device *dev, struct pi_local *lp)
 	    /* Malloc up new buffer. */
 	    sksize = pkt_len;
 
-	    skb = alloc_skb(sksize, GFP_ATOMIC);
+	    skb = dev_alloc_skb(sksize);
 	    if (skb == NULL) {
 		printk("PI: %s: Memory squeeze, dropping packet.\n", dev->name);
 		lp->stats.rx_dropped++;
 		restore_flags(flags);
 		return;
 	    }
-	    skb->len = (unsigned long) pkt_len;
 	    skb->dev = dev;
 
 	    /* KISS kludge -  prefix with a 0 byte */
-	    skb->data[0] = 0;
+	    cfix=skb_put(skb,pkt_len);
+	    *cfix++=0;
 	    /* 'skb->data' points to the start of sk_buff data area. */
-	    memcpy(&skb->data[1], (char *) cur_buf->data,
+	    memcpy(cfix, (char *) cur_buf->data,
 		   pkt_len - 1);
-	    skb->protocol=ntohs(ETH_P_AX25);
+	    skb->protocol=htons(ETH_P_AX25);
+	    IS_SKB(skb);
 	    netif_rx(skb);
 	    lp->stats.rx_packets++;
 	}			/* end good frame */
@@ -582,6 +584,7 @@ static void b_rxint(struct device *dev, struct pi_local *lp)
     struct sk_buff *skb;
     int sksize;
     int pkt_len;
+    unsigned char *cfix;
 
     save_flags(flags);
     cli();			/* disable interrupts */
@@ -636,21 +639,22 @@ static void b_rxint(struct device *dev, struct pi_local *lp)
 
 		/* Malloc up new buffer. */
 		sksize = pkt_len;
-		skb = alloc_skb(sksize, GFP_ATOMIC);
+		skb = dev_alloc_skb(sksize);
 		if (skb == NULL) {
 		    printk("PI: %s: Memory squeeze, dropping packet.\n", dev->name);
 		    lp->stats.rx_dropped++;
 		    restore_flags(flags);
 		    return;
 		}
-		skb->len = pkt_len;
 		skb->dev = dev;
 
 		/* KISS kludge -  prefix with a 0 byte */
-		skb->data[0] = 0;
+		cfix=skb_put(skb,pkt_len);
+		*cfix++=0;
 		/* 'skb->data' points to the start of sk_buff data area. */
-		memcpy(&skb->data[1], lp->rcvbuf->data, pkt_len - 1);
+		memcpy(cfix, lp->rcvbuf->data, pkt_len - 1);
 		skb->protocol=ntohs(ETH_P_AX25);
+		IS_SKB(skb);
 		netif_rx(skb);
 		lp->stats.rx_packets++;
 		/* packet queued - initialize buffer for next frame */
@@ -1068,10 +1072,10 @@ static void rts(struct pi_local *lp, int x)
 }
 
 /* Fill in the MAC-level header. */
-static int pi_header(unsigned char *buff, struct device *dev, unsigned short type,
-	     void *daddr, void *saddr, unsigned len, struct sk_buff *skb)
+static int pi_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+	     void *daddr, void *saddr, unsigned len)
 {
-    return ax25_encapsulate(buff, dev, type, daddr, saddr, len, skb);
+    return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
 }
 
 /* Rebuild the MAC-level header. */
@@ -1424,13 +1428,10 @@ static int pi_probe(struct device *dev, int card_type)
     dev->rebuild_header = pi_rebuild_header;
     dev->set_mac_address = pi_set_mac_address;
 
-    dev->type = AF_AX25;	/* AF_AX25 device */
+    dev->type = ARPHRD_AX25;	/* AF_AX25 device */
     dev->hard_header_len = 17;	/* We don't do digipeaters */
     dev->mtu = 1500;		/* eth_mtu is the default */
     dev->addr_len = 7;		/* sizeof an ax.25 address */
-    for (i = 0; i < ETH_ALEN; i++) {
-	dev->broadcast[i] = 0xff;
-    }
     memcpy(dev->broadcast, ax25_bcast, 7);
     memcpy(dev->dev_addr, ax25_test, 7);
 

@@ -112,7 +112,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 	 *	Find the original IP header.
 	 */
 	 
-	iph = (struct iphdr *) (skb_in->data + dev->hard_header_len);
+	iph = (struct iphdr *) skb_in->data;
 	
 	/*
 	 *	No replies to MAC multicast
@@ -243,7 +243,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 	 *	Re-adjust length according to actual IP header size. 
 	 */
 
-	skb->len = offset + sizeof(struct icmphdr) + sizeof(struct iphdr) + 8;
+	skb_put(skb,sizeof(struct icmphdr) + sizeof(struct iphdr) + 8);
 	
 	/*
 	 *	Fill in the frame
@@ -350,7 +350,9 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb)
 static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
 	struct device *dev, unsigned long source)
 {
+#ifndef CONFIG_IP_FORWARD
 	struct rtable *rt;
+#endif
 	struct iphdr *iph;
 	unsigned long ip;
 
@@ -377,7 +379,7 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
 			 */
 #ifdef not_a_good_idea
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_GATEWAY),
-				ip, 0, icmph->un.gateway, dev,0, 0);
+				ip, 0, icmph->un.gateway, dev,0, 0, 0);
 			break;
 #endif
 		case ICMP_REDIR_HOST:
@@ -398,7 +400,7 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
 				break;
 			printk("ICMP redirect from %s\n", in_ntoa(source));
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_HOST | RTF_GATEWAY),
-				ip, 0, icmph->un.gateway, dev,0, 0, 0);
+				ip, 0, icmph->un.gateway, dev,0, 0, 0, 0);
 			break;
 		case ICMP_REDIR_NETTOS:
 		case ICMP_REDIR_HOSTTOS:
@@ -459,7 +461,7 @@ static void icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device 
 	 *	Re-adjust length according to actual IP header size. 
 	 */
 	 
-	skb2->len = offset + len;
+	skb_put(skb2,len);
 
 	/*
 	 *	Build ICMP_ECHO Response message. 
@@ -497,15 +499,13 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	unsigned long *timeptr, midtime;
 	struct device *ndev=NULL;
 
-        if (len != 20)
+        if (len < 12)
 	{
 		printk(
 		  "ICMP: Size (%d) of ICMP_TIMESTAMP request should be 20!\n",
 		  len);
 		icmp_statistics.IcmpInErrors++;		
                 /* correct answers are possible for everything >= 12 */
-	  	if (len < 12)
-			return;
 	}
 
 	size = dev->hard_header_len + 84;
@@ -537,7 +537,7 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	/*
 	 *	Re-adjust length according to actual IP header size. 
 	 */
-	skb2->len = offset + 20;
+	skb_put(skb2,20);
  
 	/*
 	 *	Build ICMP_TIMESTAMP Response message. 
@@ -628,7 +628,7 @@ static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	 *	Re-adjust length according to actual IP header size. 
 	 */
 
-	skb2->len = offset + len;
+	skb_put(skb2,len);
 
 	/*
 	 *	Build ICMP ADDRESS MASK Response message. 

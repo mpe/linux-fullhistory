@@ -313,15 +313,14 @@ sl_bump(struct slip *sl)
 	}
 #endif  /* SL_INCLUDE_CSLIP */
 
-	skb = alloc_skb(count, GFP_ATOMIC);
+	skb = dev_alloc_skb(count);
 	if (skb == NULL)  {
 		printk("%s: memory squeeze, dropping packet.\n", sl->dev->name);
 		sl->rx_dropped++;
 		return;
 	}
-	skb->len = count;
 	skb->dev = sl->dev;
-	memcpy(skb->data, sl->rbuff, count);
+	memcpy(skb_put(skb,count), sl->rbuff, count);
 	if(sl->mode&(SL_MODE_AX25|SL_MODE_AX25VC))
 		skb->protocol=htons(ETH_P_AX25);
 	else
@@ -493,15 +492,15 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 
 /* Fill in the MAC-level header. Not used by SLIP. */
 static int
-sl_header(unsigned char *buff, struct device *dev, unsigned short type,
-	  void *daddr, void *saddr, unsigned len, struct sk_buff *skb)
+sl_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+	  void *daddr, void *saddr, unsigned len)
 {
 #ifdef CONFIG_AX25
 #ifdef CONFIG_INET
 	struct slip *sl = &sl_ctrl[dev->base_addr];
 
 	if (((sl->mode & SL_MODE_AX25) || (sl->mode & SL_MODE_AX25VC)) && type != htons(ETH_P_AX25))  {
-		return ax25_encapsulate(buff, dev, type, daddr, saddr, len, skb);
+		return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
 	}
 #endif
 #endif
@@ -988,7 +987,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 
 	switch(cmd) {
 	 case SIOCGIFNAME:
-		err = verify_area(VERIFY_WRITE, arg, 16);
+		err = verify_area(VERIFY_WRITE, arg, strlen(sl->dev->name) + 1);
 		if (err)  {
 			return -err;
 		}

@@ -1229,6 +1229,8 @@ void si_swapinfo(struct sysinfo *val)
 	return;
 }
 
+#define LONG_ALIGN(x) (((x)+(sizeof(long))-1)&~((sizeof(long))-1))
+
 /*
  * set up the free-area data structures:
  *   - mark all pages MAP_PAGE_RESERVED
@@ -1252,7 +1254,7 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	start_mem = init_swap_cache(start_mem, end_mem);
 	mem_map = (mem_map_t *) start_mem;
 	p = mem_map + MAP_NR(end_mem);
-	start_mem = (unsigned long) p;
+	start_mem = LONG_ALIGN((unsigned long) p);
 	while (p > mem_map)
 		*--p = MAP_PAGE_RESERVED;
 
@@ -1263,7 +1265,7 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 		end_mem = (end_mem + ~mask) & mask;
 		bitmap_size = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT + i);
 		bitmap_size = (bitmap_size + 7) >> 3;
-		bitmap_size = (bitmap_size + sizeof(unsigned long) - 1) & ~(sizeof(unsigned long)-1);
+		bitmap_size = LONG_ALIGN(bitmap_size);
 		free_area_map[i] = (unsigned char *) start_mem;
 		memset((void *) start_mem, 0, bitmap_size);
 		start_mem += bitmap_size;

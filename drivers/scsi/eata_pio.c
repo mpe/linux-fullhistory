@@ -878,7 +878,7 @@ void find_pio_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 {
 
 #ifndef CONFIG_PCI
-    printk("Kernel PCI support not enabled. Skipping scan for PCI HBAs.\n");
+    printk("eata_pio: kernel PCI support not enabled. Skipping scan for PCI HBAs.\n");
 #else
     
     u8 pci_bus, pci_device_fn;
@@ -964,9 +964,9 @@ void find_pio_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 		       "PCI_BASE_ADDRESS_0\n", error);
 	}
     } else
-	printk("No BIOS32 extensions present. This eata_pio release "
+	printk("eata_pio: No BIOS32 extensions present. This driver release "
 	       "still depends on it.\n"
-	       "Skipping scan for PCI HBAs. Sorry.\n");
+	       "          Skipping scan for PCI HBAs.\n");
 #endif /* #ifndef CONFIG_PCI */
     return;
 }
@@ -981,11 +981,6 @@ int eata_pio_detect(Scsi_Host_Template * tpnt)
     DBG((DBG_PROBE && DBG_DELAY) || DPT_DEBUG,
 	printk("Using lots of delays to let you read the debugging output\n"));
     
-#ifndef DBG_EISA
-
-printk("DBG_EISA not defined !!!\n");
-
-#endif
 
     find_pio_PCI(&gc, tpnt);
 

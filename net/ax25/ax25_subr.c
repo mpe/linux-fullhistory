@@ -46,6 +46,8 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 
+/* #define	NO_BACKOFF	*/
+
 /*
  * This routine purges the input queue of frames.
  */
@@ -140,26 +142,26 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int type)
 {
 	struct sk_buff *skb;
 	unsigned char  *dptr;
-	int len;
 	struct device *dev;
+	int asize;
 	
 	if ((dev = ax25->device) == NULL)
 		return;	/* Route died */
 
-	if ((skb = alloc_skb(16 + 1 + size_ax25_addr(ax25->digipeat), GFP_ATOMIC)) == NULL)
+	asize= 1+size_ax25_addr(ax25->digipeat);
+	
+	if ((skb = alloc_skb(16 + asize, GFP_ATOMIC)) == NULL)
 		return;
-
+	skb_reserve(skb, asize);
+	
 	if (ax25->sk != NULL) {
 		skb->sk = ax25->sk;
-        	ax25->sk->wmem_alloc += skb->mem_len;
+        	ax25->sk->wmem_alloc += skb->truesize;
 	}
 
-	dptr = skb->data;
-	
-	dptr += 1 + size_ax25_addr(ax25->digipeat);	/* KISS byte & 2 calls */
-
 	/* Assume a response - address structure for DTE */
-	len = 1;		/* Normal size */
+	dptr = skb_put(skb,1);
+	
 	
 	if ((frametype & U) == S)		/* S frames carry NR */
 		frametype |= (ax25->vr << 5);
@@ -167,8 +169,7 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int type)
 	*dptr = frametype;
 
 	skb->free = 1;
-	skb->len  = len + size_ax25_addr(ax25->digipeat) + 1;
-
+	skb_push(skb,asize);
 	ax25_transmit_buffer(ax25, skb, type);
 }
 
@@ -187,19 +188,23 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 	if ((skb = alloc_skb(len, GFP_ATOMIC)) == NULL)
 		return;	/* Next SABM will get DM'd */
 
-	skb->len = len;
+	skb_reserve(skb,len-1);
 
 	ax25_digi_invert(digi, &retdigi);
 
-	dptr = skb->data + 1 + size_ax25_addr(digi);
+	dptr = skb_put(skb,1);
 	skb->sk = NULL;
 
-	*dptr = DM;
+	*dptr = DM | PF;
 
 	if (dev == NULL)
 		return;
 
-	dptr    = skb->data;
+	/*
+	 *	Do the address ourselves.
+	 */
+
+	dptr    = skb_push(skb, len-1);
 	*dptr++ = 0;
 	dptr   += build_ax25_addr(dptr, dest, src, &retdigi, C_RESPONSE);
 
@@ -214,12 +219,17 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
  */
 unsigned short ax25_calculate_t1(ax25_cb *ax25)
 {
-	int t, n;
-	
-	for (t = 2, n = 0; n < ax25->n2count; n++)
-		t *= 2;
-		
+#ifndef NO_BACKOFF
+	int n, t = 2;
+
+	if (ax25->backoff)
+		for (n = 0; n < ax25->n2count; n++)
+			t *= 2;
+
 	return t * ax25->rtt;
+#else
+	return 2 * ax25->rtt;
+#endif
 }
 
 /*
@@ -227,7 +237,7 @@ unsigned short ax25_calculate_t1(ax25_cb *ax25)
  */
 void ax25_calculate_rtt(ax25_cb *ax25)
 {
-	if (ax25->n2count == 0)
+	if (ax25->t1timer > 0 && ax25->n2count == 0)
 		ax25->rtt = (9 * ax25->rtt + ax25->t1 - ax25->t1timer) / 10;
 
 	/* Don't go below one second */

@@ -1086,7 +1086,7 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 {
 
 #ifndef CONFIG_PCI
-    printk("Kernel PCI support not enabled. Skipping scan for PCI HBAs.\n");
+    printk("eata_dma: kernel PCI support not enabled. Skipping scan for PCI HBAs.\n");
 #else
     
     u8 pci_bus, pci_device_fn;
@@ -1175,8 +1175,9 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 		       "PCI_BASE_ADDRESS_0\n", error);
 	}
     } else
-	printk("No BIOS32 extensions present. This eata_dma release "
-	       "still depends on it.\nSkipping scan for PCI HBAs. Sorry.\n");
+	printk("eata_dma: No BIOS32 extensions present. This driver release "
+	       "still depends on it.\n"
+               "          Skipping scan for PCI HBAs. \n");
 #endif /* #ifndef CONFIG_PCI */
     return;
 }

@@ -77,6 +77,7 @@ extern int ipx_get_interface_info(char *, char **, off_t , int);
 #ifdef CONFIG_AX25
 extern int ax25_get_info(char *, char **, off_t, int);
 extern int ax25_rt_get_info(char *, char **, off_t, int);
+extern int ax25_cs_get_info(char *, char **, off_t, int);
 #ifdef CONFIG_NETROM
 extern int nr_get_info(char *, char **, off_t, int);
 extern int nr_nodes_get_info(char *, char **, off_t, int);
@@ -165,6 +166,7 @@ static struct proc_dir_entry net_dir[] = {
 #ifdef CONFIG_AX25
 	{ PROC_NET_AX25_ROUTE,	10, "ax25_route" },
 	{ PROC_NET_AX25,	4, "ax25" },
+	{ PROC_NET_AX25_CALLS,	10, "ax25_calls" },
 #ifdef CONFIG_NETROM
 	{ PROC_NET_NR_NODES,	8, "nr_nodes" },
 	{ PROC_NET_NR_NEIGH,	8, "nr_neigh" },
@@ -345,6 +347,9 @@ static int proc_readnet(struct inode * inode, struct file * file,
 				break;
 			case PROC_NET_AX25:
 				length = ax25_get_info(page,&start,file->f_pos,thistime);
+				break;
+			case PROC_NET_AX25_CALLS:
+				length = ax25_cs_get_info(page,&start,file->f_pos,thistime);
 				break;
 #ifdef CONFIG_NETROM
 			case PROC_NET_NR_NODES:

@@ -29,6 +29,7 @@ struct full_sockaddr_ax25
 #define AX25_N2		3
 #define AX25_T3		4
 #define AX25_T2		5
+#define	AX25_BACKOFF	6
 
 #define SIOCAX25GETUID		(SIOCPROTOPRIVATE)
 #define SIOCAX25ADDUID		(SIOCPROTOPRIVATE+1)

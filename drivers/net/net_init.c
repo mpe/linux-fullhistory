@@ -159,6 +159,17 @@ init_etherdev(struct device *dev, int sizeof_priv, unsigned long *mem_startp)
 	return dev;
 }
 
+
+static int eth_mac_addr(struct device *dev, void * addr)
+{
+	struct ifreq * ifr = (struct ifreq *) addr;
+
+	if(dev->start)
+		return -EBUSY;
+	memcpy(dev->dev_addr, ifr->ifr_hwaddr.sa_data,dev->hard_header_len);
+	return 0;
+}
+
 void ether_setup(struct device *dev)
 {
 	int i;
@@ -182,6 +193,7 @@ void ether_setup(struct device *dev)
 
 	dev->hard_header	= eth_header;
 	dev->rebuild_header = eth_rebuild_header;
+	dev->set_mac_address = eth_mac_addr;
 
 	dev->type		= ARPHRD_ETHER;
 	dev->hard_header_len = ETH_HLEN;

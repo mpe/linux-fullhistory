@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 002
+ *	NET/ROM release 003
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -14,6 +14,7 @@
  *
  *	History
  *	NET/ROM 001	Jonathan(G4KLX)	Cloned from ax25_subr.c
+ *	NET/ROM	003	Jonathan(G4KLX)	Added G8BPQ NET/ROM extensions.
  */
  
 #include <linux/config.h>
@@ -150,11 +151,11 @@ void nr_write_internal(struct sock *sk, int frametype)
 {
 	struct sk_buff *skb;
 	unsigned char  *dptr;
-	int len;
+	int len, timeout;
 	
 	switch (frametype & 0x0F) {
-		case NR_CONNREQ: len = 52; break;
-		case NR_CONNACK: len = 38; break;
+		case NR_CONNREQ: len = 54; break;
+		case NR_CONNACK: len = (sk->nr->bpqext) ? 39 : 38; break;
 		case NR_DISCREQ: len = 37; break;
 		case NR_DISCACK: len = 37; break;
 		case NR_INFOACK: len = 37; break;
@@ -166,11 +167,17 @@ void nr_write_internal(struct sock *sk, int frametype)
 	if ((skb = alloc_skb(len, GFP_ATOMIC)) == NULL)
 		return;
 
-	dptr = skb->data + 32;
+	/*
+	 *	Space for AX.25
+	 */
+	skb_reserve(skb,17);
+	
+	dptr = skb_put(skb,len-17);
 
 	switch (frametype & 0x0F) {
 
 		case NR_CONNREQ:
+			timeout = (sk->nr->rtt / PR_SLOWHZ) * 2;
 			*dptr++ = sk->nr->my_index;
 			*dptr++ = sk->nr->my_id;
 			*dptr++ = 0;
@@ -186,6 +193,9 @@ void nr_write_internal(struct sock *sk, int frametype)
 			dptr[6] &= ~LAPB_C;
 			dptr[6] &= ~LAPB_E;
 			dptr[6] |= SSID_SPARE;
+			dptr += 7;
+			*dptr++ = timeout % 256;
+			*dptr++ = timeout / 256;
 			break;
 
 		case NR_CONNACK:
@@ -195,6 +205,7 @@ void nr_write_internal(struct sock *sk, int frametype)
 			*dptr++ = sk->nr->my_id;
 			*dptr++ = frametype;
 			*dptr++ = sk->window;
+			if (sk->nr->bpqext) *dptr++ = nr_default.ttl;
 			break;
 
 		case NR_DISCREQ:
@@ -216,7 +227,6 @@ void nr_write_internal(struct sock *sk, int frametype)
 	}
 
 	skb->free = 1;
-	skb->len  = len;
 
 	nr_transmit_buffer(sk, skb);
 }
@@ -233,7 +243,8 @@ void nr_transmit_dm(struct sk_buff *skb)
 	if ((skbn = alloc_skb(38, GFP_ATOMIC)) == NULL)
 		return;
 
-	dptr = skbn->data + 16;
+	skb_reserve(skbn,17);
+	dptr = skb_put(skbn,21);
 
 	*dptr++ = AX25_P_NETROM;
 	
@@ -259,7 +270,6 @@ void nr_transmit_dm(struct sk_buff *skb)
 	*dptr++ = 0;
 
 	skbn->free = 1;
-	skbn->len  = 38;
 	skbn->sk   = NULL;
 
 	if (!nr_route_frame(skbn, NULL))
@@ -284,7 +294,7 @@ unsigned short nr_calculate_t1(struct sock *sk)
  */
 void nr_calculate_rtt(struct sock *sk)
 {
-	if (sk->nr->n2count == 0)
+	if (sk->nr->t1timer > 0 && sk->nr->n2count == 0)
 		sk->nr->rtt = (9 * sk->nr->rtt + sk->nr->t1 - sk->nr->t1timer) / 10;
 
 	/* Don't go below one second */

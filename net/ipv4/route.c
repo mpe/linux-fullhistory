@@ -28,6 +28,7 @@
  *		Alan Cox	:	Removed compatibility cruft.
  *		Alan Cox	:	RTF_REJECT support.
  *		Alan Cox	:	TCP irtt support.
+ *		Jonathan Naylor	:	Added Metric support.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -209,7 +210,7 @@ static inline struct device * get_gw_dev(unsigned long gw)
  */
  
 void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
-	unsigned long gw, struct device *dev, unsigned short mtu, unsigned long window, unsigned short irtt)
+	unsigned long gw, struct device *dev, unsigned short mtu, unsigned long window, unsigned short irtt, unsigned char metric)
 {
 	struct rtable *r, *rt;
 	struct rtable **rp;
@@ -282,6 +283,7 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	rt->rt_gateway = gw;
 	rt->rt_mask = mask;
 	rt->rt_mss = dev->mtu - HEADER_SIZE;
+	rt->rt_metric = metric;
 	rt->rt_window = 0;	/* Default is no clamping */
 
 	/* Are the MSS/Window valid ? */
@@ -312,7 +314,8 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	while ((r = *rp) != NULL) 
 	{
 		if (r->rt_dst != dst || 
-		    r->rt_mask != mask) 
+		    r->rt_mask != mask ||
+		    r->rt_metric < metric)
 		{
 			rp = &r->rt_next;
 			continue;
@@ -472,7 +475,7 @@ static int rt_new(struct rtentry *r)
 	 *	Add the route
 	 */
 	 
-	ip_rt_add(flags, daddr, mask, gw, dev, r->rt_mss, r->rt_window, r->rt_irtt);
+	ip_rt_add(flags, daddr, mask, gw, dev, r->rt_mss, r->rt_window, r->rt_irtt, r->rt_metric);
 	return 0;
 }
 

@@ -12,8 +12,8 @@ pEII_datalink_header(struct datalink_proto *dl,
 	unsigned long	len = skb->len;
 	unsigned long	hard_len = dev->hard_header_len;
 
-	dev->hard_header(skb->data, dev, ETH_P_IPX,
-			dest_node, NULL, len - hard_len, skb);
+	dev->hard_header(skb, dev, ETH_P_IPX,
+			dest_node, NULL, len - hard_len);
 	skb->h.raw = skb->data + hard_len;
 }
 

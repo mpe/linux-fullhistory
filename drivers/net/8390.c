@@ -455,7 +455,7 @@ static void ei_receive(struct device *dev)
 		} else if ((rx_frame.status & 0x0F) == ENRSR_RXOK) {
 			struct sk_buff *skb;
 			
-			skb = alloc_skb(pkt_len, GFP_ATOMIC);
+			skb = dev_alloc_skb(pkt_len);
 			if (skb == NULL) {
 				if (ei_debug > 1)
 					printk("%s: Couldn't allocate a sk_buff of size %d.\n",
@@ -463,10 +463,9 @@ static void ei_receive(struct device *dev)
 				ei_local->stat.rx_dropped++;
 				break;
 			} else {
-				skb->len = pkt_len;
 				skb->dev = dev;
 				
-				ei_block_input(dev, pkt_len, (char *) skb->data,
+				ei_block_input(dev, pkt_len, skb_put(skb,pkt_len),
 							   current_offset + sizeof(rx_frame));
 				skb->protocol=eth_type_trans(skb,dev);
 				netif_rx(skb);

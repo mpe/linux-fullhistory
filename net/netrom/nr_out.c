@@ -1,5 +1,5 @@
 /*
- *	NET/ROM release 002
+ *	NET/ROM release 003
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -61,7 +61,7 @@ static void nr_send_iframe(struct sock *sk, struct sk_buff *skb)
 	if (skb == NULL)
 		return;
 
-	dptr = skb->data + 34;
+	dptr = skb->data + 17;
 	
 	*dptr++ = sk->nr->vs;
 	*dptr++ = sk->nr->vr;
@@ -150,7 +150,11 @@ void nr_transmit_buffer(struct sock *sk, struct sk_buff *skb)
 {
 	unsigned char *dptr;
 
-	dptr = skb->data + 16;
+	/*
+	 *	Add the protocol byte
+	 */
+	 
+	dptr = skb_push(skb,1);
 
 	*dptr++ = AX25_P_NETROM;
 	

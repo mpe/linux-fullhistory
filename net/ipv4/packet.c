@@ -82,13 +82,10 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	sk = (struct sock *) pt->data;	
 
 	/*
-	 *	The SOCK_PACKET socket receives _all_ frames, and as such 
-	 *	therefore needs to put the header back onto the buffer.
-	 *	(it was removed by inet_bh()).
+	 *	The SOCK_PACKET socket receives _all_ frames.
 	 */
 	 
 	skb->dev = dev;
-	skb->len += dev->hard_header_len;
 
 	/*
 	 *	Charge the memory to the socket. This is done specifically
@@ -100,9 +97,9 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 		sk->rmem_alloc = 0;
 	}
 
-	if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) 
+	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf) 
 	{
-/*	        printk("packet_rcv: drop, %d+%d>%d\n", sk->rmem_alloc, skb->mem_len, sk->rcvbuf); */
+/*	        printk("packet_rcv: drop, %d+%d>%d\n", sk->rmem_alloc, skb->truesize, sk->rcvbuf); */
 		skb->sk = NULL;
 		kfree_skb(skb, FREE_READ);
 		return(0);
@@ -112,7 +109,7 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	cli();
 
 	skb->sk = sk;
-	sk->rmem_alloc += skb->mem_len;	
+	sk->rmem_alloc += skb->truesize;	
 
 	/*
 	 *	Queue the packet up, and wake anyone waiting for it.
@@ -201,8 +198,7 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
 	 
 	skb->sk = sk;
 	skb->free = 1;
-	memcpy_fromfs(skb->data, from, len);
-	skb->len = len;
+	memcpy_fromfs(skb_put(skb,len), from, len);
 	skb->arp = 1;		/* No ARP needs doing on this (complete) frame */
 
 	/*
@@ -289,7 +285,6 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	struct sk_buff *skb;
 	struct sockaddr *saddr;
 	int err;
-	int truesize;
 
 	saddr = (struct sockaddr *)sin;
 
@@ -326,8 +321,7 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	 *	user program they can ask the device for its MTU anyway.
 	 */
 	 
-	truesize = skb->len;
-	copied = min(len, truesize);
+	copied = min(len, skb->len);
 
 	memcpy_tofs(to, skb->data, copied);	/* We can't use skb_copy_datagram here */
 	sk->stamp=skb->stamp;
@@ -354,7 +348,7 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	 */
 	 
 	release_sock(sk);
-	return(truesize);
+	return(copied);
 }
 
 

@@ -2089,7 +2089,8 @@ long con_init(long kmem_start)
 				outb_p (6, 0x3cf) ;
 #endif
 
-				/* normalise the palette registers, to point the                                 * 16 screen colours to the first 16 DAC entries */
+				/* normalise the palette registers, to point the
+				 * 16 screen colours to the first 16 DAC entries */
 
 				for (i=0; i<16; i++) {
 					inb_p (0x3da) ;
@@ -2400,7 +2401,11 @@ static int set_get_font(char * arg, int set, int ch512)
 
 	if (video_type == VIDEO_TYPE_EGAC || video_type == VIDEO_TYPE_VGAC) {
 		charmap = colourmap;
-		beg = (video_type == VIDEO_TYPE_VGAC ? 0x06 : 0x0e) ;
+		beg = 0x0e;
+#ifdef VGA_CAN_DO_64KB
+		if (video_type == VIDEO_TYPE_VGAC)
+			beg = 0x06;
+#endif
 	} else if (video_type == VIDEO_TYPE_EGAM) {
 		charmap = blackwmap;
 		beg = 0x0a;

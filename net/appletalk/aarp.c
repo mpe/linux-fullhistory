@@ -115,7 +115,7 @@ static void aarp_send_query(struct aarp_entry *a)
 	 
 	skb->arp	=	1;
 	skb->free	=	1;
-	skb->len	=	len;
+	skb_put(skb,len);
 	skb->dev	=	a->dev;
 	
 	/*
@@ -175,7 +175,7 @@ static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_ad
 	 
 	skb->arp	=	1;
 	skb->free	=	1;
-	skb->len	=	len;
+	skb_put(skb,len);
 	skb->dev	=	dev;
 	
 	/*
@@ -237,7 +237,7 @@ void aarp_send_probe(struct device *dev, struct at_addr *us)
 	 
 	skb->arp	=	1;
 	skb->free	=	1;
-	skb->len	=	len;
+	skb_put(skb,len);
 	skb->dev	=	dev;
 	
 	/*
@@ -576,11 +576,13 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 		return 0;
 	}
 	
+	skb_pull(skb,dev->hard_header_len);
+	
 	/*
 	 *	Frame size ok ?
 	 */
 	 
-	if(skb->len<sizeof(*ea))
+	if(skb_pull(skb,sizeof(*ea))<sizeof(*ea))
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;

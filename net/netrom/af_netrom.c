@@ -17,10 +17,10 @@
  *	NET/ROM 002	Darryl(G7LED)	Fixes and address enhancement.
  *			Jonathan(G4KLX)	Complete bind re-think.
  *			Alan(GW4PTS)	Trivial tweaks into new format.
+ *	NET/ROM	003	Jonathan(G4KLX)	Added G8BPQ extensions.
  *
  *	To do:
  *		Fix non-blocking connect failure.
- *		Make it use normal SIOCADDRT/DELRT not funny node ioctl() calls.
  */
   
 #include <linux/config.h>
@@ -290,7 +290,7 @@ static int nr_setsockopt(struct socket *sock, int level, int optname,
 		case NETROM_T1:
 			if (opt < 1)
 				return -EINVAL;
-			sk->nr->t1 = opt * PR_SLOWHZ;
+			sk->nr->rtt = (opt * PR_SLOWHZ) / 2;
 			return 0;
 
 		case NETROM_T2:
@@ -470,6 +470,7 @@ static int nr_create(struct socket *sock, int protocol)
 	nr->my_index   = 0;
 	nr->my_id      = 0;
 
+	nr->bpqext     = 1;
 	nr->state      = NR_STATE_0;
 
 	memset(&nr->source_addr, '\0', sizeof(ax25_address));
@@ -549,6 +550,8 @@ static struct sock *nr_make_new(struct sock *osk)
 	nr->t1       = osk->nr->t1;
 	nr->t2       = osk->nr->t2;
 	nr->n2       = osk->nr->n2;
+
+	nr->bpqext   = osk->nr->bpqext;
 
 	nr->t1timer  = 0;
 	nr->t2timer  = 0;
@@ -864,23 +867,27 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	struct sock *make;	
 	ax25_address *src, *dest, *user;
 	unsigned short circuit_index, circuit_id;
-	unsigned short frametype, window;
+	unsigned short frametype, window, timeout;
 
 	skb->sk = NULL;		/* Initially we don't know who its for */
 	
-	src  = (ax25_address *)(skb->data + 17);
-	dest = (ax25_address *)(skb->data + 24);
+	/*
+	 *	skb->data points to the netrom frame start
+	 */
+	 
+	src  = (ax25_address *)(skb->data);
+	dest = (ax25_address *)(skb->data + 7);
 
-	circuit_index = skb->data[32];
-	circuit_id    = skb->data[33];
-	frametype     = skb->data[36];
+	circuit_index = skb->data[15];
+	circuit_id    = skb->data[16];
+	frametype     = skb->data[19];
 
 #ifdef CONFIG_INET
 	/*
 	 * Check for an incoming IP over NET/ROM frame.
 	 */
 	 if ((frametype & 0x0F) == NR_PROTOEXT && circuit_index == NR_PROTO_IP && circuit_id == NR_PROTO_IP) {
-	 	skb->h.raw = skb->data + 37;
+	 	skb->h.raw = skb->data + 20;
 
 		return nr_rx_ip(skb, dev);
 	 }
@@ -891,10 +898,12 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	 * a Connect Request base it on their circuit ID.
 	 */
 	if (((frametype & 0x0F) != NR_CONNREQ && (sk = nr_find_socket(circuit_index, circuit_id, SOCK_SEQPACKET)) != NULL) ||
-	    ((frametype & 0x0F) == NR_CONNREQ && (sk = nr_find_peer(circuit_index, circuit_id, SOCK_SEQPACKET)) != NULL)) {
-		skb->h.raw = skb->data + 37;
-		skb->len  -= 20;
-
+	    ((frametype & 0x0F) == NR_CONNREQ && (sk = nr_find_peer(circuit_index, circuit_id, SOCK_SEQPACKET)) != NULL)) 
+	{
+		if((frametype & 0x0F) == NR_CONNACK && skb->len == 39)	/* ??? size check --FIXME-- */
+			sk->nr->bpqext = 1;
+		else
+			sk->nr->bpqext = 0;
 		return nr_process_rx_frame(sk, skb);
 	}
 
@@ -908,8 +917,8 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 
-	user   = (ax25_address *)(skb->data + 38);
-	window = skb->data[37];
+	user   = (ax25_address *)(skb->data + 11);
+	window = skb->data[20];
 
 	skb->sk             = make;
 	make->state         = TCP_ESTABLISHED;
@@ -930,6 +939,16 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	/* Window negotiation */
 	if (window < make->window)
 		make->window = window;
+
+	/* L4 timeout negotiation */
+	if (skb->len == 37) {
+		timeout = skb->data[53] * 256 + skb->data[52];
+		if (timeout * PR_SLOWHZ < make->nr->rtt * 2)
+			make->nr->rtt = (timeout * PR_SLOWHZ) / 2;
+		make->nr->bpqext = 1;
+	} else {
+		make->nr->bpqext = 0;
+	}
 
 	nr_write_internal(make, NR_CONNACK);
 
@@ -1007,9 +1026,13 @@ static int nr_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	skb->sk   = sk;
 	skb->free = 1;
 	skb->arp  = 1;
-	skb->len  = size;
+	skb_reserve(skb,37);
 	
-	asmptr = skb->data + 16;
+	/*
+	 *	Push down the NetROM header
+	 */
+	 
+	asmptr = skb_push(skb,20);
 
 	if (sk->debug)
 		printk("Building NET/ROM Header.\n");
@@ -1043,7 +1066,12 @@ static int nr_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	if (sk->debug)
 		printk("Built header.\n");
 
-	skb->h.raw = asmptr;
+	/*
+	 *	Put the data on the end.
+	 */
+	 
+	skb->h.raw = skb_put(skb,len);
+	asmptr=skb->h.raw;
 	
 	if (sk->debug)
 		printk("NET/ROM: Appending user data\n");
@@ -1100,15 +1128,16 @@ static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	if ((skb = skb_recv_datagram(sk, flags, noblock, &er)) == NULL)
 		return er;
 
-	copied = (size < skb->len) ? size : skb->len;
+	/* Allow for the 20 byte netrom header */
+	copied = (size < skb->len-20) ? size : skb->len-20;
 
-	skb_copy_datagram(skb, 0, ubuf, copied);
+	skb_copy_datagram(skb, 20, ubuf, copied);
 	
 	if (sax != NULL) {
 		struct sockaddr_ax25 addr;
 		
 		addr.sax25_family = AF_NETROM;
-		memcpy(&addr.sax25_call, skb->data + 24, sizeof(ax25_address));
+		memcpy(&addr.sax25_call, skb->data + 7, sizeof(ax25_address));
 
 		memcpy(sax, &addr, sizeof(*sax));
 
@@ -1169,7 +1198,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			struct sk_buff *skb;
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
-				amount = skb->len;
+				amount = skb->len-20;
 			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned long))) != 0)
 				return err;
 			put_fs_long(amount, (unsigned long *)arg);
@@ -1199,10 +1228,8 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCSIFMETRIC:
 			return -EINVAL;
 
-		case SIOCNRADDNODE:
-		case SIOCNRDELNODE:
-		case SIOCNRADDNEIGH:
-		case SIOCNRDELNEIGH:
+		case SIOCADDRT:
+		case SIOCDELRT:
 		case SIOCNRDECOBS:
 			if (!suser()) return -EPERM;
 			return nr_rt_ioctl(cmd, (void *)arg);
@@ -1324,7 +1351,7 @@ void nr_proto_init(struct net_proto *pro)
 {
 	sock_register(nr_proto_ops.family, &nr_proto_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
-	printk("G4KLX NET/ROM for Linux. Version 0.2 ALPHA for AX.25 029 for Linux 1.3.0\n");
+	printk("G4KLX NET/ROM for Linux. Version 0.3 ALPHA for AX25 029 Linux 1.3.0\n");
 
 	nr_default.quality    = NR_DEFAULT_QUAL;
 	nr_default.obs_count  = NR_DEFAULT_OBS;

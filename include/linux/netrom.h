@@ -5,27 +5,20 @@
 #define NETROM_T2	2
 #define NETROM_N2	3
 
-#define SIOCNRADDNODE		(SIOCPROTOPRIVATE)
-#define SIOCNRDELNODE		(SIOCPROTOPRIVATE+1)
-#define	SIOCNRADDNEIGH		(SIOCPROTOPRIVATE+2)
-#define	SIOCNRDELNEIGH		(SIOCPROTOPRIVATE+3)
-#define	SIOCNRGETPARMS		(SIOCPROTOPRIVATE+4)
-#define	SIOCNRSETPARMS		(SIOCPROTOPRIVATE+5)
-#define	SIOCNRDECOBS		(SIOCPROTOPRIVATE+6)
+#define	SIOCNRGETPARMS		(SIOCPROTOPRIVATE+0)
+#define	SIOCNRSETPARMS		(SIOCPROTOPRIVATE+1)
+#define	SIOCNRDECOBS		(SIOCPROTOPRIVATE+2)
 
-struct nr_node_struct {
+struct nr_route_struct {
+#define	NETROM_NEIGH	0
+#define	NETROM_NODE	1
+	int type;
 	ax25_address callsign;
+	char device[16];
+	unsigned int quality;
 	char mnemonic[7];
 	ax25_address neighbour;
-	char device[16];
-	unsigned int quality;
 	unsigned int obs_count;
-};
-
-struct nr_neigh_struct {
-	ax25_address callsign;
-	char device[16];
-	unsigned int quality;
 };
 
 struct nr_parms_struct {

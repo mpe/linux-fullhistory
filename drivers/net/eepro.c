@@ -1046,16 +1046,15 @@ eepro_rx(struct device *dev)
 			struct sk_buff *skb;
 
 			rcv_size &= 0x3fff;
-			skb = alloc_skb(rcv_size, GFP_ATOMIC);
+			skb = dev_alloc_skb(rcv_size);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 				lp->stats.rx_dropped++;
 				break;
 			}
-			skb->len = rcv_size;
 			skb->dev = dev;
 
-			insw(ioaddr+IO_PORT, skb->data, (rcv_size + 1) >> 1);
+			insw(ioaddr+IO_PORT, skb_put(skb,rcv_size), (rcv_size + 1) >> 1);
 	
 			skb->protocol = eth_type_trans(skb,dev);	
 			netif_rx(skb);

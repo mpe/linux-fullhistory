@@ -56,6 +56,7 @@
  *			Jonathan(G4KLX)		and removed all the old Berkeley, added IP mode registration.
  *			Darryl(G7LED)		stuff. Cross-port digipeating. Minor fixes and enhancements.
  *			Alan(GW4PTS)		Missed suser() on axassociate checks
+ *	AX.25 030	Alan(GW4PTS)		Switched to new buffers. Not tested netrom/new buffers yet.
  *
  *	To do:
  *		Support use as digipeater, including an on/off ioctl
@@ -63,6 +64,8 @@
  *		copy only when needed.
  *		Consider better arbitary protocol support.
  *		Fix non-blocking connect failure.
+ *		VC mode doesnt work on the PI card.
+ *		Settable protocol id for SEQPACKET sockets
  */
  
 #include <linux/config.h>
@@ -343,10 +346,10 @@ static void ax25_send_to_raw(struct sock *sk, struct sk_buff *skb, int proto)
 				return;
 
 			copy->sk = sk;
-			sk->rmem_alloc += copy->mem_len;
+			sk->rmem_alloc += copy->truesize;
 			skb_queue_tail(&sk->receive_queue, copy);
 			if (!sk->dead)
-				sk->data_ready(sk, skb->len - 2);
+				sk->data_ready(sk, skb->len);
 		}
 
 		sk = sk->next;
@@ -507,6 +510,7 @@ static ax25_cb *ax25_create_cb(void)
 	ax25->n2      = DEFAULT_N2;
 	ax25->t3      = DEFAULT_T3;
 
+	ax25->backoff   = 1;
 	ax25->condition = 0x00;
 	ax25->t1timer   = 0;
 	ax25->t2timer   = 0;
@@ -639,7 +643,7 @@ static int ax25_setsockopt(struct socket *sock, int level, int optname,
 		case AX25_T1:
 			if (opt < 1)
 				return -EINVAL;
-			sk->ax25->t1 = opt * PR_SLOWHZ;
+			sk->ax25->rtt = (opt * PR_SLOWHZ) / 2;
 			return 0;
 
 		case AX25_T2:
@@ -658,6 +662,10 @@ static int ax25_setsockopt(struct socket *sock, int level, int optname,
 			if (opt < 1)
 				return -EINVAL;
 			sk->ax25->t3 = opt * PR_SLOWHZ;
+			return 0;
+	
+		case AX25_BACKOFF:
+			sk->ax25->backoff = opt ? 1 : 0;
 			return 0;
 	
 		default:
@@ -699,6 +707,10 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname,
 						
 		case AX25_T3:
 			val = sk->ax25->t3 / PR_SLOWHZ;
+			break;
+	
+		case AX25_BACKOFF:
+			val = sk->ax25->backoff;
 			break;
 	
 		default:
@@ -874,14 +886,15 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	sk->write_space  = def_callback1;
 	sk->error_report = def_callback1;
 
-	ax25->rtt    = osk->ax25->rtt;
-	ax25->t1     = osk->ax25->t1;
-	ax25->t2     = osk->ax25->t2;
-	ax25->t3     = osk->ax25->t3;
-	ax25->n2     = osk->ax25->n2;
+	ax25->backoff = osk->ax25->backoff;
+	ax25->rtt     = osk->ax25->rtt;
+	ax25->t1      = osk->ax25->t1;
+	ax25->t2      = osk->ax25->t2;
+	ax25->t3      = osk->ax25->t3;
+	ax25->n2      = osk->ax25->n2;
 
-	ax25->window = osk->ax25->window;
-	ax25->device = dev;
+	ax25->window  = osk->ax25->window;
+	ax25->device  = dev;
 
 	memcpy(&ax25->source_addr, &osk->ax25->source_addr, sizeof(ax25_address));
 	
@@ -1227,7 +1240,7 @@ static int ax25_getname(struct socket *sock, struct sockaddr *uaddr,
  
 int ax25_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 {
-	unsigned char *data = skb->data;
+	unsigned char *data;
 	struct sock *make;
 	struct sock *sk;
 	int type = 0;
@@ -1236,6 +1249,12 @@ int ax25_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 	ax25_address src, dest;
 	struct sock *raw;
 	int mine = 0;
+	
+	data=skb->data;
+	
+	/*
+	 *	Process the AX.25/LAPB frame.
+	 */
 
 	skb->sk = NULL;		/* Initially we don't know who its for */
 	
@@ -1279,7 +1298,6 @@ int ax25_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 			}
 #endif
 			build_ax25_addr(skb->data + 1, &src, &dest, &dp, type);
-			skb->len += dev->hard_header_len;
 			skb->arp = 1;
 			dev_queue_xmit(skb, dev, SOPRI_NORMAL);			
 		} else {
@@ -1289,11 +1307,7 @@ int ax25_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 		return 0;
 	}
 
-	/*
-	 *	Adjust the lengths for digipeated input
-	 */
-	skb->len -= sizeof(ax25_address) * dp.ndigi;
-	
+	 
 	/* For our port addreses ? */
 	if (ax25cmp(&dest, (ax25_address *)dev->dev_addr) == 0)
 		mine = 1;
@@ -1311,7 +1325,8 @@ int ax25_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 		if ((raw = ax25_addr_match(&dest)) != NULL)
 			ax25_send_to_raw(raw, skb, (int)*data);
 
-		if (!mine && ax25cmp(&dest, (ax25_address *)dev->broadcast) != 0) {
+		if (!mine && ax25cmp(&dest, (ax25_address *)dev->broadcast) != 0) 
+		{
 			kfree_skb(skb, FREE_READ);
 			return 0;
 		}
@@ -1334,11 +1349,15 @@ int ax25_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 					if (sk->rmem_alloc >= sk->rcvbuf) {
 						kfree_skb(skb, FREE_READ);
 					} else {
+						/*
+						 *	Remove kiss/headers
+						 */
+						skb_pull(skb,3+size_ax25_addr(&dp));
 						skb_queue_tail(&sk->receive_queue, skb);
 						skb->sk = sk;
-						sk->rmem_alloc += skb->mem_len;
+						sk->rmem_alloc += skb->truesize;
 						if (!sk->dead)
-							sk->data_ready(sk, skb->len - 2);
+							sk->data_ready(sk, skb->len);
 					}
 				} else {
 					kfree_skb(skb, FREE_READ);
@@ -1354,6 +1373,12 @@ int ax25_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 	}
 	
 	/* LAPB */
+	
+	/*
+	 *	Pull of the AX.25 headers leaving the CTRL/PID bytes
+	 */
+	skb_pull(skb, 1+size_ax25_addr(&dp));
+	
 	if ((ax25 = ax25_find_cb(&dest, &src, dev)) != NULL) {
 		skb->h.raw = data;
 		/* Process the frame. If it is queued up internally it returns one otherwise we 
@@ -1457,7 +1482,7 @@ int ax25_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 
 	if (sk != NULL) {
 		if (!sk->dead)
-			sk->data_ready(sk, skb->len - 2);
+			sk->data_ready(sk, skb->len );
 	} else {
 		kfree_skb(skb, FREE_READ);
 	}
@@ -1559,9 +1584,8 @@ static int ax25_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	skb->sk   = sk;
 	skb->free = 1;
 	skb->arp  = 1;
-	skb->len  = size;
-	
-	asmptr = skb->data;
+	skb_reserve(skb, 3+size_ax25_addr(dp));
+	asmptr = skb_push(skb,3+size_ax25_addr(dp));
 	if (sk->debug) {
 		printk("Building AX.25 Header (dp=%p).\n", dp);
 		if (dp != 0)
@@ -1584,7 +1608,7 @@ static int ax25_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 		printk("AX.25: Appending user data\n");
 
 	/* User data follows immediately after the AX.25 data */
-	memcpy_fromfs(asmptr, ubuf, len);
+	memcpy_fromfs(skb_put(skb,len), ubuf, len);
 	if (sk->debug)
 		printk("AX.25: Transmitting buffer\n");
 	if (sk->type == SOCK_SEQPACKET) {
@@ -1621,6 +1645,7 @@ static int ax25_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	int copied = 0;
 	struct sk_buff *skb;
 	int er;
+	int bias=0;
 
 	if (sk->err) {
 		er      = -sk->err;
@@ -1632,15 +1657,19 @@ static int ax25_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 		*addr_len = sizeof(*sax);
 
 	/* This works for seqpacket too. The receiver has ordered the queue for us! We do one quick check first though */
-	if (sk->type == SOCK_SEQPACKET && sk->state != TCP_ESTABLISHED)
-		return -ENOTCONN;
+	if (sk->type == SOCK_SEQPACKET)
+	{
+		if(sk->state != TCP_ESTABLISHED)
+			return -ENOTCONN;
+		bias=2;
+	}
 
 	/* Now we can treat all alike */
 	if ((skb = skb_recv_datagram(sk, flags, noblock, &er)) == NULL)
 		return er;
 
-	copied= (size < skb->len) ? size : skb->len;
-	skb_copy_datagram(skb, sk->type == SOCK_SEQPACKET ? 2 : 0, ubuf, copied);
+	copied= (size < skb->len-bias) ? size : skb->len-bias;
+	skb_copy_datagram(skb, bias, ubuf, copied);
 	
 	if (sax) {
 		struct sockaddr_ax25 addr;
@@ -1907,10 +1936,11 @@ void ax25_proto_init(struct net_proto *pro)
 
 #ifdef CONFIG_INET
  
-int ax25_encapsulate(unsigned char *buff, struct device *dev, unsigned short type, void *daddr,
-		void *saddr, unsigned len, struct sk_buff *skb)
+int ax25_encapsulate(struct sk_buff *skb, struct device *dev, unsigned short type, void *daddr,
+		void *saddr, unsigned len)
 {
   	/* header is an AX.25 UI frame from us to them */
+ 	unsigned char *buff=skb_push(skb,17);
   	*buff++ = 0;	/* KISS DATA */
   	
 	if (daddr != NULL)

@@ -1,8 +1,8 @@
 /********************************************************
 * Header file for eata_pio.c Linux EATA-PIO SCSI driver *
-* (c) 1993,94,95 Michael Neuffer                        *
+* (c) 1993,94,95 Michael Neuffer			*
 *********************************************************
-* last change: 95/06/21                                 *
+* last change: 95/06/21					*
 ********************************************************/
 
 
@@ -19,38 +19,38 @@
 
 #define VER_MAJOR 0
 #define VER_MINOR 0
-#define VER_SUB   "1a"
+#define VER_SUB	  "1a"
 
 /************************************************************************
- * Here you can switch parts of the code on and of                      *
+ * Here you can switch parts of the code on and of			*
  ************************************************************************/
 
-#define VERBOSE_SETUP                   /* show startup screen of 2001 */
-#define ALLOW_DMA_BOARDS 1
+#define VERBOSE_SETUP			/* show startup screen of 2001 */
+#define ALLOW_DMA_BOARDS 0
 
 /************************************************************************
- * Debug options.                                                       * 
- * Enable DEBUG and whichever options you require.                      *
+ * Debug options.							* 
+ * Enable DEBUG and whichever options you require.			*
  ************************************************************************/
-#define DEBUG_EATA      1   /* Enable debug code.                       */
-#define DPT_DEBUG       0   /* Bobs special                             */
-#define DBG_DELAY       0   /* Build in delays so debug messages can be
-			     * be read before they vanish of the top of
-			     * the screen!
-			     */
-#define DBG_PROBE       0   /* Debug probe routines.                    */
-#define DBG_ISA         0   /* Trace ISA routines                       */ 
-#define DBG_EISA        0   /* Trace EISA routines                      */ 
-#define DBG_PCI         0   /* Trace PCI routines                       */ 
-#define DBG_PIO         0   /* Trace get_config_PIO                     */
-#define DBG_COM         0   /* Trace command call                       */
-#define DBG_QUEUE       0   /* Trace command queueing.                  */
-#define DBG_INTR        0   /* Trace interrupt service routine.         */
-#define DBG_INTR2       0   /* Trace interrupt service routine.         */
-#define DBG_PROC        0   /* Debug proc-fs related statistics         */
-#define DBG_PROC_WRITE  0
-#define DBG_REGISTER    0   /* */
-#define DBG_ABNORM      1   /* Debug abnormal actions (reset, abort)    */
+#define DEBUG_EATA	1   /* Enable debug code.			*/
+#define DPT_DEBUG	0   /* Bobs special				*/
+#define DBG_DELAY	0   /* Build in delays so debug messages can be
+                             * be read before they vanish of the top of
+                             * the screen!
+                             */
+#define DBG_PROBE	0   /* Debug probe routines.			*/
+#define DBG_ISA		0   /* Trace ISA routines			*/ 
+#define DBG_EISA	0   /* Trace EISA routines			*/ 
+#define DBG_PCI		0   /* Trace PCI routines			*/ 
+#define DBG_PIO		0   /* Trace get_config_PIO			*/
+#define DBG_COM		0   /* Trace command call			*/
+#define DBG_QUEUE	0   /* Trace command queueing.			*/
+#define DBG_INTR	0   /* Trace interrupt service routine.		*/
+#define DBG_INTR2	0   /* Trace interrupt service routine.		*/
+#define DBG_PROC	0   /* Debug proc-fs related statistics		*/
+#define DBG_PROC_WRITE	0
+#define DBG_REGISTER	0   /* */
+#define DBG_ABNORM	1   /* Debug abnormal actions (reset, abort)	*/
 
 #if DEBUG_EATA 
 #define DBG(x, y)   if ((x)) {y;} 
@@ -76,27 +76,27 @@ int eata_pio_release(struct Scsi_Host *);
 extern int generic_proc_info(char *, char **, off_t, int, int, int);
 
 
-#define EATA_PIO {                   \
-	NULL, NULL,                  \
-	eata_pio_proc_info,/* procinfo       */  \
-	"eata_pio",        /* proc dir entry */  \
-	PROC_SCSI_EATA_PIO,/* proc dir inode */  \
-	 "EATA (Extended Attachment) PIO driver",\
-	eata_pio_detect,             \
-	eata_pio_release,            \
-	NULL, NULL,                  \
-	eata_pio_queue,              \
-	eata_pio_abort,              \
-	eata_pio_reset,              \
-	NULL,   /* Slave attach */   \
-	scsicam_bios_param,          \
-	0,      /* Canqueue     */   \
-	0,      /* this_id      */   \
-	0,      /* sg_tablesize */   \
-	0,      /* cmd_per_lun  */   \
-	0,      /* present      */   \
-	1,      /* True if ISA  */   \
-	ENABLE_CLUSTERING }
+#define EATA_PIO {		     \
+    NULL, NULL,			 \
+    eata_pio_proc_info,/* procinfo	 */  \
+    "eata_pio",	       /* proc dir entry */  \
+    PROC_SCSI_EATA_PIO,/* proc dir inode */  \
+     "EATA (Extended Attachment) PIO driver",\
+    eata_pio_detect,		 \
+    eata_pio_release,		 \
+    NULL, NULL,			 \
+    eata_pio_queue,		 \
+    eata_pio_abort,		 \
+    eata_pio_reset,		 \
+    NULL,   /* Slave attach */	 \
+    scsicam_bios_param,		 \
+    0,	    /* Canqueue	    */	 \
+    0,	    /* this_id	    */	 \
+    0,	    /* sg_tablesize */	 \
+    0,	    /* cmd_per_lun  */	 \
+    0,	    /* present	    */	 \
+    1,	    /* True if ISA  */	 \
+    ENABLE_CLUSTERING }
 
 #endif /* _EATA_PIO_H */
 
@@ -115,6 +115,6 @@ extern int generic_proc_info(char *, char **, off_t, int, int, int);
  * c-continued-statement-offset: 4
  * c-continued-brace-offset: 0
  * indent-tabs-mode: nil
- * tab-width: 4
+ * tab-width: 8
  * End:
  */

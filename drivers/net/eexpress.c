@@ -941,18 +941,17 @@ eexp_rx(struct device *dev)
 			struct sk_buff *skb;
 
 			pkt_len &= 0x3fff;
-			skb = alloc_skb(pkt_len, GFP_ATOMIC);
+			skb = dev_alloc_skb(pkt_len);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 				lp->stats.rx_dropped++;
 				break;
 			}
-			skb->len = pkt_len;
 			skb->dev = dev;
 
 			outw(data_buffer_addr + 10, ioaddr + READ_PTR);
 
-			insw(ioaddr, skb->data, (pkt_len + 1) >> 1);
+			insw(ioaddr, skb_put(skb,pkt_len), (pkt_len + 1) >> 1);
 		
 			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb);

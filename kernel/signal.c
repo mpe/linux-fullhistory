@@ -69,7 +69,7 @@ asmlinkage int sys_sigpending(sigset_t *set)
 {
 	int error;
 	/* fill in "set" with signals pending but blocked. */
-	error = verify_area(VERIFY_WRITE, set, 4);
+	error = verify_area(VERIFY_WRITE, set, sizeof(sigset_t));
 	if (!error)
 		put_user(current->blocked & current->signal, set);
 	return error;
