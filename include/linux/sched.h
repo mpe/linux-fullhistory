@@ -322,16 +322,6 @@ struct task_struct {
 
 #define DEF_PRIORITY	(20*HZ/100)	/* 200 ms time slices */
 
-/* Note: This is very ugly I admit.  But some versions of gcc will
- *       dump core when an empty structure constant is parsed at
- *       the end of a large top level structure initialization. -DaveM
- */
-#ifdef __SMP__
-#define INIT_LOCKS	SPIN_LOCK_UNLOCKED
-#else
-#define INIT_LOCKS
-#endif
-
 /*
  *  INIT_TASK is used to set up the first task table, touch at
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
@@ -367,7 +357,7 @@ struct task_struct {
 /* fs */	&init_fs, \
 /* files */	&init_files, \
 /* mm */	&init_mm, \
-/* signals */	INIT_LOCKS, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
+/* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
 }
 
 union task_union {

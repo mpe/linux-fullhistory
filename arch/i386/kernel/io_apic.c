@@ -1108,9 +1108,8 @@ static inline void init_IO_APIC_traps(void)
 			/*
 			 * disable it in the 8259A:
 			 */
-			cached_irq_mask |= 1 << i;
 			if (i < 16)
-				set_8259A_irq_mask(i);
+				disable_8259A_irq(i);
 		}
 	}
 }

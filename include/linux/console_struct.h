@@ -9,12 +9,6 @@
  * to achieve effects such as fast scrolling by changing the origin.
  */
 
-/*
- * You can set here how should the cursor look by default.
- * In case you set CONFIG_SOFTCURSOR, this might be really interesting.
- */
-#define CUR_DEFAULT CUR_UNDERLINE
-
 #define NPAR 16
 
 struct vc_data {
@@ -108,3 +102,5 @@ extern struct vc vc_cons [MAX_NR_CONSOLES];
 #define CUR_BLOCK	6
 #define CUR_HWMASK	0x0f
 #define CUR_SWMASK	0xfff0
+
+#define CUR_DEFAULT CUR_UNDERLINE

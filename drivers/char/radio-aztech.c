@@ -113,7 +113,7 @@ static int az_setfreq(struct az_device *dev, unsigned long frequency)
 {
 	int  i;
 
-	frequency = (frequency / 16.0) * 100;	/* massage data a bit */
+	frequency = (frequency * 100) / 16;	/* massage data a bit */
   
 	frequency += 1070;		/* tuning needs 24 data bits  */
 	frequency /= 5;
@@ -177,8 +177,8 @@ static int az_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			if(v.tuner)	/* Only 1 tuner */ 
 				return -EINVAL;
-			v.rangelow=(int)(87.9*16);
-			v.rangehigh=(int)(107.8*16);
+			v.rangelow=(879*16)/10;
+			v.rangehigh=(1078*16)/10;
 			v.flags=0;
 			v.mode=VIDEO_MODE_AUTO;
 			v.signal=0xFFFF*az_getsigstr(az);

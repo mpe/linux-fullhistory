@@ -56,7 +56,7 @@ extern int handle_IRQ_event(unsigned int, struct pt_regs *);
 
 void mask_irq(unsigned int irq);
 void unmask_irq(unsigned int irq);
-void set_8259A_irq_mask (unsigned int irq);
+void disable_8259A_irq(unsigned int irq);
 int i8259A_irq_pending (unsigned int irq);
 void ack_APIC_irq (void);
 void setup_IO_APIC (void);
@@ -67,7 +67,6 @@ void init_pic_mode (void);
 void print_IO_APIC (void);
 
 extern unsigned long long io_apic_irqs;
-extern unsigned long long cached_irq_mask;
 
 #define IO_APIC_VECTOR(irq)	irq_vector[irq]
 

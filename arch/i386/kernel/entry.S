@@ -562,6 +562,8 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_capset)           /* 185 */
 	.long SYMBOL_NAME(sys_sigaltstack)
 	.long SYMBOL_NAME(sys_sendfile)
+	.long SYMBOL_NAME(sys_ni_syscall)		/* streams1 */
+	.long SYMBOL_NAME(sys_ni_syscall)		/* streams2 */
 	
 	.rept NR_syscalls-187
 		.long SYMBOL_NAME(sys_ni_syscall)

@@ -524,13 +524,19 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 	if (flag & O_CREAT) {
 		struct dentry *dir;
 
+		error = -EEXIST;
+		if (dentry->d_inode && (flag & O_EXCL))
+			goto exit;
+
 		dir = lock_parent(dentry);
 		error = PTR_ERR(dir);
 		if (IS_ERR(dir))
 			goto exit;
+
 		/*
-		 * The existence test must be done _after_ getting the directory
-		 * semaphore - the dentry might otherwise change.
+		 * Somebody might have created the file while we
+		 * waited for the directory lock.. So we have to
+		 * re-do the existence test.
 		 */
 		if (dentry->d_inode) {
 			error = 0;

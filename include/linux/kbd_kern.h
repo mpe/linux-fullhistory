@@ -151,4 +151,14 @@ int keyboard_wait_for_keypress(struct console *);
 
 extern unsigned int keymap_count;
 
+/* console.c */
+
+extern task_queue con_task_queue;
+
+extern inline void con_schedule_flip(struct tty_struct *t)
+{
+	queue_task(&t->flip.tqueue, &con_task_queue);
+	mark_bh(CONSOLE_BH);
+}
+
 #endif

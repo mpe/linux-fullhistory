@@ -1,7 +1,7 @@
 /*
  * bios32.c - Low-Level PCI Access
  *
- * $Id: bios32.c,v 1.43 1998/08/03 15:59:20 mj Exp $
+ * $Id: bios32.c,v 1.44 1998/08/04 14:54:56 mj Exp $
  *
  * Copyright 1993, 1994 Drew Eckhardt
  *      Visionary Computing
@@ -65,6 +65,12 @@
  *
  * Jun 19, 1998 : Changed to use spinlocks, so that PCI configuration space
  *	can be accessed from interrupts even on SMP systems. [mj]
+ *
+ * August  1998 : Better support for peer host bridges and more paranoid
+ *	checks for direct hardware access. Ugh, this file starts to look as
+ *	a large gallery of common hardware bug workarounds (watch the comments)
+ *	-- the PCI specs themselves are sane, but most implementors should be
+ *	hit hard with \hammer scaled \magstep5. [mj]
  */
 
 #include <linux/config.h>
@@ -331,6 +337,25 @@ static struct pci_access pci_direct_conf2 = {
       pci_conf2_write_config_dword
 };
 
+/*
+ * Before we decide to use direct hardware access mechanisms, we try to do some
+ * trivial checks to ensure it at least _seems_ to be working -- we just test
+ * whether bus 00 contains a host bridge (this is similar to checking
+ * techniques used in XFree86, but ours should be more reliable since we
+ * attempt to make use of direct access hints provided by the PCI BIOS).
+ */
+__initfunc(int pci_sanity_check(struct pci_access *a))
+{
+	u16 dfn, class;
+
+	for(dfn=0; dfn < 0x100; dfn++)
+		if (!a->read_config_word(0, dfn, PCI_CLASS_DEVICE, &class) &&
+		    class == PCI_CLASS_BRIDGE_HOST)
+			return 1;
+	DBG("PCI: Sanity check failed\n");
+	return 0;
+}
+
 __initfunc(static struct pci_access *pci_check_direct(void))
 {
 	unsigned int tmp;
@@ -345,7 +370,8 @@ __initfunc(static struct pci_access *pci_check_direct(void))
 		outb (0x01, 0xCFB);
 		tmp = inl (0xCF8);
 		outl (0x80000000, 0xCF8);
-		if (inl (0xCF8) == 0x80000000) {
+		if (inl (0xCF8) == 0x80000000 &&
+		    pci_sanity_check(&pci_direct_conf1)) {
 			outl (tmp, 0xCF8);
 			__restore_flags(flags);
 			printk("PCI: Using configuration type 1\n");
@@ -361,7 +387,8 @@ __initfunc(static struct pci_access *pci_check_direct(void))
 		outb (0x00, 0xCFB);
 		outb (0x00, 0xCF8);
 		outb (0x00, 0xCFA);
-		if (inb (0xCF8) == 0x00 && inb (0xCFA) == 0x00) {
+		if (inb (0xCF8) == 0x00 && inb (0xCFA) == 0x00 &&
+		    pci_sanity_check(&pci_direct_conf2)) {
 			__restore_flags(flags);
 			printk("PCI: Using configuration type 2\n");
 			return &pci_direct_conf2;
@@ -920,6 +947,7 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 	struct pci_bus *b = &pci_root;
 	int i;
 
+#ifdef CONFIG_PCI_DIRECT
 	/*
 	 * Don't search for peer host bridges if we use config type 2
 	 * since it reads bogus values for non-existent busses and
@@ -927,6 +955,7 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 	 */
 	if (access_pci == &pci_direct_conf2)
 		return;
+#endif
 	do {
 		int n = b->subordinate+1;
 		u16 l;

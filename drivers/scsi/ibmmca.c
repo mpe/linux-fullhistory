@@ -2137,8 +2137,7 @@ static int ldn_access_load(struct Scsi_Host *shpnt, int ldn)
 {
    if (IBM_DS.total_accesses == 0) return (0);
    if (IBM_DS.ldn_access[ldn] == 0) return (0);
-#error Floating point in kernel - shoot programmer
-   return((int)(((float)IBM_DS.ldn_access[ldn]/(float)IBM_DS.total_accesses)*(float)100.000));
+   return (IBM_DS.ldn_access[ldn] * 100) / IBM_DS.total_accesses;
 }
 
 /* calculate total amount of r/w-accesses */

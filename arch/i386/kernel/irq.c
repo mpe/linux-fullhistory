@@ -48,27 +48,23 @@ atomic_t nmi_counter;
 /*
  * About the IO-APIC, the architecture is 'merged' into our
  * current irq architecture, seemlessly. (i hope). It is only
- * visible through 8 more hardware interrupt lines, but otherwise
- * drivers are unaffected. The main code is believed to be
- * NR_IRQS-safe (nothing anymore thinks we have 16
+ * visible through a few more more hardware interrupt lines, but 
+ * otherwise drivers are unaffected. The main code is believed
+ * to be NR_IRQS-safe (nothing anymore thinks we have 16
  * irq lines only), but there might be some places left ...
  */
 
 /*
  * This contains the irq mask for both 8259A irq controllers,
- * and on SMP the extended IO-APIC IRQs 16-23. The IO-APIC
- * uses this mask too, in probe_irq*().
- *
- * (0x0000ffff for NR_IRQS==16, 0x00ffffff for NR_IRQS=24)
  */
-#if NR_IRQS == 64
-unsigned long long cached_irq_mask = -1;
-#else
-unsigned long long cached_irq_mask = (((unsigned long long) 1)<<NR_IRQS)-1;
-#endif
+static unsigned int cached_irq_mask = 0xffff;
 
-#define cached_21	((cached_irq_mask | io_apic_irqs) & 0xff)
-#define cached_A1	(((cached_irq_mask | io_apic_irqs) >> 8) & 0xff)
+#define __byte(x,y) (((unsigned char *)&(y))[x])
+#define __word(x,y) (((unsigned short *)&(y))[x])
+#define __long(x,y) (((unsigned int *)&(y))[x])
+
+#define cached_21	(__byte(0,cached_irq_mask))
+#define cached_A1	(__byte(1,cached_irq_mask))
 
 spinlock_t irq_controller_lock;
 
@@ -81,18 +77,11 @@ spinlock_t irq_controller_lock;
  * this 'mixed mode' IRQ handling costs us one more branch in do_IRQ,
  * but we have _much_ higher compatibility and robustness this way.
  */
-
-/*
- * Default to all normal IRQ's _not_ using the IO APIC.
- *
- * To get IO-APIC interrupts we turn some of them into IO-APIC
- * interrupts during boot.
- */
 unsigned long long io_apic_irqs = 0;
 
 static void do_8259A_IRQ (unsigned int irq, int cpu, struct pt_regs * regs);
-static void enable_8259A_irq (unsigned int irq);
-static void disable_8259A_irq (unsigned int irq);
+static void enable_8259A_irq(unsigned int irq);
+void disable_8259A_irq(unsigned int irq);
 
 /*
  * Dummy controller type for unused interrupts
@@ -127,10 +116,10 @@ int irq_vector[NR_IRQS] = { IRQ0_TRAP_VECTOR , 0 };
  * These have to be protected by the irq controller spinlock
  * before being called.
  */
-
-static inline void mask_8259A(unsigned int irq)
+void disable_8259A_irq(unsigned int irq)
 {
-	cached_irq_mask |= 1 << irq;
+	unsigned int mask = 1 << irq;
+	cached_irq_mask |= mask;
 	if (irq & 8) {
 		outb(cached_A1,0xA1);
 	} else {
@@ -138,28 +127,14 @@ static inline void mask_8259A(unsigned int irq)
 	}
 }
 
-static inline void unmask_8259A(unsigned int irq)
+static void enable_8259A_irq(unsigned int irq)
 {
-	cached_irq_mask &= ~(1 << irq);
+	unsigned int mask = ~(1 << irq);
+	cached_irq_mask &= mask;
 	if (irq & 8) {
 		outb(cached_A1,0xA1);
 	} else {
 		outb(cached_21,0x21);
-	}
-}
-
-void set_8259A_irq_mask(unsigned int irq)
-{
-	/*
-	 * (it might happen that we see IRQ>15 on a UP box, with SMP
-	 * emulation)
-	 */
-	if (irq < 16) {
-		if (irq & 8) {
-			outb(cached_A1,0xA1);
-		} else {
-			outb(cached_21,0x21);
-		}
 	}
 }
 
@@ -638,23 +613,7 @@ int handle_IRQ_event(unsigned int irq, struct pt_regs * regs)
 	return status;
 }
 
-/*
- * disable/enable_irq() wait for all irq contexts to finish
- * executing. Also it's recursive.
- */
-static void disable_8259A_irq(unsigned int irq)
-{
-	cached_irq_mask |= 1 << irq;
-	set_8259A_irq_mask(irq);
-}
-
-void enable_8259A_irq (unsigned int irq)
-{
-	cached_irq_mask &= ~(1 << irq);
-	set_8259A_irq_mask(irq);
-}
-
-int i8259A_irq_pending (unsigned int irq)
+int i8259A_irq_pending(unsigned int irq)
 {
 	unsigned int mask = 1<<irq;
 
@@ -664,9 +623,9 @@ int i8259A_irq_pending (unsigned int irq)
 }
 
 
-void make_8259A_irq (unsigned int irq)
+void make_8259A_irq(unsigned int irq)
 {
-	io_apic_irqs &= ~(1<<irq);
+	__long(0,io_apic_irqs) &= ~(1<<irq);
 	irq_desc[irq].handler = &i8259A_irq_type;
 	disable_irq(irq);
 	enable_irq(irq);
@@ -705,7 +664,7 @@ static void do_8259A_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	if (handle_IRQ_event(irq, regs)) {
 		spin_lock(&irq_controller_lock);
 		if (!(irq_desc[irq].status &= IRQ_DISABLED))
-			unmask_8259A(irq);
+			enable_8259A_irq(irq);
 		spin_unlock(&irq_controller_lock);
 	}
 
@@ -757,15 +716,6 @@ void enable_irq(unsigned int irq)
  * do_IRQ handles all normal device IRQ's (the special
  * SMP cross-CPU interrupts have their own specific
  * handlers).
- *
- * the biggest change on SMP is the fact that we no more mask
- * interrupts in hardware, please believe me, this is unavoidable,
- * the hardware is largely message-oriented, i tried to force our
- * state-driven irq handling scheme onto the IO-APIC, but no avail.
- *
- * so we soft-disable interrupts via 'event counters', the first 'incl'
- * will do the IRQ handling. This also has the nice side effect of increased
- * overlapping ... i saw no driver problem so far.
  */
 asmlinkage void do_IRQ(struct pt_regs regs)
 {	
@@ -846,15 +796,12 @@ int setup_x86_irq(unsigned int irq, struct irqaction * new)
 #ifdef __SMP__
 		if (IO_APIC_IRQ(irq)) {
 			/*
-			 * First disable it in the 8259A:
+			 * If it was on a 8259, disable it there
+			 * and move the "pendingness" onto the
+			 * new irq descriptor.
 			 */
-			cached_irq_mask |= 1 << irq;
 			if (irq < 16) {
-				set_8259A_irq_mask(irq);
-				/*
-				 * transport pending ISA IRQs to
-				 * the new descriptor
-				 */
+				disable_8259A_irq(irq);
 				if (i8259A_irq_pending(irq))
 					irq_desc[irq].events = 1;
 			}

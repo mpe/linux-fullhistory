@@ -296,7 +296,7 @@ get_sysnames(long type, long variation,
 	static int alcor_indices[] = {0,0,0,1,1,1,0,0,0,0,0,0,2,2,2,2,2,2};
 
 	static char * eb64p_names[] = {"EB64+", "Cabriolet", "AlphaPCI64"};
-	static int eb64p_indices[] = {0,0,1.2};
+	static int eb64p_indices[] = {0,0,1,2};
 
 	static char * eb66_names[] = {"EB66", "EB66+"};
 	static int eb66_indices[] = {0,0,1};

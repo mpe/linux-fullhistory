@@ -1123,11 +1123,12 @@ __initfunc(asmlinkage void start_kernel(void))
 	dquot_init_hash();
 #endif
 	printk("POSIX conformance testing by UNIFIX\n");
-	check_bugs();
 
 #ifdef __SMP__
 	smp_init();
 #endif
+
+	check_bugs();
 
 #if defined(CONFIG_MTRR)	/* Do this after SMP initialization */
 /*

@@ -190,6 +190,7 @@ __initfunc(static const char *vgacon_startup(void))
 			display_desc = "*MDA";
 			request_region(0x3b0,12,"mda");
 			request_region(0x3bf, 1,"mda");
+			vga_video_font_height = 16;
 		}
 	}
 	else				/* If not, it is color. */
@@ -256,6 +257,7 @@ __initfunc(static const char *vgacon_startup(void))
 			vga_vram_end = 0xba000;
 			display_desc = "*CGA";
 			request_region(0x3d4,2,"cga");
+			vga_video_font_height = 8;
 		}
 	}
 	vga_vram_base = VGA_MAP_MEM(vga_vram_base);
@@ -284,11 +286,12 @@ __initfunc(static const char *vgacon_startup(void))
 	    || vga_video_type == VIDEO_TYPE_EGAM) {
 		vga_hardscroll_enabled = vga_hardscroll_user_enable;
 		vga_default_font_height = ORIG_VIDEO_POINTS;
-		vga_video_font_height = video_font_height = ORIG_VIDEO_POINTS;
+		vga_video_font_height = ORIG_VIDEO_POINTS;
 		/* This may be suboptimal but is a safe bet - go with it */
 		video_scan_lines =
-			video_font_height * vga_video_num_lines;
+			vga_video_font_height * vga_video_num_lines;
 	}
+	video_font_height = vga_video_font_height;
 
 	return display_desc;
 }
@@ -356,19 +359,15 @@ static u8 vgacon_build_attr(struct vc_data *c, u8 color, u8 intensity, u8 blink,
 
 static void vgacon_invert_region(struct vc_data *c, u16 *p, int count)
 {
-	if (vga_can_do_color) {
-		while (count--) {
-			u16 a = scr_readw(p);
-			a = (((a) & 0x88ff) | (((a) & 0x7000) >> 4)
-			     | (((a) & 0x0700) << 4));
-			scr_writew(a, p++);
-		}
-	} else {
-		while (count--) {
-			u16 a = scr_readw(p);
+	int col = vga_can_do_color;
+
+	while (count--) {
+		u16 a = scr_readw(p);
+		if (col)
+			a = ((a) & 0x88ff) | (((a) & 0x7000) >> 4) | (((a) & 0x0700) << 4);
+		else
 			a ^= ((a & 0x0700) == 0x0100) ? 0x7000 : 0x7700;
-			scr_writew(a, p++);
-		}
+		scr_writew(a, p++);
 	}
 }
 
@@ -684,7 +683,7 @@ vgacon_do_font_op(char *arg, int set, int ch512)
 		charmap = (char *)VGA_MAP_MEM(colourmap);
 		beg = 0x0e;
 #ifdef VGA_CAN_DO_64KB
-		if (video_type == VIDEO_TYPE_VGAC)
+		if (vga_video_type == VIDEO_TYPE_VGAC)
 			beg = 0x06;
 #endif
 	} else {

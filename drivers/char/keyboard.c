@@ -19,6 +19,7 @@
  * parts by Geert Uytterhoeven, May 1997
  *
  * 27-05-97: Added support for the Magic SysRq Key (Martin Mares)
+ * 16-01-97: Dead-key-twice behavior now configurable (Jiri Hanika)
  */
 
 #include <linux/config.h>
@@ -140,7 +141,8 @@ const int max_vals[] = {
 
 const int NR_TYPES = SIZE(max_vals);
 
-static void put_queue(int);
+/* N.B. drivers/macintosh/mac_keyb.c needs to call put_queue */
+void put_queue(int);
 static unsigned char handle_diacr(unsigned char);
 
 /* kbd_pt_regs - set by keyboard_interrupt(), used by show_ptregs() */
@@ -310,12 +312,12 @@ void handle_scancode(unsigned char scancode)
 }
 
 
-static void put_queue(int ch)
+void put_queue(int ch)
 {
 	wake_up(&keypress_wait);
 	if (tty) {
 		tty_insert_flip_char(tty, ch, 0);
-		tty_schedule_flip(tty);
+		con_schedule_flip(tty);
 	}
 }
 
@@ -329,7 +331,7 @@ static void puts_queue(char *cp)
 		tty_insert_flip_char(tty, *cp, 0);
 		cp++;
 	}
-	tty_schedule_flip(tty);
+	con_schedule_flip(tty);
 }
 
 static void applkey(int key, char mode)
@@ -441,7 +443,7 @@ static void send_intr(void)
 	if (!tty)
 		return;
 	tty_insert_flip_char(tty, 0, TTY_BREAK);
-	tty_schedule_flip(tty);
+	con_schedule_flip(tty);
 }
 
 static void scroll_forw(void)
@@ -539,8 +541,8 @@ static void do_self(unsigned char value, char up_flag)
 static unsigned char ret_diacr[NR_DEAD] =
 	{A_GRAVE, A_ACUTE, A_CFLEX, A_TILDE, A_DIAER, A_CEDIL };
 
-/* If a dead key pressed twice, output a character corresponding to it,	*/
-/* otherwise just remember the dead key.				*/
+/* If a dead key pressed twice, output a character corresponding to it,    */
+/* unless overriden in accent_table; otherwise just remember the dead key. */
 
 static void do_dead(unsigned char value, char up_flag)
 {
@@ -549,8 +551,7 @@ static void do_dead(unsigned char value, char up_flag)
 
 	value = ret_diacr[value];
 	if (diacr == value) {   /* pressed twice */
-		diacr = 0;
-		put_queue(value);
+		put_queue(handle_diacr(value));
 		return;
 	}
 	diacr = value;
@@ -574,7 +575,8 @@ unsigned char handle_diacr(unsigned char ch)
 			return accent_table[i].result;
 	}
 
-	put_queue(d);
+	if (ch != d)	/* dead key pressed twice, put once */
+		put_queue(d);
 	return ch;
 }
 

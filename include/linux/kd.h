@@ -168,10 +168,9 @@ struct console_font_op {
 #define KD_FONT_OP_SET_DEFAULT	2	/* Set font to default, data points to name / NULL */
 #define KD_FONT_OP_COPY		3	/* Copy from another console */
 
-#define KD_FONT_FLAG_GLOBAL		1	/* Change on _all_ consoles */
-#define KD_FONT_FLAG_DONT_RECALC 	2	/* Don't recalculate hw charcell size [compat] */
+#define KD_FONT_FLAG_DONT_RECALC 	1	/* Don't recalculate hw charcell size [compat] */
 #ifdef __KERNEL__
-#define KD_FONT_FLAG_NEW		0x80000000	/* Indicate new KDFONTOP interface, which should be more strict */
+#define KD_FONT_FLAG_OLD		0x80000000	/* Invoked via old interface [compat] */
 #endif
 
 /* note: 0x4B00-0x4B4E all have had a value at some time;

@@ -393,7 +393,7 @@ do_fontx_ioctl(int cmd, struct consolefontdesc *user_cfd, int perm)
 		if (!perm)
 			return -EPERM;
 		op.op = KD_FONT_OP_SET;
-		op.flags = 0;
+		op.flags = KD_FONT_FLAG_OLD;
 		op.width = 8;
 		op.height = cfdarg.charheight;
 		op.charcount = cfdarg.charcount;
@@ -401,7 +401,7 @@ do_fontx_ioctl(int cmd, struct consolefontdesc *user_cfd, int perm)
 		return con_font_op(fg_console, &op);
 	case GIO_FONTX: {
 		op.op = KD_FONT_OP_GET;
-		op.flags = 0;
+		op.flags = KD_FONT_FLAG_OLD;
 		op.width = 8;
 		op.height = cfdarg.charheight;
 		op.charcount = cfdarg.charcount;
@@ -955,7 +955,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if (!perm)
 			return -EPERM;
 		op.op = KD_FONT_OP_SET;
-		op.flags = KD_FONT_FLAG_DONT_RECALC;	/* Compatibility */
+		op.flags = KD_FONT_FLAG_OLD | KD_FONT_FLAG_DONT_RECALC;	/* Compatibility */
 		op.width = 8;
 		op.height = 0;
 		op.charcount = 256;
@@ -966,7 +966,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	case GIO_FONT: {
 		struct console_font_op op;
 		op.op = KD_FONT_OP_GET;
-		op.flags = 0;
+		op.flags = KD_FONT_FLAG_OLD;
 		op.width = 8;
 		op.height = 32;
 		op.charcount = 256;
@@ -1014,7 +1014,6 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return -EFAULT;
 		if (!perm && op.op != KD_FONT_OP_GET)
 			return -EPERM;
-		op.flags |= KD_FONT_FLAG_NEW;
 		i = con_font_op(console, &op);
 		if (i) return i;
 		if (copy_to_user((void *) arg, &op, sizeof(op)))
@@ -1249,14 +1248,6 @@ void complete_change_console(unsigned int new_console)
 	if (vt_cons[new_console]->vc_mode == KD_TEXT)
 		set_palette() ;
 
-	/* FIXME: Do we still need this? */
-#ifdef CONFIG_SUN_CONSOLE
-	if (old_vc_mode != vt_cons[new_console]->vc_mode)
-	{
-	 	if (old_vc_mode == KD_GRAPHICS)
-			update_screen(new_console);
-	}
-#endif		
 	/*
 	 * Wake anyone waiting for their VT to activate
 	 */

@@ -80,7 +80,7 @@ static int tty_drivers_read_proc(char *page, char **start, off_t off,
 			break;
 		}
 		len += sprintf(page+len, "%-20s /dev/%-8s %3d %7s %s\n",
-			       p->driver_name ? p->driver_name : "",
+			       p->driver_name ? p->driver_name : "unknown",
 			       p->name, p->major, range, type);
 		if (len+begin > off+count)
 			break;

@@ -92,6 +92,7 @@
 #include <linux/interrupt.h>
 #include <linux/config.h>
 #include <linux/version.h>
+#include <linux/tqueue.h>
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
 #endif
@@ -168,6 +169,14 @@ int kmsg_redirect = 0;
  * variable, we use this one for the "master display".
  */
 static struct vc_data *master_display_fg = NULL;
+
+/*
+ * Unfortunately, we need to delay tty echo when we're currently writing to the
+ * console since the code is (and always was) not re-entrant, so we insert
+ * all filp requests to con_task_queue instead of tq_timer and run it from
+ * the console_bh.
+ */
+DECLARE_TASK_QUEUE(con_task_queue);
 
 /*
  *	Low-Level Functions
@@ -1068,7 +1077,7 @@ static void respond_string(const char * p, struct tty_struct * tty)
 		tty_insert_flip_char(tty, *p, 0);
 		p++;
 	}
-	tty_schedule_flip(tty);
+	con_schedule_flip(tty);
 }
 
 static void cursor_report(int currcons, struct tty_struct * tty)
@@ -1735,11 +1744,6 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 	struct vt_struct *vt = (struct vt_struct *)tty->driver_data;
 	u16 himask, charmask;
 
-#if CONFIG_AP1000
-        ap_write(1,buf,count);
-        return(count);
-#endif
-
 	currcons = vt->vc_num;
 	if (!vc_cons_allocated(currcons)) {
 	    /* could this happen? */
@@ -1893,6 +1897,7 @@ static int do_con_write(struct tty_struct * tty, int from_user,
  */
 static void console_bh(void)
 {
+	run_task_queue(&con_task_queue);
 	if (want_console >= 0) {
 		if (want_console != fg_console && vc_cons_allocated(want_console)) {
 			hide_cursor(fg_console);
@@ -1924,10 +1929,6 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 	ushort cnt = 0;
 	ushort myx = x;
 
-#if CONFIG_AP1000
-        prom_printf(b);
-        return;
-#endif
 	if (!printable || printing)
 		return;	 /* console not yet initialized */
 	printing = 1;
@@ -1938,21 +1939,26 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 	if (!vc_cons_allocated(currcons)) {
 		/* impossible */
 		printk("vt_console_print: tty %d not allocated ??\n", currcons+1);
-		return;
+		goto quit;
 	}
 
 	/* undraw cursor first */
-	hide_cursor(currcons);
-	
+	if (IS_FG)
+		hide_cursor(currcons);
+
 	start = (ushort *)pos;
 
 	/* Contrived structure to try to emulate original need_wrap behaviour
 	 * Problems caused when we have need_wrap set on '\n' character */
+	disable_bh(CONSOLE_BH);	
 	while (count--) {
+		enable_bh(CONSOLE_BH);
 		c = *b++;
+		disable_bh(CONSOLE_BH);
 		if (c == 10 || c == 13 || c == 8 || need_wrap) {
 			if (cnt > 0) {
-				sw->con_putcs(vc_cons[currcons].d, start, cnt, y, x);
+				if (IS_VISIBLE)
+					sw->con_putcs(vc_cons[currcons].d, start, cnt, y, x);
 				x += cnt;
 				if (need_wrap)
 					x--;
@@ -1982,15 +1988,19 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 		myx++;
 	}
 	if (cnt > 0) {
-		sw->con_putcs(vc_cons[currcons].d, start, cnt, y, x);
+		if (IS_VISIBLE)
+			sw->con_putcs(vc_cons[currcons].d, start, cnt, y, x);
 		x += cnt;
 		if (x == video_num_columns) {
 			x--;
 			need_wrap = 1;
 		}
 	}
+	enable_bh(CONSOLE_BH);
 	set_cursor(currcons);
 	poke_blanked_console();
+
+quit:
 	printing = 0;
 }
 
@@ -2127,10 +2137,8 @@ static void con_stop(struct tty_struct *tty)
 	console_num = MINOR(tty->device) - (tty->driver.minor_start);
 	if (!vc_cons_allocated(console_num))
 		return;
-#if !CONFIG_AP1000
 	set_vc_kbd_led(kbd_table + console_num, VC_SCROLLOCK);
 	set_leds();
-#endif
 }
 
 /*
@@ -2144,10 +2152,8 @@ static void con_start(struct tty_struct *tty)
 	console_num = MINOR(tty->device) - (tty->driver.minor_start);
 	if (!vc_cons_allocated(console_num))
 		return;
-#if !CONFIG_AP1000
 	clr_vc_kbd_led(kbd_table + console_num, VC_SCROLLOCK);
 	set_leds();
-#endif
 }
 
 static void con_flush_chars(struct tty_struct *tty)
@@ -2255,10 +2261,6 @@ __initfunc(unsigned long con_init(unsigned long kmem_start))
 
 	if (tty_register_driver(&console_driver))
 		panic("Couldn't register console driver\n");
-
-#if CONFIG_AP1000
-	return kmem_start;
-#endif
 
 	timer_table[BLANK_TIMER].fn = blank_screen;
 	timer_table[BLANK_TIMER].expires = 0;
@@ -2597,7 +2599,7 @@ int con_font_op(int currcons, struct console_font_op *op)
 			
 			/* If from KDFONTOP ioctl, don't allow things which can be done in userland,
 			   so that we can get rid of this soon */
-			if (op->flags & KD_FONT_FLAG_NEW)
+			if (!(op->flags & KD_FONT_FLAG_OLD))
 				goto quit;
 			rc = -EFAULT;
 			for (h = 32; h > 0; h--)
@@ -2640,7 +2642,7 @@ int con_font_op(int currcons, struct console_font_op *op)
 		
 		if (op->data && op->charcount > old_op.charcount)
 			rc = -ENOSPC;
-		if (op->flags & KD_FONT_FLAG_NEW) {
+		if (!(op->flags & KD_FONT_FLAG_OLD)) {
 			if (op->width > old_op.width || 
 			    op->height > old_op.height)
 				rc = -ENOSPC;
@@ -2694,7 +2696,7 @@ void putconsxy(int currcons, char *p)
 
 u16 vcs_scr_readw(int currcons, u16 *org)
 {
-	if (org == (u16 *)pos && softcursor_original != -1)
+	if ((unsigned long)org == pos && softcursor_original != -1)
 		return softcursor_original;
 	return scr_readw(org);
 }
@@ -2702,7 +2704,7 @@ u16 vcs_scr_readw(int currcons, u16 *org)
 void vcs_scr_writew(int currcons, u16 val, u16 *org)
 {
 	scr_writew(val, org);
-	if (org == (u16 *)pos) {
+	if ((unsigned long)org == pos) {
 		softcursor_original = -1;
 		add_softcursor(currcons);
 	}

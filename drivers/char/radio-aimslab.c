@@ -155,7 +155,7 @@ static int rt_setfreq(struct rt_device *dev, unsigned long freq)
 
 	/* adapted from radio-aztech.c */
 
-	freq = (freq / 16.0) * 100;	/* massage the data a little	*/
+	freq = (freq * 100) / 16;	/* massage the data a little	*/
 	freq += 1070;			/* IF = 10.7 MHz 		*/
 	freq /= 5;			/* ref = 25 kHz			*/
 
@@ -223,8 +223,8 @@ static int rt_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			if(v.tuner)	/* Only 1 tuner */ 
 				return -EINVAL;
-			v.rangelow=(int)(88.0*16);
-			v.rangehigh=(int)(108.0*16);
+			v.rangelow=(88*16);
+			v.rangehigh=(108*16);
 			v.flags=0;
 			v.mode=VIDEO_MODE_AUTO;
 			v.signal=0xFFFF*rt_getsigstr(rt);

@@ -10,8 +10,8 @@
 /*
  * Your basic spinlocks, allowing only a single CPU anywhere
  */
-typedef struct { } spinlock_t;
-#define SPIN_LOCK_UNLOCKED { }
+typedef struct { int gcc_is_buggy; } spinlock_t;
+#define SPIN_LOCK_UNLOCKED { 0 }
 
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		do { } while(0)
