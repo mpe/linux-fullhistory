@@ -74,12 +74,6 @@ static int hfs_releasepage(struct page *page, int mask)
 			;
 		else if (atomic_read(&node->refcnt))
 			res = 0;
-		else for (i = 0; i < tree->pages_per_bnode; i++) {
-			if (PageActive(node->page[i])) {
-				res = 0;
-				break;
-			}
-		}
 		if (res && node) {
 			hfs_bnode_unhash(node);
 			hfs_bnode_free(node);
@@ -103,7 +97,7 @@ static int hfs_releasepage(struct page *page, int mask)
 		spin_unlock(&tree->hash_lock);
 	}
 	//printk("releasepage: %lu,%x = %d\n", page->index, mask, res);
-	return res;
+	return res ? try_to_free_buffers(page) : 0;
 }
 
 static int hfs_get_blocks(struct inode *inode, sector_t iblock, unsigned long max_blocks,
