@@ -52,8 +52,6 @@ void jfs_read_inode(struct inode *inode)
 	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &jfs_dir_inode_operations;
 		inode->i_fop = &jfs_dir_operations;
-		inode->i_mapping->a_ops = &jfs_aops;
-		mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
 	} else if (S_ISLNK(inode->i_mode)) {
 		if (inode->i_size >= IDATASIZE) {
 			inode->i_op = &page_symlink_inode_operations;
@@ -184,11 +182,11 @@ jfs_get_blocks(struct inode *ip, sector_t lblock, unsigned long max_blocks,
 	s32 xlen;
 
 	/*
-	 * If this is a special inode (imap, dmap) or directory,
+	 * If this is a special inode (imap, dmap)
 	 * the lock should already be taken
 	 */
-	take_locks = ((JFS_IP(ip)->fileset != AGGREGATE_I) &&
-		      !S_ISDIR(ip->i_mode));
+	take_locks = (JFS_IP(ip)->fileset != AGGREGATE_I);
+
 	/*
 	 * Take appropriate lock on inode
 	 */
@@ -198,12 +196,6 @@ jfs_get_blocks(struct inode *ip, sector_t lblock, unsigned long max_blocks,
 		else
 			IREAD_LOCK(ip);
 	}
-
-	/*
-	 * Don't try to do xtLookup when there is no xtree
-	 */
-	if (S_ISDIR(ip->i_mode) && jfs_dirtable_inline(ip))
-		goto unlock;
 
 	if (((lblock64 << ip->i_sb->s_blocksize_bits) < ip->i_size) &&
 	    (xtLookup(ip, lblock64, max_blocks, &xflag, &xaddr, &xlen, 0)
