@@ -366,12 +366,9 @@ static int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 	struct inode * inode;
 	int err;
 
-	/*
-	 * N.B. Several error exits in ext2_new_inode don't set err.
-	 */
 	inode = ext2_new_inode (dir, mode, &err);
 	if (!inode)
-		return -EIO;
+		return err;
 
 	inode->i_op = &ext2_file_inode_operations;
 	inode->i_fop = &ext2_file_operations;
@@ -397,7 +394,7 @@ static int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int 
 
 	inode = ext2_new_inode (dir, mode, &err);
 	if (!inode)
-		return -EIO;
+		return err;
 
 	inode->i_uid = current->fsuid;
 	init_special_inode(inode, mode, rdev);
@@ -428,7 +425,7 @@ static int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 
 	inode = ext2_new_inode (dir, S_IFDIR, &err);
 	if (!inode)
-		return -EIO;
+		return err;
 
 	inode->i_op = &ext2_dir_inode_operations;
 	inode->i_fop = &ext2_dir_operations;
@@ -634,7 +631,7 @@ static int ext2_symlink (struct inode * dir, struct dentry *dentry, const char *
 		return -ENAMETOOLONG;
 
 	if (!(inode = ext2_new_inode (dir, S_IFLNK, &err)))
-		return -EIO;
+		return err;
 
 	inode->i_mode = S_IFLNK | S_IRWXUGO;
 

@@ -318,6 +318,23 @@ static void cs_error(client_handle_t handle, int func, int ret)
     error_info_t err = { func, ret };
     pcmcia_report_error(handle, &err);
 }
+/*======================================================================
+
+    This bit of code is used to avoid unregistering network devices
+    at inappropriate times.  2.2 and later kernels are fairly picky
+    about when this can happen.
+    
+======================================================================*/
+
+static void flush_stale_links(void)
+{
+    dev_link_t *link, *next;
+    for (link = dev_list; link; link = next) {
+	next = link->next;
+	if (link->state & DEV_STALE_LINK)
+	    ray_detach(link);
+    }
+}
 
 /*=============================================================================
     ray_attach() creates an "instance" of the driver, allocating
@@ -336,6 +353,7 @@ static dev_link_t *ray_attach(void)
     struct net_device *dev;
     
     DEBUG(1, "ray_attach()\n");
+    flush_stale_links();
 
     /* Initialize the dev_link_t structure */
     link = kmalloc(sizeof(struct dev_link_t), GFP_KERNEL);
@@ -384,7 +402,6 @@ static dev_link_t *ray_attach(void)
     
     dev->priv = local;
     local->finder = link;
-    link->dev = &local->node;
     local->card_status = CARD_INSERTED;
     local->authentication_state = UNAUTHENTICATED;
     local->num_multi = 0;
@@ -451,8 +468,6 @@ fail_alloc_dev:
 static void ray_detach(dev_link_t *link)
 {
     dev_link_t **linkp;
-    struct net_device *dev;
-    long flags;
 
     DEBUG(1, "ray_detach(0x%p)\n", link);
     
@@ -462,19 +477,12 @@ static void ray_detach(dev_link_t *link)
     if (*linkp == NULL)
         return;
 
-    save_flags(flags);
-    cli();
-    if (link->state & DEV_RELEASE_PENDING) {
-        del_timer(&link->release);
-        link->state &= ~DEV_RELEASE_PENDING;
-    }
-    restore_flags(flags);
-
     /* If the device is currently configured and active, we won't
       actually delete it yet.  Instead, it is marked so that when
       the release() function is called, that will trigger a proper
       detach().
     */
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG) {
         ray_release((u_long)link);
         if(link->state & DEV_STALE_CONFIG) {
@@ -490,10 +498,10 @@ static void ray_detach(dev_link_t *link)
     /* Unlink device structure, free pieces */
     *linkp = link->next;
     if (link->priv) {
-        dev = link->priv;
+        struct net_device *dev = link->priv;
+	if (link->dev) unregister_netdev(dev);
         if (dev->priv)
             kfree(dev->priv);
-
         kfree(link->priv);
     }
     kfree(link);
@@ -606,6 +614,7 @@ static void ray_config(dev_link_t *link)
     }
 
     strcpy(local->node.dev_name, dev->name);
+    link->dev = &local->node;
 
     link->state &= ~DEV_CONFIG_PENDING;
     printk(KERN_INFO "%s: RayLink, irq %d, hw_addr ",
@@ -907,9 +916,7 @@ static void ray_release(u_long arg)
         return;
     }
     del_timer(&local->timer);
-    if (link->dev != '\0') unregister_netdev(dev);
-    /* Unlink the device chain */
-    link->dev = NULL;
+    link->state &= ~DEV_CONFIG;
 
     iounmap(local->sram);
     iounmap(local->rmem);
@@ -926,8 +933,6 @@ static void ray_release(u_long arg)
     i = pcmcia_release_irq(link->handle, &link->irq);
     if ( i != CS_SUCCESS ) DEBUG(0,"ReleaseIRQ ret = %x\n",i);
 
-    link->state &= ~DEV_CONFIG;
-    if (link->state & DEV_STALE_LINK) ray_detach(link);
     DEBUG(2,"ray_release ending\n");
 } /* ray_release */
 /*=============================================================================
@@ -954,8 +959,7 @@ static int ray_event(event_t event, int priority,
         link->state &= ~DEV_PRESENT;
         netif_device_detach(dev);
         if (link->state & DEV_CONFIG) {
-            link->release.expires = jiffies + HZ/20;
-            add_timer(&link->release);
+            mod_timer(&link->release, jiffies + HZ/20);
             del_timer(&local->timer);
         }
         break;
@@ -1006,7 +1010,7 @@ int ray_dev_init(struct net_device *dev)
     if ( (i = dl_startup_params(dev)) < 0)
     {
         printk(KERN_INFO "ray_dev_init dl_startup_params failed - "
-           "returns 0x%x/n",i);
+           "returns 0x%x\n",i);
         return -1;
     }
     
@@ -1554,11 +1558,8 @@ static int ray_dev_close(struct net_device *dev)
 
     link->open--;
     netif_stop_queue(dev);
-    if (link->state & DEV_STALE_CONFIG) {
-        link->release.expires = jiffies + HZ/20;
-        link->state |= DEV_RELEASE_PENDING;
-        add_timer(&link->release);
-    }
+    if (link->state & DEV_STALE_CONFIG)
+	mod_timer(&link->release, jiffies + HZ/20);
 
     MOD_DEC_USE_COUNT;
 
@@ -2773,10 +2774,9 @@ static void __exit exit_ray_cs(void)
 #endif
 
     unregister_pcmcia_driver(&dev_info);
-    while (dev_list != NULL) {
-        if (dev_list->state & DEV_CONFIG) ray_release((u_long)dev_list);
+    while (dev_list != NULL)
         ray_detach(dev_list);
-    }
+
 #ifdef CONFIG_PROC_FS
     remove_proc_entry("driver/ray_cs/ray_cs", NULL);
     remove_proc_entry("driver/ray_cs/essid", NULL);

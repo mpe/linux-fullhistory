@@ -1,4 +1,4 @@
-/* $Id: display7seg.c,v 1.2 2000/08/02 06:22:35 davem Exp $
+/* $Id: display7seg.c,v 1.3 2000/08/29 07:01:55 davem Exp $
  *
  * display7seg - Driver implementation for the 7-segment display
  * present on Sun Microsystems CP1400 and CP1500
@@ -18,7 +18,7 @@
 #include <linux/ioport.h>		/* request_region, check_region */
 #include <asm/ebus.h>			/* EBus device					*/
 #include <asm/oplib.h>			/* OpenProm Library 			*/
-#include <asm/uaccess.h>		/* put_/get_user_ret			*/
+#include <asm/uaccess.h>		/* put_/get_user			*/
 
 #include <asm/display7seg.h>
 
@@ -132,7 +132,8 @@ static int d7s_ioctl(struct inode *inode, struct file *f,
 		/* assign device register values
 		 * we mask-out D7S_FLIP if in sol_compat mode
 		 */
-		get_user_ret(ireg, (int *) arg, -EFAULT);
+		if (get_user(ireg, (int *) arg))
+			return -EFAULT;
 		if (0 != sol_compat) {
 			(regs & D7S_FLIP) ? 
 				(ireg |= D7S_FLIP) : (ireg &= ~D7S_FLIP);
@@ -147,7 +148,8 @@ static int d7s_ioctl(struct inode *inode, struct file *f,
 		 * This driver will not misinform you about the state
 		 * of your hardware while in sol_compat mode
 		 */
-		put_user_ret(regs, (int *) arg, -EFAULT);
+		if (put_user(regs, (int *) arg))
+			return -EFAULT;
 		break;
 
 	case D7SIOCTM:

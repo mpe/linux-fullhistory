@@ -28,12 +28,7 @@
 #include "proto.h"
 #include "pci_impl.h"
 
-
-/*
- * NOTE: Herein lie back-to-back mb instructions.  They are magic.
- * One plausible explanation is that the I/O controller does not properly
- * handle the system transaction.  Another involves timing.  Ho hum.
- */
+#undef DEBUG_IRONGATE 		/* define to enable verbose Irongate debug */
 
 /*
  * BIOS32-style PCI interface:
@@ -200,11 +195,12 @@ struct pci_ops irongate_pci_ops =
 	write_dword:	irongate_write_config_dword
 };
 
-#if 0
+#ifdef DEBUG_IRONGATE
 static void
 irongate_register_dump(const char *function_name)
 {
 	printk("%s: Irongate registers:\n"
+	       "\tFunction 0:\n"
 	       "\tdev_vendor\t0x%08x\n"
 	       "\tstat_cmd\t0x%08x\n"
 	       "\tclass\t\t0x%08x\n"
@@ -249,7 +245,26 @@ irongate_register_dump(const char *function_name)
 	       "\tagpstat\t\t0x%08x\n"
 	       "\tagpcmd\t\t0x%08x\n"
 	       "\tagpva\t\t0x%08x\n"
-	       "\tagpmode\t\t0x%08x\n",
+	       "\tagpmode\t\t0x%08x\n"
+
+	       "\n\tFunction 1:\n"
+	       "\tdev_vendor:\t0x%08x\n"
+	       "\tcmd_status:\t0x%08x\n"
+	       "\trevid_etc :\t0x%08x\n"
+	       "\thtype_etc :\t0x%08x\n"
+	       "\trsrvd0[0] :\t0x%08x\n"
+	       "\trsrvd0[1] :\t0x%08x\n"
+	       "\tbus_nmbers:\t0x%08x\n"
+	       "\tio_baselim:\t0x%08x\n"
+	       "\tmem_bselim:\t0x%08x\n"
+	       "\tpf_baselib:\t0x%08x\n"
+	       "\trsrvd1[0] :\t0x%08x\n"
+	       "\trsrvd1[1] :\t0x%08x\n"
+	       "\tio_baselim:\t0x%08x\n"
+	       "\trsrvd2[0] :\t0x%08x\n"
+	       "\trsrvd2[1] :\t0x%08x\n"
+	       "\tinterrupt :\t0x%08x\n",
+
 	       function_name,
 	       IRONGATE0->dev_vendor,
 	       IRONGATE0->stat_cmd,
@@ -295,7 +310,23 @@ irongate_register_dump(const char *function_name)
 	       IRONGATE0->agpstat,
 	       IRONGATE0->agpcmd,
 	       IRONGATE0->agpva,
-	       IRONGATE0->agpmode);
+	       IRONGATE0->agpmode,
+	       IRONGATE1->dev_vendor,
+	       IRONGATE1->stat_cmd,
+	       IRONGATE1->class,
+	       IRONGATE1->htype,
+	       IRONGATE1->rsrvd0[0],
+	       IRONGATE1->rsrvd0[1],
+	       IRONGATE1->busnos,
+	       IRONGATE1->io_baselim_regs,
+	       IRONGATE1->mem_baselim,
+	       IRONGATE1->pfmem_baselim,
+	       IRONGATE1->rsrvd1[0],
+	       IRONGATE1->rsrvd1[1],
+	       IRONGATE1->io_baselim,
+	       IRONGATE1->rsrvd2[0],
+	       IRONGATE1->rsrvd2[1],
+	       IRONGATE1->interrupt );
 }
 #else
 #define irongate_register_dump(x)

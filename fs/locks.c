@@ -1040,17 +1040,12 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	 */
 	if (IS_MANDLOCK(inode) &&
 	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID) {
-		struct vm_area_struct *vma;
 		struct address_space *mapping = inode->i_mapping;
-		spin_lock(&mapping->i_shared_lock);
-		for(vma = mapping->i_mmap;vma;vma = vma->vm_next_share) {
-			if (!(vma->vm_flags & VM_MAYSHARE))
-				continue;
-			spin_unlock(&mapping->i_shared_lock);
+
+		if (mapping->i_mmap_shared != NULL) {
 			error = -EAGAIN;
 			goto out_putf;
 		}
-		spin_unlock(&mapping->i_shared_lock);
 	}
 
 	error = -EINVAL;
@@ -1199,17 +1194,12 @@ int fcntl_setlk64(unsigned int fd, unsigned int cmd, struct flock64 *l)
 	 */
 	if (IS_MANDLOCK(inode) &&
 	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID) {
-		struct vm_area_struct *vma;
 		struct address_space *mapping = inode->i_mapping;
-		spin_lock(&mapping->i_shared_lock);
-		for(vma = mapping->i_mmap;vma;vma = vma->vm_next_share) {
-			if (!(vma->vm_flags & VM_MAYSHARE))
-				continue;
-			spin_unlock(&mapping->i_shared_lock);
+
+		if (mapping->i_mmap_shared != NULL) {
 			error = -EAGAIN;
 			goto out_putf;
 		}
-		spin_unlock(&mapping->i_shared_lock);
 	}
 
 	error = -EINVAL;

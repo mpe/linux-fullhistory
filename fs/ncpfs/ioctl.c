@@ -290,7 +290,8 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 				return -EACCES;
 			}
 			/* get only low 8 bits... */
-			get_user_ret(newstate, (unsigned char*)arg, -EFAULT);
+			if (get_user(newstate, (unsigned char *) arg))
+				return -EFAULT;
 			if (server->sign_active) {
 				/* cannot turn signatures OFF when active */
 				if (!newstate) return -EINVAL;

@@ -213,7 +213,9 @@ static inline int preemption_goodness(struct task_struct * prev, struct task_str
  * This function must be inline as anything that saves and restores
  * flags has to do so within the same register window on sparc (Anton)
  */
-static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
+static FASTCALL(void reschedule_idle(struct task_struct * p));
+
+static void reschedule_idle(struct task_struct * p)
 {
 #ifdef CONFIG_SMP
 	int this_cpu = smp_processor_id();
@@ -284,7 +286,6 @@ static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
 		goto preempt_now;
 	}
 
-	spin_unlock_irqrestore(&runqueue_lock, flags);
 	return;
 		
 send_now_idle:
@@ -296,12 +297,10 @@ send_now_idle:
 	if ((tsk->processor != current->processor) && !tsk->need_resched)
 		smp_send_reschedule(tsk->processor);
 	tsk->need_resched = 1;
-	spin_unlock_irqrestore(&runqueue_lock, flags);
 	return;
 
 preempt_now:
 	tsk->need_resched = 1;
-	spin_unlock_irqrestore(&runqueue_lock, flags);
 	/*
 	 * the APIC stuff can go outside of the lock because
 	 * it uses no task information, only CPU#.
@@ -316,7 +315,6 @@ preempt_now:
 	tsk = cpu_curr(this_cpu);
 	if (preemption_goodness(tsk, p, this_cpu) > 1)
 		tsk->need_resched = 1;
-	spin_unlock_irqrestore(&runqueue_lock, flags);
 #endif
 }
 
@@ -365,9 +363,7 @@ inline void wake_up_process(struct task_struct * p)
 	if (task_on_runqueue(p))
 		goto out;
 	add_to_runqueue(p);
-	reschedule_idle(p, flags); // spin_unlocks runqueue
-
-	return;
+	reschedule_idle(p);
 out:
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 }
@@ -480,10 +476,9 @@ out_unlock:
 	 * current process as well.)
 	 */
 running_again:
-	if (prev == idle_task(smp_processor_id()))
-		goto out_unlock;
-	reschedule_idle(prev, flags); // spin_unlocks runqueue
-	return;
+	if (prev != idle_task(smp_processor_id()))
+		reschedule_idle(prev);
+	goto out_unlock;
 #endif /* CONFIG_SMP */
 }
 
@@ -656,6 +651,9 @@ still_running_back:
 
 same_process:
 	reacquire_kernel_lock(current);
+	if (current->need_resched)
+		goto tq_scheduler_back;
+
 	return;
 
 recalculate:
@@ -1142,13 +1140,13 @@ static void show_task(struct task_struct * p)
 		printk("\n");
 
 	{
-		struct signal_queue *q;
+		struct sigqueue *q;
 		char s[sizeof(sigset_t)*2+1], b[sizeof(sigset_t)*2+1]; 
 
-		render_sigset_t(&p->signal, s);
+		render_sigset_t(&p->pending.signal, s);
 		render_sigset_t(&p->blocked, b);
 		printk("   sig: %d %s %s :", signal_pending(p), s, b);
-		for (q = p->sigqueue; q ; q = q->next)
+		for (q = p->pending.head; q ; q = q->next)
 			printk(" %d", q->info.si_signo);
 		printk(" X\n");
 	}

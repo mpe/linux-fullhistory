@@ -9,7 +9,7 @@
 
 O_TARGET := ext2.o
 O_OBJS   := acl.o balloc.o bitmap.o dir.o file.o fsync.o ialloc.o inode.o \
-		ioctl.o namei.o super.o symlink.o truncate.o
+		ioctl.o namei.o super.o symlink.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

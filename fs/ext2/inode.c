@@ -704,6 +704,285 @@ struct address_space_operations ext2_aops = {
 	bmap: ext2_bmap
 };
 
+/*
+ * Probably it should be a library function... search for first non-zero word
+ * or memcmp with zero_page, whatever is better for particular architecture.
+ * Linus?
+ */
+static inline int all_zeroes(u32 *p, u32 *q)
+{
+	while (p < q)
+		if (*p++)
+			return 1;
+	return 0;
+}
+
+/**
+ *	ext2_find_shared - find the indirect blocks for partial truncation.
+ *	@inode:	  inode in question
+ *	@depth:	  depth of the affected branch
+ *	@offsets: offsets of pointers in that branch (see ext2_block_to_path)
+ *	@chain:	  place to store the pointers to partial indirect blocks
+ *	@top:	  place to the (detached) top of branch
+ *
+ *	This is a helper function used by ext2_truncate().
+ *
+ *	When we do truncate() we may have to clean the ends of several indirect
+ *	blocks but leave the blocks themselves alive. Block is partially
+ *	truncated if some data below the new i_size is refered from it (and
+ *	it is on the path to the first completely truncated data block, indeed).
+ *	We have to free the top of that path along with everything to the right
+ *	of the path. Since no allocation past the truncation point is possible
+ *	until ext2_truncate() finishes, we may safely do the latter, but top
+ *	of branch may require special attention - pageout below the truncation
+ *	point might try to populate it.
+ *
+ *	We atomically detach the top of branch from the tree, store the block
+ *	number of its root in *@top, pointers to buffer_heads of partially
+ *	truncated blocks - in @chain[].bh and pointers to their last elements
+ *	that should not be removed - in @chain[].p. Return value is the pointer
+ *	to last filled element of @chain.
+ *
+ *	The work left to caller to do the actual freeing of subtrees:
+ *		a) free the subtree starting from *@top
+ *		b) free the subtrees whose roots are stored in
+ *			(@chain[i].p+1 .. end of @chain[i].bh->b_data)
+ *		c) free the subtrees growing from the inode past the @chain[0].p
+ *			(no partially truncated stuff there).
+ */
+
+static Indirect *ext2_find_shared(struct inode *inode,
+				int depth,
+				int offsets[4],
+				Indirect chain[4],
+				u32 *top)
+{
+	Indirect *partial, *p;
+	int k, err;
+
+	*top = 0;
+	for (k = depth; k > 1 && !offsets[k-1]; k--)
+		;
+	partial = ext2_get_branch(inode, k, offsets, chain, &err);
+	/* Writer: pointers */
+	if (!partial)
+		partial = chain + k-1;
+	/*
+	 * If the branch acquired continuation since we've looked at it -
+	 * fine, it should all survive and (new) top doesn't belong to us.
+	 */
+	if (!partial->key && *partial->p)
+		/* Writer: end */
+		goto no_top;
+	for (p=partial; p>chain && all_zeroes((u32*)p->bh->b_data,p->p); p--)
+		;
+	/*
+	 * OK, we've found the last block that must survive. The rest of our
+	 * branch should be detached before unlocking. However, if that rest
+	 * of branch is all ours and does not grow immediately from the inode
+	 * it's easier to cheat and just decrement partial->p.
+	 */
+	if (p == chain + k - 1 && p > chain) {
+		p->p--;
+	} else {
+		*top = *p->p;
+		*p->p = 0;
+	}
+	/* Writer: end */
+
+	while(partial > p)
+	{
+		brelse(partial->bh);
+		partial--;
+	}
+no_top:
+	return partial;
+}
+
+/**
+ *	ext2_free_data - free a list of data blocks
+ *	@inode:	inode we are dealing with
+ *	@p:	array of block numbers
+ *	@q:	points immediately past the end of array
+ *
+ *	We are freeing all blocks refered from that array (numbers are
+ *	stored as little-endian 32-bit) and updating @inode->i_blocks
+ *	appropriately.
+ */
+static inline void ext2_free_data(struct inode *inode, u32 *p, u32 *q)
+{
+	int blocks = inode->i_sb->s_blocksize / 512;
+	unsigned long block_to_free = 0, count = 0;
+	unsigned long nr;
+
+	for ( ; p < q ; p++) {
+		nr = le32_to_cpu(*p);
+		if (nr) {
+			*p = 0;
+			/* accumulate blocks to free if they're contiguous */
+			if (count == 0)
+				goto free_this;
+			else if (block_to_free == nr - count)
+				count++;
+			else {
+				/* Writer: ->i_blocks */
+				inode->i_blocks -= blocks * count;
+				/* Writer: end */
+				ext2_free_blocks (inode, block_to_free, count);
+				mark_inode_dirty(inode);
+			free_this:
+				block_to_free = nr;
+				count = 1;
+			}
+		}
+	}
+	if (count > 0) {
+		/* Writer: ->i_blocks */
+		inode->i_blocks -= blocks * count;
+		/* Writer: end */
+		ext2_free_blocks (inode, block_to_free, count);
+		mark_inode_dirty(inode);
+	}
+}
+
+/**
+ *	ext2_free_branches - free an array of branches
+ *	@inode:	inode we are dealing with
+ *	@p:	array of block numbers
+ *	@q:	pointer immediately past the end of array
+ *	@depth:	depth of the branches to free
+ *
+ *	We are freeing all blocks refered from these branches (numbers are
+ *	stored as little-endian 32-bit) and updating @inode->i_blocks
+ *	appropriately.
+ */
+static void ext2_free_branches(struct inode *inode, u32 *p, u32 *q, int depth)
+{
+	struct buffer_head * bh;
+	unsigned long nr;
+
+	if (depth--) {
+		int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+		for ( ; p < q ; p++) {
+			nr = le32_to_cpu(*p);
+			if (!nr)
+				continue;
+			*p = 0;
+			bh = bread (inode->i_dev, nr, inode->i_sb->s_blocksize);
+			/*
+			 * A read failure? Report error and clear slot
+			 * (should be rare).
+			 */ 
+			if (!bh) {
+				ext2_error(inode->i_sb, "ext2_free_branches",
+					"Read failure, inode=%ld, block=%ld",
+					inode->i_ino, nr);
+				continue;
+			}
+			ext2_free_branches(inode,
+					   (u32*)bh->b_data,
+					   (u32*)bh->b_data + addr_per_block,
+					   depth);
+			bforget(bh);
+			/* Writer: ->i_blocks */
+			inode->i_blocks -= inode->i_sb->s_blocksize / 512;
+			/* Writer: end */
+			ext2_free_blocks(inode, nr, 1);
+			mark_inode_dirty(inode);
+		}
+	} else
+		ext2_free_data(inode, p, q);
+}
+
+void ext2_truncate (struct inode * inode)
+{
+	u32 *i_data = inode->u.ext2_i.i_data;
+	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+	int offsets[4];
+	Indirect chain[4];
+	Indirect *partial;
+	int nr = 0;
+	int n;
+	long iblock;
+
+	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
+	    S_ISLNK(inode->i_mode)))
+		return;
+	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
+		return;
+
+	ext2_discard_prealloc(inode);
+
+	iblock = (inode->i_size + inode->i_sb->s_blocksize-1)
+					>> EXT2_BLOCK_SIZE_BITS(inode->i_sb);
+
+	n = ext2_block_to_path(inode, iblock, offsets);
+	if (n == 0)
+		return;
+
+	if (n == 1) {
+		ext2_free_data(inode, i_data+offsets[0],
+					i_data + EXT2_NDIR_BLOCKS);
+		goto do_indirects;
+	}
+
+	partial = ext2_find_shared(inode, n, offsets, chain, &nr);
+	/* Kill the top of shared branch (already detached) */
+	if (nr) {
+		if (partial == chain)
+			mark_inode_dirty(inode);
+		else
+			mark_buffer_dirty(partial->bh, 1);
+		ext2_free_branches(inode, &nr, &nr+1, (chain+n-1) - partial);
+	}
+	/* Clear the ends of indirect blocks on the shared branch */
+	while (partial > chain) {
+		ext2_free_branches(inode,
+				   partial->p + 1,
+				   (u32*)partial->bh->b_data + addr_per_block,
+				   (chain+n-1) - partial);
+		mark_buffer_dirty(partial->bh, 1);
+		if (IS_SYNC(inode)) {
+			ll_rw_block (WRITE, 1, &partial->bh);
+			wait_on_buffer (partial->bh);
+		}
+		brelse (partial->bh);
+		partial--;
+	}
+do_indirects:
+	/* Kill the remaining (whole) subtrees */
+	switch (offsets[0]) {
+		default:
+			nr = i_data[EXT2_IND_BLOCK];
+			if (nr) {
+				i_data[EXT2_IND_BLOCK] = 0;
+				mark_inode_dirty(inode);
+				ext2_free_branches(inode, &nr, &nr+1, 1);
+			}
+		case EXT2_IND_BLOCK:
+			nr = i_data[EXT2_DIND_BLOCK];
+			if (nr) {
+				i_data[EXT2_DIND_BLOCK] = 0;
+				mark_inode_dirty(inode);
+				ext2_free_branches(inode, &nr, &nr+1, 2);
+			}
+		case EXT2_DIND_BLOCK:
+			nr = i_data[EXT2_TIND_BLOCK];
+			if (nr) {
+				i_data[EXT2_TIND_BLOCK] = 0;
+				mark_inode_dirty(inode);
+				ext2_free_branches(inode, &nr, &nr+1, 3);
+			}
+		case EXT2_TIND_BLOCK:
+			;
+	}
+	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	if (IS_SYNC(inode))
+		ext2_sync_inode (inode);
+	else
+		mark_inode_dirty(inode);
+}
+
 void ext2_read_inode (struct inode * inode)
 {
 	struct buffer_head * bh;
@@ -781,30 +1060,22 @@ void ext2_read_inode (struct inode * inode)
 	inode->i_blksize = PAGE_SIZE;	/* This is the optimal IO size (for stat), not the fs block size */
 	inode->i_blocks = le32_to_cpu(raw_inode->i_blocks);
 	inode->i_version = ++event;
-	inode->u.ext2_i.i_new_inode = 0;
 	inode->u.ext2_i.i_flags = le32_to_cpu(raw_inode->i_flags);
 	inode->u.ext2_i.i_faddr = le32_to_cpu(raw_inode->i_faddr);
 	inode->u.ext2_i.i_frag_no = raw_inode->i_frag;
 	inode->u.ext2_i.i_frag_size = raw_inode->i_fsize;
-	inode->u.ext2_i.i_osync = 0;
 	inode->u.ext2_i.i_file_acl = le32_to_cpu(raw_inode->i_file_acl);
 	if (S_ISDIR(inode->i_mode))
 		inode->u.ext2_i.i_dir_acl = le32_to_cpu(raw_inode->i_dir_acl);
 	else {
-		inode->u.ext2_i.i_dir_acl = 0;
 		inode->u.ext2_i.i_high_size = le32_to_cpu(raw_inode->i_size_high);
 		inode->i_size |= ((__u64)le32_to_cpu(raw_inode->i_size_high)) << 32;
 	}
 	inode->i_generation = le32_to_cpu(raw_inode->i_generation);
 	inode->u.ext2_i.i_block_group = block_group;
-	inode->u.ext2_i.i_next_alloc_block = 0;
-	inode->u.ext2_i.i_next_alloc_goal = 0;
-	if (inode->u.ext2_i.i_prealloc_count)
-		ext2_error (inode->i_sb, "ext2_read_inode",
-			    "New inode has non-zero prealloc count!");
 
 	/*
-	 * NOTE! The in-memory inode i_blocks array is in little-endian order
+	 * NOTE! The in-memory inode i_data array is in little-endian order
 	 * even on big-endian machines: we do NOT byteswap the block numbers!
 	 */
 	for (block = 0; block < EXT2_N_BLOCKS; block++)
@@ -940,9 +1211,23 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 	raw_inode->i_file_acl = cpu_to_le32(inode->u.ext2_i.i_file_acl);
 	if (S_ISDIR(inode->i_mode))
 		raw_inode->i_dir_acl = cpu_to_le32(inode->u.ext2_i.i_dir_acl);
-	else
+	else {
 		raw_inode->i_size_high = cpu_to_le32(inode->i_size >> 32);
-
+		if (raw_inode->i_size_high) {
+			struct super_block *sb = inode->i_sb;
+			struct ext2_super_block *es = sb->u.ext2_sb.s_es;
+			if (!(es->s_feature_ro_compat & cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE))) {
+			       /* If this is the first large file
+				* created, add a flag to the superblock.
+				*/
+				lock_kernel();
+				es->s_feature_ro_compat |= cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE);
+				unlock_kernel();
+				ext2_write_super(sb);
+			}
+		}
+	}
+	
 	raw_inode->i_generation = cpu_to_le32(inode->i_generation);
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		raw_inode->i_block[0] = cpu_to_le32(kdev_t_to_nr(inode->i_rdev));
@@ -966,7 +1251,7 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 void ext2_write_inode (struct inode * inode, int wait)
 {
 	lock_kernel();
-	ext2_update_inode (inode, 0);
+	ext2_update_inode (inode, wait);
 	unlock_kernel();
 }
 

@@ -500,15 +500,21 @@ out_release:
 
 static inline int copy_sighand(unsigned long clone_flags, struct task_struct * tsk)
 {
-	if (clone_flags & CLONE_SIGHAND) {
+	struct signal_struct *sig;
+
+	if (clone_flags & CLONE_SIGNAL) {
 		atomic_inc(&current->sig->count);
 		return 0;
 	}
-	tsk->sig = kmem_cache_alloc(sigact_cachep, GFP_KERNEL);
-	if (!tsk->sig)
+	sig = kmem_cache_alloc(sigact_cachep, GFP_KERNEL);
+	tsk->sig = sig;
+	if (!sig)
 		return -1;
-	spin_lock_init(&tsk->sig->siglock);
-	atomic_set(&tsk->sig->count, 1);
+	spin_lock_init(&sig->siglock);
+	atomic_set(&sig->count, 1);
+
+	init_sigpending(&sig->pending);
+
 	memcpy(tsk->sig->action, current->sig->action, sizeof(tsk->sig->action));
 	return 0;
 }
@@ -591,9 +597,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	spin_lock_init(&p->alloc_lock);
 
 	p->sigpending = 0;
-	sigemptyset(&p->signal);
-	p->sigqueue = NULL;
-	p->sigqueue_tail = &p->sigqueue;
+	init_sigpending(&p->pending);
 
 	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;
 	p->it_real_incr = p->it_virt_incr = p->it_prof_incr = 0;
@@ -664,7 +668,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->tgid = retval;
 	INIT_LIST_HEAD(&p->thread_group);
 	write_lock_irq(&tasklist_lock);
-	if (clone_flags & CLONE_THREAD) {
+	if (clone_flags & CLONE_SIGNAL) {
 		p->tgid = current->tgid;
 		list_add(&p->thread_group, &current->thread_group);
 	}

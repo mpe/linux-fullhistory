@@ -2,7 +2,7 @@
 
     PCMCIA Card Information Structure parser
 
-    cistpl.c 1.77 2000/01/16 19:19:01
+    cistpl.c 1.90 2000/08/30 20:23:47
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -15,7 +15,7 @@
     rights and limitations under the License.
 
     The initial developer of the original code is David A. Hinds
-    <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+    <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
     are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
 
     Alternatively, the contents of this file may be used under the
@@ -77,6 +77,14 @@ static const u_int exponent[] = {
 /* Upper limit on reasonable # of tuples */
 #define MAX_TUPLES		200
 
+/*====================================================================*/
+
+/* Parameters that can be set with 'insmod' */
+
+#define INT_MODULE_PARM(n, v) static int n = v; MODULE_PARM(n, "i")
+
+INT_MODULE_PARM(cis_width,	0);		/* 16-bit CIS? */
+
 /*======================================================================
 
     Low-level functions to read and write CIS memory.  I think the
@@ -87,6 +95,17 @@ static const u_int exponent[] = {
 /* Bits in attr field */
 #define IS_ATTR		1
 #define IS_INDIRECT	8
+
+static void set_cis_map(socket_info_t *s, pccard_mem_map *mem)
+{
+    s->ss_entry->set_mem_map(s->sock, mem);
+    if (s->cap.features & SS_CAP_STATIC_MAP) {
+	if (s->cis_virt)
+	    bus_iounmap(s->cap.bus, s->cis_virt);
+	s->cis_virt = bus_ioremap(s->cap.bus, mem->sys_start,
+				  s->cap.map_size);
+    }
+}
 
 void read_cis_mem(socket_info_t *s, int attr, u_int addr,
 		  u_int len, void *ptr)
@@ -99,16 +118,17 @@ void read_cis_mem(socket_info_t *s, int attr, u_int addr,
 	memset(ptr, 0xff, len);
 	return;
     }
-    mem->flags |= MAP_ACTIVE; mem->flags &= ~MAP_ATTRIB;
-    sys = s->cis_virt;
+    mem->flags = MAP_ACTIVE;
+    if (cis_width) mem->flags |= MAP_16BIT;
 
     if (attr & IS_INDIRECT) {
 	/* Indirect accesses use a bunch of special registers at fixed
 	   locations in common memory */
 	u_char flags = ICTRL0_COMMON|ICTRL0_AUTOINC|ICTRL0_BYTEGRAN;
 	if (attr & IS_ATTR) { addr *= 2; flags = ICTRL0_AUTOINC; }
-	mem->card_start = 0;
-	s->ss_entry->set_mem_map(s->sock, mem);
+	mem->card_start = 0; mem->flags = MAP_ACTIVE;
+	set_cis_map(s, mem);
+	sys = s->cis_virt;
 	bus_writeb(s->cap.bus, flags, sys+CISREG_ICTRL0);
 	bus_writeb(s->cap.bus, addr & 0xff, sys+CISREG_IADDR0);
 	bus_writeb(s->cap.bus, (addr>>8) & 0xff, sys+CISREG_IADDR1);
@@ -121,14 +141,15 @@ void read_cis_mem(socket_info_t *s, int attr, u_int addr,
 	if (attr) { mem->flags |= MAP_ATTRIB; inc++; addr *= 2; }
 	sys += (addr & (s->cap.map_size-1));
 	mem->card_start = addr & ~(s->cap.map_size-1);
-
-	for (; len > 0; sys = s->cis_virt) {
-	    s->ss_entry->set_mem_map(s->sock, mem);
+	while (len) {
+	    set_cis_map(s, mem);
+	    sys = s->cis_virt + (addr & (s->cap.map_size-1));
 	    for ( ; len > 0; len--, buf++, sys += inc) {
 		if (sys == s->cis_virt+s->cap.map_size) break;
 		*buf = bus_readb(s->cap.bus, sys);
 	    }
 	    mem->card_start += s->cap.map_size;
+	    addr = 0;
 	}
     }
     DEBUG(3, "cs:  %#2.2x %#2.2x %#2.2x %#2.2x ...\n",
@@ -144,16 +165,17 @@ void write_cis_mem(socket_info_t *s, int attr, u_int addr,
     
     DEBUG(3, "cs: write_cis_mem(%d, %#x, %u)\n", attr, addr, len);
     if (setup_cis_mem(s) != 0) return;
-    mem->flags |= MAP_ACTIVE; mem->flags &= ~MAP_ATTRIB;
-    sys = s->cis_virt;
+    mem->flags = MAP_ACTIVE;
+    if (cis_width) mem->flags |= MAP_16BIT;
 
     if (attr & IS_INDIRECT) {
 	/* Indirect accesses use a bunch of special registers at fixed
 	   locations in common memory */
 	u_char flags = ICTRL0_COMMON|ICTRL0_AUTOINC|ICTRL0_BYTEGRAN;
 	if (attr & IS_ATTR) { addr *= 2; flags = ICTRL0_AUTOINC; }
-	mem->card_start = 0;
-	s->ss_entry->set_mem_map(s->sock, mem);
+	mem->card_start = 0; mem->flags = MAP_ACTIVE;
+	set_cis_map(s, mem);
+	sys = s->cis_virt;
 	bus_writeb(s->cap.bus, flags, sys+CISREG_ICTRL0);
 	bus_writeb(s->cap.bus, addr & 0xff, sys+CISREG_IADDR0);
 	bus_writeb(s->cap.bus, (addr>>8) & 0xff, sys+CISREG_IADDR1);
@@ -164,16 +186,16 @@ void write_cis_mem(socket_info_t *s, int attr, u_int addr,
     } else {
 	int inc = 1;
 	if (attr & IS_ATTR) { mem->flags |= MAP_ATTRIB; inc++; addr *= 2; }
-	sys += (addr & (s->cap.map_size-1));
 	mem->card_start = addr & ~(s->cap.map_size-1);
-
-	for (; len > 0; sys = s->cis_virt) {
-	    s->ss_entry->set_mem_map(s->sock, mem);
+	while (len) {
+	    set_cis_map(s, mem);
+	    sys = s->cis_virt + (addr & (s->cap.map_size-1));
 	    for ( ; len > 0; len--, buf++, sys += inc) {
 		if (sys == s->cis_virt+s->cap.map_size) break;
 		bus_writeb(s->cap.bus, *buf, sys);
 	    }
 	    mem->card_start += s->cap.map_size;
+	    addr = 0;
 	}
     }
 }
@@ -238,7 +260,8 @@ static int checksum_match(u_long base)
 
 int setup_cis_mem(socket_info_t *s)
 {
-    if (s->cis_mem.sys_start == 0) {
+    if (!(s->cap.features & SS_CAP_STATIC_MAP) &&
+	(s->cis_mem.sys_start == 0)) {
 	int low = !(s->cap.features & SS_CAP_PAGE_REGS);
 	vs = s;
 	validate_mem(cis_readable, checksum_match, low);
@@ -262,9 +285,11 @@ void release_cis_mem(socket_info_t *s)
     if (s->cis_mem.sys_start != 0) {
 	s->cis_mem.flags &= ~MAP_ACTIVE;
 	s->ss_entry->set_mem_map(s->sock, &s->cis_mem);
-	release_mem_region(s->cis_mem.sys_start, s->cap.map_size);
+	if (!(s->cap.features & SS_CAP_STATIC_MAP))
+	    release_mem_region(s->cis_mem.sys_start, s->cap.map_size);
 	bus_iounmap(s->cap.bus, s->cis_virt);
 	s->cis_mem.sys_start = 0;
+	s->cis_virt = NULL;
     }
 }
 
@@ -1278,6 +1303,25 @@ static int parse_org(tuple_t *tuple, cistpl_org_t *org)
 
 /*====================================================================*/
 
+static int parse_format(tuple_t *tuple, cistpl_format_t *fmt)
+{
+    u_char *p;
+
+    if (tuple->TupleDataLen < 10)
+	return CS_BAD_TUPLE;
+
+    p = tuple->TupleData;
+
+    fmt->type = p[0];
+    fmt->edc = p[1];
+    fmt->offset = le32_to_cpu(*(u_int *)(p+2));
+    fmt->length = le32_to_cpu(*(u_int *)(p+6));
+
+    return CS_SUCCESS;
+}
+
+/*====================================================================*/
+
 int pcmcia_parse_tuple(client_handle_t handle, tuple_t *tuple, cisparse_t *parse)
 {
     int ret = CS_SUCCESS;
@@ -1345,6 +1389,10 @@ int pcmcia_parse_tuple(client_handle_t handle, tuple_t *tuple, cisparse_t *parse
     case CISTPL_ORG:
 	ret = parse_org(tuple, &parse->org);
 	break;
+    case CISTPL_FORMAT:
+    case CISTPL_FORMAT_A:
+	ret = parse_format(tuple, &parse->format);
+	break;
     case CISTPL_NO_LINK:
     case CISTPL_LINKTARGET:
 	ret = CS_SUCCESS;
@@ -1395,34 +1443,36 @@ int pcmcia_validate_cis(client_handle_t handle, cisinfo_t *info)
 {
     tuple_t tuple;
     cisparse_t p;
-    int ret, reserved, errors;
-    
+    int ret, reserved, dev_ok = 0, ident_ok = 0;
+
     if (CHECK_HANDLE(handle))
 	return CS_BAD_HANDLE;
-    
-    info->Chains = reserved = errors = 0;
+
+    info->Chains = reserved = 0;
     tuple.DesiredTuple = RETURN_FIRST_TUPLE;
     tuple.Attributes = TUPLE_RETURN_COMMON;
     ret = pcmcia_get_first_tuple(handle, &tuple);
     if (ret != CS_SUCCESS)
 	return CS_SUCCESS;
 
-    /* First tuple should be DEVICE */
-    if (tuple.TupleCode != CISTPL_DEVICE)
-	errors++;
-    /* All cards should have a MANFID tuple */
-    if (read_tuple(handle, CISTPL_MANFID, &p) != CS_SUCCESS)
-	errors++;
-    /* All cards should have either a VERS_1 or a VERS_2 tuple.  But
-       at worst, we'll accept a CFTABLE_ENTRY that parses. */
-    if ((read_tuple(handle, CISTPL_VERS_1, &p) != CS_SUCCESS) &&
-	(read_tuple(handle, CISTPL_VERS_2, &p) != CS_SUCCESS) &&
-	(read_tuple(handle, CISTPL_CFTABLE_ENTRY, &p) != CS_SUCCESS) &&
-	(read_tuple(handle, CISTPL_CFTABLE_ENTRY_CB, &p) != CS_SUCCESS))
-	errors++;
-    if (errors > 1)
+    /* First tuple should be DEVICE; we should really have either that
+       or a CFTABLE_ENTRY of some sort */
+    if ((tuple.TupleCode == CISTPL_DEVICE) ||
+	(read_tuple(handle, CISTPL_CFTABLE_ENTRY, &p) == CS_SUCCESS) ||
+	(read_tuple(handle, CISTPL_CFTABLE_ENTRY_CB, &p) == CS_SUCCESS))
+	dev_ok++;
+
+    /* All cards should have a MANFID tuple, and/or a VERS_1 or VERS_2
+       tuple, for card identification.  Certain old D-Link and Linksys
+       cards have only a broken VERS_2 tuple; hence the bogus test. */
+    if ((read_tuple(handle, CISTPL_MANFID, &p) == CS_SUCCESS) ||
+	(read_tuple(handle, CISTPL_VERS_1, &p) == CS_SUCCESS) ||
+	(read_tuple(handle, CISTPL_VERS_2, &p) != CS_NO_MORE_ITEMS))
+	ident_ok++;
+
+    if (!dev_ok && !ident_ok)
 	return CS_SUCCESS;
-    
+
     for (info->Chains = 1; info->Chains < MAX_TUPLES; info->Chains++) {
 	ret = pcmcia_get_next_tuple(handle, &tuple);
 	if (ret != CS_SUCCESS) break;
@@ -1431,9 +1481,10 @@ int pcmcia_validate_cis(client_handle_t handle, cisinfo_t *info)
 	    ((tuple.TupleCode > 0x90) && (tuple.TupleCode < 0xff)))
 	    reserved++;
     }
-    if ((info->Chains == MAX_TUPLES) || (reserved > 5))
+    if ((info->Chains == MAX_TUPLES) || (reserved > 5) ||
+	((!dev_ok || !ident_ok) && (info->Chains > 10)))
 	info->Chains = 0;
-    
+
     return CS_SUCCESS;
 }
 

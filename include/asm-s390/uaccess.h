@@ -407,10 +407,6 @@ __copy_from_user_asm(void* to, const void* from,  long n)
         err;                                                    \
 })
 
-#define copy_from_user_ret(to,from,n,retval) ({ if (copy_from_user(to,from,n)) return retval; })
-
-#define copy_to_user_ret(to,from,n,retval) ({ if (copy_to_user(to,from,n)) return retval; })
-
 /*
  * Copy a null terminated string from userspace.
  */

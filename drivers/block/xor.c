@@ -1406,6 +1406,818 @@ XORBLOCK_TEMPLATE(SPARC)
 }
 #endif /* __sparc_v[78]__ */
 
+#ifdef __alpha__
+/*
+ * High speed xor_block operation for RAID4/5 pipelined for Alpha EV5.
+ * There is a second version using EV6 prefetch instructions.
+ *
+ * Copyright (C) 2000 Richard Henderson (rth@redhat.com)
+ */
+
+XORBLOCK_TEMPLATE(alpha)
+{
+	long lines = bh_ptr[0]->b_size / sizeof (long) / 8;
+	long *d = (long *) bh_ptr[0]->b_data;
+	long *s1 = (long *) bh_ptr[1]->b_data;
+	long *s2, *s3, *s4;
+
+	if (count == 2) goto two_blocks;
+
+	s2 = (long *) bh_ptr[2]->b_data;
+	if (count == 3) goto three_blocks;
+
+	s3 = (long *) bh_ptr[3]->b_data;
+	if (count == 4) goto four_blocks;
+
+	s4 = (long *) bh_ptr[4]->b_data;
+	goto five_blocks;
+
+two_blocks:
+asm volatile ("
+	.align 4
+2:
+	ldq $0,0(%0)
+	ldq $1,0(%1)
+	ldq $2,8(%0)
+	ldq $3,8(%1)
+
+	ldq $4,16(%0)
+	ldq $5,16(%1)
+	ldq $6,24(%0)
+	ldq $7,24(%1)
+
+	ldq $16,32(%0)
+	ldq $17,32(%1)
+	ldq $18,40(%0)
+	ldq $19,40(%1)
+
+	ldq $20,48(%0)
+	ldq $21,48(%1)
+	ldq $22,56(%0)
+	xor $0,$1,$0		# 7 cycles from $1 load
+
+	ldq $23,56(%1)
+	xor $2,$3,$2
+	stq $0,0(%0)
+	xor $4,$5,$4
+
+	stq $2,8(%0)
+	xor $6,$7,$6
+	stq $4,16(%0)
+	xor $16,$17,$16
+
+	stq $6,24(%0)
+	xor $18,$19,$18
+	stq $16,32(%0)
+	xor $20,$21,$20
+
+	stq $18,40(%0)
+	xor $22,$23,$22
+	stq $20,48(%0)
+	subq %2,1,%2
+
+	stq $22,56(%0)
+	addq %0,64,%0
+	addq %1,64,%1
+	bgt %2,2b"
+	: "=r"(d), "=r"(s1), "=r"(lines)
+	: "0"(d), "1"(s1), "2"(lines)
+	: "memory", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7",
+	  "$16", "$17", "$18", "$19", "$20", "$21", "$22", "$23");
+	return;
+
+three_blocks:
+asm volatile ("
+	.align 4
+3:
+	ldq $0,0(%0)
+	ldq $1,0(%1)
+	ldq $2,0(%2)
+	ldq $3,8(%0)
+
+	ldq $4,8(%1)
+	ldq $6,16(%0)
+	ldq $7,16(%1)
+	ldq $17,24(%0)
+
+	ldq $18,24(%1)
+	ldq $20,32(%0)
+	ldq $21,32(%1)
+	ldq $5,8(%2)
+
+	ldq $16,16(%2)
+	ldq $19,24(%2)
+	ldq $22,32(%2)
+	nop
+
+	xor $0,$1,$1		# 8 cycles from $0 load
+	xor $3,$4,$4		# 6 cycles from $4 load
+	xor $6,$7,$7		# 6 cycles from $7 load
+	xor $17,$18,$18		# 5 cycles from $18 load
+
+	xor $1,$2,$2		# 9 cycles from $2 load
+	xor $20,$21,$21		# 5 cycles from $21 load
+	stq $2,0(%0)
+	xor $4,$5,$5		# 6 cycles from $5 load
+
+	stq $5,8(%0)
+	xor $7,$16,$16		# 7 cycles from $16 load
+	stq $16,16(%0)
+	xor $18,$19,$19		# 7 cycles from $19 load
+
+	stq $19,24(%0)
+	xor $21,$22,$22		# 7 cycles from $22 load
+	stq $22,32(%0)
+	nop
+
+	ldq $0,40(%0)
+	ldq $1,40(%1)
+	ldq $3,48(%0)
+	ldq $4,48(%1)
+
+	ldq $6,56(%0)
+	ldq $7,56(%1)
+	ldq $2,40(%2)
+	ldq $5,48(%2)
+
+	ldq $16,56(%2)
+	xor $0,$1,$1		# 4 cycles from $1 load
+	xor $3,$4,$4		# 5 cycles from $4 load
+	xor $6,$7,$7		# 5 cycles from $7 load
+
+	xor $1,$2,$2		# 4 cycles from $2 load
+	xor $4,$5,$5		# 5 cycles from $5 load
+	stq $2,40(%0)
+	xor $7,$16,$16		# 4 cycles from $16 load
+
+	stq $5,48(%0)
+	subq %3,1,%3
+	stq $16,56(%0)
+	addq %2,64,%2
+
+	addq %1,64,%1
+	addq %0,64,%0
+	bgt %3,3b"
+	: "=r"(d), "=r"(s1), "=r"(s2), "=r"(lines)
+	: "0"(d), "1"(s1), "2"(s2), "3"(lines)
+	: "memory", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7",
+	  "$16", "$17", "$18", "$19", "$20", "$21", "$22");
+	return;
+
+four_blocks:
+asm volatile ("
+	.align 4
+4:
+	ldq $0,0(%0)
+	ldq $1,0(%1)
+	ldq $2,0(%2)
+	ldq $3,0(%3)
+
+	ldq $4,8(%0)
+	ldq $5,8(%1)
+	ldq $6,8(%2)
+	ldq $7,8(%3)
+
+	ldq $16,16(%0)
+	ldq $17,16(%1)
+	ldq $18,16(%2)
+	ldq $19,16(%3)
+
+	ldq $20,24(%0)
+	xor $0,$1,$1		# 6 cycles from $1 load
+	ldq $21,24(%1)
+	xor $2,$3,$3		# 6 cycles from $3 load
+
+	ldq $0,24(%2)
+	xor $1,$3,$3
+	ldq $1,24(%3)
+	xor $4,$5,$5		# 7 cycles from $5 load
+
+	stq $3,0(%0)
+	xor $6,$7,$7
+	xor $16,$17,$17		# 7 cycles from $17 load
+	xor $5,$7,$7
+
+	stq $7,8(%0)
+	xor $18,$19,$19		# 7 cycles from $19 load
+	ldq $2,32(%0)
+	xor $17,$19,$19
+
+	ldq $3,32(%1)
+	ldq $4,32(%2)
+	ldq $5,32(%3)
+	xor $20,$21,$21		# 8 cycles from $21 load
+
+	ldq $6,40(%0)
+	ldq $7,40(%1)
+	ldq $16,40(%2)
+	ldq $17,40(%3)
+
+	stq $19,16(%0)
+	xor $0,$1,$1		# 9 cycles from $1 load
+	xor $2,$3,$3		# 5 cycles from $3 load
+	xor $21,$1,$1
+
+	ldq $18,48(%0)
+	xor $4,$5,$5		# 5 cycles from $5 load
+	ldq $19,48(%1)
+	xor $3,$5,$5
+
+	ldq $20,48(%2)
+	ldq $21,48(%3)
+	ldq $0,56(%0)
+	ldq $1,56(%1)
+
+	ldq $2,56(%2)
+	xor $6,$7,$7		# 8 cycles from $6 load
+	ldq $3,56(%3)
+	xor $16,$17,$17		# 8 cycles from $17 load
+
+	xor $7,$17,$17
+	xor $18,$19,$19		# 5 cycles from $19 load
+	xor $20,$21,$21		# 5 cycles from $21 load
+	xor $19,$21,$21
+
+	stq $1,24(%0)
+	xor $0,$1,$1		# 5 cycles from $1 load
+	stq $5,32(%0)
+	xor $2,$3,$3		# 4 cycles from $3 load
+
+	stq $17,40(%0)
+	xor $1,$3,$3
+	stq $21,48(%0)
+	subq %4,1,%4
+
+	stq $3,56(%0)
+	addq %3,64,%3
+	addq %2,64,%2
+	addq %1,64,%1
+
+	addq %0,64,%0
+	bgt %4,4b"
+	: "=r"(d), "=r"(s1), "=r"(s2), "=r"(s3), "=r"(lines)
+	: "0"(d), "1"(s1), "2"(s2), "3"(s3), "4"(lines)
+	: "memory", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7",
+	  "$16", "$17", "$18", "$19", "$20", "$21");
+	return;
+
+five_blocks:
+asm volatile ("
+	ldq %0,0(%6)
+	ldq %1,8(%6)
+	ldq %2,16(%6)
+	ldq %3,24(%6)
+	ldq %4,32(%6)
+	ldq %0,%7(%0)
+	ldq %1,%7(%1)
+	ldq %2,%7(%2)
+	ldq %3,%7(%3)
+	ldq %4,%7(%4)
+	.align 4
+5:
+	ldq $0,0(%0)
+	ldq $1,0(%1)
+	ldq $2,0(%2)
+	ldq $3,0(%3)
+
+	ldq $4,0(%4)
+	ldq $5,8(%0)
+	ldq $6,8(%1)
+	ldq $7,8(%2)
+
+	ldq $16,8(%3)
+	ldq $17,8(%4)
+	ldq $18,16(%0)
+	ldq $19,16(%1)
+
+	ldq $20,16(%2)
+	xor $0,$1,$1		# 6 cycles from $1 load
+	ldq $21,16(%3)
+	xor $2,$3,$3		# 6 cycles from $3 load
+
+	ldq $0,16(%4)
+	xor $1,$3,$3
+	ldq $1,24(%0)
+	xor $3,$4,$4		# 7 cycles from $4 load
+
+	stq $4,0(%0)
+	xor $5,$6,$6		# 7 cycles from $6 load
+	xor $7,$16,$16		# 7 cycles from $16 load
+	xor $6,$17,$17		# 7 cycles from $17 load
+
+	ldq $2,24(%1)
+	xor $16,$17,$17
+	ldq $3,24(%2)
+	xor $18,$19,$19		# 8 cycles from $19 load
+
+	stq $17,8(%0)
+	xor $19,$20,$20		# 8 cycles from $20 load
+	ldq $4,24(%3)
+	xor $21,$0,$0		# 7 cycles from $0 load
+
+	ldq $5,24(%4)
+	xor $20,$0,$0
+	ldq $6,32(%0)
+	ldq $7,32(%1)
+
+	stq $0,16(%0)
+	xor $1,$2,$2		# 6 cycles from $2 load
+	ldq $16,32(%2)
+	xor $3,$4,$4		# 4 cycles from $4 load
+	
+	ldq $17,32(%3)
+	xor $2,$4,$4
+	ldq $18,32(%4)
+	ldq $19,40(%0)
+
+	ldq $20,40(%1)
+	ldq $21,40(%2)
+	ldq $0,40(%3)
+	xor $4,$5,$5		# 7 cycles from $5 load
+
+	stq $5,24(%0)
+	xor $6,$7,$7		# 7 cycles from $7 load
+	ldq $1,40(%4)
+	ldq $2,48(%0)
+
+	ldq $3,48(%1)
+	xor $7,$16,$16		# 7 cycles from $16 load
+	ldq $4,48(%2)
+	xor $17,$18,$18		# 6 cycles from $18 load
+
+	ldq $5,48(%3)
+	xor $16,$18,$18
+	ldq $6,48(%4)
+	xor $19,$20,$20		# 7 cycles from $20 load
+
+	stq $18,32(%0)
+	xor $20,$21,$21		# 8 cycles from $21 load
+	ldq $7,56(%0)
+	xor $0,$1,$1		# 6 cycles from $1 load
+
+	ldq $16,56(%1)
+	ldq $17,56(%2)
+	ldq $18,56(%3)
+	ldq $19,56(%4)
+
+	xor $21,$1,$1
+	xor $2,$3,$3		# 9 cycles from $3 load
+	xor $3,$4,$4		# 9 cycles from $4 load
+	xor $5,$6,$6		# 8 cycles from $6 load
+
+	unop
+	xor $4,$6,$6
+	xor $7,$16,$16		# 7 cycles from $16 load
+	xor $17,$18,$18		# 6 cycles from $18 load
+
+	stq $6,48(%0)
+	xor $16,$18,$18
+	subq %5,1,%5
+	xor $18,$19,$19		# 8 cycles from $19 load
+
+	stq $19,56(%0)
+	addq %4,64,%4
+	addq %3,64,%3
+	addq %2,64,%2
+
+	addq %1,64,%1
+	addq %0,64,%0
+	bgt %5,5b"
+	: "=&r"(d), "=&r"(s1), "=&r"(s2), "=&r"(s3), "=r"(s4), "=r"(lines)
+	/* ARG! We've run out of asm arguments!  We've got to reload
+	   all those pointers we just loaded.  */
+	: "r"(bh_ptr), "i" (&((struct buffer_head *)0)->b_data), "5"(lines)
+	: "memory", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7",
+	  "$16", "$17", "$18", "$19", "$20", "$21");
+	return;
+}
+
+#define prefetch(base, ofs) \
+	asm("ldq $31,%2(%0)" : "=r"(base) : "0"(base), "i"(ofs))
+
+XORBLOCK_TEMPLATE(alpha_prefetch)
+{
+	long lines = bh_ptr[0]->b_size / sizeof (long) / 8;
+	long *d = (long *) bh_ptr[0]->b_data;
+	long *s1 = (long *) bh_ptr[1]->b_data;
+	long *s2, *s3, *s4;
+	long p;
+
+	p = count == 2;
+	prefetch(d, 0);
+	prefetch(s1, 0);
+	prefetch(d, 64);
+	prefetch(s1, 64);
+	prefetch(d, 128);
+	prefetch(s1, 128);
+	prefetch(d, 192);
+	prefetch(s1, 192);
+	if (p) goto two_blocks;
+
+	s2 = (long *) bh_ptr[2]->b_data;
+	p = count == 3;
+	prefetch(s2, 0);
+	prefetch(s2, 64);
+	prefetch(s2, 128);
+	prefetch(s2, 192);
+	if (p) goto three_blocks;
+
+	s3 = (long *) bh_ptr[3]->b_data;
+	p = count == 4;
+	prefetch(s3, 0);
+	prefetch(s3, 64);
+	prefetch(s3, 128);
+	prefetch(s3, 192);
+	if (p) goto four_blocks;
+
+	s4 = (long *) bh_ptr[4]->b_data;
+	prefetch(s4, 0);
+	prefetch(s4, 64);
+	prefetch(s4, 128);
+	prefetch(s4, 192);
+	goto five_blocks;
+
+two_blocks:
+asm volatile ("
+	.align 4
+2:
+	ldq $0,0(%0)
+	ldq $1,0(%1)
+	ldq $2,8(%0)
+	ldq $3,8(%1)
+
+	ldq $4,16(%0)
+	ldq $5,16(%1)
+	ldq $6,24(%0)
+	ldq $7,24(%1)
+
+	ldq $16,32(%0)
+	ldq $17,32(%1)
+	ldq $18,40(%0)
+	ldq $19,40(%1)
+
+	ldq $20,48(%0)
+	ldq $21,48(%1)
+	ldq $22,56(%0)
+	ldq $23,56(%1)
+
+	ldq $31,256(%0)
+	xor $0,$1,$0		# 8 cycles from $1 load
+	ldq $31,256(%1)
+	xor $2,$3,$2
+
+	stq $0,0(%0)
+	xor $4,$5,$4
+	stq $2,8(%0)
+	xor $6,$7,$6
+
+	stq $4,16(%0)
+	xor $16,$17,$16
+	stq $6,24(%0)
+	xor $18,$19,$18
+
+	stq $16,32(%0)
+	xor $20,$21,$20
+	stq $18,40(%0)
+	xor $22,$23,$22
+
+	stq $20,48(%0)
+	subq %2,1,%2
+	stq $22,56(%0)
+	addq %0,64,%0
+
+	addq %1,64,%1
+	bgt %2,2b"
+	: "=r"(d), "=r"(s1), "=r"(lines)
+	: "0"(d), "1"(s1), "2"(lines)
+	: "memory", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7",
+	  "$16", "$17", "$18", "$19", "$20", "$21", "$22", "$23");
+	return;
+
+three_blocks:
+asm volatile ("
+	.align 4
+3:
+	ldq $0,0(%0)
+	ldq $1,0(%1)
+	ldq $2,0(%2)
+	ldq $3,8(%0)
+
+	ldq $4,8(%1)
+	ldq $6,16(%0)
+	ldq $7,16(%1)
+	ldq $17,24(%0)
+
+	ldq $18,24(%1)
+	ldq $20,32(%0)
+	ldq $21,32(%1)
+	ldq $5,8(%2)
+
+	ldq $16,16(%2)
+	ldq $19,24(%2)
+	ldq $22,32(%2)
+	nop
+
+	xor $0,$1,$1		# 8 cycles from $0 load
+	xor $3,$4,$4		# 7 cycles from $4 load
+	xor $6,$7,$7		# 6 cycles from $7 load
+	xor $17,$18,$18		# 5 cycles from $18 load
+
+	xor $1,$2,$2		# 9 cycles from $2 load
+	xor $20,$21,$21		# 5 cycles from $21 load
+	stq $2,0(%0)
+	xor $4,$5,$5		# 6 cycles from $5 load
+
+	stq $5,8(%0)
+	xor $7,$16,$16		# 7 cycles from $16 load
+	stq $16,16(%0)
+	xor $18,$19,$19		# 7 cycles from $19 load
+
+	stq $19,24(%0)
+	xor $21,$22,$22		# 7 cycles from $22 load
+	stq $22,32(%0)
+	nop
+
+	ldq $0,40(%0)
+	ldq $1,40(%1)
+	ldq $3,48(%0)
+	ldq $4,48(%1)
+
+	ldq $6,56(%0)
+	ldq $7,56(%1)
+	ldq $2,40(%2)
+	ldq $5,48(%2)
+
+	ldq $16,56(%2)
+	ldq $31,256(%0)
+	ldq $31,256(%1)
+	ldq $31,256(%2)
+
+	xor $0,$1,$1		# 6 cycles from $1 load
+	xor $3,$4,$4		# 5 cycles from $4 load
+	xor $6,$7,$7		# 5 cycles from $7 load
+	xor $1,$2,$2		# 4 cycles from $2 load
+	
+	xor $4,$5,$5		# 5 cycles from $5 load
+	xor $7,$16,$16		# 4 cycles from $16 load
+	stq $2,40(%0)
+	subq %3,1,%3
+
+	stq $5,48(%0)
+	addq %2,64,%2
+	stq $16,56(%0)
+	addq %1,64,%1
+
+	addq %0,64,%0
+	bgt %3,3b"
+	: "=r"(d), "=r"(s1), "=r"(s2), "=r"(lines)
+	: "0"(d), "1"(s1), "2"(s2), "3"(lines)
+	: "memory", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7",
+	  "$16", "$17", "$18", "$19", "$20", "$21", "$22");
+	return;
+
+four_blocks:
+asm volatile ("
+	.align 4
+4:
+	ldq $0,0(%0)
+	ldq $1,0(%1)
+	ldq $2,0(%2)
+	ldq $3,0(%3)
+
+	ldq $4,8(%0)
+	ldq $5,8(%1)
+	ldq $6,8(%2)
+	ldq $7,8(%3)
+
+	ldq $16,16(%0)
+	ldq $17,16(%1)
+	ldq $18,16(%2)
+	ldq $19,16(%3)
+
+	ldq $20,24(%0)
+	xor $0,$1,$1		# 6 cycles from $1 load
+	ldq $21,24(%1)
+	xor $2,$3,$3		# 6 cycles from $3 load
+
+	ldq $0,24(%2)
+	xor $1,$3,$3
+	ldq $1,24(%3)
+	xor $4,$5,$5		# 7 cycles from $5 load
+
+	stq $3,0(%0)
+	xor $6,$7,$7
+	xor $16,$17,$17		# 7 cycles from $17 load
+	xor $5,$7,$7
+
+	stq $7,8(%0)
+	xor $18,$19,$19		# 7 cycles from $19 load
+	ldq $2,32(%0)
+	xor $17,$19,$19
+
+	ldq $3,32(%1)
+	ldq $4,32(%2)
+	ldq $5,32(%3)
+	xor $20,$21,$21		# 8 cycles from $21 load
+
+	ldq $6,40(%0)
+	ldq $7,40(%1)
+	ldq $16,40(%2)
+	ldq $17,40(%3)
+
+	stq $19,16(%0)
+	xor $0,$1,$1		# 9 cycles from $1 load
+	xor $2,$3,$3		# 5 cycles from $3 load
+	xor $21,$1,$1
+
+	ldq $18,48(%0)
+	xor $4,$5,$5		# 5 cycles from $5 load
+	ldq $19,48(%1)
+	xor $3,$5,$5
+
+	ldq $20,48(%2)
+	ldq $21,48(%3)
+	ldq $0,56(%0)
+	ldq $1,56(%1)
+
+	ldq $2,56(%2)
+	xor $6,$7,$7		# 8 cycles from $6 load
+	ldq $3,56(%3)
+	xor $16,$17,$17		# 8 cycles from $17 load
+
+	ldq $31,256(%0)
+	xor $7,$17,$17
+	ldq $31,256(%1)
+	xor $18,$19,$19		# 6 cycles from $19 load
+
+	ldq $31,256(%2)
+	xor $20,$21,$21		# 6 cycles from $21 load
+	ldq $31,256(%3)
+	xor $19,$21,$21
+
+	stq $1,24(%0)
+	xor $0,$1,$1		# 7 cycles from $1 load
+	stq $5,32(%0)
+	xor $2,$3,$3		# 6 cycles from $3 load
+
+	stq $17,40(%0)
+	xor $1,$3,$3
+	stq $21,48(%0)
+	subq %4,1,%4
+
+	stq $3,56(%0)
+	addq %3,64,%3
+	addq %2,64,%2
+	addq %1,64,%1
+
+	addq %0,64,%0
+	bgt %4,4b"
+	: "=r"(d), "=r"(s1), "=r"(s2), "=r"(s3), "=r"(lines)
+	: "0"(d), "1"(s1), "2"(s2), "3"(s3), "4"(lines)
+	: "memory", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7",
+	  "$16", "$17", "$18", "$19", "$20", "$21");
+	return;
+
+five_blocks:
+asm volatile ("
+	ldq %0,0(%6)
+	ldq %1,8(%6)
+	ldq %2,16(%6)
+	ldq %3,24(%6)
+	ldq %4,32(%6)
+	ldq %0,%7(%0)
+	ldq %1,%7(%1)
+	ldq %2,%7(%2)
+	ldq %3,%7(%3)
+	ldq %4,%7(%4)
+	.align 4
+5:
+	ldq $0,0(%0)
+	ldq $1,0(%1)
+	ldq $2,0(%2)
+	ldq $3,0(%3)
+
+	ldq $4,0(%4)
+	ldq $5,8(%0)
+	ldq $6,8(%1)
+	ldq $7,8(%2)
+
+	ldq $16,8(%3)
+	ldq $17,8(%4)
+	ldq $18,16(%0)
+	ldq $19,16(%1)
+
+	ldq $20,16(%2)
+	xor $0,$1,$1		# 6 cycles from $1 load
+	ldq $21,16(%3)
+	xor $2,$3,$3		# 6 cycles from $3 load
+
+	ldq $0,16(%4)
+	xor $1,$3,$3
+	ldq $1,24(%0)
+	xor $3,$4,$4		# 7 cycles from $4 load
+
+	stq $4,0(%0)
+	xor $5,$6,$6		# 7 cycles from $6 load
+	xor $7,$16,$16		# 7 cycles from $16 load
+	xor $6,$17,$17		# 7 cycles from $17 load
+
+	ldq $2,24(%1)
+	xor $16,$17,$17
+	ldq $3,24(%2)
+	xor $18,$19,$19		# 8 cycles from $19 load
+
+	stq $17,8(%0)
+	xor $19,$20,$20		# 8 cycles from $20 load
+	ldq $4,24(%3)
+	xor $21,$0,$0		# 7 cycles from $0 load
+
+	ldq $5,24(%4)
+	xor $20,$0,$0
+	ldq $6,32(%0)
+	ldq $7,32(%1)
+
+	stq $0,16(%0)
+	xor $1,$2,$2		# 6 cycles from $2 load
+	ldq $16,32(%2)
+	xor $3,$4,$4		# 4 cycles from $4 load
+	
+	ldq $17,32(%3)
+	xor $2,$4,$4
+	ldq $18,32(%4)
+	ldq $19,40(%0)
+
+	ldq $20,40(%1)
+	ldq $21,40(%2)
+	ldq $0,40(%3)
+	xor $4,$5,$5		# 7 cycles from $5 load
+
+	stq $5,24(%0)
+	xor $6,$7,$7		# 7 cycles from $7 load
+	ldq $1,40(%4)
+	ldq $2,48(%0)
+
+	ldq $3,48(%1)
+	xor $7,$16,$16		# 7 cycles from $16 load
+	ldq $4,48(%2)
+	xor $17,$18,$18		# 6 cycles from $18 load
+
+	ldq $5,48(%3)
+	xor $16,$18,$18
+	ldq $6,48(%4)
+	xor $19,$20,$20		# 7 cycles from $20 load
+
+	stq $18,32(%0)
+	xor $20,$21,$21		# 8 cycles from $21 load
+	ldq $7,56(%0)
+	xor $0,$1,$1		# 6 cycles from $1 load
+
+	ldq $16,56(%1)
+	ldq $17,56(%2)
+	ldq $18,56(%3)
+	ldq $19,56(%4)
+
+	ldq $31,256(%0)
+	xor $21,$1,$1
+	ldq $31,256(%1)
+	xor $2,$3,$3		# 9 cycles from $3 load
+
+	ldq $31,256(%2)
+	xor $3,$4,$4		# 9 cycles from $4 load
+	ldq $31,256(%3)
+	xor $5,$6,$6		# 8 cycles from $6 load
+
+	ldq $31,256(%4)
+	xor $4,$6,$6
+	xor $7,$16,$16		# 7 cycles from $16 load
+	xor $17,$18,$18		# 6 cycles from $18 load
+
+	stq $6,48(%0)
+	xor $16,$18,$18
+	subq %5,1,%5
+	xor $18,$19,$19		# 8 cycles from $19 load
+
+	stq $19,56(%0)
+	addq %4,64,%4
+	addq %3,64,%3
+	addq %2,64,%2
+
+	addq %1,64,%1
+	addq %0,64,%0
+	bgt %5,5b"
+	: "=&r"(d), "=&r"(s1), "=&r"(s2), "=&r"(s3), "=r"(s4), "=r"(lines)
+	/* ARG! We've run out of asm arguments!  We've got to reload
+	   all those pointers we just loaded.  */
+	: "r"(bh_ptr), "i" (&((struct buffer_head *)0)->b_data), "5"(lines)
+	: "memory", "$0", "$1", "$2", "$3", "$4", "$5", "$6", "$7",
+	  "$16", "$17", "$18", "$19", "$20", "$21");
+	return;
+}
+
+#undef prefetch
+
+#endif /* __alpha__ */
+
 #ifndef __sparc_v9__
 
 /*
@@ -1815,7 +2627,20 @@ static inline void pick_fastest_function(void)
 	}
 #ifdef CONFIG_X86_XMM 
 	if (cpu_has_xmm) {
+		/* we force the use of the KNI xor block because it
+			can write around l2.  we may also be able
+			to load into the l1 only depending on how
+			the cpu deals with a load to a line that is
+			being prefetched.
+		*/
 		fastest = &t_xor_block_pIII_kni;
+	}
+#endif
+#ifdef __alpha__
+	if (implver() == IMPLVER_EV6) {
+		/* Force the use of alpha_prefetch if EV6, as it
+		   is significantly faster in the cold cache case.  */
+		fastest = &t_xor_block_alpha_prefetch;
 	}
 #endif
 	xor_block = fastest->xor_block;
@@ -1854,27 +2679,23 @@ void calibrate_xor_block(void)
 	if (cpu_has_xmm) {
 		printk(KERN_INFO
 			"raid5: KNI detected, trying cache-avoiding KNI checksum routine\n");
-		/* we force the use of the KNI xor block because it
-			can write around l2.  we may also be able
-			to load into the l1 only depending on how
-			the cpu deals with a load to a line that is
-			being prefetched.
-		*/
 		xor_speed(&t_xor_block_pIII_kni,&b1,&b2);
 	}
 #endif /* CONFIG_X86_XMM */
 
 #ifdef __i386__
-
 	if (md_cpu_has_mmx()) {
 		printk(KERN_INFO
 			"raid5: MMX detected, trying high-speed MMX checksum routines\n");
 		xor_speed(&t_xor_block_pII_mmx,&b1,&b2);
 		xor_speed(&t_xor_block_p5_mmx,&b1,&b2);
 	}
-
 #endif /* __i386__ */
-	
+
+#ifdef __alpha__
+	xor_speed(&t_xor_block_alpha,&b1,&b2);
+	xor_speed(&t_xor_block_alpha_prefetch,&b1,&b2);
+#endif
 	
 	xor_speed(&t_xor_block_8regs,&b1,&b2);
 	xor_speed(&t_xor_block_32regs,&b1,&b2);

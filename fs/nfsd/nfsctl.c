@@ -312,7 +312,9 @@ done:
 EXPORT_NO_SYMBOLS;
 MODULE_AUTHOR("Olaf Kirch <okir@monad.swb.de>");
 
-extern long (*do_nfsservctl)(int, void *, void *);
+struct nfsd_linkage nfsd_linkage_s = {
+	do_nfsservctl: handle_sys_nfsservctl,
+};
 
 /*
  * Initialize the module
@@ -321,7 +323,7 @@ int
 init_module(void)
 {
 	printk(KERN_INFO "Installing knfsd (copyright (C) 1996 okir@monad.swb.de).\n");
-	do_nfsservctl = handle_sys_nfsservctl;
+	nfsd_linkage = &nfsd_linkage_s;
 	return 0;
 }
 
@@ -331,7 +333,7 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	do_nfsservctl = NULL;
+	nfsd_linkage = NULL;
 	nfsd_export_shutdown();
 	nfsd_cache_shutdown();
 	remove_proc_entry("fs/nfs/exports", NULL);

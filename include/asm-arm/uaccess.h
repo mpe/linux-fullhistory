@@ -59,9 +59,6 @@ extern __inline__ int verify_area(int type, const void * addr, unsigned long siz
  * address space - it must have been done previously with a separate
  * "access_ok()" call.
  *
- * The "xxx_ret" versions return constant specified in the third
- * argument if something bad happens.
- *
  * The "xxx_error" versions set the third argument to EFAULT if an
  * error occurs, and leave it unchanged on success.  Note that these
  * versions are void (ie, don't return a value as such).
@@ -69,14 +66,10 @@ extern __inline__ int verify_area(int type, const void * addr, unsigned long siz
 #define get_user(x,p)		__get_user_check((x),(p),sizeof(*(p)))
 #define __get_user(x,p)		__get_user_nocheck((x),(p),sizeof(*(p)))
 #define __get_user_error(x,p,e)	__get_user_nocheck_error((x),(p),sizeof(*(p)),(e))
-#define get_user_ret(x,p,r)	({ if (get_user(x,p)) return r; })
-#define __get_user_ret(x,p,r)	({ if (__get_user(x,p)) return r; })
 
 #define put_user(x,p)		__put_user_check((__typeof(*(p)))(x),(p),sizeof(*(p)))
 #define __put_user(x,p)		__put_user_nocheck((__typeof(*(p)))(x),(p),sizeof(*(p)))
 #define __put_user_error(x,p,e)	__put_user_nocheck_error((x),(p),sizeof(*(p)),(e))
-#define put_user_ret(x,p,r)	({ if (put_user(x,p)) return r; })
-#define __put_user_ret(x,p,r)	({ if (__put_user(x,p)) return r; })
 
 static __inline__ unsigned long copy_from_user(void *to, const void *from, unsigned long n)
 {
@@ -91,9 +84,6 @@ static __inline__ unsigned long __copy_from_user(void *to, const void *from, uns
 	return n;
 }
 
-#define copy_from_user_ret(t,f,n,r)					\
-	({ if (copy_from_user(t,f,n)) return r; })
-
 static __inline__ unsigned long copy_to_user(void *to, const void *from, unsigned long n)
 {
 	if (access_ok(VERIFY_WRITE, to, n))
@@ -106,9 +96,6 @@ static __inline__ unsigned long __copy_to_user(void *to, const void *from, unsig
 	__do_copy_to_user(to, from, n);
 	return n;
 }
-
-#define copy_to_user_ret(t,f,n,r)					\
-	({ if (copy_to_user(t,f,n)) return r; })
 
 static __inline__ unsigned long clear_user (void *to, unsigned long n)
 {

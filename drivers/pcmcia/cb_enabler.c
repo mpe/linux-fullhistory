@@ -2,7 +2,7 @@
 
     CardBus device enabler
 
-    cb_enabler.c 1.28 1999/12/09 20:57:37
+    cb_enabler.c 1.31 2000/06/12 21:29:36
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -15,7 +15,7 @@
     rights and limitations under the License.
 
     The initial developer of the original code is David A. Hinds
-    <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+    <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
     are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
 
     Alternatively, the contents of this file may be used under the
@@ -58,12 +58,12 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"cb_enabler.c 1.28 1999/12/09 20:57:37 (David Hinds)";
+"cb_enabler.c 1.31 2000/06/12 21:29:36 (David Hinds)";
 #else
 #define DEBUG(n, args...) do { } while (0)
 #endif
 
-MODULE_AUTHOR("David Hinds <dhinds@pcmcia.sourceforge.org>");
+MODULE_AUTHOR("David Hinds <dahinds@users.sourceforge.net>");
 MODULE_DESCRIPTION("CardBus stub enabler module");
 
 /*====================================================================*/
@@ -168,9 +168,9 @@ static void cb_detach(dev_link_t *link)
     driver_info_t *dev = link->priv;
     dev_link_t **linkp;
     bus_info_t *b = (void *)link->win;
-    
+
     DEBUG(0, "cb_detach(0x%p)\n", link);
-    
+
     /* Locate device structure */
     for (linkp = &dev->dev_list; *linkp; linkp = &(*linkp)->next)
 	if (*linkp == link) break;
@@ -179,16 +179,16 @@ static void cb_detach(dev_link_t *link)
 
     if (link->state & DEV_CONFIG)
 	cb_release((u_long)link);
-    
+
     /* Don't drop Card Services connection if we are the bus owner */
-    if ((b->flags != 0) && (link == b->owner)) {
+    if (b && (b->flags != 0) && (link == b->owner)) {
 	link->state |= DEV_STALE_LINK;
 	return;
     }
-    
+
     if (link->handle)
 	pcmcia_deregister_client(link->handle);
-    
+
     *linkp = link->next;
     kfree(link);
     MOD_DEC_USE_COUNT;

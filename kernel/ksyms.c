@@ -55,9 +55,6 @@
 
 extern int console_loglevel;
 extern void set_device_ro(kdev_t dev,int flag);
-#if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
-extern long (*do_nfsservctl)(int, void *, void *);
-#endif
 
 extern void *sys_call_table;
 
@@ -264,10 +261,6 @@ EXPORT_SYMBOL(filemap_nopage);
 EXPORT_SYMBOL(filemap_swapout);
 EXPORT_SYMBOL(filemap_sync);
 EXPORT_SYMBOL(lock_page);
-
-#if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
-EXPORT_SYMBOL(do_nfsservctl);
-#endif
 
 /* device registration */
 EXPORT_SYMBOL(register_chrdev);

@@ -686,7 +686,8 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 
 	if (cmd == SOUND_MIXER_PRIVATE1) {
 		/* enable/disable/query mixer preamp */
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != -1) {
 			val = val ? 0xff : 0xf7;
 			write_mixer(s, 0x7d, (read_mixer(s, 0x7d) | 0x08) & val);
@@ -696,7 +697,8 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 	}
 	if (cmd == SOUND_MIXER_PRIVATE2) {
 		/* enable/disable/query spatializer */
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != -1) {
 			val &= 0x3f;
 			write_mixer(s, 0x52, val);
@@ -773,7 +775,8 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 			       0xb4, read_ctrl(s, 0xb4));
 		}
 #endif
-	        get_user_ret(val, (int *)arg, -EFAULT);
+	        if (get_user(val, (int *)arg))
+			return -EFAULT;
                 i = hweight32(val);
                 if (i == 0)
                         return 0;
@@ -789,7 +792,8 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 		return 0;
 
 	case SOUND_MIXER_VOLUME:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		l = val & 0xff;
 		if (l > 100)
 			l = 100;
@@ -820,7 +824,8 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 		return put_user(s->mix.vol[9], (int *)arg);
 
 	case SOUND_MIXER_SPEAKER:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		l = val & 0xff;
 		if (l > 100)
 			l = 100;
@@ -837,7 +842,8 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 		return put_user(s->mix.vol[7], (int *)arg);
 
 	case SOUND_MIXER_RECLEV:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		l = (val << 1) & 0x1fe;
 		if (l > 200)
 			l = 200;
@@ -864,7 +870,8 @@ static int mixer_ioctl(struct solo1_state *s, unsigned int cmd, unsigned long ar
 		i = _IOC_NR(cmd);
 		if (i >= SOUND_MIXER_NRDEVICES || !(vidx = mixtable1[i]))
 			return -EINVAL;
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		l = (val << 1) & 0x1fe;
 		if (l > 200)
 			l = 200;
@@ -1268,7 +1275,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		return 0;
 
         case SNDCTL_DSP_SPEED:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val >= 0) {
 			stop_adc(s);
 			stop_dac(s);
@@ -1295,7 +1303,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		return put_user(s->rate, (int *)arg);
 		
         case SNDCTL_DSP_STEREO:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		stop_adc(s);
 		stop_dac(s);
 		s->dma_adc.ready = s->dma_dac.ready = 0;
@@ -1305,7 +1314,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		return 0;
 
         case SNDCTL_DSP_CHANNELS:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 0) {
 			stop_adc(s);
 			stop_dac(s);
@@ -1320,7 +1330,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
                 return put_user(AFMT_S16_LE|AFMT_U16_LE|AFMT_S8|AFMT_U8, (int *)arg);
 
 	case SNDCTL_DSP_SETFMT: /* Selects ONE fmt*/
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != AFMT_QUERY) {
 			stop_adc(s);
 			stop_dac(s);
@@ -1346,7 +1357,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		return put_user(val, (int *)arg);
 
 	case SNDCTL_DSP_SETTRIGGER:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			if (val & PCM_ENABLE_INPUT) {
 				if (!s->dma_adc.ready && (ret = prog_dmabuf_adc(s)))
@@ -1459,7 +1471,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		return put_user(s->dma_adc.fragsize, (int *)arg);
 
         case SNDCTL_DSP_SETFRAGMENT:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			s->dma_adc.ossfragshift = val & 0xffff;
 			s->dma_adc.ossmaxfrags = (val >> 16) & 0xffff;
@@ -1486,7 +1499,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		if ((file->f_mode & FMODE_READ && s->dma_adc.subdivision) ||
 		    (file->f_mode & FMODE_WRITE && s->dma_dac.subdivision))
 			return -EINVAL;
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 1 && val != 2 && val != 4)
 			return -EINVAL;
 		if (file->f_mode & FMODE_READ)

@@ -8,11 +8,6 @@ The Digiboard Driver for Linux supports the following boards:
  switches) You can use up to 4 cards with this driver and it should work
  on other architectures than intel also.
 
-In case you have problems with this version (1.6.1) of this driver, please
-email directly to me as I made the last update. It you have a report about
-running it on other architectures than intel, email me, so I can document
-it here.
-
 A version of this driver has been taken by Digiboard to make a driver
 software package which supports also PC/Xem cards and newer PCI cards
 but it doesn't support the old PC/Xi cards and it isn't yet ported to
@@ -154,21 +149,11 @@ Sources of Information
 ----------------------
 
 Please contact digi directly digilnux@dgii.com. Forward any information of
-general interest to me.
+general interest to me so that I can include it on the webpage.
 
-Web page (mainly of historical interest): http://lameter.com/digi
+Web page: http://lameter.com/digi
 
 Christoph Lameter (christoph@lameter.com) Aug 14, 2000.
-
-Supporting Tools
-----------------
-
-Some (old) tools and more detailed information can be found at
-ftp://lameter.com/digi
-
-The "ditty" tool described in the Digiboard Manuals for other Unixes
-is also available.
-
 
 Device file creation
 --------------------

@@ -2,7 +2,7 @@
 
     Resource management routines
 
-    rsrc_mgr.c 1.77 1999/11/16 03:32:59
+    rsrc_mgr.c 1.79 2000/08/30 20:23:58
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -15,7 +15,7 @@
     rights and limitations under the License.
 
     The initial developer of the original code is David A. Hinds
-    <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+    <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
     are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
 
     Alternatively, the contents of this file may be used under the
@@ -58,14 +58,12 @@
 
 /* Parameters that can be set with 'insmod' */
 
-/* Should we probe resources for conflicts? */
-static int probe_mem = 1;
-MODULE_PARM(probe_mem, "i");
+#define INT_MODULE_PARM(n, v) static int n = v; MODULE_PARM(n, "i")
+
+INT_MODULE_PARM(probe_mem,	1);		/* memory probe? */
 #ifdef CONFIG_ISA
-static int probe_io = 1;
-static int mem_limit = 0x10000;
-MODULE_PARM(probe_io, "i");
-MODULE_PARM(mem_limit, "i");
+INT_MODULE_PARM(probe_io,	1);		/* IO port probe? */
+INT_MODULE_PARM(mem_limit,	0x10000);
 #endif
 
 /*======================================================================

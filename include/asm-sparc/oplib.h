@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.20 1998/09/17 11:05:25 jj Exp $
+/* $Id: oplib.h,v 1.21 2000/08/26 02:38:04 anton Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -9,6 +9,7 @@
 #define __SPARC_OPLIB_H
 
 #include <asm/openprom.h>
+#include <linux/spinlock.h>
 
 /* The master romvec pointer... */
 extern struct linux_romvec *romvec;
@@ -311,6 +312,7 @@ extern void prom_apply_obio_ranges(struct linux_prom_registers *obioregs, int nr
 /* Apply ranges of any prom node (and optionally parent node as well) to registers. */
 extern void prom_apply_generic_ranges(int node, int parent, 
 				      struct linux_prom_registers *sbusregs, int nregs);
-				   
+
+extern spinlock_t prom_lock;
 
 #endif /* !(__SPARC_OPLIB_H) */

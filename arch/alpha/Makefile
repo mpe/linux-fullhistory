@@ -23,6 +23,8 @@ have_mcpu_pca56 := $(shell if $(CC) -mcpu=pca56 -S -o /dev/null -xc /dev/null > 
 
 have_mcpu_ev6 := $(shell if $(CC) -mcpu=ev6 -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo y; else echo n; fi)
 
+have_mcpu_ev67 := $(shell if $(CC) -mcpu=ev67 -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo y; else echo n; fi)
+
 # Turn on the proper cpu optimizations.
 ifeq ($(have_mcpu),y)
   # If GENERIC, make sure to turn off any instruction set extensions that

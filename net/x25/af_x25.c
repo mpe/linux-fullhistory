@@ -20,6 +20,7 @@
  *	2000-22-03	Daniela Squassoni Allowed disabling/enabling of 
  *					  facilities negotiation and increased 
  *					  the throughput upper limit.
+ *	2000-27-08	Arnaldo C. Melo s/suser/capable/ + micro cleanups
  */
 
 #include <linux/config.h>
@@ -402,10 +403,7 @@ static int x25_getsockopt(struct socket *sock, int level, int optname,
 	if (put_user(len, optlen))
 		return -EFAULT;
 
-	if (copy_to_user(optval, &val, len))
-		return -EFAULT;
-
-	return 0;
+	return copy_to_user(optval, &val, len) ? -EFAULT : 0;
 }
 
 static int x25_listen(struct socket *sock, int backlog)
@@ -1067,9 +1065,7 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if (amount < 0)
 				amount = 0;
-			if (put_user(amount, (unsigned int *)arg))
-				return -EFAULT;
-			return 0;
+			return put_user(amount, (unsigned int *)arg);
 		}
 
 		case TIOCINQ: {
@@ -1078,18 +1074,14 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
 				amount = skb->len;
-			if (put_user(amount, (unsigned int *)arg))
-				return -EFAULT;
-			return 0;
+			return put_user(amount, (unsigned int *)arg);
 		}
 
 		case SIOCGSTAMP:
 			if (sk != NULL) {
 				if (sk->stamp.tv_sec == 0)
 					return -ENOENT;
-				if (copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)))
-					return -EFAULT;
-				return 0;
+				return copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)) ? -EFAULT : 0;
 			}
 			return -EINVAL;
 
@@ -1114,15 +1106,13 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return x25_subscr_ioctl(cmd, (void *)arg);
 
 		case SIOCX25SSUBSCRIP:
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_NET_ADMIN)) return -EPERM;
 			return x25_subscr_ioctl(cmd, (void *)arg);
 
 		case SIOCX25GFACILITIES: {
 			struct x25_facilities facilities;
 			facilities = sk->protinfo.x25->facilities;
-			if (copy_to_user((void *)arg, &facilities, sizeof(facilities)))
-				return -EFAULT;
-			return 0;
+			return copy_to_user((void *)arg, &facilities, sizeof(facilities)) ? -EFAULT : 0;
 		}
 
 		case SIOCX25SFACILITIES: {
@@ -1148,9 +1138,7 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCX25GCALLUSERDATA: {
 			struct x25_calluserdata calluserdata;
 			calluserdata = sk->protinfo.x25->calluserdata;
-			if (copy_to_user((void *)arg, &calluserdata, sizeof(calluserdata)))
-				return -EFAULT;
-			return 0;
+			return copy_to_user((void *)arg, &calluserdata, sizeof(calluserdata)) ? -EFAULT : 0;
 		}
 
 		case SIOCX25SCALLUSERDATA: {
@@ -1166,9 +1154,7 @@ static int x25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCX25GCAUSEDIAG: {
 			struct x25_causediag causediag;
 			causediag = sk->protinfo.x25->causediag;
-			if (copy_to_user((void *)arg, &causediag, sizeof(causediag)))
-				return -EFAULT;
-			return 0;
+			return copy_to_user((void *)arg, &causediag, sizeof(causediag)) ? -EFAULT : 0;
 		}
 
  		default:

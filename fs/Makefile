@@ -11,9 +11,10 @@ FILESYSTEMS = $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
 O_TARGET := fs.o
 O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 		super.o  block_dev.o stat.o exec.o pipe.o namei.o fcntl.o \
-		ioctl.o readdir.o select.o fifo.o locks.o filesystems.o \
+		ioctl.o readdir.o select.o fifo.o locks.o \
 		dcache.o inode.o attr.o bad_inode.o file.o iobuf.o \
 		$(BINFMTS) $(FILESYSTEMS)
+OX_OBJS := filesystems.o
 
 ALL_SUB_DIRS := coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
 		hpfs sysv smbfs ncpfs ufs efs affs romfs autofs hfs lockd \

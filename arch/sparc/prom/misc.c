@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.17 1998/07/21 10:36:22 jj Exp $
+/* $Id: misc.c,v 1.18 2000/08/26 02:38:03 anton Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -15,16 +15,18 @@
 
 extern void restore_current(void);
 
+spinlock_t prom_lock = SPIN_LOCK_UNLOCKED;
+
 /* Reset and reboot the machine with the command 'bcommand'. */
 void
 prom_reboot(char *bcommand)
 {
 	unsigned long flags;
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	(*(romvec->pv_reboot))(bcommand);
 	/* Never get here. */
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 }
 
 /* Forth evaluate the expression contained in 'fstring'. */
@@ -34,13 +36,13 @@ prom_feval(char *fstring)
 	unsigned long flags;
 	if(!fstring || fstring[0] == 0)
 		return;
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	if(prom_vers == PROM_V0)
 		(*(romvec->pv_fortheval.v0_eval))(strlen(fstring), fstring);
 	else
 		(*(romvec->pv_fortheval.v2_eval))(fstring);
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 }
 
 /* We want to do this more nicely some day. */
@@ -66,10 +68,10 @@ prom_cmdline(void)
 		prom_palette (1);
 #endif
 	install_obp_ticker();
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	(*(romvec->pv_abort))();
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 	install_linux_ticker();
 #ifdef CONFIG_SUN_AUXIO
 	TURN_ON_LED;
@@ -88,11 +90,11 @@ prom_halt(void)
 {
 	unsigned long flags;
 again:
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	(*(romvec->pv_halt))();
 	/* Never get here. */
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 	goto again; /* PROM is out to get me -DaveM */
 }
 

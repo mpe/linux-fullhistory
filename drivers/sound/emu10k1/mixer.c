@@ -1038,7 +1038,8 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 		if (card->isaps)
 			return -EINVAL;
 
-		get_user_ret(val, (int *) arg, -EFAULT);
+		if (get_user(val, (int *) arg))
+			return -EFAULT;
 		i = hweight32(val);
 		if (i == 0)
 			return 0;	/* val = mixer_recmask(s); */
@@ -1062,7 +1063,8 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 
 		if (i >= SOUND_MIXER_NRDEVICES)
 			return -EINVAL;
-		get_user_ret(val, (int *) arg, -EFAULT);
+		if (get_user(val, (int *) arg))
+			return -EFAULT;
 		if (emu10k1_mixer_wrch(card, i, val))
 			return -EINVAL;
 

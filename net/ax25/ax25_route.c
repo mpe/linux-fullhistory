@@ -38,6 +38,7 @@
  *			Joerg(DL1BKE)	Moved BPQ Ethernet driver to separate device.
  *	AX.25 035	Frederic(F1OAT)	Support for pseudo-digipeating.
  *			Jonathan(G4KLX)	Support for packet forwarding.
+ *			Arnaldo C. Melo s/suser/capable/
  */
 
 #include <linux/config.h>
@@ -363,7 +364,7 @@ int ax25_rt_autobind(ax25_cb *ax25, ax25_address *addr)
 		return -EHOSTUNREACH;
 
 	if ((call = ax25_findbyuid(current->euid)) == NULL) {
-		if (ax25_uid_policy && !suser())
+		if (ax25_uid_policy && !capable(CAP_NET_BIND_SERVICE))
 			return -EPERM;
 		call = (ax25_address *)ax25->ax25_dev->dev->dev_addr;
 	}

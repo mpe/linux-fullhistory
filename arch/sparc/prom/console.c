@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.22 2000/02/08 20:24:23 davem Exp $
+/* $Id: console.c,v 1.23 2000/08/26 02:38:03 anton Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
@@ -30,7 +30,7 @@ prom_nbgetchar(void)
 	int i = -1;
 	unsigned long flags;
 
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_SUN4:
@@ -49,7 +49,7 @@ prom_nbgetchar(void)
 		break;
 	};
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 	return i; /* Ugh, we could spin forever on unsupported proms ;( */
 }
 
@@ -63,7 +63,7 @@ prom_nbputchar(char c)
 	unsigned long flags;
 	int i = -1;
 
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_SUN4:
@@ -82,7 +82,7 @@ prom_nbputchar(char c)
 		break;
 	};
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 	return i; /* Ugh, we could spin forever on unsupported proms ;( */
 }
 
@@ -125,10 +125,10 @@ prom_query_input_device()
 			return PROMDEV_I_UNK;
 		};
 	case PROM_V3:
-		save_flags(flags); cli();
+		spin_lock_irqsave(&prom_lock, flags);
 		st_p = (*romvec->pv_v2devops.v2_inst2pkg)(*romvec->pv_v2bootargs.fd_stdin);
 		restore_current();
-		restore_flags(flags);
+		spin_unlock_irqrestore(&prom_lock, flags);
 		if(prom_node_has_property(st_p, "keyboard"))
 			return PROMDEV_IKBD;
 		if (prom_getproperty(st_p, "name", propb, sizeof(propb)) != -1) {
@@ -174,10 +174,10 @@ prom_query_output_device()
 		break;
 	case PROM_V2:
 	case PROM_V3:
-		save_flags(flags); cli();
+		spin_lock_irqsave(&prom_lock, flags);
 		st_p = (*romvec->pv_v2devops.v2_inst2pkg)(*romvec->pv_v2bootargs.fd_stdout);
 		restore_current();
-		restore_flags(flags);
+		spin_unlock_irqrestore(&prom_lock, flags);
 		propl = prom_getproperty(st_p, "device_type", propb, sizeof(propb));
 		if (propl >= 0 && propl == sizeof("display") &&
 			strncmp("display", propb, sizeof("display")) == 0)

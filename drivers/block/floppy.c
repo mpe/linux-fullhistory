@@ -118,6 +118,12 @@
  * being used to store jiffies, which are unsigned longs).
  */
 
+/*
+ * 2000/08/28 -- Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+ * - get rid of check_region
+ * - s/suser/capable/
+ */
+
 #define FLOPPY_SANITY_CHECK
 #undef  FLOPPY_SILENT_DCL_CLEAR
 
@@ -3497,7 +3503,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
 	/* permission checks */
 	if (((cmd & 0x40) && !(filp->f_mode & 2)) ||
-	    ((cmd & 0x80) && !suser()))
+	    ((cmd & 0x80) && !capable(CAP_SYS_ADMIN)))
 		return -EPERM;
 
 	/* copyin */
@@ -4299,23 +4305,14 @@ static int floppy_grab_irq_and_dma(void)
 
 	for (fdc=0; fdc< N_FDC; fdc++){
 		if (FDCS->address != -1){
-			if (check_region(FDCS->address, 6) < 0 ||
-			    check_region(FDCS->address+7, 1) < 0) {
+			if (!request_region(FDCS->address, 6, "floppy")) {
 				DPRINT("Floppy io-port 0x%04lx in use\n", FDCS->address);
-				fd_free_irq();
-				fd_free_dma();
-				while(--fdc >= 0) {
-					release_region(FDCS->address, 6);
-					release_region(FDCS->address+7, 1);
-				}
-				MOD_DEC_USE_COUNT;
-				spin_lock_irqsave(&floppy_usage_lock, flags);
-				usage_count--;
-				spin_unlock_irqrestore(&floppy_usage_lock, flags);
-				return -1;
+				goto cleanup1;
 			}
-			request_region(FDCS->address, 6, "floppy");
-			request_region(FDCS->address+7, 1, "floppy DIR");
+			if (!request_region(FDCS->address + 7, 1, "floppy DIR")) {
+				DPRINT("Floppy io-port 0x%04lx in use\n", FDCS->address + 7);
+				goto cleanup2;
+			}
 			/* address + 6 is reserved, and may be taken by IDE.
 			 * Unfortunately, Adaptec doesn't know this :-(, */
 		}
@@ -4339,6 +4336,20 @@ static int floppy_grab_irq_and_dma(void)
 	fdc = 0;
 	irqdma_allocated = 1;
 	return 0;
+cleanup2:
+	release_region(FDCS->address, 6);
+cleanup1:
+	fd_free_irq();
+	fd_free_dma();
+	while(--fdc >= 0) {
+		release_region(FDCS->address, 6);
+		release_region(FDCS->address + 7, 1);
+	}
+	MOD_DEC_USE_COUNT;
+	spin_lock_irqsave(&floppy_usage_lock, flags);
+	usage_count--;
+	spin_unlock_irqrestore(&floppy_usage_lock, flags);
+	return -1;
 }
 
 static void floppy_release_irq_and_dma(void)

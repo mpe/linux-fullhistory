@@ -100,9 +100,10 @@ sgi_graphics_ioctl (struct inode *inode, struct file *file, unsigned int cmd, un
 		i = verify_area (VERIFY_READ, (void *) arg, sizeof (struct gfx_getboardinfo_args));
 		if (i) return i;
 		
-		__get_user_ret (board,    &bia->board, -EFAULT);
-		__get_user_ret (dest_buf, &bia->buf,   -EFAULT);
-		__get_user_ret (max_len,  &bia->len,   -EFAULT);
+		if (__get_user (board,    &bia->board) ||
+		    __get_user (dest_buf, &bia->buf) ||
+		    __get_user (max_len,  &bia->len))
+			return -EFAULT;
 
 		if (board >= boards)
 			return -EINVAL;
@@ -125,8 +126,9 @@ sgi_graphics_ioctl (struct inode *inode, struct file *file, unsigned int cmd, un
 		i = verify_area (VERIFY_READ, (void *)arg, sizeof (struct gfx_attach_board_args));
 		if (i) return i;
 
-		__get_user_ret (board, &att->board, -EFAULT);
-		__get_user_ret (vaddr, &att->vaddr, -EFAULT);
+		if (__get_user (board, &att->board) ||
+		    __get_user (vaddr, &att->vaddr))
+			return -EFAULT;
 
 		/* Ok for now we are assuming /dev/graphicsN -> head N even
 		 * if the ioctl api suggests that this is not quite the case.

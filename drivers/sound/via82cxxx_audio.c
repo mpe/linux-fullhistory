@@ -1900,7 +1900,8 @@ static int via_dsp_ioctl (struct inode *inode, struct file *file,
 
 	/* query or set current channel's PCM data format */
 	case SNDCTL_DSP_SETFMT:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != AFMT_QUERY) {
 			rc = 0;
 
@@ -1928,7 +1929,8 @@ static int via_dsp_ioctl (struct inode *inode, struct file *file,
 
 	/* query or set number of channels (1=mono, 2=stereo) */
         case SNDCTL_DSP_CHANNELS:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 0) {
 			rc = 0;
 			spin_lock_irq (&card->lock);
@@ -1954,7 +1956,8 @@ static int via_dsp_ioctl (struct inode *inode, struct file *file,
 	
 	/* enable (val is not zero) or disable (val == 0) stereo */
         case SNDCTL_DSP_STEREO:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		rc = 0;
 		spin_lock_irq (&card->lock);
 		if (rc == 0 && rd)
@@ -1969,7 +1972,8 @@ static int via_dsp_ioctl (struct inode *inode, struct file *file,
 	
 	/* query or set sampling rate */
         case SNDCTL_DSP_SPEED:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val < 0)
 			return -EINVAL;
 		if (val > 0) {
@@ -2061,7 +2065,8 @@ static int via_dsp_ioctl (struct inode *inode, struct file *file,
 
 	/* set fragment size.  implemented as a successful no-op for now */
 	case SNDCTL_DSP_SETFRAGMENT:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 
 		DPRINTK ("SNDCTL_DSP_SETFRAGMENT (fragshift==0x%04X (%d), maxfrags==0x%04X (%d))\n",
 			 val & 0xFFFF,

@@ -21,6 +21,7 @@
  *					Implemented idle timer.
  *					Added use count to neighbour.
  *                      Tomi(OH2BNS)    Fixed rose_getname().
+ *                      Arnaldo C. Melo s/suser/capable/ + micro cleanups
  */
 
 #include <linux/config.h>
@@ -510,10 +511,7 @@ static int rose_getsockopt(struct socket *sock, int level, int optname,
 	if (put_user(len, optlen))
 		return -EFAULT;
 
-	if (copy_to_user(optval, &val, len))
-		return -EFAULT;
-
-	return 0;
+	return copy_to_user(optval, &val, len) ? -EFAULT : 0;
 }
 
 static int rose_listen(struct socket *sock, int backlog)
@@ -695,7 +693,7 @@ static int rose_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	source = &addr->srose_call;
 
 	if ((user = ax25_findbyuid(current->euid)) == NULL) {
-		if (ax25_uid_policy && !suser())
+		if (ax25_uid_policy && !capable(CAP_NET_BIND_SERVICE))
 			return -EACCES;
 		user = source;
 	}
@@ -1236,9 +1234,7 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if (amount < 0)
 				amount = 0;
-			if (put_user(amount, (unsigned int *)arg))
-				return -EFAULT;
-			return 0;
+			return put_user(amount, (unsigned int *)arg);
 		}
 
 		case TIOCINQ: {
@@ -1247,18 +1243,14 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
 				amount = skb->len;
-			if (put_user(amount, (unsigned int *)arg))
-				return -EFAULT;
-			return 0;
+			return put_user(amount, (unsigned int *)arg);
 		}
 
 		case SIOCGSTAMP:
 			if (sk != NULL) {
 				if (sk->stamp.tv_sec == 0)
 					return -ENOENT;
-				if (copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)))
-					return -EFAULT;
-				return 0;
+				return copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)) ? -EFAULT : 0;
 			}
 			return -EINVAL;
 
@@ -1284,9 +1276,7 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			struct rose_cause_struct rose_cause;
 			rose_cause.cause      = sk->protinfo.rose->cause;
 			rose_cause.diagnostic = sk->protinfo.rose->diagnostic;
-			if (copy_to_user((void *)arg, &rose_cause, sizeof(struct rose_cause_struct)))
-				return -EFAULT;
-			return 0;
+			return copy_to_user((void *)arg, &rose_cause, sizeof(struct rose_cause_struct)) ? -EFAULT : 0;
 		}
 
 		case SIOCRSSCAUSE: {
@@ -1299,7 +1289,7 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		}
 
 		case SIOCRSSL2CALL:
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_NET_ADMIN)) return -EPERM;
 			if (ax25cmp(&rose_callsign, &null_ax25_address) != 0)
 				ax25_listen_release(&rose_callsign, NULL);
 			if (copy_from_user(&rose_callsign, (void *)arg, sizeof(ax25_address)))
@@ -1309,9 +1299,7 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return 0;
 
 		case SIOCRSGL2CALL:
-			if (copy_to_user((void *)arg, &rose_callsign, sizeof(ax25_address)))
-				return -EFAULT;
-			return 0;
+			return copy_to_user((void *)arg, &rose_callsign, sizeof(ax25_address)) ? -EFAULT : 0;
 
 		case SIOCRSACCEPT:
 			if (sk->protinfo.rose->state == ROSE_STATE_5) {

@@ -924,33 +924,9 @@ static void partial_clear(struct vm_area_struct *vma, unsigned long address)
 	memclear_highpage_flush(page, offset, PAGE_SIZE - offset);
 }
 
-/*
- * Handle all mappings that got truncated by a "truncate()"
- * system call.
- *
- * NOTE! We have to be ready to update the memory sharing
- * between the file and the memory map for a potential last
- * incomplete page.  Ugly, but necessary.
- */
-void vmtruncate(struct inode * inode, loff_t offset)
+static void vmtruncate_list(struct vm_area_struct *mpnt,
+			    unsigned long pgoff, unsigned long partial)
 {
-	unsigned long partial, pgoff;
-	struct vm_area_struct * mpnt;
-	struct address_space *mapping = inode->i_mapping;
-	unsigned long limit;
-
-	if (inode->i_size < offset)
-		goto do_expand;
-	inode->i_size = offset;
-	truncate_inode_pages(mapping, offset);
-	spin_lock(&mapping->i_shared_lock);
-	if (!mapping->i_mmap)
-		goto out_unlock;
-
-	pgoff = (offset + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
-	partial = (unsigned long)offset & (PAGE_CACHE_SIZE - 1);
-
-	mpnt = mapping->i_mmap;
 	do {
 		struct mm_struct *mm = mpnt->vm_mm;
 		unsigned long start = mpnt->vm_start;
@@ -983,6 +959,39 @@ void vmtruncate(struct inode * inode, loff_t offset)
 		zap_page_range(mm, start, len);
 		flush_tlb_range(mm, start, end);
 	} while ((mpnt = mpnt->vm_next_share) != NULL);
+}
+			      
+
+/*
+ * Handle all mappings that got truncated by a "truncate()"
+ * system call.
+ *
+ * NOTE! We have to be ready to update the memory sharing
+ * between the file and the memory map for a potential last
+ * incomplete page.  Ugly, but necessary.
+ */
+void vmtruncate(struct inode * inode, loff_t offset)
+{
+	unsigned long partial, pgoff;
+	struct address_space *mapping = inode->i_mapping;
+	unsigned long limit;
+
+	if (inode->i_size < offset)
+		goto do_expand;
+	inode->i_size = offset;
+	truncate_inode_pages(mapping, offset);
+	spin_lock(&mapping->i_shared_lock);
+	if (!mapping->i_mmap && !mapping->i_mmap_shared)
+		goto out_unlock;
+
+	pgoff = (offset + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	partial = (unsigned long)offset & (PAGE_CACHE_SIZE - 1);
+
+	if (mapping->i_mmap != NULL)
+		vmtruncate_list(mapping->i_mmap, pgoff, partial);
+	if (mapping->i_mmap_shared != NULL)
+		vmtruncate_list(mapping->i_mmap_shared, pgoff, partial);
+
 out_unlock:
 	spin_unlock(&mapping->i_shared_lock);
 	/* this should go into ->truncate */
@@ -1095,15 +1104,12 @@ static int do_swap_page(struct mm_struct * mm,
  */
 static int do_anonymous_page(struct mm_struct * mm, struct vm_area_struct * vma, pte_t *page_table, int write_access, unsigned long addr)
 {
-	int high = 0;
 	struct page *page = NULL;
 	pte_t entry = pte_wrprotect(mk_pte(ZERO_PAGE(addr), vma->vm_page_prot));
 	if (write_access) {
 		page = alloc_page(GFP_HIGHUSER);
 		if (!page)
 			return -1;
-		if (PageHighMem(page))
-			high = 1;
 		clear_user_highpage(page, addr);
 		entry = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 		mm->rss++;

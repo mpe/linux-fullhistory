@@ -2,7 +2,7 @@
 
     PCMCIA Card Services -- core services
 
-    cs.c 1.249 2000/02/10 23:26:11
+    cs.c 1.267 2000/08/30 22:07:31
     
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -15,7 +15,7 @@
     rights and limitations under the License.
 
     The initial developer of the original code is David A. Hinds
-    <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+    <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
     are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
 
     Alternatively, the contents of this file may be used under the
@@ -66,7 +66,7 @@
 int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 static const char *version =
-"cs.c 1.249 2000/02/10 23:26:11 (David Hinds)";
+"cs.c 1.267 2000/08/30 22:07:31 (David Hinds)";
 #endif
 
 #ifdef CONFIG_PCI
@@ -93,7 +93,7 @@ static const char *version =
 static const char *release = "Linux PCMCIA Card Services " CS_RELEASE;
 static const char *options = "options: " OPTIONS;
 
-MODULE_AUTHOR("David Hinds <dhinds@pcmcia.sourceforge.org>");
+MODULE_AUTHOR("David Hinds <dahinds@users.sourceforge.net>");
 MODULE_DESCRIPTION("Linux PCMCIA Card Services " CS_RELEASE
 		   "\n  options:" OPTIONS);
 
@@ -773,6 +773,13 @@ static int alloc_io_space(socket_info_t *s, u_int attr, ioaddr_t *base,
 	      *base, align);
 	align = 0;
     }
+    /* Check for an already-allocated window that must conflict with
+       what was asked for.  It is a hack because it does not catch all
+       potential conflicts, just the most obvious ones. */
+    for (i = 0; i < MAX_IO_WIN; i++)
+	if ((s->io[i].NumPorts != 0) &&
+	    ((s->io[i].BasePort & (align-1)) == *base))
+	    return 1;
     for (i = 0; i < MAX_IO_WIN; i++) {
 	if (s->io[i].NumPorts == 0) {
 	    if (find_io_region(base, num, align, name) == 0) {
@@ -1676,11 +1683,13 @@ int pcmcia_request_configuration(client_handle_t handle,
 	write_cis_mem(s, 1, (base + CISREG_SCR)>>1, 1, &c->Copy);
     }
     if (req->Present & PRESENT_OPTION) {
-	if (s->functions == 1)
+	if (s->functions == 1) {
 	    c->Option = req->ConfigIndex & COR_CONFIG_MASK;
-	else {
+	} else {
 	    c->Option = req->ConfigIndex & COR_MFC_CONFIG_MASK;
-	    c->Option |= COR_FUNC_ENA|COR_ADDR_DECODE|COR_IREQ_ENA;
+	    c->Option |= COR_FUNC_ENA|COR_IREQ_ENA;
+	    if (req->Present & PRESENT_IOBASE_0)
+		c->Option |= COR_ADDR_DECODE;
 	}
 	if (c->state & CONFIG_IRQ_REQ)
 	    if (!(c->irq.Attributes & IRQ_FORCED_PULSE))
@@ -1829,8 +1838,8 @@ int pcmcia_request_irq(client_handle_t handle, irq_req_t *req)
     if (c->state & CONFIG_IRQ_REQ)
 	return CS_IN_USE;
     
-    /* Short cut: if the interrupt is PCI, there are no options */
-    if (s->cap.irq_mask == (1 << s->cap.pci_irq))
+    /* Short cut: if there are no ISA interrupts, then it is PCI */
+    if (!s->cap.irq_mask)
 	irq = s->cap.pci_irq;
 #ifdef CONFIG_ISA
     else if (s->irq.AssignedIRQ != 0) {
@@ -1845,7 +1854,6 @@ int pcmcia_request_irq(client_handle_t handle, irq_req_t *req)
 	ret = CS_IN_USE;
 	if (req->IRQInfo1 & IRQ_INFO2_VALID) {
 	    mask = req->IRQInfo2 & s->cap.irq_mask;
-	    mask &= ~(1 << s->cap.pci_irq);
 	    for (try = 0; try < 2; try++) {
 		for (irq = 0; irq < 32; irq++)
 		    if ((mask >> irq) & 1) {
@@ -1910,11 +1918,12 @@ int pcmcia_request_window(client_handle_t *handle, win_req_t *req, window_handle
 	     req->Size : s->cap.map_size);
     if (req->Size & (s->cap.map_size-1))
 	return CS_BAD_SIZE;
-    if (req->Base & (align-1))
+    if ((req->Base && (s->cap.features & SS_CAP_STATIC_MAP)) ||
+	(req->Base & (align-1)))
 	return CS_BAD_BASE;
     if (req->Base)
 	align = 0;
-    
+
     /* Allocate system memory window */
     for (w = 0; w < MAX_WIN; w++)
 	if (!(s->state & SOCKET_WIN_REQ(w))) break;
@@ -1928,13 +1937,13 @@ int pcmcia_request_window(client_handle_t *handle, win_req_t *req, window_handle
     win->sock = s;
     win->base = req->Base;
     win->size = req->Size;
-	
-    if (find_mem_region(&win->base, win->size, align,
+
+    if (!(s->cap.features & SS_CAP_STATIC_MAP) &&
+	find_mem_region(&win->base, win->size, align,
 			(req->Attributes & WIN_MAP_BELOW_1MB) ||
 			!(s->cap.features & SS_CAP_PAGE_REGS),
 			(*handle)->dev_info))
 	return CS_IN_USE;
-    req->Base = win->base;
     (*handle)->state |= CLIENT_WIN_REQ(w);
 
     /* Configure the socket controller */
@@ -1949,14 +1958,15 @@ int pcmcia_request_window(client_handle_t *handle, win_req_t *req, window_handle
 	win->ctl.flags |= MAP_16BIT;
     if (req->Attributes & WIN_USE_WAIT)
 	win->ctl.flags |= MAP_USE_WAIT;
-    win->ctl.sys_start = req->Base;
-    win->ctl.sys_stop = req->Base + req->Size-1;
+    win->ctl.sys_start = win->base;
+    win->ctl.sys_stop = win->base + win->size-1;
     win->ctl.card_start = 0;
     if (set_mem_map(s, &win->ctl) != 0)
 	return CS_BAD_ARGS;
     s->state |= SOCKET_WIN_REQ(w);
 
     /* Return window handle */
+    req->Base = win->ctl.sys_start;
     *wh = win;
     
     return CS_SUCCESS;
@@ -2168,7 +2178,7 @@ int CardServices(int func, void *a1, void *a2, void *a3)
 {
 
 #ifdef PCMCIA_DEBUG
-    if (pc_debug > 1) {
+    if (pc_debug > 2) {
 	int i;
 	for (i = 0; i < SERVICE_COUNT; i++)
 	    if (service_table[i].key == func) break;

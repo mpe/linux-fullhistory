@@ -1628,7 +1628,8 @@ vnc_private_ioctl(int dev, unsigned int cmd, caddr_t arg)
 		u_int prev_spkr_mute, prev_line_mute, prev_auto_state;
 		int val;
 
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 
 		/* check if parameter is logical */
 		if (val & ~(VNC_MUTE_INTERNAL_SPKR |
@@ -1657,7 +1658,8 @@ vnc_private_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	}
 
 	case SOUND_MIXER_PRIVATE2:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 
 		switch (val) {
 #define VNC_SOUND_PAUSE         0x53    //to pause the DSP
@@ -1681,8 +1683,10 @@ vnc_private_ioctl(int dev, unsigned int cmd, caddr_t arg)
 		unsigned long	flags;
 		int		mixer_reg[15], i, val;
 
-		get_user_ret(val, (int *)arg, -EFAULT);
-		copy_from_user_ret(mixer_reg, (void *)val, sizeof(mixer_reg), -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
+		if (copy_from_user(mixer_reg, (void *)val, sizeof(mixer_reg)))
+			return -EFAULT;
 
 		switch (mixer_reg[14]) {
 		case MIXER_PRIVATE3_RESET:
@@ -1708,7 +1712,8 @@ vnc_private_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 			spin_unlock_irqrestore(&waveartist_lock, flags);
 
-			copy_to_user_ret((void *)val, mixer_reg, sizeof(mixer_reg), -EFAULT);
+			if (copy_to_user((void *)val, mixer_reg, sizeof(mixer_reg)))
+				return -EFAULT;
 			break;
 
 		default:

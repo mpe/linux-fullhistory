@@ -1419,7 +1419,8 @@ nm256_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
     switch (cmd)
 	{
 	case SOUND_PCM_WRITE_RATE:
-	    get_user_ret(ret, (int *) arg, -EFAULT);
+	    if (get_user(ret, (int *) arg))
+		return -EFAULT;
 
 	    if (ret != 0) {
 		oldinfo = card->sinfo[w].samplerate;
@@ -1437,7 +1438,8 @@ nm256_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	    break;
 
 	case SNDCTL_DSP_STEREO:
-	    get_user_ret(ret, (int *) arg, -EFAULT);
+	    if (get_user(ret, (int *) arg))
+		return -EFAULT;
 
 	    card->sinfo[w].stereo = ret ? 1 : 0;
 	    ret = nm256_setInfo (dev, card);
@@ -1447,7 +1449,8 @@ nm256_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	    break;
 
 	case SOUND_PCM_WRITE_CHANNELS:
-	    get_user_ret(ret, (int *) arg, -EFAULT);
+	    if (get_user(ret, (int *) arg))
+		return -EFAULT;
 
 	    if (ret < 1 || ret > 3)
 		ret = card->sinfo[w].stereo + 1;
@@ -1464,7 +1467,8 @@ nm256_audio_ioctl(int dev, unsigned int cmd, caddr_t arg)
 	    break;
 
 	case SNDCTL_DSP_SETFMT:
-	    get_user_ret(ret, (int *) arg, -EFAULT);
+	    if (get_user(ret, (int *) arg)
+		return -EFAULT;
 
 	    if (ret != 0) {
 		oldinfo = card->sinfo[w].bits;

@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.25 1998/09/17 11:04:58 jj Exp $
+/* $Id: tree.c,v 1.26 2000/08/26 02:38:03 anton Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -26,10 +26,10 @@ int __prom_getchild(int node)
 	unsigned long flags;
 	int cnode;
 
-	save_and_cli(flags);
+	spin_lock_irqsave(&prom_lock, flags);
 	cnode = prom_nodeops->no_child(node);
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 
 	return cnode;
 }
@@ -57,10 +57,10 @@ int __prom_getsibling(int node)
 	unsigned long flags;
 	int cnode;
 
-	save_and_cli(flags);
+	spin_lock_irqsave(&prom_lock, flags);
 	cnode = prom_nodeops->no_nextnode(node);
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 
 	return cnode;
 }
@@ -93,10 +93,10 @@ int prom_getproplen(int node, char *prop)
 	if((!node) || (!prop))
 		return -1;
 		
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	ret = prom_nodeops->no_proplen(node, prop);
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 	return ret;
 }
 
@@ -113,10 +113,10 @@ int prom_getproperty(int node, char *prop, char *buffer, int bufsize)
 	if((plen > bufsize) || (plen == 0) || (plen == -1))
 		return -1;
 	/* Ok, things seem all right. */
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	ret = prom_nodeops->no_getprop(node, prop, buffer);
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 	return ret;
 }
 
@@ -226,10 +226,10 @@ char * __prom_nextprop(int node, char * oprop)
 	unsigned long flags;
 	char *prop;
 
-	save_and_cli(flags);
+	spin_lock_irqsave(&prom_lock, flags);
 	prop = prom_nodeops->no_nextprop(node, oprop);
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 
 	return prop;
 }
@@ -325,10 +325,10 @@ int prom_setprop(int node, char *pname, char *value, int size)
 
 	if(size == 0) return 0;
 	if((pname == 0) || (value == 0)) return 0;
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	ret = prom_nodeops->no_setprop(node, pname, value, size);
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 	return ret;
 }
 
@@ -337,10 +337,10 @@ int prom_inst2pkg(int inst)
 	int node;
 	unsigned long flags;
 	
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	node = (*romvec->pv_v2devops.v2_inst2pkg)(inst);
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 	if (node == -1) return 0;
 	return node;
 }

@@ -641,17 +641,15 @@ static int ec_dev_ioctl(struct socket *sock, unsigned int cmd, void *arg)
 static int econet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	struct sock *sk = sock->sk;
-	int err;
 	int pid;
 
 	switch(cmd) 
 	{
 		case FIOSETOWN:
 		case SIOCSPGRP:
-			err = get_user(pid, (int *) arg);
-			if (err)
-				return err; 
-			if (current->pid != pid && current->pgrp != -pid && !suser())
+			if (get_user(pid, (int *) arg))
+				return -EFAULT; 
+			if (current->pid != pid && current->pgrp != -pid && !capable(CAP_NET_ADMIN))
 				return -EPERM;
 			sk->proc = pid;
 			return(0);
@@ -661,10 +659,7 @@ static int econet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg
 		case SIOCGSTAMP:
 			if(sk->stamp.tv_sec==0)
 				return -ENOENT;
-			err = -EFAULT;
-			if (!copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)))
-				err = 0;
-			return err;
+			return copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)) ? -EFAULT : 0;
 		case SIOCGIFFLAGS:
 		case SIOCSIFFLAGS:
 		case SIOCGIFCONF:

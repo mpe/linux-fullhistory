@@ -655,10 +655,12 @@ L:	autofs@linux.kernel.org
 S:	Maintained
 
 KERNEL NFSD
-P:	G. Allen Morris III
-M:	gam3@acm.org
+P:	Neil Brown
+M:	neilb@cse.unsw.edu.au
 L:	nfs-devel@linux.kernel.org (Linux NFS)
-W:	http://csua.berkeley.edu/~gam3/knfsd
+L:	nfs@lists.sourceforge.net
+W:	http://nfs.sourceforge.net/
+W:	http://www.cse.unsw.edu.au/~neilb/oss/knfsd/
 S:	Maintained
 
 LANMEDIA WAN CARD DRIVER
@@ -894,7 +896,7 @@ PCMCIA SUBSYSTEM
 P:	David Hinds
 M:	dhinds@zen.stanford.edu
 L:	linux-kernel@vger.kernel.org
-W:	http://pcmcia.sourceforge.org
+W:	http://pcmcia-cs.sourceforge.net
 S:	Maintained
 
 PCNET32 NETWORK DRIVER

@@ -507,7 +507,8 @@ static long read_nibble(unsigned minor, char *c, unsigned long cnt)
           if (pins & BPP_GP_PError) byte |= 0x40;
           if (pins & BPP_GP_Busy)   byte |= 0x80;
 
-          put_user_ret(byte, c, -EFAULT);
+          if (put_user(byte, c))
+		  return -EFAULT;
           c += 1;
           remaining -= 1;
 
@@ -559,7 +560,8 @@ static long read_ecp(unsigned minor, char *c, unsigned long cnt)
               for (idx = 0 ;  idx < repeat ;  idx += 1)
                 buffer[idx] = instances[minor].repeat_byte;
 
-              copy_to_user_ret(c, buffer, repeat, -EFAULT);
+              if (copy_to_user(c, buffer, repeat))
+		      return -EFAULT;
               remaining -= repeat;
               c += repeat;
               instances[minor].run_length -= repeat;
@@ -575,7 +577,8 @@ static long read_ecp(unsigned minor, char *c, unsigned long cnt)
           if (rc & BPP_GP_Busy) {
                 /* OK, this is data. read it in. */
               unsigned char byte = bpp_inb(base_addrs[minor]);
-              put_user_ret(byte, c, -EFAULT);
+              if (put_user(byte, c))
+		      return -EFAULT;
               c += 1;
               remaining -= 1;
 
@@ -685,7 +688,8 @@ static long write_compat(unsigned minor, const char *c, unsigned long cnt)
       while (remaining > 0) {
             unsigned char byte;
 
-            get_user_ret(byte, c, -EFAULT);
+            if (get_user(byte, c))
+		    return -EFAULT;
             c += 1;
 
             rc = wait_for(BPP_GP_nAck, BPP_GP_Busy, TIME_IDLE_LIMIT, minor);
@@ -735,7 +739,8 @@ static long write_ecp(unsigned minor, const char *c, unsigned long cnt)
           unsigned char byte;
           int rc;
 
-          get_user_ret(byte, c, -EFAULT);
+          if (get_user(byte, c))
+		  return -EFAULT;
 
           rc = wait_for(0, BPP_GP_Busy, TIME_PResponse, minor);
           if (rc == -1) return -ETIMEDOUT;

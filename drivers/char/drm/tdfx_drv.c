@@ -379,17 +379,18 @@ int tdfx_version(struct inode *inode, struct file *filp, unsigned int cmd,
 	drm_version_t version;
 	int	      len;
 
-	copy_from_user_ret(&version,
+	if (copy_from_user(&version,
 			   (drm_version_t *)arg,
-			   sizeof(version),
-			   -EFAULT);
+			   sizeof(version)))
+		return -EFAULT;
 
 #define DRM_COPY(name,value)				     \
 	len = strlen(value);				     \
 	if (len > name##_len) len = name##_len;		     \
 	name##_len = strlen(value);			     \
 	if (len && name) {				     \
-		copy_to_user_ret(name, value, len, -EFAULT); \
+		if (copy_to_user(name, value, len))	     \
+			return -EFAULT;			     \
 	}
 
 	version.version_major	   = TDFX_MAJOR;
@@ -400,10 +401,10 @@ int tdfx_version(struct inode *inode, struct file *filp, unsigned int cmd,
 	DRM_COPY(version.date, TDFX_DATE);
 	DRM_COPY(version.desc, TDFX_DESC);
 
-	copy_to_user_ret((drm_version_t *)arg,
+	if (copy_to_user((drm_version_t *)arg,
 			 &version,
-			 sizeof(version),
-			 -EFAULT);
+			 sizeof(version)))
+		return -EFAULT;
 	return 0;
 }
 
@@ -518,7 +519,8 @@ int tdfx_lock(struct inode *inode, struct file *filp, unsigned int cmd,
         dev->lck_start = start = get_cycles();
 #endif
 
-        copy_from_user_ret(&lock, (drm_lock_t *)arg, sizeof(lock), -EFAULT);
+        if (copy_from_user(&lock, (drm_lock_t *)arg, sizeof(lock)))
+		return -EFAULT;
 
         if (lock.context == DRM_KERNEL_CONTEXT) {
                 DRM_ERROR("Process %d using kernel context %d\n",
@@ -615,6 +617,15 @@ int tdfx_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 #endif
 
         if (!ret) {
+		sigemptyset(&dev->sigmask);
+		sigaddset(&dev->sigmask, SIGSTOP);
+		sigaddset(&dev->sigmask, SIGTSTP);
+		sigaddset(&dev->sigmask, SIGTTIN);
+		sigaddset(&dev->sigmask, SIGTTOU);
+		dev->sigdata.context = lock.context;
+		dev->sigdata.lock    = dev->lock.hw_lock;
+		block_all_signals(drm_notifier, &dev->sigdata, &dev->sigmask);
+
                 if (lock.flags & _DRM_LOCK_READY) {
 				/* Wait for space in DMA/FIFO */
 		}
@@ -649,7 +660,8 @@ int tdfx_unlock(struct inode *inode, struct file *filp, unsigned int cmd,
 	drm_device_t	  *dev	  = priv->dev;
 	drm_lock_t	  lock;
 
-	copy_from_user_ret(&lock, (drm_lock_t *)arg, sizeof(lock), -EFAULT);
+	if (copy_from_user(&lock, (drm_lock_t *)arg, sizeof(lock)))
+		return -EFAULT;
 	
 	if (lock.context == DRM_KERNEL_CONTEXT) {
 		DRM_ERROR("Process %d using kernel context %d\n",
@@ -679,5 +691,6 @@ int tdfx_unlock(struct inode *inode, struct file *filp, unsigned int cmd,
 	}
 #endif
 	
+	unblock_all_signals();
 	return 0;
 }

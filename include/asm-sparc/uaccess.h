@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.21 2000/01/08 16:38:23 anton Exp $
+/* $Id: uaccess.h,v 1.22 2000/08/29 07:01:58 davem Exp $
  * uaccess.h: User space memore access functions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -94,17 +94,9 @@ extern void __ret_efault(void);
 unsigned long __pu_addr = (unsigned long)(ptr); \
 __put_user_check((__typeof__(*(ptr)))(x),__pu_addr,sizeof(*(ptr))); })
 
-#define put_user_ret(x,ptr,retval) ({ \
-unsigned long __pu_addr = (unsigned long)(ptr); \
-__put_user_check_ret((__typeof__(*(ptr)))(x),__pu_addr,sizeof(*(ptr)),retval); })
-
 #define get_user(x,ptr) ({ \
 unsigned long __gu_addr = (unsigned long)(ptr); \
 __get_user_check((x),__gu_addr,sizeof(*(ptr)),__typeof__(*(ptr))); })
-
-#define get_user_ret(x,ptr,retval) ({ \
-unsigned long __gu_addr = (unsigned long)(ptr); \
-__get_user_check_ret((x),__gu_addr,sizeof(*(ptr)),__typeof__(*(ptr)),retval); })
 
 /*
  * The "__xxx" versions do not do address space checking, useful when
@@ -112,9 +104,7 @@ __get_user_check_ret((x),__gu_addr,sizeof(*(ptr)),__typeof__(*(ptr)),retval); })
  * checks by hand with "access_ok()")
  */
 #define __put_user(x,ptr) __put_user_nocheck((x),(ptr),sizeof(*(ptr)))
-#define __put_user_ret(x,ptr,retval) __put_user_nocheck_ret((x),(ptr),sizeof(*(ptr)),retval)
 #define __get_user(x,ptr) __get_user_nocheck((x),(ptr),sizeof(*(ptr)),__typeof__(*(ptr)))
-#define __get_user_ret(x,ptr,retval) __get_user_nocheck_ret((x),(ptr),sizeof(*(ptr)),__typeof__(*(ptr)),retval)
 
 struct __large_struct { unsigned long buf[100]; };
 #define __m(x) ((struct __large_struct *)(x))
@@ -303,19 +293,9 @@ __copy_res = __copy_user(__copy_to, (void *) (from), __copy_size); \
 } else __copy_res = __copy_size; \
 __copy_res; })
 
-#define copy_to_user_ret(to,from,n,retval) ({ \
-if (copy_to_user(to,from,n)) \
-	return retval; \
-})
-
 #define __copy_to_user(to,from,n)		\
 	__copy_user((void *)(to),		\
 		    (void *)(from), n)
-
-#define __copy_to_user_ret(to,from,n,retval) ({ \
-if (__copy_to_user(to,from,n)) \
-	return retval; \
-})
 
 #define copy_from_user(to,from,n) ({ \
 void *__copy_to = (void *) (to); \
@@ -327,19 +307,9 @@ __copy_res = __copy_user(__copy_to, __copy_from, __copy_size); \
 } else __copy_res = __copy_size; \
 __copy_res; })
 
-#define copy_from_user_ret(to,from,n,retval) ({ \
-if (copy_from_user(to,from,n)) \
-	return retval; \
-})
-
 #define __copy_from_user(to,from,n)		\
 	__copy_user((void *)(to),		\
 		    (void *)(from), n)
-
-#define __copy_from_user_ret(to,from,n,retval) ({ \
-if (__copy_from_user(to,from,n)) \
-	return retval; \
-})
 
 extern __inline__ __kernel_size_t __clear_user(void *addr, __kernel_size_t size)
 {
@@ -367,11 +337,6 @@ if(__clear_size && __access_ok((unsigned long)__clear_addr, __clear_size)) { \
 __clear_res = __clear_user(__clear_addr, __clear_size); \
 } else __clear_res = __clear_size; \
 __clear_res; })
-
-#define clear_user_ret(addr,size,retval) ({ \
-if (clear_user(addr,size)) \
-	return retval; \
-})
 
 extern int __strncpy_from_user(unsigned long dest, unsigned long src, int count);
 

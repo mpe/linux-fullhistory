@@ -2,7 +2,7 @@
 
     PC Card Driver Services
     
-    ds.c 1.104 2000/01/11 01:18:02
+    ds.c 1.108 2000/08/07 19:06:15
     
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -15,7 +15,7 @@
     rights and limitations under the License.
 
     The initial developer of the original code is David A. Hinds
-    <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+    <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
     are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
 
     Alternatively, the contents of this file may be used under the
@@ -61,12 +61,12 @@ int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static const char *version =
-"ds.c 1.104 2000/01/11 01:18:02 (David Hinds)";
+"ds.c 1.108 2000/08/07 19:06:15 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
 
-MODULE_AUTHOR("David Hinds <dhinds@pcmcia.sourceforge.org>");
+MODULE_AUTHOR("David Hinds <dahinds@users.sourceforge.net>");
 MODULE_DESCRIPTION("PCMCIA Driver Services " CS_RELEASE);
 
 /*====================================================================*/
@@ -81,6 +81,7 @@ typedef struct driver_info_t {
 
 typedef struct socket_bind_t {
     driver_info_t	*driver;
+    u_char		function;
     dev_link_t		*instance;
     struct socket_bind_t *next;
 } socket_bind_t;
@@ -391,7 +392,8 @@ static int bind_request(int i, bind_info_t *bind_info)
     }
 
     for (b = s->bind; b; b = b->next)
-	if (driver == b->driver)
+	if ((driver == b->driver) &&
+	    (bind_info->function == b->function))
 	    break;
     if (b != NULL) {
 	bind_info->instance = b->instance;
@@ -413,6 +415,7 @@ static int bind_request(int i, bind_info_t *bind_info)
     driver->use_count++;
     b = kmalloc(sizeof(socket_bind_t), GFP_KERNEL);
     b->driver = driver;
+    b->function = bind_info->function;
     b->instance = NULL;
     b->next = s->bind;
     s->bind = b;
@@ -475,16 +478,14 @@ static int get_device_info(int i, bind_info_t *bind_info, int first)
 #endif
 
     for (b = s->bind; b; b = b->next)
-	if (strcmp((char *)b->driver->dev_info,
-		   (char *)bind_info->dev_info) == 0)
+	if ((strcmp((char *)b->driver->dev_info,
+		    (char *)bind_info->dev_info) == 0) &&
+	    (b->function == bind_info->function))
 	    break;
     if (b == NULL) return -ENODEV;
-
-    if (b->instance == NULL)
+    if ((b->instance == NULL) ||
+	(b->instance->state & DEV_CONFIG_PENDING))
 	return -EAGAIN;
-    if (b->instance->state & DEV_CONFIG_PENDING)
-	return -EAGAIN;
-
     if (first)
 	node = b->instance->dev;
     else
@@ -511,8 +512,9 @@ static int unbind_request(int i, bind_info_t *bind_info)
     DEBUG(2, "unbind_request(%d, '%s')\n", i,
 	  (char *)bind_info->dev_info);
     for (b = &s->bind; *b; b = &(*b)->next)
-	if (strcmp((char *)(*b)->driver->dev_info,
-		   (char *)bind_info->dev_info) == 0)
+	if ((strcmp((char *)(*b)->driver->dev_info,
+		    (char *)bind_info->dev_info) == 0) &&
+	    ((*b)->function == bind_info->function))
 	    break;
     if (*b == NULL)
 	return -ENODEV;

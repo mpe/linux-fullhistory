@@ -754,6 +754,364 @@ cia_pci_clr_err(void)
 	*(vip)CIA_IOC_CIA_ERR;		/* re-read to force write.  */
 }
 
+static void
+cia_decode_pci_error(struct el_CIA_sysdata_mcheck *cia, const char *msg)
+{
+	static const char * const pci_cmd_desc[16] = {
+		"Interrupt Acknowledge", "Special Cycle", "I/O Read",
+		"I/O Write", "Reserved 0x4", "Reserved 0x5", "Memory Read",
+		"Memory Write", "Reserved 0x8", "Reserved 0x9",
+		"Configuration Read", "Configuration Write",
+		"Memory Read Multiple", "Dual Address Cycle",
+		"Memory Read Line", "Memory Write and Invalidate"
+	};
+
+	if (cia->cia_err & (CIA_ERR_COR_ERR
+			    | CIA_ERR_UN_COR_ERR
+			    | CIA_ERR_MEM_NEM
+			    | CIA_ERR_PA_PTE_INV)) {
+		static const char * const window_desc[6] = {
+			"No window active", "Window 0 hit", "Window 1 hit",
+			"Window 2 hit", "Window 3 hit", "Monster window hit"
+		};
+
+		const char *window;
+		const char *cmd;
+		unsigned long addr, tmp;
+		int lock, dac;
+	
+		cmd = pci_cmd_desc[cia->pci_err0 & 0x7];
+		lock = (cia->pci_err0 >> 4) & 1;
+		dac = (cia->pci_err0 >> 5) & 1;
+
+		tmp = (cia->pci_err0 >> 8) & 0x1F;
+		tmp = ffs(tmp);
+		window = window_desc[tmp];
+
+		addr = cia->pci_err1;
+		if (dac) {
+			tmp = *(vip)CIA_IOC_PCI_W_DAC & 0xFFUL;
+			addr |= tmp << 32;
+		}
+
+		printk(KERN_CRIT "CIA machine check: %s\n", msg);
+		printk(KERN_CRIT "  DMA command: %s\n", cmd);
+		printk(KERN_CRIT "  PCI address: %#010lx\n", addr);
+		printk(KERN_CRIT "  %s, Lock: %d, DAC: %d\n",
+		       window, lock, dac);
+	} else if (cia->cia_err & (CIA_ERR_PERR
+				   | CIA_ERR_PCI_ADDR_PE
+				   | CIA_ERR_RCVD_MAS_ABT
+				   | CIA_ERR_RCVD_TAR_ABT
+				   | CIA_ERR_IOA_TIMEOUT)) {
+		static const char * const master_st_desc[16] = {
+			"Idle", "Drive bus", "Address step cycle",
+			"Address cycle", "Data cycle", "Last read data cycle",
+			"Last write data cycle", "Read stop cycle",
+			"Write stop cycle", "Read turnaround cycle",
+			"Write turnaround cycle", "Reserved 0xB",
+			"Reserved 0xC", "Reserved 0xD", "Reserved 0xE",
+			"Unknown state"
+		};
+		static const char * const target_st_desc[16] = {
+			"Idle", "Busy", "Read data cycle", "Write data cycle",
+			"Read stop cycle", "Write stop cycle",
+			"Read turnaround cycle", "Write turnaround cycle",
+			"Read wait cycle", "Write wait cycle",
+			"Reserved 0xA", "Reserved 0xB", "Reserved 0xC",
+			"Reserved 0xD", "Reserved 0xE", "Unknown state"
+		};
+
+		const char *cmd;
+		const char *master, *target;
+		unsigned long addr, tmp;
+		int dac;
+
+		master = master_st_desc[(cia->pci_err0 >> 16) & 0xF];
+		target = target_st_desc[(cia->pci_err0 >> 20) & 0xF];
+		cmd = pci_cmd_desc[(cia->pci_err0 >> 24) & 0xF];
+		dac = (cia->pci_err0 >> 28) & 1;
+
+		addr = cia->pci_err2;
+		if (dac) {
+			tmp = *(volatile int *)CIA_IOC_PCI_W_DAC & 0xFFUL;
+			addr |= tmp << 32;
+		}
+
+		printk(KERN_CRIT "CIA machine check: %s\n", msg);
+		printk(KERN_CRIT "  PCI command: %s\n", cmd);
+		printk(KERN_CRIT "  Master state: %s, Target state: %s\n",
+		       master, target);
+		printk(KERN_CRIT "  PCI address: %#010lx, DAC: %d\n",
+		       addr, dac);
+	} else {
+		printk(KERN_CRIT "CIA machine check: %s\n", msg);
+		printk(KERN_CRIT "  Unknown PCI error\n");
+		printk(KERN_CRIT "  PCI_ERR0 = %#08lx", cia->pci_err0);
+		printk(KERN_CRIT "  PCI_ERR1 = %#08lx", cia->pci_err1);
+		printk(KERN_CRIT "  PCI_ERR2 = %#08lx", cia->pci_err2);
+	}
+}
+
+static void
+cia_decode_mem_error(struct el_CIA_sysdata_mcheck *cia, const char *msg)
+{
+	unsigned long mem_port_addr;
+	unsigned long mem_port_mask;
+	const char *mem_port_cmd;
+	const char *seq_state;
+	const char *set_select;
+	unsigned long tmp;
+
+	/* If this is a DMA command, also decode the PCI bits.  */
+	if ((cia->mem_err1 >> 20) & 1)
+		cia_decode_pci_error(cia, msg);
+	else
+		printk(KERN_CRIT "CIA machine check: %s\n", msg);
+
+	mem_port_addr = cia->mem_err0 & 0xfffffff0;
+	mem_port_addr |= (cia->mem_err1 & 0x83UL) << 32;
+
+	mem_port_mask = (cia->mem_err1 >> 12) & 0xF;
+
+	tmp = (cia->mem_err1 >> 8) & 0xF;
+	tmp |= ((cia->mem_err1 >> 20) & 1) << 4;
+	if ((tmp & 0x1E) == 0x06)
+		mem_port_cmd = "WRITE BLOCK or WRITE BLOCK LOCK";
+	else if ((tmp & 0x1C) == 0x08)
+		mem_port_cmd = "READ MISS or READ MISS MODIFY";
+	else if (tmp == 0x1C)
+		mem_port_cmd = "BC VICTIM";
+	else if ((tmp & 0x1E) == 0x0E)
+		mem_port_cmd = "READ MISS MODIFY";
+	else if ((tmp & 0x1C) == 0x18)
+		mem_port_cmd = "DMA READ or DMA READ MODIFY";
+	else if ((tmp & 0x1E) == 0x12)
+		mem_port_cmd = "DMA WRITE";
+	else
+		mem_port_cmd = "Unknown";
+
+	tmp = (cia->mem_err1 >> 16) & 0xF;
+	switch (tmp) {
+	case 0x0:
+		seq_state = "Idle";
+		break;
+	case 0x1:
+		seq_state = "DMA READ or DMA WRITE";
+		break;
+	case 0x2: case 0x3:
+		seq_state = "READ MISS (or READ MISS MODIFY) with victim";
+		break;
+	case 0x4: case 0x5: case 0x6:
+		seq_state = "READ MISS (or READ MISS MODIFY) with no victim";
+		break;
+	case 0x8: case 0x9: case 0xB:
+		seq_state = "Refresh";
+		break;
+	case 0xC:
+		seq_state = "Idle, waiting for DMA pending read";
+		break;
+	case 0xE: case 0xF:
+		seq_state = "Idle, ras precharge";
+		break;
+	default:
+		seq_state = "Unknown";
+		break;
+	}
+
+	tmp = (cia->mem_err1 >> 24) & 0x1F;
+	switch (tmp) {
+	case 0x00: set_select = "Set 0 selected"; break;
+	case 0x01: set_select = "Set 1 selected"; break;
+	case 0x02: set_select = "Set 2 selected"; break;
+	case 0x03: set_select = "Set 3 selected"; break;
+	case 0x04: set_select = "Set 4 selected"; break;
+	case 0x05: set_select = "Set 5 selected"; break;
+	case 0x06: set_select = "Set 6 selected"; break;
+	case 0x07: set_select = "Set 7 selected"; break;
+	case 0x08: set_select = "Set 8 selected"; break;
+	case 0x09: set_select = "Set 9 selected"; break;
+	case 0x0A: set_select = "Set A selected"; break;
+	case 0x0B: set_select = "Set B selected"; break;
+	case 0x0C: set_select = "Set C selected"; break;
+	case 0x0D: set_select = "Set D selected"; break;
+	case 0x0E: set_select = "Set E selected"; break;
+	case 0x0F: set_select = "Set F selected"; break;
+	case 0x10: set_select = "No set selected"; break;
+	case 0x1F: set_select = "Refresh cycle"; break;
+	default:   set_select = "Unknown"; break;
+	}
+
+	printk(KERN_CRIT "  Memory port command: %s\n", mem_port_cmd);
+	printk(KERN_CRIT "  Memory port address: %#010lx, mask: %#lx\n",
+	       mem_port_addr, mem_port_mask);
+	printk(KERN_CRIT "  Memory sequencer state: %s\n", seq_state);
+	printk(KERN_CRIT "  Memory set: %s\n", set_select);
+}
+
+static void
+cia_decode_ecc_error(struct el_CIA_sysdata_mcheck *cia, const char *msg)
+{
+	long syn;
+	long i;
+	const char *fmt;
+
+	cia_decode_mem_error(cia, msg);
+
+	syn = cia->cia_syn & 0xff;
+	if (syn == (syn & -syn)) {
+		fmt = KERN_CRIT "  ECC syndrome %#x -- check bit %d\n";
+		i = ffs(syn) - 1;
+	} else {
+		static unsigned char const data_bit[64] = {
+			0xCE, 0xCB, 0xD3, 0xD5,
+			0xD6, 0xD9, 0xDA, 0xDC,
+			0x23, 0x25, 0x26, 0x29,
+			0x2A, 0x2C, 0x31, 0x34,
+			0x0E, 0x0B, 0x13, 0x15,
+			0x16, 0x19, 0x1A, 0x1C,
+			0xE3, 0xE5, 0xE6, 0xE9,
+			0xEA, 0xEC, 0xF1, 0xF4,
+			0x4F, 0x4A, 0x52, 0x54,
+			0x57, 0x58, 0x5B, 0x5D,
+			0xA2, 0xA4, 0xA7, 0xA8,
+			0xAB, 0xAD, 0xB0, 0xB5,
+			0x8F, 0x8A, 0x92, 0x94,
+			0x97, 0x98, 0x9B, 0x9D,
+			0x62, 0x64, 0x67, 0x68,
+			0x6B, 0x6D, 0x70, 0x75
+		};
+
+		for (i = 0; i < 64; ++i)
+			if (data_bit[i] == syn)
+				break;
+
+		if (i < 64)
+			fmt = KERN_CRIT "  ECC syndrome %#x -- data bit %d\n";
+		else
+			fmt = KERN_CRIT "  ECC syndrome %#x -- unknown bit\n";
+	}
+
+	printk (fmt, syn, i);
+}
+
+static void
+cia_decode_parity_error(struct el_CIA_sysdata_mcheck *cia)
+{
+	static const char * const cmd_desc[16] = {
+		"NOP", "LOCK", "FETCH", "FETCH_M", "MEMORY BARRIER",
+		"SET DIRTY", "WRITE BLOCK", "WRITE BLOCK LOCK",
+		"READ MISS0", "READ MISS1", "READ MISS MOD0",
+		"READ MISS MOD1", "BCACHE VICTIM", "Spare",
+		"READ MISS MOD STC0", "READ MISS MOD STC1"
+	};
+
+	unsigned long addr;
+	unsigned long mask;
+	const char *cmd;
+	int par;
+
+	addr = cia->cpu_err0 & 0xfffffff0;
+	addr |= (cia->cpu_err1 & 0x83UL) << 32;
+	cmd = cmd_desc[(cia->cpu_err1 >> 8) & 0xF];
+	mask = (cia->cpu_err1 >> 12) & 0xF;
+	par = (cia->cpu_err1 >> 21) & 1;
+
+	printk(KERN_CRIT "CIA machine check: System bus parity error\n");
+	printk(KERN_CRIT "  Command: %s, Parity bit: %d\n", cmd, par);
+	printk(KERN_CRIT "  Address: %#010lx, Mask: %#lx\n", addr, mask);
+}
+
+static int
+cia_decode_mchk(unsigned long la_ptr)
+{
+	struct el_common *com;
+	struct el_CIA_sysdata_mcheck *cia;
+	int which;
+
+	com = (void *)la_ptr;
+	cia = (void *)(la_ptr + com->sys_offset);
+
+	if ((cia->cia_err & CIA_ERR_VALID) == 0)
+		return 0;
+
+	which = cia->cia_err & 0xfff;
+	switch (ffs(which) - 1) {
+	case 0: /* CIA_ERR_COR_ERR */
+		cia_decode_ecc_error(cia, "Corrected ECC error");
+		break;
+	case 1: /* CIA_ERR_UN_COR_ERR */
+		cia_decode_ecc_error(cia, "Uncorrected ECC error");
+		break;
+	case 2: /* CIA_ERR_CPU_PE */
+		cia_decode_parity_error(cia);
+		break;
+	case 3: /* CIA_ERR_MEM_NEM */
+		cia_decode_mem_error(cia, "Access to nonexistent memory");
+		break;
+	case 4: /* CIA_ERR_PCI_SERR */
+		cia_decode_pci_error(cia, "PCI bus system error");
+		break;
+	case 5: /* CIA_ERR_PERR */
+		cia_decode_pci_error(cia, "PCI data parity error");
+		break;
+	case 6: /* CIA_ERR_PCI_ADDR_PE */
+		cia_decode_pci_error(cia, "PCI address parity error");
+		break;
+	case 7: /* CIA_ERR_RCVD_MAS_ABT */
+		cia_decode_pci_error(cia, "PCI master abort");
+		break;
+	case 8: /* CIA_ERR_RCVD_TAR_ABT */
+		cia_decode_pci_error(cia, "PCI target abort");
+		break;
+	case 9: /* CIA_ERR_PA_PTE_INV */
+		cia_decode_pci_error(cia, "PCI invalid PTE");
+		break;
+	case 10: /* CIA_ERR_FROM_WRT_ERR */
+		cia_decode_mem_error(cia, "Write to flash ROM attempted");
+		break;
+	case 11: /* CIA_ERR_IOA_TIMEOUT */
+		cia_decode_pci_error(cia, "I/O timeout");
+		break;
+	}
+
+	if (cia->cia_err & CIA_ERR_LOST_CORR_ERR)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "Correctable ECC error\n");
+	if (cia->cia_err & CIA_ERR_LOST_UN_CORR_ERR)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "Uncorrectable ECC error\n");
+	if (cia->cia_err & CIA_ERR_LOST_CPU_PE)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "System bus parity error\n");
+	if (cia->cia_err & CIA_ERR_LOST_MEM_NEM)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "Access to nonexistent memory\n");
+	if (cia->cia_err & CIA_ERR_LOST_PERR)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "PCI data parity error\n");
+	if (cia->cia_err & CIA_ERR_LOST_PCI_ADDR_PE)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "PCI address parity error\n");
+	if (cia->cia_err & CIA_ERR_LOST_RCVD_MAS_ABT)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "PCI master abort\n");
+	if (cia->cia_err & CIA_ERR_LOST_RCVD_TAR_ABT)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "PCI target abort\n");
+	if (cia->cia_err & CIA_ERR_LOST_PA_PTE_INV)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "PCI invalid PTE\n");
+	if (cia->cia_err & CIA_ERR_LOST_FROM_WRT_ERR)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "Write to flash ROM attempted\n");
+	if (cia->cia_err & CIA_ERR_LOST_IOA_TIMEOUT)
+		printk(KERN_CRIT "CIA lost machine check: "
+		       "I/O timeout\n");
+
+	return 1;
+}
+
 void
 cia_machine_check(unsigned long vector, unsigned long la_ptr,
 		  struct pt_regs * regs)
@@ -769,30 +1127,7 @@ cia_machine_check(unsigned long vector, unsigned long la_ptr,
 	mb();
 
 	expected = mcheck_expected(0);
-	if (!expected && vector == 0x660) {
-		struct el_common *com;
-		struct el_common_EV5_uncorrectable_mcheck *ev5;
-		struct el_CIA_sysdata_mcheck *cia;
-
-		com = (void *)la_ptr;
-		ev5 = (void *)(la_ptr + com->proc_offset);
-		cia = (void *)(la_ptr + com->sys_offset);
-
-		if (com->code == 0x202) {
-			printk(KERN_CRIT "CIA PCI machine check: code=%x\n"
-			       "  cpu_err0=%08x cpu_err1=%08x cia_err=%08x\n"
-			       "  cia_stat=%08x err_mask=%08x cia_syn=%08x\n"
-			       "  mem_err0=%08x mem_err1=%08x\n"
-			       "  pci_err0=%08x pci_err1=%08x pci_err2=%08x\n",
-			       (int) com->code,
-			       (int) cia->cpu_err0, (int) cia->cpu_err1,
-			       (int) cia->cia_err,  (int) cia->cia_stat,
-			       (int) cia->err_mask, (int) cia->cia_syn,
-			       (int) cia->mem_err0, (int) cia->mem_err1,
-			       (int) cia->pci_err0, (int) cia->pci_err1,
-			       (int) cia->pci_err2);
-			expected = 1;
-		}
-	}
+	if (!expected && vector == 0x660)
+		expected = cia_decode_mchk(la_ptr);
 	process_mcheck_info(vector, la_ptr, regs, "CIA", expected);
 }

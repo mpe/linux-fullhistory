@@ -1346,19 +1346,22 @@ repeat:
 
 #ifdef CONFIG_SPARC32_COMPAT
 		if (current->thread.flags & SPARC_FLAG_32BIT) {
-			copy_to_user_ret((Firm_event *)p, &this_event,
-					 sizeof(Firm_event)-sizeof(struct timeval),
-					 -EFAULT);
+			if (copy_to_user((Firm_event *)p, &this_event,
+					 sizeof(Firm_event)-sizeof(struct timeval)))
+				return -EFAULT;
 			p += sizeof(Firm_event)-sizeof(struct timeval);
-			__put_user_ret(this_event.time.tv_sec, (u32 *)p, -EFAULT);
+			if (__put_user(this_event.time.tv_sec, (u32 *)p))
+				return -EFAULT;
 			p += sizeof(u32);
-			__put_user_ret(this_event.time.tv_usec, (u32 *)p, -EFAULT);
+			if (__put_user(this_event.time.tv_usec, (u32 *)p))
+				return -EFAULT;
 			p += sizeof(u32);
 		} else
 #endif
 		{
-			copy_to_user_ret((Firm_event *)p, &this_event, 
-					 sizeof(Firm_event), -EFAULT);
+			if (copy_to_user((Firm_event *)p, &this_event, 
+					 sizeof(Firm_event)))
+				return -EFAULT;
 			p += sizeof (Firm_event);
 		}
 #ifdef KBD_DEBUG
@@ -1401,22 +1404,27 @@ kbd_ioctl (struct inode *i, struct file *f, unsigned int cmd, unsigned long arg)
 
 	switch (cmd){
 	case KIOCTYPE:		  /* return keyboard type */
-		put_user_ret(sunkbd_type, (int *) arg, -EFAULT);
+		if (put_user(sunkbd_type, (int *) arg))
+			return -EFAULT;
 		break;
 	case KIOCGTRANS:
-		put_user_ret(TR_UNTRANS_EVENT, (int *) arg, -EFAULT);
+		if (put_user(TR_UNTRANS_EVENT, (int *) arg))
+			return -EFAULT;
 		break;
 	case KIOCTRANS:
-		get_user_ret(value, (int *) arg, -EFAULT);
+		if (get_user(value, (int *) arg))
+			return -EFAULT;
 		if (value != TR_UNTRANS_EVENT)
 			return -EINVAL;
 		break;
 	case KIOCLAYOUT:
-		put_user_ret(sunkbd_layout, (int *) arg, -EFAULT);
+		if (put_user(sunkbd_layout, (int *) arg))
+			return -EFAULT;
 		break;
 	case KIOCSDIRECT:
 #ifndef CODING_NEW_DRIVER
-		get_user_ret(value, (int *) arg, -EFAULT);
+		if (get_user(value, (int *) arg))
+			return -EFAULT;
 		if(value)
 			kbd_redirected = fg_console + 1;
 		else
@@ -1425,7 +1433,8 @@ kbd_ioctl (struct inode *i, struct file *f, unsigned int cmd, unsigned long arg)
 #endif
 		break;
 	case KIOCCMD:
-		get_user_ret(value, (int *) arg, -EFAULT);
+		if (get_user(value, (int *) arg))
+			return -EFAULT;
 		c = (unsigned char) value;
 		switch (c) {
 			case SKBDCMD_CLICK:
@@ -1444,8 +1453,9 @@ kbd_ioctl (struct inode *i, struct file *f, unsigned int cmd, unsigned long arg)
 				return -EINVAL;
 		}
 	case KIOCSLED:
-		get_user_ret(c, (unsigned char *) arg, -EFAULT);
-			
+		if (get_user(c, (unsigned char *) arg))
+			return -EFAULT;
+
 		if (c & LED_SCRLCK) leds |= (1 << VC_SCROLLOCK);
 		if (c & LED_NLOCK) leds |= (1 << VC_NUMLOCK);
 		if (c & LED_CLOCK) leds |= (1 << VC_CAPSLOCK);
@@ -1453,7 +1463,8 @@ kbd_ioctl (struct inode *i, struct file *f, unsigned int cmd, unsigned long arg)
 		sun_setledstate(kbd_table + fg_console, leds);
 		break;
 	case KIOCGLED:
-		put_user_ret(vcleds_to_sunkbd(getleds()), (unsigned char *) arg, -EFAULT);
+		if (put_user(vcleds_to_sunkbd(getleds()), (unsigned char *) arg))
+			return -EFAULT;
 		break;
 	case KIOCGRATE:
 	{
@@ -1465,8 +1476,9 @@ kbd_ioctl (struct inode *i, struct file *f, unsigned int cmd, unsigned long arg)
 		else
 			rate.rate = 0;
 
-		copy_to_user_ret((struct kbd_rate *)arg, &rate,
-				 sizeof(struct kbd_rate), -EFAULT);
+		if (copy_to_user((struct kbd_rate *)arg, &rate,
+				 sizeof(struct kbd_rate)))
+			return -EFAULT;
 
 		return 0;
 	}
@@ -1495,7 +1507,8 @@ kbd_ioctl (struct inode *i, struct file *f, unsigned int cmd, unsigned long arg)
 		int count;
 		
 		count = kbd_head - kbd_tail;
-		put_user_ret((count < 0) ? KBD_QSIZE - count : count, (int *) arg, -EFAULT);
+		if (put_user((count < 0) ? KBD_QSIZE - count : count, (int *) arg))
+			return -EFAULT;
 		return 0;
 	}
 	default:

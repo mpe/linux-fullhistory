@@ -1300,7 +1300,8 @@ static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, 
 		return 0;
 
 	case SNDCTL_DSP_SPEED: /* set smaple rate */
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val >= 0) {
 			if (file->f_mode & FMODE_WRITE) {
 				stop_dac(state);
@@ -1320,7 +1321,8 @@ static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, 
 		return put_user(dmabuf->rate, (int *)arg);
 
 	case SNDCTL_DSP_STEREO: /* set stereo or mono channel */
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if(val==0)
 			return -EINVAL;
 		if (file->f_mode & FMODE_WRITE) {
@@ -1351,7 +1353,8 @@ static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, 
 		return put_user(AFMT_S16_LE, (int *)arg);
 
 	case SNDCTL_DSP_SETFMT: /* Select sample format */
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != AFMT_QUERY) {
 			if (file->f_mode & FMODE_WRITE) {
 				stop_dac(state);
@@ -1365,7 +1368,8 @@ static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, 
 		return put_user(AFMT_S16_LE, (int *)arg);
 
 	case SNDCTL_DSP_CHANNELS:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 0) {
 			if (file->f_mode & FMODE_WRITE) {
 				stop_dac(state);
@@ -1385,14 +1389,16 @@ static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, 
 	case SNDCTL_DSP_SUBDIVIDE:
 		if (dmabuf->subdivision)
 			return -EINVAL;
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 1 && val != 2 && val != 4)
 			return -EINVAL;
 		dmabuf->subdivision = val;
 		return 0;
 
 	case SNDCTL_DSP_SETFRAGMENT:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 
 		dmabuf->ossfragshift = val & 0xffff;
 		dmabuf->ossmaxfrags = (val >> 16) & 0xffff;
@@ -1450,7 +1456,8 @@ static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, 
 		return put_user(val, (int *)arg);
 
 	case SNDCTL_DSP_SETTRIGGER:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			if (val & PCM_ENABLE_INPUT) {
 				if (!dmabuf->ready && (ret = prog_dmabuf(state, 1)))

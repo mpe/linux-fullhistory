@@ -906,15 +906,21 @@ void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 	if (file) {
 		struct inode * inode = file->f_dentry->d_inode;
 		struct address_space *mapping = inode->i_mapping;
+		struct vm_area_struct **head;
+
 		if (vmp->vm_flags & VM_DENYWRITE)
 			atomic_dec(&inode->i_writecount);
+
+		head = &mapping->i_mmap;
+		if (vmp->vm_flags & VM_SHARED)
+			head = &mapping->i_mmap_shared;
       
 		/* insert vmp into inode's share list */
 		spin_lock(&mapping->i_shared_lock);
-		if((vmp->vm_next_share = mapping->i_mmap) != NULL)
-			mapping->i_mmap->vm_pprev_share = &vmp->vm_next_share;
-		mapping->i_mmap = vmp;
-		vmp->vm_pprev_share = &mapping->i_mmap;
+		if((vmp->vm_next_share = *head) != NULL)
+			(*head)->vm_pprev_share = &vmp->vm_next_share;
+		*head = vmp;
+		vmp->vm_pprev_share = head;
 		spin_unlock(&mapping->i_shared_lock);
 	}
 }

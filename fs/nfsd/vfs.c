@@ -142,6 +142,7 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 		} else
 			dentry = dget(dparent->d_parent);
 	} else {
+		fh_lock(fhp);
 		dentry = lookup_one(name, dparent);
 		err = PTR_ERR(dentry);
 		if (IS_ERR(dentry))

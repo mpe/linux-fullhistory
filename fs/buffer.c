@@ -2606,8 +2606,8 @@ int kupdate(void *sem)
 		if (signal_pending(tsk)) {
 			int stopped = 0;
 			spin_lock_irq(&tsk->sigmask_lock);
-			if (sigismember(&tsk->signal, SIGSTOP)) {
-				sigdelset(&tsk->signal, SIGSTOP);
+			if (sigismember(&tsk->pending.signal, SIGSTOP)) {
+				sigdelset(&tsk->pending.signal, SIGSTOP);
 				stopped = 1;
 			}
 			recalc_sigpending(tsk);
@@ -2625,9 +2625,9 @@ int kupdate(void *sem)
 static int __init bdflush_init(void)
 {
 	DECLARE_MUTEX_LOCKED(sem);
-	kernel_thread(bdflush, &sem, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	kernel_thread(bdflush, &sem, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
 	down(&sem);
-	kernel_thread(kupdate, &sem, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	kernel_thread(kupdate, &sem, CLONE_FS | CLONE_FILES | CLONE_SIGNAL);
 	down(&sem);
 	return 0;
 }

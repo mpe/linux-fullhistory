@@ -100,6 +100,7 @@
  *						with only 6 digipeaters and sockaddr_ax25 in ax25_bind(),
  *						ax25_connect() and ax25_sendmsg()
  *			Joerg(DL1BKE)		Added support for SO_BINDTODEVICE
+ *			Arnaldo C. Melo		s/suser/capable(CAP_NET_ADMIN)/, some more cleanups
  */
 
 #include <linux/config.h>
@@ -817,10 +818,7 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname, char *op
 	if (put_user(length, optlen))
 		return -EFAULT;
 
-	if (copy_to_user(optval, valptr, length))
-		return -EFAULT;
-
-	return 0;
+	return copy_to_user(optval, valptr, length) ? -EFAULT : 0;
 }
 
 static int ax25_listen(struct socket *sock, int backlog)
@@ -1070,7 +1068,7 @@ static int ax25_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EINVAL;
 
 	call = ax25_findbyuid(current->euid);
-	if (call == NULL && ax25_uid_policy && !suser())
+	if (call == NULL && ax25_uid_policy && !capable(CAP_NET_ADMIN))
 		return -EACCES;
 
 	if (call == NULL)
@@ -1584,9 +1582,7 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if (amount < 0)
 				amount = 0;
-			if (put_user(amount, (int *)arg))
-				return -EFAULT;
-			return 0;
+			return put_user(amount, (int *)arg);
 		}
 
 		case TIOCINQ: {
@@ -1595,18 +1591,14 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
 				amount = skb->len;
-			if (put_user(amount, (int *)arg))
-				return -EFAULT;
-			return 0;
+			return put_user(amount, (int *)arg);
 		}
 
 		case SIOCGSTAMP:
 			if (sk != NULL) {
 				if (sk->stamp.tv_sec == 0)
 					return -ENOENT;
-				if (copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)))
-					return -EFAULT;
-				return 0;
+				return copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)) : -EFAULT : 0;
 			}
 			return -EINVAL;
 
@@ -1621,7 +1613,7 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 		case SIOCAX25NOUID: {	/* Set the default policy (default/bar) */
 			long amount;
-			if (!suser())
+			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			if (get_user(amount, (long *)arg))
 				return -EFAULT;
@@ -1634,12 +1626,12 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCADDRT:
 		case SIOCDELRT:
 		case SIOCAX25OPTRT:
-			if (!suser())
+			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			return ax25_rt_ioctl(cmd, (void *)arg);
 
 		case SIOCAX25CTLCON:
-			if (!suser())
+			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			return ax25_ctl_ioctl(cmd, (void *)arg);
 
@@ -1688,7 +1680,7 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCAX25ADDFWD:
 		case SIOCAX25DELFWD: {
 			struct ax25_fwd_struct ax25_fwd;
-			if (!suser())
+			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			if (copy_from_user(&ax25_fwd, (void *)arg, sizeof(ax25_fwd)))
 				return -EFAULT;

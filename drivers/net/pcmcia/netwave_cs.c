@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Authors:       John Markus Bjørndalen <johnm@cs.uit.no>
  *                Dag Brattli <dagb@cs.uit.no>
- *                David Hinds <dhinds@pcmcia.sourceforge.org>
+ *                David Hinds <dahinds@users.sourceforge.net>
  * Created at:    A long time ago!
  * Modified at:   Mon Nov 10 11:54:37 1997
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
@@ -63,7 +63,7 @@
 
 #ifdef CONFIG_NET_PCMCIA_RADIO
 #include <linux/wireless.h>
-#endif	/* CONFIG_NET_PCMCIA_RADIO */
+#endif
 
 #include <pcmcia/version.h>
 #include <pcmcia/cs_types.h>
@@ -130,8 +130,7 @@
 #define NETWAVE_ASR_RXRDY   0x80
 #define NETWAVE_ASR_TXBA    0x01
 
-#define TX_TIMEOUT  20
-#define WATCHDOG_JIFFIES 32
+#define TX_TIMEOUT		((32*HZ)/100)
 
 static const unsigned int imrConfRFU1 = 0x10; /* RFU interrupt mask, keep high */
 static const unsigned int imrConfIENA = 0x02; /* Interrupt enable */
@@ -150,8 +149,6 @@ static const unsigned int txConfMAC    = 0x20; /* Host sends MAC mode */
 static const unsigned int txConfEUD    = 0x10; /* Enable Uni-Data packets */
 static const unsigned int txConfKey    = 0x02; /* Scramble data packets */
 static const unsigned int txConfLoop   = 0x01; /* Loopback mode */
-
-static int netwave_debug = 0;
 
 /*
    All the PCMCIA modules use PCMCIA_DEBUG to control debugging.  If
@@ -223,7 +220,6 @@ static void netwave_reset(struct net_device *dev);
 static int netwave_open(struct net_device *dev);  /* Open the device */
 static int netwave_close(struct net_device *dev); /* Close the device */
 static int netwave_config(struct net_device *dev, struct ifmap *map);
-static void netwave_tx_timeout (struct net_device *dev);
 
 /* Packet transmission and Packet reception */
 static int netwave_start_xmit( struct sk_buff *skb, struct net_device *dev);
@@ -231,7 +227,7 @@ static int netwave_rx( struct net_device *dev);
 
 /* Interrupt routines */
 static void netwave_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void netwave_watchdog(u_long);	/* Transmission watchdog */
+static void netwave_watchdog(struct net_device *);
 
 /* Statistics */
 static void update_stats(struct net_device *dev);
@@ -309,7 +305,6 @@ typedef struct netwave_private {
     u_char     *ramBase;
     int        timeoutCounter;
     int        lastExec;
-    spinlock_t lock;
     struct timer_list      watchdog;	/* To avoid blocking state */
     struct site_survey     nss;
     struct net_device_stats stats;
@@ -417,18 +412,6 @@ static struct iw_statistics *netwave_get_wireless_stats(struct net_device *dev)
 #endif
 
 /*
- * Function netwave_init (dev)
- *
- *    We never need to do anything when a device is "initialized"
- *    by the net software, because we only register already-found cards.
- */
-int netwave_init(struct net_device *dev)
-{
-    /* We do all the initialization of this in netwave_attach instead */
-    return 0;
-}
-
-/*
  * Function netwave_attach (void)
  *
  *     Creates an "instance" of the driver, allocating local data 
@@ -456,7 +439,6 @@ static dev_link_t *netwave_attach(void)
     priv = kmalloc(sizeof(*priv), GFP_KERNEL);
     if (!priv) return NULL;
     memset(priv, 0, sizeof(*priv));
-    priv->lock = SPIN_LOCK_UNLOCKED;
     link = &priv->link; dev = &priv->dev;
     link->priv = dev->priv = priv;
     link->release.function = &netwave_release;
@@ -486,10 +468,6 @@ static dev_link_t *netwave_attach(void)
     link->conf.ConfigIndex = 1;
     link->conf.Present = PRESENT_OPTION;
 
-    /* Set the watchdog timer */
-    priv->watchdog.function = &netwave_watchdog;
-    priv->watchdog.data = (unsigned long) dev;
-
     /* Netwave specific entries in the device structure */
     dev->hard_start_xmit = &netwave_start_xmit;
     dev->set_config = &netwave_config;
@@ -501,14 +479,12 @@ static dev_link_t *netwave_attach(void)
 #endif
     dev->do_ioctl = &netwave_ioctl;
 
+    dev->tx_timeout = &netwave_watchdog;
+    dev->watchdog_timeo = TX_TIMEOUT;
+
     ether_setup(dev);
-    strcpy(dev->name, priv->node.dev_name);
-    dev->init = &netwave_init;
     dev->open = &netwave_open;
     dev->stop = &netwave_close;
-    dev->tx_timeout = netwave_tx_timeout;
-    dev->watchdog_timeo = TX_TIMEOUT;
-    netif_start_queue (dev);
     link->irq.Instance = dev;
     
     /* Register with Card Services */
@@ -545,30 +521,21 @@ static void netwave_detach(dev_link_t *link)
 {
     netwave_private *priv = link->priv;
     dev_link_t **linkp;
-    long flags;
 
     DEBUG(0, "netwave_detach(0x%p)\n", link);
   
-    save_flags(flags);
-    if (link->state & DEV_RELEASE_PENDING) {
-	del_timer(&link->release);
-	link->state &= ~DEV_RELEASE_PENDING;
-    }
-    cli();
-    restore_flags(flags);
-
     /*
 	  If the device is currently configured and active, we won't
 	  actually delete it yet.  Instead, it is marked so that when
 	  the release() function is called, that will trigger a proper
 	  detach().
 	*/
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG) {
 	netwave_release((u_long) link);
 	if (link->state & DEV_STALE_CONFIG) {
 	    DEBUG(1, "netwave_cs: detach postponed, '%s' still "
 		  "locked\n", link->dev->dev_name);
-	    
 	    link->state |= DEV_STALE_LINK;
 	    return;
 	}
@@ -641,7 +608,7 @@ static int netwave_ioctl(struct net_device *dev, /* ioctl device */
     struct iwreq *wrq = (struct iwreq *) rq;
 #endif
 	
-    DEBUG( 0, "%s: ->netwave_ioctl(cmd=0x%X)\n", dev->name, cmd);
+    DEBUG(0, "%s: ->netwave_ioctl(cmd=0x%X)\n", dev->name, cmd);
 	
     /* Disable interrupts & save flags */
     save_flags(flags);
@@ -840,7 +807,7 @@ static void netwave_pcmcia_config(dev_link_t *link) {
     struct net_device *dev = &priv->dev;
     tuple_t tuple;
     cisparse_t parse;
-    int i=0, j, last_ret, last_fn;
+    int i, j, last_ret, last_fn;
     u_char buf[64];
     win_req_t req;
     memreq_t mem;
@@ -862,16 +829,16 @@ static void netwave_pcmcia_config(dev_link_t *link) {
     CS_CHECK(ParseTuple, handle, &tuple, &parse);
     link->conf.ConfigBase = parse.config.base;
     link->conf.Present = parse.config.rmask[0];
-    
+
     /* Configure card */
     link->state |= DEV_CONFIG;
-	
+
     /*
      *  Try allocating IO ports.  This tries a few fixed addresses.
      *  If you want, you can also read the card's config table to
      *  pick addresses -- see the serial driver for an example.
      */
-    for (j = 0x0; j < 0x400; j += 0x20) {
+    for (i = j = 0x0; j < 0x400; j += 0x20) {
 	link->io.BasePort1 = j ^ 0x300;
 	i = CardServices(RequestIO, link->handle, &link->io);
 	if (i == CS_SUCCESS) break;
@@ -880,19 +847,19 @@ static void netwave_pcmcia_config(dev_link_t *link) {
 	cs_error(link->handle, RequestIO, i);
 	goto failed;
     }
-		
+
     /*
      *  Now allocate an interrupt line.  Note that this does not
      *  actually assign a handler to the interrupt.
      */
     CS_CHECK(RequestIRQ, handle, &link->irq);
-	
+
     /*
      *  This actually configures the PCMCIA socket -- setting up
      *  the I/O windows and the interrupt mapping.
      */
     CS_CHECK(RequestConfiguration, handle, &link->conf);
-    
+
     /*
      *  Allocate a 32K memory window.  Note that the dev_link_t
      *  structure provides space for one window handle -- if your
@@ -900,7 +867,7 @@ static void netwave_pcmcia_config(dev_link_t *link) {
      *  the handles in your private data structure, link->priv.
      */
     DEBUG(1, "Setting mem speed of %d\n", mem_speed);
-    
+
     req.Attributes = WIN_DATA_WIDTH_8|WIN_MEMORY_TYPE_CM|WIN_ENABLE;
     req.Base = 0; req.Size = 0x8000;
     req.AccessSpeed = mem_speed;
@@ -908,26 +875,25 @@ static void netwave_pcmcia_config(dev_link_t *link) {
     CS_CHECK(RequestWindow, &link->win, &req);
     mem.CardOffset = 0x20000; mem.Page = 0; 
     CS_CHECK(MapMemPage, link->win, &mem);
-    
+
     /* Store base address of the common window frame */
     ramBase = ioremap(req.Base, 0x8000);
     ((netwave_private*)dev->priv)->ramBase = ramBase;
-    
+
     dev->irq = link->irq.AssignedIRQ;
     dev->base_addr = link->io.BasePort1;
-    netif_start_queue (dev);
     if (register_netdev(dev) != 0) {
 	printk(KERN_DEBUG "netwave_cs: register_netdev() failed\n");
 	goto failed;
     }
-	
+
+    strcpy(priv->node.dev_name, dev->name);
+    link->dev = &priv->node;
     link->state &= ~DEV_CONFIG_PENDING;
-	
-    link->dev = &((netwave_private *)dev->priv)->node;
 
     /* Reset card before reading physical address */
     netwave_doreset(dev->base_addr, ramBase);
-    
+
     /* Read the ethernet address and fill in the Netwave registers. */
     for (i = 0; i < 6; i++) 
 	dev->dev_addr[i] = readb(ramBase + NETWAVE_EREG_PA + i);
@@ -949,7 +915,6 @@ cs_failed:
     cs_error(link->handle, last_fn, last_ret);
 failed:
     netwave_release((u_long)link);
-    return;
 } /* netwave_pcmcia_config */
 
 /*
@@ -975,7 +940,7 @@ static void netwave_release(u_long arg) {
 	link->state |= DEV_STALE_CONFIG;
 	return;
     }
-	
+
     /* Don't bother checking to see if these succeed or not */
     if (link->win) {
 	iounmap(priv->ramBase);
@@ -984,9 +949,9 @@ static void netwave_release(u_long arg) {
     CardServices(ReleaseConfiguration, link->handle);
     CardServices(ReleaseIO, link->handle, &link->io);
     CardServices(ReleaseIRQ, link->handle, &link->irq);
- 
-    link->state &= ~(DEV_CONFIG | DEV_RELEASE_PENDING | DEV_STALE_CONFIG);
-    
+
+    link->state &= ~(DEV_CONFIG | DEV_STALE_CONFIG);
+
 } /* netwave_release */
 
 /*
@@ -1020,8 +985,7 @@ static int netwave_event(event_t event, int priority,
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
 	    netif_device_detach(dev);
-	    link->release.expires = jiffies + 5;
-	    add_timer(&link->release);
+	    mod_timer(&link->release, jiffies + HZ/20);
 	}
 	break;
     case CS_EVENT_CARD_INSERTION:
@@ -1035,7 +999,6 @@ static int netwave_event(event_t event, int priority,
 	if (link->state & DEV_CONFIG) {
 	    if (link->open)
 		netif_device_detach(dev);
-
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
 	break;
@@ -1082,10 +1045,7 @@ static void netwave_reset(struct net_device *dev) {
     DEBUG(0, "netwave_reset: Done with hardware reset\n");
 
     priv->timeoutCounter = 0;
-	
-    /* If watchdog was activated, kill it ! */
-    del_timer(&priv->watchdog);
-	
+
     /* Reset card */
     netwave_doreset(iobase, ramBase);
     printk(KERN_DEBUG "netwave_reset: Done with hardware reset\n");
@@ -1172,7 +1132,7 @@ static int netwave_hw_xmit(unsigned char* data, int len,
     netwave_private *priv = (netwave_private *) dev->priv;
     u_char* ramBase = priv->ramBase;
     ioaddr_t iobase = dev->base_addr;
-	
+
     /* Disable interrupts & save flags */
     save_flags(flags);
     cli();
@@ -1183,9 +1143,10 @@ static int netwave_hw_xmit(unsigned char* data, int len,
 	/* No buffers available */
 	printk(KERN_DEBUG "netwave_hw_xmit: %s - no xmit buffers available.\n",
 	       dev->name);
+	restore_flags(flags);
 	return 1;
     }
-	
+
     priv->stats.tx_bytes += len;
 
     DEBUG(3, "Transmitting with SPCQ %x SPU %x LIF %x ISPLQ %x\n",
@@ -1222,28 +1183,10 @@ static int netwave_hw_xmit(unsigned char* data, int len,
     writeb(len & 0xff, ramBase + NETWAVE_EREG_CB + 1);
     writeb((len>>8) & 0xff, ramBase + NETWAVE_EREG_CB + 2);
     writeb(NETWAVE_CMD_EOC, ramBase + NETWAVE_EREG_CB + 3);
-	
-    /* If watchdog not already active, activate it... */
-    if (!timer_pending(&priv->watchdog)) {
-	/* set timer to expire in WATCHDOG_JIFFIES */
-	priv->watchdog.expires = jiffies + WATCHDOG_JIFFIES;
-	add_timer(&priv->watchdog);
-    }
+
     restore_flags( flags);
     return 0;
 }
-
-
-static void netwave_tx_timeout (struct net_device *dev)
-{
-	if (netwave_debug > 0)
-		printk (KERN_DEBUG "%s timed out.\n", dev->name);
-	netwave_reset (dev);
-	dev->trans_start = jiffies;
-	netif_start_queue (dev);
-}
-
-
 
 static int netwave_start_xmit(struct sk_buff *skb, struct net_device *dev) {
 	/* This flag indicate that the hardware can't perform a transmission.
@@ -1252,23 +1195,15 @@ static int netwave_start_xmit(struct sk_buff *skb, struct net_device *dev) {
 	 * As the watchdog will abort too long transmissions, we are quite safe...
 	 */
 
-    /* Sending a NULL skb means some higher layer thinks we've missed an
-     * tx-done interrupt. Caution: dev_tint() handles the cli()/sti()
-     * itself. 
-     */
+    netif_stop_queue(dev);
 
-    /* Block a timer-based transmit from overlapping. This could 
-     * better be done with atomic_swap(1, dev->tbusy, but set_bit()
-     * works as well 
-     */
-    netif_stop_queue (dev);
-    if (1) {
+    {
 	short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 	unsigned char* buf = skb->data;
 	
 	if (netwave_hw_xmit( buf, length, dev) == 1) {
 	    /* Some error, let's make them call us another time? */
-	    netif_start_queue (dev);
+	    netif_start_queue(dev);
 	}
 	dev->trans_start = jiffies;
     }
@@ -1295,10 +1230,8 @@ static void netwave_interrupt(int irq, void* dev_id, struct pt_regs *regs) {
     dev_link_t *link = &priv->link;
     int i;
     
-    if ((dev == NULL) || !netif_device_present(dev))
+    if (!netif_device_present(dev))
 	return;
-    
-    spin_lock (&priv->lock);
     
     iobase = dev->base_addr;
     ramBase = priv->ramBase;
@@ -1313,9 +1246,9 @@ static void netwave_interrupt(int irq, void* dev_id, struct pt_regs *regs) {
 	
         status = inb(iobase + NETWAVE_REG_ASR);
 		
-	if ( ! (link->state & DEV_PRESENT) || link->state & DEV_SUSPEND ) {
-	    DEBUG( 1, "netwave_interupt: Interrupt with status 0x%x "
-		   "from removed or suspended card!\n", status);
+	if (!DEV_OK(link)) {
+	    DEBUG(1, "netwave_interrupt: Interrupt with status 0x%x "
+		  "from removed or suspended card!\n", status);
 	    break;
 	}
 		
@@ -1393,21 +1326,15 @@ static void netwave_interrupt(int irq, void* dev_id, struct pt_regs *regs) {
 	    DEBUG(3, "New status is TSER %x ASR %x\n",
 		  readb(ramBase + NETWAVE_EREG_TSER),
 		  inb(iobase + NETWAVE_REG_ASR));
-			
-	    /* If watchdog was activated, kill it ! */
-	    del_timer(&priv->watchdog);
 
-	    netif_wake_queue (dev);
+	    netif_wake_queue(dev);
 	}
 	/* TxBA, this would trigger on all error packets received */
 	/* if (status & 0x01) {
-	   if (netwave_debug > 3) 
-	   printk(KERN_DEBUG "Transmit buffers available, %x\n", status); 
-	   } 
+	   DEBUG(4, "Transmit buffers available, %x\n", status);
+	   }
 	   */
     }
-    /* done.. */
-    spin_unlock (&priv->lock);
 } /* netwave_interrupt */
 
 /*
@@ -1418,20 +1345,12 @@ static void netwave_interrupt(int irq, void* dev_id, struct pt_regs *regs) {
  *    it expire, we reset the card.
  *
  */
-static void netwave_watchdog(u_long a) {
-    struct net_device *dev;
-    ioaddr_t iobase;
-	
-    dev = (struct net_device *) a;
-    iobase = dev->base_addr;
-    
-    DEBUG( 1, "%s: netwave_watchdog: watchdog timer expired\n", dev->name);
-	
-    netwave_reset(dev); 
-	
-    /* We are not waiting anymore... */
-    netif_start_queue (dev);
-	
+static void netwave_watchdog(struct net_device *dev) {
+
+    DEBUG(1, "%s: netwave_watchdog: watchdog timer expired\n", dev->name);
+    netwave_reset(dev);
+    dev->trans_start = jiffies;
+    netif_start_queue(dev);
 } /* netwave_watchdog */
 
 static struct net_device_stats *netwave_get_stats(struct net_device *dev) {
@@ -1569,8 +1488,8 @@ static int netwave_open(struct net_device *dev) {
 
     link->open++;
     MOD_INC_USE_COUNT;
-	
-    netif_start_queue (dev);
+
+    netif_start_queue(dev);
     netwave_reset(dev);
 	
     return 0;
@@ -1582,17 +1501,10 @@ static int netwave_close(struct net_device *dev) {
 
     DEBUG(1, "netwave_close: finishing.\n");
 
-    netif_stop_queue (dev);
-
-    /* If watchdog was activated, kill it ! */
-    del_timer(&priv->watchdog);
-	
     link->open--;
-    if (link->state & DEV_STALE_CONFIG) {
-	link->release.expires = jiffies + 5;
-	link->state |= DEV_RELEASE_PENDING;
-	add_timer(&link->release);
-    }	
+    netif_stop_queue(dev);
+    if (link->state & DEV_STALE_CONFIG)
+	mod_timer(&link->release, jiffies + HZ/20);
 	
     MOD_DEC_USE_COUNT;
     return 0;

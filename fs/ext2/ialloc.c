@@ -398,9 +398,13 @@ repeat:
 			ext2_error (sb, "ext2_new_inode",
 				    "Free inodes count corrupted in group %d",
 				    i);
-			unlock_super (sb);
-			iput (inode);
-			return NULL;
+			if (sb->s_flags & MS_RDONLY) {
+				unlock_super (sb);
+				iput (inode);
+				return NULL;
+			}
+			gdp->bg_free_inodes_count = 0;
+			mark_buffer_dirty(bh2, 1);
 		}
 		goto repeat;
 	}
@@ -411,6 +415,7 @@ repeat:
 			    "block_group = %d,inode=%d", i, j);
 		unlock_super (sb);
 		iput (inode);
+		*err = -EIO;
 		return NULL;
 	}
 	gdp->bg_free_inodes_count =

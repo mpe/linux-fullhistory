@@ -1074,6 +1074,13 @@ found_page:
 			goto page_not_up_to_date;
 		generic_file_readahead(reada_ok, filp, inode, page);
 page_ok:
+		/* If users can be writing to this page using arbitrary
+		 * virtual addresses, take care about potential aliasing
+		 * before reading the page on the kernel side.
+		 */
+		if (page->mapping->i_mmap_shared != NULL)
+			flush_dcache_page(page);
+
 		/*
 		 * Ok, we have the page, and it's up-to-date, so
 		 * now we can copy it to user space...

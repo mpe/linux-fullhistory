@@ -2,7 +2,7 @@
 
     A driver for PCMCIA serial devices
 
-    serial_cs.c 1.118 2000/05/04 01:29:47
+    serial_cs.c 1.123 2000/08/24 18:46:38
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -15,7 +15,7 @@
     rights and limitations under the License.
 
     The initial developer of the original code is David A. Hinds
-    <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+    <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
     are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
 
     Alternatively, the contents of this file may be used under the
@@ -58,7 +58,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"serial_cs.c 1.118 2000/05/04 01:29:47 (David Hinds)";
+"serial_cs.c 1.123 2000/08/24 18:46:38 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -242,12 +242,11 @@ static int setup_serial(serial_info_t *info, ioaddr_t port, int irq)
     memset(&serial, 0, sizeof(serial));
     serial.port = port;
     serial.irq = irq;
-    serial.flags = ASYNC_SKIP_TEST;
-    serial.flags |= (info->multi || info->slave) ? ASYNC_SHARE_IRQ : 0;
+    serial.flags = ASYNC_SKIP_TEST | ASYNC_SHARE_IRQ;
     line = register_serial(&serial);
     if (line < 0) {
-	printk(KERN_NOTICE "serial_cs: register_serial() at 0x%04x, "
-	       "irq %d failed\n", serial.port, serial.irq);
+	printk(KERN_NOTICE "serial_cs: register_serial() at 0x%04lx,"
+	       " irq %d failed\n", (u_long)serial.port, serial.irq);
 	return -1;
     }
     
@@ -290,7 +289,7 @@ static int simple_config(dev_link_t *link)
     cisparse_t parse;
     cistpl_cftable_entry_t *cf = &parse.cftable_entry;
     config_info_t config;
-    int i, j;
+    int i, j, try;
 
     /* If the card is already configured, look up the port and irq */
     i = CardServices(GetConfigurationInfo, handle, &config);
@@ -315,22 +314,26 @@ static int simple_config(dev_link_t *link)
     tuple.TupleOffset = 0; tuple.TupleDataMax = 255;
     tuple.Attributes = 0;
     tuple.DesiredTuple = CISTPL_CFTABLE_ENTRY;
-    i = first_tuple(handle, &tuple, &parse);
-    while (i != CS_NO_MORE_ITEMS) {
-	if (i != CS_SUCCESS) goto next_entry;
-	if (cf->vpp1.present & (1<<CISTPL_POWER_VNOM))
-	    link->conf.Vpp1 = link->conf.Vpp2 =
-		cf->vpp1.param[CISTPL_POWER_VNOM]/10000;
-	if ((cf->io.nwin > 0) && (cf->io.win[0].len == 8) &&
-	    (cf->io.win[0].base != 0)) {
-	    link->conf.ConfigIndex = cf->index;
-	    link->io.BasePort1 = cf->io.win[0].base;
-	    link->io.IOAddrLines = cf->io.flags & CISTPL_IO_LINES_MASK;
-	    i = CardServices(RequestIO, link->handle, &link->io);
-	    if (i == CS_SUCCESS) goto found_port;
+    /* Two tries: without IO aliases, then with aliases */
+    for (try = 0; try < 2; try++) {
+	i = first_tuple(handle, &tuple, &parse);
+	while (i != CS_NO_MORE_ITEMS) {
+	    if (i != CS_SUCCESS) goto next_entry;
+	    if (cf->vpp1.present & (1<<CISTPL_POWER_VNOM))
+		link->conf.Vpp1 = link->conf.Vpp2 =
+		    cf->vpp1.param[CISTPL_POWER_VNOM]/10000;
+	    if ((cf->io.nwin > 0) && (cf->io.win[0].len == 8) &&
+		(cf->io.win[0].base != 0)) {
+		link->conf.ConfigIndex = cf->index;
+		link->io.BasePort1 = cf->io.win[0].base;
+		link->io.IOAddrLines = (try == 0) ?
+		    16 : cf->io.flags & CISTPL_IO_LINES_MASK;
+		i = CardServices(RequestIO, link->handle, &link->io);
+		if (i == CS_SUCCESS) goto found_port;
+	    }
+	next_entry:
+	    i = next_tuple(handle, &tuple, &parse);
 	}
-    next_entry:
-	i = next_tuple(handle, &tuple, &parse);
     }
     
     /* Second pass: try to find an entry that isn't picky about
@@ -448,6 +451,9 @@ static int multi_config(dev_link_t *link)
     }
     
     setup_serial(info, link->io.BasePort1, link->irq.AssignedIRQ);
+    /* The Nokia cards are not really multiport cards */
+    if (info->manfid == MANFID_NOKIA)
+	return 0;
     for (i = 0; i < info->multi-1; i++)
 	setup_serial(info, base2+(8*i), link->irq.AssignedIRQ);
     
@@ -518,11 +524,13 @@ void serial_config(dev_link_t *link)
 	 (parse.funcid.func == CISTPL_FUNCID_MULTI) ||
 	 (parse.funcid.func == CISTPL_FUNCID_SERIAL))) {
 	tuple.DesiredTuple = CISTPL_CFTABLE_ENTRY;
-	if ((first_tuple(handle, &tuple, &parse) == CS_SUCCESS) &&
-	    (((cf->io.nwin == 1) && (cf->io.win[0].len == 16)) ||
-	     ((cf->io.nwin == 2) && (cf->io.win[0].len == 8) &&
-	      (cf->io.win[1].len == 8))))
-	    info->multi = 2;
+	if (first_tuple(handle, &tuple, &parse) == CS_SUCCESS) {
+	    if ((cf->io.nwin == 1) && (cf->io.win[0].len % 8 == 0))
+		info->multi = cf->io.win[0].len >> 3;
+	    if ((cf->io.nwin == 2) && (cf->io.win[0].len == 8) &&
+		(cf->io.win[1].len == 8))
+		info->multi = 2;
+	}
     }
     
     if (info->multi > 1)

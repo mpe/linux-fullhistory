@@ -9,10 +9,14 @@
  * Real Time signals may be queued.
  */
 
-struct signal_queue
-{
-	struct signal_queue *next;
+struct sigqueue {
+	struct sigqueue *next;
 	siginfo_t info;
+};
+
+struct sigpending {
+	struct sigqueue *head, **tail;
+	sigset_t signal;
 };
 
 /*
@@ -206,6 +210,13 @@ extern inline void siginitsetinv(sigset_t *set, unsigned long mask)
 }
 
 #endif /* __HAVE_ARCH_SIG_SETOPS */
+
+static inline void init_sigpending(struct sigpending *sig)
+{
+	sigemptyset(&sig->signal);
+	sig->head = NULL;
+	sig->tail = &sig->head;
+}
 
 #endif /* __KERNEL__ */
 

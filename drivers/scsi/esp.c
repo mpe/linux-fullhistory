@@ -1,4 +1,4 @@
-/* $Id: esp.c,v 1.95 2000/08/23 22:32:37 davem Exp $
+/* $Id: esp.c,v 1.96 2000/08/24 03:51:26 davem Exp $
  * esp.c:  EnhancedScsiProcessor Sun SCSI driver code.
  *
  * Copyright (C) 1995, 1998 David S. Miller (davem@caip.rutgers.edu)
@@ -1599,7 +1599,9 @@ static void esp_exec_cmd(struct esp *esp)
 
 	if (SDptr->sync) {
 		/* this targets sync is known */
+#ifndef __sparc_v9__
 do_sync_known:
+#endif
 		if (SDptr->disconnect)
 			*cmdp++ = IDENTIFY(1, lun);
 		else
@@ -2583,6 +2585,8 @@ static int esp_do_data(struct esp *esp)
 	esp_advance_phase(SCptr, thisphase);
 	ESPDATA(("newphase<%s> ", (thisphase == in_datain) ? "DATAIN" : "DATAOUT"));
 	hmuch = dma_can_transfer(esp, SCptr);
+	if (hmuch > (64 * 1024) && (esp->erev != fashme))
+		hmuch = (64 * 1024);
 	ESPDATA(("hmuch<%d> ", hmuch));
 	esp->current_transfer_size = hmuch;
 

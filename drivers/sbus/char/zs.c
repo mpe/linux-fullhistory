@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.58 2000/07/06 01:41:38 davem Exp $
+/* $Id: zs.c,v 1.59 2000/08/29 07:01:55 davem Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1319,7 +1319,8 @@ static int get_serial_info(struct sun_serial * info,
 	tmp.close_delay = info->close_delay;
 	tmp.closing_wait = info->closing_wait;
 	tmp.custom_divisor = info->custom_divisor;
-	copy_to_user_ret(retinfo,&tmp,sizeof(*retinfo), -EFAULT);
+	if (copy_to_user(retinfo,&tmp,sizeof(*retinfo)))
+		return -EFAULT;
 	return 0;
 }
 
@@ -1390,7 +1391,8 @@ static int get_lsr_info(struct sun_serial * info, unsigned int *value)
 	ZSDELAY();
 	ZSLOG(REGCTRL, status, 0);
 	sti();
-	put_user_ret(status, value, -EFAULT);
+	if (put_user(status, value))
+		return -EFAULT;
 	return 0;
 }
 
@@ -1409,7 +1411,8 @@ static int get_modem_info(struct sun_serial * info, unsigned int *value)
 		| ((status  & DCD) ? TIOCM_CAR : 0)
 		| ((status  & SYNC) ? TIOCM_DSR : 0)
 		| ((status  & CTS) ? TIOCM_CTS : 0);
-	put_user_ret(result, value, -EFAULT);
+	if (put_user(result, value))
+		return -EFAULT;
 	return 0;
 }
 
@@ -1418,7 +1421,8 @@ static int set_modem_info(struct sun_serial * info, unsigned int cmd,
 {
 	unsigned int arg;
 
-	get_user_ret(arg, value, -EFAULT);
+	if (get_user(arg, value))
+		return -EFAULT;
 	switch (cmd) {
 	case TIOCMBIS: 
 		if (arg & TIOCM_RTS)
@@ -1494,11 +1498,13 @@ static int zs_ioctl(struct tty_struct *tty, struct file * file,
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
 			return 0;
 		case TIOCGSOFTCAR:
-			put_user_ret(C_CLOCAL(tty) ? 1 : 0,
-				     (unsigned long *) arg, -EFAULT);
+			if (put_user(C_CLOCAL(tty) ? 1 : 0,
+				     (unsigned long *) arg))
+				return -EFAULT;
 			return 0;
 		case TIOCSSOFTCAR:
-			get_user_ret(arg, (unsigned long *) arg, -EFAULT);
+			if (get_user(arg, (unsigned long *) arg))
+				return -EFAULT;
 			tty->termios->c_cflag =
 				((tty->termios->c_cflag & ~CLOCAL) |
 				 (arg ? CLOCAL : 0));
@@ -1519,8 +1525,9 @@ static int zs_ioctl(struct tty_struct *tty, struct file * file,
 			return get_lsr_info(info, (unsigned int *) arg);
 
 		case TIOCSERGSTRUCT:
-			copy_to_user_ret((struct sun_serial *) arg,
-				    info, sizeof(struct sun_serial), -EFAULT);
+			if (copy_to_user((struct sun_serial *) arg,
+				    info, sizeof(struct sun_serial)))
+				return -EFAULT;
 			return 0;
 			
 		default:
@@ -1906,7 +1913,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.58 $";
+	char *revision = "$Revision: 1.59 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

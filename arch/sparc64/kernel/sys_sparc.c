@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.45 2000/07/30 23:12:24 davem Exp $
+/* $Id: sys_sparc.c,v 1.46 2000/08/29 07:01:54 davem Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -398,13 +398,18 @@ asmlinkage int sys_utrap_install(utrap_entry_t type, utrap_handler_t new_p,
 		return -EINVAL;
 	if (new_p == (utrap_handler_t)(long)UTH_NOCHANGE) {
 		if (old_p) {
-			if (!current->thread.utraps)
-				put_user_ret(NULL, old_p, -EFAULT);
-			else
-				put_user_ret((utrap_handler_t)(current->thread.utraps[type]), old_p, -EFAULT);
+			if (!current->thread.utraps) {
+				if (put_user(NULL, old_p))
+					return -EFAULT;
+			} else {
+				if (put_user((utrap_handler_t)(current->thread.utraps[type]), old_p))
+					return -EFAULT;
+			}
 		}
-		if (old_d)
-			put_user_ret(NULL, old_d, -EFAULT);
+		if (old_d) {
+			if (put_user(NULL, old_d))
+				return -EFAULT;
+		}
 		return 0;
 	}
 	if (!current->thread.utraps) {
@@ -431,11 +436,14 @@ asmlinkage int sys_utrap_install(utrap_entry_t type, utrap_handler_t new_p,
 			       UT_TRAP_INSTRUCTION_31*sizeof(long));
 		}
 	}
-	if (old_p)
-		put_user_ret((utrap_handler_t)(current->thread.utraps[type]),
-			     old_p, -EFAULT);
-	if (old_d)
-		put_user_ret(NULL, old_d, -EFAULT);
+	if (old_p) {
+		if (put_user((utrap_handler_t)(current->thread.utraps[type]), old_p))
+			return -EFAULT;
+	}
+	if (old_d) {
+		if (put_user(NULL, old_d))
+			return -EFAULT;
+	}
 	current->thread.utraps[type] = (long)new_p;
 
 	return 0;

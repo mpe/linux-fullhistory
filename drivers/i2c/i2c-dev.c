@@ -220,10 +220,10 @@ int i2cdev_ioctl (struct inode *inode, struct file *file, unsigned int cmd,
 		                     sizeof(unsigned long)))?-EFAULT:0;
 
         case I2C_RDWR:
-		copy_from_user_ret(&rdwr_arg, 
-			(struct i2c_rdwr_ioctl_data *)arg, 
-			sizeof(rdwr_arg),
-			-EFAULT);
+		if (copy_from_user(&rdwr_arg, 
+				   (struct i2c_rdwr_ioctl_data *)arg, 
+				   sizeof(rdwr_arg)))
+			return -EFAULT;
 
 		rdwr_pa = (struct i2c_msg *)
 			kmalloc(rdwr_arg.nmsgs * sizeof(struct i2c_msg), 
@@ -280,10 +280,10 @@ int i2cdev_ioctl (struct inode *inode, struct file *file, unsigned int cmd,
 		return res;
 
 	case I2C_SMBUS:
-		copy_from_user_ret(&data_arg,
+		if (copy_from_user(&data_arg,
 		                   (struct i2c_smbus_ioctl_data *) arg,
-		                   sizeof(struct i2c_smbus_ioctl_data),
-		                   -EFAULT);
+		                   sizeof(struct i2c_smbus_ioctl_data)))
+			return -EFAULT;
 		if ((data_arg.size != I2C_SMBUS_BYTE) && 
 		    (data_arg.size != I2C_SMBUS_QUICK) &&
 		    (data_arg.size != I2C_SMBUS_BYTE_DATA) && 
@@ -336,15 +336,18 @@ int i2cdev_ioctl (struct inode *inode, struct file *file, unsigned int cmd,
 			datasize = sizeof(data_arg.data->block);
 
 		if ((data_arg.size == I2C_SMBUS_PROC_CALL) || 
-		    (data_arg.read_write == I2C_SMBUS_WRITE))
-			copy_from_user_ret(&temp,data_arg.data,datasize,
-			                   -EFAULT);
+		    (data_arg.read_write == I2C_SMBUS_WRITE)) {
+			if (copy_from_user(&temp, data_arg.data, datasize))
+				return -EFAULT;
+		}
 		res = i2c_smbus_xfer(client->adapter,client->addr,client->flags,
 		      data_arg.read_write,
 		      data_arg.command,data_arg.size,&temp);
 		if (! res && ((data_arg.size == I2C_SMBUS_PROC_CALL) || 
-		   (data_arg.read_write == I2C_SMBUS_READ)))
-			copy_to_user_ret(data_arg.data,&temp,datasize,-EFAULT);
+			      (data_arg.read_write == I2C_SMBUS_READ))) {
+			if (copy_to_user(data_arg.data, &temp, datasize))
+				return -EFAULT;
+		}
 		return res;
 
 	default:

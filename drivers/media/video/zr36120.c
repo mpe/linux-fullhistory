@@ -1242,7 +1242,8 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 	 case VIDIOCCAPTURE:
 	 {
 		int v;
-		get_user_ret(v,(int*)arg, -EFAULT);
+		if (get_user(v, (int *)arg))
+			return -EFAULT;
 		DEBUG(printk(CARD_DEBUG "VIDIOCCAPTURE(%d)\n",CARD,v));
 
 		if (v==0) {
@@ -1314,7 +1315,8 @@ int zoran_ioctl(struct video_device* dev, unsigned int cmd, void *arg)
 	 case VIDIOCSYNC:
 	 {
 		int i;
-		get_user_ret(i,(int*)arg, -EFAULT);
+		if (get_user(i, (int *) arg))
+			return -EFAULT;
 		DEBUG(printk(CARD_DEBUG "VIDEOCSYNC(%d)\n",CARD,i));
 		if (i<0 || i>ZORAN_MAX_FBUFFERS)
 			return -EINVAL;

@@ -361,7 +361,8 @@ struct address_space {
 	unsigned long		nrpages;	/* number of pages */
 	struct address_space_operations *a_ops;	/* methods */
 	void			*host;		/* owner: inode, block_device */
-	struct vm_area_struct	*i_mmap;	/* list of mappings */
+	struct vm_area_struct	*i_mmap;	/* list of private mappings */
+	struct vm_area_struct	*i_mmap_shared; /* list of shared mappings */
 	spinlock_t		i_shared_lock;  /* and spinlock protecting it */
 };
 

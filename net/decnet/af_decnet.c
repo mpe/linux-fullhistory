@@ -32,6 +32,7 @@
  *       Patrick Caulfield: Fixes to delayed acceptance logic.
  *         David S. Miller: New socket locking
  *        Steve Whitehouse: Socket list hashing/locking
+ *         Arnaldo C. Melo: use capable, not suser
  */
 
 
@@ -688,7 +689,7 @@ static int dn_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (dn_ntohs(saddr->sdn_nodeaddrl) && (dn_ntohs(saddr->sdn_nodeaddrl) != 2))
 		return -EINVAL;
 
-	if (saddr->sdn_objnum && !suser())
+	if (saddr->sdn_objnum && !capable(CAP_NET_BIND_SERVICE))
 		return -EPERM;
 
 	if (dn_ntohs(saddr->sdn_objnamel) > DN_MAXOBJL)
@@ -698,7 +699,7 @@ static int dn_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EINVAL;
 
 	if (saddr->sdn_flags & SDF_WILD) {
-		if (!suser())
+		if (!capable(CAP_NET_BIND_SERVICE))
 			return -EPERM;
 	} else {
 		if (dn_ntohs(saddr->sdn_nodeaddrl)) {
@@ -1101,7 +1102,7 @@ static int dn_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 #if 0
 	case SIOCSIFADDR:
-		if (!suser())    return -EPERM;
+		if (!capable(CAP_NET_ADMIN))    return -EPERM;
 
 		if ((err = copy_from_user(devname, ioarg->devname, 5)) != 0)
 			break;
@@ -1143,7 +1144,7 @@ static int dn_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 #if 0
 	case SIOCSNETADDR:
-		if (!suser()) {
+		if (!capable(CAP_NET_ADMIN)) {
 			err = -EPERM;
 			break;
 		}
@@ -1174,7 +1175,7 @@ static int dn_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		break;
 #endif
 	case OSIOCSNETADDR:
-		if (!suser()) {
+		if (!capable(CAP_NET_ADMIN)) {
 			err = -EPERM;
 			break;
 		}
@@ -1189,8 +1190,7 @@ static int dn_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		break;
 
 	case OSIOCGNETADDR:
-		if ((err = put_user(decnet_address, (unsigned short *)arg)) != 0)
-			break;
+		err = put_user(decnet_address, (unsigned short *)arg);
 		break;
         case SIOCGIFCONF:
         case SIOCGIFFLAGS:

@@ -1,4 +1,4 @@
-/* $Id: devmap.c,v 1.6 1998/03/09 14:04:23 jj Exp $
+/* $Id: devmap.c,v 1.7 2000/08/26 02:38:03 anton Exp $
  * promdevmap.c:  Map device/IO areas to virtual addresses.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -29,13 +29,13 @@ prom_mapio(char *vhint, int ios, unsigned int paddr, unsigned int num_bytes)
 	unsigned long flags;
 	char *ret;
 
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	if((num_bytes == 0) || (paddr == 0)) ret = (char *) 0x0;
 	else
 	ret = (*(romvec->pv_v2devops.v2_dumb_mmap))(vhint, ios, paddr,
 						    num_bytes);
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 	return ret;
 }
 
@@ -46,9 +46,9 @@ prom_unmapio(char *vaddr, unsigned int num_bytes)
 	unsigned long flags;
 
 	if(num_bytes == 0x0) return;
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	(*(romvec->pv_v2devops.v2_dumb_munmap))(vaddr, num_bytes);
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 	return;
 }

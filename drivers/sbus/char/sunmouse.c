@@ -462,21 +462,24 @@ repeat:
 				    ((sizeof(Firm_event) - sizeof(struct timeval) +
 				      (sizeof(u32) * 2))))
 					break;
-				copy_to_user_ret((Firm_event *)p, &this_event,
-						 sizeof(Firm_event)-sizeof(struct timeval),
-						 -EFAULT);
+				if (copy_to_user((Firm_event *)p, &this_event,
+						 sizeof(Firm_event)-sizeof(struct timeval)))
+					return -EFAULT;
 				p += sizeof(Firm_event)-sizeof(struct timeval);
-				__put_user_ret(this_event.time.tv_sec, (u32 *)p, -EFAULT);
+				if (__put_user(this_event.time.tv_sec, (u32 *)p))
+					return -EFAULT;
 				p += sizeof(u32);
-				__put_user_ret(this_event.time.tv_usec, (u32 *)p, -EFAULT);
+				if (__put_user(this_event.time.tv_usec, (u32 *)p))
+					return -EFAULT;
 				p += sizeof(u32);
 			} else
 #endif	
 			{	
 				if ((end - p) < sizeof(Firm_event))
 					break;
-				copy_to_user_ret((Firm_event *)p, &this_event,
-				     		 sizeof(Firm_event), -EFAULT);
+				if (copy_to_user((Firm_event *)p, &this_event,
+				     		 sizeof(Firm_event)))
+					return -EFAULT;
 				p += sizeof (Firm_event);
 			}
 			spin_lock_irqsave(&sunmouse.lock, flags);
@@ -540,16 +543,19 @@ sun_mouse_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsig
 	switch (cmd){
 		/* VUIDGFORMAT - Get input device byte stream format */
 	case _IOR('v', 2, int):
-		put_user_ret(sunmouse.vuid_mode, (int *) arg, -EFAULT);
+		if (put_user(sunmouse.vuid_mode, (int *) arg))
+			return -EFAULT;
 		break;
 
 		/* VUIDSFORMAT - Set input device byte stream format*/
 	case _IOW('v', 1, int):
-		get_user_ret(i, (int *) arg, -EFAULT);
+		if (get_user(i, (int *) arg))
+			return -EFAULT;
 		if (i == VUID_NATIVE || i == VUID_FIRM_EVENT){
 			int value;
 
-			get_user_ret(value, (int *)arg, -EFAULT);
+			if (get_user(value, (int *)arg))
+				return -EFAULT;
 
 			spin_lock_irq(&sunmouse.lock);
 			sunmouse.vuid_mode = value;

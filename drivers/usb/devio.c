@@ -607,7 +607,8 @@ static int proc_control(struct dev_state *ps, void *arg)
 	unsigned char *tbuf;
 	int i, ret;
 
-	copy_from_user_ret(&ctrl, (void *)arg, sizeof(ctrl), -EFAULT);
+	if (copy_from_user(&ctrl, (void *)arg, sizeof(ctrl)))
+		return -EFAULT;
 	switch (ctrl.requesttype & 0x1f) {
 	case USB_RECIP_ENDPOINT:
 		if ((ret = findintfep(ps->dev, ctrl.index & 0xff)) < 0)
@@ -636,11 +637,13 @@ static int proc_control(struct dev_state *ps, void *arg)
 		i = my_usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), ctrl.request, ctrl.requesttype,
 				       ctrl.value, ctrl.index, tbuf, ctrl.length, tmo);
 		if ((i > 0) && ctrl.length) {
-			copy_to_user_ret(ctrl.data, tbuf, ctrl.length, -EFAULT);
+			if (copy_to_user(ctrl.data, tbuf, ctrl.length))
+				return -EFAULT;
 		}
 	} else {
 		if (ctrl.length) {
-			copy_from_user_ret(tbuf, ctrl.data, ctrl.length, -EFAULT);
+			if (copy_from_user(tbuf, ctrl.data, ctrl.length))
+				return -EFAULT;
 		}
 		i = my_usb_control_msg(dev, usb_sndctrlpipe(dev, 0), ctrl.request, ctrl.requesttype,
 				       ctrl.value, ctrl.index, tbuf, ctrl.length, tmo);
@@ -662,7 +665,8 @@ static int proc_bulk(struct dev_state *ps, void *arg)
 	unsigned char *tbuf;
 	int i, ret;
 
-	copy_from_user_ret(&bulk, (void *)arg, sizeof(bulk), -EFAULT);
+	if (copy_from_user(&bulk, (void *)arg, sizeof(bulk)))
+		return -EFAULT;
 	if ((ret = findintfep(ps->dev, bulk.ep)) < 0)
 		return ret;
 	if ((ret = checkintf(ps, ret)))
@@ -686,11 +690,13 @@ static int proc_bulk(struct dev_state *ps, void *arg)
 		}
 		i = my_usb_bulk_msg(dev, pipe, tbuf, len1, &len2, tmo);
 		if (!i && len2) {
-			copy_to_user_ret(bulk.data, tbuf, len2, -EFAULT);
+			if (copy_to_user(bulk.data, tbuf, len2))
+				return -EFAULT;
 		}
 	} else {
 		if (len1) {
-			copy_from_user_ret(tbuf, bulk.data, len1, -EFAULT);
+			if (copy_from_user(tbuf, bulk.data, len1))
+				return -EFAULT;
 		}
 		i = my_usb_bulk_msg(dev, pipe, tbuf, len1, &len2, tmo);
 	}
@@ -708,7 +714,8 @@ static int proc_resetep(struct dev_state *ps, void *arg)
 	unsigned int ep;
 	int ret;
 
-	get_user_ret(ep, (unsigned int *)arg, -EFAULT);
+	if (get_user(ep, (unsigned int *)arg))
+		return -EFAULT;
 	if ((ret = findintfep(ps->dev, ep)) < 0)
 		return ret;
 	if ((ret = checkintf(ps, ret)))
@@ -723,7 +730,8 @@ static int proc_clearhalt(struct dev_state *ps, void *arg)
 	int pipe;
 	int ret;
 
-	get_user_ret(ep, (unsigned int *)arg, -EFAULT);
+	if (get_user(ep, (unsigned int *)arg))
+		return -EFAULT;
 	if ((ret = findintfep(ps->dev, ep)) < 0)
 		return ret;
 	if ((ret = checkintf(ps, ret)))
@@ -743,7 +751,8 @@ static int proc_getdriver(struct dev_state *ps, void *arg)
 	struct usb_interface *interface;
 	int ret;
 
-	copy_from_user_ret(&gd, arg, sizeof(gd), -EFAULT);
+	if (copy_from_user(&gd, arg, sizeof(gd)))
+		return -EFAULT;
 	if ((ret = findintfif(ps->dev, gd.interface)) < 0)
 		return ret;
 	interface = usb_ifnum_to_if(ps->dev, gd.interface);
@@ -752,7 +761,8 @@ static int proc_getdriver(struct dev_state *ps, void *arg)
 	if (!interface->driver)
 		return -ENODATA;
 	strcpy(gd.driver, interface->driver->name);
-	copy_to_user_ret(arg, &gd, sizeof(gd), -EFAULT);
+	if (copy_to_user(arg, &gd, sizeof(gd)))
+		return -EFAULT;
 	return 0;
 }
 
@@ -762,7 +772,8 @@ static int proc_connectinfo(struct dev_state *ps, void *arg)
 
 	ci.devnum = ps->dev->devnum;
 	ci.slow = ps->dev->slow;
-	copy_to_user_ret(arg, &ci, sizeof(ci), -EFAULT);
+	if (copy_to_user(arg, &ci, sizeof(ci)))
+		return -EFAULT;
 	return 0;
 }
 
@@ -798,7 +809,8 @@ static int proc_setintf(struct dev_state *ps, void *arg)
 	struct usb_interface *interface;
 	int ret;
 
-	copy_from_user_ret(&setintf, arg, sizeof(setintf), -EFAULT);
+	if (copy_from_user(&setintf, arg, sizeof(setintf)))
+		return -EFAULT;
 	if ((ret = findintfif(ps->dev, setintf.interface)) < 0)
 		return ret;
 	interface = usb_ifnum_to_if(ps->dev, setintf.interface);
@@ -817,7 +829,8 @@ static int proc_setconfig(struct dev_state *ps, void *arg)
 {
 	unsigned int u;
 
-	get_user_ret(u, (unsigned int *)arg, -EFAULT);
+	if (get_user(u, (unsigned int *)arg))
+		return -EFAULT;
 	if (usb_set_configuration(ps->dev, u) < 0)
 		return -EINVAL;
 	return 0;
@@ -831,7 +844,8 @@ static int proc_submiturb(struct dev_state *ps, void *arg)
 	unsigned int u, totlen, isofrmlen;
 	int ret;
 
-	copy_from_user_ret(&uurb, arg, sizeof(uurb), -EFAULT);
+	if (copy_from_user(&uurb, arg, sizeof(uurb)))
+		return -EFAULT;
 	if (uurb.flags & ~(USBDEVFS_URB_ISO_ASAP|USBDEVFS_URB_DISABLE_SPD))
 		return -EINVAL;
 	if (!uurb.buffer)
@@ -948,18 +962,22 @@ static int processcompl(struct async *as)
 	if (as->userbuffer)
 		if (copy_to_user(as->userbuffer, as->urb.transfer_buffer, as->urb.transfer_buffer_length))
 			return -EFAULT;
-	put_user_ret(as->urb.status, &((struct usbdevfs_urb *)as->userurb)->status, -EFAULT);
-	put_user_ret(as->urb.actual_length, &((struct usbdevfs_urb *)as->userurb)->actual_length, -EFAULT);
-	put_user_ret(as->urb.error_count, &((struct usbdevfs_urb *)as->userurb)->error_count, -EFAULT);
+	if (put_user(as->urb.status,
+		     &((struct usbdevfs_urb *)as->userurb)->status) ||
+	    __put_user(as->urb.actual_length,
+		       &((struct usbdevfs_urb *)as->userurb)->actual_length) ||
+	    __put_user(as->urb.error_count,
+		       &((struct usbdevfs_urb *)as->userurb)->error_count))
+		return -EFAULT;
+
 	if (!(usb_pipeisoc(as->urb.pipe)))
 		return 0;
 	for (i = 0; i < as->urb.number_of_packets; i++) {
-		put_user_ret(as->urb.iso_frame_desc[i].actual_length, 
-			     &((struct usbdevfs_urb *)as->userurb)->iso_frame_desc[i].actual_length, 
-			     -EFAULT);
-		put_user_ret(as->urb.iso_frame_desc[i].status, 
-			     &((struct usbdevfs_urb *)as->userurb)->iso_frame_desc[i].status, 
-			     -EFAULT);
+		if (put_user(as->urb.iso_frame_desc[i].actual_length, 
+			     &((struct usbdevfs_urb *)as->userurb)->iso_frame_desc[i].actual_length) ||
+		    __put_user(as->urb.iso_frame_desc[i].status, 
+			       &((struct usbdevfs_urb *)as->userurb)->iso_frame_desc[i].status))
+			return -EFAULT;
 	}
 	return 0;
 }
@@ -990,7 +1008,8 @@ static int proc_reapurb(struct dev_state *ps, void *arg)
 		free_async(as);
 		if (ret)
 			return ret;
-		put_user_ret(addr, (void **)arg, -EFAULT);
+		if (put_user(addr, (void **)arg))
+			return -EFAULT;
 		return 0;
 	}
 	if (signal_pending(current))
@@ -1011,7 +1030,8 @@ static int proc_reapurbnonblock(struct dev_state *ps, void *arg)
 	free_async(as);
 	if (ret)
 		return ret;
-	put_user_ret(addr, (void **)arg, -EFAULT);
+	if (put_user(addr, (void **)arg))
+		return -EFAULT;
 	return 0;
 }
 
@@ -1019,7 +1039,8 @@ static int proc_disconnectsignal(struct dev_state *ps, void *arg)
 {
 	struct usbdevfs_disconnectsignal ds;
 
-	copy_from_user_ret(&ds, arg, sizeof(ds), -EFAULT);
+	if (copy_from_user(&ds, arg, sizeof(ds)))
+		return -EFAULT;
 	if (ds.signr != 0 && (ds.signr < SIGRTMIN || ds.signr > SIGRTMAX))
 		return -EINVAL;
 	ps->discsignr = ds.signr;
@@ -1032,7 +1053,8 @@ static int proc_claiminterface(struct dev_state *ps, void *arg)
 	unsigned int intf;
 	int ret;
 
-	get_user_ret(intf, (unsigned int *)arg, -EFAULT);
+	if (get_user(intf, (unsigned int *)arg))
+		return -EFAULT;
 	if ((ret = findintfif(ps->dev, intf)) < 0)
 		return ret;
 	return claimintf(ps, ret);
@@ -1043,7 +1065,8 @@ static int proc_releaseinterface(struct dev_state *ps, void *arg)
 	unsigned int intf;
 	int ret;
 
-	get_user_ret(intf, (unsigned int *)arg, -EFAULT);
+	if (get_user(intf, (unsigned int *)arg))
+		return -EFAULT;
 	if ((ret = findintfif(ps->dev, intf)) < 0)
 		return ret;
 	return releaseintf(ps, intf);
@@ -1057,7 +1080,8 @@ static int proc_ioctl (struct dev_state *ps, void *arg)
 	int			retval = 0;
 
 	/* get input parameters and alloc buffer */
-	copy_from_user_ret (&ctrl, (void *) arg, sizeof (ctrl), -EFAULT);
+	if (copy_from_user(&ctrl, (void *) arg, sizeof (ctrl)))
+		return -EFAULT;
 	if ((size = _IOC_SIZE (ctrl.ioctl_code)) > 0) {
 		if ((buf = kmalloc (size, GFP_KERNEL)) == 0)
 			return -ENOMEM;

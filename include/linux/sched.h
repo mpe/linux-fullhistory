@@ -33,12 +33,13 @@ extern unsigned long event;
 #define CLONE_VM	0x00000100	/* set if VM shared between processes */
 #define CLONE_FS	0x00000200	/* set if fs info shared between processes */
 #define CLONE_FILES	0x00000400	/* set if open files shared between processes */
-#define CLONE_SIGHAND	0x00000800	/* set if signal handlers shared */
+#define CLONE_SIGNAL	0x00000800	/* set if signal handlers and blocked signals shared */
 #define CLONE_PID	0x00001000	/* set if pid shared */
 #define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too */
 #define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release */
 #define CLONE_PARENT	0x00008000	/* set if we want to have the same parent as the cloner */
-#define CLONE_THREAD	0x00010000	/* set if we want to clone the "thread group" */
+
+#define CLONE_SIGHAND	CLONE_SIGNAL	/* Old name */
 
 /*
  * These are the constant used to fake the fixed-point load-average
@@ -233,6 +234,7 @@ struct mm_struct {
 struct signal_struct {
 	atomic_t		count;
 	struct k_sigaction	action[_NSIG];
+	struct sigpending	pending;
 	spinlock_t		siglock;
 };
 
@@ -240,6 +242,7 @@ struct signal_struct {
 #define INIT_SIGNALS { \
 		ATOMIC_INIT(1), \
 		{ {{0,}}, }, \
+		{ NULL, &init_signals.pending.head, }, \
 		SPIN_LOCK_UNLOCKED }
 
 /*
@@ -366,8 +369,10 @@ struct task_struct {
 /* signal handlers */
 	spinlock_t sigmask_lock;	/* Protects signal and blocked */
 	struct signal_struct *sig;
-	sigset_t signal, blocked;
-	struct signal_queue *sigqueue, **sigqueue_tail;
+
+	sigset_t blocked;
+	struct sigpending pending;
+
 	unsigned long sas_ss_sp;
 	size_t sas_ss_size;
 	int (*notifier)(void *priv);
@@ -455,10 +460,8 @@ struct task_struct {
     files:		&init_files,					\
     sigmask_lock:	SPIN_LOCK_UNLOCKED,				\
     sig:		&init_signals,					\
-    signal:		{{0}},						\
+    pending:		{ NULL, &tsk.pending.head, {{0}}},		\
     blocked:		{{0}},						\
-    sigqueue:		NULL,						\
-    sigqueue_tail:	&tsk.sigqueue,					\
     alloc_lock:		SPIN_LOCK_UNLOCKED				\
 }
 
@@ -575,11 +578,11 @@ static inline int signal_pending(struct task_struct *p)
 	return (p->sigpending != 0);
 }
 
-/* Reevaluate whether the task has signals pending delivery.
-   This is required every time the blocked sigset_t changes.
-   All callers should have t->sigmask_lock.  */
-
-static inline void recalc_sigpending(struct task_struct *t)
+/*
+ * Re-calculate pending state from the set of locally pending
+ * signals, globally pending signals, and blocked signals.
+ */
+static inline int has_pending_signals(sigset_t *p1, sigset_t *p2, sigset_t *blocked)
 {
 	unsigned long ready;
 	long i;
@@ -587,23 +590,31 @@ static inline void recalc_sigpending(struct task_struct *t)
 	switch (_NSIG_WORDS) {
 	default:
 		for (i = _NSIG_WORDS, ready = 0; --i >= 0 ;)
-			ready |= t->signal.sig[i] &~ t->blocked.sig[i];
+			ready |= (p1->sig[i] | p2->sig[i]) &~ blocked->sig[i];
 		break;
 
-	case 4: ready  = t->signal.sig[3] &~ t->blocked.sig[3];
-		ready |= t->signal.sig[2] &~ t->blocked.sig[2];
-		ready |= t->signal.sig[1] &~ t->blocked.sig[1];
-		ready |= t->signal.sig[0] &~ t->blocked.sig[0];
+	case 4: ready  = (p1->sig[3] | p2->sig[3]) &~ blocked->sig[3];
+		ready |= (p1->sig[2] | p2->sig[2]) &~ blocked->sig[2];
+		ready |= (p1->sig[1] | p2->sig[1]) &~ blocked->sig[1];
+		ready |= (p1->sig[0] | p2->sig[0]) &~ blocked->sig[0];
 		break;
 
-	case 2: ready  = t->signal.sig[1] &~ t->blocked.sig[1];
-		ready |= t->signal.sig[0] &~ t->blocked.sig[0];
+	case 2: ready  = (p1->sig[1] | p2->sig[1]) &~ blocked->sig[1];
+		ready |= (p1->sig[0] | p2->sig[0]) &~ blocked->sig[0];
 		break;
 
-	case 1: ready  = t->signal.sig[0] &~ t->blocked.sig[0];
+	case 1: ready  = (p1->sig[0] | p2->sig[0]) &~ blocked->sig[0];
 	}
+	return ready !=	0;
+}
 
-	t->sigpending = (ready != 0);
+/* Reevaluate whether the task has signals pending delivery.
+   This is required every time the blocked sigset_t changes.
+   All callers should have t->sigmask_lock.  */
+
+static inline void recalc_sigpending(struct task_struct *t)
+{
+	t->sigpending = has_pending_signals(&t->pending.signal, &t->sig->pending.signal, &t->blocked);
 }
 
 /* True if we are on the alternate signal stack.  */

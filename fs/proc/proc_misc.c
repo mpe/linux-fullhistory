@@ -56,7 +56,7 @@ extern int get_module_list(char *);
 extern int get_ksyms_list(char *, char **, off_t, int);
 #endif
 extern int get_device_list(char *);
-extern int get_partition_list(char *);
+extern int get_partition_list(char *, char **, off_t, int);
 extern int get_filesystem_list(char *);
 extern int get_filesystem_info(char *);
 extern int get_exec_domain_list(char *);
@@ -375,12 +375,8 @@ static int devices_read_proc(char *page, char **start, off_t off,
 static int partitions_read_proc(char *page, char **start, off_t off,
 				 int count, int *eof, void *data)
 {
-	int len = get_partition_list(page);
-	if (len <= off+count) *eof = 1;
-	*start = page + off;
-	len -= off;
-	if (len>count) len = count;
-	if (len<0) len = 0;
+	int len = get_partition_list(page, start, off, count);
+	if (len < count) *eof = 1;
 	return len;
 }
 

@@ -1,5 +1,5 @@
 /*
- * cistpl.h 1.32 2000/01/11 19:06:50
+ * cistpl.h 1.34 2000/06/19 23:18:12
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -12,7 +12,7 @@
  * limitations under the License. 
  *
  * The initial developer of the original code is David A. Hinds
- * <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+ * <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
  * are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
  *
  * Alternatively, the contents of this file may be used under the
@@ -68,6 +68,7 @@
 #define CISTPL_BYTEORDER	0x43
 #define CISTPL_DATE		0x44
 #define CISTPL_BATTERY		0x45
+#define CISTPL_FORMAT_A		0x47
 /* Layer 3 tuples */
 #define CISTPL_ORG		0x46
 #define CISTPL_SPCL		0x90
@@ -530,6 +531,21 @@ typedef struct cistpl_org_t {
 #define CISTPL_ORG_APPSPEC	0x01
 #define CISTPL_ORG_XIP		0x02
 
+typedef struct cistpl_format_t {
+    u_char	type;
+    u_char	edc;
+    u_int	offset;
+    u_int	length;
+} cistpl_format_t;
+
+#define CISTPL_FORMAT_DISK	0x00
+#define CISTPL_FORMAT_MEM	0x01
+
+#define CISTPL_EDC_NONE		0x00
+#define CISTPL_EDC_CKSUM	0x01
+#define CISTPL_EDC_CRC		0x02
+#define CISTPL_EDC_PCC		0x03
+
 typedef union cisparse_t {
     cistpl_device_t		device;
     cistpl_checksum_t		checksum;
@@ -548,6 +564,7 @@ typedef union cisparse_t {
     cistpl_device_geo_t		device_geo;
     cistpl_vers_2_t		vers_2;
     cistpl_org_t		org;
+    cistpl_format_t		format;
 } cisparse_t;
 
 typedef struct tuple_t {

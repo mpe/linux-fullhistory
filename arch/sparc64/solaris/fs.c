@@ -1,4 +1,4 @@
-/* $Id: fs.c,v 1.22 2000/07/28 12:15:02 davem Exp $
+/* $Id: fs.c,v 1.23 2000/08/29 07:01:54 davem Exp $
  * fs.c: fs related syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -612,20 +612,25 @@ asmlinkage int solaris_fcntl(unsigned fd, unsigned cmd, u32 arg)
 			case SOL_F_SETLKW: cmd = F_SETLKW; break;
 			}
 
-			get_user_ret (f.l_type, &((struct sol_flock *)A(arg))->l_type, -EFAULT);
-			__get_user_ret (f.l_whence, &((struct sol_flock *)A(arg))->l_whence, -EFAULT);
-			__get_user_ret (f.l_start, &((struct sol_flock *)A(arg))->l_start, -EFAULT);
-			__get_user_ret (f.l_len, &((struct sol_flock *)A(arg))->l_len, -EFAULT);
-			__get_user_ret (f.l_pid, &((struct sol_flock *)A(arg))->l_sysid, -EFAULT);
+			if (get_user (f.l_type, &((struct sol_flock *)A(arg))->l_type) ||
+			    __get_user (f.l_whence, &((struct sol_flock *)A(arg))->l_whence) ||
+			    __get_user (f.l_start, &((struct sol_flock *)A(arg))->l_start) ||
+			    __get_user (f.l_len, &((struct sol_flock *)A(arg))->l_len) ||
+			    __get_user (f.l_pid, &((struct sol_flock *)A(arg))->l_sysid))
+				return -EFAULT;
+
 			set_fs(KERNEL_DS);
 			ret = sys_fcntl(fd, cmd, (unsigned long)&f);
 			set_fs(old_fs);
-			__put_user_ret (f.l_type, &((struct sol_flock *)A(arg))->l_type, -EFAULT);
-			__put_user_ret (f.l_whence, &((struct sol_flock *)A(arg))->l_whence, -EFAULT);
-			__put_user_ret (f.l_start, &((struct sol_flock *)A(arg))->l_start, -EFAULT);
-			__put_user_ret (f.l_len, &((struct sol_flock *)A(arg))->l_len, -EFAULT);
-			__put_user_ret (f.l_pid, &((struct sol_flock *)A(arg))->l_pid, -EFAULT);
-			__put_user_ret (0, &((struct sol_flock *)A(arg))->l_sysid, -EFAULT);
+
+			if (__put_user (f.l_type, &((struct sol_flock *)A(arg))->l_type) ||
+			    __put_user (f.l_whence, &((struct sol_flock *)A(arg))->l_whence) ||
+			    __put_user (f.l_start, &((struct sol_flock *)A(arg))->l_start) ||
+			    __put_user (f.l_len, &((struct sol_flock *)A(arg))->l_len) ||
+			    __put_user (f.l_pid, &((struct sol_flock *)A(arg))->l_pid) ||
+			    __put_user (0, &((struct sol_flock *)A(arg))->l_sysid))
+				return -EFAULT;
+
 			return ret;
 		}
 	case SOL_F_FREESP:
@@ -634,7 +639,9 @@ asmlinkage int solaris_fcntl(unsigned fd, unsigned cmd, u32 arg)
 		    int (*sys_newftruncate)(unsigned int, unsigned long)=
 			    (int (*)(unsigned int, unsigned long))SYS(ftruncate);
 
-		    get_user_ret(length, &((struct sol_flock*)A(arg))->l_start, -EFAULT);
+		    if (get_user(length, &((struct sol_flock*)A(arg))->l_start))
+			    return -EFAULT;
+
 		    return sys_newftruncate(fd, length);
 		}
 	};

@@ -1,4 +1,4 @@
-/* $Id: ffb_context.c,v 1.3 2000/06/09 03:46:53 davem Exp $
+/* $Id: ffb_context.c,v 1.4 2000/08/29 07:01:55 davem Exp $
  * ffb_context.c: Creator/Creator3D DRI/DRM context switching.
  *
  * Copyright (C) 2000 David S. Miller (davem@redhat.com)
@@ -389,19 +389,21 @@ int ffb_resctx(struct inode *inode, struct file *filp, unsigned int cmd,
 	int		i;
 
 	DRM_DEBUG("%d\n", DRM_RESERVED_CONTEXTS);
-	copy_from_user_ret(&res, (drm_ctx_res_t *)arg, sizeof(res), -EFAULT);
+	if (copy_from_user(&res, (drm_ctx_res_t *)arg, sizeof(res)))
+		return -EFAULT;
 	if (res.count >= DRM_RESERVED_CONTEXTS) {
 		memset(&ctx, 0, sizeof(ctx));
 		for (i = 0; i < DRM_RESERVED_CONTEXTS; i++) {
 			ctx.handle = i;
-			copy_to_user_ret(&res.contexts[i],
+			if (copy_to_user(&res.contexts[i],
 					 &i,
-					 sizeof(i),
-					 -EFAULT);
+					 sizeof(i)))
+				return -EFAULT;
 		}
 	}
 	res.count = DRM_RESERVED_CONTEXTS;
-	copy_to_user_ret((drm_ctx_res_t *)arg, &res, sizeof(res), -EFAULT);
+	if (copy_to_user((drm_ctx_res_t *)arg, &res, sizeof(res)))
+		return -EFAULT;
 	return 0;
 }
 
@@ -414,14 +416,16 @@ int ffb_addctx(struct inode *inode, struct file *filp, unsigned int cmd,
 	drm_ctx_t	ctx;
 	int idx;
 
-	copy_from_user_ret(&ctx, (drm_ctx_t *)arg, sizeof(ctx), -EFAULT);
+	if (copy_from_user(&ctx, (drm_ctx_t *)arg, sizeof(ctx)))
+		return -EFAULT;
 	idx = ffb_alloc_queue(dev, (ctx.flags & _DRM_CONTEXT_2DONLY));
 	if (idx < 0)
 		return -ENFILE;
 
 	DRM_DEBUG("%d\n", ctx.handle);
 	ctx.handle = idx;
-	copy_to_user_ret((drm_ctx_t *)arg, &ctx, sizeof(ctx), -EFAULT);
+	if (copy_to_user((drm_ctx_t *)arg, &ctx, sizeof(ctx)))
+		return -EFAULT;
 	return 0;
 }
 
@@ -435,7 +439,8 @@ int ffb_modctx(struct inode *inode, struct file *filp, unsigned int cmd,
 	drm_ctx_t ctx;
 	int idx;
 
-	copy_from_user_ret(&ctx, (drm_ctx_t*)arg, sizeof(ctx), -EFAULT);
+	if (copy_from_user(&ctx, (drm_ctx_t*)arg, sizeof(ctx)))
+		return -EFAULT;
 
 	idx = ctx.handle;
 	if (idx <= 0 || idx >= FFB_MAX_CTXS)
@@ -463,7 +468,8 @@ int ffb_getctx(struct inode *inode, struct file *filp, unsigned int cmd,
 	drm_ctx_t ctx;
 	int idx;
 
-	copy_from_user_ret(&ctx, (drm_ctx_t*)arg, sizeof(ctx), -EFAULT);
+	if (copy_from_user(&ctx, (drm_ctx_t*)arg, sizeof(ctx)))
+		return -EFAULT;
 
 	idx = ctx.handle;
 	if (idx <= 0 || idx >= FFB_MAX_CTXS)
@@ -478,7 +484,8 @@ int ffb_getctx(struct inode *inode, struct file *filp, unsigned int cmd,
 	else
 		ctx.flags = 0;
 
-	copy_to_user_ret((drm_ctx_t*)arg, &ctx, sizeof(ctx), -EFAULT);
+	if (copy_to_user((drm_ctx_t*)arg, &ctx, sizeof(ctx)))
+		return -EFAULT;
 
 	return 0;
 }
@@ -490,7 +497,8 @@ int ffb_switchctx(struct inode *inode, struct file *filp, unsigned int cmd,
 	drm_device_t	*dev	= priv->dev;
 	drm_ctx_t	ctx;
 
-	copy_from_user_ret(&ctx, (drm_ctx_t *)arg, sizeof(ctx), -EFAULT);
+	if (copy_from_user(&ctx, (drm_ctx_t *)arg, sizeof(ctx)))
+		return -EFAULT;
 	DRM_DEBUG("%d\n", ctx.handle);
 	return ffb_context_switch(dev, dev->last_context, ctx.handle);
 }
@@ -500,7 +508,8 @@ int ffb_newctx(struct inode *inode, struct file *filp, unsigned int cmd,
 {
 	drm_ctx_t	ctx;
 
-	copy_from_user_ret(&ctx, (drm_ctx_t *)arg, sizeof(ctx), -EFAULT);
+	if (copy_from_user(&ctx, (drm_ctx_t *)arg, sizeof(ctx)))
+		return -EFAULT;
 	DRM_DEBUG("%d\n", ctx.handle);
 
 	return 0;
@@ -515,7 +524,8 @@ int ffb_rmctx(struct inode *inode, struct file *filp, unsigned int cmd,
 	ffb_dev_priv_t	*fpriv	= (ffb_dev_priv_t *) (dev + 1);
 	int idx;
 
-	copy_from_user_ret(&ctx, (drm_ctx_t *)arg, sizeof(ctx), -EFAULT);
+	if (copy_from_user(&ctx, (drm_ctx_t *)arg, sizeof(ctx)))
+		return -EFAULT;
 	DRM_DEBUG("%d\n", ctx.handle);
 
 	idx = ctx.handle - 1;

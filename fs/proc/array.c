@@ -241,7 +241,7 @@ static inline char * task_sig(struct task_struct *p, char *buffer)
 	sigset_t ign, catch;
 
 	buffer += sprintf(buffer, "SigPnd:\t");
-	buffer = render_sigset_t(&p->signal, buffer);
+	buffer = render_sigset_t(&p->pending.signal, buffer);
 	*buffer++ = '\n';
 	buffer += sprintf(buffer, "SigBlk:\t");
 	buffer = render_sigset_t(&p->blocked, buffer);
@@ -382,7 +382,7 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 		 * It must be decimal for Linux 2.0 compatibility.
 		 * Use /proc/#/status for real-time signals.
 		 */
-		task->signal .sig[0] & 0x7fffffffUL,
+		task->pending.signal.sig[0] & 0x7fffffffUL,
 		task->blocked.sig[0] & 0x7fffffffUL,
 		sigign      .sig[0] & 0x7fffffffUL,
 		sigcatch    .sig[0] & 0x7fffffffUL,

@@ -1,5 +1,5 @@
 /*
- * cs.h 1.69 1999/10/25 20:23:17
+ * cs.h 1.71 2000/08/29 00:54:20
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -12,7 +12,7 @@
  * limitations under the License. 
  *
  * The initial developer of the original code is David A. Hinds
- * <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+ * <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
  * are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
  *
  * Alternatively, the contents of this file may be used under the
@@ -250,11 +250,6 @@ typedef struct eventmask_t {
 #define PRESENT_IOBASE_2	0x080
 #define PRESENT_IOBASE_3	0x100
 #define PRESENT_IOSIZE		0x200
-
-/* Attributes for Request/GetConfiguration */
-#define CONF_ENABLE_IRQ		0x01
-#define EXCLUSIVE_USE		0x02
-#define VALID_CLIENT		0x04
 
 /* For GetMemPage, MapMemPage */
 typedef struct memreq_t {

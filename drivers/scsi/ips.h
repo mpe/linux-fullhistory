@@ -96,10 +96,6 @@
       #define __PUT_USER               __put_user
    #endif
    
-   #ifndef PUT_USER_RET
-      #define PUT_USER_RET             put_user_ret
-   #endif
-   
    #ifndef GET_USER
       #define GET_USER                 get_user
    #endif
@@ -108,10 +104,6 @@
       #define __GET_USER               __get_user
    #endif
    
-   #ifndef GET_USER_RET
-      #define GET_USER_RET             get_user_ret
-   #endif
-
    /*
     * Lock macros
     */

@@ -529,7 +529,7 @@ static void __init isapnp_add_irq_resource(struct pci_dev *dev,
 		(*res)->irq = irq;
 #ifdef CONFIG_PCI
 	for (i=0; i<16; i++)
-		if (irq->map & i)
+		if (irq->map & (1<<i))
 			pcibios_penalize_isa_irq(i);
 #endif
 }

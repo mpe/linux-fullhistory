@@ -73,7 +73,8 @@ static int copyin(struct openpromio *info, struct openpromio **opp_p)
 	if (!info || !opp_p)
 		return -EFAULT;
 
-	get_user_ret(bufsize, &info->oprom_size, -EFAULT);
+	if (get_user(bufsize, &info->oprom_size))
+		return -EFAULT;
 
 	if (bufsize == 0)
 		return -EINVAL;
@@ -132,7 +133,8 @@ static int getstrings(struct openpromio *info, struct openpromio **opp_p)
  */
 static int copyout(void *info, struct openpromio *opp, int len)
 {
-	copy_to_user_ret(info, opp, len, -EFAULT);
+	if (copy_to_user(info, opp, len))
+		return -EFAULT;
 	return 0;
 }
 
@@ -364,7 +366,8 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 
 	switch (cmd) {
 	case OPIOCGET:
-		copy_from_user_ret(&op, (void *)arg, sizeof(op), -EFAULT);
+		if (copy_from_user(&op, (void *)arg, sizeof(op)))
+			return -EFAULT;
 
 		if (!goodnode(op.op_nodeid,data))
 			return -EINVAL;
@@ -386,9 +389,10 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 
 		if (len <= 0) {
 			kfree(str);
-			/* Verified by the above copy_from_user_ret */
-			__copy_to_user_ret((void *)arg, &op,
-					   sizeof(op), -EFAULT);
+			/* Verified by the above copy_from_user */
+			if (__copy_to_user((void *)arg, &op,
+				       sizeof(op)))
+				return -EFAULT;
 			return 0;
 		}
 
@@ -414,7 +418,8 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 		return error;
 
 	case OPIOCNEXTPROP:
-		copy_from_user_ret(&op, (void *)arg, sizeof(op), -EFAULT);
+		if (copy_from_user(&op, (void *)arg, sizeof(op)))
+			return -EFAULT;
 
 		if (!goodnode(op.op_nodeid,data))
 			return -EINVAL;
@@ -457,7 +462,8 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 		return error;
 
 	case OPIOCSET:
-		copy_from_user_ret(&op, (void *)arg, sizeof(op), -EFAULT);
+		if (copy_from_user(&op, (void *)arg, sizeof(op)))
+			return -EFAULT;
 
 		if (!goodnode(op.op_nodeid,data))
 			return -EINVAL;
@@ -485,13 +491,14 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 		return 0;
 
 	case OPIOCGETOPTNODE:
-		copy_to_user_ret((void *)arg, &options_node,
-				 sizeof(int), -EFAULT);
+		if (copy_to_user((void *)arg, &options_node, sizeof(int)))
+			return -EFAULT;
 		return 0;
 
 	case OPIOCGETNEXT:
 	case OPIOCGETCHILD:
-		copy_from_user_ret(&node, (void *)arg, sizeof(int), -EFAULT);
+		if (copy_from_user(&node, (void *)arg, sizeof(int)))
+			return -EFAULT;
 
 		save_and_cli(flags);
 		if (cmd == OPIOCGETNEXT)
@@ -500,7 +507,8 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 			node = __prom_getchild(node);
 		restore_flags(flags);
 
-		__copy_to_user_ret((void *)arg, &node, sizeof(int), -EFAULT);
+		if (__copy_to_user((void *)arg, &node, sizeof(int)))
+			return -EFAULT;
 
 		return 0;
 

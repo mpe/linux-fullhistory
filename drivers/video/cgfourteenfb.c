@@ -1,4 +1,4 @@
-/* $Id: cgfourteenfb.c,v 1.7 1999/11/19 09:57:01 davem Exp $
+/* $Id: cgfourteenfb.c,v 1.8 2000/08/29 07:01:56 davem Exp $
  * cgfourteenfb.c: CGfourteen frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -299,15 +299,17 @@ static int cg14_ioctl (struct fb_info_sbusfb *fb, unsigned int cmd, unsigned lon
 		break;
 	case MDI_GET_CFGINFO:
 		mdii = (struct mdi_cfginfo *)arg;
-		put_user_ret(FBTYPE_MDICOLOR, &mdii->mdi_type, -EFAULT);
-		__put_user_ret(fb->type.fb_height, &mdii->mdi_height, -EFAULT);
-		__put_user_ret(fb->type.fb_width, &mdii->mdi_width, -EFAULT);
-		__put_user_ret(fb->s.cg14.mode, &mdii->mdi_mode, -EFAULT);
-		__put_user_ret(72, &mdii->mdi_pixfreq, -EFAULT); /* FIXME */
-		__put_user_ret(fb->s.cg14.ramsize, &mdii->mdi_size, -EFAULT);
+		if (put_user(FBTYPE_MDICOLOR, &mdii->mdi_type) ||
+		    __put_user(fb->type.fb_height, &mdii->mdi_height) ||
+		    __put_user(fb->type.fb_width, &mdii->mdi_width) ||
+		    __put_user(fb->s.cg14.mode, &mdii->mdi_mode) ||
+		    __put_user(72, &mdii->mdi_pixfreq) || /* FIXME */
+		    __put_user(fb->s.cg14.ramsize, &mdii->mdi_size))
+			return -EFAULT;
 		break;
 	case MDI_SET_PIXELMODE:
-		get_user_ret(mode, (int *)arg, -EFAULT);
+		if (get_user(mode, (int *)arg))
+			return -EFAULT;
 
 		spin_lock_irqsave(&fb->lock, flags);
 		tmp = sbus_readb(mcr);

@@ -1,5 +1,5 @@
 /*
- * ciscode.h 1.40 2000/02/01 19:06:40
+ * ciscode.h 1.45 2000/08/12 02:08:23
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -12,7 +12,7 @@
  * limitations under the License. 
  *
  * The initial developer of the original code is David A. Hinds
- * <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+ * <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
  * are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
  *
  * Alternatively, the contents of this file may be used under the
@@ -78,6 +78,9 @@
 
 #define MANFID_NEW_MEDIA		0x0057
 
+#define MANFID_NOKIA			0x0124
+#define PRODID_NOKIA_CARDPHONE		0x0900
+
 #define MANFID_OLICOM			0x0121
 #define PRODID_OLICOM_OC2231		0x3122
 #define PRODID_OLICOM_OC2232		0x3222
@@ -94,6 +97,7 @@
 #define MANFID_PIONEER			0x000b
 
 #define MANFID_PSION			0x016c
+#define PRODID_PSION_NET100		0x0023
 
 #define MANFID_QUATECH			0x0137
 #define PRODID_QUATECH_SPP100		0x0003
@@ -106,11 +110,14 @@
 
 #define MANFID_SOCKET			0x0104
 #define PRODID_SOCKET_DUAL_RS232	0x0006
+#define PRODID_SOCKET_EIO		0x000a
 #define PRODID_SOCKET_LPE		0x000d
 
 #define MANFID_SUNDISK			0x0045
 
 #define MANFID_TDK			0x0105
+
+#define MANFID_TOSHIBA			0x0098
 
 #define MANFID_XIRCOM			0x0105
 

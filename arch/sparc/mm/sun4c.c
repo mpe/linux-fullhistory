@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.198 2000/08/14 00:46:13 anton Exp $
+/* $Id: sun4c.c,v 1.199 2000/08/29 08:59:23 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -2404,8 +2404,8 @@ static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long addr
 
 		mapping = vma->vm_file->f_dentry->d_inode->i_mapping;
 		spin_lock(&mapping->i_shared_lock);
-		vmaring = mapping->i_mmap; 
-		do {
+		vmaring = mapping->i_mmap_shared; 
+		if (vmaring != NULL) do {
 			unsigned long vaddr = vmaring->vm_start + offset;
 			unsigned long start;
 

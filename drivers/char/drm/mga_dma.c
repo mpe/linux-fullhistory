@@ -82,6 +82,7 @@ static void mga_delay(void)
    	return;
 }
 
+#ifdef __i386__
 void mga_flush_write_combine(void)
 {
    	int xchangeDummy;
@@ -92,6 +93,11 @@ void mga_flush_write_combine(void)
 			 " movl $0,%%eax ; cpuid ; pop %%edx ; pop %%ecx ; pop %%ebx ;"
 			 " pop %%eax" : /* no outputs */ :  /* no inputs */ );
 }
+#else
+void mga_flush_write_combine(void)
+{
+}
+#endif
 
 /* These are two age tags that will never be sent to
  * the hardware */
@@ -850,7 +856,8 @@ int mga_dma_init(struct inode *inode, struct file *filp,
    
    	DRM_DEBUG("%s\n", __FUNCTION__);
 
-	copy_from_user_ret(&init, (drm_mga_init_t *)arg, sizeof(init), -EFAULT);
+	if (copy_from_user(&init, (drm_mga_init_t *)arg, sizeof(init)))
+		return -EFAULT;
    
 	switch(init.func) {
 	case MGA_INIT_DMA:
@@ -932,7 +939,8 @@ int mga_control(struct inode *inode, struct file *filp, unsigned int cmd,
 	drm_device_t	*dev	= priv->dev;
 	drm_control_t	ctl;
    
-	copy_from_user_ret(&ctl, (drm_control_t *)arg, sizeof(ctl), -EFAULT);
+	if (copy_from_user(&ctl, (drm_control_t *)arg, sizeof(ctl)))
+		return -EFAULT;
 
    	DRM_DEBUG("%s\n", __FUNCTION__);
 
@@ -1019,7 +1027,8 @@ int mga_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 	drm_lock_t	  lock;
 
 	DRM_DEBUG("%s\n", __FUNCTION__);
-	copy_from_user_ret(&lock, (drm_lock_t *)arg, sizeof(lock), -EFAULT);
+	if (copy_from_user(&lock, (drm_lock_t *)arg, sizeof(lock)))
+		return -EFAULT;
 
 	if (lock.context == DRM_KERNEL_CONTEXT) {
 		DRM_ERROR("Process %d using kernel context %d\n",
@@ -1068,6 +1077,15 @@ int mga_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 	}
 	
 	if (!ret) {
+		sigemptyset(&dev->sigmask);
+		sigaddset(&dev->sigmask, SIGSTOP);
+		sigaddset(&dev->sigmask, SIGTSTP);
+		sigaddset(&dev->sigmask, SIGTTIN);
+		sigaddset(&dev->sigmask, SIGTTOU);
+		dev->sigdata.context = lock.context;
+		dev->sigdata.lock    = dev->lock.hw_lock;
+		block_all_signals(drm_notifier, &dev->sigdata, &dev->sigmask);
+
 		if (lock.flags & _DRM_LOCK_QUIESCENT) {
 		   DRM_DEBUG("_DRM_LOCK_QUIESCENT\n");
 		   mga_flush_queue(dev);
@@ -1088,7 +1106,8 @@ int mga_flush_ioctl(struct inode *inode, struct file *filp,
       	drm_mga_private_t *dev_priv = (drm_mga_private_t *)dev->dev_private;
 
    	DRM_DEBUG("%s\n", __FUNCTION__);
-	copy_from_user_ret(&lock, (drm_lock_t *)arg, sizeof(lock), -EFAULT);
+	if (copy_from_user(&lock, (drm_lock_t *)arg, sizeof(lock)))
+		return -EFAULT;
 
 	if(!_DRM_LOCK_IS_HELD(dev->lock.hw_lock->lock)) {
 		DRM_ERROR("mga_flush_ioctl called without lock held\n");

@@ -78,7 +78,7 @@ int ax25_uid_ioctl(int cmd, struct sockaddr_ax25 *sax)
 			return -ENOENT;
 
 		case SIOCAX25ADDUID:
-			if (!suser())
+			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			if (ax25_findbyuid(sax->sax25_uid))
 				return -EEXIST;
@@ -95,7 +95,7 @@ int ax25_uid_ioctl(int cmd, struct sockaddr_ax25 *sax)
 			return 0;
 
 		case SIOCAX25DELUID:
-			if (!suser())
+			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			for (ax25_uid = ax25_uid_list; ax25_uid != NULL; ax25_uid = ax25_uid->next) {
 				if (ax25cmp(&sax->sax25_call, &ax25_uid->call) == 0)

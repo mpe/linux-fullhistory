@@ -2,7 +2,7 @@
 
 	Written 1993-1998 by
 	Donald Becker, becker@cesdis.gsfc.nasa.gov, (driver core) and
-	David Hinds, dhinds@pcmcia.sourceforge.org (from his PC card code).
+	David Hinds, dahinds@users.sourceforge.net (from his PC card code).
 
 	This software may be used and distributed according to the terms of
 	the GNU Public License, incorporated herein by reference.
@@ -327,7 +327,7 @@ static dev_link_t *tc574_attach(void)
 	dev->stop = &el3_close;
 	dev->tx_timeout = el3_tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
-	
+
 	/* Register with Card Services */
 	link->next = dev_list;
 	dev_list = link;

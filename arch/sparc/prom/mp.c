@@ -1,4 +1,4 @@
-/* $Id: mp.c,v 1.11 2000/01/29 01:09:12 anton Exp $
+/* $Id: mp.c,v 1.12 2000/08/26 02:38:03 anton Exp $
  * mp.c:  OpenBoot Prom Multiprocessor support routines.  Don't call
  *        these on a UP or else you will halt and catch fire. ;)
  *
@@ -25,7 +25,7 @@ prom_startcpu(int cpunode, struct linux_prom_registers *ctable_reg, int ctx, cha
 	int ret;
 	unsigned long flags;
 
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_V2:
@@ -37,7 +37,7 @@ prom_startcpu(int cpunode, struct linux_prom_registers *ctable_reg, int ctx, cha
 		break;
 	};
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 
 	return ret;
 }
@@ -51,7 +51,7 @@ prom_stopcpu(int cpunode)
 	int ret;
 	unsigned long flags;
 
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_V2:
@@ -63,7 +63,7 @@ prom_stopcpu(int cpunode)
 		break;
 	};
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 
 	return ret;
 }
@@ -77,7 +77,7 @@ prom_idlecpu(int cpunode)
 	int ret;
 	unsigned long flags;
 
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_V2:
@@ -89,7 +89,7 @@ prom_idlecpu(int cpunode)
 		break;
 	};
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 
 	return ret;
 }
@@ -103,7 +103,7 @@ prom_restartcpu(int cpunode)
 	int ret;
 	unsigned long flags;
 
-	save_flags(flags); cli();
+	spin_lock_irqsave(&prom_lock, flags);
 	switch(prom_vers) {
 	case PROM_V0:
 	case PROM_V2:
@@ -115,7 +115,7 @@ prom_restartcpu(int cpunode)
 		break;
 	};
 	restore_current();
-	restore_flags(flags);
+	spin_unlock_irqrestore(&prom_lock, flags);
 
 	return ret;
 }

@@ -113,15 +113,15 @@ ioctl_rio(struct inode *inode, struct file *file, unsigned int cmd,
 		data = (void *) arg;
 		if (data == NULL)
 			break;
-		copy_from_user_ret(&rio_cmd, data, sizeof(struct RioCommand),
-				   -EFAULT);
+		if (copy_from_user(&rio_cmd, data, sizeof(struct RioCommand)))
+			return -EFAULT;
 		if (rio_cmd.length > PAGE_SIZE)
 			return -EINVAL;
 		buffer = (unsigned char *) __get_free_page(GFP_KERNEL);
 		if (buffer == NULL)
 			return -ENOMEM;
-		copy_from_user_ret(buffer, rio_cmd.buffer, rio_cmd.length,
-				   -EFAULT);
+		if (copy_from_user(buffer, rio_cmd.buffer, rio_cmd.length))
+			return -EFAULT;
 
 		requesttype = rio_cmd.requesttype | USB_DIR_IN |
 		    USB_TYPE_VENDOR | USB_RECIP_DEVICE;
@@ -150,8 +150,9 @@ ioctl_rio(struct inode *inode, struct file *file, unsigned int cmd,
 				dbg("Executed ioctl. Result = %d (data=%04x)",
 				     le32_to_cpu(result),
 				     le32_to_cpu(*((long *) buffer)));
-				copy_to_user_ret(rio_cmd.buffer, buffer,
-						 rio_cmd.length, -EFAULT);
+				if (copy_to_user(rio_cmd.buffer, buffer,
+						 rio_cmd.length))
+					return -EFAULT;
 				retries = 0;
 			}
 
@@ -170,15 +171,15 @@ ioctl_rio(struct inode *inode, struct file *file, unsigned int cmd,
 		data = (void *) arg;
 		if (data == NULL)
 			break;
-		copy_from_user_ret(&rio_cmd, data, sizeof(struct RioCommand),
-				   -EFAULT);
+		if (copy_from_user(&rio_cmd, data, sizeof(struct RioCommand)))
+			return -EFAULT;
 		if (rio_cmd.length > PAGE_SIZE)
 			return -EINVAL;
 		buffer = (unsigned char *) __get_free_page(GFP_KERNEL);
 		if (buffer == NULL)
 			return -ENOMEM;
-		copy_from_user_ret(buffer, rio_cmd.buffer, rio_cmd.length,
-				   -EFAULT);
+		if (copy_from_user(buffer, rio_cmd.buffer, rio_cmd.length))
+			return -EFAULT;
 
 		requesttype = rio_cmd.requesttype | USB_DIR_OUT |
 		    USB_TYPE_VENDOR | USB_RECIP_DEVICE;

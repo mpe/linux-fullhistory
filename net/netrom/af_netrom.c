@@ -30,6 +30,7 @@
  *			Jonathan(G4KLX)	Removed hdrincl.
  *	NET/ROM 007	Jonathan(G4KLX)	New timer architecture.
  *					Impmented Idle timer.
+ *			Arnaldo C. Melo s/suser/capable/, micro cleanups
  */
 
 #include <linux/config.h>
@@ -437,10 +438,7 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 	if (put_user(len, optlen))
 		return -EFAULT;
 
-	if (copy_to_user(optval, &val, len))
-		return -EFAULT;
-
-	return 0;
+	return copy_to_user(optval, &val, len) ? -EFAULT : 0;
 }
 
 static int nr_listen(struct socket *sock, int backlog)
@@ -616,7 +614,7 @@ full_sockaddr_ax25))
 	 * Only the super user can set an arbitrary user callsign.
 	 */
 	if (addr->fsa_ax25.sax25_ndigis == 1) {
-		if (!suser())
+		if (!capable(CAP_NET_BIND_SERVICE))
 			return -EACCES;
 		sk->protinfo.nr->user_addr   = addr->fsa_digipeater[0];
 		sk->protinfo.nr->source_addr = addr->fsa_ax25.sax25_call;
@@ -624,7 +622,7 @@ full_sockaddr_ax25))
 		source = &addr->fsa_ax25.sax25_call;
 
 		if ((user = ax25_findbyuid(current->euid)) == NULL) {
-			if (ax25_uid_policy && !suser())
+			if (ax25_uid_policy && !capable(CAP_NET_BIND_SERVICE))
 				return -EPERM;
 			user = source;
 		}
@@ -680,7 +678,7 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 		source = (ax25_address *)dev->dev_addr;
 
 		if ((user = ax25_findbyuid(current->euid)) == NULL) {
-			if (ax25_uid_policy && !suser())
+			if (ax25_uid_policy && !capable(CAP_NET_ADMIN))
 				return -EPERM;
 			user = source;
 		}
@@ -1111,9 +1109,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			amount = sk->sndbuf - atomic_read(&sk->wmem_alloc);
 			if (amount < 0)
 				amount = 0;
-			if (put_user(amount, (int *)arg))
-				return -EFAULT;
-			return 0;
+			return put_user(amount, (int *)arg);
 		}
 
 		case TIOCINQ: {
@@ -1122,18 +1118,14 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
 				amount = skb->len;
-			if (put_user(amount, (int *)arg))
-				return -EFAULT;
-			return 0;
+			return put_user(amount, (int *)arg);
 		}
 
 		case SIOCGSTAMP:
 			if (sk != NULL) {
 				if (sk->stamp.tv_sec == 0)
 					return -ENOENT;
-				if (copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)))
-					return -EFAULT;
-				return 0;
+				return copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval)) ? -EFAULT : 0;
 			}
 			return -EINVAL;
 
@@ -1152,7 +1144,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCADDRT:
 		case SIOCDELRT:
 		case SIOCNRDECOBS:
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_NET_ADMIN)) return -EPERM;
 			return nr_rt_ioctl(cmd, (void *)arg);
 
  		default:

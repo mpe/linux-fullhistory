@@ -361,7 +361,8 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 	case SNDCTL_DSP_SPEED:
 		DPF(2, "SNDCTL_DSP_SPEED:\n");
 
-		get_user_ret(val, (int *) arg, -EFAULT);
+		if (get_user(val, (int *) arg))
+			return -EFAULT;
 		DPD(2, "val is %d\n", val);
 
 		if (val > 0) {
@@ -415,7 +416,8 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 	case SNDCTL_DSP_STEREO:
 		DPF(2, "SNDCTL_DSP_STEREO:\n");
 
-		get_user_ret(val, (int *) arg, -EFAULT);
+		if (get_user(val, (int *) arg))
+			return -EFAULT;
 		DPD(2, " val is %d\n", val);
 
 		if (file->f_mode & FMODE_READ) {
@@ -460,7 +462,8 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 	case SNDCTL_DSP_CHANNELS:
 		DPF(2, "SNDCTL_DSP_CHANNELS:\n");
 
-		get_user_ret(val, (int *) arg, -EFAULT);
+		if (get_user(val, (int *) arg))
+			return -EFAULT;
 		DPD(2, " val is %d\n", val);
 
 		if (val > 0) {
@@ -522,7 +525,8 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 	case SNDCTL_DSP_SETFMT:	/* Same as SNDCTL_DSP_SAMPLESIZE */
 		DPF(2, "SNDCTL_DSP_SETFMT:\n");
 
-		get_user_ret(val, (int *) arg, -EFAULT);
+		if (get_user(val, (int *) arg))
+			return -EFAULT;
 		DPD(2, " val is %d\n", val);
 
 		if (val != AFMT_QUERY) {
@@ -624,7 +628,8 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 	case SNDCTL_DSP_SETTRIGGER:
 		DPF(2, "SNDCTL_DSP_SETTRIGGER:\n");
 
-		get_user_ret(val, (int *) arg, -EFAULT);
+		if (get_user(val, (int *) arg))
+			return -EFAULT;
 
 		if (file->f_mode & FMODE_WRITE) {
 			spin_lock_irqsave(&woinst->lock, flags);
@@ -850,7 +855,8 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 	case SNDCTL_DSP_SETFRAGMENT:
 		DPF(2, "SNDCTL_DSP_SETFRAGMENT:\n");
 
-		get_user_ret(val, (int *) arg, -EFAULT);
+		if (get_user(val, (int *) arg))
+			return -EFAULT;
 
 		DPD(2, "val is 0x%x\n", val);
 

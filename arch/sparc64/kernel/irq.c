@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.91 2000/08/05 10:48:40 davem Exp $
+/* $Id: irq.c,v 1.92 2000/08/26 02:42:28 anton Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -608,7 +608,7 @@ again:
 		       spin_is_locked(lock) ||
 		       (!local_bh_count(smp_processor_id()) && spin_is_locked(&global_bh_lock))) {
 			if (!--count) {
-				show("wait_on_irq");
+				show("get_irqlock");
 				count = (~0 >> 1);
 			}
 			__sti();

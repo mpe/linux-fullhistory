@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_minisocks.c,v 1.1 2000/08/09 11:59:04 davem Exp $
+ * Version:	$Id: tcp_minisocks.c,v 1.2 2000/08/28 04:32:52 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -742,7 +742,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		/* Back to base struct sock members. */
 		newsk->err = 0;
 		newsk->priority = 0;
-		atomic_set(&newsk->refcnt, 1);
+		atomic_set(&newsk->refcnt, 2);
 #ifdef INET_REFCNT_DEBUG
 		atomic_inc(&inet_sock_nr);
 #endif
@@ -966,5 +966,6 @@ int tcp_child_process(struct sock *parent, struct sock *child,
 	}
 
 	bh_unlock_sock(child);
+	sock_put(child);
 	return ret;
 }

@@ -1043,9 +1043,10 @@ static inline int cosa_download(struct cosa_data *cosa, struct cosa_download *d)
 		return -EPERM;
 	}
 
-	get_user_ret(addr, &(d->addr), -EFAULT);
-	get_user_ret(len, &(d->len), -EFAULT);
-	get_user_ret(code, &(d->code), -EFAULT);
+	if (get_user(addr, &(d->addr)) ||
+	    __get_user(len, &(d->len)) ||
+	    __get_user(code, &(d->code)))
+		return -EFAULT;
 
 	if (d->addr < 0 || d->addr > COSA_MAX_FIRMWARE_SIZE)
 		return -EINVAL;
@@ -1083,9 +1084,10 @@ static inline int cosa_readmem(struct cosa_data *cosa, struct cosa_download *d)
 		return -EPERM;
 	}
 
-	get_user_ret(addr, &(d->addr), -EFAULT);
-	get_user_ret(len, &(d->len), -EFAULT);
-	get_user_ret(code, &(d->code), -EFAULT);
+	if (get_user(addr, &(d->addr)) ||
+	    __get_user(len, &(d->len)) ||
+	    __get_user(code, &(d->code)))
+		return -EFAULT;
 
 	/* If something fails, force the user to reset the card */
 	cosa->firmware_status &= ~COSA_FW_RESET;
@@ -1133,7 +1135,8 @@ static inline int cosa_start(struct cosa_data *cosa, int address)
 static inline int cosa_getidstr(struct cosa_data *cosa, char *string)
 {
 	int l = strlen(cosa->id_string)+1;
-	copy_to_user_ret(string, cosa->id_string, l, -EFAULT);
+	if (copy_to_user(string, cosa->id_string, l))
+		return -EFAULT;
 	return l;
 }
 
@@ -1141,7 +1144,8 @@ static inline int cosa_getidstr(struct cosa_data *cosa, char *string)
 static inline int cosa_gettype(struct cosa_data *cosa, char *string)
 {
 	int l = strlen(cosa->type)+1;
-	copy_to_user_ret(string, cosa->type, l, -EFAULT);
+	if (copy_to_user(string, cosa->type, l))
+		return -EFAULT;
 	return l;
 }
 
@@ -1429,7 +1433,8 @@ static int download(struct cosa_data *cosa, char *microcode, int length, int add
 	while (length--) {
 		char c;
 #ifndef SRP_DOWNLOAD_AT_BOOT
-		get_user_ret(c,microcode, -23);
+		if (get_user(c, microcode))
+			return -23; /* ??? */
 #else
 		c = *microcode;
 #endif
@@ -1507,7 +1512,8 @@ static int readmem(struct cosa_data *cosa, char *microcode, int length, int addr
 		}
 		c=i;
 #if 1
-		put_user_ret(c,microcode, -23);
+		if (put_user(c, microcode))
+			return -23; /* ??? */
 #else
 		*microcode = c;
 #endif

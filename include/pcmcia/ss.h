@@ -1,5 +1,5 @@
 /*
- * ss.h 1.26 2000/02/04 20:35:21
+ * ss.h 1.28 2000/06/12 21:55:40
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -12,7 +12,7 @@
  * limitations under the License. 
  *
  * The initial developer of the original code is David A. Hinds
- * <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+ * <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
  * are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
  *
  * Alternatively, the contents of this file may be used under the
@@ -61,6 +61,7 @@ typedef struct socket_cap_t {
 #define SS_CAP_PAGE_REGS	0x0001
 #define SS_CAP_VIRTUAL_BUS	0x0002
 #define SS_CAP_MEM_ALIGN	0x0004
+#define SS_CAP_STATIC_MAP	0x0008
 #define SS_CAP_PCCARD		0x4000
 #define SS_CAP_CARDBUS		0x8000
 

@@ -6,13 +6,13 @@
     Megahertz, Motorola, Ositech, and Psion Dacom ethernet/modem
     multifunction cards.
 
-    Copyright (C) 1999 David A. Hinds -- dhinds@pcmcia.sourceforge.org
+    Copyright (C) 1999 David A. Hinds -- dahinds@users.sourceforge.net
 
-    smc91c92_cs.c 1.96 2000/05/09 02:35:58
+    smc91c92_cs.c 1.104 2000/08/31 21:25:13
     
     This driver contains code written by Donald Becker
     (becker@cesdis.gsfc.nasa.gov), Rowan Hughes (x-csrdh@jcu.edu.au),
-    David Hinds (dhinds@pcmcia.sourceforge.org), and Erik Stahlman
+    David Hinds (dahinds@users.sourceforge.net), and Erik Stahlman
     (erik@vt.edu).  Donald wrote the SMC 91c92 code using parts of
     Erik's SMC 91c94 driver.  Rowan wrote a similar driver, and I've
     incorporated some parts of his driver here.  I (Dave) wrote most
@@ -635,11 +635,12 @@ static void mot_config(dev_link_t *link)
     mdelay(100);
 }
 
-static int mot_setup(dev_link_t *link) {
+static int mot_setup(dev_link_t *link)
+{
     struct smc_private *smc = link->priv;
     struct net_device *dev = &smc->dev;
     ioaddr_t ioaddr = dev->base_addr;
-    int i, wait=0, loop;
+    int i, wait, loop;
     u_int addr;
 
     /* Read Ethernet address from Serial EEPROM */
@@ -650,7 +651,7 @@ static int mot_setup(dev_link_t *link) {
 	SMC_SELECT_BANK(1);
 	outw((CTL_RELOAD | CTL_EE_SELECT), ioaddr + CONTROL);
 
-	for (loop = 0; loop < 200; loop++) {
+	for (loop = wait = 0; loop < 200; loop++) {
 	    udelay(10);
 	    wait = ((CTL_RELOAD | CTL_STORE) & inw(ioaddr + CONTROL));
 	    if (wait == 0) break;
@@ -751,7 +752,7 @@ static int osi_config(dev_link_t *link)
     struct smc_private *smc = link->priv;
     struct net_device *dev = &smc->dev;
     static ioaddr_t com[4] = { 0x3f8, 0x2f8, 0x3e8, 0x2e8 };
-    int i=0, j;
+    int i, j;
     
     link->conf.Attributes |= CONF_ENABLE_SPKR;
     link->conf.Status = CCSR_AUDIO_ENA;
@@ -765,7 +766,7 @@ static int osi_config(dev_link_t *link)
     /* Enable Hard Decode, LAN, Modem */
     link->conf.ConfigIndex = 0x23;
     
-    for (j = 0; j < 4; j++) {
+    for (i = j = 0; j < 4; j++) {
 	link->io.BasePort2 = com[j];
 	i = CardServices(RequestIO, link->handle, &link->io);
 	if (i == CS_SUCCESS) break;
@@ -808,15 +809,16 @@ static int osi_setup(dev_link_t *link, u_short manfid, u_short cardid)
     for (i = 0; i < 6; i++)
 	dev->dev_addr[i] = buf[i+2];
 
-    if (manfid != MANFID_OSITECH) return 0;
-
-    if (cardid == PRODID_OSITECH_SEVEN) {
+    if (((manfid == MANFID_OSITECH) &&
+	 (cardid == PRODID_OSITECH_SEVEN)) ||
+	((manfid == MANFID_PSION) &&
+	 (cardid == PRODID_PSION_NET100))) {
 	/* Download the Seven of Diamonds firmware */
 	for (i = 0; i < sizeof(__Xilinx7OD); i++) {
 	    outb(__Xilinx7OD[i], link->io.BasePort1+2);
 	    udelay(50);
 	}
-    } else {
+    } else if (manfid == MANFID_OSITECH) {
 	/* Make sure both functions are powered up */
 	set_bits(0x300, link->io.BasePort1 + OSITECH_AUI_PWR);
 	/* Now, turn on the interrupt for both card functions */
@@ -927,7 +929,8 @@ static void smc91c92_config(dev_link_t *link)
     /* Configure card */
     link->state |= DEV_CONFIG;
 
-    if (smc->manfid == MANFID_OSITECH) {
+    if ((smc->manfid == MANFID_OSITECH) &&
+	(smc->cardid != PRODID_OSITECH_SEVEN)) {
 	i = osi_config(link);
     } else if ((smc->manfid == MANFID_MOTOROLA) ||
 	       ((smc->manfid == MANFID_MEGAHERTZ) &&
@@ -1001,7 +1004,7 @@ static void smc91c92_config(dev_link_t *link)
     for (i = 0; i < 6; i++)
 	printk("%02X%s", dev->dev_addr[i], ((i<5) ? ":" : "\n"));
     if (rev > 0) {
-	u_long mir, mcr, mii;
+	u_long mir, mcr;
 	ioaddr_t ioaddr = dev->base_addr;
 	SMC_SELECT_BANK(0);
 	mir = inw(ioaddr + MEMINFO) & 0xff;
@@ -1014,8 +1017,14 @@ static void smc91c92_config(dev_link_t *link)
 	else
 	    printk(KERN_INFO "  %lu kb", mir>>10);
 	SMC_SELECT_BANK(1);
-	mii = inw(ioaddr + CONFIG) & CFG_MII_SELECT;
-	printk(" buffer, %s xcvr\n", mii ? "MII" : if_names[dev->if_port]);
+	smc->cfg = inw(ioaddr + CONFIG) & ~CFG_AUI_SELECT;
+	smc->cfg |= CFG_NO_WAIT | CFG_16BIT | CFG_STATIC;
+	if (smc->manfid == MANFID_OSITECH)
+	    smc->cfg |= CFG_IRQ_SEL_1 | CFG_IRQ_SEL_0;
+	if ((rev >> 4) >= 7)
+	    smc->cfg |= CFG_MII_SELECT;
+	printk(" buffer, %s xcvr\n", (smc->cfg & CFG_MII_SELECT) ?
+	       "MII" : if_names[dev->if_port]);
     }
     
     return;
@@ -1321,7 +1330,7 @@ static int smc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
     DEBUG(2, "%s: smc91c92_start_xmit(length = %d) called,"
 	  " status %4.4x.\n", dev->name, skb->len, inw(ioaddr + 2));
-
+    
     if (smc->saved_skb) {
 	/* THIS SHOULD NEVER HAPPEN. */
 	smc->stats.tx_aborted_errors++;
@@ -1808,9 +1817,6 @@ static void smc_reset(struct net_device *dev)
        Accept link errors, counter and Tx error interrupts. */
     outw(CTL_AUTO_RELEASE | CTL_TE_ENABLE | CTL_CR_ENABLE,
 	 ioaddr + CONTROL);
-    smc->cfg = inw(ioaddr + CONFIG) & ~CFG_AUI_SELECT;
-    smc->cfg |= CFG_NO_WAIT | CFG_16BIT | CFG_STATIC |
-	(smc->manfid == MANFID_OSITECH ? (CFG_IRQ_SEL_1 | CFG_IRQ_SEL_0) : 0);
     smc_set_xcvr(dev, dev->if_port);
     if ((smc->manfid == MANFID_OSITECH) &&
 	(smc->cardid != PRODID_OSITECH_SEVEN))

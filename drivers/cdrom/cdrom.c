@@ -292,10 +292,10 @@ MODULE_PARM(check_media_type, "i");
 
 /* These are used to simplify getting data in from and back to user land */
 #define IOCTL_IN(arg, type, in)	\
-	copy_from_user_ret(&in, (type *) arg, sizeof in, -EFAULT)
+	copy_from_user(&in, (type *) arg, sizeof in)
 
 #define IOCTL_OUT(arg, type, out) \
-	copy_to_user_ret((type *) arg, &out, sizeof out, -EFAULT)
+	copy_to_user((type *) arg, &out, sizeof out)
 
 /* The (cdo->capability & ~cdi->mask & CDC_XXX) construct was used in
    a lot of places. This macro makes the code more clear. */
@@ -1463,7 +1463,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 		cdinfo(CD_DO_IOCTL, "entering CDROMMULTISESSION\n"); 
                 if (!(cdo->capability & CDC_MULTI_SESSION))
                         return -ENOSYS;
-		IOCTL_IN(arg, struct cdrom_multisession, ms_info);
+		if (IOCTL_IN(arg, struct cdrom_multisession, ms_info))
+			return -EFAULT;
 		requested_format = ms_info.addr_format;
 		if (!((requested_format == CDROM_MSF) ||
 			(requested_format == CDROM_LBA)))
@@ -1473,7 +1474,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 			return ret;
 		sanitize_format(&ms_info.addr, &ms_info.addr_format,
 				requested_format);
-		IOCTL_OUT(arg, struct cdrom_multisession, ms_info);
+		if (IOCTL_OUT(arg, struct cdrom_multisession, ms_info))
+			return -EFAULT;
 		cdinfo(CD_DO_IOCTL, "CDROMMULTISESSION successful\n"); 
 		return 0;
 		}
@@ -1632,7 +1634,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 			return -ENOSYS;
 		if ((ret=cdo->get_mcn(cdi, &mcn)))
 			return ret;
-		IOCTL_OUT(arg, struct cdrom_mcn, mcn);
+		if (IOCTL_OUT(arg, struct cdrom_mcn, mcn))
+			return -EFAULT;
 		cdinfo(CD_DO_IOCTL, "CDROM_GET_MCN successful\n"); 
 		return 0;
 		}
@@ -1717,7 +1720,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 		if (!CDROM_CAN(CDC_PLAY_AUDIO))
 			return -ENOSYS;
 		/* cdinfo(CD_DO_IOCTL,"entering CDROMSUBCHNL\n");*/ 
-		IOCTL_IN(arg, struct cdrom_subchnl, q);
+		if (IOCTL_IN(arg, struct cdrom_subchnl, q))
+			return -EFAULT;
 		requested = q.cdsc_format;
 		if (!((requested == CDROM_MSF) ||
 		      (requested == CDROM_LBA)))
@@ -1728,7 +1732,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 		back = q.cdsc_format; /* local copy */
 		sanitize_format(&q.cdsc_absaddr, &back, requested);
 		sanitize_format(&q.cdsc_reladdr, &q.cdsc_format, requested);
-		IOCTL_OUT(arg, struct cdrom_subchnl, q);
+		if (IOCTL_OUT(arg, struct cdrom_subchnl, q))
+			return -EFAULT;
 		/* cdinfo(CD_DO_IOCTL, "CDROMSUBCHNL successful\n"); */ 
 		return 0;
 		}
@@ -1737,10 +1742,12 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 		if (!CDROM_CAN(CDC_PLAY_AUDIO))
 			return -ENOSYS;
 		/* cdinfo(CD_DO_IOCTL, "entering CDROMREADTOCHDR\n"); */ 
-		IOCTL_IN(arg, struct cdrom_tochdr, header);
+		if (IOCTL_IN(arg, struct cdrom_tochdr, header))
+			return -EFAULT;
 		if ((ret=cdo->audio_ioctl(cdi, cmd, &header)))
 			return ret;
-		IOCTL_OUT(arg, struct cdrom_tochdr, header);
+		if (IOCTL_OUT(arg, struct cdrom_tochdr, header))
+			return -EFAULT;
 		/* cdinfo(CD_DO_IOCTL, "CDROMREADTOCHDR successful\n"); */ 
 		return 0;
 		}
@@ -1750,7 +1757,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 		if (!CDROM_CAN(CDC_PLAY_AUDIO))
 			return -ENOSYS;
 		/* cdinfo(CD_DO_IOCTL, "entering CDROMREADTOCENTRY\n"); */ 
-		IOCTL_IN(arg, struct cdrom_tocentry, entry);
+		if (IOCTL_IN(arg, struct cdrom_tocentry, entry))
+			return -EFAULT;
 		requested_format = entry.cdte_format;
 		if (!((requested_format == CDROM_MSF) || 
 			(requested_format == CDROM_LBA)))
@@ -1761,7 +1769,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 			return ret;
 		sanitize_format(&entry.cdte_addr,
 		&entry.cdte_format, requested_format);
-		IOCTL_OUT(arg, struct cdrom_tocentry, entry);
+		if (IOCTL_OUT(arg, struct cdrom_tocentry, entry))
+			return -EFAULT;
 		/* cdinfo(CD_DO_IOCTL, "CDROMREADTOCENTRY successful\n"); */ 
 		return 0;
 		}
@@ -1770,7 +1779,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 		if (!CDROM_CAN(CDC_PLAY_AUDIO))
 			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYMSF\n"); 
-		IOCTL_IN(arg, struct cdrom_msf, msf);
+		if (IOCTL_IN(arg, struct cdrom_msf, msf))
+			return -EFAULT;
 		return cdo->audio_ioctl(cdi, cmd, &msf);
 		}
 	case CDROMPLAYTRKIND: {
@@ -1778,7 +1788,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 		if (!CDROM_CAN(CDC_PLAY_AUDIO))
 			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYTRKIND\n"); 
-		IOCTL_IN(arg, struct cdrom_ti, ti);
+		if (IOCTL_IN(arg, struct cdrom_ti, ti))
+			return -EFAULT;
 		CHECKAUDIO;
 		return cdo->audio_ioctl(cdi, cmd, &ti);
 		}
@@ -1787,7 +1798,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 		if (!CDROM_CAN(CDC_PLAY_AUDIO))
 			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering CDROMVOLCTRL\n"); 
-		IOCTL_IN(arg, struct cdrom_volctrl, volume);
+		if (IOCTL_IN(arg, struct cdrom_volctrl, volume))
+			return -EFAULT;
 		return cdo->audio_ioctl(cdi, cmd, &volume);
 		}
 	case CDROMVOLREAD: {
@@ -1797,7 +1809,8 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 		cdinfo(CD_DO_IOCTL, "entering CDROMVOLREAD\n"); 
 		if ((ret=cdo->audio_ioctl(cdi, cmd, &volume)))
 			return ret;
-		IOCTL_OUT(arg, struct cdrom_volctrl, volume);
+		if (IOCTL_OUT(arg, struct cdrom_volctrl, volume))
+			return -EFAULT;
 		return 0;
 		}
 	case CDROMSTART:
@@ -1894,7 +1907,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 			blocksize = CD_FRAMESIZE_RAW0;
 			break;
 		}
-		IOCTL_IN(arg, struct cdrom_msf, msf);
+		if (IOCTL_IN(arg, struct cdrom_msf, msf))
+			return -EFAULT;
 		lba = msf_to_lba(msf.cdmsf_min0,msf.cdmsf_sec0,msf.cdmsf_frame0);
 		/* FIXME: we need upper bound checking, too!! */
 		if (lba < 0)
@@ -1933,7 +1947,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		struct cdrom_read_audio ra;
 		int lba, frames;
 
-		IOCTL_IN(arg, struct cdrom_read_audio, ra);
+		if (IOCTL_IN(arg, struct cdrom_read_audio, ra))
+			return -EFAULT;
 
 		if (ra.addr_format == CDROM_MSF)
 			lba = msf_to_lba(ra.addr.msf.minute,
@@ -1975,7 +1990,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 	case CDROMSUBCHNL: {
 		struct cdrom_subchnl q;
 		u_char requested, back;
-		IOCTL_IN(arg, struct cdrom_subchnl, q);
+		if (IOCTL_IN(arg, struct cdrom_subchnl, q))
+			return -EFAULT;
 		requested = q.cdsc_format;
 		if (!((requested == CDROM_MSF) ||
 		      (requested == CDROM_LBA)))
@@ -1986,7 +2002,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		back = q.cdsc_format; /* local copy */
 		sanitize_format(&q.cdsc_absaddr, &back, requested);
 		sanitize_format(&q.cdsc_reladdr, &q.cdsc_format, requested);
-		IOCTL_OUT(arg, struct cdrom_subchnl, q);
+		if (IOCTL_OUT(arg, struct cdrom_subchnl, q))
+			return -EFAULT;
 		/* cdinfo(CD_DO_IOCTL, "CDROMSUBCHNL successful\n"); */ 
 		return 0;
 		}
@@ -1994,7 +2011,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		struct cdrom_ti ti;
 
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYTRKIND\n");
-		IOCTL_IN(arg, struct cdrom_ti, ti);
+		if (IOCTL_IN(arg, struct cdrom_ti, ti))
+			return -EFAULT;
 
 		cgc.cmd[0] = GPCMD_PLAY_AUDIO_TI;
 		cgc.cmd[4] = ti.cdti_trk0;
@@ -2006,7 +2024,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 	case CDROMPLAYMSF: {
 		struct cdrom_msf msf;
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYMSF\n");
-		IOCTL_IN(arg, struct cdrom_msf, msf);
+		if (IOCTL_IN(arg, struct cdrom_msf, msf))
+			return -EFAULT;
 		cgc.cmd[0] = GPCMD_PLAY_AUDIO_MSF;
 		cgc.cmd[3] = msf.cdmsf_min0;
 		cgc.cmd[4] = msf.cdmsf_sec0;
@@ -2020,7 +2039,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 	case CDROMPLAYBLK: {
 		struct cdrom_blk blk;
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYBLK\n");
-		IOCTL_IN(arg, struct cdrom_blk, blk);
+		if (IOCTL_IN(arg, struct cdrom_blk, blk))
+			return -EFAULT;
 		cgc.cmd[0] = GPCMD_PLAY_AUDIO_10;
 		cgc.cmd[2] = (blk.from >> 24) & 0xff;
 		cgc.cmd[3] = (blk.from >> 16) & 0xff;
@@ -2038,7 +2058,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		unsigned short offset;
 		cdinfo(CD_DO_IOCTL, "entering CDROMVOLUME\n");
 
-		IOCTL_IN(arg, struct cdrom_volctrl, volctrl);
+		if (IOCTL_IN(arg, struct cdrom_volctrl, volctrl))
+			return -EFAULT;
 
 		cgc.buffer = buffer;
 		cgc.buflen = 24;
@@ -2064,7 +2085,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 			volctrl.channel1 = buffer[offset+11];
 			volctrl.channel2 = buffer[offset+13];
 			volctrl.channel3 = buffer[offset+15];
-			IOCTL_OUT(arg, struct cdrom_volctrl, volctrl);
+			if (IOCTL_OUT(arg, struct cdrom_volctrl, volctrl))
+				return -EFAULT;
 			return 0;
 		}
 		
@@ -2130,10 +2152,12 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		if (!CDROM_CAN(CDC_DVD))
 			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering DVD_AUTH\n"); 
-		IOCTL_IN(arg, dvd_authinfo, ai);
+		if (IOCTL_IN(arg, dvd_authinfo, ai))
+			return -EFAULT;
 		if ((ret = dvd_do_auth (cdi, &ai)))
 			return ret;
-		IOCTL_OUT(arg, dvd_authinfo, ai);
+		if (IOCTL_OUT(arg, dvd_authinfo, ai))
+			return -EFAULT;
 		return 0;
 		}
 
@@ -2143,7 +2167,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		if (!CDROM_CAN(CDC_GENERIC_PACKET))
 			return -ENOSYS;
 		cdinfo(CD_DO_IOCTL, "entering CDROM_SEND_PACKET\n"); 
-		IOCTL_IN(arg, struct cdrom_generic_command, cgc);
+		if (IOCTL_IN(arg, struct cdrom_generic_command, cgc))
+			return -EFAULT;
 		copy = !!cgc.buflen;
 		userbuf = cgc.buffer;
 		cgc.buffer = NULL;
@@ -2190,7 +2215,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		cdinfo(CD_DO_IOCTL, "entering CDROM_NEXT_WRITABLE\n"); 
 		if ((ret = cdrom_get_next_writable(dev, &next)))
 			return ret;
-		IOCTL_OUT(arg, long, next);
+		if (IOCTL_OUT(arg, long, next))
+			return -EFAULT;
 		return 0;
 		}
 	case CDROM_LAST_WRITTEN: {
@@ -2198,7 +2224,8 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		cdinfo(CD_DO_IOCTL, "entering CDROM_LAST_WRITTEN\n"); 
 		if ((ret = cdrom_get_last_written(dev, &last)))
 			return ret;
-		IOCTL_OUT(arg, long, last);
+		if (IOCTL_OUT(arg, long, last))
+			return -EFAULT;
 		return 0;
 		}
 	} /* switch */

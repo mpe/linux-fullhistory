@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.29 2000/08/14 23:50:31 anton Exp $
+/* $Id: misc.c,v 1.30 2000/08/29 07:01:54 davem Exp $
  * misc.c: Miscelaneous syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -139,12 +139,14 @@ asmlinkage int solaris_brk(u32 brk)
 	int i, len = (countfrom) ? 					\
 		((sizeof(to) > sizeof(from) ? 				\
 			sizeof(from) : sizeof(to))) : sizeof(to); 	\
-	copy_to_user_ret(to, from, len, -EFAULT); 			\
+	if (copy_to_user(to, from, len))				\
+		return -EFAULT;						\
 	if (dotchop) 							\
 		for (p=from,i=0; *p && *p != '.' && --len; p++,i++); 	\
 	else 								\
 		i = len - 1; 						\
-	__put_user_ret('\0', (char *)(to+i), -EFAULT); 			\
+	if (__put_user('\0', (char *)(to+i)))				\
+		return -EFAULT;						\
 }
 
 struct sol_uname {
@@ -297,10 +299,13 @@ asmlinkage int solaris_sysinfo(int cmd, u32 buf, s32 count)
 	}
 	len = strlen(r) + 1;
 	if (count < len) {
-		copy_to_user_ret((char *)A(buf), r, count - 1, -EFAULT);
-		__put_user_ret(0, (char *)A(buf) + count - 1, -EFAULT);
-	} else
-		copy_to_user_ret((char *)A(buf), r, len, -EFAULT);
+		if (copy_to_user((char *)A(buf), r, count - 1) ||
+		    __put_user(0, (char *)A(buf) + count - 1))
+			return -EFAULT;
+	} else {
+		if (copy_to_user((char *)A(buf), r, len))
+			return -EFAULT;
+	}
 	return len;
 }
 

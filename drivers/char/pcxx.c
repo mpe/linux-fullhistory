@@ -14,8 +14,8 @@
  *
  * This Driver is currently maintained by Christoph Lameter (christoph@lameter.com)
  *
- * Please contact digi for support issues at digilnux@dgii.com. Some
- * information (mostly of historical interest) can be found at
+ * Please contact digi for support issues at digilnux@dgii.com.
+ * Some more information can be found at
  * http://lameter.com/digi.
  *
  *  1.5.2 Fall 1995 Bug fixes by David Nugent
@@ -39,16 +39,12 @@
  *              and Xeve also.
  *  1.6.2 August, 7, 2000: Arnaldo Carvalho de Melo <acme@conectiva.com.br>
  *  		get rid of panics, release previously allocated resources
+ *  1.6.3 August, 23, 2000: Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+ *  		cleaned up wrt verify_area.
+ *              Christoph Lameter: Update documentation, email addresses
+ *              and URLs. Remove some obsolete code.
  *
  */
-
-#undef SPEED_HACK
-/* If you define SPEED_HACK then you get the following Baudrate translation
-   19200 = 57600
-   38400 = 115K
-   The driver supports the native 57.6K and 115K Baudrates under Linux, but
-   some distributions like Slackware 3.0 don't like these high baudrates.
-*/
 
 #include <linux/module.h>
 #include <linux/mm.h>
@@ -81,7 +77,7 @@
 #include <asm/bitops.h>
 #include <asm/semaphore.h>
 
-#define VERSION 	"1.6.2"
+#define VERSION 	"1.6.3"
 
 #include "digi.h"
 #include "fep.h"
@@ -713,11 +709,10 @@ static int pcxe_write(struct tty_struct * tty, int from_user, const unsigned cha
 		tail &= (size - 1);
 		stlen = (head >= tail) ? (size - (head - tail) - 1) : (tail - head - 1);
 		count = MIN(stlen, count);
-		if (count) {
-			if (verify_area(VERIFY_READ, (char*)buf, count))
-				count=0;
-			else copy_from_user(ch->tmp_buf, buf, count);
-		}
+		if (count)
+			if (copy_from_user(ch->tmp_buf, buf, count))
+				count = 0;
+
 		buf = ch->tmp_buf;
 		memoff(ch);
 		restore_flags(flags);
@@ -1896,11 +1891,6 @@ fepcmd(struct channel *ch, int cmd, int word_or_byte, int byte2, int ncmds,
 static unsigned termios2digi_c(struct channel *ch, unsigned cflag)
 {
 	unsigned res = 0;
-#ifdef SPEED_HACK
-	/* CL: HACK to force 115200 at 38400 and 57600 at 19200 Baud */
-	if ((cflag & CBAUD)== B38400) cflag=cflag - B38400 + B115200;
-	if ((cflag & CBAUD)== B19200) cflag=cflag - B19200 + B57600;
-#endif
 	if (cflag & CBAUDEX)
 	{
 		ch->digiext.digi_flags |= DIGI_FAST;
@@ -2124,7 +2114,6 @@ static void receive_data(struct channel *ch)
 static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned long arg)
 {
-	int error;
 	struct channel *ch = (struct channel *) tty->driver_data;
 	volatile struct board_chan *bc;
 	int retval;
@@ -2163,15 +2152,13 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			return 0;
 
 		case TIOCGSOFTCAR:
-			return put_user(C_CLOCAL(tty) ? 1 : 0,
-			    (unsigned int *) arg);
+			return put_user(C_CLOCAL(tty) ? 1 : 0, (unsigned int *)arg);
 
 		case TIOCSSOFTCAR:
 			{
 			    unsigned int value;
-			    error = get_user( value, (unsigned int *) arg);
-			    if (error)
-				return error;
+			    if (get_user(value, (unsigned int *) arg))
+				    return -EFAULT;
 			    tty->termios->c_cflag = ((tty->termios->c_cflag & ~CLOCAL) | (value ? CLOCAL : 0));
 			}
 			return 0;
@@ -2199,18 +2186,16 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			if(mstat & ch->dcd)
 				mflag |= TIOCM_CD;
 
-			error = put_user(mflag, (unsigned int *) arg);
-			if(error)
-				return error;
+			if (put_user(mflag, (unsigned int *) arg))
+				return -EFAULT;
 			break;
 
 		case TIOCMBIS:
 		case TIOCMBIC:
 		case TIOCMODS:
 		case TIOCMSET:
-			error = get_user(mstat, (unsigned int *) arg);
-			if(error)
-				return error;
+			if (get_user(mstat, (unsigned int *) arg))
+				return -EFAULT;
 
 			mflag = 0;
 			if(mstat & TIOCM_DTR)
@@ -2262,10 +2247,8 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			break;
 
 		case DIGI_GETA:
-			if((error=verify_area(VERIFY_WRITE, (char*)arg, sizeof(digi_t))))
-				return(error);
-
-			copy_to_user((char*)arg, &ch->digiext, sizeof(digi_t));
+			if (copy_to_user((char*)arg, &ch->digiext, sizeof(digi_t)))
+				return -EFAULT;
 			break;
 
 		case DIGI_SETAW:
@@ -2282,10 +2265,8 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			/* Fall Thru */
 
 		case DIGI_SETA:
-			if((error=verify_area(VERIFY_READ, (char*)arg,sizeof(digi_t))))
-				return(error);
-
-			copy_from_user(&ch->digiext, (char*)arg, sizeof(digi_t));
+			if (copy_from_user(&ch->digiext, (char*)arg, sizeof(digi_t)))
+				return -EFAULT;
 #ifdef DEBUG_IOCTL
 			printk("ioctl(DIGI_SETA): flags = %x\n", ch->digiext.digi_flags);
 #endif
@@ -2319,10 +2300,8 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			memoff(ch);
 			restore_flags(flags);
 
-			if((error=verify_area(VERIFY_WRITE, (char*)arg,sizeof(dflow))))
-				return(error);
-
-			copy_to_user((char*)arg, &dflow, sizeof(dflow));
+			if (copy_to_user((char*)arg, &dflow, sizeof(dflow)))
+				return -EFAULT;
 			break;
 
 		case DIGI_SETAFLOW:
@@ -2335,10 +2314,8 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 				stopc = ch->stopca;
 			}
 
-			if((error=verify_area(VERIFY_READ, (char*)arg,sizeof(dflow))))
-				return(error);
-
-			copy_from_user(&dflow, (char*)arg, sizeof(dflow));
+			if (copy_from_user(&dflow, (char*)arg, sizeof(dflow)))
+				return -EFAULT;
 
 			if(dflow.startc != startc || dflow.stopc != stopc) {
 				cli();

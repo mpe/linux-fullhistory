@@ -16,12 +16,10 @@
 #include <linux/major.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
-#ifdef CONFIG_KMOD
 #include <linux/kmod.h>
-#endif
-#include <linux/lockd/bind.h>
-#include <linux/lockd/xdr.h>
 #include <linux/init.h>
+#include <linux/module.h>
+#include <linux/nfsd/interface.h>
 
 #ifdef CONFIG_CODA_FS
 extern int init_coda(void);
@@ -48,32 +46,28 @@ void __init filesystem_setup(void)
 #endif
 }
 
-#ifndef CONFIG_NFSD
-#ifdef CONFIG_NFSD_MODULE
-long (*do_nfsservctl)(int, void *, void *);
-#endif
+#if defined(CONFIG_NFSD_MODULE)
+struct nfsd_linkage *nfsd_linkage = NULL;
+
 long
 asmlinkage sys_nfsservctl(int cmd, void *argp, void *resp)
 {
-#ifndef CONFIG_NFSD_MODULE
-	return -ENOSYS;
-#else
 	int ret = -ENOSYS;
 	
 	lock_kernel();
-	if (do_nfsservctl) {
-		ret = do_nfsservctl(cmd, argp, resp);
-		goto out;
-	}
-#ifdef CONFIG_KMOD
-	if (request_module ("nfsd") == 0) {
-		if (do_nfsservctl)
-			ret = do_nfsservctl(cmd, argp, resp);
-	}
-#endif /* CONFIG_KMOD */
-out:
+
+	if (nfsd_linkage ||
+	    (request_module ("nfsd") == 0 && nfsd_linkage))
+		ret = nfsd_linkage->do_nfsservctl(cmd, argp, resp);
+
 	unlock_kernel();
 	return ret;
-#endif /* CONFIG_NFSD_MODULE */
+}
+EXPORT_SYMBOL(nfsd_linkage);
+
+#elif ! defined (CONFIG_NFSD)
+asmlinkage int sys_nfsservctl(int cmd, void *argp, void *resp)
+{
+	return -ENOSYS;
 }
 #endif /* CONFIG_NFSD */

@@ -501,10 +501,6 @@ CONFIG_PCMCIA_SERIAL=y
 #
 # Multimedia devices
 #
-
-#
-# Video For Linux
-#
 # CONFIG_VIDEO_DEV is not set
 
 #

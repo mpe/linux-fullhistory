@@ -559,7 +559,8 @@ static int dmabuf_copyin_user(struct dmabuf *db, unsigned int ptr, const void *b
 		rem = db->dmasize - ptr;
 		if (pgrem > rem)
 			pgrem = rem;
-		copy_from_user_ret((db->sgbuf[ptr >> PAGE_SHIFT]) + (ptr & (PAGE_SIZE-1)), buffer, pgrem, -EFAULT);
+		if (copy_from_user((db->sgbuf[ptr >> PAGE_SHIFT]) + (ptr & (PAGE_SIZE-1)), buffer, pgrem))
+			return -EFAULT;
 		size -= pgrem;
 		(char *)buffer += pgrem;
 		ptr += pgrem;
@@ -583,7 +584,8 @@ static int dmabuf_copyout_user(struct dmabuf *db, unsigned int ptr, void *buffer
 		rem = db->dmasize - ptr;
 		if (pgrem > rem)
 			pgrem = rem;
-		copy_to_user_ret(buffer, (db->sgbuf[ptr >> PAGE_SHIFT]) + (ptr & (PAGE_SIZE-1)), pgrem, -EFAULT);
+		if (copy_to_user(buffer, (db->sgbuf[ptr >> PAGE_SHIFT]) + (ptr & (PAGE_SIZE-1)), pgrem))
+			return -EFAULT;
 		size -= pgrem;
 		(char *)buffer += pgrem;
 		ptr += pgrem;
@@ -2029,7 +2031,8 @@ static int usb_audio_ioctl_mixdev(struct inode *inode, struct file *file, unsign
 	ms->modcnt++;
 	switch (_IOC_NR(cmd)) {
 	case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		return set_rec_src(ms, val);
 
 	default:
@@ -2039,7 +2042,8 @@ static int usb_audio_ioctl_mixdev(struct inode *inode, struct file *file, unsign
 		for (j = 0; j < ms->numch && ms->ch[j].osschannel != i; j++);
 		if (j >= ms->numch)
 			return -EINVAL;
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (wrmixer(ms, j, val))
 			return -EIO;
 		return put_user(ms->ch[j].value, (int *)arg);
@@ -2352,7 +2356,8 @@ static int usb_audio_ioctl(struct inode *inode, struct file *file, unsigned int 
 		return 0;
 
 	case SNDCTL_DSP_SPEED:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val >= 0) {
 			if (val < 4000)
 				val = 4000;
@@ -2370,7 +2375,8 @@ static int usb_audio_ioctl(struct inode *inode, struct file *file, unsigned int 
 		return 0;
 
 	case SNDCTL_DSP_CHANNELS:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 0) {
 			val2 = (file->f_mode & FMODE_READ) ? as->usbin.dma.format : as->usbout.dma.format;
 			if (val == 1)
@@ -2388,7 +2394,8 @@ static int usb_audio_ioctl(struct inode *inode, struct file *file, unsigned int 
 				AFMT_S8 | AFMT_S16_LE | AFMT_S16_BE, (int *)arg);
 
 	case SNDCTL_DSP_SETFMT: /* Selects ONE fmt*/
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != AFMT_QUERY) {
 			if (hweight32(val) != 1)
 				return -EINVAL;
@@ -2415,7 +2422,8 @@ static int usb_audio_ioctl(struct inode *inode, struct file *file, unsigned int 
 		return put_user(val, (int *)arg);
 
 	case SNDCTL_DSP_SETTRIGGER:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			if (val & PCM_ENABLE_INPUT) {
 				if (!as->usbin.dma.ready && (ret = prog_dmabuf_in(as)))
@@ -2509,7 +2517,8 @@ static int usb_audio_ioctl(struct inode *inode, struct file *file, unsigned int 
 		return put_user(as->usbin.dma.fragsize, (int *)arg);
 
 	case SNDCTL_DSP_SETFRAGMENT:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			as->usbin.dma.ossfragshift = val & 0xffff;
 			as->usbin.dma.ossmaxfrags = (val >> 16) & 0xffff;
@@ -2536,7 +2545,8 @@ static int usb_audio_ioctl(struct inode *inode, struct file *file, unsigned int 
 		if ((file->f_mode & FMODE_READ && as->usbin.dma.subdivision) ||
 		    (file->f_mode & FMODE_WRITE && as->usbout.dma.subdivision))
 			return -EINVAL;
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 1 && val != 2 && val != 4)
 			return -EINVAL;
 		if (file->f_mode & FMODE_READ)

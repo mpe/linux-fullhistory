@@ -584,22 +584,26 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	
 	switch (cmd){
 	case FBIOGTYPE:		/* return frame buffer type */
-		copy_to_user_ret((struct fbtype *)arg, &fb->type, sizeof(struct fbtype), -EFAULT);
+		if (copy_to_user((struct fbtype *)arg, &fb->type, sizeof(struct fbtype)))
+			return -EFAULT;
 		break;
 	case FBIOGATTR: {
 		struct fbgattr *fba = (struct fbgattr *) arg;
 		
 		i = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct fbgattr));
 		if (i) return i;
-		__put_user_ret(fb->emulations[0], &fba->real_type, -EFAULT);
-		__put_user_ret(0, &fba->owner, -EFAULT);
-		__copy_to_user_ret(&fba->fbtype, &fb->type,
-				   sizeof(struct fbtype), -EFAULT);
-		__put_user_ret(0, &fba->sattr.flags, -EFAULT);
-		__put_user_ret(fb->type.fb_type, &fba->sattr.emu_type, -EFAULT);
-		__put_user_ret(-1, &fba->sattr.dev_specific[0], -EFAULT);
-		for (i = 0; i < 4; i++)
-			put_user_ret(fb->emulations[i], &fba->emu_types[i], -EFAULT);
+		if (__put_user(fb->emulations[0], &fba->real_type) ||
+		    __put_user(0, &fba->owner) ||
+		    __copy_to_user(&fba->fbtype, &fb->type,
+				   sizeof(struct fbtype)) ||
+		    __put_user(0, &fba->sattr.flags) ||
+		    __put_user(fb->type.fb_type, &fba->sattr.emu_type) ||
+		    __put_user(-1, &fba->sattr.dev_specific[0]))
+			return -EFAULT;
+		for (i = 0; i < 4; i++) {
+			if (put_user(fb->emulations[i], &fba->emu_types[i]))
+				return -EFAULT;
+		}
 		break;
 	}
 	case FBIOSATTR:
@@ -612,7 +616,8 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			if (vt_cons[lastconsole]->vc_mode == KD_TEXT)
  				break;
  		}
-		get_user_ret(i, (int *)arg, -EFAULT);
+		if (get_user(i, (int *)arg))
+			return -EFAULT;
 		if (i){
 			if (!fb->blanked || !fb->unblank)
 				break;
@@ -627,7 +632,8 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		}
 		break;
 	case FBIOGVIDEO:
-		put_user_ret(fb->blanked, (int *) arg, -EFAULT);
+		if (put_user(fb->blanked, (int *) arg))
+			return -EFAULT;
 		break;
 	case FBIOGETCMAP_SPARC: {
 		char *rp, *gp, *bp;
@@ -639,23 +645,29 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		i = verify_area (VERIFY_READ, (void *) arg, sizeof (struct fbcmap));
 		if (i) return i;
 		cmap = (struct fbcmap *) arg;
-		__get_user_ret(count, &cmap->count, -EFAULT);
-		__get_user_ret(index, &cmap->index, -EFAULT);
+		if (__get_user(count, &cmap->count) ||
+		    __get_user(index, &cmap->index))
+			return -EFAULT;
 		if ((index < 0) || (index > 255))
 			return -EINVAL;
 		if (index + count > 256)
 			count = 256 - index;
-		__get_user_ret(rp, &cmap->red, -EFAULT);
-		__get_user_ret(gp, &cmap->green, -EFAULT);
-		__get_user_ret(bp, &cmap->blue, -EFAULT);
-		if(verify_area (VERIFY_WRITE, rp, count))  return -EFAULT;
-		if(verify_area (VERIFY_WRITE, gp, count))  return -EFAULT;
-		if(verify_area (VERIFY_WRITE, bp, count))  return -EFAULT;
+		if (__get_user(rp, &cmap->red) ||
+		    __get_user(gp, &cmap->green) ||
+		    __get_user(bp, &cmap->blue))
+			return -EFAULT;
+		if (verify_area (VERIFY_WRITE, rp, count))
+			return -EFAULT;
+		if (verify_area (VERIFY_WRITE, gp, count))
+			return -EFAULT;
+		if (verify_area (VERIFY_WRITE, bp, count))
+			return -EFAULT;
 		end = index + count;
 		for (i = index; i < end; i++){
-			__put_user_ret(fb->color_map CM(i,0), rp, -EFAULT);
-			__put_user_ret(fb->color_map CM(i,1), gp, -EFAULT);
-			__put_user_ret(fb->color_map CM(i,2), bp, -EFAULT);
+			if (__put_user(fb->color_map CM(i,0), rp) ||
+			    __put_user(fb->color_map CM(i,1), gp) ||
+			    __put_user(fb->color_map CM(i,2), bp))
+				return -EFAULT;
 			rp++; gp++; bp++;
 		}
 		(*fb->loadcmap)(fb, NULL, index, count);
@@ -671,24 +683,32 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		i = verify_area (VERIFY_READ, (void *) arg, sizeof (struct fbcmap));
 		if (i) return i;
 		cmap = (struct fbcmap *) arg;
-		__get_user_ret(count, &cmap->count, -EFAULT);
-		__get_user_ret(index, &cmap->index, -EFAULT);
+		if (__get_user(count, &cmap->count) ||
+		    __get_user(index, &cmap->index))
+			return -EFAULT;
 		if ((index < 0) || (index > 255))
 			return -EINVAL;
 		if (index + count > 256)
 			count = 256 - index;
-		__get_user_ret(rp, &cmap->red, -EFAULT);
-		__get_user_ret(gp, &cmap->green, -EFAULT);
-		__get_user_ret(bp, &cmap->blue, -EFAULT);
-		if(verify_area (VERIFY_READ, rp, count)) return -EFAULT;
-		if(verify_area (VERIFY_READ, gp, count)) return -EFAULT;
-		if(verify_area (VERIFY_READ, bp, count)) return -EFAULT;
+		if (__get_user(rp, &cmap->red) ||
+		    __get_user(gp, &cmap->green) ||
+		    __get_user(bp, &cmap->blue))
+			return -EFAULT;
+		if (verify_area (VERIFY_READ, rp, count))
+			return -EFAULT;
+		if (verify_area (VERIFY_READ, gp, count))
+			return -EFAULT;
+		if (verify_area (VERIFY_READ, bp, count))
+			return -EFAULT;
 
 		end = index + count;
 		for (i = index; i < end; i++){
-			__get_user_ret(fb->color_map CM(i,0), rp, -EFAULT);
-			__get_user_ret(fb->color_map CM(i,1), gp, -EFAULT);
-			__get_user_ret(fb->color_map CM(i,2), bp, -EFAULT);
+			if (__get_user(fb->color_map CM(i,0), rp))
+				return -EFAULT;
+			if (__get_user(fb->color_map CM(i,1), gp))
+				return -EFAULT;
+			if (__get_user(fb->color_map CM(i,2), bp))
+				return -EFAULT;
 			rp++; gp++; bp++;
 		}
 		(*fb->loadcmap)(fb, NULL, index, count);
@@ -699,8 +719,9 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		if (!fb->setcursor) return -EINVAL;
 		if(verify_area (VERIFY_WRITE, p, sizeof (struct fbcurpos)))
 			return -EFAULT;
-		__put_user_ret(fb->cursor.hwsize.fbx, &p->fbx, -EFAULT);
-		__put_user_ret(fb->cursor.hwsize.fby, &p->fby, -EFAULT);
+		if (__put_user(fb->cursor.hwsize.fbx, &p->fbx) ||
+		    __put_user(fb->cursor.hwsize.fby, &p->fby))
+			return -EFAULT;
 		break;
 	}
 	case FBIOSCURSOR:

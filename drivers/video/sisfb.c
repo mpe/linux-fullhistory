@@ -1,5 +1,5 @@
 /*
- * SiS 300/630/540 frame buffer device For Kernal 2.3.x
+ * SiS 300/630/540 frame buffer device For Kernal 2.4.x
  *
  * This driver is partly based on the VBE 2.0 compliant graphic 
  * boards framebuffer driver, which is 
@@ -10,6 +10,7 @@
 
 #define EXPORT_SYMTAB
 #undef  SISFBDEBUG
+#undef CONFIG_FB_SIS_LINUXBIOS
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -174,11 +175,10 @@ static struct board {
 	u16 vendor, device;
 	const char *name;
 } dev_list[] = {
-	{
-	PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_300,	 "SIS 300"}, {
-	PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_5300, "SIS 540"}, {
-	PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_6300, "SIS 630"}, {
-	0, 0, NULL}
+	{PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_300,     "SIS 300"},
+	{PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_540_VGA, "SIS 540"},
+	{PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_630_VGA, "SIS 630"},
+	{0, 0, NULL}
 };
 
 /* card parameters */
@@ -192,9 +192,16 @@ static int video_cmap_len;
 static int sisfb_off = 0;
 
 static struct fb_var_screeninfo default_var = {
-	0, 0, 0, 0, 0, 0, 0, 0,
-	{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	0, FB_ACTIVATE_NOW, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0,
+	0, 0,
+	0,
+	0,
+	{0, 8, 0},
+	{0, 8, 0},
+	{0, 8, 0},
+	{0, 0, 0},
+	0,
+	FB_ACTIVATE_NOW, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0,
 	0,
 	FB_VMODE_NONINTERLACED,
 	{0, 0, 0, 0, 0, 0}
@@ -202,9 +209,11 @@ static struct fb_var_screeninfo default_var = {
 
 static struct display disp;
 static struct fb_info fb_info;
+
 static struct {
 	u16 blue, green, red, pad;
 } palette[256];
+
 static union {
 #ifdef FBCON_HAS_CFB16
 	u16 cfb16[16];
@@ -230,7 +239,7 @@ u16 P3c4, P3d4, P3c0, P3ce, P3c2, P3ca, P3c6, P3c7, P3c8, P3c9, P3da;
 u16 CRT1VCLKLen;
 u16 flag_clearbuffer;
 u16 CRT1VCLKLen;
-int ModeIDOffset, StandTable, CRT1Table, ScreenOffset, MCLKData, ECLKData;
+int ModeIDOffset, StandTable, CRT1Table, ScreenOffset;
 int REFIndex, ModeType;
 int VCLKData;
 int RAMType;
@@ -249,26 +258,25 @@ static const struct _sisbios_mode {
 	u16 cols;
 	u16 rows;
 } sisbios_mode[] = {
-	{
-	"640x480x8", 0x2E, 640, 480, 8, 1, 80, 30}, {
-	"640x480x16", 0x44, 640, 480, 16, 1, 80, 30}, {
-	"640x480x32", 0x62, 640, 480, 32, 1, 80, 30}, {
-	"800x600x8", 0x30, 800, 600, 8, 2, 100, 37}, {
-	"800x600x16", 0x47, 800, 600, 16, 2, 100, 37}, {
-	"800x600x32", 0x63, 800, 600, 32, 2, 100, 37}, {
-	"1024x768x8", 0x38, 1024, 768, 8, 2, 128, 48}, {
-	"1024x768x16", 0x4A, 1024, 768, 16, 2, 128, 48}, {
-	"1024x768x32", 0x64, 1024, 768, 32, 2, 128, 48}, {
-	"1280x1024x8", 0x3A, 1280, 1024, 8, 2, 160, 64}, {
-	"1280x1024x16", 0x4D, 1280, 1024, 16, 2, 160, 64}, {
-	"1280x1024x32", 0x65, 1280, 1024, 32, 2, 160, 64}, {
-	"1600x1200x8", 0x3C, 1600, 1200, 8, 1, 200, 75}, {
-	"1600x1200x16", 0x3D, 1600, 1200, 16, 1, 200, 75}, {
-	"1600x1200x32", 0x66, 1600, 1200, 32, 1, 200, 75}, {
-	"1920x1440x8", 0x68, 1920, 1440, 8, 1, 240, 75}, {
-	"1920x1440x16", 0x69, 1920, 1440, 16, 1, 240, 75}, {
-	"1920x1440x32", 0x6B, 1920, 1440, 32, 1, 240, 75}, {
-	"\0", 0x00, 0, 0, 0, 0, 0, 0}
+	{"640x480x8",    0x2E,  640,  480,  8, 1,  80, 30},
+	{"640x480x16",   0x44,  640,  480, 16, 1,  80, 30},
+	{"640x480x32",   0x62,  640,  480, 32, 1,  80, 30},
+	{"800x600x8",    0x30,  800,  600,  8, 2, 100, 37},
+	{"800x600x16",   0x47,  800,  600, 16, 2, 100, 37},
+	{"800x600x32",   0x63,  800,  600, 32, 2, 100, 37}, 
+	{"1024x768x8",   0x38, 1024,  768,  8, 2, 128, 48},
+	{"1024x768x16",  0x4A, 1024,  768, 16, 2, 128, 48},
+	{"1024x768x32",  0x64, 1024,  768, 32, 2, 128, 48},
+	{"1280x1024x8",  0x3A, 1280, 1024,  8, 2, 160, 64},
+	{"1280x1024x16", 0x4D, 1280, 1024, 16, 2, 160, 64},
+	{"1280x1024x32", 0x65, 1280, 1024, 32, 2, 160, 64},
+	{"1600x1200x8",  0x3C, 1600, 1200,  8, 1, 200, 75},
+	{"1600x1200x16", 0x3D, 1600, 1200, 16, 1, 200, 75},
+	{"1600x1200x32", 0x66, 1600, 1200, 32, 1, 200, 75},
+	{"1920x1440x8",  0x68, 1920, 1440,  8, 1, 240, 75},
+	{"1920x1440x16", 0x69, 1920, 1440, 16, 1, 240, 75},
+	{"1920x1440x32", 0x6B, 1920, 1440, 32, 1, 240, 75},
+	{"\0", 0x00, 0, 0, 0, 0, 0, 0}
 };
 
 static struct _vrate {
@@ -277,57 +285,33 @@ static struct _vrate {
 	u16 yres;
 	u16 refresh;
 } vrate[] = {
-	{
-	1, 640, 480, 60}, {
-	2, 640, 480, 72}, {
-	3, 640, 480, 75}, {
-	4, 640, 480, 85}, {
-	5, 640, 480, 100}, {
-	6, 640, 480, 120}, {
-	7, 640, 480, 160}, {
-	8, 640, 480, 200}, {
-	1, 800, 600, 56}, {
-	2, 800, 600, 60}, {
-	3, 800, 600, 72}, {
-	4, 800, 600, 75}, {
-	5, 800, 600, 85}, {
-	6, 800, 600, 100}, {
-	7, 800, 600, 120}, {
-	8, 800, 600, 160}, {
-	1, 1024, 768, 56}, {
-	2, 1024, 768, 60}, {
-	3, 1024, 768, 72}, {
-	4, 1024, 768, 75}, {
-	5, 1024, 768, 85}, {
-	6, 1024, 768, 100}, {
-	7, 1024, 768, 120}, {
-	1, 1280, 1024, 43}, {
-	2, 1280, 1024, 60}, {
-	3, 1280, 1024, 75}, {
-	4, 1280, 1024, 85}, {
-	1, 1600, 1200, 60}, {
-	2, 1600, 1200, 65}, {
-	3, 1600, 1200, 70}, {
-	4, 1600, 1200, 75}, {
-	5, 1600, 1200, 85}, {
-	1, 1920, 1440, 60}, {
-	0, 0, 0, 0}
+	{1,  640,  480,  60}, {2,  640, 480,  72}, {3,  640, 480,  75}, {4,  640, 480,  85},
+	{5,  640,  480, 100}, {6,  640, 480, 120}, {7,  640, 480, 160}, {8,  640, 480, 200},
+	{1,  800,  600,  56}, {2,  800, 600,  60}, {3,  800, 600,  72}, {4,  800, 600,  75},
+	{5,  800,  600,  85}, {6,  800, 600, 100}, {7,  800, 600, 120}, {8,  800, 600, 160},
+	{1, 1024,  768,  43}, {2, 1024, 768,  60}, {3, 1024, 768,  70}, {4, 1024, 768,  75},
+	{5, 1024,  768,  85}, {6, 1024, 768, 100}, {7, 1024, 768, 120},
+	{1, 1280, 1024,  43}, {2, 1280, 1024, 60}, {3, 1280, 1024, 75}, {4, 1280, 1024, 85},
+	{1, 1600, 1200,  60}, {2, 1600, 1200, 65}, {3, 1600, 1200, 70}, {4, 1600, 1200, 75},
+	{5, 1600, 1200,  85},
+	{1, 1920, 1440,  60},
+	{0, 0, 0, 0}
 };
 
-
-u16 DRAMType[17][5] =
-    { {0x0C, 0x0A, 0x02, 0x40, 0x39}, {0x0D, 0x0A, 0x01, 0x40, 0x48},
-{0x0C, 0x09, 0x02, 0x20, 0x35}, {0x0D, 0x09, 0x01, 0x20, 0x44},
-{0x0C, 0x08, 0x02, 0x10, 0x31}, {0x0D, 0x08, 0x01, 0x10, 0x40},
-{0x0C, 0x0A, 0x01, 0x20, 0x34}, {0x0C, 0x09, 0x01, 0x08, 0x32},
-{0x0B, 0x08, 0x02, 0x08, 0x21}, {0x0C, 0x08, 0x01, 0x08, 0x30},
-{0x0A, 0x08, 0x02, 0x04, 0x11}, {0x0B, 0x0A, 0x01, 0x10, 0x28},
-{0x09, 0x08, 0x02, 0x02, 0x01}, {0x0B, 0x09, 0x01, 0x08, 0x24},
-{0x0B, 0x08, 0x01, 0x04, 0x20}, {0x0A, 0x08, 0x01, 0x02, 0x10},
-{0x09, 0x08, 0x01, 0x01, 0x00}
+u16 DRAMType[17][5] = {
+	{0x0C, 0x0A, 0x02, 0x40, 0x39}, {0x0D, 0x0A, 0x01, 0x40, 0x48},
+	{0x0C, 0x09, 0x02, 0x20, 0x35}, {0x0D, 0x09, 0x01, 0x20, 0x44},
+	{0x0C, 0x08, 0x02, 0x10, 0x31}, {0x0D, 0x08, 0x01, 0x10, 0x40},
+	{0x0C, 0x0A, 0x01, 0x20, 0x34}, {0x0C, 0x09, 0x01, 0x08, 0x32},
+	{0x0B, 0x08, 0x02, 0x08, 0x21}, {0x0C, 0x08, 0x01, 0x08, 0x30},
+	{0x0A, 0x08, 0x02, 0x04, 0x11}, {0x0B, 0x0A, 0x01, 0x10, 0x28},
+	{0x09, 0x08, 0x02, 0x02, 0x01}, {0x0B, 0x09, 0x01, 0x08, 0x24},
+	{0x0B, 0x08, 0x01, 0x04, 0x20}, {0x0A, 0x08, 0x01, 0x02, 0x10},
+	{0x09, 0x08, 0x01, 0x01, 0x00}
 };
 
-u16 MDA_DAC[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+u16 MDA_DAC[] = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x15,
 	0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x15,
 	0x3F, 0x3F, 0x3F, 0x3F, 0x3F, 0x3F, 0x3F, 0x3F,
@@ -337,7 +321,8 @@ u16 MDA_DAC[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x3F, 0x3F, 0x3F, 0x3F, 0x3F, 0x3F, 0x3F, 0x3F
 };
 
-u16 CGA_DAC[] = { 0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x09, 0x15,
+u16 CGA_DAC[] = {
+	0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x09, 0x15,
 	0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x09, 0x15,
 	0x2A, 0x3A, 0x2E, 0x3E, 0x2B, 0x3B, 0x2F, 0x3F,
 	0x2A, 0x3A, 0x2E, 0x3E, 0x2B, 0x3B, 0x2F, 0x3F,
@@ -347,7 +332,8 @@ u16 CGA_DAC[] = { 0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x09, 0x15,
 	0x2A, 0x3A, 0x2E, 0x3E, 0x2B, 0x3B, 0x2F, 0x3F
 };
 
-u16 EGA_DAC[] = { 0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x05, 0x15,
+u16 EGA_DAC[] = {
+	0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x05, 0x15,
 	0x20, 0x30, 0x24, 0x34, 0x21, 0x31, 0x25, 0x35,
 	0x08, 0x18, 0x0C, 0x1C, 0x09, 0x19, 0x0D, 0x1D,
 	0x28, 0x38, 0x2C, 0x3C, 0x29, 0x39, 0x2D, 0x3D,
@@ -357,7 +343,8 @@ u16 EGA_DAC[] = { 0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x05, 0x15,
 	0x2A, 0x3A, 0x2E, 0x3E, 0x2B, 0x3B, 0x2F, 0x3F
 };
 
-u16 VGA_DAC[] = { 0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x09, 0x15,
+u16 VGA_DAC[] = {
+	0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x09, 0x15,
 	0x2A, 0x3A, 0x2E, 0x3E, 0x2B, 0x3B, 0x2F, 0x3F,
 	0x00, 0x05, 0x08, 0x0B, 0x0E, 0x11, 0x14, 0x18,
 	0x1C, 0x20, 0x24, 0x28, 0x2D, 0x32, 0x38, 0x3F,
@@ -368,6 +355,55 @@ u16 VGA_DAC[] = { 0x00, 0x10, 0x04, 0x14, 0x01, 0x11, 0x09, 0x15,
 	0x08, 0x0C, 0x10, 0x08, 0x0A, 0x0C, 0x0E, 0x10,
 	0x0B, 0x0C, 0x0D, 0x0F, 0x10
 };
+
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+
+#define Monitor1Sense 0x20
+
+unsigned char SRegsInit[] = { 
+ 	0x03, 0x00, 0x03, 0x00, 0x02, 0xa1, 0x00, 0x13,
+	0x2f, 0x85, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+ 	0x00, 0x0f, 0x00, 0x00, 0x4f, 0x01, 0x00, 0x00,
+	0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x00, 0x00, 
+ 	0xa1, 0x76, 0xb2, 0xf6, 0x0d, 0x00, 0x00, 0x00,
+	0x37, 0x61, 0x80, 0x1b, 0xe1, 0x01, 0x55, 0x43, 
+ 	0x80, 0x00, 0x01, 0xff, 0x00, 0x00, 0x00, 0xff,
+	0x8e, 0x40, 0x00, 0x00, 0x08, 0x00, 0xff, 0xff
+};
+
+unsigned char SRegs[] = { 
+ 	0x03, 0x01, 0x0F, 0x00, 0x0E, 0xA1, 0x02, 0x13,
+	0x3F, 0x86, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00,
+ 	0x0B, 0x0F, 0x00, 0x00, 0x4F, 0x01, 0x00, 0x00,
+	0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x40, 0x00,
+ 	0xA1, 0xB6, 0xB2, 0xF6, 0x0D, 0x00, 0xF8, 0xF0,
+	0x37, 0x61, 0x80, 0x1B, 0xE1, 0x80, 0x55, 0x43,
+ 	0x80, 0x00, 0x11, 0xFF, 0x00, 0x00, 0x00, 0xFF,
+	0x8E, 0x40, 0x00, 0x00, 0x08, 0x00, 0xFF, 0xFF
+};
+
+unsigned char CRegs[] = { 
+	0x5f, 0x4f, 0x50, 0x82, 0x55, 0x81, 0x0b, 0x3e,
+	0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  
+	0xe9, 0x0b, 0xdf, 0x50, 0x40, 0xe7, 0x04, 0xa3,
+	0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff
+};	// clear CR11[7]
+
+unsigned char GRegs[] = { 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x05, 0x0f, 0xff, 0x00
+};
+
+unsigned char ARegs[] = { 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+unsigned char MReg = 0x6f;
+
+#endif
+
 
 /* HEAP stuff */
 
@@ -463,6 +499,7 @@ static void set_reg3(u16 port, u16 data);
 static void set_reg4(u16 port, unsigned long data);
 static u8 get_reg1(u16 port, u16 index);
 static u8 get_reg2(u16 port);
+//#ifndef CONFIG_FB_SIS_LINUXBIOS
 static u32 get_reg3(u16 port);
 static u16 get_modeID_length(unsigned long ROMAddr, u16 ModeNo);
 static int search_modeID(unsigned long ROMAddr, u16 ModeNo);
@@ -488,6 +525,7 @@ static void set_crt1_FIFO(unsigned long ROMAddr);
 static void set_crt1_FIFO2(unsigned long ROMAddr);
 static void set_crt1_mode_regs(unsigned long ROMAddr, u16 ModeNo);
 static void set_interlace(unsigned long ROMAddr, u16 ModeNo);
+//#endif
 static void write_DAC(u16 dl, u16 ah, u16 al, u16 dh);
 static void load_DAC(unsigned long ROMAddr);
 static void display_on(void);
@@ -781,6 +819,7 @@ static void sisfb_set_disp(int con, struct fb_var_screeninfo *var)
 		sw = &fbcon_cfb8;
 		break;
 #endif
+
 #ifdef FBCON_HAS_CFB16
 	case 15:
 	case 16:
@@ -788,18 +827,21 @@ static void sisfb_set_disp(int con, struct fb_var_screeninfo *var)
 		display->dispsw_data = fbcon_cmap.cfb16;
 		break;
 #endif
+
 #ifdef FBCON_HAS_CFB24
 	case 24:
 		sw = &fbcon_cfb24;
 		display->dispsw_data = fbcon_cmap.cfb24;
 		break;
 #endif
+
 #ifdef FBCON_HAS_CFB32
 	case 32:
 		sw = &fbcon_cfb32;
 		display->dispsw_data = fbcon_cmap.cfb32;
 		break;
 #endif
+
 	default:
 		sw = &fbcon_dummy;
 		return;
@@ -810,7 +852,6 @@ static void sisfb_set_disp(int con, struct fb_var_screeninfo *var)
 
 	display->scrollmode = SCROLL_YREDRAW;
 	sisfb_sw.bmove = fbcon_redraw_bmove;
-
 }
 
 /*
@@ -818,9 +859,8 @@ static void sisfb_set_disp(int con, struct fb_var_screeninfo *var)
  *    Return != 0 for invalid regno.
  */
 
-static int sis_getcolreg(unsigned regno, unsigned *red, unsigned *green,
-			 unsigned *blue, unsigned *transp,
-			 struct fb_info *fb_info)
+static int sis_getcolreg(unsigned regno, unsigned *red, unsigned *green, unsigned *blue,
+			 unsigned *transp, struct fb_info *fb_info)
 {
 	if (regno >= video_cmap_len)
 		return 1;
@@ -838,9 +878,8 @@ static int sis_getcolreg(unsigned regno, unsigned *red, unsigned *green,
  *    entries in the var structure). Return != 0 for invalid regno.
  */
 
-static int sis_setcolreg(unsigned regno, unsigned red, unsigned green,
-			 unsigned blue, unsigned transp,
-			 struct fb_info *fb_info)
+static int sis_setcolreg(unsigned regno, unsigned red, unsigned green, unsigned blue,
+			 unsigned transp, struct fb_info *fb_info)
 {
 
 	if (regno >= video_cmap_len)
@@ -949,14 +988,13 @@ static int do_set_var(struct fb_var_screeninfo *var, int isactive,
 		return 1;
 	}
 
-	if (search_refresh_rate(ivideo.refresh_rate) == 0) {	/* not supported rate */
+	if (search_refresh_rate(ivideo.refresh_rate) == 0) {
+		/* not supported rate */
 		rate_idx = sisbios_mode[mode_idx].rate_idx;
 		ivideo.refresh_rate = 60;
 	}
 
-
-	if (((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW)
-	    && isactive) {
+	if (((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) && isactive) {
 		pre_setmode();
 
 		if (SiSSetMode(mode_no)) {
@@ -1020,7 +1058,8 @@ static int sisfb_heap_init(void)
 	struct OH *poh;
 	u8 jTemp, tq_state;
 
-	if(ivideo.video_size > 0x800000)   /* video ram is large than 8M */
+	if (ivideo.video_size > 0x800000)
+		/* video ram is large than 8M */
 		heap_start = (unsigned long) ivideo.video_vbase + RESERVED_MEM_SIZE_8M;
 	else
 		heap_start = (unsigned long) ivideo.video_vbase + RESERVED_MEM_SIZE_4M;
@@ -1401,22 +1440,28 @@ static u32 get_reg3(u16 port)
 
 static u16 get_modeID_length(unsigned long ROMAddr, u16 ModeNo)
 {
-#if 0
 	unsigned char ModeID;
 	u16 modeidlength;
 	u16 usModeIDOffset;
+	unsigned short PreviousWord,CurrentWord;
 
-	modeidlength = 0;
-	usModeIDOffset = *((u16 *) (ROMAddr + 0x20A));
-	ModeID = *((unsigned char *) (ROMAddr + usModeIDOffset));
-	while (ModeID != 0x2E) {
-		modeidlength++;
-		usModeIDOffset = usModeIDOffset + 1;
-		ModeID = *((unsigned char *) (ROMAddr + usModeIDOffset));
-	}
-	return (modeidlength);
-#endif
 	return(10);
+   
+	modeidlength=0;
+   	usModeIDOffset=*((unsigned short *)(ROMAddr+0x20A));      // Get EModeIDTable
+
+   	CurrentWord=*((unsigned short *)(ROMAddr+usModeIDOffset));     // Offset 0x20A
+   	PreviousWord=*((unsigned short *)(ROMAddr+usModeIDOffset-2));     // Offset 0x20A
+   	while((CurrentWord!=0x2E07)||(PreviousWord!=0x0801)) 
+	{
+      	modeidlength++;
+      	usModeIDOffset=usModeIDOffset+1;               // 10 <= ExtStructSize
+      	CurrentWord=*((unsigned short *)(ROMAddr+usModeIDOffset));
+      	PreviousWord=*((unsigned short *)(ROMAddr+usModeIDOffset-2)); 
+   	}
+   	modeidlength++;
+
+   	return(modeidlength);
 }
 
 static int search_modeID(unsigned long ROMAddr, u16 ModeNo)
@@ -1470,8 +1515,7 @@ static void get_mode_ptr(unsigned long ROMAddr, u16 ModeNo)
 	StandTable = *((u16 *) (ROMAddr + 0x202));
 
 	if (ModeNo <= 13)
-		index =
-		    *((unsigned char *) (ROMAddr + ModeIDOffset + 0x03));
+		index = *((unsigned char *) (ROMAddr + ModeIDOffset + 0x03));
 	else {
 		if (ModeType <= 0x02)
 			index = 0x1B;
@@ -1488,26 +1532,40 @@ static void set_seq_regs(unsigned long ROMAddr)
 	unsigned char SRdata;
 	u16 i;
 
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	SRdata = SRegs[0x01];
+#else
 	set_reg1(P3c4, 0x00, 0x03);
 	StandTable = StandTable + 0x05;
 	SRdata = *((unsigned char *) (ROMAddr + StandTable));
+#endif
+
 	SRdata = SRdata | 0x20;
 	set_reg1(P3c4, 0x01, SRdata);
 
+
 	for (i = 02; i <= 04; i++) {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+		SRdata = SRegs[i];
+#else
 		StandTable++;
 		SRdata = *((unsigned char *) (ROMAddr + StandTable));
+#endif
 		set_reg1(P3c4, i, SRdata);
 	}
 }
 
 static void set_misc_regs(unsigned long ROMAddr)
 {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	set_reg3(P3c2, 0x23);
+#else
 	unsigned char Miscdata;
 
 	StandTable++;
 	Miscdata = *((unsigned char *) (ROMAddr + StandTable));
 	set_reg3(P3c2, Miscdata);
+#endif
 }
 
 static void set_crtc_regs(unsigned long ROMAddr)
@@ -1516,13 +1574,19 @@ static void set_crtc_regs(unsigned long ROMAddr)
 	u16 i;
 
 	CRTCdata = (unsigned char) get_reg1(P3d4, 0x11);
+#ifndef CONFIG_FB_SIS_LINUXBIOS
 	CRTCdata = CRTCdata & 0x7f;
+#endif
 	set_reg1(P3d4, 0x11, CRTCdata);
 
 	for (i = 0; i <= 0x18; i++) {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+		set_reg1(P3d4, i, CRegs[i]);
+#else
 		StandTable++;
 		CRTCdata = *((unsigned char *) (ROMAddr + StandTable));
 		set_reg1(P3d4, i, CRTCdata);
+#endif
 	}
 }
 
@@ -1532,17 +1596,23 @@ static void set_attregs(unsigned long ROMAddr)
 	u16 i;
 
 	for (i = 0; i <= 0x13; i++) {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+		get_reg2(P3da);
+		set_reg3(P3c0, i);
+		set_reg3(P3c0, ARegs[i]);
+#else
 		StandTable++;
 		ARdata = *((unsigned char *) (ROMAddr + StandTable));
 
 		get_reg2(P3da);
 		set_reg3(P3c0, i);
 		set_reg3(P3c0, ARdata);
+#endif
 	}
+
 	get_reg2(P3da);
 	set_reg3(P3c0, 0x14);
 	set_reg3(P3c0, 0x00);
-
 	get_reg2(P3da);
 	set_reg3(P3c0, 0x20);
 }
@@ -1553,15 +1623,22 @@ static void set_grc_regs(unsigned long ROMAddr)
 	u16 i;
 
 	for (i = 0; i <= 0x08; i++) {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+		set_reg1(P3ce, i, GRegs[i]);
+#else
 		StandTable++;
 		GRdata = *((unsigned char *) (ROMAddr + StandTable));
 		set_reg1(P3ce, i, GRdata);
+#endif
 	}
+
+#ifndef CONFIG_FB_SIS_LINUXBIOS
 	if (ModeType > ModeVGA) {
 		GRdata = (unsigned char) get_reg1(P3ce, 0x05);
 		GRdata = GRdata & 0xBF;
 		set_reg1(P3ce, 0x05, GRdata);
 	}
+#endif
 }
 
 static void ClearExt1Regs(void)
@@ -1637,6 +1714,9 @@ static int get_rate_ptr(unsigned long ROMAddr, u16 ModeNo)
 
 static void set_sync(unsigned long ROMAddr)
 {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	set_reg3(P3c2, MReg);
+#else
 	u16 sync;
 	u16 temp;
 
@@ -1645,10 +1725,33 @@ static void set_sync(unsigned long ROMAddr)
 	temp = 0x2F;
 	temp = temp | sync;
 	set_reg3(P3c2, temp);
+#endif
 }
 
 static void set_crt1_crtc(unsigned long ROMAddr)
 {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	unsigned char data;
+	u16 i;
+
+	data = (unsigned char) get_reg1(P3d4, 0x11);
+	data = data & 0x7F;
+	set_reg1(P3d4, 0x11, data);
+
+	for (i = 0; i <= 0x07; i++)
+		set_reg1(P3d4, i, CRegs[i]);
+	for (i = 0x10; i <= 0x12; i++)
+		set_reg1(P3d4, i, CRegs[i]);
+	for (i = 0x15; i <= 0x16; i++)
+		set_reg1(P3d4, i, CRegs[i]);
+	for (i = 0x0A; i <= 0x0C; i++)
+		set_reg1(P3c4, i, SRegs[i]);
+
+	data = SRegs[0x0E] & 0xE0;
+	set_reg1(P3c4, 0x0E, data);
+
+	set_reg1(P3d4, 0x09, CRegs[0x09]);
+#else
 	unsigned char index;
 	unsigned char data;
 	u16 i;
@@ -1707,10 +1810,16 @@ static void set_crt1_crtc(unsigned long ROMAddr)
 
 	if (ModeType > 0x03)
 		set_reg1(P3d4, 0x14, 0x4F);
+#endif
 }
+
 
 static void set_crt1_offset(unsigned long ROMAddr)
 {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	set_reg1(P3c4, 0x0E, SRegs[0x0E]);
+	set_reg1(P3c4, 0x10, SRegs[0x10]);
+#else
 	u16 temp, ah, al;
 	u16 temp2, i;
 	u16 DisplayUnit;
@@ -1773,6 +1882,7 @@ static void set_crt1_offset(unsigned long ROMAddr)
 	else
 		ah = ah + 2;
 	set_reg1(P3c4, 0x10, ah);
+#endif
 }
 
 static u16 get_vclk_len(unsigned long ROMAddr)
@@ -1792,31 +1902,44 @@ static u16 get_vclk_len(unsigned long ROMAddr)
 static void set_crt1_vclk(unsigned long ROMAddr)
 {
 	u16 i;
+
+#ifndef CONFIG_FB_SIS_LINUXBIOS
 	unsigned char index, data;
 
 	index = *((unsigned char *) (ROMAddr + REFIndex + 0x03));
+	index &= 0x03F;
 	CRT1VCLKLen = get_vclk_len(ROMAddr);
 	data = index * CRT1VCLKLen;
 	VCLKData = *((u16 *) (ROMAddr + 0x208));
 	VCLKData = VCLKData + data;
+#endif
 
 	set_reg1(P3c4, 0x31, 0);
 
 	for (i = 0x2B; i <= 0x2C; i++) {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+		set_reg1(P3c4, i, SRegs[i]);
+#else
 		data = *((unsigned char *) (ROMAddr + VCLKData));
 		set_reg1(P3c4, i, data);
 		VCLKData++;
+#endif
 	}
 	set_reg1(P3c4, 0x2D, 0x80);
 }
-
 static void set_vclk_state(unsigned long ROMAddr, u16 ModeNo)
 {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	set_reg1(P3c4, 0x32, SRegs[0x32]);
+	set_reg1(P3c4, 0x07, SRegs[0x07]);
+#else
+
 	u16 data, data2;
 	u16 VCLK;
 	unsigned char index;
 
 	index = *((unsigned char *) (ROMAddr + REFIndex + 0x03));
+	index &= 0x3F;
 	CRT1VCLKLen = get_vclk_len(ROMAddr);
 	data = index * CRT1VCLKLen;
 	VCLKData = *((u16 *) (ROMAddr + 0x208));
@@ -1849,6 +1972,7 @@ static void set_vclk_state(unsigned long ROMAddr, u16 ModeNo)
 	data = data & 0xFC;
 	data = data | data2;
 	set_reg1(P3c4, 0x07, data);
+#endif
 }
 
 static u16 calc_delay2(unsigned long ROMAddr, u16 key)
@@ -1926,6 +2050,7 @@ static void set_crt1_FIFO(unsigned long ROMAddr)
 	u16 ah, bl, A, B;
 
 	index = *((unsigned char *) (ROMAddr + REFIndex + 0x03));
+	index &= 0x3F;
 	CRT1VCLKLen = get_vclk_len(ROMAddr);
 	data = index * CRT1VCLKLen;
 	VCLKData = *((u16 *) (ROMAddr + 0x208));
@@ -2017,14 +2142,26 @@ static void set_crt1_FIFO(unsigned long ROMAddr)
 	set_reg1(P3c4, 0x09, data2);
 }
 
-
 static void set_crt1_FIFO2(unsigned long ROMAddr)
 {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	set_reg1(P3c4, 0x15, SRegs[0x15]);
+
+	set_reg4(0xcf8, 0x80000050);
+	set_reg4(0xcfc, 0xc5041e04);
+
+	set_reg1(P3c4, 0x08, SRegs[0x08]);
+	set_reg1(P3c4, 0x0F, SRegs[0x0F]);
+	set_reg1(P3c4, 0x3b, 0x00);
+	set_reg1(P3c4, 0x09, SRegs[0x09]);
+#else
+
 	u16 index, data, VCLK, data2, MCLKOffset, MCLK, colorth = 1;
 	u16 ah, bl, B;
 	unsigned long eax;
 
 	index = *((unsigned char *) (ROMAddr + REFIndex + 0x03));
+	index &= 0x3F;
 	CRT1VCLKLen = get_vclk_len(ROMAddr);
 	data = index * CRT1VCLKLen;
 	VCLKData = *((u16 *) (ROMAddr + 0x208));
@@ -2115,10 +2252,17 @@ static void set_crt1_FIFO2(unsigned long ROMAddr)
 	data2 = data2 & 0xF0;
 	data2 = data2 | data;
 	set_reg1(P3c4, 0x09, data2);
+#endif
 }
 
 static void set_crt1_mode_regs(unsigned long ROMAddr, u16 ModeNo)
 {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	set_reg1(P3c4, 0x06, SRegs[0x06]);
+	set_reg1(P3c4, 0x01, SRegs[0x01]);
+	set_reg1(P3c4, 0x0F, SRegs[0x0F]);
+	set_reg1(P3c4, 0x21, SRegs[0x21]);
+#else
 
 	u16 data, data2, data3;
 
@@ -2166,11 +2310,16 @@ static void set_crt1_mode_regs(unsigned long ROMAddr, u16 ModeNo)
 	else
 		data = data | 0xA0;
 	set_reg1(P3c4, 0x21, data);
+#endif
 }
-
 
 static void set_interlace(unsigned long ROMAddr, u16 ModeNo)
 {
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	set_reg1(P3d4, 0x19, CRegs[0x19]);
+	set_reg1(P3d4, 0x1A, CRegs[0x1A]);
+#else
+
 	unsigned long Temp;
 	u16 data, Temp2;
 
@@ -2201,6 +2350,7 @@ static void set_interlace(unsigned long ROMAddr, u16 ModeNo)
 	if (ModeNo == 0x37)
 		Temp2 = Temp2 | 0x40;
 	set_reg1(P3d4, 0x1A, (u16) Temp2);
+#endif
 }
 
 static void write_DAC(u16 dl, u16 ah, u16 al, u16 dh)
@@ -2239,6 +2389,7 @@ static void load_DAC(unsigned long ROMAddr)
 	u16 al, ah, dh;
 	u16 *table = VGA_DAC;
 
+#ifndef CONFIG_FB_SIS_LINUXBIOS
 	data = *((u16 *) (ROMAddr + ModeIDOffset + 0x01));
 	data = data & DACInfoFlag;
 	time = 64;
@@ -2252,6 +2403,11 @@ static void load_DAC(unsigned long ROMAddr)
 		time = 256;
 		table = VGA_DAC;
 	}
+#else
+	time = 256;
+	table = VGA_DAC;
+#endif
+
 	if (time == 256)
 		j = 16;
 	else
@@ -2316,12 +2472,170 @@ static void display_on(void)
 	set_reg1(P3c4, 0x01, data);
 }
 
-static int SiSSetMode(u16 ModeNo)
+void SetMemoryClock(void)
+{
+	unsigned char i;
+	int idx;
+
+	u8 MCLK[] = {
+		0x5A, 0x64, 0x80, 0x66, 0x00,	// SDRAM
+		0xB3, 0x45, 0x80, 0x83, 0x00,	// SGRAM
+		0x37, 0x61, 0x80, 0x00, 0x01,	// ESDRAM
+		0x37, 0x22, 0x80, 0x33, 0x01,
+		0x37, 0x61, 0x80, 0x00, 0x01,
+		0x37, 0x61, 0x80, 0x00, 0x01,
+		0x37, 0x61, 0x80, 0x00, 0x01,
+		0x37, 0x61, 0x80, 0x00, 0x01
+	};
+
+	u8 ECLK[] = {
+		0x54, 0x43, 0x80, 0x00, 0x01,
+		0x53, 0x43, 0x80, 0x00, 0x01,
+		0x55, 0x43, 0x80, 0x00, 0x01,
+		0x52, 0x43, 0x80, 0x00, 0x01,
+		0x3f, 0x42, 0x80, 0x00, 0x01,
+		0x54, 0x43, 0x80, 0x00, 0x01,
+		0x54, 0x43, 0x80, 0x00, 0x01,
+		0x54, 0x43, 0x80, 0x00, 0x01
+	};
+
+	idx = RAMType * 5;
+
+	for (i = 0x28; i <= 0x2A; i++) {	// Set MCLK
+		set_reg1(P3c4, i, MCLK[idx]);
+		idx++;
+	}
+
+	idx = RAMType * 5;
+	for (i = 0x2E; i <= 0x30; i++) {	// Set ECLK
+		set_reg1(P3c4, i, ECLK[idx]);
+		idx++;
+	}
+}
+
+void ClearDAC(u16 port)
+{
+	int i;
+
+	set_reg3(P3c8, 0x00);
+	for (i = 0; i < (256 * 3); i++)
+		set_reg3(P3c9, 0x00);
+}
+
+void ClearALLBuffer(void)
+{
+	unsigned long AdapterMemorySize;
+
+	AdapterMemorySize = get_reg1(P3c4, 0x14);
+	AdapterMemorySize = AdapterMemorySize & 0x3F;
+	AdapterMemorySize++;
+
+	memset((char *) ivideo.video_vbase, 0, AdapterMemorySize);
+}
+
+void LongWait(void)
 {
 	unsigned long temp;
-	u16 cr30flag, cr31flag;
-	unsigned long ROMAddr = rom_vbase;
+
+	for (temp = 1; temp > 0;) {
+		temp = get_reg2(P3da);
+		temp = temp & 0x08;
+	}
+	for (; temp == 0;) {
+		temp = get_reg2(P3da);
+		temp = temp & 0x08;
+	}
+}
+
+void WaitDisplay(void)
+{
+	unsigned short temp;
+
+	for (temp = 0; temp == 0;) {
+		temp = get_reg2(P3da);
+		temp = temp & 0x01;
+	}
+	for (; temp == 1;) {
+		temp = get_reg2(P3da);
+		temp = temp & 0x01;
+	}
+}
+
+int TestMonitorType(unsigned short d1, unsigned short d2, unsigned short d3)
+{
+	unsigned short temp;
+	set_reg3(P3c6, 0xFF);
+	set_reg3(P3c8, 0x00);
+	set_reg3(P3c9, d1);
+	set_reg3(P3c9, d2);
+	set_reg3(P3c9, d3);
+	WaitDisplay();		//wait horizontal retrace
+	temp = get_reg2(P3c2);
+	if (temp & 0x10)
+		return 1;
+	else
+		return 0;
+}
+
+void SetRegANDOR(unsigned short Port, unsigned short Index,
+		 unsigned short DataAND, unsigned short DataOR)
+{
+	unsigned short temp1;
+	temp1 = get_reg1(Port, Index);	//part1port index 02
+	temp1 = (temp1 & (DataAND)) | DataOR;
+	set_reg1(Port, Index, temp1);
+}
+
+
+int DetectMonitor(void)
+{
+	unsigned short flag1;
+	unsigned short DAC_TEST_PARMS[3] = { 0x0F, 0x0F, 0x0F };
+	unsigned short DAC_CLR_PARMS[3] = { 0x00, 0x00, 0x00 };
+
+	flag1 = get_reg1(P3c4, 0x38);	//call BridgeisOn
+	if ((flag1 & 0x20)) {
+		set_reg1(P3d4, 0x30, 0x41);
+	}
+
+	SiSSetMode(0x2E);	//set mode to 0x2E instead of 0x3
+
+	ClearDAC(P3c8);
+	ClearALLBuffer();
+
+	LongWait();
+	LongWait();
+
+	flag1 = TestMonitorType(DAC_TEST_PARMS[0], DAC_TEST_PARMS[1],
+				DAC_TEST_PARMS[2]);
+	if (flag1 == 0) {
+		flag1 = TestMonitorType(DAC_TEST_PARMS[0], DAC_TEST_PARMS[1],
+					DAC_TEST_PARMS[2]);
+	}
+
+	if (flag1 == 1) {
+		SetRegANDOR(P3d4, 0x32, ~Monitor1Sense, Monitor1Sense);
+	} else {
+		SetRegANDOR(P3d4, 0x32, ~Monitor1Sense, 0x0);
+	}
+
+	TestMonitorType(DAC_CLR_PARMS[0], DAC_CLR_PARMS[1],
+			DAC_CLR_PARMS[2]);
+
+	set_reg1(P3d4, 0x34, 0x4A);
+
+	return 1;
+}
+
+int SiSInit300(void)
+{
+	//unsigned long ROMAddr = rom_vbase;
 	u16 BaseAddr = (u16) ivideo.vga_base;
+	unsigned char i, temp, AGP;
+	unsigned long j, k, ulTemp;
+	unsigned char SR11, SR19, SR1A, SR21, SR22;
+	unsigned char SR14;
+	unsigned long Temp;
 
 	P3c4 = BaseAddr + 0x14;
 	P3d4 = BaseAddr + 0x24;
@@ -2335,6 +2649,176 @@ static int SiSSetMode(u16 ModeNo)
 	P3c9 = BaseAddr + 0x19;
 	P3da = BaseAddr + 0x2A;
 
+	set_reg1(P3c4, 0x05, 0x86);	// 1.Openkey
+
+	SR14 = (unsigned char) get_reg1(P3c4, 0x14);
+	SR19 = (unsigned char) get_reg1(P3c4, 0x19);
+	SR1A = (unsigned char) get_reg1(P3c4, 0x1A);
+
+	for (i = 0x06; i < 0x20; i++)
+		set_reg1(P3c4, i, 0);	// 2.Reset Extended register
+	for (i = 0x21; i <= 0x27; i++)
+		set_reg1(P3c4, i, 0);	//   Reset Extended register
+	for (i = 0x31; i <= 0x3D; i++)
+		set_reg1(P3c4, i, 0);
+	for (i = 0x30; i <= 0x37; i++)
+		set_reg1(P3d4, i, 0);
+
+#if 0
+	if ((ivideo.chip_id == SIS_Trojan) || (ivideo.chip_id == SIS_Spartan))
+		// 3.Set Define Extended register
+		temp = (unsigned char) SR1A;
+	else {
+		temp = *((unsigned char *) (ROMAddr + SoftSettingAddr));
+		if ((temp & SoftDRAMType) == 0) {
+			// 3.Set Define Extended register
+			temp = (unsigned char) get_reg1(P3c4, 0x3A);
+		}
+	}
+#endif
+
+	// 3.Set Define Extended register
+	temp = (unsigned char) SR1A;
+
+	RAMType = temp & 0x07;
+	SetMemoryClock();
+	for (k = 0; k < 5; k++)
+		for (j = 0; j < 0xffff; j++)
+			ulTemp = (unsigned long) get_reg1(P3c4, 0x05);
+
+	Temp = (unsigned long) get_reg1(P3c4, 0x3C);
+	Temp = Temp | 0x01;
+	set_reg1(P3c4, 0x3C, (unsigned short) Temp);
+	for (k = 0; k < 5; k++)
+		for (j = 0; j < 0xffff; j++)
+			Temp = (unsigned long) get_reg1(P3c4, 0x05);
+
+	Temp = (unsigned long) get_reg1(P3c4, 0x3C);
+	Temp = Temp & 0xFE;
+	set_reg1(P3c4, 0x3C, (unsigned short) Temp);
+	for (k = 0; k < 5; k++)
+		for (j = 0; j < 0xffff; j++)
+			Temp = (unsigned long) get_reg1(P3c4, 0x05);
+
+	//SR07=*((unsigned char *)(ROMAddr+0xA4));  // todo
+	set_reg1(P3c4, 0x07, SRegsInit[0x07]);
+#if 0
+	if (HwDeviceExtension->jChipID == SIS_Glamour)
+		for (i = 0x15; i <= 0x1C; i++) {
+			temp = *((unsigned char *) (ROMAddr + 0xA5 + ((i - 0x15) * 8) + RAMType));
+			set_reg1(P3c4, i, temp);
+		}
+#endif
+
+	//SR1F=*((unsigned char *)(ROMAddr+0xE5));  
+	set_reg1(P3c4, 0x1F, SRegsInit[0x1F]);
+
+	// Get AGP
+	AGP = 1;
+	temp = (unsigned char) get_reg1(P3c4, 0x3A);
+	temp = temp & 0x30;
+	if (temp == 0x30)
+		// PCI
+		AGP = 0;
+
+	//SR21=*((unsigned char *)(ROMAddr+0xE6));
+	SR21 = SRegsInit[0x21];
+	if (AGP == 0)
+		SR21 = SR21 & 0xEF;	// PCI
+	set_reg1(P3c4, 0x21, SR21);
+
+	//SR22=*((unsigned char *)(ROMAddr+0xE7));
+	SR22 = SRegsInit[0x22];
+	if (AGP == 1)
+		SR22 = SR22 & 0x20;	// AGP
+	set_reg1(P3c4, 0x22, SR22);
+
+	//SR23=*((unsigned char *)(ROMAddr+0xE8));
+	set_reg1(P3c4, 0x23, SRegsInit[0x23]);
+
+	//SR24=*((unsigned char *)(ROMAddr+0xE9));
+	set_reg1(P3c4, 0x24, SRegsInit[0x24]);
+
+	//SR25=*((unsigned char *)(ROMAddr+0xEA));
+	set_reg1(P3c4, 0x25, SRegsInit[0x25]);
+
+	//SR32=*((unsigned char *)(ROMAddr+0xEB));
+	set_reg1(P3c4, 0x32, SRegsInit[0x32]);
+
+	SR11 = 0x0F;
+	set_reg1(P3c4, 0x11, SR11);
+
+#if 0
+	if (IF_DEF_LVDS == 1) {
+		//LVDS
+		temp = ExtChipLVDS;
+	} else if (IF_DEF_TRUMPION == 1) {
+		//Trumpion
+		temp = ExtChipTrumpion;
+	} else {
+		//301
+		temp = ExtChip301;
+	}
+#endif
+
+	// 301;
+	temp = 0x02;
+	set_reg1(P3d4, 0x37, temp);
+
+#if 0
+	//09/07/99 modify by domao for 630/540 MM
+	if (HwDeviceExtension->jChipID == SIS_Glamour) {
+		//For SiS 300 Chip
+		SetDRAMSize(HwDeviceExtension);
+		SetDRAMSize(HwDeviceExtension);
+	} else {
+		//For SiS 630/540 Chip
+		//Restore SR14, SR19 and SR1A
+		set_reg1(P3c4, 0x14, SR14);
+		set_reg1(P3c4, 0x19, SR19);
+		set_reg1(P3c4, 0x1A, SR1A);
+	}
+#endif
+
+	set_reg1(P3c4, 0x14, SR14);
+	set_reg1(P3c4, 0x19, SR19);
+	set_reg1(P3c4, 0x1A, SR1A);
+	set_reg3(P3c6, 0xff);
+	ClearDAC(P3c8);
+	DetectMonitor();
+
+#if 0
+	//sense CRT2
+	GetSenseStatus(HwDeviceExtension, BaseAddr, ROMAddr);      
+#endif
+
+	return (TRUE);
+}
+
+static int SiSSetMode(u16 ModeNo)
+{
+	//#ifndef CONFIG_FB_SIS_LINUXBIOS
+	unsigned long temp;
+	//#endif
+
+	u16 cr30flag, cr31flag;
+	unsigned long ROMAddr = rom_vbase;
+	u16 BaseAddr = (u16) ivideo.vga_base;
+	u_short i;
+
+	P3c4 = BaseAddr + 0x14;
+	P3d4 = BaseAddr + 0x24;
+	P3c0 = BaseAddr + 0x10;
+	P3ce = BaseAddr + 0x1e;
+	P3c2 = BaseAddr + 0x12;
+	P3ca = BaseAddr + 0x1a;
+	P3c6 = BaseAddr + 0x16;
+	P3c7 = BaseAddr + 0x17;
+	P3c8 = BaseAddr + 0x18;
+	P3c9 = BaseAddr + 0x19;
+	P3da = BaseAddr + 0x2A;
+
+#ifndef CONFIG_FB_SIS_LINUXBIOS
 	temp = search_modeID(ROMAddr, ModeNo);
 
 	if (temp == 0)
@@ -2343,39 +2827,186 @@ static int SiSSetMode(u16 ModeNo)
 	temp = check_memory_size(ROMAddr);
 	if (temp == 0)
 		return (0);
+#endif
 
+#if 1
 	cr30flag = (unsigned char) get_reg1(P3d4, 0x30);
 	if (((cr30flag & 0x01) == 1) || ((cr30flag & 0x02) == 0)) {
+#ifndef CONFIG_FB_SIS_LINUXBIOS
 		get_mode_ptr(ROMAddr, ModeNo);
+#endif
 		set_seq_regs(ROMAddr);
 		set_misc_regs(ROMAddr);
 		set_crtc_regs(ROMAddr);
 		set_attregs(ROMAddr);
 		set_grc_regs(ROMAddr);
 		ClearExt1Regs();
+
+#ifndef CONFIG_FB_SIS_LINUXBIOS
 		temp = get_rate_ptr(ROMAddr, ModeNo);
 		if (temp) {
+#endif
 			set_sync(ROMAddr);
 			set_crt1_crtc(ROMAddr);
 			set_crt1_offset(ROMAddr);
 			set_crt1_vclk(ROMAddr);
 			set_vclk_state(ROMAddr, ModeNo);
-			if ((ivideo.chip_id == SIS_Trojan)
-			    || (ivideo.chip_id == SIS_Spartan))
+
+			if ((ivideo.chip_id == SIS_Trojan) || (ivideo.chip_id == SIS_Spartan))
 				set_crt1_FIFO2(ROMAddr);
 			else	/* SiS 300 */
 				set_crt1_FIFO(ROMAddr);
+#ifndef CONFIG_FB_SIS_LINUXBIOS
 		}
+#endif
 		set_crt1_mode_regs(ROMAddr, ModeNo);
-		if ((ivideo.chip_id == SIS_Trojan)
-		    || (ivideo.chip_id ==
-			SIS_Spartan)) set_interlace(ROMAddr, ModeNo);
+		if ((ivideo.chip_id == SIS_Trojan) || (ivideo.chip_id == SIS_Spartan))
+			set_interlace(ROMAddr, ModeNo);
 		load_DAC(ROMAddr);
 
 		/* clear OnScreen */
 		memset((char *) ivideo.video_vbase, 0,
 		       video_linelength * ivideo.video_height);
 	}
+#else
+	cr30flag = (unsigned char) get_reg1(P3d4, 0x30);
+	if (((cr30flag & 0x01) == 1) || ((cr30flag & 0x02) == 0)) {
+		//set_seq_regs(ROMAddr);
+		{
+			unsigned char SRdata;
+			SRdata = SRegs[0x01] | 0x20;
+			set_reg1(P3c4, 0x01, SRdata);
+
+			for (i = 02; i <= 04; i++)
+				set_reg1(P3c4, i, SRegs[i]);
+		}
+
+		//set_misc_regs(ROMAddr);
+		{
+			set_reg3(P3c2, 0x23);
+		}
+
+		//set_crtc_regs(ROMAddr);
+		{
+			unsigned char CRTCdata;
+
+			CRTCdata = (unsigned char) get_reg1(P3d4, 0x11);
+			set_reg1(P3d4, 0x11, CRTCdata);
+
+			for (i = 0; i <= 0x18; i++)
+				set_reg1(P3d4, i, CRegs[i]);
+		}
+
+		//set_attregs(ROMAddr);
+		{
+			for (i = 0; i <= 0x13; i++) {
+				get_reg2(P3da);
+				set_reg3(P3c0, i);
+				set_reg3(P3c0, ARegs[i]);
+			}
+			get_reg2(P3da);
+			set_reg3(P3c0, 0x14);
+			set_reg3(P3c0, 0x00);
+			get_reg2(P3da);
+			set_reg3(P3c0, 0x20);
+		}
+
+		//set_grc_regs(ROMAddr);
+		{
+			for (i = 0; i <= 0x08; i++)
+				set_reg1(P3ce, i, GRegs[i]);
+		}
+
+		//ClearExt1Regs();
+		{
+			for (i = 0x0A; i <= 0x0E; i++)
+				set_reg1(P3c4, i, 0x00);
+		}
+
+		//set_sync(ROMAddr);
+		{
+			set_reg3(P3c2, MReg);
+		}
+
+		//set_crt1_crtc(ROMAddr);
+		{
+			unsigned char data;
+
+			data = (unsigned char) get_reg1(P3d4, 0x11);
+			data = data & 0x7F;
+			set_reg1(P3d4, 0x11, data);
+
+			for (i = 0; i <= 0x07; i++)
+				set_reg1(P3d4, i, CRegs[i]);
+			for (i = 0x10; i <= 0x12; i++)
+				set_reg1(P3d4, i, CRegs[i]);
+			for (i = 0x15; i <= 0x16; i++)
+				set_reg1(P3d4, i, CRegs[i]);
+			for (i = 0x0A; i <= 0x0C; i++)
+				set_reg1(P3c4, i, SRegs[i]);
+
+			data = SRegs[0x0E] & 0xE0;
+			set_reg1(P3c4, 0x0E, data);
+
+			set_reg1(P3d4, 0x09, CRegs[0x09]);
+
+		}
+
+		//set_crt1_offset(ROMAddr);
+		{
+			set_reg1(P3c4, 0x0E, SRegs[0x0E]);
+			set_reg1(P3c4, 0x10, SRegs[0x10]);
+		}
+
+		//set_crt1_vclk(ROMAddr);
+		{
+			set_reg1(P3c4, 0x31, 0);
+
+			for (i = 0x2B; i <= 0x2C; i++)
+				set_reg1(P3c4, i, SRegs[i]);
+			set_reg1(P3c4, 0x2D, 0x80);
+		}
+
+		//set_vclk_state(ROMAddr, ModeNo);
+		{
+			set_reg1(P3c4, 0x32, SRegs[0x32]);
+			set_reg1(P3c4, 0x07, SRegs[0x07]);
+		}
+
+		if ((ivideo.chip_id == SIS_Trojan)
+		    || (ivideo.chip_id == SIS_Spartan)) {
+			//set_crt1_FIFO2(ROMAddr);
+			set_reg1(P3c4, 0x15, SRegs[0x15]);
+
+			set_reg4(0xcf8, 0x80000050);
+			set_reg4(0xcfc, 0xc5041e04);
+
+			set_reg1(P3c4, 0x08, SRegs[0x08]);
+			set_reg1(P3c4, 0x0F, SRegs[0x0F]);
+			set_reg1(P3c4, 0x3b, 0x00);
+			set_reg1(P3c4, 0x09, SRegs[0x09]);
+		}
+
+		//set_crt1_mode_regs(ROMAddr, ModeNo);
+		{
+			set_reg1(P3c4, 0x06, SRegs[0x06]);
+			set_reg1(P3c4, 0x01, SRegs[0x01]);
+			set_reg1(P3c4, 0x0F, SRegs[0x0F]);
+			set_reg1(P3c4, 0x21, SRegs[0x21]);
+		}
+
+		if ((ivideo.chip_id == SIS_Trojan) || (ivideo.chip_id == SIS_Spartan)) {
+			//set_interlace(ROMAddr, ModeNo);
+			set_reg1(P3d4, 0x19, CRegs[0x19]);
+			set_reg1(P3d4, 0x1A, CRegs[0x1A]);
+		}
+		load_DAC(ROMAddr);
+
+		/* clear OnScreen */
+		memset((char *) ivideo.video_vbase, 0,
+		       video_linelength * ivideo.video_height);
+	}
+#endif
 	cr31flag = (unsigned char) get_reg1(P3d4, 0x31);
 
 	display_on();
@@ -2508,8 +3139,7 @@ static int sisfb_get_var(struct fb_var_screeninfo *var, int con,
 	DPRINTK("sisfb: sisfb_get_var:[%d]\n", con);
 
 	if (con == -1)
-		memcpy(var, &default_var,
-		       sizeof(struct fb_var_screeninfo));
+		memcpy(var, &default_var, sizeof(struct fb_var_screeninfo));
 	else
 		*var = fb_display[con].var;
 	return 0;
@@ -2570,8 +3200,8 @@ static int sisfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 	else if (fb_display[con].cmap.len)	/* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
-		fb_copy_cmap(fb_default_cmap(video_cmap_len),
-			     cmap, kspc ? 0 : 2);
+		fb_copy_cmap(fb_default_cmap(video_cmap_len), cmap, kspc ? 0 : 2);
+
 	return 0;
 }
 
@@ -2602,12 +3232,12 @@ static int sisfb_ioctl(struct inode *inode, struct file *file,
 {
 	switch (cmd) {
 	case FBIO_ALLOC:
-		if(!capable(CAP_SYS_RAWIO))
+		if (!capable(CAP_SYS_RAWIO))
 			return -EPERM;
 		sis_malloc((struct sis_memreq *) arg);
 		break;
 	case FBIO_FREE:
-		if(!capable(CAP_SYS_RAWIO))
+		if (!capable(CAP_SYS_RAWIO))
 			return -EPERM;
 		sis_free(*(unsigned long *) arg);
 		break;
@@ -2668,9 +3298,9 @@ static int sisfb_mmap(struct fb_info *info, struct file *file,
 	if (boot_cpu_data.x86 > 3)
 		pgprot_val(vma->vm_page_prot) |= _PAGE_PCD;
 #endif
-	if (io_remap_page_range(vma->vm_start, off,
-				vma->vm_end - vma->vm_start,
-				vma->vm_page_prot)) return -EAGAIN;
+	if (io_remap_page_range(vma->vm_start, off, vma->vm_end - vma->vm_start,
+				vma->vm_page_prot))
+		return -EAGAIN;
 	return 0;
 }
 
@@ -2695,7 +3325,7 @@ int sisfb_setup(char *options)
 	if (!options || !*options)
 		return 0;
 
-	for (this_opt = strtok(options, ","); this_opt;
+	for (this_opt = strtok(options, ","); this_opt; 
 	     this_opt = strtok(NULL, ",")) {
 		if (!*this_opt)
 			continue;
@@ -2786,10 +3416,13 @@ static void sisfb_blank(int blank, struct fb_info *info)
 
 int __init sisfb_init(void)
 {
-	struct pci_dev *pdev;
+	struct pci_dev *pdev = NULL;
 	struct board *b;
 	int pdev_valid = 0;
 	unsigned char jTemp;
+	u32 cmd;
+
+	outb(0x77, 0x80);
 
 	if (sisfb_off)
 		return -ENXIO;
@@ -2814,12 +3447,45 @@ int __init sisfb_init(void)
 	if (!pdev_valid)
 		return -1;
 
-	ivideo.video_base = pdev->resource[0].start & ~0x7FFFFF;
-	ivideo.mmio_base = pdev->resource[1].start & ~0x3FFF;
-	ivideo.vga_base = (pdev->resource[2].start & 0xFFFFFC) + 0x30;
-	rom_base = 0x000C0000;
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	pci_read_config_dword(pdev, PCI_COMMAND, &cmd);
+	cmd |= PCI_COMMAND_IO;
+	cmd |= PCI_COMMAND_MEMORY;
+	pci_write_config_dword(pdev, PCI_COMMAND, cmd); 
+#endif
 
+	ivideo.video_base = pci_resource_start(pdev, 0);
+	if (!request_mem_region(ivideo.video_base, pci_resource_len(pdev, 0),
+				"sisfb FB")) {
+		printk(KERN_ERR "sisfb: cannot reserve frame buffer memory\n");
+		return -ENODEV;
+	}
+	ivideo.mmio_base = pci_resource_start(pdev, 1);
+	if (!request_mem_region(ivideo.mmio_base, pci_resource_len(pdev, 1),
+				"sisfb MMIO")) {
+		printk(KERN_ERR "sisfb: cannot reserve MMIO region\n");
+		release_mem_region(pci_resource_start(pdev, 1), 
+				   pci_resource_len(pdev, 1));
+		return -ENODEV;
+	}
+	ivideo.vga_base = pci_resource_start(pdev, 2);
+	if (!request_region(ivideo.vga_base, pci_resource_len(pdev, 2),
+			    "sisfb IO")) {
+		printk(KERN_ERR "sisfb: cannot reserve I/O ports\n");
+		release_mem_region(pci_resource_start(pdev, 1),
+				   pci_resource_len(pdev, 1));
+		release_mem_region(pci_resource_start(pdev, 0),
+				   pci_resource_len(pdev, 0));
+		return -ENODEV;
+	}
+	ivideo.vga_base += 0x30;
+
+#ifndef CONFIG_FB_SIS_LINUXBIOS
+	rom_base = 0x000C0000;
 	request_region(rom_base, 32, "sisfb");
+#else
+        rom_base = 0x0;
+#endif
 
 	/* set passwd */
 	vgawb(SEQ_ADR, IND_SIS_PASSWORD);
@@ -2839,13 +3505,21 @@ int __init sisfb_init(void)
 	if (mode_idx < 0)
 		mode_idx = DEFAULT_MODE;	/* 0:640x480x8 */
 
+#ifdef CONFIG_FB_SIS_LINUXBIOS
+	mode_idx = DEFAULT_MODE;
+	rate_idx = sisbios_mode[mode_idx].rate_idx;
+	/* set to default refresh rate 60MHz */
+	ivideo.refresh_rate = 60;
+#endif
+
 	mode_no = sisbios_mode[mode_idx].mode_no;
 
 	if (ivideo.refresh_rate != 0)
 		search_refresh_rate(ivideo.refresh_rate);
 
 	if (rate_idx == 0) {
-		rate_idx = sisbios_mode[mode_idx].rate_idx;	/* set to default refresh rate 60MHz */
+		rate_idx = sisbios_mode[mode_idx].rate_idx;
+		/* set to default refresh rate 60MHz */
 		ivideo.refresh_rate = 60;
 	}
 
@@ -2854,25 +3528,14 @@ int __init sisfb_init(void)
 	ivideo.video_height = sisbios_mode[mode_idx].yres;
 	video_linelength = ivideo.video_width * (ivideo.video_bpp >> 3);
 
-	if (!request_mem_region(ivideo.video_base, ivideo.video_size, "sisfb FB")) 
-	{
-		printk(KERN_ERR
-		       "sisfb: abort, cannot reserve video memory at 0x%lx\n",
-		       ivideo.video_base);
-		return -1;
-	}
-
-	if (!request_mem_region(ivideo.mmio_base, MMIO_SIZE, "sisfb MMIO")) 
-	{
-		printk(KERN_ERR
-		       "sisfb: abort, cannot reserve mmio memory at 0x%lx\n",
-		       ivideo.mmio_base);
-		return -1;
-	}
-
 	ivideo.video_vbase = ioremap(ivideo.video_base, ivideo.video_size);
 	ivideo.mmio_vbase = ioremap(ivideo.mmio_base, MMIO_SIZE);
+
+#ifndef CONFIG_FB_SIS_LINUXBIOS
 	rom_vbase = (unsigned long) ioremap(rom_base, MAX_ROM_SCAN);
+#endif
+
+	SiSInit300(); 
 
 	printk(KERN_INFO
 	       "sisfb: framebuffer at 0x%lx, mapped to 0x%p, size %dk\n",

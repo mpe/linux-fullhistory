@@ -1030,7 +1030,8 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 				err = matroxfb_get_vblank(PMINFO &vblank);
 				if (err)
 					return err;
-				copy_to_user_ret((struct fb_vblank*)arg, &vblank, sizeof(vblank), -EFAULT);
+				if (copy_to_user((struct fb_vblank*)arg, &vblank, sizeof(vblank)))
+					return -EFAULT;
 				return 0;
 			}
 		case MATROXFB_SET_OUTPUT_MODE:
@@ -1038,7 +1039,8 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 				struct matroxioc_output_mode mom;
 				int val;
 
-				copy_from_user_ret(&mom, (struct matroxioc_output_mode*)arg, sizeof(mom), -EFAULT);
+				if (copy_from_user(&mom, (struct matroxioc_output_mode*)arg, sizeof(mom)))
+					return -EFAULT;
 				if (mom.output >= sizeof(u_int32_t))
 					return -EINVAL;
 				switch (mom.output) {
@@ -1084,7 +1086,8 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 				struct matroxioc_output_mode mom;
 				int val;
 
-				copy_from_user_ret(&mom, (struct matroxioc_output_mode*)arg, sizeof(mom), -EFAULT);
+				if (copy_from_user(&mom, (struct matroxioc_output_mode*)arg, sizeof(mom)))
+					return -EFAULT;
 				if (mom.output >= sizeof(u_int32_t))
 					return -EINVAL;
 				switch (mom.output) {
@@ -1108,14 +1111,16 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 					default:
 						return -EINVAL;
 				}
-				copy_to_user_ret((struct matroxioc_output_mode*)arg, &mom, sizeof(mom), -EFAULT);
+				if (copy_to_user((struct matroxioc_output_mode*)arg, &mom, sizeof(mom)))
+					return -EFAULT;
 				return 0;
 			}
 		case MATROXFB_SET_OUTPUT_CONNECTION:
 			{
 				u_int32_t tmp;
 
-				copy_from_user_ret(&tmp, (u_int32_t*)arg, sizeof(tmp), -EFAULT);
+				if (copy_from_user(&tmp, (u_int32_t*)arg, sizeof(tmp)))
+					return -EFAULT;
 				if (tmp & ~ACCESS_FBINFO(output.all))
 					return -EINVAL;
 				if (tmp & ACCESS_FBINFO(output.sh))
@@ -1134,7 +1139,8 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 			}
 		case MATROXFB_GET_OUTPUT_CONNECTION:
 			{
-				put_user_ret(ACCESS_FBINFO(output.ph), (u_int32_t*)arg, -EFAULT);
+				if (put_user(ACCESS_FBINFO(output.ph), (u_int32_t*)arg))
+					return -EFAULT;
 				return 0;
 			}
 		case MATROXFB_GET_AVAILABLE_OUTPUTS:
@@ -1146,12 +1152,14 @@ static int matroxfb_ioctl(struct inode *inode, struct file *file,
 					tmp &= ~MATROXFB_OUTPUT_CONN_SECONDARY;
 				if (ACCESS_FBINFO(output.ph) & MATROXFB_OUTPUT_CONN_SECONDARY)
 					tmp &= ~MATROXFB_OUTPUT_CONN_DFP;
-				put_user_ret(tmp, (u_int32_t*)arg, -EFAULT);
+				if (put_user(tmp, (u_int32_t*)arg))
+					return -EFAULT;
 				return 0;
 			}
 		case MATROXFB_GET_ALL_OUTPUTS:
 			{
-				put_user_ret(ACCESS_FBINFO(output.all), (u_int32_t*)arg, -EFAULT);
+				if (put_user(ACCESS_FBINFO(output.all), (u_int32_t*)arg))
+					return -EFAULT;
 				return 0;
 			}
 	}

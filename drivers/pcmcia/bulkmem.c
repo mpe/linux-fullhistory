@@ -2,7 +2,7 @@
 
     PCMCIA Bulk Memory Services
 
-    bulkmem.c 1.34 1999/11/17 01:37:55
+    bulkmem.c 1.37 2000/06/12 21:29:35
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -15,7 +15,7 @@
     rights and limitations under the License.
 
     The initial developer of the original code is David A. Hinds
-    <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
+    <dahinds@users.sourceforge.net>.  Portions created by David A. Hinds
     are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
 
     Alternatively, the contents of this file may be used under the
@@ -62,7 +62,7 @@
 static int do_mtd_request(memory_handle_t handle, mtd_request_t *req,
 			  caddr_t buf)
 {
-    int ret=0, tries;
+    int ret, tries;
     client_t *mtd;
     socket_info_t *s;
     
@@ -70,7 +70,7 @@ static int do_mtd_request(memory_handle_t handle, mtd_request_t *req,
     if (mtd == NULL)
 	return CS_GENERAL_FAILURE;
     s = SOCKET(mtd);
-    for (tries = 0; tries < 100; tries++) {
+    for (ret = tries = 0; tries < 100; tries++) {
 	mtd->event_callback_args.mtdrequest = req;
 	mtd->event_callback_args.buffer = buf;
 	ret = EVENT(mtd, CS_EVENT_MTD_REQUEST, CS_EVENT_PRI_LOW);
