@@ -7,7 +7,6 @@
  */
 #include <asm/addrspace.h>
 #include <linux/init.h>
-#include <linux/config.h>
 #include <linux/string.h>
 #include "prom.h"
 

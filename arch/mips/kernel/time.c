@@ -6,6 +6,7 @@
  * This file contains the time handling details for PC-style clocks as
  * found in some MIPS systems.
  */
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/sched.h>

@@ -25,6 +25,7 @@
  *			- code/test for other LAN classes
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/netdevice.h>

@@ -6,7 +6,6 @@
  * $Id: $
  */
 #include <linux/init.h>
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 

@@ -11,6 +11,8 @@
  *
  */
 
+#include <linux/config.h>
+
 #define USB_SCSI "usbscsi: "
 
 extern int usbscsi_debug;

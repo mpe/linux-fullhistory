@@ -950,7 +950,6 @@ asmlinkage int sys_sendto(int fd, void * buff, size_t len, unsigned flags,
 	struct msghdr msg;
 	struct iovec iov;
 	
-	lock_kernel();
 	sock = sockfd_lookup(fd, &err);
 	if (!sock)
 		goto out;
@@ -977,7 +976,6 @@ asmlinkage int sys_sendto(int fd, void * buff, size_t len, unsigned flags,
 out_put:		
 	sockfd_put(sock);
 out:
-	unlock_kernel();
 	return err;
 }
 
@@ -1005,7 +1003,6 @@ asmlinkage int sys_recvfrom(int fd, void * ubuf, size_t size, unsigned flags,
 	char address[MAX_SOCK_ADDR];
 	int err,err2;
 
-	lock_kernel();
 	sock = sockfd_lookup(fd, &err);
 	if (!sock)
 		goto out;
@@ -1030,7 +1027,6 @@ asmlinkage int sys_recvfrom(int fd, void * ubuf, size_t size, unsigned flags,
 	}
 	sockfd_put(sock);			
 out:
-	unlock_kernel();
 	return err;
 }
 
@@ -1123,8 +1119,6 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	struct msghdr msg_sys;
 	int err, ctl_len, iov_size, total_len;
 	
-	lock_kernel();
-
 	err = -EFAULT;
 	if (copy_from_user(&msg_sys,msg,sizeof(struct msghdr)))
 		goto out; 
@@ -1194,7 +1188,6 @@ out_freeiov:
 out_put:
 	sockfd_put(sock);
 out:       
-	unlock_kernel();
 	return err;
 }
 
@@ -1218,7 +1211,6 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	struct sockaddr *uaddr;
 	int *uaddr_len;
 	
-	lock_kernel();
 	err=-EFAULT;
 	if (copy_from_user(&msg_sys,msg,sizeof(struct msghdr)))
 		goto out;
@@ -1282,7 +1274,6 @@ out_freeiov:
 out_put:
 	sockfd_put(sock);
 out:
-	unlock_kernel();
 	return err;
 }
 

@@ -36,7 +36,6 @@
  * 6		wLength		2	Count		Bytes for data
  */
 
-#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/bitops.h>
 #include <linux/malloc.h>

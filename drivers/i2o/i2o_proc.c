@@ -38,7 +38,6 @@
 #define FMT_U64_HEX "0x%08x%08x"
 #define U64_VAL(pu64) *((u32*)(pu64)+1), *((u32*)(pu64))
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/i2o.h>

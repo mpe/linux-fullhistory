@@ -3,7 +3,6 @@
  *
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <asm/dec/tc.h>
 

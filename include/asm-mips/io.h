@@ -6,8 +6,6 @@
  */
 #undef CONF_SLOWDOWN_IO
 
-#include <linux/config.h>
-
 #include <asm/mipsconfig.h>
 #include <asm/addrspace.h>
 

@@ -52,6 +52,7 @@
  * /proc/sysvipc/sem support (c) 1999 Dragos Acostachioaie <dragos@iname.com>
  */
 
+#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>

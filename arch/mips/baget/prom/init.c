@@ -6,7 +6,6 @@
  * $Id$
  */
 #include <linux/init.h>
-#include <linux/config.h>
 #include <asm/bootinfo.h>
 
 char arcs_cmdline[CL_SIZE];

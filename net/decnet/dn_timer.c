@@ -13,7 +13,6 @@
  *                               timer idea.
  *       Steve Whitehouse      : Added checks for sk->sock_readers
  */
-#include <linux/config.h>
 #include <linux/net.h>
 #include <linux/socket.h>
 #include <linux/skbuff.h>

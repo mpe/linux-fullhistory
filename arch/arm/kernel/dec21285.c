@@ -3,6 +3,7 @@
  *
  * Copyright (C) 1998 Russell King, Phil Blundell
  */
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>

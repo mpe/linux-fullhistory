@@ -5,7 +5,6 @@
  * Copyright (C) 1998 Gleb Raiko & Vladimir Roganov
  *
  */
-#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

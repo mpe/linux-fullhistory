@@ -8,7 +8,6 @@
  */
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/module.h>
 
 /* extern int rrm_command (unsigned int cmd, void *arg);

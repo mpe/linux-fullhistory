@@ -17,7 +17,6 @@
 #include <linux/videodev.h>
 #include <linux/vmalloc.h>
 #include <linux/wrapper.h>
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <asm/spinlock.h>

@@ -21,6 +21,7 @@
 #ifndef	_CYCLOMX_H
 #define	_CYCLOMX_H
 
+#include <linux/config.h>
 #include <linux/wanrouter.h>
 #include <asm/spinlock.h>
 

@@ -6,6 +6,7 @@
  *
  * $Id: printf.c,v 1.2 1999/06/12 18:42:38 ulfc Exp $
  */
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 

@@ -39,7 +39,6 @@
 * Aug  8, 1998	Arnaldo		Initial version.
 */
 
-#include <linux/config.h>
 #ifdef MODULE
 #ifdef MODVERSIONS
 #include <linux/modversions.h>

@@ -1,6 +1,8 @@
 #ifndef _NET_DN_FIB_H
 #define _NET_DN_FIB_H
 
+#include <linux/config.h>
+
 #ifdef CONFIG_DECNET_ROUTER
 
 

@@ -24,6 +24,7 @@
 #define MOD_DEC_USE_COUNT
 #endif
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/init.h> 

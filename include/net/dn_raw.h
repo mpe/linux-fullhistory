@@ -1,6 +1,8 @@
 #ifndef _NET_DN_RAW_H
 #define _NET_DN_RAW_H
 
+#include <linux/config.h>
+
 #ifdef CONFIG_DECNET_RAW
 
 extern struct proto_ops dn_raw_proto_ops;

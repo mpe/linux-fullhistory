@@ -10,6 +10,7 @@
  *  22-May-1999	RMK	Added support for V6 DMA
  */
 
+#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/ioport.h>

@@ -9,9 +9,7 @@
  *                    - Indigo2 changes
  *                    - Interrupt handling fixes
  */
-#include <linux/config.h>
 #include <linux/init.h>
-
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
 #include <linux/signal.h>

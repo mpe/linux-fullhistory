@@ -10,6 +10,7 @@
  *  26-Jan-1999	PJB	Don't use IACK on CATS
  *  16-Mar-1999	RMK	Added autodetect of ISA PICs
  */
+#include <linux/config.h>
 #include <asm/hardware.h>
 #include <asm/dec21285.h>
 #include <asm/irq.h>

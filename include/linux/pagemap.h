@@ -39,11 +39,14 @@ static inline unsigned long page_address(struct page * page)
  */
 #define page_cache_entry(x)	(mem_map + MAP_NR(x))
 
-#define PAGE_HASH_BITS 16
+extern unsigned int page_hash_bits;
+#define PAGE_HASH_BITS (page_hash_bits)
 #define PAGE_HASH_SIZE (1 << PAGE_HASH_BITS)
 
 extern atomic_t page_cache_size; /* # of pages currently in the hash table */
-extern struct page * page_hash_table[PAGE_HASH_SIZE];
+extern struct page **page_hash_table;
+
+extern void page_cache_init(unsigned long);
 
 /*
  * We use a power-of-two hash table to avoid a modulus,

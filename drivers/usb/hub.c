@@ -10,7 +10,6 @@
 #include <linux/list.h>
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <asm/spinlock.h>

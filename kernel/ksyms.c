@@ -171,6 +171,8 @@ EXPORT_SYMBOL(block_flushpage);
 EXPORT_SYMBOL(generic_file_read);
 EXPORT_SYMBOL(generic_file_write);
 EXPORT_SYMBOL(generic_file_mmap);
+EXPORT_SYMBOL(page_hash_bits);
+EXPORT_SYMBOL(page_hash_table);
 EXPORT_SYMBOL(file_lock_table);
 EXPORT_SYMBOL(posix_lock_file);
 EXPORT_SYMBOL(posix_test_lock);

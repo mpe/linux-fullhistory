@@ -11,6 +11,7 @@
  * /proc/sysvipc/msg support (c) 1999 Dragos Acostachioaie <dragos@iname.com>
  */
 
+#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/msg.h>
 #include <linux/interrupt.h>

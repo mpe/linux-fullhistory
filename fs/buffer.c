@@ -78,14 +78,13 @@ static int nr_buffers_type[NR_LIST] = {0,};
 static struct buffer_head * unused_list = NULL;
 static int nr_unused_buffer_heads = 0;
 static spinlock_t unused_list_lock = SPIN_LOCK_UNLOCKED;
+static DECLARE_WAIT_QUEUE_HEAD(buffer_wait);
 
 struct bh_free_head {
 	struct buffer_head *list;
 	spinlock_t lock;
 };
 static struct bh_free_head free_list[NR_SIZES];
-
-static DECLARE_WAIT_QUEUE_HEAD(buffer_wait);
 
 static kmem_cache_t *bh_cachep;
 
@@ -904,7 +903,6 @@ void __brelse(struct buffer_head * buf)
 
 	if (atomic_read(&buf->b_count)) {
 		atomic_dec(&buf->b_count);
-		wake_up(&buffer_wait);
 		return;
 	}
 	printk("VFS: brelse: Trying to free free buffer\n");
@@ -923,7 +921,6 @@ void __bforget(struct buffer_head * buf)
 	if (atomic_read(&buf->b_count) != 1 || buffer_locked(buf)) {
 		touch_buffer(buf);
 		atomic_dec(&buf->b_count);
-		wake_up(&buffer_wait);
 	} else {
 		atomic_set(&buf->b_count, 0);
 		buf->b_state = 0;
@@ -1837,9 +1834,16 @@ void __init buffer_init(unsigned long memory_size)
 	   for something that is really too small */
 
 	do {
+		unsigned long tmp;
+
 		nr_hash = (PAGE_SIZE << order) / sizeof(struct buffer_head *);
 		bh_hash_mask = (nr_hash - 1);
-		bh_hash_shift = (PAGE_SHIFT + order);
+
+		tmp = nr_hash;
+		bh_hash_shift = 0;
+		while((tmp >>= 1UL) != 0UL)
+			bh_hash_shift++;
+
 		hash_table = (struct buffer_head **)
 		    __get_free_pages(GFP_ATOMIC, order);
 	} while (hash_table == NULL && --order > 0);
@@ -2070,7 +2074,6 @@ int bdflush(void * unused)
 						--written;
 				} else
 					ll_rw_block(WRITE, 1, &bh);
-				wake_up(&buffer_wait);
 				atomic_dec(&bh->b_count);
 				goto repeat;
 			}
