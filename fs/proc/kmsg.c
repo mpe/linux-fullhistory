@@ -38,7 +38,7 @@ static ssize_t kmsg_read(struct file * file, char * buf,
 
 static unsigned int kmsg_poll(struct file *file, poll_table * wait)
 {
-	poll_wait(&log_wait, wait);
+	poll_wait(file, &log_wait, wait);
 	if (log_size)
 		return POLLIN | POLLRDNORM;
 	return 0;

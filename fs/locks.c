@@ -177,7 +177,10 @@ static inline int locks_overlap(struct file_lock *fl1, struct file_lock *fl2)
 		(fl2->fl_end >= fl1->fl_start));
 }
 
-/* Check whether two locks have the same owner
+/*
+ * Check whether two locks have the same owner
+ * N.B. Do we need the test on PID as well as owner?
+ * (Clone tasks should be considered as one "owner".)
  */
 static inline int
 locks_same_owner(struct file_lock *fl1, struct file_lock *fl2)
@@ -471,6 +474,7 @@ out:
 void locks_remove_posix(struct task_struct *task, struct file *filp)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
+	void * owner = task->files;
 	struct file_lock file_lock, *fl;
 	struct file_lock **before;
 
@@ -480,7 +484,7 @@ void locks_remove_posix(struct task_struct *task, struct file *filp)
 repeat:
 	before = &inode->i_flock;
 	while ((fl = *before) != NULL) {
-		if ((fl->fl_flags & FL_POSIX) && fl->fl_owner == task) {
+		if ((fl->fl_flags & FL_POSIX) && fl->fl_owner == owner) {
 			int (*lock)(struct file *, int, struct file_lock *);
 			lock = filp->f_op->lock;
 			if (lock) {
@@ -571,6 +575,7 @@ int locks_verify_area(int read_write, struct inode *inode, struct file *filp,
 
 int locks_mandatory_locked(struct inode *inode)
 {
+	void * owner = current->files;
 	struct file_lock *fl;
 
 	/* Search the lock list for this inode for any POSIX locks.
@@ -578,7 +583,7 @@ int locks_mandatory_locked(struct inode *inode)
 	for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
 		if (!(fl->fl_flags & FL_POSIX))
 			continue;
-		if (fl->fl_owner != current)
+		if (fl->fl_owner != owner)
 			return (-EAGAIN);
 	}
 	return (0);
@@ -595,7 +600,7 @@ int locks_mandatory_area(int read_write, struct inode *inode,
 
 	tfl.fl_file = filp;
 	tfl.fl_flags = FL_POSIX | FL_ACCESS;
-	tfl.fl_owner = current;
+	tfl.fl_owner = current->files;
 	tfl.fl_pid = current->pid;
 	tfl.fl_type = (read_write == FLOCK_VERIFY_WRITE) ? F_WRLCK : F_RDLCK;
 	tfl.fl_start = offset;
@@ -679,7 +684,7 @@ static int posix_make_lock(struct file *filp, struct file_lock *fl,
 		fl->fl_end = OFFSET_MAX;
 	
 	fl->fl_file = filp;
-	fl->fl_owner = current;
+	fl->fl_owner = current->files;
 	fl->fl_pid = current->pid;
 
 	return (1);

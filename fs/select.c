@@ -25,6 +25,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/poll.h>
+#include <linux/file.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -59,6 +60,7 @@ static void free_wait(poll_table * p)
 		p->nr--;
 		entry--;
 		remove_wait_queue(entry->wait_address,&entry->wait);
+		fput(entry->filp);
 	}
 }
 

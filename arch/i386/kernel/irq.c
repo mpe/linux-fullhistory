@@ -82,20 +82,16 @@ static int disabled_irq [NR_IRQS] = { 0, };
  * but we have _much_ higher compatibility and robustness this way.
  */
 
-#ifndef __SMP__
-  static const unsigned int io_apic_irqs = 0;
-#else
-  /*
-   * Default to all normal IRQ's _not_ using the IO APIC.
-   *
-   * To get IO-APIC interrupts you should either:
-   *  - turn some of them into IO-APIC interrupts at runtime
-   *    with some magic system call interface.
-   *  - explicitly use irq 16-19 depending on which PCI irq
-   *    line your PCI controller uses.
-   */
-  unsigned int io_apic_irqs = 0;
-#endif
+/*
+ * Default to all normal IRQ's _not_ using the IO APIC.
+ *
+ * To get IO-APIC interrupts you should either:
+ *  - turn some of them into IO-APIC interrupts at runtime
+ *    with some magic system call interface.
+ *  - explicitly use irq 16-19 depending on which PCI irq
+ *    line your PCI controller uses.
+ */
+unsigned int io_apic_irqs = 0;
 
 struct hw_interrupt_type {
 	void (*handle)(unsigned int irq, int cpu, struct pt_regs * regs);

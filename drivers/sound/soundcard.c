@@ -670,7 +670,7 @@ static unsigned int sound_poll(struct file *file, poll_table * wait)
 	case SND_DEV_DSP:
 	case SND_DEV_DSP16:
 	case SND_DEV_AUDIO:
-		return DMAbuf_poll(dev >> 4, wait);
+		return DMAbuf_poll(file, dev >> 4, wait);
 #endif
 	}
 	return 0;

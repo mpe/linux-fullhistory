@@ -175,13 +175,8 @@ DC390_StartSCSI( PACB pACB, PDCB pDCB, PSRB pSRB )
 }
 
 
-#ifndef  VERSION_ELF_1_2_13
 static void
 DC390_Interrupt( int irq, void *dev_id, struct pt_regs *regs)
-#else
-static void
-DC390_Interrupt( int irq, struct pt_regs *regs)
-#endif
 {
     PACB   pACB;
     PDCB   pDCB;
@@ -303,11 +298,7 @@ DC390_DataOut_0( PACB pACB, PSRB pSRB, PUCHAR psstatus)
 		pSRB->pSegmentList++;
 		psgl = pSRB->pSegmentList;
 
-#ifndef VERSION_ELF_1_2_13
 		pSRB->SGPhysAddr = virt_to_phys( psgl->address );
-#else
-		pSRB->SGPhysAddr = (ULONG) psgl->address;
-#endif
 		pSRB->SGToBeXferLen = (ULONG) psgl->length;
 	    }
 	    else
@@ -368,11 +359,7 @@ DC390_DataIn_0( PACB pACB, PSRB pSRB, PUCHAR psstatus)
 		pSRB->pSegmentList++;
 		psgl = pSRB->pSegmentList;
 
-#ifndef VERSION_ELF_1_2_13
 		pSRB->SGPhysAddr = virt_to_phys( psgl->address );
-#else
-		pSRB->SGPhysAddr = (ULONG) psgl->address;
-#endif
 		pSRB->SGToBeXferLen = (ULONG) psgl->length;
 	    }
 	    else
@@ -427,11 +414,7 @@ din_1:
 	    if( residual )
 	    {
 		bval = inb(ioport+ScsiFifo);	    /* get residual byte */
-#ifndef VERSION_ELF_1_2_13
 		ptr = (PUCHAR) phys_to_virt( pSRB->SGPhysAddr );
-#else
-		ptr = (PUCHAR) pSRB->SGPhysAddr;
-#endif
 		*ptr = bval;
 		pSRB->SGPhysAddr++;
 		pSRB->TotalXferredLen++;
@@ -643,11 +626,7 @@ DataIO_Comm( PACB pACB, PSRB pSRB, UCHAR ioDir)
 	if( !pSRB->SGToBeXferLen )
 	{
 	    psgl = pSRB->pSegmentList;
-#ifndef VERSION_ELF_1_2_13
 	    pSRB->SGPhysAddr = virt_to_phys( psgl->address );
-#else
-	    pSRB->SGPhysAddr = (ULONG) psgl->address;
-#endif
 	    pSRB->SGToBeXferLen = (ULONG) psgl->length;
 	}
 	lval = pSRB->SGToBeXferLen;

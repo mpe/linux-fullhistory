@@ -547,8 +547,8 @@ static unsigned int sg_poll(struct file *file, poll_table * wait)
         struct scsi_generic *device = &scsi_generics[dev];
         unsigned int mask = 0;
 
-        poll_wait(&scsi_generics[dev].read_wait, wait);
-        poll_wait(&scsi_generics[dev].write_wait, wait);
+        poll_wait(file, &scsi_generics[dev].read_wait, wait);
+        poll_wait(file, &scsi_generics[dev].write_wait, wait);
         if(device->pending && device->complete)
                 mask |= POLLIN | POLLRDNORM;
         if(!device->pending)

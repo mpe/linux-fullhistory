@@ -575,7 +575,7 @@ static ssize_t read_pad(struct file * file, char * buffer, size_t count, loff_t 
 
 static unsigned int pad_poll(struct file *file, poll_table * wait)
 {
-	poll_wait(&queue, wait);
+	poll_wait(file, &queue, wait);
     	if(button_pending || xy_pending)
 		return POLLIN | POLLRDNORM;
 	return 0;

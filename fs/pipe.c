@@ -174,7 +174,7 @@ static unsigned int pipe_poll(struct file * filp, poll_table * wait)
 	unsigned int mask;
 	struct inode * inode = filp->f_dentry->d_inode;
 
-	poll_wait(&PIPE_WAIT(*inode), wait);
+	poll_wait(filp, &PIPE_WAIT(*inode), wait);
 	mask = POLLIN | POLLRDNORM;
 	if (PIPE_EMPTY(*inode))
 		mask = POLLOUT | POLLWRNORM;
@@ -195,7 +195,7 @@ static unsigned int fifo_poll(struct file * filp, poll_table * wait)
 	unsigned int mask;
 	struct inode * inode = filp->f_dentry->d_inode;
 
-	poll_wait(&PIPE_WAIT(*inode), wait);
+	poll_wait(filp, &PIPE_WAIT(*inode), wait);
 	mask = POLLIN | POLLRDNORM;
 	if (PIPE_EMPTY(*inode))
 		mask = POLLOUT | POLLWRNORM;
@@ -228,7 +228,7 @@ static unsigned int connect_poll(struct file * filp, poll_table * wait)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
 
-	poll_wait(&PIPE_WAIT(*inode), wait);
+	poll_wait(filp, &PIPE_WAIT(*inode), wait);
 	if (!PIPE_EMPTY(*inode)) {
 		filp->f_op = &read_fifo_fops;
 		return POLLIN | POLLRDNORM;

@@ -4,8 +4,8 @@
 ;*		    Device Driver				       *
 ;***********************************************************************/
 
-#ifndef TMSCSIM_H
-#define TMSCSIM_H
+#ifndef _TMSCSIM_H
+#define _TMSCSIM_H
 
 #define IRQ_NONE 255
 
@@ -677,4 +677,4 @@ UCHAR	xx2;
 	(PCI_CFG2_ENABLE | (((function) << 1) & 0xe))
 
 
-#endif /* TMSCSIM_H */
+#endif /* _TMSCSIM_H */

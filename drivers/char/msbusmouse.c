@@ -159,7 +159,7 @@ static ssize_t read_mouse(struct file * file,
 
 static unsigned int mouse_poll(struct file *file, poll_table * wait)
 {
-	poll_wait(&mouse.wait, wait);
+	poll_wait(file, &mouse.wait, wait);
 	if (mouse.ready) 
 		return POLLIN | POLLRDNORM;
 	return 0;

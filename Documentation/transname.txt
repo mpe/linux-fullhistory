@@ -20,7 +20,7 @@ for this task because they have to be valid in the view of mounted
 filesystems at all clients, not at the server.
 
 Linux transname overcomes this problem by allowing filenames
-to be context-dependend. For example, if you have a file /etc/config
+to be context-dependent. For example, if you have a file /etc/config
 that should differ on the hosts "myserver" and "myclient", you just
 create two different files named /etc/config#host=myserver# and
 /etc/config#host=myclient# . On host "myserver", the file

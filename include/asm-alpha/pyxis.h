@@ -1,6 +1,7 @@
 #ifndef __ALPHA_PYXIS__H__
 #define __ALPHA_PYXIS__H__
 
+#include <linux/config.h> /* CONFIG_ALPHA_RUFFIAN. */
 #include <linux/types.h>
 
 /*

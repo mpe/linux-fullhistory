@@ -475,6 +475,7 @@ static int lp_open(struct inode * inode, struct file * file)
 		return -ENXIO;
 	if (LP_F(minor) & LP_BUSY)
 		return -EBUSY;
+	LP_F(minor) |= LP_BUSY;
 
 	MOD_INC_USE_COUNT;
 
@@ -491,23 +492,26 @@ static int lp_open(struct inode * inode, struct file * file)
 		if (status & LP_POUTPA) {
 			printk(KERN_INFO "lp%d out of paper\n", minor);
 			MOD_DEC_USE_COUNT;
+			LP_F(minor) &= ~LP_BUSY;
 			return -ENOSPC;
 		} else if (!(status & LP_PSELECD)) {
 			printk(KERN_INFO "lp%d off-line\n", minor);
 			MOD_DEC_USE_COUNT;
+			LP_F(minor) &= ~LP_BUSY;
 			return -EIO;
 		} else if (!(status & LP_PERRORP)) {
 			printk(KERN_ERR "lp%d printer error\n", minor);
 			MOD_DEC_USE_COUNT;
+			LP_F(minor) &= ~LP_BUSY;
 			return -EIO;
 		}
 	}
 	lp_table[minor].lp_buffer = (char *) kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
 	if (!lp_table[minor].lp_buffer) {
 		MOD_DEC_USE_COUNT;
+		LP_F(minor) &= ~LP_BUSY;
 		return -ENOMEM;
 	}
-	LP_F(minor) |= LP_BUSY;
 	return 0;
 }
 

@@ -93,7 +93,7 @@ struct proto_ops {
 			 int flags);
   int	(*getname)	(struct socket *sock, struct sockaddr *uaddr,
 			 int *usockaddr_len, int peer);
-  unsigned int (*poll)	(struct socket *sock, struct poll_table_struct *wait);
+  unsigned int (*poll)	(struct file *file, struct socket *sock, struct poll_table_struct *wait);
   int	(*ioctl)	(struct socket *sock, unsigned int cmd,
 			 unsigned long arg);
   int	(*listen)	(struct socket *sock, int len);

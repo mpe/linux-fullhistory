@@ -25,7 +25,7 @@ dep_tristate 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 $CONFIG_SCSI
 dep_tristate 'Adaptec AIC7xxx support' CONFIG_SCSI_AIC7XXX $CONFIG_SCSI
 if [ "$CONFIG_SCSI_AIC7XXX" != "n" ]; then
     bool '   Enable tagged command queueing' CONFIG_AIC7XXX_TAGGED_QUEUEING Y
-    dep_tristate '   Override driver defaults for commands per LUN' CONFIG_OVERRIDE_CMDS N
+    bool '   Override driver defaults for commands per LUN' CONFIG_OVERRIDE_CMDS N
     if [ "$CONFIG_OVERRIDE_CMDS" != "n" ]; then
       int  '   Maximum number of commands per LUN' CONFIG_AIC7XXX_CMDS_PER_LUN 8
     fi

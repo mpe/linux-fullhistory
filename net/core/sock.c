@@ -910,7 +910,7 @@ int sock_no_getname(struct socket *sock, struct sockaddr *saddr,
 	return -EOPNOTSUPP;
 }
 
-unsigned int sock_no_poll(struct socket *sock, poll_table *pt)
+unsigned int sock_no_poll(struct file * file, struct socket *sock, poll_table *pt)
 {
 	return -EOPNOTSUPP;
 }

@@ -572,7 +572,7 @@ struct proto
 	void			(*write_wakeup)(struct sock *sk);
 	void			(*read_wakeup)(struct sock *sk);
 
-	unsigned int		(*poll)(struct socket *sock,
+	unsigned int		(*poll)(struct file * file, struct socket *sock,
 					struct poll_table_struct *wait);
 
 	int			(*ioctl)(struct sock *sk, int cmd,
@@ -798,7 +798,7 @@ extern int                      sock_no_accept(struct socket *,
 					       struct socket *, int);
 extern int                      sock_no_getname(struct socket *,
 						struct sockaddr *, int *, int);
-extern unsigned int             sock_no_poll(struct socket *,
+extern unsigned int             sock_no_poll(struct file *, struct socket *,
 					     struct poll_table_struct *);
 extern int                      sock_no_ioctl(struct socket *, unsigned int,
 					      unsigned long);

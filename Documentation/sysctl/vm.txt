@@ -1,0 +1,238 @@
+
+Documentation for /proc/sys/vm/*	version 0.1
+	(c) 1998, Rik van Riel <H.H.vanRiel@fys.ruu.nl>
+
+For general info and legal blurb, please look in README.
+
+==============================================================
+
+This file contains the documentation for the sysctl files in
+/proc/sys/vm and is valid for Linux kernel version 2.1.
+
+The files in this directory can be used to tune the operation
+of the virtual memory (VM) subsystem of the Linux kernel, and
+one of the files (bdflush) also has a little influence on disk
+usage.
+
+Currently, these files are in /proc/sys/vm:
+- bdflush
+- freepages
+- overcommit_memory
+- swapctl
+- swapout_interval
+
+==============================================================
+
+bdflush:
+
+This file controls the operation of the bdflush kernel
+daemon. The source code to this struct can be found in
+linux/mm/buffer.c. It currently contains 9 integer values,
+of which 6 are actually used by the kernel.
+
+From linux/fs/buffer.c:
+--------------------------------------------------------------
+union bdflush_param{
+    struct {
+        int nfract;      /* Percentage of buffer cache dirty to
+                            activate bdflush */
+        int ndirty;      /* Maximum number of dirty blocks to
+                            write out per wake-cycle */
+        int nrefill;     /* Number of clean buffers to try to
+                            obtain each time we call refill */
+        int nref_dirt;   /* Dirty buffer threshold for activating
+                            bdflush when trying to refill buffers. */
+        int dummy1;      /* unused */
+        int age_buffer;  /* Time for normal buffer to age before
+                            we flush it */
+        int age_super;   /* Time for superblock to age before we
+                            flush it */
+        int dummy2;      /* unused */
+        int dummy3;      /* unused */
+    } b_un;
+    unsigned int data[N_PARAM];
+} bdf_prm = {{40, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
+--------------------------------------------------------------
+
+The first parameter governs the maximum number of of dirty
+buffers in the buffer cache. Dirty means that the contents
+of the buffer still have to be written to disk (as opposed
+to a clean buffer, which can just be forgotten about).
+Setting this to a high value means that Linux can delay disk
+writes for a long time, but it also means that it will have
+to do a lot I/O at once when memory becomes short. A low
+value will spread out disk I/O more evenly.
+
+The second parameter (ndirty) gives the maximum number of
+dirty buffers that bdflush can write to the disk in one time.
+A high value will mean delayed, bursty I/O, while a small
+value can lead to memory shortage when bdflush isn't woken
+up often enough...
+
+The third parameter (nrefill) is the number of buffers that
+bdflush will add to the list of free buffers when
+refill_freelist() is called. It is necessary to allocate free
+buffers beforehand, since the buffers often are of a different
+size than memory pages and some bookkeeping needs to be done
+beforehand. The higher the number, the more memory will be
+wasted and the less often refill_freelist() will need to run.
+
+When refill_freelist() comes across more than nref_dirt dirty
+buffers, it will wake up bdflush.
+
+Finally, the age_buffer and age_super parameters govern the
+maximum time Linux waits before writing out a dirty buffer
+to disk. The value is expressed in jiffies (clockticks), the
+number of jiffies per second is 100, except on Alpha machines
+(1024). Age_buffer is the maximum age for data blocks, while
+age_super is for filesystem metadata.
+
+==============================================================
+
+freepages:
+
+This file contains three values: min_free_pages, free_pages_low
+and free_pages_high in order.
+
+These numbers are used by the VM subsystem to keep a reasonable
+number of pages on the free page list, so that programs can
+allocate new pages without having to wait for the system to
+free used pages first. The actual freeing of pages is done
+by kswapd, a kernel daemon.
+
+min_free_pages  -- when the number of free pages reaches this
+                   level, only the kernel can allocate memory
+                   for _critical_ tasks only
+free_pages_low  -- when the number of free pages drops below
+                   this level, kswapd is woken up immediately
+free_pages_high -- this is kswapd's target, when more than
+                   free_pages_high pages are free, kswapd will
+                   stop swapping.
+
+When the number of free pages is between free_pages_low and
+free_pages_high, and kswapd hasn't run for swapout_interval
+jiffies, then kswapd is woken up too. See swapout_interval
+for more info.
+
+When free memory is always low on your system, and kswapd has
+trouble keeping up with allocations, you might want to
+increase these values, especially free_pages_high and perhaps
+free_pages_low. I've found that a 1:2:4 relation for these
+values tend to work rather well in a heavily loaded system.
+
+==============================================================
+
+overcommit_memory:
+
+This file contains only one value. The following algorithm
+is used to decide if there's enough memory. If the value
+of overcommit_memory > 0, then there's always enough
+memory :-). This is a useful feature, since programs often
+malloc() huge amounts of memory 'just in case', while they
+only use a small part of it. Leaving this value at 0 will
+lead to the failure of such a huge malloc(), when in fact
+the system has enough memory for the program to run...
+On the other hand, enabling this feature can cause you to
+run out of memory and thrash the system to death, so large
+and/or important servers will want to set this value to 0.
+
+From linux/mm/mmap.c:
+--------------------------------------------------------------
+static inline int vm_enough_memory(long pages)
+{
+    /* Stupid algorithm to decide if we have enough memory: while
+     * simple, it hopefully works in most obvious cases.. Easy to
+     * fool it, but this should catch most mistakes.
+     */
+    long freepages;
+
+    /* Sometimes we want to use more memory than we have. */
+    if (sysctl_overcommit_memory)
+        return 1;
+
+    freepages = buffermem >> PAGE_SHIFT;
+    freepages += page_cache_size;
+    freepages >>= 1;
+    freepages += nr_free_pages;
+    freepages += nr_swap_pages;
+    freepages -= num_physpages >> 4;
+    return freepages > pages;
+}
+
+==============================================================
+
+swapctl:
+
+This file contains no less than 16 variables, of which about
+half is actually used :-) In the listing below, the unused
+variables are marked as such.
+All of these values are used by kswapd, and the usage can be
+found in linux/mm/vmscan.c.
+
+From linux/include/linux/swapctl.h:
+--------------------------------------------------------------
+typedef struct swap_control_v5
+{
+    unsigned int    sc_max_page_age;
+    unsigned int    sc_page_advance;
+    unsigned int    sc_page_decline;
+    unsigned int    sc_page_initial_age;
+    unsigned int    sc_max_buff_age;      /* unused */
+    unsigned int    sc_buff_advance;      /* unused */
+    unsigned int    sc_buff_decline;      /* unused */
+    unsigned int    sc_buff_initial_age;  /* unused */
+    unsigned int    sc_age_cluster_fract;
+    unsigned int    sc_age_cluster_min;
+    unsigned int    sc_pageout_weight;
+    unsigned int    sc_bufferout_weight;
+    unsigned int    sc_buffer_grace;      /* unused */
+    unsigned int    sc_nr_buffs_to_free;  /* unused */
+    unsigned int    sc_nr_pages_to_free;  /* unused */
+    enum RCL_POLICY sc_policy;            /* RCL_PERSIST hardcoded */
+} swap_control_v5;
+--------------------------------------------------------------
+
+The first four variables are used to keep track of Linux'
+page aging. Page aging is a bookkeeping method to keep track
+of which pages of memory are used often, and which pages can
+be swapped out without consequences.
+
+When a page is swapped in, it starts at sc_page_initial_age
+(default 3) and when the page is scanned by kswapd, it's age
+is adjusted according to the following scheme:
+- if the page was used since the last time we scanned, it's
+  age is increased sc_page_advance (default 3) up to a maximum
+  of sc_max_page_age (default 20)
+- else (it wasn't used) it's age is decreased sc_page_decline
+  (default 1)
+And when a page reaches age 0, it's ready to be swapped out.
+
+The variables sc_age_cluster_fract till sc_bufferout_weight
+have to do with the amount of scanning kswapd is doing on
+each call to try_to_swap_out().
+
+sc_age_cluster_fract is used to calculate how many pages from
+a process are to be scanned by kswapd. The formula used is
+sc_age_cluster_fract/1024 * RSS, so if you want kswapd to scan
+the whole process, sc_age_cluster_fract needs to have a value
+of 1024. The minimum number of pages kswapd will scan is
+represented by sc_age_cluster_min, this is done so kswapd will
+also scan small processes.
+
+The values of sc_pageout_weight and sc_bufferout_weight are
+used to control the how many tries kswapd will do in order
+to swapout one page / buffer. As with sc_age_cluster_fract,
+the actual value is calculated by several more or less complex
+formulae and the default value is good for every purpose.
+
+==============================================================
+
+swapout_interval:
+
+The single value in this file controls the amount of time
+between successive wakeups of kswapd when nr_free_pages is
+between free_pages_low and free_pages_high. The default value
+of HZ/4 is usually right, but when kswapd can't keep up with
+the number of allocations in your system, you might want to
+decrease this number. 
+

@@ -1015,7 +1015,7 @@ isdn_poll(struct file *file, poll_table * wait)
 	int drvidx = isdn_minor2drv(minor - ISDN_MINOR_CTRL);
 
 	if (minor == ISDN_MINOR_STATUS) {
-		poll_wait(&(dev->info_waitq), wait);
+		poll_wait(file, &(dev->info_waitq), wait);
 		/* mask = POLLOUT | POLLWRNORM; */
 		if (file->private_data) {
 			mask |= POLLIN | POLLRDNORM;
@@ -1023,7 +1023,7 @@ isdn_poll(struct file *file, poll_table * wait)
 		return mask;
 	}
 	if (minor >= ISDN_MINOR_CTRL && minor <= ISDN_MINOR_CTRLMAX) {
-		poll_wait(&(dev->drv[drvidx]->st_waitq), wait);
+		poll_wait(file, &(dev->drv[drvidx]->st_waitq), wait);
 		if (drvidx < 0) {
 			printk(KERN_ERR "isdn_common: isdn_poll 1 -> what the hell\n");
 			return POLLERR;

@@ -1578,12 +1578,12 @@ unsigned int sequencer_poll(int dev, struct file *file, poll_table * wait)
 	save_flags(flags);
 	cli();
 	/* input */
-	poll_wait(&midi_sleeper, wait);
+	poll_wait(file, &midi_sleeper, wait);
 	if (iqlen)
 		mask |= POLLIN | POLLRDNORM;
 
 	/* output */
-	poll_wait(&seq_sleeper, wait);
+	poll_wait(file, &seq_sleeper, wait);
 	if ((SEQ_MAX_QUEUE - qlen) >= output_threshold) 
 		mask |= POLLOUT | POLLWRNORM;
 	restore_flags(flags);

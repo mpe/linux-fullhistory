@@ -517,7 +517,7 @@ static int rtc_release(struct inode *inode, struct file *file)
 #ifndef __alpha__
 static unsigned int rtc_poll(struct file *file, poll_table *wait)
 {
-	poll_wait(&rtc_wait, wait);
+	poll_wait(file, &rtc_wait, wait);
 	if (rtc_irq_data != 0)
 		return POLLIN | POLLRDNORM;
 	return 0;

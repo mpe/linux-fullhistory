@@ -20,11 +20,7 @@ void init_IO_APIC_traps(void);
 int IO_APIC_get_PCI_irq_vector (int bus, int slot, int fn);
 void make_8259A_irq (unsigned int irq);
 
-#ifdef __SMP__
- extern unsigned int io_apic_irqs;
-#else
- extern const unsigned int io_apic_irqs;
-#endif
+extern unsigned int io_apic_irqs;
 
 #define IO_APIC_IRQ(x) ((1<<x) & io_apic_irqs)
 

@@ -1,0 +1,208 @@
+
+Documentation for /proc/sys/kernel/*	version 0.1
+	(c) 1998, Rik van Riel <H.H.vanRiel@fys.ruu.nl>
+
+For general info and legal blurb, please look in README.
+
+==============================================================
+
+This file contains documentation for the sysctl files in
+/proc/sys/kernel/ and is valid for Linux kernel version 2.1.
+
+The files in this directory can be used to tune and monitor
+miscellaneous and general things in the operation of the Linux
+kernel. Since some of the files _can_ be used to screw up your
+system, it is advisable to read both documentation and source
+before actually making adjustments.
+
+Currently, these files are in /proc/sys/kernel:
+- ctrl-alt-del
+- dentry-state
+- domainname
+- file-max
+- file-nr
+- hostname
+- inode-max
+- inode-nr
+- inode-state
+- osrelease
+- ostype
+- panic
+- printk
+- securelevel
+- version
+
+==============================================================
+
+ctrl-alt-del:
+
+When the value in this file is 0, ctrl-alt-del is trapped and
+sent to the init(1) program to handle a graceful restart.
+When, however, the value is > 0, Linux's reaction to a Vulcan
+Nerve Pinch (tm) will be an immediate reboot, without even
+syncing it's dirty buffers.
+
+Note: when a program (like dosemu) has the keyboard in 'raw'
+mode, the ctrl-alt-del is intercepted by the program before it
+ever reaches the kernel tty layer, and it's up to the program
+to decide what to do with it.
+
+==============================================================
+
+dentry-state:
+
+From linux/fs/dentry.c:
+--------------------------------------------------------------
+struct {
+        int nr_dentry;
+        int nr_unused;
+        int age_limit;         /* age in seconds */
+        int want_pages;        /* pages requested by system */
+        int dummy[2];
+} dentry_stat = {0, 0, 45, 0,};
+-------------------------------------------------------------- 
+
+Dentries are dynamically allocated and deallocated, and
+nr_dentry seems to be 0 all the time. Hence it's safe to
+assume that only nr_unused, age_limit and want_pages are
+used. Nr_unused seems to be exactly what it's name says.
+Age_limit is the age in seconds after which dcache entries
+can be reclaimed when memory is short and want_pages is
+nonzero when shrink_dcache_pages() has been called and the
+dcache isn't pruned yet.
+
+==============================================================
+
+domainname & hostname:
+
+These files can be controlled to set the domainname and
+hostname of your box. For the classic darkstar.frop.org
+a simple:
+# echo "darkstar" > /proc/sys/kernel/hostname
+# echo "frop.org" > /proc/sys/kernel/domainname
+would suffice to set your hostname and domainname.
+
+==============================================================
+
+file-max & file-nr:
+
+The kernel allocates filehandles dynamically, but as yet it
+doesn't free them again...
+
+The value in file-max denotes the maximum number of file-
+handles that the Linux kernel will allocate. When you get lots
+of error messages about running out of file handles, you might
+want to increase this limit.
+
+The three values in file-nr denote the number of allocated
+file handles, the number of used file handles and the maximum
+number of file handles. When the allocated filehandles come
+close to the maximum, but the number of actually used ones is
+far behind, you've encountered a peek in your filehandle usage
+and you don't need to increase the maximum.
+
+==============================================================
+
+inode-max, inode-nr & inode-state:
+
+As with filehandles, the kernel allocates the inode structures
+dynamically, but can't free them yet...
+
+The value in inode-max denotes the maximum number of inode
+handlers. This value should be 3-4 times larger as the value
+in file-max, since stdin, stdout and network sockets also
+need an inode struct to handle them. When you regularly run
+out of inodes, you need to increase this value.
+
+The file inode-nr contains the first two items from
+inode-state, so we'll skip to that file...
+
+Inode-state contains three actual numbers and four dummies.
+The actual numbers are, in order of appearance, nr_inodes,
+nr_free_inodes and preshrink.
+
+Nr_inodes stands for the number of inodes the system has
+allocated, this can be slightly more than inode-max because
+Linux allocates them one pagefull at a time.
+
+Nr_free_inodes represents the number of free inodes (?) and
+preshrink is nonzero when the nr_inodes > inode-max and the
+system needs to prune the inode list instead of allocating
+more.
+
+==============================================================
+
+osrelease, ostype & version:
+
+# cat osrelease
+2.1.88
+# cat ostype
+Linux
+# cat version
+#5 Wed Feb 25 21:49:24 MET 1998
+
+The files osrelease and ostype should be clear enough. Version
+needs a little more clarification however. The '#5' means that
+this is the fifth kernel built from this source base and the
+date behind it indicates the time the kernel was built.
+The only way to tune these values is to rebuild the kernel :-)
+
+==============================================================
+
+panic:
+
+The value in this file represents the number of seconds the
+kernel waits before rebooting on a panic. When you use the
+software watchdog, the recommended setting is 60.
+
+==============================================================
+
+printk:
+
+The four values in printk denote: console_loglevel,
+default_message_loglevel, minimum_console_level and
+default_console_loglevel respectively.
+
+These values influence printk() behavior when printing or
+logging error messages. See 'man 2 syslog' for more info on
+the different loglevels.
+
+- console_loglevel: messages with a higher priority than
+  this will be printed to the console
+- default_message_level: messages without an explicit priority
+  will be printed with this priority
+- minimum_console_loglevel: minimum (highest) value to which
+  console_loglevel can be set
+- default_console_loglevel: default value for console_loglevel
+
+Note: a quick look in linux/kernel/printk.c will reveal that
+these variables aren't put inside a structure, so their order
+in-core isn't formally guaranteed and garbage values _might_
+occur when the compiler changes. (???)
+
+==============================================================
+
+securelevel:
+
+When the value in this file is nonzero, root is prohibited
+from:
+- changing the immutable and append-only flags on files
+- changing sysctl things (limited ???)
+
+==============================================================
+
+real-root-dev: (CONFIG_INITRD only)
+
+This file is used to configure the real root device when using
+an initial ramdisk to configure the system before switching to
+the 'real' root device. See linux/Documentation/initrd.txt for
+more info.
+
+==============================================================
+
+reboot-cmd: (Sparc only)
+
+??? This seems to be a way to give an argument to the Sparc
+ROM/Flash boot loader. Maybe to tell it what to do after
+rebooting. ???
+

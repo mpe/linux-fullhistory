@@ -129,7 +129,7 @@ static unsigned int coda_psdev_poll(struct file *file, poll_table * wait)
 	if ( !vcp ) 
 	        return -ENXIO;
 
-	poll_wait(&(vcp->vc_waitq), wait);
+	poll_wait(file, &(vcp->vc_waitq), wait);
 	if (!q_empty(&(vcp->vc_pending)))
                 mask |= POLLIN | POLLRDNORM;
 

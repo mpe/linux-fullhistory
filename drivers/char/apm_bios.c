@@ -948,7 +948,7 @@ static unsigned int do_poll(struct file *fp, poll_table * wait)
 	as = fp->private_data;
 	if (check_apm_bios_struct(as, "select"))
 		return 0;
-	poll_wait(&process_list, wait);
+	poll_wait(fp, &process_list, wait);
 	if (!queue_empty(as))
 		return POLLIN | POLLRDNORM;
 	return 0;

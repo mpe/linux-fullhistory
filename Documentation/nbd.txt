@@ -4,19 +4,19 @@
    means, that it works on my computer, and it worked on one of school
    computers.
    
-   What is it: With this think compiled in kernel, linux can use remote
-   server as one of its block devices. So every time client computer
-   wants to read /dev/nd0, it will send request over TCP to server, which
-   will reply with data readed. This can be used for stations with
-   low-disk space (or even disklesses - if you boot from floppy) to
-   borrow disk space from other computer. Unlike NFS, it is possible to
-   put any filesystem on it etc. It is impossible to use NBD as root
-   filesystem, since it requires user-level program to start. It also
+   What is it: With this compiled in the kernel, linux can use a remote
+   server as one of its block devices. So every time the client computer
+   wants to read /dev/nd0, it sends a request over TCP to the server, which
+   will reply with the data read. This can be used for stations with
+   low-disk space (or even diskless - if you boot from floppy) to
+   borrow disk space from another computer. Unlike NFS, it is possible to
+   put any filesystem on it etc. It is impossible to use NBD as a root
+   filesystem, since it requires a user-level program to start. It also
    allows you to run block-device in user land (making server and client
-   physicaly same computer, communicating using loopback).
+   physically the same computer, communicating using loopback).
    
    Current state: It currently works. Network block device looks like
-   being pretty stable. I originaly thought that it is impossible to swap
+   being pretty stable. I originally thought that it is impossible to swap
    over TCP. It turned out not to be true - swapping over TCP now works
    and seems to be deadlock-free, but it requires heavy patches into
    Linux's network layer.
@@ -30,8 +30,8 @@ brw-rw-rw-   1 root     root      43,   1 Apr 11 00:28 nd1
 ...
 
    Protocol: Userland program passes file handle with connected TCP
-   socket to actuall kernel driver. This way, kernel does not have to
-   care about connecting etc. Protocol is rather simple: If driver is
+   socket to actual kernel driver. This way, the kernel does not have to
+   care about connecting etc. Protocol is rather simple: If the driver is
    asked to read from block device, it sends packet of following form
    "request" (all data are in network byte order):
    
@@ -48,7 +48,7 @@ brw-rw-rw-   1 root     root      43,   1 Apr 11 00:28 nd1
    structure "reply":
    
   __u32 magic;        must be equal to
-  __u64 handle;       handle copyied from request
+  __u64 handle;       handle copied from request
   __u32 error;        0 = operation completed successfully,
                       else error code
   ...                 in case of read operation with no error,

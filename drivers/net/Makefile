@@ -172,6 +172,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ULTRA32),y)
+L_OBJS += smc-ultra32.o
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_ULTRA32),m)
+  CONFIG_8390_MODULE = y
+  M_OBJS += smc-ultra32.o
+  endif
+endif
+
 ifeq ($(CONFIG_E2100),y)
 L_OBJS += e2100.o
 CONFIG_8390_BUILTIN = y

@@ -22,11 +22,10 @@ int DMAbuf_space_in_queue (int dev);
 int DMAbuf_activate_recording (int dev, struct dma_buffparms *dmap);
 int DMAbuf_get_buffer_pointer (int dev, struct dma_buffparms *dmap, int direction);
 void DMAbuf_launch_output(int dev, struct dma_buffparms *dmap);
-unsigned int DMAbuf_poll(int dev, poll_table *wait);
+unsigned int DMAbuf_poll(struct file *file, int dev, poll_table *wait);
 void DMAbuf_start_devices(unsigned int devmask);
 void DMAbuf_reset (int dev);
 int DMAbuf_sync (int dev);
-unsigned int DMAbuf_poll(int dev, poll_table *wait);
 
 /*
  *	System calls for /dev/dsp and /dev/audio (audio.c)

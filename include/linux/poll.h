@@ -11,6 +11,7 @@
 
 
 struct poll_table_entry {
+	struct file * filp;
 	struct wait_queue wait;
 	struct wait_queue ** wait_address;
 };
@@ -22,7 +23,7 @@ typedef struct poll_table_struct {
 
 #define __MAX_POLL_TABLE_ENTRIES (PAGE_SIZE / sizeof (struct poll_table_entry))
 
-extern inline void poll_wait(struct wait_queue ** wait_address, poll_table *p)
+extern inline void poll_wait(struct file * filp, struct wait_queue ** wait_address, poll_table *p)
 {
 	struct poll_table_entry * entry;
 
@@ -31,6 +32,8 @@ extern inline void poll_wait(struct wait_queue ** wait_address, poll_table *p)
 	if (p->nr >= __MAX_POLL_TABLE_ENTRIES)
 		return;
  	entry = p->entry + p->nr;
+ 	entry->filp = filp;
+ 	filp->f_count++;
 	entry->wait_address = wait_address;
 	entry->wait.task = current;
 	entry->wait.next = NULL;

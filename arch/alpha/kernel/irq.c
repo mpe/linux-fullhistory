@@ -920,7 +920,7 @@ miata_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	       *(vulp)PYXIS_INT_MASK, inb(0x20) | (inb(0xA0) << 8));
 #endif
 
-	/* For now, AND off and bits we are not interested in.  */
+	/* For now, AND off any bits we are not interested in.  */
 #if defined(CONFIG_ALPHA_MIATA)
 	/* HALT (2), timer (6), ISA Bridge (7), 21142/3 (8),
 	   then all the PCI slots/INTXs (12-31).  */

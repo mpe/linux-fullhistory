@@ -702,7 +702,7 @@ isdn_ppp_poll(struct file *file, poll_table * wait)
 	if (is->debug & 0x2)
 		printk(KERN_DEBUG "isdn_ppp_poll: minor: %d\n", MINOR(file->f_dentry->d_inode->i_rdev));
 
-	poll_wait(&is->wq, wait);
+	poll_wait(file, &is->wq, wait);
 
 	if (!(is->state & IPPP_OPEN)) {
 		printk(KERN_DEBUG "isdn_ppp: device not open\n");

@@ -1102,8 +1102,8 @@ static unsigned int normal_poll(struct tty_struct * tty, struct file * file, pol
 {
 	unsigned int mask = 0;
 
-	poll_wait(&tty->read_wait, wait);
-	poll_wait(&tty->write_wait, wait);
+	poll_wait(file, &tty->read_wait, wait);
+	poll_wait(file, &tty->write_wait, wait);
 	if (input_available_p(tty, TIME_CHAR(tty) ? 0 : MIN_CHAR(tty)))
 		mask |= POLLIN | POLLRDNORM;
 	if (tty->packet && tty->link->ctrl_status)

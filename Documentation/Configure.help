@@ -2193,10 +2193,9 @@ CONFIG_BRIDGE
   (user: anonymous) from shadow.cabi.net in /pub/Linux. Note that if
   your box acts as a bridge, it probably contains several ethernet
   devices, but the kernel is not able to recognize more than one at
-  boot time without help; for details read the
-  Multiple-Ethernet-mini-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. The Bridging code is
-  still in test. If unsure, say N.
+  boot time without help; for details read the Ethernet-HOWTO, available 
+  via ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO/. 
+  The Bridging code is still in test. If unsure, say N.
 
 Packet socket
 CONFIG_PACKET
@@ -3052,10 +3051,8 @@ CONFIG_NETDEVICES
   the WWW, you need to have access to a machine on the Internet that
   has a program like lynx or netscape)).  You'll have to say Y if your
   computer contains a network card that you want to use under linux
-  (make sure you know its name because you will be asked for it and
-  read the Ethernet-HOWTO; also, if you plan to use more than one
-  network card under linux, read the Multiple-Ethernet-mini-HOWTO,
-  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini) or if you
+  (make sure you know its name because you will be asked for it and read
+  the Ethernet-HOWTO in sunsite.unc.edu:/pub/Linux/docs/HOWTO; or if you
   want to use SLIP (Serial Line Internet Protocol is the protocol used
   to send Internet traffic over telephone lines or nullmodem cables)
   or CSLIP (compressed SLIP) or PPP (Point to Point Protocol, a better
@@ -3796,10 +3793,8 @@ Western Digital/SMC cards
 CONFIG_NET_VENDOR_SMC
   If you have a network (ethernet) card belonging to this class, say Y
   and read the Ethernet-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
-  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
-  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. Note that
-  the answer to this question doesn't directly affect the kernel:
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the
+  answer to this question doesn't directly affect the kernel:
   saying N will just cause this configure script to skip all the
   questions about Western Digital cards. If you say Y, you will be
   asked for your specific card in the following questions.
@@ -3813,10 +3808,7 @@ CONFIG_WD80x3
   running kernel whenever you want). The module will be called
   wd.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 SMC Ultra support
 CONFIG_ULTRA
@@ -3827,13 +3819,23 @@ CONFIG_ULTRA
   from the running kernel whenever you want). The module will be
   called smc-ultra.o. If you want to compile it as a module, say M
   here and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.  Important: There have
-  been many reports that, with some motherboards mixing an SMC Ultra
-  and an Adaptec AHA1542 SCSI card causes corruption problems with
-  many operating systems.
+  Documentation/networking/net-modules.txt. 
+  Important: There have been many reports that, with some motherboards 
+  mixing an SMC Ultra and an Adaptec AHA154x SCSI card (or compatible,
+  such as some BusLogic models) causes corruption problems with many 
+  operating systems. The linux smc-ultra driver has a work-around for this
+  but keep it in mind if you have such a SCSI card and have problems.
+
+SMC Ultra32 EISA support
+CONFIG_ULTRA
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). The module will be
+  called smc-ultra32.o. If you want to compile it as a module, say M
+  here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. 
 
 SMC 9194 Support
 CONFIG_SMC9194
@@ -3847,20 +3849,15 @@ CONFIG_SMC9194
   inserted in and removed from the running kernel whenever you
   want). The module will be called smc9194.o. If you want to compile
   it as a module, say M here and read Documentation/modules.txt as
-  well as Documentation/networking/net-modules.txt. If you plan to use
-  more than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  well as Documentation/networking/net-modules.txt.
 
 Racal-Interlan (Micom) NI cards
 CONFIG_NET_VENDOR_RACAL
   If you have a network (ethernet) card belonging to this class, such
   as the NI5010, NI5210 or NI6210, say Y and read the Ethernet-HOWTO,
   available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
-  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
-  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. Note that
-  the answer to this question doesn't directly affect the kernel:
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the answer 
+  to this question doesn't directly affect the kernel:
   saying N will just cause this configure script to skip all the
   questions about NI cards. If you say Y, you will be asked for your
   specific card in the following questions.
@@ -3875,10 +3872,7 @@ CONFIG_NI5010
   running kernel whenever you want). The module will be called
   ni5010.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-xIO  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 NI5210 support
 CONFIG_NI52
@@ -3889,10 +3883,7 @@ CONFIG_NI52
   running kernel whenever you want). The module will be called
   ni52.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt. 
 
 NI6510 support
 CONFIG_NI65
@@ -3903,19 +3894,14 @@ CONFIG_NI65
   running kernel whenever you want). The module will be called
   ni65.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt. 
 
 AMD LANCE and PCnet (AT1500 and NE2100) support
 CONFIG_LANCE
   If you have a network (ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. Some LinkSys cards are of
-  this type. If you plan to use more than one network card under
-  linux, read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  this type.
 
 3COM cards
 CONFIG_NET_VENDOR_3COM
@@ -3925,9 +3911,7 @@ CONFIG_NET_VENDOR_3COM
   this question doesn't directly affect the kernel: saying N will just
   cause this configure script to skip all the questions about 3COM
   cards. If you say Y, you will be asked for your specific card in the
-  following questions. If you plan to use more than one network card
-  under linux, read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. 
+  following questions. 
 
 3c501 support
 CONFIG_EL1
@@ -3941,10 +3925,7 @@ CONFIG_EL1
   from the running kernel whenever you want). The module will be
   called 3c501.o. If you want to compile it as a module, say M here
   and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini - and don't use 3c501s.
+  Documentation/networking/net-modules.txt.
 
 3c503 support
 CONFIG_EL2
@@ -3955,10 +3936,7 @@ CONFIG_EL2
   running kernel whenever you want). The module will be called
   3c503.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 3c505 support
 CONFIG_ELPLUS
@@ -3970,9 +3948,7 @@ CONFIG_ELPLUS
   removed from the running kernel whenever you want), say M here and
   read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
-  3c505.o. If you plan to use more than one network card under linux,
-  read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  3c505.o.
 
 3c507 support
 CONFIG_EL16
@@ -3983,10 +3959,7 @@ CONFIG_EL16
   running kernel whenever you want). The module will be called
   3c507.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 3c523 support 
 CONFIG_ELMC
@@ -3997,10 +3970,7 @@ CONFIG_ELMC
   running kernel whenever you want). The module will be called
   3c523.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 3c509/3c579 support
 CONFIG_EL3
@@ -4011,11 +3981,8 @@ CONFIG_EL3
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
-  3c509.o. If you plan to use more than one network card under linux,
-  read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If your card is not
-  working you may need to use the DOS setup disk to disable Plug &
-  Play mode, and to select the default media type.
+  3c509.o. If your card is not working you may need to use the DOS setup
+  disk to disable Plug & Play mode, and to select the default media type.
 
 3c590 series (592/595/597) "Vortex" support
 CONFIG_VORTEX
@@ -4028,9 +3995,7 @@ CONFIG_VORTEX
   running kernel whenever you want), say M here and read
   Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
-  3c59x.o. If you plan to use more than one network card under linux,
-  read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini
+  3c59x.o.
 
 Other ISA cards
 CONFIG_NET_ISA
@@ -4043,9 +4008,7 @@ CONFIG_NET_ISA
   directly affect the kernel: saying N will just cause this configure
   script to skip all the remaining ISA network card questions.  If you
   say Y, you will be asked for your specific card in the following
-  questions.  If you plan to use more than one network card under
-  linux, read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  questions. 
 
 Generic ARCnet support
 CONFIG_ARCNET
@@ -4062,10 +4025,7 @@ CONFIG_ARCNET
   from the running kernel whenever you want). The module will be
   called arcnet.o. If you want to compile it as a module, say M here
   and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 Enable arc0e (ARCnet "ether-encap" packet format)
 CONFIG_ARCNET_ETH
@@ -4146,10 +4106,7 @@ CONFIG_E2100
   running kernel whenever you want). The module will be called
   e2100.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 CS89x0 support
 CONFIG_CS89x0
@@ -4162,9 +4119,7 @@ CONFIG_CS89x0
   running kernel whenever you want), say M here and read
   Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
-  cs89x.o. If you plan to use more than one network card under linux,
-  read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  cs89x.o.
 
 DEPCA support
 CONFIG_DEPCA
@@ -4175,9 +4130,7 @@ CONFIG_DEPCA
   code which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt as
   well as Documentation/networking/net-modules.txt. The module will be
-  called depca.o. If you plan to use more than one network card under
-  linux, read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  called depca.o.
 
 EtherWorks 3 support
 CONFIG_EWRK3
@@ -4190,18 +4143,13 @@ CONFIG_EWRK3
   running kernel whenever you want), say M here and read
   Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
-  ewrk3.o. If you plan to use more than one network card under linux,
-  read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  ewrk3.o.
 
 SEEQ8005 support
 CONFIG_SEEQ8005
   This is a driver for the SEEQ 8005 network (ethernet) card. If this
   is for you, read the Ethernet-HOWTO, available via ftp (user:
-  anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan
-  to use more than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO.
 
 AT1700 support
 CONFIG_AT1700
@@ -4212,9 +4160,7 @@ CONFIG_AT1700
   running kernel whenever you want). If you want to compile it as a
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
-  at1700.o. If you plan to use more than one network card under linux,
-  read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  at1700.o.
 
 FMV-181/182/183/184 support
 CONFIG_FMV18X
@@ -4225,10 +4171,7 @@ CONFIG_FMV18X
   removed from the running kernel whenever you want). The module will
   be called fmv18x.o. If you want to compile it as a module, say M
   here and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you use FMV-183 or
+  Documentation/networking/net-modules.txt.  If you use FMV-183 or
   FMV-184 and it is not working, you may need to disable Plug & Play
   mode of the card.
 
@@ -4242,10 +4185,7 @@ CONFIG_EEXPRESS_PRO
   in and removed from the running kernel whenever you want). The
   module will be called eepro.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 EtherExpress support
 CONFIG_EEXPRESS
@@ -4259,9 +4199,7 @@ CONFIG_EEXPRESS
   running kernel whenever you want), say M here and read
   Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
-  eexpress.o. If you plan to use more than one network card under
-  linux, read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  eexpress.o.
 
 AT&T WaveLAN & DEC RoamAbout DS support
 CONFIG_WAVELAN
@@ -4282,10 +4220,7 @@ CONFIG_WAVELAN
   inserted in and removed from the running kernel whenever you
   want). The module will be called wavelan.o. If you want to compile
   it as a module, say M here and read Documentation/modules.txt as
-  well as Documentation/networking/net-modules.txt. If you plan to use
-  more than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  well as Documentation/networking/net-modules.txt.
 
 HP PCLAN+ (27247B and 27252A) support
 CONFIG_HPLAN_PLUS
@@ -4296,10 +4231,7 @@ CONFIG_HPLAN_PLUS
   running kernel whenever you want). The module will be called
   hp-plus.o. If you want to compile it as a module, say M here and
   read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 HP PCLAN (27245 and other 27xxx series) support
 CONFIG_HPLAN
@@ -4310,10 +4242,7 @@ CONFIG_HPLAN
   running kernel whenever you want). The module will be called
   hp.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 HP 10/100VG PCLAN (ISA, EISA, PCI) support
 CONFIG_HP100
@@ -4324,9 +4253,7 @@ CONFIG_HP100
   running kernel whenever you want), say M here and read
   Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
-  hp100.o. If you plan to use more than one network card under linux,
-  read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  hp100.o.
 
 NE2000/NE1000 support
 CONFIG_NE2000
@@ -4338,28 +4265,21 @@ CONFIG_NE2000
   from the running kernel whenever you want). The module will be
   called ne.o. If you want to compile it as a module, say M here and
   read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 SK_G16 support
 CONFIG_SK_G16
   If you have a network (ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
-  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
-  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.
 
 EISA, VLB, PCI and on board controllers
 CONFIG_NET_EISA
   This is another class of network cards which attach directly to the
   bus. If you have one of those, say Y and read the Ethernet-HOWTO,
   available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you plan to use more than
-  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
-  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you
-  are unsure, say Y. Note that the answer to this question doesn't
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you are unsure, say Y. 
+  Note that the answer to this question doesn't
   directly affect the kernel: saying N will just cause this configure
   script to skip all the questions about this class of network
   cards. If you say Y, you will be asked for your specific card in the
@@ -4369,10 +4289,7 @@ AMD PCnet32 (VLB and PCI) support
 CONFIG_PCNET32
   If you have a PCnet32 or PCnetPCI based network (ethernet) card, say
   Y here and read the Ethernet-HOWTO, available via ftp (user:
-  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you plan to
-  use more than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. 
 
 Ansel Communications EISA 3200 support
 CONFIG_AC3200
@@ -4383,10 +4300,7 @@ CONFIG_AC3200
   running kernel whenever you want). The module will be called
   ac3200.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 Racal-Interlan EISA ES3210 support
 CONFIG_ES3210
@@ -4397,10 +4311,7 @@ CONFIG_ES3210
   running kernel whenever you want). The module will be called
   es3210.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 Apricot Xen-II on board ethernet
 CONFIG_APRICOT
@@ -4411,9 +4322,7 @@ CONFIG_APRICOT
   running kernel whenever you want), say M here and read
   Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
-  apricot.o. If you plan to use more than one network card under
-  linux, read the Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  apricot.o.
 
 Generic DECchip & DIGITAL EtherWORKS PCI/EISA
 CONFIG_DE4X5
@@ -4427,10 +4336,7 @@ CONFIG_DE4X5
   from the running kernel whenever you want). The module will be
   called de4x5.o. If you want to compile it as a module, say M here
   and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 DECchip Tulip (dc21x4x) PCI support
 CONFIG_DEC_ELCP
@@ -4462,10 +4368,7 @@ CONFIG_DGRS
   from the running kernel whenever you want). The module will be
   called dgrs.o. If you want to compile it as a module, say M here and
   read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 EtherExpressPro/100 support
 CONFIG_EEXPRESS_PRO100
@@ -4476,10 +4379,7 @@ CONFIG_EEXPRESS_PRO100
   removed from the running kernel whenever you want). The module will
   be called eepro100.o. If you want to compile it as a module, say M
   here and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 ICL EtherTeam 16i/32 support
 CONFIG_ETH16I
@@ -4490,10 +4390,7 @@ CONFIG_ETH16I
   running kernel whenever you want). The module will be called
   eth16i.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. If you plan to use more
-  than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  Documentation/networking/net-modules.txt.
 
 TI ThunderLAN support (EXPERIMENTAL)
 CONFIG_TLAN
@@ -4553,9 +4450,7 @@ CONFIG_DE600
   want to compile this driver as a module however ( = code which can
   be inserted in and removed from the running kernel whenever you
   want), say M here and read Documentation/modules.txt. The module
-  will be called de600.o. If you plan to use more than one network
-  card under linux, read the Multiple-Ethernet-mini-HOWTO, available
-  from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  will be called de600.o.
 
 D-Link DE620 pocket adapter support
 CONFIG_DE620
@@ -4568,9 +4463,7 @@ CONFIG_DE620
   want to compile this driver as a module however ( = code which can
   be inserted in and removed from the running kernel whenever you
   want), say M here and read Documentation/modules.txt. The module
-  will be called de620.o. If you plan to use more than one network
-  card under linux, read the Multiple-Ethernet-mini-HOWTO, available
-  from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  will be called de620.o.
 
 Token Ring driver support
 CONFIG_TR

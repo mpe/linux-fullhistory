@@ -1,7 +1,6 @@
 /*
  * SMC 37C669 initialization code
  */
-#include <linux/config.h>
 #include <linux/kernel.h>
 
 #include <linux/bios32.h>

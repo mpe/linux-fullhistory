@@ -138,6 +138,9 @@ __initfunc(static int ethif_probe(struct device *dev))
 #if defined(CONFIG_MCA)
         && ultramca_probe(dev)
 #endif
+#if defined(CONFIG_ULTRA32)
+	&& ultra32_probe(dev)
+#endif
 #endif
 #if defined(CONFIG_SMC9194)
 	&& smc_init(dev)

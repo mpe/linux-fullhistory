@@ -2564,8 +2564,8 @@ ppp_tty_poll (struct tty_struct *tty, struct file *filp, poll_table * wait)
 	if (ppp && ppp->magic == PPP_MAGIC && tty == ppp->tty) {
 		CHECK_PPP (0);
 
-		poll_wait(&ppp->read_wait, wait);
-		poll_wait(&ppp->write_wait, wait);
+		poll_wait(filp, &ppp->read_wait, wait);
+		poll_wait(filp, &ppp->write_wait, wait);
 
 		/* Must lock the user buffer area while checking. */
 		CHECK_BUF_MAGIC(ppp->ubuf);

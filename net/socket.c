@@ -467,7 +467,7 @@ static unsigned int sock_poll(struct file *file, poll_table * wait)
 	 *	We can't return errors to poll, so it's either yes or no. 
 	 */
 
-	return sock->ops->poll(sock, wait);
+	return sock->ops->poll(file, sock, wait);
 }
 
 

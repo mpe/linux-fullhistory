@@ -538,7 +538,7 @@ extern __inline__ struct sk_buff *dev_alloc_skb(unsigned int length)
 }
 
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);
-extern unsigned int		datagram_poll(struct socket *sock, struct poll_table_struct *wait);
+extern unsigned int		datagram_poll(struct file *file, struct socket *sock, struct poll_table_struct *wait);
 extern int			skb_copy_datagram(struct sk_buff *from, int offset, char *to,int size);
 extern int			skb_copy_datagram_iovec(struct sk_buff *from, int offset, struct iovec *to,int size);
 extern void			skb_free_datagram(struct sock * sk, struct sk_buff *skb);

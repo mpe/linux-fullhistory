@@ -567,7 +567,7 @@ repeat:
 
 static unsigned int aux_poll(struct file *file, poll_table * wait)
 {
-	poll_wait(&queue->proc_list, wait);
+	poll_wait(file, &queue->proc_list, wait);
 	if (aux_ready)
 		return POLLIN | POLLRDNORM;
 	return 0;

@@ -1140,8 +1140,8 @@ random_poll(struct file *file, poll_table * wait)
 {
 	unsigned int mask;
 
-	poll_wait(&random_read_wait, wait);
-	poll_wait(&random_write_wait, wait);
+	poll_wait(file, &random_read_wait, wait);
+	poll_wait(file, &random_write_wait, wait);
 	mask = 0;
 	if (random_state.entropy_count >= WAIT_INPUT_BITS)
 		mask |= POLLIN | POLLRDNORM;

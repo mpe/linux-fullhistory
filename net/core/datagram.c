@@ -195,12 +195,12 @@ int skb_copy_datagram_iovec(struct sk_buff *skb, int offset, struct iovec *to,
  *	is only ever holding data ready to receive.
  */
 
-unsigned int datagram_poll(struct socket *sock, poll_table *wait)
+unsigned int datagram_poll(struct file * file, struct socket *sock, poll_table *wait)
 {
 	struct sock *sk = sock->sk;
 	unsigned int mask;
 
-	poll_wait(sk->sleep, wait);
+	poll_wait(file, sk->sleep, wait);
 	mask = 0;
 
 	/* exceptional events? */

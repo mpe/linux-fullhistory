@@ -836,13 +836,13 @@ int inet_shutdown(struct socket *sock, int how)
 }
 
 
-unsigned int inet_poll(struct socket *sock, poll_table *wait)
+unsigned int inet_poll(struct file * file, struct socket *sock, poll_table *wait)
 {
 	struct sock *sk = sock->sk;
 
 	if (sk->prot->poll == NULL)
 		return(0);
-	return sk->prot->poll(sock, wait);
+	return sk->prot->poll(file, sock, wait);
 }
 
 /*

@@ -396,12 +396,12 @@ unsigned int MIDIbuf_poll(int dev, struct file *file, poll_table * wait)
 	dev = dev >> 4;
 
 	/* input */
-	poll_wait(&input_sleeper[dev], wait);
+	poll_wait(file, &input_sleeper[dev], wait);
 	if (DATA_AVAIL(midi_in_buf[dev]))
 		mask |= POLLIN | POLLRDNORM;
 
 	/* output */
-	poll_wait(&midi_sleeper[dev], wait);
+	poll_wait(file, &midi_sleeper[dev], wait);
 	if (!SPACE_AVAIL(midi_out_buf[dev]))
 		mask |= POLLOUT | POLLWRNORM;
 	
