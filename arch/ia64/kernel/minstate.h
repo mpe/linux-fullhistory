@@ -26,7 +26,7 @@
 (pKStk) addl r1=-IA64_PT_REGS_SIZE,r1;			/* if in kernel mode, use sp (r12) */	\
 	;;											\
 (pUStk)	mov r18=ar.bsp;										\
-(pUStk)	mov ar.rsc=0x3;		/* set eager mode, pl 0, little-endian, loadrs=0 */		\
+(pUStk)	mov ar.rsc=0x3;		/* set eager mode, pl 0, little-endian, loadrs=0 */
 
 #define MINSTATE_END_SAVE_MIN_VIRT								\
 	bsw.1;			/* switch back to bank 1 (must be last in insn group) */	\
