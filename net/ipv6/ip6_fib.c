@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.20 2000/01/16 05:11:37 davem Exp $
+ *	$Id: ip6_fib.c,v 1.21 2000/05/03 06:37:07 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -87,12 +87,7 @@ static void fib6_repair_tree(struct fib6_node *fn);
 
 static __u32	rt_sernum	= 0;
 
-static struct timer_list ip6_fib_timer = {
-	NULL, NULL,
-	0,
-	~0UL,
-	fib6_run_gc
-};
+static struct timer_list ip6_fib_timer = { function: fib6_run_gc };
 
 static struct fib6_walker_t fib6_walker_list = {
 	&fib6_walker_list, &fib6_walker_list, 

@@ -67,7 +67,7 @@ int mod_timer(struct timer_list *timer, unsigned long expires);
 
 extern void it_real_fn(unsigned long);
 
-extern inline void init_timer(struct timer_list * timer)
+static inline void init_timer(struct timer_list * timer)
 {
 	timer->list.next = timer->list.prev = NULL;
 #ifdef CONFIG_SMP
@@ -75,7 +75,7 @@ extern inline void init_timer(struct timer_list * timer)
 #endif
 }
 
-extern inline int timer_pending (const struct timer_list * timer)
+static inline int timer_pending (const struct timer_list * timer)
 {
 	return timer->list.next != NULL;
 }

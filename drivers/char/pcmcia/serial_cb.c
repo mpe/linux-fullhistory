@@ -50,12 +50,12 @@ static char *version =
 
 ======================================================================*/
 
-static void device_setup(u_char bus, u_char devfn, u_int ioaddr)
+static void device_setup(struct pci_dev *pdev, u_int ioaddr)
 {
     u_short a, b;
 
-    pcibios_read_config_word(bus, devfn, PCI_SUBSYSTEM_VENDOR_ID, &a);
-    pcibios_read_config_word(bus, devfn, PCI_SUBSYSTEM_ID, &b);
+    a = pdev->subsystem_vendor;
+    b = pdev->subsystem_device;
     if (((a == 0x13a2) && (b == 0x8007)) ||
 	((a == 0x1420) && (b == 0x8003))) {
 	/* Ositech, Psion 83c175-based cards */
@@ -81,22 +81,26 @@ static void device_setup(u_char bus, u_char devfn, u_int ioaddr)
 static dev_node_t *serial_attach(dev_locator_t *loc)
 {
     u_int io;
-    u_char bus, devfn, irq;
+    u_char irq;
     int line;
     struct serial_struct serial;
+    struct pci_dev *pdev;
+    dev_node_t *node;
     
-    if (loc->bus != LOC_PCI) return NULL;
-    bus = loc->b.pci.bus; devfn = loc->b.pci.devfn;
-    printk(KERN_INFO "serial_attach(bus %d, fn %d)\n", bus, devfn);
-    pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &io);
-    pcibios_read_config_byte(bus, devfn, PCI_INTERRUPT_LINE, &irq);
-    if (io & PCI_BASE_ADDRESS_SPACE_IO) {
-	io &= PCI_BASE_ADDRESS_IO_MASK;
-    } else {
+    MOD_INC_USE_COUNT;
+
+    if (loc->bus != LOC_PCI) goto err_out;
+    pdev = pci_find_slot (loc->b.pci.bus, loc->b.pci.devfn);
+    if (!pdev) goto err_out;
+
+    printk(KERN_INFO "serial_attach(bus %d, fn %d)\n", pdev->bus->number, pdev->devfn);
+    io = pci_resource_start (pdev, 0);
+    irq = pdev->irq;
+    if (!(pci_resource_flags(pdev, 0) & IORESOURCE_IO)) {
 	printk(KERN_NOTICE "serial_cb: PCI base address 0 is not IO\n");
-	return NULL;
+	goto err_out;
     }
-    device_setup(bus, devfn, io);
+    device_setup(pdev, io);
     memset(&serial, 0, sizeof(serial));
     serial.port = io; serial.irq = irq;
     serial.flags = ASYNC_SKIP_TEST | ASYNC_SHARE_IRQ;
@@ -109,15 +113,22 @@ static dev_node_t *serial_attach(dev_locator_t *loc)
     if (line < 0) {
 	printk(KERN_NOTICE "serial_cb: register_serial() at 0x%04x, "
 	       "irq %d failed\n", serial.port, serial.irq);
-	return NULL;
-    } else {
-	dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
-	sprintf(node->dev_name, "ttyS%d", line);
-	node->major = TTY_MAJOR; node->minor = 0x40 + line;
-	node->next = NULL;
-	MOD_INC_USE_COUNT;
-	return node;
+    	goto err_out;
     }
+
+    node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
+    if (!node)
+	    goto err_out_unregister;
+    sprintf(node->dev_name, "ttyS%d", line);
+    node->major = TTY_MAJOR; node->minor = 0x40 + line;
+    node->next = NULL;
+    return node;
+
+err_out_unregister:
+    unregister_serial(0x40 + line);
+err_out:
+    MOD_DEC_USE_COUNT;
+    return NULL;
 }
 
 static void serial_detach(dev_node_t *node)

@@ -877,9 +877,8 @@ static void cyz_poll(unsigned long);
 static long cyz_polling_cycle = CZ_DEF_POLL;
 
 static int cyz_timeron = 0;
-static struct timer_list
-cyz_timerlist = {
-    NULL, NULL, 0, 0, cyz_poll
+static struct timer_list cyz_timerlist = {
+    function: cyz_poll
 };
 #else /* CONFIG_CYZ_INTR */
 static void cyz_rx_restart(unsigned long);

@@ -34,7 +34,7 @@
 #if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
 #include <linux/if_bridge.h>
 #include "../bridge/br_private.h"
-static unsigned char bridge_ula[] = {0x01, 0x80, 0xc2, 0x00, 0x00};
+static unsigned char bridge_ula_lec[] = {0x01, 0x80, 0xc2, 0x00, 0x00};
 #endif
 
 /* Modular too */
@@ -92,7 +92,7 @@ struct net_device **get_dev_lec (void) {
 }
 
 #if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
-static void handle_bridge(struct sk_buff *skb, struct net_device *dev)
+static void lec_handle_bridge(struct sk_buff *skb, struct net_device *dev)
 {
         struct ethhdr *eth;
         char *buff;
@@ -220,8 +220,8 @@ lec_send_packet(struct sk_buff *skb, struct net_device *dev)
                 (long)skb->head, (long)skb->data, (long)skb->tail,
                 (long)skb->end);
 #if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
-        if (memcmp(skb->data, bridge_ula, sizeof(bridge_ula)) == 0)
-                handle_bridge(skb, dev);
+        if (memcmp(skb->data, bridge_ula_lec, sizeof(bridge_ula_lec)) == 0)
+                lec_handle_bridge(skb, dev);
 #endif
 
         /* Make sure we have room for lec_id */

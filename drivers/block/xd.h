@@ -122,8 +122,8 @@ static void xd_recalibrate (u_char drive);
 static void xd_interrupt_handler (int irq, void *dev_id, struct pt_regs *regs);
 static u_char xd_setup_dma (u_char opcode,u_char *buffer,u_int count);
 static u_char *xd_build (u_char *cmdblk,u_char command,u_char drive,u_char head,u_short cylinder,u_char sector,u_char count,u_char control);
-static void xd_wakeup (void);
-static void xd_watchdog (void);
+static void xd_wakeup (unsigned long unused);
+static void xd_watchdog (unsigned long unused);
 static inline u_char xd_waitport (u_short port,u_char flags,u_char mask,u_long timeout);
 static u_int xd_command (u_char *command,u_char mode,u_char *indata,u_char *outdata,u_char *sense,u_long timeout);
 

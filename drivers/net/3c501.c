@@ -243,7 +243,7 @@ int __init el1_probe(struct net_device *dev)
 	if (base_addr > 0x1ff)	/* Check a single specified location. */
 		return el1_probe1(dev, base_addr);
 	else if (base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	for (i = 0; netcard_portlist[i]; i++)
 	{
@@ -254,7 +254,7 @@ int __init el1_probe(struct net_device *dev)
 			return 0;
 	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 #endif
 
@@ -303,13 +303,14 @@ static int __init el1_probe1(struct net_device *dev, int ioaddr)
 		mname = "NP943";
     	}
     	else
-		return ENODEV;
+		return -ENODEV;
 
 	/*
 	 *	Grab the region so we can find the another board if autoIRQ fails.
 	 */
 
-	request_region(ioaddr, EL1_IO_EXTENT,"3c501");
+	if (!request_region(ioaddr, EL1_IO_EXTENT,"3c501"))
+		return -ENODEV;
 
 	/*
 	 *	We auto-IRQ by shutting off the interrupt line and letting it float
@@ -331,7 +332,7 @@ static int __init el1_probe1(struct net_device *dev, int ioaddr)
 		{
 			printk("%s probe at %#x failed to detect IRQ line.\n",
 				mname, ioaddr);
-			return EAGAIN;
+			return -EAGAIN;
 		}
 	}
 
@@ -406,11 +407,15 @@ static int el_open(struct net_device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned long flags;
 
+	MOD_INC_USE_COUNT;
+
 	if (el_debug > 2)
 		printk("%s: Doing el_open()...", dev->name);
 
-	if (request_irq(dev->irq, &el_interrupt, 0, "3c501", dev))
+	if (request_irq(dev->irq, &el_interrupt, 0, "3c501", dev)) {
+		MOD_DEC_USE_COUNT;
 		return -EAGAIN;
+	}
 
 	spin_lock_irqsave(&lp->lock, flags);
 	el_reset(dev);
@@ -419,7 +424,6 @@ static int el_open(struct net_device *dev)
 	lp->txing = 0;		/* Board in RX mode */
 	outb(AX_RX, AX_CMD);	/* Aux control, irq and receive enabled */
 	netif_start_queue(dev);
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 

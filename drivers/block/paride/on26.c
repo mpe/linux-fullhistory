@@ -125,7 +125,7 @@ static void on26_disconnect ( PIA *pi )
 
 static int on26_test_port( PIA *pi)  /* hard reset */
 
-{       int     i, m, d, x, y;
+{       int     i, m, d, x=0, y=0;
 
         pi->saved_r0 = r0();
         pi->saved_r2 = r2();

@@ -312,7 +312,6 @@ EXPORT_NO_SYMBOLS;
 /* This is a bit of a hack... */
 int __init init_module(void)
 {
-	int i, j;
 	cpqarray_init();
 	if (nr_ctlr == 0)
 		return -EIO;
@@ -627,16 +626,15 @@ static int cpqarray_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
 	for(i=0; i<6; i++)
 		addr[i] = pdev->resource[i].flags;
 
-	(void) pcibios_read_config_word(bus, device_fn,
-					PCI_COMMAND,&command);
-	(void) pcibios_read_config_byte(bus, device_fn,
-					PCI_CLASS_REVISION,&revision);
-	(void) pcibios_read_config_byte(bus, device_fn,
-					PCI_CACHE_LINE_SIZE, &cache_line_size);
-	(void) pcibios_read_config_byte(bus, device_fn,
-					PCI_LATENCY_TIMER, &latency_timer);
+	if (pci_enable_device(pdev))
+		return -1;
 
-	(void) pcibios_read_config_dword(bus, device_fn, 0x2c, &board_id);
+	pci_read_config_word(pdev, PCI_COMMAND, &command);
+	pci_read_config_byte(pdev, PCI_CLASS_REVISION, &revision);
+	pci_read_config_byte(pdev, PCI_CACHE_LINE_SIZE, &cache_line_size);
+	pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &latency_timer);
+
+	pci_read_config_dword(pdev, 0x2c, &board_id);
 
 DBGINFO(
 	printk("vendor_id = %x\n", vendor_id);
@@ -659,7 +657,7 @@ DBGINFO(
 	 */
 	for(i=0; i<6; i++)
 		if (!(addr[i] & 0x1)) {
-			c->paddr = pdev->resource[i].start;
+			c->paddr = pci_resource_start (pdev, i);
 			break;
 		}
 	c->vaddr = remap_pci_mem(c->paddr, 128);

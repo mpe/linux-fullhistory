@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.19 2000/03/16 11:53:05 jj Exp $
+/* $Id: unaligned.c,v 1.20 2000/04/29 08:05:21 anton Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -360,10 +360,12 @@ void kernel_mna_trap_fault(struct pt_regs *regs, unsigned int insn)
         	} else
                 	printk(KERN_ALERT "Unable to handle kernel paging request in mna handler");
 	        printk(KERN_ALERT " at virtual address %016lx\n",address);
-        	printk(KERN_ALERT "current->mm->context = %016lx\n",
-	               (unsigned long) current->mm->context);
-	        printk(KERN_ALERT "current->mm->pgd = %016lx\n",
-        	       (unsigned long) current->mm->pgd);
+		printk(KERN_ALERT "current->{mm,active_mm}->context = %016lx\n",
+			(current->mm ? current->mm->context :
+			current->active_mm->context));
+		printk(KERN_ALERT "current->{mm,active_mm}->pgd = %016lx\n",
+			(current->mm ? (unsigned long) current->mm->pgd :
+			(unsigned long) current->active_mm->pgd));
 	        die_if_kernel("Oops", regs);
 		/* Not reached */
 	}

@@ -3,7 +3,7 @@
  * not have boot monitor support for board information.
  */
 #include <sys/types.h>
-#include <linux/autoconf.h>
+#include <linux/config.h>
 #ifdef CONFIG_8xx
 #include <asm/mpc8xx.h>
 #endif

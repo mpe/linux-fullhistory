@@ -1386,6 +1386,7 @@ static int add_card(struct pci_dev *dev)
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
+	/* XXX check return value */
 	pci_enable_device(dev);
 #endif
 

@@ -135,8 +135,7 @@ void dn_start_fast_timer(struct sock *sk)
 
 	if (!scp->delack_pending) {
 		scp->delack_pending = 1;
-		scp->delack_timer.next =
-		scp->delack_timer.prev = NULL;
+		init_timer(&scp->delack_timer);
 		scp->delack_timer.expires = jiffies + FAST_INTERVAL;
 		scp->delack_timer.data = (unsigned long)sk;
 		scp->delack_timer.function = dn_fast_timer;

@@ -2200,6 +2200,7 @@ static int find_planb(void)
 	unsigned char		dev_fn, confreg, bus;
 	unsigned int		old_base, new_base;
 	unsigned int		irq;
+	struct pci_dev 		*pdev;
 
 	if (_machine != _MACH_Pmac)
 		return 0;
@@ -2251,17 +2252,23 @@ static int find_planb(void)
 		"membase 0x%x (base reg. 0x%x)\n",
 		bus, PCI_SLOT(dev_fn), PCI_FUNC(dev_fn), old_base, confreg);
 
+	pdev = pci_find_slot (bus, dev_fn);
+	if (!pdev) {
+		printk(KERN_ERR "cannot find slot\n");
+		/* XXX handle error */
+	}
+
 	/* Enable response in memory space, bus mastering,
 	   use memory write and invalidate */
-	pcibios_write_config_word (bus, dev_fn, PCI_COMMAND,
+	pci_write_config_word (pdev, PCI_COMMAND,
 		PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER |
 		PCI_COMMAND_INVALIDATE);
 	/* Set PCI Cache line size & latency timer */
-	pcibios_write_config_byte (bus, dev_fn, PCI_CACHE_LINE_SIZE, 0x8);
-	pcibios_write_config_byte (bus, dev_fn, PCI_LATENCY_TIMER, 0x40);
+	pci_write_config_byte (pdev, PCI_CACHE_LINE_SIZE, 0x8);
+	pci_write_config_byte (pdev, PCI_LATENCY_TIMER, 0x40);
 
 	/* Set the new base address */
-	pcibios_write_config_dword (bus, dev_fn, confreg, new_base);
+	pci_write_config_dword (pdev, confreg, new_base);
 
 	planb_regs = (volatile struct planb_registers *)
 						ioremap (new_base, 0x400);

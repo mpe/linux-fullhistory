@@ -734,7 +734,7 @@ static void do_sequencer_timer(unsigned long dummy)
 
 
 static struct timer_list seq_timer =
-{NULL, NULL, 0, 0, do_sequencer_timer};
+{function: do_sequencer_timer};
 
 void request_sound_timer(int count)
 {

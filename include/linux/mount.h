@@ -31,14 +31,17 @@ struct vfsmount
 
 static inline struct vfsmount *mntget(struct vfsmount *mnt)
 {
-	atomic_inc(&mnt->mnt_count);
+	if (mnt)
+		atomic_inc(&mnt->mnt_count);
 	return mnt;
 }
 
 static inline void mntput(struct vfsmount *mnt)
 {
-	if (atomic_dec_and_test(&mnt->mnt_count))
-		BUG();
+	if (mnt) {
+		if (atomic_dec_and_test(&mnt->mnt_count))
+			BUG();
+	}
 }
 
 #endif

@@ -43,7 +43,10 @@ contains:
 
 	name		Name of the driver
 	id_table	Pointer to table of device ID's the driver is
-			interested in
+			interested in.  Most drivers should export this
+			table using MODULE_DEVICE_TABLE(pci,...).
+			Set to NULL to call probe() function for every
+			PCI device known to the system.
 	probe		Pointer to a probing function which gets called (during
 			execution of pci_register_driver for already existing
 			devices or later if a new device gets inserted) for all

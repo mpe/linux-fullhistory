@@ -12,6 +12,7 @@
  *  more details.
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/fb.h>
 #include <linux/string.h>

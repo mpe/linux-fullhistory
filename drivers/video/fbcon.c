@@ -229,15 +229,13 @@ static void fbcon_vbl_detect(int irq, void *dummy, struct pt_regs *fp)
 static void cursor_timer_handler(unsigned long dev_addr);
 
 static struct timer_list cursor_timer = {
-    NULL, NULL, 0, 0L, cursor_timer_handler
+    function: cursor_timer_handler
 };
 
 static void cursor_timer_handler(unsigned long dev_addr)
 {
       fbcon_vbl_handler(0, NULL, NULL);
       cursor_timer.expires = jiffies+HZ/50;
-      cursor_timer.data = 0;
-      cursor_timer.next = cursor_timer.prev = NULL;
       add_timer(&cursor_timer);
 }
 
@@ -411,8 +409,6 @@ static const char *fbcon_startup(void)
     if (irqres) {
 	cursor_blink_rate = DEFAULT_CURSOR_BLINK_RATE;
 	cursor_timer.expires = jiffies+HZ/50;
-	cursor_timer.data = 0;
-	cursor_timer.next = cursor_timer.prev = NULL;
 	add_timer(&cursor_timer);
     }
 

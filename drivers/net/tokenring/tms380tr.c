@@ -270,8 +270,6 @@ int tms380tr_open(struct net_device *dev)
 	tp->timer.expires	= jiffies + 30*HZ;
 	tp->timer.function	= tms380tr_timer_end_wait;
 	tp->timer.data		= (unsigned long)dev;
-	tp->timer.next		= NULL;
-	tp->timer.prev		= NULL;
 	add_timer(&tp->timer);
 
 	printk(KERN_INFO "%s: Adapter RAM size: %dK\n", 

@@ -110,8 +110,6 @@
 #define TRACE_Q(fmt, arg...) /**/
 #endif
 
-void cleanup_module(void);
-
 static void on_timer_1(void*);
 static void on_timer_2(void*);
 static void add_tx_queue(struct r3964_info *, struct r3964_block_header *);
@@ -196,11 +194,7 @@ static void dump_block(const unsigned char *block, unsigned int length)
  * Module support routines
  *************************************************************/
 
-#ifdef MODULE
-
-#define r3964_init init_module
-
-void cleanup_module(void)
+static void __exit r3964_exit(void)
 {
    int status;
    
@@ -218,9 +212,6 @@ void cleanup_module(void)
    }
    
 }
-
-
-#endif /* MODULE */
 
 static int __init r3964_init(void)
 {
@@ -248,9 +239,9 @@ static int __init r3964_init(void)
    return status;
 }
 
-#ifndef MODULE
-__initcall (r3964_init);
-#endif
+module_init(r3964_init);
+module_exit(r3964_exit);
+
 
 /*************************************************************
  * Protocol implementation routines

@@ -1,4 +1,4 @@
-/* $Id: pci_common.c,v 1.11 2000/04/26 10:48:02 davem Exp $
+/* $Id: pci_common.c,v 1.12 2000/05/01 06:32:49 davem Exp $
  * pci_common.c: PCI controller common support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -497,10 +497,10 @@ static int __init pci_intmap_match(struct pci_dev *pdev, unsigned int *interrupt
 		       pwalk->bus->number != pbm->pci_first_busno)
 			pwalk = pwalk->bus->self;
 
-		bus_pcp = pwalk->bus->self->sysdata;
-
+		bus_pcp = pwalk->sysdata;
 		pregs = bus_pcp->prom_regs;
-		offset = prom_getint(bus_pcp->prom_node,
+
+		offset = prom_getint(dev_pcp->prom_node,
 				     "fcode-rom-offset");
 
 		/* Did PROM know better and assign an interrupt other
@@ -509,8 +509,8 @@ static int __init pci_intmap_match(struct pci_dev *pdev, unsigned int *interrupt
 		 * correct 'interrupts' property, unless it is quadhme.
 		 */
 		if (offset == -1 ||
-		    !strcmp(bus_pcp->prom_name, "SUNW,qfe") ||
-		    !strcmp(bus_pcp->prom_name, "qfe")) {
+		    !strcmp(dev_pcp->prom_name, "SUNW,qfe") ||
+		    !strcmp(dev_pcp->prom_name, "qfe")) {
 			/*
 			 * No, use low slot number bits of child as IRQ line.
 			 */

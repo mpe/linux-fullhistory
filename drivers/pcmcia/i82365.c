@@ -1518,7 +1518,7 @@ static int __init init_i82365(void)
     if (poll_interval != 0) {
 	poll_timer.function = pcic_interrupt_wrapper;
 	poll_timer.data = 0;
-	poll_timer.prev = poll_timer.next = NULL;
+	init_timer(&poll_timer);
     	poll_timer.expires = jiffies + poll_interval;
 	add_timer(&poll_timer);
     }

@@ -2034,7 +2034,7 @@ static int matroxfb_probe(struct pci_dev* pdev, const struct pci_device_id* dumm
 	ACCESS_FBINFO(fastfont.size) = fastfont;
 
 	ACCESS_FBINFO(cursor.state) = CM_ERASE;
-	ACCESS_FBINFO(cursor.timer.prev) = ACCESS_FBINFO(cursor.timer.next) = NULL;
+	init_timer (&ACCESS_FBINFO(cursor.timer));
 	ACCESS_FBINFO(cursor.timer.data) = (unsigned long)MINFO;
 	spin_lock_init(&ACCESS_FBINFO(lock.DAC));
 	spin_lock_init(&ACCESS_FBINFO(lock.accel));

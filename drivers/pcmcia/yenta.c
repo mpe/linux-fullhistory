@@ -786,10 +786,8 @@ static int yenta_open(pci_socket_t *socket)
 	/*
 	 * Do some basic sanity checking..
 	 */
-	if (pci_enable_device(dev)) {
-		printk("Unable to enable device\n");
+	if (pci_enable_device(dev))
 		return -1;
-	}
 	if (!dev->resource[0].start) {
 		printk("No cardbus resource!\n");
 		return -1;

@@ -1157,7 +1157,6 @@ lance_close(struct net_device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct lance_private *lp = (struct lance_private *)dev->priv;
-	int i;
 
 	netif_stop_queue (dev);
 

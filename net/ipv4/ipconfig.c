@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.30 2000/04/15 01:48:10 davem Exp $
+ *  $Id: ipconfig.c,v 1.31 2000/05/03 06:37:06 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.

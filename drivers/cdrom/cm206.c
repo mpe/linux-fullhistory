@@ -1420,7 +1420,7 @@ int __init cm206_init(void)
 #ifdef MODULE
 
 
-void __init parse_options(void)
+static void __init parse_options(void)
 {
   int i;
   for (i=0; i<2; i++) {

@@ -8,6 +8,8 @@
 #ifndef __CONFIG_8260_DEFS
 #define __CONFIG_8260_DEFS
 
+#include <linux/config.h>
+
 #ifdef CONFIG_8260
 
 #ifdef CONFIG_EST8260

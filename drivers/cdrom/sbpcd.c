@@ -764,10 +764,10 @@ static struct {
 unsigned long cli_sti; /* for saving the processor flags */
 #endif
 /*==========================================================================*/
-static struct timer_list delay_timer = { NULL, NULL, 0, 0, mark_timeout_delay};
-static struct timer_list data_timer = { NULL, NULL, 0, 0, mark_timeout_data};
+static struct timer_list delay_timer = { function: mark_timeout_delay};
+static struct timer_list data_timer = { function: mark_timeout_data};
 #if 0
-static struct timer_list audio_timer = { NULL, NULL, 0, 0, mark_timeout_audio};
+static struct timer_list audio_timer = { function: mark_timeout_audio};
 #endif
 /*==========================================================================*/
 /*

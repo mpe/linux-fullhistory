@@ -190,6 +190,17 @@ const char __module_parm_desc_##var[]		\
 __attribute__((section(".modinfo"))) =		\
 "parm_desc_" __MODULE_STRING(var) "=" desc
 
+/*
+ * MODULE_DEVICE_TABLE exports information about devices
+ * currently supported by this module.  A device type, such as PCI,
+ * is a C-like identifier passed as the first arg to this macro.
+ * The second macro arg is the variable containing the device
+ * information being made public.
+ *
+ * The following is a list of known device types (arg 1),
+ * and the C types which are to be passed as arg 2.
+ * pci - struct pci_device_id - List of PCI ids supported by this module
+ */
 #define MODULE_DEVICE_TABLE(type,name)	\
 const struct type##_device_id * __module_##type##_device_table = name
 /* not put to .modinfo section to avoid section type conflicts */

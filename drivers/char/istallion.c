@@ -796,7 +796,7 @@ static struct file_operations	stli_fsiomem = {
  *	not increase character latency by much either...
  */
 static struct timer_list	stli_timerlist = {
-	NULL, NULL, 0, 0, stli_poll
+	function: stli_poll
 };
 
 static int	stli_timeron = 0;
@@ -837,7 +837,7 @@ void cleanup_module()
 	stlibrd_t	*brdp;
 	stliport_t	*portp;
 	unsigned long	flags;
-	int		i, j, k;
+	int		i, j;
 
 #if DEBUG
 	printk("cleanup_module()\n");

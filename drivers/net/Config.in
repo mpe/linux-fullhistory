@@ -53,13 +53,13 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
    fi
    bool '  3COM cards' CONFIG_NET_VENDOR_3COM
    if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
-      tristate '    3c501 support' CONFIG_EL1
-      tristate '    3c503 support' CONFIG_EL2
-      tristate '    3c505 support' CONFIG_ELPLUS
+      tristate '    3c501 "EtherLink" support' CONFIG_EL1
+      tristate '    3c503 "EtherLink II" support' CONFIG_EL2
+      tristate '    3c505 "Etherlink Plus" support' CONFIG_ELPLUS
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	 tristate '    3c507 support (EXPERIMENTAL)' CONFIG_EL16
       fi
-      tristate '    3c509/3c529 (MCA)/3c579 support' CONFIG_EL3
+      tristate '    3c509/3c529 (MCA)/3c579 "Etherlink III" support' CONFIG_EL3
       tristate '    3c515 ISA Fast EtherLink' CONFIG_3C515
       if [ "$CONFIG_MCA" = "y" ]; then
 	 tristate '    3c523 support' CONFIG_ELMC

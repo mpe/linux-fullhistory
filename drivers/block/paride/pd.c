@@ -637,7 +637,7 @@ void    cleanup_module(void);
 
 int     init_module(void)
 
-{       int     err, unit;
+{
 
 #ifdef PARIDE_JUMBO
        { extern paride_init();

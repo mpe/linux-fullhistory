@@ -115,7 +115,7 @@ static struct net_device *init_netdev(struct net_device *dev, int sizeof_priv, c
 	 *	Allocate a name
 	 */
 	 
-	if (dev->name && (dev->name[0] == '\0' || dev->name[0] == ' '))
+	if (dev->name[0] == '\0' || dev->name[0] == ' ')
 	{
 		if(dev_alloc_name(dev, mask)<0)
 		{
@@ -154,8 +154,7 @@ static struct net_device *init_netdev(struct net_device *dev, int sizeof_priv, c
  * alignment is enforced for this private data area.
  *
  * If an empty string area is passed as dev->name, or a new structure is made,
- * a new name string is constructed.  The passed string area should be 8 bytes
- * long.
+ * a new name string is constructed.
  */
 
 struct net_device *init_etherdev(struct net_device *dev, int sizeof_priv)
@@ -412,7 +411,7 @@ int register_netdev(struct net_device *dev)
 	 *	do a name allocation
 	 */
 	 
-	if (dev->name && strchr(dev->name, '%'))
+	if (strchr(dev->name, '%'))
 	{
 		err = -EBUSY;
 		if(dev_alloc_name(dev, dev->name)<0)
@@ -423,7 +422,7 @@ int register_netdev(struct net_device *dev)
 	 *	Back compatibility hook. Kill this one in 2.5
 	 */
 	
-	if (dev->name && (dev->name[0]==0 || dev->name[0]==' '))
+	if (dev->name[0]==0 || dev->name[0]==' ')
 	{
 		err = -EBUSY;
 		if(dev_alloc_name(dev, "eth%d")<0)

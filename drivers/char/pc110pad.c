@@ -116,7 +116,7 @@ static int recent_transition=0;
 static int transition_count=0;
 static int synthesize_tap=0;
 static void tap_timeout(unsigned long data);
-static struct timer_list tap_timer = { NULL, NULL, 0, 0, tap_timeout };
+static struct timer_list tap_timer = { function: tap_timeout };
 
 
 /**
@@ -232,7 +232,7 @@ static int xy_pending=0;	/* set if new data have not yet been read */
  */
  
 static void bounce_timeout(unsigned long data);
-static struct timer_list bounce_timer = { NULL, NULL, 0, 0, bounce_timeout };
+static struct timer_list bounce_timer = { function: bounce_timeout };
 
 
 

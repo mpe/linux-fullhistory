@@ -4,7 +4,6 @@
  * port on SMC1.
  */
 #include <linux/types.h>
-#include <linux/autoconf.h>
 #include "asm/mpc8260.h"
 #include "asm/cpm_8260.h"
 

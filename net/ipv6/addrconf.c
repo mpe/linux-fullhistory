@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: addrconf.c,v 1.57 2000/01/18 08:24:21 davem Exp $
+ *	$Id: addrconf.c,v 1.58 2000/05/03 06:37:07 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -84,10 +84,7 @@ rwlock_t addrconf_lock = RW_LOCK_UNLOCKED;
 
 void addrconf_verify(unsigned long);
 
-static struct timer_list addr_chk_timer = {
-	NULL, NULL,
-	0, 0, addrconf_verify
-};
+static struct timer_list addr_chk_timer = { function: addrconf_verify };
 
 static int addrconf_ifdown(struct net_device *dev, int how);
 

@@ -1330,34 +1330,15 @@ static int __init  dgrs_scan(void)
 	 */
 	if (pci_present())
 	{
-		int pci_index = 0;
+		struct pci_dev *pdev = NULL;
 
-		for (; pci_index < 8; pci_index++)
+		while ((pdev = pci_find_device(SE6_PCI_VENDOR_ID, SE6_PCI_DEVICE_ID, pdev)) != NULL)
 		{
-			uchar	pci_bus, pci_device_fn;
-#if LINUX_VERSION_CODE < 0x20100
-			uchar	pci_irq;
-#else
-			uint	pci_irq;
-			struct pci_dev *pdev;
-#endif
-			uchar	pci_latency;
-			ushort	pci_command;
-
-			if (pcibios_find_device(SE6_PCI_VENDOR_ID,
-							SE6_PCI_DEVICE_ID,
-							pci_index, &pci_bus,
-							&pci_device_fn))
-					break;
-
-			pdev = pci_find_slot(pci_bus, pci_device_fn);
-			pci_irq = pdev->irq;
-			plxreg = pdev->resource[0].start;
-			io = pdev->resource[1].start;
-			mem = pdev->resource[2].start;
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-					0x30, &plxdma);
-			irq = pci_irq;
+			plxreg = pci_resource_start (pdev, 0);
+			io = pci_resource_start (pdev, 1);
+			mem = pci_resource_start (pdev, 2);
+			pci_read_config_dword(pdev, 0x30, &plxdma);
+			irq = pdev->irq;
 			plxdma &= ~15;
 
 			/*
@@ -1373,10 +1354,8 @@ static int __init  dgrs_scan(void)
 			OUTL(io + PLX_SPACE0_RANGE, 0xFFE00000L);
 			if (plxdma == 0)
 				plxdma = mem + (2048L * 1024L);
-			pcibios_write_config_dword(pci_bus, pci_device_fn,
-					0x30, plxdma + 1);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-					0x30, &plxdma);
+			pci_write_config_dword(pdev, 0x30, plxdma + 1);
+			pci_read_config_dword(pdev, 0x30, &plxdma);
 			plxdma &= ~15;
 
 			/*
@@ -1386,26 +1365,9 @@ static int __init  dgrs_scan(void)
 			 * value to avoid data corruption that occurs when the
 			 * timer expires during a transfer.  Yes, it's a bug.
 			 */
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-						 PCI_COMMAND, &pci_command);
-			if ( ! (pci_command & PCI_COMMAND_MASTER))
-			{
-				printk("  Setting the PCI Master Bit!\n");
-				pci_command |= PCI_COMMAND_MASTER;
-				pcibios_write_config_word(pci_bus,
-						pci_device_fn,
-						PCI_COMMAND, pci_command);
-			}
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-					 PCI_LATENCY_TIMER, &pci_latency);
-			if (pci_latency != 255)
-			{
-				printk("  Overriding PCI latency timer: "
-					"was %d, now is 255.\n", pci_latency);
-				pcibios_write_config_byte(pci_bus,
-						pci_device_fn,
-						PCI_LATENCY_TIMER, 255);
-			}
+			if (pci_enable_device(pdev))
+				continue;
+			pci_set_master(pdev);
 
 			dgrs_found_device(io, mem, irq, plxreg, plxdma);
 

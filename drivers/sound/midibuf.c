@@ -51,7 +51,7 @@ static void midi_poll(unsigned long dummy);
 
 
 static struct timer_list poll_timer = {
-	NULL, NULL, 0, 0, midi_poll
+	function: midi_poll
 };
 
 static volatile int open_devs = 0;

@@ -60,6 +60,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 		goto out_failed;
 	}
 
+#error Do not let this one slip through..
 	if (PageLocked(page))
 		goto out_failed;
 

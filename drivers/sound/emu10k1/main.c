@@ -616,7 +616,6 @@ static int __devinit emu10k1_probe(struct pci_dev *pci_dev, const struct pci_dev
 	}
 
 	if (pci_enable_device(pci_dev)) {
-		printk(KERN_ERR "emu10k1: couldn't enable device\n");
 		kfree(card);
 		return -ENODEV;
 	}

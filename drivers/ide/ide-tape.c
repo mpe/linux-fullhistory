@@ -5887,24 +5887,20 @@ static ide_proc_entry_t idetape_proc[] = {
  *	IDE subdriver functions, registered with ide.c
  */
 static ide_driver_t idetape_driver = {
-	"ide-tape",		/* name */
-	IDETAPE_VERSION,	/* version */
-	ide_tape,		/* media */
-	1,			/* busy */
-	1,			/* supports_dma */
-	1,			/* supports_dsc_overlap */
-	idetape_cleanup,	/* cleanup */
-	idetape_do_request,	/* do_request */
-	idetape_end_request,	/* end_request */
-	idetape_blkdev_ioctl,	/* ioctl */
-	idetape_blkdev_open,	/* open */
-	idetape_blkdev_release,	/* release */
-	NULL,			/* media_change */
-	NULL,			/* revalidate */
-	idetape_pre_reset,	/* pre_reset */
-	NULL,			/* capacity */
-	NULL,			/* special */
-	idetape_proc		/* proc */
+	name:		"ide-tape",
+	version:	IDETAPE_VERSION,
+	media:		ide_tape,
+	busy:		1,
+	supports_dma:	1,
+	supports_dsc_overlap: 1,
+	cleanup:	idetape_cleanup,
+	do_request:	idetape_do_request,
+	end_request:	idetape_end_request,
+	ioctl:		idetape_blkdev_ioctl,
+	open:		idetape_blkdev_open,
+	release:	idetape_blkdev_release,
+	pre_reset:	idetape_pre_reset,
+	proc:		idetape_proc,
 };
 
 int idetape_init (void);

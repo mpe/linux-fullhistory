@@ -408,10 +408,8 @@ static int __devinit starfire_init_one (struct pci_dev *pdev,
 		goto err_out_free_netdev;
 	}
 	
-	if (pci_enable_device (pdev)) {
-		printk (KERN_ERR PFX "card %d: cannot enable PCI device, aborting\n", card_idx);
+	if (pci_enable_device (pdev))
 		goto err_out_free_res;
-	}
 	
 	ioaddr = (long) ioremap (ioaddr, io_size);
 	if (!ioaddr) {

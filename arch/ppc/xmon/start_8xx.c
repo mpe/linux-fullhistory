@@ -7,7 +7,6 @@
  * We rely upon the 8xx uart driver to support us, as the interface
  * changes between boot up and operational phases of the kernel.
  */
-#include <linux/config.h>
 #include <linux/string.h>
 #include <asm/machdep.h>
 #include <asm/io.h>

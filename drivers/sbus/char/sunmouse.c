@@ -563,13 +563,13 @@ sun_mouse_ioctl (struct inode *inode, struct file *file, unsigned int cmd, unsig
 		/* This is a buggy application doing termios on the mouse driver */
 		/* we ignore it.  I keep this check here so that we will notice   */
 		/* future mouse vuid ioctls */
-		break;
+		return -ENOTTY;
 		
 	default:
 #ifdef DEBUG
 		printk ("[MOUSE-ioctl: %8.8x]\n", cmd);
 #endif
-		return -1;
+		return -EINVAL;
 	}
 	return 0;
 }

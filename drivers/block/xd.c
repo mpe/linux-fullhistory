@@ -149,9 +149,7 @@ static int xd_geo[XD_MAXDRIVES*3] __initdata = { 0,0,0,0,0,0 };
 static volatile int xdc_busy = 0;
 static DECLARE_WAIT_QUEUE_HEAD(xdc_wait);
 
-typedef void (*timeout_fn)(unsigned long);
-static struct timer_list xd_timer = { NULL, NULL, 0, 0, (timeout_fn) xd_wakeup },
-			 xd_watchdog_int = { NULL, NULL, 0, 0, (timeout_fn) xd_watchdog };
+static struct timer_list xd_timer, xd_watchdog_int;
 
 static volatile u_char xd_error;
 static int nodma = XD_DONT_USE_DMA;
@@ -161,6 +159,9 @@ static devfs_handle_t devfs_handle = NULL;
 /* xd_init: register the block device number and set up pointer tables */
 int __init xd_init (void)
 {
+	init_timer (&xd_timer); xd_timer.function = xd_wakeup;
+	init_timer (&xd_watchdog_int); xd_watchdog_int.function = xd_watchdog;
+
 	if (devfs_register_blkdev(MAJOR_NR,"xd",&xd_fops)) {
 		printk("xd: Unable to get major number %d\n",MAJOR_NR);
 		return -1;
@@ -551,13 +552,13 @@ static u_char *xd_build (u_char *cmdblk,u_char command,u_char drive,u_char head,
 }
 
 /* xd_wakeup is called from timer interrupt */
-static void xd_wakeup (void)
+static void xd_wakeup (unsigned long unused)
 {
 	wake_up(&xdc_wait);
 }
 
 /* xd_wakeup is called from timer interrupt */
-static void xd_watchdog (void)
+static void xd_watchdog (unsigned long unused)
 {
 	xd_error = 1;
 	wake_up(&xd_wait_int);
@@ -1136,8 +1137,8 @@ int init_module(void)
 	if((xd[0] = count))
 		do_xd_setup(xd);
 
-	if (error = xd_init())
-		return error;
+	error = xd_init();
+	if (error) return error;
 
 	printk(KERN_INFO "XD: Loaded as a module.\n");
 	if (!xd_drives) {

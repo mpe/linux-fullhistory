@@ -465,28 +465,30 @@ static void DAC960_DetectControllers(DAC960_ControllerType_T ControllerType)
       unsigned char Device = DeviceFunction >> 3;
       unsigned char Function = DeviceFunction & 0x7;
       unsigned int IRQ_Channel = PCI_Device->irq;
-      unsigned long BaseAddress0 = PCI_Device->resource[0].start;
-      unsigned long BaseAddress1 = PCI_Device->resource[1].start;
+      unsigned long BaseAddress0 = pci_resource_start (PCI_Device, 0);
+      unsigned long BaseAddress1 = pci_resource_start (PCI_Device, 1);
       unsigned short SubsystemVendorID, SubsystemDeviceID;
       int CommandIdentifier;
-      pci_read_config_word(PCI_Device, PCI_SUBSYSTEM_VENDOR_ID,
-			   &SubsystemVendorID);
-      pci_read_config_word(PCI_Device, PCI_SUBSYSTEM_ID,
-			   &SubsystemDeviceID);
+
+      if (pci_enable_device(PCI_Device))
+	  goto Ignore;
+
+      SubsystemVendorID = PCI_Device->subsystem_vendor;
+      SubsystemDeviceID = PCI_Device->subsystem_device;
       switch (ControllerType)
 	{
 	case DAC960_V5_Controller:
 	  if (!(SubsystemVendorID == PCI_VENDOR_ID_MYLEX &&
 		SubsystemDeviceID == PCI_DEVICE_ID_MYLEX_DAC960P_V5))
 	    goto Ignore;
-	  PCI_Address = BaseAddress0 & PCI_BASE_ADDRESS_MEM_MASK;
+	  PCI_Address = BaseAddress0;
 	  break;
 	case DAC960_V4_Controller:
-	  PCI_Address = BaseAddress0 & PCI_BASE_ADDRESS_MEM_MASK;
+	  PCI_Address = BaseAddress0;
 	  break;
 	case DAC960_V3_Controller:
-	  IO_Address = BaseAddress0 & PCI_BASE_ADDRESS_IO_MASK;
-	  PCI_Address = BaseAddress1 & PCI_BASE_ADDRESS_MEM_MASK;
+	  IO_Address = BaseAddress0;
+	  PCI_Address = BaseAddress1;
 	  break;
 	}
       if (DAC960_ControllerCount == DAC960_MaxControllers)

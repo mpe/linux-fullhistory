@@ -438,7 +438,7 @@ void sunkbd_inchar(unsigned char ch, struct pt_regs *regs);
 static void keyboard_timer (unsigned long ignored);
 
 static struct timer_list
-auto_repeat_timer = { NULL, NULL, 0, 0, keyboard_timer };
+auto_repeat_timer = { function: keyboard_timer };
 
 /* Keeps track of the last pressed key */
 static unsigned char last_keycode;
@@ -1219,8 +1219,7 @@ static void sunkbd_kd_nosound(unsigned long __unused)
 static void sunkbd_kd_mksound(unsigned int hz, unsigned int ticks)
 {
 	unsigned long flags;
-	static struct timer_list sound_timer = { NULL, NULL, 0, 0,
-						 sunkbd_kd_nosound };
+	static struct timer_list sound_timer = { function: sunkbd_kd_nosound };
 
 	spin_lock_irqsave(&sunkbd_lock, flags);
 

@@ -513,8 +513,6 @@ int moxa_init(void)
 
 static int moxa_get_PCI_conf(struct pci_dev *p, int board_type, moxa_board_conf * board)
 {
-	unsigned int val;
-
 	board->baseAddr = pci_resource_start (p, 2);
 	board->boardType = board_type;
 	switch (board_type) {

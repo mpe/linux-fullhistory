@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.123 2000/04/25 04:13:34 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.124 2000/05/03 06:37:07 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1893,14 +1893,14 @@ static void get_tcp6_sock(struct sock *sp, char *tmpbuf, int i)
 	srcp  = ntohs(sp->sport);
 	timer_active	= 0;
 	timer_expires	= (unsigned) -1;
-	if (tp->retransmit_timer.prev != NULL && tp->retransmit_timer.expires < timer_expires) {
+	if (timer_pending(&tp->retransmit_timer) && tp->retransmit_timer.expires < timer_expires) {
 		timer_active	= 1;
 		timer_expires	= tp->retransmit_timer.expires;
-	} else if (tp->probe_timer.prev != NULL && tp->probe_timer.expires < timer_expires) {
+	} else if (timer_pending(&tp->probe_timer) && tp->probe_timer.expires < timer_expires) {
 		timer_active	= 4;
 		timer_expires	= tp->probe_timer.expires;
 	}
-	if (sp->timer.prev != NULL && sp->timer.expires < timer_expires) {
+	if (timer_pending(&sp->timer) && sp->timer.expires < timer_expires) {
 		timer_active	= 2;
 		timer_expires	= sp->timer.expires;
 	}

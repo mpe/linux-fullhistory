@@ -39,7 +39,6 @@ struct timer_list tunertimer,rdstimer,readtimer;
 static __u8 rdsin=0,rdsout=0,rdsstat=0;
 static unsigned char rdsbuf[RDS_BUFFER];
 static int cadet_lock=0;
-static int cadet_probe(void);
 
 /*
  * Signal Strength Threshold Values
@@ -562,7 +561,7 @@ static int cadet_probe(void)
 }
 #endif
 
-int __init cadet_init(void)
+static int __init cadet_init(void)
 {
 #ifndef MODULE        
 	io = cadet_probe ();

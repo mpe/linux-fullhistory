@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.35 2000/04/25 04:13:34 davem Exp $
+ *	$Id: raw.c,v 1.36 2000/05/03 06:37:07 davem Exp $
  *
  *	Fixes:
  *	Hideaki YOSHIFUJI	:	sin6_scope_id support
@@ -715,15 +715,15 @@ static void get_raw6_sock(struct sock *sp, char *tmpbuf, int i)
 {
 	struct in6_addr *dest, *src;
 	__u16 destp, srcp;
-	int timer_active;
+	int sock_timer_active;
 	unsigned long timer_expires;
 
 	dest  = &sp->net_pinfo.af_inet6.daddr;
 	src   = &sp->net_pinfo.af_inet6.rcv_saddr;
 	destp = 0;
 	srcp  = sp->num;
-	timer_active = (sp->timer.prev != NULL) ? 2 : 0;
-	timer_expires = (timer_active == 2 ? sp->timer.expires : jiffies);
+	sock_timer_active = timer_pending(&sp->timer) ? 2 : 0;
+	timer_expires = (sock_timer_active == 2 ? sp->timer.expires : jiffies);
 	sprintf(tmpbuf,
 		"%4d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X "
 		"%02X %08X:%08X %02X:%08lX %08X %5d %8d %ld %d %p",
@@ -734,7 +734,7 @@ static void get_raw6_sock(struct sock *sp, char *tmpbuf, int i)
 		dest->s6_addr32[2], dest->s6_addr32[3], destp,
 		sp->state, 
 		atomic_read(&sp->wmem_alloc), atomic_read(&sp->rmem_alloc),
-		timer_active, timer_expires-jiffies, 0,
+		sock_timer_active, timer_expires-jiffies, 0,
 		sp->socket->inode->i_uid, 0,
 		sp->socket ? sp->socket->inode->i_ino : 0,
 		atomic_read(&sp->refcnt), sp);

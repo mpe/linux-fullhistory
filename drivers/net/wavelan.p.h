@@ -695,10 +695,8 @@ static unsigned short	iobase[]	=
 /* Parameters set by insmod */
 static int	io[4]	= { 0, 0, 0, 0 };
 static int	irq[4]	= { 0, 0, 0, 0 };
-static char	name[4][IFNAMSIZ] = { "", "", "", "" };
 MODULE_PARM(io, "1-4i");
 MODULE_PARM(irq, "1-4i");
-MODULE_PARM(name, "1-4c" __MODULE_STRING(IFNAMSIZ));
 #endif	/* MODULE */
 
 #endif	/* WAVELAN_P_H */

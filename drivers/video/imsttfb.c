@@ -1927,9 +1927,10 @@ imsttfb_init(void)
 	while ((pdev = pci_find_device(PCI_VENDOR_ID_IMS, PCI_ANY_ID, pdev))) {
 		if ((pdev->class >> 16) != PCI_BASE_CLASS_DISPLAY)
 			continue;
-		pci_enable_device(pdev);
+		if (pci_enable_device(pdev))
+			continue;
 
-		addr = pdev->resource[0].start;
+		addr = pci_resource_start (pdev, 0);
 		if (!addr)
 			continue;
 

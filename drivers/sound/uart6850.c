@@ -76,7 +76,7 @@ static void poll_uart6850(unsigned long dummy);
 
 
 static struct timer_list uart6850_timer = {
-	NULL, NULL, 0, 0, poll_uart6850
+	function: poll_uart6850
 };
 
 static void uart6850_input_loop(void)

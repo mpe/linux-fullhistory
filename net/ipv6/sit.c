@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.37 2000/03/21 06:14:00 davem Exp $
+ *	$Id: sit.c,v 1.38 2000/05/03 06:37:07 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -58,7 +58,7 @@ static int ipip6_fb_tunnel_init(struct net_device *dev);
 static int ipip6_tunnel_init(struct net_device *dev);
 
 static struct net_device ipip6_fb_tunnel_dev = {
-	NULL, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipip6_fb_tunnel_init,
+	"", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipip6_fb_tunnel_init,
 };
 
 static struct ip_tunnel ipip6_fb_tunnel = {
@@ -173,7 +173,7 @@ struct ip_tunnel * ipip6_tunnel_locate(struct ip_tunnel_parm *parms, int create)
 	dev->priv = (void*)(dev+1);
 	nt = (struct ip_tunnel*)dev->priv;
 	nt->dev = dev;
-	dev->name = nt->parms.name;
+	strcpy(dev->name, nt->parms.name);
 	dev->init = ipip6_tunnel_init;
 	dev->new_style = 1;
 	memcpy(&nt->parms, parms, sizeof(*parms));
@@ -810,7 +810,7 @@ int __init sit_init(void)
 	printk(KERN_INFO "IPv6 over IPv4 tunneling driver\n");
 
 	ipip6_fb_tunnel_dev.priv = (void*)&ipip6_fb_tunnel;
-	ipip6_fb_tunnel_dev.name = ipip6_fb_tunnel.parms.name;
+	strcpy(ipip6_fb_tunnel_dev.name, ipip6_fb_tunnel.parms.name);
 #ifdef MODULE
 	register_netdev(&ipip6_fb_tunnel_dev);
 #else

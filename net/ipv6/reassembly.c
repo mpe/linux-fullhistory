@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: reassembly.c,v 1.16 2000/01/09 02:19:51 davem Exp $
+ *	$Id: reassembly.c,v 1.17 2000/05/03 06:37:07 davem Exp $
  *
  *	Based on: net/ipv4/ip_fragment.c
  *
@@ -87,9 +87,6 @@ struct frag_queue {
 
 static struct frag_queue ipv6_frag_queue = {
 	&ipv6_frag_queue, &ipv6_frag_queue,
-	0, {{{0}}}, {{{0}}},
-	{0}, NULL, NULL,
-	0, 0, 0, 0
 };
 
 /* Memory Tracking Functions. */

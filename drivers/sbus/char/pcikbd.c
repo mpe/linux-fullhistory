@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.45 2000/04/24 06:10:19 davem Exp $
+/* $Id: pcikbd.c,v 1.46 2000/05/03 06:37:05 davem Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -425,8 +425,7 @@ static void pcikbd_kd_nosound(unsigned long __unused)
 static void pcikbd_kd_mksound(unsigned int hz, unsigned int ticks)
 {
 	unsigned long flags;
-	static struct timer_list sound_timer = { NULL, NULL, 0, 0,
-						 pcikbd_kd_nosound };
+	static struct timer_list sound_timer = { function: pcikbd_kd_nosound };
 
 	save_flags(flags); cli();
 	del_timer(&sound_timer);

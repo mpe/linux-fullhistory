@@ -34,10 +34,10 @@ struct nfscache_head {
 	struct svc_cacherep *	prev;
 };
 
-static struct nfscache_head	hash_list[HASHSIZE];
+static struct nfscache_head *	hash_list;
 static struct svc_cacherep *	lru_head;
 static struct svc_cacherep *	lru_tail;
-static struct svc_cacherep	nfscache[CACHESIZE];
+static struct svc_cacherep *	nfscache;
 static int			cache_initialized = 0;
 static int			cache_disabled = 1;
 
@@ -48,10 +48,26 @@ nfsd_cache_init(void)
 {
 	struct svc_cacherep	*rp;
 	struct nfscache_head	*rh;
-	int			i;
+	size_t			i;
 
 	if (cache_initialized)
 		return;
+
+	i = CACHESIZE * sizeof (struct svc_cacherep);
+	nfscache = kmalloc (i, GFP_KERNEL);
+	if (!nfscache) {
+		printk (KERN_ERR "nfsd: cannot allocate %d bytes for reply cache\n", i);
+		return;
+	}
+
+	i = HASHSIZE * sizeof (struct nfscache_head);
+	hash_list = kmalloc (i, GFP_KERNEL);
+	if (!hash_list) {
+		kfree (nfscache);
+		nfscache = NULL;
+		printk (KERN_ERR "nfsd: cannot allocate %d bytes for hash list\n", i);
+		return;
+	}
 
 	for (i = 0, rh = hash_list; i < HASHSIZE; i++, rh++)
 		rh->next = rh->prev = (struct svc_cacherep *) rh;
@@ -88,6 +104,11 @@ nfsd_cache_shutdown(void)
 
 	cache_initialized = 0;
 	cache_disabled = 1;
+
+	kfree (nfscache);
+	nfscache = NULL;
+	kfree (hash_list);
+	hash_list = NULL;
 }
 
 /*

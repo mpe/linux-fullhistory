@@ -29,7 +29,7 @@ static void     poll_def_tmr(unsigned long dummy);
 
 
 static struct timer_list def_tmr =
-{NULL, NULL, 0, 0, poll_def_tmr};
+{function: poll_def_tmr};
 
 static unsigned long
 tmr2ticks(int tmr_value)

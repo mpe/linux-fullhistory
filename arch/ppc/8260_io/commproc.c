@@ -15,7 +15,6 @@
  * process is reset, we reclaim the memory available.  There is
  * currently no deallocator for this memory.
  */
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
