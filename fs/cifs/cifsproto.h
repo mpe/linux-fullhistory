@@ -137,10 +137,11 @@ extern int CIFSSMBSetTimes(const int xid, struct cifsTconInfo *tcon,
 			const struct nls_table *nls_codepage);
 extern int CIFSSMBSetFileTimes(const int xid, struct cifsTconInfo *tcon,
 			const FILE_BASIC_INFO * data, __u16 fid);
-extern int CIFSSMBSetTimesLegacy(int xid, struct cifsTconInfo *tcon, 
-			char *fileName, FILE_BASIC_INFO * data,
+#if 0
+extern int CIFSSMBSetAttrLegacy(int xid, struct cifsTconInfo *tcon,
+			char *fileName, __u16 dos_attributes,
 			const struct nls_table *nls_codepage);
-
+#endif /* possibly unneeded function */
 extern int CIFSSMBSetEOF(const int xid, struct cifsTconInfo *tcon,
 			const char *fileName, __u64 size,int setAllocationSizeFlag,
 			const struct nls_table *nls_codepage);

@@ -353,10 +353,14 @@ checkSMB(struct smb_hdr *smb, __u16 mid, int length)
 	if (((unsigned int)length < 2 + sizeof (struct smb_hdr)) ||
 	    (len > CIFSMaxBufSize + MAX_CIFS_HDR_SIZE - 4)) {
 		if ((unsigned int)length < 2 + sizeof (struct smb_hdr)) {
-			cERROR(1, ("Length less than 2 + sizeof smb_hdr "));
-			if (((unsigned int)length >= sizeof (struct smb_hdr) - 1)
-			    && (smb->Status.CifsError != 0))
+			if (((unsigned int)length >= 
+				sizeof (struct smb_hdr) - 1)
+			    && (smb->Status.CifsError != 0)) {
+				smb->WordCount = 0;
 				return 0;	/* some error cases do not return wct and bcc */
+			} else {
+				cERROR(1, ("Length less than smb header size"));
+			}
 
 		}
 		if (len > CIFSMaxBufSize + MAX_CIFS_HDR_SIZE - 4)

@@ -3526,85 +3526,58 @@ SetTimesRetry:
 	return rc;
 }
 
+/* Can not be used to set time stamps yet (due to old DOS time format) */
+/* Can be used to set attributes */
+#if 0  /* Possibly not needed - since it turns out that strangely NT4 has a bug
+	  handling it anyway and NT4 was what we thought it would be needed for
+	  Do not delete it until we prove whether needed for Win9x though */
 int
-CIFSSMBSetTimesLegacy(int xid, struct cifsTconInfo *tcon, char *fileName,
-		FILE_BASIC_INFO * data, const struct nls_table *nls_codepage)
+CIFSSMBSetAttrLegacy(int xid, struct cifsTconInfo *tcon, char *fileName,
+		__u16 dos_attrs, const struct nls_table *nls_codepage)
 {
-	TRANSACTION2_SPI_REQ *pSMB = NULL;
-	TRANSACTION2_SPI_RSP *pSMBr = NULL;
-	FILE_INFO_STANDARD   *pfinfo;
-	int name_len;
+	SETATTR_REQ *pSMB = NULL;
+	SETATTR_RSP *pSMBr = NULL;
 	int rc = 0;
-	int bytes_returned = 0;
-	char *data_offset;
-	__u16 params, param_offset, count, offset, byte_count;
+	int bytes_returned;
+	int name_len;
 
-	cFYI(1, ("In SetTimesLegacy"));
+	cFYI(1, ("In SetAttrLegacy"));
 
-SetTimesRetryLegacy:
-	rc = smb_init(SMB_COM_TRANSACTION2, 15, tcon, (void **) &pSMB,
+SetAttrLgcyRetry:
+	rc = smb_init(SMB_COM_SETATTR, 8, tcon, (void **) &pSMB,
 		      (void **) &pSMBr);
 	if (rc)
 		return rc;
 
 	if (pSMB->hdr.Flags2 & SMBFLG2_UNICODE) {
 		name_len =
-		    cifs_strtoUCS((wchar_t *) pSMB->FileName, fileName, PATH_MAX
-				  /* find define for this maxpathcomponent */
-				  , nls_codepage);
-		name_len++;	/* trailing null */
+			cifs_strtoUCS((wchar_t *) pSMB->fileName, fileName, 
+				PATH_MAX, nls_codepage);
+		name_len++;     /* trailing null */
 		name_len *= 2;
-	} else {		/* BB improve the check for buffer overruns BB */
+	} else {                /* BB improve the check for buffer overruns BB */
 		name_len = strnlen(fileName, PATH_MAX);
-		name_len++;	/* trailing null */
-		strncpy(pSMB->FileName, fileName, name_len);
+		name_len++;     /* trailing null */
+		strncpy(pSMB->fileName, fileName, name_len);
 	}
-/* BB fixme - we have to map to FILE_STANDARD_INFO (level 1 info
-	in parent function, from the better and ususal FILE_BASIC_INFO */
-	params = 6 + name_len;
-	pSMB->MaxParameterCount = cpu_to_le16(2);
-	pSMB->MaxDataCount = cpu_to_le16(1000);	/* BB find exact max SMB PDU from sess structure BB */
-	pSMB->MaxSetupCount = 0;
-	pSMB->Reserved = 0;
-	pSMB->Flags = 0;
-	pSMB->Timeout = 0;
-	pSMB->Reserved2 = 0;
-	param_offset = offsetof(struct smb_com_transaction2_spi_req,
-                                     InformationLevel) - 4;
-	offset = param_offset + params;
-	data_offset = (char *) (&pSMB->hdr.Protocol) + offset;
-	pfinfo = (FILE_INFO_STANDARD *)data_offset;
-	/* BB add conversion for FILE_BASIC_INFO data struct to
-		 FILE_INFO_STANDARD finfo struct */
-	pSMB->ParameterOffset = cpu_to_le16(param_offset);
-	pSMB->DataOffset = cpu_to_le16(offset);
-	pSMB->SetupCount = 1;
-	pSMB->Reserved3 = 0;
-	pSMB->SubCommand = cpu_to_le16(TRANS2_SET_PATH_INFORMATION);
-	count = sizeof(FILE_INFO_STANDARD);
-	byte_count = 3 /* pad */  + params + count;
-
-	pSMB->DataCount = cpu_to_le16(count);
-	pSMB->ParameterCount = cpu_to_le16(params);
-	pSMB->TotalDataCount = pSMB->DataCount;
-	pSMB->TotalParameterCount = pSMB->ParameterCount;
-	pSMB->InformationLevel = cpu_to_le16(SMB_INFO_STANDARD);
-	pSMB->Reserved4 = 0;
-	pSMB->hdr.smb_buf_length += byte_count;
-	pSMB->ByteCount = cpu_to_le16(byte_count);
+	pSMB->attr = cpu_to_le16(dos_attrs);
+	pSMB->BufferFormat = 0x04;
+	pSMB->hdr.smb_buf_length += name_len + 1;
+	pSMB->ByteCount = cpu_to_le16(name_len + 1);
 	rc = SendReceive(xid, tcon->ses, (struct smb_hdr *) pSMB,
 			 (struct smb_hdr *) pSMBr, &bytes_returned, 0);
 	if (rc) {
-		cFYI(1, ("SetPathInfo (times legacy) returned %d", rc));
+		cFYI(1, ("Error in LegacySetAttr = %d", rc));
 	}
 
 	cifs_buf_release(pSMB);
 
 	if (rc == -EAGAIN)
-		goto SetTimesRetryLegacy;
+		goto SetAttrLgcyRetry;
 
 	return rc;
 }
+#endif /* temporarily unneeded SetAttr legacy function */
 
 int
 CIFSSMBUnixSetPerms(const int xid, struct cifsTconInfo *tcon,

@@ -417,14 +417,40 @@ cifs_unlink(struct inode *inode, struct dentry *direntry)
 		}
 	} else if (rc == -EACCES) {
 		/* try only if r/o attribute set in local lookup data? */
-		pinfo_buf = (FILE_BASIC_INFO *)kmalloc(sizeof(FILE_BASIC_INFO),GFP_KERNEL);
+		pinfo_buf = (FILE_BASIC_INFO *)kmalloc(sizeof(FILE_BASIC_INFO),
+			GFP_KERNEL);
 		if(pinfo_buf) {
 			memset(pinfo_buf,0,sizeof(FILE_BASIC_INFO));        
 		/* ATTRS set to normal clears r/o bit */
 			pinfo_buf->Attributes = cpu_to_le32(ATTR_NORMAL);
 			rc = CIFSSMBSetTimes(xid, pTcon, full_path, pinfo_buf,
 				cifs_sb->local_nls);
-			kfree(pinfo_buf);
+			if(rc == -EOPNOTSUPP) {
+				int oplock = FALSE;
+				__u16 netfid;
+			/*	rc = CIFSSMBSetAttrLegacy(xid, pTcon, full_path,
+							  (__u16)ATTR_NORMAL,
+							  cifs_sb->local_nls); 
+			For some strange reason it seems that NT4 eats the
+			old setattr call without actually setting the attributes
+			so on to the third attempted workaround ... */
+
+			/* BB could scan to see if we already have it open */
+			/* and pass in pid of opener to function */
+				rc = CIFSSMBOpen(xid, pTcon, full_path,
+						FILE_OPEN,
+						FILE_WRITE_ATTRIBUTES,
+						CREATE_NOT_DIR, &netfid,
+						&oplock, NULL,
+						cifs_sb->local_nls);
+				if(rc==0) {
+					rc = CIFSSMBSetFileTimes(xid, pTcon,
+							pinfo_buf, netfid);
+					CIFSSMBClose(xid, pTcon, netfid);
+				}
+			}
+			kfree(pinfo_buf); 
+				
 		}
 		if(rc==0) {
 			rc = CIFSSMBDelFile(xid, pTcon, full_path, cifs_sb->local_nls);

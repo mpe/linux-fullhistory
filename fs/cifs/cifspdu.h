@@ -36,6 +36,7 @@
 #define SMB_COM_CLOSE                 0x04 /* triv req/rsp, timestamp ignored */
 #define SMB_COM_DELETE                0x06 /* trivial response */
 #define SMB_COM_RENAME                0x07 /* trivial response */
+#define SMB_COM_SETATTR               0x09 /* trivial response */
 #define SMB_COM_LOCKING_ANDX          0x24 /* trivial response */
 #define SMB_COM_COPY                  0x29 /* trivial rsp, fail filename ignrd*/
 #define SMB_COM_READ_ANDX             0x2E
@@ -864,6 +865,24 @@ typedef struct smb_com_create_directory_rsp {
 	struct smb_hdr hdr;	/* wct = 0 */
 	__u16 ByteCount;	/* bct = 0 */
 } CREATE_DIRECTORY_RSP;
+
+typedef struct smb_com_setattr_req {
+	struct smb_hdr hdr; /* wct = 8 */
+	__le16 attr;
+	__le16 time_low;
+	__le16 time_high;
+	__le16 reserved[5]; /* must be zero */
+	__u16  ByteCount;
+	__u8   BufferFormat; /* 4 = ASCII */
+	unsigned char fileName[1];
+} SETATTR_REQ;
+
+typedef struct smb_com_setattr_rsp {
+	struct smb_hdr hdr;     /* wct = 0 */
+	__u16 ByteCount;        /* bct = 0 */
+} SETATTR_RSP;
+
+/* empty wct response to setattr */
 
 /***************************************************/
 /* NT Transact structure defintions follow         */
