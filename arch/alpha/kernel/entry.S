@@ -718,7 +718,7 @@ sys_call_table:
 	.quad do_entSys, sys_ptrace, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, sys_access, do_entSys
 	.quad do_entSys, sys_sync, sys_kill, do_entSys, sys_setpgid
-	.quad do_entSys, sys_dup, sys_pipe, do_entSys, do_entSys
+	.quad do_entSys, sys_dup, sys_pipe, osf_set_program_attributes, do_entSys
 	.quad sys_open, do_entSys, sys_getxgid, osf_sigprocmask, do_entSys
 /*50*/	.quad do_entSys, sys_acct, sys_sigpending, do_entSys, sys_ioctl
 	.quad do_entSys, do_entSys, sys_symlink, sys_readlink, sys_execve
@@ -729,7 +729,7 @@ sys_call_table:
 	/* map BSD's setpgrp to sys_setpgid for binary compatibility: */
 	.quad sys_setgroups, do_entSys, sys_setpgid, sys_setitimer, do_entSys
 	.quad do_entSys, sys_getitimer, sys_gethostname, sys_sethostname, sys_getdtablesize
-	.quad sys_dup2, sys_newfstat, sys_fcntl, sys_select, do_entSys
+	.quad sys_dup2, sys_newfstat, sys_fcntl, sys_select, sys_poll
 	.quad sys_fsync, sys_setpriority, sys_socket, sys_connect, sys_accept
 /*100*/	.quad osf_getpriority, sys_send, sys_recv, sys_sigreturn, sys_bind
 	.quad sys_setsockopt, sys_listen, do_entSys, do_entSys, do_entSys
@@ -759,7 +759,7 @@ sys_call_table:
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, sys_getpgid, sys_getsid
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, osf_proplist_syscall
+	.quad do_entSys, osf_sysinfo, do_entSys, do_entSys, osf_proplist_syscall
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 /*250*/	.quad do_entSys, osf_usleep_thread, do_entSys, do_entSys, sys_sysfs
 	.quad do_entSys, osf_getsysinfo, osf_setsysinfo, do_entSys, do_entSys

@@ -243,7 +243,7 @@ static struct file_operations vcs_fops = {
 	vcs_read,	/* read */
 	vcs_write,	/* write */
 	NULL,		/* readdir */
-	NULL,		/* select */
+	NULL,		/* poll */
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
 	vcs_open,	/* open */

@@ -45,6 +45,7 @@
 #include <linux/malloc.h>
 #include <linux/miscdevice.h>
 #include <linux/random.h>
+#include <linux/poll.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -494,13 +495,11 @@ repeat:
 }
 
 
-static int aux_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
+static unsigned int aux_poll(struct file *file, poll_table * wait)
 {
-	if (sel_type != SEL_IN)
-		return 0;
+	poll_wait(&queue->proc_list, wait);
 	if (aux_ready)
-		return 1;
-	select_wait(&queue->proc_list, wait);
+		return POLLIN | POLLRDNORM;
 	return 0;
 }
 
@@ -510,7 +509,7 @@ struct file_operations psaux_fops = {
 	read_aux,
 	write_aux,
 	NULL, 		/* readdir */
-	aux_select,
+	aux_poll,
 	NULL, 		/* ioctl */
 	NULL,		/* mmap */
 	open_aux,

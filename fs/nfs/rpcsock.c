@@ -40,6 +40,7 @@
 #include <linux/net.h>
 #include <linux/mm.h>
 #include <linux/rpcsock.h>
+#include <linux/poll.h>
 
 #include <linux/udp.h>
 #include <net/sock.h>
@@ -159,21 +160,20 @@ rpc_recvmsg(struct rpc_sock *rsock, struct iovec *iov,
 
 /*
  * This code is slightly complicated. Since the networking code does not
- * honor the current->timeout value, we have to select on the socket.
+ * honor the current->timeout value, we have to poll on the socket.
  */
 static inline int
 rpc_select(struct rpc_sock *rsock)
 {
-	struct select_table_entry entry;
+	struct poll_table_entry entry;
 	struct file	*file = rsock->file;
-	select_table	wait_table;
+	poll_table	wait_table;
 
-	dprintk("RPC: selecting on socket...\n");
+	dprintk("RPC: polling socket...\n");
 	wait_table.nr = 0;
 	wait_table.entry = &entry;
 	current->state = TASK_INTERRUPTIBLE;
-	if (!file->f_op->select(file->f_inode, file, SEL_IN, &wait_table)
-	 && !file->f_op->select(file->f_inode, file, SEL_IN, NULL)) {
+	if (!(file->f_op->poll(file, &wait_table) & POLLIN)) {
 		schedule();
 		remove_wait_queue(entry.wait_address, &entry.wait);
 		current->state = TASK_RUNNING;

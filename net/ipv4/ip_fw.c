@@ -209,9 +209,9 @@ extern inline int port_match(unsigned short *portptr,int nports,unsigned short p
 int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_fw *chain, int policy, int mode)
 {
 	struct ip_fw *f;
-	struct tcphdr		*tcp=(struct tcphdr *)((unsigned long *)ip+ip->ihl);
-	struct udphdr		*udp=(struct udphdr *)((unsigned long *)ip+ip->ihl);
-	struct icmphdr		*icmp=(struct icmphdr *)((unsigned long *)ip+ip->ihl);
+	struct tcphdr		*tcp=(struct tcphdr *)((__u32 *)ip+ip->ihl);
+	struct udphdr		*udp=(struct udphdr *)((__u32 *)ip+ip->ihl);
+	struct icmphdr		*icmp=(struct icmphdr *)((__u32 *)ip+ip->ihl);
 	__u32			src, dst;
 	__u16			src_port=0xFFFF, dst_port=0xFFFF, icmp_type=0xFF;
 	unsigned short		f_prt=0, prt;

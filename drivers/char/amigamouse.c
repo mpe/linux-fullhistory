@@ -11,13 +11,13 @@
  *
  * Heavily modified by David Giller
  *   changed from queue- to counter- driven
- *   hacked out a (probably incorrect) mouse_select
+ *   hacked out a (probably incorrect) mouse_poll
  *
  * Modified again by Nathan Laredo to interface with
  *   0.96c-pl1 IRQ handling changes (13JUL92)
- *   didn't bother touching select code.
+ *   didn't bother touching poll code.
  *
- * Modified the select() code blindly to conform to the VFS
+ * Modified the poll() code blindly to conform to the VFS
  *   requirements. 92.07.14 - Linus. Somebody should test it out.
  *
  * Modified by Johan Myreen to make room for other mice (9AUG92)
@@ -42,6 +42,7 @@
 #include <linux/errno.h>
 #include <linux/miscdevice.h>
 #include <linux/random.h>
+#include <linux/poll.h>
 
 #include <asm/setup.h>
 #include <asm/system.h>
@@ -277,16 +278,14 @@ static long read_mouse(struct inode * inode, struct file * file,
 }
 
 /*
- * select for mouse input
+ * poll for mouse input
  */
 
-static int mouse_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
+static unsigned int mouse_poll(struct file *file, poll_table * wait)
 {
-	if (sel_type == SEL_IN) {
-	    	if (mouse.ready)
-			return 1;
-		select_wait(&mouse.wait, wait);
-    	}
+	poll_wait(&mouse.wait, wait);
+	if (mouse.ready)
+		return POLLIN | POLLRDNORM;
 	return 0;
 }
 
@@ -295,7 +294,7 @@ struct file_operations amiga_mouse_fops = {
 	read_mouse,
 	write_mouse,
 	NULL, 		/* mouse_readdir */
-	mouse_select, 	/* mouse_select */
+	mouse_poll, 	/* mouse_poll */
 	NULL, 		/* mouse_ioctl */
 	NULL,		/* mouse_mmap */
 	open_mouse,

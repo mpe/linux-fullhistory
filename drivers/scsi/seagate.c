@@ -43,20 +43,41 @@
  * will configure the driver for a TMC-8xx style controller using IRQ 15
  * with a base address of 0xC8000.
  *
- * -DFAST or -DFAST32 will use blind transfers where possible
- *
- * -DARBITRATE will cause the host adapter to arbitrate for the
+ * -DARBITRATE 
+ *      Will cause the host adapter to arbitrate for the
  *      bus for better SCSI-II compatibility, rather than just
  *      waiting for BUS FREE and then doing its thing.  Should
  *      let us do one command per Lun when I integrate my
  *      reorganization changes into the distribution sources.
  *
- * -DSLOW_HANDSHAKE will allow compatibility with broken devices that don't
+ * -DDEBUG
+ *      Will activate debug code.
+ *
+ * -DFAST or -DFAST32 
+ *      Will use blind transfers where possible
+ *
+ * -DPARITY  
+ *      This will enable parity.
+ *
+ * -DSEAGATE_USE_ASM
+ *      Will use older seagate assembly code. should be (very small amount)
+ *      Faster.
+ *
+ * -DSLOW_HANDSHAKE
+ *      Will allow compatibility with broken devices that don't
  *      handshake fast enough (ie, some CD ROM's) for the Seagate
  *      code.
  *
- * -DSLOW_RATE=x, x some number will let you specify a default
+ * -DSLOW_RATE=x
+ *      x is some number, It will let you specify a default
  *      transfer rate if handshaking isn't working correctly.
+ *
+ * The following to options are patches from the SCSI.HOWTO
+ *
+ * -DSWAPSTAT  This will swap the definitions for STAT_MSG and STAT_CD.
+ *
+ * -DSWAPCNTDATA  This will swap the order that seagate.c messes with
+ *                the CONTROL an DATA registers.
  */
 
 #include <linux/module.h>
@@ -396,8 +417,8 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 #ifdef ARBITRATE
             " ARBITRATE"
 #endif
-#ifdef SLOW_HANDSHAKE
-            " SLOW_HANDSHAKE"
+#ifdef DEBUG
+            " DEBUG"
 #endif
 #ifdef FAST
 #ifdef FAST32
@@ -408,6 +429,21 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 #endif
 #ifdef LINKED
             " LINKED"
+#endif
+#ifdef PARITY
+            " PARITY"
+#endif
+#ifdef SEAGATE_USE_ASM
+            " SEAGATE_USE_ASM"
+#endif
+#ifdef SLOW_HANDSHAKE
+            " SLOW_HANDSHAKE"
+#endif
+#ifdef SWAPSTAT
+            " SWAPSTAT"
+#endif
+#ifdef SWAPCNTDATA
+            " SWAPCNTDATA"
 #endif
             "\n", tpnt->name);
     return 1;
@@ -926,12 +962,21 @@ static int internal_command (unsigned char target, unsigned char lun,
  *    try this with a SCSI protocol or logic analyzer to see what is
  *    going on.
  */
+#ifdef SWAPCNTDATA
+	cli();
+      WRITE_CONTROL (BASE_CMD | CMD_DRVR_ENABLE | CMD_SEL |
+                     (reselect ? CMD_ATTN : 0));
+      WRITE_DATA ((unsigned char) ((1 << target) |
+                               (controller_type == SEAGATE ? 0x80 : 0x40)));
+	sti();
+#else
       cli ();
       WRITE_DATA ((unsigned char) ((1 << target) |
                                (controller_type == SEAGATE ? 0x80 : 0x40)));
       WRITE_CONTROL (BASE_CMD | CMD_DRVR_ENABLE | CMD_SEL |
                      (reselect ? CMD_ATTN : 0));
       sti ();
+#endif
       while (!((status_read = STATUS) & STAT_BSY) && (jiffies < clock)
              && !st0x_aborted)
 #if 0 && (DEBUG & PHASE_SELECTION)

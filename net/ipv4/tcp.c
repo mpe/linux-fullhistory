@@ -30,7 +30,7 @@
  *					socket was looked up backwards. Nobody
  *					tested any icmp error code obviously.
  *		Alan Cox	:	tcp_err() now handled properly. It
- *					wakes people on errors. select
+ *					wakes people on errors. poll
  *					behaves and the icmp error race
  *					has gone by moving it into sock.c
  *		Alan Cox	:	tcp_send_reset() fixed to work for
@@ -102,12 +102,12 @@
  *		Alan Cox	:	BSD accept semantics.
  *		Alan Cox	:	Reset on closedown bug.
  *	Peter De Schrijver	:	ENOTCONN check missing in tcp_sendto().
- *		Michael Pall	:	Handle select() after URG properly in
+ *		Michael Pall	:	Handle poll() after URG properly in
  *					all cases.
  *		Michael Pall	:	Undo the last fix in tcp_read_urg()
  *					(multi URG PUSH broke rlogin).
  *		Michael Pall	:	Fix the multi URG PUSH problem in
- *					tcp_readable(), select() after URG
+ *					tcp_readable(), poll() after URG
  *					works now.
  *		Michael Pall	:	recv(...,MSG_OOB) never blocks in the
  *					BSD api.
@@ -128,7 +128,7 @@
  *		Alan Cox	:	Reset tracing code.
  *		Alan Cox	:	Spurious resets on shutdown.
  *		Alan Cox	:	Giant 15 minute/60 second timer error
- *		Alan Cox	:	Small whoops in selecting before an
+ *		Alan Cox	:	Small whoops in polling before an
  *					accept.
  *		Alan Cox	:	Kept the state trace facility since
  *					it's handy for debugging.
@@ -162,7 +162,7 @@
  *					generates them.
  *		Alan Cox	:	Cache last socket.
  *		Alan Cox	:	Per route irtt.
- *		Matt Day	:	Select() match BSD precisely on error
+ *		Matt Day	:	poll()->select() match BSD precisely on error
  *		Alan Cox	:	New buffers
  *		Marc Tamsky	:	Various sk->prot->retransmits and
  *					sk->retransmits misupdating fixed.
@@ -419,6 +419,7 @@
 
 #include <linux/types.h>
 #include <linux/fcntl.h>
+#include <linux/poll.h>
 
 #include <net/icmp.h>
 #include <net/tcp.h>
@@ -573,9 +574,9 @@ static int tcp_readable(struct sock *sk)
 		 * though there was normal data available. If we subtract
 		 * the urg data right here, we even get it to work for more
 		 * than one URG PUSH skb without normal data.
-		 * This means that select() finally works now with urg data
+		 * This means that poll() finally works now with urg data
 		 * in the queue.  Note that rlogin was never affected
-		 * because it doesn't use select(); it uses two processes
+		 * because it doesn't use poll(); it uses two processes
 		 * and a blocking read().  And the queue scan in tcp_read()
 		 * was correct.  Mike <pall@rz.uni-karlsruhe.de>
 		 */
@@ -597,81 +598,60 @@ static int tcp_readable(struct sock *sk)
 }
 
 /*
- * LISTEN is a special case for select..
+ * LISTEN is a special case for poll..
  */
-static int tcp_listen_select(struct sock *sk, int sel_type, select_table *wait)
+static unsigned int tcp_listen_poll(struct sock *sk, poll_table *wait)
 {
-	if (sel_type == SEL_IN) {
-		struct open_request *req;
+	struct open_request *req;
 
-		lock_sock(sk);
-		req = tcp_find_established(&sk->tp_pinfo.af_tcp);
-		release_sock(sk);
-		if (req)
-			return 1;
-		select_wait(sk->sleep,wait);
-		return 0;
-	}
+	lock_sock(sk);
+	req = tcp_find_established(&sk->tp_pinfo.af_tcp);
+	release_sock(sk);
+	if (req)
+		return POLLIN | POLLRDNORM;
 	return 0;
 }
 
 /*
  *	Wait for a TCP event.
  *
- *	Note that we don't need to lock the socket, as the upper select layers
+ *	Note that we don't need to lock the socket, as the upper poll layers
  *	take care of normal races (between the test and the event) and we don't
  *	go look at any of the socket buffers directly.
  */
-int tcp_select(struct socket *sock, int sel_type, select_table *wait)
+unsigned int tcp_poll(struct socket *sock, poll_table *wait)
 {
+	unsigned int mask;
 	struct sock *sk = sock->sk;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
+	poll_wait(sk->sleep, wait);
 	if (sk->state == TCP_LISTEN)
-		return tcp_listen_select(sk, sel_type, wait);
+		return tcp_listen_poll(sk, wait);
 
-	switch(sel_type) {
-	case SEL_IN:
-		if (sk->err)
-			return 1;
-		if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
-			break;
+	mask = 0;
+	if (sk->err)
+		mask = POLLERR;
+	/* connected ? */
+	if (sk->state != TCP_SYN_SENT && sk->state != TCP_SYN_RECV) {
 
 		if (sk->shutdown & RCV_SHUTDOWN)
-			return 1;
+			mask |= POLLHUP;
 			
-		if (tp->rcv_nxt == sk->copied_seq)
-			break;
+		if ((tp->rcv_nxt != sk->copied_seq) &&
+		    (sk->urg_seq != sk->copied_seq ||
+		     tp->rcv_nxt != sk->copied_seq+1 ||
+		     sk->urginline || !sk->urg_data))
+			mask |= POLLIN | POLLRDNORM;
 
-		if (sk->urg_seq != sk->copied_seq ||
-		    tp->rcv_nxt != sk->copied_seq+1 ||
-		    sk->urginline || !sk->urg_data)
-			return 1;
-		break;
+		if (!(sk->shutdown & SEND_SHUTDOWN) &&
+		     (sock_wspace(sk) >= sk->mtu+128+sk->prot->max_header))
+			mask |= POLLOUT | POLLWRNORM;
 
-	case SEL_OUT:
-		if (sk->err)
-			return 1;
-		if (sk->shutdown & SEND_SHUTDOWN)
-			return 0;
-		if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
-			break;
-		/*
-		 * This is now right thanks to a small fix
-		 * by Matt Dillon.
-		 */
-
-		if (sock_wspace(sk) < sk->mtu+128+sk->prot->max_header)
-			break;
-		return 1;
-
-	case SEL_EX:
 		if (sk->urg_data)
-			return 1;
-		break;
+			mask |= POLLPRI;
 	}
-	select_wait(sk->sleep, wait);
-	return 0;
+	return mask;
 }
 
 int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)

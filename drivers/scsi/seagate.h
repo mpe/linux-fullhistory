@@ -37,14 +37,6 @@ int seagate_st0x_biosparam(Disk *, kdev_t, int*);
 			 1, 7, SG_ALL, 1, 0, 0, DISABLE_CLUSTERING}
 #endif
 
-
-/*
-	defining PARITY causes parity data to be checked
-*/
-
-#define PARITY
-
-
 /*
 	Thanks to Brian Antoine for the example code in his Messy-Loss ST-01
 		driver, and Mitsugu Suzuki for information on the ST-01
@@ -67,11 +59,16 @@ int seagate_st0x_biosparam(Disk *, kdev_t, int*);
 /*
 	STATUS
 */
+#ifdef SWAPSTAT
+	#define STAT_MSG		0x08
+	#define STAT_CD			0x02
+#else
+	#define STAT_MSG		0x02
+	#define STAT_CD			0x08
+#endif
 
 #define STAT_BSY		0x01
-#define STAT_MSG		0x02
 #define STAT_IO			0x04
-#define STAT_CD			0x08
 #define STAT_REQ		0x10
 #define STAT_SEL		0x20
 #define STAT_PARITY		0x40

@@ -630,6 +630,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_getresuid)	/* 165 */
 	.long SYMBOL_NAME(sys_vm86)
 	.long SYMBOL_NAME(sys_query_module)
-	.rept NR_syscalls-167
+	.long SYMBOL_NAME(sys_poll)
+	.rept NR_syscalls-168
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

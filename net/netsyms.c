@@ -99,7 +99,7 @@ EXPORT_SYMBOL(skb_free_datagram);
 EXPORT_SYMBOL(skb_copy_datagram);
 EXPORT_SYMBOL(skb_copy_datagram_iovec);
 EXPORT_SYMBOL(skb_realloc_headroom);
-EXPORT_SYMBOL(datagram_select);
+EXPORT_SYMBOL(datagram_poll);
 
 /* Needed by smbfs.o */
 EXPORT_SYMBOL(__scm_destroy);
@@ -144,7 +144,7 @@ EXPORT_SYMBOL(inet_release);
 EXPORT_SYMBOL(inet_stream_connect);
 EXPORT_SYMBOL(inet_dgram_connect);
 EXPORT_SYMBOL(inet_accept);
-EXPORT_SYMBOL(inet_select);
+EXPORT_SYMBOL(inet_poll);
 EXPORT_SYMBOL(inet_listen);
 EXPORT_SYMBOL(inet_shutdown);
 EXPORT_SYMBOL(inet_setsockopt);
@@ -174,7 +174,7 @@ EXPORT_SYMBOL(tcp_close);
 EXPORT_SYMBOL(tcp_accept);
 EXPORT_SYMBOL(tcp_write_wakeup);
 EXPORT_SYMBOL(tcp_read_wakeup);
-EXPORT_SYMBOL(tcp_select);
+EXPORT_SYMBOL(tcp_poll);
 EXPORT_SYMBOL(tcp_ioctl);
 EXPORT_SYMBOL(tcp_shutdown);
 EXPORT_SYMBOL(tcp_setsockopt);

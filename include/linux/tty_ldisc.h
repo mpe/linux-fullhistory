@@ -119,9 +119,7 @@ struct tty_ldisc {
 	int	(*ioctl)(struct tty_struct * tty, struct file * file,
 			 unsigned int cmd, unsigned long arg);
 	void	(*set_termios)(struct tty_struct *tty, struct termios * old);
-	int	(*select)(struct tty_struct * tty, struct inode * inode,
-			  struct file * file, int sel_type,
-			  struct select_table_struct *wait);
+	unsigned int (*poll)(struct tty_struct *, struct file *, poll_table *);
 	
 	/*
 	 * The following routines are called from below.

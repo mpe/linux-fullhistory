@@ -1212,7 +1212,7 @@ struct proto tcp_prot = {
 	NULL,
 	tcp_write_wakeup,
 	tcp_read_wakeup,
-	tcp_select,
+	tcp_poll,
 	tcp_ioctl,
 	tcp_v4_init_sock,
 	tcp_v4_destroy_sock,

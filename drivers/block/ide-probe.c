@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-probe.c	Version 1.0  Oct  31, 1996
+ *  linux/drivers/block/ide-probe.c	Version 1.01  Jan  26, 1997
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -36,7 +36,8 @@
  *  code is still sprinkled about.  Think of it as a major evolution, with
  *  inspiration from lots of linux users, esp.  hamish@zot.apana.org.au
  *
- * Version 1.0		move drive probing code from ide.c to ide-probe.c
+ * Version 1.00		move drive probing code from ide.c to ide-probe.c
+ * Version 1.01		fix compilation problem for m68k
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -494,9 +495,7 @@ static void save_match (ide_hwif_t *hwif, ide_hwif_t *new, ide_hwif_t **match)
 static int init_irq (ide_hwif_t *hwif)
 {
 	unsigned long flags;
-#if MAX_HWIFS > 1
 	unsigned int index;
-#endif /* MAX_HWIFS > 1 */
 	ide_hwgroup_t *hwgroup;
 	ide_hwif_t *match = NULL;
 

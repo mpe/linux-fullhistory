@@ -101,7 +101,7 @@ static long sock_write(struct inode *inode, struct file *file,
 		       const char *buf, unsigned long size);
 
 static void sock_close(struct inode *inode, struct file *file);
-static int sock_select(struct inode *inode, struct file *file, int which, select_table *seltable);
+static unsigned int sock_poll(struct file *file, poll_table *wait);
 static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg);
 static int sock_fasync(struct inode *inode, struct file *filp, int on);
@@ -117,7 +117,7 @@ static struct file_operations socket_file_ops = {
 	sock_read,
 	sock_write,
 	NULL,			/* readdir */
-	sock_select,
+	sock_poll,
 	sock_ioctl,
 	NULL,			/* mmap */
 	NULL,			/* no special open code... */
@@ -444,19 +444,19 @@ int sock_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 }
 
 
-static int sock_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
+static unsigned int sock_poll(struct file *file, poll_table * wait)
 {
 	struct socket *sock;
 
-	sock = socki_lookup(inode);
+	sock = socki_lookup(file->f_inode);
 
 	/*
-	 *	We can't return errors to select, so it's either yes or no. 
+	 *	We can't return errors to poll, so it's either yes or no. 
 	 */
 
-	if (sock->ops->select)
-		return sock->ops->select(sock, sel_type, wait);
-	return(0);
+	if (sock->ops->poll)
+		return sock->ops->poll(sock, wait);
+	return 0;
 }
 
 
@@ -1249,7 +1249,7 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
 /*
  *	System call vectors. Since I (RIB) want to rewrite sockets as streams,
  *	we have this level of indirection. Not a lot of overhead, since more of
- *	the work is done via read/write/select directly.
+ *	the work is done via read/write/poll directly.
  *
  *	I'm now expanding this up to a higher level to separate the assorted
  *	kernel/user space manipulations and global assumptions from the protocol

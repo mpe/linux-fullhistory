@@ -445,13 +445,13 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 	restore_flags(flags);
 }
 
-extern inline void select_wait(struct wait_queue ** wait_address, select_table * p)
+extern inline void poll_wait(struct wait_queue ** wait_address, poll_table * p)
 {
-	struct select_table_entry * entry;
+	struct poll_table_entry * entry;
 
 	if (!p || !wait_address)
 		return;
-	if (p->nr >= __MAX_SELECT_TABLE_ENTRIES)
+	if (p->nr >= __MAX_POLL_TABLE_ENTRIES)
 		return;
  	entry = p->entry + p->nr;
 	entry->wait_address = wait_address;

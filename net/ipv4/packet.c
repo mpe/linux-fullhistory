@@ -497,7 +497,7 @@ struct proto packet_prot =
 	NULL,
 	NULL,
 	NULL,
-	datagram_select,
+	datagram_poll,
 	NULL,			/* No ioctl */
 	packet_init,
 	NULL,

@@ -302,8 +302,7 @@ static void	do_apm_timer(unsigned long);
 static int	do_open(struct inode *, struct file *);
 static void	do_release(struct inode *, struct file *);
 static long	do_read(struct inode *, struct file *, char *, unsigned long);
-static int	do_select(struct inode *, struct file *, int,
-			  select_table *);
+static unsigned int do_poll(struct file *, poll_table *);
 static int	do_ioctl(struct inode *, struct file *, u_int, u_long);
 
 #ifdef CONFIG_PROC_FS
@@ -360,7 +359,7 @@ static struct file_operations apm_bios_fops = {
 	do_read,
 	NULL,		/* write */
 	NULL,		/* readdir */
-	do_select,
+	do_poll,
 	do_ioctl,
 	NULL,		/* mmap */
 	do_open,
@@ -865,19 +864,16 @@ repeat:
 	return 0;
 }
 
-static int do_select(struct inode *inode, struct file *fp, int sel_type,
-		     select_table * wait)
+static unsigned int do_poll(struct file *fp, poll_table * wait)
 {
-	struct apm_bios_struct *	as;
+	struct apm_bios_struct * as;
 
 	as = fp->private_data;
 	if (check_apm_bios_struct(as, "select"))
 		return 0;
-	if (sel_type != SEL_IN)
-		return 0;
+	poll_wait(&process_list, wait);
 	if (!queue_empty(as))
-		return 1;
-	select_wait(&process_list, wait);
+		return POLLIN | POLLRDNORM;
 	return 0;
 }
 

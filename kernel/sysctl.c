@@ -59,7 +59,7 @@ struct file_operations proc_sys_file_operations =
 	proc_readsys,	/* read	   */
 	proc_writesys,	/* write   */
 	NULL,		/* readdir */
-	NULL,		/* select  */
+	NULL,		/* poll    */
 	NULL,		/* ioctl   */
 	NULL,		/* mmap	   */
 	NULL,		/* no special open code	   */

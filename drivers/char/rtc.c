@@ -75,8 +75,7 @@ static long rtc_read(struct inode *inode, struct file *file,
 static int rtc_ioctl(struct inode *inode, struct file *file,
 			unsigned int cmd, unsigned long arg);
 
-static int rtc_select(struct inode *inode, struct file *file,
-			int sel_type, select_table *wait);
+static unsigned int rtc_poll(struct file *file, poll_table *wait);
 
 void get_rtc_time (struct rtc_time *rtc_tm);
 void get_rtc_alm_time (struct rtc_time *alm_tm);
@@ -492,14 +491,11 @@ static void rtc_release(struct inode *inode, struct file *file)
 	rtc_status &= ~RTC_IS_OPEN;
 }
 
-static int rtc_select(struct inode *inode, struct file *file,
-			int sel_type, select_table *wait)
+static unsigned int rtc_poll(struct file *file, poll_table *wait)
 {
-	if (sel_type == SEL_IN) {
-		if (rtc_irq_data != 0)
-			return 1;
-		select_wait(&rtc_wait, wait);
-	}
+	poll_wait(&rtc_wait, wait);
+	if (rtc_irq_data != 0)
+		return POLLIN | POLLRDNORM;
 	return 0;
 }
 
@@ -512,7 +508,7 @@ static struct file_operations rtc_fops = {
 	rtc_read,
 	NULL,		/* No write */
 	NULL,		/* No readdir */
-	rtc_select,
+	rtc_poll,
 	rtc_ioctl,
 	NULL,		/* No mmap */
 	rtc_open,

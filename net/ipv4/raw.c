@@ -412,7 +412,7 @@ struct proto raw_prot = {
 	NULL,
 	NULL,
 	NULL,
-	datagram_select,
+	datagram_poll,
 #ifdef CONFIG_IP_MROUTE	
 	ipmr_ioctl,
 #else

@@ -545,7 +545,7 @@ extern __inline__ void skb_orphan(struct sk_buff *skb)
 
 extern struct sk_buff *		skb_realloc_headroom(struct sk_buff *skb, int newheadroom);
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);
-extern int			datagram_select(struct socket *sock, int sel_type, select_table *wait);
+extern unsigned int		datagram_poll(struct socket *sock, poll_table *wait);
 extern int			skb_copy_datagram(struct sk_buff *from, int offset, char *to,int size);
 extern int			skb_copy_datagram_iovec(struct sk_buff *from, int offset, struct iovec *to,int size);
 extern void			skb_free_datagram(struct sock * sk, struct sk_buff *skb);

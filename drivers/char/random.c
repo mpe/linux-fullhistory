@@ -233,6 +233,7 @@
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
 #include <linux/random.h>
+#include <linux/poll.h>
 
 #include <asm/uaccess.h>
 #include <asm/irq.h>
@@ -332,8 +333,7 @@ static long random_read(struct inode * inode, struct file * file,
 		       char * buf, unsigned long nbytes);
 static long random_read_unlimited(struct inode * inode, struct file * file,
 				 char * buf, unsigned long nbytes);
-static int random_select(struct inode *inode, struct file *file,
-			 int sel_type, select_table * wait);
+static unsigned int random_poll(struct file *file, poll_table * wait);
 static long random_write(struct inode * inode, struct file * file,
 			const char * buffer, unsigned long count);
 static int random_ioctl(struct inode * inode, struct file * file,
@@ -1086,23 +1086,18 @@ random_read_unlimited(struct inode * inode, struct file * file,
 	return extract_entropy(&random_state, buf, nbytes, 1);
 }
 
-static int
-random_select(struct inode *inode, struct file *file,
-		      int sel_type, select_table * wait)
+static unsigned int
+random_poll(struct file *file, poll_table * wait)
 {
-	switch (sel_type) {
-	case SEL_IN:
-		if (random_state.entropy_count >= 8)
-			return 1;
-		select_wait(&random_wait, wait);
-		break;
-	case SEL_OUT:
-		if (random_state.entropy_count < WAIT_OUTPUT_BITS)
-			return 1;
-		select_wait(&random_wait, wait);
-		break;
-	}
-	return 0;
+	unsigned int mask;
+
+	poll_wait(&random_wait, wait);
+	mask = 0;
+	if (random_state.entropy_count >= 8)
+		mask |= POLLIN | POLLRDNORM;
+	if (random_state.entropy_count < WAIT_OUTPUT_BITS)
+		mask |= POLLOUT | POLLWRNORM;
+	return mask;
 }
 
 static long
@@ -1270,7 +1265,7 @@ struct file_operations random_fops = {
 	random_read,
 	random_write,
 	NULL,		/* random_readdir */
-	random_select,	/* random_select */
+	random_poll,	/* random_poll */
 	random_ioctl,
 	NULL,		/* random_mmap */
 	NULL,		/* no special open code */
@@ -1282,7 +1277,7 @@ struct file_operations urandom_fops = {
 	random_read_unlimited,
 	random_write,
 	NULL,		/* urandom_readdir */
-	NULL,		/* urandom_select */
+	NULL,		/* urandom_poll */
 	random_ioctl,
 	NULL,		/* urandom_mmap */
 	NULL,		/* no special open code */

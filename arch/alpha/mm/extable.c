@@ -34,6 +34,8 @@ search_one_table(const struct exception_table_entry *first,
         return 0;
 }
 
+register unsigned long gp __asm__("$29");
+
 unsigned
 search_exception_table(unsigned long addr)
 {
@@ -41,7 +43,6 @@ search_exception_table(unsigned long addr)
 
 #ifndef CONFIG_MODULE
 	/* There is only the kernel to search.  */
-	register unsigned long gp __asm__("$29");
 	ret = search_one_table(__start___ex_table, __stop___ex_table - 1,
 			       addr - gp);
 	if (ret) return ret;

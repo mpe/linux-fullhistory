@@ -463,7 +463,7 @@ struct file_operations {
 	long (*read) (struct inode *, struct file *, char *, unsigned long);
 	long (*write) (struct inode *, struct file *, const char *, unsigned long);
 	int (*readdir) (struct inode *, struct file *, void *, filldir_t);
-	int (*select) (struct inode *, struct file *, int, select_table *);
+	unsigned int (*poll) (struct file *, poll_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct inode *, struct file *, struct vm_area_struct *);
 	int (*open) (struct inode *, struct file *);

@@ -12,6 +12,7 @@
 #include <linux/termios.h>
 #include <linux/mm.h>
 
+#include <asm/poll.h>
 #include <asm/uaccess.h>
 
 /*
@@ -159,57 +160,43 @@ static int pipe_ioctl(struct inode *pino, struct file * filp,
 	}
 }
 
-static int pipe_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
+static unsigned int pipe_poll(struct file * filp, poll_table * wait)
 {
-	switch (sel_type) {
-		case SEL_IN:
-			if (!PIPE_EMPTY(*inode) || !PIPE_WRITERS(*inode))
-				return 1;
-			select_wait(&PIPE_WAIT(*inode), wait);
-			return 0;
-		case SEL_OUT:
-			if (PIPE_EMPTY(*inode) || !PIPE_READERS(*inode))
-				return 1;
-			select_wait(&PIPE_WAIT(*inode), wait);
-			return 0;
-		case SEL_EX:
-			if (!PIPE_READERS(*inode) || !PIPE_WRITERS(*inode))
-				return 1;
-			select_wait(&inode->i_wait,wait);
-			return 0;
-	}
-	return 0;
+	unsigned int mask;
+	struct inode * inode = filp->f_inode;
+
+	poll_wait(&PIPE_WAIT(*inode), wait);
+	mask = POLLIN | POLLRDNORM;
+	if (PIPE_EMPTY(*inode))
+		mask = POLLOUT | POLLWRNORM;
+	if (!PIPE_WRITERS(*inode))
+		mask |= POLLHUP;
+	if (!PIPE_READERS(*inode))
+		mask |= POLLERR;
+	return mask;
 }
 
 #ifdef FIFO_SUNOS_BRAINDAMAGE
 /*
  * Arggh. Why does SunOS have to have different select() behaviour
- * for pipes and fifos? Hate-Hate-Hate. See difference in SEL_IN..
+ * for pipes and fifos? Hate-Hate-Hate. SunOS lacks POLLHUP..
  */
-static int fifo_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
+static unsigned int fifo_poll(struct file * filp, poll_table * wait)
 {
-	switch (sel_type) {
-		case SEL_IN:
-			if (!PIPE_EMPTY(*inode))
-				return 1;
-			select_wait(&PIPE_WAIT(*inode), wait);
-			return 0;
-		case SEL_OUT:
-			if (!PIPE_FULL(*inode) || !PIPE_READERS(*inode))
-				return 1;
-			select_wait(&PIPE_WAIT(*inode), wait);
-			return 0;
-		case SEL_EX:
-			if (!PIPE_READERS(*inode) || !PIPE_WRITERS(*inode))
-				return 1;
-			select_wait(&inode->i_wait,wait);
-			return 0;
-	}
-	return 0;
+	unsigned int mask;
+	struct inode * inode = filp->f_inode;
+
+	poll_wait(&PIPE_WAIT(*inode), wait);
+	mask = POLLIN | POLLRDNORM;
+	if (PIPE_EMPTY(*inode))
+		mask = POLLOUT | POLLWRNORM;
+	if (!PIPE_READERS(*inode))
+		mask |= POLLERR;
+	return mask;
 }
 #else
 
-#define fifo_select pipe_select
+#define fifo_poll pipe_poll
 
 #endif /* FIFO_SUNOS_BRAINDAMAGE */
 
@@ -227,31 +214,18 @@ static long connect_read(struct inode * inode, struct file * filp,
 	return pipe_read(inode,filp,buf,count);
 }
 
-static int connect_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
+static unsigned int connect_poll(struct file * filp, poll_table * wait)
 {
-	switch (sel_type) {
-		case SEL_IN:
-			if (!PIPE_EMPTY(*inode)) {
-				filp->f_op = &read_fifo_fops;
-				return 1;
-			}
-			if (PIPE_WRITERS(*inode)) {
-				filp->f_op = &read_fifo_fops;
-			}
-			select_wait(&PIPE_WAIT(*inode), wait);
-			return 0;
-		case SEL_OUT:
-			if (!PIPE_FULL(*inode))
-				return 1;
-			select_wait(&PIPE_WAIT(*inode), wait);
-			return 0;
-		case SEL_EX:
-			if (!PIPE_READERS(*inode) || !PIPE_WRITERS(*inode))
-				return 1;
-			select_wait(&inode->i_wait,wait);
-			return 0;
+	struct inode * inode = filp->f_inode;
+
+	poll_wait(&PIPE_WAIT(*inode), wait);
+	if (!PIPE_EMPTY(*inode)) {
+		filp->f_op = &read_fifo_fops;
+		return POLLIN | POLLRDNORM;
 	}
-	return 0;
+	if (PIPE_WRITERS(*inode))
+		filp->f_op = &read_fifo_fops;
+	return POLLOUT | POLLWRNORM;
 }
 
 static void pipe_read_release(struct inode * inode, struct file * filp)
@@ -305,7 +279,7 @@ struct file_operations connecting_fifo_fops = {
 	connect_read,
 	bad_pipe_w,
 	NULL,		/* no readdir */
-	connect_select,
+	connect_poll,
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
 	pipe_read_open,
@@ -318,7 +292,7 @@ struct file_operations read_fifo_fops = {
 	pipe_read,
 	bad_pipe_w,
 	NULL,		/* no readdir */
-	fifo_select,
+	fifo_poll,
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
 	pipe_read_open,
@@ -331,7 +305,7 @@ struct file_operations write_fifo_fops = {
 	bad_pipe_r,
 	pipe_write,
 	NULL,		/* no readdir */
-	fifo_select,
+	fifo_poll,
 	pipe_ioctl,
 	NULL,		/* mmap */
 	pipe_write_open,
@@ -344,7 +318,7 @@ struct file_operations rdwr_fifo_fops = {
 	pipe_read,
 	pipe_write,
 	NULL,		/* no readdir */
-	fifo_select,
+	fifo_poll,
 	pipe_ioctl,
 	NULL,		/* mmap */
 	pipe_rdwr_open,
@@ -357,7 +331,7 @@ struct file_operations read_pipe_fops = {
 	pipe_read,
 	bad_pipe_w,
 	NULL,		/* no readdir */
-	pipe_select,
+	pipe_poll,
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
 	pipe_read_open,
@@ -370,7 +344,7 @@ struct file_operations write_pipe_fops = {
 	bad_pipe_r,
 	pipe_write,
 	NULL,		/* no readdir */
-	pipe_select,
+	pipe_poll,
 	pipe_ioctl,
 	NULL,		/* mmap */
 	pipe_write_open,
@@ -383,7 +357,7 @@ struct file_operations rdwr_pipe_fops = {
 	pipe_read,
 	pipe_write,
 	NULL,		/* no readdir */
-	pipe_select,
+	pipe_poll,
 	pipe_ioctl,
 	NULL,		/* mmap */
 	pipe_rdwr_open,

@@ -1,7 +1,7 @@
 /*
  * linux/drivers/scsi/ide-scsi.h
  *
- * Copyright (C) 1996 Gadi Oxman <gadio@netvision.net.il>
+ * Copyright (C) 1996, 1997 Gadi Oxman <gadio@netvision.net.il>
  */
 
 #ifndef IDESCSI_H
@@ -31,7 +31,7 @@ extern int idescsi_reset (Scsi_Cmnd *cmd, unsigned int resetflags);
 	NULL,			/* bios_param	*/			\
 	10,			/* can_queue	*/			\
 	-1,			/* this_id	*/			\
-	SG_NONE,		/* sg_tablesize	*/			\
+	256,			/* sg_tablesize	*/			\
 	5,			/* cmd_per_lun	*/			\
 	0,			/* present	*/			\
 	0,			/* isa_dma	*/			\

@@ -531,8 +531,7 @@ struct proto
 	void			(*write_wakeup)(struct sock *sk);
 	void			(*read_wakeup)(struct sock *sk);
 
-	int			(*select)(struct socket *sock, int which,
-					  select_table *wait);
+	unsigned int		(*poll)(struct socket *sock, poll_table *wait);
 
 	int			(*ioctl)(struct sock *sk, int cmd,
 					 unsigned long arg);

@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/ide.c	Version 6.00  Dec   4, 1996
+ *  linux/drivers/block/ide.c	Version 6.01  Jan  26, 1997
  *
- *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
+ *  Copyright (C) 1994-1997  Linus Torvalds & authors (see below)
  */
 #define _IDE_C		/* needed by <linux/blk.h> */
 
@@ -276,6 +276,8 @@
  *			fix bug in ide_error()
  *			fix bug in the first ide_get_lock() call for Atari
  *			don't flush leftover data for ATAPI devices
+ * Version 6.01		clear hwgroup->active while the hwgroup sleeps
+ *			support HDIO_GETGEO for floppies
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -1240,10 +1242,9 @@ static inline void ide_leave_hwgroup (ide_hwgroup_t *hwgroup)
 			sleep = jiffies + WAIT_MIN_SLEEP;
 		hwgroup->timer.expires = sleep;
 		add_timer(&hwgroup->timer);
-	} else {	/* Ugly, but how can we sleep for the lock otherwise? perhaps from tq_scheduler? */
+	} else	/* Ugly, but how can we sleep for the lock otherwise? perhaps from tq_scheduler? */
 		ide_release_lock(&ide_lock);
-		hwgroup->active = 0;
-	}
+	hwgroup->active = 0;
 }
 
 /*
@@ -1876,7 +1877,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		case HDIO_GETGEO:
 		{
 			struct hd_geometry *loc = (struct hd_geometry *) arg;
-			if (!loc || drive->media != ide_disk) return -EINVAL;
+			if (!loc || (drive->media != ide_disk && drive->media != ide_floppy)) return -EINVAL;
 			if (put_user(drive->bios_head, (byte *) &loc->heads)) return -EFAULT;
 			if (put_user(drive->bios_sect, (byte *) &loc->sectors)) return -EFAULT;
 			if (put_user(drive->bios_cyl, (unsigned short *) &loc->cylinders)) return -EFAULT;

@@ -3,17 +3,17 @@
  *
  *	Generic datagram handling routines. These are generic for all protocols. Possibly a generic IP version on top
  *	of these would make sense. Not tonight however 8-).
- *	This is used because UDP, RAW, PACKET, DDP, IPX, AX.25 and NetROM layer all have identical select code and mostly
- *	identical recvmsg() code. So we share it here. The select was shared before but buried in udp.c so I moved it.
+ *	This is used because UDP, RAW, PACKET, DDP, IPX, AX.25 and NetROM layer all have identical poll code and mostly
+ *	identical recvmsg() code. So we share it here. The poll was shared before but buried in udp.c so I moved it.
  *
- *	Authors:	Alan Cox <alan@cymru.net>. (datagram_select() from old udp.c code)
+ *	Authors:	Alan Cox <alan@cymru.net>. (datagram_poll() from old udp.c code)
  *
  *	Fixes:
  *		Alan Cox	:	NULL return from skb_peek_copy() understood
  *		Alan Cox	:	Rewrote skb_read_datagram to avoid the skb_peek_copy stuff.
  *		Alan Cox	:	Added support for SOCK_SEQPACKET. IPX can no longer use the SO_TYPE hack but
  *					AX.25 now works right, and SPX is feasible.
- *		Alan Cox	:	Fixed write select of non IP protocol crash.
+ *		Alan Cox	:	Fixed write poll of non IP protocol crash.
  *		Florian  La Roche:	Changed for my new skbuff handling.
  *		Darryl Miles	:	Fixed non-blocking SOCK_SEQPACKET.
  *		Linus Torvalds	:	BSD semantic fixes.
@@ -34,6 +34,8 @@
 #include <linux/sched.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/poll.h>
+
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/route.h>
@@ -188,57 +190,48 @@ int skb_copy_datagram_iovec(struct sk_buff *skb, int offset, struct iovec *to,
 }
 
 /*
- *	Datagram select: Again totally generic. This also handles
+ *	Datagram poll: Again totally generic. This also handles
  *	sequenced packet sockets providing the socket receive queue
  *	is only ever holding data ready to receive.
  */
 
-int datagram_select(struct socket *sock, int sel_type, select_table *wait)
+unsigned int datagram_poll(struct socket *sock, poll_table *wait)
 {
 	struct sock *sk = sock->sk;
+	unsigned int mask;
 
+	poll_wait(sk->sleep, wait);
+	mask = 0;
+
+	/* exceptional events? */
 	if (sk->err)
-		return 1;
-	switch(sel_type)
-	{
-		case SEL_IN:
-			if (sk->shutdown & RCV_SHUTDOWN)
-				return 1;
-			if (connection_based(sk) && sk->state==TCP_CLOSE)
-			{
-				/* Connection closed: Wake up */
-				return 1;
-			}
-			if (!skb_queue_empty(&sk->receive_queue))
-			{	/* This appears to be consistent
-				   with other stacks */
-				return 1;
-			}
-			break;
+		mask |= POLLERR;
+	if (sk->shutdown & RCV_SHUTDOWN)
+		mask |= POLLHUP;
 
-		case SEL_OUT:
-			if (sk->shutdown & SEND_SHUTDOWN)
-				return 1;
-			if (connection_based(sk) && sk->state==TCP_SYN_SENT)
-			{
-				/* Connection still in progress */
-				break;
-			}
-			if (sk->prot && sock_wspace(sk) >= MIN_WRITE_SPACE)
-			{
-				return 1;
-			}
-			if (sk->prot==NULL && sk->sndbuf-sk->wmem_alloc >= MIN_WRITE_SPACE)
-			{
-				return 1;
-			}
-			break;
+	/* readable? */
+	if (!skb_queue_empty(&sk->receive_queue))
+		mask |= POLLIN | POLLRDNORM;
 
-		case SEL_EX:
-			break;
+	/* Connection-based need to check for termination and startup */
+	if (connection_based(sk)) {
+		if (sk->state==TCP_CLOSE)
+			mask |= POLLHUP;
+		/* connection hasn't started yet? */
+		if (sk->state == TCP_SYN_SENT)
+			return mask;
 	}
 
-	/* select failed.. */
-	select_wait(sk->sleep, wait);
-	return 0;
+	/* writable? */
+	if (!(sk->shutdown & SEND_SHUTDOWN)) {
+		if (sk->prot) {
+			if (sock_wspace(sk) >= MIN_WRITE_SPACE)
+				mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
+		} else {
+			if (sk->sndbuf-sk->wmem_alloc >= MIN_WRITE_SPACE)
+				mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
+		}
+	}
+
+	return mask;
 }

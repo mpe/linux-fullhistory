@@ -122,12 +122,11 @@ static int ext2_readlink (struct inode * inode, char * buffer, int buflen)
 	}
 	else
 		link = (char *) inode->u.ext2_i.i_data;
-	
-	/* XXX I hope link is always '\0'-terminated. */ 	
-	i = strlen(link);
-	if (i >= buflen)
-		i = buflen-1;
-	if (copy_to_user(buffer, link, i+1))
+
+	i = 0;
+	while (i < buflen && link[i])
+		i++;
+	if (copy_to_user(buffer, link, i))
 		i = -EFAULT;
  	if (DO_UPDATE_ATIME(inode)) {
 		inode->i_atime = CURRENT_TIME;

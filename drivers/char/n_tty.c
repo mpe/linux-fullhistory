@@ -33,6 +33,7 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
+#include <linux/poll.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -982,37 +983,29 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 	return (b - buf) ? b - buf : retval;
 }
 
-static int normal_select(struct tty_struct * tty, struct inode * inode,
-			 struct file * file, int sel_type, select_table *wait)
+static unsigned int normal_poll(struct tty_struct * tty, struct file * file, poll_table *wait)
 {
-	switch (sel_type) {
-		case SEL_IN:
-			if (input_available_p(tty, TIME_CHAR(tty) ? 0 :
-					      MIN_CHAR(tty)))
-				return 1;
-			/* fall through */
-		case SEL_EX:
-			if (tty->packet && tty->link->ctrl_status)
-				return 1;
-			if (tty->flags & (1 << TTY_OTHER_CLOSED))
-				return 1;
-			if (tty_hung_up_p(file))
-				return 1;
-			if (!waitqueue_active(&tty->read_wait)) {
-				if (MIN_CHAR(tty) && !TIME_CHAR(tty))
-					tty->minimum_to_wake = MIN_CHAR(tty);
-				else
-					tty->minimum_to_wake = 1;
-			}
-			select_wait(&tty->read_wait, wait);
-			return 0;
-		case SEL_OUT:
-			if (tty->driver.chars_in_buffer(tty) < WAKEUP_CHARS)
-				return 1;
-			select_wait(&tty->write_wait, wait);
-			return 0;
+	unsigned int mask = 0;
+
+	poll_wait(&tty->read_wait, wait);
+	poll_wait(&tty->write_wait, wait);
+	if (input_available_p(tty, TIME_CHAR(tty) ? 0 : MIN_CHAR(tty)))
+		mask |= POLLIN | POLLRDNORM;
+	if (tty->packet && tty->link->ctrl_status)
+		mask |= POLLPRI | POLLIN | POLLRDNORM;
+	if (tty->flags & (1 << TTY_OTHER_CLOSED))
+		mask |= POLLHUP;
+	if (tty_hung_up_p(file))
+		mask |= POLLHUP;
+	if (!(mask & (POLLHUP | POLLIN | POLLRDNORM))) {
+		if (MIN_CHAR(tty) && !TIME_CHAR(tty))
+			tty->minimum_to_wake = MIN_CHAR(tty);
+		else
+			tty->minimum_to_wake = 1;
 	}
-	return 0;
+	if (tty->driver.chars_in_buffer(tty) < WAKEUP_CHARS)
+		mask |= POLLOUT | POLLWRNORM;
+	return mask;
 }
 
 struct tty_ldisc tty_ldisc_N_TTY = {
@@ -1027,7 +1020,7 @@ struct tty_ldisc tty_ldisc_N_TTY = {
 	write_chan,		/* write */
 	n_tty_ioctl,		/* ioctl */
 	n_tty_set_termios,	/* set_termios */
-	normal_select,		/* select */
+	normal_poll,		/* poll */
 	n_tty_receive_buf,	/* receive_buf */
 	n_tty_receive_room,	/* receive_room */
 	0			/* write_wakeup */

@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/ide-floppy.c	Version 0.3 - ALPHA	Dec   2, 1996
+ * linux/drivers/block/ide-floppy.c	Version 0.4 - ALPHA	Jan  26, 1997
  *
- * Copyright (C) 1996 Gadi Oxman <gadio@netvision.net.il>
+ * Copyright (C) 1996, 1997 Gadi Oxman <gadio@netvision.net.il>
  */
 
 /*
@@ -16,6 +16,7 @@
  * Ver 0.1   Oct 17 96   Initial test version, mostly based on ide-tape.c.
  * Ver 0.2   Oct 31 96   Minor changes.
  * Ver 0.3   Dec  2 96   Fixed error recovery bug.
+ * Ver 0.4   Jan 26 97   Add support for the HDIO_GETGEO ioctl.
  */
 
 #include <linux/config.h>
@@ -1048,6 +1049,9 @@ static int idefloppy_get_flexible_disk_page (ide_drive_t *drive)
 			drive->name, capacity / 1024, page->cyls, page->heads, page->sectors,
 			page->transfer_rate / 8, page->sector_size, page->rpm);
 		floppy->flexible_disk_page = *page;
+		drive->bios_cyl = page->cyls;
+		drive->bios_head = page->heads;
+		drive->bios_sect = page->sectors;
 		if (capacity != floppy->blocks * floppy->block_size)
 			printk (KERN_NOTICE "%s: The drive reports both %d and %d bytes as its capacity\n",
 				drive->name, capacity, floppy->blocks * floppy->block_size);

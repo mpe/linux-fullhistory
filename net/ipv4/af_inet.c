@@ -1188,13 +1188,13 @@ int inet_shutdown(struct socket *sock, int how)
 }
 
 
-int inet_select(struct socket *sock, int sel_type, select_table *wait)
+unsigned int inet_poll(struct socket *sock, poll_table *wait)
 {
 	struct sock *sk = sock->sk;
 
-	if (sk->prot->select == NULL)
+	if (sk->prot->poll == NULL)
 		return(0);
-	return sk->prot->select(sock, sel_type, wait);
+	return sk->prot->poll(sock, wait);
 }
 
 /*
@@ -1589,7 +1589,7 @@ struct proto_ops inet_stream_ops = {
 	NULL,
 	inet_accept,
 	inet_getname, 
-	inet_select,
+	inet_poll,
 	inet_ioctl,
 	inet_listen,
 	inet_shutdown,
@@ -1610,7 +1610,7 @@ struct proto_ops inet_dgram_ops = {
 	NULL,
 	NULL,
 	inet_getname, 
-	datagram_select,
+	datagram_poll,
 	inet_ioctl,
 	NULL,
 	inet_shutdown,

@@ -851,7 +851,7 @@ struct proto udp_prot = {
 	NULL,
 	NULL,
 	NULL,
-	datagram_select,
+	datagram_poll,
 	udp_ioctl,
 	NULL,
 	NULL,

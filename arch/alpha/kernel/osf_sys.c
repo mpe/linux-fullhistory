@@ -43,6 +43,23 @@ extern void put_unnamed_dev(kdev_t);
 
 extern asmlinkage int sys_umount(char *);
 extern asmlinkage int sys_swapon(const char *specialfile, int swap_flags);
+extern asmlinkage unsigned long sys_brk(unsigned long);
+
+/*
+ * This is pure guess-work..
+ */
+asmlinkage int osf_set_program_attributes(
+	unsigned long text_start, unsigned long text_len,
+	unsigned long bss_start, unsigned long bss_len)
+{
+	struct mm_struct *mm = current->mm;
+
+	mm->end_code = bss_start + bss_len;
+	mm->brk = bss_start + bss_len;
+	printk("set_program_attributes(%lx %lx %lx %lx)\n",
+		text_start, text_len, bss_start, bss_len);
+	return 0;
+}
 
 /*
  * OSF/1 directory handling functions...
@@ -699,6 +716,37 @@ asmlinkage unsigned long alpha_create_module(char *module_name, unsigned long si
 	return retval;
 }
 
+asmlinkage long osf_sysinfo(int command, char *buf, long count)
+{
+	static char * sysinfo_table[] = {
+		system_utsname.sysname,
+		system_utsname.nodename,
+		system_utsname.release,
+		system_utsname.version,
+		system_utsname.machine,
+		"alpha",	/* instruction set architecture */
+		"dummy",	/* hardware serial number */
+		"dummy",	/* hardware manufacturer */
+		"dummy",	/* secure RPC domain */
+	};
+	unsigned long offset;
+	char *res;
+	long len;
+
+	offset = command-1;
+	if (offset >= sizeof(sysinfo_table)/sizeof(char *)) {
+		/* Digital unix has a few unpublished interfaces here */
+		printk("sysinfo(%d)", command);
+		return -EINVAL;
+	}
+	res = sysinfo_table[offset];
+	len = strlen(res)+1;
+	if (len > count)
+		len = count;
+	if (copy_to_user(buf, res, len))
+		return -EFAULT;
+	return 0;
+}
 
 asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer, unsigned long nbytes,
 					int *start, void *arg)

@@ -26,6 +26,7 @@
 
 #include <net/netlink.h>
 
+#include <asm/poll.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -63,19 +64,16 @@ int netlink_donothing(int minor, struct sk_buff *skb)
 	return -EINVAL;
 }
 
-static int netlink_select(struct inode *inode, struct file *file, int sel_type, select_table * wait)
+static unsigned int netlink_poll(struct file *file, poll_table * wait)
 {
-	unsigned int minor = MINOR(inode->i_rdev);
-	switch (sel_type) {
-	case SEL_IN:
-		if (skb_peek(&skb_queue_rd[minor])!=NULL)
-			return 1;
-		select_wait(&read_space_wait[minor], wait);
-		break;
-	case SEL_OUT:
-		return 1;
-	}
-	return 0;
+	unsigned int mask;
+	unsigned int minor = MINOR(file->f_inode->i_rdev);
+
+	poll_wait(&read_space_wait[minor], wait);
+	mask = POLLOUT | POLLWRNORM;
+	if (skb_peek(&skb_queue_rd[minor]))
+		mask |= POLLIN | POLLRDNORM;
+	return mask;
 }
 
 /*
@@ -183,7 +181,7 @@ static struct file_operations netlink_fops = {
 	netlink_read,
 	netlink_write,
 	NULL,		/* netlink_readdir */
-	netlink_select,
+	netlink_poll,
 	netlink_ioctl,
 	NULL,		/* netlink_mmap */
 	netlink_open,

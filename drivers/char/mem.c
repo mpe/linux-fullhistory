@@ -372,7 +372,7 @@ static struct file_operations mem_fops = {
 	read_mem,
 	write_mem,
 	NULL,		/* mem_readdir */
-	NULL,		/* mem_select */
+	NULL,		/* mem_poll */
 	NULL,		/* mem_ioctl */
 	mmap_mem,
 	NULL,		/* no special open code */
@@ -385,7 +385,7 @@ static struct file_operations kmem_fops = {
 	read_kmem,
 	write_kmem,
 	NULL,		/* kmem_readdir */
-	NULL,		/* kmem_select */
+	NULL,		/* kmem_poll */
 	NULL,		/* kmem_ioctl */
 	mmap_kmem,
 	NULL,		/* no special open code */
@@ -398,7 +398,7 @@ static struct file_operations null_fops = {
 	read_null,
 	write_null,
 	NULL,		/* null_readdir */
-	NULL,		/* null_select */
+	NULL,		/* null_poll */
 	NULL,		/* null_ioctl */
 	NULL,		/* null_mmap */
 	NULL,		/* no special open code */
@@ -411,7 +411,7 @@ static struct file_operations port_fops = {
 	read_port,
 	write_port,
 	NULL,		/* port_readdir */
-	NULL,		/* port_select */
+	NULL,		/* port_poll */
 	NULL,		/* port_ioctl */
 	NULL,		/* port_mmap */
 	NULL,		/* no special open code */
@@ -424,7 +424,7 @@ static struct file_operations zero_fops = {
 	read_zero,
 	write_zero,
 	NULL,		/* zero_readdir */
-	NULL,		/* zero_select */
+	NULL,		/* zero_poll */
 	NULL,		/* zero_ioctl */
 	mmap_zero,
 	NULL,		/* no special open code */
@@ -436,7 +436,7 @@ static struct file_operations full_fops = {
 	read_full,
 	write_full,
 	NULL,		/* full_readdir */
-	NULL,		/* full_select */
+	NULL,		/* full_poll */
 	NULL,		/* full_ioctl */	
 	NULL,		/* full_mmap */
 	NULL,		/* no special open code */
@@ -483,7 +483,7 @@ static struct file_operations memory_fops = {
 	NULL,		/* read */
 	NULL,		/* write */
 	NULL,		/* readdir */
-	NULL,		/* select */
+	NULL,		/* poll */
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
 	memory_open,	/* just a selector for the real open */

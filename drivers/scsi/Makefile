@@ -392,7 +392,7 @@ aic7xxx_seq.h:	aic7xxx_asm aic7xxx.seq
 	./aic7xxx_asm -o $@ aic7xxx.seq
 
 seagate.o: seagate.c
-	$(CC) $(CFLAGS) -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -c seagate.c 
+	$(CC) $(CFLAGS) -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -DPARITY -c seagate.c 
 
 # For debugging, use the -g flag
 53c7,8xx.o : 53c7,8xx.c

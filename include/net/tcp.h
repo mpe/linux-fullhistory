@@ -265,8 +265,7 @@ extern int			tcp_rcv_established(struct sock *sk,
 extern void			tcp_close(struct sock *sk, 
 					  unsigned long timeout);
 extern struct sock *		tcp_accept(struct sock *sk, int flags);
-extern int			tcp_select(struct socket *sock, int sel_type, 
-					   select_table *wait);
+extern unsigned int		tcp_poll(struct socket *sock, poll_table *wait);
 extern int			tcp_getsockopt(struct sock *sk, int level, 
 					       int optname, char *optval, 
 					       int *optlen);
