@@ -3,6 +3,8 @@
  * read/write.
  */
 
+#ifndef IOC_CONTROL
+
 #ifndef __ASSEMBLER__
 #define __IOC(offset)	(IOC_BASE + (offset >> 2))
 #else
@@ -54,3 +56,4 @@
 #define IOC_T3GO	__IOC(0x78)
 #define IOC_T3LATCH	__IOC(0x7c)
 
+#endif

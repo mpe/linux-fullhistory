@@ -10,8 +10,6 @@
 #ifndef __ASM_ARCH_SERIAL_H
 #define __ASM_ARCH_SERIAL_H
 
-#include <linux/config.h>
-
 #include <asm/irq.h>
 
 /*
@@ -23,13 +21,8 @@
  */
 #define BASE_BAUD (1843200 / 16)
 
-#ifdef CONFIG_CATS
-#define _SER_IRQ0	IRQ_ISA(4)
-#define _SER_IRQ1	IRQ_ISA(3)
-#else
-#define _SER_IRQ0	0
-#define _SER_IRQ1	0
-#endif
+#define _SER_IRQ0	IRQ_ISA_UART
+#define _SER_IRQ1	IRQ_ISA_UART2
 
 #define STD_COM_FLAGS (ASYNC_BOOT_AUTOCONF | ASYNC_SKIP_TEST)
 

@@ -8,8 +8,8 @@
  * some more work to get it to fit into our separate processor and
  * architecture structure.
  */
-extern unsigned long phys_screen_end;
-extern unsigned long map_screen_mem(unsigned long log_start, unsigned long kmem, int update);
+#include <asm/arch/memory.h>
+
 int page_nr;
 
 #define setup_processor_functions()
@@ -20,10 +20,11 @@ static inline void setup_swapper_dir (int index, pte_t *ptep)
 	set_pmd (pmd_offset (swapper_pg_dir + index, 0), mk_pmd (ptep));
 }
 
-static inline unsigned long setup_pagetables(unsigned long start_mem, unsigned long end_mem)
+static inline unsigned long
+setup_pagetables(unsigned long start_mem, unsigned long end_mem)
 {
 	unsigned int i;
-	union {unsigned long l; pte_t *pte; } u;
+	union { unsigned long l; pte_t *pte; } u;
 
 	page_nr = MAP_NR(end_mem);
 
@@ -37,14 +38,11 @@ static inline unsigned long setup_pagetables(unsigned long start_mem, unsigned l
 	for (i = 1; i < PTRS_PER_PGD; i++)
 		pgd_val(swapper_pg_dir[i]) = 0;
 
-	/* now map screen mem in */
-	phys_screen_end = SCREEN2_END;
-	map_screen_mem (SCREEN1_END - 480*1024, 0, 0);
-
 	return start_mem;
 }
 
-static inline void mark_usable_memory_areas(unsigned long *start_mem, unsigned long end_mem)
+static inline void
+mark_usable_memory_areas(unsigned long *start_mem, unsigned long end_mem)
 {
 	unsigned long smem;
 
@@ -54,7 +52,4 @@ static inline void mark_usable_memory_areas(unsigned long *start_mem, unsigned l
 		clear_bit(PG_reserved, &mem_map[MAP_NR(smem)].flags);
 		smem += PAGE_SIZE;
 	}
-
-	for (smem = phys_screen_end; smem < SCREEN2_END; smem += PAGE_SIZE)
-		clear_bit(PG_reserved, &mem_map[MAP_NR(smem)].flags);
 }

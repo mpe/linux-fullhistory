@@ -8,6 +8,7 @@
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>
+#include <asm/hardware.h>
 #include "../lib/constants.h"
 
 /* This is the maximum size of an area which will be flushed.  If the area
@@ -21,7 +22,6 @@ Lclean_switch:	.long	0
 
 /*
  * Function: sa110_flush_cache_all (void)
- *
  * Purpose : Flush all cache lines
  */
 		.align	5
@@ -33,7 +33,7 @@ _sa110_flush_cache_all_r2:
 		ands	r1, r1, #1
 		eor	r1, r1, #1
 		str	r1, [r3]
-		ldr	ip, =0xdf000000
+		ldr	ip, =FLUSH_BASE
 		addne	ip, ip, #32768
 		add	r1, ip, #16384			@ only necessary for 16k
 1:		ldr	r3, [ip], #32
@@ -47,11 +47,9 @@ _sa110_flush_cache_all_r2:
 
 /*
  * Function: sa110_flush_cache_area (unsigned long address, int end, int flags)
- *
  * Params  : address	Area start address
  *	   : end	Area end address
  *	   : flags	b0 = I cache as well
- *
  * Purpose : clean & flush all cache lines associated with this area of memory
  */
 		.align	5
@@ -74,10 +72,8 @@ _sa110_flush_cache_area:
 
 /*
  * Function: sa110_cache_wback_area(unsigned long address, unsigned long end)
- *
  * Params  : address	Area start address
  *	   : end	Area end address
- *
  * Purpose : ensure all dirty cachelines in the specified area have been
  *	     written out to memory (for DMA)
  */
@@ -99,13 +95,10 @@ _sa110_cache_wback_area:
 
 /*
  * Function: sa110_cache_purge_area(unsigned long address, unsigned long end)
- *
  * Params  : address	Area start address
  *	   : end	Area end address
- *
  * Purpose : throw away all D-cached data in specified region without
- *	     an obligation to write it ack.
- *
+ *	     an obligation to write it back.
  * Note    : Must clean the D-cached entries around the boundaries if the
  *	     start and/or end address are not cache aligned.
  */
@@ -124,9 +117,7 @@ _sa110_cache_purge_area:
 
 /*
  * Function: sa110_flush_cache_entry (unsigned long address)
- *
  * Params  : address	Address of cache line to flush
- *
  * Purpose : clean & flush an entry
  */
 		.align	5
@@ -138,24 +129,23 @@ _sa110_flush_cache_entry:
 		mov	pc, lr
 
 /*
- * Function: sa110_flush_cache_pte (unsigned long address)
- *
+ * Function: sa110_clean_cache_area(unsigned long start, unsigned long size)
  * Params  : address	Address of cache line to clean
- *
  * Purpose : Ensure that physical memory reflects cache at this location
  *	     for page table purposes.
  */
-_sa110_flush_cache_pte:
-		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry	 (drain is done by TLB fns)
+_sa110_clean_cache_area:
+1:		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry	 (drain is done by TLB fns)
+		add	r0, r0, #32
+		subs	r1, r1, #32
+		bhi	1b
 		mov	pc, lr
 
 /*
  * Function: sa110_flush_ram_page (unsigned long page)
- *
  * Params  : address	Area start address
  *	   : size	size of area
  *	   : flags	b0 = I cache as well
- *
  * Purpose : clean & flush all cache lines associated with this area of memory
  */
 		.align	5
@@ -176,7 +166,6 @@ _sa110_flush_ram_page:
 
 /*
  * Function: sa110_flush_tlb_all (void)
- *
  * Purpose : flush all TLB entries in all caches
  */
 		.align	5
@@ -188,11 +177,9 @@ _sa110_flush_tlb_all:
 
 /*
  * Function: sa110_flush_tlb_area (unsigned long address, unsigned long end, int flags)
- *
  * Params  : address	Area start address
  *	   : end	Area end address
  *	   : flags	b0 = I cache as well
- *
  * Purpose : flush a TLB entry
  */
 		.align	5
@@ -212,22 +199,21 @@ _sa110_flush_tlb_area:
 
 		.align	5
 _sa110_flush_icache_area:
-		mov	r3, #0
 1:		mcr	p15, 0, r0, c7, c10, 1		@ Clean D entry
 		add	r0, r0, #32
-		cmp	r0, r1
-		blt	1b
+		subs	r1, r1, #32
+		bhi	1b
+		mov	r0, #0
+		mcr	p15, 0, r0, c7, c10, 4		@ drain WB
 		mcr	p15, 0, r0, c7, c5, 0		@ flush I cache
 		mov	pc, lr
 /*
  * Function: sa110_switch_to (struct task_struct *prev, struct task_struct *next)
- *
  * Params  : prev	Old task structure
  *	   : next	New task structure for process to run
- *
+ * Returns : prev
  * Purpose : Perform a task switch, saving the old processes state, and restoring
  *	     the new.
- *
  * Notes   : We don't fiddle with the FP registers here - we postpone this until
  *	     the new task actually uses FP.  This way, we don't swap FP for tasks
  *	     that do not require it.
@@ -237,20 +223,30 @@ _sa110_switch_to:
 		stmfd	sp!, {r4 - r9, fp, lr}		@ Store most regs on stack
 		mrs	ip, cpsr
 		stmfd	sp!, {ip}			@ Save cpsr_SVC
+		ldr	r2, [r0, #TSS_MEMMAP]		@ Get old page tables
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
-		ldr	r0, [r1, #TSK_ADDR_LIMIT]
-		teq	r0, #0
-		moveq	r0, #DOM_KERNELDOMAIN
-		movne	r0, #DOM_USERDOMAIN
-		mcr	p15, 0, r0, c3, c0		@ Set segment
-		ldr	r0, [r1, #TSS_MEMMAP]		@ Page table pointer
+		ldr	r4, [r1, #TSK_ADDR_LIMIT]
+		teq	r4, #0
+		moveq	r4, #DOM_KERNELDOMAIN
+		movne	r4, #DOM_USERDOMAIN
+		mcr	p15, 0, r4, c3, c0		@ Set segment
+		ldr	r4, [r1, #TSS_MEMMAP]		@ Page table pointer
+/*
+ * Flushing the cache is nightmarishly slow, so we take any excuse
+ * to get out of it.  If the old page table is the same as the new,
+ * this is a CLONE_VM relative of the old task and there is no need
+ * to flush.  The overhead of the tests isn't even on the radar
+ * compared to the cost of the flush itself.
+ */
+		teq	r4, r2
+		beq	2f
 		ldr	r3, =Lclean_switch
 		ldr	r2, [r3]
 		ands	r2, r2, #1
 		eor	r2, r2, #1
 		str	r2, [r3]
-		ldr	r2, =0xdf000000
+		ldr	r2, =FLUSH_BASE
 		addne	r2, r2, #32768
 		add	r1, r2, #16384			@ only necessary for 16k
 1:		ldr	r3, [r2], #32
@@ -259,19 +255,16 @@ _sa110_switch_to:
 		mov	r1, #0
 		mcr	p15, 0, r1, c7, c5, 0		@ flush I cache
 		mcr	p15, 0, r1, c7, c10, 4		@ drain WB
-		mcr	p15, 0, r0, c2, c0, 0		@ load page table pointer
+		mcr	p15, 0, r4, c2, c0, 0		@ load page table pointer
 		mcr	p15, 0, r1, c8, c7, 0		@ flush TLBs
-		ldmfd	sp!, {ip}
+2:		ldmfd	sp!, {ip}
 		msr	spsr, ip			@ Save tasks CPSR into SPSR for this return
 		ldmfd	sp!, {r4 - r9, fp, pc}^		@ Load all regs saved previously
 
 /*
  * Function: sa110_data_abort ()
- *
  * Params  : r0 = address of aborted instruction
- *
  * Purpose : obtain information about current aborted instruction
- *
  * Returns : r0 = address of abort
  *	   : r1 = FSR
  *	   : r2 != 0 if writing
@@ -288,12 +281,10 @@ _sa110_data_abort:
 		mov	pc, lr
 
 /*
- * Function: sa110_set_pmd ()
- *
+ * Function: sa110_set_pmd(pmd_t *pmdp, pmd_t pmd)
  * Params  : r0 = Address to set
  *	   : r1 = value to set
- *
- * Purpose : Set a PMD and flush it out of any WB cache
+ * Purpose : Set a PMD and flush it out
  */
 		.align	5
 _sa110_set_pmd:	str	r1, [r0]
@@ -301,23 +292,51 @@ _sa110_set_pmd:	str	r1, [r0]
 		mov	pc, lr
 
 /*
+ * Function: sa110_set_pte(pte_t *ptep, pte_t pte)
+ * Params  : r0 = Address to set
+ *	   : r1 = value to set
+ * Purpose : Set a PTE and flush it out
+ */
+		.align	5
+_sa110_set_pte:	str	r1, [r0], #-1024		@ linux version
+
+		eor	r1, r1, #LPTE_PRESENT | LPTE_YOUNG | LPTE_WRITE | LPTE_DIRTY
+
+		bic	r2, r1, #0xff0
+		bic	r2, r2, #3
+		orr	r2, r2, #HPTE_TYPE_SMALL
+
+		tst	r1, #LPTE_USER | LPTE_EXEC	@ User or Exec?
+		orrne	r2, r2, #HPTE_AP_READ
+
+		tst	r1, #LPTE_WRITE | LPTE_DIRTY	@ Write and Dirty?
+		orreq	r2, r2, #HPTE_AP_WRITE
+
+		tst	r1, #LPTE_PRESENT | LPTE_YOUNG	@ Present and Young?
+		movne	r2, #0
+
+		str	r2, [r0]			@ hardware version
+		mov	r0, r0
+		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry	 (drain is done by TLB fns)
+		mov	pc, lr
+
+/*
  * Function: sa110_check_bugs (void)
  *	   : sa110_proc_init (void)
  *	   : sa110_proc_fin (void)
- *
  * Notes   : This processor does not require these
  */
 _sa110_check_bugs:
 		mrs	ip, cpsr
 		bic	ip, ip, #F_BIT
 		msr	cpsr, ip
+
 _sa110_proc_init:
 _sa110_proc_fin:
 		mov	pc, lr
 
 /*
  * Function: sa110_reset
- *
  * Notes   : This sets up everything for a reset
  */
 _sa110_reset:	mrs	r1, cpsr
@@ -350,14 +369,15 @@ ENTRY(sa110_processor_functions)
 		.word	_sa110_flush_cache_all		@ 24
 		.word	_sa110_flush_cache_area		@ 28
 		.word	_sa110_flush_cache_entry	@ 32
-		.word	_sa110_flush_cache_pte		@ 36
+		.word	_sa110_clean_cache_area		@ 36
 		.word	_sa110_flush_ram_page		@ 40
 		.word	_sa110_flush_tlb_all		@ 44
 		.word	_sa110_flush_tlb_area		@ 48
 
 		.word	_sa110_set_pmd			@ 52
-		.word	_sa110_reset			@ 56
-		.word	_sa110_flush_icache_area	@ 60
+		.word	_sa110_set_pte			@ 56
+		.word	_sa110_reset			@ 60
+		.word	_sa110_flush_icache_area	@ 64
 
-		.word	_sa110_cache_wback_area		@ 64
-		.word	_sa110_cache_purge_area		@ 68
+		.word	_sa110_cache_wback_area		@ 68
+		.word	_sa110_cache_purge_area		@ 72

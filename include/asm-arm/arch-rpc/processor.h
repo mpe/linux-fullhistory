@@ -1,14 +1,17 @@
 /*
  * linux/include/asm-arm/arch-rpc/processor.h
  *
- * Copyright (c) 1996 Russell King.
+ * Copyright (c) 1996-1999 Russell King.
  *
  * Changelog:
- *  10-09-1996	RMK	Created
+ *  10-Sep-1996	RMK	Created
+ *  21-Mar-1999	RMK	Added asm/arch/memory.h
  */
 
 #ifndef __ASM_ARCH_PROCESSOR_H
 #define __ASM_ARCH_PROCESSOR_H
+
+#include <asm/arch/memory.h>
 
 /*
  * Bus types
@@ -18,17 +21,9 @@
 #define MCA_bus 0
 #define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
-/*
- * User space: 3GB
- */
-#define TASK_SIZE	(0xc0000000UL)
-
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
 #define TASK_UNMAPPED_BASE (TASK_SIZE / 3)
-
-#define INIT_MMAP \
-{ &init_mm, 0, 0, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
 
 #endif

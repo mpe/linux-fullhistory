@@ -71,7 +71,7 @@ static int vfat_hashi(struct dentry *parent, struct qstr *qstr);
 static int vfat_hash(struct dentry *parent, struct qstr *qstr);
 static int vfat_cmpi(struct dentry *dentry, struct qstr *a, struct qstr *b);
 static int vfat_cmp(struct dentry *dentry, struct qstr *a, struct qstr *b);
-static int vfat_revalidate(struct dentry *dentry);
+static int vfat_revalidate(struct dentry *dentry, int);
 
 static struct dentry_operations vfat_dentry_ops[4] = {
 	{
@@ -106,7 +106,7 @@ void vfat_put_super(struct super_block *sb)
 	MOD_DEC_USE_COUNT;
 }
 
-static int vfat_revalidate(struct dentry *dentry)
+static int vfat_revalidate(struct dentry *dentry, int flags)
 {
 	PRINTK1(("vfat_revalidate: %s\n", dentry->d_name.name));
 	if (dentry->d_time == dentry->d_parent->d_inode->i_version) {

@@ -6,7 +6,7 @@
 #ifndef __ASM_ARCH_SYSTEM_H
 #define __ASM_ARCH_SYSTEM_H
 
-#include <asm/proc-fns.h>
+#include <asm/iomd.h>
 
 #define arch_reset(mode) {						\
 	extern void ecard_reset (int card);				\

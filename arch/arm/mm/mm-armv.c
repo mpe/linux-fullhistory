@@ -37,7 +37,8 @@ __initfunc(unsigned long setup_io_pagetables(unsigned long start_mem))
 		virtual = mp->virtual;
 		physical = mp->physical;
 		length = mp->length;
-		prot = (mp->prot_read ? PTE_AP_READ : 0) | (mp->prot_write ? PTE_AP_WRITE : 0);
+		prot = (mp->prot_read ? L_PTE_USER : 0) | (mp->prot_write ? L_PTE_WRITE : 0)
+			| L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY;
 
 		while ((virtual & 1048575 || physical & 1048575) && length >= PAGE_SIZE) {
 			alloc_init_page(&start_mem, virtual, physical, mp->domain, prot);
@@ -56,7 +57,8 @@ __initfunc(unsigned long setup_io_pagetables(unsigned long start_mem))
 			physical += 1048576;
 		}
 
-		prot = (mp->prot_read ? PTE_AP_READ : 0) | (mp->prot_write ? PTE_AP_WRITE : 0);
+		prot = (mp->prot_read ? L_PTE_USER : 0) | (mp->prot_write ? L_PTE_WRITE : 0)
+			| L_PTE_PRESENT | L_PTE_YOUNG | L_PTE_DIRTY;
 
 		while (length >= PAGE_SIZE) {
 			alloc_init_page(&start_mem, virtual, physical, mp->domain, prot);

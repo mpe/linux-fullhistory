@@ -193,7 +193,7 @@ _arm2_3_data_abort:
 		movs	pc, lr
 
 _arm2_3_check_bugs:
-		movs	pc, lr
+		bics	pc, lr, #0x04000000		@ Clear FIQ disable bit
 
 /*
  * Processor specific - ARM2
@@ -205,6 +205,8 @@ LC0:		.word	SYMBOL_NAME(page_nr)
  *
  * Params  : prev	Old task structure
  *	   : next	New task structure for process to run
+ *
+ * Returns : prev
  *
  * Purpose : Perform a task switch, saving the old processes state, and restoring
  *	     the new.
@@ -218,15 +220,15 @@ _arm2_switch_to:
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
 		mov	r4, r1
-		add	r0, r1, #TSS_MEMCMAP		@ Remap MEMC
+		add	r7, r1, #TSS_MEMCMAP		@ Remap MEMC
 		ldr	r1, LC0
 		ldr	r1, [r1]
-1:		ldmia	r0!, {r2, r3, r5, r6}
+1:		ldmia	r7!, {r2, r3, r5, r6}
 		strb	r2, [r2]
 		strb	r3, [r3]
 		strb	r5, [r5]
 		strb	r6, [r6]
-		ldmia	r0!, {r2, r3, r5, r6}
+		ldmia	r7!, {r2, r3, r5, r6}
 		strb	r2, [r2]
 		strb	r3, [r3]
 		strb	r5, [r5]
@@ -318,6 +320,8 @@ _arm2_proc_fin:	movs	pc, lr
  * Params  : prev	Old task structure
  *	   : next	New task structure for process to run
  *
+ * Returns : prev
+ *
  * Purpose : Perform a task switch, saving the old processes state, and restoring
  *	     the new.
  *
@@ -330,22 +334,22 @@ _arm3_switch_to:
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
 		mov	r4, r1
-		add	r0, r1, #TSS_MEMCMAP		@ Remap MEMC
+		add	r7, r1, #TSS_MEMCMAP		@ Remap MEMC
 		ldr	r1, LC0
 		ldr	r1, [r1]
-1:		ldmia	r0!, {r2, r3, r5, r6}
+1:		ldmia	r7!, {r2, r3, r5, r6}
 		strb	r2, [r2]
 		strb	r3, [r3]
 		strb	r5, [r5]
 		strb	r6, [r6]
-		ldmia	r0!, {r2, r3, r5, r6}
+		ldmia	r7!, {r2, r3, r5, r6}
 		strb	r2, [r2]
 		strb	r3, [r3]
 		strb	r5, [r5]
 		strb	r6, [r6]
 		subs	r1, r1, #8
 		bhi	1b
-		mcr	p15, 0, r0, c1, c0, 0		@ flush cache
+		mcr	p15, 0, r7, c1, c0, 0		@ flush cache
 		ldmfd	sp!, {r4 - r9, fp, pc}^		@ Load all regs saved previously
 /*
  * Function: arm3_remap_memc (struct task_struct *tsk)

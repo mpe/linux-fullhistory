@@ -9,6 +9,10 @@
 #include <asm/page.h>
 
 #ifdef __KERNEL__
+
+/* forward-decare task_struct */
+struct task_struct;
+
 /*
  * Don't change this structure
  */
@@ -18,7 +22,7 @@ extern struct processor {
 	 *
 	 * flush caches for task switch
 	 */
-	void (*_switch_to)(void *prev, void *next);
+	struct task_struct *(*_switch_to)(struct task_struct *prev, struct task_struct *next);
 	/*
 	 * get data abort address/flags
 	 */
@@ -54,10 +58,10 @@ extern struct processor {
 			 */
 			void (*_flush_cache_entry)(unsigned long address);
 			/*
-			 * flush a virtual address used for a page table
-			 * note D-cache only!
+			 * clean a virtual address range from the
+			 * D-cache without flushing the cache.
 			 */
-			void (*_flush_cache_pte)(unsigned long address);
+			void (*_clean_cache_area)(unsigned long start, unsigned long size);
 			/*
 			 * flush a page to RAM
 			 */
@@ -76,13 +80,17 @@ extern struct processor {
 			 */
 			void (*_set_pmd)(pmd_t *pmdp, pmd_t pmd);
 			/*
+			 * Set a PTE
+			 */
+			void (*_set_pte)(pte_t *ptep, pte_t pte);
+			/*
 			 * Special stuff for a reset
 			 */
 			unsigned long (*reset)(void);
 			/*
 			 * flush an icached page
 			 */
-			void (*_flush_icache_area)(unsigned long start, unsigned long end);
+			void (*_flush_icache_area)(unsigned long start, unsigned long size);
 			/*
 			 * write back dirty cached data
 			 */

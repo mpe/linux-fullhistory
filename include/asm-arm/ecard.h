@@ -47,6 +47,9 @@
 #define MANU_ICS		0x003c
 #define PROD_ICS_IDE			0x00ae
 
+#define MANU_ICS2		0x003d
+#define PROD_ICS2_IDE			0x00ae
+
 #define MANU_SERPORT		0x003f
 #define PROD_SERPORT_DSPORT		0x00b9
 
@@ -76,7 +79,7 @@
 #define CONST const
 #endif
 
-#define MAX_ECARDS	8
+#define MAX_ECARDS	9
 
 typedef enum {				/* Cards address space		*/
 	ECARD_IOC,
@@ -116,14 +119,18 @@ typedef unsigned long *loader_t;
 typedef struct {			/* Card handler routines	*/
 	void (*irqenable)(ecard_t *ec, int irqnr);
 	void (*irqdisable)(ecard_t *ec, int irqnr);
+	int  (*irqpending)(ecard_t *ec);
 	void (*fiqenable)(ecard_t *ec, int fiqnr);
 	void (*fiqdisable)(ecard_t *ec, int fiqnr);
+	int  (*fiqpending)(ecard_t *ec);
 } expansioncard_ops_t;
 
 /*
  * This contains all the info needed on an expansion card
  */
 struct expansion_card {
+	struct expansion_card  *next;
+
 	/* Public data */
 	volatile unsigned char *irqaddr;	/* address of IRQ register	*/
 	volatile unsigned char *fiqaddr;	/* address of FIQ register	*/
@@ -135,10 +142,10 @@ struct expansion_card {
 	void			*fiq_data;	/* Data for use for FIQ by card	*/
 	expansioncard_ops_t	*ops;		/* Enable/Disable Ops for card	*/
 
-	CONST unsigned char	slot_no;	/* Slot number			*/
-	CONST unsigned char	dma;		/* DMA number (for request_dma)	*/
-	CONST unsigned char	irq;		/* IRQ number (for request_irq)	*/
-	CONST unsigned char	fiq;		/* FIQ number (for request_irq)	*/
+	CONST unsigned int	slot_no;	/* Slot number			*/
+	CONST unsigned int	dma;		/* DMA number (for request_dma)	*/
+	CONST unsigned int	irq;		/* IRQ number (for request_irq)	*/
+	CONST unsigned int	fiq;		/* FIQ number (for request_irq)	*/
 	CONST card_type_t	type;		/* Type of card			*/
 	CONST struct in_ecid	cid;		/* Card Identification		*/
 

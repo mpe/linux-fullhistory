@@ -141,6 +141,7 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 	struct inode *inode;
 	struct osf_dirent_callback buf;
 
+	lock_kernel();
 	error = -EBADF;
 	file = fget(fd);
 	if (!file)
@@ -173,6 +174,7 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 out_putf:
 	fput(file);
 out:
+	unlock_kernel();
 	return error;
 }
 

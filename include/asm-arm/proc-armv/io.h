@@ -22,17 +22,14 @@
 
 #include <asm/proc-fns.h>
 
-extern inline void dma_cache_inv(unsigned long start, unsigned long size)
-{
-	processor.u.armv3v4._cache_purge_area(start, start + size);
-}
+#define dma_cache_inv(start, size)					    \
+	do { processor.u.armv3v4._cache_purge_area((unsigned long)(start),  \
+		((unsigned long)(start)+(size))); } while (0)
 
-extern inline void dma_cache_wback(unsigned long start, unsigned long size)
-{
-	processor.u.armv3v4._cache_wback_area(start, start + size);
-}
+#define dma_cache_wback(start, size)					    \
+	do { processor.u.armv3v4._cache_wback_area((unsigned long)(start),  \
+		((unsigned long)(start)+(size))); } while (0)
 
-extern inline void dma_cache_wback_inv(unsigned long start, unsigned long size)
-{
-	processor.u.armv3v4._flush_cache_area(start, start + size, 0);
-}
+#define dma_cache_wback_inv(start, size)				    \
+	do { processor.u.armv3v4._flush_cache_area((unsigned long)(start),  \
+		((unsigned long)(start)+(size)), 0); } while (0)

@@ -3,55 +3,85 @@
  *
  * Copyright (C) 1998 Russell King
  * Copyright (C) 1998 Phil Blundell
+ *
+ * Changelog:
+ *  20-Jan-1998	RMK	Started merge of EBSA286, CATS and NetWinder
+ *  01-Feb-1999	PJB	ISA IRQs start at 0 not 16
  */
 
-#define NR_IRQS			48
+#define NR_IRQS			32
+#define NR_DC21285_IRQS		16
+
+#define _ISA_IRQ(x)		(0 + (x))
+#define _DC21285_IRQ(x)		(16 + (x))
 
 /*
  * This is a list of all interrupts that the 21285
- * can generate
+ * can generate and we handle.
  */
-#define IRQ_RESERVED		0
-#define IRQ_SOFTIRQ		1
-#define IRQ_CONRX		2
-#define IRQ_CONTX		3
-#define IRQ_TIMER1		4
-#define IRQ_TIMER2		5
-#define IRQ_TIMER3		6
-#define IRQ_TIMER4		7
-#define IRQ_IN0			8
-#define IRQ_IN1			9
-#define IRQ_IN2			10
-#define IRQ_IN3			11
-#define IRQ_XCS0		12
-#define IRQ_XCS1		13
-#define IRQ_XCS2		14
-#define IRQ_DOORBELLHOST	15
-#define IRQ_DMA1		16
-#define IRQ_DMA2		17
-#define IRQ_PCI			18
-#define IRQ_BIST		22
-#define IRQ_SERR		23
-#define IRQ_SDRAMPARITY		24
-#define IRQ_I2OINPOST		25
-#define IRQ_DISCARDTIMER	27
-#define IRQ_PCIDATAPARITY	28
-#define IRQ_PCIMASTERABORT	29
-#define IRQ_PCITARGETABORT	30
-#define IRQ_PCIPARITY		31
+#define IRQ_CONRX		_DC21285_IRQ(0)
+#define IRQ_CONTX		_DC21285_IRQ(1)
+#define IRQ_TIMER1		_DC21285_IRQ(2)
+#define IRQ_TIMER2		_DC21285_IRQ(3)
+#define IRQ_TIMER3		_DC21285_IRQ(4)
+#define IRQ_IN0			_DC21285_IRQ(5)
+#define IRQ_IN1			_DC21285_IRQ(6)
+#define IRQ_IN2			_DC21285_IRQ(7)
+#define IRQ_IN3			_DC21285_IRQ(8)
+#define IRQ_DOORBELLHOST	_DC21285_IRQ(9)
+#define IRQ_DMA1		_DC21285_IRQ(10)
+#define IRQ_DMA2		_DC21285_IRQ(11)
+#define IRQ_PCI			_DC21285_IRQ(12)
+#define IRQ_SDRAMPARITY		_DC21285_IRQ(13)
+#define IRQ_I2OINPOST		_DC21285_IRQ(14)
+#define IRQ_PCI_ERR		_DC21285_IRQ(15)
 
-/* IRQs 32-47 are the 16 ISA interrupts on a CATS board.  */
-#define IRQ_ISA_PIC	IRQ_IN2
-#define IRQ_IS_ISA(_x)	(((_x) >= 32) && ((_x) <= 47))
-#define IRQ_ISA(_x)	((_x) + 0x20)
-#define IRQ_ISA_CASCADE		IRQ_ISA(2)
+#define IRQ_ISA_TIMER		_ISA_IRQ(0)
+#define IRQ_ISA_KEYBOARD	_ISA_IRQ(1)
+#define IRQ_ISA_CASCADE		_ISA_IRQ(2)
+#define IRQ_ISA_UART2		_ISA_IRQ(3)
+#define IRQ_ISA_UART		_ISA_IRQ(4)
+#define IRQ_ISA_FLOPPY		_ISA_IRQ(6)
+#define IRQ_ISA_PRINTER		_ISA_IRQ(7)
+#define IRQ_ISA_RTC_ALARM	_ISA_IRQ(8)
+#define IRQ_ISA_2		_ISA_IRQ(9)
+#define IRQ_ISA_PS2MOUSE	_ISA_IRQ(12)
+#define IRQ_ISA_HARDDISK1	_ISA_IRQ(14)
+#define IRQ_ISA_HARDDISK2	_ISA_IRQ(15)
+
+#define IRQ_MASK_UART_RX	(1 << 2)
+#define IRQ_MASK_UART_TX	(1 << 3)
+#define IRQ_MASK_TIMER1		(1 << 4)
+#define IRQ_MASK_TIMER2		(1 << 5)
+#define IRQ_MASK_TIMER3		(1 << 6)
+#define IRQ_MASK_IN0		(1 << 8)
+#define IRQ_MASK_IN1		(1 << 9)
+#define IRQ_MASK_IN2		(1 << 10)
+#define IRQ_MASK_IN3		(1 << 11)
+#define IRQ_MASK_DOORBELLHOST	(1 << 15)
+#define IRQ_MASK_DMA1		(1 << 16)
+#define IRQ_MASK_DMA2		(1 << 17)
+#define IRQ_MASK_PCI		(1 << 18)
+#define IRQ_MASK_SDRAMPARITY	(1 << 24)
+#define IRQ_MASK_I2OINPOST	(1 << 25)
+#define IRQ_MASK_PCI_ERR	((1 <<23) | (1 << 27) | (1 << 28) | (1 << 29) | (1 << 30) | (1 << 31))
 
 /*
- * Now map them to the Linux interrupts
+ * Netwinder interrupt allocations
  */
-#define IRQ_TIMER		IRQ_TIMER1
-#define IRQ_FLOPPYDISK		IRQ_ISA(6)
-#define IRQ_HARDDISK		IRQ_ISA(14)
-#define IRQ_HARDDISK_SECONDARY	IRQ_ISA(15)
+#define IRQ_NETWINDER_ETHER10	IRQ_IN0
+#define IRQ_NETWINDER_ETHER100	IRQ_IN1
+#define IRQ_NETWINDER_VIDCOMP	IRQ_IN2
+#define IRQ_NETWINDER_PS2MOUSE	_ISA_IRQ(5)
+#define IRQ_NETWINDER_IR	_ISA_IRQ(6)
+#define IRQ_NETWINDER_BUTTON	_ISA_IRQ(10)
+#define IRQ_NETWINDER_VGA	_ISA_IRQ(11)
+#define IRQ_NETWINDER_SOUND	_ISA_IRQ(12)
 
-#define irq_cannonicalize(_i)	(((_i) == IRQ_ISA_CASCADE) ? IRQ_ISA(9) : _i)
+#undef RTC_IRQ
+#define RTC_IRQ		IRQ_ISA_RTC_ALARM
+#undef AUX_IRQ
+#define AUX_IRQ		(machine_is_netwinder() ? IRQ_NETWINDER_PS2MOUSE : IRQ_ISA_PS2MOUSE)
+#define IRQ_FLOPPYDISK	IRQ_ISA_FLOPPY
+
+#define irq_cannonicalize(_i)	(((_i) == IRQ_ISA_CASCADE) ? IRQ_ISA_2 : _i)

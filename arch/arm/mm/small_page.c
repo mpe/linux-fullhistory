@@ -5,6 +5,8 @@
  *
  * Changelog:
  *  26/01/1996	RMK	Cleaned up various areas to make little more generic
+ *  07/02/1999	RMK	Support added for 16K and 32K page sizes
+ *			containing 8K blocks
  */
 
 #include <linux/signal.h>
@@ -19,20 +21,31 @@
 #include <linux/swap.h>
 #include <linux/smp.h>
 
-#define SMALL_ALLOC_SHIFT	(10)
-#define SMALL_ALLOC_SIZE	(1 << SMALL_ALLOC_SHIFT)
-#define NR_BLOCKS		(PAGE_SIZE / SMALL_ALLOC_SIZE)
-
-#if NR_BLOCKS != 4
-#error I only support 4 blocks per page!
+#if PAGE_SIZE == 4096
+/* 2K blocks */
+#define SMALL_ALLOC_SHIFT	(11)
+#define NAME(x)			x##_2k
+#elif PAGE_SIZE == 32768 || PAGE_SIZE == 16384
+/* 8K blocks */
+#define SMALL_ALLOC_SHIFT	(13)
+#define NAME(x)			x##_8k
 #endif
 
-#define USED(pg)		((atomic_read(&(pg)->count) >> 8) & 15)
+#define SMALL_ALLOC_SIZE	(1 << SMALL_ALLOC_SHIFT)
+#define NR_BLOCKS		(PAGE_SIZE / SMALL_ALLOC_SIZE)
+#define BLOCK_MASK		((1 << NR_BLOCKS) - 1)
+
+#define USED(pg)		((atomic_read(&(pg)->count) >> 8) & BLOCK_MASK)
 #define SET_USED(pg,off)	(atomic_read(&(pg)->count) |= 256 << off)
 #define CLEAR_USED(pg,off)	(atomic_read(&(pg)->count) &= ~(256 << off))
+#define ALL_USED		BLOCK_MASK
 #define IS_FREE(pg,off)		(!(atomic_read(&(pg)->count) & (256 << off)))
-#define PAGE_PTR(page,block)	((struct free_small_page *)((page) + \
+#define SM_PAGE_PTR(page,block)	((struct free_small_page *)((page) + \
 					((block) << SMALL_ALLOC_SHIFT)))
+
+#if NR_BLOCKS != 2 && NR_BLOCKS != 4
+#error I only support 2 or 4 blocks per page
+#endif
 
 struct free_small_page {
 	unsigned long next;
@@ -52,6 +65,7 @@ static unsigned char offsets[1<<NR_BLOCKS] = {
 	1,	/* 0001 */
 	0,	/* 0010 */
 	2,	/* 0011 */
+#if NR_BLOCKS == 4
 	0,	/* 0100 */
 	1,	/* 0101 */
 	0,	/* 0110 */
@@ -64,6 +78,7 @@ static unsigned char offsets[1<<NR_BLOCKS] = {
 	1,	/* 1101 */
 	0,	/* 1110 */
 	4	/* 1111 */
+#endif
 };
 
 static inline void clear_page_links(unsigned long page)
@@ -72,7 +87,7 @@ static inline void clear_page_links(unsigned long page)
 	int i;
 
 	for (i = 0; i < NR_BLOCKS; i++) {
-		fsp = PAGE_PTR(page, i);
+		fsp = SM_PAGE_PTR(page, i);
 		fsp->next = fsp->prev = 0;
 	}
 }
@@ -90,7 +105,7 @@ static inline void set_page_links_prev(unsigned long page, unsigned long prev)
 	for (i = 0; i < NR_BLOCKS; i++) {
 		if (mask & (1 << i))
 			continue;
-		fsp = PAGE_PTR(page, i);
+		fsp = SM_PAGE_PTR(page, i);
 		fsp->prev = prev;
 	}
 }
@@ -108,12 +123,12 @@ static inline void set_page_links_next(unsigned long page, unsigned long next)
 	for (i = 0; i < NR_BLOCKS; i++) {
 		if (mask & (1 << i))
 			continue;
-		fsp = PAGE_PTR(page, i);
+		fsp = SM_PAGE_PTR(page, i);
 		fsp->next = next;
 	}
 }
 
-unsigned long get_small_page(int priority)
+unsigned long NAME(get_page)(int priority)
 {
 	struct free_small_page *fsp;
 	unsigned long new_page;
@@ -129,8 +144,8 @@ again:
 	page = mem_map + MAP_NR(small_page_ptr);
 	offset = offsets[USED(page)];
 	SET_USED(page, offset);
-	new_page = (unsigned long)PAGE_PTR(small_page_ptr, offset);
-	if (USED(page) == 15) {
+	new_page = (unsigned long)SM_PAGE_PTR(small_page_ptr, offset);
+	if (USED(page) == ALL_USED) {
 		fsp = (struct free_small_page *)new_page;
 		set_page_links_prev (fsp->next, 0);
 		small_page_ptr = fsp->next;
@@ -156,30 +171,31 @@ need_new_page:
 	goto again;
 }
 
-void free_small_page(unsigned long spage)
+void NAME(free_page)(unsigned long spage)
 {
 	struct free_small_page *ofsp, *cfsp;
 	unsigned long flags;
 	struct page *page;
 	int offset, oldoffset;
 
+	if (!spage)
+		goto none;
+
 	offset = (spage >> SMALL_ALLOC_SHIFT) & (NR_BLOCKS - 1);
 	spage -= offset << SMALL_ALLOC_SHIFT;
 
 	page = mem_map + MAP_NR(spage);
-	if (!PageReserved(page) || !USED(page)) {
-		printk ("Trying to free non-small page from %p\n", __builtin_return_address(0));
-		return;
-	}
-	if (IS_FREE(page, offset)) {
-		printk ("Trying to free free small page from %p\n", __builtin_return_address(0));
-		return;
-	}
+	if (!PageReserved(page) || !USED(page))
+		goto non_small;
+
+	if (IS_FREE(page, offset))
+		goto free;
+
 	save_flags_cli (flags);
 	oldoffset = offsets[USED(page)];
 	CLEAR_USED(page, offset);
-	ofsp = PAGE_PTR(spage, oldoffset);
-	cfsp = PAGE_PTR(spage, offset);
+	ofsp = SM_PAGE_PTR(spage, oldoffset);
+	cfsp = SM_PAGE_PTR(spage, offset);
 
 	if (oldoffset == NR_BLOCKS) { /* going from totally used to mostly used */
 		cfsp->prev = 0;
@@ -197,4 +213,13 @@ void free_small_page(unsigned long spage)
 	} else
 		*cfsp = *ofsp;
 	restore_flags(flags);
+	return;
+
+non_small:
+	printk ("Trying to free non-small page from %p\n", __builtin_return_address(0));
+	return;
+free:
+	printk ("Trying to free free small page from %p\n", __builtin_return_address(0));
+none:
+	return;
 }

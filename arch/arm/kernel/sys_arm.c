@@ -77,12 +77,14 @@ asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 		goto out;
 	if (!(a.flags & MAP_ANONYMOUS)) {
 		error = -EBADF;
-		if (a.fd >= current->files->max_fds || 
-		    !(file = current->files->fd[a.fd]))
+		file = fget(a.fd);
+		if (!file)
 			goto out;
 	}
 	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	error = do_mmap(file, a.addr, a.len, a.prot, a.flags, a.offset);
+	if (file)
+		fput(file);
 out:
 	unlock_kernel();
 	return error;

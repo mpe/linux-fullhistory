@@ -120,5 +120,20 @@ static int FDC2 = -1;
 #define FLOPPY_MOTOR_MASK 0xf0
 
 #define CROSS_64KB(a,s) (0)
+
+/*
+ * This allows people to reverse the order of
+ * fd0 and fd1, in case their hardware is
+ * strangely connected (as some RiscPCs
+ * and A5000s seem to be).
+ */
+static void driveswap(int *ints, int dummy, int dummy2)
+{
+	floppy_selects[0][0] ^= floppy_selects[0][1];
+	floppy_selects[0][1] ^= floppy_selects[0][0];
+	floppy_selects[0][0] ^= floppy_selects[0][1];
+}
+
+#define EXTRA_FLOPPY_PARAMS ,{ "driveswap", &driveswap, NULL, 0, 0 }
 	
 #endif

@@ -191,14 +191,14 @@ file->f_dentry->d_name.name);
 /*
  * Dentry operations routines
  */
-static int smb_lookup_validate(struct dentry *);
+static int smb_lookup_validate(struct dentry *, int);
 static int smb_hash_dentry(struct dentry *, struct qstr *);
 static int smb_compare_dentry(struct dentry *, struct qstr *, struct qstr *);
 static void smb_delete_dentry(struct dentry *);
 
 static struct dentry_operations smbfs_dentry_operations =
 {
-	smb_lookup_validate,	/* d_validate(struct dentry *) */
+	smb_lookup_validate,	/* d_revalidate(struct dentry *) */
 	smb_hash_dentry,	/* d_hash */
 	smb_compare_dentry,	/* d_compare */
 	smb_delete_dentry	/* d_delete(struct dentry *) */
@@ -208,7 +208,7 @@ static struct dentry_operations smbfs_dentry_operations =
  * This is the callback when the dcache has a lookup hit.
  */
 static int
-smb_lookup_validate(struct dentry * dentry)
+smb_lookup_validate(struct dentry * dentry, int flags)
 {
 	struct inode * inode = dentry->d_inode;
 	unsigned long age = jiffies - dentry->d_time;

@@ -112,14 +112,14 @@ ncp_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 /*
  * Dentry operations routines
  */
-static int ncp_lookup_validate(struct dentry *);
+static int ncp_lookup_validate(struct dentry *, int);
 static int ncp_hash_dentry(struct dentry *, struct qstr *);
 static int ncp_compare_dentry (struct dentry *, struct qstr *, struct qstr *);
 static void ncp_delete_dentry(struct dentry *);
 
 struct dentry_operations ncp_dentry_operations =
 {
-	ncp_lookup_validate,	/* d_validate(struct dentry *) */
+	ncp_lookup_validate,	/* d_revalidate(struct dentry *, int) */
 	ncp_hash_dentry,	/* d_hash */
 	ncp_compare_dentry,    	/* d_compare */
 	ncp_delete_dentry	/* d_delete(struct dentry *) */
@@ -345,7 +345,7 @@ leave_me:;
 
 
 static int
-ncp_lookup_validate(struct dentry * dentry)
+ncp_lookup_validate(struct dentry * dentry, int flags)
 {
 	struct ncp_server *server;
 	struct inode *dir = dentry->d_parent->d_inode;

@@ -1349,8 +1349,8 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 		case Q_GETSTATS:
 			break;
 		case Q_GETQUOTA:
-			if (((type == USRQUOTA && current->uid != id) ||
-			     (type == GRPQUOTA && current->gid != id)) &&
+			if (((type == USRQUOTA && current->euid != id) ||
+			     (type == GRPQUOTA && current->egid != id)) &&
 			    !capable(CAP_SYS_RESOURCE))
 				goto out;
 			break;

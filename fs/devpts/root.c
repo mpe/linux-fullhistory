@@ -18,7 +18,7 @@
 
 static int devpts_root_readdir(struct file *,void *,filldir_t);
 static struct dentry *devpts_root_lookup(struct inode *,struct dentry *);
-static int devpts_revalidate(struct dentry *);
+static int devpts_revalidate(struct dentry *, int);
 
 static struct file_operations devpts_root_operations = {
 	NULL,                   /* llseek */
@@ -116,7 +116,7 @@ static int devpts_root_readdir(struct file *filp, void *dirent, filldir_t filldi
  * the pty really does still exist.  Never revalidate negative dentries;
  * for simplicity (fix later?)
  */
-static int devpts_revalidate(struct dentry * dentry)
+static int devpts_revalidate(struct dentry * dentry, int flags)
 {
 	struct devpts_sb_info *sbi;
 

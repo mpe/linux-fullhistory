@@ -52,12 +52,13 @@ _arm6_7_flush_tlb_area:
 		blt	1b
 		mov	pc, lr
 
-@LC0:		.word	_current
 /*
  * Function: arm6_7_switch_to (struct task_struct *prev, struct task_struct *next)
  *
  * Params  : prev	Old task structure
  *	   : next	New task structure for process to run
+ *
+ * Returns : prev
  *
  * Purpose : Perform a task switch, saving the old processes state, and restoring
  *	     the new.
@@ -72,15 +73,15 @@ _arm6_7_switch_to:
 		stmfd	sp!, {ip}			@ Save cpsr_SVC
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
-		ldr	r0, [r1, #TSK_ADDR_LIMIT]
-		teq	r0, #0
-		moveq	r0, #DOM_KERNELDOMAIN
-		movne	r0, #DOM_USERDOMAIN
-		mcr	p15, 0, r0, c3, c0		@ Set domain reg
-		ldr	r0, [r1, #TSS_MEMMAP]		@ Page table pointer
+		ldr	r2, [r1, #TSK_ADDR_LIMIT]
+		teq	r2, #0
+		moveq	r2, #DOM_KERNELDOMAIN
+		movne	r2, #DOM_USERDOMAIN
+		mcr	p15, 0, r2, c3, c0		@ Set domain reg
+		ldr	r2, [r1, #TSS_MEMMAP]		@ Page table pointer
 		mov	r1, #0
 		mcr	p15, 0, r1, c7, c0, 0		@ flush cache
-		mcr	p15, 0, r0, c2, c0, 0		@ update page table ptr
+		mcr	p15, 0, r2, c2, c0, 0		@ update page table ptr
 		mcr	p15, 0, r1, c5, c0, 0		@ flush TLBs
 		ldmfd	sp!, {ip}
 		msr	spsr, ip			@ Save tasks CPSR into SPSR for this return
@@ -369,6 +370,35 @@ _arm7_set_pmd:	tst	r1, #3
 		mov	pc, lr
 
 /*
+ * Function: arm6_7_set_pte(pte_t *ptep, pte_t pte)
+ * Params  : r0 = Address to set
+ *	   : r1 = value to set
+ * Purpose : Set a PTE and flush it out of any WB cache
+ */
+		.align	5
+_arm6_7_set_pte:
+		str	r1, [r0], #-1024		@ linux version
+
+		bic	r2, r1, #0xff0
+		bic	r2, r2, #3
+		orr	r2, r2, #HPTE_TYPE_SMALL
+
+		tst	r1, #LPTE_USER | LPTE_EXEC
+		orrne	r2, r2, #HPTE_AP_READ
+
+		tst	r1, #LPTE_WRITE
+		tstne	r1, #LPTE_DIRTY
+		orrne	r2, r2, #HPTE_AP_WRITE
+
+		tst	r1, #LPTE_PRESENT
+		tstne	r1, #LPTE_YOUNG
+		moveq	r2, #0
+
+		str	r2, [r0]			@ hardware version
+		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry	 (drain is done by TLB fns)
+		mov	pc, lr
+
+/*
  * Function: _arm6_7_reset
  *
  * Notes   : This sets up everything for a reset
@@ -405,8 +435,12 @@ ENTRY(arm6_processor_functions)
 		.word	_arm6_7_flush_tlb_all		@ 44
 		.word	_arm6_7_flush_tlb_area		@ 48
 		.word	_arm6_set_pmd			@ 52
-		.word	_arm6_7_reset			@ 54
-		.word	_arm6_7_flush_cache		@ 58
+		.word	_arm6_7_set_pte			@ 56
+		.word	_arm6_7_reset			@ 60
+		.word	_arm6_7_flush_cache		@ 64
+
+		.word	_arm6_7_flush_cache		@ 68
+		.word	_arm6_7_flush_cache		@ 72
 
 /*
  * Purpose : Function pointers used to access above functions - all calls
@@ -431,8 +465,9 @@ ENTRY(arm7_processor_functions)
 		.word	_arm6_7_flush_tlb_all		@ 44
 		.word	_arm6_7_flush_tlb_area		@ 48
 		.word	_arm7_set_pmd			@ 52
-		.word	_arm6_7_reset			@ 56
-		.word	_arm6_7_flush_cache		@ 60
-
+		.word	_arm6_7_set_pte			@ 56
+		.word	_arm6_7_reset			@ 60
 		.word	_arm6_7_flush_cache		@ 64
+
 		.word	_arm6_7_flush_cache		@ 68
+		.word	_arm6_7_flush_cache		@ 72

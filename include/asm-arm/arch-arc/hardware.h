@@ -1,7 +1,7 @@
 /*
  * linux/include/asm-arm/arch-arc/hardware.h
  *
- * Copyright (C) 1996 Russell King.
+ * Copyright (C) 1996-1999 Russell King.
  *
  * This file contains the hardware definitions of the
  * Acorn Archimedes/A5000 machines.
@@ -9,21 +9,20 @@
  * Modifications:
  *  04-04-1998	PJB/RMK	Merged arc and a5k versions
  */
-
 #ifndef __ASM_ARCH_HARDWARE_H
 #define __ASM_ARCH_HARDWARE_H
 
 #include <linux/config.h>
+
+#include <asm/arch/memory.h>
 
 /*
  * What hardware must be present - these can be tested by the kernel
  * source.
  */
 #define HAS_IOC
-#include <asm/ioc.h>
 #define HAS_MEMC
 #include <asm/memc.h>
-#define HAS_MEMC1A
 #define HAS_VIDC
 
 /*
@@ -56,6 +55,12 @@
  * for use with inb/outb
  */
 #define IO_VIDC_BASE		0x80100000
+#ifdef CONFIG_ARCH_A5K
+#define IOEB_VID_CTL		0x800d4012
+#define IOEB_PRESENT		0x800d4014
+#define IOEB_PSCLR		0x800d4016
+#define IOEB_MONTYPE		0x800d401c
+#endif
 #ifdef CONFIG_ARCH_ARC
 #define LATCHAADDR		0x80094010
 #define LATCHBADDR		0x80094006
@@ -65,6 +70,14 @@
 #define IO_EC_IOC4_BASE		0x8009c000
 #define IO_EC_IOC_BASE		0x80090000
 #define IO_EC_MEMC_BASE		0x80000000
+
+#ifdef CONFIG_ARCH_ARC
+/* A680 hardware */
+#define WD1973_BASE		0x03290000
+#define WD1973_LATCH		0x03350000
+#define Z8530_BASE		0x032b0008
+#define SCSI_BASE		0x03100000
+#endif
 
 /*
  * IO definitions
@@ -77,11 +90,8 @@
 /*
  * RAM definitions
  */
-#define MAPTOPHYS(a)		(((unsigned long)a & 0x007fffff) + PAGE_OFFSET)
-#define KERNTOPHYS(a)		((((unsigned long)(&a)) & 0x007fffff) + PAGE_OFFSET)
 #define GET_MEMORY_END(p)	(PAGE_OFFSET + (p->u1.s.page_size) * (p->u1.s.nr_pages))
 #define PARAMS_BASE		(PAGE_OFFSET + 0x7c000)
-#define KERNEL_BASE		(PAGE_OFFSET + 0x80000)
 
 #else
 

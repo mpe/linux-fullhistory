@@ -52,9 +52,14 @@ struct pt_regs {
 #define CC_Z_BIT	(1 << 30)
 #define CC_N_BIT	(1 << 31)
 
+#if 0 /* GCC/egcs should be able to optimise this, IMHO */
 #define user_mode(regs)	\
 	((((regs)->ARM_cpsr & MODE_MASK) == USR_MODE) || \
 	 (((regs)->ARM_cpsr & MODE_MASK) == USR26_MODE))
+#else
+#define user_mode(regs)	\
+	(((regs)->ARM_cpsr & 0xf) == 0)
+#endif
 
 #define processor_mode(regs) \
 	((regs)->ARM_cpsr & MODE_MASK)
@@ -74,8 +79,19 @@ struct pt_regs {
 /* Are the current registers suitable for user mode?
  * (used to maintain security in signal handlers)
  */
-#define valid_user_regs(regs) \
-	(user_mode(regs) && ((regs)->ARM_sp & 3) == 0)
+static inline int valid_user_regs(struct pt_regs *regs)
+{
+	if ((regs->ARM_cpsr & 0xf) == 0 ||
+	    (regs->ARM_cpsr & (F_BIT|I_BIT)))
+		return 1;
+
+	/*
+	 * Force CPSR to something logical...
+	 */
+	regs->ARM_cpsr &= (CC_V_BIT|CC_C_BIT|CC_Z_BIT|CC_N_BIT|0x10);
+
+	return 0;
+}
 
 #endif
 

@@ -23,18 +23,6 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 
-/*
- * The bitmask for a lookup event:
- *  - follow links at the end
- *  - require a directory
- *  - ending slashes ok even for nonexistent files
- *  - internal "there are more path compnents" flag
- */
-#define LOOKUP_FOLLOW		(1)
-#define LOOKUP_DIRECTORY	(2)
-#define LOOKUP_SLASHOK		(4)
-#define LOOKUP_CONTINUE		(8)
-
 #include <asm/namei.h>
 
 /* This can be removed after the beta phase. */
@@ -225,12 +213,12 @@ static struct dentry * reserved_lookup(struct dentry * parent, struct qstr * nam
 /*
  * Internal lookup() using the new generic dcache.
  */
-static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
+static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name, int flags)
 {
 	struct dentry * dentry = d_lookup(parent, name);
 
 	if (dentry && dentry->d_op && dentry->d_op->d_revalidate) {
-		if (!dentry->d_op->d_revalidate(dentry) && !d_invalidate(dentry)) {
+		if (!dentry->d_op->d_revalidate(dentry, flags) && !d_invalidate(dentry)) {
 			dput(dentry);
 			dentry = NULL;
 		}
@@ -245,7 +233,7 @@ static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
  * We get the directory semaphore, and after getting that we also
  * make sure that nobody added the entry to the dcache in the meantime..
  */
-static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
+static struct dentry * real_lookup(struct dentry * parent, struct qstr * name, int flags)
 {
 	struct dentry * result;
 	struct inode *dir = parent->d_inode;
@@ -258,7 +246,7 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 	 * FIXME! This could use version numbering or similar to
 	 * avoid unnecessary cache lookups.
 	 */
-	result = cached_lookup(parent, name);
+	result = cached_lookup(parent, name, flags);
 	if (!result) {
 		struct dentry * dentry = d_alloc(parent, name);
 		result = ERR_PTR(-ENOMEM);
@@ -392,9 +380,9 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 		/* This does the actual lookups.. */
 		dentry = reserved_lookup(base, &this);
 		if (!dentry) {
-			dentry = cached_lookup(base, &this);
+			dentry = cached_lookup(base, &this, flags);
 			if (!dentry) {
-				dentry = real_lookup(base, &this);
+				dentry = real_lookup(base, &this, flags);
 				if (IS_ERR(dentry))
 					break;
 			}

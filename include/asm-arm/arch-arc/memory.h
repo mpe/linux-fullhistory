@@ -1,13 +1,25 @@
 /*
- * linux/include/asm-arm/arch-arc/mmu.h
+ * linux/include/asm-arm/arch-arc/memory.h
  *
- * Copyright (c) 1996 Russell King.
+ * Copyright (c) 1996-1999 Russell King.
  *
  * Changelog:
- *  22-11-1996	RMK	Created
+ *  22-Nov-1996	RMK	Created
+ *  21-Mar-1999	RMK	Renamed to memory.h
+ *		RMK	Moved PAGE_OFFSET and TASK_SIZE here
  */
-#ifndef __ASM_ARCH_MMU_H
-#define __ASM_ARCH_MMU_H
+#ifndef __ASM_ARCH_MEMORY_H
+#define __ASM_ARCH_MEMORY_H
+
+/*
+ * User space: 26MB
+ */
+#define TASK_SIZE	(0x01a00000UL)
+
+/*
+ * Page offset: 32MB
+ */
+#define PAGE_OFFSET	(0x02000000UL)
 
 #define __virt_to_phys__is_a_macro
 #define __virt_to_phys(vpage) vpage

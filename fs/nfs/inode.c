@@ -696,25 +696,19 @@ nfs_revalidate(struct dentry *dentry)
 }
 
 /*
- * Revalidate the file on open (this
- * is separate from the path-revalidation
- * that we do on any lookup).
- *
- * When we actually open a file, we want
- * fairly strict consistency: make sure that
- * we've updated the attributes within the
- * last second or so..
+ * These are probably going to contain hooks for
+ * allocating and releasing RPC credentials for
+ * the file. I'll have to think about Tronds patch
+ * a bit more..
  */
 int nfs_open(struct inode *inode, struct file *filp)
 {
-	int retval = 0;
+	return 0;
+}
 
-	if (time_after(jiffies, NFS_READTIME(inode) + HZ/2)) {
-		struct dentry *dentry = filp->f_dentry;
-		struct nfs_server *server = NFS_DSERVER(dentry);
-		retval = _nfs_revalidate_inode(server, dentry);
-	}
-	return retval;
+int nfs_release(struct inode *inode, struct file *filp)
+{
+	return 0;
 }
 
 /*

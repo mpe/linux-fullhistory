@@ -7,8 +7,8 @@
  */
 
 /*
- * On the EBSA, the clock ticks at weird rates.
- * This is therefore not used to calculate the
- * divisor.
+ * On EBSA285 boards, the clock runs at 50MHz and is
+ * divided by a 4-bit prescaler.  Other boards use an
+ * ISA derived timer, and this is unused.
  */
 #define CLOCK_TICK_RATE		(50000000 / 16)

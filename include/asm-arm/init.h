@@ -5,7 +5,7 @@
 
 /* C routines */
 
-#ifdef CONFIG_TEXT_INIT_SECTION
+#ifdef CONFIG_TEXT_SECTIONS
 
 #define __init __attribute__ ((__section__ (".text.init")))
 #define __initfunc(__arginit) \

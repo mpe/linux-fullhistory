@@ -779,14 +779,14 @@ S:	Maintained
 USB HUB AND UHCI DRIVERS
 P:	Johannes Erdfelt
 M:	jerdfelt@sventech.com
-L:	linux-usb@peloncho.fis.ucm.es
+L:	linux-usb@suse.com
 S:	Maintained
 
 USB OHCI DRIVER
 P:	Gregory P. Smith
 M:	greg@electricrain.com
 M:	greg@suitenine.com
-L:	linux-usb@peloncho.fis.ucm.es
+L:	linux-usb@suse.com
 S:	Maintained (not yet usable)
 W:	http://suitenine.com/usb/
 

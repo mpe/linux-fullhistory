@@ -133,6 +133,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"	.section .fixup,\"ax\"\n"			\
 	"	.align	2\n"					\
 	"3:	mvn	%0, %3\n"				\
+	"	mov	%1, #0\n"				\
 	"	b	2b\n"					\
 	"	.previous\n"					\
 	"	.section __ex_table,\"a\"\n"			\
@@ -153,6 +154,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"	.section .fixup,\"ax\"\n"			\
 	"	.align	2\n"					\
 	"4:	mvn	%0, %5\n"				\
+	"	mov	%1, #0\n"				\
 	"	b	3b\n"					\
 	"	.previous\n"					\
 	"	.section __ex_table,\"a\"\n"			\
@@ -173,6 +175,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"	.section .fixup,\"ax\"\n"			\
 	"	.align	2\n"					\
 	"3:	mvn	%0, %3\n"				\
+	"	mov	%1, #0\n"				\
 	"	b	2b\n"					\
 	"	.previous\n"					\
 	"	.section __ex_table,\"a\"\n"			\

@@ -26,7 +26,9 @@ struct exec
 
 #define M_ARM 103
 
+#ifdef __KERNEL__
 #include <asm/arch/a.out.h>
+#endif
 
 #ifndef LIBRARY_START_TEXT
 #define LIBRARY_START_TEXT	(0x00c00000)

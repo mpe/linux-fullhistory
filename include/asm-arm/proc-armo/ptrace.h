@@ -68,8 +68,13 @@ struct pt_regs {
 /* Are the current registers suitable for user mode?
  * (used to maintain security in signal handlers)
  */
-#define valid_user_regs(regs) \
-	(user_mode(regs) && ((regs)->ARM_sp & 3) == 0)
+static inline int valid_user_regs(struct pt_regs *regs)
+{
+	if (!user_mode(regs) || regs->ARM_pc & (F_BIT | I_BIT))
+		return 1;
+
+	return 0;
+}
 
 #endif
 

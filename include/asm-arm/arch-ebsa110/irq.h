@@ -11,6 +11,8 @@
 #define IRQ_MSET	((volatile unsigned char *)0xf2c00000)
 #define IRQ_MASK	((volatile unsigned char *)0xf2c00000)
 
+#define fixup_irq(x) (x)
+
 static void ebsa110_mask_and_ack_irq(unsigned int irq)
 {
 	*IRQ_MCLR = 1 << irq;

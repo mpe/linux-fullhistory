@@ -30,7 +30,7 @@ extern struct inode *pseudo_root;
  */
 
 /* nothing for now ... */
-static int umsdos_dentry_validate(struct dentry *dentry)
+static int umsdos_dentry_validate(struct dentry *dentry, int flags)
 {
 	return 1;
 }
@@ -46,7 +46,7 @@ static void umsdos_dentry_dput(struct dentry *dentry)
 
 struct dentry_operations umsdos_dentry_operations =
 {
-	umsdos_dentry_validate,	/* d_validate(struct dentry *) */
+	umsdos_dentry_validate,	/* d_revalidate(struct dentry *, int) */
 	NULL,			/* d_hash */
 	NULL,			/* d_compare */
 	umsdos_dentry_dput,	/* d_delete(struct dentry *) */

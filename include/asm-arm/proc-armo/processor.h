@@ -14,8 +14,6 @@
 #ifndef __ASM_PROC_PROCESSOR_H
 #define __ASM_PROC_PROCESSOR_H
 
-#ifdef __KERNEL__
-
 #include <asm/assembler.h>
 #include <linux/string.h>
 
@@ -31,6 +29,8 @@ struct context_save_struct {
 	unsigned long fp;
 	unsigned long pc;
 };
+
+#define INIT_CSS (struct context_save_struct){ 0, 0, 0, 0, 0, 0, 0, SVC26_MODE }
 
 typedef struct {
 	void (*put_byte)(void);			/* Special calling convention */
@@ -50,50 +50,13 @@ extern uaccess_t uaccess_user, uaccess_kernel;
 
 #define EXTRA_THREAD_STRUCT							\
 	uaccess_t	*uaccess;		/* User access functions*/	\
-	struct context_save_struct *save;					\
-	unsigned long	memmap;							\
 	unsigned long	memcmap[256];
 
 #define EXTRA_THREAD_STRUCT_INIT		\
-	&uaccess_kernel,			\
-	0,					\
-	(unsigned long) swapper_pg_dir,		\
+	,&uaccess_kernel,			\
 	{ 0, }
 
-DECLARE_THREAD_STRUCT;
-
-/*
- * Return saved PC of a blocked thread.
- */
-extern __inline__ unsigned long thread_saved_pc (struct thread_struct *t)
-{
-	if (t->save)
-		return t->save->pc & ~PCMASK;
-	else
-		return 0;
-}
-
-extern __inline__ unsigned long get_css_fp (struct thread_struct *t)
-{
-	if (t->save)
-		return t->save->fp;
-	else
-		return 0;
-}
-
-asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
-
-extern __inline__ void copy_thread_css (struct context_save_struct *save)
-{
-	save->r4 =
-	save->r5 =
-	save->r6 =
-	save->r7 =
-	save->r8 =
-	save->r9 =
-	save->fp = 0;
-	save->pc = ((unsigned long)ret_from_sys_call) | SVC26_MODE;
-}
+#define SWAPPER_PG_DIR ((unsigned long)swapper_pg_dir)
 
 #define start_thread(regs,pc,sp)					\
 ({									\
@@ -105,18 +68,16 @@ extern __inline__ void copy_thread_css (struct context_save_struct *save)
 	regs->ARM_r2 = stack[2];	/* r2 (envp) */			\
 	regs->ARM_r1 = stack[1];	/* r1 (argv) */			\
 	regs->ARM_r0 = stack[0];	/* r0 (argc) */			\
-	flush_tlb_mm(current->mm);					\
 })
 
 /* Allocation and freeing of basic task resources. */
 /*
  * NOTE! The task struct and the stack go together
  */
-#define alloc_task_struct() \
-	((struct task_struct *) __get_free_pages(GFP_KERNEL,1))
-#define free_task_struct(p)    free_pages((unsigned long)(p),1)
+extern unsigned long get_page_8k(int priority);
+extern void free_page_8k(unsigned long page);
 
-
-#endif
+#define ll_alloc_task_struct()	((struct task_struct *)get_page_8k(GFP_KERNEL))
+#define ll_free_task_struct(p)  free_page_8k((unsigned long)(p))
 
 #endif

@@ -37,7 +37,7 @@
  */
 #include <asm/pgtable.h>
  
-#define PTE_SIZE (PTRS_PER_PTE * 4)
+#define PTE_SIZE (PTRS_PER_PTE * BYTES_PER_PTR)
 
 extern unsigned long setup_io_pagetables(unsigned long start_mem);
 
@@ -79,7 +79,7 @@ static inline void
 alloc_init_page(unsigned long *mem, unsigned long virt, unsigned long phys, int domain, int prot)
 {
 	pgd_t *pgdp;
-	pmd_t *pmdp, pmd;
+	pmd_t *pmdp;
 	pte_t *ptep;
 
 	pgdp = pgd_offset_k(virt);
@@ -92,46 +92,41 @@ alloc_init_page(unsigned long *mem, unsigned long virt, unsigned long phys, int 
 
 		ptep = (pte_t *)memory;
 		memzero(ptep, PTE_SIZE);
+		memory += PTE_SIZE;
 
-		pmd_val(pmd) = __virt_to_phys(memory) | PMD_TYPE_TABLE | PMD_DOMAIN(domain);
-		set_pmd(pmdp, pmd);
+		ptep = (pte_t *)memory;
+		memzero(ptep, PTE_SIZE);
+
+		set_pmd(pmdp, __mk_pmd(ptep, PMD_TYPE_TABLE | PMD_DOMAIN(domain)));
 
 		*mem = memory + PTE_SIZE;
 	}
 
 	ptep = pte_offset(pmdp, virt);
 
-	pte_val(*ptep) = phys | prot | PTE_TYPE_SMALL;
+	set_pte(ptep, mk_pte_phys(phys, __pgprot(prot)));
 }
 
 static inline unsigned long
 setup_pagetables(unsigned long start_mem, unsigned long end_mem)
 {
-	unsigned long address;
+	unsigned long address = 0;
 
-	/*
-	 * map in zero page
-	 */
-	alloc_init_page(&start_mem, 0, __virt_to_phys(PAGE_OFFSET), DOMAIN_USER, PTE_CACHEABLE);
+	do {
+		if (address >= PAGE_OFFSET && address < end_mem)
+			/*
+			 * map in physical ram & kernel
+			 */
+			alloc_init_section(&start_mem, address, __virt_to_phys(address), DOMAIN_KERNEL,
+					   PMD_SECT_CACHEABLE | PMD_SECT_BUFFERABLE | PMD_SECT_AP_WRITE);
+		else
+			/*
+			 * unmap everything else
+			 */
+			free_init_section(address);
 
-	/*
-	 * ensure no mappings in user space
-	 */
-	for (address = PGDIR_SIZE; address < PAGE_OFFSET; address += PGDIR_SIZE)
-		free_init_section(address);
-
-	/*
-	 * map in physical ram & kernel
-	 */
-	for (address = PAGE_OFFSET; address < end_mem; address += PGDIR_SIZE)
-		alloc_init_section(&start_mem, address, __virt_to_phys(address), DOMAIN_KERNEL,
-				   PMD_SECT_CACHEABLE | PMD_SECT_BUFFERABLE | PMD_SECT_AP_WRITE);
-
-	/*
-	 * unmap everything else
-	 */
-	for (address = end_mem; address; address += PGDIR_SIZE)
-		free_init_section(address);
+		address += PGDIR_SIZE;
+	} while (address != 0);
 
 	/*
 	 * An area to invalidate the cache
@@ -143,6 +138,12 @@ setup_pagetables(unsigned long start_mem, unsigned long end_mem)
 	 * Now set up our IO mappings
 	 */
 	start_mem = setup_io_pagetables(start_mem);
+
+	/*
+	 * map in zero page
+	 */
+	alloc_init_page(&start_mem, 0, __virt_to_phys(PAGE_OFFSET),
+			DOMAIN_USER, L_PTE_CACHEABLE | L_PTE_YOUNG | L_PTE_PRESENT);
 
 	flush_cache_all();
 
@@ -156,9 +157,21 @@ void mark_usable_memory_areas(unsigned long *start_mem, unsigned long end_mem)
 
 	*start_mem = smem = PAGE_ALIGN(*start_mem);
 
+	/*
+	 * Mark all of memory from the end of kernel to end of memory
+	 */
 	while (smem < end_mem) {
-	    	clear_bit(PG_reserved, &mem_map[MAP_NR(smem)].flags);
-    		smem += PAGE_SIZE;
+		clear_bit(PG_reserved, &mem_map[MAP_NR(smem)].flags);
+		smem += PAGE_SIZE;
+	}
+
+	/*
+	 * Mark memory from page 1 to start of the swapper page directory
+	 */
+	smem = PAGE_OFFSET + PAGE_SIZE;
+	while (smem < (unsigned long)&swapper_pg_dir) {
+		clear_bit(PG_reserved, &mem_map[MAP_NR(smem)].flags);
+		smem += PAGE_SIZE;
 	}
 }	
 

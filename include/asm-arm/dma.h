@@ -6,20 +6,20 @@ typedef unsigned int dmach_t;
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <asm/irq.h>
-#include <asm/system.h>
 #include <asm/spinlock.h>
 #include <asm/arch/dma.h>
 
 /*
- * DMA modes - we have two, IN and OUT
+ * DMA modes
  */
 typedef unsigned int dmamode_t;
 
-#define DMA_MODE_MASK	1
+#define DMA_MODE_MASK	3
 
-#define DMA_MODE_READ	0
-#define DMA_MODE_WRITE	1
-#define DMA_AUTOINIT	2
+#define DMA_MODE_READ	 0
+#define DMA_MODE_WRITE	 1
+#define DMA_MODE_CASCADE 2
+#define DMA_AUTOINIT	 4
 
 typedef struct {
 	unsigned long address;

@@ -1,11 +1,22 @@
 /*
- * linux/include/asm-arm/arch-nexuspci/mmu.h
+ * linux/include/asm-arm/arch-nexuspci/memory.h
  *
  * Copyright (c) 1997, 1998 Philip Blundell.
+ * Copyright (c) 1999 Russell King
  *
  */
 #ifndef __ASM_ARCH_MMU_H
 #define __ASM_ARCH_MMU_H
+
+/*
+ * Task size: 3GB
+ */
+#define TASK_SIZE	(0xc0000000UL)
+
+/*
+ * Page offset: 3GB
+ */
+#define PAGE_OFFSET	(0xc0000000UL)
 
 /*
  * On NexusPCI, the DRAM is contiguous

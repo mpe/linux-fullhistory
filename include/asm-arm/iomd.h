@@ -125,6 +125,8 @@
 #define DMA_ST_OFL	4
 #define DMA_ST_INT	2
 #define DMA_ST_AB	1
+
+#ifndef IOC_CONTROL
 /*
  * IOC compatability
  */
@@ -155,6 +157,7 @@
 #define IOC_T1LTCHH	IOMD_T1LTCHH
 #define IOC_T1GO	IOMD_T1GO
 #define IOC_T1LATCH	IOMD_T1LATCH
+#endif
 
 /*
  * DMA (MEMC) compatability

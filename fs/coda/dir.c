@@ -44,7 +44,7 @@ static int coda_rename(struct inode *old_inode, struct dentry *old_dentry,
 static int coda_readdir(struct file *file, void *dirent, filldir_t filldir);
 
 /* dentry ops */
-static int coda_dentry_revalidate(struct dentry *de);
+static int coda_dentry_revalidate(struct dentry *de, int);
 static void coda_dentry_delete(struct dentry *);
 
 /* support routines */
@@ -778,7 +778,7 @@ exit:
 }
 
 /* called when a cache lookup succeeds */
-static int coda_dentry_revalidate(struct dentry *de)
+static int coda_dentry_revalidate(struct dentry *de, int flags)
 {
 	int valid = 1;
 	struct inode *inode = de->d_inode;

@@ -7,9 +7,9 @@
 #ifndef __ASM_PROC_PGTABLE_H
 #define __ASM_PROC_PGTABLE_H
 
-#include <asm/arch/mmu.h>
+#include <linux/config.h>
 #include <linux/slab.h>
-#include <asm/arch/processor.h>		/* For TASK_SIZE */
+#include <asm/arch/memory.h>		/* For TASK_SIZE */
 
 #define LIBRARY_TEXT_START 0x0c000000
 
@@ -280,12 +280,16 @@ extern __inline__ unsigned long pte_page(pte_t pte)
 	return __phys_to_virt(pte_val(pte) & PAGE_MASK);
 }
 
-extern __inline__ pmd_t mk_pmd (pte_t *ptep)
+extern __inline__ pmd_t mk_pmd(pte_t *ptep)
 {
 	pmd_t pmd;
 	pmd_val(pmd) = __virt_to_phys((unsigned long)ptep) | _PAGE_TABLE;
 	return pmd;
 }
+
+/* these are aliases for the above function */
+#define mk_user_pmd(ptep)   mk_pmd(ptep)
+#define mk_kernel_pmd(ptep) mk_pmd(ptep)
 
 #define set_pmd(pmdp,pmd) ((*(pmdp)) = (pmd))
 
@@ -319,6 +323,7 @@ extern __inline__ pte_t * pte_offset(pmd_t *dir, unsigned long address)
  */
 
 #ifndef __SMP__
+#ifndef CONFIG_NO_PGT_CACHE
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache;
@@ -329,13 +334,16 @@ extern struct pgtable_cache_struct {
 #define pte_quicklist (quicklists.pte_cache)
 #define pgd_quicklist (quicklists.pgd_cache)
 #define pgtable_cache_size (quicklists.pgtable_cache_sz)
+#endif
 
 #else
 #error Pgtable caches have to be per-CPU, so that no locking is needed.
 #endif
 
 extern pgd_t *get_pgd_slow(void);
+extern void free_table(void *table);
 
+#ifndef CONFIG_NO_PGT_CACHE
 extern __inline__ pgd_t *get_pgd_fast(void)
 {
 	unsigned long *ret;
@@ -355,14 +363,17 @@ extern __inline__ void free_pgd_fast(pgd_t *pgd)
 	pgd_quicklist = (unsigned long *) pgd;
 	pgtable_cache_size++;
 }
+#endif
 
+/* keep this as an inline so we get type checking */
 extern __inline__ void free_pgd_slow(pgd_t *pgd)
 {
-	kfree(pgd);
+	free_table((void *)pgd);
 }
 
 extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
 
+#ifndef CONFIG_NO_PGT_CACHE
 extern __inline__ pte_t *get_pte_fast(void)
 {
 	unsigned long *ret;
@@ -381,10 +392,12 @@ extern __inline__ void free_pte_fast(pte_t *pte)
 	pte_quicklist = (unsigned long *) pte;
 	pgtable_cache_size++;
 }
+#endif
 
+/* keep this as an inline so we get type checking */
 extern __inline__ void free_pte_slow(pte_t *pte)
 {
-	kfree(pte);
+	free_table((void *)pte);
 }
 
 /* We don't use pmd cache, so this is a dummy routine */
@@ -404,6 +417,26 @@ extern __inline__ void free_pmd_slow(pmd_t *pmd)
 extern void __bad_pmd(pmd_t *pmd);
 extern void __bad_pmd_kernel(pmd_t *pmd);
 
+#ifdef CONFIG_NO_PGT_CACHE
+#define pte_free_kernel(pte)    free_pte_slow(pte)
+#define pte_free(pte)           free_pte_slow(pte)
+#define pgd_free(pgd)           free_pgd_slow(pgd)
+#define pgd_alloc()             get_pgd_slow()
+
+extern __inline__ pte_t *pte_alloc(pmd_t * pmd, unsigned long address)
+{
+	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
+
+	if (pmd_none (*pmd)) {
+		return get_pte_slow(pmd, address);
+	}
+	if (pmd_bad (*pmd)) {
+		__bad_pmd(pmd);
+		return NULL;
+	}
+	return (pte_t *) pmd_page(*pmd) + address;
+}
+#else
 #define pte_free_kernel(pte)    free_pte_fast(pte)
 #define pte_free(pte)           free_pte_fast(pte)
 #define pgd_free(pgd)           free_pgd_fast(pgd)
@@ -427,6 +460,7 @@ extern __inline__ pte_t *pte_alloc(pmd_t * pmd, unsigned long address)
 	}
 	return (pte_t *) pmd_page(*pmd) + address;
 }
+#endif
 
 /*
  * allocating and freeing a pmd is trivial: the 1-entry pmd is
@@ -448,7 +482,6 @@ extern __inline__ pmd_t *pmd_alloc(pgd_t *pgd, unsigned long address)
 extern __inline__ void set_pgdir(unsigned long address, pgd_t entry)
 {
 	struct task_struct * p;
-	pgd_t *pgd;
 
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
@@ -457,8 +490,14 @@ extern __inline__ void set_pgdir(unsigned long address, pgd_t entry)
 		*pgd_offset(p->mm,address) = entry;
 	}
 	read_unlock(&tasklist_lock);
-	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-		pgd[address >> PGDIR_SHIFT] = entry;
+#ifndef CONFIG_NO_PGT_CACHE
+	{
+		pgd_t *pgd;
+		for (pgd = (pgd_t *)pgd_quicklist; pgd;
+		     pgd = (pgd_t *)*(unsigned long *)pgd)
+			pgd[address >> PGDIR_SHIFT] = entry;
+	}
+#endif
 }
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];

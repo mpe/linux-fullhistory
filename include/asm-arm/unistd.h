@@ -195,6 +195,9 @@
 #define __NR_capset			(__NR_SYSCALL_BASE+185)
 #define __NR_sigaltstack		(__NR_SYSCALL_BASE+186)
 #define __NR_sendfile			(__NR_SYSCALL_BASE+187)
+					/* 188 reserved */
+					/* 189 reserved */
+#define __NR_vfork			(__NR_SYSCALL_BASE+190)
 
 #define __sys2(x) #x
 #define __sys1(x) __sys2(x)
@@ -364,7 +367,7 @@ static inline int close(int fd)
 
 static inline int _exit(int exitcode)
 {
-	extern int sys_exit(int);
+	extern int sys_exit(int) __attribute__((noreturn));
 	return sys_exit(exitcode);
 }
 
@@ -393,37 +396,11 @@ static inline pid_t wait(int * wait_stat)
 static inline _syscall3(int,execve,const char *,file,char **,argv,char **,envp);
 
 /*
- * This is the mechanism for creating a new kernel thread.
- *
- * NOTE! Only a kernel-only process(ie the swapper or direct descendants
- * who haven't done an "execve()") should use this: it will work within
- * a system call from a "real" process, but the process memory space will
- * not be free'd until both the parent and the child have exited.
+ * Create a new kernel thread
  */
-static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
-{
-	long retval;
-
-	__asm__ __volatile__("
-	mov	r0,%1
-	mov	r1,%2
-	"__syscall(clone)"
-	teq	r0, #0
-	bne	1f
-	mov	r0,%4
-	mov	lr, pc
-	mov	pc, %3
-	"__syscall(exit)"
-1:	mov %0,r0"
-        : "=r" (retval)
-        : "Ir" (flags | CLONE_VM), "Ir" (NULL), "r" (fn), "Ir" (arg)
-	: "r0","r1","r2","r3","lr");
-	
-	return retval;
-}
+extern pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 
 #endif
-
 #endif /* __ASM_ARM_UNISTD_H */
 
 

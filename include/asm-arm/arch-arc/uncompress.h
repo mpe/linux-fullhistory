@@ -5,8 +5,6 @@
  */
 #define VIDMEM ((char *)0x02000000)
  
-#include "../arch/arm/drivers/char/font.h"
-
 int video_num_columns, video_num_lines, video_size_row;
 int white, bytes_per_char_h;
 extern unsigned long con_charconvtable[256];

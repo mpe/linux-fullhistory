@@ -34,6 +34,8 @@ void oldlatch_bupdate(unsigned char mask,unsigned char newdata);
 /* newval=(oldval & mask)|newdata */
 void oldlatch_aupdate(unsigned char mask,unsigned char newdata);
 
+void oldlatch_init(void);
+
 #elif defined(CONFIG_ARCH_A5K)
 
 #ifdef __need_oldlatches

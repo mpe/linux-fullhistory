@@ -8,37 +8,30 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 all:	lib first_rule
-ifeq ($(MACHINE),a5k)
-MMARCH=arc
-else
-MMARCH=$(MACHINE)
-endif
 
 O_TARGET := mm.o
-O_OBJS   := init.o extable.o fault-$(PROCESSOR).o mm-$(MMARCH).o
+O_OBJS   := init.o extable.o fault-$(PROCESSOR).o small_page.o
 
 ifeq ($(PROCESSOR),armo)
  O_OBJS += proc-arm2,3.o
 endif
 
 ifeq ($(PROCESSOR),armv)
- O_OBJS += small_page.o proc-arm6,7.o proc-sa110.o
+ O_OBJS += mm-$(MACHINE).o proc-arm6,7.o proc-sa110.o ioremap.o
 endif
 
 include $(TOPDIR)/Rules.make
 
+%.o: %.S
+	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c -o $@ $<
+
+.PHONY:	lib
+lib:;	@$(MAKE) -C ../lib constants.h
+
+# Special dependencies
+fault-armv.o: fault-common.c
+fault-armo.o: fault-common.c
 proc-arm2,3.o:	../lib/constants.h
 proc-arm6,7.o:	../lib/constants.h
 proc-sa110.o:	../lib/constants.h
 
-%.o: %.S
-ifneq ($(CONFIG_BINUTILS_NEW),y)
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -E $< | tr ';$$' '\n#' > ..$@.tmp.s
-	$(CC) $(CFLAGS:-pipe=) -c -o $@ ..$@.tmp.s
-	$(RM) ..$@.tmp.s
-else
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c -o $@ $<
-endif
-
-.PHONY:	lib
-lib:;	@$(MAKE) -C ../lib constants.h

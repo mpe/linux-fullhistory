@@ -1,9 +1,12 @@
 /*
- * linux/include/asm-arm/arch-ebsa110/uncompress.h
+ * linux/include/asm-arm/arch-ebsa285/uncompress.h
  *
  * Copyright (C) 1996,1997,1998 Russell King
  */
 
+/*
+ * Note! This could cause problems on the NetWinder
+ */
 #define BASE 0x42000160
 
 static __inline__ void putc(char c)

@@ -10,6 +10,9 @@
  *   11-01-1998	RMK	Added mask_and_ack_irq
  *   22-08-1998	RMK	Restructured IRQ routines
  */
+#include <asm/ioc.h>
+
+#define fixup_irq(x) (x)
 
 static void arc_mask_irq_ack_a(unsigned int irq)
 {
@@ -108,10 +111,17 @@ static __inline__ void irq_init_irq(void)
 	outb(0, IOC_FIQMASK);
 
 	for (irq = 0; irq < NR_IRQS; irq++) {
-		switch (irq & 0xf8) {
+		switch (irq) {
 		case 0 ... 6:
 			irq_desc[irq].probe_ok = 1;
+			irq_desc[irq].valid    = 1;
+			irq_desc[irq].mask_ack = arc_mask_irq_ack_a;
+			irq_desc[irq].mask     = arc_mask_irq_a;
+			irq_desc[irq].unmask   = arc_unmask_irq_a;
+			break;
+
 		case 7:
+			irq_desc[irq].noautoenable = 1;
 			irq_desc[irq].valid    = 1;
 			irq_desc[irq].mask_ack = arc_mask_irq_ack_a;
 			irq_desc[irq].mask     = arc_mask_irq_a;

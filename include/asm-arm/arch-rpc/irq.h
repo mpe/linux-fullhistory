@@ -7,6 +7,9 @@
  *   10-10-1996	RMK	Brought up to date with arch-sa110eval
  *   22-08-1998	RMK	Restructured IRQ routines
  */
+#include <asm/iomd.h>
+
+#define fixup_irq(x) (x)
 
 static void rpc_mask_irq_ack_a(unsigned int irq)
 {

@@ -38,63 +38,67 @@ extern __inline__ unsigned long gettimeoffset (void)
 	return 0;
 }
 
-#ifndef DIVISOR
-extern __inline__ int reset_timer (void)
+static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	*PIT_T1 = (PIT1_COUNT) & 0xff;
-	*PIT_T1 = (PIT1_COUNT) >> 8;
-	return 1;
-}
-#else
-extern __inline__ int reset_timer (void)
-{
-	static unsigned int divisor;
-#ifdef CONFIG_LEDS	
-	static int count = 50;
-#endif
-
 	*PIT_T1 = (PIT1_COUNT) & 0xff;
 	*PIT_T1 = (PIT1_COUNT) >> 8;
 
 #ifdef CONFIG_LEDS
-	if (--count == 0) {
-		count = 50;
-		leds_event(led_timer);
+	{
+		static int count = 50;
+		if (--count == 0) {
+			count = 50;
+			leds_event(led_timer);
+		}
 	}
 #endif
 
-	if (divisor == 0) {
-		divisor = DIVISOR - 1;
-		return 1;
+	{
+#ifdef DIVISOR
+		static unsigned int divisor;
+
+		if (divisor-- == 0) {
+			divisor = DIVISOR - 1;
+#else
+		{
+#endif
+			do_timer(regs);
+		}
 	}
-	divisor -= 1;
-	return 0;
 }
-#endif
 
-/*
- * We don't have a RTC to update!
- */
-#define update_rtc()
+static struct irqaction timerirq = {
+	timer_interrupt,
+	0,
+	0,
+	"timer",
+	NULL,
+	NULL
+};
 
 /*
  * Set up timer interrupt, and return the current time in seconds.
  */
-extern __inline__ unsigned long setup_timer (void)
+extern __inline__ void setup_timer(void)
 {
 	/*
 	 * Timer 1, mode 0, 16-bit, autoreload
 	 */
 	*PIT_CTRL = 0x70;
+
 	/*
 	 * Refresh counter clocked at 47.8MHz/7 = 146.4ns
 	 * We want centi-second interrupts
 	 */
-	reset_timer ();
+	*PIT_T1 = (PIT1_COUNT) & 0xff;
+	*PIT_T1 = (PIT1_COUNT) >> 8;
+
 	/*
 	 * Default the date to 1 Jan 1970 0:0:0
 	 * You will have to run a time daemon to set the
 	 * clock correctly at bootup
 	 */
-	return mktime(1970, 1, 1, 0, 0, 0);
+	xtime.tv_sec = mktime(1970, 1, 1, 0, 0, 0);
+
+	setup_arm_irq(IRQ_TIMER, &timerirq);
 }

@@ -5,7 +5,6 @@
  */
 #define VIDMEM ((char *)SCREEN_START)
  
-#include "../arch/arm/drivers/char/font.h"
 #include <asm/hardware.h>
 #include <asm/io.h>
 

@@ -33,13 +33,15 @@ static struct tty_struct *get_tty(int fd)
 {
 	struct file *filp;
 
-	if(fd >= NR_OPEN || !(filp = current->files->fd[fd]))
+	file = fcheck(fd);
+	if(!file)
 		return ((struct tty_struct *) 0);
 	if(filp->private_data) {
 		struct tty_struct *ttyp = (struct tty_struct *) filp->private_data;
 
-		if(ttyp->magic == TTY_MAGIC)
+		if(ttyp->magic == TTY_MAGIC) {
 			return ttyp;
+		}
 	}
 	return ((struct tty_struct *) 0);
 }

@@ -225,11 +225,18 @@
     to  determine this in  advance other than by  trial and error and common
     sense, e.g. call a BNC connectored port 'BNC', not '10Mb'.
 
-    TO DO:
-    ------
+    Changed the bus probing.  EISA used to be  done first,  followed by PCI.
+    Most people probably don't even know  what a de425 is today and the EISA
+    probe has messed  up some SCSI cards  in the past,  so now PCI is always
+    probed  first  followed by  EISA if  a) the architecture allows EISA and
+    either  b) there have been no PCI cards detected or  c) an EISA probe is
+    forced by  the user.  To force  a probe  include  "force_eisa"  in  your
+    insmod "args" line;  for built-in kernels either change the driver to do
+    this  automatically  or include  #define DE4X5_FORCE_EISA  on or  before
+    line 1040 in the driver.
 
-    o check what revision numbers the 21142 and 21143 have
-    o
+    TO DO: 
+    ------
 
     Revision History
     ----------------
@@ -416,11 +423,14 @@
 			   access traps. This flag is merely for log messages:
 			   should do something more definitive though...
       0.543  30-Dec-98    Add SMP spin locking.
-
+      0.544   8-May-99    Fix for buggy SROM in Motorola embedded boards using
+                           a 21143 by <mmporter@home.com>.
+			  Change PCI/EISA bus probing order.
+ 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:V0.543 1998/12/30 davies@maniac.ultranet.com\n";
+static const char *version = "de4x5.c:V0.544 1999/5/8 davies@maniac.ultranet.com\n";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -1027,8 +1037,11 @@ static char name[DE4X5_NAME_LENGTH + 1];
 #if !defined(__sparc_v9__) && !defined(__powerpc__) && !defined(__alpha__)
 static u_char de4x5_irq[] = EISA_ALLOWED_IRQ_LIST;
 static int lastEISA = 0;
-#else
-static int lastEISA = MAX_EISA_SLOTS;           /* Only PCI probes */
+#  ifdef DE4X5_FORCE_EISA                 /* Force an EISA bus probe or not */
+static int forceEISA = 1;
+#  else
+static int forceEISA = 0;
+#  endif
 #endif
 static int num_de4x5s = 0;
 static int cfrv = 0, useSROM = 0;
@@ -1098,12 +1111,12 @@ de4x5_probe(struct device *dev))
 {
     u_long iobase = dev->base_addr;
 
+    pci_probe(dev, iobase);
 #if !defined(__sparc_v9__) && !defined(__powerpc__) && !defined(__alpha__)
-    eisa_probe(dev, iobase);
-#endif
-    if (lastEISA == MAX_EISA_SLOTS) {
-	pci_probe(dev, iobase);
+    if ((lastPCI == NO_MORE_PCI) && ((num_de4x5s == 0) || forceEISA)) {
+        eisa_probe(dev, iobase);
     }
+#endif
     
     return (dev->priv ? 0 : -ENODEV);
 }
@@ -1230,6 +1243,7 @@ de4x5_hw_init(struct device *dev, u_long iobase))
 	if ((tmp = (void *)kmalloc(RX_BUFF_SZ * NUM_RX_DESC + ALIGN, 
 				   GFP_KERNEL)) == NULL) {
 	    kfree(lp->cache.priv);
+	    lp->cache.priv = NULL;
 	    return -ENOMEM;
 	}
 
@@ -2066,38 +2080,36 @@ eisa_probe(struct device *dev, u_long ioaddr))
     }
     
     for (status = -ENODEV; (i<maxSlots) && (dev!=NULL); i++, iobase+=EISA_SLOT_INC) {
-	if (EISA_signature(name, EISA_ID)) {
-	    cfid = (u32) inl(PCI_CFID);
-	    cfrv = (u_short) inl(PCI_CFRV);
-	    device = (cfid >> 8) & 0x00ffff00;
-	    vendor = (u_short) cfid;
-	    
-	    /* Read the EISA Configuration Registers */
-	    irq = inb(EISA_REG0);
-	    irq = de4x5_irq[(irq >> 1) & 0x03];
+	if (check_region(iobase, DE4X5_EISA_TOTAL_SIZE)) continue;
+	if (!EISA_signature(name, EISA_ID)) continue;
 
-	    if (is_DC2114x) {
-		device = ((cfrv & CFRV_RN) < DC2114x_BRK ? DC21142 : DC21143);
-	    }
-	    lp->chipset = device;
-
-	    /* Write the PCI Configuration Registers */
-	    outl(PCI_COMMAND_IO | PCI_COMMAND_MASTER, PCI_CFCS);
-	    outl(0x00006000, PCI_CFLT);
-	    outl(iobase, PCI_CBIO);
+	cfid = (u32) inl(PCI_CFID);
+	cfrv = (u_short) inl(PCI_CFRV);
+	device = (cfid >> 8) & 0x00ffff00;
+	vendor = (u_short) cfid;
 	    
-	    DevicePresent(EISA_APROM);
-	    if (check_region(iobase, DE4X5_EISA_TOTAL_SIZE) == 0) {
-		dev->irq = irq;
-		if ((status = de4x5_hw_init(dev, iobase)) == 0) {
-		    num_de4x5s++;
-		    if (loading_module) link_modules(lastModule, dev);
-		    lastEISA = i;
-		    return;
-		}
-	    } else if (ioaddr != 0) {
-		printk("%s: region already allocated at 0x%04lx.\n", dev->name,iobase);
-	    }
+	/* Read the EISA Configuration Registers */
+	irq = inb(EISA_REG0);
+	irq = de4x5_irq[(irq >> 1) & 0x03];
+
+	if (is_DC2114x) {
+	    device = ((cfrv & CFRV_RN) < DC2114x_BRK ? DC21142 : DC21143);
+	}
+	lp->chipset = device;
+
+	/* Write the PCI Configuration Registers */
+	outl(PCI_COMMAND_IO | PCI_COMMAND_MASTER, PCI_CFCS);
+	outl(0x00006000, PCI_CFLT);
+	outl(iobase, PCI_CBIO);
+	    
+	DevicePresent(EISA_APROM);
+
+	dev->irq = irq;
+	if ((status = de4x5_hw_init(dev, iobase)) == 0) {
+	    num_de4x5s++;
+	    if (loading_module) link_modules(lastModule, dev);
+	    lastEISA = i;
+	    return;
 	}
     }
 
@@ -4794,6 +4806,7 @@ type3_infoblock(struct device *dev, u_char count, u_char *p)
     if (lp->state == INITIALISED) {
         lp->ibn = 3;
         lp->active = *p++;
+	if (MOTO_SROM_BUG) lp->active = 0;
 	lp->phy[lp->active].gep = (*p ? p : 0); p += (2 * (*p) + 1);
 	lp->phy[lp->active].rst = (*p ? p : 0); p += (2 * (*p) + 1);
 	lp->phy[lp->active].mc  = TWIDDLE(p); p += 2;
@@ -5326,6 +5339,9 @@ de4x5_parse_params(struct device *dev)
 	t = *q;
 	*q = '\0';
 
+#if !defined(__sparc_v9__) && !defined(__powerpc__) && !defined(__alpha__)
+	if (strstr(p, "force_eisa") || strstr(p, "FORCE_EISA")) forceEISA = 1;
+#endif
 	if (strstr(p, "fdx") || strstr(p, "FDX")) lp->params.fdx = 1;
 
 	if (strstr(p, "autosense") || strstr(p, "AUTOSENSE")) {
@@ -5766,6 +5782,12 @@ init_module(void)
 		release_region(p->base_addr, (lp->bus == PCI ? 
 					      DE4X5_PCI_TOTAL_SIZE :
 					      DE4X5_EISA_TOTAL_SIZE));
+		if (lp->cache.buf) {        /* MAC buffers allocated?    */
+		    kfree(lp->cache.buf);   /* Free the MAC buffers      */
+		}
+		if (lp->cache.priv) {       /* Private area allocated?   */
+		    kfree(lp->cache.priv);  /* Free the private area     */
+		}
 	    }
 	    kfree(p);
 	} else {
@@ -5799,10 +5821,10 @@ unlink_modules(struct device *p)
 	if (lp->cache.buf) {                /* MAC buffers allocated?    */
 	    kfree(lp->cache.buf);           /* Free the MAC buffers      */
 	}
-	kfree(lp->cache.priv);              /* Free the private area     */
 	release_region(p->base_addr, (lp->bus == PCI ? 
 				      DE4X5_PCI_TOTAL_SIZE :
 				      DE4X5_EISA_TOTAL_SIZE));
+	kfree(lp->cache.priv);              /* Free the private area     */
     }
     unregister_netdev(p);
     kfree(p);                               /* Free the device structure */
@@ -5867,6 +5889,9 @@ insert_device(struct device *dev, u_long iobase, int (*init)(struct device *)))
  * Local variables:
  *  compile-command: "gcc -D__KERNEL__ -I/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -fno-strength-reduce -malign-loops=2 -malign-jumps=2 -malign-functions=2 -O2 -m486 -c de4x5.c"
  *
- *  compile-command: "gcc -D__KERNEL__ -DMODULE -I/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -fno-strength-reduce -malign-loops=2 -malign-jumps=2 -malign-functions=2 -O2 -m486 -c de4x5.c"
+ * Delete -D__SMP__ below if you didn't define this in your kernel
+ * Delete -DMODVERSIONS below if you didn't define this in your kernel
+ *
+ *  compile-command: "gcc -D__KERNEL__ -DMODULE -I/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -fno-strength-reduce -malign-loops=2 -malign-jumps=2 -malign-functions=2 -O2 -m486 -DMODVERSIONS -include /linux/include/linux/modversions.h -c de4x5.c"
  * End:
  */

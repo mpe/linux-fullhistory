@@ -29,6 +29,9 @@
 #include <asm/proc/mm-init.h>
 
 pgd_t swapper_pg_dir[PTRS_PER_PGD];
+#ifndef CONFIG_NO_PGT_CACHE
+struct pgtable_cache_struct quicklists;
+#endif
 
 extern char _etext, _stext, _edata, __bss_start, _end;
 extern char __init_begin, __init_end;
@@ -36,6 +39,7 @@ extern char __init_begin, __init_end;
 int do_check_pgt_cache(int low, int high)
 {
 	int freed = 0;
+#ifndef CONFIG_NO_PGT_CACHE
 	if(pgtable_cache_size > high) {
 		do {
 			if(pgd_quicklist)
@@ -46,6 +50,7 @@ int do_check_pgt_cache(int low, int high)
 				free_pte_slow(get_pte_fast()), freed++;
 		} while(pgtable_cache_size > low);
 	}
+#endif
 	return freed;
 }
 
@@ -63,17 +68,18 @@ int do_check_pgt_cache(int low, int high)
  * data and COW.
  */
 #if PTRS_PER_PTE != 1
-unsigned long *empty_bad_page_table;
+pte_t *empty_bad_page_table;
 
 pte_t *__bad_pagetable(void)
 {
-	int i;
 	pte_t bad_page;
+	int i;
 
 	bad_page = BAD_PAGE;
 	for (i = 0; i < PTRS_PER_PTE; i++)
-		empty_bad_page_table[i] = (unsigned long)pte_val(bad_page);
-	return (pte_t *) empty_bad_page_table;
+		set_pte(empty_bad_page_table + i, bad_page);
+
+	return empty_bad_page_table;
 }
 #endif
 
@@ -128,14 +134,20 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 	empty_bad_page = (unsigned long *)start_mem;
 	start_mem += PAGE_SIZE;
 #if PTRS_PER_PTE != 1
-	empty_bad_page_table = (unsigned long *)start_mem;
-	start_mem += PTRS_PER_PTE * sizeof (void *);
+#ifdef CONFIG_CPU_32
+	start_mem += PTRS_PER_PTE * BYTES_PER_PTR;
+#endif
+	empty_bad_page_table = (pte_t *)start_mem;
+	start_mem += PTRS_PER_PTE * BYTES_PER_PTR;
 #endif
 	memzero (empty_zero_page, PAGE_SIZE);
 	start_mem = setup_pagetables (start_mem, end_mem);
 
 	flush_tlb_all();
 	update_memc_all();
+
+	end_mem &= PAGE_MASK;
+	high_memory = (void *)end_mem;
 
 	return free_area_init(start_mem, end_mem);
 }
@@ -161,19 +173,18 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	/* mark usable pages in the mem_map[] */
 	mark_usable_memory_areas(&start_mem, end_mem);
 
+#define BETWEEN(w,min,max) ((w) >= (unsigned long)(min) && \
+			    (w) < (unsigned long)(max))
+
 	for (tmp = PAGE_OFFSET; tmp < end_mem ; tmp += PAGE_SIZE) {
 		if (PageReserved(mem_map+MAP_NR(tmp))) {
-			if (tmp >= KERNTOPHYS(_stext) &&
-			    tmp < KERNTOPHYS(_edata)) {
-				if (tmp < KERNTOPHYS(_etext))
-					codepages++;
-				else
-					datapages++;
-			} else if (tmp >= KERNTOPHYS(__init_begin)
-				   && tmp < KERNTOPHYS(__init_end))
+			if (BETWEEN(tmp, &__init_begin, &__init_end))
 				initpages++;
-			else if (tmp >= KERNTOPHYS(__bss_start)
-				 && tmp < (unsigned long) start_mem)
+			else if (BETWEEN(tmp, &_stext, &_etext))
+				codepages++;
+			else if (BETWEEN(tmp, &_etext, &_edata))
+				datapages++;
+			else if (BETWEEN(tmp, &__bss_start, start_mem))
 				datapages++;
 			else
 				reservedpages++;
@@ -181,13 +192,16 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		}
 		atomic_set(&mem_map[MAP_NR(tmp)].count, 1);
 #ifdef CONFIG_BLK_DEV_INITRD
-		if (!initrd_start || (tmp < initrd_start || tmp >= initrd_end))
+		if (!initrd_start || !BETWEEN(tmp, initrd_start, initrd_end))
 #endif
 			free_page(tmp);
 	}
-	printk ("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data, %dk init)\n",
+
+#undef BETWEEN
+
+	printk ("Memory: %luk/%luM available (%dk code, %dk reserved, %dk data, %dk init)\n",
 		 (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
-		 max_mapnr << (PAGE_SHIFT-10),
+		 max_mapnr >> (20 - PAGE_SHIFT),
 		 codepages << (PAGE_SHIFT-10),
 		 reservedpages << (PAGE_SHIFT-10),
 		 datapages << (PAGE_SHIFT-10),
@@ -203,17 +217,45 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 #endif
 }
 
-void free_initmem (void)
+static void free_area(unsigned long addr, unsigned long end, char *s)
 {
-	unsigned long addr;
+	unsigned int size = (end - addr) >> 10;
 
-	addr = (unsigned long)(&__init_begin);
-	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
+	for (; addr < end; addr += PAGE_SIZE) {
 		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
 		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
 		free_page(addr);
 	}
-	printk ("Freeing unused kernel memory: %dk freed\n", (&__init_end - &__init_begin) >> 10);
+
+	if (size)
+		printk(" %dk %s", size, s);
+}
+
+void free_initmem (void)
+{
+	printk("Freeing unused kernel memory:");
+
+	free_area((unsigned long)(&__init_begin),
+		  (unsigned long)(&__init_end),
+		  "init");
+
+#ifdef CONFIG_FOOTBRIDGE
+	{
+	extern int __netwinder_begin, __netwinder_end, __ebsa285_begin, __ebsa285_end;
+
+	if (!machine_is_netwinder())
+		free_area((unsigned long)(&__netwinder_begin),
+			  (unsigned long)(&__netwinder_end),
+			  "netwinder");
+
+	if (!machine_is_ebsa285() && !machine_is_cats())
+		free_area((unsigned long)(&__ebsa285_begin),
+			  (unsigned long)(&__ebsa285_end),
+			  "ebsa285/cats");
+	}
+#endif
+
+	printk("\n");
 }
 
 void si_meminfo(struct sysinfo *val)

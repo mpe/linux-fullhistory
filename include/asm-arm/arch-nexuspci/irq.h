@@ -9,6 +9,8 @@
 
 #include <asm/io.h>
 
+#define fixup_irq(x) (x)
+
 #define INTCONT		0xffe00000
 
 extern unsigned long soft_irq_mask;
