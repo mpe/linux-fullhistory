@@ -23,17 +23,16 @@
 
 static inline int min(int a, int b)
 {
-	return a<b ? a : b;
+	return a < b ? a : b;
 }
 
 /*
  * Fill in the supplied page for mmap
  */
-static unsigned long 
-ncp_file_mmap_nopage(struct vm_area_struct * area,
-		     unsigned long address, int no_share)
+static unsigned long ncp_file_mmap_nopage(struct vm_area_struct *area,
+				     unsigned long address, int no_share)
 {
-	struct inode * inode = area->vm_inode;
+	struct inode *inode = area->vm_inode;
 	unsigned long page;
 	unsigned int clear;
 	unsigned long tmp;
@@ -48,37 +47,28 @@ ncp_file_mmap_nopage(struct vm_area_struct * area,
 	pos = address - area->vm_start + area->vm_offset;
 
 	clear = 0;
-	if (address + PAGE_SIZE > area->vm_end)
-	{
+	if (address + PAGE_SIZE > area->vm_end) {
 		clear = address + PAGE_SIZE - area->vm_end;
 	}
-
-        /* what we can read in one go */
+	/* what we can read in one go */
 	bufsize = NCP_SERVER(inode)->buffer_size;
 
 	fs = get_fs();
 	set_fs(get_ds());
 
-        if (ncp_make_open(inode, O_RDONLY) < 0)
-	{
-                clear = PAGE_SIZE;
-        }
-        else
-        {
+	if (ncp_make_open(inode, O_RDONLY) < 0) {
+		clear = PAGE_SIZE;
+	} else {
 		int already_read = 0;
 		int count = PAGE_SIZE - clear;
 		int to_read;
 
-		while (already_read < count)
-		{
+		while (already_read < count) {
 			int read_this_time;
 
-			if ((pos % bufsize) != 0)
-			{
+			if ((pos % bufsize) != 0) {
 				to_read = bufsize - (pos % bufsize);
-			}
-			else
-			{
+			} else {
 				to_read = bufsize;
 			}
 
@@ -87,33 +77,31 @@ ncp_file_mmap_nopage(struct vm_area_struct * area,
 			if (ncp_read(NCP_SERVER(inode),
 				     NCP_FINFO(inode)->file_handle,
 				     pos, to_read,
-				     (char *)(page + already_read),
-				     &read_this_time) != 0)
-			{
-			       read_this_time = 0;
+				     (char *) (page + already_read),
+				     &read_this_time) != 0) {
+				read_this_time = 0;
 			}
-
 			pos += read_this_time;
 			already_read += read_this_time;
 
-			if (read_this_time < to_read)
-			{
+			if (read_this_time < to_read) {
 				break;
 			}
 		}
 
-        }
+	}
 
 	set_fs(fs);
 
 	tmp = page + PAGE_SIZE;
 	while (clear--) {
-		*(char *)--tmp = 0;
+		*(char *) --tmp = 0;
 	}
 	return page;
 }
 
-struct vm_operations_struct ncp_file_mmap = {
+struct vm_operations_struct ncp_file_mmap =
+{
 	NULL,			/* open */
 	NULL,			/* close */
 	NULL,			/* unmap */
@@ -128,18 +116,15 @@ struct vm_operations_struct ncp_file_mmap = {
 
 
 /* This is used for a general mmap of a ncp file */
-int
-ncp_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
+int ncp_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma)
 {
-        DPRINTK("ncp_mmap: called\n");
+	DPRINTK("ncp_mmap: called\n");
 
-	if (!ncp_conn_valid(NCP_SERVER(inode)))
-	{
+	if (!ncp_conn_valid(NCP_SERVER(inode))) {
 		return -EIO;
 	}
-
-        /* only PAGE_COW or read-only supported now */
-	if (vma->vm_flags & VM_SHARED)	
+	/* only PAGE_COW or read-only supported now */
+	if (vma->vm_flags & VM_SHARED)
 		return -EINVAL;
 	if (!inode->i_sb || !S_ISREG(inode->i_mode))
 		return -EACCES;
@@ -147,7 +132,6 @@ ncp_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
-
 	vma->vm_inode = inode;
 	inode->i_count++;
 	vma->vm_ops = &ncp_file_mmap;

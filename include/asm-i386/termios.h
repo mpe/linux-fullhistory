@@ -45,6 +45,7 @@ struct termio {
 #define N_PPP		3
 #define N_STRIP		4
 #define N_AX25		5
+#define N_X25		6	/* X.25 async */
 
 #ifdef __KERNEL__
 

@@ -1779,7 +1779,7 @@ printk(KERN_INFO "fd%d: accessing %s-disk with %s-layout\n",drive,unit[drive].ty
   return 0;
 }
 
-static void floppy_release(struct inode * inode, struct file * filp)
+static int floppy_release(struct inode * inode, struct file * filp)
 {
   unsigned long flags;
 
@@ -1803,6 +1803,7 @@ static void floppy_release(struct inode * inode, struct file * filp)
 /* the mod_use counter is handled this way */
   floppy_off (inode->i_rdev & 3);
 #endif
+  return 0;
 }
 
 void amiga_floppy_setup (char *str, int *ints)

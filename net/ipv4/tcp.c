@@ -1290,7 +1290,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 			 * shouldn't happen
 			 */
 			if (before(*seq, skb->seq)) {
-				printk("recvmsg bug: copied %X seq %X\n",
+				printk(KERN_INFO "recvmsg bug: copied %X seq %X\n",
 				       *seq, skb->seq);
 				break;
 			}

@@ -87,7 +87,7 @@ static struct ipfrag *ip_frag_create(int offset, int end, struct sk_buff *skb, u
 	fp = (struct ipfrag *) frag_kmalloc(sizeof(struct ipfrag), GFP_ATOMIC);
 	if (fp == NULL)
 	{
-		NETDEBUG(printk("IP: frag_create: no memory left !\n"));
+		NETDEBUG(printk(KERN_ERR "IP: frag_create: no memory left !\n"));
 		return(NULL);
 	}
 	memset(fp, 0, sizeof(struct ipfrag));
@@ -249,7 +249,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph)
 	qp = (struct ipq *) frag_kmalloc(sizeof(struct ipq), GFP_ATOMIC);
 	if (qp == NULL)
 	{
-		NETDEBUG(printk("IP: create: no memory left !\n"));
+		NETDEBUG(printk(KERN_ERR "IP: create: no memory left !\n"));
 		return(NULL);
 	}
 	memset(qp, 0, sizeof(struct ipq));
@@ -262,7 +262,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph)
 	qp->iph = (struct iphdr *) frag_kmalloc(64 + 8, GFP_ATOMIC);
 	if (qp->iph == NULL)
 	{
-		NETDEBUG(printk("IP: create: no memory left !\n"));
+		NETDEBUG(printk(KERN_ERR "IP: create: no memory left !\n"));
 		frag_kfree_s(qp, sizeof(struct ipq));
 		return(NULL);
 	}
@@ -343,7 +343,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	
 	if(len>65535)
 	{
-		printk("Oversized IP packet from %s.\n", in_ntoa(qp->iph->saddr));
+		printk(KERN_INFO "Oversized IP packet from %s.\n", in_ntoa(qp->iph->saddr));
 		ip_statistics.IpReasmFails++;
 		ip_free(qp);
 		return NULL;
@@ -352,7 +352,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	if ((skb = dev_alloc_skb(len)) == NULL)
 	{
 		ip_statistics.IpReasmFails++;
-		NETDEBUG(printk("IP: queue_glue: no memory for gluing queue %p\n", qp));
+		NETDEBUG(printk(KERN_ERR "IP: queue_glue: no memory for gluing queue %p\n", qp));
 		ip_free(qp);
 		return(NULL);
 	}
@@ -373,7 +373,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	{
 		if(count+fp->len > skb->len)
 		{
-			NETDEBUG(printk("Invalid fragment list: Fragment over size.\n"));
+			NETDEBUG(printk(KERN_ERR "Invalid fragment list: Fragment over size.\n"));
 			ip_free(qp);
 			kfree_skb(skb,FREE_WRITE);
 			ip_statistics.IpReasmFails++;
@@ -485,7 +485,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 	 
 	if(ntohs(iph->tot_len)+(int)offset>65535)
 	{
-		printk("Oversized packet received from %s\n",in_ntoa(iph->saddr));
+		printk(KERN_INFO "Oversized packet received from %s\n",in_ntoa(iph->saddr));
 		frag_kfree_skb(skb, FREE_READ);
 		ip_statistics.IpReasmFails++;
 		return NULL;

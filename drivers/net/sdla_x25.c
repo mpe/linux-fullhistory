@@ -589,20 +589,6 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 	sdla_t* card = chan->card;
 	int retry = 0, queued = 0;
 
-	if (skb == NULL)
-	{
-		/* If we get here, some higher layer thinks we've missed a
-		 * tx-done interrupt.
-		 */
-#ifdef _DEBUG_
-		printk(KERN_INFO "%s: interface %s got kicked!\n",
-			card->devname, dev->name)
-		;
-#endif
-		dev_tint(dev);
-		return 0;
-	}
-
 	if (set_bit(0, (void*)&card->wandev.critical))
 	{
 #ifdef _DEBUG_

@@ -667,7 +667,9 @@ el3_rx(struct device *dev)
 				skb->protocol=eth_type_trans(skb,dev);
 				netif_rx(skb);
 				outw(RxDiscard, ioaddr + EL3_CMD); /* Pop top Rx packet. */
+				lp->stats.rx_bytes+=skb->len;
 				lp->stats.rx_packets++;
+				lp->stats.rx_bytes+=pkt_len;
 				continue;
 			} else if (el3_debug)
 				printk("%s: Couldn't allocate a sk_buff of size %d.\n",

@@ -24,7 +24,7 @@ EXPORT_SYMBOL(wp_works_ok);
 EXPORT_SYMBOL(__verify_write);
 EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
-EXPORT_SYMBOL(ioremap);
+EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(iounmap);
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
@@ -44,6 +44,7 @@ EXPORT_SYMBOL_NOVERS(__lock_kernel);
 
 #ifdef CONFIG_MCA
 /* Adapter probing and info methods. */
+EXPORT_SYMBOL(mca_find_adapter);
 EXPORT_SYMBOL(mca_write_pos);
 EXPORT_SYMBOL(mca_read_pos);
 EXPORT_SYMBOL(mca_read_stored_pos);

@@ -836,7 +836,7 @@ void ip_fragment(struct sk_buff *skb, int local, int (*output)(struct sk_buff*))
 		 */
 
 		if ((skb2 = alloc_skb(len+hlen+15,GFP_ATOMIC)) == NULL) {
-			NETDEBUG(printk("IP: frag: no memory for new fragment!\n"));
+			NETDEBUG(printk(KERN_INFO "IP: frag: no memory for new fragment!\n"));
 			ip_statistics.IpFragFails++;
 			kfree_skb(skb, FREE_WRITE);
 			return;

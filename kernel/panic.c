@@ -17,7 +17,7 @@
 #include <linux/reboot.h>
 
 asmlinkage void sys_sync(void);	/* it's really int */
-extern void do_unblank_screen(void);
+extern void unblank_console(void);
 extern int C_A_D;
 
 int panic_timeout = 0;
@@ -43,7 +43,7 @@ NORET_TYPE void panic(const char * fmt, ...)
 	else
 		sys_sync();
 
-	do_unblank_screen();
+	unblank_console();
 
 #ifdef __SMP__
 	smp_message_pass(MSG_ALL_BUT_SELF, MSG_STOP_CPU, 0, 0);

@@ -18,7 +18,7 @@
  *     'unsigned long con_init(unsigned long)'
  *     'int con_open(struct tty_struct *tty, struct file * filp)'
  *     'void con_write(struct tty_struct * tty)'
- *     'void console_print(const char * b)'
+ *     'void vt_console_print(const char * b)'
  *     'void update_screen(int new_console)'
  *
  *     'void do_blank_screen(int)'
@@ -91,6 +91,7 @@
 #include <linux/interrupt.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/console.h>
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -131,6 +132,7 @@ static struct termios *console_termios_locked[MAX_NR_CONSOLES];
 unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
 struct vc vc_cons [MAX_NR_CONSOLES];
 
+static int con_open(struct tty_struct *, struct file *);
 static void con_setsize(unsigned long rows, unsigned long cols);
 static void vc_init(unsigned int console, unsigned long rows,
 		    unsigned long cols, int do_clear);
@@ -148,7 +150,7 @@ extern void hide_cursor(void);
 static void reset_terminal(int currcons, int do_clear);
 extern void reset_vc(unsigned int new_console);
 extern void vt_init(void);
-extern void register_console(void (*proc)(const char *));
+extern void set_vesa_blanking(unsigned long arg);
 extern void vesa_blank(void);
 extern void vesa_unblank(void);
 extern void vesa_powerdown(void);
@@ -178,7 +180,7 @@ static int printable = 0;		/* Is console ready for printing? */
 int		video_mode_512ch = 0;	/* 512-character mode */
 unsigned long	video_font_height;	/* Height of current screen font */
 unsigned long	video_scan_lines;	/* Number of scan lines on screen */
-unsigned long   default_font_height;    /* Height of default screen font */
+static unsigned long   default_font_height;    /* Height of default screen font */
 int		video_font_is_default = 1;
 static unsigned short console_charmask = 0x0ff;
 
@@ -189,121 +191,16 @@ static int blankinterval = 10*60*HZ;
 static int vesa_off_interval = 0;
 static long blank_origin, blank__origin, unblank_origin;
 
-
-#ifdef CONFIG_SERIAL_ECHO
-
-#include <linux/serial_reg.h>
-
-extern int serial_echo_init (int base);
-extern int serial_echo_print (const char *s);
-
 /*
- * this defines the address for the port to which printk echoing is done
- *  when CONFIG_SERIAL_ECHO is defined
+ * fg_console is the current virtual console,
+ * last_console is the last used one,
+ * want_console is the console we want to switch to,
+ * kmsg_redirect is the console for kernel messages,
  */
-#define SERIAL_ECHO_PORT	0x3f8	/* COM1 */
-
-static int serial_echo_port = 0;
-
-#define serial_echo_outb(v,a) outb((v),(a)+serial_echo_port)
-#define serial_echo_inb(a)    inb((a)+serial_echo_port)
-
-#define BOTH_EMPTY (UART_LSR_TEMT | UART_LSR_THRE)
-
-/* Wait for transmitter & holding register to empty */
-#define WAIT_FOR_XMITR \
- do { \
-       lsr = serial_echo_inb(UART_LSR); \
- } while ((lsr & BOTH_EMPTY) != BOTH_EMPTY)
-
-/* These two functions abstract the actual communications with the
- * debug port.	This is so we can change the underlying communications
- * mechanism without modifying the rest of the code.
- */
-int
-serial_echo_print(const char *s)
-{
-	int     lsr, ier;
-	int     i;
-
-	if (!serial_echo_port) return (0);
-
-	/*
-	 * First save the IER then disable the interrupts
-	 */
-	ier = serial_echo_inb(UART_IER);
-	serial_echo_outb(0x00, UART_IER);
-
-	/*
-	 * Now, do each character
-	 */
-	for (i = 0; *s; i++, s++) {
-		WAIT_FOR_XMITR;
-
-		/* Send the character out. */
-		serial_echo_outb(*s, UART_TX);
-
-		/* if a LF, also do CR... */
-		if (*s == 10) {
-			WAIT_FOR_XMITR;
-			serial_echo_outb(13, UART_TX);
-		}
-	}
-
-	/*
-	 * Finally, Wait for transmitter & holding register to empty
-	 *  and restore the IER
-	 */
-	do {
-		lsr = serial_echo_inb(UART_LSR);
-	} while ((lsr & BOTH_EMPTY) != BOTH_EMPTY);
-	serial_echo_outb(ier, UART_IER);
-
-	return (0);
-}
-
-
-int
-serial_echo_init(int base)
-{
-	int comstat, hi, lo;
-	
-	if (base != 0x2f8 && base != 0x3f8) {
-		serial_echo_port = 0;
-		return (0);
-	} else
-	  serial_echo_port = base;
-
-	/*
-	 * read the Divisor Latch
-	 */
-	comstat = serial_echo_inb(UART_LCR);
-	serial_echo_outb(comstat | UART_LCR_DLAB, UART_LCR);
-	hi = serial_echo_inb(UART_DLM);
-	lo = serial_echo_inb(UART_DLL);
-	serial_echo_outb(comstat, UART_LCR);
-
-	/*
-	 * now do hardwired init
-	 */
-	serial_echo_outb(0x03, UART_LCR); /* No parity, 8 data bits, 1 stop */
-	serial_echo_outb(0x83, UART_LCR); /* Access divisor latch */
-	serial_echo_outb(0x00, UART_DLM); /* 9600 baud */
-	serial_echo_outb(0x0c, UART_DLL);
-	serial_echo_outb(0x03, UART_LCR); /* Done with divisor */
-
-	/* Prior to disabling interrupts, read the LSR and RBR
-	 * registers
-	 */
-	comstat = serial_echo_inb(UART_LSR); /* COM? LSR */
-	comstat = serial_echo_inb(UART_RX);	/* COM? RBR */
-	serial_echo_outb(0x00, UART_IER); /* Disable all interrupts */
-
-	return(0);
-}
-
-#endif /* CONFIG_SERIAL_ECHO */
-
+int fg_console = 0;
+int last_console = 0;
+int want_console = -1;
+int kmsg_redirect = 0;
 
 int vc_cons_allocated(unsigned int i)
 {
@@ -599,7 +496,7 @@ static void set_origin(int currcons)
 	__set_origin(__real_origin);
 }
 
-void scrup(int currcons, unsigned int t, unsigned int b)
+static void scrup(int currcons, unsigned int t, unsigned int b)
 {
 	int hardscroll = hardscroll_enabled;
 
@@ -653,7 +550,7 @@ void scrup(int currcons, unsigned int t, unsigned int b)
 	}
 }
 
-void
+static void
 scrdown(int currcons, unsigned int t, unsigned int b)
 {
 	unsigned short *s;
@@ -949,12 +846,62 @@ void mouse_report(struct tty_struct * tty, int butt, int mrx, int mry)
 	respond_string(buf, tty);
 }
 
-/* invoked via ioctl(TIOCLINUX) */
+/* invoked via ioctl(TIOCLINUX) and through set_selection */
 int mouse_reporting(void)
 {
 	int currcons = fg_console;
 
 	return report_mouse;
+}
+
+int tioclinux(struct tty_struct *tty, unsigned long arg)
+{
+	char type, data;
+
+	if (tty->driver.type != TTY_DRIVER_TYPE_CONSOLE)
+		return -EINVAL;
+	if (current->tty != tty && !suser())
+		return -EPERM;
+	if (get_user(type, (char *)arg))
+		return -EFAULT;
+	switch (type)
+	{
+		case 2:
+			return set_selection(arg, tty, 1);
+		case 3:
+			return paste_selection(tty);
+		case 4:
+			do_unblank_screen();
+			return 0;
+		case 5:
+			return sel_loadlut(arg);
+		case 6:
+			
+	/*
+	 * Make it possible to react to Shift+Mousebutton.
+	 * Note that 'shift_state' is an undocumented
+	 * kernel-internal variable; programs not closely
+	 * related to the kernel should not use this.
+	 */
+	 		data = shift_state;
+			return put_user(data, (char *) arg);
+		case 7:
+			data = mouse_reporting();
+			return put_user(data, (char *) arg);
+		case 10:
+			set_vesa_blanking(arg);
+			return 0;
+		case 11:	/* set kmsg redirect */
+			if (!suser())
+				return -EPERM;
+			if (get_user(data, (char *)arg+1))
+					return -EFAULT;
+			kmsg_redirect = data;
+			return 0;
+		case 12:	/* get fg_console */
+			return fg_console;
+	}
+	return -EINVAL;
 }
 
 static inline unsigned short *screenpos(int currcons, int offset, int viewed)
@@ -1877,7 +1824,8 @@ void poke_blanked_console(void)
 	}
 }
 
-void console_print(const char * b)
+#ifdef CONFIG_VT_CONSOLE
+void vt_console_print(const char * b, unsigned count)
 {
 	int currcons = fg_console;
 	unsigned char c;
@@ -1896,15 +1844,12 @@ void console_print(const char * b)
 
 	if (!vc_cons_allocated(currcons)) {
 		/* impossible */
-		printk("console_print: tty %d not allocated ??\n", currcons+1);
+		printk("vt_console_print: tty %d not allocated ??\n", currcons+1);
 		return;
 	}
 
-#ifdef CONFIG_SERIAL_ECHO
-        serial_echo_print(b);
-#endif /* CONFIG_SERIAL_ECHO */
-
-	while ((c = *(b++)) != 0) {
+	while (count-- > 0) {
+		c = *(b++);
 		if (c == 10 || c == 13 || need_wrap) {
 			if (c != 13)
 				lf(currcons);
@@ -1928,6 +1873,19 @@ void console_print(const char * b)
 	poke_blanked_console();
 	printing = 0;
 }
+
+static int vt_console_device(void)
+{
+	return MKDEV(TTY_MAJOR, fg_console + 1);
+}
+
+extern void keyboard_wait_for_keypress(void);
+
+struct console vt_console_driver = {
+	vt_console_print, do_unblank_screen,
+        keyboard_wait_for_keypress, vt_console_device
+};
+#endif
 
 /*
  * con_throttle and con_unthrottle are only used for
@@ -2129,10 +2087,6 @@ unsigned long con_init(unsigned long kmem_start)
 		/* This may be suboptimal but is a safe bet - go with it */
 		video_scan_lines = video_font_height * video_num_lines;
 
-#ifdef CONFIG_SERIAL_ECHO
-		serial_echo_init(SERIAL_ECHO_PORT);
-#endif /* CONFIG_SERIAL_ECHO */
-
 		printk("Console: %ld point font, %ld scans\n",
 		       video_font_height, video_scan_lines);
 	}
@@ -2151,8 +2105,10 @@ unsigned long con_init(unsigned long kmem_start)
 	 * initialization and register_console() event from
 	 * within the bus probing code... :-(
 	 */
+#ifdef CONFIG_VT_CONSOLE
 	if (video_type != VIDEO_TYPE_TGAC)
-		register_console(console_print);
+		register_console(&vt_console_driver);
+#endif
 
 	init_bh(CONSOLE_BH, console_bh);
 	return kmem_start;
@@ -2295,7 +2251,7 @@ void update_screen(int new_console)
 /*
  * Allocate the console screen memory.
  */
-int con_open(struct tty_struct *tty, struct file * filp)
+static int con_open(struct tty_struct *tty, struct file * filp)
 {
 	unsigned int	idx;
 	int i;

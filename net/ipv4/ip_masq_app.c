@@ -73,7 +73,7 @@ int register_ip_masq_app(struct ip_masq_app *mapp, unsigned short proto, __u16 p
         unsigned long flags;
         unsigned hash;
         if (!mapp) {
-                printk("register_ip_masq_app(): NULL arg\n");
+                printk(KERN_ERR "register_ip_masq_app(): NULL arg\n");
                 return -EINVAL;
         }
         mapp->type = IP_MASQ_APP_TYPE(proto, port);
@@ -99,14 +99,14 @@ int unregister_ip_masq_app(struct ip_masq_app *mapp)
         unsigned hash;
         unsigned long flags;
         if (!mapp) {
-                printk("unregister_ip_masq_app(): NULL arg\n");
+                printk(KERN_ERR "unregister_ip_masq_app(): NULL arg\n");
                 return -EINVAL;
         }
         /*
          * only allow unregistration if it has no attachments
          */
         if (mapp->n_attach)  {
-                printk("unregister_ip_masq_app(): has %d attachments. failed\n",
+                printk(KERN_ERR "unregister_ip_masq_app(): has %d attachments. failed\n",
                        mapp->n_attach);
                 return -EINVAL;
         }
@@ -122,7 +122,7 @@ int unregister_ip_masq_app(struct ip_masq_app *mapp)
                 }
 
         restore_flags(flags);
-        printk("unregister_ip_masq_app(proto=%s,port=%u): not hashed!\n",
+        printk(KERN_ERR "unregister_ip_masq_app(proto=%s,port=%u): not hashed!\n",
                masq_proto_name(IP_MASQ_APP_PROTO(mapp->type)), IP_MASQ_APP_PORT(mapp->type));
         return -EINVAL;
 }
@@ -164,7 +164,7 @@ static __inline__ int ip_masq_app_bind_chg(struct ip_masq_app *mapp, int delta)
         n_at = mapp->n_attach + delta;
         if (n_at < 0) {
                 restore_flags(flags);
-                printk("ip_masq_app: tried to set n_attach < 0 for (proto=%s,port==%d) ip_masq_app object.\n",
+                printk(KERN_ERR "ip_masq_app: tried to set n_attach < 0 for (proto=%s,port==%d) ip_masq_app object.\n",
                        masq_proto_name(IP_MASQ_APP_PROTO(mapp->type)),
                        IP_MASQ_APP_PORT(mapp->type));
                 return -1;
@@ -189,7 +189,7 @@ struct ip_masq_app * ip_masq_bind_app(struct ip_masq *ms)
                  */
 
                 if (ms->app != NULL) {
-                        printk("ip_masq_bind_app() called for already bound object.\n");
+                        printk(KERN_ERR "ip_masq_bind_app() called for already bound object.\n");
                         return ms->app;
                 }
 
@@ -528,7 +528,7 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
 
                 n_skb = alloc_skb(MAX_HEADER + skb->len + diff, pri);
                 if (n_skb == NULL) {
-                        printk("skb_replace(): no room left (from %p)\n",
+                        printk(KERN_ERR "skb_replace(): no room left (from %p)\n",
                                __builtin_return_address(0));
                         return skb;
 

@@ -34,4 +34,9 @@ struct nfs_inode_info {
 	unsigned long attrtimeo;
 };
 
+struct nfs_lock_info {
+	u32		state;
+	unsigned int	flags;
+};
+
 #endif

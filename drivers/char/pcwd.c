@@ -394,9 +394,10 @@ static long pcwd_read(struct inode *inode, struct file *file, char *buf,
 	}
 }
 
-static void pcwd_close(struct inode *ino, struct file *filep)
+static int pcwd_close(struct inode *ino, struct file *filep)
 {
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 static void get_support(void)

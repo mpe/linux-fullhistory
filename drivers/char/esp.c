@@ -290,7 +290,7 @@ static _INLINE_ void rs_sched_event(struct esp_struct *info,
 				  int event)
 {
 	info->event |= 1 << event;
-	queue_task_irq_off(&info->tqueue, &tq_esp);
+	queue_task(&info->tqueue, &tq_esp);
 	mark_bh(ESP_BH);
 }
 
@@ -354,13 +354,13 @@ static void do_ttybuf(void *private_)
 			memmove(info->tty_buf->char_buf,
 				info->tty_buf->char_buf + x_bytes,
 				info->tty_buf->count);
-			queue_task_irq_off(&info->tty_buf->tqueue,
+			queue_task(&info->tty_buf->tqueue,
 						&tq_timer);
 		}
 
-		queue_task_irq_off(&tty->flip.tqueue, &tq_timer);
+		queue_task(&tty->flip.tqueue, &tq_timer);
 	} else {
-		queue_task_irq_off(&info->tty_buf->tqueue, &tq_timer);
+		queue_task(&info->tty_buf->tqueue, &tq_timer);
 	}
 
 	restore_flags(flags);
@@ -429,9 +429,9 @@ static _INLINE_ void receive_chars_dma_done(struct esp_struct *info,
 		buffer->flag_buf_ptr++;
 		
 		if (buffer == info->tty_buf)
-			queue_task_irq_off(&info->tty_buf->tqueue, &tq_timer);
+			queue_task(&info->tty_buf->tqueue, &tq_timer);
 
-		queue_task_irq_off(&tty->flip.tqueue, &tq_timer);
+		queue_task(&tty->flip.tqueue, &tq_timer);
 	}
 
 	if (dma_bytes != num_bytes) {
@@ -560,7 +560,7 @@ static _INLINE_ void check_modem_status(struct esp_struct *info)
 #ifdef SERIAL_DEBUG_OPEN
 			printk("scheduling hangup...");
 #endif
-			queue_task_irq_off(&info->tqueue_hangup,
+			queue_task(&info->tqueue_hangup,
 					   &tq_scheduler);
 		}
 	}

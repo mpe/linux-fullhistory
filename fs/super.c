@@ -48,7 +48,6 @@
 
 extern void wait_for_keypress(void);
 extern struct file_operations * get_blkfops(unsigned int major);
-extern void blkdev_release (struct inode *);
 
 extern int root_mountflags;
 

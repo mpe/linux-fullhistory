@@ -13,10 +13,15 @@
  *
  *  Big-endian to little-endian byte-swapping/bitmaps by
  *        David S. Miller (davem@caip.rutgers.edu), 1995
+ * 
+ *  Removed unnecessary code duplication for little endian machines
+ *  and excessive __inline__s. 
+ *        Andi Kleen, 1997
  */
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <asm/byteorder.h>
 
 #include <linux/errno.h>
 #include <linux/fs.h>
@@ -30,7 +35,7 @@
 #define blocksize (EXT2_BLOCK_SIZE(inode->i_sb))
 #define addr_per_block (EXT2_ADDR_PER_BLOCK(inode->i_sb))
 
-static __inline__ int sync_block (struct inode * inode, u32 * block, int wait)
+static int sync_block (struct inode * inode, u32 * block, int wait)
 {
 	struct buffer_head * bh;
 	int tmp;
@@ -58,7 +63,8 @@ static __inline__ int sync_block (struct inode * inode, u32 * block, int wait)
 	return 0;
 }
 
-static __inline__ int sync_block_swab32 (struct inode * inode, u32 * block, int wait)
+#ifndef __LITTLE_ENDIAN
+static int sync_block_swab32 (struct inode * inode, u32 * block, int wait)
 {
 	struct buffer_head * bh;
 	int tmp;
@@ -85,8 +91,12 @@ static __inline__ int sync_block_swab32 (struct inode * inode, u32 * block, int 
 	bh->b_count--;
 	return 0;
 }
+#else
+#define sync_block_swab32 sync_block
+#endif
 
-static __inline__ int sync_iblock (struct inode * inode, u32 * iblock, 
+
+static int sync_iblock (struct inode * inode, u32 * iblock, 
 			struct buffer_head ** bh, int wait) 
 {
 	int rc, tmp;
@@ -109,7 +119,8 @@ static __inline__ int sync_iblock (struct inode * inode, u32 * iblock,
 	return 0;
 }
 
-static __inline__ int sync_iblock_swab32 (struct inode * inode, u32 * iblock, 
+#ifndef __LITTLE_ENDIAN
+static int sync_iblock_swab32 (struct inode * inode, u32 * iblock, 
 			       struct buffer_head ** bh, int wait) 
 {
 	int rc, tmp;
@@ -131,9 +142,11 @@ static __inline__ int sync_iblock_swab32 (struct inode * inode, u32 * iblock,
 		return -1;
 	return 0;
 }
+#else
+#define sync_iblock_swab32 sync_iblock
+#endif
 
-
-static __inline__ int sync_direct (struct inode * inode, int wait)
+static int sync_direct (struct inode * inode, int wait)
 {
 	int i;
 	int rc, err = 0;
@@ -148,7 +161,7 @@ static __inline__ int sync_direct (struct inode * inode, int wait)
 	return err;
 }
 
-static __inline__ int sync_indirect (struct inode * inode, u32 * iblock, int wait)
+static int sync_indirect (struct inode * inode, u32 * iblock, int wait)
 {
 	int i;
 	struct buffer_head * ind_bh;
@@ -171,6 +184,7 @@ static __inline__ int sync_indirect (struct inode * inode, u32 * iblock, int wai
 	return err;
 }
 
+#ifndef __LITTLE_ENDIAN
 static __inline__ int sync_indirect_swab32 (struct inode * inode, u32 * iblock, int wait)
 {
 	int i;
@@ -193,8 +207,11 @@ static __inline__ int sync_indirect_swab32 (struct inode * inode, u32 * iblock, 
 	brelse (ind_bh);
 	return err;
 }
+#else
+#define sync_indirect_swab32 sync_indirect
+#endif
 
-static __inline__ int sync_dindirect (struct inode * inode, u32 * diblock, int wait)
+static int sync_dindirect (struct inode * inode, u32 * diblock, int wait)
 {
 	int i;
 	struct buffer_head * dind_bh;
@@ -217,6 +234,7 @@ static __inline__ int sync_dindirect (struct inode * inode, u32 * diblock, int w
 	return err;
 }
 
+#ifndef __LITTLE_ENDIAN
 static __inline__ int sync_dindirect_swab32 (struct inode * inode, u32 * diblock, int wait)
 {
 	int i;
@@ -239,8 +257,11 @@ static __inline__ int sync_dindirect_swab32 (struct inode * inode, u32 * diblock
 	brelse (dind_bh);
 	return err;
 }
+#else
+#define sync_dindirect_swab32 sync_dindirect
+#endif
 
-static __inline__ int sync_tindirect (struct inode * inode, u32 * tiblock, int wait)
+static int sync_tindirect (struct inode * inode, u32 * tiblock, int wait)
 {
 	int i;
 	struct buffer_head * tind_bh;

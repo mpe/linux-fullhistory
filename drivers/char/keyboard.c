@@ -71,13 +71,19 @@ static int initialize_kbd(void);
 #include <asm/io.h>
 #include <asm/system.h>
 
-extern void poke_blanked_console(void);
 extern void ctrl_alt_del(void);
 extern void reset_vc(unsigned int new_console);
 extern void scrollback(int);
 extern void scrollfront(int);
 
 unsigned char kbd_read_mask = 0x01;	/* modified by psaux.c */
+
+struct wait_queue * keypress_wait = NULL;
+
+void keyboard_wait_for_keypress(void)
+{
+	sleep_on(&keypress_wait);
+}
 
 /*
  * global state includes the following, and various static variables

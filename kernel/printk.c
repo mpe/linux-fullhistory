@@ -23,14 +23,13 @@
 #include <linux/tty_driver.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/console.h>
 
 #include <asm/uaccess.h>
 
 #define LOG_BUF_LEN	8192
 
 static char buf[1024];
-
-extern void console_print(const char *);
 
 /* printk's without a loglevel use this.. */
 #define DEFAULT_MESSAGE_LOGLEVEL 4 /* KERN_WARNING */
@@ -43,7 +42,7 @@ unsigned long log_size = 0;
 struct wait_queue * log_wait = NULL;
 int console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
 
-static void (*console_print_proc)(const char *) = 0;
+struct console *console_drivers = NULL;
 static char log_buf[LOG_BUF_LEN];
 static unsigned long log_start = 0;
 static unsigned long logged_chars = 0;
@@ -209,11 +208,13 @@ asmlinkage int printk(const char *fmt, ...)
 			if (*p == '\n')
 				break;
 		}
-		if (msg_level < console_loglevel && console_print_proc) {
-			char tmp = p[1];
-			p[1] = '\0';
-			(*console_print_proc)(msg);
-			p[1] = tmp;
+		if (msg_level < console_loglevel && console_drivers) {
+			struct console *c = console_drivers;
+			while(c) {
+				if (c->write)
+					c->write(msg, p - msg + 1);
+				c = c->next;
+			}
 		}
 		if (*p == '\n')
 			msg_level = -1;
@@ -223,21 +224,43 @@ asmlinkage int printk(const char *fmt, ...)
 	return i;
 }
 
+void console_print(const char *s)
+{
+	struct console *c = console_drivers;
+	int len = strlen(s);
+	while(c) {
+		if (c->write)
+			c->write(s, len);
+		c = c->next;
+	}
+}
+
+void unblank_console(void)
+{
+	struct console *c = console_drivers;
+	while(c) {
+		if (c->unblank)
+			c->unblank();
+		c = c->next;
+	}
+}
+
 /*
  * The console driver calls this routine during kernel initialization
  * to register the console printing procedure with printk() and to
  * print any messages that were printed by the kernel before the
  * console driver was initialized.
  */
-void register_console(void (*proc)(const char *))
+void register_console(struct console * console)
 {
-	int	i,j;
+	int	i,j,len;
 	int	p = log_start;
 	char	buf[16];
 	signed char msg_level = -1;
 	char	*q;
 
-	console_print_proc = proc;
+	console->next = console_drivers;
+	console_drivers = console;
 
 	for (i=0,j=0; i < log_size; i++) {
 		buf[j++] = log_buf[p];
@@ -246,12 +269,14 @@ void register_console(void (*proc)(const char *))
 			continue;
 		buf[j] = 0;
 		q = buf;
+		len = j;
 		if (msg_level < 0) {
 			msg_level = buf[1] - '0';
 			q = buf + 3;
+			len -= 3;
 		}
 		if (msg_level < console_loglevel)
-			(*proc)(q);
+			console->write(q, len);
 		if (buf[j-1] == '\n')
 			msg_level = -1;
 		j = 0;

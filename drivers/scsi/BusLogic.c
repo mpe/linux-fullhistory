@@ -27,8 +27,8 @@
 */
 
 
-#define BusLogic_DriverVersion		"2.0.8"
-#define BusLogic_DriverDate		"17 March 1997"
+#define BusLogic_DriverVersion		"2.0.9"
+#define BusLogic_DriverDate		"29 March 1997"
 
 
 #include <linux/module.h>
@@ -295,15 +295,16 @@ static boolean BusLogic_CreateCCB(BusLogic_HostAdapter_T *HostAdapter)
   CCB->NextAll = HostAdapter->All_CCBs;
   HostAdapter->Free_CCBs = CCB;
   HostAdapter->All_CCBs = CCB;
+  HostAdapter->AllocatedCCBs++;
   return true;
 }
 
 
 /*
-  BusLogic_CreateCCBs allocates the initial CCBs for Host Adapter.
+  BusLogic_CreateInitialCCBs allocates the initial CCBs for Host Adapter.
 */
 
-static boolean BusLogic_CreateCCBs(BusLogic_HostAdapter_T *HostAdapter)
+static boolean BusLogic_CreateInitialCCBs(BusLogic_HostAdapter_T *HostAdapter)
 {
   int Allocated;
   for (Allocated = 0; Allocated < HostAdapter->InitialCCBs; Allocated++)
@@ -335,6 +336,32 @@ static void BusLogic_DestroyCCBs(BusLogic_HostAdapter_T *HostAdapter)
 
 
 /*
+  BusLogic_CreateAdditionalCCBs allocates Additional CCBs for Host Adapter.  If
+  allocation fails and there are no remaining CCBs available, the Driver Queue
+  Depth is decreased to a known safe value to avoid potential deadlocks when
+  multiple host adapters share the same IRQ Channel.
+*/
+
+static void BusLogic_CreateAdditionalCCBs(BusLogic_HostAdapter_T *HostAdapter,
+					  int AdditionalCCBs,
+					  boolean SuccessMessageP)
+{
+  int Allocated;
+  if (AdditionalCCBs <= 0) return;
+  for (Allocated = 0; Allocated < AdditionalCCBs; Allocated++)
+    if (!BusLogic_CreateCCB(HostAdapter)) break;
+  if (Allocated > 0 && SuccessMessageP)
+    BusLogic_Notice("Allocated %d additional CCBs (total now %d)\n",
+		    HostAdapter, Allocated, HostAdapter->AllocatedCCBs);
+  if (Allocated > 0) return;
+  BusLogic_Notice("Failed to allocate additional CCBs\n", HostAdapter);
+  HostAdapter->DriverQueueDepth =
+    HostAdapter->AllocatedCCBs - (HostAdapter->MaxTargetDevices - 1);
+  HostAdapter->SCSI_Host->can_queue = HostAdapter->DriverQueueDepth;
+}
+
+
+/*
   BusLogic_AllocateCCB allocates a CCB from Host Adapter's free list,
   allocating more memory from the Kernel if necessary.  The Host Adapter's
   Lock should already have been acquired by the caller.
@@ -345,24 +372,23 @@ static BusLogic_CCB_T *BusLogic_AllocateCCB(BusLogic_HostAdapter_T
 {
   static unsigned long SerialNumber = 0;
   BusLogic_CCB_T *CCB;
-  int Allocated;
   CCB = HostAdapter->Free_CCBs;
   if (CCB != NULL)
     {
       CCB->SerialNumber = ++SerialNumber;
       HostAdapter->Free_CCBs = CCB->Next;
       CCB->Next = NULL;
+      if (HostAdapter->Free_CCBs == NULL)
+	BusLogic_CreateAdditionalCCBs(HostAdapter,
+				      HostAdapter->IncrementalCCBs,
+				      true);
       return CCB;
     }
-  for (Allocated = 0; Allocated < HostAdapter->IncrementalCCBs; Allocated++)
-    if (!BusLogic_CreateCCB(HostAdapter)) break;
+  BusLogic_CreateAdditionalCCBs(HostAdapter,
+				HostAdapter->IncrementalCCBs,
+				true);
   CCB = HostAdapter->Free_CCBs;
-  if (CCB == NULL)
-    {
-      BusLogic_Notice("Failed to allocate additional CCBs\n", HostAdapter);
-      return NULL;
-    }
-  BusLogic_Notice("Allocated %d additional CCBs\n", HostAdapter, Allocated);
+  if (CCB == NULL) return NULL;
   CCB->SerialNumber = ++SerialNumber;
   HostAdapter->Free_CCBs = CCB->Next;
   CCB->Next = NULL;
@@ -1514,7 +1540,7 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
       HostAdapter->MaxTargetDevices = (HostAdapter->HostWideSCSI ? 16 : 8);
       HostAdapter->MaxLogicalUnits = 32;
       HostAdapter->InitialCCBs = 64;
-      HostAdapter->IncrementalCCBs = 32;
+      HostAdapter->IncrementalCCBs = 16;
       HostAdapter->DriverQueueDepth = 255;
       HostAdapter->HostAdapterQueueDepth = HostAdapter->DriverQueueDepth;
       HostAdapter->SynchronousPermitted = FlashPointInfo->SynchronousPermitted;
@@ -1833,14 +1859,14 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
       HostAdapter->StrictRoundRobinModeSupport = true;
       HostAdapter->MailboxCount = 255;
       HostAdapter->InitialCCBs = 64;
-      HostAdapter->IncrementalCCBs = 32;
+      HostAdapter->IncrementalCCBs = 16;
     }
   else
     {
       HostAdapter->StrictRoundRobinModeSupport = false;
       HostAdapter->MailboxCount = 32;
       HostAdapter->InitialCCBs = 32;
-      HostAdapter->IncrementalCCBs = 4;
+      HostAdapter->IncrementalCCBs = 8;
     }
   HostAdapter->DriverQueueDepth = HostAdapter->MailboxCount;
   /*
@@ -2604,6 +2630,7 @@ static void BusLogic_SelectQueueDepths(SCSI_Host_T *Host,
   int TaggedQueueDepth = HostAdapter->TaggedQueueDepth;
   int UntaggedQueueDepth = HostAdapter->UntaggedQueueDepth;
   int TaggedDeviceCount = 0, UntaggedDeviceCount = 0;
+  int DesiredCCBs = HostAdapter->MaxTargetDevices - 1;
   SCSI_Device_T *Device;
   for (Device = DeviceList; Device != NULL; Device = Device->next)
     if (Device->host == Host)
@@ -2630,7 +2657,11 @@ static void BusLogic_SelectQueueDepths(SCSI_Host_T *Host,
 	  Device->queue_depth = TaggedQueueDepth;
 	else Device->queue_depth = UntaggedQueueDepth;
 	HostAdapter->QueueDepth[Device->id] = Device->queue_depth;
+	DesiredCCBs += Device->queue_depth;
       }
+  BusLogic_CreateAdditionalCCBs(HostAdapter,
+				DesiredCCBs - HostAdapter->AllocatedCCBs,
+				false);
 }
 
 
@@ -2744,16 +2775,16 @@ int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *HostTemplate)
       /*
 	Read the Host Adapter Configuration, Configure the Host Adapter,
 	Acquire the System Resources necessary to use the Host Adapter,
-	then Test Interrupts, Create the Mailboxes, CCBs, and Target
-	Device Statistics, Initialize the Host Adapter, and finally
-	perform Target Device Inquiry.
+	then Test Interrupts, Create the Mailboxes, Initial CCBs, and
+	Target Device Statistics, Initialize the Host Adapter, and
+	finally perform Target Device Inquiry.
       */
       if (BusLogic_ReadHostAdapterConfiguration(HostAdapter) &&
 	  BusLogic_ReportHostAdapterConfiguration(HostAdapter) &&
 	  BusLogic_AcquireResources(HostAdapter) &&
 	  BusLogic_TestInterrupts(HostAdapter) &&
 	  BusLogic_CreateMailboxes(HostAdapter) &&
-	  BusLogic_CreateCCBs(HostAdapter) &&
+	  BusLogic_CreateInitialCCBs(HostAdapter) &&
 	  BusLogic_CreateTargetDeviceStatistics(HostAdapter) &&
 	  BusLogic_InitializeHostAdapter(HostAdapter) &&
 	  BusLogic_TargetDeviceInquiry(HostAdapter))
@@ -4133,6 +4164,11 @@ int BusLogic_ProcDirectoryInfo(char *ProcBuffer, char **StartPointer,
   TargetDeviceStatistics = HostAdapter->TargetDeviceStatistics;
   Buffer = HostAdapter->MessageBuffer;
   Length = HostAdapter->MessageBufferLength;
+  Length += sprintf(&Buffer[Length], "\n\
+Current Driver Queue Depth:	%d\n\
+Currently Allocated CCBs:	%d\n",
+		    HostAdapter->DriverQueueDepth,
+		    HostAdapter->AllocatedCCBs);
   Length += sprintf(&Buffer[Length], "\n\n\
 			   DATA TRANSFER STATISTICS\n\
 \n\

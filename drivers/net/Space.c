@@ -348,6 +348,16 @@ static struct device slip_bootstrap = {
 #undef NEXT_DEV
 #define NEXT_DEV (&slip_bootstrap)
 #endif	/* SLIP */
+
+#if defined(X25_ASY) || defined(CONFIG_X25_ASY)
+	/* To be exact, this node just hooks the initialization
+	   routines to the device structures.			*/
+extern int x25_asy_init_ctrl_dev(struct device *);
+static struct device x25_asy_bootstrap = {
+  "x25_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, x25_asy_init_ctrl_dev, };
+#undef NEXT_DEV
+#define NEXT_DEV (&x25_asy_bootstrap)
+#endif	/* X25_ASY */
   
 #if defined(CONFIG_MKISS)
 	/* To be exact, this node just hooks the initialization

@@ -38,7 +38,13 @@
    Aug 21 1996:  Modified the code which maps ldns to (pun,0).  It was
    insufficient for those of us with CD-ROM changers.
    - Chris Beauregard
+
+   Mar 16 1997: Modified driver to run as a module and to support
+   multiple adapters.
+   - Klaus Kudielka
  */
+
+#include <linux/module.h>
 
 #include <linux/kernel.h>
 #include <linux/head.h>
@@ -64,15 +70,9 @@
    Driver Description
 
    (A) Subsystem Detection
-   This is done in find_adapter() function and is easy, since
+   This is done in the ibmmca_detect() function and is easy, since
    the information about MCA integrated subsystems and plug-in 
    adapters is readily available in structure *mca_info.
-
-   In case you have more than one SCSI subsystem, only one can be used,
-   and its I/O port addresses should be standard 0x3540-7. To use more
-   than one adapter, the sharing of interrupt 14 would have to be 
-   supported in Linux (it is not at present, but could be, since MCA 
-   interrupts are level-triggered).
 
    (B) Physical Units, Logical Units, and Logical Devices
    There can be up to 56 devices on SCSI bus (besides the adapter):
@@ -136,7 +136,7 @@
    100% sure that it is correct for larger disks.
 
    (F) Kernel Boot Option 
-   The function ibmmca_scsi_setup() is called if option ibmmcascsi=n 
+   The function ibmmca_scsi_setup() is called if option ibmmcascsi=... 
    is passed to the kernel. See file linux/init/main.c for details.
  */
 
@@ -153,12 +153,25 @@
  * keyboard controller, serial port controller, VGA, and XGA.
  */
 
-/*addresses of hardware registers on the subsystem */
-#define IM_CMD_REG   0x3540	/*Command Interface, (4 bytes long) */
-#define IM_ATTN_REG  0x3544	/*Attention (1 byte) */
-#define IM_CTR_REG   0x3545	/*Basic Control (1 byte) */
-#define IM_INTR_REG  0x3546	/*Interrupt Status (1 byte, read only) */
-#define IM_STAT_REG  0x3547	/*Basic Status (1 byte, read only) */
+/* driver configuration */
+#define IM_MAX_HOSTS      8             /* maximum number of host adapters */
+#define IM_RESET_DELAY    10            /* seconds allowed for a reset */
+
+/* driver debugging - #undef all for normal operation */
+#undef  IM_DEBUG_TIMEOUT  50            /* if defined: count interrupts
+					   and ignore this special one */
+#undef  IM_DEBUG_INT                    /* verbose interrupt */
+#undef  IM_DEBUG_CMD                    /* verbose queuecommand */
+
+/* addresses of hardware registers on the subsystem */
+#define IM_CMD_REG   (shpnt->io_port)	/*Command Interface, (4 bytes long) */
+#define IM_ATTN_REG  (shpnt->io_port+4)	/*Attention (1 byte) */
+#define IM_CTR_REG   (shpnt->io_port+5)	/*Basic Control (1 byte) */
+#define IM_INTR_REG  (shpnt->io_port+6)	/*Interrupt Status (1 byte, r/o) */
+#define IM_STAT_REG  (shpnt->io_port+7)	/*Basic Status (1 byte, read only) */
+
+#define IM_IO_PORT   0x3540
+#define IM_N_IO_PORT 8
 
 /*requests going into the upper nibble of the Attention register */
 /*note: the lower nibble specifies the device(0-14), or subsystem(15) */
@@ -314,40 +327,67 @@ struct logical_device
     int is_disk;
     int block_length;
   };
-static struct logical_device ld[MAX_LOG_DEV];
 
-/*if this is nonzero, ibmmcascsi option has been passed to the kernel */
-static int setup_called = 0;
+/* data structure for each host adapter */
+struct ibmmca_hostdata
+  {
+    /* array of logical devices */
+    struct logical_device _ld[MAX_LOG_DEV];
+    /* array to convert (pun, lun) into logical device number */
+    unsigned char _get_ldn[8][8];
+    /* used only when checking logical devices */
+    int _local_checking_phase_flag;
+    int _got_interrupt;
+    int _stat_result;
+    /* reset status (used only when doing reset) */
+    int _reset_status;
+  };
 
-/*scsi id (physical unit number) of subsystem (set during detect) */
-static int subsystem_pun;
-
-/*array to convert (pun, lun) into logical device number */
-static unsigned char get_ldn[8][8];
-
-/*counter of concurrent disk read/writes, to turn on/off disk led */
-static int disk_rw_in_progress;
-
-/*used only when checking logical devices */
-static int local_checking_phase_flag;
-static int got_interrupt;
-static int stat_result;
-
-/*reset status and its values (used only when doing reset) */
-static int reset_status;
+/* reset status values */
 #define IM_RESET_NOT_IN_PROGRESS   0
 #define IM_RESET_IN_PROGRESS       1
 #define IM_RESET_FINISHED_OK       2
 #define IM_RESET_FINISHED_FAIL     3
 
+/* macros to access host data structure */
+#define HOSTDATA(shpnt) ((struct ibmmca_hostdata *) shpnt->hostdata)
+#define subsystem_pun (shpnt->this_id)
+#define ld (HOSTDATA(shpnt)->_ld)
+#define get_ldn (HOSTDATA(shpnt)->_get_ldn)
+#define local_checking_phase_flag (HOSTDATA(shpnt)->_local_checking_phase_flag)
+#define got_interrupt (HOSTDATA(shpnt)->_got_interrupt)
+#define stat_result (HOSTDATA(shpnt)->_stat_result)
+#define reset_status (HOSTDATA(shpnt)->_reset_status)
+
+/*--------------------------------------------------------------------*/
+
+/* if this is nonzero, ibmmcascsi option has been passed to the kernel */
+static int io_port[IM_MAX_HOSTS] = { 0 };
+static int scsi_id[IM_MAX_HOSTS] = { 7 };
+
+MODULE_PARM(io_port, "1-" __MODULE_STRING(IM_MAX_HOSTS) "i");
+MODULE_PARM(scsi_id, "1-" __MODULE_STRING(IM_MAX_HOSTS) "i");
+
+/*counter of concurrent disk read/writes, to turn on/off disk led */
+static int disk_rw_in_progress = 0;
+
+/* host information */
+static int found = 0;
+static struct Scsi_Host *hosts[IM_MAX_HOSTS+1] = { NULL };
+
+/*--------------------------------------------------------------------*/
+
 /*local functions */
 static void interrupt_handler (int irq, void *dev_id,
 			       struct pt_regs *regs);
-static void issue_cmd (unsigned long cmd_reg, unsigned char attn_reg);
+static void issue_cmd (struct Scsi_Host *shpnt, unsigned long cmd_reg,
+		       unsigned char attn_reg);
 static void internal_done (Scsi_Cmnd * cmd);
-static int find_subsystem (void);
-static void check_devices (void);
-static int device_exists (int ldn, int *is_disk, int *block_length);
+static void check_devices (struct Scsi_Host *shpnt);
+static int device_exists (struct Scsi_Host *shpnt, int ldn, int *is_disk,
+			  int *block_length);
+static struct Scsi_Host *ibmmca_register(Scsi_Host_Template * template,
+					 int port, int id);
 
 /*--------------------------------------------------------------------*/
 
@@ -355,16 +395,20 @@ static void
 interrupt_handler (int irq, void *dev_id,
 		   struct pt_regs *regs)
 {
-  /*get command result and logical device */
-  unsigned int intr_reg = inb (IM_INTR_REG);
-  unsigned int cmd_result = intr_reg & 0xf0;
-  unsigned int ldn = intr_reg & 0x0f;
+  int i = 0;
+  struct Scsi_Host *shpnt;
+  unsigned int intr_reg;
+  unsigned int cmd_result;
+  unsigned int ldn;
 
-  if (!inb (IM_STAT_REG) & IM_INTR_REQUEST)
-    {
-      printk ("ibmmca SCSI: spurious/shared interrupt?\n");
-      return;
-    }
+  do shpnt = hosts[i++];
+  while (shpnt && !(inb(IM_STAT_REG) & IM_INTR_REQUEST));
+  if (!shpnt) return;
+
+  /*get command result and logical device */
+  intr_reg = inb(IM_INTR_REG);
+  cmd_result = intr_reg & 0xf0;
+  ldn = intr_reg & 0x0f;
 
   /*must wait for attention reg not busy, then send EOI to subsystem */
   while (1)
@@ -409,9 +453,6 @@ interrupt_handler (int irq, void *dev_id,
 		}
 	      else
 		{
-		  /*reset disk led counter, turn of disk led */
-		  disk_rw_in_progress = 0;
-		  PS2_DISK_LED_OFF ();
 		  reset_status = IM_RESET_FINISHED_OK;
 		}
 	      return;
@@ -420,16 +461,29 @@ interrupt_handler (int irq, void *dev_id,
 	    panic ("IBM MCA SCSI: invalid logical device number.\n");
 	}
 
+#ifdef IM_DEBUG_TIMEOUT
+      {
+	static int count = 0;
+
+	if (++count == IM_DEBUG_TIMEOUT) {
+	  printk("IBM MCA SCSI: Ignoring interrupt.\n");
+	  return;
+	}
+      }
+#endif
+
       /*if no command structure, just return, else clear cmd */
       cmd = ld[ldn].cmd;
       if (!cmd)
 	return;
       ld[ldn].cmd = 0;
 
-      /* printk("cmd=%02x ireg=%02x ds=%02x cs=%02x de=%02x ce=%02x\n", 
-         cmd->cmnd[0], intr_reg, 
-         ld[ldn].tsb.dev_status, ld[ldn].tsb.cmd_status, 
-         ld[ldn].tsb.dev_error, ld[ldn].tsb.cmd_error); */
+#ifdef IM_DEBUG_INT
+      printk("cmd=%02x ireg=%02x ds=%02x cs=%02x de=%02x ce=%02x\n", 
+	     cmd->cmnd[0], intr_reg, 
+	     ld[ldn].tsb.dev_status, ld[ldn].tsb.cmd_status, 
+	     ld[ldn].tsb.dev_error, ld[ldn].tsb.cmd_error);
+#endif
 
       /*if this is end of disk read/write, may turn off PS/2 disk led */
       if (ld[ldn].is_disk)
@@ -457,7 +511,8 @@ interrupt_handler (int irq, void *dev_id,
 /*--------------------------------------------------------------------*/
 
 static void 
-issue_cmd (unsigned long cmd_reg, unsigned char attn_reg)
+issue_cmd (struct Scsi_Host *shpnt, unsigned long cmd_reg,
+	   unsigned char attn_reg)
 {
   /*must wait for attention reg not busy */
   while (1)
@@ -487,83 +542,29 @@ internal_done (Scsi_Cmnd * cmd)
 static int
 ibmmca_getinfo (char *buf, int slot, void *dev)
 {
+  struct Scsi_Host *shpnt = dev;
   int len = 0;
 
   len += sprintf (buf + len, "Subsystem PUN: %d\n", subsystem_pun);
-  len += sprintf (buf + len, "Detected at boot: %s\n",
-		  setup_called ? "No" : "Yes");
+  len += sprintf (buf + len, "I/O base address: 0x%x\n", shpnt->io_port);
   return len;
-}
-
-static int 
-find_subsystem (void)
-{
-  int j, list_size, slot;
-  unsigned char pos2, pos3;
-
-  /*if this is not MCA machine, return "nothing found" */
-  if (!MCA_bus)
-    return 0;
-
-  /*if ibmmcascsi setup option was passed to kernel, return "found" */
-  if (setup_called)
-    {
-      printk ("IBM MCA SCSI: forced detection, scsi id=%d.\n",
-	      subsystem_pun);
-      return 1;
-    }
-
-  /*first look for the SCSI integrated on the motherboard */
-  pos2 = mca_read_stored_pos (MCA_INTEGSCSI, 2);
-  if ((pos2 & 1) == 0)
-    {
-      pos3 = mca_read_stored_pos (MCA_INTEGSCSI, 3);
-      subsystem_pun = (pos3 & 0xe0) >> 5;
-      printk ("IBM MCA SCSI: integrated SCSI found, scsi id=%d.\n",
-	      subsystem_pun);
-      mca_set_adapter_name (MCA_INTEGSCSI, "PS/2 Integrated SCSI");
-      mca_set_adapter_procfn (MCA_INTEGSCSI, (MCA_ProcFn) ibmmca_getinfo,
-			      NULL);
-      return 1;
-    }
-
-  list_size = sizeof (subsys_list) / sizeof (struct subsys_list_struct);
-  for (j = 0; j < list_size; j += 1)
-    {
-      if ((slot = mca_find_adapter (subsys_list[j].mca_id, 0)) != MCA_NOTFOUND)
-	{
-	  pos3 = mca_read_stored_pos (slot, 3);
-	  subsystem_pun = (pos3 & 0xe0) >> 5;
-	  printk ("IBM MCA SCSI: %s found in slot %d, scsi id=%d.\n",
-		  subsys_list[j].description, slot + 1, subsystem_pun);
-
-	  mca_set_adapter_name (slot, subsys_list[j].description);
-	  mca_set_adapter_procfn (slot, (MCA_ProcFn) ibmmca_getinfo,
-				  NULL);
-
-	  return 1;
-	}
-    }
-
-  /*return "nothing found" */
-  return 0;
 }
 
 /*--------------------------------------------------------------------*/
 
 static void 
-check_devices (void)
+check_devices(struct Scsi_Host *shpnt)
 {
   int is_disk, block_length;
   int ldn;
   int num_ldn = 0;
 
-  /*check ldn's from 0 to MAX_LOG_DEV to find which devices exist */
+  /* check ldn's from 0 to MAX_LOG_DEV to find which devices exist */
   for (ldn = 0; ldn < MAX_LOG_DEV; ldn++)
     {
-      if (device_exists (ldn, &is_disk, &block_length))
+      if (device_exists(shpnt, ldn, &is_disk, &block_length))
 	{
-	  printk ("IBM MCA SCSI: logical device found at ldn=%d.\n", ldn);
+	  printk("IBM MCA SCSI: logical device found at ldn=%d.\n", ldn);
 	  ld[ldn].is_disk = is_disk;
 	  ld[ldn].block_length = block_length;
 	  get_ldn[num_ldn / 8][num_ldn % 8] = ldn;
@@ -577,7 +578,8 @@ check_devices (void)
 /*--------------------------------------------------------------------*/
 
 static int 
-device_exists (int ldn, int *is_disk, int *block_length)
+device_exists(struct Scsi_Host *shpnt, int ldn, int *is_disk,
+	      int *block_length)
 {
   struct im_scb scb;
   struct im_tsb tsb;
@@ -596,7 +598,7 @@ device_exists (int ldn, int *is_disk, int *block_length)
 
       /*issue scb to passed ldn, and busy wait for interrupt */
       got_interrupt = 0;
-      issue_cmd (virt_to_bus(&scb), IM_SCB | ldn);
+      issue_cmd (shpnt, virt_to_bus(&scb), IM_SCB | ldn);
       while (!got_interrupt)
 	barrier ();
 
@@ -633,7 +635,7 @@ device_exists (int ldn, int *is_disk, int *block_length)
 
 	  /*issue scb to passed ldn, and busy wait for interrupt */
 	  got_interrupt = 0;
-	  issue_cmd (virt_to_bus(&scb), IM_SCB | ldn);
+	  issue_cmd (shpnt, virt_to_bus(&scb), IM_SCB | ldn);
 	  while (!got_interrupt)
 	    barrier ();
 
@@ -656,47 +658,154 @@ device_exists (int ldn, int *is_disk, int *block_length)
 
 /*--------------------------------------------------------------------*/
 
+#ifdef CONFIG_SCSI_IBMMCA
+
 void 
 ibmmca_scsi_setup (char *str, int *ints)
 {
-  /*verify that one value (between 0 and 7) was specified */
-  if (setup_called++ || ints[0] != 1 || ints[1] < 0 || ints[1] >= 8)
+  int i;
+
+  for (i = 0; i < IM_MAX_HOSTS && i < ints[0]; i++)
     {
-      printk ("IBM MCA SCSI: usage: ibmmcascsi=<ADAPTER_SCSI_ID>\n");
-      return;
+      io_port[i] = ints[i+1];
     }
-  subsystem_pun = ints[1];
 }
+
+#endif
 
 /*--------------------------------------------------------------------*/
 
 int 
 ibmmca_detect (Scsi_Host_Template * template)
 {
-  /*initialize local data */
-  memset (ld, 0, sizeof ld);
-  memset (get_ldn, 0xff, sizeof get_ldn);
-  disk_rw_in_progress = 0;
-  reset_status = IM_RESET_NOT_IN_PROGRESS;
+  struct Scsi_Host *shpnt;
+  int port, id, i, list_size, slot;
+  unsigned pos2, pos3;
 
-  /*search for the subsystem, return 0 if not found */
-  if (!find_subsystem ())
+  /* if this is not MCA machine, return "nothing found" */
+  if (!MCA_bus)
     return 0;
 
-  /*get interrupt request level */
-  if (request_irq (IM_IRQ, interrupt_handler, SA_SHIRQ, "ibmmca", 0))
+  /* get interrupt request level */
+  if (request_irq (IM_IRQ, interrupt_handler, SA_SHIRQ, "ibmmca", hosts))
     {
-      printk ("IBM MCA SCSI: Unable to get IRQ %d.\n", IM_IRQ);
+      printk("IBM MCA SCSI: Unable to get IRQ %d.\n", IM_IRQ);
       return 0;
     }
 
-  /*check which logical devices exist */
+  /* if ibmmcascsi setup option was passed to kernel, return "found" */
+  for (i = 0; i < IM_MAX_HOSTS; i++)
+    if (io_port[i] > 0 && scsi_id[i] >= 0 && scsi_id[i] < 8)
+    {
+      printk("IBM MCA SCSI: forced detection, io=0x%x, scsi id=%d.\n",
+	      io_port[i], scsi_id[i]);
+      ibmmca_register(template, io_port[i], scsi_id[i]);
+    }
+  if (found) return found;
+
+  /* first look for the SCSI integrated on the motherboard */
+  pos2 = mca_read_stored_pos(MCA_INTEGSCSI, 2);
+  if ((pos2 & 1) == 0)
+    {
+      pos3 = mca_read_stored_pos(MCA_INTEGSCSI, 3);
+      port = IM_IO_PORT + ((pos2 & 0x0e) << 2);
+      id = (pos3 & 0xe0) >> 5;
+      printk("IBM MCA SCSI: integrated SCSI found, io=0x%x, scsi id=%d.\n",
+	      port, id);
+      if ((shpnt = ibmmca_register(template, port, id)))
+	{
+	  mca_set_adapter_name(MCA_INTEGSCSI, "PS/2 Integrated SCSI");
+	  mca_set_adapter_procfn(MCA_INTEGSCSI, (MCA_ProcFn) ibmmca_getinfo,
+				 shpnt);
+	}
+    }
+
+  /* now look for other adapters */
+  list_size = sizeof(subsys_list) / sizeof(struct subsys_list_struct);
+  for (i = 0; i < list_size; i++)
+    {
+      slot = 0;
+      while ((slot = mca_find_adapter(subsys_list[i].mca_id, slot))
+	     != MCA_NOTFOUND)
+	{
+	  pos2 = mca_read_stored_pos(slot, 2);
+	  pos3 = mca_read_stored_pos(slot, 3);
+	  port = IM_IO_PORT + ((pos2 & 0x0e) << 2);
+	  id = (pos3 & 0xe0) >> 5;
+	  printk ("IBM MCA SCSI: %s found in slot %d, io=0x%x, scsi id=%d.\n",
+		  subsys_list[i].description, slot + 1, port, id);
+	  if ((shpnt = ibmmca_register(template, port, id)))
+	    {
+	      mca_set_adapter_name (slot, subsys_list[i].description);
+	      mca_set_adapter_procfn (slot, (MCA_ProcFn) ibmmca_getinfo,
+				      shpnt);
+	    }
+	  slot++;
+	}
+    }
+
+  if (!found) {
+    free_irq (IM_IRQ, hosts);
+    printk("IBM MCA SCSI: No adapter attached.\n");
+  }
+
+  return found;
+}
+
+/*--------------------------------------------------------------------*/
+
+static struct Scsi_Host *
+ibmmca_register(Scsi_Host_Template * template, int port, int id)
+{
+  struct Scsi_Host *shpnt;
+  int i, j;
+
+  /* check I/O region */
+  if (check_region(port, IM_N_IO_PORT))
+    {
+      printk("IBM MCA SCSI: Unable to get I/O region 0x%x-0x%x.\n",
+	port, port + IM_N_IO_PORT);
+      return NULL;
+    }
+
+  /* register host */
+  shpnt = scsi_register(template, sizeof(struct ibmmca_hostdata));
+  if (!shpnt)
+    {
+      printk("IBM MCA SCSI: Unable to register host.\n");
+      return NULL;
+    }
+
+  /* request I/O region */
+  request_region(port, IM_N_IO_PORT, "ibmmca");
+
+  hosts[found++] = shpnt;
+  shpnt->irq = IM_IRQ;
+  shpnt->io_port = port;
+  shpnt->n_io_port = IM_N_IO_PORT;
+  shpnt->this_id = id;
+  for (i = 0; i < 8; i++)
+    for (j = 0; j < 8; j++)
+      get_ldn[i][j] = MAX_LOG_DEV;
+
+  /* check which logical devices exist */
   local_checking_phase_flag = 1;
-  check_devices ();
+  check_devices(shpnt);
   local_checking_phase_flag = 0;
 
-  /*if got here, one ibm mca subsystem has been detected */
-  return 1;
+  /* an ibm mca subsystem has been detected */
+  return shpnt;
+}
+
+/*--------------------------------------------------------------------*/
+
+int
+ibmmca_release(struct Scsi_Host *shpnt)
+{
+  release_region(shpnt->io_port, shpnt->n_io_port);
+  if (!(--found))
+    free_irq(shpnt->irq, hosts);
+  return 0;
 }
 
 /*--------------------------------------------------------------------*/
@@ -719,6 +828,7 @@ ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
   unsigned int ldn;
   unsigned int scsi_cmd;
   struct im_scb *scb;
+  struct Scsi_Host *shpnt = cmd->host;
 
   /*if (target,lun) unassigned, return error */
   ldn = get_ldn[cmd->target][cmd->lun];
@@ -764,7 +874,9 @@ ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 
   /*fill scb information dependent on scsi command */
   scsi_cmd = cmd->cmnd[0];
-  /* printk("issue scsi cmd=%02x to ldn=%d\n", scsi_cmd, ldn); */
+#ifdef IM_DEBUG_CMD
+  printk("issue scsi cmd=%02x to ldn=%d\n", scsi_cmd, ldn);
+#endif
   switch (scsi_cmd)
     {
     case READ_6:
@@ -833,7 +945,7 @@ ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
     }
 
   /*issue scb command, and return */
-  issue_cmd (virt_to_bus(scb), IM_SCB | ldn);
+  issue_cmd (shpnt, virt_to_bus(scb), IM_SCB | ldn);
   return 0;
 }
 
@@ -842,10 +954,13 @@ ibmmca_queuecommand (Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 int 
 ibmmca_abort (Scsi_Cmnd * cmd)
 {
-/*do a reset instead, since abort does not work well for me at present */
-  return ibmmca_reset (cmd);
+  /* The code below doesn't work right now, so we tell the upper layer
+     that we can't abort. This eventually causes a reset.
+     */
+  return SCSI_ABORT_SNOOZE;
 
 #if 0
+  struct Scsi_Host *shpnt = cmd->host;
   unsigned int ldn;
   void (*saved_done) (Scsi_Cmnd *);
 
@@ -870,7 +985,7 @@ ibmmca_abort (Scsi_Cmnd * cmd)
   saved_done = cmd->scsi_done;
   cmd->scsi_done = internal_done;
   cmd->SCp.Status = 0;
-  issue_cmd (IM_ABORT_IMM_CMD, IM_IMM_CMD | ldn);
+  issue_cmd (shpnt, IM_ABORT_IMM_CMD, IM_IMM_CMD | ldn);
   while (!cmd->SCp.Status)
     barrier ();
 
@@ -889,22 +1004,42 @@ ibmmca_abort (Scsi_Cmnd * cmd)
 /*--------------------------------------------------------------------*/
 
 int 
-ibmmca_reset (Scsi_Cmnd * cmd)
+ibmmca_reset (Scsi_Cmnd * cmd, unsigned int reset_flags)
 {
-  /*issue reset immediate command to subsystem, and wait for interrupt */
-  printk ("IBM MCA SCSI: resetting all devices.\n");
+  struct Scsi_Host *shpnt = cmd->host;
+  int ticks = IM_RESET_DELAY*HZ;
+
+  if (local_checking_phase_flag) {
+    printk("IBM MCA SCSI: unable to reset while checking devices.\n");
+    return SCSI_RESET_SNOOZE;
+  }
+
+  /* issue reset immediate command to subsystem, and wait for interrupt */
+  printk("IBM MCA SCSI: resetting all devices.\n");
   cli ();
   reset_status = IM_RESET_IN_PROGRESS;
-  issue_cmd (IM_RESET_IMM_CMD, IM_IMM_CMD | 0xf);
-  while (reset_status == IM_RESET_IN_PROGRESS)
-    barrier ();
+  issue_cmd (shpnt, IM_RESET_IMM_CMD, IM_IMM_CMD | 0xf);
+  while (reset_status == IM_RESET_IN_PROGRESS && --ticks) {
+    udelay(1000000/HZ);
+    barrier();
+  }
 
-  /*if reset failed, just return error */
-  if (reset_status == IM_RESET_FINISHED_FAIL)
+  /* if reset did not complete, just return an error*/
+  if (!ticks) {
+    printk("IBM MCA SCSI: reset did not complete within %d seconds.\n",
+	   IM_RESET_DELAY);
+    reset_status = IM_RESET_FINISHED_FAIL;
     return SCSI_RESET_ERROR;
+  }
+  
+  /* if reset failed, just return an error */
+  if (reset_status == IM_RESET_FINISHED_FAIL) {
+    printk("IBM MCA SCSI: reset failed.\n");
+    return SCSI_RESET_ERROR;
+  }
 
-  /*so reset finished ok - call outstanding done's, and return success */
-  printk ("IBM MCA SCSI: reset finished well.\n");
+  /* so reset finished ok - call outstanding done's, and return success */
+  printk ("IBM MCA SCSI: reset completed without error.\n");
   {
     int i;
     for (i = 0; i < MAX_LOG_DEV; i++)
@@ -947,3 +1082,11 @@ ibmmca_biosparam (Disk * disk, kdev_t dev, int *info)
 }
 
 /*--------------------------------------------------------------------*/
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = IBMMCA;
+
+#include "scsi_module.c"
+#endif
+

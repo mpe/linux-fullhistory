@@ -582,16 +582,6 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 		return status;
 	}
 
-	if (skb == NULL) {
-		dev_tint (dev);
-		printk ("skb is NULL\n");
-		return 0;
-	}
-
-	if (skb->len <= 0) {
-		printk ("skb len is %id\n", skb->len);
-		return 0;
-	}
 	/* Block a timer-based transmit from overlapping. */
 #ifdef OLD_METHOD
 	dev->tbusy = 1;

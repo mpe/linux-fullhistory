@@ -38,7 +38,7 @@
 
 static long long ext2_file_lseek(struct inode *, struct file *, long long, int);
 static long ext2_file_write (struct inode *, struct file *, const char *, unsigned long);
-static void ext2_release_file (struct inode *, struct file *);
+static int ext2_release_file (struct inode *, struct file *);
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -260,8 +260,9 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
  * from ext2_open: open gets called at every open, but release
  * gets called only when /all/ the files are closed.
  */
-static void ext2_release_file (struct inode * inode, struct file * filp)
+static int ext2_release_file (struct inode * inode, struct file * filp)
 {
 	if (filp->f_mode & 2)
 		ext2_discard_prealloc (inode);
+	return 0;
 }

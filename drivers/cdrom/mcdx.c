@@ -227,7 +227,7 @@ static void mcdx_intr(int, void *, struct pt_regs*);
 
 /* exported by file_ops */
 static int mcdx_open(struct inode*, struct file*);
-static void mcdx_close(struct inode*, struct file*);
+static int mcdx_close(struct inode*, struct file*);
 static int mcdx_ioctl(struct inode*, struct file*, unsigned int, unsigned long);
 
 /* misc internal support functions */
@@ -860,7 +860,7 @@ mcdx_open(struct inode *ip, struct file *fp)
 
 }
 
-static void
+static int
 mcdx_close(struct inode *ip, struct file *fp)
 {
     struct s_drive_stuff *stuffp;
@@ -889,7 +889,7 @@ mcdx_close(struct inode *ip, struct file *fp)
     }
 
     MOD_DEC_USE_COUNT;
-    return;
+    return 0;
 }
 
 int check_mcdx_media_change(kdev_t full_dev)

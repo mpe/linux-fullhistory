@@ -183,7 +183,7 @@ static __inline__ void kill_sk_later(struct sock *sk)
 	 * [PR]
 	 */
 		  
-	printk("Socket destroy delayed (r=%d w=%d)\n",
+	printk(KERN_DEBUG "Socket destroy delayed (r=%d w=%d)\n",
 	       sk->rmem_alloc, sk->wmem_alloc);
 
 	sk->destroy = 1;
@@ -1067,7 +1067,7 @@ void inet_proto_init(struct net_proto *pro)
 	struct sk_buff *dummy_skb;
 	struct inet_protocol *p;
 
-	printk("Swansea University Computer Society TCP/IP for NET3.037\n");
+	printk(KERN_INFO "Swansea University Computer Society TCP/IP for NET3.037\n");
 
 	if (sizeof(struct inet_skb_parm) > sizeof(dummy_skb->cb))
 	{
@@ -1087,7 +1087,7 @@ void inet_proto_init(struct net_proto *pro)
 	 *	Add all the protocols. 
 	 */
 
-	printk("IP Protocols: ");
+	printk(KERN_INFO "IP Protocols: ");
 	for(p = inet_protocol_base; p != NULL;) 
 	{
 		struct inet_protocol *tmp = (struct inet_protocol *) p->next;

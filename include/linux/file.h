@@ -12,14 +12,17 @@ extern inline struct file * fget(unsigned long fd)
 	return file;
 }
 
-extern void __fput(struct file *, struct inode *);
+extern int __fput(struct file *, struct inode *);
 
-extern inline void fput(struct file *file, struct inode *inode)
+extern inline int fput(struct file *file, struct inode *inode)
 {
 	int count = file->f_count-1;
+	int error = 0;
+
 	if (!count)
-		__fput(file, inode);
+		error = __fput(file, inode);
 	file->f_count = count;
+	return error;
 }
 
 #endif

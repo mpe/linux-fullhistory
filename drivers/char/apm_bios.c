@@ -301,7 +301,7 @@ static void	check_events(void);
 static void	do_apm_timer(unsigned long);
 
 static int	do_open(struct inode *, struct file *);
-static void	do_release(struct inode *, struct file *);
+static int	do_release(struct inode *, struct file *);
 static long	do_read(struct inode *, struct file *, char *, unsigned long);
 static unsigned int do_poll(struct file *, poll_table *);
 static int	do_ioctl(struct inode *, struct file *, u_int, u_long);
@@ -911,14 +911,14 @@ static int do_ioctl(struct inode * inode, struct file *filp,
 	return 0;
 }
 
-static void do_release(struct inode * inode, struct file * filp)
+static int do_release(struct inode * inode, struct file * filp)
 {
 	struct apm_bios_struct *	as;
 
 	as = filp->private_data;
 	filp->private_data = NULL;
 	if (check_apm_bios_struct(as, "release"))
-		return;
+		return 0;
 	if (as->standbys_pending > 0) {
 		standbys_pending -= as->standbys_pending;
 		if (standbys_pending <= 0)
@@ -944,6 +944,7 @@ static void do_release(struct inode * inode, struct file * filp)
 			as1->next = as->next;
 	}
 	kfree_s(as, sizeof(*as));
+	return 0;
 }
 
 static int do_open(struct inode * inode, struct file * filp)

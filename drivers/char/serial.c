@@ -3429,3 +3429,137 @@ void cleanup_module(void)
 }
 #endif /* MODULE */
 
+
+/*
+ * ------------------------------------------------------------
+ * Serial console driver
+ * ------------------------------------------------------------
+ */
+#ifdef CONFIG_SERIAL_CONSOLE
+
+#include <linux/console.h>
+
+/*
+ * this defines the index into rs_table for the port to use
+ */
+#ifndef CONFIG_SERIAL_CONSOLE_PORT
+#define CONFIG_SERIAL_CONSOLE_PORT	0
+#endif
+
+#define BOTH_EMPTY (UART_LSR_TEMT | UART_LSR_THRE)
+
+/* Wait for transmitter & holding register to empty */
+static inline void wait_for_xmitr(struct serial_state *ser)
+{
+	int lsr;
+	do {
+		lsr = inb(ser->port + UART_LSR);
+	} while ((lsr & BOTH_EMPTY) != BOTH_EMPTY);
+}
+
+/*
+ * Print a string to the serial port trying not to disturb any possible
+ * real use of the port...
+ */
+static int serial_console_write(const char *s, unsigned count)
+{
+	struct serial_state *ser;
+	int ier;
+	unsigned i;
+
+	ser = rs_table + CONFIG_SERIAL_CONSOLE_PORT;
+	/*
+	 * First save the IER then disable the interrupts
+	 */
+	ier = inb(ser->port + UART_IER);
+	outb(0x00, ser->port + UART_IER);
+
+	/*
+	 * Now, do each character
+	 */
+	for (i = 0; i < count; i++, s++) {
+		wait_for_xmitr(ser);
+
+		/* Send the character out. */
+		outb(*s, ser->port + UART_TX);
+
+		/* if a LF, also do CR... */
+		if (*s == 10) {
+			wait_for_xmitr(ser);
+			outb(13, ser->port + UART_TX);
+		}
+	}
+
+	/*
+	 * Finally, Wait for transmitter & holding register to empty
+	 *  and restore the IER
+	 */
+	wait_for_xmitr(ser);
+	outb(ier, ser->port + UART_IER);
+
+	return (0);
+}
+
+/*
+ * Receive character from the serial port
+ */
+static int serial_console_wait_key(void)
+{
+	struct serial_state *ser;
+	int ier;
+	int lsr;
+	int c;
+
+	ser = rs_table + CONFIG_SERIAL_CONSOLE_PORT;
+
+	/*
+	 * First save the IER then disable the interrupts so
+	 * that the real driver for the port does not get the
+	 * character.
+	 */
+	ier = inb(ser->port + UART_IER);
+	outb(0x00, ser->port + UART_IER);
+
+	do {
+		lsr = inb(ser->port + UART_LSR);
+	} while (!(lsr & UART_LSR_DR));
+	c = inb(ser->port + UART_RX);
+
+	/* Restore the interrupts */
+	outb(ier, ser->port + UART_IER);
+
+	return c;
+}
+
+static int serial_console_device(void)
+{
+	return MKDEV(TTYAUX_MAJOR, 64 + CONFIG_SERIAL_CONSOLE_PORT);
+}
+
+long serial_console_init(long kmem_start, long kmem_end)
+{
+	static struct console console = {
+		serial_console_write, 0,
+                serial_console_wait_key, serial_console_device
+	};
+	struct serial_state *ser;
+
+	ser = rs_table + CONFIG_SERIAL_CONSOLE_PORT;
+
+	/* Disable all interrupts, it works in polled mode */
+	outb(0x00, ser->port + UART_IER); 
+
+	/*
+	 * now do hardwired init
+	 */
+	outb(0x03, ser->port + UART_LCR); /* No parity, 8 data bits, 1 stop */
+	outb(0x83, ser->port + UART_LCR); /* Access divisor latch */
+	outb(0x00, ser->port + UART_DLM); /* 9600 baud */
+	outb(0x0c, ser->port + UART_DLL);
+	outb(0x03, ser->port + UART_LCR); /* Done with divisor */
+
+	register_console(&console);
+	return kmem_start;
+}
+
+#endif

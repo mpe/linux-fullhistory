@@ -330,7 +330,6 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 {
     int blocks = len / 128;
     int start = 0;
-    int i;
     int bl;
     NCR5380_local_declare();
 

@@ -132,7 +132,7 @@ unsigned short fddi_type_trans(struct sk_buff *skb, struct device *dev)
 	if(fddi->hdr.llc_8022_1.dsap==0xe0)
 	{
 		skb_pull(skb, FDDI_K_8022_HLEN-3);
-		type=htons(ETH_P_8022);
+		type=htons(ETH_P_802_2);
 	}
 	else
 	{

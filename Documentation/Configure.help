@@ -600,13 +600,6 @@ CONFIG_ALPHA_SRM
   have access to a machine on the Internet that has one of the
   programs lynx, netscape or Mosaic).
 
-Echo console messages on /dev/ttyS1
-CONFIG_SERIAL_ECHO
-  If you say Y here, all kernel messages that would usually go
-  to the console will also be sent to the device /dev/ttyS1 which
-  corresponds to a serial port; this could be useful if you attached
-  a terminal or printer to that port.
-
 Non-standard serial port support
 CONFIG_SERIAL_NONSTANDARD
   Say Y here if you have any non-standard serial boards --- boards
@@ -1533,11 +1526,12 @@ CONFIG_CHR_DEV_SG
 Probe all LUNs on each SCSI device
 CONFIG_SCSI_MULTI_LUN
   If you have a SCSI device that supports more than one LUN (Logical
-  Unit Number), e.g. a CD jukebox, you should say Y here so that all
-  will be found by the SCSI driver. An SCSI device with multiple LUNs
-  acts logically like multiple SCSI devices. The vast majority of SCSI
-  devices have only one LUN, and so most people can say N here and
-  should in fact do so, because it is safer.
+  Unit Number), e.g. a CD jukebox, and only one LUN is detected, you
+  can say Y here to force the SCSI driver to probe for multiple LUNs. 
+  A SCSI device with multiple LUNs acts logically like multiple SCSI
+  devices.  The vast majority of SCSI devices have only one LUN, and
+  so most people can say N here and should in fact do so, because it
+  is safer.
 
 Verbose SCSI error reporting (kernel size +=12K)
 CONFIG_SCSI_CONSTANTS
@@ -1886,6 +1880,12 @@ CONFIG_SCSI_IBMMCA
   whenever you want). The module will be called ibmmca.o. If you want
   to compile it as a module, say M here and read
   Documentation/modules.txt.
+  Normally, all IBM MCA SCSI adapters are automatically detected. You
+  can completely override auto-detection by specifying
+  "ibmmcascsi=io1,io2,..." at the boot loader's command prompt or
+  "io_port=io1,io2,... scsi_id=id1,id2,..." as a parameter of insmod.
+  "io" and "id" are the I/O base address and the SCSI ID of each
+  adapter, respectively.
 
 Always IN2000 SCSI support
 CONFIG_SCSI_IN2000
@@ -3820,6 +3820,17 @@ CONFIG_SYSV_FS
   Documentation/modules.txt. The module will be called sysv.o. If you
   haven't heard about all of this before, it's safe to say N.
 
+Kernel automounter support (experimental)
+CONFIG_AUTOFS_FS
+  The automounter is a tool to automatically mount remote filesystems
+  on demand.  This implementation is partially kernel-based to reduce
+  overhead in the already-mounted case; this is unlike the BSD
+  automounter (amd), which is only in user space.  To use the
+  automounter you also need the user-space tools from
+  ftp.kernel.org:/pub/linux/daemons/autofs.  If you are not a part of
+  a fairly large, distributed network, you probably do not need an
+  automounter, and can say N here.
+
 BSD UFS filesystem support (read only)
 CONFIG_UFS_FS
   BSD and derivate versions of Unix (such as SunOS, FreeBSD, NetBSD
@@ -3935,6 +3946,19 @@ CONFIG_ROMFS_FS
   and read Documentation/modules.txt.  If you don't know whether you
   need it, then you don't need it: say N.
 
+Virtual terminal
+CONFIG_VT
+  This includes support for a terminal device using display and
+  keyboard devices. Only people using embedded systems want to say N
+  here. Most say Y here.
+
+Console on virtual terminal
+CONFIG_VT_CONSOLE
+  If you enable this option, all kernel messages will be sent to the
+  device /dev/tty which corresponds to the virtual terminal you have
+  visible on your display. You should say Y here if you have no other
+  console device.
+
 Standard/generic serial support
 CONFIG_SERIAL
   This selects whether you want to include the driver for the standard
@@ -3953,6 +3977,16 @@ CONFIG_SERIAL
   system, try running gpm first.  Most people will say Y or M here, so
   that they can use serial mice, modems and similar devices connecting
   to the standard serial ports.
+
+Console on serial port
+CONFIG_SERIAL_CONSOLE
+  If you enable this option, all kernel messages will be sent to the
+  device /dev/ttyS1 which corresponds to a serial port; this could be
+  useful if you attached a terminal or printer to that port. You can
+  use this in combination with console on virtual terminal, in which
+  case you get the output on both serial and display. Most people say
+  N here so that they can use the serial port for modem, mouse or some
+  other device.
 
 Digiboard PC/Xx Support
 CONFIG_DIGI

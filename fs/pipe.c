@@ -228,25 +228,28 @@ static unsigned int connect_poll(struct file * filp, poll_table * wait)
 	return POLLOUT | POLLWRNORM;
 }
 
-static void pipe_read_release(struct inode * inode, struct file * filp)
+static int pipe_read_release(struct inode * inode, struct file * filp)
 {
 	PIPE_READERS(*inode)--;
 	wake_up_interruptible(&PIPE_WAIT(*inode));
+	return 0;
 }
 
-static void pipe_write_release(struct inode * inode, struct file * filp)
+static int pipe_write_release(struct inode * inode, struct file * filp)
 {
 	PIPE_WRITERS(*inode)--;
 	wake_up_interruptible(&PIPE_WAIT(*inode));
+	return 0;
 }
 
-static void pipe_rdwr_release(struct inode * inode, struct file * filp)
+static int pipe_rdwr_release(struct inode * inode, struct file * filp)
 {
 	if (filp->f_mode & FMODE_READ)
 		PIPE_READERS(*inode)--;
 	if (filp->f_mode & FMODE_WRITE)
 		PIPE_WRITERS(*inode)--;
 	wake_up_interruptible(&PIPE_WAIT(*inode));
+	return 0;
 }
 
 static int pipe_read_open(struct inode * inode, struct file * filp)

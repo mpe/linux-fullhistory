@@ -301,7 +301,6 @@ static struct file_operations graphdev_fops =
 	fb_ioctl,
 	fb_mmap,
 	fb_open,		/* open */
-	(void(*)(struct inode *, struct file *))
 	fb_close,		/* close */
 };
 

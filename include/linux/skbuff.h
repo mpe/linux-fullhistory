@@ -448,7 +448,7 @@ extern __inline__ unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
 	{
 		__label__ here;
 		panic(skb_put_errstr,&&here,len);
-here:
+here:          ;
 	}
 	return tmp;
 }
@@ -462,7 +462,7 @@ extern __inline__ unsigned char *skb_push(struct sk_buff *skb, unsigned int len)
 	{
 		__label__ here;
 		panic(skb_push_errstr, &&here,len);
-here:
+here:          ;
 	}
 	return skb->data;
 }
@@ -538,7 +538,6 @@ extern __inline__ void skb_orphan(struct sk_buff *skb)
 
 #endif
 
-extern struct sk_buff *		skb_realloc_headroom(struct sk_buff *skb, int newheadroom);
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);
 extern unsigned int		datagram_poll(struct socket *sock, poll_table *wait);
 extern int			skb_copy_datagram(struct sk_buff *from, int offset, char *to,int size);

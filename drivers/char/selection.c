@@ -11,6 +11,8 @@
  * Now that /dev/vcs exists, most of this can disappear again.
  */
 
+#include <linux/config.h>
+#include <linux/module.h>
 #include <linux/tty.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -306,3 +308,6 @@ int paste_selection(struct tty_struct *tty)
 	current->state = TASK_RUNNING;
 	return 0;
 }
+
+EXPORT_SYMBOL(set_selection);
+EXPORT_SYMBOL(paste_selection);

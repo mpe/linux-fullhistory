@@ -44,6 +44,9 @@ first_rule: sub_dirs
 %.s: %.c
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -S $< -o $@
 
+%.i: %.c
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -E $< > $@
+
 %.o: %.c
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -c -o $@ $<
 

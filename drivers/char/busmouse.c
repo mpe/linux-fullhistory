@@ -119,14 +119,15 @@ static int fasync_mouse(struct inode *inode, struct file *filp, int on)
  * close access to the mouse
  */
 
-static void close_mouse(struct inode * inode, struct file * file)
+static int close_mouse(struct inode * inode, struct file * file)
 {
 	fasync_mouse(inode, file, 0);
 	if (--mouse.active)
-		return;
+		return 0;
 	MSE_INT_OFF();
 	free_irq(mouse_irq, NULL);
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 /*

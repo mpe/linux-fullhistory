@@ -149,7 +149,7 @@ static int sg_open(struct inode * inode, struct file * filp)
     return 0;
 }
 
-static void sg_close(struct inode * inode, struct file * filp)
+static int sg_close(struct inode * inode, struct file * filp)
 {
     int dev=MINOR(inode->i_rdev);
     scsi_generics[dev].users--;
@@ -159,6 +159,7 @@ static void sg_close(struct inode * inode, struct file * filp)
         __MOD_DEC_USE_COUNT(sg_template.module);
     scsi_generics[dev].exclude=0;
     wake_up(&scsi_generics[dev].generic_wait);
+    return 0;
 }
 
 static char *sg_malloc(int size)

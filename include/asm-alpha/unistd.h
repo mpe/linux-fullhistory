@@ -279,7 +279,7 @@
 #define __NR_uname			339
 #define __NR_nanosleep			340
 #define __NR_mremap			341
-#define __NR_nfsctl			342
+#define __NR_nfsservctl			342
 #define __NR_setresuid			343
 #define __NR_getresuid			344
 #define __NR_pciconfig_read		345

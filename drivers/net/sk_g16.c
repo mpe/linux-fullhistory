@@ -40,9 +40,6 @@ static const char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
  *                 M. Hipp (mhipp@student.uni-tuebingen.de)
  *                 R. Bolz (Schneider & Koch, Germany)
  *
- * See README.sk_g16 for details about limitations and bugs for the
- * current version.
- *
  * To Do: 
  *        - Support of SK_G8 and other SK Network Cards.
  *        - Autoset memory mapped RAM. Check for free memory and then
@@ -320,20 +317,6 @@ static const char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
  */
 
 #define ETHERCARD_TOTAL_SIZE    SK_POS_SIZE
-
-/* 
- * Portreserve is there to mark the Card I/O Port region as used. 
- * Check_region is to check if the region at ioaddr with the size "size" 
- * is free or not.
- * Snarf_region allocates the I/O Port region.
- */
-
-#ifndef HAVE_PORTRESERVE
-
-#define check_region(ioaddr, size)              0
-#define request_region(ioaddr, size,name)       do ; while (0)
-
-#endif
 
 /* 
  * SK_DEBUG
@@ -1028,6 +1011,7 @@ static int SK_open(struct device *dev)
 static int SK_lance_init(struct device *dev, unsigned short mode)
 {
     int i;
+    unsigned long flags;
     struct priv *p = (struct priv *) dev->priv; 
     struct tmd  *tmdp;
     struct rmd  *rmdp;
@@ -1046,10 +1030,10 @@ static int SK_lance_init(struct device *dev, unsigned short mode)
     {
 	tmdp = p->tmdhead + i; 
    
-	tmdp->u.buffer = (unsigned long) p->tmdbufs[i]; /* assign buffer */
+	writel((unsigned long) p->tmdbufs[i], tmdp->u.buffer); /* assign buffer */
 	
 	/* Mark TMD as start and end of packet */
-	tmdp->u.s.status = TX_STP | TX_ENP;
+	writeb(TX_STP | TX_ENP, tmdp->u.s.status);
     }
 
 
@@ -1062,42 +1046,43 @@ static int SK_lance_init(struct device *dev, unsigned short mode)
 	rmdp = p->rmdhead + i;
 
 	
-	rmdp->u.buffer = (unsigned long) p->rmdbufs[i]; /* assign buffer */
+	writel((unsigned long) p->rmdbufs[i], rmdp->u.buffer); /* assign buffer */
 	
 	/* 
          * LANCE must be owner at beginning so that he can fill in 
 	 * receiving packets, set status and release RMD 
 	 */
 
-	rmdp->u.s.status = RX_OWN;  
+	writeb(RX_OWN, rmdp->u.s.status);
 
-	rmdp->blen = -PKT_BUF_SZ;    /* Buffer Size in a two's complement */
+	writew(-PKT_BUF_SZ, rmdp->blen); /* Buffer Size (two's complement) */
 
-	rmdp->mlen = 0;              /* init message length */       
+	writeb(0, rmdp->mlen);           /* init message length */       
 	
     }
 
     /* Fill LANCE Initialize Block */
 
-    (p->ram)->ib.mode = mode;        /* Set operation mode */
+    writew(mode, (p->ram)->ib.mode); /* Set operation mode */
 
     for (i = 0; i < ETH_ALEN; i++)   /* Set physical address */
     {
-	(p->ram)->ib.paddr[i] = dev->dev_addr[i]; 
+	writeb(dev->dev_addr[i], (p->ram)->ib.paddr[i]); 
     }
 
     for (i = 0; i < 8; i++)          /* Set multicast, logical address */
     {
-	(p->ram)->ib.laddr[i] = 0;   /* We do not use logical addressing */
+	writeb(0, (p->ram)->ib.laddr[i]); /* We do not use logical addressing */
     } 
 
     /* Set ring descriptor pointers and set number of descriptors */
 
-    (p->ram)->ib.rdrp = (int)  p->rmdhead | RMDNUMMASK;
-    (p->ram)->ib.tdrp = (int)  p->tmdhead | TMDNUMMASK;
+    writel((int)p->rmdhead | RMDNUMMASK, (p->ram)->ib.rdrp);
+    writel((int)p->tmdhead | TMDNUMMASK, (p->ram)->ib.tdrp);
 
     /* Prepare LANCE Control and Status Registers */
 
+    save_flags(flags);
     cli();
 
     SK_write_reg(CSR3, CSR3_ACON);   /* Ale Control !!!THIS MUST BE SET!!!! */
@@ -1133,7 +1118,7 @@ static int SK_lance_init(struct device *dev, unsigned short mode)
 
     SK_write_reg(CSR0, CSR0_INIT); 
 
-    sti();
+    restore_flags(flags);
 
     /* Wait until LANCE finished initialization */
     
@@ -1216,22 +1201,6 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 
     }
 
-    /* 
-     * If some upper Layer thinks we missed a transmit done interrupt
-     * we are passed NULL.
-     * (dev_queue_xmit net/inet/dev.c 
-     */
-
-    if (skb == NULL)
-    {
-        /* 
-         * Dequeue packets from transmit queue and send them.
-         */
-	dev_tint(dev); 
-                    
-	return 0;
-    }
-    
     PRINTK2(("## %s: SK_send_packet() called, CSR0 %#04x.\n", 
 	    SK_NAME, SK_read_reg(CSR0)));
 
@@ -1258,7 +1227,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 
 	memcpy_toio((tmdp->u.buffer & 0x00ffffff), skb->data, skb->len);
 
-	tmdp->blen = -len;            /* set length to transmit */
+	writew(-len, tmdp->blen);            /* set length to transmit */
 
 	/* 
 	 * Packet start and end is always set because we use the maximum
@@ -1266,7 +1235,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 	 * Relinquish ownership to LANCE
 	 */
 
-	tmdp->u.s.status = TX_OWN | TX_STP | TX_ENP;
+	writeb(TX_OWN | TX_STP | TX_ENP, tmdp->u.s.status);
 	
 	/* Start Demand Transmission */
 	SK_write_reg(CSR0, CSR0_TDMD | CSR0_INEA);
@@ -1278,7 +1247,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 	p->tmdnum &= TMDNUM-1; 
 
 	/* Do we own the next transmit buffer ? */
-	if (! ((p->tmdhead + p->tmdnum)->u.s.status & TX_OWN) )
+	if (! (readb((p->tmdhead + p->tmdnum)->u.s.status) & TX_OWN) )
 	{
 	   /* 
 	    * We own next buffer and are ready to transmit, so
@@ -1400,7 +1369,7 @@ static void SK_txintr(struct device *dev)
     p->tmdlast++;
     p->tmdlast &= TMDNUM-1;
 
-    tmdstat = tmdp->u.s.status & 0xff00; /* filter out status bits 15:08 */
+    tmdstat = readb(tmdp->u.s.status);
 
     /* 
      * We check status of transmitted packet.
@@ -1408,21 +1377,22 @@ static void SK_txintr(struct device *dev)
      */
     if (tmdstat & TX_ERR) /* Error occurred */
     {
-	printk("%s: TX error: %04x %04x\n", dev->name, (int) tmdstat,
-		(int) tmdp->status2);
+	int stat2 = readw(tmdp->status2);
 
-	if (tmdp->status2 & TX_TDR)    /* TDR problems? */
+	printk("%s: TX error: %04x %04x\n", dev->name, tmdstat, stat2);
+
+	if (stat2 & TX_TDR)    /* TDR problems? */
 	{
 	    printk("%s: tdr-problems \n", dev->name);
 	}
 
-	if (tmdp->status2 & TX_RTRY)   /* Failed in 16 attempts to transmit ? */
+	if (stat2 & TX_RTRY)   /* Failed in 16 attempts to transmit ? */
             p->stats.tx_aborted_errors++;   
-        if (tmdp->status2 & TX_LCOL)   /* Late collision ? */
+        if (stat2 & TX_LCOL)   /* Late collision ? */
             p->stats.tx_window_errors++; 
-	if (tmdp->status2 & TX_LCAR)   /* Loss of Carrier ? */  
+	if (stat2 & TX_LCAR)   /* Loss of Carrier ? */  
             p->stats.tx_carrier_errors++;
-        if (tmdp->status2 & TX_UFLO)   /* Underflow error ? */
+        if (stat2 & TX_UFLO)   /* Underflow error ? */
         {
             p->stats.tx_fifo_errors++;
 
@@ -1436,7 +1406,7 @@ static void SK_txintr(struct device *dev)
 	
 	p->stats.tx_errors++;
 
-	tmdp->status2 = 0;             /* Clear error flags */
+	writew(0, tmdp->status2);             /* Clear error flags */
     }
     else if (tmdstat & TX_MORE)        /* Collisions occurred ? */
     {
@@ -1449,7 +1419,7 @@ static void SK_txintr(struct device *dev)
          * First I did not have this in but then I thought at minimum
          * we see that something was not ok.
          * If anyone knows something better than this to handle this
-         * please report it. (see Email addresses in the README file)
+         * please report it.
          */ 
 
         p->stats.collisions++; 
@@ -1519,7 +1489,7 @@ static void SK_rxintr(struct device *dev)
      * it up to higher layer 
      */
 
-    while (!( (rmdstat = rmdp->u.s.status) & RX_OWN))
+    while (!( (rmdstat = readb(rmdp->u.s.status)) & RX_OWN))
     {
 	/* 
          * Start and end of packet must be set, because we use 
@@ -1549,7 +1519,7 @@ static void SK_rxintr(struct device *dev)
 	     * packets. 
 	     */
 
-	    rmdp->u.s.status = RX_OWN;      /* Relinquish ownership to LANCE */ 
+	    writeb(RX_OWN, rmdp->u.s.status); /* Relinquish ownership to LANCE */ 
 
 	}
 	else if (rmdstat & RX_ERR)          /* Receive Error ? */
@@ -1561,13 +1531,13 @@ static void SK_rxintr(struct device *dev)
 	    if (rmdstat & RX_FRAM) p->stats.rx_frame_errors++;
 	    if (rmdstat & RX_CRC)  p->stats.rx_crc_errors++;
 
-	    rmdp->u.s.status = RX_OWN;      /* Relinquish ownership to LANCE */
+	    writeb(RX_OWN, rmdp->u.s.status); /* Relinquish ownership to LANCE */
 
 	}
 	else /* We have a packet which can be queued for the upper layers */
 	{
 
-	    int len = (rmdp->mlen & 0x0fff);  /* extract message length from receive buffer */
+	    int len = readw(rmdp->mlen) & 0x0fff;  /* extract message length from receive buffer */
 	    struct sk_buff *skb;
 
 	    skb = dev_alloc_skb(len+2); /* allocate socket buffer */ 
@@ -1580,7 +1550,7 @@ static void SK_rxintr(struct device *dev)
 		 * to Lance, update statistics and go ahead.
 		 */
 
-		rmdp->u.s.status = RX_OWN;  /* Relinquish ownership to LANCE */
+		writeb(RX_OWN, rmdp->u.s.status); /* Relinquish ownership to LANCE */
 		printk("%s: Couldn't allocate sk_buff, deferring packet.\n",
 		       dev->name);
 		p->stats.rx_dropped++;
@@ -1618,7 +1588,7 @@ static void SK_rxintr(struct device *dev)
 	     * free our descriptor and update statistics 
 	     */
 
-	    rmdp->u.s.status = RX_OWN;
+	    writeb(RX_OWN, rmdp->u.s.status);
 	    p->stats.rx_packets++;
 
 

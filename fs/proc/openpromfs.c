@@ -405,7 +405,7 @@ write_try_string:
 	return filp->f_pos - k;
 }
 
-void property_release (struct inode *inode, struct file *filp)
+int property_release (struct inode *inode, struct file *filp)
 {
 	openprom_property *op = (openprom_property *)filp->private_data;
 	unsigned long flags;
@@ -413,7 +413,7 @@ void property_release (struct inode *inode, struct file *filp)
 	u32 node;
 	
 	if (!op)
-		return;
+		return 0;
 	node = nodes[(u16)((uint)inode->u.generic_ip)].node;
 	if ((u16)((uint)inode->u.generic_ip) == aliases) {
 		if ((op->flag & OPP_DIRTY) && (op->flag & OPP_STRING)) {
@@ -456,6 +456,7 @@ void property_release (struct inode *inode, struct file *filp)
 		}
 	}
 	kfree (filp->private_data);
+	return 0;
 }
 
 static struct file_operations openpromfs_prop_ops = {

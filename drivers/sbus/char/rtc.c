@@ -118,10 +118,11 @@ static int rtc_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void rtc_release(struct inode *inode, struct file *file)
+static int rtc_release(struct inode *inode, struct file *file)
 {
 	MOD_DEC_USE_COUNT;
 	rtc_busy = 0;
+	return 0;
 }
 
 static struct file_operations rtc_fops = {

@@ -1142,7 +1142,7 @@ mcd_open(struct inode *ip, struct file *fp)
  * On close, we flush all mcd blocks from the buffer cache.
  */
 
-static void
+static int
 mcd_release(struct inode * inode, struct file * file)
 { MOD_DEC_USE_COUNT;
   if (!--mcd_open_count) {
@@ -1150,6 +1150,7 @@ mcd_release(struct inode * inode, struct file * file)
 	sync_dev(inode->i_rdev);
 	invalidate_buffers(inode -> i_rdev);
   }
+  return 0;
 }
 
 

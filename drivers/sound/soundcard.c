@@ -127,7 +127,7 @@ sound_open (struct inode *inode, struct file *file)
   return retval;
 }
 
-static void
+static int
 sound_release (struct inode *inode, struct file *file)
 {
   int             dev;
@@ -140,6 +140,7 @@ sound_release (struct inode *inode, struct file *file)
 #ifdef MODULE
   MOD_DEC_USE_COUNT;
 #endif
+  return 0;
 }
 
 static int

@@ -392,13 +392,14 @@ static int lp_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void lp_release(struct inode *inode, struct file *file)
+static int lp_release(struct inode *inode, struct file *file)
 {
 	int dev =MINOR(inode->i_rdev);
 
 	lp_table[dev]->flags &= ~LP_BUSY;
 	lp_table[dev]->lp_release();
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 

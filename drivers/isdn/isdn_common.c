@@ -1790,7 +1790,7 @@ isdn_open(struct inode *ino, struct file *filep)
 	return -ENODEV;
 }
 
-static void
+static int
 isdn_close(struct inode *ino, struct file *filep)
 {
 	uint minor = MINOR(ino->i_rdev);
@@ -1807,13 +1807,13 @@ isdn_close(struct inode *ino, struct file *filep)
 					q->next = p->next;
 				else
 					dev->infochain = (infostruct *) (p->next);
-				return;
+				return 0;
 			}
 			q = p;
 			p = (infostruct *) (p->next);
 		}
 		printk(KERN_WARNING "isdn: No private data while closing isdnctrl\n");
-		return;
+                return 0;
 	}
 	if (minor < ISDN_MINOR_CTRL) {
 		drvidx = isdn_minor2drv(minor);
@@ -1822,23 +1822,24 @@ isdn_close(struct inode *ino, struct file *filep)
 		c.command = ISDN_CMD_UNLOCK;
 		c.driver = drvidx;
 		(void) dev->drv[drvidx]->interface->command(&c);
-		return;
+		return 0;
 	}
 	if (minor <= ISDN_MINOR_CTRLMAX) {
 		drvidx = isdn_minor2drv(minor - ISDN_MINOR_CTRL);
 		if (drvidx < 0)
-			return;
+			return 0;
 		if (dev->profd == current)
 			dev->profd = NULL;
 		c.command = ISDN_CMD_UNLOCK;
 		c.driver = drvidx;
 		(void) dev->drv[drvidx]->interface->command(&c);
-		return;
+		return 0;
 	}
 #ifdef CONFIG_ISDN_PPP
 	if (minor <= ISDN_MINOR_PPPMAX)
 		isdn_ppp_release(minor - ISDN_MINOR_PPP, filep);
 #endif
+	return 0;
 }
 
 static struct file_operations isdn_fops =

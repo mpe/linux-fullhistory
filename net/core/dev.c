@@ -250,7 +250,46 @@ struct device *dev_getbyhwaddr(unsigned short type, char *ha)
 	}
 	return(NULL);
 }
-	
+
+/*
+ *	Passed a format string - eg "lt%d" it will try and find a suitable
+ *	id. Not efficient for many devices, not called a lot..
+ */
+
+int dev_alloc_name(struct device *dev, const char *name)
+{
+	int i;
+	/*
+	 *	If you need over 100 please also fix the algorithm...
+	 */
+	for(i=0;i<100;i++)
+	{
+		sprintf(dev->name,name,i);
+		if(dev_get(dev->name)==NULL)
+			return i;
+	}
+	return -ENFILE;	/* Over 100 of the things .. bail out! */
+}
+ 
+struct device *dev_alloc(const char *name, int *err)
+{
+	struct device *dev=kmalloc(sizeof(struct device)+16, GFP_KERNEL);
+	if(dev==NULL)
+	{
+		*err=-ENOBUFS;
+		return NULL;
+	}
+	dev->name=(char *)(dev+1);	/* Name string space */
+	*err=dev_alloc_name(dev,name);
+	if(*err<0)
+	{
+		kfree(dev);
+		return NULL;
+	}
+	return dev;
+}
+
+
 /*
  *	Find and possibly load an interface.
  */
@@ -560,7 +599,7 @@ int dev_queue_xmit(struct sk_buff *skb)
 			}
 		} 
 		else
-			printk("%s: !skb->arp & !rebuild_header!\n", dev->name);
+			printk(KERN_DEBUG "%s: !skb->arp & !rebuild_header!\n", dev->name);
 	}
 
 	/*
@@ -592,7 +631,7 @@ void dev_loopback_xmit(struct sk_buff *skb)
 	skb_pull(newskb, newskb->nh.raw - newskb->data);
 	newskb->ip_summed = CHECKSUM_UNNECESSARY;
 	if (newskb->dst==NULL)
-		printk("BUG: packet without dst looped back 1\n");
+		printk(KERN_DEBUG "BUG: packet without dst looped back 1\n");
 	netif_rx(newskb);
 }
 
@@ -880,7 +919,7 @@ void dev_tint(struct device *dev)
 	 */
 
 	if (net_alias_is(dev)) {
-		printk("net alias %s transmits\n", dev->name);
+		printk(KERN_DEBUG "net alias %s transmits\n", dev->name);
 		return;
 	}
 
@@ -1010,7 +1049,7 @@ static int sprintf_stats(char *buffer, struct device *dev)
 	int size;
 	
 	if (stats)
-		size = sprintf(buffer, "%6s:%8ld %7ld %4ld %4ld %4ld %4ld %8ld %8ld %4ld %4ld %4ld %5ld %4ld\n",
+		size = sprintf(buffer, "%6s:%8lu %7lu %4lu %4lu %4lu %4lu %8lu %8lu %4lu %4lu %4lu %5lu %4lu\n",
 		   dev->name,
 		   stats->rx_bytes,
 		   stats->rx_packets, stats->rx_errors,

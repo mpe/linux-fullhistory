@@ -27,7 +27,7 @@
 
 /* Not-exported routines. */
 static int cdrom_open(struct inode *ip, struct file *fp);
-static void cdrom_release(struct inode *ip, struct file *fp);
+static int cdrom_release(struct inode *ip, struct file *fp);
 static int cdrom_ioctl(struct inode *ip, struct file *fp,
 				unsigned int cmd, unsigned long arg);
 static int cdrom_media_changed(kdev_t dev);
@@ -196,14 +196,14 @@ int open_for_data(struct cdrom_device_info * cdi)
 
 /* Admittedly, the logic below could be performed in a nicer way. */
 static
-void cdrom_release(struct inode *ip, struct file *fp)
+int cdrom_release(struct inode *ip, struct file *fp)
 {
         kdev_t dev = ip->i_rdev;
         struct cdrom_device_info *cdi = cdrom_find_device (dev);
         struct cdrom_device_ops *cdo;
 	
         if (cdi == NULL)
-                return;
+                return 0;
         cdo = cdi->ops;        
         if (cdi->use_count == 1 &&      /* last process that closes dev*/
             cdi->options & CDO_LOCK &&  
@@ -218,6 +218,7 @@ void cdrom_release(struct inode *ip, struct file *fp)
                     cdo->capability & ~cdi->mask & CDC_OPEN_TRAY)
                         cdo->tray_move(cdi, 1);
         }
+	return 0;
 }
 
 /* We want to make media_changed accessible to the user through an

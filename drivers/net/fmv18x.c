@@ -345,14 +345,6 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		sti();
 	}
 
-	/* If some higher layer thinks we've missed an tx-done interrupt
-	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	   itself. */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
-
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
 	if (set_bit(0, (void*)&dev->tbusy) != 0)

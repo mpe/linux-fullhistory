@@ -982,6 +982,7 @@ elmc_rcv_int(struct device *dev) {
             skb->protocol=eth_type_trans(skb,dev);
             netif_rx(skb);
             p->stats.rx_packets++;
+            p->stats.rx_bytes+=totlen;
           } else {
             p->stats.rx_dropped++;
 		  }

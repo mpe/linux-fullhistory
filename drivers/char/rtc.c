@@ -462,7 +462,7 @@ static int rtc_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void rtc_release(struct inode *inode, struct file *file)
+static int rtc_release(struct inode *inode, struct file *file)
 {
 
 	/*
@@ -490,6 +490,7 @@ static void rtc_release(struct inode *inode, struct file *file)
 
 	rtc_irq_data = 0;
 	rtc_status &= ~RTC_IS_OPEN;
+	return 0;
 }
 
 static unsigned int rtc_poll(struct file *file, poll_table *wait)

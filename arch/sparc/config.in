@@ -21,6 +21,9 @@ endmenu
 mainmenu_option next_comment
 comment 'General setup'
 
+define_bool CONFIG_VT y
+define_bool CONFIG_VT_CONSOLE y
+
 bool 'Support for AP1000 multicomputer' CONFIG_AP1000
 
 if [ "$CONFIG_AP1000" = "y" ]; then

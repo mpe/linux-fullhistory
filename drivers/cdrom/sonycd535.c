@@ -1434,7 +1434,7 @@ cdu_open(struct inode *inode,
  * Close the drive.  Spin it down if no task is using it.  The spin
  * down will fail if playing audio, so audio play is OK.
  */
-static void
+static int
 cdu_release(struct inode *inode,
 			struct file *filp)
 {
@@ -1460,6 +1460,7 @@ cdu_release(struct inode *inode,
 		do_sony_cmd(&cmd_no, 1, status, NULL, 0, 0);
 #endif
 	}
+	return 0;
 }
 
 

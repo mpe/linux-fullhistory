@@ -147,7 +147,7 @@ static int sd_open(struct inode * inode, struct file * filp)
     return 0;
 }
 
-static void sd_release(struct inode * inode, struct file * file)
+static int sd_release(struct inode * inode, struct file * file)
 {
     int target;
     fsync_dev(inode->i_rdev);
@@ -165,6 +165,7 @@ static void sd_release(struct inode * inode, struct file * file)
         __MOD_DEC_USE_COUNT(rscsi_disks[target].device->host->hostt->module);
     if(sd_template.module)
         __MOD_DEC_USE_COUNT(sd_template.module);
+    return 0;
 }
 
 static void sd_geninit(struct gendisk *);
@@ -491,7 +492,7 @@ static void do_sd_request (void)
 	     * from user space, since we do not want to
 	     * sleep from an interrupt.
 	     */
-	    if( SDev->removable && !intr_count )
+	    if( SDev->removable && !in_interrupt() )
 	    {
                 scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
 		/* scsi_ioctl may allow CURRENT to change, so start over. */

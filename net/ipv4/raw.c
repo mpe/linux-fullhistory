@@ -285,7 +285,7 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 		if (usin->sin_family != AF_INET) {
 			static int complained;
 			if (!complained++)
-				printk("%s forgot to set AF_INET in raw sendmsg. Fix it!\n", current->comm);
+				printk(KERN_INFO "%s forgot to set AF_INET in raw sendmsg. Fix it!\n", current->comm);
 			if (usin->sin_family)
 				return -EINVAL;
 		}

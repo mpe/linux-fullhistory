@@ -109,7 +109,7 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-unsigned int de600_debug = DE600_DEBUG;
+static unsigned int de600_debug = DE600_DEBUG;
 MODULE_PARM(de600_debug, "i");
 
 #ifdef FAKE_SMALL_MAX
@@ -401,17 +401,6 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 	int	len;
 	int	tickssofar;
 	byte	*buffer = skb->data;
-
-	/*
-	 * If some higher layer thinks we've missed a
-	 * tx-done interrupt we are passed NULL.
-	 * Caution: dev_tint() handles the cli()/sti() itself.
-	 */
-
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
 
 	if (free_tx_pages <= 0) {	/* Do timeouts, to avoid hangs. */
 		tickssofar = jiffies - dev->trans_start;

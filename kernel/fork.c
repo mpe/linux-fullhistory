@@ -292,7 +292,16 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	/* ok, now we should be set up.. */
 	p->swappable = 1;
 	p->exit_signal = clone_flags & CSIGNAL;
-	p->counter = current->counter >> 1;
+
+	/*
+	 * "share" dynamic priority between parent and child, thus the
+	 * total amount of dynamic priorities in the system doesnt change,
+	 * more scheduling fairness. This is only important in the first
+	 * timeslice, on the long run the scheduling behaviour is unchanged.
+	 */
+	current->counter >>= 1;
+	p->counter = current->counter;
+
 	if(p->pid) {
 		wake_up_process(p);		/* do this last, just in case */
 	} else {

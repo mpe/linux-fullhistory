@@ -1482,13 +1482,6 @@ static int pi_send_packet(struct sk_buff *skb, struct device *dev)
 {
     struct pi_local *lp = (struct pi_local *) dev->priv;
 
-    /* If some higher layer thinks we've missed an tx-done interrupt
-	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	   itself. */
-    if (skb == NULL) {
-	dev_tint(dev);
-	return 0;
-    }
     hardware_send_packet(lp, skb);
     dev->trans_start = jiffies;
 

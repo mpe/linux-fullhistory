@@ -196,7 +196,7 @@ static long initrd_read(struct inode *inode,struct file *file,
 }
 
 
-static void initrd_release(struct inode *inode,struct file *file)
+static int initrd_release(struct inode *inode,struct file *file)
 {
 	unsigned long i;
 
@@ -204,6 +204,7 @@ static void initrd_release(struct inode *inode,struct file *file)
 	for (i = initrd_start; i < initrd_end; i += PAGE_SIZE)
 		free_page(i);
 	initrd_start = 0;
+	return 0;
 }
 
 
@@ -243,9 +244,10 @@ static int rd_open(struct inode * inode, struct file * filp)
 }
 
 #ifdef MODULE
-static void rd_release(struct inode * inode, struct file * filp)
+static int rd_release(struct inode * inode, struct file * filp)
 {
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 #endif
 

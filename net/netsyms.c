@@ -86,6 +86,9 @@ EXPORT_SYMBOL(sock_unregister);
 
 /* Socket layer support routines */
 EXPORT_SYMBOL(memcpy_fromiovec);
+EXPORT_SYMBOL(sock_create);
+EXPORT_SYMBOL(sock_alloc);
+EXPORT_SYMBOL(sock_release);
 EXPORT_SYMBOL(sock_setsockopt);
 EXPORT_SYMBOL(sock_getsockopt);
 EXPORT_SYMBOL(sock_sendmsg);
@@ -141,6 +144,10 @@ EXPORT_SYMBOL(destroy_EII_client);
 #ifdef CONFIG_ATALK_MODULE
 EXPORT_SYMBOL(sklist_destroy_socket);
 EXPORT_SYMBOL(sklist_insert_socket);
+#endif
+
+#ifdef CONFIG_SMB_FS_MODULE
+EXPORT_SYMBOL(scm_detach_fds);
 #endif
 
 #ifdef CONFIG_SMB_FS_MODULE
@@ -257,6 +264,7 @@ EXPORT_SYMBOL(tr_type_trans);
 EXPORT_SYMBOL(register_trdev);
 EXPORT_SYMBOL(unregister_trdev);
 EXPORT_SYMBOL(init_trdev);
+EXPORT_SYMBOL(csum_partial_copy);
 #endif
                   
 #ifdef CONFIG_NET_ALIAS
@@ -281,7 +289,7 @@ EXPORT_SYMBOL(unregister_net_alias_type);
 #endif
 
 /* support for loadable net drivers */
-#ifdef CONFIG_INET
+#ifdef CONFIG_NET
 EXPORT_SYMBOL(register_netdev);
 EXPORT_SYMBOL(unregister_netdev);
 EXPORT_SYMBOL(ether_setup);
@@ -300,6 +308,8 @@ EXPORT_SYMBOL(irq2dev_map);
 EXPORT_SYMBOL(dev_add_pack);
 EXPORT_SYMBOL(dev_remove_pack);
 EXPORT_SYMBOL(dev_get);
+EXPORT_SYMBOL(dev_alloc);
+EXPORT_SYMBOL(dev_alloc_name);
 EXPORT_SYMBOL(dev_ioctl);
 EXPORT_SYMBOL(dev_queue_xmit);
 #ifdef CONFIG_IP_ACCT
@@ -315,7 +325,7 @@ EXPORT_SYMBOL(tty_register_ldisc);
 EXPORT_SYMBOL(kill_fasync);
 EXPORT_SYMBOL(ip_rcv);
 EXPORT_SYMBOL(arp_rcv);
-#endif  /* CONFIG_INET */
+#endif  /* CONFIG_NET */
 
 #ifdef CONFIG_NETLINK
 EXPORT_SYMBOL(netlink_attach);

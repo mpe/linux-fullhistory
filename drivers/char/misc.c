@@ -179,10 +179,6 @@ void cleanup_module(void)
 
 EXPORT_SYMBOL(misc_register);
 EXPORT_SYMBOL(misc_deregister);
-#ifndef MODULE
-EXPORT_SYMBOL(set_selection);   /* used by the kmouse module, can only */
-EXPORT_SYMBOL(paste_selection); /* be exported if misc.c is in linked in */
-#endif
 
 #if defined(CONFIG_PROC_FS) && !defined(MODULE)
 static struct proc_dir_entry *proc_misc;	

@@ -49,6 +49,7 @@
 #include <linux/genhd.h>
 #include <linux/swap.h>
 #include <linux/ctype.h>
+#include <linux/file.h>
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD) || defined(CONFIG_BLK_DEV_IDE_MODULE) || defined(CONFIG_BLK_DEV_HD_MODULE)
 extern struct drive_info_struct drive_info;
@@ -74,7 +75,7 @@ extern unsigned char aux_device_present, kbd_read_mask;
 extern char *get_options(char *str, int *ints);
 extern void set_device_ro(int dev,int flag);
 extern struct file_operations * get_blkfops(unsigned int);
-extern void blkdev_release(struct inode * inode);
+extern int blkdev_release(struct inode * inode);
 
 extern void *sys_call_table;
 
@@ -114,6 +115,7 @@ EXPORT_SYMBOL(pci_strdev);
 EXPORT_SYMBOL(do_mmap);
 EXPORT_SYMBOL(do_munmap);
 EXPORT_SYMBOL(exit_mm);
+EXPORT_SYMBOL(exit_files);
 
 /* internal kernel memory management */
 EXPORT_SYMBOL(__get_free_pages);
@@ -132,6 +134,7 @@ EXPORT_SYMBOL(update_vm_cache);
 /* filesystem internal functions */
 EXPORT_SYMBOL(getname);
 EXPORT_SYMBOL(putname);
+EXPORT_SYMBOL(__fput);
 EXPORT_SYMBOL(__iget);
 EXPORT_SYMBOL(iput);
 EXPORT_SYMBOL(namei);
@@ -161,8 +164,14 @@ EXPORT_SYMBOL(dcache_lookup);
 EXPORT_SYMBOL(dcache_add);
 EXPORT_SYMBOL(add_blkdev_randomness);
 EXPORT_SYMBOL(generic_file_read);
+EXPORT_SYMBOL(generic_file_write);
 EXPORT_SYMBOL(generic_file_mmap);
 EXPORT_SYMBOL(generic_readpage);
+EXPORT_SYMBOL(file_lock_table);
+EXPORT_SYMBOL(posix_lock_file);
+EXPORT_SYMBOL(posix_test_lock);
+EXPORT_SYMBOL(posix_block_lock);
+EXPORT_SYMBOL(posix_unblock_lock);
 
 /* device registration */
 EXPORT_SYMBOL(register_chrdev);
@@ -308,6 +317,7 @@ EXPORT_SYMBOL(register_reboot_notifier);
 EXPORT_SYMBOL(unregister_reboot_notifier);
 EXPORT_SYMBOL(_ctype);
 EXPORT_SYMBOL(secure_tcp_sequence_number);
+EXPORT_SYMBOL(get_random_bytes);
 
 /* Signal interfaces */
 EXPORT_SYMBOL(send_sig);
@@ -352,7 +362,9 @@ EXPORT_SYMBOL(fasync_helper);
 
 /* psaux mouse */
 EXPORT_SYMBOL(aux_device_present);
+#ifdef CONFIG_VT
 EXPORT_SYMBOL(kbd_read_mask);
+#endif
 
 #ifdef CONFIG_BLK_DEV_MD
 EXPORT_SYMBOL(disk_name);	/* for md.c */

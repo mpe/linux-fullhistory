@@ -89,7 +89,7 @@ static void ps2esdi_continue_request(void);
 
 static int ps2esdi_open(struct inode *inode, struct file *file);
 
-static void ps2esdi_release(struct inode *inode, struct file *file);
+static int ps2esdi_release(struct inode *inode, struct file *file);
 
 static int ps2esdi_ioctl(struct inode *inode, struct file *file,
 			 u_int cmd, u_long arg);
@@ -1060,7 +1060,7 @@ static int ps2esdi_open(struct inode *inode, struct file *file)
 
 
 
-static void ps2esdi_release(struct inode *inode, struct file *file)
+static int ps2esdi_release(struct inode *inode, struct file *file)
 {
 	int dev = DEVICE_NR(MINOR(inode->i_rdev));
 
@@ -1068,6 +1068,7 @@ static void ps2esdi_release(struct inode *inode, struct file *file)
 		sync_dev(dev);
 		access_count[dev]--;
 	}
+	return 0;
 }
 
 

@@ -733,7 +733,9 @@ void device_setup(void)
 #ifdef CONFIG_INET
 	net_dev_init();
 #endif
+#ifdef CONFIG_VT
 	console_map_init();
+#endif
 
 	for (p = gendisk_head ; p ; p=p->next) {
 		setup_dev(p);

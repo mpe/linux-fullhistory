@@ -330,7 +330,7 @@ static void azt_transfer(void);
 static void do_aztcd_request(void);
 static void azt_invalidate_buffers(void);
 int         aztcd_open(struct inode *ip, struct file *fp);
-static void aztcd_release(struct inode * inode, struct file * file);
+static int  aztcd_release(struct inode * inode, struct file * file);
 int         aztcd_init(void);
 #ifdef MODULE
  int        init_module(void);
@@ -1542,7 +1542,7 @@ int aztcd_open(struct inode *ip, struct file *fp)
 /*
  * On close, we flush all azt blocks from the buffer cache.
  */
-static void aztcd_release(struct inode * inode, struct file * file)
+static int aztcd_release(struct inode * inode, struct file * file)
 { 
 #ifdef AZT_DEBUG
   printk("aztcd: executing aztcd_release\n");
@@ -1558,7 +1558,7 @@ static void aztcd_release(struct inode * inode, struct file * file)
            aztSendCmd(ACMD_EJECT);
         CLEAR_TIMER;
   }
-  return;
+  return 0;
 }
 
 

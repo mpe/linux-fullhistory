@@ -112,7 +112,7 @@ int tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 
 	if (size < sizeof(struct tcphdr) || size > skb->len) 
 	{
-		printk("tcp_send_skb: bad skb (skb = %p, data = %p, th = %p, len = %u)\n",
+		printk(KERN_DEBUG "tcp_send_skb: bad skb (skb = %p, data = %p, th = %p, len = %u)\n",
 			skb, skb->data, th, skb->len);
 		kfree_skb(skb, FREE_WRITE);
 		return 0;
@@ -130,7 +130,7 @@ int tcp_send_skb(struct sock *sk, struct sk_buff *skb)
                  */
 		if(!th->syn && !th->fin) 
 		{
-			printk("tcp_send_skb: attempt to queue a bogon.\n");
+			printk(KERN_DEBUG "tcp_send_skb: attempt to queue a bogon.\n");
 			kfree_skb(skb,FREE_WRITE);
 			return 0;
 		}
@@ -770,7 +770,7 @@ void tcp_send_fin(struct sock *sk)
 	if (buff == NULL)
 	{
 		/* This is a disaster if it occurs */
-		printk("tcp_send_fin: Impossible malloc failure");
+		printk(KERN_INFO "tcp_send_fin: Impossible malloc failure");
 		return;
 	}
 

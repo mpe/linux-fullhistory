@@ -1568,17 +1568,6 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 		return 1;
 	}
 
-	/* If some higher layer thinks we've missed a tx-done interrupt
-	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	   itself. */
-	if (skb == NULL) {
-		BUGMSG(D_NORMAL,"tx passed null skb (status=%Xh, inTX=%d, tickssofar=%ld)\n",
-			ARCSTATUS,lp->intx,jiffies-dev->trans_start);
-		lp->stats.tx_errors++;
-		dev_tint(dev);
-		return 0;
-	}
-
 	if (lp->txready)	/* transmit already in progress! */
 	{
 		BUGMSG(D_NORMAL,"trying to start new packet while busy! (status=%Xh)\n",

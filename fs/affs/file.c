@@ -42,7 +42,7 @@ static long affs_file_write(struct inode *inode, struct file *filp, const char *
 static long affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf,
 				unsigned long count);
 static int affs_open_file(struct inode *inode, struct file *filp);
-static void affs_release_file(struct inode *inode, struct file *filp);
+static int affs_release_file(struct inode *inode, struct file *filp);
 
 static struct file_operations affs_file_operations = {
 	NULL,			/* lseek - default */
@@ -883,7 +883,7 @@ affs_open_file(struct inode *inode, struct file *filp)
 	return error;
 }
 
-static void
+static int
 affs_release_file(struct inode *inode, struct file *filp)
 {
 	struct affs_zone	*zone;
@@ -913,4 +913,5 @@ affs_release_file(struct inode *inode, struct file *filp)
 		}
 	}
 	unlock_super(inode->i_sb);
+	return 0;
 }

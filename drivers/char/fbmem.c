@@ -247,15 +247,16 @@ fb_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void 
+static int 
 fb_release(struct inode *inode, struct file *file)
 {
 	int fbidx=GET_FB_IDX(inode->i_rdev);
 	int vidx=GET_FB_VAR_IDX(inode->i_rdev);
 	if (! vidx)
-		return;
+		return 0;
 	if (! (--fb_open_count[fbidx]))
 		fb_curr_open[fbidx]=0;
+	return 0;
 }
 
 static struct file_operations fb_fops = {

@@ -8,10 +8,11 @@
 
 /*services provided to the higher level of Linux SCSI driver */
 int ibmmca_detect (Scsi_Host_Template *);
+int ibmmca_release (struct Scsi_Host *);
 int ibmmca_command (Scsi_Cmnd *);
 int ibmmca_queuecommand (Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
 int ibmmca_abort (Scsi_Cmnd *);
-int ibmmca_reset (Scsi_Cmnd *);
+int ibmmca_reset (Scsi_Cmnd *, unsigned int);
 int ibmmca_biosparam (Disk *, kdev_t, int *);
 
 /*structure for /proc filesystem */
@@ -25,7 +26,7 @@ extern struct proc_dir_entry proc_scsi_ibmmca;
           NULL,                 /*proc info fn*/      \
           "IBMMCA",             /*name*/              \
           ibmmca_detect,        /*detect fn*/         \
-          NULL,                 /*release fn*/        \
+          ibmmca_release,       /*release fn*/        \
           NULL,                 /*info fn*/           \
           ibmmca_command,       /*command fn*/        \
           ibmmca_queuecommand,  /*queuecommand fn*/   \

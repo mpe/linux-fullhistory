@@ -227,7 +227,7 @@ int init_module(void)
 void cleanup_module(void)
 {
         if (ip_masq_raudio_done() != 0)
-                printk("ip_masq_raudio: can't remove module");
+                printk(KERN_INFO "ip_masq_raudio: can't remove module");
 }
 
 #endif /* MODULE */

@@ -104,15 +104,16 @@ static int fasync_mouse(struct inode *inode, struct file *filp, int on)
 	return 0;
 }
 
-static void release_mouse(struct inode * inode, struct file * file)
+static int release_mouse(struct inode * inode, struct file * file)
 {
 	fasync_mouse(inode, file, 0);
 	if (--mouse.active)
-		return;
+		return 0;
 	ATIXL_MSE_INT_OFF(); /* Interrupts are really shut down here */
 	mouse.ready = 0;
 	free_irq(ATIXL_MOUSE_IRQ, NULL);
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 static int open_mouse(struct inode * inode, struct file * file)

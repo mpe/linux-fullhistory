@@ -258,11 +258,11 @@ static void qp_interrupt(int cpl, void *dev_id, struct pt_regs * regs)
 #endif
 
 
-static void release_aux(struct inode * inode, struct file * file)
+static int release_aux(struct inode * inode, struct file * file)
 {
 	fasync_aux(inode, file, 0);
 	if (--aux_count)
-		return;
+		return 0;
 	/* disable kbd bh to avoid mixing of cmd bytes */
 	disable_bh(KEYBOARD_BH);
 	aux_write_cmd(AUX_INTS_OFF);		/* disable controller ints */
@@ -277,24 +277,26 @@ static void release_aux(struct inode * inode, struct file * file)
 	free_irq(AUX_IRQ, NULL);
 #endif
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 #ifdef CONFIG_82C710_MOUSE
-static void release_qp(struct inode * inode, struct file * file)
+static int release_qp(struct inode * inode, struct file * file)
 {
 	unsigned char status;
 
 	fasync_aux(inode, file, 0);
-	if (--qp_count)
-		return;
-	if (!poll_qp_status())
-		printk("Warning: Mouse device busy in release_qp()\n");
-	status = inb_p(qp_status);
-	outb_p(status & ~(QP_ENABLE|QP_INTS_ON), qp_status);
-	if (!poll_qp_status())
-		printk("Warning: Mouse device busy in release_qp()\n");
-	free_irq(QP_IRQ, NULL);
-	MOD_DEC_USE_COUNT;
+	if (!--qp_count) {
+		if (!poll_qp_status())
+			printk("Warning: Mouse device busy in release_qp()\n");
+		status = inb_p(qp_status);
+		outb_p(status & ~(QP_ENABLE|QP_INTS_ON), qp_status);
+		if (!poll_qp_status())
+			printk("Warning: Mouse device busy in release_qp()\n");
+		free_irq(QP_IRQ, NULL);
+		MOD_DEC_USE_COUNT;
+	}
+	return 0;
 }
 #endif
 
@@ -544,7 +546,9 @@ int psaux_init(void)
 	if (aux_device_present == 0xaa) {
 		printk(KERN_INFO "PS/2 auxiliary pointing device detected -- driver installed.\n");
 	 	aux_present = 1;
+#ifdef CONFIG_VT
 		kbd_read_mask = AUX_OBUF_FULL;
+#endif
 	} else {
 		return -EIO;
 	}

@@ -93,7 +93,9 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 #endif
 	netif_rx(skb);
-  
+
+	stats->rx_bytes+=skb->len;
+	stats->tx_bytes+=skb->len;
 	stats->rx_packets++;
 	stats->tx_packets++;
 

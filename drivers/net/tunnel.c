@@ -268,30 +268,23 @@ int tunnel_init(struct device *dev)
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 #ifdef MODULE
 
-static int tunnel_probe(struct device *dev)
-{
-	tunnel_init(dev);
-	return 0;
-}
+
+static char tunnel_name[16];
 
 static struct device dev_tunnel = 
 {
-	"tunl0\0   ", 
+	tunnel_name, 
 	0, 0, 0, 0,
  	0x0, 0,
- 	0, 0, 0, NULL, tunnel_probe 
+ 	0, 0, 0, NULL, tunnel_init
  };
 
 int init_module(void)
 {
 	/* Find a name for this unit */
-	int ct= 1;
-	
-	while(dev_get(dev_tunnel.name)!=NULL && ct<100)
-	{
-		sprintf(dev_tunnel.name,"tunl%d",ct);
-		ct++;
-	}
+	int err=dev_alloc_name(&dev_tunnel, "tunl%d");
+	if(err<0)
+		return err;
 	
 #ifdef TUNNEL_DEBUG
 	printk("tunnel: registering device %s\n", dev_tunnel.name);

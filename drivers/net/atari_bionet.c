@@ -436,13 +436,6 @@ bionet_send_packet(struct sk_buff *skb, struct device *dev) {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned long flags;
 
-	/* If some higher layer thinks we've missed an tx-done interrupt we
-	 * are passed NULL. Caution: dev_tint() handles the cli()/sti() itself.
-	 */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
 	/* Block a timer-based transmit from overlapping.  This could better be
 	 * done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
 	 */
@@ -473,12 +466,11 @@ bionet_send_packet(struct sk_buff *skb, struct device *dev) {
 
 		dev->trans_start = jiffies;
 		dev->tbusy	 = 0;
+		lp->stats.tx_packets++;
+		lp->stats.tx_bytes+=length;
 	}
 	dev_kfree_skb(skb, FREE_WRITE);
 
-	/* You might need to clean up and record Tx statistics here.
-	 */
-	lp->stats.tx_packets++;
 	return 0;
 }
 
@@ -539,6 +531,7 @@ bionet_poll_rx(struct device *dev) {
 			memcpy(skb->data, nic_packet->buffer, pkt_len);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
+			lp->stats.rx_bytes+=pkt_len;
 		}
 	}
 
@@ -612,9 +605,10 @@ static char kernel_version[] = UTS_RELEASE;
 #undef	NEXT_DEV
 #define NEXT_DEV	(&bio_dev)
 
+static char bio_name[16];
 static struct device bio_dev =
 	{
-		"        ",	/* filled in by register_netdev() */
+		bio_name,	/* filled in by register_netdev() */
 		0, 0, 0, 0,	/* memory */
 		0, 0,		/* base, irq */
 		0, 0, 0, NEXT_DEV, bionet_probe,

@@ -1275,3 +1275,118 @@ out:
 	unlock_kernel();
 	return error;
 }
+
+/*
+ * Write to a file through the page cache. This is mainly for the
+ * benefit of NFS and possibly other network-based file systems.
+ *
+ * We currently put everything into the page cache prior to writing it.
+ * This is not a problem when writing full pages. With partial pages,
+ * however, we first have to read the data into the cache, then
+ * dirty the page, and finally schedule it for writing. Alternatively, we
+ * could write-through just the portion of data that would go into that
+ * page, but that would kill performance for applications that write data
+ * line by line, and it's prone to race conditions.
+ *
+ * Note that this routine doesn't try to keep track of dirty pages. Each
+ * file system has to do this all by itself, unfortunately.
+ *							okir@monad.swb.de
+ */
+long
+generic_file_write(struct inode *inode, struct file *file, const char *buf, unsigned long count)
+{
+	struct page	*page, **hash;
+	unsigned long	page_cache = 0;
+	unsigned long	ppos, offset;
+	unsigned int	bytes, written;
+	unsigned long	pos;
+	int		status, sync, didread = 0;
+
+	if (!inode->i_op || !inode->i_op->updatepage)
+		return -EIO;
+
+	sync    = file->f_flags & O_SYNC;
+	pos     = file->f_pos;
+	written = 0;
+	status  = 0;
+
+	if (file->f_flags & O_APPEND)
+		pos = inode->i_size;
+
+	while (count) {
+		/*
+		 * Try to find the page in the cache. If it isn't there,
+		 * allocate a free page.
+		 */
+		offset = (pos & ~PAGE_MASK);
+		ppos = pos & PAGE_MASK;
+
+		if ((bytes = PAGE_SIZE - offset) > count)
+			bytes = count;
+
+		hash = page_hash(inode, ppos);
+		if (!(page = __find_page(inode, ppos, *hash))) {
+			if (!page_cache) {
+				page_cache = __get_free_page(GFP_KERNEL);
+				if (!page_cache) {
+					status = -ENOMEM;
+					break;
+				}
+				continue;
+			}
+			page = mem_map + MAP_NR(page_cache);
+			add_to_page_cache(page, inode, ppos, hash);
+			page_cache = 0;
+		}
+
+lockit:
+		while (set_bit(PG_locked, &page->flags))
+			wait_on_page(page);
+
+		/*
+		 * If the page is not uptodate, and we're writing less
+		 * than a full page of data, we may have to read it first.
+		 * However, don't bother with reading the page when it's
+		 * after the current end of file.
+		 */
+		if (!PageUptodate(page)) {
+			/* Already tried to read it twice... too bad */
+			if (didread > 1) {
+				status = -EIO;
+				break;
+			}
+			if (bytes < PAGE_SIZE && ppos < inode->i_size) {
+				/* readpage implicitly unlocks the page */
+				status = inode->i_op->readpage(inode, page);
+				if (status < 0)
+					break;
+				didread++;
+				goto lockit;
+			}
+			set_bit(PG_uptodate, &page->flags);
+		}
+		didread = 0;
+
+		/* Alright, the page is there, and we've locked it. Now
+		 * update it. */
+		status = inode->i_op->updatepage(inode, page, buf,
+							offset, bytes, sync);
+		free_page(page_address(page));
+		if (status < 0)
+			break;
+
+		written += status;
+		count -= status;
+		pos += status;
+		buf += status;
+	}
+	file->f_pos = pos;
+	if (pos > inode->i_size)
+		inode->i_size = pos;
+
+	if (page_cache)
+		free_page(page_cache);
+	if (written)
+		return written;
+	return status;
+}

@@ -353,6 +353,7 @@ static c_char srom_repair_info[][100] = {
      0x00,0x18,}
 };
 
+#undef DE4X5_VERBOSE     /* define to get more verbose startup messages */
 
 #ifdef DE4X5_DEBUG
 static int de4x5_debug = DE4X5_DEBUG;
@@ -645,7 +646,7 @@ static struct bus_type {
 ** Also have to save the irq for those cards whose hardware designers
 ** can't follow the PCI to PCI Bridge Architecture spec.
 */
-struct {
+static struct {
     int chipset;
     int bus;
     int irq;
@@ -768,7 +769,9 @@ static void    timeout(struct device *dev, void (*fn)(u_long data), u_long data,
 static void    yawn(struct device *dev, int state);
 static int     de4x5_dev_index(char *s);
 static void    link_modules(struct device *dev, struct device *tmp);
+#ifdef MODULE
 static struct  device *unlink_modules(struct device *p);
+#endif
 static void    de4x5_dbg_open(struct device *dev);
 static void    de4x5_dbg_mii(struct device *dev, int k);
 static void    de4x5_dbg_media(struct device *dev);
@@ -807,7 +810,7 @@ struct InfoLeaf {
     int chipset;
     int (*fn)(struct device *);
 };
-struct InfoLeaf infoleaf_array[] = {
+static struct InfoLeaf infoleaf_array[] = {
     {DC21041, dc21041_infoleaf},
     {DC21140, dc21140_infoleaf},
     {DC21142, dc21142_infoleaf},
@@ -1068,7 +1071,10 @@ de4x5_hw_init(struct device *dev, u_long iobase)
 	printk("      and requires IRQ%d (provided by %s).\n", dev->irq,
 	       ((lp->bus == PCI) ? "PCI BIOS" : "EISA CNFG"));
 
-	printk("INFOLEAF_SIZE: %d\nCOMPACT: %d\n", INFOLEAF_SIZE, COMPACT);
+#ifdef DE4X5_VERBOSE
+	printk("%s: INFOLEAF_SIZE: %ld, COMPACT: %ld\n", dev->name, 
+	       INFOLEAF_SIZE, COMPACT);
+#endif
     }
     
     if (de4x5_debug & DEBUG_VERSION) {
@@ -1293,6 +1299,9 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 	    printk("%s: transmit busy, lost media or stale skb found:\n  STS:%08x\n  tbusy:%ld\n  IMR:%08x\n  OMR:%08x\n Stale skb: %s\n",dev->name, inl(DE4X5_STS), dev->tbusy, inl(DE4X5_IMR), inl(DE4X5_OMR), (lp->tx_skb[lp->tx_new] ? "YES" : "NO"));
 	}
     } else if (skb->len > 0) {
+	/* Update the byte counter */
+	lp->stats.tx_bytes += skb->len;
+
 	/* If we already have stuff queued locally, use that first */
 	if (lp->cache.skb && !dev->interrupt) {
 	    de4x5_put_cache(dev, skb);
@@ -1316,7 +1325,7 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 	}
 	if (skb) de4x5_putb_cache(dev, skb);
     }
-    
+
     lp->cache.lock = 0;
 
     return status;
@@ -1452,6 +1461,7 @@ de4x5_rx(struct device *dev)
 		    
 		/* Update stats */
 		lp->stats.rx_packets++;
+		lp->stats.rx_bytes += pkt_len;
 		de4x5_local_stats(dev, skb->data, pkt_len);
 	    }
 	    
@@ -2081,6 +2091,7 @@ link_modules(struct device *dev, struct device *tmp)
     return;
 }
 
+#ifdef MODULE
 static struct device *
 unlink_modules(struct device *p)
 {
@@ -2103,6 +2114,7 @@ unlink_modules(struct device *p)
     
     return next;
 }
+#endif
 
 /*
 ** Auto configure the media here rather than setting the port at compile
@@ -4660,12 +4672,18 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     u_long iobase = dev->base_addr;
     int i, j, status = 0;
     s32 omr;
-    union {
-	u8  addr[(HASH_TABLE_LEN * ETH_ALEN)];
-	u16 sval[(HASH_TABLE_LEN * ETH_ALEN) >> 1];
-	u32 lval[(HASH_TABLE_LEN * ETH_ALEN) >> 2];
+    struct {
+	u8  *addr;
+	u16 *sval;
+	u32 *lval;
     } tmp;
-    
+
+    tmp.addr = tmp.sval = tmp.lval = kmalloc(HASH_TABLE_LEN * ETH_ALEN, GFP_KERNEL);
+    if (!tmp.addr){ 
+      printk("%s ioctl: memory squeeze.\n", dev->name);
+      return -ENOMEM;
+    }
+
     switch(ioc->cmd) {
       case DE4X5_GET_HWADDR:           /* Get the hardware address */
 	ioc->len = ETH_ALEN;
@@ -4916,7 +4934,9 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
       default:
 	status = -EOPNOTSUPP;
     }
-    
+
+    kfree(tmp.addr);
+
     return status;
 }
 

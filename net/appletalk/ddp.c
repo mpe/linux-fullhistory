@@ -259,6 +259,7 @@ static void atif_drop_device(struct device *dev)
 		else
 			iface = &tmp->next;
 	}
+	MOD_DEC_USE_COUNT;
 }
 
 static struct atalk_iface *atif_add_device(struct device *dev, struct at_addr *sa)
@@ -277,6 +278,7 @@ static struct atalk_iface *atif_add_device(struct device *dev, struct at_addr *s
 	iface->next=atalk_iface_list;
 	atalk_iface_list=iface;
 	restore_flags(flags);
+	MOD_INC_USE_COUNT;
 	return iface;
 }
 
@@ -705,6 +707,8 @@ int atif_ioctl(int cmd, void *arg)
 			else
 			{
 				atif=atif_add_device(dev, &sa->sat_addr);
+				if (atif == NULL)
+					return -ENOMEM;
 			}
 			atif->nets= *nr;
 

@@ -1,6 +1,8 @@
 #ifndef __I386_SMPLOCK_H
 #define __I386_SMPLOCK_H
 
+#define __STR(x) #x
+
 #ifndef __SMP__
 
 #define lock_kernel()				do { } while(0)
@@ -77,9 +79,9 @@ extern __inline__ void unlock_kernel(void)
 	cli
 	decl	%0
 	jnz	1f
-	movb	%1, active_kernel_processor
+	movb	%1, " __STR(active_kernel_processor) "
 	lock
-	btrl	$0, kernel_flag
+	btrl	$0, " __STR(kernel_flag) "
 1:
 	popfl
 "	: /* no outputs */

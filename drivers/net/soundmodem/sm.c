@@ -235,6 +235,11 @@ static struct {
  * the same behaviour as par96_check_lpt in baycom.c
  */
 
+/*
+ * returns 0 if ok and != 0 on error;
+ * the same behaviour as par96_check_lpt in baycom.c
+ */
+
 static int check_lpt(unsigned int iobase)
 {
 	unsigned char b1,b2;

@@ -3493,7 +3493,7 @@ static long floppy_write(struct inode * inode, struct file * filp,
 	return ret;
 }
 
-static void floppy_release(struct inode * inode, struct file * filp)
+static int floppy_release(struct inode * inode, struct file * filp)
 {
 	int drive;
 
@@ -3511,6 +3511,7 @@ static void floppy_release(struct inode * inode, struct file * filp)
 		UDRS->fd_ref = 0;
 	}
 	floppy_release_irq_and_dma();
+	return 0;
 }
 
 /*

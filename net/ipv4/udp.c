@@ -52,6 +52,7 @@
  *		David S. Miller	:	New socket lookup architecture.
  *					Last socket cache retained as it
  *					does have a high hit rate.
+ *		Olaf Kirch	:	Don't linearise iovec on sendmsg.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -505,7 +506,8 @@ struct udpfakehdr
 	u32 saddr;
 	u32 daddr;
 	u32 other;
-	const char *from;
+	struct iovec *iov;
+	int nriov;
 	u32 wcheck;
 };
 
@@ -519,20 +521,36 @@ struct udpfakehdr
 static int udp_getfrag(const void *p, char * to, unsigned int offset, unsigned int fraglen) 
 {
 	struct udpfakehdr *ufh = (struct udpfakehdr *)p;
-	const char *src;
-	char *dst;
+	struct iovec *iov;
+	char *src;
+	char *dst = to;
 	unsigned int len;
 
-	if (offset) {
-		len = fraglen;
-	 	src = ufh->from+(offset-sizeof(struct udphdr));
-	 	dst = to;
-	} else {
-		len = fraglen-sizeof(struct udphdr);
- 		src = ufh->from;
-		dst = to+sizeof(struct udphdr);
+	if (offset == 0) {
+		fraglen -= sizeof(struct udphdr);
+		dst += sizeof(struct udphdr);
 	}
-	ufh->wcheck = csum_partial_copy_fromuser(src, dst, len, ufh->wcheck);
+
+	iov = ufh->iov;
+	do {
+		if ((len = iov->iov_len) > fraglen)
+			len = fraglen;
+		src = (char *) iov->iov_base + iov->iov_len - len;
+		ufh->wcheck = csum_partial_copy_fromuser(src,
+						dst + fraglen - len, len,
+						ufh->wcheck);
+		if ((iov->iov_len -= len) == 0) {
+			if (--(ufh->nriov) < 0) {
+				printk(KERN_NOTICE "udp_getfrag: nriov = %d\n",
+							ufh->nriov);
+				return -EINVAL;
+			}
+			iov--;
+		}
+		fraglen -= len;
+	} while (fraglen);
+	ufh->iov = iov;
+
 	if (offset == 0) {
  		ufh->wcheck = csum_partial((char *)ufh, sizeof(struct udphdr),
  				   ufh->wcheck);
@@ -556,29 +574,42 @@ static int udp_getfrag(const void *p, char * to, unsigned int offset, unsigned i
 static int udp_getfrag_nosum(const void *p, char * to, unsigned int offset, unsigned int fraglen) 
 {
 	struct udpfakehdr *ufh = (struct udpfakehdr *)p;
-	const char *src;
-	char *dst;
+	struct iovec *iov;
+	char *src;
+	char *dst = to;
 	int err;
 	unsigned int len;
 
-	if (offset) {
-		len = fraglen;
-	 	src = ufh->from+(offset-sizeof(struct udphdr));
-	 	dst = to;
-	} else {
-		len = fraglen-sizeof(struct udphdr);
- 		src = ufh->from;
-		dst = to+sizeof(struct udphdr);
+	if (offset == 0) {
+		fraglen -= sizeof(struct udphdr);
+	 	dst += sizeof(struct udphdr);
 	}
-	err = copy_from_user(dst,src,len);
+
+	iov = ufh->iov;
+	do {
+		if ((len = iov->iov_len) > fraglen)
+			len = fraglen;
+		src = (char *) iov->iov_base + iov->iov_len - len;
+		err = copy_from_user(dst + fraglen - len, src, len);
+		fraglen -= len;
+		if ((iov->iov_len -= len) == 0) {
+			if (--(ufh->nriov) < 0) {
+				printk(KERN_NOTICE "udp_getfrag: nriov = %d\n",
+							ufh->nriov);
+				return -EINVAL;
+			}
+			iov--;
+		}
+	} while (fraglen && err >= 0);
+	ufh->iov = iov;
+
 	if (offset == 0) 
 		memcpy(to, ufh, sizeof(struct udphdr));
 	return err;
 }
 
 
-static int udp_sendto(struct sock *sk, const unsigned char *from, int len,
-		      struct msghdr *msg)
+int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
 	int ulen = len + sizeof(struct udphdr);
 	struct device *dev = NULL;
@@ -675,7 +706,8 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len,
 	ufh.uh.len = htons(ulen);
 	ufh.uh.check = 0;
 	ufh.other = (htons(ulen) << 16) + IPPROTO_UDP*256;
-	ufh.from = from;
+	ufh.iov = msg->msg_iov + msg->msg_iovlen - 1;
+	ufh.nriov = msg->msg_iovlen;
 	ufh.wcheck = 0;
 
 	/* RFC1122: OK.  Provides the checksumming facility (MUST) as per */
@@ -700,44 +732,6 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len,
 		return len;
 	}
 	return err;
-}
-
-/*
- *	Temporary
- */
- 
-int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
-{
-	if(msg->msg_iovlen==1)
-		return udp_sendto(sk,msg->msg_iov[0].iov_base,len, msg);
-	else {
-		/*
-		 *	For awkward cases we linearise the buffer first. In theory this is only frames
-		 *	whose iovec's don't split on 4 byte boundaries, and soon encrypted stuff (to keep
-		 *	skip happy). We are a bit more general about it.
-		 */
-		 
-		unsigned char *buf;
-		int fs;
-		int err;
-		if(len>65515)
-			return -EMSGSIZE;
-		buf=kmalloc(len, GFP_KERNEL);
-		if(buf==NULL)
-			return -ENOBUFS;
-		err = memcpy_fromiovec(buf, msg->msg_iov, len);
-		if (err)
-			err = -EFAULT;
-		if (!err)
-		{
-			fs=get_fs();
-			set_fs(get_ds());
-			err=udp_sendto(sk,buf,len, msg);
-			set_fs(fs);
-		}
-		kfree_s(buf,len);
-		return err;
-	}
 }
 
 /*
@@ -1063,7 +1057,7 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 	ulen = ntohs(uh->len);
 	
 	if (ulen > len || len < sizeof(*uh) || ulen < sizeof(*uh)) {
-		NETDEBUG(printk("UDP: short packet: %d/%d\n", ulen, len));
+		NETDEBUG(printk(KERN_DEBUG "UDP: short packet: %d/%d\n", ulen, len));
 		udp_statistics.UdpInErrors++;
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
@@ -1086,7 +1080,7 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 		/* RFC1122: OK.  Discards the bad packet silently (as far as */
 		/* the network is concerned, anyway) as per 4.1.3.4 (MUST). */
 
-		NETDEBUG(printk("UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
+		NETDEBUG(printk(KERN_DEBUG "UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
 		       ntohl(saddr),ntohs(uh->source),
 		       ntohl(daddr),ntohs(uh->dest),
 		       ulen));

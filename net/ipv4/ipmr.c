@@ -17,6 +17,9 @@
  *	Malcolm Beattie		:	Buffer handling fixes.
  *	Alexey Kuznetsov	:	Double buffer free and other fixes.
  *	SVR Anand		:	Fixed several multicast bugs and problems.
+ *	Alexey Kuznetsov	:	Status, optimisations and more.
+ *	Brad Parker		:	Better behaviour on mrouted upcall
+ *					overflow.
  *
  *	Status:
  *		Cache manager under test. Forwarding in vague test mode
@@ -264,15 +267,16 @@ static void ipmr_cache_resolve(struct mfc_cache *cache)
  *	expects the following bizarre scheme..
  */
  
-static void ipmr_cache_report(struct sk_buff *pkt, vifi_t vifi, int assert)
+static int ipmr_cache_report(struct sk_buff *pkt, vifi_t vifi, int assert)
 {
 	struct sk_buff *skb = alloc_skb(128, GFP_ATOMIC);
 	int ihl = pkt->nh.iph->ihl<<2;
 	struct igmphdr *igmp;
 	struct igmpmsg *msg;
+	int ret;
 
 	if(!skb)
-		return;
+		return -ENOMEM;
 		
 	/*
 	 *	Copy the IP header
@@ -299,9 +303,16 @@ static void ipmr_cache_report(struct sk_buff *pkt, vifi_t vifi, int assert)
 	/*
 	 *	Deliver to mrouted
 	 */
-	if(sock_queue_rcv_skb(mroute_socket,skb)<0)
+	if((ret=sock_queue_rcv_skb(mroute_socket,skb))<0)
 	{
+		static unsigned long last_warn;
+		if(jiffies-last_warn>10*HZ)
+		{
+			last_warn=jiffies;
+			printk("mroute: pending queue full, dropping entries.\n");
+		}
 		kfree_skb(skb, FREE_READ);
+		return ret;
 	}
 }
 
@@ -342,7 +353,12 @@ static void ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct s
 		 *	Reflect first query at mrouted.
 		 */
 		if(mroute_socket)
-			ipmr_cache_report(skb, vifi, 0);
+		{
+			/* If the report failed throw the cache entry 
+			   out - Brad Parker */
+			if(ipmr_cache_report(skb, vifi, 0)<0)
+				impr_cache_delete(cache);
+		}
 	}
 	/*
 	 *	See if we can append the packet

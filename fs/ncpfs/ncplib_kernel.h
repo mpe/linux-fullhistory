@@ -29,89 +29,11 @@ int
 ncp_negotiate_buffersize(struct ncp_server *server, int size,
 			 int *target);
 int
-ncp_get_encryption_key(struct ncp_server *server,
-		       char *target);
-int
-ncp_get_bindery_object_id(struct ncp_server *server,
-			  int object_type, char *object_name,
-			  struct ncp_bindery_object *target);
-int
-ncp_login_encrypted(struct ncp_server *server,
-		    struct ncp_bindery_object *object,
-		    unsigned char *key,
-		    unsigned char *passwd);
-int
-ncp_login_user(struct ncp_server *server,
-	       unsigned char *username,
-	       unsigned char *password);
-int
 ncp_get_volume_info_with_number(struct ncp_server *server, int n,
 				struct ncp_volume_info *target);
 
 int
-ncp_get_volume_number(struct ncp_server *server, const char *name,
-		      int *target);
-
-int
-ncp_file_search_init(struct ncp_server *server,
-		     int dir_handle, const char *path,
-		     struct ncp_filesearch_info *target);
-
-int
-ncp_file_search_continue(struct ncp_server *server,
-			 struct ncp_filesearch_info *fsinfo,
-			 int attributes, const char *path,
-			 struct ncp_file_info *target);
-
-int
-ncp_get_finfo(struct ncp_server *server,
-	      int dir_handle, const char *path, const char *name,
-	      struct ncp_file_info *target);
-
-int
-ncp_open_file(struct ncp_server *server,
-	      int dir_handle, const char *path,
-	      int attr, int access,
-	      struct ncp_file_info *target);
-int
 ncp_close_file(struct ncp_server *server, const char *file_id);
-
-int
-ncp_create_newfile(struct ncp_server *server,
-		   int dir_handle, const char *path,
-		   int attr,
-		   struct ncp_file_info *target);
-
-int
-ncp_create_file(struct ncp_server *server,
-		int dir_handle, const char *path,
-		int attr,
-		struct ncp_file_info *target);
-
-int
-ncp_erase_file(struct ncp_server *server,
-	       int dir_handle, const char *path,
-	       int attr);
-
-int
-ncp_rename_file(struct ncp_server *server,
-		int old_handle, const char *old_path,
-		int attr,
-		int new_handle, const char *new_path);
-
-int
-ncp_create_directory(struct ncp_server *server,
-		     int dir_handle, const char *path,
-		     int inherit_mask);
-
-int
-ncp_delete_directory(struct ncp_server *server,
-		     int dir_handle, const char *path);
-
-int
-ncp_rename_directory(struct ncp_server *server,
-		     int dir_handle,
-		     const char *old_path, const char *new_path);
 
 int
 ncp_read(struct ncp_server *server, const char *file_id,

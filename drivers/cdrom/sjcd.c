@@ -1385,7 +1385,7 @@ int sjcd_open( struct inode *ip, struct file *fp ){
 /*
  * On close, we flush all sjcd blocks from the buffer cache.
  */
-static void sjcd_release( struct inode *inode, struct file *file ){
+static int sjcd_release( struct inode *inode, struct file *file ){
   int s;
 
 #if defined( SJCD_TRACE )
@@ -1413,6 +1413,7 @@ static void sjcd_release( struct inode *inode, struct file *file ){
       }
     }
   }
+  return 0;
 }
 
 /*

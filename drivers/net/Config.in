@@ -180,5 +180,6 @@ fi
 
 if [ "$CONFIG_X25" != "n" ]; then
   tristate 'LAPB over Ethernet driver' CONFIG_LAPBETHER
+  tristate 'X.25 async driver' CONFIG_X25_ASY
 fi
 

@@ -265,8 +265,8 @@ int at1700_probe1(struct device *dev, short ioaddr)
 
 	dev->open		= net_open;
 	dev->stop		= net_close;
-	dev->hard_start_xmit = net_send_packet;
-	dev->get_stats	= net_get_stats;
+	dev->hard_start_xmit	= net_send_packet;
+	dev->get_stats		= net_get_stats;
 	dev->set_multicast_list = &set_multicast_list;
 
 	/* Fill in the fields of 'dev' with ethernet-generic values. */
@@ -390,14 +390,6 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		lp->tx_started = 0;
 		lp->tx_queue = 0;
 		lp->tx_queue_len = 0;
-	}
-
-	/* If some higher layer thinks we've missed an tx-done interrupt
-	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	   itself. */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
 	}
 
 	/* Block a timer-based transmit from overlapping.  This could better be

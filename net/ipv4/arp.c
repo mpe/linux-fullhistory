@@ -348,7 +348,7 @@ static void arp_purge_send_q(struct arp_table *entry)
 	return;
 }
 
-static void __inline__ arp_free(struct arp_table **entryp)
+static void arp_free(struct arp_table **entryp)
 {
 	struct arp_table *entry = *entryp;
 	*entryp = entry->u.next;
@@ -802,7 +802,7 @@ static struct arp_table * arp_alloc(int how)
 	if (how > 1 && arp_unres_size >= ARP_MAX_UNRES) {
 		arp_unres_expire();
 		if (arp_unres_size >= ARP_MAX_UNRES) {
-			printk("arp_unres_size=%d\n", arp_unres_size);
+			printk(KERN_DEBUG "arp_unres_size=%d\n", arp_unres_size);
 			return NULL;
 		}
 	}
@@ -1817,16 +1817,6 @@ int arp_ioctl(unsigned int cmd, void *arg)
 			if (err)
 				return -EFAULT;
 			break;
-		case OLD_SIOCDARP:
-		case OLD_SIOCSARP:
-			if (!suser())
-				return -EPERM;
-		case OLD_SIOCGARP:
-			err = copy_from_user(&r, arg, sizeof(struct arpreq_old));
-			if (err)
-				return -EFAULT;
-			memset(&r.arp_dev, 0, sizeof(r.arp_dev));
-			break;
 		default:
 			return -EINVAL;
 	}
@@ -1857,46 +1847,10 @@ int arp_ioctl(unsigned int cmd, void *arg)
 		        return arp_req_delete(&r, dev);
 		case SIOCSARP:
 			return arp_req_set(&r, dev);
-		case OLD_SIOCDARP:
-			/* old  SIOCDARP destroys both
-			 * normal and proxy mappings
-			 */
-			r.arp_flags &= ~ATF_PUBL;
-			err = arp_req_delete(&r, dev);
-			r.arp_flags |= ATF_PUBL;
-			if (!err)
-				arp_req_delete(&r, dev);
-			else
-				err = arp_req_delete(&r, dev);
-			return err;
-		case OLD_SIOCSARP:
-			err = arp_req_set(&r, dev);
-			/* old SIOCSARP works so funny,
-			 * that its behaviour can be emulated
-			 * only approximately 8).
-			 * It should work. --ANK
-			 */
-			if (r.arp_flags & ATF_PUBL)
-			{	
-				r.arp_flags &= ~ATF_PUBL;
-				arp_req_delete(&r, dev);
-			}
-			return err;
 		case SIOCGARP:
 			err = arp_req_get(&r, dev);
 			if (!err)
 				err = copy_to_user(arg, &r, sizeof(r));
-			return err;
-		case OLD_SIOCGARP:
-			r.arp_flags &= ~ATF_PUBL;
-			err = arp_req_get(&r, dev);
-			if (err < 0)
-			{
-				r.arp_flags |= ATF_PUBL;
-				err = arp_req_get(&r, dev);
-			}
-			if (!err)
-				err = copy_to_user(arg, &r, sizeof(struct arpreq_old));
 			return err;
 	}
 	/*NOTREACHED*/

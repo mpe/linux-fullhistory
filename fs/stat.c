@@ -16,6 +16,18 @@
 
 #include <asm/uaccess.h>
 
+/*
+ * Revalidate the inode. This is required for proper NFS attribute caching.
+ */
+static __inline__ int
+do_revalidate(struct inode *inode)
+{
+	if (inode->i_op && inode->i_op->revalidate)
+		return inode->i_op->revalidate(inode);
+	return 0;
+}
+
+
 #if !defined(__alpha__) && !defined(__sparc__)
 
 /*
@@ -118,7 +130,8 @@ asmlinkage int sys_stat(char * filename, struct __old_kernel_stat * statbuf)
 	error = namei(filename,&inode);
 	if (error)
 		goto out;
-	error = cp_old_stat(inode,statbuf);
+	if ((error = do_revalidate(inode)) == 0)
+		error = cp_old_stat(inode,statbuf);
 	iput(inode);
 out:
 	unlock_kernel();
@@ -135,7 +148,8 @@ asmlinkage int sys_newstat(char * filename, struct stat * statbuf)
 	error = namei(filename,&inode);
 	if (error)
 		goto out;
-	error = cp_new_stat(inode,statbuf);
+	if ((error = do_revalidate(inode)) == 0)
+		error = cp_new_stat(inode,statbuf);
 	iput(inode);
 out:
 	unlock_kernel();
@@ -157,7 +171,8 @@ asmlinkage int sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
 	error = lnamei(filename,&inode);
 	if (error)
 		goto out;
-	error = cp_old_stat(inode,statbuf);
+	if ((error = do_revalidate(inode)) == 0)
+		error = cp_old_stat(inode,statbuf);
 	iput(inode);
 out:
 	unlock_kernel();
@@ -175,7 +190,8 @@ asmlinkage int sys_newlstat(char * filename, struct stat * statbuf)
 	error = lnamei(filename,&inode);
 	if (error)
 		goto out;
-	error = cp_new_stat(inode,statbuf);
+	if ((error = do_revalidate(inode)) == 0)
+		error = cp_new_stat(inode,statbuf);
 	iput(inode);
 out:
 	unlock_kernel();
@@ -197,7 +213,8 @@ asmlinkage int sys_fstat(unsigned int fd, struct __old_kernel_stat * statbuf)
 	lock_kernel();
 	if (fd >= NR_OPEN || !(f=current->files->fd[fd]) || !(inode=f->f_inode))
 		goto out;
-	ret = cp_old_stat(inode,statbuf);
+	if ((ret = do_revalidate(inode)) == 0)
+		ret = cp_old_stat(inode,statbuf);
 out:
 	unlock_kernel();
 	return ret;
@@ -214,7 +231,8 @@ asmlinkage int sys_newfstat(unsigned int fd, struct stat * statbuf)
 	lock_kernel();
 	if (fd >= NR_OPEN || !(f=current->files->fd[fd]) || !(inode=f->f_inode))
 		goto out;
-	err = cp_new_stat(inode,statbuf);
+	if ((err = do_revalidate(inode)) == 0)
+		err = cp_new_stat(inode,statbuf);
 out:
 	unlock_kernel();
 	return err;
@@ -235,7 +253,8 @@ asmlinkage int sys_readlink(const char * path, char * buf, int bufsiz)
 	if (error)
 		goto out;
 	error = -EINVAL;
-	if (!inode->i_op || !inode->i_op->readlink) {
+	if (!inode->i_op || !inode->i_op->readlink
+	 || (error = do_revalidate(inode)) < 0) {
 		iput(inode);
 		goto out;
 	}

@@ -1,6 +1,8 @@
 #ifndef _ASM_IO_H
 #define _ASM_IO_H
 
+#include <linux/vmalloc.h>
+
 /*
  * This file contains the definitions for the x86 IO instructions
  * inb/inw/inl/outb/outw/outl and the "string versions" of the same
@@ -184,7 +186,23 @@ extern inline void * phys_to_virt(unsigned long address)
 	return __io_virt(address);
 }
 
-extern void * ioremap(unsigned long offset, unsigned long size);
+extern void * __ioremap(unsigned long offset, unsigned long size, unsigned long flags);
+
+extern inline void * ioremap (unsigned long offset, unsigned long size)
+{
+	return __ioremap(offset, size, 0);
+}
+
+/*
+ * This one maps high address device memory and turns off caching for that area.
+ * it's useful if some control registers are in such an area and write combining
+ * or read caching is not desirable:
+ */
+extern inline void * ioremap_nocache (unsigned long offset, unsigned long size)
+{
+        return __ioremap(offset, size, _PAGE_PCD);
+}
+
 extern void iounmap(void *addr);
 
 /*

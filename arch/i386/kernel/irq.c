@@ -334,11 +334,6 @@ unsigned int local_irq_count[NR_CPUS];
 #define irq_active(cpu) \
 	(global_irq_count != local_irq_count[cpu])
 
-#define INIT_STUCK 10000000
-
-#define STUCK(x) \
-if (!--stuck) {printk(#x " stuck at %08lx, waiting for %08lx\n", where, previous); stuck = INIT_STUCK;}
-
 /*
  * "global_cli()" is a special case, in that it can hold the
  * interrupts disabled for a longish time, and also because
@@ -355,31 +350,19 @@ static inline void check_smp_invalidate(int cpu)
 	}
 }
 
-static inline void get_irqlock(int cpu, unsigned long where)
-{
-static unsigned long previous;
-	int local_count;
-	int stuck = INIT_STUCK;
+static unsigned long previous_irqholder;
 
-	if (set_bit(0,&global_irq_lock)) {
-		/* do we already hold the lock? */
-		if ((unsigned char) cpu == global_irq_holder)
-			return;
-		/* Uhhuh.. Somebody else got it. Wait.. */
-		do {
-			do {
-				STUCK(irqlock1);
-				check_smp_invalidate(cpu);
-			} while (test_bit(0,&global_irq_lock));
-		} while (set_bit(0,&global_irq_lock));		
-	}
-	/*
-	 * Ok, we got the lock bit.
-	 * But that's actually just the easy part.. Now
-	 * we need to make sure that nobody else is running
-	 * in an interrupt context. 
-	 */
-	local_count = local_irq_count[cpu];
+#undef INIT_STUCK
+#define INIT_STUCK 10000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("wait_on_irq stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", where, previous_irqholder, local_count, global_irq_count); stuck = INIT_STUCK;}
+
+static inline void wait_on_irq(int cpu, unsigned long where)
+{
+	int stuck = INIT_STUCK;
+	int local_count = local_irq_count[cpu];
 
 	/* Are we the only one in an interrupt context? */
 	while (local_count != global_irq_count) {
@@ -397,7 +380,7 @@ static unsigned long previous;
 		 * their things before trying to get the lock again.
 		 */
 		for (;;) {
-			STUCK(irqlock2);
+			STUCK;
 			check_smp_invalidate(cpu);
 			if (global_irq_count)
 				continue;
@@ -408,12 +391,44 @@ static unsigned long previous;
 		}
 		atomic_add(local_count, &global_irq_count);
 	}
+}
+
+#undef INIT_STUCK
+#define INIT_STUCK 10000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("get_irqlock stuck at %08lx, waiting for %08lx\n", where, previous_irqholder); stuck = INIT_STUCK;}
+
+static inline void get_irqlock(int cpu, unsigned long where)
+{
+	int stuck = INIT_STUCK;
+
+	if (set_bit(0,&global_irq_lock)) {
+		/* do we already hold the lock? */
+		if ((unsigned char) cpu == global_irq_holder)
+			return;
+		/* Uhhuh.. Somebody else got it. Wait.. */
+		do {
+			do {
+				STUCK;
+				check_smp_invalidate(cpu);
+			} while (test_bit(0,&global_irq_lock));
+		} while (set_bit(0,&global_irq_lock));		
+	}
+	/*
+	 * Ok, we got the lock bit.
+	 * But that's actually just the easy part.. Now
+	 * we need to make sure that nobody else is running
+	 * in an interrupt context. 
+	 */
+	wait_on_irq(cpu, where);
 
 	/*
 	 * Finally.
 	 */
 	global_irq_holder = cpu;
-	previous = where;
+	previous_irqholder = where;
 }
 
 void __global_cli(void)
@@ -485,8 +500,8 @@ static inline void irq_exit(int cpu, int irq)
 
 #else
 
-#define irq_enter(cpu, irq)	do { } while (0)
-#define irq_exit(cpu, irq)	do { } while (0)
+#define irq_enter(cpu, irq)	(++intr_count)
+#define irq_exit(cpu, irq)	(--intr_count)
 
 #endif
 

@@ -5200,7 +5200,7 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
 /*
  *  On close, we flush all sbp blocks from the buffer cache.
  */
-static void sbpcd_release(struct inode * ip, struct file * file)
+static int sbpcd_release(struct inode * ip, struct file * file)
 {
 	int i;
 	
@@ -5208,7 +5208,7 @@ static void sbpcd_release(struct inode * ip, struct file * file)
 	if ((i<0) || (i>=NR_SBPCD) || (D_S[i].drv_id==-1))
 	{
 		msg(DBG_INF, "release: bad device: %04X\n", ip->i_rdev);
-		return;
+		return 0;
 	}
 	down(&ioctl_read_sem);
 	switch_drive(i);
@@ -5236,6 +5236,7 @@ static void sbpcd_release(struct inode * ip, struct file * file)
 		}
 	}
 	up(&ioctl_read_sem);
+	return 0;
 }
 /*==========================================================================*/
 /*

@@ -167,6 +167,7 @@ CONFIG_DE4X5=y
 # CONFIG_SLIP is not set
 # CONFIG_TR is not set
 # CONFIG_LAPBETHER is not set
+# CONFIG_X25_ASY is not set
 
 #
 # ISDN subsystem
@@ -197,11 +198,14 @@ CONFIG_ISO9660_FS=y
 # CONFIG_SYSV_FS is not set
 # CONFIG_AFFS_FS is not set
 # CONFIG_ROMFS_FS is not set
+CONFIG_AUTOFS_FS=y
 # CONFIG_UFS_FS is not set
 
 #
 # Character devices
 #
+CONFIG_VT=y
+CONFIG_VT_CONSOLE=y
 CONFIG_SERIAL=y
 # CONFIG_SERIAL_EXTENDED is not set
 # CONFIG_SERIAL_NONSTANDARD is not set

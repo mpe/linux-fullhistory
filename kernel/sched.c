@@ -1553,11 +1553,11 @@ out:
 
 asmlinkage int sys_sched_yield(void)
 {
-	spin_unlock(&scheduler_lock);
+	spin_lock(&scheduler_lock);
 	spin_lock_irq(&runqueue_lock);
 	move_last_runqueue(current);
 	spin_unlock_irq(&runqueue_lock);
-	spin_lock(&scheduler_lock);
+	spin_unlock(&scheduler_lock);
 	need_resched = 1;
 	return 0;
 }
@@ -1629,48 +1629,46 @@ static void jiffiestotimespec(unsigned long jiffies, struct timespec *value)
 
 asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 {
-	int error = -EFAULT;
 	struct timespec t;
 	unsigned long expire;
 
-	lock_kernel();
 	if(copy_from_user(&t, rqtp, sizeof(struct timespec)))
-		goto out;
+		return -EFAULT;
 
-	error = -EINVAL;
 	if (t.tv_nsec >= 1000000000L || t.tv_nsec < 0 || t.tv_sec < 0)
-		goto out;
+		return -EINVAL;
+
 
 	if (t.tv_sec == 0 && t.tv_nsec <= 2000000L &&
-	    current->policy != SCHED_OTHER) {
+	    current->policy != SCHED_OTHER) 
+	{
 		/*
 		 * Short delay requests up to 2 ms will be handled with
 		 * high precision by a busy wait for all real-time processes.
+		 *
+		 * Its important on SMP not to do this holding locks.
 		 */
 		udelay((t.tv_nsec + 999) / 1000);
-		error = 0;
-		goto out;
+		return 0;
 	}
 
 	expire = timespectojiffies(&t) + (t.tv_sec || t.tv_nsec) + jiffies;
+	lock_kernel();
 	current->timeout = expire;
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
+	unlock_kernel();
 
-	error = 0;
 	if (expire > jiffies) {
 		if (rmtp) {
 			jiffiestotimespec(expire - jiffies -
 					  (expire > jiffies + 1), &t);
-			error = -EFAULT;
 			if (copy_to_user(rmtp, &t, sizeof(struct timespec)))
-				goto out;
+				return -EFAULT;
 		}
-		error = -EINTR;
+		return -EINTR;
 	}
-out:
-	unlock_kernel();
-	return error;
+	return 0;
 }
 
 static void show_task(int nr,struct task_struct * p)

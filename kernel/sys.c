@@ -893,14 +893,13 @@ int in_group_p(gid_t grp)
 			gid_t *groups = current->groups;
 			do {
 				if (*groups == grp)
-					goto out;
+					break;
 				groups++;
 				i--;
 			} while (i);
 		}
 		return 0;
 	}
-out:
 	return 1;
 }
 

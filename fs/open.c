@@ -675,14 +675,17 @@ asmlinkage int sys_creat(const char * pathname, int mode)
 
 #endif
 
-void __fput(struct file *filp, struct inode *inode)
+int __fput(struct file *filp, struct inode *inode)
 {
+	int	error = 0;
+
 	if (filp->f_op && filp->f_op->release)
-		filp->f_op->release(inode,filp);
+		error = filp->f_op->release(inode,filp);
 	filp->f_inode = NULL;
 	if (filp->f_mode & FMODE_WRITE)
 		put_write_access(inode);
 	iput(inode);
+	return error;
 }
 
 int close_fp(struct file *filp)
@@ -696,8 +699,7 @@ int close_fp(struct file *filp)
 	inode = filp->f_inode;
 	if (inode)
 		locks_remove_locks(current, filp);
-	fput(filp, inode);
-	return 0;
+	return fput(filp, inode);
 }
 
 asmlinkage int sys_close(unsigned int fd)

@@ -245,7 +245,7 @@ static unsigned long do_slow_gettimeoffset(void)
 /*
  * this is only used if we have fast gettimeoffset:
  */
-void do_x86_get_fast_time(struct timeval * tv)
+static void do_x86_get_fast_time(struct timeval * tv)
 {
 	do_gettimeofday(tv);
 }
@@ -454,7 +454,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 	  )*60 + sec; /* finally seconds */
 }
 
-unsigned long get_cmos_time(void)
+static unsigned long get_cmos_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
 	int i;

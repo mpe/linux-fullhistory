@@ -48,7 +48,7 @@ endif
 
 HEAD := arch/m68k/kernel/head.o
 
-SUBDIRS += arch/m68k/kernel arch/m68k/mm arch/m68k/console arch/m68k/lib
+SUBDIRS += arch/m68k/kernel arch/m68k/mm arch/m68k/lib
 ARCHIVES := arch/m68k/kernel/kernel.o arch/m68k/mm/mm.o $(ARCHIVES)
 LIBS += arch/m68k/lib/lib.a
 
@@ -67,8 +67,11 @@ ARCHIVES := $(ARCHIVES) arch/m68k/mac/mac.o
 SUBDIRS := $(SUBDIRS) arch/m68k/mac
 endif
 
+ifdef CONFIG_VT
 # add in console.a after {amiga,atari}.o that need it
 ARCHIVES := $(ARCHIVES) arch/m68k/console/console.a
+SUBDIRS := $(SUBDIRS) arch/m68k/console
+endif
 
 ifdef CONFIG_M68040
 ARCHIVES := $(ARCHIVES) arch/m68k/fpsp040/fpsp.o

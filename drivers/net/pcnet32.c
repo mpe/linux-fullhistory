@@ -37,9 +37,9 @@ static const char *version = "pcnet32.c:v0.23 8.2.97 tsbogend@alpha.franken.de\n
 static unsigned int pcnet32_portlist[] = {0x300, 0x320, 0x340, 0x360, 0};
 
 #ifdef PCNET32_DEBUG
-int pcnet32_debug = PCNET32_DEBUG;
+static int pcnet32_debug = PCNET32_DEBUG;
 #else
-int pcnet32_debug = 1;
+static int pcnet32_debug = 1;
 #endif
 
 /*

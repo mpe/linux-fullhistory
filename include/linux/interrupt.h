@@ -3,8 +3,10 @@
 #define _LINUX_INTERRUPT_H
 
 #include <linux/kernel.h>
+
 #include <asm/bitops.h>
 #include <asm/atomic.h>
+#include <asm/hardirq.h>
 
 struct irqaction {
 	void (*handler)(int, void *, struct pt_regs *);
@@ -77,15 +79,24 @@ extern inline void enable_bh(int nr)
  */
 extern inline void start_bh_atomic(void)
 {
+#ifdef __SMP__
 	cli();
 	atomic_inc(&intr_count);
 	sti();
+#else
+	intr_count++;
+	barrier();
+#endif
 }
 
 extern inline void end_bh_atomic(void)
 {
-	barrier();
+#ifdef __SMP__
 	atomic_dec(&intr_count);
+#else
+	barrier();
+	intr_count--;
+#endif
 }
 
 /*

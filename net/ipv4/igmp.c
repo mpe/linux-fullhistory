@@ -210,7 +210,7 @@ static void igmp_stop_timer(struct ip_mc_list *im)
 	  im->tm_running=0;
   }
   else
-	  printk(KERN_ERR "igmp_stop_timer() called with timer not running by %p\n",__builtin_return_address(0));
+	  printk(KERN_DEBUG "igmp_stop_timer() called with timer not running by %p\n",__builtin_return_address(0));
 }
 
 extern __inline__ unsigned int random(void)

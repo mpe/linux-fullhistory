@@ -342,6 +342,7 @@ struct file {
 #define FL_FLOCK	2
 #define FL_BROKEN	4	/* broken flock() emulation */
 #define FL_ACCESS	8	/* for processes suspended by mandatory locking */
+#define FL_LOCKD	16	/* lock held by rpc.lockd */
 
 struct file_lock {
 	struct file_lock *fl_next;	/* singly linked list for this inode  */
@@ -349,20 +350,33 @@ struct file_lock {
 	struct file_lock *fl_prevlink;	/* used to simplify lock removal */
 	struct file_lock *fl_nextblock; /* circular list of blocked processes */
 	struct file_lock *fl_prevblock;
-	struct task_struct *fl_owner;
+	void *fl_owner;			/* usu. the process' task_struct */
+	unsigned int fl_pid;
 	struct wait_queue *fl_wait;
 	struct file *fl_file;
 	unsigned char fl_flags;
 	unsigned char fl_type;
 	off_t fl_start;
 	off_t fl_end;
+
+	void (*fl_notify)(struct file_lock *);	/* unblock callback */
+
+	union {
+		struct nfs_lock_info	nfs_fl;
+	} fl_u;
 };
+
+extern struct file_lock		*file_lock_table;
 
 #include <linux/fcntl.h>
 
 extern int fcntl_getlk(unsigned int fd, struct flock *l);
 extern int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l);
 extern void locks_remove_locks(struct task_struct *task, struct file *filp);
+extern struct file_lock *posix_test_lock(struct file *, struct file_lock *);
+extern int posix_lock_file(struct file *, struct file_lock *, unsigned int);
+extern void posix_block_lock(struct file_lock *, struct file_lock *);
+extern void posix_unblock_lock(struct file_lock *);
 
 #include <linux/stat.h>
 
@@ -467,11 +481,12 @@ struct file_operations {
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct inode *, struct file *, struct vm_area_struct *);
 	int (*open) (struct inode *, struct file *);
-	void (*release) (struct inode *, struct file *);
+	int (*release) (struct inode *, struct file *);
 	int (*fsync) (struct inode *, struct file *);
 	int (*fasync) (struct inode *, struct file *, int);
 	int (*check_media_change) (kdev_t dev);
 	int (*revalidate) (kdev_t dev);
+	int (*lock) (struct inode *, struct file *, int, struct file_lock *);
 };
 
 struct inode_operations {
@@ -493,6 +508,9 @@ struct inode_operations {
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
 	int (*smap) (struct inode *,int);
+	int (*updatepage) (struct inode *, struct page *, const char *,
+				unsigned long, unsigned int, int);
+	int (*revalidate) (struct inode *);
 };
 
 struct super_operations {
@@ -537,7 +555,7 @@ extern int do_truncate(struct inode *, unsigned long);
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_blkdev(unsigned int major, const char * name);
 extern int blkdev_open(struct inode * inode, struct file * filp);
-extern void blkdev_release (struct inode * inode);
+extern int blkdev_release (struct inode * inode);
 extern struct file_operations def_blk_fops;
 extern struct inode_operations blkdev_inode_operations;
 
@@ -658,6 +676,7 @@ extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 extern int generic_readpage(struct inode *, struct page *);
 extern int generic_file_mmap(struct inode *, struct file *, struct vm_area_struct *);
 extern long generic_file_read(struct inode *, struct file *, char *, unsigned long);
+extern long generic_file_write(struct inode *, struct file *, const char *, unsigned long);
 
 extern void put_super(kdev_t dev);
 unsigned long generate_cluster(kdev_t dev, int b[], int size);

@@ -122,7 +122,7 @@ ip_masq_hash(struct ip_masq *ms)
         unsigned hash;
 
         if (ms->flags & IP_MASQ_F_HASHED) {
-                printk("ip_masq_hash(): request for already hashed\n");
+                printk(KERN_INFO "ip_masq_hash(): request for already hashed\n");
                 return 0;
         }
         /*
@@ -155,7 +155,7 @@ static __inline__ int ip_masq_unhash(struct ip_masq *ms)
         unsigned hash;
         struct ip_masq ** ms_p;
         if (!(ms->flags & IP_MASQ_F_HASHED)) {
-                printk("ip_masq_unhash(): request for unhash flagged\n");
+                printk(KERN_INFO "ip_masq_unhash(): request for unhash flagged\n");
                 return 0;
         }
         /*
@@ -349,14 +349,14 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
 
         if (*free_ports_p == 0) {
                 if (++n_fails < 5)
-                        printk("ip_masq_new(proto=%s): no free ports.\n",
+                        printk(KERN_ERR "ip_masq_new(proto=%s): no free ports.\n",
                                masq_proto_name(proto));
                 return NULL;
         }
         ms = (struct ip_masq *) kmalloc(sizeof(struct ip_masq), GFP_ATOMIC);
         if (ms == NULL) {
                 if (++n_fails < 5)
-                        printk("ip_masq_new(proto=%s): no memory available.\n",
+                        printk(KERN_ERR "ip_masq_new(proto=%s): no memory available.\n",
                                masq_proto_name(proto));
                 return NULL;
         }
@@ -416,7 +416,7 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
         }
 
         if (++n_fails < 5)
-                printk("ip_masq_new(proto=%s): could not get free masq entry (free=%d).\n",
+                printk(KERN_ERR "ip_masq_new(proto=%s): could not get free masq entry (free=%d).\n",
                        masq_proto_name(ms->protocol), *free_ports_p);
         kfree_s(ms, sizeof(*ms));
         return NULL;

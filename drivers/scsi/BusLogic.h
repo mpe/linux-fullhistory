@@ -145,7 +145,7 @@ extern int BusLogic_ProcDirectoryInfo(char *, char **, off_t, int, int, int);
 */
 
 #define BusLogic_LineBufferSize			100
-#define BusLogic_MessageBufferSize		8900
+#define BusLogic_MessageBufferSize		9900
 
 
 /*
@@ -1311,6 +1311,7 @@ typedef struct BusLogic_HostAdapter
   unsigned short MailboxCount;
   unsigned short InitialCCBs;
   unsigned short IncrementalCCBs;
+  unsigned short AllocatedCCBs;
   unsigned short DriverQueueDepth;
   unsigned short HostAdapterQueueDepth;
   unsigned short TaggedQueueDepth;

@@ -549,10 +549,11 @@ static int openprom_open(struct inode * inode, struct file * file)
 	return 0;
 }
 
-static void openprom_release(struct inode * inode, struct file * file)
+static int openprom_release(struct inode * inode, struct file * file)
 {
 	kfree_s(file->private_data, sizeof(DATA));
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 static struct file_operations openprom_fops = {

@@ -65,10 +65,7 @@ void init_modules(void)
 	kernel_module.nsyms = __stop___ksymtab - __start___ksymtab;
 
 #ifdef __alpha__
-	{
-		register unsigned long gp __asm__("$29");
-		kernel_module.gp = gp;
-	}
+	__asm__("stq $29,%0" : "=m"(kernel_module.gp));
 #endif
 }
 

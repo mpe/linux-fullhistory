@@ -1284,7 +1284,7 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 	case CHECKSUM_HW:
 		if (tcp_v4_check(th,len,saddr,daddr,skb->csum)) {
 			struct iphdr * iph = skb->nh.iph;
-			printk("TCPv4 bad checksum from %08x:%04x to %08x:%04x, len=%d/%d/%d\n",
+			printk(KERN_DEBUG "TCPv4 bad checksum from %08x:%04x to %08x:%04x, len=%d/%d/%d\n",
 			       saddr, ntohs(th->source), daddr,
 			       ntohs(th->dest), len, skb->len, ntohs(iph->tot_len));
 					goto discard_it;

@@ -337,13 +337,14 @@ sun_mouse_fasync (struct inode *inode, struct file *filp, int on)
 	return 0;
 }
 
-static void
+static int
 sun_mouse_close(struct inode *inode, struct file *file)
 {
 	sun_mouse_fasync (inode, file, 0);
 	if (--sunmouse.active)
-		return;
+		return 0;
 	sunmouse.ready = 0;
+	return 0;
 }
 
 static long

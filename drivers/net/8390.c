@@ -32,6 +32,7 @@
   Paul Gortmaker	: rewrite Rx overrun handling as per NS specs.
   Alexey Kuznetsov	: use the 8390's six bit hash multicast filter.
   Paul Gortmaker	: tweak ANK's above multicast changes a bit.
+  Paul Gortmaker	: update packet statistics for v2.1.x
 
 
   Sources:
@@ -152,6 +153,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 		if (tickssofar < TX_TIMEOUT ||	(tickssofar < (TX_TIMEOUT+5) && ! (txsr & ENTSR_PTX))) {
 			return 1;
 		}
+		ei_local->stat.tx_errors++;
 		isr = inb(e8390_base+EN0_ISR);
 		if (dev->start == 0) {
 			printk("%s: xmit on stopped card\n", dev->name);
@@ -160,8 +162,8 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 
 		/*
 		 * Note that if the Tx posted a TX_ERR interrupt, then the
-		 * error will have been handled from the interrupt handler.
-		 * and not here.
+		 * error will have been handled from the interrupt handler
+		 * and not here. Error statistics are handled there as well.
 		 */
 
 		printk(KERN_DEBUG "%s: Tx timed out, %s TSR=%#2x, ISR=%#2x, t=%d.\n",
@@ -186,13 +188,12 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
     if (dev->interrupt) {
 	printk("%s: Tx request while isr active.\n",dev->name);
 	outb_p(ENISR_ALL, e8390_base + EN0_IMR);
+	ei_local->stat.tx_errors++;
 	return 1;
     }
     ei_local->irqlock = 1;
 
     send_length = ETH_ZLEN < length ? length : ETH_ZLEN;
-
-    ei_local->stat.tx_bytes+=send_length;
     
 #ifdef EI_PINGPONG
 
@@ -223,6 +224,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	ei_local->irqlock = 0;
 	dev->tbusy = 1;
 	outb_p(ENISR_ALL, e8390_base + EN0_IMR);
+	ei_local->stat.tx_errors++;
 	return 1;
     }
 
@@ -270,6 +272,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
     outb_p(ENISR_ALL, e8390_base + EN0_IMR);
 
     dev_kfree_skb (skb, FREE_WRITE);
+    ei_local->stat.tx_bytes += send_length;
     
     return 0;
 }
@@ -393,14 +396,12 @@ static void ei_tx_err(struct device *dev)
 
     if (tx_was_aborted)
 		ei_tx_intr(dev);
-
-    /*
-     * Note: NCR reads zero on 16 collisions so we add them
-     * in by hand. Somebody might care...
-     */
-    if (txsr & ENTSR_ABT)
-	ei_local->stat.collisions += 16;
-	
+    else {
+		ei_local->stat.tx_errors++;
+		if (txsr & ENTSR_CRS) ei_local->stat.tx_carrier_errors++;
+		if (txsr & ENTSR_CDH) ei_local->stat.tx_heartbeat_errors++;
+		if (txsr & ENTSR_OWC) ei_local->stat.tx_window_errors++;
+    }
 }
 
 /* We have finished a transmit: check for errors and then trigger the next
@@ -467,7 +468,10 @@ static void ei_tx_intr(struct device *dev)
 	ei_local->stat.tx_packets++;
     else {
 	ei_local->stat.tx_errors++;
-	if (status & ENTSR_ABT) ei_local->stat.tx_aborted_errors++;
+	if (status & ENTSR_ABT) {
+		ei_local->stat.tx_aborted_errors++;
+		ei_local->stat.collisions += 16;
+	}
 	if (status & ENTSR_CRS) ei_local->stat.tx_carrier_errors++;
 	if (status & ENTSR_FU)  ei_local->stat.tx_fifo_errors++;
 	if (status & ENTSR_CDH) ei_local->stat.tx_heartbeat_errors++;
@@ -490,7 +494,7 @@ static void ei_receive(struct device *dev)
     int num_rx_pages = ei_local->stop_page-ei_local->rx_start_page;
     
     while (++rx_pkt_count < 10) {
-		int pkt_len;
+		int pkt_len, pkt_stat;
 		
 		/* Get the rx page (incoming packet pointer). */
 		outb_p(E8390_NODMA+E8390_PAGE1, e8390_base + E8390_CMD);
@@ -515,6 +519,7 @@ static void ei_receive(struct device *dev)
 		ei_get_8390_hdr(dev, &rx_frame, this_frame);
 		
 		pkt_len = rx_frame.count - sizeof(struct e8390_pkt_hdr);
+		pkt_stat = rx_frame.status;
 		
 		next_frame = this_frame + 1 + ((pkt_len+4)>>8);
 		
@@ -537,7 +542,8 @@ static void ei_receive(struct device *dev)
 					   dev->name, rx_frame.count, rx_frame.status,
 					   rx_frame.next);
 			ei_local->stat.rx_errors++;
-		} else if ((rx_frame.status & 0x0F) == ENRSR_RXOK) {
+			ei_local->stat.rx_length_errors++;
+		} else if ((pkt_stat & 0x0F) == ENRSR_RXOK) {
 			struct sk_buff *skb;
 			
 			skb = dev_alloc_skb(pkt_len+2);
@@ -552,18 +558,21 @@ static void ei_receive(struct device *dev)
 				skb->dev = dev;
 				skb_put(skb, pkt_len);	/* Make room */
 				ei_block_input(dev, pkt_len, skb, current_offset + sizeof(rx_frame));
-				ei_local->stat.rx_bytes+=skb->len;
 				skb->protocol=eth_type_trans(skb,dev);
 				netif_rx(skb);
 				ei_local->stat.rx_packets++;
+				ei_local->stat.rx_bytes += pkt_len;
+				if (pkt_stat & ENRSR_PHY)
+					ei_local->stat.multicast++;
 			}
 		} else {
-			int errs = rx_frame.status;
 			if (ei_debug)
 				printk("%s: bogus packet: status=%#2x nxpg=%#2x size=%d\n",
 					   dev->name, rx_frame.status, rx_frame.next,
 					   rx_frame.count);
-			if (errs & ENRSR_FO)
+			ei_local->stat.rx_errors++;
+			/* NB: The NIC counts CRC, frame and missed errors. */
+			if (pkt_stat & ENRSR_FO)
 				ei_local->stat.rx_fifo_errors++;
 		}
 		next_frame = rx_frame.next;

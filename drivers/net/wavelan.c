@@ -2354,6 +2354,7 @@ wv_packet_read(device *		dev,
   netif_rx(skb);
 
   lp->stats.rx_packets++;
+  lp->stats.rx_bytes+=sksize;
 
 #ifdef DEBUG_RX_TRACE
   printk(KERN_DEBUG "%s: <-wv_packet_read()\n", dev->name);

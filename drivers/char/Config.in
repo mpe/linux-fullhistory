@@ -4,6 +4,10 @@
 mainmenu_option next_comment
 comment 'Character devices'
 
+bool 'Virtual terminal' CONFIG_VT
+if [ "$CONFIG_VT" = "y" ]; then
+  bool 'Console on virtual terminal' CONFIG_VT_CONSOLE
+fi
 tristate 'Standard/generic (dumb) serial support' CONFIG_SERIAL
 bool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED
 if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
@@ -11,6 +15,7 @@ if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
    bool '   Support for sharing serial interrupts' CONFIG_SERIAL_SHARE_IRQ
    bool '   Support special multiport boards' CONFIG_SERIAL_MULTIPORT
    bool '   Support the Bell Technologies HUB6 card' CONFIG_HUB6
+   bool '   Console on serial port' CONFIG_SERIAL_CONSOLE
 fi
 bool 'Non-standard serial port support' CONFIG_SERIAL_NONSTANDARD
 if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then

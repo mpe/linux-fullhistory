@@ -37,6 +37,7 @@ tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
 tristate 'Amiga FFS filesystem support' CONFIG_AFFS_FS
 tristate 'ROM filesystem support' CONFIG_ROMFS_FS
+tristate 'Kernel automounter support (experimental)' CONFIG_AUTOFS_FS
 if [ "$CONFIG_AFFS_FS" != "n" ]; then
   define_bool CONFIG_AMIGA_PARTITION y
 fi

@@ -23,6 +23,7 @@
 #include <linux/affs_fs.h>
 #include <linux/ufs_fs.h>
 #include <linux/romfs_fs.h>
+#include <linux/auto_fs.h>
 #include <linux/major.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -108,6 +109,10 @@ asmlinkage int sys_setup(void)
 
 #ifdef CONFIG_UFS_FS
 	init_ufs_fs();
+#endif
+
+#ifdef CONFIG_AUTOFS_FS
+	init_autofs_fs();
 #endif
 
 	mount_root();

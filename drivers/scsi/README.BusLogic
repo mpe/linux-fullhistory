@@ -1,10 +1,10 @@
 	   BusLogic MultiMaster and FlashPoint SCSI Driver for Linux
 
-			  Version 2.0.8 for Linux 2.0
+			  Version 2.0.9 for Linux 2.0
 
 			      PRODUCTION RELEASE
 
-				 17 March 1997
+				 29 March 1997
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -37,11 +37,10 @@ the major performance and error recovery features can be configured from the
 Linux kernel command line, allowing individual installations to tune driver
 performance and error recovery to their particular needs.
 
-The most recent versions of this driver will always be available from my Linux
-Home Page at URL "http://www.dandelion.com/Linux/" and by anonymous FTP from
-ftp.dandelion.com.  While only limited FTP directory listings are permitted,
-the introductory banner displayed on anonymous FTP login will provide a list of
-the driver versions and any other files that are available for retrieval.
+The latest information on Linux support for BusLogic SCSI Host Adapters, as
+well as the most recent release of this driver and the latest firmware for the
+BT-948/958/958D, will always be available from my Linux Home Page at URL
+"http://www.dandelion.com/Linux/".
 
 Bug reports should be sent via electronic mail to "lnz@dandelion.com".  Please
 include with the bug report the complete configuration messages reported by the
@@ -189,45 +188,45 @@ that it is or will be supported.
 
 FlashPoint Series PCI Host Adapters:
 
-FlashPoint LT (BT-930)	Ultra Fast Single-ended SCSI-2
-FlashPoint DL (BT-932)	Dual Channel Ultra Fast Single-ended SCSI-2
-FlashPoint LW (BT-950)	Ultra Wide Single-ended SCSI-2
-FlashPoint DW (BT-952)	Dual Channel Ultra Wide Single-ended SCSI-2
+FlashPoint LT (BT-930)	Ultra SCSI-2
+FlashPoint DL (BT-932)	Dual Channel Ultra SCSI-2
+FlashPoint LW (BT-950)	Wide Ultra SCSI-2
+FlashPoint DW (BT-952)	Dual Channel Wide Ultra SCSI-2
 
 MultiMaster "W" Series Host Adapters:
 
-BT-948	    PCI		Ultra Fast Single-ended SCSI-2
-BT-958	    PCI		Ultra Wide Single-ended SCSI-2
-BT-958D	    PCI		Ultra Wide Differential SCSI-2
+BT-948	    PCI		Ultra SCSI-2
+BT-958	    PCI		Wide Ultra SCSI-2
+BT-958D	    PCI		Wide Differential Ultra SCSI-2
 
 MultiMaster "C" Series Host Adapters:
 
-BT-946C	    PCI		Fast Single-ended SCSI-2
-BT-956C	    PCI		Fast Wide Single-ended SCSI-2
-BT-956CD    PCI		Fast Wide Differential SCSI-2
-BT-445C	    VLB		Fast Single-ended SCSI-2
-BT-747C	    EISA	Fast Single-ended SCSI-2
-BT-757C	    EISA	Fast Wide Single-ended SCSI-2
-BT-757CD    EISA	Fast Wide Differential SCSI-2
-BT-545C	    ISA		Fast Single-ended SCSI-2
-BT-540CF    ISA		Fast Single-ended SCSI-2
+BT-946C	    PCI		Fast SCSI-2
+BT-956C	    PCI		Wide Fast SCSI-2
+BT-956CD    PCI		Wide Differential Fast SCSI-2
+BT-445C	    VLB		Fast SCSI-2
+BT-747C	    EISA	Fast SCSI-2
+BT-757C	    EISA	Wide Fast SCSI-2
+BT-757CD    EISA	Wide Differential Fast SCSI-2
+BT-545C	    ISA		Fast SCSI-2
+BT-540CF    ISA		Fast SCSI-2
 
 MultiMaster "S" Series Host Adapters:
 
-BT-445S	    VLB		Fast Single-ended SCSI-2
-BT-747S	    EISA	Fast Single-ended SCSI-2
-BT-747D	    EISA	Fast Differential SCSI-2
-BT-757S	    EISA	Fast Wide Single-ended SCSI-2
-BT-757D	    EISA	Fast Wide Differential SCSI-2
-BT-545S	    ISA		Fast Single-ended SCSI-2
-BT-542D	    ISA		Fast Differential SCSI-2
-BT-742A	    EISA	Single-ended SCSI-2 (742A revision H)
-BT-542B	    ISA		Single-ended SCSI-2 (542B revision H)
+BT-445S	    VLB		Fast SCSI-2
+BT-747S	    EISA	Fast SCSI-2
+BT-747D	    EISA	Differential Fast SCSI-2
+BT-757S	    EISA	Wide Fast SCSI-2
+BT-757D	    EISA	Wide Differential Fast SCSI-2
+BT-545S	    ISA		Fast SCSI-2
+BT-542D	    ISA		Differential Fast SCSI-2
+BT-742A	    EISA	SCSI-2 (742A revision H)
+BT-542B	    ISA		SCSI-2 (542B revision H)
 
 MultiMaster "A" Series Host Adapters:
 
-BT-742A	    EISA	Single-ended SCSI-2 (742A revisions A - G)
-BT-542B	    ISA		Single-ended SCSI-2 (542B revisions A - G)
+BT-742A	    EISA	SCSI-2 (742A revisions A - G)
+BT-542B	    ISA		SCSI-2 (542B revisions A - G)
 
 AMI FastDisk Host Adapters that are true BusLogic MultiMaster clones are also
 supported by this driver.
@@ -380,7 +379,7 @@ To install the new BusLogic SCSI driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf BusLogic-2.0.8.tar.gz
+  tar -xvzf BusLogic-2.0.9.tar.gz
   mv README.* LICENSE.* BusLogic.[ch] FlashPoint.c linux/drivers/scsi
   patch -p < BusLogic.patch
   cd linux

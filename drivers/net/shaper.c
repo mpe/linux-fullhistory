@@ -610,18 +610,11 @@ static struct device dev_shape =
 
 int init_module(void)
 {
-	int i;
-	for(i=0;i<99;i++)
-	{
-		sprintf(devicename,"shaper%d",i);
-		if(dev_get(devicename)==NULL)
-			break;
-	}
-	if(i==100)
-		return -ENFILE;
-	
+	int err=dev_alloc_name(&dev_shape,"shaper%d");
+	if(err<0)
+		return err;
 	printk(SHAPER_BANNER);	
-	if (register_netdev(&dev_shape) != 0)
+	if (register_netdev(dev) != 0)
 		return -EIO;
 	printk("Traffic shaper initialised.\n");
 	return 0;

@@ -3271,7 +3271,7 @@ static int idetape_chrdev_open (struct inode *inode, struct file *filp)
 /*
  *	Our character device release function.
  */
-static void idetape_chrdev_release (struct inode *inode, struct file *filp)
+static int idetape_chrdev_release (struct inode *inode, struct file *filp)
 {
 	ide_drive_t *drive = get_drive_ptr (inode->i_rdev);
 	idetape_tape_t *tape = drive->driver_data;
@@ -3310,6 +3310,7 @@ static void idetape_chrdev_release (struct inode *inode, struct file *filp)
 	clear_bit (IDETAPE_BUSY, &tape->flags);
 	if (tape->chrdev_direction == idetape_direction_none)
 		MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 /*

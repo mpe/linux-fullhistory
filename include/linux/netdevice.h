@@ -309,6 +309,8 @@ extern struct device    *dev_getbyhwaddr(unsigned short type, char *hwaddr);
 extern void		dev_add_pack(struct packet_type *pt);
 extern void		dev_remove_pack(struct packet_type *pt);
 extern struct device	*dev_get(const char *name);
+extern struct device	*dev_alloc(const char *name, int *err);
+extern int		dev_alloc_name(struct device *dev, const char *name);
 extern int		dev_open(struct device *dev);
 extern int		dev_close(struct device *dev);
 extern int		dev_queue_xmit(struct sk_buff *skb);

@@ -423,7 +423,7 @@ static void do_sr_request (void)
  	     * from user space, since we do not want to
  	     * sleep from an interrupt.
  	     */
- 	    if( SDev->removable && !intr_count )
+ 	    if( SDev->removable && !in_interrupt() )
  	    {
 		scsi_ioctl(SDev, SCSI_IOCTL_DOORLOCK, 0);
  	    }

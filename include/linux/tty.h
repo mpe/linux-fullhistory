@@ -280,7 +280,6 @@ extern struct tty_ldisc ldiscs[];
 extern int fg_console, last_console, want_console;
 
 extern int kmsg_redirect;
-extern struct wait_queue * keypress_wait;
 
 extern unsigned long con_init(unsigned long);
 
@@ -328,14 +327,20 @@ extern struct tty_ldisc tty_ldisc_N_TTY;
 extern int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 		       unsigned int cmd, unsigned long arg);
 
+/* serial.c */
+
+extern long serial_console_init(long kmem_start, long kmem_end);
+
 /* pcxx.c */
 
 extern int pcxe_open(struct tty_struct *tty, struct file *filp);
 
 /* console.c */
 
-extern int con_open(struct tty_struct * tty, struct file * filp);
 extern void update_screen(int new_console);
+
+/* printk.c */
+
 extern void console_print(const char *);
 
 /* vt.c */

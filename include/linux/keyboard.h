@@ -19,10 +19,13 @@
 	may increase the number of keymaps beyond MAX_NR_OF_USER_KEYMAPS. */
 #define MAX_NR_OF_USER_KEYMAPS 256 	/* should be at least 7 */
 
+#ifdef __KERNEL__
 extern const int NR_TYPES;
 extern const int max_vals[];
 extern unsigned short *key_maps[MAX_NR_KEYMAPS];
 extern unsigned short plain_map[NR_KEYS];
+extern struct wait_queue * keypress_wait;
+#endif
 
 #define MAX_NR_FUNC	256	/* max nr of strings assigned to keys */
 

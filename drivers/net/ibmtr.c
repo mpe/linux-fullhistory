@@ -53,7 +53,9 @@
  *	  from being rudely overwritten before the transmit cycle is
  *	  complete. (August 15 1996)
  *	+ completed multiple adapter support. (November 20 1996)
- */
+ *	+ implemented csum_partial_copy in tr_rx and increased receive 
+ *        buffer size and count. Minor fixes. (March 15, 1997)
+*/
 
 #ifdef PCMCIA
 #define MODULE
@@ -79,13 +81,10 @@
 /* some 95 OS send many non UI frame; this allow removing the warning */
 #define TR_FILTERNONUI	1
 
-/* use memcpy to read/write frame data instead of for-loop */
-#define USE_MEMCPY 1
-
 /* version and credits */
 static char *version =
 "ibmtr.c: v1.3.57  8/ 7/94 Peter De Schrijver and Mark Swanson\n"
-"         v2.1.10 11/20/96 Paul Norton <pnorton@cts.com>\n";
+"         v2.1.29  3/15/97 Paul Norton <pnorton@cts.com>\n";
 
 static char pcchannelid[] = {
 	0x05, 0x00, 0x04, 0x09,
@@ -120,6 +119,7 @@ static char mcchannelid[] = {
 #include <linux/netdevice.h>
 #include <linux/trdevice.h>
 #include <linux/stddef.h>
+#include <net/checksum.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -177,8 +177,6 @@ static int	tok_send_packet(struct sk_buff *skb, struct device *dev);
 static struct net_device_stats * tok_get_stats(struct device *dev);
 void		ibmtr_readlog(struct device *dev);
 void		ibmtr_reset_timer(struct timer_list *tmr, struct device *dev);
-
-static struct timer_list tr_timer;
 
 static unsigned int ibmtr_portlist[] = {
 	0xa20, 0xa24, 0
@@ -858,7 +856,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							      open_ret_code);
 
 					      if (ti->open_status != FAILURE) {
-						      ibmtr_reset_timer(&tr_timer, dev);
+						      ibmtr_reset_timer(&(ti->tr_timer), dev);
 					      }
 
 				      }
@@ -872,7 +870,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 					if (readb(ti->srb+offsetof(struct dlc_open_sap, ret_code))) {
 						DPRINTK("open_sap failed: ret_code = %02X,retrying\n",
 							(int)readb(ti->srb+offsetof(struct dlc_open_sap, ret_code)));
-						ibmtr_reset_timer(&tr_timer, dev);
+						ibmtr_reset_timer(&(ti->tr_timer), dev);
 					} else {
 						ti->exsap_station_id=
 							readw(ti->srb+offsetof(struct dlc_open_sap, station_id));
@@ -983,7 +981,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 						      DPRINTK("Signal loss/Lobe fault\n");
 						      DPRINTK("We try to reopen the adapter.\n");
-						      ibmtr_reset_timer(&tr_timer, dev);
+						      ibmtr_reset_timer(&(ti->tr_timer), dev);
 					      } else if (ring_status & (HARD_ERROR | XMIT_BEACON
 											| AUTO_REMOVAL | REMOVE_RECV | RING_RECOVER))
 						      DPRINTK("New ring status: %02X\n", ring_status);
@@ -1297,27 +1295,16 @@ static void tr_tx(struct device *dev)
 
 	/* header length including rif is computed above, now move the data
 	   and set fields appropriately. */
-#if USE_MEMCPY
 	memcpy_toio(dhb, ti->current_skb->data, hdr_len);
-#else
-	for (i=0; i<hdr_len; i++)
-		writeb(*(unsigned char *)(ti->current_skb->data +i), dhb++);
-#endif
 
 	writeb(hdr_len, ti->asb + offsetof(struct asb_xmit_resp, hdr_length));
 	writew(htons(ti->current_skb->len-sizeof(struct trh_hdr)+hdr_len),
 	       ti->asb + offsetof(struct asb_xmit_resp, frame_length));
 
 	/*  now copy the actual packet data next to hdr */
-#if USE_MEMCPY
 	memcpy_toio(dhb + hdr_len,
 		    ti->current_skb->data + sizeof(struct trh_hdr),
 		    ti->current_skb->len - sizeof(struct trh_hdr));
-#else
-	for (i=0; i<ti->current_skb->len-sizeof(struct trh_hdr); i++)
-		writeb(*(unsigned char *)(ti->current_skb->data +sizeof(struct trh_hdr)+i),
-		       dhb+i);
-#endif
 
 	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 	dev->tbusy=0;
@@ -1329,20 +1316,20 @@ static void tr_tx(struct device *dev)
 
 static void tr_rx(struct device *dev)
 {
-	int i;
 	struct tok_info *ti=(struct tok_info *) dev->priv;
-	__u32 rbuffer;
+	__u32 rbuffer, rbufdata;
 	__u32 llc;
 	unsigned char *data;
-	unsigned int rbuffer_len, lan_hdr_len;
+	unsigned int rbuffer_len, lan_hdr_len, hdr_len;
 	unsigned int arb_frame_len;
 	struct sk_buff *skb;
 	unsigned int skb_size = 0;
 	int	is8022 = 0;
+	unsigned int chksum = 0;
 
 	rbuffer=(ti->sram
-		 +ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))));
-
+		 +ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))))+2;
+ 
 	if(readb(ti->asb + offsetof(struct asb_rec, ret_code))!=0xFF)
 		DPRINTK("ASB not free !!!\n");
 
@@ -1354,7 +1341,7 @@ static void tr_rx(struct device *dev)
 	       ti->asb + offsetof(struct asb_rec, rec_buf_addr));
 
 	lan_hdr_len=readb(ti->arb + offsetof(struct arb_rec_req, lan_hdr_len));
-
+	
 	llc=(rbuffer+offsetof(struct rec_buf, data) + lan_hdr_len);
 
 #if TR_VERBOSE
@@ -1367,128 +1354,123 @@ static void tr_rx(struct device *dev)
 		"ethertype: %04X\n",
 		(int)readb(llc + offsetof(struct trllc, dsap)),
 		(int)readb(llc + offsetof(struct trllc, ssap)),
+		(int)readb(llc + offsetof(struct trllc, llc)),
 		(int)readb(llc + offsetof(struct trllc, protid)),
 		(int)readb(llc + offsetof(struct trllc, protid)+1),
 		(int)readb(llc + offsetof(struct trllc, protid)+2),
 		(int)readw(llc + offsetof(struct trllc, ethertype)));
 #endif
-
 	if (readb(llc + offsetof(struct trllc, llc))!=UI_CMD) {
-#if !TR_FILTERNONUI
-		DPRINTK("non-UI frame arrived. dropped. llc= %02X\n",
-			(int)readb(llc + offsetof(struct trllc, llc))
-#endif
 			writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
 			ti->tr_stats.rx_dropped++;
 			writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 			return;
-			}
-
-		if ((readb(llc + offsetof(struct trllc, dsap))!=0xAA) ||
-		    (readb(llc + offsetof(struct trllc, ssap))!=0xAA)) {
-			is8022 = 1;
-		}
-
-#if TR_VERBOSE
-		if ((readb(llc + offsetof(struct trllc, dsap))!=0xAA) ||
-		    (readb(llc + offsetof(struct trllc, ssap))!=0xAA)) {
-
-			__u32 trhhdr;
-
-			trhhdr=(rbuffer+offsetof(struct rec_buf,data));
-
-			DPRINTK("Probably non-IP frame received.\n");
-			DPRINTK("ssap: %02X dsap: %02X saddr: %02X:%02X:%02X:%02X:%02X:%02X "
-				"daddr: %02X:%02X:%02X:%02X:%02X:%02X\n",
-				(int)readb(llc + offsetof(struct trllc, ssap)),
-				(int)readb(llc + offsetof(struct trllc, dsap)),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+1),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+2),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+3),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+4),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+5),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+1),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+2),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+3),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+4),
-				(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+5));
-		}
-#endif
-
-		arb_frame_len=ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
-		skb_size = arb_frame_len-lan_hdr_len+sizeof(struct trh_hdr);
-		if (is8022) {
-			skb_size += sizeof(struct trllc);
-		}
-
-		if (!(skb=dev_alloc_skb(skb_size))) {
-			DPRINTK("out of memory. frame dropped.\n");
-			ti->tr_stats.rx_dropped++;
-			writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
-			writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
-			return;
-		}
-
-		skb_put(skb, skb_size);
-		skb->dev=dev;
-
-		data=skb->data;
-#if USE_MEMCPY
-		memcpy_fromio(data, rbuffer + offsetof(struct rec_buf, data), lan_hdr_len);
-#else
-		for (i=0; i<lan_hdr_len; i++)
-			data[i]=readb(rbuffer + offsetof(struct rec_buf, data)+i);
-#endif
-		if (lan_hdr_len<sizeof(struct trh_hdr))
-			memset(data+lan_hdr_len, 0, sizeof(struct trh_hdr)-lan_hdr_len);
-
-		data+=sizeof(struct trh_hdr);
-		rbuffer_len=ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)))
-			-lan_hdr_len;
-		if (is8022) {
-			struct trllc	*local_llc = (struct trllc *)data;
-			memset(local_llc, 0, sizeof(*local_llc));
-			local_llc->ethertype = htons(ETH_P_TR_802_2);
-			data += sizeof(struct trllc);
-		}
-
-#if TR_VERBOSE
-		DPRINTK("rbuffer_len: %d, data: %p\n", rbuffer_len, data);
-#endif
-#if USE_MEMCPY
-		memcpy_fromio(data, rbuffer + offsetof(struct rec_buf, data) + lan_hdr_len, rbuffer_len);
-#else
-		for (i=0; i<rbuffer_len; i++)
-			data[i]=readb(rbuffer+ offsetof(struct rec_buf, data)+lan_hdr_len+i);
-#endif
-		data+=rbuffer_len;
-
-		while (readw(rbuffer + offsetof(struct rec_buf, buf_ptr))) {
-			rbuffer=(ti->sram
-				 +ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_ptr)))-2);
-			rbuffer_len=ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)));
-			for (i=0; i<rbuffer_len; i++)
-				data[i]=readb(rbuffer + offsetof(struct rec_buf, data)+i);
-			data+=rbuffer_len;
-
-#if TR_VERBOSE
-			DPRINTK("buf_ptr: %d, data =%p\n",
-				ntohs((rbuffer + offsetof(struct rec_buf, buf_ptr))), data);
-#endif
-		}
-
-		writeb(0, ti->asb + offsetof(struct asb_rec, ret_code));
-
-		writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
-
-		ti->tr_stats.rx_packets++;
-
-		skb->protocol=tr_type_trans(skb,dev);
-		netif_rx(skb);
-
 	}
+
+       	if ((readb(llc + offsetof(struct trllc, dsap))!=0xAA) ||
+       	    (readb(llc + offsetof(struct trllc, ssap))!=0xAA)) {
+       		is8022 = 1;
+       	}
+
+#if TR_VERBOSE
+       	if (is8022){
+
+       		__u32 trhhdr;
+
+       		trhhdr=(rbuffer+offsetof(struct rec_buf,data));
+
+       		DPRINTK("Probably non-IP frame received.\n");
+       		DPRINTK("ssap: %02X dsap: %02X saddr: %02X:%02X:%02X:%02X:%02X:%02X "
+       			"daddr: %02X:%02X:%02X:%02X:%02X:%02X\n",
+       			(int)readb(llc + offsetof(struct trllc, ssap)),
+       			(int)readb(llc + offsetof(struct trllc, dsap)),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+1),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+2),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+3),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+4),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+5),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+1),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+2),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+3),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+4),
+       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+5));
+       	}
+#endif
+
+       	arb_frame_len=ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
+       	skb_size = arb_frame_len-lan_hdr_len+sizeof(struct trh_hdr);
+       	if (is8022) {
+       		skb_size += sizeof(struct trllc);
+       	}
+
+       	if (!(skb=dev_alloc_skb(skb_size))) {
+       		DPRINTK("out of memory. frame dropped.\n");
+       		ti->tr_stats.rx_dropped++;
+       		writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
+       		writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+       		return;
+       	}
+
+       	skb_put(skb, skb_size);
+       	skb->dev=dev;
+
+       	data=skb->data;
+
+	/* Copy the 802.5 MAC header */
+	memcpy_fromio(data, rbuffer + offsetof(struct rec_buf, data), lan_hdr_len);
+
+	if (lan_hdr_len<sizeof(struct trh_hdr))
+		memset(data+lan_hdr_len, 0, sizeof(struct trh_hdr)-lan_hdr_len);
+
+	data+=sizeof(struct trh_hdr);
+	rbuffer_len=ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)))-lan_hdr_len;
+
+	if (is8022) {
+		/* create whitewashed LLC header in skb buffer (why not the real one?) */
+		struct trllc	*local_llc = (struct trllc *)data;
+		memset(local_llc, 0, sizeof(*local_llc));
+		local_llc->ethertype = htons(ETH_P_TR_802_2);
+		hdr_len = sizeof(struct trllc);
+	} else {
+                /* Copy the LLC header and the IPv4 header */
+		hdr_len = sizeof(struct trllc) + sizeof(struct iphdr);
+		memcpy_fromio(data, rbuffer+offsetof(struct rec_buf, data)+lan_hdr_len,hdr_len);
+        }
+	data        += hdr_len;
+       	lan_hdr_len += hdr_len;
+	rbuffer_len -= hdr_len;
+	rbufdata     = rbuffer + offsetof(struct rec_buf,data) + lan_hdr_len;
+
+	/* Copy the payload... */
+	for (;;) {
+		if (is8022)
+			memcpy_fromio(data, rbufdata, rbuffer_len);
+		else
+			chksum = csum_partial_copy(bus_to_virt(rbufdata), data, rbuffer_len, chksum);
+		rbuffer = ntohs(readw(rbuffer));
+		if (!rbuffer)
+			break;
+		data += rbuffer_len;
+		rbuffer += ti->sram;
+		rbuffer_len = ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)));
+		rbufdata = rbuffer + offsetof(struct rec_buf, data);
+	}
+
+       	writeb(0, ti->asb + offsetof(struct asb_rec, ret_code));
+
+       	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+
+       	ti->tr_stats.rx_packets++;
+
+	skb->protocol  = tr_type_trans(skb,dev);
+	if (!is8022){
+		skb->csum      = chksum;
+		skb->ip_summed = 1;
+	}
+	netif_rx(skb);
+}
 
 static int tok_send_packet(struct sk_buff *skb, struct device *dev)
 {

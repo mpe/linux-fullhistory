@@ -171,6 +171,8 @@
  *             still here, if the eject button is pushed while the
  *             drive light is flashing, the drive will return a bad
  *             status and be reset.  It recovers, though.
+ *
+ *  03/07/97 - Fixed a problem with timers.
  */
 
 #include <linux/major.h>
@@ -933,6 +935,9 @@ handle_sony_cd_attention(void)
    volatile int val;
 
 
+#if DEBUG
+   printk("Entering handle_sony_cd_attention\n");
+#endif
    if (is_attention())
    {
       if (num_consecutive_attentions > CDU31A_MAX_CONSECUTIVE_ATTENTIONS)
@@ -940,6 +945,9 @@ handle_sony_cd_attention(void)
          printk("cdu31a: Too many consecutive attentions: %d\n",
                 num_consecutive_attentions);
          num_consecutive_attentions = 0;
+#if DEBUG
+         printk("Leaving handle_sony_cd_attention at %d\n", __LINE__);
+#endif
          return(0);
       }
 
@@ -982,6 +990,9 @@ handle_sony_cd_attention(void)
       }
 
       num_consecutive_attentions++;
+#if DEBUG
+      printk("Leaving handle_sony_cd_attention at %d\n", __LINE__);
+#endif
       return(1);
    }
    else if (abort_read_started)
@@ -998,10 +1009,16 @@ handle_sony_cd_attention(void)
          val = read_data_register();
       }
       abort_read_started = 0;
+#if DEBUG
+      printk("Leaving handle_sony_cd_attention at %d\n", __LINE__);
+#endif
       return(1);
    }
 
    num_consecutive_attentions = 0;
+#if DEBUG
+   printk("Leaving handle_sony_cd_attention at %d\n", __LINE__);
+#endif
    return(0);
 }
 
@@ -1090,6 +1107,9 @@ start_request(unsigned int sector,
    unsigned int retry_count;
 
 
+#if DEBUG
+   printk("Entering start_request\n");
+#endif
    log_to_msf(sector, params);
    /* If requested, read exactly what was asked. */
    if (read_nsect_only)
@@ -1130,6 +1150,9 @@ start_request(unsigned int sector,
    if (is_busy())
    {
       printk("CDU31A: Timeout while waiting to issue command\n");
+#if DEBUG
+      printk("Leaving start_request at %d\n", __LINE__);
+#endif
       return(1);
    }
    else
@@ -1145,8 +1168,14 @@ start_request(unsigned int sector,
       sony_next_block = sector * 4;
       readahead_dataleft = 0;
       readahead_bad = 0;
+#if DEBUG
+      printk("Leaving start_request at %d\n", __LINE__);
+#endif
       return(0);
    }
+#if DEBUG
+   printk("Leaving start_request at %d\n", __LINE__);
+#endif
 }
 
 /* Abort a pending read operation.  Clear all the drive status and
@@ -1188,6 +1217,13 @@ abort_read(void)
 static void
 handle_abort_timeout(unsigned long data)
 {
+   unsigned long flags;
+
+#if DEBUG
+   printk("Entering handle_abort_timeout\n");
+#endif
+   save_flags(flags);
+   cli();
    /* If it is in use, ignore it. */
    if (!sony_inuse)
    {
@@ -1204,6 +1240,10 @@ handle_abort_timeout(unsigned long data)
       readahead_bad = 0;
       abort_read_started = 1;
    }
+   restore_flags(flags);
+#if DEBUG
+   printk("Leaving handle_abort_timeout\n");
+#endif
 }
 
 /* Actually get data and status from the drive. */
@@ -1218,6 +1258,9 @@ input_data(char         *buffer,
    volatile unsigned char val;
 
 
+#if DEBUG
+   printk("Entering input_data\n");
+#endif
    /* If an XA disk on a CDU31A, skip the first 12 bytes of data from
       the disk.  The real data is after that. */
    if (sony_xa_mode)
@@ -1266,6 +1309,9 @@ input_data(char         *buffer,
          val = read_data_register();
       }
    }
+#if DEBUG
+   printk("Leaving input_data at %d\n", __LINE__);
+#endif
 }
 
 /* read data from the drive.  Note the nsect must be <= 4. */
@@ -1281,6 +1327,10 @@ read_data_block(char          *buffer,
    unsigned int offset;
    unsigned int skip;
 
+
+#if DEBUG
+   printk("Entering read_data_block\n");
+#endif
 
    res_reg[0] = 0;
    res_reg[1] = 0;
@@ -1347,6 +1397,9 @@ read_data_block(char          *buffer,
          {
             get_result(res_reg, res_size);
          }
+#if DEBUG
+         printk("Leaving read_data_block at %d\n", __LINE__);
+#endif
          return;
       }
    }
@@ -1466,6 +1519,9 @@ read_data_block(char          *buffer,
          }
       }
    }
+#if DEBUG
+   printk("Leaving read_data_block at %d\n", __LINE__);
+#endif
 }
 
 /*
@@ -1486,6 +1542,10 @@ do_cdu31a_request(void)
    unsigned long flags;
 
 
+#if DEBUG
+         printk("Entering do_cdu31a_request\n");
+#endif
+
    /* 
     * Make sure no one else is using the driver; wait for them
     * to finish if it is so.
@@ -1503,6 +1563,9 @@ do_cdu31a_request(void)
             end_request(0);
          }
          restore_flags(flags);
+#if DEBUG
+         printk("Leaving do_cdu31a_request at %d\n", __LINE__);
+#endif
          return;
       }
    }
@@ -1518,11 +1581,8 @@ do_cdu31a_request(void)
 
    sti();
 
-   /* If the timer is running, cancel it. */
-   if (cdu31a_abort_timer.next != NULL)
-   {
-      del_timer(&cdu31a_abort_timer);
-   }
+   /* Make sure the timer is cancelled. */
+   del_timer(&cdu31a_abort_timer);
 
    while (1)
    {
@@ -1694,6 +1754,7 @@ try_read_again:
    }
 
 end_do_cdu31a_request:
+   cli();
 #if 0
    /* After finished, cancel any pending operations. */
    abort_read();
@@ -1708,6 +1769,9 @@ end_do_cdu31a_request:
    sony_inuse = 0;
    wake_up_interruptible(&sony_wait);
    restore_flags(flags);
+#if DEBUG
+   printk("Leaving do_cdu31a_request at %d\n", __LINE__);
+#endif
 }
 
 /* Copy overlapping buffers. */
@@ -2852,7 +2916,7 @@ drive_spinning:
  * Close the drive.  Spin it down if no task is using it.  The spin
  * down will fail if playing audio, so audio play is OK.
  */
-static void
+static int
 scd_release(struct inode *inode,
          struct file *filp)
 {
@@ -2877,6 +2941,7 @@ scd_release(struct inode *inode,
 
       sony_spun_up = 0;
    }
+   return 0;
 }
 
 
@@ -3141,8 +3206,7 @@ cdu31a_init(void)
       /* use 'mount -o block=2048' */
       blksize_size[MAJOR_NR] = &cdu31a_block_size;
       
-      cdu31a_abort_timer.next = NULL;
-      cdu31a_abort_timer.prev = NULL;
+      init_timer(&cdu31a_abort_timer);
       cdu31a_abort_timer.function = handle_abort_timeout;
    }
 

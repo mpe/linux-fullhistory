@@ -100,7 +100,7 @@ static long sock_read(struct inode *inode, struct file *file,
 static long sock_write(struct inode *inode, struct file *file,
 		       const char *buf, unsigned long size);
 
-static void sock_close(struct inode *inode, struct file *file);
+static int sock_close(struct inode *inode, struct file *file);
 static unsigned int sock_poll(struct file *file, poll_table *wait);
 static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg);
@@ -467,7 +467,7 @@ static unsigned int sock_poll(struct file *file, poll_table * wait)
 }
 
 
-void sock_close(struct inode *inode, struct file *filp)
+int sock_close(struct inode *inode, struct file *filp)
 {
 	/*
 	 *	It was possible the inode is NULL we were 
@@ -477,10 +477,11 @@ void sock_close(struct inode *inode, struct file *filp)
 	if (!inode)
 	{
 		printk(KERN_DEBUG "sock_close: NULL inode\n");
-		return;
+		return 0;
 	}
 	sock_fasync(inode, filp, 0);
 	sock_release(socki_lookup(inode));
+	return 0;
 }
 
 /*
@@ -561,19 +562,16 @@ int sock_wake_async(struct socket *sock, int how)
 }
 
 
-asmlinkage int sys_socket(int family, int type, int protocol)
+int sock_create(int family, int type, int protocol, struct socket **res)
 {
-	int i, fd, err;
+	int i;
 	struct socket *sock;
-
-	lock_kernel();
 
  	/*
  	 *	Check protocol is in range
  	 */
-	err = -EINVAL;
  	if(family<0||family>=NPROTO)
- 		goto out;
+		return -EINVAL;
  		
 #if defined(CONFIG_KERNELD) && defined(CONFIG_NET)
 	/* Attempt to load a protocol module if the find failed. 
@@ -591,7 +589,7 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 #endif
 
 	if (net_families[family]==NULL)
-  		goto out;
+  		return -EINVAL;
 
 /*
  *	Check that this is a type that we know how to manipulate and
@@ -602,7 +600,7 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 	if ((type != SOCK_STREAM && type != SOCK_DGRAM &&
 	     type != SOCK_SEQPACKET && type != SOCK_RAW &&
 	     type != SOCK_PACKET) || protocol < 0)
-			goto out;
+			return -EINVAL;
 
 /*
  *	Allocate the socket and allow the family to set things up. if
@@ -610,11 +608,10 @@ asmlinkage int sys_socket(int family, int type, int protocol)
  *	default.
  */
 
-	err = -ENFILE;
 	if (!(sock = sock_alloc())) 
 	{
 		printk(KERN_WARNING "socket: no more sockets\n");
-		goto out;	/* Not exactly a match, but its the
+		return -ENFILE;		/* Not exactly a match, but its the
 					   closest posix thing */
 	}
 
@@ -623,9 +620,24 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 	if ((i = net_families[family]->create(sock, protocol)) < 0) 
 	{
 		sock_release(sock);
-		err = i;
+		return i;
 	}
-	else if ((fd = get_fd(sock->inode)) < 0) 
+
+	*res = sock;
+	return 0;
+}
+
+asmlinkage int sys_socket(int family, int type, int protocol)
+{
+	int fd, err;
+	struct socket *sock;
+
+	lock_kernel();
+
+	if ((err = sock_create(family, type, protocol, &sock)) < 0)
+		goto out;
+
+	if ((fd = get_fd(sock->inode)) < 0) 
 	{
 		sock_release(sock);
 		err = -EINVAL;
@@ -635,6 +647,7 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 		sock->file = current->files->fd[fd];
 		err = fd;
 	}
+
 out:
 	unlock_kernel();
 	return err;
@@ -988,35 +1001,6 @@ bad:
 }
 
 
-/*
- *	Receive a datagram from a socket. Call the protocol recvmsg method
- */
-
-asmlinkage int sys_recv(int fd, void * ubuf, size_t size, unsigned flags)
-{
-	struct iovec iov;
-	struct msghdr msg;
-	struct socket *sock;
-	int err;
-
-	lock_kernel();
-	if ((sock = sockfd_lookup(fd, &err))!=NULL)
-	{		
-		msg.msg_name=NULL;
-		msg.msg_iov=&iov;
-		msg.msg_iovlen=1;
-		msg.msg_control=NULL;
-		msg.msg_controllen=0;
-		iov.iov_base=ubuf;
-		iov.iov_len=size;
-
-		err=sock_recvmsg(sock, &msg, size,
-			    (current->files->fd[fd]->f_flags & O_NONBLOCK) ? flags | MSG_DONTWAIT : flags);
-		sockfd_put(sock);
-	}
-	unlock_kernel();
-	return err;
-}
 
 /*
  *	Receive a frame from the socket and optionally record the address of the 
@@ -1056,6 +1040,15 @@ asmlinkage int sys_recvfrom(int fd, void * ubuf, size_t size, unsigned flags,
 	}		
 	unlock_kernel();
 	return err;
+}
+
+/*
+ *	Receive a datagram from a socket. 
+ */
+
+asmlinkage int sys_recv(int fd, void * ubuf, size_t size, unsigned flags)
+{
+	return sys_recvfrom(fd,ubuf,size,flags, NULL, NULL);
 }
 
 /*
@@ -1289,13 +1282,7 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 
 /*
- *	System call vectors. Since I (RIB) want to rewrite sockets as streams,
- *	we have this level of indirection. Not a lot of overhead, since more of
- *	the work is done via read/write/poll directly.
- *
- *	I'm now expanding this up to a higher level to separate the assorted
- *	kernel/user space manipulations and global assumptions from the protocol
- *	layers proper - AC.
+ *	System call vectors. 
  *
  *	Argument checking cleaned up. Saved 20% in size.
  */
@@ -1434,7 +1421,7 @@ void sock_init(void)
 {
 	int i;
 
-	printk(KERN_INFO "Swansea University Computer Society NET3.038 for Linux 2.1\n");
+	printk(KERN_INFO "Swansea University Computer Society NET3.039 for Linux 2.1\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 

@@ -298,7 +298,9 @@ struct {
 	{ "swap=", swap_setup },
 	{ "buff=", buff_setup },
 	{ "panic=", panic_setup },
+#ifdef CONFIG_VT
 	{ "no-scroll", no_scroll },
+#endif
 #ifdef CONFIG_BUGi386
 	{ "no-hlt", no_halt },
 	{ "no387", no_387 },
@@ -1014,17 +1016,9 @@ static int init(void * unused)
 	}
 #endif
 
-#ifdef __sparc__
-        if (serial_console == 1) {
-                (void) open("/dev/cua0", O_RDWR, 0);
-        } else if (serial_console == 2) {
-                (void) open("/dev/cua1", O_RDWR, 0);
-        } else {
-#endif
-                (void) open("/dev/tty1", O_RDWR, 0);
-#ifdef __sparc__
-        }
-#endif
+	if (open("/dev/console",O_RDWR,0) < 0)
+		printk("Unable to open an initial console.\n");
+
 	(void) dup(0);
 	(void) dup(0);
 	

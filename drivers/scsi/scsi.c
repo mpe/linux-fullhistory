@@ -277,11 +277,14 @@ static struct dev_info device_list[] =
 {"INSITE","Floptical   F*8I","*", BLIST_KEY},
 {"INSITE","I325VM","*", BLIST_KEY},
 {"NRC","MBR-7","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"NRC","MBR-7.4","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"NAKAMICH","MJ-4.8S","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"PIONEER","CD-ROM DRM-602X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"PIONEER","CD-ROM DRM-604X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"EMULEX","MD21/S2     ESDI","*", BLIST_SINGLELUN},
 {"CANON","IPUBJD","*", BLIST_SPARSELUN},
 {"MATSHITA","PD","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"YAMAHA","CDR100","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"YAMAHA","CDR102","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 /*
  * Must be at end of list...
@@ -1028,7 +1031,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
 
     host = device->host;
 
-    if (intr_count && SCSI_BLOCK(host)) return NULL;
+    if (in_interrupt() && SCSI_BLOCK(host)) return NULL;
 
     while (1==1){
 	if (!device->single_lun) {
@@ -1243,12 +1246,12 @@ inline void internal_cmnd (Scsi_Cmnd * SCpnt)
 	 * interrupt.
 	 */
 
-	if(!intr_count && SCpnt->host->irq)
+	if(!in_interrupt() && SCpnt->host->irq)
 	    disable_irq(SCpnt->host->irq);
 
 	host->hostt->queuecommand (SCpnt, scsi_done);
 
-	if(!intr_count && SCpnt->host->irq)
+	if(!in_interrupt() && SCpnt->host->irq)
 	    enable_irq(SCpnt->host->irq);
     }
     else
@@ -2897,7 +2900,9 @@ static void resize_dma_pool(void)
 	    if (SDpnt->type == TYPE_WORM || SDpnt->type == TYPE_ROM)
 	        new_dma_sectors += (2048 >> 9) * SDpnt->queue_depth;
 	}
-	else if (SDpnt->type == TYPE_SCANNER || SDpnt->type == TYPE_PROCESSOR) {
+	else if (SDpnt->type == TYPE_SCANNER ||
+		 SDpnt->type == TYPE_PROCESSOR ||
+		 SDpnt->type == TYPE_MEDIUM_CHANGER) {
 	    new_dma_sectors += (4096 >> 9) * SDpnt->queue_depth;
 	}
 	else {

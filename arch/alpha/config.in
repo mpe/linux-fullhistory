@@ -83,7 +83,6 @@ then
 	define_bool CONFIG_ALPHA_AVANTI y
 fi
 
-bool 'Echo console messages on /dev/ttyS0 (COM1)' CONFIG_SERIAL_ECHO
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'TGA Console Support' CONFIG_TGA_CONSOLE
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

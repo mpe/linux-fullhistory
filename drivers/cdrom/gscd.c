@@ -87,7 +87,7 @@ static void gscd_bin2bcd          (unsigned char *p);
 static void do_gscd_request       (void);
 static int  gscd_ioctl            (struct inode *, struct file *, unsigned int, unsigned long);
 static int  gscd_open             (struct inode *, struct file *);
-static void gscd_release          (struct inode *, struct file *);
+static int  gscd_release          (struct inode *, struct file *);
 static int  check_gscd_med_chg    (kdev_t);
 
 /*      GoldStar Funktionen    */
@@ -394,7 +394,7 @@ printk ( "GSCD: open\n" );
  * On close, we flush all gscd blocks from the buffer cache.
  */
 
-static void gscd_release (struct inode * inode, struct file * file)
+static int gscd_release (struct inode * inode, struct file * file)
 {
 
 #ifdef GSCD_DEBUG
@@ -406,6 +406,7 @@ printk ( "GSCD: release\n" );
 	invalidate_buffers(inode -> i_rdev);
 
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 

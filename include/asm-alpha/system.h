@@ -70,14 +70,12 @@ __asm__ __volatile__("mb": : :"memory")
 #define draina() \
 __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_draina) : "memory")
 
-#define getipl() \
-({ unsigned long __old_ipl; \
+#define getipl(__old_ipl) \
 __asm__ __volatile__( \
 	"call_pal 54\n\t" \
 	"bis $0,$0,%0" \
 	: "=r" (__old_ipl) \
-	: : "$0", "$1", "$16", "$22", "$23", "$24", "$25"); \
-__old_ipl; })
+	: : "$0", "$1", "$16", "$22", "$23", "$24", "$25")
 
 #define setipl(__new_ipl) \
 __asm__ __volatile__( \
@@ -86,20 +84,23 @@ __asm__ __volatile__( \
 	: : "r" (__new_ipl) \
 	: "$0", "$1", "$16", "$22", "$23", "$24", "$25", "memory")
 
-#define swpipl(__new_ipl) \
-({ unsigned long __old_ipl; \
+#define swpipl(__old_ipl,__new_ipl) \
 __asm__ __volatile__( \
 	"bis %1,%1,$16\n\t" \
 	"call_pal 53\n\t" \
 	"bis $0,$0,%0" \
 	: "=r" (__old_ipl) \
 	: "r" (__new_ipl) \
-	: "$0", "$1", "$16", "$22", "$23", "$24", "$25", "memory"); \
-__old_ipl; })
+	: "$0", "$1", "$16", "$22", "$23", "$24", "$25", "memory")
+
+#define __cli()			setipl(7)
+#define __sti()			setipl(0)
+#define __save_flags(flags)	getipl(flags)
+#define __restore_flags(flags)	setipl(flags)
 
 #define cli()			setipl(7)
 #define sti()			setipl(0)
-#define save_flags(flags)	do { flags = getipl(); } while (0)
+#define save_flags(flags)	getipl(flags)
 #define restore_flags(flags)	setipl(flags)
 
 /*
@@ -122,28 +123,36 @@ extern __inline__ unsigned long xchg_u64 (volatile long * m, unsigned long val);
 extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 {
 	unsigned long dummy;
+
 	__asm__ __volatile__(
-		"\n1:\t"
-		"ldl_l %0,%2\n\t"
-		"bis %3,%3,%1\n\t"
-		"stl_c %1,%2\n\t"
-		"beq %1,1b\n"
-		: "=&r" (val), "=&r" (dummy), "=m" (*m)
-		: "r" (val), "m" (*m));
+	"1:	ldl_l %0,%2\n"
+	"	bis %3,%3,%1\n"
+	"	stl_c %1,%2\n"
+	"	beq %1,2f\n"
+	".text 2\n"
+	"2:	br 1b\n"
+	".text"
+	: "=&r" (val), "=&r" (dummy), "=m" (*m)
+	: "r" (val), "m" (*m));
+
 	return val;
 }
 
 extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
 {
 	unsigned long dummy;
+
 	__asm__ __volatile__(
-		"\n1:\t"
-		"ldq_l %0,%2\n\t"
-		"bis %3,%3,%1\n\t"
-		"stq_c %1,%2\n\t"
-		"beq %1,1b\n"
-		: "=&r" (val), "=&r" (dummy), "=m" (*m)
-		: "r" (val), "m" (*m));
+	"1:	ldq_l %0,%2\n"
+	"	bis %3,%3,%1\n"
+	"	stq_c %1,%2\n"
+	"	beq %1,2f\n"
+	".text 2\n"
+	"2:	br 1b\n"
+	".text"
+	: "=&r" (val), "=&r" (dummy), "=m" (*m)
+	: "r" (val), "m" (*m));
+
 	return val;
 }
 

@@ -1946,7 +1946,7 @@ static int floppy_open( struct inode *inode, struct file *filp )
 }
 
 
-static void floppy_release( struct inode * inode, struct file * filp )
+static int floppy_release( struct inode * inode, struct file * filp )
 {
   int drive;
 
@@ -1966,6 +1966,7 @@ static void floppy_release( struct inode * inode, struct file * filp )
     }
 
   MOD_DEC_USE_COUNT;
+  return 0;
 }
 
 static struct file_operations floppy_fops = {

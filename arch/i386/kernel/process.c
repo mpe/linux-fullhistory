@@ -149,7 +149,15 @@ int cpu_idle(void *unused)
 	{
 		if(cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
 			__asm("hlt");
-		run_task_queue(&tq_scheduler);
+		/*
+		 * tq_scheduler currently assumes we're running in a process
+		 * context (ie that we hold the kernel lock..)
+		 */
+		if (tq_scheduler) {
+			lock_kernel();
+			run_task_queue(&tq_scheduler);
+			unlock_kernel();
+		}
 		schedule();
 	}
 }
@@ -203,7 +211,7 @@ void reboot_setup(char *str, int *ints)
    doesn't work with at least one type of 486 motherboard.  It is easy
    to stop this code working; hence the copious comments. */
 
-unsigned long long
+static unsigned long long
 real_mode_gdt_entries [3] =
 {
 	0x0000000000000000ULL,	/* Null descriptor */
@@ -211,7 +219,7 @@ real_mode_gdt_entries [3] =
 	0x000092000100ffffULL		/* 16-bit real-mode 64k data at 0x00000100 */
 };
 
-struct
+static struct
 {
 	unsigned short       size __attribute__ ((packed));
 	unsigned long long * base __attribute__ ((packed));
@@ -238,7 +246,7 @@ real_mode_idt = { 0x3ff, 0 };
    More could be done here to set up the registers as if a CPU reset had
    occurred; hopefully real BIOSes don't assume much. */
 
-unsigned char real_mode_switch [] =
+static unsigned char real_mode_switch [] =
 {
 	0x66, 0x0f, 0x20, 0xc0,			/*    movl  %cr0,%eax        */
 	0x66, 0x83, 0xe0, 0x11,			/*    andl  $0x00000011,%eax */

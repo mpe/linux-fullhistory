@@ -218,7 +218,7 @@ skip_call_fw_firewall:
 			kfree_skb(skb, FREE_WRITE);
 
 			if (skb2 == NULL) {
-				NETDEBUG(printk("\nIP: No memory available for IP forward\n"));
+				NETDEBUG(printk(KERN_ERR "\nIP: No memory available for IP forward\n"));
 				return -1;
 			}
 			skb = skb2;

@@ -521,17 +521,6 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
 	byte *buffer = skb->data;
 	byte using_txbuf;
 
-	/*
-	 * If some higher layer thinks we've missed a
-	 * tx-done interrupt we are passed NULL.
-	 * Caution: dev_tint() handles the cli()/sti() itself.
-	 */
-
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
-
 	using_txbuf = de620_tx_buffs(dev); /* Peek at the adapter */
 	dev->tbusy = (using_txbuf == (TXBF0 | TXBF1)); /* Boolean! */
 

@@ -20,9 +20,12 @@ FONTMAPFILE = cp437.uni
 
 L_TARGET := char.a
 M_OBJS   :=
-L_OBJS   := tty_io.o n_tty.o console.o \
-	tty_ioctl.o pty.o vt.o mem.o vc_screen.o random.o \
-	consolemap.o selection.o
+L_OBJS   := tty_io.o n_tty.o tty_ioctl.o pty.o mem.o random.o
+
+ifdef CONFIG_VT
+L_OBJS += console.o vt.o vc_screen.o consolemap.o
+LX_OBJS += selection.o
+endif
 
 ifeq ($(CONFIG_SERIAL),y)
   ifndef CONFIG_SUN_SERIAL
@@ -35,7 +38,9 @@ else
 endif
 
 ifndef CONFIG_SUN_KEYBOARD
+ifdef CONFIG_VT
 L_OBJS += keyboard.o defkeymap.o
+endif
 endif
 
 ifeq ($(CONFIG_DIGI),y)
@@ -235,13 +240,15 @@ else
   MX_OBJS += misc.o
   endif
 endif
-  
-ifdef CONFIG_TGA_CONSOLE
-L_OBJS += tga.o
-else
- ifndef CONFIG_SUN_CONSOLE
- L_OBJS += vga.o vesa_blank.o
- endif
+
+ifdef CONFIG_VT
+  ifdef CONFIG_TGA_CONSOLE
+  L_OBJS += tga.o
+  else
+   ifndef CONFIG_SUN_CONSOLE
+   L_OBJS += vga.o vesa_blank.o
+   endif
+  endif
 endif
 
 include $(TOPDIR)/Rules.make

@@ -229,7 +229,7 @@ struct net_local {
 
   */
 
-unsigned short init_words[] = {
+static unsigned short init_words[] = {
 	/*	System Configuration Pointer (SCP). */
 	0x0000,					/* Set bus size to 16 bits. */
 	0,0,					/* pad words. */
@@ -286,7 +286,7 @@ static int	el16_close(struct device *dev);
 static struct net_device_stats *el16_get_stats(struct device *dev);
 
 static void hardware_send_packet(struct device *dev, void *buf, short length);
-void init_82586_mem(struct device *dev);
+static void init_82586_mem(struct device *dev);
 
 
 #ifdef HAVE_DEVLIST
@@ -687,7 +687,7 @@ static void init_rx_bufs(struct device *dev)
 
 }
 
-void init_82586_mem(struct device *dev)
+static void init_82586_mem(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;

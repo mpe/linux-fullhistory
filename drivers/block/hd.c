@@ -656,14 +656,14 @@ static int hd_open(struct inode * inode, struct file * filp)
  * Releasing a block device means we sync() it, so that it can safely
  * be forgotten about...
  */
-static void hd_release(struct inode * inode, struct file * file)
+static int hd_release(struct inode * inode, struct file * file)
 {
         int target;
 	sync_dev(inode->i_rdev);
 
 	target =  DEVICE_NR(inode->i_rdev);
 	access_count[target]--;
-
+	return 0;
 }
 
 static void hd_geninit(struct gendisk *);

@@ -85,58 +85,68 @@ struct termio {
 /*
  * Translate a "termio" structure into a "termios". Ugh.
  */
-#define SET_LOW_TERMIOS_BITS(termios, termio, x) { \
-	unsigned short __tmp; \
-	get_user(__tmp,&(termio)->x); \
-	*(unsigned short *) &(termios)->x = __tmp; \
-}
 
-#define user_termio_to_kernel_termios(termios, termio) \
-do { \
-	SET_LOW_TERMIOS_BITS(termios, termio, c_iflag); \
-	SET_LOW_TERMIOS_BITS(termios, termio, c_oflag); \
-	SET_LOW_TERMIOS_BITS(termios, termio, c_cflag); \
-	SET_LOW_TERMIOS_BITS(termios, termio, c_lflag); \
-	get_user((termios)->c_cc[VINTR], &(termio)->c_cc[_VINTR]); \
-	get_user((termios)->c_cc[VQUIT], &(termio)->c_cc[_VQUIT]); \
-	get_user((termios)->c_cc[VERASE], &(termio)->c_cc[_VERASE]); \
-	get_user((termios)->c_cc[VKILL], &(termio)->c_cc[_VKILL]); \
-	get_user((termios)->c_cc[VEOF], &(termio)->c_cc[_VEOF]); \
-	get_user((termios)->c_cc[VMIN], &(termio)->c_cc[_VMIN]); \
-	get_user((termios)->c_cc[VEOL], &(termio)->c_cc[_VEOL]); \
-	get_user((termios)->c_cc[VTIME], &(termio)->c_cc[_VTIME]); \
-	get_user((termios)->c_cc[VEOL2], &(termio)->c_cc[_VEOL2]); \
-	get_user((termios)->c_cc[VSWTC], &(termio)->c_cc[_VSWTC]); \
-} while(0)
+#define user_termio_to_kernel_termios(a_termios, u_termio)			\
+({										\
+	struct termios *k_termios = (a_termios);				\
+	struct termio k_termio;							\
+	int canon, ret;								\
+										\
+	ret = copy_from_user(&k_termio, u_termio, sizeof(k_termio));		\
+	if (!ret) {								\
+		/* Overwrite only the low bits.  */				\
+		*(unsigned short *)&k_termios->c_iflag = k_termio.c_iflag;	\
+		*(unsigned short *)&k_termios->c_oflag = k_termio.c_oflag;	\
+		*(unsigned short *)&k_termios->c_cflag = k_termio.c_cflag;	\
+		*(unsigned short *)&k_termios->c_lflag = k_termio.c_lflag;	\
+		canon = k_termio.c_lflag & ICANON;				\
+										\
+		k_termios->c_cc[VINTR]  = k_termio.c_cc[_VINTR];		\
+		k_termios->c_cc[VQUIT]  = k_termio.c_cc[_VQUIT];		\
+		k_termios->c_cc[VERASE] = k_termio.c_cc[_VERASE];		\
+		k_termios->c_cc[VKILL]  = k_termio.c_cc[_VKILL];		\
+		k_termios->c_cc[VEOL2]  = k_termio.c_cc[_VEOL2];		\
+		k_termios->c_cc[VSWTC]  = k_termio.c_cc[_VSWTC];		\
+		k_termios->c_cc[canon ? VEOF : VMIN]  = k_termio.c_cc[_VEOF];	\
+		k_termios->c_cc[canon ? VEOL : VTIME] = k_termio.c_cc[_VEOL];	\
+	}									\
+	ret;									\
+})
 
 /*
  * Translate a "termios" structure into a "termio". Ugh.
  *
  * Note the "fun" _VMIN overloading.
  */
-#define kernel_termios_to_user_termio(termio, termios) \
-do { \
-	put_user((termios)->c_iflag, &(termio)->c_iflag); \
-	put_user((termios)->c_oflag, &(termio)->c_oflag); \
-	put_user((termios)->c_cflag, &(termio)->c_cflag); \
-	put_user((termios)->c_lflag, &(termio)->c_lflag); \
-	put_user((termios)->c_line, &(termio)->c_line); \
-	put_user((termios)->c_cc[VINTR], &(termio)->c_cc[_VINTR]); \
-	put_user((termios)->c_cc[VQUIT], &(termio)->c_cc[_VQUIT]); \
-	put_user((termios)->c_cc[VERASE], &(termio)->c_cc[_VERASE]); \
-	put_user((termios)->c_cc[VKILL], &(termio)->c_cc[_VKILL]); \
-	put_user((termios)->c_cc[VEOF], &(termio)->c_cc[_VEOF]); \
-	put_user((termios)->c_cc[VEOL], &(termio)->c_cc[_VEOL]); \
-	put_user((termios)->c_cc[VEOL2], &(termio)->c_cc[_VEOL2]); \
-	put_user((termios)->c_cc[VSWTC], &(termio)->c_cc[_VSWTC]); \
-	if (!((termios)->c_lflag & ICANON)) { \
-		put_user((termios)->c_cc[VMIN], &(termio)->c_cc[_VMIN]); \
-		put_user((termios)->c_cc[VTIME], &(termio)->c_cc[_VTIME]); \
-	} \
-} while(0)
+#define kernel_termios_to_user_termio(u_termio, a_termios)		\
+({									\
+	struct termios *k_termios = (a_termios);			\
+	struct termio k_termio;						\
+	int canon;							\
+									\
+	k_termio.c_iflag = k_termios->c_iflag;				\
+	k_termio.c_oflag = k_termios->c_oflag;				\
+	k_termio.c_cflag = k_termios->c_cflag;				\
+	canon = (k_termio.c_lflag = k_termios->c_lflag) & ICANON;	\
+									\
+	k_termio.c_line = k_termios->c_line;				\
+	k_termio.c_cc[_VINTR]  = k_termios->c_cc[VINTR];		\
+	k_termio.c_cc[_VQUIT]  = k_termios->c_cc[VQUIT];		\
+	k_termio.c_cc[_VERASE] = k_termios->c_cc[VERASE];		\
+	k_termio.c_cc[_VKILL]  = k_termios->c_cc[VKILL];		\
+	k_termio.c_cc[_VEOF]   = k_termios->c_cc[canon ? VEOF : VMIN];	\
+	k_termio.c_cc[_VEOL]   = k_termios->c_cc[canon ? VEOL : VTIME];	\
+	k_termio.c_cc[_VEOL2]  = k_termios->c_cc[VEOL2];		\
+	k_termio.c_cc[_VSWTC]  = k_termios->c_cc[VSWTC];		\
+									\
+	copy_to_user(u_termio, &k_termio, sizeof(k_termio));		\
+})
 
-#define user_termios_to_kernel_termios(k, u) copy_from_user(k, u, sizeof(struct termios))
-#define kernel_termios_to_user_termios(u, k) copy_to_user(u, k, sizeof(struct termios))
+#define user_termios_to_kernel_termios(k, u) \
+	copy_from_user(k, u, sizeof(struct termios))
+
+#define kernel_termios_to_user_termios(u, k) \
+	copy_to_user(u, k, sizeof(struct termios))
 
 #endif	/* __KERNEL__ */
 

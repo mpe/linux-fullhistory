@@ -312,7 +312,7 @@ static void sl_changedmtu(struct slip *sl)
 }
 
 
-/* Set the "sending" flag.  This must be atomic, hence the ASM. */
+/* Set the "sending" flag.  This must be atomic hence the set_bit. */
 static inline void
 sl_lock(struct slip *sl)
 {

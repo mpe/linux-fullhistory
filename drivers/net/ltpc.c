@@ -690,7 +690,7 @@ static int sendup_buffer (struct device *dev)
 	int dnode, snode, llaptype, len; 
 	int sklen;
 	struct sk_buff *skb;
-	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
+	struct net_device_stats *stats = (struct enet_statistics *)dev->priv;
 	struct lt_rcvlap *ltc = (struct lt_rcvlap *) ltdmacbuf;
 
 	if (ltc->command != LT_RCVLAP) {
@@ -742,9 +742,11 @@ static int sendup_buffer (struct device *dev)
 
 	skb->h.raw = skb->data;
 
+	stats->rx_packets++;
+	stats->rx_bytes+=skb->len;
+
 	/* toss it onwards */
 	netif_rx(skb);
-	stats->rx_packets++;
 	return 0;
 }
 
@@ -939,16 +941,16 @@ static int ltpc_xmit(struct sk_buff *skb, struct device *dev)
 		printk("\n");
 	}
 
-	dev_kfree_skb(skb, FREE_WRITE);
-
 	stats->tx_packets++;
+	stats->tx_bytes+=skb->len;
 
+	dev_kfree_skb(skb, FREE_WRITE);
 	return 0;
 }
 
 static struct net_device_stats *ltpc_get_stats(struct device *dev)
 {
-	struct enet_statistics *stats = (struct enet_statistics*) dev->priv;
+	struct net_device_stats *stats = (struct net_device_stats *) dev->priv;
 	return stats;
 }
 
@@ -1211,8 +1213,11 @@ int ltpc_probe(struct device *dev)
 }
 
 #ifdef MODULE
+
+static char dev_name[8];
+
 static struct device dev_ltpc = {
-	"ltalk0\0   ", 
+		dev_name, 
 		0, 0, 0, 0,
 	 	0x0, 0,
 	 	0, 0, 0, NULL, ltpc_probe };
@@ -1220,16 +1225,11 @@ static struct device dev_ltpc = {
 int init_module(void)
 {
 	/* Find a name for this unit */
-	int ct= 1;
+	int err=dev_alloc_name(&dev_ltpc,"lt%d");
 	
-	while(dev_get(dev_ltpc.name)!=NULL && ct<100)
-	{
-		sprintf(dev_ltpc.name,"ltpc%d",ct);
-		ct++;
-	}
-	if(ct==100)
-		return -ENFILE;
-	
+	if(err<0)
+		return err;
+
 	if (register_netdev(&dev_ltpc) != 0) {
 		if(debug&DEBUG_VERBOSE) printk("EIO from register_netdev\n");
 		return -EIO;

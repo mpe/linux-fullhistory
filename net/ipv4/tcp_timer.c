@@ -69,7 +69,7 @@ void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long when)
 
 	if((long)when <= 0)
 	{		
-		printk("xmit_timer <= 0 - timer:%d when:%lx\n", what, when);
+		printk(KERN_DEBUG "xmit_timer <= 0 - timer:%d when:%lx\n", what, when);
 		when=HZ/50;
 	}
 
@@ -100,11 +100,11 @@ void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long when)
 		break;	
 
 	case TIME_WRITE:
-		printk("bug: tcp_reset_xmit_timer TIME_WRITE\n");
+		printk(KERN_DEBUG "bug: tcp_reset_xmit_timer TIME_WRITE\n");
 		break;
 
 	default:
-		printk("bug: unknown timer value\n");
+		printk(KERN_DEBUG "bug: unknown timer value\n");
 	}
 }
 
@@ -123,7 +123,7 @@ void tcp_clear_xmit_timer(struct sock *sk, int what)
 		del_timer(&tp->probe_timer);
 		break;	
 	default:
-		printk("bug: unknown timer value\n");
+		printk(KERN_DEBUG "bug: unknown timer value\n");
 	}
 }
 
@@ -142,7 +142,7 @@ int tcp_timer_is_set(struct sock *sk, int what)
 		return tp->probe_timer.next != NULL;
 		break;	
 	default:
-		printk("bug: unknown timer value\n");
+		printk(KERN_DEBUG "bug: unknown timer value\n");
 	}
 	return 0;
 }

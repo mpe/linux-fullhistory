@@ -89,9 +89,9 @@ static void set_multicast_list(struct device *dev);
 
 /* Example routines you must write ;->. */
 #define tx_done(dev)	(inw(SEEQ_STATUS) & SEEQSTAT_TX_ON)
-extern void hardware_send_packet(struct device *dev, char *buf, int length);
+static void hardware_send_packet(struct device *dev, char *buf, int length);
 extern void seeq8005_init(struct device *dev, int startp);
-inline void wait_for_buffer(struct device *dev);
+static inline void wait_for_buffer(struct device *dev);
 
 
 /* Check for a network adaptor of this type, and return '0' iff one exists.
@@ -389,14 +389,6 @@ seeq8005_send_packet(struct sk_buff *skb, struct device *dev)
 		dev->trans_start = jiffies;
 	}
 
-	/* If some higher layer thinks we've missed an tx-done interrupt
-	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	   itself. */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
-
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
 	if (set_bit(0, (void*)&dev->tbusy) != 0)
@@ -689,7 +681,7 @@ void seeq8005_init(struct device *dev, int startp)
 }	
 
 
-void hardware_send_packet(struct device * dev, char *buf, int length)
+static void hardware_send_packet(struct device * dev, char *buf, int length)
 {
 	int ioaddr = dev->base_addr;
 	int status = inw(SEEQ_STATUS);

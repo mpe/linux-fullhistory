@@ -20,11 +20,10 @@
 asmlinkage int sys_sysinfo(struct sysinfo *info)
 {
 	struct sysinfo val;
-	int err;
 
-	lock_kernel();
 	memset((char *)&val, 0, sizeof(struct sysinfo));
 
+	lock_kernel();
 	val.uptime = jiffies / HZ;
 
 	val.loads[0] = avenrun[0] << (SI_LOAD_SHIFT - FSHIFT);
@@ -35,11 +34,9 @@ asmlinkage int sys_sysinfo(struct sysinfo *info)
 
 	si_meminfo(&val);
 	si_swapinfo(&val);
+	unlock_kernel();
 
 	if (copy_to_user(info, &val, sizeof(struct sysinfo)))
-		err = -EFAULT;
-	else
-		err = 0;
-	unlock_kernel();
-	return err;
+		return -EFAULT;
+	return 0;
 }

@@ -98,15 +98,16 @@ static int fasync_mouse(struct inode *inode, struct file *filp, int on)
 	return 0;
 }
 
-static void release_mouse(struct inode * inode, struct file * file)
+static int release_mouse(struct inode * inode, struct file * file)
 {
 	fasync_mouse(inode, file, 0);
 	if (--mouse.active)
-		return;
+		return 0;
 	MS_MSE_INT_OFF();
 	mouse.ready = 0; 
 	free_irq(mouse_irq, NULL);
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 static int open_mouse(struct inode * inode, struct file * file)

@@ -443,7 +443,10 @@ void ide_init_triton (byte bus, byte fn)
 	const char *chipset = "ide";
 	piix_timing_t timings[2];
 
-	if (pcibios_read_config_word(piix_pci_bus, piix_pci_fn, 0x02, &devid))
+	piix_pci_bus = bus;
+	piix_pci_fn  = fn;
+
+	if (pcibios_read_config_word(bus, fn, 0x02, &devid))
 		goto quit;
 	chipset = (devid == PCI_DEVICE_ID_INTEL_82371SB_1) ? "PIIX3" : "PIIX";
 
@@ -462,13 +465,10 @@ void ide_init_triton (byte bus, byte fn)
 		goto quit;
 	if ((rc = pcibios_read_config_word(bus, fn, 0x42, (short *)&timings[1])))
 		goto quit;
-	if ((!timings[0].ports_enabled) || (!timings[1].ports_enabled)) {
+	if ((!timings[0].ports_enabled) && (!timings[1].ports_enabled)) {
 		printk("%s: neither IDE port is enabled\n", chipset);
 		goto quit;
 	}
-
-	piix_pci_bus = bus;
-	piix_pci_fn  = fn;
 
 	/*
 	 * See if Bus-Mastered DMA is enabled
@@ -534,7 +534,7 @@ void ide_init_triton (byte bus, byte fn)
 			byte recovery = 4 - timing.recovery;
 			if (devid == PCI_DEVICE_ID_INTEL_82371SB_1
 			 && timing.sidetim_enabled
-			 && !pcibios_read_config_byte(piix_pci_bus, piix_pci_fn, 0x44, (byte *) &sidetim))
+			 && !pcibios_read_config_byte(bus, fn, 0x44, (byte *) &sidetim))
 				slave = "";		/* PIIX3 */
 			else
 				slave = "/slave";	/* PIIX, or PIIX3 in compatibility mode */

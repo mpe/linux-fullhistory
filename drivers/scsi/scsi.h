@@ -550,7 +550,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	for(;;) {			            \
 	current->state = TASK_UNINTERRUPTIBLE;	    \
 	if (CONDITION) {		            \
-            if (intr_count)	                    \
+            if (in_interrupt())	                    \
 	        panic("scsi: trying to call schedule() in interrupt" \
 		      ", file %s, line %d.\n", __FILE__, __LINE__);  \
 	    schedule();			\

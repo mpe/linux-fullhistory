@@ -13,7 +13,7 @@
 
 struct notifier_block
 {
-	int (*notifier_call)(struct notifier_block *this, unsigned long, void *);
+	int (*notifier_call)(struct notifier_block *self, unsigned long, void *);
 	struct notifier_block *next;
 	int priority;
 };

@@ -270,7 +270,7 @@
 #define __NR__sysctl            251
 #define __NR_getsid             252
 #define __NR_fdatasync          253
-#define __NR_nfsctl             254
+#define __NR_nfsservctl         254
 #define __NR_aplib              255
 
 #define _syscall0(type,name) \

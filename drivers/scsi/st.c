@@ -804,7 +804,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 
 
 /* Close the device*/
-	static void
+	static int
 scsi_tape_close(struct inode * inode, struct file * filp)
 {
     int result;
@@ -923,7 +923,7 @@ out:
     if(st_template.module)
 	__MOD_DEC_USE_COUNT(st_template.module);
 
-    return;
+    return 0;
 }
 
 
@@ -2008,7 +2008,7 @@ st_int_ioctl(struct inode * inode,
 		      arg - MT_ST_HPLOADER_OFFSET);
 	   }
 #endif
-	   cmd[3] = arg; /* MediaID field of C1553A */
+	   cmd[3] = arg - MT_ST_HPLOADER_OFFSET; /* MediaID field of C1553A */
        }
 #if ST_NOWAIT
        cmd[1] = 1;  /* Don't wait for completion */
@@ -2975,6 +2975,7 @@ normalize_buffer(ST_buffer *STbuffer)
 }
 
 
+#ifndef MODULE
 /* Set the boot options. Syntax: st=xxx,yyy
    where xxx is buffer size in 1024 byte blocks and yyy is write threshold
    in 1024 byte blocks. */
@@ -2991,6 +2992,7 @@ st_setup(char *str, int *ints)
   if (ints[0] > 2 && ints[3] > 0)
     st_max_buffers = ints[3];
 }
+#endif
 
 
 static struct file_operations st_fops = {

@@ -500,6 +500,11 @@ struct sock
   */
   
 	struct socket		*socket;
+
+  /*
+   *	RPC layer private data
+   */
+	void			*user_data;
   
   /*
    *	Callbacks 

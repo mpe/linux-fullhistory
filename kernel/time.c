@@ -156,32 +156,33 @@ asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 	static int	firsttime = 1;
 	struct timeval	new_tv;
 	struct timezone new_tz;
-	int err = -EPERM;
 
-	lock_kernel();
 	if (!suser())
-		goto out;
-	err = -EFAULT;
+		return -EPERM;
+		
 	if (tv) {
 		if (copy_from_user(&new_tv, tv, sizeof(*tv)))
-			goto out;
+			return -EFAULT;
 	}
 	if (tz) {
 		if (copy_from_user(&new_tz, tz, sizeof(*tz)))
-			goto out;
+			return -EFAULT;
+		lock_kernel();
 		sys_tz = new_tz;
 		if (firsttime) {
 			firsttime = 0;
 			if (!tv)
 				warp_clock();
 		}
+		unlock_kernel();
 	}
 	if (tv)
+	{
+		lock_kernel();
 		do_settimeofday(&new_tv);
-	err = 0;
-out:
-	unlock_kernel();
-	return err;
+		unlock_kernel();
+	}
+	return 0;
 }
 
 long pps_offset = 0;		/* pps time offset (us) */
@@ -208,33 +209,32 @@ void (*hardpps_ptr)(struct timeval *) = (void (*)(struct timeval *))0;
 asmlinkage int sys_adjtimex(struct timex *txc_p)
 {
         long ltemp, mtemp, save_adjust;
-	int error = -EFAULT;
 	struct timex txc;		/* Local copy of parameter */
 
-	lock_kernel();
 	/* Copy the user data space into the kernel copy
 	 * structure. But bear in mind that the structures
 	 * may change
 	 */
 	if(copy_from_user(&txc, txc_p, sizeof(struct timex)))
-		goto out;	
+		return -EFAULT;
 
 	/* In order to modify anything, you gotta be super-user! */
-	error = -EPERM;
 	if (txc.modes && !suser())
-		goto out;
-
+		return -EPERM;
+		
 	/* Now we validate the data before disabling interrupts */
-	error = -EINVAL;
+
 	if (txc.modes != ADJ_OFFSET_SINGLESHOT && (txc.modes & ADJ_OFFSET))
 	  /* adjustment Offset limited to +- .512 seconds */
-	  if (txc.offset <= - MAXPHASE || txc.offset >= MAXPHASE )
-	    goto out;
+		if (txc.offset <= - MAXPHASE || txc.offset >= MAXPHASE )
+			return -EINVAL;	
 
 	/* if the quartz is off by more than 10% something is VERY wrong ! */
 	if (txc.modes & ADJ_TICK)
-	  if (txc.tick < 900000/HZ || txc.tick > 1100000/HZ)
-	    goto out;
+		if (txc.tick < 900000/HZ || txc.tick > 1100000/HZ)
+			return -EINVAL;
+
+	lock_kernel();
 
 	cli();
 
@@ -351,9 +351,6 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	txc.stbcnt	   = pps_stbcnt;
 
 	sti();
-
-	error = copy_to_user(txc_p, &txc, sizeof(struct timex)) ? -EFAULT : time_state;
-out:
 	unlock_kernel();
-	return error;
+	return copy_to_user(txc_p, &txc, sizeof(struct timex)) ? -EFAULT : time_state;
 }

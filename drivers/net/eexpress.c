@@ -467,25 +467,6 @@ static int eexp_xmit(struct sk_buff *buf, struct device *dev)
 	if (dev->tbusy)
 		unstick_cu(dev);
 
-	if (buf==NULL)
-	{
-		/* Some higher layer thinks we might have missed a
-		 * tx-done interrupt.  Does this ever actually happen?
-		 */
-		unsigned short status = scb_status(dev);
-		unsigned short txstatus = eexp_hw_lasttxstat(dev);
-		if (SCB_CUdead(status))
-		{
-			printk(KERN_WARNING "%s: CU has died! status %04x %04x, attempting to restart...\n",
-				dev->name, status, txstatus);
-			lp->stats.tx_errors++;
-			eexp_hw_txrestart(dev);
-		}
-		dev_tint(dev);
-		outb(SIRQ_en|irqrmap[dev->irq],dev->base_addr+SET_IRQ);
-		return 0;
-	}
-
 	if (set_bit(0,(void *)&dev->tbusy))
 	{
 		lp->stats.tx_dropped++;

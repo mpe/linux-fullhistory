@@ -294,7 +294,7 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 }
 
 /* xd_release: release the device */
-static void xd_release (struct inode *inode, struct file *file)
+static int xd_release (struct inode *inode, struct file *file)
 {
 	int target;
 
@@ -303,6 +303,7 @@ static void xd_release (struct inode *inode, struct file *file)
 		sync_dev(inode->i_rdev);
 		xd_access[target]--;
 	}
+	return 0;
 }
 
 /* xd_reread_partitions: rereads the partition table from a drive */

@@ -77,6 +77,13 @@ extern int vc_cons_allocated(unsigned int);
 
 unsigned char kbd_read_mask = 0x01;	/* modified by psaux.c */
 
+struct wait_queue * keypress_wait = NULL;
+
+void keyboard_wait_for_keypress(void)
+{
+	sleep_on(&keypress_wait);
+}
+
 /*
  * global state includes the following, and various static variables
  * in this module: prev_scancode, shift_state, diacr, npadch, dead_key_next.

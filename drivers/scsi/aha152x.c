@@ -432,9 +432,13 @@ enum {
 #if defined(DEBUG_AHA152X)
 int aha152x[]  = { 0, 11, 7, 1, 1, 0, DELAY_DEFAULT, 0, DEBUG_DEFAULT };
 int aha152x1[] = { 0, 11, 7, 1, 1, 0, DELAY_DEFAULT, 0, DEBUG_DEFAULT };
+MODULE_PARM(aha152x, "1-9i");
+MODULE_PARM(aha152x1, "1-9i");
 #else
 int aha152x[]  = { 0, 11, 7, 1, 1, 0, DELAY_DEFAULT, 0 };
 int aha152x1[] = { 0, 11, 7, 1, 1, 0, DELAY_DEFAULT, 0 };
+MODULE_PARM(aha152x, "1-8i");
+MODULE_PARM(aha152x1, "1-8i");
 #endif
 #endif
 

@@ -74,24 +74,6 @@ static void gzip_mark(void **);
 static void gzip_release(void **);
   
 /*
- * These are set up by the setup-routine at boot-time:
- */
-
-struct screen_info {
-	unsigned char  orig_x;
-	unsigned char  orig_y;
-	unsigned char  unused1[2];
-	unsigned short orig_video_page;
-	unsigned char  orig_video_mode;
-	unsigned char  orig_video_cols;
-	unsigned short unused2;
-	unsigned short orig_video_ega_bx;
-	unsigned short unused3;
-	unsigned char  orig_video_lines;
-	unsigned char  orig_video_isVGA;
-};
-
-/*
  * This is set up by the setup-routine at boot-time
  */
 #define EXT_MEM_K (*(unsigned short *)0x90002)

@@ -180,8 +180,8 @@ static struct hp100_eisa_id hp100_eisa_ids[] = {
   { 0x01030103c, "HP J2585", 	   HP100_BUS_PCI },
 };
 
-int hp100_rx_ratio = HP100_DEFAULT_RX_RATIO;
-int hp100_priority_tx = HP100_DEFAULT_PRIORITY_TX;
+static int hp100_rx_ratio = HP100_DEFAULT_RX_RATIO;
+static int hp100_priority_tx = HP100_DEFAULT_PRIORITY_TX;
 
 /*
  *  prototypes

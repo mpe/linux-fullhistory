@@ -199,6 +199,9 @@ source fs/Config.in
 mainmenu_option next_comment
 comment 'Character devices'
 
+define_bool CONFIG_VT y
+define_bool CONFIG_VT_CONSOLE y
+
 tristate 'Parallel printer support' CONFIG_PRINTER
 if [ "$CONFIG_AMIGA" = "y" ]; then
   dep_tristate 'Multiface Card III parallel support' CONFIG_MULTIFACE_III_LP $CONFIG_PRINTER

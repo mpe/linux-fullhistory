@@ -64,6 +64,8 @@ CONFIG_PROC_FS=y
 #
 # character devices
 #
+CONFIG_VT=y
+CONFIG_VT_CONSOLE=y
 # CONFIG_CYCLADES is not set
 # CONFIG_STALDRV is not set
 # CONFIG_PRINTER is not set

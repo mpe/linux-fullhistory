@@ -418,6 +418,18 @@ P:	John A. Martin
 M:	jam@acm.org
 S:	Maintained
 
+KERNEL AUTOMOUNTER (AUTOFS)
+P:	H. Peter Anvin
+M:	hpa@zytor.com
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+DEVICE NUMBER REGISTRY
+P:	H. Peter Anvin
+M:	hpa@zytor.com
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 REST:
 P:	Linus Torvalds
 S:	Buried alive in diapers

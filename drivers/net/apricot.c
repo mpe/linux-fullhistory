@@ -240,7 +240,7 @@ remove_rx_bufs(struct device *dev)
     do
     {
         lp->scb.rfd = rfd->next;
-        kfree_s(rfd, sizeof(struct i596_rfd));
+        kfree(rfd);
         rfd = lp->scb.rfd;
     }
     while (rfd != lp->rx_tail);
@@ -354,6 +354,7 @@ i596_rx(struct device *dev)
 	    skb->protocol=eth_type_trans(skb,dev);
 	    netif_rx(skb);
 	    lp->stats.rx_packets++;
+	    lp->stats.rx_bytes+=pkt_len;
 
 	    if (i596_debug > 4) print_eth(skb->data);
 	}
@@ -411,15 +412,13 @@ i596_cleanup_cmd(struct i596_private *lp)
 		lp->stats.tx_aborted_errors++;
 
 		ptr->next = (struct i596_cmd * ) I596_NULL;
-		kfree_s((unsigned char *)tx_cmd, (sizeof (struct tx_cmd) + sizeof (struct i596_tbd)));
+		kfree(tx_cmd);
 		break;
 	    }
 	    case CmdMulticastList:
 	    {
-		unsigned short count = *((unsigned short *) (ptr + 1));
-
 		ptr->next = (struct i596_cmd * ) I596_NULL;
-		kfree_s((unsigned char *)ptr, (sizeof (struct i596_cmd) + count + 2));
+		kfree(ptr);
 		break;
 	    }
 	    default:
@@ -650,6 +649,7 @@ i596_start_xmit(struct sk_buff *skb, struct device *dev)
 	    i596_add_cmd(dev, (struct i596_cmd *)tx_cmd);
 
 	    lp->stats.tx_packets++;
+	    lp->stats.tx_bytes+=length;
 	}
     }
 
@@ -821,7 +821,7 @@ i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 
 		    ptr->next = (struct i596_cmd * ) I596_NULL;
-		    kfree_s((unsigned char *)tx_cmd, (sizeof (struct tx_cmd) + sizeof (struct i596_tbd)));
+		    kfree(tx_cmd);
 		    break;
 		}
 		case CmdMulticastList:
@@ -829,7 +829,7 @@ i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		    unsigned short count = *((unsigned short *) (ptr + 1));
 
 		    ptr->next = (struct i596_cmd * ) I596_NULL;
-		    kfree_s((unsigned char *)ptr, (sizeof (struct i596_cmd) + count + 2));
+		    kfree(ptr);
 		    break;
 		}
 		case CmdTDR:
@@ -1032,7 +1032,7 @@ void
 cleanup_module(void)
 {
     unregister_netdev(&dev_apricot);
-    kfree_s((void *)dev_apricot.mem_start, sizeof(struct i596_private) + 0xf);
+    kfree(dev_apricot.mem_start);
     dev_apricot.priv = NULL;
 
     /* If we don't do this, we can't re-insmod it later. */

@@ -122,7 +122,7 @@ void net_timer (unsigned long data)
 
 			if (sk->state != TCP_CLOSE) 
 			{
-				printk ("non CLOSE socket in time_done\n");
+				printk (KERN_DEBUG "non CLOSE socket in time_done\n");
 				break;
 			}
 			destroy_sock (sk);
@@ -148,7 +148,7 @@ void net_timer (unsigned long data)
 			break;
 
 		default:
-			printk ("net_timer: timer expired - reason %d is unknown\n", why);
+			printk (KERN_DEBUG "net_timer: timer expired - reason %d is unknown\n", why);
 			break;
 	}
 }

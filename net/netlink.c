@@ -151,12 +151,13 @@ static int netlink_open(struct inode * inode, struct file * file)
 	return -EUNATCH;
 }
 
-static void netlink_release(struct inode * inode, struct file * file)
+static int netlink_release(struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
 	if (file->f_mode & FMODE_READ)
 		open_map&=~(1<<minor);
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 
@@ -462,7 +463,7 @@ int init_netlink(void)
 
 int init_module(void)
 {
-	printk(KERN_INFO "Network Kernel/User communications module 0.04\n");
+	printk(KERN_INFO "Network Kernel/User communications module 0.05\n");
 	return init_netlink();
 }
 

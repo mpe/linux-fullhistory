@@ -66,6 +66,13 @@ extern void scrollfront(int);
 unsigned char kbd_read_mask = 0x01;	  /* modified by psaux.c */
 unsigned char aux_device_present = 0x00;  /* To make kernel/ksyms.c happy */
 
+struct wait_queue * keypress_wait = NULL;
+
+void keyboard_wait_for_keypress(void)
+{
+	sleep_on(&keypress_wait);
+}
+
 /*
  * global state includes the following, and various static variables
  * in this module: prev_scancode, shift_state, diacr, npadch, dead_key_next.
@@ -1382,7 +1389,7 @@ kbd_open (struct inode *i, struct file *f)
 	return 0;
 }
 
-static void
+static int
 kbd_close (struct inode *i, struct file *f)
 {
 	if (--kbd_active)
@@ -1395,6 +1402,7 @@ kbd_close (struct inode *i, struct file *f)
 	kbd_opened = 0;
 
 	kbd_fasync (i, f, 0);
+	return 0;
 }
 
 static struct

@@ -23,7 +23,7 @@
 #define PER_XENIX		(0x0007 | STICKY_TIMEOUTS)
 
 /* Prototype for an lcall7 syscall handler. */
-typedef asmlinkage void (*lcall7_func)(struct pt_regs *);
+typedef void (*lcall7_func)(struct pt_regs *);
 
 
 /* Description of an execution domain - personality range supported,

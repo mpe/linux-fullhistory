@@ -26,7 +26,7 @@ HTML-ized shopping list.
 http://www.datanet.hu/generations/linux/Changes2.html is an
 English-language HTML version.
 
-Last updated: February 27, 1997.
+Last updated: April 1, 1997.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Minimal Requirements
@@ -35,14 +35,13 @@ Current Minimal Requirements
    Upgrade to at *least* these software revisions before thinking you've
 encountered a bug!
 
-- Kernel modules	 modutils-2.1.23
+- Kernel modules	 modutils-2.1.29-970320
 - Gnu C 		 2.7.2.1
-- Binutils		 2.7.0.3
+- Binutils		 2.7.0.9
 - Linux C Library	 5.4.23
 - Dynamic Linker (ld.so) 1.8.5
 - Linux C++ Library	 2.7.2.1
 - Procps		 1.01
-- SysVinit		 2.69
 - Mount                  2.5p
 - Net-tools              1.32-alpha
 - Kbd                    0.91
@@ -84,7 +83,14 @@ widely available, so if you need to upgrade, use it.
 Modules
 =======
 
-   You need to upgrade to modutils-2.1.23 for kernels 2.1.18 and later.
+   You need to upgrade to modutils-2.1.29-970320 for kernels 2.1.29 and
+later.
+
+Binutils
+========
+
+   If you upgrade binutils, please read its accompanying release notes
+to find out the proper way to upgrade it.
 
 Gnu C
 =====
@@ -113,6 +119,12 @@ information to them if you need to replace the automatic routes.
 in some standard tools.  Check in /proc/net/rt_local to verify their
 presence.
 
+   To turn on IP forwarding, issue the following command:   echo 1 >
+/proc/sys/net/ipv4/ip_forwarding
+
+   To run bootpd, you'll need to issue the following command:   echo 1
+>/proc/sys/net/ipv4/ip_boot_agent
+
 RPM
 ===
 
@@ -123,7 +135,7 @@ DOSEMU
 ======
 
    A new "stable" version of DOSEMU is available for 2.1.x kernels.
-Upgrade to 0.64.3 or later.
+Upgrade to 0.66.1 or later.
 
 Loadlin
 =======
@@ -163,12 +175,12 @@ Where to get the files
 Binutils
 ========
 
-The 2.7.0.3 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.7.0.3.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.7.0.3.bin.tar.gz
+The 2.7.0.9 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.7.0.9.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.7.0.9.bin.tar.gz
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.7.0.3
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.7.0.3
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.7.0.9
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.7.0.9
 
 Gnu C
 =====
@@ -210,9 +222,8 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.8.5.tar.gz
 Modules utilities
 =================
 
-The 2.1.23 release:
-ftp://tsx-11.mit.edu/pub/linux/sources/system/v2.1/modutils-2.1.23.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/kernel/v2.1/modutils-2.1.23.tar.gz
+The 2.1.29-970320 release:
+ftp://ftp.redhat.com/pub/alphabits/modutils-2.1.29-970320.tar.gz
 
 Procps utilities
 ================
@@ -237,9 +248,9 @@ ftp://ftp.redhat.com/pub/redhat/redhat-4.0/updates/i386/rpm-devel-2.2.7-1.sparc.
 DOSEMU
 ======
 
-The 0.64.3.1 release:
-ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/dosemu0.64.3.1.tgz
-ftp://sunsite.unc.edu/pub/Linux/system/emulators/dosemu0.64.3.1.tgz
+The 0.66.1 release:
+ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/dosemu0.66.1.tgz
+ftp://sunsite.unc.edu/pub/Linux/system/emulators/dosemu0.66.1.tgz
 
 Loadlin
 =======

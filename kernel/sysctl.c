@@ -197,25 +197,17 @@ int do_sysctl (int *name, int nlen,
 	if (nlen == 0 || nlen >= CTL_MAXNAME)
 		return -ENOTDIR;
 	
-	error = verify_area(VERIFY_READ,name,nlen*sizeof(int));
-	if (error) return error;
-	if (oldval) {
+	if (oldval) 
+	{
 		int old_len;
 		if (!oldlenp)
 			return -EFAULT;
-		error = verify_area(VERIFY_WRITE,oldlenp,sizeof(size_t));
-		if (error) return error;
-		get_user(old_len, oldlenp);
-		error = verify_area(VERIFY_WRITE,oldval,old_len);
-		if (error) return error;
-	}
-	if (newval) {
-		error = verify_area(VERIFY_READ,newval,newlen);
-		if (error) return error;
+		if(get_user(old_len, oldlenp))
+			return -EFAULT;
 	}
 	tmp = &root_table_header;
 	do {
-		context = 0;
+		context = NULL;
 		error = parse_table(name, nlen, oldval, oldlenp, 
 				    newval, newlen, tmp->ctl_table, &context);
 		if (context)
@@ -232,14 +224,12 @@ extern asmlinkage int sys_sysctl(struct __sysctl_args *args)
 	struct __sysctl_args tmp;
 	int error;
 
+	if(copy_from_user(&tmp, args, sizeof(tmp)))
+		return -EFAULT;
+		
 	lock_kernel();
-	error = verify_area(VERIFY_READ, args, sizeof(*args));
-	if (error)
-		goto out;
-	copy_from_user(&tmp, args, sizeof(tmp));
 	error = do_sysctl(tmp.name, tmp.nlen, tmp.oldval, tmp.oldlenp,
 			  tmp.newval, tmp.newlen);
-out:
 	unlock_kernel();
 	return error;
 }
@@ -266,6 +256,7 @@ out:
 
 /* ctl_perm does NOT grant the superuser all rights automatically, because
    some sysctl variables are readonly even to root. */
+
 static int test_perm(int mode, int op)
 {
 	if (!current->euid)
@@ -276,6 +267,7 @@ static int test_perm(int mode, int op)
 		return 0;
 	return -EACCES;
 }
+
 static inline int ctl_perm(ctl_table *table, int op)
 {
 	return test_perm(table->mode, op);
@@ -293,7 +285,8 @@ repeat:
 
 	for ( ; table->ctl_name; table++) {
 		int n;
-		get_user(n,name);
+		if(get_user(n,name))
+			return -EFAULT;
 		if (n == table->ctl_name ||
 		    table->ctl_name == CTL_ANY) {
 			if (table->child) {
@@ -353,15 +346,18 @@ int do_sysctl_strategy (ctl_table *table,
 			if (len) {
 				if (len > table->maxlen)
 					len = table->maxlen;
-				copy_to_user(oldval, table->data, len);
-				put_user(len, oldlenp);
+				if(copy_to_user(oldval, table->data, len))
+					return -EFAULT;
+				if(put_user(len, oldlenp))
+					return -EFAULT;
 			}
 		}
 		if (newval && newlen) {
 			len = newlen;
 			if (len > table->maxlen)
 				len = table->maxlen;
-			copy_from_user(table->data, newval, len);
+			if(copy_from_user(table->data, newval, len))
+				return -EFAULT;
 		}
 	}
 	return 0;
@@ -382,7 +378,8 @@ static int do_securelevel_strategy (ctl_table *table,
 	if (newval && newlen) {
 		if (newlen != sizeof (int))
 			return -EINVAL;
-		copy_from_user (&level, newval, newlen);
+		if(copy_from_user (&level, newval, newlen))
+			return -EFAULT;
 		if (level < securelevel && current->pid != 1)
 			return -EPERM;
 	}
@@ -499,10 +496,6 @@ static long do_rw_proc(int write, struct inode * inode, struct file * file,
 	size_t res;
 	long error;
 	
-	error = verify_area(write ? VERIFY_READ : VERIFY_WRITE, buf, count);
-	if (error)
-		return error;
-
 	de = (struct proc_dir_entry*) inode->u.generic_ip;
 	if (!de || !de->data)
 		return -ENOTDIR;
@@ -553,14 +546,16 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 		len = 0;
 		p = buffer;
 		while (len < *lenp) {
-			get_user(c, p++);
+			if(get_user(c, p++))
+				return -EFAULT;
 			if (c == 0 || c == '\n')
 				break;
 			len++;
 		}
 		if (len >= table->maxlen)
 			len = table->maxlen-1;
-		copy_from_user(table->data, buffer, len);
+		if(copy_from_user(table->data, buffer, len))
+			return -EFAULT;
 		((char *) table->data)[len] = 0;
 		filp->f_pos += *lenp;
 	} else {
@@ -570,9 +565,11 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 		if (len > *lenp)
 			len = *lenp;
 		if (len)
-			copy_to_user(buffer, table->data, len);
+			if(copy_to_user(buffer, table->data, len))
+				return -EFAULT;
 		if (len < *lenp) {
-			put_user('\n', ((char *) buffer) + len);
+			if(put_user('\n', ((char *) buffer) + len))
+				return -EFAULT;
 			len++;
 		}
 		*lenp = len;
@@ -602,7 +599,8 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 		if (write) {
 			while (left) {
 				char c;
-				get_user(c,(char *) buffer);
+				if(get_user(c,(char *) buffer))
+					return -EFAULT;
 				if (!isspace(c))
 					break;
 				left--;
@@ -614,7 +612,8 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 			len = left;
 			if (len > TMPBUFLEN-1)
 				len = TMPBUFLEN-1;
-			copy_from_user(buf, buffer, len);
+			if(copy_from_user(buf, buffer, len))
+				return -EFAULT;
 			buf[len] = 0;
 			p = buf;
 			if (*p == '-' && left > 1) {
@@ -640,21 +639,24 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 			len = strlen(buf);
 			if (len > left)
 				len = left;
-			copy_to_user(buffer, buf, len);
+			if(copy_to_user(buffer, buf, len))
+				return -EFAULT;
 			left -= len;
 			buffer += len;
 		}
 	}
 
 	if (!write && !first && left) {
-		put_user('\n', (char *) buffer);
+		if(put_user('\n', (char *) buffer))
+			return -EFAULT;
 		left--, buffer++;
 	}
 	if (write) {
 		p = (char *) buffer;
 		while (left) {
 			char c;
-			get_user(c, p++);
+			if(get_user(c, p++))
+				return -EFAULT;
 			if (!isspace(c))
 				break;
 			left--;
@@ -690,7 +692,8 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 		if (write) {
 			while (left) {
 				char c;
-				get_user(c, (char *) buffer);
+				if(get_user(c, (char *) buffer))
+					return -EFAULT;
 				if (!isspace(c))
 					break;
 				left--;
@@ -702,7 +705,8 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 			len = left;
 			if (len > TMPBUFLEN-1)
 				len = TMPBUFLEN-1;
-			copy_from_user(buf, buffer, len);
+			if(copy_from_user(buf, buffer, len))
+				return -EFAULT;
 			buf[len] = 0;
 			p = buf;
 			if (*p == '-' && left > 1) {
@@ -733,21 +737,24 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 			len = strlen(buf);
 			if (len > left)
 				len = left;
-			copy_to_user(buffer, buf, len);
+			if(copy_to_user(buffer, buf, len))
+				return -EFAULT;
 			left -= len;
 			buffer += len;
 		}
 	}
 
 	if (!write && !first && left) {
-		put_user('\n', (char *) buffer);
+		if(put_user('\n', (char *) buffer))
+			return -EFAULT;
 		left--, buffer++;
 	}
 	if (write) {
 		p = (char *) buffer;
 		while (left) {
 			char c;
-			get_user(c, p++);
+			if(get_user(c, p++))
+				return -EFAULT;
 			if (!isspace(c))
 				break;
 			left--;
@@ -798,22 +805,27 @@ int sysctl_string(ctl_table *table, int *name, int nlen,
 		return -ENOTDIR;
 	
 	if (oldval && oldlenp) {
-		get_user(len, oldlenp);
+		if(get_user(len, oldlenp))
+			return -EFAULT;
 		if (len) {
 			l = strlen(table->data);
 			if (len > l) len = l;
 			if (len >= table->maxlen)
 				len = table->maxlen;
-			copy_to_user(oldval, table->data, len);
-			put_user(0, ((char *) oldval) + len);
-			put_user(len, oldlenp);
+			if(copy_to_user(oldval, table->data, len))
+				return -EFAULT;
+			if(put_user(0, ((char *) oldval) + len))
+				return -EFAULT;
+			if(put_user(len, oldlenp))
+				return -EFAULT;
 		}
 	}
 	if (newval && newlen) {
 		len = newlen;
 		if (len > table->maxlen)
 			len = table->maxlen;
-		copy_from_user(table->data, newval, len);
+		if(copy_from_user(table->data, newval, len))
+			return -EFAULT;
 		if (len == table->maxlen)
 			len--;
 		((char *) table->data)[len] = 0;
@@ -870,14 +882,16 @@ int do_string (
 		return -EINVAL;
 	if (oldval) {
 		int old_l;
-		get_user(old_l, oldlenp);
+		if(get_user(old_l, oldlenp))
+			return -EFAULT;
 		if (l > old_l)
 			return -ENOMEM;
-		put_user(l, oldlenp);
-		copy_to_user(oldval, data, l);
+		if(put_user(l, oldlenp) || copy_to_user(oldval, data, l))
+			return -EFAULT;
 	}
 	if (newval) {
-		copy_from_user(data, newval, newlen);
+		if(copy_from_user(data, newval, newlen))
+			return -EFAULT;
 		data[newlen] = 0;
 	}
 	return 0;
@@ -893,14 +907,16 @@ int do_int (
 		return -EINVAL;
 	if (oldval) {
 		int old_l;
-		get_user(old_l, oldlenp);
+		if(get_user(old_l, oldlenp))
+			return -EFAULT;
 		if (old_l < sizeof(int))
 			return -ENOMEM;
-		put_user(sizeof(int), oldlenp);
-		copy_to_user(oldval, data, sizeof(int));
+		if(put_user(sizeof(int), oldlenp)||copy_to_user(oldval, data, sizeof(int)))
+			return -EFAULT;
 	}
 	if (newval)
-		copy_from_user(data, newval, sizeof(int));
+		if(copy_from_user(data, newval, sizeof(int)))
+			return -EFAULT;
 	return 0;
 }
 
@@ -914,14 +930,16 @@ int do_struct (
 		return -EINVAL;
 	if (oldval) {
 		int old_l;
-		get_user(old_l, oldlenp);
+		if(get_user(old_l, oldlenp))
+			return -EFAULT;
 		if (old_l < len)
 			return -ENOMEM;
-		put_user(len, oldlenp);
-		copy_to_user(oldval, data, len);
+		if(put_user(len, oldlenp) || copy_to_user(oldval, data, len))
+			return -EFAULT;
 	}
 	if (newval)
-		copy_from_user(data, newval, len);
+		if(copy_from_user(data, newval, len))
+			return -EFAULT;
 	return 0;
 }
 

@@ -130,6 +130,7 @@ extern int	sock_wake_async(struct socket *sk, int how);
 extern int	sock_register(struct net_proto_family *fam);
 extern int	sock_unregister(int family);
 extern struct socket *sock_alloc(void);
+extern int	sock_create(int family, int type, int proto, struct socket **);
 extern void	sock_release(struct socket *);
 extern int   	sock_sendmsg(struct socket *, struct msghdr *m, int len);
 extern int	sock_recvmsg(struct socket *, struct msghdr *m, int len, int flags);

@@ -29,7 +29,7 @@
 #include "diacr.h"
 #include "selection.h"
 
-extern char vt_dont_switch;
+char vt_dont_switch = 0;
 extern struct tty_driver console_driver;
 
 #define VT_IS_IN_USE(i)	(console_driver.table[i] && console_driver.table[i]->count)
@@ -80,6 +80,7 @@ extern int con_get_font(char * fontmap);
 extern int con_set_cmap(unsigned char *cmap);
 extern int con_get_cmap(unsigned char *cmap);
 extern void reset_palette(int currcons);
+extern void set_palette(void) ;
 extern int con_adjust_height(unsigned long fontheight);
 
 extern int video_mode_512ch;
@@ -1143,3 +1144,216 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return -ENOIOCTLCMD;
 	}
 }
+
+/*
+ * Sometimes we want to wait until a particular VT has been activated. We
+ * do it in a very simple manner. Everybody waits on a single queue and
+ * get woken up at once. Those that are satisfied go on with their business,
+ * while those not ready go back to sleep. Seems overkill to add a wait
+ * to each vt just for this - usually this does nothing!
+ */
+static struct wait_queue *vt_activate_queue = NULL;
+
+/*
+ * Sleeps until a vt is activated, or the task is interrupted. Returns
+ * 0 if activation, -EINTR if interrupted.
+ */
+int vt_waitactive(int vt)
+{
+	int retval;
+	struct wait_queue wait = { current, NULL };
+
+	add_wait_queue(&vt_activate_queue, &wait);
+	for (;;) {
+		current->state = TASK_INTERRUPTIBLE;
+		retval = 0;
+		if (vt == fg_console)
+			break;
+		retval = -EINTR;
+		if (current->signal & ~current->blocked)
+			break;
+		schedule();
+	}
+	remove_wait_queue(&vt_activate_queue, &wait);
+	current->state = TASK_RUNNING;
+	return retval;
+}
+
+#define vt_wake_waitactive() wake_up(&vt_activate_queue)
+
+void reset_vc(unsigned int new_console)
+{
+	vt_cons[new_console]->vc_mode = KD_TEXT;
+	kbd_table[new_console].kbdmode = VC_XLATE;
+	vt_cons[new_console]->vt_mode.mode = VT_AUTO;
+	vt_cons[new_console]->vt_mode.waitv = 0;
+	vt_cons[new_console]->vt_mode.relsig = 0;
+	vt_cons[new_console]->vt_mode.acqsig = 0;
+	vt_cons[new_console]->vt_mode.frsig = 0;
+	vt_cons[new_console]->vt_pid = -1;
+	vt_cons[new_console]->vt_newvt = -1;
+	reset_palette (new_console) ;
+}
+
+/*
+ * Performs the back end of a vt switch
+ */
+void complete_change_console(unsigned int new_console)
+{
+	unsigned char old_vc_mode;
+
+        if ((new_console == fg_console) || (vt_dont_switch))
+                return;
+        if (!vc_cons_allocated(new_console))
+                return;
+	last_console = fg_console;
+
+	/*
+	 * If we're switching, we could be going from KD_GRAPHICS to
+	 * KD_TEXT mode or vice versa, which means we need to blank or
+	 * unblank the screen later.
+	 */
+	old_vc_mode = vt_cons[fg_console]->vc_mode;
+	update_screen(new_console);
+
+	/*
+	 * If this new console is under process control, send it a signal
+	 * telling it that it has acquired. Also check if it has died and
+	 * clean up (similar to logic employed in change_console())
+	 */
+	if (vt_cons[new_console]->vt_mode.mode == VT_PROCESS)
+	{
+		/*
+		 * Send the signal as privileged - kill_proc() will
+		 * tell us if the process has gone or something else
+		 * is awry
+		 */
+		if (kill_proc(vt_cons[new_console]->vt_pid,
+			      vt_cons[new_console]->vt_mode.acqsig,
+			      1) != 0)
+		{
+		/*
+		 * The controlling process has died, so we revert back to
+		 * normal operation. In this case, we'll also change back
+		 * to KD_TEXT mode. I'm not sure if this is strictly correct
+		 * but it saves the agony when the X server dies and the screen
+		 * remains blanked due to KD_GRAPHICS! It would be nice to do
+		 * this outside of VT_PROCESS but there is no single process
+		 * to account for and tracking tty count may be undesirable.
+		 */
+		        reset_vc(new_console);
+		}
+	}
+
+	/*
+	 * We do this here because the controlling process above may have
+	 * gone, and so there is now a new vc_mode
+	 */
+	if (old_vc_mode != vt_cons[new_console]->vc_mode)
+	{
+		if (vt_cons[new_console]->vc_mode == KD_TEXT)
+			do_unblank_screen();
+		else
+			do_blank_screen(1);
+	}
+
+	/* Set the colour palette for this VT */
+	if (vt_cons[new_console]->vc_mode == KD_TEXT)
+		set_palette() ;
+	
+#ifdef CONFIG_SUN_CONSOLE
+	if (old_vc_mode != vt_cons[new_console]->vc_mode)
+	{
+		extern void set_cursor(int currcons);
+		extern void hide_cursor(void);
+
+	 	if (old_vc_mode == KD_GRAPHICS)
+		{
+			extern void sun_clear_margin(void);
+			extern void render_screen(void);
+			
+			sun_clear_margin();
+			render_screen();
+			set_cursor(fg_console);
+		}
+		else
+			hide_cursor();
+	}
+#endif		
+      /*
+	 * Wake anyone waiting for their VT to activate
+	 */
+	vt_wake_waitactive();
+	return;
+}
+
+/*
+ * Performs the front-end of a vt switch
+ */
+void change_console(unsigned int new_console)
+{
+        if ((new_console == fg_console) || (vt_dont_switch))
+                return;
+        if (!vc_cons_allocated(new_console))
+		return;
+
+	/*
+	 * If this vt is in process mode, then we need to handshake with
+	 * that process before switching. Essentially, we store where that
+	 * vt wants to switch to and wait for it to tell us when it's done
+	 * (via VT_RELDISP ioctl).
+	 *
+	 * We also check to see if the controlling process still exists.
+	 * If it doesn't, we reset this vt to auto mode and continue.
+	 * This is a cheap way to track process control. The worst thing
+	 * that can happen is: we send a signal to a process, it dies, and
+	 * the switch gets "lost" waiting for a response; hopefully, the
+	 * user will try again, we'll detect the process is gone (unless
+	 * the user waits just the right amount of time :-) and revert the
+	 * vt to auto control.
+	 */
+	if (vt_cons[fg_console]->vt_mode.mode == VT_PROCESS)
+	{
+		/*
+		 * Send the signal as privileged - kill_proc() will
+		 * tell us if the process has gone or something else
+		 * is awry
+		 */
+		if (kill_proc(vt_cons[fg_console]->vt_pid,
+			      vt_cons[fg_console]->vt_mode.relsig,
+			      1) == 0)
+		{
+			/*
+			 * It worked. Mark the vt to switch to and
+			 * return. The process needs to send us a
+			 * VT_RELDISP ioctl to complete the switch.
+			 */
+			vt_cons[fg_console]->vt_newvt = new_console;
+			return;
+		}
+
+		/*
+		 * The controlling process has died, so we revert back to
+		 * normal operation. In this case, we'll also change back
+		 * to KD_TEXT mode. I'm not sure if this is strictly correct
+		 * but it saves the agony when the X server dies and the screen
+		 * remains blanked due to KD_GRAPHICS! It would be nice to do
+		 * this outside of VT_PROCESS but there is no single process
+		 * to account for and tracking tty count may be undesirable.
+		 */
+		reset_vc(fg_console);
+
+		/*
+		 * Fall through to normal (VT_AUTO) handling of the switch...
+		 */
+	}
+
+	/*
+	 * Ignore all switches in KD_GRAPHICS+VT_AUTO mode
+	 */
+	if (vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
+		return;
+
+	complete_change_console(new_console);
+}
+

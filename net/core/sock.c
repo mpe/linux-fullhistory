@@ -322,9 +322,15 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		    char *optval, int *optlen)
 {
 	struct sock *sk = sock->sk;
-  	int val;
-  	struct linger ling;
-  	int len;
+	
+	union
+	{
+  		int val;
+  		struct linger ling;
+		struct timeval tm;
+	} v;
+	
+	int lv=sizeof(int),len;
   	
   	if(get_user(len,optlen))
   		return -EFAULT;
@@ -332,119 +338,110 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
   	switch(optname) 
   	{
 		case SO_DEBUG:		
-			val = sk->debug;
+			v.val = sk->debug;
 			break;
 		
 		case SO_DONTROUTE:
-			val = sk->localroute;
+			v.val = sk->localroute;
 			break;
 		
 		case SO_BROADCAST:
-			val= sk->broadcast;
+			v.val= sk->broadcast;
 			break;
 
 		case SO_SNDBUF:
-			val=sk->sndbuf;
+			v.val=sk->sndbuf;
 			break;
 		
 		case SO_RCVBUF:
-			val =sk->rcvbuf;
+			v.val =sk->rcvbuf;
 			break;
 
 		case SO_REUSEADDR:
-			val = sk->reuse;
+			v.val = sk->reuse;
 			break;
 
 		case SO_KEEPALIVE:
-			val = sk->keepopen;
+			v.val = sk->keepopen;
 			break;
 
 		case SO_TYPE:
-			val = sk->type;		  		
+			v.val = sk->type;		  		
 			break;
 
 		case SO_ERROR:
-			val = -sock_error(sk);
-			if(val==0)
-				val=xchg(&sk->err_soft,0);
+			v.val = -sock_error(sk);
+			if(v.val==0)
+				v.val=xchg(&sk->err_soft,0);
 			break;
 
 		case SO_OOBINLINE:
-			val = sk->urginline;
+			v.val = sk->urginline;
 			break;
 	
 		case SO_NO_CHECK:
-			val = sk->no_check;
+			v.val = sk->no_check;
 			break;
 
 		case SO_PRIORITY:
-			val = sk->priority;
+			v.val = sk->priority;
 			break;
 		
 		case SO_LINGER:	
-		  {
-			len=min(len,sizeof(ling));
-			if (put_user(len, optlen)) 
-				return -EFAULT;
-			ling.l_onoff=sk->linger;
-			ling.l_linger=sk->lingertime;
-			if (copy_to_user(optval,&ling,len))
-				return -EFAULT;
-			return 0;
-		  }
-		
+			lv=sizeof(v.ling);
+			v.ling.l_onoff=sk->linger;
+ 			v.ling.l_linger=sk->lingertime;
+			break;
+					
 		case SO_BSDCOMPAT:
-			val = sk->bsdism;
+			v.val = sk->bsdism;
 			break;
 			
 		case SO_RCVTIMEO:
 		case SO_SNDTIMEO:
-		{
-			static struct timeval tm={0,0};
-			len=min(len, sizeof(struct timeval));
-			if(put_user(len,optlen))
-				return -EFAULT;
-			if(copy_to_user(optval,&tm,len))
-				return -EFAULT;
-			return 0;
-		}
+			lv=sizeof(struct timeval);
+			v.tm.tv_sec=0;
+			v.tm.tv_usec=0;
+			break;
+
 		case SO_RCVLOWAT:
 		case SO_SNDLOWAT:
-			val=1;
+			v.val=1;
 
 		case SO_PASSCRED:
-			val = sock->passcred;
+			v.val = sock->passcred;
 			break;
 
 		case SO_PEERCRED:
-			len=min(len, sizeof(sk->peercred));
-			if(put_user(len, optlen))
-				return -EFAULT;
+			lv=sizeof(sk->peercred);
+			len=min(len, lv);
 			if(copy_to_user((void*)optval, &sk->peercred, len))
 				return -EFAULT;
-			return 0;
+			goto lenout;
+			
+#ifdef CONFIG_NET_SECURITY			
 			
 		case SO_SECURITY_AUTHENTICATION:
-			val = sk->authentication;
+			v.val = sk->authentication;
 			break;
 			
 		case SO_SECURITY_ENCRYPTION_TRANSPORT:
-			val = sk->encryption;
+			v.val = sk->encryption;
 			break;
 			
 		case SO_SECURITY_ENCRYPTION_NETWORK:
-			val = sk->encrypt_net;
+			v.val = sk->encrypt_net;
 			break;
-			
+#endif
 		default:
 			return(-ENOPROTOOPT);
 	}
-	len=min(len,sizeof(int));
+	len=min(len,lv);
+	if(copy_to_user(optval,&v,len))
+		return -EFAULT;
+lenout:
   	if(put_user(len, optlen))
   		return -EFAULT;
-	if(copy_to_user(optval,&val,len))
-		return -EFAULT;
-
   	return 0;
 }
 
@@ -487,7 +484,7 @@ void sock_wfree(struct sk_buff *skb)
 #endif
 #if 1
 	if (!sk) {
-		printk("sock_wfree: sk==NULL\n");
+		printk(KERN_DEBUG "sock_wfree: sk==NULL\n");
 		return;
 	}
 #endif
@@ -505,7 +502,7 @@ void sock_rfree(struct sk_buff *skb)
 #endif	
 #if 1
 	if (!sk) {
-		printk("sock_rfree: sk==NULL\n");
+		printk(KERN_DEBUG "sock_rfree: sk==NULL\n");
 		return;
 	}
 #endif
@@ -581,17 +578,12 @@ unsigned long sock_wspace(struct sock *sk)
 struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigned long fallback, int noblock, int *errcode)
 {
 	struct sk_buff *skb;
-	int err;
 
 	do
 	{
 		if(sk->err!=0)
 		{
-			cli();
-			err= -sk->err;
-			sk->err=0;
-			sti();
-			*errcode=err;
+			*errcode=xchg(&sk->err,0);
 			return NULL;
 		}
 		

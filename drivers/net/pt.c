@@ -947,13 +947,6 @@ static int pt_send_packet(struct sk_buff *skb, struct device *dev)
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: pt_send_packet(): (%d)\n", lp->base & CHANA);
 #endif
-	/* If some higher layer thinks we've missed an tx-done interrupt
-	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	   itself.*/
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
 	hardware_send_packet(lp, skb);
 	dev->trans_start = jiffies;
 

@@ -178,6 +178,17 @@ static int blankinterval = 10*60*HZ;
 static int vesa_off_interval = 0;
 static int vesa_blank_mode = 0; /* 0:none 1:suspendV 2:suspendH 3:powerdown */
 
+/*
+ * fg_console is the current virtual console,
+ * last_console is the last used one,
+ * want_console is the console we want to switch to,
+ * kmsg_redirect is the console for kernel messages,
+ */
+int fg_console = 0;
+int last_console = 0;
+int want_console = -1;
+int kmsg_redirect = 0;
+
 static struct vc {
 	struct vc_data *d;
 
@@ -1003,6 +1014,56 @@ int mouse_reporting(void)
 	int currcons = fg_console;
 
 	return report_mouse;
+}
+
+int tioclinux(struct tty_struct *tty, unsigned long arg)
+{
+	char type, data;
+
+	if (tty->driver.type != TTY_DRIVER_TYPE_CONSOLE)
+		return -EINVAL;
+	if (current->tty != tty && !suser())
+		return -EPERM;
+	if (get_user(type, (char *)arg))
+		return -EFAULT;
+	switch (type)
+	{
+		case 2:
+			return set_selection(arg, tty, 1);
+		case 3:
+			return paste_selection(tty);
+		case 4:
+			do_unblank_screen();
+			return 0;
+		case 5:
+			return sel_loadlut(arg);
+		case 6:
+			
+	/*
+	 * Make it possible to react to Shift+Mousebutton.
+	 * Note that 'shift_state' is an undocumented
+	 * kernel-internal variable; programs not closely
+	 * related to the kernel should not use this.
+	 */
+	 		data = shift_state;
+			return put_user(data, (char *) arg);
+		case 7:
+			data = mouse_reporting();
+			return put_user(data, (char *) arg);
+		case 10:
+			set_vesa_blanking(arg);
+			return 0;
+		case 11:	/* set kmsg redirect */
+			if (!suser())
+				return -EPERM;
+			if (get_user(data, (char *)arg+1))
+					return -EFAULT;
+			kmsg_redirect = data;
+			return 0;
+		case 12:	/* get fg_console */
+			return fg_console;
+	}
+	return -EINVAL;
 }
 
 static inline unsigned short *screenpos(int currcons, int offset, int viewed)

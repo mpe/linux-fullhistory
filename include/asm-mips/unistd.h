@@ -1143,6 +1143,7 @@
 #define __NR_munlock			(__NR_Linux + 155)
 #define __NR_mlockall			(__NR_Linux + 156)
 #define __NR_munlockall			(__NR_Linux + 157)
+#define __NR_nfsservctl			(__NR_Linux + 158)
 
 
 /*

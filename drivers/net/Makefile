@@ -690,6 +690,14 @@ ifeq ($(CONFIG_VENDOR_SANGOMA),y)
   endif
 endif
 
+ifeq ($(CONFIG_X25_ASY),y)
+L_OBJS += x25_asy.o
+else
+  ifeq ($(CONFIG_X25_ASY),m)
+  M_OBJS += x25_asy.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 clean:

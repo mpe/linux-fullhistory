@@ -37,8 +37,7 @@
 #include "selection.h"
 #include "console_struct.h"
 
-extern void register_console(void (*proc)(const char *));
-extern void console_print(const char *);
+extern struct console vt_console_driver;
 
 /* TGA hardware description (minimal) */
 /*
@@ -485,7 +484,9 @@ tga_console_init(void)
 	/*
 	 * FINALLY, we can register TGA as console (whew!)
 	 */
-	register_console(console_print);
+#ifdef CONFIG_VT_CONSOLE
+	register_console(&vt_console_driver);
+#endif
 }
 
 unsigned char PLLbits[7] = { 0x80, 0x04, 0x00, 0x24, 0x44, 0x80, 0xb8 };

@@ -1600,7 +1600,7 @@ static int get_rt_from_user(struct in_rtmsg *rtm, void *arg)
 	} else {
 		u32 mask = ((struct sockaddr_in*)&r.rt_genmask)->sin_addr.s_addr;
 		if (r.rt_genmask.sa_family != AF_INET) {
-			printk(KERN_WARNING "%s forgot to specify route netmask.\n", current->comm);
+			printk(KERN_DEBUG "%s forgot to specify route netmask.\n", current->comm);
 			if (r.rt_genmask.sa_family)
 				return -EAFNOSUPPORT;
 		}

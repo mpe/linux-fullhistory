@@ -1710,7 +1710,7 @@ static int ide_open(struct inode * inode, struct file * filp)
  * Releasing a block device means we sync() it, so that it can safely
  * be forgotten about...
  */
-static void ide_release(struct inode * inode, struct file * file)
+static int ide_release(struct inode * inode, struct file * file)
 {
 	ide_drive_t *drive;
 
@@ -1721,6 +1721,7 @@ static void ide_release(struct inode * inode, struct file * file)
 			DRIVER(drive)->release(inode, file, drive);
 		MOD_DEC_USE_COUNT;
 	}
+	return 0;
 }
 
 void ide_unregister (unsigned int index)

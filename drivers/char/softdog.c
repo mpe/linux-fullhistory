@@ -83,7 +83,7 @@ static int softdog_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void softdog_release(struct inode *inode, struct file *file)
+static int softdog_release(struct inode *inode, struct file *file)
 {
 	/*
 	 *	Shut off the timer.
@@ -94,6 +94,7 @@ static void softdog_release(struct inode *inode, struct file *file)
 	MOD_DEC_USE_COUNT;
 #endif	
 	timer_alive=0;
+	return 0;
 }
 
 static void softdog_ping(void)

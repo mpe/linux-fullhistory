@@ -1914,7 +1914,7 @@ static int opt_open(struct inode *ip, struct file *fp)
 
 
 /* Release device special file; flush all blocks from the buffer cache */
-static void opt_release(struct inode *ip, struct file *fp)
+static int opt_release(struct inode *ip, struct file *fp)
 {
 	int status;
 
@@ -1939,6 +1939,7 @@ static void opt_release(struct inode *ip, struct file *fp)
 		CLEAR_REQ_TIMER;
 	}
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 

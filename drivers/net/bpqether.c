@@ -241,12 +241,13 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
 		return 0;
 	}
 
-	((struct bpqdev *)dev->priv)->stats.rx_packets++;
-
 	len = skb->data[0] + skb->data[1] * 256 - 5;
 
 	skb_pull(skb, 2);	/* Remove the length bytes */
 	skb_trim(skb, len);	/* Set the length of the data */
+
+	((struct bpqdev *)dev->priv)->stats.rx_packets++;
+	((struct bpqdev *)dev->priv)->stats.rx_bytes+=len;
 
 	ptr = skb_push(skb, 1);
 	*ptr = 0;
@@ -314,7 +315,6 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 	*ptr++ = (size + 5) / 256;
 
 	bpq = (struct bpqdev *)dev->priv;
-	bpq->stats.tx_packets++;
 
 	if ((dev = bpq_get_ether_dev(dev)) == NULL) {
 		bpq->stats.tx_dropped++;
@@ -324,7 +324,9 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 
 	skb->dev = dev;
 	dev->hard_header(skb, dev, ETH_P_BPQ, bpq->dest_addr, NULL, 0);
-
+	bpq->stats.tx_packets++;
+	bpq->stats.tx_bytes+=skb->len;
+  
 	dev_queue_xmit(skb);
 
 	return 0;

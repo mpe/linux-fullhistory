@@ -2387,7 +2387,7 @@ static int qic02_tape_open_no_use_count(struct inode * inode, struct file * filp
 } /* qic02_tape_open */
 
 
-static void qic02_tape_release(struct inode * inode, struct file * filp)
+static int qic02_tape_release(struct inode * inode, struct file * filp)
 {
     kdev_t dev = inode->i_rdev;
 
@@ -2420,7 +2420,7 @@ static void qic02_tape_release(struct inode * inode, struct file * filp)
 #ifdef MODULE
     MOD_DEC_USE_COUNT;
 #endif
-    return;
+    return 0;
 } /* qic02_tape_release */
 
 

@@ -56,6 +56,7 @@
 #include <linux/interrupt.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/console.h>
 #include <linux/timer.h>
 #include <linux/ctype.h>
 #include <linux/kd.h>
@@ -87,28 +88,15 @@
 #define TTY_PARANOIA_CHECK
 #define CHECK_TTY_COUNT
 
-extern void do_blank_screen(int nopowersave);
-extern void set_vesa_blanking(const unsigned long arg);
-
 struct termios tty_std_termios;		/* for the benefit of tty drivers  */
 struct tty_driver *tty_drivers = NULL;	/* linked list of tty drivers */
 struct tty_ldisc ldiscs[NR_LDISCS];	/* line disc dispatch table	*/
 
 /*
- * fg_console is the current virtual console,
- * last_console is the last used one,
- * want_console is the console we want to switch to,
- * kmsg_redirect is the console for kernel messages,
  * redirect is the pseudo-tty that console output
  * is redirected to if asked by TIOCCONS.
  */
-int fg_console = 0;
-int last_console = 0;
-int want_console = -1;
-int kmsg_redirect = 0;
 struct tty_struct * redirect = NULL;
-struct wait_queue * keypress_wait = NULL;
-char vt_dont_switch = 0;
 
 static void initialize_tty_struct(struct tty_struct *tty);
 
@@ -116,13 +104,10 @@ static long tty_read(struct inode *, struct file *, char *, unsigned long);
 static long tty_write(struct inode *, struct file *, const char *, unsigned long);
 static unsigned int tty_poll(struct file *, poll_table *);
 static int tty_open(struct inode *, struct file *);
-static void tty_release(struct inode *, struct file *);
+static int tty_release(struct inode *, struct file *);
 static int tty_ioctl(struct inode * inode, struct file * file,
 		     unsigned int cmd, unsigned long arg);
 static int tty_fasync(struct inode * inode, struct file * filp, int on);
-
-extern void reset_palette(int currcons) ;
-extern void set_palette(void) ;
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -509,221 +494,12 @@ void disassociate_ctty(int on_exit)
 			p->tty = NULL;
 }
 
-/*
- * Sometimes we want to wait until a particular VT has been activated. We
- * do it in a very simple manner. Everybody waits on a single queue and
- * get woken up at once. Those that are satisfied go on with their business,
- * while those not ready go back to sleep. Seems overkill to add a wait
- * to each vt just for this - usually this does nothing!
- */
-static struct wait_queue *vt_activate_queue = NULL;
-
-/*
- * Sleeps until a vt is activated, or the task is interrupted. Returns
- * 0 if activation, -EINTR if interrupted.
- */
-int vt_waitactive(int vt)
-{
-	int retval;
-	struct wait_queue wait = { current, NULL };
-
-	add_wait_queue(&vt_activate_queue, &wait);
-	for (;;) {
-		current->state = TASK_INTERRUPTIBLE;
-		retval = 0;
-		if (vt == fg_console)
-			break;
-		retval = -EINTR;
-		if (current->signal & ~current->blocked)
-			break;
-		schedule();
-	}
-	remove_wait_queue(&vt_activate_queue, &wait);
-	current->state = TASK_RUNNING;
-	return retval;
-}
-
-#define vt_wake_waitactive() wake_up(&vt_activate_queue)
-
-void reset_vc(unsigned int new_console)
-{
-	vt_cons[new_console]->vc_mode = KD_TEXT;
-	kbd_table[new_console].kbdmode = VC_XLATE;
-	vt_cons[new_console]->vt_mode.mode = VT_AUTO;
-	vt_cons[new_console]->vt_mode.waitv = 0;
-	vt_cons[new_console]->vt_mode.relsig = 0;
-	vt_cons[new_console]->vt_mode.acqsig = 0;
-	vt_cons[new_console]->vt_mode.frsig = 0;
-	vt_cons[new_console]->vt_pid = -1;
-	vt_cons[new_console]->vt_newvt = -1;
-	reset_palette (new_console) ;
-}
-
-/*
- * Performs the back end of a vt switch
- */
-void complete_change_console(unsigned int new_console)
-{
-	unsigned char old_vc_mode;
-
-        if ((new_console == fg_console) || (vt_dont_switch))
-                return;
-        if (!vc_cons_allocated(new_console))
-                return;
-	last_console = fg_console;
-
-	/*
-	 * If we're switching, we could be going from KD_GRAPHICS to
-	 * KD_TEXT mode or vice versa, which means we need to blank or
-	 * unblank the screen later.
-	 */
-	old_vc_mode = vt_cons[fg_console]->vc_mode;
-	update_screen(new_console);
-
-	/*
-	 * If this new console is under process control, send it a signal
-	 * telling it that it has acquired. Also check if it has died and
-	 * clean up (similar to logic employed in change_console())
-	 */
-	if (vt_cons[new_console]->vt_mode.mode == VT_PROCESS)
-	{
-		/*
-		 * Send the signal as privileged - kill_proc() will
-		 * tell us if the process has gone or something else
-		 * is awry
-		 */
-		if (kill_proc(vt_cons[new_console]->vt_pid,
-			      vt_cons[new_console]->vt_mode.acqsig,
-			      1) != 0)
-		{
-		/*
-		 * The controlling process has died, so we revert back to
-		 * normal operation. In this case, we'll also change back
-		 * to KD_TEXT mode. I'm not sure if this is strictly correct
-		 * but it saves the agony when the X server dies and the screen
-		 * remains blanked due to KD_GRAPHICS! It would be nice to do
-		 * this outside of VT_PROCESS but there is no single process
-		 * to account for and tracking tty count may be undesirable.
-		 */
-		        reset_vc(new_console);
-		}
-	}
-
-	/*
-	 * We do this here because the controlling process above may have
-	 * gone, and so there is now a new vc_mode
-	 */
-	if (old_vc_mode != vt_cons[new_console]->vc_mode)
-	{
-		if (vt_cons[new_console]->vc_mode == KD_TEXT)
-			do_unblank_screen();
-		else
-			do_blank_screen(1);
-	}
-
-	/* Set the colour palette for this VT */
-	if (vt_cons[new_console]->vc_mode == KD_TEXT)
-		set_palette() ;
-	
-#ifdef CONFIG_SUN_CONSOLE
-	if (old_vc_mode != vt_cons[new_console]->vc_mode)
-	{
-		extern void set_cursor(int currcons);
-		extern void hide_cursor(void);
-
-	 	if (old_vc_mode == KD_GRAPHICS)
-		{
-			extern void sun_clear_margin(void);
-			extern void render_screen(void);
-			
-			sun_clear_margin();
-			render_screen();
-			set_cursor(fg_console);
-		}
-		else
-			hide_cursor();
-	}
-#endif		
-	/*
-	 * Wake anyone waiting for their VT to activate
-	 */
-	vt_wake_waitactive();
-	return;
-}
-
-/*
- * Performs the front-end of a vt switch
- */
-void change_console(unsigned int new_console)
-{
-        if ((new_console == fg_console) || (vt_dont_switch))
-                return;
-        if (!vc_cons_allocated(new_console))
-		return;
-
-	/*
-	 * If this vt is in process mode, then we need to handshake with
-	 * that process before switching. Essentially, we store where that
-	 * vt wants to switch to and wait for it to tell us when it's done
-	 * (via VT_RELDISP ioctl).
-	 *
-	 * We also check to see if the controlling process still exists.
-	 * If it doesn't, we reset this vt to auto mode and continue.
-	 * This is a cheap way to track process control. The worst thing
-	 * that can happen is: we send a signal to a process, it dies, and
-	 * the switch gets "lost" waiting for a response; hopefully, the
-	 * user will try again, we'll detect the process is gone (unless
-	 * the user waits just the right amount of time :-) and revert the
-	 * vt to auto control.
-	 */
-	if (vt_cons[fg_console]->vt_mode.mode == VT_PROCESS)
-	{
-		/*
-		 * Send the signal as privileged - kill_proc() will
-		 * tell us if the process has gone or something else
-		 * is awry
-		 */
-		if (kill_proc(vt_cons[fg_console]->vt_pid,
-			      vt_cons[fg_console]->vt_mode.relsig,
-			      1) == 0)
-		{
-			/*
-			 * It worked. Mark the vt to switch to and
-			 * return. The process needs to send us a
-			 * VT_RELDISP ioctl to complete the switch.
-			 */
-			vt_cons[fg_console]->vt_newvt = new_console;
-			return;
-		}
-
-		/*
-		 * The controlling process has died, so we revert back to
-		 * normal operation. In this case, we'll also change back
-		 * to KD_TEXT mode. I'm not sure if this is strictly correct
-		 * but it saves the agony when the X server dies and the screen
-		 * remains blanked due to KD_GRAPHICS! It would be nice to do
-		 * this outside of VT_PROCESS but there is no single process
-		 * to account for and tracking tty count may be undesirable.
-		 */
-		reset_vc(fg_console);
-
-		/*
-		 * Fall through to normal (VT_AUTO) handling of the switch...
-		 */
-	}
-
-	/*
-	 * Ignore all switches in KD_GRAPHICS+VT_AUTO mode
-	 */
-	if (vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
-		return;
-
-	complete_change_console(new_console);
-}
-
 void wait_for_keypress(void)
 {
-	sleep_on(&keypress_wait);
+        struct console *c = console_drivers;
+        while(c && !c->wait_key)
+                c = c->next;
+        if (c) c->wait_key();
 }
 
 void stop_tty(struct tty_struct *tty)
@@ -1283,11 +1059,16 @@ retry_open:
 		/* noctty = 1; */
 	}
 	if (device == CONSOLE_DEV) {
-		device = MKDEV(TTY_MAJOR, fg_console+1);
+		struct console *c = console_drivers;
+		while(c && !c->device)
+			c = c->next;
+		if (!c)
+                        return -ENODEV;
+                device = c->device();
 		noctty = 1;
 	}
 	minor = MINOR(device);
-	
+
 	retval = init_dev(device, &tty);
 	if (retval)
 		return retval;
@@ -1342,9 +1123,10 @@ retry_open:
  * we have to make the redirection checks after that and on both
  * sides of a pty.
  */
-static void tty_release(struct inode * inode, struct file * filp)
+static int tty_release(struct inode * inode, struct file * filp)
 {
 	release_dev(filp);
+	return 0;
 }
 
 static unsigned int tty_poll(struct file * filp, poll_table * wait)
@@ -1597,56 +1379,6 @@ static int tiocspgrp(struct tty_struct *tty, struct tty_struct *real_tty, pid_t 
 	return 0;
 }
 
-static int tioclinux(struct tty_struct *tty, unsigned long arg)
-{
-	char type, data;
-
-	if (tty->driver.type != TTY_DRIVER_TYPE_CONSOLE)
-		return -EINVAL;
-	if (current->tty != tty && !suser())
-		return -EPERM;
-	if (get_user(type, (char *)arg))
-		return -EFAULT;
-	switch (type)
-	{
-		case 2:
-			return set_selection(arg, tty, 1);
-		case 3:
-			return paste_selection(tty);
-		case 4:
-			do_unblank_screen();
-			return 0;
-		case 5:
-			return sel_loadlut(arg);
-		case 6:
-			
-	/*
-	 * Make it possible to react to Shift+Mousebutton.
-	 * Note that 'shift_state' is an undocumented
-	 * kernel-internal variable; programs not closely
-	 * related to the kernel should not use this.
-	 */
-	 		data = shift_state;
-			return put_user(data, (char *) arg);
-		case 7:
-			data = mouse_reporting();
-			return put_user(data, (char *) arg);
-		case 10:
-			set_vesa_blanking(arg);
-			return 0;
-		case 11:	/* set kmsg redirect */
-			if (!suser())
-				return -EPERM;
-			if (get_user(data, (char *)arg+1))
-					return -EFAULT;
-			kmsg_redirect = data;
-			return 0;
-		case 12:	/* get fg_console */
-			return fg_console;
-	}
-	return -EINVAL;
-}
-
 static int tiocttygstruct(struct tty_struct *tty, struct tty_struct *arg)
 {
 	if (copy_to_user(arg, tty, sizeof(*arg)))
@@ -1718,8 +1450,10 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			return put_user(tty->ldisc.num, (int *) arg);
 		case TIOCSETD:
 			return tiocsetd(tty, (int *) arg);
+#ifdef CONFIG_VT
 		case TIOCLINUX:
 			return tioclinux(tty, arg);
+#endif
 		case TIOCTTYGSTRUCT:
 			return tiocttygstruct(tty, (struct tty_struct *) arg);
 	}
@@ -1951,7 +1685,13 @@ long console_init(long kmem_start, long kmem_end)
 	 * set up the console device so that later boot sequences can 
 	 * inform about problems etc..
 	 */
-	return con_init(kmem_start);
+#ifdef CONFIG_SERIAL_CONSOLE
+	kmem_start = serial_console_init(kmem_start, kmem_end);
+#endif
+#ifdef CONFIG_VT
+	kmem_start = con_init(kmem_start);
+#endif
+	return kmem_start;
 }
 
 static struct tty_driver dev_tty_driver, dev_console_driver;
@@ -1976,7 +1716,7 @@ int tty_init(void)
 	dev_tty_driver.driver_name = "/dev/tty";
 	dev_tty_driver.name = dev_tty_driver.driver_name + 5;
 	dev_tty_driver.name_base = 0;
-	dev_tty_driver.major = TTY_MAJOR;
+	dev_tty_driver.major = TTYAUX_MAJOR;
 	dev_tty_driver.minor_start = 0;
 	dev_tty_driver.num = 1;
 	dev_tty_driver.type = TTY_DRIVER_TYPE_SYSTEM;
@@ -1988,14 +1728,14 @@ int tty_init(void)
 	dev_console_driver = dev_tty_driver;
 	dev_console_driver.driver_name = "/dev/console";
 	dev_console_driver.name = dev_console_driver.driver_name + 5;
-	dev_console_driver.major = TTYAUX_MAJOR;
+	dev_console_driver.major = TTY_MAJOR;
 	dev_console_driver.type = TTY_DRIVER_TYPE_SYSTEM;
 	dev_console_driver.subtype = SYSTEM_TYPE_CONSOLE;
 
 	if (tty_register_driver(&dev_console_driver))
 		panic("Couldn't register /dev/console driver\n");
-	
-#if !CONFIG_NO_KEYBOARD
+
+#ifdef CONFIG_VT
 	kbd_init();
 #endif
 #ifdef CONFIG_ESPSERIAL  /* init ESP before rs, so rs doesn't see the port */
@@ -2020,7 +1760,9 @@ int tty_init(void)
 	riscom8_init();
 #endif
 	pty_init();
+#ifdef CONFIG_VT
 	vcs_init();
+#endif
 	return 0;
 }
 

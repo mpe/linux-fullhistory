@@ -58,7 +58,7 @@ static int busy_flag = 0;
 static int old_sigmask;
 
 static int ftape_open(struct inode *ino, struct file *filep);
-static void ftape_close(struct inode *ino, struct file *filep);
+static int ftape_close(struct inode *ino, struct file *filep);
 static int ftape_ioctl(struct inode *ino, struct file *filep,
 		       unsigned int command, unsigned long arg);
 static long ftape_read(struct inode *ino, struct file *fp,
@@ -260,7 +260,7 @@ static int ftape_open(struct inode *ino, struct file *filep)
 
 /*      Close ftape device
  */
-static void ftape_close(struct inode *ino, struct file *filep)
+static int ftape_close(struct inode *ino, struct file *filep)
 {
 	TRACE_FUN(4, "ftape_close");
 	int result;
@@ -268,7 +268,7 @@ static void ftape_close(struct inode *ino, struct file *filep)
 	if (!busy_flag || MINOR(ino->i_rdev) != ftape_unit) {
 		TRACE(1, "failed: not busy or wrong unit");
 		TRACE_EXIT;
-		return;		/* keep busy_flag !(?) */
+		return 0;		/* keep busy_flag !(?) */
 	}
 	current->blocked = _BLOCK_ALL;
 	result = _ftape_close();
@@ -281,6 +281,7 @@ static void ftape_close(struct inode *ino, struct file *filep)
 	current->blocked = old_sigmask;		/* restore before open state */
 	TRACE_EXIT;
 	MOD_DEC_USE_COUNT;	/* unlock module in memory */
+	return 0;
 }
 
 /*      Ioctl for ftape device

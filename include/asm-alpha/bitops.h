@@ -10,6 +10,10 @@
  * is guaranteed to be atomic. All bit operations return 0 if the bit
  * was cleared before the operation and != 0 if it was not.
  *
+ * To get proper branch prediction for the main line, we must branch
+ * forward to code at the end of this object's .text section, then
+ * branch back to restart the operation.
+ *
  * bit 0 is the LSB of addr; bit 64 is the LSB of (addr+1).
  */
 
@@ -20,19 +24,19 @@ extern __inline__ unsigned long set_bit(unsigned long nr, void * addr)
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
-		"\n1:\t"
-		"ldl_l %0,%1\n\t"
-		"and %0,%3,%2\n\t"
-		"bne %2,2f\n\t"
-		"xor %0,%3,%0\n\t"
-		"stl_c %0,%1\n\t"
-		"beq %0,1b\n"
-		"2:"
-		:"=&r" (temp),
-		 "=m" (*m),
-		 "=&r" (oldbit)
-		:"Ir" (1UL << (nr & 31)),
-		 "m" (*m));
+	"1:	ldl_l %0,%1\n"
+	"	and %0,%3,%2\n"
+	"	bne %2,2f\n"
+	"	xor %0,%3,%0\n"
+	"	stl_c %0,%1\n"
+	"	beq %0,3f\n"
+	"2:\n"
+	".text 2\n"
+	"3:	br 1b\n"
+	".text"
+	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
+	:"Ir" (1UL << (nr & 31)), "m" (*m));
+
 	return oldbit != 0;
 }
 
@@ -43,19 +47,19 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void * addr)
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
-		"\n1:\t"
-		"ldl_l %0,%1\n\t"
-		"and %0,%3,%2\n\t"
-		"beq %2,2f\n\t"
-		"xor %0,%3,%0\n\t"
-		"stl_c %0,%1\n\t"
-		"beq %0,1b\n"
-		"2:"
-		:"=&r" (temp),
-		 "=m" (*m),
-		 "=&r" (oldbit)
-		:"Ir" (1UL << (nr & 31)),
-		 "m" (*m));
+	"1:	ldl_l %0,%1\n"
+	"	and %0,%3,%2\n\t"
+	"	beq %2,2f\n\t"
+	"	xor %0,%3,%0\n\t"
+	"	stl_c %0,%1\n\t"
+	"	beq %0,3f\n"
+	"2:\n"
+	".text 2\n"
+	"3:	br 1b\n"
+	".text"
+	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
+	:"Ir" (1UL << (nr & 31)), "m" (*m));
+
 	return oldbit != 0;
 }
 
@@ -66,17 +70,17 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
-		"\n1:\t"
-		"ldl_l %0,%1\n\t"
-		"and %0,%3,%2\n\t"
-		"xor %0,%3,%0\n\t"
-		"stl_c %0,%1\n\t"
-		"beq %0,1b\n"
-		:"=&r" (temp),
-		 "=m" (*m),
-		 "=&r" (oldbit)
-		:"Ir" (1UL << (nr & 31)),
-		 "m" (*m));
+	"1:	ldl_l %0,%1\n"
+	"	and %0,%3,%2\n\t"
+	"	xor %0,%3,%0\n\t"
+	"	stl_c %0,%1\n\t"
+	"	beq %0,3f\n"
+	".text 2\n"
+	"3:	br 1b\n"
+	".text"
+	:"=&r" (temp), "=m" (*m), "=&r" (oldbit)
+	:"Ir" (1UL << (nr & 31)), "m" (*m));
+
 	return oldbit != 0;
 }
 

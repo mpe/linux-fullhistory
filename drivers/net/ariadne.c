@@ -581,14 +581,6 @@ static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev)
 	return(0);
     }
 
-    if (skb == NULL) {
-	dev_tint(dev);
-	return(0);
-    }
-
-    if (skb->len <= 0)
-	return(0);
-
 #if 0
     if (ariadne_debug > 3) {
 	board->Lance.RAP = CSR0;	/* PCnet-ISA Controller Status */

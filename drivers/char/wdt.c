@@ -275,7 +275,7 @@ static int wdt_open(struct inode *inode, struct file *file)
 	}
 }
 
-static void wdt_release(struct inode *inode, struct file *file)
+static int wdt_release(struct inode *inode, struct file *file)
 {
 	if(MINOR(inode->i_rdev)==WATCHDOG_MINOR)
 	{
@@ -286,6 +286,7 @@ static void wdt_release(struct inode *inode, struct file *file)
 		wdt_is_open=0;
 	}
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 /*

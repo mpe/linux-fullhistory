@@ -24,9 +24,10 @@ static int kmsg_open(struct inode * inode, struct file * file)
 	return sys_syslog(1,NULL,0);
 }
 
-static void kmsg_release(struct inode * inode, struct file * file)
+static int kmsg_release(struct inode * inode, struct file * file)
 {
 	(void) sys_syslog(0,NULL,0);
+	return 0;
 }
 
 static long kmsg_read(struct inode * inode, struct file * file,

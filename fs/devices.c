@@ -235,11 +235,12 @@ int blkdev_open(struct inode * inode, struct file * filp)
 	return ret;
 }	
 
-void blkdev_release(struct inode * inode)
+int blkdev_release(struct inode * inode)
 {
 	struct file_operations *fops = get_blkfops(MAJOR(inode->i_rdev));
 	if (fops && fops->release)
-		fops->release(inode,NULL);
+		return fops->release(inode,NULL);
+	return 0;
 }
 
 

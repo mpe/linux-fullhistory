@@ -885,14 +885,6 @@ static int plip_tx_packet(struct sk_buff *skb, struct device *dev)
 	if (dev->tbusy)
 		return 1;
 
-	/* If some higher layer thinks we've missed an tx-done interrupt
-	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	   itself. */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
-
 	if (set_bit(0, (void*)&dev->tbusy) != 0) {
 		printk("%s: Transmitter access conflict.\n", dev->name);
 		return 1;

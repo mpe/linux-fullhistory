@@ -132,6 +132,7 @@
 #define TYPE_SCANNER        0x06
 #define TYPE_MOD            0x07    /* Magneto-optical disk - 
 				     * - treated as TYPE_DISK */
+#define TYPE_MEDIUM_CHANGER 0x08
 #define TYPE_NO_LUN         0x7f
 
 
