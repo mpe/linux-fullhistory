@@ -295,24 +295,33 @@ static char *statename[]={
 
 static __inline__ void tcp_set_state(struct sock *sk, int state)
 {
-	if(sk->state==TCP_ESTABLISHED)
-		tcp_statistics.TcpCurrEstab--;
+	int oldstate = sk->state;
+
+	sk->state = state;
+
 #ifdef STATE_TRACE
 	if(sk->debug)
-		printk("TCP sk=%p, State %s -> %s\n",sk, statename[sk->state],statename[state]);
+		printk("TCP sk=%p, State %s -> %s\n",sk, statename[oldstate],statename[state]);
 #endif	
-	/* This is a hack but it doesn't occur often and it's going to
-	   be a real        to fix nicely */
-	   
-	if(state==TCP_ESTABLISHED && sk->state==TCP_SYN_RECV)
-	{
-		wake_up_interruptible(&master_select_wakeup);
-	}
-	sk->state=state;
-	if(state==TCP_ESTABLISHED)
-		tcp_statistics.TcpCurrEstab++;
-	if(sk->state==TCP_CLOSE)
+
+	switch (state) {
+	case TCP_ESTABLISHED:
+		if (oldstate != TCP_ESTABLISHED) {
+			tcp_statistics.TcpCurrEstab++;
+			/* This is a hack but it doesn't occur often and it's going to
+			   be a real        to fix nicely */
+			if (oldstate == TCP_SYN_RECV)
+				wake_up_interruptible(&master_select_wakeup);
+		}
+		break;
+
+	case TCP_CLOSE:
 		tcp_cache_zap();
+		/* fall through */
+	default:
+		if (oldstate==TCP_ESTABLISHED)
+			tcp_statistics.TcpCurrEstab--;
+	}
 }
 
 #endif	/* _TCP_H */

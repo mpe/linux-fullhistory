@@ -1386,7 +1386,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 	if (currcons == sel_cons)
 		clear_selection();
 
-	disable_bh(KEYBOARD_BH);
+	disable_bh(CONSOLE_BH);
 	while (!tty->stopped &&	count) {
 		c = from_user ? get_user(buf) : *buf;
 		buf++; n++; count--;
@@ -1820,7 +1820,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 	}
 	if (vcmode != KD_GRAPHICS)
 		set_cursor(currcons);
-	enable_bh(KEYBOARD_BH);
+	enable_bh(CONSOLE_BH);
 	return n;
 }
 

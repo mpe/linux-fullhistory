@@ -376,6 +376,7 @@ static void keyboard_interrupt(int irq, struct pt_regs *regs)
 		goto end_kbd_intr;
 	}
 	do_poke_blanked_console = 1;
+	mark_bh(CONSOLE_BH);
 	add_keyboard_randomness(scancode);
 
 	tty = ttytab[fg_console];

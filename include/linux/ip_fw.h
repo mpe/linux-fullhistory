@@ -20,6 +20,7 @@
  *					chains, new "insert" and "append"
  *					commands to replace "add" commands,
  *					add ICMP header to struct ip_fwpkt.
+ *	Jos Vos			:	Add support for matching device names.
  *
  *	All the real work was done by .....
  */
@@ -55,6 +56,7 @@ struct ip_fw
 	struct in_addr fw_src, fw_dst;		/* Source and destination IP addr */
 	struct in_addr fw_smsk, fw_dmsk;	/* Mask for src and dest IP addr */
 	struct in_addr fw_via;			/* IP address of interface "via" */
+	struct device *fw_viadev;		/* device of interface "via" */
 	unsigned short fw_flg;			/* Flags word */
 	unsigned short fw_nsp, fw_ndp;          /* N'of src ports and # of dst ports */
 						/* in ports array (dst ports follow */
@@ -63,7 +65,8 @@ struct ip_fw
 #define IP_FW_MAX_PORTS	10      		/* A reasonable maximum */
 	unsigned short fw_pts[IP_FW_MAX_PORTS]; /* Array of port numbers to match */
 	unsigned long  fw_pcnt,fw_bcnt;		/* Packet and byte counters */
-	unsigned char fw_tosand, fw_tosxor;	/* Revised packet priority */
+	unsigned char  fw_tosand, fw_tosxor;	/* Revised packet priority */
+	char           fw_vianame[IFNAMSIZ];	/* name of interface "via" */
 };
 
 /*
@@ -112,6 +115,7 @@ struct ip_fw
 #define IP_FW_IN		1
 #define IP_FW_OUT		2
 #define IP_FW_ACCT		3
+#define IP_FW_CHAINS		4	/* total number of ip_fw chains */
 
 #define IP_FW_INSERT		(IP_FW_BASE_CTL)
 #define IP_FW_APPEND		(IP_FW_BASE_CTL+1)
@@ -160,6 +164,7 @@ struct ip_fwpkt
 		struct icmphdr fwp_icmph;	/* ICMP header */
 	} fwp_protoh;
 	struct in_addr fwp_via;			/* interface address */
+	char           fwp_vianame[IFNAMSIZ];	/* interface name */
 };
 
 /*

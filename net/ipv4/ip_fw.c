@@ -31,6 +31,8 @@
  *	only delete the first matching entry, use 0xFFFF (0xFF) as ports (ICMP
  *	types) when counting packets being 2nd and further fragments.
  *		Jos Vos <jos@xos.nl> 8/2/1996.
+ *	Add support for matching on device names.
+ *		Jos Vos <jos@xos.nl> 15/2/1996.
  *
  * Masquerading functionality
  *
@@ -363,13 +365,23 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		if (match)
 		{
 			/*
-			 *	Look for a VIA match 
+			 *	Look for a VIA address match 
 			 */
 			if(f->fw_via.s_addr && rif)
 			{
 				if(rif->pa_addr!=f->fw_via.s_addr)
 					continue;	/* Mismatch */
 			}
+
+			/*
+			 *	Look for a VIA device match 
+			 */
+			if(f->fw_viadev)
+			{
+				if(rif!=f->fw_viadev)
+					continue;	/* Mismatch */
+			}
+
 			/*
 			 *	Drop through - this is a match
 			 */
@@ -472,43 +484,39 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			break;
 	} /* Loop */
 	
-	answer = FW_BLOCK;
-	
-	/*
-	 * We rely on policy defined in the rejecting entry or, if no match
-	 * was found, we rely on the general policy variable for this type
-	 * of firewall.
-	 */
+	if (opt != 1) {
 
-	if(f!=NULL) 
-	{
-		policy=f->fw_flg;
-		tosand=f->fw_tosand;
-		tosxor=f->fw_tosxor;
-	}
-	else
-	{
-		tosand=0xFF;
-		tosxor=0x00;
-	}
-	
-	if(opt != 1) 
-	{
-		if(policy&IP_FW_F_ACCEPT)
+		/*
+		 * We rely on policy defined in the rejecting entry or, if no match
+		 * was found, we rely on the general policy variable for this type
+		 * of firewall.
+		 */
+
+		if (f!=NULL) {
+			policy=f->fw_flg;
+			tosand=f->fw_tosand;
+			tosxor=f->fw_tosxor;
+		} else {
+			tosand=0xFF;
+			tosxor=0x00;
+		}
+
+		if (policy&IP_FW_F_ACCEPT) {
+			/* Adjust priority and recompute checksum */
+			__u8 old_tos = ip->tos;
+			ip->tos = (old_tos & tosand) ^ tosxor;
+			if (ip->tos != old_tos)
+		 		ip_send_check(ip);
 			answer=(policy&IP_FW_F_MASQ)?FW_MASQUERADE:FW_ACCEPT;
+		} else if(policy&IP_FW_F_ICMPRPL)
+			answer = FW_REJECT;
 		else
-			if(policy&IP_FW_F_ICMPRPL)
-				answer = FW_REJECT;
-	}
+			answer = FW_BLOCK;
 
-	if (policy&IP_FW_F_ACCEPT) { /* Adjust priority and recompute checksum */
-		__u8 old_tos = ip->tos;
-		ip->tos = (old_tos & tosand) ^ tosxor;
-		if (ip->tos != old_tos)
-		 	ip_send_check(ip);
-	}
-
-	return answer;
+		return answer;
+	} else
+		/* we're doing accounting, always ok */
+		return 0;
 }
 
 #ifdef CONFIG_IP_MASQUERADE
@@ -897,6 +905,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  		}
  		else ms->timer.expires = jiffies+MASQUERADE_EXPIRE_TCP;
  
+		skb->csum = csum_partial(th + 1, size - sizeof(*th), 0);
  		tcp_send_check(th,iph->saddr,iph->daddr,size,skb);
  	}
  	add_timer(&ms->timer);
@@ -1002,6 +1011,8 @@ int ip_fw_demasquerade(struct sk_buff *skb)
 #endif
 					}
 				}
+				skb->csum = csum_partial(portptr + sizeof(struct tcphdr),
+					size - sizeof(struct tcphdr), 0);
  				tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,size,skb);
  			}
  			ip_send_check(iph);
@@ -1072,6 +1083,12 @@ static int insert_in_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,
 
 	cli();
 
+	if ((ftmp->fw_vianame)[0]) {
+		if (!(ftmp->fw_viadev = dev_get(ftmp->fw_vianame)))
+			ftmp->fw_viadev = (struct device *) -1;
+	} else
+		ftmp->fw_viadev = NULL;
+
 	ftmp->fw_next = *chainptr;
        	*chainptr=ftmp;
 	restore_flags(flags);
@@ -1105,6 +1122,12 @@ static int append_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,
 	ftmp->fw_next = NULL;
 
 	cli();
+
+	if ((ftmp->fw_vianame)[0]) {
+		if (!(ftmp->fw_viadev = dev_get(ftmp->fw_vianame)))
+			ftmp->fw_viadev = (struct device *) -1;
+	} else
+		ftmp->fw_viadev = NULL;
 
 	chtmp_prev=NULL;
 	for (chtmp=*chainptr;chtmp!=NULL;chtmp=chtmp->fw_next) 
@@ -1145,7 +1168,7 @@ static int del_from_chain(struct ip_fw *volatile*chainptr, struct ip_fw *frwl)
 	while( !was_found && ftmp != NULL )
 	{
 		matches=1;
-	     if (ftmp->fw_src.s_addr!=frwl->fw_src.s_addr 
+		if (ftmp->fw_src.s_addr!=frwl->fw_src.s_addr 
 		     ||  ftmp->fw_dst.s_addr!=frwl->fw_dst.s_addr
 		     ||  ftmp->fw_smsk.s_addr!=frwl->fw_smsk.s_addr
 		     ||  ftmp->fw_dmsk.s_addr!=frwl->fw_dmsk.s_addr
@@ -1163,6 +1186,8 @@ static int del_from_chain(struct ip_fw *volatile*chainptr, struct ip_fw *frwl)
         		if (ftmp->fw_pts[tmpnum]!=frwl->fw_pts[tmpnum])
 				matches=0;
 		}
+		if (strncmp(ftmp->fw_vianame, frwl->fw_vianame, IFNAMSIZ))
+		        matches=0;
 		if(matches)
 		{
 			was_found=1;
@@ -1332,11 +1357,11 @@ int ip_fw_ctl(int stage, void *m, int len)
 
 	if ( cmd == IP_FW_CHECK )
 	{
-		struct device viadev;
+		struct device *viadev;
 		struct ip_fwpkt *ipfwp;
 		struct iphdr *ip;
 
-		if ( len < sizeof(struct ip_fwpkt) )
+		if ( len != sizeof(struct ip_fwpkt) )
 		{
 #ifdef DEBUG_CONFIG_IP_FIREWALL
 			printk("ip_fw_ctl: length=%d, expected %d\n",
@@ -1348,8 +1373,18 @@ int ip_fw_ctl(int stage, void *m, int len)
 	 	ipfwp = (struct ip_fwpkt *)m;
 	 	ip = &(ipfwp->fwp_iph);
 
-		if ( ip->ihl != sizeof(struct iphdr) / sizeof(int))
-		{
+		if ( !(viadev = dev_get(ipfwp->fwp_vianame)) ) {
+#ifdef DEBUG_CONFIG_IP_FIREWALL
+			printk("ip_fw_ctl: invalid device \"%s\"\n", ipfwp->fwp_vianame);
+#endif
+			return(EINVAL);
+		} else if ( viadev->pa_addr != ipfwp->fwp_via.s_addr ) {
+#ifdef DEBUG_CONFIG_IP_FIREWALL
+			printk("ip_fw_ctl: device \"%s\" has another IP address\n",
+				ipfwp->fwp_vianame);
+#endif
+			return(EINVAL);
+		} else if ( ip->ihl != sizeof(struct iphdr) / sizeof(int)) {
 #ifdef DEBUG_CONFIG_IP_FIREWALL
 			printk("ip_fw_ctl: ip->ihl=%d, want %d\n",ip->ihl,
 					sizeof(struct iphdr)/sizeof(int));
@@ -1357,9 +1392,7 @@ int ip_fw_ctl(int stage, void *m, int len)
 			return(EINVAL);
 		}
 
-		viadev.pa_addr = ipfwp->fwp_via.s_addr;
-
-		if ((ret = ip_fw_chk(ip, &viadev, *chains[fwtype],
+		if ((ret = ip_fw_chk(ip, viadev, *chains[fwtype],
 				*policies[fwtype], 2)) == FW_ACCEPT)
 			return(0);
 	    	else if (ret == FW_MASQUERADE)	
@@ -1459,9 +1492,10 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 	
 	while(i!=NULL)
 	{
-		len+=sprintf(buffer+len,"%08lX/%08lX->%08lX/%08lX %08lX %X ",
+		len+=sprintf(buffer+len,"%08lX/%08lX->%08lX/%08lX %.16s %08lX %X ",
 			ntohl(i->fw_src.s_addr),ntohl(i->fw_smsk.s_addr),
 			ntohl(i->fw_dst.s_addr),ntohl(i->fw_dmsk.s_addr),
+			(i->fw_vianame)[0] ? i->fw_vianame : "-",
 			ntohl(i->fw_via.s_addr),i->fw_flg);
 		len+=sprintf(buffer+len,"%u %u %-9lu %-9lu",
 			i->fw_nsp,i->fw_ndp, i->fw_pcnt,i->fw_bcnt);
@@ -1611,6 +1645,46 @@ struct firewall_ops ipfw_ops=
 
 #endif
 
+#if defined(CONFIG_IP_ACCT) || defined(CONFIG_IP_FIREWALL)
+
+int ipfw_device_event(struct notifier_block *this, unsigned long event, void *ptr)
+{
+	struct device *dev=ptr;
+	char *devname = dev->name;
+	unsigned long flags;
+	struct ip_fw *fw;
+	int chn;
+
+	save_flags(flags);
+	cli();
+	
+	if (event == NETDEV_UP) {
+		for (chn = 0; chn < IP_FW_CHAINS; chn++)
+			for (fw = *chains[chn]; fw; fw = fw->fw_next)
+				if ((fw->fw_vianame)[0] && !strncmp(devname,
+						fw->fw_vianame, IFNAMSIZ))
+					fw->fw_viadev = dev;
+	} else if (event == NETDEV_DOWN) {
+		for (chn = 0; chn < IP_FW_CHAINS; chn++)
+			for (fw = *chains[chn]; fw; fw = fw->fw_next)
+				/* we could compare just the pointers ... */
+				if ((fw->fw_vianame)[0] && !strncmp(devname,
+						fw->fw_vianame, IFNAMSIZ))
+					fw->fw_viadev = (struct device *) -1;
+	}
+
+	restore_flags(flags);
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block ipfw_dev_notifier={
+	ipfw_device_event,
+	NULL,
+	0
+};
+
+#endif
+
 void ip_fw_init(void)
 {
 #ifdef CONFIG_IP_ACCT
@@ -1652,5 +1726,9 @@ void ip_fw_init(void)
 		0, &proc_net_inode_operations,
 		ip_msqhst_procinfo
 	});
+#endif
+#if defined(CONFIG_IP_ACCT) || defined(CONFIG_IP_FIREWALL)
+	/* Register for device up/down reports */
+	register_netdevice_notifier(&ipfw_dev_notifier);
 #endif
 }
