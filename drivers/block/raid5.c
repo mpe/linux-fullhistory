@@ -586,13 +586,15 @@ static void raid5_build_block (struct stripe_head *sh, struct buffer_head *bh, i
 
 	b_data = ((volatile struct buffer_head *) bh)->b_data;
 	memset (bh, 0, sizeof (struct buffer_head));
-	init_buffer(bh, dev, block, raid5_end_request, sh);
+	init_buffer(bh, raid5_end_request, sh);
+	bh->b_dev = dev;
+	bh->b_blocknr = block;
 	((volatile struct buffer_head *) bh)->b_data = b_data;
 
 	bh->b_rdev	= raid_conf->disks[i].dev;
 	bh->b_rsector   = sh->sector;
 
-	bh->b_state	= (1 << BH_Req);
+	bh->b_state	= (1 << BH_Req) | (1 << BH_Allocated);
 	bh->b_size	= sh->size;
 	bh->b_list	= BUF_LOCKED;
 }

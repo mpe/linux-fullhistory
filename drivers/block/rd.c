@@ -173,7 +173,7 @@ repeat:
 
 	if (CURRENT->cmd == READ) 
 		memset(CURRENT->buffer, 0, len); 
-	else	
+	else
 		set_bit(BH_Protected, &CURRENT->bh->b_state);
 
 	end_request(1);

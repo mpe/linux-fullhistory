@@ -2834,7 +2834,6 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	bprm.dentry = dentry;
 	bprm.filename = filename;
 	bprm.sh_bang = 0;
-	bprm.java = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
 	if ((bprm.argc = count32(argv)) < 0) {

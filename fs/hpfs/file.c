@@ -53,143 +53,111 @@ void hpfs_truncate(struct inode *i)
 {
 	if (IS_IMMUTABLE(i)) return /*-EPERM*/;
 	i->i_hpfs_n_secs = 0;
-	hpfs_truncate_btree(i->i_sb, i->i_ino, 1, ((i->i_size + 511) >> 9));
 	i->i_blocks = 1 + ((i->i_size + 511) >> 9);
+	hpfs_truncate_btree(i->i_sb, i->i_ino, 1, ((i->i_size + 511) >> 9));
 	hpfs_write_inode(i);
 }
 
-ssize_t hpfs_file_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
+int hpfs_getblk_block(struct inode *inode, long block, int create, int *err, int *created)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
-	int i,j;
-	int a = generic_file_read(filp, buf, count, ppos);
-	if (inode->i_hpfs_conv != CONV_TEXT || a < 0) {
-		return a;
-	}	
-	for (i = 0, j = 0; i < a; i++) {
-		char c;
-		int error;
-		if ((error = get_user(c, buf + i))) return error;
-		if (c != '\r') {
-			if (i != j) put_user(c, buf + j);
-			j++;
-		}
+	int add;
+	int sec = 0;
+	down(&inode->i_sem);
+	if (err) *err = 0;
+	if (created) *created = 0;
+	if (!inode->i_blocks) {
+		hpfs_error(inode->i_sb, "hpfs_get_block: inode %08x has no blocks", inode->i_ino);
+		if (err) *err = -EFSERROR;
+		up(&inode->i_sem);
+		return 0;
 	}
-	return j;
+	if (block < ((add = inode->i_blocks - 1))) {
+		int bm;
+		if (!(bm = hpfs_bmap(inode, block))) {
+			hpfs_error(inode->i_sb, "hpfs_get_block: cound not bmap block %08x, inode %08x, size %08x", (int)block, inode->i_ino, (int)inode->i_size);
+			*err = -EFSERROR;
+		}
+		up(&inode->i_sem);
+		return bm;
+	}
+	if (!create) {
+		if (err) *err = -EFBIG;
+		up(&inode->i_sem);
+		return 0;
+	}
+	if (created) *created = 1;
+	while (add <= block) {
+		if ((sec = hpfs_add_sector_to_btree(inode->i_sb, inode->i_ino, 1, add)) == -1) {
+			if (err) *err = -ENOSPC;
+			hpfs_truncate_btree(inode->i_sb, inode->i_ino, 1, inode->i_blocks - 1);
+			return 0;
+		} /* FIXME: clear block */
+		add++;
+	}
+	inode->i_blocks = add + 1;
+	up(&inode->i_sem);
+	return sec;
 }
 
-ssize_t hpfs_file_write(struct file *filp, const char *buf, size_t count,
-			loff_t *ppos)
+/* copied from ext2fs */
+static int hpfs_get_block(struct inode *inode, unsigned long block, struct buffer_head *bh, int update)
 {
-	struct inode *i = filp->f_dentry->d_inode;
-	int carry, error = 0;
-	const char *start = buf;
-	if (!i) return -EINVAL;
-	if (!S_ISREG(i->i_mode)) return -EINVAL;
-	if (IS_IMMUTABLE(i)) return -EPERM;
-	if (filp->f_flags & O_APPEND) *ppos = i->i_size;
-	if (count <= 0) return 0;
-	if ((unsigned)(*ppos+count) >= 0x80000000U || (unsigned)count >= 0x80000000U) return -EFBIG;
-	carry = 0;
-	while (count || carry) {
-		int ii, add = 0;
-		secno sec = 0; /* Go away, uninitialized variable warning */
-		int offset, size, written;
-		char ch;
-		struct buffer_head *bh;
-		char *data;
-		offset = *ppos & 0x1ff;
-		size = count > 0x200 - offset ? 0x200 - offset : count;
-		if ((*ppos >> 9) < ((i->i_size + 0x1ff) >> 9)) {
-			i->i_hpfs_n_secs = 0;
-			if (!(sec = hpfs_bmap(i, *ppos >> 9))) {
-				hpfs_error(i->i_sb, "bmap failed, file %08x, fsec %08x",
-					i->i_ino, *ppos >> 9);
-				error =- EFSERROR;
-				break;
-			}
-		} else for (ii = (i->i_size + 0x1ff) >> 9, add = 1; ii <= *ppos >> 9; ii++) {
-			if ((sec = hpfs_add_sector_to_btree(i->i_sb, i->i_ino, 1, ii)) == -1) {
-				hpfs_truncate(i);
-				return -ENOSPC;
-			}
-			if (*ppos != i->i_size)
-				if ((data = hpfs_get_sector(i->i_sb, sec, &bh))) {
-					memset(data, 0, 512);
-					mark_buffer_dirty(bh, 0);
-					brelse(bh);
-				}
-			i->i_size = 0x200 * ii + 1;
-			i->i_blocks++;
-			/*mark_inode_dirty(i);*/i->i_hpfs_dirty = 1;
-			if (i->i_sb->s_hpfs_chk >= 2) {
-				secno bsec;
-				bsec = hpfs_bmap(i, ii);
-				if (sec != bsec) {
-					hpfs_error(i->i_sb, "sec == %08x, bmap returns %08x", sec, bsec);
-					error = -EFSERROR;
-					break;
-				}
-			}	
-			PRINTK(("file_write: added %08x\n", sec));
+	if (!bh->b_blocknr) {
+		int error, created;
+		unsigned long blocknr;
+
+		blocknr = hpfs_getblk_block(inode, block, 1, &error, &created);
+		if (!blocknr) {
+			if (!error)
+				error = -ENOSPC;
+			return error;
 		}
-		if (!sec || sec == 15) {
-			hpfs_error(i->i_sb, "bmap returned empty sector");
-			error = -EFSERROR;
-			break;
+
+		bh->b_dev = inode->i_dev;
+		bh->b_blocknr = blocknr;
+
+		if (!update)
+			return 0;
+
+		if (created) {
+			memset(bh->b_data, 0, bh->b_size);
+			set_bit(BH_Uptodate, &bh->b_state);
+			return 0;
 		}
-		if (i->i_sb->s_hpfs_chk)
-			if (hpfs_chk_sectors(i->i_sb, sec, 1, "data")) {
-				error = -EFSERROR;
-				break;
-			}
-		if ((!offset && size == 0x200) || add)
-			data = hpfs_get_sector(i->i_sb, sec, &bh);
-		else data = hpfs_map_sector(i->i_sb, sec, &bh, 0);
-		if (!data) {
-			error = -EIO;
-			break;
-		}
-		if (i->i_hpfs_conv != CONV_TEXT) {
-			memcpy_fromfs(data + offset, buf, written = size);
-			buf += size;
-		} else {
-			int left;
-			char *to;
-			/* LF->CR/LF conversion, stolen from fat fs */
-			written = left = 0x200 - offset;
-			to = (char *) bh->b_data + (*ppos & 0x1ff);
-			if (carry) {
-				*to++ = '\n';
-				left--;
-				carry = 0;
-			}
-			for (size = 0; size < count && left; size++) {
-				if ((error = get_user(ch, buf++))) break;
-				if (ch == '\n') {
-					*to++ = '\r';
-					left--;
-				}
-				if (!left) carry = 1;
-				else {
-					*to++ = ch;
-					left--;
-				}
-			}
-			written -= left;
-		}
-		update_vm_cache(i, *ppos, bh->b_data + (*ppos & 0x1ff), written);
-		*ppos += written;
-		if (*ppos > i->i_size) {
-			i->i_size = *ppos;
-			/*mark_inode_dirty(i);*/i->i_hpfs_dirty = 1;
-		}
-		mark_buffer_dirty(bh, 0);
-		brelse(bh);
-		count -= size;
 	}
-	if (start == buf) return error;
-	i->i_mtime = CURRENT_TIME;
-	/*mark_inode_dirty(i);*/i->i_hpfs_dirty = 1;
-	return buf - start;
+
+	if (!update)
+		return 0;
+
+	lock_kernel();
+	ll_rw_block(READ, 1, &bh);
+	wait_on_buffer(bh);
+	unlock_kernel();
+
+	return buffer_uptodate(bh) ? 0 : -EIO;
 }
+
+int hpfs_writepage(struct file *file, struct page *page)
+{
+	return block_write_full_page(file, page, hpfs_get_block);
+}
+
+long hpfs_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char *buf)
+{
+        return block_write_partial_page(file, page, offset, bytes, buf, hpfs_get_block);
+}
+
+
+ssize_t hpfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
+{
+	ssize_t retval;
+	struct inode *inode = file->f_dentry->d_inode;
+	retval = generic_file_write(file, buf, count, ppos, hpfs_write_one_page);
+	if (retval > 0) {
+		/*remove_suid(inode);*/
+		inode->i_mtime = CURRENT_TIME;
+		inode->i_hpfs_dirty = 1;
+	}
+	return retval;
+}
+

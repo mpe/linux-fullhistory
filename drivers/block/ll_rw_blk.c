@@ -384,12 +384,9 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
 
-	/* Uhhuh.. Nasty dead-lock possible here.. */
-	if (buffer_locked(bh))
+	/* Only one thread can actually submit the I/O. */
+	if (test_and_set_bit(BH_Lock, &bh->b_state))
 		return;
-	/* Maybe the above fixes it, and maybe it doesn't boot. Life is interesting */
-
-	lock_buffer(bh);
 
 	if (blk_size[major]) {
 		unsigned long maxsector = (blk_size[major][MINOR(bh->b_rdev)] << 1) + 1;

@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.128 1999/05/25 16:53:24 jj Exp $
+/*  $Id: init.c,v 1.129 1999/06/25 10:32:08 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -419,10 +419,12 @@ __u32 mmu_get_scsi_one(char *vaddr, unsigned long len, struct linux_sbus *sbus)
 	}
 
 	if (iommu->strbuf_enabled) {
+		volatile u64 *sbuf_pflush = (volatile u64 *) &sregs->sbuf_pflush;
+
 		spin_lock_irqsave(&iommu->iommu_lock, flags);
 		iommu->flushflag = 0;
 		while(start < end) {
-			sregs->sbuf_pflush = start;
+			*sbuf_pflush = start;
 			start += PAGE_SIZE;
 		}
 		sregs->sbuf_fsync = __pa(&(iommu->flushflag));
@@ -447,6 +449,8 @@ void mmu_release_scsi_one(u32 vaddr, unsigned long len, struct linux_sbus *sbus)
 	start &= PAGE_MASK;
 
 	if (iommu->strbuf_enabled) {
+		volatile u64 *sbuf_pflush = (volatile u64 *) &sregs->sbuf_pflush;
+
 		spin_lock_irqsave(&iommu->iommu_lock, flags);
 
 		/* 1) Clear the flush flag word */
@@ -456,7 +460,7 @@ void mmu_release_scsi_one(u32 vaddr, unsigned long len, struct linux_sbus *sbus)
 		 *    we want flushed.
 		 */
 		while(start < end) {
-			sregs->sbuf_pflush = start;
+			*sbuf_pflush = start;
 			start += PAGE_SIZE;
 		}
 
@@ -484,6 +488,8 @@ void mmu_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
 	volatile u64 *sbctrl = (volatile u64 *) &sregs->sbus_control;
 
 	if (iommu->strbuf_enabled) {
+		volatile u64 *sbuf_pflush = (volatile u64 *) &sregs->sbuf_pflush;
+
 		spin_lock_irqsave(&iommu->iommu_lock, flags);
 		iommu->flushflag = 0;
 
@@ -500,7 +506,7 @@ void mmu_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
 			sg[sz--].dvma_addr = sbus_dvma_addr(start);
 			start &= PAGE_MASK;
 			while(start < end) {
-				sregs->sbuf_pflush = start;
+				*sbuf_pflush = start;
 				start += PAGE_SIZE;
 			}
 		}
@@ -535,6 +541,8 @@ void mmu_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus
 	unsigned long flags, tmp;
 
 	if (iommu->strbuf_enabled) {
+		volatile u64 *sbuf_pflush = (volatile u64 *) &sregs->sbuf_pflush;
+
 		spin_lock_irqsave(&iommu->iommu_lock, flags);
 
 		/* 1) Clear the flush flag word */
@@ -549,7 +557,7 @@ void mmu_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus
 
 			start &= PAGE_MASK;
 			while(start < end) {
-				sregs->sbuf_pflush = start;
+				*sbuf_pflush = start;
 				start += PAGE_SIZE;
 			}
 			sz--;

@@ -21,6 +21,7 @@
 #include <asm/bitops.h>
 #include <asm/segment.h>
 #include <asm/uaccess.h>
+#include <linux/smp_lock.h>
 
 #include <stdarg.h>
 
@@ -259,6 +260,7 @@ secno hpfs_bmap(struct inode *, unsigned);
 void hpfs_truncate(struct inode *);
 ssize_t hpfs_file_read(struct file *, char *, size_t, loff_t *);
 ssize_t hpfs_file_write(struct file *, const char *, size_t, loff_t *);
+int hpfs_writepage (struct file *, struct page *);
 
 /* inode.c */
 

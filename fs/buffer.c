@@ -71,7 +71,6 @@ static struct buffer_head * free_list[NR_SIZES] = {NULL, };
 static kmem_cache_t *bh_cachep;
 
 static struct buffer_head * unused_list = NULL;
-static struct buffer_head * reuse_list = NULL;
 static DECLARE_WAIT_QUEUE_HEAD(buffer_wait);
 
 static int nr_buffers = 0;
@@ -671,13 +670,10 @@ static void refill_freelist(int size)
 	}
 }
 
-void init_buffer(struct buffer_head *bh, kdev_t dev, int block,
-		 bh_end_io_t *handler, void *dev_id)
+void init_buffer(struct buffer_head *bh, bh_end_io_t *handler, void *dev_id)
 {
 	bh->b_list = BUF_CLEAN;
 	bh->b_flushtime = 0;
-	bh->b_dev = dev;
-	bh->b_blocknr = block;
 	bh->b_end_io = handler;
 	bh->b_dev_id = dev_id;
 }
@@ -725,9 +721,10 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 	 */
 	spin_lock_irqsave(&page_uptodate_lock, flags);
 	unlock_buffer(bh);
+	bh->b_count--;
 	tmp = bh->b_this_page;
 	while (tmp != bh) {
-		if (buffer_locked(tmp))
+		if (tmp->b_count && (tmp->b_end_io == end_buffer_io_async))
 			goto still_busy;
 		tmp = tmp->b_this_page;
 	}
@@ -806,9 +803,11 @@ get_free:
 	/* OK, FINALLY we know that this buffer is the only one of its kind,
 	 * and that it's unused (b_count=0), unlocked, and clean.
 	 */
-	init_buffer(bh, dev, block, end_buffer_io_sync, NULL);
+	init_buffer(bh, end_buffer_io_sync, NULL);
+	bh->b_dev = dev;
+	bh->b_blocknr = block;
 	bh->b_count = 1;
-	bh->b_state = 0;
+	bh->b_state = 1 << BH_Allocated;
 
 	/* Insert the buffer into the regular lists */
 	insert_into_lru_list(bh);
@@ -1042,35 +1041,6 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 	unused_list = bh;
 }
 
-/* 
- * We can't put completed temporary IO buffer_heads directly onto the
- * unused_list when they become unlocked, since the device driver
- * end_request routines still expect access to the buffer_head's
- * fields after the final unlock.  So, the device driver puts them on
- * the reuse_list instead once IO completes, and we recover these to
- * the unused_list here.
- *
- * Note that we don't do a wakeup here, but return a flag indicating
- * whether we got any buffer heads. A task ready to sleep can check
- * the returned value, and any tasks already sleeping will have been
- * awakened when the buffer heads were added to the reuse list.
- */
-static inline int recover_reusable_buffer_heads(void)
-{
-	struct buffer_head *head = xchg(&reuse_list, NULL);
-	int found = 0;
-	
-	if (head) {
-		do {
-			struct buffer_head *bh = head;
-			head = head->b_next_free;
-			put_unused_buffer_head(bh);
-		} while (head);
-		found = 1;
-	}
-	return found;
-}
-
 /*
  * Reserve NR_RESERVED buffer heads for async IO requests to avoid
  * no-buffer-head deadlock.  Return NULL on failure; waiting for
@@ -1080,7 +1050,6 @@ static struct buffer_head * get_unused_buffer_head(int async)
 {
 	struct buffer_head * bh;
 
-	recover_reusable_buffer_heads();
 	if (nr_unused_buffer_heads > NR_RESERVED) {
 		bh = unused_list;
 		unused_list = bh->b_next_free;
@@ -1204,8 +1173,10 @@ no_grow:
 	 */
 	add_wait_queue(&buffer_wait, &wait);
 	current->state = TASK_UNINTERRUPTIBLE;
-	if (!recover_reusable_buffer_heads())
+	if (nr_unused_buffer_heads < MAX_BUF_PER_PAGE) {
+		current->policy |= SCHED_YIELD;
 		schedule();
+	}
 	remove_wait_queue(&buffer_wait, &wait);
 	current->state = TASK_RUNNING;
 	goto try_again;
@@ -1237,7 +1208,9 @@ static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], i
 		block = *(b++);
 
 		tail = bh;
-		init_buffer(bh, dev, block, end_buffer_io_async, NULL);
+		init_buffer(bh, end_buffer_io_async, NULL);
+		bh->b_dev = dev;
+		bh->b_blocknr = block;
 
 		/*
 		 * When we use bmap, we define block zero to represent
@@ -1247,7 +1220,10 @@ static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], i
 		 */
 		if (bmap && !block) {
 			memset(bh->b_data, 0, size);
+			set_bit(BH_Uptodate, &bh->b_state);
+			continue;
 		}
+		set_bit(BH_Allocated, &bh->b_state);
 	}
 	tail->b_this_page = head;
 	get_page(page);
@@ -1283,13 +1259,14 @@ int block_flushpage(struct inode *inode, struct page *page, unsigned long offset
 		 * is this block fully flushed?
 		 */
 		if (offset <= curr_off) {
-			if (bh->b_blocknr) {
+			if (buffer_allocated(bh)) {
 				bh->b_count++;
 				wait_on_buffer(bh);
 				if (bh->b_dev == B_FREE)
 					BUG();
 				mark_buffer_clean(bh);
 				clear_bit(BH_Uptodate, &bh->b_state);
+				clear_bit(BH_Allocated, &bh->b_state);
 				bh->b_blocknr = 0;
 				bh->b_count--;
 			}
@@ -1381,8 +1358,8 @@ int block_write_full_page (struct file *file, struct page *page, fs_getblock_t f
 		 * decisions (block #0 may actually be a valid block)
 		 */
 		bh->b_end_io = end_buffer_io_sync;
-		if (!buffer_uptodate(bh)) {
-			err = fs_get_block(inode, block, bh, 0);
+		if (!buffer_allocated(bh)) {
+			err = fs_get_block(inode, block, bh, FS_GETBLK_ALLOCATE);
 			if (err)
 				goto out;
 		}
@@ -1470,12 +1447,25 @@ int block_write_partial_page (struct file *file, struct page *page, unsigned lon
 		 * not going to fill it completely.
 		 */
 		bh->b_end_io = end_buffer_io_sync;
-		if (!buffer_uptodate(bh)) {
-			int update = start_offset || (end_bytes && (i == end_block));
-
-			err = fs_get_block(inode, block, bh, update);
+		if (!buffer_allocated(bh)) {
+			unsigned int flags = FS_GETBLK_ALLOCATE;
+			if (start_offset || (end_bytes && (i == end_block)))
+				flags |= FS_GETBLK_UPDATE;
+			err = fs_get_block(inode, block, bh, flags);
 			if (err)
 				goto out;
+		}
+
+		if (start_offset || (end_bytes && (i == end_block))) {
+			if (!buffer_uptodate(bh)) {
+				lock_kernel();
+				ll_rw_block(READ, 1, &bh);
+				wait_on_buffer(bh);
+				unlock_kernel();
+				err = -EIO;
+				if (!buffer_uptodate(bh))
+					goto out;
+			}
 		}
 
 		err = -EFAULT;
@@ -1586,6 +1576,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 					BUG();
 				if (!buffer_uptodate(bh)) {
 					arr[nr++] = bh;
+					bh->b_count++;
 				}
 			}
 		} else { /* WRITE */
@@ -1600,6 +1591,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 			set_bit(BH_Uptodate, &bh->b_state);
 			set_bit(BH_Dirty, &bh->b_state);
 			arr[nr++] = bh;
+			bh->b_count++;
 		}
 		bh = bh->b_this_page;
 	} while (bh != head);
@@ -1680,23 +1672,30 @@ int block_read_full_page(struct file * file, struct page * page)
 		 * their bnr cached but had an IO error!
 		 */
 		if (!buffer_uptodate(bh)) {
-			phys_block = inode->i_op->bmap(inode, iblock);
+			unsigned long phys_block = bh->b_blocknr;
+			if (!buffer_allocated(bh)) {
+				phys_block = inode->i_op->bmap(inode, iblock);
+				if (phys_block) {
+					bh->b_dev = inode->i_dev;
+					bh->b_blocknr = phys_block;
+					set_bit(BH_Allocated, &bh->b_state);
+				}
+			}
+					
 			/*
 			 * this is safe to do because we hold the page lock:
 			 */
 			if (phys_block) {
-				init_buffer(bh, inode->i_dev, phys_block, end_buffer_io_async, NULL);
+				init_buffer(bh, end_buffer_io_async, NULL);
 				arr[nr] = bh;
+				bh->b_count++;
 				nr++;
 			} else {
 				/*
 				 * filesystem 'hole' represents zero-contents.
-				 *
-				 * Don't mark the buffer up-to-date (that also implies
-				 * that it is ok on disk, which it isn't), but _do_
-				 * zero out the contents so that readers see the zeroes.
 				 */
 				memset(bh->b_data, 0, blocksize);
+				set_bit(BH_Uptodate, &bh->b_state);
 			}
 		}
 		iblock++;

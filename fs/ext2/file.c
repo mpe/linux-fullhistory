@@ -106,41 +106,32 @@ static inline void remove_suid(struct inode *inode)
 	}
 }
 
-static int ext2_get_block(struct inode *inode, unsigned long block, struct buffer_head *bh, int update)
+static int ext2_get_block(struct inode *inode, unsigned long block, struct buffer_head *bh, unsigned int flags)
 {
-	if (!bh->b_blocknr) {
-		int error, created;
-		unsigned long blocknr;
+	int error, created;
+	unsigned long blocknr;
 
-		blocknr = ext2_getblk_block(inode, block, 1, &error, &created);
-		if (!blocknr) {
-			if (!error)
-				error = -ENOSPC;
+	blocknr = ext2_getblk_block(inode, block, flags & FS_GETBLK_ALLOCATE, &error, &created);
+	if (!blocknr) {
+		if (error)
 			return error;
-		}
-
-		bh->b_dev = inode->i_dev;
-		bh->b_blocknr = blocknr;
-
-		if (!update)
-			return 0;
-
-		if (created) {
-			memset(bh->b_data, 0, bh->b_size);
-			set_bit(BH_Uptodate, &bh->b_state);
-			return 0;
-		}
+		if (!(flags & FS_GETBLK_ALLOCATE))
+			goto clear_and_uptodate;
+		return -ENOSPC;
 	}
 
-	if (!update)
-		return 0;
+	bh->b_dev = inode->i_dev;
+	bh->b_blocknr = blocknr;
+	set_bit(BH_Allocated, &bh->b_state);
 
-	lock_kernel();
-	ll_rw_block(READ, 1, &bh);
-	wait_on_buffer(bh);
-	unlock_kernel();
-
-	return buffer_uptodate(bh) ? 0 : -EIO;
+	if (created) {
+clear_and_uptodate:
+		if (flags & FS_GETBLK_UPDATE) {
+			memset(bh->b_data, 0, bh->b_size);
+			set_bit(BH_Uptodate, &bh->b_state);
+		}
+	}
+	return 0;
 }
 
 static int ext2_writepage (struct file * file, struct page * page)

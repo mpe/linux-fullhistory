@@ -501,7 +501,7 @@ int ext2_getblk_block (struct inode * inode, long block,
 		inode->u.ext2_i.i_next_alloc_goal++;
 	}
 
-	*err = 0; // -ENOSPC;
+	*err = 0;
 	b = block;
 	*created = 0;
 	if (block < EXT2_NDIR_BLOCKS) {

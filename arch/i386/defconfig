@@ -314,17 +314,7 @@ CONFIG_82C710_MOUSE=y
 #
 # USB drivers - not for the faint of heart
 #
-CONFIG_USB=y
-CONFIG_USB_UHCI=y
-# CONFIG_USB_OHCI is not set
-# CONFIG_USB_OHCI_HCD is not set
-CONFIG_USB_HUB=y
-CONFIG_USB_MOUSE=y
-CONFIG_USB_KBD=y
-# CONFIG_USB_AUDIO is not set
-# CONFIG_USB_ACM is not set
-# CONFIG_USB_PRINTER is not set
-# CONFIG_USB_SCSI is not set
+# CONFIG_USB is not set
 
 #
 # Filesystems

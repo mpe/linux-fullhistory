@@ -188,7 +188,9 @@ typedef char buffer_block[BLOCK_SIZE];
 #define BH_Dirty	1	/* 1 if the buffer is dirty */
 #define BH_Lock		2	/* 1 if the buffer is locked */
 #define BH_Req		3	/* 0 if the buffer has been invalidated */
+#define BH_Allocated	4	/* 1 if the buffer has allocated backing store */
 #define BH_Protected	6	/* 1 if the buffer is protected */
+
 /*
  * Try to keep the most commonly used fields in single cache lines (16
  * bytes) to improve performance.  This ordering should be
@@ -232,7 +234,7 @@ struct buffer_head {
 };
 
 typedef void (bh_end_io_t)(struct buffer_head *bh, int uptodate);
-void init_buffer(struct buffer_head *, kdev_t, int, bh_end_io_t *, void *);
+void init_buffer(struct buffer_head *, bh_end_io_t *, void *);
 
 #define __buffer_state(bh, state)	(((bh)->b_state & (1UL << BH_##state)) != 0)
 
@@ -240,6 +242,7 @@ void init_buffer(struct buffer_head *, kdev_t, int, bh_end_io_t *, void *);
 #define buffer_dirty(bh)	__buffer_state(bh,Dirty)
 #define buffer_locked(bh)	__buffer_state(bh,Lock)
 #define buffer_req(bh)		__buffer_state(bh,Req)
+#define buffer_allocated(bh)	__buffer_state(bh,Allocated)
 #define buffer_protected(bh)	__buffer_state(bh,Protected)
 
 #define buffer_page(bh)		(mem_map + MAP_NR((bh)->b_data))
@@ -870,7 +873,10 @@ extern struct buffer_head * breada(kdev_t, int, int, unsigned int, unsigned int)
 extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 
 typedef long (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
-typedef int (*fs_getblock_t)(struct inode *, unsigned long, struct buffer_head *, int);
+typedef int (*fs_getblock_t)(struct inode *, unsigned long, struct buffer_head *, unsigned int);
+
+#define FS_GETBLK_ALLOCATE	1
+#define FS_GETBLK_UPDATE	2
 
 /* Generic buffer handling for block filesystems.. */
 extern int block_read_full_page(struct file *, struct page *);
