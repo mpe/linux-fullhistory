@@ -1453,7 +1453,7 @@ static int ds_ioctl(struct inode * inode, struct file * file,
 			printed++;
 		}
 	}
-	ret = -EINVAL;
+	err = -EINVAL;
 	goto free_out;
 	break;
     case DS_GET_FIRST_WINDOW:
