@@ -39,6 +39,7 @@ asmlinkage void do_bottom_half(void)
 	unsigned long mask, left;
 	void (**bh)(void);
 
+	sti();
 	bh = bh_base;
 	active = bh_active & bh_mask;
 	for (mask = 1, left = ~0 ; left & active ; bh++,mask += mask,left += left) {

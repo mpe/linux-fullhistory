@@ -270,11 +270,8 @@ ENTRY(lcall7)
 
 	ALIGN
 handle_bottom_half:
-	pushfl
 	incl SYMBOL_NAME(intr_count)
-	sti
 	call SYMBOL_NAME(do_bottom_half)
-	popfl
 	decl SYMBOL_NAME(intr_count)
 	jmp 9f
 	ALIGN

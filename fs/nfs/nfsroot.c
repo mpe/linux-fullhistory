@@ -1,7 +1,9 @@
 /*
- *  linux/fs/nfs/nfsroot.c -- version 2.1
+ *  linux/fs/nfs/nfsroot.c -- version 2.3
  *
- *  Copyright (C) 1995  Gero Kuhlmann <gero@gkminix.han.de>
+ *  Copyright (C) 1995, 1996  Gero Kuhlmann <gero@gkminix.han.de>
+ *
+ *  For parts of this file:
  *  Copyright (C) 1996  Martin Mares <mj@k332.feld.cvut.cz>
  *
  *  Allow an NFS filesystem to be mounted as root. The way this works is:
@@ -16,6 +18,7 @@
  *
  *	Alan Cox	:	Removed get_address name clash with FPU.
  *	Alan Cox	:	Reformatted a bit.
+ *	Gero Kuhlmann	:	Code cleanup
  *	Michael Rausch  :	Fixed recognition of an incoming RARP answer.
  *	Martin Mares	: (2.0)	Auto-configuration via BOOTP supported.
  *	Martin Mares	:	Manual selection of interface & BOOTP/RARP.
@@ -30,27 +33,19 @@
  *	Gerd Knorr	:	Fixed wired inode handling
  *	Martin Mares	: (2.2)	"0.0.0.0" addresses from command line ignored.
  *	Martin Mares	:	RARP replies not tested for server address.
- *
- *
- *	Known bugs and caveats:
- *
- *	- BOOTP code doesn't handle multiple network interfaces properly.
- *	  For now, it uses the first one, trying to prefer ethernet-like
- *	  devices. Not critical as diskless stations are usually single-homed.
+ *	Gero Kuhlmann	: (2.3) Some bug fixes and code cleanup again (please
+ *				send me your new patches _before_ bothering
+ *				Linus so that I don' always have to cleanup
+ *				_afterwards_ - thanks)
+ *	Gero Kuhlmann	:	Last changes of Martin Mares undone.
  *
  */
 
 
 /* Define this to allow debugging output */
 #undef NFSROOT_DEBUG
-#undef NFSROOT_MORE_DEBUG
+#undef NFSROOT_BOOTP_DEBUG
 
-/* Define the timeout for waiting for a RARP/BOOTP reply */
-#define CONF_BASE_TIMEOUT	(HZ*5)	/* Initial timeout: 5 seconds */
-#define CONF_RETRIES	 	10	/* 10 retries */
-#define CONF_TIMEOUT_RANDOM	(HZ)	/* Maximum amount of randomization */
-#define CONF_TIMEOUT_MULT	*5/4	/* Speed of timeout growth */
-#define CONF_TIMEOUT_MAX	(HZ*30)	/* Maximum allowed timeout */
 
 #include <linux/config.h>
 #include <linux/types.h>
@@ -58,6 +53,8 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/random.h>
+#include <linux/fcntl.h>
 
 #include <asm/param.h>
 #include <linux/utsname.h>
@@ -79,14 +76,20 @@
 #include <linux/in.h>
 #include <net/route.h>
 #include <net/sock.h>
-#include <linux/random.h>
-#include <linux/fcntl.h>
 
 
 /* Range of privileged ports */
 #define STARTPORT	600
 #define ENDPORT		1023
 #define NPORTS		(ENDPORT - STARTPORT + 1)
+
+
+/* Define the timeout for waiting for a RARP/BOOTP reply */
+#define CONF_BASE_TIMEOUT	(HZ*5)	/* Initial timeout: 5 seconds */
+#define CONF_RETRIES	 	10	/* 10 retries */
+#define CONF_TIMEOUT_RANDOM	(HZ)	/* Maximum amount of randomization */
+#define CONF_TIMEOUT_MULT	*5/4	/* Speed of timeout growth */
+#define CONF_TIMEOUT_MAX	(HZ*30)	/* Maximum allowed timeout */
 
 
 /* List of open devices */
@@ -98,6 +101,7 @@ struct open_dev {
 
 static struct open_dev *open_base = NULL;
 
+
 /* IP configuration */
 static struct device *root_dev = NULL;	/* Device selected for booting */
 static char user_dev_name[IFNAMSIZ];	/* Name of user-selected boot device */
@@ -106,8 +110,8 @@ static struct sockaddr_in server;	/* Server IP address */
 static struct sockaddr_in gateway;	/* Gateway IP address */
 static struct sockaddr_in netmask;	/* Netmask for local subnet */
 
-/* BOOTP/RARP variables */
 
+/* BOOTP/RARP variables */
 static int bootp_flag;			/* User said: Use BOOTP! */
 static int rarp_flag;			/* User said: Use RARP! */
 static int bootp_dev_count = 0;		/* Number of devices allowing BOOTP */
@@ -115,23 +119,23 @@ static int rarp_dev_count = 0;		/* Number of devices allowing RARP */
 
 #if defined(CONFIG_RNFS_BOOTP) || defined(CONFIG_RNFS_RARP)
 #define CONFIG_RNFS_DYNAMIC		/* Enable dynamic IP config */
-volatile static int pkt_arrived;	/* BOOTP/RARP packet detected */
+static volatile int pkt_arrived;	/* BOOTP/RARP packet detected */
 
-#define ARRIVED_BOOTP 1
-#define ARRIVED_RARP 2
+#define ARRIVED_BOOTP	1
+#define ARRIVED_RARP	2
 #endif
 
-/* NFS-related data */
-static struct nfs_mount_data nfs_data;	/* NFS mount info */
-static char nfs_path[NFS_MAXPATHLEN];	/* Name of directory to mount */
-static int nfs_port;			/* Port to connect to for NFS service */
 
-/* Macro for formatting of addresses in debug dumps */
-#define IN_NTOA(x) (((x) == INADDR_NONE) ? "none" : in_ntoa(x))
+/* NFS-related data */
+static struct nfs_mount_data nfs_data;		/* NFS mount info */
+static char nfs_path[NFS_MAXPATHLEN] = "";	/* Name of directory to mount */
+static int nfs_port;				/* Port to connect to for NFS */
+
 
 /* Yes, we use sys_socket, but there's no include file for it */
 extern asmlinkage int sys_socket(int family, int type, int protocol);
-     
+
+
 
 /***************************************************************************
 
@@ -174,7 +178,7 @@ static int root_dev_open(void)
 			if (!(dev->flags & IFF_NOARP))
 				rarp_dev_count++;
 #ifdef NFSROOT_DEBUG
-	printk(KERN_NOTICE "Root-NFS: Opened %s\n", dev->name);
+			printk(KERN_NOTICE "Root-NFS: Opened %s\n", dev->name);
 #endif
 		}
 	}
@@ -210,6 +214,7 @@ static void root_dev_close(void)
 		openp = nextp;
 	}
 }
+
 
 
 /***************************************************************************
@@ -305,6 +310,13 @@ static int root_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
+	/* Discard packets which are not from specified server. */
+	if (rarp_flag && !bootp_flag &&
+	    server.sin_addr.s_addr != INADDR_NONE &&
+	    server.sin_addr.s_addr != sip) {
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
 
 	/*
 	 * The packet is what we were looking for. Setup the global
@@ -351,8 +363,9 @@ static void root_rarp_send(void)
 		}
 	}
 }
-
 #endif
+
+
 
 /***************************************************************************
 
@@ -394,6 +407,7 @@ static struct bootp_pkt *xmit_bootp;	/* Packet being transmitted */
 static struct bootp_pkt *recv_bootp;	/* Packet being received */
 
 static int bootp_have_route = 0;	/* BOOTP route installed */
+
 
 /*
  *  Free BOOTP packet buffers
@@ -665,7 +679,7 @@ static int root_bootp_open(void)
 	xmit_bootp->hlen = best_dev->addr_len;
 	memcpy(xmit_bootp->hw_addr, best_dev->dev_addr, best_dev->addr_len);
 	root_bootp_init_ext(xmit_bootp->vendor_area);
-#ifdef NFSROOT_DEBUG
+#ifdef NFSROOT_BOOTP_DEBUG
 	{
 		int x;
 		printk(KERN_NOTICE "BOOTP: XID=%08x, DE=%s, HT=%02x, HL=%02x, HA=",
@@ -734,7 +748,7 @@ static void root_do_bootp_ext(u8 *ext)
 	u8 *c;
 	static int got_bootp_domain = 0;
 
-#ifdef NFSROOT_MORE_DEBUG
+#ifdef NFSROOT_BOOTP_DEBUG
 	printk("BOOTP: Got extension %02x",*ext);
 	for(c=ext+2; c<ext+2+ext[1]; c++)
 		printk(" %02x", *c);
@@ -792,7 +806,7 @@ static void root_bootp_recv(void)
 	    recv_bootp->htype != xmit_bootp->htype ||
 	    recv_bootp->hlen != xmit_bootp->hlen ||
 	    recv_bootp->xid != xmit_bootp->xid) {
-#ifdef NFSROOT_DEBUG
+#ifdef NFSROOT_BOOTP_DEBUG
 		printk("?");
 #endif
 		return;
@@ -831,8 +845,9 @@ static void root_bootp_recv(void)
 		}
 	}
 }
-
 #endif
+
+
 
 /***************************************************************************
 
@@ -849,59 +864,51 @@ static void root_bootp_recv(void)
 static int root_auto_config(void)
 {
 	int retries;
-	u32 timeout, jiff;
-	u32 start_jiffies;
-	int selected = 0;
+	unsigned long timeout, jiff;
+	unsigned long start_jiffies;
 
-	/* Check devices */
+	/*
+	 * If neither BOOTP nor RARP was selected, return with an error. This
+	 * routine gets only called when some pieces of information are mis-
+	 * sing, and without BOOTP and RARP we are not able to get that in-
+	 * formation.
+	 */
+	if (!bootp_flag && !rarp_flag) {
+		printk(KERN_ERR "Root-NFS: Neither RARP nor BOOTP selected.\n");
+		return -1;
+	}
 
 #ifdef CONFIG_RNFS_BOOTP
-	if (bootp_flag) {
-		if (bootp_dev_count)
-			selected = 1;
-		else {
-			printk(KERN_ERR "BOOTP: No suitable device found.\n");
-			bootp_flag = 0;
-		}
+	if (bootp_flag && !bootp_dev_count) {
+		printk(KERN_ERR "Root-NFS: No suitable device for BOOTP found.\n");
+		bootp_flag = 0;
 	}
 #else
 	bootp_flag = 0;
 #endif
 
 #ifdef CONFIG_RNFS_RARP
-	if (rarp_flag) {
-		if (rarp_dev_count)
-			selected = 1;
-		else {
-			printk(KERN_ERR "RARP: No suitable device found.\n");
-			rarp_flag = 0;
-		}
+	if (rarp_flag && !rarp_dev_count) {
+		printk(KERN_ERR "Root-NFS: No suitable device for RARP found.\n");
+		rarp_flag = 0;
 	}
 #else
 	rarp_flag = 0;
 #endif
 
-	/* If neither BOOTP nor RARP was selected manually, use both of them */
-	if (!selected) {
-#ifdef CONFIG_RNFS_BOOTP
-		if (bootp_dev_count)
-			bootp_flag = 1;
-#endif
-#ifdef CONFIG_RNFS_RARP
-		if (rarp_dev_count)
-			rarp_flag = 1;
-#endif
-		if (!bootp_flag && !rarp_flag)
-			return -1;
-	}
+	if (!bootp_flag && !rarp_flag)
+		/* Error message already printed */
+		return -1;
 
-	/* Setup RARP and BOOTP protocols */
+	/*
+	 * Setup RARP and BOOTP protocols
+	 */
 #ifdef CONFIG_RNFS_RARP
 	if (rarp_flag)
 		root_rarp_open();
 #endif
 #ifdef CONFIG_RNFS_BOOTP
-	if (bootp_flag && root_bootp_open()) {
+	if (bootp_flag && root_bootp_open() < 0) {
 		root_bootp_close();
 		return -1;
 	}
@@ -925,8 +932,8 @@ static int root_auto_config(void)
 	timeout = CONF_BASE_TIMEOUT + (timeout % (unsigned) CONF_TIMEOUT_RANDOM);
 	for(;;) {
 #ifdef CONFIG_RNFS_BOOTP
-		if (bootp_flag && root_bootp_send(jiffies - start_jiffies)) {
-			printk("...BOOTP failed!\n");
+		if (bootp_flag && root_bootp_send(jiffies - start_jiffies) < 0) {
+			printk(" BOOTP failed!\n");
 			root_bootp_close();
 			bootp_flag = 0;
 			if (!rarp_flag)
@@ -948,7 +955,7 @@ static int root_auto_config(void)
 		if (pkt_arrived)
 			break;
 		if (! --retries) {
-			printk("timed out!\n");
+			printk(" timed out!\n");
 			break;
 		}
 		timeout = timeout CONF_TIMEOUT_MULT;
@@ -968,7 +975,7 @@ static int root_auto_config(void)
 	if (!pkt_arrived)
 		return -1;
 
-	printk("OK\n");
+	printk(" OK\n");
 	printk(KERN_NOTICE "Root-NFS: Got %s answer from %s, ",
 		(pkt_arrived == ARRIVED_BOOTP) ? "BOOTP" : "RARP",
 		in_ntoa(server.sin_addr.s_addr));
@@ -976,8 +983,9 @@ static int root_auto_config(void)
 
 	return 0;
 }
-
 #endif
+
+
 
 /***************************************************************************
 
@@ -1029,9 +1037,10 @@ static struct nfs_bool_opts {
 
 
 /*
- *  Prepare the NFS data structure and parse any options
+ *  Prepare the NFS data structure and parse any options. This tries to
+ *  set as many values in the nfs_data structure as known right now.
  */
-static int root_nfs_parse(char *name)
+static int root_nfs_name(char *name)
 {
 	char buf[NFS_MAXPATHLEN];
 	char *cp, *options, *val;
@@ -1043,13 +1052,20 @@ static int root_nfs_parse(char *name)
 		name = cp;
 	}
 
+	/* Clear the nfs_data structure and setup the server hostname */
+	memset(&nfs_data, 0, sizeof(nfs_data));
+	strncpy(nfs_data.hostname, in_ntoa(server.sin_addr.s_addr),
+						sizeof(nfs_data.hostname)-1);
+
 	/* Set the name of the directory to mount */
 	cp = in_ntoa(myaddr.sin_addr.s_addr);
 	strncpy(buf, name, 255);
 	if ((options = strchr(buf, ',')))
 		*options++ = '\0';
+	if (!strcmp(buf, "default"))
+		strcpy(buf, NFS_ROOT);
 	if (strlen(buf) + strlen(cp) > NFS_MAXPATHLEN) {
-		printk(KERN_ERR "Root-NFS: Pathname for remote directory too long\n");
+		printk(KERN_ERR "Root-NFS: Pathname for remote directory too long.\n");
 		return -1;
 	}
 	sprintf(nfs_path, buf, cp);
@@ -1100,6 +1116,8 @@ static int root_nfs_parse(char *name)
 #ifdef NFSROOT_DEBUG
 static void root_nfs_print(void)
 {
+#define IN_NTOA(x) (((x) == INADDR_NONE) ? "none" : in_ntoa(x))
+
 	printk(KERN_NOTICE "Root-NFS: IP config: dev=%s, ",
 		root_dev ? root_dev->name : "none");
 	printk("local=%s, ", IN_NTOA(myaddr.sin_addr.s_addr));
@@ -1118,19 +1136,32 @@ static void root_nfs_print(void)
 		nfs_data.acdirmin, nfs_data.acdirmax);
 	printk(KERN_NOTICE "Root-NFS:     port = %d, flags = %08x\n",
 		nfs_port, nfs_data.flags);
+
+#undef IN_NTOA
 }
 #endif
 
 
 /*
- *  Parse any IP configuration options (the "nfsaddrs" parameter).
- *  The parameter consists of option fields separated by colons. It can start
- *  with device name and possibly with auto-config type ("bootp" or "rarp")
- *  followed by own IP address, IP address of the server, IP address of
- *  default gateway, local netmask and a host name. Any of the addresses can
- *  be blank to indicate that default value should be used.
+ *  Decode any IP configuration options in the "nfsaddrs" kernel command
+ *  line parameter. It consists of option fields separated by colons in
+ *  the following order:
+ *
+ *  <client-ip>:<server-ip>:<gw-ip>:<netmask>:<host name>:<device>:<bootp|rarp>
+ *
+ *  Any of the fields can be empty which means to use a default value:
+ *	<client-ip>	- address given by BOOTP or RARP
+ *	<server-ip>	- address of host returning BOOTP or RARP packet
+ *	<gw-ip>		- none, or the address returned by BOOTP
+ *	<netmask>	- automatically determined from <client-ip>, or the
+ *			  one returned by BOOTP
+ *	<host name>	- <client-ip> in ASCII notation, or the name returned
+ *			  by BOOTP
+ *	<device>	- use all available devices for RARP and the first
+ *			  one for BOOTP
+ *	<bootp|rarp>	- use both protocols to determine my own address
  */
-static void root_nfs_ip_config(char *addrs)
+static void root_nfs_addrs(char *addrs)
 {
 	char *cp, *ip, *dp;
 	int num = 0;
@@ -1143,31 +1174,29 @@ static void root_nfs_ip_config(char *addrs)
 	system_utsname.nodename[0] = '\0';
 	system_utsname.domainname[0] = '\0';
 	user_dev_name[0] = '\0';
-	bootp_flag = rarp_flag = 0;
+	bootp_flag = rarp_flag = 1;
 
-	/* Check for device name and BOOTP/RARP flags */
-	ip = addrs;
-	while (ip && *ip && (*ip < '0' || *ip > '9')) {
-		if ((cp = strchr(ip, ':')))
-			*cp++ = '\0';
-		if (*ip) {
-			if (!strcmp(ip, "rarp"))
-				rarp_flag = 1;
-			else if (!strcmp(ip, "bootp"))
-				bootp_flag = 1;
-			else if (!user_dev_name[0]) {
-				strncpy(user_dev_name, ip, IFNAMSIZ);
-				user_dev_name[IFNAMSIZ-1] = '\0';
-			}
-		}
-		ip = cp;
+	/* The following is just a shortcut for automatic IP configuration */
+	if (!strcmp(addrs, "bootp")) {
+		rarp_flag = 0;
+		return;
+	} else if (!strcmp(addrs, "rarp")) {
+		bootp_flag = 0;
+		return;
+	} else if (!strcmp(addrs, "both")) {
+		return;
 	}
 
-	/* Parse the IP addresses */
+	/* Parse the whole string */
+	ip = addrs;
 	while (ip && *ip) {
 		if ((cp = strchr(ip, ':')))
 			*cp++ = '\0';
-		if (strlen(ip) > 0 && strcmp(ip, "0.0.0.0")) {
+		if (strlen(ip) > 0) {
+#ifdef NFSROOT_DEBUG
+			printk(KERN_NOTICE "Root-NFS: Config string num %d is \"%s\"\n",
+								num, ip);
+#endif
 			switch (num) {
 			case 0:
 				myaddr.sin_addr.s_addr = in_aton(ip);
@@ -1190,6 +1219,18 @@ static void root_nfs_ip_config(char *addrs)
 				strncpy(system_utsname.nodename, ip, __NEW_UTS_LEN);
 				system_utsname.nodename[__NEW_UTS_LEN] = '\0';
 				break;
+			case 5:
+				strncpy(user_dev_name, ip, IFNAMSIZ);
+				user_dev_name[IFNAMSIZ-1] = '\0';
+				break;
+			case 6:
+				if (!strcmp(ip, "rarp"))
+					bootp_flag = 0;
+				else if (!strcmp(ip, "bootp"))
+					rarp_flag = 0;
+				else if (strcmp(ip, "both"))
+					bootp_flag = rarp_flag = 0;
+				break;
 			default:
 				break;
 			}
@@ -1197,19 +1238,6 @@ static void root_nfs_ip_config(char *addrs)
 		ip = cp;
 		num++;
 	}
-#ifdef NFSROOT_DEBUG
-	printk(KERN_NOTICE "Root-NFS: IP options: dev=%s, RARP=%d, BOOTP=%d, ",
-		user_dev_name[0] ? user_dev_name : "none",
-		rarp_flag,
-		bootp_flag);
-	printk("local=%s, ", IN_NTOA(myaddr.sin_addr.s_addr));
-	printk("server=%s, ", IN_NTOA(server.sin_addr.s_addr));
-	printk("gw=%s, ", IN_NTOA(gateway.sin_addr.s_addr));
-	printk("mask=%s, ", IN_NTOA(netmask.sin_addr.s_addr));
-	printk("host=%s, domain=%s\n",
-		system_utsname.nodename[0] ? system_utsname.nodename : "none",
-		system_utsname.domainname[0] ? system_utsname.domainname : "none");
-#endif
 }
 
 
@@ -1225,9 +1253,6 @@ static int root_nfs_setup(void)
 		strncpy(system_utsname.nodename, in_ntoa(myaddr.sin_addr.s_addr), __NEW_UTS_LEN);
 		system_utsname.nodename[__NEW_UTS_LEN] = '\0';
 	}
-
-	/* Setup the server hostname */
-	strncpy(nfs_data.hostname, in_ntoa(server.sin_addr.s_addr), 255);
 
 	/* Set the correct netmask */
 	if (netmask.sin_addr.s_addr == INADDR_NONE)
@@ -1253,7 +1278,7 @@ static int root_nfs_setup(void)
 	route.rt_mss = root_dev->mtu;
 	route.rt_flags = RTF_UP;
 	*((struct sockaddr_in *) &(route.rt_dst)) = myaddr;
-	(((struct sockaddr_in *) &(route.rt_dst))) -> sin_addr.s_addr &= netmask.sin_addr.s_addr;
+	(((struct sockaddr_in *) &(route.rt_dst)))->sin_addr.s_addr &= netmask.sin_addr.s_addr;
 	*((struct sockaddr_in *) &(route.rt_genmask)) = netmask;
 	if (ip_rt_new(&route)) {
 		printk(KERN_ERR "Root-NFS: Adding of local route failed!\n");
@@ -1261,8 +1286,8 @@ static int root_nfs_setup(void)
 	}
 
 	if (gateway.sin_addr.s_addr != INADDR_NONE) {	/* Default route */
-		(((struct sockaddr_in *) &(route.rt_dst))) -> sin_addr.s_addr = 0;
-		(((struct sockaddr_in *) &(route.rt_genmask))) -> sin_addr.s_addr = 0;
+		(((struct sockaddr_in *) &(route.rt_dst)))->sin_addr.s_addr = INADDR_ANY;
+		(((struct sockaddr_in *) &(route.rt_genmask)))->sin_addr.s_addr = INADDR_ANY;
 		*((struct sockaddr_in *) &(route.rt_gateway)) = gateway;
 		route.rt_flags |= RTF_GATEWAY;
 		if ((gateway.sin_addr.s_addr ^ myaddr.sin_addr.s_addr) & netmask.sin_addr.s_addr) {
@@ -1289,16 +1314,15 @@ static int root_nfs_setup(void)
 int nfs_root_init(char *nfsname, char *nfsaddrs)
 {
 	/*
-	 * Get local and server IP address. First check for network config
-	 * parameters in the command line parameter.
+	 * Decode IP addresses and other configuration info contained
+	 * in the nfsaddrs string (which came from the kernel command
+	 * line).
 	 */
-	root_nfs_ip_config(nfsaddrs);
+	root_nfs_addrs(nfsaddrs);
 
-	/* Parse NFS options */
-	if (root_nfs_parse(nfsname))
-		return -1;
-
-	/* Setup all network devices */
+	/*
+	 * Setup all network devices
+	 */
 	if (root_dev_open() < 0)
 		return -1;
 
@@ -1328,20 +1352,32 @@ int nfs_root_init(char *nfsname, char *nfsaddrs)
 		if (open_base != NULL && open_base->next == NULL) {
 			root_dev = open_base->dev;
 		} else {
-			/* I hope this cannot happen */
-			printk(KERN_ERR "Root-NFS: 1 == 0!\n");
+			printk(KERN_ERR "Root-NFS: Multiple devices and no server\n");
 			root_dev_close();
 			return -1;
 		}
 	}
+
 	/*
 	 * Close all network devices except the device which connects to
 	 * server
 	 */
 	root_dev_close();
 
-	/* Setup devices and routes */
-	if (root_nfs_setup())
+	/*
+	 * Decode the root directory path name and NFS options from
+	 * the kernel command line. This has to go here in order to
+	 * be able to use the client IP address for the remote root
+	 * directory (necessary for pure RARP booting).
+	 */
+	if (root_nfs_name(nfsname) < 0)
+		return -1;
+
+	/*
+	 * Setup devices and routes. The server directory is actually
+	 * mounted after init() has been started.
+	 */
+	if (root_nfs_setup() < 0)
 		return -1;
 
 #ifdef NFSROOT_DEBUG
@@ -1358,7 +1394,7 @@ int nfs_root_init(char *nfsname, char *nfsaddrs)
 
  ***************************************************************************/
 
-static struct file  *nfs_file;
+static struct file  *nfs_file;		/* File descriptor pointing to inode */
 static struct inode *nfs_sock_inode;	/* Inode containing socket */
 static int *rpc_packet = NULL;		/* RPC packet */
 
@@ -1370,14 +1406,11 @@ static int root_nfs_open(void)
 {
 	/* Open the socket */
 	if ((nfs_data.fd = sys_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-		printk(KERN_ERR "Root-NFS: Cannot open UDP socket!\n");
+		printk(KERN_ERR "Root-NFS: Cannot open UDP socket for NFS!\n");
 		return -1;
 	}
 	nfs_file = current->files->fd[nfs_data.fd];
 	nfs_sock_inode = nfs_file->f_inode;
-
-	/* keep socket open. Do we need really this ? */
-	/* nfs_file->f_count++; */                   
 	return 0;
 }
 
@@ -1387,8 +1420,18 @@ static int root_nfs_open(void)
  *  increases the reference count, so we can simply close the file, and
  *  the socket keeps open.
  */
-static void root_nfs_close(int close_all)
+static void root_nfs_close(void)
 {
+	/*
+	 * The following close doesn't touch the server structure, which
+	 * now contains a file pointer pointing into nowhere. The system
+	 * _should_ crash as soon as someone tries to select on the root
+	 * filesystem. Haven't tried it yet - we can still change it back
+	 * to the old way of keeping a static copy of all important data
+	 * structures, including their pointers. At least this should be
+	 * checked out _carefully_ before going into a public release
+	 * kernel.  -  GK
+	 */
 	sys_close(nfs_data.fd);
 }
 
@@ -1409,14 +1452,14 @@ static int root_nfs_bind(void)
 			if (port > ENDPORT) {
 				port = STARTPORT;
 			}
-			res = nfs_sock_inode->u.socket_i.ops->bind
-				(&nfs_sock_inode->u.socket_i,
-				 (struct sockaddr *)sin, sizeof(struct sockaddr_in));
+			res = nfs_sock_inode->u.socket_i.ops->bind(&nfs_sock_inode->u.socket_i,
+						(struct sockaddr *)sin,
+						sizeof(struct sockaddr_in));
 		}
 	}
 	if (res < 0) {
 		printk(KERN_ERR "Root-NFS: Cannot find a suitable listening port\n");
-		root_nfs_close(1);
+		root_nfs_close();
 		return -1;
 	}
 #ifdef NFSROOT_DEBUG
@@ -1451,7 +1494,7 @@ static int *root_nfs_call(int *end)
 	s.file = nfs_file;
 	sock = &((nfs_file->f_inode)->u.socket_i);
 
-	/* extract the other end of the socket into s->toaddr */
+	/* Extract the other end of the socket into s->toaddr */
 	sock->ops->getname(sock, &(s.toaddr), &dummylen, 1);
 	((struct sockaddr_in *) &s.toaddr)->sin_port   = server.sin_port;
 	((struct sockaddr_in *) &s.toaddr)->sin_family = server.sin_family;
@@ -1470,11 +1513,10 @@ static int *root_nfs_call(int *end)
 	 * packet out, and finally check wether the answer is OK.
 	 */
 	if (nfs_sock_inode->u.socket_i.ops->connect &&
-	    nfs_sock_inode->u.socket_i.ops->connect
-	    (&nfs_sock_inode->u.socket_i,
-	     (struct sockaddr *) &server,
-	     sizeof(struct sockaddr_in),
-	     nfs_file->f_flags) < 0)
+	    nfs_sock_inode->u.socket_i.ops->connect(&nfs_sock_inode->u.socket_i,
+						(struct sockaddr *) &server,
+						sizeof(struct sockaddr_in),
+						nfs_file->f_flags) < 0)
 		return NULL;
 	if (nfs_rpc_call(&s, rpc_packet, end, nfs_data.wsize) < 0)
 		return NULL;
@@ -1567,9 +1609,10 @@ static int root_nfs_get_handle(void)
 	/* Prepare header for mountd request */
 	p = root_nfs_header(NFS_MOUNT_PROC, NFS_MOUNT_PROGRAM, NFS_MOUNT_VERSION);
 	if (!p) {
-		root_nfs_close(1);
+		root_nfs_close();
 		return -1;
 	}
+
 	/* Set arguments for mountd */
 	len = strlen(nfs_path);
 	*p++ = htonl(len);
@@ -1580,7 +1623,7 @@ static int root_nfs_get_handle(void)
 
 	/* Send request to server mountd */
 	if ((p = root_nfs_call(p)) == NULL) {
-		root_nfs_close(1);
+		root_nfs_close();
 		return -1;
 	}
 	status = ntohl(*p++);
@@ -1590,7 +1633,7 @@ static int root_nfs_get_handle(void)
 	} else {
 		printk(KERN_ERR "Root-NFS: Server returned error %d while mounting %s\n",
 			status, nfs_path);
-		root_nfs_close(1);
+		root_nfs_close();
 		return -1;
 	}
 
@@ -1607,17 +1650,17 @@ static int root_nfs_do_mount(struct super_block *sb)
 	server.sin_port = htons(nfs_port);
 	nfs_data.addr = server;
 	if (nfs_sock_inode->u.socket_i.ops->connect &&
-	    nfs_sock_inode->u.socket_i.ops->connect
-	    (&nfs_sock_inode->u.socket_i,
-	     (struct sockaddr *) &server,
-	     sizeof(struct sockaddr_in),
-	     nfs_file->f_flags) < 0) {
-		root_nfs_close(1);
+	    nfs_sock_inode->u.socket_i.ops->connect(&nfs_sock_inode->u.socket_i,
+						(struct sockaddr *) &server,
+						sizeof(struct sockaddr_in),
+						nfs_file->f_flags) < 0) {
+		root_nfs_close();
 		return -1;
 	}
+
 	/* Now (finally ;-)) read the super block for mounting */
 	if (nfs_read_super(sb, &nfs_data, 1) == NULL) {
-		root_nfs_close(1);
+		root_nfs_close();
 		return -1;
 	}
 	return 0;
@@ -1640,6 +1683,6 @@ int nfs_root_mount(struct super_block *sb)
 		return -1;
 	if (root_nfs_do_mount(sb) < 0)
 		return -1;
-	root_nfs_close(0);
+	root_nfs_close();
 	return 0;
 }

@@ -237,7 +237,7 @@ Summary of ide driver parameters for kernel "command line":
 				except the cmd640.
  "idex=serialize"	: do not overlap operations on idex and ide(x^1)
 
- The following two are valid ONLY on ide0,
+ The following are valid ONLY on ide0,
  and the defaults for the base,ctl ports must not be altered.
 
  "ide0=dtc2278"		: probe/support DTC2278 interface

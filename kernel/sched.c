@@ -923,9 +923,8 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 			p->counter = 0;
 			need_resched = 1;
 		}
-
-		update_one_process(p, ticks, ticks-system, system);
 	}
+	update_one_process(p, ticks, ticks-system, system);
 #else
 	int cpu,j;
 	cpu = smp_processor_id();

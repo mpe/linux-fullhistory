@@ -295,7 +295,7 @@ repeat:
  * This is really ugly. But the goto's actually try to clarify some
  * of the logic when it comes to error handling etc.
  */
-#define MAX_READAHEAD (PAGE_SIZE*4)
+#define MAX_READAHEAD (PAGE_SIZE*8)
 int generic_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	int error, read;

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.34  Mar 16, 1996
+ *  linux/drivers/block/ide.c	Version 5.35  Mar 23, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -221,6 +221,8 @@
  * Version 5.33		improve handling of HDIO_DRIVE_CMDs that read data
  * Version 5.34		fix irq-sharing problem from 5.33
  *			fix cdrom ioctl problem from 5.33
+ * Version 5.35		cosmetic changes
+ *			fix cli() problem in try_to_identify()
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -1573,7 +1575,7 @@ static void timer_expiry (unsigned long data)
  * This routine assumes cli() is in effect when called.
  *
  * If an unexpected interrupt happens on irq15 while we are handling irq14
- * and if the two interfaces are "serialized" (CMD640B), then it looks like
+ * and if the two interfaces are "serialized" (CMD640), then it looks like
  * we could screw up by interfering with a new request being set up for irq15.
  *
  * In reality, this is a non-issue.  The new command is not sent unless the
@@ -2371,6 +2373,8 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 
 	delay_10ms();		/* wait for IRQ and DRQ_STAT */
 	if (OK_STAT(GET_STAT(),DRQ_STAT,BAD_R_STAT)) {
+		unsigned long flags;
+		save_flags(flags);
 		cli();			/* some systems need this */
 		do_identify(drive, cmd); /* drive returned ID */
 		if (drive->present && drive->media != ide_tape) {
@@ -2379,6 +2383,8 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 				tuneproc(drive, 255);	/* auto-tune PIO mode */
 		}
 		rc = 0;			/* drive responded with ID */
+		(void) GET_STAT();	/* clear drive IRQ */
+		restore_flags(flags);
 	} else
 		rc = 2;			/* drive refused ID */
 	if (!HWIF(drive)->irq) {
@@ -2638,7 +2644,7 @@ static int match_parm (char *s, const char *keywords[], int vals[], int max_vals
  *				except the cmd640.
  * "idex=serialize"	: do not overlap operations on idex and ide(x^1)
  *
- * The following two are valid ONLY on ide0,
+ * The following are valid ONLY on ide0,
  * and the defaults for the base,ctl ports must not be altered.
  *
  * "ide0=dtc2278"	: probe/support DTC2278 interface

@@ -165,7 +165,7 @@ int root_mountflags = MS_RDONLY;
 char *execute_command = 0;
 
 #ifdef CONFIG_ROOT_NFS
-char nfs_root_name[NFS_ROOT_NAME_LEN] = { NFS_ROOT };
+char nfs_root_name[NFS_ROOT_NAME_LEN] = { "default" };
 char nfs_root_addrs[NFS_ROOT_ADDRS_LEN] = { "" };
 #endif
 

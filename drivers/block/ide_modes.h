@@ -41,7 +41,7 @@ static struct ide_pio_info {
 	{ "WDC AC2120",  0 },
 	{ "WDC AC2850",  3 },
 	{ "WDC AC1270",  3 },
-	{ "WDC AC1170",  3 },
+	{ "WDC AC1170",  1 },
 	{ "WDC AC1210",  1 },
 	{ "WDC AC280",   0 },
 /*	{ "WDC AC21000", 4 }, */

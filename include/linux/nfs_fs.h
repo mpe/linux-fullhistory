@@ -128,6 +128,7 @@ extern int nfs_mmap(struct inode * inode, struct file * file, struct vm_area_str
 
 /* NFS root */
 
+#define NFS_ROOT		"/tftpboot/%s"
 #define NFS_ROOT_NAME_LEN	256
 #define NFS_ROOT_ADDRS_LEN	128
 

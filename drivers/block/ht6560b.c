@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ht6580.c       Version 0.03  Feb 09, 1996
+ *  linux/drivers/block/ht6580.c       Version 0.04  Mar 19, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & author (see below)
  */
@@ -44,9 +44,6 @@
  * If I have booted to dos sometime after power on, I can get smaller
  * timing values working. Perhaps I could soft-ice the initialization.
  *
- * OS/2 driver seems to use some kind of DMA. But that code is really
- * messy to me to found out how.
- *
  * -=- malafoss@snakemail.hut.fi -=- searching the marvels of universe -=-
  */
 
@@ -71,6 +68,7 @@
  * silly sequence (below) whenever we switch between primary and secondary.
  *
  * This stuff is courtesy of malafoss@snakemail.hut.fi
+ *                          (or maf@nemesis.tky.hut.fi)
  *
  * At least one user has reported that this code can confuse the floppy
  * controller and/or driver -- perhaps this should be changed to use
@@ -152,9 +150,12 @@ static void ht6560b_selectproc (ide_drive_t *drive)
                  */
                 outb (timing, IDE_SELECT_REG);
                 (void) inb (IDE_STATUS_REG);
-		OUT_BYTE(drive->select.all,IDE_SELECT_REG);
 		restore_flags (flags);
+#ifdef DEBUG
+		printk("ht6560b: %s: select=%#x timing=%#x\n", drive->name, t, timing);
+#endif
 	}
+	OUT_BYTE(drive->select.all,IDE_SELECT_REG);
 }
 
 /*
@@ -229,6 +230,6 @@ void init_ht6560b (void)
 			ide_hwifs[0].serialized = 1;
 			ide_hwifs[1].serialized = 1;
 		} else
-			printk("ht6560b: not found\n");
+			printk("\nht6560b: not found\n");
 	}
 }

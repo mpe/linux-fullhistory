@@ -1097,7 +1097,7 @@ then
 	# Activate the Linux compatible sound configuration.
 	# This may not work for all sound cards.  (See sound docs)
 	#
-	make -C drivers/sound mkscript >>.menuconfig.log 2>&1
+	make -C drivers/sound mkscript kernelconfig >>.menuconfig.log 2>&1
 
 	echo "# $kernel_version" >.menuconfig
 fi

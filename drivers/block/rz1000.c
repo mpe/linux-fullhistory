@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/rz1000.c	Version 0.02  Feb 08, 1996
+ *  linux/drivers/block/rz1000.c	Version 0.03  Mar 20, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & author (see below)
  */
@@ -36,7 +36,7 @@ void init_rz1000 (byte bus, byte fn)
 	int rc;
 	unsigned short reg;
 
-	printk("ide: buggy RZ1000 interface: ");
+	printk("ide0: buggy RZ1000 interface: ");
 	if ((rc = pcibios_read_config_word (bus, fn, PCI_COMMAND, &reg))) {
 		ide_pci_access_error (rc);
 	} else if (!(reg & 1)) {

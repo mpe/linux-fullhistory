@@ -196,8 +196,8 @@ static const char *version =
 #include <linux/timer.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
-#include <linux/if_arp.h>
 #include <linux/netdevice.h>
+#include <linux/if_arp.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 

@@ -154,6 +154,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( AL,		AL_M1513,	"M1513"),
 	DEVICE( AL,		AL_M4803,	"M4803"),
 	DEVICE( ASP,		ASP_ABP940,	"ABP940"),
+	DEVICE( CERN,		CERN_SPSB_PMC,	"STAR/RD24 SCI-PCI (PMC)"),
+	DEVICE( CERN,		CERN_SPSB_PCI,	"STAR/RD24 SCI-PCI (PMC)"),
 	DEVICE( IMS,		IMS_8849,	"8849"),
 	DEVICE( TEKRAM2,	TEKRAM2_690c,	"DC690c"),
 	DEVICE( AMCC,		AMCC_MYRINET,	"Myrinet PCI (M2-PCI-32)"),
@@ -475,6 +477,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_3COM:		return "3Com";
 	      case PCI_VENDOR_ID_AL:		return "Acer Labs";
 	      case PCI_VENDOR_ID_ASP:		return "Advanced System Products";
+	      case PCI_VENDOR_ID_CERN:		return "CERN";
 	      case PCI_VENDOR_ID_IMS:		return "IMS";
 	      case PCI_VENDOR_ID_TEKRAM2:	return "Tekram";
 	      case PCI_VENDOR_ID_AMCC:		return "AMCC";

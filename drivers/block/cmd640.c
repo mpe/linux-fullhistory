@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/cmd640.c	Version 0.08  Mar 15, 1996
+ *  linux/drivers/block/cmd640.c	Version 0.09  Mar 19, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & authors (see below)
  */
@@ -43,6 +43,7 @@
  *  Version 0.08	Added autotune/noautotune support.  -ml
  *
  *  Version 0.09	Try to be smarter about 2nd port enabling.  -ml
+ *  Version 0.10	Be nice and don't reset 2nd port.  -ml
  *			
  */
 
@@ -149,7 +150,7 @@ static byte get_cmd640_reg_pci1(int reg_no)
 }
 
 /* PCI method 2 access (from CMD datasheet) */
- 
+
 static void put_cmd640_reg_pci2(int reg_no, int val)
 {
 	unsigned long flags;
@@ -272,12 +273,12 @@ static int probe_for_cmd640_vlb(void) {
 	return 1;
 }
 
+#if 0
 /*
  * Low level reset for controller, actually it has nothing specific for
  * CMD640, but I don't know how to use standard reset routine before
  * we recognized any drives.
  */
-
 static void cmd640_reset_controller(int iface_no)
 {
 	int retry_count = 600;
@@ -294,12 +295,8 @@ static void cmd640_reset_controller(int iface_no)
 
 	if (retry_count == 0)
 		printk("cmd640: failed to reset controller %d\n", iface_no);
-#if 0	
-	else
-		printk("cmd640: controller %d reset [%d]\n", 
-			iface_no, retry_count);
-#endif
 }
+#endif /* 0 */
 
 /*
  *  Returns 1 if an IDE interface/drive exists at 0x170,
@@ -344,14 +341,13 @@ int ide_probe_for_cmd640x(void)
 
 	ide_hwifs[0].serialized = 1;	/* ensure this *always* gets set */
 	ide_hwifs[1].serialized = 1;	/* ensure this *always* gets set */
-	
+
 #if 0	
 	/* Dump initial state of chip registers */
 	for (b = 0; b != 0xff; b++) {
 		printk(" %2x%c", get_cmd640_reg(b),
 				((b&0xf) == 0xf) ? '\n' : ',');
 	}
-
 #endif
 
 	/*
@@ -394,7 +390,6 @@ int ide_probe_for_cmd640x(void)
 	 */
 	b = get_cmd640_reg(CNTRL);	
 
-
 	if (!secondary_port_responding()) {
 		b ^= CNTRL_ENA_2ND;	/* toggle the bit */
 		second_port_toggled = 1;
@@ -428,38 +423,46 @@ int ide_probe_for_cmd640x(void)
 			ide_hwifs[1].drives[0].autotune = 1;
 		if (ide_hwifs[1].drives[1].autotune == 0)
 			ide_hwifs[1].drives[1].autotune = 1;
-		/* We reset timings, and disable read-ahead */
+		/* disable read-ahead for drives 2 & 3 */
 		put_cmd640_reg(ARTTIM23, (DIS_RA2 | DIS_RA3));
-		put_cmd640_reg(DRWTIM23, 0);
+
+		if (second_port_toggled) {
+			/* reset PIO timings for drives 2 & 3 */
+			put_cmd640_reg(DRWTIM23, 0);
+		}
+#if 0
+		/* reset the secondary interface */
 		cmd640_reset_controller(1);
+#endif
 	}
 
-	printk("ide: buggy CMD640%c interface at ", 
+	printk("ide: buggy CMD640%c interface on ", 
 	       'A' - 1 + cmd640_chip_version);
 	switch (bus_type) {
 		case vlb :
-			printk("local bus, port 0x%x", cmd640_key);
+			printk("vlb (0x%x)", cmd640_key);
 			break;
 		case pci1:
-			printk("pci, (0x%x)", cmd640_key);
+			printk("pci (0x%x)", cmd640_key);
 			break;
 		case pci2:
-			printk("pci,(access method 2) (0x%x)", cmd640_key);
+			printk("pci (access method 2) (0x%x)", cmd640_key);
 			break;
 	}
 
-	/*
-	 * Reset interface timings
-	 */
+#if 0
+	/* reset PIO timings for drives 1 & 2 */
 	put_cmd640_reg(CMDTIM, 0);
+#endif /* 0 */
 
 	/*
 	 * Tell everyone what we did to their system
 	 */
-	printk("\n ... serialized, secondary port %s\n", second_port_toggled ? "toggled" : "untouched");
+	printk("; serialized, secondary port %s\n", second_port_toggled ? "toggled" : "untouched");
 	return 1;
 }
 
+#if 0  /* not used anywhere */
 int cmd640_off(void) {
 	static int a = 0;
 	byte b;
@@ -472,6 +475,7 @@ int cmd640_off(void) {
 	put_cmd640_reg(CNTRL, b);
 	return 1;
 }
+#endif /* 0 */
 
 /*
  * Sets readahead mode for specific drive

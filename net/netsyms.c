@@ -96,6 +96,8 @@ static struct symbol_table net_syms = {
 	X(ip_options_compile),
 	X(ip_rt_put),
 	X(arp_send),
+	X(ip_id_count),
+	X(ip_send_check),
 #ifdef CONFIG_IP_FORWARD
 	X(ip_forward),
 #endif
@@ -166,6 +168,8 @@ static struct symbol_table net_syms = {
 	X(kill_fasync),
 #ifdef CONFIG_FIREWALL
 	X(call_in_firewall),
+	X(call_out_firewall),
+	X(call_fw_firewall),
 #endif
 #endif  /* CONFIG_INET */
 

@@ -96,20 +96,12 @@ static void unplug_device(void * data)
  * force the transfer to start only after we have put all the requests
  * on the list.
  *
- * Note! We can do the check without interrupts off, because interrupts
- * will never add a new request to the queue, only take requests off.. 
+ * This is called with interrupts off and no requests on the queue.
  */
 static inline void plug_device(struct blk_dev_struct * dev)
 {
-	if (!dev->current_request) {
-		unsigned long flags;
-
-		save_flags(flags);
-		cli();
-		dev->current_request = &dev->plug;
-		queue_task_irq_off(&dev->plug_tq, &tq_scheduler);
-		restore_flags(flags);
-	}
+	dev->current_request = &dev->plug;
+	queue_task_irq_off(&dev->plug_tq, &tq_scheduler);
 }
 
 /*
@@ -340,63 +332,67 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 
 /* look for a free request. */
 	down (&request_lock);
+
+	/*
+	 * Try to coalesce the new request with old requests
+	 */
 	cli();
+	req = blk_dev[major].current_request;
+	if (!req) {
+		plug_device(blk_dev + major);
+	} else switch (major) {
+	     case IDE0_MAJOR:	/* same as HD_MAJOR */
+	     case IDE1_MAJOR:
+	     case FLOPPY_MAJOR:
+	     case IDE2_MAJOR:
+	     case IDE3_MAJOR:
+		/*
+		 * The scsi disk and cdrom drivers completely remove the request
+		 * from the queue when they start processing an entry.  For this
+		 * reason it is safe to continue to add links to the top entry for
+		 * those devices.
+		 *
+		 * All other drivers need to jump over the first entry, as that
+		 * entry may be busy being processed and we thus can't change it.
+		 */
+	        req = req->next;
+		if (!req)
+			break;
+		/* fall through */
 
-/* The scsi disk and cdrom drivers completely remove the request
- * from the queue when they start processing an entry.  For this reason
- * it is safe to continue to add links to the top entry for those devices.
- */
-	if ((   major == IDE0_MAJOR	/* same as HD_MAJOR */
-	     || major == IDE1_MAJOR
-	     || major == MD_MAJOR
-	     || major == FLOPPY_MAJOR
-	     || major == SCSI_DISK_MAJOR
-	     || major == SCSI_CDROM_MAJOR
-	     || major == IDE2_MAJOR
-	     || major == IDE3_MAJOR)
-	    && (req = blk_dev[major].current_request))
-	{
-		if (major != SCSI_DISK_MAJOR &&
-		    major != SCSI_CDROM_MAJOR &&
-		    major != MD_MAJOR)
-		        req = req->next;
+	     case SCSI_DISK_MAJOR:
+	     case SCSI_CDROM_MAJOR:
+	     case MD_MAJOR:
 
-		while (req) {
-			if (req->rq_dev == bh->b_dev &&
-			    !req->sem &&
-			    req->cmd == rw &&
-			    req->sector + req->nr_sectors == sector &&
-			    req->nr_sectors < 244)
-			{
+		do {
+			if (req->sem)
+				continue;
+			if (req->cmd != rw)
+				continue;
+			if (req->nr_sectors >= 244)
+				continue;
+			if (req->rq_dev != bh->b_dev)
+				continue;
+			/* Can we add it to the end of this request? */
+			if (req->sector + req->nr_sectors == sector) {
 				req->bhtail->b_reqnext = bh;
 				req->bhtail = bh;
-				req->nr_sectors += count;
-				mark_buffer_clean(bh);
-				up (&request_lock);
-				sti();
-				return;
-			}
-
-			if (req->rq_dev == bh->b_dev &&
-			    !req->sem &&
-			    req->cmd == rw &&
-			    req->sector - count == sector &&
-			    req->nr_sectors < 244)
-			{
-			    	req->nr_sectors += count;
+			/* or to the beginning? */
+			} else if (req->sector - count == sector) {
 			    	bh->b_reqnext = req->bh;
+			    	req->bh = bh;
 			    	req->buffer = bh->b_data;
 			    	req->current_nr_sectors = count;
 			    	req->sector = sector;
-				mark_buffer_clean(bh);
-			    	req->bh = bh;
-				up (&request_lock);
-			    	sti();
-			    	return;
-			}    
+			} else
+				continue;
 
-			req = req->next;
-		}
+		    	req->nr_sectors += count;
+			mark_buffer_clean(bh);
+			up (&request_lock);
+		    	sti();
+		    	return;
+		} while ((req = req->next) != NULL);
 	}
 
 	up (&request_lock);
@@ -524,12 +520,6 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		goto sorry;
 	}
 
-	/* If there are no pending requests for this device, then we insert
-	   a dummy request for that device.  This will prevent the request
-	   from starting until we have shoved all of the blocks into the
-	   queue, and then we let it rip.  */
-
-	plug_device(dev);
 	for (i = 0; i < nr; i++) {
 		if (bh[i]) {
 			set_bit(BH_Req, &bh[i]->b_state);

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 79
+SUBLEVEL = 80
 
 ARCH = i386
 
@@ -67,16 +67,6 @@ endif
 #
 
 ROOT_DEV = CURRENT
-
-#
-# NFS_ROOT_NAME specifies the default name of the directory to mount
-# as root via NFS, if the kernel does not get the "root=" option from
-# the boot loader. The "%s" will be replaced by the IP-number of the
-# local system. Use empty string for default root path provided by BOOTP.
-#
-
-#NFS_ROOT = -DNFS_ROOT="\"/tftpboot/%s\""
-NFS_ROOT = -DNFS_ROOT="\"\""
 
 #
 # INSTALL_PATH specifies where to place the updated kernel and system map
@@ -242,7 +232,7 @@ init/version.o: init/version.c include/linux/compile.h
 	$(CC) $(CFLAGS) -DUTS_MACHINE='"$(ARCH)"' -c -o init/version.o init/version.c
 
 init/main.o: init/main.c
-	$(CC) $(CFLAGS) $(PROFILING) $(NFS_ROOT) -c -o $*.o $<
+	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
 fs: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=fs
