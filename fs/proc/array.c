@@ -373,32 +373,65 @@ static int get_arg(int pid, char * buffer)
 
 static unsigned long get_wchan(struct task_struct *p)
 {
-#ifdef __i386__
-	unsigned long ebp, eip;
-	unsigned long stack_page;
-	int count = 0;
-
 	if (!p || p == current || p->state == TASK_RUNNING)
 		return 0;
-	stack_page = p->kernel_stack_page;
-	if (!stack_page)
-		return 0;
-	ebp = p->tss.ebp;
-	do {
-		if (ebp < stack_page || ebp >= 4092+stack_page)
+#if defined(__i386__)
+	{
+		unsigned long ebp, eip;
+		unsigned long stack_page;
+		int count = 0;
+
+		stack_page = p->kernel_stack_page;
+		if (!stack_page)
 			return 0;
-		eip = *(unsigned long *) (ebp+4);
-		if ((void *)eip != sleep_on &&
-		    (void *)eip != interruptible_sleep_on)
-			return eip;
-		ebp = *(unsigned long *) ebp;
-	} while (count++ < 16);
+		ebp = p->tss.ebp;
+		do {
+			if (ebp < stack_page || ebp >= 4092+stack_page)
+				return 0;
+			eip = *(unsigned long *) (ebp+4);
+			if ((void *)eip != sleep_on &&
+			    (void *)eip != interruptible_sleep_on)
+				return eip;
+			ebp = *(unsigned long *) ebp;
+		} while (count++ < 16);
+	}
+#elif defined(__alpha__)
+	/*
+	 * This one depends on the frame size of schedule().  Do a
+	 * "disass schedule" in gdb to find the frame size.  Also, the
+	 * code assumes that sleep_on() follows immediately after
+	 * interruptible_sleep_on() and that add_timer() follows
+	 * immediately after interruptible_sleep().  Ugly, isn't it?
+	 * Maybe adding a wchan field to task_struct would be better,
+	 * after all...
+	 */
+	{
+	    unsigned long schedule_frame;
+	    unsigned long pc;
+
+	    pc = thread_saved_pc(&p->tss);
+	    if (pc >= (unsigned long) interruptible_sleep_on && pc < (unsigned long) add_timer) {
+		schedule_frame = ((unsigned long *)p->tss.ksp)[6];
+		return ((unsigned long *)schedule_frame)[12];
+	    }
+	    return pc;
+	}
 #endif
 	return 0;
 }
 
-#define	KSTK_EIP(stack)	(((unsigned long *)stack)[1019])
-#define	KSTK_ESP(stack)	(((unsigned long *)stack)[1022])
+#if defined(__i386__)
+# define KSTK_EIP(tsk)	(((unsigned long *)tsk->kernel_stack_page)[1019])
+# define KSTK_ESP(tsk)	(((unsigned long *)tsk->kernel_stack_page)[1022])
+#elif defined(__alpha__)
+  /*
+   * See arch/alpha/kernel/ptrace.c for details.
+   */
+# define PT_REG(reg)		(PAGE_SIZE - sizeof(struct pt_regs)	\
+				 + (long)&((struct pt_regs *)0)->reg)
+# define KSTK_EIP(tsk)	(*(unsigned long *)(tsk->kernel_stack_page + PT_REG(pc)))
+# define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
+#endif
 
 static int get_stat(int pid, char * buffer)
 {
@@ -417,13 +450,15 @@ static int get_stat(int pid, char * buffer)
 		state = "RSDZTD"[tsk->state];
 	vsize = eip = esp = 0;
 	if (tsk->mm) {
-		vsize = tsk->kernel_stack_page;
-		if (vsize) {
-			eip = KSTK_EIP(vsize);
-			esp = KSTK_ESP(vsize);
-			vsize = tsk->mm->brk - tsk->mm->start_code + PAGE_SIZE-1;
-			if (esp)
-				vsize += TASK_SIZE - esp;
+		if (tsk->kernel_stack_page) {
+			eip = KSTK_EIP(tsk);
+			esp = KSTK_ESP(tsk);
+			vsize = (  (tsk->mm->end_code - tsk->mm->start_code)	/* text */
+				 + (tsk->mm->end_data - tsk->mm->start_data)	/* data */
+				 + (tsk->mm->brk - tsk->mm->start_brk));	/* bss + heap */
+			if (esp) {
+				vsize += tsk->mm->start_stack - esp;		/* stack */
+			}
 		}
 	}
 	wchan = get_wchan(tsk);

@@ -14,4 +14,3 @@ struct datalink_proto {
 };
 
 #endif
-

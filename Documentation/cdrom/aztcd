@@ -1,8 +1,9 @@
-$Id: README.aztcd,v 1.80 1995/10/11 19:37:49 root Exp root $
+$Id: README.aztcd,v 1.90 1995/10/21 17:52:16 root Exp root $
                        Readme-File README.aztcd
-   for Aztech CD-ROM CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 
-                          CD-ROM  Driver 
-                       Version 1.7 and newer
+           for Aztech CD-ROM CDA268-01A, ORCHID CD-3110,
+                  OKANO/WEARNES CDD110, Conrad TXC
+                           CD-ROM Driver 
+                       Version 1.9 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
@@ -37,29 +38,31 @@ Contents of this file:
 ----------------------------------------------------------------------------
 
 1. NOTE 
-This software has been successfully in alpha and beta test for quite a long
-time with AZTECH CDA268-01A, ORCHID CDS-3110 and ORCHID/WEARNES CDD110 
-and has proven to be stable with kernel versions 1.0.9 to 1.2.0. But with
-any software there still may be bugs in it. So if you encounter problems,
-you are invited to help us improve this software. Please send me a detailed
-bug report (see chapter BUG REPORTS). You are also invited in helping us to 
-increase the number of drives, which are supported.
+This software has been successfully in alpha and beta test and is part of
+the standard kernel since kernel 1.1.8x since December 1994. It works with
+time with AZTECH CDA268-01A, ORCHID CDS-3110, ORCHID/WEARNES CDD110 and
+CONRAD TXC (Nr.99 31 23 -series 04) and has proven to be stable with kernel 
+versions 1.0.9 to 1.3.35. But with any software there still may be bugs in it. 
+So if you encounter problems, you are invited to help us improve this software. 
+Please send me a detailed bug report (see chapter BUG REPORTS). You are also 
+invited in helping us to increase the number of drives, which are supported.
 
 Please read the README-files carefully and always keep a backup copy of your 
 old kernel, in order to reboot if something goes wrong!
 
-
 2. INSTALLATION
-If you received this software as a standalone package AZTECH.CDROM.Vxx.tgz 
-(xx=version number) and not included in the standard Linux kernel, read the 
-file AZTECH.CDROM.README included in that package to install it. The 
-standalone package's home is 'ftp.gwdg.de : pub/linux/cdrom/drivers/aztech'.
 The driver consists of a header file 'aztcd.h', which normally should reside 
 in /usr/include/linux and the source code 'aztcd.c', which normally resides in
-/usr/src/linux/drivers/block. It uses /dev/aztcd0, which must be a valid block
-device with major number 29 and reside in directory /dev. To mount a CD-ROM,
-your kernel needs to have the ISO9660-filesystem support included.
+/usr/src/linux/drivers/block. It uses /dev/aztcd (/dev/aztcd0 in some distri-
+butions), which must be a valid block device with major number 29 and reside 
+in directory /dev. To mount a CD-ROM, your kernel needs to have the ISO9660-
+filesystem support included.
 
+PLEASE NOTE: aztcd.c has been developped in parallel to the linux kernel,
+which had and is having many major and minor changes which are not backward
+compatible. Quite definitely aztcd.c version 1.80 and newer will NOT work
+in kernels older than 1.3.33. So please always use the most recent version
+of aztcd.c with the appropriate linux-kernel.
 
 3.  CONFIGURING YOUR KERNEL
 If your kernel is already configured for using the AZTECH driver you will
@@ -89,13 +92,12 @@ If you still get a different message while Linux boots or when you get the
 message, that the ISO9660-filesystem is not supported by your kernel, when
 you try to mount the CD-ROM drive, you have to recompile your kernel.
 
-If you do *not* have an Aztech/Orchid/Okano/Wearnes drive and want to bypass
-drive detection during Linux boot up, start with boot parameter aztcd=0.
+If you do *not* have an Aztech/Orchid/Okano/Wearnes/TXC drive and want to 
+bypass drive detection during Linux boot up, start with boot parameter aztcd=0.
 
-Joe Nardone has compiled a boot disk with the Aztech driver for installing 
-Slackware from CDROM. You can find the disk images at 'sunsite.unc.edu'; 
-see file 'aztech.gz.README' for instructions on how to use it.
-
+Most distributions nowadays do contain a boot disk image containing aztcd.
+Please note, that this driver will not work with IDE/ATAPI drives! With these 
+you must use ide-cd.c instead.
 
 4. RECOMPILING YOUR KERNEL
 If your kernel is not yet configured for the AZTECH driver and the ISO9660-
@@ -138,10 +140,10 @@ filesystem, you have to recompile your kernel:
 4.1 AZTCD AS A RUN-TIME LOADABLE MODULE
 If you do not need aztcd permanently, you can also load and remove the driver
 during runtime via insmod and rmmod. To build aztcd as a loadable module you 
-must *not* configure your kernel for AZTECH support. Nevertheless, you may
-run into problems, if the version of your boot kernel is not the same than
-the source kernel version, from which you create the modules. So rebuild your 
-kernel, if necessary. 
+must configure your kernel for AZTECH module support (answer 'm' when con-
+figuring the kernel). Anyhow, you may run into problems, if the version of 
+your boot kernel is not the same than the source kernel version, from which 
+you create the modules. So rebuild your kernel, if necessary. 
 
 Now edit the base address of your AZTECH interface card in
 /usr/src/linux/include/linux/aztcd.h to the appropriate value. There are
@@ -193,7 +195,7 @@ which contains the info of all previous sessions etc.. If you do set
 AZT_MULTISESSION to 0, you can use multisession CDs anyway. In that case the 
 drive's firmware will do automatic redirection. For the ISO9660-filesystem any 
 multisession CD  will then look like a 'normal' single session CD. But never-
-theless the data of all sessions is viewable and accessible. So with practical-
+theless the data of all sessions are viewable and accessible. So with practical-
 ly all real world applications you won't notice the difference. But as future
 applications may make use of advanced multisession features, I've started to
 implement the interface for the ISO9660 multisession interface via ioctl
@@ -209,8 +211,9 @@ in a mounted drive, anyhow ?!
 
 The driver uses busy wait in most cases for the drive handshake (macros
 STEN_LOW and DTEN_LOW). I tested with a 486/DX2 at 66MHz and a Pentium at
-60MHz. Whenever you use a much faster machine you are likely to get timeout 
-messages. In that case edit aztcd.h and increase the timeout value AZT_TIMEOUT. 
+60MHz and 90MHz. Whenever you use a much faster machine you are likely to get 
+timeout messages. In that case edit aztcd.h and increase the timeout value 
+AZT_TIMEOUT. 
 
 For some 'slow' drive commands I implemented waiting with a timer waitqueue
 (macro STEN_LOW_WAIT). If you get this timeout message, you may also edit
@@ -221,17 +224,14 @@ stable, but also causes CPU overhead.
 
 5.3 DOSEMU's CD-ROM SUPPORT
 With release 1.20 aztcd was modified to allow access to CD-ROMS when running
-under dosemu-0.60. aztcd-versions before 1.20 are most likely to crash
+under dosemu-0.60.0 aztcd-versions before 1.20 are most likely to crash
 Linux, when a CD-ROM is accessed under dosemu. This problem has partly been
 fixed, but still when accessing a directory for the first time the system
 might hang for some 30sec. So be patient, when using dosemu's CD-ROM support
-in combination with aztcd :-) ! Unfortunately up to now, I could not locate
-the root cause of that problem. It seems to be somewhere in the interaction
-of the kernel with dosemu's and aztcd's buffers. I appreciate any help on
-this subject ! 
+in combination with aztcd :-) ! 
 This problem has now (July 1995) been fixed by a modification to dosemu's
-CD-ROM driver, but it is unclear, with which version of dosemu this modi-
-fication will officially be included.
+CD-ROM driver. The new version came with dosemu-0.60.2, see dosemu's
+README.CDROM.
 
 6. BUG REPORTS
 Please send detailed bug reports and bug fixes via EMail to
@@ -261,16 +261,17 @@ snail mail address for such 'stuff' is
 
 
 7. OTHER DRIVES
-The following drives ORCHID CDS3110, OKANO CDD110 and WEARNES nearly look 
-the same as AZTECH CDA268-01A, especially they seem to use the same command 
-codes. So it was quite simple to make the AZTECH driver work with these drives. 
+The following drives ORCHID CDS3110, OKANO CDD110, WEARNES CDD110 and Conrad
+TXC Nr. 993123-series 04 nearly look the same as AZTECH CDA268-01A, especially 
+they seem to use the same command codes. So it was quite simple to make the 
+AZTECH driver work with these drives. 
 
 Unfortunately I do not have any of these drives available, so I couldn't test
 it myself. But I've got reports, that it works with ORCHID CDS3110 and Game-
-Wave32 sound cards and also with WEARNES CDD110 in some different combinations. 
-In some installations, it seems necessary to initialize the drive with the DOS 
-driver before (especially if combined with a sound card) and then do a warm 
-boot (CTRL-ALT-RESET) or start Linux from DOS, e.g. with 'loadlin'.
+Wave32 sound cards and also with WEARNES CDD110 and Conrad TXC in some different
+combinations. In some installations, it seems necessary to initialize the drive 
+with the DOS driver before (especially if combined with a sound card) and then 
+do a warm boot (CTRL-ALT-RESET) or start Linux from DOS, e.g. with 'loadlin'.
 
 If you do not succeed, read chapter DEBUGGING. Thanks in advance!
 
@@ -289,6 +290,9 @@ which you don't have available for testing. So if you like, please help us.
  drive. By appropriately configuring the drive and the DOS driver you can
  check, whether your drive does operate in this mode correctly under DOS. If
  it does not operate under DOS, it won't under Linux.
+ If your drive's base address is something like 0x170 or 0x1F0 you most
+ likely are having a IDE/ATAPI-compatible drive, which is not supported by
+ aztcd.c, use ide-cd.c instead.
  Make sure the Base Address is configured correctly in aztcd.h, also make
  sure, that /dev/aztcd0 exists with the correct major number (compare it with
  the entry in file /usr/include/linux/major.h for the Aztech drive). 
@@ -456,6 +460,9 @@ and also were very patient with the problems which occurred.
 Reinhard Max delivered the information for the CDROM-interface of the
 SoundWave32 soundcards.
 
+Jochen Koch and Olaf ? delivered the information for supporting Conrad's TXC
+drive.
+
 Anybody, who is interested in these items should have a look at 'ftp.gwdg.de',
 directory 'pub/linux/cdrom' and at 'ftp.cdrom.com', directory 'pub/cdrom'.
 
@@ -500,7 +507,7 @@ should try before, how to restore from a backup copy)!
 Werner Zimmermann
 Fachhochschule fuer Technik Esslingen
 (EMail: zimmerma@rz.fht-esslingen.de)
-July 26, 1995
+October 21, 1995
 
 ---------------------------------------------------------------------------
 APPENDIX: Source code of cdplay.c

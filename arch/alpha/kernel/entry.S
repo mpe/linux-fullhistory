@@ -606,7 +606,7 @@ sys_call_table:
 	.quad sys_open, do_entSys, sys_getxgid, osf_sigprocmask, do_entSys
 /*50*/	.quad do_entSys, sys_acct, do_entSys, do_entSys, sys_ioctl
 	.quad do_entSys, do_entSys, sys_symlink, sys_readlink, sys_execve
-	.quad sys_umask, do_entSys, do_entSys, sys_getpgrp, sys_getpagesize
+	.quad sys_umask, sys_chroot, do_entSys, sys_getpgrp, sys_getpagesize
 	.quad do_entSys, osf_vfork, sys_newstat, sys_newlstat, do_entSys
 	.quad do_entSys, osf_mmap, do_entSys, sys_munmap, sys_mprotect
 	.quad sys_madvise, sys_vhangup, do_entSys, do_entSys, sys_getgroups

@@ -27,6 +27,8 @@ struct kconfig * clast = NULL;
 struct kconfig * koption = NULL;
 static int lineno = 0;
 static int menus_seen = 0;
+static char * current_file = NULL;
+static int do_source(char * filename);
 /*
  * Simple function just to skip over spaces and tabs in config.in.
  */
@@ -138,7 +140,10 @@ static struct condition * parse_if(char * pnt)
   return list;
 
  error:
-  printf("Bad if clause at line %d:%s\n", lineno, opnt);
+  if(current_file != NULL) 
+    printf("Bad if clause at line %d(%s):%s\n", lineno, current_file, opnt);
+  else
+    printf("Bad if clause at line %d:%s\n", lineno, opnt);
   return NULL;
 }
 
@@ -241,6 +246,13 @@ int parse(char * pnt) {
     {
       tok = tok_menuname;
       pnt += 13;
+    }
+  else if      (strncmp(pnt, "source", 6) == 0) 
+    {
+      pnt += 7;
+      pnt = skip_whitespace(pnt);
+      do_source(pnt);
+      return;
     }
   else if (strncmp(pnt, "mainmenu_option", 15) == 0) 
     {
@@ -417,22 +429,49 @@ dump_if(struct condition * cond)
   printf("\n");
 }
 
-char buffer[1024];
+static int do_source(char * filename)
+{
+  char buffer[1024];
+  int old_lineno;
+  char * pnt;
+  FILE * infile;
+
+  infile = fopen(filename,"r");
+  if(!infile) {
+    fprintf(stderr,"Unable to open file %s\n", filename);
+    return 1;
+  }
+  old_lineno = lineno;
+  lineno = 0;
+  current_file = filename;
+  while (fgets(buffer, sizeof(buffer), infile))
+    {
+      /*
+       * Strip the trailing return character.
+       */
+      pnt = buffer + strlen(buffer) - 1;
+      if( *pnt == '\n') *pnt = 0;
+      lineno++;
+      parse(buffer);
+    }
+  fclose(infile);
+  current_file = NULL;
+  lineno = old_lineno;
+  return 0;
+}
 
 main(int argc, char * argv[])
 {
   char * pnt;
   struct kconfig * cfg;
+  char buffer[1024];
   int    i;
 
   /*
    * Loop over every input line, and parse it into the tables.
    */
-  while(1)
+  while(fgets(buffer, sizeof(buffer), stdin))
     {
-      fgets(buffer, sizeof(buffer), stdin);
-      if(feof(stdin)) break;
-
       /*
        * Strip the trailing return character.
        */

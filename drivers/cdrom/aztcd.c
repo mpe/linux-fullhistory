@@ -1,5 +1,5 @@
-#define AZT_VERSION "1.80"
-/*      $Id: aztcd.c,v 1.80 1995/10/11 19:35:03 root Exp root $
+#define AZT_VERSION "1.90"
+/*      $Id: aztcd.c,v 1.90 1995/10/21 17:51:59 root Exp root $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
 	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
@@ -134,6 +134,8 @@
                 with kernel 1.3.33. Will definitely not work with older kernels.
                 Programming done by Linus himself.
                 Werner Zimmermann, October 11, 1995
+	V1.90   Support for Conrad TXC drives, thank's to Jochen and Olaf.
+	        Werner Zimmermann, October 21, 1995
 	NOTE: 
 	Points marked with ??? are questionable !
 */
@@ -164,7 +166,8 @@
 #include <asm/segment.h>
 
 #define MAJOR_NR AZTECH_CDROM_MAJOR 
-#include <linux/blk.h>
+
+#include "blk.h"
 
 #ifdef MODULE
 #else
@@ -1538,8 +1541,9 @@ int aztcd_init(void)
 	  printk("aztcd: no Aztech CD-ROM Initialization");
           return -EIO;
 	}
-	printk("aztcd: Aztech, Orchid, Okano, Wearnes CD-ROM Driver (C) 1994,1995 W.Zimmermann\n");
-	printk("aztcd: DriverVersion=%s  BaseAddress=0x%x \n",AZT_VERSION,azt_port);
+	printk("aztcd: Aztech,Orchid,Okano,Wearnes,TXC CD-ROM Driver (C) 1994,1995 W.Zimmermann\n");
+	printk("aztcd: DriverVersion=%s BaseAddress=0x%x  For IDE/ATAPI-drives use ide-cd.c\n",AZT_VERSION,azt_port);
+	printk("aztcd: If you have problems, read /usr/src/linux/drivers/block/README.aztcd\n");
 
 	if (check_region(azt_port, 4)) {
 	  printk("aztcd: conflict, I/O port (%X) already used\n",
@@ -1644,6 +1648,9 @@ int aztcd_init(void)
 	 }
 	else if ((result[2]=='C')&&(result[3]=='D')&&(result[4]=='D'))
 	 { printk("aztcd: ORCHID or WEARNES drive detected\n"); /*ORCHID or WEARNES*/
+	 }
+	else if ((result[1]==0x03)&&(result[2]=='5'))
+	 { printk("aztcd: TXC drive detected\n"); /*Conrad TXC*/
 	 }
 	else                                               /*OTHERS or none*/
 	 { printk("aztcd: : unknown drive or firmware version detected\n");

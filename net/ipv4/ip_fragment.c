@@ -19,6 +19,7 @@
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/icmp.h>
+#include <linux/netdevice.h>
 #include <net/sock.h>
 #include <net/ip.h>
 #include <net/icmp.h>
@@ -29,12 +30,61 @@
 #include <net/checksum.h>
 
 /*
+ *	Fragment cache limits. We will commit 256K at one time. Should we
+ *	cross that limit we will prune down to 192K. This should cope with
+ *	even the most extreme cases without allowing an attacker to measurably
+ *	harm machine performance.
+ */
+ 
+#define IPFRAG_HIGH_THRESH		(256*1024)
+#define IPFRAG_LOW_THRESH		(192*1024)
+
+/*
  *	This fragment handler is a bit of a heap. On the other hand it works quite
  *	happily and handles things quite well.
  */
 
 static struct ipq *ipqueue = NULL;		/* IP fragment queue	*/
 
+unsigned long ip_frag_mem = 0;			/* Memory used for fragments */
+
+/*
+ *	Memory Tracking Functions
+ */
+ 
+extern __inline__ void frag_kfree_skb(struct sk_buff *skb, int type)
+{
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	ip_frag_mem-=skb->truesize;
+	restore_flags(flags);
+	kfree_skb(skb,type);
+}
+
+extern __inline__ void frag_kfree_s(void *ptr, int len)
+{
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	ip_frag_mem-=len;
+	restore_flags(flags);
+	kfree_s(ptr,len);
+}
+ 
+extern __inline__ void *frag_kmalloc(int size, int pri)
+{
+	unsigned long flags;
+	void *vp=kmalloc(size,pri);
+	if(!vp)
+		return NULL;
+	save_flags(flags);
+	cli();
+	ip_frag_mem+=size;
+	restore_flags(flags);
+	return vp;
+}
+ 
 /*
  *	Create a new fragment entry.
  */
@@ -42,8 +92,9 @@ static struct ipq *ipqueue = NULL;		/* IP fragment queue	*/
 static struct ipfrag *ip_frag_create(int offset, int end, struct sk_buff *skb, unsigned char *ptr)
 {
 	struct ipfrag *fp;
+	unsigned long flags;
 
-	fp = (struct ipfrag *) kmalloc(sizeof(struct ipfrag), GFP_ATOMIC);
+	fp = (struct ipfrag *) frag_kmalloc(sizeof(struct ipfrag), GFP_ATOMIC);
 	if (fp == NULL)
 	{
 		NETDEBUG(printk("IP: frag_create: no memory left !\n"));
@@ -57,6 +108,15 @@ static struct ipfrag *ip_frag_create(int offset, int end, struct sk_buff *skb, u
 	fp->len = end - offset;
 	fp->skb = skb;
 	fp->ptr = ptr;
+	
+	/*
+	 *	Charge for the SKB as well.
+	 */
+	 
+	save_flags(flags);
+	cli();
+	ip_frag_mem+=skb->truesize;
+	restore_flags(flags);
 
 	return(fp);
 }
@@ -128,16 +188,16 @@ static void ip_free(struct ipq *qp)
 	{
 		xp = fp->next;
 		IS_SKB(fp->skb);
-		kfree_skb(fp->skb,FREE_READ);
-		kfree_s(fp, sizeof(struct ipfrag));
+		frag_kfree_skb(fp->skb,FREE_READ);
+		frag_kfree_s(fp, sizeof(struct ipfrag));
 		fp = xp;
 	}
 
 	/* Release the IP header. */
-	kfree_s(qp->iph, 64 + 8);
+	frag_kfree_s(qp->iph, 64 + 8);
 
 	/* Finally, release the queue descriptor itself. */
-	kfree_s(qp, sizeof(struct ipq));
+	frag_kfree_s(qp, sizeof(struct ipq));
 	sti();
 }
 
@@ -169,6 +229,20 @@ static void ip_expire(unsigned long arg)
 	ip_free(qp);
 }
 
+/*
+ *	Memory limiting on fragments. Evictor trashes the oldest 
+ *	fragment queue until we are back under the low threshold
+ */
+ 
+static void ip_evictor(void)
+{
+	while(ip_frag_mem>IPFRAG_LOW_THRESH)
+	{
+		if(!ipqueue)
+			panic("ip_evictor: memcount");
+		ip_free(ipqueue);
+	}
+}
 
 /*
  * 	Add an entry to the 'ipq' queue for a newly received IP datagram.
@@ -182,7 +256,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
 	struct ipq *qp;
 	int ihlen;
 
-	qp = (struct ipq *) kmalloc(sizeof(struct ipq), GFP_ATOMIC);
+	qp = (struct ipq *) frag_kmalloc(sizeof(struct ipq), GFP_ATOMIC);
 	if (qp == NULL)
 	{
 		NETDEBUG(printk("IP: create: no memory left !\n"));
@@ -196,11 +270,11 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
 	 */
 
 	ihlen = iph->ihl * 4;
-	qp->iph = (struct iphdr *) kmalloc(64 + 8, GFP_ATOMIC);
+	qp->iph = (struct iphdr *) frag_kmalloc(64 + 8, GFP_ATOMIC);
 	if (qp->iph == NULL)
 	{
 		NETDEBUG(printk("IP: create: no memory left !\n"));
-		kfree_s(qp, sizeof(struct ipq));
+		frag_kfree_s(qp, sizeof(struct ipq));
 		return(NULL);
 	}
 
@@ -306,7 +380,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 		{
 			NETDEBUG(printk("Invalid fragment list: Fragment over size.\n"));
 			ip_free(qp);
-			kfree_skb(skb,FREE_WRITE);
+			frag_kfree_skb(skb,FREE_WRITE);
 			ip_statistics.IpReasmFails++;
 			return NULL;
 		}
@@ -342,10 +416,19 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 	unsigned char *ptr;
 	int flags, offset;
 	int i, ihl, end;
-
+	
 	ip_statistics.IpReasmReqds++;
 
-	/* Find the entry of this IP datagram in the "incomplete datagrams" queue. */
+	/*
+	 *	Start by cleaning up the memory
+	 */
+
+	if(ip_frag_mem>IPFRAG_HIGH_THRESH)
+		ip_evictor();
+	/* 
+	 *	Find the entry of this IP datagram in the "incomplete datagrams" queue. 
+	 */
+	 
 	qp = ip_find(iph);
 
 	/* Is this a non-fragmented datagram? */
@@ -392,7 +475,7 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 		if ((qp = ip_create(skb, iph, dev)) == NULL)
 		{
 			skb->sk = NULL;
-			kfree_skb(skb, FREE_READ);
+			frag_kfree_skb(skb, FREE_READ);
 			ip_statistics.IpReasmFails++;
 			return NULL;
 		}
@@ -474,8 +557,8 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 			
 			next=tfp;	/* We have killed the original next frame */
 
-			kfree_skb(tmp->skb,FREE_READ);
-			kfree_s(tmp, sizeof(struct ipfrag));
+			frag_kfree_skb(tmp->skb,FREE_READ);
+			frag_kfree_s(tmp, sizeof(struct ipfrag));
 		}
 	}
 
@@ -493,7 +576,7 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 	if (!tfp)
 	{
 		skb->sk = NULL;
-		kfree_skb(skb, FREE_READ);
+		frag_kfree_skb(skb, FREE_READ);
 		return NULL;
 	}
 	tfp->prev = prev;

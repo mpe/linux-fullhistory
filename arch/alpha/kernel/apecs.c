@@ -28,7 +28,7 @@ extern int alpha_sys_type;
 #ifdef CONFIG_ALPHA_APECS
 
 #ifdef DEBUG
-# define DBG(args)	printk(args)
+# define DBG(args)	printk args
 #else
 # define DBG(args)
 #endif
@@ -120,6 +120,21 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	unsigned int stat0, value;
 	unsigned int haxr2 = 0; /* to keep gcc quiet */
 
+#ifdef CONFIG_ALPHA_AVANTI
+	register long s0 asm ("9");
+	register long s1 asm ("10");
+	register long s2 asm ("11");
+	register long s3 asm ("12");
+	register long s4 asm ("13");
+	register long s5 asm ("14");
+	asm volatile ("# %0" : "r="(s0));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" : "r="(s1));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" : "r="(s2));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" : "r="(s3));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" : "r="(s4));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" : "r="(s5));/* SRM X4.2 on Avanti steps on this */
+#endif
+
 	save_flags(flags);	/* avoid getting hit by machine check */
 	cli();
 
@@ -185,6 +200,14 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 		mb();
 	}
 	restore_flags(flags);
+#ifdef CONFIG_ALPHA_AVANTI
+	asm volatile ("# %0" :: "r"(s0));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" :: "r"(s1));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" :: "r"(s2));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" :: "r"(s3));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" :: "r"(s4));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" :: "r"(s5));/* SRM X4.2 on Avanti steps on this */
+#endif
 	return value;
 }
 
@@ -383,8 +406,8 @@ unsigned long apecs_init(unsigned long mem_start, unsigned long mem_end)
 #ifdef CONFIG_ALPHA_CABRIOLET
 	/*
 	 * JAE: HACK!!! for now, hardwire if configured...
-	 * davidm: miniloader doesn't seem to get clockfrequency
-	 * right, so fix for now.
+	 * davidm: Older miniloader versions don't set the clockfrequency
+	 * right, so hardcode it for now.
 	 */
 	if (hwrpb->sys_type == ST_DEC_EB64P) {
 		hwrpb->sys_type = ST_DEC_EBPC64;
@@ -438,12 +461,14 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 	DBG(("apecs_machine_check: expected %d DCSR 0x%lx PEAR 0x%lx\n",
 	     apecs_mcheck_expected, mchk_sysdata->epic_dcsr, mchk_sysdata->epic_pear));
 #ifdef DEBUG
-	unsigned long *ptr;
-	int i;
+	{
+	    unsigned long *ptr;
+	    int i;
 
-	ptr = (unsigned long *)la_ptr;
-	for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-		printk(" +%x %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
+	    ptr = (unsigned long *)la_ptr;
+	    for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
+		printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
+	    }
 	}
 #endif /* DEBUG */
 

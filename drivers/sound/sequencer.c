@@ -2101,7 +2101,7 @@ sequencer_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 }
 
 int
-sequencer_write (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
+sequencer_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 {
   return -EIO;
 }
@@ -2118,7 +2118,7 @@ sequencer_release (int dev, struct fileinfo *file)
 }
 int
 sequencer_ioctl (int dev, struct fileinfo *file,
-		 unsigned int cmd, unsigned int arg)
+		 unsigned int cmd, ioctl_arg arg)
 {
   return -EIO;
 }

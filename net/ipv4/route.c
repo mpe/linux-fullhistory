@@ -575,16 +575,14 @@ static int rt_kill(struct rtentry *r)
 int rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	struct rtable *r;
-	int len=0;
+	int len=128;
 	off_t pos=0;
 	off_t begin=0;
 	char temp[129];
 
 	if(offset<128)
-	{
 		sprintf(buffer,"%-127s\n","Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT");
-		pos=128;
-  	}
+	pos=128;
   	
 	for (r = rt_base; r != NULL; r = r->rt_next) 
 	{

@@ -15,6 +15,11 @@
 	This is a driver for WD8003 and WD8013 "compatible" ethercards.
 
 	Thanks to Russ Nelson (nelson@crnwyr.com) for loaning me a WD8013.
+
+	Changelog:
+
+	Paul Gortmaker	: multiple card support for module users
+
 */
 
 static const char *version =
@@ -110,6 +115,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 	int ancient = 0;			/* An old card without config registers. */
 	int word16 = 0;				/* 0 = 8 bit, 1 = 16 bit */
 	const char *model_name;
+	static unsigned version_printed = 0;
 
 	for (i = 0; i < 8; i++)
 		checksum += inb(ioaddr + 8 + i);
@@ -120,6 +126,9 @@ int wd_probe1(struct device *dev, int ioaddr)
 
 	if (dev == NULL)
 		dev = init_etherdev(0, sizeof(struct ei_device));
+
+	if (ei_debug  &&  version_printed++ == 0)
+		printk(version);
 
 	printk("%s: WD80x3 at %#3x, ", dev->name, ioaddr);
 	for (i = 0; i < 6; i++)
@@ -257,8 +266,6 @@ int wd_probe1(struct device *dev, int ioaddr)
 
 	printk(" %s, IRQ %d, shared memory at %#lx-%#lx.\n",
 		   model_name, dev->irq, dev->mem_start, dev->mem_end-1);
-	if (ei_debug > 0)
-		printk(version);
 
 	ei_status.reset_8390 = &wd_reset_8390;
 	ei_status.block_input = &wd_block_input;
@@ -408,44 +415,61 @@ wd_close_card(struct device *dev)
 
 
 #ifdef MODULE
+#define MAX_WD_MODS	4	/* Max number of wd modules allowed */
+#define NAMELEN		9	/* # of chars for storing dev->name */
 char kernel_version[] = UTS_RELEASE;
-static char devicename[9] = { 0, };
-static struct device dev_wd80x3 = {
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, wd_probe };
+static char namelist[NAMELEN * MAX_WD_MODS] = { 0, };
+static struct device dev_wd80x3[MAX_WD_MODS] = {
+	{
+		NULL,		/* assign a chunk of namelist[] below */
+		0, 0, 0, 0,
+		0, 0,
+		0, 0, 0, NULL, NULL
+	},
+};
 
-int io = 0x300;
-int irq = 0;
-int mem = 0;
+static int io[MAX_WD_MODS] = { 0, };
+static int irq[MAX_WD_MODS]  = { 0, };
+static int mem[MAX_WD_MODS] = { 0, };
 
-int init_module(void)
+/* This is set up so that only a single autoprobe takes place per call.
+ISA device autoprobes on a running machine are not recommended. */
+int
+init_module(void)
 {
-	if (io == 0)
-		printk("wd: You should not use auto-probing with insmod!\n");
-	dev_wd80x3.base_addr = io;
-	dev_wd80x3.irq       = irq;
-	dev_wd80x3.mem_start = mem;
-	if (register_netdev(&dev_wd80x3) != 0)
-		return -EIO;
+	int this_dev;
+
+	for (this_dev = 0; this_dev < MAX_WD_MODS; this_dev++) {
+		dev_wd80x3[this_dev].name = namelist+(NAMELEN*this_dev);
+		dev_wd80x3[this_dev].irq = irq[this_dev];
+		dev_wd80x3[this_dev].base_addr = io[this_dev];
+		dev_wd80x3[this_dev].mem_start = mem[this_dev];
+		dev_wd80x3[this_dev].init = wd_probe;
+		if (io[this_dev] == 0)  {
+			if (this_dev != 0) break; /* only autoprobe 1st one */
+			printk(KERN_NOTICE "wd.c: Presently autoprobing (not recommended) for a single card.\n");
+		}
+		if (register_netdev(&dev_wd80x3[this_dev]) != 0) {
+			printk(KERN_WARNING "modules: No wd80x3 card found (i/o = 0x%x).\n", io[this_dev]);
+			return -EIO;
+		}
+	}
+
 	return 0;
 }
 
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("wd80x3: device busy, remove delayed\n");
-	else
-	{
-		int ioaddr = dev_wd80x3.base_addr - WD_NIC_OFFSET;
+	int this_dev;
 
-		unregister_netdev(&dev_wd80x3);
-
-		/* If we don't do this, we can't re-insmod it later. */
-		free_irq(dev_wd80x3.irq);
-		release_region(ioaddr, WD_IO_EXTENT);
+	for (this_dev = 0; this_dev < MAX_WD_MODS; this_dev++) {
+		if (dev_wd80x3[this_dev].priv != NULL) {
+			int ioaddr = dev_wd80x3[this_dev].base_addr - WD_NIC_OFFSET;
+			unregister_netdev(&dev_wd80x3[this_dev]);
+			free_irq(dev_wd80x3[this_dev].irq);
+			release_region(ioaddr, WD_IO_EXTENT);
+		}
 	}
 }
 #endif /* MODULE */

@@ -16,10 +16,16 @@
     in programmed-I/O mode.
 
     Sources:
-    EtherLink II Technical Reference Guide,
+    EtherLink II Technical Reference Manual,
+    EtherLink II/16 Technical Reference Manual Supplement,
     3Com Corporation, 5400 Bayfront Plaza, Santa Clara CA 95052-8145
     
     The Crynwr 3c503 packet driver.
+
+    Changelog:
+
+    Paul Gortmaker	: add support for the 2nd 8kB of RAM on 16 bit cards.
+
 */
 
 static const char *version =
@@ -148,7 +154,7 @@ el2_pio_probe(struct device *dev)
 int
 el2_probe1(struct device *dev, int ioaddr)
 {
-    int i, iobase_reg, membase_reg, saved_406;
+    int i, iobase_reg, membase_reg, saved_406, wordlength;
     static unsigned version_printed = 0;
     unsigned long vendor_id;
 
@@ -180,8 +186,6 @@ el2_probe1(struct device *dev, int ioaddr)
 	return ENODEV;
     }
 
-    request_region(ioaddr, EL2_IO_EXTENT,"3c503");
-
     if (dev == NULL)
 	dev = init_etherdev(0, sizeof(struct ei_device));
 
@@ -191,7 +195,7 @@ el2_probe1(struct device *dev, int ioaddr)
     dev->base_addr = ioaddr;
     ethdev_init(dev);
 
-    printk("%s: 3c503 at %#3x,", dev->name, ioaddr);
+    printk("%s: 3c503 at i/o base %#3x, node address", dev->name, ioaddr);
 
     /* Retrieve and print the ethernet address. */
     for (i = 0; i < 6; i++)
@@ -199,6 +203,13 @@ el2_probe1(struct device *dev, int ioaddr)
 
     /* Map the 8390 back into the window. */
     outb(ECNTRL_THIN, ioaddr + 0x406);
+
+    /* Check for EL2/16 as described in tech. man. */
+    outb_p(E8390_PAGE0, ioaddr + E8390_CMD);
+    outb_p(0, ioaddr + EN0_DCFG);
+    outb_p(E8390_PAGE2, ioaddr + E8390_CMD);
+    wordlength = inb_p(ioaddr + EN0_DCFG) & ENDCFG_WTS;
+    outb_p(E8390_PAGE0, ioaddr + E8390_CMD);
 
     /* Probe for, turn on and clear the board's shared memory. */
     if (ei_debug > 2) printk(" memory jumpers %2.2x ", membase_reg);
@@ -216,13 +227,16 @@ el2_probe1(struct device *dev, int ioaddr)
 
     if ((membase_reg & 0xf0) == 0) {
 	dev->mem_start = 0;
+	ei_status.name = "3c503-PIO";
     } else {
 	dev->mem_start = ((membase_reg & 0xc0) ? 0xD8000 : 0xC8000) +
 	    ((membase_reg & 0xA0) ? 0x4000 : 0);
 
-#define EL2_MEMSIZE (EL2SM_STOP_PG - EL2SM_START_PG)*256
+#define EL2_MEMSIZE (EL2_MB1_STOP_PG - EL2_MB1_START_PG)*256
 #ifdef EL2MEMTEST
-	/* This has never found an error, but someone might care. */
+	/* This has never found an error, but someone might care.
+	   Note that it only tests the 2nd 8kB on 16kB 3c503/16
+	   cards between card addr. 0x2000 and 0x3fff. */
 	{			/* Check the card's memory. */
 	    unsigned long mem_base = dev->mem_start;
 	    unsigned int test_val = 0xbbadf00d;
@@ -233,6 +247,7 @@ el2_probe1(struct device *dev, int ioaddr)
 		    || readl(mem_base + i) != test_val) {
 		    printk(" memory failure or memory address conflict.\n");
 		    dev->mem_start = 0;
+		    ei_status.name = "3c503-PIO";
 		    break;
 		}
 		test_val += 0x55555555;
@@ -240,27 +255,48 @@ el2_probe1(struct device *dev, int ioaddr)
 	    }
 	}
 #endif  /* EL2MEMTEST */
-	/* Divide the on-board memory into a single maximum-sized transmit
-	   (double-sized for ping-pong transmit) buffer at the base, and
-	   use the rest as a receive ring. */
+
 	dev->mem_end = dev->rmem_end = dev->mem_start + EL2_MEMSIZE;
-	dev->rmem_start = TX_PAGES*256 + dev->mem_start;
+
+	if (wordlength) {	/* No Tx pages to skip over to get to Rx */
+		dev->rmem_start = dev->mem_start;
+		ei_status.name = "3c503/16";
+	} else {
+		dev->rmem_start = TX_PAGES*256 + dev->mem_start;
+		ei_status.name = "3c503";
+	}
+    }
+
+    /*
+	Divide up the memory on the card. This is the same regardless of
+	whether shared-mem or PIO is used. For 16 bit cards (16kB RAM),
+	we use the entire 8k of bank1 for an Rx ring. We only use 3k 
+	of the bank0 for 2 full size Tx packet slots. For 8 bit cards,
+	(8kB RAM) we use 3kB of bank1 for two Tx slots, and the remaining 
+	5kB for an Rx ring.  */
+
+    if (wordlength) {
+	ei_status.tx_start_page = EL2_MB0_START_PG;
+	ei_status.rx_start_page = EL2_MB1_START_PG;
+    } else {
+	ei_status.tx_start_page = EL2_MB1_START_PG;
+	ei_status.rx_start_page = EL2_MB1_START_PG + TX_PAGES;
     }
 
     /* Finish setting the board's parameters. */
-    ei_status.name = "3C503";
-    ei_status.tx_start_page = EL2SM_START_PG;
-    ei_status.rx_start_page = EL2SM_START_PG + TX_PAGES;
-    ei_status.stop_page = EL2SM_STOP_PG;
+    ei_status.stop_page = EL2_MB1_STOP_PG;
+    ei_status.word16 = wordlength;
     ei_status.reset_8390 = &el2_reset_8390;
     ei_status.get_8390_hdr = &el2_get_8390_hdr;
     ei_status.block_input = &el2_block_input;
     ei_status.block_output = &el2_block_output;
 
+    request_region(ioaddr, EL2_IO_EXTENT, ei_status.name);
+
     if (dev->irq == 2)
 	dev->irq = 9;
     else if (dev->irq > 5 && dev->irq != 9) {
-	printk("\n3c503: configured interrupt %d invalid, using autoIRQ.\n",
+	printk("\n3c503: configured interrupt %d invalid, will use autoIRQ.\n",
 	       dev->irq);
 	dev->irq = 0;
     }
@@ -272,14 +308,13 @@ el2_probe1(struct device *dev, int ioaddr)
     dev->stop = &el2_close;
 
     if (dev->mem_start)
-	printk("\n%s: %s with shared memory at %#6lx-%#6lx.\n",
-	       dev->name, ei_status.name, dev->mem_start, dev->mem_end-1);
-    else
-	printk("\n%s: %s using programmed I/O (REJUMPER for SHARED MEMORY).\n",
-	       dev->name, ei_status.name);
+	printk("\n%s: %s - %dkB RAM, 8kB shared mem window at %#6lx-%#6lx.\n",
+		dev->name, ei_status.name, (wordlength+1)<<3,
+		dev->mem_start, dev->mem_end-1);
 
-    if (ei_debug > 1)
-	printk(version);
+    else
+	printk("\n%s: %s, %dkB RAM, using programmed I/O (REJUMPER for SHARED MEMORY).\n",
+	       dev->name, ei_status.name, (wordlength+1)<<3);
 
     return 0;
 }
@@ -300,7 +335,7 @@ el2_open(struct device *dev)
 		outb_p(0x04 << ((*irqp == 9) ? 2 : *irqp), E33G_IDCFR);
 		outb_p(0x00, E33G_IDCFR);
 		if (*irqp == autoirq_report(0)	 /* It's a good IRQ line! */
-		    && request_irq (dev->irq = *irqp, &ei_interrupt, 0, "3c503") == 0)
+		    && request_irq (dev->irq = *irqp, &ei_interrupt, 0, ei_status.name) == 0)
 		    break;
 	    }
 	} while (*++irqp);
@@ -309,7 +344,7 @@ el2_open(struct device *dev)
 	    return -EAGAIN;
 	}
     } else {
-	if (request_irq(dev->irq, &ei_interrupt, 0, "3c503")) {
+	if (request_irq(dev->irq, &ei_interrupt, 0, ei_status.name)) {
 	    return -EAGAIN;
 	}
     }
@@ -388,13 +423,16 @@ el2_block_output(struct device *dev, int count,
     int i;				/* Buffer index */
     int boguscount = 0;		/* timeout counter */
 
-    /* This should really be set with during an open(). */
-    outb(EGACFR_NORM, E33G_GACFR);	/* Enable RAM and interrupts. */
+    if (ei_status.word16)      /* Tx packets go into bank 0 on EL2/16 card */
+	outb(EGACFR_RSEL|EGACFR_TCM, E33G_GACFR);
+    else 
+	outb(EGACFR_NORM, E33G_GACFR);
 
     if (dev->mem_start) {	/* Shared memory transfer */
 	unsigned long dest_addr = dev->mem_start +
 	    ((start_page - ei_status.tx_start_page) << 8);
 	memcpy_toio(dest_addr, buf, count);
+	outb(EGACFR_NORM, E33G_GACFR);	/* Back to bank1 in case on bank0 */
 	return;
     }
     /* No shared memory, put the packet out the slow way. */
@@ -413,11 +451,13 @@ el2_block_output(struct device *dev, int count,
 		if (++boguscount > (i<<3) + 32) {
 		    printk("%s: FIFO blocked in el2_block_output (at %d of %d, bc=%d).\n",
 			   dev->name, i, count, boguscount);
+		    outb(EGACFR_NORM, E33G_GACFR);	/* To MB1 for EL2/16 */
 		    return;
 		}
 	outb(buf[i], E33G_FIFOH);
     }
     outb_p(ei_status.interface_num==0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
+    outb(EGACFR_NORM, E33G_GACFR);	/* Back to bank1 in case on bank0 */
     return;
 }
 
@@ -426,7 +466,7 @@ static void
 el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
     unsigned int i;
-    unsigned long hdr_start = dev->mem_start + ((ring_page - EL2SM_START_PG)<<8);
+    unsigned long hdr_start = dev->mem_start + ((ring_page - EL2_MB1_START_PG)<<8);
 
     if (dev->mem_start) {       /* Use the shared memory. */
 	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
@@ -456,7 +496,7 @@ el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
 
     /* Maybe enable shared memory just be to be safe... nahh.*/
     if (dev->mem_start) {	/* Use the shared memory. */
-	ring_offset -= (EL2SM_START_PG<<8);
+	ring_offset -= (EL2_MB1_START_PG<<8);
 	if (dev->mem_start + ring_offset + count > end_of_ring) {
 	    /* We must wrap the input move. */
 	    int semi_count = end_of_ring - (dev->mem_start + ring_offset);

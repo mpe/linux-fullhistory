@@ -41,6 +41,7 @@
 #define __NR_readlink		 58
 #define __NR_execve		 59
 #define __NR_umask		 60
+#define __NR_chroot		 61
 #define __NR_getpgrp		 63
 #define __NR_getpagesize	 64
 #define __NR_stat		 67

@@ -344,6 +344,7 @@ struct el_lca_mcheck_long {
 	struct el_common	h;		/* common logout header */
 	unsigned long		pt[32];		/* PAL temps (pt[0] is reason) */
 	unsigned long		exc_addr;	/* exception address */
+	unsigned long		pad1[3];
 	unsigned long		pal_base;	/* PALcode base address */
 	unsigned long		hier;		/* hw interrupt enable */
 	unsigned long		hirr;		/* hw interrupt request */

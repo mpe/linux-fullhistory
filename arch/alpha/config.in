@@ -14,7 +14,8 @@ else
 fi
 
 choice 'Alpha system type' \
-	"Jensen		CONFIG_ALPHA_JENSEN		\
+	"Avanti		CONFIG_ALPHA_AVANTI		\
+	 Jensen		CONFIG_ALPHA_JENSEN		\
 	 Noname		CONFIG_ALPHA_NONAME		\
 	 Cabriolet	CONFIG_ALPHA_CABRIOLET		\
 	 EB66		CONFIG_ALPHA_EB66		\
@@ -87,7 +88,7 @@ mainmenu_option next_comment
 comment 'Sound'
 
 tristate 'Sound card support' CONFIG_SOUND
-if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
+if [ "$CONFIG_SOUND" != "n" ]; then
   source drivers/sound/Config.in
 fi
 

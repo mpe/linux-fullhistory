@@ -210,10 +210,10 @@ static int ppp_dev_header (unsigned char *buff, struct device *dev,
 			   unsigned len, struct sk_buff *skb);
 
 #else /* The 1.3.x kernel is here */
-#define get_long_user(addr)	    get_user(((long *) addr))
+#define get_long_user(addr)	    get_user(((int *) addr))
 #define get_int_user(addr)	    ((int) get_user(((int *) addr)))
 #define put_byte_user(val,addr)	    put_user((val),((u_char *) (addr)))
-#define put_long_user(val,addr)	    put_user((val),((long *) (addr)))
+#define put_long_user(val,addr)	    put_user((val),((int *) (addr)))
 
 static int ppp_dev_header (sk_buff *, struct device *, unsigned short,
 			   void *, void *, unsigned);

@@ -359,21 +359,6 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 		printk("    esr: %lx  ear: %lx\n", el.s->esr, el.s->ear);
 		printk("    dc_stat: %lx  ioc_stat0: %lx  ioc_stat1: %lx\n",
 		       el.s->dc_stat, el.s->ioc_stat0, el.s->ioc_stat1);
-		if (el.c->retry &&
-		    (el.s->esr & (ESR_EAV|ESR_CEE|ESR_UEE|ESR_NXM)) == (ESR_EAV|ESR_CEE))
-		{
-			unsigned long addr, val;
-
-			/* temporarily disable processor/system correctable error logging: */
-			wrmces(0x18);
-			addr = el.s->ear & ~ (0x7<<29 | 0x7);
-			addr += IDENT_ADDR;
-			printk("  correcting quadword at address %lx\n", addr);
-			val = *(volatile long *)addr;
-			*(volatile long *)addr = val;
-			/* reenable all machine checks: */
-			wrmces(0x00);
-		}
 		break;
 
 	      case sizeof(struct el_lca_mcheck_long):

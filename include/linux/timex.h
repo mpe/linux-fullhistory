@@ -105,6 +105,11 @@
 #define PPS_VALID 120		/* pps signal watchdog max (s) */
 #define MAXGLITCH 30		/* pps signal glitch max (s) */
 
+#ifndef __alpha__
+/*
+ * This definitively is wrong for the Alpha and none of the
+ * kernel code seems to reference this anymore.
+ */
 #define CLOCK_TICK_RATE	1193180 /* Underlying HZ */
 #define CLOCK_TICK_FACTOR	20	/* Factor of both 1000000 and CLOCK_TICK_RATE */
 #define LATCH  ((CLOCK_TICK_RATE + HZ/2) / HZ)	/* For divider */
@@ -112,6 +117,7 @@
 #define FINETUNE ((((((long)LATCH * HZ - CLOCK_TICK_RATE) << SHIFT_HZ) * \
 	(1000000/CLOCK_TICK_FACTOR) / (CLOCK_TICK_RATE/CLOCK_TICK_FACTOR)) \
 		<< (SHIFT_SCALE-SHIFT_HZ)) / HZ)
+#endif /* !__alpha__ */
 
 /*
  * syscall interface - used (mainly by NTP daemon)

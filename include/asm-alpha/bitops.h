@@ -77,7 +77,7 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
 	return oldbit != 0;
 }
 
-extern __inline__ unsigned long test_bit(int nr, void * addr)
+extern __inline__ unsigned long test_bit(int nr, const void * addr)
 {
 	return 1UL & (((int *) addr)[nr >> 5] >> (nr & 31));
 }

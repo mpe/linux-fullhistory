@@ -1,6 +1,8 @@
 #ifndef __ALPHA_A_OUT_H__
 #define __ALPHA_A_OUT_H__
 
+#include <linux/types.h>
+
 /*
  * OSF/1 ECOFF header structs.  ECOFF files consist of:
  * 	- a file header (struct filehdr),

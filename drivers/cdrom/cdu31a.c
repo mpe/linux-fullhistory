@@ -1,25 +1,25 @@
 /*
- * Sony CDU-31A CDROM interface device driver.
- *
- * Corey Minyard (minyard@wf-rch.cirr.com)
- *
- * Colossians 3:17
- *
- * The Sony interface device driver handles Sony interface CDROM
- * drives and provides a complete block-level interface as well as an
- * ioctl() interface compatible with the Sun (as specified in
- * include/linux/cdrom.h).  With this interface, CDROMs can be
- * accessed and standard audio CDs can be played back normally.
- *
- * WARNING - 	All autoprobes have been removed from the driver.
- *		You MUST configure the CDU31A via a LILO config
- *		at boot time or in lilo.conf.  I have the
- *		following in my lilo.conf:
- *
- *                append="cdu31a=0x1f88,0,PAS"
- *
- *		The first number is the I/O base address of the
- *		card.  The second is the interrupt (0 means none).
+* Sony CDU-31A CDROM interface device driver.
+*
+* Corey Minyard (minyard@wf-rch.cirr.com)
+*
+* Colossians 3:17
+*
+* The Sony interface device driver handles Sony interface CDROM
+* drives and provides a complete block-level interface as well as an
+* ioctl() interface compatible with the Sun (as specified in
+* include/linux/cdrom.h).  With this interface, CDROMs can be
+* accessed and standard audio CDs can be played back normally.
+*
+* WARNING - 	All autoprobes have been removed from the driver.
+*		You MUST configure the CDU31A via a LILO config
+*		at boot time or in lilo.conf.  I have the
+*		following in my lilo.conf:
+*
+*                append="cdu31a=0x1f88,0,PAS"
+*
+*		The first number is the I/O base address of the
+*		card.  The second is the interrupt (0 means none).
  *		The third should be "PAS" if on a Pro-Audio
  *		spectrum, or nothing if on something else.
  *
@@ -158,6 +158,15 @@
  * 
  *              * The documentation states to set this for interrupt
  *                4, but I think that is a mistake.
+ *
+ *  It probably a little late to be adding a history, but I guess I
+ *  will start.
+ *
+ *  10/24/95 - Added support for disabling the eject button when the
+ *             drive is open.  Note that there is a small problem
+ *             still here, if the eject button is pushed while the
+ *             drive light is flashing, the drive will return a bad
+ *             status and be reset.  It recovers, though.
  */
 
 #include <linux/major.h>
@@ -296,6 +305,8 @@ static struct task_struct *has_cd_task = NULL;  /* The task that is currently
 						   NULL if none. */
 
 static int is_double_speed = 0; /* Is the drive a CDU33A? */
+
+static int is_auto_eject = 1;   /* Door has been locked? 1=No/0=Yes */
 
 /*
  * The audio status uses the values from read subchannel data as specified
@@ -454,6 +465,8 @@ static inline void
 reset_drive(void)
 {
    curr_control_reg = 0;
+   readahead_dataleft = 0;
+   sony_toc_read = 0;
    outb(SONY_DRIVE_RESET_BIT, sony_cd_control_reg);
 }
 
@@ -581,10 +594,14 @@ set_drive_params(void)
    }
 
    params[0] = SONY_SD_MECH_CONTROL;
-   params[1] = 0x03; /* Set auto spin up and auto eject */
+   params[1] = SONY_AUTO_SPIN_UP_BIT; /* Set auto spin up */
+
+   if (is_auto_eject) params[1] |= SONY_AUTO_EJECT_BIT;
+   
    if (is_double_speed)
    {
-      params[1] |= 0x04; /* Set the drive to double speed if possible */
+      params[1] |= SONY_DOUBLE_SPEED_BIT; /* Set the drive to double speed if 
+                                             possible */
    }
    do_sony_cd_cmd(SONY_SET_DRIVE_PARAM_CMD,
                   params,
@@ -626,11 +643,7 @@ restart_on_error(void)
    current->timeout = jiffies + 2*HZ;
    schedule();
 
-   do_sony_cd_cmd(SONY_READ_TOC_CMD, NULL, 0, res_reg, &res_size);
-   if ((res_size < 2) || ((res_reg[0] & 0xf0) == 0x20))
-   {
-      printk("cdu31a: Unable to read TOC: 0x%2.2x\n", res_reg[1]);
-   }
+   sony_get_toc();
 }
 
 /*
@@ -919,23 +932,7 @@ handle_sony_cd_attention(void)
    volatile int val;
 
 
-   if (abort_read_started)
-   {
-      while (is_result_reg_not_empty())
-      {
-         val = read_result_register();
-      }
-      clear_data_ready();
-      clear_result_ready();
-      /* Clear out the data */
-      while (is_data_requested())
-      {
-         val = read_data_register();
-      }
-      abort_read_started = 0;
-      return(1);
-   }
-   else if (is_attention())
+   if (is_attention())
    {
       if (num_consecutive_attentions > CDU31A_MAX_CONSECUTIVE_ATTENTIONS)
       {
@@ -969,7 +966,10 @@ handle_sony_cd_attention(void)
          break;
 
       case SONY_EJECT_PUSHED_ATTN:
-         sony_audio_status = CDROM_AUDIO_INVALID;
+         if (is_auto_eject)
+         {
+            sony_audio_status = CDROM_AUDIO_INVALID;
+         }
          break;
 
       case SONY_LEAD_IN_ERR_ATTN:
@@ -981,6 +981,22 @@ handle_sony_cd_attention(void)
       }
 
       num_consecutive_attentions++;
+      return(1);
+   }
+   else if (abort_read_started)
+   {
+      while (is_result_reg_not_empty())
+      {
+         val = read_result_register();
+      }
+      clear_data_ready();
+      clear_result_ready();
+      /* Clear out the data */
+      while (is_data_requested())
+      {
+         val = read_data_register();
+      }
+      abort_read_started = 0;
       return(1);
    }
 
@@ -1496,6 +1512,9 @@ do_cdu31a_request(void)
    while (handle_sony_cd_attention())
       ;
 
+   /* Make sure we have a valid TOC. */
+   sony_get_toc(); 
+
    sti();
 
    /* If the timer is running, cancel it. */
@@ -1719,14 +1738,49 @@ sony_get_toc(void)
    unsigned int res_size;
    unsigned char parms[1];
    int session;
+   int num_spin_ups;
 
 
 #if DEBUG
    printk("Entering sony_get_toc\n");
 #endif
 
+   num_spin_ups = 0;
    if (!sony_toc_read)
    {
+respinup_on_gettoc:
+      /* Ignore the result, since it might error if spinning already. */
+      do_sony_cd_cmd(SONY_SPIN_UP_CMD, NULL, 0, res_reg, &res_size);
+
+      do_sony_cd_cmd(SONY_READ_TOC_CMD, NULL, 0, res_reg, &res_size);
+
+      /* The drive sometimes returns error 0.  I don't know why, but ignore
+         it.  It seems to mean the drive has already done the operation. */
+      if ((res_size < 2) || ((res_reg[0] != 0) && (res_reg[1] != 0)))
+      {
+         /* If the drive is already playing, it's ok.  */
+         if ((res_reg[1] == SONY_AUDIO_PLAYING_ERR) || (res_reg[1] == 0))
+         {
+            goto gettoc_drive_spinning;
+         }
+
+         /* If the drive says it is not spun up (even though we just did it!)
+            then retry the operation at least a few times. */
+         if (   (res_reg[1] == SONY_NOT_SPIN_ERR)
+             && (num_spin_ups < MAX_CDU31A_RETRIES))
+         {
+            num_spin_ups++;
+            goto respinup_on_gettoc;
+         }
+
+         printk("cdu31a: Error reading TOC: %x %x\n",
+                sony_toc.exec_status[0],
+                sony_toc.exec_status[1]);
+	 return;
+      }
+
+gettoc_drive_spinning:
+
       /* The idea here is we keep asking for sessions until the command
 	 fails.  Then we know what the last valid session on the disk is.
 	 No need to check session 0, since session 0 is the same as session
@@ -1761,6 +1815,7 @@ sony_get_toc(void)
          /* Let's not get carried away... */
          if (session > 20)
          {
+            printk("cdu31a: too many sessions: %d\n", session);
             return;
          }
       }
@@ -1779,6 +1834,10 @@ sony_get_toc(void)
 		     &res_size);
       if ((res_size < 2) || ((sony_toc.exec_status[0] & 0xf0) == 0x20))
       {
+         printk("cdu31a: Error reading session %d: %x %x\n",
+                session,
+                sony_toc.exec_status[0],
+                sony_toc.exec_status[1]);
 	 /* An error reading the TOC.  Return without sony_toc_read
 	    set. */
 	 return;
@@ -2650,6 +2709,12 @@ static int scd_ioctl(struct inode *inode,
       return 0;
       break;
 
+   case CDROMEJECT_SW:
+      is_auto_eject = arg;
+      set_drive_params();
+      return 0;
+      break;
+
    default:
       return -EINVAL;
    }
@@ -2771,6 +2836,10 @@ drive_spinning:
    sony_usage++;
    MOD_INC_USE_COUNT;
 
+   /* If all is OK (until now...), then lock the door */
+   is_auto_eject = 0;
+   set_drive_params();
+
    return 0;
 }
 
@@ -2795,6 +2864,11 @@ scd_release(struct inode *inode,
    if (sony_usage == 0)
    {
       sync_dev(inode->i_rdev);
+
+      /* Unlock the door, only if nobody is using the drive */
+      is_auto_eject = 1;
+      set_drive_params();
+
       do_sony_cd_cmd(SONY_SPIN_DOWN_CMD, NULL, 0, res_reg, &res_size);
 
       sony_spun_up = 0;

@@ -109,7 +109,7 @@ static void check_pending(int signum)
 	}	
 }
 
-asmlinkage unsigned long sys_signal(int signum, void (*handler)(int))
+asmlinkage unsigned long sys_signal(int signum, __sighandler_t handler)
 {
 	int err;
 	struct sigaction tmp;

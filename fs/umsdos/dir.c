@@ -260,7 +260,7 @@ static int umsdos_readdir_x(
 /*
 	Read count directory entries from directory filp
 	Return a negative value from linux/errno.h.
-	Return > 0 if success (the amount of byte written to dirent)
+	Return 0 or positive if successful
 */
 static int UMSDOS_readdir(
 	struct inode *dir,		/* Point to a description of the super block */
@@ -284,7 +284,7 @@ static int UMSDOS_readdir(
 	}
 	PRINTK (("UMSDOS_readdir out %d count %d pos %Ld\n",ret,count
 		,filp->f_pos));
-	return count == 0 ? -ENOENT : ret;
+	return count?:ret;
 }
 /*
 	Complete the inode content with info from the EMD file

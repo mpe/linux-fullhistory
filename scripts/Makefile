@@ -2,7 +2,7 @@ HEADER=header.tk
 TAIL=tail.tk
 
 kconfig.tk: ../arch/${ARCH}/config.in tkparse ${HEADER} ${TAIL}
-	./tkparse < ../arch/${ARCH}/config.in  > kconfig.tmp
+	./tkparse < ../arch/${ARCH}/config.in > kconfig.tmp
 	cp ${HEADER} ./kconfig.tk
 	cat kconfig.tmp >> kconfig.tk
 	rm -f kconfig.tmp

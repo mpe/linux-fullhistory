@@ -28,8 +28,6 @@ static int C_A_D = 1;
 
 extern void adjust_clock(void);
 
-#define	PZERO	15
-
 asmlinkage int sys_ni_syscall(void)
 {
 	return -ENOSYS;

@@ -12,10 +12,14 @@
 #define OLD_3COM_ID	0x02608c
 #define NEW_3COM_ID	0x0020af
 
-/* Shared memory management parameters */
+/* Shared memory management parameters. NB: The 8 bit cards have only
+   one bank (MB1) which serves both Tx and Rx packet space. The 16bit
+   cards have 2 banks, MB0 for Tx packets, and MB1 for Rx packets. 
+   You choose which bank appears in the sh. mem window with EGACFR_MBSn */
 
-#define EL2SM_START_PG	(0x20)	/* First page of TX buffer */
-#define EL2SM_STOP_PG	(0x40)	/* Last page +1 of RX ring */
+#define EL2_MB0_START_PG	(0x00)	/* EL2/16 Tx packets go in bank 0 */
+#define EL2_MB1_START_PG	(0x20)	/* First page of bank 1 */
+#define EL2_MB1_STOP_PG		(0x40)	/* Last page +1 of bank 1 */
 
 /* 3Com 3c503 ASIC registers */
 #define E33G_STARTPG	(EL2H+0)	/* Start page, matching EN0_STARTPG */
@@ -60,7 +64,28 @@
 
 /* Bits in E33G_GACFR register: */
 
-#define EGACFR_NORM	(0x49)	/* Enable 8K shared mem, no DMA TC int */
-#define EGACFR_IRQOFF	(0xc9)	/* Above, and disable 8390 IRQ line */
+#define EGACFR_NIM	(0x80)	/* NIC interrupt mask */
+#define EGACFR_TCM	(0x40)	/* DMA term. count interrupt mask */
+#define EGACFR_RSEL	(0x08)	/* Map a bank of card mem into system mem */
+#define EGACFR_MBS2	(0x04)	/* Memory bank select, bit 2. */
+#define EGACFR_MBS1	(0x02)	/* Memory bank select, bit 1. */
+#define EGACFR_MBS0	(0x01)	/* Memory bank select, bit 0. */
+
+#define EGACFR_NORM	(0x49)	/* TCM | RSEL | MBS0 */
+#define EGACFR_IRQOFF	(0xc9)	/* TCM | RSEL | MBS0 | NIM */
+
+/*
+	MBS2	MBS1	MBS0	Sh. mem windows card mem at:
+	----	----	----	-----------------------------
+	0	0	0	0x0000 -- bank 0
+	0	0	1	0x2000 -- bank 1 (only choice for 8bit card)
+	0	1	0	0x4000 -- bank 2, not used
+	0	1	1	0x6000 -- bank 3, not used
+
+There was going to be a 32k card that used bank 2 and 3, but it 
+never got produced.
+
+*/
+
 
 /* End of 3C503 parameter definitions */

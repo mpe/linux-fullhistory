@@ -135,7 +135,7 @@ extern __inline__ int change_bit(int nr, void * addr)
 
 #endif /* !defined(__R4000__) */
 
-extern __inline__ int test_bit(int nr, void *addr)
+extern __inline__ int test_bit(int nr, const void *addr)
 {
 	int	mask;
 	unsigned long	*a;

@@ -61,6 +61,8 @@ extern inline void * phys_to_virt(unsigned long address)
  * accomodate things like XFree or svgalib that like to define their
  * own versions of inb etc.
  */
+extern void __sethae (unsigned long addr);	/* syscall */
+extern void _sethae (unsigned long addr);	/* cached version */
 extern unsigned int _inb (unsigned long port);
 extern unsigned int _inw (unsigned long port);
 extern unsigned int _inl (unsigned long port);

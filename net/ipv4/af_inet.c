@@ -230,6 +230,7 @@ void put_sock(unsigned short num, struct sock *sk)
 	while ((tmp = *skp) != NULL) {
 		if (!(tmp->rcv_saddr & mask))
 			break;
+		skp = &tmp->next;
 	}
 	sk->next = tmp;
 	*skp = sk;

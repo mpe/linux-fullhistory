@@ -16,6 +16,7 @@
  *	Fixes:
  *		Mike Shaver	:	RFC1122 checks.
  *		Alan Cox	:	Multicast ping reply as self.
+ *		Alan Cox	:	Fix atomicity lockup in ip_build_xmit call
  *
  *
  *
@@ -235,7 +236,7 @@ static void icmp_build_xmit(struct icmp_bxm *icmp_param, __u32 saddr, __u32 dadd
 	icmp_out_count(icmp_param->icmph.type);
 	ip_build_xmit(sk, icmp_glue_bits, icmp_param, 
 		icmp_param->data_len+sizeof(struct icmphdr),
-		daddr, saddr, &icmp_param->replyopts, 0, IPPROTO_ICMP);
+		daddr, saddr, &icmp_param->replyopts, 0, IPPROTO_ICMP, 1);
 }
 
 

@@ -70,7 +70,7 @@ mainmenu_option next_comment
 comment 'Sound'
 
 tristate 'Sound card support' CONFIG_SOUND
-if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
+if [ "$CONFIG_SOUND" != "n" ]; then
   source drivers/sound/Config.in
 fi
 

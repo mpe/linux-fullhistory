@@ -53,6 +53,8 @@ volatile unsigned long net_allocs = 0;
 volatile unsigned long net_fails  = 0;
 volatile unsigned long net_free_locked = 0;
 
+extern unsigned long ip_frag_mem;
+
 void show_net_buffers(void)
 {
 	printk("Networking buffers in use          : %lu\n",net_skbcount);
@@ -60,6 +62,9 @@ void show_net_buffers(void)
 	printk("Total network buffer allocations   : %lu\n",net_allocs);
 	printk("Total failed network buffer allocs : %lu\n",net_fails);
 	printk("Total free while locked events     : %lu\n",net_free_locked);
+#ifdef CONFIG_INET
+	printk("IP fragment buffer size            : %lu\n",ip_frag_mem);
+#endif	
 }
 
 #if CONFIG_SKB_CHECK

@@ -223,13 +223,13 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 	{
 		if(len>65535)
 			return -EMSGSIZE;
-		err=ip_build_xmit(sk, raw_getrawfrag, from, len, sin.sin_addr.s_addr, 0, sk->opt, flags, sin.sin_port);
+		err=ip_build_xmit(sk, raw_getrawfrag, from, len, sin.sin_addr.s_addr, 0, sk->opt, flags, sin.sin_port, noblock);
 	}
 	else
 	{
 		if(len>65535-sizeof(struct iphdr))
 			return -EMSGSIZE;
-		err=ip_build_xmit(sk, raw_getfrag, from, len, sin.sin_addr.s_addr, 0, sk->opt, flags, sin.sin_port);
+		err=ip_build_xmit(sk, raw_getfrag, from, len, sin.sin_addr.s_addr, 0, sk->opt, flags, sin.sin_port, noblock);
 	}
 	return err<0?err:len;
 }

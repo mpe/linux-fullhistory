@@ -47,6 +47,7 @@
  *		Alan Cox	:	Route cache
  *		Jon Peatfield	:	Minor efficientcy fix to sendto().
  *		Mike Shaver	:	RFC1122 checks.
+ *		Alan Cox	:	Nonblocking error fix.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -292,7 +293,7 @@ static void udp_getfrag_nosum(const void *p, __u32 saddr, char * to, unsigned in
 
 static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 		      const unsigned char *from, int len, int rt,
-		    __u32 saddr) 
+		    __u32 saddr, int noblock) 
 {
 	int ulen = len + sizeof(struct udphdr);
 	int a;
@@ -310,11 +311,6 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	ufh.from = from;
 	ufh.wcheck = 0;
 
-	/* RFC1122 Violation: there is no provision for passing IP options */
-	/* from the application layer to the IP one.  It's a MUST (4.1.3.2), */
-	/* but it looks like it'd require some work on ip_build_xmit. */
-	/* Alan says he's got a Cunning Plan. -- MS */
-
 	/* RFC1122: OK.  Provides the checksumming facility (MUST) as per */
 	/* 4.1.3.4. It's configurable by the application via setsockopt() */
 	/* (MAY) and it defaults to on (MUST).  Almost makes up for the */
@@ -322,10 +318,10 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 
 	if(sk->no_check)
 		a = ip_build_xmit(sk, udp_getfrag_nosum, &ufh, ulen, 
-			sin->sin_addr.s_addr, saddr, sk->opt, rt, IPPROTO_UDP);
+			sin->sin_addr.s_addr, saddr, sk->opt, rt, IPPROTO_UDP, noblock);
 	else
 		a = ip_build_xmit(sk, udp_getfrag, &ufh, ulen, 
-			sin->sin_addr.s_addr, saddr, sk->opt, rt, IPPROTO_UDP);
+			sin->sin_addr.s_addr, saddr, sk->opt, rt, IPPROTO_UDP, noblock);
 	if(a<0)
 		return a;
 	udp_statistics.UdpOutDatagrams++;
@@ -393,7 +389,7 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len, int n
 	sk->inuse = 1;
 
 	/* Send the packet. */
-	tmp = udp_send(sk, usin, from, len, flags, saddr);
+	tmp = udp_send(sk, usin, from, len, flags, saddr, noblock);
 
 	/* The datagram has been sent off.  Release the socket. */
 	release_sock(sk);
@@ -568,7 +564,10 @@ int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   	rt=(sk->localroute?ip_rt_local:ip_rt_route)((__u32)usin->sin_addr.s_addr, NULL, &sa);
   	if(rt==NULL)
   		return -ENETUNREACH;
-  	sk->saddr = sa;		/* Update source address */
+  	if(!sk->saddr)
+	  	sk->saddr = sa;		/* Update source address */
+	if(!sk->rcv_saddr)
+		sk->rcv_saddr = sa;
 	sk->daddr = usin->sin_addr.s_addr;
 	sk->dummy_th.dest = usin->sin_port;
 	sk->state = TCP_ESTABLISHED;

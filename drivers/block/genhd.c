@@ -213,8 +213,7 @@ check_table:
 	if (!tested_for_dm6++) {	/* only check for DM6 *once* */
 		extern int ide_xlate_1024(kdev_t, int, const char *);
 		/* check for various "disk managers" which do strange things */
-		int ezstring = !strncmp(data+0x1a3, "Micro House", 11);
-		if (p->sys_ind == EZD_PARTITION || ezstring) {
+		if (p->sys_ind == EZD_PARTITION) {
 			/*
 			 * The remainder of the disk must be accessed using
 			 * a translated geometry that reduces the number of 

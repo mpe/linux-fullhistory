@@ -30,11 +30,11 @@ extern void timer_interrupt(struct pt_regs * regs);
 static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
 
-#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+#if NR_IRQS == 33
   static unsigned char cache_804 = 0xef;
   static unsigned char cache_805 = 0xff;
   static unsigned char cache_806 = 0xff;
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+#elif NR_IRQS == 32
   static unsigned char cache_26 = 0xdf;
   static unsigned char cache_27 = 0xff;
 #endif
@@ -54,7 +54,7 @@ void disable_irq(unsigned int irq_nr)
 	} else if (irq_nr < 16) {
 		cache_A1 |= mask;
 		outb(cache_A1,0xA1);
-#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+#if NR_IRQS == 33
 	} else if (irq_nr < 24) {
 		cache_804 |= mask;
 		outb(cache_804, 0x804);
@@ -64,7 +64,7 @@ void disable_irq(unsigned int irq_nr)
 	} else {
 		cache_806 |= mask;
 		outb(cache_806, 0x806);
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P) 
+#elif NR_IRQS == 32 
 	} else if (irq_nr < 24) {
 		cache_26 |= mask;
 		outb(cache_26, 0x26);
@@ -91,7 +91,7 @@ void enable_irq(unsigned int irq_nr)
 	} else if (irq_nr < 16) {
 		cache_A1 &= mask;
 		outb(cache_A1,0xA1);
-#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+#if NR_IRQS == 33
 	} else if (irq_nr < 24) {
 		cache_804 &= mask;
 		outb(cache_804, 0x804);
@@ -101,7 +101,7 @@ void enable_irq(unsigned int irq_nr)
 	} else {
 		cache_806 &= mask;
 		outb(cache_806, 0x806);
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+#elif NR_IRQS == 32
 	} else if (irq_nr < 24) {
 		cache_26 &= mask;
 		outb(cache_26, 0x26);
@@ -166,7 +166,7 @@ static inline void mask_irq(int irq)
 	} else if (irq < 16) {
 		cache_A1 |= mask;
 		outb(cache_A1, 0xA1);
-#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+#if NR_IRQS == 33
 	} else if (irq < 24) {
 		cache_804 |= mask;
 		outb(cache_804, 0x804);
@@ -176,7 +176,7 @@ static inline void mask_irq(int irq)
 	} else {
 		cache_806 |= mask;
 		outb(cache_806, 0x806);
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB66P)
+#elif NR_IRQS == 32
 	} else if (irq < 24) {
 		cache_26 |= mask;
 		outb(cache_26, 0x26);
@@ -197,7 +197,7 @@ static inline void unmask_irq(unsigned long irq)
 	} else if (irq < 16) {
 		cache_A1 &= mask;
 		outb(cache_A1, 0xA1);
-#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+#if NR_IRQS == 33
 	} else if (irq < 24) {
 		cache_804 &= mask;
 		outb(cache_804, 0x804);
@@ -295,8 +295,6 @@ static void unexpected_irq(int irq, struct pt_regs * regs)
 	outb(0x0c, 0x2fc);
 	outb(0,0x61);
 	outb(0,0x461);
-#elif defined(CONFIG_ALPHA_NONAME)
-	printk("61=%02x, 64=%02x, 60=%02x\n", inb(0x61), inb(0x64), inb(0x60));
 #endif
 }
 
@@ -507,11 +505,11 @@ unsigned long probe_irq_on(void)
 	
 	/* now filter out any obviously spurious interrupts */
 	irqmask = (((unsigned long)cache_A1)<<8) | (unsigned long) cache_21;
-#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+#if NR_IRQS == 33
 	irqmask |= ((((unsigned long)cache_804)<<16) |
 		    (((unsigned long)cache_805)<<24) |
 		    (((unsigned long)cache_806)<<24));
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+#elif NR_IRQS == 32
 	irqmask |= ((((unsigned long)cache_26)<<16) |
 		    (((unsigned long)cache_27)<<24));
 #endif
@@ -530,11 +528,11 @@ int probe_irq_off(unsigned long irqs)
 	int i;
 	
 	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
-#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+#if NR_IRQS == 33
 	irqmask |= ((((unsigned long)cache_804)<<16) |
 		    (((unsigned long)cache_805)<<24) |
 		    (((unsigned long)cache_806)<<24));
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+#elif NR_IRQS == 32
 	irqmask |= ((((unsigned long)cache_26)<<16) |
 		    (((unsigned long)cache_27)<<24));
 #endif
@@ -575,14 +573,14 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned lon
 			return;
 		case 2:
 			machine_check(vector, la_ptr, &regs);
-			break;
+			return;
 		case 3:
 #if defined(CONFIG_ALPHA_JENSEN) || defined(CONFIG_ALPHA_NONAME) || \
     defined(CONFIG_ALPHA_SRM)
 			srm_device_interrupt(vector, &regs);
-#elif defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+#elif NR_IRQS == 33
 			cabriolet_and_eb66p_device_interrupt(vector, &regs);
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+#elif NR_IRQS == 32
 			eb66_and_eb64p_device_interrupt(vector, &regs);
 #endif
 			return;
@@ -604,11 +602,11 @@ void init_IRQ(void)
 	dma_outb(0, DMA2_RESET_REG);
 	dma_outb(0, DMA1_CLR_MASK_REG);
 	dma_outb(0, DMA2_CLR_MASK_REG);
-#if defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB66P)
+#if NR_IRQS == 33
 	outb(cache_804, 0x804);
 	outb(cache_805, 0x805);
 	outb(cache_806, 0x806);
-#elif defined(CONFIG_ALPHA_EB66) || defined(CONFIG_ALPHA_EB64P)
+#elif NR_IRQS == 32
 	outb(cache_26, 0x26);
 	outb(cache_27, 0x27);
 #endif

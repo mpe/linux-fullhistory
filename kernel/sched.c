@@ -654,11 +654,13 @@ static void second_overflow(void)
 	time_adj += ltemp >>
 	    (SHIFT_USEC + SHIFT_HZ - SHIFT_SCALE);
 
+#if HZ == 100
     /* compensate for (HZ==100) != 128. Add 25% to get 125; => only 3% error */
     if (time_adj < 0)
 	time_adj -= -time_adj >> 2;
     else
 	time_adj += time_adj >> 2;
+#endif
 }
 
 /*

@@ -4,5 +4,5 @@
 # This is really ugly: it should probably be changed
 # to use the normal config script setup
 #
-$MAKE -C drivers/sound config || exit 1 ;;
+$MAKE -C drivers/sound config || exit 1
 

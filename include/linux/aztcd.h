@@ -1,4 +1,4 @@
-/* $Id: aztcd.h,v 1.80 1995/10/11 19:39:18 root Exp root $
+/* $Id: aztcd.h,v 1.90 1995/10/21 17:52:10 root Exp root $
  *
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann
@@ -57,7 +57,6 @@
 
 /*---------------------------------------------------------------------------*/
 /*-----nothing to be configured for normal applications below this line------*/
-
 
 /* Increase this if you get lots of timeouts; if you get kernel panic, replace
    STEN_LOW_WAIT by STEN_LOW in the source code */

@@ -174,7 +174,8 @@
  *					change. Doesn't yet cope with MSS shrink right
  *					but its a start!
  *		Marc Tamsky	:	Closing in closing fixes.
- *		Mike Shaver	:	RFC1122 verifications
+ *		Mike Shaver	:	RFC1122 verifications.
+ *		Alan Cox	:	rcv_saddr errors.
  *
  *
  * To Fix:
@@ -1816,7 +1817,6 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 					from += copy;
 					copied += copy;
 					len -= copy;
-					seglen -= copy;
 					sk->write_seq += copy;
 					seglen -= copy;
 				}
@@ -3053,6 +3053,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 
 	newsk->daddr = saddr;
 	newsk->saddr = daddr;
+	newsk->rcv_saddr = daddr;
 
 	put_sock(newsk->num,newsk);
 	newsk->dummy_th.res1 = 0;
@@ -4575,7 +4576,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	
 
 	/*
-	 *	Put in the IP header and routing stuff. 
+	 *	Put in the IP header and routing stuff.
 	 */
 	 
 	if (sk->localroute)
@@ -4583,6 +4584,12 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	else
 	  rt=ip_rt_route(sk->daddr, NULL, sk->saddr ? NULL : &sk->saddr);
 
+	/*
+	 *	When we connect we enforce receive requirements too.
+	 */
+	 
+	sk->rcv_saddr=sk->saddr;
+	
 	/*
 	 *	We need to build the routing stuff from the things saved in skb. 
 	 */

@@ -64,7 +64,7 @@ extern __inline__ int change_bit(int nr, void * addr)
  * This routine doesn't need to be atomic, but it's faster to code it
  * this way.
  */
-extern __inline__ int test_bit(int nr, void * addr)
+extern __inline__ int test_bit(int nr, const void * addr)
 {
 	int oldbit;
 

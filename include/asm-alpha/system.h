@@ -97,6 +97,12 @@ __old_ipl; })
 #define save_flags(flags)	do { flags = getipl(); } while (0)
 #define restore_flags(flags)	setipl(flags)
 
+/*
+ * Give prototypes to shut up gcc.
+ */
+extern inline unsigned long xchg_u32 (volatile int * m, unsigned long val);
+extern inline unsigned long xchg_u64 (volatile long * m, unsigned long val);
+
 extern inline unsigned long xchg_u32(volatile int * m, unsigned long val)
 {
 	unsigned long dummy, dummy2;

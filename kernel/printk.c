@@ -27,8 +27,12 @@ static char buf[1024];
 
 extern void console_print(const char *);
 
-#define DEFAULT_MESSAGE_LOGLEVEL 6 /* KERN_INFO */
-#define DEFAULT_CONSOLE_LOGLEVEL 7 /* anything more serious than KERN_DEBUG */
+/* printk's without a loglevel use this.. */
+#define DEFAULT_MESSAGE_LOGLEVEL 5 /* KERN_NOTICE */
+
+/* We show everything that is more important than this.. */
+#define MINIMUM_CONSOLE_LOGLEVEL 6 /* Minimum loglevel we let people use */
+#define DEFAULT_CONSOLE_LOGLEVEL 6 /* anything more serious than KERN_INFO */
 
 unsigned long log_size = 0;
 struct wait_queue * log_wait = NULL;
@@ -124,7 +128,7 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 			logged_chars = 0;
 			return 0;
 		case 6:		/* Disable logging to console */
-			console_loglevel = 1; /* only panic messages shown */
+			console_loglevel = MINIMUM_CONSOLE_LOGLEVEL;
 			return 0;
 		case 7:		/* Enable logging to console */
 			console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
@@ -132,6 +136,8 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 		case 8:
 			if (len < 1 || len > 8)
 				return -EINVAL;
+			if (len < MINIMUM_CONSOLE_LOGLEVEL)
+				len = MINIMUM_CONSOLE_LOGLEVEL;
 			console_loglevel = len;
 			return 0;
 	}

@@ -11,7 +11,9 @@
  *	later.
  *
  *	Fixes
- *		Felix Koop:	NR_CPUS used properly
+ *		Felix Koop	:	NR_CPUS used properly
+ *		Jose Renau	:	Handle single CPU case.
+ *		Alan Cox	:	By repeated request 8) - Total BogoMIP report.
  *
  */
 
@@ -57,7 +59,7 @@ static volatile int smp_msg_id;				/* Message being sent					*/
 volatile unsigned long kernel_flag=0;			/* Kernel spinlock 					*/
 volatile unsigned char active_kernel_processor = NO_PROC_ID;	/* Processor holding kernel spinlock		*/
 volatile unsigned long kernel_counter=0;		/* Number of times the processor holds the lock		*/
-volatile unsigned long syscall_count=0;		/* Number of times the processor holds the syscall lock	*/
+volatile unsigned long syscall_count=0;			/* Number of times the processor holds the syscall lock	*/
 volatile unsigned long smp_spins=0;			/* Count of cycles wasted to spinning			*/
 
 volatile unsigned long ipi_count;			/* Number of IPI's delivered				*/
@@ -560,10 +562,22 @@ void smp_boot_cpus(void)
 	 *	Allow the user to impress friends.
 	 */
 	if(cpucount==0)
+	{
 		printk("Error: only one processor found.\n");
+		cpu_present_map=(1<<smp_processor_id());
+	}
 	else
 	{
-		printk("Total of %d processors activated.\n", cpucount+1);
+		unsigned long bogosum=0;
+		for(i=0;i<32;i++)
+		{
+			if(cpu_present_map&(1<<i))
+				bogosum+=cpu_data[i].udelay_val;
+		}
+		printk("Total of %d processors activated (%lu.%02lu BogoMIPS).\n", 
+			cpucount+1, 
+			(bogosum+2500)/500000,
+			((bogosum+2500)/5000)%100);
 		smp_activated=1;
 		smp_num_cpus=cpucount+1;
 	}

@@ -45,27 +45,24 @@ My e-mail address is: apenwarr@foxnet.net
 			
 These are the ARCnet drivers for Linux.
 
-This new "stable" release has come from many months of on-and-off effort
-from me (Avery Pennarun), many bug reports from users, and in particular a
-lot of input and coding from Tomasz Motylewski.  (I've held off on Tomasz'
-latest patches - but his all-new RFC1051 support is here and waiting for the
-next ALPHA release!)
+This new release has resulted from many months of on-and-off effort from me
+(Avery Pennarun), many bug reports from users, and in particular a lot of
+input and coding from Tomasz Motylewski.  Starting with ARCnet 2.10 ALPHA,
+Tomasz's all-new-and-improved RFC1051 support has been included and seems to
+be working fine!
 
 
 Where do I discuss these drivers?
 ---------------------------------
 
-There is a mailing list specifically for discussion of the ARCnet drivers
-for Linux, and anything you might want to interface them with (ie. DOS). 
-I'll also post new versions of the Linux-ARCnet distribution to the list in
-tar-gzip-uuencode format.
+BOINGY - the linux-arcnet@807-city.on.ca mailing list is now so unstable
+that I can't recommend people even bother with it.  I no longer have an
+account on 807-CITY (though they still graciously forward my mail to me) so
+there's not much I can do.  If there's sufficient interest (e-mail me!) I
+will set one up at my new address, Foxnet.
 
-To subscribe to the list, send a message to listserv@807-city.on.ca
-with the following line in the BODY (not the SUBJECT) of your message:
-	subscribe linux-arcnet YOUR REAL NAME
-Remember to remove your signature, or you'll get an error back.
-
-Send all bug (or success) reports to me or to the list.
+Send all bug (or success) reports to me, then, not the list, since (as I
+mentioned) the list doesn't work.
 
 The people on linux-net@vger.rutgers.edu have also been known to be very
 helpful, especially when we're talking about ALPHA Linux kernels that may or
@@ -93,9 +90,29 @@ ftp'ing to ftp.novell.com.
 You can get the Crynwr packet driver collection (including arcether.com, the
 one you'll want to use with arcnet cards) from
 oak.oakland.edu:/simtel/msdos/pktdrvr. It won't work perfectly on a 386+
-without patches, though, and also doesn't like several cards.  Mail me if
-you want a fixed version.  (Ahem: I may or may not have a 100% fixed version
-by the time I get your mail!)
+without patches, though, and also doesn't like several cards.  Fixed
+versions are available on my WWW page, or via e-mail if you don't have WWW
+access. 
+
+
+Installing the Driver
+---------------------
+
+If this driver was included as part of your Linux kernel source, all you
+will need to do in order to install it is:
+	make config
+		(be sure to choose ARCnet under "other ISA cards")
+	make dep
+	make clean
+	make zImage
+	
+If you obtained this ARCnet package as an upgrade to the ARCnet driver in
+your current kernel, you will need to first copy arcnet.c over the one in
+the linux/drivers/net directory.
+
+You will know the driver is installed properly if you get a lot of ARCnet
+messages when you boot into the new Linux kernel.  (These messages can be
+disabled by taking D_INIT out of the list of debug flags in arcnet.c.)
 
 
 Loadable Module Support
@@ -113,9 +130,9 @@ module.
 	make zImage
 	make modules
 	
-If you're using a loadable module, you need to use insmod to load the
-module, and you need to specify various characteristics of your card on the
-command line.  For example:
+If you're using a loadable module, you need to use insmod to load it, and
+you need to specify various characteristics of your card on the command
+line.  For example:
 	cd /usr/src/linux/modules
 	insmod arcnet.o io=0x300 irqnum=2 shmem=0xd0000
 You can also add a num=1, num=2 etc for additional arcnet cards that will
@@ -145,12 +162,21 @@ NFS: Should be fine linux->linux, just pretend you're using ethernet cards.
         is also a DOS-based NFS server called SOSS.  It doesn't multitask
         quite the way Linux does (actually, it doesn't multitask AT ALL) but
         you never know what you might need.
+        
+        With AmiTCP (and possibly others), you may need to set the following
+        options in your Amiga nfstab:  MD 1024 MR 1024 MW 1024
+        (Thanks to Christian Gottschling <ferksy@indigo.tng.oche.de>
+	for this.)
+	
+	Probably these refer to maximum NFS data/read/write block sizes.  I
+	don't know why the defaults on the Amiga didn't work; write to me if
+	you know more.
 
 DOS: If you're using the freeware arcether.com, you might want to install
-        the source code patch.  It helps with PC/TCP, and also can get
-        arcether to load if it timed out too quickly during initialization. 
-        Mail me if you need a precompiled version of arcether.com. (ie. you
-        if don't have a DOS assembler)
+        the driver patch from my web page.  It helps with PC/TCP, and also
+        can get arcether to load if it timed out too quickly during
+        initialization.  In fact, if you use it on a 386+ you REALLY need
+        the patch, really.
 	
 Windows:  See DOS :)  Trumpet Winsock works fine with either the Novell or
 	Arcether client, assuming you remember to load winpkt of course.
@@ -159,10 +185,10 @@ LAN Manager and Windows for Workgroups: These programs use protocols that
         are incompatible with the internet standard.  They try to pretend
         the cards are ethernet, and confuse everyone else on the network. 
         
-        However, v2.00 of the Linux ARCnet driver supports this protocol via
-        the 'arc0e' device.  See the section on "Multiprotocol Support" for
-	more information.
-        
+        However, v2.00 and higher of the Linux ARCnet driver supports this
+        protocol via the 'arc0e' device.  See the section on "Multiprotocol
+        Support" for more information.
+
 	Using the freeware Samba server and clients for Linux, you can now
 	interface quite nicely with TCP/IP-based WfWg or Lan Manager
 	networks.
@@ -182,24 +208,25 @@ OS2: Has not been tested.  The "correct" solution would be to buy either of
 	installing it under Warp, however.  Please mail me with any results.
 
 NetBSD/AmiTCP: These use an old version of the Internet standard ARCnet
-	protocol (RFC1051) which is incompatible with the Linux driver at
-	present.  Work to support these is underway and should be available
-	in an ALPHA release very soon.
-	
+	protocol (RFC1051) which is compatible with the Linux driver v2.10
+	ALPHA and above using the arc0s device. (See "Multiprotocol ARCnet"
+	below.)
+
 
 Using Multiprotocol ARCnet
 --------------------------
 
-The ARCnet driver v2.00 supports two protocols, each on its own "virtual
-network device":
+The ARCnet driver v2.10 ALPHA supports three protocols, each on its own
+"virtual network device":
+
 	arc0  - RFC1201 protocol, the official internet standard which just
 		happens to be 100% compatible with Novell's TRXNET driver. 
-		Version 1.00 of the ARCnet driver _only_ supported this
-		protocol.  arc0 is the faster of the two protocols, and
-		allows larger packets to be used because it supports RFC1201
-		"packet splitting" operations.  Unless you have a specific
-		need to use a different protocol, I highly suggest that you
-		stick with this one.
+		Version 1.00 of the ARCnet driver supported _only_ this
+		protocol.  arc0 is the fastest of the three protocols (for
+		whatever reason), and allows larger packets to be used
+		because it supports RFC1201 "packet splitting" operations. 
+		Unless you have a specific need to use a different protocol,
+		I strongly suggest that you stick with this one.
 		
 	arc0e - "Ethernet-Encapsulation" which sends packets over ARCnet
 		that are actually a lot like Ethernet packets, including the
@@ -207,16 +234,30 @@ network device":
 		Microsoft's NDIS ARCnet driver, like the one in WfWg and
 		LANMAN.  Because the MTU of 493 is actually smaller than the
 		one "required" by TCP/IP (576), there is a chance that some
-		network operations will not work properly.  The Linux TCP/IP
-		layer can compensate in most cases, however, by
+		network operations will not function properly.  The Linux
+		TCP/IP layer can compensate in most cases, however, by
 		automatically fragmenting the TCP/IP packets to make them
 		fit.  arc0e also works slightly more slowly than arc0, for
 		reasons yet to be determined.  (Probably it's the smaller
-		MTU that does it)
+		MTU that does it.)
+		
+	arc0s - The "[s]imple" RFC1051 protocol is the "previous" internet
+		standard that is completely incompatible with the new
+		standard.  Some software today, however, continues to
+		support the old standard (and only the old standard)
+		including NetBSD and AmiTCP.  RFC1051 also does not support
+		RFC1201's packet splitting, and the MTU of 507 is still
+		smaller than the internet "requirement," so it's quite
+		possible that you may run into problems.  It's also slower
+		than RFC1201 by about 25%, for the same reason as arc0e.
+		
+		The arc0s support was contributed by Tomasz Motylewski
+		and modified somewhat by me.  Bugs are probably my fault.
 
-The arc0e device is created automatically when you first 'ifconfig' the arc0
-device.  To actually use arc0e, though, you need to 'ifconfig' it as well. 
-There are a number of ways you can set up your network then:
+The arc0e and arc0s devices are created automatically when you first
+'ifconfig' the arc0 device.  To actually use them, though, you need to also
+'ifconfig' the other virtual devices you need.  There are a number of ways
+you can set up your network then:
 
 
 1. Single Protocol.
@@ -230,29 +271,33 @@ There are a number of ways you can set up your network then:
    	ifconfig arc0 MY.IP.ADD.RESS
    	route add MY.IP.ADD.RESS arc0
    	route add SUB.NET.ADD.RESS arc0
-   	[etc]
+   	[add other local routes here]
    	
    If you need arc0e (and only arc0e), it's a little different:
-   	ifconfig arc0 up     /* the IP address doesn't matter on arc0 */
+   	ifconfig arc0 MY.IP.ADD.RESS
    	ifconfig arc0e MY.IP.ADD.RESS
    	route add MY.IP.ADD.RESS arc0e
    	route add SUB.NET.ADD.RESS arc0e
+   
+   arc0s works much the same way as arc0e.
 
 
 2. More than one protocol on the same wire.
 
    Now things start getting confusing.  To even try it, you may need to be
-   partly crazy.  Here's what *I* did.  :)
+   partly crazy.  Here's what *I* did. :) Note that I don't include arc0s in
+   my home network; I don't have any NetBSD or AmiTCP computers, so I only
+   use arc0s during limited testing.
 
    I have three computers on my home network; two Linux boxes (which prefer
-   RFC1201 protocol), and one XT that can't run Linux but runs the free
-   Microsoft LANMAN Client instead.
-   
+   RFC1201 protocol, for reasons listed above), and one XT that can't run
+   Linux but runs the free Microsoft LANMAN Client instead.
+
    Worse, one of the Linux computers (freedom) also has a modem and acts as
-   a router to my information provider.  The other Linux box (insight) also
-   has its own IP address and needs to use freedom as its default gateway. 
-   The XT (patience), however, does not have its own internet IP address and
-   so I assigned it one on a "private subnet" (as defined by RFC1597).
+   a router to my internet provider.  The other Linux box (insight) also has
+   its own IP address and needs to use freedom as its default gateway.  The
+   XT (patience), however, does not have its own internet IP address and so
+   I assigned it one on a "private subnet" (as defined by RFC1597).
    
    To start with, take a simple network with just insight and freedom. 
    Insight needs to:
@@ -372,13 +417,13 @@ Do the same as above, but also include the output of the ifconfig and route
 commands, as well as any pertinent log entries (ie: anything that starts
 with "arcnet:" and has shown up since the last reboot) in your mail.
 
-If you want to try fixing it yourself (I highly recommend that you mail me
+If you want to try fixing it yourself (I strongly recommend that you mail me
 about the problem first, since it might already have been solved) you may
 want to try some of the debug levels available.  For heavy testing on
-D_DURING or more, it would be a REALLY good idea to kill your klogd
-daemon first!  D_DURING displays 4-5 lines for each packet sent or
-received.  D_TX and RX actually DISPLAY each packet as it is sent or
-received, which is obviously quite big.
+D_DURING or more, it would be a REALLY good idea to kill your klogd daemon
+first!  D_DURING displays 4-5 lines for each packet sent or received.  D_TX
+and RX actually DISPLAY each packet as it is sent or received, which is
+obviously quite big.
 
 You can run the arcdump shell script (available from me or in the full
 ARCnet package if you got it) as root to list the contents of the arcnet
@@ -399,7 +444,7 @@ You can change the debug level without recompiling the kernel by typing:
 	ifconfig arc0 down metric 1xxx
 	/etc/rc.d/rc.inet1
 where "xxx" is the debug level you want.  For example, "metric 1015" would put
-you at debug level 15.  Debug level 3 is currently the default.
+you at debug level 15.  Debug level 7 is currently the default.
 
 Note that the debug level is (as of v1.90 ALPHA) a binary combination of
 different debug flags; so debug level 7 is really 1+2+4 or

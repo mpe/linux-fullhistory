@@ -134,6 +134,13 @@
 #define SONY_SD_AUTO_SPIN_DOWN_TIME     0x06
 
 /*
+ * The following are parameter bits for the mechanical control command
+ */
+#define SONY_AUTO_SPIN_UP_BIT           0x01
+#define SONY_AUTO_EJECT_BIT             0x02
+#define SONY_DOUBLE_SPEED_BIT           0x04
+
+/*
  * The following extract information from the drive configuration about
  * the drive itself.
  */

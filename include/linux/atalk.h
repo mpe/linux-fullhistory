@@ -72,6 +72,8 @@ struct atalk_sock
 
 #ifdef __KERNEL__
 
+#include <linux/if_ether.h>
+
 struct ddpehdr
 {
 	/* FIXME for bigendians */

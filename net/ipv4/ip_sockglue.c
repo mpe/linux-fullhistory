@@ -18,6 +18,7 @@
 #include <linux/skbuff.h>
 #include <linux/ip.h>
 #include <linux/icmp.h>
+#include <linux/netdevice.h>
 #include <net/sock.h>
 #include <net/ip.h>
 #include <net/icmp.h>

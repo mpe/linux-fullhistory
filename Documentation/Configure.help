@@ -1,0 +1,2203 @@
+# LAST EDIT: Fri Oct 27 23:03:01 1995 by Axel Boldt (boldt@math.ucsb.edu) 
+#
+# This version of the Linux kernel configuration help texts
+# corresponds to the kernel versions 1.3.x. Be aware that these
+# are development kernels.
+#
+# The latest version of these help texts is always available from
+#    http://math-www.uni-paderborn.de/~axel/config_help.html
+#
+# Information about what a kernel is, what it does, how to patch and
+# compile it and much more is contained in the Kernel-HOWTO, available
+# via anonymous ftp from sunsite.unc.edu in the directory
+# /pub/Linux/docs/HOWTO. 
+#
+# Format: description<nl>variable<nl>helptext<nl><nl>. The help texts
+# must not contain empty lines. No variable should occur twice; if it
+# does, only the first occurance will be used by Configure. The lines
+# in a help text should be indented two positions. Lines starting with
+# `#' are ignored. Use emacs' kfill.el to edit this file or you lose.
+#
+# All this was shamelessly stolen from several different sources. Many
+# thanks to all the contributors.  Feel free to use these help texts
+# in your own kernel configuration tools. The texts are copyrighted
+# (c) 1995 by Axel Boldt and governed by our beloved little Copyleft
+# virus, the GNU Public License. This essentially means that you can
+# do with them whatever you want unless you try to restrict someone
+# else's right to do whatever they want.
+#
+# Send comments to Axel Boldt <boldt@math.ucsb.edu>.
+
+Kernel math emulation
+CONFIG_MATH_EMULATION
+  Linux can emulate a math coprocessor (used for floating point
+  operations) if you don't have one. 486DX and Pentium processors have
+  a math coprocessor built in, 486SX and 386 do not, unless you added
+  a 487DX or 387, respectively.  (The messages during boot time can
+  give you some hints here.) Everyone needs either a coprocessor or
+  this emulation. If you enable this emulation even though you have a
+  coprocessor, the coprocessor will be used nevertheless. (This
+  behavior can be changed with the kernel command line option
+  "no387", which comes handy if your coprocessor is broken. See the
+  documentation of your boot loader (lilo or loadlin) about how to
+  pass options to the kernel. The lilo procedure is also explained in
+  the SCSI-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.) This means that it is a good
+  idea to say Y here if you intend to use this kernel on different
+  machines. More information about the internals of Linux math
+  coprocessor emulation can be found in arch/i386/math-emu/README. If
+  you are not sure, say Y; apart from resulting in a 45kB bigger
+  kernel, it won't hurt.
+
+Normal floppy disk support
+CONFIG_BLK_DEV_FD
+  If you want to use your floppy disk drive(s) under Linux, say
+  Y. Information about this driver, especially important for IBM
+  Thinkpad users, is contained in drivers/block/README.fd.  This
+  driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+  
+Normal (MFM/RLL) disk and IDE disk/cdrom support
+CONFIG_ST506   		           
+  This is the regular, non-SCSI harddisk support. Pretty much everyone
+  will want to say Y here, except if they configure a diskless machine
+  which mounts all files over the network using NFS (rare; if you are
+  planning to do this, have a look at the package
+  /pub/Linux/system/Linux-boot/netboot-nfs.tar.gz, available via ftp
+  (user: anonymous) from sunsite.unc.edu, extract with "tar xzvf
+  filename") or if they exclusively use SCSI drives and no IDE/ATAPI
+  CDROMs (ATAPI = AT Attachment Packet Interface is a new protocol
+  currently used for controlling CDROM and tape drives, similar to the
+  SCSI protocol. Some newer CDROM drives such as NEC 260 and MITSUMI
+  triple/quad speed drives use it, but most MITSUMI CDROM drives
+  don't).  Useful information about how to use large (>504MB) IDE
+  harddrives and how to work around a hardware bug in the CMD640 IDE
+  interface is contained in drivers/block/README.ide. To fine-tune
+  the parameters of your IDE drive for improved performance, you might
+  want to have a look at the hdparm package in
+  sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/
+	
+Use old (reliable) disk-only driver for primary i/f
+CONFIG_BLK_DEV_HD
+  As you might have guessed, there are now two drivers for IDE
+  harddrives around: the old reliable one and the new improved
+  one. The new driver can also handle IDE/ATAPI CDROM drives (ATAPI =
+  AT Attachment Packet Interface is a new protocol currently used for
+  controlling CDROM and tape drives, similar to the SCSI
+  protocol. Some newer CDROM drives such as NEC 260 and MITSUMI
+  triple/quad speed drives use it, but most MITSUMI CDROM drives
+  don't). The old driver supports up to two hard drives, while the new
+  one can deal with any mix of up to eight hard drives and IDE/ATAPI
+  CDROMs, two per IDE interface. Using the old driver makes sense if
+  you have older MFM/RLL/ESDI drives, since it is smaller and these
+  drives don't benefit from the additional features of the new
+  driver. If you have more than one IDE interface (=controller), you
+  can use the old driver on the first and the new one on the others,
+  if you like.  In that case (or if you have just one interface and
+  don't want to use the new driver at all) you would say Y here,
+  thereby enlarging your kernel by about 4 kB. If you want to use the
+  new driver exclusively, say N and answer Y to the following
+  question(s). Useful information about how to use large (>504MB) IDE
+  harddrives is contained in drivers/block/README.ide. If unsure, say
+  N.
+
+Use new IDE driver for primary/secondary i/f 
+CONFIG_BLK_DEV_IDE 
+  This will use the new and improved IDE driver for the specified IDE
+  interface (=controller).  You can use up to 8 IDE harddisks and
+  IDE/ATAPI CDROMs, 2 per interface. (ATAPI = AT Attachment Packet
+  Interface is a new protocol currently used for controlling CDROM and
+  tape drives, similar to the SCSI protocol. Some newer CDROM drives
+  such as NEC 260 and MITSUMI triple/quad speed drives use it, but
+  most MITSUMI CDROM drives don't.) If you have just one IDE harddisk
+  and no IDE/ATAPI CDROM drive and you intend to use the old IDE
+  driver on the primary interface, say N here. Everybody else says
+  Y. This driver enlarges your kernel by about 8kB. Useful information
+  about how to use large (>504MB) IDE harddrives and how to use more
+  than 2 IDE interfaces is contained in drivers/block/README.ide.
+
+Include support for IDE/ATAPI CDROMs
+CONFIG_BLK_DEV_IDECD
+  If you have a CDROM drive using the ATAPI protocol, say Y. (ATAPI =
+  AT Attachment Packet Interface is a new protocol currently used for
+  controlling CDROM and tape drives, similar to the SCSI protocol and
+  derived from IDE=ATA. Some newer CDROM drives such as NEC 260 and
+  MITSUMI triple/quad speed drives use it, but most MITSUMI CDROM
+  drives don't.) If this is your only CDROM drive, you can say N to
+  all other CDROM options appearing later, but make sure to say Y to
+  the ISO9660 filesystem and read the CDROM-HOWTO, available via ftp
+  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note
+  that older version of the linux boot loader lilo cannot properly
+  deal with IDE/ATAPI CDROMs; install lilo 16 or higher, available
+  from sunsite.unc.edu:/pub/Linux/system/Linux-boot/lilo.
+
+XT harddisk support
+CONFIG_BLK_DEV_XD
+  Very old 8 bit hard disk controllers used in the IBM XT
+  computer. Pretty unlikely that you have this: say N.
+
+Support for Deskstation Tyne
+CONFIG_DESKSTATION_TYNE
+#####
+##### Anyone have details? It's for the MIPS architecture.
+#####
+
+Support for Acer PICA 1 chipset
+CONFIG_ACER_PICA_61
+#####
+##### Anyone have details? It's for the MIPS architecture.
+#####
+
+Support for DECstation
+CONFIG_DECSTATION
+#####
+##### Anyone have details? It's for the MIPS architecture.
+#####
+
+Generate code for R4x00
+CONFIG_R4X00
+#####
+##### Anyone have details? It's for the MIPS architecture.
+#####
+
+Networking support
+CONFIG_NET
+  Unless you really know what you are doing, you should say Y
+  here. The reason is that some programs need it even if you configure
+  a stand-alone machine that won't be connected to any other computer.
+  If you have recently upgraded from an older kernel, you should
+  consider updating your networking tools too; read net/README for
+  details. 
+
+Sun floppy controller support
+CONFIG_BLK_DEV_SUNFD
+  This is support for floppy drives on Sun workstations. But this
+  support does not exist at this time, so you might as well say N.
+
+Alpha system type
+CONFIG_ALPHA_JENSEN
+  Find out what type of Alpha system you are running. If you can't
+  find one of the given names, then try "Noname". For this question,
+  it suffices to give a unique prefix of the option you want to
+  choose. 
+
+Limit memory to low 16MB
+CONFIG_MAX_16M
+  This is for some buggy motherboards which cannot properly deal with
+  the memory above 16MB. If you have more than 16MB of RAM and
+  experience weird problems, you might want to try Y, everyone else
+  says N. Note for machines with more that 64MB: in order for the
+  kernel to be able to use the memory above 64MB, pass the command
+  line option "mem=XXXM" (where XXX is the memory size in
+  megabytes) to your kernel. See the documentation of your boot loader
+  (lilo or loadlin) about how to pass options to the kernel. The lilo
+  procedure is also explained in the SCSI-HOWTO, available via ftp
+  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+  You also need at least 512kB of RAM cache if you have more than 64MB
+  of RAM.
+
+Using SRM as bootloader
+CONFIG_ALPHA_SRM
+#####
+##### Don't know what this is about.
+#####
+
+PCI bios support
+CONFIG_PCI
+  Find out whether you have a PCI motherboard. PCI is the name of a
+  bus system, i.e. the way the CPU talks to the other stuff inside
+  your box. Other bus systems are ISA, EISA, Microchannel or VESA. If
+  you have PCI, say Y, otherwise N. Note: some old PCI motherboards
+  have BIOS bugs and may crash if this is enabled (but they run fine
+  without this option). The PCI-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO, contains
+  valuable information about which PCI hardware works under Linux and
+  which doesn't.  If some of PCI devices don't work and you get a
+  warning during boot time, please follow the instructions at the top of
+  include/linux/pci.h. Information regarding the buggy PCTech RZ 1000 IDE
+  harddrive controller which is used in some PCI systems is on the WWW
+  at http://www.powerquest.com/hardware.html. (To browse the WWW, you
+  need to have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic). The new IDE driver detects this
+  controller and works around this bug, though.
+
+PCI bridge optimization (experimental)
+CONFIG_PCI_OPTIMIZE
+  This can improve access times for some hardware devices under
+  certain BIOSes if your computer uses a PCI bussystem. This is
+  recommended; say Y.
+
+PCI Triton IDE Bus Master DMA support
+CONFIG_BLK_DEV_TRITON
+  If your PCI system uses an IDE harddrive (as opposed to SCSI, say)
+  and includes the Intel PCI Triton chipset (82371FB), you will want
+  to enable this option to improve performance. Read the comments at
+  the beginning of drivers/block/triton.c. The hdparm utility can be
+  gotten via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/. It's safe to
+  say Y.
+
+System V IPC
+CONFIG_SYSVIPC
+  InterProcessCommunication is a suite of library functions and system
+  calls which let processes (= running programs) synchronize and
+  exchange information. It is generally considered to be a good thing,
+  and some programs won't run unless you enable this. You can find
+  documentation about IPC in ipc.info, which is contained in
+  sunsite.unc.edu:/pub/Linux/docs/man/info.tar.gz (available via ftp,
+  user: anonymous; extract with "tar xzvf filename"). These docs
+  are in the info format which is used to document GNU software and
+  can be read from within emacs ("Ctrl-h i") or with the program info
+  ("man info"). Enabling this option enlarges your kernel by about
+  7kB. Just say Y.
+
+Kernel support for ELF binaries
+CONFIG_BINFMT_ELF
+  ELF (Executable and Linkable Format) is a format for libraries and
+  executables used across different architectures and operating
+  systems. This option will enable your kernel to run ELF binaries and
+  enlarge it by about 2kB. ELF support under Linux is quickly
+  replacing the traditional Linux a.out format because it is portable
+  (this does *not* mean that you will be able to run executables from
+  different architectures or operating systems!) and makes building
+  run-time libraries very easy. Many new executables are distributed
+  solely in ELF format. You definitely want to say Y here. Information
+  about ELF is on the WWW at http://sable.ox.ac.uk/~jo95004/elf.html
+  (To browse the WWW, you need to have access to a machine on the
+  Internet that has one of the programs lynx, netscape or Mosaic).  If
+  you find that after upgrading to Linux kernel 1.3 and saying Y here,
+  you still can't run any ELF binaries (they just crash), then you'll
+  have to install the newest ELF runtime libraries, including ld.so
+  (available via ftp (user: anonymous) from
+  tsx-11.mit.edu:/pub/linux/packages/GCC). Also note that ELF binary
+  support was broken in kernel versions 1.3.0 - 1.3.2. Either use a
+  newer 1.3 kernel or one of the stable 1.2 versions. If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt.
+
+Compile kernel as ELF - if your GCC is ELF-GCC
+CONFIG_KERNEL_ELF
+  The gcc version 2.7.0 and newer produces the new ELF binary format
+  as default. If you have such a compiler (try "gcc -v"), say Y
+  here, otherwise N.
+  It is possible, albeit almost pointless, to compile the kernel in
+  a.out format even if your compiler produces ELF as default. For
+  that, you would have to say N here and change the variables LD and
+  CC in the toplevel Makefile. Similarly, if your compiler produces
+  a.out by default but is able to produce ELF, you can compile the
+  kernel in ELF by saying Y here and editing the variables CC
+  and LD in the toplevel Makefile.
+
+Use -m486 flag for 486-specific optimizations
+CONFIG_M486
+  If you have a 486 as opposed to a 386 or Pentium CPU, say Y here:
+  things will be slightly faster. However, it is not required: the
+  kernel will run on all CPUs with and without this option. If you are
+  not sure, say Y; apart from enlarging your kernel by about 6 kB, it
+  won't hurt.
+
+SMP Kernel (experimental - gcc2.5.8 only: see Documentation/SMP.txt)
+CONFIG_SMP
+  This is experimental support for multiprocessor Pentium machines
+  that agree with the Intel MP v1.1 specification. It can deal with up
+  to 32 processors. You can only compile it with gcc version 2.5.8
+  ("gcc -v"). For details, see Documentation/SMP.ez in the kernel
+  source (this document has been formatted using the ez andrew word
+  processor, available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/X11/andrew/auis63L3-wp.tgz) and
+  http://www.linux.org.uk/SMP/title.html on the WWW (to browse the
+  WWW, you need to have access to a machine on the Internet that has
+  one of the programs lynx, netscape or Mosaic). Please back up all
+  your harddrives before using kernels compiled with this option.
+
+Set version information on all symbols for modules
+CONFIG_MODVERSIONS
+  Kernel modules are pieces of code which can be inserted in or
+  removed from the running kernel, using the programs insmod and
+  rmmod. This is described in the file
+  Documentation/modules.txt. Usually, modules have to be recompiled
+  whenever you switch to a new kernel. Enabling this option allows you
+  to keep using the same modules even after compiling a new kernel;
+  this requires the program modprobe. All the software needed for
+  module support is in the modules package in
+  sunsite.unc.edu:/pub/Linux/kernel, available via ftp (user:
+  anonymous). NOTE1: if you say Y here but don't have the program
+  genksyms (which is also contained in the above mentioned modules
+  package), then the building of your kernel will fail. NOTE2: if you
+  say Y here, then you cannot say Y to the PPP driver, below; the only
+  option is to compile it as a module (PPP is a protocol for sending
+  internet traffic over telephone lines). Therefore, N is a safe bet.
+
+TCP/IP networking
+CONFIG_INET
+  These are the protocols used on the Internet and on most local
+  Ethernets. The safest is to say Y here (which will enlarge your
+  kernel by about 35 kB), since some programs (e.g. the X window
+  system) use TCP/IP even if your machine is not connected to any
+  other computer. You will get the so-called loopback device which
+  allows you to ping yourself (great fun, that!). This option is also
+  necessary if you want to use the full power of term (term is a
+  program which gives you almost full Internet connectivity if you
+  have a regular dial up shell account on some Internet connected Unix
+  computer. Read the Term-HOWTO, available via ftp (user: anonymous)
+  on sunsite.unc.edu:/pub/Linux/docs/HOWTO).  Short answer:
+  say Y.
+
+IP: forwarding/gatewaying
+CONFIG_IP_FORWARD
+  People who want to use their Linux box as the router for a local
+  network (i.e. the computer responsible for distributing Internet
+  traffic to and from the machines in the local network and the
+  subnetworks) should say Y here (thereby enlarging their kernel by
+  about 5 kB). Note that in this case, you possibly have two ethernet
+  devices in your computer: one for the "outside world" and one for
+  your local net. The kernel is not able to recognize both at boot
+  time without help; for details read the
+  Multiple-Ethernet-mini-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.  If your box is
+  connected to two networks, it may still make sense to say N here,
+  namely if you want to turn your box into a firewall protecting a
+  local network from the internet. The Firewall-HOWTO tells you how to
+  do this. If your setup is more complex, say you are connected to
+  three networks and you want to act as a firewall between two of them
+  and route traffic for the others, you need to say Y here and enable
+  IP firewalling below. If you intend to use IP masquerading (i.e. IP
+  traffic from one of the local computers and destined for an outside
+  host is changed by your box so that it appears to come from you),
+  you'll have to say Y here and also to IP firewalling and IP
+  masquerading below. You should say Y here also if you want to
+  configure your box as a SLIP (the protocol for sending internet
+  traffic over telephone lines) or PPP (a better SLIP) server for
+  other people to dial into and your box is connected to a local
+  network at the same time. You would then most likely use proxy-ARP
+  (Address Resolution Protocol), explained in the Proxy-Arp mini howto
+  on sunsite in /pub/Linux/docs/HOWTO/mini. If unsure, say N.
+
+IP: multicasting
+CONFIG_IP_MULTICAST
+  This is code for addressing several networked computers at once,
+  enlarging your kernel by about 2 kB. Some versions of gated, the
+  program which constantly updates a networked computer's routing
+  tables, require that this option be compiled in. You also need
+  multicasting if you intend to participate in the MBONE, a high
+  bandwidth network on top of the internet which carries audio and
+  video broadcasts. Information about the multicast capabilities of
+  the various network cards is contained in
+  drivers/net/README.multicast. For most people, it's safe to say N.
+
+IP: firewalling
+CONFIG_IP_FIREWALL
+  A firewall is a computer which protects a local network from the
+  rest of the internet: all traffic to and from computers on the local
+  net is inspected by the firewall first. If you want to enlarge your
+  kernel by about 2kB and configure your Linux box as a firewall for a
+  local network, say Y here. You will need to read the FIREWALL-HOWTO,
+  available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, you will have to use
+  the ipfw tool from the net-tools package, available via ftp (user:
+  anonymous) from
+  ftp.linux.org.uk:/pub/linux/Networking/PROGRAMS/NetTools. It allows
+  selective blocking of internet traffic based on type, origin and
+  destination.  You need to enable IP firewalling in order to be able
+  to use IP masquerading (i.e. IP traffic from one of the local
+  computers and destined for an outside host is changed by your box so
+  that it appears to come from you). Chances are that you don't want
+  this, so say N.
+
+IP: accounting
+CONFIG_IP_ACCT
+  This keeps track of your IP network traffic and produces some
+  statistics. Usually, you only want to say Y here if your box will be
+  a router or a firewall for some local network, in which case you
+  naturally should have said Y to IP forwarding/gatewaying resp. IP
+  firewalling. The data is accessible with "cat /proc/net/ip_acct", so
+  you want to say Y to the /proc filesystem below, if you say Y
+  here. To specify what exactly should be recorded, you need the tool
+  ipfw from the net-tools package, available via ftp (user:
+  anonymous) from
+  ftp.linux.org.uk:/pub/Linux/Networking/PROGRAMS/NetTools.  Also, you
+  might want to have a look at the net-acct package, available via ftp
+  (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/system/Network/management. Most people
+  say N, however.
+
+IP: tunneling
+CONFIG_NET_IPIP
+  Tunneling means to encapsulating data of one protocol type within
+  another protocol and sending it over a channel that understands the
+  encapsulating protocol. This particular tunneling driver implements
+  encapsulation of IP within IP, which sounds kind of pointless, but
+  can be useful if you want to make your (or some other) machine
+  appear on a different network than it physically is. Enabling this
+  option will produce two modules ( = code which can be inserted in
+  and removed from the running kernel whenever you want), one
+  encapsulator and one decapsulator.  This is still alpha code, which
+  means that it need not be completely stable. You can read details in
+  drivers/net/README.tunnel. Most people can say N.
+  
+IP: firewall packet logging
+CONFIG_IP_FIREWALL_VERBOSE
+  This gives you information about what your firewall did with
+  packets it received. The information is handled by the klogd demon
+  which is responsible for kernel messages ("man klogd").
+
+IP: masquerading (ALPHA)
+CONFIG_IP_MASQUERADE
+  If one of the computers on your local network for which your Linux
+  box acts as a firewall wants to send something to the outside, your
+  box can "masquerade" as that host, i.e. it forwards the traffic to
+  the intended destination, but makes it look like it came from the
+  firewall host itself. It works both ways: if the outside host
+  answers, the firewall will silently forward the traffic to the
+  corresponding local computer. This way, the computers on your local
+  net are completely invisible to the outside world, even though they
+  can reach the outside and can be reached. This makes it possible to
+  have the computers on the local network participate on the internet
+  even if they don't have officially registered IP addresses.  (This
+  last problem can also be solved by connecting the Linux box to the
+  Internet using SLiRP [SLiRP is a SLIP/PPP emulator that works if you
+  have a regular dial up shell account on some UNIX computer; get if
+  via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/system/Network/serial/]).  Details on how
+  to set things up are contained in the IP Masquerading FAQ, available
+  via ftp (user: anonymous) from ftp.eves.com:/pub/masq/.  This is
+  ALPHA code, which means that it need not be completely stable; it
+  has nothing to do with the computer architecture of the same
+  name. If you want this, say Y.
+
+IP: multicast routing(in progress)
+CONFIG_IP_MROUTE
+  This is used if you want your machine to act as a router for IP
+  packets that have several destination addresses. Information about
+  the multicast capabilities of the various network cards is contained
+  in drivers/net/README.multicast. If you haven't heard about it, you
+  don't need it.
+
+PC/TCP compatibility mode
+CONFIG_INET_PCTCP
+  If you have been having difficulties telneting to your Linux machine
+  from a DOS system that uses (broken) PC/TCP networking software, try
+  enabling this option.  Everyone else says N.
+
+Reverse ARP
+CONFIG_INET_RARP
+  Since you asked: if there are diskless machines on your network that
+  know their hardware ethernet address but don't know their IP
+  addresses upon startup, they send out a Reverse
+  AddressResolutionProtocol request to find out their own IP
+  addresses. If you want your Linux box to be able to *answer* such
+  requests, say Y here; you'd use the program rarp ("man rarp"). If
+  you want to compile this as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want), say M
+  here and read Documentation/modules.txt.  If you don't understand a
+  word, say N and rest in peace.
+
+Assume subnets are local
+CONFIG_INET_SNARL
+  Say Y if you are on a subnetted network with all machines connected
+  by Ethernet segments only, as this option optimizes network access
+  for this special case. If there are other connections, e.g. SLIP
+  links, between machines of your IP network, say N.  If in doubt, say
+  Y.
+
+Disable NAGLE algorithm (normally enabled)
+CONFIG_TCP_NAGLE_OFF
+  The NAGLE algorithm works by requiring an acknowledgment before
+  sending small IP frames (= packets).  This keeps tiny packets from
+  telnet and rlogin from congesting Wide Area Networks.  You may wish
+  to disable it if you run your X-server from across the network, or
+  if multiple byte key sequences are delayed. Most people strongly
+  recommend to say N here, though, thereby leaving NAGLE enabled.
+
+IP: Drop source routed frames
+CONFIG_IP_NOSR
+  Usually, the originator of an IP frame (= packet) specifies only the
+  destination, and the hosts along the way do the routing, i.e. they
+  decide how to forward the frame. However, there is a feature of the
+  IP protocol that allows to specify the full route for a given frame
+  already at its origin. A frame with such a fully specified route is
+  called "source routed". The question now is whether we should honor
+  these route requests when such frames arrive, or if we should
+  drop all those frames instead. Honoring can introduce security
+  problems (and is not required by the IP specification), and hence it
+  is recommended to say Y here unless you really know what you're
+  doing.
+
+IP: Allow large windows (not recommend if <16Mb of memory)
+CONFIG_SKB_LARGE
+  This option can speed up network performance. It works by increasing
+  the size of socket buffers, thereby reducing overhead but increasing
+  memory usage. Say N if you have less than 16Mb of RAM, otherwise Y.
+  Note for machines with more that 64MB: in order for the kernel to be
+  able to use the memory above 64MB, pass the command line option
+  "mem=XXXM" (where XXX is the memory size in megabytes) to your
+  kernel. See the documentation of your boot loader (lilo or loadlin)
+  about how to pass options to the kernel. The lilo procedure is also
+  explained in the SCSI-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  You also need at least 512kB
+  of RAM cache if you have more than 64MB of RAM.
+
+The IPX protocol
+CONFIG_IPX
+  This is support for the Novell networking protocol. You need it if
+  you want to access Novell Netware servers from within the Linux DOS
+  emulator dosemu (read the DOSEMU-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO). It's very
+  limited and won't make your Linux box into a Novell server. It would
+  enlarge your kernel by about 5 kB. General information about how to
+  connect Linux, Windows machines and Macs is on the WWW at
+  http://eats.com/linux_mac_win.html (to browse the WWW, you need to
+  have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic). Unless you have Novell computers
+  on your local network, say N.
+
+Appletalk DDP
+CONFIG_ATALK
+  Appletalk is the way Apple computers speak to each other on an
+  Ethernet (Apple calls it EtherTalk) network. If your linux box is
+  connected to such a network and you want to join the conversation,
+  say Y. You would have to give "appletalk" as the address family
+  argument to ifconfig ("man ifconfig") in order to do this. You will
+  also probably want to use the netatalk package so that your Linux
+  box can act as a print and file server for macs as well as access
+  appletalk printers. Check out
+  http://www.cs.dartmouth.edu/~flowerpt/projects/linux-netatalk/ on
+  the WWW for details (to browse the WWW, you need to have access to a
+  machine on the Internet that has one of the programs lynx, netscape
+  or Mosaic). I hear that the GNU boycott of Apple is over, so even
+  politically correct people are allowed to say Y here.
+
+Amateur Radio AX.25 Level 2
+CONFIG_AX25
+  This is the protocol used for computer communication over amateur
+  radio. It is either used by itself for point-to-point links, or to
+  carry other protocols such as tcp/ip. To use it, you need a device
+  that connects your Linux box to your amateur radio. You can either
+  use a low speed TNC (a Terminal Node Controller acts as a kind of
+  modem connecting your computer's serial port to your radio's
+  microphone input and speaker output) supporting the KISS protocol or
+  the much faster Ottawa PI card (to enable support for this card,
+  you'll have to answer Y to the question about ALPHA test drivers,
+  below) or the Z8530 SCC cards; the latter two require an additional
+  radio modem.  In order to use AX.25, you need to get a set of
+  supporting software tools via ftp (user: anonymous) from
+  sunacm.swan.ac.uk:/pub/misc/Linux/Radio/. A comprehensive listing of
+  all the software for Linux amateur radio users as well as
+  information about how to configure an AX.25 port is contained in the
+  HAM-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. You might also want to check
+  out the file Documentation/networking/ax25.txt in the kernel
+  source. More information about digital amateur radio in general is
+  on the WWW at
+  http://www.cis.ohio-state.edu/hypertext/faq/usenet/radio/ham-radio/digital-faq/faq.html
+  (To browse the WWW, you need to have access to a machine on the
+  Internet that has one of the programs lynx, netscape or
+  Mosaic). AX.25 support is actively being developed, so it's best to
+  get the very latest 1.3 kernel if you intend to use this.
+
+Amateur Radio NET/ROM
+CONFIG_NETROM
+  NET/ROM is a network layer protocol on top of AX.25 useful for
+  routing.  A comprehensive listing of all the software for Linux
+  amateur radio users as well as information about how to configure an
+  AX.25 port is contained in the HAM-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. You also might
+  also want to check out the file
+  Documentation/networking/ax25.txt. More information about digital
+  amateur radio in general is on the WWW at
+  http://www.cis.ohio-state.edu/hypertext/faq/usenet/radio/ham-radio/digital-faq/faq.html
+  (To browse the WWW, you need to have access to a machine on the
+  Internet that has one of the programs lynx, netscape or
+  Mosaic). Amateur radio support is actively being developed, so you
+  might want to get the very latest 1.3 kernel if you intend to use
+  this.
+
+Kernel/User network link driver(ALPHA)
+CONFIG_NETLINK
+  This driver will allow for two-way communication between certain
+  parts of the kernel or modules and user processes; the user
+  processes will be able to read from and write to special files in
+  the /dev directory having major mode 18. So far, the kernel uses it
+  to publish some network related information if you enable "Routing
+  messages", below. Say Y if you want to experiment with it; this is
+  ALPHA code, which means that it need not be completely stable; it
+  has nothing to do with the computer architecture of the same name.
+
+Routing messages
+CONFIG_RTNETLINK
+  If you enable this and create a special file with major number 18
+  and minor number 0 with mknod ("man mknod"), you can read some
+  network related information from that file. Everything you write to
+  that file will be discarded. Say Y, because otherwise the network
+  link driver is pointless.
+
+SCSI support?
+CONFIG_SCSI
+  If you want to use an SCSI harddisk, SCSI tapedrive, SCSI CDROM or
+  any other SCSI device under Linux, say Y and make sure that you know
+  the name of your SCSI host adaptor (the card inside your computer
+  that "speaks" the SCSI protocol), because you will be asked for
+  it. And read the SCSI-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+SCSI disk support
+CONFIG_BLK_DEV_SD
+  If you want to use an SCSI harddisk under Linux, say Y and read the
+  SCSI-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This is NOT for SCSI
+  CDROMs. This driver is also available as a module ( = code which can
+  be inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+  
+SCSI tape support
+CONFIG_CHR_DEV_ST
+  If you want to use an SCSI tapedrive under Linux, say Y and read the
+  SCSI-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO and drivers/scsi/README.st in
+  the kernel source. This is NOT for SCSI CDROMs. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+
+SCSI CDROM support
+CONFIG_BLK_DEV_SR
+  If you want to use an SCSI CDROM under Linux, say Y and read the
+  SCSI-HOWTO and the CDROM-HOWTO from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also make sure to enable the
+  ISO9660 filesystem later. This driver is also available as a module
+  ( = code which can be inserted in and removed from the running
+  kernel whenever you want). If you want to compile it as a module,
+  say M here and read Documentation/modules.txt.
+
+SCSI generic support
+CONFIG_CHR_DEV_SG
+  If you want to use SCSI scanners, synthesizers or CD-writers or just
+  about anything having "SCSI" in its name, say Y here. Those won't be
+  supported by the kernel directly, so you need some additional
+  software which knows how to talk to these things using the SCSI
+  protocol. Chances are that you'll have to write that software
+  yourself, so have a look at the SCSI-HOWTO and at the
+  SCSI-Programming-HOWTO, both available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
+
+Probe all LUNs on each SCSI device
+CONFIG_SCSI_MULTI_LUN
+  If you have an SCSI device that supports more than one LUN (Logical
+  Unit Number), e.g. a CD jukebox, you should say Y here so that all
+  will be found by the SCSI driver. An SCSI device with multiple LUNs
+  acts logically like multiple SCSI devices. The vast majority of SCSI
+  devices have only one LUN, and so most people can say N here.
+
+Verbose SCSI error reporting (kernel size +=12K)
+CONFIG_SCSI_CONSTANTS
+  The error messages regarding your SCSI hardware will be easier to
+  understand if you enable this; it will enlarge your kernel by about
+  12KB. If in doubt, say Y.
+
+Adaptec AHA152X support
+CONFIG_SCSI_AHA152X
+  This is support for an SCSI host adaptor. It is explained in section
+  3.3 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
+  box, you may have to change some settings in drivers/scsi/aha152x.h.
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Adaptec AHA1542 support
+CONFIG_SCSI_AHA1542
+  This is support for an SCSI host adaptor. It is explained in section
+  3.4 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
+  the box, you may have to change some settings in
+  drivers/scsi/aha1542.h.  If you want to compile this as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt.
+ 
+Adaptec AHA1740 support
+CONFIG_SCSI_AHA1740
+  This is support for an SCSI host adaptor. It is explained in section
+  3.5 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
+  the box, you may have to change some settings in
+  drivers/scsi/aha1740.h. This driver is also available as a module (
+  = code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
+Adaptec AHA274X/284X/294X support
+CONFIG_SCSI_AIC7XXX
+  Information about this SCSI host adaptor is contained in
+  drivers/scsi/README.aic7xxx and in the SCSI-HOWTO, available via ftp
+  (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it
+  doesn't work out of the box, you may have to change some settings in
+  drivers/scsi/aic7xxx.h.  If you want to compile this as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt.
+
+BusLogic SCSI support
+CONFIG_SCSI_BUSLOGIC
+  This is support for the BusLogic family of SCSI host adaptors.  If
+  it doesn't work out of the box, you may have to change some settings
+  in drivers/scsi/buslogic.h. Please read the SCSI-HOWTO, available
+  via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+ 
+EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support
+CONFIG_SCSI_EATA_DMA
+  This is support for an SCSI host adaptor. Please read the
+  SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
+  box, you may have to change some settings in
+  drivers/scsi/eata_dma.h. This driver is also available as a module (
+  = code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
+EATA-PIO (old DPT PM2001, PM2012A) support
+CONFIG_SCSI_EATA_PIO
+  This driver supports all EATA-PIO SCSI host adaptors. You might want
+  to have a look at the settings in drivers/scsi/eata_pio.h and at the
+  SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
+
+UltraStor 14F/34F support
+CONFIG_SCSI_U14_34F
+  This is support for the UltraStor 14F, 24F and 34F SCSI-2 host
+  adaptor family. The source at drivers/scsi/u14-34f.c contains some
+  information about this hardware. If the driver doesn't work out of
+  the box, you may have to change some settings in
+  drivers/scsi/u14-34f.h. Read the SCSI-HOWTO, available via ftp
+  (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note
+  that there is also another driver for the same hardware: "UltraStor
+  SCSI support", below. You should only enable one of them. This
+  driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Future Domain 16xx SCSI support
+CONFIG_SCSI_FUTURE_DOMAIN
+  This is support for an SCSI host adaptor. It is explained in section
+  3.7 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
+  the box, you may have to change some settings in
+  drivers/scsi/fdomain.h. This driver is also available as a module (
+  = code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
+Generic NCR5380 SCSI support
+CONFIG_SCSI_GENERIC_NCR5380
+  This is the generic NCR family of SCSI controllers, not to be
+  confused with the NCR 53c7 or 8xx controllers. It is explained in
+  section 3.8 of the SCSI-HOWTO, available via ftp (user: anonymous)
+  at sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
+  the box, you may have to change some settings in
+  drivers/scsi/g_NCR5380.h. This driver is also available as a module
+  ( = code which can be inserted in and removed from the running
+  kernel whenever you want). If you want to compile it as a module,
+  say M here and read Documentation/modules.txt.
+ 
+NCR53c7,8xx SCSI support
+CONFIG_SCSI_NCR53C7xx
+  This is the 53c7 and 8xx NCR family of SCSI controllers, not to be
+  confused with the NCR 5380 controllers. It is explained in section
+  3.8 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
+  box, you may have to change some settings in
+  drivers/scsi/53c7,8xx.h. This driver is also available as a module (
+  = code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+ 
+Always IN2000 SCSI support (test release)
+CONFIG_SCSI_IN2000
+  Believe it or not, there is an SCSI host adaptor of that name. It is
+  explained in section 3.6 of the SCSI-HOWTO, available via ftp (user:
+  anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't
+  work out of the box, you may have to change some settings in
+  drivers/scsi/inn2000.h.  If you want to compile this as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt.
+
+PAS16 SCSI support
+CONFIG_SCSI_PAS16
+  This is support for an SCSI host adaptor. It is explained in section
+  3.10 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
+  box, you may have to change some settings in drivers/scsi/pas16.h.
+ 
+QLOGIC SCSI support
+CONFIG_SCSI_QLOGIC
+  Information about this SCSI driver is contained in
+  drivers/scsi/README.qlogic. You should also read the SCSI-HOWTO,
+  available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+Seagate ST-02 and Future Domain TMC-8xx SCSI support
+CONFIG_SCSI_SEAGATE
+  These are 8-bit SCSI controller; the ST-01 is also supported by this
+  driver.  It is explained in section 3.9 of the SCSI-HOWTO, available
+  via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
+  box, you may have to change some settings in drivers/scsi/seagate.h.
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Trantor T128/T128F/T228 SCSI support
+CONFIG_SCSI_T128
+  This is support for an SCSI host adaptor. It is explained in section
+  3.11 of the SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
+  the box, you may have to change some settings in
+  drivers/scsi/t128.h. Note that Trantor was recently purchased by
+  Adaptec, and some former Trantor products are being sold under the
+  Adaptec name.
+
+UltraStor SCSI support
+CONFIG_SCSI_ULTRASTOR
+  This is support for the UltraStor 14F, 24F and 34F SCSI-2 host
+  adaptor family. This driver is explained in section 3.12 of the
+  SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
+  box, you may have to change some settings in
+  drivers/scsi/ultrastor.h. If you want to compile this as a module (
+  = code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt.
+  Note that there is also another driver for the same hardware:
+  "UltraStor 14F/34F support", above. You should only enable one of
+  them.
+ 
+7000FASST SCSI support
+CONFIG_SCSI_7000FASST
+  This driver supports the Western Digital 7000 SCSI host adaptor.
+  Some information is in the source: drivers/scsi/wd7000.c.  This
+  driver is also available as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want). If you
+  want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+EATA ISA/EISA (DPT PM2011/021/012/022/122/322) support
+CONFIG_SCSI_EATA
+  This driver supports all the DPT SCSI host adapters, such as
+  PM2011B/9X, PM2021A/9X, PM2012A, PM1012B, PM2022A/9X, PM2122A/9X and
+  PM2322A/9X. Note that the PM2001 is not supported by this
+  driver. You want to read the start of drivers/scsi/eata.c and the
+  SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
+
+Network device support?
+CONFIG_NETDEVICES
+  You can say N here in case you don't intend to connect to any other
+  computer at all or all your connections will be either via UUCP
+  (UUCP is a protocol to forward mail and news between unix hosts over
+  telephone lines; read the UUCP-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO) or dialing up a
+  shell account or a BBS, even using term (term is a program which
+  gives you almost full Internet connectivity if you have a regular
+  dial up shell account on some Internet connected Unix computer. Read
+  the Term-HOWTO).  You'll have to say Y if your computer contains a
+  network card that you want to use under linux (make sure you know
+  its name because you will be asked for it and read the
+  Ethernet-HOWTO; also, if you plan to use more than one network card
+  under linux, read the Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini) or if you want to use
+  SLIP (Serial Line Internet Protocol is the protocol used to send
+  Internet traffic over telephone lines or nullmodem cables) or CSLIP
+  (compressed SLIP) or PPP (better and newer variant of SLIP) or PLIP
+  (Parallel Line Internet Protocol is mainly used to create a mini
+  network by connecting the parallel ports of two local machines) or
+  AX.25/KISS (protocol for sending internet traffic over radio links).
+  Make sure to read the NET-2-HOWTO.  Eventually, you will have to
+  read Olaf Kirch's excellent book "Network Administrator's Guide", to
+  be found in sunsite.unc.edu:/pub/Linux/docs/LDP.  If unsure, say Y.
+
+Dummy net driver support
+CONFIG_DUMMY
+  This is essentially a loopback device (i.e. traffic you send to this
+  device is immediately returned back to you) with a configurable IP
+  address different from the usual 127.0.0.1. Can be used to give you
+  more than one IP address or make your currently inactive SLIP
+  address seem like a real address. If you use SLIP or PPP, you might
+  want to enable it. Read about it in the Network Administrator's
+  Guide, available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/LDP. Since this thing comes often
+  handy, the default is Y. It won't enlarge your kernel either. What a
+  deal.  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt.
+  
+SLIP (serial line) support
+CONFIG_SLIP
+  Say Y if you intend to use SLIP or CSLIP (compressed SLIP) to
+  connect to your Internet service provider or to connect to some
+  other local Unix box or if you want to configure your Linux box as a
+  Slip/CSlip server for other people to dial in.  SLIP (Serial Line
+  Internet Protocol) is the protocol used to send Internet traffic
+  over telephone lines or serial cables (also known as
+  nullmodems). Normally, your access provider has to support SLIP in
+  order for you to be able to use it, but there is now a SLIP emulator
+  called SLiRP around (available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/system/Network/serial/) which allows you
+  to use SLIP over a regular dial up shell connection. If you plan to
+  use SLiRP, make sure to say Y to CSLIP, below. The NET-2-HOWTO,
+  available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO, explains how to configure
+  SLIP. Note that you don't need this option if you just want to run
+  term (term is a program which gives you almost full Internet
+  connectivity if you have a regular dial up shell account on some
+  Internet connected Unix computer. Read the Term-HOWTO). SLIP support
+  will enlarge your kernel by about 4kB. If unsure, say N.  If you
+  want to compile this as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt.
+  
+CSLIP compressed headers
+CONFIG_SLIP_COMPRESSED
+  This protocol is faster than SLIP because it uses compression on the
+  TCP/IP headers (not on the data itself), but it has to be supported
+  on both ends. Ask your access provider if you are not sure and say
+  Y, just in case. You will still be able to use plain SLIP. If you
+  plan to use SLiRP, the SLIP emulator (available via ftp (user:
+  anonymous) from sunsite.unc.edu:/pub/Linux/system/Network/serial/)
+  which allows you to use SLIP over a regular dial up shell
+  connection, you definitely want to say Y here. The NET-2-HOWTO,
+  available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO, explains how to configure
+  CSLIP. This won't enlarge your kernel.
+
+PPP (point-to-point) support
+CONFIG_PPP
+  PPP (Point to Point Protocol) is a newer and better SLIP. It serves
+  the same purpose: sending Internet traffic over telephone (and other
+  serial) lines.  Ask your access provider if they support it, because
+  otherwise you can't use it (not quite true any more: the free
+  program SLiRP can emulate a PPP line if you just have a regular dial
+  up shell account on some UNIX computer; get it via ftp (user:
+  anonymous) from sunsite.unc.edu:/pub/Linux/system/Network/serial/).
+  To use PPP, you need an additional program called pppd as described
+  in Documentation/networking/ppp.txt and in the PPP-HOWTO, available
+  from sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that you don't need
+  this option if you just want to run term (term is a program which
+  gives you almost full Internet connectivity if you have a regular
+  dial up shell account on some Internet connected UNIX computer. Read
+  the Term-HOWTO). The PPP option enlarges your kernel by about
+  16kB. This driver is also available as a module ( = code which can
+  be inserted in and removed from the running kernel whenever you
+  want). If you said Y to "Version information on all symbols" above,
+  then you cannot compile the PPP driver into the kernel; you can only
+  compile it as a module. If you want to compile it as a module, say M
+  here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If unsure, say N.
+
+16 channels instead of 4 
+CONFIG_PPP_LOTS
+  Saying Y here will allow you to have up to 16 PPP connections
+  running in parallel. This is mainly useful if you intend your linux
+  box to act as a dial-in PPP server. Most people can say N.
+
+Z8530 SCC kiss emulation driver for AX.2
+CONFIG_SCC
+  These cards are used to connect your Linux box to an amateur radio
+  and communicate with other computers.  If you want to use this, read
+  drivers/char/README.scc and the HAM-HOWTO, available available via
+  ftp (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+
+PLIP (parallel port) support
+CONFIG_PLIP
+  PLIP (Parallel Line Internet Protocol) is mainly used to create a
+  mini network consisting of two local machines. The parallel ports
+  are connected using a "null printer" or "Turbo Laplink" cable (you
+  can find the wiring in drivers/net/README?.plip).  This works also
+  if one of the two machines runs DOS and has some PLIP software
+  installed, e.g. NCSA telnet.  If you want to use this, say Y and
+  read the NET-2-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  You need to say N or M to
+  "parallel printer support" below if you say Y here. Also, you might
+  have to edit the file drivers/net/Space.c and adjust the parallel
+  port's IRQ (there is a small number of Interrupt ReQuest lines in
+  your computer that are used by the periphery to gain the CPU's
+  attention - often a source of trouble if two different devices are
+  mistakenly configured to use the same IRQ. If you have the /proc
+  filesystem installed (see below), you can say "cat /proc/interrupts"
+  to see what the different IRQs are currently used for.)  This option
+  enlarges your kernel by about 8kB. If unsure, say N.  If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you want to use both a
+  parallel printer and PLIP, it is best to compile both drivers as
+  modules.
+
+EQL (serial line load balancing) support
+CONFIG_EQUALIZER
+  If you have two serial connections to some other computer (this
+  usually requires two modems and two telephone lines) and you use
+  SLIP (= the protocol for sending internet traffic over telephone
+  lines) or PPP (= a better SLIP) on them, you can make them behave
+  like one double speed connection using this driver. Naturally, this
+  has to be supported at the other end as well, either with a similar
+  EQL Linux driver or with a Livingston Portmaster 2e. Say Y if you
+  want this and read drivers/net/README.eql. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+
+Sun LANCE Ethernet support
+CONFIG_SUN_LANCE
+  This is support for a certain type of Ethernet cards on Sun
+  workstations. The driver does not yet exist, so you might as well
+  say N.
+
+Sun Intel Ethernet support
+CONFIG_SUN_INTEL
+  This is support for a certain type of Ethernet cards on Sun
+  workstations. The driver does not yet exist, so you might as well
+  say N.
+
+Do you want to be offered ALPHA test drivers
+CONFIG_NET_ALPHA
+  ALPHA means that they might be unstable and buggy; it has nothing to
+  do with the computer architecture of the same name. If you don't
+  have a network card in your computer, say N; otherwise say Y,
+  because in most circumstances buggy support for your hardware is
+  still better than none at all (in particular, it enables you to test
+  and improve the drivers). Note that the answer to this question
+  doesn't directly affect the kernel: saying N will just cause this
+  configure script to present you with less choices. If you plan to
+  use more than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available via ftp (user anonymous)
+  from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+Western Digital/SMC cards
+CONFIG_NET_VENDOR_SMC
+  If you have a network (ethernet) card belonging to this class, say Y
+  and read the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
+  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
+  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. Note that
+  the answer to this question doesn't directly affect the kernel:
+  saying N will just cause this configure script to skip all the
+  questions about Western Digital cards. If you say Y, you will be
+  asked for your specific card in the following questions. If you plan
+  to use more than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+WD80*3 support
+CONFIG_WD80x3
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+SMC Ultra support
+CONFIG_ULTRA
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt as
+  well as Documentation/networking/net-modules.txt. If you plan to use
+  more than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+AMD LANCE and PCnet (AT1500 and NE2100) support
+CONFIG_LANCE
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
+  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
+  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+3COM cards
+CONFIG_NET_VENDOR_3COM
+  If you have a network (ethernet) card belonging to this class, say Y
+  and read the Ethernet-HOWTO, available via ftp (user: anonymous)
+  in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the answer to
+  this question doesn't directly affect the kernel: saying N will just
+  cause this configure script to skip all the questions about 3COM
+  cards. If you say Y, you will be asked for your specific card in the
+  following questions. If you plan to use more than one network card
+  under linux, read the Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. 
+
+3c501 support
+CONFIG_EL1
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  Also, consider buying a new
+  card, since the 3c501 is buggy and obsolete and the driver is
+  unsupported. This driver is also available as a module ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+3c503 support
+CONFIG_EL2
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+3c505 support
+CONFIG_ELPLUS
+  Information about this network (ethernet) card can be found in
+  drivers/net/README.3c505. If you have a card of this type, say Y and
+  read the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+3c507 support
+CONFIG_EL16
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+3c509/3c579 support
+CONFIG_EL3
+  If you have a network (ethernet) card belonging to the 3Com
+  EtherLinkIII series, say Y and read the Ethernet-HOWTO, available
+  via ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+Other ISA cards
+CONFIG_NET_ISA
+  If your network (ethernet) card hasn't been mentioned yet and its
+  bussystem (that's the way the components of the card talk to each
+  other) is ISA (as opposed to EISA, VLB or PCI), say Y. Make sure you
+  know the name of your card. Read the Ethernet-HOWTO, available via
+  ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. If
+  unsure, say Y.  Note that the answer to this question doesn't
+  directly affect the kernel: saying N will just cause this configure
+  script to skip all the remaining ISA network card questions.  If you
+  say Y, you will be asked for your specific card in the following
+  questions.  If you plan to use more than one network card under
+  linux, read the Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+Arcnet support
+CONFIG_ARCNET
+  If you have a network card of this type, say Y and check out the
+  beautiful poetry in Documentation/networking/arcnet.txt in the
+  kernel source. If you get this driver to work or not, either way,
+  send mail to the author. You might also want to have a look at the
+  Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO (even though arcnet is no true
+  ethernet). This driver is also available as a module ( = code which
+  can be inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+Cabletron E21xx support
+CONFIG_E2100
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+DEPCA support
+CONFIG_DEPCA
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO as well as
+  drivers/net/depca.c.  If you want to compile this as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt as
+  well as Documentation/networking/net-modules.txt. If you plan to use
+  more than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+EtherWorks 3 support
+CONFIG_EWRK3
+  This driver supports the DE203, DE204 and DE205 network (ethernet)
+  cards. If this is for you, say Y and read drivers/net/README.ewrk3
+  in the kernel source as well as the Ethernet-HOWTO, available via
+  ftp (user: anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+SEEQ8005 support
+CONFIG_SEEQ8005
+  This is a driver for the SEEQ 8005 network (ethernet) card. If this
+  is for you, read the Ethernet-HOWTO, available via ftp (user:
+  anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan
+  to use more than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+AT1700 support
+CONFIG_AT1700
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+EtherExpressPro support
+CONFIG_EEXPRESS_PRO
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+EtherExpress support
+CONFIG_EEXPRESS
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the Intel
+  EtherExpress card is generally regarded to be a very poor choice and
+  the driver is not very reliable. If you want to compile this as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+NI5210 support
+CONFIG_NI52
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
+  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
+  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+NI6510 support
+CONFIG_NI65
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
+  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
+  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+Ottawa PI and PI/2 support
+CONFIG_PI
+  This is a driver for the Ottawa Amateur Radio Club PI and PI2 cards,
+  which are commonly used to send internet traffic over radio. More
+  information about these cards is on the WWW at
+  http://hydra.carleton.ca/info/pi2.html (To browse the WWW, you need
+  to have access to a machine on the Internet that has one of the
+  programs lynx, netscape or Mosaic). If you have one of these cards,
+  you can say Y here and should read the HAM-HOWTO, available via ftp
+  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also,
+  you should have said Y to "AX.25 support" above, because AX.25 is
+  the protocol used for digital traffic over radio links.
+
+WaveLAN support
+CONFIG_WAVELAN
+  These are cards for wireless ethernet-like networking. Supported are
+  AT&T GIS and NCR WaveLAN cards. If you want to use a card of this
+  type under Linux, say Y and read the Ethernet-HOWTO, available via
+  ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Some
+  more specific information is contained in
+  drivers/net/README.wavelan. This driver is also available as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+HP PCLAN+ (27247B and 27252A) support
+CONFIG_HPLAN_PLUS
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+HP PCLAN (27245 and other 27xxx series) support
+CONFIG_HPLAN
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+HP 10/100VG PCLAN (ISA, EISA, PCI) support
+CONFIG_HP100
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+NE2000/NE1000 support
+CONFIG_NE2000
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+SK_G16 support
+CONFIG_SK_G16
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
+  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
+  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+EISA, VLB, PCI and on board controllers
+CONFIG_NET_EISA
+  This is another class of network cards which attach directly to the
+  bus. If you have one of those, say Y and read the Ethernet-HOWTO,
+  available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO; if you are unsure, say
+  Y. Note that the answer to this question doesn't directly affect the
+  kernel: saying N will just cause this configure script to skip all
+  the questions about this class of network cards. If you say Y, you
+  will be asked for your specific card in the following questions.  If
+  you plan to use more than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+Ansel Communications EISA 3200 support
+CONFIG_AC3200
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+Apricot Xen-II on board ethernet
+CONFIG_APRICOT
+  If you have a network (ethernet) controller of this type, say Y and
+  read the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+DE425, DE434, DE435 support
+CONFIG_DE4X5
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  More specific information is
+  contained in drivers/net/README.de4x5. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+Zenith Z-Note support
+CONFIG_ZNET
+  The Zenith Z-Note notebook computer has a built-in network
+  (ethernet) card, and this is the Linux driver for it. Note that the
+  IBM Thinkpad 300 is compatible with the Z-Note and is also supported
+  by this driver. Read the Ethernet-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+
+Pocket and portable adaptors
+CONFIG_NET_POCKET
+  Cute little network (ethernet) devices which attach to your parallel
+  port ("pocket adaptors"). If you have one of those, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
+#####
+##### What should you say to CONFIG_PRINTER in order to use these?
+#####
+  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
+  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you
+  want to plug a network card into the PCMCIA slot of your laptop
+  instead (PCMCIA is the standard for credit card size extension cards
+  used by all modern laptops), look in
+  cb-iris.stanford.edu:/pub/pcmcia and say N here.  Note that the
+  answer to this question doesn't directly affect the kernel: saying N
+  will just cause this configure script to skip all the questions
+  about this class of network devices.  If you say Y, you will be
+  asked for your specific device in the following questions.  If you
+  plan to use more than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+AT-LAN-TEC/RealTek pocket adaptor support
+CONFIG_ATP
+  This is a network (ethernet) device which attaches to your parallel
+  port. Read drivers/net/atp.c as well as the Ethernet-HOWTO,
+  available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO if you want to use this. If
+  you plan to use more than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+D-Link DE600 pocket adaptor support
+CONFIG_DE600
+  This is a network (ethernet) device which attaches to your parallel
+  port. Read drivers/net/README.DLINK as well as the Ethernet-HOWTO,
+  available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO if you want to use this.  If
+  you want to compile this as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want), say M
+  here and read Documentation/modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+D-Link DE620 pocket adaptor support
+CONFIG_DE620
+  This is a network (ethernet) device which attaches to your parallel
+  port. Read drivers/net/README.DLINK as well as the Ethernet-HOWTO,
+  available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO if you want to use this.  If
+  you want to compile this as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want), say M
+  here and read Documentation/modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+ 
+Token Ring driver support
+CONFIG_TR
+  Token Ring is IBM's way of communication on a local network; the
+  rest of the world uses ethernet. If you are connected to a token
+  ring network and want to use your Token Ring card under Linux, say Y.
+  Most people can say N here.
+
+IBM Tropic chipset based adaptor support
+CONFIG_IBMTR
+  This is support for all IBM Token Ring cards that don't use DMA. If
+  you have such a beast, say Y, otherwise N. Warning: this driver will
+  almost definitely fail if more than one active Token Ring card is
+  present. This driver is also available as a module ( = code which
+  can be inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt.
+
+Support non-SCSI/IDE/ATAPI drives
+CONFIG_CD_NO_IDESCSI
+  If you have a CDROM drive that is neither SCSI nor IDE/ATAPI, say Y
+  here, otherwise N. Read the CDROM-HOWTO, available via ftp (user:
+  anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the
+  answer to this question doesn't directly affect the kernel: saying N
+  will just cause this configure script to skip all the questions
+  about these CDROM drives. If you are unsure what you have, say Y and
+  find out whether you have one of the following drives.
+
+Sony CDU31A/CDU33A CDROM driver support
+CONFIG_CDU31A
+  These CDROM drives have a spring-pop-out caddyless drawer, and a
+  rectangular green LED centered beneath it. If you have one of these,
+  say Y here and also to "ISO9660 cdrom filesystem support"
+  below. Read the CDROM-HOWTO, available via ftp (user: anonymous)
+  from sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, read
+  Documentation/cdrom/cdu31a. NOTE: this CDROM drive won't be
+  auto detected by the kernel at boot time; you have to provide its
+  specifications as an option to the kernel as described in the above
+  README.  See the documentation of your boot loader (lilo or loadlin)
+  about how to pass options to the kernel. The lilo procedure is also
+  explained in the SCSI-HOWTO. This driver is also available as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
+Standard Mitsumi [no XA/Multisession] CDROM support
+CONFIG_MCD
+  This is a very common CDROM drive. In some models, the whole drive
+  chassis slides out for cd insertion.  Later models use a motorized
+  tray type mechanism. If you have one of these CDROM drives, say Y
+  here and also to "ISO9660 cdrom filesystem support" below. Read the,
+  available via ftp (user: anonymous) CDROM-HOWTO from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that this driver does
+  not support XA or MultiSession CDs (PhotoCDs). There's a new
+  experimental driver in the 1.3 kernels that can do this, but cannot
+  play your music CDs. If you want that one, say N here. If the driver
+  doesn't work out of the box, you might want to have a look at
+  linux/include/linux/mcd.h. If your Mitsumi CDROM drive is of type
+  IDE/ATAPI, then you have to say N here and should have said Y to
+  "Support for IDE/ATAPI CDROMs" above. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N now.
+
+Experimental Mitsumi [XA/MultiSession, no Audio] support
+CONFIG_MCDX
+  Use this driver if you want to be able to read XA or MultiSession
+  CDs (PhotoCDs) as well as ordinary CDs with your Mitsumi CDROM
+  drive. In addition, this driver uses much less kernel memory than
+  the old one, if that is a concern. However, you won't be able to
+  play audio CDs. If you have two Mitsumi CDROM drives, you can use
+  the old driver for one and the new for the other;
+  Documentation/cdrom/mcdx explains how. If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
+
+Matsushita/Panasonic CDROM driver support
+CONFIG_SBPCD
+  The Creative Labs Soundblaster CD drives as well as Longshine and
+  IBM External ISA also fall under this category. It has a uniquely
+  shaped faceplate, with a caddyless motorized drawer which makes it
+  recognizable, but has no external brand markings. Some Soundblaster
+  drives have a caddy and manual loading/eject, but still no external
+  markings. If you have one of these, say Y here and also to "ISO9660
+  cdrom filesystem support" below. This driver can support up to four
+  CDROM controllers, each of which can support up to four CDROM
+  drives; you will be asked how many controllers you have. Read
+  Documentation/cdrom/sbpcd and include/linux/sbpcd.h in the kernel
+  source and the CDROM-HOWTO, available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.  If you
+  want to compile this as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt.
+
+Matsushita/Panasonic second CDROM controller support
+CONFIG_SBPCD2
+  If you have two CDROM drives of this type that you want to use
+  simultaneously under Linux, say Y here, otherwise N.
+
+Aztech/Orchid/Okano/Wearnes (non IDE) CDROM support
+CONFIG_AZTCD
+  If you have a CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 CDROM
+  drive, say Y here and also to "ISO9660 cdrom filesystem support"
+  below. This is NOT for CDROM drives with IDE interface, such as
+  Aztech CDA269-031SE. (If you have one of those, you should have said
+  Y to the new IDE driver above.) You want to read
+  Documentation/cdrom/aztcd and include/linux/aztcd.h in the kernel
+  source and the CDROM-HOWTO, available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.  If you
+  want to compile this as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt.
+
+Sony CDU535 CDROM driver support
+CONFIG_CDU535
+  If you have a CDU-535 or CDU-531 CDROM drive (this is one of the
+  older Sony drives with its own interface card), say Y here and also
+  to "ISO9660 cdrom filesystem support" below. You want to read
+  Documentation/cdrom/sonycd535 in the kernel source and the
+  CDROM-HOWTO, available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.  If you
+  want to compile this as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt.
+
+Goldstar R420 CDROM support
+CONFIG_GSCD
+  If this is your CDROM drive, say Y here and also to "ISO9660 cdrom
+  filesystem support" below. You want to read Documentation/cdrom/gscd
+  in the kernel source and the CDROM-HOWTO, available via ftp (user:
+  anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. As described
+  in the file gscd, you might have to change a setting in the file
+  include/linux/gscd.h before compiling the kernel. If unsure, say N.
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt.
+
+Philips/LMS CM206 CDROM support
+CONFIG_CM206
+  If you have a Philips/LMS CDROM drive cm206 in combination with a
+  cm260 host adapter card, say Y here and also to "ISO9660 cdrom
+  filesystem support" below. You want to read
+  Documentation/cdrom/cm206 in the kernel source and the CDROM-HOWTO,
+  available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.  If you
+  want to compile this as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt.
+
+Experimental Optics Storage DOLPHIN 8000AT CDROM support
+CONFIG_OPTCD
+  If this is your CDROM drive, say Y here and also to "ISO9660 cdrom
+  filesystem support" below. You want to read
+  Documentation/cdrom/optcd in the kernel source and the CDROM-HOWTO,
+  available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.  If you
+  want to compile this as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt.
+
+Experimental Sanyo H94A CDROM support
+CONFIG_SJCD
+  If this is your CDROM drive, say Y here and also to "ISO9660 cdrom
+  filesystem support" below. You want to read
+  Documentation/cdrom/sjcd in the kernel source (this file includes
+  information about how to make the driver work together with an ISP16
+  soundcard) and the CDROM-HOWTO,
+  available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.
+
+Standard (minix) fs support
+CONFIG_MINIX_FS
+  Minix is a simple operating system used in many classes about
+  OS's. The minix filesystem (= method to organize files on a harddisk
+  partition or a floppy disk) was the original filesystem for Linux,
+  has been superseded by the second extended filesystem ext2fs but is
+  still used for root/boot and other floppies or ram disks since it is
+  leaner. You don't want to use it on your harddisk because of certain
+  built-in restrictions. This option will enlarge your kernel by about
+  25 kB. Everyone should say Y so that they are able to read this
+  common floppy format.  If you want to compile this as a module
+  however ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt. Note that the filesystem of your root
+  partition cannot be compiled as a module.
+
+Extended fs support
+CONFIG_EXT_FS
+  This is the old Linux filesystem (= method to organize files on a
+  harddisk partition or a floppy disk) and not in use anymore. It
+  enlarges your kernel by about 25 kB. Let's all kill this beast. Say
+  N.
+
+Second extended fs support
+CONFIG_EXT2_FS
+  This is the de facto standard Linux filesystem (= method to organize
+  files on a storage device) for harddisks. You want to say Y, unless
+  you intend to use Linux exclusively from inside a DOS partition
+  using the umsdos filesystem. The advantage of the latter is that you
+  can get away without repartitioning your hard drive (which often
+  implies backing everything up and restoring afterwards); the
+  disadvantage is that Linux becomes susceptible to DOS viruses and
+  that umsdos is somewhat slower than ext2fs. Even if you want to run
+  Linux in this fashion, it might be a good idea to have ext2fs
+  around: it enables you to read more floppy disks and facilitates the
+  transition to a *real* Linux partition later. Another (rare) case
+  which doesn't require ext2fs is a diskless Linux box which mounts
+  all files over the network using NFS (in this case it's sufficient
+  to enable NFS filesystem support below; if you are planning to do
+  this, have a look at the package
+  /pub/Linux/system/Linux-boot/netboot-nfs.tar.gz, available via ftp
+  (user: anonymous) from sunsite.unc.edu, extract with "tar xzvf
+  filename"). There is a short ext2fs-FAQ, available via ftp
+  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/faqs. This
+  option will enlarge your kernel by about 41 kB. Default is Y.
+
+xiafs filesystem support
+CONFIG_XIA_FS
+  This filesystem (= method to organize files on a harddisk partition
+  or a floppy disk) is only used rarely these days. This option would
+  enlarge your kernel by about 28 kB. Say N.  If you want to compile
+  this as a module ( = code which can be inserted in and removed from
+  the running kernel whenever you want), say M here and read
+  Documentation/modules.txt. Note that the filesystem of your root
+  partition cannot be compiled as a module.
+
+msdos fs support
+CONFIG_MSDOS_FS
+  This allows you to mount MSDOS partitions of your harddrive (unless
+  they are compressed; the only way to access compressed MSDOS
+  partitions under Linux is with the DOS emulator DOSEMU, described in
+  the DOSEMU-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you intend to use dosemu
+  with a non-compressed MSDOS partition, say Y here) and MSDOS
+  floppies. This means that file access becomes transparent, i.e. the
+  MSDOS files look and behave just like all other Unix files.  Another
+  way to read and write MSDOS floppies from within Linux (but not
+  transparently) is with the mtools ("man mtools") program suite,
+  which doesn't require the msdos filesystem support.  If you want to
+  use umsdos, the Unix-like filesystem on top of DOS, which allows you
+  to run Linux from within a DOS partition without repartitioning,
+  you'll have to say Y here. This option will enlarge your kernel by
+  about 25 kB. If unsure, say Y.  If you want to compile this as a
+  module however ( = code which can be inserted in and removed from
+  the running kernel whenever you want), say M here and read
+  Documentation/modules.txt. Note that the filesystem of your root
+  partition cannot be a module.
+
+umsdos: Unix like fs on top of std MSDOS FAT fs
+CONFIG_UMSDOS_FS
+  Say Y here if you want to run Linux from within an existing DOS
+  partition of your harddrive. The advantage of this is that you can
+  get away without repartitioning your hard drive (which often implies
+  backing everything up and restoring afterwards) and hence you're
+  able to quickly try out Linux or show it to your friends; the
+  disadvantage is that Linux becomes susceptible to DOS viruses and
+  that UMSDOS is somewhat slower than ext2fs.  Another use of umsdos
+  is to write files with long unix filenames to MSDOS floppies; it
+  also allows unix style softlinks and owner/permissions of files on
+  MSDOS floppies. You will need a program called umssync in order to
+  make use of umsdos. Read Documentation/filesystems/umsdos.txt. This
+  option enlarges your kernel by about 25 kB. If unsure, say N.  If
+  you want to compile this as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want), say M
+  here and read Documentation/modules.txt. Note that the filesystem of
+  your root partition cannot be a module.
+
+/proc filesystem support
+CONFIG_PROC_FS
+  This is a virtual filesystem providing information about the status
+  of the system. "Virtual" means that it doesn't take any space on
+  your harddisk: the files are created on the fly when you access
+  them. Also, you cannot read the files with less or more: you need to
+  use cat. The filesystem is explained in the Kernel Hacker's Guide,
+  available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/LDP.  This option will enlarge your
+  kernel by about 18 kB. It's totally cool; for example, "cat
+  /proc/interrupts" gives information about what the different IRQs
+  are used for at the moment (there is a small number of Interrupt
+  ReQuest lines in your computer that are used by the periphery to
+  gain the CPU's attention - often a source of trouble if two devices
+  are mistakenly configured to use the same IRQ). Several programs
+  depend on this, so everyone should say Y here.
+  
+NFS filesystem support
+CONFIG_NFS_FS
+  If you are connected to a network (using SLIP, PPP or ethernet, not
+  term [term is a program which gives you almost full Internet
+  connectivity if you have a regular dial up shell account on some
+  Internet connected Unix computer. Read the Term-HOWTO, available via
+  ftp (user: anonymous) on sunsite.unc.edu:/pub/Linux/docs/HOWTO]) and
+  want to mount files residing on another UNIX computer (the NFS
+  server) using the NetworkFileSharing protocol, say Y. "Mounting
+  files" means that the client can access the files with usual UNIX
+  commands as if they were sitting on the client's harddisk. For this
+  to work, the server must run the programs nfsd and mountd (but does
+  not need to have NFS filesystem support enabled). NFS is explained
+  in the Network Administrator's Guide, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/LDP, and on its man
+  page: "man nfs". There is also a NFS-FAQ in
+  sunsite.unc.edu:/pub/Linux/docs/faqs which presumes that you know
+  the basics of NFS already. If you say Y here, you should have said Y
+  to TCP/IP networking also. This option would enlarge your kernel by
+  about 27 kB. This filesystem is also available as a module ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt. If you don't know what all
+  this is about, say N.
+
+ISO9660 cdrom filesystem support
+CONFIG_ISO9660_FS
+  If you have a CDROM and want to do more with it than just listen to
+  audio CDs and watch its LEDs, say Y (and read the CDROM-HOWTO,
+  available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO), thereby enlarging your
+  kernel by about 27 kB; otherwise say N.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
+
+OS/2 HPFS filesystem support (read only)
+CONFIG_HPFS_FS
+  OS/2 is IBM's operating system for PC's, the same as Warp, and HPFS
+  is the filesystem used for organizing files on OS/2 harddisk
+  partitions. Say Y if you want to be able to read files from an OS/2
+  HPFS partition of your harddrive. OS/2 floppies however are in
+  regular MSDOS format, so you don't need this option in order to be
+  able to read them. Read Documentation/filesystems/hpfs.txt. This
+  filesystem is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. If unsure, say N.
+  
+System V and Coherent filesystem support
+CONFIG_SYSV_FS
+  SCO, Xenix and Coherent are commercial Unix systems for intel
+  machines. Enabling this option would allow you to read and write to
+  and from their floppies and harddisk partitions. You need this if
+  you want to run iBCS2 (iBCS2 [Intel Binary Compatibility Standard]
+  is a kernel module which lets you run SCO, Xenix, Wyse, Unix Ware,
+  Dell Unix and System V programs under Linux and is often needed to
+  run commercial software, most prominently WordPerfect. It's in
+  tsx-11.mit.edu:/pub/linux/BETA). If you only intend to mount files
+  from some other Unix over the network using NFS, you don't need this
+  (but you need nfs filesystem support obviously). Note that this
+  option is generally not needed for floppies, since a good portable
+  way to transport files between unixes (and even to other operating
+  systems) is given by the tar program ("man tar").  Note also that
+  this option has nothing to do whatsoever with the option "System V
+  IPC". Read about the System V filesystem in
+  Documentation/filesystems/sysv-fs.txt. This option will enlarge your
+  kernel by about 34 kB. If you want to compile this as a module
+  ( = code which can be inserted in and removed from the running
+  kernel whenever you want), say M here and read
+  Documentation/modules.txt. If you haven't heard about all of this
+  before, it's safe to say N.  
+
+SMB filesystem (to mount WfW shares etc..) support
+CONFIG_SMB_FS
+  SMB (Server Message Buffer) is the protocol Windows for Workgroups
+  (WfW), Windows NT and Lan Manager use to talk to each other over an
+  ethernet. Enabling this allows you to mount their filesystems and
+  access them just like any other unix directory. For details, read
+  Documentation/filesystems/smbfs.txt.  Note: if you just want your
+  box to act as an SMB *server* and make files and printing services
+  available to Windows clients (which need to have a TCP/IP stack),
+  you don't need to enable this filesystem support; you can use the
+  program samba (available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/system/Network/samba) for that. General
+  information about how to connect Linux, Windows machines and Macs is
+  on the WWW at http://eats.com/linux_mac_win.html (to browse the WWW,
+  you need to have access to a machine on the Internet that has one of
+  the programs lynx, netscape or Mosaic).  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt. Most people say N here.
+
+Cyclades async mux support
+CONFIG_CYCLADES
+  This is a card which gives you many serial ports. You would need
+  something like this to connect more than two modems to your linux
+  box, for instance in order to become a BBS. If you haven't heard
+  about it, it's safe to say N.
+
+Stallion multiport serial support 
+CONFIG_STALDRV
+  Stallion cards give you many serial ports. You would need something
+  like this to connect more than two modems to your linux box, for
+  instance in order to become a BBS. If you say Y here, you will be
+  asked for your specific card model in the next questions. If you
+  haven't heard about it, it's safe to say N.
+ 
+Stallion EasyIO or EC8/32 support 
+CONFIG_STALLION n
+  If you have an EasyIO or EasyConnection 8/32 multiport Stallion
+  card, then this is for you; say Y.  If you want to compile this as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
+
+CONFIG_ISTALLION n
+  If you have an EasyConnection 8/64, ONboard, Brumby or Stallion
+  serial multiport card, say Y here. To compile it as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt.
+
+Parallel printer support
+CONFIG_PRINTER
+  If you intend to attach a printer to the parallel port of your Linux
+  box (as opposed to using a serial printer; if the connector at the
+  printer has 9 or 25 holes ["female"], then it's serial), say Y. Also
+  read the Printing-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt. If you intend to use PLIP (Parallel Line
+  Internet Protocol is mainly used to create a mini network by
+  connecting the parallel ports of two local machines) and a parallel
+  printer, you should compile both as modules because the drivers
+  don't like each other.
+
+Logitech busmouse support
+CONFIG_BUSMOUSE
+  Logitech mouse connected to a proprietary interface card. It's
+  generally a round connector with 9 pins. Note that the newer mice
+  made by Logitech don't use the Logitech protocol anymore; for those,
+  you don't need this option. You want to read the Busmouse-HOWTO,
+  available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt. If you are unsure, say N and read the
+  HOWTO nevertheless: it will tell you what you have. Chances are that
+  you have a regular serial MouseSystem or Microsoft mouse (made by
+  Logitech) plugging in a COM port (rectangular with 9 or 25 pins)
+  which is supported automatically.
+
+PS/2 mouse (aka "auxiliary device") support
+CONFIG_PSMOUSE
+  The PS/2 mouse connects to a special mouse port that looks much like
+  the keyboard port (small circular connector with 6 pins). This way,
+  the mouse does not use any serial ports. This port can also be used
+  for other input devices like light pens, tablets, keypads. Compaq,
+  AST and IBM all use this as their mouse port on currently shipping
+  machines. The trackballs of some laptops are PS/2 mice
+  also. Although this is not a busmouse, it is explained in detail in
+  the Busmouse-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt. If you are unsure, say N and read the
+  HOWTO nevertheless: it will tell you what you have. Chances are that
+  you have a regular serial MouseSystem or Microsoft mouse plugging in
+  a COM port (9 or 25 pins) which is supported automatically.
+
+C&T 82C710 mouse port support (as on TI Travelmate)
+CONFIG_82C710_MOUSE
+  This is a certain kind of PS/2 mouse used on the TI Travelmate. If
+  you are unsure, try first to say N here and come back if the mouse
+  doesn't work. Read the Busmouse-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+
+Microsoft busmouse support
+CONFIG_MS_BUSMOUSE
+  These animals (also called Inport mice) are connected to an
+  expansion board using a round connector with 9 pins. If this is what
+  you have, say Y and read the Busmouse-HOWTO, available via ftp
+  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you
+  want to compile this as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt. If you are unsure, say N and
+  read the HOWTO nevertheless: it will tell you what you have. Chances
+  are that you have a regular serial MouseSystem or Microsoft mouse
+  plugging in a COM port which is supported automatically.
+
+ATIXL busmouse support
+CONFIG_ATIXL_BUSMOUSE
+  This is a rare type of busmouse that is connected to the back of an
+  ATI video card. Note that most ATI mice are actually Microsoft
+  busmice. Read the Busmouse-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt. If you are unsure, say N and read
+  the HOWTO nevertheless: it will tell you what you have. Chances are
+  that you have a regular serial MouseSystem or Microsoft mouse
+  plugging in a COM port (9 or 25 pins) which is supported
+  automatically.
+
+Selection (cut and paste for virtual consoles)
+CONFIG_SELECTION
+  This allows you to use your mouse for moving text on a Linux console
+  or even between several virtual consoles. Read about it with "man
+  selection". You also need it to run gpm ("general purpose mouse")
+  which is a superset of selection. This is explained in the
+  Busmouse-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO, although selection works fine
+  with serial mice, too. Most people say Y unless they run mainly the
+  X Window System, which has its own cut-and-paste mechanism. Enabling
+  this option enlarges your kernel by about 1 kB. Newer kernels
+  contain this code by default and don't have this config option
+  anymore. 
+
+QIC-02 tape support
+CONFIG_QIC02_TAPE
+  If you have a non-SCSI tape drive like that, say Y.
+
+Do you want runtime configuration for QIC-02
+CONFIG_QIC02_DYNCONF
+  You can either configure this driver once and for all by editing a
+  header file, in which case you should say N, or you can fetch a
+  program via anonymous ftp which is able to configure this driver
+  during runtime. If you want this, say Y.
+
+QIC-117 tape support
+CONFIG_FTAPE
+  Most tape drives using the floppy disk controller will need
+  this. Colorado Jumbo, Conner Tape-Stor would be two models of this.
+  If you have a non-SCSI tape device like that, say Y. QIC-40 users
+  say Y too. And everyone read the Ftape-HOWTO, available via ftp
+  (user: anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. Tape
+  drives that attach to the parallel port, like the Colorado Tracker,
+  are not yet supported by Linux.  Note that saying Y here will not
+  insert the code into the kernel: instead, a module will be compiled
+  ( = code which can be inserted in and removed from the running
+  kernel whenever you want). Read Documentation/modules.txt to find
+  out how to use it.
+
+number of ftape buffers
+NR_FTAPE_BUFFERS 3
+  The floppy tape drive needs some memory allocated in the kernel.
+  n buffers, each having 32 kB, will be allocated if you enter n
+  here. Consequently, your kernel size increases by n*32 kB. You
+  should accept the default unless you know what you're doing.
+
+Zilog serial support
+CONFIG_SUN_ZS
+  This driver does not exist at this point, so you might as well say
+  N.
+
+Sound card support
+CONFIG_SOUND
+  If you have a Sound Card in your Computer, i.e. if it can say more
+  than an occasional beep, say Y. Be sure to have all the information
+  about your sound card and its configuration down (I/O port,
+  interrupt and DMA channel), because you will be asked for it. You
+  want to read the Sound-HOWTO, available via ftp (user: anonymous)
+  from sunsite.unc.edu:/pub/Linux/docs/HOWTO. There is also some
+  information in various README files in drivers/sound.  If you want
+  to compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt. I'm told that even without a sound
+  card, you can make your computer say more than an occasional beep,
+  by programming the PC speaker. Kernel patches and programs to do
+  that are at
+  sunsite.unc.edu:/pub/Linux/kernel/patches/console/pcsndrv-X.X.tar.gz,
+  to be extracted with "tar xzvf filename".
+
+Sun Audio support
+CONFIG_SUN_AUDIO
+  This is support for the soundcards on Sun workstations. The code
+  does not exist yet, so you might as well say N here.
+
+Kernel profiling support
+CONFIG_PROFILE
+  This is for kernel hackers who want to know how much time the kernel
+  spends in the various procedures. The information is stored in
+  /proc/profile (enable the /proc filesystem!) and in order to read
+  it, you need the readprofile package from sunsite.unc.edu. Its
+  manpage gives information regarding the format of profiling data. To
+  become a kernel hacker, you can start with the Kernel Hacker's
+  Guide, available via ftp (user: anonymous) from
+  sunsite.unc.edu:/pub/Linux/docs/LDP. Mere mortals say N.
+ 
+Profile shift count
+CONFIG_PROFILE_SHIFT
+  This is used to adjust the granularity with which the addresses of
+  executed instructions get recorded in /proc/profile. But since you
+  enabled "Kernel profiling support", you must be a kernel hacker and
+  hence you know what this is about :-)
+
+# need an empty line after last entry, for sed script in Configure.
+
+#
+# This is used by ispell.el:
+#
+# LocalWords:  CONFIG coprocessor DX Pentium SX lilo loadlin HOWTO ftp sunsite
+# LocalWords:  unc edu docs emu README kB BLK DEV FD Thinkpad fd MFM RLL IDE gz
+# LocalWords:  cdrom harddisk diskless netboot nfs xzvf ATAPI MB harddrives ide
+# LocalWords:  HD harddisks CDROMs IDECD NEC MITSUMI filesystem XT XD PCI bios
+# LocalWords:  ISA EISA Microchannel VESA BIOSes bussystem IPC SYSVIPC ipc Ctrl
+# LocalWords:  InterProcessCommunication BINFMT Linkable http ac uk jo html GCC
+# LocalWords:  netscape gcc LD CC toplevel MODVERSIONS insmod rmmod modprobe IP
+# LocalWords:  genksyms INET loopback gatewaying ethernet internet PPP ARP Arp
+# LocalWords:  howto multicasting MULTICAST MBONE firewalling ipfw ACCT resp ip
+# LocalWords:  proc acct IPIP encapsulator decapsulator klogd PCTCP RARP EXT PS
+# LocalWords:  telneting AddressResolutionProtocol subnetted NAGLE rlogin NOSR
+# LocalWords:  Mb SKB IPX Novell Netware dosemu Appletalk DDP ATALK tapedrive
+# LocalWords:  SD CHR scsi thingy SG CD LUNs LUN jukebox Adaptec BusLogic EATA
+# LocalWords:  buslogic DMA DPT ATT eata dma PIO UltraStor fdomain umsdos ext
+# LocalWords:  QLOGIC qlogic TMC seagate Trantor ultrastor FASST wd NETDEVICES
+# LocalWords:  unix BBS linux nullmodem CSLIP PLIP Kirch's LDP CSlip SL SCC IRQ
+# LocalWords:  Turbo Laplink plip NCSA port's ReQuest IRQs EQL SMC AMD PCnet NE
+# LocalWords:  COM ELPLUS Com EtherLinkIII VLB Arcnet arcnet Cabletron DEPCA DE
+# LocalWords:  depca EtherWorks EWRK ewrk SEEQ EtherExpressPro EEXPRESS NI xxx
+# LocalWords:  EtherExpress WaveLAN wavelan PCLAN HPLAN VG SK Ansel Xen de ZNET
+# LocalWords:  PCMCIA cb stanford pcmcia LAN TEC RealTek ATP atp DLINK NetTools
+# LocalWords:  TR Sony CDU caddyless cdu Mitsumi MCD cd mcd XA MultiSession CDA
+# LocalWords:  Matsushita Panasonic SBPCD Soundblaster Longshine sbpcd Aztech
+# LocalWords:  Okano Wearnes AZTCD CDD SE aztcd sonycd Goldstar GSCD Philips fs
+# LocalWords:  LMS OPTCD Sanyo SJCD minix faqs xiafs XIA msdos harddrive mtools
+# LocalWords:  std softlinks umssync NetworkFileSharing nfsd mountd CDs HPFS TI
+# LocalWords:  hpfs SYSV SCO intel iBCS Wyse WordPerfect tsx mit unixes sysv NR
+# LocalWords:  SMB WfW Cyclades async mux Logitech busmouse MouseSystem aka AST
+# LocalWords:  PSMOUSE Compaq trackballs Travelmate Inport ATIXL ATI busmice ld
+# LocalWords:  gpm config QIC DYNCONF FTAPE Stor Ftape ftape pcsndrv manpage NT
+# LocalWords:  readprofile diskdrives org com masq EtherTalk tcp netrom sunacm
+# LocalWords:  misc AIC aic pio nullmodems scc Portmaster eql GIS PhotoCDs MCDX
+# LocalWords:  mcdx gscd optcd sjcd ISP soundcard hdparm Workgroups Lan samba
+# LocalWords:  filesystems smbfs ATA ppp PCTech RZ www powerquest txt CMD ESDI
+# LocalWords:  chipset FB multicast MROUTE appletalk ifconfig IBMTR multiport
+# LocalWords:  Multisession STALDRV EasyIO EC EasyConnection ISTALLION ONboard
+# LocalWords:  Brumby pci TNC cis ohio faq usenet NETLINK dev hydra ca Tyne mem
+# LocalWords:  carleton Deskstation DECstation SUNFD JENSEN Noname XXXM SLiRP
+# LocalWords:  pppd Zilog ZS soundcards SRM bootloader SMP smp ez mainmenu rarp
+# LocalWords:  RTNETLINK mknod

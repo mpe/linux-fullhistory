@@ -667,7 +667,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 
       if (((long) start_addr & ~(dma_pagesize - 1))
 	  != ((long) end_addr & ~(dma_pagesize - 1))
-	  || end_addr >= (char *) (16 * 1024 * 1024))
+	  || end_addr >= (char *) MAX_DMA_ADDRESS)
 	{
 	  printk (
 		   "sound: kmalloc returned invalid address 0x%lx for %ld Bytes DMA-buffer\n",
@@ -677,7 +677,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 	}
     }
   dmap->raw_buf = start_addr;
-  dmap->raw_buf_phys = (unsigned long) start_addr;
+  dmap->raw_buf_phys = virt_to_bus((unsigned long) start_addr);
 
   for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
     {

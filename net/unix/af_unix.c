@@ -18,6 +18,7 @@
  *		Niibe Yutaka	:	async I/O support.
  *		Carsten Paeth	:	PF_UNIX check, address fixes.
  *		Alan Cox	:	Limit size of allocated blocks.
+ *		Alan Cox	:	Fixed the stupid socketpair bug.
  */
 
 #include <linux/config.h>
@@ -46,7 +47,7 @@
 #include <net/af_unix.h>
 #include <linux/proc_fs.h>
 
-static unix_socket *volatile unix_socket_list=NULL;
+static unix_socket * unix_socket_list=NULL;
 
 #define min(a,b)	(((a)<(b))?(a):(b))
 
@@ -68,25 +69,19 @@ static inline void unix_mkname(struct sockaddr_un * sun, unsigned long len)
  
 static void unix_remove_socket(unix_socket *sk)
 {
-	unix_socket *s;
+	unix_socket **s;
 	
 	cli();
-	s=unix_socket_list;
-	if(s==sk)
+	s = &unix_socket_list;
+
+	while(*s!=NULL)
 	{
-		unix_socket_list=s->next;
-		sti();
-		return;
-	}
-	while(s && s->next)
-	{
-		if(s->next==sk)
+		if(*s==sk)
 		{
-			s->next=sk->next;
-			sti();
-			return;
+			*s=sk->next;
+			break;
 		}
-		s=s->next;
+		s=&((*s)->next);
 	}
 	sti();
 }
@@ -279,7 +274,7 @@ static int unix_create(struct socket *sock, int protocol)
 	skb_queue_head_init(&sk->back_log);
 	sk->protinfo.af_unix.family=AF_UNIX;
 	sk->protinfo.af_unix.inode=NULL;
-	sk->protinfo.af_unix.locks=1;	/* Us */
+	sk->protinfo.af_unix.locks=1;		/* Us */
 	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
 	sk->protinfo.af_unix.name=NULL;
 	sk->protinfo.af_unix.other=NULL;
@@ -540,20 +535,8 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 
 static int unix_socketpair(struct socket *a, struct socket *b)
 {
-	int err;
 	unix_socket *ska,*skb;	
 	
-	err=unix_create(a, 0);
-	if(err)
-		return err;
-	err=unix_create(b, 0);
-	if(err)
-	{
-		unix_release(a, NULL);
-		a->data=NULL;
-		return err;
-	}
-
 	ska=a->data;
 	skb=b->data;
 

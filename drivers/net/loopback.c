@@ -15,6 +15,8 @@
  *		Alan Cox	:	Rejig for NET3.029 snap #3
  *		Alan Cox	: 	Fixed NET3.029 bugs and sped up
  *		Larry McVoy	:	Tiny tweak to double performance
+ *		Alan Cox	:	Backed out LMV's tweak - the linux mm cant
+ *					take it...
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -125,10 +127,13 @@ static int loopback_open(struct device *dev)
 int loopback_init(struct device *dev)
 {
 	int i;
-#ifdef CONFIG_SKB_LARGE
+#if LINUS_EVER_SOLVES_THE_LARGE_ATOMIC_BUFFER_ISSUE
 	dev->mtu		= 7900;			/* MTU			*/
 #else
-	dev->mtu		= 3800;
+/*
+ *	If Alpha uses 8K pages then I guess 7K would be good for it.
+ */
+	dev->mtu		= 2000;			/* Kept under 1 page    */
 #endif	
 	dev->tbusy		= 0;
 	dev->hard_start_xmit	= loopback_xmit;

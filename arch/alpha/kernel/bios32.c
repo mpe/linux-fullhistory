@@ -541,29 +541,40 @@ static inline void eb66_and_eb64p_fixup(void)
 
 
 /*
- * Fixup configuration for Noname boards (AXPpci33).
+ * Fixup configuration for Noname (AXPpci33) and Avanti (AlphaStation 240).
  */
-static inline void noname_fixup(void)
+static inline void avanti_and_noname_fixup(void)
 {
 	struct pci_dev *dev;
 	/*
 	 * The Noname board has 5 PCI slots with each of the 4
 	 * interrupt pins routed to different pins on the PCI/ISA
-	 * bridge (PIRQ0-PIRQ3).  I don't have any information yet as
-	 * to how INTB, INTC, and INTD get routed (4/12/95,
-	 * davidm@cs.arizona.edu).  pirq_tab[0] is a fake entry to
-	 * deal with old PCI boards that have the interrupt pin number
-	 * hardwired to 0 (meaning that they use the default INTA
-	 * line, if they are interrupt driven at all).
+	 * bridge (PIRQ0-PIRQ3).  The table below is based on
+	 * information available at:
+	 *
+	 *   http://ftp.digital.com/pub/DEC/axppci/ref_interrupts.txt
+	 *
+	 * I have no information on the Avanti interrupt routing, but
+	 * the routing seems to be identical to the Noname except
+	 * that the Avanti has an additional slot whose routing I'm
+	 * unsure of.
+	 *
+	 * pirq_tab[0] is a fake entry to deal with old PCI boards
+	 * that have the interrupt pin number hardwired to 0 (meaning
+	 * that they use the default INTA line, if they are interrupt
+	 * driven at all).
 	 */
-	static const char pirq_tab[7][5] = {
-		{ 3,  3, -1, -1, -1}, /* idsel  6 (53c810) */ 
-		{-1, -1, -1, -1, -1}, /* idsel  7 (PCI/ISA bridge) */
+	static const char pirq_tab[][5] = {
+		{ 3,  3,  3,  3,  3}, /* idsel  6 (53c810) */ 
+		{-1, -1, -1, -1, -1}, /* idsel  7 (SIO: PCI/ISA bridge) */
 		{ 2,  2, -1, -1, -1}, /* idsel  8 (slot closest to ISA) */
 		{-1, -1, -1, -1, -1}, /* idsel  9 (unused) */
 		{-1, -1, -1, -1, -1}, /* idsel 10 (unused) */
-		{ 0,  0, -1, -1, -1}, /* idsel 11 (slot furthest from ISA) */
-		{ 1,  1, -1, -1, -1}, /* idsel 12 (middle slot) */
+		{ 0,  0,  2,  1,  0}, /* idsel 11 (slot furthest from ISA) KN25_PCI_SLOT0 */
+		{ 1,  1,  0,  2,  1}, /* idsel 12 (middle slot) KN25_PCI_SLOT1 */
+#ifdef CONFIG_ALPHA_AVANTI
+		{ 1,  1, -1, -1, -1}, /* idsel 13 KN25_PCI_SLOT2 ??? */
+#endif /* CONFIG_ALPHA_AVANTI */
 	};
 	/*
 	 * route_tab selects irq routing in PCI/ISA bridge so that:
@@ -571,6 +582,9 @@ static inline void noname_fixup(void)
 	 *		PIRQ1 -> irq  9
 	 *		PIRQ2 -> irq 10
 	 *		PIRQ3 -> irq 11
+	 *
+	 * This probably ought to be configurable via MILO.  For
+	 * example, sound boards seem to like using IRQ 9.
 	 */
 	const unsigned int route_tab = 0x0b0a090f;
 	unsigned char pin;
@@ -587,13 +601,13 @@ static inline void noname_fixup(void)
 	for (dev = pci_devices; dev; dev = dev->next) {
 		dev->irq = 0;
 		if (dev->bus->number != 0 ||
-		    PCI_SLOT(dev->devfn) < 6 || PCI_SLOT(dev->devfn) > 12)
+		    PCI_SLOT(dev->devfn) < 6 ||
+		    PCI_SLOT(dev->devfn) >= 6 + sizeof(pirq_tab)/sizeof(pirq_tab[0]))
 		{
-			printk("noname_set_irq: no dev on bus %d, slot %d!!\n",
+			printk("bios32.avanti_and_noname_fixup: no dev on bus %d, slot %d!!\n",
 			       dev->bus->number, PCI_SLOT(dev->devfn));
 			continue;
 		}
-
 		pcibios_read_config_byte(dev->bus->number, dev->devfn,
 					 PCI_INTERRUPT_PIN, &pin);
 		pirq = pirq_tab[PCI_SLOT(dev->devfn) - 6][pin];
@@ -644,8 +658,8 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 	/*
 	 * Now is the time to do all those dirty little deeds...
 	 */
-#if defined(CONFIG_ALPHA_NONAME)
-	noname_fixup();
+#if defined(CONFIG_ALPHA_NONAME) || defined(CONFIG_ALPHA_AVANTI)
+	avanti_and_noname_fixup();
 #elif defined(CONFIG_ALPHA_CABRIOLET)
 	cabriolet_fixup();
 #elif defined(CONFIG_ALPHA_EB66P)

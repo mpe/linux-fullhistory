@@ -100,7 +100,6 @@ int unregister_firewall(int pf, struct firewall_ops *fw)
 int call_fw_firewall(int pf, struct sk_buff *skb, void *phdr)
 {
 	struct firewall_ops *fw=firewall_chain[pf];
-	int result=firewall_policy[pf];
 	
 	while(fw!=NULL)
 	{
@@ -109,8 +108,7 @@ int call_fw_firewall(int pf, struct sk_buff *skb, void *phdr)
 			return rc;
 		fw=fw->next;
 	}
-	/* alan, is this right? */
-	return result;
+	return firewall_policy[pf];
 }
 
 /*
@@ -120,7 +118,6 @@ int call_fw_firewall(int pf, struct sk_buff *skb, void *phdr)
 int call_in_firewall(int pf, struct sk_buff *skb, void *phdr)
 {
 	struct firewall_ops *fw=firewall_chain[pf];
-	int result=firewall_policy[pf];
 	
 	while(fw!=NULL)
 	{
@@ -129,14 +126,12 @@ int call_in_firewall(int pf, struct sk_buff *skb, void *phdr)
 			return rc;
 		fw=fw->next;
 	}
-	/* alan, is this right? */
-	return result;
+	return firewall_policy[pf];
 }
 
 int call_out_firewall(int pf, struct sk_buff *skb, void *phdr)
 {
 	struct firewall_ops *fw=firewall_chain[pf];
-	int result=firewall_policy[pf];
 	
 	while(fw!=NULL)
 	{
@@ -146,7 +141,7 @@ int call_out_firewall(int pf, struct sk_buff *skb, void *phdr)
 		fw=fw->next;
 	}
 	/* alan, is this right? */
-	return result;
+	return firewall_policy[pf];
 }
 
 void fwchain_init(void)

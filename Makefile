@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 36
+SUBLEVEL = 37
 
 ARCH = i386
 
@@ -251,7 +251,7 @@ mrproper: clean
 	rm -f drivers/scsi/aic7xxx_asm drivers/scsi/aic7xxx_seq.h
 	rm -f drivers/char/uni_hash.tbl drivers/char/conmakehash
 	rm -f .version .config* config.in config.old
-	rm -f scripts/tkparse scripts/kconfig.tk
+	rm -f scripts/tkparse scripts/kconfig.tk scripts/kconfig.tmp
 	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`
 	rm -f .hdepend

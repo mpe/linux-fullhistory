@@ -255,24 +255,31 @@ static void eraser(unsigned char c, struct tty_struct *tty)
 					tail = (tail+1) & (N_TTY_BUF_SIZE-1);
 				}
 
+				/* should never happen */
+				if (tty->column > 0x80000000)
+					tty->column = 0; 
+
 				/* Now backup to that column. */
 				while (tty->column > col) {
 					/* Can't use opost here. */
 					put_char('\b', tty);
-					tty->column--;
+					if (tty->column > 0)
+						tty->column--;
 				}
 			} else {
 				if (iscntrl(c) && L_ECHOCTL(tty)) {
 					put_char('\b', tty);
 					put_char(' ', tty);
 					put_char('\b', tty);
-					tty->column--;
+					if (tty->column > 0)
+						tty->column--;
 				}
 				if (!iscntrl(c) || L_ECHOCTL(tty)) {
 					put_char('\b', tty);
 					put_char(' ', tty);
 					put_char('\b', tty);
-					tty->column--;
+					if (tty->column > 0)
+						tty->column--;
 				}
 			}
 		}
@@ -696,6 +703,8 @@ static int n_tty_open(struct tty_struct *tty)
 	}
 	memset(tty->read_buf, 0, N_TTY_BUF_SIZE);
 	tty->read_head = tty->read_tail = tty->read_cnt = 0;
+	tty->canon_head = tty->canon_data = tty->erasing = 0;
+	tty->column = 0;
 	memset(tty->read_flags, 0, sizeof(tty->read_flags));
 	n_tty_set_termios(tty, 0);
 	tty->minimum_to_wake = 1;

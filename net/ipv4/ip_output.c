@@ -17,6 +17,9 @@
  *		Arnt Gulbrandsen, <agulbra@nvg.unit.no>
  *
  *	See ip_input.c for original log
+ *
+ *	Fixes:
+ *		Alan Cox	:	Missing nonblock feature in ip_build_xmit.
  */
 
 #include <asm/segment.h>
@@ -551,7 +554,8 @@ int ip_build_xmit(struct sock *sk,
 		   __u32 user_saddr,
 		   struct options * opt,
 		   int flags,
-		   int type) 
+		   int type,
+		   int noblock) 
 {
 	struct rtable *rt;
 	unsigned int fraglen, maxfraglen, fragheaderlen;
@@ -671,7 +675,7 @@ int ip_build_xmit(struct sock *sk,
 	if(length <= dev->mtu && !MULTICAST(daddr) && daddr!=0xFFFFFFFF && daddr!=dev->pa_brdaddr)
 	{	
 		int error;
-		struct sk_buff *skb=sock_alloc_send_skb(sk, length+15+dev->hard_header_len,0, 0,&error);
+		struct sk_buff *skb=sock_alloc_send_skb(sk, length+15+dev->hard_header_len,0, noblock, &error);
 		if(skb==NULL)
 		{
 			ip_statistics.IpOutDiscards++;
@@ -822,7 +826,7 @@ int ip_build_xmit(struct sock *sk,
 		 *	Get the memory we require with some space left for alignment.
 		 */
 
-		skb = sock_alloc_send_skb(sk, fraglen+15, 0, 0, &error);
+		skb = sock_alloc_send_skb(sk, fraglen+15, 0, noblock, &error);
 		if (skb == NULL)
 		{
 			ip_statistics.IpOutDiscards++;

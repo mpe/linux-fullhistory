@@ -154,6 +154,20 @@ audio_release (int dev, struct fileinfo *file)
   DMAbuf_release (dev, mode);
 }
 
+#if !defined(i386)
+static void
+translate_bytes (const unsigned char *table, unsigned char *buff, int n)
+{
+  unsigned long   i;
+
+  if (n <= 0)
+    return;
+
+  for (i = 0; i < n; ++i)
+    buff[i] = table[buff[i]];
+}
+
+#else
 extern inline void
 translate_bytes (const void *table, void *buff, int n)
 {
@@ -168,7 +182,7 @@ translate_bytes (const void *table, void *buff, int n)
     :	       "bx", "cx", "di", "si", "ax");
     }
 }
-
+#endif
 
 int
 audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
@@ -248,7 +262,7 @@ audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 	  /*
 	   * This just allows interrupts while the conversion is running
 	   */
-	  __asm__ ("sti");
+	  sti();
 	  translate_bytes (ulaw_dsp, (unsigned char *) &wr_dma_buf[dev][wr_buff_ptr[dev]], l);
 	}
 
@@ -323,7 +337,7 @@ audio_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 	  /*
 	   * This just allows interrupts while the conversion is running
 	   */
-	  __asm__ ("sti");
+	  sti();
 
 	  translate_bytes (dsp_ulaw, (unsigned char *) dmabuf, l);
 	}

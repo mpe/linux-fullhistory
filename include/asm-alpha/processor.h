@@ -49,10 +49,12 @@ struct thread_struct {
 #include <asm/ptrace.h>
 
 /*
- * Return saved PC of a blocked thread.  This assumes the frame pointer
- * is the 6th saved long on the kernel stack and that the saved return
- * address is the first long in the frame.  This all holds provided the
- * thread blocked through a call to schedule().
+ * Return saved PC of a blocked thread.  This assumes the frame
+ * pointer is the 6th saved long on the kernel stack and that the
+ * saved return address is the first long in the frame.  This all
+ * holds provided the thread blocked through a call to schedule() ($15
+ * is the frame pointer in schedule() and $15 is saved at offset 48 by
+ * entry.S:do_switch_stack).
  */
 extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
