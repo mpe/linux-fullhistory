@@ -270,16 +270,12 @@ static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
 
 	if (dentry && dentry->d_revalidate) {
 		int validated, (*revalidate)(struct dentry *) = dentry->d_revalidate;
-		struct dentry * save;
 
 		dentry->d_count++;
-		validated = revalidate(dentry);
-		save = dentry;
-		if (!validated) {
-			d_drop(dentry);
+		validated = revalidate(dentry) || d_invalidate(dentry);
+		dput(dentry);
+		if (!validated)
 			dentry = NULL;
-		}
-		dput(save);
 	}
 	return dentry;
 }

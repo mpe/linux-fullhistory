@@ -31,6 +31,18 @@
 #endif
 
 
+/*
+  FlashPoint support is only available for the Intel x86 Architecture.
+*/
+
+#ifndef __i386__
+
+#undef CONFIG_SCSI_OMIT_FLASHPOINT
+#define CONFIG_SCSI_OMIT_FLASHPOINT
+
+#endif
+
+
 #ifndef CONFIG_SCSI_OMIT_FLASHPOINT
 
 
@@ -495,7 +507,7 @@ typedef struct SCCBMgr_info {
 	#define SCSI_PARITY_ENA		  0x0001
 	#define LOW_BYTE_TERM		  0x0010
 	#define HIGH_BYTE_TERM		  0x0020
-	#define _BUSTYPE_PCI	  0x3
+	#define BUSTYPE_PCI	  0x3
 #endif
 
 #define SUPPORT_16TAR_32LUN	  0x0002
@@ -2590,7 +2602,7 @@ int SccbMgr_sense_adapter(PSCCBMGR_INFO pCardInfo)
       pCardInfo->si_flags |= SUPPORT_16TAR_32LUN;
 
    pCardInfo->si_card_family = HARPOON_FAMILY;
-   pCardInfo->si_bustype = _BUSTYPE_PCI;
+   pCardInfo->si_bustype = BUSTYPE_PCI;
 
 	if(pCurrNvRam){
    	pCardInfo->si_card_model[0] = '9';
@@ -3193,7 +3205,7 @@ STATIC s32bits probe_adapter(PADAPTER_INFO pAdapterInfo)
 	}
 
    pAdapterInfo->ai_product_family = HARPOON_FAMILY;
-   pAdapterInfo->ai_HBAbustype = _BUSTYPE_PCI;
+   pAdapterInfo->ai_HBAbustype = BUSTYPE_PCI;
 
    for (i=0;i<CARD_MODEL_NAMELEN;i++)
    {

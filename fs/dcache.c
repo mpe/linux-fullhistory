@@ -1,4 +1,3 @@
-
 /*
  * fs/dcache.c
  *
@@ -90,6 +89,25 @@ repeat:
 			list_add(&dentry->d_lru, &dentry_unused);
 		}
 	}
+}
+
+/*
+ * Try to invalidate the dentry if it turns out to be
+ * possible. If there are other users of the dentry we
+ * can't invalidate it.
+ *
+ * This is currently incorrect. We should try to see if
+ * we can invalidate any unused children - right now we
+ * refuse to invalidate way too much.
+ */
+int d_invalidate(struct dentry * dentry)
+{
+	/* We should do a partial shrink_dcache here */
+	if (dentry->d_count != 1)
+		return -EBUSY;
+
+	d_drop(dentry);
+	return 0;
 }
 
 /*
@@ -366,6 +384,11 @@ char * d_path(struct dentry *dentry, char *buffer, int buflen)
 
 	*--end = '\0';
 	buflen--;
+	if (dentry->d_parent != dentry && list_empty(&dentry->d_hash)) {
+		buflen -= 10;
+		end -= 10;
+		memcpy(end, " (deleted)", 10);
+	}
 
 	/* Get '/' right */
 	retval = end-1;

@@ -1,10 +1,10 @@
 	   BusLogic MultiMaster and FlashPoint SCSI Driver for Linux
 
-			  Version 2.0.9 for Linux 2.0
+			 Version 2.0.10 for Linux 2.0
 
 			      PRODUCTION RELEASE
 
-				 29 March 1997
+				11 August 1997
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -284,6 +284,14 @@ o PCI Slot Scanning Order
   so as to recognize the host adapters in the same order as they are enumerated
   by the host adapter's BIOS.
 
+o Mega-Transfers/Second
+
+  The driver reports on the synchronous transfer parameters negotiated between
+  the host adapter and target devices in units of "mega-transfers/second".  For
+  wide devices, the unit of transfer is 16 bits if wide negotiation has been
+  successfully completed.  Therefore, the total transfer rate to wide devices
+  will generally be twice the synchronous tranfer rate reported by the driver.
+
 
 			     COMMAND LINE OPTIONS
 
@@ -372,16 +380,17 @@ substantially impact performance.
 
 				 INSTALLATION
 
-This distribution was prepared for Linux kernel version 2.0.29, but should be
-compatible with 2.0.4 or any later 2.0 series kernel.
+This distribution was prepared for Linux kernel version 2.0.30, but should be
+compatible with 2.0.4 or any later 2.0 series kernel if BusLogic.patch is also
+applied.
 
 To install the new BusLogic SCSI driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf BusLogic-2.0.9.tar.gz
+  tar -xvzf BusLogic-2.0.10.tar.gz
   mv README.* LICENSE.* BusLogic.[ch] FlashPoint.c linux/drivers/scsi
-  patch -p < BusLogic.patch
+  patch -p < BusLogic.patch	    # Only for kernels prior to 2.0.30
   cd linux
   make config
   make depend

@@ -1118,7 +1118,6 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 		dput(dir_d);
 		error = -ENOTDIR;
 	}
-	dput(old_root);
 	dput(old_pwd);
 	if (error) {
 		int umount_error;
