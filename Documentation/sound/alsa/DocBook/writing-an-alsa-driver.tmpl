@@ -3011,6 +3011,9 @@ struct _snd_pcm_runtime {
 	current appl_ptr for the internal buffer, and this callback
 	is useful only for such a purpose.
 	</para>
+	<para>
+	  This callback is atomic.
+	</para>
       </section>
 
       <section id="pcm-interface-operators-page-callback">
@@ -3206,6 +3209,11 @@ struct _snd_pcm_runtime {
       (e.g. <parameter>trigger</parameter> callback).
       For taking a certain delay in such a callback, please use
       <function>udelay()</function> or <function>mdelay()</function>.
+      </para>
+
+      <para>
+      All three atomic callbacks (trigger, pointer, and ack) are
+      called with local interrupts disabled.
       </para>
 
     </section>
@@ -4598,11 +4606,12 @@ struct _snd_pcm_runtime {
         </para>
 
         <para>
-        The <function>trigger</function> callback may be called from
-        another hardware interrupt handler.  This means that all
-        spinlocks taken in the <function>trigger</function> callback
-        must be taken with <function>spin_lock_irqsave</function>
-        everywhere.
+        The <function>trigger</function> callback with nonzero
+        <paramater>up</parameter> parameter may be called from another
+        hardware interrupt handler.  This means that all spinlocks
+        taken in the <function>trigger</function> callback must be
+        taken with <function>spin_lock_irqsave</function> even when
+        you are in your own interrupt handler.
         </para>
       </section>
 
@@ -4622,6 +4631,12 @@ struct _snd_pcm_runtime {
         This is called with a nonzero <parameter>up</parameter>
         parameter to enable receiving data, or with a zero
         <parameter>up</parameter> parameter do disable receiving data.
+        </para>
+
+        <para>
+        The <function>trigger</function> callback must not sleep; the
+        actual reading of data from the device is usually done in an
+        interrupt handler.
         </para>
 
         <para>
