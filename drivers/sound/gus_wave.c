@@ -2195,7 +2195,7 @@ gus_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SOUND_PCM_WRITE_RATE:
       if (local)
 	return gus_audio_set_speed ((int) arg);
-      return snd_ioctl_return ((int *) arg, gus_audio_set_speed (get_fs_long ((long *) arg)));
+      return snd_ioctl_return ((int *) arg, gus_audio_set_speed (get_user ((int *) arg)));
       break;
 
     case SOUND_PCM_READ_RATE:
@@ -2207,13 +2207,13 @@ gus_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SNDCTL_DSP_STEREO:
       if (local)
 	return gus_audio_set_channels ((int) arg + 1) - 1;
-      return snd_ioctl_return ((int *) arg, gus_audio_set_channels (get_fs_long ((long *) arg) + 1) - 1);
+      return snd_ioctl_return ((int *) arg, gus_audio_set_channels (get_user ((int *) arg) + 1) - 1);
       break;
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
 	return gus_audio_set_channels ((int) arg);
-      return snd_ioctl_return ((int *) arg, gus_audio_set_channels (get_fs_long ((long *) arg)));
+      return snd_ioctl_return ((int *) arg, gus_audio_set_channels (get_user ((int *) arg)));
       break;
 
     case SOUND_PCM_READ_CHANNELS:
@@ -2225,7 +2225,7 @@ gus_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SNDCTL_DSP_SETFMT:
       if (local)
 	return gus_audio_set_bits ((int) arg);
-      return snd_ioctl_return ((int *) arg, gus_audio_set_bits (get_fs_long ((long *) arg)));
+      return snd_ioctl_return ((int *) arg, gus_audio_set_bits (get_user ((int *) arg)));
       break;
 
     case SOUND_PCM_READ_BITS:
@@ -3046,7 +3046,7 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:
-	    gus_recmask = get_fs_long ((long *) arg) & MIX_DEVS;
+	    gus_recmask = get_user ((int *) arg) & MIX_DEVS;
 	    if (!(gus_recmask & (SOUND_MASK_MIC | SOUND_MASK_LINE)))
 	      gus_recmask = SOUND_MASK_MIC;
 	    /* Note! Input volumes are updated during next open for recording */
@@ -3055,7 +3055,7 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 
 	  case SOUND_MIXER_MIC:
 	    {
-	      int             vol = get_fs_long ((long *) arg) & 0xff;
+	      int             vol = get_user ((int *) arg) & 0xff;
 
 	      if (vol < 0)
 		vol = 0;
@@ -3069,7 +3069,7 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 
 	  case SOUND_MIXER_LINE:
 	    {
-	      int             vol = get_fs_long ((long *) arg) & 0xff;
+	      int             vol = get_user ((int *) arg) & 0xff;
 
 	      if (vol < 0)
 		vol = 0;
@@ -3082,7 +3082,7 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	    break;
 
 	  case SOUND_MIXER_PCM:
-	    gus_pcm_volume = get_fs_long ((long *) arg) & 0xff;
+	    gus_pcm_volume = get_user ((int *) arg) & 0xff;
 	    if (gus_pcm_volume < 0)
 	      gus_pcm_volume = 0;
 	    if (gus_pcm_volume > 100)
@@ -3095,7 +3095,7 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	    {
 	      int             voice;
 
-	      gus_wave_volume = get_fs_long ((long *) arg) & 0xff;
+	      gus_wave_volume = get_user ((int *) arg) & 0xff;
 
 	      if (gus_wave_volume < 0)
 		gus_wave_volume = 0;

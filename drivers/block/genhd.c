@@ -37,6 +37,7 @@
  */
 #include <asm/unaligned.h>
 
+#define SYS_IND(p)	get_unaligned(&p->sys_ind)
 #define NR_SECTS(p)	get_unaligned(&p->nr_sects)
 #define START_SECT(p)	get_unaligned(&p->start_sect)
 
@@ -100,8 +101,8 @@ static void add_partition (struct gendisk *hd, int minor, int start, int size)
 
 static inline int is_extended_partition(struct partition *p)
 {
-	return (p->sys_ind == DOS_EXTENDED_PARTITION ||
-		p->sys_ind == LINUX_EXTENDED_PARTITION);
+	return (SYS_IND(p) == DOS_EXTENDED_PARTITION ||
+		SYS_IND(p) == LINUX_EXTENDED_PARTITION);
 }
 
 #ifdef CONFIG_MSDOS_PARTITION
@@ -277,7 +278,7 @@ check_table:
 		 */
 		extern int ide_xlate_1024(kdev_t, int, const char *);
 		unsigned int sig = *(unsigned short *)(data + 2);
-		if (p->sys_ind == EZD_PARTITION) {
+		if (SYS_IND(p) == EZD_PARTITION) {
 			/*
 			 * The remainder of the disk must be accessed using
 			 * a translated geometry that reduces the number of 
@@ -290,7 +291,7 @@ check_table:
 				data += 512;
 				goto check_table;
 			}
-		} else if (p->sys_ind == DM6_PARTITION) {
+		} else if (SYS_IND(p) == DM6_PARTITION) {
 
 			/*
 			 * Everything on the disk is offset by 63 sectors,
@@ -313,7 +314,7 @@ check_table:
 			 * DM6 signature in MBR, courtesy of OnTrack
 			 */
 			(void) ide_xlate_1024 (dev, 0, " [DM6:MBR]");
-		} else if (p->sys_ind == DM6_AUX1PARTITION || p->sys_ind == DM6_AUX3PARTITION) {
+		} else if (SYS_IND(p) == DM6_AUX1PARTITION || SYS_IND(p) == DM6_AUX3PARTITION) {
 			/*
 			 * DM6 on other than the first (boot) drive
 			 */
@@ -364,7 +365,7 @@ check_table:
 				hd->part[minor].nr_sects = 2;
 		}
 #ifdef CONFIG_BSD_DISKLABEL
-		if (p->sys_ind == BSD_PARTITION) {
+		if (SYS_IND(p) == BSD_PARTITION) {
 			printk(" <");
 			bsd_disklabel_partition(hd, MKDEV(hd->major, minor));
 			printk(" >");

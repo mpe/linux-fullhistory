@@ -156,7 +156,7 @@ pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SOUND_PCM_WRITE_RATE:
       if (local)
 	return pcm_set_speed ((int) arg);
-      return snd_ioctl_return ((int *) arg, pcm_set_speed (get_fs_long ((long *) arg)));
+      return snd_ioctl_return ((int *) arg, pcm_set_speed (get_user ((int *) arg)));
       break;
 
     case SOUND_PCM_READ_RATE:
@@ -168,13 +168,13 @@ pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SNDCTL_DSP_STEREO:
       if (local)
 	return pcm_set_channels ((int) arg + 1) - 1;
-      return snd_ioctl_return ((int *) arg, pcm_set_channels (get_fs_long ((long *) arg) + 1) - 1);
+      return snd_ioctl_return ((int *) arg, pcm_set_channels (get_user ((int *) arg) + 1) - 1);
       break;
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
 	return pcm_set_channels ((int) arg);
-      return snd_ioctl_return ((int *) arg, pcm_set_channels (get_fs_long ((long *) arg)));
+      return snd_ioctl_return ((int *) arg, pcm_set_channels (get_user ((int *) arg)));
       break;
 
     case SOUND_PCM_READ_CHANNELS:
@@ -186,7 +186,7 @@ pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SNDCTL_DSP_SETFMT:
       if (local)
 	return pcm_set_bits ((int) arg);
-      return snd_ioctl_return ((int *) arg, pcm_set_bits (get_fs_long ((long *) arg)));
+      return snd_ioctl_return ((int *) arg, pcm_set_bits (get_user ((int *) arg)));
       break;
 
     case SOUND_PCM_READ_BITS:
@@ -197,9 +197,9 @@ pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SOUND_PCM_WRITE_FILTER:	/*
 					 * NOT YET IMPLEMENTED
 					 */
-      if (get_fs_long ((long *) arg) > 1)
+      if (get_user ((int *) arg) > 1)
 	return -(EINVAL);
-      pcm_filter = get_fs_long ((long *) arg);
+      pcm_filter = get_user ((int *) arg);
       break;
 
     case SOUND_PCM_READ_FILTER:

@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/fcntl.h>
+#include <linux/file.h>
 #include <linux/mm.h>
 #include <linux/uio.h>
 
@@ -106,21 +107,33 @@ asmlinkage int sys_read(unsigned int fd,char * buf,int count)
 	struct file * file;
 	struct inode * inode;
 
-	if (fd>=NR_OPEN || !(file=current->files->fd[fd]) || !(inode=file->f_inode))
-		return -EBADF;
+	error = -EBADF;
+	file = fget(fd);
+	if (!file)
+		goto bad_file;
+	inode = file->f_inode;
+	if (!inode)
+		goto out;
+	error = -EBADF;
 	if (!(file->f_mode & 1))
-		return -EBADF;
+		goto out;
+	error = -EINVAL;
 	if (!file->f_op || !file->f_op->read)
-		return -EINVAL;
+		goto out;
+	error = 0;
 	if (count <= 0)
-		return 0;
+		goto out;
 	error = locks_verify_area(FLOCK_VERIFY_READ,inode,file,file->f_pos,count);
 	if (error)
-		return error;
+		goto out;
 	error = verify_area(VERIFY_WRITE,buf,count);
 	if (error)
-		return error;
-	return file->f_op->read(inode,file,buf,count);
+		goto out;
+	error = file->f_op->read(inode,file,buf,count);
+out:
+	fput(file, inode);
+bad_file:
+	return error;
 }
 
 asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
@@ -128,22 +141,28 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 	int error;
 	struct file * file;
 	struct inode * inode;
-	int written;
-	
-	if (fd>=NR_OPEN || !(file=current->files->fd[fd]) || !(inode=file->f_inode))
-		return -EBADF;
+
+	error = -EBADF;
+	file = fget(fd);
+	if (!file)
+		goto bad_file;
+	inode = file->f_inode;
+	if (!inode)
+		goto out;
 	if (!(file->f_mode & 2))
-		return -EBADF;
+		goto out;
+	error = -EINVAL;
 	if (!file->f_op || !file->f_op->write)
-		return -EINVAL;
+		goto out;
+	error = 0;
 	if (!count)
-		return 0;
+		goto out;
 	error = locks_verify_area(FLOCK_VERIFY_WRITE,inode,file,file->f_pos,count);
 	if (error)
-		return error;
+		goto out;
 	error = verify_area(VERIFY_READ,buf,count);
 	if (error)
-		return error;
+		goto out;
 	/*
 	 * If data has been written to the file, remove the setuid and
 	 * the setgid bits. We do it anyway otherwise there is an
@@ -164,9 +183,12 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 	}
 
 	down(&inode->i_sem);
-	written = file->f_op->write(inode,file,buf,count);
+	error = file->f_op->write(inode,file,buf,count);
 	up(&inode->i_sem);
-	return written;
+out:
+	fput(file, inode);
+bad_file:
+	return error;
 }
 
 static int sock_readv_writev(int type, struct inode * inode, struct file * file,

@@ -48,7 +48,7 @@ snd_ioctl_return (int *addr, int value)
   if (value < 0)
     return value;
 
-  put_fs_long (value, (long *) &((addr)[0]));
+  put_user (value, addr);
   return 0;
 }
 
@@ -668,7 +668,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 
       audio_devs[dev]->buffsize = PAGE_SIZE * (1 << sz);
 
-      if ((start_addr = (char *) __get_free_pages (GFP_ATOMIC, sz, MAX_DMA_ADDRESS)) == NULL)
+      if ((start_addr = (char *) __get_dma_pages (GFP_ATOMIC, sz)) == NULL)
 	audio_devs[dev]->buffsize /= 2;
     }
 

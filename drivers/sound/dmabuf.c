@@ -227,13 +227,13 @@ close_dmap (int dev, struct dma_buffparms *dmap, int chan)
 static unsigned int
 default_set_bits (int dev, unsigned int bits)
 {
-  return audio_devs[dev]->d->ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) bits, 1);
+  return audio_devs[dev]->d->ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) (long) bits, 1);
 }
 
 static int
 default_set_speed (int dev, int speed)
 {
-  return audio_devs[dev]->d->ioctl (dev, SNDCTL_DSP_SPEED, (caddr_t) speed, 1);
+  return audio_devs[dev]->d->ioctl (dev, SNDCTL_DSP_SPEED, (caddr_t) (long) speed, 1);
 }
 
 static short
@@ -241,7 +241,7 @@ default_set_channels (int dev, short channels)
 {
   int             c = channels;
 
-  return audio_devs[dev]->d->ioctl (dev, SNDCTL_DSP_CHANNELS, (caddr_t) c, 1);
+  return audio_devs[dev]->d->ioctl (dev, SNDCTL_DSP_CHANNELS, (caddr_t) (long) c, 1);
 }
 
 static void
@@ -761,14 +761,14 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 {
   struct dma_buffparms *dmap_out = audio_devs[dev]->dmap_out;
   struct dma_buffparms *dmap_in = audio_devs[dev]->dmap_in;
-  int             iarg = (int) arg;
+  long            larg = (long) arg;
 
   switch (cmd)
     {
     case SOUND_PCM_WRITE_RATE:
       if (local)
-	return audio_devs[dev]->d->set_speed (dev, (int) arg);
-      return snd_ioctl_return ((int *) arg, audio_devs[dev]->d->set_speed (dev, get_fs_long ((long *) arg)));
+	return audio_devs[dev]->d->set_speed (dev, larg);
+      return snd_ioctl_return ((int *) arg, audio_devs[dev]->d->set_speed (dev, get_user ((int *) arg)));
 
     case SOUND_PCM_READ_RATE:
       if (local)
@@ -777,13 +777,13 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_STEREO:
       if (local)
-	return audio_devs[dev]->d->set_channels (dev, (int) arg + 1) - 1;
-      return snd_ioctl_return ((int *) arg, audio_devs[dev]->d->set_channels (dev, get_fs_long ((long *) arg) + 1) - 1);
+	return audio_devs[dev]->d->set_channels (dev, larg + 1) - 1;
+      return snd_ioctl_return ((int *) arg, audio_devs[dev]->d->set_channels (dev, get_user ((int *) arg) + 1) - 1);
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-	return audio_devs[dev]->d->set_channels (dev, (short) iarg);
-      return snd_ioctl_return ((int *) arg, audio_devs[dev]->d->set_channels (dev, get_fs_long ((long *) arg)));
+	return audio_devs[dev]->d->set_channels (dev, (short) larg);
+      return snd_ioctl_return ((int *) arg, audio_devs[dev]->d->set_channels (dev, get_user ((int *) arg)));
 
     case SOUND_PCM_READ_CHANNELS:
       if (local)
@@ -792,8 +792,8 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_SAMPLESIZE:
       if (local)
-	return audio_devs[dev]->d->set_bits (dev, (unsigned int) arg);
-      return snd_ioctl_return ((int *) arg, audio_devs[dev]->d->set_bits (dev, get_fs_long ((long *) arg)));
+	return audio_devs[dev]->d->set_bits (dev, larg);
+      return snd_ioctl_return ((int *) arg, audio_devs[dev]->d->set_bits (dev, get_user ((int *) arg)));
 
     case SOUND_PCM_READ_BITS:
       if (local)
@@ -827,7 +827,7 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_SUBDIVIDE:
       {
-	int             fact = get_fs_long ((long *) arg);
+	int             fact = get_user ((int *) arg);
 	int             ret;
 
 	ret = dma_subdivide (dev, dmap_out, arg, fact);
@@ -851,7 +851,7 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_SETFRAGMENT:
       {
-	int             fact = get_fs_long ((long *) arg);
+	int             fact = get_user ((int *) arg);
 	int             ret;
 
 	ret = dma_set_fragment (dev, dmap_out, arg, fact);
@@ -930,7 +930,7 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
       {
 	unsigned long   flags;
 
-	int             bits = get_fs_long ((long *) arg) & audio_devs[dev]->open_mode;
+	int             bits = get_user ((int *) arg) & audio_devs[dev]->open_mode;
 	int             changed;
 
 	if (audio_devs[dev]->d->trigger == NULL)

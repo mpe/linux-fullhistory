@@ -127,17 +127,18 @@
       0.40    27-Dec-95   Rationalise MODULE and autoprobe code.
                           Rewrite for portability & updated.
                           ALPHA support from <jestabro@amt.tay1.dec.com>
-                          Added verify_area() calls in depca_ioctl() from
+                          Added verify_area() calls in ewrk3_ioctl() from
                           suggestion by <heiko@colossus.escape.de>.
 			  Add new multicasting code.
       0.41    20-Jan-96   Fix IRQ set up problem reported by 
                           <kenneth@bbs.sas.ntu.ac.sg>.
       0.42    22-Apr-96	  Fix alloc_device() bug <jari@markkus2.fimr.fi>
+      0.43    16-Aug-96	  Update alloc_device() to conform to de4x5.c
 
     =========================================================================
 */
 
-static const char *version = "ewrk3.c:v0.42 96/4/22 davies@wanton.lkg.dec.com\n";
+static const char *version = "ewrk3.c:v0.43 96/8/16 davies@wanton.lkg.dec.com\n";
 
 #include <linux/module.h>
 
@@ -162,6 +163,7 @@ static const char *version = "ewrk3.c:v0.42 96/4/22 davies@wanton.lkg.dec.com\n"
 #include <linux/time.h>
 #include <linux/types.h>
 #include <linux/unistd.h>
+#include <linux/ctype.h>
 
 #include "ewrk3.h"
 
@@ -315,6 +317,8 @@ static u_char get_hw_addr (struct device *dev, u_char *eeprom_image, char chipTy
 static void   isa_probe(struct device *dev, u_long iobase);
 static void   eisa_probe(struct device *dev, u_long iobase);
 static struct device *alloc_device(struct device *dev, u_long iobase);
+static int    ewrk3_dev_index(char *s);
+static struct device *insert_device(struct device *dev, u_long iobase, int (*init)(struct device *));
 
 
 #ifdef MODULE
@@ -1368,113 +1372,95 @@ static void eisa_probe(struct device *dev, u_long ioaddr)
 }
 
 /*
-** Allocate the device by pointing to the next available space in the
-** device structure. Should one not be available, it is created.
+** Search the entire 'eth' device list for a fixed probe. If a match isn't
+** found then check for an autoprobe or unused device location. If they
+** are not available then insert a new device structure at the end of
+** the current list.
 */
-static struct device *alloc_device(struct device *dev, u_long iobase)
+static struct device *
+alloc_device(struct device *dev, u_long iobase)
 {
-  int addAutoProbe = 0;
-  struct device *tmp = NULL, *ret;
-  int (*init)(struct device *) = NULL;
+    struct device *adev = NULL;
+    int fixed = 0, new_dev = 0;
 
-  /*
-  ** Check the device structures for an end of list or unused device
-  */
-  if (!loading_module) {
-    while (dev->next != NULL) {
-      if ((dev->base_addr == EWRK3_NDA) || (dev->base_addr == 0)) break;
-      dev = dev->next;                     /* walk through eth device list */
-      num_eth++;                           /* increment eth device number */
+    num_eth = ewrk3_dev_index(dev->name);
+    if (loading_module) return dev;
+    
+    while (1) {
+	if (((dev->base_addr == EWRK3_NDA) || (dev->base_addr==0)) && !adev) {
+	    adev=dev;
+	} else if ((dev->priv == NULL) && (dev->base_addr==iobase)) {
+	    fixed = 1;
+	} else {
+	    if (dev->next == NULL) {
+		new_dev = 1;
+	    } else if (strncmp(dev->next->name, "eth", 3) != 0) {
+		new_dev = 1;
+	    }
+	}
+	if ((dev->next == NULL) || new_dev || fixed) break;
+	dev = dev->next;
+	num_eth++;
+    }
+    if (adev && !fixed) {
+	dev = adev;
+	num_eth = ewrk3_dev_index(dev->name);
+	new_dev = 0;
     }
 
-    /*
-    ** If an autoprobe is requested for another device, we must re-insert
-    ** the request later in the list. Remember the current position first.
-    */
-    if ((dev->base_addr == 0) && (num_ewrk3s > 0)) {
-      addAutoProbe++;
-      tmp = dev->next;                     /* point to the next device */
-      init = dev->init;                    /* remember the probe function */
+    if (((dev->next == NULL) &&  
+	((dev->base_addr != EWRK3_NDA) && (dev->base_addr != 0)) && !fixed) ||
+	new_dev) {
+	num_eth++;                         /* New device */
+	dev = insert_device(dev, iobase, ewrk3_probe);
     }
+    
+    return dev;
+}
 
-    /*
-    ** If at end of list and can't use current entry, malloc one up. 
-    ** If memory could not be allocated, print an error message.
-    */
-    if ((dev->next == NULL) &&  
-	!((dev->base_addr == EWRK3_NDA) || (dev->base_addr == 0))){
-      dev->next = (struct device *)kmalloc(sizeof(struct device) + 8,
-					   GFP_KERNEL);
+/*
+** If at end of eth device list and can't use current entry, malloc
+** one up. If memory could not be allocated, print an error message.
+*/
+static struct device *
+insert_device(struct device *dev, u_long iobase, int (*init)(struct device *))
+{
+    struct device *new;
 
-      dev = dev->next;                     /* point to the new device */
-      if (dev == NULL) {
-	printk("eth%d: Device not initialised, insufficient memory\n",
-	       num_eth);
-      } else {
-	/*
-	** If the memory was allocated, point to the new memory area
-	** and initialize it (name, I/O address, next device (NULL) and
-	** initialisation probe routine).
-	*/
+    new = (struct device *)kmalloc(sizeof(struct device)+8, GFP_KERNEL);
+    if (new == NULL) {
+	printk("eth%d: Device not initialised, insufficient memory\n",num_eth);
+	return NULL;
+    } else {
+	new->next = dev->next;
+	dev->next = new;
+	dev = dev->next;               /* point to the new device */
 	dev->name = (char *)(dev + 1);
 	if (num_eth > 9999) {
-	  sprintf(dev->name,"eth????");    /* New device name */
+	    sprintf(dev->name,"eth????");/* New device name */
 	} else {
-	  sprintf(dev->name,"eth%d", num_eth);/* New device name */
+	    sprintf(dev->name,"eth%d", num_eth);/* New device name */
 	}
-	dev->base_addr = iobase;           /* assign the io address */
-	dev->next = NULL;                  /* mark the end of list */
-	dev->init = &ewrk3_probe;          /* initialisation routine */
-	num_ewrk3s++;
-      }
+	dev->base_addr = iobase;       /* assign the io address */
+	dev->init = init;              /* initialisation routine */
     }
-    ret = dev;                             /* return current struct, or NULL */
-  
-    /*
-    ** Now figure out what to do with the autoprobe that has to be inserted.
-    ** Firstly, search the (possibly altered) list for an empty space.
-    */
-    if (ret != NULL) {
-      if (addAutoProbe) {
-	for (;(tmp->next!=NULL) && (tmp->base_addr!=EWRK3_NDA); tmp=tmp->next);
 
-	/*
-	** If no more device structures and can't use the current one, malloc
-	** one up. If memory could not be allocated, print an error message.
-	*/
-	if ((tmp->next == NULL) && !(tmp->base_addr == EWRK3_NDA)) {
-	  tmp->next = (struct device *)kmalloc(sizeof(struct device) + 8,
-					       GFP_KERNEL);
-	  tmp = tmp->next;                     /* point to the new device */
-	  if (tmp == NULL) {
-	    printk("%s: Insufficient memory to extend the device list.\n", 
-		   dev->name);
-	  } else {
-	    /*
-	    ** If the memory was allocated, point to the new memory area
-	    ** and initialize it (name, I/O address, next device (NULL) and
-	    ** initialisation probe routine).
-	    */
-	    tmp->name = (char *)(tmp + 1);
-	    if (num_eth > 9999) {
-	      sprintf(tmp->name,"eth????");       /* New device name */
-	    } else {
-	      sprintf(tmp->name,"eth%d", num_eth);/* New device name */
-	    }
-	    tmp->base_addr = 0;                /* re-insert the io address */
-	    tmp->next = NULL;                  /* mark the end of list */
-	    tmp->init = init;                  /* initialisation routine */
-	  }
-	} else {                               /* structure already exists */
-	  tmp->base_addr = 0;                  /* re-insert the io address */
-	}
-      }
+    return dev;
+}
+
+static int
+ewrk3_dev_index(char *s)
+{
+    int i=0, j=0;
+
+    for (;*s; s++) {
+	if (isdigit(*s)) {
+	    j=1;
+	    i = (i * 10) + (*s - '0');
+	} else if (j) break;
     }
-  } else {
-    ret = dev;
-  }
 
-  return ret;
+    return i;
 }
 
 /*
@@ -1927,9 +1913,9 @@ cleanup_module(void)
 
 /*
  * Local variables:
- *  kernel-compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O2 -m486 -c ewrk3.c"
+ *  compile-command: "gcc -D__KERNEL__ -I/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -fno-strength-reduce -malign-loops=2 -malign-jumps=2 -malign-functions=2 -O2 -m486 -c ewrk3.c"
  *
- *  module-compile-command: "gcc -D__KERNEL__ -DMODULE -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O2 -m486 -c ewrk3.c"
+ *  compile-command: "gcc -D__KERNEL__ -DMODULE -I/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -fno-strength-reduce -malign-loops=2 -malign-jumps=2 -malign-functions=2 -O2 -m486 -c ewrk3.c"
  * End:
  */
 

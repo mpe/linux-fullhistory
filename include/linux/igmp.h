@@ -1,5 +1,5 @@
 /*
- *	Linux NET3:	Internet Gateway Management Protocol  [IGMP]
+ *	Linux NET3:	Internet Group Management Protocol  [IGMP]
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>

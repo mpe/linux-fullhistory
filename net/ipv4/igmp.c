@@ -1,7 +1,7 @@
 /*
- *	Linux NET3:	Internet Gateway Management Protocol  [IGMP]
+ *	Linux NET3:	Internet Group Management Protocol  [IGMP]
  *
- *	This code implements the IGMP protocol as defined in RFC1122. There has
+ *	This code implements the IGMP protocol as defined in RFC1112. There has
  *	been a further revision of this protocol since which is now supported.
  *
  *	If you have trouble with this module be careful what gcc you have used,

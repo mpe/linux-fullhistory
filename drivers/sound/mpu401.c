@@ -790,7 +790,7 @@ mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
 	  printk ("MPU-401: Intelligent mode not supported by the HW\n");
 	  return -(EINVAL);
 	}
-      set_uart_mode (dev, devc, !get_fs_long ((long *) arg));
+      set_uart_mode (dev, devc, !get_user ((int *) arg));
       return 0;
       break;
 
@@ -1590,7 +1590,7 @@ mpu_timer_ioctl (int dev,
     {
     case SNDCTL_TMR_SOURCE:
       {
-	int             parm = (int) get_fs_long ((long *) arg) & timer_caps;
+	int             parm = (int) get_user ((int *) arg) & timer_caps;
 
 	if (parm != 0)
 	  {
@@ -1628,7 +1628,7 @@ mpu_timer_ioctl (int dev,
 
     case SNDCTL_TMR_TIMEBASE:
       {
-	int             val = (int) get_fs_long ((long *) arg);
+	int             val = (int) get_user ((int *) arg);
 
 	if (val)
 	  set_timebase (midi_dev, val);
@@ -1639,7 +1639,7 @@ mpu_timer_ioctl (int dev,
 
     case SNDCTL_TMR_TEMPO:
       {
-	int             val = (int) get_fs_long ((long *) arg);
+	int             val = (int) get_user ((int *) arg);
 	int             ret;
 
 	if (val)
@@ -1662,14 +1662,14 @@ mpu_timer_ioctl (int dev,
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (get_fs_long ((long *) arg) != 0)	/* Can't change */
+      if (get_user ((int *) arg) != 0)	/* Can't change */
 	return -(EINVAL);
 
       return snd_ioctl_return ((int *) arg, ((curr_tempo * curr_timebase) + 30) / 60);
       break;
 
     case SNDCTL_TMR_METRONOME:
-      metronome_mode = (int) get_fs_long ((long *) arg);
+      metronome_mode = (int) get_user ((int *) arg);
       setup_metronome (midi_dev);
       return 0;
       break;

@@ -30,24 +30,42 @@ extern int ptrace_cancel_bpt (struct task_struct *child);
 /*
  * The OSF/1 sigprocmask calling sequence is different from the
  * C sigprocmask() sequence..
+ *
+ * how:
+ * 1 - SIG_BLOCK
+ * 2 - SIG_UNBLOCK
+ * 3 - SIG_SETMASK
+ *
+ * We change the range to -1 .. 1 in order to let gcc easily
+ * use the conditional move instructions.
  */
-asmlinkage unsigned long osf_sigprocmask(int how, unsigned long newmask)
+asmlinkage unsigned long osf_sigprocmask(int how, unsigned long newmask,
+	long a2, long a3, long a4, long a5, struct pt_regs regs)
 {
-	unsigned long oldmask = current->blocked;
+	unsigned long ok, oldmask;
+	struct task_struct * tsk;
 
-	newmask &= _BLOCKABLE;
-	switch (how) {
-		case SIG_BLOCK:
-			current->blocked |= newmask;
-			return oldmask;
-		case SIG_UNBLOCK:
-			current->blocked &= ~newmask;
-			return oldmask;
-		case SIG_SETMASK:
-			current->blocked = newmask;
-			return oldmask;
+	ok = how-1;		/*  0 .. 2 */
+	tsk = current;
+	ok = ok <= 2;
+	oldmask = -EINVAL;
+	if (ok) {
+		long sign;		/* -1 .. 1 */
+		unsigned long block, unblock;
+
+		oldmask = tsk->blocked;
+		newmask &= _BLOCKABLE;
+		sign = how-2;
+		unblock = oldmask & ~newmask;
+		block = oldmask | newmask;
+		if (!sign)
+			block = unblock;
+		regs.r0 = 0;	/* special no error return */
+		if (sign <= 0)
+			newmask = block;
+		tsk->blocked = newmask;
 	}
-	return -EINVAL;
+	return oldmask;
 }
 
 /*

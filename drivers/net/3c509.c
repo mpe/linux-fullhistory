@@ -47,10 +47,10 @@ static char *version = "3c509.c:1.07 6/15/95 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/config.h>	/* for CONFIG_MCA */
+#include <linux/delay.h>	/* for udelay() */
 
 #include <asm/bitops.h>
 #include <asm/io.h>
-
 
 #ifdef EL3_DEBUG
 int el3_debug = EL3_DEBUG;
@@ -310,28 +310,24 @@ int el3_probe(struct device *dev)
  */
 static ushort read_eeprom(short ioaddr, int index)
 {
-	int timer;
-
 	outw(EEPROM_READ + index, ioaddr + 10);
 	/* Pause for at least 162 us. for the read to take place. */
-	for (timer = 0; timer < 162*4 + 400; timer++)
-		SLOW_DOWN_IO;
+	udelay (200);
 	return inw(ioaddr + 12);
 }
 
 /* Read a word from the EEPROM when in the ISA ID probe state. */
 static ushort id_read_eeprom(int index)
 {
-	int timer, bit, word = 0;
+	int bit, word = 0;
 
 	/* Issue read command, and pause for at least 162 us. for it to complete.
 	   Assume extra-fast 16Mhz bus. */
 	outb(EEPROM_READ + index, id_port);
 
-	/* This should really be done by looking at one of the timer channels. */
-	for (timer = 0; timer < 162*4 + 400; timer++)
-		SLOW_DOWN_IO;
-
+	/* Pause for at least 162 us. for the read to take place. */
+	udelay (200);
+	
 	for (bit = 15; bit >= 0; bit--)
 		word = (word << 1) + (inb(id_port) & 0x01);
 

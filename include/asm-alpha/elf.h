@@ -5,8 +5,10 @@
  * ELF register definitions..
  */
 
-/* 
- * Note: ELF_NGREG must ben the same as EF_SIZE/8.
+/*
+ * The OSF/1 version of <sys/procfs.h> makes gregset_t 46 entries long.
+ * I have no idea why that is so.  For now, we just leave it at 33
+ * (32 general regs + processor status word). 
  */
 #define ELF_NGREG	33
 #define ELF_NFPREG	32
@@ -32,12 +34,6 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE	8192
 
-#define ELF_CORE_COPY_REGS(_dest,_regs)			\
-{ struct user _dump;					\
-	dump_thread(_regs, &_dump);			\
-	memcpy((char *) &_dest, (char *) &_dump.regs,	\
-	       sizeof(elf_gregset_t)); }
-
 /* $0 is set by ld.so to a pointer to a function which might be 
    registered using atexit.  This provides a mean for the dynamic
    linker to call DT_FINI functions for shared libraries that have
@@ -48,5 +44,51 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
    such function.  */
 
 #define ELF_PLAT_INIT(_r)       _r->r0 = 0
+
+/* Use the same format as the OSF/1 procfs interface.  The register
+   layout is sane.  However, since dump_thread() creates the funky
+   layout that ECOFF coredumps want, we need to undo that layout here.
+   Eventually, it would be nice if the ECOFF core-dump had to do the
+   translation, then ELF_CORE_COPY_REGS() would become trivial and
+   faster.  */
+#define ELF_CORE_COPY_REGS(_dest,_regs)				\
+{								\
+	struct user _dump;					\
+								\
+	dump_thread(_regs, &_dump);				\
+	_dest[ 0] = _dump.regs[EF_V0];				\
+	_dest[ 1] = _dump.regs[EF_T0];				\
+	_dest[ 2] = _dump.regs[EF_T1];				\
+	_dest[ 3] = _dump.regs[EF_T2];				\
+	_dest[ 4] = _dump.regs[EF_T3];				\
+	_dest[ 5] = _dump.regs[EF_T4];				\
+	_dest[ 6] = _dump.regs[EF_T5];				\
+	_dest[ 7] = _dump.regs[EF_T6];				\
+	_dest[ 8] = _dump.regs[EF_T7];				\
+	_dest[ 9] = _dump.regs[EF_S0];				\
+	_dest[10] = _dump.regs[EF_S1];				\
+	_dest[11] = _dump.regs[EF_S2];				\
+	_dest[12] = _dump.regs[EF_S3];				\
+	_dest[13] = _dump.regs[EF_S4];				\
+	_dest[14] = _dump.regs[EF_S5];				\
+	_dest[15] = _dump.regs[EF_S6];				\
+	_dest[16] = _dump.regs[EF_A0];				\
+	_dest[17] = _dump.regs[EF_A1];				\
+	_dest[18] = _dump.regs[EF_A2];				\
+	_dest[19] = _dump.regs[EF_A3];				\
+	_dest[20] = _dump.regs[EF_A4];				\
+	_dest[21] = _dump.regs[EF_A5];				\
+	_dest[22] = _dump.regs[EF_T8];				\
+	_dest[23] = _dump.regs[EF_T9];				\
+	_dest[24] = _dump.regs[EF_T10];				\
+	_dest[25] = _dump.regs[EF_T11];				\
+	_dest[26] = _dump.regs[EF_RA];				\
+	_dest[27] = _dump.regs[EF_T12];				\
+	_dest[28] = _dump.regs[EF_AT];				\
+	_dest[29] = _dump.regs[EF_GP];				\
+	_dest[30] = _dump.regs[EF_SP];				\
+	_dest[31] = _dump.regs[EF_PC];	/* store PC here */	\
+	_dest[32] = _dump.regs[EF_PS];				\
+}
 
 #endif

@@ -156,23 +156,82 @@ void insw (unsigned long port, void *dst, unsigned long count)
 
 /*
  * Read COUNT 32-bit words from port PORT into memory starting at
- * SRC.  SRC must be at least word aligned.  This is used by the
- * IDE driver to read disk sectors.  Performance is important, but
- * the interfaces seems to be slow: just using the inlined version
- * of the inw() breaks things.
+ * SRC. Now works with any alignment in SRC. Performance is important,
+ * but the interfaces seems to be slow: just using the inlined version
+ * of the inl() breaks things.
  */
 void insl (unsigned long port, void *dst, unsigned long count)
 {
-	if (((unsigned long)dst) & 0x3) {
-		panic("insl: memory not aligned");
-	}
-
-	while (count) {
+	unsigned int l = 0, l2;
+	
+	if (!count)
+		return;
+	
+	switch (((unsigned long) dst) & 0x3)
+	{
+	 case 0x00:			/* Buffer 32-bit aligned */
+		while (count--)
+		{
+			*(unsigned int *) dst = inl(port);
+			((unsigned int *) dst)++;
+		}
+		break;
+	
+	/* Assuming little endian Alphas in cases 0x01 -- 0x03 ... */
+	
+	 case 0x02:			/* Buffer 16-bit aligned */
 		--count;
-		*(unsigned int *) dst = inl(port);
-		((unsigned int *) dst)++;
+		
+		l = inl(port);
+		*(unsigned short *) dst = l;
+		((unsigned short *) dst)++;
+		
+		while (count--)
+		{
+			l2 = inl(port);
+			*(unsigned int *) dst = l >> 16 | l2 << 16;
+			((unsigned int *) dst)++;
+			l = l2;
+		}
+		*(unsigned short *) dst = l >> 16;
+		break;
+	 case 0x01:			/* Buffer 8-bit aligned */
+		--count;
+		
+		l = inl(port);
+		*(unsigned char *) dst = l;
+		((unsigned char *) dst)++;
+		*(unsigned short *) dst = l >> 8;
+		((unsigned short *) dst)++;
+		while (count--)
+		{
+			l2 = inl(port);
+			*(unsigned int *) dst = l >> 24 | l2 << 8;
+			((unsigned int *) dst)++;
+			l = l2;
+		}
+		*(unsigned char *) dst = l >> 24;
+		break;
+	 case 0x03:			/* Buffer 8-bit aligned */
+		--count;
+		
+		l = inl(port);
+		*(unsigned char *) dst = l;
+		((unsigned char *) dst)++;
+		while (count--)
+		{
+			l2 = inl(port);
+			*(unsigned int *) dst = l << 24 | l2 >> 8;
+			((unsigned int *) dst)++;
+			l = l2;
+		}
+		*(unsigned short *) dst = l >> 8;
+		((unsigned short *) dst)++;
+		*(unsigned char *) dst = l >> 24;
+		break;
 	}
 }
+
 
 /*
  * Like insb but in the opposite direction.
@@ -223,20 +282,79 @@ void outsw (unsigned long port, const void *src, unsigned long count)
 
 /*
  * Like insl but in the opposite direction.  This is used by the IDE
- * driver to write disk sectors.  Performance is important, but the
- * interfaces seems to be slow: just using the inlined version of the
- * outw() breaks things.
+ * driver to write disk sectors.  Works with any alignment in SRC.
+ *  Performance is important, but the interfaces seems to be slow:
+ * just using the inlined version of the outl() breaks things.
  */
 void outsl (unsigned long port, const void *src, unsigned long count)
 {
-	if (((unsigned long)src) & 0x3) {
-		panic("outsw: memory not aligned");
-	}
-
-	while (count) {
+	unsigned int l = 0, l2;
+	
+	if (!count)
+		return;
+	
+	switch (((unsigned long) src) & 0x3)
+	{
+	 case 0x00:			/* Buffer 32-bit aligned */
+		while (count--)
+		{
+			outl(*(unsigned int *) src, port);
+			((unsigned int *) src)++;
+		}
+		break;
+	
+	/* Assuming little endian Alphas in cases 0x01 -- 0x03 ... */
+	
+	 case 0x02:			/* Buffer 16-bit aligned */
 		--count;
-		outl(*(unsigned int *) src, port);
-		((unsigned int *) src)++;
+		
+		l = *(unsigned short *) src << 16;
+		((unsigned short *) src)++;
+		
+		while (count--)
+		{
+			l2 = *(unsigned int *) src;
+			((unsigned int *) src)++;
+			outl (l >> 16 | l2 << 16, port);
+			l = l2;
+		}
+		l2 = *(unsigned short *) src;
+		outl (l >> 16 | l2 << 16, port);
+		break;
+	 case 0x01:			/* Buffer 8-bit aligned */
+		--count;
+		
+		l  = *(unsigned char *) src << 8;
+		((unsigned char *) src)++;
+		l |= *(unsigned short *) src << 16;
+		((unsigned short *) src)++;
+		while (count--)
+		{
+			l2 = *(unsigned int *) src;
+			((unsigned int *) src)++;
+			outl (l >> 8 | l2 << 24, port);
+			l = l2;
+		}
+		l2 = *(unsigned char *) src;
+		outl (l >> 8 | l2 << 24, port);
+		break;
+	 case 0x03:			/* Buffer 8-bit aligned */
+		--count;
+		
+		l  = *(unsigned char *) src << 24;
+		((unsigned char *) src)++;
+		while (count--)
+		{
+			l2 = *(unsigned int *) src;
+			((unsigned int *) src)++;
+			outl (l >> 24 | l2 << 8, port);
+			l = l2;
+		}
+		l2  = *(unsigned short *) src;
+		((unsigned short *) src)++;
+		l2 |= *(unsigned char *) src << 16;
+		outl (l >> 24 | l2 << 8, port);
+		break;
 	}
 }
 

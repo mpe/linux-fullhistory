@@ -17,6 +17,7 @@
 #include <linux/tty.h>
 #include <linux/time.h>
 #include <linux/mm.h>
+#include <linux/file.h>
 
 #include <asm/segment.h>
 #include <asm/bitops.h>
@@ -602,6 +603,16 @@ asmlinkage int sys_creat(const char * pathname, int mode)
 
 #endif
 
+void __fput(struct file *filp, struct inode *inode)
+{
+	if (filp->f_op && filp->f_op->release)
+		filp->f_op->release(inode,filp);
+	filp->f_inode = NULL;
+	if (filp->f_mode & FMODE_WRITE)
+		put_write_access(inode);
+	iput(inode);
+}
+
 int close_fp(struct file *filp)
 {
 	struct inode *inode;
@@ -613,17 +624,7 @@ int close_fp(struct file *filp)
 	inode = filp->f_inode;
 	if (inode)
 		locks_remove_locks(current, filp);
-	if (filp->f_count > 1) {
-		filp->f_count--;
-		return 0;
-	}
-	if (filp->f_op && filp->f_op->release)
-		filp->f_op->release(inode,filp);
-	filp->f_count--;
-	filp->f_inode = NULL;
-	if (filp->f_mode & FMODE_WRITE)
-		put_write_access(inode);
-	iput(inode);
+	fput(filp, inode);
 	return 0;
 }
 

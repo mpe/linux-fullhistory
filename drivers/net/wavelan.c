@@ -69,7 +69,7 @@ struct net_local
 
 extern int		wavelan_probe(device *);	/* See Space.c */
 
-static const char	*version	= "wavelan.c:v7 95/4/8\n";
+static const char	*version	= "wavelan.c:v8 96/8/18\n";
 
 /*
  * Entry point forward declarations.
@@ -786,6 +786,13 @@ wavelan_probe(device *dev)
 #endif	/* 0 */
 		0x390,
 	};
+	static struct proc_dir_entry	pe	=
+	{
+		PROC_NET_WAVELAN, 7, "wavelan",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		wavelan_get_info
+	};
 
 	if (wavelan_debug > 0)
 		printk("%s: ->wavelan_probe(dev=0x%x (base_addr=0x%x))\n", dev->name, (unsigned int)dev, (unsigned int)dev->base_addr);
@@ -822,6 +829,8 @@ wavelan_probe(device *dev)
 		r = wavelan_probe1(dev, base_addr);
 		if (wavelan_debug > 0)
 			printk("%s: <-wavelan_probe(): %d\n", dev->name, r);
+		if (r == 0)
+			proc_net_register(&pe);
 		return r;
 	}
 
@@ -834,13 +843,7 @@ wavelan_probe(device *dev)
 		{
 			if (wavelan_debug > 0)
 				printk("%s: <-wavelan_probe(): 0\n", dev->name);
-			proc_net_register(&(struct proc_dir_entry) {
-				PROC_NET_WAVELAN, 7, "wavelan",
-				S_IFREG | S_IRUGO, 1, 0, 0,
-				0, &proc_net_inode_operations,
-				wavelan_get_info
-			});
-
+			proc_net_register(&pe);
 			return 0;
 		}
 	}
@@ -2495,6 +2498,7 @@ wavelan_local_show(device *dev)
  *	Marc Meertens (Marc.Meertens@Utrecht.NCR.com),
  *	Pauline Middelink (middelin@polyware.iaf.nl),
  *	Robert Morris (rtm@das.harvard.edu),
+ *	Jean Tourrilhes (jt@hplb.hpl.hp.com),
  *	Girish Welling (welling@paul.rutgers.edu),
  *
  * Thanks go also to:
@@ -2517,6 +2521,6 @@ wavelan_local_show(device *dev)
  * Please send bug reports, updates, comments to:
  *
  * Bruce Janson                                    Email:  bruce@cs.usyd.edu.au
- * Basser Department of Computer Science           Phone:  +61-2-351-3423
- * University of Sydney, N.S.W., 2006, AUSTRALIA   Fax:    +61-2-351-3838
+ * Basser Department of Computer Science           Phone:  +61-2-9351-3423
+ * University of Sydney, N.S.W., 2006, AUSTRALIA   Fax:    +61-2-9351-3838
  */

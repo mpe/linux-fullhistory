@@ -27,6 +27,7 @@
 #define wp_works_ok__is_a_macro /* for versions in ksyms.c */
 
 struct thread_struct {
+	/* the fields below are used by PALcode and must match struct pcb: */
 	unsigned long ksp;
 	unsigned long usp;
 	unsigned long ptbr;
@@ -34,12 +35,18 @@ struct thread_struct {
 	unsigned int asn;
 	unsigned long unique;
 	/*
-	 * bit  0.. 0: floating point enable (used by PALcode)
-	 * bit  1.. 5: IEEE_TRAP_ENABLE bits (see fpu.h)
+	 * bit  0: floating point enable
+	 * bit 62: performance monitor enable
+	 */
+	unsigned long pal_flags;
+	unsigned long res1, res2;
+
+	/* the fields below are Linux-specific: */
+	/*
+	 * bit 0:    perform syscall argument validation (get/set_fs)
+	 * bit 1..5: IEEE_TRAP_ENABLE bits (see fpu.h)
 	 */
 	unsigned long flags;
-	unsigned long res1, res2;
-	unsigned long segment; 
 };
 
 #define INIT_MMAP { &init_mm, 0xfffffc0000000000,  0xfffffc0010000000, \
@@ -48,7 +55,8 @@ struct thread_struct {
 #define INIT_TSS  { \
 	0, 0, 0, \
 	0, 0, 0, \
-	0, 0, 0, KERNEL_DS, \
+	0, 0, 0, \
+	0 \
 }
 
 #define alloc_kernel_stack()    get_free_page(GFP_KERNEL)

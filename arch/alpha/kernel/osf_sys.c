@@ -189,13 +189,48 @@ asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
 	return do_mmap(file, addr, len, prot, flags, off);
 }
 
-asmlinkage int osf_statfs(char * path, struct statfs * buffer, unsigned long bufsiz)
+
+/*
+ * The OSF/1 statfs structure is much larger, but this should
+ * match the beginning, at least.
+ */
+struct osf_statfs {
+	short	f_type;
+	short	f_flags;
+	int	f_fsize;
+	int	f_bsize;
+	int	f_blocks;
+	int	f_bfree;
+	int	f_bavail;
+	int	f_files;
+	int	f_ffree;
+	__kernel_fsid_t f_fsid;
+} * osf_stat;
+
+static void linux_to_osf_statfs (struct statfs * linux_stat, struct osf_statfs * osf_stat)
 {
+	osf_stat->f_type   = linux_stat->f_type;
+	osf_stat->f_flags  = 0;	/* mount flags */
+	/* Linux doesn't provide a "fundamental filesystem block size": */
+	osf_stat->f_fsize  = linux_stat->f_bsize;
+	osf_stat->f_bsize  = linux_stat->f_bsize;
+	osf_stat->f_blocks = linux_stat->f_blocks;
+	osf_stat->f_bfree  = linux_stat->f_bfree;
+	osf_stat->f_bavail = linux_stat->f_bavail;
+	osf_stat->f_files  = linux_stat->f_files;
+	osf_stat->f_ffree  = linux_stat->f_ffree;
+	osf_stat->f_fsid   = linux_stat->f_fsid;
+}
+
+
+asmlinkage int osf_statfs(char * path, struct osf_statfs * buffer, unsigned long bufsiz)
+{
+	struct statfs linux_stat;
 	struct inode * inode;
 	int retval;
 
-	if (bufsiz > sizeof(struct statfs))
-		bufsiz = sizeof(struct statfs);
+	if (bufsiz > sizeof(struct osf_statfs))
+		bufsiz = sizeof(struct osf_statfs);
 	retval = verify_area(VERIFY_WRITE, buffer, bufsiz);
 	if (retval)
 		return retval;
@@ -206,13 +241,15 @@ asmlinkage int osf_statfs(char * path, struct statfs * buffer, unsigned long buf
 		iput(inode);
 		return -ENOSYS;
 	}
-	inode->i_sb->s_op->statfs(inode->i_sb, buffer, bufsiz);
+	inode->i_sb->s_op->statfs(inode->i_sb, &linux_stat, sizeof(linux_stat));
+	linux_to_osf_statfs(&linux_stat, buffer);
 	iput(inode);
 	return 0;
 }
 
-asmlinkage int osf_fstatfs(unsigned long fd, struct statfs * buffer, unsigned long bufsiz)
+asmlinkage int osf_fstatfs(unsigned long fd, struct osf_statfs * buffer, unsigned long bufsiz)
 {
+	struct statfs linux_stat;
 	struct file * file;
 	struct inode * inode;
 	int retval;
@@ -220,15 +257,16 @@ asmlinkage int osf_fstatfs(unsigned long fd, struct statfs * buffer, unsigned lo
 	retval = verify_area(VERIFY_WRITE, buffer, bufsiz);
 	if (retval)
 		return retval;
-	if (bufsiz > sizeof(struct statfs))
-		bufsiz = sizeof(struct statfs);
+	if (bufsiz > sizeof(struct osf_statfs))
+		bufsiz = sizeof(struct osf_statfs);
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
 	if (!inode->i_sb->s_op->statfs)
 		return -ENOSYS;
-	inode->i_sb->s_op->statfs(inode->i_sb, buffer, bufsiz);
+	inode->i_sb->s_op->statfs(inode->i_sb, &linux_stat, sizeof(linux_stat));
+	linux_to_osf_statfs(&linux_stat, buffer);
 	return 0;
 }
 

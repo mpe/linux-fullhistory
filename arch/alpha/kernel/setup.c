@@ -135,11 +135,10 @@ void setup_arch(char **cmdline_p,
 	 * installation.  Later we'll add other abbreviations
 	 * as well...
 	 */
-	if(strcmp(COMMAND_LINE, "INSTALL") == 0) {
+	if (strcmp(COMMAND_LINE, "INSTALL") == 0) {
 		strcpy(command_line, "root=/dev/fd0 load_ramdisk=1");
 		strcpy(saved_command_line, command_line);
-	}
-	else {
+	} else {
 		strcpy(command_line, COMMAND_LINE);
 		strcpy(saved_command_line, COMMAND_LINE);
 	}

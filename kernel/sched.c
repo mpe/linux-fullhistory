@@ -997,23 +997,11 @@ static void timer_bh(void)
 	run_timer_list();
 }
 
-/*
- * Run the bottom half stuff only about 100 times a second,
- * we'd just use up unnecessary CPU time for timer handling
- * otherwise
- */
-#if HZ > 100
-#define should_run_timers(x) ((x) >= HZ/100)
-#else
-#define should_run_timers(x) (1)
-#endif
-
 void do_timer(struct pt_regs * regs)
 {
 	(*(unsigned long *)&jiffies)++;
 	lost_ticks++;
-	if (should_run_timers(lost_ticks))
-		mark_bh(TIMER_BH);
+	mark_bh(TIMER_BH);
 	if (!user_mode(regs)) {
 		lost_ticks_system++;
 		if (prof_buffer && current->pid) {

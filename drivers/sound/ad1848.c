@@ -477,11 +477,11 @@ ad1848_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:
-	    return snd_ioctl_return ((int *) arg, ad1848_set_recmask (devc, get_fs_long ((long *) arg)));
+	    return snd_ioctl_return ((int *) arg, ad1848_set_recmask (devc, get_user ((int *) arg)));
 	    break;
 
 	  default:
-	    return snd_ioctl_return ((int *) arg, ad1848_mixer_set (devc, cmd & 0xff, get_fs_long ((long *) arg)));
+	    return snd_ioctl_return ((int *) arg, ad1848_mixer_set (devc, cmd & 0xff, get_user ((int *) arg)));
 	  }
       else
 	switch (cmd & 0xff)	/*

@@ -337,10 +337,19 @@
 #define IMR_TIM    0x00000001       /* Transmit Interrupt Mask */
 
 /*
-** DC21040 Missed Frame Counter (DE4X5_MFC)
+** DC21040 Missed Frames Counter (DE4X5_MFC)
 */
-#define MFC_OVFL   0x00010000       /* Counter Overflow Bit */
-#define MFC_CNTR   0x0000ffff       /* Counter Bits */
+#define MFC_OVFL   0x00010000       /* Missed Frames Counter Overflow Bit */
+#define MFC_CNTR   0x0000ffff       /* Missed Frames Counter Bits */
+
+/*
+** DC21140 Missed Frames and FIFO Overflow Counters (DE4X5_MFC)
+*/
+#define MFC_FOCO   0x10000000       /* FIFO Overflow Counter Overflow Bit */
+#define MFC_FOC    0x0ffe0000       /* FIFO Overflow Counter Bits */
+#define MFC_OVFL   0x00010000       /* Missed Frames Counter Overflow Bit */
+#define MFC_CNTR   0x0000ffff       /* Missed Frames Counter Bits */
+#define MFC_FOCM   0x1ffe0000       /* FIFO Overflow Counter Mask */
 
 /*
 ** DC21040 Ethernet Address PROM (DE4X5_APROM)

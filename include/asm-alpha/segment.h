@@ -102,17 +102,18 @@ static inline void memcpy_tofs(void * to, const void * from, unsigned long n)
 }
 
 /*
- * For segmented architectures, these are used to specify which segment
- * to use for the above functions.
+ * The fs value determines whether argument validity checking should be
+ * performed or not.  If get_fs() == USER_DS, checking is performed, with
+ * get_fs() == KERNEL_DS, checking is bypassed.
  *
- * The alpha is not segmented, so these are just dummies.
+ * For historical reasons, these macros are grossly misnamed.
  */
 
-#define KERNEL_DS 0
-#define USER_DS 1
+#define KERNEL_DS	0
+#define USER_DS		1
 
-#define get_fs()	(current->tss.segment)
-#define set_fs(x)	(current->tss.segment=(x))
+#define get_fs()  (current->tss.flags & 0x1)
+#define set_fs(x) (current->tss.flags = (current->tss.flags & ~0x1) | ((x) & 0x1))
 
 static inline unsigned long get_ds(void)
 {

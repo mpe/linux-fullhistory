@@ -35,7 +35,7 @@ static int      audio_format[MAX_AUDIO_DEV];
 static int      local_conversion[MAX_AUDIO_DEV];
 
 static int
-set_format (int dev, int fmt)
+set_format (int dev, long fmt)
 {
   if (fmt != AFMT_QUERY)
     {
@@ -64,7 +64,7 @@ int
 audio_open (int dev, struct fileinfo *file)
 {
   int             ret;
-  int             bits;
+  long            bits;
   int             dev_type = dev & 0x0f;
   int             mode = file->mode & O_ACCMODE;
 
@@ -381,7 +381,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	break;
 
       case SNDCTL_DSP_SETFMT:
-	return snd_ioctl_return ((int *) arg, set_format (dev, get_fs_long ((long *) arg)));
+	return snd_ioctl_return ((int *) arg, set_format (dev, get_user ((int *) arg)));
 
       case SNDCTL_DSP_GETISPACE:
 	if (!(audio_devs[dev]->open_mode & OPEN_READ))

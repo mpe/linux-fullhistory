@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.5 - ALPHA	Apr  12, 1996
+ * linux/drivers/block/ide-tape.c	Version 1.6 - ALPHA	Aug  16, 1996
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
  *
@@ -184,6 +184,8 @@
  * Ver 1.5   Apr 12 96   Fixed shared interface operation, broken in 1.3.85.
  *                       Fixed pipelined read mode inefficiency.
  *                       Fixed nasty null dereferencing bug.
+ * Ver 1.6   Aug 16 96   Fixed FPU usage in the driver.
+ *                       Fixed end of media bug.
  *
  * We are currently in an *alpha* stage. The driver is not complete and not
  * much tested. I would strongly suggest to:
@@ -1224,8 +1226,7 @@ void idetape_setup (ide_drive_t *drive)
 {
 	idetape_tape_t *tape=&(drive->tape);
 	unsigned int allocation_length;
-	double service_time,nr_units;
-		
+
 #if IDETAPE_DEBUG_LOG
 	printk ("ide-tape: Reached idetape_setup\n");
 #endif /* IDETAPE_DEBUG_LOG */	
@@ -1259,8 +1260,11 @@ void idetape_setup (ide_drive_t *drive)
 
 	idetape_get_mode_sense_results (drive);
 
-	tape->data_buffer_size=tape->capabilities.ctl*tape->tape_block_size;
-
+	tape->data_buffer_size = tape->capabilities.ctl * tape->tape_block_size;
+	while (tape->data_buffer_size > 0xffff) {
+		tape->capabilities.ctl /= 2;
+		tape->data_buffer_size = tape->capabilities.ctl * tape->tape_block_size;
+	}
 	allocation_length=tape->data_buffer_size;
 	if (tape->data_buffer_size % IDETAPE_ALLOCATION_BLOCK)
 		allocation_length+=IDETAPE_ALLOCATION_BLOCK;
@@ -1304,14 +1308,11 @@ void idetape_setup (ide_drive_t *drive)
 	 *	constantly streaming.
 	 */
 
-	service_time=((double) tape->data_buffer_size/1024.0)/((double) tape->capabilities.speed*(1000.0/1024.0));
-	nr_units=(double) tape->capabilities.buffer_size*512.0/(double) tape->data_buffer_size;
-
 	if (tape->max_number_of_stages)	
-		tape->best_dsc_rw_frequency=(unsigned long) (0.5*nr_units*service_time*HZ);
-	else		
-		tape->best_dsc_rw_frequency=(unsigned long) (service_time*HZ);
-	
+		tape->best_dsc_rw_frequency = (unsigned long) ((tape->capabilities.buffer_size * 32 * HZ) / (tape->capabilities.speed * 125));
+	else
+		tape->best_dsc_rw_frequency = (unsigned long) ((tape->data_buffer_size * HZ) / (tape->capabilities.speed * 1000));
+
 	/*
 	 *	Ensure that the number we got makes sense.
 	 */
@@ -2105,6 +2106,7 @@ void idetape_media_access_finished (ide_drive_t *drive)
 void idetape_retry_pc (ide_drive_t *drive)
 
 {
+	idetape_tape_t *tape = &drive->tape;
 	idetape_packet_command_t *pc;
 	struct request *new_rq;
 
@@ -2116,6 +2118,7 @@ void idetape_retry_pc (ide_drive_t *drive)
 	pc->buffer=pc->temp_buffer;
 	pc->buffer_size=IDETAPE_TEMP_BUFFER_SIZE;
 	pc->current_position=pc->temp_buffer;
+	tape->reset_issued = 1;
 	idetape_queue_pc_head (drive,pc,new_rq);
 }
 
@@ -3217,7 +3220,7 @@ int idetape_add_chrdev_read_request (ide_drive_t *drive,int blocks,char *buffer)
 	rq.sector = tape->block_address;
 	rq.nr_sectors = rq.current_nr_sectors = blocks;
 
-	if (tape->active_data_request != NULL || tape->current_number_of_stages <= 0.25*tape->max_number_of_stages) {
+	if (tape->active_data_request != NULL || tape->current_number_of_stages <= tape->max_number_of_stages / 4) {
 		new_stage=idetape_kmalloc_stage (drive);
 		while (new_stage != NULL) {
 			new_stage->rq=rq;
@@ -3335,7 +3338,7 @@ int idetape_add_chrdev_write_request (ide_drive_t *drive,int blocks,char *buffer
 	 *	keep up with the higher speeds of the tape.
 	 */
 
-	if (tape->active_data_request == NULL && tape->current_number_of_stages >= 0.75*tape->max_number_of_stages)
+	if (tape->active_data_request == NULL && tape->current_number_of_stages >= (3 * tape->max_number_of_stages) / 4)
 		idetape_insert_pipeline_into_queue (drive);		
 
 	if (tape->error_in_pipeline_stage) {		/* Return a deferred error */
@@ -4458,8 +4461,7 @@ void idetape_increase_max_pipeline_stages (ide_drive_t *drive)
 	printk ("Reached idetape_increase_max_pipeline_stages\n");
 #endif /* IDETAPE_DEBUG_LOG */
 
-	tape->max_number_of_stages+=IDETAPE_INCREASE_STAGES_RATE*
-					(IDETAPE_MAX_PIPELINE_STAGES-IDETAPE_MIN_PIPELINE_STAGES);
+	tape->max_number_of_stages+=IDETAPE_INCREASE_STAGES_RATE;
 
 	if (tape->max_number_of_stages >= IDETAPE_MAX_PIPELINE_STAGES)
 		tape->max_number_of_stages = IDETAPE_MAX_PIPELINE_STAGES;

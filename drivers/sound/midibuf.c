@@ -473,7 +473,7 @@ MIDIbuf_ioctl (int dev, struct fileinfo *file,
       {
 
       case SNDCTL_MIDI_PRETIME:
-	val = (int) get_fs_long ((long *) arg);
+	val = (int) get_user ((int *) arg);
 	if (val < 0)
 	  val = 0;
 

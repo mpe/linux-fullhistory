@@ -214,7 +214,7 @@ timer_ioctl (int dev,
 
     case SNDCTL_TMR_TIMEBASE:
       {
-	int             val = get_fs_long ((long *) arg);
+	int             val = get_user ((int *) arg);
 
 	if (val)
 	  {
@@ -231,7 +231,7 @@ timer_ioctl (int dev,
 
     case SNDCTL_TMR_TEMPO:
       {
-	int             val = get_fs_long ((long *) arg);
+	int             val = get_user ((int *) arg);
 
 	if (val)
 	  {
@@ -251,7 +251,7 @@ timer_ioctl (int dev,
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (get_fs_long ((long *) arg) != 0)	/* Can't change */
+      if (get_user ((int *) arg) != 0)	/* Can't change */
 	return -(EINVAL);
 
       return snd_ioctl_return ((int *) arg, ((curr_tempo * curr_timebase) + 30) / 60);

@@ -205,11 +205,16 @@
 			   reported by <csd@microplex.com> and 
 			   <baba@beckman.uiuc.edu>.
 			  Upgraded alloc_device() code.
+      0.431  28-Jun-96    Fix potential bug in queue_pkt() from discussion
+                          with <csd@microplex.com>
+      0.44   13-Aug-96    Fix RX overflow bug in 2114[023] chips.
+                          Fix EISA probe bugs reported by <os2@kpi.kharkov.ua>
+			  and <michael@compurex.com>
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:v0.43 96/6/21 davies@wanton.lkg.dec.com\n";
+static const char *version = "de4x5.c:v0.44 96/8/13 davies@wanton.lkg.dec.com\n";
 
 #include <linux/module.h>
 
@@ -344,6 +349,7 @@ static s32 de4x5_full_duplex = 0;
 
 #define MAX_EISA_SLOTS 16
 #define EISA_SLOT_INC 0x1000
+#define EISA_ALLOWED_IRQ_LIST  {5, 9, 10, 11}
 
 #define DE4X5_SIGNATURE {"DE425","DE434","DE435","DE450","DE500"}
 #define DE4X5_NAME_LENGTH 8
@@ -534,6 +540,7 @@ struct de4x5_private {
 	int save_cnt;                       /* Flag if state already saved  */
 	struct sk_buff *skb;                /* Save the (re-ordered) skb's  */
     } cache;
+    int rx_ovf;                             /* Check for 'RX overflow' tag  */
 };
 
 /*
@@ -571,6 +578,7 @@ static int     de4x5_queue_pkt(struct sk_buff *skb, struct device *dev);
 static void    de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int     de4x5_close(struct device *dev);
 static struct  enet_statistics *de4x5_get_stats(struct device *dev);
+static void    de4x5_local_stats(struct device *dev, char *buf, int pkt_len);
 static void    set_multicast_list(struct device *dev);
 static int     de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd);
 
@@ -584,6 +592,7 @@ static int     de4x5_rx(struct device *dev);
 static int     de4x5_tx(struct device *dev);
 static int     de4x5_ast(struct device *dev);
 static int     de4x5_txur(struct device *dev);
+static int     de4x5_rx_ovfc(struct device *dev);
 
 static int     autoconf_media(struct device *dev);
 static void    create_packet(struct device *dev, char *frame, int len);
@@ -672,7 +681,9 @@ static int autoprobed = 0, loading_module = 0;
 #endif /* MODULE */
 
 static char name[DE4X5_NAME_LENGTH + 1];
+static u_char de4x5_irq[] = EISA_ALLOWED_IRQ_LIST;
 static int num_de4x5s = 0, num_eth = 0;
+static int cfrv = 0;
 
 /*
 ** Miscellaneous defines...
@@ -756,10 +767,10 @@ de4x5_hw_init(struct device *dev, u_long iobase)
     
     dev->base_addr = iobase;
     if (lp->bus == EISA) {
-	printk("%s: %s at %04lx (EISA slot %ld)", 
+	printk("%s: %s at 0x%04lx (EISA slot %ld)", 
 	       dev->name, name, iobase, ((iobase>>12)&0x0f));
     } else {                                 /* PCI port address */
-	printk("%s: %s at %04lx (PCI bus %d, device %d)", dev->name, name,
+	printk("%s: %s at 0x%04lx (PCI bus %d, device %d)", dev->name, name,
 	       iobase, lp->bus_num, lp->device);
     }
     
@@ -887,6 +898,12 @@ de4x5_hw_init(struct device *dev, u_long iobase)
 
 	/* Create a loopback packet frame for later media probing */
 	create_packet(dev, lp->frame, sizeof(lp->frame));
+
+	/* Check if the RX overflow bug needs testing for */
+	tmpchs = cfrv & 0x000000fe;
+	if ((lp->chipset == DC21140) && (tmpchs == 0x20)) {
+	    lp->rx_ovf = 1;
+	}
 
 	/* Initialise the adapter state */
 	lp->state = CLOSED;
@@ -1128,26 +1145,21 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 	}
 
 	while (skb && !dev->tbusy && !lp->tx_skb[lp->tx_new]) {
-	    set_bit(0, (void*)&dev->tbusy);
 	    cli();
-	    if (TX_BUFFS_AVAIL) {           /* Fill in a Tx ring entry */
-		load_packet(dev, skb->data, 
-			    TD_IC | TD_LS | TD_FS | skb->len, skb);
-		outl(POLL_DEMAND, DE4X5_TPD);/* Start the TX */
+	    set_bit(0, (void*)&dev->tbusy);
+	    load_packet(dev, skb->data, TD_IC | TD_LS | TD_FS | skb->len, skb);
+	    outl(POLL_DEMAND, DE4X5_TPD);/* Start the TX */
 		
-		lp->tx_new = (++lp->tx_new) % lp->txRingSize;
-		dev->trans_start = jiffies;
+	    lp->tx_new = (++lp->tx_new) % lp->txRingSize;
+	    dev->trans_start = jiffies;
 		    
-		if (TX_BUFFS_AVAIL) {
-		    dev->tbusy = 0;         /* Another pkt may be queued */
-		}
-		skb = de4x5_get_cache(dev);
+	    if (TX_BUFFS_AVAIL) {
+		dev->tbusy = 0;         /* Another pkt may be queued */
 	    }
+	    skb = de4x5_get_cache(dev);
 	    sti();
 	}
-	if (skb && (dev->tbusy || lp->tx_skb[lp->tx_new])) {
-	    de4x5_putb_cache(dev, skb);
-	}
+	if (skb) de4x5_putb_cache(dev, skb);
     }
     
     lp->cache.lock = 0;
@@ -1234,13 +1246,20 @@ static int
 de4x5_rx(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
-    int i, entry;
+    u_long iobase = dev->base_addr;
+    int entry;
     s32 status;
-    char *buf;
     
     for (entry=lp->rx_new; lp->rx_ring[entry].status>=0;entry=lp->rx_new) {
 	status = lp->rx_ring[entry].status;
 	
+	if (lp->rx_ovf) {
+	    if (inl(DE4X5_MFC) & MFC_FOCM) {
+		de4x5_rx_ovfc(dev);
+		break;
+	    }
+	}
+
 	if (status & RD_FS) {                 /* Remember the start of frame */
 	    lp->rx_old = entry;
 	}
@@ -1269,34 +1288,13 @@ de4x5_rx(struct device *dev)
 		}
 		de4x5_dbg_rx(skb, pkt_len);
 
-	/* Push up the protocol stack */
+		/* Push up the protocol stack */
 		skb->protocol=eth_type_trans(skb,dev);
 		netif_rx(skb);
 		    
 		/* Update stats */
 		lp->stats.rx_packets++;
-		for (i=1; i<DE4X5_PKT_STAT_SZ-1; i++) {
-		    if (pkt_len < (i*DE4X5_PKT_BIN_SZ)) {
-			lp->pktStats.bins[i]++;
-			i = DE4X5_PKT_STAT_SZ;
-		    }
-		}
-		buf = skb->data;              /* Look at the dest addr */
-		if (buf[0] & 0x01) {          /* Multicast/Broadcast */
-		    if ((*(s32 *)&buf[0] == -1) && (*(s16 *)&buf[4] == -1)) {
-			lp->pktStats.broadcast++;
-		    } else {
-			lp->pktStats.multicast++;
-		    }
-		} else if ((*(s32 *)&buf[0] == *(s32 *)&dev->dev_addr[0]) &&
-			   (*(s16 *)&buf[4] == *(s16 *)&dev->dev_addr[4])) {
-		    lp->pktStats.unicast++;
-		}
-		
-		lp->pktStats.bins[0]++;       /* Duplicates stats.rx_packets */
-		if (lp->pktStats.bins[0] == 0) { /* Reset counters */
-		    memset((char *)&lp->pktStats, 0, sizeof(lp->pktStats));
-		}
+		de4x5_local_stats(dev, skb->data, pkt_len);
 	    }
 	    
 	    /* Change buffer ownership for this frame, back to the adapter */
@@ -1338,7 +1336,6 @@ de4x5_tx(struct device *dev)
 		if (status & TD_NC) lp->stats.tx_carrier_errors++;
 		if (status & TD_LC) lp->stats.tx_window_errors++;
 		if (status & TD_UF) lp->stats.tx_fifo_errors++;
-		if (status & TD_LC) lp->stats.collisions++;
 		if (status & TD_EC) lp->pktStats.excessive_collisions++;
 		if (status & TD_DE) lp->stats.tx_aborted_errors++;
 	    
@@ -1353,6 +1350,10 @@ de4x5_tx(struct device *dev)
 		lp->lostMedia = 0;        /* Remove transient problem */
 		lp->linkOK++;
 	    }
+	    /* Update the collision counter */
+	    lp->stats.collisions += ((status & TD_EC) ? 16 : 
+				                      ((status & TD_CC) >> 3));
+
 	    /* Free the buffer. */
 	    if (lp->tx_skb[entry] != NULL) {
 		dev_kfree_skb(lp->tx_skb[entry], FREE_WRITE);
@@ -1416,6 +1417,27 @@ de4x5_txur(struct device *dev)
     return 0;
 }
 
+static int 
+de4x5_rx_ovfc(struct device *dev)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    int iobase = dev->base_addr;
+    int omr;
+
+    omr = inl(DE4X5_OMR);
+    outl(omr & ~OMR_SR, DE4X5_OMR);
+    while (inl(DE4X5_STS) & STS_RS);
+
+    for (; lp->rx_ring[lp->rx_new].status>=0;) {
+	lp->rx_ring[lp->rx_new].status = R_OWN;
+	lp->rx_new = (++lp->rx_new % lp->rxRingSize);
+    }
+
+    outl(omr, DE4X5_OMR);
+    
+    return 0;
+}
+
 static int
 de4x5_close(struct device *dev)
 {
@@ -1466,6 +1488,37 @@ de4x5_get_stats(struct device *dev)
     lp->stats.rx_missed_errors = (int)(inl(DE4X5_MFC) & (MFC_OVFL | MFC_CNTR));
     
     return &lp->stats;
+}
+
+static void
+de4x5_local_stats(struct device *dev, char *buf, int pkt_len)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    int i;
+
+    for (i=1; i<DE4X5_PKT_STAT_SZ-1; i++) {
+        if (pkt_len < (i*DE4X5_PKT_BIN_SZ)) {
+	    lp->pktStats.bins[i]++;
+	    i = DE4X5_PKT_STAT_SZ;
+	}
+    }
+    if (buf[0] & 0x01) {          /* Multicast/Broadcast */
+        if ((*(s32 *)&buf[0] == -1) && (*(s16 *)&buf[4] == -1)) {
+	    lp->pktStats.broadcast++;
+	} else {
+	    lp->pktStats.multicast++;
+	}
+    } else if ((*(s32 *)&buf[0] == *(s32 *)&dev->dev_addr[0]) &&
+	       (*(s16 *)&buf[4] == *(s16 *)&dev->dev_addr[4])) {
+        lp->pktStats.unicast++;
+    }
+		
+    lp->pktStats.bins[0]++;       /* Duplicates stats.rx_packets */
+    if (lp->pktStats.bins[0] == 0) { /* Reset counters */
+        memset((char *)&lp->pktStats, 0, sizeof(lp->pktStats));
+    }
+
+    return;
 }
 
 static void
@@ -1608,11 +1661,16 @@ eisa_probe(struct device *dev, u_long ioaddr)
     for (status = -ENODEV; (i<maxSlots) && (dev!=NULL); i++, iobase+=EISA_SLOT_INC) {
 	if (EISA_signature(name, EISA_ID)) {
 	    cfid = inl(PCI_CFID);
+	    cfrv = inl(PCI_CFRV);
 	    device = (u_short)(cfid >> 16);
 	    vendor = (u_short) cfid;
 	    
+	    /* Read the EISA Configuration Registers */
+	    dev->irq = inb(EISA_REG0);
+	    dev->irq = de4x5_irq[(dev->irq >> 1) & 0x03];
+
 	    lp->chipset = device;
-	    DevicePresent(EISA_APROM);
+	    DevicePresent(DE4X5_APROM);
 	    /* Write the PCI Configuration Registers */
 	    outl(PCI_COMMAND_IO | PCI_COMMAND_MASTER, PCI_CFCS);
 	    outl(0x00006000, PCI_CFLT);
@@ -1690,6 +1748,9 @@ pci_probe(struct device *dev, u_long ioaddr)
 	    /* Set the chipset information */
 	    lp->chipset = device;
 	    
+	    /* Get the chip configuration revision register */
+	    pcibios_read_config_dword(pb, PCI_DEVICE, PCI_REVISION_ID, &cfrv);
+
 	    /* Get the board I/O address */
 	    pcibios_read_config_dword(pb, PCI_DEVICE, PCI_BASE_ADDRESS_0, &iobase);
 	    iobase &= CBIO_MASK;
@@ -3552,7 +3613,10 @@ de4x5_switch_to_mii(struct device *dev)
     
     /* Restore CSR6 */
     outl(omr, DE4X5_OMR);
-    
+
+    /* Reset CSR8 */
+    inl(DE4X5_MFC);
+
     return omr;
 }
 
@@ -3579,6 +3643,9 @@ de4x5_switch_to_srl(struct device *dev)
     /* Restore CSR6 */
     outl(omr, DE4X5_OMR);
     
+    /* Reset CSR8 */
+    inl(DE4X5_MFC);
+
     return omr;
 }
 

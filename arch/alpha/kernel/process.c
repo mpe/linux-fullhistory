@@ -85,7 +85,7 @@ void show_regs(struct pt_regs * regs)
  */
 void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 {
-	current->tss.segment = USER_DS;
+	set_fs(USER_DS);
 	regs->pc = pc;
 	regs->ps = 8;
 	wrusp(sp);
@@ -157,7 +157,8 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	childstack->r26 = (unsigned long) ret_from_sys_call;
 	p->tss.usp = usp;
 	p->tss.ksp = (unsigned long) childstack;
-	p->tss.flags = 1;
+	p->tss.pal_flags = 1;	/* set FEN, clear everything else */
+	p->tss.flags = current->tss.flags;
 	p->mm->context = 0;
 }
 

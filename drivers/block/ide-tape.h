@@ -53,7 +53,7 @@
  
 #define	IDETAPE_MIN_PIPELINE_STAGES		100
 #define	IDETAPE_MAX_PIPELINE_STAGES		200
-#define	IDETAPE_INCREASE_STAGES_RATE		0.2
+#define	IDETAPE_INCREASE_STAGES_RATE		20
 
 /*
  *	Assuming the tape shares an interface with another device, the default

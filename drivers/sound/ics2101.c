@@ -128,23 +128,23 @@ ics2101_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	    break;
 
 	  case SOUND_MIXER_MIC:
-	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_MIC, get_fs_long ((long *) arg)));
+	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_MIC, get_user ((int *) arg)));
 	    break;
 
 	  case SOUND_MIXER_CD:
-	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_CD, get_fs_long ((long *) arg)));
+	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_CD, get_user ((int *) arg)));
 	    break;
 
 	  case SOUND_MIXER_LINE:
-	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_LINE, get_fs_long ((long *) arg)));
+	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_LINE, get_user ((int *) arg)));
 	    break;
 
 	  case SOUND_MIXER_SYNTH:
-	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_GF1, get_fs_long ((long *) arg)));
+	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_GF1, get_user ((int *) arg)));
 	    break;
 
 	  case SOUND_MIXER_VOLUME:
-	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_VOL, get_fs_long ((long *) arg)));
+	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_VOL, get_user ((int *) arg)));
 	    break;
 
 	  default:

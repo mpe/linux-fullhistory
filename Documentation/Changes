@@ -26,11 +26,14 @@ http://slug.ctv.es/~alfredo/Cambios.html.
 valtozasokrol, az alabbi cimen megtalaljak Nyitrai Tamas forditasat:
 http://www.datanet.hu/generations/linux/newkernel.html.
 
+   Tamas also maintains a version of this file in English at
+http://www.datanet.hu/generations/linux/Changes.html.
+
    For people who prefer Japanese (thanks to Mitsuhiro Kojima): Kono
 bunshou no nihongo ban wa
 http://jf.gee.kyoto-u.ac.jp/JF/v2.0/Changes-2.0.html ni arimasu.
 
-Last updated: August 6, 1996.
+Last updated: August 18, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -146,6 +149,14 @@ especially when compiling a new kernel:
    This is NOT a kernel bug.  Rather, these messages are generally
 caused by hardware problems.  See http://www.bitwizard.nl/sig11/ for
 the sig11 FAQ.
+
+   On the other hand, if you're using a gcc patched for Pentium
+optimization and are getting these errors, downgrade to a standard GNU
+gcc before assuming your hardware (or the kernel) is to blame..
+
+   On a related note, if you get random OOPses that don't seem to be
+related to anything and you have a motherboard with APM support, try
+disabling the APM support and/or compiling the kernel with APM support.
 
 Procps utilities
 ================
@@ -528,7 +539,7 @@ solution is to edit the file /usr/lib/man.config and change all
 `-Tlatin1' options to `-Tascii'.  An alternate solution, for those of
 you who can't reformat your man files in .../cat* directories is to
 edit /usr/lib/man.config, setting the PAGER to `PAGER
-(LESSCHARSET=latin1;export LESSCHARSET;/usr/bin/less -is'.
+(LESSCHARSET=latin1;export LESSCHARSET;/usr/bin/less -is)'.
 
 E2fsprogs
 =========
