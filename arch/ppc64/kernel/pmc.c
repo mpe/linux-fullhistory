@@ -12,6 +12,7 @@
 #include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/spinlock.h>
+#include <linux/module.h>
 
 #include <asm/processor.h>
 #include <asm/pmc.h>
@@ -50,6 +51,7 @@ int reserve_pmc_hardware(perf_irq_t new_perf_irq)
 	spin_unlock(&pmc_owner_lock);
 	return err;
 }
+EXPORT_SYMBOL_GPL(reserve_pmc_hardware);
 
 void release_pmc_hardware(void)
 {
@@ -62,3 +64,4 @@ void release_pmc_hardware(void)
 
 	spin_unlock(&pmc_owner_lock);
 }
+EXPORT_SYMBOL_GPL(release_pmc_hardware);
