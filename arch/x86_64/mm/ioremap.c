@@ -18,6 +18,9 @@
 #include <asm/tlbflush.h>
 #include <asm/proto.h>
 
+#define ISA_START_ADDRESS      0xa0000
+#define ISA_END_ADDRESS                0x100000
+
 static inline void remap_area_pte(pte_t * pte, unsigned long address, unsigned long size,
 	unsigned long phys_addr, unsigned long flags)
 {
@@ -172,7 +175,7 @@ void __iomem * __ioremap(unsigned long phys_addr, unsigned long size, unsigned l
 	/*
 	 * Don't remap the low PCI/ISA area, it's always mapped..
 	 */
-	if (phys_addr >= 0xA0000 && last_addr < 0x100000)
+	if (phys_addr >= ISA_START_ADDRESS && last_addr < ISA_END_ADDRESS)
 		return (__force void __iomem *)phys_to_virt(phys_addr);
 
 #ifndef CONFIG_DISCONTIGMEM
@@ -252,6 +255,9 @@ void iounmap(volatile void __iomem *addr)
 
 	if (addr <= high_memory) 
 		return; 
+	if (addr >= phys_to_virt(ISA_START_ADDRESS) &&
+		addr < phys_to_virt(ISA_END_ADDRESS))
+		return;
 
 	write_lock(&vmlist_lock);
 	for (p = vmlist, pprev = &vmlist; p != NULL; pprev = &p->next, p = *pprev)
