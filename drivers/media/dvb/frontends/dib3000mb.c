@@ -712,6 +712,7 @@ struct dvb_frontend* dib3000mb_attach(const struct dib3000_config* config,
 	state = (struct dib3000_state*) kmalloc(sizeof(struct dib3000_state), GFP_KERNEL);
 	if (state == NULL)
 		goto error;
+	memset(state,0,sizeof(struct dib3000_state));
 
 	/* setup the state */
 	state->i2c = i2c;

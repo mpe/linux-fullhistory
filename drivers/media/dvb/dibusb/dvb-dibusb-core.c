@@ -119,10 +119,6 @@ static struct usb_device_id dib_table [] = {
 /* 00 */	{ USB_DEVICE(USB_VID_AVERMEDIA,		USB_PID_AVERMEDIA_DVBT_USB_COLD)},
 /* 01 */	{ USB_DEVICE(USB_VID_AVERMEDIA,		USB_PID_AVERMEDIA_DVBT_USB_WARM)},
 /* 02 */	{ USB_DEVICE(USB_VID_AVERMEDIA,		USB_PID_YAKUMO_DTT200U_COLD) },
-
-/* the following device is actually not supported, but when loading the 
- * correct firmware (ie. its usb ids will change) everything works fine then 
- */
 /* 03 */	{ USB_DEVICE(USB_VID_AVERMEDIA,		USB_PID_YAKUMO_DTT200U_WARM) },
 
 /* 04 */	{ USB_DEVICE(USB_VID_COMPRO,		USB_PID_COMPRO_DVBU2000_COLD) },
@@ -161,7 +157,7 @@ static struct usb_device_id dib_table [] = {
  * activate the following define when you have one of the devices and want to 
  * build it from build-2.6 in dvb-kernel
  */
-// #define CONFIG_DVB_DIBUSB_MISDESIGNED_DEVICES 
+// #define CONFIG_DVB_DIBUSB_MISDESIGNED_DEVICES
 #ifdef CONFIG_DVB_DIBUSB_MISDESIGNED_DEVICES
 /* 34 */	{ USB_DEVICE(USB_VID_ANCHOR,		USB_PID_ULTIMA_TVBOX_ANCHOR_COLD) },
 /* 35 */	{ USB_DEVICE(USB_VID_CYPRESS,		USB_PID_ULTIMA_TVBOX_USB2_FX_COLD) },
@@ -207,6 +203,10 @@ static struct dibusb_demod dibusb_demod[] = {
 	  254,
 	  { 0xf, 0 }, 
 	},
+	{ DTT200U_FE,
+	  8,
+	  { 0xff,0 }, /* there is no i2c bus in this device */
+	}
 };
 
 static struct dibusb_device_class dibusb_device_classes[] = {
@@ -257,6 +257,14 @@ static struct dibusb_device_class dibusb_device_classes[] = {
 	  DIBUSB_RC_HAUPPAUGE_PROTO,
 	  &dibusb_demod[DIBUSB_DIB3000MC],
 	  &dibusb_tuner[DIBUSB_TUNER_COFDM_PANASONIC_ENV57H1XD5],
+	},
+	{ DTT200U,&dibusb_usb_ctrl[2],
+	  "dvb-dtt200u-1.fw",
+	  0x01, 0x02,
+	  7, 4096,
+	  DIBUSB_RC_NO,
+	  &dibusb_demod[DTT200U_FE],
+	  NULL, /* no explicit tuner/pll-programming necessary (it has the ENV57H1XD5) */
 	},
 };
 
@@ -321,10 +329,10 @@ static struct dibusb_usb_device dibusb_devices[] = {
 		{ &dib_table[30], NULL },
 		{ &dib_table[31], NULL },
 	},
-	{	"AVermedia/Yakumo/Hama/Typhoon DVB-T USB2.0",
-		&dibusb_device_classes[UMT2_0],
+	{	"DTT200U (Yakumo/Hama/Typhoon) DVB-T USB2.0",
+		&dibusb_device_classes[DTT200U],
 		{ &dib_table[2], NULL },
-		{ NULL },
+		{ &dib_table[3], NULL },
 	},	
 	{	"Hanftek UMT-010 DVB-T USB2.0",
 		&dibusb_device_classes[UMT2_0],
@@ -343,7 +351,7 @@ static struct dibusb_usb_device dibusb_devices[] = {
 		{ NULL },
 	},
 	{	"Artec T1 USB2.0 TVBOX with FX2 IDs (misdesigned, please report the warm ID)",
-		&dibusb_device_classes[DIBUSB2_0],
+		&dibusb_device_classes[DTT200U],
 		{ &dib_table[35], NULL },
 		{ &dib_table[36], NULL }, /* undefined, it could be that the device will get another USB ID in warm state */
 	},

@@ -74,6 +74,7 @@ typedef enum {
 	UMT2_0,
 	DIBUSB2_0B,
 	NOVAT_USB2,
+	DTT200U,
 } dibusb_class_t;
 
 typedef enum {
@@ -87,6 +88,7 @@ typedef enum {
 	DIBUSB_DIB3000MB = 0,
 	DIBUSB_DIB3000MC,
 	DIBUSB_MT352,
+	DTT200U_FE,
 } dibusb_demodulator_t;
 
 typedef enum {
@@ -155,10 +157,11 @@ struct usb_dibusb {
 #define DIBUSB_STATE_INIT       0x000
 #define DIBUSB_STATE_URB_LIST   0x001
 #define DIBUSB_STATE_URB_BUF    0x002
-#define DIBUSB_STATE_URB_SUBMIT 0x004
+#define DIBUSB_STATE_URB_INIT	0x004
 #define DIBUSB_STATE_DVB        0x008
 #define DIBUSB_STATE_I2C        0x010
 #define DIBUSB_STATE_REMOTE		0x020
+#define DIBUSB_STATE_URB_SUBMIT 0x040
 	int init_state;
 
 	int feedcount;
@@ -223,6 +226,7 @@ int dibusb_dvb_exit(struct usb_dibusb *dib);
 /* dvb-dibusb-usb.c */
 int dibusb_readwrite_usb(struct usb_dibusb *dib, u8 *wbuf, u16 wlen, u8 *rbuf,
 	u16 rlen);
+int dibusb_write_usb(struct usb_dibusb *dib, u8 *buf, u16 len);
 
 int dibusb_hw_wakeup(struct dvb_frontend *);
 int dibusb_hw_sleep(struct dvb_frontend *);
@@ -231,6 +235,9 @@ int dibusb_streaming(struct usb_dibusb *,int);
 
 int dibusb_urb_init(struct usb_dibusb *);
 int dibusb_urb_exit(struct usb_dibusb *);
+
+/* dvb-fe-dtt200u.c */
+struct dvb_frontend* dtt200u_fe_attach(struct usb_dibusb *,struct dib_fe_xfer_ops *);
 
 /* i2c and transfer stuff */
 #define DIBUSB_I2C_TIMEOUT				5000

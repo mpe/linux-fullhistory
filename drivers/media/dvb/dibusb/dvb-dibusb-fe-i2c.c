@@ -125,27 +125,6 @@ static int dibusb_tuner_quirk(struct usb_dibusb *dib)
 	return 0;
 }
 
-/* there is a ugly pid_filter in the firmware of the umt devices, it is accessible
- * by i2c address 0x8. Don't know how to deactivate it and how many rows it has.
- */
-static int dibusb_umt_pid_control(struct dvb_frontend *fe, int index, int pid, int onoff)
-{
-	struct usb_dibusb *dib = fe->dvb->priv;
-	u8 b[3];
-	b[0] = index;
-	if (onoff) {
-		b[1] = (pid >> 8) & 0xff;
-		b[2] = pid & 0xff;
-	} else {
-		b[1] = 0;
-		b[2] = 0;
-	}
-	dibusb_i2c_msg(dib, 0x8, b, 3, NULL,0);
-	dibusb_set_streaming_mode(dib,0);
-	dibusb_set_streaming_mode(dib,1);
-	return 0;
-}
-
 int dibusb_fe_init(struct usb_dibusb* dib)
 {
 	struct dib3000_config demod_cfg;
@@ -160,6 +139,8 @@ int dibusb_fe_init(struct usb_dibusb* dib)
 			demod_cfg.pll_set = dibusb_general_pll_set;
 			demod_cfg.pll_init = dibusb_general_pll_init;
 
+			deb_info("demod id: %d %d\n",dib->dibdev->dev_cl->demod->id,DTT200U_FE);
+
 			switch (dib->dibdev->dev_cl->demod->id) {
 				case DIBUSB_DIB3000MB:
 					dib->fe = dib3000mb_attach(&demod_cfg,&dib->i2c_adap,&dib->xfer_ops);
@@ -170,7 +151,9 @@ int dibusb_fe_init(struct usb_dibusb* dib)
 				case DIBUSB_MT352:
 					mt352_hanftek_umt_010_config.demod_address = dib->dibdev->dev_cl->demod->i2c_addrs[i];
 					dib->fe = mt352_attach(&mt352_hanftek_umt_010_config, &dib->i2c_adap);
-					dib->xfer_ops.pid_ctrl = dibusb_umt_pid_control;
+				break;
+				case DTT200U_FE:
+					dib->fe = dtt200u_fe_attach(dib,&dib->xfer_ops);
 				break;
 			}
 			if (dib->fe != NULL) {

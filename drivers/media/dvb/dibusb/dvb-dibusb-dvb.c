@@ -34,7 +34,7 @@ void dibusb_urb_complete(struct urb *urb, struct pt_regs *ptregs)
 		case 0:         /* success */
 		case -ETIMEDOUT:    /* NAK */
 			break;
-		case -ECONNRESET:   /* unlink */
+		case -ECONNRESET:   /* kill */
 		case -ENOENT:
 		case -ESHUTDOWN:
 			return;
@@ -43,7 +43,7 @@ void dibusb_urb_complete(struct urb *urb, struct pt_regs *ptregs)
 			break;
 	}
 
-	if (dib->feedcount > 0) {
+	if (dib->feedcount > 0 && urb->actual_length > 0) {
 		if (dib->init_state & DIBUSB_STATE_DVB)
 			dvb_dmx_swfilter(&dib->demux, (u8*) urb->transfer_buffer,urb->actual_length);
 	} else 
@@ -73,6 +73,7 @@ static int dibusb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff)
 				return -ENODEV;
 			}
 		}
+		dibusb_streaming(dib,0);
 	}
 	
 	dib->feedcount = newfeedcount;

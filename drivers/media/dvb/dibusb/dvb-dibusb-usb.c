@@ -57,7 +57,7 @@ int dibusb_readwrite_usb(struct usb_dibusb *dib, u8 *wbuf, u16 wlen, u8 *rbuf,
 /*
  * Cypress controls
  */
-static int dibusb_write_usb(struct usb_dibusb *dib, u8 *buf, u16 len)
+int dibusb_write_usb(struct usb_dibusb *dib, u8 *buf, u16 len)
 {
 	return dibusb_readwrite_usb(dib,buf,len,NULL,0);
 }
@@ -103,7 +103,14 @@ int dibusb_hw_wakeup(struct dvb_frontend *fe)
 	struct usb_dibusb *dib = (struct usb_dibusb *) fe->dvb->priv;
 	u8 b[1] = { DIBUSB_IOCTL_POWER_WAKEUP };
 	deb_info("dibusb-device is getting up.\n");
-	dibusb_ioctl_cmd(dib,DIBUSB_IOCTL_CMD_POWER_MODE, b,1);
+
+	switch (dib->dibdev->dev_cl->id) {
+		case DTT200U:
+			break;
+		default:
+			dibusb_ioctl_cmd(dib,DIBUSB_IOCTL_CMD_POWER_MODE, b,1);
+			break;
+	}
 
 	if (dib->fe_init)
 		return dib->fe_init(fe);
@@ -120,6 +127,7 @@ int dibusb_hw_sleep(struct dvb_frontend *fe)
 	switch (dib->dibdev->dev_cl->id) {
 		case DIBUSB1_1:
 		case NOVAT_USB2:
+		case DTT200U:
 			break;
 		default:
 			dibusb_ioctl_cmd(dib,DIBUSB_IOCTL_CMD_POWER_MODE, b,1);
@@ -137,8 +145,47 @@ int dibusb_set_streaming_mode(struct usb_dibusb *dib,u8 mode)
 	return dibusb_readwrite_usb(dib,b,2,NULL,0);
 }
 
+static int dibusb_urb_kill(struct usb_dibusb *dib)
+{
+	int i;
+deb_info("trying to kill urbs\n");
+	if (dib->init_state & DIBUSB_STATE_URB_SUBMIT) {
+		for (i = 0; i < dib->dibdev->dev_cl->urb_count; i++) {
+			deb_info("killing URB no. %d.\n",i);
+
+			/* stop the URB */
+			usb_kill_urb(dib->urb_list[i]);
+		}
+	} else
+	deb_info(" URBs not killed.\n");
+	dib->init_state &= ~DIBUSB_STATE_URB_SUBMIT;
+	return 0;
+}
+
+static int dibusb_urb_submit(struct usb_dibusb *dib)
+{
+	int i,ret;
+	if (dib->init_state & DIBUSB_STATE_URB_INIT) {
+		for (i = 0; i < dib->dibdev->dev_cl->urb_count; i++) {
+			deb_info("submitting URB no. %d\n",i);
+			if ((ret = usb_submit_urb(dib->urb_list[i],GFP_ATOMIC))) {
+				err("could not submit buffer urb no. %d - get them all back\n",i);
+				dibusb_urb_kill(dib);
+				return ret;
+			}
+			dib->init_state |= DIBUSB_STATE_URB_SUBMIT;
+		}
+	}
+	return 0;
+}
+
 int dibusb_streaming(struct usb_dibusb *dib,int onoff)
 {
+	if (onoff)
+		dibusb_urb_submit(dib);
+	else
+		dibusb_urb_kill(dib);
+
 	switch (dib->dibdev->dev_cl->id) {
 		case DIBUSB2_0:
 		case DIBUSB2_0B:
@@ -157,7 +204,7 @@ int dibusb_streaming(struct usb_dibusb *dib,int onoff)
 
 int dibusb_urb_init(struct usb_dibusb *dib)
 {
-	int ret,i,bufsize,def_pid_parse = 1;
+	int i,bufsize,def_pid_parse = 1;
 
 	/*
 	 * when reloading the driver w/o replugging the device
@@ -192,7 +239,6 @@ int dibusb_urb_init(struct usb_dibusb *dib)
 		if (!(dib->urb_list[i] = usb_alloc_urb(0,GFP_ATOMIC))) {
 			return -ENOMEM;
 		}
-		deb_info("submitting URB no. %d\n",i);
 
 		usb_fill_bulk_urb( dib->urb_list[i], dib->udev,
 				usb_rcvbulkpipe(dib->udev,dib->dibdev->dev_cl->pipe_data),
@@ -202,11 +248,7 @@ int dibusb_urb_init(struct usb_dibusb *dib)
 
 		dib->urb_list[i]->transfer_flags = 0;
 
-		if ((ret = usb_submit_urb(dib->urb_list[i],GFP_ATOMIC))) {
-			err("could not submit buffer urb no. %d\n",i);
-			return ret;
-		}
-		dib->init_state |= DIBUSB_STATE_URB_SUBMIT;
+		dib->init_state |= DIBUSB_STATE_URB_INIT;
 	}
 
 	/* dib->pid_parse here contains the value of the module parameter */
@@ -234,14 +276,12 @@ int dibusb_urb_init(struct usb_dibusb *dib)
 int dibusb_urb_exit(struct usb_dibusb *dib)
 {
 	int i;
+
+	dibusb_urb_kill(dib);
+
 	if (dib->init_state & DIBUSB_STATE_URB_LIST) {
 		for (i = 0; i < dib->dibdev->dev_cl->urb_count; i++) {
 			if (dib->urb_list[i] != NULL) {
-				deb_info("killing URB no. %d.\n",i);
-
-				/* stop the URBs */
-				usb_kill_urb(dib->urb_list[i]);
-
 				deb_info("freeing URB no. %d.\n",i);
 				/* free the URBs */
 				usb_free_urb(dib->urb_list[i]);
@@ -249,7 +289,6 @@ int dibusb_urb_exit(struct usb_dibusb *dib)
 		}
 		/* free the urb array */
 		kfree(dib->urb_list);
-		dib->init_state &= ~DIBUSB_STATE_URB_SUBMIT;
 		dib->init_state &= ~DIBUSB_STATE_URB_LIST;
 	}
 
@@ -259,5 +298,6 @@ int dibusb_urb_exit(struct usb_dibusb *dib)
 			dib->buffer,dib->dma_handle);
 
 	dib->init_state &= ~DIBUSB_STATE_URB_BUF;
+	dib->init_state &= ~DIBUSB_STATE_URB_INIT;
 	return 0;
 }
