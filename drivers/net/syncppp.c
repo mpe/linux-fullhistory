@@ -380,6 +380,7 @@ static void sppp_keepalive (unsigned long dummy)
 			if_down (dev);
 			if (! (sp->pp_flags & PP_CISCO)) {
 				/* Shut down the PPP link. */
+				sp->lcp.magic = jiffies;
 				sp->lcp.state = LCP_STATE_CLOSED;
 				sp->ipcp.state = IPCP_STATE_CLOSED;
 				sppp_clear_timeout (sp);
@@ -841,6 +842,25 @@ int sppp_open (struct device *dev)
 }
 
 EXPORT_SYMBOL(sppp_open);
+
+int sppp_reopen (struct device *dev)
+{
+	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
+	sppp_close(dev);
+	dev->flags |= IFF_RUNNING;
+	if (!(sp->pp_flags & PP_CISCO))
+	{
+		sp->lcp.magic = jiffies;
+		++sp->pp_seq;
+		sp->lcp.state = LCP_STATE_CLOSED;
+		sp->ipcp.state = IPCP_STATE_CLOSED;
+		/* Give it a moment for the line to settle then go */
+		sppp_set_timeout (sp, 1);
+	}
+	return 0;
+}
+
+EXPORT_SYMBOL(sppp_reopen);
 
 int sppp_change_mtu(struct device *dev, int new_mtu)
 {

@@ -64,6 +64,7 @@ lockd(struct svc_rqst *rqstp)
 {
 	struct svc_serv	*serv = rqstp->rq_server;
 	int		err = 0;
+	unsigned long grace_period_expire;
 
 	/* Lock module and set up kernel thread */
 	MOD_INC_USE_COUNT;
@@ -111,7 +112,7 @@ lockd(struct svc_rqst *rqstp)
 	}
 #endif
 
-	nlmsvc_grace_period += jiffies;
+	grace_period_expire = nlmsvc_grace_period + jiffies;
 	nlmsvc_timeout = nlm_timeout * HZ;
 
 	/*

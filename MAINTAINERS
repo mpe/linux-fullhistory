@@ -530,6 +530,12 @@ M:	kuznet@ms2.inr.ac.ru
 L:	netdev@roxanne.nuclecu.unam.mx
 S:	Maintained
 
+NFS CLIENT
+P:      Trond Myklebust
+M:      trond.myklebust@fys.uio.no
+L:      linux-kernel@vger.rutgers.edu
+S:      Maintained
+
 NI5010 NETWORK DRIVER
 P:     Jan-Pascal van Best and Andreas Mohr
 M:     jvbest@qv3pluto.leidenuniv.nl (Best)

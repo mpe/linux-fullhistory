@@ -9633,6 +9633,8 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	base = pdev->base_address[1];
 	base_2 = pdev->base_address[2];
 	irq = pdev->irq;
+	if ((base & PCI_BASE_ADDRESS_MEM_TYPE_MASK) == PCI_BASE_ADDRESS_MEM_TYPE_64)
+		base_2 = pdev->base_address[3];
 #else
 	(void) pcibios_read_config_dword(bus, device_fn,
 					PCI_BASE_ADDRESS_0, &io_port);	

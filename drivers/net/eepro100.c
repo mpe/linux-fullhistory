@@ -842,9 +842,6 @@ speedo_open(struct device *dev)
 
 	wait_for_cmd_done(ioaddr + SCBCmd);
 	outw(CU_DUMPSTATS, ioaddr + SCBCmd);
-	/* No need to wait for the command unit to accept here. */
-	if ((sp->phy[0] & 0x8000) == 0)
-		mdio_read(ioaddr, sp->phy[0] & 0x1f, 0);
 
 	/*
 	 * Request the IRQ last, after we have set up all data structures.
@@ -854,6 +851,10 @@ speedo_open(struct device *dev)
 					"Intel EtherExpress Pro 10/100 Ethernet", dev)) {
 		return -EAGAIN;
 	}
+
+	/* No need to wait for the command unit to accept here. */
+	if ((sp->phy[0] & 0x8000) == 0)
+		mdio_read(ioaddr, sp->phy[0] & 0x1f, 0);
 
 	MOD_INC_USE_COUNT;
 

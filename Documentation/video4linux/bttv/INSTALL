@@ -41,6 +41,9 @@
    10: Newer Hauppage (Bt878)
    11: Miro PCTV Pro
    12: ADS Tech Channel Surfer TV (and maybe TV+FM)
+   13: AVerMedia TVCapture 98
+   14: Aimslab VHX
+   15: Zoltrix TV-Max
 
   - You may have to adjust BTTV_MAJOR to a different number depending on your
     kernel version. The official number 81 does not work on some setups.

@@ -151,7 +151,7 @@ nlmsvc_proc_lock(struct svc_rqst *rqstp, struct nlm_args *argp,
 
 	/* Now try to lock the file */
 	resp->status = nlmsvc_lock(rqstp, file, &argp->lock,
-					argp->block, argp->cookie);
+					argp->block, &argp->cookie);
 
 	dprintk("lockd: LOCK          status %ld\n", ntohl(resp->status));
 	nlm_release_host(host);
@@ -492,7 +492,6 @@ nlmsvc_callback_exit(struct rpc_task *task)
 					task->tk_pid, -task->tk_status);
 	}
 	nlm_release_host(call->a_host);
-	rpc_release_task(task);
 	kfree(call);
 }
 

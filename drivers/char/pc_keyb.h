@@ -114,8 +114,12 @@ extern unsigned char aux_device_present;
 #define AUX_ENABLE_DEV		0xF4	/* Enable aux device */
 #define AUX_DISABLE_DEV		0xF5	/* Disable aux device */
 #define AUX_RESET		0xFF	/* Reset aux device */
+#define AUX_ACK			0xFA	/* Command byte ACK. */
 
-#define AUX_BUF_SIZE		2048
+#define AUX_BUF_SIZE		2048	/* This might be better divisible by
+					   three to make overruns stay in sync
+					   but then the read function would need
+					   a lock etc - ick */
 
 struct aux_queue {
 	unsigned long head;

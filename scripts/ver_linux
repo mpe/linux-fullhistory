@@ -4,6 +4,7 @@
 # /bin /sbin /usr/bin /usr/sbin /usr/local/bin, but it may
 # differ on your system.
 #
+PATH=/sbin:/usr/sbin:/bin:/usr/bin:$PATH
 echo '-- Versions installed: (if some fields are empty or looks'
 echo '-- unusual then possibly you have very old versions)'
 uname -a

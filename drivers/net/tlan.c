@@ -29,6 +29,8 @@
  *
  *	Tigran Aivazian <tigran@sco.com>:	TLan_PciProbe() now uses
  *						new PCI BIOS interface.
+ *	Alan Cox	<alan@redhat.com>:	Fixed the out of memory
+ *						handling.
  *
  ********************************************************************/
 
@@ -1250,28 +1252,36 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 			netif_rx( skb );
 		}
 	} else {
-		skb = (struct sk_buff *) head_list->buffer[9].address;
-		head_list->buffer[9].address = 0;
-		skb_trim( skb, head_list->frameSize );
-
+		struct sk_buff *new_skb;
+		
+		/*
+		 *	I changed the algorithm here. What we now do
+		 *	is allocate the new frame. If this fails we
+		 *	simply recycle the frame.
+		 */
+		
+		new_skb = dev_alloc_skb( TLAN_MAX_FRAME_SIZE + 7 );
+		if ( new_skb != NULL ) {
+			/* If this ever happened it would be a problem */
+			/* not any more - ac */
+			skb = (struct sk_buff *) head_list->buffer[9].address;
+			head_list->buffer[9].address = 0;
+			skb_trim( skb, head_list->frameSize );
 #if LINUX_KERNEL_VERSION > 0x20100
 			priv->stats->rx_bytes += head_list->frameSize;
 #endif
 
-		skb->protocol = eth_type_trans( skb, dev );
-		netif_rx( skb );
-
-		skb = dev_alloc_skb( TLAN_MAX_FRAME_SIZE + 7 );
-		if ( skb == NULL ) {
-			printk( "TLAN:  Couldn't allocate memory for received data.\n" );
-			/* If this ever happened it would be a problem */
-		} else {
-			skb->dev = dev;
-			skb_reserve( skb, 2 );
-			t = (void *) skb_put( skb, TLAN_MAX_FRAME_SIZE );
+			skb->protocol = eth_type_trans( skb, dev );
+			netif_rx( skb );
+	
+			new_skb->dev = dev;
+			skb_reserve( new_skb, 2 );
+			t = (void *) skb_put( new_skb, TLAN_MAX_FRAME_SIZE );
 			head_list->buffer[0].address = virt_to_bus( t );
-			head_list->buffer[9].address = (u32) skb;
+			head_list->buffer[9].address = (u32) new_skb;
 		}
+		else
+			printk(KERN_WARNING "TLAN:  Couldn't allocate memory for received data.\n" );
 	}
 
 	head_list->forward = 0;

@@ -24,6 +24,8 @@
 #include <asm/segment.h>
 #include <asm/uaccess.h>
 #include <linux/utsname.h>
+#define __NO_VERSION__
+#include <linux/module.h>
 
 #include <linux/coda.h>
 #include <linux/coda_linux.h>
@@ -491,6 +493,14 @@ struct proc_dir_entry proc_coda_cache_inv =  {
                 coda_cache_inv_stats_get_info
         };
 
+static void coda_proc_modcount(struct inode *inode, int fill)
+{
+	if (fill)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
+}
+
 #endif
 
 
@@ -504,6 +514,7 @@ void coda_sysctl_init()
 
 #ifdef CONFIG_PROC_FS
 	proc_register(&proc_root_fs,&proc_fs_coda);
+	proc_fs_coda.fill_inode = &coda_proc_modcount;
 	proc_register(&proc_fs_coda,&proc_coda_vfs);
 	proc_register(&proc_fs_coda,&proc_coda_upcall);
 	proc_register(&proc_fs_coda,&proc_coda_permission);

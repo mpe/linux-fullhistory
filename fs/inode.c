@@ -62,9 +62,8 @@ spinlock_t inode_lock = SPIN_LOCK_UNLOCKED;
 struct {
 	int nr_inodes;
 	int nr_free_inodes;
-	int preshrink;		/* pre-shrink dcache? */
-	int dummy[4];
-} inodes_stat = {0, 0, 0,};
+	int dummy[5];
+} inodes_stat = {0, 0,};
 
 int max_inodes;
 
@@ -193,6 +192,19 @@ void sync_inodes(kdev_t dev)
 			break;
 	}
 	spin_unlock(&inode_lock);
+}
+
+/*
+ * Called with the spinlock already held..
+ */
+static void sync_all_inodes(void)
+{
+	struct super_block * sb = sb_entry(super_blocks.next);
+	for (; sb != sb_entry(&super_blocks); sb = sb_entry(sb->s_list.next)) {
+		if (!sb->s_dev)
+			continue;
+		sync_list(&sb->s_dirty);
+	}
 }
 
 /*
@@ -355,18 +367,6 @@ static int free_inodes(void)
 	return found;
 }
 
-static void shrink_dentry_inodes(int goal)
-{
-	int found;
-
-	spin_unlock(&inode_lock);
-	found = select_dcache(goal, 0);
-	if (found < goal)
-		found = goal;
-	prune_dcache(found);
-	spin_lock(&inode_lock);
-}
-
 /*
  * Searches the inodes list for freeable inodes,
  * shrinking the dcache before (and possible after,
@@ -374,9 +374,22 @@ static void shrink_dentry_inodes(int goal)
  */
 static void try_to_free_inodes(int goal)
 {
-	shrink_dentry_inodes(goal);
-	if (!free_inodes())
-		shrink_dentry_inodes(goal);
+	/*
+	 * First stry to just get rid of unused inodes.
+	 *
+	 * If we can't reach our goal that way, we'll have
+	 * to try to shrink the dcache and sync existing
+	 * inodes..
+	 */
+	free_inodes();
+	goal -= inodes_stat.nr_free_inodes;
+	if (goal > 0) {
+		spin_unlock(&inode_lock);
+		prune_dcache(goal);
+		spin_lock(&inode_lock);
+		sync_all_inodes();
+		free_inodes();
+	}
 }
 
 /*
@@ -404,9 +417,9 @@ static struct inode * grow_inodes(void)
 	/*
 	 * Check whether to restock the unused list.
 	 */
-	if (inodes_stat.preshrink) {
+	if (inodes_stat.nr_inodes > max_inodes) {
 		struct list_head *tmp;
-		try_to_free_inodes(8);
+		try_to_free_inodes(inodes_stat.nr_inodes >> 2);
 		tmp = inode_unused.next;
 		if (tmp != &inode_unused) {
 			inodes_stat.nr_free_inodes--;
@@ -437,9 +450,6 @@ static struct inode * grow_inodes(void)
 		 */
 		inodes_stat.nr_inodes += INODES_PER_PAGE;
 		inodes_stat.nr_free_inodes += INODES_PER_PAGE - 1;
-		inodes_stat.preshrink = 0;
-		if (inodes_stat.nr_inodes > max_inodes)
-			inodes_stat.preshrink = 1;
 		return inode;
 	}
 
@@ -448,7 +458,6 @@ static struct inode * grow_inodes(void)
 	 * the dcache and then try again to free some inodes.
 	 */
 	prune_dcache(inodes_stat.nr_inodes >> 2);
-	inodes_stat.preshrink = 1;
 
 	spin_lock(&inode_lock);
 	free_inodes();

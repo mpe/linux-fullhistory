@@ -537,6 +537,8 @@ static struct tvcard tvcards[] =
 	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
         /* Aimslab VHX */
         { 3, 1, 0, 2, 7, { 2, 3, 1, 1}, { 0, 1, 2, 3, 4}},
+        /* Zoltrix TV-Max */
+        { 3, 1, 0, 2,15, { 2, 3, 1, 1}, { 0, 0, 0, 0, 0}},
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 

@@ -349,6 +349,7 @@ static void z8530_status(struct z8530_channel *chan)
 	if(status&TxEOM)
 	{
 /*		printk("%s: Tx underrun.\n", chan->dev->name); */
+		chan->stats.tx_fifo_errors++;
 		write_zsctrl(chan, ERR_RES);
 		z8530_tx_done(chan);
 	}
@@ -359,6 +360,8 @@ static void z8530_status(struct z8530_channel *chan)
 		{
 			printk(KERN_INFO "%s: DCD raised\n", chan->dev->name);
 			write_zsreg(chan, R3, chan->regs[3]|RxENABLE);
+			if(chan->netdevice)
+				sppp_reopen(chan->netdevice);
 		}
 		else
 		{
@@ -450,6 +453,8 @@ static void z8530_dma_status(struct z8530_channel *chan)
 		{
 			printk(KERN_INFO "%s: DCD raised\n", chan->dev->name);
 			write_zsreg(chan, R3, chan->regs[3]|RxENABLE);
+			if(chan->netdevice)
+				sppp_reopen(chan->netdevice);
 		}
 		else
 		{
@@ -1107,6 +1112,14 @@ static void z8530_tx_begin(struct z8530_channel *c)
 		{
 			flags=claim_dma_lock();
 			disable_dma(c->txdma);
+			/*
+			 *	Check if we crapped out.
+			 */
+			if(get_dma_residue(c->txdma))
+			{
+				c->stats.tx_dropped++;
+				c->stats.tx_fifo_errors++;
+			}
 			release_dma_lock(flags);
 		}
 		c->txcount=0;
@@ -1133,6 +1146,7 @@ static void z8530_tx_begin(struct z8530_channel *c)
 			set_dma_count(c->txdma, c->txcount);
 			enable_dma(c->txdma);
 			release_dma_lock(flags);
+			write_zsctrl(c, RES_EOM_L);
 			write_zsreg(c, R5, c->regs[R5]|TxENAB);
 		}
 		else
@@ -1173,6 +1187,8 @@ static void z8530_tx_done(struct z8530_channel *c)
 	c->tx_skb=NULL;
 	z8530_tx_begin(c);
 	spin_unlock_irqrestore(&z8530_buffer_lock, flags);
+	c->stats.tx_packets++;
+	c->stats.tx_bytes+=skb->len;
 	dev_kfree_skb(skb);
 }
 
@@ -1255,11 +1271,16 @@ static void z8530_rx_done(struct z8530_channel *c)
 		 
 		skb=dev_alloc_skb(ct);
 		if(skb==NULL)
-			printk("%s: Memory squeeze.\n", c->netdevice->name);
+		{
+			c->stats.rx_dropped++;
+			printk(KERN_WARNING "%s: Memory squeeze.\n", c->netdevice->name);
+		}
 		else
 		{
 			skb_put(skb, ct);
 			memcpy(skb->data, rxb, ct);
+			c->stats.rx_packets++;
+			c->stats.rx_bytes+=ct;
 		}
 		c->dma_ready=1;
 	}
@@ -1305,6 +1326,9 @@ static void z8530_rx_done(struct z8530_channel *c)
 		{
 			skb_put(c->skb2,c->mtu);
 		}
+		c->stats.rx_packets++;
+		c->stats.rx_bytes+=ct;
+		
 	}
 	/*
 	 *	If we received a frame we must now process it.
@@ -1315,7 +1339,10 @@ static void z8530_rx_done(struct z8530_channel *c)
 		c->rx_function(c,skb);
 	}
 	else
-		printk("Lost a frame\n");
+	{
+		c->stats.rx_dropped++;
+		printk(KERN_ERR "%s: Lost a frame\n", c->netdevice->name);
+	}
 }
 
 /*

@@ -10,6 +10,9 @@
  * because they share the same hardware.
  * Johan Myreen <jem@iki.fi> 1998-10-08.
  *
+ * Code fixes to handle mouse ACKs properly.
+ * C. Scott Ananian <cananian@alumni.princeton.edu> 1999-01-29.
+ *
  */
 
 #include <linux/config.h>
@@ -74,6 +77,8 @@ static int __init psaux_init(void);
 
 static struct aux_queue *queue;	/* Mouse data buffer. */
 static int aux_count = 0;
+/* used when we send commands to the mouse that expect an ACK. */
+static unsigned char mouse_reply_expected = 0;
 
 #define AUX_INTS_OFF (KBD_MODE_KCC | KBD_MODE_DISABLE_MOUSE | KBD_MODE_SYS | KBD_MODE_KBD_INT)
 #define AUX_INTS_ON  (KBD_MODE_KCC | KBD_MODE_SYS | KBD_MODE_MOUSE_INT | KBD_MODE_KBD_INT)
@@ -99,7 +104,7 @@ static int aux_count = 0;
  * Controller Status register are set 0."
  */
 
-static inline void kb_wait(void)
+static void kb_wait(void)
 {
 	unsigned long timeout = KBC_TIMEOUT;
 
@@ -400,6 +405,33 @@ char pckbd_unexpected_up(unsigned char keycode)
 	    return 0200;
 }
 
+static inline void handle_mouse_event(unsigned char scancode)
+{
+#ifdef CONFIG_PSMOUSE
+	if (mouse_reply_expected) {
+		if (scancode == AUX_ACK) {
+			mouse_reply_expected--;
+			return;
+		}
+		mouse_reply_expected = 0;
+	}
+
+	add_mouse_randomness(scancode);
+	if (aux_count) {
+		int head = queue->head;
+
+		queue->buf[head] = scancode;
+		head = (head + 1) & (AUX_BUF_SIZE-1);
+		if (head != queue->tail) {
+			queue->head = head;
+			if (queue->fasync)
+				kill_fasync(queue->fasync, SIGIO);
+			wake_up_interruptible(&queue->proc_list);
+		}
+	}
+#endif
+}
+
 /*
  * This reads the keyboard status port, and does the
  * appropriate action.
@@ -417,21 +449,7 @@ static unsigned char handle_kbd_event(void)
 		scancode = inb(KBD_DATA_REG);
 
 		if (status & KBD_STAT_MOUSE_OBF) {
-#ifdef CONFIG_PSMOUSE
-			/* Mouse data. */
-			if (aux_count) {
-				int head = queue->head;
-				queue->buf[head] = scancode;
-				add_mouse_randomness(scancode);
-				head = (head + 1) & (AUX_BUF_SIZE-1);
-				if (head != queue->tail) {
-					queue->head = head;
-					if (queue->fasync)
-						kill_fasync(queue->fasync, SIGIO);
-					wake_up_interruptible(&queue->proc_list);
-				}
-			}
-#endif
+			handle_mouse_event(scancode);
 		} else {
 			if (do_acknowledge(scancode))
 				handle_scancode(scancode);
@@ -716,9 +734,7 @@ void __init pckbd_init_hw(void)
 static int __init detect_auxiliary_port(void)
 {
 	unsigned long flags;
-	unsigned char status;
-	unsigned char val;
-	int loops = 5;
+	int loops = 10;
 	int retval = 0;
 
 	spin_lock_irqsave(&kbd_controller_lock, flags);
@@ -736,20 +752,19 @@ static int __init detect_auxiliary_port(void)
 	kb_wait();
 	outb(0x5a, KBD_DATA_REG); /* 0x5a is a random dummy value. */
 
-	status = inb(KBD_STATUS_REG);
-	while (!(status & KBD_STAT_OBF) && loops--) {
-		mdelay(1);
-		status = inb(KBD_STATUS_REG);
-	}
+	do {
+		unsigned char status = inb(KBD_STATUS_REG);
 
-	if (status & KBD_STAT_OBF) {
-		val = inb(KBD_DATA_REG);
-		if (status & KBD_STAT_MOUSE_OBF) {
-			printk(KERN_INFO "Detected PS/2 Mouse Port.\n");
-			retval = 1;
+		if (status & KBD_STAT_OBF) {
+			(void) inb(KBD_DATA_REG);
+			if (status & KBD_STAT_MOUSE_OBF) {
+				printk(KERN_INFO "Detected PS/2 Mouse Port.\n");
+				retval = 1;
+			}
+			break;
 		}
-	}
-
+		mdelay(1);
+	} while (--loops);
 	spin_unlock_irqrestore(&kbd_controller_lock, flags);
 
 	return retval;
@@ -770,16 +785,33 @@ static void aux_write_dev(int val)
 	spin_unlock_irqrestore(&kbd_controller_lock, flags);
 }
 
-static unsigned int get_from_queue(void)
+/*
+ * Send a byte to the mouse & handle returned ack
+ */
+static void aux_write_ack(int val)
 {
-	unsigned int result;
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&kbd_controller_lock, flags);
+	kb_wait();
+	outb(KBD_CCMD_WRITE_MOUSE, KBD_CNTL_REG);
+	kb_wait();
+	outb(val, KBD_DATA_REG);
+	/* we expect an ACK in response. */
+	mouse_reply_expected++;
+	kb_wait();
+	spin_unlock_irqrestore(&kbd_controller_lock, flags);
+}
+
+static unsigned char get_from_queue(void)
+{
+	unsigned char result;
+	unsigned long flags;
+
+	spin_lock_irqsave(&kbd_controller_lock, flags);
 	result = queue->buf[queue->tail];
 	queue->tail = (queue->tail + 1) & (AUX_BUF_SIZE-1);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&kbd_controller_lock, flags);
 	return result;
 }
 
@@ -834,7 +866,7 @@ static int open_aux(struct inode * inode, struct file * file)
 	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_ENABLE);	/* Enable the
 							   auxiliary port on
 							   controller. */
-	aux_write_dev(AUX_ENABLE_DEV); /* Enable aux device */
+	aux_write_ack(AUX_ENABLE_DEV); /* Enable aux device */
 	kbd_write_cmd(AUX_INTS_ON); /* Enable controller ints */
 
 	return 0;
@@ -951,11 +983,11 @@ static int __init psaux_init(void)
 
 #ifdef INITIALIZE_MOUSE
 	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_ENABLE);	/* Enable Aux. */
-	aux_write_dev(AUX_SET_SAMPLE);
-	aux_write_dev(100);			/* 100 samples/sec */
-	aux_write_dev(AUX_SET_RES);
-	aux_write_dev(3);			/* 8 counts per mm */
-	aux_write_dev(AUX_SET_SCALE21);		/* 2:1 scaling */
+	aux_write_ack(AUX_SET_SAMPLE);
+	aux_write_ack(100);			/* 100 samples/sec */
+	aux_write_ack(AUX_SET_RES);
+	aux_write_ack(3);			/* 8 counts per mm */
+	aux_write_ack(AUX_SET_SCALE21);		/* 2:1 scaling */
 #endif /* INITIALIZE_MOUSE */
 	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_DISABLE); /* Disable aux device. */
 	kbd_write_cmd(AUX_INTS_OFF); /* Disable controller ints. */

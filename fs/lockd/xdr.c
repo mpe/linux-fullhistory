@@ -53,28 +53,38 @@ nlmxdr_init(void)
 /*
  * XDR functions for basic NLM types
  */
-static inline u32 *
-nlm_decode_cookie(u32 *p, u32 *c)
+static inline u32 *nlm_decode_cookie(u32 *p, struct nlm_cookie *c)
 {
 	unsigned int	len;
 
-	if ((len = ntohl(*p++)) == 4) {
-		*c = ntohl(*p++);
-	} else if (len == 0) {		/* hockeypux brain damage */
-		*c = 0;
-	} else {
+	len = ntohl(*p++);
+	
+	if(len==0)
+	{
+		c->len=4;
+		memset(c->data, 0, 4);	/* hockeypux brain damage */
+	}
+	else if(len<=8)
+	{
+		c->len=len;
+		memcpy(c->data, p, len);
+		p+=(len+3)>>2;
+	}
+	else 
+	{
 		printk(KERN_NOTICE
-			"lockd: bad cookie size %d (should be 4)\n", len);
+			"lockd: bad cookie size %d (only cookies under 8 bytes are supported.)\n", len);
 		return NULL;
 	}
 	return p;
 }
 
 static inline u32 *
-nlm_encode_cookie(u32 *p, u32 c)
+nlm_encode_cookie(u32 *p, struct nlm_cookie *c)
 {
-	*p++ = htonl(sizeof(c));
-	*p++ = htonl(c);
+	*p++ = htonl(c->len);
+	memcpy(p, c->data, c->len);
+	p+=(c->len+3)>>2;
 	return p;
 }
 
@@ -168,7 +178,7 @@ nlm_encode_lock(u32 *p, struct nlm_lock *lock)
 static u32 *
 nlm_encode_testres(u32 *p, struct nlm_res *resp)
 {
-	if (!(p = nlm_encode_cookie(p, resp->cookie)))
+	if (!(p = nlm_encode_cookie(p, &resp->cookie)))
 		return 0;
 	*p++ = resp->status;
 
@@ -308,7 +318,7 @@ nlmsvc_decode_shareargs(struct svc_rqst *rqstp, u32 *p, nlm_args *argp)
 int
 nlmsvc_encode_shareres(struct svc_rqst *rqstp, u32 *p, struct nlm_res *resp)
 {
-	if (!(p = nlm_encode_cookie(p, resp->cookie)))
+	if (!(p = nlm_encode_cookie(p, &resp->cookie)))
 		return 0;
 	*p++ = resp->status;
 	*p++ = xdr_zero;		/* sequence argument */
@@ -318,7 +328,7 @@ nlmsvc_encode_shareres(struct svc_rqst *rqstp, u32 *p, struct nlm_res *resp)
 int
 nlmsvc_encode_res(struct svc_rqst *rqstp, u32 *p, struct nlm_res *resp)
 {
-	if (!(p = nlm_encode_cookie(p, resp->cookie)))
+	if (!(p = nlm_encode_cookie(p, &resp->cookie)))
 		return 0;
 	*p++ = resp->status;
 	return xdr_ressize_check(rqstp, p);
@@ -388,7 +398,7 @@ nlmclt_encode_testargs(struct rpc_rqst *req, u32 *p, nlm_args *argp)
 {
 	struct nlm_lock	*lock = &argp->lock;
 
-	if (!(p = nlm_encode_cookie(p, argp->cookie)))
+	if (!(p = nlm_encode_cookie(p, &argp->cookie)))
 		return -EIO;
 	*p++ = (lock->fl.fl_type == F_WRLCK)? xdr_one : xdr_zero;
 	if (!(p = nlm_encode_lock(p, lock)))
@@ -429,7 +439,7 @@ nlmclt_encode_lockargs(struct rpc_rqst *req, u32 *p, nlm_args *argp)
 {
 	struct nlm_lock	*lock = &argp->lock;
 
-	if (!(p = nlm_encode_cookie(p, argp->cookie)))
+	if (!(p = nlm_encode_cookie(p, &argp->cookie)))
 		return -EIO;
 	*p++ = argp->block? xdr_one : xdr_zero;
 	*p++ = (lock->fl.fl_type == F_WRLCK)? xdr_one : xdr_zero;
@@ -446,7 +456,7 @@ nlmclt_encode_cancargs(struct rpc_rqst *req, u32 *p, nlm_args *argp)
 {
 	struct nlm_lock	*lock = &argp->lock;
 
-	if (!(p = nlm_encode_cookie(p, argp->cookie)))
+	if (!(p = nlm_encode_cookie(p, &argp->cookie)))
 		return -EIO;
 	*p++ = argp->block? xdr_one : xdr_zero;
 	*p++ = (lock->fl.fl_type == F_WRLCK)? xdr_one : xdr_zero;
@@ -461,7 +471,7 @@ nlmclt_encode_unlockargs(struct rpc_rqst *req, u32 *p, nlm_args *argp)
 {
 	struct nlm_lock	*lock = &argp->lock;
 
-	if (!(p = nlm_encode_cookie(p, argp->cookie)))
+	if (!(p = nlm_encode_cookie(p, &argp->cookie)))
 		return -EIO;
 	if (!(p = nlm_encode_lock(p, lock)))
 		return -EIO;
@@ -472,7 +482,7 @@ nlmclt_encode_unlockargs(struct rpc_rqst *req, u32 *p, nlm_args *argp)
 static int
 nlmclt_encode_res(struct rpc_rqst *req, u32 *p, struct nlm_res *resp)
 {
-	if (!(p = nlm_encode_cookie(p, resp->cookie)))
+	if (!(p = nlm_encode_cookie(p, &resp->cookie)))
 		return -EIO;
 	*p++ = resp->status;
 	req->rq_slen = xdr_adjust_iovec(req->rq_svec, p);
@@ -501,7 +511,7 @@ nlmclt_decode_res(struct rpc_rqst *req, u32 *p, struct nlm_res *resp)
  * Buffer requirements for NLM
  */
 #define NLM_void_sz		0
-#define NLM_cookie_sz		2
+#define NLM_cookie_sz		3	/* 1 len , 2 data */
 #define NLM_caller_sz		1+QUADLEN(sizeof(system_utsname.nodename))
 #define NLM_netobj_sz		1+QUADLEN(XDR_MAX_NETOBJ)
 /* #define NLM_owner_sz		1+QUADLEN(NLM_MAXOWNER) */

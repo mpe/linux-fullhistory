@@ -25,9 +25,9 @@
  *								Audio 1 and Audio 2 at the same time.
  *				(Jan  9 1999):	Put all ESS stuff into sb_ess.[ch], this
  *								includes both the ESS stuff that has been in
- *								sb_*[ch] before I touched it and the ESS suppor
+ *								sb_*[ch] before I touched it and the ESS support
  *								I added later
- *				(Jan 23 1998):	Full Duplex seems to work. I wrote a small
+ *				(Jan 23 1999):	Full Duplex seems to work. I wrote a small
  *								test proggy which works OK. Haven't found
  *								any applications to test it though. So why did
  *								I bother to create it anyway?? :) Just for
@@ -171,7 +171,6 @@
  * ES1946	yes		This is a PCI chip; not handled by this driver
  */
 
-#include <linux/config.h>
 #include <linux/delay.h>
 
 #include "sound_config.h"

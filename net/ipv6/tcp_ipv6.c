@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.94 1998/11/07 11:50:33 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.95 1999/02/08 11:20:03 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -641,10 +641,8 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 			sk->err_soft = -dst->error;
 		} else if (tp->pmtu_cookie > dst->pmtu
 			   && !atomic_read(&sk->sock_readers)) {
-			lock_sock(sk); 
 			tcp_sync_mss(sk, dst->pmtu);
 			tcp_simple_retransmit(sk);
-			release_sock(sk);
 		} /* else let the usual retransmit timer handle it */
 		dst_release(dst);
 		return;
@@ -1210,11 +1208,6 @@ static int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 
   	ipv6_statistics.Ip6InDelivers++;
 
-	/* XXX We need to think more about socket locking
-	 * XXX wrt. backlog queues, __release_sock(), etc.  -DaveM
-	 */
-	lock_sock(sk); 
-
 	/* 
 	 * This doesn't check if the socket has enough room for the packet.
 	 * Either process the packet _without_ queueing it and then free it,
@@ -1255,8 +1248,16 @@ static int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 		nsk = tcp_v6_hnd_req(sk, skb);
 		if (!nsk)
 			goto discard;
-		lock_sock(nsk);
-		release_sock(sk);
+
+		/*
+		 * Queue it on the new socket if the new socket is active,
+		 * otherwise we just shortcircuit this and continue with
+		 * the new socket..
+		 */
+		if (atomic_read(&nsk->sock_readers)) {
+			__skb_queue_tail(&nsk->back_log, skb);
+			return 0;
+		}
 		sk = nsk;
 	}
 
@@ -1264,7 +1265,6 @@ static int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 		goto reset;
 	if (users)
 		goto ipv6_pktoptions;
-	release_sock(sk);
 	return 0;
 
 reset:
@@ -1273,7 +1273,6 @@ discard:
 	if (users)
 		kfree_skb(skb);
 	kfree_skb(skb);
-	release_sock(sk);  
 	return 0;
 
 ipv6_pktoptions:
@@ -1303,7 +1302,6 @@ ipv6_pktoptions:
 
 	if (skb)
 		kfree_skb(skb);
-	release_sock(sk);
 	return 0;
 }
 

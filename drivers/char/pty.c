@@ -84,7 +84,6 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 	wake_up_interruptible(&tty->link->write_wait);
 	set_bit(TTY_OTHER_CLOSED, &tty->link->flags);
 	if (tty->driver.subtype == PTY_TYPE_MASTER) {
-		tty_hangup(tty->link);
 		set_bit(TTY_OTHER_CLOSED, &tty->flags);
 #ifdef CONFIG_UNIX98_PTYS
 		{
@@ -95,6 +94,7 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 			}
 		}
 #endif
+		tty_vhangup(tty->link);
 	}
 }
 

@@ -708,14 +708,14 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
      */
     if (rscsi_disks[dev].sector_size == 1024)
 	if((block & 1) || (SCpnt->request.nr_sectors & 1)) {
-	    printk("sd.c:Bad block number requested");
+	    printk("sd.c:Bad block number/count requested");
 	    SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
 	    goto repeat;
 	}
 
      if (rscsi_disks[dev].sector_size == 2048)
  	if((block & 3) || (SCpnt->request.nr_sectors & 3)) {
- 	    printk("sd.c:Bad block number requested");
+ 	    printk("sd.c:Bad block number/count requested");
  	    SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
  	    goto repeat;
  	}

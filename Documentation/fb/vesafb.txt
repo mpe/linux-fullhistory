@@ -11,7 +11,7 @@ of the BIOS, and use this as framebuffer device /dev/fb0, like the m68k
 This means we decide at boot time whenever we want to run in text or
 graphics mode.  Switching mode later on (in protected mode) is
 impossible; BIOS calls work in real mode only.  VESA BIOS Extentions
-Version 2.0 are required, becauce we need a linear frame buffer.
+Version 2.0 are required, because we need a linear frame buffer.
 
 Advantages:
 
@@ -75,7 +75,7 @@ Extentions v2.0 are required, 1.2 is NOT sufficient.  You will get a
 1. Note: LILO cannot handle hex, for booting directly with 
          "vga=mode-number" you have to transform the numbers to decimal.
 2. Note: Some newer versions of LILO appear to work with those hex values,
-         if you set the 0x infront of the numbers.
+         if you set the 0x in front of the numbers.
 
 X11
 ===

@@ -304,6 +304,9 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int gfp_mask)
 	n->stamp=skb->stamp;
 	n->destructor = NULL;
 	n->security=skb->security;
+#ifdef CONFIG_IP_FIREWALL
+        n->fwmark = skb->fwmark;
+#endif
 	return n;
 }
 
@@ -350,6 +353,9 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	n->stamp=skb->stamp;
 	n->destructor = NULL;
 	n->security=skb->security;
+#ifdef CONFIG_IP_FIREWALL
+        n->fwmark = skb->fwmark;
+#endif
 
 	return n;
 }

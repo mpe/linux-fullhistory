@@ -30,6 +30,14 @@ static int	nlm_stat_to_errno(u32 stat);
  */
 static u32	nlm_cookie = 0x1234;
 
+static inline void nlmclnt_next_cookie(struct nlm_cookie *c)
+{
+	memcpy(c->data, &nlm_cookie, 4);
+	memset(c->data+4, 0, 4);
+	c->len=4;
+	nlm_cookie++;
+}
+
 /*
  * Initialize arguments for TEST/LOCK/UNLOCK/CANCEL calls
  */
@@ -40,7 +48,7 @@ nlmclnt_setlockargs(struct nlm_rqst *req, struct file_lock *fl)
 	struct nlm_lock	*lock = &argp->lock;
 
 	memset(argp, 0, sizeof(*argp));
-	argp->cookie  = nlm_cookie++;
+	nlmclnt_next_cookie(&argp->cookie);
 	argp->state   = nsm_local_state;
 	lock->fh      = *NFS_FH(fl->fl_file->f_dentry);
 	lock->caller  = system_utsname.nodename;
@@ -57,7 +65,7 @@ nlmclnt_setlockargs(struct nlm_rqst *req, struct file_lock *fl)
 int
 nlmclnt_setgrantargs(struct nlm_rqst *call, struct nlm_lock *lock)
 {
-	call->a_args.cookie  = nlm_cookie++;
+	nlmclnt_next_cookie(&call->a_args.cookie);
 	call->a_args.lock    = *lock;
 	call->a_args.lock.caller = system_utsname.nodename;
 
@@ -230,9 +238,24 @@ nlmclnt_call(struct nlm_rqst *req, u32 proc)
 		/* Perform the RPC call. If an error occurs, try again */
 		if ((status = rpc_call(clnt, proc, argp, resp, 0)) < 0) {
 			dprintk("lockd: rpc_call returned error %d\n", -status);
-			if (status == -ERESTARTSYS)
-				return status;
-			nlm_rebind_host(host);
+			switch (status) {
+			case -EPROTONOSUPPORT:
+				status = -EINVAL;
+				break;
+			case -ECONNREFUSED:
+			case -ETIMEDOUT:
+			case -ENOTCONN:
+				status = -EAGAIN;
+				break;
+			case -ERESTARTSYS:
+				return signalled () ? -EINTR : status;
+			default:
+				break;
+			}
+			if (req->a_args.block)
+				nlm_rebind_host(host);
+			else
+				break;
 		} else
 		if (resp->status == NLM_LCK_DENIED_GRACE_PERIOD) {
 			dprintk("lockd: server in grace period\n");
@@ -248,9 +271,18 @@ nlmclnt_call(struct nlm_rqst *req, u32 proc)
 
 		/* Back off a little and try again */
 		interruptible_sleep_on_timeout(&host->h_gracewait, 15*HZ);
-	} while (!signalled());
 
-	return -ERESTARTSYS;
+		/* When the lock requested by F_SETLKW isn't available,
+		   we will wait until the request can be satisfied. If
+		   a signal is received during wait, we should return
+		   -EINTR. */
+		if (signalled ()) {
+			status = -EINTR;
+			break;
+		}
+	} while (1);
+
+	return status;
 }
 
 /*
@@ -446,7 +478,7 @@ nlmclnt_unlock_callback(struct rpc_task *task)
 	int		status = req->a_res.status;
 
 	if (RPC_ASSASSINATED(task))
-		goto die;
+		return;
 
 	if (task->tk_status < 0) {
 		dprintk("lockd: unlock failed (err = %d)\n", -task->tk_status);
@@ -458,9 +490,6 @@ nlmclnt_unlock_callback(struct rpc_task *task)
 	 && status != NLM_LCK_DENIED_GRACE_PERIOD) {
 		printk("lockd: unexpected unlock status: %d\n", status);
 	}
-
-die:
-	rpc_release_task(task);
 }
 
 /*
@@ -536,7 +565,6 @@ nlmclnt_cancel_callback(struct rpc_task *task)
 	}
 
 die:
-	rpc_release_task(task);
 	nlm_release_host(req->a_host);
 	kfree(req);
 	return;

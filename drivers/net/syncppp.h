@@ -80,6 +80,7 @@ struct sk_buff *sppp_dequeue (struct device *dev);
 int sppp_isempty (struct device *dev);
 void sppp_flush (struct device *dev);
 int sppp_open (struct device *dev);
+int sppp_reopen (struct device *dev);
 int sppp_close (struct device *dev);
 #endif
 

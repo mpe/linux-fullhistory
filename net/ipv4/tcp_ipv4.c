@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.164 1999/01/04 20:36:55 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.165 1999/02/08 11:19:56 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -751,7 +751,6 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip)
 	if (sk->ip_pmtudisc != IP_PMTUDISC_DONT && sk->dst_cache) {
 		if (tp->pmtu_cookie > sk->dst_cache->pmtu &&
 		    !atomic_read(&sk->sock_readers)) {
-			lock_sock(sk); 
 			tcp_sync_mss(sk, sk->dst_cache->pmtu);
 
 			/* Resend the TCP packet because it's  
@@ -760,7 +759,6 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip)
 			 * discovery.
 			 */
 			tcp_simple_retransmit(sk);
-			release_sock(sk);
 		} /* else let the usual retransmit timer handle it */
 	}
 }

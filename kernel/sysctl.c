@@ -557,14 +557,19 @@ static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root
 				continue;
 			}
 			unregister_proc_table(table->child, de);
+
+			/* Don't unregister directories which still have entries.. */
+			if (de->subdir)
+				continue;
 		}
-		/* Don't unregister proc directories which still have
-		   entries... */
-		if (!((de->mode & S_IFDIR) && de->subdir)) {
-			proc_unregister(root, de->low_ino);
-			table->de = NULL;
-			kfree(de);
-		} 
+
+		/* Don't unregoster proc entries that are still being used.. */
+		if (de->count)
+			continue;
+
+		proc_unregister(root, de->low_ino);
+		table->de = NULL;
+		kfree(de);
 	}
 }
 

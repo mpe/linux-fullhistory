@@ -50,7 +50,7 @@ available sources to write this chapter, it seems only fair to give
 the work back to the Linux community. This work is based on the
 2.1.132 and 2.2.0-pre-kernel versions. I'm afraid it's still far from
 complete, but we hope it will be useful. As far as we know, it is the
-first 'all-in-one’ document about the /proc file system. It is
+first 'all-in-one' document about the /proc file system. It is
 focused on the Intel x86 hardware, so if you are looking for PPC, ARM,
 SPARC, APX, etc., features, you probably won't find what you are
 looking for. It also only covers IPv4 networking, not IPv6 nor other
@@ -657,7 +657,7 @@ printk
 
 sg-big-buff
    This file shows the size of the generic SCSI (sg) buffer. At this
-   point, you can’t tune it yet, but you can change it at compile time
+   point, you can't tune it yet, but you can change it at compile time
    by editing include/scsi/sg.h and changing the value of
    SG_BIG_BUFF.
 
@@ -794,9 +794,9 @@ kswapd
   swap_cluster
      This is probably the greatest influence on system
      performance. swap_cluster is the number of pages kswapd writes in
-     one turn. You’ll want this value to be large so that kswapd does
-     its I/O in large chunks and the disk doesn’t have to seek as
-     often., but you don’t want it to be too large since that would
+     one turn. You'll want this value to be large so that kswapd does
+     its I/O in large chunks and the disk doesn't have to seek as
+     often., but you don't want it to be too large since that would
      flood the request queue.
 
 overcommit_memory
@@ -1140,7 +1140,7 @@ accept_redirects
 accept_source_route
    Should source routed packages be accepted or declined. The
    default is dependent on the kernel configuration. It's 'yes' for
-   routers and 'np' for hosts.
+   routers and 'no' for hosts.
 
 bootp_relay
    Accept packets with source address 0.b.c.d destined not to this

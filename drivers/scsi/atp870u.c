@@ -1720,8 +1720,8 @@ int atp870u_detect(Scsi_Host_Template * tpnt)
     h=0;
     while ( devid[h] != 0 )
     {
-      pci_find_device(0x1191,devid[h],pdev);
-      if (pdev == NULL); {
+      pdev = pci_find_device(0x1191,devid[h],pdev);
+      if (pdev == NULL) {
 	  h++;
 	  index=0;
 	  continue;

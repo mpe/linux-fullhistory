@@ -111,16 +111,25 @@ nlmsvc_lookup_block(struct nlm_file *file, struct nlm_lock *lock, int remove)
 	return NULL;
 }
 
+static inline int nlm_cookie_match(struct nlm_cookie *a, struct nlm_cookie *b)
+{
+	if(a->len != b->len)
+		return 0;
+	if(memcmp(a->data,b->data,a->len))
+		return 0;
+	return 1;
+}
+
 /*
  * Find a block with a given NLM cookie.
  */
 static inline struct nlm_block *
-nlmsvc_find_block(u32 cookie)
+nlmsvc_find_block(struct nlm_cookie *cookie)
 {
 	struct nlm_block *block;
 
 	for (block = nlm_blocked; block; block = block->b_next) {
-		if (block->b_call.a_args.cookie == cookie)
+		if (nlm_cookie_match(&block->b_call.a_args.cookie,cookie))
 			break;
 	}
 
@@ -139,7 +148,7 @@ nlmsvc_find_block(u32 cookie)
  */
 static inline struct nlm_block *
 nlmsvc_create_block(struct svc_rqst *rqstp, struct nlm_file *file,
-				struct nlm_lock *lock, u32 cookie)
+				struct nlm_lock *lock, struct nlm_cookie *cookie)
 {
 	struct nlm_block	*block;
 	struct nlm_host		*host;
@@ -160,7 +169,7 @@ nlmsvc_create_block(struct svc_rqst *rqstp, struct nlm_file *file,
 	lock->fl.fl_notify = nlmsvc_notify_blocked;
 	if (!nlmclnt_setgrantargs(&block->b_call, lock))
 		goto failed_free;
-	block->b_call.a_args.cookie = cookie;	/* see above */
+	block->b_call.a_args.cookie = *cookie;	/* see above */
 
 	dprintk("lockd: created block %p...\n", block);
 
@@ -267,7 +276,7 @@ nlmsvc_traverse_blocks(struct nlm_host *host, struct nlm_file *file, int action)
  */
 u32
 nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
-			struct nlm_lock *lock, int wait, u32 cookie)
+			struct nlm_lock *lock, int wait, struct nlm_cookie *cookie)
 {
 	struct file_lock	*conflock;
 	struct nlm_block	*block;
@@ -529,8 +538,8 @@ nlmsvc_grant_callback(struct rpc_task *task)
 	unsigned long		timeout;
 
 	dprintk("lockd: GRANT_MSG RPC callback\n");
-	if (!(block = nlmsvc_find_block(call->a_args.cookie))) {
-		dprintk("lockd: no block for cookie %x\n", call->a_args.cookie);
+	if (!(block = nlmsvc_find_block(&call->a_args.cookie))) {
+		dprintk("lockd: no block for cookie %x\n", *(u32 *)(call->a_args.cookie.data));
 		return;
 	}
 
@@ -552,7 +561,6 @@ nlmsvc_grant_callback(struct rpc_task *task)
 	block->b_incall = 0;
 
 	nlm_release_host(call->a_host);
-	rpc_release_task(task);
 }
 
 /*
@@ -560,7 +568,7 @@ nlmsvc_grant_callback(struct rpc_task *task)
  * block.
  */
 void
-nlmsvc_grant_reply(u32 cookie, u32 status)
+nlmsvc_grant_reply(struct nlm_cookie *cookie, u32 status)
 {
 	struct nlm_block	*block;
 	struct nlm_file		*file;

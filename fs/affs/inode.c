@@ -293,7 +293,7 @@ affs_new_inode(const struct inode *dir)
 
 	sb = dir->i_sb;
 	inode->i_sb    = sb;
-	inode->i_flags = sb->s_flags;
+	inode->i_flags = 0;
 
 	if (!(block = affs_new_header((struct inode *)dir))) {
 		iput(inode);

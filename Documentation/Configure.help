@@ -2330,8 +2330,8 @@ CONFIG_IP_FIREWALL
 
 IP: firewall packet netlink device
 CONFIG_IP_FIREWALL_NETLINK
-  If you say Y here, then the first 128 bytes of each packet that hit
-  your Linux firewall and was blocked are passed on to optional user
+  If you say Y here, you can use the ipchains tool to copy all or part of
+  any packet you specify that hits your Linux firewall to optional user
   space monitoring software that can then look for attacks and take
   actions such as paging the administrator of the site.
 
@@ -2339,9 +2339,6 @@ CONFIG_IP_FIREWALL_NETLINK
   with major number 36 and minor number 3 using mknod ("man mknod"),
   and you need (to write) a program that reads from that device and
   takes appropriate action.
-
-  With the ipchains tool you can specify which packets you want to go
-  to this device, as well as how many bytes from each packet.
 
 IP: kernel level autoconfiguration
 CONFIG_IP_PNP

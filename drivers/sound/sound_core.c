@@ -63,6 +63,10 @@ static int __sound_insert_unit(struct sound_unit * s, struct sound_unit **list, 
 	int n=low;
 
 	if (index < 0) {	/* first free */
+
+		while (*list && (*list)->unit_minor<n)
+			list=&((*list)->next);
+
 		while(n<top)
 		{
 			/* Found a hole ? */
@@ -73,7 +77,7 @@ static int __sound_insert_unit(struct sound_unit * s, struct sound_unit **list, 
 		}
 
 		if(n>=top)
-			return -ENOMEM;
+			return -ENOENT;
 	} else {
 		n = low+(index*16);
 		while (*list) {
@@ -141,13 +145,13 @@ static int sound_insert_unit(struct sound_unit **list, struct file_operations *f
 	int r;
 	struct sound_unit *s=(struct sound_unit *)kmalloc(sizeof(struct sound_unit), GFP_KERNEL);
 	if(s==NULL)
-		return -1;
+		return -ENOMEM;
 		
 	spin_lock(&sound_loader_lock);
 	r=__sound_insert_unit(s,list,fops,index,low,top);
 	spin_unlock(&sound_loader_lock);
 	
-	if(r==-1)
+	if(r<0)
 		kfree(s);
 	return r;
 }

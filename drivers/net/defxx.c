@@ -2881,6 +2881,22 @@ int dfx_hw_dma_uninit(
 	return(DFX_K_SUCCESS);
 	}
 
+
+/*
+ *	Align an sk_buff to a boundary power of 2
+ *
+ */
+ 
+void my_skb_align(struct sk_buff *skb, int n)
+{
+	u32 x=(u32)skb->data;	/* We only want the low bits .. */
+	u32 v;
+	
+	v=(x+n-1)&~(n-1);	/* Where we want to be */
+	
+	skb_reserve(skb, v-x);
+}
+
 
 /*
  * ================
@@ -2950,8 +2966,8 @@ void dfx_rcv_init(
 			 * align to 128 bytes for compatibility with
 			 * the old EISA boards.
 			 */
-			newskb->data = (char *)((unsigned long)
-						(newskb->data+127) & ~127);
+			 
+			my_skb_align(newskb,128);
 			bp->descr_block_virt->rcv_data[i+j].long_1 = virt_to_bus(newskb->data);
 			/*
 			 * p_rcv_buff_va is only used inside the
@@ -3062,10 +3078,10 @@ void dfx_rcv_queue_process(
 					newskb = dev_alloc_skb(NEW_SKB_SIZE);
 					if (newskb){
 						rx_in_place = 1;
-
-						newskb->data = (char *)((unsigned long)(newskb->data+127) & ~127);
+						
+						my_skb_align(newskb, 128);
 						skb = (struct sk_buff *)bp->p_rcv_buff_va[entry];
-						skb->data += RCV_BUFF_K_PADDING;
+						skb_reserve(skb, RCV_BUFF_K_PADDING);
 						bp->p_rcv_buff_va[entry] = (char *)newskb;
 						bp->descr_block_virt->rcv_data[entry].long_1 = virt_to_bus(newskb->data);
 					} else
@@ -3088,9 +3104,9 @@ void dfx_rcv_queue_process(
 
 						memcpy(skb->data, p_buff + RCV_BUFF_K_PADDING, pkt_len+3);
 					}
-
-					skb->data += 3;			/* adjust data field so that it points to FC byte */
-					skb->len = pkt_len;		/* pass up packet length, NOT including CRC */
+					
+					skb_reserve(skb,3);		/* adjust data field so that it points to FC byte */
+					skb_put(skb, pkt_len);		/* pass up packet length, NOT including CRC */
 					skb->dev = bp->dev;		/* pass up device pointer */
 
 					skb->protocol = fddi_type_trans(skb, bp->dev);

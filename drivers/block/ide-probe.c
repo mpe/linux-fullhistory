@@ -124,6 +124,10 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 			case ide_tape:
 				printk ("TAPE");
 				break;
+			case ide_optical:
+				printk ("OPTICAL");
+				drive->removable = 1;
+				break;
 			default:
 				printk("UNKNOWN (type %d)", type);
 				break;

@@ -127,6 +127,8 @@ endif
 
 ifeq ($(CONFIG_IRDA),y)
 SUB_DIRS += irda
+# There might be some irda features that are compiled as modules
+MOD_SUB_DIRS += irda
 else
   ifeq ($(CONFIG_IRDA),m)
   MOD_SUB_DIRS += irda

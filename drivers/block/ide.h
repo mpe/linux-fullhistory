@@ -182,6 +182,7 @@ typedef unsigned char	byte;	/* used everywhere */
 
 #define ide_scsi	0x21
 #define ide_disk	0x20
+#define ide_optical	0x7
 #define ide_cdrom	0x5
 #define ide_tape	0x1
 #define ide_floppy	0x0

@@ -639,6 +639,8 @@ asmlinkage void schedule(void)
 	struct task_struct * prev, * next;
 	int this_cpu;
 
+	run_task_queue(&tq_scheduler);
+
 	prev = current;
 	this_cpu = prev->processor;
 	/*
@@ -654,7 +656,6 @@ asmlinkage void schedule(void)
 	/* Do "administrative" work here while we don't hold any locks */
 	if (bh_active & bh_mask)
 		do_bottom_half();
-	run_task_queue(&tq_scheduler);
 
 	spin_lock(&scheduler_lock);
 	spin_lock_irq(&runqueue_lock);

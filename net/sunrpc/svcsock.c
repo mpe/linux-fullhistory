@@ -24,6 +24,7 @@
 #include <linux/fcntl.h>
 #include <linux/net.h>
 #include <linux/in.h>
+#include <linux/inet.h>
 #include <linux/udp.h>
 #include <linux/version.h>
 #include <linux/unistd.h>
@@ -546,14 +547,14 @@ svc_tcp_accept(struct svc_sock *svsk)
 	 * we just punt connects from unprivileged ports. */
 	if (ntohs(sin.sin_port) >= 1024) {
 		printk(KERN_WARNING
-			"%s: connect from unprivileged port: %08lx:%d",
+			"%s: connect from unprivileged port: %s:%d",
 			serv->sv_name, 
-			ntohl(sin.sin_addr.s_addr), ntohs(sin.sin_port));
+			in_ntoa(sin.sin_addr.s_addr), ntohs(sin.sin_port));
 		goto failed;
 	}
 
-	dprintk("%s: connect from %08lx:%04x\n", serv->sv_name,
-			ntohl(sin.sin_addr.s_addr), ntohs(sin.sin_port));
+	dprintk("%s: connect from %s:%04x\n", serv->sv_name,
+			in_ntoa(sin.sin_addr.s_addr), ntohs(sin.sin_port));
 
 	if (!(newsvsk = svc_setup_socket(serv, newsock, &err, 0)))
 		goto failed;

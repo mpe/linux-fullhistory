@@ -14,7 +14,7 @@
 /*
  * ioctl commands
  */
-#define	SMB_IOC_GETMOUNTUID		_IOR('u', 1, uid_t)
+#define	SMB_IOC_GETMOUNTUID		_IOR('u', 1, __kernel_uid_t)
 #define SMB_IOC_NEWCONN                 _IOW('u', 2, struct smb_conn_opt)
 
 #ifdef __KERNEL__

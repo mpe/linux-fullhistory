@@ -1676,16 +1676,23 @@ static inline void make_pio_request(struct file *file,
 
 int kpiod(void * unused)
 {
-	struct wait_queue wait = {current};
+	struct task_struct *tsk = current;
+	struct wait_queue wait = { tsk, };
 	struct inode * inode;
 	struct dentry * dentry;
 	struct pio_request * p;
 	
-	current->session = 1;
-	current->pgrp = 1;
-	strcpy(current->comm, "kpiod");
-	sigfillset(&current->blocked);
+	tsk->session = 1;
+	tsk->pgrp = 1;
+	strcpy(tsk->comm, "kpiod");
+	sigfillset(&tsk->blocked);
 	init_waitqueue(&pio_wait);
+	/*
+	 * Mark this task as a memory allocator - we don't want to get caught
+	 * up in the regular mm freeing frenzy if we have to allocate memory
+	 * in order to write stuff out.
+	 */
+	tsk->flags |= PF_MEMALLOC;
 
 	lock_kernel();
 	
@@ -1695,14 +1702,14 @@ int kpiod(void * unused)
 					      NULL, NULL);
 	if (!pio_request_cache)
 		panic ("Could not create pio_request slab cache");
-	
+
 	while (1) {
-		current->state = TASK_INTERRUPTIBLE;
+		tsk->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&pio_wait, &wait);
-		while (!pio_first)
+		if (!pio_first)
 			schedule();
 		remove_wait_queue(&pio_wait, &wait);
-		current->state = TASK_RUNNING;
+		tsk->state = TASK_RUNNING;
 
 		while (pio_first) {
 			p = get_pio_request();
