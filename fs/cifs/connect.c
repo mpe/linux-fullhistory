@@ -543,9 +543,18 @@ cifs_parse_mount_options(char *options, const char *devname,struct smb_vol *vol)
 				return 1;
 			}
 		} else if (strnicmp(data, "pass", 4) == 0) {
-			if (!value || !*value) {
+			if (!value) {
 				vol->password = NULL;
 				continue;
+			} else if(value[0] == 0) {
+				/* check if string begins with double comma
+				   since that would mean the password really
+				   does start with a comma, and would not
+				   indicate an empty string */
+				if(value[1] != separator[0]) {
+					vol->password = NULL;
+					continue;
+				}
 			}
 			temp_len = strlen(value);
 			/* removed password length check, NTLM passwords
@@ -560,15 +569,20 @@ cifs_parse_mount_options(char *options, const char *devname,struct smb_vol *vol)
 
 			/* NB: password legally can have multiple commas and
 			the only illegal character in a password is null */
-				
+
 			if ((value[temp_len] == 0) && (value[temp_len+1] == separator[0])) {
 				/* reinsert comma */
 				value[temp_len] = separator[0];
 				temp_len+=2;  /* move after the second comma */
 				while(value[temp_len] != 0)  {
-					if((value[temp_len] == separator[0]) && (value[temp_len+1] != separator[0])) {
-						/* single comma indicating start of next parm */
-						break;
+					if (value[temp_len] == separator[0]) {
+						if (value[temp_len+1] == separator[0]) {
+							temp_len++; /* skip second comma */
+						} else { 
+						/* single comma indicating start
+							 of next parm */
+							break;
+						}
 					}
 					temp_len++;
 				}
@@ -576,10 +590,12 @@ cifs_parse_mount_options(char *options, const char *devname,struct smb_vol *vol)
 					options = NULL;
 				} else {
 					value[temp_len] = 0;
-					/* move options to point to start of next parm */
+					/* point option to start of next parm */
 					options = value + temp_len + 1;
 				}
-				/* go from value to (value + temp_len) condensing double commas to singles */
+				/* go from value to value + temp_len condensing 
+				double commas to singles. Note that this ends up
+				allocating a few bytes too many, which is ok */
 				vol->password = cifs_kcalloc(temp_len, GFP_KERNEL);
 				for(i=0,j=0;i<temp_len;i++,j++) {
 					vol->password[j] = value[i];
@@ -588,8 +604,7 @@ cifs_parse_mount_options(char *options, const char *devname,struct smb_vol *vol)
 						i++;
 					}
 				}
-				/* value[temp_len] is zeroed above so
-					 vol->password[temp_len] guaranteed to be null */
+				vol->password[j] = 0;
 			} else {
 				vol->password = cifs_kcalloc(temp_len + 1, GFP_KERNEL);
 				strcpy(vol->password, value);
@@ -1182,6 +1197,7 @@ cifs_mount(struct super_block *sb, struct cifs_sb_info *cifs_sb,
 	}
 
 	if (volume_info.username) {
+		/* BB fixme parse for domain name here */
 		cFYI(1, ("Username: %s ", volume_info.username));
 
 	} else {
