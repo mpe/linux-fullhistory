@@ -587,6 +587,11 @@ static int socket_resume(struct pcmcia_socket *skt)
 	skt->ops->init(skt);
 	skt->ops->set_socket(skt, &skt->socket);
 
+	if (!(skt->state & SOCKET_PRESENT)) {
+		skt->state &= ~SOCKET_SUSPEND;
+		return socket_insert(skt);
+	}
+
 	ret = socket_setup(skt, resume_delay);
 	if (ret == CS_SUCCESS) {
 		/*
