@@ -77,7 +77,7 @@ struct inode_operations hfs_cap_info_inode_operations = {
 	NULL,				/* rename */
 	NULL,				/* readlink */
 	NULL,				/* follow_link */
-	NULL,				/* bmap - none */
+	NULL,				/* get_block - none */
 	NULL,				/* readpage */
 	NULL,				/* writepage */
 	NULL,				/* flushpage */

@@ -55,10 +55,8 @@ ufs_readdir (struct file * filp, void * dirent, filldir_t filldir)
 
 	while (!error && !stored && filp->f_pos < inode->i_size) {
 		lblk = (filp->f_pos) >> sb->s_blocksize_bits;
-		/* XXX - ufs_bmap() call needs error checking */
-		blk = ufs_bmap(inode, lblk);
-		bh = bread (sb->s_dev, blk, sb->s_blocksize);
-		if (!bh) {
+		blk = ufs_frag_map(inode, lblk);
+		if (!blk || !(bh = bread (sb->s_dev, blk, sb->s_blocksize))) {
 			/* XXX - error - skip to the next block */
 			printk("ufs_readdir: "
 			       "dir inode %lu has a hole at offset %lu\n",
@@ -209,7 +207,7 @@ struct inode_operations ufs_dir_inode_operations = {
 	ufs_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

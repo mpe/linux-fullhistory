@@ -130,6 +130,7 @@ asmlinkage void schedule(void);
  */
 struct files_struct {
 	atomic_t count;
+	rwlock_t file_lock;
 	int max_fds;
 	struct file ** fd;	/* current fd array */
 	fd_set close_on_exec;
@@ -138,6 +139,7 @@ struct files_struct {
 
 #define INIT_FILES { \
 	ATOMIC_INIT(1), \
+	RW_LOCK_UNLOCKED, \
 	NR_OPEN, \
 	&init_fd_array[0], \
 	{ { 0, } }, \

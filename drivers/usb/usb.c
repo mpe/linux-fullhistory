@@ -773,7 +773,7 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 
 	/* toggle is reset on clear */
 
-	usb_settoggle(dev, endp & 0x0f, 0);
+	usb_settoggle(dev, endp & 0x0f, ((endp >> 7) & 1) ^ 1, 0);
 
 	return 0;
 }
@@ -823,7 +823,8 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 		return -1;
 
 	dev->actconfig = cp;
-	dev->toggle = 0;
+	dev->toggle[0] = 0;
+	dev->toggle[1] = 0;
 	usb_set_maxpacket(dev);
 	return 0;
 }

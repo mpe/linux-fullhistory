@@ -57,13 +57,9 @@ static inline void kbd_init_hw(void)
 	ppc_md.kbd_init_hw();
 }
 
-#define kbd_sysrq_xlate	(ppc_md.kbd_sysrq_xlate)
+#define kbd_sysrq_xlate	(ppc_md.ppc_kbd_sysrq_xlate)
 
-#ifdef CONFIG_MAC_KEYBOARD
-# define SYSRQ_KEY 0x69
-#else
-# define SYSRQ_KEY 0x54
-#endif
+extern unsigned long SYSRQ_KEY;
 
 #endif /* CONFIG_APUS */
 

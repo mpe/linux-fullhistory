@@ -4,10 +4,10 @@
 #include <asm/atomic.h>
 #include <asm/hardirq.h>
 
-extern unsigned int ppc_local_bh_count[NR_CPUS];
-
 #define get_active_bhs()	(bh_mask & bh_active)
 #define clear_active_bhs(x)	atomic_clear_mask((x),&bh_active)
+
+extern unsigned int ppc_local_bh_count[NR_CPUS];
 
 extern inline void init_bh(int nr, void (*routine)(void))
 {
@@ -20,7 +20,7 @@ extern inline void remove_bh(int nr)
 {
 	bh_mask &= ~(1 << nr);
 	wmb();
-	bh_base[nr] = NULL;
+	bh_base[nr] = 0;
 }
 
 extern inline void mark_bh(int nr)
@@ -55,7 +55,8 @@ static inline void end_bh_atomic(void)
 static inline int softirq_trylock(int cpu)
 {
 	if (!test_and_set_bit(0,&global_bh_count)) {
-		if (atomic_read(&global_bh_lock) == 0) {
+		if (atomic_read(&global_bh_lock) &&
+		    ppc_local_bh_count[cpu] == 0) {
 			++ppc_local_bh_count[cpu];
 			return 1;
 		}
@@ -90,6 +91,9 @@ extern inline void end_bh_atomic(void)
 #define synchronize_bh()	barrier()
 
 #endif	/* SMP */
+
+#define local_bh_disable()	(ppc_local_bh_count[smp_processor_id()]++)
+#define local_bh_enable()	(ppc_local_bh_count[smp_processor_id()]--)
 
 /*
  * These use a mask count to correctly handle

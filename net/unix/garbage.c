@@ -199,7 +199,7 @@ void unix_gc(void)
 		 *	in flight we are in use.
 		 */
 		if(s->socket && s->socket->file &&
-		   s->socket->file->f_count > s->protinfo.af_unix.inflight)
+		   atomic_read(&s->socket->file->f_count) > s->protinfo.af_unix.inflight)
 			maybe_unmark_and_push(s);
 	}
 

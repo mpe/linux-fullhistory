@@ -64,9 +64,9 @@ void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table
 		if (p->nr < __MAX_POLL_TABLE_ENTRIES) {
 			struct poll_table_entry * entry;
 ok_table:
-		 	entry = p->entry + p->nr;
-		 	entry->filp = filp;
-		 	filp->f_count++;
+			entry = p->entry + p->nr;
+			entry->filp = filp;
+			atomic_inc(&filp->f_count);
 			entry->wait_address = wait_address;
 			init_waitqueue_entry(&entry->wait, current);
 			add_wait_queue(wait_address,&entry->wait);

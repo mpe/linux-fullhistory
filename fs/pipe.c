@@ -8,6 +8,7 @@
 #include <linux/file.h>
 #include <linux/poll.h>
 #include <linux/malloc.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 
@@ -28,15 +29,11 @@
 /* in case of paging and multiple read/write on the same pipe. (FGC)         */
 
 
-static ssize_t pipe_read(struct file * filp, char * buf,
-			 size_t count, loff_t *ppos)
+static ssize_t do_pipe_read(struct file * filp, char * buf, size_t count)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
 	ssize_t chars = 0, size = 0, read = 0;
         char *pipebuf;
-
-	if (ppos != &filp->f_pos)
-		return -ESPIPE;
 
 	if (filp->f_flags & O_NONBLOCK) {
 		if (PIPE_LOCK(*inode))
@@ -82,16 +79,12 @@ static ssize_t pipe_read(struct file * filp, char * buf,
 		return -EAGAIN;
 	return 0;
 }
-	
-static ssize_t pipe_write(struct file * filp, const char * buf,
-			  size_t count, loff_t *ppos)
+
+static ssize_t do_pipe_write(struct file * filp, const char * buf, size_t count)
 {
 	struct inode * inode = filp->f_dentry->d_inode;
 	ssize_t chars = 0, free = 0, written = 0, err=0;
 	char *pipebuf;
-
-	if (ppos != &filp->f_pos)
-		return -ESPIPE;
 
 	if (!PIPE_READERS(*inode)) { /* no readers */
 		send_sig(SIGPIPE,current,0);
@@ -145,6 +138,32 @@ static ssize_t pipe_write(struct file * filp, const char * buf,
 errout:
 	up(&inode->i_sem);
 	return written ? written : err;
+}
+
+static ssize_t pipe_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
+{
+	ssize_t retval;
+
+	if (ppos != &filp->f_pos)
+		return -ESPIPE;
+
+	lock_kernel();
+	retval = do_pipe_read(filp, buf, count);
+	unlock_kernel();
+	return retval;
+}
+
+static ssize_t pipe_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
+{
+	ssize_t retval;
+
+	if (ppos != &filp->f_pos)
+		return -ESPIPE;
+
+	lock_kernel();
+	retval = do_pipe_write(filp, buf, count);
+	unlock_kernel();
+	return retval;
 }
 
 static long long pipe_lseek(struct file * file, long long offset, int orig)

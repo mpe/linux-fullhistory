@@ -1,6 +1,8 @@
 #ifndef __ASM_HARDIRQ_H
 #define __ASM_HARDIRQ_H
 
+#include <asm/smp.h>
+
 extern unsigned int ppc_local_irq_count[NR_CPUS];
 
 /*

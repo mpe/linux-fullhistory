@@ -384,25 +384,15 @@ extern int sysv_new_block(struct super_block * sb);
 extern void sysv_free_block(struct super_block * sb, unsigned int block);
 extern unsigned long sysv_count_free_blocks(struct super_block *sb);
 
-extern int sysv_bmap(struct inode *,int);
-
 extern struct buffer_head * sysv_getblk(struct inode *, unsigned int, int);
-extern int sysv_getblk_block(struct inode *, long, int, int *, int *);
+extern int sysv_get_block(struct inode *, long, struct buffer_head *, int);
 extern struct buffer_head * sysv_file_bread(struct inode *, int, int);
-extern ssize_t sysv_file_read(struct file *, char *, size_t, loff_t *);
 
 extern void sysv_truncate(struct inode *);
-extern void sysv_put_super(struct super_block *);
-extern struct super_block *sysv_read_super(struct super_block *,void *,int);
 extern int init_sysv_fs(void);
-extern void sysv_write_super(struct super_block *);
-extern void sysv_read_inode(struct inode *);
-extern int sysv_notify_change(struct dentry *, struct iattr *);
 extern void sysv_write_inode(struct inode *);
-extern int sysv_statfs(struct super_block *, struct statfs *, int);
 extern int sysv_sync_inode(struct inode *);
 extern int sysv_sync_file(struct file *, struct dentry *);
-extern int sysv_mmap(struct file *, struct vm_area_struct *);
 
 extern struct inode_operations sysv_file_inode_operations;
 extern struct inode_operations sysv_file_inode_operations_with_bmap;

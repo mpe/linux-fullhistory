@@ -1,5 +1,5 @@
 /*
- * $Id: smp.c,v 1.52 1999/05/23 22:43:51 cort Exp $
+ * $Id: smp.c,v 1.54 1999/06/24 17:13:34 cort Exp $
  *
  * Smp support for ppc.
  *
@@ -243,20 +243,21 @@ void __init smp_boot_cpus(void)
 {
 	extern struct task_struct *current_set[NR_CPUS];
 	extern void __secondary_start_psurge(void);
-	int i;
+	extern void __secondary_start_chrp(void);
+	int i, cpu_nr;
 	struct task_struct *p;
 	unsigned long a;
 
         printk("Entering SMP Mode...\n");
 	/* let other processors know to not do certain initialization */
 	first_cpu_booted = 1;
+	smp_num_cpus = 1;
 	
 	/*
 	 * assume for now that the first cpu booted is
 	 * cpu 0, the master -- Cort
 	 */
 	cpu_callin_map[0] = 1;
-	cpu_callin_map[1] = 0;
         smp_store_cpu_info(0);
         active_kernel_processor = 0;
 	current->processor = 0;
@@ -282,16 +283,12 @@ void __init smp_boot_cpus(void)
 	{
 	case _MACH_Pmac:
 		/* assume powersurge board - 2 processors -- Cort */
-		smp_num_cpus = 2; 
+		cpu_nr = 2; 
 		break;
 	case _MACH_chrp:
-		smp_num_cpus = ((openpic_read(&OpenPIC->Global.Feature_Reporting0)
+		cpu_nr = ((openpic_read(&OpenPIC->Global.Feature_Reporting0)
 				 & OPENPIC_FEATURE_LAST_PROCESSOR_MASK) >>
 				OPENPIC_FEATURE_LAST_PROCESSOR_SHIFT)+1;
-		/* get our processor # - we may not be cpu 0 */
-		printk("SMP %d processors, boot CPU is %d (should be 0)\n",
-		       smp_num_cpus,
-		       10/*openpic_read(&OpenPIC->Processor[0]._Who_Am_I)*/);
 		break;
 	}
 
@@ -299,7 +296,7 @@ void __init smp_boot_cpus(void)
 	 * only check for cpus we know exist.  We keep the callin map
 	 * with cpus at the bottom -- Cort
 	 */
-	for ( i = 1 ; i < smp_num_cpus; i++ )
+	for ( i = 1 ; i < cpu_nr; i++ )
 	{
 		int c;
 		
@@ -332,6 +329,19 @@ void __init smp_boot_cpus(void)
 		case _MACH_chrp:
 			*(unsigned long *)KERNELBASE = i;
 			asm volatile("dcbf 0,%0"::"r"(KERNELBASE):"memory");
+#if 0
+			device = find_type_devices("cpu");
+			/* assume cpu device list is in order, find the ith cpu */
+			for ( a = i; device && a; device = device->next, a-- )
+				;
+			if ( !device )
+				break;
+			printk( "Starting %s (%lu): ", device->full_name,
+				*(ulong *)get_property(device, "reg", NULL) );
+			call_rtas( "start-cpu", 3, 1, NULL,
+				   *(ulong *)get_property(device, "reg", NULL),
+				   __pa(__secondary_start_chrp), i);
+#endif			
 			break;
 		}
 		
@@ -349,6 +359,7 @@ void __init smp_boot_cpus(void)
 			/* this sync's the decr's -- Cort */
 			if ( _machine == _MACH_Pmac )
 				set_dec(decrementer_count);
+			smp_num_cpus++;
 		} else {
 			printk("Processor %d is stuck.\n", i);
 		}
@@ -366,7 +377,6 @@ void __init smp_boot_cpus(void)
 
 void __init smp_commence(void)
 {
-	printk("SMP %d: smp_commence()\n",current->processor);
 	/*
 	 *	Lets the callin's below out of their loop.
 	 */
@@ -381,16 +391,12 @@ void __init initialize_secondary(void)
 /* Activate a secondary processor. */
 asmlinkage int __init start_secondary(void *unused)
 {
-	printk("SMP %d: start_secondary()\n",current->processor);
 	smp_callin();
 	return cpu_idle(NULL);
 }
 
 void __init smp_callin(void)
 {
-	int i;
-	
-	printk("SMP %d: smp_callin()\n",current->processor);
         smp_store_cpu_info(current->processor);
 	set_dec(decrementer_count);
 	
@@ -407,7 +413,6 @@ void __init smp_callin(void)
 
 void __init smp_setup(char *str, int *ints)
 {
-	printk("SMP %d: smp_setup()\n",current->processor);
 }
 
 int __init setup_profiling_timer(unsigned int multiplier)

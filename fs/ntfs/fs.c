@@ -439,7 +439,7 @@ static struct inode_operations ntfs_inode_operations_nobmap = {
 	NULL, /* rename */
 	NULL, /* readlink */
 	NULL, /* follow_link */
-	NULL, /* bmap */
+	NULL, /* get_block */
 	NULL, /* readpage */
 	NULL, /* writepage */
 	NULL, /* flushpage */
@@ -622,8 +622,8 @@ static struct inode_operations ntfs_inode_operations = {
 	NULL, /* rename */
 	NULL, /* readlink */
 	NULL, /* follow_link */
-	ntfs_bmap,
-	block_read_full_page,
+	ntfs_bmap, /* get_block */
+	block_read_full_page, /* readpage */
 	NULL, /* writepage */
 	NULL, /* flushpage */
 	NULL, /* truncate */
@@ -671,7 +671,7 @@ static struct inode_operations ntfs_dir_inode_operations = {
 	NULL, /* rename */
 	NULL, /* readlink */
 	NULL, /* follow_link */
-	NULL, /* bmap */
+	NULL, /* get_block */
 	NULL, /* readpage */
 	NULL, /* writepage */
 	NULL, /* flushpage */

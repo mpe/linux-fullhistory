@@ -73,16 +73,12 @@ struct ip_masq_mfw {
 	__u32 fwmark;			/* key: firewall mark */
 	struct list_head hosts;		/* list of forward-to hosts */
 	atomic_t nhosts;		/* number of "" */
-#ifdef __SMP__
 	rwlock_t lock;
-#endif
 };
 
 
 static DECLARE_MUTEX(mfw_sema);
-#ifdef __SMP__
 static rwlock_t mfw_lock = RW_LOCK_UNLOCKED;
-#endif
 
 static struct ip_masq_mfw *ip_masq_mfw_table[IP_MASQ_MFW_HSIZE];
 
@@ -143,9 +139,7 @@ static struct ip_masq_mfw * mfw_new(int fwmark)
 	MOD_INC_USE_COUNT;
 	memset(mfw, 0, sizeof(*mfw));
 	mfw->fwmark = fwmark;
-#ifdef __SMP__
 	mfw->lock = (rwlock_t) RW_LOCK_UNLOCKED;
-#endif
 
 	INIT_LIST_HEAD(&mfw->hosts);
 out:

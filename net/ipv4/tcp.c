@@ -749,7 +749,6 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 	int mss_now;
 	int err, copied;
 
-	unlock_kernel();
 	lock_sock(sk);
 
 	err = 0;
@@ -976,7 +975,6 @@ do_fault2:
 out:
 	tcp_push_pending_frames(sk, tp);
 	release_sock(sk);
-	lock_kernel();
 	return err;
 }
 
@@ -1156,7 +1154,6 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 	if (flags & MSG_WAITALL)
 		target=len;
 
-	unlock_kernel();
 	add_wait_queue(sk->sleep, &wait);
 	lock_sock(sk);
 	
@@ -1355,7 +1352,6 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 	/* Clean up data we have read: This will do ACK frames. */
 	cleanup_rbuf(sk, copied);
 	release_sock(sk);
-	lock_kernel();
 	return copied;
 }
 

@@ -56,16 +56,16 @@ ppc_defs.h: mk_defs.c ppc_defs.head \
 		$(TOPDIR)/include/asm/processor.h \
 		$(TOPDIR)/include/asm/pgtable.h \
 		$(TOPDIR)/include/asm/ptrace.h
-	$(CC) ${CFLAGS} -S mk_defs.c
+	$(CC) $(CFLAGS) -S mk_defs.c
 	cp ppc_defs.head ppc_defs.h
 	grep '^#define' mk_defs.s >>ppc_defs.h
 	rm mk_defs.s
 
 find_name : find_name.c
-	$(HOSTCC) -o find_name find_name.c
+	$(HOSTCC) $(HOSTCFLAGS) -o find_name find_name.c
 
 checks: checks.c
-	$(HOSTCC) ${CFLAGS} -D__KERNEL__ -o checks checks.c
+	$(HOSTCC) $(HOSTCFLAGS) -D__KERNEL__ -o checks checks.c
 	./checks
 
 include $(TOPDIR)/Rules.make

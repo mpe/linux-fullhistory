@@ -1143,7 +1143,6 @@ ssize_t generic_file_read(struct file * filp, char * buf, size_t count, loff_t *
 {
 	ssize_t retval;
 
-	unlock_kernel();
 	retval = -EFAULT;
 	if (access_ok(VERIFY_WRITE, buf, count)) {
 		retval = 0;
@@ -1161,7 +1160,6 @@ ssize_t generic_file_read(struct file * filp, char * buf, size_t count, loff_t *
 				retval = desc.error;
 		}
 	}
-	lock_kernel();
 	return retval;
 }
 
@@ -1486,7 +1484,7 @@ static int filemap_write_page(struct vm_area_struct * vma,
 	 * If a task terminates while we're swapping the page, the vma and
 	 * and file could be released ... increment the count to be safe.
 	 */
-	file->f_count++;
+	atomic_inc(&file->f_count);
 	result = do_write_page(inode, file, (const char *) page, offset);
 	fput(file);
 	return result;
@@ -1834,8 +1832,6 @@ generic_file_write(struct file *file, const char *buf,
 		count = limit - pos;
 	}
 
-	unlock_kernel();
-
 	while (count) {
 		unsigned long bytes, pgpos, offset;
 		/*
@@ -1897,7 +1893,6 @@ repeat_find:
 		page_cache_free(page_cache);
 
 	err = written ? written : status;
-	lock_kernel();
 out:
 	return err;
 }

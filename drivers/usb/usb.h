@@ -276,7 +276,7 @@ struct usb_device {
 	int devnum;			/* Device number on USB bus */
 	int slow;			/* Slow device? */
 	int maxpacketsize;		/* Maximum packet size */
-	int toggle;			/* one bit for each endpoint */
+	int toggle[2];			/* one bit for each endpoint ([0] = IN, [1] = OUT) */
 	int halted;			/* endpoint halts */
 	struct usb_config_descriptor *actconfig;/* the active configuration */
 	int epmaxpacket[16];		/* endpoint specific maximums */
@@ -362,7 +362,7 @@ extern void usb_destroy_configuration(struct usb_device *dev);
 #define usb_pipedevice(pipe)	(((pipe) >> 8) & 0x7f)
 #define usb_pipeendpoint(pipe)	(((pipe) >> 15) & 0xf)
 #define usb_pipedata(pipe)	(((pipe) >> 19) & 1)
-#define usb_pipeout(pipe)	(((pipe) & 0x80) == 0)
+#define usb_pipeout(pipe)	((((pipe) >> 7) & 1) ^ 1)
 #define usb_pipeslow(pipe)	(((pipe) >> 26) & 1)
 
 #define usb_pipetype(pipe)	(((pipe) >> 30) & 3)
@@ -374,9 +374,9 @@ extern void usb_destroy_configuration(struct usb_device *dev);
 #define usb_pipe_endpdev(pipe)	(((pipe) >> 8) & 0x7ff)
 
 /* The D0/D1 toggle bits */
-#define usb_gettoggle(dev, ep) (((dev)->toggle >> ep) & 1)
-#define	usb_dotoggle(dev, ep)	((dev)->toggle ^= (1 <<	ep))
-#define usb_settoggle(dev, ep, bit) ((dev)->toggle = ((dev)->toggle & ~(1 << ep)) | ((bit) << ep))
+#define usb_gettoggle(dev, ep, out) (((dev)->toggle[out] >> ep) & 1)
+#define	usb_dotoggle(dev, ep, out)  ((dev)->toggle[out] ^= (1 << ep))
+#define usb_settoggle(dev, ep, out, bit) ((dev)->toggle[out] = ((dev)->toggle[out] & ~(1 << ep)) | ((bit) << ep))
 
 /* Endpoint halt */
 #define usb_endpoint_halt(dev, ep) ((dev)->halted |= (1 << (ep)))

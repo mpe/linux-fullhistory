@@ -221,11 +221,6 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 			return;
 		if (!(bh = bread(dev,0,get_ptable_blocksize(dev))))
 			return;
-	  /*
-	   * This block is from a device that we're about to stomp on.
-	   * So make sure nobody thinks this block is usable.
-	   */
-		bh->b_state = 0;
 
 		if ((*(unsigned short *) (bh->b_data+510)) != cpu_to_le16(MSDOS_LABEL_MAGIC))
 			goto done;
@@ -285,10 +280,12 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 		hd->part[current_minor].start_sect = first_sector + START_SECT(p) * sector_size;
 		this_sector = first_sector + START_SECT(p) * sector_size;
 		dev = MKDEV(hd->major, current_minor);
-		brelse(bh);
+
+		/* Use bforget(), as we have changed the disk geometry */
+		bforget(bh);
 	}
 done:
-	brelse(bh);
+	bforget(bh);
 }
 
 #ifdef CONFIG_SOLARIS_X86_PARTITION
@@ -386,7 +383,6 @@ static void bsd_disklabel_partition(struct gendisk *hd, kdev_t dev,
 
 	if (!(bh = bread(dev,0,get_ptable_blocksize(dev))))
 		return;
-	bh->b_state = 0;
 	l = (struct bsd_disklabel *) (bh->b_data+512);
 	if (l->d_magic != BSD_DISKMAGIC) {
 		brelse(bh);
@@ -402,7 +398,9 @@ static void bsd_disklabel_partition(struct gendisk *hd, kdev_t dev,
 		if (p->p_fstype != BSD_FS_UNUSED) 
 			check_and_add_bsd_partition(hd, p, dev);
 	}
-	brelse(bh);
+
+	/* Use bforget(), as we have changed the disk setup */
+	bforget(bh);
 
 }
 #endif
@@ -421,7 +419,6 @@ static void unixware_partition(struct gendisk *hd, kdev_t dev)
 
 	if (!(bh = bread(dev, 14, get_ptable_blocksize(dev))))
 		return;
-	bh->b_state = 0;
 	l = (struct unixware_disklabel *) (bh->b_data+512);
 	if (le32_to_cpu(l->d_magic) != UNIXWARE_DISKMAGIC ||
 	    le32_to_cpu(l->vtoc.v_magic) != UNIXWARE_DISKMAGIC2) {
@@ -441,7 +438,8 @@ static void unixware_partition(struct gendisk *hd, kdev_t dev)
 		}
 		p++;
 	}
-	brelse(bh);
+	/* Use bforget, as we have changed the disk setup */
+	bforget(bh);
 	printk(" >");
 }
 #endif
@@ -469,15 +467,12 @@ read_mbr:
 		return -1;
 	}
 	data = bh->b_data;
-	/* In some cases we modify the geometry    */
-	/*  of the drive (below), so ensure that   */
-	/*  nobody else tries to re-use this data. */
-	bh->b_state = 0;
 #ifdef CONFIG_BLK_DEV_IDE
 check_table:
 #endif
+	/* Use bforget(), because we have potentially changed the disk geometry */
 	if (*(unsigned short *)  (0x1fe + data) != cpu_to_le16(MSDOS_LABEL_MAGIC)) {
-		brelse(bh);
+		bforget(bh);
 		return 0;
 	}
 	p = (struct partition *) (0x1be + data);
@@ -515,7 +510,7 @@ check_table:
 			 * adjustments to fool fdisk/LILO and partition check.
 			 */
 			if (ide_xlate_1024(dev, 1, " [DM6:DDO]")) {
-				brelse(bh);
+				bforget(bh);
 				goto read_mbr;	/* start over with new MBR */
 			}
 		} else if (sig <= 0x1ae &&
@@ -627,7 +622,7 @@ check_table:
 		}
 	}
 	printk("\n");
-	brelse(bh);
+	bforget(bh);
 	return 1;
 }
 

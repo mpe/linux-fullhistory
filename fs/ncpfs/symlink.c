@@ -59,7 +59,7 @@ struct inode_operations ncp_symlink_inode_operations={
 	NULL,			/* rename */
 	ncp_readlink,		/* readlink */
 	ncp_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

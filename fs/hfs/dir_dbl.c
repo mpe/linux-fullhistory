@@ -86,7 +86,7 @@ struct inode_operations hfs_dbl_dir_inode_operations = {
 	dbl_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

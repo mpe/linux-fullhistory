@@ -1,5 +1,5 @@
 /*
- * $Id: process.c,v 1.85 1999/05/16 21:27:08 cort Exp $
+ * $Id: process.c,v 1.86 1999/06/17 21:53:46 cort Exp $
  *
  *  linux/arch/ppc/kernel/process.c
  *
@@ -306,6 +306,7 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	p->tss.fpscr = current->tss.fpscr;
 	childregs->msr &= ~MSR_FP;
 
+	p->processor = 0;
 #ifdef __SMP__
 	p->last_processor = NO_PROC_ID;
 #endif /* __SMP__ */

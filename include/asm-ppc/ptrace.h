@@ -17,29 +17,27 @@
  * the PT_* values below.  This simplifies arch/ppc/kernel/ptrace.c.
  */
 
-#include <linux/config.h>
-
 #ifndef __ASSEMBLY__
 #ifdef CONFIG_PPC64
-#define REG unsigned long /*long*/
+#define PPC_REG unsigned long /*long*/
 #else
-#define REG unsigned long
+#define PPC_REG unsigned long
 #endif
 struct pt_regs {
-	REG gpr[32];
-	REG nip;
-	REG msr;
-	REG orig_gpr3;	/* Used for restarting system calls */
-	REG ctr;
-	REG link;
-	REG xer;
-	REG ccr;
-	REG mq;		/* 601 only (not used at present) */
-			/* Used on APUS to hold IPL value. */
-	REG trap;	/* Reason for being here */
-	REG dar;	/* Fault registers */
-	REG dsisr;
-	REG result;   	/* Result of a system call */
+	PPC_REG gpr[32];
+	PPC_REG nip;
+	PPC_REG msr;
+	PPC_REG orig_gpr3;	/* Used for restarting system calls */
+	PPC_REG ctr;
+	PPC_REG link;
+	PPC_REG xer;
+	PPC_REG ccr;
+	PPC_REG mq;		/* 601 only (not used at present) */
+				/* Used on APUS to hold IPL value. */
+	PPC_REG trap;		/* Reason for being here */
+	PPC_REG dar;		/* Fault registers */
+	PPC_REG dsisr;
+	PPC_REG result; 	/* Result of a system call */
 };
 #endif
 

@@ -35,6 +35,10 @@ struct machdep_calls {
 	unsigned long	(*get_rtc_time)(void);
 	void		(*calibrate_decr)(void);
 
+	void		(*heartbeat)(void);
+	unsigned long	heartbeat_reset;
+	unsigned long	heartbeat_count;
+
 	unsigned char 	(*nvram_read_val)(int addr);
 	void		(*nvram_write_val)(int addr, unsigned char val);
 
@@ -49,7 +53,7 @@ struct machdep_calls {
 	void		(*kbd_leds)(unsigned char leds);
 	void		(*kbd_init_hw)(void);
 #ifdef CONFIG_MAGIC_SYSRQ
-	unsigned char 	*kbd_sysrq_xlate;
+	unsigned char 	*ppc_kbd_sysrq_xlate;
 #endif
 
 	/* PCI interfaces */

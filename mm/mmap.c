@@ -313,7 +313,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		if (error)
 			goto unmap_and_free_vma;
 		vma->vm_file = file;
-		file->f_count++;
+		atomic_inc(&file->f_count);
 	}
 
 	/*
@@ -547,7 +547,7 @@ static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
 		mpnt->vm_file = area->vm_file;
 		mpnt->vm_pte = area->vm_pte;
 		if (mpnt->vm_file)
-			mpnt->vm_file->f_count++;
+			atomic_inc(&mpnt->vm_file->f_count);
 		if (mpnt->vm_ops && mpnt->vm_ops->open)
 			mpnt->vm_ops->open(mpnt);
 		area->vm_end = addr;	/* Truncate area */

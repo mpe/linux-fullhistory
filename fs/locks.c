@@ -563,11 +563,14 @@ int locks_verify_area(int read_write, struct inode *inode, struct file *filp,
 	/* Candidates for mandatory locking have the setgid bit set
 	 * but no group execute bit -  an otherwise meaningless combination.
 	 */
-	if (IS_MANDLOCK(inode) &&
-	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
-		return (locks_mandatory_area(read_write, inode, filp, offset,
-					     count));
-	return (0);
+	if (IS_MANDLOCK(inode) && (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID) {
+		int retval;
+		lock_kernel();
+		retval = locks_mandatory_area(read_write, inode, filp, offset, count);
+		unlock_kernel();
+		return retval;
+	}
+	return 0;
 }
 
 int locks_mandatory_locked(struct inode *inode)

@@ -521,7 +521,7 @@ static struct inode_operations romfs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap -- not really */
+	NULL,			/* get_block -- not really */
 	romfs_readpage,		/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */
@@ -565,7 +565,7 @@ static struct inode_operations romfs_dir_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */
@@ -588,7 +588,7 @@ static struct inode_operations romfs_link_inode_operations = {
 	NULL,			/* rename */
 	romfs_readlink,		/* readlink */
 	romfs_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

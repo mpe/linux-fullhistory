@@ -1,8 +1,7 @@
 /*
  *  linux/include/asm-ppc/ide.h
  *
- *  Copyright (C) 1994-1996  Linus Torvalds & authors
- */
+ *  Copyright (C) 1994-1996 Linus Torvalds & authors */
 
 /*
  *  This file contains the ppc architecture specific IDE code.
@@ -42,11 +41,11 @@ struct ide_machdep_calls {
         void        (*outsw)(ide_ioreg_t port, void *buf, int ns);
         int         (*default_irq)(ide_ioreg_t base);
         ide_ioreg_t (*default_io_base)(int index);
-        int         (*check_region)(ide_ioreg_t from, unsigned int extent);
-        void        (*request_region)(ide_ioreg_t from,
+        int         (*ide_check_region)(ide_ioreg_t from, unsigned int extent);
+        void        (*ide_request_region)(ide_ioreg_t from,
                                       unsigned int extent,
                                       const char *name);
-        void        (*release_region)(ide_ioreg_t from,
+        void        (*ide_release_region)(ide_ioreg_t from,
                                       unsigned int extent);
         void        (*fix_driveid)(struct hd_driveid *id);
         void        (*ide_init_hwif)(hw_regs_t *hw,
@@ -59,7 +58,6 @@ struct ide_machdep_calls {
 
 extern struct ide_machdep_calls ppc_ide_md;
 
-void ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq);
 void ide_insw(ide_ioreg_t port, void *buf, int ns);
 void ide_outsw(ide_ioreg_t port, void *buf, int ns);
 void ppc_generic_ide_fix_driveid(struct hd_driveid *id);
@@ -97,6 +95,14 @@ static __inline__ ide_ioreg_t ide_default_io_base(int index)
 		return -1;
 }
 
+static __inline__ void  ide_init_hwif_ports(hw_regs_t *hw,
+					   ide_ioreg_t data_port,
+					   ide_ioreg_t ctrl_port, int *irq)
+{
+	if (ppc_ide_md.ide_init_hwif != NULL)
+		ppc_ide_md.ide_init_hwif(hw, data_port, ctrl_port, irq);
+}
+
 static __inline__ void ide_init_default_hwifs(void)
 {
 #ifdef __DO_I_NEED_THIS
@@ -113,22 +119,22 @@ static __inline__ void ide_init_default_hwifs(void)
 
 static __inline__ int ide_check_region (ide_ioreg_t from, unsigned int extent)
 {
-	if ( ppc_ide_md.check_region )
-		return ppc_ide_md.check_region(from, extent);
+	if ( ppc_ide_md.ide_check_region )
+		return ppc_ide_md.ide_check_region(from, extent);
 	else
 		return -1;
 }
 
 static __inline__ void ide_request_region (ide_ioreg_t from, unsigned int extent, const char *name)
 {
-	if ( ppc_ide_md.request_region )
-		ppc_ide_md.request_region(from, extent, name);
+	if ( ppc_ide_md.ide_request_region )
+		ppc_ide_md.ide_request_region(from, extent, name);
 }
 
 static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent)
 {
-	if ( ppc_ide_md.release_region )
-		ppc_ide_md.release_region(from, extent);
+	if ( ppc_ide_md.ide_release_region )
+		ppc_ide_md.ide_release_region(from, extent);
 }
 
 static __inline__ void ide_fix_driveid (struct hd_driveid *id)
@@ -137,6 +143,7 @@ static __inline__ void ide_fix_driveid (struct hd_driveid *id)
 		ppc_ide_md.fix_driveid(id);
 }
 
+#if 0	/* inb/outb from io.h is OK now -- paulus */
 #undef inb
 #define inb(port)	in_8((unsigned char *)((port) + ppc_ide_md.io_base))
 #undef inb_p
@@ -147,6 +154,7 @@ static __inline__ void ide_fix_driveid (struct hd_driveid *id)
 	out_8((unsigned char *)((port) + ppc_ide_md.io_base), (val) )
 #undef outb_p
 #define outb_p(val, port)	outb(val, port)
+#endif
 
 typedef union {
 	unsigned all			: 8;	/* all of the bits together */

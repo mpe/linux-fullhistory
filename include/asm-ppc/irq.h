@@ -6,6 +6,7 @@
 #include <asm/machdep.h>		/* ppc_md */
 
 extern void disable_irq(unsigned int);
+extern void disable_irq_nosync(unsigned int);
 extern void enable_irq(unsigned int);
 
 #ifndef CONFIG_8xx

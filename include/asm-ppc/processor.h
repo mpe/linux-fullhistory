@@ -208,6 +208,11 @@ void start_thread(struct pt_regs *regs, unsigned long nip, unsigned long sp);
 void release_thread(struct task_struct *);
 
 /*
+ * Create a new kernel thread.
+ */
+extern long kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
+
+/*
  * Bus types
  */
 #define EISA_bus 0

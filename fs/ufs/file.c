@@ -87,23 +87,16 @@ static inline void remove_suid(struct inode *inode)
 	}
 }
 
-static int ufs_writepage (struct file *file, struct page *page)
-{
-	return block_write_full_page(file, page, ufs_getfrag_block);
-}
-
-static long ufs_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char *buf)
-{
-	return block_write_partial_page(file, page, offset, bytes, buf, ufs_getfrag_block);
-}
-
 /*
  * Write to a file (through the page cache).
  */
 static ssize_t
 ufs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
-	ssize_t retval = generic_file_write(file, buf, count, ppos, ufs_write_one_page);
+	ssize_t retval;
+
+	retval = generic_file_write(file, buf, count,
+				    ppos, block_write_partial_page);
 	if (retval > 0) {
 		struct inode *inode = file->f_dentry->d_inode;
 		remove_suid(inode);
@@ -157,12 +150,12 @@ struct inode_operations ufs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	ufs_bmap,		/* bmap */
+	ufs_getfrag_block,	/* get_block */
 	block_read_full_page,	/* readpage */
-	ufs_writepage,		/* writepage */
+	block_write_full_page,	/* writepage */
 	block_flushpage,	/* flushpage */
 	ufs_truncate,		/* truncate */
 	NULL, 			/* permission */
 	NULL,			/* smap */
-	NULL,			/* revalidate */
+	NULL			/* revalidate */
 };

@@ -33,9 +33,7 @@ EXPORT_SYMBOL(unregister_ip_masq_mod);
 EXPORT_SYMBOL(ip_masq_mod_lkp_link);
 EXPORT_SYMBOL(ip_masq_mod_lkp_unlink);
 
-#ifdef __SMP__
 static spinlock_t masq_mod_lock = SPIN_LOCK_UNLOCKED;
-#endif
 
 /*
  *	Base pointer for registered modules

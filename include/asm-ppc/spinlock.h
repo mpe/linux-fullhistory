@@ -2,7 +2,6 @@
 #define __ASM_SPINLOCK_H
 
 #ifndef __SMP__
-
 /*
  * Your basic spinlocks, allowing only a single CPU anywhere
  *
@@ -18,14 +17,16 @@
 
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		do { } while(0)
-#define spin_trylock(lock)	do { } while(0)
+#define spin_trylock(lock)	(1)
 #define spin_unlock_wait(lock)	do { } while(0)
 #define spin_unlock(lock)	do { } while(0)
 #define spin_lock_irq(lock)	cli()
 #define spin_unlock_irq(lock)	sti()
-
+#define spin_lock_bh(lock)	local_bh_disable()
+#define spin_unlock_bh(lock)	local_bh_enable()
 #define spin_lock_irqsave(lock, flags) \
 	do { save_flags(flags); cli(); } while (0)
+
 #define spin_unlock_irqrestore(lock, flags) \
 	restore_flags(flags)
 
@@ -57,6 +58,10 @@
 #define read_unlock_irq(lock)	sti()
 #define write_lock_irq(lock)	cli()
 #define write_unlock_irq(lock)	sti()
+#define read_lock_bh(lock)	local_bh_disable()
+#define read_unlock_bh(lock)	local_bh_enable()
+#define write_lock_bh(lock)	local_bh_disable()
+#define write_unlock_bh(lock)	local_bh_enable()
 
 #define read_lock_irqsave(lock, flags)	\
 	do { save_flags(flags); cli(); } while (0)
@@ -94,8 +99,11 @@ extern int spin_trylock(spinlock_t *lock);
 
 #define spin_lock_irq(lock) \
 	do { __cli(); spin_lock(lock); } while (0)
+#define spin_lock_bh(___lk) do { local_bh_disable(); spin_lock(___lk); } while(0)
+
 #define spin_unlock_irq(lock) \
 	do { spin_unlock(lock); __sti(); } while (0)
+#define spin_unlock_bh(___lk) do { spin_unlock(___lk); local_bh_enable(); } while(0)
 
 #define spin_lock_irqsave(lock, flags) \
 	do { __save_flags(flags); __cli(); spin_lock(lock); } while (0)
@@ -132,10 +140,13 @@ extern void _write_unlock(rwlock_t *rw);
 #define read_unlock(rw)		_read_unlock(rw)
 
 #define read_lock_irq(lock)	do { __cli(); read_lock(lock); } while (0)
+#define read_lock_bh(lock)	do { local_bh_disable(); read_lock(lock); } while (0)
 #define read_unlock_irq(lock)	do { read_unlock(lock); __sti(); } while (0)
+#define read_unlock_bh(lock)	do { read_unlock(lock); local_bh_enable(); } while (0)
 #define write_lock_irq(lock)	do { __cli(); write_lock(lock); } while (0)
+#define write_lock_bh(lock)	do { local_bh_disable(); write_lock(lock); } while(0)
 #define write_unlock_irq(lock)	do { write_unlock(lock); __sti(); } while (0)
-
+#define write_unlock_bh(lock)	do { write_unlock(lock); local_bh_enable(); } while(0)
 #define read_lock_irqsave(lock, flags)	\
 	do { __save_flags(flags); __cli(); read_lock(lock); } while (0)
 #define read_unlock_irqrestore(lock, flags) \
@@ -147,12 +158,3 @@ extern void _write_unlock(rwlock_t *rw);
 
 #endif /* SMP */
 #endif /* __ASM_SPINLOCK_H */
-
-
-
-
-
-
-
-
-

@@ -80,7 +80,7 @@ struct file * get_empty_filp(void)
 		nr_free_files--;
 	new_one:
 		memset(f, 0, sizeof(*f));
-		f->f_count = 1;
+		atomic_set(&f->f_count, 1);
 		f->f_version = ++event;
 		f->f_uid = current->fsuid;
 		f->f_gid = current->fsgid;
@@ -120,7 +120,7 @@ int init_private_file(struct file *filp, struct dentry *dentry, int mode)
 {
 	memset(filp, 0, sizeof(*filp));
 	filp->f_mode   = mode;
-	filp->f_count  = 1;
+	atomic_set(&filp->f_count, 1);
 	filp->f_dentry = dentry;
 	filp->f_uid    = current->fsuid;
 	filp->f_gid    = current->fsgid;
@@ -133,21 +133,17 @@ int init_private_file(struct file *filp, struct dentry *dentry, int mode)
 
 void fput(struct file *file)
 {
-	int count = file->f_count-1;
-
-	if (!count) {
+	if (atomic_dec_and_test(&file->f_count)) {
 		locks_remove_flock(file);
 		__fput(file);
-		file->f_count = 0;
 		remove_filp(file);
 		insert_file_free(file);
-	} else
-		file->f_count = count;
+	}
 }
 
 void put_filp(struct file *file)
 {
-	if(--file->f_count == 0) {
+	if (atomic_dec_and_test(&file->f_count)) {
 		remove_filp(file);
 		insert_file_free(file);
 	}

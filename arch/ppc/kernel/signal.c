@@ -1,7 +1,7 @@
 /*
  *  linux/arch/ppc/kernel/signal.c
  *
- *  $Id: signal.c,v 1.24 1999/04/03 11:25:16 paulus Exp $
+ *  $Id: signal.c,v 1.25 1999/06/17 05:40:20 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -455,6 +455,7 @@ int do_signal(sigset_t *oldset, struct pt_regs *regs)
 			default:
 				lock_kernel();
 				sigaddset(&current->signal, signr);
+				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;
 				do_exit(exit_code);
 				/* NOTREACHED */

@@ -189,7 +189,7 @@ struct inode_operations qnx4_file_inode_operations =
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	qnx4_bmap,	        /* bmap */
+	qnx4_bmap,	        /* get_block */
 	qnx4_readpage,		/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

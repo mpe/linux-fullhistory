@@ -48,7 +48,7 @@
 #include <asm/mk48t59.h>
 #include <asm/prep_nvram.h>
 #include <asm/raven.h>
-
+#include <asm/keyboard.h>
 
 #include "time.h"
 #include "local_irq.h"
@@ -825,9 +825,9 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
         ppc_ide_md.outsw = prep_ide_outsw;
         ppc_ide_md.default_irq = prep_ide_default_irq;
         ppc_ide_md.default_io_base = prep_ide_default_io_base;
-        ppc_ide_md.check_region = prep_ide_check_region;
-        ppc_ide_md.request_region = prep_ide_request_region;
-        ppc_ide_md.release_region = prep_ide_release_region;
+        ppc_ide_md.ide_check_region = prep_ide_check_region;
+        ppc_ide_md.ide_request_region = prep_ide_request_region;
+        ppc_ide_md.ide_release_region = prep_ide_release_region;
         ppc_ide_md.fix_driveid = prep_ide_fix_driveid;
         ppc_ide_md.ide_init_hwif = prep_ide_init_hwif_ports;
 #endif		
@@ -841,7 +841,8 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.kbd_leds          = pckbd_leds;
 	ppc_md.kbd_init_hw       = pckbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+	ppc_md.ppc_kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+	SYSRQ_KEY = 0x54;
 #endif
 #endif
 }

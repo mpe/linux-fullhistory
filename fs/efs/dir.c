@@ -25,6 +25,8 @@ static struct file_operations efs_dir_operations = {
 	NULL			/* revalidate */
 };
 
+extern int efs_get_block(struct inode *, long, struct buffer_head *, int);
+
 struct inode_operations efs_dir_inode_operations = {
 	&efs_dir_operations,	/* default directory file-ops */
 	NULL,			/* create */
@@ -38,7 +40,7 @@ struct inode_operations efs_dir_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	efs_bmap,		/* bmap */
+	efs_get_block,		/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

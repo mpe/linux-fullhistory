@@ -35,7 +35,7 @@ struct inode_operations affs_symlink_inode_operations = {
 	NULL,			/* rename */
 	affs_readlink,		/* readlink */
 	affs_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

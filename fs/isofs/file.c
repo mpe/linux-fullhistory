@@ -48,7 +48,7 @@ struct inode_operations isofs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	isofs_bmap,		/* bmap */
+	isofs_get_block,	/* get_block */
 	block_read_full_page,	/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

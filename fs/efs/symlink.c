@@ -26,7 +26,7 @@ struct inode_operations efs_symlink_inode_operations = {
 	NULL,			/* rename */
 	efs_readlink,		/* readlink */
 	efs_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

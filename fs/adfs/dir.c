@@ -51,7 +51,7 @@ struct inode_operations adfs_dir_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* read link */
 	NULL,			/* follow link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* read page */
 	NULL,			/* write page */
 	NULL,			/* flush page */

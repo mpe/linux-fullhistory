@@ -91,7 +91,6 @@ extern void longjmp(u_int *, int);
 static char *help_string = "\
 Commands:\n\
   d	dump bytes\n\
-  dc	dump characters\n\
   di	dump instructions\n\
   df	dump float values\n\
   dd	dump double values\n\
@@ -518,7 +517,7 @@ excprint(struct pt_regs *fp)
 {
 	printf("vector: %x at pc = %x, msr = %x, sp = %x [%x]\n",
 	       fp->trap, fp->nip, fp->msr, fp->gpr[1], fp);
-	if ((fp->trap == 0x300) || (fp->trap == 0x600) || (fp->trap == 0x200))
+	if (fp->trap == 0x300 || fp->trap == 0x600)
 		printf("dar = %x, dsisr = %x\n", fp->dar, fp->dsisr);
 	if (current)
 		printf("current = %x, pid = %d, comm = %s\n",
@@ -991,15 +990,16 @@ bsesc()
 	return c;
 }
 
-#define isxdigit(c)	('0' <= (c) && (c) <= '9' || 'a' <= (c) && (c) <= 'f' \
-			 || 'A' <= (c) && (c) <= 'F')
+#define isxdigit(c)	(('0' <= (c) && (c) <= '9') \
+			 || ('a' <= (c) && (c) <= 'f') \
+			 || ('A' <= (c) && (c) <= 'F'))
 void
 dump()
 {
 	int c;
 
 	c = inchar();
-	if ((isxdigit(c) && (c != 'f') && (c != 'd')) || (c == '\n'))
+	if ((isxdigit(c) && c != 'f' && c != 'd') || c == '\n')
 		termch = c;
 	scanhex(&adrs);
 	if( termch != '\n')

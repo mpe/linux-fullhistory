@@ -650,17 +650,19 @@ __clear_msr_me:
 
 /*
  * Create a kernel thread
- *   __kernel_thread(flags, fn, arg)
+ *   kernel_thread(fn, arg, flags)
  */
-_GLOBAL(__kernel_thread)
+_GLOBAL(kernel_thread)
+	mr	r6,r3		/* function */
+	ori	r3,r5,CLONE_VM	/* flags */
 	li	r0,__NR_clone
 	sc
 	cmpi	0,r3,0		/* parent or child? */
 	bnelr			/* return if parent */
 	li	r0,0		/* clear out p->tss.regs */
 	stw	r0,TSS+PT_REGS(r2)	/* since we don't have user ctx */
-	mtlr	r4              /* fn addr in lr */
-	mr	r3,r5	        /* load arg and call fn */
+	mtlr	r6              /* fn addr in lr */
+	mr	r3,r4	        /* load arg and call fn */
 	blrl
 	li	r0,__NR_exit	/* exit after child exits */
         li	r3,0
@@ -866,7 +868,7 @@ sys_call_table:
 	.long sys_getresuid	/* 165 */
 	.long sys_query_module
 	.long sys_poll
-#ifdef CONFIG_NFS	
+#ifdef CONFIG_NFSD	
 	.long sys_nfsservctl
 #else
 	.long sys_ni_syscall

@@ -70,6 +70,9 @@ zImage: $(OBJS) no_initrd.o mknote
 	./mknote > note
 	$(OBJCOPY) $@ $@ --add-section=.note=note -R .comment
 
+mknote: mknote.c
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ mknote.c
+
 zImage.initrd: $(OBJS) initrd.o
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) initrd.o $(LIBS)
 

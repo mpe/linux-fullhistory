@@ -42,7 +42,7 @@ struct inode_operations coda_symlink_inode_operations = {
 	NULL,			/* rename */
 	coda_readlink,		/* readlink */
 	coda_follow_link,     	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

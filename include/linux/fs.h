@@ -407,9 +407,10 @@ struct file {
 	struct file		*f_next, **f_pprev;
 	struct dentry		*f_dentry;
 	struct file_operations	*f_op;
+	atomic_t		f_count;
+	unsigned int 		f_flags;
 	mode_t			f_mode;
 	loff_t			f_pos;
-	unsigned int 		f_count, f_flags;
 	unsigned long 		f_reada, f_ramax, f_raend, f_ralen, f_rawin;
 	struct fown_struct	f_owner;
 	unsigned int		f_uid, f_gid;

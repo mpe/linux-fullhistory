@@ -4,7 +4,7 @@
 Please mail me (Cort Dougan, cort@cs.nmt.edu) if you have questions,
 comments or corrections.
 
-Last Change: 3.24.98
+Last Change: 6.16.99
 
 This just covers sound on the PReP and CHRP systems for now and later
 will contain information on the PowerMac's.
@@ -51,7 +51,7 @@ set automatically on boot.
 
   Midi is not supported since the cs4232 driver doesn't support midi yet.
 
-2. IBM PowerPersonal PReP machines and IBM LongTrail CHRP
+2. IBM PowerPersonal PReP machines
 
   I've only tested sound on the Power Personal Series of IBM workstations
   so if you try it on others please let me know the result.  I'm especially
@@ -74,3 +74,8 @@ set automatically on boot.
   This setup does _NOT_ allow for recording yet.
 
   Midi is not supported since the cs4232 driver doesn't support midi yet.
+
+2. IBM CHRP
+
+  I have only tested this on the 43P-150.  Build the kernel with the cs4232
+  set as a module and load the module with irq=9 dma=1 dma2=2 io=0x550

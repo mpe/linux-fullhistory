@@ -48,6 +48,7 @@
 #include <asm/irq.h>
 #include <asm/adb.h>
 #include <asm/hydra.h>
+#include <asm/keyboard.h>
 
 #include "time.h"
 #include "local_irq.h"
@@ -66,7 +67,6 @@ extern volatile unsigned char *chrp_int_ack_special;
 
 unsigned long chrp_get_rtc_time(void);
 int chrp_set_rtc_time(unsigned long nowtime);
-unsigned long rtas_event_scan_rate = 0, rtas_event_scan_ct = 0;
 void chrp_calibrate_decr(void);
 void chrp_time_init(void);
 
@@ -281,7 +281,7 @@ __initfunc(void
 	/*
 	 *  Fix the Super I/O configuration
 	 */
-	/*sio_init();*/
+	sio_init();
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;
 #endif
@@ -295,15 +295,16 @@ __initfunc(void
 		struct property *p;
 		device = find_devices("rtas");
 		for ( p = device->properties;
-		      strncmp(p->name, "rtas-event-scan-rate", 20) && p ;
+		      p && strncmp(p->name, "rtas-event-scan-rate", 20);
 		      p = p->next )
 			/* nothing */ ;
 		if ( p && *(unsigned long *)p->value )
 		{
-			rtas_event_scan_rate = (HZ/(*(unsigned long *)p->value)*30)-1;
-			rtas_event_scan_ct = 1;
+			ppc_md.heartbeat = chrp_event_scan;
+			ppc_md.heartbeat_reset = (HZ/(*(unsigned long *)p->value)*30)-1;
+			ppc_md.heartbeat_count = 1;
 			printk("RTAS Event Scan Rate: %lu (%lu jiffies)\n",
-			       *(unsigned long *)p->value, rtas_event_scan_rate );
+			       *(unsigned long *)p->value, ppc_md.heartbeat_reset );
 		}
 	}
 }
@@ -312,11 +313,8 @@ void
 chrp_event_scan(void)
 {
 	unsigned char log[1024];
-	if ( rtas_event_scan_rate && (rtas_event_scan_ct-- <= 0) )
-	{
-		call_rtas( "event-scan", 4, 1, NULL, 0x0, 1, __pa(log), 1024 );
-		rtas_event_scan_ct = rtas_event_scan_rate;
-	}
+	call_rtas( "event-scan", 4, 1, NULL, 0x0, 1, __pa(log), 1024 );
+	ppc_md.heartbeat_count = ppc_md.heartbeat_reset;
 }
 	
 void
@@ -331,7 +329,7 @@ void
 chrp_power_off(void)
 {
 	/* allow power on only with power button press */
-#define	PWR_FIELD(x) (0x8000000000000000 >> ((x)-96))
+#define	PWR_FIELD(x) (0x8000000000000000ULL >> ((x)-96))
 	printk("RTAS power-off returned %d\n",
 	       call_rtas("power-off", 2, 1, NULL,
 			 ((PWR_FIELD(96)|PWR_FIELD(97))>>32)&0xffffffff,
@@ -632,7 +630,8 @@ __initfunc(void
 		ppc_md.kbd_leds          = pckbd_leds;
 		ppc_md.kbd_init_hw       = pckbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-		ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+		ppc_md.ppc_kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+		SYSRQ_KEY = 0x54;
 #endif		
 	}
 	else
@@ -644,7 +643,8 @@ __initfunc(void
 		ppc_md.kbd_leds          = mackbd_leds;
 		ppc_md.kbd_init_hw       = mackbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-		ppc_md.kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
+		ppc_md.ppc_kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
+		SYSRQ_KEY = 0x69;
 #endif		
 	}
 #else
@@ -655,7 +655,8 @@ __initfunc(void
 	ppc_md.kbd_leds          = pckbd_leds;
 	ppc_md.kbd_init_hw       = pckbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+	ppc_md.ppc_kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+	SYSRQ_KEY = 0x54;
 #endif
 #endif
 #endif
@@ -665,9 +666,9 @@ __initfunc(void
         ppc_ide_md.outsw = chrp_ide_outsw;
         ppc_ide_md.default_irq = chrp_ide_default_irq;
         ppc_ide_md.default_io_base = chrp_ide_default_io_base;
-        ppc_ide_md.check_region = chrp_ide_check_region;
-        ppc_ide_md.request_region = chrp_ide_request_region;
-        ppc_ide_md.release_region = chrp_ide_release_region;
+        ppc_ide_md.ide_check_region = chrp_ide_check_region;
+        ppc_ide_md.ide_request_region = chrp_ide_request_region;
+        ppc_ide_md.ide_release_region = chrp_ide_release_region;
         ppc_ide_md.fix_driveid = chrp_ide_fix_driveid;
         ppc_ide_md.ide_init_hwif = chrp_ide_init_hwif_ports;
 

@@ -221,11 +221,13 @@
                            by <tymm@computer.org> 
       0.451    5-Nov-98   Fixed mca stuff cuz I'm a dummy. <tymm@computer.org>
       0.5     14-Nov-98   Re-spin for 2.1.x kernels.
+      0.51    27-Jun-99   Correct received packet length for CRC from
+                           report by <worm@dkik.dk>
 
     =========================================================================
 */
 
-static const char *version = "depca.c:v0.5 1998/11/14 davies@maniac.ultranet.com\n";
+static const char *version = "depca.c:v0.51 1999/6/27 davies@maniac.ultranet.com\n";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -947,7 +949,7 @@ depca_rx(struct device *dev)
 	if (status & R_CRC)  lp->stats.rx_crc_errors++;
 	if (status & R_BUFF) lp->stats.rx_fifo_errors++;
       } else {	
-	short len, pkt_len = readw(&lp->rx_ring[entry].msg_length);
+	short len, pkt_len = readw(&lp->rx_ring[entry].msg_length) - 4;
 	struct sk_buff *skb;
 
 	skb = dev_alloc_skb(pkt_len+2);

@@ -184,26 +184,10 @@ extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inod
 int get_joliet_filename(struct iso_directory_record *, struct inode *, unsigned char *);
 int get_acorn_filename(struct iso_directory_record *, char *, struct inode *);
 
-/* The stuff that follows may be totally unneeded. I have not checked to see 
- which prototypes we are still using.  */
-
-extern int isofs_open(struct inode * inode, struct file * filp);
-extern void isofs_release(struct inode * inode, struct file * filp);
-extern struct dentry *isofs_lookup(struct inode * dir, struct dentry *);
-extern unsigned long isofs_count_free_inodes(struct super_block *sb);
-extern int isofs_new_block(int dev);
-extern int isofs_free_block(int dev, int block);
-extern int isofs_bmap(struct inode *,int);
-
-extern void isofs_put_super(struct super_block *);
-extern struct super_block *isofs_read_super(struct super_block *,void *,int);
+extern struct dentry *isofs_lookup(struct inode *, struct dentry *);
+extern int isofs_get_block(struct inode *, long, struct buffer_head *, int);
+extern int isofs_bmap(struct inode *, int);
 extern int init_iso9660_fs(void);
-extern void isofs_read_inode(struct inode *);
-extern void isofs_put_inode(struct inode *);
-extern int isofs_statfs(struct super_block *, struct statfs *, int);
-
-extern int isofs_lseek(struct inode *, struct file *, off_t, int);
-extern int isofs_read(struct inode *, struct file *, char *, int);
 extern int isofs_lookup_grandparent(struct inode *, int);
 
 extern struct inode_operations isofs_file_inode_operations;

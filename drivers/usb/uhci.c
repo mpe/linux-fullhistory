@@ -20,6 +20,7 @@
 
 /* 4/4/1999 added data toggle for interrupt pipes -keryan */
 /* 5/16/1999 added global toggles for bulk and control */
+/* 6/25/1999 added fix for data toggles on bidirectional bulk endpoints */ 
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -105,7 +106,7 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
     			if (uhci_debug) {
 			    printk("Set toggle from %x rval %d\n", (unsigned int)tmp, rval ? *rval : 0);
 			}
-			usb_settoggle(dev->usb, usb_pipeendpoint(tmp->info), (tmp->info >> 19) & 1);
+			usb_settoggle(dev->usb, usb_pipeendpoint(tmp->info), usb_pipeout(tmp->info), (tmp->info >> 19) & 1);
 			break;
 		} else {
 		    if(rval)
@@ -372,7 +373,7 @@ static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_d
 
 	td->link = 1;
 	td->status = status;			/* In */
-	td->info = destination | (7 << 21) | (usb_gettoggle(usb_dev, usb_pipeendpoint(pipe)) << 19);	/* 8 bytes of data */
+	td->info = destination | (7 << 21) | (usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << 19);	/* 8 bytes of data */
 	td->buffer = virt_to_bus(dev->data);
 	td->first = td;
 	td->qh = interrupt_qh;
@@ -991,7 +992,7 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 
 		td->status = status;					/* Status */
 		td->info = destination | ((pktsze-1) << 21) |
-			 (usb_gettoggle(usb_dev, usb_pipeendpoint(pipe)) << 19); /* pktsze bytes of data */
+			 (usb_gettoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe)) << 19); /* pktsze bytes of data */
 		td->buffer = virt_to_bus(data);
 		td->backptr = &prevtd->link;
 		td->first = first;
@@ -1006,7 +1007,7 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 		}
 
 		/* Alternate Data0/1 (start with Data0) */
-		usb_dotoggle(usb_dev, usb_pipeendpoint(pipe));
+		usb_dotoggle(usb_dev, usb_pipeendpoint(pipe), usb_pipeout(pipe));
 	}
 	td->link = 1;				/* Terminate */
 	td->status |= (1 << 24);		/* IOC */
@@ -1267,9 +1268,9 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 				if (!(td->status & (1 << 25))) {
 					struct uhci_qh *interrupt_qh = td->qh;
 
-					usb_dotoggle(td->dev, usb_pipeendpoint(td->info));
+					usb_dotoggle(td->dev, usb_pipeendpoint(td->info), usb_pipeout(td->info));
 					td->info &= ~(1 << 19); /* clear data toggle */
-					td->info |= usb_gettoggle(td->dev, usb_pipeendpoint(td->info)) << 19; /* toggle between data0 and data1 */
+					td->info |= usb_gettoggle(td->dev, usb_pipeendpoint(td->info), usb_pipeout(td->info)) << 19; /* toggle between data0 and data1 */
 					td->status = (td->status & 0x2f000000) | (1 << 23) | (1 << 24);	/* active */
 
 					/* Remove then readd? Is that necessary */
@@ -1280,7 +1281,7 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 				struct uhci_qh *interrupt_qh = td->qh;
 				/* marked for removal */
 				td->inuse &= ~2;
-				usb_dotoggle(td->dev, usb_pipeendpoint(td->info));
+				usb_dotoggle(td->dev, usb_pipeendpoint(td->info), usb_pipeout(td->info));
 				uhci_remove_qh(interrupt_qh->skel, interrupt_qh);
 				uhci_qh_deallocate(interrupt_qh);
 				uhci_td_deallocate(td);

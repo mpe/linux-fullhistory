@@ -315,9 +315,7 @@ static __inline__ const __u8 icmp_type_request(__u8 type)
  *	Will cycle in MASQ_PORT boundaries.
  */
 static __u16 masq_port = PORT_MASQ_BEGIN;
-#ifdef __SMP__
 static spinlock_t masq_port_lock = SPIN_LOCK_UNLOCKED;
-#endif
 
 /*
  *	free ports counters (UDP & TCP)

@@ -43,7 +43,7 @@ struct inode_operations qnx4_symlink_inode_operations =
 	NULL,			/* rename */
 	qnx4_readlink,		/* readlink */
 	qnx4_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

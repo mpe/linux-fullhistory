@@ -137,24 +137,14 @@ static int hpfs_get_block(struct inode *inode, unsigned long block, struct buffe
 	return buffer_uptodate(bh) ? 0 : -EIO;
 }
 
-int hpfs_writepage(struct file *file, struct page *page)
-{
-	return block_write_full_page(file, page, hpfs_get_block);
-}
-
-long hpfs_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char *buf)
-{
-        return block_write_partial_page(file, page, offset, bytes, buf, hpfs_get_block);
-}
-
-
 ssize_t hpfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
 	ssize_t retval;
-	struct inode *inode = file->f_dentry->d_inode;
-	retval = generic_file_write(file, buf, count, ppos, hpfs_write_one_page);
+
+	retval = generic_file_write(file, buf, count,
+				    ppos, block_write_partial_page);
 	if (retval > 0) {
-		/*remove_suid(inode);*/
+		struct inode *inode = file->f_dentry->d_inode;
 		inode->i_mtime = CURRENT_TIME;
 		inode->i_hpfs_dirty = 1;
 	}

@@ -301,13 +301,20 @@ void hpfs_remove_btree(struct super_block *s, struct bplus_header *btree)
 		anode = hpfs_map_anode(s, ano, &bh);
 		btree1 = &anode->btree;
 	} else btree1 = btree;
-	for (i = 0; i < btree1->n_used_nodes; i++)
-		if (btree1->u.internal[i].down == oano)
-			if ((pos = i + 1) < btree1->n_used_nodes) goto go_down;
-			else goto go_up;
-	hpfs_error(s, "reference to anode %08x not found in anode %08x (probably bad up pointer)",
-		oano, level ? ano : -1);
-	if (level) brelse(bh);
+	for (i = 0; i < btree1->n_used_nodes; i++) {
+		if (btree1->u.internal[i].down == oano) {
+			if ((pos = i + 1) < btree1->n_used_nodes)
+				goto go_down;
+			else
+				goto go_up;
+		}
+	}
+	hpfs_error(s,
+		   "reference to anode %08x not found in anode %08x "
+		   "(probably bad up pointer)",
+		   oano, level ? ano : -1);
+	if (level)
+		brelse(bh);
 }
 
 /* Just a wrapper around hpfs_bplus_lookup .. used for reading eas */

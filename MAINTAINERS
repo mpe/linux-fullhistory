@@ -170,6 +170,12 @@ L:	linux-scsi@vger.rutgers.edu
 W:	http://www.dandelion.com/Linux/
 S:	Maintained
 
+CIRRUS LOGIC GENERIC FBDEV DRIVER
+P:	Jeff Garzik
+M:	jgarzik@pobox.com
+L:	linux-fbdev@vuser.vu.union.edu
+S:	Maintained
+
 CONFIGURE, MENUCONFIG, XCONFIG
 P:	Michael Elizabeth Chastain
 M:	mec@shout.net

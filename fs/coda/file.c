@@ -47,7 +47,7 @@ struct inode_operations coda_file_inode_operations = {
 	NULL,		        /* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	coda_readpage,    	/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

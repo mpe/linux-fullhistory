@@ -127,7 +127,7 @@ static struct inode_operations router_inode =
 	NULL,			/* readlink */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* truncate */
 	router_proc_perms
 };
@@ -167,7 +167,7 @@ static struct inode_operations wandev_inode =
 	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* truncate */
 	router_proc_perms
 };

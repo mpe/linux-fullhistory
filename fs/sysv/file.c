@@ -33,23 +33,14 @@
 #include <linux/fs.h>
 #include <linux/sysv_fs.h>
 
-static int sysv_writepage (struct file * file, struct page * page)
-{
-	return block_write_full_page(file, page, sysv_getblk_block);
-}
-
-static long sysv_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
-{
-	return block_write_partial_page(file, page, offset, bytes, buf, sysv_getblk_block);
-}
-
 /*
  * Write to a file (through the page cache).
  */
 static ssize_t
 sysv_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
-	return generic_file_write(file, buf, count, ppos, sysv_write_one_page);
+	return generic_file_write(file, buf, count,
+				  ppos, block_write_partial_page);
 }
 
 /*
@@ -86,9 +77,9 @@ struct inode_operations sysv_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	sysv_bmap,		/* bmap */
+	sysv_get_block,		/* get_block */
 	block_read_full_page,	/* readpage */
-	sysv_writepage,		/* writepage */
+	block_write_full_page,	/* writepage */
 	block_flushpage,	/* flushpage */
 	sysv_truncate,		/* truncate */
 	NULL,   		/* permission */

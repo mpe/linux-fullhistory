@@ -42,6 +42,7 @@
 #include <linux/vt_kern.h>
 #include <linux/console.h>
 #include <linux/ide.h>
+#include <linux/pci.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -56,6 +57,7 @@
 #include <asm/feature.h>
 #include <asm/ide.h>
 #include <asm/machdep.h>
+#include <asm/keyboard.h>
 
 #include "time.h"
 #include "local_irq.h"
@@ -98,6 +100,7 @@ extern char saved_command_line[];
 
 extern void zs_kgdb_hook(int tty_num);
 static void ohare_init(void);
+static void init_p2pbridge(void);
 
 __pmac
 int
@@ -255,6 +258,7 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 	ohare_init();
 
 	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
+	init_p2pbridge();
 
 	/* Checks "l2cr-value" property in the registry */
 	if ( (_get_PVR() >> 16) == 8) {
@@ -297,6 +301,31 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 	else
 #endif
 		ROOT_DEV = to_kdev_t(DEFAULT_ROOT_DEVICE);
+}
+
+/*
+ * Tweak the PCI-PCI bridge chip on the blue & white G3s.
+ */
+__initfunc(static void init_p2pbridge(void))
+{
+	struct device_node *p2pbridge;
+	unsigned char bus, devfn;
+	unsigned short val;
+
+	/* XXX it would be better here to identify the specific
+	   PCI-PCI bridge chip we have. */
+	if ((p2pbridge = find_devices("pci-bridge")) == 0
+	    || p2pbridge->parent == NULL
+	    || strcmp(p2pbridge->parent->name, "pci") != 0)
+		return;
+
+	if (pci_device_loc(p2pbridge, &bus, &devfn) < 0)
+		return;
+
+	pcibios_read_config_word(bus, devfn, PCI_BRIDGE_CONTROL, &val);
+	val &= ~PCI_BRIDGE_CTL_MASTER_ABORT;
+	pcibios_write_config_word(bus, devfn, PCI_BRIDGE_CONTROL, val);
+	pcibios_read_config_word(bus, devfn, PCI_BRIDGE_CONTROL, &val);
 }
 
 __initfunc(static void ohare_init(void))
@@ -488,13 +517,13 @@ pmac_halt(void)
 void
 pmac_ide_insw(ide_ioreg_t port, void *buf, int ns)
 {
-	ide_insw(port, buf, ns);
+	_insw_ns(port+_IO_BASE, buf, ns);
 }
 
 void
 pmac_ide_outsw(ide_ioreg_t port, void *buf, int ns)
 {
-	ide_outsw(port, buf, ns);
+	_outsw_ns(port+_IO_BASE, buf, ns);
 }
 
 int
@@ -596,7 +625,8 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.kbd_leds          = mackbd_leds;
 	ppc_md.kbd_init_hw       = mackbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
+	ppc_md.ppc_kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
+	SYSRQ_KEY = 0x69;
 #endif
 #endif
 
@@ -605,13 +635,13 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
         ppc_ide_md.outsw = pmac_ide_outsw;
         ppc_ide_md.default_irq = pmac_ide_default_irq;
         ppc_ide_md.default_io_base = pmac_ide_default_io_base;
-        ppc_ide_md.check_region = pmac_ide_check_region;
-        ppc_ide_md.request_region = pmac_ide_request_region;
-        ppc_ide_md.release_region = pmac_ide_release_region;
+        ppc_ide_md.ide_check_region = pmac_ide_check_region;
+        ppc_ide_md.ide_request_region = pmac_ide_request_region;
+        ppc_ide_md.ide_release_region = pmac_ide_release_region;
         ppc_ide_md.fix_driveid = pmac_ide_fix_driveid;
         ppc_ide_md.ide_init_hwif = pmac_ide_init_hwif_ports;
 
-        ppc_ide_md.io_base = 0;
+        ppc_ide_md.io_base = _IO_BASE;	/* actually too early for this :-( */
 #endif		
 }
 

@@ -129,7 +129,7 @@ struct inode_operations ufs_symlink_inode_operations = {
 	NULL,			/* rename */
 	ufs_readlink,		/* readlink */
 	ufs_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

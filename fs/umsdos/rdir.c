@@ -249,7 +249,7 @@ struct inode_operations umsdos_rdir_inode_operations =
 	NULL,			/* followlink */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */

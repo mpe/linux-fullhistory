@@ -51,9 +51,7 @@ MODULE_PARM(debug, "i");
 /*
  *	Lock
  */
-#ifdef __SMP__
 static spinlock_t portfw_lock = SPIN_LOCK_UNLOCKED;
-#endif
 
 static struct list_head portfw_list[2];
 static __inline__ int portfw_idx(int protocol)

@@ -467,7 +467,7 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 	 * The IO completion will then free the page and the dentry.
 	 */
 	get_page(page);
-	file->f_count++;
+	atomic_inc(&file->f_count);
 
 	/* Schedule request */
 	synchronous = schedule_write_request(req, synchronous);

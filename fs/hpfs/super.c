@@ -283,7 +283,7 @@ int parse_opts(char *opts, uid_t *uid, gid_t *gid, umode_t *umask,
 	return 1;
 }
 
-static inline void hpfs_help()
+static inline void hpfs_help(void)
 {
 	printk("\n\
 HPFS filesystem options:\n\

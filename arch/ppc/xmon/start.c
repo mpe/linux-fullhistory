@@ -32,7 +32,7 @@ xmon_map_scc(void)
 #ifdef CHRP_ESCC
 		unsigned long addr = 0xc1013020;
 #else
-		unsigned long addr = 0xf3013030;
+		unsigned long addr = 0xf3013020;
 #endif
 		TXRDY = 4;
 		RXRDY = 1;

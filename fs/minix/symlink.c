@@ -33,7 +33,7 @@ struct inode_operations minix_symlink_inode_operations = {
 	NULL,			/* rename */
 	minix_readlink,		/* readlink */
 	minix_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

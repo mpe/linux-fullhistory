@@ -19,12 +19,13 @@ void gunzip(void *, int, unsigned char *, int *);
 #define RAM_START	0x00000000
 #define RAM_END		(8<<20)
 
-#define RAM_FREE	(6<<20)		/* after image of chrpboot */
+#define RAM_FREE	((unsigned long)(_end+0x1000)&~0xFFF)
 #define PROG_START	0x00010000
 
 char *avail_ram;
 char *end_avail;
 
+extern char _end[];
 extern char image_data[];
 extern int image_len;
 extern char initrd_data[];
@@ -47,8 +48,8 @@ chrpboot(int a1, int a2, void *prom)
 	initrd_start = (RAM_END - initrd_size) & ~0xFFF;
 	a1 = initrd_start;
 	a2 = initrd_size;
-	printf("initial ramdisk at 0x%x (%u bytes)\n\r", initrd_start,
-	       initrd_size);
+	printf("initial ramdisk moving 0x%x <- 0x%x (%x bytes)\n\r", initrd_start,
+	       initrd_data,initrd_size);
 	memcpy((char *)initrd_start, initrd_data, initrd_size);
 	end_avail = (char *)initrd_start;
     } else
@@ -56,7 +57,6 @@ chrpboot(int a1, int a2, void *prom)
     im = image_data;
     len = image_len;
     dst = (void *) PROG_START;
-
     if (im[0] == 0x1f && im[1] == 0x8b) {
 	avail_ram = (char *)RAM_FREE;
 	printf("gunzipping (0x%x <- 0x%x:0x%0x)...", dst, im, im+len);

@@ -27,23 +27,14 @@
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
 
-static int minix_writepage(struct file *file, struct page *page)
-{
-	return block_write_full_page(file, page, minix_getblk_block);
-}
-
-static long minix_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char *buf)
-{
-	return block_write_partial_page(file, page, offset, bytes, buf, minix_getblk_block);
-}
-
 /*
  * Write to a file (through the page cache).
  */
 static ssize_t
 minix_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
-	return generic_file_write(file, buf, count, ppos, minix_write_one_page);
+	return generic_file_write(file, buf, count,
+				  ppos, block_write_partial_page);
 }
 
 /*
@@ -80,9 +71,9 @@ struct inode_operations minix_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	minix_bmap,		/* bmap */
+	minix_get_block,	/* get_block */
 	block_read_full_page,	/* readpage */
-	minix_writepage,	/* writepage */
+	block_write_full_page,	/* writepage */
 	block_flushpage,	/* flushpage */
 	minix_truncate,		/* truncate */
 	NULL,			/* permission */

@@ -117,28 +117,22 @@ asmlinkage ssize_t sys_read(unsigned int fd, char * buf, size_t count)
 {
 	ssize_t ret;
 	struct file * file;
-	ssize_t (*read)(struct file *, char *, size_t, loff_t *);
-
-	lock_kernel();
 
 	ret = -EBADF;
 	file = fget(fd);
-	if (!file)
-		goto bad_file;
-	if (!(file->f_mode & FMODE_READ))
-		goto out;
-	ret = locks_verify_area(FLOCK_VERIFY_READ, file->f_dentry->d_inode,
-				file, file->f_pos, count);
-	if (ret)
-		goto out;
-	ret = -EINVAL;
-	if (!file->f_op || !(read = file->f_op->read))
-		goto out;
-	ret = read(file, buf, count, &file->f_pos);
-out:
-	fput(file);
-bad_file:
-	unlock_kernel();
+	if (file) {
+		if (file->f_mode & FMODE_READ) {
+			ret = locks_verify_area(FLOCK_VERIFY_READ, file->f_dentry->d_inode,
+						file, file->f_pos, count);
+			if (!ret) {
+				ssize_t (*read)(struct file *, char *, size_t, loff_t *);
+				ret = -EINVAL;
+				if (file->f_op && (read = file->f_op->read) != NULL)
+					ret = read(file, buf, count, &file->f_pos);
+			}
+		}
+		fput(file);
+	}
 	return ret;
 }
 
@@ -146,31 +140,23 @@ asmlinkage ssize_t sys_write(unsigned int fd, const char * buf, size_t count)
 {
 	ssize_t ret;
 	struct file * file;
-	struct inode * inode;
-	ssize_t (*write)(struct file *, const char *, size_t, loff_t *);
-
-	lock_kernel();
 
 	ret = -EBADF;
 	file = fget(fd);
-	if (!file)
-		goto bad_file;
-	if (!(file->f_mode & FMODE_WRITE))
-		goto out;
-	inode = file->f_dentry->d_inode;
-	ret = locks_verify_area(FLOCK_VERIFY_WRITE, inode, file,
+	if (file) {
+		if (file->f_mode & FMODE_WRITE) {
+			struct inode *inode = file->f_dentry->d_inode;
+			ret = locks_verify_area(FLOCK_VERIFY_WRITE, inode, file,
 				file->f_pos, count);
-	if (ret)
-		goto out;
-	ret = -EINVAL;
-	if (!file->f_op || !(write = file->f_op->write))
-		goto out;
-
-	ret = write(file, buf, count, &file->f_pos);
-out:
-	fput(file);
-bad_file:
-	unlock_kernel();
+			if (!ret) {
+				ssize_t (*write)(struct file *, const char *, size_t, loff_t *);
+				ret = -EINVAL;
+				if (file->f_op && (write = file->f_op->write) != NULL)
+					ret = write(file, buf, count, &file->f_pos);
+			}
+		}
+		fput(file);
+	}
 	return ret;
 }
 

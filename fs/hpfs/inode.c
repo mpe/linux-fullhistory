@@ -42,7 +42,8 @@ static const struct inode_operations hpfs_file_iops =
 	NULL,				/* readlink */
 	NULL,				/* follow_link */
 	(int (*)(struct inode *, int))
-	&hpfs_bmap,			/* bmap */
+#warning Someone needs to code up hpfs_get_block properly... -DaveM
+	&hpfs_bmap,			/* get_block */
 	block_read_full_page,		/* readpage */
 	hpfs_writepage,			/* writepage */
 	block_flushpage,		/* flushpage */
@@ -85,7 +86,7 @@ static const struct inode_operations hpfs_dir_iops =
 	hpfs_rename,			/* rename */
 	NULL,				/* readlink */
 	NULL,				/* follow_link */
-	NULL,				/* bmap */
+	NULL,				/* get_block */
 	NULL,				/* readpage */
 	NULL,				/* writepage */
 	NULL,				/* flushpage */
@@ -109,7 +110,7 @@ const struct inode_operations hpfs_symlink_iops =
 	NULL,				/* rename */
 	hpfs_readlink,			/* readlink */
 	hpfs_follow_link,		/* follow_link */
-	NULL,				/* bmap */
+	NULL,				/* get_block */
 	NULL,				/* readpage */
 	NULL,				/* writepage */
 	NULL,				/* flushpage */

@@ -3,7 +3,6 @@
 #
 # Paul Mackerras	January 1997
 
-HOSTCC	= gcc
 HOSTCFLAGS = -O -I$(TOPDIR)/include
 
 CC	= $(CROSS_COMPILE)gcc

@@ -1,5 +1,5 @@
 /*
- * $Id: mbx_setup.c,v 1.10 1999/05/14 07:24:19 davem Exp $
+ * $Id: mbx_setup.c,v 1.11 1999/06/28 17:59:43 cort Exp $
  *
  *  linux/arch/ppc/kernel/setup.c
  *
@@ -473,9 +473,9 @@ mbx_init(unsigned long r3, unsigned long r4, unsigned long r5,
         ppc_ide_md.outsw = mbx_ide_outsw;
         ppc_ide_md.default_irq = mbx_ide_default_irq;
         ppc_ide_md.default_io_base = mbx_ide_default_io_base;
-        ppc_ide_md.check_region = mbx_ide_check_region;
-        ppc_ide_md.request_region = mbx_ide_request_region;
-        ppc_ide_md.release_region = mbx_ide_release_region;
+        ppc_ide_md.ide_check_region = mbx_ide_check_region;
+        ppc_ide_md.ide_request_region = mbx_ide_request_region;
+        ppc_ide_md.ide_release_region = mbx_ide_release_region;
         ppc_ide_md.fix_driveid = mbx_ide_fix_driveid;
         ppc_ide_md.ide_init_hwif = mbx_ide_init_hwif_ports;
 

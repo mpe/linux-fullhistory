@@ -790,7 +790,7 @@ int filp_close(struct file *filp, fl_owner_t id)
 	int retval;
 	struct dentry *dentry = filp->f_dentry;
 
-	if (filp->f_count == 0) {
+	if (!atomic_read(&filp->f_count)) {
 		printk("VFS: Close: file count is 0\n");
 		return 0;
 	}

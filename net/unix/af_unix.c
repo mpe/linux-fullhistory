@@ -103,6 +103,7 @@
 #include <net/scm.h>
 #include <linux/init.h>
 #include <linux/poll.h>
+#include <linux/smp_lock.h>
 
 #include <asm/checksum.h>
 
@@ -943,7 +944,7 @@ static void unix_attach_fds(struct scm_cookie *scm, struct sk_buff *skb)
  *	Send AF_UNIX data.
  */
 
-static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
+static int do_unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			      struct scm_cookie *scm)
 {
 	struct sock *sk = sock->sk;
@@ -1040,6 +1041,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	
 	if (!unix_peer(sk))
 		unix_unlock(other);
+
 	return len;
 
 out_unlock:
@@ -1050,8 +1052,18 @@ out:
 	return err;
 }
 
+static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
+			      struct scm_cookie *scm)
+{
+	int retval;
+
+	lock_kernel();
+	retval = do_unix_dgram_sendmsg(sock, msg, len, scm);
+	unlock_kernel();
+	return retval;
+}
 		
-static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
+static int do_unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			       struct scm_cookie *scm)
 {
 	struct sock *sk = sock->sk;
@@ -1120,9 +1132,9 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		
 		if (skb==NULL)
 		{
-			if (sent)
-				goto out;
-			return err;
+			if (!sent)
+				sent = err;
+			goto out;
 		}
 
 		/*
@@ -1141,9 +1153,9 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 		if (memcpy_fromiovec(skb_put(skb,size), msg->msg_iov, size)) {
 			kfree_skb(skb);
-			if (sent)
-				goto out;
-			return -EFAULT;
+			if (!sent)
+				sent = -EFAULT;
+			goto out;
 		}
 
 		other=unix_peer(sk);
@@ -1155,7 +1167,8 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 				goto out;
 			if (!(msg->msg_flags&MSG_NOSIGNAL))
 				send_sig(SIGPIPE,current,0);
-			return -EPIPE;
+			sent = -EPIPE;
+			goto out;
 		}
 
 		skb_queue_tail(&other->receive_queue, skb);
@@ -1164,6 +1177,17 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	}
 out:
 	return sent;
+}
+
+static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
+			       struct scm_cookie *scm)
+{
+	int retval;
+
+	lock_kernel();
+	retval = do_unix_stream_sendmsg(sock, msg, len, scm);
+	unlock_kernel();
+	return retval;
 }
 
 /*
@@ -1180,7 +1204,7 @@ static void unix_data_wait(unix_socket * sk)
 	}
 }
 
-static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
+static int do_unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 			      int flags, struct scm_cookie *scm)
 {
 	struct sock *sk = sock->sk;
@@ -1257,8 +1281,18 @@ out:
 	return err;
 }
 
+static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
+			      int flags, struct scm_cookie *scm)
+{
+	int retval;
 
-static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size,
+	lock_kernel();
+	retval = do_unix_dgram_recvmsg(sock, msg, size, flags, scm);
+	unlock_kernel();
+	return retval;
+}
+
+static int do_unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 			       int flags, struct scm_cookie *scm)
 {
 	struct sock *sk = sock->sk;
@@ -1275,8 +1309,7 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 		return -EOPNOTSUPP;
 	if (flags&MSG_WAITALL)
 		target = size;
-		
-		
+
 	msg->msg_namelen = 0;
 
 	/* Lock the socket to prevent queue disordering
@@ -1390,6 +1423,17 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 
 	up(&sk->protinfo.af_unix.readsem);
 	return copied;
+}
+
+static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size,
+			       int flags, struct scm_cookie *scm)
+{
+	int retval;
+
+	lock_kernel();
+	retval = do_unix_stream_recvmsg(sock, msg, size, flags, scm);
+	unlock_kernel();
+	return retval;
 }
 
 static int unix_shutdown(struct socket *sock, int mode)

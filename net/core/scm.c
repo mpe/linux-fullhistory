@@ -232,7 +232,7 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 			break;
 		}
 		/* Bump the usage count and install the file. */
-		fp[i]->f_count++;
+		atomic_inc(&fp[i]->f_count);
 		current->files->fd[new_fd] = fp[i];
 	}
 
@@ -274,7 +274,7 @@ struct scm_fp_list *scm_fp_dup(struct scm_fp_list *fpl)
 		memcpy(new_fpl, fpl, sizeof(*fpl));
 
 		for (i=fpl->count-1; i>=0; i--)
-			fpl->fp[i]->f_count++;
+			atomic_inc(&fpl->fp[i]->f_count);
 	}
 	return new_fpl;
 }

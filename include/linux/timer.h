@@ -71,7 +71,7 @@ extern inline void init_timer(struct timer_list * timer)
 	timer->prev = NULL;
 }
 
-extern inline int timer_pending(struct timer_list * timer)
+extern inline int timer_pending(const struct timer_list * timer)
 {
 	return timer->prev != NULL;
 }

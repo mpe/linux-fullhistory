@@ -63,7 +63,7 @@ struct inode_operations hfs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	hfs_bmap,		/* bmap */
+	hfs_bmap,		/* get_block */
 	block_read_full_page,	/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

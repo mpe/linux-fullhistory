@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.60 1999/05/25 01:42:41 cort Exp $
+ * $Id: prom.c,v 1.61 1999/06/17 06:05:52 paulus Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -338,7 +338,9 @@ prom_init(int r3, int r4, prom_entry pp)
 			 */
 			model = (char *) early_get_property
 				(r4 + bi->deviceTreeOffset, 4, RELOC("model"));
-			if (model && strcmp(model, RELOC("iMac,1")) == 0) {
+			if (model
+			    && (strcmp(model, RELOC("iMac,1")) == 0
+				|| strcmp(model, RELOC("PowerMac1,1")) == 0)) {
 				out_le32((unsigned *)0x80880008, 1);	/* XXX */
 			}
 		}
@@ -887,11 +889,11 @@ interpret_pci_props(struct device_node *np, unsigned long mem_start)
 	    && (imp = (struct pci_intr_map *)
 		get_property(np->parent, "interrupt-map", &ml)) != 0
 	    && (ip = (int *) get_property(np, "interrupts", &l)) != 0) {
-		unsigned int busdevfn = pci_addrs[0].addr.a_hi & 0xffff00;
+		unsigned int devfn = pci_addrs[0].addr.a_hi & 0xff00;
 		np->n_intrs = 0;
 		np->intrs = (struct interrupt_info *) mem_start;
 		for (i = 0; (ml -= sizeof(struct pci_intr_map)) >= 0; ++i) {
-			if (imp[i].addr.a_hi == busdevfn) {
+			if (imp[i].addr.a_hi == devfn) {
 				np->intrs[np->n_intrs].line = imp[i].intr;
 				np->intrs[np->n_intrs].sense = 0;
 				++np->n_intrs;

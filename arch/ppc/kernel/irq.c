@@ -1,5 +1,5 @@
 /*
- * $Id: irq.c,v 1.106 1999/05/25 21:16:04 cort Exp $
+ * $Id: irq.c,v 1.107 1999/06/17 05:39:12 paulus Exp $
  *
  *  arch/ppc/kernel/irq.c
  *
@@ -187,6 +187,12 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 void free_irq(unsigned int irq, void *dev_id)
 {
 	request_irq(irq, NULL, 0, NULL, dev_id);
+}
+
+/* XXX should implement irq disable depth like on intel */
+void disable_irq_nosync(unsigned int irq_nr)
+{
+	mask_irq(irq_nr);
 }
 
 void disable_irq(unsigned int irq_nr)

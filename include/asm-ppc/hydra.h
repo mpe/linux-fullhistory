@@ -85,13 +85,13 @@ extern volatile struct Hydra *Hydra;
 #define HYDRA_INT_VIA		9
 #define HYDRA_INT_ADB		10
 #define HYDRA_INT_ADB_NMI	11
-#define HYDRA_INT_EXT1		12
-#define HYDRA_INT_EXT2		13
-#define HYDRA_INT_EXT3		14
-#define HYDRA_INT_EXT4		15
-#define HYDRA_INT_EXT5		16
-#define HYDRA_INT_EXT6		17
-#define HYDRA_INT_EXT7		18
+#define HYDRA_INT_EXT1		12	/* PCI IRQW */
+#define HYDRA_INT_EXT2		13	/* PCI IRQX */
+#define HYDRA_INT_EXT3		14	/* PCI IRQY */
+#define HYDRA_INT_EXT4		15	/* PCI IRQZ */
+#define HYDRA_INT_EXT5		16	/* IDE Primay/Secondary */
+#define HYDRA_INT_EXT6		17	/* IDE Secondary */
+#define HYDRA_INT_EXT7		18	/* Power Off Request */
 #define HYDRA_INT_SPARE		19
 
 extern int hydra_init(void);

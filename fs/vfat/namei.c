@@ -1232,7 +1232,7 @@ struct inode_operations vfat_dir_inode_operations = {
 	vfat_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* followlink */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

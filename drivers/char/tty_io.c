@@ -628,10 +628,12 @@ static ssize_t tty_read(struct file * file, char * buf, size_t count,
 			return -ERESTARTSYS;
 		}
 #endif
+	lock_kernel();
 	if (tty->ldisc.read)
 		i = (tty->ldisc.read)(tty,file,buf,count);
 	else
 		i = -EIO;
+	unlock_kernel();
 	if (i > 0)
 		inode->i_atime = CURRENT_TIME;
 	return i;
@@ -658,7 +660,9 @@ static inline ssize_t do_tty_write(
 		unsigned long size = PAGE_SIZE*2;
 		if (size > count)
 			size = count;
+		lock_kernel();
 		ret = write(tty, file, buf, size);
+		unlock_kernel();
 		if (ret <= 0)
 			break;
 		written += ret;

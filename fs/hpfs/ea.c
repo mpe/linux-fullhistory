@@ -233,10 +233,10 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, char *key, char *data
 				goto bail;
 			fnode->ea_anode = 0;
 			len++;
-		}
-		else if (!fnode->ea_anode)
-			if (hpfs_alloc_if_possible(s, fnode->ea_secno + len)) len++;
-			else {
+		} else if (!fnode->ea_anode) {
+			if (hpfs_alloc_if_possible(s, fnode->ea_secno + len)) {
+				len++;
+			} else {
 				/* Aargh... don't know how to create ea anodes :-( */
 				/*struct buffer_head *bh;
 				struct anode *anode;
@@ -280,10 +280,15 @@ void hpfs_set_ea(struct inode *inode, struct fnode *fnode, char *key, char *data
 				fnode->ea_secno = new_sec;
 				len = (pos + 511) >> 9;
 			}
-		if (fnode->ea_anode)
-			if (hpfs_add_sector_to_btree(s, fnode->ea_secno, 0, len) != -1)
+		}
+		if (fnode->ea_anode) {
+			if (hpfs_add_sector_to_btree(s, fnode->ea_secno,
+						     0, len) != -1) {
 				len++;
-			else goto bail;
+			} else {
+				goto bail;
+			}
+		}
 	}
 	h[0] = 0;
 	h[1] = strlen(key);

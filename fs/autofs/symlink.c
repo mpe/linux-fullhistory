@@ -49,7 +49,7 @@ struct inode_operations autofs_symlink_inode_operations = {
 	NULL,			/* rename */
 	autofs_readlink,	/* readlink */
 	autofs_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

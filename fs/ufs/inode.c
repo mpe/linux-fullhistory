@@ -36,6 +36,7 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 #include <linux/mm.h>
+#include <linux/smp_lock.h>
 
 #include "swab.h"
 #include "util.h"
@@ -82,10 +83,10 @@ static void ufs_print_inode(struct inode * inode)
 #define ufs_inode_bmap(inode, nr) \
 	(SWAB32((inode)->u.ufs_i.i_u1.i_data[(nr) >> uspi->s_fpbshift]) + ((nr) & uspi->s_fpbmask))
 
-static inline unsigned ufs_block_bmap (struct buffer_head * bh, unsigned nr, 
+static inline unsigned int ufs_block_bmap (struct buffer_head * bh, unsigned nr, 
 	struct ufs_sb_private_info * uspi, unsigned swab)
 {
-	unsigned tmp;
+	unsigned int tmp;
 
 	UFSD(("ENTER, nr %u\n", nr))
 	if (!bh)
@@ -96,86 +97,90 @@ static inline unsigned ufs_block_bmap (struct buffer_head * bh, unsigned nr,
 	return tmp;
 }
 
-int ufs_bmap (struct inode * inode, int fragment)
+int ufs_frag_map(struct inode *inode, int frag)
 {
-	struct super_block * sb;
-	struct ufs_sb_private_info * uspi;
-	unsigned tmp;
-	unsigned swab;
+	struct super_block *sb;
+	struct ufs_sb_private_info *uspi;
+	unsigned int swab;
+	int i, ret;
+
+	ret = 0;
+	lock_kernel();
 	
 	sb = inode->i_sb;
 	uspi = sb->u.ufs_sb.s_uspi;
 	swab = sb->u.ufs_sb.s_swab;
-
-	UFSD(("ENTER, ino %lu, fragment %u\n", inode->i_ino, fragment))
-	
-	if (fragment >= ((UFS_NDADDR + uspi->s_apb + uspi->s_2apb + uspi->s_3apb) << uspi->s_fpbshift)) {
-		ufs_warning (sb, "ufs_bmap", "block > big");
-		return 0;
+	if (frag < 0) {
+		ufs_warning(sb, "ufs_frag_map", "frag < 0");
+		goto out;
+	}
+	if (frag >=
+	    ((UFS_NDADDR + uspi->s_apb + uspi->s_2apb + uspi->s_3apb)
+	     << uspi->s_fpbshift)) {
+		ufs_warning(sb, "ufs_frag_map", "frag > big");
+		goto out;
 	}
 
-	/*
-	 * direct fragment
-	 */
-	if (fragment < UFS_NDIR_FRAGMENT)
-		return (uspi->s_sbbase + ufs_inode_bmap (inode, fragment));
-
-	/*
-	 * indirect fragment
-	 */	
-	fragment -= UFS_NDIR_FRAGMENT;
-	if (fragment < (1 << (uspi->s_apbshift + uspi->s_fpbshift))) {
-		tmp = ufs_inode_bmap (inode, 
-			UFS_IND_FRAGMENT + (fragment >> uspi->s_apbshift));
-		if (!tmp)
-			return 0;
-		return (uspi->s_sbbase + 
-			ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
-			fragment & uspi->s_apbmask, uspi, swab));
+	if (frag < UFS_NDIR_FRAGMENT) {
+		ret = uspi->s_sbbase + ufs_inode_bmap(inode, frag);
+		goto out;
 	}
 
-	/*
-	 * dindirect fragment
-	 */
-	fragment -= 1 << (uspi->s_apbshift + uspi->s_fpbshift);
-	if (fragment < (1 << (uspi->s_2apbshift + uspi->s_fpbshift))) {
-		tmp = ufs_inode_bmap (inode,
-			UFS_DIND_FRAGMENT + (fragment >> uspi->s_2apbshift));
-		if (!tmp)
-			return 0;
-		tmp = ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
-			(fragment >> uspi->s_apbshift) & uspi->s_apbmask, uspi, swab);
-		if (!tmp)
-			return 0;
-		return (uspi->s_sbbase + 
-			ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
-			fragment & uspi->s_apbmask, uspi, swab));
+	frag -= UFS_NDIR_FRAGMENT;
+	if (frag < (1 << (uspi->s_apbshift + uspi->s_fpbshift))) {
+		i = ufs_inode_bmap(inode,
+				   UFS_IND_FRAGMENT + (frag >> uspi->s_apbshift));
+		if (!i)
+			goto out;
+		ret = (uspi->s_sbbase +
+		       ufs_block_bmap(bread(sb->s_dev, uspi->s_sbbase + i,
+					    sb->s_blocksize),
+				      frag & uspi->s_apbmask, uspi, swab));
 	}
-
-	/*
-	 * tindirect fragment
-	 */
-	fragment -= 1 << (uspi->s_2apbshift + uspi->s_fpbshift);
-	tmp = ufs_inode_bmap (inode, 
-		UFS_TIND_FRAGMENT + (fragment >> uspi->s_3apbshift));
-	if (!tmp)
-		return 0;
-	tmp = ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
-		(fragment >> uspi->s_2apbshift) & uspi->s_apbmask, uspi, swab);
-	if (!tmp)
-		return 0;
-	tmp = ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
-		(fragment >> uspi->s_apbshift) & uspi->s_apbmask, uspi, swab);
-	if (!tmp)
-		return 0;
-	return (uspi->s_sbbase + 
-		ufs_block_bmap (bread (sb->s_dev, uspi->s_sbbase + tmp, sb->s_blocksize),
-		fragment & uspi->s_apbmask, uspi, swab));
+	frag -= 1 << (uspi->s_apbshift + uspi->s_fpbshift);
+	if (frag < (1 << (uspi->s_2apbshift + uspi->s_fpbshift))) {
+		i = ufs_inode_bmap (inode,
+				    UFS_DIND_FRAGMENT + (frag >> uspi->s_2apbshift));
+		if (!i)
+			goto out;
+		i = ufs_block_bmap(bread(sb->s_dev, uspi->s_sbbase + i,
+					 sb->s_blocksize),
+				   (frag >> uspi->s_apbshift) & uspi->s_apbmask,
+				   uspi, swab);
+		if (!i)
+			goto out;
+		ret = (uspi->s_sbbase +
+		       ufs_block_bmap(bread(sb->s_dev, uspi->s_sbbase + i,
+					    sb->s_blocksize),
+				      (frag & uspi->s_apbmask), uspi, swab));
+		goto out;
+	}
+	frag -= 1 << (uspi->s_2apbshift + uspi->s_fpbshift);
+	i = ufs_inode_bmap(inode,
+			   UFS_TIND_FRAGMENT + (frag >> uspi->s_3apbshift));
+	if (!i)
+		goto out;
+	i = ufs_block_bmap(bread(sb->s_dev, uspi->s_sbbase + i, sb->s_blocksize),
+			   (frag >> uspi->s_2apbshift) & uspi->s_apbmask,
+			   uspi, swab);
+	if (!i)
+		goto out;
+	i = ufs_block_bmap(bread(sb->s_dev, uspi->s_sbbase + i, sb->s_blocksize),
+			   (frag >> uspi->s_apbshift) & uspi->s_apbmask,
+			   uspi, swab);
+	if (!i)
+		goto out;
+	ret = (uspi->s_sbbase +
+	       ufs_block_bmap(bread(sb->s_dev, uspi->s_sbbase + i, sb->s_blocksize),
+			      (frag & uspi->s_apbmask), uspi, swab));
+out:
+	unlock_kernel();
+	return ret;
 }
 
-static struct buffer_head * ufs_inode_getfrag (struct inode * inode, 
-	unsigned fragment, unsigned new_fragment, int create, 
-	unsigned required, int *err, int metadata, int *phys_block, int *created)
+static struct buffer_head * ufs_inode_getfrag (struct inode *inode,
+	unsigned int fragment, unsigned int new_fragment,
+	unsigned int required, int *err, int metadata, long *phys, int *new)
 {
 	struct super_block * sb;
 	struct ufs_sb_private_info * uspi;
@@ -184,7 +189,7 @@ static struct buffer_head * ufs_inode_getfrag (struct inode * inode,
 	unsigned block, blockoff, lastfrag, lastblock, lastblockoff;
 	unsigned tmp, goal;
 	u32 * p, * p2;
-	unsigned swab;
+	unsigned int swab;
 
 	UFSD(("ENTER, ino %lu, fragment %u, new_fragment %u, required %u\n",
 		inode->i_ino, fragment, new_fragment, required))         
@@ -206,18 +211,17 @@ repeat:
 					 sb->s_blocksize);
 			if (tmp == SWAB32(*p)) {
 				UFSD(("EXIT, result %u\n", tmp + blockoff))
-					return result;
+				return result;
 			}
 			brelse (result);
 			goto repeat;
 		} else {
-			*phys_block = tmp;
+			*phys = tmp;
 			return NULL;
 		}
 	}
 	*err = -EFBIG;
-	if (!create)
-		return NULL;
+
 	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
 	if (limit < RLIM_INFINITY) {
 		limit >>= sb->s_blocksize_bits;
@@ -226,6 +230,7 @@ repeat:
 			return NULL;
 		}
 	}
+
 	lastblock = ufs_fragstoblks (lastfrag);
 	lastblockoff = ufs_fragnum (lastfrag);
 	/*
@@ -270,10 +275,10 @@ repeat:
 	}
 	if (!tmp) {
 		if ((!blockoff && SWAB32(*p)) || 
-		(blockoff && lastfrag != inode->u.ufs_i.i_lastfrag))
+		    (blockoff && lastfrag != inode->u.ufs_i.i_lastfrag))
 			goto repeat;
-		else
-			return NULL;
+		*err = -ENOSPC;
+		return NULL;
 	}
 
 	/* The nullification of framgents done in ufs/balloc.c is
@@ -283,10 +288,10 @@ repeat:
 	if (metadata) {
 		result = getblk (inode->i_dev, tmp + blockoff, sb->s_blocksize);
 	} else {
-		*phys_block = tmp;
+		*phys = tmp;
 		result = NULL;
 		*err = 0;
-		*created = 1;
+		*new = 1;
 	}
 
 	inode->i_ctime = CURRENT_TIME;
@@ -297,16 +302,16 @@ repeat:
 	return result;
 }
 
-static struct buffer_head * ufs_block_getfrag (struct inode * inode,
-	struct buffer_head * bh, unsigned fragment, unsigned new_fragment, 
-	int create, unsigned blocksize, int * err, int metadata, int *phys_block, int *created)
+static struct buffer_head * ufs_block_getfrag (struct inode *inode,
+	struct buffer_head *bh, unsigned int fragment, unsigned int new_fragment, 
+	unsigned int blocksize, int * err, int metadata, long *phys, int *new)
 {
 	struct super_block * sb;
 	struct ufs_sb_private_info * uspi;
 	struct buffer_head * result;
 	unsigned tmp, goal, block, blockoff;
 	u32 * p;
-	unsigned swab;
+	unsigned int swab;
 
 	sb = inode->i_sb;
 	swab = sb->u.ufs_sb.s_swab;
@@ -316,15 +321,14 @@ static struct buffer_head * ufs_block_getfrag (struct inode * inode,
 
 	UFSD(("ENTER, ino %lu, fragment %u, new_fragment %u\n", inode->i_ino, fragment, new_fragment))	
 
+	result = NULL;
 	if (!bh)
-		return NULL;
+		goto out;
 	if (!buffer_uptodate(bh)) {
 		ll_rw_block (READ, 1, &bh);
 		wait_on_buffer (bh);
-		if (!buffer_uptodate(bh)) {
-			brelse (bh);
-			return NULL;
-		}
+		if (!buffer_uptodate(bh))
+			goto out;
 	}
 
 	p = (u32 *) bh->b_data + block;
@@ -334,24 +338,18 @@ repeat:
 		if (metadata) {
 			result = getblk (bh->b_dev, uspi->s_sbbase + tmp + blockoff,
 					 sb->s_blocksize);
-			if (tmp == SWAB32(*p)) {
-				brelse (bh);
-				UFSD(("EXIT, result %u\n", tmp + blockoff))
-				return result;
-			}
+			if (tmp == SWAB32(*p))
+				goto out;
 			brelse (result);
 			goto repeat;
 		} else {
-			*phys_block = tmp;
-			brelse (bh);
-			return NULL;
+			*phys = tmp;
+			goto out;
 		}
 	}
 	*err = -EFBIG;
-	if (!create) {
-		brelse (bh);
-		return NULL;
-	} else {
+
+	{
 		unsigned long limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
 		if (limit < RLIM_INFINITY) {
 			limit >>= sb->s_blocksize_bits;
@@ -368,12 +366,9 @@ repeat:
 		goal = bh->b_blocknr + uspi->s_fpb;
 	tmp = ufs_new_fragments (inode, p, ufs_blknum(new_fragment), goal, uspi->s_fpb, err);
 	if (!tmp) {
-		if (SWAB32(*p)) {
+		if (SWAB32(*p))
 			goto repeat;
-		} else {
-			brelse (bh);
-			return NULL;
-		}
+		goto out;
 	}		
 
 	/* The nullification of framgents done in ufs/balloc.c is
@@ -383,10 +378,8 @@ repeat:
 	if (metadata) {
 		result = getblk (bh->b_dev, tmp + blockoff, sb->s_blocksize);
 	} else {
-		*phys_block = tmp;
-		result = NULL;
-		*err = 0;
-		*created = 1;
+		*phys = tmp;
+		*new = 1;
 	}
 
 	mark_buffer_dirty(bh, 1);
@@ -396,122 +389,137 @@ repeat:
 	}
 	inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
+out:
 	brelse (bh);
 	UFSD(("EXIT, result %u\n", tmp + blockoff))
 	return result;
 }
 
-int ufs_getfrag_block (struct inode * inode, long fragment,
-		       int create, int * err, int *created)
+int ufs_getfrag_block (struct inode *inode, long fragment, struct buffer_head *bh_result, int create)
 {
 	struct super_block * sb;
 	struct ufs_sb_private_info * uspi;
-	struct buffer_head * bh, * tmp;
-	unsigned f;
-	unsigned swab;
-	int phys_block;
+	struct buffer_head * bh;
+	unsigned int swab;
+	int ret, err, new;
+	unsigned long ptr, phys;
 	
 	sb = inode->i_sb;
 	uspi = sb->u.ufs_sb.s_uspi;
 	swab = sb->u.ufs_sb.s_swab;
-	*err = -EIO;
+
+	if (!create) {
+		phys = ufs_frag_map(inode, fragment);
+		if (phys) {
+			bh_result->b_dev = inode->i_dev;
+			bh_result->b_blocknr = phys;
+			bh_result->b_state |= (1UL << BH_Mapped);
+		}
+		return 0;
+	}
+
+	err = -EIO;
+	new = 0;
+	ret = 0;
+	bh = NULL;
+
+	lock_kernel();
 
 	UFSD(("ENTER, ino %lu, fragment %u\n", inode->i_ino, fragment))
-	if (fragment < 0) {
-		ufs_warning (sb, "ufs_getblk", "block < 0");
-		return 0;
-	}
-	if (fragment > ((UFS_NDADDR + uspi->s_apb + uspi->s_2apb + uspi->s_3apb) << uspi->s_fpbshift)) {
-		ufs_warning (sb, "ufs_getblk", "block > big");
-		return 0;
-	}
+	if (fragment < 0)
+		goto abort_negative;
+	if (fragment >
+	    ((UFS_NDADDR + uspi->s_apb + uspi->s_2apb + uspi->s_3apb)
+	     << uspi->s_fpbshift))
+		goto abort_too_big;
 
-	*err = -ENOSPC;
-	f = fragment;
-	*created = 0;
+	err = 0;
+	ptr = fragment;
 	  
 	/*
-	 * Direct fragment
+	 * ok, these macros clean the logic up a bit and make
+	 * it much more readable:
 	 */
-	if (fragment < UFS_NDIR_FRAGMENT) {
-		tmp = ufs_inode_getfrag (inode, fragment, fragment, create, 1,
-					 err, 0, &phys_block, created);
+#define GET_INODE_DATABLOCK(x) \
+		ufs_inode_getfrag(inode, x, fragment, 1, &err, 0, &phys, &new)
+#define GET_INODE_PTR(x) \
+		ufs_inode_getfrag(inode, x, fragment, uspi->s_fpb, &err, 1, NULL, NULL)
+#define GET_INDIRECT_DATABLOCK(x) \
+		ufs_block_getfrag(inode, bh, x, fragment, sb->s_blocksize, \
+				  &err, 0, &phys, &new);
+#define GET_INDIRECT_PTR(x) \
+		ufs_block_getfrag(inode, bh, x, fragment, sb->s_blocksize, \
+				  &err, 1, NULL, NULL);
+
+	if (ptr < UFS_NDIR_FRAGMENT) {
+		bh = GET_INODE_DATABLOCK(ptr);
 		goto out;
 	}
-	/*
-	 * Indirect fragment
-	 */
-	fragment -= UFS_NDIR_FRAGMENT;
-	if (fragment < (1 << (uspi->s_apbshift + uspi->s_fpbshift))) {
-		bh = ufs_inode_getfrag (inode, 
-			UFS_IND_FRAGMENT + (fragment >> uspi->s_apbshift),
-			f, create, uspi->s_fpb, err, 1, NULL, NULL);
-		tmp = ufs_block_getfrag (inode, bh, 
-					 fragment & uspi->s_apbmask,
-					 f, create, sb->s_blocksize,
-					 err, 0, &phys_block, created);
-		goto out;
+	ptr -= UFS_NDIR_FRAGMENT;
+	if (ptr < (1 << (uspi->s_apbshift + uspi->s_fpbshift))) {
+		bh = GET_INODE_PTR(UFS_IND_FRAGMENT + (ptr >> uspi->s_apbshift));
+		goto get_indirect;
 	}
-	/*
-	 * Dindirect fragment
-	 */
-	fragment -= 1 << (uspi->s_apbshift + uspi->s_fpbshift);
-	if ( fragment < (1 << (uspi->s_2apbshift + uspi->s_fpbshift))) {
-		bh = ufs_inode_getfrag (inode,
-			UFS_DIND_FRAGMENT + (fragment >> uspi->s_2apbshift),
-			f, create, uspi->s_fpb, err,
-			1, NULL, NULL);
-		bh = ufs_block_getfrag (inode, bh,
-			(fragment >> uspi->s_apbshift) & uspi->s_apbmask, 
-			f, create, sb->s_blocksize, err,
-			1, NULL, NULL);
-		tmp = ufs_block_getfrag (inode, bh, 
-			fragment & uspi->s_apbmask,
-			f, create, sb->s_blocksize, err,
-			0, &phys_block, created);
-		goto out;
+	ptr -= 1 << (uspi->s_apbshift + uspi->s_fpbshift);
+	if (ptr < (1 << (uspi->s_2apbshift + uspi->s_fpbshift))) {
+		bh = GET_INODE_PTR(UFS_DIND_FRAGMENT + (ptr >> uspi->s_2apbshift));
+		goto get_double;
 	}
-	/*
-	 * Tindirect fragment
-	 */
-	fragment -= 1 << (uspi->s_2apbshift + uspi->s_fpbshift);
-	bh = ufs_inode_getfrag (inode,
-		UFS_TIND_FRAGMENT + (fragment >> uspi->s_3apbshift), 
-		f, create, uspi->s_fpb, err, 1, NULL, NULL);
-	bh = ufs_block_getfrag (inode, bh,
-		(fragment >> uspi->s_2apbshift) & uspi->s_apbmask,
-		f, create, sb->s_blocksize, err, 1, NULL, NULL);
-	bh = ufs_block_getfrag (inode, bh,
-		(fragment >> uspi->s_apbshift) & uspi->s_apbmask, 
-		f, create, sb->s_blocksize, err, 1, NULL, NULL);
-	tmp = ufs_block_getfrag (inode, bh,
-		fragment & uspi->s_apbmask, 
-		f, create, sb->s_blocksize, err, 0, &phys_block, created);
+	ptr -= 1 << (uspi->s_2apbshift + uspi->s_fpbshift);
+	bh = GET_INODE_PTR(UFS_TIND_FRAGMENT + (ptr >> uspi->s_3apbshift));
+	bh = GET_INDIRECT_PTR((ptr >> uspi->s_2apbshift) & uspi->s_apbmask);
+get_double:
+	bh = GET_INDIRECT_PTR((ptr >> uspi->s_apbshift) & uspi->s_apbmask);
+get_indirect:
+	bh = GET_INDIRECT_DATABLOCK(ptr & uspi->s_apbmask);
+
+#undef GET_INODE_DATABLOCK
+#undef GET_INODE_PTR
+#undef GET_INDIRECT_DATABLOCK
+#undef GET_INDIRECT_PTR
 
 out:
-	if (!phys_block)
-		return 0;
-	if (*err)
-		return 0;
-	return phys_block;
+	if (err)
+		goto abort;
+	bh_result->b_dev = inode->i_dev;
+	bh_result->b_blocknr = phys;
+	bh_result->b_state |= (1UL << BH_Mapped);
+	if (new)
+		bh_result->b_state |= (1UL << BH_New);
+abort:
+	unlock_kernel();
+	return err;
+
+abort_negative:
+	ufs_warning(sb, "ufs_get_block", "block < 0");
+	goto abort;
+
+abort_too_big:
+	ufs_warning(sb, "ufs_get_block", "block > big");
+	goto abort;
 }
 
 struct buffer_head *ufs_getfrag(struct inode *inode, unsigned int fragment,
 				int create, int *err)
 {
-	struct buffer_head *tmp = NULL;
-	int phys_block, created;
+	struct buffer_head dummy;
+	int error;
 
-	phys_block = ufs_getfrag_block(inode, fragment, create, err, &created);
-	if (phys_block) {
-		tmp = getblk(inode->i_dev, phys_block, inode->i_sb->s_blocksize);
-		if (created) {
-			memset(tmp->b_data, 0, inode->i_sb->s_blocksize);
-			mark_buffer_uptodate(tmp, 1);
-			mark_buffer_dirty(tmp, 1);
+	dummy.b_state = 0;
+	dummy.b_blocknr = -1000;
+	error = ufs_getfrag_block(inode, fragment, &dummy, create);
+	*err = error;
+	if (!error && buffer_mapped(&dummy)) {
+		struct buffer_head *bh;
+		bh = getblk(dummy.b_dev, dummy.b_blocknr, inode->i_sb->s_blocksize);
+		if (buffer_new(&dummy)) {
+			memset(bh->b_data, 0, inode->i_sb->s_blocksize);
+			mark_buffer_uptodate(bh, 1);
+			mark_buffer_dirty(bh, 1);
 		}
+		return bh;
 	}
-	return tmp;
+	return NULL;
 }
 
 struct buffer_head * ufs_bread (struct inode * inode, unsigned fragment,
