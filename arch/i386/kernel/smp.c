@@ -653,6 +653,8 @@ extern int cpu_idle(void * unused);
 __initfunc(int start_secondary(void *unused))
 {
 	smp_callin();
+	while (!smp_commenced)
+		barrier();
 	cpu_idle(NULL);
 }
 

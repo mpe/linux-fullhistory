@@ -46,7 +46,8 @@ struct serial_struct {
 #define PORT_16650	6
 #define PORT_16650V2	7
 #define PORT_16750	8
-#define PORT_MAX	8
+#define PORT_STARTECH	9
+#define PORT_MAX	9
 
 struct serial_uart_config {
 	char	*name;

@@ -252,6 +252,135 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 	return weight;
 }
 
+/*
+ * Event timer code
+ */
+#define TVN_BITS 6
+#define TVR_BITS 8
+#define TVN_SIZE (1 << TVN_BITS)
+#define TVR_SIZE (1 << TVR_BITS)
+#define TVN_MASK (TVN_SIZE - 1)
+#define TVR_MASK (TVR_SIZE - 1)
+
+#define SLOW_BUT_DEBUGGING_TIMERS 0
+
+struct timer_vec {
+        int index;
+        struct timer_list *vec[TVN_SIZE];
+};
+
+struct timer_vec_root {
+        int index;
+        struct timer_list *vec[TVR_SIZE];
+};
+
+static struct timer_vec tv5 = { 0 };
+static struct timer_vec tv4 = { 0 };
+static struct timer_vec tv3 = { 0 };
+static struct timer_vec tv2 = { 0 };
+static struct timer_vec_root tv1 = { 0 };
+
+static struct timer_vec * const tvecs[] = {
+	(struct timer_vec *)&tv1, &tv2, &tv3, &tv4, &tv5
+};
+
+#define NOOF_TVECS (sizeof(tvecs) / sizeof(tvecs[0]))
+
+static unsigned long timer_jiffies = 0;
+
+static inline void insert_timer(struct timer_list *timer,
+				struct timer_list **vec, int idx)
+{
+	if ((timer->next = vec[idx]))
+		vec[idx]->prev = timer;
+	vec[idx] = timer;
+	timer->prev = (struct timer_list *)&vec[idx];
+}
+
+static inline void internal_add_timer(struct timer_list *timer)
+{
+	/*
+	 * must be cli-ed when calling this
+	 */
+	unsigned long expires = timer->expires;
+	unsigned long idx = expires - timer_jiffies;
+
+	if (idx < TVR_SIZE) {
+		int i = expires & TVR_MASK;
+		insert_timer(timer, tv1.vec, i);
+	} else if (idx < 1 << (TVR_BITS + TVN_BITS)) {
+		int i = (expires >> TVR_BITS) & TVN_MASK;
+		insert_timer(timer, tv2.vec, i);
+	} else if (idx < 1 << (TVR_BITS + 2 * TVN_BITS)) {
+		int i = (expires >> (TVR_BITS + TVN_BITS)) & TVN_MASK;
+		insert_timer(timer, tv3.vec, i);
+	} else if (idx < 1 << (TVR_BITS + 3 * TVN_BITS)) {
+		int i = (expires >> (TVR_BITS + 2 * TVN_BITS)) & TVN_MASK;
+		insert_timer(timer, tv4.vec, i);
+	} else if (expires < timer_jiffies) {
+		/* can happen if you add a timer with expires == jiffies,
+		 * or you set a timer to go off in the past
+		 */
+		insert_timer(timer, tv1.vec, tv1.index);
+	} else if (idx < 0xffffffffUL) {
+		int i = (expires >> (TVR_BITS + 3 * TVN_BITS)) & TVN_MASK;
+		insert_timer(timer, tv5.vec, i);
+	} else {
+		/* Can only get here on architectures with 64-bit jiffies */
+		timer->next = timer->prev = timer;
+	}
+}
+
+static spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
+
+void add_timer(struct timer_list *timer)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&timerlist_lock, flags);
+#if SLOW_BUT_DEBUGGING_TIMERS
+        if (timer->next || timer->prev) {
+                printk("add_timer() called with non-zero list from %p\n",
+		       __builtin_return_address(0));
+		goto out;
+        }
+#endif
+	internal_add_timer(timer);
+#if SLOW_BUT_DEBUGGING_TIMERS
+out:
+#endif
+	spin_unlock_irqrestore(&timerlist_lock, flags);
+}
+
+static inline int detach_timer(struct timer_list *timer)
+{
+	int ret = 0;
+	struct timer_list *next, *prev;
+	next = timer->next;
+	prev = timer->prev;
+	if (next) {
+		next->prev = prev;
+	}
+	if (prev) {
+		ret = 1;
+		prev->next = next;
+	}
+	return ret;
+}
+
+
+int del_timer(struct timer_list * timer)
+{
+	int ret;
+	unsigned long flags;
+
+	spin_lock_irqsave(&timerlist_lock, flags);
+	ret = detach_timer(timer);
+	timer->next = timer->prev = 0;
+	spin_unlock_irqrestore(&timerlist_lock, flags);
+	return ret;
+}
+
 #ifdef __SMP__
 
 #define idle_task (task[cpu_number_map[this_cpu]])
@@ -284,10 +413,8 @@ asmlinkage void schedule(void)
 	need_resched = 0;
 	prev = current;
 	this_cpu = smp_processor_id();
-	if (local_irq_count[this_cpu]) {
-		printk("Scheduling in interrupt\n");
-		*(char *)0 = 0;
-	}
+	if (local_irq_count[this_cpu])
+		goto scheduling_in_interrupt;
 	release_kernel_lock(prev, this_cpu, lock_depth);
 	if (bh_active & bh_mask)
 		do_bottom_half();
@@ -297,16 +424,8 @@ asmlinkage void schedule(void)
 
 	/* move an exhausted RR process to be last.. */
 	if (!prev->counter && prev->policy == SCHED_RR) {
-		if (prev->pid) {
-			prev->counter = prev->priority;
-			move_last_runqueue(prev);
-		} else {
-			static int count = 5;
-			if (count) {
-				count--;
-				printk("Moving pid 0 last\n");
-			}
-		}
+		prev->counter = prev->priority;
+		move_last_runqueue(prev);
 	}
 	timeout = 0;
 	switch (prev->state) {
@@ -338,7 +457,9 @@ asmlinkage void schedule(void)
 		 * the scheduler lock
 		 */
 		spin_unlock_irq(&runqueue_lock);
+#ifdef __SMP__
 		prev->has_cpu = 0;
+#endif
 	
 /*
  * Note! there may appear new tasks on the run-queue during this, as
@@ -369,8 +490,10 @@ asmlinkage void schedule(void)
 		}
 	}
 
+#ifdef __SMP__
 	next->has_cpu = 1;
 	next->processor = this_cpu;
+#endif
 
 	if (prev != next) {
 		struct timer_list timer;
@@ -392,6 +515,11 @@ asmlinkage void schedule(void)
 	spin_unlock(&scheduler_lock);
 
 	reacquire_kernel_lock(prev, smp_processor_id(), lock_depth);
+	return;
+
+scheduling_in_interrupt:
+	printk("Scheduling in interrupt\n");
+	*(int *)0 = 0;
 }
 
 #ifndef __alpha__
@@ -613,133 +741,6 @@ void sleep_on(struct wait_queue **p)
 	__sleep_on(p,TASK_UNINTERRUPTIBLE);
 }
 
-
-#define TVN_BITS 6
-#define TVR_BITS 8
-#define TVN_SIZE (1 << TVN_BITS)
-#define TVR_SIZE (1 << TVR_BITS)
-#define TVN_MASK (TVN_SIZE - 1)
-#define TVR_MASK (TVR_SIZE - 1)
-
-#define SLOW_BUT_DEBUGGING_TIMERS 0
-
-struct timer_vec {
-        int index;
-        struct timer_list *vec[TVN_SIZE];
-};
-
-struct timer_vec_root {
-        int index;
-        struct timer_list *vec[TVR_SIZE];
-};
-
-static struct timer_vec tv5 = { 0 };
-static struct timer_vec tv4 = { 0 };
-static struct timer_vec tv3 = { 0 };
-static struct timer_vec tv2 = { 0 };
-static struct timer_vec_root tv1 = { 0 };
-
-static struct timer_vec * const tvecs[] = {
-	(struct timer_vec *)&tv1, &tv2, &tv3, &tv4, &tv5
-};
-
-#define NOOF_TVECS (sizeof(tvecs) / sizeof(tvecs[0]))
-
-static unsigned long timer_jiffies = 0;
-
-static inline void insert_timer(struct timer_list *timer,
-				struct timer_list **vec, int idx)
-{
-	if ((timer->next = vec[idx]))
-		vec[idx]->prev = timer;
-	vec[idx] = timer;
-	timer->prev = (struct timer_list *)&vec[idx];
-}
-
-static inline void internal_add_timer(struct timer_list *timer)
-{
-	/*
-	 * must be cli-ed when calling this
-	 */
-	unsigned long expires = timer->expires;
-	unsigned long idx = expires - timer_jiffies;
-
-	if (idx < TVR_SIZE) {
-		int i = expires & TVR_MASK;
-		insert_timer(timer, tv1.vec, i);
-	} else if (idx < 1 << (TVR_BITS + TVN_BITS)) {
-		int i = (expires >> TVR_BITS) & TVN_MASK;
-		insert_timer(timer, tv2.vec, i);
-	} else if (idx < 1 << (TVR_BITS + 2 * TVN_BITS)) {
-		int i = (expires >> (TVR_BITS + TVN_BITS)) & TVN_MASK;
-		insert_timer(timer, tv3.vec, i);
-	} else if (idx < 1 << (TVR_BITS + 3 * TVN_BITS)) {
-		int i = (expires >> (TVR_BITS + 2 * TVN_BITS)) & TVN_MASK;
-		insert_timer(timer, tv4.vec, i);
-	} else if (expires < timer_jiffies) {
-		/* can happen if you add a timer with expires == jiffies,
-		 * or you set a timer to go off in the past
-		 */
-		insert_timer(timer, tv1.vec, tv1.index);
-	} else if (idx < 0xffffffffUL) {
-		int i = (expires >> (TVR_BITS + 3 * TVN_BITS)) & TVN_MASK;
-		insert_timer(timer, tv5.vec, i);
-	} else {
-		/* Can only get here on architectures with 64-bit jiffies */
-		timer->next = timer->prev = timer;
-	}
-}
-
-static spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
-
-void add_timer(struct timer_list *timer)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&timerlist_lock, flags);
-#if SLOW_BUT_DEBUGGING_TIMERS
-        if (timer->next || timer->prev) {
-                printk("add_timer() called with non-zero list from %p\n",
-		       __builtin_return_address(0));
-		goto out;
-        }
-#endif
-	internal_add_timer(timer);
-#if SLOW_BUT_DEBUGGING_TIMERS
-out:
-#endif
-	spin_unlock_irqrestore(&timerlist_lock, flags);
-}
-
-static inline int detach_timer(struct timer_list *timer)
-{
-	int ret = 0;
-	struct timer_list *next, *prev;
-	next = timer->next;
-	prev = timer->prev;
-	if (next) {
-		next->prev = prev;
-	}
-	if (prev) {
-		ret = 1;
-		prev->next = next;
-	}
-	return ret;
-}
-
-
-int del_timer(struct timer_list * timer)
-{
-	int ret;
-	unsigned long flags;
-
-	spin_lock_irqsave(&timerlist_lock, flags);
-	ret = detach_timer(timer);
-	timer->next = timer->prev = 0;
-	spin_unlock_irqrestore(&timerlist_lock, flags);
-	return ret;
-}
-
 static inline void cascade_timers(struct timer_vec *tv)
 {
         /* cascade all the timers from tv up one level */
@@ -831,17 +832,18 @@ unsigned long avenrun[3] = { 0,0,0 };
  */
 static unsigned long count_active_tasks(void)
 {
-	struct task_struct **p;
+	struct task_struct *p;
 	unsigned long nr = 0;
 
-	for(p = &LAST_TASK; p > &FIRST_TASK; --p)
-		if (*p && ((*p)->state == TASK_RUNNING ||
-			   (*p)->state == TASK_UNINTERRUPTIBLE ||
-			   (*p)->state == TASK_SWAPPING))
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if (p->pid &&
+		    (p->state == TASK_RUNNING ||
+		     p->state == TASK_UNINTERRUPTIBLE ||
+		     p->state == TASK_SWAPPING))
 			nr += FIXED_1;
-#ifdef __SMP__
-	nr-=(smp_num_cpus-1)*FIXED_1;
-#endif			
+	}
+	read_unlock(&tasklist_lock);
 	return nr;
 }
 

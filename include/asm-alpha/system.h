@@ -62,57 +62,89 @@ extern void wrmces (unsigned long);
 
 extern void alpha_switch_to(unsigned long pctxp);
 
-extern void imb(void);
-
 #define mb() \
 __asm__ __volatile__("mb": : :"memory")
+
+#define imb() \
+__asm__ __volatile__ ("call_pal %0" : : "i" (PAL_imb) : "memory")
 
 #define draina() \
 __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_draina) : "memory")
 
-#define getipl(__old_ipl) \
-__asm__ __volatile__( \
-	"call_pal 54\n\t" \
-	"bis $0,$0,%0" \
-	: "=r" (__old_ipl) \
-	: : "$0", "$1", "$16", "$22", "$23", "$24", "$25")
+#define call_pal1(palno,arg) \
+({ \
+	register unsigned long __r0 __asm__("$0"); \
+	register unsigned long __r16 __asm__("$16"); __r16 = arg; \
+	__asm__ __volatile__( \
+		"call_pal %3" \
+		:"=r" (__r0),"=r" (__r16) \
+		:"1" (__r16),"i" (palno) \
+		:"$1", "$22", "$23", "$24", "$25", "memory"); \
+	__r0; \
+})
 
-#define setipl(__new_ipl) \
-__asm__ __volatile__( \
-	"bis %0,%0,$16\n\t" \
-	"call_pal 53" \
-	: : "r" (__new_ipl) \
-	: "$0", "$1", "$16", "$22", "$23", "$24", "$25", "memory")
+#define getipl() \
+({ \
+	register unsigned long r0 __asm__("$0"); \
+	__asm__ __volatile__( \
+		"call_pal %1" \
+		:"=r" (r0) \
+		:"i" (PAL_rdps) \
+		:"$1", "$16", "$22", "$23", "$24", "$25", "memory"); \
+	r0; \
+})
 
-#define swpipl(__old_ipl,__new_ipl) \
-__asm__ __volatile__( \
-	"bis %1,%1,$16\n\t" \
-	"call_pal 53\n\t" \
-	"bis $0,$0,%0" \
-	: "=r" (__old_ipl) \
-	: "r" (__new_ipl) \
-	: "$0", "$1", "$16", "$22", "$23", "$24", "$25", "memory")
+#define setipl(ipl) \
+do { \
+	register unsigned long __r16 __asm__("$16") = (ipl); \
+	__asm__ __volatile__( \
+		"call_pal %2" \
+		:"=r" (__r16) \
+		:"0" (__r16),"i" (PAL_swpipl) \
+		:"$0", "$1", "$22", "$23", "$24", "$25", "memory"); \
+} while (0)
+
+#define swpipl(ipl) \
+({ \
+	register unsigned long __r0 __asm__("$0"); \
+	register unsigned long __r16 __asm__("$16") = (ipl); \
+	__asm__ __volatile__( \
+		"call_pal %3" \
+		:"=r" (__r0),"=r" (__r16) \
+		:"1" (__r16),"i" (PAL_swpipl) \
+		:"$1", "$22", "$23", "$24", "$25", "memory"); \
+	__r0; \
+})
 
 #define __cli()			setipl(7)
 #define __sti()			setipl(0)
-#define __save_flags(flags)	getipl(flags)
+#define __save_flags(flags)	do { (flags) = getipl(); } while (0)
 #define __restore_flags(flags)	setipl(flags)
 
 #define cli()			setipl(7)
 #define sti()			setipl(0)
-#define save_flags(flags)	getipl(flags)
+#define save_flags(flags)	do { (flags) = getipl(); } while (0)
 #define restore_flags(flags)	setipl(flags)
 
 /*
  * TB routines..
  */
-extern void tbi(long type, ...);
+#define __tbi(nr,arg,arg1...) do { \
+	register unsigned long __r16 __asm__("$16") = (nr); \
+	register unsigned long __r17 __asm__("$17"); arg; \
+	__asm__ __volatile__( \
+		"call_pal %3" \
+		:"=r" (__r16),"=r" (__r17) \
+		:"0" (__r16),"i" (PAL_tbi) ,##arg1 \
+		:"$0", "$1", "$22", "$23", "$24", "$25"); \
+} while (0)
 
-#define tbisi(x)	tbi(1,(x))
-#define tbisd(x)	tbi(2,(x))
-#define tbis(x)		tbi(3,(x))
-#define tbiap()		tbi(-1)
-#define tbia()		tbi(-2)
+#define tbi(x,y)	__tbi(x,__r17=(y),"1" (__r17))
+#define tbisi(x)	__tbi(1,__r17=(x),"1" (__r17))
+#define tbisd(x)	__tbi(2,__r17=(x),"1" (__r17))
+#define tbis(x)		__tbi(3,__r17=(x),"1" (__r17))
+#define tbiap()		__tbi(-1, /* no second argument */)
+#define tbia()		__tbi(-2, /* no second argument */)
 
 /*
  * Give prototypes to shut up gcc.

@@ -2072,6 +2072,20 @@ CONFIG_SCSI_NCR53C406A
   and read Documentation/modules.txt. The module will be called
   NCR53c406.o.
 
+Tekram DC390W/U/F (T) SCSI support
+CONFIG_SCSI_DC390W
+  This driver supports the Tekram DC390W/U/F (T) PCI SCSI host adapters with
+  the NCR/Symbios 53c825/875 chips. If you have a DC390 (T) adaptor with the 
+  Am53C974A chip use the DC390(T) driver.
+
+Tekram DC390(T) (AMD PCscsi) SCSI support
+CONFIG_SCSI_DC390T
+  This driver supports the Tekram DC390(T) PCI SCSI Hostadapter with
+  the Am53C974A chip, and perhaps other cards using the same chip.
+  
+  This driver does _not_ support the DC390W/U/F adaptor with the 
+  NCR/Symbios chips.
+
 AM53/79C974 PCI SCSI support
 CONFIG_SCSI_AM53C974
   This is support for the AM53/79C974 SCSI host adapters. Please read

@@ -503,7 +503,7 @@ const unsigned long bt485_cursor_source[64] __initdata = {
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 };
 
-const unsigned int bt463_cursor_source[256] = __initdata {
+const unsigned int bt463_cursor_source[256] __initdata = {
   0xffff0000, 0x00000000, 0x00000000, 0x00000000,
   0xffff0000, 0x00000000, 0x00000000, 0x00000000,
   0xffff0000, 0x00000000, 0x00000000, 0x00000000,

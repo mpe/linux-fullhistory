@@ -65,22 +65,6 @@ rdusp:
 	.end rdusp
 
 	.align 3
-	.globl	tbi
-	.ent	tbi
-tbi:
-	call_pal PAL_tbi
-	ret	($26)
-	.end tbi
-
-	.align 3
-	.globl	imb
-	.ent	imb
-imb:
-	call_pal PAL_imb
-	ret	($26)
-	.end imb
-
-	.align 3
 	.globl	rdmces
 	.ent	rdmces
 rdmces:

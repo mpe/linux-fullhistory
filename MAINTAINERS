@@ -336,12 +336,6 @@ L:	linux-kernel@vger.rutgers.edu
 W:	http://www-plateau.cs.berkeley.edu/people/chaffee
 S:	Maintained
 
-DIGIBOARD DRIVER:
-P:	Christoph Lameter
-M:	clameter@fuller.edu
-L:	digiboard@list.fuller.edu
-S:	Maintained
-
 DIGI INTL. EPCA DRIVER:
 P:      Daniel Taylor
 M:      support@dgii.com

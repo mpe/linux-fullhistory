@@ -240,8 +240,24 @@ out:
 	unlock_kernel();
 }
 
+void enable_NMI(void)
+{
+	unsigned char reason;
+	unsigned long i;
+
+	reason = inb(0x61);
+	printk("NMI reason = %02x\n", reason);
+	reason |= 8;
+	outb(reason, 0x61);
+	i = 400000000;
+	while (--i) ;
+	reason &= ~8;
+	outb(reason, 0x61);
+}
+
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
+	show_registers(regs);
 #ifdef CONFIG_SMP_NMI_INVAL
 	smp_flush_tlb_rcv();
 #else
@@ -251,6 +267,7 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 	printk("power saving mode enabled.\n");
 #endif	
 #endif
+	enable_NMI();
 }
 
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)

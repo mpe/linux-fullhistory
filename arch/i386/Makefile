@@ -85,7 +85,7 @@ bzdisk: vmlinux
 	@$(MAKEBOOT) BOOTIMAGE=bzImage zdisk
 
 install: vmlinux
-	@$(MAKEBOOT) install
+	@$(MAKEBOOT) BOOTIMAGE=zImage install
 
 archclean:
 	@$(MAKEBOOT) clean

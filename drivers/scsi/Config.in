@@ -82,10 +82,13 @@ if [ "$CONFIG_PNP_PARPORT" != "n" ]; then
 fi
 dep_tristate 'PAS16 SCSI support' CONFIG_SCSI_PAS16 $CONFIG_SCSI
 dep_tristate 'Qlogic FAS SCSI support' CONFIG_SCSI_QLOGIC_FAS $CONFIG_SCSI
-if [ "$CONFIG_PCI" = "y" ]; then
+if [ "$CONFIG_PCI" = "y"]; then
   dep_tristate 'Qlogic ISP SCSI support' CONFIG_SCSI_QLOGIC_ISP $CONFIG_SCSI
 fi
 dep_tristate 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE $CONFIG_SCSI
+if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_AM53C974" != "y"]; then
+  dep_tristate 'Tekram DC-390(T) (AMD PCscsi) SCSI support' CONFIG_SCSI_DC390T $CONFIG_SCSI
+fi
 dep_tristate 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128 $CONFIG_SCSI
 dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F $CONFIG_SCSI
   if [ "$CONFIG_SCSI_U14_34F" != "n" ]; then

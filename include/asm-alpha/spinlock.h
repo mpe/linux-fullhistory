@@ -15,7 +15,7 @@ typedef struct { int dummy; } spinlock_t;
 #define spin_lock_irq(lock)			setipl(7)
 #define spin_unlock_irq(lock)			setipl(0)
 
-#define spin_lock_irqsave(lock, flags)		swpipl(flags,7)
+#define spin_lock_irqsave(lock, flags)		do { (flags) = swpipl(7); } while (0)
 #define spin_unlock_irqrestore(lock, flags)	setipl(flags)
 
 /*
@@ -40,9 +40,9 @@ typedef struct { int dummy; } rwlock_t;
 #define write_lock_irq(lock)	cli()
 #define write_unlock_irq(lock)	sti()
 
-#define read_lock_irqsave(lock, flags)		swpipl(flags,7)
+#define read_lock_irqsave(lock, flags)		do { (flags) = swpipl(7); } while (0)
 #define read_unlock_irqrestore(lock, flags)	setipl(flags)
-#define write_lock_irqsave(lock, flags)		swpipl(flags,7)
+#define write_lock_irqsave(lock, flags)		do { (flags) = swpipl(7); } while (0)
 #define write_unlock_irqrestore(lock, flags)	setipl(flags)
 
 #else
@@ -117,7 +117,7 @@ l1:
 	do { spin_unlock(lock); __sti(); } while (0)
 
 #define spin_lock_irqsave(lock, flags) \
-	do { swpipl(flags,7); spin_lock(lock); } while (0)
+	do { flags = swpipl(7); spin_lock(lock); } while (0)
 
 #define spin_unlock_irqrestore(lock, flags) \
 	do { spin_unlock(lock); setipl(flags); } while (0)

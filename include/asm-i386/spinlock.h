@@ -80,7 +80,7 @@ __asm__ __volatile__( \
 	"\n1:\t" \
 	"lock ; btsl $0,%0\n\t" \
 	"jc 2f\n" \
-	".section .text.lock\n" \
+	".section .text.lock,\"ax\"\n" \
 	"2:\t" \
 	"testb $1,%0\n\t" \
 	"jne 2b\n\t" \
@@ -134,7 +134,7 @@ typedef struct {
 	asm volatile("\n1:\t" \
 		     "lock ; incl %0\n\t" \
 		     "js 2f\n" \
-		     ".section .text.lock\n" \
+		     ".section .text.lock,\"ax\"\n" \
 		     "2:\tlock ; decl %0\n" \
 		     "3:\tcmpl $0,%0\n\t" \
 		     "js 3b\n\t" \
@@ -153,7 +153,7 @@ typedef struct {
 		     "testl $0x7fffffff,%0\n\t" \
 		     "jne 4f\n" \
 		     "2:\n" \
-		     ".section .text.lock\n" \
+		     ".section .text.lock,\"ax\"\n" \
 		     "3:\ttestl $-1,%0\n\t" \
 		     "js 3b\n\t" \
 		     "lock ; btsl $31,%0\n\t" \

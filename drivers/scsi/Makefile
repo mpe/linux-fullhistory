@@ -185,6 +185,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_DC390T),y)
+L_OBJS += tmscsim.o
+else
+  ifeq ($(CONFIG_SCSI_DC390T),m)
+  M_OBJS += tmscsim.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_AM53C974),y)
 L_OBJS += AM53C974.o
 else

@@ -5285,11 +5285,11 @@ static struct file_operations sbpcd_fops =
  * bytes above).
  *
  */
-__initfunc(
 #if (SBPCD_ISSUE-1)
-static
+__initfunc(static void sbpcd_setup(const char *s, int *p))
+#else
+__initfunc(void sbpcd_setup(const char *s, int *p))
 #endif
-void sbpcd_setup(const char *s, int *p))
 {
 	setup_done++;
 	msg(DBG_INI,"sbpcd_setup called with %04X,%s\n",p[1], s);
