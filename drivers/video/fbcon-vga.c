@@ -178,7 +178,7 @@ void fbcon_vga_revc(struct display *p, int x, int y)
 
 struct display_switch fbcon_vga = {
     fbcon_vga_setup, fbcon_vga_bmove, fbcon_vga_clear, fbcon_vga_putc,
-    fbcon_vga_putcs, fbcon_vga_revc, NULL, NULL, FONTWIDTH(8)
+    fbcon_vga_putcs, fbcon_vga_revc, NULL, NULL, NULL, FONTWIDTH(8)
 };
 
 

@@ -34,12 +34,41 @@ ifeq ($(CONFIG_PROM_CONSOLE),y)
 endif
 
 ifeq ($(CONFIG_FB),y)
-  L_OBJS += fonts.o font_8x8.o font_8x16.o pearl_8x8.o font_6x11.o font_sun8x16.o font_sun12x22.o
+  L_OBJS += fonts.o
   OX_OBJS += fbcon.o fbcmap.o
 # fbgen is not compiled by default since nobody uses it yet
+  ifeq ($(CONFIG_FONT_8x8),y)
+    L_OBJS += font_8x8.o
+  endif
+  ifeq ($(CONFIG_FONT_8x16),y)
+    L_OBJS += font_8x16.o
+  endif
+  ifeq ($(CONFIG_FONT_SUN8x16),y)
+    L_OBJS += font_sun8x16.o
+  endif
+  ifeq ($(CONFIG_FONT_SUN12x22),y)
+    L_OBJS += font_sun12x22.o
+  endif
+  ifeq ($(CONFIG_FONT_6x11),y)
+    L_OBJS += font_6x11.o
+  endif
+  ifeq ($(CONFIG_FONT_ACORN_8x8),y)
+    L_OBJS += font_acorn_8x8.o
+  endif
+  ifeq ($(CONFIG_FONT_PEARL_8x8),y)
+    L_OBJS += font_pearl_8x8.o
+  endif
 endif
 
 # Frame Buffer Devices
+
+ifeq ($(CONFIG_FB_ACORN),y)
+L_OBJS += acornfb.o
+else
+  ifeq ($(CONFIG_FB_ACORN),m)
+  M_OBJS += acornfb.o
+  endif
+endif
 
 ifeq ($(CONFIG_FB_AMIGA),y)
 L_OBJS += amifb.o

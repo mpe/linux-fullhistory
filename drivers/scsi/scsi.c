@@ -397,7 +397,7 @@ static void scan_scsis_done (Scsi_Cmnd * SCpnt)
 	up(SCpnt->request.sem);
 }
 
-void scsi_logging_setup(char *str, int *ints) 
+__initfunc(void scsi_logging_setup(char *str, int *ints))
 {
     if (ints[0] != 1) {
 	printk("scsi_logging_setup : usage scsi_logging_level=n "
@@ -413,7 +413,7 @@ static int max_scsi_luns = 8;
 static int max_scsi_luns = 1;
 #endif
 
-void scsi_luns_setup(char *str, int *ints) 
+__initfunc(void scsi_luns_setup(char *str, int *ints))
 {
     if (ints[0] != 1)
 	printk("scsi_luns_setup : usage max_scsi_luns=n (n should be between 1 and 8)\n");

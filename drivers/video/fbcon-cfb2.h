@@ -2,6 +2,16 @@
      *  2 bpp packed pixel (cfb2)
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_CFB2) || defined(CONFIG_FBCON_CFB2_MODULE)
+#define FBCON_HAS_CFB2
+#endif
+#else
+#if defined(CONFIG_FBCON_CFB2)
+#define FBCON_HAS_CFB2
+#endif
+#endif
+
 extern struct display_switch fbcon_cfb2;
 extern void fbcon_cfb2_setup(struct display *p);
 extern void fbcon_cfb2_bmove(struct display *p, int sy, int sx, int dy, int dx,

@@ -31,3 +31,10 @@ depends on the configuration of your VGA).
    The third parameter consists of character attribute bits you want to set.
 Bit setting takes place before bit toggling, so you can simply clear a bit by 
 including it in both the set mask and the toggle mask.
+
+Examples:
+=========
+
+To get normal blinking underline, use: echo -e '\033[?2c'
+To get blinking block, use:            echo -e '\033[?6c'
+To get red non-blinking block, use:    echo -e '\033[?17;0;64c'

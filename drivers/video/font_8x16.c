@@ -4,14 +4,11 @@
 /*                                            */
 /**********************************************/
 
+#include "font.h"
+
 #define FONTDATAMAX 4096
 
-char fontname_8x16[] = "VGA8x16";
-
-int  fontheight_8x16 = 16;
-int  fontwidth_8x16  = 8;
-
-unsigned char fontdata_8x16[FONTDATAMAX] = {
+static unsigned char fontdata_8x16[FONTDATAMAX] = {
 
 	/* 0 0x00 '^@' */
 	0x00, /* 00000000 */
@@ -4623,3 +4620,12 @@ unsigned char fontdata_8x16[FONTDATAMAX] = {
 
 };
 
+
+struct fbcon_font_desc font_vga_8x16 = {
+	VGA8x16_IDX,
+	"VGA8x16",
+	8,
+	16,
+	fontdata_8x16,
+	0
+};

@@ -2,6 +2,16 @@
      *  Amiga bitplanes (afb)
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_AFB) || defined(CONFIG_FBCON_AFB_MODULE)
+#define FBCON_HAS_AFB
+#endif
+#else
+#if defined(CONFIG_FBCON_AFB)
+#define FBCON_HAS_AFB
+#endif
+#endif
+
 extern struct display_switch fbcon_afb;
 extern void fbcon_afb_setup(struct display *p);
 extern void fbcon_afb_bmove(struct display *p, int sy, int sx, int dy, int dx,

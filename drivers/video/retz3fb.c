@@ -290,7 +290,7 @@ static void z3fb_blank(int blank, struct fb_info *info);
  *    Text console acceleration
  */
 
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 static struct display_switch fbcon_retz3_8;
 #endif
 
@@ -1280,7 +1280,7 @@ static void retz3fb_set_disp(int con, struct fb_info *info)
 	display->can_soft_blank = 1;
 	display->inverse = z3fb_inverse;
 	switch (display->var.bits_per_pixel) {
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 	case 8:
 		if (display->var.accel_flags & FB_ACCELF_TEXT) {
 		    display->dispsw = &fbcon_retz3_8;
@@ -1289,7 +1289,7 @@ static void retz3fb_set_disp(int con, struct fb_info *info)
 		    display->dispsw = &fbcon_cfb8;
 		break;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 	case 16:
 		display->dispsw = &fbcon_cfb16;
 		break;
@@ -1351,7 +1351,7 @@ static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
 			display->can_soft_blank = 1;
 			display->inverse = z3fb_inverse;
 			switch (display->var.bits_per_pixel) {
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 			case 8:
 				if (var->accel_flags & FB_ACCELF_TEXT) {
 					display->dispsw = &fbcon_retz3_8;
@@ -1360,7 +1360,7 @@ static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
 					display->dispsw = &fbcon_cfb8;
 				break;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 			case 16:
 				display->dispsw = &fbcon_cfb16;
 				break;
@@ -1629,7 +1629,7 @@ void cleanup_module(void)
  *  Text console acceleration
  */
 
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 static void fbcon_retz3_8_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	                int height, int width)
 {
@@ -1676,7 +1676,7 @@ static void fbcon_retz3_8_clear(struct vc_data *conp, struct display *p, int
 
 static struct display_switch fbcon_retz3_8 = {
     fbcon_cfb8_setup, fbcon_retz3_8_bmove, fbcon_retz3_8_clear,
-    fbcon_cfb8_putc, fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL,
-    NULL, FONTWIDTH(8)
+    fbcon_cfb8_putc, fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL, NULL,
+    fbcon_cfb8_clear_margins, FONTWIDTH(8)
 };
 #endif

@@ -13,6 +13,7 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 
 static struct file_operations proc_base_operations = {
 	NULL,			/* lseek - default */
@@ -120,7 +121,7 @@ static struct proc_dir_entry proc_pid_exe = {
 };
 static struct proc_dir_entry proc_pid_fd = {
 	PROC_PID_FD, 2, "fd",
-	S_IFDIR | S_IRUSR | S_IXUSR, 1, 0, 0,
+	S_IFDIR | S_IRUSR | S_IXUSR, 2, 0, 0,
 	0, &proc_fd_inode_operations,
 	NULL, proc_pid_fill_inode,
 };
@@ -173,7 +174,7 @@ static struct proc_dir_entry proc_pid_cpu = {
 };
 #endif
 
-void proc_base_init(void)
+__initfunc(void proc_base_init(void))
 {
 #if CONFIG_AP1000
 	proc_register(&proc_pid, &proc_pid_ringbuf);

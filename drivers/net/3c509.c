@@ -775,10 +775,6 @@ MODULE_PARM(debug,"i");
 MODULE_PARM(irq,"1-8i");
 MODULE_PARM(xcvr,"1-8i");
 
-MODULE_PARM(debug,"i");
-MODULE_PARM(irq,"1-8i");
-MODULE_PARM(xcvr,"1-8i");
-
 int
 init_module(void)
 {

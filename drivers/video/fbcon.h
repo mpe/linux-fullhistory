@@ -31,6 +31,7 @@ struct display_switch {
     void (*revc)(struct display *p, int xx, int yy);
     void (*cursor)(struct display *p, int mode, int xx, int yy);
     int  (*set_font)(struct display *p, int width, int height);
+    void (*clear_margins)(struct vc_data *conp, struct display *p);
     unsigned int fontwidthmask;      /* 1 at (1 << (width - 1)) if width is supported */
 }; 
 

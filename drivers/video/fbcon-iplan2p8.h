@@ -2,6 +2,16 @@
      *  Atari interleaved bitplanes (8 planes) (iplan2p8)
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_IPLAN2P8) || defined(CONFIG_FBCON_IPLAN2P8_MODULE)
+#define FBCON_HAS_IPLAN2P8
+#endif
+#else
+#if defined(CONFIG_FBCON_IPLAN2P8)
+#define FBCON_HAS_IPLAN2P8
+#endif
+#endif
+
 extern struct display_switch fbcon_iplan2p8;
 extern void fbcon_iplan2p8_setup(struct display *p);
 extern void fbcon_iplan2p8_bmove(struct display *p, int sy, int sx, int dy,

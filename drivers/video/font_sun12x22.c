@@ -1,11 +1,8 @@
+#include "font.h"
+
 #define FONTDATAMAX 5632
 
-char fontname_sun12x22[] = "SUN12x22";
-
-int  fontheight_sun12x22 = 22;
-int  fontwidth_sun12x22  = 12;
-
-unsigned short fontdata_sun12x22[FONTDATAMAX] = {
+static unsigned short fontdata_sun12x22[FONTDATAMAX] = {
 
 	/* 0 0x00 '^@' */
 	0x0000, /* 000000000000 */
@@ -6208,3 +6205,16 @@ unsigned short fontdata_sun12x22[FONTDATAMAX] = {
 
 };
 
+
+struct fbcon_font_desc font_sun_12x22 = {
+	SUN12x22_IDX,
+	"SUN12x22",
+	12,
+	22,
+	fontdata_sun12x22,
+#ifdef __sparc__
+	5
+#else
+	-1
+#endif
+};

@@ -2,6 +2,16 @@
      *  16 bpp packed pixel (cfb16)
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_CFB16) || defined(CONFIG_FBCON_CFB16_MODULE)
+#define FBCON_HAS_CFB16
+#endif
+#else
+#if defined(CONFIG_FBCON_CFB16)
+#define FBCON_HAS_CFB16
+#endif
+#endif
+
 extern struct display_switch fbcon_cfb16;
 extern u16 fbcon_cfb16_cmap[16];
 extern void fbcon_cfb16_setup(struct display *p);

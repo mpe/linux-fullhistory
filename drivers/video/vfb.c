@@ -260,37 +260,37 @@ static int vfb_set_var(struct fb_var_screeninfo *var, int con,
 	    display->can_soft_blank = 1;
 	    display->inverse = 0;
 	    switch (var->bits_per_pixel) {
-#ifdef CONFIG_FBCON_MFB
+#ifdef FBCON_HAS_MFB
 		case 1:
 		    display->dispsw = &fbcon_mfb;
 		    break;
 #endif
-#ifdef CONFIG_FBCON_CFB2
+#ifdef FBCON_HAS_CFB2
 		case 2:
 		    display->dispsw = &fbcon_cfb2;
 		    break;
 #endif
-#ifdef CONFIG_FBCON_CFB4
+#ifdef FBCON_HAS_CFB4
 		case 4:
 		    display->dispsw = &fbcon_cfb4;
 		    break;
 #endif
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 		case 8:
 		    display->dispsw = &fbcon_cfb8;
 		    break;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 		case 16:
 		    display->dispsw = &fbcon_cfb16;
 		    break;
 #endif
-#ifdef CONFIG_FBCON_CFB24
+#ifdef FBCON_HAS_CFB24
 		case 24:
 		    display->dispsw = &fbcon_cfb24;
 		    break;
 #endif
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
 		case 32:
 		    display->dispsw = &fbcon_cfb32;
 		    break;

@@ -32,6 +32,10 @@
 #include <linux/kbd_diacr.h>
 #include <linux/selection.h>
 
+#ifdef CONFIG_FB_COMPAT_XPMAC
+#include <asm/vc_ioctl.h>
+#endif /* CONFIG_FB_COMPAT_XPMAC */
+
 char vt_dont_switch = 0;
 extern struct tty_driver console_driver;
 
@@ -57,7 +61,6 @@ struct vt_struct *vt_cons[MAX_NR_CONSOLES];
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);
 #endif
 
-unsigned int video_mode_512ch;
 unsigned int video_font_height;
 unsigned int default_font_height;
 unsigned int video_scan_lines;
@@ -215,9 +218,12 @@ do_kdsk_ioctl(int cmd, struct kbentry *user_kbe, int perm, struct kbd_struct *kb
 		    if (kbd->kbdmode != VC_UNICODE)
 				return -EINVAL;
 
+		/* ++Geert: non-PC keyboards may generate keycode zero */
+#if !defined(__mc68000__) && !defined(__powerpc__)
 		/* assignment to entry 0 only tests validity of args */
 		if (!i)
 			break;
+#endif
 
 		if (!(key_map = key_maps[s])) {
 			int j;
@@ -370,26 +376,37 @@ static inline int
 do_fontx_ioctl(int cmd, struct consolefontdesc *user_cfd, int perm)
 {
 	struct consolefontdesc cfdarg;
+	struct console_font_op op;
 	int i;
 
 	if (copy_from_user(&cfdarg, user_cfd, sizeof(struct consolefontdesc))) 
 		return -EFAULT;
-	if (vt_cons[fg_console]->vc_mode != KD_TEXT)
-		return -EINVAL;
  	
 	switch (cmd) {
 	case PIO_FONTX:
 		if (!perm)
 			return -EPERM;
-		return con_set_font(cfdarg.chardata, 8, cfdarg.charheight, cfdarg.charcount);
+		op.op = KD_FONT_OP_SET;
+		op.flags = 0;
+		op.width = 8;
+		op.height = cfdarg.charheight;
+		op.charcount = cfdarg.charcount;
+		op.data = cfdarg.chardata;
+		return con_font_op(fg_console, &op);
 	case GIO_FONTX: {
-		int w, h;
-		int c= cfdarg.charcount;
 		if (!cfdarg.chardata)
 			return 0;
-		i = con_get_font(cfdarg.chardata, &w, &h, &c);
+		op.op = KD_FONT_OP_GET;
+		op.flags = 0;
+		op.width = 8;
+		op.height = cfdarg.charheight;
+		op.charcount = cfdarg.charcount;
+		op.data = cfdarg.chardata;
+		i = con_font_op(fg_console, &op);
 		if (i)
 			return i;
+		cfdarg.charheight = op.height;
+		cfdarg.charcount = op.charcount;
 		if (copy_to_user(user_cfd, &cfdarg, sizeof(struct consolefontdesc)))
 			return -EFAULT;
 		return 0;
@@ -929,14 +946,28 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
   	}
 
-	case PIO_FONT:
+	case PIO_FONT: {
+		struct console_font_op op;
 		if (!perm)
 			return -EPERM;
-		return con_set_font((char *)arg, 8, 0, 256);
+		op.op = KD_FONT_OP_SET;
+		op.flags = KD_FONT_FLAG_DONT_RECALC;	/* Compatibility */
+		op.width = 8;
+		op.height = 0;
+		op.charcount = 256;
+		op.data = (char *) arg;
+		return con_font_op(fg_console, &op);
+	}
 
 	case GIO_FONT: {
-		int w, h, s=256;
-		return con_get_font((char *)arg, &w, &h, &s);
+		struct console_font_op op;
+		op.op = KD_FONT_OP_GET;
+		op.flags = 0;
+		op.width = 8;
+		op.height = 32;
+		op.charcount = 256;
+		op.data = (char *) arg;
+		return con_font_op(fg_console, &op);
 	}
 
 	case PIO_CMAP:
@@ -961,12 +992,29 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		   font is not saved. */
 		return -ENOSYS;
 #else
-
-		i = con_set_font(NULL, 0, 0, 0);	/* Set font to default */
+		{
+		struct console_font_op op;
+		op.op = KD_FONT_SET_DEFAULT;
+		op.data = NULL;
+		i = con_font_op(fg_console, &op);
 		if (i) return i;
 		con_set_default_unimap();
 		return 0;
+		}
 #endif
+	}
+
+	case KDFONTOP: {
+		struct console_font_op op;
+		if (copy_from_user(&op, (void *) arg, sizeof(op)))
+			return -EFAULT;
+		if (!perm && op.op != KD_FONT_OP_GET)
+			return -EPERM;
+		i = con_font_op(console, &op);
+		if (i) return i;
+		if (copy_to_user((void *) arg, &op, sizeof(op)))
+			return -EFAULT;
+		return 0;
 	}
 
 	case PIO_SCRNMAP:
@@ -1009,6 +1057,76 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		   return -EPERM;
 		vt_dont_switch = 0;
 		return 0;
+#ifdef CONFIG_FB_COMPAT_XPMAC
+	case VC_GETMODE:
+		{
+			struct vc_mode mode;
+
+			i = verify_area(VERIFY_WRITE, (void *) arg,
+					sizeof(struct vc_mode));
+			if (i == 0)
+				i = console_getmode(&mode);
+			if (i)
+				return i;
+			if (copy_to_user((void *) arg, &mode, sizeof(mode)))
+				return -EFAULT;
+			return 0;
+		}
+	case VC_SETMODE:
+	case VC_INQMODE:
+		{
+			struct vc_mode mode;
+
+			if (!perm)
+				return -EPERM;
+			i = verify_area(VERIFY_READ, (void *) arg,
+					sizeof(struct vc_mode));
+			if (i)
+				return i;
+			if (copy_from_user(&mode, (void *) arg, sizeof(mode)))
+				return -EFAULT;
+			return console_setmode(&mode, cmd == VC_SETMODE);
+		}
+	case VC_SETCMAP:
+		{
+			unsigned char cmap[3][256], *p;
+			int n_entries, cmap_size, i, j;
+
+			if (!perm)
+				return -EPERM;
+			if (arg == (unsigned long) VC_POWERMODE_INQUIRY
+			    || arg <= VESA_POWERDOWN) {
+				/* compatibility hack: VC_POWERMODE
+				   was changed from 0x766a to 0x766c */
+				return console_powermode((int) arg);
+			}
+			i = verify_area(VERIFY_READ, (void *) arg,
+					sizeof(int));
+			if (i)
+				return i;
+			if (get_user(cmap_size, (int *) arg))
+				return -EFAULT;
+			if (cmap_size % 3)
+				return -EINVAL;
+			n_entries = cmap_size / 3;
+			if ((unsigned) n_entries > 256)
+				return -EINVAL;
+			p = (unsigned char *) (arg + sizeof(int));
+			for (j = 0; j < n_entries; ++j)
+				for (i = 0; i < 3; ++i)
+					if (get_user(cmap[i][j], p++))
+						return -EFAULT;
+			return console_setcmap(n_entries, cmap[0],
+					       cmap[1], cmap[2]);
+		}
+	case VC_GETCMAP:
+		/* not implemented yet */
+		return -ENOIOCTLCMD;
+	case VC_POWERMODE:
+		if (!perm)
+			return -EPERM;
+		return console_powermode((int) arg);
+#endif /* CONFIG_FB_COMPAT_XPMAC */
 	default:
 		return -ENOIOCTLCMD;
 	}

@@ -132,8 +132,26 @@ struct kbkeycode {
 
 #define KDSIGACCEPT	0x4B4E	/* accept kbd generated signals */
 
+#define KDFONTOP	0x4B72	/* font operations */
+
+struct console_font_op {
+	unsigned int op;	/* operation code KD_FONT_OP_* */
+	unsigned int flags;	/* KD_FONT_FLAG_* */
+	unsigned int width, height;	/* font size */
+	unsigned int charcount;
+	unsigned char *data;	/* font data with height fixed to 32 */
+};
+
+#define KD_FONT_OP_SET		0	/* Set font */
+#define KD_FONT_OP_GET		1	/* Get font */
+#define KD_FONT_OP_SET_DEFAULT	2	/* Set font to default, data points to name / NULL */
+#define KD_FONT_OP_COPY		3	/* Copy from another console */
+
+#define KD_FONT_FLAG_GLOBAL		1	/* Change on _all_ consoles */
+#define KD_FONT_FLAG_DONT_RECALC 	2	/* Don't recalculate hw charcell size [compat] */
+
 /* note: 0x4B00-0x4B4E all have had a value at some time;
    don't reuse for the time being */
-/* note: 0x4B60-0x4B6D, 0x4B70, 0x4B71 used above */
+/* note: 0x4B60-0x4B6D, 0x4B70-0x4B72 used above */
 
 #endif /* _LINUX_KD_H */

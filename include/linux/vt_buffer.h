@@ -26,7 +26,9 @@
 #define scr_writew(val, addr) (*(addr) = (val))
 #define scr_readw(addr) (*(addr))
 #define scr_memcpyw(d, s, c) memcpy(d, s, c)
+#define scr_memmovew(d, s, c) memmove(d, s, c)
 #define VT_BUF_HAVE_MEMCPYW
+#define VT_BUF_HAVE_MEMMOVEW
 #define scr_memcpyw_from(d, s, c) memcpy(d, s, c)
 #define scr_memcpyw_to(d, s, c) memcpy(d, s, c)
 #define VT_BUF_HAVE_MEMCPYF
@@ -50,6 +52,21 @@ extern inline void scr_memcpyw(u16 *d, u16 *s, unsigned int count)
 }
 #endif
 
+#ifndef VT_BUF_HAVE_MEMMOVEW
+extern inline void scr_memmovew(u16 *d, u16 *s, unsigned int count)
+{
+	if (d < s)
+		scr_memcpyw(d, s, count);
+	else {
+		count /= 2;
+		d += count;
+		s += count;
+		while (count--)
+			scr_writew(scr_readw(--s), --d);
+	}
+}
+#endif
+
 #ifndef VT_BUF_HAVE_MEMCPYF
 extern inline void scr_memcpyw_from(u16 *d, u16 *s, unsigned int count)
 {
@@ -65,13 +82,5 @@ extern inline void scr_memcpyw_to(u16 *d, u16 *s, unsigned int count)
 		scr_writew(*s++, d++);
 }
 #endif
-
-#define reverse_video_char(a)	(((a) & 0x88) | ((((a) >> 4) | ((a) << 4)) & 0x77))
-#define reverse_video_short(a)	(((a) & 0x88ff) | \
-	(((a) & 0x7000) >> 4) | (((a) & 0x0700) << 4))
-/* this latter line used to have masks 0xf000 and 0x0f00, but selection
-   requires a self-inverse operation; moreover, the old version looks wrong */
-#define reverse_video_short_mono(a)	((a) ^ 0x800)
-#define complement_video_short(a)	((a) ^ (can_do_color ? 0x7700 : 0x800))
 
 #endif

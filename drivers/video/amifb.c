@@ -1486,17 +1486,17 @@ static int amifb_set_var(struct fb_var_screeninfo *var, int con,
 			display->can_soft_blank = 1;
 			display->inverse = amifb_inverse;
 			switch (fix.type) {
-#ifdef CONFIG_FBCON_ILBM
+#ifdef FBCON_HAS_ILBM
 			    case FB_TYPE_INTERLEAVED_PLANES:
 				display->dispsw = &fbcon_ilbm;
 				break;
 #endif
-#ifdef CONFIG_FBCON_AFB
+#ifdef FBCON_HAS_AFB
 			    case FB_TYPE_PLANES:
 				display->dispsw = &fbcon_afb;
 				break;
 #endif
-#ifdef CONFIG_FBCON_MFB
+#ifdef FBCON_HAS_MFB
 			    case FB_TYPE_PACKED_PIXELS:	/* depth == 1 */
 				display->dispsw = &fbcon_mfb;
 				break;
@@ -2129,7 +2129,7 @@ static int ami_encode_fix(struct fb_fix_screeninfo *fix,
 	fix->smem_start = (char *)videomemory;
 	fix->smem_len = videomemorysize;
 
-#ifdef CONFIG_FBCON_MFB
+#ifdef FBCON_HAS_MFB
 	if (par->bpp == 1) {
 		fix->type = FB_TYPE_PACKED_PIXELS;
 		fix->type_aux = 0;

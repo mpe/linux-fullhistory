@@ -111,7 +111,7 @@ static int s3triofbcon_setcmap(struct fb_cmap *cmap, int con);
      *  Text console acceleration
      */
 
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 static struct display_switch fbcon_trio8;
 #endif
 
@@ -568,7 +568,7 @@ __initfunc(void s3triofb_init_of(struct device_node *dp))
     disp.line_length = fb_fix.line_length;
     disp.can_soft_blank = 1;
     disp.inverse = 0;
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
     if (fb_var.accel_flags & FB_ACCELF_TEXT)
 	disp.dispsw = &fbcon_trio8;
     else
@@ -576,6 +576,7 @@ __initfunc(void s3triofb_init_of(struct device_node *dp))
 #else
     disp.dispsw = NULL;
 #endif
+    disp.scrollmode = fb_var.accel_flags & FB_ACCELF_TEXT ? 0 : SCROLL_YREDRAW;
 
     strcpy(fb_info.modename, "Trio64 ");
     strncat(fb_info.modename, dp->full_name, sizeof(fb_info.modename));
@@ -831,7 +832,7 @@ static void Trio_MoveCursor(u_short x, u_short y) {
      *  Text console acceleration
      */
 
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 static void fbcon_trio8_bmove(struct display *p, int sy, int sx, int dy,
 			      int dx, int height, int width)
 {
@@ -878,6 +879,7 @@ static void fbcon_trio8_revc(struct display *p, int xx, int yy)
 
 static struct display_switch fbcon_trio8 = {
    fbcon_cfb8_setup, fbcon_trio8_bmove, fbcon_trio8_clear, fbcon_trio8_putc,
-   fbcon_trio8_putcs, fbcon_trio8_revc, NULL, NULL, FONTWIDTH(8)
+   fbcon_trio8_putcs, fbcon_trio8_revc, NULL, NULL, fbcon_cfb8_clear_margins,
+   FONTWIDTH(8)
 };
 #endif

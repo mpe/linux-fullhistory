@@ -21,11 +21,6 @@
 extern struct vt_struct {
 	int vc_num;				/* The console number */
 	unsigned char	vc_mode;		/* KD_TEXT, ... */
-#if 0	/* FIXME: Does anyone use these? */
-	unsigned char	vc_kbdraw;
-	unsigned char	vc_kbde0;
-	unsigned char   vc_kbdleds;
-#endif
 	struct vt_mode	vt_mode;
 	int		vt_pid;
 	int		vt_newvt;
@@ -35,6 +30,8 @@ extern struct vt_struct {
 void (*kd_mksound)(unsigned int hz, unsigned int ticks);
 
 /* console.c */
+
+struct console_font_op;
 
 int vc_allocate(unsigned int console, int init);
 int vc_cons_allocated(unsigned int console);
@@ -50,12 +47,12 @@ void vesa_powerdown(void);
 void reset_palette(int currcons);
 void set_palette(void);
 void do_blank_screen(int nopowersave);
-int con_set_font(char * fontmap, int w, int h, int chars);
-int con_get_font(char * fontmap, int *w, int *h, int *chars);
+int con_font_op(int currcons, struct console_font_op *op);
 int con_set_cmap(unsigned char *cmap);
 int con_get_cmap(unsigned char *cmap);
 void scrollback(int);
 void scrollfront(int);
+void update_region(int currcons, unsigned long start, int count);
 
 struct tty_struct;
 int tioclinux(struct tty_struct *tty, unsigned long arg);
@@ -76,7 +73,6 @@ void con_set_default_unimap(void);
 
 /* vt.c */
 
-extern unsigned int video_mode_512ch;
 extern unsigned int video_font_height;
 extern unsigned int default_font_height;
 extern unsigned int video_scan_lines;

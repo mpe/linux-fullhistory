@@ -497,7 +497,7 @@ static int get_pixel_mac(struct display *p, int pixel_x, int pixel_y)
 
 struct display_switch fbcon_mac = {
     fbcon_mac_setup, fbcon_mac_bmove, fbcon_mac_clear, fbcon_mac_putc,
-    fbcon_mac_putcs, fbcon_mac_revc, NULL, NULL, FONTWIDTHRANGE(1,8)
+    fbcon_mac_putcs, fbcon_mac_revc, NULL, NULL, NULL, FONTWIDTHRANGE(1,8)
 };
 
 

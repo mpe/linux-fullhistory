@@ -41,6 +41,9 @@ struct sbus_mmap_map {
 	unsigned long size;
 };
 
+#define SBUS_MMAP_FBSIZE(n) (-n)
+#define SBUS_MMAP_EMPTY	0x80000000
+
 struct fb_info_sbusfb {
 	struct fb_info info;
 	struct fb_fix_screeninfo fix;
@@ -63,7 +66,6 @@ struct fb_info_sbusfb {
 	int x_margin;
 	int y_margin;
 	int vtconsole;
-	int lastconsole;
 	int consolecnt;
 	int emulations[4];
 	struct sbus_mmap_map *mmap_map;
@@ -81,6 +83,7 @@ struct fb_info_sbusfb {
 	void (*reset)(struct fb_info_sbusfb *);
 	void (*fill)(struct fb_info_sbusfb *, int, int, unsigned short *);
 	void (*switch_from_graph)(struct fb_info_sbusfb *);
+	void (*restore_palette)(struct fb_info_sbusfb *);
 };
 
 extern char *creatorfb_init(struct fb_info_sbusfb *);

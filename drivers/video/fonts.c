@@ -2,6 +2,7 @@
  * linux/drivers/video/fonts.c -- `Soft' font definitions
  *
  *    Created 1995 by Geert Uytterhoeven
+ *    Rewritten 1998 by Martin Mares <mj@ucw.cz>
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive
@@ -17,99 +18,61 @@
 #endif
 #include "font.h"
 
+#define NO_FONTS
 
-   /*
-    *    External Font Definitions
-    */
-
-/* VGA8x8 */
-extern char fontname_8x8[];
-extern int fontwidth_8x8, fontheight_8x8;
-extern u8 fontdata_8x8[];
-
-/* VGA8x16 */
-extern char fontname_8x16[];
-extern int fontwidth_8x16, fontheight_8x16;
-extern u8 fontdata_8x16[];
-
-/* PEARL8x8 */
-extern char fontname_pearl8x8[];
-extern int fontwidth_pearl8x8, fontheight_pearl8x8;
-extern u8 fontdata_pearl8x8[];
-
-/* VGA6x11 */
-extern char fontname_6x11[];
-extern int fontwidth_6x11, fontheight_6x11;
-extern u8 fontdata_6x11[];
-
-/* SUN8x16 */
-extern char fontname_sun8x16[];
-extern int fontwidth_sun8x16, fontheight_sun8x16;
-extern u8 fontdata_sun8x16[];
-
-/* SUN12x22 */
-extern char fontname_sun12x22[];
-extern int fontwidth_sun12x22, fontheight_sun12x22;
-extern u8 fontdata_sun12x22[];
-
-
-
-   /*
-    *    Font Descriptor Array
-    */
-
-struct softfontdesc {
-   int idx;
-   char *name;
-   int *width;
-   int *height;
-   u8 *data;
-};
-
-#define VGA8x8_IDX	0
-#define VGA8x16_IDX	1
-#define PEARL8x8_IDX	2
-#define VGA6x11_IDX	3
-#define SUN8x16_IDX	4
-#define SUN12x22_IDX	5
-
-static struct softfontdesc softfonts[] = {
-   { VGA8x8_IDX, fontname_8x8, &fontwidth_8x8, &fontheight_8x8, fontdata_8x8 },
-#ifndef __sparc__
-   { VGA8x16_IDX, fontname_8x16, &fontwidth_8x16, &fontheight_8x16, fontdata_8x16 },
-   { PEARL8x8_IDX, fontname_pearl8x8, &fontwidth_pearl8x8, &fontheight_pearl8x8,
-     fontdata_pearl8x8 },
-   { VGA6x11_IDX, fontname_6x11, &fontwidth_6x11, &fontheight_6x11, fontdata_6x11 },
-#else
-   { SUN8x16_IDX, fontname_sun8x16, &fontwidth_sun8x16, &fontheight_sun8x16, 
-     fontdata_sun8x16 },
-   { SUN12x22_IDX, fontname_sun12x22, &fontwidth_sun12x22, &fontheight_sun12x22, 
-     fontdata_sun12x22 },
+static struct fbcon_font_desc *fbcon_fonts[] = {
+#ifdef CONFIG_FONT_8x8
+#undef NO_FONTS
+    &font_vga_8x8,
+#endif
+#ifdef CONFIG_FONT_8x16
+#undef NO_FONTS
+    &font_vga_8x16,
+#endif
+#ifdef CONFIG_FONT_6x11
+#if !defined(CONFIG_MAC) && !defined(CONFIG_FB_SBUS)
+#undef NO_FONTS
+#endif
+    &font_vga_6x11,
+#endif
+#ifdef CONFIG_FONT_SUN8x16
+#undef NO_FONTS
+    &font_sun_8x16,
+#endif
+#ifdef CONFIG_FONT_SUN12x22
+#if !defined(CONFIG_FB_SBUS) && !defined(CONFIG_FBCON_CFB8)
+#undef NO_FONTS
+#endif
+    &font_sun_12x22,
+#endif
+#ifdef CONFIG_FONT_ACORN_8x8
+#undef NO_FONTS
+    &font_acorn_8x8,
+#endif
+#ifdef CONFIG_FONT_PEARL_8x8
+#undef NO_FONTS
+    &font_pearl_8x8,
 #endif
 };
 
-static unsigned int numsoftfonts = sizeof(softfonts)/sizeof(*softfonts);
+#define num_fonts (sizeof(fbcon_fonts)/sizeof(*fbcon_fonts))
 
+#ifdef NO_FONTS
+#error No fonts configured.
+#endif
 
    /*
     *    Find a font with a specific name
     */
 
-int findsoftfont(char *name, unsigned short *width, unsigned short *height, u8 *data[])
+struct fbcon_font_desc *fbcon_find_font(char *name)
 {
    unsigned int i;
 
-   for (i = 0; i < numsoftfonts; i++)
-      if (!strcmp(softfonts[i].name, name)) {
-         if (width)
-            *width = *softfonts[i].width;
-         if (height)
-            *height = *softfonts[i].height;
-         if (data)
-            *data = softfonts[i].data;
-			return(1);
-      }
-	return(0);
+   for (i = 0; i < num_fonts; i++)
+      if (!strcmp(fbcon_fonts[i]->name, name))
+	  return fbcon_fonts[i];
+   return NULL;
 }
 
 
@@ -117,44 +80,32 @@ int findsoftfont(char *name, unsigned short *width, unsigned short *height, u8 *
     *    Get the default font for a specific screen size
     */
 
-void getdefaultfont(int xres, int yres, char *name[], unsigned short *width, unsigned short *height,
-                    u8 *data[])
+struct fbcon_font_desc *fbcon_get_default_font(int xres, int yres)
 {
-    int i, j;
-    
-    if (yres < 400) {
-	i = VGA8x8_IDX;
-#ifdef CONFIG_AMIGA
-	if (MACH_IS_AMIGA)
-	    i = PEARL8x8_IDX;
-#endif
-    } else
-	i = VGA8x16_IDX;
+    int i, c, cc;
+    struct fbcon_font_desc *f, *g;
 
-#if defined(CONFIG_MAC)
-    if (MACH_IS_MAC) {
-#if 0  /* MSch: removed until 6x11 is debugged */
-        i = VGA6x11_IDX;   /* I added this for fun ... I like 6x11 */
+    g = NULL;
+    cc = -10000;
+    for(i=0; i<num_fonts; i++) {
+	f = fbcon_fonts[i];
+	c = f->pref;
+#ifdef __mc68000__
+#ifdef CONFIG_FONT_PEARL_8x8
+	if (MACH_IS_AMIGA && f->idx == PEARL8x8_IDX)
+	    c = 100;
 #endif
-       if (xres < 640)
-           i = VGA6x11_IDX;
+#ifdef CONFIG_FONT_6x11
+	if (MACH_IS_MAC && xres < 640 && f->idx == VGA6x11_IDX)
+	    c = 100;
+#endif
+#endif
+	if ((yres < 400) == (f->height <= 8))
+	    c += 1000;
+	if (c > cc) {
+	    cc = c;
+	    g = f;
+	}
     }
-#endif
-
-#ifdef __sparc__
-    i = SUN8x16_IDX;
-#endif
-
-    for (j = 0; j < numsoftfonts; j++)
-        if (softfonts[j].idx == i)
-            break;
-
-    if (name)
-	*name = softfonts[j].name;
-    if (width)
-	*width = *softfonts[j].width;
-    if (height)
-	*height = *softfonts[j].height;
-    if (data)
-	*data = softfonts[j].data;
+    return g;
 }

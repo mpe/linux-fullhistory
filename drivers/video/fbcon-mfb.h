@@ -2,6 +2,16 @@
      *  Monochrome (mfb)
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_MFB) || defined(CONFIG_FBCON_MFB_MODULE)
+#define FBCON_HAS_MFB
+#endif
+#else
+#if defined(CONFIG_FBCON_MFB)
+#define FBCON_HAS_MFB
+#endif
+#endif
+
 extern struct display_switch fbcon_mfb;
 extern void fbcon_mfb_setup(struct display *p);
 extern void fbcon_mfb_bmove(struct display *p, int sy, int sx, int dy, int dx,

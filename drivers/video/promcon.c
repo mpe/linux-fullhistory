@@ -1,10 +1,11 @@
-/* $Id: promcon.c,v 1.3 1998/07/13 01:06:19 ecd Exp $
+/* $Id: promcon.c,v 1.6 1998/07/19 12:49:26 mj Exp $
  * Console driver utilizing PROM sun terminal emulation
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
  * Copyright (C) 1998  Jakub Jelinek  (jj@ultra.linux.cz)
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -23,6 +24,14 @@
 static short pw = 80 - 1, ph = 34 - 1;
 static short px, py;
 
+#define PROMCON_COLOR 1
+
+#if PROMCON_COLOR
+#define inverted(s)	((((s) & 0x7700) == 0x0700) ? 0 : 1)
+#else
+#define inverted(s)	(((s) & 0x0800) ? 1 : 0)
+#endif
+
 static __inline__ void
 promcon_puts(char *buf, int cnt)
 {
@@ -38,20 +47,20 @@ promcon_start(struct vc_data *conp, char *b)
 	if (px == pw) {
 		unsigned short *t = s - 1;
 
-		if ((*s & 0x0800) && (*t & 0x0800))
+		if (inverted(*s) && inverted(*t))
 			return sprintf(b, "\b\033[7m%c\b\033[@%c\033[m",
 				       *s, *t);
-		else if (*s & 0x0800)
+		else if (inverted(*s))
 			return sprintf(b, "\b\033[7m%c\033[m\b\033[@%c",
 				       *s, *t);
-		else if (*t & 0x0800)
+		else if (inverted(*t))
 			return sprintf(b, "\b%c\b\033[@\033[7m%c\033[m",
 				       *s, *t);
 		else
 			return sprintf(b, "\b%c\b\033[@%c", *s, *t);
 	}
 
-	if (*s & 0x0800)
+	if (inverted(*s))
 		return sprintf(b, "\033[7m%c\033[m\b", *s);
 	else
 		return sprintf(b, "%c\b", *s);
@@ -69,18 +78,18 @@ promcon_end(struct vc_data *conp, char *b)
 	if (px == pw) {
 		unsigned short *t = s - 1;
 
-		if ((*s & 0x0800) && (*t & 0x0800))
+		if (inverted(*s) && inverted(*t))
 			b += sprintf(b, "\b%c\b\033[@\033[7m%c\033[m", *s, *t);
-		else if (*s & 0x0800)
+		else if (inverted(*s))
 			b += sprintf(b, "\b%c\b\033[@%c", *s, *t);
-		else if (*t & 0x0800)
+		else if (inverted(*t))
 			b += sprintf(b, "\b\033[7m%c\b\033[@%c\033[m", *s, *t);
 		else
 			b += sprintf(b, "\b\033[7m%c\033[m\b\033[@%c", *s, *t);
 		return b - p;
 	}
 
-	if (*s & 0x0800)
+	if (inverted(*s))
 		b += sprintf(b, "%c\b", *s);
 	else
 		b += sprintf(b, "\033[7m%c\033[m\b", *s);
@@ -114,7 +123,7 @@ __initfunc(const char *promcon_startup(void))
 static void
 promcon_init(struct vc_data *conp, int init)
 {
-	conp->vc_can_do_color = 0;
+	conp->vc_can_do_color = PROMCON_COLOR;
 	conp->vc_cols = pw + 1;
 	conp->vc_rows = ph + 1;
 }
@@ -129,12 +138,12 @@ static unsigned short *
 promcon_repaint_line(unsigned short *s, unsigned char *buf, unsigned char **bp)
 {
 	int cnt = pw + 1;
-	unsigned short attr = 0;
+	int attr = -1;
 	unsigned char *b = *bp;
 
 	while (cnt--) {
-		if (attr != (*s & 0x0800)) {
-			attr = (*s & 0x0800);
+		if (attr != inverted(*s)) {
+			attr = inverted(*s);
 			if (attr) {
 				strcpy (b, "\033[7m");
 				b += 4;
@@ -183,7 +192,7 @@ promcon_putcs(struct vc_data *conp, const unsigned short *s,
 				py = y;
 			}
 
-			if (attr & 0x0800)
+			if (inverted(attr))
 				b += sprintf(b, "\033[7m%c\033[m", *s++);
 			else
 				b += sprintf(b, "%c", *s++);
@@ -191,7 +200,7 @@ promcon_putcs(struct vc_data *conp, const unsigned short *s,
 			strcpy(b, "\b\033[@");
 			b += 4;
 
-			if (save & 0x0800)
+			if (inverted(save))
 				b += sprintf(b, "\033[7m%c\033[m", save);
 			else
 				b += sprintf(b, "%c", save);
@@ -207,7 +216,7 @@ promcon_putcs(struct vc_data *conp, const unsigned short *s,
 		}
 	}
 
-	if (attr & 0x0800) {
+	if (inverted(attr)) {
 		strcpy(b, "\033[7m");
 		b += 4;
 	}
@@ -234,7 +243,7 @@ promcon_putcs(struct vc_data *conp, const unsigned short *s,
 		px++;
 	}
 
-	if (attr & 0x0800) {
+	if (inverted(attr)) {
 		strcpy(b, "\033[m");
 		b += 3;
 	}
@@ -376,19 +385,13 @@ promcon_cursor(struct vc_data *conp, int mode)
 }
 
 static int
-promcon_get_font(struct vc_data *conp, int *w, int *h, char *data)
+promcon_font_op(struct vc_data *conp, struct console_font_op *op)
 {
 	return -ENOSYS;
 }
         
 static int
-promcon_set_font(struct vc_data *conp, int w, int h, char *data)
-{
-	return -ENOSYS;
-}
-
-static int
-promcon_blank(int blank)
+promcon_blank(struct vc_data *conp, int blank)
 {
 	if (blank) {
 		promcon_puts("\033[H\033[J\033[7m \033[m\b", 15);
@@ -503,10 +506,11 @@ struct consw prom_con = {
 	con_bmove:		promcon_bmove,
 	con_switch:		promcon_switch,
 	con_blank:		promcon_blank,
-	con_get_font:		promcon_get_font,
-	con_set_font:		promcon_set_font,
+	con_font_op:		promcon_font_op,
 	con_set_palette:	DUMMY,
 	con_scrolldelta:	DUMMY,
 	con_set_origin:		NULL,
 	con_save_screen:	NULL,
+	con_build_attr:		NULL,
+	con_invert_region:	NULL,
 };

@@ -2,6 +2,16 @@
      *  VGA characters/attributes
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_VGA) || defined(CONFIG_FBCON_VGA_MODULE)
+#define FBCON_HAS_VGA
+#endif
+#else
+#if defined(CONFIG_FBCON_VGA)
+#define FBCON_HAS_VGA
+#endif
+#endif
+
 extern struct display_switch fbcon_vga;
 extern void fbcon_vga_setup(struct display *p);
 extern void fbcon_vga_bmove(struct display *p, int sy, int sx, int dy, int dx,

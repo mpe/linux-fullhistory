@@ -5,7 +5,7 @@
 if [ "$CONFIG_FB" = "y" ]; then
   define_bool CONFIG_DUMMY_CONSOLE y
   if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
-    define_bool CONFIG_FB_ACORN y
+    bool 'Acorn VIDC support' CONFIG_FB_ACORN
   fi
   if [ "$CONFIG_APOLLO" = "y" ]; then
     define_bool CONFIG_FB_APOLLO y
@@ -51,7 +51,9 @@ if [ "$CONFIG_FB" = "y" ]; then
   # with xconfig.  --pb
   if [ "$ARCH" = "i386" -o "$ARCH" = "alpha" -o "$ARCH" = "ppc" -o \
        "$CONFIG_ARM" = "y" ]; then
-    tristate 'VGA chipset support (text only)' CONFIG_FB_VGA
+    if [ "$CONFIG_ARM" != "y" -o "$CONFIG_ARCH_ACORN" != "y" ] ; then
+      tristate 'VGA chipset support (text only)' CONFIG_FB_VGA
+    fi
   fi
   if [ "$ARCH" = "alpha" ]; then
     tristate 'TGA framebuffer support' CONFIG_FB_TGA
@@ -69,6 +71,8 @@ if [ "$CONFIG_FB" = "y" ]; then
       fi
       bool '  CGsix (GX,GXplus) support' CONFIG_FB_CGSIX
     fi
+  fi
+  if [ "$ARCH" = "sparc64" ]; then
     if [ "$CONFIG_PCI" != "n" ]; then
       bool 'PCI framebuffers' CONFIG_FB_PCI
       if [ "$CONFIG_FB_PCI" != "n" ]; then
@@ -122,15 +126,15 @@ if [ "$CONFIG_FB" = "y" ]; then
       fi
     fi
     if [ "$CONFIG_FB_ACORN" = "y" -o "$CONFIG_FB_ATARI" = "y" -o \
-	 "$CONFIG_FB_MAC" = "y" -o  "$CONFIG_FB_OF" = "y" -o \
-	 "$CONFIG_FB_TGA" = "y" -o "$CONFIG_FB_VESA" = "y" -o \
-	 "$CONFIG_FB_VIRTUAL" = "y" ]; then
+	 "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_MAC" = "y" -o \
+	 "$CONFIG_FB_OF" = "y" -o "$CONFIG_FB_TGA" = "y" -o \
+	 "$CONFIG_FB_VESA" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" ]; then
       define_bool CONFIG_FBCON_CFB8 y
     else
       if [ "$CONFIG_FB_ACORN" = "m" -o "$CONFIG_FB_ATARI" = "m" -o \
-	   "$CONFIG_FB_MAC" = "m" -o  "$CONFIG_FB_OF" = "m" -o \
-	   "$CONFIG_FB_TGA" = "m" -o "$CONFIG_FB_VESA" = "m" -o \
-	   "$CONFIG_FB_VIRTUAL" = "m" ]; then
+	   "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_MAC" = "y" -o \
+	   "$CONFIG_FB_OF" = "m" -o "$CONFIG_FB_TGA" = "m" -o \
+	   "$CONFIG_FB_VESA" = "m" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
 	define_bool CONFIG_FBCON_CFB8 m
       fi
     fi
@@ -195,6 +199,41 @@ if [ "$CONFIG_FB" = "y" ]; then
     else
       if [ "$CONFIG_FB_MDA" = "m" -o "$CONFIG_FB_VGA" = "m" ]; then
 	define_bool CONFIG_FBCON_VGA m
+      fi
+    fi
+  fi
+  if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
+    bool 'Sparc console 8x16 font' CONFIG_FONT_SUN8x16
+    bool 'Sparc console 12x22 font (not supported by all drivers)' CONFIG_FONT_SUN12x22
+    bool 'Select other fonts' CONFIG_FBCON_FONTS
+    if [ "$CONFIG_FBCON_FONTS" = "y" ]; then
+      bool '  VGA 8x8 font' CONFIG_FONT_8x8
+      bool '  VGA 8x16 font' CONFIG_FONT_8x16
+      bool '  Mac console 6x11 font (not supported by all drivers)' CONFIG_FONT_6x11
+      bool '  Pearl (old m68k) console 8x8 font' CONFIG_FONT_PEARL_8x8
+      bool '  Acorn console 8x8 font' CONFIG_FONT_ACORN_8x8
+    fi
+  else
+    bool 'Select compiled-in fonts' CONFIG_FBCON_FONTS
+    if [ "$CONFIG_FBCON_FONTS" = "y" ]; then
+      bool '  VGA 8x8 font' CONFIG_FONT_8x8
+      bool '  VGA 8x16 font' CONFIG_FONT_8x16
+      bool '  Sparc console 8x16 font' CONFIG_FONT_SUN8x16
+      bool '  Sparc console 12x22 font (not supported by all drivers)' CONFIG_FONT_SUN12x22
+      bool '  Mac console 6x11 font (not supported by all drivers)' CONFIG_FONT_6x11
+      bool '  Pearl (old m68k) console 8x8 font' CONFIG_FONT_PEARL_8x8
+      bool '  Acorn console 8x8 font' CONFIG_FONT_ACORN_8x8
+    else
+      define_bool CONFIG_FONT_8x8 y
+      define_bool CONFIG_FONT_8x16 y
+      if [ "$CONFIG_MAC" = "y" ]; then
+        define_bool CONFIG_FONT_6x11 y
+      fi
+      if [ "$CONFIG_AMIGA" = "y" ]; then
+        define_bool CONFIG_FONT_PEARL_8x8 y
+      fi
+      if [ "$CONFIG_ARM" = "y" ]; then
+        define_bool CONFIG_FONT_ACORN_8x8 y
       fi
     fi
   fi

@@ -286,7 +286,8 @@ static struct fb_ops mdafb_ops = {
 
 static struct display_switch fbcon_mdafb = {
     fbcon_vga_setup, fbcon_vga_bmove, fbcon_vga_clear, fbcon_vga_putc,
-    fbcon_vga_putcs, fbcon_vga_revc, fbcon_mdafb_cursor, NULL, FONTWIDTH(8)
+    fbcon_vga_putcs, fbcon_vga_revc, fbcon_mdafb_cursor, NULL, NULL,
+    FONTWIDTH(8)
 };
 
 

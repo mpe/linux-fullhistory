@@ -167,8 +167,7 @@ static void fbcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
 			int height, int width);
 static int fbcon_switch(struct vc_data *conp);
 static int fbcon_blank(struct vc_data *conp, int blank);
-static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data);
-static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data);
+static int fbcon_font_op(struct vc_data *conp, struct console_font_op *op);
 static int fbcon_set_palette(struct vc_data *conp, unsigned char *table);
 static int fbcon_scrolldelta(struct vc_data *conp, int lines);
 
@@ -303,7 +302,7 @@ static const char *fbcon_startup(void)
 #endif /* CONFIG_MAC */
 
 #if defined(__arm__) && defined(IRQ_VSYNCPULSE)
-    irqres = request_irq(IRQ_VSYNCPULSE, fbcon_vbl_handler, 0,
+    irqres = request_irq(IRQ_VSYNCPULSE, fbcon_vbl_handler, SA_SHIRQ,
 			 "console/cursor", fbcon_vbl_handler);
 #endif
 
@@ -400,6 +399,7 @@ static void fbcon_setup(int con, int init, int logo)
     int logo_lines = 0;
     /* Only if not module */
     extern int initmem_freed;
+    struct fbcon_font_desc *font;
     
     if (con != fg_console || initmem_freed || p->type == FB_TYPE_TEXT)
     	logo = 0;
@@ -407,11 +407,11 @@ static void fbcon_setup(int con, int init, int logo)
     p->var.xoffset = p->var.yoffset = p->yscroll = 0;  /* reset wrap/pan */
 
     if (!p->fb_info->fontname[0] ||
-	!findsoftfont(p->fb_info->fontname, &p->fontwidth, &p->fontheight,
-		      &p->fontdata) || !fontwidthvalid(p,p->fontwidth))
-	getdefaultfont(p->var.xres, p->var.yres, NULL, &p->fontwidth,
-		       &p->fontheight, &p->fontdata);
-
+	!(font = fbcon_find_font(p->fb_info->fontname)))
+	    font = fbcon_get_default_font(p->var.xres, p->var.yres);
+    p->fontwidth = font->width;
+    p->fontheight = font->height;
+    p->fontdata = font->data;
     fbcon_font_widths(p);
     if (!fontwidthvalid(p,p->fontwidth)) {
 #ifdef CONFIG_MAC
@@ -497,6 +497,9 @@ static void fbcon_setup(int con, int init, int logo)
     p->bgcol = 0;
 
     if (!init) {
+        if (con == fg_console)
+            set_palette(); /* Unlike vgacon, we have to set palette before resize on directcolor, 
+                              so that it is drawn with correct colors */
 	vc_resize_con(nr_rows, nr_cols, con);
 	if (save) {
     	    q = (unsigned short *)(conp->vc_origin + conp->vc_size_row * old_rows);
@@ -1103,6 +1106,8 @@ static int fbcon_switch(struct vc_data *conp)
 
     if (info && info->switch_con)
 	(*info->switch_con)(conp->vc_num, info);
+    if (p->dispsw && p->dispsw->clear_margins)
+	p->dispsw->clear_margins(conp, p);
     return 1;
 }
 
@@ -1145,21 +1150,17 @@ static int fbcon_blank(struct vc_data *conp, int blank)
 }
 
 
-static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data)
+static inline int fbcon_get_font(int unit, struct console_font_op *op)
 {
-    int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
-    int i, j, size, alloc;
+    char *data = op->data;
+    int i, j;
 
-    size = (p->fontwidth+7)/8 * p->fontheight * 256;
-    alloc = (*w+7)/8 * *h * 256;
-    *w = p->fontwidth;
-    *h = p->fontheight;
-
-    if (alloc < size)
-	/* allocation length not sufficient */
-	return -ENAMETOOLONG;
-
+    if (p->fontwidth != 8)		/* FIXME: Implement for wide fonts */
+        return -EINVAL;
+    op->width = p->fontwidth;
+    op->height = p->fontheight;
+    op->charcount = 256;
     for (i = 0; i < 256; i++)
 	for (j = 0; j < p->fontheight; j++)
 	    data[i*32+j] = p->fontdata[i*p->fontheight+j];
@@ -1170,85 +1171,30 @@ static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data)
 #define REFCOUNT(fd)	(((int *)(fd))[-1])
 #define FNTSIZE(fd)	(((int *)(fd))[-2])
 
-static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
+static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int userfont)
 {
-    int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
-    int i, j, size, userspace = 1, resize;
-    char *old_data = NULL, *new_data;
+    int resize;
+    int w = op->width;
+    int h = op->height;
+    char *old_data = NULL;
 
-    if (w < 0)
-	w = p->fontwidth;
-    if (h < 0)
-	h = p->fontheight;
-
-    if (w == 0) {
-	/* engage predefined font, name in 'data' */
-	unsigned short width, height;
-	data[MAX_FONT_NAME] = 0;
-
-	if (!findsoftfont( data, &width, &height, (u8 **)&data ))
-	    return -ENOENT;
-	w = width; h = height;
-	userspace = 0;
-    } else if (w == 1) {
-	/* copy font from some other console in 'h'*/
-	struct display *op;
-
-	if (h < 0 || !vc_cons_allocated( h ))
-	    return -ENOTTY;
-	if (h == unit)
-	    return 0; /* nothing to do */
-	op = &fb_display[h];
-	if (op->fontdata == p->fontdata)
-	    return 0; /* already the same font... */
-
-	resize = (op->fontwidth != p->fontwidth) ||
-		 (op->fontheight != p->fontheight);
-	if (p->userfont)
-	    old_data = p->fontdata;
-	p->fontdata = op->fontdata;
-	w = p->fontwidth = op->fontwidth;
-	h = p->fontheight = op->fontheight;
-	p->fontwidthlog = op->fontwidthlog;
-	p->fontheightlog = op->fontheightlog;
-	if ((p->userfont = op->userfont))
-	    REFCOUNT(p->fontdata)++;	/* increment usage counter */
-	goto activate;
-    }
-
-    if (!fontwidthvalid(p,w))
-	/* Currently only fontwidth == 8 supported */
+    if (!fontwidthvalid(p,w)) {
+        if (userfont)
+	    kfree(data);
 	return -ENXIO;
+    }
 
     resize = (w != p->fontwidth) || (h != p->fontheight);
-    size = (w+7)/8 * h * 256;
-
     if (p->userfont)
-	old_data = p->fontdata;
-
-    if (userspace) {
-	if (!(new_data = kmalloc( 2*sizeof(int)+size, GFP_USER )))
-	    return -ENOMEM;
-	new_data += 2*sizeof(int);
-	FNTSIZE(new_data) = size;
-	REFCOUNT(new_data) = 1; /* usage counter */
-
-	for (i = 0; i < 256; i++)
-	    for (j = 0; j < h; j++)
-		new_data[i*h+j] = data[i*32+j];
-
-	p->fontdata = new_data;
-	p->userfont = 1;
-    } else {
-	p->fontdata = data;
-	p->userfont = 0;
-    }
+        old_data = p->fontdata;
+    p->fontdata = data;
+    if ((p->userfont = userfont))
+        REFCOUNT(data)++;
     p->fontwidth = w;
     p->fontheight = h;
     fbcon_font_widths(p);
 
-activate:
     if (resize) {
 	/* reset wrap/pan */
 	p->var.xoffset = p->var.yoffset = p->yscroll = 0;
@@ -1267,6 +1213,82 @@ activate:
 	kfree( old_data - 2*sizeof(int) );
 
     return 0;
+}
+
+static inline int fbcon_copy_font(int unit, struct console_font_op *op)
+{
+    struct display *od, *p = &fb_display[unit];
+    int h = op->height;
+
+    if (h < 0 || !vc_cons_allocated( h ))
+        return -ENOTTY;
+    if (h == unit)
+        return 0; /* nothing to do */
+    od = &fb_display[h];
+    if (od->fontdata == p->fontdata)
+        return 0; /* already the same font... */
+    return fbcon_do_set_font(unit, op, od->fontdata, od->userfont);
+}
+
+static inline int fbcon_set_font(int unit, struct console_font_op *op)
+{
+    int w = op->width;
+    int h = op->height;
+    int size = (w+7)/8 * h * 256;
+    int i, j;
+    u8 *new_data, *data = op->data;
+
+    if (w != 8 || op->charcount != 256)
+        return -EINVAL;
+       
+    if (!(new_data = kmalloc( 2*sizeof(int)+size, GFP_USER )))
+        return -ENOMEM;
+    new_data += 2*sizeof(int);
+    FNTSIZE(new_data) = size;
+    REFCOUNT(new_data) = 0; /* usage counter */
+    for (i = 0; i < 256; i++)
+	for (j = 0; j < h; j++)
+	    new_data[i*h+j] = data[i*32+j];
+    return fbcon_do_set_font(unit, op, new_data, 1);
+}
+
+static inline int fbcon_set_def_font(int unit, struct console_font_op *op)
+{
+    char name[MAX_FONT_NAME];
+    struct fbcon_font_desc *f;
+    struct display *p = &fb_display[unit];
+
+    if (!op->data)
+	f = fbcon_get_default_font(p->var.xres, p->var.yres);
+    else if (strncpy_from_user(name, op->data, MAX_FONT_NAME-1) < 0)
+	return -EFAULT;
+    else {
+	name[MAX_FONT_NAME-1] = 0;
+	if (!(f = fbcon_find_font(name)))
+	    return -ENOENT;
+    }
+    op->width = f->width;
+    op->height = f->height;
+    op->charcount = 256;
+    return fbcon_do_set_font(unit, op, f->data, 0);
+}
+
+static int fbcon_font_op(struct vc_data *conp, struct console_font_op *op)
+{
+    int unit = conp->vc_num;
+
+    switch (op->op) {
+	case KD_FONT_OP_SET:
+	    return fbcon_set_font(unit, op);
+	case KD_FONT_OP_GET:
+	    return fbcon_get_font(unit, op);
+	case KD_FONT_OP_SET_DEFAULT:
+	    return fbcon_set_def_font(unit, op);
+	case KD_FONT_OP_COPY:
+	    return fbcon_copy_font(unit, op);
+	default:
+	    return -ENOSYS;
+    }
 }
 
 static u16 palette_red[16];
@@ -1299,6 +1321,7 @@ static int fbcon_set_palette(struct vc_data *conp, unsigned char *table)
 	palette_cmap.len = 1<<p->var.bits_per_pixel;
     else
 	palette_cmap.len = 16;
+    palette_cmap.start = 0;
     return p->fb_info->fbops->fb_set_cmap(&palette_cmap, 1, unit, p->fb_info);
 }
 
@@ -1306,8 +1329,6 @@ static int fbcon_scrolldelta(struct vc_data *conp, int lines)
 {
     int unit, offset, limit, scrollback_old;
     struct display *p;
-
-    /* FIXME: Sync to new code, remember to set visible_origin */
 
     if (!scrollback_phys_max)
 	return -ENOSYS;
@@ -1346,6 +1367,8 @@ static int fbcon_scrolldelta(struct vc_data *conp, int lines)
     p->var.xoffset = 0;
     p->var.yoffset = offset*p->fontheight;
     p->fb_info->updatevar(unit, p->fb_info);
+    if (!offset)
+	fbcon_cursor(conp, CM_DRAW);
     return 0;
 }
 
@@ -1375,7 +1398,6 @@ __initfunc(static int fbcon_show_logo( void ))
 	int first_col = use_256 ? 32 : depth > 4 ? 16 : 0;
 	int num_cols = use_256 ? LINUX_LOGO_COLORS : 16;
 	unsigned char *red, *green, *blue;
-	int old_cmap_len;
 	
 	if (use_256) {
 	    red   = linux_logo_red;
@@ -1388,11 +1410,6 @@ __initfunc(static int fbcon_show_logo( void ))
 	    blue  = linux_logo16_blue;
 	}
 
-	/* dirty trick to avoid setcmap calling kmalloc which isn't
-	 * initialized yet... */
-	old_cmap_len = fb_display[fg_console].cmap.len;
-	fb_display[fg_console].cmap.len = 1 << (depth/(is_truecolor ? 3 : 1));
-	
 	for( i = 0; i < num_cols; i += n ) {
 	    n = num_cols - i;
 	    if (n > 16)
@@ -1408,7 +1425,6 @@ __initfunc(static int fbcon_show_logo( void ))
 	    p->fb_info->fbops->fb_set_cmap(&palette_cmap, 1, fg_console,
 					   p->fb_info);
 	}
-	fb_display[fg_console].cmap.len = old_cmap_len;
     }
 	
     if (depth >= 8) {
@@ -1626,12 +1642,13 @@ struct consw fb_con = {
     con_bmove: 		fbcon_bmove,
     con_switch: 	fbcon_switch,
     con_blank: 		fbcon_blank,
-    con_get_font: 	fbcon_get_font,
-    con_set_font: 	fbcon_set_font,
+    con_font_op:	fbcon_font_op,
     con_set_palette: 	fbcon_set_palette,
     con_scrolldelta: 	fbcon_scrolldelta,
     con_set_origin: 	NULL,
     con_save_screen: 	NULL,
+    con_build_attr:	NULL,
+    con_invert_region:	NULL,
 };
 
 
@@ -1657,3 +1674,4 @@ static struct display_switch fbcon_dummy = {
  */
 
 EXPORT_SYMBOL(fb_display);
+EXPORT_SYMBOL(fbcon_redraw_bmove);

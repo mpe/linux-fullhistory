@@ -15,14 +15,13 @@
 #define _LINUX_CONSOLE_H_ 1
 
 struct vc_data;
+struct console_font_op;
 
 /*
  * this is what the terminal answers to a ESC-Z or csi0c query.
  */
 #define VT100ID "\033[?1;2c"
 #define VT102ID "\033[?6c"
-
-/* DPC: 1994-04-13 !!! con_putcs is new entry !!! */
 
 struct consw {
 	const char *(*con_startup)(void);
@@ -36,12 +35,13 @@ struct consw {
 	void	(*con_bmove)(struct vc_data *, int, int, int, int, int, int);
 	int	(*con_switch)(struct vc_data *);
 	int	(*con_blank)(struct vc_data *, int);
-	int	(*con_get_font)(struct vc_data *, int *, int *, char *);
-	int	(*con_set_font)(struct vc_data *, int, int, char *);
+	int	(*con_font_op)(struct vc_data *, struct console_font_op *);
 	int	(*con_set_palette)(struct vc_data *, unsigned char *);
 	int	(*con_scrolldelta)(struct vc_data *, int);
 	int	(*con_set_origin)(struct vc_data *);
 	void	(*con_save_screen)(struct vc_data *);
+	u8	(*con_build_attr)(struct vc_data *, u8, u8, u8, u8, u8);
+	void	(*con_invert_region)(struct vc_data *, u16 *, int);
 };
 
 extern struct consw *conswitchp;
@@ -108,10 +108,10 @@ extern void register_console(struct console *);
 extern int unregister_console(struct console *);
 extern struct console *console_drivers;
 
-/* VEA Blanking Levels */
+/* VESA Blanking Levels */
 #define VESA_NO_BLANKING        0
 #define VESA_VSYNC_SUSPEND      1
 #define VESA_HSYNC_SUSPEND      2
 #define VESA_POWERDOWN          3
 
-#endif /* linux/console.h */
+#endif /* _LINUX_CONSOLE_H */

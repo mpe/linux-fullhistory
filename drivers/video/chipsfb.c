@@ -41,6 +41,7 @@
 #include "fbcon.h"
 #include "fbcon-cfb8.h"
 #include "fbcon-cfb16.h"
+#include "macmodes.h"
 
 static int currcon = 0;
 
@@ -300,7 +301,7 @@ static int chipsfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	out_8(p->io_base + 0x3c9, green);
 	out_8(p->io_base + 0x3c9, blue);
 
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
     if (regno < 16)
 		fbcon_cfb16_cmap[regno] = (red << 10) | (green << 5) | blue;		
 #endif
@@ -347,7 +348,11 @@ static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, in
 		var->blue.offset = 0;
 		var->red.length = var->green.length = var->blue.length = 5;
 		
+#ifdef FBCON_HAS_CFB16
 		disp->dispsw = &fbcon_cfb16;
+#else
+		disp->dispsw = NULL;
+#endif
     } else if (bpp == 8) {
 		if (con == currcon) {
 			write_cr(0x13, 100);		// 8 bit display width (decimal)
@@ -362,7 +367,11 @@ static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, in
  		var->red.offset = var->green.offset = var->blue.offset = 0;
 		var->red.length = var->green.length = var->blue.length = 8;
 		
+#ifdef FBCON_HAS_CFB8
 		disp->dispsw = &fbcon_cfb8;
+#else
+		disp->dispsw = NULL;
+#endif
 	}
 
 	var->bits_per_pixel = bpp;

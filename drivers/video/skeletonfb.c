@@ -244,15 +244,15 @@ static struct display_switch *xxx_get_dispsw(const void *par,
      *  If you don't have any appropriate operations, simple fill in the NULL
      *  pointer, and there will be no text output.
      */
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
     if (is_cfb8)
 	return &fbcon_cfb8;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
     if (is_cfb16)
 	return &fbcon_cfb16;
 #endif
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
     if (is_cfb32)
 	return &fbcon_cfb32;
 #endif

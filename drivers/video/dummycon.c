@@ -15,13 +15,15 @@
 
 /*
  *  Dummy console driver
- *
  */
 
 #ifdef __sparc__
 /* Some reasonable defaults, so that we don't loose any text */
 #define DUMMY_COLUMNS	128
 #define DUMMY_ROWS	54
+#elif defined(CONFIG_ARM)
+#define DUMMY_COLUMNS	ORIG_VIDEO_COLS
+#define DUMMY_ROWS	ORIG_VIDEO_LINES
 #else
 #define DUMMY_COLUMNS	80
 #define DUMMY_ROWS	25
@@ -64,8 +66,7 @@ struct consw dummy_con = {
     (void *)dummycon_dummy,	/* con_bmove */
     (void *)dummycon_dummy,	/* con_switch */
     (void *)dummycon_dummy,	/* con_blank */
-    (void *)dummycon_dummy,	/* con_get_font */
-    (void *)dummycon_dummy,	/* con_set_font */
+    (void *)dummycon_dummy,	/* con_font_op */
     (void *)dummycon_dummy,	/* con_set_palette */
     (void *)dummycon_dummy,	/* con_scrolldelta */
     NULL,			/* con_set_origin */

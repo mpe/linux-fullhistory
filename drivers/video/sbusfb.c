@@ -52,7 +52,6 @@ void sbusfb_setup(char *options, int *ints);
 
 static int currcon;
 static int defx_margin = -1, defy_margin = -1;
-static int disable __initdata = 0;
 static char fontname[40] __initdata = { 0 };
 static struct {
 	int depth;
@@ -156,6 +155,13 @@ static int sbusfb_release(struct fb_info *info, int user)
 	return 0;
 }
 
+static unsigned long sbusfb_mmapsize(struct fb_info_sbusfb *fb, long size)
+{
+	if (size == SBUS_MMAP_EMPTY) return 0;
+	if (size >= 0) return size;
+	return fb->type.fb_size * (-size);
+}
+
 static int sbusfb_mmap(struct fb_info *info, struct file *file, 
 			struct vm_area_struct *vma)
 {
@@ -174,7 +180,7 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 #ifdef __sparc_v9__
 	/* Align it as much as desirable */
 	{
-		int j, max = -1, alignment;
+		int j, max = -1, alignment, s = 0;
 		
 		map_offset = vma->vm_offset+size;
 		for (i = 0; fb->mmap_map[i].size; i++) {
@@ -182,11 +188,13 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 				continue;
 			if (fb->mmap_map[i].voff >= map_offset)
 				break;
-			if (max < 0 || fb->mmap_map[i].size > fb->mmap_map[max].size)
+			if (max < 0 || sbusfb_mmapsize(fb,fb->mmap_map[i].size) > s) {
 				max = i;
+				s = sbusfb_mmapsize(fb,fb->mmap_map[max].size);
+			}
 		}
 		if (max >= 0) {
-			j = fb->mmap_map[max].size;
+			j = s;
 			if (fb->mmap_map[max].voff + j > map_offset)
 				j = map_offset - fb->mmap_map[max].voff;
 			for (alignment = 0x400000; alignment > PAGE_SIZE; alignment >>= 3)
@@ -212,8 +220,8 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 		map_size = 0;
 		for (i = 0; fb->mmap_map[i].size; i++)
 			if (fb->mmap_map[i].voff == vma->vm_offset+page) {
-				map_size = fb->mmap_map[i].size;
-				map_offset = (fb->physbase + fb->mmap_map[i].poff) & _PAGE_PADDR;
+				map_size = sbusfb_mmapsize(fb,fb->mmap_map[i].size);
+				map_offset = (fb->physbase + fb->mmap_map[i].poff) & PAGE_MASK;
 				break;
 			}
 		if (!map_size){
@@ -232,10 +240,14 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 	file->f_count++;
 	vma->vm_flags |= VM_IO;
 	if (!fb->mmaped) {
+		int lastconsole = 0;
+		
+		if (info->display_fg)
+			lastconsole = info->display_fg->vc_num;
 		fb->mmaped = 1;
-		if (fb->consolecnt && fb_display[fb->lastconsole].fb_info == info) {
-			fb->vtconsole = fb->lastconsole;
-			vt_cons [fb->lastconsole]->vc_mode = KD_GRAPHICS;
+		if (fb->consolecnt && fb_display[lastconsole].fb_info == info) {
+			fb->vtconsole = lastconsole;
+			vt_cons [lastconsole]->vc_mode = KD_GRAPHICS;
 		} else if (fb->unblank && !fb->blanked)
 			(*fb->unblank)(fb);
 	}
@@ -520,6 +532,7 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 {
 	struct fb_info_sbusfb *fb = sbusfbinfo(info);
 	int i;
+	int lastconsole;
 	
 	switch (cmd){
 	case FBIOGTYPE:		/* return frame buffer type */
@@ -546,9 +559,11 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		if (i) return i;
 		return -EINVAL;
 	case FBIOSVIDEO:
-		if (fb->consolecnt &&
-		    vt_cons[fb->lastconsole]->vc_mode == KD_TEXT)
- 			break;
+		if (fb->consolecnt) {
+			lastconsole = info->display_fg->vc_num;
+			if (vt_cons[lastconsole]->vc_mode == KD_TEXT)
+ 				break;
+ 		}
 		get_user_ret(i, (int *)arg, -EFAULT);
 		if (i){
 			if (!fb->blanked || !fb->unblank)
@@ -643,7 +658,8 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	case FBIOSCURSOR:
 		if (!fb->setcursor) return -EINVAL;
  		if (fb->consolecnt) {
- 			if (vt_cons[fb->lastconsole]->vc_mode == KD_TEXT)
+ 			lastconsole = info->display_fg->vc_num; 
+ 			if (vt_cons[lastconsole]->vc_mode == KD_TEXT)
  				return -EINVAL; /* Don't let graphics programs hide our nice text cursor */
 			fb->hw_cursor_shown = 0; /* Forget state of our text cursor */
 		}
@@ -653,7 +669,8 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		if (!fb->setcursor) return -EINVAL;
 		/* Don't let graphics programs move our nice text cursor */
  		if (fb->consolecnt) {
- 			if (vt_cons[fb->lastconsole]->vc_mode == KD_TEXT)
+ 			lastconsole = info->display_fg->vc_num; 
+ 			if (vt_cons[lastconsole]->vc_mode == KD_TEXT)
  				return -EINVAL; /* Don't let graphics programs move our nice text cursor */
  		}
 		if (copy_from_user(&fb->cursor.cpos, (void *)arg, sizeof(struct fbcurpos)))
@@ -689,9 +706,7 @@ __initfunc(void sbusfb_setup(char *options, int *ints))
 			    	defx_margin = i; defy_margin = j;
 			    }
 			}
-		} else if (!strncmp(p, "disable", 7))
-			disable = 1;
-		else if (!strncmp(p, "font=", 5)) {
+		} else if (!strncmp(p, "font=", 5)) {
 			int i;
 			
 			for (i = 0; i < sizeof(fontname) - 1; i++)
@@ -710,16 +725,17 @@ static int sbusfbcon_switch(int con, struct fb_info *info)
 {
 	int x_margin, y_margin;
 	struct fb_info_sbusfb *fb = sbusfbinfo(info);
+	int lastconsole;
     
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
 		fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1, sbusfb_getcolreg, info);
 
-	if (fb->lastconsole != con && 
-	    (fb_display[fb->lastconsole].fontwidth != fb_display[con].fontwidth ||
-	     fb_display[fb->lastconsole].fontheight != fb_display[con].fontheight))
+	lastconsole = info->display_fg->vc_num;
+	if (lastconsole != con && 
+	    (fb_display[lastconsole].fontwidth != fb_display[con].fontwidth ||
+	     fb_display[lastconsole].fontheight != fb_display[con].fontheight))
 		fb->hw_cursor_shown = 0;
-	fb->lastconsole = con;
 	x_margin = (fb_display[con].var.xres_virtual - fb_display[con].var.xres) / 2;
 	y_margin = (fb_display[con].var.yres_virtual - fb_display[con].var.yres) / 2;
 	if (fb->margins)
@@ -855,9 +871,33 @@ static int sbusfb_set_font(struct display *p, int width, int height)
 	return 1;
 }
 
+void sbusfb_palette(int enter)
+{
+	int i;
+	struct display *p;
+	
+	for (i = 0; i < MAX_NR_CONSOLES; i++) {
+		p = &fb_display[i];
+		if (p->dispsw && p->dispsw->setup == sbusfb_disp_setup &&
+		    p->fb_info->display_fg &&
+		    p->fb_info->display_fg->vc_num == i) {
+			struct fb_info_sbusfb *fb = sbusfbinfod(p);
+
+			if (fb->restore_palette) {
+				if (enter)
+					fb->restore_palette(fb);
+				else if (vt_cons[i]->vc_mode != KD_GRAPHICS)
+				         vc_cons[i].d->vc_sw->con_set_palette(vc_cons[i].d, color_table);
+			}
+		}
+	}
+}
+
     /*
      *  Initialisation
      */
+     
+extern void (*prom_palette)(int);
 
 __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 				      struct linux_sbus_device *sbdp))
@@ -876,6 +916,10 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 		prom_printf("Could not allocate sbusfb structure\n");
 		return;
 	}
+	
+	if (!prom_palette)
+		prom_palette = sbusfb_palette;
+	
 	memset(fb, 0, sizeof(struct fb_info_sbusfb));
 	fix = &fb->fix;
 	var = &fb->var;
@@ -893,7 +937,7 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 	fb->emulations[0] = fbtype;
 	
 #ifndef __sparc_v9__
-	disp->screen_base = prom_getintdefault(node, "address", 0);
+	disp->screen_base = (unsigned char *)prom_getintdefault(node, "address", 0);
 #endif
 	
 	type->fb_height = h = prom_getintdefault(node, "height", 900);
@@ -991,6 +1035,7 @@ __initfunc(static void sbusfb_init_fb(int node, int parent, int fbtype,
 	fb->dispsw.set_font = sbusfb_set_font;
 	fb->setup = fb->dispsw.setup;
 	fb->dispsw.setup = sbusfb_disp_setup;
+	fb->dispsw.clear_margins = NULL;
 
 	disp->var = *var;
 	disp->visual = fix->visual;
@@ -1015,47 +1060,53 @@ static inline int known_card(char *name)
 	char *p;
 	for (p = name; *p && *p != ','; p++);
 	if (*p == ',') name = p + 1;
-	if (!strcmp(p, "cgsix") || !strcmp(p, "cgthree+"))
+	if (!strcmp(name, "cgsix") || !strcmp(name, "cgthree+"))
 		return FBTYPE_SUNFAST_COLOR;
-	if (!strcmp(p, "cgthree") || !strcmp(p, "cgRDI"))
+	if (!strcmp(name, "cgthree") || !strcmp(name, "cgRDI"))
 		return FBTYPE_SUN3COLOR;
-	if (!strcmp(p, "cgfourteen"))
+	if (!strcmp(name, "cgfourteen"))
 		return FBTYPE_MDICOLOR;
-	if (!strcmp(p, "leo"))
+	if (!strcmp(name, "leo"))
 		return FBTYPE_SUNLEO;
-	if (!strcmp(p, "bwtwo"))
+	if (!strcmp(name, "bwtwo"))
 		return FBTYPE_SUN2BW;
-	if (!strcmp(p, "tcx"))
+	if (!strcmp(name, "tcx"))
 		return FBTYPE_TCXCOLOR;
 	return FBTYPE_NOTYPE;
 }
 
 __initfunc(void sbusfb_init(void))
 {
-	int node, root, type;
+	int type;
 	struct linux_sbus_device *sbdp;
 	struct linux_sbus *sbus;
 	char prom_name[40];
 	extern int con_is_present(void);
 	
-	if (!con_is_present() || disable) return;
+	if (!con_is_present()) return;
 	
 #ifdef CONFIG_FB_CREATOR
-	root = prom_getchild(prom_root_node);
-	for (node = prom_searchsiblings(root, "SUNW,ffb"); node;
-	     node = prom_searchsiblings(prom_getsibling(node), "SUNW,ffb")) {
-		sbusfb_init_fb(node, prom_root_node, FBTYPE_CREATOR, NULL);
+	{
+		int root, node;
+		root = prom_getchild(prom_root_node);
+		for (node = prom_searchsiblings(root, "SUNW,ffb"); node;
+		     node = prom_searchsiblings(prom_getsibling(node), "SUNW,ffb")) {
+			sbusfb_init_fb(node, prom_root_node, FBTYPE_CREATOR, NULL);
+		}
 	}
 #endif
 #ifdef CONFIG_SUN4
 	sbusfb_init_fb(0, 0, FBTYPE_SUN2BW, NULL);
 #endif
 #if defined(CONFIG_FB_CGFOURTEEN) && !defined(__sparc_v9__)
-	root = prom_getchild(prom_root_node);
-	root = prom_searchsiblings(root, "obio");
-	if (root && 
-	    (node = prom_searchsiblings(prom_getchild(root), "cgfourteen"))) {
-		sbusfb_init_fb(node, root, FBTYPE_MDICOLOR, NULL);
+	{
+		int root, node;
+		root = prom_getchild(prom_root_node);
+		root = prom_searchsiblings(root, "obio");
+		if (root && 
+		    (node = prom_searchsiblings(prom_getchild(root), "cgfourteen"))) {
+			sbusfb_init_fb(node, root, FBTYPE_MDICOLOR, NULL);
+		}
 	}
 #endif
 	if (!SBus_chain) return;

@@ -71,24 +71,12 @@
 #include <linux/fb.h>
 #include <asm/atarikb.h>
 
-#ifdef CONFIG_FBCON_CFB8
 #include "fbcon-cfb8.h"
-#endif
-#ifdef CONFIG_FBCON_CFB16
 #include "fbcon-cfb16.h"
-#endif
-#ifdef CONFIG_FBCON_IPLAN2P2
 #include "fbcon-iplan2p2.h"
-#endif
-#ifdef CONFIG_FBCON_IPLAN2P4
 #include "fbcon-iplan2p4.h"
-#endif
-#ifdef CONFIG_FBCON_IPLAN2P8
 #include "fbcon-iplan2p8.h"
-#endif
-#ifdef CONFIG_FBCON_MFB
 #include "fbcon-mfb.h"
-#endif
 
 
 #define SWITCH_ACIA 0x01		/* modes for switch on OverScan */
@@ -1654,7 +1642,7 @@ static int falcon_setcolreg( unsigned regno, unsigned red,
 			(((red & 0xe) >> 1) | ((red & 1) << 3) << 8) |
 			(((green & 0xe) >> 1) | ((green & 1) << 3) << 4) |
 			((blue & 0xe) >> 1) | ((blue & 1) << 3);
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 		fbcon_cfb16_cmap[regno] = (red << 11) | (green << 5) | blue;
 #endif
 	}
@@ -2484,17 +2472,17 @@ atafb_set_disp(int con, struct fb_info *info)
 	switch (fix.type) {
 	    case FB_TYPE_INTERLEAVED_PLANES:
 		switch (var.bits_per_pixel) {
-#ifdef CONFIG_FBCON_IPLAN2P2
+#ifdef FBCON_HAS_IPLAN2P2
 		    case 2:
 			display->dispsw = &fbcon_iplan2p2;
 			break;
 #endif
-#ifdef CONFIG_FBCON_IPLAN2P4
+#ifdef FBCON_HAS_IPLAN2P4
 		    case 4:
 			display->dispsw = &fbcon_iplan2p4;
 			break;
 #endif
-#ifdef CONFIG_FBCON_IPLAN2P8
+#ifdef FBCON_HAS_IPLAN2P8
 		    case 8:
 			display->dispsw = &fbcon_iplan2p8;
 			break;
@@ -2503,17 +2491,17 @@ atafb_set_disp(int con, struct fb_info *info)
 		break;
 	    case FB_TYPE_PACKED_PIXELS:
 		switch (var.bits_per_pixel) {
-#ifdef CONFIG_FBCON_MFB
+#ifdef FBCON_HAS_MFB
 		    case 1:
 			display->dispsw = &fbcon_mfb;
 			break;
 #endif
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 		    case 8:
 			display->dispsw = &fbcon_cfb8;
 			break;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 		    case 16:
 			display->dispsw = &fbcon_cfb16;
 			break;

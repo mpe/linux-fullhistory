@@ -3,6 +3,7 @@
  *
  *	Copyright (C) 1997 Geert Uytterhoeven
  *	Copyright (C) 1998 Bernd Harries
+ *	Copyright (C) 1998 Eddie C. Dost
  *
  *  This driver is partly based on the PowerMac console driver:
  *
@@ -27,6 +28,22 @@
 
     - support arbitrary video modes
 
+  (ecd):
+
+    - fix initialization and allocation of resources for cursor (and disp?).
+
+    - fix initialization of cursor timer.
+
+    - add code to detect ramdac type on initialization.
+
+    - add code to support cursor on all cards and all ramdacs.
+
+    - make cursor parameters controllable via ioctl()s.
+
+    - handle arbitrary fonts.
+
+						(Anyone to help with all this?)
+
 ******************************************************************************/
 
 #include <linux/config.h>
@@ -42,6 +59,7 @@
 #include <linux/interrupt.h>
 #include <linux/fb.h>
 #include <linux/selection.h>
+#include <linux/console.h>
 #include <linux/init.h>
 #include <linux/pci.h>
 #include <linux/nvram.h>
@@ -52,6 +70,7 @@
 #if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
+#include "macmodes.h"
 #endif
 #ifdef __sparc__
 #include <asm/pbm.h>
@@ -250,6 +269,23 @@ struct pci_mmap_map {
     unsigned long prot_mask;
 };
 
+#define DEFAULT_CURSOR_BLINK_RATE	(20)
+
+struct aty_cursor {
+	int		   enable;
+    	int		   on;
+	int		   vbl_cnt;
+	int		   blink_rate;
+	u32		   offset;
+	struct {
+	    u16 x, y;
+	}		   pos, hot, size;
+	u32		   color[2];
+	u8		   bits[8][64];
+	u8		   mask[8][64];
+	struct timer_list *timer;
+};
+
 struct fb_info_aty {
     struct fb_info fb_info;
     unsigned long ati_regbase_phys;
@@ -257,6 +293,7 @@ struct fb_info_aty {
     unsigned long frame_buffer_phys;
     unsigned long frame_buffer;
     struct pci_mmap_map *mmap_map;
+    struct aty_cursor *cursor;
     u8 chip_class;
     u8 pixclock_lim_8;	/* ps, <= 8 bpp */
     u8 pixclock_lim_hi;	/* ps, > 8 bpp */
@@ -418,25 +455,15 @@ static void atyfbcon_blank(int blank, struct fb_info *info);
      *  Text console acceleration
      */
 
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 static struct display_switch fbcon_aty8;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 static struct display_switch fbcon_aty16;
 #endif
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
 static struct display_switch fbcon_aty32;
 #endif
-
-
-#ifdef CONFIG_FB_COMPAT_XPMAC
-extern struct vc_mode display_info;
-extern struct fb_info *console_fb_info;
-extern int (*console_setmode_ptr)(struct vc_mode *, int);
-extern int (*console_set_cmap_ptr)(struct fb_cmap *, int, int,
-				   struct fb_info *);
-static int atyfb_console_setmode(struct vc_mode *, int);
-#endif /* CONFIG_FB_COMPAT_XPMAC */
 
 
     /*
@@ -482,8 +509,13 @@ static inline u32 aty_ld_le32(volatile unsigned int regindex,
     temp = info->ati_regbase;
     asm("lwbrx %0,%1,%2": "=r"(val):"r"(regindex), "r"(temp));
 #else
+#ifdef __sparc__v9__
+    temp = info->ati_regbase + regindex;
+    asm("lduwa [%1] %2, %0" : "=r" (val) : "r" (temp), "i" (ASI_PL));
+#else
     temp = info->ati_regbase+regindex;
     val = le32_to_cpu(*((volatile u32 *)(temp)));
+#endif
 #endif
     return val;
 }
@@ -497,8 +529,13 @@ static inline void aty_st_le32(volatile unsigned int regindex, u32 val,
     temp = info->ati_regbase;
     asm("stwbrx %0,%1,%2": : "r"(val), "r"(regindex), "r"(temp):"memory");
 #else
+#ifdef __sparc__v9__
+    temp = info->ati_regbase + regindex;
+    asm("stwa %0, [%1] %2" : "r" (val), "r" (temp), "i" (ASI_PL) : "memory");
+#else
     temp = info->ati_regbase+regindex;
     *((volatile u32 *)(temp)) = cpu_to_le32(val);
+#endif
 #endif
 }
 
@@ -648,7 +685,7 @@ static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info)
     /* set pixel depth */
     wait_for_fifo(2, info);
     switch(par->hw.gx.cmode) {
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 	case CMODE_8:
 	    aty_st_le32(DP_PIX_WIDTH, HOST_8BPP | SRC_8BPP | DST_8BPP |
 				      BYTE_ORDER_LSB_TO_MSB,
@@ -656,7 +693,7 @@ static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info)
 	    aty_st_le32(DP_CHAIN_MASK, 0x8080, info);
 	    break;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 	case CMODE_16:
 	    aty_st_le32(DP_PIX_WIDTH, HOST_15BPP | SRC_15BPP | DST_15BPP |
 				      BYTE_ORDER_LSB_TO_MSB,
@@ -672,7 +709,7 @@ static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info)
 	    aty_st_le32(DP_CHAIN_MASK, 0x8080, info);
 	    break;
 #endif
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
 	case CMODE_32:
 	    aty_st_le32(DP_PIX_WIDTH, HOST_32BPP | SRC_32BPP | DST_32BPP |
 				      BYTE_ORDER_LSB_TO_MSB, info);
@@ -803,6 +840,226 @@ static void set_off_pitch(const struct atyfb_par *par,
     offset = ((par->yoffset*par->vxres+par->xoffset)>>3)<<par->hw.gx.cmode;
     aty_st_le32(CRTC_OFF_PITCH, pitch<<22 | offset, info);
 }
+
+/*
+ * Hardware Cursor support.
+ */
+
+static u8 cursor_pixel_map[2] = { 0, 15 };
+static u8 cursor_color_map[2] = { 0, 0xff };
+
+static u8 cursor_bits_lookup[16] =
+{
+	0x00, 0x40, 0x10, 0x50, 0x04, 0x44, 0x14, 0x54,
+	0x01, 0x41, 0x11, 0x51, 0x05, 0x45, 0x15, 0x55
+};
+
+static u8 cursor_mask_lookup[16] =
+{
+	0xaa, 0x2a, 0x8a, 0x0a, 0xa2, 0x22, 0x82, 0x02,
+	0xa8, 0x28, 0x88, 0x08, 0xa0, 0x20, 0x80, 0x00
+};
+
+static void
+aty_set_cursor_color(struct fb_info_aty *fb, u8 *pixel,
+		     u8 *red, u8 *green, u8 *blue)
+{
+	struct aty_cursor *c = fb->cursor;
+	int i;
+
+	if (!c)
+		return;
+
+	for (i = 0; i < 2; i++) {
+		c->color[i] =  (u32)red[i] << 24;
+		c->color[i] |= (u32)green[i] << 16;
+ 		c->color[i] |= (u32)blue[i] <<  8;
+ 		c->color[i] |= (u32)pixel[i];
+	}
+
+	wait_for_fifo(2, fb);
+	aty_st_le32(CUR_CLR0, c->color[0], fb);
+	aty_st_le32(CUR_CLR1, c->color[1], fb);
+	wait_for_idle(fb);
+}
+
+static void
+aty_set_cursor_shape(struct fb_info_aty *fb)
+{
+	struct aty_cursor *c = fb->cursor;
+	u8 *ram, m, b;
+	int x, y;
+
+	if (!c)
+		return;
+
+	ram = (u8 *)(fb->frame_buffer + c->offset);
+
+	for (y = 0; y < c->size.y; y++) {
+		for (x = 0; x < c->size.x >> 2; x++) {
+			m = c->mask[x][y];
+			b = c->bits[x][y];
+			*ram++ = cursor_mask_lookup[m >> 4] |
+				 cursor_bits_lookup[(b & m) >> 4];
+			*ram++ = cursor_mask_lookup[m & 0x0f] |
+				 cursor_bits_lookup[(b & m) & 0x0f];
+		}
+		for ( ; x < 8; x++) {
+			*ram++ = 0xaa;
+			*ram++ = 0xaa;
+		}
+	}
+	memset(ram, 0xaa, (64 - c->size.y) * 16);
+}
+
+static void
+aty_set_cursor(struct fb_info_aty *fb)
+{
+	struct aty_cursor *c = fb->cursor;
+	u16 xoff, yoff;
+	int x, y;
+
+	if (!c)
+		return;
+
+	if (c->on) {
+		x = c->pos.x - c->hot.x;
+		if (x < 0) {
+			xoff = -x;
+			x = 0;
+		} else {
+			xoff = 0;
+		}
+
+		y = c->pos.y - c->hot.y;
+		if (y < 0) {
+			yoff = -y;
+			y = 0;
+		} else {
+			yoff = 0;
+		}
+
+		wait_for_fifo(4, fb);
+		aty_st_le32(CUR_OFFSET, (c->offset >> 3) + (yoff << 1), fb);
+		aty_st_le32(CUR_HORZ_VERT_OFF,
+			    ((u32)(64 - c->size.y + yoff) << 16) | xoff, fb);
+		aty_st_le32(CUR_HORZ_VERT_POSN, ((u32)y << 16) | x, fb);
+		aty_st_le32(GEN_TEST_CNTL, aty_ld_le32(GEN_TEST_CNTL, fb)
+						       | HWCURSOR_ENABLE, fb);
+	} else {
+		wait_for_fifo(4, fb);
+		aty_st_le32(GEN_TEST_CNTL,
+			    aty_ld_le32(GEN_TEST_CNTL, fb) & ~HWCURSOR_ENABLE,
+			    fb);
+	}
+	wait_for_idle(fb);
+}
+
+static void
+aty_cursor_timer_handler(unsigned long dev_addr)
+{
+	struct fb_info_aty *fb = (struct fb_info_aty *)dev_addr;
+
+	if (!fb->cursor)
+		return;
+
+	if (!fb->cursor->enable)
+		goto out;
+
+	if (fb->cursor->vbl_cnt && --fb->cursor->vbl_cnt == 0) {
+		fb->cursor->on ^= 1;
+		aty_set_cursor(fb);
+		fb->cursor->vbl_cnt = fb->cursor->blink_rate;
+	}
+
+out:
+	fb->cursor->timer->expires = jiffies + (HZ / 50);
+	add_timer(fb->cursor->timer);
+}
+
+static void
+atyfb_cursor(struct display *d, int mode, int x, int y)
+{
+	struct fb_info_aty *fb = (struct fb_info_aty *)d->fb_info;
+	struct aty_cursor *c = fb->cursor;
+
+	if (!c)
+		return;
+
+	x *= d->fontwidth;
+	y *= d->fontheight;
+	if (c->pos.x == x && c->pos.y == y && (mode == CM_ERASE) == !c->on)
+		return;
+
+	c->enable = 0;
+	c->pos.x = x;
+	c->pos.y = y;
+
+	switch (mode) {
+	case CM_ERASE:
+		c->on = 0;
+		aty_set_cursor(fb);
+		break;
+
+	case CM_DRAW:
+	case CM_MOVE:
+		c->on = 1;
+		aty_set_cursor(fb);
+
+		if (!c->timer) {
+			c->timer = kmalloc(sizeof(*c->timer), GFP_KERNEL);
+			if (!c->timer)
+				return;
+
+			c->blink_rate = DEFAULT_CURSOR_BLINK_RATE;
+
+			init_timer(c->timer);
+			c->timer->expires = jiffies + (HZ / 50);
+			c->timer->data = (unsigned long)fb;
+			c->timer->function = aty_cursor_timer_handler;
+			add_timer(c->timer);
+		}
+
+		c->vbl_cnt = c->blink_rate;
+		c->enable = 1;
+		break;
+	}
+}
+
+static int
+atyfb_set_font(struct display *d, int width, int height)
+{
+    struct fb_info_aty *fb = (struct fb_info_aty *)d->fb_info;
+    struct aty_cursor *c = fb->cursor;
+    int i, j;
+
+    if (c) {
+	if (!width || !height) {
+	    width = 8;
+	    height = 16;
+	}
+
+	c->offset = fb->total_vram - 0x1000;
+	c->hot.x = 0;
+	c->hot.y = 0;
+	c->size.x = width;
+	c->size.y = height;
+
+	memset(c->bits, 0xff, sizeof(c->bits));
+	memset(c->mask, 0, sizeof(c->mask));
+
+	for (i = 0, j = width; j >= 0; j -= 8, i++) {
+	    c->mask[i][height-2] = (j >= 8) ? 0xff : (0xff << (8 - j));
+	    c->mask[i][height-1] = (j >= 8) ? 0xff : (0xff << (8 - j));
+	}
+
+	aty_set_cursor_color(fb, cursor_pixel_map, cursor_color_map,
+			     cursor_color_map, cursor_color_map);
+	aty_set_cursor_shape(fb);
+    }
+    return 1;
+}
+
 
 static void atyfb_set_par(struct atyfb_par *par, struct fb_info_aty *info)
 {
@@ -1492,17 +1749,17 @@ static int atyfb_set_var(struct fb_var_screeninfo *var, int con,
 	    display->inverse = 0;
 	    accel = var->accel_flags & FB_ACCELF_TEXT;
 	    switch (par.hw.gx.cmode) {
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 		case CMODE_8:
 		    display->dispsw = accel ? &fbcon_aty8 : &fbcon_cfb8;
 		    break;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 		case CMODE_16:
 		    display->dispsw = accel ? &fbcon_aty16 : &fbcon_cfb16;
 		    break;
 #endif
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
 		case CMODE_32:
 		    display->dispsw = accel ? &fbcon_aty32 : &fbcon_cfb32;
 		    break;
@@ -1514,6 +1771,10 @@ static int atyfb_set_var(struct fb_var_screeninfo *var, int con,
 	    display->scrollmode = accel ? 0 : SCROLL_YREDRAW;
 	    if (info->changevar)
 		(*info->changevar)(con);
+	    if (info2->cursor) {
+	    	display->dispsw->cursor = atyfb_cursor;
+	    	display->dispsw->set_font = atyfb_set_font;
+	    }
 	}
 	if (con == currcon)
 	    atyfb_set_par(&par, info2);
@@ -1565,9 +1826,10 @@ static int atyfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			   info);
     else if (fb_display[con].cmap.len) /* non default colormap? */
 	fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
-    else
-	fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-		     cmap, kspc ? 0 : 2);
+    else {
+	int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
+	fb_copy_cmap(fb_default_cmap(size), cmap, kspc ? 0 : 2);
+    }
     return 0;
 }
 
@@ -1581,8 +1843,8 @@ static int atyfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
     int err;
 
     if (!fb_display[con].cmap.len) {	/* no colormap allocated? */
-	if ((err = fb_alloc_cmap(&fb_display[con].cmap,
-				 1<<fb_display[con].var.bits_per_pixel, 0)))
+	int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
+	if ((err = fb_alloc_cmap(&fb_display[con].cmap, size, 0)))
 	    return err;
     }
     if (con == currcon)			/* current console? */
@@ -1900,6 +2162,11 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 	info->palette[j].blue = default_blu[k];
     }
 
+    if (info->chip_class == CLASS_VT || info->chip_class == CLASS_GT) {
+	info->cursor = kmalloc(sizeof(struct aty_cursor), GFP_ATOMIC);
+	memset(info->cursor, 0, sizeof(*info->cursor));
+    }
+
     atyfb_set_par(&info->default_par, info);
     encode_var(&var, &info->default_par, info);
     atyfb_set_var(&var, -1, &info->fb_info);
@@ -1923,6 +2190,13 @@ __initfunc(void atyfb_init(void))
     unsigned long addr;
     int i, j;
     u16 tmp;
+#ifdef __sparc__
+    extern int con_is_present(void);
+
+    /* Do not attach when we have a serial console. */
+    if (!con_is_present())
+	    return;
+#endif
 
     for (pdev = pci_devices; pdev; pdev = pdev->next) {
 	if (((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY) &&
@@ -1933,6 +2207,7 @@ __initfunc(void atyfb_init(void))
 		printk("atyfb_init: can't alloc fb_info_aty\n");
 		return;
 	    }
+	    memset(info, 0, sizeof(struct fb_info_aty));
 
 	    addr = pdev->base_address[0];
 	    if ((addr & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
@@ -2010,7 +2285,7 @@ __initfunc(void atyfb_init(void))
 	     * Fix PROMs idea of MEM_CNTL settings...
 	     */
 	    tmp = aty_ld_le32(CONFIG_CHIP_ID, info) & CFG_CHIP_TYPE;
-	    if (tmp == MACH64_VT_ID) {
+	    if (tmp == VT_CHIP_ID) {
 		u32 mem = aty_ld_le32(MEM_CNTL, info);
 		switch (mem & 0x0f) {
 		    case 3:
@@ -2028,7 +2303,8 @@ __initfunc(void atyfb_init(void))
 		    default:
 			break;
 		}
-		mem &= ~(0x00f00000);
+		if ((aty_ld_le32(CONFIG_STAT0, info) & 7) >= SDRAM)
+			mem &= ~(0x00f00000);
 		aty_st_le32(MEM_CNTL, mem, info);
 	    }
 
@@ -2213,11 +2489,8 @@ __initfunc(void atyfb_of_init(struct device_node *dp))
 	}
 
 #ifdef CONFIG_FB_COMPAT_XPMAC
-	if (!console_fb_info) {
+	if (!console_fb_info)
 	    console_fb_info = &info->fb_info;
-	    console_setmode_ptr = atyfb_console_setmode;
-	    console_set_cmap_ptr = atyfb_set_cmap;
-	}
 #endif /* CONFIG_FB_COMPAT_XPMAC */
     }
 }
@@ -2336,6 +2609,12 @@ static int atyfbcon_switch(int con, struct fb_info *info)
     atyfb_set_par(&par, info2);
     /* Install new colormap */
     do_install_cmap(con, info);
+    /* Install hw cursor */
+    if (info2->cursor) {
+	aty_set_cursor_color(info2, cursor_pixel_map, cursor_color_map,
+			     cursor_color_map, cursor_color_map);
+	aty_set_cursor_shape(info2);
+    }
     return 0;
 }
 
@@ -2362,20 +2641,23 @@ static void atyfbcon_blank(int blank, struct fb_info *info)
     u8 gen_cntl;
 
     gen_cntl = aty_ld_8(CRTC_GEN_CNTL, info2);
-#ifndef __sparc__
-    if (blank & VESA_VSYNC_SUSPEND)
-	    gen_cntl |= 0x8;
-    if (blank & VESA_HSYNC_SUSPEND)
-	    gen_cntl |= 0x4;
-    if ((blank & VESA_POWERDOWN) == VESA_POWERDOWN)
-	    gen_cntl |= 0x40;
-#endif
-    if (blank == VESA_NO_BLANKING)
-	    gen_cntl &= ~(0x4c);
-#ifdef __sparc__
+    if (blank > 0)
+	switch (blank-1) {
+	    case VESA_NO_BLANKING:
+		gen_cntl |= 0x40;
+		break;
+	    case VESA_VSYNC_SUSPEND:
+		gen_cntl |= 0x8;
+		break;
+	    case VESA_HSYNC_SUSPEND:
+		gen_cntl |= 0x4;
+		break;
+	    case VESA_POWERDOWN:
+		gen_cntl |= 0x4c;
+		break;
+	}
     else
-	    gen_cntl |= 0x40;
-#endif
+	gen_cntl &= ~(0x4c);
     aty_st_8(CRTC_GEN_CNTL, gen_cntl, info2);
 }
 
@@ -2433,10 +2715,10 @@ static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     info2->aty_cmap_regs->lut = blue << scale;
     eieio();
     if (regno < 16) {
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 	fbcon_cfb16_cmap[regno] = (regno << 10) | (regno << 5) | regno;
 #endif
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
 	fbcon_cfb32_cmap[regno] = (regno << 24) | (regno << 16) |
 				  (regno << 8) | regno;
 #endif
@@ -2452,10 +2734,11 @@ static void do_install_cmap(int con, struct fb_info *info)
     if (fb_display[con].cmap.len)
 	fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
 		    atyfb_setcolreg, info);
-    else
-	fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-				    &fb_display[con].var, 1, atyfb_setcolreg,
-		    info);
+    else {
+	int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
+	fb_set_cmap(fb_default_cmap(size), &fb_display[con].var, 1,
+		    atyfb_setcolreg, info);
+    }
 }
 
 
@@ -2567,7 +2850,7 @@ static void fbcon_aty_clear(struct vc_data *conp, struct display *p, int sy,
 		 (struct fb_info_aty *)p->fb_info);
 }
 
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 static void fbcon_aty8_putc(struct vc_data *conp, struct display *p, int c,
 			    int yy, int xx)
 {
@@ -2584,11 +2867,12 @@ static void fbcon_aty8_putcs(struct vc_data *conp, struct display *p,
 
 static struct display_switch fbcon_aty8 = {
     fbcon_cfb8_setup, fbcon_aty_bmove, fbcon_aty_clear, fbcon_aty8_putc,
-    fbcon_aty8_putcs, fbcon_cfb8_revc, NULL, NULL, FONTWIDTH(8)
+    fbcon_aty8_putcs, fbcon_cfb8_revc, NULL, NULL, fbcon_cfb8_clear_margins,
+    FONTWIDTH(8)
 };
 #endif
 
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 static void fbcon_aty16_putc(struct vc_data *conp, struct display *p, int c,
 			     int yy, int xx)
 {
@@ -2605,11 +2889,11 @@ static void fbcon_aty16_putcs(struct vc_data *conp, struct display *p,
 
 static struct display_switch fbcon_aty16 = {
     fbcon_cfb16_setup, fbcon_aty_bmove, fbcon_aty_clear, fbcon_aty16_putc,
-    fbcon_aty16_putcs, fbcon_cfb16_revc, NULL, FONTWIDTH(8)
+    fbcon_aty16_putcs, fbcon_cfb16_revc, NULL, NULL, NULL, FONTWIDTH(8)
 };
 #endif
 
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
 static void fbcon_aty32_putc(struct vc_data *conp, struct display *p, int c,
 			     int yy, int xx)
 {
@@ -2626,49 +2910,6 @@ static void fbcon_aty32_putcs(struct vc_data *conp, struct display *p,
 
 static struct display_switch fbcon_aty32 = {
     fbcon_cfb32_setup, fbcon_aty_bmove, fbcon_aty_clear, fbcon_aty32_putc,
-    fbcon_aty32_putcs, fbcon_cfb32_revc, NULL, FONTWIDTH(8)
+    fbcon_aty32_putcs, fbcon_cfb32_revc, NULL, NULL, NULL, FONTWIDTH(8)
 };
 #endif
-
-
-#ifdef CONFIG_FB_COMPAT_XPMAC
-
-    /*
-     *  Backward compatibility mode for Xpmac
-     *
-     *  This should move to offb.c once this driver supports arbitrary video
-     *  modes
-     */
-
-static int atyfb_console_setmode(struct vc_mode *mode, int doit)
-{
-    struct fb_var_screeninfo var;
-    struct atyfb_par par;
-    int vmode, cmode;
-
-    if (mode->mode <= 0 || mode->mode > VMODE_MAX )
-	return -EINVAL;
-    vmode = mode->mode;
-
-    switch (mode->depth) {
-	case 24:
-	case 32:
-	    cmode = CMODE_32;
-	    break;
-	case 16:
-	    cmode = CMODE_16;
-	    break;
-	case 8:
-	case 0:			/* (default) */
-	    cmode = CMODE_8;
-	    break;
-	default:
-	    return -EINVAL;
-    }
-    init_par(&par, vmode, cmode);
-    encode_var(&var, &par, (struct fb_info_aty *)console_fb_info);
-    var.activate = doit ? FB_ACTIVATE_NOW : FB_ACTIVATE_TEST;
-    return atyfb_set_var(&var, currcon, console_fb_info);
-}
-
-#endif /* CONFIG_FB_COMPAT_XPMAC */

@@ -171,18 +171,18 @@ static void vesafb_set_disp(int con)
 	vesafb_get_var(&display->var, -1, &fb_info);
 
 	switch (video_bpp) {
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 	case 8:
 		sw = &fbcon_cfb8;
 		break;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 	case 15:
 	case 16:
 		sw = &fbcon_cfb16;
 		break;
 #endif
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
 	case 32:
 		sw = &fbcon_cfb32;
 		break;
@@ -242,7 +242,7 @@ static int vesa_setcolreg(unsigned regno, unsigned red, unsigned green,
 	palette[regno].blue  = blue;
 	
 	switch (video_bpp) {
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 	case 8:
 		/* Hmm, can we do it _always_ this way ??? */
 		outb_p(regno, dac_reg);
@@ -251,19 +251,19 @@ static int vesa_setcolreg(unsigned regno, unsigned red, unsigned green,
 		outb_p(blue, dac_val);
 		break;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 	case 15:
 	case 16:
 		fbcon_cfb16_cmap[regno] =
 			(red << vesafb_defined.red.offset) | (green << 5) | blue;
 		break;
 #endif
-#ifdef CONFIG_FBCON_CFB24
+#ifdef FBCON_HAS_CFB24
 	case 24:
 		/* FIXME: todo */
 		break;
 #endif
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
 	case 32:
 		fbcon_cfb32_cmap[regno] =
 			(red   << vesafb_defined.red.offset)   |

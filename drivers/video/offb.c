@@ -34,6 +34,7 @@
 
 #include "fbcon.h"
 #include "fbcon-cfb8.h"
+#include "macmodes.h"
 
 
 static int currcon = 0;
@@ -406,7 +407,7 @@ __initfunc(void offb_init(void))
 	disp->line_length = fix->line_length;
 	disp->can_soft_blank = info->cmap_adr ? 1 : 0;
 	disp->inverse = 0;
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 	disp->dispsw = &fbcon_cfb8;
 #else
 	disp->dispsw = NULL;

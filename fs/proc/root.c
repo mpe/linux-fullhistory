@@ -13,6 +13,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/config.h>
+#include <linux/init.h>
 #include <asm/bitops.h>
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
@@ -632,7 +633,7 @@ static struct proc_dir_entry proc_root_ppc_htab = {
 };
 #endif
 
-void proc_root_init(void)
+__initfunc(void proc_root_init(void))
 {
 	proc_base_init();
 	proc_register(&proc_root, &proc_root_loadavg);

@@ -2,6 +2,16 @@
      *  Atari interleaved bitplanes (4 planes) (iplan2p4)
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_IPLAN2P4) || defined(CONFIG_FBCON_IPLAN2P4_MODULE)
+#define FBCON_HAS_IPLAN2P4
+#endif
+#else
+#if defined(CONFIG_FBCON_IPLAN2P4)
+#define FBCON_HAS_IPLAN2P4
+#endif
+#endif
+
 extern struct display_switch fbcon_iplan2p4;
 extern void fbcon_iplan2p4_setup(struct display *p);
 extern void fbcon_iplan2p4_bmove(struct display *p, int sy, int sx, int dy,

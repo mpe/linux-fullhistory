@@ -692,30 +692,6 @@
 /* ATI PCI constants */
 #define PCI_ATI_VENDOR_ID	0x1002
 
-/* mach64GX family */
-#define PCI_MACH64_GX		0x4758	/* mach64GX (ATI888GX00) */
-#define PCI_MACH64_CX		0x4358	/* mach64CX (ATI888CX00) */
-
-/* mach64CT family */
-#define PCI_MACH64_CT		0x4354	/* mach64CT (ATI264CT) */
-#define PCI_MACH64_ET		0x4554	/* mach64ET (ATI264ET) */
-
-/* mach64CT family / mach64VT class */
-#define PCI_MACH64_VT		0x5654	/* mach64VT (ATI264VT) */
-#define PCI_MACH64_VTB		0x5655	/* mach64VTB (ATI264VTB) */
-#define PCI_MACH64_VT4		0x5656	/* mach64VT4 (ATI264VT4) */
-
-/* mach64CT family / mach64GT (3D RAGE) class */
-#define PCI_MACH64_GB		0x4742	/* RAGE PRO, BGA, AGP 1x and 2x */
-#define PCI_MACH64_GD		0x4744	/* RAGE PRO, BGA, AGP 1x only */
-#define PCI_MACH64_GI		0x4749	/* RAGE PRO, BGA, PCI33 only */
-#define PCI_MACH64_GP		0x4750	/* RAGE PRO, PQFP, PCI33, full 3D */
-#define PCI_MACH64_GQ		0x4751	/* RAGE PRO, PQFP, PCI33, limited 3D */
-#define PCI_MACH64_GT		0x4754	/* 3D RAGE II/II+ */
-#define PCI_MACH64_GTB		0x4755	/* 3D II+ */
-#define PCI_MACH64_GTC		0x4756	/* 3D RAGE IIC */
-#define PCI_MACH64_LT		0x4c47	/* 3D RAGE LT */
-
 
 /* CONFIG_CHIP_ID register constants */
 #define CFG_CHIP_TYPE		0x0000FFFF
@@ -729,28 +705,30 @@
 /* Chip IDs read from CONFIG_CHIP_ID */
 
 /* mach64GX family */
-#define MACH64_GX_ID		0xD7	/* mach64GX (ATI888GX00) */
-#define MACH64_CX_ID		0x57	/* mach64CX (ATI888CX00) */
+#define GX_CHIP_ID	0xD7	/* mach64GX (ATI888GX00) */
+#define CX_CHIP_ID	0x57	/* mach64CX (ATI888CX00) */
+
+#define GX_PCI_ID	0x4758	/* mach64GX (ATI888GX00) */
+#define CX_PCI_ID	0x4358	/* mach64CX (ATI888CX00) */
 
 /* mach64CT family */
-#define MACH64_CT_ID		PCI_MACH64_CT
-#define MACH64_ET_ID		PCI_MACH64_ET
+#define CT_CHIP_ID	0x4354	/* mach64CT (ATI264CT) */
+#define ET_CHIP_ID	0x4554	/* mach64ET (ATI264ET) */
 
 /* mach64CT family / mach64VT class */
-#define MACH64_VT_ID		PCI_MACH64_VT
-#define MACH64_VTB_ID		PCI_MACH64_VTB
-#define MACH64_VT4_ID		PCI_MACH64_VT4
+#define VT_CHIP_ID	0x5654	/* mach64VT (ATI264VT) */
+#define VU_CHIP_ID	0x5655	/* mach64VTB (ATI264VTB) */
 
 /* mach64CT family / mach64GT (3D RAGE) class */
-#define MACH64_GB_ID		PCI_MACH64_GB
-#define MACH64_GD_ID		PCI_MACH64_GD
-#define MACH64_GI_ID		PCI_MACH64_GI
-#define MACH64_GP_ID		PCI_MACH64_GP
-#define MACH64_GQ_ID		PCI_MACH64_GQ
-#define MACH64_GT_ID		PCI_MACH64_GT
-#define MACH64_GTB_ID		PCI_MACH64_GTB
-#define MACH64_GTC_ID		PCI_MACH64_GTC
-#define MACH64_LT_ID		PCI_MACH64_LT
+#define LT_CHIP_ID	0x4c54	/* 3D RAGE LT */
+#define LG_CHIP_ID	0x4c47	/* 3D RAGE LG */
+#define GT_CHIP_ID	0x4754	/* 3D RAGE (GT) */
+#define GU_CHIP_ID	0x4755	/* 3D RAGE II/II+ (GTB) */
+#define GB_CHIP_ID	0x4742	/* RAGE PRO, BGA, AGP 1x and 2x */
+#define GD_CHIP_ID	0x4744	/* RAGE PRO, BGA, AGP 1x only */
+#define GI_CHIP_ID	0x4749	/* RAGE PRO, BGA, PCI33 only */
+#define GP_CHIP_ID	0x4750	/* RAGE PRO, PQFP, PCI33, full 3D */
+#define GQ_CHIP_ID	0x4751	/* RAGE PRO, PQFP, PCI33, limited 3D */
 
 
 /* Mach64 major ASIC revisions */

@@ -284,6 +284,8 @@ CONFIG_VGA_CONSOLE=y
 # Sound
 #
 # CONFIG_SOUND is not set
+CONFIG_SOUND_OSS=n
+CONFIG_LOWLEVEL_SOUND=n
 
 #
 # Kernel hacking

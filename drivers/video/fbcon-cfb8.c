@@ -108,7 +108,7 @@ void fbcon_cfb8_putc(struct vc_data *conp, struct display *p, int c, int yy,
     int bytes=p->next_line,rows;
     u32 eorx,fgx,bgx;
 
-    dest = p->screen_base + yy * p->fontheight * bytes + xx * 8;
+    dest = p->screen_base + yy * p->fontheight * bytes + xx * p->fontwidth;
     if (p->fontwidth <= 8)
 	cdat = p->fontdata + (c & 0xff) * p->fontheight;
     else
@@ -154,7 +154,7 @@ void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
     int rows,bytes=p->next_line;
     u32 eorx, fgx, bgx;
 
-    dest0 = p->screen_base + yy * p->fontheight * bytes + xx * 8;
+    dest0 = p->screen_base + yy * p->fontheight * bytes + xx * p->fontwidth;
     fgx=attr_fgcol(p,*s);
     bgx=attr_bgcol(p,*s);
     fgx |= (fgx << 8);
@@ -222,6 +222,29 @@ void fbcon_cfb8_revc(struct display *p, int xx, int yy)
     }
 }
 
+void fbcon_cfb8_clear_margins(struct vc_data *conp, struct display *p)
+{
+    u8 *dest;
+    int bytes=p->next_line;
+    u8 bgx;
+    int i;
+
+    unsigned int right_start = conp->vc_cols*p->fontwidth;
+    unsigned int right_width = p->var.xres_virtual-right_start;
+    unsigned int bottom_start = conp->vc_rows*p->fontheight;
+    unsigned int bottom_width = p->var.yres_virtual-bottom_start;
+
+    bgx=attr_bgcol_ec(p,conp);
+
+    if (right_width) {
+	dest = p->screen_base+right_start;
+	for (i = 0; i < bottom_start; i++, dest += bytes)
+	    memset(dest, bgx, right_width);
+    }
+    if (bottom_width)
+	memset(p->screen_base+bottom_start*bytes, bgx, bytes*bottom_width);
+}
+
 
     /*
      *  `switch' for the low level operations
@@ -229,7 +252,7 @@ void fbcon_cfb8_revc(struct display *p, int xx, int yy)
 
 struct display_switch fbcon_cfb8 = {
     fbcon_cfb8_setup, fbcon_cfb8_bmove, fbcon_cfb8_clear, fbcon_cfb8_putc,
-    fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL, NULL, 
+    fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL, NULL, fbcon_cfb8_clear_margins,
     FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 

@@ -20,6 +20,8 @@
  *	 - making it shorter - scr_readw are macros which expand in PRETTY long code
  */
 
+#include <linux/config.h>
+
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/errno.h>
@@ -170,7 +172,7 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	long p = *ppos;
 	long viewed, attr, size, written;
 	const char *buf0;
-	unsigned short *org = NULL;
+	u16 *org0 = NULL, *org = NULL;
 
 	attr = (currcons & 128);
 	currcons = (currcons & 127);
@@ -193,7 +195,7 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 
 	buf0 = buf;
 	if (!attr) {
-		org = screen_pos(currcons, p, viewed);
+		org0 = org = screen_pos(currcons, p, viewed);
 		while (count > 0) {
 			unsigned char c;
 			count--;
@@ -211,8 +213,8 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 				putconsxy(currcons, header+2);
 		}
 		if (count > 0) {
-		    p -= HEADER_SIZE;
-			org = screen_pos(currcons, p/2, viewed);
+			p -= HEADER_SIZE;
+			org0 = org = screen_pos(currcons, p/2, viewed);
 			if ((p & 1) && count > 0) {
 			    char c;
 				count--;
@@ -244,9 +246,8 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 #endif
 		}
 	}
-	if (currcons == fg_console)
-		/* Horribly inefficient if count < screen size.  */
-		update_screen(currcons);
+	if (org0)
+		update_region(currcons, (unsigned long)(org0), org-org0);
 	written = buf - buf0;
 	*ppos += written;
 	RETURN( written );

@@ -33,8 +33,7 @@ extern int default_blu[];
 
 extern void do_unblank_screen(void);
 extern unsigned short *screen_pos(int currcons, int w_offset, int viewed);
-extern unsigned short screen_word(int currcons, int offset, int viewed);
-extern int scrw2glyph(unsigned short scr_word);
+extern u16 screen_glyph(int currcons, int offset);
 extern void complement_pos(int currcons, int offset);
 extern void invert_screen(int currcons, int offset, int count, int shift);
 

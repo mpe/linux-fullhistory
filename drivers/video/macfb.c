@@ -43,7 +43,7 @@ static struct fb_var_screeninfo macfb_defined={
 	{0,0,0},	/* transparency */
 	0,		/* standard pixel format */
 	FB_ACTIVATE_NOW,
-	274,195,	/* 14" monitor - the late Mikael Nykvist's anyway */
+	274,195,	/* 14" monitor *Mikael Nykvist's anyway* */
 	0,		/* The only way to accelerate a mac is .. */
 	0L,0L,0L,0L,0L,
 	0L,0L,0,	/* No sync info */
@@ -217,22 +217,22 @@ static void macfb_set_disp(int con)
 	display->inverse = inverse;
 
 	switch (mac_depth) {
-#ifdef CONFIG_FBCON_MFB
+#ifdef FBCON_HAS_MFB
 	    case 1:
 		display->dispsw = &fbcon_mfb;
 		break;
 #endif
-#ifdef CONFIG_FBCON_CFB2
+#ifdef FBCON_HAS_CFB2
 	    case 2:
 		display->dispsw = &fbcon_cfb2;
 		break;
 #endif
-#ifdef CONFIG_FBCON_CFB4
+#ifdef FBCON_HAS_CFB4
 	    case 4:
 		display->dispsw = &fbcon_cfb4;
 		break;
 #endif
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 	    case 8:
 		display->dispsw = &fbcon_cfb8;
 		break;

@@ -88,9 +88,7 @@ extern void smp_setup(char *str, int *ints);
 #ifdef __i386__
 extern void ioapic_pirq_setup(char *str, int *ints);
 #endif
-#ifdef CONFIG_VGA_CONSOLE
 extern void no_scroll(char *str, int *ints);
-#endif
 extern void kbd_reset_setup(char *str, int *ints);
 extern void panic_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
@@ -767,15 +765,14 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_HFMODEM
 	{ "hfmodem=", hfmodem_setup },
 #endif
-#ifdef CONFIG_PMAC_CONSOLE
-	{ "console=", pmac_cons_setup },
-	{ "vmode=", pmac_vmode_setup },
-#endif
 #ifdef CONFIG_FTAPE
 	{ "ftape=", ftape_setup},
 #endif
 #ifdef CONFIG_MD_BOOT
 	{ "md=", md_setup},
+#endif
+#ifdef CONFIG_MACMOUSE
+	{ "adb_buttons=", adb_mouse_setup },
 #endif
 	{ 0, 0 }
 };

@@ -1,4 +1,4 @@
-/* $Id: creatorfb.c,v 1.5 1998/07/13 12:47:12 jj Exp $
+/* $Id: creatorfb.c,v 1.7 1998/07/21 10:36:48 jj Exp $
  * creatorfb.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -191,7 +191,6 @@ static void ffb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	fbc->pmask = 0xffffffff;
 	fbc->unk2 = 8;
 
-	/* FIXME: Optimize this by allowing 8/16 fontheigh only and introduce p->fontheightlog */
 	if (p->fontheightlog) {
 		y = sy << p->fontheightlog; h = height << p->fontheightlog;
 	} else {
@@ -390,7 +389,7 @@ static void ffb_loadcmap (struct fb_info_sbusfb *fb, int index, int count)
 
 static struct display_switch ffb_dispsw __initdata = {
 	ffb_setup, fbcon_redraw_bmove, ffb_clear, ffb_putc, ffb_putcs, ffb_revc, 
-	NULL, NULL, FONTWIDTHRANGE(1,16) /* Allow fontwidths up to 16 */
+	NULL, NULL, NULL, FONTWIDTHRANGE(1,16) /* Allow fontwidths up to 16 */
 };
 
 static void ffb_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)
@@ -477,6 +476,7 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	fix->line_length = 8192;
 	fix->mmio_start = (char *)(regs[0].phys_addr) + FFB_FBC_REGS_POFF;
 	fix->mmio_len = PAGE_SIZE;
+	fix->accel = FB_ACCEL_SUN_CREATOR;
 	
 	var->bits_per_pixel = 32;
 	var->green.offset = 8;

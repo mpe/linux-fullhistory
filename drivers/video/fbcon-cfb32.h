@@ -2,6 +2,16 @@
      *  32 bpp packed pixel (cfb32)
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_CFB32) || defined(CONFIG_FBCON_CFB32_MODULE)
+#define FBCON_HAS_CFB32
+#endif
+#else
+#if defined(CONFIG_FBCON_CFB32)
+#define FBCON_HAS_CFB32
+#endif
+#endif
+
 extern struct display_switch fbcon_cfb32;
 extern u32 fbcon_cfb32_cmap[16];
 extern void fbcon_cfb32_setup(struct display *p);

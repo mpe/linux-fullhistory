@@ -42,8 +42,6 @@ static int sel_end;
 static int sel_buffer_lth = 0;
 static char *sel_buffer = NULL;
 
-#define sel_pos(n)   inverse_translate(scrw2glyph(screen_word(sel_cons, n, 1)))
-
 /* clear_selection, highlight and highlight_pointer can be called
    from interrupt (via scrollback/front) */
 
@@ -57,6 +55,12 @@ highlight(const int s, const int e) {
 inline static void
 highlight_pointer(const int where) {
 	complement_pos(sel_cons, where);
+}
+
+static unsigned char
+sel_pos(int n)
+{
+	return inverse_translate(screen_glyph(sel_cons, n));
 }
 
 /* remove the current selection highlight, if any,

@@ -2,6 +2,16 @@
      *  Mac variable bpp packed pixels (mac)
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_MAC) || defined(CONFIG_FBCON_MAC_MODULE)
+#define FBCON_HAS_MAC
+#endif
+#else
+#if defined(CONFIG_FBCON_MAC)
+#define FBCON_HAS_MAC
+#endif
+#endif
+
 extern struct display_switch fbcon_mac;
 extern void fbcon_mac_setup(struct display *p);
 extern void fbcon_mac_bmove(struct display *p, int sy, int sx, int dy, int dx,

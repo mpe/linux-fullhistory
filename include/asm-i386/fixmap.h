@@ -33,16 +33,16 @@
  * task switches.
  */
 
-enum fixed_addresses {
 /*
  * on UP currently we will have no trace of the fixmap mechanizm,
  * no page table allocations, etc. This might change in the
  * future, say framebuffers for the console driver(s) could be
  * fix-mapped?
  */
+enum fixed_addresses {
 #if __SMP__
-	FIX_APIC_BASE 			= 1,	/* 0xfffff000 */
-	FIX_IO_APIC_BASE 		= 2,	/* 0xffffe000 */
+	FIX_APIC_BASE,
+	FIX_IO_APIC_BASE,
 #endif
 	__end_of_fixed_addresses
 };
@@ -50,9 +50,15 @@ enum fixed_addresses {
 extern void set_fixmap (enum fixed_addresses idx, unsigned long phys);
 
 /*
- * used by vmalloc.c:
+ * used by vmalloc.c.
+ *
+ * Leave one empty page between vmalloc'ed areas and
+ * the start of the fixmap, and leave one page empty
+ * at the top of mem..
  */
-#define FIXADDR_START (0UL-((__end_of_fixed_addresses-1)<<PAGE_SHIFT))
+#define FIXADDR_TOP	(0xffffe000UL)
+#define FIXADDR_SIZE	(__end_of_fixed_addresses << PAGE_SHIFT)
+#define FIXADDR_START	(FIXADDR_TOP - FIXADDR_SIZE)
 
 /*
  * 'index to address' translation. If anyone tries to use the idx
@@ -67,10 +73,10 @@ extern inline unsigned long fix_to_virt(const unsigned int idx)
 	 * illegal way. (such as mixing up address types or using
 	 * out-of-range indices)
 	 */
-	if ((!idx) || (idx >= __end_of_fixed_addresses))
+	if (idx >= __end_of_fixed_addresses)
 		panic("illegal fixaddr index!");
 
-        return (0UL-(unsigned long)(idx<<PAGE_SHIFT));
+        return FIXADDR_TOP - (idx << PAGE_SHIFT);
 }
 
 #endif

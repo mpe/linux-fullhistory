@@ -106,6 +106,9 @@ struct video_picture
 #define VIDEO_PALETTE_RGB32	5	/* 32bit RGB */	
 #define VIDEO_PALETTE_RGB555	6	/* 555 15bit RGB */
 #define VIDEO_PALETTE_YUV422	7	/* YUV422 capture */
+#define VIDEO_PALETTE_YUYV	8
+#define VIDEO_PALETTE_UYVY	9	/* The great thing about standards is ... */
+#define VIDEO_PALETTE_YUV420	10
 };
 
 struct video_audio
@@ -201,6 +204,7 @@ struct video_key
 #define VID_HARDWARE_RTRACK	9
 #define VID_HARDWARE_ZOLTRIX	10
 #define VID_HARDWARE_SAA7146    11
+#define VID_HARDWARE_VIDEUM	12	/* Reserved for Winnov videum */
 
 /*
  *	Initialiser list

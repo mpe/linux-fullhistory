@@ -63,6 +63,8 @@
 #define bell_duration	(vc_cons[currcons].d->vc_bell_duration)
 #define cursor_type	(vc_cons[currcons].d->vc_cursor_type)
 #define display_fg	(vc_cons[currcons].d->vc_display_fg)
+#define complement_mask (vc_cons[currcons].d->vc_complement_mask)
+#define hi_font_mask	(vc_cons[currcons].d->vc_hi_font_mask)
 
 #define vcmode		(vt_cons[currcons]->vc_mode)
 

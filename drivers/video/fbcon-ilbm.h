@@ -2,6 +2,16 @@
      *  Amiga interleaved bitplanes (ilbm)
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_ILBM) || defined(CONFIG_FBCON_ILBM_MODULE)  
+#define FBCON_HAS_ILBM 
+#endif
+#else
+#if defined(CONFIG_FBCON_ILBM) 
+#define FBCON_HAS_ILBM 
+#endif
+#endif
+
 extern struct display_switch fbcon_ilbm;
 extern void fbcon_ilbm_setup(struct display *p);
 extern void fbcon_ilbm_bmove(struct display *p, int sy, int sx, int dy, int dx,

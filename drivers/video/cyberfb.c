@@ -241,7 +241,7 @@ static void Cyberfb_blank(int blank, struct fb_info *info);
  *    Text console acceleration
  */
 
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 static struct display_switch fbcon_cyber8;
 #endif
 
@@ -853,7 +853,7 @@ static void cyberfb_set_disp(int con, struct fb_info *info)
 	display->can_soft_blank = 1;
 	display->inverse = Cyberfb_inverse;
 	switch (display->var.bits_per_pixel) {
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 	    case 8:
 		if (display->var.accel_flags & FB_ACCELF_TEXT) {
 		    display->dispsw = &fbcon_cyber8;
@@ -862,7 +862,7 @@ static void cyberfb_set_disp(int con, struct fb_info *info)
 		    display->dispsw = &fbcon_cfb8;
 		break;
 #endif
-#ifdef CONFIG_FBCON_CFB16
+#ifdef FBCON_HAS_CFB16
 	    case 16:
 		display->dispsw = &fbcon_cfb16;
 		break;
@@ -1127,7 +1127,7 @@ __initfunc(static int get_video_mode(const char *name))
  *    Text console acceleration
  */
 
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 static void fbcon_cyber8_bmove(struct display *p, int sy, int sx, int dy,
 			       int dx, int height, int width)
 {
@@ -1174,7 +1174,8 @@ static void fbcon_cyber8_revc(struct display *p, int xx, int yy)
 
 static struct display_switch fbcon_cyber8 = {
    fbcon_cfb8_setup, fbcon_cyber8_bmove, fbcon_cyber8_clear, fbcon_cyber8_putc,
-   fbcon_cyber8_putcs, fbcon_cyber8_revc, NULL, NULL, FONTWIDTH(8)
+   fbcon_cyber8_putcs, fbcon_cyber8_revc, NULL, NULL, fbcon_cfb8_clear_margins,
+   FONTWIDTH(8)
 };
 #endif
 

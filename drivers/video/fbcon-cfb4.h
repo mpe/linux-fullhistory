@@ -2,6 +2,16 @@
      *  4 bpp packed pixel (cfb4)
      */
 
+#ifdef MODULE
+#if defined(CONFIG_FBCON_CFB4) || defined(CONFIG_FBCON_CFB4_MODULE)
+#define FBCON_HAS_CFB4
+#endif
+#else
+#if defined(CONFIG_FBCON_CFB4)
+#define FBCON_HAS_CFB4
+#endif
+#endif
+
 extern struct display_switch fbcon_cfb4;
 extern void fbcon_cfb4_setup(struct display *p);
 extern void fbcon_cfb4_bmove(struct display *p, int sy, int sx, int dy, int dx,

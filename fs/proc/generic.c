@@ -260,13 +260,16 @@ struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 	ent->name = ((char *) ent) + sizeof(*ent);
 	ent->namelen = len;
 
-	if (mode == S_IFDIR) {
+	if (S_ISDIR(mode)) {
+		if ((mode & S_IALLUGO) == 0)
 		mode |= S_IRUGO | S_IXUGO;
 		ent->ops = &proc_dyna_dir_inode_operations;
 		ent->nlink = 2;
-	}
-	else if (mode == 0) {
-		mode = S_IFREG | S_IRUGO;
+	} else {
+		if ((mode & S_IFMT) == 0)
+			mode |= S_IFREG;
+		if ((mode & S_IALLUGO) == 0)
+			mode |= S_IRUGO;
 		ent->nlink = 1;
 	}
 	ent->mode = mode;

@@ -1,7 +1,12 @@
 /*
  * console_struct.h
  *
- * Data structure and defines shared between console.c, vga.c and tga.c
+ * Data structure describing single virtual console except for data
+ * used by vt.c.
+ *
+ * Fields marked with [#] must be set by the low-level driver.
+ * Fields marked with [!] can be changed by the low-level driver
+ * to achieve effects such as fast scrolling by changing the origin.
  */
 
 /*
@@ -10,11 +15,13 @@
  */
 #define CUR_DEFAULT CUR_UNDERLINE
 
+#include <linux/config.h>
+
 #define NPAR 16
 
 struct vc_data {
 	unsigned short	vc_num;			/* Console number */
-	unsigned int	vc_cols;		/* Console size */
+	unsigned int	vc_cols;		/* [#] Console size */
 	unsigned int	vc_rows;
 	unsigned int	vc_size_row;		/* Bytes per row */
 	struct consw	*vc_sw;
@@ -27,14 +34,15 @@ struct vc_data {
 	unsigned char	vc_s_color;		/* Saved foreground & background */
 	unsigned char	vc_ulcolor;		/* Color for underline mode */
 	unsigned char	vc_halfcolor;		/* Color for half intensity mode */
+	unsigned short	vc_complement_mask;	/* [#] Xor mask for mouse pointer */
+	unsigned short	vc_hi_font_mask;	/* [#] Attribute set for upper 256 chars or font or 0 if not supported */
 	unsigned int	vc_x, vc_y;		/* Cursor position */
 	unsigned int	vc_top, vc_bottom;	/* Scrolling region */
 	unsigned int	vc_state;		/* Escape sequence parser state */
 	unsigned int	vc_npar,vc_par[NPAR];	/* Parameters of current escape sequence */
-	unsigned long	vc_scr_top;		/* Top of video memory */
-	unsigned long	vc_origin;		/* Start of real screen */
-	unsigned long	vc_scr_end;		/* End of real screen */
-	unsigned long	vc_visible_origin;	/* Top of visible window */
+	unsigned long	vc_origin;		/* [!] Start of real screen */
+	unsigned long	vc_scr_end;		/* [!] End of real screen */
+	unsigned long	vc_visible_origin;	/* [!] Top of visible window */
 	unsigned long	vc_pos;			/* Cursor address */
 	unsigned int	vc_saved_x;
 	unsigned int	vc_saved_y;
@@ -77,7 +85,7 @@ struct vc_data {
 	unsigned int	vc_bell_pitch;		/* Console bell pitch */
 	unsigned int	vc_bell_duration;	/* Console bell duration */
 	unsigned int	vc_cursor_type;
-	struct vc_data **vc_display_fg;		/* Ptr to var holding fg console for this display */
+	struct vc_data **vc_display_fg;		/* [!] Ptr to var holding fg console for this display */
 	/* additional information is in vt_kern.h */
 };
 

@@ -32,10 +32,19 @@
      */
 
 static u_char nibbletab_cfb2[]={
+#if defined(__BIG_ENDIAN)
 	0x00,0x03,0x0c,0x0f,
 	0x30,0x33,0x3c,0x3f,
 	0xc0,0xc3,0xcc,0xcf,
 	0xf0,0xf3,0xfc,0xff
+#elif defined(__LITTLE_ENDIAN)
+	0x00,0xc0,0x30,0xf0,
+	0x0c,0xcc,0x3c,0xfc,
+	0x03,0xc3,0x33,0xf3,
+	0x0f,0xcf,0x3f,0xff
+#else
+#error FIXME: No endianness??
+#endif
 };
  
 
@@ -185,7 +194,7 @@ void fbcon_cfb2_revc(struct display *p, int xx, int yy)
 
 struct display_switch fbcon_cfb2 = {
     fbcon_cfb2_setup, fbcon_cfb2_bmove, fbcon_cfb2_clear, fbcon_cfb2_putc,
-    fbcon_cfb2_putcs, fbcon_cfb2_revc, NULL, NULL, FONTWIDTH(8)
+    fbcon_cfb2_putcs, fbcon_cfb2_revc, NULL, NULL, NULL, FONTWIDTH(8)
 };
 
 

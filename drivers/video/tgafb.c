@@ -741,22 +741,21 @@ __initfunc(void tgafb_init(void))
     disp.can_soft_blank = 1;
     disp.inverse = 0;
     switch (tga_type) {
-#ifdef CONFIG_FBCON_CFB8
+#ifdef FBCON_HAS_CFB8
 	case 0: /* 8-plane */
 	    disp.dispsw = &fbcon_cfb8;
-	    disp.scrollmode = SCROLL_YREDRAW;
 	    break;
 #endif
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
 	case 1: /* 24-plane */
 	case 3: /* 24plusZ */
 	    disp.dispsw = &fbcon_cfb32;
-	    disp.scrollmode = SCROLL_YREDRAW;
 	    break;
 #endif
 	default:
 	    disp.dispsw = NULL;
     }
+    disp.scrollmode = SCROLL_YREDRAW;
 
     strcpy(fb_info.modename, fb_fix.id);
     fb_info.node = -1;
@@ -842,10 +841,10 @@ static int tgafb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     palette[regno].green = green;
     palette[regno].blue = blue;
 
-#ifdef CONFIG_FBCON_CFB32
+#ifdef FBCON_HAS_CFB32
     if (regno < 16 && tga_type != 0)
 	fbcon_cfb32_cmap[regno] = (red << 16) | (green << 8) | blue;
-#endif /* CONFIG_FBCON_CFB32 */
+#endif
 
     /* How to set a single color register?? */
 

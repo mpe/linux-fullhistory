@@ -779,7 +779,7 @@ int TLan_StartTx( struct sk_buff *skb, struct device *dev )
 
 	if ( ! priv->phyOnline ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TLAN TRANSMIT:  %s PHY is not ready\n", dev->name );
-		dev_kfree_skb( skb, FREE_WRITE );
+		dev_kfree_skb( skb );
 		return 0;
 	}
 
@@ -837,7 +837,7 @@ int TLan_StartTx( struct sk_buff *skb, struct device *dev )
 	CIRC_INC( priv->txTail, TLAN_NUM_TX_LISTS );
 
 	if ( bbuf ) {
-		dev_kfree_skb( skb, FREE_WRITE );
+		dev_kfree_skb( skb );
 	}
 		
 	dev->trans_start = jiffies;
@@ -1126,7 +1126,7 @@ u32 TLan_HandleTxEOF( struct device *dev, u16 host_int )
 	head_list = priv->txList + priv->txHead;
 
 	if ( ! bbuf ) {
-		dev_kfree_skb( (struct sk_buff *) head_list->buffer[9].address, FREE_WRITE );
+		dev_kfree_skb( (struct sk_buff *) head_list->buffer[9].address );
 		head_list->buffer[9].address = 0;
 	}
 
@@ -1692,7 +1692,7 @@ void TLan_FreeLists( struct device *dev )
 			list = priv->txList + i;
 			skb = (struct sk_buff *) list->buffer[9].address;
 			if ( skb ) {
-				dev_kfree_skb( skb, FREE_WRITE );
+				dev_kfree_skb( skb );
 				list->buffer[9].address = 0;
 			}
 		}
@@ -1701,7 +1701,7 @@ void TLan_FreeLists( struct device *dev )
 			list = priv->rxList + i;
 			skb = (struct sk_buff *) list->buffer[9].address;
 			if ( skb ) {
-				dev_kfree_skb( skb, FREE_READ );
+				dev_kfree_skb( skb );
 				list->buffer[9].address = 0;
 			}
 		}
