@@ -84,6 +84,13 @@ trouble with some specific TV card, try to ask there instead of
 mailing me directly.  The chance that someone with the same card
 listens there is much higher...
 
+For problems with sound:  There are alot of different systems used
+for TV sound all over the world.  And there are also different chips
+which decode the audio signal.  Reports about sound problems ("stereo
+does'nt work") are pretty useless unless you include some details
+about your hardware and the TV sound scheme used in your country (or
+at least the country you are living in).
+
 
 Finally: If you mail some patches for bttv around the world (to
 linux-kernel/Alan/Linus/...), please Cc: me.

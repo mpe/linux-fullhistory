@@ -95,8 +95,8 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 						break;
 					case ABS_Y:
 						size = handle->dev->absmax[ABS_Y] - handle->dev->absmin[ABS_Y];
-						list->dy += (value * CONFIG_MOUSEDEV_SCREEN_Y - list->oldy) / size;
-						list->oldy += list->dy * size;
+						list->dy -= (value * CONFIG_MOUSEDEV_SCREEN_Y - list->oldy) / size;
+						list->oldy -= list->dy * size;
 						break;
 				}
 				break;

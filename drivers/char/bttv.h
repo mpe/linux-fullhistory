@@ -21,7 +21,7 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,22) 
+#define BTTV_VERSION_CODE KERNEL_VERSION(0,7,24) 
 
 #include <linux/types.h>
 #include <linux/wait.h>
@@ -112,7 +112,8 @@ struct bttv_gbuf {
 #define GBUFFER_GRABBING     1
 #define GBUFFER_DONE         2
 #define GBUFFER_ERROR        3
-
+	struct timeval tv;
+	
 	u16 width;
 	u16 height;
 	u16 fmt;
@@ -122,8 +123,7 @@ struct bttv_gbuf {
 	unsigned long re;
 };
 
-struct bttv
-{
+struct bttv {
 	struct video_device video_dev;
 	struct video_device radio_dev;
 	struct video_device vbi_dev;
@@ -192,6 +192,9 @@ struct bttv
 	unsigned int last_field; /* number of last grabbed field */
 	int i2c_command;
 	int triton1;
+
+	int errors;
+	int needs_restart;
 
 	WAIT_QUEUE gpioq;
 	int shutdown;

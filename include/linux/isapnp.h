@@ -128,6 +128,24 @@ struct isapnp_resources {
 	struct isapnp_resources *next;	/* next resource */
 };
 
+#define ISAPNP_ANY_ID		0xffff
+#define ISAPNP_CARD_DEVS	8
+
+#define ISAPNP_CARD_ID(_va, _vb, _vc, _device) \
+		vendor: ISAPNP_VENDOR(_va, _vb, _vc), device: ISAPNP_DEVICE(_device)
+#define ISAPNP_CARD_END \
+		vendor: 0, device: 0
+#define ISAPNP_DEVICE_ID(_va, _vb, _vc, _function) \
+		{ vendor: ISAPNP_VENDOR(_va, _vb, _vc), function: ISAPNP_FUNCTION(_function) }
+
+struct isapnp_card_id {
+	unsigned short vendor, device;
+	struct {
+		unsigned short vendor, function;
+	} devs[ISAPNP_CARD_DEVS];	/* logical devices */
+	unsigned long driver_data;	/* data private to the driver */
+};
+
 #if defined(CONFIG_ISAPNP) || (defined(CONFIG_ISAPNP_MODULE) && defined(MODULE))
 
 #define __ISAPNP__
@@ -158,6 +176,9 @@ struct pci_dev *isapnp_find_dev(struct pci_bus *card,
 				unsigned short vendor,
 				unsigned short function,
 				struct pci_dev *from);
+int isapnp_probe_cards(const struct isapnp_card_id *ids,
+		       int (*probe)(struct pci_bus *card,
+				    const struct isapnp_card_id *id));
 /* misc */
 void isapnp_resource_change(struct resource *resource,
 			    unsigned long start,
@@ -196,7 +217,10 @@ extern inline struct pci_bus *isapnp_find_card(unsigned short vendor,
 extern inline struct pci_dev *isapnp_find_dev(struct pci_bus *card,
 					      unsigned short vendor,
 					      unsigned short function,
-				       struct pci_dev *from) { return NULL; }
+					      struct pci_dev *from) { return NULL; }
+extern inline int isapnp_probe_cards(const struct isapnp_card_id *ids,
+				     int (*probe)(struct pci_bus *card,
+						  const struct isapnp_card_id *id)) { return -ENODEV; }
 extern inline void isapnp_resource_change(struct resource *resource,
 					  unsigned long start,
 					  unsigned long size) { ; }

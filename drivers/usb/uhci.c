@@ -1985,6 +1985,15 @@ static int setup_uhci(struct pci_dev *dev, int irq, unsigned int io_addr, unsign
 {
 	int retval;
 	struct uhci *uhci;
+	char buf[8], *bufp = buf;
+
+#ifndef __sparc__
+	sprintf(buf, "%d", irq);
+#else
+	bufp = __irq_itoa(irq);
+#endif
+	printk(KERN_INFO __FILE__ ": USB UHCI at I/O 0x%x, IRQ %s\n",
+		io_addr, bufp);
 
 	uhci = alloc_uhci(io_addr, io_size);
 	if (!uhci)

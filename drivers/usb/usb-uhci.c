@@ -2597,6 +2597,15 @@ _static int __init alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_add
 	uhci_t *s;
 	struct usb_bus *bus;
 	struct pm_dev *pmdev;
+	char buf[8], *bufp = buf;
+
+#ifndef __sparc__
+	sprintf(buf, "%d", irq);
+#else
+	bufp = __irq_itoa(irq);
+#endif
+	printk(KERN_INFO __FILE__ ": USB UHCI at I/O 0x%x, IRQ %s\n",
+		io_addr, bufp);
 
 	s = kmalloc (sizeof (uhci_t), GFP_KERNEL);
 	if (!s)

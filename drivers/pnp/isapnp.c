@@ -1208,6 +1208,50 @@ struct pci_dev *isapnp_find_dev(struct pci_bus *card,
 	return NULL;
 }
 
+static const struct isapnp_card_id *
+isapnp_match_card(const struct isapnp_card_id *ids, struct pci_bus *card)
+{
+	int idx;
+
+	while (ids->vendor || ids->device) {
+		if ((ids->vendor == ISAPNP_ANY_ID || ids->vendor == card->vendor) &&
+		    (ids->device == ISAPNP_ANY_ID || ids->device == card->device)) {
+			for (idx = 0; idx < ISAPNP_CARD_DEVS; idx++) {
+				if (ids->devs[idx].vendor == 0 &&
+				    ids->devs[idx].function == 0)
+					return ids;
+				if (isapnp_find_dev(card,
+						    ids->devs[idx].vendor,
+						    ids->devs[idx].function,
+						    NULL) == NULL)
+					goto __next;
+			}
+			return ids;
+		}
+	      __next:
+		ids++;
+	}
+	return NULL;
+}
+
+int isapnp_probe_cards(const struct isapnp_card_id *ids,
+		       int (*probe)(struct pci_bus *_card,
+		       		    const struct isapnp_card_id *_id))
+{
+	struct pci_bus *card;	
+	const struct isapnp_card_id *id;
+	int count = 0;
+
+	if (ids == NULL || probe == NULL)
+		return -EINVAL;
+	isapnp_for_each_card(card) {
+		id = isapnp_match_card(ids, card);
+		if (id != NULL && probe(card, id) >= 0)
+			count++;
+	}
+	return count;
+}
+
 static unsigned int isapnp_dma_resource_flags(struct isapnp_dma *dma)
 {
 	return dma->flags | IORESOURCE_DMA | IORESOURCE_AUTO;
@@ -2065,6 +2109,8 @@ static void __init isapnp_pci_init(void)
 
 #endif /* CONFIG_PCI */
 
+EXPORT_SYMBOL(isapnp_cards);
+EXPORT_SYMBOL(isapnp_devices);
 EXPORT_SYMBOL(isapnp_present);
 EXPORT_SYMBOL(isapnp_cfg_begin);
 EXPORT_SYMBOL(isapnp_cfg_end);
@@ -2080,6 +2126,7 @@ EXPORT_SYMBOL(isapnp_activate);
 EXPORT_SYMBOL(isapnp_deactivate);
 EXPORT_SYMBOL(isapnp_find_card);
 EXPORT_SYMBOL(isapnp_find_dev);
+EXPORT_SYMBOL(isapnp_probe_cards);
 EXPORT_SYMBOL(isapnp_resource_change);
 
 int __init isapnp_init(void)

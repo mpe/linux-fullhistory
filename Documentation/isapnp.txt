@@ -64,10 +64,10 @@ extern struct pci_bus *isapnp_find_card(unsigned short vendor,
                                         unsigned short device,
                                         struct pci_bus *from);
 
-The above function finds a ISA PnP card. For the vendor device should
+This function finds a ISA PnP card. For the vendor device should
 be used ISAPNP_VENDOR(a,b,c) where a,b,c are characters or integers.
 For the device number should be used ISAPNP_DEVICE(x) macro where x is
-integer value. Both vendor and device numbers can be get from contents
+integer value. Both vendor and device numbers can be taken from contents
 of the /proc/isapnp file.
 
 extern struct pci_dev *isapnp_find_dev(struct pci_bus *card,
@@ -75,11 +75,36 @@ extern struct pci_dev *isapnp_find_dev(struct pci_bus *card,
                                        unsigned short function,
                                        struct pci_dev *from);
 
-The above function finds the ISA PnP device. If card is NULL, then
+This function finds the ISA PnP device. If card is NULL, then
 the global search mode is used (all devices are used for the searching).
 Otherwise only devices which belongs to the specified card are verified.
 For the function number can be used ISAPNP_FUNCTION(x) macro which works
 similarly as the ISAPNP_DEVICE(x) macro.
+
+extern int isapnp_probe_cards(const struct isapnp_card_id *ids,
+			      int (*probe)(struct pci_bus *card,
+					   const struct isapnp_card_id *id));
+
+
+This function is a helper for drivers which requires to use more than
+one device from an ISA PnP card. For each cards is called the probe
+callback with appropriate information.
+
+Example for ids parameter initialization:
+
+static struct isapnp_card_id ids[] __devinitdata = {
+	{
+        	ISAPNP_CARD_ID('A','D','V', 0x550a),
+                devs: {
+			ISAPNP_DEVICE_ID('A', 'D', 'V', 0x0010),
+			ISAPNP_DEVICE_ID('A', 'D', 'V', 0x0011)
+		},
+		driver_data: 0x1234,
+	},
+	{
+		ISAPNP_CARD_END,
+	}
+};
 
 ISA PnP configuration
 =====================
@@ -99,18 +124,24 @@ otherwise the access to the ISA PnP configuration functions will be blocked.
 Second way is auto-configuration
 --------------------------------
 
-These two functions gives to the driver the real power of the ISA PnP
-feature. First function dev->prepare() only initialize the resource
-members in the device structure. This structure contains all resources
-set to auto configuration values after the initialization. The driver for
-ISA PnP device may modify (or not) some resources to skip auto configuration
-for the given resource.
+This feature gives to the driver the real power of the ISA PnP code.
+Function dev->prepare() initializes the resource members in the device
+structure. This structure contains all resources set to auto configuration
+values after the initialization. The device driver may modify some resources
+to skip the auto configuration for a given resource.
 
-The function isapnp_configure does:
-	- resources which have the auto configuration value are configured
+Once the device structure contains all requested resource values, the function
+dev->activate() must be called to assign free resources to resource members
+with the auto configuration value.
+
+Function dev->activate() does:
+	- resources with the auto configuration value are configured
 	- the auto configuration is created using ISA PnP resource map
 	- the function writes configuration to ISA PnP configuration registers
 	- the function returns to the caller actual used resources
+
+When the device driver is removing, function dev->deactivate() has to be
+called to free all assigned resources.
 
 Example (game port initialization)
 ==================================

@@ -302,9 +302,10 @@ struct input_event {
 #define BTN_TOOL_AIRBRUSH	0x144
 #define BTN_TOOL_FINGER		0x145
 #define BTN_TOOL_MOUSE		0x146
-#define BTN_TOUCH		0x147
-#define BTN_STYLUS		0x148
-#define BTN_STYLUS2		0x149
+#define BTN_TOOL_LENS		0x147
+#define BTN_TOUCH		0x14a
+#define BTN_STYLUS		0x14b
+#define BTN_STYLUS2		0x14c
 
 #define KEY_MAX			0x1ff
 

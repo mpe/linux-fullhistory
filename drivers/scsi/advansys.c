@@ -4186,7 +4186,7 @@ STATIC void         asc_prt_hex(char *f, uchar *, int);
 #endif /* ADVANSYS_DEBUG */
 
 #ifdef ADVANSYS_ASSERT
-STATIC int             interrupts_enabled(void);
+STATIC int             advansys_interrupts_enabled(void);
 #endif /* ADVANSYS_ASSERT */
 
 
@@ -7053,7 +7053,7 @@ asc_execute_scsi_cmnd(Scsi_Cmnd *scp)
     Scsi_Device        *device;
     int                ret;
 
-    ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
+    ASC_ASSERT(advansys_interrupts_enabled() == ASC_FALSE);
     ASC_DBG2(1, "asc_execute_scsi_cmnd: scp %lx, done %lx\n",
         (ulong) scp, (ulong) scp->scsi_done);
 
@@ -7182,7 +7182,7 @@ asc_execute_scsi_cmnd(Scsi_Cmnd *scp)
     }
 
     ASC_DBG(1, "asc_execute_scsi_cmnd: end\n");
-    ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
+    ASC_ASSERT(advansys_interrupts_enabled() == ASC_FALSE);
     return ret;
 }
 
@@ -7602,7 +7602,7 @@ asc_isr_callback(ASC_DVC_VAR *asc_dvc_varp, ASC_QDONE_INFO *qdonep)
     struct Scsi_Host    *shp;
     int                 i;
 
-    ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
+    ASC_ASSERT(advansys_interrupts_enabled() == ASC_FALSE);
     ASC_DBG2(1, "asc_isr_callback: asc_dvc_varp %lx, qdonep %lx\n",
         (ulong) asc_dvc_varp, (ulong) qdonep);
     ASC_DBG_PRT_ASC_QDONE_INFO(2, qdonep);
@@ -7773,7 +7773,7 @@ adv_isr_callback(ADV_DVC_VAR *adv_dvc_varp, ADV_SCSI_REQ_Q *scsiqp)
     struct Scsi_Host    *shp;
     int                 i;
 
-    ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
+    ASC_ASSERT(advansys_interrupts_enabled() == ASC_FALSE);
     ASC_DBG2(1, "adv_isr_callback: adv_dvc_varp %lx, scsiqp %lx\n",
         (ulong) adv_dvc_varp, (ulong) scsiqp);
     ASC_DBG_PRT_ADV_SCSI_REQ_Q(2, scsiqp);
@@ -8422,7 +8422,7 @@ asc_enqueue(asc_queue_t *ascq, REQP reqp, int flag)
 
     ASC_DBG3(3, "asc_enqueue: ascq %lx, reqp %lx, flag %d\n",
         (ulong) ascq, (ulong) reqp, flag);
-    ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
+    ASC_ASSERT(advansys_interrupts_enabled() == ASC_FALSE);
     ASC_ASSERT(reqp != NULL);
     ASC_ASSERT(flag == ASC_FRONT || flag == ASC_BACK);
     tid = REQPTID(reqp);
@@ -8475,7 +8475,7 @@ asc_dequeue(asc_queue_t *ascq, int tid)
     REQP    reqp;
 
     ASC_DBG2(3, "asc_dequeue: ascq %lx, tid %d\n", (ulong) ascq, tid);
-    ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
+    ASC_ASSERT(advansys_interrupts_enabled() == ASC_FALSE);
     ASC_ASSERT(tid >= 0 && tid <= ADV_MAX_TID);
     if ((reqp = ascq->q_first[tid]) != NULL) {
         ASC_ASSERT(ascq->q_tidmask & ADV_TID_TO_TIDMASK(tid));
@@ -8524,7 +8524,7 @@ asc_dequeue_list(asc_queue_t *ascq, REQP *lastpp, int tid)
     int     i;
 
     ASC_DBG2(3, "asc_dequeue_list: ascq %lx, tid %d\n", (ulong) ascq, tid);
-    ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
+    ASC_ASSERT(advansys_interrupts_enabled() == ASC_FALSE);
     ASC_ASSERT((tid == ASC_TID_ALL) || (tid >= 0 && tid <= ADV_MAX_TID));
 
     /*
@@ -8607,7 +8607,7 @@ asc_rmqueue(asc_queue_t *ascq, REQP reqp)
 
     ASC_DBG2(3, "asc_rmqueue: ascq %lx, reqp %lx\n",
         (ulong) ascq, (ulong) reqp);
-    ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
+    ASC_ASSERT(advansys_interrupts_enabled() == ASC_FALSE);
     ASC_ASSERT(reqp != NULL);
 
     tid = REQPTID(reqp);
@@ -8675,7 +8675,7 @@ asc_isqueued(asc_queue_t *ascq, REQP reqp)
 
     ASC_DBG2(3, "asc_isqueued: ascq %lx, reqp %lx\n",
         (ulong) ascq, (ulong) reqp);
-    ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
+    ASC_ASSERT(advansys_interrupts_enabled() == ASC_FALSE);
     ASC_ASSERT(reqp != NULL);
 
     tid = REQPTID(reqp);
@@ -8705,7 +8705,7 @@ asc_execute_queue(asc_queue_t *ascq)
     int                     i;
 
     ASC_DBG1(1, "asc_execute_queue: ascq %lx\n", (ulong) ascq);
-    ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
+    ASC_ASSERT(advansys_interrupts_enabled() == ASC_FALSE);
     /*
      * Execute queued commands for devices attached to
      * the current board in round-robin fashion.
@@ -10919,12 +10919,12 @@ asc_prt_hex(char *f, uchar *s, int l)
 
 #ifdef ADVANSYS_ASSERT
 /*
- * interrupts_enabled()
+ * advansys_interrupts_enabled()
  *
  * Return 1 if interrupts are enabled, otherwise return 0.
  */
 STATIC int
-interrupts_enabled(void)
+advansys_interrupts_enabled(void)
 {
     int flags;
 

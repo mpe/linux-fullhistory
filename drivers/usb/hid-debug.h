@@ -105,6 +105,7 @@ static struct hid_usage_entry hid_usage_table[] = {
     {0, 0x35, "Tap"},
     {0, 0x39, "TabletFunctionKey"},
     {0, 0x3a, "ProgramChangeKey"},
+    {0, 0x3c, "Invert"},
     {0, 0x42, "TipSwitch"},
     {0, 0x43, "SecondaryTipSwitch"},
     {0, 0x44, "BarrelSwitch"},

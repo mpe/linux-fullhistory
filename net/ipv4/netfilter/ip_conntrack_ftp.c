@@ -1,7 +1,4 @@
 /* FTP extension for IP connection tracking. */
-#ifdef MODULE
-#define EXPORT_SYMTAB
-#endif
 #include <linux/module.h>
 #include <linux/netfilter.h>
 #include <linux/ip.h>

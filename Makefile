@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 3
 SUBLEVEL = 99
-EXTRAVERSION = -pre2
+EXTRAVERSION = -pre3
 
 KERNELRELEASE=$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
 
@@ -179,8 +179,7 @@ DRIVERS += $(DRIVERS-y)
 
 include arch/$(ARCH)/Makefile
 
-export	CORE_FILES NETWORKS DRIVERS LIBS HEAD LDFLAGS LIBS LINKFLAGS \
-	MAKEBOOT ASFLAGS
+export	NETWORKS DRIVERS LIBS HEAD LDFLAGS LINKFLAGS MAKEBOOT ASFLAGS
 
 # use '-fno-strict-aliasing', but only if the compiler can take it
 CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)

@@ -4306,6 +4306,9 @@ static void __init probe_serial_pci(void)
 #ifdef ENABLE_SERIAL_PNP
 
 static struct pci_board pnp_devices[] __initdata = {
+	/* Motorola VoiceSURFR 56K Modem */
+	{	ISAPNP_VENDOR('M', 'O', 'T'), ISAPNP_DEVICE(0x15F0), 0, 0,
+		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },
 	/* Rockwell 56K ACF II Fax+Data+Voice Modem */
 	{	ISAPNP_VENDOR('A', 'K', 'Y'), ISAPNP_DEVICE(0x1021), 0, 0,
 		SPCI_FL_BASE0 | SPCI_FL_PNPDEFAULT, 1, 115200 },

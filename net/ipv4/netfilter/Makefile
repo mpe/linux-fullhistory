@@ -21,6 +21,8 @@ OX_OBJS += ip_conntrack_standalone.o
 O_OBJS += $(IP_NF_CONNTRACK_OBJ)
 else
   ifeq ($(CONFIG_IP_NF_CONNTRACK),m)
+  MI_OBJS += $(IP_NF_CONNTRACK_OBJ)
+  MIX_OBJS += ip_conntrack_standalone.o
   M_OBJS += ip_conntrack.o
   endif
 endif
@@ -37,7 +39,7 @@ ifeq ($(CONFIG_IP_NF_FTP),y)
 OX_OBJS += ip_conntrack_ftp.o
 else
   ifeq ($(CONFIG_IP_NF_FTP),m)
-  M_OBJS += ip_conntrack_ftp.o
+  MX_OBJS += ip_conntrack_ftp.o
   endif
 endif
 
@@ -129,6 +131,8 @@ O_OBJS += ip_nat_rule.o $(IP_NF_NAT_OBJ)
   endif
 else
   ifeq ($(CONFIG_IP_NF_NAT),m)
+  MI_OBJS += ip_nat_rule.o $(IP_NF_NAT_OBJ) 
+  MIX_OBJS += ip_nat_standalone.o
   M_OBJS += iptable_nat.o
     ifeq ($(CONFIG_IP_NF_FTP),m)
     M_OBJS += ip_nat_ftp.o

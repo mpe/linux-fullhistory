@@ -58,7 +58,8 @@ static unsigned char keybdev_mac_codes[256] =
 
 #endif
 
-struct input_handler keybdev_handler;
+static struct input_handler keybdev_handler;
+static int keybdev_alt = 0;
 
 void keybdev_ledfunc(unsigned int led)
 {
@@ -93,13 +94,21 @@ void keybdev_event(struct input_handle *handle, unsigned int type, unsigned int 
 		handle_scancode(0x1d, down);
 		handle_scancode(0x45, down);
 	} else if (code >= 96) {
-		handle_scancode(0xe0, 1);
-		handle_scancode(keybdev_x86_e0s[code - 96], down);
-		if (code == 99) {
+		if (code == 99 && keybdev_alt) {
+			 handle_scancode(84, down);
+		} else {
 			handle_scancode(0xe0, 1);
-			handle_scancode(0x37, down);
+			handle_scancode(keybdev_x86_e0s[code - 96], down);
+			if (code == 99) {
+				handle_scancode(0xe0, 1);
+				handle_scancode(0x37, down);
+			}
 		}
+	} else if (code == 84) {
+		handle_scancode(43, down);
 	} else handle_scancode(code, down);
+
+	if (code == 56 || code == 100) keybdev_alt = down;
 
 #elif CONFIG_ADB_KEYBOARD
 
@@ -152,7 +161,7 @@ static void keybdev_disconnect(struct input_handle *handle)
 	kfree(handle);
 }
 	
-struct input_handler keybdev_handler = {
+static struct input_handler keybdev_handler = {
 	event:		keybdev_event,
 	connect:	keybdev_connect,
 	disconnect:	keybdev_disconnect,

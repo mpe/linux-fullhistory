@@ -802,6 +802,11 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 
 				case 0x30: /* TipPressure */
 
+					if (!test_bit(BTN_TOUCH, input->keybit)) {
+						device->quirks |= HID_QUIRK_NOTOUCH;
+						set_bit(EV_KEY, input->evbit);
+						set_bit(BTN_TOUCH, input->keybit);
+					}
 					usage->type = EV_ABS; bit = input->absbit; max = ABS_MAX; 
 					usage->code = ABS_PRESSURE;
 					clear_bit(usage->code, bit);
@@ -817,10 +822,18 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 					}
 					break;
 
+				case 0x3c: /* Invert */
+
+					usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
+					usage->code = BTN_TOOL_RUBBER;
+					clear_bit(usage->code, bit);
+					break;
+
 				case 0x33: /* Touch */
 				case 0x42: /* TipSwitch */
 				case 0x43: /* TipSwitch2 */
 
+					device->quirks &= ~HID_QUIRK_NOTOUCH;
 					usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
 					usage->code = BTN_TOUCH;
 					clear_bit(usage->code, bit);
@@ -930,7 +943,7 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 	}
 }
 
-static void hid_process_event(struct input_dev *input, int flags, struct hid_usage *usage, __s32 value)
+static void hid_process_event(struct input_dev *input, int *quirks, struct hid_field *field, struct hid_usage *usage, __s32 value)
 {
 	hid_dump_input(usage, value);
 
@@ -941,9 +954,30 @@ static void hid_process_event(struct input_dev *input, int flags, struct hid_usa
 		return;
 	}
 
+	if (usage->hid == (HID_UP_DIGITIZER | 0x003c)) { /* Invert */
+		*quirks = value ? (*quirks | HID_QUIRK_INVERT) : (*quirks & ~HID_QUIRK_INVERT);
+		return;
+	}
+
+	if (usage->hid == (HID_UP_DIGITIZER | 0x0032)) { /* InRange */
+		if (value) {
+			input_event(input, usage->type, (*quirks & HID_QUIRK_INVERT) ? BTN_TOOL_RUBBER : usage->code, 1);
+			return;
+		}
+		input_event(input, usage->type, usage->code, 0);
+		input_event(input, usage->type, BTN_TOOL_RUBBER, 0);
+		return;
+	}
+
+	if (usage->hid == (HID_UP_DIGITIZER | 0x0030) && (*quirks & HID_QUIRK_NOTOUCH)) { /* Pressure */
+		int a = field->logical_minimum;
+		int b = field->logical_maximum;
+		input_event(input, EV_KEY, BTN_TOUCH, value > a + ((b - a) >> 3));
+	}
+
 	input_event(input, usage->type, usage->code, value);
 
-	if ((flags & HID_MAIN_ITEM_RELATIVE) && (usage->type == EV_KEY))
+	if ((field->flags & HID_MAIN_ITEM_RELATIVE) && (usage->type == EV_KEY))
 		input_event(input, usage->type, usage->code, 0);
 }
 
@@ -986,19 +1020,21 @@ static void hid_input_field(struct hid_device *dev, struct hid_field *field, __u
 			} else {
 				if (value[n] == field->value[n]) continue;
 			}
-			hid_process_event(&dev->input, field->flags, &field->usage[n], value[n]);
+			hid_process_event(&dev->input, &dev->quirks, field, &field->usage[n], value[n]);
 
 		} else {
 
 			if (field->value[n] >= min && field->value[n] <= max			/* non-NULL value */
 				&& field->usage[field->value[n] - min].hid			/* nonzero usage */
 				&& search(value, field->value[n], count))
-					hid_process_event(&dev->input, field->flags, &field->usage[field->value[n] - min], 0);
+					hid_process_event(&dev->input, &dev->quirks, field,
+						&field->usage[field->value[n] - min], 0);
 
 			if (value[n] >= min && value[n] <= max					/* non-NULL value */
 				&& field->usage[value[n] - min].hid				/* nonzero usage */
 				&& search(field->value, value[n], count))
-					hid_process_event(&dev->input, field->flags, &field->usage[value[n] - min], 1);
+					hid_process_event(&dev->input, &dev->quirks,
+						field, &field->usage[value[n] - min], 1);
 		}
 	}
 
@@ -1261,14 +1297,18 @@ static void hid_init_input(struct hid_device *hid)
 
 #define USB_VENDOR_ID_WACOM		0x056a
 #define USB_DEVICE_ID_WACOM_GRAPHIRE	0x0010
-#define USB_DEVICE_ID_WACOM_INTUOS	0x0021
+#define USB_DEVICE_ID_WACOM_INTUOS	0x0020
 
 struct hid_blacklist {
 	__u16 idVendor;
 	__u16 idProduct;
 } hid_blacklist[] = {
-	{ USB_VENDOR_ID_WACOM, USB_DEVICE_ID_WACOM_INTUOS },
 	{ USB_VENDOR_ID_WACOM, USB_DEVICE_ID_WACOM_GRAPHIRE },
+	{ USB_VENDOR_ID_WACOM, USB_DEVICE_ID_WACOM_INTUOS },
+	{ USB_VENDOR_ID_WACOM, USB_DEVICE_ID_WACOM_INTUOS + 1},
+	{ USB_VENDOR_ID_WACOM, USB_DEVICE_ID_WACOM_INTUOS + 2},
+	{ USB_VENDOR_ID_WACOM, USB_DEVICE_ID_WACOM_INTUOS + 3},
+	{ USB_VENDOR_ID_WACOM, USB_DEVICE_ID_WACOM_INTUOS + 4},
 	{ 0, 0 }
 };
 

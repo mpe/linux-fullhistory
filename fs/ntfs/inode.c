@@ -258,7 +258,7 @@ static void ntfs_load_attributes(ntfs_inode* ino)
 	if( !buf )
 		return;
 	delta=0;
-	for(offset=0;datasize;datasize-=len)
+	for(offset=0;datasize;datasize-=len,offset+=len)
 	{
 		ntfs_io io;
 		io.fn_put=ntfs_put;
@@ -268,7 +268,7 @@ static void ntfs_load_attributes(ntfs_inode* ino)
 		if(ntfs_read_attr(ino,vol->at_attribute_list,0,offset,&io)){
 			ntfs_error("error in load_attributes\n");
 		}
-		delta=len;
+		delta+=len;
 		parse_attributes(ino,buf,&delta);
 		if(delta)
 			/* move remaining bytes to buffer start */

@@ -7,9 +7,6 @@
 /* (c) 1999 Paul `Rusty' Russell.  Licenced under the GNU General
    Public Licence. */
 
-#ifdef MODULE
-#define EXPORT_SYMTAB
-#endif
 #include <linux/types.h>
 #include <linux/ip.h>
 #include <linux/netfilter.h>

@@ -1327,6 +1327,13 @@ N: Andreas S. Krebs
 E: akrebs@altavista.net
 D: CYPRESS CY82C693 chipset IDE, Digital's PC-Alpha 164SX boards
 
+N: Greg Kroah-Hartman
+E: greg@kroah.com
+W: http://www.kroah.com/linux-usb/
+D: USB Serial Converter driver framework, USB Handspring Visor driver
+D: ConnectTech WHITEHeat USB driver, Generic USB Serial driver
+D: bits and pieces of USB core code.
+
 N: Russell Kroll
 E: rkroll@exploits.org
 W: http://www.exploits.org/
@@ -1360,10 +1367,13 @@ S: D-91080 Uttenreuth
 S: Germany
 
 N: Jaroslav Kysela
-E: perex@jcu.cz
-W: http://www.pf.jcu.cz/~perex
+E: perex@suse.cz
+W: http://www.perex.cz
 D: Original Author and Maintainer for HP 10/100 Mbit Network Adapters
-S: Unix Centre of Pedagogical Faculty, University of South Bohemia
+D: ISA PnP
+S: Sindlovy Dvory 117
+S: 370 01  Ceske Budejovice
+S: Czech Republic
 
 N: Bas Laarhoven
 E: bas@vimec.nl

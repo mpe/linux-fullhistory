@@ -1650,16 +1650,24 @@ static void hc_release_ohci (ohci_t * ohci)
 static int hc_found_ohci (struct pci_dev *dev, int irq, void * mem_base)
 {
 	ohci_t * ohci;
-	dbg("USB HC found: irq= %d membase= %lx", irq, (unsigned long) mem_base);
+	char buf[8], *bufp = buf;
+
+#ifndef __sparc__
+	sprintf(buf, "%d", irq);
+#else
+	bufp = __irq_itoa(irq);
+#endif
+	printk(KERN_INFO __FILE__ ": USB OHCI at membase 0x%lx, IRQ %s\n",
+		(unsigned long)	mem_base, bufp);
     
 	ohci = hc_alloc_ohci (mem_base);
 	if (!ohci) {
 		return -ENOMEM;
 	}
-	
+
 	INIT_LIST_HEAD (&ohci->ohci_hcd_list);
 	list_add (&ohci->ohci_hcd_list, &ohci_hcd_list);
-	
+
 	hc_reset (ohci);
 	writel (ohci->hc_control = OHCI_USB_RESET, &ohci->regs->control);
 	wait_ms (10);

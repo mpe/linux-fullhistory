@@ -179,6 +179,13 @@ struct hid_item {
 #define HID_FEATURE_REPORT	2
 
 /*
+ * HID device quirks.
+ */
+
+#define HID_QUIRK_INVERT	0x01
+#define HID_QUIRK_NOTOUCH	0x02
+
+/*
  * This is the global enviroment of the parser. This information is
  * persistent for main-items. The global enviroment can be saved and
  * restored with PUSH/POP statements.
@@ -285,6 +292,7 @@ struct hid_device {							/* device report descriptor */
 	struct urb urb;							/* USB URB structure */
 	struct urb urbout;						/* Output URB */
 	struct input_dev input;						/* input device structure */
+	int quirks;							/* Various nasty tricks the device can pull on us */
 };
 
 #define HID_GLOBAL_STACK_SIZE 4
