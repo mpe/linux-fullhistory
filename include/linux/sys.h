@@ -7,11 +7,6 @@
 #define NR_syscalls 256
 
 /*
- * These are system calls with the same entry-point
- */
-#define _sys_clone _sys_fork
-
-/*
  * These are system calls that will be removed at some time
  * due to newer versions existing..
  * (please be careful - ibcs2 may need some of these).

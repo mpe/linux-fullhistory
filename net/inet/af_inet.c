@@ -864,11 +864,13 @@ outside_loop:
 	{
 /* should be below! */
 		if (sk2->num != snum) continue;
+#if 0
 		if (sk2->dead) 
 		{
 			destroy_sock(sk2);
 			goto outside_loop;
 		}
+#endif
 		if (!sk->reuse)
 		{
 			sti();

@@ -6,9 +6,9 @@
 extern int sel_cons;
 
 extern void clear_selection(void);
-extern int set_selection(const int arg, struct tty_struct *tty);
+extern int set_selection(const unsigned long arg, struct tty_struct *tty);
 extern int paste_selection(struct tty_struct *tty);
-extern int sel_loadlut(const int arg);
+extern int sel_loadlut(const unsigned long arg);
 extern int mouse_reporting(void);
 extern void mouse_report(struct tty_struct * tty, int butt, int mrx, int mry);
 
@@ -33,7 +33,9 @@ extern void putconsxy(int currcons, char *p);
 
 /* how to access screen memory */
 #ifdef __alpha__
- 
+
+#include <asm/io.h> 
+
 static inline void scr_writew(unsigned short val, unsigned short * addr)
 {
 	if ((long) addr < 0)

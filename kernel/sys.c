@@ -517,6 +517,7 @@ asmlinkage int sys_setsid(void)
 	current->leader = 1;
 	current->session = current->pgrp = current->pid;
 	current->tty = NULL;
+	current->tty_old_pgrp = 0;
 	return current->pgrp;
 }
 

@@ -7,8 +7,8 @@
    Copyright (C) 1994, David S. Miller (davem@caip.rutgers.edu)
 */
 
-extern unsigned int trapbase[];
-extern unsigned int end[], etext[], msgbuf[];
+extern unsigned long *trapbase;
+extern char end, etext, msgbuf;
 
 extern void flush_vac_context(void);
 extern void flush_vac_segment(unsigned int foo_segment);

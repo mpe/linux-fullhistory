@@ -73,7 +73,6 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 	unsigned int old_offset;
 	unsigned int backlink;
 	int dlen, rrflag, match;
-	int high_sierra = 0;
 	char * dpnt;
 	struct iso_directory_record * de;
 	char c;
@@ -155,16 +154,6 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 			backlink = 0;
 		}
     
-		/* Do not report hidden or associated files */
-		high_sierra = dir->i_sb->u.isofs_sb.s_high_sierra;
-		if (de->flags[-high_sierra] & 5) {
-		  if (cpnt) {
-		    kfree(cpnt);
-		    cpnt = NULL;
-		  };
-		  continue;
-		}
-		
 		dlen = de->name_len[0];
 		dpnt = de->name;
 		/* Now convert the filename in the buffer to lower case */

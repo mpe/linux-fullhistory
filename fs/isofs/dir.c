@@ -183,14 +183,17 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 		   is no Rock Ridge NM field. */
 		
 		else {
-		  /* Do not report hidden or associated files */
-		        high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
-		        if (de->flags[-high_sierra] & 5) {
-			  if (cpnt) {
-			    kfree(cpnt);
-			    cpnt = NULL;
-			  };
-			  continue;
+			if (inode->i_sb->u.isofs_sb.s_unhide=='n')
+                        {
+		  		/* Do not report hidden or associated files */
+		        	high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
+		        	if (de->flags[-high_sierra] & 5) {
+				  if (cpnt) {
+				    kfree(cpnt);
+				    cpnt = NULL;
+				  };
+				  continue;
+				}
 			}
 			dlen = de->name_len[0];
 			dpnt = de->name;

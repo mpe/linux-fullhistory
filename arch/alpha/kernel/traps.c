@@ -38,10 +38,28 @@ asmlinkage void do_entUna(unsigned long va, unsigned long opcode, unsigned long 
 	die_if_kernel("Unaligned", regs, 0);
 }
 
+/*
+ * DEC means people to use the "retsys" instruction for return from
+ * a system call, but they are clearly misguided about this. We use
+ * "rti" in all cases, and fill in the stack with the return values.
+ * That should make signal handling etc much cleaner.
+ *
+ * Even more horribly, DEC doesn't allow system calls from kernel mode.
+ * "Security" features letting the user do something the kernel can't
+ * are a thinko. DEC palcode is strange. The PAL-code designers probably
+ * got terminally tainted by VMS at some point.
+ */
+asmlinkage void do_entSys(unsigned long sysnr, unsigned long arg1, unsigned long arg2, struct pt_regs *regs)
+{
+	printk("System call %ld(%ld,%ld)\n", sysnr, arg1, arg2);
+	die_if_kernel("Syscall", regs, 0);
+}
+
 extern asmlinkage void entMM(void);
 extern asmlinkage void entIF(void);
 extern asmlinkage void entArith(void);
 extern asmlinkage void entUna(void);
+extern asmlinkage void entSys(void);
 
 void trap_init(void)
 {
@@ -59,4 +77,5 @@ void trap_init(void)
 	wrent(entMM, 2);
 	wrent(entIF, 3);
 	wrent(entUna, 4);
+	wrent(entSys, 5);
 }

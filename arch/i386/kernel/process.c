@@ -150,9 +150,8 @@ void flush_thread(void)
 		current->debugreg[i] = 0;
 }
 
-#define IS_CLONE (regs->orig_eax == __NR_clone)
-
-unsigned long copy_thread(int nr, unsigned long clone_flags, struct task_struct * p, struct pt_regs * regs)
+void copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
+	struct task_struct * p, struct pt_regs * regs)
 {
 	int i;
 	struct pt_regs * childregs;
@@ -171,15 +170,9 @@ unsigned long copy_thread(int nr, unsigned long clone_flags, struct task_struct 
 	p->tss.eip = (unsigned long) ret_from_sys_call;
 	*childregs = *regs;
 	childregs->eax = 0;
+	childregs->esp = esp;
 	p->tss.back_link = 0;
 	p->tss.eflags = regs->eflags & 0xffffcfff;	/* iopl is always 0 for a new process */
-	if (IS_CLONE) {
-		if (regs->ebx)
-			childregs->esp = regs->ebx;
-		clone_flags = regs->ecx;
-		if (childregs->esp == regs->esp)
-			clone_flags |= COPYVM;
-	}
 	p->tss.ldt = _LDT(nr);
 	if (p->ldt) {
 		p->ldt = (struct desc_struct*) vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
@@ -196,7 +189,6 @@ unsigned long copy_thread(int nr, unsigned long clone_flags, struct task_struct 
 		p->tss.io_bitmap[i] = ~0;
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
-	return clone_flags;
 }
 
 /*
@@ -236,6 +228,25 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 		   convert it into standard 387 format first.. */
 		dump->u_fpvalid = 0;
 	}
+}
+
+asmlinkage int sys_fork(struct pt_regs regs)
+{
+	return do_fork(COPYVM | SIGCHLD, regs.esp, &regs);
+}
+
+asmlinkage int sys_clone(struct pt_regs regs)
+{
+	unsigned long clone_flags;
+	unsigned long newsp;
+
+	newsp = regs.ebx;
+	clone_flags = regs.ecx;
+	if (!newsp)
+		newsp = regs.esp;
+	if (newsp == regs.esp)
+		clone_flags |= COPYVM;
+	return do_fork(clone_flags, newsp, &regs);
 }
 
 /*

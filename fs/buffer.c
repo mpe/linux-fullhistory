@@ -1363,7 +1363,7 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 		if(priority > 3 && nlist == BUF_SHARED) continue;
 		bh = lru_list[nlist];
 		if(!bh) continue;
-		i = nr_buffers_type[nlist] >> priority;
+		i = 2*nr_buffers_type[nlist] >> priority;
 		for ( ; i-- > 0 ; bh = bh->b_next_free) {
 			/* We may have stalled while waiting for I/O to complete. */
 			if(bh->b_list != nlist) goto repeat1;

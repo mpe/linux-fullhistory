@@ -160,18 +160,33 @@ extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_VALID; }
 extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)] > 1; }
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
+extern inline void pte_reuse(pte_t * ptep)
+{
+	if (!(mem_map[MAP_NR(ptep)] & MAP_PAGE_RESERVED))
+		mem_map[MAP_NR(ptep)]++;
+}
 
 extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
 extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~_PFN_MASK) != _PAGE_TABLE || pmd_page(pmd) > high_memory; }
 extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_VALID; }
 extern inline int pmd_inuse(pmd_t *pmdp)	{ return mem_map[MAP_NR(pmdp)] > 1; }
 extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
+extern inline void pmd_reuse(pmd_t * pmdp)
+{
+	if (!(mem_map[MAP_NR(pmdp)] & MAP_PAGE_RESERVED))
+		mem_map[MAP_NR(pmdp)]++;
+}
 
 extern inline int pgd_none(pgd_t pgd)		{ return !pgd_val(pgd); }
 extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & ~_PFN_MASK) != _PAGE_TABLE || pgd_page(pgd) > high_memory; }
 extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd) & _PAGE_VALID; }
 extern inline int pgd_inuse(pgd_t *pgdp)	{ return mem_map[MAP_NR(pgdp)] > 1; }
 extern inline void pgd_clear(pgd_t * pgdp)	{ pgd_val(*pgdp) = 0; }
+extern inline void pgd_reuse(pgd_t * pgdp)
+{
+	if (!(mem_map[MAP_NR(pgdp)] & MAP_PAGE_RESERVED))
+		mem_map[MAP_NR(pgdp)]++;
+}
 
 /*
  * The following only work if pte_present() is true.

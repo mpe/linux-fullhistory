@@ -1,3 +1,4 @@
+#define THREE_LEVEL
 /*
  *  linux/fs/proc/mem.c
  *
@@ -25,7 +26,8 @@
 
 static int mem_read(struct inode * inode, struct file * file,char * buf, int count)
 {
-	pgd_t *pgdir;
+	pgd_t *page_dir;
+	pmd_t *page_middle;
 	pte_t pte;
 	char * page;
 	struct task_struct * tsk;
@@ -50,15 +52,23 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		pgdir = PAGE_DIR_OFFSET(tsk,addr);
-		if (pgd_none(*pgdir))
+		page_dir = pgd_offset(tsk,addr);
+		if (pgd_none(*page_dir))
 			break;
-		if (pgd_bad(*pgdir)) {
-			printk("Bad page dir entry %08lx\n", pgd_val(*pgdir));
-			pgd_clear(pgdir);
+		if (pgd_bad(*page_dir)) {
+			printk("Bad page dir entry %08lx\n", pgd_val(*page_dir));
+			pgd_clear(page_dir);
 			break;
 		}
-		pte = *(pte_t *) (PAGE_PTR(addr) + pgd_page(*pgdir));
+		page_middle = pmd_offset(page_dir,addr);
+		if (pmd_none(*page_middle))
+			break;
+		if (pmd_bad(*page_middle)) {
+			printk("Bad page middle entry %08lx\n", pmd_val(*page_middle));
+			pmd_clear(page_middle);
+			break;
+		}
+		pte = *pte_offset(page_middle,addr);
 		if (!pte_present(pte))
 			break;
 		page = (char *) pte_page(pte) + (addr & ~PAGE_MASK);
@@ -78,8 +88,9 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 
 static int mem_write(struct inode * inode, struct file * file,char * buf, int count)
 {
-	pgd_t * pgdir;
-	pte_t * pte;
+	pgd_t *page_dir;
+	pmd_t *page_middle;
+	pte_t pte;
 	char * page;
 	struct task_struct * tsk;
 	unsigned long addr, pid;
@@ -103,15 +114,23 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		pgdir = PAGE_DIR_OFFSET(tsk,addr);
-		if (pgd_none(*pgdir))
+		page_dir = pgd_offset(tsk,addr);
+		if (pgd_none(*page_dir))
 			break;
-		if (pgd_bad(*pgdir)) {
-			printk("Bad page dir entry %08lx\n", pgd_val(*pgdir));
-			pgd_clear(pgdir);
+		if (pgd_bad(*page_dir)) {
+			printk("Bad page dir entry %08lx\n", pgd_val(*page_dir));
+			pgd_clear(page_dir);
 			break;
 		}
-		pte = *(pte_t *) (PAGE_PTR(addr) + pgd_page(*pgdir));
+		page_middle = pmd_offset(page_dir,addr);
+		if (pmd_none(*page_middle))
+			break;
+		if (pmd_bad(*page_middle)) {
+			printk("Bad page middle entry %08lx\n", pmd_val(*page_middle));
+			pmd_clear(page_middle);
+			break;
+		}
+		pte = *pte_offset(page_middle,addr);
 		if (!pte_present(pte))
 			break;
 		if (!pte_write(pte))
@@ -157,6 +176,7 @@ int mem_mmap(struct inode * inode, struct file * file,
 {
 	struct task_struct *tsk;
 	pgd_t *src_dir, *dest_dir;
+	pmd_t *src_middle, *dest_middle;
 	pte_t *src_table, *dest_table;
 	unsigned long stmp, dtmp;
 	struct vm_area_struct *src_vma = NULL;
@@ -168,7 +188,6 @@ int mem_mmap(struct inode * inode, struct file * file,
 	for (i = 1 ; i < NR_TASKS ; i++)
 		if (task[i] && task[i]->pid == (inode->i_ino >> 16)) {
 			tsk = task[i];
-			src_vma = task[i]->mm->mmap;
 			break;
 		}
 
@@ -180,6 +199,7 @@ int mem_mmap(struct inode * inode, struct file * file,
 	 moment because working out the vm_area_struct & nattach stuff isn't
 	 worth it. */
 
+	src_vma = tsk->mm->mmap;
 	stmp = vma->vm_offset;
 	while (stmp < vma->vm_offset + (vma->vm_end - vma->vm_start)) {
 		while (src_vma && stmp > src_vma->vm_end)
@@ -187,15 +207,21 @@ int mem_mmap(struct inode * inode, struct file * file,
 		if (!src_vma || (src_vma->vm_flags & VM_SHM))
 			return -EINVAL;
 
-		src_dir = PAGE_DIR_OFFSET(tsk, stmp);
+		src_dir = pgd_offset(tsk, stmp);
 		if (pgd_none(*src_dir))
 			return -EINVAL;
 		if (pgd_bad(*src_dir)) {
 			printk("Bad source page dir entry %08lx\n", pgd_val(*src_dir));
 			return -EINVAL;
 		}
-
-		src_table = (pte_t *)(pgd_page(*src_dir) + PAGE_PTR(stmp));
+		src_middle = pmd_offset(src_dir, stmp);
+		if (pmd_none(*src_middle))
+			return -EINVAL;
+		if (pmd_bad(*src_middle)) {
+			printk("Bad source page middle entry %08lx\n", pmd_val(*src_middle));
+			return -EINVAL;
+		}
+		src_table = pte_offset(src_middle, stmp);
 		if (pte_none(*src_table))
 			return -EINVAL;
 
@@ -208,7 +234,7 @@ int mem_mmap(struct inode * inode, struct file * file,
 		stmp += PAGE_SIZE;
 	}
 
-	src_vma = task[i]->mm->mmap;
+	src_vma = tsk->mm->mmap;
 	stmp    = vma->vm_offset;
 	dtmp    = vma->vm_start;
 
@@ -216,28 +242,17 @@ int mem_mmap(struct inode * inode, struct file * file,
 		while (src_vma && stmp > src_vma->vm_end)
 			src_vma = src_vma->vm_next;
 
-		src_dir = PAGE_DIR_OFFSET(tsk, stmp);
-		src_table = (pte_t *) (pgd_page(*src_dir) + PAGE_PTR(stmp));
+		src_dir = pgd_offset(tsk, stmp);
+		src_middle = pmd_offset(src_dir, stmp);
+		src_table = pte_offset(src_middle, stmp);
 
-		dest_dir = PAGE_DIR_OFFSET(current, dtmp);
-
-		if (pgd_none(*dest_dir)) {
-			unsigned long page = get_free_page(GFP_KERNEL);
-			if (!page)
-				return -ENOMEM;
-			if (pgd_none(*dest_dir)) {
-				pgd_set(dest_dir, (pte_t *) page);
-			} else {
-				free_page(page);
-			}
-		}
-
-		if (pgd_bad(*dest_dir)) {
-			printk("Bad dest directory entry %08lx\n", pgd_val(*dest_dir));
-			return -EINVAL;
-		}
-
-		dest_table = (pte_t *) (pgd_page(*dest_dir) + PAGE_PTR(dtmp));
+		dest_dir = pgd_offset(current, dtmp);
+		dest_middle = pmd_alloc(dest_dir, dtmp);
+		if (!dest_middle)
+			return -ENOMEM;
+		dest_table = pte_alloc(dest_middle, dtmp);
+		if (!dest_table)
+			return -ENOMEM;
 
 		if (!pte_present(*src_table))
 			do_no_page(src_vma, stmp, 1);

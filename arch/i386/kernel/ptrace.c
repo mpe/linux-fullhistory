@@ -1,3 +1,4 @@
+#define THREE_LEVEL
 /* ptrace.c */
 /* By Ross Biro 1/23/92 */
 /* edited by Linus Torvalds */
@@ -86,11 +87,12 @@ static inline int put_stack_long(struct task_struct *task, int offset,
 static unsigned long get_long(struct vm_area_struct * vma, unsigned long addr)
 {
 	pgd_t * pgdir;
+	pmd_t * pgmiddle;
 	pte_t * pgtable;
 	unsigned long page;
 
 repeat:
-	pgdir = PAGE_DIR_OFFSET(vma->vm_task, addr);
+	pgdir = pgd_offset(vma->vm_task, addr);
 	if (pgd_none(*pgdir)) {
 		do_no_page(vma, addr, 0);
 		goto repeat;
@@ -100,7 +102,17 @@ repeat:
 		pgd_clear(pgdir);
 		return 0;
 	}
-	pgtable = (pte_t *) (PAGE_PTR(addr) + pgd_page(*pgdir));
+	pgmiddle = pmd_offset(pgdir, addr);
+	if (pmd_none(*pgmiddle)) {
+		do_no_page(vma, addr, 0);
+		goto repeat;
+	}
+	if (pmd_bad(*pgmiddle)) {
+		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
+		pmd_clear(pgmiddle);
+		return 0;
+	}
+	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
 		do_no_page(vma, addr, 0);
 		goto repeat;
@@ -126,11 +138,12 @@ static void put_long(struct vm_area_struct * vma, unsigned long addr,
 	unsigned long data)
 {
 	pgd_t *pgdir;
+	pmd_t *pgmiddle;
 	pte_t *pgtable;
 	unsigned long page;
 
 repeat:
-	pgdir = PAGE_DIR_OFFSET(vma->vm_task, addr);
+	pgdir = pgd_offset(vma->vm_task, addr);
 	if (!pgd_present(*pgdir)) {
 		do_no_page(vma, addr, 1);
 		goto repeat;
@@ -140,7 +153,17 @@ repeat:
 		pgd_clear(pgdir);
 		return;
 	}
-	pgtable = (pte_t *) (PAGE_PTR(addr) + pgd_page(*pgdir));
+	pgmiddle = pmd_offset(pgdir, addr);
+	if (pmd_none(*pgmiddle)) {
+		do_no_page(vma, addr, 0);
+		goto repeat;
+	}
+	if (pmd_bad(*pgmiddle)) {
+		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
+		pmd_clear(pgmiddle);
+		return;
+	}
+	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
 		do_no_page(vma, addr, 1);
 		goto repeat;

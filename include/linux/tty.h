@@ -222,6 +222,7 @@ struct tty_struct {
 	 */
 	unsigned int column;
 	unsigned char lnext:1, erasing:1, raw:1, real_raw:1, icanon:1;
+	unsigned char closing:1;
 	unsigned short minimum_to_wake;
 	unsigned overrun_time;
 	int num_overrun;

@@ -21,6 +21,7 @@
 #include	<linux/ioport.h>
 #include	<linux/in.h>
 #include	<linux/string.h>
+#include	<linux/delay.h>
 #include	<asm/system.h>
 #include	<asm/bitops.h>
 #include	<asm/io.h>
@@ -70,7 +71,7 @@ struct net_local
 
 extern int		wavelan_probe(device *);	/* See Space.c */
 
-static char		*version	= "wavelan.c:v5 31/1/95\n";
+static char		*version	= "wavelan.c:v6 22/2/95\n";
 
 /*
  * Entry point forward declarations.
@@ -102,14 +103,6 @@ static void		wavelan_local_show(device *);
 
 static unsigned int	wavelan_debug	= WAVELAN_DEBUG;
 static net_local	*first_wavelan	= (net_local *)0;
-
-static
-void
-busy_loop(int i)
-{
-	while (i-- > 0)
-		;
-}
 
 static
 unsigned long
@@ -150,7 +143,7 @@ hacr_write_slow(unsigned short ioaddr, int hacr)
 {
 	hacr_write(ioaddr, hacr);
 	/* delay might only be needed sometimes */
-	busy_loop(1000);
+	udelay(1000);
 }
 
 /*
@@ -444,11 +437,13 @@ wavelan_ack(device *dev)
 
 	set_chan_attn(ioaddr, lp->hacr);
 
-	for (i = 1000000; i > 0; i--)
+	for (i = 1000; i > 0; i--)
 	{
 		obram_read(ioaddr, scboff(OFFSET_SCB, scb_command), (unsigned char *)&scb_cs, sizeof(scb_cs));
 		if (scb_cs == 0)
 			break;
+
+		udelay(1000);
 	}
 
 	if (i <= 0)
@@ -477,11 +472,13 @@ wavelan_synchronous_cmd(device *dev, char *str)
 
 	set_chan_attn(ioaddr, lp->hacr);
 
-	for (i = 64000; i > 0; i--)
+	for (i = 64; i > 0; i--)
 	{
 		obram_read(ioaddr, OFFSET_CU, (unsigned char *)&cb, sizeof(cb));
 		if (cb.ac_status & AC_SFLD_C)
 			break;
+
+		udelay(1000);
 	}
 
 	if (i <= 0 || !(cb.ac_status & AC_SFLD_OK))
@@ -557,23 +554,27 @@ wavelan_hardware_reset(device *dev)
 
 	set_chan_attn(ioaddr, lp->hacr);
 
-	for (i = 1000000; i > 0; i--)
+	for (i = 1000; i > 0; i--)
 	{
 		obram_read(ioaddr, OFFSET_ISCP, (unsigned char *)&iscp, sizeof(iscp));
 
 		if (iscp.iscp_busy == (unsigned short)0)
 			break;
+
+		udelay(1000);
 	}
 
 	if (i <= 0)
 		printk("%s: wavelan_hardware_reset(): iscp_busy timeout.\n", dev->name);
 
-	for (i = 15000; i > 0; i--)
+	for (i = 15; i > 0; i--)
 	{
 		obram_read(ioaddr, OFFSET_SCB, (unsigned char *)&scb, sizeof(scb));
 
 		if (scb.scb_status == (SCB_ST_CX | SCB_ST_CNA))
 			break;
+
+		udelay(1000);
 	}
 
 	if (i <= 0)
@@ -970,11 +971,13 @@ wavelan_ru_start(device *dev)
 
 	set_chan_attn(ioaddr, lp->hacr);
 
-	for (i = 1000000; i > 0; i--)
+	for (i = 1000; i > 0; i--)
 	{
 		obram_read(ioaddr, scboff(OFFSET_SCB, scb_command), (unsigned char *)&scb_cs, sizeof(scb_cs));
 		if (scb_cs == 0)
 			break;
+
+		udelay(1000);
 	}
 
 	if (i <= 0)
@@ -1049,11 +1052,13 @@ wavelan_cu_start(device *dev)
 
 	set_chan_attn(ioaddr, lp->hacr);
 
-	for (i = 1000000; i > 0; i--)
+	for (i = 1000; i > 0; i--)
 	{
 		obram_read(ioaddr, scboff(OFFSET_SCB, scb_command), (unsigned char *)&scb_cs, sizeof(scb_cs));
 		if (scb_cs == 0)
 			break;
+
+		udelay(1000);
 	}
 
 	if (i <= 0)
@@ -1849,6 +1854,7 @@ void
 wavelan_set_multicast_list(device *dev, int num_addrs, void *addrs)
 {
 	net_local	*lp;
+	unsigned long	x;
 
 	lp = (net_local *)dev->priv;
 
@@ -1859,7 +1865,9 @@ wavelan_set_multicast_list(device *dev, int num_addrs, void *addrs)
 		 * Promiscuous mode: receive all packets.
 		 */
 		lp->promiscuous = 1;
+		x = wavelan_splhi();
 		(void)wavelan_hardware_reset(dev);
+		wavelan_splx(x);
 		break;
 
 	case 0:
@@ -1868,7 +1876,9 @@ wavelan_set_multicast_list(device *dev, int num_addrs, void *addrs)
 		 * clear multicast list.
 		 */
 		lp->promiscuous = 0;
+		x = wavelan_splhi();
 		(void)wavelan_hardware_reset(dev);
+		wavelan_splx(x);
 		break;
 
 	default:
@@ -2319,9 +2329,9 @@ wavelan_local_show(device *dev)
  *	Allan Creighton (allanc@cs.usyd.edu.au),
  *	Matthew Geier (matthew@cs.usyd.edu.au),
  *	Remo di Giovanni (remo@cs.usyd.edu.au),
+ *	Eckhard Grah (grah@wrcs1.urz.uni-wuppertal.de),
  *	Mark Hagan (mhagan@wtcpost.daytonoh.NCR.COM),
  *	Tim Nicholson (tim@cs.usyd.edu.au),
- *	Jeff Noxon (jeff@oylpatch.sccsi.com),
  *	Ian Parkin (ian@cs.usyd.edu.au),
  *	John Rosenberg (johnr@cs.usyd.edu.au),
  *	George Rossi (george@phm.gov.au),

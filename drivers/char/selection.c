@@ -3,10 +3,10 @@
  *
  * This module exports the functions:
  *
- *     'int set_selection(const int arg)'
+ *     'int set_selection(const unsigned long arg)'
  *     'void clear_selection(void)'
  *     'int paste_selection(struct tty_struct *tty)'
- *     'int sel_loadlut(const int arg)'
+ *     'int sel_loadlut(const unsigned long arg)'
  *
  * Now that /dev/vcs exists, most of this can disappear again.
  */
@@ -15,6 +15,9 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+
+#include <asm/segment.h>
+
 #include "vt_kern.h"
 #include "consolemap.h"
 #include "selection.h"
@@ -82,7 +85,7 @@ static inline int inword(const unsigned char c) {
 }
 
 /* set inwordLut contents. Invoked by ioctl(). */
-int sel_loadlut(const int arg)
+int sel_loadlut(const unsigned long arg)
 {
 	int i = verify_area(VERIFY_READ, (char *) arg, 36);
 	if (i)
@@ -107,7 +110,7 @@ static inline unsigned short limit(const unsigned short v, const unsigned short 
 }
 
 /* set the current selection. Invoked by ioctl(). */
-int set_selection(const int arg, struct tty_struct *tty)
+int set_selection(const unsigned long arg, struct tty_struct *tty)
 {
 	int sel_mode, new_sel_start, new_sel_end, spc;
 	char *bp, *obp;

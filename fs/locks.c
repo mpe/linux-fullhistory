@@ -7,7 +7,7 @@
  *  Deadlock Detection added by Kelly Carmichael, kelly@[142.24.8.65]
  *  September 17, 1994.
  *
- * FIXME: one thing isn't handled yet:
+ *  FIXME: one thing isn't handled yet:
  *	- mandatory locks (requires lots of changes elsewhere)
  *
  *  Edited by Kai Petzke, wpp@marie.physik.tu-berlin.de
@@ -22,7 +22,11 @@
  *  process. Since locks still depend on the process id, locks are inherited
  *  after an exec() but not after a fork(). This agrees with POSIX, and both
  *  BSD and SVR4 practice.
- *  Andy Walker (andy@keo.kvaerner.no), February 14, 1994
+ *  Andy Walker (andy@keo.kvaerner.no), February 14, 1995
+ *
+ *  Scrapped free list which is redundant now that we allocate locks
+ *  dynamically with kmalloc()/kfree().
+ *  Andy Walker (andy@keo.kvaerner.no), February 21, 1995
  *
  */
 
@@ -45,16 +49,11 @@ static int overlap(struct file_lock *fl1, struct file_lock *fl2);
 static int lock_it(struct file *filp, struct file_lock *caller);
 static struct file_lock *alloc_lock(struct file_lock **pos, struct file_lock *fl);
 static void free_lock(struct file_lock **fl);
-static void free_list_garbage_collect(void);
 #ifdef DEADLOCK_DETECTION
 int locks_deadlocked(int my_pid,int blocked_pid);
 #endif
 
-#define FREE_LIST_GARBAGE_COLLECT 20
-
 static struct file_lock *file_lock_table = NULL;
-static struct file_lock *file_lock_free_list = NULL;
-static int free_list_cnt = 0;
 
 int fcntl_getlk(unsigned int fd, struct flock *l)
 {
@@ -155,7 +154,8 @@ repeat:
 				if (current->signal & ~current->blocked)
 					return -ERESTARTSYS;
 #ifdef DEADLOCK_DETECTION
-				if (locks_deadlocked(file_lock.fl_owner->pid,fl->fl_owner->pid)) return -EDEADLOCK;
+				if (locks_deadlocked(file_lock.fl_owner->pid,fl->fl_owner->pid))
+					return -EDEADLOCK;
 #endif
 				interruptible_sleep_on(&fl->fl_wait);
 				if (current->signal & ~current->blocked)
@@ -192,9 +192,11 @@ int locks_deadlocked(int my_pid,int blocked_pid)
 		dlock_wait = fl->fl_wait;
 		do {
 			if (dlock_wait->task != NULL) {
-				if (dlock_wait->task->pid == blocked_pid) return -EDEADLOCK;
+				if (dlock_wait->task->pid == blocked_pid)
+					return -EDEADLOCK;
 				ret_val = locks_deadlocked(dlock_wait->task->pid,blocked_pid);
-				if (ret_val) return -EDEADLOCK;
+				if (ret_val)
+					return -EDEADLOCK;
 			}
 			dlock_wait = dlock_wait->next;
 		} while (dlock_wait != fl->fl_wait);
@@ -445,40 +447,26 @@ next_lock:
 
 /*
  * File_lock() inserts a lock at the position pos of the linked list.
- *
- *  Modified to create a new node if no free entries available - Chad Page
- *
  */
 static struct file_lock *alloc_lock(struct file_lock **pos,
 				    struct file_lock *fl)
 {
 	struct file_lock *tmp;
 
-	tmp = file_lock_free_list;
-
-	if (tmp == NULL)
-	{
-		/* Okay, let's make a new file_lock structure... */
-		tmp = (struct file_lock *)kmalloc(sizeof(struct file_lock), GFP_KERNEL);
-		tmp -> fl_owner = NULL;
-		tmp -> fl_next = file_lock_free_list;
-		tmp -> fl_nextlink = file_lock_table;
-		file_lock_table = tmp;
-	}
-	else
-	{
-		/* remove from free list */
-		file_lock_free_list = tmp->fl_next;
-		free_list_cnt--;
-	}
-
-	if (tmp->fl_owner != NULL)
-		panic("alloc_lock: broken free list\n");
+	/* Okay, let's make a new file_lock structure... */
+	tmp = (struct file_lock *)kmalloc(sizeof(struct file_lock), GFP_KERNEL);
+	if (!tmp)
+		return tmp;
+	tmp->fl_nextlink = file_lock_table;
+	tmp->fl_prevlink = NULL;
+	if (file_lock_table != NULL)
+		file_lock_table->fl_prevlink = tmp;
+	file_lock_table = tmp;
 
 	tmp->fl_next = *pos;	/* insert into file's list */
 	*pos = tmp;
 
-	tmp->fl_owner = current;	/* FIXME: needed? */
+	tmp->fl_owner = current;
 	tmp->fl_wait = NULL;
 
 	tmp->fl_type = fl->fl_type;
@@ -490,7 +478,7 @@ static struct file_lock *alloc_lock(struct file_lock **pos,
 }
 
 /*
- * Add a lock to the free list ...
+ * Free up a lock...
  */
 
 static void free_lock(struct file_lock **fl_p)
@@ -498,24 +486,19 @@ static void free_lock(struct file_lock **fl_p)
 	struct file_lock *fl;
 
 	fl = *fl_p;
-	if (fl->fl_owner == NULL)	/* sanity check */
-		panic("free_lock: broken lock list\n");
-
 	*fl_p = (*fl_p)->fl_next;
 
-	fl->fl_next = file_lock_free_list;	/* add to free list */
-	file_lock_free_list = fl;
-	fl->fl_owner = NULL;			/* for sanity checks */
+	if (fl->fl_nextlink != NULL)
+		fl->fl_nextlink->fl_prevlink = fl->fl_prevlink;
 
-	free_list_cnt++;
-	if (free_list_cnt == FREE_LIST_GARBAGE_COLLECT)
-		free_list_garbage_collect();
+	if (fl->fl_prevlink != NULL)
+		fl->fl_prevlink->fl_nextlink = fl->fl_nextlink;
+	else
+		file_lock_table = fl->fl_nextlink;
 
 	wake_up(&fl->fl_wait);
-}
 
-static void free_list_garbage_collect(void)
-{
-	/* Do nothing for now */
+	kfree(fl);
+
 	return;
 }

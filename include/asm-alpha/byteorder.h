@@ -32,14 +32,11 @@ __ntohl(unsigned long int x)
 		((x & 0xff000000U) >> 24));
 }
 
-extern __inline__ unsigned long int
-__constant_ntohl(unsigned long int x)
-{
-	return (((x & 0x000000ffU) << 24) |
-		((x & 0x0000ff00U) <<  8) |
-		((x & 0x00ff0000U) >>  8) |
-		((x & 0xff000000U) >> 24));
-}
+#define __constant_ntohl(x) \
+((unsigned int)((((unsigned int)(x) & 0x000000ffU) << 24) | \
+		(((unsigned int)(x) & 0x0000ff00U) <<  8) | \
+		(((unsigned int)(x) & 0x00ff0000U) >>  8) | \
+		(((unsigned int)(x) & 0xff000000U) >> 24)))
 
 extern __inline__ unsigned short int
 __ntohs(unsigned short int x)
@@ -48,12 +45,9 @@ __ntohs(unsigned short int x)
 		((x & 0xff00) >> 8));
 }
 
-extern __inline__ unsigned short int
-__constant_ntohs(unsigned short int x)
-{
-	return (((x & 0x00ff) << 8) |
-		((x & 0xff00) >> 8));
-}
+#define __constant_ntohs(x) \
+((unsigned short int)((((unsigned short int)(x) & 0x00ff) << 8) | \
+		      (((unsigned short int)(x) & 0xff00) >> 8)))
 
 #define __htonl(x) __ntohl(x)
 #define __htons(x) __ntohs(x)

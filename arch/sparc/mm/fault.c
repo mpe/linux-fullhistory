@@ -14,11 +14,6 @@
 extern unsigned long pg0[1024];		/* page table for 0-4MB for everybody */
 extern void die_if_kernel(char *,struct pt_regs *,long);
 
-/* Sparc stuff... I know this is a ugly place to put the PROM vector, don't
- * remind me.
- */
-extern unsigned int trapbase[];
-extern unsigned int end[], etext[], msgbuf[];
 struct linux_romvec *romvec;
 
 /* foo */

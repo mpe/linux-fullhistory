@@ -160,7 +160,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	 * self-modifying code.
 	 */
 
-	a= (unsigned long) etext;
+	a= (unsigned long) &etext;
 	mask=~(PTE_NC|PTE_W);    /* make cacheable + not writable */
 
 	printk("changing kernel text perms...\n");
@@ -173,7 +173,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 
 	for(i=0; i<8; i++)
 	  {
-	    b=PAGE_ALIGN((unsigned long) trapbase);
+	    b=PAGE_ALIGN((unsigned long) &trapbase);
 
 	    switch_to_context(i);
 

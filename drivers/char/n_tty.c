@@ -345,7 +345,7 @@ static inline void n_tty_receive_char(struct tty_struct *tty, unsigned char c)
 		return;
 	}
 	
-	if (tty->stopped && I_IXON(tty) && I_IXANY(tty) && L_IEXTEN(tty)) {
+	if (tty->stopped && I_IXON(tty) && I_IXANY(tty)) {
 		start_tty(tty);
 		return;
 	}
@@ -354,6 +354,16 @@ static inline void n_tty_receive_char(struct tty_struct *tty, unsigned char c)
 		c &= 0x7f;
 	if (I_IUCLC(tty) && L_IEXTEN(tty))
 		c=tolower(c);
+
+	if (tty->closing) {
+		if (I_IXON(tty)) {
+			if (c == START_CHAR(tty))
+				start_tty(tty);
+			else if (c == STOP_CHAR(tty))
+				stop_tty(tty);
+		}
+		return;
+	}
 
 	/*
 	 * If the previous character was LNEXT, or we know that this
@@ -690,6 +700,7 @@ static int n_tty_open(struct tty_struct *tty)
 	memset(tty->read_flags, 0, sizeof(tty->read_flags));
 	n_tty_set_termios(tty, 0);
 	tty->minimum_to_wake = 1;
+	tty->closing = 0;
 	return 0;
 }
 

@@ -2769,9 +2769,9 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->linger=0;
 	newsk->destroy = 0;
 	init_timer(&newsk->timer);
-	init_timer(&newsk->retransmit_timer);
 	newsk->timer.data = (unsigned long)newsk;
 	newsk->timer.function = &net_timer;
+	init_timer(&newsk->retransmit_timer);
 	newsk->retransmit_timer.data = (unsigned long)newsk;
 	newsk->retransmit_timer.function=&retransmit_timer;
 	newsk->dummy_th.source = skb->h.th->dest;
@@ -4393,7 +4393,9 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 
 	tcp_set_state(sk,TCP_SYN_SENT);
 	sk->rto = TCP_TIMEOUT_INIT;
-	init_timer(&sk->retransmit_timer);
+#if 0 /* we already did this */
+	init_timer(&sk->retransmit_timer); 
+#endif
 	sk->retransmit_timer.function=&retransmit_timer;
 	sk->retransmit_timer.data = (unsigned long)sk;
 	reset_xmit_timer(sk, TIME_WRITE, sk->rto);	/* Timer for repeating the SYN until an answer */

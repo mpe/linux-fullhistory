@@ -506,11 +506,10 @@ static int swap_out_process(struct task_struct * p)
 static int swap_out(unsigned int priority)
 {
 	static int swap_task;
-	int loop;
-	int counter = NR_TASKS * 2 >> priority;
+	int loop, counter;
 	struct task_struct *p;
 
-	counter = NR_TASKS * 2 >> priority;
+	counter = 2*NR_TASKS >> priority;
 	for(; counter >= 0; counter--, swap_task++) {
 		/*
 		 * Check that swap_task is suitable for swapping.  If not, look for
@@ -557,6 +556,15 @@ static int swap_out(unsigned int priority)
 	return 0;
 }
 
+/*
+ * we keep on shrinking one resource until it's considered "too hard",
+ * and then switch to the next one (priority being an indication on how
+ * hard we should try with the resource).
+ *
+ * This should automatically find the resource that can most easily be
+ * free'd, so hopefully we'll get reasonable behaviour even under very
+ * different circumstances.
+ */
 static int try_to_free_page(int priority)
 {
 	static int state = 0;
@@ -565,23 +573,19 @@ static int try_to_free_page(int priority)
 	switch (state) {
 		do {
 		case 0:
-			if (priority != GFP_NOBUFFER && shrink_buffers(i)) {
-				state = 1;
+			if (priority != GFP_NOBUFFER && shrink_buffers(i))
 				return 1;
-			}
+			state = 1;
 		case 1:
-			if (shm_swap(i)) {
-				state = 2;
+			if (shm_swap(i))
 				return 1;
-			}
-		case 2:
-			if (swap_out(i)) {
-				state = 0;
+			state = 2;
+		default:
+			if (swap_out(i))
 				return 1;
-			}
+			state = 0;
 		} while(--i);
 	}
-	state = 2;
 	return 0;
 }
 

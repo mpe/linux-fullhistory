@@ -268,11 +268,12 @@ extern int request_irq(unsigned int irq,void (*handler)(int, struct pt_regs *),
 	unsigned long flags, const char *device);
 extern void free_irq(unsigned int irq);
 
-extern unsigned long copy_thread(int, unsigned long, struct task_struct *, struct pt_regs *);
+extern void copy_thread(int, unsigned long, unsigned long, struct task_struct *, struct pt_regs *);
 extern void flush_thread(void);
 extern void exit_thread(void);
 
 extern int do_execve(char *, char **, char **, struct pt_regs *);
+extern int do_fork(unsigned long, unsigned long, struct pt_regs *);
 asmlinkage int do_signal(unsigned long, struct pt_regs *);
 
 /*

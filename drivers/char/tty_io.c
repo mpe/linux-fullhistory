@@ -452,6 +452,7 @@ void disassociate_ctty(int priv)
 		kill_pg(tty->pgrp, SIGCONT, priv);
 	}
 
+	current->tty_old_pgrp = 0;
 	tty->session = 0;
 	tty->pgrp = -1;
 
@@ -1165,6 +1166,7 @@ retry_open:
 	    !current->tty &&
 	    tty->session == 0) {
 		current->tty = tty;
+		current->tty_old_pgrp = 0;
 		tty->session = current->session;
 		tty->pgrp = current->pgrp;
 	}
@@ -1393,6 +1395,7 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					return -EPERM;
 			}
 			current->tty = tty;
+			current->tty_old_pgrp = 0;
 			tty->session = current->session;
 			tty->pgrp = current->pgrp;
 			return 0;

@@ -1,6 +1,8 @@
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
+#include <asm/segment.h>
+
 /*
  * System defines.. Note that this is included both from .c and .S
  * files, so it does only defines, not any C code.

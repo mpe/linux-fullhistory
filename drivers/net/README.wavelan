@@ -1,13 +1,8 @@
 #if	defined(CONFIG_WAVELAN)
 
-Tue Jan 31 10:42:35 EST 1995
+Thu Feb 23 00:10:31 EST 1995
 
-0. This document refers to Version 5 of the Linux WaveLAN device driver software.
-   It has been tested successfully under the 1.1.87 release of the Linux
-   kernel.  It is `beta-test' software, so caveat emptor.  Please report bugs
-   to me so that I can fix them quickly.
-
-1. At present the driver only autoprobes for a WaveLAN card at I/O address 0x390.
+1. At present the driver autoprobes for a WaveLAN card only at I/O address 0x390.
    The version of the card that I use (NCR) supports four I/O addresses (selectable
    via a pair of DIP switches).  If you want the driver to autoprobe a different
    subset of the four valid addresses then you will need to edit
@@ -28,20 +23,7 @@ Tue Jan 31 10:42:35 EST 1995
 	append	="ether=0,0x390,0x4321,eth0"
 	..
 
-3. The files that comprise this software must be incorporated into the Linux
-   kernel source tree (usually rooted at /usr/src/linux).  Following that a
-   "make clean; make config; make dep; make zImage" should produce a Linux
-   kernel incorporating the WaveLAN driver, ready for installation.
-   The files:
-   	drivers/net/wavelan.[ch]
-   	drivers/net/i82586.h
-   are unique to this package and simply may be moved into place.  The
-   others are modified versions of pre-existing files and must
-   be incorporated more carefully.  However, the regions of modified code
-   within these files are small and are bracketed by the preprocessor
-   symbol CONFIG_WAVELAN, so incorporation should be straightforward.
-
-4. If you encounter any problems send me some email.
+3. If you encounter any problems send me some email.
 
 Good luck,
 Bruce Janson (bruce@cs.usyd.edu.au)

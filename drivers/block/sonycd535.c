@@ -4,7 +4,7 @@
  * This is a modified version of the CDU-31A device driver (see below).
  * Changes were made using documentation for the CDU-531 (which Sony
  * assures me is very similar to the 535) and partial disassembly of the
- * DOS driver.  I used Minyard's driver and replaced the the CDU-31A 
+ * DOS driver.  I used Minyard's driver and replaced the the CDU-31A
  * commands with the CDU-531 commands.  This was complicated by a different
  * interface protocol with the drive.  The driver is still polled.
  *
@@ -23,18 +23,23 @@
  *
  * Things to do:
  *  - handle errors and status better, put everything into a single word
- *  - use interrupts, DMA
+ *  - use interrupts (code mostly there, but a big hole still missing)
+ *  - handle multi-session CDs?
+ *  - use DMA?
  *
  *  Known Bugs:
  *  -
  *
+ *   Ken Pizzini (ken@halcyon.com)
+ *
+ * Original by:
  *   Ron Jeppesen (ronj.an@site007.saic.com)
  *
  *
  *------------------------------------------------------------------------
  * Sony CDROM interface device driver.
  *
- * Corey Minyard (minyard@wf-rch.cirr.com) (CDU-535 complaints to ronj above)
+ * Corey Minyard (minyard@wf-rch.cirr.com) (CDU-535 complaints to Ken above)
  *
  * Colossians 3:17
  *
@@ -99,6 +104,9 @@
 # include <linux/module.h>
 # include <linux/malloc.h>
 # include <linux/version.h>
+# ifndef CONFIG_MODVERSIONS
+	char kernel_version[]= UTS_RELEASE;
+# endif
 #endif
 
 #include <linux/errno.h>
@@ -137,9 +145,11 @@
  * proper address.
  */
 #ifndef CDU535_ADDRESS
-# define CDU535_ADDRESS	(0x340)
+# define CDU535_ADDRESS			0x340
 #endif
-
+#ifndef CDU535_INTERRUPT
+# define CDU535_INTERRUPT		0
+#endif
 #ifndef CDU535_HANDLE
 # define CDU535_HANDLE			"cdu535"
 #endif
@@ -171,7 +181,9 @@
  *  if LOCK_DOORS is defined then the eject button is disabled while
  * the device is open.
  */
-#define LOCK_DOORS
+#ifndef NO_LOCK_DOORS
+# define LOCK_DOORS
+#endif
 
 static int read_subcode(void);
 static void sony_get_toc(void);
@@ -179,11 +191,14 @@ static int cdu_open(struct inode *inode, struct file *filp);
 static inline unsigned int int_to_bcd(unsigned int val);
 static unsigned int bcd_to_int(unsigned int bcd);
 static int do_sony_cmd(Byte * cmd, int nCmd, Byte status[2],
-					   Byte * response, int nResponse, int ignoreStatusBit7);
+					   Byte * response, int n_response, int ignoreStatusBit7);
 
 /* The base I/O address of the Sony Interface.  This is a variable (not a
    #define) so it can be easily changed via some future ioctl() */
-static unsigned short sony_cd_base_io = CDU535_ADDRESS;
+#ifndef MODULE
+static
+#endif
+unsigned short sony535_cd_base_io = CDU535_ADDRESS;
 
 /*
  * The following are I/O addresses of the various registers for the drive.  The
@@ -217,10 +232,10 @@ static struct s535_sony_toc *sony_toc;	/* Points to the table of
 static struct s535_sony_subcode *last_sony_subcode;		/* Points to the last
 														   subcode address read */
 #ifndef MODULE
-static unsigned char *sony_buffer;	/* Points to the read-ahead buffer */
+static Byte *sony_buffer;		/* Points to the read-ahead buffer */
 #else
-static unsigned char **sony_buffer;		/* Points to the pointers
-										   to the sector buffers */
+static Byte **sony_buffer;		/* Points to the pointers
+								   to the sector buffers */
 #endif
 static int sony_inuse = 0;		/* is the drive in use? Only one
 								   open at a time allowed */
@@ -240,8 +255,17 @@ static int sony_audio_status = CDROM_AUDIO_NO_STATUS;
  *   I just kept the CDU-31A driver behavior rather than using the PAUSE
  * command on the CDU-535.
  */
-static unsigned char cur_pos_msf[3] = {0, 0, 0};
-static unsigned char final_pos_msf[3] = {0, 0, 0};
+static Byte cur_pos_msf[3] = {0, 0, 0};
+static Byte final_pos_msf[3] = {0, 0, 0};
+
+/* What IRQ is the drive using?  0 if none. */
+#ifndef MODULE
+static
+#endif
+int sony535_irq_used = CDU535_INTERRUPT;
+
+/* The interrupt handler will wake this queue up when it gets an interrupt. */
+static struct wait_queue *cdu535_irq_wait = NULL;
 
 
 /*
@@ -251,10 +275,10 @@ static unsigned char final_pos_msf[3] = {0, 0, 0};
 static int
 cdu535_check_media_change(dev_t full_dev)
 {
-	int     retval;
+	int retval;
 
 	if (MINOR(full_dev) != 0) {
-		printk("Sony CD-ROM request error: invalid device.\n");
+		printk(CDU535_MESSAGE_NAME " request error: invalid device.\n");
 		return 0;
 	}
 
@@ -264,18 +288,64 @@ cdu535_check_media_change(dev_t full_dev)
 	return retval;
 }
 
+static inline void
+enable_interrupts(void)
+{
+#ifdef USE_IRQ
+	/* this code snarfed from cdu31a.c; it will not
+	 * directly work for the cdu535 as written...
+	 */
+	curr_control_reg |= ( SONY_ATTN_INT_EN_BIT
+						| SONY_RES_RDY_INT_EN_BIT
+						| SONY_DATA_RDY_INT_EN_BIT);
+	outb(curr_control_reg, sony_cd_control_reg);
+#endif
+}
+
+static inline void
+disable_interrupts(void)
+{
+#ifdef USE_IRQ
+	/* this code snarfed from cdu31a.c; it will not
+	 * directly work for the cdu535 as written...
+	 */
+	curr_control_reg &= ~(SONY_ATTN_INT_EN_BIT
+						| SONY_RES_RDY_INT_EN_BIT
+						| SONY_DATA_RDY_INT_EN_BIT);
+	outb(curr_control_reg, sony_cd_control_reg);
+#endif
+}
+
+static void
+cdu535_interrupt(int irq, struct pt_regs *regs)
+{
+	disable_interrupts();
+	if (cdu535_irq_wait != NULL)
+		wake_up(&cdu535_irq_wait);
+	else
+		printk(CDU535_MESSAGE_NAME
+				": Got an interrupt but nothing was waiting\n");
+}
+
 
 /*
  * Wait a little while (used for polling the drive).  If in initialization,
- * setting a timeout doesn't work, so just loop for a while  (we trust
- * that the sony_sleep() call is protected by a test for proper jiffies count).
+ * setting a timeout doesn't work, so just loop for a while.  (We trust
+ * that the sony_sleep() call is protected by a test for proper jiffies count.)
  */
 static inline void
 sony_sleep(void)
 {
-	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies;
-	schedule();
+	if (sony535_irq_used <= 0) {	/* poll */
+		current->state = TASK_INTERRUPTIBLE;
+		current->timeout = jiffies;
+		schedule();
+	} else {	/* Interrupt driven */
+		cli();
+		enable_interrupts();
+		interruptible_sleep_on(&cdu535_irq_wait);
+		sti();
+	}
 }
 
 /*------------------start of SONY CDU535 very specific ---------------------*/
@@ -293,23 +363,24 @@ select_unit(int unit_no)
 }
 
 /***************************************************************************
- * int read_result_reg( unsigned char *data_ptr )
+ * int read_result_reg( Byte *data_ptr )
  *
  *  Read a result byte from the Sony CDU controller, store in location pointed
  * to by data_ptr.  Return zero on success, TIME_OUT if we did not receive
  * data.
  ***************************************************************************/
 static int
-read_result_reg(unsigned char *data_ptr)
+read_result_reg(Byte *data_ptr)
 {
-	int     retry_count;
-	int     read_status;
+	int retry_count;
+	int read_status;
 
 	retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
 	while (jiffies < retry_count) {
 		if (((read_status = inb(read_status_reg)) & SONY535_RESULT_NOT_READY_BIT) == 0) {
 #if DEBUG > 1
-			printk("read_result_reg(): readStatReg = 0x%x\n", read_status);
+			printk(CDU535_MESSAGE_NAME
+					": read_result_reg(): readStatReg = 0x%x\n", read_status);
 #endif
 			*data_ptr = inb(result_reg);
 			return 0;
@@ -317,14 +388,14 @@ read_result_reg(unsigned char *data_ptr)
 			sony_sleep();
 		}
 	}
-	printk(" Sony CDROM read_result_reg: TIME OUT!\n");
+	printk(CDU535_MESSAGE_NAME " read_result_reg: TIME OUT!\n");
 	return TIME_OUT;
 }
 
 /****************************************************************************
  * int read_exec_status( Byte status[2] )
  *
- *  Read the execution status of the last command and put into status. 
+ *  Read the execution status of the last command and put into status.
  * Handles reading second status word if available.  Returns 0 on success,
  * TIME_OUT on failure.
  ****************************************************************************/
@@ -339,10 +410,8 @@ read_exec_status(Byte status[2])
 			return TIME_OUT;
 	}
 #if DEBUG > 1
-	printk("read_exec_status: read 0x%x\n", status[0]);
-	if (status[0] & 0x80)
-		printk(" and 0x%x\n", status[1]);
-	printk("\n");
+	printk(CDU535_MESSAGE_NAME ": read_exec_status: read 0x%x 0x%x\n",
+			status[0], status[1]);
 #endif
 	return 0;
 }
@@ -357,9 +426,9 @@ read_exec_status(Byte status[2])
 static int
 check_drive_status(void)
 {
-	Byte    status, e_status[2];
-	int     CDD, ATN;
-	unsigned char cmd;
+	Byte status, e_status[2];
+	int  CDD, ATN;
+	Byte cmd;
 
 	select_unit(0);
 	if (sony_audio_status == CDROM_AUDIO_PLAY) {	/* check status */
@@ -387,7 +456,7 @@ check_drive_status(void)
 		return TIME_OUT;
 
 #if DEBUG > 1
-	printk("--check_drive_status() got 0x%x\n", status);
+	printk(CDU535_MESSAGE_NAME ": check_drive_status() got 0x%x\n", status);
 #endif
 
 	if (status == 0)
@@ -401,17 +470,17 @@ check_drive_status(void)
 		break;					/* go on to CDD stuff */
 	case SONY535_ATN_BUSY:
 		if (initialized)
-			printk("Sony CDROM error, drive busy\n");
+			printk(CDU535_MESSAGE_NAME " error: drive busy\n");
 		return CD_BUSY;
 	case SONY535_ATN_EJECT_IN_PROGRESS:
-		printk("Sony CDROM error, eject in progress\n");
+		printk(CDU535_MESSAGE_NAME " error: eject in progress\n");
 		sony_audio_status = CDROM_AUDIO_INVALID;
 		return CD_BUSY;
 	case SONY535_ATN_RESET_OCCURRED:
 	case SONY535_ATN_DISC_CHANGED:
 	case SONY535_ATN_RESET_AND_DISC_CHANGED:
 #if DEBUG > 0
-		printk("Sony CDROM, reset occurred or disc changed\n");
+		printk(CDU535_MESSAGE_NAME " notice: reset occurred or disc changed\n");
 #endif
 		sony_disc_changed = 1;
 		sony_toc_read = 0;
@@ -425,16 +494,17 @@ check_drive_status(void)
 		}
 		return 0;
 	default:
-		printk("Sony CDROM error, drive busy (ATN=0x%x)\n", ATN);
+		printk(CDU535_MESSAGE_NAME " error: drive busy (ATN=0x%x)\n", ATN);
 		return CD_BUSY;
 	}
-	switch (CDD) {				/* the 531 docs are not helpful in decoding this */
-	case 0x0:					/* just use the values from the DOS driver */
+	switch (CDD) {			/* the 531 docs are not helpful in decoding this */
+	case 0x0:				/* just use the values from the DOS driver */
 	case 0x2:
 	case 0xa:
-		break;					/* no error */
+		break;				/* no error */
 	case 0xc:
-		printk("check_drive_status(): CDD = 0xc! Not properly handled!\n");
+		printk(CDU535_MESSAGE_NAME
+				": check_drive_status(): CDD = 0xc! Not properly handled!\n");
 		return CD_BUSY;		/* ? */
 	default:
 		return CD_BUSY;
@@ -443,14 +513,14 @@ check_drive_status(void)
 }	/* check_drive_status() */
 
 /*****************************************************************************
- * int do_sony_cmd( Byte *cmd, int n_cmd, Byte status[2], 
+ * int do_sony_cmd( Byte *cmd, int n_cmd, Byte status[2],
  *                Byte *response, int n_response, int ignore_status_bit7 )
  *
  *  Generic routine for executing commands.  The command and its parameters
  *  should be placed in the cmd[] array, number of bytes in the command is
  *  stored in nCmd.  The response from the command will be stored in the
  *  response array.  The number of bytes you expect back (excluding status)
- *  should be passed in nResponse.  Finally, some
+ *  should be passed in n_response.  Finally, some
  *  commands set bit 7 of the return status even when there is no second
  *  status byte, on these commands set ignoreStatusBit7 TRUE.
  *    If the command was sent and data received back, then we return 0,
@@ -462,7 +532,7 @@ static int
 do_sony_cmd(Byte * cmd, int n_cmd, Byte status[2],
 			Byte * response, int n_response, int ignore_status_bit7)
 {
-	int     i;
+	int i;
 
 	/* write out the command */
 	for (i = 0; i < n_cmd; i++)
@@ -471,7 +541,7 @@ do_sony_cmd(Byte * cmd, int n_cmd, Byte status[2],
 	/* read back the status */
 	if (read_result_reg(status) != 0)
 		return TIME_OUT;
-	if (!ignore_status_bit7 && ((status[0] & 0x80) != 0)) {	
+	if (!ignore_status_bit7 && ((status[0] & 0x80) != 0)) {
 		/* get second status byte */
 		if (read_result_reg(status + 1) != 0)
 			return TIME_OUT;
@@ -479,7 +549,8 @@ do_sony_cmd(Byte * cmd, int n_cmd, Byte status[2],
 		status[1] = 0;
 	}
 #if DEBUG > 2
-	printk("do_sony_cmd %x: %x %x\n", *cmd, status[0], status[1]);
+	printk(CDU535_MESSAGE_NAME ": do_sony_cmd %x: %x %x\n",
+			*cmd, status[0], status[1]);
 #endif
 
 	/* do not know about when I should read set of data and when not to */
@@ -502,7 +573,8 @@ do_sony_cmd(Byte * cmd, int n_cmd, Byte status[2],
 static int
 set_drive_mode(int mode, Byte status[2])
 {
-	Byte    cmd_buff[2], ret_buff[1];
+	Byte cmd_buff[2];
+	Byte ret_buff[1];
 
 	cmd_buff[0] = SONY535_SET_DRIVE_MODE;
 	cmd_buff[1] = mode;
@@ -510,7 +582,7 @@ set_drive_mode(int mode, Byte status[2])
 }
 
 /***************************************************************************
- * int seek_and_read_N_blocks( Byte params[], int n_blocks, Byte status[2], 
+ * int seek_and_read_N_blocks( Byte params[], int n_blocks, Byte status[2],
  *                             Byte *data_buff, int buff_size )
  *
  *  Read n_blocks of data from the CDROM starting at position params[0:2],
@@ -527,19 +599,19 @@ seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 					   Byte * data_buff, int buf_size)
 #else
 seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
-					   unsigned char **buff, int buf_size)
+					   Byte **buff, int buf_size)
 #endif
 {
-	int     i;
 	const int block_size = 2048;
-	Byte    cmd_buff[7];
-	int     read_status;
-	int     retry_count;
-#ifdef MODULE
-	Byte   *data_buff;
-	int     sector_count = 0;
+	Byte cmd_buff[7];
+	int  i;
+	int  read_status;
+	int  retry_count;
+#ifndef MODULE
+	Byte *start_pos = data_buff;
 #else
-	Byte   *start_pos = data_buff;
+	Byte *data_buff;
+	int  sector_count = 0;
 #endif
 
 	if (buf_size < ((long)block_size) * n_blocks)
@@ -598,11 +670,11 @@ seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 static int
 request_toc_data(Byte status[2], struct s535_sony_toc *toc)
 {
-	int     to_status;
-	int     i, j, n_tracks, track_no;
-	Byte    cmd_no = 0xb2;
-	Byte    track_address_buffer[5];
-	int     first_track_num, last_track_num;
+	int  to_status;
+	int  i, j, n_tracks, track_no;
+	int  first_track_num, last_track_num;
+	Byte cmd_no = 0xb2;
+	Byte track_address_buffer[5];
 
 	/* read the fixed portion of the table of contents */
 	if ((to_status = do_sony_cmd(&cmd_no, 1, status, (Byte *) toc, 15, 1)) != 0)
@@ -636,19 +708,19 @@ request_toc_data(Byte status[2], struct s535_sony_toc *toc)
 static int
 spin_up_drive(Byte status[2])
 {
-	Byte    cmd_buff[1];
+	Byte cmd;
 
 	/* first see if the drive is already spinning */
-	cmd_buff[0] = SONY535_REQUEST_DRIVE_STATUS_1;
-	if (do_sony_cmd(cmd_buff, 1, status, NULL, 0, 0) != 0)
+	cmd = SONY535_REQUEST_DRIVE_STATUS_1;
+	if (do_sony_cmd(&cmd, 1, status, NULL, 0, 0) != 0)
 		return TIME_OUT;
 	if ((status[0] & SONY535_STATUS1_NOT_SPINNING) == 0)
-		return 0;				/* its already spinning */
+		return 0;	/* its already spinning */
 
-	/* else, give the spin-up command */
-	cmd_buff[0] = SONY535_SPIN_UP;
-	return do_sony_cmd(cmd_buff, 1, status, NULL, 0, 0);
-}	/* spin_up_drive() */
+	/* otherwise, give the spin-up command */
+	cmd = SONY535_SPIN_UP;
+	return do_sony_cmd(&cmd, 1, status, NULL, 0, 0);
+}
 
 /*--------------------end of SONY CDU535 very specific ---------------------*/
 
@@ -656,8 +728,7 @@ spin_up_drive(Byte status[2])
 static inline unsigned int
 int_to_bcd(unsigned int val)
 {
-	int     retval;
-
+	int retval;
 
 	retval = (val / 10) << 4;
 	retval = retval | val % 10;
@@ -678,7 +749,7 @@ bcd_to_int(unsigned int bcd)
  * a block device) to an MSF format.
  */
 static void
-log_to_msf(unsigned int log, unsigned char *msf)
+log_to_msf(unsigned int log, Byte *msf)
 {
 	log = log + LOG_START_OFFSET;
 	msf[0] = int_to_bcd(log / 4500);
@@ -692,7 +763,7 @@ log_to_msf(unsigned int log, unsigned char *msf)
  * Convert an MSF format to a logical sector.
  */
 static unsigned int
-msf_to_log(unsigned char *msf)
+msf_to_log(Byte *msf)
 {
 	unsigned int log;
 
@@ -711,8 +782,7 @@ msf_to_log(unsigned char *msf)
  * the drive would want to see a number-of-sector value.
  */
 static void
-size_to_buf(unsigned int size,
-			unsigned char *buf)
+size_to_buf(unsigned int size, Byte *buf)
 {
 	buf[0] = size / 65536;
 	size = size % 65536;
@@ -731,14 +801,15 @@ size_to_buf(unsigned int size,
 static void
 do_cdu535_request(void)
 {
-	int     block;
 	unsigned int dev;
-	int     nsect;
-	unsigned char params[10];
-	int     copyoff;
-	int     spin_up_retry;
 	unsigned int read_size;
-	unsigned char status[2], cmd[2];
+	int  block;
+	int  nsect;
+	int  copyoff;
+	int  spin_up_retry;
+	Byte params[10];
+	Byte status[2];
+	Byte cmd[2];
 
 
 	if (!sony_inuse) {
@@ -798,33 +869,37 @@ do_cdu535_request(void)
 					size_to_buf(read_size, &params[3]);
 
 					/*
-					 * Read the data.  If the drive was not spinning, spin it up and try
-					 * once more.  I know, the goto is ugly, but I am too lazy to fix it.
+					 * Read the data.  If the drive was not spinning,
+					 * spin it up and try once more.
 					 */
 					spin_up_retry = 0;
-				  try_read_again:
+					for (;;) {
 #if DEBUG > 1
-					if (check_drive_status() != 0) {	/* drive not ready */
-						sony_first_block = -1;
-						sony_last_block = -1;
-						end_request(0);
-						return;
-					}
-#endif
-					if (seek_and_read_N_blocks(params, read_size, status, sony_buffer,
-											   (read_size * 2048)) < 0) {
-						if ((status[0] & SONY535_STATUS1_NOT_SPINNING) && (!spin_up_retry)) {
-							printk(" Sony535 Debug -- calling spin up when reading data!\n");
-							cmd[0] = SONY535_SPIN_UP;
-							do_sony_cmd(cmd, 1, status, NULL, 0, 0);
-							spin_up_retry = 1;
-							goto try_read_again;
+						if (check_drive_status() != 0) {
+							/* drive not ready */
+							sony_first_block = -1;
+							sony_last_block = -1;
+							end_request(0);
+							return;
 						}
-						printk("Sony CDROM Read error: 0x%.2x\n", status[0]);
-						sony_first_block = -1;
-						sony_last_block = -1;
-						end_request(0);
-						return;
+#endif
+						if (0 <= seek_and_read_N_blocks(params, read_size,
+									status, sony_buffer, (read_size * 2048)))
+							break;
+						if (!(status[0] & SONY535_STATUS1_NOT_SPINNING) ||
+															spin_up_retry) {
+							printk(CDU535_MESSAGE_NAME " Read error: 0x%.2x\n",
+									status[0]);
+							sony_first_block = -1;
+							sony_last_block = -1;
+							end_request(0);
+							return;
+						}
+						printk(CDU535_MESSAGE_NAME
+							" debug: calling spin up when reading data!\n");
+						cmd[0] = SONY535_SPIN_UP;
+						do_sony_cmd(cmd, 1, status, NULL, 0, 0);
+						spin_up_retry = 1;
 					}
 				}
 				/*
@@ -866,7 +941,7 @@ do_cdu535_request(void)
 static void
 sony_get_toc(void)
 {
-	unsigned char status[2];
+	Byte status[2];
 	if (!sony_toc_read) {
 		/* do not call check_drive_status() from here since it can call this routine */
 		if (request_toc_data(status, sony_toc) < 0)
@@ -884,8 +959,8 @@ sony_get_toc(void)
 static int
 find_track(int track)
 {
-	int     i;
-	int     num_tracks;
+	int i;
+	int num_tracks;
 
 
 	num_tracks = bcd_to_int(sony_toc->last_track_num) -
@@ -905,16 +980,17 @@ find_track(int track)
 static int
 read_subcode(void)
 {
-	Byte    cmd = SONY535_REQUEST_SUB_Q_DATA, status[2];
-	int     dsc_status;
+	Byte cmd = SONY535_REQUEST_SUB_Q_DATA;
+	Byte status[2];
+	int  dsc_status;
 
 	if (check_drive_status() != 0)
 		return -EIO;
 
 	if ((dsc_status = do_sony_cmd(&cmd, 1, status, (Byte *) last_sony_subcode,
-							   sizeof (struct s535_sony_subcode), 1)) != 0) {
-		printk("Sony CDROM error 0x%.2x, %d (read_subcode)\n", status[0],
-			   dsc_status);
+							   sizeof(struct s535_sony_subcode), 1)) != 0) {
+		printk(CDU535_MESSAGE_NAME " error 0x%.2x, %d (read_subcode)\n",
+				status[0], dsc_status);
 		return -EIO;
 	}
 	return 0;
@@ -942,9 +1018,9 @@ sony_get_subchnl_info(long arg)
 	if (!sony_toc_read) {
 		return -EIO;
 	}
-	verify_area(VERIFY_WRITE /* and read */ , (char *)arg, sizeof (schi));
+	verify_area(VERIFY_WRITE /* and read */ , (char *)arg, sizeof schi);
 
-	memcpy_fromfs(&schi, (char *)arg, sizeof (schi));
+	memcpy_fromfs(&schi, (char *)arg, sizeof schi);
 
 	switch (sony_audio_status) {
 	case CDROM_AUDIO_PLAY:
@@ -959,7 +1035,7 @@ sony_get_subchnl_info(long arg)
 
 	case CDROM_AUDIO_NO_STATUS:
 		schi.cdsc_audiostatus = sony_audio_status;
-		memcpy_tofs((char *)arg, &schi, sizeof (schi));
+		memcpy_tofs((char *)arg, &schi, sizeof schi);
 		return 0;
 		break;
 
@@ -986,7 +1062,7 @@ sony_get_subchnl_info(long arg)
 		schi.cdsc_absaddr.lba = msf_to_log(last_sony_subcode->abs_msf);
 		schi.cdsc_reladdr.lba = msf_to_log(last_sony_subcode->rel_msf);
 	}
-	memcpy_tofs((char *)arg, &schi, sizeof (schi));
+	memcpy_tofs((char *)arg, &schi, sizeof schi);
 	return 0;
 }
 
@@ -1001,9 +1077,9 @@ cdu_ioctl(struct inode *inode,
 		  unsigned long arg)
 {
 	unsigned int dev;
-	unsigned char status[2];
-	unsigned char cmd_buff[10], params[10];
-	int     i, dsc_status;
+	Byte status[2];
+	Byte cmd_buff[10], params[10];
+	int  i, dsc_status;
 
 
 	if (!inode) {
@@ -1019,7 +1095,8 @@ cdu_ioctl(struct inode *inode,
 	switch (cmd) {
 	case CDROMSTART:			/* Spin up the drive */
 		if (spin_up_drive(status) < 0) {
-			printk("Sony CDROM error 0x%.2x (CDROMSTART)\n", status[0]);
+			printk(CDU535_MESSAGE_NAME " error 0x%.2x (CDROMSTART)\n",
+					status[0]);
 			return -EIO;
 		}
 		return 0;
@@ -1038,7 +1115,8 @@ cdu_ioctl(struct inode *inode,
 		dsc_status = do_sony_cmd(cmd_buff, 1, status, NULL, 0, 0);
 		if (((dsc_status < 0) && (dsc_status != BAD_STATUS)) ||
 			((status[0] & ~(SONY535_STATUS1_NOT_SPINNING)) != 0)) {
-			printk("Sony CDROM error 0x%.2x (CDROMSTOP)\n", status[0]);
+			printk(CDU535_MESSAGE_NAME " error 0x%.2x (CDROMSTOP)\n",
+					status[0]);
 			return -EIO;
 		}
 		return 0;
@@ -1047,7 +1125,8 @@ cdu_ioctl(struct inode *inode,
 	case CDROMPAUSE:			/* Pause the drive */
 		cmd_buff[0] = SONY535_HOLD;		/* CDU-31 driver uses AUDIO_STOP, not pause */
 		if (do_sony_cmd(cmd_buff, 1, status, NULL, 0, 0) != 0) {
-			printk("Sony CDROM error 0x%.2x (CDROMPAUSE)\n", status[0]);
+			printk(CDU535_MESSAGE_NAME " error 0x%.2x (CDROMPAUSE)\n",
+					status[0]);
 			return -EIO;
 		}
 		/* Get the current position and save it for resuming */
@@ -1082,7 +1161,8 @@ cdu_ioctl(struct inode *inode,
 		cmd_buff[9] = final_pos_msf[2];
 		if ((do_sony_cmd(cmd_buff, 5, status, NULL, 0, 0) != 0) ||
 			(do_sony_cmd(cmd_buff + 5, 5, status, NULL, 0, 0) != 0)) {
-			printk("Sony CDROM error 0x%.2x (CDROMRESUME)\n", status[0]);
+			printk(CDU535_MESSAGE_NAME " error 0x%.2x (CDROMRESUME)\n",
+					status[0]);
 			return -EIO;
 		}
 		sony_audio_status = CDROM_AUDIO_PLAY;
@@ -1108,7 +1188,8 @@ cdu_ioctl(struct inode *inode,
 		/* cmd_buff[7-9] are filled in for loop above */
 		if ((do_sony_cmd(cmd_buff, 5, status, NULL, 0, 0) != 0) ||
 			(do_sony_cmd(cmd_buff + 5, 5, status, NULL, 0, 0) != 0)) {
-			printk("Sony CDROM error 0x%.2x (CDROMPLAYMSF)\n", status[0]);
+			printk(CDU535_MESSAGE_NAME " error 0x%.2x (CDROMPLAYMSF)\n",
+					status[0]);
 			return -EIO;
 		}
 		/* Save the final position for pauses and resumes */
@@ -1128,10 +1209,10 @@ cdu_ioctl(struct inode *inode,
 			if (!sony_toc_read)
 				return -EIO;
 			hdr = (struct cdrom_tochdr *)arg;
-			verify_area(VERIFY_WRITE, hdr, sizeof (*hdr));
+			verify_area(VERIFY_WRITE, hdr, sizeof *hdr);
 			loc_hdr.cdth_trk0 = bcd_to_int(sony_toc->first_track_num);
 			loc_hdr.cdth_trk1 = bcd_to_int(sony_toc->last_track_num);
-			memcpy_tofs(hdr, &loc_hdr, sizeof (*hdr));
+			memcpy_tofs(hdr, &loc_hdr, sizeof *hdr);
 		}
 		return 0;
 		break;
@@ -1140,17 +1221,17 @@ cdu_ioctl(struct inode *inode,
 		{
 			struct cdrom_tocentry *entry;
 			struct cdrom_tocentry loc_entry;
-			int     track_idx;
-			unsigned char *msf_val = NULL;
+			int  track_idx;
+			Byte *msf_val = NULL;
 
 			sony_get_toc();
 			if (!sony_toc_read) {
 				return -EIO;
 			}
 			entry = (struct cdrom_tocentry *)arg;
-			verify_area(VERIFY_WRITE /* and read */ , entry, sizeof (*entry));
+			verify_area(VERIFY_WRITE /* and read */ , entry, sizeof *entry);
 
-			memcpy_fromfs(&loc_entry, entry, sizeof (loc_entry));
+			memcpy_fromfs(&loc_entry, entry, sizeof loc_entry);
 
 			/* Lead out is handled separately since it is special. */
 			if (loc_entry.cdte_track == CDROM_LEADOUT) {
@@ -1174,7 +1255,7 @@ cdu_ioctl(struct inode *inode,
 				loc_entry.cdte_addr.msf.second = bcd_to_int(*(msf_val + 1));
 				loc_entry.cdte_addr.msf.frame = bcd_to_int(*(msf_val + 2));
 			}
-			memcpy_tofs(entry, &loc_entry, sizeof (*entry));
+			memcpy_tofs(entry, &loc_entry, sizeof *entry);
 		}
 		return 0;
 		break;
@@ -1182,14 +1263,14 @@ cdu_ioctl(struct inode *inode,
 	case CDROMPLAYTRKIND:		/* Play a track.  This currently ignores index. */
 		{
 			struct cdrom_ti ti;
-			int     track_idx;
+			int track_idx;
 
 			sony_get_toc();
 			if (!sony_toc_read)
 				return -EIO;
-			verify_area(VERIFY_READ, (char *)arg, sizeof (ti));
+			verify_area(VERIFY_READ, (char *)arg, sizeof ti);
 
-			memcpy_fromfs(&ti, (char *)arg, sizeof (ti));
+			memcpy_fromfs(&ti, (char *)arg, sizeof ti);
 			if ((ti.cdti_trk0 < sony_toc->first_track_num)
 				|| (sony_toc->last_track_num < ti.cdti_trk0)
 				|| (ti.cdti_trk1 < ti.cdti_trk0)) {
@@ -1234,9 +1315,11 @@ cdu_ioctl(struct inode *inode,
 			cmd_buff[9] = params[6];
 			if ((do_sony_cmd(cmd_buff, 5, status, NULL, 0, 0) != 0) ||
 				(do_sony_cmd(cmd_buff + 5, 5, status, NULL, 0, 0) != 0)) {
-				printk("Params: %x %x %x %x %x %x %x\n", params[0], params[1],
-					   params[2], params[3], params[4], params[5], params[6]);
-				printk("Sony CDROM error 0x%.2x (CDROMPLAYTRKIND)\n", status[0]);
+				printk(CDU535_MESSAGE_NAME " error 0x%.2x (CDROMPLAYTRKIND)\n",
+						status[0]);
+				printk("... Params: %x %x %x %x %x %x %x\n",
+						params[0], params[1], params[2],
+						params[3], params[4], params[5], params[6]);
 				return -EIO;
 			}
 			/* Save the final position for pauses and resumes */
@@ -1254,14 +1337,15 @@ cdu_ioctl(struct inode *inode,
 		{
 			struct cdrom_volctrl volctrl;
 
-			verify_area(VERIFY_READ, (char *)arg, sizeof (volctrl));
+			verify_area(VERIFY_READ, (char *)arg, sizeof volctrl);
 
-			memcpy_fromfs(&volctrl, (char *)arg, sizeof (volctrl));
+			memcpy_fromfs(&volctrl, (char *)arg, sizeof volctrl);
 			cmd_buff[0] = SONY535_SET_VOLUME;
 			cmd_buff[1] = volctrl.channel0;
 			cmd_buff[2] = volctrl.channel1;
 			if (do_sony_cmd(cmd_buff, 3, status, NULL, 0, 0) != 0) {
-				printk("Sony CDROM error 0x%.2x (CDROMVOLCTRL)\n", status[0]);
+				printk(CDU535_MESSAGE_NAME " error 0x%.2x (CDROMVOLCTRL)\n",
+						status[0]);
 				return -EIO;
 			}
 		}
@@ -1276,7 +1360,8 @@ cdu_ioctl(struct inode *inode,
 		sony_audio_status = CDROM_AUDIO_INVALID;
 		cmd_buff[0] = SONY535_EJECT_CADDY;
 		if (do_sony_cmd(cmd_buff, 1, status, NULL, 0, 0) != 0) {
-			printk("Sony CDROM error 0x%.2x (CDROMEJECT)\n", status[0]);
+			printk(CDU535_MESSAGE_NAME " error 0x%.2x (CDROMEJECT)\n",
+					status[0]);
 			return -EIO;
 		}
 		return 0;
@@ -1296,7 +1381,7 @@ static int
 cdu_open(struct inode *inode,
 		 struct file *filp)
 {
-	unsigned char status[2], cmd_buff[2];
+	Byte status[2], cmd_buff[2];
 
 
 	if (sony_inuse)
@@ -1307,7 +1392,8 @@ cdu_open(struct inode *inode,
 	MOD_INC_USE_COUNT;
 
 	if (spin_up_drive(status) != 0) {
-		printk("Sony CDROM error 0x%.2x (cdu_open, spin up)\n", status[0]);
+		printk(CDU535_MESSAGE_NAME " error 0x%.2x (cdu_open, spin up)\n",
+				status[0]);
 		sony_inuse = 0;
 		MOD_DEC_USE_COUNT;
 		return -EIO;
@@ -1343,7 +1429,7 @@ static void
 cdu_release(struct inode *inode,
 			struct file *filp)
 {
-	unsigned char status[2], cmd_no;
+	Byte status[2], cmd_no;
 
 	sony_inuse = 0;
 	MOD_DEC_USE_COUNT;
@@ -1392,28 +1478,44 @@ static struct file_operations cdu_fops =
 unsigned long
 sony535_init(unsigned long mem_start, unsigned long mem_end)
 #else
-int 
+int
 init_module(void)
 #endif
 {
 	struct s535_sony_drive_config drive_config;
-	unsigned char cmd_buff[3], ret_buff[2];
-	unsigned char status[2];
-	int     retry_count;
+	Byte cmd_buff[3];
+	Byte ret_buff[2];
+	Byte status[2];
+	int  retry_count;
+	int  tmp_irq;
 #ifdef MODULE
-	int     i;
+	int  i;
 #endif
 
-	/* Set up all the register locations */
-	result_reg = sony_cd_base_io;
-	command_reg = sony_cd_base_io;
-	data_reg = sony_cd_base_io + 1;
-	read_status_reg = sony_cd_base_io + 2;
-	select_unit_reg = sony_cd_base_io + 3;
+	/* Setting the base I/O address to 0xffff will disable it. */
+	if (sony535_cd_base_io == 0xffff)
+		goto bail;
 
-	printk("sonycd535: probing base address %03X\n", sony_cd_base_io);
-	if (check_region(sony_cd_base_io,4)) {
-		printk("sonycd535: my base address is not free!\n");
+	/* Set up all the register locations */
+	result_reg = sony535_cd_base_io;
+	command_reg = sony535_cd_base_io;
+	data_reg = sony535_cd_base_io + 1;
+	read_status_reg = sony535_cd_base_io + 2;
+	select_unit_reg = sony535_cd_base_io + 3;
+
+#ifndef USE_IRQ
+	sony535_irq_used = 0;	/* polling only until this is ready... */
+#endif
+	/* we need to poll until things get initialized */
+	tmp_irq = sony535_irq_used;
+	sony535_irq_used = 0;
+
+#if DEBUG > 0
+	printk(CDU535_MESSAGE_NAME ": probing base address %03X\n",
+			sony535_cd_base_io);
+#endif
+	if (check_region(sony535_cd_base_io,4)) {
+		printk(CDU535_MESSAGE_NAME ": my base address is not free!\n");
 #ifndef MODULE
 		return mem_start;
 #else
@@ -1433,19 +1535,46 @@ init_module(void)
 		select_unit(0);
 		if (inb(result_reg) != 0xff)
 			break;
-		sony_sleep();			/* about 1-2 ms on my machine */
+		sony_sleep();
 	}
 
 	if ((jiffies < retry_count) && (check_drive_status() != TIME_OUT)) {
 		/* CD-ROM drive responded --  get the drive configuration */
 		cmd_buff[0] = SONY535_INQUIRY;
-		if (do_sony_cmd(cmd_buff, 1, status, (Byte *) & drive_config, 28, 1) == 0) {
-			/* was able to get the configuration, set drive mode as rest of init */
+		if (do_sony_cmd(cmd_buff, 1, status,
+						(Byte *)&drive_config, 28, 1) == 0) {
+			/* was able to get the configuration,
+			 * set drive mode as rest of init
+			 */
 #if DEBUG > 0
 			/* 0x50 == CADDY_NOT_INSERTED | NOT_SPINNING */
 			if ( (status[0] & 0x7f) != 0 && (status[0] & 0x7f) != 0x50 )
-				printk("Inquiry command returned status = 0x%x\n", status[0]);
+				printk(CDU535_MESSAGE_NAME
+						"Inquiry command returned status = 0x%x\n", status[0]);
 #endif
+			/* now ready to use interrupts, if available */
+			sony535_irq_used = tmp_irq;
+#ifndef MODULE
+/* This code is not in MODULEs by default, since the autoirq stuff might
+ * not be in the module-accessable symbol table.
+ */
+			/* A negative sony535_irq_used will attempt an autoirq. */
+			if (sony535_irq_used < 0) {
+				autoirq_setup(0);
+				enable_interrupts();
+				outb(0, read_status_reg);	/* does a reset? */
+				sony535_irq_used = autoirq_report(10);
+				disable_interrupts();
+			}
+#endif
+			if (sony535_irq_used > 0) {
+			    if (request_irq(sony535_irq_used, cdu535_interrupt,
+								SA_INTERRUPT, CDU535_HANDLE)) {
+					printk("Unable to grab IRQ%d for the " CDU535_MESSAGE_NAME
+							" driver; polling instead.\n", sony535_irq_used);
+					sony535_irq_used = 0;
+				}
+			}
 			cmd_buff[0] = SONY535_SET_DRIVE_MODE;
 			cmd_buff[1] = 0x0;	/* default audio */
 			if (do_sony_cmd(cmd_buff, 2, status, ret_buff, 1, 1) == 0) {
@@ -1453,11 +1582,14 @@ init_module(void)
 				sony_buffer_size = SONY535_BUFFER_SIZE;
 				sony_buffer_sectors = sony_buffer_size / 2048;
 
-				printk("Sony I/F CDROM : %8.8s %16.16s %4.4s",
+				printk(CDU535_MESSAGE_NAME " I/F CDROM : %8.8s %16.16s %4.4s",
 					   drive_config.vendor_id,
 					   drive_config.product_id,
 					   drive_config.product_rev_level);
-				printk("  using %d byte buffer\n", sony_buffer_size);
+				printk("  base address %03X, ", sony535_cd_base_io);
+				if (tmp_irq > 0)
+					printk("IRQ%d, ", tmp_irq);
+				printk("using %d byte buffer\n", sony_buffer_size);
 
 				if (register_blkdev(MAJOR_NR, CDU535_HANDLE, &cdu_fops)) {
 					printk("Unable to get major %d for %s\n",
@@ -1473,21 +1605,21 @@ init_module(void)
 
 #ifndef MODULE
 				sony_toc = (struct s535_sony_toc *)mem_start;
-				mem_start += sizeof (*sony_toc);
+				mem_start += sizeof *sony_toc;
 				last_sony_subcode = (struct s535_sony_subcode *)mem_start;
-				mem_start += sizeof (*last_sony_subcode);
-				sony_buffer = (unsigned char *)mem_start;
+				mem_start += sizeof *last_sony_subcode;
+				sony_buffer = (Byte *)mem_start;
 				mem_start += sony_buffer_size;
 
 #else /* MODULE */
 				sony_toc = (struct s535_sony_toc *)
-					kmalloc(sizeof (*sony_toc), GFP_KERNEL);
+					kmalloc(sizeof *sony_toc, GFP_KERNEL);
 				last_sony_subcode = (struct s535_sony_subcode *)
-					kmalloc(sizeof (*last_sony_subcode), GFP_KERNEL);
-				sony_buffer = (unsigned char **)
+					kmalloc(sizeof *last_sony_subcode, GFP_KERNEL);
+				sony_buffer = (Byte **)
 					kmalloc(4 * sony_buffer_sectors, GFP_KERNEL);
 				for (i = 0; i < sony_buffer_sectors; i++)
-					sony_buffer[i] = (unsigned char *)kmalloc(2048, GFP_KERNEL);
+					sony_buffer[i] = (Byte *)kmalloc(2048, GFP_KERNEL);
 #endif /* MODULE */
 				initialized = 1;
 			}
@@ -1500,8 +1632,9 @@ init_module(void)
 		return -EIO;
 #endif
 	} else {
-		request_region(sony_cd_base_io, 4, CDU535_HANDLE);
+		request_region(sony535_cd_base_io, 4, CDU535_HANDLE);
 	}
+bail:
 #ifndef MODULE
 	return mem_start;
 #else
@@ -1511,7 +1644,7 @@ init_module(void)
 
 #ifndef MODULE
 /*
- * accept "kernel command line" parameters 
+ * accept "kernel command line" parameters
  * (added by emoenke@gwdg.de)
  *
  * use: tell LILO:
@@ -1522,33 +1655,35 @@ init_module(void)
 void
 sonycd535_setup(char *strings, int *ints)
 {
+	/* if IRQ change and default io base desired,
+	 * then call with io base of 0
+	 */
 	if (ints[0] > 0)
-		sony_cd_base_io = ints[1];
-#if 0	/* placeholder for future use */
+		if (ints[0] != 0)
+			sony535_cd_base_io = ints[1];
 	if (ints[0] > 1)
-		irq_used = ints[2];
-#endif
+		sony535_irq_used = ints[2];
 	if ((strings != NULL) && (*strings != '\0'))
-		printk("%s: Warning: Unknown interface type: %s\n",
-				strings, CDU535_MESSAGE_NAME);
+		printk(CDU535_MESSAGE_NAME
+				": Warning: Unknown interface type: %s\n", strings);
 }
 
 #else /* MODULE */
 
-void 
+void
 cleanup_module(void)
 {
 	int i;
 	if (MOD_IN_USE) {
-		printk("Sony 535 module in use, cannot remove\n");
+		printk(CDU535_HANDLE " module in use, cannot remove\n");
 		return;
 	}
-	release_region(sony_cd_base_io, 4);
-	kfree_s(sony_toc, sizeof (*sony_toc));
-	kfree_s(last_sony_subcode, sizeof (*last_sony_subcode));
+	release_region(sony535_cd_base_io, 4);
 	for (i = 0; i < sony_buffer_sectors; i++)
 		kfree_s(sony_buffer[i], 2048);
 	kfree_s(sony_buffer, 4 * sony_buffer_sectors);
+	kfree_s(last_sony_subcode, sizeof *last_sony_subcode);
+	kfree_s(sony_toc, sizeof *sony_toc);
 	if (unregister_blkdev(MAJOR_NR, CDU535_HANDLE) == -EINVAL)
 		printk("Uh oh, couldn't unregister " CDU535_HANDLE "\n");
 	else

@@ -163,12 +163,11 @@ static void copy_fs(unsigned long clone_flags, struct task_struct * p)
  * information (task[nr]) and sets up the necessary registers. It
  * also copies the data segment in its entirety.
  */
-asmlinkage int sys_fork(struct pt_regs regs)
+int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 {
 	int nr;
-	struct task_struct *p;
 	unsigned long new_stack;
-	unsigned long clone_flags = COPYVM | SIGCHLD;
+	struct task_struct *p;
 
 	if(!(p = (struct task_struct*)__get_free_page(GFP_KERNEL)))
 		goto bad_fork;
@@ -206,7 +205,7 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	task[nr] = p;
 
 	/* copy all the process information */
-	clone_flags = copy_thread(nr, COPYVM | SIGCHLD, p, &regs);
+	copy_thread(nr, clone_flags, usp, p, regs);
 	if (copy_mm(clone_flags, p))
 		goto bad_fork_cleanup;
 	p->semundo = NULL;

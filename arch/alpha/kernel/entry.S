@@ -145,6 +145,18 @@ entUna:
 	rti
 .end entUna
 
+.align 5
+.globl	entSys
+.ent	entSys
+entSys:
+	SAVE_ALL
+	bis	$30,$30,$19
+	lda	$27,do_entSys
+	jsr	$26,($27),do_entSys
+	RESTORE_ALL
+	rti
+.end entSys
+
 	.align 5
 	.globl sys_call_table
 sys_call_table:

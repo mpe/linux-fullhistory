@@ -63,6 +63,7 @@ struct iso9660_options{
   char map;
   char rock;
   char cruft;
+  char unhide;
   unsigned char conversion;
   unsigned int blocksize;
   mode_t mode;
@@ -77,6 +78,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 	popt->map = 'n';
 	popt->rock = 'y';
 	popt->cruft = 'n';
+	popt->unhide = 'n';
 	popt->conversion = 'a';
 	popt->blocksize = 1024;
 	popt->mode = S_IRUGO;
@@ -86,6 +88,10 @@ static int parse_options(char *options, struct iso9660_options * popt)
 	for (this_char = strtok(options,","); this_char; this_char = strtok(NULL,",")) {
 	        if (strncmp(this_char,"norock",6) == 0) {
 		  popt->rock = 'n';
+		  continue;
+		};
+	        if (strncmp(this_char,"unhide",6) == 0) {
+		  popt->unhide = 'y';
 		  continue;
 		};
 	        if (strncmp(this_char,"cruft",5) == 0) {
@@ -214,6 +220,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	printk("map = %c\n", opt.map);
 	printk("rock = %c\n", opt.rock);
 	printk("cruft = %c\n", opt.cruft);
+	printk("unhide = %c\n", opt.unhide);
 	printk("conversion = %c\n", opt.conversion);
 	printk("blocksize = %d\n", opt.blocksize);
 	printk("gid = %d\n", opt.gid);
@@ -353,6 +360,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->u.isofs_sb.s_rock = (opt.rock == 'y' ? 1 : 0);
 	s->u.isofs_sb.s_conversion = opt.conversion;
 	s->u.isofs_sb.s_cruft = opt.cruft;
+	s->u.isofs_sb.s_unhide = opt.unhide;
 	s->u.isofs_sb.s_uid = opt.uid;
 	s->u.isofs_sb.s_gid = opt.gid;
 	/*
