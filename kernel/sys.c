@@ -570,12 +570,7 @@ asmlinkage long sys_setuid(uid_t uid)
 		if (uid != old_ruid && set_user(uid) < 0)
 			return -EAGAIN;
 		current->suid = uid;
-	} else if (uid == current->uid) {
-		/* Nothing - just set fsuid/euid */
-	}  else if (uid == current->suid) {
-		if (set_user(uid) < 0)
-			return -EAGAIN;
-	} else
+	} else if ((uid != current->uid) && (uid != current->suid))
 		return -EPERM;
 
 	current->fsuid = current->euid = uid;
