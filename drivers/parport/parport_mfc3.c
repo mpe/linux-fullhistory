@@ -274,16 +274,6 @@ static void mfc3_dec_use_count(void)
 	MOD_DEC_USE_COUNT;
 }
 
-static void mfc3_fill_inode(struct inode *inode, int fill)
-{
-#ifdef MODULE
-	if (fill)
-		MOD_INC_USE_COUNT;
-	else
-		MOD_DEC_USE_COUNT;
-#endif
-}
-
 static struct parport_operations pp_mfc3_ops = {
 	mfc3_write_data,
 	mfc3_read_data,
@@ -292,46 +282,35 @@ static struct parport_operations pp_mfc3_ops = {
 	mfc3_read_control,
 	mfc3_frob_control,
 
-	NULL, /* write_econtrol */
-	NULL, /* read_econtrol */
-	NULL, /* frob_econtrol */
-
-	mfc3_write_status,
 	mfc3_read_status,
 
-	NULL, /* write fifo */
-	NULL, /* read fifo */
+	mfc3_enable_irq,
+	mfc3_disable_irq,
 
-	mfc3_change_mode,
+	NULL, /* data_forward - FIXME */
+	NULL, /* data_reverse - FIXME */
 
-
-	mfc3_release_resources,
-	mfc3_claim_resources,
-
-
-	NULL, /* epp_write_data */
-	NULL, /* epp_read_data */
-	NULL, /* epp_write_addr */
-	NULL, /* epp_read_addr */
-	NULL, /* epp_check_timeout */
-
-	NULL, /* epp_write_block */
-	NULL, /* epp_read_block */
-
-	NULL, /* ecp_write_block */
-	NULL, /* ecp_read_block */
+	mfc3_interrupt,
 
 	mfc3_init_state,
 	mfc3_save_state,
 	mfc3_restore_state,
 
-	mfc3_enable_irq,
-	mfc3_disable_irq,
-	mfc3_interrupt,
-
 	mfc3_inc_use_count,
 	mfc3_dec_use_count,
-	mfc3_fill_inode
+
+	parport_ieee1284_epp_write_data,
+	parport_ieee1284_epp_read_data,
+	parport_ieee1284_epp_write_addr,
+	parport_ieee1284_epp_read_addr,
+
+	parport_ieee1284_ecp_write_data,
+	parport_ieee1284_ecp_read_data,
+	parport_ieee1284_ecp_write_addr,
+
+	parport_ieee1284_write_compat,
+	parport_ieee1284_read_nibble,
+	parport_ieee1284_read_byte,
 };
 
 /* ----------- Initialisation code --------------------------------- */

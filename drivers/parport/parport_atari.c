@@ -92,11 +92,6 @@ parport_atari_read_status(struct parport *p)
 }
 
 static void
-parport_atari_write_status(struct parport *p, unsigned char status)
-{
-}
-
-static void
 parport_atari_init_state(struct parport_state *s)
 {
 }
@@ -129,17 +124,6 @@ parport_atari_dec_use_count(void)
 	MOD_DEC_USE_COUNT;
 }
 
-static void
-parport_atari_fill_inode(struct inode *inode, int fill)
-{
-#ifdef MODULE
-	if (fill)
-		MOD_INC_USE_COUNT;
-	else
-		MOD_DEC_USE_COUNT;
-#endif
-}
-
 static struct parport_operations parport_atari_ops = {
 	parport_atari_write_data,
 	parport_atari_read_data,
@@ -148,41 +132,35 @@ static struct parport_operations parport_atari_ops = {
 	parport_atari_read_control,
 	parport_atari_frob_control,
 
-	NULL, /* write_econtrol */
-	NULL, /* read_econtrol */
-	NULL, /* frob_econtrol */
-
-	parport_atari_write_status,
 	parport_atari_read_status,
 
-	NULL, /* write fifo */
-	NULL, /* read fifo */
+	NULL, /* enable_irq - FIXME */
+	NULL, /* disable_irq - FIXME */
 
-	NULL, /* change_mode */
+	NULL, /* data_forward - FIXME */
+	NULL, /* data_reverse - FIXME */
 
-	NULL, /* epp_write_data */
-	NULL, /* epp_read_data */
-	NULL, /* epp_write_addr */
-	NULL, /* epp_read_addr */
-	NULL, /* epp_check_timeout */
-
-	NULL, /* epp_write_block */
-	NULL, /* epp_read_block */
-
-	NULL, /* ecp_write_block */
-	NULL, /* ecp_read_block */
+	parport_atari_interrupt,
 
 	parport_atari_init_state,
 	parport_atari_save_state,
 	parport_atari_restore_state,
 
-	NULL, /* enable_irq */
-	NULL, /* disable_irq */
-	parport_atari_interrupt,
-
 	parport_atari_inc_use_count,
 	parport_atari_dec_use_count,
-	parport_atari_fill_inode
+
+	parport_ieee1284_epp_write_data,
+	parport_ieee1284_epp_read_data,
+	parport_ieee1284_epp_write_addr,
+	parport_ieee1284_epp_read_addr,
+
+	parport_ieee1284_ecp_write_data,
+	parport_ieee1284_ecp_read_data,
+	parport_ieee1284_ecp_write_addr,
+
+	parport_ieee1284_write_compat,
+	parport_ieee1284_read_nibble,
+	parport_ieee1284_read_byte,
 };
 
 

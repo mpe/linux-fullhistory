@@ -128,12 +128,7 @@ static int do_hardware(ctl_table *table, int write, struct file *filp,
 	if (port->irq == PARPORT_IRQ_NONE) {
 		len += sprintf(buffer+len, "irq:\tnone\n");
 	} else {
-#ifdef __sparc__
-		len += sprintf(buffer+len, "irq:\t%s\n", 
-			       __irq_itoa(port->irq));
-#else
 		len += sprintf(buffer+len, "irq:\t%d\n", port->irq);
-#endif
 	}
 
 	if (port->dma == PARPORT_DMA_NONE)

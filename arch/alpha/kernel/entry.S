@@ -1146,7 +1146,7 @@ sys_call_table:
 	.quad sys_timer_create
 	.quad sys_timer_settime
 	.quad sys_timer_gettime
-	.quad sys_timer_setoverrun
+	.quad sys_timer_getoverrun
 	.quad sys_timer_delete			/* 375 */
 	.quad sys_clock_gettime
 	.quad sys_clock_settime

@@ -199,16 +199,6 @@ static void amiga_dec_use_count(void)
 	MOD_DEC_USE_COUNT;
 }
 
-static void amiga_fill_inode(struct inode *inode, int fill)
-{
-#ifdef MODULE
-	if (fill)
-		MOD_INC_USE_COUNT;
-	else
-		MOD_DEC_USE_COUNT;
-#endif
-}
-
 static struct parport_operations pp_amiga_ops = {
 	amiga_write_data,
 	amiga_read_data,
@@ -217,42 +207,35 @@ static struct parport_operations pp_amiga_ops = {
 	amiga_read_control,
 	amiga_frob_control,
 
-	NULL, /* write_econtrol */
-	NULL, /* read_econtrol */
-	NULL, /* frob_econtrol */
-
-	amiga_write_status,
 	amiga_read_status,
 
-	NULL, /* write fifo */
-	NULL, /* read fifo */
+	amiga_enable_irq,
+	amiga_disable_irq,
 
-	amiga_change_mode,
+	NULL, /* data_forward */
+	NULL, /* data_reverse */
 
-
-	NULL, /* epp_write_data */
-	NULL, /* epp_read_data */
-	NULL, /* epp_write_addr */
-	NULL, /* epp_read_addr */
-	NULL, /* epp_check_timeout */
-
-	NULL, /* epp_write_block */
-	NULL, /* epp_read_block */
-
-	NULL, /* ecp_write_block */
-	NULL, /* ecp_read_block */
+	amiga_interrupt, 
 
 	amiga_init_state,
 	amiga_save_state,
 	amiga_restore_state,
 
-	amiga_enable_irq,
-	amiga_disable_irq,
-	amiga_interrupt, 
-
 	amiga_inc_use_count,
 	amiga_dec_use_count,
-	amiga_fill_inode
+
+	parport_ieee1284_epp_write_data,
+	parport_ieee1284_epp_read_data, /* impossible? */
+	parport_ieee1284_epp_write_addr,
+	parport_ieee1284_epp_read_addr, /* impossible? */
+
+	parport_ieee1284_ecp_write_data,
+	parport_ieee1284_ecp_read_data, /* impossible? */
+	parport_ieee1284_ecp_write_addr,
+
+	parport_ieee1284_write_compat, /* FIXME - need to write amiga one */
+	parport_ieee1284_read_nibble,
+	parport_ieee1284_read_byte, /* impossible? */
 };
 
 /* ----------- Initialisation code --------------------------------- */

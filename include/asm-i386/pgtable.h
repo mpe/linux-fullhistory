@@ -17,6 +17,8 @@
 #include <asm/fixmap.h>
 #include <linux/threads.h>
 
+extern pgd_t swapper_pg_dir[1024];
+
 /* Caches aren't brain-dead on the intel. */
 #define flush_cache_all()			do { } while (0)
 #define flush_cache_mm(mm)			do { } while (0)
@@ -86,79 +88,19 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define local_flush_tlb() \
 	__flush_tlb()
 
+extern void flush_tlb_all(void);
+extern void flush_tlb_current_task(void);
+extern void flush_tlb_mm(struct mm_struct *);
+extern void flush_tlb_page(struct vm_area_struct *, unsigned long);
 
-#define CLEVER_SMP_INVALIDATE
-#ifdef CLEVER_SMP_INVALIDATE
+#define flush_tlb()	flush_tlb_current_task()
 
-/*
- *	Smarter SMP flushing macros. 
- *		c/o Linus Torvalds.
- *
- *	These mean you can really definitely utterly forget about
- *	writing to user space from interrupts. (Its not allowed anyway).
- */
- 
-static inline void flush_tlb_current_task(void)
-{
-	/* just one copy of this mm? */
-	if (atomic_read(&current->mm->mm_users) == 1)
-		local_flush_tlb();	/* and that's us, so.. */
-	else
-		smp_flush_tlb();
-}
-
-#define flush_tlb() flush_tlb_current_task()
-
-#define flush_tlb_all() smp_flush_tlb()
-
-static inline void flush_tlb_mm(struct mm_struct * mm)
-{
-	if (mm == current->mm && atomic_read(&mm->mm_users) == 1)
-		local_flush_tlb();
-	else
-		smp_flush_tlb();
-}
-
-static inline void flush_tlb_page(struct vm_area_struct * vma,
-	unsigned long va)
-{
-	if (vma->vm_mm == current->mm && atomic_read(&current->mm->mm_users) == 1)
-		__flush_tlb_one(va);
-	else
-		smp_flush_tlb();
-}
-
-static inline void flush_tlb_range(struct mm_struct * mm,
-	unsigned long start, unsigned long end)
+static inline void flush_tlb_range(struct mm_struct * mm, unsigned long start, unsigned long end)
 {
 	flush_tlb_mm(mm);
 }
 
 
-#else
-
-#define flush_tlb() \
-	smp_flush_tlb()
-
-#define flush_tlb_all() flush_tlb()
-
-static inline void flush_tlb_mm(struct mm_struct *mm)
-{
-	flush_tlb();
-}
-
-static inline void flush_tlb_page(struct vm_area_struct *vma,
-	unsigned long addr)
-{
-	flush_tlb();
-}
-
-static inline void flush_tlb_range(struct mm_struct *mm,
-	unsigned long start, unsigned long end)
-{
-	flush_tlb();
-}
-#endif
 #endif
 #endif /* !__ASSEMBLY__ */
 
@@ -392,13 +334,11 @@ extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
 
 extern __inline__ pgd_t *get_pgd_slow(void)
 {
-	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL), *init;
+	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
 
 	if (ret) {
-		init = pgd_offset(&init_mm, 0);
-		memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
-		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
-			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+		memset(ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
+		memcpy(ret + USER_PTRS_PER_PGD, swapper_pg_dir + USER_PTRS_PER_PGD, (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 	}
 	return ret;
 }
@@ -407,9 +347,9 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 {
 	unsigned long *ret;
 
-	if((ret = pgd_quicklist) != NULL) {
+	if ((ret = pgd_quicklist) != NULL) {
 		pgd_quicklist = (unsigned long *)(*ret);
-		ret[0] = ret[1];
+		ret[0] = 0;
 		pgtable_cache_size--;
 	} else
 		ret = (unsigned long *)get_pgd_slow();
@@ -562,8 +502,6 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
 			pgd[address >> PGDIR_SHIFT] = entry;
 #endif
 }
-
-extern pgd_t swapper_pg_dir[1024];
 
 /*
  * The i386 doesn't have any external MMU info: the kernel page

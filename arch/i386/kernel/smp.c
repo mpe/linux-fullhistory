@@ -1580,8 +1580,7 @@ static inline void send_IPI_single(int dest, int vector)
  * bad as in the early days of SMP, so we might ease some of the
  * paranoia here.
  */
-
-void smp_flush_tlb(void)
+static void flush_tlb_others(void)
 {
 	int cpu = smp_processor_id();
 	int stuck;
@@ -1634,12 +1633,59 @@ void smp_flush_tlb(void)
 		}
 		__restore_flags(flags);
 	}
+}
 
-	/*
-	 *	Flush the local TLB
-	 */
+/*
+ *	Smarter SMP flushing macros. 
+ *		c/o Linus Torvalds.
+ *
+ *	These mean you can really definitely utterly forget about
+ *	writing to user space from interrupts. (Its not allowed anyway).
+ */	
+void flush_tlb_current_task(void)
+{
+	unsigned long vm_mask = 1 << current->processor;
+	struct mm_struct *mm = current->mm;
+
+	if (mm->cpu_vm_mask != vm_mask)
+		flush_tlb_others();
+	mm->cpu_vm_mask = vm_mask;
 	local_flush_tlb();
+}
 
+void flush_tlb_mm(struct mm_struct * mm)
+{
+	unsigned long vm_mask = 1 << current->processor;
+
+	if (mm->cpu_vm_mask & ~vm_mask)
+		flush_tlb_others();
+	if (current->active_mm == mm) {
+		local_flush_tlb();
+		mm->cpu_vm_mask = vm_mask;
+		return;
+	}
+	mm->cpu_vm_mask = 0;
+}
+
+void flush_tlb_page(struct vm_area_struct * vma, unsigned long va)
+{
+	unsigned long vm_mask = 1 << current->processor;
+	struct mm_struct *mm = vma->vm_mm;
+
+	if (mm->cpu_vm_mask & ~vm_mask)
+		flush_tlb_others();
+	if (current->active_mm == mm) {
+		__flush_tlb_one(va);
+		mm->cpu_vm_mask = vm_mask;
+		return;
+	}
+	mm->cpu_vm_mask = 0;
+}
+
+void flush_tlb_all(void)
+{
+	flush_tlb_others();
+	local_flush_tlb();
 }
 
 

@@ -143,28 +143,6 @@ void clear_page_tables(struct mm_struct *mm, unsigned long first, int nr)
 	check_pgt_cache();
 }
 
-/*
- * This function just free's the page directory - the
- * pages tables themselves have been freed earlier by 
- * clear_page_tables().
- */
-void free_page_tables(struct mm_struct * mm)
-{
-	pgd_t * page_dir = mm->pgd;
-
-	if (page_dir) {
-		if (page_dir == swapper_pg_dir)
-			goto out_bad;
-		pgd_free(page_dir);
-	}
-	return;
-
-out_bad:
-	printk(KERN_ERR
-		"free_page_tables: Trying to free kernel pgd\n");
-	return;
-}
-
 #define PTE_TABLE_MASK	((PTRS_PER_PTE-1) * sizeof(pte_t))
 #define PMD_TABLE_MASK	((PTRS_PER_PMD-1) * sizeof(pmd_t))
 

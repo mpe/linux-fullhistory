@@ -55,10 +55,7 @@
 
 #include <linux/parport.h>
 #include <linux/parport_pc.h>
-
-/* Maximum number of ports to support.  It is useless to set this greater
-   than PARPORT_MAX (in <linux/parport.h>).  */
-#define PARPORT_PC_MAX_PORTS  8
+#include <asm/parport.h>
 
 /* ECR modes */
 #define ECR_SPP 00
@@ -69,8 +66,6 @@
 #define ECR_VND 05
 #define ECR_TST 06
 #define ECR_CNF 07
-
-static int user_specified __initdata = 0;
 
 /* frob_control, but for ECR */
 static void frob_econtrol (struct parport *pb, unsigned char m,
@@ -927,17 +922,6 @@ void parport_pc_dec_use_count(void)
 #endif
 }
 
-static void parport_pc_fill_inode(struct inode *inode, int fill)
-{
-	/* Is this still needed? -tim */
-#ifdef MODULE
-	if (fill)
-		MOD_INC_USE_COUNT;
-	else
-		MOD_DEC_USE_COUNT;
-#endif
-}
-
 struct parport_operations parport_pc_ops = 
 {
 	parport_pc_write_data,
@@ -962,7 +946,6 @@ struct parport_operations parport_pc_ops =
 
 	parport_pc_inc_use_count,
 	parport_pc_dec_use_count,
-	parport_pc_fill_inode,
 
 	parport_ieee1284_epp_write_data,
 	parport_ieee1284_epp_read_data,
@@ -1712,8 +1695,8 @@ static int __init parport_pc_init_pci (int irq, int dma)
 		unsigned int device;
 		unsigned int numports;
 		struct {
-			unsigned int lo;
-			unsigned int hi; /* -ve if not there */
+			unsigned long lo;
+			unsigned long hi; /* -ve if not there */
 		} addr[4];
 	} cards[] = {
 		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_550, 1,
@@ -1776,39 +1759,22 @@ static int __init parport_pc_init_pci (int irq, int dma)
 						  pcidev)) != NULL) {
 			int n;
 			for (n = 0; n < cards[i].numports; n++) {
-				int lo = cards[i].addr[n].lo;
-				int hi = cards[i].addr[n].hi;
-				int io_lo = pcidev->base_address[lo];
-				int io_hi = ((hi < 0) ? 0 :
-					     pcidev->base_address[hi]);
+				unsigned long lo = cards[i].addr[n].lo;
+				unsigned long hi = cards[i].addr[n].hi;
+				unsigned long io_lo = pcidev->base_address[lo];
+				unsigned long io_hi = ((hi < 0) ? 0 :
+						pcidev->base_address[hi]);
 				io_lo &= PCI_BASE_ADDRESS_IO_MASK;
 				io_hi &= PCI_BASE_ADDRESS_IO_MASK;
-				count += probe_one_port (io_lo, io_hi,
-							 irq, dma);
+				if (irq == PARPORT_IRQ_AUTO)
+					count += probe_one_port (io_lo, io_hi,
+								 pcidev->irq,
+								 dma);
+				else
+					count += probe_one_port (io_lo, io_hi,
+								 irq, dma);
 			}
 		}
-	}
-
-	return count;
-}
-
-int __init parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
-{
-	int count = 0, i = 0;
-	if (io && *io) {
-		/* Only probe the ports we were given. */
-		user_specified = 1;
-		do {
-			if (!*io_hi) *io_hi = 0x400 + *io;
-			count += probe_one_port(*(io++), *(io_hi++),
-						*(irq++), *(dma++));
-		} while (*io && (++i < PARPORT_PC_MAX_PORTS));
-	} else {
-		/* Probe all the likely ports. */
-		count += probe_one_port(0x3bc, 0x7bc, irq[0], dma[0]);
-		count += probe_one_port(0x378, 0x778, irq[0], dma[0]);
-		count += probe_one_port(0x278, 0x678, irq[0], dma[0]);
-		count += parport_pc_init_pci (irq[0], dma[0]);
 	}
 
 	return count;

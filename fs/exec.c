@@ -371,7 +371,6 @@ static int exec_mmap(void)
 	if (old_mm && atomic_read(&old_mm->mm_users) == 1) {
 		flush_cache_mm(old_mm);
 		mm_release();
-		release_segments(old_mm);
 		exit_mmap(old_mm);
 		flush_tlb_mm(old_mm);
 		return 0;
@@ -381,10 +380,9 @@ static int exec_mmap(void)
 	if (mm) {
 		struct mm_struct *active_mm = current->active_mm;
 
-		mm->cpu_vm_mask = (1UL << smp_processor_id());
 		current->mm = mm;
 		current->active_mm = mm;
-		switch_mm(active_mm, mm);
+		switch_mm(active_mm, mm, smp_processor_id());
 		mm_release();
 		if (old_mm) {
 			if (active_mm != old_mm) BUG();

@@ -621,15 +621,6 @@ signed long schedule_timeout(signed long timeout)
  */
 static inline void __schedule_tail(struct task_struct *prev)
 {
-	if (!current->active_mm) BUG();
-
-	if (!prev->mm) {
-		struct mm_struct *mm = prev->active_mm;
-		if (mm) {
-			prev->active_mm = NULL;
-			mmdrop(mm);
-		}
-	}
 #ifdef __SMP__
 	if ((prev->state == TASK_RUNNING) &&
 			(prev != idle_task(smp_processor_id())))
@@ -798,7 +789,12 @@ still_running_back:
 		} else {
 			if (next->active_mm != mm) BUG();
 			if (mm != oldmm)
-				switch_mm(oldmm, mm);
+				switch_mm(oldmm, mm, this_cpu);
+		}
+
+		if (!prev->mm) {
+			prev->active_mm = NULL;
+			mmdrop(oldmm);
 		}
 	}
 

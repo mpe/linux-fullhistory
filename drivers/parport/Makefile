@@ -36,13 +36,6 @@ ifeq ($(CONFIG_PARPORT),y)
       M_OBJS += parport_pc.o
     endif
   endif
-  ifeq ($(CONFIG_PARPORT_AX),y)
-    LX_OBJS += parport_ax.o
-  else
-    ifeq ($(CONFIG_PARPORT_AX),m)
-      M_OBJS += parport_ax.o
-    endif
-  endif
   ifeq ($(CONFIG_PARPORT_AMIGA),y)
     LX_OBJS += parport_amiga.o
   else

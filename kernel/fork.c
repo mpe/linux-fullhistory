@@ -312,6 +312,29 @@ struct mm_struct * mm_alloc(void)
 	return NULL;
 }
 
+/*
+ * Called when the last reference to the mm
+ * is dropped: either by a lazy thread or by
+ * mmput. Free the page directory and the mm.
+ */
+inline void __mmdrop(struct mm_struct *mm)
+{
+	if (mm == &init_mm) BUG();
+	pgd_free(mm->pgd);
+	kmem_cache_free(mm_cachep, mm);
+}
+
+/*
+ * Decrement the use count and release all resources for an mm.
+ */
+void mmput(struct mm_struct *mm)
+{
+	if (atomic_dec_and_test(&mm->mm_users)) {
+		exit_mmap(mm);
+		mmdrop(mm);
+	}
+}
+
 /* Please note the differences between mmput and mm_release.
  * mmput is called whenever we stop holding onto a mm_struct,
  * error success whatever.
@@ -333,30 +356,6 @@ void mm_release(void)
 	if (tsk->flags & PF_VFORK) {
 		tsk->flags &= ~PF_VFORK;
 		up(tsk->p_opptr->vfork_sem);
-	}
-}
-
-/*
- * Called when the last reference to the mm
- * is dropped: either by a lazy thread or by
- * mmput
- */
-inline void __mmdrop(struct mm_struct *mm)
-{
-	if (mm == &init_mm) BUG();
-	free_page_tables(mm);
-	kmem_cache_free(mm_cachep, mm);
-}
-
-/*
- * Decrement the use count and release all resources for an mm.
- */
-void mmput(struct mm_struct *mm)
-{
-	if (atomic_dec_and_test(&mm->mm_users)) {
-		release_segments(mm);
-		exit_mmap(mm);
-		mmdrop(mm);
 	}
 }
 

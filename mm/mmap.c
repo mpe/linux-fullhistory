@@ -813,6 +813,7 @@ void exit_mmap(struct mm_struct * mm)
 {
 	struct vm_area_struct * mpnt;
 
+	release_segments(mm);
 	mpnt = mm->mmap;
 	mm->mmap = mm->mmap_avl = mm->mmap_cache = NULL;
 	mm->rss = 0;

@@ -52,7 +52,6 @@ static void dead_irq (int i, void *p, struct pt_regs *r) { }
 static void dead_initstate (struct pardevice *d, struct parport_state *s) { }
 static void dead_state (struct parport *p, struct parport_state *s) { }
 static void dead_noargs (void) { }
-static void dead_fill (struct inode *i, int f) { }
 static size_t dead_write (struct parport *p, const void *b, size_t l, int f)
 { return 0; }
 static size_t dead_read (struct parport *p, void *b, size_t l, int f)
@@ -74,7 +73,6 @@ static struct parport_operations dead_ops = {
 	dead_state,
 	dead_noargs,		/* xxx_use_count */
 	dead_noargs,
-	dead_fill,		/* fill_inode */
 	dead_write,		/* epp */
 	dead_read,
 	dead_write,

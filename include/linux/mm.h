@@ -304,7 +304,6 @@ extern void show_free_areas(void);
 extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
 	unsigned long address);
 
-extern void free_page_tables(struct mm_struct * mm);
 extern void clear_page_tables(struct mm_struct *, unsigned long, int);
 
 extern void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long size);
