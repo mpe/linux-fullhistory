@@ -21,6 +21,7 @@ extern char * strpbrk(const char *,const char *);
 extern char * strtok(char *,const char *);
 extern char * strstr(const char *,const char *);
 extern size_t strlen(const char *);
+extern size_t strnlen(const char *,size_t);
 extern size_t strspn(const char *,const char *);
 extern int strcmp(const char *,const char *);
 extern int strncmp(const char *,const char *,size_t);

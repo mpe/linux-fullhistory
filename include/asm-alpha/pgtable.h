@@ -22,10 +22,12 @@
 /*
  * entries per page directory level: the alpha is three-level, with
  * all levels having a one-page page table.
+ *
+ * The PGD is special: the last entry is reserved for self-mapping.
  */
 #define PTRS_PER_PTE	(1UL << (PAGE_SHIFT-3))
 #define PTRS_PER_PMD	(1UL << (PAGE_SHIFT-3))
-#define PTRS_PER_PGD	(1UL << (PAGE_SHIFT-3))
+#define PTRS_PER_PGD	((1UL << (PAGE_SHIFT-3))-1)
 
 /* the no. of pointers that fit on a page: this will go away */
 #define PTRS_PER_PAGE	(1UL << (PAGE_SHIFT-3))
@@ -158,7 +160,7 @@ extern inline unsigned long pgd_page(pgd_t pgd)
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_VALID; }
-extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)] > 1; }
+extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)] != 1; }
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
 extern inline void pte_reuse(pte_t * ptep)
 {
@@ -169,7 +171,7 @@ extern inline void pte_reuse(pte_t * ptep)
 extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
 extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~_PFN_MASK) != _PAGE_TABLE || pmd_page(pmd) > high_memory; }
 extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_VALID; }
-extern inline int pmd_inuse(pmd_t *pmdp)	{ return mem_map[MAP_NR(pmdp)] > 1; }
+extern inline int pmd_inuse(pmd_t *pmdp)	{ return mem_map[MAP_NR(pmdp)] != 1; }
 extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
 extern inline void pmd_reuse(pmd_t * pmdp)
 {
@@ -180,7 +182,7 @@ extern inline void pmd_reuse(pmd_t * pmdp)
 extern inline int pgd_none(pgd_t pgd)		{ return !pgd_val(pgd); }
 extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & ~_PFN_MASK) != _PAGE_TABLE || pgd_page(pgd) > high_memory; }
 extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd) & _PAGE_VALID; }
-extern inline int pgd_inuse(pgd_t *pgdp)	{ return mem_map[MAP_NR(pgdp)] > 1; }
+extern inline int pgd_inuse(pgd_t *pgdp)	{ return mem_map[MAP_NR(pgdp)] != 1; }
 extern inline void pgd_clear(pgd_t * pgdp)	{ pgd_val(*pgdp) = 0; }
 extern inline void pgd_reuse(pgd_t * pgdp)
 {
@@ -212,9 +214,10 @@ extern inline pte_t pte_mkdirty(pte_t pte)	{ pte_val(pte) |= __DIRTY_BITS; retur
 extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= __ACCESS_BITS; return pte; }
 extern inline pte_t pte_mkcow(pte_t pte)	{ pte_val(pte) |= _PAGE_COW; return pte; }
 
-/* to set the page-dir */
+/* to set the page-dir. Note the self-mapping in the last entry */
 extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
 {
+	pgd_val(pgdir[PTRS_PER_PGD]) = pte_val(mk_pte((unsigned long) pgdir, PAGE_KERNEL));
 	tsk->tss.ptbr = ((unsigned long) pgdir - PAGE_OFFSET) >> PAGE_SHIFT;
 	if (tsk == current)
 		invalidate();
@@ -222,23 +225,23 @@ extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
 
 #define PAGE_DIR_OFFSET(tsk,address) pgd_offset((tsk),(address))
 
-/* to find an entry in a page-table-directory */
+/* to find an entry in a page-table-directory. */
 extern inline pgd_t * pgd_offset(struct task_struct * tsk, unsigned long address)
 {
 	return (pgd_t *) ((tsk->tss.ptbr << PAGE_SHIFT) + PAGE_OFFSET) +
-		((address >> PGDIR_SHIFT) & (PTRS_PER_PGD - 1));
+		((address >> PGDIR_SHIFT) & (PTRS_PER_PAGE - 1));
 }
 
 /* Find an entry in the second-level page table.. */
 extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
 {
-	return (pmd_t *) pgd_page(*dir) + ((address >> PMD_SHIFT) & (PTRS_PER_PMD - 1));
+	return (pmd_t *) pgd_page(*dir) + ((address >> PMD_SHIFT) & (PTRS_PER_PAGE - 1));
 }
 
 /* Find an entry in the third-level page table.. */
 extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
 {
-	return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1));
+	return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PAGE - 1));
 }
 
 /*              
@@ -373,5 +376,14 @@ extern inline pgd_t * pgd_alloc(void)
 }
 
 extern pgd_t swapper_pg_dir[1024];
+
+/*
+ * The alpha doesn't have any external MMU info: the kernel page
+ * tables contain all the necessary information.
+ */
+extern inline void update_mmu_cache(struct vm_area_struct * vma,
+	unsigned long address, pte_t pte)
+{
+}
 
 #endif /* _ALPHA_PGTABLE_H */

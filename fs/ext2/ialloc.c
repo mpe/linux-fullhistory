@@ -74,7 +74,7 @@ static void read_inode_bitmap (struct super_block * sb,
 		ext2_panic (sb, "read_inode_bitmap",
 			    "Cannot read inode bitmap - "
 			    "block_group = %lu, inode_bitmap = %lu",
-			    block_group, gdp->bg_inode_bitmap);
+			    block_group, (unsigned long) gdp->bg_inode_bitmap);
 	sb->u.ext2_sb.s_inode_bitmap_number[bitmap_nr] = block_group;
 	sb->u.ext2_sb.s_inode_bitmap[bitmap_nr] = bh;
 }
@@ -549,6 +549,6 @@ void ext2_check_inodes_bitmap (struct super_block * sb)
 		ext2_error (sb, "ext2_check_inodes_bitmap",
 			    "Wrong free inodes count in super block, "
 			    "stored = %lu, counted = %lu",
-			    es->s_free_inodes_count, bitmap_count);
+			    (unsigned long) es->s_free_inodes_count, bitmap_count);
 	unlock_super (sb);
 }

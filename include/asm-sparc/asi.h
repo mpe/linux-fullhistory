@@ -10,6 +10,11 @@
  * be similar under regular sun4's.
  */
 
+#include <linux/config.h>
+#ifdef CONFIG_SUN4M
+#include "asi4m.h"
+#else
+
 #define ASI_NULL1        0x0
 #define ASI_NULL2        0x1
 
@@ -34,4 +39,5 @@
 #define ASI_FLUSHCTX     0xe
 
 
+#endif /* CONFIG_SUN4M */
 #endif /* _SPARC_ASI_H */

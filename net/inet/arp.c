@@ -37,6 +37,7 @@
  *                                      re-arranged proxy handling.
  *		Alan Cox	:	Changed to use notifiers.
  *		Niibe Yutaka	:	Reply for this device or proxies only.
+ *		Alan Cox	:	Don't proxy across hardware types!
  */
 
 #include <linux/types.h>
@@ -680,7 +681,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			     having to use a huge number of proxy arp entries
 			     and having to keep them uptodate.
 			     */
-			  if (proxy_entry->dev != dev &&
+			  if (proxy_entry->dev != dev && proxy_entry->htype == htype &&
 			      !((proxy_entry->ip^tip)&proxy_entry->mask))
 			    break;
 

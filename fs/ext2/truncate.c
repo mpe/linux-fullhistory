@@ -45,8 +45,8 @@ static int ext2_secrm_seed = 152;	/* Random generator base */
 
 static int trunc_direct (struct inode * inode)
 {
+	u32 * p;
 	int i, tmp;
-	unsigned long * p;
 	struct buffer_head * bh;
 	unsigned long block_to_free = 0;
 	unsigned long free_count = 0;
@@ -102,12 +102,12 @@ repeat:
 	return retry;
 }
 
-static int trunc_indirect (struct inode * inode, int offset, unsigned long * p)
+static int trunc_indirect (struct inode * inode, int offset, u32 * p)
 {
 	int i, tmp;
 	struct buffer_head * bh;
 	struct buffer_head * ind_bh;
-	unsigned long * ind;
+	u32 * ind;
 	unsigned long block_to_free = 0;
 	unsigned long free_count = 0;
 	int retry = 0;
@@ -134,7 +134,7 @@ repeat:
 			i = 0;
 		if (i < indirect_block)
 			goto repeat;
-		ind = i + (unsigned long *) ind_bh->b_data;
+		ind = i + (u32 *) ind_bh->b_data;
 		tmp = *ind;
 		if (!tmp)
 			continue;
@@ -176,7 +176,7 @@ repeat:
 	}
 	if (free_count > 0)
 		ext2_free_blocks (inode->i_sb, block_to_free, free_count);
-	ind = (unsigned long *) ind_bh->b_data;
+	ind = (u32 *) ind_bh->b_data;
 	for (i = 0; i < addr_per_block; i++)
 		if (*(ind++))
 			break;
@@ -199,11 +199,11 @@ repeat:
 }
 
 static int trunc_dindirect (struct inode * inode, int offset,
-			    unsigned long * p)
+			    u32 * p)
 {
 	int i, tmp;
 	struct buffer_head * dind_bh;
-	unsigned long * dind;
+	u32 * dind;
 	int retry = 0;
 	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
 	int blocks = inode->i_sb->s_blocksize / 512;
@@ -228,7 +228,7 @@ repeat:
 			i = 0;
 		if (i < dindirect_block)
 			goto repeat;
-		dind = i + (unsigned long *) dind_bh->b_data;
+		dind = i + (u32 *) dind_bh->b_data;
 		tmp = *dind;
 		if (!tmp)
 			continue;
@@ -236,7 +236,7 @@ repeat:
 					  dind);
 		mark_buffer_dirty(dind_bh, 1);
 	}
-	dind = (unsigned long *) dind_bh->b_data;
+	dind = (u32 *) dind_bh->b_data;
 	for (i = 0; i < addr_per_block; i++)
 		if (*(dind++))
 			break;
@@ -262,7 +262,7 @@ static int trunc_tindirect (struct inode * inode)
 {
 	int i, tmp;
 	struct buffer_head * tind_bh;
-	unsigned long * tind, * p;
+	u32 * tind, * p;
 	int retry = 0;
 	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
 	int blocks = inode->i_sb->s_blocksize / 512;
@@ -289,13 +289,13 @@ repeat:
 			i = 0;
 		if (i < tindirect_block)
 			goto repeat;
-		tind = i + (unsigned long *) tind_bh->b_data;
+		tind = i + (u32 *) tind_bh->b_data;
 		retry |= trunc_dindirect(inode, EXT2_NDIR_BLOCKS +
 			addr_per_block + (i + 1) * addr_per_block * addr_per_block,
 			tind);
 		mark_buffer_dirty(tind_bh, 1);
 	}
-	tind = (unsigned long *) tind_bh->b_data;
+	tind = (u32 *) tind_bh->b_data;
 	for (i = 0; i < addr_per_block; i++)
 		if (*(tind++))
 			break;
@@ -331,10 +331,10 @@ void ext2_truncate (struct inode * inode)
 		down(&inode->i_sem);
 		retry = trunc_direct(inode);
 		retry |= trunc_indirect (inode, EXT2_IND_BLOCK,
-			(unsigned long *) &inode->u.ext2_i.i_data[EXT2_IND_BLOCK]);
+			(u32 *) &inode->u.ext2_i.i_data[EXT2_IND_BLOCK]);
 		retry |= trunc_dindirect (inode, EXT2_IND_BLOCK +
 			EXT2_ADDR_PER_BLOCK(inode->i_sb),
-			(unsigned long *) &inode->u.ext2_i.i_data[EXT2_DIND_BLOCK]);
+			(u32 *) &inode->u.ext2_i.i_data[EXT2_DIND_BLOCK]);
 		retry |= trunc_tindirect (inode);
 		up(&inode->i_sem);
 		if (!retry)

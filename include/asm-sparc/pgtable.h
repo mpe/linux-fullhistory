@@ -8,12 +8,12 @@
  */
 
 /* PMD_SHIFT determines the size of the area a second-level page table can map */
-#define PMD_SHIFT       22
+#define PMD_SHIFT       18
 #define PMD_SIZE        (1UL << PMD_SHIFT)
 #define PMD_MASK        (~(PMD_SIZE-1))
 
 /* PGDIR_SHIFT determines what a third-level page table entry can map */
-#define PGDIR_SHIFT       22
+#define PGDIR_SHIFT       18
 #define PGDIR_SIZE        (1UL << PGDIR_SHIFT)
 #define PGDIR_MASK        (~(PGDIR_SIZE-1))
 #define PGDIR_ALIGN(addr) (((addr)+PGDIR_SIZE-1)&PGDIR_MASK)
@@ -48,7 +48,8 @@
 #define _PAGE_VALID     0x80000000   /* valid page */
 #define _PAGE_WRITE     0x40000000   /* can be written to */
 #define _PAGE_PRIV      0x20000000   /* bit to signify privileged page */
-#define _PAGE_REF       0x02000000   /* Page had been accessed/referenced */
+#define _PAGE_NOCACHE   0x10000000   /* non-cacheable page */
+#define _PAGE_REF       0x02000000   /* Page has been accessed/referenced */
 #define _PAGE_DIRTY     0x01000000   /* Page has been modified, is dirty */
 #define _PAGE_COW       0x00800000   /* COW page, hardware ignores this bit (untested) */
 
@@ -71,7 +72,8 @@
 #define PAGE_SHARED     __pgprot(_PAGE_VALID | _PAGE_WRITE | _PAGE_REF)
 #define PAGE_COPY       __pgprot(_PAGE_VALID | _PAGE_REF | _PAGE_COW)
 #define PAGE_READONLY   __pgprot(_PAGE_VALID | _PAGE_REF)
-#define PAGE_KERNEL     __pgprot(_PAGE_VALID | _PAGE_PRIV)
+#define PAGE_KERNEL     __pgprot(_PAGE_VALID | _PAGE_WRITE | _PAGE_NOCACHE | _PAGE_REF | _PAGE_PRIV)
+#define PAGE_INVALID    __pgprot(_PAGE_PRIV)
 
 #define _PAGE_NORMAL(x) __pgprot(_PAGE_VALID | _PAGE_REF | (x))
 

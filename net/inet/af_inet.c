@@ -28,6 +28,11 @@
  *		Niibe Yutaka	:	4.4BSD style write async I/O
  *		Alan Cox, 
  *		Tony Gale 	:	Fixed reuse semantics.
+ *		Alan Cox	:	bind() shouldn't abort existing but dead
+ *					sockets. Stops FTP netin:.. I hope.
+ *		Alan Cox	:	bind() works correctly for RAW sockets. Note
+ *					that FreeBSD at least is broken in this respect
+ *					so be careful with compatibility tests...
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -823,77 +828,76 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 {
 	struct sockaddr_in *addr=(struct sockaddr_in *)uaddr;
 	struct sock *sk=(struct sock *)sock->data, *sk2;
-	unsigned short snum;
+	unsigned short snum = 0 /* Stoopid compiler.. this IS ok */;
 	int chk_addr_ret;
 
 	/* check this error. */
 	if (sk->state != TCP_CLOSE)
 		return(-EIO);
-	if (sk->num != 0) 
-		return(-EINVAL);
-
 	if(addr_len<sizeof(struct sockaddr_in))
 		return -EINVAL;
-
-	snum = ntohs(addr->sin_port);
-
-	/*
-	 * We can't just leave the socket bound wherever it is, it might
-	 * be bound to a privileged port. However, since there seems to
-	 * be a bug here, we will leave it if the port is not privileged.
-	 */
-	if (snum == 0) 
+		
+	if(sock->type != SOCK_RAW)
 	{
-		snum = get_new_socknum(sk->prot, 0);
-	}
-	if (snum < PROT_SOCK && !suser()) 
-		return(-EACCES);
+		if (sk->num != 0) 
+			return(-EINVAL);
 
+		snum = ntohs(addr->sin_port);
+
+		/*
+		 * We can't just leave the socket bound wherever it is, it might
+		 * be bound to a privileged port. However, since there seems to
+		 * be a bug here, we will leave it if the port is not privileged.
+		 */
+		if (snum == 0) 
+		{
+			snum = get_new_socknum(sk->prot, 0);
+		}
+		if (snum < PROT_SOCK && !suser()) 
+			return(-EACCES);
+	}
+	
 	chk_addr_ret = ip_chk_addr(addr->sin_addr.s_addr);
 	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR && chk_addr_ret != IS_MULTICAST)
 		return(-EADDRNOTAVAIL);	/* Source address MUST be ours! */
-  	
+	  	
 	if (chk_addr_ret || addr->sin_addr.s_addr == 0)
 		sk->saddr = addr->sin_addr.s_addr;
-
-	/* Make sure we are allowed to bind here. */
-	cli();
-outside_loop:
-	for(sk2 = sk->prot->sock_array[snum & (SOCK_ARRAY_SIZE -1)];
-					sk2 != NULL; sk2 = sk2->next) 
+	
+	if(sock->type != SOCK_RAW)
 	{
-/* should be below! */
-		if (sk2->num != snum) continue;
-#if 0
-		if (sk2->dead) 
+		/* Make sure we are allowed to bind here. */
+		cli();
+		for(sk2 = sk->prot->sock_array[snum & (SOCK_ARRAY_SIZE -1)];
+					sk2 != NULL; sk2 = sk2->next) 
 		{
-			destroy_sock(sk2);
-			goto outside_loop;
+		/* should be below! */
+			if (sk2->num != snum) 
+				continue;
+			if (!sk->reuse)
+			{
+				sti();
+				return(-EADDRINUSE);
+			}
+			
+			if (sk2->num != snum) 
+				continue;		/* more than one */
+			if (sk2->saddr != sk->saddr) 
+				continue;	/* socket per slot ! -FB */
+			if (!sk2->reuse || sk2->state==TCP_LISTEN) 
+			{
+				sti();
+				return(-EADDRINUSE);
+			}
 		}
-#endif
-		if (!sk->reuse)
-		{
-			sti();
-			return(-EADDRINUSE);
-		}
-		
-		if (sk2->num != snum) 
-			continue;		/* more than one */
-		if (sk2->saddr != sk->saddr) 
-			continue;	/* socket per slot ! -FB */
-		if (!sk2->reuse || sk2->state==TCP_LISTEN) 
-		{
-			sti();
-			return(-EADDRINUSE);
-		}
-	}
-	sti();
+		sti();
 
-	remove_sock(sk);
-	put_sock(snum, sk);
-	sk->dummy_th.source = ntohs(sk->num);
-	sk->daddr = 0;
-	sk->dummy_th.dest = 0;
+		remove_sock(sk);
+		put_sock(snum, sk);
+		sk->dummy_th.source = ntohs(sk->num);
+		sk->daddr = 0;
+		sk->dummy_th.dest = 0;
+	}
 	return(0);
 }
 
@@ -1002,7 +1006,7 @@ static int inet_socketpair(struct socket *sock1, struct socket *sock2)
 
 
 /*
- *	FIXME: Get BSD behaviour
+ *	Accept a pending connection. The TCP layer now gives BSD semantics.
  */
 
 static int inet_accept(struct socket *sock, struct socket *newsock, int flags)

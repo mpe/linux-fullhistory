@@ -20,6 +20,7 @@
 #include <linux/user.h>
 #include <linux/a.out.h>
 #include <linux/tty.h>
+#include <linux/ioport.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -122,4 +123,12 @@ void setup_arch(char **cmdline_p,
 	*cmdline_p = command_line;
 	*memory_start_p = memory_start;
 	*memory_end_p = memory_end;
+	/* request io space for devices used on all i[345]86 PC'S */
+	request_region(0x00,0x20,"dma1");
+	request_region(0x40,0x20,"timer");
+	request_region(0x70,0x10,"rtc");
+	request_region(0x80,0x20,"dma page reg");
+	request_region(0xc0,0x20,"dma2");
+	request_region(0xf0,0x2,"npu");
+	request_region(0xf8,0x8,"npu");
 }

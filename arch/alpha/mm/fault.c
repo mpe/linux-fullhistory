@@ -24,12 +24,11 @@ extern void die_if_kernel(char *,struct pt_regs *,long);
 
 /*
  * This routine handles page faults.  It determines the address,
- * and the problem, and then passes it off to one of the appropriate
- * routines.
+ * and the problem, and then passes it off to handle_mm_fault().
  *
  * mmcsr:
- *	0 = translation not valid (= do_no_page())
- *	1 = access violation (= user tries to access kernel pages)
+ *	0 = translation not valid
+ *	1 = access violation
  *	2 = fault-on-read
  *	3 = fault-on-execute
  *	4 = fault-on-write
@@ -39,13 +38,12 @@ extern void die_if_kernel(char *,struct pt_regs *,long);
  *	0 = load
  *	1 = store
  */
-asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr,
-	long cause, struct pt_regs * regs)
+asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr, long cause,
+	unsigned long a3, unsigned long a4, unsigned long a5,
+	struct pt_regs regs)
 {
 	struct vm_area_struct * vma;
 
-	if (mmcsr == 1)
-		goto bad_area;
 	vma = find_vma(current, address);
 	if (!vma)
 		goto bad_area;
@@ -73,11 +71,7 @@ good_area:
 			goto bad_area;
 	}
 
-	if (mmcsr) {
-		do_wp_page(vma, address, cause > 0);
-		return;
-	}
-	do_no_page(vma, address, cause > 0);
+	handle_mm_fault(vma, address, cause > 0);
 	return;
 
 /*
@@ -85,7 +79,7 @@ good_area:
  * Fix it, but check if it's kernel or user first..
  */
 bad_area:
-	if (user_mode(regs)) {
+	if (user_mode(&regs)) {
 		send_sig(SIGSEGV, current, 1);
 		return;
 	}
@@ -94,6 +88,6 @@ bad_area:
  * terminate things with extreme prejudice.
  */
 	printk(KERN_ALERT "Unable to handle kernel paging request at virtual address %08lx\n",address);
-	die_if_kernel("Oops", regs, cause);
+	die_if_kernel("Oops", &regs, cause);
 	do_exit(SIGKILL);
 }

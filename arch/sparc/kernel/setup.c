@@ -52,7 +52,8 @@ unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
 }
 
 /* Lame prom console routines, gets registered below. Thanks for the
- * tip Linus.
+ * tip Linus.  First comes the V0 prom routine, then the V3 version
+ * writen by Paul Hatchman (paul@sfe.com.au).
  */
 
 void sparc_console_print(const char * p)
@@ -69,6 +70,24 @@ void sparc_console_print(const char * p)
 
 }
 
+/* paul@sfe.com.au */
+/* V3 prom console printing routines */
+void sparc_console_print_v3 (const char *p)
+{
+       unsigned char c;
+
+       while ((c = *(p++)) != 0)
+       {
+               if (c == '\n') romvec->pv_v2devops.v2_dev_write 
+                       ((*romvec->pv_v2bootargs.fd_stdout), "\r", 1);
+               romvec->pv_v2devops.v2_dev_write 
+                       ((*romvec->pv_v2bootargs.fd_stdout), &c, 1);
+       }
+
+       return;
+}
+
+
 /* This routine will in the future do all the nasty prom stuff
  * to probe for the mmu type and it's parameters, etc. This will
  * also be where SMP things happen plus the Sparc specific memory
@@ -76,23 +95,23 @@ void sparc_console_print(const char * p)
  */
 
 extern void register_console(void (*proc)(const char *));
+extern unsigned int prom_iface_vers, end_of_phys_memory;
 
 void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
-	extern int _end;
-
-	register_console(sparc_console_print);
+	if(romvec->pv_romvers == 0) {
+	  register_console(sparc_console_print);
+	} else {
+	  register_console(sparc_console_print_v3);
+	};
 
 	printk("Sparc PROM-Console registered...\n");
-
-	printk("calling get_idprom...\n");
 	get_idprom();     /* probe_devices expects this to be done */
-
-	printk("calling probe_devices...\n");
 	probe_devices();  /* cpu/fpu, mmu probes */
 
 	*memory_start_p = (((unsigned long) &end));
+	*memory_end_p = (((unsigned long) end_of_phys_memory));
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)

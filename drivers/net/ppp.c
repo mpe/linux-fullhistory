@@ -1463,7 +1463,6 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCSASYNCMAP:
     error = verify_area (VERIFY_READ, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      memset (ppp->xmit_async_map, 0, sizeof (ppp->xmit_async_map));
       ppp->xmit_async_map[0] = get_fs_long (l);
       bset (ppp->xmit_async_map, PPP_FLAG);
       bset (ppp->xmit_async_map, PPP_ESC);

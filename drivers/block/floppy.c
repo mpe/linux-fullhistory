@@ -240,6 +240,8 @@ static int inr; /* size of reply buffer, when called from interrupt */
 #define R_SECTOR (reply_buffer[5])
 #define R_SIZECODE (reply_buffer[6])
 
+#define SEL_DLY (2*HZ/100)
+
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof( (x)[0] ))
 /*
  * this struct defines the different floppy drive types.
@@ -254,38 +256,38 @@ static struct {
   |     |   Head load time, msec
   |     |   |   Head unload time, msec (not used)
   |     |   |   |     Step rate interval, usec
-  |     |   |   |     |    Time needed for spinup time (jiffies)
-  |     |   |   |     |    |    Timeout for spinning down (jiffies)
-  |     |   |   |     |    |    |   Spindown offset (where disk stops)
-  |     |   |   |     |    |    |   |  Select delay
-  |     |   |   |     |    |    |   |  |  RPS
-  |     |   |   |     |    |    |   |  |  |    Max number of tracks
-  |     |   |   |     |    |    |   |  |  |    |     Interrupt timeout
-  |     |   |   |     |    |    |   |  |  |    |     |   Max nonintlv. sectors
-  |     |   |   |     |    |    |   |  |  |    |     |   | -Max Errors- flags */
-{{0,  500, 16, 16, 8000, 100, 300,  0, 2, 5,  80, 3*HZ, 20, {3,1,2,0,2}, 0,
-      0, { 7, 4, 8, 2, 1, 5, 3,10}, 150, 0 }, "unknown" },
+  |     |   |   |     |       Time needed for spinup time (jiffies)
+  |     |   |   |     |       |      Timeout for spinning down (jiffies)
+  |     |   |   |     |       |      |   Spindown offset (where disk stops)
+  |     |   |   |     |       |      |   |     Select delay
+  |     |   |   |     |       |      |   |     |     RPS
+  |     |   |   |     |       |      |   |     |     |    Max number of tracks
+  |     |   |   |     |       |      |   |     |     |    |     Interrupt timeout
+  |     |   |   |     |       |      |   |     |     |    |     |   Max nonintlv. sectors
+  |     |   |   |     |       |      |   |     |     |    |     |   | -Max Errors- flags */
+{{0,  500, 16, 16, 8000,    1*HZ, 3*HZ,  0, SEL_DLY, 5,  80, 3*HZ, 20, {3,1,2,0,2}, 0,
+      0, { 7, 4, 8, 2, 1, 5, 3,10}, 3*HZ/2, 0 }, "unknown" },
 
-{{1,  300, 16, 16, 8000, 100, 300,  0, 2, 5,  40, 3*HZ, 17, {3,1,2,0,2}, 0,
-      0, { 1, 0, 0, 0, 0, 0, 0, 0}, 150, 1 }, "360K PC" }, /*5 1/4 360 KB PC*/
+{{1,  300, 16, 16, 8000,    1*HZ, 3*HZ,  0, SEL_DLY, 5,  40, 3*HZ, 17, {3,1,2,0,2}, 0,
+      0, { 1, 0, 0, 0, 0, 0, 0, 0}, 3*HZ/2, 1 }, "360K PC" }, /*5 1/4 360 KB PC*/
 
-{{2,  500, 16, 16, 6000,  40, 300, 14, 2, 6,  83, 3*HZ, 17, {3,1,2,0,2}, 0,
-      0, { 2, 5, 6,23,10,20,11, 0}, 150, 2 }, "1.2M" }, /*5 1/4 HD AT*/
+{{2,  500, 16, 16, 6000, 4*HZ/10, 3*HZ, 14, SEL_DLY, 6,  83, 3*HZ, 17, {3,1,2,0,2}, 0,
+      0, { 2, 5, 6,23,10,20,11, 0}, 3*HZ/2, 2 }, "1.2M" }, /*5 1/4 HD AT*/
 
-{{3,  250, 16, 16, 3000, 100, 300,  0, 2, 5,  83, 3*HZ, 20, {3,1,2,0,2}, 0,
-      0, { 4,22,21,30, 3, 0, 0, 0}, 150, 4 }, "720k" }, /*3 1/2 DD*/
+{{3,  250, 16, 16, 3000,    1*HZ, 3*HZ,  0, SEL_DLY, 5,  83, 3*HZ, 20, {3,1,2,0,2}, 0,
+      0, { 4,22,21,30, 3, 0, 0, 0}, 3*HZ/2, 4 }, "720k" }, /*3 1/2 DD*/
 
-{{4,  500, 16, 16, 4000,  40, 300, 10, 2, 5,  83, 3*HZ, 20, {3,1,2,0,2}, 0,
-      0, { 7, 4,25,22,31,21,29,11}, 150, 7 }, "1.44M" }, /*3 1/2 HD*/
+{{4,  500, 16, 16, 4000, 4*HZ/10, 3*HZ, 10, SEL_DLY, 5,  83, 3*HZ, 20, {3,1,2,0,2}, 0,
+      0, { 7, 4,25,22,31,21,29,11}, 3*HZ/2, 7 }, "1.44M" }, /*3 1/2 HD*/
 
-{{5, 1000, 15,  8, 3000,  40, 300, 10, 2, 5,  83, 3*HZ, 40, {3,1,2,0,2}, 0,
-      0, { 7, 8, 4,25,28,22,31,21}, 150, 8 }, "2.88M AMI BIOS" }, /*3 1/2 ED*/
+{{5, 1000, 15,  8, 3000, 4*HZ/10, 3*HZ, 10, SEL_DLY, 5,  83, 3*HZ, 40, {3,1,2,0,2}, 0,
+      0, { 7, 8, 4,25,28,22,31,21}, 3*HZ/2, 8 }, "2.88M AMI BIOS" }, /*3 1/2 ED*/
 
-{{6, 1000, 15,  8, 3000,  40, 300, 10, 2, 5,  83, 3*HZ, 40, {3,1,2,0,2}, 0,
-      0, { 7, 8, 4,25,28,22,31,21}, 150, 8 }, "2.88M" } /*3 1/2 ED*/
-/*    |  ---autodetected formats--   |   |      |
-      read_track                     |   |    Name printed when booting
-                                     |  Native format
+{{6, 1000, 15,  8, 3000, 4*HZ/10, 3*HZ, 10, SEL_DLY, 5,  83, 3*HZ, 40, {3,1,2,0,2}, 0,
+      0, { 7, 8, 4,25,28,22,31,21}, 3*HZ/2, 8 }, "2.88M" } /*3 1/2 ED*/
+/*    |  ---autodetected formats--   |      |      |
+      read_track                     |      |    Name printed when booting
+                                     |     Native format
                                    Frequency of disk change checks */
 };
 
@@ -3228,7 +3230,7 @@ static void daring(int *ints,int param)
 			default_drive_params[i].params.select_delay = 0;
 			default_drive_params[i].params.flags |= FD_SILENT_DCL_CLEAR;
 		} else {
-			default_drive_params[i].params.select_delay = 2;
+			default_drive_params[i].params.select_delay = 2*HZ/100;
 			default_drive_params[i].params.flags &= ~FD_SILENT_DCL_CLEAR;
 		}
 	}

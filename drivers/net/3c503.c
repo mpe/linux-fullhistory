@@ -330,7 +330,7 @@ el2_reset_8390(struct device *dev)
 {
     if (ei_debug > 1) {
 	printk("%s: Resetting the 3c503 board...", dev->name);
-	printk("%#x=%#02x %#x=%#02x %#x=%#02x...", E33G_IDCFR, inb(E33G_IDCFR),
+	printk("%#lx=%#02x %#lx=%#02x %#lx=%#02x...", E33G_IDCFR, inb(E33G_IDCFR),
 	       E33G_CNTRL, inb(E33G_CNTRL), E33G_GACFR, inb(E33G_GACFR));
     }
     outb_p(ECNTRL_RESET|ECNTRL_THIN, E33G_CNTRL);

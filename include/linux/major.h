@@ -36,8 +36,8 @@
  * 16 - sockets
  * 17 - af_unix
  * 18 - af_inet
- * 19 -                                               UNUSED
- * 20 -                                               UNUSED
+ * 19 - cyclades /dev/ttyC*
+ * 20 - cyclades /dev/cub*
  * 21 - scsi generic
  * 22 -                        (at2disk)
  * 23 -                        mitsumi cdrom
@@ -69,7 +69,8 @@
 #define SOCKET_MAJOR	16
 #define AF_UNIX_MAJOR	17
 #define AF_INET_MAJOR	18
-/* unused: 19, 20 */
+#define CYCLADES_MAJOR  19
+#define CYCLADESAUX_MAJOR 20
 #define SCSI_GENERIC_MAJOR 21
 #define IDE1_MAJOR	22
 #define MITSUMI_CDROM_MAJOR 23

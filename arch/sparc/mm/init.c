@@ -29,6 +29,8 @@ extern void show_net_buffers(void);
 
 extern int map_the_prom(int);
 
+struct sparc_phys_banks sp_banks[14];
+unsigned long *sun4c_mmu_table;
 extern int invalid_segment, num_segmaps, num_contexts;
 
 /*
@@ -102,8 +104,11 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
 
 unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 {
-	int pg_segmap = 0;
 	unsigned long i, a, b, mask=0;
+	unsigned long curseg, curpte, num_inval;
+	unsigned long address;
+	pte_t *pg_table;
+
 	register int num_segs, num_ctx;
 	register char * c;
 
@@ -112,6 +117,8 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 
 	num_segs -= 1;
 	invalid_segment = num_segs;
+
+	start_mem = free_area_init(start_mem, end_mem);
 
 /* On the sparc we first need to allocate the segmaps for the
  * PROM's virtual space, and make those segmaps unusable. We
@@ -125,10 +132,81 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 
 	start_mem = PAGE_ALIGN(start_mem);
 
+	/* Set up static page tables in kernel space, this will be used
+	 * so that the low-level page fault handler can fill in missing
+	 * TLB entries since all mmu entries cannot be loaded at once
+	 * on the sun4c.
+	 */
+
+#if 0
+	/* ugly debugging code */
+	for(i=0; i<40960; i+=PAGE_SIZE)
+	  printk("address=0x%x  vseg=%d  pte=0x%x\n", (unsigned int) i,
+		 (int) get_segmap(i), (unsigned int) get_pte(i));
+#endif
+
+	printk("Setting up kernel static mmu table... bounce bounce\n");
+
+	address = 0; /* ((unsigned long) &end) + 524288; */
+	sun4c_mmu_table = (unsigned long *) start_mem;
+	pg_table = (pte_t *) start_mem;
+	curseg = curpte = num_inval = 0;
+	while(address < end_mem) {
+	  if(curpte == 0)
+	    put_segmap((address&PGDIR_MASK), curseg);
+	  for(i=0; sp_banks[i].num_bytes != 0; i++)
+	    if((address >= sp_banks[i].base_addr) && 
+	       (address <= (sp_banks[i].base_addr + sp_banks[i].num_bytes)))
+	      goto good_address;
+	  /* No physical memory here, so set the virtual segment to
+	   * the invalid one, and put an invalid pte in the static
+	   * kernel table.
+	   */
+	  *pg_table = mk_pte((address >> PAGE_SHIFT), PAGE_INVALID);
+	  pg_table++; curpte++; num_inval++;
+	  if(curpte > 63) {
+	    if(curpte == num_inval) {
+	      put_segmap((address&PGDIR_MASK), invalid_segment);
+	    } else {
+	      put_segmap((address&PGDIR_MASK), curseg);
+	      curseg++;
+	    }
+	    curpte = num_inval = 0;
+	  }
+	  address += PAGE_SIZE;
+	  continue;
+
+	  good_address:
+	  /* create pte entry */
+	  if(address < (((unsigned long) &end) + 524288)) {
+	    pte_val(*pg_table) = get_pte(address);
+	  } else {
+	    *pg_table = mk_pte((address >> PAGE_SHIFT), PAGE_KERNEL);
+	    put_pte(address, pte_val(*pg_table));
+	  }
+
+	  pg_table++; curpte++;
+	  if(curpte > 63) {
+	    put_segmap((address&PGDIR_MASK), curseg);
+	    curpte = num_inval = 0;
+	    curseg++;
+	  }
+	  address += PAGE_SIZE;
+	}	  
+
+	start_mem = (unsigned long) pg_table;
 	/* ok, allocate the kernel pages, map them in all contexts
 	 * (with help from the prom), and lock them. Isn't the sparc
 	 * fun kiddies? TODO
 	 */
+
+#if 0
+	/* ugly debugging code */
+	for(i=0x1a3000; i<(0x1a3000+40960); i+=PAGE_SIZE)
+	  printk("address=0x%x  vseg=%d  pte=0x%x\n", (unsigned int) i,
+		 (int) get_segmap(i), (unsigned int) get_pte(i));
+	halt();
+#endif
 
 	b=PGDIR_ALIGN(start_mem)>>18;
 	c= (char *)0x0;
@@ -163,9 +241,6 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	a= (unsigned long) &etext;
 	mask=~(PTE_NC|PTE_W);    /* make cacheable + not writable */
 
-	printk("changing kernel text perms...\n");
-
-
 	/* must do for every segment since kernel uses all contexts
 	 * and unlike some sun kernels I know of, we can't hard wire
 	 * context 0 just for the kernel, that is unnecessary.
@@ -191,34 +266,79 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	    switch_to_context(i);
 	    printk("%d ", (int) i);
 	  }
+	printk("\n");
 
 	switch_to_context(0);
 
-	/* invalidate all user segmaps for virt addrs 0-KERNBASE */
-
-	/* WRONG, now I just let the kernel sit in low addresses only
-         * from 0 -- end_kernel just like i386-linux. This will make
-         * mem-code a bit easier to cope with.
-	 */
-
-	printk("\ninvalidating user segmaps\n");
-	for(i = 0; i<8; i++)
-	  {
-	    switch_to_context(i);
-	    a=((unsigned long) &end);
-	    for(a+=524288, pg_segmap=0; ++pg_segmap<=3584; a+=(1<<18))
-	      put_segmap((unsigned long *) a, (invalid_segment&0x7f));
-	  }
-
-	printk("wheee! have I sold out yet?\n");
-
 	invalidate();
-	return free_area_init(start_mem, end_mem);
+	return start_mem;
 }
 
 void mem_init(unsigned long start_mem, unsigned long end_mem)
 {
-	return;
+  unsigned long start_low_mem = PAGE_SIZE;
+  int codepages = 0;
+  int reservedpages = 0;
+  int datapages = 0;
+  int i = 0;
+  unsigned long tmp, limit, tmp2, addr;
+  extern char etext;
+
+  end_mem &= PAGE_MASK;
+  high_memory = end_mem;
+
+  start_low_mem = PAGE_ALIGN(start_low_mem);
+  start_mem = PAGE_ALIGN(start_mem);
+
+  for(i = 0; sp_banks[i].num_bytes != 0; i++) {
+    tmp = sp_banks[i].base_addr;
+    limit = (sp_banks[i].base_addr + sp_banks[i].num_bytes);
+    if(tmp<start_mem) {
+      if(limit>start_mem)
+	tmp = start_mem;
+      else continue;
+    }
+
+    while(tmp<limit) {
+      mem_map[MAP_NR(tmp)] = 0;
+      tmp += PAGE_SIZE;
+    }
+    if(sp_banks[i+1].num_bytes != 0)
+      while(tmp < sp_banks[i+1].base_addr) {
+	mem_map[MAP_NR(tmp)] = MAP_PAGE_RESERVED;
+	tmp += PAGE_SIZE;
+      }
+  }
+
+#ifdef CONFIG_SCSI
+  scsi_mem_init(high_memory);
+#endif
+
+  for (addr = 0; addr < high_memory; addr += PAGE_SIZE) {
+    if(mem_map[MAP_NR(addr)]) {
+      if (addr < (unsigned long) &etext)
+	codepages++;
+      else if(addr < start_mem)
+	datapages++;
+      else
+	reservedpages++;
+      continue;
+    }
+    mem_map[MAP_NR(addr)] = 1;
+    free_page(addr);
+  }
+
+  tmp2 = nr_free_pages << PAGE_SHIFT;
+
+  printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data)\n",
+	 tmp2 >> 10,
+	 high_memory >> 10,
+	 codepages << (PAGE_SHIFT-10),
+	 reservedpages << (PAGE_SHIFT-10),
+	 datapages << (PAGE_SHIFT-10));
+
+  invalidate();
+  return;
 }
 
 void si_meminfo(struct sysinfo *val)

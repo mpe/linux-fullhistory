@@ -135,6 +135,7 @@ extern int	sock_awaitconn(struct socket *mysock, struct socket *servsock, int fl
 extern int	sock_wake_async(struct socket *sock, int how);
 extern int	sock_register(int family, struct proto_ops *ops);
 extern int	sock_unregister(int family);
-
+extern struct socket *sock_alloc(void);
+extern void	sock_release(struct socket *sock);
 #endif /* __KERNEL__ */
 #endif	/* _LINUX_NET_H */

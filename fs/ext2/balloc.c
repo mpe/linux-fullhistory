@@ -75,7 +75,7 @@ static void read_block_bitmap (struct super_block * sb,
 		ext2_panic (sb, "read_block_bitmap",
 			    "Cannot read block bitmap - "
 			    "block_group = %d, block_bitmap = %lu",
-			    block_group, gdp->bg_block_bitmap);
+			    block_group, (unsigned long) gdp->bg_block_bitmap);
 	sb->u.ext2_sb.s_block_bitmap_number[bitmap_nr] = block_group;
 	sb->u.ext2_sb.s_block_bitmap[bitmap_nr] = bh;
 }
@@ -249,8 +249,8 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
  * bitmap, and then for any free bit if that fails.
  */
 int ext2_new_block (struct super_block * sb, unsigned long goal,
-		    unsigned long * prealloc_count,
-		    unsigned long * prealloc_block)
+		    u32 * prealloc_count,
+		    u32 * prealloc_block)
 {
 	struct buffer_head * bh;
 	struct buffer_head * bh2;
@@ -577,6 +577,6 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 		ext2_error (sb, "ext2_check_blocks_bitmap",
 			    "Wrong free blocks count in super block, "
 			    "stored = %lu, counted = %lu",
-			    es->s_free_blocks_count, bitmap_count);
+			    (unsigned long) es->s_free_blocks_count, bitmap_count);
 	unlock_super (sb);
 }

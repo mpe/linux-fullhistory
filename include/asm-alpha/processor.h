@@ -8,12 +8,9 @@
 #define __ASM_ALPHA_PROCESSOR_H
 
 /*
- * We have a 8GB user address space to start with: 33 bits of vm
- * can be handled with just 2 page table levels.
- *
- * Eventually, this should be bumped to 40 bits or so..
+ * We have a 41-bit user address space: 2TB user VM...
  */
-#define TASK_SIZE (0x200000000UL)
+#define TASK_SIZE (0x20000000000UL)
 
 /*
  * Bus types
@@ -39,6 +36,9 @@ struct thread_struct {
 	unsigned long flags;
 	unsigned long res1, res2;
 };
+
+#define INIT_MMAP { &init_task, 0xfffffc0000300000,  0xfffffc0010000000, \
+	PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
 
 #define INIT_TSS  { \
 	0, 0, 0, \

@@ -8,6 +8,10 @@
  *	Stir fried together from the IP multicast and CAP patches above
  *		Alan Cox <Alan.Cox@linux.org>	
  *
+ *	Fixes:
+ *		Alan Cox	:	Update the device on a real delete
+ *					rather than any time but...
+ *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
@@ -114,10 +118,10 @@ void dev_mc_delete(struct device *dev, void *addr, int alen, int all)
 			*dmi=(*dmi)->next;
 			dev->mc_count--;
 			kfree_s(tmp,sizeof(*tmp));
+			dev_mc_upload(dev);
 			return;
 		}
 	}
-	dev_mc_upload(dev);
 }
 
 /*

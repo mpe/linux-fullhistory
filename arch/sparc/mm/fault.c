@@ -12,6 +12,8 @@
 #include <asm/pgtable.h>
 
 extern unsigned long pg0[1024];		/* page table for 0-4MB for everybody */
+extern struct sparc_phys_banks sp_banks[14];
+
 extern void die_if_kernel(char *,struct pt_regs *,long);
 
 struct linux_romvec *romvec;
@@ -49,28 +51,30 @@ probe_memory(void)
 {
   register struct linux_romvec *lprom;
   register struct linux_mlist_v0 *mlist;
-  register unsigned long bytes, base_paddr;
+  register unsigned long bytes, base_paddr, tally;
   register int i;
 
-  bytes = 0;
+  bytes = tally = 0;
   base_paddr = 0;
+  i=0;
   lprom = romvec;
   switch(lprom->pv_romvers)
     {
     case 0:
       mlist=(*(lprom->pv_v0mem.v0_totphys));
-      bytes=mlist->num_bytes;
+      bytes = tally = mlist->num_bytes;
       base_paddr = (unsigned long) mlist->start_adr;
-      printk("Bank 1: starting at 0x%x holding %d bytes\n", 
-	     (unsigned int) base_paddr, (int) bytes);
-      i=1;
-      if(mlist->theres_more != (void *)0)
-	{
+
+      sp_banks[0].base_addr = base_paddr;
+      sp_banks[0].num_bytes = bytes;
+
+      if(mlist->theres_more != (void *)0) {
 	  i++;
 	  mlist=mlist->theres_more;
-	  bytes+=mlist->num_bytes;
-	  printk("Bank %d: starting at 0x%x holding %d bytes\n", i,
-		 (unsigned int) mlist->start_adr, (int) mlist->num_bytes);
+	  bytes=mlist->num_bytes;
+	  tally += bytes;
+	  sp_banks[i].base_addr = (unsigned long) mlist->start_adr;
+	  sp_banks[i].num_bytes = mlist->num_bytes;
 	}
       break;
     case 2:
@@ -78,10 +82,12 @@ probe_memory(void)
       (*(lprom->pv_halt))();
       break;
     }
-  printk("Physical memory: %d bytes  starting at va 0x%x\n",
-	 (unsigned int) bytes, (int) base_paddr);
 
-  return bytes;
+  i++;
+  sp_banks[i].base_addr = 0xdeadbeef;
+  sp_banks[i].num_bytes = 0;
+
+  return tally;
 }
 
 /* Sparc routine to reserve the mapping of the open boot prom */

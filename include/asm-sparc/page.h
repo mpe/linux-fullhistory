@@ -20,6 +20,19 @@
 
 #ifdef __KERNEL__
 
+/* The following structure is used to hold the physical
+ * memory configuration of the machine.  This is filled
+ * in probe_memory() and is later used by mem_init() to
+ * set up mem_map[].  We statically allocate 14 of these
+ * structs, this is arbitrary.  The entry after the last
+ * valid one has num_bytes==0.
+ */
+
+struct sparc_phys_banks {
+  unsigned long base_addr;
+  unsigned long num_bytes;
+};
+
 #define CONFIG_STRICT_MM_TYPECHECKS
 
 #ifdef CONFIG_STRICT_MM_TYPECHECKS
@@ -105,17 +118,17 @@ extern __inline__ unsigned long get_segmap(unsigned long addr)
 {
   register unsigned long entry;
 
-  __asm__ __volatile__("lduha [%1] 0x3, %0" : 
+  __asm__ __volatile__("lduba [%1] 0x3, %0" : 
 		       "=r" (entry) :
 		       "r" (addr));
 
-  return entry;
+  return (entry&0x7f);
 }
 
-extern __inline__ void put_segmap(unsigned long* addr, unsigned long entry)
+extern __inline__ void put_segmap(unsigned long addr, unsigned long entry)
 {
 
-  __asm__ __volatile__("stha %1, [%0] 0x3" : : "r" (addr), "r" (entry));
+  __asm__ __volatile__("stba %1, [%0] 0x3" : : "r" (addr), "r" (entry&0x7f));
 
   return;
 }

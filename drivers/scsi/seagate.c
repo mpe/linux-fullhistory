@@ -283,7 +283,7 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
  *	First, we try for the manual override.
  */
 #ifdef DEBUG 
-	printk("Autodetecting seagate ST0x\n");
+	printk("Autodetecting ST0x / TMC-8xx\n");
 #endif
 	
 	if (hostno != -1)
@@ -357,39 +357,40 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 		borken_init();
 #endif
 		
+		printk("%s options:"
+#ifdef ARBITRATE
+		" ARBITRATE"
+#endif
+#ifdef SLOW_HANDSHAKE
+		" SLOW_HANDSHAKE"
+#endif
+#ifdef FAST
+#ifdef FAST32
+		" FAST32"
+#else
+		" FAST"
+#endif
+#endif
+#ifdef LINKED
+		" LINKED"
+#endif
+              "\n", tpnt->name);
 		return 1;
 		}
 	else
 		{
 #ifdef DEBUG
-		printk("ST0x not detected.\n");
+		printk("ST0x / TMC-8xx not detected.\n");
 #endif
 		return 0;
 		}
 	}
 	 
 const char *seagate_st0x_info(struct Scsi_Host * shpnt) {
-      static char buffer[256];
-        sprintf(buffer, "scsi%d : %s at irq %d address %p options :"
-#ifdef ARBITRATE
-" ARBITRATE"
-#endif
-#ifdef SLOW_HANDSHAKE
-" SLOW_HANDSHAKE"
-#endif
-#ifdef FAST
-#ifdef FAST32
-" FAST32"
-#else
-" FAST"
-#endif
-#endif
- 
-#ifdef LINKED
-" LINKED"
-#endif
-              "\n", hostno, (controller_type == SEAGATE) ? ST0X_ID_STR : 
-              FD_ID_STR, irq, base_address);
+      static char buffer[64];
+        sprintf(buffer, "%s at irq %d, address 0x%05X", 
+		(controller_type == SEAGATE) ? ST0X_ID_STR : FD_ID_STR,
+		irq, (unsigned int)base_address);
         return buffer;
 }
 

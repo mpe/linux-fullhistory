@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 3.12  February 19, 1995
+ *  linux/drivers/block/ide.c	Version 3.13  February 23, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -103,11 +103,12 @@
  *  Version 3.11	fix mis-identification of old WD disks as cdroms
  *  Version 3,12	simplify logic for selecting initial mult_count
  *			  (fixes problems with buggy WD drives)
+ *  Version 3.13	remove excess "multiple mode disabled" messages
  *
  *  To do:
  *	- special 32-bit controller-type detection & support
- *	- figure out why two WD drives on one i/f sometimes don't identify
  *	- figure out how to support oddball "intelligent" caching cards
+ *	- reverse-engineer 3/4 drive support on fancy "Promise" cards
  */
 
 #include <linux/config.h>
@@ -1701,7 +1702,8 @@ static void do_identify (ide_dev_t *dev, byte cmd)
 		dev->mult_req = INITIAL_MULT_COUNT;
 		if (dev->mult_req > id->max_multsect)
 			dev->mult_req = id->max_multsect;
-		dev->special.b.set_multmode = 1;
+		if (dev->mult_req || ((id->multsect_valid & 1) && id->multsect))
+			dev->special.b.set_multmode = 1;
 		printk(", MaxMult=%d", id->max_multsect);
 	}
 	printk("\n");

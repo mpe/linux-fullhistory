@@ -137,7 +137,6 @@ static void copy_files(unsigned long clone_flags, struct task_struct * p)
 static int copy_mm(unsigned long clone_flags, struct task_struct * p)
 {
 	if (clone_flags & COPYVM) {
-		p->mm->swappable = 1;
 		p->mm->min_flt = p->mm->maj_flt = 0;
 		p->mm->cmin_flt = p->mm->cmaj_flt = 0;
 		if (copy_page_tables(p))
@@ -193,7 +192,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->pid = last_pid;
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
-	SET_LINKS(p);
 	p->signal = 0;
 	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;
 	p->it_real_incr = p->it_virt_incr = p->it_prof_incr = 0;
@@ -202,7 +200,9 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->utime = p->stime = 0;
 	p->cutime = p->cstime = 0;
 	p->start_time = jiffies;
+	p->mm->swappable = 0;	/* don't try to swap it out before it's set up */
 	task[nr] = p;
+	SET_LINKS(p);
 
 	/* copy all the process information */
 	copy_thread(nr, clone_flags, usp, p, regs);
@@ -213,6 +213,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	copy_fs(clone_flags, p);
 
 	/* ok, now we should be set up.. */
+	p->mm->swappable = 1;
 	p->exit_signal = clone_flags & CSIGNAL;
 	p->counter = current->counter >> 1;
 	p->state = TASK_RUNNING;	/* do this last, just in case */

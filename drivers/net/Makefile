@@ -231,6 +231,8 @@ endif
 
 ifdef CONFIG_ARCNET
 NETDRV_OBJS := $(NETDRV_OBJS) arcnet.o
+else
+MODULES := $(MODULES) arcnet.o
 endif
 
 ifdef CONFIG_PI

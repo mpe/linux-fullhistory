@@ -246,7 +246,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
 		pte = pte_wrprotect(pte);
 	if (delete_from_swap_cache(pte_page(pte)))
 		pte = pte_mkdirty(pte);
-	*new_pte = pte;
+	*new_pte = pte_mkold(pte);
 	*old_pte = pte;
 	mem_map[MAP_NR(pte_page(pte))]++;
 }
@@ -288,7 +288,7 @@ static inline int copy_one_pgd(pgd_t * old_pgd, pgd_t * new_pgd)
 	if (pgd_none(*old_pgd))
 		return 0;
 	if (pgd_bad(*old_pgd)) {
-		printk("copy_one_pgd: bad page table: probable memory corruption\n");
+		printk("copy_one_pgd: bad page table (%p: %08lx): probable memory corruption\n", old_pgd, pgd_val(*old_pgd));
 		pgd_clear(old_pgd);
 		return 0;
 	}
@@ -325,8 +325,8 @@ int copy_page_tables(struct task_struct * tsk)
 	new_pgd = pgd_alloc();
 	if (!new_pgd)
 		return -ENOMEM;
-	old_pgd = pgd_offset(current, 0);
 	SET_PAGE_DIR(tsk, new_pgd);
+	old_pgd = pgd_offset(current, 0);
 	for (i = 0 ; i < PTRS_PER_PGD ; i++) {
 		int errno = copy_one_pgd(old_pgd, new_pgd);
 		if (errno) {
@@ -566,7 +566,7 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 static void put_page(pte_t * page_table, pte_t pte)
 {
 	if (!pte_none(*page_table)) {
-		printk("put_page: page already exists\n");
+		printk("put_page: page already exists %08lx\n", pte_val(*page_table));
 		free_page(pte_page(pte));
 		return;
 	}
@@ -590,11 +590,17 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 		printk("mem_map disagrees with %08lx at %08lx\n",page,address);
 	pgd = pgd_offset(tsk,address);
 	pmd = pmd_alloc(pgd, address);
-	if (!pmd)
+	if (!pmd) {
+		free_page(page);
+		oom(tsk);
 		return 0;
+	}
 	pte = pte_alloc(pmd, address);
-	if (!pte)
+	if (!pte) {
+		free_page(page);
+		oom(tsk);
 		return 0;
+	}
 	if (!pte_none(*pte)) {
 		printk("put_dirty_page: page already exists\n");
 		pte_clear(pte);
@@ -664,9 +670,9 @@ void do_wp_page(struct vm_area_struct * vma, unsigned long address,
 			invalidate();
 			return;
 		}
+		*page_table = BAD_PAGE;
 		free_page(old_page);
 		oom(vma->vm_task);
-		*page_table = BAD_PAGE;
 		invalidate();
 		return;
 	}
@@ -809,6 +815,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		return 0;
 	if (pgd_bad(*from_dir)) {
 		printk("try_to_share: bad page directory %08lx\n", pgd_val(*from_dir));
+		pgd_clear(from_dir);
 		return 0;
 	}
 	from_middle = pmd_offset(from_dir, from_address);
@@ -817,6 +824,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		return 0;
 	if (pmd_bad(*from_middle)) {
 		printk("try_to_share: bad mid directory %08lx\n", pmd_val(*from_middle));
+		pmd_clear(from_middle);
 		return 0;
 	}
 	from_table = pte_offset(from_middle, from_address);
@@ -967,9 +975,15 @@ static inline pte_t * get_empty_pgtable(struct task_struct * tsk,unsigned long a
 
 	pgd = pgd_offset(tsk, address);
 	pmd = pmd_alloc(pgd, address);
-	if (!pmd)
+	if (!pmd) {
+		oom(tsk);
 		return NULL;
+	}
 	pte = pte_alloc(pmd, address);
+	if (!pte) {
+		oom(tsk);
+		return NULL;
+	}
 	return pte;
 }
 
@@ -1065,4 +1079,55 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 	} else if (mem_map[MAP_NR(page)] > 1 && !(vma->vm_flags & VM_SHARED))
 		entry = pte_wrprotect(entry);
 	put_page(page_table, entry);
+}
+
+/*
+ * The above separate functions for the no-page and wp-page
+ * cases will go away (they mostly do the same thing anyway),
+ * and we'll instead use only a general "handle_mm_fault()".
+ *
+ * These routines also need to handle stuff like marking pages dirty
+ * and/or accessed for architectures that don't do it in hardware (most
+ * RISC architectures).  The early dirtying is also good on the i386.
+ *
+ * There is also a hook called "update_mmu_cache()" that architectures
+ * with external mmu caches can use to update those (ie the Sparc or
+ * PowerPC hashed page tables that act as extended TLBs).
+ */
+static inline void handle_pte_fault(struct vm_area_struct * vma, unsigned long address,
+	int write_access, pte_t * pte)
+{
+	if (!pte_present(*pte)) {
+		do_no_page(vma, address, write_access);
+		return;
+	}
+	*pte = pte_mkyoung(*pte);
+	if (!write_access)
+		return;
+	if (pte_write(*pte)) {
+		*pte = pte_mkdirty(*pte);
+		return;
+	}
+	do_wp_page(vma, address, write_access);
+}
+
+void handle_mm_fault(struct vm_area_struct * vma, unsigned long address,
+	int write_access)
+{
+	pgd_t *pgd;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	pgd = pgd_offset(vma->vm_task, address);
+	pmd = pmd_alloc(pgd, address);
+	if (!pmd)
+		goto no_memory;
+	pte = pte_alloc(pmd, address);
+	if (!pte)
+		goto no_memory;
+	handle_pte_fault(vma, address, write_access, pte);
+	update_mmu_cache(vma, address, *pte);
+	return;
+no_memory:
+	oom(vma->vm_task);
 }

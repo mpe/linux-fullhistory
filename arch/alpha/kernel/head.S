@@ -59,7 +59,7 @@ rdusp:
 	ret ($26)
 	.end rdusp
 
-.align 5
+.align 9
 .globl floppy_track_buffer
 floppy_track_buffer:
 	.space 512*2*MAX_BUFFER_SECTORS,1

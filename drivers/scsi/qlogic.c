@@ -18,7 +18,7 @@
    Reference Qlogic FAS408 Technical Manual, 53408-510-00A, May 10, 1994
    (you can reference it, but it is incomplete and inaccurate in places)
 
-   Version 0.40a
+   Version 0.41
 
    Functions as standalone, loadable, and PCMCIA driver, the latter from
    Dave Hind's PCMCIA package.
@@ -37,6 +37,9 @@
    again, 0 tends to be slower, but more stable.  */
 #define QL_TURBO_PDMA 1
 
+/* This should be 1 to enable parity detection */
+#define QL_ENABLE_PARITY 1
+
 /* This will reset all devices when the driver is initialized (during bootup).
    The other linux drivers don't do this, but the DOS drivers do, and after
    using DOS or some kind of crash or lockup this will bring things back
@@ -45,31 +48,42 @@
    recognized when this was set. */
 #define QL_RESET_AT_START 0
 
-/* crystal frequency in megahertz (for offset 5 and 9) */
+/* crystal frequency in megahertz (for offset 5 and 9)
+   Please set this for your card.  Most Qlogic cards are 40 Mhz.  The
+   Control Concepts ISA (not VLB) is 24 Mhz */
 #define XTALFREQ	40
 
-/*****/
-/* offset 0xc */
-/* This will set fast (10Mhz) synchronous timing when set to 1
-   FASTCLK must also be 0 */
-#define FASTSCSI  0
-
-/* This when set to 1 will set a faster sync transfer rate */
-#define FASTCLK   0
+/**********/
+/* DANGER! modify these at your own risk */
+/* SLOWCABLE can usually be reset to zero if you have a clean setup and
+   proper termination.  The rest are for synchronous transfers and other
+   advanced features if your device can transfer faster than 5Mb/sec.
+   If you are really curious, email me for a quick howto until I have
+   something official */
+/**********/
 
 /*****/
 /* config register 1 (offset 8) options */
 /* This needs to be set to 1 if your cabling is long or noisy */
-#define SLOWCABLE 0
+#define SLOWCABLE 1
 
-/* This should be 1 to enable parity detection */
-#define QL_ENABLE_PARITY 1
+/*****/
+/* offset 0xc */
+/* This will set fast (10Mhz) synchronous timing when set to 1
+   For this to have an effect, FASTCLK must also be 1 */
+#define FASTSCSI 0
+
+/* This when set to 1 will set a faster sync transfer rate */
+#define FASTCLK 0
+/*(XTALFREQ>25?1:0)*/
 
 /*****/
 /* offset 6 */
-/* This is the sync transfer divisor, 40Mhz/X will be the data rate
-	The power on default is 5, the maximum normal value is 5 */
+/* This is the sync transfer divisor, XTALFREQ/X will be the maximum
+   achievable data rate (assuming the rest of the system is capable
+   and set properly) */
 #define SYNCXFRPD 4
+/*(XTALFREQ/5)*/
 
 /*****/
 /* offset 7 */
@@ -164,6 +178,7 @@ int	j;
 	j = 0;
 	if (phase & 1) {	/* in */
 #if QL_TURBO_PDMA
+rtrc(4)
 		/* empty fifo in large chunks */
 		if( reqlen >= 128 && (inb( qbase + 8 ) & 2) ) { /* full */
 			insl( qbase + 4, request, 32 );
@@ -183,6 +198,7 @@ int	j;
 		}
 #endif
 		/* until both empty and int (or until reclen is 0) */
+rtrc(7)
 		j = 0;
 		while( reqlen && !( (j & 0x10) && (j & 0xc0) ) ) {
 			/* while bytes to receive and not empty */
@@ -198,6 +214,7 @@ int	j;
 	}
 	else {	/* out */
 #if QL_TURBO_PDMA
+rtrc(4)
 		if( reqlen >= 128 && inb( qbase + 8 ) & 0x10 ) { /* empty */
 			outsl(qbase + 4, request, 32 );
 			reqlen -= 128;
@@ -216,6 +233,7 @@ int	j;
 		}
 #endif
 		/* until full and int (or until reclen is 0) */
+rtrc(7)
 		j = 0;
 		while( reqlen && !( (j & 2) && (j & 0xc0) ) ) {
 			/* while bytes to send and not full */
@@ -308,6 +326,7 @@ unsigned int	reqlen; 		/* total length of transfer */
 struct scatterlist	*sglist;	/* scatter-gather list pointer */
 unsigned int	sgcount;		/* sg counter */
 
+rtrc(1)
 	j = inb(qbase + 6);
 	i = inb(qbase + 5);
 	if (i == 0x20) {
@@ -336,7 +355,7 @@ unsigned int	sgcount;		/* sg counter */
 	reqlen = cmd->request_bufflen;
 /* note that it won't work if transfers > 16M are requested */
 	if (reqlen && !((phase = inb(qbase + 4)) & 6)) {	/* data phase */
-rtrc(1)
+rtrc(2)
 		outb(reqlen, qbase);			/* low-mid xfer cnt */
 		outb(reqlen >> 8, qbase+1);			/* low-mid xfer cnt */
 		outb(reqlen >> 16, qbase + 0xe);	/* high xfer cnt */
@@ -367,7 +386,6 @@ rtrc(2)
 	}
 /*** Enter Status (and Message In) Phase ***/
 	k = jiffies + WATCHDOG;
-rtrc(4)
 	while ( k > jiffies && !qabort && !(inb(qbase + 4) & 6));	/* wait for status phase */
 	if ( k <= jiffies ) {
 		ql_zap();
@@ -389,7 +407,7 @@ rtrc(4)
 		result = DID_ERROR;
 	}
 	outb(0x12, qbase + 3);	/* done, disconnect */
-rtrc(3)
+rtrc(1)
 	if ((k = ql_wai()))
 		return (k << 16);
 /* should get bus service interrupt and disconnect interrupt */
@@ -573,7 +591,7 @@ unsigned long	flags;
 	if( qlirq != -1 )
 		hreg->irq = qlirq;
 
-	sprintf(qinfo, "Qlogic Driver version 0.40a, chip %02X at %03X, IRQ %d, TPdma:%d",
+	sprintf(qinfo, "Qlogic Driver version 0.41, chip %02X at %03X, IRQ %d, TPdma:%d",
 	    qltyp, qbase, qlirq, QL_TURBO_PDMA );
 	host->name = qinfo;
 

@@ -1,4 +1,4 @@
-README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.1.93)
+README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.1.95)
 ================================================================================
 Supported by:  mlord@bnr.ca           -- disks, interfaces, probing
                snyder@fnald0.fnal.gov -- cdroms, ATAPI, audio
@@ -26,6 +26,7 @@ Under construction:
 
 	- support for interface speed selection on jumperless interfaces
 	- improved detection of non-standard IDE ATAPI cdrom drives
+	- support for non-standard 3rd/4th drive interface on Promise cards
 
 To access devices on the second interface, device entries must first be
 created in /dev for them.  To create such entries, simply run the included

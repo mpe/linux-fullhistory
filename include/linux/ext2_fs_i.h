@@ -19,21 +19,21 @@
  * second extended file system inode data in memory
  */
 struct ext2_inode_info {
-	unsigned long  i_data[15];
-	unsigned long  i_flags;
-	unsigned long  i_faddr;
-	unsigned char  i_frag_no;
-	unsigned char  i_frag_size;
-	unsigned short i_osync;
-	unsigned long  i_file_acl;
-	unsigned long  i_dir_acl;
-	unsigned long  i_dtime;
-	unsigned long  i_version;
-	unsigned long  i_block_group;
-	unsigned long  i_next_alloc_block;
-	unsigned long  i_next_alloc_goal;
-	unsigned long  i_prealloc_block;
-	unsigned long  i_prealloc_count;
+	__u32	i_data[15];
+	__u32	i_flags;
+	__u32	i_faddr;
+	__u8	i_frag_no;
+	__u8	i_frag_size;
+	__u16	i_osync;
+	__u32	i_file_acl;
+	__u32	i_dir_acl;
+	__u32	i_dtime;
+	__u32	i_version;
+	__u32	i_block_group;
+	__u32	i_next_alloc_block;
+	__u32	i_next_alloc_goal;
+	__u32	i_prealloc_block;
+	__u32	i_prealloc_count;
 };
 
 #endif	/* _LINUX_EXT2_FS_I */

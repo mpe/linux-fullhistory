@@ -194,6 +194,8 @@ unsigned int get_swap_page(void)
 		for (offset = p->lowest_bit; offset <= p->highest_bit ; offset++) {
 			if (p->swap_map[offset])
 				continue;
+			if (test_bit(offset, p->swap_lockmap))
+				continue;
 			p->swap_map[offset] = 1;
 			nr_swap_pages--;
 			if (offset == p->highest_bit)
@@ -257,8 +259,6 @@ void swap_free(unsigned long entry)
 		printk("Trying to free swap from unused swap-device\n");
 		return;
 	}
-	while (set_bit(offset,p->swap_lockmap))
-		sleep_on(&lock_queue);
 	if (offset < p->lowest_bit)
 		p->lowest_bit = offset;
 	if (offset > p->highest_bit)
@@ -268,9 +268,6 @@ void swap_free(unsigned long entry)
 	else
 		if (!--p->swap_map[offset])
 			nr_swap_pages++;
-	if (!clear_bit(offset,p->swap_lockmap))
-		printk("swap_free: lock already cleared\n");
-	wake_up(&lock_queue);
 }
 
 /*
@@ -311,7 +308,18 @@ void swap_in(struct vm_area_struct * vma, pte_t * page_table,
   	return;
 }
 
-static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, pte_t * page_table)
+/*
+ * The swap-out functions return 1 of they successfully
+ * threw something out, and we got a free page. It returns
+ * zero if it couldn't do anything, and any other value
+ * indicates it decreased rss, but the page was shared.
+ *
+ * NOTE! If it sleeps, it *must* return 1 to make sure we
+ * don't continue with the swap-out. Otherwise we may be
+ * using a process that no longer actually exists (it might
+ * have died while we slept).
+ */
+static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pte_t * page_table)
 {
 	pte_t pte;
 	unsigned long entry;
@@ -332,8 +340,9 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, p
 	if (pte_dirty(pte)) {
 		if (mem_map[MAP_NR(page)] != 1)
 			return 0;
+		vma->vm_task->mm->rss--;
 		if (vma->vm_ops && vma->vm_ops->swapout)
-			vma->vm_ops->swapout(vma, offset, page_table);
+			vma->vm_ops->swapout(vma, address-vma->vm_start, page_table);
 		else {
 			if (!(entry = get_swap_page()))
 				return 0;
@@ -342,7 +351,7 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, p
 			write_swap_page(entry, (char *) page);
 		}
 		free_page(page);
-		return 1 + mem_map[MAP_NR(page)];
+		return 1;	/* we slept: the process may not exist any more */
 	}
         if ((entry = find_in_swap_cache(page)))  {
 		if (mem_map[MAP_NR(page)] != 1) {
@@ -350,15 +359,18 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, p
 			printk("Aiee.. duplicated cached swap-cache entry\n");
 			return 0;
 		}
+		vma->vm_task->mm->rss--;
 		pte_val(*page_table) = entry;
 		invalidate();
 		free_page(page);
 		return 1;
 	} 
+	vma->vm_task->mm->rss--;
 	pte_clear(page_table);
 	invalidate();
+	entry = mem_map[MAP_NR(page)];
 	free_page(page);
-	return 1 + mem_map[MAP_NR(page)];
+	return entry;
 }
 
 /*
@@ -409,20 +421,11 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
 		end = pmd_end;
 
 	do {
-		switch (try_to_swap_out(vma, address-vma->vm_start, pte)) {
-			case 0:
-				break;
-
-			case 1:
-				vma->vm_task->mm->rss--;
-				/* continue with the following page the next time */
-				vma->vm_task->mm->swap_address = address + PAGE_SIZE;
-				return 1;
-
-			default:
-				vma->vm_task->mm->rss--;
-				break;
-		}
+		int result;
+		vma->vm_task->mm->swap_address = address + PAGE_SIZE;
+		result = try_to_swap_out(vma, address, pte);
+		if (result)
+			return result;
 		address += PAGE_SIZE;
 		pte++;
 	} while (address < end);
@@ -450,8 +453,9 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
 		end = pgd_end;
 	
 	do {
-		if (swap_out_pmd(vma, pmd, address, end))
-			return 1;
+		int result = swap_out_pmd(vma, pmd, address, end);
+		if (result)
+			return result;
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
 	} while (address < end);
@@ -465,8 +469,9 @@ static int swap_out_vma(struct vm_area_struct * vma, pgd_t *pgdir,
 
 	end = vma->vm_end;
 	while (start < end) {
-		if (swap_out_pgd(vma, pgdir, start, end))
-			return 1;
+		int result = swap_out_pgd(vma, pgdir, start, end);
+		if (result)
+			return result;
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		pgdir++;
 	}
@@ -494,13 +499,16 @@ static int swap_out_process(struct task_struct * p)
 		address = vma->vm_start;
 
 	for (;;) {
-		if (swap_out_vma(vma, pgd_offset(p, address), address))
-			return 1;
+		int result = swap_out_vma(vma, pgd_offset(p, address), address);
+		if (result)
+			return result;
 		vma = vma->vm_next;
 		if (!vma)
-			return 0;
+			break;
 		address = vma->vm_start;
 	}
+	p->mm->swap_address = 0;
+	return 0;
 }
 
 static int swap_out(unsigned int priority)
@@ -510,7 +518,7 @@ static int swap_out(unsigned int priority)
 	struct task_struct *p;
 
 	counter = 2*NR_TASKS >> priority;
-	for(; counter >= 0; counter--, swap_task++) {
+	for(; counter >= 0; counter--) {
 		/*
 		 * Check that swap_task is suitable for swapping.  If not, look for
 		 * the next suitable process.
@@ -547,10 +555,17 @@ static int swap_out(unsigned int priority)
 			else
 				p->mm->swap_cnt = SWAP_RATIO / p->mm->dec_flt;
 		}
-		if (swap_out_process(p)) {
-			if ((--p->mm->swap_cnt) == 0)
-				swap_task++;
-			return 1;
+		if (!--p->mm->swap_cnt)
+			swap_task++;
+		switch (swap_out_process(p)) {
+			case 0:
+				if (p->mm->swap_cnt)
+					swap_task++;
+				break;
+			case 1:
+				return 1;
+			default:
+				break;
 		}
 	}
 	return 0;
@@ -790,8 +805,8 @@ void show_free_areas(void)
 		for (tmp = free_area_list[order].next ; tmp != free_area_list + order ; tmp = tmp->next) {
 			nr ++;
 		}
-		total += nr * (4 << order);
-		printk("%lu*%ukB ", nr, 4 << order);
+		total += nr * ((PAGE_SIZE>>10) << order);
+		printk("%lu*%lukB ", nr, (PAGE_SIZE>>10) << order);
 	}
 	restore_flags(flags);
 	printk("= %lukB)\n", total);

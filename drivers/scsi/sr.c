@@ -352,7 +352,7 @@ static void sr_photocd(struct inode *inode)
       break;
     }
     if (rec[14] != 0 && rec[14] != 0xb0) {
-      printk("sr_photocd: Hmm, seems the CDROM does'nt support multisession CD's\n");
+      printk("sr_photocd: Hmm, seems the CDROM doesn't support multisession CD's\n");
       no_multi = 1;
       break;
     }
@@ -385,13 +385,13 @@ static void sr_photocd(struct inode *inode)
     if (rc != 0) {
       if (rc == 0x28000002) {
 	/* Got a "not ready" - error. No chance to find out if this is
-	   becauce there is no CD in the drive or becauce the drive
+	   because there is no CD in the drive or because the drive
 	   don't knows multisession CD's. So I need to do an extra check... */
 	if (kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
 			      SCSI_IOCTL_TEST_UNIT_READY, NULL)) {
 	  printk("sr_photocd: drive not ready\n");
 	} else {
-	  printk("sr_photocd: Hmm, seems the CDROM does'nt support multisession CD's\n");
+	  printk("sr_photocd: Hmm, seems the CDROM doesn't support multisession CD's\n");
 	  no_multi = 1;
 	}
       } else

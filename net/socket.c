@@ -1,7 +1,7 @@
 /*
  * NET		An implementation of the SOCKET network access protocol.
  *
- * Version:	@(#)socket.c	1.0.5	05/25/93
+ * Version:	@(#)socket.c	1.1.93	18/02/95
  *
  * Authors:	Orest Zborowski, <obz@Kodak.COM>
  *		Ross Biro, <bir7@leland.Stanford.Edu>
@@ -29,6 +29,9 @@
  *					allowed to allocate.
  *		Linus		:	Argh. removed all the socket allocation
  *					altogether: it's in the inode now.
+ *		Alan Cox	:	Made sock_alloc()/sock_release() public
+ *					for NetROM and future kernel nfsd type
+ *					stuff.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -225,7 +228,8 @@ static inline struct socket *sockfd_lookup(int fd, struct file **pfile)
 /*
  *	Allocate a socket.
  */
-static struct socket *sock_alloc(void)
+
+struct socket *sock_alloc(void)
 {
 	struct inode * inode;
 	struct socket * sock;
@@ -265,8 +269,7 @@ static inline void sock_release_peer(struct socket *peer)
 	sock_wake_async(peer, 1);
 }
 
-
-static void sock_release(struct socket *sock)
+void sock_release(struct socket *sock)
 {
 	int oldstate;
 	struct socket *peersock, *nextsock;

@@ -1276,8 +1276,6 @@ static int ipx_setsockopt(struct socket *sock, int level, int optname, char *opt
 			switch(optname)
 			{
 				case IPX_TYPE:
-					if(!suser())
-						return(-EPERM);
 					sk->ipx_type=opt;
 					return 0;
 				default:
@@ -1681,9 +1679,6 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 			return -EINVAL;
 		if(usipx->sipx_family != AF_IPX)
 			return -EINVAL;
-
-		if(htons(usipx->sipx_port)<IPX_MIN_EPHEMERAL_SOCKET && !suser())
-			return -EPERM;
 	} else {
 		if(sk->state!=TCP_ESTABLISHED)
 			return -ENOTCONN;

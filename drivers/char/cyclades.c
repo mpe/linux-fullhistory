@@ -2457,7 +2457,7 @@ scrn[1] = '\0';
     memset(&cy_serial_driver, 0, sizeof(struct tty_driver));
     cy_serial_driver.magic = TTY_DRIVER_MAGIC;
     cy_serial_driver.name = "ttyC";
-    cy_serial_driver.major = 19 /* TTY_MAJOR */;
+    cy_serial_driver.major = CYCLADES_MAJOR;
     cy_serial_driver.minor_start = 32;
     cy_serial_driver.num = NR_PORTS;
     cy_serial_driver.type = TTY_DRIVER_TYPE_SERIAL;
@@ -2492,7 +2492,7 @@ scrn[1] = '\0';
      */
     cy_callout_driver = cy_serial_driver;
     cy_callout_driver.name = "cub";
-    cy_callout_driver.major = 20 /* TTYAUX_MAJOR */;
+    cy_callout_driver.major = CYCLADESAUX_MAJOR;
     cy_callout_driver.subtype = SERIAL_TYPE_CALLOUT;
 
     if (tty_register_driver(&cy_serial_driver))

@@ -26,6 +26,7 @@
 #include <linux/ptrace.h>
 #include <linux/signal.h>
 #include <linux/string.h>
+#include <linux/ioport.h>
 
 #include <asm/bitops.h>
 
@@ -136,14 +137,14 @@ typedef void (void_fn)(void);
 
 static void_fn do_null, enter, show_ptregs, send_intr, lastcons, caps_toggle,
 	num, hold, scroll_forw, scroll_back, boot_it, caps_on, compose,
-	SAK, decr_console, incr_console, spawn_console;
+	SAK, decr_console, incr_console, spawn_console, bare_num;
 
 static void_fnp spec_fn_table[] = {
 	do_null,	enter,		show_ptregs,	show_mem,
 	show_state,	send_intr,	lastcons,	caps_toggle,
 	num,		hold,		scroll_forw,	scroll_back,
 	boot_it,	caps_on,	compose,	SAK,
-	decr_console,	incr_console,	spawn_console
+	decr_console,	incr_console,	spawn_console,	bare_num
 };
 
 /* maximum values each key_handler can handle */
@@ -643,11 +644,21 @@ static void hold(void)
 
 static void num(void)
 {
-	if (vc_kbd_mode(kbd,VC_APPLIC)) {
+	if (vc_kbd_mode(kbd,VC_APPLIC))
 		applkey('P', 1);
-		return;
-	}
-	if (!rep)	/* no autorepeat for numlock, ChN */
+	else
+		bare_num();
+}
+
+/*
+ * Bind this to Shift-NumLock if you work in application keypad mode
+ * but want to be able to change the NumLock flag.
+ * Bind this to NumLock if you prefer that the NumLock key always
+ * changes the NumLock flag.
+ */
+static void bare_num(void)
+{
+	if (!rep)
 		chg_vc_kbd_led(kbd,VC_NUMLOCK);
 }
 
@@ -1170,6 +1181,8 @@ unsigned long kbd_init(unsigned long kmem_start)
 
 	bh_base[KEYBOARD_BH].routine = kbd_bh;
 	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard");
+	request_region(0x60,1,"kbd");
+	request_region(0x64,1,"kbd");
 #ifdef __alpha__
 	/* enable keyboard interrupts, PC/AT mode */
 	kb_wait();

@@ -20,6 +20,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
+#include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/timex.h>
 
@@ -360,4 +361,6 @@ void init_IRQ(void)
 		printk("Unable to get IRQ2 for cascade\n");
 	if (request_irq(13,math_error_irq, 0, "math error"))
 		printk("Unable to get IRQ13 for math-error handler\n");
-}
+	request_region(0x20,0x20,"pic1");
+	request_region(0xa0,0x20,"pic2");
+} 

@@ -66,6 +66,9 @@ struct thread_struct {
 	unsigned long float_regs[64]; /* V8 and below have 32, V9 has 64 */
 };
 
+#define INIT_MMAP { &init_task, 0x0, 0x40000000, \
+		      PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC }
+
 #define INIT_TSS  { \
 	0, 0, 0, 0, 0, 0, \
         { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \

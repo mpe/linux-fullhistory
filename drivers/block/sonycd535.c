@@ -1556,7 +1556,7 @@ init_module(void)
 			sony535_irq_used = tmp_irq;
 #ifndef MODULE
 /* This code is not in MODULEs by default, since the autoirq stuff might
- * not be in the module-accessable symbol table.
+ * not be in the module-accessible symbol table.
  */
 			/* A negative sony535_irq_used will attempt an autoirq. */
 			if (sony535_irq_used < 0) {

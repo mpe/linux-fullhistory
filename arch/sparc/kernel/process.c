@@ -76,15 +76,16 @@ void flush_thread(void)
   halt();
 }
 
-unsigned long copy_thread(int nr, unsigned long clone_flags, struct task_struct * p, struct pt_regs * regs)
+void copy_thread(int nr, unsigned long clone_flags, unsigned long sp, struct task_struct * p, struct pt_regs * regs)
 {
 	struct pt_regs * childregs;
 
 	childregs = ((struct pt_regs *) (p->kernel_stack_page + PAGE_SIZE)) - 1;
 	p->tss.usp = (unsigned long) childregs;
 	*childregs = *regs;
+	childregs->sp = sp;
 	p->tss.psr = regs->psr; /* for condition codes */
-	return clone_flags;
+	return;
 }
 
 /*
@@ -93,6 +94,11 @@ unsigned long copy_thread(int nr, unsigned long clone_flags, struct task_struct 
 void dump_thread(struct pt_regs * regs, struct user * dump)
 {
   return; /* solaris does this enough */
+}
+
+asmlinkage int sys_fork(struct pt_regs regs)
+{
+	return do_fork(COPYVM | SIGCHLD, regs.sp, &regs);
 }
 
 /*

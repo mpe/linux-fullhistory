@@ -4,11 +4,13 @@
 */
 
 #include <linux/kernel.h>
+#include <linux/string.h>
 #include <asm/vac-ops.h>
 #include <asm/io.h>
 #include <asm/vaddrs.h>
 #include <asm/param.h>
 #include <asm/clock.h>
+#include <asm/system.h>
 
 /* #define DEBUG_PROBING */
 
@@ -83,7 +85,7 @@ struct cpu_iu_info linux_sparc_chips[] = {
   { 2, 0, "Bipolar Integrated Technology - B5010"},
   { 3, 0, "LSI Logic Corporation - unknown-type"},
   { 4, 0, "Texas Instruments, Inc. - unknown"},
-  { 4, 1, "Texas Instruments, Inc. - unknown"},
+  { 4, 1, "Texas Instruments, Inc. - Sparc Classic"},
   { 4, 2, "Texas Instruments, Inc. - unknown"},
   { 4, 3, "Texas Instruments, Inc. - unknown"},
   { 4, 4, "Texas Instruments, Inc. - unknown"},
@@ -119,7 +121,10 @@ extern void find_mmu_num_contexts(void);
 void
 probe_cpu(void)
 {
-  register int psr_impl, psr_vers, fpu_vers, i;
+  register int psr_impl=0;
+  register int psr_vers = 0;
+  register int fpu_vers = 0;
+  register int i = 0;
   unsigned int tmp_fsr;
 
   &tmp_fsr;   /* GCC grrr... */
@@ -195,6 +200,7 @@ probe_vac(void)
 {
   register unsigned int x,y;
 
+#ifndef CONFIG_SRMMU
   vac_size = find_vac_size();
   vac_linesize = find_vac_linesize();
   vac_do_hw_vac_flushes = find_vac_hwflushes();
@@ -223,6 +229,7 @@ probe_vac(void)
 
   x=enable_vac();
   printk("ENABLED\n");
+#endif
 
   return;
 }
@@ -233,7 +240,7 @@ probe_mmu(void)
   find_mmu_num_segmaps();
   find_mmu_num_contexts();
 
-  printk("\nMMU segmaps: %d     MMU contexts: %d\n", num_segmaps, 
+  printk("MMU segmaps: %d     MMU contexts: %d\n", num_segmaps, 
 	 num_contexts);
 
   return;
@@ -275,7 +282,7 @@ probe_clock(int fchild)
 	}
     }
 
-  printk("%s\n", node_str);
+  printk("Mostek %s\n", node_str);
   printk("At OBIO address: 0x%x Virtual address: 0x%x\n",
 	 (unsigned int) TIMER_PHYSADDR, (unsigned int) TIMER_STRUCT);
 
@@ -299,49 +306,13 @@ probe_esp(register int esp_node)
   printk("\nProbing ESP:\n");
   lbuf = get_str_from_prom(nd, "name", promstr_buf);
 
-  printk("\nProperty length for %s: 0x%x\n", "name", 
-	 *get_int_from_prom(nd, "name", promint_buf));
-
   if(*get_int_from_prom(nd, "name", promint_buf) != 0)
-  printk("Node: 0x%x Name: %s", nd, lbuf);
+  printk("Node: 0x%x Name: %s\n", nd, lbuf);
 
-  lbuf = get_str_from_prom(nd, "device-type", promstr_buf);
-
-  printk("\nProperty length for %s: 0x%x\n", "device_type", 
-	 *get_int_from_prom(nd, "device_type", promint_buf));
-
-  if(*get_int_from_prom(nd, "device-type", promint_buf) != 0)
-    printk("Device-Type: %s ", lbuf);
-  
-  lbuf = get_str_from_prom(nd, "model", promstr_buf);
-
-  printk("\nProperty length for %s: 0x%x\n", "model", 
-	 *get_int_from_prom(nd, "model", promint_buf));
-
-  if(*get_int_from_prom(nd, "model", promint_buf) != 0)
-    printk("Model: %s", lbuf);
-
-  printk("\n");
-
-  while((nd = node_get_sibling(nd)) != 0)
-    {
-      lbuf = get_str_from_prom(nd, "name", promstr_buf);
-
-      if(*get_int_from_prom(nd, "name", promint_buf) != 0)
-      printk("Node: 0x%x Name: %s ", nd, lbuf);
-
-      lbuf = get_str_from_prom(nd, "device-type", promstr_buf);
-
-      if(*get_int_from_prom(nd, "device-type", promint_buf) != 0)
-      printk("Device-Type: %s ", lbuf);
-
-      lbuf = get_str_from_prom(nd, "model", promstr_buf);
-
-      if(*get_int_from_prom(nd, "model", promint_buf) != 0)
-      printk("Model: %s", lbuf);
-
-      printk("\n");
-    }
+  while((nd = node_get_sibling(nd)) != 0) {
+    lbuf = get_str_from_prom(nd, "name", promstr_buf);
+    printk("Node: 0x%x Name: %s\n", nd, lbuf);
+  }
 
   printk("\n");
 
@@ -358,40 +329,44 @@ probe_sbus(register int cpu_child_node)
 
   lbuf = (char *) 0;
 
-  while((nd = node_get_sibling(nd)) != 0)
-    {
-      lbuf = get_str_from_prom(nd, "name", promstr_buf);
-      if(lbuf[0]=='s' && lbuf[1]=='b' && lbuf[2]=='u' && lbuf[3]=='s')
-	break;
-    }
+  while((nd = node_get_sibling(nd)) != 0) {
+    lbuf = get_str_from_prom(nd, "name", promstr_buf);
+    if(strcmp(lbuf, "sbus") == 0)
+      break;
+  };
+
   nd = node_get_child(nd);
 
   printk("Node: 0x%x Name: %s\n", nd,
 	 get_str_from_prom(nd, "name", promstr_buf));
 
-  if(lbuf[0]=='e' && lbuf[1]=='s' && lbuf[2]=='p')
+  if(strcmp(lbuf, "esp") == 0) {
     probe_esp(nd);
+  };
 
-  while((nd = node_get_sibling(nd)) != 0)
-    {
-      printk("Node: 0x%x Name: %s\n", nd,
-	     get_str_from_prom(nd, "name", promstr_buf));
+  while((nd = node_get_sibling(nd)) != 0) {
+    printk("Node: 0x%x Name: %s\n", nd,
+	   lbuf = get_str_from_prom(nd, "name", promstr_buf));
+    
+    if(strcmp(lbuf, "esp") == 0) {
+      savend = nd;
+      probe_esp(nd);
+      nd = savend;
+    };
+  };
 
-	  if(lbuf[0]=='e' && lbuf[1]=='s' && lbuf[2]=='p')
-	    {
-	      savend = nd;
-	      probe_esp(nd);
-	      nd = savend;
-	    }
-    }
-
+  printk("\n");
   return;
 }
+
+extern unsigned long probe_memory(void);
+extern struct sparc_phys_banks sp_banks[14];
+unsigned int phys_bytes_of_ram, end_of_phys_memory;
 
 void
 probe_devices(void)
 {
-  register int nd;
+  register int nd, i;
   register char* str;
 
   nd = prom_node_root;
@@ -399,14 +374,17 @@ probe_devices(void)
   printk("PROBING DEVICES:\n");
 
   str = get_str_from_prom(nd, "device_type", promstr_buf);
-  printk("Root Node: 0x%x ", nd);
+  if(strcmp(str, "cpu") == 0) {
+    printk("Found CPU root prom device tree node.\n");
+  } else {
+    printk("Root node in device tree was not 'cpu' cannot continue.\n");
+    halt();
+  };
 
 #ifdef DEBUG_PROBING
   printk("String address for d_type: 0x%x\n", (unsigned int) str);
   printk("str[0] = %c  str[1] = %c  str[2] = %c \n", str[0], str[1], str[2]);
 #endif
-
-  printk("Device Type: %s ", str);
 
   str = get_str_from_prom(nd, "name", promstr_buf);
 
@@ -421,29 +399,34 @@ probe_devices(void)
 
 
 /* Ok, here will go a call to each specific device probe. We can
-   call these now that we have the 'root' node and the child of
-   this node to send to the routines. ORDER IS IMPORTANT!
-*/
+ * call these now that we have the 'root' node and the child of
+ * this node to send to the routines. ORDER IS IMPORTANT!
+ */
 
   probe_cpu();
   probe_vac();
   probe_mmu();
+  phys_bytes_of_ram = probe_memory();
 
-/*
+  printk("Physical Memory: %d bytes\n", (int) phys_bytes_of_ram);
+  for(i=0; sp_banks[i].num_bytes != 0; i++) {
+    printk("Bank %d:  base 0x%x  bytes %d\n", i,
+	   (unsigned int) sp_banks[i].base_addr, 
+	   (int) sp_banks[i].num_bytes);
+    end_of_phys_memory = sp_banks[i].base_addr + sp_banks[i].num_bytes;
+  }
+
   printk("PROM Root Child Node: 0x%x Name: %s \n", nd,
 	 get_str_from_prom(nd, "name", promstr_buf));
 
-  while((nd = node_get_sibling(nd)) != 0)
-    {
-
-      printk("Node: 0x%x Name: %s\n", nd,
-	     get_str_from_prom(nd, "name", promstr_buf));
-
-    }
+  while((nd = node_get_sibling(nd)) != 0) {
+    printk("Node: 0x%x Name: %s", nd,
+	   get_str_from_prom(nd, "name", promstr_buf));
+    printk("\n");
+  };
 
   printk("\nProbing SBUS:\n");
   probe_sbus(first_descent);
-*/
 
   return;
 }

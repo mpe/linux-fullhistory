@@ -22,6 +22,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/bitops.h>
+#include <asm/dma.h>
 
 static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
@@ -374,8 +375,9 @@ static void machine_check(unsigned long vector, unsigned long la_ptr, struct pt_
 	printk("Machine check\n");
 }
 
-asmlinkage void do_entInt(unsigned long type, unsigned long vector,
-	unsigned long la_ptr, struct pt_regs *regs)
+asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,
+	unsigned long a3, unsigned long a4, unsigned long a5,
+	struct pt_regs regs)
 {
 	switch (type) {
 		case 0:
@@ -383,13 +385,13 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector,
 			break;
 		case 1:
 			/* timer interrupt.. */
-			handle_irq(0, regs);
+			handle_irq(0, &regs);
 			return;
 		case 2:
-			machine_check(vector, la_ptr, regs);
+			machine_check(vector, la_ptr, &regs);
 			break;
 		case 3:
-			device_interrupt(vector, regs);
+			device_interrupt(vector, &regs);
 			return;
 		case 4:
 			printk("Performance counter interrupt\n");
@@ -397,7 +399,7 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector,
 		default:
 			printk("Hardware intr %ld %lx? Huh?\n", type, vector);
 	}
-	printk("PC = %016lx PS=%04lx\n", regs->pc, regs->ps);
+	printk("PC = %016lx PS=%04lx\n", regs.pc, regs.ps);
 }
 
 extern asmlinkage void entInt(void);
@@ -405,4 +407,8 @@ extern asmlinkage void entInt(void);
 void init_IRQ(void)
 {
 	wrent(entInt, 0);
+	dma_outb(0, DMA1_RESET_REG);
+	dma_outb(0, DMA2_RESET_REG);
+	dma_outb(0, DMA1_CLR_MASK_REG);
+	dma_outb(0, DMA2_CLR_MASK_REG);
 }

@@ -92,7 +92,7 @@ int ext2_check_dir_entry (char * function, struct inode * dir,
 	if (error_msg != NULL)
 		ext2_error (dir->i_sb, function, "bad directory entry: %s\n"
 			    "offset=%lu, inode=%lu, rec_len=%d, name_len=%d",
-			    error_msg, offset, de->inode, de->rec_len,
+			    error_msg, offset, (unsigned long) de->inode, de->rec_len,
 			    de->name_len);
 	return error_msg == NULL ? 1 : 0;
 }

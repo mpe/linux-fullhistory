@@ -2003,8 +2003,8 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	if (info->flags & ASYNC_CALLOUT_ACTIVE)
 		info->callout_termios = *tty->termios;
 	/*
-	 * Now we wait for the trnasmit buffer to clear; and we notify 
-	 * the line discpline only process XON/XOFF characters.
+	 * Now we wait for the transmit buffer to clear; and we notify 
+	 * the line discipline to only process XON/XOFF characters.
 	 */
 	tty->closing = 1;
 	if (info->closing_wait != ASYNC_CLOSING_WAIT_NONE)

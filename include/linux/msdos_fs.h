@@ -62,29 +62,29 @@
 
 
 struct msdos_boot_sector {
-	char ignored[3];	    /* Boot strap short or near jump */
-	char system_id[8];	    /* Name - can be used to special case
-				       partition manager volumes */
-	unsigned char sector_size[2];/* bytes per logical sector */
-	unsigned char cluster_size; /* sectors/cluster */
-	unsigned short reserved;    /* reserved sectors */
-	unsigned char fats;	    /* number of FATs */
-	unsigned char dir_entries[2];/* root directory entries */
-	unsigned char sectors[2];   /* number of sectors */
-	unsigned char media;	    /* media code (unused) */
-	unsigned short fat_length;  /* sectors/FAT */
-	unsigned short secs_track;  /* sectors per track */
-	unsigned short heads;	    /* number of heads */
-	unsigned long hidden;	    /* hidden sectors (unused) */
-	unsigned long total_sect;   /* number of sectors (if sectors == 0) */
+	__s8	ignored[3];	/* Boot strap short or near jump */
+	__s8	system_id[8];	/* Name - can be used to special case
+				   partition manager volumes */
+	__u8	sector_size[2];	/* bytes per logical sector */
+	__u8	cluster_size;	/* sectors/cluster */
+	__u16	reserved;	/* reserved sectors */
+	__u8	fats;		/* number of FATs */
+	__u8	dir_entries[2];	/* root directory entries */
+	__u8	sectors[2];	/* number of sectors */
+	__u8	media;		/* media code (unused) */
+	__u16	fat_length;	/* sectors/FAT */
+	__u16	secs_track;	/* sectors per track */
+	__u16	heads;		/* number of heads */
+	__u32	hidden;		/* hidden sectors (unused) */
+	__u32	total_sect;	/* number of sectors (if sectors == 0) */
 };
 
 struct msdos_dir_entry {
-	char name[8],ext[3]; /* name and extension */
-	unsigned char attr;  /* attribute bits */
-	char unused[10];
-	unsigned short time,date,start; /* time, date and first cluster */
-	unsigned long size;  /* file size (in bytes) */
+	__s8	name[8],ext[3];	/* name and extension */
+	__u8	attr;		/* attribute bits */
+	__u8	unused[10];
+	__u16	time,date,start;/* time, date and first cluster */
+	__u32	size;		/* file size (in bytes) */
 };
 
 struct fat_cache {
@@ -119,9 +119,8 @@ extern void unlock_creation(void);
 extern void lock_fat(struct super_block *sb);
 extern void unlock_fat(struct super_block *sb);
 extern int msdos_add_cluster(struct inode *inode);
-extern int date_dos2unix(unsigned short time,unsigned short date);
-extern void date_unix2dos(int unix_date,unsigned short *time,
-    unsigned short *date);
+extern int date_dos2unix(__u16 time, __u16 date);
+extern void date_unix2dos(int unix_date,__u16 *time, __u16 *date);
 extern int msdos_get_entry(struct inode *dir,loff_t *pos,struct buffer_head **bh,
     struct msdos_dir_entry **de);
 extern int msdos_scan(struct inode *dir,char *name,struct buffer_head **res_bh,

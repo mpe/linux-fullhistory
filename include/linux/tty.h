@@ -199,7 +199,7 @@ struct tty_struct {
 	int pgrp;
 	int session;
 	dev_t	device;
-	int flags;
+	unsigned long flags;
 	int count;
 	struct winsize winsize;
 	unsigned char stopped:1, hw_stopped:1, packet:1;
@@ -231,7 +231,7 @@ struct tty_struct {
 	int read_head;
 	int read_tail;
 	int read_cnt;
-	int read_flags[N_TTY_BUF_SIZE/32];
+	unsigned long read_flags[N_TTY_BUF_SIZE/(8*sizeof(unsigned long))];
 	int canon_data;
 	unsigned long canon_head;
 	unsigned int canon_column;

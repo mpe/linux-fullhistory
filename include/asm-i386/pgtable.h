@@ -130,7 +130,7 @@ extern unsigned long high_memory;
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
-extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)] > 1; }
+extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)] != 1; }
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
 extern inline void pte_reuse(pte_t * ptep)
 {
@@ -154,7 +154,7 @@ extern inline void pmd_reuse(pmd_t * pmdp)	{ }
 extern inline int pgd_none(pgd_t pgd)		{ return 0; }
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return 1; }
-extern inline int pgd_inuse(pgd_t * pgdp)	{ return mem_map[MAP_NR(pgdp)] > 1; }
+extern inline int pgd_inuse(pgd_t * pgdp)	{ return mem_map[MAP_NR(pgdp)] != 1; }
 extern inline void pgd_clear(pgd_t * pgdp)	{ }
 extern inline void pgd_reuse(pgd_t * pgdp)
 {
@@ -345,5 +345,14 @@ extern inline pgd_t * pgd_alloc(void)
 }
 
 extern pgd_t swapper_pg_dir[1024];
+
+/*
+ * The i386 doesn't have any external MMU info: the kernel page
+ * tables contain all the necessary information.
+ */
+extern inline void update_mmu_cache(struct vm_area_struct * vma,
+	unsigned long address, pte_t pte)
+{
+}
 
 #endif /* _I386_PAGE_H */

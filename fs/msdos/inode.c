@@ -275,7 +275,7 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 		    MSDOS_SB(sb)->fats,MSDOS_SB(sb)->fat_start,MSDOS_SB(sb)->
 		    fat_length,MSDOS_SB(sb)->dir_start,MSDOS_SB(sb)->dir_entries,
 		    MSDOS_SB(sb)->data_start,CF_LE_W(*(unsigned short *) &b->
-		    sectors),b->total_sect,logical_sector_size);
+		    sectors),(unsigned long)b->total_sect,logical_sector_size);
 		printk ("Transaction block size = %d\n",blksize);
 	}
 	if (error) {

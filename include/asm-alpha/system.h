@@ -81,7 +81,12 @@ extern unsigned long rdusp(void);
 
 #define halt() __asm__ __volatile__(".long 0");
 
-#define switch_to(x)		panic("switch_to() not yet done")
+extern void alpha_switch_to(unsigned long pctxp);
+
+#define switch_to(p) do { \
+	current = p; \
+	alpha_switch_to((unsigned long) &(p)->tss - 0xfffffc0000000000); \
+} while (0)
 
 #ifndef mb
 #define mb() __asm__ __volatile__("mb": : :"memory")

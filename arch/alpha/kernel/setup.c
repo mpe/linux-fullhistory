@@ -74,6 +74,7 @@ void setup_arch(char **cmdline_p,
 	static char cmdline[] = "";
 	extern int _end;
 
+	ROOT_DEV = 0x0200;	/* fd0 */
 	aux_device_present = 0xaa;
 	*cmdline_p = cmdline;
 	*memory_start_p = (unsigned long) &_end;

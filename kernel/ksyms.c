@@ -39,6 +39,7 @@
 #include <linux/netdevice.h>
 #include <linux/ip.h>
 #include "../net/inet/protocol.h"
+#include "../net/inet/arp.h"
 #endif
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
@@ -299,6 +300,7 @@ struct symbol_table symbol_table = {
 	X(dev_queue_xmit),
 	X(dev_base),
 	X(dev_close),
+	X(arp_find),
 	X(n_tty_ioctl),
 	X(tty_register_ldisc),
 	X(kill_fasync),

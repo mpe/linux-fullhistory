@@ -1262,14 +1262,18 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 	struct rtable *rt;	/* Route we use */
 	unsigned char *ptr;	/* Data pointer */
 	unsigned long raddr;	/* Router IP address */
-
+	
 	/* 
 	 *	See if we are allowed to forward this.
 	 */
 
 #ifdef CONFIG_IP_FIREWALL
-	if(!ip_fw_chk(skb->h.iph, ip_fw_fwd_chain, ip_fw_fwd_policy))
+	int err;
+	
+	if((err=ip_fw_chk(skb->h.iph, dev, ip_fw_fwd_chain, ip_fw_fwd_policy))!=1)
 	{
+		if(err==-1)
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
 		return;
 	}
 #endif
@@ -1425,7 +1429,7 @@ static void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
 			 *	Count mapping we shortcut
 			 */
 			 
-			ip_acct_cnt(iph,ip_acct_chain);
+			ip_acct_cnt(iph,dev,ip_acct_chain);
 #endif			
 			
 			/*
@@ -1462,6 +1466,9 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 				take up stack space. */
 	int brd=IS_MYADDR;
 	int is_frag=0;
+#ifdef CONFIG_IP_FIREWALL
+	int err;
+#endif	
 
 	ip_statistics.IpInReceives++;
 
@@ -1493,9 +1500,10 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 #ifdef	CONFIG_IP_FIREWALL
 	
-	if(!LOOPBACK(iph->daddr) && !ip_fw_chk(iph,ip_fw_blk_chain,
-			ip_fw_blk_policy))
+	if ((err=ip_fw_chk(iph,dev,ip_fw_blk_chain,ip_fw_blk_policy))!=1)
 	{
+		if(err==-1)
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0, dev);
 		kfree_skb(skb, FREE_WRITE);
 		return 0;	
 	}
@@ -1609,7 +1617,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 */
 	 
 #ifdef CONFIG_IP_ACCT
-	ip_acct_cnt(iph,ip_acct_chain);
+	ip_acct_cnt(iph,dev, ip_acct_chain);
 #endif	
 
 	/*
@@ -1906,7 +1914,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 
 	ip_statistics.IpOutRequests++;
 #ifdef CONFIG_IP_ACCT
-	ip_acct_cnt(iph,ip_acct_chain);
+	ip_acct_cnt(iph,dev, ip_acct_chain);
 #endif	
 	
 #ifdef CONFIG_IP_MULTICAST	

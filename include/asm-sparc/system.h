@@ -110,12 +110,12 @@ extern inline void *xchg_u32(int * m, unsigned long val)
 	unsigned long dummy;
 
 	__asm__ __volatile__(
-		"ld [%1],%2\n\t"
-		"st %0, [%1]\n\t"
+		"ld %1,%2   ! xchg_u32() is here\n\t"
+		"st %0, %1\n\t"
 		"or %%g0, %2, %0"
-		: "=r" (val), "=r" (m), "=r" (dummy)
+		: "=r" (val), "=m" (*m), "=r" (dummy)
 		: "0" (val));
-	return (void *)val;
+	return (void *) val;
 }
 
 

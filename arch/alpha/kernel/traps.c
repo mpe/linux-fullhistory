@@ -15,27 +15,34 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 	unsigned long i;
 
 	printk("%s %ld\n", str, err);
-	printk("PC = %016lx PS = %04lx\n", regs->pc, regs->ps);
+	printk("pc = %016lx ps = %04lx\n", regs->pc, regs->ps);
+	printk("rp = %016lx sp = %p\n", regs->r26, regs+1);
 	for (i = 0 ; i < 5000000000 ; i++)
 		/* pause */;
 	halt();
 }
 
-asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask, unsigned long a2, struct pt_regs * regs)
+asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
+	unsigned long a2, unsigned long a3, unsigned long a4, unsigned long a5,
+	struct pt_regs regs)
 {
 	printk("Arithmetic trap: %02lx %016lx\n", summary, write_mask);
-	die_if_kernel("Arithmetic fault", regs, 0);
+	die_if_kernel("Arithmetic fault", &regs, 0);
 }
 
-asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2, struct pt_regs * regs)
+asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
+	unsigned long a3, unsigned long a4, unsigned long a5,
+	struct pt_regs regs)
 {
-	die_if_kernel("Instruction fault", regs, type);
+	die_if_kernel("Instruction fault", &regs, type);
 }
 
-asmlinkage void do_entUna(unsigned long va, unsigned long opcode, unsigned long reg, struct pt_regs * regs)
+asmlinkage void do_entUna(unsigned long va, unsigned long opcode, unsigned long reg,
+	unsigned long a3, unsigned long a4, unsigned long a5,
+	struct pt_regs regs)
 {
 	printk("Unaligned trap: %016lx %ld %ld\n", va, opcode, reg);
-	die_if_kernel("Unaligned", regs, 0);
+	die_if_kernel("Unaligned", &regs, 0);
 }
 
 /*
@@ -49,10 +56,11 @@ asmlinkage void do_entUna(unsigned long va, unsigned long opcode, unsigned long 
  * are a thinko. DEC palcode is strange. The PAL-code designers probably
  * got terminally tainted by VMS at some point.
  */
-asmlinkage void do_entSys(unsigned long sysnr, unsigned long arg1, unsigned long arg2, struct pt_regs *regs)
+asmlinkage void do_entSys(unsigned long a0, unsigned long a1, unsigned long a2,
+	unsigned long a3, unsigned long a4, unsigned long a5, struct pt_regs regs)
 {
-	printk("System call %ld(%ld,%ld)\n", sysnr, arg1, arg2);
-	die_if_kernel("Syscall", regs, 0);
+	printk("System call %ld(%ld,%ld)\n", regs.r0, a0, a1);
+	die_if_kernel("Syscall", &regs, 0);
 }
 
 extern asmlinkage void entMM(void);

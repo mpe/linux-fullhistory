@@ -105,7 +105,7 @@ void show_regs(struct pt_regs * regs)
 		printk(" ESP: %04x:%08lx",0xffff & regs->ss,regs->esp);
 	printk(" EFLAGS: %08lx\n",regs->eflags);
 	printk("EAX: %08lx EBX: %08lx ECX: %08lx EDX: %08lx\n",
-		regs->orig_eax,regs->ebx,regs->ecx,regs->edx);
+		regs->eax,regs->ebx,regs->ecx,regs->edx);
 	printk("ESI: %08lx EDI: %08lx EBP: %08lx",
 		regs->esi, regs->edi, regs->ebp);
 	printk(" DS: %04x ES: %04x FS: %04x GS: %04x\n",
@@ -237,6 +237,7 @@ asmlinkage int sys_fork(struct pt_regs regs)
 
 asmlinkage int sys_clone(struct pt_regs regs)
 {
+#ifdef CLONE_ACTUALLY_WORKS_OK
 	unsigned long clone_flags;
 	unsigned long newsp;
 
@@ -247,6 +248,9 @@ asmlinkage int sys_clone(struct pt_regs regs)
 	if (newsp == regs.esp)
 		clone_flags |= COPYVM;
 	return do_fork(clone_flags, newsp, &regs);
+#else
+	return -ENOSYS;
+#endif
 }
 
 /*

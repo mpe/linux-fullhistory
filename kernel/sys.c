@@ -172,8 +172,12 @@ void ctrl_alt_del(void)
 {
 	if (C_A_D)
 		hard_reset_now();
-	else
+	else {
+		int i;
 		send_sig(SIGINT,task[1],1);
+		for (i = 2; i < NR_TASKS; i++)
+			send_sig(SIGHUP,task[i],1);
+	}
 }
 	
 

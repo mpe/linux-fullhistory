@@ -421,7 +421,6 @@ static int shm_map (struct vm_area_struct *shmd)
 	pmd_t *page_middle;
 	pte_t *page_table;
 	unsigned long tmp, shm_sgn;
-	int error;
 
 	/* clear old mappings */
 	do_munmap(shmd->vm_start, shmd->vm_end - shmd->vm_start);
@@ -437,10 +436,10 @@ static int shm_map (struct vm_area_struct *shmd)
 		page_dir = pgd_offset(shmd->vm_task,tmp);
 		page_middle = pmd_alloc(page_dir,tmp);
 		if (!page_middle)
-			break;
+			return -ENOMEM;
 		page_table = pte_alloc(page_middle,tmp);
 		if (!page_table)
-			break;
+			return -ENOMEM;
 		pte_val(*page_table) = shm_sgn;
 	}
 	invalidate();

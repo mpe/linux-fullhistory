@@ -123,8 +123,6 @@ struct mm_struct {
 	struct vm_area_struct * mmap_avl;
 };
 
-#define INIT_MMAP { &init_task, 0, 0x40000000, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
-
 #define INIT_MM { \
 		0, \
 		0, 0, 0, \

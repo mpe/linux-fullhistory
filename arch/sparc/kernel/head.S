@@ -155,13 +155,13 @@ current_node:	.skip 4
 boot_msg:	
 	.ascii "Booting Sparc-Linux V0.00PRE-ALPHA "
 	.ascii WHO_COMPILED_ME 
-	.asciz " \n"
+	.ascii "\r\n"
 	.align 4
 
 	.globl boot_msg2
 
 boot_msg2:
-	.asciz "Booting Sparclinux V0.00 PRE-ALPHA on a (SUN4C)\n\n"
+	.asciz "Booting Sparclinux V0.00 PRE-ALPHA on a (SUN4C)\r\n\n"
 
 	.align 4
 
@@ -250,20 +250,20 @@ C_LABEL(trapbase):
 
 /* Level'd interrupt entry points, see macro defs above */
 
-        TRAP_ENTRY_INTERRUPT_SOFT(1, 0x101) /* Interrupt Level 1  */
-        TRAP_ENTRY_INTERRUPT(2)             /* Interrupt Level 2  */
-        TRAP_ENTRY_INTERRUPT(3)             /* Interrupt Level 3  */
-        TRAP_ENTRY_INTERRUPT_SOFT(4, 0x104) /* Interrupt Level 4  */
-        TRAP_ENTRY_INTERRUPT(5)             /* Interrupt Level 5  */
-        TRAP_ENTRY_INTERRUPT_SOFT(6, 0x106) /* Interrupt Level 6  */
-        TRAP_ENTRY_INTERRUPT(7)             /* Interrupt Level 7  */
-        TRAP_ENTRY_INTERRUPT(8)             /* Interrupt Level 8  */
-        TRAP_ENTRY_INTERRUPT(9)             /* Interrupt Level 9  */
-        TRAP_ENTRY_INTERRUPT(10)            /* Interrupt Level 10 */
-        TRAP_ENTRY_INTERRUPT(11)            /* Interrupt Level 11 */
-        TRAP_ENTRY_INTERRUPT(12)            /* Interrupt Level 12 */
-        TRAP_ENTRY_INTERRUPT(13)            /* Interrupt Level 13 */
-        TRAP_ENTRY_TIMER                    /* Interrupt Level 14 */
+        TRAP_ENTRY_INTERRUPT_SOFT(1, 0x101) /* IRQ Software/SBUS Level 1  */
+        TRAP_ENTRY_INTERRUPT(2)             /* IRQ SBUS Level 2           */
+        TRAP_ENTRY_INTERRUPT(3)             /* IRQ SCSI/DMA/SBUS Level 3  */
+        TRAP_ENTRY_INTERRUPT_SOFT(4, 0x104) /* IRQ Software Level 4       */
+        TRAP_ENTRY_INTERRUPT(5)             /* IRQ SBUS/Ethernet Level 5  */
+        TRAP_ENTRY_INTERRUPT_SOFT(6, 0x106) /* IRQ Software Level 6       */
+        TRAP_ENTRY_INTERRUPT(7)             /* IRQ Video/SBUS Level 5     */
+        TRAP_ENTRY_INTERRUPT(8)             /* IRQ SBUS Level 6           */
+        TRAP_ENTRY_INTERRUPT(9)             /* IRQ SBUS Level 7           */
+        TRAP_ENTRY_INTERRUPT(10)            /* IRQ Timer #1               */
+        TRAP_ENTRY_INTERRUPT(11)            /* IRQ Floppy Intr.           */
+        TRAP_ENTRY_INTERRUPT(12)            /* IRQ Zilog serial chip      */
+        TRAP_ENTRY_INTERRUPT(13)            /* IRQ Audio Intr.            */
+        TRAP_ENTRY_TIMER                    /* IRQ Timer #2 (one we use)  */
         TRAP_ENTRY_INTERRUPT_NMI(15, linux_trap_nmi) /* Level 15 (nmi) */
 
 	TRAP_ENTRY(0x20, my_trap_handler)   /* General Register Access Error */
@@ -541,6 +541,15 @@ nosmp:		sethi	%hi( C_LABEL(boot_psr) ), %l1
 		be	found_v2
 		nop
 
+		/* paul@sfe.com.au */
+		subcc	%o3, 0x3, %g0			! a v3 prom?
+		or	%g0, 0x3, %o5
+		sethi	%hi(C_LABEL(prom_iface_vers) ), %g1
+		st	%o5, [%g1 + %lo( C_LABEL(prom_iface_vers) )]
+		be	not_v2
+		nop
+
+
 /* Old sun4's pass our load address into %o0 instead of the prom
    pointer. On sun4's you have to hard code the romvec pointer into
    your code. Sun probably still does that because they don't even
@@ -654,6 +663,15 @@ is_sun4c:					! OK, this is a sun4c, yippie
  * as the prom expects.
  */
 
+/* paul@sfe.com.au */
+/* V3 doesnt have printf.. And I dont really feel like doing the formatting
+ * myself.. So we miss out on some messages (for now).
+ */
+		ld	[%g7 + 0x4], %o0
+		subcc	%o3, 0x3, %g0
+		be	v3_bootmsg
+		nop
+
 		sethi	%hi(boot_msg), %o0	
 		or	%o0, %lo(boot_msg), %o0
 		sethi	%hi(prom_printf), %o1
@@ -686,6 +704,28 @@ is_sun4c:					! OK, this is a sun4c, yippie
 
 		b	rest_of_boot
 		nop
+
+v3_bootmsg:
+		ld	[%g7 + 0x94], %o0
+		ld	[%o0], %o0
+		sethi	%hi(boot_msg), %o1
+		or	%o1, %lo(boot_msg), %o1
+		mov	BOOT_MSG_LEN, %o2
+		ld	[%g7 + 0xb8], %o4
+		call	%o4
+		nop
+ 
+		ld	[%g7 + 0x94], %o0
+		ld	[%o0], %o0
+		sethi	%hi(boot_msg2), %o1
+		or	%o1, %lo(boot_msg2), %o1
+		mov	BOOT_MSG2_LEN, %o2
+		ld	[%g7 + 0xb8], %o4
+		call	%o4
+		nop
+		b	rest_of_boot
+		nop
+
 
 no_sun4_here:
 		ld	[%g7 + 0x68], %o1
@@ -723,7 +763,9 @@ rest_of_boot:
 		srl	%l2, %g5, %l2
 		or	%l2, %l3, %l1		
 
+#ifndef CONFIG_SRMMU
 		sta	%l1, [%l0] ASI_PTE
+#endif
 	
 		or	%g0, 0x1, %l1
 		stb	%l1, [%l0]
@@ -856,9 +898,13 @@ rest_of_boot:
 
 /* Here we go */
 
+#ifndef CONFIG_SUN4M
+		/* paul@sfe.com.au */
+		/* Look into traps later :( */
 		set	C_LABEL(trapbase), %g3
 		wr	%g3, 0x0, %tbr
 		WRITE_PAUSE
+#endif
 
 
 /* First we call init_prom() to set up romvec, then off to start_kernel() */

@@ -13,7 +13,7 @@ Fri Feb 17 09:34:09 1995  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* serial.c (rs_init, set_serial_info, get_serial_info, rs_close):
 		Remove support for closing_wait2.  Instead, set
-		tty->closing and rely on the line dispcline to prevent
+		tty->closing and rely on the line discipline to prevent
 		echo wars.
 
 	* n_tty.c (n_tty_receive_char):  IEXTEN does not need to be
@@ -30,7 +30,7 @@ Sun Feb 12 23:57:48 1995  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* serial.c (rs_interrupt_multi, startup, shutdown, rs_ioctl,
 		set_multiport_struct, get_multiport_struct): Add
-		provisions for a new type of interrutp service routine,
+		provisions for a new type of interrupt service routine,
 		which better supports multiple serial ports on a single
 		IRQ.  
 
@@ -61,7 +61,7 @@ Thu Jan 26 09:02:49 1995  Theodore Y. Ts'o  (tytso@rt-11)
 
 		The default is to wait 30 seconds; in the case of a
 		very slow device, the close_wait timeout should be
-		lengthed.  If it is set to 0, the kernel will wait
+		lengthened.  If it is set to 0, the kernel will wait
 		forever for all of the data to be transmitted.
 
 Thu Jan 17 01:17:20 1995  Theodore Y. Ts'o  (tytso@rt-11)

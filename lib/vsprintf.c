@@ -217,11 +217,8 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			s = va_arg(args, char *);
 			if (!s)
 				s = "<NULL>";
-			len = strlen(s);
-			if (precision < 0)
-				precision = len;
-			else if (len > precision)
-				len = precision;
+
+			len = strnlen(s, precision);
 
 			if (!(flags & LEFT))
 				while (len < field_width--)

@@ -171,11 +171,13 @@
       0.38axp 15-sep-94   Special version for Alpha AXP Linux V1.0.
       0.381   12-dec-94   Added DE101 recognition, fix multicast bug.
       0.382    9-feb-95   Fix recognition bug reported by <bkm@star.rl.ac.uk>.
+      0.383   22-feb-95   Fix for conflict with VESA SCSI reported by
+                          <stromain@alf.dec.com>
 
     =========================================================================
 */
 
-static char *version = "depca.c:v0.382 2/9/94 davies@wanton.lkg.dec.com\n";
+static char *version = "depca.c:v0.383 2/22/94 davies@wanton.lkg.dec.com\n";
 
 #include <linux/config.h>
 #ifdef MODULE
@@ -333,15 +335,16 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 /*
 ** Private functions
 */
-static int depca_probe1(struct device *dev, short ioaddr);
+static int  depca_probe1(struct device *dev, short ioaddr);
 static void depca_init_ring(struct device *dev);
-static int depca_rx(struct device *dev);
-static int depca_tx(struct device *dev);
+static int  depca_rx(struct device *dev);
+static int  depca_tx(struct device *dev);
 
 static void LoadCSRs(struct device *dev);
-static int InitRestartDepca(struct device *dev);
+static int  InitRestartDepca(struct device *dev);
 static char *DepcaSignature(unsigned long mem_addr);
-static int DevicePresent(short ioaddr);
+static int  DevicePresent(short ioaddr);
+static int  EISA_signature(short iobase);
 #ifdef HAVE_MULTICAST
 static void SetMulticastFilter(int num_addrs, char *addrs, char *multicast_table);
 #endif
@@ -1346,7 +1349,7 @@ static struct device *eisa_probe(struct device *dev)
   ioaddr+=0x1000;                         /* get the first slot address */
   for (status = -ENODEV, i=1; i<MAX_EISA_SLOTS; i++, ioaddr+=0x1000) {
 
-    if (DevicePresent(ioaddr) == 0) {
+    if (EISA_signature(DEPCA_EISA_ID) == 0) {
       if (num_depcas > 0) {        /* only gets here in autoprobe */
 	dev = alloc_device(dev, ioaddr);
       } else {
@@ -1501,6 +1504,40 @@ static int DevicePresent(short ioaddr)
   }
 
   return status;
+}
+
+/*
+** Look for a particular board name in the EISA configuration space
+*/
+static int EISA_signature(short iobase)
+{
+  unsigned long i;
+  int status;
+  char *signatures[] = DEPCA_SIGNATURE;
+  char ManCode[8];
+  union {
+    u_long ID;
+    u_char Id[4];
+  } Eisa;
+
+  for (i=0; i<4; i++) {
+    Eisa.Id[i] = inb(iobase + i);
+  }
+
+  ManCode[0]=(((Eisa.Id[0]>>2)&0x1f)+0x40);
+  ManCode[1]=(((Eisa.Id[1]&0xe0)>>5)+((Eisa.Id[0]&0x03)<<3)+0x40);
+  ManCode[2]=(((Eisa.Id[2]>>4)&0x0f)+0x30);
+  ManCode[3]=((Eisa.Id[2]&0x0f)+0x30);
+  ManCode[4]=(((Eisa.Id[3]>>4)&0x0f)+0x30);
+  ManCode[5]='\0';
+
+  for (status = -ENXIO, i=0;*signatures[i] != '\0' && status;i++) {
+    if (strstr(ManCode, signatures[i]) != NULL) {
+      status = 0;
+    }
+  }
+  
+  return status;                            /* return the device name string */
 }
 
 #ifdef MODULE

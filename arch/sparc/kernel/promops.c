@@ -9,7 +9,7 @@
 #include <asm/openprom.h>
 
 /* #define DEBUG_PROMOPS */
-#define MAX_PR_LEN   16           /* exotic hardware probably overshoots this */
+#define MAX_PR_LEN   64           /* exotic hardware probably overshoots this */
 
 int prom_node_root;               /* initialized in init_prom */
 
@@ -37,12 +37,14 @@ node_get_child(int node)
  * the default return value is -1 is the prom has nothing interesting.
  */
 
+unsigned int prom_int_null;
+
 unsigned int *
 get_int_from_prom(int node, char *nd_prop, unsigned int *value)
 {
   unsigned int pr_len;
 
-  *value = 0;    /* duh, I was returning -1 as an unsigned int, prom_panic() */
+  *value = &prom_int_null;    /* duh, I was returning -1 as an unsigned int, prom_panic() */
 
   pr_len = romvec->pv_nodeops->no_proplen(node, nd_prop);
   if(pr_len > MAX_PR_LEN)
@@ -99,6 +101,7 @@ init_prom(struct linux_romvec *r_ptr)
 {
   romvec = r_ptr;
   prom_node_root = romvec->pv_nodeops->no_nextnode(0);
+  prom_int_null = 0;
   
   return;
 }

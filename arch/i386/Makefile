@@ -52,6 +52,12 @@ SUBDIRS := $(SUBDIRS) arch/i386/math-emu
 DRIVERS := $(DRIVERS) arch/i386/math-emu/math.a
 endif
 
+arch/i386/kernel: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=arch/i386/kernel
+
+arch/i386/mm: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=arch/i386/mm
+
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 
 zImage: vmlinux

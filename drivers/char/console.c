@@ -96,6 +96,7 @@
 #include <linux/malloc.h>
 #include <linux/major.h>
 #include <linux/mm.h>
+#include <linux/ioport.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -1002,7 +1003,7 @@ void invert_screen(int currcons, int offset, int count, int viewed)
 	else
 		while (count--) {
 			unsigned short old = scr_readw(p);
-			scr_writew(old ^ ((old & 0x0700 == 0x0100)
+			scr_writew(old ^ (((old & 0x0700) == 0x0100)
 					  ? 0x7000 : 0x7700), p);
 		}
 }
@@ -1915,12 +1916,16 @@ long con_init(long kmem_start)
 			video_type = VIDEO_TYPE_EGAM;
 			video_mem_term = 0xb8000;
 			display_desc = "EGA+";
+			request_region(0x3b4,2,"ega+");
 		}
 		else
 		{
 			video_type = VIDEO_TYPE_MDA;
 			video_mem_term = 0xb2000;
 			display_desc = "*MDA";
+			request_region(0x3b4,2,"mda");
+			request_region(0x3b8,1,"mda");
+			request_region(0x3bf,1,"mda");
 		}
 	}
 	else				/* If not, it is color. */
@@ -1934,12 +1939,14 @@ long con_init(long kmem_start)
 			video_type = VIDEO_TYPE_EGAC;
 			video_mem_term = 0xc0000;
 			display_desc = "EGA+";
+			request_region(0x3d4,2,"ega+");
 		}
 		else
 		{
 			video_type = VIDEO_TYPE_CGA;
 			video_mem_term = 0xba000;
 			display_desc = "*CGA";
+			request_region(0x3d4,2,"cga");
 		}
 	}
 	

@@ -360,7 +360,7 @@ static int ext2_check_descriptors (struct super_block * sb)
 			ext2_error (sb, "ext2_check_descriptors",
 				    "Block bitmap for group %d"
 				    " not in group (block %lu)!",
-				    i, gdp->bg_block_bitmap);
+				    i, (unsigned long) gdp->bg_block_bitmap);
 			return 0;
 		}
 		if (gdp->bg_inode_bitmap < block ||
@@ -369,7 +369,7 @@ static int ext2_check_descriptors (struct super_block * sb)
 			ext2_error (sb, "ext2_check_descriptors",
 				    "Inode bitmap for group %d"
 				    " not in group (block %lu)!",
-				    i, gdp->bg_inode_bitmap);
+				    i, (unsigned long) gdp->bg_inode_bitmap);
 			return 0;
 		}
 		if (gdp->bg_inode_table < block ||
@@ -379,7 +379,7 @@ static int ext2_check_descriptors (struct super_block * sb)
 			ext2_error (sb, "ext2_check_descriptors",
 				    "Inode table for group %d"
 				    " not in group (block %lu)!",
-				    i, gdp->bg_inode_table);
+				    i, (unsigned long) gdp->bg_inode_table);
 			return 0;
 		}
 		block += EXT2_BLOCKS_PER_GROUP(sb);

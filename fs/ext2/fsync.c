@@ -27,7 +27,7 @@
 #define blocksize (EXT2_BLOCK_SIZE(inode->i_sb))
 #define addr_per_block (EXT2_ADDR_PER_BLOCK(inode->i_sb))
 
-static int sync_block (struct inode * inode, unsigned long * block, int wait)
+static int sync_block (struct inode * inode, u32 * block, int wait)
 {
 	struct buffer_head * bh;
 	int tmp;
@@ -55,7 +55,7 @@ static int sync_block (struct inode * inode, unsigned long * block, int wait)
 	return 0;
 }
 
-static int sync_iblock (struct inode * inode, unsigned long * iblock, 
+static int sync_iblock (struct inode * inode, u32 * iblock, 
 			struct buffer_head ** bh, int wait) 
 {
 	int rc, tmp;
@@ -94,8 +94,7 @@ static int sync_direct (struct inode * inode, int wait)
 	return err;
 }
 
-static int sync_indirect (struct inode * inode, unsigned long * iblock,
-			  int wait)
+static int sync_indirect (struct inode * inode, u32 * iblock, int wait)
 {
 	int i;
 	struct buffer_head * ind_bh;
@@ -107,7 +106,7 @@ static int sync_indirect (struct inode * inode, unsigned long * iblock,
 	
 	for (i = 0; i < addr_per_block; i++) {
 		rc = sync_block (inode, 
-				 ((unsigned long *) ind_bh->b_data) + i,
+				 ((u32 *) ind_bh->b_data) + i,
 				 wait);
 		if (rc > 0)
 			break;
@@ -118,8 +117,7 @@ static int sync_indirect (struct inode * inode, unsigned long * iblock,
 	return err;
 }
 
-static int sync_dindirect (struct inode * inode, unsigned long * diblock,
-			   int wait)
+static int sync_dindirect (struct inode * inode, u32 * diblock, int wait)
 {
 	int i;
 	struct buffer_head * dind_bh;
@@ -131,7 +129,7 @@ static int sync_dindirect (struct inode * inode, unsigned long * diblock,
 	
 	for (i = 0; i < addr_per_block; i++) {
 		rc = sync_indirect (inode,
-				    ((unsigned long *) dind_bh->b_data) + i,
+				    ((u32 *) dind_bh->b_data) + i,
 				    wait);
 		if (rc > 0)
 			break;
@@ -142,8 +140,7 @@ static int sync_dindirect (struct inode * inode, unsigned long * diblock,
 	return err;
 }
 
-static int sync_tindirect (struct inode * inode, unsigned long * tiblock, 
-			   int wait)
+static int sync_tindirect (struct inode * inode, u32 * tiblock, int wait)
 {
 	int i;
 	struct buffer_head * tind_bh;
@@ -155,7 +152,7 @@ static int sync_tindirect (struct inode * inode, unsigned long * tiblock,
 	
 	for (i = 0; i < addr_per_block; i++) {
 		rc = sync_dindirect (inode,
-				     ((unsigned long *) tind_bh->b_data) + i,
+				     ((u32 *) tind_bh->b_data) + i,
 				     wait);
 		if (rc > 0)
 			break;

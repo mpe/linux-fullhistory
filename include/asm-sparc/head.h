@@ -12,6 +12,10 @@
 #define INT_ENABLE_REG_PHYSADR      0xf5000000
 #define INTS_ENAB   0x01
 
+#define BOOT_MSG_LEN    61
+#define BOOT_MSG2_LEN   50
+
+
 #define WRITE_PAUSE     nop; nop; nop;
 
 #define PAGE_SIZE       4096

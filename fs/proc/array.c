@@ -277,7 +277,7 @@ static int get_cpuinfo(char * buffer)
 {
 #ifdef __i386__
 	char *model[2][9]={{"DX","SX","DX/2","4","SX/2","6",
-				"7","DX/4"},
+				"DX/2-WB","DX/4"},
 			{"Pentium 60/66","Pentium 90/100","3",
 				"4","5","6","7","8"}};
 	char mask[2];

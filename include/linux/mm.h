@@ -179,6 +179,7 @@ extern int unmap_page_range(unsigned long from, unsigned long size);
 extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size, pgprot_t prot);
 extern int zeromap_page_range(unsigned long from, unsigned long size, pgprot_t prot);
 
+extern void handle_mm_fault(struct vm_area_struct *vma, unsigned long address, int write_access);
 extern void do_wp_page(struct vm_area_struct * vma, unsigned long address, int write_access);
 extern void do_no_page(struct vm_area_struct * vma, unsigned long address, int write_access);
 
@@ -204,7 +205,7 @@ extern void si_swapinfo(struct sysinfo * val);
 extern void rw_swap_page(int rw, unsigned long nr, char * buf);
 
 /* mmap.c */
-extern int do_mmap(struct file * file, unsigned long addr, unsigned long len,
+extern unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off);
 extern struct vm_area_struct * find_vma (struct task_struct *, unsigned long);
 extern struct vm_area_struct * find_vma_intersection (struct task_struct *, unsigned long, unsigned long);

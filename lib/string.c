@@ -104,6 +104,15 @@ size_t strlen(const char * s)
 	return sc - s;
 }
 
+size_t strnlen(const char * s, size_t count)
+{
+	const char *sc;
+
+	for (sc = s; *sc != '\0' && count--; ++sc)
+		/* nothing */;
+	return sc - s;
+}
+
 size_t strspn(const char *s, const char *accept)
 {
 	const char *p;
