@@ -311,7 +311,7 @@ int fdc_interrupt_wait(int time)
 	int current_blocked = current->blocked;
 	static int resetting = 0;
 
-	if (wait_intr) {
+	if (waitqueue_active(&wait_intr)) {
 		TRACE(1, "error: nested call");
 		return -EIO;	/* return error... */
 	}

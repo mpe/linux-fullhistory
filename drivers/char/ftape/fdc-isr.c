@@ -771,7 +771,7 @@ fdc_isr(void)
 			}
 			seek_completed = 1;
 			fdc_mode = fdc_idle;
-		} else if (!wait_intr) {
+		} else if (!waitqueue_active(&wait_intr)) {
 			if (expected_stray_interrupts == 0) {
 				TRACE(2, "unexpected stray interrupt");
 			} else {

@@ -90,7 +90,7 @@ extern void enable_irq(unsigned int);
 	"outb %al,$0x21\n\t" \
 	"jmp 1f\n" \
 	"1:\tjmp 1f\n" \
-	"1:\tmovb $0x60+"#nr",%al\n\t" \
+	"1:\tmovb $0xE0+"#nr",%al\n\t" \
 	"outb %al,$0x20\n\t"
 
 #define ACK_SECOND(mask,nr) \
@@ -102,11 +102,11 @@ extern void enable_irq(unsigned int);
 	"outb %al,$0xA1\n\t" \
 	"jmp 1f\n" \
 	"1:\tjmp 1f\n" \
-	"1:\tmovb $0x60+"#nr",%al\n\t" \
+	"1:\tmovb $0xE0+"#nr",%al\n\t" \
 	"outb %al,$0xA0\n\t" \
 	"jmp 1f\n" \
 	"1:\tjmp 1f\n" \
-	"1:\tmovb $0x62,%al\n\t" \
+	"1:\tmovb $0xE2,%al\n\t" \
 	"outb %al,$0x20\n\t"
 
 #define UNBLK_FIRST(mask) \

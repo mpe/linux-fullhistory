@@ -325,35 +325,38 @@ void tcp_write_xmit(struct sock *sk)
 		skb_unlink(skb);
 		
 		/*
-		 *	See if we really need to send the packet. 
+		 *	See if we really need to send the whole packet. 
 		 */
 		 
-		if (before(skb->end_seq, sk->rcv_ack_seq +1)) 
-		{
+		if (before(skb->end_seq, sk->rcv_ack_seq +1)) {
 			/*
-			 *	This is acked data. We can discard it. This 
-			 *	cannot currently occur.
+			 *	This is acked data. We can discard it.
+			 *	This implies the packet was sent out
+			 *	of the write queue by a zero window probe.
 			 */
 			 
 			sk->retransmits = 0;
 			kfree_skb(skb, FREE_WRITE);
 			if (!sk->dead) 
 				sk->write_space(sk);
-		} 
-		else
-		{
+		} else {
 			struct tcphdr *th;
 			struct iphdr *iph;
 			int size;
-/*
- * put in the ack seq and window at this point rather than earlier,
- * in order to keep them monotonic.  We really want to avoid taking
- * back window allocations.  That's legal, but RFC1122 says it's frowned on.
- * Ack and window will in general have changed since this packet was put
- * on the write queue.
- */
+
 			iph = skb->ip_hdr;
 			th = (struct tcphdr *)(((char *)iph) +(iph->ihl << 2));
+
+                        /* See if we need to shrink the leading packet on
+                         * the retransmit queue. Strictly speaking, we
+                         * should never need to do this, but some buggy TCP
+                         * implementations get confused if you send them
+                         * a packet that contains both old and new data. (Feh!)
+                         * Soooo, we have this uglyness here.
+                         */
+			if (after(sk->rcv_ack_seq,skb->seq+th->syn+th->fin))
+				tcp_shrink_skb(sk,skb,sk->rcv_ack_seq);
+
 			size = skb->len - (((unsigned char *) th) - skb->data);
 #ifndef CONFIG_NO_PATH_MTU_DISCOVERY
 			if (size > sk->mtu - sizeof(struct iphdr))
@@ -363,6 +366,13 @@ void tcp_write_xmit(struct sock *sk)
 			}
 #endif
 			
+/*
+ * put in the ack seq and window at this point rather than earlier,
+ * in order to keep them monotonic.  We really want to avoid taking
+ * back window allocations.  That's legal, but RFC1122 says it's frowned on.
+ * Ack and window will in general have changed since this packet was put
+ * on the write queue.
+ */
 			th->ack_seq = htonl(sk->acked_seq);
 			th->window = htons(tcp_select_window(sk));
 
@@ -1189,4 +1199,57 @@ void tcp_send_probe0(struct sock *sk)
 	sk->retransmits++;
 	sk->prot->retransmits ++;
 	tcp_reset_xmit_timer (sk, TIME_PROBE0, sk->rto);
+}
+
+/*
+ * Remove the portion of a packet that has already been sent.
+ * Needed to deal with buggy TCP implementations that can't deal
+ * with seeing a packet that contains some data that has already
+ * been received.
+ */
+void tcp_shrink_skb(struct sock *sk, struct sk_buff *skb, u32 ack)
+{
+	struct iphdr *iph;
+	struct tcphdr *th;
+	unsigned char *old, *new;
+	unsigned long len;
+	int diff;
+
+	/*
+	 *	Recover the buffer pointers
+	 */
+	 
+	iph = (struct iphdr *)skb->ip_hdr;
+	th = (struct tcphdr *)(((char *)iph) +(iph->ihl << 2));
+
+	/* how much data are we droping from the tcp frame */
+	diff = ack - skb->seq;
+	/* how much data are we keeping in the tcp frame */
+	len = (skb->end_seq - (th->fin + th->syn)) - ack;
+
+	/* pointers to new start of remaining data, and old start */
+	new = (unsigned char *)th + th->doff*4;
+	old = new+diff;
+
+	/* Update our starting seq number */
+	skb->seq = ack;
+	th->seq = htonl(ack);
+	iph->tot_len = htons(ntohs(iph->tot_len)-diff);
+
+	/* Get the partial checksum for the IP options */
+	if (th->doff*4 - sizeof(*th) > 0)
+		skb->csum = csum_partial((void *)(th+1),
+				th->doff*4-sizeof(*th),0);
+	else
+		skb->csum = 0;
+
+	/* Copy the good data down and get it's checksum */
+	skb->csum = csum_partial_copy((void *)old,(void *)new,len,skb->csum);
+
+	/* shorten the skb */
+	skb_trim(skb,skb->len-diff);
+	 
+	/* Checksum the shrunk buffer */
+	tcp_send_check(th, sk->saddr, sk->daddr, 
+		   th->doff * 4 + len , skb);
 }

@@ -4067,12 +4067,16 @@ static int floppy_grab_irq_and_dma(void)
 	if (fd_request_irq()) {
 		DPRINT("Unable to grab IRQ%d for the floppy driver\n",
 			FLOPPY_IRQ);
+		MOD_DEC_USE_COUNT;
+		usage_count--;
 		return -1;
 	}
 	if (fd_request_dma()) {
 		DPRINT("Unable to grab DMA%d for the floppy driver\n",
 			FLOPPY_DMA);
 		fd_free_irq();
+		MOD_DEC_USE_COUNT;
+		usage_count--;
 		return -1;
 	}
 	for (fdc = 0; fdc < N_FDC; fdc++)
@@ -4098,7 +4102,6 @@ static void floppy_release_irq_and_dma(void)
 		return;
 	}
 	INT_ON;
-	MOD_DEC_USE_COUNT;
 	fd_disable_dma();
 	fd_free_dma();
 	fd_disable_irq();
@@ -4131,6 +4134,7 @@ static void floppy_release_irq_and_dma(void)
 	if (floppy_tq.sync)
 		printk("task queue still active\n");
 #endif
+	MOD_DEC_USE_COUNT;
 }
 
 

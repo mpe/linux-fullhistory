@@ -134,16 +134,38 @@
 /* runtime by use of the CDROMAUDIOBUFSIZ ioctl.    */
 #define READ_AUDIO 0
 
+/* Optimizations for the Teac CD-55A drive read performance.
+ * SBP_TEAC_SPEED can be changed here, or one can set the 
+ * variable "teac" when loading as a module.
+ * Valid settings are:
+ *   0 - very slow - the recommended "DISTRIBUTION 1" setup.
+ *   1 - 2x performance with little overhead. No busy waiting.
+ *   2 - 4x performance with 5ms overhead per read. Busy wait.
+ *
+ * Setting SBP_TEAC_SPEED or the variable 'teac' to anything
+ * other than 0 may cause problems. If you run into them, first
+ * change SBP_TEAC_SPEED back to 0 and see if your drive responds
+ * normally. If yes, you are "allowed" to report your case - to help
+ * me with the driver, not to solve your hassle. Don´t mail if you
+ * simply are stuck into your own "tuning" experiments, you know?
+ */
+#define SBP_TEAC_SPEED 1
+
 /*==========================================================================*/
 /*==========================================================================*/
 /*
- * nothing to change below here if you are not experimenting
+ * nothing to change below here if you are not fully aware what you're doing
  */
 #ifndef _LINUX_SBPCD_H
 
 #define _LINUX_SBPCD_H
 /*==========================================================================*/
 /*==========================================================================*/
+/*
+ * driver's own read_ahead, data mode
+ */
+#define SBP_BUFFER_FRAMES 8 
+
 #define LONG_TIMING 0 /* test against timeouts with "gold" CDs on CR-521 */
 #undef  FUTURE
 #undef SAFE_MIXED
@@ -151,9 +173,14 @@
 #define TEST_UPC 0
 #define SPEA_TEST 0
 #define TEST_STI 0
+#define OLD_BUSY 0
 #undef PATH_CHECK
 #ifndef SOUND_BASE
 #define SOUND_BASE 0
+#endif
+#if DISTRIBUTION
+#undef SBP_TEAC_SPEED
+#define SBP_TEAC_SPEED 0
 #endif
 /*==========================================================================*/
 /*

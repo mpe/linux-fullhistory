@@ -161,6 +161,7 @@ extern void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcph
 
 extern void tcp_enqueue_partial(struct sk_buff *, struct sock *);
 extern struct sk_buff * tcp_dequeue_partial(struct sock *);
+extern void tcp_shrink_skb(struct sock *,struct sk_buff *,u32);
 
 /* tcp_input.c */
 extern void tcp_cache_zap(void);

@@ -260,8 +260,8 @@ struct task_struct {
 #define PF_DUMPCORE	0x00000200	/* dumped core */
 #define PF_SIGNALED	0x00000400	/* killed by a signal */
 
-#define PF_STARTING	0x00000100	/* being created */
-#define PF_EXITING	0x00000200	/* getting shut down */
+#define PF_STARTING	0x00000002	/* being created */
+#define PF_EXITING	0x00000004	/* getting shut down */
 
 #define PF_USEDFPU	0x00100000	/* Process used the FPU this quantum (SMP only) */
 #define PF_DTRACE	0x00200000	/* delayed trace (used on m68k) */

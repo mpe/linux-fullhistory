@@ -13,7 +13,7 @@
  *             labelled E2550UA or MK4015 or 2800F).
  */
 
-#define VERSION "v4.5 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "v4.6 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 /*   Copyright (C) 1993, 1994, 1995  Eberhard Moenkeberg <emoenke@gwdg.de>
  *
@@ -293,11 +293,15 @@
  *       ll_rw_blk.c).
  *       "Check media change" without touching any drive.
  *
+ *  4.6  Use a semaphore to synchronize multi-activity; elaborated by Rob
+ *       Riggs <rriggs@tesser.com>. At the moment, we simply block "read"
+ *       against "ioctl" and vice versa. This could be refined further, but
+ *       I guess with almost no performance increase.
+ *       Experiments to speed up the CD-55A; again with help of Rob Riggs
+ *       (to be true, he gave both, idea & code. ;-)
+ *
  *
  *  TODO
- *
- *     synchronize multi-activity
- *        (data + audio + ioctl + disk change, multiple drives)
  *     implement "read all subchannel data" (96 bytes per frame)
  *
  *     special thanks to Kai Makisara (kai.makisara@vtt.fi) for his fine
@@ -571,9 +575,8 @@ static const char *major_name="sbpcd4";
 static struct wait_queue *sbp_waitq = NULL;
 #endif FUTURE
 
-/*==========================================================================*/
-#define SBP_BUFFER_FRAMES 8 /* driver's own read_ahead, data mode */
-/*==========================================================================*/
+static int teac=SBP_TEAC_SPEED;
+static int buffers=SBP_BUFFER_FRAMES;
 
 static u_char family0[]="MATSHITA"; /* MKE CR-521, CR-522, CR-523 */
 static u_char family1[]="CR-56";    /* MKE CR-562, CR-563 */
@@ -592,8 +595,11 @@ static u_char infobuf[20];
 static u_char xa_head_buf[CD_XA_HEAD];
 static u_char xa_tail_buf[CD_XA_TAIL];
 
+#if OLD_BUSY
 static volatile u_char busy_data=0;
 static volatile u_char busy_audio=0; /* true semaphores would be safer */
+#endif OLD_BUSY
+static struct semaphore ioctl_read_sem = MUTEX;
 static u_long timeout;
 static volatile u_char timed_out_delay=0;
 static volatile u_char timed_out_data=0;
@@ -828,6 +834,8 @@ static void sbp_sleep(u_int time)
 	sti();
 }
 /*==========================================================================*/
+#define RETURN_UP(rc) {up(&ioctl_read_sem); return(rc);}
+/*==========================================================================*/
 /*
  *  convert logical_block_address to m-s-f_number (3 bytes only)
  */
@@ -959,6 +967,57 @@ static void flush_status(void)
 	
 	sbp_sleep(15*HZ/10);
 	for (i=maxtim_data;i!=0;i--) inb(CDi_status);
+}
+/*====================================================================*/
+/*
+ * CDi status loop for Teac CD-55A (Rob Riggs)
+ *
+ * This is needed because for some strange reason
+ * the CD-55A can take a real long time to give a
+ * status response. This seems to happen after we
+ * issue a READ command where a long seek is involved.
+ *
+ * I tried to ensure that we get max throughput with
+ * minimal busy waiting. We busy wait at first, then
+ * "switch gears" and start sleeping. We sleep for
+ * longer periods of time the longer we wait.
+ *
+ */
+static int CDi_stat_loop_T(void)
+{
+	int	i, gear=1;
+	u_long  timeout_1, timeout_2, timeout_3, timeout_4;
+
+	timeout_1 = jiffies + HZ / 50;  /* sbp_sleep(0) for a short period */
+	timeout_2 = jiffies + HZ / 5;	/* nap for no more than 200ms */
+	timeout_3 = jiffies + 5 * HZ;	/* sleep for up to 5s */
+	timeout_4 = jiffies + 45 * HZ;	/* long sleep for up to 45s. */
+	do
+          {
+            i = inb(CDi_status);
+            if (!(i&s_not_data_ready)) return (i);
+            if (!(i&s_not_result_ready)) return (i);
+            switch(gear)
+              {
+              case 4:
+                sbp_sleep(HZ);
+                if (jiffies > timeout_4) gear++;
+                msg(DBG_TEA, "CDi_stat_loop_T: long sleep active.\n");
+                break;
+              case 3:
+                sbp_sleep(HZ/10);
+                if (jiffies > timeout_3) gear++;
+                break;
+              case 2:
+                sbp_sleep(HZ/100);
+                if (jiffies > timeout_2) gear++;
+                break;
+              case 1:
+                sbp_sleep(0);
+                if (jiffies > timeout_1) gear++;
+              }
+          } while (gear < 5);
+	return -1;
 }
 /*==========================================================================*/
 static int CDi_stat_loop(void)
@@ -1290,8 +1349,20 @@ static int cmd_out_T(void)
 	for (ntries=CMDT_TRIES;ntries>0;ntries--)
 	{
 		if (drvcmd[0]==CMDT_READ_VER) sbp_sleep(HZ); /* fixme */
+#if 01
 		OUT(CDo_sel_i_d,1);
-		i=inb(CDi_status);
+#endif 01
+		if (teac==2)
+                  {
+                    if ((i=CDi_stat_loop_T()) == -1) break;
+                  }
+		else
+                  {
+#if 0
+                    OUT(CDo_sel_i_d,1);
+#endif 0
+                    i=inb(CDi_status);
+                  }
 		if (!(i&s_not_data_ready)) /* f.e. CMDT_DISKINFO */
 		{
 			OUT(CDo_sel_i_d,1);
@@ -1384,7 +1455,8 @@ static int cmd_out_T(void)
 			return (-D_S[d].error_state-400);
 		}
 		if (drvcmd[0]==CMDT_READ) return (0); /* handled elsewhere */
-		sbp_sleep(HZ/10);
+		if ((teac==0)||(ntries<(CMDT_TRIES-5))) sbp_sleep(HZ/10);
+		else sbp_sleep(HZ/100);
 		if (ntries>(CMDT_TRIES-50)) continue;
 		msg(DBG_TEA,"cmd_out_T: next CMDT_TRIES (%02X): %d.\n", drvcmd[0], ntries-1);
 	}
@@ -3343,7 +3415,7 @@ static int check_version(void)
 		}
 		else if (famV_drive)
 		  {
-		    if (j==100) D_S[d].drv_type=drv_at;
+		    if ((j==100)||(j==150)) D_S[d].drv_type=drv_at;
 		    ask_mail(); /* hopefully we get some feedback by this */
 		  }
 	}
@@ -3716,7 +3788,7 @@ static int DiskInfo(void)
 		return (i);
 	}
 	if (D_S[d].f_multisession) D_S[d].sbp_bufsiz=1;  /* possibly a weird PhotoCD */
-	else D_S[d].sbp_bufsiz=SBP_BUFFER_FRAMES;
+	else D_S[d].sbp_bufsiz=buffers;
 	i=cc_ReadTocEntry(D_S[d].n_first_track);
 	if (i<0)
 	{
@@ -3878,16 +3950,17 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		msg(DBG_INF, "ioctl: bad device: %04X\n", inode->i_rdev);
 		return (-ENXIO);             /* no such drive */
 	}
+	down(&ioctl_read_sem);
 	if (d!=i) switch_drive(i);
 	
 #if 0
 	st=GetStatus();
-	if (st<0) return (-EIO);
+	if (st<0) RETURN_UP(-EIO);
 	
 	if (!toc_valid)
 	{
 		i=DiskInfo();
-		if (i<0) return (-EIO);	/* error reading TOC */
+		if (i<0) RETURN_UP(-EIO);	/* error reading TOC */
 	}
 #endif
 	
@@ -3895,9 +3968,9 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	switch (cmd) 		/* Sun-compatible */
 	{
 	case DDIOCSDBG:		/* DDI Debug */
-		if (!suser()) return (-EPERM);
+		if (!suser()) RETURN_UP(-EPERM);
 		i=sbpcd_dbg_ioctl(arg,1);
-		return (i);
+		RETURN_UP(i);
 		
 	case CDROMPAUSE:     /* Pause the drive */
 		msg(DBG_IOC,"ioctl: CDROMPAUSE entered.\n");
@@ -3910,19 +3983,19 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		case audio_playing:
 			if (famL_drive) i=cc_ReadSubQ();
 			else i=cc_Pause_Resume(1);
-			if (i<0) return (-EIO);
+			if (i<0) RETURN_UP(-EIO);
 			if (famL_drive) i=cc_Pause_Resume(1);
 			else i=cc_ReadSubQ();
-			if (i<0) return (-EIO);
+			if (i<0) RETURN_UP(-EIO);
 			D_S[d].pos_audio_start=D_S[d].SubQ_run_tot;
 			D_S[d].audio_state=audio_pausing;
-			return (0);
+			RETURN_UP(0);
 		case audio_pausing:
 			i=cc_Seek(D_S[d].pos_audio_start,1);
-			if (i<0) return (-EIO);
-			return (0);
+			if (i<0) RETURN_UP(-EIO);
+			RETURN_UP(0);
 		default:
-			return (-EINVAL);
+			RETURN_UP(-EINVAL);
 		}
 		
 	case CDROMRESUME: /* resume paused audio play */
@@ -3935,26 +4008,26 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			i=cc_PlayAudio(D_S[d].pos_audio_start,
 				       D_S[d].pos_audio_end);
 		else i=cc_Pause_Resume(3);
-		if (i<0) return (-EIO);
+		if (i<0) RETURN_UP(-EIO);
 		D_S[d].audio_state=audio_playing;
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMPLAYMSF:
 		msg(DBG_IOC,"ioctl: CDROMPLAYMSF entered.\n");
 #if SAFE_MIXED
-		if (D_S[d].has_data>1) return (-EBUSY);
+		if (D_S[d].has_data>1) RETURN_UP(-EBUSY);
 #endif SAFE_MIXED
 		if (D_S[d].audio_state==audio_playing)
 		{
 			i=cc_Pause_Resume(1);
-			if (i<0) return (-EIO);
+			if (i<0) RETURN_UP(-EIO);
 			i=cc_ReadSubQ();
-			if (i<0) return (-EIO);
+			if (i<0) RETURN_UP(-EIO);
 			D_S[d].pos_audio_start=D_S[d].SubQ_run_tot;
 			i=cc_Seek(D_S[d].pos_audio_start,1);
 		}
 		st=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_msf));
-		if (st) return (st);
+		if (st) RETURN_UP(st);
 		memcpy_fromfs(&msf, (void *) arg, sizeof(struct cdrom_msf));
 		/* values come as msf-bin */
 		D_S[d].pos_audio_start = (msf.cdmsf_min0<<16) |
@@ -3971,33 +4044,36 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			msg(DBG_INF,"ioctl: cc_PlayAudio returns %d\n",i);
 			DriveReset();
 			D_S[d].audio_state=0;
-			return (-EIO);
+			RETURN_UP(-EIO);
 		}
 		D_S[d].audio_state=audio_playing;
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMPLAYTRKIND: /* Play a track.  This currently ignores index. */
 		msg(DBG_IOC,"ioctl: CDROMPLAYTRKIND entered.\n");
 #if SAFE_MIXED
-		if (D_S[d].has_data>1) return (-EBUSY);
+		if (D_S[d].has_data>1) RETURN_UP(-EBUSY);
 #endif SAFE_MIXED
 		if (D_S[d].audio_state==audio_playing)
 		{
 			msg(DBG_IOX,"CDROMPLAYTRKIND: already audio_playing.\n");
-			return (0);
-			return (-EINVAL);
+#if 1
+			RETURN_UP(0); /* just let us play on */
+#else
+			RETURN_UP(-EINVAL); /* play on, but say "error" */
+#endif
 		}
 		st=verify_area(VERIFY_READ,(void *) arg,sizeof(struct cdrom_ti));
 		if (st<0)
 		{
 			msg(DBG_IOX,"CDROMPLAYTRKIND: verify_area error.\n");
-			return (st);
+			RETURN_UP(st);
 		}
 		memcpy_fromfs(&ti,(void *) arg,sizeof(struct cdrom_ti));
 		msg(DBG_IOX,"ioctl: trk0: %d, ind0: %d, trk1:%d, ind1:%d\n",
 		    ti.cdti_trk0,ti.cdti_ind0,ti.cdti_trk1,ti.cdti_ind1);
-		if (ti.cdti_trk0<D_S[d].n_first_track) return (-EINVAL);
-		if (ti.cdti_trk0>D_S[d].n_last_track) return (-EINVAL);
+		if (ti.cdti_trk0<D_S[d].n_first_track) RETURN_UP(-EINVAL);
+		if (ti.cdti_trk0>D_S[d].n_last_track) RETURN_UP(-EINVAL);
 		if (ti.cdti_trk1<ti.cdti_trk0) ti.cdti_trk1=ti.cdti_trk0;
 		if (ti.cdti_trk1>D_S[d].n_last_track) ti.cdti_trk1=D_S[d].n_last_track;
 		D_S[d].pos_audio_start=D_S[d].TocBuffer[ti.cdti_trk0].address;
@@ -4008,28 +4084,29 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			msg(DBG_INF,"ioctl: cc_PlayAudio returns %d\n",i);
 			DriveReset();
 			D_S[d].audio_state=0;
-			return (-EIO);
+			RETURN_UP(-EIO);
 		}
 		D_S[d].audio_state=audio_playing;
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMREADTOCHDR:        /* Read the table of contents header */
 		msg(DBG_IOC,"ioctl: CDROMREADTOCHDR entered.\n");
 		tochdr.cdth_trk0=D_S[d].n_first_track;
 		tochdr.cdth_trk1=D_S[d].n_last_track;
 		st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_tochdr));
-		if (st) return (st);
+		if (st) RETURN_UP(st);
 		memcpy_tofs((void *) arg, &tochdr, sizeof(struct cdrom_tochdr));
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMREADTOCENTRY:      /* Read an entry in the table of contents */
 		msg(DBG_IOC,"ioctl: CDROMREADTOCENTRY entered.\n");
 		st=verify_area(VERIFY_WRITE,(void *) arg, sizeof(struct cdrom_tocentry));
-		if (st) return (st);
+		if (st) RETURN_UP(st);
 		memcpy_fromfs(&tocentry, (void *) arg, sizeof(struct cdrom_tocentry));
 		i=tocentry.cdte_track;
 		if (i==CDROM_LEADOUT) i=D_S[d].n_last_track+1;
-		else if (i<D_S[d].n_first_track||i>D_S[d].n_last_track) return (-EINVAL);
+		else if (i<D_S[d].n_first_track||i>D_S[d].n_last_track)
+                  RETURN_UP(-EINVAL);
 		tocentry.cdte_adr=D_S[d].TocBuffer[i].ctl_adr&0x0F;
 		tocentry.cdte_ctrl=(D_S[d].TocBuffer[i].ctl_adr>>4)&0x0F;
 		tocentry.cdte_datamode=D_S[d].TocBuffer[i].format;
@@ -4041,68 +4118,68 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		}
 		else if (tocentry.cdte_format==CDROM_LBA) /* blk required */
 			tocentry.cdte_addr.lba=msf2blk(D_S[d].TocBuffer[i].address);
-		else return (-EINVAL);
+		else RETURN_UP(-EINVAL);
 		memcpy_tofs((void *) arg, &tocentry, sizeof(struct cdrom_tocentry));
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMRESET:      /* hard reset the drive */
 		msg(DBG_IOC,"ioctl: CDROMRESET entered.\n");
 		i=DriveReset();
 		D_S[d].audio_state=0;
-		return (i);
+		RETURN_UP(i);
 		
 	case CDROMSTOP:      /* Spin down the drive */
 		msg(DBG_IOC,"ioctl: CDROMSTOP entered.\n");
 #if SAFE_MIXED
-		if (D_S[d].has_data>1) return (-EBUSY);
+		if (D_S[d].has_data>1) RETURN_UP(-EBUSY);
 #endif SAFE_MIXED
 		i=cc_Pause_Resume(1);
 		D_S[d].audio_state=0;
-		return (i);
+		RETURN_UP(i);
 		
 	case CDROMSTART:  /* Spin up the drive */
 		msg(DBG_IOC,"ioctl: CDROMSTART entered.\n");
 		cc_SpinUp();
 		D_S[d].audio_state=0;
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMEJECT:
 		msg(DBG_IOC,"ioctl: CDROMEJECT entered.\n");
 		if (fam0_drive) return (0);
-		if (D_S[d].open_count>1) return (-EBUSY);
+		if (D_S[d].open_count>1) RETURN_UP(-EBUSY);
 		i=UnLockDoor();
 		D_S[d].open_count=-9; /* to get it locked next time again */
 		i=cc_SpinDown();
 		msg(DBG_IOX,"ioctl: cc_SpinDown returned %d.\n", i);
 		msg(DBG_TEA,"ioctl: cc_SpinDown returned %d.\n", i);
-		if (i<0) return (-EIO);
+		if (i<0) RETURN_UP(-EIO);
 		D_S[d].CD_changed=0xFF;
 		D_S[d].diskstate_flags=0;
 		D_S[d].audio_state=0;
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMEJECT_SW:
 		msg(DBG_IOC,"ioctl: CDROMEJECT_SW entered.\n");
-		if (fam0_drive) return (0);
+		if (fam0_drive) RETURN_UP(0);
 		D_S[d].f_eject=arg;
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMVOLCTRL:   /* Volume control */
 		msg(DBG_IOC,"ioctl: CDROMVOLCTRL entered.\n");
 		st=verify_area(VERIFY_READ,(void *) arg,sizeof(volctrl));
-		if (st) return (st);
+		if (st) RETURN_UP(st);
 		memcpy_fromfs(&volctrl,(char *) arg,sizeof(volctrl));
 		D_S[d].vol_chan0=0;
 		D_S[d].vol_ctrl0=volctrl.channel0;
 		D_S[d].vol_chan1=1;
 		D_S[d].vol_ctrl1=volctrl.channel1;
 		i=cc_SetVolume();
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMVOLREAD:   /* read Volume settings from drive */
 		msg(DBG_IOC,"ioctl: CDROMVOLREAD entered.\n");
 		st=verify_area(VERIFY_WRITE,(void *)arg,sizeof(volctrl));
-		if (st) return (st);
+		if (st) RETURN_UP(st);
 		st=cc_GetVolume();
 		if (st<0) return (st);
 		volctrl.channel0=D_S[d].vol_ctrl0;
@@ -4110,15 +4187,16 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		volctrl.channel2=0;
 		volctrl.channel2=0;
 		memcpy_tofs((void *)arg,&volctrl,sizeof(volctrl));
-		return (0);
+		RETURN_UP(0);
 
 	case CDROMSUBCHNL:   /* Get subchannel info */
 		msg(DBG_IOS,"ioctl: CDROMSUBCHNL entered.\n");
-		if ((st_spinning)||(!subq_valid)) { i=cc_ReadSubQ();
-						    if (i<0) return (-EIO);
-					    }
+		if ((st_spinning)||(!subq_valid)) {
+			i=cc_ReadSubQ();
+			if (i<0) RETURN_UP(-EIO);
+		}
 		st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_subchnl));
-		if (st)	return (st);
+		if (st)	RETURN_UP(st);
 		memcpy_fromfs(&SC, (void *) arg, sizeof(struct cdrom_subchnl));
 		switch (D_S[d].audio_state)
 		{
@@ -4156,27 +4234,27 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		    SC.cdsc_adr,SC.cdsc_ctrl,
 		    SC.cdsc_trk,SC.cdsc_ind,
 		    SC.cdsc_absaddr,SC.cdsc_reladdr);
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMREADMODE1:
 		msg(DBG_IOC,"ioctl: CDROMREADMODE1 requested.\n");
 #if SAFE_MIXED
-		if (D_S[d].has_data>1) return (-EBUSY);
+		if (D_S[d].has_data>1) RETURN_UP(-EBUSY);
 #endif SAFE_MIXED
 		cc_ModeSelect(CD_FRAMESIZE);
 		cc_ModeSense();
 		D_S[d].mode=READ_M1;
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMREADMODE2: /* not usable at the moment */
 		msg(DBG_IOC,"ioctl: CDROMREADMODE2 requested.\n");
 #if SAFE_MIXED
-		if (D_S[d].has_data>1) return (-EBUSY);
+		if (D_S[d].has_data>1) RETURN_UP(-EBUSY);
 #endif SAFE_MIXED
 		cc_ModeSelect(CD_FRAMESIZE_RAW1);
 		cc_ModeSense();
 		D_S[d].mode=READ_M2;
-		return (0);
+		RETURN_UP(0);
 		
 	case CDROMAUDIOBUFSIZ: /* configure the audio buffer size */
 		msg(DBG_IOC,"ioctl: CDROMAUDIOBUFSIZ entered.\n");
@@ -4193,11 +4271,11 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			}
 			else msg(DBG_INF,"audio buffer size: %d frames.\n",D_S[d].sbp_audsiz);
 		}
-		return (D_S[d].sbp_audsiz);
+		RETURN_UP(D_S[d].sbp_audsiz);
 
 	case CDROMREADAUDIO:
 	{ /* start of CDROMREADAUDIO */
-		int i=0, j=0, frame, block;
+		int i=0, j=0, frame, block=0;
 		u_int try=0;
 		u_long timeout;
 		u_char *p;
@@ -4208,27 +4286,27 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		int error_flag;
 		
 		msg(DBG_IOC,"ioctl: CDROMREADAUDIO entered.\n");
-		if (fam0_drive) return (-EINVAL);
-		if (famL_drive) return (-EINVAL);
-		if (famV_drive) return (-EINVAL);
-		if (famT_drive) return (-EINVAL);
+		if (fam0_drive) RETURN_UP(-EINVAL);
+		if (famL_drive) RETURN_UP(-EINVAL);
+		if (famV_drive) RETURN_UP(-EINVAL);
+		if (famT_drive) RETURN_UP(-EINVAL);
 #if SAFE_MIXED
-		if (D_S[d].has_data>1) return (-EBUSY);
+		if (D_S[d].has_data>1) RETURN_UP(-EBUSY);
 #endif SAFE_MIXED
-		if (D_S[d].aud_buf==NULL) return (-EINVAL);
+		if (D_S[d].aud_buf==NULL) RETURN_UP(-EINVAL);
 		i=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_read_audio));
-		if (i) return (i);
+		if (i) RETURN_UP(i);
 		memcpy_fromfs(&read_audio, (void *) arg, sizeof(struct cdrom_read_audio));
-		if (read_audio.nframes>D_S[d].sbp_audsiz) return (-EINVAL);
+		if (read_audio.nframes>D_S[d].sbp_audsiz) RETURN_UP(-EINVAL);
 		i=verify_area(VERIFY_WRITE, read_audio.buf,
 			      read_audio.nframes*CD_FRAMESIZE_RAW);
-		if (i) return (i);
+		if (i) RETURN_UP(i);
 		
 		if (read_audio.addr_format==CDROM_MSF) /* MSF-bin specification of where to start */
 			block=msf2lba(&read_audio.addr.msf.minute);
 		else if (read_audio.addr_format==CDROM_LBA) /* lba specification of where to start */
 			block=read_audio.addr.lba;
-		else return (-EINVAL);
+		else RETURN_UP(-EINVAL);
 #if 000
 		i=cc_SetSpeed(speed_150,0,0);
 		if (i) msg(DBG_AUD,"read_audio: SetSpeed error %d\n", i);
@@ -4236,8 +4314,10 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		msg(DBG_AUD,"read_audio: lba: %d, msf: %06X\n",
 		    block, blk2msf(block));
 		msg(DBG_AUD,"read_audio: before cc_ReadStatus.\n");
+#if OLD_BUSY
 		while (busy_data) sbp_sleep(HZ/10); /* wait a bit */
 		busy_audio=1;
+#endif OLD_BUSY
 		error_flag=0;
 		for (data_tries=5; data_tries>0; data_tries--)
 		{
@@ -4400,43 +4480,45 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		cc_ModeSelect(CD_FRAMESIZE);
 		cc_ModeSense();
 		D_S[d].mode=READ_M1;
+#if OLD_BUSY
 		busy_audio=0;
+#endif OLD_BUSY
 		if (data_tries == 0)
 		{
 			msg(DBG_AUD,"read_audio: failed after 5 tries.\n");
-			return (-8);
+			RETURN_UP(-EIO);
 		}
 		msg(DBG_AUD,"read_audio: successful return.\n");
-		return (0);
+		RETURN_UP(0);
 	} /* end of CDROMREADAUDIO */
 		
 	case CDROMMULTISESSION: /* tell start-of-last-session */
 		msg(DBG_IOC,"ioctl: CDROMMULTISESSION entered.\n");
 		st=verify_area(VERIFY_WRITE,(void *) arg, sizeof(struct cdrom_multisession));
-		if (st) return (st);
+		if (st) RETURN_UP(st);
 		memcpy_fromfs(&ms_info, (void *) arg, sizeof(struct cdrom_multisession));
 		if (ms_info.addr_format==CDROM_MSF) /* MSF-bin requested */
 			lba2msf(D_S[d].lba_multi,&ms_info.addr.msf.minute);
 		else if (ms_info.addr_format==CDROM_LBA) /* lba requested */
 			ms_info.addr.lba=D_S[d].lba_multi;
-		else return (-EINVAL);
+		else RETURN_UP(-EINVAL);
 		if (D_S[d].f_multisession) ms_info.xa_flag=1; /* valid redirection address */
 		else ms_info.xa_flag=0; /* invalid redirection address */
 		memcpy_tofs((void *) arg, &ms_info, sizeof(struct cdrom_multisession));
 		msg(DBG_MUL,"ioctl: CDROMMULTISESSION done (%d, %08X).\n",
 		    ms_info.xa_flag, ms_info.addr.lba);
-		return (0);
+		RETURN_UP(0);
 		
 	case BLKRASET:
-		if(!suser())  return -EACCES;
-		if(!(inode->i_rdev)) return -EINVAL;
-		if(arg > 0xff) return -EINVAL;
+		if(!suser()) RETURN_UP(-EACCES);
+		if(!(inode->i_rdev)) RETURN_UP(-EINVAL);
+		if(arg > 0xff) RETURN_UP(-EINVAL);
 		read_ahead[MAJOR(inode->i_rdev)] = arg;
-		return (0);
+		RETURN_UP(0);
 		
 	default:
 		msg(DBG_IOC,"ioctl: unknown function request %04X\n", cmd);
-		return (-EINVAL);
+		RETURN_UP(-EINVAL);
 	} /* end switch(cmd) */
 }
 /*==========================================================================*/
@@ -4489,6 +4571,7 @@ static void sbp_transfer(struct request *req)
 static inline void sbpcd_end_request(struct request *req, int uptodate) {
 	req->next=CURRENT;
 	CURRENT=req;
+	up(&ioctl_read_sem);
 	end_request(uptodate);
 }
 /*==========================================================================*/
@@ -4528,6 +4611,7 @@ static void DO_SBPCD_REQUEST(void)
 	CURRENT=req->next;	/* task can fuck it up         GTL  */
 	sti();
 	
+	down(&ioctl_read_sem);
 	if (req->rq_status == RQ_INACTIVE)
 		sbpcd_end_request(req, 0);
 	if (req -> sector == -1)
@@ -4545,8 +4629,10 @@ static void DO_SBPCD_REQUEST(void)
 			kdevname(req->rq_dev));
 		goto err_done;
 	}
+#if OLD_BUSY
 	while (busy_audio) sbp_sleep(HZ); /* wait a bit */
 	busy_data=1;
+#endif OLD_BUSY
 	
 	if (D_S[i].audio_state==audio_playing) goto err_done;
 	if (d!=i) switch_drive(i);
@@ -4612,7 +4698,9 @@ static void DO_SBPCD_REQUEST(void)
 	}
 	
  err_done:
+#if OLD_BUSY
 	busy_data=0;
+#endif OLD_BUSY
 #ifdef DEBUG_GTL
 	printk(" do_sbpcd_request[%do](%p:%ld+%ld) end 4 (error), Time:%li\n",
 		xnr, req, req->sector, req->nr_sectors, jiffies);
@@ -4753,8 +4841,8 @@ static int sbp_data(struct request *req)
 #if LONG_TIMING
 	max_latency=9*HZ;
 #else
-	if (D_S[d].f_multisession) max_latency=9*HZ;
-	else max_latency=3*HZ;
+	if (D_S[d].f_multisession) max_latency=15*HZ;
+	else max_latency=5*HZ;
 #endif
 	duration=jiffies;
 	for (frame=0;frame<D_S[d].sbp_read_frames&&!error_flag; frame++)
@@ -4855,9 +4943,16 @@ static int sbp_data(struct request *req)
 		wait=8;
 		do
 		{
-			sbp_sleep(1);
-			OUT(CDo_sel_i_d,0);
-			i=inb(CDi_status);
+			if (teac==2)
+                          {
+                            if ((i=CDi_stat_loop_T()) == -1) break;
+                          }
+                        else
+                          {
+                            sbp_sleep(1);
+                            OUT(CDo_sel_i_d,0); 
+                            i=inb(CDi_status);
+                          } 
 			if (!(i&s_not_data_ready))
 			{
 				OUT(CDo_sel_i_d,1);
@@ -5018,22 +5113,26 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
 	if (fp->f_mode & 2)
 		return -EROFS;
 	
+	down(&ioctl_read_sem);
 	switch_drive(i);
 	
 	i=cc_ReadError();
 	flags_cmd_out |= f_respo2;
-	cc_ReadStatus();                         /* command: give 1-byte status */
+	cc_ReadStatus(); /* command: give 1-byte status */
 	i=ResponseStatus();
 	if (famT_drive&&(i<0))
 	{
 		cc_DriveReset();
 		i=ResponseStatus();
+#if 0
+                sbp_sleep(HZ);
+#endif 0
 		i=ResponseStatus();
 	}
 	if (i<0)
 	{
 		msg(DBG_INF,"sbpcd_open: ResponseStatus timed out (%d).\n",i);
-		return (-EIO);                  /* drive doesn't respond */
+		RETURN_UP(-EIO);                  /* drive doesn't respond */
 	}
 	if (famT_drive)	msg(DBG_TEA,"sbpcd_open: ResponseStatus=%02X\n", i);
 	if (!st_door_closed)
@@ -5065,7 +5164,7 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
 			cc_SpinDown(); /* eject tray */
 		}
 #endif
-		return (-ENXIO);
+		RETURN_UP(-ENXIO);
 	}
 	/*
 	 * try to keep an "open" counter here and lock the door if 0->1.
@@ -5092,7 +5191,7 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
 #endif SAFE_MIXED
 	}
 	if (!st_spinning) cc_SpinUp();
-	return (0);
+	RETURN_UP(0);
 }
 /*==========================================================================*/
 /*
@@ -5108,6 +5207,7 @@ static void sbpcd_release(struct inode * ip, struct file * file)
 		msg(DBG_INF, "release: bad device: %04X\n", ip->i_rdev);
 		return;
 	}
+	down(&ioctl_read_sem);
 	switch_drive(i);
 	/*
 	 * try to keep an "open" counter here and unlock the door if 1->0.
@@ -5132,6 +5232,7 @@ static void sbpcd_release(struct inode * ip, struct file * file)
 #endif SAFE_MIXED
 		}
 	}
+	up(&ioctl_read_sem);
 }
 /*==========================================================================*/
 /*
@@ -5365,7 +5466,10 @@ int SBPCD_INIT(void)
 	}
 	
 	if (port_index>0)
-		msg(DBG_INF, "You should configure sbpcd.h for your hardware.\n");
+          {
+            msg(DBG_INF, "You should read linux/Documentation/cdrom/sbpcd\n");
+            msg(DBG_INF, "and then configure sbpcd.h for your hardware.\n");
+          }
 	check_datarate();
 	msg(DBG_INI,"check_datarate done.\n");
 	
@@ -5450,7 +5554,7 @@ int SBPCD_INIT(void)
 #endif MODULE
 	}
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-	read_ahead[MAJOR_NR] = SBP_BUFFER_FRAMES * (CD_FRAMESIZE / 512);
+	read_ahead[MAJOR_NR] = buffers * (CD_FRAMESIZE / 512);
 	
 	request_region(CDo_command,4,major_name);
 	
@@ -5466,7 +5570,7 @@ int SBPCD_INIT(void)
 		 */
 		D_S[j].aud_buf=NULL;
 		D_S[j].sbp_audsiz=0;
-		D_S[j].sbp_bufsiz=SBP_BUFFER_FRAMES;
+		D_S[j].sbp_bufsiz=buffers;
 		if (D_S[j].drv_type&drv_fam1)
 			if (READ_AUDIO>0) D_S[j].sbp_audsiz=READ_AUDIO;
 		D_S[j].sbp_buf=(u_char *) vmalloc(D_S[j].sbp_bufsiz*CD_FRAMESIZE);
@@ -5476,7 +5580,7 @@ int SBPCD_INIT(void)
 			return -EIO;
 		}
 #ifdef MODULE
-		msg(DBG_INF,"data buffer size: %d frames.\n",SBP_BUFFER_FRAMES);
+		msg(DBG_INF,"data buffer size: %d frames.\n",buffers);
 #endif MODULE
 		if (D_S[j].sbp_audsiz>0)
 		{

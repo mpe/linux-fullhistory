@@ -1349,7 +1349,7 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on)
 		return retval;
 
 	if (on) {
-		if (!tty->read_wait)
+		if (!waitqueue_active(&tty->read_wait))
 			tty->minimum_to_wake = 1;
 		if (filp->f_owner == 0) {
 			if (tty->pgrp)
@@ -1358,7 +1358,7 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on)
 				filp->f_owner = current->pid;
 		}
 	} else {
-		if (!tty->fasync && !tty->read_wait)
+		if (!tty->fasync && !waitqueue_active(&tty->read_wait))
 			tty->minimum_to_wake = N_TTY_BUF_SIZE;
 	}
 	return 0;

@@ -978,10 +978,11 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	/*
 	 * Maybe we can take some stuff off of the write queue,
 	 * and put it onto the xmit queue.
-	 * FIXME: (?) There is bizarre case being tested here, to check if
+	 * There is bizarre case being tested here, to check if
 	 * the data at the head of the queue ends before the start of
-	 * the sequence we already ACKed. This does not appear to be
-	 * a case that can actually occur. Why are we testing it?
+	 * the sequence we already ACKed. This is not an error,
+	 * it can occur when we send a packet directly off of the write_queue
+	 * in a zero window probe.
 	 */
 
 	if (!skb_queue_empty(&sk->write_queue) &&

@@ -795,7 +795,7 @@ do_it_again:
 		  	current->timeout = (unsigned long) -1;
 			if (time)
 				tty->minimum_to_wake = 1;
-			else if (!tty->read_wait ||
+			else if (!waitqueue_active(&tty->read_wait) ||
 				 (tty->minimum_to_wake > minimum))
 				tty->minimum_to_wake = minimum;
 		} else {
@@ -907,7 +907,7 @@ do_it_again:
 	}
 	remove_wait_queue(&tty->read_wait, &wait);
 
-	if (!tty->read_wait)
+	if (!waitqueue_active(&tty->read_wait))
 		tty->minimum_to_wake = minimum;
 
 	current->state = TASK_RUNNING;
@@ -991,7 +991,7 @@ static int normal_select(struct tty_struct * tty, struct inode * inode,
 				return 1;
 			if (tty_hung_up_p(file))
 				return 1;
-			if (!tty->read_wait) {
+			if (!waitqueue_active(&tty->read_wait)) {
 				if (MIN_CHAR(tty) && !TIME_CHAR(tty))
 					tty->minimum_to_wake = MIN_CHAR(tty);
 				else

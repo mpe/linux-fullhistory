@@ -1433,34 +1433,34 @@ static int con_write(struct tty_struct * tty, int from_user,
 		  tc = translate[toggle_meta ? (c|0x80) : c];
 		}
 
-		/* If the original code was < 32 we only allow a
-		 * glyph to be displayed if the code is not normally
-		 * used (such as for cursor movement) or if the
-		 * disp_ctrl mode has been explicitly enabled.
-		 * Note: ESC is *never* allowed to be displayed as
-		 * that would disable all escape sequences!
-		 * To display font position 0x1B, go into UTF mode
-		 * and display character U+F01B, or change the mapping.
-		 */
-		ok = (tc && (c >= 32 || (!utf && !(((disp_ctrl ? CTRL_ALWAYS
-					    : CTRL_ACTION) >> c) & 1))));
+                /* If the original code was a control character we
+                 * only allow a glyph to be displayed if the code is
+                 * not normally used (such as for cursor movement) or
+                 * if the disp_ctrl mode has been explicitly enabled.
+                 * Certain characters (as given by the CTRL_ALWAYS
+                 * bitmap) are always displayed as control characters,
+                 * as the console would be pretty useless without
+                 * them; to display an arbitrary font position use the
+                 * direct-to-font zone in UTF-8 mode.
+                 */
+                ok = tc && (c >= 32 ||
+                            (!utf && !(((disp_ctrl ? CTRL_ALWAYS
+                                         : CTRL_ACTION) >> c) & 1)))
+                        && (c != 127 || disp_ctrl);
 
 		if (vc_state == ESnormal && ok) {
 			/* Now try to find out how to display it */
 			tc = conv_uni_to_pc(tc);
-			if ( tc == -4 )
-			  {
-			    /* If we got -4 (not found) then see if we have
-			       defined a replacement character (U+FFFD) */
-			    tc = conv_uni_to_pc(0xfffd);
-			  }
-			else if ( tc == -3 )
-			  {
-			    /* Bad hash table -- hope for the best */
-			    tc = c;
-			  }
+			if ( tc == -4 ) {
+                                /* If we got -4 (not found) then see if we have
+                                   defined a replacement character (U+FFFD) */
+                                tc = conv_uni_to_pc(0xfffd);
+                        } else if ( tc == -3 ) {
+                                /* Bad hash table -- hope for the best */
+                                tc = c;
+                        }
 			if (tc & ~console_charmask)
-			  continue; /* Conversion failed */
+                                continue; /* Conversion failed */
 
 			if (need_wrap) {
 				cr(currcons);

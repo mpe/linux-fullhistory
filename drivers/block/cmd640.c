@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/cmd640.c	Version 1.01  Aug 12, 1996
+ *  linux/drivers/block/cmd640.c	Version 1.02  Sep 01, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & authors (see below)
  */
@@ -94,9 +94,12 @@
  *  Version 1.00	Mmm.. cannot depend on PCMD_ENA in all systems
  *  Version 1.01	slow/fast devsel can be selected with "hdparm -p6/-p7"
  *			 ("fast" is necessary for 32bit I/O in some systems)
+ *  Version 1.02	fix bug that resulted in slow "setup times"
+ *			 (patch courtesy of Zoltan Hidvegi)
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
+#define CMD640_PREFETCH_MASKS 1
 
 #include <linux/config.h>
 #include <linux/types.h>
@@ -408,9 +411,11 @@ static void check_prefetch (unsigned int index)
 		drive->no_io_32bit = 1;
 		drive->io_32bit = 0;
 	} else {
+#if CMD640_PREFETCH_MASKS
 		drive->no_unmask = 1;
-		drive->no_io_32bit = 0;
 		drive->unmask = 0;
+#endif
+		drive->no_io_32bit = 0;
 	}
 }
 
@@ -454,8 +459,10 @@ static void set_prefetch_mode (unsigned int index, int mode)
 	cli();
 	b = get_cmd640_reg(reg);
 	if (mode) {	/* want prefetch on? */
+#if CMD640_PREFETCH_MASKS
 		drive->no_unmask = 1;
 		drive->unmask = 0;
+#endif
 		drive->no_io_32bit = 0;
 		b &= ~prefetch_masks[index];	/* enable prefetch */
 	} else {
@@ -556,9 +563,10 @@ static void program_drive_counts (unsigned int index)
 	 * Convert setup_count to internal chipset representation
 	 */
 	switch (setup_count) {
-		case 4:	 setup_count = 0x00;
-		case 3:	 setup_count = 0x80;
-		case 2:	 setup_count = 0x40;
+		case 4:	 setup_count = 0x00; break;
+		case 3:	 setup_count = 0x80; break;
+		case 1:
+		case 2:	 setup_count = 0x40; break;
 		default: setup_count = 0xc0; /* case 5 */
 	}
 
