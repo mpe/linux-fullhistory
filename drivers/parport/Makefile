@@ -9,7 +9,7 @@
 # Rewritten to use lists instead of if-statements.
 #
 
-L_TARGET := parport.a
+O_TARGET := driver.o
 
 export-objs	:= init.o parport_pc.o
 
@@ -27,24 +27,6 @@ obj-$(CONFIG_PARPORT_MFC3)	+= parport_mfc3.o
 obj-$(CONFIG_PARPORT_ATARI)	+= parport_atari.o
 obj-$(CONFIG_PARPORT_SUNBPP)	+= parport_sunbpp.o
 obj-$(CONFIG_PARPORT_GSC)	+= parport_gsc.o
-
-# Extract lists of the multi-part drivers.
-# The 'int-*' lists are the intermediate files used to build the multi's.
-multi-y		:= $(filter $(list-multi), $(obj-y))
-multi-m		:= $(filter $(list-multi), $(obj-m))
-int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
-int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
-
-# Take multi-part drivers out of obj-y and put components in.
-obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
-
-# Translate to Rules.make lists.
-L_OBJS		:= $(filter-out $(export-objs), $(obj-y))
-LX_OBJS		:= $(filter	$(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out	$(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
-MI_OBJS		:= $(sort $(filter-out	$(export-objs), $(int-m)))
-MIX_OBJS	:= $(sort $(filter	$(export-objs), $(int-m)))
 
 include $(TOPDIR)/Rules.make
 

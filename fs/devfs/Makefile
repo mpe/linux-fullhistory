@@ -8,7 +8,10 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := devfs.o
-OX_OBJS  := base.o util.o
+
+export-objs := base.o util.o
+
+obj-y   := base.o util.o
 
 # Special case to support building documentation
 ifndef TOPDIR

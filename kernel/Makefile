@@ -8,23 +8,17 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := kernel.o
-O_OBJS    = sched.o dma.o fork.o exec_domain.o panic.o printk.o \
+
+export-objs = signal.o sys.o kmod.o context.o
+
+obj-y     = sched.o dma.o fork.o exec_domain.o panic.o printk.o \
 	    module.o exit.o itimer.o info.o time.o softirq.o resource.o \
-	    sysctl.o acct.o capability.o ptrace.o timer.o user.o
+	    sysctl.o acct.o capability.o ptrace.o timer.o user.o \
+	    signal.o sys.o kmod.o context.o
 
-OX_OBJS  += signal.o sys.o kmod.o context.o
-
-ifeq ($(CONFIG_UID16),y)
-O_OBJS += uid16.o
-endif
-
-ifeq ($(CONFIG_MODULES),y)
-OX_OBJS  += ksyms.o
-endif
-
-ifeq ($(CONFIG_PM),y)
-OX_OBJS += pm.o
-endif
+obj-$(CONFIG_UID16) += uid16.o
+obj-$(CONFIG_MODULES) += ksyms.o
+obj-$(CONFIG_PM) += pm.o
 
 ifneq ($(CONFIG_IA64),y)
 # According to Alan Modra <alan@linuxcare.com.au>, the -fno-omit-frame-pointer is

@@ -47,13 +47,5 @@ subdir-$(CONFIG_ACPI)		+= acpi
 # Subdirectories that should be entered when MAKING_MODULES=1, even if set to 'y'.
 both-m		:= $(filter $(mod-subdirs), $(subdir-y))
 
-# Translate to Rules.make lists.
-SUB_DIRS	:= $(subdir-y)
-MOD_SUB_DIRS	:= $(sort $(subdir-m) $(both-m))
-ALL_SUB_DIRS	:= $(sort $(subdir-y) $(subdir-m) $(subdir-n) $(subdir-))
-
-# net/hamradio is already in ALL_SUB_DIRS of drivers/net/Makefile
-ALL_SUB_DIRS	:= $(filter-out net/hamradio, $(ALL_SUB_DIRS))
-
 include $(TOPDIR)/Rules.make
 

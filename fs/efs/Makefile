@@ -8,7 +8,8 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := efs.o
-O_OBJS   := super.o inode.o namei.o dir.o file.o symlink.o
-M_OBJS   := $(O_TARGET)
+
+obj-y    := super.o inode.o namei.o dir.o file.o symlink.o
+obj-m    := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -4,10 +4,6 @@
 # Makefile for the Linux PCMCIA SCSI drivers.
 #
 
-SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
-
 obj-y		:=
 obj-m		:=
 obj-n		:=
@@ -33,22 +29,6 @@ aha152x-objs	:= aha152x_stub.o aha152x.o
 apa1480-objs	:= apa1480_stub.o aic7xxx.o
 fdomain-objs	:= fdomain_stub.o fdomain.o
 qlogic-objs	:= qlogic_stub.o qlogicfas.o
-
-# Extract lists of the multi-part drivers.
-
-multi-y		:= $(filter $(list-multi), $(obj-y))
-multi-m		:= $(filter $(list-multi), $(obj-m))
-int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
-int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
-
-# Translate to Rules.make lists.
-
-O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
-OX_OBJS		:= $(filter     $(export-objs), $(obj-y))
-M_OBJS		:= $(filter-out $(export-objs), $(obj-m))
-MX_OBJS		:= $(filter     $(export-objs), $(obj-m))
-MI_OBJS		:= $(filter-out $(export-objs), $(int-m))
-MIX_OBJS	:= $(filter     $(export-objs), $(int-m))
 
 include $(TOPDIR)/Rules.make
 

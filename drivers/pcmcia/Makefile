@@ -8,42 +8,40 @@
 # Note 2! The CFLAGS definitions are now inherited from the
 # parent makes..
 
-SUB_DIRS     :=
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
+O_TARGET := pcmcia.o
+
+export-objs := ds.o cs.o cb_enabler.o yenta.o pci_socket.o
+
+multi-list = pcmcia_core.o yenta_socket.o
+
+yenta_socket-objs := pci_socket.o yenta.o
+pcmcia_core-objs := cistpl.o rsrc_mgr.o bulkmem.o cs.o
+ifeq ($(CONFIG_CARDBUS),y)
+  pcmcia_core-objs += cardbus.o
+endif
 
 ifeq ($(CONFIG_PCMCIA),y)
-  O_OBJS   := cistpl.o rsrc_mgr.o bulkmem.o
-  OX_OBJS  := ds.o cs.o
-  O_TARGET := pcmcia.o
+  obj-y   := cistpl.o rsrc_mgr.o bulkmem.o ds.o cs.o
   ifeq ($(CONFIG_CARDBUS),y)
-    O_OBJS += cardbus.o
-    OX_OBJS += cb_enabler.o yenta.o pci_socket.o
+    obj-y += cardbus.o cb_enabler.o yenta.o pci_socket.o
   endif
   ifeq ($(CONFIG_I82365),y)
-    O_OBJS += i82365.o
+    obj-y += i82365.o
   endif
   ifeq ($(CONFIG_TCIC),y)
-    O_OBJS += tcic.o
+    obj-y += tcic.o
   endif
 else
   ifeq ($(CONFIG_PCMCIA),m)
-     M_OBJS   := pcmcia_core.o 
-     MX_OBJS  := ds.o
-     MIX_OBJS  := cs.o
-     CORE_OBJS := cistpl.o rsrc_mgr.o bulkmem.o cs.o
+    obj-m   := pcmcia_core.o ds.o
     ifeq ($(CONFIG_I82365),y)
-      M_OBJS += i82365.o
+      obj-m += i82365.o
     endif
     ifeq ($(CONFIG_TCIC),y)
-      M_OBJS += tcic.o
+      obj-m += tcic.o
     endif
      ifeq ($(CONFIG_CARDBUS),y)
-	M_OBJS += yenta_socket.o
-	CORE_OBJS += cardbus.o
-	CARDBUS_OBJS := pci_socket.o yenta.o
-	OX_OBJS += pci_socket.o yenta.o
-	MX_OBJS += cb_enabler.o
+	obj-m += yenta_socket.o cb_enabler.o
      endif
   endif
 endif

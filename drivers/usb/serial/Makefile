@@ -3,15 +3,8 @@
 #
 
 O_TARGET	:= usb-serial.o
-M_OBJS		:=
-O_OBJS		:=
 
 # Object file lists.
-
-obj-y	:=
-obj-m	:=
-obj-n	:=
-obj-	:=
 
 obj-$(CONFIG_USB_SERIAL)                        += usbserial.o
 obj-$(CONFIG_USB_SERIAL_VISOR)			+= visor.o
@@ -27,13 +20,6 @@ obj-$(CONFIG_USB_SERIAL_MCT_U232)		+= mct_u232.o
  
 # Objects that export symbols.
 export-objs	:= usbserial.o
-
-# Translate to Rules.make lists.
-
-O_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-y)))
-OX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-y)))
-M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
 

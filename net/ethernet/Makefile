@@ -23,9 +23,7 @@ ifdef CONFIG_ATALK
 OBJ2	:= pe2.o
 endif
 
-ifdef CONFIG_NET
-O_OBJS	:= $(OBJS) $(OBJ2)
-endif
+obj-$(CONFIG_NET)	:= $(OBJS) $(OBJ2)
 
 include $(TOPDIR)/Rules.make
 

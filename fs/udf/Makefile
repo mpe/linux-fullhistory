@@ -8,9 +8,10 @@
 # Note 2! The CFLAGS definitions are now in the main makefile..
 
 O_TARGET := udf.o
-O_OBJS   := balloc.o dir.o file.o ialloc.o inode.o lowlevel.o namei.o \
+
+obj-y   := balloc.o dir.o file.o ialloc.o inode.o lowlevel.o namei.o \
 		partition.o super.o truncate.o symlink.o fsync.o \
 		crc.o directory.o misc.o udftime.o unicode.o
-M_OBJS   := $(O_TARGET)
+obj-m   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -8,11 +8,12 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
 O_TARGET := hfs.o
-O_OBJS   := balloc.o bdelete.o bfind.o bins_del.o binsert.o bitmap.o bitops.o \
+
+obj-y    := balloc.o bdelete.o bfind.o bins_del.o binsert.o bitmap.o bitops.o \
 	    bnode.o brec.o btree.o catalog.o dir.o dir_cap.o dir_dbl.o \
 	    dir_nat.o extent.o file.o file_cap.o file_hdr.o inode.o mdb.o \
             part_tbl.o string.o super.o sysdep.o trans.o version.o
 
-M_OBJS   := $(O_TARGET)
+obj-m    := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -9,28 +9,13 @@
 # parent makes..
 #
 
-O_OBJS		:=
-OX_OBJS		:=
-M_OBJS		:=
-MX_OBJS		:=
-
-# Object file lists.
-
-obj-y		:=
-obj-m		:=
-obj-n		:=
-obj-		:=
-
-SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) ftape joystick pcmcia rio drm agp
-
 #
 # This file contains the font map for the default (hardware) font
 #
 FONTMAPFILE = cp437.uni
 
 O_TARGET := char.o
+
 obj-y	 += tty_io.o n_tty.o tty_ioctl.o mem.o raw.o pty.o misc.o random.o
 
 # All of the (potential) objects that export symbols.
@@ -135,13 +120,8 @@ obj-$(CONFIG_SERIAL167) += serial167.o
 obj-$(CONFIG_MVME162_SCC) += generic_serial.o vme_scc.o
 obj-$(CONFIG_BVME6000_SCC) += generic_serial.o vme_scc.o
 
-ifeq ($(CONFIG_RIO),y)
-  SUB_DIRS += rio
-else
-  ifeq ($(CONFIG_RIO),m)
-    MOD_SUB_DIRS += rio
-  endif
-endif
+subdir-$(CONFIG_RIO) += rio
+subdir-$(CONFIG_INPUT) += joystick
 
 obj-$(CONFIG_ATIXL_BUSMOUSE) += atixlmouse.o
 obj-$(CONFIG_LOGIBUSMOUSE) += logibusmouse.o
@@ -149,12 +129,6 @@ obj-$(CONFIG_PRINTER) += lp.o
 
 ifeq ($(CONFIG_INPUT),y)
 obj-y += joystick/js.o
-SUB_DIRS += joystick
-MOD_SUB_DIRS += joystick
-else
-  ifeq ($(CONFIG_INPUT),m)
-  MOD_SUB_DIRS += joystick
-  endif
 endif
 
 obj-$(CONFIG_BUSMOUSE) += busmouse.o
@@ -178,16 +152,13 @@ obj-$(CONFIG_INTEL_RNG) += i810_rng.o
 
 obj-$(CONFIG_QIC02_TAPE) += tpqic02.o
 
+subdir-$(CONFIG_FTAPE) += ftape
+subdir-$(CONFIG_DRM) += drm
+subdir-$(CONFIG_PCMCIA) += pcmcia
+subdir-$(CONFIG_agp) += agp
+
 ifeq ($(CONFIG_FTAPE),y)
 obj-y       += ftape/ftape.o
-SUB_DIRS     += ftape
-ifneq ($(CONFIG_ZFTAPE),n)
-MOD_SUB_DIRS += ftape
-endif
-else
-  ifeq ($(CONFIG_FTAPE),m)
-  MOD_SUB_DIRS += ftape
-  endif
 endif
 
 obj-$(CONFIG_H8) += h8.o
@@ -195,33 +166,6 @@ obj-$(CONFIG_PPDEV) += ppdev.o
 obj-$(CONFIG_DZ) += dz.o
 obj-$(CONFIG_NWBUTTON) += nwbutton.o
 obj-$(CONFIG_NWFLASH) += nwflash.o
-
-ifeq ($(CONFIG_DRM),y)
-  SUB_DIRS += drm
-  MOD_SUB_DIRS += drm
-else
-  ifeq ($(CONFIG_DRM),m)
-  MOD_SUB_DIRS += drm
-  endif
-endif
-
-ifeq ($(CONFIG_PCMCIA),y)
-  SUB_DIRS += pcmcia
-  MOD_IN_SUB_DIRS += pcmcia
-else
-  ifeq ($(CONFIG_PCMCIA),m)
-    MOD_IN_SUB_DIRS += pcmcia
-  endif
-endif
-
-ifeq ($(CONFIG_AGP), y)
-  SUB_DIRS += agp
-  MOD_SUB_DIRS += agp
-else
-  ifeq ($(CONFIG_AGP), m)
-    MOD_SUB_DIRS += agp
-  endif
-endif
 
 # Only one watchdog can succeed. We probe the hardware watchdog
 # drivers first, then the softdog driver.  This means if your hardware
@@ -239,32 +183,6 @@ obj-$(CONFIG_977_WATCHDOG) += wdt977.o
 obj-$(CONFIG_I810_TCO) += i810-tco.o
 obj-$(CONFIG_SOFT_WATCHDOG) += softdog.o
 
-
-# Extract lists of the multi-part drivers.
-# The 'int-*' lists are the intermediate files used to build the multi's.
-
-multi-y         := $(filter $(list-multi), $(obj-y))
-multi-m         := $(filter $(list-multi), $(obj-m))
-int-y           := $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
-int-m           := $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
-
-# Files that are both resident and modular: remove from modular.
-
-obj-m           := $(filter-out $(obj-y), $(obj-m))
-int-m           := $(filter-out $(int-y), $(int-m))
-
-# Take multi-part drivers out of obj-y and put components in.
-
-obj-y           := $(filter-out $(list-multi), $(obj-y)) $(int-y)
-
-# Translate to Rules.make lists.
-
-O_OBJS          := $(filter-out $(export-objs), $(obj-y))
-OX_OBJS         := $(filter     $(export-objs), $(obj-y))
-M_OBJS          := $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS         := $(sort $(filter     $(export-objs), $(obj-m)))
-MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
-MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
 
 include $(TOPDIR)/Rules.make
 

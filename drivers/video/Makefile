@@ -2,11 +2,6 @@
 # 5 Aug 1999, James Simmons, <mailto:jsimmons@edgeglobal.com>
 # Rewritten to use lists instead of if-statements.
 
-SUB_DIRS        :=
-MOD_SUB_DIRS    := $(SUB_DIRS)
-MOD_IN_SUB_DIRS :=
-ALL_SUB_DIRS    := $(SUB_DIRS) matrox riva
-
 O_TARGET := video.o
 O_OBJS   :=
 M_OBJS   :=
@@ -21,12 +16,6 @@ export-objs    := fbmem.o fbcmap.o fbcon.o fbmon.o modedb.o \
 		  fbcon-cfb2.o fbcon-cfb24.o fbcon-cfb32.o fbcon-cfb4.o \
 		  fbcon-cfb8.o fbcon-mac.o fbcon-mfb.o fbcon-vga8-planes.o \
 		  matrox/matroxfb.o cyber2000fb.o fbcon-hga.o
-
-# Object file lists.
-obj-y          :=
-obj-m          :=
-obj-n          :=
-obj-           :=
 
 # Each configuration option enables a list of files.
 
@@ -90,34 +79,20 @@ obj-$(CONFIG_FB_CGFOURTEEN)       += cgfourteenfb.o sbusfb.o
 obj-$(CONFIG_FB_P9100)            += p9100fb.o sbusfb.o
 obj-$(CONFIG_FB_LEO)              += leofb.o sbusfb.o
 
+subdir-$(CONFIG_FB_MATROX)	  += matrox
 ifeq ($(CONFIG_FB_MATROX),y)
-SUB_DIRS			  += matrox
 obj-y				  += matrox/matrox.o
-MOD_SUB_DIRS			  += matrox
-else
-  ifeq ($(CONFIG_FB_MATROX),m)
-  MOD_SUB_DIRS			  += matrox
-  endif
 endif
 
+subdir-$(CONFIG_FB_RIVA)	  += riva
 ifeq ($(CONFIG_FB_RIVA),y)
-SUB_DIRS			  += riva
 obj-y				  += riva/rivafb.o
-else
-  ifeq ($(CONFIG_FB_RIVA),m)
-  MOD_SUB_DIRS			  += riva
-  endif
 endif
 
+subdir-$(CONFIG_FB_SIS)		  += sis
 ifeq ($(CONFIG_FB_SIS),y)
-SUB_DIRS			  += sis
 obj-y				  += sis/sisfb.o
-else
-  ifeq ($(CONFIG_FB_SIS),m)
-  MOD_SUB_DIRS			  += sis
-  endif
 endif
-
 
 obj-$(CONFIG_FB_SUN3)             += sun3fb.o
 obj-$(CONFIG_FB_BWTWO)            += bwtwofb.o
@@ -144,30 +119,6 @@ obj-$(CONFIG_FBCON_MAC)           += fbcon-mac.o
 obj-$(CONFIG_FBCON_MFB)           += fbcon-mfb.o
 obj-$(CONFIG_FBCON_VGA)           += fbcon-vga.o
 obj-$(CONFIG_FBCON_HGA)           += fbcon-hga.o
-
-# Extract lists of the multi-part drivers.
-# The 'int-*' lists are the intermediate files used to build the multi's.
-
-multi-y         := $(filter $(list-multi), $(obj-y))
-multi-m         := $(filter $(list-multi), $(obj-m))
-int-y           := $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
-int-m           := $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
-
-# Files that are both resident and modular: remove from modular.
-
-obj-m          := $(filter-out $(obj-y), $(obj-m))
-int-m          := $(filter-out $(int-y), $(int-m))
-
-# Take multi-part drivers out of obj-y and put components in.
-
-obj-y          := $(filter-out $(list-multi), $(obj-y)) $(int-y)
-
-# Translate to Rules.make lists.
-
-O_OBJS         := $(filter-out $(export-objs), $(obj-y))
-OX_OBJS        := $(filter     $(export-objs), $(obj-y))
-M_OBJS         := $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS        := $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
 

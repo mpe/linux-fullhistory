@@ -8,8 +8,10 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
 O_TARGET := msdos.o
-O_OBJS   := namei.o
-OX_OBJS  := msdosfs_syms.o
-M_OBJS   := $(O_TARGET)
+
+export-objs := msdosfs_syms.o
+
+obj-y := namei.o msdosfs_syms.o
+obj-m := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

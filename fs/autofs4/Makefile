@@ -5,31 +5,9 @@
 #
 
 O_TARGET := autofs4.o
-O_OBJS   := init.o inode.o root.o symlink.o waitq.o expire.o
 
-M_OBJS   := $(O_TARGET)
+obj-y   := init.o inode.o root.o symlink.o waitq.o expire.o
 
-ifdef TOPDIR
-#
-# Part of the kernel code
-#
+obj-m   := $(O_TARGET)
+
 include $(TOPDIR)/Rules.make
-else
-#
-# Standalone (handy for development)
-#
-include ../Makefile.rules
-
-CFLAGS += -D__KERNEL__ -DMODULE $(KFLAGS) -I../include -I$(KINCLUDE) $(MODFLAGS)
-
-all: $(O_TARGET)
-
-$(O_TARGET): $(O_OBJS)
-	$(LD) -r -o $(O_TARGET) $(O_OBJS)
-
-install: $(O_TARGET)
-	install -c $(O_TARGET) /lib/modules/`uname -r`/fs
-
-clean:
-	rm -f *.o *.s
-endif

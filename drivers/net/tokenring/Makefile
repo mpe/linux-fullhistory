@@ -6,10 +6,6 @@
 # unless it's something special (ie not a .c file).
 #
 
-SUB_DIRS     :=
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
-
 obj-y   :=
 obj-n   :=
 obj-m   :=
@@ -26,9 +22,5 @@ obj-$(CONFIG_TMSPCI) 	+= tmspci.o
 obj-$(CONFIG_SMCTR) 	+= smctr.o
 
 L_TARGET := tr.a
-L_OBJS   := $(filter-out $(export-objs), $(obj-y))
-LX_OBJS  := $(filter     $(export-objs), $(obj-y))
-M_OBJS   := $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS  := $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make

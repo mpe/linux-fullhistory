@@ -4,10 +4,6 @@
 # Makefile for the Linux PCMCIA network device drivers.
 #
 
-SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
-
 O_TARGET := pcmcia_net.o
 
 obj-y		:=
@@ -38,11 +34,6 @@ obj-$(CONFIG_AIRONET4500_CS)	+= aironet4500_cs.o
 obj-$(CONFIG_PCMCIA_XIRTULIP)	+= xircom_tulip_cb.o
 
 obj-$(CONFIG_PCMCIA_IBMTR)	+= ibmtr_cs.o
-
-O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
-OX_OBJS		:= $(filter     $(export-objs), $(obj-y))
-M_OBJS		:= $(filter-out $(export-objs), $(obj-m))
-MX_OBJS		:= $(filter     $(export-objs), $(obj-m))
 
 include $(TOPDIR)/Rules.make
 

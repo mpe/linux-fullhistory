@@ -8,7 +8,10 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := partitions.o
-OX_OBJS   := check.o
+
+export-objs := check.o
+
+obj-y := check.o
 
 obj-$(CONFIG_ACORN_PARTITION) += acorn.o
 obj-$(CONFIG_AMIGA_PARTITION) += amiga.o
@@ -20,9 +23,6 @@ obj-$(CONFIG_SGI_PARTITION) += sgi.o
 obj-$(CONFIG_SUN_PARTITION) += sun.o
 obj-$(CONFIG_ULTRIX_PARTITION) += ultrix.o
 obj-$(CONFIG_IBM_PARTITION) += ibm.o
-
-O_OBJS += $(obj-y)
-M_OBJS += $(obj-m)
 
 include $(TOPDIR)/Rules.make
 

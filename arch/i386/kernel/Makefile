@@ -46,9 +46,4 @@ ifneq ($(CONFIG_ACPI_INTERPRETER),y)
 obj-$(CONFIG_ACPI)	+= acpi.o
 endif
 
-O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
-OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out	$(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
-
 include $(TOPDIR)/Rules.make

@@ -4,9 +4,9 @@
 
 O_TARGET := cramfs.o
 
-O_OBJS := inode.o uncompress.o inflate/zlib.o
+obj-y  := inode.o uncompress.o inflate/zlib.o
 
-M_OBJS := $(O_TARGET)
+obj-m := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
 

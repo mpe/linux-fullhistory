@@ -8,15 +8,22 @@
 # In the future, some of these should be built conditionally.
 #
 
-SUB_DIRS     :=
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
-
 O_TARGET := idedriver.o
+
+export-objs		:= ide.o ide-features.o
+list-multi		:= ide-mod.o ide-probe-mod.o
 
 obj-y		:=
 obj-m		:=
 ide-obj-y	:=
+
+obj-$(CONFIG_BLK_DEV_HD)	+= hd.o
+obj-$(CONFIG_BLK_DEV_IDE)       += ide-mod.o ide-probe-mod.o
+obj-$(CONFIG_BLK_DEV_IDECS)     += ide-cs.o
+obj-$(CONFIG_BLK_DEV_IDEDISK)   += ide-disk.o
+obj-$(CONFIG_BLK_DEV_IDECD)     += ide-cd.o
+obj-$(CONFIG_BLK_DEV_IDETAPE)   += ide-tape.o
+obj-$(CONFIG_BLK_DEV_IDEFLOPPY) += ide-floppy.o
 
 ide-obj-$(CONFIG_BLK_DEV_AEC62XX)	+= aec62xx.o
 ide-obj-$(CONFIG_BLK_DEV_ALI14XX)	+= ali14xx.o
@@ -31,7 +38,6 @@ ide-obj-$(CONFIG_BLK_DEV_DTC2278)	+= dtc2278.o
 ide-obj-$(CONFIG_BLK_DEV_FALCON_IDE)	+= falconide.o
 ide-obj-$(CONFIG_BLK_DEV_GAYLE)		+= gayle.o
 ide-obj-$(CONFIG_BLK_DEV_Q40IDE)	+= q40ide.o
-obj-$(CONFIG_BLK_DEV_HD)		+= hd.o
 ide-obj-$(CONFIG_BLK_DEV_HPT34X)	+= hpt34x.o
 ide-obj-$(CONFIG_BLK_DEV_HPT366)	+= hpt366.o
 ide-obj-$(CONFIG_BLK_DEV_HT6560B)	+= ht6560b.o
@@ -59,34 +65,8 @@ ide-obj-$(CONFIG_BLK_DEV_VIA82CXXX)	+= via82cxxx.o
 
 ide-obj-$(CONFIG_PROC_FS)		+= ide-proc.o
 
-export-objs		:= ide.o ide-features.o
-list-multi		:= ide-mod.o ide-probe-mod.o
 ide-mod-objs		:= $(export-objs) $(ide-obj-y)
 ide-probe-mod-objs	:= ide-probe.o ide-geometry.o
-
-obj-$(CONFIG_BLK_DEV_IDE)	+= ide-mod.o ide-probe-mod.o
-obj-$(CONFIG_BLK_DEV_IDECS)	+= ide-cs.o
-obj-$(CONFIG_BLK_DEV_IDEDISK)	+= ide-disk.o
-obj-$(CONFIG_BLK_DEV_IDECD)	+= ide-cd.o
-obj-$(CONFIG_BLK_DEV_IDETAPE)	+= ide-tape.o
-obj-$(CONFIG_BLK_DEV_IDEFLOPPY)	+= ide-floppy.o
-
-# Extract lists of the multi-part drivers.
-# The 'int-*' lists are the intermediate files used to build the multi's.
-multi-y		:= $(filter $(list-multi), $(obj-y))
-multi-m		:= $(filter $(list-multi), $(obj-m))
-int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
-int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
-
-# Take multi-part drivers out of obj-y and put components in.
-obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
-
-# Translate to Rules.make lists.
-O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
-OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
-MI_OBJS		:= $(sort $(filter-out	$(export-objs), $(int-m)))
-MIX_OBJS	:= $(sort $(filter	$(export-objs), $(int-m)))
 
 include $(TOPDIR)/Rules.make
 

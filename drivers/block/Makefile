@@ -8,10 +8,6 @@
 # In the future, some of these should be built conditionally.
 #
 
-SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) paride
-
 O_TARGET := block.o
 
 export-objs	:= ll_rw_blk.o blkpg.o loop.o DAC960.o
@@ -36,30 +32,6 @@ obj-$(CONFIG_BLK_DEV_DAC960)	+= DAC960.o
 
 obj-$(CONFIG_BLK_DEV_NBD)	+= nbd.o
 
-ifeq ($(CONFIG_PARIDE),y)
-SUB_DIRS	+= paride
-MOD_IN_SUB_DIRS	+= paride
-else
-  ifeq ($(CONFIG_PARIDE),m)
-  MOD_IN_SUB_DIRS	+= paride
-  endif
-endif
-
-
-# Extract lists of the multi-part drivers.
-# The 'int-*' lists are the intermediate files used to build the multi's.
-multi-y		:= $(filter $(list-multi), $(obj-y))
-multi-m		:= $(filter $(list-multi), $(obj-m))
-int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
-int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
-
-# Take multi-part drivers out of obj-y and put components in.
-obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
-
-# Translate to Rules.make lists.
-O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
-OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
+subdir-$(CONFIG_PARIDE) += paride
 
 include $(TOPDIR)/Rules.make

@@ -8,8 +8,10 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
 O_TARGET := fat.o
-O_OBJS   := buffer.o cache.o dir.o file.o inode.o misc.o tables.o cvf.o
-OX_OBJS  := fatfs_syms.o
-M_OBJS   := $(O_TARGET)
+
+export-objs := fatfs_syms.o
+
+obj-y    := buffer.o cache.o dir.o file.o inode.o misc.o tables.o cvf.o fatfs_syms.o
+obj-m    := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -7,59 +7,39 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-ALL_SUB_DIRS := irlan irnet ircomm compressors
-SUB_DIRS :=
-MOD_SUB_DIRS :=
-OX_OBJS :=
-
 O_TARGET := irda.o
-O_OBJS	 := iriap.o iriap_event.o irlmp.o irlmp_event.o irlmp_frame.o \
+
+export-objs := irsyms.o
+
+obj-y	 := iriap.o iriap_event.o irlmp.o irlmp_event.o irlmp_frame.o \
             irlap.o irlap_event.o irlap_frame.o timer.o qos.o irqueue.o \
             irttp.o irda_device.o irias_object.o crc.o wrapper.o af_irda.o \
-	    discovery.o parameters.o
-OX_OBJS := irsyms.o
+	    discovery.o parameters.o irsyms.o
 
 ifeq ($(CONFIG_IRDA),m)
-M_OBJS   := $(O_TARGET)
+obj-m   := $(O_TARGET)
 endif
 
-ifeq ($(CONFIG_IRDA_COMPRESSION),y)
-O_OBJS += irlap_comp.o
-endif
+obj-$(CONFIG_IRDA_COMPRESSION) += irlap_comp.o
+obj-$(CONFIG_PROC_FS) += irproc.o
+obj-$(CONFIG_SYSCTL) += irsysctl.o
+obj-$(CONFIG_IRLAN) += irlan/irlan.o
 
-ifeq ($(CONFIG_PROC_FS),y)
-O_OBJS += irproc.o
-endif
-
-ifeq ($(CONFIG_SYSCTL),y)
-O_OBJS += irsysctl.o
-endif
+subdir-$(CONFIG_IRLAN) += irlan
+subdir-$(CONFIG_IRNET) += irnet
+subdir-$(CONFIG_IRCOMM) += ircomm
+subdir-$(CONFIG_IRDA_COMPRESSION) += compressors
 
 ifeq ($(CONFIG_IRLAN),y)
-SUB_DIRS += irlan
-O_OBJS += irlan/irlan.o
-else
-  ifeq ($(CONFIG_IRLAN),m)
-  MOD_SUB_DIRS += irlan
-  endif
+obj-y += irlan/irlan.o
 endif
 
 ifeq ($(CONFIG_IRNET),y)
-SUB_DIRS += irnet
-O_OBJS += irnet/irnet.o
-else
-  ifeq ($(CONFIG_IRNET),m)
-  MOD_SUB_DIRS += irnet
-  endif
-endif
-
-ifeq ($(CONFIG_IRDA_COMPRESSION),y)
-SUB_DIRS += compressors
-MOD_IN_SUB_DIRS += compressors
+obj-y += irnet/irnet.o
 endif
 
 ifeq ($(CONFIG_IRDA_DEFLATE),y)
-O_OBJS += compressors/irda_deflate.o
+obj-y += compressors/irda_deflate.o
 else
   ifeq ($(CONFIG_IRDA_DEFLATE),m)
   MOD_TO_LIST += irda_deflate.o
@@ -67,12 +47,7 @@ else
 endif
 
 ifeq ($(CONFIG_IRCOMM),y)
-SUB_DIRS += ircomm
-O_OBJS += ircomm/ircomm_and_tty.o
-else
-  ifeq ($(CONFIG_IRCOMM),m)
-  MOD_SUB_DIRS += ircomm
-  endif
+obj-y += ircomm/ircomm_and_tty.o
 endif
 
 include $(TOPDIR)/Rules.make

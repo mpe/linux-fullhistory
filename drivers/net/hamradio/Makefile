@@ -11,10 +11,6 @@
 #
 
 
-SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) soundmodem
-
 O_TARGET := hamradio.o
 
 export-objs	= hdlcdrv.o
@@ -34,22 +30,10 @@ obj-$(CONFIG_BAYCOM_PAR)	+= baycom_par.o		hdlcdrv.o
 obj-$(CONFIG_BAYCOM_EPP)	+= baycom_epp.o		hdlcdrv.o
 obj-$(CONFIG_SOUNDMODEM)	+= 			hdlcdrv.o
 
+subdir-$(CONFIG_SOUNDMODEM) += soundmodem
+
 ifeq ($(CONFIG_SOUNDMODEM),y)
-SUB_DIRS += soundmodem
-O_OBJS += soundmodem/soundmodem.o
-else
-  ifeq ($(CONFIG_SOUNDMODEM),m)
-  MOD_SUB_DIRS += soundmodem
-  endif
+obj-y += soundmodem/soundmodem.o
 endif
-
-# Files that are both resident and modular: remove from modular.
-obj-m		:= $(filter-out $(obj-y), $(obj-m))
-
-# Translate to Rules.make lists.
-O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
-OX_OBJS		:= $(filter     $(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make

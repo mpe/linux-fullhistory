@@ -30,7 +30,7 @@ endif
 endif
 
 O_TARGET := jffs.o
-M_OBJS   := $(O_TARGET)
-O_OBJS   := jffs_fm.o intrep.o $(INODE_O)
+obj-m    := $(O_TARGET)
+obj-y    := jffs_fm.o intrep.o $(INODE_O)
 
 include $(TOPDIR)/Rules.make

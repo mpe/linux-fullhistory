@@ -5,18 +5,14 @@
 
 O_TARGET	:= agp.o
 
-ifeq ($(CONFIG_AGP),y)
-  O_OBJS += agpgart_fe.o
-  OX_OBJS += agpgart_be.o
-else
-  ifeq ($(CONFIG_AGP), m)
-    MI_OBJS += agpgart_fe.o
-    MIX_OBJS += agpgart_be.o
-    M_OBJS += agpgart.o
-  endif
-endif
+export-objs := agpgart_be.o
+
+multi-objs := agpgart.o
+agpgart-objs := agpgart_fe.o agpgart_be.o
+
+obj-$(CONFIG_AGP) += agpgart.o
 
 include $(TOPDIR)/Rules.make
 
-agpgart.o: agpgart_be.o agpgart_fe.o
-	$(LD) $(LD_RFLAG) -r -o $@ agpgart_be.o agpgart_fe.o
+agpgart.o: $(agpgart-objs)
+	$(LD) $(LD_RFLAG) -r -o $@ $(agpgart-objs)

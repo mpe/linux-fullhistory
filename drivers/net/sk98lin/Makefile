@@ -3,20 +3,12 @@
 # Makefile for the SysKonnect SK-98xx device driver.
 #
 
-ifeq ($(CONFIG_SK98LIN),y)
-    O_TARGET := sk98lin.o
-    O_OBJS = skge.o skaddr.o skgehwt.o skgeinit.o skgepnmi.o skgesirq.o \
+O_TARGET := sk98lin.o
+
+obj-y :=     skge.o skaddr.o skgehwt.o skgeinit.o skgepnmi.o skgesirq.o \
              ski2c.o sklm80.o skqueue.o skrlmt.o sktimer.o skvpd.o \
              skxmac2.o skcsum.o
-else
-  ifeq ($(CONFIG_SK98LIN),m)
-    M_OBJS := sk98lin.o
-    O_TARGET := sk98lin.o
-    O_OBJS = skge.o skaddr.o skgehwt.o skgeinit.o skgepnmi.o skgesirq.o \
-             ski2c.o sklm80.o skqueue.o skrlmt.o sktimer.o skvpd.o \
-             skxmac2.o skcsum.o
-  endif
-endif
+obj-m := $(O_TARGET)
 
 # DBGDEF =  \
 # -DDEBUG

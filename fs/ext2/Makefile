@@ -8,8 +8,9 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := ext2.o
-O_OBJS   := acl.o balloc.o bitmap.o dir.o file.o fsync.o ialloc.o inode.o \
+
+obj-y    := acl.o balloc.o bitmap.o dir.o file.o fsync.o ialloc.o inode.o \
 		ioctl.o namei.o super.o symlink.o
-M_OBJS   := $(O_TARGET)
+obj-m    := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

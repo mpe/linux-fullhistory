@@ -3,6 +3,7 @@
 # 30 Jan 1998, Michael Elizabeth Chastain, <mailto:mec@shout.net>
 # Rewritten to use lists instead of if-statements.
 
+O_TARGET	:= driver.o
 
 
 # All of the (potential) objects that export symbols.
@@ -41,25 +42,6 @@ obj-$(CONFIG_SBPCD3)		+= sbpcd3.o     cdrom.o
 obj-$(CONFIG_SBPCD4)		+= sbpcd4.o     cdrom.o
 obj-$(CONFIG_SJCD)		+= sjcd.o
 obj-$(CONFIG_CDU535)		+= sonycd535.o
-
-
-
-# Files that are both resident and modular: remove from modular.
-
-obj-m		:= $(filter-out $(obj-y), $(obj-m))
-
-
-
-# Translate to Rules.make lists.
-
-L_TARGET	:= cdrom.a
-
-L_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-y)))
-LX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-y)))
-M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
-
-
 
 # Hand off to Rules.make.
 

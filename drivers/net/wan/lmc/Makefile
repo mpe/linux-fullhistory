@@ -4,24 +4,11 @@
 # Specifically the 1000,1200,5200,5245
 #
 
-ifeq ($(CONFIG_LANMEDIA),y)
-    O_TARGET := lmc.o
-    O_OBJS = lmc_debug.o lmc_media.o lmc_main.o lmc_proto.o
-else
-  ifeq ($(CONFIG_LANMEDIA),m)
-    M_OBJS := lmc.o
-    O_TARGET := lmc.o
-    O_OBJS = lmc_debug.o lmc_media.o lmc_main.o lmc_proto.o
-  endif
-endif
+O_TARGET := lmc.o
 
-#
-# Base debugging and event log (doubles lmc.o size)
-#
-# DBGDEF =  \
-# -DDEBUG
+obj-y := lmc_debug.o lmc_media.o lmc_main.o lmc_proto.o
+obj-m := lmc.o
 
-#
 # Like above except every packet gets echoed to KERN_DEBUG
 # in hex
 #

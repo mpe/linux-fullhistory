@@ -8,9 +8,9 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET	:= bridge.o
-O_OBJS		:= br.o br_device.o br_fdb.o br_forward.o br_if.o br_input.o \
+obj-y		:= br.o br_device.o br_fdb.o br_forward.o br_if.o br_input.o \
 			br_ioctl.o br_notify.o br_stp.o br_stp_bpdu.o \
 			br_stp_if.o br_stp_timer.o
-M_OBJS		:= $(O_TARGET)
+obj-m		:= $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

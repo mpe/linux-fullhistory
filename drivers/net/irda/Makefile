@@ -5,10 +5,6 @@
 # Rewritten to use lists instead of if-statements.
 #
 
-SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
-
 O_TARGET := irda.o
 
 export-objs	= irport.o
@@ -26,15 +22,5 @@ obj-$(CONFIG_ACTISYS_DONGLE)	+= actisys.o
 obj-$(CONFIG_GIRBIL_DONGLE)	+= girbil.o
 obj-$(CONFIG_LITELINK_DONGLE)	+= litelink.o
 obj-$(CONFIG_OLD_BELKIN_DONGLE)	+= old_belkin.o
-
-
-# Files that are both resident and modular: remove from modular.
-obj-m		:= $(filter-out $(obj-y), $(obj-m))
-
-# Translate to Rules.make lists.
-O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
-OX_OBJS		:= $(filter     $(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make

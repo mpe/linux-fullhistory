@@ -8,13 +8,8 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := irlan.o
-O_OBJS	 := irlan_common.o irlan_eth.o irlan_event.o irlan_client.o irlan_provider.o irlan_filter.o irlan_provider_event.o irlan_client_event.o
-M_OBJS   := $(O_TARGET)
-MI_OBJS  :=
 
-OX_OBJS  += 
+obj-y	:= irlan_common.o irlan_eth.o irlan_event.o irlan_client.o irlan_provider.o irlan_filter.o irlan_provider_event.o irlan_client_event.o
+obj-m	:= $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
-
-tar:
-		tar -cvf /dev/f1 .

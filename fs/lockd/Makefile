@@ -8,14 +8,14 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := lockd.o
-O_OBJS   := clntlock.o clntproc.o host.o svc.o svclock.o svcshare.o \
-	    svcproc.o svcsubs.o mon.o xdr.o
 
-ifdef CONFIG_LOCKD_V4
- O_OBJS += xdr4.o svc4proc.o
-endif
+export-objs := lockd_syms.o
 
-OX_OBJS  := lockd_syms.o
-M_OBJS   := $(O_TARGET)
+obj-y    := clntlock.o clntproc.o host.o svc.o svclock.o svcshare.o \
+	    svcproc.o svcsubs.o mon.o xdr.o lockd_syms.o
+
+obj-$(CONFIG_LOCKD_V4) += xdr4.o svc4proc.o
+
+obj-m    := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -18,9 +18,4 @@ obj-		:=
 obj-$(CONFIG_PCMCIA_SERIAL_CS)	+= serial_cs.o
 obj-$(CONFIG_PCMCIA_SERIAL_CB)	+= serial_cb.o
 
-O_OBJS		:= $(obj-y)
-OX_OBJS		:=
-M_OBJS		:= $(obj-m)
-MX_OBJS		:=
-
 include $(TOPDIR)/Rules.make

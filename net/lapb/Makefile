@@ -9,10 +9,11 @@
 
 
 O_TARGET := lapb.o
-O_OBJS	 := lapb_in.o lapb_out.o lapb_subr.o lapb_timer.o
-M_OBJS   := $(O_TARGET)
 
-OX_OBJS  += lapb_iface.o
+export-objs := lapb_iface.o
+
+obj-y	 := lapb_in.o lapb_out.o lapb_subr.o lapb_timer.o lapb_iface.o
+obj-m    := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
 

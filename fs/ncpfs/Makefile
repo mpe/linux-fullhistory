@@ -8,9 +8,10 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
 O_TARGET := ncpfs.o
-O_OBJS   := dir.o file.o inode.o ioctl.o mmap.o ncplib_kernel.o sock.o \
+
+obj-y    := dir.o file.o inode.o ioctl.o mmap.o ncplib_kernel.o sock.o \
 		symlink.o ncpsign_kernel.o
-M_OBJS   := $(O_TARGET)
+obj-m    := $(O_TARGET)
 
 # If you want debugging output, please uncomment the following line
 # EXTRA_CFLAGS += -DDEBUG_NCP=1

@@ -11,13 +11,15 @@ include ../../.config
 
 O_TARGET= atm.o
 
-ifeq ($(CONFIG_ATM),y)
+export-objs = common.o atm_misc.o raw.o resources.o ipcommon.o proc.o lane_mpoa_init.o
 
-O_OBJS	= addr.o pvc.o signaling.o svc.o
-OX_OBJS = common.o atm_misc.o raw.o resources.o
+multi-list = mpoa.o
+mpoa-objs = mpc.o mpoa_caches.o mpoa_proc.o
+
+obj-$(CONFIG_ATM) = addr.o pvc.o signaling.o svc.o common.o atm_misc.o raw.o resources.o
 
 ifeq ($(CONFIG_ATM_CLIP),y)
-O_OBJS += clip.o
+obj-y += clip.o
 NEED_IPCOM = ipcommon.o
 endif
 
@@ -25,34 +27,16 @@ ifeq ($(CONFIG_NET_SCH_ATM),y)
 NEED_IPCOM = ipcommon.o
 endif
 
-OX_OBJS += $(NEED_IPCOM)
+obj-y += $(NEED_IPCOM)
 
 ifeq ($(CONFIG_PROC_FS),y)
-OX_OBJS += proc.o
+obj-y += proc.o
 endif
 
-ifeq ($(CONFIG_ATM_LANE),y)
-O_OBJS += lec.o
-OX_OBJS += lane_mpoa_init.o
-else
-  ifeq ($(CONFIG_ATM_LANE),m)
-  OX_OBJS += lane_mpoa_init.o
-  M_OBJS += lec.o
-  endif
-endif
-
-ifeq ($(CONFIG_ATM_MPOA),y)
-O_OBJS += mpc.o mpoa_caches.o mpoa_proc.o
-else
-  ifeq ($(CONFIG_ATM_MPOA),m)
-  M_OBJS += mpoa.o
-  endif
-endif
-
-endif
-
+obj-$(CONFIG_ATM_LANE) += lec.o lane_mpoa_init.o
+obj-$(CONFIG_ATM_MPOA) += mpoa.o
 
 include $(TOPDIR)/Rules.make
 
-mpoa.o: mpc.o mpoa_caches.o mpoa_proc.o
-	$(LD) -r -o mpoa.o mpc.o mpoa_caches.o mpoa_proc.o
+mpoa.o: $(mpoa-objs)
+	$(LD) -r -o mpoa.o $(mpoa-objs)

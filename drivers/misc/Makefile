@@ -9,14 +9,7 @@
 # parent makes..
 #
 
-SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS)
-
 O_TARGET := misc.o
-M_OBJS   :=
-O_OBJS   :=
-OX_OBJS  :=
 
 include $(TOPDIR)/Rules.make
 

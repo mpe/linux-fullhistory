@@ -4,8 +4,7 @@
 
 O_TARGET := ramfs.o
 
-O_OBJS := inode.o
-
-M_OBJS := $(O_TARGET)
+obj-y := inode.o
+obj-m := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -3,8 +3,9 @@
 #
 
 O_TARGET := devpts.o
-O_OBJS   := root.o inode.o
 
-M_OBJS   := $(O_TARGET)
+obj-y    := root.o inode.o
+
+obj-m    := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

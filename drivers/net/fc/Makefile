@@ -9,7 +9,4 @@ O_TARGET := fc.o
 
 obj-$(CONFIG_IPHASE5526)	+= iph5526.o
 
-O_OBJS	:= $(obj-y)
-M_OBJS	:= $(obj-m)
-
 include $(TOPDIR)/Rules.make

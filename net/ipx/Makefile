@@ -10,24 +10,17 @@
 # We only get in/to here if CONFIG_IPX = 'y' or 'm'
 
 O_TARGET := ipx.o
-M_OBJS   :=
-OX_OBJS  := af_ipx.o
+
+export-objs = af_ipx.o af_spx.o
+
+obj-y	:= af_ipx.o
 
 ifeq ($(CONFIG_IPX),m)
-  M_OBJS += $(O_TARGET)
+  obj-m += $(O_TARGET)
 endif
 
-ifeq ($(CONFIG_SYSCTL),y)
-  O_OBJS += sysctl_net_ipx.o
-endif
-
-ifeq ($(CONFIG_SPX),y)
-OX_OBJS += af_spx.o
-else
-  ifeq ($(CONFIG_SPX),m)
-  MX_OBJS += af_spx.o
-  endif
-endif
+obj-$(CONFIG_SYSCTL) += sysctl_net_ipx.o
+obj-$(CONFIG_SPX) += af_spx.o
 
 include $(TOPDIR)/Rules.make
 

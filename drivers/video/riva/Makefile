@@ -8,7 +8,8 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := rivafb.o
-O_OBJS   := fbdev.o riva_hw.o
-M_OBJS   := $(O_TARGET)
+
+obj-y    := fbdev.o riva_hw.o
+obj-m    := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

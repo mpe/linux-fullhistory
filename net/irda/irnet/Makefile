@@ -9,14 +9,8 @@
 
 MOD_LIST_NAME := IRDA_MODULES
 O_TARGET := irnet.o
-#O_OBJS	 := irnet_ppp.o
-O_OBJS	 := irnet_ppp.o irnet_irda.o
-M_OBJS   := $(O_TARGET)
-MI_OBJS  :=
 
-OX_OBJS  += 
+obj-y	:= irnet_ppp.o irnet_irda.o
+obj-m	:= $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
-
-tar:
-		tar -cvf /dev/f1 .

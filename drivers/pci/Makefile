@@ -9,22 +9,21 @@
 # parent makefile.
 #
 
-L_TARGET := pci.a
+O_TARGET := driver.o
 
-# Nasty trick as we need to link files with no references from the outside.
-O_TARGET := pci_core.o
-L_OBJS	 := pci_core.o
-O_OBJS   := quirks.o
-OX_OBJS   := pci.o
+export-objs := pci.o
 
-ifdef CONFIG_PROC_FS
-O_OBJS   += proc.o
-endif
+obj-$(CONFIG_PCI) += pci.o quirks.o compat.o names.o setup-res.o
+obj-$(CONFIG_PROC_FS) += proc.o
 
-L_OBJS   += compat.o names.o setup-res.o setup-bus.o setup-irq.o
+#
+# Some architectures use the generic PCI setup functions
+#
+obj-$(CONFIG_ALPHA) += setup-bus.o setup-irq.o
+obj-$(CONFIG_ARM) += setup-bus.o setup-irq.o
 
 ifndef CONFIG_X86
-L_OBJS   += syscall.o
+obj-y += syscall.o
 endif
 
 include $(TOPDIR)/Rules.make

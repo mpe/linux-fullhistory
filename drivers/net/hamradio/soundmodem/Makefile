@@ -11,36 +11,18 @@
 
 O_TARGET	:= soundmodem.o
 
-O_OBJS		:= sm.o
-ifeq ($(CONFIG_SOUNDMODEM_SBC),y)
-O_OBJS		+= sm_sbc.o
-endif
-ifeq ($(CONFIG_SOUNDMODEM_WSS),y)
-O_OBJS		+= sm_wss.o
-endif
-ifeq ($(CONFIG_SOUNDMODEM_AFSK1200),y)
-O_OBJS		+= sm_afsk1200.o
-endif
-ifeq ($(CONFIG_SOUNDMODEM_AFSK2400_7),y)
-O_OBJS		+= sm_afsk2400_7.o
-endif
-ifeq ($(CONFIG_SOUNDMODEM_AFSK2400_8),y)
-O_OBJS		+= sm_afsk2400_8.o
-endif
-ifeq ($(CONFIG_SOUNDMODEM_AFSK2666),y)
-O_OBJS		+= sm_afsk2666.o
-endif
-ifeq ($(CONFIG_SOUNDMODEM_HAPN4800),y)
-O_OBJS		+= sm_hapn4800.o
-endif
-ifeq ($(CONFIG_SOUNDMODEM_PSK4800),y)
-O_OBJS		+= sm_psk4800.o
-endif
-ifeq ($(CONFIG_SOUNDMODEM_FSK9600),y)
-O_OBJS		+= sm_fsk9600.o
-endif
+obj-y		:= sm.o
+obj-$(CONFIG_SOUNDMODEM_SBC) += sm_sbc.o
+obj-$(CONFIG_SOUNDMODEM_WSS) += sm_wss.o
+obj-$(CONFIG_SOUNDMODEM_AFSK1200) += sm_afsk1200.o
+obj-$(CONFIG_SOUNDMODEM_AFSK2400_7) += sm_afsk2400_7.o
+obj-$(CONFIG_SOUNDMODEM_AFSK2400_8) += sm_afsk2400_8.o
+obj-$(CONFIG_SOUNDMODEM_AFSK2666) += sm_afsk2666.o
+obj-$(CONFIG_SOUNDMODEM_HAPN4800) += sm_hapn4800.o
+obj-$(CONFIG_SOUNDMODEM_PSK4800) += sm_psk4800.o
+obj-$(CONFIG_SOUNDMODEM_FSK9600) += sm_fsk9600.o
 
-M_OBJS		:= $(O_TARGET)
+obj-m		:= $(O_TARGET)
 
 all:		all_targets
 .PHONY:		all

@@ -9,171 +9,171 @@
 
 O_TARGET := sched.o
 
-O_OBJS	:= sch_generic.o
+obj-y	:= sch_generic.o
 
 ifeq ($(CONFIG_NET_SCHED), y)
 
-O_OBJS += sch_api.o sch_fifo.o
+obj-y += sch_api.o sch_fifo.o
 
 ifeq ($(CONFIG_NET_ESTIMATOR), y)
-O_OBJS += estimator.o
+obj-y += estimator.o
 endif
 
 ifeq ($(CONFIG_NET_CLS), y)
-O_OBJS += cls_api.o
+obj-y += cls_api.o
 
 ifeq ($(CONFIG_NET_CLS_POLICE), y)
-O_OBJS += police.o
+obj-y += police.o
 endif
 
 endif
 
 ifeq ($(CONFIG_NET_SCH_INGRESS), y)
-O_OBJS += sch_ingress.o 
+obj-y += sch_ingress.o 
 else
   ifeq ($(CONFIG_NET_SCH_INGRESS), m)
-	M_OBJS += sch_ingress.o 
+	obj-m += sch_ingress.o 
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_CBQ), y)
-O_OBJS += sch_cbq.o
+obj-y += sch_cbq.o
 else
   ifeq ($(CONFIG_NET_SCH_CBQ), m)
-	M_OBJS += sch_cbq.o
+	obj-m += sch_cbq.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_CSZ), y)
-O_OBJS += sch_csz.o
+obj-y += sch_csz.o
 else
   ifeq ($(CONFIG_NET_SCH_CSZ), m)
-	M_OBJS += sch_csz.o
+	obj-m += sch_csz.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_HPFQ), y)
-O_OBJS += sch_hpfq.o
+obj-y += sch_hpfq.o
 else
   ifeq ($(CONFIG_NET_SCH_HPFQ), m)
-	M_OBJS += sch_hpfq.o
+	obj-m += sch_hpfq.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_HFSC), y)
-O_OBJS += sch_hfsc.o
+obj-y += sch_hfsc.o
 else
   ifeq ($(CONFIG_NET_SCH_HFSC), m)
-	M_OBJS += sch_hfsc.o
+	obj-m += sch_hfsc.o
   endif
 endif
 
 
 ifeq ($(CONFIG_NET_SCH_SFQ), y)
-O_OBJS += sch_sfq.o
+obj-y += sch_sfq.o
 else
   ifeq ($(CONFIG_NET_SCH_SFQ), m)
-	M_OBJS += sch_sfq.o
+	obj-m += sch_sfq.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_RED), y)
-O_OBJS += sch_red.o
+obj-y += sch_red.o
 else
   ifeq ($(CONFIG_NET_SCH_RED), m)
-	M_OBJS += sch_red.o
+	obj-m += sch_red.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_TBF), y)
-O_OBJS += sch_tbf.o
+obj-y += sch_tbf.o
 else
   ifeq ($(CONFIG_NET_SCH_TBF), m)
-	M_OBJS += sch_tbf.o
+	obj-m += sch_tbf.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_PRIO), y)
-O_OBJS += sch_prio.o
+obj-y += sch_prio.o
 else
   ifeq ($(CONFIG_NET_SCH_PRIO), m)
-	M_OBJS += sch_prio.o
+	obj-m += sch_prio.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_TEQL), y)
-O_OBJS += sch_teql.o
+obj-y += sch_teql.o
 else
   ifeq ($(CONFIG_NET_SCH_TEQL), m)
-	M_OBJS += sch_teql.o
+	obj-m += sch_teql.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_GRED), y)
-O_OBJS += sch_gred.o
+obj-y += sch_gred.o
 else
   ifeq ($(CONFIG_NET_SCH_GRED), m)
-       M_OBJS += sch_gred.o
+       obj-m += sch_gred.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_DSMARK), y)
-O_OBJS += sch_dsmark.o
+obj-y += sch_dsmark.o
 else
   ifeq ($(CONFIG_NET_SCH_DSMARK), m)
-       M_OBJS += sch_dsmark.o
+       obj-m += sch_dsmark.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_CLS_TCINDEX), y)
-O_OBJS += cls_tcindex.o
+obj-y += cls_tcindex.o
 else
   ifeq ($(CONFIG_NET_CLS_TCINDEX), m)
-       M_OBJS += cls_tcindex.o
+       obj-m += cls_tcindex.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_SCH_ATM), y)
-O_OBJS += sch_atm.o
+obj-y += sch_atm.o
 endif
 
 ifeq ($(CONFIG_NET_CLS_U32), y)
-O_OBJS += cls_u32.o
+obj-y += cls_u32.o
 else
   ifeq ($(CONFIG_NET_CLS_U32), m)
-	M_OBJS += cls_u32.o
+	obj-m += cls_u32.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_CLS_RSVP), y)
-O_OBJS += cls_rsvp.o
+obj-y += cls_rsvp.o
 else
   ifeq ($(CONFIG_NET_CLS_RSVP), m)
-	M_OBJS += cls_rsvp.o
+	obj-m += cls_rsvp.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_CLS_RSVP6), y)
-O_OBJS += cls_rsvp6.o
+obj-y += cls_rsvp6.o
 else
   ifeq ($(CONFIG_NET_CLS_RSVP6), m)
-	M_OBJS += cls_rsvp6.o
+	obj-m += cls_rsvp6.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_CLS_ROUTE4), y)
-O_OBJS += cls_route.o
+obj-y += cls_route.o
 else
   ifeq ($(CONFIG_NET_CLS_ROUTE4), m)
-	M_OBJS += cls_route.o
+	obj-m += cls_route.o
   endif
 endif
 
 ifeq ($(CONFIG_NET_CLS_FW), y)
-O_OBJS += cls_fw.o
+obj-y += cls_fw.o
 else
   ifeq ($(CONFIG_NET_CLS_FW), m)
-	M_OBJS += cls_fw.o
+	obj-m += cls_fw.o
   endif
 endif
 

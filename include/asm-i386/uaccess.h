@@ -511,7 +511,7 @@ do {								\
 			"	stosb\n"			\
 			"	popl %%eax\n"			\
 			"	incl %0\n"			\
-			"	jmp 2b\n"			\
+			"	jmp 3b\n"			\
 			".previous\n"				\
 			".section __ex_table,\"a\"\n"		\
 			"	.align 4\n"			\

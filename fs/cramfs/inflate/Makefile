@@ -28,7 +28,7 @@
 
 O_TARGET := zlib.o
 
-O_OBJS := adler32.o infblock.o infcodes.o inffast.o inflate.o \
-          inftrees.o infutil.o uncompr.o
+obj-y := adler32.o infblock.o infcodes.o inffast.o inflate.o \
+         inftrees.o infutil.o uncompr.o
 
 include $(TOPDIR)/Rules.make

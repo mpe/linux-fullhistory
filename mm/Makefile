@@ -8,12 +8,11 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := mm.o
-O_OBJS	 := memory.o mmap.o filemap.o mprotect.o mlock.o mremap.o \
+
+obj-y	 := memory.o mmap.o filemap.o mprotect.o mlock.o mremap.o \
 	    vmalloc.o slab.o bootmem.o swap.o vmscan.o page_io.o \
 	    page_alloc.o swap_state.o swapfile.o numa.o oom_kill.o
 
-ifeq ($(CONFIG_HIGHMEM),y)
-O_OBJS += highmem.o
-endif
+obj-$(CONFIG_HIGHMEM) += highmem.o
 
 include $(TOPDIR)/Rules.make

@@ -8,229 +8,59 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := netfilter.o
-M_OBJS :=
 
-IP_NF_CONNTRACK_OBJ:=ip_conntrack_core.o ip_conntrack_proto_generic.o ip_conntrack_proto_tcp.o ip_conntrack_proto_udp.o ip_conntrack_proto_icmp.o
+export-objs = ip_conntrack_standalone.o ip_conntrack_ftp.o ip_fw_compat.o ip_nat_standalone.o ip_tables.o
 
-IP_NF_NAT_OBJ:=ip_nat_core.o ip_nat_proto_unknown.o ip_nat_proto_tcp.o ip_nat_proto_udp.o ip_nat_proto_icmp.o
+# Multipart objects.
+list-multi		:= ip_conntrack.o iptable_nat.o ipfwadm.o ipchains.o
 
-# All the parts of conntrack and NAT required for compatibility layer.
-IP_NF_COMPAT_LAYER:=ip_fw_compat.o ip_fw_compat_redir.o ip_fw_compat_masq.o $(IP_NF_CONNTRACK_OBJ) $(IP_NF_NAT_OBJ)
+ip_conntrack-objs	:= ip_conntrack_standalone.o ip_conntrack_core.o ip_conntrack_proto_generic.o ip_conntrack_proto_tcp.o ip_conntrack_proto_udp.o ip_conntrack_proto_icmp.o
+iptable_nat-objs	:= ip_nat_standalone.o ip_nat_rule.o ip_nat_core.o ip_nat_proto_unknown.o ip_nat_proto_tcp.o ip_nat_proto_udp.o ip_nat_proto_icmp.o
+ip_nf_compat-objs	:= ipfwadm_core.o ip_fw_compat.o ip_fw_compat_redir.o ip_fw_compat_masq.o $(ip_conntrack-objs) $(iptable_nat-objs)
+ipfwadm-objs		:= ipfwadm_core.o
+ipchains-objs		:= ipchains_core.o
 
-# Link order matters here.
-ifeq ($(CONFIG_IP_NF_CONNTRACK),y)
-OX_OBJS += ip_conntrack_standalone.o
-O_OBJS += $(IP_NF_CONNTRACK_OBJ)
-else
-  ifeq ($(CONFIG_IP_NF_CONNTRACK),m)
-  MI_OBJS += $(IP_NF_CONNTRACK_OBJ)
-  MIX_OBJS += ip_conntrack_standalone.o
-  M_OBJS += ip_conntrack.o
-  endif
-endif
+obj-$(CONFIG_IP_NF_CONNTRACK) += ip_conntrack.o
+obj-$(CONFIG_IP_NF_FTP) += ip_conntrack_ftp.o
+obj-$(CONFIG_IP_NF_IPTABLES) += ip_tables.o
+obj-$(CONFIG_IP_NF_MATCH_LIMIT) += ipt_limit.o
+obj-$(CONFIG_IP_NF_MATCH_MARK) += ipt_mark.o
+obj-$(CONFIG_IP_NF_MATCH_MAC) += ipt_mac.o
+obj-$(CONFIG_IP_NF_MATCH_MULTIPORT) += ipt_multiport.o
+obj-$(CONFIG_IP_NF_MATCH_OWNER) += ipt_owner.o
+obj-$(CONFIG_IP_NF_MATCH_TOS) += ipt_tos.o
+obj-$(CONFIG_IP_NF_MATCH_STATE) += ipt_state.o
+obj-$(CONFIG_IP_NF_MATCH_UNCLEAN) += ipt_unclean.o
+obj-$(CONFIG_IP_NF_NAT) += iptable_nat.o
+obj-$(CONFIG_IP_NF_FTP) += ip_nat_ftp.o
+obj-$(CONFIG_IP_NF_FILTER) += iptable_filter.o
+obj-$(CONFIG_IP_NF_MANGLE) += iptable_mangle.o
 
-ifeq ($(CONFIG_IP_NF_FTP),y)
-OX_OBJS += ip_conntrack_ftp.o
-else
-  ifeq ($(CONFIG_IP_NF_FTP),m)
-  MX_OBJS += ip_conntrack_ftp.o
-  endif
-endif
+obj-$(CONFIG_IP_NF_TARGET_REJECT) += ipt_REJECT.o
+obj-$(CONFIG_IP_NF_TARGET_MIRROR) += ipt_MIRROR.o
+obj-$(CONFIG_IP_NF_TARGET_TOS) += ipt_TOS.o
+obj-$(CONFIG_IP_NF_TARGET_MARK) += ipt_MARK.o
+obj-$(CONFIG_IP_NF_TARGET_MASQUERADE) += ipt_MASQUERADE.o
+obj-$(CONFIG_IP_NF_TARGET_REDIRECT) += ipt_REDIRECT.o
+obj-$(CONFIG_IP_NF_TARGET_LOG) += ipt_LOG.o
 
-ifeq ($(CONFIG_IP_NF_IPTABLES),y)
-OX_OBJS += ip_tables.o
-else
-  ifeq ($(CONFIG_IP_NF_IPTABLES),m)
-  MX_OBJS += ip_tables.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_MATCH_LIMIT),y)
-O_OBJS += ipt_limit.o
-else
-  ifeq ($(CONFIG_IP_NF_MATCH_LIMIT),m)
-  M_OBJS += ipt_limit.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_MATCH_MARK),y)
-O_OBJS += ipt_mark.o
-else
-  ifeq ($(CONFIG_IP_NF_MATCH_MARK),m)
-  M_OBJS += ipt_mark.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_MATCH_MAC),y)
-O_OBJS += ipt_mac.o
-else
-  ifeq ($(CONFIG_IP_NF_MATCH_MAC),m)
-  M_OBJS += ipt_mac.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_MATCH_MULTIPORT),y)
-O_OBJS += ipt_multiport.o
-else
-  ifeq ($(CONFIG_IP_NF_MATCH_MULTIPORT),m)
-  M_OBJS += ipt_multiport.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_MATCH_OWNER),y)
-O_OBJS += ipt_owner.o
-else
-  ifeq ($(CONFIG_IP_NF_MATCH_OWNER),m)
-  M_OBJS += ipt_owner.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_MATCH_TOS),y)
-O_OBJS += ipt_tos.o
-else
-  ifeq ($(CONFIG_IP_NF_MATCH_TOS),m)
-  M_OBJS += ipt_tos.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_MATCH_STATE),y)
-O_OBJS += ipt_state.o
-else
-  ifeq ($(CONFIG_IP_NF_MATCH_STATE),m)
-  M_OBJS += ipt_state.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_MATCH_UNCLEAN),y)
-O_OBJS += ipt_unclean.o
-else
-  ifeq ($(CONFIG_IP_NF_MATCH_UNCLEAN),m)
-  M_OBJS += ipt_unclean.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_NAT),y)
-O_OBJS += ip_nat_standalone.o ip_nat_rule.o $(IP_NF_NAT_OBJ) 
-  ifeq ($(CONFIG_IP_NF_FTP),y)
-  O_OBJS += ip_nat_ftp.o
-  endif
-else
-  ifeq ($(CONFIG_IP_NF_NAT),m)
-  MI_OBJS += ip_nat_rule.o $(IP_NF_NAT_OBJ) 
-  MIX_OBJS += ip_nat_standalone.o
-  M_OBJS += iptable_nat.o
-    ifeq ($(CONFIG_IP_NF_FTP),m)
-    M_OBJS += ip_nat_ftp.o
-    endif
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_FILTER),y)
-O_OBJS += iptable_filter.o
-else
-  ifeq ($(CONFIG_IP_NF_FILTER),m)
-  M_OBJS += iptable_filter.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_MANGLE),y)
-O_OBJS += iptable_mangle.o
-else
-  ifeq ($(CONFIG_IP_NF_MANGLE),m)
-  M_OBJS += iptable_mangle.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_TARGET_REJECT),y)
-O_OBJS += ipt_REJECT.o
-else
-  ifeq ($(CONFIG_IP_NF_TARGET_REJECT),m)
-  M_OBJS += ipt_REJECT.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_TARGET_MIRROR),y)
-O_OBJS += ipt_MIRROR.o
-else
-  ifeq ($(CONFIG_IP_NF_TARGET_MIRROR),m)
-  M_OBJS += ipt_MIRROR.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_TARGET_TOS),y)
-O_OBJS += ipt_TOS.o
-else
-  ifeq ($(CONFIG_IP_NF_TARGET_TOS),m)
-  M_OBJS += ipt_TOS.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_TARGET_MARK),y)
-O_OBJS += ipt_MARK.o
-else
-  ifeq ($(CONFIG_IP_NF_TARGET_MARK),m)
-  M_OBJS += ipt_MARK.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_TARGET_MASQUERADE),y)
-O_OBJS += ipt_MASQUERADE.o
-else
-  ifeq ($(CONFIG_IP_NF_TARGET_MASQUERADE),m)
-  M_OBJS += ipt_MASQUERADE.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_TARGET_REDIRECT),y)
-O_OBJS += ipt_REDIRECT.o
-else
-  ifeq ($(CONFIG_IP_NF_TARGET_REDIRECT),m)
-  M_OBJS += ipt_REDIRECT.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_TARGET_LOG),y)
-O_OBJS += ipt_LOG.o
-else
-  ifeq ($(CONFIG_IP_NF_TARGET_LOG),m)
-  M_OBJS += ipt_LOG.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_COMPAT_IPCHAINS),y)
-O_OBJS += ipchains_core.o $(IP_NF_COMPAT_LAYER)
-else
-  ifeq ($(CONFIG_IP_NF_COMPAT_IPCHAINS),m)
-  M_OBJS += ipchains.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_COMPAT_IPFWADM),y)
-O_OBJS += ipfwadm_core.o $(IP_NF_COMPAT_LAYER)
-else
-  ifeq ($(CONFIG_IP_NF_COMPAT_IPFWADM),m)
-  M_OBJS += ipfwadm.o
-  endif
-endif
-
-ifeq ($(CONFIG_IP_NF_QUEUE),y)
-O_OBJS += ip_queue.o
-else
-  ifeq ($(CONFIG_IP_NF_QUEUE),m)
-  M_OBJS += ip_queue.o
-  endif
-endif
+obj-$(CONFIG_IP_NF_COMPAT_IPCHAINS) += ipchains.o ip_nf_compat.o
+obj-$(CONFIG_IP_NF_COMPAT_IPFWADM) += ipfwadm.o ip_nf_compat.o
+obj-$(CONFIG_IP_NF_QUEUE) += ip_queue.o
 
 include $(TOPDIR)/Rules.make
 
-ip_conntrack.o: ip_conntrack_standalone.o $(IP_NF_CONNTRACK_OBJ)
-	$(LD) -r -o $@ $(IP_NF_CONNTRACK_OBJ) ip_conntrack_standalone.o 
+ip_conntrack.o: $(ip_conntrack-objs)
+	$(LD) -r -o $@ $(ip_conntrack-objs)
 
-iptable_nat.o: ip_nat_standalone.o ip_nat_rule.o $(IP_NF_NAT_OBJ) 
-	$(LD) -r -o $@ ip_nat_standalone.o ip_nat_rule.o $(IP_NF_NAT_OBJ)
+iptable_nat.o: $(iptable_nat-objs)
+	$(LD) -r -o $@ $(iptable_nat-objs)
 
-ipfwadm.o: ipfwadm_core.o $(IP_NF_COMPAT_LAYER)
-	$(LD) -r -o $@ ipfwadm_core.o $(IP_NF_COMPAT_LAYER)
+ipfwadm.o: $(ipfwadm-objs)
+	$(LD) -r -o $@ $(ipfwadm-objs)
 
-ipchains.o: ipchains_core.o $(IP_NF_COMPAT_LAYER) 
-	$(LD) -r -o $@ ipchains_core.o $(IP_NF_COMPAT_LAYER)
+ipchains.o: $(ipchains-objs)
+	$(LD) -r -o $@ $(ipchains-objs)
+
+ip_nf_compat.o: $(ip_nf_compat-objs)
+	$(LD) -r -o $@ $(ip_nf_compat-objs)

@@ -9,35 +9,23 @@
 
 O_TARGET := core.o
 
-O_OBJS	:= sock.o skbuff.o iovec.o datagram.o scm.o
+export-objs := netfilter.o profile.o
+
+obj-y := sock.o skbuff.o iovec.o datagram.o scm.o
 
 ifeq ($(CONFIG_SYSCTL),y)
 ifeq ($(CONFIG_NET),y)
-O_OBJS += sysctl_net_core.o
+obj-y += sysctl_net_core.o
 endif
 endif
 
-ifdef CONFIG_FILTER
-O_OBJS += filter.o
-endif
+obj-$(CONFIG_FILTER) += filter.o
 
-ifdef CONFIG_NET
+obj-$(CONFIG_NET) += dev.o dev_mcast.o dst.o neighbour.o rtnetlink.o utils.o
 
-O_OBJS	+= dev.o dev_mcast.o dst.o neighbour.o rtnetlink.o utils.o
-
-ifdef CONFIG_NETFILTER
-OX_OBJS += netfilter.o
-endif
-
-ifeq ($(CONFIG_NET_DIVERT),y)
-O_OBJS += dv.o
-endif
-
-endif
-
-ifdef CONFIG_NET_PROFILE
-OX_OBJS += profile.o
-endif
+obj-$(CONFIG_NETFILTER) += netfilter.o
+obj-$(CONFIG_NET_DIVERT) += dv.o
+obj-$(CONFIG_NET_PROFILE) += profile.o
 
 include $(TOPDIR)/Rules.make
 

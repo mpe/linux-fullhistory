@@ -2,22 +2,12 @@
 # Makefile for the SysKonnect FDDI PCI adapter driver
 #
 
-ifeq ($(CONFIG_SKFP),y)
-    O_TARGET := skfp.o
-    O_OBJS =  skfddi.o    hwmtm.o    fplustm.o  smt.o      cfm.o     \
+O_TARGET := skfp.o
+obj-y :=      skfddi.o    hwmtm.o    fplustm.o  smt.o      cfm.o     \
               ecm.o       pcmplc.o   pmf.o      queue.o    rmt.o     \
 	      smtdef.o    smtinit.o  smttimer.o srf.o      lnkstat.o \
               smtparse.o  hwt.o      drvfbi.o   ess.o
-else
-  ifeq ($(CONFIG_SKFP),m)
-    M_OBJS := skfp.o
-    O_TARGET := skfp.o
-    O_OBJS =  skfddi.o    hwmtm.o    fplustm.o  smt.o      cfm.o     \
-              ecm.o       pcmplc.o   pmf.o      queue.o    rmt.o     \
-	      smtdef.o    smtinit.o  smttimer.o srf.o      lnkstat.o \
-              smtparse.o  hwt.o      drvfbi.o   ess.o
-  endif
-endif
+obj-m := skfp.o
 
 # NOTE:
 #   Compiling this driver produces some warnings (and some more are 

@@ -8,16 +8,11 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET :=
-O_OBJS	 := 
-M_OBJS   := 
 
-ifeq ($(CONFIG_IRDA_DEFLATE),y)
-O_OBJS += irda_deflate.o
-else
-  ifeq ($(CONFIG_IRDA_DEFLATE),m)
-  M_OBJS += irda_deflate.o
-  endif
-endif
+obj-y := 
+obj-m := 
+
+obj-$(CONFIG_IRDA_DEFLATE) += irda_deflate.o
 
 include $(TOPDIR)/Rules.make
 

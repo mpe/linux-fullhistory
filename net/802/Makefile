@@ -8,34 +8,38 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := 802.o
-O_OBJS	  = p8023.o
 
+export-objs = llc_macinit.o p8022.o psnap.o
+
+obj-y	= p8023.o
+
+obj-$(CONFIG_SYSCTL) += sysctl_net_802.o
+obj-$(CONFIG_LLC) += llc_sendpdu.o llc_utility.o cl2llc.o llc_macinit.o
 ifeq ($(CONFIG_SYSCTL),y)
-O_OBJS += sysctl_net_802.o
+obj-y += sysctl_net_802.o
 endif
 
 ifeq ($(CONFIG_LLC),y)
-SUB_DIRS += transit
-O_OBJS += llc_sendpdu.o llc_utility.o cl2llc.o
-OX_OBJS += llc_macinit.o
+subdir-y += transit
+obj-y += llc_sendpdu.o llc_utility.o cl2llc.o llc_macinit.o
 SNAP = y
 endif
 
 ifdef CONFIG_TR
-O_OBJS += tr.o
+obj-y += tr.o
 	SNAP=y
 endif
 
 ifdef CONFIG_NET_FC
-O_OBJS += fc.o
+obj-y += fc.o
 endif
 
 ifdef CONFIG_FDDI
-O_OBJS += fddi.o
+obj-y += fddi.o
 endif
 
 ifdef CONFIG_HIPPI
-O_OBJS += hippi.o
+obj-y += hippi.o
 endif
 
 ifdef CONFIG_IPX
@@ -47,9 +51,8 @@ ifdef CONFIG_ATALK
 endif
 
 ifeq ($(SNAP),y)
-OX_OBJS += p8022.o psnap.o
+obj-y += p8022.o psnap.o
 endif
-
 
 include $(TOPDIR)/Rules.make
 

@@ -6,6 +6,7 @@
 # drm.o is a fake target -- it is never built
 # The real targets are in the module-list
 O_TARGET	:= drm.o
+
 module-list     := gamma.o tdfx.o r128.o ffb.o mga.o i810.o
 export-objs     := $(patsubst %.o,%_drv.o,$(module-list))
 
@@ -44,28 +45,15 @@ mga-objs   := $(lib-objs) mga_drv.o   mga_dma.o     mga_context.o  mga_bufs.o \
 	      mga_state.o
 i810-objs  := $(lib-objs) i810_drv.o  i810_dma.o    i810_context.o i810_bufs.o
 
-obj-$(CONFIG_DRM_GAMMA) += gamma.o $(gamma-objs)
-obj-$(CONFIG_DRM_TDFX)  += tdfx.o  $(tdfx-objs)
-obj-$(CONFIG_DRM_R128)  += r128.o  $(r128-objs)
-obj-$(CONFIG_DRM_FFB)   += ffb.o   $(ffb-objs)
+obj-$(CONFIG_DRM_GAMMA) += gamma.o
+obj-$(CONFIG_DRM_TDFX)  += tdfx.o
+obj-$(CONFIG_DRM_R128)  += r128.o
+obj-$(CONFIG_DRM_FFB)   += ffb.o
 
 ifneq ($CONFIG_AGP),)
-obj-$(CONFIG_DRM_MGA)   += mga.o   $(mga-objs)
-obj-$(CONFIG_DRM_I810)  += i810.o  $(i810-objs)
+obj-$(CONFIG_DRM_MGA)   += mga.o
+obj-$(CONFIG_DRM_I810)  += i810.o
 endif
-
-# Take module names out of obj-y and int-m
-
-obj-y           := $(filter-out $(module-list), $(obj-y))
-int-m           := $(filter-out $(module-list), $(obj-m))
-
-# Translate to Rules.make lists.
-
-O_OBJS          := $(filter-out $(export-objs), $(obj-y))
-OX_OBJS         := $(filter     $(export-objs), $(obj-y))
-M_OBJS          := $(sort $(filter     $(module-list), $(obj-m)))
-MI_OBJS         := $(sort $(filter-out $(export-objs), $(int-m)))
-MIX_OBJS        := $(sort $(filter     $(export-objs), $(int-m)))
 
 include $(TOPDIR)/Rules.make
 

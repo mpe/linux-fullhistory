@@ -94,7 +94,7 @@ static void __init quirk_sb16audio_resources(struct pci_dev *dev)
 		changed = 1;
 	}
 	if(changed)
-		printk(KERN_INFO "ISAPnP: SB audio device quirk - increasing port range\n");
+		printk(KERN_INFO "isapnp: SB audio device quirk - increasing port range\n");
 	return;
 }
 

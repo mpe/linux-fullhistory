@@ -8,26 +8,18 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := ircomm_and_tty.o
-O_OBJS	 := ircomm_param.o ircomm_core.o ircomm_event.o ircomm_lmp.o ircomm_ttp.o ircomm_tty.o ircomm_tty_attach.o ircomm_tty_ioctl.o
-M_OBJS   := ircomm.o ircomm-tty.o
-MI_OBJS  := ircomm_param.o ircomm_core.o ircomm_event.o ircomm_lmp.o ircomm_ttp.o ircomm_tty.o ircomm_tty_attach.o ircomm_tty_ioctl.o
 
-OX_OBJS  += 
+multi-objs := ircomm.o ircomm-tty.o
+ircomm-objs := ircomm_core.o ircomm_event.o ircomm_lmp.o ircomm_ttp.o
+ircomm-tty-objs := ircomm_tty.o ircomm_tty_attach.o ircomm_tty_ioctl.o ircomm_param.o
 
-# Special rule to build the composite modules
-
-ifeq ($(CONFIG_IRCOMM),m)
-ircomm.o:  $(MI_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ ircomm_core.o ircomm_event.o ircomm_lmp.o ircomm_ttp.o
-
-ircomm-tty.o: $(MI_OBJS)
-	$(LD) $(LD_RFLAG) -r -o $@ ircomm_tty.o ircomm_tty_attach.o ircomm_tty_ioctl.o ircomm_param.o
-
-
-endif
+obj-$(CONFIG_IRCOMM) += ircomm.o ircomm-tty.o
 
 include $(TOPDIR)/Rules.make
 
-tar:
-		tar -cvf /dev/f1 .
+ircomm.o:  $(ircomm-objs)
+	$(LD) $(LD_RFLAG) -r -o $@ $(ircomm-objs)
+
+ircomm-tty.o: $(ircomm-tty-objs)
+	$(LD) $(LD_RFLAG) -r -o $@ $(ircomm-tty-objs)
 

@@ -9,20 +9,17 @@
 
 
 O_TARGET := ax25.o
-O_OBJS	 := ax25_addr.o ax25_dev.o ax25_iface.o ax25_in.o ax25_ip.o ax25_out.o \
+
+export-objs := af_ax25.o
+
+obj-y	 := ax25_addr.o ax25_dev.o ax25_iface.o ax25_in.o ax25_ip.o ax25_out.o \
 	    ax25_route.o ax25_std_in.o ax25_std_subr.o ax25_std_timer.o \
-	    ax25_subr.o ax25_timer.o ax25_uid.o
-M_OBJS   := $(O_TARGET)
+	    ax25_subr.o ax25_timer.o ax25_uid.o af_ax25.o
 
-OX_OBJS  += af_ax25.o
+obj-m    := $(O_TARGET)
 
-ifeq ($(CONFIG_AX25_DAMA_SLAVE),y)
-O_OBJS += ax25_ds_in.o ax25_ds_subr.o ax25_ds_timer.o
-endif
-
-ifeq ($(CONFIG_SYSCTL),y)
-O_OBJS += sysctl_net_ax25.o
-endif
+obj-$(CONFIG_AX25_DAMA_SLAVE) += ax25_ds_in.o ax25_ds_subr.o ax25_ds_timer.o
+obj-$(CONFIG_SYSCTL) += sysctl_net_ax25.o
 
 include $(TOPDIR)/Rules.make
 

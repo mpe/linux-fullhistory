@@ -6,8 +6,6 @@
 #
 
 SUB_DIRS     := 
-MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) lmc
 
 O_TARGET := wan.o
 
@@ -38,14 +36,10 @@ obj-$(CONFIG_LANMEDIA)		+=		syncppp.o
 obj-$(CONFIG_SYNCLINK_SYNCPPP)	+=		syncppp.o
 obj-$(CONFIG_X25_ASY)		+= x25_asy.o
 
+subdir-$(CONFIG_LANMEDIA) += lmc
+
 ifeq ($(CONFIG_LANMEDIA),y)
-  SUB_DIRS += lmc
-  MOD_IN_SUB_DIRS += lmc
   obj-y += lmc/lmc.o
-else
-  ifeq ($(CONFIG_LANMEDIA),m)
-  MOD_IN_SUB_DIRS += lmc
-  endif
 endif
  
 obj-$(CONFIG_DLCI)		+= dlci.o 
@@ -54,29 +48,6 @@ obj-$(CONFIG_VENDOR_SANGOMA)	+= sdladrv.o wanpipe.o
 obj-$(CONFIG_CYCLADES_SYNC)	+= cycx_drv.o cyclomx.o
 obj-$(CONFIG_LAPBETHER)		+= lapbether.o
 obj-$(CONFIG_SBNI)		+= sbni.o
-
-
-# Extract lists of the multi-part drivers.
-# The 'int-*' lists are the intermediate files used to build the multi's.
-multi-y		:= $(filter $(list-multi), $(obj-y))
-multi-m		:= $(filter $(list-multi), $(obj-m))
-int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
-int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
-
-# Files that are both resident and modular: remove from modular.
-obj-m		:= $(filter-out $(obj-y), $(obj-m))
-int-m		:= $(filter-out $(int-y), $(int-m))
-
-# Take multi-part drivers out of obj-y and put components in.
-obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
-
-# Translate to Rules.make lists.
-O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
-OX_OBJS		:= $(filter     $(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
-MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
-MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
 
 include $(TOPDIR)/Rules.make
 

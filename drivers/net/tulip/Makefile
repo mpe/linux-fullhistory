@@ -8,7 +8,8 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := tulip.o
-O_OBJS   := 21142.o eeprom.o interrupt.o media.o pnic.o timer.o tulip_core.o
-M_OBJS   := $(O_TARGET)
+
+obj-y   := 21142.o eeprom.o interrupt.o media.o pnic.o timer.o tulip_core.o
+obj-m   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

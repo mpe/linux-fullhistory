@@ -123,8 +123,7 @@ DRIVERS		=drivers/block/block.o \
 		 drivers/char/char.o \
 		 drivers/misc/misc.o \
 		 drivers/net/net.o \
-		 drivers/media/media.o \
-	         drivers/parport/parport.a
+		 drivers/media/media.o
 LIBS		=$(TOPDIR)/lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc lib
 
@@ -133,6 +132,7 @@ DRIVERS-y :=
 DRIVERS-m :=
 DRIVERS-  :=
 
+DRIVERS-$(CONFIG_PARPORT) += drivers/parport/driver.o
 DRIVERS-$(CONFIG_AGP) += drivers/char/agp/agp.o
 DRIVERS-$(CONFIG_DRM) += drivers/char/drm/drm.o
 DRIVERS-$(CONFIG_NUBUS) += drivers/nubus/nubus.a
@@ -148,11 +148,11 @@ DRIVERS-$(CONFIG_SCSI) += drivers/scsi/scsidrv.o
 DRIVERS-$(CONFIG_IEEE1394) += drivers/ieee1394/ieee1394.a
 
 ifneq ($(CONFIG_CD_NO_IDESCSI)$(CONFIG_BLK_DEV_IDECD)$(CONFIG_BLK_DEV_SR)$(CONFIG_PARIDE_PCD),)
-DRIVERS-y += drivers/cdrom/cdrom.a
+DRIVERS-y += drivers/cdrom/driver.o
 endif
 
 DRIVERS-$(CONFIG_SOUND) += drivers/sound/sounddrivers.o
-DRIVERS-$(CONFIG_PCI) += drivers/pci/pci.a
+DRIVERS-$(CONFIG_PCI) += drivers/pci/driver.o
 DRIVERS-$(CONFIG_MTD) += drivers/mtd/mtdlink.o
 DRIVERS-$(CONFIG_PCMCIA) += drivers/pcmcia/pcmcia.o
 DRIVERS-$(CONFIG_PCMCIA_NETCARD) += drivers/net/pcmcia/pcmcia_net.o

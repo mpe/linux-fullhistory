@@ -8,20 +8,17 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := sunrpc.o
-O_OBJS   := clnt.o xprt.o sched.o \
+
+export-objs := sunrpc_syms.o
+
+obj-y    := clnt.o xprt.o sched.o \
 	    auth.o auth_null.o auth_unix.o \
 	    svc.o svcsock.o svcauth.o \
-	    pmap_clnt.o xdr.o
-OX_OBJS  := sunrpc_syms.o
+	    pmap_clnt.o xdr.o sunrpc_syms.o
 
-ifeq ($(CONFIG_PROC_FS),y)
-  O_OBJS     += stats.o
-endif
+obj-$(CONFIG_PROC_FS) += stats.o
+obj-$(CONFIG_SYSCTL) += sysctl.o
 
-ifeq ($(CONFIG_SYSCTL),y)
-  O_OBJS     += sysctl.o
-endif
-
-M_OBJS   := $(O_TARGET)
+obj-m  := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

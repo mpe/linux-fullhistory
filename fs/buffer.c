@@ -758,13 +758,6 @@ void init_buffer(struct buffer_head *bh, bh_end_io_t *handler, void *private)
 	bh->b_private = private;
 }
 
-static void end_buffer_io_bad(struct buffer_head *bh, int uptodate)
-{
-	mark_buffer_uptodate(bh, uptodate);
-	unlock_buffer(bh);
-	BUG();
-}
-
 static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 {
 	static spinlock_t page_uptodate_lock = SPIN_LOCK_UNLOCKED;
@@ -995,7 +988,7 @@ repeat:
 	 * and it is clean.
 	 */
 	if (bh) {
-		init_buffer(bh, end_buffer_io_bad, NULL);
+		init_buffer(bh, NULL, NULL);
 		bh->b_dev = dev;
 		bh->b_blocknr = block;
 		bh->b_state = 1 << BH_Mapped;
@@ -1305,7 +1298,7 @@ try_again:
 		set_bh_page(bh, page, offset);
 
 		bh->b_list = BUF_CLEAN;
-		bh->b_end_io = end_buffer_io_bad;
+		bh->b_end_io = NULL;
 	}
 	return head;
 /*
@@ -1426,7 +1419,7 @@ static void create_empty_buffers(struct page *page, kdev_t dev, unsigned long bl
 	do {
 		bh->b_dev = dev;
 		bh->b_blocknr = 0;
-		bh->b_end_io = end_buffer_io_bad;
+		bh->b_end_io = NULL;
 		tail = bh;
 		bh = bh->b_this_page;
 	} while (bh);

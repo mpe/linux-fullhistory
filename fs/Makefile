@@ -75,17 +75,4 @@ obj-$(CONFIG_BINFMT_ELF)	+= binfmt_elf.o
 obj-y += $(join $(subdir-y),$(subdir-y:%=/%.o))
 
 
-# Subdirectories that should be entered when MAKING_MODULES=1, even if set to 'y'.
-both-m		:= $(filter $(mod-subdirs), $(subdir-y))
-
-# Translate to Rules.make lists.
-O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
-OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
-M_OBJS		:= $(sort $(filter-out	$(export-objs), $(obj-m)))
-MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
-
-SUB_DIRS	:= $(subdir-y)
-MOD_SUB_DIRS	:= $(sort $(subdir-m) $(both-m))
-ALL_SUB_DIRS 	:= $(sort $(subdir-y) $(subdir-m) $(subdir-n) $(subdir-))
-
 include $(TOPDIR)/Rules.make

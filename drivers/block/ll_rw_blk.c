@@ -885,6 +885,8 @@ void generic_make_request (int rw, struct buffer_head * bh)
 {
 	int major = MAJOR(bh->b_rdev);
 	request_queue_t *q;
+
+	if (!bh->b_end_io) BUG();
 	if (blk_size[major]) {
 		unsigned long maxsector = (blk_size[major][MINOR(bh->b_rdev)] << 1) + 1;
 		unsigned int sector, count;

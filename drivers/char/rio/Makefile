@@ -13,10 +13,9 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := rio.o
-O_OBJS   := rio_linux.o rioinit.o rioboot.o riocmd.o rioctrl.o riointr.o \
+
+obj-y   := rio_linux.o rioinit.o rioboot.o riocmd.o rioctrl.o riointr.o \
             rioparam.o riopcicopy.o rioroute.o riotable.o riotty.o
-M_OBJS   := $(O_TARGET)
+obj-m   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
-
-rio.o: $(O_OBJS)

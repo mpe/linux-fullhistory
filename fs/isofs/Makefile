@@ -8,12 +8,10 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
 O_TARGET := isofs.o
-O_OBJS   := namei.o inode.o dir.o util.o rock.o
 
-ifdef CONFIG_JOLIET
-O_OBJS += joliet.o
-endif
+obj-y  := namei.o inode.o dir.o util.o rock.o
+obj-$(CONFIG_JOLIET) += joliet.o
 
-M_OBJS   := $(O_TARGET)
+obj-m  := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -4,15 +4,9 @@
 
 # Subdirs.
 
-SUB_DIRS	:=
-MOD_SUB_DIRS	:= $(SUB_DIRS)
-ALL_SUB_DIRS	:= $(SUB_DIRS) serial storage
-
 # The target object and module list name.
 
 O_TARGET	:= usbdrv.o
-M_OBJS		:=
-O_OBJS		:=
 
 # Objects that export symbols.
 
@@ -68,34 +62,16 @@ obj-$(CONFIG_USB_NET1080)	+= net1080.o
 
 # Object files in subdirectories
 
+subdir-$(CONFIG_USB_SERIAL)	+= serial
+subdir-$(CONFIG_USB_STORAGE)	+= storage
+
 ifeq ($(CONFIG_USB_SERIAL),y)
-	SUB_DIRS += serial
 	obj-y += serial/usb-serial.o
-else
-	ifeq ($(CONFIG_USB_SERIAL),m)
-		MOD_SUB_DIRS += serial
-	endif
 endif
 
 ifeq ($(CONFIG_USB_STORAGE),y)
-	SUB_DIRS += storage
 	obj-y += storage/storage.o
-else
-	ifeq ($(CONFIG_USB_STORAGE),m)
-		MOD_SUB_DIRS += storage
-	endif
 endif
-
-# Translate to Rules.make lists.
-multi-used	:= $(filter $(list-multi), $(obj-y) $(obj-m))
-multi-objs	:= $(foreach m, $(multi-used), $($(basename $(m))-objs))
-active-objs	:= $(sort $(multi-objs) $(obj-y) $(obj-m))
-
-O_OBJS		:= $(obj-y)
-M_OBJS		:= $(obj-m)
-MIX_OBJS	:= $(filter $(export-objs), $(active-objs))
-
-# The global Rules.make.
 
 include $(TOPDIR)/Rules.make
 

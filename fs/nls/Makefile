@@ -52,8 +52,7 @@ obj-$(CONFIG_NLS_KOI8_R)	+= nls_koi8-r.o
 obj-$(CONFIG_NLS_ABC)		+= nls_abc.o
 obj-$(CONFIG_NLS_UTF8)		+= nls_utf8.o
 
-OX_OBJS		= $(obj-y)
-M_OBJS		= $(obj-m)
+export-objs = $(obj-y)
 
 O_TARGET = nls.o
 

@@ -28,7 +28,4 @@ obj-$(CONFIG_PARIDE_ON20)	+= on20.o
 obj-$(CONFIG_PARIDE_ON26)	+= on26.o
 obj-$(CONFIG_PARIDE_KTTI)	+= ktti.o
 
-L_OBJS	:= $(obj-y)
-M_OBJS	:= $(obj-m)
-
 include $(TOPDIR)/Rules.make
