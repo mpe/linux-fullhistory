@@ -1,6 +1,9 @@
-    /*
-     *  VGA characters/attributes
-     */
+/*
+ *  FBcon low-level driver for VGA characters/attributes
+ */
+
+#ifndef _VIDEO_FBCON_VGA_H
+#define _VIDEO_FBCON_VGA_H
 
 #include <linux/config.h>
 
@@ -25,3 +28,5 @@ extern void fbcon_vga_putc(struct vc_data *conp, struct display *p, int c,
 extern void fbcon_vga_putcs(struct vc_data *conp, struct display *p,
 			    const unsigned short *s, int count, int yy, int xx);
 extern void fbcon_vga_revc(struct display *p, int xx, int yy);
+
+#endif /* _VIDEO_FBCON_VGA_H */

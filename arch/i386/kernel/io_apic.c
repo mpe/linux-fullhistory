@@ -129,7 +129,7 @@ static inline void io_apic_sync(void)
 
 /*
  * We disable IO-APIC IRQs by setting their 'destination CPU mask' to
- * zero. Trick, trick.
+ * zero. Trick by Ramesh Nalluri.
  */
 static inline void disable_IO_APIC_irq(unsigned int irq)
 {
@@ -882,9 +882,9 @@ static void __init construct_default_ISA_mptable(void)
 		if (!IO_APIC_IRQ(i))
 			continue;
 
-		mp_irqs[pos].mpc_irqtype = 0;
-		mp_irqs[pos].mpc_irqflag = 0;
-		mp_irqs[pos].mpc_srcbus = 0;
+		mp_irqs[pos].mpc_irqtype = mp_INT;
+		mp_irqs[pos].mpc_irqflag = (1 << 2) | 1;	/* High-active edge */
+		mp_irqs[pos].mpc_srcbus = MP_BUS_ISA;
 		mp_irqs[pos].mpc_srcbusirq = i;
 		mp_irqs[pos].mpc_dstapic = 0;
 		mp_irqs[pos].mpc_dstirq = i;

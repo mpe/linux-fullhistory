@@ -97,7 +97,7 @@ static int setfl(int fd, struct file * filp, unsigned long arg)
 
 	/* Did FASYNC state change? */
 	if ((arg ^ filp->f_flags) & FASYNC) {
-		if (filp->f_op->fasync)
+		if (filp->f_op && filp->f_op->fasync)
 			filp->f_op->fasync(fd, filp, (arg & FASYNC) != 0);
 	}
 

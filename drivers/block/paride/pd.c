@@ -110,10 +110,11 @@
 				Added slave support
 	1.03    GRG 1998.06.16  Eliminate an Ugh.
 	1.04	GRG 1998.08.15  Extra debugging, use HZ in loop timing
+	1.05    GRG 1998.09.24  Added jumbo support
 
 */
 
-#define PD_VERSION      "1.04"
+#define PD_VERSION      "1.05"
 #define PD_MAJOR	45
 #define PD_NAME		"pd"
 #define PD_UNITS	4
@@ -610,6 +611,12 @@ void    cleanup_module(void);
 int     init_module(void)
 
 {       int     err, unit;
+
+#ifdef PARIDE_JUMBO
+       { extern paride_init();
+         paride_init();
+       } 
+#endif
 
         err = pd_init();
         if (err) return err;

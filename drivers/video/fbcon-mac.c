@@ -19,8 +19,8 @@
 #include <linux/fb.h>
 #include <linux/delay.h>
 
-#include "fbcon.h"
-#include "fbcon-mac.h"
+#include <video/fbcon.h>
+#include <video/fbcon-mac.h>
 
 
     /*
@@ -57,24 +57,24 @@ void fbcon_mac_bmove(struct display *p, int sy, int sx, int dy, int dx,
    int dl,dr,dt,db,dw,dlo;
    int move_up;
 
-   src = (u8 *) (p->screen_base + sy * p->fontheight * p->next_line);
-   dest = (u8 *) (p->screen_base + dy * p->fontheight * p->next_line);
+   src = (u8 *) (p->screen_base + sy * fontheight(p) * p->next_line);
+   dest = (u8 *) (p->screen_base + dy * fontheight(p) * p->next_line);
 
    if( sx == 0 && width == p->conp->vc_cols) {
-     s = height * p->fontheight * p->next_line;
+     s = height * fontheight(p) * p->next_line;
      mymemmove(dest, src, s);
      return;
    }
    
-   l = sx * p->fontwidth;
-   r = l + width * p->fontwidth;
-   t = sy * p->fontheight;
-   b = t + height * p->fontheight;
+   l = sx * fontwidth(p);
+   r = l + width * fontwidth(p);
+   t = sy * fontheight(p);
+   b = t + height * fontheight(p);
 
-   dl = dx * p->fontwidth;
-   dr = dl + width * p->fontwidth;
-   dt = dy * p->fontheight;
-   db = dt + height * p->fontheight;
+   dl = dx * fontwidth(p);
+   dr = dl + width * fontwidth(p);
+   dt = dy * fontheight(p);
+   db = dt + height * fontheight(p);
 
    /* w is the # pixels between two long-aligned points, left and right */
    w = (r&~31) - ((l+31)&~31);
@@ -143,8 +143,8 @@ void fbcon_mac_bmove(struct display *p, int sy, int sx, int dy, int dx,
    if (sy <= sx) {
      i = b;
      move_up = 0;
-     src += height * p->fontheight;
-     dest += height * p->fontheight;
+     src += height * fontheight(p);
+     dest += height * fontheight(p);
    } else {
      i = t;
      move_up = 1;
@@ -195,22 +195,22 @@ void fbcon_mac_clear(struct vc_data *conp, struct display *p, int sy, int sx,
    u8 *dest;
    int l,r,t,b,w,lo,s;
 
-   inverse = attr_reverse(p,conp->vc_attr);
+   inverse = conp ? attr_reverse(p,conp->vc_attr) : 0;
    pixel = inverse ? PIXEL_WHITE_MAC : PIXEL_BLACK_MAC;
-   dest = (u8 *) (p->screen_base + sy * p->fontheight * p->next_line);
+   dest = (u8 *) (p->screen_base + sy * fontheight(p) * p->next_line);
 
    if( sx == 0 && width == p->conp->vc_cols) {
-     s = height * p->fontheight * p->next_line;
+     s = height * fontheight(p) * p->next_line;
      if (inverse)
        mymemclear(dest, s);
      else
        mymemset(dest, s);
    }
    
-   l = sx * p->fontwidth;
-   r = l + width * p->fontwidth;
-   t = sy * p->fontheight;
-   b = t + height * p->fontheight;
+   l = sx * fontwidth(p);
+   r = l + width * fontwidth(p);
+   t = sy * fontheight(p);
+   b = t + height * fontheight(p);
    /* w is the # pixels between two long-aligned points, left and right */
    w = (r&~31) - ((l+31)&~31);
    /* lo is the # pixels between the left edge and a long-aligned left pixel */
@@ -272,23 +272,23 @@ void fbcon_mac_putc(struct vc_data *conp, struct display *p, int c, int yy,
    u8 d;
    int j;
 
-   cdat = p->fontdata+(c&p->charmask)*p->fontheight;
+   cdat = p->fontdata+(c&p->charmask)*fontheight(p);
    bold = attr_bold(p,c);
    ch_reverse = attr_reverse(p,c);
    ch_underline = attr_underline(p,c);
 
-   for (rows = 0; rows < p->fontheight; rows++) {
+   for (rows = 0; rows < fontheight(p); rows++) {
       d = *cdat++;
       if (!conp->vc_can_do_color) {
-	if (ch_underline && rows == (p->fontheight-2))
+	if (ch_underline && rows == (fontheight(p)-2))
 	  d = 0xff;
 	else if (bold)
 	  d |= d>>1;
 	if (ch_reverse)
 	  d = ~d;
       }
-      for (j = 0; j < p->fontwidth; j++) {
-	plot_pixel_mac(p, (d & 0x80) >> 7, (xx*p->fontwidth) + j, (yy*p->fontheight) + rows);
+      for (j = 0; j < fontwidth(p); j++) {
+	plot_pixel_mac(p, (d & 0x80) >> 7, (xx*fontwidth(p)) + j, (yy*fontheight(p)) + rows);
 	d <<= 1;
       }
    }
@@ -311,9 +311,9 @@ void fbcon_mac_revc(struct display *p, int xx, int yy)
 {
    u_int rows, j;
 
-   for (rows = 0; rows < p->fontheight; rows++) {
-     for (j = 0; j < p->fontwidth; j++) {
-       plot_pixel_mac (p, PIXEL_INVERT_MAC, (xx*p->fontwidth)+j, (yy*p->fontheight)+rows);
+   for (rows = 0; rows < fontheight(p); rows++) {
+     for (j = 0; j < fontwidth(p); j++) {
+       plot_pixel_mac (p, PIXEL_INVERT_MAC, (xx*fontwidth(p))+j, (yy*fontheight(p))+rows);
      }
    }
 }

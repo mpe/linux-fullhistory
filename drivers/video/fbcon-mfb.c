@@ -15,8 +15,8 @@
 #include <linux/string.h>
 #include <linux/fb.h>
 
-#include "fbcon.h"
-#include "fbcon-mfb.h"
+#include <video/fbcon.h>
+#include <video/fbcon-mfb.h>
 
 
     /*
@@ -39,21 +39,21 @@ void fbcon_mfb_bmove(struct display *p, int sy, int sx, int dy, int dx,
     u_int rows;
 
     if (sx == 0 && dx == 0 && width == p->next_line) {
-	src = p->screen_base+sy*p->fontheight*width;
-	dest = p->screen_base+dy*p->fontheight*width;
-	mymemmove(dest, src, height*p->fontheight*width);
+	src = p->screen_base+sy*fontheight(p)*width;
+	dest = p->screen_base+dy*fontheight(p)*width;
+	mymemmove(dest, src, height*fontheight(p)*width);
     } else if (dy <= sy) {
-	src = p->screen_base+sy*p->fontheight*p->next_line+sx;
-	dest = p->screen_base+dy*p->fontheight*p->next_line+dx;
-	for (rows = height*p->fontheight; rows--;) {
+	src = p->screen_base+sy*fontheight(p)*p->next_line+sx;
+	dest = p->screen_base+dy*fontheight(p)*p->next_line+dx;
+	for (rows = height*fontheight(p); rows--;) {
 	    mymemmove(dest, src, width);
 	    src += p->next_line;
 	    dest += p->next_line;
 	}
     } else {
-	src = p->screen_base+((sy+height)*p->fontheight-1)*p->next_line+sx;
-	dest = p->screen_base+((dy+height)*p->fontheight-1)*p->next_line+dx;
-	for (rows = height*p->fontheight; rows--;) {
+	src = p->screen_base+((sy+height)*fontheight(p)-1)*p->next_line+sx;
+	dest = p->screen_base+((dy+height)*fontheight(p)-1)*p->next_line+dx;
+	for (rows = height*fontheight(p); rows--;) {
 	    mymemmove(dest, src, width);
 	    src -= p->next_line;
 	    dest -= p->next_line;
@@ -66,17 +66,18 @@ void fbcon_mfb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 {
     u8 *dest;
     u_int rows;
+    int inverse = conp ? attr_reverse(p,conp->vc_attr) : 0;
 
-    dest = p->screen_base+sy*p->fontheight*p->next_line+sx;
+    dest = p->screen_base+sy*fontheight(p)*p->next_line+sx;
 
     if (sx == 0 && width == p->next_line) {
-	if (attr_reverse(p,conp->vc_attr))
-	    mymemset(dest, height*p->fontheight*width);
+	if (inverse)
+	    mymemset(dest, height*fontheight(p)*width);
 	else
-	    mymemclear(dest, height*p->fontheight*width);
+	    mymemclear(dest, height*fontheight(p)*width);
     } else
-	for (rows = height*p->fontheight; rows--; dest += p->next_line)
-	    if (attr_reverse(p,conp->vc_attr))
+	for (rows = height*fontheight(p); rows--; dest += p->next_line)
+	    if (inverse)
 		mymemset(dest, width);
 	    else
 		mymemclear_small(dest, width);
@@ -89,13 +90,13 @@ void fbcon_mfb_putc(struct vc_data *conp, struct display *p, int c, int yy,
     u_int rows, bold, revs, underl;
     u8 d;
 
-    dest = p->screen_base+yy*p->fontheight*p->next_line+xx;
-    cdat = p->fontdata+(c&p->charmask)*p->fontheight;
+    dest = p->screen_base+yy*fontheight(p)*p->next_line+xx;
+    cdat = p->fontdata+(c&p->charmask)*fontheight(p);
     bold = attr_bold(p,c);
     revs = attr_reverse(p,c);
     underl = attr_underline(p,c);
 
-    for (rows = p->fontheight; rows--; dest += p->next_line) {
+    for (rows = fontheight(p); rows--; dest += p->next_line) {
 	d = *cdat++;
 	if (underl && !rows)
 	    d = 0xff;
@@ -115,7 +116,7 @@ void fbcon_mfb_putcs(struct vc_data *conp, struct display *p,
     u8 d;
     u16 c;
 
-    dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
+    dest0 = p->screen_base+yy*fontheight(p)*p->next_line+xx;
     bold = attr_bold(p,*s);
     revs = attr_reverse(p,*s);
     underl = attr_underline(p,*s);
@@ -123,8 +124,8 @@ void fbcon_mfb_putcs(struct vc_data *conp, struct display *p,
     while (count--) {
 	c = *s++ & p->charmask;
 	dest = dest0++;
-	cdat = p->fontdata+c*p->fontheight;
-	for (rows = p->fontheight; rows--; dest += p->next_line) {
+	cdat = p->fontdata+c*fontheight(p);
+	for (rows = fontheight(p); rows--; dest += p->next_line) {
 	    d = *cdat++;
 	    if (underl && !rows)
 		d = 0xff;
@@ -142,8 +143,8 @@ void fbcon_mfb_revc(struct display *p, int xx, int yy)
     u8 *dest;
     u_int rows;
 
-    dest = p->screen_base+yy*p->fontheight*p->next_line+xx;
-    for (rows = p->fontheight; rows--; dest += p->next_line)
+    dest = p->screen_base+yy*fontheight(p)*p->next_line+xx;
+    for (rows = fontheight(p); rows--; dest += p->next_line)
 	*dest = ~*dest;
 }
 

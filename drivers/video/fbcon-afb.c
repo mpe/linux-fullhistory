@@ -15,8 +15,8 @@
 #include <linux/string.h>
 #include <linux/fb.h>
 
-#include "fbcon.h"
-#include "fbcon-afb.h"
+#include <video/fbcon.h>
+#include <video/fbcon-afb.h>
 
 
     /*
@@ -174,22 +174,22 @@ void fbcon_afb_bmove(struct display *p, int sy, int sx, int dy, int dx,
     u_short i, j;
 
     if (sx == 0 && dx == 0 && width == p->next_line) {
-	src = p->screen_base+sy*p->fontheight*width;
-	dest = p->screen_base+dy*p->fontheight*width;
+	src = p->screen_base+sy*fontheight(p)*width;
+	dest = p->screen_base+dy*fontheight(p)*width;
 	i = p->var.bits_per_pixel;
 	do {
-	    mymemmove(dest, src, height*p->fontheight*width);
+	    mymemmove(dest, src, height*fontheight(p)*width);
 	    src += p->next_plane;
 	    dest += p->next_plane;
 	} while (--i);
     } else if (dy <= sy) {
-	src0 = p->screen_base+sy*p->fontheight*p->next_line+sx;
-	dest0 = p->screen_base+dy*p->fontheight*p->next_line+dx;
+	src0 = p->screen_base+sy*fontheight(p)*p->next_line+sx;
+	dest0 = p->screen_base+dy*fontheight(p)*p->next_line+dx;
 	i = p->var.bits_per_pixel;
 	do {
 	    src = src0;
 	    dest = dest0;
-	    j = height*p->fontheight;
+	    j = height*fontheight(p);
 	    do {
 	        mymemmove(dest, src, width);
 	        src += p->next_line;
@@ -199,13 +199,13 @@ void fbcon_afb_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	    dest0 += p->next_plane;
 	} while (--i);
     } else {
-	src0 = p->screen_base+(sy+height)*p->fontheight*p->next_line+sx;
-	dest0 = p->screen_base+(dy+height)*p->fontheight*p->next_line+dx;
+	src0 = p->screen_base+(sy+height)*fontheight(p)*p->next_line+sx;
+	dest0 = p->screen_base+(dy+height)*fontheight(p)*p->next_line+dx;
 	i = p->var.bits_per_pixel;
 	do {
 	    src = src0;
 	    dest = dest0;
-	    j = height*p->fontheight;
+	    j = height*fontheight(p);
 	    do {
 	        src -= p->next_line;
 	        dest -= p->next_line;
@@ -224,13 +224,13 @@ void fbcon_afb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
     u_short i, j;
     int bg;
 
-    dest0 = p->screen_base+sy*p->fontheight*p->next_line+sx;
+    dest0 = p->screen_base+sy*fontheight(p)*p->next_line+sx;
 
     bg = attr_bgcol_ec(p,conp);
     i = p->var.bits_per_pixel;
     do {
 	dest = dest0;
-	j = height*p->fontheight;
+	j = height*fontheight(p);
 	do {
 	    if (bg & 1)
 	        mymemset(dest, width);
@@ -250,8 +250,8 @@ void fbcon_afb_putc(struct vc_data *conp, struct display *p, int c, int yy,
     u_short i, j;
     int fg, bg;
 
-    dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
-    cdat0 = p->fontdata+(c&p->charmask)*p->fontheight;
+    dest0 = p->screen_base+yy*fontheight(p)*p->next_line+xx;
+    cdat0 = p->fontdata+(c&p->charmask)*fontheight(p);
     fg = attr_fgcol(p,c);
     bg = attr_bgcol(p,c);
 
@@ -264,7 +264,7 @@ void fbcon_afb_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	    expand += 512;
 	if (fg & 1)
 	    expand += 256;
-	j = p->fontheight;
+	j = fontheight(p);
 	do {
 	    *dest = expand[*cdat++];
 	    dest += p->next_line;
@@ -289,7 +289,7 @@ void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
     u16 c1, c2, c3, c4;
     int fg0, bg0, fg, bg;
 
-    dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
+    dest0 = p->screen_base+yy*fontheight(p)*p->next_line+xx;
     fg0 = attr_fgcol(p,*s);
     bg0 = attr_bgcol(p,*s);
 
@@ -299,7 +299,7 @@ void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
 	    dest1 = dest0++;
 	    xx++;
 
-	    cdat10 = p->fontdata+c1*p->fontheight;
+	    cdat10 = p->fontdata+c1*fontheight(p);
 	    fg = fg0;
 	    bg = bg0;
 
@@ -312,7 +312,7 @@ void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
 		    expand += 512;
 		if (fg & 1)
 		    expand += 256;
-		j = p->fontheight;
+		j = fontheight(p);
 		do {
 		    *dest = expand[*cdat1++];
 		    dest += p->next_line;
@@ -328,10 +328,10 @@ void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
 	    c4 = s[3] & p->charmask;
 
 	    dest1 = dest0;
-	    cdat10 = p->fontdata+c1*p->fontheight;
-	    cdat20 = p->fontdata+c2*p->fontheight;
-	    cdat30 = p->fontdata+c3*p->fontheight;
-	    cdat40 = p->fontdata+c4*p->fontheight;
+	    cdat10 = p->fontdata+c1*fontheight(p);
+	    cdat20 = p->fontdata+c2*fontheight(p);
+	    cdat30 = p->fontdata+c3*fontheight(p);
+	    cdat40 = p->fontdata+c4*fontheight(p);
 	    fg = fg0;
 	    bg = bg0;
 
@@ -347,7 +347,7 @@ void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
 		    expand += 512;
 		if (fg & 1)
 		    expand += 256;
-		j = p->fontheight;
+		j = fontheight(p);
 	        do {
 #if defined(__BIG_ENDIAN)
 		    *(u32 *)dest = expand[*cdat1++]<<24 |
@@ -381,7 +381,7 @@ void fbcon_afb_revc(struct display *p, int xx, int yy)
     u_short i, j;
     int mask;
 
-    dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
+    dest0 = p->screen_base+yy*fontheight(p)*p->next_line+xx;
     mask = p->fgcol ^ p->bgcol;
 
     /*
@@ -394,7 +394,7 @@ void fbcon_afb_revc(struct display *p, int xx, int yy)
     do {
 	if (mask & 1) {
 	    dest = dest0;
-	    j = p->fontheight;
+	    j = fontheight(p);
 	    do {
 	        *dest = ~*dest;
 		dest += p->next_line;

@@ -1,6 +1,9 @@
-    /*
-     *  Amiga interleaved bitplanes (ilbm)
-     */
+/*
+ *  FBcon low-level driver for Amiga interleaved bitplanes (ilbm)
+ */
+
+#ifndef _VIDEO_FBCON_ILBM_H
+#define _VIDEO_FBCON_ILBM_H
 
 #include <linux/config.h>
 
@@ -25,3 +28,5 @@ extern void fbcon_ilbm_putc(struct vc_data *conp, struct display *p, int c,
 extern void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p,
 			     const unsigned short *s, int count, int yy, int xx);
 extern void fbcon_ilbm_revc(struct display *p, int xx, int yy);
+
+#endif /* _VIDEO_FBCON_ILBM_H */

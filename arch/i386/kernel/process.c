@@ -519,32 +519,20 @@ void exit_thread(void)
 void flush_thread(void)
 {
 	int i;
+	struct task_struct *tsk = current;
 
 	for (i=0 ; i<8 ; i++)
-		current->tss.debugreg[i] = 0;
+		tsk->tss.debugreg[i] = 0;
 
 	/*
 	 * Forget coprocessor state..
 	 */
-	if (current->flags & PF_USEDFPU) {
-		current->flags &= ~PF_USEDFPU;
-		stts();
-	}
-	current->used_math = 0;
+	clear_fpu(tsk);
+	tsk->used_math = 0;
 }
 
 void release_thread(struct task_struct *dead_task)
 {
-}
-
-static inline void unlazy_fpu(struct task_struct *tsk)
-{
-	if (tsk->flags & PF_USEDFPU) {
-		__asm__("fnsave %0":"=m" (tsk->tss.i387));
-		asm volatile("fwait");
-		tsk->flags &= ~PF_USEDFPU;
-		stts();
-	}
 }
 
 /*
@@ -621,11 +609,12 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 {
 	int fpvalid;
+	struct task_struct *tsk = current;
 
-	fpvalid = current->used_math;
+	fpvalid = tsk->used_math;
 	if (fpvalid) {
-		unlazy_fpu(current);
-		memcpy(fpu,&current->tss.i387.hard,sizeof(*fpu));
+		unlazy_fpu(tsk);
+		memcpy(fpu,&tsk->tss.i387.hard,sizeof(*fpu));
 	}
 
 	return fpvalid;

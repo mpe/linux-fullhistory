@@ -281,6 +281,24 @@ extern void copy_segments(int nr, struct task_struct *p, struct mm_struct * mm);
 extern void release_segments(struct mm_struct * mm);
 
 /*
+ * FPU lazy state save handling..
+ */
+#define unlazy_fpu(tsk) do { \
+	if (tsk->flags & PF_USEDFPU) { \
+		asm volatile("fnsave %0\n\tfwait":"=m" (tsk->tss.i387)); \
+		tsk->flags &= ~PF_USEDFPU; \
+		stts(); \
+	} \
+} while (0)
+
+#define clear_fpu(tsk) do { \
+	if (tsk->flags & PF_USEDFPU) { \
+		tsk->flags &= ~PF_USEDFPU; \
+		stts(); \
+	} \
+} while (0)
+
+/*
  * Return saved PC of a blocked thread.
  */
 extern inline unsigned long thread_saved_pc(struct thread_struct *t)

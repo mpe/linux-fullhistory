@@ -1,7 +1,7 @@
 
 		Linux and parallel port IDE devices
 
-PARIDE v1.02   (c) 1997-8  Grant Guenther <grant@torque.net>
+PARIDE v1.03   (c) 1997-8  Grant Guenther <grant@torque.net>
 
 1. Introduction
 
@@ -42,8 +42,8 @@ parallel port IDE subsystem, including:
 	SyQuest EZ-135, EZ-230 & SparQ drives
 	Avatar Shark
 	Imation Superdisk LS-120
-	FreeCom Power CD
-	Hewlett-Packard 5GB tape drive
+	FreeCom Power CD 
+	Hewlett-Packard 5GB and 8GB tape drives
 	Hewlett-Packard 7100 and 7200 CD-RW drives
 
 as well as most of the clone and no-name products on the market.
@@ -52,7 +52,7 @@ To support such a wide range of devices, PARIDE, the parallel port IDE
 subsystem, is actually structured in three parts.   There is a base
 paride module which provides a registry and some common methods for
 accessing the parallel ports.  The second component is a set of 
-high-level drivers for each of the different type of supported device: 
+high-level drivers for each of the different types of supported devices: 
 
 	pd	IDE disk
 	pcd	ATAPI CD-ROM
@@ -176,7 +176,7 @@ It is much faster and simpler to get to understand the PARIDE drivers
 if you use them as loadable kernel modules.   
 
 Note 1:  using these drivers with the "kerneld" automatic module loading
-system is not recommended, and is not documented here.  
+system is not recommended for beginners, and is not documented here.  
 
 Note 2:  if you build PARPORT support as a loadable module, PARIDE must
 also be built as loadable modules, and PARPORT must be loaded before the
@@ -290,13 +290,56 @@ floppy that you could share with a DOS system:
 	mkdosfs /dev/pf0
 	mount /dev/pf0 /mnt
 
-2.4  Using the pg driver
+
+2.4  The pf driver
+
+The pf driver is intended for use with parallel port ATAPI disk
+devices.  The most common devices in this category are PD drives
+and LS-120 drives.  Traditionally, media for these devices are not
+partitioned.  Consequently, the pf driver does not support partitioned
+media.  This may be changed in a future version of the driver. 
+
+
+2.5  Using the pt driver
+
+The pt driver for parallel port ATAPI tape drives is a minimal driver.
+It does not yet support many of the standard tape ioctl operations. 
+For best performance, a block size of 32KB should be used.  You will
+probably want to set the parallel port delay to 0, if you can.
+
+
+2.6  Using the pg driver
 
 The pg driver can be used in conjunction with the cdrecord program
-to create CD-ROMs.  For more information, and the required patches 
-to cdrecord, please visit http://www.torque.net/parport/cdr.html .
+to create CD-ROMs.  Please get cdrecord version 1.6.1a3 or later
+from ftp://ftp.fokus.gmd.de/pub/unix/cdrecord/ (you may have to look
+in the alpha subdirectory).  To record CD-R media your parallel port
+should ideally be set to EPP mode, and the "port delay" should be
+set to 0.  With those settings it is possible to record at 2x speed
+without any buffer underruns.  If you cannot get the driver to work
+in EPP mode, try to use "bidirectional" or "PS/2" mode and 1x speeds only.
+
 
 3. Troubleshooting
+
+The most common problems that people report with the PARIDE drivers
+concern the parallel port CMOS settings.  At this time, none of the
+PARIDE protocol modules support ECP mode, or any ECP combination modes.
+If you are able to do so, please set your parallel port into EPP mode
+using your CMOS setup procedure.
+
+Some parallel ports cannot reliably transfer data at full speed.  To
+offset the errors, the PARIDE protocol modules introduce a "port
+delay" between each access to the i/o ports.  Each protocol sets
+a default value for this delay.  In most cases, the user can override
+the default and set it to 0 - resulting in somewhat higher transfer
+rates.  In some rare cases (especially with older 486 systems) the
+default delays are not long enough.  if you experience corrupt data
+transfers, or unexpected failures, you may wish to increase the
+port delay.   The delay can be programmed using the "driveN" parameters
+to each of the high-level drivers.  Please see the notes above, or
+read the comments at the beginning of the driver source files in
+linux/drivers/block/paride.
 
 While a lot of testing has gone into these drivers to make them work
 as smoothly as possible, problems will arise.  If you do have problems,

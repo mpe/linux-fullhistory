@@ -16,8 +16,8 @@
 #include <linux/string.h>
 #include <linux/fb.h>
 
-#include "fbcon.h"
-#include "fbcon-cfb2.h"
+#include <video/fbcon.h>
+#include <video/fbcon-cfb2.h>
 
 
     /*
@@ -57,7 +57,7 @@ void fbcon_cfb2_setup(struct display *p)
 void fbcon_cfb2_bmove(struct display *p, int sy, int sx, int dy, int dx,
 		      int height, int width)
 {
-	int bytes = p->next_line, linesize = bytes * p->fontheight, rows;
+	int bytes = p->next_line, linesize = bytes * fontheight(p), rows;
 	u8 *src,*dst;
 
 	if (sx == 0 && dx == 0 && width * 2 == bytes) {
@@ -69,7 +69,7 @@ void fbcon_cfb2_bmove(struct display *p, int sy, int sx, int dy, int dx,
 		if (dy < sy || (dy == sy && dx < sx)) {
 			src = p->screen_base + sy * linesize + sx * 2;
 			dst = p->screen_base + dy * linesize + dx * 2;
-			for (rows = height * p->fontheight ; rows-- ;) {
+			for (rows = height * fontheight(p) ; rows-- ;) {
 				mymemmove(dst, src, width * 2);
 				src += bytes;
 				dst += bytes;
@@ -80,7 +80,7 @@ void fbcon_cfb2_bmove(struct display *p, int sy, int sx, int dy, int dx,
 				- bytes;
 			dst = p->screen_base + (dy+height) * linesize + dx * 2
 				- bytes;
-			for (rows = height * p->fontheight ; rows-- ;) {
+			for (rows = height * fontheight(p) ; rows-- ;) {
 				mymemmove(dst, src, width * 2);
 				src -= bytes;
 				dst -= bytes;
@@ -93,10 +93,10 @@ void fbcon_cfb2_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 		      int height, int width)
 {
 	u8 *dest0,*dest;
-	int bytes=p->next_line,lines=height * p->fontheight, rows, i;
+	int bytes=p->next_line,lines=height * fontheight(p), rows, i;
 	u32 bgx;
 
-	dest = p->screen_base + sy * p->fontheight * bytes + sx * 2;
+	dest = p->screen_base + sy * fontheight(p) * bytes + sx * 2;
 
 	bgx=attr_bgcol_ec(p,conp);
 	bgx |= (bgx << 2);	/* expand the colour to 16 bits */
@@ -128,8 +128,8 @@ void fbcon_cfb2_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	int bytes=p->next_line,rows;
 	u32 eorx,fgx,bgx;
 
-	dest = p->screen_base + yy * p->fontheight * bytes + xx * 2;
-	cdat = p->fontdata + (c & p->charmask) * p->fontheight;
+	dest = p->screen_base + yy * fontheight(p) * bytes + xx * 2;
+	cdat = p->fontdata + (c & p->charmask) * fontheight(p);
 
 	fgx=3;/*attr_fgcol(p,c);*/
 	bgx=attr_bgcol(p,c);
@@ -139,7 +139,7 @@ void fbcon_cfb2_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	bgx |= (bgx << 4);
 	eorx = fgx ^ bgx;
 
-	for (rows = p->fontheight ; rows-- ; dest += bytes) {
+	for (rows = fontheight(p) ; rows-- ; dest += bytes) {
 		((u8 *)dest)[0]=
 			(nibbletab_cfb2[*cdat >> 4] & eorx) ^ bgx;
 		((u8 *)dest)[1]=
@@ -155,7 +155,7 @@ void fbcon_cfb2_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	int rows,bytes=p->next_line;
 	u32 eorx, fgx, bgx;
 
-	dest0 = p->screen_base + yy * p->fontheight * bytes + xx * 2;
+	dest0 = p->screen_base + yy * fontheight(p) * bytes + xx * 2;
 	fgx=3/*attr_fgcol(p,*s)*/;
 	bgx=attr_bgcol(p,*s);
 	fgx |= (fgx << 2);
@@ -165,9 +165,9 @@ void fbcon_cfb2_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	eorx = fgx ^ bgx;
 	while (count--) {
 		c = *s++ & p->charmask;
-		cdat = p->fontdata + c * p->fontheight;
+		cdat = p->fontdata + c * fontheight(p);
 
-		for (rows = p->fontheight, dest = dest0; rows-- ; dest += bytes) {
+		for (rows = fontheight(p), dest = dest0; rows-- ; dest += bytes) {
 			((u8 *)dest)[0]=
 				(nibbletab_cfb2[*cdat >> 4] & eorx) ^ bgx;
 			((u8 *)dest)[1]=
@@ -182,8 +182,8 @@ void fbcon_cfb2_revc(struct display *p, int xx, int yy)
 	u8 *dest;
 	int bytes=p->next_line, rows;
 
-	dest = p->screen_base + yy * p->fontheight * bytes + xx * 2;
-	for (rows = p->fontheight ; rows-- ; dest += bytes) {
+	dest = p->screen_base + yy * fontheight(p) * bytes + xx * 2;
+	for (rows = fontheight(p) ; rows-- ; dest += bytes) {
 		((u16 *)dest)[0] ^= 0xffff;
 	}
 }

@@ -1,6 +1,9 @@
-    /*
-     *  Mac variable bpp packed pixels (mac)
-     */
+/*
+ *  FBcon low-level driver for Mac variable bpp packed pixels (mac)
+ */
+
+#ifndef _VIDEO_FBCON_MAC_H
+#define _VIDEO_FBCON_MAC_H
 
 #include <linux/config.h>
 
@@ -25,3 +28,5 @@ extern void fbcon_mac_putc(struct vc_data *conp, struct display *p, int c,
 extern void fbcon_mac_putcs(struct vc_data *conp, struct display *p,
 			    const unsigned short *s, int count, int yy, int xx);
 extern void fbcon_mac_revc(struct display *p, int xx, int yy);
+
+#endif /* _VIDEO_FBCON_MAC_H */

@@ -19,8 +19,8 @@
 
 #include <asm/byteorder.h>
 
-#include "fbcon.h"
-#include "fbcon-iplan2p2.h"
+#include <video/fbcon.h>
+#include <video/fbcon-iplan2p2.h>
 
 
     /*
@@ -169,16 +169,16 @@ void fbcon_iplan2p2_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	/*  Special (but often used) case: Moving whole lines can be
 	 *  done with memmove()
 	 */
-	mymemmove(p->screen_base + dy * p->next_line * p->fontheight,
-		  p->screen_base + sy * p->next_line * p->fontheight,
-		  p->next_line * height * p->fontheight);
+	mymemmove(p->screen_base + ((dy * p->next_line) << fontheightlog(p)),
+		  p->screen_base + ((sy * p->next_line) << fontheightlog(p)),
+		  (p->next_line * height) << fontheightlog(p));
     } else {
 	int rows, cols;
 	u8 *src;
 	u8 *dst;
 	int bytes = p->next_line;
-	int linesize = bytes * p->fontheight;
-	u_int colsize  = height * p->fontheight;
+	int linesize = bytes << fontheightlog(p);
+	u_int colsize  = height << fontheightlog(p);
 	u_int upwards  = (dy < sy) || (dy == sy && dx < sx);
 
 	if ((sx & 1) == (dx & 1)) {
@@ -258,7 +258,7 @@ void fbcon_iplan2p2_clear(struct vc_data *conp, struct display *p, int sy,
     u8 *start;
     int rows;
     int bytes = p->next_line;
-    int lines = height * p->fontheight;
+    int lines = height << fontheightlog(p);
     u32 size;
     u32 cval;
     u16 pcval;
@@ -266,11 +266,11 @@ void fbcon_iplan2p2_clear(struct vc_data *conp, struct display *p, int sy,
     cval = expand2l (COLOR_2P (attr_bgcol_ec(p,conp)));
 
     if (sx == 0 && width * 2 == bytes) {
-	offset = sy * bytes * p->fontheight;
+	offset = (sy * bytes) << fontheightlog(p);
 	size = lines * bytes;
 	memset_even_2p(p->screen_base+offset, size, cval);
     } else {
-	offset = (sy * bytes * p->fontheight) + (sx>>1)*4 + (sx & 1);
+	offset = ((sy * bytes) << fontheightlog(p)) + (sx>>1)*4 + (sx & 1);
 	start = p->screen_base + offset;
 	pcval = expand2w(COLOR_2P(attr_bgcol_ec(p,conp)));
 
@@ -306,14 +306,14 @@ void fbcon_iplan2p2_putc(struct vc_data *conp, struct display *p, int c,
     int bytes = p->next_line;
     u16 eorx, fgx, bgx, fdx;
 
-    dest = p->screen_base + yy * p->fontheight * bytes + (xx>>1)*4 + (xx & 1);
-    cdat = p->fontdata + (c & p->charmask) * p->fontheight;
+    dest = p->screen_base + ((yy * bytes) << fontheightlog(p)) + (xx>>1)*4 + (xx & 1);
+    cdat = p->fontdata + ((c & p->charmask) << fontheightlog(p));
 
     fgx = expand2w(COLOR_2P(attr_fgcol(p,c)));
     bgx = expand2w(COLOR_2P(attr_bgcol(p,c)));
     eorx = fgx ^ bgx;
 
-    for (rows = p->fontheight ; rows-- ; dest += bytes) {
+    for (rows = fontheight(p) ; rows-- ; dest += bytes) {
 	fdx = dup2w(*cdat++);
 	movepw(dest, (fdx & eorx) ^ bgx);
     }
@@ -330,16 +330,16 @@ void fbcon_iplan2p2_putcs(struct vc_data *conp, struct display *p,
     u16 eorx, fgx, bgx, fdx;
 
     bytes = p->next_line;
-    dest0 = p->screen_base + yy * p->fontheight * bytes + (xx>>1)*4 + (xx & 1);
+    dest0 = p->screen_base + ((yy * bytes) << fontheightlog(p)) + (xx>>1)*4 + (xx & 1);
     fgx = expand2w(COLOR_2P(attr_fgcol(p,*s)));
     bgx = expand2w(COLOR_2P(attr_bgcol(p,*s)));
     eorx = fgx ^ bgx;
 
     while (count--) {
 	c = *s++ & p->charmask;
-	cdat  = p->fontdata + (c * p->fontheight);
+	cdat  = p->fontdata + (c << fontheightlog(p));
 
-	for (rows = p->fontheight, dest = dest0; rows-- ; dest += bytes) {
+	for (rows = fontheight(p), dest = dest0; rows-- ; dest += bytes) {
 	    fdx = dup2w(*cdat++);
 	    movepw(dest, (fdx & eorx) ^ bgx);
 	}
@@ -353,9 +353,9 @@ void fbcon_iplan2p2_revc(struct display *p, int xx, int yy)
     int j;
     int bytes;
 
-    dest = p->screen_base + yy * p->fontheight * p->next_line + (xx>>1)*4 +
-	   (xx & 1);
-    j = p->fontheight;
+    dest = (p->screen_base + ((yy * p->next_line) << fontheightlog(p)) +
+	    (xx>>1)*4 + (xx & 1));
+    j = fontheight(p);
     bytes = p->next_line;
     while (j--) {
 	/*  This should really obey the individual character's

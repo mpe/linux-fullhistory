@@ -16,7 +16,7 @@
 #if defined(__mc68000__) || defined(CONFIG_APUS)
 #include <asm/setup.h>
 #endif
-#include "font.h"
+#include <video/font.h>
 
 #define NO_FONTS
 

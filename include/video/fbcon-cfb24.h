@@ -1,6 +1,9 @@
-    /*
-     *  24 bpp packed pixel (cfb24)
-     */
+/*
+ *  FBcon low-level driver for 24 bpp packed pixel (cfb24)
+ */
+
+#ifndef _VIDEO_FBCON_CFB24_H
+#define _VIDEO_FBCON_CFB24_H
 
 #include <linux/config.h>
 
@@ -15,7 +18,6 @@
 #endif
 
 extern struct display_switch fbcon_cfb24;
-extern u32 fbcon_cfb24_cmap[16];
 extern void fbcon_cfb24_setup(struct display *p);
 extern void fbcon_cfb24_bmove(struct display *p, int sy, int sx, int dy,
 			      int dx, int height, int width);
@@ -26,4 +28,7 @@ extern void fbcon_cfb24_putc(struct vc_data *conp, struct display *p, int c,
 extern void fbcon_cfb24_putcs(struct vc_data *conp, struct display *p,
 			      const unsigned short *s, int count, int yy, int xx);
 extern void fbcon_cfb24_revc(struct display *p, int xx, int yy);
-extern void fbcon_cfb24_clear_margins(struct vc_data *conp, struct display *p);
+extern void fbcon_cfb24_clear_margins(struct vc_data *conp, struct display *p,
+				      int bottom_only);
+
+#endif /* _VIDEO_FBCON_CFB24_H */

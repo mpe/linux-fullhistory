@@ -40,7 +40,7 @@
  * fix-mapped?
  */
 enum fixed_addresses {
-#if __SMP__
+#ifdef __SMP__
 	FIX_APIC_BASE,
 	FIX_IO_APIC_BASE,
 #endif

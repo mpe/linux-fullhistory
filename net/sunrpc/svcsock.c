@@ -76,43 +76,52 @@ svc_serv_dequeue(struct svc_serv *serv, struct svc_rqst *rqstp)
 static inline void
 svc_release_skb(struct svc_rqst *rqstp)
 {
-	if (!rqstp->rq_skbuff)
-		return;
+	struct sk_buff *skb = rqstp->rq_skbuff;
 
-	dprintk("svc: releasing skb %p\n", rqstp->rq_skbuff);
-	skb_free_datagram(rqstp->rq_sock->sk_sk, rqstp->rq_skbuff);
+	if (!skb)
+		return;
 	rqstp->rq_skbuff = NULL;
+
+	dprintk("svc: service %p, releasing skb %p\n", rqstp, skb);
+	skb_free_datagram(rqstp->rq_sock->sk_sk, skb);
 }
 
 /*
  * Queue up a socket with data pending. If there are idle nfsd
- * processes, wake'em up.
+ * processes, wake 'em up.
  * When calling this function, you should make sure it can't be interrupted
  * by the network bottom half.
  */
-static inline void
+static void
 svc_sock_enqueue(struct svc_sock *svsk)
 {
+	struct svc_serv	*serv = svsk->sk_server;
 	struct svc_rqst	*rqstp;
-	struct svc_serv	*serv;
+
+	if (serv->sv_threads && serv->sv_sockets)
+		printk(KERN_ERR
+			"svc_sock_enqueue: threads and sockets both waiting??\n");
 
 	if (svsk->sk_busy) {
 		/* Don't enqueue socket while daemon is receiving */
-		dprintk("svc: socket %p not enqueued: busy\n", svsk->sk_sk);
+		dprintk("svc: socket %p busy, not enqueued\n", svsk->sk_sk);
 		return;
 	}
 
 	/* Mark socket as busy. It will remain in this state until the
 	 * server has processed all pending data and put the socket back
-	 * on the idle list
+	 * on the idle list.
 	 */
 	svsk->sk_busy = 1;
 
-	serv = svsk->sk_server;
 	if ((rqstp = serv->sv_threads) != NULL) {
 		dprintk("svc: socket %p served by daemon %p\n",
-						svsk->sk_sk, rqstp);
+			svsk->sk_sk, rqstp);
 		svc_serv_dequeue(serv, rqstp);
+		if (rqstp->rq_sock)
+			printk(KERN_ERR 
+				"svc_sock_enqueue: server %p, rq_sock=%p!\n",
+				rqstp, rqstp->rq_sock);
 		rqstp->rq_sock = svsk;
 		svsk->sk_inuse++;
 		wake_up(&rqstp->rq_wait);
@@ -137,7 +146,8 @@ svc_sock_dequeue(struct svc_serv *serv)
 	end_bh_atomic();
 
 	if (svsk) {
-		dprintk("svc: socket %p dequeued\n", svsk->sk_sk);
+		dprintk("svc: socket %p dequeued, inuse=%d\n",
+			svsk->sk_sk, svsk->sk_inuse);
 		svsk->sk_qued = 0;
 	}
 
@@ -325,13 +335,12 @@ svc_recvfrom(struct svc_rqst *rqstp, struct iovec *iov, int nr, int buflen)
 static void
 svc_udp_data_ready(struct sock *sk, int count)
 {
-	struct svc_sock	*svsk;
+	struct svc_sock	*svsk = (struct svc_sock *)(sk->user_data);
 
-	dprintk("svc: socket %p data ready (inet %p)\n", sk->user_data, sk);
-
-	svsk = (struct svc_sock *)(sk->user_data);
 	if (!svsk)
 		return;
+	dprintk("svc: socket %p(inet %p), count=%d, busy=%d\n",
+		svsk, sk, count, svsk->sk_busy);
 	svsk->sk_data = 1;
 	svc_sock_enqueue(svsk);
 }
@@ -724,12 +733,21 @@ svc_tcp_init(struct svc_sock *svsk)
 int
 svc_recv(struct svc_serv *serv, struct svc_rqst *rqstp)
 {
-	struct wait_queue	wait = { current, NULL };
 	struct svc_sock		*svsk;
 	int			len;
+	struct wait_queue	wait = { current, NULL };
 
 	dprintk("svc: server %p waiting for data (to = %ld)\n",
-					rqstp, current->timeout);
+		rqstp, current->timeout);
+
+	if (rqstp->rq_sock)
+		printk(KERN_ERR 
+			"svc_recv: service %p, socket not NULL!\n",
+			 rqstp);
+	if (waitqueue_active(&rqstp->rq_wait))
+		printk(KERN_ERR 
+			"svc_recv: service %p, wait queue active!\n",
+			 rqstp);
 
 again:
 	/* Initialize the buffers */
@@ -741,13 +759,10 @@ again:
 
 	start_bh_atomic();
 	if ((svsk = svc_sock_dequeue(serv)) != NULL) {
-		end_bh_atomic();
 		rqstp->rq_sock = svsk;
-		svsk->sk_inuse++; /* N.B. where is this decremented? */
+		svsk->sk_inuse++;
 	} else {
 		/* No data pending. Go to sleep */
-		rqstp->rq_sock = NULL;
-		rqstp->rq_wait = NULL;
 		svc_serv_enqueue(serv, rqstp);
 
 		/*
@@ -759,15 +774,22 @@ again:
 		end_bh_atomic();
 		schedule();
 
+		remove_wait_queue(&rqstp->rq_wait, &wait);
+
+		start_bh_atomic();
 		if (!(svsk = rqstp->rq_sock)) {
 			svc_serv_dequeue(serv, rqstp);
-			if (!(svsk = rqstp->rq_sock))
-				return signalled()? -EINTR : -EAGAIN;
+			end_bh_atomic();
+			dprintk("svc: server %p, no data yet\n", rqstp);
+			return signalled()? -EINTR : -EAGAIN;
 		}
 	}
+	end_bh_atomic();
 
-	dprintk("svc: server %p servicing socket %p\n", rqstp, svsk);
+	dprintk("svc: server %p, socket %p, inuse=%d\n",
+		 rqstp, svsk, svsk->sk_inuse);
 	len = svsk->sk_recvfrom(rqstp);
+	dprintk("svc: got len=%d\n", len);
 
 	/* No data, incomplete (TCP) read, or accept() */
 	if (len == 0 || len == -EAGAIN) {

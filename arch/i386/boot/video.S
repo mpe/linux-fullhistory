@@ -24,7 +24,7 @@
 #undef CONFIG_VIDEO_LOCAL
 
 ! Force 400 scan lines for standard modes (hack to fix bad behaviour
-! of certain broken BIOS'es -- don't use unless needed)
+! of certain broken BIOSes -- don't use unless needed)
 #undef CONFIG_VIDEO_400_HACK
 
 ! A special hack allowing to force specific BIOS mode ID along with specific
@@ -85,6 +85,9 @@
 #define PARAM_LFB_SIZE		0x1c
 #define PARAM_LFB_LINELENGTH	0x24
 #define PARAM_LFB_COLORS	0x26
+#define PARAM_VESAPM_SEG	0x2e
+#define PARAM_VESAPM_OFF	0x30
+#define PARAM_LFB_PAGES		0x32
 
 ! Define DO_STORE according to CONFIG_VIDEO_RETAIN
 #ifdef CONFIG_VIDEO_RETAIN
@@ -236,13 +239,14 @@ mopar_gr:
 	seg	fs
 	mov	[PARAM_LFB_DEPTH],ax
 
+	mov	al,(di+29)
+	mov	ah,#0
+	seg	fs
+	mov	[PARAM_LFB_PAGES],ax
+
 	mov	eax,(di+40)
 	seg	fs
 	mov	[PARAM_LFB_BASE],eax
-
-	mov	eax,(di+44)
-	seg	fs
-	mov	[PARAM_LFB_SIZE],eax
 
 	mov	eax,(di+31)
 	seg	fs
@@ -251,7 +255,30 @@ mopar_gr:
 	mov	eax,(di+35)
 	seg	fs
 	mov	[PARAM_LFB_COLORS+4],eax
-	
+
+	! get video mem size
+	lea	di,modelist+1024
+	mov	ax,#0x4f00
+	int	0x10
+
+	xor	eax,eax	
+	mov	ax,(di+18)
+	seg	fs
+	mov	[PARAM_LFB_SIZE],eax
+
+	! get protected mode interface informations	
+	mov	ax,#0x4f0a
+	xor	bx,bx
+	xor	di,di
+	int	0x10
+	cmp	ax,#0x004f
+	jnz	no_pm
+	seg	fs
+	mov	[PARAM_VESAPM_SEG],es
+	seg	fs
+	mov	[PARAM_VESAPM_OFF],di
+
+no_pm:
 	ret
 
 !
@@ -619,7 +646,7 @@ st80:	cmpb	[adapter],#0	! CGA/MDA/HGA => mode 3/7 is always 80x25
 	jz	set80
 	seg	gs		! This is EGA+ -- beware of 80x50 etc.
 	mov	al,[0x0484]
-	or	al,al		! Some buggy BIOSs set 0 rows
+	or	al,al		! Some buggy BIOSes set 0 rows
 	jz	set80
 	cmp	al,#24		! Let's hope this is correct
 	jz	set80

@@ -1042,12 +1042,14 @@ isdn_net_send_skb(struct device *ndev, isdn_net_local * lp,
 	if (ret == len) {
 		lp->transcount += len;
 		clear_bit(0, (void *) &(ndev->tbusy));
+		mark_bh(NET_BH);
 		return 0;
 	}
 	if (ret < 0) {
 		dev_kfree_skb(skb);
 		lp->stats.tx_errors++;
 		clear_bit(0, (void *) &(ndev->tbusy));
+		mark_bh(NET_BH);
 		return 0;
 	}
 	return 1;

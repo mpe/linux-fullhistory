@@ -1,6 +1,9 @@
-    /*
-     *  8 bpp packed pixel (cfb8)
-     */
+/*
+ *  FBcon low-level driver for 8 bpp packed pixel (cfb8)
+ */
+
+#ifndef _VIDEO_FBCON_CFB8_H
+#define _VIDEO_FBCON_CFB8_H
 
 #include <linux/config.h>
 
@@ -25,4 +28,7 @@ extern void fbcon_cfb8_putc(struct vc_data *conp, struct display *p, int c,
 extern void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
 			     const unsigned short *s, int count, int yy, int xx);
 extern void fbcon_cfb8_revc(struct display *p, int xx, int yy);
-extern void fbcon_cfb8_clear_margins(struct vc_data *conp, struct display *p);
+extern void fbcon_cfb8_clear_margins(struct vc_data *conp, struct display *p,
+				     int bottom_only);
+
+#endif /* _VIDEO_FBCON_CFB8_H */

@@ -1,6 +1,9 @@
-    /*
-     *  Amiga bitplanes (afb)
-     */
+/*
+ *  FBcon low-level driver for Amiga bitplanes (afb)
+ */
+
+#ifndef _VIDEO_FBCON_AFB_H
+#define _VIDEO_FBCON_AFB_H
 
 #include <linux/config.h>
 
@@ -25,3 +28,5 @@ extern void fbcon_afb_putc(struct vc_data *conp, struct display *p, int c,
 extern void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
 			    const unsigned short *s, int count, int yy, int xx);
 extern void fbcon_afb_revc(struct display *p, int xx, int yy);
+
+#endif

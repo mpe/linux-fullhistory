@@ -1,3 +1,6 @@
+#ifndef _VIDEO_S3BLIT_H
+#define _VIDEO_S3BLIT_H
+
 /* s3 commands */
 #define S3_BITBLT       0xc011
 #define S3_TWOPOINTLINE 0x2811
@@ -72,3 +75,5 @@
 
 
 #define S3_LAW_CTL 0x58
+
+#endif /* _VIDEO_S3BLIT_H */

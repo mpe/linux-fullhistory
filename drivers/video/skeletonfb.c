@@ -17,8 +17,9 @@
 #include <linux/malloc.h>
 #include <linux/delay.h>
 #include <linux/fb.h>
+#include <linux/init.h>
 
-#include "fbcon.h"
+#include <video/fbcon.h>
 
 
     /*
@@ -83,13 +84,15 @@ static void xxx_detect(void)
      *  it as the default video mode
      */
 
+    struct xxxfb_par par;
+
     /* ... */
     xxx_get_par(&par);
     xxx_encode_var(&default_var, &par);
 }
 
 static int xxx_encode_fix(struct fb_fix_screeninfo *fix, struct xxxfb_par *par,
-			  const struct fb_info *fb_info)
+			  const struct fb_info *info)
 {
     /*
      *  This function should fill in the 'fix' structure based on the values
@@ -101,7 +104,7 @@ static int xxx_encode_fix(struct fb_fix_screeninfo *fix, struct xxxfb_par *par,
 }
 
 static int xxx_decode_var(struct fb_var_screeninfo *var, struct xxxfb_par *par,
-			  const struct fb_info *fb_info)
+			  const struct fb_info *info)
 {
     /*
      *  Get the video params out of 'var'. If a value doesn't fit, round it up,
@@ -122,7 +125,7 @@ static int xxx_decode_var(struct fb_var_screeninfo *var, struct xxxfb_par *par,
 }
 
 static int xxx_encode_var(struct fb_var_screeninfo *var, struct xxxfb_par *par,
-			  const struct fb_info *fb_info)
+			  const struct fb_info *info)
 {
     /*
      *  Fill the 'var' structure based on the values in 'par' and maybe other
@@ -133,7 +136,7 @@ static int xxx_encode_var(struct fb_var_screeninfo *var, struct xxxfb_par *par,
     return 0;
 }
 
-static void xxx_get_par(struct xxxfb_par *par, const struct fb_info *fb_info)
+static void xxx_get_par(struct xxxfb_par *par, const struct fb_info *info)
 {
     /*
      *  Fill the hardware's 'par' structure.
@@ -146,7 +149,7 @@ static void xxx_get_par(struct xxxfb_par *par, const struct fb_info *fb_info)
     }
 }
 
-static void xxx_set_par(struct xxxfb_par *par, const struct fb_info *fb_info)
+static void xxx_set_par(struct xxxfb_par *par, const struct fb_info *info)
 {
     /*
      *  Set the hardware according to 'par'.
@@ -159,10 +162,11 @@ static void xxx_set_par(struct xxxfb_par *par, const struct fb_info *fb_info)
 
 static int xxx_getcolreg(unsigned regno, unsigned *red, unsigned *green,
 			 unsigned *blue, unsigned *transp,
-			 const struct fb_info *fb_info)
+			 const struct fb_info *info)
 {
     /*
      *  Read a single color register and split it into colors/transparent.
+     *  The return values must have a 16 bit magnitude.
      *  Return != 0 for invalid regno.
      */
 
@@ -172,12 +176,12 @@ static int xxx_getcolreg(unsigned regno, unsigned *red, unsigned *green,
 
 static int xxx_setcolreg(unsigned regno, unsigned red, unsigned green,
 			 unsigned blue, unsigned transp,
-			 const struct fb_info *fb_info)
+			 const struct fb_info *info)
 {
     /*
-     *  Set a single color register. The values supplied are already rounded
-     *  down to the hardware's capabilities (according to the entries in the
-     *  `var' structure). Return != 0 for invalid regno.
+     *  Set a single color register. The values supplied have a 16 bit
+     *  magnitude.
+     *  Return != 0 for invalid regno.
      */
 
     if (regno < 16) {
@@ -185,25 +189,29 @@ static int xxx_setcolreg(unsigned regno, unsigned red, unsigned green,
 	 *  Make the first 16 colors of the palette available to fbcon
 	 */
 	if (is_cfb15)		/* RGB 555 */
-	    fbcon_cfb15_cmap[regno] = be16_to_cpu((red << 10) | (green << 5) |
-						  blue);
+	    ...fbcon_cmap.cfb16[regno] = ((red & 0xf800) >> 1) |
+					 ((green & 0xf800) >> 6) |
+					 ((blue & 0xf800) >> 11);
 	if (is_cfb16)		/* RGB 565 */
-	    fbcon_cfb16_cmap[regno] = be16_to_cpu((red << 11) | (green << 5) |
-						  blue);
+	    ...fbcon_cmap.cfb16[regno] = (red & 0xf800) |
+					 ((green & 0xfc00) >> 5) |
+					 ((blue & 0xf800) >> 11);
 	if (is_cfb24)		/* RGB 888 */
-	    fbcon_cfb24_cmap[regno] = be32_to_cpu((red << 16) | (green << 8) |
-						  blue);
+	    ...fbcon_cmap.cfb24[regno] = ((red & 0xff00) << 8) |
+					 (green & 0xff00) |
+					 ((blue & 0xff00) >> 8);
 	if (is_cfb32)		/* RGBA 8888 */
-	    fbcon_cfb32_cmap[regno] = be32_to_cpu((red << 24) | (green << 16) |
-						  (blue << 8) | transp);
+	    ...fbcon_cmap.cfb32[regno] = ((red & 0xff00) << 16) |
+					 ((green & 0xff00) << 8) |
+					 (blue & 0xff00) |
+					 ((transp & 0xff00) >> 8);
     }
     /* ... */
     return 0;
 }
 
 static int xxx_pan_display(struct fb_var_screeninfo *var,
-			   struct xxxfb_par *par,
-			   const struct fb_info *fb_info)
+			   struct xxxfb_par *par, const struct fb_info *info)
 {
     /*
      *  Pan (or wrap, depending on the `vmode' field) the display using the
@@ -215,7 +223,7 @@ static int xxx_pan_display(struct fb_var_screeninfo *var,
     return 0;
 }
 
-static int xxx_blank(int blank_mode, const struct fb_info *fb_info)
+static int xxx_blank(int blank_mode, const struct fb_info *info)
 {
     /*
      *  Blank the screen if blank_mode != 0, else unblank. If blank == NULL
@@ -232,30 +240,45 @@ static int xxx_blank(int blank_mode, const struct fb_info *fb_info)
     return 0;
 }
 
-static struct display_switch *xxx_get_dispsw(const void *par,
-					     struct fb_info_gen *info)
+static void xxx_set_dispsw(const void *par, struct display *disp,
+			   struct fb_info_gen *info)
 {
+    unsigned long flags;
+
     /*
-     *  Return a pointer to appropriate low level text console operations for
-     *  the video mode `par' of your video hardware. These can be generic
-     *  software routines, or hardware accelerated routines specifically
-     *  tailored for your hardware.
-     *  If you don't have any appropriate operations, simple fill in the NULL
-     *  pointer, and there will be no text output.
+     *  Fill in a pointer to appropriate low level text console operations (and
+     *  optionally a pointer to help data) for the video mode `par' of your
+     *  video hardware. These can be generic software routines, or hardware
+     *  accelerated routines specifically tailored for your hardware.
+     *  If you don't have any appropriate operations, you must fill in a
+     *  pointer to dummy operations, and there will be no text output.
      */
+    save_flags(flags); cli();
 #ifdef FBCON_HAS_CFB8
-    if (is_cfb8)
-	return &fbcon_cfb8;
+    if (is_cfb8) {
+	disp->dispsw = fbcon_cfb8;
+    } else
 #endif
 #ifdef FBCON_HAS_CFB16
-    if (is_cfb16)
-	return &fbcon_cfb16;
+    if (is_cfb16) {
+	disp->dispsw = fbcon_cfb16;
+	disp->dispsw_data = ...fbcon_cmap.cfb16;	/* console palette */
+    } else
+#endif
+#ifdef FBCON_HAS_CFB24
+    if (is_cfb24) {
+	disp->dispsw = fbcon_cfb24;
+	disp->dispsw_data = ...fbcon_cmap.cfb24;	/* console palette */
+    } else
 #endif
 #ifdef FBCON_HAS_CFB32
-    if (is_cfb32)
-	return &fbcon_cfb32;
+    if (is_cfb32) {
+	disp->dispsw = fbcon_cfb32;
+	disp->dispsw_data = ...fbcon_cmap.cfb32;	/* console palette */
+    } else
 #endif
-    return NULL;
+	disp->dispsw = &fbcon_dummy;
+    restore_flags(flags);
 }
 
 
@@ -278,27 +301,25 @@ struct fbgen_hwswitch xxx_switch = {
 
 __initfunc(void xxxfb_init(void))
 {
-    struct fb_var_screeninfo var;
-
-    fb_info.fbhw = &xxx_switch;
-    fbhw->detect();
-    strcpy(fb_info.modename, "XXX");
-    fb_info.changevar = NULL;
-    fb_info.node = -1;
-    fb_info.fbops = &xxxfb_ops;
-    fb_info.disp = disp;
-    fb_info.switch_con = &xxxfb_switch;
-    fb_info.updatevar = &xxxfb_update_var;
-    fb_info.blank = &xxxfb_blank;
+    fb_info.gen.fbhw = &xxx_switch;
+    fb_info.gen.fbhw->detect();
+    strcpy(fb_info.gen.info.modename, "XXX");
+    fb_info.gen.info.changevar = NULL;
+    fb_info.gen.info.node = -1;
+    fb_info.gen.info.fbops = &xxxfb_ops;
+    fb_info.gen.info.disp = &disp;
+    fb_info.gen.info.switch_con = &xxxfb_switch;
+    fb_info.gen.info.updatevar = &xxxfb_update_var;
+    fb_info.gen.info.blank = &xxxfb_blank;
     /* This should give a reasonable default video mode */
-    fbgen_get_var(&disp.var, -1, &fb_info.gen);
-    fbgen_do_set_var(var, 1, &fbinfo.gen);
-    fbgen_set_disp(-1, &fb_info.gen.info);
+    fbgen_get_var(&disp.var, -1, &fb_info.gen.info);
+    fbgen_do_set_var(&disp.var, 1, &fb_info.gen);
+    fbgen_set_disp(-1, &fb_info.gen);
     fbgen_install_cmap(0, &fb_info.gen);
     if (register_framebuffer(&fb_info.gen.info) < 0)
 	return;
-    printk("fb%d: %s frame buffer device\n", GET_FB_IDX(fb_info.node),
-	   fb_info.modename);
+    printk("fb%d: %s frame buffer device\n", GET_FB_IDX(fb_info.gen.info.node),
+	   fb_info.gen.info.modename);
 
     /* uncomment this if your driver cannot be unloaded */
     /* MOD_INC_USE_COUNT; */
@@ -316,7 +337,7 @@ void xxxfb_cleanup(struct fb_info *info)
      *  clean up all instances.
      */
 
-    unregister_framebuffer(&fb_info);
+    unregister_framebuffer(info);
     /* ... */
 }
 

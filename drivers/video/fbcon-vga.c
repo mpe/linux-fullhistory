@@ -18,8 +18,8 @@
 
 #include <asm/io.h>
 
-#include "fbcon.h"
-#include "fbcon-vga.h"
+#include <video/fbcon.h>
+#include <video/fbcon-vga.h>
 
 
     /*

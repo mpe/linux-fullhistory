@@ -431,6 +431,20 @@ CONFIG_BLK_DEV_IDEDMA
 
   It is safe to say Y to this question.
 
+Boot off-board chipsets first support
+CONFIG_BLK_DEV_OFFBOARD
+  Normally, IDE controllers built into the motherboard (on-board
+  controllers) are assigned to ide0 and ide1 while those on add-in
+  PCI cards (off-board controllers) are relegated to ide2 and ide3.
+  Saying Y to here will reverse the situation, with off-board
+  controllers on ide0/1 and on-board controllers on ide2/3. This
+  can improve the usability of some boot managers such as LILO
+  when booting from a drive on an off-board controller.
+  Note that this will rearrange the order of the hd* devices and
+  may require modification of fstab and other files.
+
+  If in doubt, say N.
+
 Use DMA by default when available
 CONFIG_IDEDMA_AUTO
   Prior to kernel version 2.1.112, Linux used to automatically use
@@ -650,9 +664,11 @@ CONFIG_PARIDE_PG
   The module will be called pg.o.  You must also have at least one 
   parallel port protocol driver in your system.  This driver 
   implements an API loosely related to the generic SCSI driver.  
-  See /usr/include/linux/pg.h for details, or visit 
-  http://www.torque.net/parport/cdr.html for more information and
-  the required patches to cdrecord.
+  See /usr/include/linux/pg.h for details. 
+
+  You can obtain the most recent version of cdrecord from
+  ftp://ftp.fokus.gmd.de/pub/unix/cdrecord/ .  Versions 1.6.1a3 and
+  later fully support the pg driver.
 
 ATEN EH-100 protocol
 CONFIG_PARIDE_ATEN

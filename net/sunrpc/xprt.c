@@ -310,7 +310,7 @@ xprt_adjust_cwnd(struct rpc_xprt *xprt, int result)
 		if ((cwnd >>= 1) < RPC_CWNDSCALE)
 			cwnd = RPC_CWNDSCALE;
 		xprt->congtime = jiffies + ((cwnd * HZ) << 3) / RPC_CWNDSCALE;
-		dprintk("RPC:      cong %08lx, cwnd was %08lx, now %08lx, "
+		dprintk("RPC:      cong %ld, cwnd was %ld, now %ld, "
 			"time %ld ms\n", xprt->cong, xprt->cwnd, cwnd,
 			(xprt->congtime-jiffies)*1000/HZ);
 		pprintk("RPC: %lu %ld cwnd\n", jiffies, cwnd);
@@ -884,11 +884,14 @@ tcp_write_space(struct sock *sk)
 static void
 xprt_timer(struct rpc_task *task)
 {
-	if (task->tk_rqstp)
-		xprt_adjust_cwnd(task->tk_xprt, -ETIMEDOUT);
+	struct rpc_rqst	*req = task->tk_rqstp;
 
-	dprintk("RPC: %4d xprt_timer (%s request)\n", task->tk_pid,
-			task->tk_rqstp? "pending" : "backlogged");
+	if (req) {
+		xprt_adjust_cwnd(task->tk_xprt, -ETIMEDOUT);
+	}
+
+	dprintk("RPC: %4d xprt_timer (%s request)\n",
+		task->tk_pid, req ? "pending" : "backlogged");
 
 	task->tk_status  = -ETIMEDOUT;
 	task->tk_timeout = 0;
@@ -1155,12 +1158,13 @@ xprt_reserve_status(struct rpc_task *task)
 	return;
 
 bad_list:
-	printk("RPC: %4d inconsistent free list (cong %ld cwnd %ld)\n",
+	printk(KERN_ERR 
+		"RPC: %4d inconsistent free list (cong %ld cwnd %ld)\n",
 		task->tk_pid, xprt->cong, xprt->cwnd);
 	rpc_debug = ~0;
 	goto bummer;
 bad_used:
-	printk("RPC: used rqst slot %p on free list!\n", req);
+	printk(KERN_ERR "RPC: used rqst slot %p on free list!\n", req);
 bummer:
 	task->tk_status = -EIO;
 	xprt->free = NULL;
@@ -1216,12 +1220,16 @@ xprt_release(struct rpc_task *task)
 	}
 	end_bh_atomic();
 
-	/* Decrease congestion value. If congestion threshold is not yet
-	 * reached, pass on the request slot.
+	/* Decrease congestion value. */
+	xprt->cong -= RPC_CWNDSCALE;
+
+#if 0
+	/* If congestion threshold is not yet reached, pass on the request slot.
 	 * This looks kind of kludgy, but it guarantees backlogged requests
 	 * are served in order.
+	 * N.B. This doesn't look completely safe, as the task is still
+	 * on the backlog list after wake-up.
 	 */
-	xprt->cong -= RPC_CWNDSCALE;
 	if (!RPCXPRT_CONGESTED(xprt)) {
 		struct rpc_task	*next = rpc_wake_up_next(&xprt->backlog);
 
@@ -1232,9 +1240,14 @@ xprt_release(struct rpc_task *task)
 			return;
 		}
 	}
+#endif
 
 	req->rq_next = xprt->free;
 	xprt->free   = req;
+
+	/* If not congested, wake up the next backlogged process */
+	if (!RPCXPRT_CONGESTED(xprt))
+		rpc_wake_up_next(&xprt->backlog);
 }
 
 /*

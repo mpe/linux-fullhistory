@@ -58,6 +58,7 @@ static void	call_reconnect(struct rpc_task *task);
 static u32 *	call_header(struct rpc_task *task);
 static u32 *	call_verify(struct rpc_task *task);
 
+
 /*
  * Create an RPC client
  * FIXME: This should also take a flags argument (as in task->tk_flags).
@@ -500,13 +501,12 @@ static void
 call_receive(struct rpc_task *task)
 {
 	dprintk("RPC: %4d call_receive (status %d)\n", 
-				task->tk_pid, task->tk_status);
+		task->tk_pid, task->tk_status);
 
+	task->tk_action = call_status;
 	/* In case of error, evaluate status */
-	if (task->tk_status < 0) {
-		task->tk_action = call_status;
+	if (task->tk_status < 0)
 		return;
-	}
 
 	/* If we have no decode function, this means we're performing
 	 * a void call (a la lockd message passing). */
@@ -516,7 +516,6 @@ call_receive(struct rpc_task *task)
 		return;
 	}
 
-	task->tk_action = call_status;
 	xprt_receive(task);
 }
 
@@ -579,7 +578,8 @@ call_timeout(struct rpc_task *task)
 				task->tk_pid);
 			goto minor_timeout;
 		}
-		if ((to->to_initval <<= 1) > to->to_maxval)
+		to->to_initval <<= 1;
+		if (to->to_initval > to->to_maxval)
 			to->to_initval = to->to_maxval;
 	}
 
@@ -592,9 +592,13 @@ call_timeout(struct rpc_task *task)
 		return;
 	}
 	if (clnt->cl_chatty && !(task->tk_flags & RPC_CALL_MAJORSEEN)) {
-		printk("%s: server %s not responding, still trying\n",
-			clnt->cl_protname, clnt->cl_server);
 		task->tk_flags |= RPC_CALL_MAJORSEEN;
+		if (req)
+			printk("%s: server %s not responding, still trying\n",
+				clnt->cl_protname, clnt->cl_server);
+		else 
+			printk("%s: task %d can't get a request slot\n",
+				clnt->cl_protname, task->tk_pid);
 	}
 	if (clnt->cl_autobind)
 		clnt->cl_port = 0;

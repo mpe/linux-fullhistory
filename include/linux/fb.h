@@ -230,50 +230,51 @@ struct fb_ops {
     */
 
 struct display {
-   /* Filled in by the frame buffer device */
+    /* Filled in by the frame buffer device */
 
-   struct fb_var_screeninfo var;    /* variable infos. yoffset and vmode */
-                                    /* are updated by fbcon.c */
-   struct fb_cmap cmap;             /* colormap */
-   char *screen_base;               /* pointer to top of virtual screen */    
+    struct fb_var_screeninfo var;   /* variable infos. yoffset and vmode */
+				    /* are updated by fbcon.c */
+    struct fb_cmap cmap;            /* colormap */
+    char *screen_base;              /* pointer to top of virtual screen */    
 				    /* (virtual address) */
-   int visual;
-   int type;                        /* see FB_TYPE_* */
-   int type_aux;                    /* Interleave for interleaved Planes */
-   u_short ypanstep;                /* zero if no hardware ypan */
-   u_short ywrapstep;               /* zero if no hardware ywrap */
-   u_long line_length;              /* length of a line in bytes */
-   u_short can_soft_blank;          /* zero if no hardware blanking */
-   u_short inverse;                 /* != 0 text black on white as default */
+    int visual;
+    int type;                       /* see FB_TYPE_* */
+    int type_aux;                   /* Interleave for interleaved Planes */
+    u_short ypanstep;               /* zero if no hardware ypan */
+    u_short ywrapstep;              /* zero if no hardware ywrap */
+    u_long line_length;             /* length of a line in bytes */
+    u_short can_soft_blank;         /* zero if no hardware blanking */
+    u_short inverse;                /* != 0 text black on white as default */
+    struct display_switch *dispsw;  /* low level operations */
+    void *dispsw_data;		    /* optional dispsw helper data */
 
 #if 0
-   struct fb_fix_cursorinfo fcrsr;
-   struct fb_var_cursorinfo *vcrsr;
-   struct fb_cursorstate crsrstate;
+    struct fb_fix_cursorinfo fcrsr;
+    struct fb_var_cursorinfo *vcrsr;
+    struct fb_cursorstate crsrstate;
 #endif
 
-   /* Filled in by the low-level console driver */
+    /* Filled in by the low-level console driver */
 
-   struct vc_data *conp;            /* pointer to console data */
-   struct fb_info *fb_info;         /* frame buffer for this console */
-   int vrows;                       /* number of virtual rows */
-   unsigned short cursor_x;	    /* current cursor position */
-   unsigned short cursor_y;
-   int fgcol;                       /* text colors */
-   int bgcol;
-   u_long next_line;                /* offset to one line below */
-   u_long next_plane;               /* offset to next plane */
-   u_char *fontdata;                /* Font associated to this display */
-   unsigned short fontheightlog;
-   unsigned short fontwidthlog;
-   unsigned short fontheight;
-   unsigned short fontwidth;
-   int userfont;                    /* != 0 if fontdata kmalloc()ed */
-   struct display_switch *dispsw;   /* low level operations */
-   u_short scrollmode;              /* Scroll Method */
-   short yscroll;                   /* Hardware scrolling */
-   unsigned char fgshift, bgshift;
-   unsigned short charmask;	    /* 0xff or 0x1ff */
+    struct vc_data *conp;           /* pointer to console data */
+    struct fb_info *fb_info;        /* frame buffer for this console */
+    int vrows;                      /* number of virtual rows */
+    unsigned short cursor_x;	    /* current cursor position */
+    unsigned short cursor_y;
+    int fgcol;                      /* text colors */
+    int bgcol;
+    u_long next_line;               /* offset to one line below */
+    u_long next_plane;              /* offset to next plane */
+    u_char *fontdata;               /* Font associated to this display */
+    unsigned short _fontheightlog;
+    unsigned short _fontwidthlog;
+    unsigned short _fontheight;
+    unsigned short _fontwidth;
+    int userfont;                   /* != 0 if fontdata kmalloc()ed */
+    u_short scrollmode;             /* Scroll Method */
+    short yscroll;                  /* Hardware scrolling */
+    unsigned char fgshift, bgshift;
+    unsigned short charmask;	    /* 0xff or 0x1ff */
 };
 
 
@@ -321,8 +322,8 @@ struct fbgen_hwswitch {
     int (*pan_display)(const struct fb_var_screeninfo *var,
 		       struct fb_info_gen *info);
     int (*blank)(int blank_mode, struct fb_info_gen *info);
-    struct display_switch *(*get_dispsw)(const void *par,
-					 struct fb_info_gen *info);
+    void (*set_dispsw)(const void *par, struct display *disp,
+		       struct fb_info_gen *info);
 };
 
 struct fb_info_gen {
@@ -394,14 +395,13 @@ extern struct display fb_display[MAX_NR_CONSOLES];
 extern int fb_alloc_cmap(struct fb_cmap *cmap, int len, int transp);
 extern void fb_copy_cmap(struct fb_cmap *from, struct fb_cmap *to,
 			 int fsfromto);
-extern int fb_get_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var,
-		       int kspc, int (*getcolreg)(u_int, u_int *, u_int *,
-						  u_int *, u_int *,
-						  struct fb_info *),
+extern int fb_get_cmap(struct fb_cmap *cmap, int kspc,
+		       int (*getcolreg)(u_int, u_int *, u_int *, u_int *,
+					u_int *, struct fb_info *),
 		       struct fb_info *fb_info);
-extern int fb_set_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var,
-		       int kspc, int (*setcolreg)(u_int, u_int, u_int, u_int,
-						  u_int, struct fb_info *),
+extern int fb_set_cmap(struct fb_cmap *cmap, int kspc,
+		       int (*setcolreg)(u_int, u_int, u_int, u_int, u_int,
+					struct fb_info *),
 		       struct fb_info *fb_info);
 extern struct fb_cmap *fb_default_cmap(int len);
 extern void fb_invert_cmaps(void);
@@ -461,31 +461,6 @@ struct fb_cursorstate {
 #define FB_CURSOR_OFF		0
 #define FB_CURSOR_ON		1
 #define FB_CURSOR_FLASH		2
-
-#define FBCMD_DRAWLINE		0x4621
-#define FBCMD_MOVE		0x4622
-
-#define FB_LINE_XOR	1
-#define FB_LINE_BOX	2
-#define FB_LINE_FILLED	4
-
-struct fb_line {
-	__s32 start_x;
-	__s32 start_y;
-	__s32 end_x;
-	__s32 end_y;
-	__u32 color;
-	__u32 option;
-};
-
-struct fb_move {
-	__s32 src_x;
-	__s32 src_y;
-	__s32 dest_x;
-	__s32 dest_y;
-	__u32 height;
-	__u32 width;
-};
 
 #endif /* Preliminary */
 

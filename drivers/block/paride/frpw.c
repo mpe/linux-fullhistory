@@ -12,10 +12,11 @@
         1.01    GRG 1998.05.06 init_proto, release_proto
 			       fix chip detect
 			       added EPP-16 and EPP-32
+	1.02    GRG 1998.09.23 added hard reset to initialisation process
 
 */
 
-#define	FRPW_VERSION	"1.01" 
+#define	FRPW_VERSION	"1.02" 
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -183,6 +184,9 @@ static int frpw_test_pnp ( PIA *pi )
 /*  returns chip_type:   0 = Xilinx, 1 = ASIC   */
 
 {	int olddelay, a, b;
+
+        w0(0); w2(8); udelay(50); w2(0xc);   /* parallel bus reset */
+        mdelay(1500);
 
 	olddelay = pi->delay;
 	pi->delay = 10;

@@ -21,13 +21,15 @@
 #include <linux/selection.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
+#include <linux/config.h>
 
 #include <asm/io.h>
+#include <asm/mtrr.h>
 
-#include "fbcon.h"
-#include "fbcon-cfb8.h"
-#include "fbcon-cfb16.h"
-#include "fbcon-cfb32.h"
+#include <video/fbcon.h>
+#include <video/fbcon-cfb8.h>
+#include <video/fbcon-cfb16.h>
+#include <video/fbcon-cfb32.h>
 
 #define dac_reg	(0x3c8)
 #define dac_val	(0x3c9)
@@ -75,19 +77,26 @@ static struct fb_var_screeninfo vesafb_defined = {
 
 static struct display disp;
 static struct fb_info fb_info;
-static struct { u_char red, green, blue, pad; } palette[256];
+static struct { u_short blue, green, red, pad; } palette[256];
+static union {
+#ifdef FBCON_HAS_CFB16
+    u16 cfb16[16];
+#endif
+#ifdef FBCON_HAS_CFB32
+    u32 cfb32[16];
+#endif
+} fbcon_cmap;
 
-static int inverse = 0;
+static int             inverse   = 0;
+static int             currcon   = 0;
 
-static int currcon = 0;
+static int             pmi_setpal = 1;	/* pmi for palette changes ??? */
+static int             ypan       = 1;
+static int             ywrap      = 0;
+static unsigned short  *pmi_base  = 0;
+static void            (*pmi_start)(void);
+static void            (*pmi_pal)(void);
 
-/* --------------------------------------------------------------------- */
-/* speed up scrolling                                                    */
-
-#define USE_REDRAW   1
-#define USE_MEMMOVE  2
-  
-static int vesafb_scroll = USE_REDRAW;
 static struct display_switch vesafb_sw;
 
 /* --------------------------------------------------------------------- */
@@ -111,8 +120,37 @@ static int vesafb_release(struct fb_info *info, int user)
 	return(0);
 }
 
-static int fb_update_var(int con, struct fb_info *info)
+static int vesafb_pan_display(struct fb_var_screeninfo *var, int con,
+                            struct fb_info *info)
 {
+	int offset;
+
+	if (var->xoffset)
+		return -EINVAL;
+	if (ypan && var->yoffset+var->yres > var->yres_virtual)
+		return -EINVAL;
+	if (ywrap && var->yoffset > var->yres_virtual)
+		return -EINVAL;
+
+	offset = (var->yoffset * video_linelength + var->xoffset) / 4;
+
+        __asm__ __volatile__(
+                "call *(%%edi)"
+                : /* no return value */
+                : "a" (0x4f07),         /* EAX */
+                  "b" (0),              /* EBX */
+                  "c" (offset),         /* ECX */
+                  "d" (offset >> 16),   /* EDX */
+                  "D" (&pmi_start));    /* EDI */
+	return 0;
+}
+
+static int vesafb_update_var(int con, struct fb_info *info)
+{
+	if (con == currcon && (ywrap || ypan)) {
+		struct fb_var_screeninfo *var = &fb_display[currcon].var;
+		return vesafb_pan_display(var,con,info);
+	}
 	return 0;
 }
 
@@ -126,9 +164,9 @@ static int vesafb_get_fix(struct fb_fix_screeninfo *fix, int con,
 	fix->smem_len=video_size;
 	fix->type = video_type;
 	fix->visual = video_visual;
-	fix->xpanstep=0;
-	fix->ypanstep=0;
-	fix->ywrapstep=0;
+	fix->xpanstep  = 0;
+	fix->ypanstep  = (ywrap || ypan)  ? 1 : 0;
+	fix->ywrapstep =  ywrap           ? 1 : 0;
 	fix->line_length=video_linelength;
 	return 0;
 }
@@ -179,19 +217,22 @@ static void vesafb_set_disp(int con)
 	case 15:
 	case 16:
 		sw = &fbcon_cfb16;
+		display->dispsw_data = fbcon_cmap.cfb16;
 		break;
 #endif
 #ifdef FBCON_HAS_CFB32
 	case 32:
 		sw = &fbcon_cfb32;
+		display->dispsw_data = fbcon_cmap.cfb32;
 		break;
 #endif
 	default:
+		sw = &fbcon_dummy;
 		return;
 	}
 	memcpy(&vesafb_sw, sw, sizeof(*sw));
 	display->dispsw = &vesafb_sw;
-	if (vesafb_scroll == USE_REDRAW) {
+	if (!ypan && !ywrap) {
 		display->scrollmode = SCROLL_YREDRAW;
 		vesafb_sw.bmove = fbcon_redraw_bmove;
 	}
@@ -219,8 +260,40 @@ static int vesa_getcolreg(unsigned regno, unsigned *red, unsigned *green,
 	*red   = palette[regno].red;
 	*green = palette[regno].green;
 	*blue  = palette[regno].blue;
+	*transp = 0;
 	return 0;
 }
+
+#ifdef FBCON_HAS_CFB8
+
+static void vesa_setpalette(int regno, unsigned red, unsigned green, unsigned blue)
+{
+	struct { u_char blue, green, red, pad; } entry;
+
+	if (pmi_setpal) {
+		entry.red   = red   >> 10;
+		entry.green = green >> 10;
+		entry.blue  = blue  >> 10;
+		entry.pad   = 0;
+	        __asm__ __volatile__(
+                "call *(%%esi)"
+                : /* no return value */
+                : "a" (0x4f09),         /* EAX */
+                  "b" (0),              /* EBX */
+                  "c" (1),              /* ECX */
+                  "d" (regno),          /* EDX */
+                  "D" (&entry),         /* EDI */
+                  "S" (&pmi_pal));      /* ESI */
+	} else {
+		/* without protected mode interface, try VGA registers... */
+		outb_p(regno,       dac_reg);
+		outb_p(red   >> 10, dac_val);
+		outb_p(green >> 10, dac_val);
+		outb_p(blue  >> 10, dac_val);
+	}
+}
+
+#endif
 
 static int vesa_setcolreg(unsigned regno, unsigned red, unsigned green,
 			  unsigned blue, unsigned transp,
@@ -235,7 +308,7 @@ static int vesa_setcolreg(unsigned regno, unsigned red, unsigned green,
 	
 	if (regno >= video_cmap_len)
 		return 1;
-	
+
 	palette[regno].red   = red;
 	palette[regno].green = green;
 	palette[regno].blue  = blue;
@@ -243,18 +316,25 @@ static int vesa_setcolreg(unsigned regno, unsigned red, unsigned green,
 	switch (video_bpp) {
 #ifdef FBCON_HAS_CFB8
 	case 8:
-		/* Hmm, can we do it _always_ this way ??? */
-		outb_p(regno, dac_reg);
-		outb_p(red, dac_val);
-		outb_p(green, dac_val);
-		outb_p(blue, dac_val);
+		vesa_setpalette(regno,red,green,blue);
 		break;
 #endif
 #ifdef FBCON_HAS_CFB16
 	case 15:
 	case 16:
-		fbcon_cfb16_cmap[regno] =
-			(red << vesafb_defined.red.offset) | (green << 5) | blue;
+		if (vesafb_defined.red.offset == 10) {
+			/* 1:5:5:5 */
+			fbcon_cmap.cfb16[regno] =
+				((red   & 0xf800) >>  1) |
+				((green & 0xf800) >>  6) |
+				((blue  & 0xf800) >> 11);
+		} else {
+			/* 0:5:6:5 */
+			fbcon_cmap.cfb16[regno] =
+				((red   & 0xf800)      ) |
+				((green & 0xfc00) >>  5) |
+				((blue  & 0xf800) >> 11);
+		}
 		break;
 #endif
 #ifdef FBCON_HAS_CFB24
@@ -264,7 +344,10 @@ static int vesa_setcolreg(unsigned regno, unsigned red, unsigned green,
 #endif
 #ifdef FBCON_HAS_CFB32
 	case 32:
-		fbcon_cfb32_cmap[regno] =
+		red   >>= 8;
+		green >>= 8;
+		blue  >>= 8;
+		fbcon_cmap.cfb32[regno] =
 			(red   << vesafb_defined.red.offset)   |
 			(green << vesafb_defined.green.offset) |
 			(blue  << vesafb_defined.blue.offset);
@@ -279,11 +362,9 @@ static void do_install_cmap(int con, struct fb_info *info)
 	if (con != currcon)
 		return;
 	if (fb_display[con].cmap.len)
-		fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-			    vesa_setcolreg, info);
+		fb_set_cmap(&fb_display[con].cmap, 1, vesa_setcolreg, info);
 	else
-		fb_set_cmap(fb_default_cmap(video_cmap_len),
-			    &fb_display[con].var, 1, vesa_setcolreg,
+		fb_set_cmap(fb_default_cmap(video_cmap_len), 1, vesa_setcolreg,
 			    info);
 }
 
@@ -291,7 +372,7 @@ static int vesafb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			   struct fb_info *info)
 {
 	if (con == currcon) /* current console? */
-		return fb_get_cmap(cmap, &fb_display[con].var, kspc, vesa_getcolreg, info);
+		return fb_get_cmap(cmap, kspc, vesa_getcolreg, info);
 	else if (fb_display[con].cmap.len) /* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
@@ -311,17 +392,10 @@ static int vesafb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			return err;
 	}
 	if (con == currcon)			/* current console? */
-		return fb_set_cmap(cmap, &fb_display[con].var, kspc, vesa_setcolreg, info);
+		return fb_set_cmap(cmap, kspc, vesa_setcolreg, info);
 	else
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return 0;
-}
-
-static int vesafb_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info)
-{
-	/* no panning */
-	return -EINVAL;
 }
 
 static int vesafb_ioctl(struct inode *inode, struct file *file, 
@@ -355,14 +429,16 @@ void vesafb_setup(char *options, int *ints)
 	for(this_opt=strtok(options,","); this_opt; this_opt=strtok(NULL,",")) {
 		if (!*this_opt) continue;
 		
-		printk("vesafb_setup: option %s\n", this_opt);
-		
 		if (! strcmp(this_opt, "inverse"))
 			inverse=1;
 		else if (! strcmp(this_opt, "redraw"))
-			vesafb_scroll = USE_REDRAW;
-		else if (! strcmp(this_opt, "memmove"))
-			vesafb_scroll = USE_MEMMOVE;
+			ywrap=0,ypan=0;
+		else if (! strcmp(this_opt, "ypan"))
+			ywrap=0,ypan=1;
+		else if (! strcmp(this_opt, "ywrap"))
+			ywrap=1,ypan=0;
+		else if (! strcmp(this_opt, "nopal"))
+			pmi_setpal=0;
 		else if (!strncmp(this_opt, "font:", 5))
 			strcpy(fb_info.fontname, this_opt+5);
 	}
@@ -372,13 +448,14 @@ static int vesafb_switch(int con, struct fb_info *info)
 {
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
-		fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1,
-			    vesa_getcolreg, info);
+		fb_get_cmap(&fb_display[currcon].cmap, 1, vesa_getcolreg,
+			    info);
 	
 	currcon = con;
 	/* Install new colormap */
 	do_install_cmap(con, info);
-	return 0;
+	vesafb_update_var(con,info);
+	return 1;
 }
 
 /* 0 unblank, 1 blank, 2 no vsync, 3 no hsync, 4 off */
@@ -400,23 +477,61 @@ __initfunc(void vesafb_init(void))
 	video_width         = screen_info.lfb_width;
 	video_height        = screen_info.lfb_height;
 	video_linelength    = screen_info.lfb_linelength;
-	video_size          = video_linelength * video_height /* screen_info.lfb_size */;
+	video_size          = screen_info.lfb_size * 65536;
 	video_visual = (video_bpp == 8) ?
-		FB_VISUAL_PSEUDOCOLOR : FB_VISUAL_DIRECTCOLOR;
+		FB_VISUAL_PSEUDOCOLOR : FB_VISUAL_TRUECOLOR;
         video_vbase = ioremap((unsigned long)video_base, video_size);
 
-	printk("vesafb: %dx%dx%d, linelength=%d\n",
-	       video_width, video_height, video_bpp, video_linelength);
-	printk("vesafb: framebuffer at 0x%p, mapped to 0x%p, size %d\n",
-	       video_base, video_vbase, video_size);
-	if (vesafb_scroll == USE_REDRAW)  printk("vesafb: scrolling=redraw\n");
-	if (vesafb_scroll == USE_MEMMOVE) printk("vesafb: scrolling=memmove\n");
-	 
+	printk("vesafb: framebuffer at 0x%p, mapped to 0x%p, size %dk\n",
+	       video_base, video_vbase, video_size/1024);
+	printk("vesafb: mode is %dx%dx%d, linelength=%d, pages=%d\n",
+	       video_width, video_height, video_bpp, video_linelength, screen_info.pages);
+
+	if (screen_info.vesapm_seg) {
+		printk("vesafb: protected mode interface info at %04x:%04x\n",
+		       screen_info.vesapm_seg,screen_info.vesapm_off);
+	}
+
+	if (screen_info.vesapm_seg < 0xc000)
+		ywrap = ypan = pmi_setpal = 0; /* not available or some DOS TSR ... */
+
+	if (ypan || ywrap || pmi_setpal) {
+		pmi_base  = (unsigned short*)(__PAGE_OFFSET+((unsigned long)screen_info.vesapm_seg << 4) + screen_info.vesapm_off);
+		pmi_start = (void*)((char*)pmi_base + pmi_base[1]);
+		pmi_pal   = (void*)((char*)pmi_base + pmi_base[2]);
+		printk("vesafb: pmi: set display start = %p, set palette = %p\n",pmi_start,pmi_pal);
+		if (pmi_base[3]) {
+			printk("vesafb: pmi: ports = ");
+				for (i = pmi_base[3]/2; pmi_base[i] != 0xffff; i++)
+					printk("%x ",pmi_base[i]);
+			printk("\n");
+			if (pmi_base[i] != 0xffff) {
+				/*
+				 * memory areas not supported (yet?)
+				 *
+				 * Rules are: we have to set up a descriptor for the requested
+				 * memory area and pass it in the ES register to the BIOS function.
+				 */
+				printk("vesafb: can't handle memory requests, pmi disabled\n");
+				ywrap = ypan = pmi_setpal = 0;
+			}
+		}
+	}
+
 	vesafb_defined.xres=video_width;
 	vesafb_defined.yres=video_height;
 	vesafb_defined.xres_virtual=video_width;
-	vesafb_defined.yres_virtual=video_height;
+	vesafb_defined.yres_virtual=video_size / video_linelength;
 	vesafb_defined.bits_per_pixel=video_bpp;
+
+	if ((ypan || ywrap) && vesafb_defined.yres_virtual > video_height) {
+		printk("vesafb: scrolling: %s using protected mode interface, yres_virtual=%d\n",
+		       ywrap ? "ywrap" : "ypan",vesafb_defined.yres_virtual);
+	} else {
+		printk("vesafb: scrolling: redraw\n");
+		vesafb_defined.yres_virtual = video_height;
+		ypan = ywrap = 0;
+	}
 
 	if (video_bpp > 8) {
 		vesafb_defined.red.offset    = screen_info.red_pos;
@@ -451,6 +566,9 @@ __initfunc(void vesafb_init(void))
 		video_cmap_len = 256;
 	}
 	request_region(0x3c0, 32, "vga+");
+#ifdef CONFIG_MTRR
+        mtrr_add((unsigned long)video_base, video_size, MTRR_TYPE_WRCOMB, 1);
+#endif
 	
 	strcpy(fb_info.modename, "VESA VGA");
 	fb_info.changevar = NULL;
@@ -458,7 +576,7 @@ __initfunc(void vesafb_init(void))
 	fb_info.fbops = &vesafb_ops;
 	fb_info.disp=&disp;
 	fb_info.switch_con=&vesafb_switch;
-	fb_info.updatevar=&fb_update_var;
+	fb_info.updatevar=&vesafb_update_var;
 	fb_info.blank=&vesafb_blank;
 	vesafb_set_disp(-1);
 

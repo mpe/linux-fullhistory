@@ -8,8 +8,8 @@
  *  for more details.
  */
 
-#ifndef __VIDEO_FBCON_H
-#define __VIDEO_FBCON_H
+#ifndef _VIDEO_FBCON_H
+#define _VIDEO_FBCON_H
 
 #include <linux/config.h>
 #include <linux/console_struct.h>
@@ -23,6 +23,7 @@ struct display_switch {
     void (*setup)(struct display *p);
     void (*bmove)(struct display *p, int sy, int sx, int dy, int dx,
 		  int height, int width);
+    /* for clear, conp may be NULL, which means use a blanking (black) color */
     void (*clear)(struct vc_data *conp, struct display *p, int sy, int sx,
 		  int height, int width);
     void (*putc)(struct vc_data *conp, struct display *p, int c, int yy,
@@ -32,9 +33,15 @@ struct display_switch {
     void (*revc)(struct display *p, int xx, int yy);
     void (*cursor)(struct display *p, int mode, int xx, int yy);
     int  (*set_font)(struct display *p, int width, int height);
-    void (*clear_margins)(struct vc_data *conp, struct display *p);
+    void (*clear_margins)(struct vc_data *conp, struct display *p,
+			  int bottom_only);
     unsigned int fontwidthmask;      /* 1 at (1 << (width - 1)) if width is supported */
 }; 
+
+extern struct display_switch fbcon_dummy;
+
+#define fontheight(p) ((p)->_fontheight)
+#define fontheightlog(p) ((p)->_fontheightlog)
 
 #ifdef CONFIG_FBCON_FONTWIDTH8_ONLY
 
@@ -43,12 +50,18 @@ struct display_switch {
 /* fontwidths w1-w2 inclusive are supported by dispsw */
 #define FONTWIDTHRANGE(w1,w2)	FONTWIDTH(8)
 
+#define fontwidth(p) (8)
+#define fontwidthlog(p) (0)
+
 #else
 
 /* fontwidth w is supported by dispsw */
 #define FONTWIDTH(w)	(1 << ((w) - 1))
 /* fontwidths w1-w2 inclusive are supported by dispsw */
 #define FONTWIDTHRANGE(w1,w2)	(FONTWIDTH(w2+1) - FONTWIDTH(w1))
+
+#define fontwidth(p) ((p)->_fontwidth)
+#define fontwidthlog(p) ((p)->_fontwidthlog)
 
 #endif
 
@@ -62,7 +75,7 @@ struct display_switch {
 #define attr_bgcol(p,s)    \
 	(((s) >> ((p)->bgshift)) & 0x0f)
 #define	attr_bgcol_ec(p,conp) \
-	(((conp)->vc_video_erase_char >> ((p)->bgshift)) & 0x0f)
+	((conp) ? (((conp)->vc_video_erase_char >> ((p)->bgshift)) & 0x0f) : 0)
 
 /* Monochrome */
 #define attr_bold(p,s) \
@@ -77,11 +90,32 @@ struct display_switch {
     /*
      *  Scroll Method
      */
+     
+/* Internal flags */
+#define __SCROLL_YPAN		0x001
+#define __SCROLL_YWRAP		0x002
+#define __SCROLL_YMOVE		0x003
+#define __SCROLL_YREDRAW	0x004
+#define __SCROLL_YMASK		0x00f
+#define __SCROLL_YFIXED		0x010
+#define __SCROLL_YNOMOVE	0x020
+#define __SCROLL_YPANREDRAW	0x040
 
-#define SCROLL_YWRAP	(0)
-#define SCROLL_YPAN	(1)
-#define SCROLL_YMOVE	(2)
-#define SCROLL_YREDRAW	(3)
+/* Only these should be used by the drivers */
+/* Which one should you use? If you have a fast card and slow bus,
+   then probably just 0 to indicate fbcon should choose between
+   YWRAP/YPAN+MOVE/YMOVE. On the other side, if you have a fast bus
+   and even better if your card can do fonting (1->8/32bit painting),
+   you should consider either SCROLL_YREDRAW (if your card is
+   able to do neither YPAN/YWRAP), or SCROLL_YNOMOVE.
+   The best is to test it with some real life scrolling (usually, not
+   all lines on the screen are filled completely with non-space characters,
+   and REDRAW performs much better on such lines, so don't cat a file
+   with every line covering all screen columns, it would not be the right
+   benchmark).
+ */
+#define SCROLL_YREDRAW		(__SCROLL_YFIXED|__SCROLL_YREDRAW)
+#define SCROLL_YNOMOVE		(__SCROLL_YNOMOVE|__SCROLL_YPANREDRAW)
 
 extern void fbcon_redraw_bmove(struct display *, int, int, int, int, int, int);
 
@@ -333,7 +367,10 @@ static __inline__ void fast_memmove(char *dst, const char *src, size_t size)
 
     /*
      *  Anyone who'd like to write asm functions for other CPUs?
+     *   (Why are these functions better than those from include/asm/string.h?)
      */
+
+#ifndef CONFIG_SUN4
 
 static __inline__ void *mymemclear_small(void *s, size_t count)
 {
@@ -349,6 +386,36 @@ static __inline__ void *mymemset(void *s, size_t count)
 {
     return(memset(s, 255, count));
 }
+
+#else
+
+/* You may think that I'm crazy and that I should use generic
+   routines.  No, I'm not: sun4's framebuffer crashes if we std
+   into it, so we cannot use memset.  */
+
+static __inline__ void *sun4_memset(void *s, char val, size_t count)
+{
+    int i;
+    for(i=0; i<count;i++)
+        ((char *) s) [i] = val;
+    return s;
+}
+
+static __inline__ void *mymemset(void *s, size_t count)
+{
+    return sun4_memset(s, 255, count);
+}
+
+static __inline__ void *mymemclear(void *s, size_t count)
+{
+    return sun4_memset(s, 0, count);
+}
+
+static __inline__ void *mymemclear_small(void *s, size_t count)
+{
+    return sun4_memset(s, 0, count);
+}
+#endif
 
 #ifdef __i386__
 static __inline__ void fast_memmove(void *d, const void *s, size_t count)
@@ -385,7 +452,8 @@ __asm__ __volatile__ (
 	"decl %%esi\n\t"
 	"decl %%edi\n"
 	"2:\trep\n\t"
-	"movsl"
+	"movsl\n\t"
+	"cld"
 	: /* no output */
 	:"c"(count),"D"(count-4+(long)d),"S"(count-4+(long)s)
 	:"ax","cx","di","si","memory");
@@ -411,4 +479,4 @@ static __inline__ void fast_memmove(char *dst, const char *src, size_t size)
 
 #endif /* !m68k */
 
-#endif /* __VIDEO_FBCON_H */
+#endif /* _VIDEO_FBCON_H */

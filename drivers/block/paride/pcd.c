@@ -96,10 +96,11 @@
 				pcd_completion, use HZ in loop timing
 	1.05	GRG 1998.08.16	Conformed to "Uniform CD-ROM" standard
 	1.06    GRG 1998.08.19  Added audio ioctl support
+	1.07    GRG 1998.09.24  Increased reset timeout, added jumbo support
 
 */
 
-#define	PCD_VERSION	"1.06"
+#define	PCD_VERSION	"1.07"
 #define PCD_MAJOR	46
 #define PCD_NAME	"pcd"
 #define PCD_UNITS	4
@@ -191,7 +192,7 @@ MODULE_PARM(drive3,"1-6i");
 #define PCD_TMO		   800		/* timeout in jiffies */
 #define PCD_DELAY           50          /* spin delay in uS */
 #define PCD_READY_TMO	    20		/* in seconds */
-#define PCD_RESET_TMO	    30		/* in tenths of a second */
+#define PCD_RESET_TMO	   100		/* in tenths of a second */
 
 #define PCD_SPIN	(1000000*PCD_TMO)/(HZ*PCD_DELAY)
 
@@ -364,6 +365,12 @@ static void pcd_release(struct cdrom_device_info *cdi)
 int	init_module(void)
 
 {	int	err;
+
+#ifdef PARIDE_JUMBO
+       { extern paride_init();
+         paride_init();
+       } 
+#endif
 
 	err = pcd_init();
 

@@ -1,6 +1,9 @@
-    /*
-     *  4 bpp packed pixel (cfb4)
-     */
+/*
+ *  FBcon low-level driver for 4 bpp packed pixel (cfb4)
+ */
+
+#ifndef _VIDEO_FBCON_CFB4_H
+#define _VIDEO_FBCON_CFB4_H
 
 #include <linux/config.h>
 
@@ -25,3 +28,5 @@ extern void fbcon_cfb4_putc(struct vc_data *conp, struct display *p, int c,
 extern void fbcon_cfb4_putcs(struct vc_data *conp, struct display *p,
 			     const unsigned short *s, int count, int yy, int xx);
 extern void fbcon_cfb4_revc(struct display *p, int xx, int yy);
+
+#endif /* _VIDEO_FBCON_CFB4_H */

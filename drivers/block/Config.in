@@ -33,6 +33,7 @@ else
       bool '   Generic PCI IDE chipset support' CONFIG_BLK_DEV_IDEPCI
       if [ "$CONFIG_BLK_DEV_IDEPCI" = "y" ]; then
         bool '     Generic PCI bus-master DMA support' CONFIG_BLK_DEV_IDEDMA
+        bool '     Boot off-board chipsets first support' CONFIG_BLK_DEV_OFFBOARD
         if [ "$CONFIG_BLK_DEV_IDEDMA" = "y" ]; then
           bool '     Use DMA by default when available' CONFIG_IDEDMA_AUTO
         fi

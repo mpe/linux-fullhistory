@@ -1276,8 +1276,10 @@ retry_open:
 	if (retval)
 		return retval;
 
+#ifdef CONFIG_UNIX98_PTYS
 	/* N.B. this error exit may leave filp->f_flags with O_NONBLOCK set */
 init_dev_done:
+#endif
 	filp->private_data = tty;
 	check_tty_count(tty, "tty_open");
 	if (tty->driver.type == TTY_DRIVER_TYPE_PTY &&

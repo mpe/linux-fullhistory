@@ -31,10 +31,6 @@ static void memcpy_fs(int fsfromto, void *to, void *from, int len)
     }
 }
 
-#define CNVT_TOHW(val,width)	((((val)<<(width))+0x7fff-(val))>>16)
-#define CNVT_FROMHW(val,width)	(((width) ? ((((val)<<16)-(val)) / \
-					((1<<(width))-1)) : 0))
-
 static u16 red2[] = {
     0x0000, 0xaaaa
 };
@@ -163,9 +159,10 @@ void fb_copy_cmap(struct fb_cmap *from, struct fb_cmap *to, int fsfromto)
      *  Get the colormap for a screen
      */
 
-int fb_get_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
+int fb_get_cmap(struct fb_cmap *cmap, int kspc,
     	    	int (*getcolreg)(u_int, u_int *, u_int *, u_int *, u_int *,
-				 struct fb_info *), struct fb_info *info)
+				 struct fb_info *),
+		struct fb_info *info)
 {
     int i, start;
     u16 *red, *green, *blue, *transp;
@@ -181,10 +178,6 @@ int fb_get_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
     for (i = 0; i < cmap->len; i++) {
 	if (getcolreg(start++, &hred, &hgreen, &hblue, &htransp, info))
 	    return 0;
-	hred = CNVT_FROMHW(hred, var->red.length);
-	hgreen = CNVT_FROMHW(hgreen, var->green.length);
-	hblue = CNVT_FROMHW(hblue, var->blue.length);
-	htransp = CNVT_FROMHW(htransp, var->transp.length);
 	if (kspc) {
 	    *red = hred;
 	    *green = hgreen;
@@ -212,9 +205,10 @@ int fb_get_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
      *  Set the colormap for a screen
      */
 
-int fb_set_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
+int fb_set_cmap(struct fb_cmap *cmap, int kspc,
     	    	int (*setcolreg)(u_int, u_int, u_int, u_int, u_int,
-				 struct fb_info *), struct fb_info *info)
+				 struct fb_info *),
+		struct fb_info *info)
 {
     int i, start;
     u16 *red, *green, *blue, *transp;
@@ -243,10 +237,6 @@ int fb_set_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
 	    else
 		htransp = 0;
 	}
-	hred = CNVT_TOHW(hred, var->red.length);
-	hgreen = CNVT_TOHW(hgreen, var->green.length);
-	hblue = CNVT_TOHW(hblue, var->blue.length);
-	htransp = CNVT_TOHW(htransp, var->transp.length);
 	red++;
 	green++;
 	blue++;

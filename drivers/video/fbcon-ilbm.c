@@ -15,8 +15,8 @@
 #include <linux/string.h>
 #include <linux/fb.h>
 
-#include "fbcon.h"
-#include "fbcon-ilbm.h"
+#include <video/fbcon.h>
+#include <video/fbcon-ilbm.h>
 
 
     /*
@@ -45,25 +45,25 @@ void fbcon_ilbm_bmove(struct display *p, int sy, int sx, int dy, int dx,
 		      int height, int width)
 {
     if (sx == 0 && dx == 0 && width == p->next_plane)
-	mymemmove(p->screen_base+dy*p->fontheight*p->next_line,
-		  p->screen_base+sy*p->fontheight*p->next_line,
-		  height*p->fontheight*p->next_line);
+	mymemmove(p->screen_base+dy*fontheight(p)*p->next_line,
+		  p->screen_base+sy*fontheight(p)*p->next_line,
+		  height*fontheight(p)*p->next_line);
     else {
 	u8 *src, *dest;
 	u_int i;
 
 	if (dy <= sy) {
-	    src = p->screen_base+sy*p->fontheight*p->next_line+sx;
-	    dest = p->screen_base+dy*p->fontheight*p->next_line+dx;
-	    for (i = p->var.bits_per_pixel*height*p->fontheight; i--;) {
+	    src = p->screen_base+sy*fontheight(p)*p->next_line+sx;
+	    dest = p->screen_base+dy*fontheight(p)*p->next_line+dx;
+	    for (i = p->var.bits_per_pixel*height*fontheight(p); i--;) {
 		mymemmove(dest, src, width);
 		src += p->next_plane;
 		dest += p->next_plane;
 	    }
 	} else {
-	    src = p->screen_base+(sy+height)*p->fontheight*p->next_line+sx;
-	    dest = p->screen_base+(dy+height)*p->fontheight*p->next_line+dx;
-	    for (i = p->var.bits_per_pixel*height*p->fontheight; i--;) {
+	    src = p->screen_base+(sy+height)*fontheight(p)*p->next_line+sx;
+	    dest = p->screen_base+(dy+height)*fontheight(p)*p->next_line+dx;
+	    for (i = p->var.bits_per_pixel*height*fontheight(p); i--;) {
 		src -= p->next_plane;
 		dest -= p->next_plane;
 		mymemmove(dest, src, width);
@@ -79,10 +79,10 @@ void fbcon_ilbm_clear(struct vc_data *conp, struct display *p, int sy, int sx,
     u_int i, rows;
     int bg, bg0;
 
-    dest = p->screen_base+sy*p->fontheight*p->next_line+sx;
+    dest = p->screen_base+sy*fontheight(p)*p->next_line+sx;
 
     bg0 = attr_bgcol_ec(p,conp);
-    for (rows = height*p->fontheight; rows--;) {
+    for (rows = height*fontheight(p); rows--;) {
 	bg = bg0;
 	for (i = p->var.bits_per_pixel; i--; dest += p->next_plane) {
 	    if (bg & 1)
@@ -102,12 +102,12 @@ void fbcon_ilbm_putc(struct vc_data *conp, struct display *p, int c, int yy,
     u8 d;
     int fg0, bg0, fg, bg;
 
-    dest = p->screen_base+yy*p->fontheight*p->next_line+xx;
-    cdat = p->fontdata+(c&p->charmask)*p->fontheight;
+    dest = p->screen_base+yy*fontheight(p)*p->next_line+xx;
+    cdat = p->fontdata+(c&p->charmask)*fontheight(p);
     fg0 = attr_fgcol(p,c);
     bg0 = attr_bgcol(p,c);
 
-    for (rows = p->fontheight; rows--;) {
+    for (rows = fontheight(p); rows--;) {
 	d = *cdat++;
 	fg = fg0;
 	bg = bg0;
@@ -153,7 +153,7 @@ void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p,
     u32 d;
     int fg0, bg0, fg, bg;
 
-    dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
+    dest0 = p->screen_base+yy*fontheight(p)*p->next_line+xx;
     fg0 = attr_fgcol(p,*s);
     bg0 = attr_bgcol(p,*s);
 
@@ -163,8 +163,8 @@ void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p,
 	    dest = dest0++;
 	    xx++;
 
-	    cdat1 = p->fontdata+c1*p->fontheight;
-	    for (rows = p->fontheight; rows--;) {
+	    cdat1 = p->fontdata+c1*fontheight(p);
+	    for (rows = fontheight(p); rows--;) {
 		d = *cdat1++;
 		fg = fg0;
 		bg = bg0;
@@ -191,11 +191,11 @@ void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p,
 	    c4 = s[3] & p->charmask;
 
 	    dest = dest0;
-	    cdat1 = p->fontdata+c1*p->fontheight;
-	    cdat2 = p->fontdata+c2*p->fontheight;
-	    cdat3 = p->fontdata+c3*p->fontheight;
-	    cdat4 = p->fontdata+c4*p->fontheight;
-	    for (rows = p->fontheight; rows--;) {
+	    cdat1 = p->fontdata+c1*fontheight(p);
+	    cdat2 = p->fontdata+c2*fontheight(p);
+	    cdat3 = p->fontdata+c3*fontheight(p);
+	    cdat4 = p->fontdata+c4*fontheight(p);
+	    for (rows = fontheight(p); rows--;) {
 #if defined(__BIG_ENDIAN)
 		d = *cdat1++<<24 | *cdat2++<<16 | *cdat3++<<8 | *cdat4++;
 #elif defined(__LITTLE_ENDIAN)
@@ -234,7 +234,7 @@ void fbcon_ilbm_revc(struct display *p, int xx, int yy)
     u_int rows, i;
     int mask;
 
-    dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
+    dest0 = p->screen_base+yy*fontheight(p)*p->next_line+xx;
     mask = p->fgcol ^ p->bgcol;
 
     /*
@@ -246,7 +246,7 @@ void fbcon_ilbm_revc(struct display *p, int xx, int yy)
     for (i = p->var.bits_per_pixel; i--; dest0 += p->next_plane) {
 	if (mask & 1) {
 	    dest = dest0;
-	    for (rows = p->fontheight; rows--; dest += p->next_line)
+	    for (rows = fontheight(p); rows--; dest += p->next_line)
 		*dest = ~*dest;
 	}
 	mask >>= 1;

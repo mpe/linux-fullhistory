@@ -305,6 +305,9 @@ extern void nfs_root_setup(char *str, int *ints);
 #ifdef CONFIG_FTAPE
 extern void ftape_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_MDA_CONSOLE
+extern void mdacon_setup(char *str, int *ints);
+#endif
 
 #if defined(CONFIG_SYSVIPC)
 extern void ipc_init(void);
@@ -315,10 +318,6 @@ extern void dquot_init_hash(void);
 
 #ifdef CONFIG_MD_BOOT
 extern void md_setup(char *str,int *ints) __init;
-#endif
-
-#ifdef __sparc__
-extern int serial_console;
 #endif
 
 /*
@@ -544,10 +543,13 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 	{ "panic=", panic_setup },
 	{ "console=", console_setup },
-#ifdef CONFIG_VT
 #ifdef CONFIG_VGA_CONSOLE
 	{ "no-scroll", no_scroll },
 #endif
+#ifdef CONFIG_MDA_CONSOLE
+	{ "mdacon=", mdacon_setup },
+#endif
+#ifdef CONFIG_VT
 	{ "kbd-reset", kbd_reset_setup },
 #endif
 #ifdef CONFIG_BUGi386

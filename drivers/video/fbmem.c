@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/char/fbmem.c
+ *  linux/drivers/video/fbmem.c
  *
  *  Copyright (C) 1994 Martin Schaller
  *
@@ -66,6 +66,7 @@ extern void offb_init(void);
 extern void offb_setup(char *options, int *ints);
 extern void atyfb_init(void);
 extern void atyfb_setup(char *options, int *ints);
+extern void imsttfb_init(void);
 extern void dnfb_init(void);
 extern void tgafb_init(void);
 extern void virgefb_init(void);
@@ -73,16 +74,15 @@ extern void virgefb_setup(char *options, int *ints);
 extern void resolver_video_setup(char *options, int *ints);
 extern void s3triofb_init(void);
 extern void s3triofb_setup(char *options, int *ints);
-extern void vgafb_init(void);
-extern void vgafb_setup(char *options, int *ints);
 extern void vesafb_init(void);
 extern void vesafb_setup(char *options, int *ints);
-extern void mdafb_init(void);
-extern void mdafb_setup(char *options, int *ints);
 extern void hpfb_init(void);
 extern void hpfb_setup(char *options, int *ints);
 extern void sbusfb_init(void);
 extern void sbusfb_setup(char *options, int *ints);
+extern void valkyriefb_init(void);
+extern void valkyriefb_setup(char *options, int *ints);
+extern void g364fb_init(void);
 
 static struct {
 	const char *name;
@@ -116,6 +116,9 @@ static struct {
 #ifdef CONFIG_FB_ATY
 	{ "atyfb", atyfb_init, atyfb_setup },
 #endif
+#ifdef CONFIG_FB_IMSTT
+	{ "imsttfb", imsttfb_init, NULL },
+#endif
 #ifdef CONFIG_APOLLO
 	{ "apollo", dnfb_init, NULL },
 #endif
@@ -128,20 +131,20 @@ static struct {
 #ifdef CONFIG_FB_VIRGE
 	{ "virge", virgefb_init, virgefb_setup },
 #endif
-#ifdef CONFIG_FB_VGA
-	{ "vga", vgafb_init, vgafb_setup },
-#endif 
 #ifdef CONFIG_FB_VESA
 	{ "vesa", vesafb_init, vesafb_setup },
-#endif 
-#ifdef CONFIG_FB_MDA
-	{ "mda", mdafb_init, mdafb_setup },
 #endif 
 #ifdef CONFIG_FB_HP300
 	{ "hpfb", hpfb_init, hpfb_setup },
 #endif 
 #ifdef CONFIG_FB_SBUS
 	{ "sbus", sbusfb_init, sbusfb_setup },
+#endif
+#ifdef CONFIG_FB_VALKYRIE
+	{ "valkyriefb", valkyriefb_init, valkyriefb_setup },
+#endif
+#ifdef CONFIG_FB_G364
+	{ "g364", g364fb_init, NULL },
 #endif
 #ifdef CONFIG_GSP_RESOLVER
 	/* Not a real frame buffer device... */
@@ -166,6 +169,10 @@ struct fb_info *registered_fb[FB_MAX];
 int num_registered_fb = 0;
 
 char con2fb_map[MAX_NR_CONSOLES];
+
+static int first_fb_vc = 0;
+static int last_fb_vc = MAX_NR_CONSOLES-1;
+static int fbcon_is_default = 1;
 
 static inline int PROC_CONSOLE(void)
 {
@@ -253,6 +260,9 @@ static void set_con2fb_map(int unit, int newidx)
     int oldidx = con2fb_map[unit];
     struct fb_info *oldfb, *newfb;
     struct vc_data *conp;
+    char *fontdata;
+    unsigned short fontwidth, fontheight, fontwidthlog, fontheightlog;
+    int userfont;
 
     if (newidx != con2fb_map[unit]) {
        oldfb = registered_fb[oldidx];
@@ -261,9 +271,21 @@ static void set_con2fb_map(int unit, int newidx)
 	   return;
        oldfb->fbops->fb_release(oldfb,0);
        conp = fb_display[unit].conp;
+       fontdata = fb_display[unit].fontdata;
+       fontwidth = fb_display[unit]._fontwidth;
+       fontheight = fb_display[unit]._fontheight;
+       fontwidthlog = fb_display[unit]._fontwidthlog;
+       fontheightlog = fb_display[unit]._fontheightlog;
+       userfont = fb_display[unit].userfont;
        con2fb_map[unit] = newidx;
        fb_display[unit] = *(newfb->disp);
        fb_display[unit].conp = conp;
+       fb_display[unit].fontdata = fontdata;
+       fb_display[unit]._fontwidth = fontwidth;
+       fb_display[unit]._fontheight = fontheight;
+       fb_display[unit]._fontwidthlog = fontwidthlog;
+       fb_display[unit]._fontheightlog = fontheightlog;
+       fb_display[unit].userfont = userfont;
        fb_display[unit].fb_info = newfb;
        if (!newfb->changevar)
 	   newfb->changevar = oldfb->changevar;
@@ -423,6 +445,9 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 #elif defined(__i386__)
 	if (boot_cpu_data.x86 > 3)
 		pgprot_val(vma->vm_page_prot) |= _PAGE_PCD;
+#elif defined(__mips__)
+	pgprot_val(vma->vm_page_prot) &= ~_CACHE_MASK;
+	pgprot_val(vma->vm_page_prot) |= _CACHE_UNCACHED;
 #else
 #warning What do we have to do here??
 #endif
@@ -501,7 +526,7 @@ register_framebuffer(struct fb_info *fb_info)
 
 	if (first) {
 		first = 0;
-		take_over_console(&fb_con, 0, MAX_NR_CONSOLES-1, 1);
+		take_over_console(&fb_con, first_fb_vc, last_fb_vc, fbcon_is_default);
 	}
 
 	return 0;
@@ -595,7 +620,7 @@ __initfunc(void video_setup(char *options, int *ints))
 
     if (!options || !*options)
 	    return;
-
+	    
     if (!strncmp(options, "map:", 4)) {
 	    options += 4;
 	    if (*options)
@@ -605,6 +630,17 @@ __initfunc(void video_setup(char *options, int *ints))
 			    con2fb_map[i] = (options[j++]-'0') % FB_MAX;
 		    }
 	    return;
+    }
+
+    if (!strncmp(options, "vc:", 3)) {
+	    options += 3;
+	    if (*options)
+		first_fb_vc = simple_strtoul(options, &options, 10) - 1;
+	    if (first_fb_vc < 0)
+		first_fb_vc = 0;
+	    if (*options++ == '-')
+		last_fb_vc = simple_strtoul(options, &options, 10) - 1;
+	    fbcon_is_default = 0;
     }
 
     if (num_pref_init_funcs == FB_MAX)

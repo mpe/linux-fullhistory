@@ -34,10 +34,10 @@
 	To use this device, you must have the following device 
 	special files defined:
 
-		/dev/pg0 b 97 0
-		/dev/pg1 b 97 1
-		/dev/pg2 b 97 2
-		/dev/pg3 b 97 3
+		/dev/pg0 c 97 0
+		/dev/pg1 c 97 1
+		/dev/pg2 c 97 2
+		/dev/pg3 c 97 3
 
 	(You'll need to change the 97 to something else if you use
 	the 'major' parameter to install the driver on a different
@@ -117,9 +117,11 @@
 /* Changes:
 
 	1.01	GRG 1998.06.16	Bug fixes
+	1.02    GRG 1998.09.24  Added jumbo support
+
 */
 
-#define PG_VERSION      "1.01"
+#define PG_VERSION      "1.02"
 #define PG_MAJOR	97
 #define PG_NAME		"pg"
 #define PG_UNITS	4
@@ -323,6 +325,12 @@ void    cleanup_module(void);
 int     init_module(void)
 
 {       int     err;
+
+#ifdef PARIDE_JUMBO
+       { extern paride_init();
+         paride_init();
+       } 
+#endif
 
 	err = pg_init();
 

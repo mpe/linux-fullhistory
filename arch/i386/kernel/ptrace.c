@@ -647,8 +647,6 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 #endif
 			  __copy_from_user(&child->tss.i387.hard, (void *)data,
 					   sizeof(struct user_i387_struct));
-			  child->flags &= ~PF_USEDFPU;
-			  stts();
 #ifdef CONFIG_MATH_EMULATION
 			} else {
 			  restore_i387_soft(&child->tss.i387.soft,

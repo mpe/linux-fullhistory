@@ -1,8 +1,9 @@
+#include <linux/timer.h>
 #include <asm/sbus.h>
 #include <asm/oplib.h>
 #include <asm/fbio.h>
 
-#include "fbcon.h"
+#include <video/fbcon.h>
 
 struct bt_regs {
 	volatile unsigned int addr;           /* address register */
@@ -36,15 +37,33 @@ struct fb_info_tcx {
 	struct tcx_tec *tec;
 	u32 *cplane;
 };
+struct fb_info_leo {
+	struct leo_lx_krn *lx_krn;
+	struct leo_lc_ss0_usr *lc_ss0_usr;
+	struct leo_ld_ss0 *ld_ss0;
+	struct leo_ld_ss1 *ld_ss1;
+	struct leo_cursor *cursor;
+	unsigned int extent;
+};
+struct fb_info_cgfourteen {
+	struct cg14_regs *regs;
+	struct cg14_cursor *cursor;
+	struct cg14_clut *clut;
+	int ramsize;
+	int mode;
+};
 
 struct cg_cursor {
-	short	enable;         /* cursor is enabled */
+	char	enable;         /* cursor is enabled */
+	char	mode;		/* cursor mode */
 	struct	fbcurpos cpos;  /* position */
 	struct	fbcurpos chot;  /* hot-spot */
 	struct	fbcurpos size;  /* size of mask & image fields */
 	struct	fbcurpos hwsize; /* hw max size */
 	int	bits[2][128];   /* space for mask & image bits */
 	char	color [6];      /* cursor colors */
+	struct	timer_list timer; /* cursor timer */
+	int	blink_rate;	/* cursor blink rate */
 };
 
 struct sbus_mmap_map {
@@ -71,10 +90,11 @@ struct fb_info_sbusfb {
 		struct fb_info_bwtwo bw2;
 		struct fb_info_cgthree cg3;
 		struct fb_info_tcx tcx;
+		struct fb_info_leo leo;
+		struct fb_info_cgfourteen cg14;
 	} s;
 	unsigned char *color_map;
 	struct cg_cursor cursor;
-	unsigned char hw_cursor_shown;
 	unsigned char open;
 	unsigned char mmaped;
 	unsigned char blanked;
@@ -82,6 +102,7 @@ struct fb_info_sbusfb {
 	int y_margin;
 	int vtconsole;
 	int consolecnt;
+	int graphmode;
 	int emulations[4];
 	struct sbus_mmap_map *mmap_map;
 	unsigned long physbase;
@@ -91,7 +112,7 @@ struct fb_info_sbusfb {
 	void (*setcursor)(struct fb_info_sbusfb *);
 	void (*setcurshape)(struct fb_info_sbusfb *);
 	void (*setcursormap)(struct fb_info_sbusfb *, unsigned char *, unsigned char *, unsigned char *);
-	void (*loadcmap)(struct fb_info_sbusfb *, int, int);
+	void (*loadcmap)(struct fb_info_sbusfb *, struct display *, int, int);
 	void (*blank)(struct fb_info_sbusfb *);
 	void (*unblank)(struct fb_info_sbusfb *);
 	void (*margins)(struct fb_info_sbusfb *, struct display *, int, int);
@@ -99,6 +120,7 @@ struct fb_info_sbusfb {
 	void (*fill)(struct fb_info_sbusfb *, struct display *, int, int, unsigned short *);
 	void (*switch_from_graph)(struct fb_info_sbusfb *);
 	void (*restore_palette)(struct fb_info_sbusfb *);
+	int (*ioctl)(struct fb_info_sbusfb *, unsigned int, unsigned long);
 };
 
 extern char *creatorfb_init(struct fb_info_sbusfb *);

@@ -2,7 +2,7 @@
 
 #include <linux/config.h>
 
-#include "font.h"
+#include <video/font.h>
 
 static unsigned char acorndata_8x8[] = {
 /* 00 */  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* ^@ */

@@ -385,20 +385,15 @@ void math_error(void)
 {
 	struct task_struct * task;
 
-	lock_kernel();
-	clts();
-	task = current;
 	/*
-	 *	Save the info for the exception handler
+	 * Save the info for the exception handler
+	 * (this will also clear the error)
 	 */
-	__asm__ __volatile__("fnsave %0":"=m" (task->tss.i387.hard));
-	task->flags&=~PF_USEDFPU;
-	stts();
-
+	task = current;
+	unlazy_fpu(task);
 	task->tss.trap_no = 16;
 	task->tss.error_code = 0;
 	force_sig(SIGFPE, task);
-	unlock_kernel();
 }
 
 asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
@@ -426,16 +421,6 @@ asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,
 asmlinkage void math_state_restore(void)
 {
 	__asm__ __volatile__("clts");		/* Allow maths ops (or we recurse) */
-
-/*
- *	SMP is actually simpler than uniprocessor for once. Because
- *	we can't pull the delayed FPU switching trick Linus does
- *	we simply have to do the restore each context switch and
- *	set the flag. switch_to() will always save the state in
- *	case we swap processors. We also don't use the coprocessor
- *	timer - IRQ 13 mode isn't used with SMP machines (thank god).
- */
-
 	if(current->used_math)
 		__asm__("frstor %0": :"m" (current->tss.i387));
 	else

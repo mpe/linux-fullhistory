@@ -10,10 +10,11 @@
 /* Changes:
 
         1.01    GRG 1998.05.06 init_proto, release_proto
+	1.02    GRG 1998.09.23 updates for the -E rev chip
 
 */
 
-#define ON26_VERSION      "1.01"
+#define ON26_VERSION      "1.02"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -91,8 +92,8 @@ static void on26_write_regr( PIA *pi, int cont, int regr, int val )
         }
 }
 
-#define  CCP(x)  w0(0xff);w0(0xaa);w0(0x55);w0(0);w0(0xff);\
-		 w0(0x87);w0(0x78);w0(x);w2(4);
+#define  CCP(x)  w0(0xfe);w0(0xaa);w0(0x55);w0(0);w0(0xff);\
+		 w0(0x87);w0(0x78);w0(x);w2(4);w2(5);w2(4);w0(0xff);
 
 static void on26_connect ( PIA *pi )
 
@@ -102,7 +103,6 @@ static void on26_connect ( PIA *pi )
         pi->saved_r2 = r2();
 
         CCP(0x20);
-	w2(0xcd); w2(0xcc); w0(0xff);
 	x = 8; if (pi->mode) x = 9;
 
 	w0(2); P1; w0(8); P2;
@@ -114,10 +114,61 @@ static void on26_disconnect ( PIA *pi )
 {       if (pi->mode >= 2) { w3(4); w3(4); w3(4); w3(4); }
 	              else { w0(4); P1; w0(4); P1; }
 	CCP(0x30);
-        w2(0xcd); w2(0xcc); w0(0xff);
         w0(pi->saved_r0);
         w2(pi->saved_r2);
 } 
+
+static int on26_test_port( PIA *pi)  /* hard reset */
+
+{       int     i, m, d;
+
+        pi->saved_r0 = r0();
+        pi->saved_r2 = r2();
+
+        d = pi->delay;
+        m = pi->mode;
+        pi->delay = 5;
+        pi->mode = 0;
+
+        w2(0xc);
+
+        CCP(0x30); CCP(0); 
+
+        w0(0xfe);w0(0xaa);w0(0x55);w0(0);w0(0xff);
+        i = ((r1() & 0xf0) << 4); w0(0x87);
+        i |= (r1() & 0xf0); w0(0x78);
+        w0(0x20);w2(4);w2(5);
+        i |= ((r1() & 0xf0) >> 4);
+        w2(4);w0(0xff);
+
+        if (i == 0xb5f) {
+
+            w0(2); P1; w0(0);   P2;
+            w0(3); P1; w0(0);   P2;
+            w0(2); P1; w0(8);   P2; udelay(100);
+            w0(2); P1; w0(0xa); P2; udelay(100);
+            w0(2); P1; w0(8);   P2; udelay(1000);
+            
+            on26_write_regr(pi,0,6,0xa0);
+
+            for (i=0;i<100;i++) {
+                if (!(on26_read_regr(pi,0,7) & 0x80)) break;
+                udelay(100000);
+            }
+
+            w0(4); P1; w0(4); P1;
+        }
+
+        CCP(0x30);
+
+        pi->delay = d;
+        pi->mode = m;
+        w0(pi->saved_r0);
+        w2(pi->saved_r2);
+
+        return 5;
+}
+
 
 static void on26_read_block( PIA *pi, char * buf, int count )
 
@@ -240,7 +291,7 @@ struct pi_protocol on26 = {"on26",0,5,2,1,1,
                            on26_read_block,
                            on26_connect,
                            on26_disconnect,
-                           0,
+                           on26_test_port,
                            0,
                            0,
                            on26_log_adapter,

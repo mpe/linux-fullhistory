@@ -336,7 +336,9 @@ static void pty_set_termios(struct tty_struct *tty, struct termios *old_termios)
 
 __initfunc(int pty_init(void))
 {
+#ifdef CONFIG_UNIX98_PTYS
 	int i;
+#endif
 
 	/* Traditional BSD devices */
 

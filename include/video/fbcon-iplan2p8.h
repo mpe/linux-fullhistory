@@ -1,6 +1,9 @@
-    /*
-     *  Atari interleaved bitplanes (8 planes) (iplan2p8)
-     */
+/*
+ *  FBcon low-level driver for Atari interleaved bitplanes (8 planes) (iplan2p8)
+ */
+
+#ifndef _VIDEO_FBCON_IPLAN2P8_H
+#define _VIDEO_FBCON_IPLAN2P8_H
 
 #include <linux/config.h>
 
@@ -25,3 +28,5 @@ extern void fbcon_iplan2p8_putc(struct vc_data *conp, struct display *p, int c,
 extern void fbcon_iplan2p8_putcs(struct vc_data *conp, struct display *p,
 				 const unsigned short *s, int count, int yy, int xx);
 extern void fbcon_iplan2p8_revc(struct display *p, int xx, int yy);
+
+#endif /* _VIDEO_FBCON_IPLAN2P8_H */

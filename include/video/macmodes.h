@@ -8,6 +8,8 @@
  *  more details.
  */
 
+#ifndef _VIDEO_MACMODES_H
+#define _VIDEO_MACMODES_H
 
     /*
      *  Video mode values.
@@ -58,3 +60,5 @@ extern int mac_map_monitor_sense(int sense);
 
 #define NV_VMODE		0x140f
 #define NV_CMODE		0x1410
+
+#endif /* _VIDEO_MACMODES_H */

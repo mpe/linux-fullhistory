@@ -4,7 +4,7 @@
 /*                                            */
 /**********************************************/
 
-#include "font.h"
+#include <video/font.h>
 
 #define FONTDATAMAX 2048
 

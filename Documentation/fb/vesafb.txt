@@ -30,37 +30,66 @@ How to use it?
 ==============
 
 Switching modes is done using the vga=... boot parameter.  Read
-Documentation/svga.txt for details.  With vesafb both text and
-graphics modes work.  Text modes are handled by vgafb, graphic modes
-by the new vesafb.c.
+Documentation/svga.txt for details.
 
-The graphic modes are not in the list which you get if you boot with
+You should compile in both vgacon (for text mode) and vesafb (for
+graphics mode).   Which of them takes over the console depends on
+whenever the specified mode is text or graphics.
+
+The graphic modes are NOT in the list which you get if you boot with
 vga=ask and hit return.  Here are some mode numbers:
 
-    | 640x480  800x600  1024x768
-----+---------------------------
-256 |  0x101    0x103    0x105
-32k |  0x110    0x113    0x116
-64k |  0x111    0x114    0x117
-16M |  0x112    0x115    0x118
+    | 640x480  800x600  1024x768 1280x1024
+----+-------------------------------------
+256 |  0x101    0x103    0x105    0x107   
+32k |  0x110    0x113    0x116    0x119   
+64k |  0x111    0x114    0x117    0x11A   
+16M |  0x112    0x115    0x118    0x11B   
 
-Note 1: this are the VESA mode numbers.  The video mode select code
-        expects 0x200 + VESA mode number.
-Note 2: lilo can't handle hex, for booting with "vga=??" you have to
-        transform the numbers to decimal.
+This are the VESA mode numbers.  The video mode select code expects
+0x200 + VESA mode number.  Therefore you have to enter "305" at the
+"vga=ask" prompt to boot into 1024x768x8.
+
+If this does'nt work, this might be becauce your BIOS does not support
+linear framebuffers or becauce it does'nt support this mode at all.
+Even if your board does, it might be the BIOS does not.  VESA BIOS
+Extentions v2.0 are required, 1.2 is NOT sufficient.  You'll get a
+"bad mode number" message if something goes wrong.
+
+Note: LILO can't handle hex, for booting directly with "vga=mode-number"
+      you have to transform the numbers to decimal.
 
 
-Speed it up!
-============
+X11
+===
 
-Check /usr/src/linux/Documentation/mtrr.txt, enabling write-combining
-for the framebuffer memory gives a performance boost.
+XF68_FBDev should work just fine, but it is non-accelerated.  Running
+another (accelerated) X-Server like XF86_SVGA might or might not work.
+It depends on X-Server and graphics board.
 
-There are two ways to do console scrolling: redraw the screen
-completely, or by copying around the video memory.  You can select one
-of them using the kernel command line: video=vesa:redraw or
-video=vesa:memmove.  redraw is the default, becauce this one works
-faster on my box.
+The X-Server must restore the video mode correctly, else you end up
+with a broken console (and vesafb can't do anything about this).
+
+
+Configuration
+=============
+
+You can pass kernel command line options to vesafb with
+"video=vesa:option1".  Multiple options should be separated
+by comma.  Accepted options:
+
+invers	- no comment...
+redraw	- scroll by redrawing the affected part of the screen
+ypan    - enable display panning using the VESA protected mode
+	  interface.  This enables the Shift-PgUp scrollback 
+	  thing and greatly speeds up fullscreen scrolling.
+	  It is slower than "redraw" when scrolling only a halve
+	  screen.  This is the default.
+ywrap	- If your gfx board supports wrap-around, use this one
+	  instead of ypan. 
+nopal	- Don't use the protected mode interface for palette
+	  changes.  vesafb will try the standard vga registers
+	  instead.
 
 
 Have fun!
