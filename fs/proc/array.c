@@ -70,401 +70,7 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
-
-
-static int open_kcore(struct inode * inode, struct file * filp)
-{
-	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
-}
-
-extern ssize_t read_kcore(struct file *, char *, size_t, loff_t *);
-
-static struct file_operations proc_kcore_operations = {
-	NULL,           /* lseek */
-	read_kcore,
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	open_kcore
-};
-
-struct inode_operations proc_kcore_inode_operations = {
-	&proc_kcore_operations,
-};
-
-/*
- * This function accesses profiling information. The returned data is
- * binary: the sampling step and the actual contents of the profile
- * buffer. Use of the program readprofile is recommended in order to
- * get meaningful info out of these data.
- */
-static ssize_t read_profile(struct file *file, char *buf,
-			    size_t count, loff_t *ppos)
-{
-	unsigned long p = *ppos;
-	ssize_t read;
-	char * pnt;
-	unsigned int sample_step = 1 << prof_shift;
-
-	if (p >= (prof_len+1)*sizeof(unsigned int))
-		return 0;
-	if (count > (prof_len+1)*sizeof(unsigned int) - p)
-		count = (prof_len+1)*sizeof(unsigned int) - p;
-	read = 0;
-
-	while (p < sizeof(unsigned int) && count > 0) {
-		put_user(*((char *)(&sample_step)+p),buf);
-		buf++; p++; count--; read++;
-	}
-	pnt = (char *)prof_buffer + p - sizeof(unsigned int);
-	copy_to_user(buf,(void *)pnt,count);
-	read += count;
-	*ppos += read;
-	return read;
-}
-
-/*
- * Writing to /proc/profile resets the counters
- *
- * Writing a 'profiling multiplier' value into it also re-sets the profiling
- * interrupt frequency, on architectures that support this.
- */
-static ssize_t write_profile(struct file * file, const char * buf,
-			     size_t count, loff_t *ppos)
-{
-#ifdef __SMP__
-	extern int setup_profiling_timer (unsigned int multiplier);
-
-	if (count==sizeof(int)) {
-		unsigned int multiplier;
-
-		if (copy_from_user(&multiplier, buf, sizeof(int)))
-			return -EFAULT;
-
-		if (setup_profiling_timer(multiplier))
-			return -EINVAL;
-	}
-#endif
-
-	memset(prof_buffer, 0, prof_len * sizeof(*prof_buffer));
-	return count;
-}
-
-static struct file_operations proc_profile_operations = {
-	NULL,           /* lseek */
-	read_profile,
-	write_profile,
-};
-
-struct inode_operations proc_profile_inode_operations = {
-	&proc_profile_operations,
-};
-
-static struct page * get_phys_addr(struct mm_struct * mm, unsigned long ptr)
-{
-	pgd_t *pgd;
-	pmd_t *pmd;
-	pte_t pte;
-
-	if (ptr >= TASK_SIZE)
-		return 0;
-	pgd = pgd_offset(mm,ptr);
-	if (pgd_none(*pgd))
-		return 0;
-	if (pgd_bad(*pgd)) {
-		pgd_ERROR(*pgd);
-		pgd_clear(pgd);
-		return 0;
-	}
-	pmd = pmd_offset(pgd,ptr);
-	if (pmd_none(*pmd))
-		return 0;
-	if (pmd_bad(*pmd)) {
-		pmd_ERROR(*pmd);
-		pmd_clear(pmd);
-		return 0;
-	}
-	pte = *pte_offset(pmd,ptr);
-	if (!pte_present(pte))
-		return 0;
-	return pte_page(pte);
-}
-
-static int get_array(struct mm_struct *mm, unsigned long start, unsigned long end, char * buffer)
-{
-	struct page *page;
-	unsigned long kaddr;
-	int size = 0, result = 0;
-	char c;
-
-	if (start >= end)
-		return result;
-	for (;;) {
-		page = get_phys_addr(mm, start);
-		if (!page)
-			return result;
-		kaddr = kmap(page, KM_READ) + (start & ~PAGE_MASK);
-		do {
-			c = *(char *) kaddr;
-			if (!c)
-				result = size;
-			if (size < PAGE_SIZE)
-				buffer[size++] = c;
-			else {
-				kunmap(kaddr, KM_READ);
-				return result;
-			}
-			kaddr++;
-			start++;
-			if (!c && start >= end) {
-				kunmap(kaddr, KM_READ);
-				return result;
-			}
-		} while (kaddr & ~PAGE_MASK);
-		kunmap(kaddr, KM_READ);
-	}
-	return result;
-}
-
-static struct mm_struct *get_mm(int pid)
-{
-	struct task_struct *p;
-	struct mm_struct *mm = NULL;
-	
-	read_lock(&tasklist_lock);
-	p = find_task_by_pid(pid);
-	if (p)
-		mm = p->mm;
-	if (mm)
-		atomic_inc(&mm->mm_users);
-	read_unlock(&tasklist_lock);
-	return mm;
-}
-
-
-static int get_env(int pid, char * buffer)
-{
-	struct mm_struct *mm = get_mm(pid);
-	int res = 0;
-	if (mm) {
-		res = get_array(mm, mm->env_start, mm->env_end, buffer);
-		mmput(mm);
-	}
-	return res;
-}
-
-static int get_arg(int pid, char * buffer)
-{
-	struct mm_struct *mm = get_mm(pid);
-	int res = 0;
-	if (mm) {
-		res = get_array(mm, mm->arg_start, mm->arg_end, buffer);
-		mmput(mm);
-	}
-	return res;
-}
-
-/*
- * These bracket the sleeping functions..
- */
-extern void scheduling_functions_start_here(void);
-extern void scheduling_functions_end_here(void);
-#define first_sched	((unsigned long) scheduling_functions_start_here)
-#define last_sched	((unsigned long) scheduling_functions_end_here)
-
-static unsigned long get_wchan(struct task_struct *p)
-{
-	if (!p || p == current || p->state == TASK_RUNNING)
-		return 0;
-#if defined(__i386__)
-	{
-		unsigned long ebp, esp, eip;
-		unsigned long stack_page;
-		int count = 0;
-
-		stack_page = (unsigned long)p;
-		esp = p->thread.esp;
-		if (!stack_page || esp < stack_page || esp > 8188+stack_page)
-			return 0;
-		/* include/asm-i386/system.h:switch_to() pushes ebp last. */
-		ebp = *(unsigned long *) esp;
-		do {
-			if (ebp < stack_page || ebp > 8184+stack_page)
-				return 0;
-			eip = *(unsigned long *) (ebp+4);
-			if (eip < first_sched || eip >= last_sched)
-				return eip;
-			ebp = *(unsigned long *) ebp;
-		} while (count++ < 16);
-	}
-#elif defined(__alpha__)
-	/*
-	 * This one depends on the frame size of schedule().  Do a
-	 * "disass schedule" in gdb to find the frame size.  Also, the
-	 * code assumes that sleep_on() follows immediately after
-	 * interruptible_sleep_on() and that add_timer() follows
-	 * immediately after interruptible_sleep().  Ugly, isn't it?
-	 * Maybe adding a wchan field to task_struct would be better,
-	 * after all...
-	 */
-	{
-	    unsigned long schedule_frame;
-	    unsigned long pc;
-
-	    pc = thread_saved_pc(&p->thread);
-	    if (pc >= first_sched && pc < last_sched) {
-		schedule_frame = ((unsigned long *)p->thread.ksp)[6];
-		return ((unsigned long *)schedule_frame)[12];
-	    }
-	    return pc;
-	}
-#elif defined(__mips__)
-	/*
-	 * The same comment as on the Alpha applies here, too ...
-	 */
-	{
-		unsigned long schedule_frame;
-		unsigned long pc;
-
-		pc = thread_saved_pc(&p->tss);
-		if (pc >= (unsigned long) interruptible_sleep_on && pc < (unsigned long) add_timer) {
-			schedule_frame = ((unsigned long *)(long)p->tss.reg30)[16];
-			return (unsigned long)((unsigned long *)schedule_frame)[11];
-		}
-		return pc;
-	}
-#elif defined(__mc68000__)
-	{
-	    unsigned long fp, pc;
-	    unsigned long stack_page;
-	    int count = 0;
-
-	    stack_page = (unsigned long)p;
-	    fp = ((struct switch_stack *)p->thread.ksp)->a6;
-	    do {
-		    if (fp < stack_page+sizeof(struct task_struct) ||
-			fp >= 8184+stack_page)
-			    return 0;
-		    pc = ((unsigned long *)fp)[1];
-		/* FIXME: This depends on the order of these functions. */
-		    if (pc < first_sched || pc >= last_sched)
-		      return pc;
-		    fp = *(unsigned long *) fp;
-	    } while (count++ < 16);
-	}
-#elif defined(__powerpc__)
-	{
-		unsigned long ip, sp;
-		unsigned long stack_page = (unsigned long) p;
-		int count = 0;
-
-		sp = p->thread.ksp;
-		do {
-			sp = *(unsigned long *)sp;
-			if (sp < stack_page || sp >= stack_page + 8188)
-				return 0;
-			if (count > 0) {
-				ip = *(unsigned long *)(sp + 4);
-				if (ip < first_sched || ip >= last_sched)
-					return ip;
-			}
-		} while (count++ < 16);
-	}
-#elif defined(__arm__)
-	{
-		unsigned long fp, lr;
-		unsigned long stack_page;
-		int count = 0;
-
-		stack_page = 4096 + (unsigned long)p;
-		fp = get_css_fp(&p->thread);
-		do {
-			if (fp < stack_page || fp > 4092+stack_page)
-				return 0;
-			lr = pc_pointer (((unsigned long *)fp)[-1]);
-			if (lr < first_sched || lr > last_sched)
-				return lr;
-			fp = *(unsigned long *) (fp - 12);
-		} while (count ++ < 16);
-	}
-#elif defined (__sparc__)
-	{
-		unsigned long pc, fp, bias = 0;
-		unsigned long task_base = (unsigned long) p;
-		struct reg_window *rw;
-		int count = 0;
-
-#ifdef __sparc_v9__
-		bias = STACK_BIAS;
-#endif
-		fp = p->thread.ksp + bias;
-		do {
-			/* Bogus frame pointer? */
-			if (fp < (task_base + sizeof(struct task_struct)) ||
-			    fp >= (task_base + (2 * PAGE_SIZE)))
-				break;
-			rw = (struct reg_window *) fp;
-			pc = rw->ins[7];
-			if (pc < first_sched || pc >= last_sched)
-				return pc;
-			fp = rw->ins[6] + bias;
-		} while (++count < 16);
-	}
-#endif
-
-	return 0;
-}
-
-#if defined(__i386__)
-# define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1019])
-# define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1022])
-#elif defined(__alpha__)
-  /*
-   * See arch/alpha/kernel/ptrace.c for details.
-   */
-# define PT_REG(reg)		(PAGE_SIZE - sizeof(struct pt_regs)	\
-				 + (long)&((struct pt_regs *)0)->reg)
-# define KSTK_EIP(tsk) \
-    (*(unsigned long *)(PT_REG(pc) + PAGE_SIZE + (unsigned long)(tsk)))
-# define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->thread.usp)
-#elif defined(__arm__)
-# ifdef CONFIG_CPU_26
-#  define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1022])
-#  define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1020])
-# else
-#  define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1021])
-#  define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1019])
-# endif
-#elif defined(__mc68000__)
-#define	KSTK_EIP(tsk)	\
-    ({			\
-	unsigned long eip = 0;	 \
-	if ((tsk)->thread.esp0 > PAGE_SIZE && \
-	    MAP_NR((tsk)->thread.esp0) < max_mapnr) \
-	      eip = ((struct pt_regs *) (tsk)->thread.esp0)->pc; \
-	eip; })
-#define	KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->thread.usp)
-#elif defined(__powerpc__)
-#define KSTK_EIP(tsk)	((tsk)->thread.regs->nip)
-#define KSTK_ESP(tsk)	((tsk)->thread.regs->gpr[1])
-#elif defined (__sparc_v9__)
-# define KSTK_EIP(tsk)  ((tsk)->thread.kregs->tpc)
-# define KSTK_ESP(tsk)  ((tsk)->thread.kregs->u_regs[UREG_FP])
-#elif defined(__sparc__)
-# define KSTK_EIP(tsk)  ((tsk)->thread.kregs->pc)
-# define KSTK_ESP(tsk)  ((tsk)->thread.kregs->u_regs[UREG_FP])
-#elif defined(__mips__)
-# define PT_REG(reg)		((long)&((struct pt_regs *)0)->reg \
-				 - sizeof(struct pt_regs))
-#define KSTK_TOS(tsk) ((unsigned long)(tsk) + KERNEL_STACK_SIZE - 32)
-# define KSTK_EIP(tsk)	(*(unsigned long *)(KSTK_TOS(tsk) + PT_REG(cp0_epc)))
-# define KSTK_ESP(tsk)	(*(unsigned long *)(KSTK_TOS(tsk) + PT_REG(regs[29])))
-#elif defined(__sh__)
-# define KSTK_EIP(tsk)  ((tsk)->thread.pc)
-# define KSTK_ESP(tsk)  ((tsk)->thread.sp)
-#endif
+#include <asm/processor.h>
 
 /* Gcc optimizes away "strlen(x)" for constant x */
 #define ADDBUF(buffer, string) \
@@ -654,36 +260,27 @@ extern inline char *task_cap(struct task_struct *p, char *buffer)
 }
 
 
-static int get_status(int pid, char * buffer)
+/* task is locked, so we are safe here */
+
+int proc_pid_status(struct task_struct *task, char * buffer)
 {
 	char * orig = buffer;
-	struct task_struct *tsk;
-	struct mm_struct *mm = NULL;
+	struct mm_struct *mm = task->mm;
 
-	read_lock(&tasklist_lock);
-	tsk = find_task_by_pid(pid);
-	if (tsk)
-		mm = tsk->mm;
-	if (mm)
-		atomic_inc(&mm->mm_users);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
-	if (!tsk)
-		return 0;
-	buffer = task_name(tsk, buffer);
-	buffer = task_state(tsk, buffer);
+	buffer = task_name(task, buffer);
+	buffer = task_state(task, buffer);
 	if (mm)
 		buffer = task_mem(mm, buffer);
-	buffer = task_sig(tsk, buffer);
-	buffer = task_cap(tsk, buffer);
-	if (mm)
-		mmput(mm);
+	buffer = task_sig(task, buffer);
+	buffer = task_cap(task, buffer);
 	return buffer - orig;
 }
 
-static int get_stat(int pid, char * buffer)
+/* task is locked, so we are safe here */
+
+int proc_pid_stat(struct task_struct *task, char * buffer)
 {
-	struct task_struct *tsk;
-	struct mm_struct *mm = NULL;
+	struct mm_struct *mm = task->mm;
 	unsigned long vsize, eip, esp, wchan;
 	long priority, nice;
 	int tty_pgrp;
@@ -691,16 +288,7 @@ static int get_stat(int pid, char * buffer)
 	char state;
 	int res;
 
-	read_lock(&tasklist_lock);
-	tsk = find_task_by_pid(pid);
-	if (tsk)
-		mm = tsk->mm;
-	if (mm)
-		atomic_inc(&mm->mm_users);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
-	if (!tsk)
-		return 0;
-	state = *get_task_state(tsk);
+	state = *get_task_state(task);
 	vsize = eip = esp = 0;
 	if (mm) {
 		struct vm_area_struct *vma;
@@ -710,55 +298,55 @@ static int get_stat(int pid, char * buffer)
 			vsize += vma->vm_end - vma->vm_start;
 			vma = vma->vm_next;
 		}
-		eip = KSTK_EIP(tsk);
-		esp = KSTK_ESP(tsk);
+		eip = KSTK_EIP(task);
+		esp = KSTK_ESP(task);
 		up(&mm->mmap_sem);
 	}
 
-	wchan = get_wchan(tsk);
+	wchan = get_wchan(task);
 
-	collect_sigign_sigcatch(tsk, &sigign, &sigcatch);
+	collect_sigign_sigcatch(task, &sigign, &sigcatch);
 
-	if (tsk->tty)
-		tty_pgrp = tsk->tty->pgrp;
+	if (task->tty)
+		tty_pgrp = task->tty->pgrp;
 	else
 		tty_pgrp = -1;
 
 	/* scale priority and nice values from timeslices to -20..20 */
 	/* to make it look like a "normal" Unix priority/nice value  */
-	priority = tsk->counter;
+	priority = task->counter;
 	priority = 20 - (priority * 10 + DEF_PRIORITY / 2) / DEF_PRIORITY;
-	nice = tsk->priority;
+	nice = task->priority;
 	nice = 20 - (nice * 20 + DEF_PRIORITY / 2) / DEF_PRIORITY;
 
 	res = sprintf(buffer,"%d (%s) %c %d %d %d %d %d %lu %lu \
 %lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu \
 %lu %lu %lu %lu %lu %lu %lu %lu %d %d\n",
-		pid,
-		tsk->comm,
+		task->pid,
+		task->comm,
 		state,
-		tsk->p_pptr->pid,
-		tsk->pgrp,
-		tsk->session,
-	        tsk->tty ? kdev_t_to_nr(tsk->tty->device) : 0,
+		task->p_pptr->pid,
+		task->pgrp,
+		task->session,
+	        task->tty ? kdev_t_to_nr(task->tty->device) : 0,
 		tty_pgrp,
-		tsk->flags,
-		tsk->min_flt,
-		tsk->cmin_flt,
-		tsk->maj_flt,
-		tsk->cmaj_flt,
-		tsk->times.tms_utime,
-		tsk->times.tms_stime,
-		tsk->times.tms_cutime,
-		tsk->times.tms_cstime,
+		task->flags,
+		task->min_flt,
+		task->cmin_flt,
+		task->maj_flt,
+		task->cmaj_flt,
+		task->times.tms_utime,
+		task->times.tms_stime,
+		task->times.tms_cutime,
+		task->times.tms_cstime,
 		priority,
 		nice,
 		0UL /* removed */,
-		tsk->it_real_value,
-		tsk->start_time,
+		task->it_real_value,
+		task->start_time,
 		vsize,
 		mm ? mm->rss : 0, /* you might want to shift this left 3 */
-		tsk->rlim ? tsk->rlim[RLIMIT_RSS].rlim_cur : 0,
+		task->rlim ? task->rlim[RLIMIT_RSS].rlim_cur : 0,
 		mm ? mm->start_code : 0,
 		mm ? mm->end_code : 0,
 		mm ? mm->start_stack : 0,
@@ -768,17 +356,15 @@ static int get_stat(int pid, char * buffer)
 		 * It must be decimal for Linux 2.0 compatibility.
 		 * Use /proc/#/status for real-time signals.
 		 */
-		tsk->signal .sig[0] & 0x7fffffffUL,
-		tsk->blocked.sig[0] & 0x7fffffffUL,
+		task->signal .sig[0] & 0x7fffffffUL,
+		task->blocked.sig[0] & 0x7fffffffUL,
 		sigign      .sig[0] & 0x7fffffffUL,
 		sigcatch    .sig[0] & 0x7fffffffUL,
 		wchan,
-		tsk->nswap,
-		tsk->cnswap,
-		tsk->exit_signal,
-		tsk->processor);
-	if (mm)
-		mmput(mm);
+		task->nswap,
+		task->cnswap,
+		task->exit_signal,
+		task->processor);
 	return res;
 }
 		
@@ -855,9 +441,9 @@ static void statm_pgd_range(pgd_t * pgd, unsigned long address, unsigned long en
 	}
 }
 
-static int get_statm(int pid, char * buffer)
+int proc_pid_statm(struct task_struct *task, char * buffer)
 {
-	struct mm_struct *mm = get_mm(pid);
+	struct mm_struct *mm = task->mm;
 	int size=0, resident=0, share=0, trs=0, lrs=0, drs=0, dt=0;
 
 	if (mm) {
@@ -884,7 +470,6 @@ static int get_statm(int pid, char * buffer)
 			vma = vma->vm_next;
 		}
 		up(&mm->mmap_sem);
-		mmput(mm);
 	}
 	return sprintf(buffer,"%d %d %d %d %d %d %d\n",
 		       size, resident, share, trs, lrs, drs, dt);
@@ -923,10 +508,10 @@ static int get_statm(int pid, char * buffer)
 #define MAPS_LINE_MAX	MAPS_LINE_MAX8
 
 
-static ssize_t read_maps (int pid, struct file * file, char * buf,
+ssize_t proc_pid_read_maps (struct task_struct *task, struct file * file, char * buf,
 			  size_t count, loff_t *ppos)
 {
-	struct task_struct *p;
+	struct mm_struct *mm = task->mm;
 	struct vm_area_struct * map, * next;
 	char * destptr = buf, * buffer;
 	loff_t lineno;
@@ -942,25 +527,19 @@ static ssize_t read_maps (int pid, struct file * file, char * buf,
 	if (!buffer)
 		goto out;
 
-	retval = -EINVAL;
-	read_lock(&tasklist_lock);
-	p = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
-	if (!p)
-		goto freepage_out;
-
-	if (!p->mm || count == 0)
+	if (!mm || count == 0)
 		goto getlen_out;
 
 	/* Check whether the mmaps could change if we sleep */
-	volatile_task = (p != current || atomic_read(&p->mm->mm_users) > 1);
+	volatile_task = (task != current || atomic_read(&mm->mm_users) > 1);
 
 	/* decode f_pos */
 	lineno = *ppos >> MAPS_LINE_SHIFT;
 	column = *ppos & (MAPS_LINE_LENGTH-1);
 
 	/* quickly go to line lineno */
-	for (map = p->mm->mmap, i = 0; map && (i < lineno); map = map->vm_next, i++)
+	down(&mm->mmap_sem);
+	for (map = mm->mmap, i = 0; map && (i < lineno); map = map->vm_next, i++)
 		continue;
 
 	for ( ; map ; map = next ) {
@@ -1019,7 +598,9 @@ static ssize_t read_maps (int pid, struct file * file, char * buf,
 		i = len-column;
 		if (i > count)
 			i = count;
+		up(&mm->mmap_sem);
 		copy_to_user(destptr, line+column, i); /* may have slept */
+		down(&mm->mmap_sem);
 		destptr += i;
 		count   -= i;
 		column  += i;
@@ -1038,246 +619,34 @@ static ssize_t read_maps (int pid, struct file * file, char * buf,
 		if (volatile_task)
 			break;
 	}
+	up(&mm->mmap_sem);
 
 	/* encode f_pos */
 	*ppos = (lineno << MAPS_LINE_SHIFT) + column;
 
 getlen_out:
 	retval = destptr - buf;
-
-freepage_out:
 	free_page((unsigned long)buffer);
 out:
 	return retval;
 }
 
 #ifdef __SMP__
-static int get_pidcpu(int pid, char * buffer)
+int proc_pid_cpu(struct task_struct *task, char * buffer)
 {
-	struct task_struct * tsk = current ;
 	int i, len;
-
-	read_lock(&tasklist_lock);
-	if (pid != tsk->pid)
-		tsk = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
-
-	if (tsk == NULL)
-		return 0;
 
 	len = sprintf(buffer,
 		"cpu  %lu %lu\n",
-		tsk->times.tms_utime,
-		tsk->times.tms_stime);
+		task->times.tms_utime,
+		task->times.tms_stime);
 		
 	for (i = 0 ; i < smp_num_cpus; i++)
 		len += sprintf(buffer + len, "cpu%d %lu %lu\n",
 			i,
-			tsk->per_cpu_utime[cpu_logical_map(i)],
-			tsk->per_cpu_stime[cpu_logical_map(i)]);
+			task->per_cpu_utime[cpu_logical_map(i)],
+			task->per_cpu_stime[cpu_logical_map(i)]);
 
 	return len;
 }
 #endif
-
-static int process_unauthorized(int type, int pid)
-{
-	struct task_struct *p;
-	uid_t euid=0;	/* Save the euid keep the lock short */
-	int ok = 0;
-		
-	read_lock(&tasklist_lock);
-	
-	/*
-	 *	Grab the lock, find the task, save the uid and
-	 *	check it has an mm still (ie its not dead)
-	 */
-	
-	p = find_task_by_pid(pid);
-	if (p) {
-		euid=p->euid;
-		ok = p->dumpable;
-		if(!cap_issubset(p->cap_permitted, current->cap_permitted))
-			ok=0;			
-	}
-		
-	read_unlock(&tasklist_lock);
-
-	if (!p)
-		return 1;
-
-	switch(type) {
-		case PROC_PID_STATUS:
-		case PROC_PID_STATM:
-		case PROC_PID_STAT:
-		case PROC_PID_MAPS:
-		case PROC_PID_CMDLINE:
-		case PROC_PID_CPU:
-			return 0;	
-	}
-	if(capable(CAP_DAC_OVERRIDE) || (current->fsuid == euid && ok))
-		return 0;
-	return 1;
-}
-
-
-static inline int get_process_array(char * page, int pid, int type)
-{
-	switch (type) {
-		case PROC_PID_STATUS:
-			return get_status(pid, page);
-		case PROC_PID_ENVIRON:
-			return get_env(pid, page);
-		case PROC_PID_CMDLINE:
-			return get_arg(pid, page);
-		case PROC_PID_STAT:
-			return get_stat(pid, page);
-		case PROC_PID_STATM:
-			return get_statm(pid, page);
-#ifdef __SMP__
-		case PROC_PID_CPU:
-			return get_pidcpu(pid, page);
-#endif
-	}
-	return -EBADF;
-}
-
-#define PROC_BLOCK_SIZE	(3*1024)		/* 4K page size but our output routines use some slack for overruns */
-
-static ssize_t array_read(struct file * file, char * buf,
-			  size_t count, loff_t *ppos)
-{
-	struct inode * inode = file->f_dentry->d_inode;
-	unsigned long page;
-	char *start;
-	ssize_t length;
-	ssize_t end;
-	unsigned int type, pid;
-	struct proc_dir_entry *dp;
-
-	if (count > PROC_BLOCK_SIZE)
-		count = PROC_BLOCK_SIZE;
-	if (!(page = __get_free_page(GFP_KERNEL)))
-		return -ENOMEM;
-	type = inode->i_ino;
-	pid = type >> 16;
-	type &= 0x0000ffff;
-	start = NULL;
-	dp = (struct proc_dir_entry *) inode->u.generic_ip;
-
-	if (!pid) {	/* can't happen */
-		free_page(page);
-		return -EBADF;
-	}
-	
-	if (process_unauthorized(type, pid)) {
-		free_page(page);
-		return -EIO;
-	}
-	
-	length = get_process_array((char *) page, pid, type);
-	if (length < 0) {
-		free_page(page);
-		return length;
-	}
-	/* Static 4kB (or whatever) block capacity */
-	if (*ppos >= length) {
-		free_page(page);
-		return 0;
-	}
-	if (count + *ppos > length)
-		count = length - *ppos;
-	end = count + *ppos;
-	copy_to_user(buf, (char *) page + *ppos, count);
-	*ppos = end;
-	free_page(page);
-	return count;
-}
-
-static struct file_operations proc_array_operations = {
-	NULL,		/* array_lseek */
-	array_read,
-	NULL,		/* array_write */
-	NULL,		/* array_readdir */
-	NULL,		/* array_poll */
-	NULL,		/* array_ioctl */
-	NULL,		/* mmap */
-	NULL,		/* no special open code */
-	NULL,		/* flush */
-	NULL,		/* no special release code */
-	NULL		/* can't fsync */
-};
-
-struct inode_operations proc_array_inode_operations = {
-	&proc_array_operations,	/* default base directory file-ops */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL			/* revalidate */
-};
-
-static ssize_t arraylong_read(struct file * file, char * buf,
-			      size_t count, loff_t *ppos)
-{
-	struct inode * inode = file->f_dentry->d_inode;
-	unsigned int pid = inode->i_ino >> 16;
-	unsigned int type = inode->i_ino & 0x0000ffff;
-
-	switch (type) {
-		case PROC_PID_MAPS:
-			return read_maps(pid, file, buf, count, ppos);
-	}
-	return -EINVAL;
-}
-
-static struct file_operations proc_arraylong_operations = {
-	NULL,		/* array_lseek */
-	arraylong_read,
-	NULL,		/* array_write */
-	NULL,		/* array_readdir */
-	NULL,		/* array_poll */
-	NULL,		/* array_ioctl */
-	NULL,		/* mmap */
-	NULL,		/* no special open code */
-	NULL,		/* flush */
-	NULL,		/* no special release code */
-	NULL		/* can't fsync */
-};
-
-struct inode_operations proc_arraylong_inode_operations = {
-	&proc_arraylong_operations,	/* default base directory file-ops */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL			/* revalidate */
-};

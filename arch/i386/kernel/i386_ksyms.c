@@ -129,3 +129,4 @@ EXPORT_SYMBOL(mca_is_adapter_used);
 EXPORT_SYMBOL(screen_info);
 #endif
 
+EXPORT_SYMBOL(get_wchan);

@@ -1,4 +1,4 @@
-/* $Id: module.c,v 1.9 1999/04/12 13:13:56 fritz Exp $
+/* $Id: module.c,v 1.11 1999/10/30 09:48:04 keil Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000.
  *
@@ -20,6 +20,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: module.c,v $
+ * Revision 1.11  1999/10/30 09:48:04  keil
+ * miss one prefix act2000
+ *
+ * Revision 1.10  1999/10/24 18:46:05  fritz
+ * Changed isa_ prefix to act2000_isa_ to prevent name-clash in latest
+ * kernels.
+ *
  * Revision 1.9  1999/04/12 13:13:56  fritz
  * Made cards pointer static to avoid name-clash.
  *
@@ -56,12 +63,12 @@
 #include "act2000_isa.h"
 #include "capi.h"
 
-static unsigned short isa_ports[] =
+static unsigned short act2000_isa_ports[] =
 {
         0x0200, 0x0240, 0x0280, 0x02c0, 0x0300, 0x0340, 0x0380,
         0xcfe0, 0xcfa0, 0xcf60, 0xcf20, 0xcee0, 0xcea0, 0xce60,
 };
-#define ISA_NRPORTS (sizeof(isa_ports)/sizeof(unsigned short))
+#define ISA_NRPORTS (sizeof(act2000_isa_ports)/sizeof(unsigned short))
 
 static act2000_card *cards = (act2000_card *) NULL;
 
@@ -238,7 +245,7 @@ act2000_transmit(struct act2000_card *card)
 {
 	switch (card->bus) {
 		case ACT2000_BUS_ISA:
-			isa_send(card);
+			act2000_isa_send(card);
 			break;
 		case ACT2000_BUS_PCMCIA:
 		case ACT2000_BUS_MCA:
@@ -253,7 +260,7 @@ act2000_receive(struct act2000_card *card)
 {
 	switch (card->bus) {
 		case ACT2000_BUS_ISA:
-			isa_receive(card);
+			act2000_isa_receive(card);
 			break;
 		case ACT2000_BUS_PCMCIA:
 		case ACT2000_BUS_MCA:
@@ -296,7 +303,7 @@ act2000_command(act2000_card * card, isdn_ctrl * c)
 				case ACT2000_IOCTL_LOADBOOT:
 					switch (card->bus) {
 						case ACT2000_BUS_ISA:
-							ret = isa_download(card,
+							ret = act2000_isa_download(card,
 									   (act2000_ddef *)a);
 							if (!ret) {
 								card->flags |= ACT2000_FLAGS_LOADED;
@@ -701,10 +708,6 @@ act2000_alloccard(int bus, int port, int irq, char *id)
         card->interface.features =
 		ISDN_FEATURE_L2_X75I |
 		ISDN_FEATURE_L2_HDLC |
-#if 0
-/* Not yet! New Firmware is on the way ... */
-		ISDN_FEATURE_L2_TRANS |
-#endif
 		ISDN_FEATURE_L3_TRANS |
 		ISDN_FEATURE_P_UNKNOWN;
         card->interface.hl_hdrlen = 20;
@@ -762,7 +765,7 @@ unregister_card(act2000_card * card)
         card->interface.statcallb(&cmd);
         switch (card->bus) {
 		case ACT2000_BUS_ISA:
-			isa_release(card);
+			act2000_isa_release(card);
 			break;
 		case ACT2000_BUS_MCA:
 		case ACT2000_BUS_PCMCIA:
@@ -796,11 +799,11 @@ act2000_addcard(int bus, int port, int irq, char *id)
 		switch (bus) {
 			case ACT2000_BUS_ISA:
 				for (i = 0; i < ISA_NRPORTS; i++)
-					if (isa_detect(isa_ports[i])) {
+					if (act2000_isa_detect(act2000_isa_ports[i])) {
 						printk(KERN_INFO
 						       "act2000: Detected ISA card at port 0x%x\n",
-						       isa_ports[i]);
-						act2000_alloccard(bus, isa_ports[i], irq, id);
+						       act2000_isa_ports[i]);
+						act2000_alloccard(bus, act2000_isa_ports[i], irq, id);
 					}
 				break;
 			case ACT2000_BUS_MCA:
@@ -823,10 +826,10 @@ act2000_addcard(int bus, int port, int irq, char *id)
 			added++;
 			switch (p->bus) {
 				case ACT2000_BUS_ISA:
-					if (isa_detect(p->port)) {
+					if (act2000_isa_detect(p->port)) {
 						if (act2000_registercard(p))
 							break;
-						if (isa_config_port(p, p->port)) {
+						if (act2000_isa_config_port(p, p->port)) {
 							printk(KERN_WARNING
 							       "act2000: Could not request port 0x%04x\n",
 							       p->port);
@@ -834,7 +837,7 @@ act2000_addcard(int bus, int port, int irq, char *id)
 							p->interface.statcallb = NULL;
 							break;
 						}
-						if (isa_config_irq(p, p->irq)) {
+						if (act2000_isa_config_irq(p, p->irq)) {
 							printk(KERN_INFO
 							       "act2000: No IRQ available, fallback to polling\n");
 							/* Fall back to polled operation */

@@ -1,11 +1,29 @@
 /*
- * $Id: b1.c,v 1.8 1999/08/22 20:26:22 calle Exp $
+ * $Id: b1.c,v 1.12 1999/11/05 16:38:01 calle Exp $
  * 
  * Common module for AVM B1 cards.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1.c,v $
+ * Revision 1.12  1999/11/05 16:38:01  calle
+ * Cleanups before kernel 2.4:
+ * - Changed all messages to use card->name or driver->name instead of
+ *   constant string.
+ * - Moved some data from struct avmcard into new struct avmctrl_info.
+ *   Changed all lowlevel capi driver to match the new structur.
+ *
+ * Revision 1.11  1999/10/11 22:04:12  keil
+ * COMPAT_NEED_UACCESS (no include in isdn_compat.h)
+ *
+ * Revision 1.10  1999/09/15 08:16:03  calle
+ * Implementation of 64Bit extention complete.
+ *
+ * Revision 1.9  1999/09/07 09:02:53  calle
+ * SETDATA removed. Now inside the kernel the datapart of DATA_B3_REQ and
+ * DATA_B3_IND is always directly after the CAPI message. The "Data" member
+ * ist never used inside the kernel.
+ *
  * Revision 1.8  1999/08/22 20:26:22  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -62,13 +80,13 @@
 #include <linux/ioport.h>
 #include <linux/capi.h>
 #include <asm/io.h>
-#include <linux/isdn_compat.h>
+#include <asm/uaccess.h>
 #include "capilli.h"
 #include "avmcard.h"
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.8 $";
+static char *revision = "$Revision: 1.12 $";
 
 /* ------------------------------------------------------------- */
 
@@ -140,11 +158,12 @@ int b1_detect(unsigned int base, enum avmcardtype cardtype)
 	return 0;
 }
 
-int b1_load_t4file(unsigned int base, capiloaddatapart * t4file)
+int b1_load_t4file(avmcard *card, capiloaddatapart * t4file)
 {
 	unsigned char buf[256];
 	unsigned char *dp;
 	int i, left, retval;
+	unsigned int base = card->port;
 
 	dp = t4file->data;
 	left = t4file->len;
@@ -158,7 +177,8 @@ int b1_load_t4file(unsigned int base, capiloaddatapart * t4file)
 		}
 		for (i = 0; i < sizeof(buf); i++)
 			if (b1_save_put_byte(base, buf[i]) < 0) {
-				printk(KERN_ERR "b1_load_t4file: corrupted t4 file ?\n");
+				printk(KERN_ERR "%s: corrupted firmware file ?\n",
+						card->name);
 				return -EIO;
 			}
 		left -= sizeof(buf);
@@ -174,17 +194,19 @@ int b1_load_t4file(unsigned int base, capiloaddatapart * t4file)
 		}
 		for (i = 0; i < left; i++)
 			if (b1_save_put_byte(base, buf[i]) < 0) {
-				printk(KERN_ERR "b1_load_t4file: corrupted t4 file ?\n");
+				printk(KERN_ERR "%s: corrupted firmware file ?\n",
+						card->name);
 				return -EIO;
 			}
 	}
 	return 0;
 }
 
-int b1_load_config(unsigned int base, capiloaddatapart * config)
+int b1_load_config(avmcard *card, capiloaddatapart * config)
 {
 	unsigned char buf[256];
 	unsigned char *dp;
+	unsigned int base = card->port;
 	int i, j, left, retval;
 
 	dp = config->data;
@@ -233,8 +255,9 @@ int b1_load_config(unsigned int base, capiloaddatapart * config)
 	return 0;
 }
 
-int b1_loaded(unsigned int base)
+int b1_loaded(avmcard *card)
 {
+	unsigned int base = card->port;
 	unsigned long stop;
 	unsigned char ans;
 	unsigned long tout = 2;
@@ -244,7 +267,8 @@ int b1_loaded(unsigned int base)
 			break;
 	}
 	if (!b1_tx_empty(base)) {
-		printk(KERN_ERR "b1_loaded: tx err, corrupted t4 file ?\n");
+		printk(KERN_ERR "%s: b1_loaded: tx err, corrupted t4 file ?\n",
+				card->name);
 		return 0;
 	}
 	b1_put_byte(base, SEND_POLL);
@@ -253,11 +277,12 @@ int b1_loaded(unsigned int base)
 			if ((ans = b1_get_byte(base)) == RECEIVE_POLL) {
 				return 1;
 			}
-			printk(KERN_ERR "b1_loaded: got 0x%x, firmware not running\n", ans);
+			printk(KERN_ERR "%s: b1_loaded: got 0x%x, firmware not running\n",
+					card->name, ans);
 			return 0;
 		}
 	}
-	printk(KERN_ERR "b1_loaded: firmware not running\n");
+	printk(KERN_ERR "%s: b1_loaded: firmware not running\n", card->name);
 	return 0;
 }
 
@@ -265,14 +290,15 @@ int b1_loaded(unsigned int base)
 
 int b1_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+	avmcard *card = cinfo->card;
 	unsigned int port = card->port;
 	unsigned long flags;
 	int retval;
 
 	b1_reset(port);
 
-	if ((retval = b1_load_t4file(port, &data->firmware))) {
+	if ((retval = b1_load_t4file(card, &data->firmware))) {
 		b1_reset(port);
 		printk(KERN_ERR "%s: failed to load t4file!!\n",
 					card->name);
@@ -282,7 +308,7 @@ int b1_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 	b1_disable_irq(port);
 
 	if (data->configuration.len > 0 && data->configuration.data) {
-		if ((retval = b1_load_config(port, &data->configuration))) {
+		if ((retval = b1_load_config(card, &data->configuration))) {
 			b1_reset(port);
 			printk(KERN_ERR "%s: failed to load config!!\n",
 					card->name);
@@ -290,7 +316,7 @@ int b1_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 		}
 	}
 
-	if (!b1_loaded(port)) {
+	if (!b1_loaded(card)) {
 		printk(KERN_ERR "%s: failed to load t4file.\n", card->name);
 		return -EIO;
 	}
@@ -309,13 +335,14 @@ int b1_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 
 void b1_reset_ctr(struct capi_ctr *ctrl)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+	avmcard *card = cinfo->card;
 	unsigned int port = card->port;
 
 	b1_reset(port);
 	b1_reset(port);
 
-	memset(card->version, 0, sizeof(card->version));
+	memset(cinfo->version, 0, sizeof(cinfo->version));
 	ctrl->reseted(ctrl);
 }
 
@@ -323,7 +350,8 @@ void b1_register_appl(struct capi_ctr *ctrl,
 				__u16 appl,
 				capi_register_params *rp)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+	avmcard *card = cinfo->card;
 	unsigned int port = card->port;
 	unsigned long flags;
 	int nconn, want = rp->level3cnt;
@@ -347,7 +375,8 @@ void b1_register_appl(struct capi_ctr *ctrl,
 
 void b1_release_appl(struct capi_ctr *ctrl, __u16 appl)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+	avmcard *card = cinfo->card;
 	unsigned int port = card->port;
 	unsigned long flags;
 
@@ -360,7 +389,8 @@ void b1_release_appl(struct capi_ctr *ctrl, __u16 appl)
 
 void b1_send_message(struct capi_ctr *ctrl, struct sk_buff *skb)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+	avmcard *card = cinfo->card;
 	unsigned int port = card->port;
 	unsigned long flags;
 	__u16 len = CAPIMSG_LEN(skb->data);
@@ -384,25 +414,26 @@ void b1_send_message(struct capi_ctr *ctrl, struct sk_buff *skb)
 
 /* ------------------------------------------------------------- */
 
-void b1_parse_version(avmcard *card)
+void b1_parse_version(avmctrl_info *cinfo)
 {
-	struct capi_ctr *ctrl = card->ctrl;
+	struct capi_ctr *ctrl = cinfo->capi_ctrl;
+	avmcard *card = cinfo->card;
 	capi_profile *profp;
 	__u8 *dversion;
 	__u8 flag;
 	int i, j;
 
 	for (j = 0; j < AVM_MAXVERSION; j++)
-		card->version[j] = "\0\0" + 1;
+		cinfo->version[j] = "\0\0" + 1;
 	for (i = 0, j = 0;
-	     j < AVM_MAXVERSION && i < card->versionlen;
-	     j++, i += card->versionbuf[i] + 1)
-		card->version[j] = &card->versionbuf[i + 1];
+	     j < AVM_MAXVERSION && i < cinfo->versionlen;
+	     j++, i += cinfo->versionbuf[i] + 1)
+		cinfo->version[j] = &cinfo->versionbuf[i + 1];
 
-	strncpy(ctrl->serial, card->version[VER_SERIAL], CAPI_SERIAL_LEN);
-	memcpy(&ctrl->profile, card->version[VER_PROFILE],sizeof(capi_profile));
+	strncpy(ctrl->serial, cinfo->version[VER_SERIAL], CAPI_SERIAL_LEN);
+	memcpy(&ctrl->profile, cinfo->version[VER_PROFILE],sizeof(capi_profile));
 	strncpy(ctrl->manu, "AVM GmbH", CAPI_MANUFACTURER_LEN);
-	dversion = card->version[VER_DRIVER];
+	dversion = cinfo->version[VER_DRIVER];
 	ctrl->version.majorversion = 2;
 	ctrl->version.minorversion = 0;
 	ctrl->version.majormanuversion = (((dversion[0] - '0') & 0xf) << 4);
@@ -415,23 +446,24 @@ void b1_parse_version(avmcard *card)
 
 	flag = ((__u8 *)(profp->manu))[1];
 	switch (flag) {
-	case 0: if (card->version[VER_CARDTYPE])
-	           strcpy(card->cardname, card->version[VER_CARDTYPE]);
-	        else strcpy(card->cardname, "B1");
+	case 0: if (cinfo->version[VER_CARDTYPE])
+	           strcpy(cinfo->cardname, cinfo->version[VER_CARDTYPE]);
+	        else strcpy(cinfo->cardname, "B1");
 		break;
-	case 3: strcpy(card->cardname,"PCMCIA B"); break;
-	case 4: strcpy(card->cardname,"PCMCIA M1"); break;
-	case 5: strcpy(card->cardname,"PCMCIA M2"); break;
-	case 6: strcpy(card->cardname,"B1 V3.0"); break;
-	case 7: strcpy(card->cardname,"B1 PCI"); break;
-	default: sprintf(card->cardname, "AVM?%u", (unsigned int)flag); break;
+	case 3: strcpy(cinfo->cardname,"PCMCIA B"); break;
+	case 4: strcpy(cinfo->cardname,"PCMCIA M1"); break;
+	case 5: strcpy(cinfo->cardname,"PCMCIA M2"); break;
+	case 6: strcpy(cinfo->cardname,"B1 V3.0"); break;
+	case 7: strcpy(cinfo->cardname,"B1 PCI"); break;
+	default: sprintf(cinfo->cardname, "AVM?%u", (unsigned int)flag); break;
         }
         printk(KERN_NOTICE "%s: card %d \"%s\" ready.\n",
-				card->name, ctrl->cnr, card->cardname);
+				card->name, ctrl->cnr, cinfo->cardname);
 
         flag = ((__u8 *)(profp->manu))[3];
         if (flag)
-		printk(KERN_NOTICE "b1capi: card %d Protocol:%s%s%s%s%s%s%s\n",
+		printk(KERN_NOTICE "%s: card %d Protocol:%s%s%s%s%s%s%s\n",
+			card->name,
 			ctrl->cnr,
 			(flag & 0x01) ? " DSS1" : "",
 			(flag & 0x02) ? " CT1" : "",
@@ -458,7 +490,8 @@ void b1_parse_version(avmcard *card)
 
 void b1_handle_interrupt(avmcard * card)
 {
-	struct capi_ctr *ctrl = card->ctrl;
+	avmctrl_info *cinfo = &card->ctrlinfo[0];
+	struct capi_ctr *ctrl = cinfo->capi_ctrl;
 	unsigned char b1cmd;
 	struct sk_buff *skb;
 
@@ -481,13 +514,17 @@ void b1_handle_interrupt(avmcard * card)
 		MsgLen = b1_get_slice(card->port, card->msgbuf);
 		DataB3Len = b1_get_slice(card->port, card->databuf);
 
+		if (MsgLen < 30) { /* not CAPI 64Bit */
+			memset(card->msgbuf+MsgLen, 0, 30-MsgLen);
+			MsgLen = 30;
+			CAPIMSG_SETLEN(card->msgbuf, 30);
+		}
 		if (!(skb = alloc_skb(DataB3Len + MsgLen, GFP_ATOMIC))) {
 			printk(KERN_ERR "%s: incoming packet dropped\n",
 					card->name);
 		} else {
 			memcpy(skb_put(skb, MsgLen), card->msgbuf, MsgLen);
 			memcpy(skb_put(skb, DataB3Len), card->databuf, DataB3Len);
-			CAPIMSG_SETDATA(skb->data, skb->data + MsgLen);
 			ctrl->handle_capimsg(ctrl, ApplId, skb);
 		}
 		break;
@@ -536,12 +573,12 @@ void b1_handle_interrupt(avmcard * card)
 
 	case RECEIVE_INIT:
 
-		card->versionlen = b1_get_slice(card->port, card->versionbuf);
-		b1_parse_version(card);
+		cinfo->versionlen = b1_get_slice(card->port, cinfo->versionbuf);
+		b1_parse_version(cinfo);
 		printk(KERN_INFO "%s: %s-card (%s) now active\n",
 		       card->name,
-		       card->version[VER_CARDTYPE],
-		       card->version[VER_DRIVER]);
+		       cinfo->version[VER_CARDTYPE],
+		       cinfo->version[VER_DRIVER]);
 		ctrl->ready(ctrl);
 		break;
 
@@ -581,7 +618,8 @@ void b1_handle_interrupt(avmcard * card)
 int b1ctl_read_proc(char *page, char **start, off_t off,
         		int count, int *eof, struct capi_ctr *ctrl)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+	avmcard *card = cinfo->card;
 	__u8 flag;
 	int len = 0;
 	char *s;
@@ -603,11 +641,11 @@ int b1ctl_read_proc(char *page, char **start, off_t off,
 	len += sprintf(page+len, "%-16s %s\n", "type", s);
 	if (card->cardtype == avm_t1isa)
 	   len += sprintf(page+len, "%-16s %d\n", "cardnr", card->cardnr);
-	if ((s = card->version[VER_DRIVER]) != 0)
+	if ((s = cinfo->version[VER_DRIVER]) != 0)
 	   len += sprintf(page+len, "%-16s %s\n", "ver_driver", s);
-	if ((s = card->version[VER_CARDTYPE]) != 0)
+	if ((s = cinfo->version[VER_CARDTYPE]) != 0)
 	   len += sprintf(page+len, "%-16s %s\n", "ver_cardtype", s);
-	if ((s = card->version[VER_SERIAL]) != 0)
+	if ((s = cinfo->version[VER_SERIAL]) != 0)
 	   len += sprintf(page+len, "%-16s %s\n", "ver_serial", s);
 
 	if (card->cardtype != avm_m1) {
@@ -635,7 +673,7 @@ int b1ctl_read_proc(char *page, char **start, off_t off,
 			(flag & 0x04) ? " leased line with D-channel" : ""
 			);
 	}
-	len += sprintf(page+len, "%-16s %s\n", "cardname", card->cardname);
+	len += sprintf(page+len, "%-16s %s\n", "cardname", cinfo->cardname);
 
 	if (off+count >= len)
 	   *eof = 1;

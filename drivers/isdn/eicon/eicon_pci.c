@@ -152,8 +152,8 @@ int eicon_pci_find_card(char *ID)
           aparms->type = EICON_CTYPE_MAESTRA;
 
           aparms->irq = pdev->irq;
-          preg = get_pcibase(pdev, 2) & 0xfffffffc;
-          pcfg = get_pcibase(pdev, 1) & 0xffffff80;
+          preg = pdev->resource[ 2].start & 0xfffffffc;
+          pcfg = pdev->resource[ 1].start & 0xffffff80;
 
 #ifdef EICON_PCI_DEBUG
           printk(KERN_DEBUG "eicon_pci: irq=%d\n", aparms->irq);
@@ -174,9 +174,9 @@ int eicon_pci_find_card(char *ID)
          printk(KERN_INFO "Eicon: DIVA Server PRI/PCI detected !\n");
           aparms->type = EICON_CTYPE_MAESTRAP; /*includes 9M,30M*/
           aparms->irq = pdev->irq;
-          pram = get_pcibase(pdev, 0) & 0xfffff000;
-          preg = get_pcibase(pdev, 2) & 0xfffff000;
-          pcfg = get_pcibase(pdev, 4) & 0xfffff000;
+          pram = pdev->resource[ 0].start & 0xfffff000;
+          preg = pdev->resource[ 2].start & 0xfffff000;
+          pcfg = pdev->resource[ 4].start & 0xfffff000;
 
 #ifdef EICON_PCI_DEBUG
           printk(KERN_DEBUG "eicon_pci: irq=%d\n", aparms->irq);

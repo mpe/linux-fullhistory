@@ -1,4 +1,4 @@
-/* $Id: elsa.c,v 2.18 1999/08/25 16:50:54 keil Exp $
+/* $Id: elsa.c,v 2.19 1999/09/04 06:20:06 keil Exp $
 
  * elsa.c     low level stuff for Elsa isdn cards
  *
@@ -14,6 +14,9 @@
  *              for ELSA PCMCIA support
  *
  * $Log: elsa.c,v $
+ * Revision 2.19  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 2.18  1999/08/25 16:50:54  keil
  * Fix bugs which cause 2.3.14 hangs (waitqueue init)
  *
@@ -91,15 +94,12 @@
 #include "hscx.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
-#ifndef COMPAT_HAS_NEW_PCI
-#include <linux/bios32.h>
-#endif
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
 
 extern const char *CardType[];
 
-const char *Elsa_revision = "$Revision: 2.18 $";
+const char *Elsa_revision = "$Revision: 2.19 $";
 const char *Elsa_Types[] =
 {"None", "PC", "PCC-8", "PCC-16", "PCF", "PCF-Pro",
  "PCMCIA", "QS 1000", "QS 3000", "QS 1000 PCI", "QS 3000 PCI", 
@@ -578,10 +578,10 @@ reset_elsa(struct IsdnCardState *cs)
 		save_flags(flags);
 		sti();
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_POTA2, 0x20);
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_POTA2, 0x00);
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_MASK, 0xc0);
 		schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 		restore_flags(flags);
@@ -785,7 +785,7 @@ Elsa_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 				cs->hw.elsa.status |= ELSA_TIMER_AKTIV;
 				byteout(cs->hw.elsa.ctrl, cs->hw.elsa.ctrl_reg);
 				byteout(cs->hw.elsa.timer, 0);
-				current->state = TASK_INTERRUPTIBLE;
+				set_current_state(TASK_INTERRUPTIBLE);
 				schedule_timeout((110*HZ)/1000);
 				restore_flags(flags);
 				cs->hw.elsa.ctrl_reg &= ~ELSA_ENA_TIMER_INT;
@@ -928,12 +928,8 @@ probe_elsa(struct IsdnCardState *cs)
 	return (CARD_portlist[i]);
 }
 
-#ifdef COMPAT_HAS_NEW_PCI
 static 	struct pci_dev *dev_qs1000 __initdata = NULL;
 static 	struct pci_dev *dev_qs3000 __initdata = NULL;
-#else
-static 	int pci_index __initdata = 0;
-#endif
 
 int
 setup_elsa(struct IsdnCard *card)
@@ -1051,7 +1047,6 @@ setup_elsa(struct IsdnCard *card)
 		       cs->irq);
 	} else if (cs->typ == ISDN_CTYPE_ELSA_PCI) {
 #if CONFIG_PCI
-#ifdef COMPAT_HAS_NEW_PCI
 		if (!pci_present()) {
 			printk(KERN_ERR "Elsa: no PCI bus present\n");
 			return(0);
@@ -1061,17 +1056,17 @@ setup_elsa(struct IsdnCard *card)
 			 dev_qs1000))) {
 				cs->subtyp = ELSA_QS1000PCI;
 			cs->irq = dev_qs1000->irq;
-			cs->hw.elsa.cfg = get_pcibase(dev_qs1000, 1) & 
+			cs->hw.elsa.cfg = dev_qs1000->resource[ 1].start & 
 				PCI_BASE_ADDRESS_IO_MASK;
-			cs->hw.elsa.base = get_pcibase(dev_qs1000, 3) & 
+			cs->hw.elsa.base = dev_qs1000->resource[ 3].start & 
 				PCI_BASE_ADDRESS_IO_MASK;
 		} else if ((dev_qs3000 = pci_find_device(PCI_VENDOR_ELSA,
 			PCI_QS3000_ID, dev_qs3000))) {
 			cs->subtyp = ELSA_QS3000PCI;
 			cs->irq = dev_qs3000->irq;
-			cs->hw.elsa.cfg = get_pcibase(dev_qs3000, 1) & 
+			cs->hw.elsa.cfg = dev_qs3000->resource[ 1].start & 
 				PCI_BASE_ADDRESS_IO_MASK;
-			cs->hw.elsa.base = get_pcibase(dev_qs3000, 3) & 
+			cs->hw.elsa.base = dev_qs3000->resource[ 3].start & 
 				PCI_BASE_ADDRESS_IO_MASK;
 		} else {
 			printk(KERN_WARNING "Elsa: No PCI card found\n");
@@ -1096,54 +1091,6 @@ setup_elsa(struct IsdnCard *card)
 			HZDELAY(500);	/* wait 500*10 ms */
 			restore_flags(flags);
 		}
-#else
-		u_char pci_bus, pci_device_fn, pci_irq;
-		u_int pci_ioaddr;
-
-		cs->subtyp = 0;
-		for (; pci_index < 0xff; pci_index++) {
-			if (pcibios_find_device(PCI_VENDOR_ELSA,
-			   PCI_QS1000_ID, pci_index, &pci_bus, &pci_device_fn)
-			   == PCIBIOS_SUCCESSFUL)
-				cs->subtyp = ELSA_QS1000PCI;
-			else if (pcibios_find_device(PCI_VENDOR_ELSA,
-			   PCI_QS3000_ID, pci_index, &pci_bus, &pci_device_fn)
-			   == PCIBIOS_SUCCESSFUL)
-				cs->subtyp = ELSA_QS3000PCI;
-			else
-				break;
-			/* get IRQ */
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-				PCI_INTERRUPT_LINE, &pci_irq);
-
-			/* get IO address */
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-				PCI_BASE_ADDRESS_1, &pci_ioaddr);
-			pci_ioaddr &= ~3; /* remove io/mem flag */
-			cs->hw.elsa.cfg = pci_ioaddr;
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-				PCI_BASE_ADDRESS_3, &pci_ioaddr);
-			if (cs->subtyp)
-				break;
-		}
-		if (!cs->subtyp) {
-			printk(KERN_WARNING "Elsa: No PCI card found\n");
-			return(0);
-		}
-		pci_index++;
-		if (!pci_irq) {
-			printk(KERN_WARNING "Elsa: No IRQ for PCI card found\n");
-			return(0);
-		}
-
-		if (!pci_ioaddr) {
-			printk(KERN_WARNING "Elsa: No IO-Adr for PCI card found\n");
-			return(0);
-		}
-		pci_ioaddr &= ~3; /* remove io/mem flag */
-		cs->hw.elsa.base = pci_ioaddr;
-		cs->irq = pci_irq;
-#endif /* COMPAT_HAS_NEW_PCI */
 		cs->hw.elsa.ale  = cs->hw.elsa.base;
 		cs->hw.elsa.isac = cs->hw.elsa.base +1;
 		cs->hw.elsa.hscx = cs->hw.elsa.base +1; 

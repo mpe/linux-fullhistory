@@ -1,4 +1,4 @@
-/* $Id: bkm_a4t.c,v 1.7 1999/08/22 20:26:55 calle Exp $
+/* $Id: bkm_a4t.c,v 1.8 1999/09/04 06:20:05 keil Exp $
  * bkm_a4t.c    low level stuff for T-Berkom A4T
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -7,6 +7,9 @@
  * Author       Roland Klabunde (R.Klabunde@Berkom.de)
  *
  * $Log: bkm_a4t.c,v $
+ * Revision 1.8  1999/09/04 06:20:05  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.7  1999/08/22 20:26:55  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -42,13 +45,10 @@
 #include "isdnl1.h"
 #include "bkm_ax.h"
 #include <linux/pci.h>
-#ifndef COMPAT_HAS_NEW_PCI
-#include <linux/bios32.h>
-#endif
 
 extern const char *CardType[];
 
-const char *bkm_a4t_revision = "$Revision: 1.7 $";
+const char *bkm_a4t_revision = "$Revision: 1.8 $";
 
 
 static inline u_char
@@ -231,11 +231,11 @@ reset_bkm(struct IsdnCardState *cs)
 		sti();
 		/* Issue the I20 soft reset     */
 		pI20_Regs->i20SysControl = 0xFF;	/* all in */
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10 * HZ) / 1000);
 		/* Remove the soft reset */
 		pI20_Regs->i20SysControl = sysRESET | 0xFF;
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10 * HZ) / 1000);
 		/* Set our configuration */
 		pI20_Regs->i20SysControl = sysRESET | sysCFG;
@@ -246,14 +246,14 @@ reset_bkm(struct IsdnCardState *cs)
 		    g_A4T_ISAC_RES |
 		    g_A4T_JADE_BOOTR |
 		    g_A4T_ISAR_BOOTR;
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10 * HZ) / 1000);
 
 		/* Remove RESET state from ISDN */
 		pI20_Regs->i20GuestControl &= ~(g_A4T_ISAC_RES |
 						g_A4T_JADE_RES |
 						g_A4T_ISAR_RES);
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10 * HZ) / 1000);
 		restore_flags(flags);
 	}
@@ -288,23 +288,16 @@ BKM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return (0);
 }
 
-#ifdef COMPAT_HAS_NEW_PCI
 static struct pci_dev *dev_a4t __initdata = NULL;
-#else
-static int pci_index __initdata = 0;
-#endif
 
-int __init
-	   setup_bkm_a4t(struct IsdnCard *card)
+__initfunc(int
+	   setup_bkm_a4t(struct IsdnCard *card))
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];
 	u_int pci_memaddr = 0, found = 0;
 	I20_REGISTER_FILE *pI20_Regs;
 #if CONFIG_PCI
-#ifndef COMPAT_HAS_NEW_PCI
-	u_char pci_bus, pci_device_fn, pci_irq = 0;
-#endif
 #endif
 
 	strcpy(tmp, bkm_a4t_revision);
@@ -315,7 +308,6 @@ int __init
 		return (0);
 
 #if CONFIG_PCI
-#ifdef COMPAT_HAS_NEW_PCI
 	if (!pci_present()) {
 		printk(KERN_ERR "bkm_a4t: no PCI bus present\n");
 		return (0);
@@ -327,40 +319,14 @@ int __init
 			&sub_sys_id);
 		if (sub_sys_id == ((A4T_SUBSYS_ID << 16) | A4T_SUBVEN_ID)) {
 			found = 1;
-			pci_memaddr = get_pcibase(dev_a4t, 0);
+			pci_memaddr = dev_a4t->resource[ 0].start;
 			cs->irq = dev_a4t->irq;
 		}
 	}
-#else
-	for (; pci_index < 0xff; pci_index++) {
-		if (pcibios_find_device(I20_VENDOR_ID,
-				I20_DEVICE_ID,
-				pci_index,
-				&pci_bus,
-				&pci_device_fn) == PCIBIOS_SUCCESSFUL) {
-			u_int sub_sys_id = 0;
-
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-				PCI_SUBSYSTEM_VENDOR_ID, &sub_sys_id);
-			if (sub_sys_id == ((A4T_SUBSYS_ID << 16) | A4T_SUBVEN_ID)) {
-				found = 1;
-				pcibios_read_config_byte(pci_bus, pci_device_fn,
-					   PCI_INTERRUPT_LINE, &pci_irq);
-				cs->irq = pci_irq;
-				pcibios_read_config_dword(pci_bus, pci_device_fn,
-				       PCI_BASE_ADDRESS_0, &pci_memaddr);
-				break;
-			}
-		}
-	}
-#endif				/* COMPAT_HAS_NEW_PCI */
 	if (!found) {
 		printk(KERN_WARNING "HiSax: %s: Card not found\n", CardType[card->typ]);
 		return (0);
 	}
-#ifndef COMPAT_HAS_NEW_PCI
-	pci_index++;
-#endif
 	if (!cs->irq) {		/* IRQ range check ?? */
 		printk(KERN_WARNING "HiSax: %s: No IRQ\n", CardType[card->typ]);
 		return (0);

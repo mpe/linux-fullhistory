@@ -1,8 +1,8 @@
-/* $Id: eicon_isa.h,v 1.3 1999/03/29 11:19:47 armin Exp $
+/* $Id: eicon_isa.h,v 1.5 1999/09/08 20:17:31 armin Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  *
- * Copyright 1998    by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1998    by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1998,99 by Armin Schindler (mac@melware.de)
  * Copyright 1999    Cytronics & Melware (info@melware.de)
  *
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_isa.h,v $
+ * Revision 1.5  1999/09/08 20:17:31  armin
+ * Added microchannel patch from Erik Weber.
+ *
+ * Revision 1.4  1999/09/06 07:29:35  fritz
+ * Changed my mail-address.
+ *
  * Revision 1.3  1999/03/29 11:19:47  armin
  * I/O stuff now in seperate file (eicon_io.c)
  * Old ISA type cards (S,SX,SCOM,Quadro,S2M) implemented.
@@ -106,6 +112,9 @@ typedef union {
 typedef struct {
 	int               ramsize;
 	int               irq;	    /* IRQ                        */
+#ifdef CONFIG_MCA
+	int		  io;	    /* IO-port for MCA brand      */
+#endif /* CONFIG_MCA */
 	void*             card;
 	eicon_isa_shmem*  shmem;    /* Shared-memory area         */
 	unsigned char*    intack;   /* Int-Acknowledge            */

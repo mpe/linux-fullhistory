@@ -361,6 +361,8 @@ struct task_struct {
 /* Thread group tracking */
    	u32 parent_exec_id;
    	u32 self_exec_id;
+/* Protection of fields allocatio/deallocation */
+	struct semaphore exit_sem;
 };
 
 /*
@@ -427,6 +429,7 @@ struct task_struct {
 /* mm */	NULL, &init_mm, \
 /* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
 /* exec cts */	0,0, \
+/* exit_sem */	__MUTEX_INITIALIZER(name.exit_sem),	\
 }
 
 #ifndef INIT_TASK_SIZE
@@ -835,6 +838,21 @@ extern inline void unhash_process(struct task_struct *p)
 	unhash_pid(p);
 	REMOVE_LINKS(p);
 	write_unlock_irq(&tasklist_lock);
+}
+
+static inline int task_lock(struct task_struct *p)
+{
+	down(&p->exit_sem);
+	if (p->p_pptr)
+		return 1;
+	/* He's dead, Jim. You take his wallet, I'll take tricoder... */
+	up(&p->exit_sem);
+	return 0;
+}
+
+static inline void task_unlock(struct task_struct *p)
+{
+	up(&p->exit_sem);
 }
 
 #endif /* __KERNEL__ */

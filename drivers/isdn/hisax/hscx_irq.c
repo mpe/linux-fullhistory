@@ -1,4 +1,4 @@
-/* $Id: hscx_irq.c,v 1.12 1999/07/01 08:11:42 keil Exp $
+/* $Id: hscx_irq.c,v 1.13 1999/10/14 20:25:28 keil Exp $
 
  * hscx_irq.c     low level b-channel stuff for Siemens HSCX
  *
@@ -7,6 +7,9 @@
  * This is an include file for fast inline IRQ stuff
  *
  * $Log: hscx_irq.c,v $
+ * Revision 1.13  1999/10/14 20:25:28  keil
+ * add a statistic for error monitoring
+ *
  * Revision 1.12  1999/07/01 08:11:42  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -181,16 +184,28 @@ hscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 	if (val & 0x80) {	/* RME */
 		r = READHSCX(cs, hscx, HSCX_RSTA);
 		if ((r & 0xf0) != 0xa0) {
-			if (!(r & 0x80))
+			if (!(r & 0x80)) {
 				if (cs->debug & L1_DEB_WARN)
 					debugl1(cs, "HSCX invalid frame");
-			if ((r & 0x40) && bcs->mode)
+#ifdef ERROR_STATISTIC
+				bcs->err_inv++;
+#endif
+			}
+			if ((r & 0x40) && bcs->mode) {
 				if (cs->debug & L1_DEB_WARN)
 					debugl1(cs, "HSCX RDO mode=%d",
 						bcs->mode);
-			if (!(r & 0x20))
+#ifdef ERROR_STATISTIC
+				bcs->err_rdo++;
+#endif
+			}
+			if (!(r & 0x20)) {
 				if (cs->debug & L1_DEB_WARN)
 					debugl1(cs, "HSCX CRC error");
+#ifdef ERROR_STATISTIC
+				bcs->err_crc++;
+#endif
+			}
 			WriteHSCXCMDR(cs, hscx, 0x80);
 		} else {
 			count = READHSCX(cs, hscx, HSCX_RBCL) & (
@@ -204,7 +219,6 @@ hscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 				if (!(skb = dev_alloc_skb(count)))
 					printk(KERN_WARNING "HSCX: receive out of memory\n");
 				else {
-					SET_SKB_FREE(skb);
 					memcpy(skb_put(skb, count), bcs->hw.hscx.rcvbuf, count);
 					skb_queue_tail(&bcs->rqueue, skb);
 				}
@@ -220,7 +234,6 @@ hscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 			if (!(skb = dev_alloc_skb(fifo_size)))
 				printk(KERN_WARNING "HiSax: receive out of memory\n");
 			else {
-				SET_SKB_FREE(skb);
 				memcpy(skb_put(skb, fifo_size), bcs->hw.hscx.rcvbuf, fifo_size);
 				skb_queue_tail(&bcs->rqueue, skb);
 			}
@@ -237,7 +250,7 @@ hscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 				if (bcs->st->lli.l1writewakeup &&
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.hscx.count);
-				idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+				dev_kfree_skb(bcs->tx_skb);
 				bcs->hw.hscx.count = 0; 
 				bcs->tx_skb = NULL;
 			}
@@ -267,6 +280,9 @@ hscx_int_main(struct IsdnCardState *cs, u_char val)
 			if (bcs->mode == 1)
 				hscx_fill_fifo(bcs);
 			else {
+#ifdef ERROR_STATISTIC
+				bcs->err_tx++;
+#endif
 				/* Here we lost an TX interrupt, so
 				   * restart transmitting the whole frame.
 				 */
@@ -297,6 +313,9 @@ hscx_int_main(struct IsdnCardState *cs, u_char val)
 				/* Here we lost an TX interrupt, so
 				   * restart transmitting the whole frame.
 				 */
+#ifdef ERROR_STATISTIC
+				bcs->err_tx++;
+#endif
 				if (bcs->tx_skb) {
 					skb_push(bcs->tx_skb, bcs->hw.hscx.count);
 					bcs->tx_cnt += bcs->hw.hscx.count;

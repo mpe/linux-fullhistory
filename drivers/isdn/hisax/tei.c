@@ -169,7 +169,6 @@ put_tei_msg(struct PStack *st, u_char m_id, unsigned int ri, u_char tei)
 		printk(KERN_WARNING "HiSax: No skb for TEI manager\n");
 		return;
 	}
-	SET_SKB_FREE(skb);
 	bp = skb_put(skb, 3);
 	bp[0] = (TEI_SAPI << 2);
 	bp[1] = (GROUP_TEI << 1) | 0x1;
@@ -371,7 +370,7 @@ tei_l1l2(struct PStack *st, int pr, void *arg)
 	int mt;
 
 	if (test_bit(FLG_FIXED_TEI, &st->l2.flag)) {
-		idev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 		return;
 	}
 
@@ -417,7 +416,7 @@ tei_l1l2(struct PStack *st, int pr, void *arg)
 		st->ma.tei_m.printdebug(&st->ma.tei_m,
 			"tei handler wrong pr %x\n", pr);
 	}
-	idev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 }
 
 static void

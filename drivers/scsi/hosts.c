@@ -111,8 +111,12 @@
 #include "mac_scsi.h"
 #endif
 
+#ifdef CONFIG_SUN3_SCSI
+#include "sun3_scsi.h"
+#endif
+
 #ifdef CONFIG_MAC_SCSI
-#include "mac_scsinew.h"
+#include "mac_scsi.h"
 #endif
 
 #ifdef CONFIG_SCSI_MAC_ESP
@@ -443,6 +447,10 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_MAC_SCSI
 	MAC_NCR5380,
 #endif
+#endif
+
+#ifdef CONFIG_SUN3_SCSI
+	SUN3_NCR5380,
 #endif
 
 #ifdef CONFIG_MVME16x_SCSI

@@ -1,286 +1,110 @@
 /*
- * mac_scsi.h -- Header file for the Macintosh native SCSI driver
+ * Cumana Generic NCR5380 driver defines
  *
- * based on Roman Hodeks atari_scsi.h
+ * Copyright 1993, Drew Eckhardt
+ *	Visionary Computing
+ *	(Unix and Linux consulting and custom programming)
+ *	drew@colorado.edu
+ *      +1 (303) 440-4894
+ *
+ * ALPHA RELEASE 1.
+ *
+ * For more information, please consult
+ *
+ * NCR 5380 Family
+ * SCSI Protocol Controller
+ * Databook
+ *
+ * NCR Microelectronics
+ * 1635 Aeroplaza Drive
+ * Colorado Springs, CO 80916
+ * 1+ (719) 578-3400
+ * 1+ (800) 334-5454
  */
 
 /*
- * atari_scsi.h -- Header file for the Atari native SCSI driver
- *
- * Copyright 1994 Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>
- *
- * (Loosely based on the work of Robert De Vries' team)
- *
- * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file COPYING in the main directory of this archive
- * for more details.
- *
+ * $Log: cumana_NCR5380.h,v $
  */
 
+#ifndef MAC_NCR5380_H
+#define MAC_NCR5380_H
 
-#ifndef MAC_SCSI_H
-#define MAC_SCSI_H
+#define MACSCSI_PUBLIC_RELEASE 1
 
-/* (I_HAVE_OVERRUNS stuff removed) */
 
 #ifndef ASM
-int mac_scsi_abort (Scsi_Cmnd *);
-int mac_scsi_detect (Scsi_Host_Template *);
-const char * mac_scsi_info (struct Scsi_Host *host);
-int mac_scsi_queue_command (Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
-int mac_scsi_reset (Scsi_Cmnd *, unsigned int);
-int mac_scsi_proc_info (char *, char **, off_t, int, int, int);
-#ifdef MODULE
-int mac_scsi_release (struct Scsi_Host *);
-#else
-#define mac_scsi_release NULL
+int macscsi_abort (Scsi_Cmnd *);
+int macscsi_detect (Scsi_Host_Template *);
+int macscsi_release (struct Scsi_Host *);
+const char *macscsi_info (struct Scsi_Host *);
+int macscsi_reset(Scsi_Cmnd *, unsigned int);
+int macscsi_queue_command (Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
+int macscsi_proc_info (char *buffer, char **start, off_t offset,
+			int length, int hostno, int inout);
+
+#ifndef NULL
+#define NULL 0
 #endif
 
-/* The values for CMD_PER_LUN and CAN_QUEUE are somehow arbitrary. Higher
- * values should work, too; try it! (but cmd_per_lun costs memory!) */
-
-/* But there seems to be a bug somewhere that requires CAN_QUEUE to be
- * 2*CMD_PER_LUN. At least on a TT, no spurious timeouts seen since
- * changed CMD_PER_LUN... */
-
-/* Note: The Falcon currently uses 8/1 setting due to unsolved problems with
- * cmd_per_lun != 1 */
-
-#define MAC_SCSI_CAN_QUEUE		        16
-#define MAC_SCSI_CMD_PER_LUN		        8
-#define MAC_SCSI_SG_TABLESIZE		SG_ALL
-
-#define	DEFAULT_USE_TAGGED_QUEUING	0
-
-
-#if defined (HOSTS_C) || defined (MODULE)
-
-#define MAC_SCSI { NULL, NULL, NULL,				\
-  mac_scsi_proc_info,						\
-  "Macintosh NCR5380 SCSI",					\
-  mac_scsi_detect,						\
-  mac_scsi_release,						\
-  mac_scsi_info,						\
-  /* command */ NULL,						\
-  mac_scsi_queue_command,					\
-  mac_scsi_abort,						\
-  mac_scsi_reset,						\
-  /* slave_attach */	NULL,					\
-  /* bios_param */	NULL,					\
-  /* can queue */	0, /* initialized at run-time */	\
-  /* host_id */		0, /* initialized at run-time */	\
-  /* scatter gather */	0, /* initialized at run-time */	\
-  /* cmd per lun */	0, /* initialized at run-time */	\
-  /* present */		0,					\
-  /* unchecked ISA DMA */ 0,					\
-  /* use_clustering */	DISABLE_CLUSTERING }
-
+#ifndef CMD_PER_LUN
+#define CMD_PER_LUN 2
 #endif
+
+#ifndef CAN_QUEUE
+#define CAN_QUEUE 16
+#endif
+
+#ifndef SG_TABLESIZE
+#define SG_TABLESIZE SG_NONE
+#endif
+
+#ifndef USE_TAGGED_QUEUING
+#define	USE_TAGGED_QUEUING 0
+#endif
+
+#include <scsi/scsicam.h>
+
+#define MAC_NCR5380 {						\
+name:			"Macintosh NCR5380 SCSI",			\
+detect:			macscsi_detect,					\
+release:		macscsi_release,	/* Release */		\
+info:			macscsi_info,					\
+queuecommand:		macscsi_queue_command,				\
+abort:			macscsi_abort,			 		\
+reset:			macscsi_reset,					\
+bios_param:		scsicam_bios_param,	/* biosparam */		\
+can_queue:		CAN_QUEUE,		/* can queue */		\
+this_id:		7,			/* id */		\
+sg_tablesize:		SG_ALL,			/* sg_tablesize */	\
+cmd_per_lun:		CMD_PER_LUN,		/* cmd per lun */	\
+unchecked_isa_dma:	0,			/* unchecked_isa_dma */	\
+use_clustering:		DISABLE_CLUSTERING				\
+	}
 
 #ifndef HOSTS_C
 
-#define	NCR5380_implementation_fields	/* none */
+#define NCR5380_implementation_fields \
+    int port, ctrl
 
-#define NCR5380_read(reg)		  mac_scsi_reg_read( reg )
-#define NCR5380_write(reg, value) mac_scsi_reg_write( reg, value )
+#define NCR5380_local_declare() \
+        struct Scsi_Host *_instance
 
-#define NCR5380_intr mac_scsi_intr
-#define NCR5380_queue_command mac_scsi_queue_command
-#define NCR5380_abort mac_scsi_abort
-#define NCR5380_proc_info mac_scsi_proc_info
-#define NCR5380_dma_read_setup(inst,d,c) mac_scsi_dma_setup (inst, d, c, 0)
-#define NCR5380_dma_write_setup(inst,d,c) mac_scsi_dma_setup (inst, d, c, 1)
-#define NCR5380_dma_residual(inst) mac_scsi_dma_residual( inst )
-#define	NCR5380_dma_xfer_len(i,cmd,phase) \
-	mac_dma_xfer_len(cmd->SCp.this_residual,cmd,((phase) & SR_IO) ? 0 : 1)
-#ifdef PSEUDO_DMA
-#define NCR5380_pread(inst,d,l) mac_pdma_read (inst, d, l)
-#define NCR5380_pwrite(inst,d,l) mac_pdma_write (inst, d, l)
-#endif
+#define NCR5380_setup(instance) \
+        _instance = instance
 
-/* Debugging printk definitions:
- *
- *  ARB  -> arbitration
- *  ASEN -> auto-sense
- *  DMA  -> DMA
- *  HSH  -> PIO handshake
- *  INF  -> information transfer
- *  INI  -> initialization
- *  INT  -> interrupt
- *  LNK  -> linked commands
- *  MAIN -> NCR5380_main() control flow
- *  NDAT -> no data-out phase
- *  NWR  -> no write commands
- *  PIO  -> PIO transfers
- *  PDMA -> pseudo DMA (unused on MAC)
- *  QU   -> queues
- *  RSL  -> reselections
- *  SEL  -> selections
- *  USL  -> usleep cpde (unused on MAC)
- *  LBS  -> last byte sent (unused on MAC)
- *  RSS  -> restarting of selections
- *  EXT  -> extended messages
- *  ABRT -> aborting and resetting
- *  TAG  -> queue tag handling
- *  MER  -> merging of consec. buffers
- *
- */
+#define NCR5380_read(reg) macscsi_read(_instance, reg)
+#define NCR5380_write(reg, value) macscsi_write(_instance, reg, value)
 
-#if NDEBUG & NDEBUG_ARBITRATION
-#define ARB_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define ARB_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_AUTOSENSE
-#define ASEN_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define ASEN_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_DMA
-#define DMA_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define DMA_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_HANDSHAKE
-#define HSH_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define HSH_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_INFORMATION
-#define INF_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define INF_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_INIT
-#define INI_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define INI_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_INTR
-#define INT_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define INT_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_LINKED
-#define LNK_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define LNK_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_MAIN
-#define MAIN_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define MAIN_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_NO_DATAOUT
-#define NDAT_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define NDAT_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_NO_WRITE
-#define NWR_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define NWR_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_PIO
-#define PIO_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define PIO_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_PSEUDO_DMA
-#define PDMA_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define PDMA_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_QUEUES
-#define QU_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define QU_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_RESELECTION
-#define RSL_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define RSL_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_SELECTION
-#define SEL_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define SEL_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_USLEEP
-#define USL_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define USL_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_LAST_BYTE_SENT
-#define LBS_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define LBS_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_RESTART_SELECT
-#define RSS_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define RSS_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_EXTENDED
-#define EXT_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define EXT_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_ABORT
-#define ABRT_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define ABRT_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_TAGS
-#define TAG_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define TAG_PRINTK(format, args...)
-#endif
-#if NDEBUG & NDEBUG_MERGING
-#define MER_PRINTK(format, args...) \
-	printk(KERN_DEBUG format , ## args)
-#else
-#define MER_PRINTK(format, args...)
-#endif
+#define NCR5380_intr macscsi_intr
+#define NCR5380_queue_command macscsi_queue_command
+#define NCR5380_abort macscsi_abort
+#define NCR5380_reset macscsi_reset
+#define NCR5380_proc_info macscsi_proc_info
 
-/* conditional macros for NCR5380_print_{,phase,status} */
+#define BOARD_NORMAL	0
+#define BOARD_NCR53C400	1
 
-#define NCR_PRINT(mask)	\
-	((NDEBUG & (mask)) ? NCR5380_print(instance) : (void)0)
-
-#define NCR_PRINT_PHASE(mask) \
-	((NDEBUG & (mask)) ? NCR5380_print_phase(instance) : (void)0)
-
-#define NCR_PRINT_STATUS(mask) \
-	((NDEBUG & (mask)) ? NCR5380_print_status(instance) : (void)0)
-
-#define NDEBUG_ANY	0xffffffff
-
-
-#endif /* else def HOSTS_C */
+#endif /* ndef HOSTS_C */
 #endif /* ndef ASM */
-#endif /* MAC_SCSI_H */
-
+#endif /* MAC_NCR5380_H */
 

@@ -181,6 +181,7 @@ EXPORT_SYMBOL(parport_write);
 EXPORT_SYMBOL(parport_read);
 EXPORT_SYMBOL(parport_ieee1284_wakeup);
 EXPORT_SYMBOL(parport_wait_peripheral);
+EXPORT_SYMBOL(parport_poll_peripheral);
 EXPORT_SYMBOL(parport_wait_event);
 EXPORT_SYMBOL(parport_set_timeout);
 EXPORT_SYMBOL(parport_ieee1284_interrupt);

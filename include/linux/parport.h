@@ -422,6 +422,10 @@ extern int parport_wait_event (struct parport *, long timeout);
 extern int parport_wait_peripheral (struct parport *port,
 				    unsigned char mask,
 				    unsigned char val);
+extern int parport_poll_peripheral (struct parport *port,
+				    unsigned char mask,
+				    unsigned char val,
+				    int usec);
 
 /* For architectural drivers */
 extern void parport_ieee1284_wakeup (struct parport *port);

@@ -322,19 +322,6 @@ typedef struct actcapi_msg {
 			__u16 plci;
 			__u16 info;
 		} select_b3_protocol_conf;
-#if 0
-		struct listen_req {
-			__u32 controller;
-			__u32 infomask;  
-			__u32 cipmask;
-			__u32 cipmask2;
-			__u16 dummy; /* 2 Length-bytes of 2 Structs MUST always be 0!!! */
-		} listen_req;
-		struct listen_conf {
-			__u32  controller;
-			__u16 info;
-		} listen_conf;
-#else
 		struct listen_req {
 			__u8  controller;
 			__u32 infomask __attribute__ ((packed));  
@@ -345,7 +332,6 @@ typedef struct actcapi_msg {
 			__u8  controller;
 			__u16 info __attribute__ ((packed));
 		} listen_conf;
-#endif
 		struct data_b3_req {
 			__u16 fakencci;
 			__u16 datalen;

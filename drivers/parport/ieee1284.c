@@ -80,27 +80,15 @@ int parport_wait_event (struct parport *port, signed long timeout)
  * are able to eat the time up to 40ms.
  */ 
 
-int parport_wait_peripheral(struct parport *port,
-			    unsigned char mask, 
-			    unsigned char result)
+int parport_poll_peripheral(struct parport *port,
+			    unsigned char mask,
+			    unsigned char result,
+			    int usec)
 {
-	int counter;
-	long deadline;
+	/* Zero return code is success, >0 is timeout. */
+	int counter = usec / 5;
 	unsigned char status;
-
-	counter = port->physport->spintime; /* usecs of fast polling */
-	if (!port->physport->cad->timeout)
-		/* A zero timeout is "special": busy wait for the
-		   entire 35ms. */
-		counter = 35000;
-
-	/* Fast polling.
-	 *
-	 * This should be adjustable.
-	 * How about making a note (in the device structure) of how long
-	 * it takes, so we know for next time?
-	 */
-	for (counter /= 5; counter > 0; counter--) {
+	for (; counter > 0; counter--) {
 		status = parport_read_status (port);
 		if ((status & mask) == result)
 			return 0;
@@ -108,8 +96,36 @@ int parport_wait_peripheral(struct parport *port,
 			return -EINTR;
 		if (current->need_resched)
 			break;
-		udelay(5);
+		udelay (5);
 	}
+
+	return 1;
+}
+
+int parport_wait_peripheral(struct parport *port,
+			    unsigned char mask, 
+			    unsigned char result)
+{
+	int ret;
+	int usec;
+	long deadline;
+	unsigned char status;
+
+	usec = port->physport->spintime; /* usecs of fast polling */
+	if (!port->physport->cad->timeout)
+		/* A zero timeout is "special": busy wait for the
+		   entire 35ms. */
+		usec = 35000;
+
+	/* Fast polling.
+	 *
+	 * This should be adjustable.
+	 * How about making a note (in the device structure) of how long
+	 * it takes, so we know for next time?
+	 */
+	ret = parport_poll_peripheral (port, mask, result, usec);
+	if (ret != 1)
+		return ret;
 
 	if (!port->physport->cad->timeout)
 		/* We may be in an interrupt handler, so we can't poll
@@ -137,7 +153,7 @@ int parport_wait_peripheral(struct parport *port,
 			/* parport_wait_event didn't time out, but the
 			 * peripheral wasn't actually ready either.
 			 * Wait for another 10ms. */
-			current->state = TASK_INTERRUPTIBLE;
+			__set_current_state (TASK_INTERRUPTIBLE);
 			schedule_timeout ((HZ+ 99) / 100);
 		}
 	}
@@ -369,8 +385,17 @@ int parport_negotiate (struct parport *port, int mode)
 				      PARPORT_CONTROL_STROBE,
 				      PARPORT_CONTROL_STROBE);
 
+		/* Event 52: nAck goes low */
+		if (parport_wait_peripheral (port, PARPORT_STATUS_ACK, 0)) {
+			/* This peripheral is _very_ slow. */
+			DPRINTK (KERN_DEBUG
+				 "%s: Event 52 didn't happen\n",
+				 port->name);
+			parport_ieee1284_terminate (port);
+			return 1;
+		}
+
 		/* Event 53: Set nStrobe high */
-		udelay (5);
 		parport_frob_control (port,
 				      PARPORT_CONTROL_STROBE,
 				      0);

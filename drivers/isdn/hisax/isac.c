@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.23 1999/08/25 16:50:52 keil Exp $
+/* $Id: isac.c,v 1.24 1999/10/14 20:25:28 keil Exp $
 
  * isac.c   ISAC specific routines
  *
@@ -9,6 +9,9 @@
  *		../../../Documentation/isdn/HiSax.cert
  *
  * $Log: isac.c,v $
+ * Revision 1.24  1999/10/14 20:25:28  keil
+ * add a statistic for error monitoring
+ *
  * Revision 1.23  1999/08/25 16:50:52  keil
  * Fix bugs which cause 2.3.14 hangs (waitqueue init)
  *
@@ -281,12 +284,20 @@ isac_interrupt(struct IsdnCardState *cs, u_char val)
 	if (val & 0x80) {	/* RME */
 		exval = cs->readisac(cs, ISAC_RSTA);
 		if ((exval & 0x70) != 0x20) {
-			if (exval & 0x40)
+			if (exval & 0x40) {
 				if (cs->debug & L1_DEB_WARN)
 					debugl1(cs, "ISAC RDO");
-			if (!(exval & 0x20))
+#ifdef ERROR_STATISTIC
+				cs->err_rx++;
+#endif
+			}
+			if (!(exval & 0x20)) {
 				if (cs->debug & L1_DEB_WARN)
 					debugl1(cs, "ISAC CRC error");
+#ifdef ERROR_STATISTIC
+				cs->err_crc++;
+#endif
+			}
 			cs->writeisac(cs, ISAC_CMDR, 0x80);
 		} else {
 			count = cs->readisac(cs, ISAC_RBCL) & 0x1f;
@@ -300,7 +311,6 @@ isac_interrupt(struct IsdnCardState *cs, u_char val)
 				if (!(skb = alloc_skb(count, GFP_ATOMIC)))
 					printk(KERN_WARNING "HiSax: D receive out of memory\n");
 				else {
-					SET_SKB_FREE(skb);
 					memcpy(skb_put(skb, count), cs->rcvbuf, count);
 					skb_queue_tail(&cs->rq, skb);
 				}
@@ -328,7 +338,7 @@ isac_interrupt(struct IsdnCardState *cs, u_char val)
 				isac_fill_fifo(cs);
 				goto afterXPR;
 			} else {
-				idev_kfree_skb(cs->tx_skb, FREE_WRITE);
+				dev_kfree_skb(cs->tx_skb);
 				cs->tx_cnt = 0;
 				cs->tx_skb = NULL;
 			}
@@ -372,6 +382,9 @@ isac_interrupt(struct IsdnCardState *cs, u_char val)
 		if (exval & 0x40) {  /* XDU */
 			debugl1(cs, "ISAC XDU");
 			printk(KERN_WARNING "HiSax: ISAC XDU\n");
+#ifdef ERROR_STATISTIC
+			cs->err_tx++;
+#endif
 			if (test_and_clear_bit(FLG_DBUSY_TIMER, &cs->HW_Flags))
 				del_timer(&cs->dbusytimer);
 			if (test_and_clear_bit(FLG_L1_DBUSY, &cs->HW_Flags))
@@ -614,7 +627,7 @@ ISAC_l1hw(struct PStack *st, int pr, void *arg)
 			discard_queue(&cs->rq);
 			discard_queue(&cs->sq);
 			if (cs->tx_skb) {
-				idev_kfree_skb(cs->tx_skb, FREE_WRITE);
+				dev_kfree_skb(cs->tx_skb);
 				cs->tx_skb = NULL;
 			}
 			if (test_and_clear_bit(FLG_DBUSY_TIMER, &cs->HW_Flags))
@@ -670,7 +683,7 @@ dbusy_timer_handler(struct IsdnCardState *cs)
 			/* discard frame; reset transceiver */
 			test_and_clear_bit(FLG_DBUSY_TIMER, &cs->HW_Flags);
 			if (cs->tx_skb) {
-				idev_kfree_skb(cs->tx_skb, FREE_WRITE);
+				dev_kfree_skb(cs->tx_skb);
 				cs->tx_cnt = 0;
 				cs->tx_skb = NULL;
 			} else {

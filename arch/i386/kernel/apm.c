@@ -1367,8 +1367,10 @@ static int apm(void *unused)
 	/* Install our power off handler.. */
 	if (power_off_enabled)
 		acpi_power_off = apm_power_off;
-	sysrq_power_off = apm_power_off;
 
+#ifdef CONFIG_MAGIC_SYSRQ
+	sysrq_power_off = apm_power_off;
+#endif
 	apm_mainloop();
 	return 0;
 }

@@ -1,5 +1,5 @@
 /*
- *  $Id: packet.c,v 1.4 1998/02/12 23:08:50 keil Exp $
+ *  $Id: packet.c,v 1.5 1999/08/31 11:20:41 paul Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -52,11 +52,11 @@ int sndpkt(int devId, int channel, struct sk_buff *data)
 	card = get_card_from_id(devId);
 
 	if(!IS_VALID_CARD(card)) {
-		pr_debug("Invalid param: %d is not a valid card id\n", card);
+		pr_debug("invalid param: %d is not a valid card id\n", card);
 		return -ENODEV;
 	}
 
-	pr_debug("%s: Send Packet: frst = 0x%x nxt = %d  f = %d n = %d\n",
+	pr_debug("%s: sndpkt: frst = 0x%x nxt = %d  f = %d n = %d\n",
 		adapter[card]->devicename,
 		adapter[card]->channel[channel].first_sendbuf,
 		adapter[card]->channel[channel].next_sendbuf,
@@ -64,26 +64,26 @@ int sndpkt(int devId, int channel, struct sk_buff *data)
 		adapter[card]->channel[channel].num_sendbufs);
 
 	if(!adapter[card]->channel[channel].free_sendbufs) {
-		pr_debug("%s: Out out TX buffers\n", adapter[card]->devicename);
+		pr_debug("%s: out of TX buffers\n", adapter[card]->devicename);
 		return -EINVAL;
 	}
 
 	if(data->len > BUFFER_SIZE) {
-		pr_debug("%s: Data overflows buffer size (data > buffer)\n", adapter[card]->devicename);
+		pr_debug("%s: data overflows buffer size (data > buffer)\n", adapter[card]->devicename);
 		return -EINVAL;
 	}
 
 	ReqLnkWrite.buff_offset = adapter[card]->channel[channel].next_sendbuf *
 		BUFFER_SIZE + adapter[card]->channel[channel].first_sendbuf;
 	ReqLnkWrite.msg_len = data->len; /* sk_buff size */
-	pr_debug("%s: Writing %d bytes to buffer offset 0x%x\n", adapter[card]->devicename,
+	pr_debug("%s: writing %d bytes to buffer offset 0x%x\n", adapter[card]->devicename,
 			ReqLnkWrite.msg_len, ReqLnkWrite.buff_offset);
 	memcpy_toshmem(card, (char *)ReqLnkWrite.buff_offset, data->data, ReqLnkWrite.msg_len);
 
 	/*
 	 * sendmessage
 	 */
-	pr_debug("%s: Send Packet size=%d, buf_offset=0x%x buf_indx=%d\n",
+	pr_debug("%s: sndpkt size=%d, buf_offset=0x%x buf_indx=%d\n",
 		adapter[card]->devicename,
 		ReqLnkWrite.msg_len, ReqLnkWrite.buff_offset,
 		adapter[card]->channel[channel].next_sendbuf);
@@ -92,7 +92,7 @@ int sndpkt(int devId, int channel, struct sk_buff *data)
 				channel+1, sizeof(LLData), (unsigned int*)&ReqLnkWrite);
 	len = data->len;
 	if(status) {
-		pr_debug("%s: Failed to send packet, status = %d\n", adapter[card]->devicename, status);
+		pr_debug("%s: failed to send packet, status = %d\n", adapter[card]->devicename, status);
 		return -1;
 	}
 	else {
@@ -101,7 +101,7 @@ int sndpkt(int devId, int channel, struct sk_buff *data)
 			++adapter[card]->channel[channel].next_sendbuf ==
 			adapter[card]->channel[channel].num_sendbufs ? 0 :
 			adapter[card]->channel[channel].next_sendbuf;
-			pr_debug("%s: Packet sent successfully\n", adapter[card]->devicename);
+			pr_debug("%s: packet sent successfully\n", adapter[card]->devicename);
 		dev_kfree_skb(data);
 		indicate_status(card,ISDN_STAT_BSENT,channel, (char *)&len);
 	}
@@ -114,7 +114,7 @@ void rcvpkt(int card, RspMessage *rcvmsg)
 	struct sk_buff *skb;
 
 	if(!IS_VALID_CARD(card)) {
-		pr_debug("Invalid param: %d is not a valid card id\n", card);
+		pr_debug("invalid param: %d is not a valid card id\n", card);
 		return;
 	}
 
@@ -122,7 +122,7 @@ void rcvpkt(int card, RspMessage *rcvmsg)
 	case 0x01:
 	case 0x02:
 	case 0x70:
-		pr_debug("%s: Error status code: 0x%x\n", adapter[card]->devicename, rcvmsg->rsp_status);
+		pr_debug("%s: error status code: 0x%x\n", adapter[card]->devicename, rcvmsg->rsp_status);
 		return;
 	case 0x00: 
 	    if (!(skb = dev_alloc_skb(rcvmsg->msg_data.response.msg_len))) {
@@ -144,7 +144,7 @@ void rcvpkt(int card, RspMessage *rcvmsg)
 		/*
 	 	 * Recycle the buffer
 	 	 */
-		pr_debug("%s: Buffer size : %d\n", adapter[card]->devicename, BUFFER_SIZE);
+		pr_debug("%s: buffer size : %d\n", adapter[card]->devicename, BUFFER_SIZE);
 /*		memset_shmem(card, rcvmsg->msg_data.response.buff_offset, 0, BUFFER_SIZE); */
 		newll.buff_offset = rcvmsg->msg_data.response.buff_offset;
 		newll.msg_len = BUFFER_SIZE;
@@ -163,30 +163,30 @@ int setup_buffers(int card, int c)
 	LLData	RcvBuffOffset;
 
 	if(!IS_VALID_CARD(card)) {
-		pr_debug("Invalid param: %d is not a valid card id\n", card);
+		pr_debug("invalid param: %d is not a valid card id\n", card);
 		return -ENODEV;
 	}
 
 	/*
 	 * Calculate the buffer offsets (send/recv/send/recv)
 	 */
-	pr_debug("%s: Seting up channel buffer space in shared RAM\n", adapter[card]->devicename);
+	pr_debug("%s: setting up channel buffer space in shared RAM\n", adapter[card]->devicename);
 	buffer_size = BUFFER_SIZE;
 	nBuffers = ((adapter[card]->ramsize - BUFFER_BASE) / buffer_size) / 2;
 	nBuffers = nBuffers > BUFFERS_MAX ? BUFFERS_MAX : nBuffers;
-	pr_debug("%s: Calculating buffer space: %d buffers, %d big\n", adapter[card]->devicename,
+	pr_debug("%s: calculating buffer space: %d buffers, %d big\n", adapter[card]->devicename,
 		nBuffers, buffer_size);
 	if(nBuffers < 2) {
-		pr_debug("%s: Not enough buffer space\n", adapter[card]->devicename);
+		pr_debug("%s: not enough buffer space\n", adapter[card]->devicename);
 		return -1;
 	}
 	cBase = (nBuffers * buffer_size) * (c - 1);
-	pr_debug("%s: Channel buffer offset from Shared RAM: 0x%x\n", adapter[card]->devicename, cBase);
+	pr_debug("%s: channel buffer offset from shared RAM: 0x%x\n", adapter[card]->devicename, cBase);
 	adapter[card]->channel[c-1].first_sendbuf = BUFFER_BASE + cBase;
 	adapter[card]->channel[c-1].num_sendbufs = nBuffers / 2;
 	adapter[card]->channel[c-1].free_sendbufs = nBuffers / 2;
 	adapter[card]->channel[c-1].next_sendbuf = 0;
-	pr_debug("%s: Send buffer setup complete: first=0x%x n=%d f=%d, nxt=%d\n",
+	pr_debug("%s: send buffer setup complete: first=0x%x n=%d f=%d, nxt=%d\n",
 				adapter[card]->devicename,
 				adapter[card]->channel[c-1].first_sendbuf,
 				adapter[card]->channel[c-1].num_sendbufs,
@@ -196,13 +196,13 @@ int setup_buffers(int card, int c)
 	/*
 	 * Prep the receive buffers
 	 */
-	pr_debug("%s: Adding %d RecvBuffers:\n", adapter[card]->devicename, nBuffers /2);
+	pr_debug("%s: adding %d RecvBuffers:\n", adapter[card]->devicename, nBuffers /2);
 	for (i = 0 ; i < nBuffers / 2; i++) {
 		RcvBuffOffset.buff_offset = 
 			((adapter[card]->channel[c-1].first_sendbuf +
 			(nBuffers / 2) * buffer_size) + (buffer_size * i));
 		RcvBuffOffset.msg_len = buffer_size;
-		pr_debug("%s: Adding RcvBuffer #%d offset=0x%x sz=%d buffsz:%d\n",
+		pr_debug("%s: adding RcvBuffer #%d offset=0x%x sz=%d bufsz:%d\n",
 				adapter[card]->devicename,
 				i + 1, RcvBuffOffset.buff_offset, 
 				RcvBuffOffset.msg_len,buffer_size);

@@ -1,8 +1,18 @@
-/* $Id: hisax.h,v 2.34 1999/08/25 17:00:04 keil Exp $
+/* $Id: hisax.h,v 2.37 1999/10/14 20:25:28 keil Exp $
 
  *   Basic declarations, defines and prototypes
  *
  * $Log: hisax.h,v $
+ * Revision 2.37  1999/10/14 20:25:28  keil
+ * add a statistic for error monitoring
+ *
+ * Revision 2.36  1999/10/10 20:16:15  werner
+ *
+ * Added variable to hfcpci union.
+ *
+ * Revision 2.35  1999/09/04 06:35:09  keil
+ * Winbond W6692 support
+ *
  * Revision 2.34  1999/08/25 17:00:04  keil
  * Make ISAR V32bis modem running
  * Make LL->HL interface open for additional commands
@@ -136,6 +146,8 @@
 #include <linux/isdnif.h>
 #include <linux/tty.h>
 #include <linux/serial_reg.h>
+
+#undef ERROR_STATISTIC
 
 #define REQUEST		0
 #define CONFIRM		1
@@ -447,6 +459,13 @@ struct hscx_hw {
 	u_char tsaxr1;
 };
 
+struct w6692B_hw {
+	int bchan;
+	int rcvidx;
+	int count;              /* Current skb sent count */
+	u_char *rcvbuf;         /* B-Channel receive Buffer */
+};
+
 struct isar_reg {
 	unsigned int Flags;
 	volatile u_char bstat;
@@ -571,6 +590,12 @@ struct BCState {
 	int event;
 	int  (*BC_SetStack) (struct PStack *, struct BCState *);
 	void (*BC_Close) (struct BCState *);
+#ifdef ERROR_STATISTIC
+	int err_crc;
+	int err_tx;
+	int err_rdo;
+	int err_inv;
+#endif
 	union {
 		struct hscx_hw hscx;
 		struct hdlc_hw hdlc;
@@ -578,6 +603,7 @@ struct BCState {
 		struct hfcB_hw hfc;
 		struct tiger_hw tiger;
 		struct amd7930_hw  amd7930;
+		struct w6692B_hw w6692;
 	} hw;
 };
 
@@ -744,7 +770,8 @@ struct hfcPCI_hw {
 	unsigned char fifo;
         unsigned char fifo_en;
         unsigned char bswapped;
-  /*	unsigned int *send; */
+        unsigned char nt_mode;
+        int nt_timer;
 	unsigned char pci_bus;
         unsigned char pci_device_fn;
         unsigned char *pci_io; /* start of PCI IO memory */
@@ -813,6 +840,11 @@ struct gazel_hw {
 	unsigned char iom2;
 };
 
+struct w6692_hw {
+	unsigned int iobase;
+	struct timer_list timer;
+};
+
 #ifdef  CONFIG_HISAX_TESTEMU
 struct te_hw {
 	unsigned char *sfifo;
@@ -821,13 +853,8 @@ struct te_hw {
 	unsigned char *sfifo_e;
 	int sfifo_cnt;
 	unsigned int stat;
-#ifdef COMPAT_HAS_NEW_WAITQ
 	wait_queue_head_t rwaitq;
 	wait_queue_head_t swaitq;
-#else
-	struct wait_queue *rwaitq;
-	struct wait_queue *swaitq;
-#endif
 };
 #endif
 
@@ -847,11 +874,7 @@ struct isac_chip {
 	int mon_rxp;
 	struct arcofi_msg *arcofi_list;
 	struct timer_list arcofitimer;
-#ifdef COMPAT_HAS_NEW_WAITQ
 	wait_queue_head_t arcofi_wait;
-#else
-	struct wait_queue *arcofi_wait;
-#endif
 	u_char arcofi_bc;
 	u_char arcofi_state;
 	u_char mocr;
@@ -863,6 +886,10 @@ struct hfcd_chip {
 };
 
 struct hfcpci_chip {
+	int ph_state;
+};
+
+struct w6692_chip {
 	int ph_state;
 };
 
@@ -910,6 +937,7 @@ struct IsdnCardState {
 #endif
 		struct bkm_hw ax;
 		struct gazel_hw gazel;
+		struct w6692_hw w6692;
 	} hw;
 	int myid;
 	isdn_if iif;
@@ -940,6 +968,7 @@ struct IsdnCardState {
 		struct isac_chip isac;
 		struct hfcd_chip hfcd;
 		struct hfcpci_chip hfcpci;
+		struct w6692_chip w6692;
 	} dc;
 	u_char *rcvbuf;
 	int rcvidx;
@@ -948,6 +977,11 @@ struct IsdnCardState {
 	int event;
 	struct tq_struct tqueue;
 	struct timer_list dbusytimer;
+#ifdef ERROR_STATISTIC
+	int err_crc;
+	int err_tx;
+	int err_rx;
+#endif
 };
 
 #define  MON0_RX	1
@@ -992,7 +1026,8 @@ struct IsdnCardState {
 #define	 ISDN_CTYPE_SCT_QUADRO	33
 #define  ISDN_CTYPE_GAZEL	34
 #define  ISDN_CTYPE_HFC_PCI	35
-#define  ISDN_CTYPE_COUNT	35
+#define  ISDN_CTYPE_W6692	36
+#define  ISDN_CTYPE_COUNT	36
 
 
 #ifdef ISDN_CHIP_ISAC
@@ -1005,10 +1040,6 @@ struct IsdnCardState {
 
 #ifndef __initdata
 #define __initdata
-#endif
-
-#ifndef __init
-#define __init
 #endif
 
 #define HISAX_INITFUNC(__arginit) __initfunc(__arginit)
@@ -1243,6 +1274,15 @@ struct IsdnCardState {
 #define  CARD_GAZEL  0
 #endif
 
+#ifdef	CONFIG_HISAX_W6692
+#define	CARD_W6692	1
+#ifndef	ISDN_CHIP_W6692
+#define	ISDN_CHIP_W6692	1
+#endif
+#else
+#define	CARD_W6692	0
+#endif
+
 #define TEI_PER_CARD 0
 
 #ifdef CONFIG_HISAX_1TR6
@@ -1336,7 +1376,7 @@ int HiSax_command(isdn_ctrl * ic);
 int HiSax_writebuf_skb(int id, int chan, int ack, struct sk_buff *skb);
 void HiSax_putstatus(struct IsdnCardState *cs, char *head, char *fmt, ...);
 void VHiSax_putstatus(struct IsdnCardState *cs, char *head, char *fmt, va_list args);
-void HiSax_reportcard(int cardnr);
+void HiSax_reportcard(int cardnr, int sel);
 int QuickHex(char *txt, u_char * p, int cnt);
 void LogFrame(struct IsdnCardState *cs, u_char * p, int size);
 void dlogframe(struct IsdnCardState *cs, struct sk_buff *skb, int dir);

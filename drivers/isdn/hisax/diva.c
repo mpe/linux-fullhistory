@@ -1,4 +1,4 @@
-/* $Id: diva.c,v 1.16 1999/08/11 21:01:25 keil Exp $
+/* $Id: diva.c,v 1.17 1999/09/04 06:20:06 keil Exp $
 
  * diva.c     low level stuff for Eicon.Diehl Diva Family ISDN cards
  *
@@ -12,6 +12,9 @@
  *
  *
  * $Log: diva.c,v $
+ * Revision 1.17  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.16  1999/08/11 21:01:25  keil
  * new PCI codefix
  *
@@ -74,13 +77,10 @@
 #include "ipac.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
-#ifndef COMPAT_HAS_NEW_PCI
-#include <linux/bios32.h>
-#endif
 
 extern const char *CardType[];
 
-const char *Diva_revision = "$Revision: 1.16 $";
+const char *Diva_revision = "$Revision: 1.17 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -550,7 +550,6 @@ Memhscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 				if (!(skb = dev_alloc_skb(count)))
 					printk(KERN_WARNING "HSCX: receive out of memory\n");
 				else {
-					SET_SKB_FREE(skb);
 					memcpy(skb_put(skb, count), bcs->hw.hscx.rcvbuf, count);
 					skb_queue_tail(&bcs->rqueue, skb);
 				}
@@ -566,7 +565,6 @@ Memhscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 			if (!(skb = dev_alloc_skb(fifo_size)))
 				printk(KERN_WARNING "HiSax: receive out of memory\n");
 			else {
-				SET_SKB_FREE(skb);
 				memcpy(skb_put(skb, fifo_size), bcs->hw.hscx.rcvbuf, fifo_size);
 				skb_queue_tail(&bcs->rqueue, skb);
 			}
@@ -583,7 +581,7 @@ Memhscx_interrupt(struct IsdnCardState *cs, u_char val, u_char hscx)
 				if (bcs->st->lli.l1writewakeup &&
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.hscx.count);
-				idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+				dev_kfree_skb(bcs->tx_skb);
 				bcs->hw.hscx.count = 0; 
 				bcs->tx_skb = NULL;
 			}
@@ -752,30 +750,30 @@ reset_diva(struct IsdnCardState *cs)
 	sti();
 	if (cs->subtyp == DIVA_IPAC_ISA) {
 		writereg(cs->hw.diva.isac_adr, cs->hw.diva.isac, IPAC_POTA2, 0x20);
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		writereg(cs->hw.diva.isac_adr, cs->hw.diva.isac, IPAC_POTA2, 0x00);
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		writereg(cs->hw.diva.isac_adr, cs->hw.diva.isac, IPAC_MASK, 0xc0);
 	} else if (cs->subtyp == DIVA_IPAC_PCI) {
 		unsigned int *ireg = (unsigned int *)(cs->hw.diva.pci_cfg +
 					PITA_MISC_REG);
 		*ireg = PITA_PARA_SOFTRESET | PITA_PARA_MPX_MODE;
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		*ireg = PITA_PARA_MPX_MODE;
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		memwritereg(cs->hw.diva.cfg_reg, IPAC_MASK, 0xc0);
 	} else { /* DIVA 2.0 */
 		cs->hw.diva.ctrl_reg = 0;        /* Reset On */
 		byteout(cs->hw.diva.ctrl, cs->hw.diva.ctrl_reg);
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		cs->hw.diva.ctrl_reg |= DIVA_RESET;  /* Reset Off */
 		byteout(cs->hw.diva.ctrl, cs->hw.diva.ctrl_reg);
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		if (cs->subtyp == DIVA_ISA)
 			cs->hw.diva.ctrl_reg |= DIVA_ISA_LED_A;
@@ -880,16 +878,12 @@ Diva_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-#ifdef COMPAT_HAS_NEW_PCI
 static 	struct pci_dev *dev_diva __initdata = NULL;
 static 	struct pci_dev *dev_diva_u __initdata = NULL;
 static 	struct pci_dev *dev_diva201 __initdata = NULL;
-#else
-static  int pci_index __initdata = 0;
-#endif
 
-int __init
-setup_diva(struct IsdnCard *card)
+__initfunc(int
+setup_diva(struct IsdnCard *card))
 {
 	int bytecnt;
 	u_char val;
@@ -927,7 +921,6 @@ setup_diva(struct IsdnCard *card)
 		bytecnt = 8;
 	} else {
 #if CONFIG_PCI
-#ifdef COMPAT_HAS_NEW_PCI
 		if (!pci_present()) {
 			printk(KERN_ERR "Diva: no PCI bus present\n");
 			return(0);
@@ -938,23 +931,23 @@ setup_diva(struct IsdnCard *card)
 			PCI_DIVA20_ID, dev_diva))) {
 			cs->subtyp = DIVA_PCI;
 			cs->irq = dev_diva->irq;
-			cs->hw.diva.cfg_reg = get_pcibase(dev_diva, 2)
+			cs->hw.diva.cfg_reg = dev_diva->resource[ 2].start
 				& PCI_BASE_ADDRESS_IO_MASK;
 		} else if ((dev_diva_u = pci_find_device(PCI_VENDOR_EICON_DIEHL,
 			PCI_DIVA20_U_ID, dev_diva_u))) {
 			cs->subtyp = DIVA_PCI;
 			cs->irq = dev_diva_u->irq;
-			cs->hw.diva.cfg_reg = get_pcibase(dev_diva_u, 2)
+			cs->hw.diva.cfg_reg = dev_diva_u->resource[ 2].start
 				& PCI_BASE_ADDRESS_IO_MASK;
 		} else if ((dev_diva201 = pci_find_device(PCI_VENDOR_EICON_DIEHL,
 			PCI_DIVA_201, dev_diva201))) {
 			cs->subtyp = DIVA_IPAC_PCI;
 			cs->irq = dev_diva201->irq;
 			cs->hw.diva.pci_cfg =
-				(ulong) ioremap((get_pcibase(dev_diva201, 0)
+				(ulong) ioremap((dev_diva201->resource[ 0].start
 					& PCI_BASE_ADDRESS_IO_MASK), 4096);
 			cs->hw.diva.cfg_reg =
-				(ulong) ioremap((get_pcibase(dev_diva201, 1)
+				(ulong) ioremap((dev_diva201->resource[ 1].start
 					& PCI_BASE_ADDRESS_IO_MASK), 4096);
 		} else {
 			printk(KERN_WARNING "Diva: No PCI card found\n");
@@ -970,66 +963,6 @@ setup_diva(struct IsdnCard *card)
 			printk(KERN_WARNING "Diva: No IO-Adr for PCI card found\n");
 			return(0);
 		}
-#else
-		u_char pci_bus, pci_device_fn, pci_irq;
-		u_int pci_ioaddr;
-
-		cs->subtyp = 0;
-		for (; pci_index < 0xff; pci_index++) {
-			if (pcibios_find_device(PCI_VENDOR_EICON_DIEHL,
-			   PCI_DIVA20_ID, pci_index, &pci_bus, &pci_device_fn)
-			   == PCIBIOS_SUCCESSFUL)
-				cs->subtyp = DIVA_PCI;
-			else if (pcibios_find_device(PCI_VENDOR_EICON_DIEHL,
-			   PCI_DIVA20_U_ID, pci_index, &pci_bus, &pci_device_fn)
-			   == PCIBIOS_SUCCESSFUL)
-			   	cs->subtyp = DIVA_PCI;
-			else if (pcibios_find_device(PCI_VENDOR_EICON_DIEHL,
-			   PCI_DIVA_201, pci_index, &pci_bus, &pci_device_fn)
-			   == PCIBIOS_SUCCESSFUL)
-			   	cs->subtyp = DIVA_IPAC_PCI;
-			else
-				break;
-			/* get IRQ */
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-				PCI_INTERRUPT_LINE, &pci_irq);
-
-			/* get IO address */
-			if (cs->subtyp == DIVA_IPAC_PCI) {
-				pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_0, &pci_ioaddr);
-				cs->hw.diva.pci_cfg = (ulong) ioremap(pci_ioaddr,
-					4096);
-				pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_1, &pci_ioaddr);
-				cs->hw.diva.cfg_reg = (ulong) ioremap(pci_ioaddr,
-					4096);
-			} else {
-				pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_1, &pci_ioaddr);
-				cs->hw.diva.pci_cfg = pci_ioaddr & ~3;
-				pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_2, &pci_ioaddr);
-				cs->hw.diva.cfg_reg = pci_ioaddr & ~3;
-			}
-			if (cs->subtyp)
-				break;
-		}
-		if (!cs->subtyp) {
-			printk(KERN_WARNING "Diva: No PCI card found\n");
-			return(0);
-		}
-		pci_index++;
-		if (!pci_irq) {
-			printk(KERN_WARNING "Diva: No IRQ for PCI card found\n");
-			return(0);
-		}
-		if (!pci_ioaddr) {
-			printk(KERN_WARNING "Diva: No IO-Adr for PCI card found\n");
-			return(0);
-		}
-		cs->irq = pci_irq;
-#endif /* COMPAT_HAS_NEW_PCI */
 		cs->irq_flags |= SA_SHIRQ;
 #else
 		printk(KERN_WARNING "Diva: cfgreg 0 and NO_PCI_BIOS\n");

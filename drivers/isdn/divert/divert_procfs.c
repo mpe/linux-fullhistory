@@ -1,5 +1,5 @@
 /* 
- * $Id: divert_procfs.c,v 1.4 1999/08/06 07:42:48 calle Exp $
+ * $Id: divert_procfs.c,v 1.5 1999/09/14 20:31:01 werner Exp $
  *
  * Filesystem handling for the diversion supplementary services.
  *
@@ -20,6 +20,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: divert_procfs.c,v $
+ * Revision 1.5  1999/09/14 20:31:01  werner
+ *
+ * Removed obsoleted functions for proc fs and synced with new ones.
+ *
  * Revision 1.4  1999/08/06 07:42:48  calle
  * Added COMPAT_HAS_NEW_WAITQ for rd_queue for newer kernels.
  *
@@ -38,16 +42,13 @@
 #define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/version.h>
-#if (LINUX_VERSION_CODE >= 0x020117) 
 #include <linux/poll.h>
-#endif
 #ifdef CONFIG_PROC_FS
   #include <linux/proc_fs.h>
 #else
   #include <linux/fs.h>
 #endif
 #include <linux/isdnif.h>
-#include <linux/isdn_compat.h>
 #include "isdn_divert.h"
 
 /*********************************/
@@ -56,11 +57,7 @@
 ulong if_used = 0; /* number of interface users */
 static struct divert_info *divert_info_head = NULL; /* head of queue */
 static struct divert_info *divert_info_tail = NULL; /* pointer to last entry */
-#ifdef COMPAT_HAS_NEW_WAITQ
 static wait_queue_head_t rd_queue;
-#else
-static struct wait_queue *rd_queue = 0; /* Queue IO */
-#endif
 
 /*********************************/
 /* put an info buffer into queue */
@@ -101,11 +98,7 @@ void put_info_buffer(char *cp)
 /**********************************/
 /* deflection device read routine */
 /**********************************/
-#if (LINUX_VERSION_CODE < 0x020117)
-static int isdn_divert_read(struct inode *inode, struct file *file, char *buf, RWARG count)
-#else
 static ssize_t isdn_divert_read(struct file *file, char *buf, size_t count, loff_t *off)
-#endif
 { struct divert_info *inf;
   int len;
 	
@@ -130,11 +123,7 @@ static ssize_t isdn_divert_read(struct file *file, char *buf, size_t count, loff
 /**********************************/
 /* deflection device write routine */
 /**********************************/
-#if (LINUX_VERSION_CODE < 0x020117)
-static int isdn_divert_write(struct inode *inode, struct file *file, const char *buf, RWARG count)
-#else
 static ssize_t isdn_divert_write(struct file *file, const char *buf, size_t count, loff_t *off)
-#endif
 {
   return(-ENODEV);
 } /* isdn_divert_write */
@@ -143,17 +132,6 @@ static ssize_t isdn_divert_write(struct file *file, const char *buf, size_t coun
 /***************************************/
 /* select routines for various kernels */
 /***************************************/
-#if (LINUX_VERSION_CODE < 0x020117)
-static int isdn_divert_select(struct inode *inode, struct file *file, int type, select_table * st)
-{
-  if (*((struct divert_info **)file->private_data))
-    return 1;
-  else 
-    { if (st) select_wait(&(rd_queue), st);
-      return 0;
-    }
-} /* isdn_divert_select */
-#else
 static unsigned int isdn_divert_poll(struct file *file, poll_table * wait)
 { unsigned int mask = 0;
 
@@ -164,7 +142,6 @@ static unsigned int isdn_divert_poll(struct file *file, poll_table * wait)
     }
   return mask;
 } /* isdn_divert_poll */
-#endif
 
 /****************/
 /* Open routine */
@@ -188,11 +165,7 @@ static int isdn_divert_open(struct inode *ino, struct file *filep)
 /*******************/
 /* close routine   */
 /*******************/
-#if (LINUX_VERSION_CODE < 0x020117)
-static void isdn_divert_close(struct inode *ino, struct file *filep)
-#else
 static int isdn_divert_close(struct inode *ino, struct file *filep)
-#endif
 { struct divert_info *inf; 
   int flags;
 
@@ -212,10 +185,7 @@ static int isdn_divert_close(struct inode *ino, struct file *filep)
       kfree(inf);
     }
   MOD_DEC_USE_COUNT;
-#if (LINUX_VERSION_CODE < 0x020117)
-#else
   return(0);
-#endif
 } /* isdn_divert_close */
 
 /*********/
@@ -301,33 +271,11 @@ static int isdn_divert_ioctl(struct inode *inode, struct file *file,
 
 
 #ifdef CONFIG_PROC_FS
-#if (LINUX_VERSION_CODE < 0x020117)
-static LSTYPE
-isdn_divert_lseek(struct inode *inode, struct file *file, LSARG offset, int orig)
-#else
 static loff_t
 isdn_divert_lseek(struct file *file, loff_t offset, int orig)
-#endif
 {
 	return -ESPIPE;
 }
-
-#if (LINUX_VERSION_CODE < 0x020117)
-static struct file_operations isdn_fops =
-{
-	isdn_divert_lseek,
-	isdn_divert_read,
-	isdn_divert_write,
-	NULL,                          /* isdn_readdir */
-	isdn_divert_select,            /* isdn_select */
-	isdn_divert_ioctl,             /* isdn_ioctl */
-	NULL,                          /* isdn_mmap */
-	isdn_divert_open,
-	isdn_divert_close,
-	NULL                           /* fsync */
-};
-
-#else
 
 static struct file_operations isdn_fops =
 {
@@ -343,51 +291,33 @@ static struct file_operations isdn_fops =
 	isdn_divert_close,
 	NULL                           /* fsync */
 };
-#endif  /* kernel >= 2.1 */
 
-
-/*
- * proc directories can do almost nothing..
- */
-struct inode_operations proc_isdn_inode_ops = {
-	&isdn_fops,	        /* isdn divert special file-ops */
-	NULL,			/* create */
-	NULL,  		        /* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,		 	/* bmap */
-	NULL,			/* truncate */
-	NULL			/* permission */
+struct inode_operations divert_file_inode_operations = {
+    &isdn_fops,  /* default proc file-ops */
+    NULL,	 /* create	*/
+    NULL,	 /* lookup	*/
+    NULL,	 /* link		*/
+    NULL,	 /* unlink	*/
+    NULL,	 /* symlink	*/
+    NULL,	 /* mkdir	*/
+    NULL,	 /* rmdir	   */
+    NULL,	 /* mknod	   */
+    NULL,	    /* rename	   */
+    NULL,	    /* readlink	   */
+    NULL,	    /* follow_link */
+    NULL,	    /* readpage	   */
+    NULL,	    /* writepage   */
+    NULL,	    /* bmap	   */
+    NULL,	    /* truncate	   */
+    NULL	    /* permission  */
 };
+
 
 /****************************/
 /* isdn subdir in /proc/net */
 /****************************/
-static struct proc_dir_entry isdn_proc_entry = 
-  { 0, 4, "isdn", S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0, 0, 
-    &proc_dir_inode_operations,NULL,NULL,NULL,NULL,NULL
-  };
-
-static struct proc_dir_entry isdn_divert_entry =
-{ 0, 6, "divert",S_IFREG | S_IRUGO, 1, 0, 0, 0, &proc_isdn_inode_ops,
-   NULL
-  }; 
-
-/*****************************************************************/
-/* variables used for automatic determining existence of proc fs */
-/*****************************************************************/
-static int (*proc_reg_dynamic)(struct proc_dir_entry *, struct proc_dir_entry *) = NULL;
-static int (*proc_unreg)(struct proc_dir_entry *, int) = NULL;
-
+static struct proc_dir_entry *isdn_proc_entry = NULL;
+static struct proc_dir_entry *isdn_divert_entry = NULL;
 #endif CONFIG_PROC_FS
 
 /***************************************************************************/
@@ -396,36 +326,19 @@ static int (*proc_unreg)(struct proc_dir_entry *, int) = NULL;
 int divert_dev_init(void)
 { int i;
 
-#ifdef COMPAT_HAS_NEW_WAITQ
 	init_waitqueue_head(&rd_queue);
-#endif
 
 #ifdef CONFIG_PROC_FS
-#if (LINUX_VERSION_CODE < 0x020117)
-  (void *) proc_reg_dynamic = get_module_symbol("","proc_register_dynamic");
-  (void *) proc_unreg = get_module_symbol("","proc_unregister");
-  if (proc_unreg)
-   { i = proc_reg_dynamic(&proc_net,&isdn_proc_entry);  
-     if (i) return(i);
-     i = proc_reg_dynamic(&isdn_proc_entry,&isdn_divert_entry);
-     if (i) 
-      { proc_unreg(&proc_net,isdn_proc_entry.low_ino);
-        return(i);
-      }
-   } /* proc exists */
-#else
-  (void *) proc_reg_dynamic = get_module_symbol("","proc_register");
-  (void *) proc_unreg = get_module_symbol("","proc_unregister");
-  if (proc_unreg)
-   { i = proc_reg_dynamic(proc_net,&isdn_proc_entry);  
-     if (i) return(i);
-     i = proc_reg_dynamic(&isdn_proc_entry,&isdn_divert_entry);
-     if (i) 
-      { proc_unreg(proc_net,isdn_proc_entry.low_ino);
-        return(i);
-      }
-   } /* proc exists */
-#endif
+  isdn_proc_entry = create_proc_entry("isdn", S_IFDIR | S_IRUGO | S_IXUGO ,proc_net);
+  if (!isdn_proc_entry) 
+    return(-1);
+  isdn_divert_entry = create_proc_entry("divert",S_IFREG | S_IRUGO,isdn_proc_entry); 
+  if (!isdn_divert_entry) 
+   {
+     remove_proc_entry("isdn",proc_net);
+     return(-1);
+   }
+  isdn_divert_entry->ops = &divert_file_inode_operations;
 #endif CONFIG_PROC_FS
 
   return(0);
@@ -439,16 +352,8 @@ int divert_dev_deinit(void)
 { int i;
 
 #ifdef CONFIG_PROC_FS
-  if (proc_unreg)
-   { i = proc_unreg(&isdn_proc_entry,isdn_divert_entry.low_ino);
-     if (i) return(i);
-#if (LINUX_VERSION_CODE < 0x020117)
-     i = proc_unreg(&proc_net,isdn_proc_entry.low_ino);  
-#else
-     i = proc_unreg(proc_net,isdn_proc_entry.low_ino);  
-#endif
-     if (i) return(i);
-   } /* proc exists */
+  remove_proc_entry("divert",isdn_proc_entry);
+  remove_proc_entry("isdn",proc_net);
 #endif CONFIG_PROC_FS
 
   return(0);

@@ -39,11 +39,11 @@ struct pci_vendor_info {
 
 #define VENDOR( vendor, name )		static struct pci_device_info __devices_##vendor[] __initdata = {
 #define ENDVENDOR()			};
-#define DEVICE( vendor, device, name )	{ PCI_DEVICE_ID_##device, 0, __devicestr_##vendor##device },
+#define DEVICE( vendor, device, name )	{ 0x##device, 0, __devicestr_##vendor##device },
 #include "devlist.h"
 
 static const struct pci_vendor_info __initdata pci_vendor_list[] = {
-#define VENDOR( vendor, name )		{ PCI_VENDOR_ID_##vendor, sizeof(__devices_##vendor) / sizeof(struct pci_device_info), __vendorstr_##vendor, __devices_##vendor },
+#define VENDOR( vendor, name )		{ 0x##vendor, sizeof(__devices_##vendor) / sizeof(struct pci_device_info), __vendorstr_##vendor, __devices_##vendor },
 #define ENDVENDOR()
 #define DEVICE( vendor, device, name )
 #include "devlist.h"

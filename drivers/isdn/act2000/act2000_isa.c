@@ -1,4 +1,4 @@
-/* $Id: act2000_isa.c,v 1.8 1999/01/05 18:29:25 he Exp $
+/* $Id: act2000_isa.c,v 1.10 1999/10/24 18:46:05 fritz Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000 (ISA-Version).
  *
@@ -20,6 +20,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: act2000_isa.c,v $
+ * Revision 1.10  1999/10/24 18:46:05  fritz
+ * Changed isa_ prefix to act2000_isa_ to prevent name-clash in latest
+ * kernels.
+ *
+ * Revision 1.9  1999/09/04 06:20:04  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.8  1999/01/05 18:29:25  he
  * merged remaining schedule_timeout() changes from 2.1.127
  *
@@ -61,17 +68,17 @@ static act2000_card *irq2card_map[16] =
 	0, 0, 0, 0, 0, 0, 0, 0,	0, 0, 0, 0, 0, 0, 0, 0
 };
 
-static int isa_irqs[] =
+static int act2000_isa_irqs[] =
 {
         3, 5, 7, 10, 11, 12, 15
 };
-#define ISA_NRIRQS (sizeof(isa_irqs)/sizeof(int))
+#define ISA_NRIRQS (sizeof(act2000_isa_irqs)/sizeof(int))
 
 static void
-isa_delay(long t)
+act2000_isa_delay(long t)
 {
         sti();
-        current->state = TASK_INTERRUPTIBLE;
+        set_current_state(TASK_INTERRUPTIBLE);
         schedule_timeout(t);
         sti();
 }
@@ -83,7 +90,7 @@ isa_delay(long t)
  *   0 = Signature not found.
  */
 static int
-isa_reset(unsigned short portbase)
+act2000_isa_reset(unsigned short portbase)
 {
         unsigned char reg;
         int i;
@@ -109,7 +116,7 @@ isa_reset(unsigned short portbase)
 }
 
 int
-isa_detect(unsigned short portbase)
+act2000_isa_detect(unsigned short portbase)
 {
         int ret = 0;
         unsigned long flags;
@@ -117,13 +124,13 @@ isa_detect(unsigned short portbase)
         save_flags(flags);
         cli();
         if (!check_region(portbase, ISA_REGION))
-                ret = isa_reset(portbase);
+                ret = act2000_isa_reset(portbase);
         restore_flags(flags);
         return ret;
 }
 
 static void
-isa_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+act2000_isa_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
         act2000_card *card = irq2card_map[irq];
         u_char istatus;
@@ -138,7 +145,7 @@ isa_interrupt(int irq, void *dev_id, struct pt_regs *regs)
                 /* RX fifo has data */
 		istatus &= ISA_ISR_OUT_MASK;
 		outb(0, ISA_PORT_SIS);
-		isa_receive(card);
+		act2000_isa_receive(card);
 		outb(ISA_SIS_INT, ISA_PORT_SIS);
         }
         if (istatus & ISA_ISR_ERR) {
@@ -151,7 +158,7 @@ isa_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 static void
-isa_select_irq(act2000_card * card)
+act2000_isa_select_irq(act2000_card * card)
 {
 	unsigned char reg;
 
@@ -183,9 +190,9 @@ isa_select_irq(act2000_card * card)
 }
 
 static void
-isa_enable_irq(act2000_card * card)
+act2000_isa_enable_irq(act2000_card * card)
 {
-	isa_select_irq(card);
+	act2000_isa_select_irq(card);
 	/* Enable READ irq */
 	outb(ISA_SIS_INT, ISA_PORT_SIS);
 }
@@ -195,7 +202,7 @@ isa_enable_irq(act2000_card * card)
  * If irq is -1, choose next free irq, else irq is given explicitely.
  */
 int
-isa_config_irq(act2000_card * card, short irq)
+act2000_isa_config_irq(act2000_card * card, short irq)
 {
         int i;
         unsigned long flags;
@@ -213,8 +220,8 @@ isa_config_irq(act2000_card * card, short irq)
         if (irq == -1) {
                 /* Auto select */
                 for (i = 0; i < ISA_NRIRQS; i++) {
-                        if (!request_irq(isa_irqs[i], &isa_interrupt, 0, card->regname, NULL)) {
-                                card->irq = isa_irqs[i];
+                        if (!request_irq(act2000_isa_irqs[i], &act2000_isa_interrupt, 0, card->regname, NULL)) {
+                                card->irq = act2000_isa_irqs[i];
                                 irq2card_map[card->irq] = card;
                                 card->flags |= ACT2000_FLAGS_IVALID;
                                 break;
@@ -222,7 +229,7 @@ isa_config_irq(act2000_card * card, short irq)
                 }
         } else {
                 /* Fixed irq */
-                if (!request_irq(irq, &isa_interrupt, 0, card->regname, NULL)) {
+                if (!request_irq(irq, &act2000_isa_interrupt, 0, card->regname, NULL)) {
                         card->irq = irq;
                         irq2card_map[card->irq] = card;
 			card->flags |= ACT2000_FLAGS_IVALID;
@@ -234,7 +241,7 @@ isa_config_irq(act2000_card * card, short irq)
                        "act2000: Could not request irq\n");
                 return -EBUSY;
         } else {
-		isa_select_irq(card);
+		act2000_isa_select_irq(card);
                 /* Disable READ and WRITE irq */
                 outb(0, ISA_PORT_SIS);
                 outb(0, ISA_PORT_SOS);
@@ -243,7 +250,7 @@ isa_config_irq(act2000_card * card, short irq)
 }
 
 int
-isa_config_port(act2000_card * card, unsigned short portbase)
+act2000_isa_config_port(act2000_card * card, unsigned short portbase)
 {
         if (card->flags & ACT2000_FLAGS_PVALID) {
                 release_region(card->port, ISA_REGION);
@@ -262,7 +269,7 @@ isa_config_port(act2000_card * card, unsigned short portbase)
  * Release ressources, used by an adaptor.
  */
 void
-isa_release(act2000_card * card)
+act2000_isa_release(act2000_card * card)
 {
         unsigned long flags;
 
@@ -280,7 +287,7 @@ isa_release(act2000_card * card)
 }
 
 static int
-isa_writeb(act2000_card * card, u_char data)
+act2000_isa_writeb(act2000_card * card, u_char data)
 {
         u_char timeout = 40;
 
@@ -297,7 +304,7 @@ isa_writeb(act2000_card * card, u_char data)
 }
 
 static int
-isa_readb(act2000_card * card, u_char * data)
+act2000_isa_readb(act2000_card * card, u_char * data)
 {
         u_char timeout = 40;
 
@@ -314,13 +321,13 @@ isa_readb(act2000_card * card, u_char * data)
 }
 
 void
-isa_receive(act2000_card *card)
+act2000_isa_receive(act2000_card *card)
 {
 	u_char c;
 
         if (test_and_set_bit(ACT2000_LOCK_RX, (void *) &card->ilock) != 0)
 		return;
-	while (!isa_readb(card, &c)) {
+	while (!act2000_isa_readb(card, &c)) {
 		if (card->idat.isa.rcvidx < 8) {
                         card->idat.isa.rcvhdr[card->idat.isa.rcvidx++] = c;
 			if (card->idat.isa.rcvidx == 8) {
@@ -332,7 +339,7 @@ isa_receive(act2000_card *card)
 					if (card->idat.isa.rcvskb == NULL) {
 						card->idat.isa.rcvignore = 1;
 						printk(KERN_WARNING
-						       "isa_receive: no memory\n");
+						       "act2000_isa_receive: no memory\n");
 						test_and_clear_bit(ACT2000_LOCK_RX, (void *) &card->ilock);
 						return;
 					}
@@ -341,12 +348,12 @@ isa_receive(act2000_card *card)
 				} else {
 					card->idat.isa.rcvidx = 0;
 					printk(KERN_WARNING
-					       "isa_receive: Invalid CAPI msg\n");
+					       "act2000_isa_receive: Invalid CAPI msg\n");
 					{
 						int i; __u8 *p; __u8 *c; __u8 tmp[30];
 						for (i = 0, p = (__u8 *)&card->idat.isa.rcvhdr, c = tmp; i < 8; i++)
 							c += sprintf(c, "%02x ", *(p++));
-						printk(KERN_WARNING "isa_receive: %s\n", tmp);
+						printk(KERN_WARNING "act2000_isa_receive: %s\n", tmp);
 					}
 				}
 			}
@@ -377,7 +384,7 @@ isa_receive(act2000_card *card)
 }
 
 void
-isa_send(act2000_card * card)
+act2000_isa_send(act2000_card * card)
 {
 	unsigned long flags;
 	struct sk_buff *skb;
@@ -410,11 +417,8 @@ isa_send(act2000_card * card)
 		skb = card->sbuf;
 		l = 0;
 		while (skb->len) {
-			if (isa_writeb(card, *(skb->data))) {
+			if (act2000_isa_writeb(card, *(skb->data))) {
 				/* Fifo is full, but more data to send */
-#if 0
-				printk(KERN_DEBUG "isa_send: %d bytes\n", l);
-#endif
 				test_and_clear_bit(ACT2000_LOCK_TX, (void *) &card->ilock);
 				/* Schedule myself */
 				act2000_schedule_tx(card);
@@ -437,9 +441,6 @@ isa_send(act2000_card * card)
 		} else
 			dev_kfree_skb(skb);
 		card->sbuf = NULL;
-#if 0
-		printk(KERN_DEBUG "isa_send: %d bytes\n", l);
-#endif
 	}
 }
 
@@ -447,7 +448,7 @@ isa_send(act2000_card * card)
  * Get firmware ID, check for 'ISDN' signature.
  */
 static int
-isa_getid(act2000_card * card)
+act2000_isa_getid(act2000_card * card)
 {
 
         act2000_fwid fid;
@@ -457,7 +458,7 @@ isa_getid(act2000_card * card)
         while (1) {
                 if (count > 510)
                         return -EPROTO;
-                if (isa_readb(card, p++))
+                if (act2000_isa_readb(card, p++))
                         break;
                 count++;
         }
@@ -476,7 +477,7 @@ isa_getid(act2000_card * card)
         printk(KERN_INFO "act2000: Firmware-ID: %s\n", fid.revision);
 	if (card->flags & ACT2000_FLAGS_IVALID) {
 		printk(KERN_DEBUG "Enabling Interrupts ...\n");
-		isa_enable_irq(card);
+		act2000_isa_enable_irq(card);
 	}
         return 0;
 }
@@ -485,7 +486,7 @@ isa_getid(act2000_card * card)
  * Download microcode into card, check Firmware signature.
  */
 int
-isa_download(act2000_card * card, act2000_ddef * cb)
+act2000_isa_download(act2000_card * card, act2000_ddef * cb)
 {
         int length;
         int ret;
@@ -497,9 +498,9 @@ isa_download(act2000_card * card, act2000_ddef * cb)
         u_char *buf;
         act2000_ddef cblock;
 
-        if (!isa_reset(card->port))
+        if (!act2000_isa_reset(card->port))
                 return -ENXIO;
-        isa_delay(HZ / 2);
+        act2000_isa_delay(HZ / 2);
         if ((ret = verify_area(VERIFY_READ, (void *) cb, sizeof(cblock))))
                 return ret;
         copy_from_user(&cblock, (char *) cb, sizeof(cblock));
@@ -517,7 +518,7 @@ isa_download(act2000_card * card, act2000_ddef * cb)
                 b = buf;
                 copy_from_user(buf, p, l);
                 while (c < l) {
-                        if (isa_writeb(card, *b++)) {
+                        if (act2000_isa_writeb(card, *b++)) {
                                 printk(KERN_WARNING
                                        "act2000: loader timed out"
                                        " len=%d c=%d\n", length, c);
@@ -530,6 +531,6 @@ isa_download(act2000_card * card, act2000_ddef * cb)
                 p += l;
         }
         kfree(buf);
-        isa_delay(HZ / 2);
-        return (isa_getid(card));
+        act2000_isa_delay(HZ / 2);
+        return (act2000_isa_getid(card));
 }

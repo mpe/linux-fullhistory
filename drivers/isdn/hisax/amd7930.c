@@ -749,8 +749,8 @@ amd7930_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-int __init
-setup_amd7930(struct IsdnCard *card)
+__initfunc(int
+setup_amd7930(struct IsdnCard *card))
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

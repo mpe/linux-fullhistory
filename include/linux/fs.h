@@ -271,6 +271,7 @@ void init_buffer(struct buffer_head *, bh_end_io_t *, void *);
 #include <linux/bfs_fs_i.h>
 #include <linux/udf_fs_i.h>
 #include <linux/ncp_fs_i.h>
+#include <linux/proc_fs_i.h>
 
 /*
  * Attribute flags.  These should be or-ed together to figure out what
@@ -395,6 +396,7 @@ struct inode {
 		struct bfs_inode_info		bfs_i;
 		struct udf_inode_info		udf_i;
 		struct ncp_inode_info		ncpfs_i;
+		struct proc_inode_info		proc_i;
 		struct socket			socket_i;
 		void				*generic_ip;
 	} u;

@@ -189,6 +189,17 @@ extern __inline__ unsigned long thread_saved_pc(struct thread_struct *t)
 	return t->pc;
 }
 
+static inline unsigned long get_wchan(struct task_struct *p)
+{
+	if (!p || p == current || p->state == TASK_RUNNING)
+		return 0;
+	/* FIXME: here the actual wchan calculation should sit */
+	return 0;
+}
+
+#define KSTK_EIP(tsk)  ((tsk)->thread.pc)
+#define KSTK_ESP(tsk)  ((tsk)->thread.sp)
+
 #define THREAD_SIZE (2*PAGE_SIZE)
 extern struct task_struct * alloc_task_struct(void);
 extern void free_task_struct(struct task_struct *);

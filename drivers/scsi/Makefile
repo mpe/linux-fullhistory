@@ -265,11 +265,19 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_MAC_SCSI_OLD),y)
+ifeq ($(CONFIG_MAC_SCSI),y)
 L_OBJS += mac_scsi.o
 else
-  ifeq ($(CONFIG_MAC_SCSI_OLD),m)
+  ifeq ($(CONFIG_MAC_SCSI),m)
   M_OBJS += mac_scsi.o
+  endif
+endif
+
+ifeq ($(CONFIG_SUN3_SCSI),y)
+L_OBJS += sun3_scsi.o
+else
+  ifeq ($(CONFIG_SUN3_SCSI),m)
+  M_OBJS += sun3_scsi.o
   endif
 endif
 

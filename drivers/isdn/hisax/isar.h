@@ -1,10 +1,13 @@
-/* $Id: isar.h,v 1.5 1999/08/25 16:59:59 keil Exp $
+/* $Id: isar.h,v 1.6 1999/10/14 20:25:29 keil Exp $
  * isar.h   ISAR (Siemens PSB 7110) specific defines
  *
  * Author Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: isar.h,v $
+ * Revision 1.6  1999/10/14 20:25:29  keil
+ * add a statistic for error monitoring
+ *
  * Revision 1.5  1999/08/25 16:59:59  keil
  * Make ISAR V32bis modem running
  * Make LL->HL interface open for additional commands
@@ -178,12 +181,17 @@
 #define HDLC_FSD	0x20
 #define HDLC_FST	0x20
 #define HDLC_ERROR	0x1c
+#define HDLC_ERR_FAD	0x10
+#define HDLC_ERR_RER	0x08
+#define HDLC_ERR_CER	0x01
 #define SART_NMD	0x01
 
 #define BSTAT_RDM0	0x1
 #define BSTAT_RDM1	0x2
 #define BSTAT_RDM2	0x4
 #define BSTAT_RDM3	0x8
+#define BSTEV_TBO	0x1f
+#define BSTEV_RBO	0x2f
 
 extern int ISARVersion(struct IsdnCardState *cs, char *s);
 extern void isar_int_main(struct IsdnCardState *cs);

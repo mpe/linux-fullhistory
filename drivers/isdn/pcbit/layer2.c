@@ -375,16 +375,11 @@ pcbit_receive(struct pcbit_dev *dev)
 
 		if (dev->read_frame) {
 			printk(KERN_DEBUG "pcbit_receive: Type 0 frame and read_frame != NULL\n");
-#if 0
-			pcbit_l2_error(dev);
-			return;
-#else
 			/* discard previous queued frame */
 			if (dev->read_frame->skb)
 				kfree_skb(dev->read_frame->skb);
 			kfree(dev->read_frame);
 			dev->read_frame = NULL;
-#endif
 		}
 		frame = kmalloc(sizeof(struct frame_buf), GFP_ATOMIC);
 
@@ -460,14 +455,10 @@ pcbit_receive(struct pcbit_dev *dev)
 
 		if (!(frame = dev->read_frame)) {
 			printk("Type 1 frame and no frame queued\n");
-#if 1
 			/* usually after an error: toss frame */
 			dev->readptr += tt;
 			if (dev->readptr > dev->sh_mem + BANK2 + BANKLEN)
 				dev->readptr -= BANKLEN;
-#else
-			pcbit_l2_error(dev);
-#endif
 			return;
 
 		}

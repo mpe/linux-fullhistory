@@ -1,4 +1,4 @@
-/* $Id: isdn_ttyfax.c,v 1.3 1999/08/22 20:26:12 calle Exp $
+/* $Id: isdn_ttyfax.c,v 1.4 1999/09/21 19:00:35 armin Exp $
  * Linux ISDN subsystem, tty_fax AT-command emulator (linklevel).
  *
  * Copyright 1999    by Armin Schindler (mac@melware.de)
@@ -20,6 +20,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ttyfax.c,v $
+ * Revision 1.4  1999/09/21 19:00:35  armin
+ * Extended FCON message with added CPN
+ * can now be activated with Bit 1 of Reg 23.
+ *
  * Revision 1.3  1999/08/22 20:26:12  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -46,7 +50,7 @@
 #include "isdn_ttyfax.h"
 
 
-static char *isdn_tty_fax_revision = "$Revision: 1.3 $";
+static char *isdn_tty_fax_revision = "$Revision: 1.4 $";
 
 #define PARSE_ERROR1 { isdn_tty_fax_modem_result(1, info); return 1; }
 
@@ -98,7 +102,7 @@ static void isdn_tty_fax_modem_result(int code, modem_info * info)
 			break;
 		case 2:	/* +FCON */
 			/* Append CPN, if enabled */
-			if ((m->mdmreg[REG_CPN] & BIT_CPN) &&
+			if ((m->mdmreg[REG_CPN] & BIT_CPNFCON) &&
 				(!(dev->usage[info->isdn_channel] & ISDN_USAGE_OUTGOING))) {
 				sprintf(rs, "/%s", m->cpn);
 				isdn_tty_at_cout(rs, info);
@@ -907,76 +911,6 @@ int isdn_tty_cmd_PLUSF_FAX(char **p, modem_info * info)
                 return 0;
         }
 
-#if 0
-	/* LO=n - Flow control opts */
-        if (!strncmp(p[0], "LO", 2)) { /* TODO */
-                p[0] += 2;
-		switch (*p[0]) {
-			case '?':
-				p[0]++;
-                                sprintf(rs, "\r\n%d",f->lo);
-                                isdn_tty_at_cout(rs, info);
-				break;
-			case '=':
-                                p[0]++;
-                                if (*p[0] == '?')
-                                    {
-                                     p[0]++;
-                                     sprintf(rs, "\r\n0,1,2");
-                       		     isdn_tty_at_cout(rs, info);
-                                    }
-                                    else
-                                    {
-                                        par = isdn_getnum(p);
-                                        if ((par < 0) || (par > 2))
-                                            PARSE_ERROR1;
-                                        f->lo = par;
-#ifdef ISDN_TTY_FAX_STAT_DEBUG
-                                        printk(KERN_DEBUG "isdn_tty: Fax FLO=%d\n", par);
-#endif
-                                    }
-                                    break;
-			default:
-				PARSE_ERROR1;
-		}
-                return 0;
-        }
-#endif
-#if 0
-	/* LPL=n - Doc for polling cmd  */
-        if (!strncmp(p[0], "LPL", 3)) { /* TODO */
-                p[0] += 3;
-		switch (*p[0]) {
-			case '?':
-				p[0]++;
-                                sprintf(rs, "\r\n%d",f->lpl);
-                                isdn_tty_at_cout(rs, info);
-				break;
-			case '=':
-                                p[0]++;
-                                if (*p[0] == '?')
-                                    {
-                                     p[0]++;
-                                     sprintf(rs, "\r\n0,1");
-                       		     isdn_tty_at_cout(rs, info);
-                                    }
-                                    else
-                                    {
-                                        par = isdn_getnum(p);
-                                        if ((par < 0) || (par > 1))
-                                            PARSE_ERROR1;
-                                        f->lpl = par;
-#ifdef ISDN_TTY_FAX_STAT_DEBUG
-                                        printk(KERN_DEBUG "isdn_tty: Fax FLPL=%d\n", par);
-#endif
-                                    }
-                                    break;
-			default:
-				PARSE_ERROR1;
-		}
-                return 0;
-        }
-#endif
 
 	/* MDL? - DCE Model       */
         if (!strncmp(p[0], "MDL?", 4)) {
@@ -1066,41 +1000,6 @@ int isdn_tty_cmd_PLUSF_FAX(char **p, modem_info * info)
                 return 0;
         }
 
-#if 0
-	/* PTS=n - Page transfer status       */
-        if (!strncmp(p[0], "PTS", 3)) { /* TODO */
-                p[0] += 3;
-		switch (*p[0]) {
-			case '?':
-				p[0]++;
-                                sprintf(rs, "\r\n%d",f->pts);
-                                isdn_tty_at_cout(rs, info);
-				break;
-			case '=':
-                                p[0]++;
-                                if (*p[0] == '?')
-                                    {
-                                     p[0]++;
-                                     sprintf(rs, "\r\n0-5");
-                       		     isdn_tty_at_cout(rs, info);
-                                    }
-                                    else
-                                    {
-                                        par = isdn_getnum(p);
-                                        if ((par < 0) || (par > 5))
-                                            PARSE_ERROR1;
-                                        f->pts = par;
-#ifdef ISDN_TTY_FAX_STAT_DEBUG
-                                        printk(KERN_DEBUG "isdn_tty: Fax FPTS=%d\n", par);
-#endif
-                                    }
-                                    break;
-			default:
-				PARSE_ERROR1;
-		}
-                return 0;
-        }
-#endif
 
 	/* REL=n - Phase C received EOL alignment */
         if (!strncmp(p[0], "REL", 3)) {
@@ -1148,41 +1047,6 @@ int isdn_tty_cmd_PLUSF_FAX(char **p, modem_info * info)
                 return 0;
         }
 
-#if 0
-	/* SPL=n - Enable polling */
-        if (!strncmp(p[0], "SPL", 3)) { /* TODO */
-                p[0] += 3;
-		switch (*p[0]) {
-			case '?':
-				p[0]++;
-                                sprintf(rs, "\r\n%d", f->spl);
-                                isdn_tty_at_cout(rs, info);
-				break;
-			case '=':
-                                p[0]++;
-                                if (*p[0] == '?')
-                                    {
-                                     p[0]++;
-                                     sprintf(rs, "\r\n0,1");
-                       		     isdn_tty_at_cout(rs, info);
-                                    }
-                                    else
-                                    {
-                                        par = isdn_getnum(p);
-                                        if ((par < 0) || (par > 1))
-                                            PARSE_ERROR1;
-                                        f->spl = par;
-#ifdef ISDN_TTY_FAX_STAT_DEBUG
-                                        printk(KERN_DEBUG "isdn_tty: Fax FSPL=%d\n", par);
-#endif
-                                    }
-                                    break;
-			default:
-				PARSE_ERROR1;
-		}
-                return 0;
-        }
-#endif
 
 	/* Phase C Transmit Data Block Size */
 	if (!strncmp(p[0], "TBC=", 4)) { /* dummy, not used */

@@ -462,6 +462,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	/*
 	 * Make sure we have a private signal table
 	 */
+	task_lock(current);
 	oldsig = current->sig;
 	retval = make_private_signals();
 	if (retval) goto flush_failed;
@@ -500,6 +501,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 			
 	flush_signal_handlers(current);
 	flush_old_files(current->files);
+	task_unlock(current);
 
 	return 0;
 
@@ -508,6 +510,7 @@ mmap_failed:
 		kfree(current->sig);
 flush_failed:
 	current->sig = oldsig;
+	task_unlock(current);
 	return retval;
 }
 

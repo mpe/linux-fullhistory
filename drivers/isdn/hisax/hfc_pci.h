@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.h,v 1.6 1999/08/28 21:04:29 werner Exp $
+/* $Id: hfc_pci.h,v 1.7 1999/10/10 20:13:06 werner Exp $
 
  *  specific defines for CCD's HFC 2BDS0 PCI chips
  *
@@ -21,6 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hfc_pci.h,v $
+ * Revision 1.7  1999/10/10 20:13:06  werner
+ *
+ * Corrected timer constant
+ *
  * Revision 1.6  1999/08/28 21:04:29  werner
  * Implemented full audio support (transparent mode)
  *
@@ -129,7 +133,7 @@
 
 /* bits in CTMT (Write) */
 #define HFCPCI_CLTIMER    0x80
-#define HFCPCI_TIM3_125   0x00
+#define HFCPCI_TIM3_125   0x04
 #define HFCPCI_TIM25      0x10
 #define HFCPCI_TIM50      0x14
 #define HFCPCI_TIM400     0x18

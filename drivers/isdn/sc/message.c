@@ -1,5 +1,5 @@
 /*
- *  $Id: message.c,v 1.4 1999/01/05 18:29:47 he Exp $
+ *  $Id: message.c,v 1.5 1999/09/04 06:20:07 keil Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  message.c - functions for sending and receiving control messages
@@ -266,7 +266,7 @@ int send_and_receive(int card,
 	tries = 0;
 	/* wait for the response */
 	while (tries < timeout) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(1);
 		
 		pr_debug("SAR waiting..\n");

@@ -650,6 +650,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->p_cptr = NULL;
 	init_waitqueue_head(&p->wait_chldexit);
 	p->vfork_sem = NULL;
+	sema_init(&p->exit_sem, 1);
 
 	p->sigpending = 0;
 	sigemptyset(&p->signal);

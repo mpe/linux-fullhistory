@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.86 1999/07/31 12:59:42 armin Exp $
+/* $Id: isdn_common.c,v 1.93 1999/11/04 13:11:36 keil Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,6 +21,40 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.c,v $
+ * Revision 1.93  1999/11/04 13:11:36  keil
+ * Reinit of v110 structs
+ *
+ * Revision 1.92  1999/10/31 15:59:50  he
+ * more skb headroom checks
+ *
+ * Revision 1.91  1999/10/28 22:48:45  armin
+ * Bugfix: isdn_free_channel() now frees the channel,
+ * even when the usage of the ttyI has changed.
+ *
+ * Revision 1.90  1999/10/27 21:21:17  detabc
+ * Added support for building logically-bind-group's per interface.
+ * usefull for outgoing call's with more then one isdn-card.
+ *
+ * Switchable support to dont reset the hangup-timeout for
+ * receive frames. Most part's of the timru-rules for receiving frames
+ * are now obsolete. If the input- or forwarding-firewall deny
+ * the frame, the line will be not hold open.
+ *
+ * Revision 1.89  1999/10/16 14:46:47  keil
+ * replace kmalloc with vmalloc for the big dev struct
+ *
+ * Revision 1.88  1999/10/02 00:39:26  he
+ * Fixed a 2.3.x wait queue initialization (was causing panics)
+ *
+ * Revision 1.87  1999/09/12 16:19:39  detabc
+ * added abc features
+ * low cost routing for net-interfaces (only the HL side).
+ * need more implementation in the isdnlog-utility
+ * udp info support (first part).
+ * different EAZ on outgoing call's.
+ * more checks on D-Channel callbacks (double use of channels).
+ * tested and running with kernel 2.3.17
+ *
  * Revision 1.86  1999/07/31 12:59:42  armin
  * Added tty fax capabilities.
  *
@@ -362,6 +396,7 @@
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/poll.h>
+#include <linux/vmalloc.h>
 #include <linux/isdn.h>
 #include "isdn_common.h"
 #include "isdn_tty.h"
@@ -381,7 +416,7 @@
 
 isdn_dev *dev = (isdn_dev *) 0;
 
-static char *isdn_revision = "$Revision: 1.86 $";
+static char *isdn_revision = "$Revision: 1.93 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -1039,9 +1074,6 @@ isdn_status_callback(isdn_ctrl * c)
 				isdn_free_queue(&dev->drv[di]->rpqueue[i]);
 			kfree(dev->drv[di]->rpqueue);
 			kfree(dev->drv[di]->rcv_waitq);
-#ifndef COMPAT_HAS_NEW_WAITQ
-			kfree(dev->drv[di]->snd_waitq);
-#endif
 			kfree(dev->drv[di]);
 			dev->drv[di] = NULL;
 			dev->drvid[di][0] = '\0';
@@ -1103,11 +1135,7 @@ isdn_getnum(char **p)
  * of the mapping (di,ch)<->minor, happen during the sleep? --he 
  */
 int
-#ifdef COMPAT_HAS_NEW_WAITQ
 isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, wait_queue_head_t *sleep)
-#else
-isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, struct wait_queue **sleep)
-#endif
 {
 	int left;
 	int count;
@@ -1535,6 +1563,9 @@ isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
  * are serialized by means of a semaphore.
  */
 		switch (cmd) {
+			case IIOCNETLCR:
+				printk(KERN_INFO "INFO: ISDN_ABC_LCR_SUPPORT not enabled\n");
+				return -ENODEV;
 #ifdef CONFIG_NETDEVICES
 			case IIOCNETAIF:
 				/* Add a network-interface */
@@ -2092,13 +2123,19 @@ isdn_free_channel(int di, int ch, int usage)
 	save_flags(flags);
 	cli();
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++)
-		if (((dev->usage[i] & ISDN_USAGE_MASK) == usage) &&
+		if (((!usage) || ((dev->usage[i] & ISDN_USAGE_MASK) == usage)) &&
 		    (dev->drvmap[i] == di) &&
 		    (dev->chanmap[i] == ch)) {
 			dev->usage[i] &= (ISDN_USAGE_NONE | ISDN_USAGE_EXCLUSIVE);
 			strcpy(dev->num[i], "???");
 			dev->ibytes[i] = 0;
 			dev->obytes[i] = 0;
+// 20.10.99 JIM, try to reinitialize v110 !
+			dev->v110emu[i] = 0;
+			atomic_set(&(dev->v110use[i]), 0);
+			isdn_v110_close(dev->v110[i]);
+			dev->v110[i] = NULL;
+// 20.10.99 JIM, try to reinitialize v110 !
 			isdn_info_update();
 			isdn_free_queue(&dev->drv[di]->rpqueue[ch]);
 		}
@@ -2180,8 +2217,33 @@ isdn_writebuf_skb_stub(int drvidx, int chan, int ack, struct sk_buff *skb)
 		/* V.110 must always be acknowledged */
 		ack = 1;
 		ret = dev->drv[drvidx]->interface->writebuf_skb(drvidx, chan, ack, nskb);
-	} else
-		ret = dev->drv[drvidx]->interface->writebuf_skb(drvidx, chan, ack, skb);
+	} else {
+		int hl = dev->drv[drvidx]->interface->hl_hdrlen;
+
+		if( skb_headroom(skb) < hl ){
+			/* 
+			 * This should only occur when new HL driver with
+			 * increased hl_hdrlen was loaded after netdevice
+			 * was created and connected to the new driver.
+			 *
+			 * The V.110 branch (re-allocates on its own) does
+			 * not need this
+			 */
+			struct sk_buff * skb_tmp;
+
+			skb_tmp = skb_realloc_headroom(skb, hl);
+			printk(KERN_DEBUG "isdn_writebuf_skb_stub: reallocating headroom%s\n", skb_tmp ? "" : " failed");
+			if (!skb_tmp) return -ENOMEM; /* 0 better? */
+			ret = dev->drv[drvidx]->interface->writebuf_skb(drvidx, chan, ack, skb_tmp);
+			if( ret > 0 ){
+				dev_kfree_skb(skb);
+			} else {
+				dev_kfree_skb(skb_tmp);
+			}
+		} else {
+			ret = dev->drv[drvidx]->interface->writebuf_skb(drvidx, chan, ack, skb);
+		}
+	}
 	if (ret > 0) {
 		dev->obytes[idx] += ret;
 		if (dev->v110[idx]) {
@@ -2202,43 +2264,11 @@ isdn_writebuf_skb_stub(int drvidx, int chan, int ack, struct sk_buff *skb)
 
 int
 register_isdn_module(isdn_module *m) {
-#if 0
-	isdn_module_list **pp = &dev->modules;
-	isdn_module *new = kmalloc(sizeof(isdn_module_list), GFP_KERNEL);
-
-	if (!new) {
-		printk(KERN_WARNING "isdn: Out of memory in register_isdn_module\n");
-		return -1;
-	}
-	while (*pp && (*pp)->orig != m)
-		pp = &(*pp)->next;
-	if (*pp != NULL) {
-		printk(KERN_WARNING "isdn: Module %s already registered\n", m->name);
-		return -1;
-	}
-	while (*pp && ((*pp)->module.priority < m->priority))
-		pp = &(*pp)->next;
-	new->next = *pp;
-	new->orig = m;
-	new->module = *m;
- 
-	*pp = new;
-#endif
 	return 0;
 }
 
 int
 unregister_isdn_module(isdn_module *m) {
-#if 0
-	isdn_module_list **pp = &dev->modules;
-
-	while (*pp && *pp != m)
-		pp = &(*pp)->next;
-	if (*pp == NULL) {
-		printk(KERN_WARNING "isdn: Module %s not found\n", m->name);
-		return -1;
-	}
-#endif
 	return 0;
 }
 
@@ -2248,9 +2278,7 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 	int j, k, m;
 	ulong flags;
 
-#ifdef COMPAT_HAS_NEW_WAITQ
 	init_waitqueue_head(&d->st_waitq);
-#endif
 	if (d->flags & DRV_FLAG_RUNNING)
 		return -1;
        	if (n < 1) return 0;
@@ -2300,14 +2328,9 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 
 	if ((adding) && (d->rcv_waitq))
 		kfree(d->rcv_waitq);
-#ifdef COMPAT_HAS_NEW_WAITQ
 	d->rcv_waitq = (wait_queue_head_t *)
 		kmalloc(sizeof(wait_queue_head_t) * 2 * m, GFP_KERNEL);
 	if (!d->rcv_waitq) {
-#else
-	if (!(d->rcv_waitq = (struct wait_queue **)
-	      kmalloc(sizeof(struct wait_queue *) * m, GFP_KERNEL))) {
-#endif
 		printk(KERN_WARNING "register_isdn: Could not alloc rcv_waitq\n");
 		if (!adding) {
 			kfree(d->rpqueue);
@@ -2316,30 +2339,11 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 		}
 		return -1;
 	}
-#ifdef COMPAT_HAS_NEW_WAITQ
 	d->snd_waitq = d->rcv_waitq + m;
 	for (j = 0; j < m; j++) {
 		init_waitqueue_head(&d->rcv_waitq[j]);
 		init_waitqueue_head(&d->snd_waitq[j]);
 	}
-#else
-	memset((char *) d->rcv_waitq, 0, sizeof(struct wait_queue *) * m);
-
-	if ((adding) && (d->snd_waitq))
-		kfree(d->snd_waitq);
-	if (!(d->snd_waitq = (struct wait_queue **)
-	      kmalloc(sizeof(struct wait_queue *) * m, GFP_KERNEL))) {
-		printk(KERN_WARNING "register_isdn: Could not alloc snd_waitq\n");
-		if (!adding) {
-			kfree(d->rcv_waitq);
-			kfree(d->rpqueue);
-			kfree(d->rcvcount);
-			kfree(d->rcverr);
-		}
-		return -1;
-	}
-	memset((char *) d->snd_waitq, 0, sizeof(struct wait_queue *) * m);
-#endif
 
 	dev->channels += n;
 	save_flags(flags);
@@ -2513,33 +2517,26 @@ isdn_init(void)
 	int i;
 	char tmprev[50];
 
-	sti();
-	if (!(dev = (isdn_dev *) kmalloc(sizeof(isdn_dev), GFP_KERNEL))) {
+	if (!(dev = (isdn_dev *) vmalloc(sizeof(isdn_dev)))) {
 		printk(KERN_WARNING "isdn: Could not allocate device-struct.\n");
 		return -EIO;
 	}
 	memset((char *) dev, 0, sizeof(isdn_dev));
 	init_timer(&dev->timer);
 	dev->timer.function = isdn_timer_funct;
-#ifdef COMPAT_HAS_NEW_WAITQ
 	init_MUTEX(&dev->sem);
 	init_waitqueue_head(&dev->info_waitq);
-#else
-	dev->sem = MUTEX;
-#endif
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		dev->drvmap[i] = -1;
 		dev->chanmap[i] = -1;
 		dev->m_idx[i] = -1;
 		strcpy(dev->num[i], "???");
-#ifdef COMPAT_HAS_NEW_WAITQ
 		init_waitqueue_head(&dev->mdm.info[i].open_wait);
 		init_waitqueue_head(&dev->mdm.info[i].close_wait);
-#endif
 	}
 	if (register_chrdev(ISDN_MAJOR, "isdn", &isdn_fops)) {
 		printk(KERN_WARNING "isdn: Could not register control devices\n");
-		kfree(dev);
+		vfree(dev);
 		return -EIO;
 	}
 	if ((i = isdn_tty_modem_init()) < 0) {
@@ -2548,7 +2545,7 @@ isdn_init(void)
 			tty_unregister_driver(&dev->mdm.cua_modem);
 		if (i <= -2)
 			tty_unregister_driver(&dev->mdm.tty_modem);
-		kfree(dev);
+		vfree(dev);
 		unregister_chrdev(ISDN_MAJOR, "isdn");
 		return -EIO;
 	}
@@ -2560,7 +2557,7 @@ isdn_init(void)
 		for (i = 0; i < ISDN_MAX_CHANNELS; i++)
 			kfree(dev->mdm.info[i].xmit_buf - 4);
 		unregister_chrdev(ISDN_MAJOR, "isdn");
-		kfree(dev);
+		vfree(dev);
 		return -EIO;
 	}
 #endif                          /* CONFIG_ISDN_PPP */
@@ -2629,7 +2626,7 @@ cleanup_module(void)
 		printk(KERN_WARNING "isdn: controldevice busy, remove cancelled\n");
 	} else {
 		del_timer(&dev->timer);
-		kfree(dev);
+		vfree(dev);
 		printk(KERN_NOTICE "ISDN-subsystem unloaded\n");
 	}
 	restore_flags(flags);

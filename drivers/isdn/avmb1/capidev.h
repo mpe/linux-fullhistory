@@ -44,11 +44,7 @@ struct capidev {
 	int is_registered;
 	__u16 applid;
 	struct sk_buff_head recv_queue;
-#ifdef COMPAT_HAS_NEW_WAITQ
 	wait_queue_head_t recv_wait;
-#else
-	struct wait_queue *recv_wait;
-#endif
 	__u16 errcode;
 	/* Statistic */
 	unsigned long nopen;

@@ -1,8 +1,8 @@
-/* $Id: icn.c,v 1.59 1999/08/28 22:10:55 keil Exp $
+/* $Id: icn.c,v 1.62 1999/09/06 07:29:35 fritz Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
- * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994,95,96 by Fritz Elfert (fritz@isdn4linux.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
+ * Revision 1.62  1999/09/06 07:29:35  fritz
+ * Changed my mail-address.
+ *
+ * Revision 1.61  1999/09/03 14:06:58  fritz
+ * Fixed a memory leak.
+ *
+ * Revision 1.60  1999/08/31 11:20:32  paul
+ * various spelling corrections (new checksums may be needed, Karsten!)
+ *
  * Revision 1.59  1999/08/28 22:10:55  keil
  * __setup function should be static
  *
@@ -238,7 +247,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.59 $";
+*revision = "$Revision: 1.62 $";
 
 static int icn_addcard(int, char *, char *);
 
@@ -467,7 +476,7 @@ icn_pollbchan_receive(int channel, icn_card * card)
 			if (!eflag) {
 				if ((cnt = card->rcvidx[channel])) {
 					if (!(skb = dev_alloc_skb(cnt))) {
-						printk(KERN_WARNING "ïcn: receive out of memory\n");
+						printk(KERN_WARNING "icn: receive out of memory\n");
 						break;
 					}
 					memcpy(skb_put(skb, cnt), card->rcvbuf[channel], cnt);
@@ -545,12 +554,10 @@ icn_pollbchan_send(int channel, icn_card * card)
 			if (!skb->len) {
 				save_flags(flags);
 				cli();
-				if (card->xskb[channel]) {
+				if (card->xskb[channel])
 					card->xskb[channel] = NULL;
-					restore_flags(flags);
-					dev_kfree_skb(skb);
-				} else
-					restore_flags(flags);
+				restore_flags(flags);
+				dev_kfree_skb(skb);
 				if (card->xlen[channel]) {
 					cmd.command = ISDN_STAT_BSENT;
 					cmd.driver = card->myid;
@@ -1852,7 +1859,6 @@ icn_addcard(int port, char *id1, char *id2)
 #ifdef MODULE
 #define icn_init init_module
 #else
-#ifdef COMPAT_HAS_NEW_SETUP
 #include <linux/init.h>
 static int __init
 icn_setup(char *line)
@@ -1863,14 +1869,6 @@ icn_setup(char *line)
 	static char sid2[20];
 
 	str = get_options(line, 2, ints);
-#else
-void
-icn_setup(char *str, int *ints)
-{
-	char *p;
-	static char sid[20];
-	static char sid2[20];
-#endif
 	if (ints[0])
 		portbase = ints[1];
 	if (ints[0] > 1)
@@ -1884,13 +1882,9 @@ icn_setup(char *str, int *ints)
 			icn_id2 = sid2;
 		}
 	}
-#ifdef COMPAT_HAS_NEW_SETUP
 	return(1);
 }
 __setup("icn=", icn_setup);
-#else
-}
-#endif
 #endif /* MODULES */
 
 int

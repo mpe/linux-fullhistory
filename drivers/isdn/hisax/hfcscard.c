@@ -1,4 +1,4 @@
-/* $Id: hfcscard.c,v 1.4 1999/08/09 18:59:59 keil Exp $
+/* $Id: hfcscard.c,v 1.5 1999/09/04 06:20:06 keil Exp $
 
  * hfcscard.c     low level stuff for hfcs based cards (Teles3c, ACER P10)
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: hfcscard.c,v $
+ * Revision 1.5  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.4  1999/08/09 18:59:59  keil
  * Fix S0 init - Thanks to Stefan Gybas
  *
@@ -27,7 +30,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcs_revision = "$Revision: 1.4 $";
+static const char *hfcs_revision = "$Revision: 1.5 $";
 
 static void
 hfcs_interrupt(int intno, void *dev_id, struct pt_regs *regs)
@@ -82,13 +85,13 @@ reset_hfcs(struct IsdnCardState *cs)
 	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_CIRM, cs->hw.hfcD.cirm);	/* Reset On */
 	save_flags(flags);
 	sti();
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((30*HZ)/1000);
 	cs->hw.hfcD.cirm = 0;
 	if (cs->typ == ISDN_CTYPE_TELES3C)
 		cs->hw.hfcD.cirm |= HFCD_MEM8K;
 	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_CIRM, cs->hw.hfcD.cirm);	/* Reset Off */
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	if (cs->typ == ISDN_CTYPE_TELES3C)
 		cs->hw.hfcD.cirm |= HFCD_INTB;
@@ -135,7 +138,7 @@ hfcs_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			init2bds0(cs);
 			save_flags(flags);
 			sti();
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout((80*HZ)/1000);
 			cs->hw.hfcD.ctmt |= HFCD_TIM800;
 			cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_CTMT, cs->hw.hfcD.ctmt); 
@@ -148,8 +151,8 @@ hfcs_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-int __init
-setup_hfcs(struct IsdnCard *card)
+__initfunc(int
+setup_hfcs(struct IsdnCard *card))
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

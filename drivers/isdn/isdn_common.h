@@ -1,4 +1,4 @@
-/* $Id: isdn_common.h,v 1.16 1999/07/01 08:29:54 keil Exp $
+/* $Id: isdn_common.h,v 1.17 1999/10/27 21:21:17 detabc Exp $
 
  * header for Linux ISDN subsystem, common used functions and debugging-switches (linklevel).
  *
@@ -21,6 +21,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.h,v $
+ * Revision 1.17  1999/10/27 21:21:17  detabc
+ * Added support for building logically-bind-group's per interface.
+ * usefull for outgoing call's with more then one isdn-card.
+ *
+ * Switchable support to dont reset the hangup-timeout for
+ * receive frames. Most part's of the timru-rules for receiving frames
+ * are now obsolete. If the input- or forwarding-firewall deny
+ * the frame, the line will be not hold open.
+ *
  * Revision 1.16  1999/07/01 08:29:54  keil
  * compatibility to 2.3 kernel
  *
@@ -118,11 +127,7 @@ extern char *isdn_map_eaz2msn(char *msn, int di);
 extern void isdn_timer_ctrl(int tf, int onoff);
 extern void isdn_unexclusive_channel(int di, int ch);
 extern int isdn_getnum(char **);
-#ifdef COMPAT_HAS_NEW_WAITQ
 extern int isdn_readbchan(int, int, u_char *, u_char *, int, wait_queue_head_t *);
-#else
-extern int isdn_readbchan(int, int, u_char *, u_char *, int, struct wait_queue**);
-#endif
 extern int isdn_get_free_channel(int, int, int, int, int);
 extern int isdn_writebuf_skb_stub(int, int, int, struct sk_buff *);
 extern int register_isdn(isdn_if * i);

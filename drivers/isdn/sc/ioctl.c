@@ -15,9 +15,6 @@ extern int send_and_receive(int, unsigned int, unsigned char,unsigned char,
 
 extern board *adapter[];
 
-#if 0
-static char *ChannelStates[] = { "Idle", "Ready", "Connecting", "Connected", "Disconnecting" };
-#endif
 
 int GetStatus(int card, boardInfo *);
 
@@ -42,7 +39,7 @@ int sc_ioctl(int card, scs_ioctl *data)
 
 		pr_debug("%s: SCIOLOAD: ioctl received\n", adapter[card]->devicename);
 		if(adapter[card]->EngineUp) {
-			pr_debug("%s: SCIOCLOAD: Command Failed, LoadProc while engine running.\n",
+			pr_debug("%s: SCIOCLOAD: command failed, LoadProc while engine running.\n",
 				adapter[card]->devicename);
 			return -1;
 		}
@@ -56,12 +53,12 @@ int sc_ioctl(int card, scs_ioctl *data)
 		status = send_and_receive(card, CMPID, cmReqType2, cmReqClass0, cmReqLoadProc,
 				0, sizeof(srec), srec, &rcvmsg, SAR_TIMEOUT);
 		if(status) {
-			pr_debug("%s: SCIOCLOAD: Command Failed, status = %d\n", 
+			pr_debug("%s: SCIOCLOAD: command failed, status = %d\n", 
 				adapter[card]->devicename, status);
 			return -1;
 		}
 		else {
-			pr_debug("%s: SCIOCLOAD: Command Sucessful\n", adapter[card]->devicename);
+			pr_debug("%s: SCIOCLOAD: command successful\n", adapter[card]->devicename);
 			return 0;
 		}
 	}
@@ -70,7 +67,7 @@ int sc_ioctl(int card, scs_ioctl *data)
 	{
 		pr_debug("%s: SCIOSTART: ioctl received\n", adapter[card]->devicename);
 		if(adapter[card]->EngineUp) {
-			pr_debug("%s: SCIOCSTART: Command Failed, Engine already running.\n",
+			pr_debug("%s: SCIOCSTART: command failed, engine already running.\n",
 				adapter[card]->devicename);
 			return -1;
 		}
@@ -94,16 +91,16 @@ int sc_ioctl(int card, scs_ioctl *data)
 		if ((err = copy_from_user(&switchtype, (char *) data->dataptr, sizeof(char))))
 			return err;
 
-		pr_debug("%s: SCIOCSETSWITCH: Setting switch type to %d\n", adapter[card]->devicename,
+		pr_debug("%s: SCIOCSETSWITCH: setting switch type to %d\n", adapter[card]->devicename,
 			switchtype);
 		status = send_and_receive(card, CEPID, ceReqTypeCall, ceReqClass0, ceReqCallSetSwitchType,
 						0, sizeof(char),&switchtype,&rcvmsg, SAR_TIMEOUT);
 		if(!status && !rcvmsg.rsp_status) {
-			pr_debug("%s: SCIOCSETSWITCH: Command Successful\n", adapter[card]->devicename);
+			pr_debug("%s: SCIOCSETSWITCH: command successful\n", adapter[card]->devicename);
 			return 0;
 		}
 		else {
-			pr_debug("%s: SCIOCSETSWITCH: Command Failed (status = %d)\n",
+			pr_debug("%s: SCIOCSETSWITCH: command failed (status = %d)\n",
 				adapter[card]->devicename, status);
 			return status;
 		}
@@ -123,10 +120,10 @@ int sc_ioctl(int card, scs_ioctl *data)
 		status = send_and_receive(card, CEPID, ceReqTypeCall, ceReqClass0, 
 			ceReqCallGetSwitchType, 0, 0, 0, &rcvmsg, SAR_TIMEOUT);
 		if (!status && !rcvmsg.rsp_status) {
-			pr_debug("%s: SCIOCGETSWITCH: Command Sucessful\n", adapter[card]->devicename);
+			pr_debug("%s: SCIOCGETSWITCH: command successful\n", adapter[card]->devicename);
 		}
 		else {
-			pr_debug("%s: SCIOCGETSWITCH: Command Failed (status = %d)\n",
+			pr_debug("%s: SCIOCGETSWITCH: command failed (status = %d)\n",
 				adapter[card]->devicename, status);
 			return status;
 		}
@@ -156,10 +153,10 @@ int sc_ioctl(int card, scs_ioctl *data)
 		status = send_and_receive(card, CEPID, ceReqTypeCall, ceReqClass0, ceReqCallGetSPID,
 					data->channel, 0, 0, &rcvmsg, SAR_TIMEOUT);
 		if (!status) {
-			pr_debug("%s: SCIOCGETSPID: Command Sucessful\n", adapter[card]->devicename);
+			pr_debug("%s: SCIOCGETSPID: command successful\n", adapter[card]->devicename);
 		}
 		else {
-			pr_debug("%s: SCIOCGETSPID: Command Failed (status = %d)\n",
+			pr_debug("%s: SCIOCGETSPID: command failed (status = %d)\n",
 				adapter[card]->devicename, status);
 			return status;
 		}
@@ -188,18 +185,18 @@ int sc_ioctl(int card, scs_ioctl *data)
 		if ((err = copy_from_user(spid, (char *) data->dataptr, sizeof(spid))))
 			return err;
 
-		pr_debug("%s: SCIOCSETSPID: Setting channel %d spid to %s\n", 
+		pr_debug("%s: SCIOCSETSPID: setting channel %d spid to %s\n", 
 			adapter[card]->devicename, data->channel, spid);
 		status = send_and_receive(card, CEPID, ceReqTypeCall, 
 			ceReqClass0, ceReqCallSetSPID, data->channel, 
 			strlen(spid), spid, &rcvmsg, SAR_TIMEOUT);
 		if(!status && !rcvmsg.rsp_status) {
-			pr_debug("%s: SCIOCSETSPID: Command Successful\n", 
+			pr_debug("%s: SCIOCSETSPID: command successful\n", 
 				adapter[card]->devicename);
 			return 0;
 		}
 		else {
-			pr_debug("%s: SCIOCSETSPID: Command Failed (status = %d)\n",
+			pr_debug("%s: SCIOCSETSPID: command failed (status = %d)\n",
 				adapter[card]->devicename, status);
 			return status;
 		}
@@ -219,10 +216,10 @@ int sc_ioctl(int card, scs_ioctl *data)
 		status = send_and_receive(card, CEPID, ceReqTypeCall, ceReqClass0, ceReqCallGetMyNumber,
 					data->channel, 0, 0, &rcvmsg, SAR_TIMEOUT);
 		if (!status) {
-			pr_debug("%s: SCIOCGETDN: Command Sucessful\n", adapter[card]->devicename);
+			pr_debug("%s: SCIOCGETDN: command successful\n", adapter[card]->devicename);
 		}
 		else {
-			pr_debug("%s: SCIOCGETDN: Command Failed (status = %d)\n",
+			pr_debug("%s: SCIOCGETDN: command failed (status = %d)\n",
 				adapter[card]->devicename, status);
 			return status;
 		}
@@ -252,18 +249,18 @@ int sc_ioctl(int card, scs_ioctl *data)
 		if ((err = copy_from_user(dn, (char *) data->dataptr, sizeof(dn))))
 			return err;
 
-		pr_debug("%s: SCIOCSETDN: Setting channel %d dn to %s\n", 
+		pr_debug("%s: SCIOCSETDN: setting channel %d dn to %s\n", 
 			adapter[card]->devicename, data->channel, dn);
 		status = send_and_receive(card, CEPID, ceReqTypeCall, 
 			ceReqClass0, ceReqCallSetMyNumber, data->channel, 
 			strlen(dn),dn,&rcvmsg, SAR_TIMEOUT);
 		if(!status && !rcvmsg.rsp_status) {
-			pr_debug("%s: SCIOCSETDN: Command Successful\n", 
+			pr_debug("%s: SCIOCSETDN: command successful\n", 
 				adapter[card]->devicename);
 			return 0;
 		}
 		else {
-			pr_debug("%s: SCIOCSETDN: Command Failed (status = %d)\n",
+			pr_debug("%s: SCIOCSETDN: command failed (status = %d)\n",
 				adapter[card]->devicename, status);
 			return status;
 		}
@@ -273,7 +270,7 @@ int sc_ioctl(int card, scs_ioctl *data)
 
 		pr_debug("%s: SCIOTRACE: ioctl received\n", adapter[card]->devicename);
 /*		adapter[card]->trace = !adapter[card]->trace; 
-		pr_debug("%s: SCIOCTRACE: Tracing turned %s\n", adapter[card]->devicename,
+		pr_debug("%s: SCIOCTRACE: tracing turned %s\n", adapter[card]->devicename,
 			adapter[card]->trace ? "ON" : "OFF"); */
 		break;
 
@@ -305,11 +302,11 @@ int sc_ioctl(int card, scs_ioctl *data)
 		status = send_and_receive(card, CEPID, ceReqTypeCall, ceReqClass0, 
 			ceReqCallGetCallType, data->channel, 0, 0, &rcvmsg, SAR_TIMEOUT);
 		if (!status && !rcvmsg.rsp_status) {
-			pr_debug("%s: SCIOCGETSPEED: Command Sucessful\n",
+			pr_debug("%s: SCIOCGETSPEED: command successful\n",
 				adapter[card]->devicename);
 		}
 		else {
-			pr_debug("%s: SCIOCGETSPEED: Command Failed (status = %d)\n",
+			pr_debug("%s: SCIOCGETSPEED: command failed (status = %d)\n",
 				adapter[card]->devicename, status);
 			return status;
 		}

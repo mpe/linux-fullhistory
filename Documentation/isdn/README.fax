@@ -9,7 +9,7 @@ This only makes sense under the following conditions :
 
 - You need the commands as dummy, because you are using
   hylafax (with patch) for AVM capi.
-- You want to use the fax capabillities of your isdn-card.
+- You want to use the fax capabilities of your isdn-card.
   (supported cards are listed below)
 
 
@@ -21,8 +21,12 @@ NOTE: This implementation does *not* support fax with passive
 Supported ISDN-Cards
 --------------------
 
-Eicon DIVA Server BRI/PCI (will be ready soon)
-Eicon DIVA Server PRI/PCI (will be ready soon)
+Eicon DIVA Server BRI/PCI
+	- full support with both B-channels.
+
+Eicon DIVA Server PRI/PCI
+	- full support on amount of B-channels
+		depending on DSPs on board.
 
 
 

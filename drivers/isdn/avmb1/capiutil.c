@@ -1,5 +1,5 @@
 /*
- * $Id: capiutil.c,v 1.9 1999/07/09 15:05:46 keil Exp $
+ * $Id: capiutil.c,v 1.10 1999/08/31 11:19:54 paul Exp $
  *
  * CAPI 2.0 convert capi message to capi message struct
  *
@@ -7,6 +7,9 @@
  * Rewritten for Linux 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capiutil.c,v $
+ * Revision 1.10  1999/08/31 11:19:54  paul
+ * various spelling corrections (new checksums may be needed, Karsten!)
+ *
  * Revision 1.9  1999/07/09 15:05:46  keil
  * compat.h is now isdn_compat.h
  *
@@ -70,7 +73,6 @@
 #include <asm/segment.h>
 #include <linux/config.h>
 
-#include <linux/isdn_compat.h>
 #include "capiutil.h"
 
 /* from CAPI2.0 DDK AVM Berlin GmbH */
@@ -97,7 +99,7 @@ char *capi_info2str(__u16 reason)
 	case 0x1001:
 	   return "Too many applications";
 	case 0x1002:
-	   return "Logical block size to small, must be at least 128 Bytes";
+	   return "Logical block size too small, must be at least 128 Bytes";
 	case 0x1003:
 	   return "Buffer exceeds 64 kByte";
 	case 0x1004:

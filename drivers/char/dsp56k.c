@@ -73,13 +73,13 @@
 		m = min(count, maxio); \
 		for (i = 0; i < m; i++) { \
 			for (t = 0; t < timeout && !ENABLE; t++) \
-				wait_some(2); \
+				wait_some(HZ/50); \
 			if(!ENABLE) \
 				return -EIO; \
 			f; \
 		} \
 		count -= m; \
-		if (m == maxio) wait_some(2); \
+		if (m == maxio) wait_some(HZ/50); \
 	} \
 }
 
@@ -87,7 +87,7 @@
 { \
 	int t; \
 	for(t = 0; t < n && !DSP56K_TRANSMIT; t++) \
-		wait_some(1); \
+		wait_some(HZ/100); \
 	if(!DSP56K_TRANSMIT) { \
 		return -EIO; \
 	} \
@@ -97,7 +97,7 @@
 { \
 	int t; \
 	for(t = 0; t < n && !DSP56K_RECEIVE; t++) \
-		wait_some(1); \
+		wait_some(HZ/100); \
 	if(!DSP56K_RECEIVE) { \
 		return -EIO; \
 	} \

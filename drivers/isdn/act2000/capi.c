@@ -113,10 +113,6 @@ static actcapi_msgdsc valid_msg[] = {
 	{{ 0x84, 0x03}, "DISCONNECT_B3_RESP"},
 	{{ 0x86, 0x03}, "DATA_B3_RESP"},
 	{{ 0xff, 0x03}, "MANUFACTURER_RESP"},
-#if 0
-/* CAPI 2.0 */
-	{{ 0x05, 0x80}, "LISTEN_REQ (CAPI 2.0)"},
-#endif
 #endif
 	{{ 0x00, 0x00}, NULL},
 };

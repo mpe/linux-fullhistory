@@ -298,7 +298,7 @@ modem_fill(struct BCState *bcs) {
 				(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st,
 						bcs->hw.hscx.count);
-			idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+			dev_kfree_skb(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 		}
 	}
@@ -389,74 +389,6 @@ static inline void transmit_chars(struct IsdnCardState *cs, int *intr_done)
 	}
 }
 
-#if 0
-static inline void check_modem_status(struct IsdnCardState *cs)
-{
-	int	status;
-	struct async_struct *info = cs->hw.elsa.info;
-	struct	async_icount *icount;
-	
-	status = serial_inp(info, UART_MSR);
-
-	if (status & UART_MSR_ANY_DELTA) {
-		icount = &info->state->icount;
-		/* update input line counters */
-		if (status & UART_MSR_TERI)
-			icount->rng++;
-		if (status & UART_MSR_DDSR)
-			icount->dsr++;
-		if (status & UART_MSR_DDCD) {
-			icount->dcd++;
-		}
-		if (status & UART_MSR_DCTS)
-			icount->cts++;
-//		wake_up_interruptible(&info->delta_msr_wait);
-	}
-
-	if ((info->flags & ASYNC_CHECK_CD) && (status & UART_MSR_DDCD)) {
-#if (defined(SERIAL_DEBUG_OPEN) || defined(SERIAL_DEBUG_INTR))
-		printk("ttys%d CD now %s...", info->line,
-		       (status & UART_MSR_DCD) ? "on" : "off");
-#endif		
-		if (status & UART_MSR_DCD)
-//			wake_up_interruptible(&info->open_wait);
-;
-		else if (!((info->flags & ASYNC_CALLOUT_ACTIVE) &&
-			   (info->flags & ASYNC_CALLOUT_NOHUP))) {
-#ifdef SERIAL_DEBUG_OPEN
-			printk("doing serial hangup...");
-#endif
-			if (info->tty)
-				tty_hangup(info->tty);
-		}
-	}
-#if 0
-	if (info->flags & ASYNC_CTS_FLOW) {
-		if (info->tty->hw_stopped) {
-			if (status & UART_MSR_CTS) {
-#if (defined(SERIAL_DEBUG_INTR) || defined(SERIAL_DEBUG_FLOW))
-				printk("CTS tx start...");
-#endif
-				info->tty->hw_stopped = 0;
-				info->IER |= UART_IER_THRI;
-				serial_outp(info, UART_IER, info->IER);
-//				rs_sched_event(info, RS_EVENT_WRITE_WAKEUP);
-				return;
-			}
-		} else {
-			if (!(status & UART_MSR_CTS)) {
-#if (defined(SERIAL_DEBUG_INTR) || defined(SERIAL_DEBUG_FLOW))
-				printk("CTS tx stop...");
-#endif
-				info->tty->hw_stopped = 1;
-				info->IER &= ~UART_IER_THRI;
-				serial_outp(info, UART_IER, info->IER);
-			}
-		}
-	}
-#endif 0
-}
-#endif
 
 static void rs_interrupt_elsa(int irq, struct IsdnCardState *cs)
 {
@@ -510,13 +442,13 @@ close_elsastate(struct BCState *bcs)
 			bcs->hw.hscx.rcvbuf = NULL;
 		}
 		while ((skb = skb_dequeue(&bcs->rqueue))) {
-			idev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb);
 		}
 		while ((skb = skb_dequeue(&bcs->squeue))) {
-			idev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 		}
 		if (bcs->tx_skb) {
-			idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+			dev_kfree_skb(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}

@@ -1,4 +1,4 @@
-/* $Id: sportster.c,v 1.9 1999/07/12 21:05:29 keil Exp $
+/* $Id: sportster.c,v 1.10 1999/09/04 06:20:06 keil Exp $
 
  * sportster.c     low level stuff for USR Sportster internal TA
  *
@@ -7,6 +7,9 @@
  * Thanks to Christian "naddy" Weisgerber (3Com, US Robotics) for documentation
  *
  * $Log: sportster.c,v $
+ * Revision 1.10  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.9  1999/07/12 21:05:29  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -43,7 +46,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *sportster_revision = "$Revision: 1.9 $";
+const char *sportster_revision = "$Revision: 1.10 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -177,11 +180,11 @@ reset_sportster(struct IsdnCardState *cs)
 	byteout(cs->hw.spt.cfg_reg + SPORTSTER_RES_IRQ, cs->hw.spt.res_irq);
 	save_flags(flags);
 	sti();
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	cs->hw.spt.res_irq &= ~SPORTSTER_RESET; /* Reset Off */
 	byteout(cs->hw.spt.cfg_reg + SPORTSTER_RES_IRQ, cs->hw.spt.res_irq);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	restore_flags(flags);
 }
@@ -208,8 +211,8 @@ Sportster_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-int __init
-get_io_range(struct IsdnCardState *cs)
+__initfunc(int
+get_io_range(struct IsdnCardState *cs))
 {
 	int i, j, adr;
 	
@@ -234,8 +237,8 @@ get_io_range(struct IsdnCardState *cs)
 	}
 }
 
-int __init
-setup_sportster(struct IsdnCard *card)
+__initfunc(int
+setup_sportster(struct IsdnCard *card))
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

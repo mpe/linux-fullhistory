@@ -1,11 +1,17 @@
 /*
- * $Id: capidrv.c,v 1.26 1999/08/06 07:41:16 calle Exp $
+ * $Id: capidrv.c,v 1.28 1999/11/05 16:22:37 calle Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.28  1999/11/05 16:22:37  calle
+ * Bugfix: Missing break in switch on ISDN_CMD_HANGUP.
+ *
+ * Revision 1.27  1999/09/16 15:13:04  calle
+ * forgot to change paramter type of contr for lower_callback ...
+ *
  * Revision 1.26  1999/08/06 07:41:16  calle
  * Added the "vbox patch". if (si1 == 1) si2 = 0;
  *
@@ -158,12 +164,11 @@
 #include <linux/ctype.h>
 #include <asm/segment.h>
 
-#include <linux/isdn_compat.h>
 #include "capiutil.h"
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.26 $";
+static char *revision = "$Revision: 1.28 $";
 int debugmode = 0;
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
@@ -714,8 +719,6 @@ static struct plcistatechange plcitable[] =
   /* P-0.1 */
   {ST_PLCI_OUTGOING, ST_PLCI_NONE, EV_PLCI_CONNECT_CONF_ERROR, p0},
   {ST_PLCI_OUTGOING, ST_PLCI_ALLOCATED, EV_PLCI_CONNECT_CONF_OK, 0},
-  {ST_PLCI_OUTGOING, ST_PLCI_DISCONNECTING, EV_PLCI_DISCONNECT_REQ, 0},
-  {ST_PLCI_OUTGOING, ST_PLCI_DISCONNECTING, EV_PLCI_FACILITY_IND_DOWN, 0},
   /* P-1 */
   {ST_PLCI_ALLOCATED, ST_PLCI_ACTIVE, EV_PLCI_CONNECT_ACTIVE_IND, 0},
   {ST_PLCI_ALLOCATED, ST_PLCI_DISCONNECTING, EV_PLCI_DISCONNECT_REQ, 0},
@@ -1855,14 +1858,19 @@ static int capidrv_command(isdn_ctrl * c, capidrv_contr * card)
 			);
 			ncci_change_state(card, bchan->nccip, EV_NCCI_DISCONNECT_B3_REQ);
 			send_message(card, &cmdcmsg);
+			return 0;
 		} else if (bchan->plcip) {
-			bchan->disconnecting = 1;
 			if (bchan->plcip->state == ST_PLCI_INCOMING) {
-				/* just ignore, we a called from isdn_status_callback(),
-				 * which will return 0 or 2, this is handled by the
-				 * CONNECT_IND handler
+				/*
+				 * just ignore, we a called from
+				 * isdn_status_callback(),
+				 * which will return 0 or 2, this is handled
+				 * by the CONNECT_IND handler
 				 */
-			} else {
+				bchan->disconnecting = 1;
+				return 0;
+			} else if (bchan->plcip->plci) {
+				bchan->disconnecting = 1;
 				capi_fill_DISCONNECT_REQ(&cmdcmsg,
 							 global.appid,
 							 card->msgid++,
@@ -1874,8 +1882,18 @@ static int capidrv_command(isdn_ctrl * c, capidrv_contr * card)
 				);
 				plci_change_state(card, bchan->plcip, EV_PLCI_DISCONNECT_REQ);
 				send_message(card, &cmdcmsg);
+				return 0;
+			} else {
+				printk(KERN_ERR "capidrv-%d: chan %ld disconnect request while waiting for CONNECT_CONF\n",
+				       card->contrnr,
+				       c->arg);
+				return -EINVAL;
 			}
 		}
+		printk(KERN_ERR "capidrv-%d: chan %ld disconnect request on free channel\n",
+				       card->contrnr,
+				       c->arg);
+		return -EINVAL;
 /* ready */
 
 	case ISDN_CMD_SETL2:
@@ -2022,10 +2040,8 @@ static int if_sendbuf(int id, int channel, int doack, struct sk_buff *skb)
 		        (void)capidrv_del_ack(nccip, datahandle);
 			return 0;
 		}
-#if 1
 		printk(KERN_DEBUG "capidrv-%d: only %d bytes headroom, need %d\n",
 		       card->contrnr, skb_headroom(skb), msglen);
-#endif
 		memcpy(skb_push(nskb, msglen), sendcmsg.buf, msglen);
 		errcode = (*capifuncs->capi_put_message) (global.appid, nskb);
 		if (errcode == CAPI_NOERROR) {
@@ -2211,10 +2227,6 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 	    ISDN_FEATURE_L2_V11096 |
 	    ISDN_FEATURE_L2_V11019 |
 	    ISDN_FEATURE_L2_V11038 |
-#if 0
-	    ISDN_FEATURE_L2_FAX |
-	    ISDN_FEATURE_L3_FAX |
-#endif
 	    ISDN_FEATURE_P_UNKNOWN;
 	card->interface.hl_hdrlen = 22; /* len of DATA_B3_REQ */
 	strncpy(card->interface.id, id, sizeof(card->interface.id) - 1);
@@ -2309,7 +2321,7 @@ static int capidrv_delcontr(__u16 contr)
 }
 
 
-static void lower_callback(unsigned int cmd, __u16 contr, void *data)
+static void lower_callback(unsigned int cmd, __u32 contr, void *data)
 {
 
 	switch (cmd) {

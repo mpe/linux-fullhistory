@@ -541,7 +541,6 @@ static struct proc_dir_entry proc_root_ppc_htab = {
 
 void __init proc_root_init(void)
 {
-	proc_base_init();
 	proc_misc_init();
 	proc_register(&proc_root, &proc_root_self);
 	proc_net = create_proc_entry("net", S_IFDIR, 0);
@@ -631,11 +630,7 @@ struct dentry *proc_lookup(struct inode * dir, struct dentry *dentry)
 
 static struct dentry *proc_root_lookup(struct inode * dir, struct dentry * dentry)
 {
-	unsigned int pid, c;
 	struct task_struct *p;
-	const char *name;
-	struct inode *inode;
-	int len;
 
 	if (dir->i_ino == PROC_ROOT_INO) { /* check for safety... */
 		extern unsigned long total_forks;
@@ -666,40 +661,7 @@ static struct dentry *proc_root_lookup(struct inode * dir, struct dentry * dentr
 	if (!proc_lookup(dir, dentry))
 		return NULL;
 	
-	pid = 0;
-	name = dentry->d_name.name;
-	len = dentry->d_name.len;
-	while (len-- > 0) {
-		c = *name - '0';
-		name++;
-		if (c > 9) {
-			pid = 0;
-			break;
-		}
-		pid *= 10;
-		pid += c;
-		if (!pid)
-			break;
-		if (pid & 0xffff0000) {
-			pid = 0;
-			break;
-		}
-	}
-	read_lock(&tasklist_lock);
-	p = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);
-	inode = NULL;
-	if (pid && p) {
-		unsigned long ino = (pid << 16) + PROC_PID_INO;
-		inode = proc_get_inode(dir->i_sb, ino, &proc_pid);
-		if (!inode)
-			return ERR_PTR(-EINVAL);
-		inode->i_flags|=S_IMMUTABLE;
-	}
-
-	dentry->d_op = &proc_dentry_operations;
-	d_add(dentry, inode);
-	return NULL;
+	return proc_pid_lookup(dir, dentry);
 }
 
 /*

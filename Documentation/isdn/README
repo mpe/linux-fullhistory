@@ -11,7 +11,7 @@ README for the ISDN-subsystem
   necessary. Those programs and some contributed utilities are available
   at
 
-   ftp.franken.de
+   ftp.isdn4linux.de
 
    /pub/isdn4linux/isdn4k-utils-<VersionNumber>.tar.gz
 
@@ -22,19 +22,23 @@ README for the ISDN-subsystem
    reasons, the mailing-list's primary language is german. However mails
    written in english have been welcome all the time.
 
-   to subscribe: write a email to majordomo@hub-wue.franken.de,
+   to subscribe: write a email to majordomo@listserv.isdn4linux.de,
    Subject irrelevant, in the message body:
    subscribe isdn4linux <your_email_address>
 
-   To write to the mailing-list, write to isdn4linux@hub-wue.franken.de
+   To write to the mailing-list, write to isdn4linux@listserv.isdn4linux.de
 
    This mailinglist is bidirectionally gated to the newsgroup
 
      de.alt.comm.isdn4linux
 
-  There is also a well maintained FAQ (both english and german) available
-  at ftp.franken.de in /pub/isdn4linux/FAQ/
-  This FAQ is also available at http://www.lrz-muenchen.de/~ui161ab/www/isdn/
+  There is also a well maintained FAQ in English available at
+     http://www.mhessler.de/i4lfaq/
+  It can be viewed online, or downloaded in sgml/text/html format.
+  The FAQ can also be viewed online at
+     http://www.isdn4inux.de/faq/
+  or downloaded from
+     ftp://ftp.isdn4linux.de/pub/isdn4linux/FAQ/
 
   1.1 Technical details
 
@@ -266,6 +270,8 @@ README for the ISDN-subsystem
              23   0         Bit coded register:
                             Bit 0:    0 = Add CPN to RING message off
                                       1 = Add CPN to RING message on
+                            Bit 1:    0 = Add CPN to FCON message off
+                                      1 = Add CPN to FCON message on
 
   Last but not least a (at the moment fairly primitive) device to request
   the line-status (/dev/isdninfo) is made available.
@@ -581,7 +587,7 @@ README for the ISDN-subsystem
    If other drivers will not be affected, I will include the changes
    in the next release.
    For developers only, there is a second mailing-list. Write to me
-   (fritz@wuemaus.franken.de), if you want to join that list.
+   (fritz@isdn4linux.de), if you want to join that list.
 
 Have fun!
 

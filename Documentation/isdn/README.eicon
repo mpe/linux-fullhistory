@@ -1,6 +1,6 @@
-$Id: README.eicon,v 1.4 1999/07/11 17:17:30 armin Exp $
+$Id: README.eicon,v 1.5 1999/10/11 18:13:25 armin Exp $
 
-(c) 1999 Cytronics & Melware
+(c) 1999 Cytronics & Melware (info@melware.de)
 
 This document describes the eicon driver for the
 Eicon.Diehl active ISDN cards.
@@ -24,17 +24,26 @@ It is meant to be used with isdn4linux, an ISDN link-level module for Linux.
 
 
 Supported Cards
----------------
+===============
 
+Old ISA type
+------------
 - S-Card ISA
 - SX-Card ISA
 - SXn-Card ISA
 - SCOM-Card ISA
 - Quadro-Card ISA
 - S2M-Card ISA
+
+DIVA Server family
+------------------
 - DIVA Server BRI/PCI 2M
 - DIVA Server PRI/PCI 2M (9M 23M 30M)
-  (Only analog modem functions of the DSPs are currently implemented)
+	supported functions of onboard DSPs:
+	- analog modem
+	- fax group 2/3 (Fax Class 2 commands)
+	- DTMF detection
+
 
 ISDN D-Channel Protocols
 ------------------------
@@ -76,6 +85,10 @@ Example for loading and starting a PRI card with E-DSS1 Protocol.
 Details about using the eiconctrl utility are in 'man eiconctrl'
 or will be printed by starting eiconctrl without any parameters.
 
+Thanks to 
+	Deutsche Mailbox Saar-Lor-Lux GmbH
+	for sponsoring and testing fax
+	capabilities with Diva Server cards.
 
 
 Any reports about bugs, errors and even wishes are welcome.

@@ -260,7 +260,6 @@ l3_alloc_skb(int len)
 		printk(KERN_WARNING "HiSax: No skb for D-channel\n");
 		return (NULL);
 	}
-	SET_SKB_FREE(skb);
 	skb_reserve(skb, MAX_HEADER_LEN);
 	return (skb);
 }
@@ -272,7 +271,7 @@ no_l3_proto(struct PStack *st, int pr, void *arg)
 
 	HiSax_putstatus(st->l1.hardware, "L3", "no D protocol");
 	if (skb) {
-		idev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 	}
 }
 

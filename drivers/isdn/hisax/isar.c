@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.5 1999/08/25 16:59:55 keil Exp $
+/* $Id: isar.c,v 1.7 1999/10/14 20:25:29 keil Exp $
 
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -6,6 +6,12 @@
  *
  *
  * $Log: isar.c,v $
+ * Revision 1.7  1999/10/14 20:25:29  keil
+ * add a statistic for error monitoring
+ *
+ * Revision 1.6  1999/08/31 11:20:20  paul
+ * various spelling corrections (new checksums may be needed, Karsten!)
+ *
  * Revision 1.5  1999/08/25 16:59:55  keil
  * Make ISAR V32bis modem running
  * Make LL->HL interface open for additional commands
@@ -459,7 +465,6 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 	case L1_MODE_TRANS:
 	case L1_MODE_V32:
 		if ((skb = dev_alloc_skb(ireg->clsb))) {
-			SET_SKB_FREE(skb);
 			rcv_mbox(cs, ireg, (u_char *)skb_put(skb, ireg->clsb));
 			skb_queue_tail(&bcs->rqueue, skb);
 			isar_sched_event(bcs, B_RCVBUFREADY);
@@ -478,6 +483,12 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 			if (cs->debug & L1_DEB_WARN)
 				debugl1(cs, "isar frame error %x len %d",
 					ireg->cmsb, ireg->clsb);
+#ifdef ERROR_STATISTIC
+			if (ireg->cmsb & HDLC_ERR_RER)
+				bcs->err_inv++;
+			if (ireg->cmsb & HDLC_ERR_CER)
+				bcs->err_crc++;
+#endif
 			bcs->hw.isar.rcvidx = 0;
 			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
 		} else {
@@ -493,7 +504,6 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 				} else if (!(skb = dev_alloc_skb(bcs->hw.isar.rcvidx-2))) {
 					printk(KERN_WARNING "ISAR: receive out of memory\n");
 				} else {
-					SET_SKB_FREE(skb);
 					memcpy(skb_put(skb, bcs->hw.isar.rcvidx-2),
 						bcs->hw.isar.rcvbuf, bcs->hw.isar.rcvidx-2);
 					skb_queue_tail(&bcs->rqueue, skb);
@@ -593,7 +603,7 @@ send_frames(struct BCState *bcs)
 			if (bcs->st->lli.l1writewakeup &&
 				(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.isar.txcnt);
-			idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+			dev_kfree_skb(bcs->tx_skb);
 			bcs->hw.isar.txcnt = 0; 
 			bcs->tx_skb = NULL;
 		}
@@ -789,10 +799,19 @@ isar_int_main(struct IsdnCardState *cs)
 			check_send(cs, ireg->cmsb);
 			break;
 		case ISAR_IIS_BSTEV:
-			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
+#ifdef ERROR_STATISTIC
+			if ((bcs = sel_bcs_isar(cs, ireg->iis >> 6))) {
+				if (ireg->cmsb == BSTEV_TBO)
+					bcs->err_tx++;
+				if (ireg->cmsb == BSTEV_RBO)
+					bcs->err_rdo++;
+			}
+#endif
 			if (cs->debug & L1_DEB_WARN)
 				debugl1(cs, "Buffer STEV dpath%d msb(%x)",
 					ireg->iis>>6, ireg->cmsb);
+			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
+			break;
 		case ISAR_IIS_PSTEV:
 			if ((bcs = sel_bcs_isar(cs, ireg->iis >> 6))) {
 				rcv_mbox(cs, ireg, (u_char *)ireg->par);
@@ -1022,8 +1041,8 @@ modeisar(struct BCState *bcs, int mode, int bc)
 					&bcs->hw.isar.reg->Flags))
 					bcs->hw.isar.dpath = 1;
 				else {
-					printk(KERN_WARNING"isar modeisar analog funktions only with DP1\n");
-					debugl1(cs, "isar modeisar analog funktions only with DP1");
+					printk(KERN_WARNING"isar modeisar analog works only with DP1\n");
+					debugl1(cs, "isar modeisar analog works only with DP1");
 					return(1);
 				}
 				break;
@@ -1159,7 +1178,7 @@ close_isarstate(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+			dev_kfree_skb(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 			if (bcs->cs->debug & L1_DEB_HSCX)
@@ -1223,7 +1242,7 @@ isar_auxcmd(struct IsdnCardState *cs, isdn_ctrl *ic) {
 						ll_run(cs, features);
 					break;
 				default:
-					printk(KERN_DEBUG "HiSax: invalid ioclt %d\n",
+					printk(KERN_DEBUG "HiSax: invalid ioctl %d\n",
 					       (int) ic->arg);
 					return(-EINVAL);
 			}

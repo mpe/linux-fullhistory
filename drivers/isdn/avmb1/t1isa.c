@@ -1,11 +1,26 @@
 /*
- * $Id: t1isa.c,v 1.5 1999/08/22 20:26:28 calle Exp $
+ * $Id: t1isa.c,v 1.8 1999/11/05 16:38:01 calle Exp $
  * 
  * Module for AVM T1 HEMA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1isa.c,v $
+ * Revision 1.8  1999/11/05 16:38:01  calle
+ * Cleanups before kernel 2.4:
+ * - Changed all messages to use card->name or driver->name instead of
+ *   constant string.
+ * - Moved some data from struct avmcard into new struct avmctrl_info.
+ *   Changed all lowlevel capi driver to match the new structur.
+ *
+ * Revision 1.7  1999/09/15 08:16:03  calle
+ * Implementation of 64Bit extention complete.
+ *
+ * Revision 1.6  1999/09/07 09:02:53  calle
+ * SETDATA removed. Now inside the kernel the datapart of DATA_B3_REQ and
+ * DATA_B3_IND is always directly after the CAPI message. The "Data" member
+ * ist never used inside the kernel.
+ *
  * Revision 1.5  1999/08/22 20:26:28  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -53,13 +68,12 @@
 #include <linux/ioport.h>
 #include <linux/capi.h>
 #include <asm/io.h>
-#include <linux/isdn_compat.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.5 $";
+static char *revision = "$Revision: 1.8 $";
 
 /* ------------------------------------------------------------- */
 
@@ -162,7 +176,8 @@ static int t1_detectandinit(unsigned int base, unsigned irq, int cardnr)
 
 static void t1_handle_interrupt(avmcard * card)
 {
-	struct capi_ctr *ctrl = card->ctrl;
+	avmctrl_info *cinfo = &card->ctrlinfo[0];
+	struct capi_ctr *ctrl = cinfo->capi_ctrl;
 	unsigned char b1cmd;
 	struct sk_buff *skb;
 
@@ -184,12 +199,17 @@ static void t1_handle_interrupt(avmcard * card)
 			MsgLen = t1_get_slice(card->port, card->msgbuf);
 			DataB3Len = t1_get_slice(card->port, card->databuf);
 
+			if (MsgLen < 30) { /* not CAPI 64Bit */
+				memset(card->msgbuf+MsgLen, 0, 30-MsgLen);
+				MsgLen = 30;
+				CAPIMSG_SETLEN(card->msgbuf, 30);
+			}
 			if (!(skb = alloc_skb(DataB3Len+MsgLen, GFP_ATOMIC))) {
-				printk(KERN_ERR "t1isa: incoming packet dropped\n");
+				printk(KERN_ERR "%s: incoming packet dropped\n",
+					card->name);
 			} else {
 				memcpy(skb_put(skb, MsgLen), card->msgbuf, MsgLen);
 				memcpy(skb_put(skb, DataB3Len), card->databuf, DataB3Len);
-				CAPIMSG_SETDATA(skb->data, skb->data + MsgLen);
 				ctrl->handle_capimsg(ctrl, ApplId, skb);
 			}
 			break;
@@ -199,7 +219,8 @@ static void t1_handle_interrupt(avmcard * card)
 			ApplId = (unsigned) b1_get_word(card->port);
 			MsgLen = t1_get_slice(card->port, card->msgbuf);
 			if (!(skb = alloc_skb(MsgLen, GFP_ATOMIC))) {
-				printk(KERN_ERR "t1isa: incoming packet dropped\n");
+				printk(KERN_ERR "%s: incoming packet dropped\n",
+						card->name);
 			} else {
 				memcpy(skb_put(skb, MsgLen), card->msgbuf, MsgLen);
 				ctrl->handle_capimsg(ctrl, ApplId, skb);
@@ -237,12 +258,12 @@ static void t1_handle_interrupt(avmcard * card)
 
 		case RECEIVE_INIT:
 
-			card->versionlen = t1_get_slice(card->port, card->versionbuf);
-			b1_parse_version(card);
+			cinfo->versionlen = t1_get_slice(card->port, cinfo->versionbuf);
+			b1_parse_version(cinfo);
 			printk(KERN_INFO "%s: %s-card (%s) now active\n",
 			       card->name,
-			       card->version[VER_CARDTYPE],
-			       card->version[VER_DRIVER]);
+			       cinfo->version[VER_CARDTYPE],
+			       cinfo->version[VER_DRIVER]);
 			ctrl->ready(ctrl);
 			break;
 
@@ -288,11 +309,12 @@ static void t1isa_interrupt(int interrupt, void *devptr, struct pt_regs *regs)
 	card = (avmcard *) devptr;
 
 	if (!card) {
-		printk(KERN_WARNING "t1_interrupt: wrong device\n");
+		printk(KERN_WARNING "t1isa: interrupt: wrong device\n");
 		return;
 	}
 	if (card->interrupt) {
-		printk(KERN_ERR "t1_interrupt: reentering interrupt hander (%s)\n", card->name);
+		printk(KERN_ERR "%s: reentering interrupt hander.\n",
+				 card->name);
 		return;
 	}
 
@@ -306,7 +328,8 @@ static void t1isa_interrupt(int interrupt, void *devptr, struct pt_regs *regs)
 
 static int t1isa_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+	avmcard *card = cinfo->card;
 	unsigned int port = card->port;
 	unsigned long flags;
 	int retval;
@@ -314,7 +337,7 @@ static int t1isa_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 	t1_disable_irq(port);
 	b1_reset(port);
 
-	if ((retval = b1_load_t4file(port, &data->firmware))) {
+	if ((retval = b1_load_t4file(card, &data->firmware))) {
 		b1_reset(port);
 		printk(KERN_ERR "%s: failed to load t4file!!\n",
 					card->name);
@@ -322,7 +345,7 @@ static int t1isa_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 	}
 
 	if (data->configuration.len > 0 && data->configuration.data) {
-		if ((retval = b1_load_config(port, &data->configuration))) {
+		if ((retval = b1_load_config(card, &data->configuration))) {
 			b1_reset(port);
 			printk(KERN_ERR "%s: failed to load config!!\n",
 					card->name);
@@ -330,7 +353,7 @@ static int t1isa_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 		}
 	}
 
-	if (!b1_loaded(port)) {
+	if (!b1_loaded(card)) {
 		printk(KERN_ERR "%s: failed to load t4file.\n", card->name);
 		return -EIO;
 	}
@@ -349,20 +372,22 @@ static int t1isa_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 
 void t1isa_reset_ctr(struct capi_ctr *ctrl)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+	avmcard *card = cinfo->card;
 	unsigned int port = card->port;
 
 	t1_disable_irq(port);
 	b1_reset(port);
 	b1_reset(port);
 
-	memset(card->version, 0, sizeof(card->version));
+	memset(cinfo->version, 0, sizeof(cinfo->version));
 	ctrl->reseted(ctrl);
 }
 
 static void t1isa_remove_ctr(struct capi_ctr *ctrl)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+	avmcard *card = cinfo->card;
 	unsigned int port = card->port;
 
 	t1_disable_irq(port);
@@ -373,6 +398,7 @@ static void t1isa_remove_ctr(struct capi_ctr *ctrl)
 	di->detach_ctr(ctrl);
 	free_irq(card->irq, card);
 	release_region(card->port, AVMB1_PORTLEN);
+	kfree(card->ctrlinfo);
 	kfree(card);
 
 	MOD_DEC_USE_COUNT;
@@ -383,16 +409,26 @@ static void t1isa_remove_ctr(struct capi_ctr *ctrl)
 static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 {
 	struct capi_ctr *ctrl;
+	avmctrl_info *cinfo;
 	avmcard *card;
 	int retval;
 
 	card = (avmcard *) kmalloc(sizeof(avmcard), GFP_ATOMIC);
 
 	if (!card) {
-		printk(KERN_WARNING "t1isa: no memory.\n");
+		printk(KERN_WARNING "%s: no memory.\n", driver->name);
 		return -ENOMEM;
 	}
 	memset(card, 0, sizeof(avmcard));
+        cinfo = (avmctrl_info *) kmalloc(sizeof(avmctrl_info), GFP_ATOMIC);
+	if (!cinfo) {
+		printk(KERN_WARNING "%s: no memory.\n", driver->name);
+		kfree(card);
+		return -ENOMEM;
+	}
+	memset(cinfo, 0, sizeof(avmctrl_info));
+	card->ctrlinfo = cinfo;
+	cinfo->card = card;
 	sprintf(card->name, "t1isa-%x", p->port);
 	card->port = p->port;
 	card->irq = p->irq;
@@ -400,33 +436,42 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 	card->cardnr = p->cardnr;
 
 	if (!(((card->port & 0x7) == 0) && ((card->port & 0x30) != 0x30))) {
-		printk(KERN_WARNING "t1isa: illegal port 0x%x.\n", card->port);
+		printk(KERN_WARNING "%s: illegal port 0x%x.\n",
+				driver->name, card->port);
+	        kfree(card->ctrlinfo);
 		kfree(card);
 		return -EINVAL;
         }
 
 	if (check_region(card->port, AVMB1_PORTLEN)) {
 		printk(KERN_WARNING
-		       "t1isa: ports 0x%03x-0x%03x in use.\n",
-		       card->port, card->port + AVMB1_PORTLEN);
+		       "%s: ports 0x%03x-0x%03x in use.\n",
+		       driver->name, card->port, card->port + AVMB1_PORTLEN);
+	        kfree(card->ctrlinfo);
 		kfree(card);
 		return -EBUSY;
 	}
 	if (hema_irq_table[card->irq & 0xf] == 0) {
-		printk(KERN_WARNING "t1isa: irq %d not valid.\n", card->irq);
+		printk(KERN_WARNING "%s: irq %d not valid.\n",
+				driver->name, card->irq);
+	        kfree(card->ctrlinfo);
 		kfree(card);
 		return -EINVAL;
 	}
 	for (ctrl = driver->controller; ctrl; ctrl = ctrl->next) {
-		if (((avmcard *)(ctrl->driverdata))->cardnr == card->cardnr) {
-			printk(KERN_WARNING "t1isa: card with number %d already installed.\n", card->cardnr);
+	        avmcard *cardp = ((avmctrl_info *)(ctrl->driverdata))->card;
+		if (cardp->cardnr == card->cardnr) {
+			printk(KERN_WARNING "%s: card with number %d already installed at 0x%x.\n",
+					driver->name, card->cardnr, cardp->port);
+	                kfree(card->ctrlinfo);
 			kfree(card);
 			return -EBUSY;
 		}
 	}
         if ((retval = t1_detectandinit(card->port, card->irq, card->cardnr)) != 0) {
-		printk(KERN_NOTICE "t1isa: NO card at 0x%x (%d)\n",
-					card->port, retval);
+		printk(KERN_NOTICE "%s: NO card at 0x%x (%d)\n",
+					driver->name, card->port, retval);
+	        kfree(card->ctrlinfo);
 		kfree(card);
 		return -EIO;
 	}
@@ -437,17 +482,21 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 
 	retval = request_irq(card->irq, t1isa_interrupt, 0, card->name, card);
 	if (retval) {
-		printk(KERN_ERR "t1isa: unable to get IRQ %d.\n", card->irq);
+		printk(KERN_ERR "%s: unable to get IRQ %d.\n",
+				driver->name, card->irq);
 		release_region(card->port, AVMB1_PORTLEN);
+	        kfree(card->ctrlinfo);
 		kfree(card);
 		return -EBUSY;
 	}
 
-	card->ctrl = di->attach_ctr(driver, card->name, card);
-	if (!card->ctrl) {
-		printk(KERN_ERR "t1isa: attach controller failed.\n");
+	cinfo->capi_ctrl = di->attach_ctr(driver, card->name, cinfo);
+	if (!cinfo->capi_ctrl) {
+		printk(KERN_ERR "%s: attach controller failed.\n",
+				driver->name);
 		free_irq(card->irq, card);
 		release_region(card->port, AVMB1_PORTLEN);
+	        kfree(card->ctrlinfo);
 		kfree(card);
 		return -EBUSY;
 	}
@@ -458,7 +507,8 @@ static int t1isa_add_card(struct capi_driver *driver, struct capicardparams *p)
 
 static void t1isa_send_message(struct capi_ctr *ctrl, struct sk_buff *skb)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+	avmcard *card = cinfo->card;
 	unsigned int port = card->port;
 	unsigned long flags;
 	__u16 len = CAPIMSG_LEN(skb->data);
@@ -483,15 +533,18 @@ static void t1isa_send_message(struct capi_ctr *ctrl, struct sk_buff *skb)
 
 static char *t1isa_procinfo(struct capi_ctr *ctrl)
 {
-	avmcard *card = (avmcard *)(ctrl->driverdata);
-	if (!card)
+	avmctrl_info *cinfo = (avmctrl_info *)(ctrl->driverdata);
+
+	if (!cinfo)
 		return "";
-	sprintf(card->infobuf, "%s %s 0x%x %d %d",
-		card->cardname[0] ? card->cardname : "-",
-		card->version[VER_DRIVER] ? card->version[VER_DRIVER] : "-",
-		card->port, card->irq, card->cardnr
+	sprintf(cinfo->infobuf, "%s %s 0x%x %d %d",
+		cinfo->cardname[0] ? cinfo->cardname : "-",
+		cinfo->version[VER_DRIVER] ? cinfo->version[VER_DRIVER] : "-",
+		cinfo->card ? cinfo->card->port : 0x0,
+		cinfo->card ? cinfo->card->irq : 0,
+		cinfo->card ? cinfo->card->cardnr : 0
 		);
-	return card->infobuf;
+	return cinfo->infobuf;
 }
 
 

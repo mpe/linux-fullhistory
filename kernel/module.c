@@ -53,6 +53,26 @@ static struct module *find_module(const char *name);
 static void free_module(struct module *, int tag_freed);
 
 
+/* needed for /proc/kcore, here because kernel_module is static (TA) */
+unsigned long get_kcore_size(void)
+{
+	unsigned long try, size = 0;
+	struct module * m;
+
+	if (module_list == &kernel_module)
+		return ((size_t)high_memory - PAGE_OFFSET + PAGE_SIZE);
+
+	/* shouldn't we have a rw spinlock for module_list? */
+	lock_kernel();
+	for (m=module_list; m; m=m->next) {
+		try = (unsigned long)m + m->size;
+		if (try > size)
+			size = try;
+	}
+	unlock_kernel();
+	return (size - PAGE_OFFSET + PAGE_SIZE);
+}
+
 /*
  * Called at boot time
  */
@@ -968,6 +988,13 @@ get_module_symbol(char *modname, char *symname)
 }
 
 #else		/* CONFIG_MODULES */
+
+/* no MODULES so high_memory is good enough for /proc/kcore (TA) */
+unsigned long get_kcore_size(void)
+{
+	return ((size_t)high_memory - PAGE_OFFSET + PAGE_SIZE);
+}
+
 
 /* Dummy syscalls for people who don't want modules */
 

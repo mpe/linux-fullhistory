@@ -164,7 +164,7 @@ int init_sc(void)
 		if(do_reset) {
 			pr_debug("Doing a SAFE probe reset\n");
 			outb(0xFF, io[b] + RESET_OFFSET);
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout(milliseconds(10000));
 		}
 		pr_debug("RAM Base for board %d is 0x%x, %s probe\n", b, ram[b],
@@ -512,19 +512,10 @@ int identify_board(unsigned long rambase, unsigned int iobase)
 	 * Try to identify a PRI card
 	 */
 	outb(PRI_BASEPG_VAL, pgport);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout(HZ);
 	sig = readl(rambase + SIG_OFFSET);
 	pr_debug("Looking for a signature, got 0x%x\n", sig);
-#if 0
-/*
- * For Gary: 
- * If it's a timing problem, it should be gone with the above schedule()
- * Another possible reason may be the missing volatile in the original
- * code. readl() does this for us.
- */
-	printk("");	/* Hack! Doesn't work without this !!!??? */
-#endif
 	if(sig == SIGNATURE)
 		return PRI_BOARD;
 
@@ -532,13 +523,10 @@ int identify_board(unsigned long rambase, unsigned int iobase)
 	 * Try to identify a PRI card
 	 */
 	outb(BRI_BASEPG_VAL, pgport);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout(HZ);
 	sig = readl(rambase + SIG_OFFSET);
 	pr_debug("Looking for a signature, got 0x%x\n", sig);
-#if 0
-	printk("");	/* Hack! Doesn't work without this !!!??? */
-#endif
 	if(sig == SIGNATURE)
 		return BRI_BOARD;
 
@@ -567,7 +555,7 @@ int identify_board(unsigned long rambase, unsigned int iobase)
 	 */
 	x = 0;
 	while((inb(iobase + FIFOSTAT_OFFSET) & RF_HAS_DATA) && x < 100) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(1);
 		x++;
 	}

@@ -1,4 +1,4 @@
-/* $Id: act2000_isa.h,v 1.2 1998/11/05 22:12:43 fritz Exp $
+/* $Id: act2000_isa.h,v 1.3 1999/10/24 18:46:05 fritz Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000 (ISA-Version).
  *
@@ -20,6 +20,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: act2000_isa.h,v $
+ * Revision 1.3  1999/10/24 18:46:05  fritz
+ * Changed isa_ prefix to act2000_isa_ to prevent name-clash in latest
+ * kernels.
+ *
  * Revision 1.2  1998/11/05 22:12:43  fritz
  * Changed mail-address.
  *
@@ -141,12 +145,12 @@ typedef enum {
 
 /* Prototypes */
 
-extern int isa_detect(unsigned short portbase);
-extern int isa_config_irq(act2000_card * card, short irq);
-extern int isa_config_port(act2000_card * card, unsigned short portbase);
-extern int isa_download(act2000_card * card, act2000_ddef * cb);
-extern void isa_release(act2000_card * card);
-extern void isa_receive(act2000_card *card);
-extern void isa_send(act2000_card *card);
+extern int act2000_isa_detect(unsigned short portbase);
+extern int act2000_isa_config_irq(act2000_card * card, short irq);
+extern int act2000_isa_config_port(act2000_card * card, unsigned short portbase);
+extern int act2000_isa_download(act2000_card * card, act2000_ddef * cb);
+extern void act2000_isa_release(act2000_card * card);
+extern void act2000_isa_receive(act2000_card *card);
+extern void act2000_isa_send(act2000_card *card);
 
 #endif                          /* act2000_isa_h */

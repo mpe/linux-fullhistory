@@ -650,6 +650,19 @@ int request_irq(unsigned int irq,
 	int retval;
 	struct irqaction * action;
 
+#if 1
+	/*
+	 * Sanity-check: shared interrupts should REALLY pass in
+	 * a real dev-ID, otherwise we'll have trouble later trying
+	 * to figure out which interrupt is which (messes up the
+	 * interrupt freeing logic etc).
+	 */
+	if (irqflags & SA_SHIRQ) {
+		if (!dev_id)
+			printk("Bad boy: %s (at 0x%x) called us without a dev_id!\n", devname, (&irq)[-1]);
+	}
+#endif
+
 	if (irq >= NR_IRQS)
 		return -EINVAL;
 	if (!handler)

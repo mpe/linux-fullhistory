@@ -1,5 +1,5 @@
 #
-# $Id: Makefile,v 1.6 1999/07/20 06:41:44 calle Exp $
+# $Id: Makefile,v 1.7 1999/09/15 08:16:03 calle Exp $
 #
 # Makefile for the CAPI and AVM-B1 device drivers.
 #
@@ -11,6 +11,9 @@
 # parent makes..
 #
 # $Log: Makefile,v $
+# Revision 1.7  1999/09/15 08:16:03  calle
+# Implementation of 64Bit extention complete.
+#
 # Revision 1.6  1999/07/20 06:41:44  calle
 # Bugfix: After the redesign of the AVM B1 driver, the driver didn't even
 #         compile, if not selected as modules.
@@ -90,6 +93,12 @@ ifeq ($(CONFIG_ISDN_DRV_AVMB1),y)
   ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
   OX_OBJS   += b1pcmcia.o
   endif
+  ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
+  O_OBJS   += t1pci.o
+  endif
+  ifdef CONFIG_ISDN_DRV_AVMB1_C4
+  O_OBJS   += c4.o
+  endif
   OX_OBJS  += capiutil.o capidrv.o b1.o
 else
   ifeq ($(CONFIG_ISDN_DRV_AVMB1),m)
@@ -105,10 +114,16 @@ else
   ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
   M_OBJS   += t1isa.o
   endif
-  MX_OBJS  += capiutil.o capidrv.o b1.o
   ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
   MX_OBJS  += b1pcmcia.o
   endif
+  ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
+  M_OBJS   += t1pci.o
+  endif
+  ifdef CONFIG_ISDN_DRV_AVMB1_C4
+  M_OBJS   += c4.o
+  endif
+  MX_OBJS  += capiutil.o capidrv.o b1.o
   endif
 endif
 

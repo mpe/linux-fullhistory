@@ -1,5 +1,5 @@
 /* 
- * $Id: isdn_divert.c,v 1.4 1999/08/25 20:02:21 werner Exp $
+ * $Id: isdn_divert.c,v 1.5 1999/08/31 11:20:04 paul Exp $
  *
  * DSS1 main diversion supplementary handling for i4l.
  *
@@ -20,6 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_divert.c,v $
+ * Revision 1.5  1999/08/31 11:20:04  paul
+ * various spelling corrections (new checksums may be needed, Karsten!)
+ *
  * Revision 1.4  1999/08/25 20:02:21  werner
  * Changed return values for stat_icall(w) from 3->4 and 4->5 because of conflicts
  * with existing software definitions. (PtP incomplete called party number)
@@ -513,7 +516,7 @@ int isdn_divert_icall(isdn_ctrl *ic)
            if (cs->akt_state == DEFLECT_ALERT)
              { strcpy(cs->deflect_dest,dv->rule.to_nr);
                if (!cs->timer.expires)
-		 { strcpy(ic->parm.setup.eazmsn,"Testtext direkt");
+		 { strcpy(ic->parm.setup.eazmsn,"Testtext direct");
                    ic->parm.setup.screen = dv->rule.screen;
                    strcpy(ic->parm.setup.phone,dv->rule.to_nr);
                    cs->akt_state = DEFLECT_AUTODEL; /* delete after timeout */
@@ -769,18 +772,6 @@ int prot_stat_callback(isdn_ctrl *ic)
                       } 
 
 
-#if 0
-  sprintf(st, "0x%lx 0x%lx",ic->arg, ic->parm.dss1_io.ll_id);
-  p = st + strlen(st);
-  p1 = ic->parm.dss1_io.data;
-  i = ic->parm.dss1_io.datalen;
-  while ((i > 0) && (p - st < 530))
-   { p += sprintf(p," %02x",(*p1++) & 0xFF);
-     i--;
-   }
-  sprintf(p, "\n");
-  put_info_buffer(st);
-#endif
                    break;
  
 		   default:

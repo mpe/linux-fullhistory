@@ -1821,13 +1821,13 @@ int __init amiga_floppy_init(void)
 		return -ENOMEM;
 	}
 
-	if (!request_irq(IRQ_AMIGA_DSKBLK, fd_block_done, 0, "floppy_dma", NULL)) {
+	if (request_irq(IRQ_AMIGA_DSKBLK, fd_block_done, 0, "floppy_dma", NULL)) {
 		printk("fd: cannot get irq for dma\n");
 		amiga_chip_free(raw_buf);
 		unregister_blkdev(MAJOR_NR,"fd");
 		return -EBUSY;
 	}
-	if (!request_irq(IRQ_AMIGA_CIAA_TB, ms_isr, 0, "floppy_timer", NULL)) {
+	if (request_irq(IRQ_AMIGA_CIAA_TB, ms_isr, 0, "floppy_timer", NULL)) {
 		printk("fd: cannot get irq for timer\n");
 		free_irq(IRQ_AMIGA_DSKBLK, NULL);
 		amiga_chip_free(raw_buf);

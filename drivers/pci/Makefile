@@ -32,3 +32,11 @@ L_OBJS   += syscall.o setup.o
 endif
 
 include $(TOPDIR)/Rules.make
+
+names.o: names.c devlist.h
+
+devlist.h: pci.ids gen-devlist
+	./gen-devlist <pci.ids >devlist.h
+
+gen-devlist: gen-devlist.c
+	$(HOSTCC) $(HOSTCFLAGS) -o gen-devlist gen-devlist.c

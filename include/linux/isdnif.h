@@ -1,10 +1,10 @@
-/* $Id: isdnif.h,v 1.30 1999/08/23 15:54:29 keil Exp $
+/* $Id: isdnif.h,v 1.32 1999/10/11 22:03:00 keil Exp $
  *
  * Linux ISDN subsystem
  *
  * Definition of the interface between the subsystem and its low-level drivers.
  *
- * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994,95,96 by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1995,96    Thinking Objects Software GmbH Wuerzburg
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -22,6 +22,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
+ * Revision 1.32  1999/10/11 22:03:00  keil
+ * COMPAT_NEED_UACCESS (no include in isdn_compat.h)
+ *
+ * Revision 1.31  1999/09/06 07:29:36  fritz
+ * Changed my mail-address.
+ *
  * Revision 1.30  1999/08/23 15:54:29  keil
  * more backported changes from kernel 2.3.14
  *
@@ -138,7 +144,6 @@
 #define isdnif_h
 
 #include <linux/config.h>
-#include <linux/isdn_compat.h>
 
 /*
  * Values for general protocol-selection

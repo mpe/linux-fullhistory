@@ -1,9 +1,21 @@
 /*
- * $Id: avmcard.h,v 1.4 1999/08/04 10:10:08 calle Exp $
+ * $Id: avmcard.h,v 1.6 1999/11/05 16:38:01 calle Exp $
  *
  * Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: avmcard.h,v $
+ * Revision 1.6  1999/11/05 16:38:01  calle
+ * Cleanups before kernel 2.4:
+ * - Changed all messages to use card->name or driver->name instead of
+ *   constant string.
+ * - Moved some data from struct avmcard into new struct avmctrl_info.
+ *   Changed all lowlevel capi driver to match the new structur.
+ *
+ * Revision 1.5  1999/09/07 09:02:53  calle
+ * SETDATA removed. Now inside the kernel the datapart of DATA_B3_REQ and
+ * DATA_B3_IND is always directly after the CAPI message. The "Data" member
+ * ist never used inside the kernel.
+ *
  * Revision 1.4  1999/08/04 10:10:08  calle
  * Bugfix: corrected /proc functions, added structure for new AVM cards.
  *
@@ -73,6 +85,7 @@ typedef struct avmcard_dmainfo {
 	__u8  sendbuf[128+2048];
 } avmcard_dmainfo;
 
+
 typedef struct avmcard {
 	char name[32];
 	unsigned int port;
@@ -81,24 +94,33 @@ typedef struct avmcard {
 	enum avmcardtype cardtype;
 	int cardnr; /* for t1isa */
 
-	int versionlen;
-	char versionbuf[1024];
-	char *version[AVM_MAXVERSION];
-
-	char cardname[32];
-
-	char infobuf[128];	/* for function procinfo */
 	char msgbuf[128];	/* capimsg msg part */
 	char databuf[2048];	/* capimsg data part */
 
 	int interrupt;
 
 	void *mbase;
-	__u32 csr;
+	volatile __u32 csr;
 	avmcard_dmainfo *dma;
 
-	struct capi_ctr *ctrl;
+	struct avmctrl_info {
+		char cardname[32];
+
+		int versionlen;
+		char versionbuf[1024];
+		char *version[AVM_MAXVERSION];
+
+		char infobuf[128];	/* for function procinfo */
+
+		struct avmcard  *card;
+		struct capi_ctr *capi_ctrl;
+
+	} *ctrlinfo;
+
+	int nlogcontr;
 } avmcard;
+
+typedef struct avmctrl_info avmctrl_info;
 
 extern int b1_irq_table[16];
 
@@ -540,16 +562,16 @@ static inline void b1_setinterrupt(unsigned int base, unsigned irq,
 }
 
 int b1_detect(unsigned int base, enum avmcardtype cardtype);
-int b1_load_t4file(unsigned int base, capiloaddatapart * t4file);
-int b1_load_config(unsigned int base, capiloaddatapart * config);
-int b1_loaded(unsigned int base);
+int b1_load_t4file(avmcard *card, capiloaddatapart * t4file);
+int b1_load_config(avmcard *card, capiloaddatapart * config);
+int b1_loaded(avmcard *card);
 int b1_load_firmware(struct capi_ctr *ctrl, capiloaddata *data);
 void b1_reset_ctr(struct capi_ctr *ctrl);
 void b1_register_appl(struct capi_ctr *ctrl, __u16 appl,
 				capi_register_params *rp);
 void b1_release_appl(struct capi_ctr *ctrl, __u16 appl);
 void b1_send_message(struct capi_ctr *ctrl, struct sk_buff *skb);
-void b1_parse_version(avmcard *card);
+void b1_parse_version(avmctrl_info *card);
 void b1_handle_interrupt(avmcard * card);
 
 int b1ctl_read_proc(char *page, char **start, off_t off,

@@ -50,7 +50,7 @@ static int shm_swapout(struct page *, struct file *);
 static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data);
 #endif
 
-unsigned int shm_prm[3] = {SHMMAX, SHMALL, SHMMNI};
+size_t shm_prm[3] = {SHMMAX, SHMALL, SHMMNI};
 
 static int shm_tot = 0; /* total number of shared memory pages */
 static int shm_rss = 0; /* number of shared memory pages that are in memory */

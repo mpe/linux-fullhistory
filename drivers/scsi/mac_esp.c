@@ -22,13 +22,12 @@
 #include <linux/blk.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/init.h>
 
 #include "scsi.h"
 #include "hosts.h"
 #include "NCR53C9x.h"
 #include "mac_esp.h"
-
-#include "../../arch/m68k/mac/via6522.h"  /* huh? */
 
 #include <asm/io.h>
 
@@ -36,10 +35,14 @@
 #include <asm/irq.h>
 #include <asm/macints.h>
 #include <asm/machw.h>
+#include <asm/mac_via.h>
 
 #include <asm/pgtable.h>
 
 #include <asm/macintosh.h>
+
+#define mac_turnon_irq(x)	mac_enable_irq(x)
+#define mac_turnoff_irq(x)	mac_disable_irq(x)
 
 extern inline void esp_handle(struct NCR_ESP *esp);
 extern void mac_esp_intr(int irq, void *dev_id, struct pt_regs *pregs);
@@ -235,6 +238,8 @@ void mac_esp_setup(char *str, int *ints) {
 #endif
 #endif
 }
+
+__setup("mac53c9x=", mac_esp_setup);
 
 /*
  * ESP address 'detection'

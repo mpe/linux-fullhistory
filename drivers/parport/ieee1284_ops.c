@@ -95,7 +95,7 @@ size_t parport_ieee1284_write_compat (struct parport *port,
                            our interrupt handler called. */
 			if (count && no_irq) {
 				parport_release (dev);
-				current->state = TASK_INTERRUPTIBLE;
+				set_current_state (TASK_INTERRUPTIBLE);
 				schedule_timeout (wait);
 				parport_claim_or_block (dev);
 			}
@@ -525,7 +525,7 @@ size_t parport_ieee1284_ecp_read_data (struct parport *port,
 			/* Yield the port for a while. */
 			if (count && dev->port->irq != PARPORT_IRQ_NONE) {
 				parport_release (dev);
-				current->state = TASK_INTERRUPTIBLE;
+				set_current_state (TASK_INTERRUPTIBLE);
 				schedule_timeout ((HZ + 24) / 25);
 				parport_claim_or_block (dev);
 			}

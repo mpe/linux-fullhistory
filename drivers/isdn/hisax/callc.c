@@ -1,4 +1,4 @@
-/* $Id: callc.c,v 2.34 1999/08/25 20:02:34 werner Exp $
+/* $Id: callc.c,v 2.39 1999/10/14 20:25:28 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,21 @@
  *              Fritz Elfert
  *
  * $Log: callc.c,v $
+ * Revision 2.39  1999/10/14 20:25:28  keil
+ * add a statistic for error monitoring
+ *
+ * Revision 2.38  1999/10/11 22:16:27  keil
+ * Suspend/Resume is possible without explicit ID too
+ *
+ * Revision 2.37  1999/09/20 19:49:47  keil
+ * Fix wrong init of PStack
+ *
+ * Revision 2.36  1999/09/20 12:13:13  keil
+ * Fix hang if no protocol was selected
+ *
+ * Revision 2.35  1999/09/04 06:20:05  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 2.34  1999/08/25 20:02:34  werner
  * Changed return values for stat_icall(w) from 3->4 and 4->5 because of conflicts
  * with existing software definitions. (PtP incomplete called party number)
@@ -145,15 +160,10 @@
 #include "../avmb1/capicmd.h"  /* this should be moved in a common place */
 
 #ifdef MODULE
-#ifdef COMPAT_HAS_NEW_SYMTAB
 #define MOD_USE_COUNT ( GET_USE_COUNT (&__this_module))
-#else
-extern long mod_use_count_;
-#define MOD_USE_COUNT mod_use_count_
-#endif /* COMPAT_HAS_NEW_SYMTAB */
 #endif	/* MODULE */
 
-const char *lli_revision = "$Revision: 2.34 $";
+const char *lli_revision = "$Revision: 2.39 $";
 
 extern struct IsdnCard cards[];
 extern int nrcards;
@@ -209,7 +219,7 @@ discard_queue(struct sk_buff_head *q)
 	int ret=0;
 
 	while ((skb = skb_dequeue(q))) {
-		idev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 		ret++;
 	}
 	return(ret);
@@ -1122,12 +1132,37 @@ dchan_l3l4(struct PStack *st, int pr, void *arg)
 }
 
 static void
+dummy_pstack(struct PStack *st, int pr, void *arg) {
+	printk(KERN_WARNING"call to dummy_pstack pr=%04x arg %lx\n", pr, (long)arg);
+}
+
+static void
+init_PStack(struct PStack **stp) {
+	*stp = kmalloc(sizeof(struct PStack), GFP_ATOMIC);
+	(*stp)->next = NULL;
+	(*stp)->l1.l1l2 = dummy_pstack;
+	(*stp)->l1.l1hw = dummy_pstack;
+	(*stp)->l1.l1tei = dummy_pstack;
+	(*stp)->l2.l2tei = dummy_pstack;
+	(*stp)->l2.l2l1 = dummy_pstack;
+	(*stp)->l2.l2l3 = dummy_pstack;
+	(*stp)->l3.l3l2 = dummy_pstack;
+        (*stp)->l3.l3ml3 = dummy_pstack;
+	(*stp)->l3.l3l4 = dummy_pstack;
+	(*stp)->lli.l4l3 = dummy_pstack;
+	(*stp)->ma.layer = dummy_pstack;
+}
+
+static void
 init_d_st(struct Channel *chanp)
 {
-	struct PStack *st = chanp->d_st;
+	struct PStack *st;
 	struct IsdnCardState *cs = chanp->cs;
 	char tmp[16];
 
+	init_PStack(&chanp->d_st);
+	st = chanp->d_st;
+	st->next = NULL;
 	HiSax_addlist(cs, st);
 	setstack_HiSax(st, cs);
 	st->l2.sap = 0;
@@ -1166,28 +1201,6 @@ callc_debug(struct FsmInst *fi, char *fmt, ...)
 }
 
 static void
-dummy_pstack(struct PStack *st, int pr, void *arg) {
-	printk(KERN_WARNING"call to dummy_pstack pr=%04x arg %lx\n", pr, (long)arg);
-}
-
-static void
-init_PStack(struct PStack **stp) {
-	*stp = kmalloc(sizeof(struct PStack), GFP_ATOMIC);
-	(*stp)->next = NULL;
-	(*stp)->l1.l1l2 = dummy_pstack;
-	(*stp)->l1.l1hw = dummy_pstack;
-	(*stp)->l1.l1tei = dummy_pstack;
-	(*stp)->l2.l2tei = dummy_pstack;
-	(*stp)->l2.l2l1 = dummy_pstack;
-	(*stp)->l2.l2l3 = dummy_pstack;
-	(*stp)->l3.l3l2 = dummy_pstack;
-        (*stp)->l3.l3ml3 = dummy_pstack;
-	(*stp)->l3.l3l4 = dummy_pstack;
-	(*stp)->lli.l4l3 = dummy_pstack;
-	(*stp)->ma.layer = dummy_pstack;
-}
-
-static void
 init_chan(int chan, struct IsdnCardState *csta)
 {
 	struct Channel *chanp = csta->channel + chan;
@@ -1209,10 +1222,6 @@ init_chan(int chan, struct IsdnCardState *csta)
 	FsmInitTimer(&chanp->fi, &chanp->dial_timer);
 	FsmInitTimer(&chanp->fi, &chanp->drel_timer);
 	if (!chan || test_bit(FLG_TWO_DCHAN, &csta->HW_Flags)) {
-		init_PStack(&chanp->d_st);
-		if (chan)
-			csta->channel->d_st->next = chanp->d_st;
-		chanp->d_st->next = NULL;
 		init_d_st(chanp);
 	} else {
 		chanp->d_st = csta->channel->d_st;
@@ -1289,7 +1298,7 @@ lldata_handler(struct PStack *st, int pr, void *arg)
 			if (chanp->data_open)
 				chanp->cs->iif.rcvcallb_skb(chanp->cs->myid, chanp->chan, skb);
 			else {
-				idev_kfree_skb(skb, FREE_READ);
+				dev_kfree_skb(skb);
 			}
 			break;
 		case (DL_ESTABLISH | INDICATION):
@@ -1319,7 +1328,7 @@ lltrans_handler(struct PStack *st, int pr, void *arg)
 				chanp->cs->iif.rcvcallb_skb(chanp->cs->myid, chanp->chan, skb);
 			else {
 				link_debug(chanp, 0, "channel not open");
-				idev_kfree_skb(skb, FREE_READ);
+				dev_kfree_skb(skb);
 			}
 			break;
 		case (PH_ACTIVATE | INDICATION):
@@ -1426,7 +1435,7 @@ leased_l4l3(struct PStack *st, int pr, void *arg)
 	switch (pr) {
 		case (DL_DATA | REQUEST):
 			link_debug(chanp, 0, "leased line d-channel DATA");
-			idev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb);
 			break;
 		case (DL_ESTABLISH | REQUEST):
 			st->l2.l2l1(st, PH_ACTIVATE | REQUEST, NULL);
@@ -1450,7 +1459,7 @@ leased_l1l2(struct PStack *st, int pr, void *arg)
 	switch (pr) {
 		case (PH_DATA | INDICATION):
 			link_debug(chanp, 0, "leased line d-channel DATA");
-			idev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb);
 			break;
 		case (PH_ACTIVATE | INDICATION):
 		case (PH_ACTIVATE | CONFIRM):
@@ -1472,11 +1481,6 @@ leased_l1l2(struct PStack *st, int pr, void *arg)
 				"transd_l1l2 unknown primitive %#x\n", pr);
 			break;
 	}
-}
-
-static void
-channel_report(struct Channel *chanp)
-{
 }
 
 static void
@@ -1512,7 +1516,6 @@ capi_debug(struct Channel *chanp, capi_msg *cm)
 {
 	char *t = tmpbuf;
 
-	t += sprintf(tmpbuf, "%d CAPIMSG", chanp->chan);
 	t += QuickHex(t, (u_char *)cm, (cm->Length>50)? 50: cm->Length);
 	t--;
 	*t= 0;
@@ -1529,20 +1532,16 @@ lli_got_fac_req(struct Channel *chanp, capi_msg *cm) {
 		return;
 	switch(cm->para[3]) {
 		case 4: /* Suspend */
-			if (cm->para[5]) {
-				strncpy(chanp->setup.phone, &cm->para[5], cm->para[5] +1);
-				FsmEvent(&chanp->fi, EV_SUSPEND, cm);
-			}
+			strncpy(chanp->setup.phone, &cm->para[5], cm->para[5] +1);
+			FsmEvent(&chanp->fi, EV_SUSPEND, cm);
 			break;
 		case 5: /* Resume */
-			if (cm->para[5]) {
-				strncpy(chanp->setup.phone, &cm->para[5], cm->para[5] +1);
-				if (chanp->fi.state == ST_NULL) {
-					FsmEvent(&chanp->fi, EV_RESUME, cm);
-				} else {
-					FsmDelTimer(&chanp->dial_timer, 72);
-					FsmAddTimer(&chanp->dial_timer, 80, EV_RESUME, cm, 73);
-				}
+			strncpy(chanp->setup.phone, &cm->para[5], cm->para[5] +1);
+			if (chanp->fi.state == ST_NULL) {
+				FsmEvent(&chanp->fi, EV_RESUME, cm);
+			} else {
+				FsmDelTimer(&chanp->dial_timer, 72);
+				FsmAddTimer(&chanp->dial_timer, 80, EV_RESUME, cm, 73);
 			}
 			break;
 	}
@@ -1694,9 +1693,8 @@ HiSax_command(isdn_ctrl * ic)
 		case (ISDN_CMD_IOCTL):
 			switch (ic->arg) {
 				case (0):
-					HiSax_reportcard(csta->cardnr);
-					for (i = 0; i < 2; i++)
-						channel_report(&csta->channel[i]);
+					num = *(unsigned int *) ic->parm.num;
+					HiSax_reportcard(csta->cardnr, num);
 					break;
 				case (1):
 					num = *(unsigned int *) ic->parm.num;
@@ -1904,7 +1902,7 @@ HiSax_writebuf_skb(int id, int chan, int ack, struct sk_buff *skb)
 				chanp->bcs->tx_cnt += len;
 				st->l2.l2l1(st, PH_DATA | REQUEST, nskb);
 			}
-			idev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 		} else
 			len = 0;
 		restore_flags(flags);

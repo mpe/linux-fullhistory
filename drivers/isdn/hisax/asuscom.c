@@ -1,4 +1,4 @@
-/* $Id: asuscom.c,v 1.7 1999/07/12 21:04:53 keil Exp $
+/* $Id: asuscom.c,v 1.8 1999/09/04 06:20:05 keil Exp $
 
  * asuscom.c     low level stuff for ASUSCOM NETWORK INC. ISDNLink cards
  *
@@ -8,6 +8,9 @@
  *
  *
  * $Log: asuscom.c,v $
+ * Revision 1.8  1999/09/04 06:20:05  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.7  1999/07/12 21:04:53  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -39,7 +42,7 @@
 
 extern const char *CardType[];
 
-const char *Asuscom_revision = "$Revision: 1.7 $";
+const char *Asuscom_revision = "$Revision: 1.8 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -288,13 +291,13 @@ reset_asuscom(struct IsdnCardState *cs)
 		byteout(cs->hw.asus.adr, ASUS_RESET);	/* Reset On */
 	save_flags(flags);
 	sti();
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	if (cs->subtyp == ASUS_IPAC)
 		writereg(cs->hw.asus.adr, cs->hw.asus.isac, IPAC_POTA2, 0x0);
 	else
 		byteout(cs->hw.asus.adr, 0);	/* Reset Off */
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	if (cs->subtyp == ASUS_IPAC) {
 		writereg(cs->hw.asus.adr, cs->hw.asus.isac, IPAC_CONF, 0x0);
@@ -326,8 +329,8 @@ Asus_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-int __init
-setup_asuscom(struct IsdnCard *card)
+__initfunc(int
+setup_asuscom(struct IsdnCard *card))
 {
 	int bytecnt;
 	struct IsdnCardState *cs = card->cs;

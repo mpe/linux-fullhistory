@@ -1,5 +1,5 @@
 /* 
- * $Id: isdn_divert.h,v 1.3 1999/08/22 20:26:37 calle Exp $
+ * $Id: isdn_divert.h,v 1.4 1999/09/02 13:24:12 paul Exp $
  *
  * Header for the diversion supplementary ioctl interface.
  *
@@ -20,6 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_divert.h,v $
+ * Revision 1.4  1999/09/02 13:24:12  paul
+ * cosmetics; text following #endif is not ANSI C
+ *
  * Revision 1.3  1999/08/22 20:26:37  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -29,10 +32,7 @@
  * Revision 1.2  1999/07/04 21:37:33  werner
  * Ported from kernel version 2.0
  *
- *
- *
  */
-
 
 
 #include <linux/ioctl.h>
@@ -94,12 +94,12 @@ typedef struct
 typedef union
  { int drv_version; /* return of driver version */
    struct 
-   { int drvid; /* id of driver */
-     char drvnam[30]; /* name of driver */
+   { int drvid;		/* id of driver */
+     char drvnam[30];	/* name of driver */
    } getid;
    struct
-   { int ruleidx; /* index of rule */
-     divert_rule rule; /* rule parms */ 
+   { int ruleidx;	/* index of rule */
+     divert_rule rule;	/* rule parms */ 
    } getsetrule;
    struct
    { u_char subcmd;  /* 0 = hangup/reject,
@@ -125,7 +125,7 @@ typedef union
 #include <linux/isdnif.h>
 #include <linux/isdn_divertif.h>
 
-#define AUTODEL_TIME 30 /* timeout in s to delete internal entrys */
+#define AUTODEL_TIME 30 /* timeout in s to delete internal entries */
 
 /**************************************************/
 /* structure keeping ascii info for device output */
@@ -153,12 +153,4 @@ extern void deleteprocs(void);
 extern int deflect_extern_action(u_char, ulong, char *);
 extern int cf_command(int, int, u_char, char *, u_char, char *, ulong *);
 
-#endif __KERNEL__
-
-
-
-
-
-
-
-
+#endif /* __KERNEL__ */

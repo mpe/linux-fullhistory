@@ -154,8 +154,6 @@ init_arcofi(struct IsdnCardState *cs) {
 	cs->dc.isac.arcofitimer.function = (void *) arcofi_timer;
 	cs->dc.isac.arcofitimer.data = (long) cs;
 	init_timer(&cs->dc.isac.arcofitimer);
-#ifdef COMPAT_HAS_NEW_WAITQ
 	init_waitqueue_head(&cs->dc.isac.arcofi_wait);
-#endif
 	test_and_set_bit(HW_ARCOFI, &cs->HW_Flags);
 }

@@ -23,7 +23,7 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 	switch (cmd) {
 	case EXT2_IOC_GETFLAGS:
 		flags = inode->u.ext2_i.i_flags & EXT2_FL_USER_VISIBLE;
-		return put_user(inode->u.ext2_i.i_flags, (int *) arg);
+		return put_user(flags, (int *) arg);
 	case EXT2_IOC_SETFLAGS: {
 		unsigned int oldflags;
 

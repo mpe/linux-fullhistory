@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.c,v 1.73 1999/08/28 21:56:27 keil Exp $
+/* $Id: isdn_tty.c,v 1.80 1999/11/07 13:34:30 armin Exp $
 
  * Linux ISDN subsystem, tty functions and AT-command emulator (linklevel).
  *
@@ -20,6 +20,30 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.c,v $
+ * Revision 1.80  1999/11/07 13:34:30  armin
+ * Fixed AT command line editor
+ *
+ * Revision 1.79  1999/10/29 18:35:08  armin
+ * Check number len in isdn_get_msnstr() to avoid buffer overflow.
+ *
+ * Revision 1.78  1999/10/28 23:03:51  armin
+ * Bugfix: now freeing channel on modem_hup() even when
+ * usage on ttyI has changed and error-report for
+ * AT-commands on wrong channel-state.
+ *
+ * Revision 1.77  1999/10/26 21:13:14  armin
+ * using define for checking phone number len in isdn_tty_getdial()
+ *
+ * Revision 1.76  1999/10/11 22:16:26  keil
+ * Suspend/Resume is possible without explicit ID too
+ *
+ * Revision 1.75  1999/10/08 18:59:32  armin
+ * Bugfix of too small MSN buffer and checking phone number
+ * in isdn_tty_getdial()
+ *
+ * Revision 1.74  1999/09/04 06:20:04  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.73  1999/08/28 21:56:27  keil
  * misplaced #endif caused ttyI crash in 2.3.X
  *
@@ -348,7 +372,7 @@ static int bit2si[8] =
 static int si2bit[8] =
 {4, 1, 4, 4, 4, 4, 4, 4};
 
-char *isdn_tty_revision = "$Revision: 1.73 $";
+char *isdn_tty_revision = "$Revision: 1.80 $";
 
 
 /* isdn_tty_try_read() is called from within isdn_tty_rcv_skb()
@@ -1014,7 +1038,6 @@ void
 isdn_tty_modem_hup(modem_info * info, int local)
 {
 	isdn_ctrl cmd;
-	int usage;
 
 	if (!info)
 		return;
@@ -1068,10 +1091,7 @@ isdn_tty_modem_hup(modem_info * info, int local)
 		}
 		isdn_all_eaz(info->isdn_driver, info->isdn_channel);
 		info->emu.mdmreg[REG_RINGCNT] = 0;
-		usage = isdn_calc_usage(info->emu.mdmreg[REG_SI1I],
-					info->emu.mdmreg[REG_L2PROT]);
-		isdn_free_channel(info->isdn_driver, info->isdn_channel,
-				  usage);
+		isdn_free_channel(info->isdn_driver, info->isdn_channel, 0);
 	}
 	info->isdn_driver = -1;
 	info->isdn_channel = -1;
@@ -1108,8 +1128,8 @@ isdn_tty_suspend(char *id, modem_info * info, atemu * m)
 	printk(KERN_DEBUG "Msusp ttyI%d\n", info->line);
 #endif
 	l = strlen(id);
-	if ((info->isdn_driver >= 0) && l) {
-		cmd.parm.cmsg.Length = l+17;
+	if ((info->isdn_driver >= 0)) {
+		cmd.parm.cmsg.Length = l+18;
 		cmd.parm.cmsg.Command = CAPI_FACILITY;
 		cmd.parm.cmsg.Subcommand = CAPI_REQ;
 		cmd.parm.cmsg.adr.Controller = info->isdn_driver + 1;
@@ -1147,10 +1167,6 @@ isdn_tty_resume(char *id, modem_info * info, atemu * m)
 	int l;
 
 	l = strlen(id);
-	if (!l) {
-		isdn_tty_modem_result(4, info);
-		return;
-	}
 	for (j = 7; j >= 0; j--)
 		if (m->mdmreg[REG_SI1] & (1 << j)) {
 			si = bit2si[j];
@@ -1204,7 +1220,7 @@ isdn_tty_resume(char *id, modem_info * info, atemu * m)
 		isdn_command(&cmd);
 		cmd.driver = info->isdn_driver;
 		cmd.arg = info->isdn_channel;
-		cmd.parm.cmsg.Length = l+17;
+		cmd.parm.cmsg.Length = l+18;
 		cmd.parm.cmsg.Command = CAPI_FACILITY;
 		cmd.parm.cmsg.Subcommand = CAPI_REQ;
 		cmd.parm.cmsg.adr.Controller = info->isdn_driver + 1;
@@ -1901,12 +1917,7 @@ isdn_tty_set_termios(struct tty_struct *tty, struct termios *old_termios)
 static int
 isdn_tty_block_til_ready(struct tty_struct *tty, struct file *filp, modem_info * info)
 {
-#ifdef COMPAT_HAS_NEW_WAITQ
 	DECLARE_WAITQUEUE(wait, NULL);
-#else
-	struct wait_queue wait =
-	{current, NULL};
-#endif
 	int do_clocal = 0;
 	unsigned long flags;
 	int retval;
@@ -2157,7 +2168,7 @@ isdn_tty_close(struct tty_struct *tty, struct file *filp)
 		 */
 		timeout = jiffies + HZ;
 		while (!(info->lsr & UART_LSR_TEMT)) {
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout(20);
 			if (time_after(jiffies,timeout))
 				break;
@@ -2173,7 +2184,7 @@ isdn_tty_close(struct tty_struct *tty, struct file *filp)
 	info->ncarrier = 0;
 	tty->closing = 0;
 	if (info->blocked_open) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(50);
 		wake_up_interruptible(&info->open_wait);
 	}
@@ -2375,11 +2386,7 @@ isdn_tty_modem_init(void)
 			return -3;
 		}
 #endif
-#ifdef COMPAT_HAS_NEW_WAITQ
 		init_MUTEX(&info->write_sem);
-#else
-		info->write_sem = MUTEX;
-#endif
 		sprintf(info->last_cause, "0000");
 		sprintf(info->last_num, "none");
 		info->last_dir = 0;
@@ -2396,13 +2403,8 @@ isdn_tty_modem_init(void)
 		info->blocked_open = 0;
 		info->callout_termios = m->cua_modem.init_termios;
 		info->normal_termios = m->tty_modem.init_termios;
-#ifdef COMPAT_HAS_NEW_WAITQ
 		init_waitqueue_head(&info->open_wait);
 		init_waitqueue_head(&info->close_wait);
-#else
-		info->open_wait = 0;
-		info->close_wait = 0;
-#endif
 		info->isdn_driver = -1;
 		info->isdn_channel = -1;
 		info->drv_index = -1;
@@ -3101,9 +3103,12 @@ isdn_tty_show_profile(int ridx, modem_info * info)
 static void
 isdn_tty_get_msnstr(char *n, char **p)
 {
-	while ((*p[0] >= '0' && *p[0] <= '9') ||
+	int limit = ISDN_MSNLEN - 1;
+
+	while (((*p[0] >= '0' && *p[0] <= '9') ||
 	       /* Why a comma ??? */
-	       (*p[0] == ','))
+	       (*p[0] == ',')) &&
+		(limit--))
 		*n++ = *p[0]++;
 	*n = '\0';
 }
@@ -3115,16 +3120,18 @@ static void
 isdn_tty_getdial(char *p, char *q,int cnt)
 {
 	int first = 1;
-	int limit=39;	/* MUST match the size in isdn_tty_parse to avoid
-				buffer overflow */
+	int limit = ISDN_MSNLEN - 1;	/* MUST match the size of interface var to avoid
+					buffer overflow */
 
 	while (strchr(" 0123456789,#.*WPTS-", *p) && *p && --cnt>0) {
 		if ((*p >= '0' && *p <= '9') || ((*p == 'S') && first) ||
-		    (*p == '*') || (*p == '#'))
+		    (*p == '*') || (*p == '#')) {
 			*q++ = *p;
-		p++;
-		if(!--limit)
+			limit--;
+		}
+		if(!limit)
 			break;
+		p++;
 		first = 0;
 	}
 	*q = 0;
@@ -3268,6 +3275,8 @@ isdn_tty_cmd_ATand(char **p, modem_info * info)
 		case 'F':
 			/* &F -Set Factory-Defaults */
 			p[0]++;
+			if (info->msr & UART_MSR_DCD)
+				PARSE_ERROR1;
 			isdn_tty_reset_profile(m);
 			isdn_tty_modem_reset_regs(info, 1);
 			break;
@@ -3919,6 +3928,12 @@ isdn_tty_parse_at(modem_info * info)
 				break;
 			case 'D':
 				/* D - Dial */
+				if (info->msr & UART_MSR_DCD)
+					PARSE_ERROR;
+				if (info->msr & UART_MSR_RI) {
+					isdn_tty_modem_result(3, info);
+					return;
+				}
 				isdn_tty_getdial(++p, ds, sizeof ds);
 				p += strlen(p);
 				if (!strlen(m->msn))
@@ -4113,7 +4128,7 @@ isdn_tty_edit_at(const char *p, int count, modem_info * info, int user)
 			c = *p;
 		total++;
 		if (c == m->mdmreg[REG_CR] || c == m->mdmreg[REG_LF]) {
-			/* Separator (CR oder LF) */
+			/* Separator (CR or LF) */
 			m->mdmcmd[m->mdmcmdl] = 0;
 			if (m->mdmreg[REG_ECHO] & BIT_ECHO) {
 				eb[0] = c;
@@ -4126,7 +4141,7 @@ isdn_tty_edit_at(const char *p, int count, modem_info * info, int user)
 			continue;
 		}
 		if (c == m->mdmreg[REG_BS] && m->mdmreg[REG_BS] < 128) {
-			/* Backspace-Funktion */
+			/* Backspace-Function */
 			if ((m->mdmcmdl > 2) || (!m->mdmcmdl)) {
 				if (m->mdmcmdl)
 					m->mdmcmdl--;
@@ -4144,18 +4159,24 @@ isdn_tty_edit_at(const char *p, int count, modem_info * info, int user)
 			if (m->mdmcmdl < 255) {
 				c = my_toupper(c);
 				switch (m->mdmcmdl) {
-					case 0:
-						if (c == 'A')
-							m->mdmcmd[m->mdmcmdl] = c;
-						break;
 					case 1:
-						if (c == 'T')
+						if (c == 'T') {
 							m->mdmcmd[m->mdmcmdl] = c;
+							m->mdmcmd[++m->mdmcmdl] = 0;
+							break;
+						} else
+							m->mdmcmdl = 0;
+						/* Fall through, check for 'A' */
+					case 0:
+						if (c == 'A') {
+							m->mdmcmd[m->mdmcmdl] = c;
+							m->mdmcmd[++m->mdmcmdl] = 0;
+						}
 						break;
 					default:
 						m->mdmcmd[m->mdmcmdl] = c;
+						m->mdmcmd[++m->mdmcmdl] = 0;
 				}
-				m->mdmcmd[++m->mdmcmdl] = 0;
 			}
 		}
 	}

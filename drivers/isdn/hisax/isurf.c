@@ -1,10 +1,13 @@
-/* $Id: isurf.c,v 1.5 1999/08/25 17:00:02 keil Exp $
+/* $Id: isurf.c,v 1.6 1999/09/04 06:20:06 keil Exp $
 
  * isurf.c  low level stuff for Siemens I-Surf/I-Talk cards
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
  * $Log: isurf.c,v $
+ * Revision 1.6  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.5  1999/08/25 17:00:02  keil
  * Make ISAR V32bis modem running
  * Make LL->HL interface open for additional commands
@@ -34,7 +37,7 @@
 
 extern const char *CardType[];
 
-static const char *ISurf_revision = "$Revision: 1.5 $";
+static const char *ISurf_revision = "$Revision: 1.6 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -154,10 +157,10 @@ reset_isurf(struct IsdnCardState *cs, u_char chips)
 	byteout(cs->hw.isurf.reset, chips); /* Reset On */
 	save_flags(flags);
 	sti();
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	byteout(cs->hw.isurf.reset, ISURF_ISAR_EA); /* Reset Off */
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	restore_flags(flags);
 }
@@ -206,8 +209,8 @@ isurf_auxcmd(struct IsdnCardState *cs, isdn_ctrl *ic) {
 	return(isar_auxcmd(cs, ic));
 }
 
-int __init
-setup_isurf(struct IsdnCard *card)
+__initfunc(int
+setup_isurf(struct IsdnCard *card))
 {
 	int ver;
 	struct IsdnCardState *cs = card->cs;

@@ -464,7 +464,7 @@ static int tt_encode_fix( struct fb_fix_screeninfo *fix,
 	int mode;
 
 	strcpy(fix->id,"Atari Builtin");
-	fix->smem_start = real_screen_base;
+	fix->smem_start = (unsigned long)real_screen_base;
 	fix->smem_len = screen_len;
 	fix->type=FB_TYPE_INTERLEAVED_PLANES;
 	fix->type_aux=2;
@@ -797,7 +797,7 @@ static int falcon_encode_fix( struct fb_fix_screeninfo *fix,
 							  struct atafb_par *par )
 {
 	strcpy(fix->id, "Atari Builtin");
-	fix->smem_start = real_screen_base;
+	fix->smem_start = (unsigned long)real_screen_base;
 	fix->smem_len = screen_len;
 	fix->type = FB_TYPE_INTERLEAVED_PLANES;
 	fix->type_aux = 2;
@@ -1760,7 +1760,7 @@ static int stste_encode_fix( struct fb_fix_screeninfo *fix,
 	int mode;
 
 	strcpy(fix->id,"Atari Builtin");
-	fix->smem_start = real_screen_base;
+	fix->smem_start = (unsigned long)real_screen_base;
 	fix->smem_len = screen_len;
 	fix->type = FB_TYPE_INTERLEAVED_PLANES;
 	fix->type_aux = 2;
@@ -2104,7 +2104,7 @@ static int ext_encode_fix( struct fb_fix_screeninfo *fix,
 
 {
 	strcpy(fix->id,"Unknown Extern");
-	fix->smem_start=external_addr;
+	fix->smem_start = (unsigned long)external_addr;
 	fix->smem_len = PAGE_ALIGN(external_len);
 	if (external_depth == 1) {
 		fix->type = FB_TYPE_PACKED_PIXELS;
@@ -2488,7 +2488,7 @@ atafb_set_disp(int con, struct fb_info *info)
 	atafb_get_var(&var, con, info);
 	if (con == -1)
 		con=0;
-	display->screen_base = fix.smem_start;
+	display->screen_base = (void *)fix.smem_start;
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;

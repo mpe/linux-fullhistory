@@ -5,7 +5,6 @@
 #ifdef __KERNEL__
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
-#include <linux/isdn_compat.h>
 
 /* Stuff to support encapsulation protocols genericly. The encapsulation
    protocol is processed at the uppermost layer of the network interface.

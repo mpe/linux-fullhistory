@@ -1,4 +1,3 @@
-#include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/errno.h>
@@ -18,8 +17,9 @@
 #include <asm/apollohw.h>
 #include <asm/uaccess.h>
 
+#include "busmouse.h"
 
-extern void handle_scancode(unsigned char);
+/* extern void handle_scancode(unsigned char,int ); */
 
 #define DNKEY_CAPS 0x7e
 #define BREAK_FLAG 0x80
@@ -37,18 +37,12 @@ extern void handle_scancode(unsigned char);
 #define APOLLO_KBD_MODE_MOUSE   0x02
 #define APOLLO_KBD_MODE_CHANGE 0xff
 
-#define MSE_UPDATE_ON() mouse_update_allowed=1
-#define MSE_UPDATE_OFF() mouse_update_allowed=0
-
 static u_char keyb_cmds[APOLLO_KEYB_CMD_ENTRIES];
 static short keyb_cmd_read=0, keyb_cmd_write=0;
 static int keyb_cmd_transmit=0;
+static int msedev;
 
 static unsigned int kbd_mode=APOLLO_KBD_MODE_KEYB;
-static short mouse_dx,mouse_dy,mouse_buttons;
-static int mouse_ready=0,mouse_update_allowed=0,mouse_active=0;
-static DECLARE_WAIT_QUEUE_HEAD(mouse_wait);
-static struct fasync_struct *mouse_fasyncptr=NULL;
 
 #if 0
 static void debug_keyb_timer_handler(unsigned long ignored);
@@ -302,103 +296,6 @@ static void debug_keyb_timer_handler(unsigned long ignored) {
 }
 #endif
 
-static unsigned int mouse_poll(struct file *file, poll_table * wait)
-{
-        poll_wait(&mouse_wait, wait);
-        if (mouse_ready)
-                return POLLIN | POLLRDNORM;
-        return 0;
-}
-
-static ssize_t write_mouse(struct file * file, const char * buffer,
-			   size_t count, loff_t *ppos)
-{
-        return -EINVAL;
-}
-
-static ssize_t read_mouse(struct file * file, char * buffer,
-			  size_t count, loff_t *ppos)
-{
-	int dx,dy,r;
-	unsigned char buttons;
-
-	if (count < 3)
-		return -EINVAL;
-	if ((r = verify_area(VERIFY_WRITE, buffer, count)))
-   		return r;
-	if (!mouse_ready)
-		return -EAGAIN;	
-
-	MSE_UPDATE_OFF();
-	dx=mouse_dx;	
-	dy=mouse_dy;	
-	if (dx < -127)
-		dx = -127;
-	else
-	if (dx > 127)
-   		dx = 127;
-	if (dy < -127)
-   		dy = -127;
-	else
-	if (dy > 127)
-   		dy = 127;
-	buttons=(mouse_buttons & 1 ? 4 : 0) |
-			(mouse_buttons & 2 ? 1 : 0) |
-			(mouse_buttons & 4 ? 2 : 0);
-
-	mouse_dx-=dx;
-	mouse_dy-=dy;
-	MSE_UPDATE_ON();
-
-	if (put_user(buttons | 0x80, buffer++) ||
-	    put_user((char)dx, buffer++) ||
-	    put_user((char)dy, buffer++))
-		return -EINVAL;
-
-	if (count > 3)
-		if (clear_user(buffer, count - 3))
-			return -EFAULT;
-	return count;
-}
-
-static int fasync_mouse(int fd, struct file *filp, int on)
-{
-        int retval;
-
-        retval = fasync_helper(fd, filp, on, &mouse_fasyncptr);
-        if (retval < 0)
-                return retval;
-        return 0;
-}
-
-
-static int release_mouse(struct inode * inode, struct file * file)
-{
-        fasync_mouse(-1, file, 0);
-        if (--mouse_active)
-                return 0;
-        MSE_UPDATE_OFF();
-        MOD_DEC_USE_COUNT;
-        return 0;
-}
-
-static int open_mouse(struct inode * inode, struct file * file)
-{
-        if (mouse_active++)
-                return 0;
-        /*
-         *  use VBL to poll mouse deltas
-         */
-
-        mouse_dx = 0;
-        mouse_dy = 0;
-        mouse_buttons = 0;
-        mouse_active = 1;
-        MOD_INC_USE_COUNT;
-        MSE_UPDATE_ON();
-        return 0;
-}
-
 static void dn_keyb_process_key_event(unsigned char scancode) {
 
 	static unsigned char lastscancode;
@@ -411,7 +308,7 @@ static void dn_keyb_process_key_event(unsigned char scancode) {
 
 	if(prev_scancode==APOLLO_KBD_MODE_CHANGE) {
 		kbd_mode=scancode;
-/*		printk("modechange: %d\n",scancode);*/
+/*		printk("modechange: %d\n",scancode); */
 	}
 	else if((scancode & (~BREAK_FLAG)) == DNKEY_CAPS) {
     	/* printk("handle_scancode: %02x\n",DNKEY_CAPS); */
@@ -440,7 +337,8 @@ static void dn_keyb_process_mouse_event(unsigned char mouse_data) {
 
 	static short mouse_byte_count=0;
 	static u_char mouse_packet[3];
-	
+	short mouse_buttons;	
+
 	mouse_packet[mouse_byte_count++]=mouse_data;
 
 	if(mouse_byte_count==3) {
@@ -552,23 +450,20 @@ void write_keyb_cmd(u_short length, u_char *cmd) {
 
 }
 
-struct file_operations apollo_mouse_fops = {
-        NULL,           /* mouse_seek */
-        read_mouse,
-        write_mouse,
-        NULL,           /* mouse_readdir */
-        mouse_poll,     /* mouse_poll */
-        NULL,           /* mouse_ioctl */
-        NULL,           /* mouse_mmap */
-        open_mouse,
-	NULL,		/* flush */
-        release_mouse,
-        NULL,
-        fasync_mouse,
-};
+static int release_mouse(struct inode * inode, struct file * file)
+{
+        MOD_DEC_USE_COUNT;
+        return 0;
+}
 
-static struct miscdevice apollo_mouse = {
-        APOLLO_MOUSE_MINOR, "apollomouse", &apollo_mouse_fops
+static int open_mouse(struct inode * inode, struct file * file)
+{
+        MOD_INC_USE_COUNT;
+        return 0;
+}
+
+static struct busmouse apollo_mouse = {
+        APOLLO_MOUSE_MINOR, "apollomouse", open_mouse, release_mouse,7
 };
 
 int __init dn_keyb_init(void){
@@ -583,12 +478,12 @@ int __init dn_keyb_init(void){
   memcpy(key_maps[8], dnalt_map, sizeof(plain_map));
   memcpy(key_maps[12], dnctrl_alt_map, sizeof(plain_map));
 
-  mouse_dx=0; 
-  mouse_dy=0; 
-  mouse_buttons=0; 
-  mouse_wait=NULL;
 
-  misc_register(&apollo_mouse);
+  msedev=register_busmouse(&apollo_mouse);
+  if (msedev < 0)
+      printk(KERN_WARNING "Unable to install Apollo mouse driver.\n");
+   else
+      printk(KERN_INFO "Apollo mouse installed.\n");
 
   /* program UpDownMode */
 

@@ -1,4 +1,4 @@
-/* $Id: avm_pci.c,v 1.11 1999/08/11 21:01:18 keil Exp $
+/* $Id: avm_pci.c,v 1.12 1999/09/04 06:20:05 keil Exp $
 
  * avm_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -7,6 +7,9 @@
  *
  *
  * $Log: avm_pci.c,v $
+ * Revision 1.12  1999/09/04 06:20:05  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.11  1999/08/11 21:01:18  keil
  * new PCI codefix
  *
@@ -50,13 +53,10 @@
 #include "isac.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
-#ifndef COMPAT_HAS_NEW_PCI
-#include <linux/bios32.h>
-#endif
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
-static const char *avm_pci_rev = "$Revision: 1.11 $";
+static const char *avm_pci_rev = "$Revision: 1.12 $";
 
 #define  AVM_FRITZ_PCI		1
 #define  AVM_FRITZ_PNP		2
@@ -482,7 +482,7 @@ HDLC_irq(struct BCState *bcs, u_int stat) {
 				if (bcs->st->lli.l1writewakeup &&
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.hdlc.count);
-				idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+				dev_kfree_skb(bcs->tx_skb);
 				bcs->hw.hdlc.count = 0;
 				bcs->tx_skb = NULL;
 			}
@@ -609,7 +609,7 @@ close_hdlcstate(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+			dev_kfree_skb(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}
@@ -734,11 +734,11 @@ reset_avmpcipnp(struct IsdnCardState *cs)
 	save_flags(flags);
 	sti();
 	outb(AVM_STATUS0_RESET | AVM_STATUS0_DIS_TIMER, cs->hw.avm.cfg_reg + 2);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 	outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER | AVM_STATUS0_ENA_IRQ, cs->hw.avm.cfg_reg + 2);
 	outb(AVM_STATUS1_ENA_IOM | cs->irq, cs->hw.avm.cfg_reg + 3);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 	printk(KERN_INFO "AVM PCI/PnP: S1 %x\n", inb(cs->hw.avm.cfg_reg + 3));
 }
@@ -773,14 +773,10 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-#ifdef COMPAT_HAS_NEW_PCI
 static 	struct pci_dev *dev_avm __initdata = NULL;
-#else
-static  int pci_index __initdata = 0;
-#endif
 
-int __init
-setup_avm_pcipnp(struct IsdnCard *card)
+__initfunc(int
+setup_avm_pcipnp(struct IsdnCard *card))
 {
 	u_int val, ver;
 	struct IsdnCardState *cs = card->cs;
@@ -796,7 +792,6 @@ setup_avm_pcipnp(struct IsdnCard *card)
 		cs->subtyp = AVM_FRITZ_PNP;
 	} else {
 #if CONFIG_PCI
-#ifdef COMPAT_HAS_NEW_PCI
 		if (!pci_present()) {
 			printk(KERN_ERR "FritzPCI: no PCI bus present\n");
 			return(0);
@@ -808,7 +803,7 @@ setup_avm_pcipnp(struct IsdnCard *card)
 				printk(KERN_WARNING "FritzPCI: No IRQ for PCI card found\n");
 				return(0);
 			}
-			cs->hw.avm.cfg_reg = get_pcibase(dev_avm, 1) &
+			cs->hw.avm.cfg_reg = dev_avm->resource[ 1].start &
 				PCI_BASE_ADDRESS_IO_MASK; 
 			if (!cs->hw.avm.cfg_reg) {
 				printk(KERN_WARNING "FritzPCI: No IO-Adr for PCI card found\n");
@@ -819,36 +814,6 @@ setup_avm_pcipnp(struct IsdnCard *card)
 			printk(KERN_WARNING "FritzPCI: No PCI card found\n");
 			return(0);
 		}
-#else
-		for (; pci_index < 255; pci_index++) {
-			unsigned char pci_bus, pci_device_fn;
-			unsigned int ioaddr;
-			unsigned char irq;
-
-			if (pcibios_find_device (PCI_VENDOR_AVM,
-				PCI_FRITZPCI_ID, pci_index,
-				&pci_bus, &pci_device_fn) != 0) {
-				continue;
-			}
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-				PCI_INTERRUPT_LINE, &irq);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-				PCI_BASE_ADDRESS_1, &ioaddr);
-			cs->irq = irq;
-			cs->hw.avm.cfg_reg = ioaddr & PCI_BASE_ADDRESS_IO_MASK;
-			if (!cs->hw.avm.cfg_reg) {
-				printk(KERN_WARNING "FritzPCI: No IO-Adr for PCI card found\n");
-				return(0);
-			}
-			cs->subtyp = AVM_FRITZ_PCI;
-			break;
-		}
-		if (pci_index == 255) {
-			printk(KERN_WARNING "FritzPCI: No PCI card found\n");
-			return(0);
-		}
-		pci_index++;
-#endif /* COMPAT_HAS_NEW_PCI */
 		cs->irq_flags |= SA_SHIRQ;
 #else
 		printk(KERN_WARNING "FritzPCI: NO_PCI_BIOS\n");

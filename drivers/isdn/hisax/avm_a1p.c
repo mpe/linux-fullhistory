@@ -1,4 +1,4 @@
-/* $Id: avm_a1p.c,v 2.4 1999/07/12 21:04:55 keil Exp $
+/* $Id: avm_a1p.c,v 2.5 1999/09/01 08:26:34 calle Exp $
  *
  * avm_a1p.c    low level stuff for the following AVM cards:
  *              A1 PCMCIA
@@ -8,6 +8,9 @@
  * Author       Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: avm_a1p.c,v $
+ * Revision 2.5  1999/09/01 08:26:34  calle
+ * Patch from Daniel Beichl <dani@ecomag.net> to make A1 PCMCIA work again.
+ *
  * Revision 2.4  1999/07/12 21:04:55  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -71,7 +74,7 @@
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
 
-static const char *avm_revision = "$Revision: 2.4 $";
+static const char *avm_revision = "$Revision: 2.5 $";
 
 static inline u_char
 ReadISAC(struct IsdnCardState *cs, u_char offset)
@@ -245,6 +248,7 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			return 0;
 
 		case CARD_INIT:
+			byteout(cs->hw.avm.cfg_reg+ASL0_OFFSET,ASL0_W_TDISABLE|ASL0_W_TRESET|ASL0_W_IRQENABLE);
 			clear_pending_isac_ints(cs);
 			clear_pending_hscx_ints(cs);
 			inithscxisac(cs, 1);
@@ -262,8 +266,8 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return 0;
 }
 
-int __init
-setup_avm_a1_pcmcia(struct IsdnCard *card)
+__initfunc(int
+setup_avm_a1_pcmcia(struct IsdnCard *card))
 {
 	u_char model, vers;
 	struct IsdnCardState *cs = card->cs;

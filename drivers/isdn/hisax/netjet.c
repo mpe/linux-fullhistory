@@ -1,4 +1,4 @@
-/* $Id: netjet.c,v 1.13 1999/08/11 21:01:31 keil Exp $
+/* $Id: netjet.c,v 1.16 1999/10/14 20:25:29 keil Exp $
 
  * netjet.c     low level stuff for Traverse Technologie NETJet ISDN cards
  *
@@ -7,6 +7,15 @@
  * Thanks to Traverse Technologie Australia for documents and informations
  *
  * $Log: netjet.c,v $
+ * Revision 1.16  1999/10/14 20:25:29  keil
+ * add a statistic for error monitoring
+ *
+ * Revision 1.15  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
+ * Revision 1.14  1999/08/31 11:20:25  paul
+ * various spelling corrections (new checksums may be needed, Karsten!)
+ *
  * Revision 1.13  1999/08/11 21:01:31  keil
  * new PCI codefix
  *
@@ -59,9 +68,6 @@
 #include "hscx.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
-#ifndef COMPAT_HAS_NEW_PCI
-#include <linux/bios32.h>
-#endif
 #include <linux/interrupt.h>
 #include <linux/ppp_defs.h>
 
@@ -75,7 +81,7 @@
 
 extern const char *CardType[];
 
-const char *NETjet_revision = "$Revision: 1.13 $";
+const char *NETjet_revision = "$Revision: 1.16 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -406,7 +412,6 @@ static void got_frame(struct BCState *bcs, int count) {
 	if (!(skb = dev_alloc_skb(count)))
 		printk(KERN_WARNING "TIGER: receive out of memory\n");
 	else {
-		SET_SKB_FREE(skb);
 		memcpy(skb_put(skb, count), bcs->hw.tiger.rcvbuf, count);
 		skb_queue_tail(&bcs->rqueue, skb);
 	}
@@ -526,19 +531,26 @@ static void read_raw(struct BCState *bcs, u_int *buf, int cnt){
 							debugl1(bcs->cs, "tiger: frame not byte aligned");
 							state=HDLC_FLAG_SEARCH;
 							bcs->hw.tiger.r_err++;
+#ifdef ERROR_STATISTIC
+							bcs->err_inv++;
+#endif
 						} else {
 							if (bcs->cs->debug & L1_DEB_HSCX)
 								debugl1(bcs->cs,"tiger frame end(%d,%d): fcs(%x) i %x",
 									i,j,bcs->hw.tiger.r_fcs, bcs->cs->hw.njet.irqstat0);
 							if (bcs->hw.tiger.r_fcs == PPP_GOODFCS) {
 								got_frame(bcs, (bitcnt>>3)-3);
-							} else
+							} else {
 								if (bcs->cs->debug) {
 									debugl1(bcs->cs, "tiger FCS error");
 									printframe(bcs->cs, bcs->hw.tiger.rcvbuf,
 										(bitcnt>>3)-1, "rec");
 									bcs->hw.tiger.r_err++;
 								}
+#ifdef ERROR_STATISTIC
+							bcs->err_crc++;
+#endif
+							}
 							state=HDLC_FLAG_FOUND;
 						}
 						bitcnt=0;
@@ -556,10 +568,13 @@ static void read_raw(struct BCState *bcs, u_int *buf, int cnt){
 				if ((state == HDLC_FRAME_FOUND) &&
 					!(bitcnt & 7)) {
 					if ((bitcnt>>3)>=HSCX_BUFMAX) {
-						debugl1(bcs->cs, "tiger: frame to big");
+						debugl1(bcs->cs, "tiger: frame too big");
 						r_val=0; 
 						state=HDLC_FLAG_SEARCH;
 						bcs->hw.tiger.r_err++;
+#ifdef ERROR_STATISTIC
+						bcs->err_inv++;
+#endif
 					} else {
 						bcs->hw.tiger.rcvbuf[(bitcnt>>3)-1] = r_val;
 						bcs->hw.tiger.r_fcs = 
@@ -584,6 +599,12 @@ static void read_tiger(struct IsdnCardState *cs) {
 	if ((cs->hw.njet.irqstat0 & cs->hw.njet.last_is0) & NETJET_IRQM0_READ) {
 		debugl1(cs,"tiger warn read double dma %x/%x",
 			cs->hw.njet.irqstat0, cs->hw.njet.last_is0);
+#ifdef ERROR_STATISTIC
+		if (cs->bcs[0].mode)
+			cs->bcs[0].err_rdo++;
+		if (cs->bcs[1].mode)
+			cs->bcs[1].err_rdo++;
+#endif
 		return;
 	} else {
 		cs->hw.njet.last_is0 &= ~NETJET_IRQM0_READ;
@@ -705,7 +726,7 @@ static void write_raw(struct BCState *bcs, u_int *buf, int cnt) {
 				if (bcs->st->lli.l1writewakeup &&
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->tx_skb->len);
-				idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+				dev_kfree_skb(bcs->tx_skb);
 				bcs->tx_skb = NULL;
 			}
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
@@ -755,6 +776,12 @@ static void write_tiger(struct IsdnCardState *cs) {
 	if ((cs->hw.njet.irqstat0 & cs->hw.njet.last_is0) & NETJET_IRQM0_WRITE) {
 		debugl1(cs,"tiger warn write double dma %x/%x",
 			cs->hw.njet.irqstat0, cs->hw.njet.last_is0);
+#ifdef ERROR_STATISTIC
+		if (cs->bcs[0].mode)
+			cs->bcs[0].err_tx++;
+		if (cs->bcs[1].mode)
+			cs->bcs[1].err_tx++;
+#endif
 		return;
 	} else {
 		cs->hw.njet.last_is0 &= ~NETJET_IRQM0_WRITE;
@@ -842,7 +869,7 @@ close_tigerstate(struct BCState *bcs)
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
-			idev_kfree_skb(bcs->tx_skb, FREE_WRITE);
+			dev_kfree_skb(bcs->tx_skb);
 			bcs->tx_skb = NULL;
 			test_and_clear_bit(BC_FLG_BUSY, &bcs->Flag);
 		}
@@ -889,8 +916,8 @@ setstack_tiger(struct PStack *st, struct BCState *bcs)
 }
 
  
-void __init
-inittiger(struct IsdnCardState *cs)
+__initfunc(void
+inittiger(struct IsdnCardState *cs))
 {
 	if (!(cs->bcs[0].hw.tiger.send = kmalloc(NETJET_DMA_TXSIZE * sizeof(unsigned int),
 		GFP_KERNEL | GFP_DMA))) {
@@ -1027,11 +1054,11 @@ reset_netjet(struct IsdnCardState *cs)
 	sti();
 	cs->hw.njet.ctrl_reg = 0xff;  /* Reset On */
 	byteout(cs->hw.njet.base + NETJET_CTRL, cs->hw.njet.ctrl_reg);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
 	cs->hw.njet.ctrl_reg = 0x00;  /* Reset Off and status read clear */
 	byteout(cs->hw.njet.base + NETJET_CTRL, cs->hw.njet.ctrl_reg);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
 	restore_flags(flags);
 	cs->hw.njet.auxd = 0;
@@ -1074,23 +1101,15 @@ NETjet_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-#ifdef COMPAT_HAS_NEW_PCI
 static 	struct pci_dev *dev_netjet __initdata = NULL;
-#else
-static  int pci_index __initdata = 0;
-#endif
 
-int __init
-setup_netjet(struct IsdnCard *card)
+__initfunc(int
+setup_netjet(struct IsdnCard *card))
 {
 	int bytecnt;
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];
 #if CONFIG_PCI
-#ifndef COMPAT_HAS_NEW_PCI
-	u_char pci_bus, pci_device_fn, pci_irq;
-	u_int pci_ioaddr, found;
-#endif
 #endif
 	strcpy(tmp, NETjet_revision);
 	printk(KERN_INFO "HiSax: Traverse Tech. NETjet driver Rev. %s\n", HiSax_getrev(tmp));
@@ -1098,7 +1117,6 @@ setup_netjet(struct IsdnCard *card)
 		return(0);
 	test_and_clear_bit(FLG_LOCK_ATOMIC, &cs->HW_Flags);
 #if CONFIG_PCI
-#ifdef COMPAT_HAS_NEW_PCI
 	if (!pci_present()) {
 		printk(KERN_ERR "Netjet: no PCI bus present\n");
 		return(0);
@@ -1110,7 +1128,7 @@ setup_netjet(struct IsdnCard *card)
 			printk(KERN_WARNING "NETjet: No IRQ for PCI card found\n");
 			return(0);
 		}
-		cs->hw.njet.base = get_pcibase(dev_netjet, 0)
+		cs->hw.njet.base = dev_netjet->resource[ 0].start
 			& PCI_BASE_ADDRESS_IO_MASK; 
 		if (!cs->hw.njet.base) {
 			printk(KERN_WARNING "NETjet: No IO-Adr for PCI card found\n");
@@ -1120,41 +1138,6 @@ setup_netjet(struct IsdnCard *card)
 		printk(KERN_WARNING "NETjet: No PCI card found\n");
 		return(0);
 	}
-#else
-	found = 0;
-	for (; pci_index < 0xff; pci_index++) {
-		if (pcibios_find_device(PCI_VENDOR_TRAVERSE_TECH,
-			PCI_NETJET_ID, pci_index, &pci_bus, &pci_device_fn)
-			== PCIBIOS_SUCCESSFUL)
-			found = 1;
-		else
-			continue;
-		/* get IRQ */
-		pcibios_read_config_byte(pci_bus, pci_device_fn,
-			PCI_INTERRUPT_LINE, &pci_irq);
-
-		/* get IO address */
-		pcibios_read_config_dword(pci_bus, pci_device_fn,
-			PCI_BASE_ADDRESS_0, &pci_ioaddr);
-		if (found)
-			break;
-	}
-	if (!found) {
-		printk(KERN_WARNING "NETjet: No PCI card found\n");
-		return(0);
-	}
-	pci_index++;
-	if (!pci_irq) {
-		printk(KERN_WARNING "NETjet: No IRQ for PCI card found\n");
-		return(0);
-	}
-	if (!pci_ioaddr) {
-		printk(KERN_WARNING "NETjet: No IO-Adr for PCI card found\n");
-		return(0);
-	}
-	cs->hw.njet.base = pci_ioaddr & PCI_BASE_ADDRESS_IO_MASK; 
-	cs->irq = pci_irq;
-#endif /* COMPAT_HAS_NEW_PCI */
 	cs->hw.njet.auxa = cs->hw.njet.base + NETJET_AUXDATA;
 	cs->hw.njet.isac = cs->hw.njet.base | NETJET_ISAC_OFF;
 	bytecnt = 256;

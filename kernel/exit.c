@@ -402,6 +402,7 @@ fake_volatile:
 #ifdef CONFIG_BSD_PROCESS_ACCT
 	acct_process(code);
 #endif
+	task_lock(tsk);
 	sem_exit();
 	__exit_mm(tsk);
 #if CONFIG_AP1000
@@ -414,6 +415,7 @@ fake_volatile:
 	tsk->state = TASK_ZOMBIE;
 	tsk->exit_code = code;
 	exit_notify();
+	task_unlock(tsk);
 #ifdef DEBUG_PROC_TREE
 	audit_ptree();
 #endif

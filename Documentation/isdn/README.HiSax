@@ -63,6 +63,7 @@ Berkom Telekom A4T
 Scitel Quadro
 Gazel ISDN cards
 HFC-PCI based cards
+Winbond W6692 based cards
 
 Note: PCF, PCF-Pro: up to now, only the ISDN part is supported
       PCC-8: not tested yet
@@ -182,6 +183,7 @@ Card types:
    34	Gazel ISDN cards (ISA)   irq,io
    34	Gazel ISDN cards (PCI)   none
    35	HFC 2BDS0 PCI            none
+   36	W6692 based PCI cards    none
 
 
 At the moment IRQ sharing is only possible with PCI cards. Please make sure
@@ -285,6 +287,7 @@ type
    34	Gazel ISDN cards (ISA)  pa=irq, pb=io
    34	Gazel ISDN cards (PCI)  no parameter
    35	HFC 2BDS0 PCI           no parameter
+   36	W6692 based PCI cards   none
 
 Running the driver
 ------------------
@@ -425,6 +428,7 @@ Special thanks to:
 	Klaus Lichtenwalder (Klaus.Lichtenwalder@WebForum.DE), for ELSA PCMCIA support
 	Enrik Berkhan (enrik@starfleet.inka.de) for S0BOX specific stuff
 	Ton van Rosmalen for Teles PCI
+	Petr Novak <petr.novak@i.cz> for Winbond W6692 support
         and more people who are hunting bugs. (If I forgot somebody, please
 	send me a mail).
 

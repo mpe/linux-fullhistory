@@ -37,9 +37,6 @@
 #include "isdnl1.h"
 #include "ipac.h"
 #include <linux/pci.h>
-#ifndef COMPAT_HAS_NEW_PCI
-#include <linux/bios32.h>
-#endif
 
 extern const char *CardType[];
 const char *gazel_revision = "$Revision: 2.6 $";
@@ -573,11 +570,7 @@ setup_gazelisa(struct IsdnCard *card, struct IsdnCardState *cs)
 	return (0);
 }
 
-#ifdef COMPAT_HAS_NEW_PCI
 static struct pci_dev *dev_tel __initdata = NULL;
-#else
-static  int pci_index __initdata = 0;
-#endif
 
 static int
 setup_gazelpci(struct IsdnCardState *cs)
@@ -589,42 +582,19 @@ setup_gazelpci(struct IsdnCardState *cs)
 	printk(KERN_WARNING "Gazel: PCI card automatic recognition\n");
 
 	found = 0;
-#ifdef COMPAT_HAS_NEW_PCI
 	if (!pci_present()) {
 		printk(KERN_WARNING "Gazel: No PCI bus present\n");
 		return 1;
 	}
-#endif
 	seekcard = GAZEL_R685;
 	for (nbseek = 0; nbseek < 3; nbseek++) {
-#ifdef COMPAT_HAS_NEW_PCI
 		if ((dev_tel = pci_find_device(GAZEL_MANUFACTURER, seekcard, dev_tel))) {
 
 			pci_irq = dev_tel->irq;
-			pci_ioaddr0 = get_pcibase(dev_tel, 1);
-			pci_ioaddr1 = get_pcibase(dev_tel, 2);
+			pci_ioaddr0 = dev_tel->resource[ 1].start;
+			pci_ioaddr1 = dev_tel->resource[ 2].start;
 			found = 1;
 		}
-#else
-		for (; pci_index < 0xff; pci_index++) {
-			u_char pci_bus, pci_device_fn;
-			
-			if (pcibios_find_device(GAZEL_MANUFACTURER, seekcard,
-				pci_index, &pci_bus, &pci_device_fn)
-				!= PCIBIOS_SUCCESSFUL)
-				break;
-			/* get IRQ */
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-				PCI_INTERRUPT_LINE, &pci_irq);
-			/* get IO address */
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-				PCI_BASE_ADDRESS_1, &pci_ioaddr0);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-				PCI_BASE_ADDRESS_2, &pci_ioaddr1);
-			found = 1;
-			break;
-		}
-#endif /* COMPAT_HAS_NEW_PCI */
 		if (found)
 			break;
 		else {
@@ -636,9 +606,6 @@ setup_gazelpci(struct IsdnCardState *cs)
 					seekcard = GAZEL_DJINN_ITOO;
 					break;
 			}
-#ifndef COMPAT_HAS_NEW_PCI
-			pci_index = 0;
-#endif
 		}
 	}
 	if (!found) {
@@ -690,8 +657,8 @@ setup_gazelpci(struct IsdnCardState *cs)
 	return (0);
 }
 
-int __init
-	   setup_gazel(struct IsdnCard *card)
+__initfunc(int
+	   setup_gazel(struct IsdnCard *card))
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

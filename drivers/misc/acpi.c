@@ -917,7 +917,7 @@ static int __init acpi_init(void)
 			   acpi_irq,
 			   SA_INTERRUPT | SA_SHIRQ,
 			   "acpi",
-			   NULL)) {
+			   acpi_facp)) {
 		printk(KERN_ERR "ACPI: SCI (IRQ%d) allocation failed\n",
 		       acpi_facp->sci_int);
 		acpi_destroy_tables();
@@ -956,7 +956,7 @@ static void __exit acpi_exit(void)
 	acpi_release_ioports(acpi_facp);
 
 	if (acpi_facp->sci_int)
-		free_irq(acpi_facp->sci_int, NULL);
+		free_irq(acpi_facp->sci_int, acpi_facp);
 
 	acpi_destroy_tables();
 }

@@ -179,6 +179,11 @@ struct proc_dir_entry {
 extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
 				off_t offset, int length, int inout);
 
+#define PROC_INODE_PROPER(inode) ((inode)->i_ino & ~0xffff)
+#define PROC_INODE_OPENPROM(inode) \
+	((inode->i_ino >= PROC_OPENPROM_FIRST) \
+	    && (inode->i_ino < PROC_OPENPROM_FIRST + PROC_NOPENPROM))
+
 #ifdef CONFIG_PROC_FS
 
 extern struct proc_dir_entry proc_root;
@@ -193,6 +198,7 @@ extern struct proc_dir_entry *proc_mca;
 extern struct proc_dir_entry *proc_bus;
 extern struct proc_dir_entry *proc_sysvipc;
 extern struct proc_dir_entry *proc_root_driver;
+extern struct proc_dir_entry proc_root_kcore;
 
 extern struct inode_operations proc_scsi_inode_operations;
 
@@ -292,7 +298,6 @@ extern struct inode * proc_get_inode(struct super_block *, int, struct proc_dir_
 extern int proc_statfs(struct super_block *, struct statfs *, int);
 extern void proc_read_inode(struct inode *);
 extern void proc_write_inode(struct inode *);
-extern int proc_permission(struct inode *, int);
 
 extern int proc_match(int, const char *,struct proc_dir_entry *);
 

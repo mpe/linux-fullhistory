@@ -86,9 +86,7 @@ int pcbit_init_dev(int board, int mem_base, int irq)
 
 	dev_pcbit[board] = dev;
 	memset(dev, 0, sizeof(struct pcbit_dev));
-#ifdef COMPAT_HAS_NEW_WAITQ
 	init_waitqueue_head(&dev->set_running_wq);
-#endif
 
 	if (mem_base >= 0xA0000 && mem_base <= 0xFFFFF )
 		dev->sh_mem = (unsigned char*) mem_base;
@@ -593,20 +591,6 @@ void pcbit_l3_receive(struct pcbit_dev * dev, ulong msg,
 		       dev->b1->s_refnum, 
 		       dev->b2->s_refnum);
 #endif
-#if 0	
-		if (dev->b1->s_refnum == refnum)
-			chan = dev->b1;
-		else { 
-		   
-			if (dev->b2->s_refnum == refnum)
-				chan = dev->b2;
-			else {
-				chan = NULL;
-				printk(KERN_WARNING "Connection Confirm - refnum doesn't match chan\n");
-				break;
-			}
-		}
-#else
 		/* We just try to find a channel in the right state */
 
 		if (dev->b1->fsm_state == ST_CALL_INIT)
@@ -620,7 +604,6 @@ void pcbit_l3_receive(struct pcbit_dev * dev, ulong msg,
 				break;
 			}
 		}
-#endif
 		if (capi_decode_conn_conf(chan, skb, &complete)) {
 			printk(KERN_DEBUG "conn_conf indicates error\n");
 			pcbit_fsm_event(dev, chan, EV_ERROR, NULL);

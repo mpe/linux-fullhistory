@@ -1,4 +1,4 @@
-/* $Id: isdn_v110.c,v 1.2 1998/02/22 19:44:25 fritz Exp $
+/* $Id: isdn_v110.c,v 1.3 1999/10/30 09:49:28 keil Exp $
 
  * Linux ISDN subsystem, V.110 related functions (linklevel).
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_v110.c,v $
+ * Revision 1.3  1999/10/30 09:49:28  keil
+ * Reinit of v110 structs
+ *
  * Revision 1.2  1998/02/22 19:44:25  fritz
  * Bugfixes and improvements regarding V.110, V.110 now running.
  *
@@ -36,7 +39,7 @@
 
 #undef ISDN_V110_DEBUG
 
-char *isdn_v110_revision = "$Revision: 1.2 $";
+char *isdn_v110_revision = "$Revision: 1.3 $";
 
 #define V110_38400 255
 #define V110_19200  15
@@ -148,21 +151,13 @@ isdn_v110_open(unsigned char key, int hdrlen, int maxsize)
 }
 
 /* isdn_v110_close frees private V.110 data structures */
-static void
+void
 isdn_v110_close(isdn_v110_stream * v)
 {
 	if (v == NULL)
 		return;
 #ifdef ISDN_V110_DEBUG
 	printk(KERN_DEBUG "v110 close\n");
-#if 0
-	printk(KERN_DEBUG "isdn_v110_close: nbytes=%d\n", v->nbytes);
-	printk(KERN_DEBUG "isdn_v110_close: nbits=%d\n", v->nbits);
-	printk(KERN_DEBUG "isdn_v110_close: key=%d\n", v->key);
-	printk(KERN_DEBUG "isdn_v110_close: SyncInit=%d\n", v->SyncInit);
-	printk(KERN_DEBUG "isdn_v110:close: decodelen=%d\n", v->decodelen);
-	printk(KERN_DEBUG "isdn_v110_close: framelen=%d\n", v->framelen);
-#endif
 #endif
 	kfree(v->encodebuf);
 	kfree(v);

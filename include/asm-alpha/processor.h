@@ -126,6 +126,49 @@ extern long kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 #define release_segments(mm)		do { } while (0)
 #define forget_segments()		do { } while (0)
 
+/*
+ * These bracket the sleeping functions..
+ */
+extern void scheduling_functions_start_here(void);
+extern void scheduling_functions_end_here(void);
+#define first_sched	((unsigned long) scheduling_functions_start_here)
+#define last_sched	((unsigned long) scheduling_functions_end_here)
+
+static inline unsigned long get_wchan(struct task_struct *p)
+{
+	unsigned long schedule_frame;
+	unsigned long pc;
+	if (!p || p == current || p->state == TASK_RUNNING)
+		return 0;
+	/*
+	 * This one depends on the frame size of schedule().  Do a
+	 * "disass schedule" in gdb to find the frame size.  Also, the
+	 * code assumes that sleep_on() follows immediately after
+	 * interruptible_sleep_on() and that add_timer() follows
+	 * immediately after interruptible_sleep().  Ugly, isn't it?
+	 * Maybe adding a wchan field to task_struct would be better,
+	 * after all...
+	 */
+
+	pc = thread_saved_pc(&p->thread);
+	if (pc >= first_sched && pc < last_sched) {
+		schedule_frame = ((unsigned long *)p->thread.ksp)[6];
+		return ((unsigned long *)schedule_frame)[12];
+	}
+	return pc;
+}
+#undef last_sched
+#undef first_sched
+
+/*
+* See arch/alpha/kernel/ptrace.c for details.
+*/
+#define PT_REG(reg)		(PAGE_SIZE - sizeof(struct pt_regs)	\
+				 + (long)&((struct pt_regs *)0)->reg)
+#define KSTK_EIP(tsk) \
+    (*(unsigned long *)(PT_REG(pc) + PAGE_SIZE + (unsigned long)(tsk)))
+#define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->thread.usp)
+
 /* NOTE: The task struct and the stack go together!  */
 #define alloc_task_struct() \
         ((struct task_struct *) __get_free_pages(GFP_KERNEL,1))

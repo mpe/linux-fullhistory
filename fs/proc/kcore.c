@@ -5,6 +5,7 @@
  *	Jeremy Fitzhardinge <jeremy@sw.oz.au>
  *	Implemented by David Howells <David.Howells@nexor.co.uk>
  *	Modified and incorporated into 2.3.x by Tigran Aivazian <tigran@sco.com>
+ *	Support to dump module's data structures (ELF only), Tigran Aivazian <tigran@sco.com>
  */
 
 #include <linux/config.h>
@@ -14,6 +15,8 @@
 #include <linux/a.out.h>
 #include <linux/elf.h>
 #include <linux/elfcore.h>
+#include <linux/module.h>
+#include <linux/proc_fs.h>
 #include <asm/uaccess.h>
 
 #ifdef CONFIG_KCORE_AOUT
@@ -262,7 +265,7 @@ ssize_t read_kcore(struct file *file, char *buffer, size_t buflen,
 	char *page;
 
 	/* work out how much file we allow to be read */
-	size = ((size_t)high_memory - PAGE_OFFSET) + PAGE_SIZE;
+	proc_root_kcore.size = size = get_kcore_size();
 	acc = 0;
 
 	/* see if file pointer already beyond EOF */

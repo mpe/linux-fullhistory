@@ -1,4 +1,4 @@
-/* $Id: sedlbauer.c,v 1.16 1999/08/29 18:23:01 niemann Exp $
+/* $Id: sedlbauer.c,v 1.17 1999/09/04 06:20:06 keil Exp $
 
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
@@ -17,6 +17,9 @@
  *            Edgar Toernig
  *
  * $Log: sedlbauer.c,v $
+ * Revision 1.17  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.16  1999/08/29 18:23:01  niemann
  * Fixed typo in errormsg
  *
@@ -100,13 +103,10 @@
 #include "isar.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
-#ifndef COMPAT_HAS_NEW_PCI
-#include <linux/bios32.h>
-#endif
 
 extern const char *CardType[];
 
-const char *Sedlbauer_revision = "$Revision: 1.16 $";
+const char *Sedlbauer_revision = "$Revision: 1.17 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed card/win", "speed star", "speed fax+", 
@@ -474,10 +474,10 @@ reset_sedlbauer(struct IsdnCardState *cs)
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_POTA2, 0x20);
 			save_flags(flags);
 			sti();
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_POTA2, 0x0);
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_CONF, 0x0);
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_ACFG, 0xff);
@@ -489,10 +489,10 @@ reset_sedlbauer(struct IsdnCardState *cs)
 			byteout(cs->hw.sedl.reset_on, SEDL_RESET);	/* Reset On */
 			save_flags(flags);
 			sti();
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			byteout(cs->hw.sedl.reset_off, 0);	/* Reset Off */
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			restore_flags(flags);
 		}
@@ -542,15 +542,11 @@ Sedl_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 }
 
 #ifdef SEDLBAUER_PCI
-#ifdef COMPAT_HAS_NEW_PCI
 static 	struct pci_dev *dev_sedl __initdata = NULL;
-#else
-static  int pci_index __initdata = 0;
-#endif
 #endif
 
-int __init
-setup_sedlbauer(struct IsdnCard *card)
+__initfunc(int
+setup_sedlbauer(struct IsdnCard *card))
 {
 	int bytecnt, ver, val;
 	struct IsdnCardState *cs = card->cs;
@@ -585,7 +581,6 @@ setup_sedlbauer(struct IsdnCard *card)
 /* Probe for Sedlbauer speed pci */
 #if SEDLBAUER_PCI
 #if CONFIG_PCI
-#ifdef COMPAT_HAS_NEW_PCI
 		if (!pci_present()) {
 			printk(KERN_ERR "Sedlbauer: no PCI bus present\n");
 			return(0);
@@ -597,41 +592,12 @@ setup_sedlbauer(struct IsdnCard *card)
 				printk(KERN_WARNING "Sedlbauer: No IRQ for PCI card found\n");
 				return(0);
 			}
-			cs->hw.sedl.cfg_reg = get_pcibase(dev_sedl, 0) &
+			cs->hw.sedl.cfg_reg = dev_sedl->resource[ 0].start &
 				PCI_BASE_ADDRESS_IO_MASK; 
 		} else {
 			printk(KERN_WARNING "Sedlbauer: No PCI card found\n");
 			return(0);
 		}
-#else
-		for (; pci_index < 255; pci_index++) {
-			unsigned char pci_bus, pci_device_fn;
-			unsigned int ioaddr;
-			unsigned char irq;
-
-			if (pcibios_find_device (PCI_VENDOR_SEDLBAUER,
-						PCI_SPEEDPCI_ID, pci_index,
-						&pci_bus, &pci_device_fn) != 0) {
-				continue;
-			}
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-					PCI_INTERRUPT_LINE, &irq);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_0, &ioaddr);
-			cs->irq = irq;
-			cs->hw.sedl.cfg_reg = ioaddr & PCI_BASE_ADDRESS_IO_MASK; 
-			if (!cs->hw.sedl.cfg_reg) {
-				printk(KERN_WARNING "Sedlbauer: No IO-Adr for PCI card found\n");
-				return(0);
-			}
-			break;
-		}	
-		if (pci_index == 255) {
-			printk(KERN_WARNING "Sedlbauer: No PCI card found\n");
-			return(0);
-		}
-		pci_index++;
-#endif /* COMPAT_HAS_NEW_PCI */
 		 cs->irq_flags |= SA_SHIRQ;
 		cs->hw.sedl.bus = SEDL_BUS_PCI;
 		cs->hw.sedl.chip = SEDL_CHIP_IPAC;

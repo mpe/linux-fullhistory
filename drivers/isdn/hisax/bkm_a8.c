@@ -1,4 +1,4 @@
-/* $Id: bkm_a8.c,v 1.7 1999/08/22 20:26:58 calle Exp $
+/* $Id: bkm_a8.c,v 1.8 1999/09/04 06:20:05 keil Exp $
  * bkm_a8.c     low level stuff for Scitel Quadro (4*S0, passive)
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -7,6 +7,9 @@
  * Author       Roland Klabunde (R.Klabunde@Berkom.de)
  *
  * $Log: bkm_a8.c,v $
+ * Revision 1.8  1999/09/04 06:20:05  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.7  1999/08/22 20:26:58  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -41,15 +44,12 @@
 #include "isdnl1.h"
 #include "bkm_ax.h"
 #include <linux/pci.h>
-#ifndef COMPAT_HAS_NEW_PCI
-#include <linux/bios32.h>
-#endif
 
 #define	ATTEMPT_PCI_REMAPPING	/* Required for PLX rev 1 */
 
 extern const char *CardType[];
 
-const char sct_quadro_revision[] = "$Revision: 1.7 $";
+const char sct_quadro_revision[] = "$Revision: 1.8 $";
 
 /* To survive the startup phase */
 typedef struct {
@@ -298,13 +298,13 @@ reset_bkm(struct IsdnCardState *cs)
 
 			save_flags(flags);
 			sti();
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout((10 * HZ) / 1000);
 
 			/* Remove the soft reset */
 			wordout(cs->hw.ax.plx_adr + 0x50, (wordin(cs->hw.ax.plx_adr + 0x50) | 4));
 
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout((10 * HZ) / 1000);
 			restore_flags(flags);
 		}
@@ -341,14 +341,10 @@ BKM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return (0);
 }
 
-#ifdef COMPAT_HAS_NEW_PCI
 static struct pci_dev *dev_a8 __initdata = NULL;
-#else
-static int pci_index __initdata = 0;
-#endif
 
-int __init
-	   setup_sct_quadro(struct IsdnCard *card)
+__initfunc(int
+	   setup_sct_quadro(struct IsdnCard *card))
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];
@@ -372,7 +368,6 @@ int __init
 		printk(KERN_WARNING "HiSax: %s: Invalid subcontroller in configuration, default to 1\n",
 		       CardType[card->typ]);
 #if CONFIG_PCI
-#ifdef COMPAT_HAS_NEW_PCI
 	if (!pci_present()) {
 		printk(KERN_ERR "bkm_a4t: no PCI bus present\n");
 		return (0);
@@ -384,46 +379,18 @@ int __init
 			&sub_sys_id);
 		if (sub_sys_id == ((SCT_SUBSYS_ID << 16) | SCT_SUBVEN_ID)) {
 			found = 1;
-			pci_ioaddr1 = get_pcibase(dev_a8, 1);
+			pci_ioaddr1 = dev_a8->resource[ 1].start;
 			pci_irq = dev_a8->irq;
 			pci_bus = dev_a8->bus->number;
 			pci_device_fn = dev_a8->devfn;
 		}
 	}
-#else
-	for (; pci_index < 0xff; pci_index++) {
-		if (pcibios_find_device(
-				PLX_VENDOR_ID,
-				PLX_DEVICE_ID,
-				pci_index,
-				&pci_bus,
-				&pci_device_fn) == PCIBIOS_SUCCESSFUL) {
-			
-			u_int sub_sys_id = 0;
-
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-				PCI_SUBSYSTEM_VENDOR_ID, &sub_sys_id);
-			if (sub_sys_id == ((SCT_SUBSYS_ID << 16) | SCT_SUBVEN_ID)) {
-				found = 1;
-				pcibios_read_config_byte(pci_bus, pci_device_fn,
-					PCI_INTERRUPT_LINE, &pci_irq);
-				pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_1, &pci_ioaddr1);
-				cs->irq = pci_irq;
-				break;
-			}
-		}
-	}
-#endif /* COMPAT_HAS_NEW_PCI */
 	if (!found) {
 		printk(KERN_WARNING "HiSax: %s (%s): Card not found\n",
 		       CardType[card->typ],
 		       sct_quadro_subtypes[cs->subtyp]);
 		return (0);
 	}
-#ifndef COMPAT_HAS_NEW_PCI
-	pci_index++; /* need for more as one card */
-#endif
 	if (!pci_irq) {		/* IRQ range check ?? */
 		printk(KERN_WARNING "HiSax: %s (%s): No IRQ\n",
 		       CardType[card->typ],
@@ -445,9 +412,7 @@ int __init
 		pci_ioaddr1 &= PCI_BASE_ADDRESS_IO_MASK;
 		pcibios_write_config_dword(pci_bus, pci_device_fn,
 			PCI_BASE_ADDRESS_1, pci_ioaddr1);
-#ifdef COMPAT_HAS_NEW_PCI
-		get_pcibase(dev_a8, 1) = pci_ioaddr1;
-#endif /* COMPAT_HAS_NEW_PCI */
+		dev_a8->resource[ 1].start = pci_ioaddr1;
 	}
 /* End HACK */
 #endif

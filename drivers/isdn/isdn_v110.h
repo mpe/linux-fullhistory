@@ -1,4 +1,4 @@
-/* $Id: isdn_v110.h,v 1.1 1998/02/20 17:32:11 fritz Exp $
+/* $Id: isdn_v110.h,v 1.2 1999/10/30 09:49:28 keil Exp $
 
  * Linux ISDN subsystem, V.110 related functions (linklevel).
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_v110.h,v $
+ * Revision 1.2  1999/10/30 09:49:28  keil
+ * Reinit of v110 structs
+ *
  * Revision 1.1  1998/02/20 17:32:11  fritz
  * First checkin (not yet completely functionable).
  *
@@ -41,5 +44,6 @@ extern struct sk_buff *isdn_v110_encode(isdn_v110_stream *, struct sk_buff *);
 extern struct sk_buff *isdn_v110_decode(isdn_v110_stream *, struct sk_buff *);
 
 extern int isdn_v110_stat_callback(int, isdn_ctrl *);
+extern void isdn_v110_close(isdn_v110_stream * v);
 
 #endif

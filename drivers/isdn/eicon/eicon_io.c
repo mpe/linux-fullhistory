@@ -1,4 +1,4 @@
-/* $Id: eicon_io.c,v 1.4 1999/08/22 20:26:47 calle Exp $
+/* $Id: eicon_io.c,v 1.8 1999/10/08 22:09:34 armin Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  * Code for communicating with hardware.
@@ -24,6 +24,20 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_io.c,v $
+ * Revision 1.8  1999/10/08 22:09:34  armin
+ * Some fixes of cards interface handling.
+ * Bugfix of NULL pointer occurence.
+ * Changed a few log outputs.
+ *
+ * Revision 1.7  1999/09/26 14:17:53  armin
+ * Improved debug and log via readstat()
+ *
+ * Revision 1.6  1999/09/21 20:35:43  armin
+ * added more error checking.
+ *
+ * Revision 1.5  1999/08/31 11:20:11  paul
+ * various spelling corrections (new checksums may be needed, Karsten!)
+ *
  * Revision 1.4  1999/08/22 20:26:47  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -51,19 +65,21 @@
 
 void
 eicon_io_rcv_dispatch(eicon_card *ccard) {
+	ulong flags;
         struct sk_buff *skb, *skb2, *skb_new;
         eicon_IND *ind, *ind2, *ind_new;
         eicon_chan *chan;
 
         if (!ccard) {
-		if (DebugVar & 1)
-	                printk(KERN_WARNING "eicon_io_rcv_dispatch: NULL card!\n");
+	        eicon_log(ccard, 1, "eicon_err: NULL card in rcv_dispatch !\n");
                 return;
         }
 
 	while((skb = skb_dequeue(&ccard->rcvq))) {
         	ind = (eicon_IND *)skb->data;
 
+		save_flags(flags);
+		cli();
         	if ((chan = ccard->IdTable[ind->IndId]) == NULL) {
 			if (DebugVar & 1) {
 				switch(ind->Ind) {
@@ -71,14 +87,16 @@ eicon_io_rcv_dispatch(eicon_card *ccard) {
 						/* doesn't matter if this happens */ 
 						break;
 					default: 
-						printk(KERN_ERR "idi: Indication for unknown channel Ind=%d Id=%x\n", ind->Ind, ind->IndId);
-						printk(KERN_DEBUG "idi_hdl: Ch??: Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
+						eicon_log(ccard, 1, "idi: Indication for unknown channel Ind=%d Id=%x\n", ind->Ind, ind->IndId);
+						eicon_log(ccard, 1, "idi_hdl: Ch??: Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
 							ind->Ind,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,ind->RBuffer.length);
 				}
 			}
+			restore_flags(flags);
 	                dev_kfree_skb(skb);
 	                continue;
 	        }
+		restore_flags(flags);
 
 		if (chan->e.complete) { /* check for rec-buffer chaining */
 			if (ind->MLength == ind->RBuffer.length) {
@@ -94,10 +112,12 @@ eicon_io_rcv_dispatch(eicon_card *ccard) {
 			}
 		}
 		else {
+			save_flags(flags);
+			cli();
 			if (!(skb2 = skb_dequeue(&chan->e.R))) {
 				chan->e.complete = 1;
-				if (DebugVar & 1)
-	                		printk(KERN_ERR "eicon: buffer incomplete, but 0 in queue\n");
+                		eicon_log(ccard, 1, "eicon: buffer incomplete, but 0 in queue\n");
+				restore_flags(flags);
 	                	dev_kfree_skb(skb);
 				continue;	
 			}
@@ -105,8 +125,8 @@ eicon_io_rcv_dispatch(eicon_card *ccard) {
 			skb_new = alloc_skb(((sizeof(eicon_IND)-1)+ind->RBuffer.length+ind2->RBuffer.length),
 					GFP_ATOMIC);
 			if (!skb_new) {
-				if (DebugVar & 1)
-	                		printk(KERN_ERR "eicon_io: skb_alloc failed in rcv_dispatch()\n");
+                		eicon_log(ccard, 1, "eicon_io: skb_alloc failed in rcv_dispatch()\n");
+				restore_flags(flags);
 	                	dev_kfree_skb(skb);
 	                	dev_kfree_skb(skb2);
 				continue;	
@@ -125,12 +145,14 @@ eicon_io_rcv_dispatch(eicon_card *ccard) {
                 	dev_kfree_skb(skb2);
 			if (ind->MLength == ind->RBuffer.length) {
 				chan->e.complete = 2;
+				restore_flags(flags);
 				idi_handle_ind(ccard, skb_new);
 				continue;
 			}
 			else {
 				chan->e.complete = 0;
 				skb_queue_tail(&chan->e.R, skb_new);
+				restore_flags(flags);
 				continue;
 			}
 		}
@@ -142,8 +164,7 @@ eicon_io_ack_dispatch(eicon_card *ccard) {
         struct sk_buff *skb;
 
         if (!ccard) {
-		if (DebugVar & 1)
-			printk(KERN_WARNING "eicon_io_ack_dispatch: NULL card!\n");
+		eicon_log(ccard, 1, "eicon_err: NULL card in ack_dispatch!\n");
                 return;
         }
 	while((skb = skb_dequeue(&ccard->rackq))) {
@@ -399,13 +420,13 @@ eicon_io_transmit(eicon_card *ccard) {
 	int scom = 0;
 	int tmp = 0;
 	int quloop = 1;
+	int dlev = 0;
 
 	pci_card = &ccard->hwif.pci;
 	isa_card = &ccard->hwif.isa;
 
         if (!ccard) {
-		if (DebugVar & 1)
-                	printk(KERN_WARNING "eicon_transmit: NULL card!\n");
+               	eicon_log(ccard, 1, "eicon_transmit: NULL card!\n");
                 return;
         }
 
@@ -438,7 +459,7 @@ eicon_io_transmit(eicon_card *ccard) {
 			prram = 0;
 			break;
 		default:
-                	printk(KERN_WARNING "eicon_transmit: unsupported card-type!\n");
+                	eicon_log(ccard, 1, "eicon_transmit: unsupported card-type!\n");
 			return;
 	}
 
@@ -457,16 +478,14 @@ eicon_io_transmit(eicon_card *ccard) {
 				}
         	                restore_flags(flags);
                 	        skb_queue_head(&ccard->sndq, skb2);
-				if (DebugVar & 32)
-        	                	printk(KERN_INFO "eicon: transmit: Card not ready\n");
+       	                	eicon_log(ccard, 32, "eicon: transmit: Card not ready\n");
 	                        return;
 			}
 		} else {
 	                if (!(ram_inb(ccard, &prram->ReqOutput) - ram_inb(ccard, &prram->ReqInput))) {
         	                restore_flags(flags);
                 	        skb_queue_head(&ccard->sndq, skb2);
-				if (DebugVar & 32)
-        	                	printk(KERN_INFO "eicon: transmit: Card not ready\n");
+       	                	eicon_log(ccard, 32, "eicon: transmit: Card not ready\n");
 	                        return;
         	        }
 		}
@@ -479,8 +498,7 @@ eicon_io_transmit(eicon_card *ccard) {
 		  cli();
 		  reqbuf = (eicon_REQ *)skb->data;
 		  if ((reqbuf->Reference) && (chan->e.B2Id == 0) && (reqbuf->ReqId & 0x1f)) {
-			if (DebugVar & 16)
-				printk(KERN_WARNING "eicon: transmit: error Id=0 on %d (Net)\n", chan->No); 
+			eicon_log(ccard, 16, "eicon: transmit: error Id=0 on %d (Net)\n", chan->No); 
 		  } else {
 			if (scom) {
 				ram_outw(ccard, &com->XBuffer.length, reqbuf->XBuffer.length);
@@ -495,7 +513,7 @@ eicon_io_transmit(eicon_card *ccard) {
 				ram_outb(ccard, &ReqOut->ReqCh, reqbuf->ReqCh);
 				ram_outb(ccard, &ReqOut->Req, reqbuf->Req); 
 			}
-
+			dlev = 160;
 			if (reqbuf->ReqId & 0x1f) { /* if this is no ASSIGN */
 
 				if (!reqbuf->Reference) { /* Signal Layer */
@@ -517,6 +535,7 @@ eicon_io_transmit(eicon_card *ccard) {
 					   ((reqbuf->Req & 0x0f) == 0x01)) { /* Send Data */
 						chan->waitq = reqbuf->XBuffer.length;
 						chan->waitpq += reqbuf->XBuffer.length;
+						dlev = 128;
 					}
 				}
 
@@ -544,13 +563,12 @@ eicon_io_transmit(eicon_card *ccard) {
 			else
 				ram_outw(ccard, &prram->NextReq, ram_inw(ccard, &ReqOut->next)); 
 
-			chan->e.busy = 1; 
-			if (DebugVar & 32)
-	                	printk(KERN_DEBUG "eicon: Req=%d Id=%x Ch=%d Len=%d Ref=%d\n", 
-							reqbuf->Req, 
-							ram_inb(ccard, &ReqOut->ReqId),
-							reqbuf->ReqCh, reqbuf->XBuffer.length,
-							chan->e.ref); 
+			chan->e.busy = 1;
+	               	eicon_log(ccard, dlev, "eicon: Req=%d Id=%x Ch=%d Len=%d Ref=%d\n", 
+					reqbuf->Req, 
+					ram_inb(ccard, &ReqOut->ReqId),
+					reqbuf->ReqCh, reqbuf->XBuffer.length,
+					chan->e.ref); 
 		  }
 		  restore_flags(flags);
 		  dev_kfree_skb(skb);
@@ -559,8 +577,7 @@ eicon_io_transmit(eicon_card *ccard) {
 		} 
 		else {
 		skb_queue_tail(&ccard->sackq, skb2);
-		if (DebugVar & 32)
-                	printk(KERN_INFO "eicon: transmit: busy chan %d\n", chan->No); 
+               	eicon_log(ccard, 128, "eicon: transmit: busy chan %d\n", chan->No); 
 		}
 
 		if (scom)
@@ -601,10 +618,11 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 	unsigned char *irqprobe = 0;
 	int scom = 0;
 	int tmp = 0;
+	int dlev = 0;
 
 
         if (!ccard) {
-                printk(KERN_WARNING "eicon_irq: spurious interrupt %d\n", irq);
+                eicon_log(ccard, 1, "eicon_irq: spurious interrupt %d\n", irq);
                 return;
         }
 
@@ -656,7 +674,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 			prram = 0;
 			break;
 		default:
-                	printk(KERN_WARNING "eicon_irq: unsupported card-type!\n");
+                	eicon_log(ccard, 1, "eicon_irq: unsupported card-type!\n");
 			return;
 	}
 
@@ -706,24 +724,21 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 		case EICON_CTYPE_QUADRO:
 		case EICON_CTYPE_S2M:
 			if (!(readb(isa_card->intack))) { /* card did not interrupt */
-				if (DebugVar & 1)
-					printk(KERN_DEBUG "eicon: IRQ: card tells no interrupt!\n");
+				eicon_log(ccard, 1, "eicon: IRQ: card reports no interrupt!\n");
 				return;
 			} 
 			break;
 #endif
 		case EICON_CTYPE_MAESTRAP:
 			if (!(readb(&ram[0x3fe]))) { /* card did not interrupt */
-				if (DebugVar & 1)
-					printk(KERN_DEBUG "eicon: IRQ: card tells no interrupt!\n");
+				eicon_log(ccard, 1, "eicon: IRQ: card reports no interrupt!\n");
 				return;
 			} 
 			break;
 		case EICON_CTYPE_MAESTRA:
 			outw(0x3fe, pci_card->PCIreg + M_ADDR);
 			if (!(inb(pci_card->PCIreg + M_DATA))) { /* card did not interrupt */
-				if (DebugVar & 1)
-					printk(KERN_DEBUG "eicon: IRQ: card tells no interrupt!\n");
+				eicon_log(ccard, 1, "eicon: IRQ: card reports no interrupt!\n");
 				return;
 			} 
 			break;
@@ -735,8 +750,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 	if ((tmp = ram_inb(ccard, &com->Rc))) {
 		eicon_RC *ack;
 		if (tmp == READY_INT) {
-			if (DebugVar & 64)
-                        	printk(KERN_INFO "eicon: IRQ Rc=READY_INT\n");
+                       	eicon_log(ccard, 64, "eicon: IRQ Rc=READY_INT\n");
 			if (ccard->ReadyInt) {
 				ccard->ReadyInt--;
 				ram_outb(ccard, &com->Rc, 0);
@@ -744,17 +758,15 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 		} else {
 			skb = alloc_skb(sizeof(eicon_RC), GFP_ATOMIC);
 			if (!skb) {
-				if (DebugVar & 1)
-	                		printk(KERN_ERR "eicon_io: skb_alloc failed in _irq()\n");
+                		eicon_log(ccard, 1, "eicon_io: skb_alloc failed in _irq()\n");
 			} else {
 				ack = (eicon_RC *)skb_put(skb, sizeof(eicon_RC));
 				ack->Rc = tmp;
 				ack->RcId = ram_inb(ccard, &com->RcId);
 				ack->RcCh = ram_inb(ccard, &com->RcCh);
 				ack->Reference = ccard->ref_in++;
-				if (DebugVar & 64)
-                	        	printk(KERN_INFO "eicon: IRQ Rc=%d Id=%x Ch=%d Ref=%d\n",
-						tmp,ack->RcId,ack->RcCh,ack->Reference);
+               	        	eicon_log(ccard, 128, "eicon: IRQ Rc=%d Id=%x Ch=%d Ref=%d\n",
+					tmp,ack->RcId,ack->RcCh,ack->Reference);
 				skb_queue_tail(&ccard->rackq, skb);
 				eicon_schedule_ack(ccard);
 			}
@@ -770,8 +782,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 			int len = ram_inw(ccard, &com->RBuffer.length);
 			skb = alloc_skb((sizeof(eicon_IND) + len - 1), GFP_ATOMIC);
 			if (!skb) {
-				if (DebugVar & 1)
-	                		printk(KERN_ERR "eicon_io: skb_alloc failed in _irq()\n");
+                		eicon_log(ccard, 1, "eicon_io: skb_alloc failed in _irq()\n");
 			} else {
 				ind = (eicon_IND *)skb_put(skb, (sizeof(eicon_IND) + len - 1));
 				ind->Ind = tmp;
@@ -779,9 +790,12 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 				ind->IndCh = ram_inb(ccard, &com->IndCh);
 				ind->MInd  = ram_inb(ccard, &com->MInd);
 				ind->MLength = ram_inw(ccard, &com->MLength);
-				ind->RBuffer.length = len; 
-				if (DebugVar & 64)
-                        		printk(KERN_INFO "eicon: IRQ Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
+				ind->RBuffer.length = len;
+				if ((tmp == 1) || (tmp == 8))
+					dlev = 128;
+				else
+					dlev = 192;
+                       		eicon_log(ccard, dlev, "eicon: IRQ Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
 					tmp,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,len);
 				ram_copyfromcard(ccard, &ind->RBuffer.P, &com->RBuffer.P, len);
 				skb_queue_tail(&ccard->rcvq, skb);
@@ -804,17 +818,15 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
                         if((Rc=ram_inb(ccard, &RcIn->Rc))) {
 				skb = alloc_skb(sizeof(eicon_RC), GFP_ATOMIC);
 				if (!skb) {
-					if (DebugVar & 1)
-	                			printk(KERN_ERR "eicon_io: skb_alloc failed in _irq()\n");
+                			eicon_log(ccard, 1, "eicon_io: skb_alloc failed in _irq()\n");
 				} else {
 					ack = (eicon_RC *)skb_put(skb, sizeof(eicon_RC));
 					ack->Rc = Rc;
 					ack->RcId = ram_inb(ccard, &RcIn->RcId);
 					ack->RcCh = ram_inb(ccard, &RcIn->RcCh);
 					ack->Reference = ram_inw(ccard, &RcIn->Reference);
-					if (DebugVar & 64)
-	        	                	printk(KERN_INFO "eicon: IRQ Rc=%d Id=%x Ch=%d Ref=%d\n",
-							Rc,ack->RcId,ack->RcCh,ack->Reference);
+        	                	eicon_log(ccard, 128, "eicon: IRQ Rc=%d Id=%x Ch=%d Ref=%d\n",
+						Rc,ack->RcId,ack->RcCh,ack->Reference);
 					skb_queue_tail(&ccard->rackq, skb);
 					eicon_schedule_ack(ccard);
 				}
@@ -839,8 +851,7 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 				int len = ram_inw(ccard, &IndIn->RBuffer.length);
 				skb = alloc_skb((sizeof(eicon_IND) + len - 1), GFP_ATOMIC);
 				if (!skb) {
-					if (DebugVar & 1)
-	                			printk(KERN_ERR "eicon_io: skb_alloc failed in _irq()\n");
+                			eicon_log(ccard, 1, "eicon_io: skb_alloc failed in _irq()\n");
 				} else {
 					ind = (eicon_IND *)skb_put(skb, (sizeof(eicon_IND) + len - 1));
 					ind->Ind = Ind;
@@ -849,8 +860,11 @@ eicon_irq(int irq, void *dev_id, struct pt_regs *regs) {
 					ind->MInd  = ram_inb(ccard, &IndIn->MInd);
 					ind->MLength = ram_inw(ccard, &IndIn->MLength);
 					ind->RBuffer.length = len;
-					if (DebugVar & 64)
-	                	        	printk(KERN_INFO "eicon: IRQ Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
+					if ((Ind == 1) || (Ind == 8))
+						dlev = 128;
+					else
+						dlev = 192;
+                	        	eicon_log(ccard, dlev, "eicon: IRQ Ind=%d Id=%x Ch=%d MInd=%d MLen=%d Len=%d\n",
 						Ind,ind->IndId,ind->IndCh,ind->MInd,ind->MLength,len);
 	                                ram_copyfromcard(ccard, &ind->RBuffer.P, &IndIn->RBuffer.P, len);
 					skb_queue_tail(&ccard->rcvq, skb);

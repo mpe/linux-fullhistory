@@ -1,11 +1,20 @@
 /*
- * $Id: capi.c,v 1.19 1999/07/09 15:05:42 keil Exp $
+ * $Id: capi.c,v 1.21 1999/09/10 17:24:18 calle Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.21  1999/09/10 17:24:18  calle
+ * Changes for proposed standard for CAPI2.0:
+ * - AK148 "Linux Exention"
+ *
+ * Revision 1.20  1999/09/07 09:02:53  calle
+ * SETDATA removed. Now inside the kernel the datapart of DATA_B3_REQ and
+ * DATA_B3_IND is always directly after the CAPI message. The "Data" member
+ * ist never used inside the kernel.
+ *
  * Revision 1.19  1999/07/09 15:05:42  keil
  * compat.h is now isdn_compat.h
  *
@@ -117,7 +126,6 @@
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
 
-#include <linux/isdn_compat.h>
 #include "capiutil.h"
 #include "capicmd.h"
 #include "capidev.h"
@@ -201,9 +209,6 @@ static ssize_t capi_read(struct file *file, char *buf,
 		skb_queue_head(&cdev->recv_queue, skb);
 		return -EMSGSIZE;
 	}
-	if (CAPIMSG_COMMAND(skb->data) == CAPI_DATA_B3
-	    && CAPIMSG_SUBCOMMAND(skb->data) == CAPI_IND)
-		CAPIMSG_SETDATA(skb->data, buf + CAPIMSG_LEN(skb->data));
 	retval = copy_to_user(buf, skb->data, skb->len);
 	if (retval) {
 		skb_queue_head(&cdev->recv_queue, skb);
@@ -429,7 +434,7 @@ static int capi_ioctl(struct inode *inode, struct file *file,
 		return data.errcode;
 
 	case CAPI_INSTALLED:
-		if ((*capifuncs->capi_installed) ())
+		if ((*capifuncs->capi_isinstalled)() == CAPI_NOERROR)
 			return 0;
 		return -ENXIO;
 
@@ -615,16 +620,12 @@ static struct capi_interface_user cuser = {
 
 int capi_init(void)
 {
-#ifdef COMPAT_HAS_NEW_WAITQ
 	int j;
-#endif
 	
 	memset(capidevs, 0, sizeof(capidevs));
-#ifdef COMPAT_HAS_NEW_WAITQ
 	for ( j = 0; j < CAPI_MAXMINOR+1; j++ ) {
 		init_waitqueue_head(&capidevs[j].recv_wait);
 	}
-#endif
 
 	if (register_chrdev(capi_major, "capi20", &capi_fops)) {
 		printk(KERN_ERR "capi20: unable to get major %d\n", capi_major);

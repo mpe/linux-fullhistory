@@ -30,6 +30,8 @@ ISAR_OBJ :=
 HFC_OBJ :=
 HFC_2BDS0 :=
 JADE_OBJ :=
+W6692_OBJ :=
+
 ifeq ($(CONFIG_HISAX_16_0),y)
 	 O_OBJS += teles0.o
 	 ISAC_OBJ := isac.o
@@ -170,6 +172,10 @@ ifeq ($(CONFIG_HISAX_GAZEL),y)
 	 HSCX_OBJ := hscx.o
 endif
 
+ifeq ($(CONFIG_HISAX_W6692),y)
+	W6692_OBJ := w6692.o
+endif
+
 # ifeq ($(CONFIG_HISAX_TESTEMU),y)
 #	 O_OBJS += testemu.o
 # endif
@@ -179,7 +185,7 @@ ifeq ($(ISAC_OBJ), isac.o)
 endif
 
 O_OBJS += $(ISAC_OBJ) $(HSCX_OBJ) $(ISAR_OBJ) $(JADE_OBJ)
-O_OBJS += $(HFC_OBJ) $(HFC_2BDS0)
+O_OBJS += $(HFC_OBJ) $(HFC_2BDS0) $(W6692_OBJ)
 OX_OBJS += config.o
 
 O_TARGET :=
