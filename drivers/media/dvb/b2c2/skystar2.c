@@ -231,8 +231,8 @@ static void fixchipaddr(u32 device, u32 bus, u32 addr, u32 *ret)
 {
 	if (device == 0x20000000)
 		*ret = bus | ((addr >> 8) & 3);
-
-	*ret = bus;
+	else
+		*ret = bus;
 }
 
 static u32 flex_i2c_read(struct adapter *adapter, u32 device, u32 bus, u32 addr, u8 *buf, u32 len)
