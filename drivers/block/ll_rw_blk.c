@@ -274,7 +274,7 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	tmp->next = req;
 
 /* for SCSI devices, call request_fn unconditionally */
-	if (scsi_major(MAJOR(req->rq_dev)))
+	if (scsi_blk_major(MAJOR(req->rq_dev)))
 		(dev->request_fn)();
 
 	sti();

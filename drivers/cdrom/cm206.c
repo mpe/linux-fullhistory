@@ -98,7 +98,7 @@ History:
  * - Philips/LMS cm260 product specification
  *
  *                       David van Leeuwen, david@tm.tno.nl.  */
-#define VERSION "$Id: cm206.c,v 0.99 1996/04/14 20:26:26 david Exp david $"
+#define VERSION "$Id: cm206.c,v 0.99.1.1 1996/08/11 10:35:01 david Exp $"
 
 #include <linux/module.h>	
 
@@ -1086,7 +1086,7 @@ static struct cdrom_device_ops cm206_dops = {
   CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_MULTI_SESSION |
     CDC_MEDIA_CHANGED | CDC_MCN | CDC_PLAY_AUDIO, /* capability */
   0,				/* mask flags */
-  2.0,				/* maximum speed */
+  2,				/* maximum speed */
   1,				/* number of minor devices */
   1,				/* number of discs */
   0,				/* options, ignored */
@@ -1188,12 +1188,14 @@ int cm206_init(void)
   }
   else printk(" IRQ %d found\n", cm206_irq);
 #else
+  cli();
   reset_cm260();
   /* Now, the problem here is that reset_cm260 can generate an
      interrupt. It seems that this can cause a kernel oops some time
      later. So we wait a while and `service' this interrupt. */
   udelay(10);
   outw(dc_normal | READ_AHEAD, r_data_control);
+  sti();
   printk(" using IRQ %d\n", cm206_irq);
 #endif
   if (send_receive_polled(c_drive_configuration) != c_drive_configuration) 

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.49  Aug  4, 1996
+ *  linux/drivers/block/ide.c	Version 5.51  Aug  10, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -257,6 +257,8 @@
  *			prevent use of io_32bit on cmd640 with no prefetch
  * Version 5.49		fix minor quirks in probing routines
  * Version 5.50		allow values as small as 20 for idebus=
+ * Version 5.51		force non io_32bit in drive_cmd_intr()
+ *			change delay_10ms() to delay_50ms() to fix problems
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -1211,7 +1213,10 @@ static void drive_cmd_intr (ide_drive_t *drive)
 
 	sti();
 	if ((stat & DRQ_STAT) && args && args[3]) {
+		byte io_32bit = drive->io_32bit;
+		drive->io_32bit = 0;
 		ide_input_data(drive, &args[4], args[3] * SECTOR_WORDS);
+		drive->io_32bit = io_32bit;
 		stat = GET_STAT();
 	}
 	if (OK_STAT(stat,READY_STAT,BAD_STAT))
@@ -2417,13 +2422,13 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 }
 
 /*
- * Delay for *at least* 10ms.  As we don't know how much time is left
+ * Delay for *at least* 50ms.  As we don't know how much time is left
  * until the next tick occurs, we wait an extra tick to be safe.
  * This is used only during the probing/polling for drives at boot time.
  */
-static void delay_10ms (void)
+static void delay_50ms (void)
 {
-	unsigned long timer = jiffies + (HZ + 99)/100 + 1;
+	unsigned long timer = jiffies + ((HZ + 19)/20) + 1;
 	while (timer > jiffies);
 }
 
@@ -2449,7 +2454,7 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* enable device irq */
 	}
 
-	delay_10ms();				/* take a deep breath */
+	delay_50ms();				/* take a deep breath */
 	if ((IN_BYTE(IDE_ALTSTATUS_REG) ^ IN_BYTE(IDE_STATUS_REG)) & ~INDEX_STAT) {
 		printk("%s: probing with STATUS instead of ALTSTATUS\n", drive->name);
 		hd_status = IDE_STATUS_REG;	/* ancient Seagate drives */
@@ -2474,10 +2479,10 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 				(void) probe_irq_off(irqs);
 			return 1;	/* drive timed-out */
 		}
-		delay_10ms();		/* give drive a breather */
+		delay_50ms();		/* give drive a breather */
 	} while (IN_BYTE(hd_status) & BUSY_STAT);
 
-	delay_10ms();		/* wait for IRQ and DRQ_STAT */
+	delay_50ms();		/* wait for IRQ and DRQ_STAT */
 	if (OK_STAT(GET_STAT(),DRQ_STAT,BAD_R_STAT)) {
 		unsigned long flags;
 		save_flags(flags);
@@ -2546,11 +2551,10 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 		(cmd == WIN_IDENTIFY) ? "ATA" : "ATAPI");
 #endif
 	SELECT_DRIVE(hwif,drive);
-	delay_10ms();		/* allow BUSY_STAT to assert & clear */
-	delay_10ms();
+	delay_50ms();
 	if (IN_BYTE(IDE_SELECT_REG) != drive->select.all && !drive->present) {
 		OUT_BYTE(0xa0,IDE_SELECT_REG);	/* exit with drive0 selected */
-		delay_10ms();		/* allow BUSY_STAT to assert & clear */
+		delay_50ms();		/* allow BUSY_STAT to assert & clear */
 		return 3;    /* no i/f present: avoid killing ethernet cards */
 	}
 
@@ -2567,7 +2571,7 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 	}
 	if (drive->select.b.unit != 0) {
 		OUT_BYTE(0xa0,IDE_SELECT_REG);	/* exit with drive0 selected */
-		delay_10ms();
+		delay_50ms();
 		(void) GET_STAT();		/* ensure drive irq is clear */
 	}
 	return rc;

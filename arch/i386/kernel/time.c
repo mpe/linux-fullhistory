@@ -68,7 +68,7 @@ static unsigned long do_fast_gettimeoffset(void)
 		 */
 		if (test_bit(TIMER_BH, &bh_active) )
 		{
-			missing_time = 997670/HZ;
+			missing_time = 1000020/HZ;
 		}
 
 		/* Get last timer tick in absolute kernel time */
@@ -90,7 +90,7 @@ static unsigned long do_fast_gettimeoffset(void)
 			:"r" (tmp),
 			 "0" (eax), "1" (edx));
 
-		edx = 997670/HZ;
+		edx = 1000020/HZ;
 		tmp = eax;
 		eax = 0;
 
@@ -111,7 +111,7 @@ static unsigned long do_fast_gettimeoffset(void)
 	eax -= low_timer;
 
 	/*
-	 * Time offset = (997670/HZ * time_low) / quotient.
+	 * Time offset = (1000020/HZ * time_low) / quotient.
 	 */
 
 	__asm__("mull %2"
@@ -124,8 +124,8 @@ static unsigned long do_fast_gettimeoffset(void)
 	 * we need to check the result so that we'll get a timer
 	 * that is monotonic.
 	 */
-	if (edx >= 997670/HZ)
-		edx = 997670/HZ-1;
+	if (edx >= 1000020/HZ)
+		edx = 1000020/HZ-1;
 
 	eax = edx + missing_time;
 	return eax;

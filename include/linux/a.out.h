@@ -94,15 +94,15 @@ enum machine_type {
 #endif
 
 #if !defined (N_DRELOFF)
-#define N_DRELOFF(x) (N_TRELOFF(x) + (x).a_trsize)
+#define N_DRELOFF(x) (N_TRELOFF(x) + N_TRSIZE(x))
 #endif
 
 #if !defined (N_SYMOFF)
-#define N_SYMOFF(x) (N_DRELOFF(x) + (x).a_drsize)
+#define N_SYMOFF(x) (N_DRELOFF(x) + N_DRSIZE(x))
 #endif
 
 #if !defined (N_STROFF)
-#define N_STROFF(x) (N_SYMOFF(x) + (x).a_syms)
+#define N_STROFF(x) (N_SYMOFF(x) + N_SYMSIZE(x))
 #endif
 
 /* Address of text segment in memory after it is loaded.  */

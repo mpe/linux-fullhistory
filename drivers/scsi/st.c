@@ -41,6 +41,7 @@
 
 #define MAJOR_NR SCSI_TAPE_MAJOR
 #include <linux/blk.h>
+
 #include "scsi.h"
 #include "hosts.h"
 #include <scsi/scsi_ioctl.h>

@@ -106,16 +106,6 @@
 /* Set this to 0 once you have configured your interface definitions right. */
 #define DISTRIBUTION 1
 
-#if DISTRIBUTION
-#define READ_AUDIO 0
-#define KLOGD_PAUSE 55
-#else
-/* max. number of audio frames to read with one     */
-/* request (allocates n* 2352 bytes kernel memory!) */
-/* may be freely adjusted, f.e. 75 (= 1 sec.), at   */
-/* runtime by use of the CDROMAUDIOBUFSIZ ioctl.    */
-#define READ_AUDIO 75
-
 /*
  * Time to wait after giving a message.
  * This gets important if you enable non-standard DBG_xxx flags.
@@ -124,12 +114,25 @@
  */
 #define KLOGD_PAUSE 1
 
-/* tray control: eject tray if no disk is in (0 or 1) */
+/* tray control: eject tray if no disk is in */
+#if DISTRIBUTION
+#define JUKEBOX 0
+#else
 #define JUKEBOX 1
+#endif DISTRIBUTION
 
-/* tray control: eject tray after last use (0 or 1) */
+/* tray control: eject tray after last use */
+#if DISTRIBUTION
+#define EJECT 0
+#else
 #define EJECT 1
 #endif DISTRIBUTION
+
+/* max. number of audio frames to read with one     */
+/* request (allocates n* 2352 bytes kernel memory!) */
+/* may be freely adjusted, f.e. 75 (= 1 sec.), at   */
+/* runtime by use of the CDROMAUDIOBUFSIZ ioctl.    */
+#define READ_AUDIO 0
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -449,6 +452,8 @@
 /*==========================================================================*/
 
 #define MAX_TRACKS	99
+
+#define ERR_DISKCHANGE 615
 
 /*==========================================================================*/
 /*

@@ -26,7 +26,7 @@ struct cdrom_device_ops {
 /* specifications */
 	const int capability;           /* capability flags */
 	int mask;                       /* mask of capability: disables them */
-	const float speed;              /* maximum speed for reading data */
+	const int speed;                /* maximum speed for reading data */
 	const int minors;               /* number of minor devs supported */
 	const int capacity;             /* number of discs in jukebox */
 /* device-related storage */

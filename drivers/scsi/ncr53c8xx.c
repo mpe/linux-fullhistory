@@ -8142,7 +8142,7 @@ static int ncr_host_info(ncb_p np, char *ptr, off_t offset, int len)
 	copy_info(&info, "  IO port address 0x%lx, ", (u_long) np->port);
 	copy_info(&info, "IRQ number %d\n", (int) np->irq);
 
-#ifndef SCSI_NCR_IOMAPPED
+#ifndef NCR_IOMAPPED
 	if (np->use_mmio)
 		copy_info(&info, "  Using memory mapped IO at virtual address 0x%lx\n",
 		                  (u_long) np->reg_remapped);

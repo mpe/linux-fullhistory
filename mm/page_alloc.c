@@ -43,7 +43,7 @@ struct free_area_struct {
 	unsigned int * map;
 };
 
-#define memory_head(x) ((struct page *)x)
+#define memory_head(x) ((struct page *)(x))
 
 static struct free_area_struct free_area[NR_MEM_LISTS];
 

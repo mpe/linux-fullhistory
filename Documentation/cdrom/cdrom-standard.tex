@@ -1,5 +1,5 @@
 \documentclass{article}
-\def\version{$Id: cdrom-standard.tex,v 0.6 1996/05/14 15:42:39 david Exp david $}
+\def\version{$Id: cdrom-standard.tex,v 0.8 1996/08/10 10:57:16 david Exp $}
 
 \evensidemargin=0pt
 \oddsidemargin=0pt
@@ -11,6 +11,7 @@
 \def\cdromc{{\tt cdrom.c}}
 \def\cdromh{{\tt cdrom.h}}
 \def\ucdrom{{\tt ucdrom.h}}
+\def\fo{\sl}
 
 \everymath{\it} \everydisplay{\it}
 \catcode `\_=\active \def_{\_\penalty100 }
@@ -33,82 +34,103 @@ IBM PC-architecture,
 write a driver for Linux (source code examples).
 \end{itemize}
 The vast choice and openness has lead not only to a wide support of
-hardware devices, but also to a certain divergence in behavior. Especially
-for \cdrom\ devices, the way a particular drive reacts to a `standard'
-$ioctl()$ call varies a lot from one brand to another; until today, the
-\linux\ \cdrom\ driver writers kept away from wilderness by a good practice:
-to evolve a new driver by copying, understanding and changing an existing
-one.
+hardware devices, but also to a certain divergence in behavior.
+Especially for \cdrom\ devices, the way a particular drive reacts to a
+`standard' $ioctl()$ call varies a lot from one brand to another;
+however, the \linux\ \cdrom\ driver writers kept away from wilderness
+by the practice of evolving a new driver by copying, understanding and
+changing an existing one.
 
-Since the beginning of the \cdrom, many different interfaces developed.
-Some of them had their own proprietary design (Sony, Mitsumi, Panasonic),
-other manufacturers adopted an existing electrical interface and changed
-the functionality (CreativeLabs/SoundBlaster, Teac, Funai) or simply adapted
-their drives to one or more of the already existing electrical interfaces
-(Aztech, Sanyo, Funai, Vertos, Longshine, Optics Storage and most of the
-`NoName' manufacturers).
-In cases where a new drive really brought his own interface or used his
-own command set and flow control scheme, either a separate driver had to
-be written, or an existing driver had to get enhanced.
+Since the beginning of the \cdrom, many different interfaces
+developed.  Some of them had their own proprietary design (Sony,
+Mitsumi, Panasonic, Philips), other manufacturers adopted an existing
+electrical interface and changed the functionality
+(CreativeLabs/SoundBlaster, Teac, Funai) or simply adapted their
+drives to one or more of the already existing electrical interfaces
+(Aztech, Sanyo, Funai, Vertos, Longshine, Optics Storage and most of
+the `NoName' manufacturers).  In cases where a new drive really
+brought his own interface or used his own command set and flow control
+scheme, either a separate driver had to be written, or an existing
+driver had to get enhanced.
 
 Nowadays, almost all new \cdrom\ types are either ATAPI/IDE or SCSI;
 it is very unlikely that any manufacturer still will create a new
 interface, and new drives for the existing proprietary interfaces are
-getting rare.
-But history has delivered us \cdrom\ support for many different interfaces.
+getting rare.  But history has delivered us \cdrom\ support for many
+different interfaces.
 
-Some of the \linux\ \cdrom\ driver writers look at the existing standard
-which is expressed through \cdromh\ as to a rather wild set of
-commands and data formats and feel that any structure is lost, and from
-this point of view, this documentation shall help to achieve a common
-programming interface.
+When (in the 1.3.70's) I looked at the existing interface which is
+expressed through \cdromh\ it appeared to be a rather wild set of
+commands and data formats.\footnote{I cannot recollect what kernel
+  version I looked at, then, presumably 1.2.13 and 1.3.34---the latest
+  kernel that I was indirectly involved in.} It seemed that many
+features of the interface have been added to include certain specific
+capabilities of certain drives, in an {\fo ad hoc\/} manner. More
+importantly, it appeared that actual execution of the commands is
+different for most of the different drivers: e.g., some drivers close
+the tray if an $open()$ call occurs while the tray is unloaded, while
+others do not. Some drivers lock the door upon opening the device, to
+prevent an incoherent file system, but others don't, to allow software
+ejection.  Undoubtedly, the capabilities of the different drives vary,
+but even when two drives have the same capability the driver behavior
+may be different.
+
+I decided to start a discussion on how to improve uniformity,
+addressing all \cdrom-driver developers found in the various driver
+files. The reactions encouraged me to write a uniform (compatible)
+software level \cdromc\ to which this document is the documentation.
+In the mean time, the data structure definitions in \cdromh\ had been
+cleaned up a lot---which was very helpful for the new code.
  
-Others---mainly those who used the already existing drivers not only
-as a coding example, but also as a `user interface' reference during
+\begin{quote}
+\small
+[Apparently, not all \cdrom\ developers support this initiative.
+They---mainly those who used the already existing drivers not only as
+a coding example, but also as a `user interface' reference during
 their own development---have taken care that \cdromh\ reflects a
 software interface to `user programs' which is unique between all
 drivers as much as possible; these driver writers will continue to
 refine the existing \cdromh\ where it seems necessary, and they tend
 to look if any newly requested functionality isn't already there
-before they are ready to define new structures. The sbpcd driver gives
-an example that it is possible to let a robot arm play juke
+before they are ready to define new structures. The {\tt sbpcd} driver
+gives an example that it is possible to let a robot arm play juke
 box---either with audio or with data CDs---and that it is possible to
 let the juke box work on even if a disk has fallen upon the floor and
 the drive door has closed without having a disk inside; without any
 new software layer or any structures which are not already present in
 \cdromh.  This `other' group of \linux\ \cdrom\ driver writers
 explicitly does {\em not\/} support the idea to define an additional
-software layer between driver and user program.
+software layer between driver and user program.]\parfillskip=0pt
+\end{quote}
 
-The following text reflects the opinion of the first mentioned \linux\ 
-\cdrom\ driver writer group only; the other group (not only the `silent
-majority') sees this text as a good base for a future documentation of the
-existing common \linux\ \cdrom\ programming interface, as it is stated 
-within \cdromh. Where \cdromh\ needs some external 
-explanation, this text can give it if the reader is aware that---at least
-at the moment---this text claims to be the proposal of something else than
-\cdromh.
+The effort (\cdromc) of which this is the documentation is {\em not\/}
+meant to drive a wedge between two groups of driver developers, but
+rather to enable sharing of `strategic code' among drivers. The code
+should {\em not\/} be viewed as a new interface to user-level
+programs, but rather as a new interface between driver code and
+kernel. 
 
+Care is taken that 100\,\% compatibility exists with the data
+structures and programmer's interface defined in \cdromh, and in order
+not to interfere with ongoing development in \cdromh, any `new' data
+structures have been put in a separate header file called \ucdrom.
+Because the data structures of \cdromh\ are fully supported, this
+documentation may also be of help to the programmers using the
+interface defined in \cdromh, but this guide is primarily written to
+help \cdrom\ driver developers adapt their code to use the `common
+\cdrom' code in \cdromc.
 
-Apart from the somewhat unstructured interfacing with software, the
-actual execution of the commands is different for most of the
-different drivers: e.g., some drivers close the tray if an $open()$ call
-occurs while the tray is unloaded, while others do not. Some drivers lock the
-door upon opening the device, to prevent an incoherent file system,
-but others don't, to allow software ejection. Undoubtedly, the
-capabilities of the different drives vary, but even when two drives have
-the same capability the driver behavior may be different. 
-
-Personally, I think that the most important drive interfaces will be
-the IDE/ATAPI drives and of course the SCSI drives, but as prices of
-hardware drop continuously, it is not unlikely that people will have
-more than one \cdrom\ drive, possibly of mixed types.  (In December
-1994, one of the cheapest \cdrom\ drives was a Philips cm206, a
-double-speed proprietary drive. In the months that I was busy writing
-a \linux\ driver for it, proprietary drives became old-fashioned and
-IDE/ATAPI drives became standard. At the time of writing (April 1996)
-the cheapest double speed drive is IDE and at one fifth of the price
-of its predecessor. Eight speed drives are available now.)
+Personally, I think that the most important hardware interfaces will
+be the IDE/ATAPI drives and of course the SCSI drives, but as prices
+of hardware drop continuously, it is not unlikely that people will
+have more than one \cdrom\ drive, possibly of mixed types. It is
+important that these drives behave in the same way. (In December 1994,
+one of the cheapest \cdrom\ drives was a Philips cm206, a double-speed
+proprietary drive. In the months that I was busy writing a \linux\ 
+driver for it, proprietary drives became old-fashioned and IDE/ATAPI
+drives became standard. At the time of writing (April 1996) the
+cheapest double speed drive is IDE and at one fifth of the price of
+its predecessor. Eight speed drives are available now.)
 
 This document defines (in pre-release versions: proposes) the various
 $ioctl$s, and the way the drivers should implement this.
@@ -125,12 +147,16 @@ For this reason, we\footnote{The writing style is such that `we' is
 used when (at least part of) the \cdrom-device driver authors support
 the idea, an `I' is used for personal opinions} propose to define
 another software-level, that separates the $ioctl()$ and $open()$
-implementation from the actual hardware implementation. We believe
-that \cdrom\ drives are specific enough (i.e., different from other
-block-devices such as floppy or hard disc drives), to define a set of
-{\em \cdrom\ device operations}, $<cdrom-device>_dops$. These are of a
-different nature than the classical block-device file operations
-$<block-device>_fops$.
+implementation from the actual hardware implementation. Note that we
+do not wish to alter the existing application interface defined in
+\cdromh, but rather want to re-root the hardware-implementation through
+some common code. 
+
+We believe that \cdrom\ drives are specific enough (i.e., different
+from other block-devices such as floppy or hard disc drives), to
+define a set of {\em \cdrom\ device operations},
+$<cdrom-device>_dops$. These are of a different nature than the
+classical block-device file operations $<block-device>_fops$.
 
 The extra interfacing level routines are implemented in a file
 \cdromc, and a low-level \cdrom\ driver hands over the interfacing to
@@ -198,7 +224,7 @@ struct& cdrom_device_ops\ \{ \hidewidth\cr
 \noalign{\medskip}
   &\llap{const\ }int& capability;&  capability flags \cr
   &int& mask;& mask of capability: disables them \cr
-  &\llap{$const\ $}float& speed;&  maximum speed for reading data \cr
+  &\llap{$const\ $}int& speed;&  maximum speed for reading data \cr
   &\llap{$const\ $}int& minors;& number of supported minor devices \cr
   &\llap{$const\ $}int& capacity;& number of discs in jukebox \cr
 \noalign{\medskip}
@@ -661,7 +687,7 @@ a \cdrom\ is unmounted, it is automatically ejected, such that the
 user can replace it. 
 \end{description}
 We hope that these option can convince everybody (both driver
-maintainers and user program developers) to adapt to the new cdrom
+maintainers and user program developers) to adapt to the new \cdrom\
 driver scheme and option flag interpretation. 
 
 \section{Description of routines in \cdromc}
@@ -791,7 +817,7 @@ the current flags.
   First disc is numbered 0. The number $arg$ is checked against the
   maximum number of discs in the juke-box found in the $cdrom_dops$.
 \item[CDROM_MEDIA_CHANGED] Returns 1 if a disc has been changed since
-  the last call. Note that calls to cdrom_$media_changed$ by the VFS
+  the last call. Note that calls to $cdrom_media_changed$ by the VFS
   are treated by an independent queue, so both mechanisms will detect
   a media change once. Currently, \cdromc\ implements maximum 16 minors
   per major device.
@@ -817,7 +843,7 @@ if implemented. No memory allocation or verification is carried out.
 \item Get hold of the files \cdromc\ and \ucdrom, they should be in
 the directory tree that came with this documentation. 
 \item Include {\tt \char`\<linux/ucdrom.h>} just after {\tt cdrom.h}.
-\item change the 3rd argument of $register_blkdev$ from
+\item Change the 3rd argument of $register_blkdev$ from
 $\&<your-drive>_fops$ to $\&cdrom_fops$. 
 \item Just after that line, add a line to register to the \cdrom\
 routines: 

@@ -13,7 +13,7 @@
  *             labelled E2550UA or MK4015 or 2800F).
  */
 
-#define VERSION "v4.4 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "v4.5 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 /*   Copyright (C) 1993, 1994, 1995  Eberhard Moenkeberg <emoenke@gwdg.de>
  *
@@ -284,10 +284,18 @@
  *       Inhibited "play audio" attempts with data CDs. Provisions for a
  *       "data-safe" handling of "mixed" (data plus audio) Cds.
  *
+ *  4.5  Meanwhile Gonzalo Tornaria <tornaria@cmat.edu.uy> (GTL) built a
+ *       special end_request routine: we seem to have to take care for not
+ *       to have two processes working at the request list. My understanding
+ *       was and is that ll_rw_blk should not call do_sbpcd_request as long
+ *       as there is still one call active (the first call will care for all
+ *       outstanding I/Os, and if a second call happens, that is a bug in
+ *       ll_rw_blk.c).
+ *       "Check media change" without touching any drive.
+ *
  *
  *  TODO
  *
- *     disk change detection
  *     synchronize multi-activity
  *        (data + audio + ioctl + disk change, multiple drives)
  *     implement "read all subchannel data" (96 bytes per frame)
@@ -510,7 +518,6 @@ static int sbpcd_debug = (1<<DBG_INF);
 static int sbpcd_debug = ((1<<DBG_INF) |
 			  (1<<DBG_TOC) |
 			  (1<<DBG_MUL) |
-			  (1<<DBG_AUD) |
 			  (1<<DBG_UPC));
 #endif DISTRIBUTION
 
@@ -914,7 +921,7 @@ static int sta2err(int sta)
 		if (sta==0x03) return (-607); /* unknown media */
 		if (sta==0x04) return (-612); /* general failure */
 		if (sta==0x05) return (0);
-		if (sta==0x06) return (-615); /* invalid disk change */
+		if (sta==0x06) return (-ERR_DISKCHANGE); /* disk change */
 		if (sta==0x0b) return (-612); /* general failure */
 		if (sta==0xff) return (-612); /* general failure */
 		return (0);
@@ -931,10 +938,9 @@ static int sta2err(int sta)
 		if (sta==0x0f) return (-611); /* read fault */
 		if (sta==0x10) return (-611); /* read fault */
 		if (sta>=0x16) return (-612); /* general failure */
-		D_S[d].CD_changed=0xFF;
-		if (sta==0x11) return (-615); /* invalid disk change (LCS: removed) */
+		if (sta==0x11) return (-ERR_DISKCHANGE); /* disk change (LCS: removed) */
 		if (famL_drive)
-			if (sta==0x12) return (-615); /* invalid disk change (inserted) */
+			if (sta==0x12) return (-ERR_DISKCHANGE); /* disk change (inserted) */
 		return (-602); /* drive not ready */
 	}
 }
@@ -1115,8 +1121,12 @@ static int get_state_T(void)
 		/* 2: closed, disk in */
 		D_S[d].status_bits=p1_door_closed|p1_disk_in|p1_spinning|p1_disk_ok;
 	else if (D_S[d].error_state==6)
+	{
 		/* 3: closed, disk in, changed ("06 xx xx") */
 		D_S[d].status_bits=p1_door_closed|p1_disk_in;
+		D_S[d].CD_changed=0xFF;
+		D_S[d].diskstate_flags &= ~toc_bit;
+	}
 	else if ((D_S[d].error_state!=2)||(D_S[d].b3!=0x3A)||(D_S[d].b4==0x00))
 	{
 		/* 1: closed, no disk ("xx yy zz"or "02 3A 00") */
@@ -1230,6 +1240,11 @@ static int cc_ReadError(void)
 	D_S[d].error_byte=infobuf[i];
 	msg(DBG_ERR,"cc_ReadError: infobuf[%d] is %d (%02X)\n",i,D_S[d].error_byte,D_S[d].error_byte);
 	i=sta2err(infobuf[i]);
+        if (i==-ERR_DISKCHANGE)
+        {
+                D_S[d].CD_changed=0xFF;
+                D_S[d].diskstate_flags &= ~toc_bit;
+        }
 	return (i);
 }
 /*==========================================================================*/
@@ -1924,7 +1939,7 @@ static int DriveReset(void)
 	do
 	{
 		i=GetStatus();
-		if ((i<0)&&(i!=-615)) return (-2); /* i!=-615 is from sta2err */
+		if ((i<0)&&(i!=-ERR_DISKCHANGE)) return (-2); /* from sta2err */
 		if (!st_caddy_in) break;
 		sbp_sleep(1);
 	}
@@ -4448,7 +4463,7 @@ static void sbp_transfer(struct request *req)
  *  special end_request for sbpcd to solve CURRENT==NULL bug. (GTL)
  *  GTL = Gonzalo Tornaria <tornaria@cmat.edu.uy>
  *
- *  This is a kluge so we don't need to modify end_request
+ *  This is a kludge so we don't need to modify end_request.
  *  We put the req we take out after INIT_REQUEST in the requests list,
  *  so that end_request will discard it. 
  *
@@ -4458,7 +4473,7 @@ static void sbp_transfer(struct request *req)
  *
  *  Could be a race here?? Could e.g. a timer interrupt schedule() us?
  *  If so, we should copy end_request here, and do it right.. (or
- *  modify end_request and the block devices.
+ *  modify end_request and the block devices).
  *
  *  In any case, the race here would be much small than it was, and
  *  I couldn't reproduce..
@@ -4466,7 +4481,7 @@ static void sbp_transfer(struct request *req)
  *  The race could be: suppose CURRENT==NULL. We put our req in the list,
  *  and we are scheduled. Other process takes over, and gets into
  *  do_sbpcd_request. It sees CURRENT!=NULL (it is == to our req), so
- *  proceds. It ends, so CURRENT is now NULL.. Now we awake somewhere in
+ *  proceeds. It ends, so CURRENT is now NULL.. Now we awake somewhere in
  *  end_request, but now CURRENT==NULL... oops!
  *
  */
@@ -4514,9 +4529,10 @@ static void DO_SBPCD_REQUEST(void)
 	sti();
 	
 	if (req->rq_status == RQ_INACTIVE)
-		goto err_done;
+		sbpcd_end_request(req, 0);
 	if (req -> sector == -1)
-		goto err_done;
+		sbpcd_end_request(req, 0);
+
 	if (req->cmd != READ)
 	{
 		msg(DBG_INF, "bad cmd %d\n", req->cmd);
@@ -5517,15 +5533,12 @@ void cleanup_module(void)
 /*
  * Check if the media has changed in the CD-ROM drive.
  * used externally (isofs/inode.c, fs/buffer.c)
- * Currently disabled (has to get "synchronized").
  */
 static int sbpcd_chk_disk_change(kdev_t full_dev)
 {
-	int i, st;
+	int i;
 	
 	msg(DBG_CHK,"media_check (%d) called\n", MINOR(full_dev));
-	return (0); /* "busy" test necessary before we really can check */
-	
 	i=MINOR(full_dev);
 	if ( (i<0) || (i>=NR_SBPCD) || (D_S[i].drv_id==-1) )
 	{
@@ -5533,43 +5546,14 @@ static int sbpcd_chk_disk_change(kdev_t full_dev)
 		return (-1);
 	}
 	
-	switch_drive(i);
-	
-	cc_ReadStatus();                         /* command: give 1-byte status */
-	st=ResponseStatus();
-	msg(DBG_CHK,"media_check: %02X\n",D_S[d].status_bits);
-	if (st<0)
-	{
-		msg(DBG_INF,"media_check: ResponseStatus error.\n");
-		return (1); /* status not obtainable */
-	}
-	if (D_S[d].CD_changed==0xFF) msg(DBG_CHK,"media_check: \"changed\" assumed.\n");
-	if (!st_spinning) msg(DBG_CHK,"media_check: motor off.\n");
-	if (!st_door_closed)
-	{
-		msg(DBG_CHK,"media_check: door open.\n");
-		D_S[d].CD_changed=0xFF;
-	}
-	if (!st_caddy_in)
-	{
-		msg(DBG_CHK,"media_check: no disk in drive.\n");
-		D_S[d].open_count=0;
-		D_S[d].CD_changed=0xFF;
-	}
-	if (!st_diskok) msg(DBG_CHK,"media_check: !st_diskok.\n");
-	
-#if 0000
-	if (D_S[d].CD_changed==0xFF)
-	{
-		D_S[d].CD_changed=1;
-		return (1); /* driver had a change detected before */
-	}
-#endif 0000 /* seems to give additional errors at the moment */
-	
-	if (!st_diskok) return (1); /* disk not o.k. */
-	if (!st_caddy_in) return (1); /* disk removed */
-	if (!st_door_closed) return (1); /* door open */
-	return (0);
+	if (D_S[i].CD_changed==0xFF)
+        {
+                D_S[i].CD_changed=0;
+                msg(DBG_CHK,"medium changed (drive %d)\n", i);
+                return (1);
+        }
+        else
+                return (0);
 }
 /*==========================================================================*/
 /*

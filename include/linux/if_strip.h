@@ -18,10 +18,8 @@
 #ifndef __LINUX_STRIP_H
 #define __LINUX_STRIP_H
 
-typedef union {
-	__u32 l;
-	__u16 s[2];
-	__u8  c[4];
+typedef struct {
+    __u8 c[6];
 } MetricomAddress;
 
 #endif

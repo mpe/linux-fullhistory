@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.12  Jul 24, 1996
+ *  linux/drivers/block/triton.c	Version 1.13  Aug 12, 1996
  *
  *  Copyright (c) 1995-1996  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -8,6 +8,9 @@
 /*
  * This module provides support for the Bus Master IDE DMA function
  * of the Intel PCI Triton I/II chipsets (i82371FB or i82371SB).
+ *
+ * Pretty much the same code will work for the OPTi "Viper" chipset.
+ * Look for DMA support for this in linux kernel 2.1.xx, when it appears.
  *
  * DMA is currently supported only for hard disk drives (not cdroms).
  *
@@ -116,6 +119,8 @@
 
 #include "ide.h"
 
+#undef DISPLAY_TRITON_TIMINGS	/* define this to display timings */
+
 /*
  * good_dma_drives() lists the model names (from "hdparm -i")
  * of drives which do not support mword2 DMA but which are
@@ -223,7 +228,7 @@ static int build_dmatable (ide_drive_t *drive)
 				if (bcount > size)
 					bcount = size;
 				*table++ = addr;
-				*table++ = bcount;
+				*table++ = bcount & 0xffff;
 				addr += bcount;
 				size -= bcount;
 			}
@@ -309,7 +314,7 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		return 1;
 	outl(virt_to_bus (HWIF(drive)->dmatable), dma_base + 4); /* PRD table */
 	outb(reading, dma_base);			/* specify r/w */
-	outb(0x26, dma_base+2);				/* clear status bits */
+	outb(inb(dma_base+2)|0x06, dma_base+2);		/* clear status bits */
 #ifdef CONFIG_BLK_DEV_IDEATAPI
 	if (drive->media != ide_disk)
 		return 0;
@@ -320,6 +325,7 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	return 0;
 }
 
+#ifdef DISPLAY_TRITON_TIMINGS
 /*
  * print_triton_drive_flags() displays the currently programmed options
  * in the i82371 (Triton) for a given drive.
@@ -341,6 +347,7 @@ static void print_triton_drive_flags (unsigned int unit, byte flags)
 	printk(" IORDY=%s",	(flags&2)	? "on " : "off");
 	printk(" fastPIO=%s\n",	((flags&9)==1)	? "on " : "off");
 }
+#endif /* DISPLAY_TRITON_TIMINGS */
 
 static void init_triton_dma (ide_hwif_t *hwif, unsigned short base)
 {
@@ -354,11 +361,11 @@ static void init_triton_dma (ide_hwif_t *hwif, unsigned short base)
 		hwif->dma_base = base;
 		if (!dmatable) {
 			/*
-			 * Since we know we are on a PCI bus, we could
-			 * actually use __get_free_pages() here instead
+			 * The BM-DMA uses a full 32-bits, so we can
+			 * safely use __get_free_page() here instead
 			 * of __get_dma_pages() -- no ISA limitations.
 			 */
-			dmatable = __get_dma_pages(GFP_KERNEL, 0);
+			dmatable = __get_free_page(GFP_KERNEL);
 		}
 		if (dmatable) {
 			hwif->dmatable = (unsigned long *) dmatable;
@@ -434,7 +441,10 @@ void ide_init_triton (byte bus, byte fn)
 	 * Save the dma_base port addr for each interface
 	 */
 	for (h = 0; h < MAX_HWIFS; ++h) {
+#ifdef DISPLAY_TRITON_TIMINGS
 		byte s_clks, r_clks;
+		unsigned short devid;
+#endif /* DISPLAY_TRITON_TIMINGS */
 		ide_hwif_t *hwif = &ide_hwifs[h];
 		unsigned short time;
 		if (hwif->io_base == 0x1f0) {
@@ -453,12 +463,32 @@ void ide_init_triton (byte bus, byte fn)
 				init_triton_dma(hwif, bmiba + 8);
 		} else
 			continue;
+#ifdef DISPLAY_TRITON_TIMINGS
 		s_clks = ((~time >> 12) & 3) + 2;
 		r_clks = ((~time >>  8) & 3) + 1;
 		printk("    %s timing: (0x%04x) sample_CLKs=%d, recovery_CLKs=%d\n",
 		 hwif->name, time, s_clks, r_clks);
+		if ((time & 0x40) && !pcibios_read_config_word(bus, fn, 0x02, &devid)
+		 && devid == PCI_DEVICE_ID_INTEL_82371SB_1)
+		{
+			byte stime;
+			if (pcibios_read_config_byte(bus, fn, 0x44, &stime)) {
+				if (hwif->io_base == 0x1f0) {
+					s_clks = ~stime >> 6;
+					r_clks = ~stime >> 4;
+				} else {
+					s_clks = ~stime >> 2;
+					r_clks = ~stime;
+				}
+				s_clks = (s_clks & 3) + 2;
+				r_clks = (r_clks & 3) + 1;
+				printk("                   slave: sample_CLKs=%d, recovery_CLKs=%d\n",
+		 			s_clks, r_clks);
+			}
+		}
 		print_triton_drive_flags (0, time & 0xf);
 		print_triton_drive_flags (1, (time >> 4) & 0xf);
+#endif /* DISPLAY_TRITON_TIMINGS */
 	}
 
 quit: if (rc) printk("ide: pcibios access failed - %s\n", pcibios_strerror(rc));

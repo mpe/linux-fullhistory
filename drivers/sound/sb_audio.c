@@ -500,9 +500,9 @@ sbpro_audio_prepare_for_output (int dev, int bsize, int bcount)
     {
       tmp = sb_getmixer (devc, 0x0e);
       if (devc->channels == 1)
-	tmp &= ~0x20;
+	tmp &= ~0x02;
       else
-	tmp |= 0x20;
+	tmp |= 0x02;
       sb_setmixer (devc, 0x0e, tmp);
     }
   restore_flags (flags);

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/cmd640.c	Version 0.99  Aug  6, 1996
+ *  linux/drivers/block/cmd640.c	Version 1.01  Aug 12, 1996
  *
  *  Copyright (C) 1995-1996  Linus Torvalds & authors (see below)
  */
@@ -17,8 +17,7 @@
  *  to work on every motherboard design that uses this screwed chip seems
  *  bloody well impossible.  However, we're still trying.
  *
- *  Version 0.96 worked for just about everybody.
- *  Version 0.97 should work for everyone
+ *  Version 0.97 worked for everybody.
  *
  *  User feedback is essential.  Many thanks to the beta test team:
  *
@@ -92,6 +91,9 @@
  *			other minor tune-ups:  0.96 was very good.
  *  Version 0.98	ignore PCI version when disabled by BIOS
  *  Version 0.99	display setup/active/recovery clocks with PIO mode
+ *  Version 1.00	Mmm.. cannot depend on PCMD_ENA in all systems
+ *  Version 1.01	slow/fast devsel can be selected with "hdparm -p6/-p7"
+ *			 ("fast" is necessary for 32bit I/O in some systems)
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -291,10 +293,12 @@ static int match_pci_cmd640_device (void)
 		if (get_cmd640_reg(i) != ven_dev[i])
 			return 0;
 	}
+#ifdef STUPIDLY_TRUST_BROKEN_PCMD_ENA_BIT
 	if ((get_cmd640_reg(PCMD) & PCMD_ENA) == 0) {
 		printk("ide: cmd640 on PCI disabled by BIOS\n");
 		return 0;
 	}
+#endif /* STUPIDLY_TRUST_BROKEN_PCMD_ENA_BIT */
 	return 1; /* success */
 }
 
@@ -634,6 +638,7 @@ static void cmd640_set_mode (unsigned int index, byte pio_mode, unsigned int cyc
  */
 static void cmd640_tune_drive (ide_drive_t *drive, byte mode_wanted)
 {
+	byte b;
 	ide_pio_data_t  d;
 	unsigned int index = 0;
 
@@ -643,18 +648,23 @@ static void cmd640_tune_drive (ide_drive_t *drive, byte mode_wanted)
 			return;
 		}
 	}
-	/*
-	 * If the user asks for pio_mode 9 (no such mode),
-	 * we take it to mean "turn ON prefetch" for this drive.
-	 *
-	 * If the user asks for pio_mode 8 (no such mode),
-	 * we take it to mean "turn OFF prefetch" for this drive.
-	 */
-	if ((mode_wanted & 0xfe) == 0x08) {	/* program prefetch? */
-		mode_wanted &= 1;
-		set_prefetch_mode(index, mode_wanted);
-		printk("%s: %sabled cmd640 prefetch\n", drive->name, mode_wanted ? "en" : "dis");
-		return;
+	switch (mode_wanted) {
+		case 6: /* set fast-devsel off */
+		case 7: /* set fast-devsel on */
+			mode_wanted &= 1;
+			b = get_cmd640_reg(CNTRL) & ~0x27;
+			if (mode_wanted)
+				b |= 0x27;
+			put_cmd640_reg(CNTRL, b);
+			printk("%s: %sabled cmd640 fast host timing (devsel)\n", drive->name, mode_wanted ? "en" : "dis");
+			return;
+
+		case 8: /* set prefetch off */
+		case 9: /* set prefetch on */
+			mode_wanted &= 1;
+			set_prefetch_mode(index, mode_wanted);
+			printk("%s: %sabled cmd640 prefetch\n", drive->name, mode_wanted ? "en" : "dis");
+			return;
 	}
 
 	(void) ide_get_best_pio_mode (drive, mode_wanted, 5, &d);

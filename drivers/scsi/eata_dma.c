@@ -58,7 +58,7 @@
  * Jagdis who did a lot of testing and found quite a number *
  * of bugs during the development.                          *
  ************************************************************
- *  last change: 96/07/20                  OS: Linux 2.0.8  *
+ *  last change: 96/08/13                 OS: Linux 2.0.12  *
  ************************************************************/
 
 /* Look in eata_dma.h for configuration and revision information */
@@ -854,6 +854,15 @@ static void eata_select_queue_depths(struct Scsi_Host *host,
 		}
 	    } else /* ISA forces us to limit the QS because of bounce buffers*/
 	        device->queue_depth = 2; /* I know this is cruel */
+
+	    /* 
+	     * It showed that we need to set an upper limit of commands 
+             * we can allow to  queue for a single device on the bus. 
+	     * If we get above that limit, the broken midlevel SCSI code 
+	     * will produce bogus timeouts and aborts en masse. :-(
+	     */
+	    if(device->queue_depth > UPPER_DEVICE_QUEUE_LIMIT)
+		device->queue_depth = UPPER_DEVICE_QUEUE_LIMIT;
 
 	    printk(KERN_INFO "scsi%d: queue depth for target %d on channel %d "
 		   "set to %d\n", host->host_no, device->id, device->channel,

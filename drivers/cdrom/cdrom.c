@@ -21,7 +21,7 @@
 
 #define FM_WRITE	0x2                 /* file mode write bit */
 
-#define VERSION "$Id: cdrom.c,v 0.4 1996/04/17 20:47:50 david Exp david $"
+#define VERSION "$Id: cdrom.c,v 0.8 1996/08/10 10:52:11 david Exp $"
 
 /* Not-exported routines. */
 int cdrom_open(struct inode *ip, struct file *fp);
@@ -351,7 +351,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
                 return cdo->options;
                 
         case CDROM_SELECT_SPEED:
-                if (0 <= arg && arg < (int) (cdo->speed + 0.5) &&
+                if (0 <= arg && arg <= cdo->speed &&
                     cdo->capability & ~cdo->mask & CDC_SELECT_SPEED)
                         return cdo->select_speed(dev, arg);
                 else

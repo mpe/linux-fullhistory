@@ -165,7 +165,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 static int ioctl_command(Scsi_Device *dev, void *buffer)
 {
     char * buf;
-    char cmd[12];
+    unsigned char cmd[12]; 
     char * cmd_in;
     Scsi_Cmnd * SCpnt;
     unsigned char opcode;
@@ -187,10 +187,10 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
      * The structure that we are passed should look like:
      *
      * struct sdata{
-     *	int inlen;
-     *	int outlen;
-     *	char cmd[];  # However many bytes are used for cmd.
-     *	char data[];
+     *	unsigned int inlen;
+     *	unsigned int outlen;
+     *	unsigned char  cmd[];  # However many bytes are used for cmd.
+     *	unsigned char  data[];
      */
     inlen = get_user((unsigned int *) buffer);
     outlen = get_user( ((unsigned int *) buffer) + 1);

@@ -172,7 +172,7 @@ L:      linux-scsi@vger.rutgers.edu
 S:      Odd fixes (e.g., new signatures)
 
 SCSI TAPE DRIVER
-P:	Kai Mdkisara
+P:	Kai Mäkisara
 M:	Kai.Makisara@metla.fi
 L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
@@ -322,6 +322,18 @@ AHA152X SCSI DRIVER
 P:	Juergen E. Fischer
 M:	Juergen Fischer <fischer@et-inf.fho-emden.de>
 L:	linux-scsi@vger.rutgers.edu
+S:	Maintained
+
+SBPCD CDROM DRIVER
+P:	Eberhard Moenkeberg
+M:	emoenke@gwdg.de
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+NON-IDE/NON-SCSI CDROM DRIVERS [GENERAL] (come on, crew - mark your responsibility)
+P:	Eberhard Moenkeberg
+M:	emoenke@gwdg.de
+L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 CREDITS FILE

@@ -39,6 +39,7 @@ struct thread_struct {
 	 */
 	unsigned long flags;
 	unsigned long res1, res2;
+	unsigned long segment; 
 };
 
 #define INIT_MMAP { &init_mm, 0xfffffc0000000000,  0xfffffc0010000000, \
@@ -47,7 +48,7 @@ struct thread_struct {
 #define INIT_TSS  { \
 	0, 0, 0, \
 	0, 0, 0, \
-	0, 0, 0, \
+	0, 0, 0, KERNEL_DS, \
 }
 
 #define alloc_kernel_stack()    get_free_page(GFP_KERNEL)
@@ -74,11 +75,6 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 /*
  * Do necessary setup to start up a newly executed thread.
  */
-static inline void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
-{
-	regs->pc = pc;
-	regs->ps = 8;
-	wrusp(sp);
-}
+extern void start_thread(struct pt_regs *, unsigned long, unsigned long);
 
 #endif /* __ASM_ALPHA_PROCESSOR_H */

@@ -428,7 +428,6 @@ void swap_tick(void)
 		if (!kswapd_awake && kswapd_ctl.maxpages > 0) {
 			wake_up(&kswapd_wait);
 			need_resched = 1;
-			kswapd_awake = 1;
 		}
 		next_swap_jiffies = jiffies + swapout_interval;
 	}

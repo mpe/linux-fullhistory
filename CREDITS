@@ -32,7 +32,7 @@ P: 2047/2A960705 BA 03 D3 2C 14 A8 A8 BD  1E DF FE 69 EE 35 BD 74
 D: Author of the SYSLINUX boot loader, maintainer of the linux.* news
 D: hierarchy and the Linux Device List; various kernel hacks
 S: 4390 Albany Dr. #46
-S: San Jose CA 95129
+S: San Jose, California 95129
 S: USA
 
 N: Derek Atkins
@@ -210,7 +210,7 @@ N: Gordon Chaffee
 E: chaffee@plateau.cs.berkeley.edu
 D: vfat filesystem
 S: 3674 Oakwood Terrace #201
-S: Fremont, CA 94536
+S: Fremont, California 94536
 S: USA
 
 N: Chih-Jen Chang     
@@ -466,7 +466,7 @@ W: http://www.cs.ucr.edu/~grif
 D: Loopback speedup, qlogic scsi hacking, VT_LOCKSWITCH
 S: Department of Computer Science
 S: University of California, Riverside
-S: Riverside, CA  92521-0304
+S: Riverside, California  92521-0304
 S: USA
 
 N: Dmitry S. Gorodchanin
@@ -490,7 +490,7 @@ N: John E. Gotts
 E: jgotts@engin.umich.edu
 D: kernel hacker
 S: 8124 Constitution Apt. 7
-S: Sterling Heights, MI  48313
+S: Sterling Heights, Michigan  48313
 S: USA
 
 N: Grant Guenther
@@ -558,7 +558,7 @@ N: Richard Henderson
 E: rth@tamu.edu
 D: Alpha/ELF, gcc, binutils, and glibc
 S: 304 E. North Ave.
-S: Bryan, TX  77801-3431
+S: Bryan, Texas  77801-3431
 S: USA
 
 N: Sebastian Hetze
@@ -589,7 +589,7 @@ E: khollis@bitgate.com
 W: http://www.nurk.org/
 D: Berkshire PC Watchdog Driver
 S: PO Box 15
-S: Grants Pass, OR 97526
+S: Grants Pass, Oregon 97526
 S: USA
 
 N: Nick Holloway
@@ -822,7 +822,7 @@ S: Puistokaari 1 E 18
 S: 00200 Helsinki
 S: Finland
 
-N: Kai M"akisara
+N: Kai Mäkisara
 E: Kai.Makisara@metla.fi
 D: SCSI Tape Driver
 
@@ -1089,23 +1089,27 @@ E: snprobst@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
 
 N: Daniel Quinlan
-E: quinlan@yggdrasil.com
-D: FSSTND Coordinator
-S: 816 Saratoga Avenue, Apartment M208
-S: San Jose, California 95129
+E: Daniel.Quinlan@linux.org
+W: http://www.bucknell.edu/~quinlan
+D: FSSTND coordinator; FHS editor
+D: random Linux documentation, patches, and hacks
+S: Box C-5083
+S: Bucknell University
+S: Lewisburg, Pennsylvania 17837
 S: USA
 
 N: Eric S. Raymond
 E: esr@thyrsus.com
 W: http://www.ccil.org/~esr/home.html
-S: 22 South Warren Avenue
-S: Malvern, PA 19355 USA
 D: ncurses library co-maintainer
 D: terminfo master file maintainer
 D: Distributions HOWTO editor
 D: Instigator, FHS standard
 D: Keeper of the Jargon File and curator of the Retrocomputing Museum
 D: Author, Emacs VC and GUD modes
+S: 22 South Warren Avenue
+S: Malvern, Pennsylvania 19355
+S: USA
 
 N: Stefan Reinauer
 E: stepan@home.culture.mipt.ru
@@ -1120,7 +1124,7 @@ E: roadcapw@cfw.com
 W: http://www.cfw.com/~roadcapw
 D: Author of menu based configuration tool, Menuconfig.
 S: 1407 Broad Street
-S: Waynesboro, Va  22980
+S: Waynesboro, Virginia  22980
 S: USA
 
 N: Florian La Roche
@@ -1198,7 +1202,7 @@ N: Darren Senn
 E: sinster@darkwater.com
 D: Whatever I notice needs doing (so far: itimers, /proc)
 S: POB 64132
-S: Sunnyvale, CA 94088-4132
+S: Sunnyvale, California 94088-4132
 S: USA
 
 N: Simon Shapiro
@@ -1225,7 +1229,7 @@ E: john@geolog.com
 E: jshiffle@netcom.com
 D: Always IN2000 SCSI driver
 D: wd33c93 SCSI driver (linux-m68k)
-S: San Jose, CA
+S: San Jose, California
 S: USA
 
 N: Rick Sladkey
@@ -1369,7 +1373,7 @@ S: 2F 14 ALY 31 LN 166 SEC 1 SHIH-PEI RD
 S: Taipei 
 S: Taiwan 112, Republic of China
 S: 24335 Delta Drive
-S: Diamond Bar, CA 91765
+S: Diamond Bar, California 91765
 S: USA
 
 N: Simmule Turner
@@ -1456,7 +1460,7 @@ D: Maintainer of sunsite WWW and FTP, moderator c.o.l.answers
 S: Cornell University Computer Science Department
 S: Robotics and Vision Laboratory
 S: 4130 Upson Hall
-S: Ithaca NY 14850
+S: Ithaca, New York 14850
 S: USA
 
 N: Greg Wettstein
@@ -1470,7 +1474,7 @@ S: Dr. Greg Wettstein, Ph.D.
 S: Oncology Research Division Computing Facility
 S: Roger Maris Cancer Center
 S: 820 4th St. N.
-S: Fargo, ND  58122
+S: Fargo, North Dakota  58122
 S: USA
 
 N: Hans-Joachim Widmaier

@@ -25,6 +25,7 @@
 #include <linux/interrupt.h>
 #include <linux/config.h>
 #include <linux/unistd.h>
+#include <linux/delay.h>
 
 #include <asm/segment.h>
 #include <asm/pgtable.h>
@@ -206,6 +207,7 @@ void hard_reset_now(void)
 			for(j = 0; j < 100000 ; j++)
 				/* nothing */;
 			outb(0xfe,0x64);	 /* pulse reset low */
+			udelay(10);
 		}
 		__asm__ __volatile__("\tlidt %0": "=m" (no_idt));
 	}

@@ -111,18 +111,12 @@ static inline void memcpy_tofs(void * to, const void * from, unsigned long n)
 #define KERNEL_DS 0
 #define USER_DS 1
 
-static inline unsigned long get_fs(void)
-{
-	return 1;
-}
+#define get_fs()	(current->tss.segment)
+#define set_fs(x)	(current->tss.segment=(x))
 
 static inline unsigned long get_ds(void)
 {
 	return 0;
-}
-
-static inline void set_fs(unsigned long val)
-{
 }
 
 #endif /* _ASM_SEGMENT_H */

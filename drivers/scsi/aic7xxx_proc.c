@@ -24,7 +24,7 @@
  *
  *  Dean W. Gehnert, deang@teleport.com, 05/01/96
  *
- *  $Id: aic7xxx_proc.c,v 3.1 1996/05/12 17:25:56 deang Exp $
+ *  $Id: aic7xxx_proc.c,v 3.2 1996/07/23 03:37:26 deang Exp $
  *-M*************************************************************************/
 
 #define BLS buffer + len + size
@@ -151,10 +151,10 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
 #else
   size += sprintf(BLS, "  AIC7XXX_TAGGED_QUEUEING: Disabled\n");
 #endif
-#ifdef AIC7XXX_SHARE_IRQS
-  size += sprintf(BLS, "  AIC7XXX_SHARE_IRQS     : Enabled\n");
+#ifdef AIC7XXX_PAGE_ENABLE
+  size += sprintf(BLS, "  AIC7XXX_PAGE_ENABLE    : Enabled\n");
 #else
-  size += sprintf(BLS, "  AIC7XXX_SHARE_IRQS     : Disabled\n");
+  size += sprintf(BLS, "  AIC7XXX_PAGE_ENABLE    : Disabled\n");
 #endif
 #ifdef AIC7XXX_PROC_STATS
   size += sprintf(BLS, "  AIC7XXX_PROC_STATS     : Enabled\n");
@@ -171,7 +171,8 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
   size += sprintf(BLS, "              Host Bus: %s\n", bus_names[p->bus_type]);
   size += sprintf(BLS, "               Base IO: %#.4x\n", p->base);
   size += sprintf(BLS, "                   IRQ: %d\n", HBAptr->irq);
-  size += sprintf(BLS, "                   SCB: %d (%d)\n", p->numscb, p->maxscb);
+  size += sprintf(BLS, "                  SCBs: Used %d, HW %d, Page %d\n",
+      p->numscbs, p->maxhscbs, p->maxscbs);
   size += sprintf(BLS, "            Interrupts: %d", p->isr_count);
   if (p->chip_type == AIC_777x)
   {
@@ -183,13 +184,13 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
     size += sprintf(BLS, "\n");
   }
   size += sprintf(BLS, "         Serial EEPROM: %s\n",
-      p->have_seeprom ? "True" : "False");
+      (p->flags & HAVE_SEEPROM) ? "True" : "False");
   size += sprintf(BLS, "  Extended Translation: %sabled\n",
-      p->extended ? "En" : "Dis");
+      (p->flags & EXTENDED_TRANSLATION) ? "En" : "Dis");
   size += sprintf(BLS, "        SCSI Bus Reset: %sabled\n",
       aic7xxx_no_reset ? "Dis" : "En");
   size += sprintf(BLS, "            Ultra SCSI: %sabled\n",
-      p->ultra_enabled ? "En" : "Dis");
+      (p->flags & ULTRA_ENABLED) ? "En" : "Dis");
   size += sprintf(BLS, "     Target Disconnect: %sabled\n",
       p->discenable ? "En" : "Dis");
   len += size; pos = begin + len; size = 0;

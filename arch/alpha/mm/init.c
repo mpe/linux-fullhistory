@@ -132,6 +132,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	pgd_val(swapper_pg_dir[1023]) = (newptbr << 32) | pgprot_val(PAGE_KERNEL);
 	init_task.tss.ptbr = newptbr;
 	init_task.tss.flags = 1;
+	init_task.tss.segment = KERNEL_DS;
 	init_task.kernel_stack_page = INIT_STACK;
 	load_PCB(&init_task.tss);
 

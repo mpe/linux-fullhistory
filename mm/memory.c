@@ -534,7 +534,6 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 static void put_page(pte_t * page_table, pte_t pte)
 {
 	if (!pte_none(*page_table)) {
-		printk("put_page: page already exists %08lx\n", pte_val(*page_table));
 		free_page(pte_page(pte));
 		return;
 	}

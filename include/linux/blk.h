@@ -310,7 +310,8 @@ static void floppy_off(unsigned int nr);
 
 #endif /* MAJOR_NR == whatever */
 
-#if ((MAJOR_NR != SCSI_TAPE_MAJOR) && !defined(IDE_DRIVER))
+#if (MAJOR_NR != SCSI_TAPE_MAJOR)
+#if !defined(IDE_DRIVER)
 
 #ifndef CURRENT
 #define CURRENT (blk_dev[MAJOR_NR].current_request)
@@ -362,12 +363,12 @@ static void (DEVICE_REQUEST)(void);
 			panic(DEVICE_NAME ": block not locked"); \
 	}
 
-#endif /* (MAJOR_NR != SCSI_TAPE_MAJOR) && !defined(IDE_DRIVER) */
+#endif /* !defined(IDE_DRIVER) */
 
 /* end_request() - SCSI devices have their own version */
 /*               - IDE drivers have their own copy too */
 
-#if ! SCSI_MAJOR(MAJOR_NR)
+#if ! SCSI_BLK_MAJOR(MAJOR_NR)
 
 #if defined(IDE_DRIVER) && !defined(_IDE_C) /* shared copy for IDE modules */
 void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
@@ -423,7 +424,8 @@ static void end_request(int uptodate) {
 	wake_up(&wait_for_request);
 }
 #endif /* defined(IDE_DRIVER) && !defined(_IDE_C) */
-#endif /* ! SCSI_MAJOR(MAJOR_NR) */
+#endif /* ! SCSI_BLK_MAJOR(MAJOR_NR) */
+#endif /* (MAJOR_NR != SCSI_TAPE_MAJOR) */
 
 #endif /* defined(MAJOR_NR) || defined(IDE_DRIVER) */
 

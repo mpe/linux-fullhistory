@@ -427,6 +427,8 @@ unload_uart401 (struct address_info *hw_config)
   if (devc == NULL)
     return;
 
+  reset_uart401 (devc);
+
   release_region (hw_config->io_base, 4);
 
   if (!devc->share_irq)

@@ -73,14 +73,12 @@
  * Tests for SCSI devices.
  */
 
-#define SCSI_MAJOR(M) \
+#define SCSI_BLK_MAJOR(M) \
   ((M) == SCSI_DISK_MAJOR	\
-   || (M) == SCSI_TAPE_MAJOR	\
-   || (M) == SCSI_CDROM_MAJOR	\
-   || (M) == SCSI_GENERIC_MAJOR)
+   || (M) == SCSI_CDROM_MAJOR)
 
-static inline int scsi_major(int m) {
-	return SCSI_MAJOR(m);
+static inline int scsi_blk_major(int m) {
+	return SCSI_BLK_MAJOR(m);
 }
 
 #endif

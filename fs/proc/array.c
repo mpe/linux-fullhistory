@@ -427,8 +427,8 @@ static unsigned long get_wchan(struct task_struct *p)
 			if (ebp < stack_page || ebp >= 4092+stack_page)
 				return 0;
 			eip = *(unsigned long *) (ebp+4);
-			if ((void *)eip != sleep_on &&
-			    (void *)eip != interruptible_sleep_on)
+			if (eip < (unsigned long) interruptible_sleep_on
+			    || eip >= (unsigned long) add_timer)
 				return eip;
 			ebp = *(unsigned long *) ebp;
 		} while (count++ < 16);

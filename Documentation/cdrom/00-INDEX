@@ -21,7 +21,7 @@ mcdx
 optcd
 	- info on the Optics Storage 8000 AT CD-ROM driver
 sbpcd
-	- info on the SoundBlaster Pro CD-ROM interface driver.
+	- info on the SoundBlaster/Panasonic CD-ROM interface driver.
 sjcd
 	- info on the SANYO CDR-H94A CD-ROM interface driver.
 sonycd535

@@ -1,13 +1,16 @@
-/* $Id: advansys.h,v 1.10 1996/01/15 04:51:06 bobf Exp bobf $ */
+/* $Id: advansys.h,v 1.11 1996/08/12 17:20:44 bobf Exp bobf $ */
 /*
  * advansys.h - Linux Host Driver for AdvanSys SCSI Adapters
  *
  * Copyright (c) 1995-1996 Advanced System Products, Inc.
  *
- * This driver may be modified and freely distributed provided that
- * the above copyright message and this comment are included in the
- * distribution. The latest version of this driver is available at
- * the AdvanSys FTP and BBS sites listed below.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that redistributions of source
+ * code retain the above copyright notice and this comment without
+ * modification.
+ *
+ * The latest version of this driver is available at the AdvanSys
+ * FTP and BBS sites listed below.
  *
  * Please send questions, comments, and bug reports to:
  * bobf@advansys.com (Bob Frey)
@@ -16,17 +19,12 @@
 #ifndef _ADVANSYS_H
 #define _ADVANSYS_H
 
-/* The driver can be used in Linux 1.2.X or 1.3.X. */
-#if !defined(LINUX_1_2) && !defined(LINUX_1_3)
+/* Convert Linux Version, Patch-level, Sub-level to LINUX_VERSION_CODE. */
+#define ASC_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
+
 #ifndef LINUX_VERSION_CODE
 #include <linux/version.h>
 #endif /* LINUX_VERSION_CODE */
-#if LINUX_VERSION_CODE > 65536 + 3 * 256
-#define LINUX_1_3
-#else /* LINUX_VERSION_CODE */
-#define LINUX_1_2
-#endif /* LINUX_VERSION_CODE */
-#endif /* !defined(LINUX_1_2) && !defined(LINUX_1_3) */
 
 /*
  * Scsi_Host_Template function prototypes.
@@ -37,14 +35,18 @@ const char *advansys_info(struct Scsi_Host *);
 int advansys_command(Scsi_Cmnd *);
 int advansys_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
 int advansys_abort(Scsi_Cmnd *);
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,89)
 int advansys_reset(Scsi_Cmnd *);
-#ifdef LINUX_1_2
+#else /* version >= v1.3.89 */
+int advansys_reset(Scsi_Cmnd *, unsigned int);
+#endif /* version >= v1.3.89 */
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,0)
 int advansys_biosparam(Disk *, int, int[]);
-#else /* LINUX_1_3 */
+#else /* version >= v1.3.0 */
 int advansys_biosparam(Disk *, kdev_t, int[]);
 extern struct proc_dir_entry proc_scsi_advansys;
 int advansys_proc_info(char *, char **, off_t, int, int, int);
-#endif /* LINUX_1_3 */
+#endif /* version >= v1.3.0 */
 
 /* init/main.c setup function */
 void advansys_setup(char *, int *);
@@ -52,7 +54,7 @@ void advansys_setup(char *, int *);
 /*
  * AdvanSys Host Driver Scsi_Host_Template (struct SHT) from hosts.h.
  */
-#ifdef LINUX_1_2
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,0)
 #define ADVANSYS { \
 	NULL,					/* struct SHT *next */ \
 	NULL,					/* int *usage_count */ \
@@ -88,7 +90,7 @@ void advansys_setup(char *, int *);
 	 */ \
 	DISABLE_CLUSTERING,		/* unsigned use_clustering:1 */ \
 }
-#else /* LINUX_1_3 */
+#else /* version >= v1.3.0 */
 #define ADVANSYS { \
 	NULL,					/* struct SHT *next */ \
 	NULL,					/* long *usage_count */ \
@@ -103,7 +105,9 @@ void advansys_setup(char *, int *);
 	advansys_queuecommand, \
 			/* int (*queuecommand)(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *)) */ \
 	advansys_abort,			/* int (*abort)(Scsi_Cmnd *) */ \
-	advansys_reset,			/* int (*reset)(Scsi_Cmnd *) */ \
+	advansys_reset, \
+		/* version < v1.3.89 int (*reset)(Scsi_Cmnd *) */ \
+		/* version >= v1.3.89 int (*reset)(Scsi_Cmnd *, unsigned int) */ \
 	NULL,					/* int (*slave_attach)(int, int) */ \
 	advansys_biosparam,		/* int (* bios_param)(Disk *, kdev_t, int []) */ \
 	/* \
@@ -127,5 +131,5 @@ void advansys_setup(char *, int *);
 	 */ \
 	DISABLE_CLUSTERING,		/* unsigned use_clustering:1 */ \
 }
-#endif /* LINUX_1_3 */
+#endif /* version >= v1.3.0 */
 #endif /* _ADVANSYS_H */

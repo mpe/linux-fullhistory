@@ -25,7 +25,12 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
-#define MULTI_VOLUME
+/*
+ * We have no support for "multi volume" CDs, but more and more disks carry
+ * wrong information within the volume descriptors.
+ */
+#define IGNORE_WRONG_MULTI_VOLUME_SPECS
+
 #ifdef LEAK_CHECK
 static int check_malloc = 0;
 static int check_bread = 0;
@@ -161,7 +166,22 @@ static int parse_options(char *options, struct iso9660_options * popt)
 
 /*
  * look if the driver can tell the multi session redirection value
+ *
+ * don't change this if you don't know what you do, please!
+ * Multisession is legal only with XA disks.
+ * A non-XA disk with more than one volume descriptor may do it right, but
+ * usually is written in a nowhere standardized "multi-partition" manner.
+ * Multisession uses absolute addressing (solely the first frame of the whole
+ * track is #0), multi-partition uses relative addressing (each first frame of
+ * each track is #0), and a track is not a session.
+ *
+ * A broken CDwriter software or drive firmware does not set new standards,
+ * at least not if conflicting with the existing ones.
+ * 
+ * emoenke@gwdg.de
  */
+#define WE_OBEY_THE_WRITTEN_STANDARDS 1
+
 static unsigned int isofs_get_last_session(kdev_t dev)
 {
   struct cdrom_multisession ms_info;
@@ -189,7 +209,11 @@ static unsigned int isofs_get_last_session(kdev_t dev)
 	  printk("isofs.inode: vol_desc_start = %d\n", ms_info.addr.lba);
 	}
 #endif 0
-      if ((i==0)&&(ms_info.xa_flag)) vol_desc_start=ms_info.addr.lba;
+      if (i==0)
+#if WE_OBEY_THE_WRITTEN_STANDARDS
+        if (ms_info.xa_flag) /* necessary for a valid ms_info.addr */
+#endif WE_OBEY_THE_WRITTEN_STANDARDS
+          vol_desc_start=ms_info.addr.lba;
     }
   return vol_desc_start;
 }
@@ -305,23 +329,23 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	
 	if(high_sierra){
 	  rootp = (struct iso_directory_record *) h_pri->root_directory_record;
+#ifndef IGNORE_WRONG_MULTI_VOLUME_SPECS
 	  if (isonum_723 (h_pri->volume_set_size) != 1) {
-#ifndef  MULTI_VOLUME 
-	    printk("Multi-volume disks not (yet) supported.\n");
+	    printk("Multi-volume disks not supported.\n");
 	    goto out;
-#endif
 	  }
+#endif IGNORE_WRONG_MULTI_VOLUME_SPECS
 	  s->u.isofs_sb.s_nzones = isonum_733 (h_pri->volume_space_size);
 	  s->u.isofs_sb.s_log_zone_size = isonum_723 (h_pri->logical_block_size);
 	  s->u.isofs_sb.s_max_size = isonum_733(h_pri->volume_space_size);
 	} else {
 	  rootp = (struct iso_directory_record *) pri->root_directory_record;
+#ifndef IGNORE_WRONG_MULTI_VOLUME_SPECS
 	  if (isonum_723 (pri->volume_set_size) != 1) {
-#ifndef MULTI_VOLUME
-	    printk("Multi-volume disks not (yet) supported.\n");
+	    printk("Multi-volume disks not supported.\n");
 	    goto out;
-#endif
 	  }
+#endif IGNORE_WRONG_MULTI_VOLUME_SPECS
 	  s->u.isofs_sb.s_nzones = isonum_733 (pri->volume_space_size);
 	  s->u.isofs_sb.s_log_zone_size = isonum_723 (pri->logical_block_size);
 	  s->u.isofs_sb.s_max_size = isonum_733(pri->volume_space_size);
@@ -628,16 +652,16 @@ void isofs_read_inode(struct inode * inode)
 	 */
 	if (inode->i_sb->u.isofs_sb.s_cruft == 'n' && 
 	    (volume_seq_no != 0) && (volume_seq_no != 1)) {
-	  printk("Warning: defective cdrom.  Enabling \"cruft\" mount option.\n");
+	  printk("Warning: defective cdrom (volume sequence number). Enabling \"cruft\" mount option.\n");
 	  inode->i_sb->u.isofs_sb.s_cruft = 'y';
 	}
 
-#ifndef MULTI_VOLUME
+#ifndef IGNORE_WRONG_MULTI_VOLUME_SPECS
 	if (inode->i_sb->u.isofs_sb.s_cruft != 'y' && 
 	    (volume_seq_no != 0) && (volume_seq_no != 1)) {
 		printk("Multi volume CD somehow got mounted.\n");
 	} else
-#endif	
+#endif IGNORE_WRONG_MULTI_VOLUME_SPECS
 	{
 	  if (S_ISREG(inode->i_mode))
 	    inode->i_op = &isofs_file_inode_operations;

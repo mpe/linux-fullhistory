@@ -982,7 +982,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	elf_fpregset_t fpu;		/* NT_PRFPREG */
 	struct elf_prpsinfo psinfo;	/* NT_PRPSINFO */
 	
-	if (!current->dumpable || limit < PAGE_SIZE)
+	if (!current->dumpable || limit < PAGE_SIZE || current->mm->count != 1)
 		return 0;
 	current->dumpable = 0;
 

@@ -623,7 +623,7 @@ attach_mad16_mpu (struct address_info *hw_config)
       return;
     }
 
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
   if (!already_initialized)
     return;
 
@@ -636,7 +636,7 @@ attach_mad16_mpu (struct address_info *hw_config)
 int
 probe_mad16_mpu (struct address_info *hw_config)
 {
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
   static int      mpu_attached = 0;
   static int      valid_ports[] =
   {0x330, 0x320, 0x310, 0x300};

@@ -81,6 +81,17 @@ void show_regs(struct pt_regs * regs)
 }
 
 /*
+ * Re-start a thread when doing execve()
+ */
+void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
+{
+	current->tss.segment = USER_DS;
+	regs->pc = pc;
+	regs->ps = 8;
+	wrusp(sp);
+}
+
+/*
  * Free current thread data structures etc..
  */
 void exit_thread(void)

@@ -5,7 +5,7 @@
 *             mike@i-Connect.Net                        *
 *             neuffer@mail.uni-mainz.de                 *
 *********************************************************
-* last change: 96/05/16                                 *
+* last change: 96/08/14                                 *
 ********************************************************/
 
 
@@ -67,6 +67,12 @@
 
 #define SG_SIZE		 64 
 #define SG_SIZE_BIG	 252	       /* max. 8096 elements, 64k */
+
+#define UPPER_DEVICE_QUEUE_LIMIT 24    /* The limit we have to set for the 
+					* device queue to keep the broken 
+					* midlevel SCSI code from producing
+					* bogus timeouts
+					*/
 
 #define TYPE_DISK_QUEUE  16
 #define TYPE_TAPE_QUEUE  4
