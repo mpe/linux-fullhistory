@@ -18,14 +18,6 @@
 #include <linux/cache.h>
 
 
-#define DEBUG_CONFIG 0
-#if DEBUG_CONFIG
-#define DBG(x...)     printk(x)
-#else
-#define DBG(x...)
-#endif
-
-
 static void __init
 pdev_fixup_irq(struct pci_dev *dev,
 	       u8 (*swizzle)(struct pci_dev *, u8 *),
@@ -53,7 +45,7 @@ pdev_fixup_irq(struct pci_dev *dev,
 		irq = 0;
 	dev->irq = irq;
 
-	DBG(KERN_ERR "PCI: fixup irq: (%s) got %d\n",
+	pr_debug("PCI: fixup irq: (%s) got %d\n",
 		dev->dev.kobj.name, dev->irq);
 
 	/* Always tell the device, so the driver knows what is

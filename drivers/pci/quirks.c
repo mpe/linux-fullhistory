@@ -19,8 +19,6 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 
-#undef DEBUG
-
 /* Deal with broken BIOS'es that neglect to enable passive release,
    which can cause problems in combination with the 82441FX/PPro MTRRs */
 static void __devinit quirk_passive_release(struct pci_dev *dev)
