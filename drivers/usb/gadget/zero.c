@@ -1193,6 +1193,8 @@ autoconf_fail:
 		device_desc.bcdDevice = __constant_cpu_to_le16 (0x0211);
 	} else if (gadget_is_s3c2410(gadget)) {
 		device_desc.bcdDevice = __constant_cpu_to_le16 (0x0212);
+	} else if (gadget_is_at91(gadget)) {
+		device_desc.bcdDevice = __constant_cpu_to_le16 (0x0213);
 	} else {
 		/* gadget zero is so simple (for now, no altsettings) that
 		 * it SHOULD NOT have problems with bulk-capable hardware.

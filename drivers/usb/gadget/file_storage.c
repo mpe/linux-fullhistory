@@ -3740,6 +3740,10 @@ static int __init check_parameters(struct fsg_dev *fsg)
 			mod_data.release = 0x0310;
 		else if (gadget_is_pxa27x(fsg->gadget))
 			mod_data.release = 0x0311;
+		else if (gadget_is_s3c2410(gadget))
+			mod_data.release = 0x0312;
+		else if (gadget_is_at91(fsg->gadget))
+			mod_data.release = 0x0313;
 		else {
 			WARN(fsg, "controller '%s' not recognized\n",
 				fsg->gadget->name);

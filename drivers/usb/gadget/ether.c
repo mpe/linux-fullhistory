@@ -243,6 +243,10 @@ MODULE_PARM_DESC(host_addr, "Host Ethernet Address");
 #define DEV_CONFIG_CDC
 #endif
 
+#ifdef CONFIG_USB_GADGET_AT91
+#define DEV_CONFIG_CDC
+#endif
+
 
 /* For CDC-incapable hardware, choose the simple cdc subset.
  * Anything that talks bulk (without notable bugs) can do this.
@@ -2251,6 +2255,8 @@ eth_bind (struct usb_gadget *gadget)
 		device_desc.bcdDevice = __constant_cpu_to_le16 (0x0211);
  	} else if (gadget_is_s3c2410(gadget)) {
  		device_desc.bcdDevice = __constant_cpu_to_le16 (0x0212);
+	} else if (gadget_is_at91(gadget)) {
+		device_desc.bcdDevice = __constant_cpu_to_le16 (0x0213);
 	} else {
 		/* can't assume CDC works.  don't want to default to
 		 * anything less functional on CDC-capable hardware,

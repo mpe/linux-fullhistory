@@ -1461,6 +1461,9 @@ static int gs_bind(struct usb_gadget *gadget)
 	} else if (gadget_is_s3c2410(gadget)) {
 		gs_device_desc.bcdDevice =
 			__constant_cpu_to_le16(GS_VERSION_NUM|0x0012);
+	} else if (gadget_is_at91(gadget)) {
+		gs_device_desc.bcdDevice =
+			__constant_cpu_to_le16(GS_VERSION_NUM|0x0013);
 	} else {
 		printk(KERN_WARNING "gs_bind: controller '%s' not recognized\n",
 			gadget->name);
