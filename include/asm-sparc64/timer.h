@@ -23,6 +23,8 @@
  * and also profiling if enabled.
  */
 
+#include <linux/config.h>
+
 /* Two timers, traditionally steered to PIL's 10 and 14 respectively.
  * But since INO packets are used on sun5, we could use any PIL level
  * we like, however for now we use the normal ones.
@@ -48,7 +50,7 @@ struct sun5_timer {
  */
 #define SUN5_HZ_TO_LIMIT(__hz)  (1000000/(__hz))
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern unsigned long timer_tick_offset;
 extern void timer_tick_interrupt(struct pt_regs *);
 #endif

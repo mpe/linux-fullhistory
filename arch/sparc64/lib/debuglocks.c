@@ -4,12 +4,13 @@
  * Copyright (C) 1998 David S. Miller (davem@redhat.com)
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
 #include <asm/system.h>
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 /* To enable this code, just define SPIN_LOCK_DEBUG in asm/spinlock.h */
 #ifdef SPIN_LOCK_DEBUG
@@ -275,4 +276,4 @@ wlock_again:
 }
 
 #endif /* SPIN_LOCK_DEBUG */
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */

@@ -847,6 +847,11 @@ M:	paulus@linuxcare.com
 L:	linux-ppp@vger.rutgers.edu
 S:	Maintained
 
+PPP OVER ETHERNET
+P:	Michal Ostrowski
+M:	mostrows@styx.uwaterloo.ca
+S:	Maintained
+
 PROMISE DC4030 CACHING DISK CONTROLLER DRIVER
 P:	Peter Denison
 M:	promise@pnd-pc.demon.co.uk

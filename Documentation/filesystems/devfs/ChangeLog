@@ -1496,3 +1496,40 @@ Work sponsored by SGI
 - Don't kill existing block ops in <devfs_read_inode>
 
 - Restore auto-ownership for /dev/pty/m*
+===============================================================================
+Changes for patch v163
+
+Work sponsored by SGI
+
+- Don't create missing directories in <devfs_find_handle>
+
+- Removed Documentation/filesystems/devfs/mk-devlinks
+
+- Updated Documentation/filesystems/devfs/README
+===============================================================================
+Changes for patch v164
+
+Work sponsored by SGI
+
+- Fixed CONFIG_DEVFS breakage in drivers/char/serial.c introduced in
+  linux-2.3.99-pre6-7
+===============================================================================
+Changes for patch v165
+
+Work sponsored by SGI
+
+- Ported to kernel 2.3.99-pre6
+===============================================================================
+Changes for patch v166
+
+Work sponsored by SGI
+
+- Added CONFIG_DEVFS_MOUNT
+===============================================================================
+Changes for patch v167
+
+Work sponsored by SGI
+
+- Updated Documentation/filesystems/devfs/README
+
+- Updated sample modules.conf

@@ -6,6 +6,7 @@
 #ifndef _SPARC64_SMP_H
 #define _SPARC64_SMP_H
 
+#include <linux/config.h>
 #include <linux/threads.h>
 #include <asm/asi.h>
 
@@ -24,7 +25,7 @@ extern struct prom_cpuinfo linux_cpus[64];
 
 #endif /* !(__ASSEMBLY__) */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 #ifndef __ASSEMBLY__
 
@@ -122,7 +123,7 @@ extern __inline__ void smp_send_stop(void) { }
 
 #define PROC_CHANGE_PENALTY	20
 
-#endif /* !(__SMP__) */
+#endif /* !(CONFIG_SMP) */
 
 #define NO_PROC_ID		0xFF
 

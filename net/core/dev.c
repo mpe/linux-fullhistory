@@ -850,7 +850,7 @@ int dev_queue_xmit(struct sk_buff *skb)
 
 
 /*=======================================================================
-			Receiver rotutines
+			Receiver routines
   =======================================================================*/
 
 int netdev_max_backlog = 300;

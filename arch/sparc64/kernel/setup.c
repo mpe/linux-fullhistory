@@ -603,7 +603,7 @@ int get_cpuinfo(char *buffer)
             "type\t\t: sun4u\n"
 	    "ncpus probed\t: %d\n"
 	    "ncpus active\t: %d\n"
-#ifndef __SMP__
+#ifndef CONFIG_SMP
             "BogoMips\t: %lu.%02lu\n"
 #endif
 	    ,
@@ -611,15 +611,15 @@ int get_cpuinfo(char *buffer)
             sparc_fpu_type[cpuid],
             prom_rev, prom_prev >> 16, (prom_prev >> 8) & 0xff, prom_prev & 0xff,
 	    linux_num_cpus, smp_num_cpus
-#ifndef __SMP__
+#ifndef CONFIG_SMP
             , loops_per_sec/500000, (loops_per_sec/5000) % 100
 #endif
 	    );
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	len += smp_bogo(buffer + len);
 #endif
 	len += mmu_info(buffer + len);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	len += smp_info(buffer + len);
 #endif
 #undef ZS_LOG

@@ -205,7 +205,6 @@ struct el3_private {
 	u_short media_status;
 	u_short fast_poll;
 	u_long last_irq;
-	spinlock_t lock;
 };
 
 /* Set iff a MII transceiver on any interface requires mdio preamble.
@@ -245,9 +244,9 @@ static void update_stats(struct net_device *dev);
 static struct net_device_stats *el3_get_stats(struct net_device *dev);
 static int el3_rx(struct net_device *dev, int worklimit);
 static int el3_close(struct net_device *dev);
+static void el3_tx_timeout(struct net_device *dev);
 static int el3_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 static void set_rx_mode(struct net_device *dev);
-static void el3_tx_timeout(struct net_device *dev);
 
 static dev_info_t dev_info = "3c574_cs";
 
@@ -277,16 +276,6 @@ static void cs_error(client_handle_t handle, int func, int ret)
 }
 
 /*
-   We never need to do anything when a tc574 device is "initialized"
-   by the net software, because we only register already-found cards.
-*/
-
-static int tc574_init(struct net_device *dev)
-{
-	return 0;
-}
-
-/*
 	tc574_attach() creates an "instance" of the driver, allocating
 	local data structures for one device.  The device is registered
 	with Card Services.
@@ -307,8 +296,6 @@ static dev_link_t *tc574_attach(void)
 	lp = kmalloc(sizeof(*lp), GFP_KERNEL);
 	if (!lp) return NULL;
 	memset(lp, 0, sizeof(*lp));
-	
-	lp->lock = SPIN_LOCK_UNLOCKED;
 	link = &lp->link; dev = &lp->dev;
 	link->priv = dev->priv = link->irq.Instance = lp;
 	
@@ -336,15 +323,11 @@ static dev_link_t *tc574_attach(void)
 	dev->do_ioctl = &el3_ioctl;
 	dev->set_multicast_list = &set_rx_mode;
 	ether_setup(dev);
-	strcpy(dev->name, lp->node.dev_name);
-	dev->init = &tc574_init;
 	dev->open = &el3_open;
 	dev->stop = &el3_close;
 	dev->tx_timeout = el3_tx_timeout;
 	dev->watchdog_timeo = TX_TIMEOUT;
 	
-	netif_start_queue (dev);
-
 	/* Register with Card Services */
 	link->next = dev_list;
 	dev_list = link;
@@ -380,7 +363,6 @@ static void tc574_detach(dev_link_t *link)
 {
 	struct el3_private *lp = link->priv;
 	dev_link_t **linkp;
-	long flags;
 
 	DEBUG(0, "3c574_detach(0x%p)\n", link);
 
@@ -390,13 +372,7 @@ static void tc574_detach(dev_link_t *link)
 	if (*linkp == NULL)
 	return;
 
-	spin_lock_irqsave(&lp->lock, flags);
-	if (link->state & DEV_RELEASE_PENDING) {
-		del_timer(&link->release);
-		link->state &= ~DEV_RELEASE_PENDING;
-	}
-	spin_unlock_irqrestore(&lp->lock, flags);
-
+	del_timer(&link->release);
 	if (link->state & DEV_CONFIG) {
 		tc574_release((u_long)link);
 		if (link->state & DEV_STALE_CONFIG) {
@@ -472,16 +448,15 @@ static void tc574_config(dev_link_t *link)
 	dev->irq = link->irq.AssignedIRQ;
 	dev->base_addr = link->io.BasePort1;
 
-	netif_start_queue (dev);
 	if (register_netdev(dev) != 0) {
 		printk(KERN_NOTICE "3c574_cs: register_netdev() failed\n");
 		goto failed;
 	}
 
-	link->state &= ~DEV_CONFIG_PENDING;
-
 	ioaddr = dev->base_addr;
+	strcpy(lp->node.dev_name, dev->name);
 	link->dev = &lp->node;
+	link->state &= ~DEV_CONFIG_PENDING;
 
 	/* The 3c574 normally uses an EEPROM for configuration info, including
 	   the hardware address.  The future products may include a modem chip
@@ -603,7 +578,7 @@ static void tc574_release(u_long arg)
 	CardServices(ReleaseIO, link->handle, &link->io);
 	CardServices(ReleaseIRQ, link->handle, &link->irq);
 
-	link->state &= ~(DEV_CONFIG | DEV_RELEASE_PENDING);
+	link->state &= ~DEV_CONFIG;
 
 } /* tc574_release */
 
@@ -628,8 +603,7 @@ static int tc574_event(event_t event, int priority,
 		link->state &= ~DEV_PRESENT;
 		if (link->state & DEV_CONFIG) {
 			netif_device_detach(dev);
-			link->release.expires = jiffies + HZ/20;
-			add_timer(&link->release);
+			mod_timer(&link->release, jiffies + HZ/20);
 		}
 		break;
 	case CS_EVENT_CARD_INSERTION:
@@ -643,7 +617,6 @@ static int tc574_event(event_t event, int priority,
 		if (link->state & DEV_CONFIG) {
 			if (link->open)
 				netif_device_detach(dev);
-
 			CardServices(ReleaseConfiguration, link->handle);
 		}
 		break;
@@ -860,7 +833,7 @@ static int el3_open(struct net_device *dev)
 	
 	link->open++;
 	MOD_INC_USE_COUNT;
-	netif_start_queue (dev);
+	netif_start_queue(dev);
 	
 	tc574_reset(dev);
 	lp->media.function = &media_check;
@@ -886,7 +859,7 @@ static void el3_tx_timeout(struct net_device *dev)
 	/* Issue TX_RESET and TX_START commands. */
 	wait_for_completion(dev, TxReset);
 	outw(TxEnable, ioaddr + EL3_CMD);
-	netif_start_queue (dev);
+	netif_start_queue(dev);
 }
 
 static void pop_tx_status(struct net_device *dev)
@@ -928,12 +901,12 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* TxFree appears only in Window 1, not offset 0x1c. */
 	if (inw(ioaddr + TxFree) <= 1536) {
-		netif_stop_queue (dev);
+		netif_stop_queue(dev);
 		/* Interrupt us when the FIFO has room for max-sized packet. 
 		   The threshold is in units of dwords. */
 		outw(SetTxThreshold + (1536>>2), ioaddr + EL3_CMD);
 	}
-	
+
 	dev_kfree_skb (skb);
 	pop_tx_status(dev);
 
@@ -948,11 +921,8 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	ioaddr_t ioaddr, status;
 	int work_budget = max_interrupt_work;
 
-    if (!netif_device_present(dev))
+	if (!netif_device_present(dev))
 		return;
-
-	spin_lock (&lp->lock);
-
 	ioaddr = dev->base_addr;
 
 	DEBUG(3, "%s: interrupt, status %4.4x.\n",
@@ -960,8 +930,8 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	while ((status = inw(ioaddr + EL3_STATUS)) &
 		   (IntLatch | RxComplete | RxEarly | StatsFull)) {
-
-		if (!netif_device_present(dev) || ((status & 0xe000) != 0x2000)) {
+		if (!netif_device_present(dev) ||
+			((status & 0xe000) != 0x2000)) {
 			DEBUG(1, "%s: Interrupt from dead card\n", dev->name);
 			break;
 		}
@@ -973,7 +943,7 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			DEBUG(3, "  TX room bit was handled.\n");
 			/* There's room in the FIFO for a full-sized packet. */
 			outw(AckIntr | TxAvailable, ioaddr + EL3_CMD);
-			netif_wake_queue (dev);
+			netif_wake_queue(dev);
 		}
 
 		if (status & TxComplete)
@@ -1022,8 +992,7 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	DEBUG(3, "%s: exiting interrupt, status %4.4x.\n",
 		  dev->name, inw(ioaddr + EL3_STATUS));
-
-	spin_unlock (&lp->lock);
+	return;
 }
 
 /*
@@ -1038,8 +1007,8 @@ static void media_check(u_long arg)
     ioaddr_t ioaddr = dev->base_addr;
     u_long flags;
 	u_short /* cable, */ media, partner;
-	
-    if (!netif_device_present(dev))
+
+	if (!netif_device_present(dev))
 		goto reschedule;
 	
     /* Check for pending interrupt with expired latency timer: with
@@ -1123,7 +1092,7 @@ static void update_stats(struct net_device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	ioaddr_t ioaddr = dev->base_addr;
-	u8 upper_cnt;
+	u8 rx, tx, up;
 
 	DEBUG(2, "%s: updating the statistics.\n", dev->name);
 
@@ -1140,22 +1109,19 @@ static void update_stats(struct net_device *dev)
 	lp->stats.tx_window_errors		+= inb(ioaddr + 4);
 	lp->stats.rx_fifo_errors		+= inb(ioaddr + 5);
 	lp->stats.tx_packets			+= inb(ioaddr + 6);
-	upper_cnt 						 = inb(ioaddr + 9);
-	lp->stats.tx_packets			+= (upper_cnt&0x30) << 4;
-	/* Rx packets   */				inb(ioaddr + 7);
-	/* Tx deferrals */				inb(ioaddr + 8);
-	lp->stats.rx_bytes 				+= inw(ioaddr + 10);
-	lp->stats.tx_bytes				+= inw(ioaddr + 12);
+	up		 						 = inb(ioaddr + 9);
+	lp->stats.tx_packets			+= (up&0x30) << 4;
+	/* Rx packets   */				   inb(ioaddr + 7);
+	/* Tx deferrals */				   inb(ioaddr + 8);
+	rx		 						 = inw(ioaddr + 10);
+	tx								 = inw(ioaddr + 12);
 
-	/* With Vortex and later we must also clear the BadSSD counter. */
 	EL3WINDOW(4);
-	inb(ioaddr + 12);
+	/* BadSSD */					   inb(ioaddr + 12);
+	up								 = inb(ioaddr + 13);
 
-	{
-		u8 up = inb(ioaddr + 13);
-		lp->stats.rx_bytes += (up & 0x0f) << 16;
-		lp->stats.tx_bytes += (up & 0xf0) << 12;
-	}
+	lp->stats.rx_bytes += rx + ((up & 0x0f) << 16);
+	lp->stats.tx_bytes += tx + ((up & 0xf0) << 12);
 
 	EL3WINDOW(1);
 }
@@ -1290,8 +1256,6 @@ static int el3_close(struct net_device *dev)
 
 	DEBUG(2, "%s: shutting down ethercard.\n", dev->name);
 	
-	netif_stop_queue (dev);
-	
 	if (DEV_OK(link)) {
 		/* Turn off statistics ASAP.  We update lp->stats below. */
 		outw(StatsDisable, ioaddr + EL3_CMD);
@@ -1307,12 +1271,10 @@ static int el3_close(struct net_device *dev)
 	}
 
 	link->open--;
+	netif_stop_queue(dev);
 	del_timer(&lp->media);
-	if (link->state & DEV_STALE_CONFIG) {
-		link->release.expires = jiffies + HZ/20;
-		link->state |= DEV_RELEASE_PENDING;
-		add_timer(&link->release);
-	}
+	if (link->state & DEV_STALE_CONFIG)
+		mod_timer(&link->release, jiffies + HZ/20);
 
 	MOD_DEC_USE_COUNT;
 

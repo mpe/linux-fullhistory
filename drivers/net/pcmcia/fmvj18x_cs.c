@@ -99,7 +99,6 @@ static void fmvj18x_config(dev_link_t *link);
 static void fmvj18x_release(u_long arg);
 static int fmvj18x_event(event_t event, int priority,
 			  event_callback_args_t *args);
-static int fmvj18x_init(struct net_device *dev);
 static dev_link_t *fmvj18x_attach(void);
 static void fmvj18x_detach(dev_link_t *);
 
@@ -115,7 +114,7 @@ static void fjn_rx(struct net_device *dev);
 static void fjn_reset(struct net_device *dev);
 static struct net_device_stats *fjn_get_stats(struct net_device *dev);
 static void set_rx_mode(struct net_device *dev);
-static void fjn_tx_timeout (struct net_device *dev);
+static void fjn_tx_timeout(struct net_device *dev);
 
 static dev_info_t dev_info = "fmvj18x_cs";
 static dev_link_t *dev_list = NULL;
@@ -140,7 +139,6 @@ typedef struct local_info_t {
     cardtype_t cardtype;
     u_short sent;
     u_char mc_filter[8];
-    spinlock_t lock;
 } local_info_t;
 
 #define MC_FILTERBREAK 64
@@ -237,7 +235,7 @@ typedef struct local_info_t {
 #define INTR_OFF             0x0d /* LAN controler ignores interrupts */
 #define INTR_ON              0x1d /* LAN controler will catch interrupts */
 
-#define TX_TIMEOUT	     10
+#define TX_TIMEOUT		((400*HZ)/1000)
 
 /*======================================================================
 
@@ -282,8 +280,6 @@ static dev_link_t *fmvj18x_attach(void)
     lp = kmalloc(sizeof(*lp), GFP_KERNEL);
     if (!lp) return NULL;
     memset(lp, 0, sizeof(*lp));
-    
-    lp->lock = SPIN_LOCK_UNLOCKED;
     link = &lp->link; dev = &lp->dev;
     link->priv = dev->priv = link->irq.Instance = lp;
 
@@ -315,14 +311,11 @@ static dev_link_t *fmvj18x_attach(void)
     dev->set_config = &fjn_config;
     dev->get_stats = &fjn_get_stats;
     dev->set_multicast_list = &set_rx_mode;
-    strcpy(dev->name, lp->node.dev_name);
     ether_setup(dev);
-    dev->init = &fmvj18x_init;
     dev->open = &fjn_open;
     dev->stop = &fjn_close;
     dev->tx_timeout = fjn_tx_timeout;
     dev->watchdog_timeo = TX_TIMEOUT;
-    netif_start_queue (dev);
     
     /* Register with Card Services */
     link->next = dev_list;
@@ -352,7 +345,6 @@ static void fmvj18x_detach(dev_link_t *link)
 {
     local_info_t *lp = link->priv;
     dev_link_t **linkp;
-    long flags;
     
     DEBUG(0, "fmvj18x_detach(0x%p)\n", link);
     
@@ -362,14 +354,7 @@ static void fmvj18x_detach(dev_link_t *link)
     if (*linkp == NULL)
 	return;
 
-    save_flags(flags);
-    cli();
-    if (link->state & DEV_RELEASE_PENDING) {
-	del_timer(&link->release);
-	link->state &= ~DEV_RELEASE_PENDING;
-    }
-    restore_flags(flags);
-    
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG) {
 	fmvj18x_release((u_long)link);
 	if (link->state & DEV_STALE_CONFIG) {
@@ -470,7 +455,6 @@ static void fmvj18x_config(dev_link_t *link)
     CS_CHECK(RequestConfiguration, link->handle, &link->conf);
     dev->irq = link->irq.AssignedIRQ;
     dev->base_addr = link->io.BasePort1;
-    netif_start_queue (dev);
     if (register_netdev(dev) != 0) {
 	printk(KERN_NOTICE "fmvj18x_cs: register_netdev() failed\n");
 	goto failed;
@@ -528,6 +512,7 @@ static void fmvj18x_config(dev_link_t *link)
 	break;
     }
 
+    strcpy(lp->node.dev_name, dev->name);
     link->dev = &lp->node;
     link->state &= ~DEV_CONFIG_PENDING;
 
@@ -574,7 +559,7 @@ static void fmvj18x_release(u_long arg)
     CardServices(ReleaseIO, link->handle, &link->io);
     CardServices(ReleaseIRQ, link->handle, &link->irq);
     
-    link->state &= ~(DEV_CONFIG | DEV_RELEASE_PENDING);
+    link->state &= ~DEV_CONFIG;
     
 } /* fmvj18x_release */
 
@@ -594,8 +579,7 @@ static int fmvj18x_event(event_t event, int priority,
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
 	    netif_device_detach(dev);
-	    link->release.expires = jiffies + HZ/20;
-	    add_timer(&link->release);
+	    mod_timer(&link->release, jiffies + HZ/20);
 	}
 	break;
     case CS_EVENT_CARD_INSERTION:
@@ -608,8 +592,7 @@ static int fmvj18x_event(event_t event, int priority,
     case CS_EVENT_RESET_PHYSICAL:
 	if (link->state & DEV_CONFIG) {
 	    if (link->open)
-	    	netif_device_detach(dev);
-
+		netif_device_detach(dev);
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
 	break;
@@ -628,11 +611,6 @@ static int fmvj18x_event(event_t event, int priority,
     }
     return 0;
 } /* fmvj18x_event */
-
-static int fmvj18x_init(struct net_device *dev)
-{
-    return 0;
-} /* fmvj18x_init */
 
 /*====================================================================*/
 
@@ -675,9 +653,6 @@ static void fjn_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	       "unknown device.\n", irq);
         return;
     }
-    
-    spin_lock (&lp->lock);
-    
     ioaddr = dev->base_addr;
 
     /* avoid multiple interrupts */
@@ -710,11 +685,10 @@ static void fjn_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    lp->tx_queue = 0;
 	    lp->tx_queue_len = 0;
 	    dev->trans_start = jiffies;
-	    netif_wake_queue (dev);
 	} else {
 	    lp->tx_started = 0;
-	    netif_stop_queue (dev);
 	}
+	netif_wake_queue(dev);
     }
     DEBUG(4, "%s: exiting interrupt,\n", dev->name);
     DEBUG(4, "    tx_status %02x, rx_status %02x.\n", tx_stat, rx_stat);
@@ -722,53 +696,49 @@ static void fjn_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     outb(D_TX_INTR, ioaddr + TX_INTR);
     outb(D_RX_INTR, ioaddr + RX_INTR);
 
-    spin_unlock (&lp->lock);
-    
 } /* fjn_interrupt */
 
 /*====================================================================*/
-static void fjn_tx_timeout (struct net_device *dev)
+
+static void fjn_tx_timeout(struct net_device *dev)
 {
-	struct local_info_t *lp = (struct local_info_t *) dev->priv;
-	ioaddr_t ioaddr = dev->base_addr;
-	unsigned long flags;
+    struct local_info_t *lp = (struct local_info_t *)dev->priv;
+    ioaddr_t ioaddr = dev->base_addr;
 
-	printk (KERN_NOTICE "%s: transmit timed out with status %04x, %s?\n",
-		dev->name, htons (inw (ioaddr + TX_STATUS)),
-		inb (ioaddr + TX_STATUS) & F_TMT_RDY
-		? "IRQ conflict" : "network cable problem");
-	printk (KERN_NOTICE "%s: timeout registers: %04x %04x %04x "
-		"%04x %04x %04x %04x %04x.\n",
-		dev->name, htons (inw (ioaddr + 0)),
-		htons (inw (ioaddr + 2)), htons (inw (ioaddr + 4)),
-		htons (inw (ioaddr + 6)), htons (inw (ioaddr + 8)),
-		htons (inw (ioaddr + 10)), htons (inw (ioaddr + 12)),
-		htons (inw (ioaddr + 14)));
-	lp->stats.tx_errors++;
+    printk(KERN_NOTICE "%s: transmit timed out with status %04x, %s?\n",
+	   dev->name, htons(inw(ioaddr + TX_STATUS)),
+	   inb(ioaddr + TX_STATUS) & F_TMT_RDY
+	   ? "IRQ conflict" : "network cable problem");
+    printk(KERN_NOTICE "%s: timeout registers: %04x %04x %04x "
+	   "%04x %04x %04x %04x %04x.\n",
+	   dev->name, htons(inw(ioaddr + 0)),
+	   htons(inw(ioaddr + 2)), htons(inw(ioaddr + 4)),
+	   htons(inw(ioaddr + 6)), htons(inw(ioaddr + 8)),
+	   htons(inw(ioaddr +10)), htons(inw(ioaddr +12)),
+	   htons(inw(ioaddr +14)));
+    lp->stats.tx_errors++;
+    /* ToDo: We should try to restart the adaptor... */
+    cli();
 
-	/* ToDo: We should try to restart the adaptor... */
-	spin_lock_irqsave (&lp->lock, flags);
+    fjn_reset(dev);
 
-	fjn_reset (dev);
-
-	lp->tx_started = 0;
-	lp->tx_queue = 0;
-	lp->tx_queue_len = 0;
-	lp->sent = 0;
-	lp->open_time = jiffies;
-	netif_start_queue (dev);
-
-	spin_unlock_irqrestore (&lp->lock, flags);
+    lp->tx_started = 0;
+    lp->tx_queue = 0;
+    lp->tx_queue_len = 0;
+    lp->sent = 0;
+    lp->open_time = jiffies;
+    sti();
+    netif_start_queue(dev);
 }
-
 
 static int fjn_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     struct local_info_t *lp = (struct local_info_t *)dev->priv;
     ioaddr_t ioaddr = dev->base_addr;
 
-    netif_stop_queue (dev);
-    if (1) {
+    netif_stop_queue(dev);
+
+    {
 	short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 	unsigned char *buf = skb->data;
 
@@ -802,17 +772,17 @@ static int fjn_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	    lp->tx_queue_len = 0;
 	    dev->trans_start = jiffies;
 	    lp->tx_started = 1;
-	    netif_start_queue (dev);
+	    netif_start_queue(dev);
 	} else {
 	    if( sram_config == 0 ) {
 		if (lp->tx_queue_len < (4096 - (ETH_FRAME_LEN +2)) )
 		    /* Yes, there is room for one more packet. */
-		    netif_start_queue (dev);
+		    netif_start_queue(dev);
 	    } else {
 		if (lp->tx_queue_len < (8192 - (ETH_FRAME_LEN +2)) && 
 						lp->tx_queue < 127 )
 		    /* Yes, there is room for one more packet. */
-		    netif_start_queue (dev);
+		    netif_start_queue(dev);
 	    }
 	}
 
@@ -976,7 +946,7 @@ static void fjn_rx(struct net_device *dev)
     }
 
     /* If any worth-while packets have been received, dev_rint()
-	   has done a mark_bh(NET_BH) for us and will work on them
+	   has done a netif_wake_queue() for us and will work on them
 	   when we get to the bottom-half routine. */
 /*
     if( lp->cardtype != TDK ) {
@@ -1021,7 +991,7 @@ static int fjn_open(struct net_device *dev)
     lp->tx_queue = 0;
     lp->tx_queue_len = 0;
     lp->open_time = jiffies;
-    netif_start_queue (dev);    
+    netif_start_queue(dev);
     
     MOD_INC_USE_COUNT;
 
@@ -1039,7 +1009,7 @@ static int fjn_close(struct net_device *dev)
     DEBUG(4, "fjn_close('%s').\n", dev->name);
 
     lp->open_time = 0;
-    netif_stop_queue (dev);
+    netif_stop_queue(dev);
 
     /* Set configuration register 0 to disable Tx and Rx. */
     if( sram_config == 0 ) 
@@ -1057,11 +1027,8 @@ static int fjn_close(struct net_device *dev)
 	outb(INTR_OFF, ioaddr + LAN_CTRL);
 
     link->open--;
-    if (link->state & DEV_STALE_CONFIG) {
-	link->release.expires = jiffies + HZ/20;
-	link->state |= DEV_RELEASE_PENDING;
-	add_timer(&link->release);
-    }
+    if (link->state & DEV_STALE_CONFIG)
+	mod_timer(&link->release, jiffies + HZ/20);
     MOD_DEC_USE_COUNT;
 
     return 0;

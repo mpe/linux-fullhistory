@@ -184,8 +184,8 @@
 #define ASIZ_task_parent_exec_id	0x00000004
 #define AOFF_task_self_exec_id	0x000005fc
 #define ASIZ_task_self_exec_id	0x00000004
-#define AOFF_task_exit_sem	0x00000600
-#define ASIZ_task_exit_sem	0x00000020
+#define AOFF_task_alloc_lock	0x00000600
+#define ASIZ_task_alloc_lock	0x00000004
 #define AOFF_mm_mmap	0x00000000
 #define ASIZ_mm_mmap	0x00000004
 #define AOFF_mm_mmap_avl	0x00000004
@@ -465,8 +465,8 @@
 #define ASIZ_task_parent_exec_id	0x00000004
 #define AOFF_task_self_exec_id	0x00000700
 #define ASIZ_task_self_exec_id	0x00000004
-#define AOFF_task_exit_sem	0x00000704
-#define ASIZ_task_exit_sem	0x00000024
+#define AOFF_task_alloc_lock	0x00000704
+#define ASIZ_task_alloc_lock	0x00000008
 #define AOFF_mm_mmap	0x00000000
 #define ASIZ_mm_mmap	0x00000004
 #define AOFF_mm_mmap_avl	0x00000004

@@ -7,6 +7,7 @@
 #ifndef _SPARC_IRQ_H
 #define _SPARC_IRQ_H
 
+#include <linux/config.h>
 #include <linux/linkage.h>
 #include <linux/threads.h>     /* For NR_CPUS */
 
@@ -21,7 +22,7 @@ BTFIXUPDEF_CALL(char *, __irq_itoa, unsigned int)
 #define NR_IRQS    15
 
 /* IRQ handler dispatch entry and exit. */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern unsigned int local_irq_count[NR_CPUS];
 #define irq_enter(cpu, irq)                     \
 do {    hardirq_enter(cpu);                     \
@@ -63,7 +64,7 @@ extern void claim_ticker14(void (*irq_handler)(int, void *, struct pt_regs *),
 			   int irq,
 			   unsigned int timeout);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 BTFIXUPDEF_CALL(void, set_cpu_int, int, int)
 BTFIXUPDEF_CALL(void, clear_cpu_int, int, int)
 BTFIXUPDEF_CALL(void, set_irq_udt, int)

@@ -9,6 +9,7 @@
  * I hate traps on the sparc, grrr...
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>  /* for jiffies */
 #include <linux/kernel.h>
 #include <linux/signal.h>
@@ -243,7 +244,7 @@ void do_fpd_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 
 	put_psr(get_psr() | PSR_EF);    /* Allow FPU ops. */
 	regs->psr |= PSR_EF;
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	if(last_task_used_math == current)
 		goto out;
 	if(last_task_used_math) {
@@ -269,7 +270,7 @@ void do_fpd_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 	}
 	current->flags |= PF_USEDFPU;
 #endif
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 out:
 #endif
 	unlock_kernel();
@@ -289,7 +290,7 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 	siginfo_t info;
 	unsigned long fsr;
 	int ret = 0;
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	struct task_struct *fpt = last_task_used_math;
 #else
 	struct task_struct *fpt = current;
@@ -300,7 +301,7 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 	 * error into our fake static buffer and hope it don't
 	 * happen again.  Thank you crashme...
 	 */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	if(!fpt) {
 #else
         if(!(fpt->flags & PF_USEDFPU)) {
@@ -345,7 +346,7 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 	}
 	/* nope, better SIGFPE the offending process... */
 	       
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	fpt->flags &= ~PF_USEDFPU;
 #endif
 	if(psr & PSR_PS) {
@@ -382,7 +383,7 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			info.si_code = FPE_FLTRES;
 	}
 	send_sig_info(SIGFPE, &info, fpt);
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	last_task_used_math = NULL;
 #endif
 	regs->psr &= ~PSR_EF;

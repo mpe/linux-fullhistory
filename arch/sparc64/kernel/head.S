@@ -366,7 +366,7 @@ setup_tba:	/* i0 = is_starfire */
 
 	/* Setup Interrupt globals */
 	wrpr	%o1, (PSTATE_IG|PSTATE_IE), %pstate
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	sethi	%hi(__up_workvec), %g5
 	or	%g5, %lo(__up_workvec), %g6
 #else

@@ -8,6 +8,7 @@
 #ifndef _SPARC_BITOPS_H
 #define _SPARC_BITOPS_H
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <asm/byteorder.h>
 
@@ -82,7 +83,7 @@ extern __inline__ void change_bit(unsigned long nr, void *addr)
 
 #include <asm/system.h>
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define __SMPVOL volatile
 #else
 #define __SMPVOL

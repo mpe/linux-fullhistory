@@ -2,7 +2,7 @@
 
     A driver for PCMCIA serial devices
 
-    serial_cs.c 1.117 1999/12/11 03:59:18
+    serial_cs.c 1.118 2000/05/04 01:29:47
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -58,7 +58,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"serial_cs.c 1.117 1999/12/11 03:59:18 (David Hinds)";
+"serial_cs.c 1.118 2000/05/04 01:29:47 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -206,7 +206,6 @@ static void serial_detach(dev_link_t *link)
 {
     serial_info_t *info = link->priv;
     dev_link_t **linkp;
-    long flags;
     int ret;
 
     DEBUG(0, "serial_detach(0x%p)\n", link);
@@ -217,14 +216,7 @@ static void serial_detach(dev_link_t *link)
     if (*linkp == NULL)
 	return;
 
-    save_flags(flags);
-    cli();
-    if (link->state & DEV_RELEASE_PENDING) {
-	del_timer(&link->release);
-	link->state &= ~DEV_RELEASE_PENDING;
-    }
-    restore_flags(flags);
-    
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG)
 	serial_release((u_long)link);
     
@@ -610,11 +602,8 @@ static int serial_event(event_t event, int priority,
     switch (event) {
     case CS_EVENT_CARD_REMOVAL:
 	link->state &= ~DEV_PRESENT;
-	if (link->state & DEV_CONFIG) {
-	    link->release.expires = jiffies + HZ/20;
-	    link->state |= DEV_RELEASE_PENDING;
-	    add_timer(&link->release);
-	}
+	if (link->state & DEV_CONFIG)
+	    mod_timer(&link->release, jiffies + HZ/20);
 	break;
     case CS_EVENT_CARD_INSERTION:
 	link->state |= DEV_PRESENT | DEV_CONFIG_PENDING;

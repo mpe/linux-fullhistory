@@ -36,7 +36,7 @@
 #define SA_IMAP_MASKED		0x100
 #define SA_DMA_SYNC		0x200
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 static void distribute_irqs(void);
 #endif
 
@@ -55,7 +55,7 @@ static void distribute_irqs(void);
 
 struct ino_bucket ivector_table[NUM_IVECS] __attribute__ ((aligned (64)));
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 unsigned int __up_workvec[16] __attribute__ ((aligned (64)));
 #define irq_work(__cpu, __pil)	&(__up_workvec[(void)(__cpu), (__pil)])
 #else
@@ -79,7 +79,7 @@ int get_irq_list(char *buf)
 {
 	int i, len = 0;
 	struct irqaction *action;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	int j;
 #endif
 
@@ -87,7 +87,7 @@ int get_irq_list(char *buf)
 		if(!(action = *(i + irq_action)))
 			continue;
 		len += sprintf(buf + len, "%3d: ", i);
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 		len += sprintf(buf + len, "%10u ", kstat_irqs(i));
 #else
 		for (j = 0; j < smp_num_cpus; j++)
@@ -409,7 +409,7 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	}
 	restore_flags(flags);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	distribute_irqs();
 #endif
 	return 0;
@@ -540,7 +540,7 @@ out:
 /* Only uniprocessor needs this IRQ/BH locking depth, on SMP it
  * lives in the brlock table for cache reasons.
  */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 unsigned int local_irq_count;
 unsigned int local_bh_count;
 #else
@@ -679,7 +679,7 @@ void __global_restore_flags(unsigned long flags)
 	}
 }
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 void catch_disabled_ivec(struct pt_regs *regs)
 {
@@ -709,7 +709,7 @@ void handler_irq(int irq, struct pt_regs *regs)
 {
 	struct ino_bucket *bp, *nbp;
 	int cpu = smp_processor_id();
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	extern int this_is_starfire;
 	int should_forward = (this_is_starfire == 0	&&
 			      irq < 10			&&
@@ -732,7 +732,7 @@ void handler_irq(int irq, struct pt_regs *regs)
 	}
 #endif
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	/*
 	 * Check for TICK_INT on level 14 softint.
 	 */
@@ -745,7 +745,7 @@ void handler_irq(int irq, struct pt_regs *regs)
 	kstat.irqs[cpu][irq]++;
 
 	/* Sliiiick... */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	bp = ((irq != 0) ?
 	      __bucket(xchg32(irq_work(cpu, irq), 0)) :
 	      &pil0_dummy_bucket);
@@ -771,7 +771,7 @@ void handler_irq(int irq, struct pt_regs *regs)
 			}
 			/* Only the dummy bucket lacks IMAP/ICLR. */
 			if(bp->pil != 0) {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 				/* Ok, here is what is going on:
 				 * 1) Retargeting IRQs on Starfire is very
 				 *    expensive so just forget about it on them.
@@ -915,7 +915,7 @@ int request_fast_irq(unsigned int irq,
 
 	restore_flags(flags);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	distribute_irqs();
 #endif
 	return 0;
@@ -941,14 +941,14 @@ void init_timers(void (*cfunc)(int, void *, struct pt_regs *),
 	unsigned long pstate;
 	extern unsigned long timer_tick_offset;
 	int node, err;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	extern void smp_tick_init(void);
 #endif
 
 	node = linux_cpus[0].prom_node;
 	*clock = prom_getint(node, "clock-frequency");
 	timer_tick_offset = *clock / HZ;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_tick_init();
 #endif
 
@@ -1015,7 +1015,7 @@ void init_timers(void (*cfunc)(int, void *, struct pt_regs *),
 	sti();
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 static int retarget_one_irq(struct irqaction *p, int goal_cpu)
 {
 	extern int this_is_starfire;
@@ -1142,7 +1142,7 @@ void __init init_IRQ(void)
 		map_prom_timers();
 		kill_prom_timer();
 		memset(&ivector_table[0], 0, sizeof(ivector_table));
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 		memset(&__up_workvec[0], 0, sizeof(__up_workvec));
 #endif
 	}

@@ -86,7 +86,7 @@ void show_mem(void)
 	printk("%ld pages of RAM\n", totalram_pages);
 	printk("%d free pages\n", nr_free_pages());
 	printk("%ld pages in page table cache\n",pgtable_cache_size);
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	if (sparc_cpu_model == sun4m || sparc_cpu_model == sun4d)
 		printk("%ld entries in page dir cache\n",pgd_cache_size);
 #endif	

@@ -18,6 +18,7 @@
  */
 #define current_text_addr() ({ __label__ _l; _l: &&_l;})
 
+#include <linux/config.h>
 #if !defined (_LANGUAGE_ASSEMBLY)
 #include <asm/cachectl.h>
 #include <asm/mipsregs.h>
@@ -45,7 +46,7 @@ extern char mips4_available;		/* CPU has MIPS IV ISA or better */
 extern struct mips_cpuinfo boot_cpu_data;
 extern unsigned int vced_count, vcei_count;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern struct mips_cpuinfo cpu_data[];
 #define current_cpu_data cpu_data[smp_processor_id()]
 #else

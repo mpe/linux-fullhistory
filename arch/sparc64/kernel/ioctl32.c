@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.88 2000/04/14 10:10:34 davem Exp $
+/* $Id: ioctl32.c,v 1.89 2000/05/06 10:38:42 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -31,6 +31,7 @@
 #include <linux/fd.h>
 #include <linux/ppp_defs.h>
 #include <linux/if_ppp.h>
+#include <linux/if_pppox.h>
 #include <linux/mtio.h>
 #include <linux/cdrom.h>
 #include <linux/loop.h>
@@ -2763,6 +2764,9 @@ COMPATIBLE_IOCTL(PPPIOCSMRRU)
 COMPATIBLE_IOCTL(PPPIOCCONNECT)
 COMPATIBLE_IOCTL(PPPIOCDISCONN)
 COMPATIBLE_IOCTL(PPPIOCATTCHAN)
+/* PPPOX */
+COMPATIBLE_IOCTL(PPPOEIOCSFWD);
+COMPATIBLE_IOCTL(PPPOEIOCDFWD);
 /* CDROM stuff */
 COMPATIBLE_IOCTL(CDROMPAUSE)
 COMPATIBLE_IOCTL(CDROMRESUME)

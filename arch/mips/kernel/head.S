@@ -157,7 +157,7 @@
 	eret
 	END(except_vec0_r45k_bvahwbug)
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* TLB refill, EXL == 0, R4000 MP badvaddr hwbug version */
 	LEAF(except_vec0_r4k_mphwbug)
 	.set	mips3
@@ -216,7 +216,7 @@
 	eret
 	END(except_vec0_r4k_250MHZhwbug)
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* TLB refill, EXL == 0, R4000 MP 250MHZ entrylo[01]+badvaddr bug version */
 	LEAF(except_vec0_r4k_MP250MHZhwbug)
 	.set	mips3

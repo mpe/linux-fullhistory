@@ -290,7 +290,7 @@ extern int __min_ipl;
 #define local_irq_disable()		__cli()
 #define local_irq_enable()		__sti()
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 extern int global_irq_holder;
 
@@ -306,7 +306,7 @@ extern void __global_restore_flags(unsigned long flags);
 #define save_flags(flags)	((flags) = __global_save_flags())
 #define restore_flags(flags)    __global_restore_flags(flags)
 
-#else /* __SMP__ */
+#else /* CONFIG_SMP */
 
 #define cli()			__cli()
 #define sti()			__sti()
@@ -314,7 +314,7 @@ extern void __global_restore_flags(unsigned long flags);
 #define save_and_cli(flags)	__save_and_cli(flags)
 #define restore_flags(flags)	__restore_flags(flags)
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 /*
  * TB routines..

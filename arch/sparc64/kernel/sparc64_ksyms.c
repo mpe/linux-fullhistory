@@ -89,7 +89,7 @@ extern int __ashrdi3(int, int);
 
 extern void dump_thread(struct pt_regs *, struct user *);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern spinlock_t kernel_flag;
 extern int smp_num_cpus;
 #ifdef SPIN_LOCK_DEBUG
@@ -117,7 +117,7 @@ __attribute__((section("__ksymtab"))) =				\
 { (unsigned long) &__sparc_priv_ ## sym, "__" #sym }
 
 /* used by various drivers */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #ifndef SPIN_LOCK_DEBUG
 /* Out of line rw-locking implementation. */
 EXPORT_SYMBOL_PRIVATE(read_lock);

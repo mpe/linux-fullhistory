@@ -22,6 +22,7 @@
 #include <linux/list.h>
 #include <linux/skbuff.h>
 #include <linux/poll.h>
+#include <asm/atomic.h>
 
 struct ppp_channel;
 
@@ -31,6 +32,7 @@ struct ppp_channel_ops {
 	int	(*start_xmit)(struct ppp_channel *, struct sk_buff *);
 	/* Handle an ioctl call that has come in via /dev/ppp. */
 	int	(*ioctl)(struct ppp_channel *, unsigned int, unsigned long);
+	
 };
 
 struct ppp_channel {

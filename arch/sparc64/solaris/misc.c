@@ -4,6 +4,7 @@
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
+#include <linux/config.h>
 #include <linux/module.h> 
 #include <linux/types.h>
 #include <linux/smp_lock.h>
@@ -368,7 +369,7 @@ asmlinkage int solaris_sysconf(int id)
 	case SOLARIS_CONFIG_PROF_TCK:
 		return prom_getintdefault(prom_cpu_nodes[smp_processor_id()],
 					  "clock-frequency", 167000000);
-#ifdef __SMP__	
+#ifdef CONFIG_SMP	
 	case SOLARIS_CONFIG_NPROC_CONF:	return NR_CPUS;
 	case SOLARIS_CONFIG_NPROC_ONLN:	return smp_num_cpus;
 #else

@@ -7,6 +7,7 @@
 #ifndef _SPARC_WINMACRO_H
 #define _SPARC_WINMACRO_H
 
+#include <linux/config.h>
 #include <asm/ptrace.h>
 #include <asm/psr.h>
 
@@ -111,7 +112,7 @@
         add      %scratch, 1, %scratch; \
         st       %scratch, [%cur_reg + AOFF_task_thread + AOFF_thread_w_saved];
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define LOAD_CURRENT4M(dest_reg, idreg) \
         rd       %tbr, %idreg; \
 	sethi    %hi(C_LABEL(current_set)), %dest_reg; \

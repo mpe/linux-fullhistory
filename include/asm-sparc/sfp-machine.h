@@ -24,6 +24,8 @@
 
 #ifndef _SFP_MACHINE_H
 #define _SFP_MACHINE_H
+
+#include <linux/config.h>
    
 #define _FP_W_TYPE_SIZE		32
 #define _FP_W_TYPE		unsigned long
@@ -174,13 +176,13 @@
 	     "3" ((USItype)(x0))					\
 	   : "cc")
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 extern struct task_struct *last_task_used_math;
 #endif
 
 /* Obtain the current rounding mode. */
 #ifndef FP_ROUNDMODE
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define FP_ROUNDMODE	((current->thread.fsr >> 30) & 0x3)
 #else
 #define FP_ROUNDMODE	((last_task_used_math->thread.fsr >> 30) & 0x3)
@@ -196,7 +198,7 @@ extern struct task_struct *last_task_used_math;
 
 #define FP_HANDLE_EXCEPTIONS return _fex
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define FP_INHIBIT_RESULTS ((current->thread.fsr >> 23) & _fex)
 #else
 #define FP_INHIBIT_RESULTS ((last_task_used_math->thread.fsr >> 23) & _fex)

@@ -294,7 +294,7 @@ bad_trap_handler:
 real_irq_entry:
 	SAVE_ALL
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	.globl	patchme_maybe_smp_msg
 
 	cmp	%l7, 12
@@ -319,7 +319,7 @@ patch_handler_irq:
 
 	RESTORE_ALL
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* SMP per-cpu ticker interrupts are handled specially. */
 smp4m_ticker:
 	bne	real_irq_continue+4
@@ -479,7 +479,7 @@ linux_trap_ipi15_sun4d:
 	/* FIXME */
 1:	b,a	1b
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 	/* This routine handles illegal instructions and privileged
 	 * instruction attempts from user code.
@@ -1462,7 +1462,7 @@ C_LABEL(ret_from_syscall):
 	b	C_LABEL(ret_sys_call)
 	 ld	[%sp + REGWIN_SZ + PT_I0], %o0
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	.globl	C_LABEL(ret_from_smpfork)
 C_LABEL(ret_from_smpfork):
 	wr	%l0, PSR_ET, %psr
@@ -1806,7 +1806,7 @@ C_LABEL(udelay):
 	sethi	%hi(0x10c6), %o1
 	call	.umul
 	 or	%o1, %lo(0x10c6), %o1
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	sethi	%hi(C_LABEL(loops_per_sec)), %o3
 	call	.umul
 	 ld	[%o3 + %lo(C_LABEL(loops_per_sec))], %o1

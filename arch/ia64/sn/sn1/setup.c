@@ -70,7 +70,7 @@ sn1_setup(char **cmdline_p)
 	outb(LATCH >> 8, 0x40);	     /* MSB */
 	printk("PIT: LATCH at 0x%x%x for %d HZ\n", LATCH >> 8, LATCH & 0xff, HZ);
 #endif
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	init_smp_config();
 #endif
 	screen_info = sn1_screen_info;

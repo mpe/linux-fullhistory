@@ -92,7 +92,7 @@ __stext:
 _stext:
 start:
 C_LABEL(trapbase):
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 C_LABEL(trapbase_cpu0):
 #endif
 /* We get control passed to us here at t_zero. */
@@ -124,7 +124,7 @@ t_irq12:TRAP_ENTRY_INTERRUPT(12)            /* IRQ Zilog serial chip         */
 t_irq13:TRAP_ENTRY_INTERRUPT(13)            /* IRQ Audio Intr.               */
 t_irq14:TRAP_ENTRY_INTERRUPT(14)            /* IRQ Timer #2                  */
 	.globl	t_nmi
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 t_nmi:	NMI_TRAP                            /* Level 15 (NMI)                */
 #else
 t_nmi:	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
@@ -203,7 +203,7 @@ dbtrap2:BAD_TRAP(0xff)                      /* Debugger/PROM breakpoint #2   */
 	.globl	C_LABEL(end_traptable)
 C_LABEL(end_traptable):
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Trap tables for the other cpus. */
 	.globl	C_LABEL(trapbase_cpu1), C_LABEL(trapbase_cpu2), C_LABEL(trapbase_cpu3)
 C_LABEL(trapbase_cpu1):
@@ -885,7 +885,7 @@ sun4d_init:
 	or	%g5, %g3, %g5
 	st	%g5, [%g4]
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Get our CPU id out of bootbus */
 	set     SUN4D_BOOTBUS_CPUID, %g3
 	lduba   [%g3] ASI_M_CTL, %g3
@@ -1030,7 +1030,7 @@ sun4c_continue_boot:
 		 */
 		set	C_LABEL(init_task_union), %g6
 		set	C_LABEL(current_set), %g2
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		sethi	%hi(C_LABEL(boot_cpu_id4)), %g3
 		ldub	[%g3 + %lo(C_LABEL(boot_cpu_id4))], %g3
 		st	%g6, [%g2]

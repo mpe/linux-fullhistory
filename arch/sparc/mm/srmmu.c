@@ -57,7 +57,7 @@ extern struct resource sparc_iomap;
 
 extern unsigned long last_valid_pfn;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define FLUSH_BEGIN(mm)
 #define FLUSH_END
 #else
@@ -77,7 +77,7 @@ BTFIXUPDEF_CALL(void, flush_chunk, unsigned long)
 #define flush_page_for_dma(page) BTFIXUP_CALL(flush_page_for_dma)(page)
 int flush_page_for_dma_global = 1;
 #define flush_chunk(chunk) BTFIXUP_CALL(flush_chunk)(chunk)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 BTFIXUPDEF_CALL(void, local_flush_page_for_dma, unsigned long)
 
 #define local_flush_page_for_dma(page) BTFIXUP_CALL(local_flush_page_for_dma)(page)
@@ -513,7 +513,7 @@ static void srmmu_set_pte_nocache_viking(pte_t *ptep, pte_t pteval)
 
 static void srmmu_quick_kernel_fault(unsigned long address)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	printk("CPU[%d]: Kernel faults at addr=0x%08lx\n",
 	       smp_processor_id(), address);
 	while (1) ;
@@ -1464,7 +1464,7 @@ static void __init init_vac_layout(void)
 {
 	int nd, cache_lines;
 	char node_str[128];
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	int cpu = 0;
 	unsigned long max_size = 0;
 	unsigned long min_line_size = 0x10000000;
@@ -1488,7 +1488,7 @@ static void __init init_vac_layout(void)
 
 			vac_cache_size = cache_lines * vac_line_size;
 			vac_badbits = (vac_cache_size - 1) & PAGE_MASK;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 			if(vac_cache_size > max_size)
 				max_size = vac_cache_size;
 			if(vac_line_size < min_line_size)
@@ -1505,7 +1505,7 @@ static void __init init_vac_layout(void)
 		prom_printf("No CPU nodes found, halting.\n");
 		prom_halt();
 	}
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	vac_cache_size = max_size;
 	vac_line_size = min_line_size;
 	vac_badbits = (vac_cache_size - 1) & PAGE_MASK;
@@ -1998,7 +1998,7 @@ static void __init poke_viking(void)
 	mreg &= ~(VIKING_ACENABLE);
 	srmmu_set_mmureg(mreg);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Avoid unnecessary cross calls. */
 	BTFIXUPCOPY_CALL(flush_cache_all, local_flush_cache_all);
 	BTFIXUPCOPY_CALL(flush_cache_mm, local_flush_cache_mm);
@@ -2052,7 +2052,7 @@ static void __init init_viking(void)
 	BTFIXUPSET_CALL(flush_cache_page, viking_flush_cache_page, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_cache_range, viking_flush_cache_range, BTFIXUPCALL_NORM);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if (sparc_cpu_model == sun4d) {
 		BTFIXUPSET_CALL(flush_tlb_all, sun4dsmp_flush_tlb_all, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_tlb_mm, sun4dsmp_flush_tlb_mm, BTFIXUPCALL_NORM);
@@ -2263,7 +2263,7 @@ static void __init patch_window_trap_handlers(void)
 	PATCH_BRANCH(sparc_ttable[SP_TRAP_DACC].inst_three, srmmu_fault);
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 /* Local cross-calls. */
 static void smp_flush_page_for_dma(unsigned long page)
 {
@@ -2299,7 +2299,7 @@ void __init ld_mmu_srmmu(void)
 	pg_iobits = SRMMU_VALID | SRMMU_WRITE | SRMMU_REF;
 	
 	/* Functions */
-#ifndef __SMP__	
+#ifndef CONFIG_SMP	
 	BTFIXUPSET_CALL(___xchg32, ___xchg32_sun4md, BTFIXUPCALL_SWAPG1G2);
 #endif
 	BTFIXUPSET_CALL(get_pte_fast, srmmu_get_pte_fast, BTFIXUPCALL_RETINT(0));
@@ -2383,7 +2383,7 @@ void __init ld_mmu_srmmu(void)
 	get_srmmu_type();
 	patch_window_trap_handlers();
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* El switcheroo... */
 
 	BTFIXUPCOPY_CALL(local_flush_cache_all, flush_cache_all);
@@ -2417,7 +2417,7 @@ void __init ld_mmu_srmmu(void)
 		ld_mmu_iounit();
 	else
 		ld_mmu_iommu();
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if (sparc_cpu_model == sun4d)
 		sun4d_init_smp();
 	else

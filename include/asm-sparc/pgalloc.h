@@ -2,6 +2,7 @@
 #ifndef _SPARC_PGALLOC_H
 #define _SPARC_PGALLOC_H
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 
@@ -9,7 +10,7 @@
 #include <asm/btfixup.h>
 
 /* Fine grained cache/tlb flushing. */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 BTFIXUPDEF_CALL(void, local_flush_cache_all, void)
 BTFIXUPDEF_CALL(void, local_flush_cache_mm, struct mm_struct *)
 BTFIXUPDEF_CALL(void, local_flush_cache_range, struct mm_struct *, unsigned long, unsigned long)

@@ -407,20 +407,18 @@ typedef struct local_info_t {
     int new_mii; /* has full 10baseT/100baseT MII */
     int modem;	 /* is a multi function card (i.e with a modem) */
     caddr_t dingo_ccr; /* only used for CEM56 cards */
-    int suspended;
     unsigned last_ptr_value; /* last packets transmitted value */
     const char *manf_str;
-    spinlock_t lock;
 } local_info_t;
 
 /****************
  * Some more prototypes
  */
 static int do_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static void do_tx_timeout(struct net_device *dev);
 static struct enet_statistics *do_get_stats(struct net_device *dev);
 static void set_addresses(struct net_device *dev);
 static void set_multicast_list(struct net_device *dev);
-static int do_init(struct net_device *dev);
 static int set_card_type(dev_link_t *link, const void *s);
 static int do_config(struct net_device *dev, struct ifmap *map);
 static int do_open(struct net_device *dev);
@@ -430,7 +428,6 @@ static void do_reset(struct net_device *dev, int full);
 static int init_mii(struct net_device *dev);
 static void do_powerdown(struct net_device *dev);
 static int do_stop(struct net_device *dev);
-static void xirc_tx_timeout (struct net_device *dev);
 
 /*=============== Helper functions =========================*/
 static void
@@ -693,8 +690,6 @@ xirc2ps_attach(void)
     local = kmalloc(sizeof(*local), GFP_KERNEL);
     if (!local) return NULL;
     memset(local, 0, sizeof(*local));
-    
-    local->lock = SPIN_LOCK_UNLOCKED;
     link = &local->link; dev = &local->dev;
     link->priv = dev->priv = local;
 
@@ -716,14 +711,11 @@ xirc2ps_attach(void)
     dev->get_stats = &do_get_stats;
     dev->do_ioctl = &do_ioctl;
     dev->set_multicast_list = &set_multicast_list;
-    strcpy(dev->name, local->node.dev_name);
     ether_setup(dev);
-    dev->init = &do_init;
     dev->open = &do_open;
     dev->stop = &do_stop;
-    dev->tx_timeout = xirc_tx_timeout;
+    dev->tx_timeout = do_tx_timeout;
     dev->watchdog_timeo = TX_TIMEOUT;
-    netif_start_queue(dev);
 
     /* Register with Card Services */
     link->next = dev_list;
@@ -758,7 +750,6 @@ xirc2ps_detach(dev_link_t * link)
 {
     local_info_t *local = link->priv;
     dev_link_t **linkp;
-    long flags;
 
     DEBUG(0, "detach(0x%p)\n", link);
 
@@ -771,20 +762,13 @@ xirc2ps_detach(dev_link_t * link)
 	return;
     }
 
-    save_flags(flags);
-    cli();
-    if (link->state & DEV_RELEASE_PENDING) {
-	del_timer(&link->release);
-	link->state &= ~DEV_RELEASE_PENDING;
-    }
-    restore_flags(flags);
-
     /*
      * If the device is currently configured and active, we won't
      * actually delete it yet.	Instead, it is marked so that when
      * the release() function is called, that will trigger a proper
      * detach().
      */
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG) {
 	DEBUG(0, "detach postponed, '%s' still locked\n",
 	      link->dev->dev_name);
@@ -1171,8 +1155,7 @@ xirc2ps_config(dev_link_t * link)
 	 * memory and write direct to the CIS registers
 	 */
 	req.Attributes = WIN_DATA_WIDTH_8|WIN_MEMORY_TYPE_AM|WIN_ENABLE;
-	req.Base = 0;
-	req.Size = 0x1000; /* 4k window */
+	req.Base = req.Size = 0;
 	req.AccessSpeed = 0;
 	link->win = (window_handle_t)link->handle;
 	if ((err = CardServices(RequestWindow, &link->win, &req))) {
@@ -1239,13 +1222,13 @@ xirc2ps_config(dev_link_t * link)
     /* we can now register the device with the net subsystem */
     dev->irq = link->irq.AssignedIRQ;
     dev->base_addr = link->io.BasePort1;
-    netif_start_queue(dev);
     if ((err=register_netdev(dev))) {
 	printk(KNOT_XIRC "register_netdev() failed\n");
 	goto config_error;
     }
 
     link->state &= ~DEV_CONFIG_PENDING;
+    strcpy(local->node.dev_name, dev->name);
     link->dev = &local->node;
 
     if (local->dingo)
@@ -1305,7 +1288,7 @@ xirc2ps_release(u_long arg)
     CardServices(ReleaseConfiguration, link->handle);
     CardServices(ReleaseIO, link->handle, &link->io);
     CardServices(ReleaseIRQ, link->handle, &link->irq);
-    link->state &= ~(DEV_CONFIG | DEV_RELEASE_PENDING);
+    link->state &= ~DEV_CONFIG;
 
 } /* xirc2ps_release */
 
@@ -1334,47 +1317,44 @@ xirc2ps_event(event_t event, int priority,
     DEBUG(0, "event(%d)\n", (int)event);
 
     switch (event) {
-      case CS_EVENT_REGISTRATION_COMPLETE:
-	  DEBUG(0, "registration complete\n");
-	  break;
-      case CS_EVENT_CARD_REMOVAL:
-	  link->state &= ~DEV_PRESENT;
-	  if (link->state & DEV_CONFIG) {
-	      netif_device_detach(dev);
-	      link->release.expires = jiffies + HZ / 20;
-	      add_timer(&link->release);
-	  }
-	  break;
-      case CS_EVENT_CARD_INSERTION:
-	  link->state |= DEV_PRESENT | DEV_CONFIG_PENDING;
-	  xirc2ps_config(link);
-	  break;
-      case CS_EVENT_PM_SUSPEND:
-	  link->state |= DEV_SUSPEND;
-	  /* Fall through... */
-      case CS_EVENT_RESET_PHYSICAL:
-	  if (link->state & DEV_CONFIG) {
-	      if (link->open) {
-		  netif_device_detach(dev);
-		  lp->suspended=1;
-		  do_powerdown(dev);
-	      }
-	      CardServices(ReleaseConfiguration, link->handle);
-	  }
-	  break;
-      case CS_EVENT_PM_RESUME:
-	  link->state &= ~DEV_SUSPEND;
-	  /* Fall through... */
-      case CS_EVENT_CARD_RESET:
-	  if (link->state & DEV_CONFIG) {
-	     CardServices(RequestConfiguration, link->handle, &link->conf);
-	     if (link->open) {
-		 do_reset(dev,1);
-		 lp->suspended=0;
-		 netif_device_attach(dev);
-	     }
-	  }
-	  break;
+    case CS_EVENT_REGISTRATION_COMPLETE:
+	DEBUG(0, "registration complete\n");
+	break;
+    case CS_EVENT_CARD_REMOVAL:
+	link->state &= ~DEV_PRESENT;
+	if (link->state & DEV_CONFIG) {
+	    netif_device_detach(dev);
+	    mod_timer(&link->release, jiffies + HZ/20);
+	}
+	break;
+    case CS_EVENT_CARD_INSERTION:
+	link->state |= DEV_PRESENT | DEV_CONFIG_PENDING;
+	xirc2ps_config(link);
+	break;
+    case CS_EVENT_PM_SUSPEND:
+	link->state |= DEV_SUSPEND;
+	/* Fall through... */
+    case CS_EVENT_RESET_PHYSICAL:
+	if (link->state & DEV_CONFIG) {
+	    if (link->open) {
+		netif_device_detach(dev);
+		do_powerdown(dev);
+	    }
+	    CardServices(ReleaseConfiguration, link->handle);
+	}
+	break;
+    case CS_EVENT_PM_RESUME:
+	link->state &= ~DEV_SUSPEND;
+	/* Fall through... */
+    case CS_EVENT_CARD_RESET:
+	if (link->state & DEV_CONFIG) {
+	    CardServices(RequestConfiguration, link->handle, &link->conf);
+	    if (link->open) {
+		do_reset(dev,1);
+		netif_device_attach(dev);
+	    }
+	}
+	break;
     }
     return 0;
 } /* xirc2ps_event */
@@ -1399,7 +1379,6 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				  * -- on a laptop?
 				  */
 
-    spin_lock (&lp->lock);
     if (!netif_device_present(dev))
 	return;
 
@@ -1596,9 +1575,6 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    goto loop_entry;
     }
     SelectPage(saved_page);
-
-    spin_unlock (&lp->lock);
-
     PutByte(XIRCREG_CR, EnableIntr);  /* re-enable interrupts */
     /* Instead of dropping packets during a receive, we could
      * force an interrupt with this command:
@@ -1608,25 +1584,17 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 /*====================================================================*/
 
-static void xirc_tx_timeout (struct net_device *dev)
+static void
+do_tx_timeout(struct net_device *dev)
 {
-	local_info_t *lp = dev->priv;
-
-	if (lp->suspended) {
-	    dev->trans_start = jiffies;
-	    lp->stats.tx_dropped++;
-	    netif_start_queue(dev);
-	    return;
-	}
-
-	printk(KERN_NOTICE "%s: transmit timed out\n", dev->name);
-	lp->stats.tx_errors++;
-	/* reset the card */
-	do_reset(dev,1);
-	dev->trans_start = jiffies;
-	netif_start_queue(dev);
+    local_info_t *lp = dev->priv;
+    printk(KERN_NOTICE "%s: transmit timed out\n", dev->name);
+    lp->stats.tx_errors++;
+    /* reset the card */
+    do_reset(dev,1);
+    dev->trans_start = jiffies;
+    netif_start_queue(dev);
 }
-
 
 static int
 do_start_xmit(struct sk_buff *skb, struct net_device *dev)
@@ -1675,8 +1643,8 @@ do_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
     dev_kfree_skb (skb);
     dev->trans_start = jiffies;
-    netif_start_queue(dev);
     lp->stats.tx_bytes += pktlen;
+    netif_start_queue(dev);
     return 0;
 }
 
@@ -1760,17 +1728,6 @@ set_multicast_list(struct net_device *dev)
     SelectPage(0);
 }
 
-/****************
- * We never need to do anything when a IIps device is "initialized"
- * by the net software, because we only register already-found cards.
- */
-static int
-do_init(struct net_device *dev)
-{
-    DEBUG(0, "do_init(%p)\n", dev);
-    return 0;
-}
-
 static int
 do_config(struct net_device *dev, struct ifmap *map)
 {
@@ -1821,7 +1778,6 @@ do_open(struct net_device *dev)
     MOD_INC_USE_COUNT;
 
     netif_start_queue(dev);
-    lp->suspended = 0;
     do_reset(dev,1);
 
     return 0;
@@ -2149,11 +2105,8 @@ do_stop(struct net_device *dev)
     SelectPage(0);
 
     link->open--;
-    if (link->state & DEV_STALE_CONFIG) {
-	link->release.expires = jiffies + HZ/20;
-	link->state |= DEV_RELEASE_PENDING;
-	add_timer(&link->release);
-    }
+    if (link->state & DEV_STALE_CONFIG)
+	mod_timer(&link->release, jiffies + HZ/20);
 
     MOD_DEC_USE_COUNT;
 

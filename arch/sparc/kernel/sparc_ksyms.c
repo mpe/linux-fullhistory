@@ -73,7 +73,7 @@ extern int __divdi3(int, int);
 
 extern void dump_thread(struct pt_regs *, struct user *);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern spinlock_t kernel_flag;
 #endif
 
@@ -108,7 +108,7 @@ EXPORT_SYMBOL_PRIVATE(_rw_read_enter);
 EXPORT_SYMBOL_PRIVATE(_rw_read_exit);
 EXPORT_SYMBOL_PRIVATE(_rw_write_enter);
 #endif
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 EXPORT_SYMBOL(__global_save_flags);
 EXPORT_SYMBOL(__global_restore_flags);
 EXPORT_SYMBOL(__global_sti);
@@ -135,7 +135,7 @@ EXPORT_SYMBOL_PRIVATE(_set_le_bit);
 EXPORT_SYMBOL_PRIVATE(_clear_le_bit);
 
 /* IRQ implementation. */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 EXPORT_SYMBOL(kernel_flag);
 EXPORT_SYMBOL(global_irq_holder);
 EXPORT_SYMBOL(global_irq_lock);
@@ -158,7 +158,7 @@ EXPORT_SYMBOL(io_remap_page_range);
 /* EXPORT_SYMBOL(iounit_map_dma_page); */
 
 /* Btfixup stuff cannot have versions, it would be complicated too much */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(___xchg32));
 #else
 EXPORT_SYMBOL_NOVERS(BTFIXUP_CALL(__smp_processor_id));

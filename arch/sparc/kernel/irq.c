@@ -101,7 +101,7 @@ int get_irq_list(char *buf)
 {
 	int i, len = 0;
 	struct irqaction * action;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	int j;
 #endif
 
@@ -115,7 +115,7 @@ int get_irq_list(char *buf)
 		if (!action) 
 		        continue;
 		len += sprintf(buf+len, "%3d: ", i);
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 		len += sprintf(buf+len, "%10u ", kstat_irqs(i));
 #else
 		for (j = 0; j < smp_num_cpus; j++)
@@ -195,7 +195,7 @@ void free_irq(unsigned int irq, void *dev_id)
         restore_flags(flags);
 }
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 unsigned int local_bh_count;
 unsigned int local_irq_count;
 
@@ -427,7 +427,7 @@ void __global_restore_flags(unsigned long flags)
 	}
 }
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 void unexpected_irq(int irq, void *dev_id, struct pt_regs * regs)
 {
@@ -456,13 +456,13 @@ void handler_irq(int irq, struct pt_regs * regs)
 {
 	struct irqaction * action;
 	int cpu = smp_processor_id();
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	extern void smp4m_irq_rotate(int cpu);
 #endif
 
 	irq_enter(cpu, irq);
 	disable_pil_irq(irq);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* Only rotate on lower priority IRQ's (scsi, ethernet, etc.). */
 	if(irq < 10)
 		smp4m_irq_rotate(cpu);
@@ -505,7 +505,7 @@ int request_fast_irq(unsigned int irq,
 	struct irqaction *action;
 	unsigned long flags;
 	unsigned int cpu_irq;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	struct tt_entry *trap_table;
 	extern struct tt_entry trapbase_cpu1, trapbase_cpu2, trapbase_cpu3;
 #endif
@@ -559,7 +559,7 @@ int request_fast_irq(unsigned int irq,
 	table[SP_TRAP_IRQ1+(cpu_irq-1)].inst_four = SPARC_NOP;
 
 	INSTANTIATE(sparc_ttable)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	trap_table = &trapbase_cpu1; INSTANTIATE(trap_table)
 	trap_table = &trapbase_cpu2; INSTANTIATE(trap_table)
 	trap_table = &trapbase_cpu3; INSTANTIATE(trap_table)

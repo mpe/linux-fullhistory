@@ -148,6 +148,7 @@ EXPORT_SYMBOL(follow_up);
 EXPORT_SYMBOL(follow_down);
 EXPORT_SYMBOL(path_init);
 EXPORT_SYMBOL(path_walk);
+EXPORT_SYMBOL(path_release);
 EXPORT_SYMBOL(__user_walk);
 EXPORT_SYMBOL(lookup_one);
 EXPORT_SYMBOL(lookup_hash);
@@ -231,6 +232,7 @@ EXPORT_SYMBOL(vfs_link);
 EXPORT_SYMBOL(vfs_rmdir);
 EXPORT_SYMBOL(vfs_unlink);
 EXPORT_SYMBOL(vfs_rename);
+EXPORT_SYMBOL(vfs_statfs);
 EXPORT_SYMBOL(generic_read_dir);
 EXPORT_SYMBOL(__pollwait);
 EXPORT_SYMBOL(ROOT_DEV);
@@ -355,7 +357,7 @@ EXPORT_SYMBOL(autoirq_setup);
 EXPORT_SYMBOL(autoirq_report);
 #endif
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 EXPORT_SYMBOL(del_timer_sync);
 #endif
 EXPORT_SYMBOL(mod_timer);
@@ -365,7 +367,7 @@ EXPORT_SYMBOL(tq_scheduler);
 EXPORT_SYMBOL(timer_active);
 EXPORT_SYMBOL(timer_table);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 /* Various random spinlocks we want to export */
 EXPORT_SYMBOL(tqueue_lock);
 

@@ -1,6 +1,8 @@
 #ifndef _ALPHA_ATOMIC_H
 #define _ALPHA_ATOMIC_H
 
+#include <linux/config.h>
+
 /*
  * Atomic operations that C can't guarantee us.  Useful for
  * resource counting etc...
@@ -9,7 +11,7 @@
  * than regular operations.
  */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 typedef struct { volatile int counter; } atomic_t;
 #else
 typedef struct { int counter; } atomic_t;

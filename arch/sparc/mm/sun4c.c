@@ -2625,7 +2625,7 @@ void __init ld_mmu_sun4c(void)
 		    _SUN4C_PAGE_IO | _SUN4C_PAGE_NOCACHE;
 	
 	/* Functions */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	BTFIXUPSET_CALL(___xchg32, ___xchg32_sun4c, BTFIXUPCALL_NORM);
 #endif
 	BTFIXUPSET_CALL(get_pte_fast, sun4c_pte_get, BTFIXUPCALL_NORM);

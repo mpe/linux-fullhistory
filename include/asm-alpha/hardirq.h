@@ -3,9 +3,10 @@
 
 /* Initially just a straight copy of the i386 code.  */
 
+#include <linux/config.h>
 #include <linux/threads.h>
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 extern int __local_irq_count;
 #define local_irq_count(cpu)  ((void)(cpu), __local_irq_count)
 extern unsigned long __irq_attempt[];
@@ -28,7 +29,7 @@ extern unsigned long __irq_attempt[];
 
 #define in_irq() (local_irq_count(smp_processor_id()) != 0)
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 
 #define hardirq_trylock(cpu)	(local_irq_count(cpu) == 0)
 #define hardirq_endlock(cpu)	((void) 0)
@@ -88,5 +89,5 @@ static inline int hardirq_trylock(int cpu)
 
 extern void synchronize_irq(void);
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 #endif /* _ALPHA_HARDIRQ_H */

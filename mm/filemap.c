@@ -242,7 +242,7 @@ int shrink_mmap(int priority, int gfp_mask)
 	struct list_head * page_lru, * dispose;
 	struct page * page = NULL;
 	
-	count = (nr_lru_pages << 1) >> (priority >> 1);
+	count = nr_lru_pages / (priority + 1);
 
 	/* we need pagemap_lru_lock for list_del() ... subtle code below */
 	spin_lock(&pagemap_lru_lock);
@@ -250,22 +250,17 @@ int shrink_mmap(int priority, int gfp_mask)
 		page = list_entry(page_lru, struct page, lru);
 		list_del(page_lru);
 
+		dispose = &lru_cache;
+		if (PageTestandClearReferenced(page))
+			goto dispose_continue;
+
 		count--;
+		dispose = &old;
 
 		/*
-		 * Any page we can't touch (because it is
-		 * locked or shared or something), gets
-		 * put on the old list (maybe we can touch
-		 * it next time).
-		 *
-		 * We leave the Reference bit untouched,
-		 * so that it can stay "young" despite being
-		 * moved to the back of the queue.
-		 *
 		 * Avoid unscalable SMP locking for pages we can
 		 * immediate tell are untouchable..
 		 */
-		dispose = &old;
 		if (!page->buffers && page_count(page) > 1)
 			goto dispose_continue;
 
@@ -284,7 +279,7 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		/*
 		 * Is it a buffer page? Try to clean it up regardless
-		 * of zone and Reference bits..
+		 * of zone - it's old.
 		 */
 		if (page->buffers) {
 			if (!try_to_free_buffers(page))
@@ -296,32 +291,12 @@ int shrink_mmap(int priority, int gfp_mask)
 			}
 		}
 
-		/*
-		 * Page is from a zone we don't care about.
-		 * Put it on the old list, but leave the reference
-		 * bit untouched - which may end up keeping
-		 * it young (so that the LRU for that zone is
-		 * not destroyed completely).
-		 */
-		if (page->zone->free_pages > page->zone->pages_high)
-			goto unlock_continue;
-
-		/*
-		 * The page is in use, or was used very recently, put it in
-		 * back at the top (it's young).. We may touch it after a
-		 * second pass if we haven't found anything else.
-		 */
-		dispose = &lru_cache;
-		if (PageTestandClearReferenced(page))
-			goto unlock_continue;
-
 		/* Take the pagecache_lock spinlock held to avoid
 		   other tasks to notice the page while we are looking at its
 		   page count. If it's a pagecache-page we'll free it
 		   in one atomic transaction after checking its page count. */
 		spin_lock(&pagecache_lock);
 
-		dispose = &old;
 		/*
 		 * We can't free pages unless there's just one user
 		 * (count == 2 because we added one ourselves above).
@@ -339,6 +314,13 @@ int shrink_mmap(int priority, int gfp_mask)
 			__delete_from_swap_cache(page);
 			goto made_inode_progress;
 		}	
+
+		/*
+		 * Page is from a zone we don't care about.
+		 * Don't drop page cache entries in vain.
+		 */
+		if (page->zone->free_pages > page->zone->pages_high)
+			goto cache_unlock_continue;
 
 		/* is it a page-cache page? */
 		if (page->mapping) {
@@ -361,10 +343,6 @@ unlock_continue:
 		spin_lock(&pagemap_lru_lock);
 		UnlockPage(page);
 		put_page(page);
-		list_add(page_lru, dispose);
-		continue;
-
-		/* we're holding pagemap_lru_lock, so we can just loop again */
 dispose_continue:
 		list_add(page_lru, dispose);
 	}

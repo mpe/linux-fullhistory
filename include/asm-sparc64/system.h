@@ -2,6 +2,7 @@
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
+#include <linux/config.h>
 #include <asm/ptrace.h>
 #include <asm/processor.h>
 #include <asm/asm_offsets.h>
@@ -71,7 +72,7 @@ extern unsigned long empty_zero_page;
 #define local_irq_save(flags)		__save_and_cli(flags)
 #define local_irq_restore(flags)	__restore_flags(flags)
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 #define cli() __cli()
 #define sti() __sti()
 #define save_flags(x) __save_flags(x)

@@ -4,6 +4,7 @@
  * Copyright (C) 1997, 2000 David S. Miller (davem@redhat.com)
  */
 
+#include <linux/config.h>
 #include <asm/asi.h>
 #include <asm/pgtable.h>
 #include <asm/page.h>
@@ -242,7 +243,7 @@ update_mmu_cache:	/* %o0=vma, %o1=address, %o2=pte */
 1:	retl
 	 nop
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/* These are all called by the slaves of a cross call, at
 	 * trap level 1, with interrupts fully disabled.
 	 *
@@ -431,4 +432,4 @@ xcall_flush_cache_all:
 	 nop
 	flush		%g6
 	retry
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */

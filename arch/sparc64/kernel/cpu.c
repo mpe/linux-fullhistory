@@ -4,6 +4,7 @@
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/sched.h>
@@ -48,7 +49,7 @@ struct cpu_iu_info linux_sparc_chips[] = {
 
 #define NSPARCCHIPS  (sizeof(linux_sparc_chips)/sizeof(struct cpu_iu_info))
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 char *sparc_cpu_type[64] = { "cpu-oops", "cpu-oops1", "cpu-oops2", "cpu-oops3" };
 char *sparc_fpu_type[64] = { "fpu-oops", "fpu-oops1", "fpu-oops2", "fpu-oops3" };
 #else

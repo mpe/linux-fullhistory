@@ -45,7 +45,7 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
-#include <linux/compile.h>
+#include <linux/pm.h>
 #include <linux/pci.h>
 #include <asm/system.h>
 #include <asm/irq.h>
@@ -61,9 +61,6 @@
 #include <pcmcia/bus_ops.h>
 #include "cs_internal.h"
 #include "rsrc_mgr.h"
-
-#include <linux/pm.h>
-static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data);
 
 #ifdef PCMCIA_DEBUG
 int pc_debug = PCMCIA_DEBUG;
@@ -83,20 +80,17 @@ static const char *version =
 #define CB_OPT ""
 #endif
 #ifdef CONFIG_PM
-#define APM_OPT " [pm]"
+#define PM_OPT " [pm]"
 #else
-#define APM_OPT ""
+#define PM_OPT ""
 #endif
 #if !defined(CONFIG_CARDBUS) && !defined(CONFIG_PCI) && !defined(CONFIG_PM)
 #define OPTIONS " none"
 #else
-#define OPTIONS PCI_OPT CB_OPT APM_OPT
+#define OPTIONS PCI_OPT CB_OPT PM_OPT
 #endif
 
 static const char *release = "Linux PCMCIA Card Services " CS_RELEASE;
-#ifdef MODULE
-static const char *kernel = "kernel build: " UTS_RELEASE " " UTS_VERSION;
-#endif
 static const char *options = "options: " OPTIONS;
 
 MODULE_AUTHOR("David Hinds <dhinds@pcmcia.sourceforge.org>");
@@ -107,39 +101,29 @@ MODULE_DESCRIPTION("Linux PCMCIA Card Services " CS_RELEASE
 
 /* Parameters that can be set with 'insmod' */
 
-static int setup_delay		= HZ/20;	/* ticks */
-static int resume_delay		= HZ/5;		/* ticks */
-static int shutdown_delay	= HZ/40;	/* ticks */
-static int vcc_settle		= HZ*4/10;	/* ticks */
-static int reset_time		= 10;		/* usecs */
-static int unreset_delay	= HZ/10;	/* ticks */
-static int unreset_check	= HZ/10;	/* ticks */
-static int unreset_limit	= 30;		/* unreset_check's */
+#define INT_MODULE_PARM(n, v) static int n = v; MODULE_PARM(n, "i")
+
+INT_MODULE_PARM(setup_delay,	HZ/20);		/* ticks */
+INT_MODULE_PARM(resume_delay,	HZ/5);		/* ticks */
+INT_MODULE_PARM(shutdown_delay,	HZ/40);		/* ticks */
+INT_MODULE_PARM(vcc_settle,	HZ*4/10);	/* ticks */
+INT_MODULE_PARM(reset_time,	10);		/* usecs */
+INT_MODULE_PARM(unreset_delay,	HZ/10);		/* ticks */
+INT_MODULE_PARM(unreset_check,	HZ/10);		/* ticks */
+INT_MODULE_PARM(unreset_limit,	30);		/* unreset_check's */
 
 /* Access speed for attribute memory windows */
-static int cis_speed		= 300;	/* ns */
+INT_MODULE_PARM(cis_speed,	300);		/* ns */
 
 /* Access speed for IO windows */
-static int io_speed		= 0;	/* ns */
+INT_MODULE_PARM(io_speed,	0);		/* ns */
 
 /* Optional features */
 #ifdef CONFIG_PM
-static int do_apm		= 1;
-MODULE_PARM(do_apm, "i");
+INT_MODULE_PARM(do_apm,		1);
 #else
-static int do_apm		= 0;
+INT_MODULE_PARM(do_apm,		0);
 #endif
-
-MODULE_PARM(setup_delay, "i");
-MODULE_PARM(resume_delay, "i");
-MODULE_PARM(shutdown_delay, "i");
-MODULE_PARM(vcc_settle, "i");
-MODULE_PARM(reset_time, "i");
-MODULE_PARM(unreset_delay, "i");
-MODULE_PARM(unreset_check, "i");
-MODULE_PARM(unreset_limit, "i");
-MODULE_PARM(cis_speed, "i");
-MODULE_PARM(io_speed, "i");
 
 /*====================================================================*/
 
@@ -340,7 +324,6 @@ int register_ss_entry(int nsock, struct pccard_operations * ss_entry)
 	s->sock = ns;
 	s->setup.data = sockets;
 	s->setup.function = &setup_socket;
-	s->setup_timeout = 0;
 	s->shutdown.data = sockets;
 	s->shutdown.function = &shutdown_socket;
 	/* base address = 0, map = 0 */
@@ -361,10 +344,13 @@ int register_ss_entry(int nsock, struct pccard_operations * ss_entry)
 	    char name[3];
 	    sprintf(name, "%02d", i);
 	    s->proc = proc_mkdir(name, proc_pccard);
+	    if (s->proc)
+		ss_entry->proc_setup(ns, s->proc);
 #ifdef PCMCIA_DEBUG
-	    create_proc_read_entry("clients",0,s->proc,proc_read_clients,s);
+	    if (s->proc)
+		create_proc_read_entry("clients", 0, s->proc,
+				       proc_read_clients, s);
 #endif
-	    ss_entry->proc_setup(ns, s->proc);
 	}
 #endif
     }
@@ -390,6 +376,7 @@ void unregister_ss_entry(struct pccard_operations * ss_entry)
 #ifdef PCMCIA_DEBUG
 	    remove_proc_entry("clients", s->proc);
 #endif
+	    remove_proc_entry(name, proc_pccard);
 	}
     }
 #endif
@@ -659,6 +646,7 @@ static void parse_events(void *info, u_int events)
 	    }
 	    s->state |= SOCKET_SETUP_PENDING;
 	    s->setup.function = &setup_socket;
+	    s->setup_timeout = 0;
 	    if (s->state & SOCKET_SUSPEND)
 		s->setup.expires = jiffies + resume_delay;
 	    else
@@ -2346,9 +2334,6 @@ EXPORT_SYMBOL(proc_pccard);
 static int __init init_pcmcia_cs(void)
 {
     printk(KERN_INFO "%s\n", release);
-#ifdef MODULE
-    printk(KERN_INFO "  %s\n", kernel);
-#endif
     printk(KERN_INFO "  %s\n", options);
     DEBUG(0, "%s\n", version);
     if (do_apm)

@@ -167,6 +167,7 @@ struct ucred {
 #define AF_ATMSVC	20	/* ATM SVCs			*/
 #define AF_SNA		22	/* Linux SNA Project (nutters!) */
 #define AF_IRDA		23	/* IRDA sockets			*/
+#define AF_PPPOX	24	/* PPPoX sockets		*/
 #define AF_MAX		32	/* For now.. */
 
 /* Protocol families, same as address families. */
@@ -195,7 +196,7 @@ struct ucred {
 #define PF_ATMSVC	AF_ATMSVC
 #define PF_SNA		AF_SNA
 #define PF_IRDA		AF_IRDA
-
+#define PF_PPPOX	AF_PPPOX
 #define PF_MAX		AF_MAX
 
 /* Maximum queue length specifiable by listen.  */

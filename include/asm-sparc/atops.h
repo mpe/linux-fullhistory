@@ -5,7 +5,9 @@
 #ifndef _SPARC_ATOPS_H
 #define _SPARC_ATOPS_H
 
-#ifdef __SMP__
+#include <linux/config.h>
+
+#ifdef CONFIG_SMP
 
 extern __inline__ __volatile__ unsigned char ldstub(volatile unsigned char *lock)
 {

@@ -6686,6 +6686,14 @@ CONFIG_PPP_BSDCOMP
   Note that the BSD compression code will always be compiled as a
   module; it is called bsd_comp.o and will show up in the directory
   modules once you have said "make modules". If unsure, say N.
+
+PPP over Ethernet (EXPERIMENTAL)
+CONFIG_PPPOE
+  Support for PPP over Ethernet.
+
+  This driver requires a specially patched pppd daemon.  The patch to
+  pppd, along with binaries of a patched pppd package can be found at:
+  http://www.math.uwaterloo.ca/~mostrows
  
 Wireless LAN (non-hamradio)
 CONFIG_NET_RADIO
@@ -10311,6 +10319,15 @@ CONFIG_DEVFS_FS
   This is work in progress. If you want to use this, you *must* read
   the material in Documentation/filesystems/devfs/, especially the
   file README there.
+
+  If unsure, say N.
+
+Enable automatic mounting at boot
+CONFIG_DEVFS_MOUNT
+  This option appears if you have CONFIG_DEVFS_FS enabled. Setting
+  this to 'Y' will make the kernel automatically mount devfs onto /dev
+  when the system is booted, before the init thread is started.
+  You can override this with the "devfs=nomount" boot option.
 
   If unsure, say N.
 

@@ -322,7 +322,7 @@ void __init btfixup(void)
 		} else
 			p = q + count;
 	}
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	flush_cacheall = (void (*)(void))BTFIXUPVAL_CALL(local_flush_cache_all);
 #else
 	flush_cacheall = (void (*)(void))BTFIXUPVAL_CALL(flush_cache_all);

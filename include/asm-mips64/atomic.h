@@ -15,9 +15,10 @@
 #ifndef _ASM_ATOMIC_H
 #define _ASM_ATOMIC_H
 
+#include <linux/config.h>
 #include <asm/sgidefs.h>
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 typedef struct { volatile int counter; } atomic_t;
 #else
 typedef struct { int counter; } atomic_t;

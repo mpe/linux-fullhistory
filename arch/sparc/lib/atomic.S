@@ -3,6 +3,7 @@
  * Copyright (C) 1996 David S. Miller (davem@caipfs.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <asm/cprefix.h>
 #include <asm/ptrace.h>
 #include <asm/psr.h>
@@ -13,7 +14,7 @@
 	.globl  __atomic_begin
 __atomic_begin:
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	.globl	___xchg32_sun4c
 ___xchg32_sun4c:
 	rd	%psr, %g3
@@ -51,7 +52,7 @@ ___atomic_add:
 	or	%g3, PSR_PIL, %g7	! Disable interrupts
 	wr	%g7, 0x0, %psr		! Set %psr
 	nop; nop; nop;			! Let the bits set
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 1:	ldstub	[%g1 + 3], %g7		! Spin on the byte lock for SMP.
 	orcc	%g7, 0x0, %g0		! Did we get it?
 	bne	1b			! Nope...
@@ -77,7 +78,7 @@ ___atomic_sub:
 	or	%g3, PSR_PIL, %g7	! Disable interrupts
 	wr	%g7, 0x0, %psr		! Set %psr
 	nop; nop; nop;			! Let the bits set
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 1:	ldstub	[%g1 + 3], %g7		! Spin on the byte lock for SMP.
 	orcc	%g7, 0x0, %g0		! Did we get it?
 	bne	1b			! Nope...

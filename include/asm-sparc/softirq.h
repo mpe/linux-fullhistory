@@ -7,6 +7,7 @@
 #ifndef __SPARC_SOFTIRQ_H
 #define __SPARC_SOFTIRQ_H
 
+#include <linux/config.h>
 #include <linux/threads.h>	/* For NR_CPUS */
 
 #include <asm/atomic.h>
@@ -14,7 +15,7 @@
 #include <asm/hardirq.h>
 
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern unsigned int local_bh_count[NR_CPUS];
 
 #define local_bh_disable()	(local_bh_count[smp_processor_id()]++)

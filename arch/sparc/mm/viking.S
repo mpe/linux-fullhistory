@@ -6,6 +6,7 @@
  * Copyright (C) 1999  Pavel Semerad  (semerad@ss1000.ms.mff.cuni.cz)
  */
 
+#include <linux/config.h>
 #include <asm/ptrace.h>
 #include <asm/psr.h>
 #include <asm/asi.h>
@@ -16,7 +17,7 @@
 #include <asm/cprefix.h>
 #include <asm/btfixup.h>
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	.data
 	.align	4
 sun4dsmp_flush_tlb_spin:
@@ -124,12 +125,12 @@ viking_mxcc_flush_chunk:
 	 restore %g0, %g0, %g0;
 
 viking_flush_cache_page:
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	ld	[%o0 + 0x0], %o0		/* XXX vma->vm_mm, GROSS XXX */
 #endif
 viking_flush_cache_mm:
 viking_flush_cache_range:
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	ld	[%o0 + AOFF_mm_context], %g1
 	cmp	%g1, -1
 	bne	viking_flush_cache_all
@@ -151,7 +152,7 @@ viking_flush_tlb_mm:
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o1
 	lda	[%g1] ASI_M_MMUREGS, %g5
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	cmp	%o1, -1
 	be	1f
 #endif
@@ -160,7 +161,7 @@ viking_flush_tlb_mm:
 	sta	%g0, [%g2] ASI_M_FLUSH_PROBE
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 1:	retl
 	 nop
 #endif
@@ -169,7 +170,7 @@ viking_flush_tlb_range:
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o3
 	lda	[%g1] ASI_M_MMUREGS, %g5
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	cmp	%o3, -1
 	be	2f
 #endif
@@ -184,7 +185,7 @@ viking_flush_tlb_range:
 	 sta	%g0, [%o1] ASI_M_FLUSH_PROBE
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 2:	retl
 	 nop
 #endif
@@ -194,7 +195,7 @@ viking_flush_tlb_page:
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o3
 	lda	[%g1] ASI_M_MMUREGS, %g5
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	cmp	%o3, -1
 	be	1f
 #endif
@@ -203,7 +204,7 @@ viking_flush_tlb_page:
 	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 1:	retl
 	 nop
 #endif
@@ -214,7 +215,7 @@ viking_flush_sig_insns:
 	retl
 	 nop
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	.globl	sun4dsmp_flush_tlb_all, sun4dsmp_flush_tlb_mm
 	.globl	sun4dsmp_flush_tlb_range, sun4dsmp_flush_tlb_page
 sun4dsmp_flush_tlb_all:

@@ -39,7 +39,7 @@ extern void (*prom_palette)(int);
 extern int serial_console;
 #endif
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern void smp_capture(void);
 extern void smp_release(void);
 #endif
@@ -63,7 +63,7 @@ prom_cmdline(void)
 	 * So in order for everything to work reliably, even
 	 * on SMP, we need to drop the IRQ locks we hold.
 	 */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	irq_exit(smp_processor_id(), 0);
 	smp_capture();
 #else
@@ -72,7 +72,7 @@ prom_cmdline(void)
 
 	p1275_cmd ("enter", P1275_INOUT(0,0));
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_release();
 	irq_enter(smp_processor_id(), 0);
 	spin_unlock_wait(&__br_write_locks[BR_GLOBALIRQ_LOCK].lock);
@@ -88,7 +88,7 @@ prom_cmdline(void)
 	__restore_flags(flags);
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern void smp_promstop_others(void);
 #endif
 
@@ -98,7 +98,7 @@ extern void smp_promstop_others(void);
 void
 prom_halt(void)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_promstop_others();
 	udelay(8000);
 #endif
@@ -328,7 +328,7 @@ int prom_wakeupsystem(void)
 	return p1275_cmd("SUNW,wakeup-system", P1275_INOUT(0, 1));
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 void prom_startcpu(int cpunode, unsigned long pc, unsigned long o0)
 {
 	p1275_cmd("SUNW,start-cpu", P1275_INOUT(3, 0), cpunode, pc, o0);

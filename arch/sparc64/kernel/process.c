@@ -42,7 +42,7 @@
 
 /* #define VERBOSE_SHOWREGS */
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 
 /*
  * the idle loop on a Sparc... ;)
@@ -259,13 +259,13 @@ void show_stackframe32(struct sparc_stackf32 *sf)
 	} while ((size -= sizeof(unsigned)));
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 static spinlock_t regdump_lock = SPIN_LOCK_UNLOCKED;
 #endif
 
 void __show_regs(struct pt_regs * regs)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	unsigned long flags;
 
 	spin_lock_irqsave(&regdump_lock, flags);
@@ -287,7 +287,7 @@ void __show_regs(struct pt_regs * regs)
 	       regs->u_regs[12], regs->u_regs[13], regs->u_regs[14],
 	       regs->u_regs[15]);
 	show_regwindow(regs);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	spin_unlock_irqrestore(&regdump_lock, flags);
 #endif
 }
@@ -317,7 +317,7 @@ void show_regs(struct pt_regs *regs)
 	extern long etrap, etraptl1;
 #endif
 	__show_regs(regs);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	{
 		extern void smp_report_regs(void);
 

@@ -6,6 +6,7 @@
 #ifndef _SPARC_SMP_H
 #define _SPARC_SMP_H
 
+#include <linux/config.h>
 #include <linux/threads.h>
 #include <asm/head.h>
 #include <asm/btfixup.h>
@@ -23,7 +24,7 @@ extern int linux_num_cpus;	/* number of CPUs probed  */
 
 #endif /* !(__ASSEMBLY__) */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 #ifndef __ASSEMBLY__
 
@@ -183,7 +184,7 @@ extern __inline__ void smp_send_stop(void) { }
 
 #define PROC_CHANGE_PENALTY     15
 
-#endif /* !(__SMP__) */
+#endif /* !(CONFIG_SMP) */
 
 #define NO_PROC_ID            0xFF
 

@@ -4,6 +4,7 @@
  * Copyright (C) 1999 Jakub Jelinek (jakub@redhat.com)
  */
 
+#include <linux/config.h>
 #include <asm/ptrace.h>
 #include <asm/psr.h>
 
@@ -21,7 +22,7 @@ ___down_read:
 	nop
 	nop
 	nop
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 1:	ldstub		[%g1 + 4], %g7
 	tst		%g7
 	bne		1b
@@ -72,7 +73,7 @@ ___down_write:
 	sethi		%hi(0x01000000), %g2
 	nop
 	nop
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 1:	ldstub		[%g1 + 4], %g7
 	tst		%g7
 	bne		1b
@@ -123,7 +124,7 @@ ___up_read:
 	nop
 	nop
 	nop
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 1:	ldstub		[%g1 + 4], %g7
 	tst		%g7
 	bne		1b
@@ -168,7 +169,7 @@ ___up_write:
 	sethi		%hi(0x01000000), %g2
 	nop
 	nop
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 1:	ldstub		[%g1 + 4], %g7
 	tst		%g7
 	bne		1b

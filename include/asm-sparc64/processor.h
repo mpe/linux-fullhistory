@@ -13,6 +13,7 @@
  */
 #define current_text_addr() ({ void *pc; __asm__("rd %%pc, %0" : "=r" (pc)); pc; })
 
+#include <linux/config.h>
 #include <asm/asi.h>
 #include <asm/a.out.h>
 #include <asm/pstate.h>
@@ -127,7 +128,7 @@ extern __inline__ unsigned long thread_saved_pc(struct thread_struct *t)
 }
 
 /* On Uniprocessor, even in RMO processes see TSO semantics */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define TSTATE_INITIAL_MM	TSTATE_TSO
 #else
 #define TSTATE_INITIAL_MM	TSTATE_RMO

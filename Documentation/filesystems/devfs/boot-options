@@ -4,14 +4,13 @@
 
 		Richard Gooch <rgooch@atnf.csiro.au>
 
-			      14-DEC-1999
+			      30-APR-2000
 
 
-When either CONFIG_DEVFS_DEBUG or CONFIG_DEVFS_BOOT_OPTIONS are
-enabled, you can pass several boot options to the kernel to control
-devfs behaviour. The boot options are prefixed by "devfs=", and are
-separated by commas. Spaces are not allowed. The syntax looks like
-this:
+When CONFIG_DEVFS_DEBUG is enabled, you can pass several boot options
+to the kernel to debug devfs. The boot options are prefixed by
+"devfs=", and are separated by commas. Spaces are not allowed. The
+syntax looks like this:
 
 devfs=<option1>,<option2>,<option3>
 
@@ -60,6 +59,8 @@ Other Options
 These control the default behaviour of devfs. The options are:
 
 show		show unregistered devices by default
+
+mount		mount devfs onto /dev at boot time
 
 nomount		do not mount devfs onto /dev at boot time
 

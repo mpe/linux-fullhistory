@@ -4,6 +4,7 @@
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
  */
 
+#include <linux/config.h>
 #include <asm/psr.h>
 #include <asm/asi.h>
 #include <asm/page.h>
@@ -64,7 +65,7 @@ swift_flush_cache_all:
 
 	.globl	swift_flush_cache_mm
 swift_flush_cache_mm:
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	ld	[%o0 + AOFF_mm_context], %g2
 	cmp	%g2, -1
 	be	swift_flush_cache_mm_out
@@ -131,7 +132,7 @@ swift_flush_cache_range:
 swift_flush_cache_page:
 	ld	[%o0 + 0x0], %o0		/* XXX vma->vm_mm, GROSS XXX */
 70:
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	ld	[%o0 + AOFF_mm_context], %g2
 	cmp	%g2, -1
 	be	swift_flush_cache_page_out
@@ -237,7 +238,7 @@ swift_flush_sig_insns:
 	.globl	swift_flush_tlb_all
 swift_flush_tlb_mm:
 swift_flush_tlb_range:
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	ld	[%o0 + AOFF_mm_context], %g2
 	cmp	%g2, -1
 	be	swift_flush_tlb_all_out
@@ -255,7 +256,7 @@ swift_flush_tlb_page:
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o3
 	andn	%o1, (PAGE_SIZE - 1), %o1
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	cmp	%o3, -1
 	be	swift_flush_tlb_page_out
 	 nop

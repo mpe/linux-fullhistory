@@ -27,7 +27,7 @@ MOD_LIST_NAME := NET_MODULES
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
 export-objs     :=	8390.o arlan.o aironet4500_core.o aironet4500_card.o ppp_async.o \
-			ppp_generic.o slhc.o
+			ppp_generic.o slhc.o pppox.o
 
 ifeq ($(CONFIG_PCMCIA),y)
   SUB_DIRS += pcmcia
@@ -214,12 +214,14 @@ ifeq ($(CONFIG_PPP),y)
   ifeq ($(CONFIG_PPP_BSDCOMP),m)
     obj-m += bsd_comp.o
   endif
+  obj-$(CONFIG_PPPOE) += pppox.o pppoe.o
 else
   ifeq ($(CONFIG_PPP),m)
     obj-m += ppp_generic.o slhc.o
     obj-$(CONFIG_PPP_ASYNC) += ppp_async.o
     obj-$(CONFIG_PPP_SYNC_TTY) += ppp_synctty.o
     obj-$(CONFIG_PPP_DEFLATE) += ppp_deflate.o
+    obj-$(CONFIG_PPPOE) += pppox.o pppoe.o
     ifeq ($(CONFIG_PPP_BSDCOMP),m)
       obj-m += bsd_comp.o
     endif

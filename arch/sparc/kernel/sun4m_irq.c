@@ -9,6 +9,7 @@
  *  Copyright (C) 1996 Dave Redman (djhr@tadpole.co.uk)
  */
 
+#include <linux/config.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/linkage.h>
@@ -167,7 +168,7 @@ static void sun4m_enable_pil_irq(unsigned int pil)
 	sun4m_interrupts->clear = cpu_pil_to_imask[pil];
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 static void sun4m_send_ipi(int cpu, int level)
 {
 	unsigned long mask;
@@ -286,7 +287,7 @@ static void __init sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_r
 	} else {
 		sun4m_timers->cpu_timers[0].l14_timer_limit = 0;
 	}
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	{
 		unsigned long flags;
 		extern unsigned long lvl14_save[4];
@@ -374,7 +375,7 @@ void __init sun4m_init_IRQ(void)
 	BTFIXUPSET_CALL(load_profile_irq, sun4m_load_profile_irq, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(__irq_itoa, sun4m_irq_itoa, BTFIXUPCALL_NORM);
 	init_timers = sun4m_init_timers;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	BTFIXUPSET_CALL(set_cpu_int, sun4m_send_ipi, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(clear_cpu_int, sun4m_clear_ipi, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(set_irq_udt, sun4m_set_udt, BTFIXUPCALL_NORM);

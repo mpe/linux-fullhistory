@@ -1,6 +1,8 @@
 #ifndef _SPARC_SEMAPHORE_HELPER_H
 #define _SPARC_SEMAPHORE_HELPER_H
 
+#include <linux/config.h>
+
 /*
  * (barely) SMP- and interrupt-safe semaphore helper functions, sparc version.
  *
@@ -12,7 +14,7 @@ static __inline__ int waking_non_zero(struct semaphore *sem)
 {
 	int ret;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	int tmp;
 
 	__asm__ __volatile__("
@@ -62,7 +64,7 @@ static __inline__ int waking_non_zero_interruptible(struct semaphore *sem,
 {
 	int ret;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	int tmp;
 
 	__asm__ __volatile__("
@@ -115,7 +117,7 @@ static __inline__ int waking_non_zero_trylock(struct semaphore *sem)
 {
 	int ret;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	int tmp;
 
 	__asm__ __volatile__("

@@ -4,7 +4,7 @@
     
     Copyright (C) 1999 David A. Hinds -- dhinds@pcmcia.sourceforge.org
 
-    3c589_cs.c 1.145 2000/02/11 03:11:51
+    3c589_cs.c 1.151 2000/05/08 22:03:18
 
     The network driver code is based on Donald Becker's 3c589 code:
     
@@ -117,7 +117,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"3c589_cs.c 1.145 2000/02/11 03:11:51 (David Hinds)";
+"3c589_cs.c 1.151 2000/05/08 22:03:18 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -156,7 +156,6 @@ static struct net_device_stats *el3_get_stats(struct net_device *dev);
 static int el3_rx(struct net_device *dev);
 static int el3_close(struct net_device *dev);
 static void el3_tx_timeout(struct net_device *dev);
-
 static void set_multicast_list(struct net_device *dev);
 
 static dev_info_t dev_info = "3c589_cs";
@@ -190,18 +189,6 @@ static void cs_error(client_handle_t handle, int func, int ret)
 {
     error_info_t err = { func, ret };
     CardServices(ReportError, handle, &err);
-}
-
-/*======================================================================
-
-    We never need to do anything when a tc589 device is "initialized"
-    by the net software, because we only register already-found cards.
-    
-======================================================================*/
-
-static int tc589_init(struct net_device *dev)
-{
-    return 0;
 }
 
 /*======================================================================
@@ -254,14 +241,10 @@ static dev_link_t *tc589_attach(void)
     dev->get_stats = &el3_get_stats;
     dev->set_multicast_list = &set_multicast_list;
     ether_setup(dev);
-    strcpy(dev->name, lp->node.dev_name);
-    dev->init = &tc589_init;
     dev->open = &el3_open;
     dev->stop = &el3_close;
     dev->tx_timeout = el3_tx_timeout;
     dev->watchdog_timeo = TX_TIMEOUT;
-    
-    netif_start_queue (dev);
     
     /* Register with Card Services */
     link->next = dev_list;
@@ -298,7 +281,6 @@ static void tc589_detach(dev_link_t *link)
 {
     struct el3_private *lp = link->priv;
     dev_link_t **linkp;
-    long flags;
     
     DEBUG(0, "3c589_detach(0x%p)\n", link);
     
@@ -308,14 +290,7 @@ static void tc589_detach(dev_link_t *link)
     if (*linkp == NULL)
 	return;
 
-    save_flags(flags);
-    cli();
-    if (link->state & DEV_RELEASE_PENDING) {
-	del_timer(&link->release);
-	link->state &= ~DEV_RELEASE_PENDING;
-    }
-    restore_flags(flags);
-    
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG) {
 	tc589_release((u_long)link);
 	if (link->state & DEV_STALE_CONFIG) {
@@ -403,13 +378,11 @@ static void tc589_config(dev_link_t *link)
 	
     dev->irq = link->irq.AssignedIRQ;
     dev->base_addr = link->io.BasePort1;
-    netif_start_queue (dev);
     if (register_netdev(dev) != 0) {
 	printk(KERN_NOTICE "3c589_cs: register_netdev() failed\n");
 	goto failed;
     }
     
-    link->state &= ~DEV_CONFIG_PENDING;
     ioaddr = dev->base_addr;
     EL3WINDOW(0);
 
@@ -429,8 +402,10 @@ static void tc589_config(dev_link_t *link)
 	    goto failed;
 	}
     }
-    
+
+    strcpy(lp->node.dev_name, dev->name);
     link->dev = &lp->node;
+    link->state &= ~DEV_CONFIG_PENDING;
     
     /* The address and resource configuration register aren't loaded from
        the EEPROM and *must* be set to 0 and IRQ3 for the PCMCIA version. */
@@ -486,7 +461,7 @@ static void tc589_release(u_long arg)
     CardServices(ReleaseIO, link->handle, &link->io);
     CardServices(ReleaseIRQ, link->handle, &link->irq);
     
-    link->state &= ~(DEV_CONFIG | DEV_RELEASE_PENDING);
+    link->state &= ~DEV_CONFIG;
     
 } /* tc589_release */
 
@@ -513,8 +488,7 @@ static int tc589_event(event_t event, int priority,
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
 	    netif_device_detach(dev);
-	    link->release.expires = jiffies + HZ/20;
-	    add_timer(&link->release);
+	    mod_timer(&link->release, jiffies + HZ/20);
 	}
 	break;
     case CS_EVENT_CARD_INSERTION:
@@ -528,7 +502,6 @@ static int tc589_event(event_t event, int priority,
 	if (link->state & DEV_CONFIG) {
 	    if (link->open)
 		netif_device_detach(dev);
-
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
 	break;
@@ -687,7 +660,7 @@ static int el3_open(struct net_device *dev)
 
     link->open++;
     MOD_INC_USE_COUNT;
-    netif_start_queue (dev);
+    netif_start_queue(dev);
     
     tc589_reset(dev);
     lp->media.function = &media_check;
@@ -713,7 +686,7 @@ static void el3_tx_timeout(struct net_device *dev)
     /* Issue TX_RESET and TX_START commands. */
     wait_for_completion(dev, TxReset);
     outw(TxEnable, ioaddr + EL3_CMD);
-    netif_start_queue (dev);
+    netif_start_queue(dev);
 }
 
 static void pop_tx_status(struct net_device *dev)
@@ -747,11 +720,8 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	  "status %4.4x.\n", dev->name, (long)skb->len,
 	  inw(ioaddr + EL3_STATUS));
 
-    netif_stop_queue (dev);
-    {
-	struct el3_private *lp = (struct el3_private *)dev->priv;
-	lp->stats.tx_bytes += skb->len;
-    }
+    ((struct el3_private *)dev->priv)->stats.tx_bytes += skb->len;
+
     /* Put out the doubleword header... */
     outw(skb->len, ioaddr + TX_FIFO);
     outw(0x00, ioaddr + TX_FIFO);
@@ -759,11 +729,11 @@ static int el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
     outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
 
     dev->trans_start = jiffies;
-    if (inw(ioaddr + TX_FREE) > 1536) {
-	netif_start_queue (dev);
-    } else
+    if (inw(ioaddr + TX_FREE) <= 1536) {
+	netif_stop_queue(dev);
 	/* Interrupt us when the FIFO has room for max-sized packet. */
 	outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
+    }
 
     dev_kfree_skb(skb);
     pop_tx_status(dev);
@@ -788,7 +758,8 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     
     while ((status = inw(ioaddr + EL3_STATUS)) &
 	(IntLatch | RxComplete | StatsFull)) {
-	if (!netif_device_present(dev) || ((status & 0xe000) != 0x2000)) {
+	if (!netif_device_present(dev) ||
+	    ((status & 0xe000) != 0x2000)) {
 	    DEBUG(1, "%s: interrupt from dead card\n", dev->name);
 	    break;
 	}
@@ -800,7 +771,7 @@ static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    DEBUG(3, "    TX room bit was handled.\n");
 	    /* There's room in the FIFO for a full-sized packet. */
 	    outw(AckIntr | TxAvailable, ioaddr + EL3_CMD);
-	    netif_wake_queue (dev);
+	    netif_wake_queue(dev);
 	}
 	
 	if (status & TxComplete)
@@ -861,8 +832,7 @@ static void media_check(u_long arg)
     u_short media, errs;
     u_long flags;
 
-    if (!netif_device_present(dev))
-	goto reschedule;
+    if (!netif_device_present(dev)) goto reschedule;
 
     EL3WINDOW(1);
     /* Check for pending interrupt with expired latency timer: with
@@ -1076,8 +1046,6 @@ static int el3_close(struct net_device *dev)
     ioaddr_t ioaddr = dev->base_addr;
     
     DEBUG(1, "%s: shutting down ethercard.\n", dev->name);
-    
-    netif_stop_queue (dev);
 
     if (DEV_OK(link)) {
 	/* Turn off statistics ASAP.  We update lp->stats below. */
@@ -1107,12 +1075,10 @@ static int el3_close(struct net_device *dev)
     }
 
     link->open--;
+    netif_stop_queue(dev);
     del_timer(&lp->media);
-    if (link->state & DEV_STALE_CONFIG) {
-	link->release.expires = jiffies + HZ/20;
-	link->state |= DEV_RELEASE_PENDING;
-	add_timer(&link->release);
-    }
+    if (link->state & DEV_STALE_CONFIG)
+	mod_timer(&link->release, jiffies + HZ/20);
     
     MOD_DEC_USE_COUNT;
     

@@ -7,7 +7,8 @@
 #ifndef __SPARC64_DELAY_H
 #define __SPARC64_DELAY_H
 
-#ifdef __SMP__
+#include <linux/config.h>
+#ifdef CONFIG_SMP
 #include <linux/sched.h>
 #include <asm/smp.h>
 #endif 
@@ -39,7 +40,7 @@ extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 	__delay(usecs);
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define __udelay_val cpu_data[smp_processor_id()].udelay_val
 #else
 #define __udelay_val loops_per_sec

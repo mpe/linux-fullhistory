@@ -4477,7 +4477,7 @@ int __init rs_init(void)
 #if (LINUX_VERSION_CODE > 0x20100)
 	serial_driver.driver_name = "serial";
 #endif
-#if (LINUX_VERSION_CODE > 0x2032D && defined(CONFIG_DEVFS_FS))
+#ifdef CONFIG_DEVFS_FS
 	serial_driver.name = "tts/%d";
 #else
 	serial_driver.name = "ttyS";
@@ -4525,7 +4525,7 @@ int __init rs_init(void)
 	 * major number and the subtype code.
 	 */
 	callout_driver = serial_driver;
-#if (LINUX_VERSION_CODE > 0x2032D && defined(CONFIG_DEVFS_FS))
+#ifdef CONFIG_DEVFS_FS
 	callout_driver.name = "cua/%d";
 #else
 	callout_driver.name = "cua";

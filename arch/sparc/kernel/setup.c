@@ -80,7 +80,7 @@ void prom_sync_me(void)
 {
 	unsigned long prom_tbr, flags;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	global_irq_holder = NO_PROC_ID;
 	*((unsigned char *)&global_irq_lock) = 0;
 	*((unsigned char *)&global_bh_lock) = 0;
@@ -478,7 +478,7 @@ int get_cpuinfo(char *buffer)
             "type\t\t: %s\n"
 	    "ncpus probed\t: %d\n"
 	    "ncpus active\t: %d\n"
-#ifndef __SMP__
+#ifndef CONFIG_SMP
             "BogoMips\t: %lu.%02lu\n"
 #endif
 	    ,
@@ -487,15 +487,15 @@ int get_cpuinfo(char *buffer)
             romvec->pv_romvers, prom_rev, romvec->pv_printrev >> 16, (short)romvec->pv_printrev,
             &cputypval,
 	    linux_num_cpus, smp_num_cpus
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	    , loops_per_sec/500000, (loops_per_sec/5000) % 100
 #endif
 	    );
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	len += smp_bogo_info(buffer + len);
 #endif
 	len += mmu_info(buffer + len);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	len += smp_info(buffer + len);
 #endif
 	return len;

@@ -26,7 +26,7 @@ UPARP=${X:-n}
 echo
 #
 case $USMP in
-	y* | Y* ) FSMP="-D__SMP__"
+	y* | Y* ) FSMP="-DCONFIG_SMP"
 		  ;;
 	*)	  FSMP=""
 		  ;;

@@ -7,9 +7,10 @@
 #ifndef __SPARC_HARDIRQ_H
 #define __SPARC_HARDIRQ_H
 
+#include <linux/config.h>
 #include <linux/threads.h>
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 extern unsigned int local_irq_count;
 
 /*
@@ -81,6 +82,6 @@ static inline int hardirq_trylock(int cpu)
 
 extern void synchronize_irq(void);
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 #endif /* __SPARC_HARDIRQ_H */

@@ -18,7 +18,7 @@
 
 #include <linux/config.h>
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 typedef struct { volatile int counter; } atomic_t;
 #else
 typedef struct { int counter; } atomic_t;

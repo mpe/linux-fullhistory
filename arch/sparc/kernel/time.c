@@ -113,7 +113,7 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	/* last time the cmos clock got updated */
 	static long last_rtc_update=0;
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	if(!user_mode(regs))
 		sparc_do_profile(regs->pc, regs->u_regs[UREG_RETPC]);
 #endif

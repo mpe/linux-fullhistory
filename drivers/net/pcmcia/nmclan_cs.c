@@ -111,7 +111,6 @@ Conditional Compilation Options
 ---------------------------------------------------------------------------- */
 
 #define MULTI_TX			0
-#define TIMEOUT_TX			1
 #define RESET_ON_TIMEOUT		1
 #define TX_INTERRUPTABLE		1
 #define RESET_XILINX			0
@@ -156,11 +155,6 @@ Defines
 					/* 6 bytes in an Ethernet Address */
 #define MACE_LADRF_LEN			8
 					/* 8 bytes in Logical Address Filter */
-
-/* Transmitter Busy Bit Index Defines */
-#define TBUSY_UNSPECIFIED		0
-#define TBUSY_PARTIAL_TX_FRAME		0
-#define TBUSY_NO_FREE_TX_FRAMES		1
 
 /* Loop Control Defines */
 #define MACE_MAX_IR_ITERATIONS		10
@@ -307,9 +301,7 @@ four transmit and 12 receive frames at a time.
 #undef MACE_IMR_DEFAULT
 #define MACE_IMR_DEFAULT 0x00 /* New statistics handling: grab everything */
 
-#define TX_TIMEOUT (5*HZ)
-
-
+#define TX_TIMEOUT		((400*HZ)/1000)
 
 /* ----------------------------------------------------------------------------
 Type Definitions
@@ -364,7 +356,6 @@ typedef struct _mace_private {
     dev_link_t link;
     struct net_device dev;
     dev_node_t node;
-    spinlock_t lock;
     struct net_device_stats linux_stats; /* Linux statistics counters */
     mace_statistics mace_stats; /* MACE chip statistics counters */
 
@@ -433,11 +424,11 @@ static int mace_config(struct net_device *dev, struct ifmap *map);
 static int mace_open(struct net_device *dev);
 static int mace_close(struct net_device *dev);
 static int mace_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static void mace_tx_timeout(struct net_device *dev);
 static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static struct net_device_stats *mace_get_stats(struct net_device *dev);
 static int mace_rx(struct net_device *dev, unsigned char RxCnt);
 static void restore_multicast_list(struct net_device *dev);
-static void mace_tx_timeout (struct net_device *dev);
 
 static void set_multicast_list(struct net_device *dev);
 
@@ -471,17 +462,6 @@ static void cs_error(client_handle_t handle, int func, int ret)
 }
 
 /* ----------------------------------------------------------------------------
-nmclan_init
-	We never need to do anything when a nmclan device is "initialized"
-	by the net software, because we only register already-found cards.
----------------------------------------------------------------------------- */
-
-static int nmclan_init(struct net_device *dev)
-{
-    return 0;
-}
-
-/* ----------------------------------------------------------------------------
 nmclan_attach
 	Creates an "instance" of the driver, allocating local data
 	structures for one device.  The device is registered with Card
@@ -504,8 +484,6 @@ static dev_link_t *nmclan_attach(void)
     lp = kmalloc(sizeof(*lp), GFP_KERNEL);
     if (!lp) return NULL;
     memset(lp, 0, sizeof(*lp));
-    
-    lp->lock = SPIN_LOCK_UNLOCKED;
     link = &lp->link; dev = &lp->dev;
     link->priv = dev->priv = link->irq.Instance = lp;
 
@@ -534,15 +512,11 @@ static dev_link_t *nmclan_attach(void)
     dev->set_config = &mace_config;
     dev->get_stats = &mace_get_stats;
     dev->set_multicast_list = &set_multicast_list;
-    strcpy(dev->name, lp->node.dev_name);
     ether_setup(dev);
-    dev->init = &nmclan_init;
     dev->open = &mace_open;
     dev->stop = &mace_close;
     dev->tx_timeout = mace_tx_timeout;
     dev->watchdog_timeo = TX_TIMEOUT;
-
-    netif_start_queue (dev);
 
     /* Register with Card Services */
     link->next = dev_list;
@@ -587,6 +561,7 @@ static void nmclan_detach(dev_link_t *link)
     if (*linkp == NULL)
 	return;
 
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG) {
 	nmclan_release((u_long)link);
 	if (link->state & DEV_STALE_CONFIG) {
@@ -763,7 +738,6 @@ static void nmclan_config(dev_link_t *link)
   CS_CHECK(RequestConfiguration, handle, &link->conf);
   dev->irq = link->irq.AssignedIRQ;
   dev->base_addr = link->io.BasePort1;
-  netif_start_queue (dev);
   i = register_netdev(dev);
   if (i != 0) {
     printk(KERN_NOTICE "nmclan_cs: register_netdev() failed\n");
@@ -806,6 +780,7 @@ static void nmclan_config(dev_link_t *link)
   else
     printk(KERN_NOTICE "nmclan_cs: invalid if_port requested\n");
 
+  strcpy(lp->node.dev_name, dev->name);
   link->dev = &lp->node;
   link->state &= ~DEV_CONFIG_PENDING;
 
@@ -846,7 +821,7 @@ static void nmclan_release(u_long arg)
   CardServices(ReleaseIO, link->handle, &link->io);
   CardServices(ReleaseIRQ, link->handle, &link->irq);
 
-  link->state &= ~(DEV_CONFIG | DEV_RELEASE_PENDING);
+  link->state &= ~DEV_CONFIG;
 
 } /* nmclan_release */
 
@@ -871,8 +846,7 @@ static int nmclan_event(event_t event, int priority,
       link->state &= ~DEV_PRESENT;
       if (link->state & DEV_CONFIG) {
 	netif_device_detach(dev);
-	link->release.expires = jiffies + HZ/20;
-	add_timer(&link->release);
+	mod_timer(&link->release, jiffies + HZ/20);
       }
       break;
     case CS_EVENT_CARD_INSERTION:
@@ -886,7 +860,6 @@ static int nmclan_event(event_t event, int priority,
       if (link->state & DEV_CONFIG) {
 	if (link->open)
 	  netif_device_detach(dev);
-
 	CardServices(ReleaseConfiguration, link->handle);
       }
       break;
@@ -908,8 +881,6 @@ static int nmclan_event(event_t event, int priority,
   }
   return 0;
 } /* nmclan_event */
-
-/* ------------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------------
 nmclan_reset
@@ -997,7 +968,7 @@ static int mace_open(struct net_device *dev)
 
   MACEBANK(0);
 
-  netif_start_queue (dev);
+  netif_start_queue(dev);
   nmclan_reset(dev);
 
   return 0; /* Always succeed */
@@ -1014,41 +985,19 @@ static int mace_close(struct net_device *dev)
   dev_link_t *link = &lp->link;
 
   DEBUG(2, "%s: shutting down ethercard.\n", dev->name);
-  
-  netif_stop_queue (dev);
 
   /* Mask off all interrupts from the MACE chip. */
   outb(0xFF, ioaddr + AM2150_MACE_BASE + MACE_IMR);
 
   link->open--;
-  if (link->state & DEV_STALE_CONFIG) {
-    link->release.expires = jiffies + HZ/20;
-    link->state |= DEV_RELEASE_PENDING;
-    add_timer(&link->release);
-  }
+  netif_stop_queue(dev);
+  if (link->state & DEV_STALE_CONFIG)
+    mod_timer(&link->release, jiffies + HZ/20);
 
   MOD_DEC_USE_COUNT;
 
   return 0;
 } /* mace_close */
-
-
-static void mace_tx_timeout (struct net_device *dev)
-{
-	mace_private *lp = (mace_private *)dev->priv;
-	dev_link_t *link = &lp->link;
-
-	printk (KERN_NOTICE "%s: transmit timed out -- ", dev->name);
-#if RESET_ON_TIMEOUT
-	printk ("resetting card\n");
-	CardServices (ResetCard, link->handle);
-#else				/* #if RESET_ON_TIMEOUT */
-	printk ("NOT resetting card\n");
-#endif				/* #if RESET_ON_TIMEOUT */
-	dev->trans_start = jiffies;
-	netif_start_queue (dev);
-}
-
 
 /* ----------------------------------------------------------------------------
 mace_start_xmit
@@ -1060,15 +1009,32 @@ mace_start_xmit
 	driver."  If _start_xmit returns non-zero, the "transmission
 	failed, put skb back into a list."
 ---------------------------------------------------------------------------- */
+
+static void mace_tx_timeout(struct net_device *dev)
+{
+  mace_private *lp = (mace_private *)dev->priv;
+  dev_link_t *link = &lp->link;
+
+  printk(KERN_NOTICE "%s: transmit timed out -- ", dev->name);
+#if RESET_ON_TIMEOUT
+  printk("resetting card\n");
+  CardServices(ResetCard, link->handle);
+#else /* #if RESET_ON_TIMEOUT */
+  printk("NOT resetting card\n");
+#endif /* #if RESET_ON_TIMEOUT */
+  dev->trans_start = jiffies;
+  netif_start_queue(dev);
+}
+
 static int mace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
   mace_private *lp = (mace_private *)dev->priv;
   ioaddr_t ioaddr = dev->base_addr;
 
+  netif_stop_queue(dev);
+
   DEBUG(3, "%s: mace_start_xmit(length = %ld) called.\n",
 	dev->name, (long)skb->len);
-
-  netif_stop_queue (dev);
 
 #if (!TX_INTERRUPTABLE)
   /* Disable MACE TX interrupts. */
@@ -1079,7 +1045,7 @@ static int mace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
   {
     /* This block must not be interrupted by another transmit request!
-       dev->tbusy will take care of timer-based retransmissions from
+       mace_tx_timeout will take care of timer-based retransmissions from
        the upper layers.  The interrupt handler is guaranteed never to
        service a transmit interrupt while we are in here.
     */
@@ -1099,12 +1065,10 @@ static int mace_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
     dev->trans_start = jiffies;
 
-    if (lp->tx_free_frames > 0) {
 #if MULTI_TX
-      netif_start_queue (dev);
+    if (lp->tx_free_frames > 0)
+      netif_start_queue(dev);
 #endif /* #if MULTI_TX */
-    }
-
   }
 
 #if (!TX_INTERRUPTABLE)
@@ -1135,8 +1099,6 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	  irq);
     return;
   }
-  
-  spin_lock (&lp->lock);
 
   if (lp->tx_irq_disabled) {
     printk(
@@ -1226,7 +1188,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
       lp->linux_stats.tx_packets++;
       lp->tx_free_frames++;
-      netif_wake_queue (dev);
+      netif_wake_queue(dev);
     } /* if (status & MACE_IR_XMTINT) */
 
     if (status & ~MACE_IMR_DEFAULT & ~MACE_IR_RCVINT & ~MACE_IR_XMTINT) {
@@ -1261,7 +1223,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
   } while ((status & ~MACE_IMR_DEFAULT) && (--IntrCnt));
 
 exception:
-  spin_unlock (&lp->lock);
+  return;
 } /* mace_interrupt */
 
 /* ----------------------------------------------------------------------------

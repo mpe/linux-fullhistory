@@ -30,7 +30,7 @@ extern void __load_new_mm_context(struct mm_struct *);
    icache flushing.  While functional, it is _way_ overkill.  The
    icache is tagged with ASNs and it suffices to allocate a new ASN
    for the process.  */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 #define flush_icache_range(start, end)		imb()
 #else
 #define flush_icache_range(start, end)		smp_imb()
@@ -45,7 +45,7 @@ extern void smp_imb(void);
    that icache entries are tagged with the ASN and load a new mm context.  */
 /* ??? Ought to use this in arch/alpha/kernel/signal.c too.  */
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 static inline void
 flush_icache_page(struct vm_area_struct *vma, struct page *page)
 {
@@ -154,7 +154,7 @@ static inline void flush_tlb_pgtables(struct mm_struct *mm,
 {
 }
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 /*
  * Flush everything (kernel mapping may also have
  * changed due to vmalloc/vfree)
@@ -204,21 +204,21 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 	flush_tlb_mm(mm);
 }
 
-#else /* __SMP__ */
+#else /* CONFIG_SMP */
 
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm(struct mm_struct *);
 extern void flush_tlb_page(struct vm_area_struct *, unsigned long);
 extern void flush_tlb_range(struct mm_struct *, unsigned long, unsigned long);
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 /*      
  * Allocate and free page tables. The xxx_kernel() versions are
  * used to allocate a kernel page table - this turns on ASN bits
  * if any.
  */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache;

@@ -49,10 +49,8 @@
     Updated to version 2.2.7 to match the first version of the kernel
     that the modification to ibmtr.c were incorporated into.
     
-	
 ======================================================================*/
 
-#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/sched.h>
@@ -74,7 +72,6 @@
 #include <pcmcia/cistpl.h>
 #include <pcmcia/ds.h>
 
-#define PCMCIA_DEBUG 10
 #ifdef PCMCIA_DEBUG
 static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
@@ -226,10 +223,6 @@ static dev_link_t *ibmtr_attach(void)
 
     dev->init = &ibmtr_probe;
 
-#if 0
-    dev->tbusy = 1; 
-#endif
-
     /* Register with Card Services */
     link->next = dev_list;
     dev_list = link;
@@ -266,8 +259,6 @@ static void ibmtr_detach(dev_link_t *link)
     struct ibmtr_dev_t *info = link->priv;
     dev_link_t **linkp;
     struct net_device *dev; 
-    long flags;
-
 
     DEBUG(0, "ibmtr_detach(0x%p)\n", link);
 
@@ -278,19 +269,11 @@ static void ibmtr_detach(dev_link_t *link)
         return;
 
     dev = info->dev;
-    
-    save_flags(flags);
-    cli();
     {
 	struct tok_info *ti = (struct tok_info *)dev->priv;
-	if (timer_pending(&ti->tr_timer)) del_timer(&ti->tr_timer);
+	del_timer(&(ti->tr_timer));
     }
-    if (link->state & DEV_RELEASE_PENDING) {
-        del_timer(&link->release);
-        link->state &= ~DEV_RELEASE_PENDING;
-    }
-    restore_flags(flags);
-
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG) {
         ibmtr_release((u_long)link);
         if (link->state & DEV_STALE_CONFIG) {
@@ -378,8 +361,9 @@ static void ibmtr_config(dev_link_t *link)
     req.Base = mmiobase;
     req.Size = 0x2000;
     req.AccessSpeed = 250;
-    link->win = (window_handle_t) link->handle;
+    link->win = (window_handle_t)link->handle;
     CS_CHECK(RequestWindow, &link->win, &req);
+
     mem.CardOffset = req.Base;
     mem.Page = 0;
     CS_CHECK(MapMemPage, link->win, &mem);
@@ -408,10 +392,6 @@ static void ibmtr_config(dev_link_t *link)
         turn on the card.  Check the "Local Area Network Credit Card
         Adapters Technical Reference"  SC30-3585 for this info.  */
     ibmtr_hw_setup(dev);
-
-#if 0
-    dev->tbusy = 0;
-#endif
 
     i = register_trdev(dev);
     
@@ -452,7 +432,6 @@ static void ibmtr_release(u_long arg)
     dev_link_t *link = (dev_link_t *)arg;
     ibmtr_dev_t *info = link->priv;
     struct net_device *dev = info->dev;
-    struct tok_info *ti=(struct tok_info *) dev->priv;
 
     DEBUG(0, "ibmtr_release(0x%p)\n", link);
 
@@ -462,8 +441,6 @@ static void ibmtr_release(u_long arg)
         link->state |= DEV_STALE_CONFIG;
         return;
     }
-
-    ti->open_status=CLOSED;
 
     CardServices(ReleaseConfiguration, link->handle);
     CardServices(ReleaseIO, link->handle, &link->io);
@@ -475,7 +452,7 @@ static void ibmtr_release(u_long arg)
 	CardServices(ReleaseWindow, info->sram_win_handle);
     }
 
-    link->state &= ~(DEV_CONFIG | DEV_RELEASE_PENDING);
+    link->state &= ~DEV_CONFIG;
 
 } /* ibmtr_release */
 
@@ -501,12 +478,8 @@ static int ibmtr_event(event_t event, int priority,
     case CS_EVENT_CARD_REMOVAL:
         link->state &= ~DEV_PRESENT;
         if (link->state & DEV_CONFIG) {
-#if 0
-            dev->tbusy = 1; dev->start = 0;
-#endif
-            link->release.expires = jiffies + HZ/20;
-            link->state |= DEV_RELEASE_PENDING;
-            add_timer(&link->release);
+	    netif_device_detach(dev);
+	    mod_timer(&link->release, jiffies + HZ/20);
         }
         break;
     case CS_EVENT_CARD_INSERTION:
@@ -518,11 +491,8 @@ static int ibmtr_event(event_t event, int priority,
         /* Fall through... */
     case CS_EVENT_RESET_PHYSICAL:
         if (link->state & DEV_CONFIG) {
-#if 0
-            if (link->open) {
-                dev->tbusy = 1; dev->start = 0;
-            }
-#endif
+            if (link->open)
+		netif_device_detach(dev);
             CardServices(ReleaseConfiguration, link->handle);
         }
         break;
@@ -534,9 +504,7 @@ static int ibmtr_event(event_t event, int priority,
             CardServices(RequestConfiguration, link->handle, &link->conf);
             if (link->open) {
 		(dev->init)(dev);
-#if 0
-                dev->tbusy = 0; dev->start = 1;
-#endif
+		netif_device_attach(dev);
             }
         }
         break;

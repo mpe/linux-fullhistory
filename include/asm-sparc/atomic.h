@@ -6,7 +6,9 @@
 #ifndef __ARCH_SPARC_ATOMIC__
 #define __ARCH_SPARC_ATOMIC__
 
-#ifdef __SMP__
+#include <linux/config.h>
+
+#ifdef CONFIG_SMP
 /* This is a temporary measure. -DaveM */
 typedef struct { volatile int counter; } atomic_t;
 #define ATOMIC_INIT(i)	{ (i << 8) }
@@ -19,7 +21,7 @@ typedef struct { int counter; } atomic_t;
 #include <asm/system.h>
 #include <asm/psr.h>
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 
 #define atomic_read(v)          ((v)->counter)
 #define atomic_set(v, i)        (((v)->counter) = i)

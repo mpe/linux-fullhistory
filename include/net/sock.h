@@ -66,6 +66,11 @@
 #endif
 #endif
 
+#if defined(CONFIG_PPPOE) || defined(CONFIG_PPPOE_MODULE)
+#include <linux/if_pppox.h>
+#include <linux/ppp_channel.h>   /* struct ppp_channel */
+#endif
+
 #if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
 #if defined(CONFIG_SPX) || defined(CONFIG_SPX_MODULE)
 #include <net/spx.h>
@@ -205,6 +210,28 @@ struct inet_opt
 };
 #endif
 
+#if defined(CONFIG_PPPOE) || defined (CONFIG_PPPOE_MODULE)
+struct pppoe_opt
+{
+	struct net_device      *dev;	  /* device associated with socket*/
+	struct pppoe_addr	pa;	  /* what this socket is bound to*/
+	struct sockaddr_pppox	relay;	  /* what socket data will be
+					     relayed to (PPPoE relaying) */
+};
+
+struct pppox_opt
+{
+	struct ppp_channel	chan;
+	struct sock		*sk;
+	struct pppox_opt	*next;	  /* for hash table */
+	union {
+		struct pppoe_opt pppoe;
+	} proto;
+};
+#define pppoe_dev	proto.pppoe.dev
+#define pppoe_pa	proto.pppoe.pa
+#define pppoe_relay	proto.pppoe.relay
+#endif
 
 /* This defines a selective acknowledgement block. */
 struct tcp_sack_block {
@@ -584,6 +611,9 @@ struct sock {
 #endif
 #if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 		rose_cb			*rose;
+#endif
+#if defined(CONFIG_PPPOE) || defined(CONFIG_PPPOE_MODULE)
+		struct pppox_opt	*pppox;
 #endif
 #ifdef CONFIG_NETLINK
 		struct netlink_opt	*af_netlink;

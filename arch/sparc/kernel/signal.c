@@ -7,6 +7,7 @@
  *  Copyright (C) 1997 Eddie C. Dost   (ecd@skynet.be)
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
@@ -197,7 +198,7 @@ static inline int
 restore_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 {
 	int err;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if (current->flags & PF_USEDFPU)
 		regs->psr &= ~PSR_EF;
 #else
@@ -554,7 +555,7 @@ static inline int
 save_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 {
 	int err = 0;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if (current->flags & PF_USEDFPU) {
 		put_psr(get_psr() | PSR_EF);
 		fpsave(&current->thread.float_regs[0], &current->thread.fsr,

@@ -6,6 +6,7 @@
  *  1997-11-02  Modified for POSIX.1b signals by Richard Henderson
  */
 
+#include <linux/config.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/unistd.h>
@@ -386,7 +387,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 	sigaddset(&t->signal, sig);
 	if (!sigismember(&t->blocked, sig)) {
 		t->sigpending = 1;
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		/*
 		 * If the task is running on a different CPU 
 		 * force a reschedule on the other CPU - note that
@@ -403,7 +404,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 		if (t->has_cpu && t->processor != smp_processor_id())
 			smp_send_reschedule(t->processor);
 		spin_unlock(&runqueue_lock);
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 	}
 
 out:

@@ -2,6 +2,7 @@
 #ifndef _SPARC64_PGALLOC_H
 #define _SPARC64_PGALLOC_H
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 
@@ -32,7 +33,7 @@ extern void __flush_tlb_range(unsigned long context, unsigned long start,
 			      unsigned long pgsz, unsigned long size);
 extern void __flush_tlb_page(unsigned long context, unsigned long page, unsigned long r);
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 
 #define flush_cache_all()	__flush_cache_all()
 #define flush_tlb_all()		__flush_tlb_all()
@@ -59,7 +60,7 @@ do { struct mm_struct *__mm = (vma)->vm_mm; \
 			 SECONDARY_CONTEXT); \
 } while(0)
 
-#else /* __SMP__ */
+#else /* CONFIG_SMP */
 
 extern void smp_flush_cache_all(void);
 extern void smp_flush_tlb_all(void);
@@ -76,7 +77,7 @@ extern void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page);
 #define flush_tlb_page(vma, page) \
 	smp_flush_tlb_page((vma)->vm_mm, page)
 
-#endif /* ! __SMP__ */
+#endif /* ! CONFIG_SMP */
 
 /* This will change for Cheetah and later chips. */
 #define VPTE_BASE	0xfffffffe00000000
@@ -101,7 +102,7 @@ extern __inline__ void flush_tlb_pgtables(struct mm_struct *mm, unsigned long st
 }
 
 /* Page table allocation/freeing. */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 /* Sliiiicck */
 #define pgt_quicklists	cpu_data[smp_processor_id()]
 #else
@@ -118,7 +119,7 @@ extern struct pgtable_cache_struct {
 #define pgtable_cache_size	(pgt_quicklists.pgcache_size)
 #define pgd_cache_size		(pgt_quicklists.pgdcache_size)
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 
 extern __inline__ void free_pgd_fast(pgd_t *pgd)
 {
@@ -167,7 +168,7 @@ extern __inline__ pgd_t *get_pgd_fast(void)
         return (pgd_t *)ret;
 }
 
-#else /* __SMP__ */
+#else /* CONFIG_SMP */
 
 extern __inline__ void free_pgd_fast(pgd_t *pgd)
 {
@@ -197,7 +198,7 @@ extern __inline__ void free_pgd_slow(pgd_t *pgd)
 	free_page((unsigned long)pgd);
 }
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 extern pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long address_premasked);
 

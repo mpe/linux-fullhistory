@@ -1,6 +1,7 @@
 #ifndef __ALPHA_DELAY_H
 #define __ALPHA_DELAY_H
 
+#include <linux/config.h>
 #include <asm/smp.h>
 
 /*
@@ -37,7 +38,7 @@ __udelay(unsigned long usecs, unsigned long lps)
 	__delay((long)usecs >> 32);
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define udelay(u)  __udelay((u), cpu_data[smp_processor_id()].loops_per_sec)
 #else
 #define udelay(u)  __udelay((u), loops_per_sec)

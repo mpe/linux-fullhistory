@@ -8,6 +8,7 @@
 #ifndef _SPARC64_IRQ_H
 #define _SPARC64_IRQ_H
 
+#include <linux/config.h>
 #include <linux/linkage.h>
 #include <linux/kernel.h>
 
@@ -113,7 +114,7 @@ extern unsigned int build_irq(int pil, int inofixup, unsigned long iclr, unsigne
 extern unsigned int sbus_build_irq(void *sbus, unsigned int ino);
 extern unsigned int psycho_build_irq(void *psycho, int imap_off, int ino, int need_dma_sync);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern void set_cpu_int(int, int);
 extern void clear_cpu_int(int, int);
 extern void set_irq_udt(int);

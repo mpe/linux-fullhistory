@@ -2,7 +2,7 @@
 
     A driver for Future Domain-compatible PCMCIA SCSI cards
 
-    fdomain_cs.c 1.41 1999/11/15 06:05:48
+    fdomain_cs.c 1.42 2000/05/04 01:30:00
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -59,7 +59,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"fdomain_cs.c 1.41 1999/11/15 06:05:48 (David Hinds)";
+"fdomain_cs.c 1.42 2000/05/04 01:30:00 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -176,6 +176,7 @@ static void fdomain_detach(dev_link_t *link)
     if (*linkp == NULL)
 	return;
 
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG) {
 	fdomain_release((u_long)link);
 	if (link->state & DEV_STALE_CONFIG) {
@@ -343,10 +344,8 @@ static int fdomain_event(event_t event, int priority,
     switch (event) {
     case CS_EVENT_CARD_REMOVAL:
 	link->state &= ~DEV_PRESENT;
-	if (link->state & DEV_CONFIG) {
-	    link->release.expires = jiffies + HZ/20;
-	    add_timer(&link->release);
-	}
+	if (link->state & DEV_CONFIG)
+	    mod_timer(&link->release, jiffies + HZ/20);
 	break;
     case CS_EVENT_CARD_INSERTION:
 	link->state |= DEV_PRESENT | DEV_CONFIG_PENDING;

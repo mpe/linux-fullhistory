@@ -9,6 +9,7 @@
 #include <asm/asi.h>
 #include <asm/page.h>
 #include <asm/pgtsrmmu.h>
+#include <linux/config.h>
 #include <linux/init.h>
 
 #define WINDOW_FLUSH(tmp1, tmp2)					\
@@ -47,7 +48,7 @@ hypersparc_flush_cache_all:
 
 	/* We expand the window flush to get maximum performance. */
 hypersparc_flush_cache_mm:
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	ld	[%o0 + AOFF_mm_context], %g1
 	cmp	%g1, -1
 	be	hypersparc_flush_cache_mm_out
@@ -84,7 +85,7 @@ hypersparc_flush_cache_mm_out:
 
 	/* The things we do for performance... */
 hypersparc_flush_cache_range:
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	ld	[%o0 + AOFF_mm_context], %g1
 	cmp	%g1, -1
 	be	hypersparc_flush_cache_range_out
@@ -174,7 +175,7 @@ hypersparc_flush_cache_range_out:
 hypersparc_flush_cache_page:
 	ld	[%o0 + 0x0], %o0		/* XXX vma->vm_mm, GROSS XXX */
 	ld	[%o0 + AOFF_mm_context], %g2
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	cmp	%g2, -1
 	be	hypersparc_flush_cache_page_out
 #endif
@@ -282,7 +283,7 @@ hypersparc_flush_tlb_mm:
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o1
 	lda	[%g1] ASI_M_MMUREGS, %g5
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	cmp	%o1, -1
 	be	hypersparc_flush_tlb_mm_out
 #endif
@@ -297,7 +298,7 @@ hypersparc_flush_tlb_range:
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o3
 	lda	[%g1] ASI_M_MMUREGS, %g5
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	cmp	%o3, -1
 	be	hypersparc_flush_tlb_range_out
 #endif
@@ -320,7 +321,7 @@ hypersparc_flush_tlb_page:
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o3
 	andn	%o1, (PAGE_SIZE - 1), %o1
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	cmp	%o3, -1
 	be	hypersparc_flush_tlb_page_out
 #endif

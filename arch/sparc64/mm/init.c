@@ -58,7 +58,7 @@ int do_check_pgt_cache(int low, int high)
 
 	if(pgtable_cache_size > high) {
 		do {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 			if(pgd_quicklist)
 				free_pgd_slow(get_pgd_fast()), freed++;
 #endif
@@ -68,7 +68,7 @@ int do_check_pgt_cache(int low, int high)
 				free_pte_slow(get_pte_fast(1)), freed++;
 		} while(pgtable_cache_size > low);
 	}
-#ifndef __SMP__ 
+#ifndef CONFIG_SMP 
         if (pgd_cache_size > high / 4) {
 		struct page *page, *page2;
                 for (page2 = NULL, page = (struct page *)pgd_quicklist; page;) {
@@ -129,7 +129,7 @@ void show_mem(void)
 	printk("%ld pages of RAM\n", num_physpages);
 	printk("%d free pages\n", nr_free_pages());
 	printk("%d pages in page table cache\n",pgtable_cache_size);
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	printk("%d entries in page dir cache\n",pgd_cache_size);
 #endif	
 	show_buffers();
@@ -701,7 +701,7 @@ out:
 	mm->context = new_ctx;
 }
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 struct pgtable_cache_struct pgt_quicklists;
 #endif
 
@@ -1207,7 +1207,7 @@ void __init mem_init(void)
 	initpages = (((unsigned long) &__init_end) - ((unsigned long) &__init_begin));
 	initpages = PAGE_ALIGN(initpages) >> PAGE_SHIFT;
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	{
 		/* Put empty_pg_dir on pgd_quicklist */
 		extern pgd_t empty_pg_dir[1024];

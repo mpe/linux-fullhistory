@@ -84,16 +84,16 @@ __reload_thread(struct thread_struct *pcb)
  * +-------------+----------------+--------------+
  */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #include <asm/smp.h>
 #define cpu_last_asn(cpuid)	(cpu_data[cpuid].last_asn)
 #else
 extern unsigned long last_asn;
 #define cpu_last_asn(cpuid)	last_asn
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 #define WIDTH_HARDWARE_ASN	8
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define WIDTH_THIS_PROCESSOR	5
 #else
 #define WIDTH_THIS_PROCESSOR	0

@@ -6,11 +6,12 @@
 #ifndef __SPARC64_HARDIRQ_H
 #define __SPARC64_HARDIRQ_H
 
+#include <linux/config.h>
 #include <linux/threads.h>
 #include <linux/brlock.h>
 #include <linux/spinlock.h>
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 extern unsigned int local_irq_count;
 #define irq_enter(cpu, irq)	(local_irq_count++)
 #define irq_exit(cpu, irq)	(local_irq_count--)
@@ -29,7 +30,7 @@ extern unsigned int local_irq_count;
 /* This tests only the local processors hw IRQ context disposition.  */
 #define in_irq() (local_irq_count != 0)
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 
 #define hardirq_trylock(cpu)	((void)(cpu), local_irq_count == 0)
 #define hardirq_endlock(cpu)	do { (void)(cpu); } while(0)
@@ -39,7 +40,7 @@ extern unsigned int local_irq_count;
 
 #define synchronize_irq()	barrier()
 
-#else /* (__SMP__) */
+#else /* (CONFIG_SMP) */
 
 static __inline__ int irqs_running(void)
 {
@@ -74,6 +75,6 @@ static inline int hardirq_trylock(int cpu)
 
 extern void synchronize_irq(void);
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 #endif /* !(__SPARC64_HARDIRQ_H) */

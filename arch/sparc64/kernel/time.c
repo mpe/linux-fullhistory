@@ -102,7 +102,7 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	write_lock(&xtime_lock);
 
 	do {
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 		if ((regs->tstate & TSTATE_PRIV) != 0)
 			sparc64_do_profile(regs->tpc, regs->u_regs[UREG_RETPC]);
 #endif
@@ -155,7 +155,7 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	write_unlock(&xtime_lock);
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 void timer_tick_interrupt(struct pt_regs *regs)
 {
 	write_lock(&xtime_lock);

@@ -6,11 +6,12 @@
 #ifndef __SPARC64_SOFTIRQ_H
 #define __SPARC64_SOFTIRQ_H
 
+#include <linux/config.h>
 #include <asm/atomic.h>
 #include <asm/hardirq.h>
 #include <asm/system.h>		/* for membar() */
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 extern unsigned int local_bh_count;
 #else
 #define local_bh_count		(cpu_data[smp_processor_id()].bh_count)

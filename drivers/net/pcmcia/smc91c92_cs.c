@@ -8,7 +8,7 @@
 
     Copyright (C) 1999 David A. Hinds -- dhinds@pcmcia.sourceforge.org
 
-    smc91c92_cs.c 1.85 2000/01/15 02:03:14
+    smc91c92_cs.c 1.96 2000/05/09 02:35:58
     
     This driver contains code written by Donald Becker
     (becker@cesdis.gsfc.nasa.gov), Rowan Hughes (x-csrdh@jcu.edu.au),
@@ -88,10 +88,6 @@ MODULE_PARM(irq_list, "1-4i");
 
 /* Operational parameter that usually are not changed. */
 
-/* Do you want to use 32 bit xfers?  This should work on all chips,
-   but could cause trouble with some PCMCIA controllers... */
-#define USE_32_BIT		1
-
 /* Time in jiffies before concluding Tx hung */
 #define TX_TIMEOUT		((400*HZ)/1000)
 
@@ -101,9 +97,6 @@ MODULE_PARM(irq_list, "1-4i");
 /* Times to check the check the chip before concluding that it doesn't
    currently have room for another Tx packet. */
 #define MEMORY_WAIT_TIME       	8
-
-/* Values that should be specific lengths */
-typedef unsigned short uint16;
 
 static dev_info_t dev_info = "smc91c92_cs";
 
@@ -125,8 +118,6 @@ struct smc_private {
     u_short			media_status;
     u_short			fast_poll;
     u_long			last_rx;
-    
-    spinlock_t			lock;
 };
 
 /* Special definitions for Megahertz multifunction cards */
@@ -156,7 +147,7 @@ struct smc_private {
 
 /* Symbolic constants for the SMC91c9* series chips, from Erik Stahlman. */
 #define	BANK_SELECT		14		/* Window select register. */
-#define SMC_SELECT_BANK(x)  { outw( x, ioaddr + BANK_SELECT); }
+#define SMC_SELECT_BANK(x)  { outw(x, ioaddr + BANK_SELECT); }
 
 /* Bank 0 registers. */
 #define	TCR 		0	/* transmit control register */
@@ -283,9 +274,9 @@ static void smc91c92_release(u_long arg);
 static int smc91c92_event(event_t event, int priority,
 			  event_callback_args_t *args);
 
-static void smc91c92_tx_timeout (struct net_device *dev);
 static int smc91c92_open(struct net_device *dev);
 static int smc91c92_close(struct net_device *dev);
+static void smc_tx_timeout(struct net_device *dev);
 static int smc_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void smc_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void smc_rx(struct net_device *dev);
@@ -320,14 +311,6 @@ static void cs_error(client_handle_t handle, int func, int ret)
 {
     error_info_t err = { func, ret };
     CardServices(ReportError, handle, &err);
-}
-
-/*====================================================================*/
-
-static int smc91c92_init(struct net_device *dev)
-{
-    DEBUG(0, "%s: smc91c92_init called!\n", dev->name);
-    return 0;
 }
 
 /*======================================================================
@@ -377,16 +360,12 @@ static dev_link_t *smc91c92_attach(void)
     dev->get_stats = &smc91c92_get_stats;
     dev->set_config = &s9k_config;
     dev->set_multicast_list = &set_rx_mode;
-    strcpy(dev->name, smc->node.dev_name);
     ether_setup(dev);
-    dev->init = &smc91c92_init;
     dev->open = &smc91c92_open;
     dev->stop = &smc91c92_close;
-    dev->tx_timeout = smc91c92_tx_timeout;
+    dev->tx_timeout = smc_tx_timeout;
     dev->watchdog_timeo = TX_TIMEOUT;
     dev->priv = link->priv = link->irq.Instance = smc;
-    
-    netif_start_queue (dev);
     
     /* Register with Card Services */
     link->next = dev_list;
@@ -422,7 +401,6 @@ static void smc91c92_detach(dev_link_t *link)
 {
     struct smc_private *smc = link->priv;
     dev_link_t **linkp;
-    long flags;
 
     DEBUG(0, "smc91c92_detach(0x%p)\n", link);
     
@@ -432,14 +410,7 @@ static void smc91c92_detach(dev_link_t *link)
     if (*linkp == NULL)
 	return;
     
-    save_flags(flags);
-    cli();
-    if (link->state & DEV_RELEASE_PENDING) {
-	del_timer(&link->release);
-	link->state &= ~DEV_RELEASE_PENDING;
-    }
-    restore_flags(flags);
-    
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG) {
 	smc91c92_release((u_long)link);
 	if (link->state & DEV_STALE_CONFIG) {
@@ -574,14 +545,13 @@ static int mhz_mfc_config(dev_link_t *link)
     
     /* Allocate a memory window, for accessing the ISR */
     req.Attributes = WIN_DATA_WIDTH_8|WIN_MEMORY_TYPE_AM|WIN_ENABLE;
-    req.Base = 0;
-    req.Size = 0x1000;
+    req.Base = req.Size = 0;
     req.AccessSpeed = 0;
     link->win = (window_handle_t)link->handle;
     i = CardServices(RequestWindow, &link->win, &req);
     if (i != CS_SUCCESS)
 	return i;
-    smc->base = ioremap(req.Base, 0x1000);
+    smc->base = ioremap(req.Base, req.Size);
     mem.CardOffset = mem.Page = 0;
     if (smc->manfid == MANFID_MOTOROLA)
 	mem.CardOffset = link->conf.ConfigBase;
@@ -670,14 +640,14 @@ static int mot_setup(dev_link_t *link) {
     struct net_device *dev = &smc->dev;
     ioaddr_t ioaddr = dev->base_addr;
     int i, wait=0, loop;
-    unsigned int addr;
+    u_int addr;
 
     /* Read Ethernet address from Serial EEPROM */
     
     for (i = 0; i < 3; i++) {
-	SMC_SELECT_BANK( 2 );
+	SMC_SELECT_BANK(2);
 	outw(MOT_EEPROM + i, ioaddr + POINTER);
-	SMC_SELECT_BANK( 1 );
+	SMC_SELECT_BANK(1);
 	outw((CTL_RELOAD | CTL_EE_SELECT), ioaddr + CONTROL);
 
 	for (loop = 0; loop < 200; loop++) {
@@ -959,10 +929,10 @@ static void smc91c92_config(dev_link_t *link)
 
     if (smc->manfid == MANFID_OSITECH) {
 	i = osi_config(link);
-    } else if (smc->manfid == MANFID_MOTOROLA
-	     || ((smc->manfid == MANFID_MEGAHERTZ)
-		 && ((smc->cardid == PRODID_MEGAHERTZ_VARIOUS)
-		     || (smc->cardid == PRODID_MEGAHERTZ_EM3288)))) {
+    } else if ((smc->manfid == MANFID_MOTOROLA) ||
+	       ((smc->manfid == MANFID_MEGAHERTZ) &&
+		((smc->cardid == PRODID_MEGAHERTZ_VARIOUS) ||
+		 (smc->cardid == PRODID_MEGAHERTZ_EM3288)))) {
 	i = mhz_mfc_config(link);
     } else {
 	i = smc_config(link);
@@ -983,7 +953,6 @@ static void smc91c92_config(dev_link_t *link)
 	dev->if_port = if_port;
     else
 	printk(KERN_NOTICE "smc91c92_cs: invalid if_port requested\n");
-    netif_start_queue (dev);
     
     if (register_netdev(dev) != 0) {
 	printk(KERN_ERR "smc91c92_cs: register_netdev() failed\n");
@@ -1011,6 +980,7 @@ static void smc91c92_config(dev_link_t *link)
 	goto config_undo;
     }
 
+    strcpy(smc->node.dev_name, dev->name);
     link->dev = &smc->node;
     link->state &= ~DEV_CONFIG_PENDING;
 
@@ -1023,6 +993,7 @@ static void smc91c92_config(dev_link_t *link)
 	case 5: name = "95"; break;
 	case 7: name = "100"; break;
 	case 8: name = "100-FD"; break;
+	case 9: name = "110"; break;
 	}
     printk(KERN_INFO "%s: smc91c%s rev %d: io %#3lx, irq %d, "
 	   "hw_addr ", dev->name, name, (rev & 0x0f), dev->base_addr,
@@ -1086,7 +1057,7 @@ static void smc91c92_release(u_long arg)
 	CardServices(ReleaseWindow, link->win);
     }
     
-    link->state &= ~(DEV_CONFIG | DEV_RELEASE_PENDING);
+    link->state &= ~DEV_CONFIG;
 
 } /* smc91c92_release */
 
@@ -1113,9 +1084,7 @@ static int smc91c92_event(event_t event, int priority,
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
 	    netif_device_detach(dev);
-	    link->release.expires = jiffies + HZ/20;
-	    link->state |= DEV_RELEASE_PENDING;
-	    add_timer(&link->release);
+	    mod_timer(&link->release, jiffies + HZ/20);
 	}
 	break;
     case CS_EVENT_CARD_INSERTION:
@@ -1129,7 +1098,6 @@ static int smc91c92_event(event_t event, int priority,
 	if (link->state & DEV_CONFIG) {
 	    if (link->open)
 		netif_device_detach(dev);
-
 	    CardServices(ReleaseConfiguration, link->handle);
 	}
 	break;
@@ -1205,8 +1173,8 @@ static int smc91c92_open(struct net_device *dev)
     }
     link->open++;
     MOD_INC_USE_COUNT;
-    
-    netif_start_queue (dev);
+
+    netif_start_queue(dev);
     smc->saved_skb = 0;
     smc->packets_waiting = 0;
     
@@ -1229,28 +1197,25 @@ static int smc91c92_close(struct net_device *dev)
 
     DEBUG(0, "%s: smc91c92_close(), status %4.4x.\n",
 	  dev->name, inw(ioaddr + BANK_SELECT));
-    
-    netif_stop_queue (dev);
-    
+
+    netif_stop_queue(dev);
+
     /* Shut off all interrupts, and turn off the Tx and Rx sections.
        Don't bother to check for chip present. */
-    SMC_SELECT_BANK( 2 );	/* Nominally paranoia, but do no assume... */
+    SMC_SELECT_BANK(2);	/* Nominally paranoia, but do no assume... */
     outw(0, ioaddr + INTERRUPT);
-    SMC_SELECT_BANK( 0 );
+    SMC_SELECT_BANK(0);
     mask_bits(0xff00, ioaddr + RCR);
     mask_bits(0xff00, ioaddr + TCR);
     
     /* Put the chip into power-down mode. */
-    SMC_SELECT_BANK( 1 );
-    outw(CTL_POWERDOWN, ioaddr + CONTROL  );
+    SMC_SELECT_BANK(1);
+    outw(CTL_POWERDOWN, ioaddr + CONTROL );
     
     link->open--;
     del_timer(&smc->media);
-    if (link->state & DEV_STALE_CONFIG) {
-	link->release.expires = jiffies + HZ/20;
-	link->state |= DEV_RELEASE_PENDING;
-	add_timer(&link->release);
-    }
+    if (link->state & DEV_STALE_CONFIG)
+	mod_timer(&link->release, jiffies + HZ/20);
     
     MOD_DEC_USE_COUNT;
     
@@ -1265,61 +1230,52 @@ static int smc91c92_close(struct net_device *dev)
    
 ======================================================================*/
 
-static void smc_hardware_send_packet( struct net_device * dev )
+static void smc_hardware_send_packet(struct net_device * dev)
 {
     struct smc_private *smc = dev->priv;
     struct sk_buff *skb = smc->saved_skb;
     ioaddr_t ioaddr = dev->base_addr;
-    unsigned char packet_no;
+    u_char packet_no;
     
-    if ( !skb ) {
+    if (!skb) {
 	printk(KERN_ERR "%s: In XMIT with no packet to send.\n", dev->name);
 	return;
     }
     
     /* There should be a packet slot waiting. */
     packet_no = inw(ioaddr + PNR_ARR) >> 8;
-    if ( packet_no & 0x80 ) {
+    if (packet_no & 0x80) {
 	/* If not, there is a hardware problem!  Likely an ejected card. */
 	printk(KERN_WARNING "%s: 91c92 hardware Tx buffer allocation"
 	       " failed, status %#2.2x.\n", dev->name, packet_no);
-	dev_kfree_skb (skb);
+	dev_kfree_skb_irq(skb);
 	smc->saved_skb = NULL;
-	netif_start_queue (dev);
+	netif_start_queue(dev);
 	return;
     }
-    
+
     smc->stats.tx_bytes += skb->len;
     /* The card should use the just-allocated buffer. */
-    outw( packet_no, ioaddr + PNR_ARR );
+    outw(packet_no, ioaddr + PNR_ARR);
     /* point to the beginning of the packet */
-    outw( PTR_AUTOINC , ioaddr + POINTER );
+    outw(PTR_AUTOINC , ioaddr + POINTER);
     
-    /* Send the packet length ( +6 for status, length and ctl byte )
-       and the status word ( set to zeros ). */
+    /* Send the packet length (+6 for status, length and ctl byte)
+       and the status word (set to zeros). */
     {
-	unsigned char *buf = skb->data;
-	int length = skb->len;	/* The chip will pad to ethernet min length. */
+	u_char *buf = skb->data;
+	u_int length = skb->len; /* The chip will pad to ethernet min. */
 
 	DEBUG(2, "%s: Trying to xmit packet of length %d.\n",
 	      dev->name, length);
 	
-#ifdef USE_32_BIT
-	outl((length+6) << 16, ioaddr + DATA_1);
-	if (length & 0x2) {
-	    outsl(ioaddr + DATA_1, buf,  length >> 2 );
-	    outw( *((uint16 *)(buf + (length & 0xFFFFFFFC))),ioaddr +DATA_1);
-	} else
-	    outsl(ioaddr + DATA_1, buf,  length >> 2 );
-#else
-	/* send the packet length: +6 for status words, length, and ctl */
-	outw( 0, ioaddr + DATA_1 );
-	outw(length + 6, ioaddr + DATA_1 );
-	outsw(ioaddr + DATA_1 , buf, length >> 1);
-#endif
+	/* send the packet length: +6 for status word, length, and ctl */
+	outw(0, ioaddr + DATA_1);
+	outw(length + 6, ioaddr + DATA_1);
+	outsw(ioaddr + DATA_1, buf, length >> 1);
 	
 	/* The odd last byte, if there is one, goes in the control word. */
-	outw((length & 1) ? 0x2000 | buf[length-1] : 0, ioaddr + DATA_1 );
+	outw((length & 1) ? 0x2000 | buf[length-1] : 0, ioaddr + DATA_1);
     }
     
     /* Enable the Tx interrupts, both Tx (TxErr) and TxEmpty. */
@@ -1328,48 +1284,45 @@ static void smc_hardware_send_packet( struct net_device * dev )
 	 ioaddr + INTERRUPT);
     
     /* The chip does the rest of the work. */
-    outw( MC_ENQUEUE , ioaddr + MMU_CMD );
+    outw(MC_ENQUEUE , ioaddr + MMU_CMD);
     
     smc->saved_skb = NULL;
-    dev_kfree_skb (skb);
+    dev_kfree_skb_irq(skb);
     dev->trans_start = jiffies;
-    netif_start_queue (dev);
+    netif_start_queue(dev);
     return;
 }
 
 /*====================================================================*/
 
-static void smc91c92_tx_timeout (struct net_device *dev)
+static void smc_tx_timeout(struct net_device *dev)
 {
-	struct smc_private *smc = dev->priv;
-	ioaddr_t ioaddr = dev->base_addr;
+    struct smc_private *smc = dev->priv;
+    ioaddr_t ioaddr = dev->base_addr;
 
-	printk (KERN_NOTICE "%s: SMC91c92 transmit timed out, "
-		"Tx_status %2.2x status %4.4x.\n",
-		dev->name, inw (ioaddr) & 0xff, inw (ioaddr + 2));
-	smc->stats.tx_errors++;
-	smc_reset (dev);
-	dev->trans_start = jiffies;
-	smc->saved_skb = NULL;
-	netif_start_queue (dev);
+    printk(KERN_NOTICE "%s: SMC91c92 transmit timed out, "
+	   "Tx_status %2.2x status %4.4x.\n",
+	   dev->name, inw(ioaddr)&0xff, inw(ioaddr + 2));
+    smc->stats.tx_errors++;
+    smc_reset(dev);
+    dev->trans_start = jiffies;
+    smc->saved_skb = NULL;
+    netif_start_queue(dev);
 }
-
-
-/*====================================================================*/
 
 static int smc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     struct smc_private *smc = dev->priv;
     ioaddr_t ioaddr = dev->base_addr;
-    unsigned short num_pages;
+    u_short num_pages;
     short time_out, ir;
-    
+
+    netif_stop_queue(dev);
+
     DEBUG(2, "%s: smc91c92_start_xmit(length = %d) called,"
 	  " status %4.4x.\n", dev->name, skb->len, inw(ioaddr + 2));
 
-    netif_stop_queue (dev);
-    
-    if ( smc->saved_skb) {
+    if (smc->saved_skb) {
 	/* THIS SHOULD NEVER HAPPEN. */
 	smc->stats.tx_aborted_errors++;
 	printk(KERN_DEBUG "%s: Internal error -- sent packet while busy.\n",
@@ -1390,10 +1343,10 @@ static int smc_start_xmit(struct sk_buff *skb, struct net_device *dev)
     /* A packet is now waiting. */
     smc->packets_waiting++;
     
-    SMC_SELECT_BANK( 2 );	/* Paranoia, we should always be in window 2 */
+    SMC_SELECT_BANK(2);	/* Paranoia, we should always be in window 2 */
     
     /* Allocate the memory; send the packet now if we win. */
-    outw( MC_ALLOC | num_pages, ioaddr + MMU_CMD );
+    outw(MC_ALLOC | num_pages, ioaddr + MMU_CMD);
     for (time_out = MEMORY_WAIT_TIME; time_out >= 0; time_out--) {
 	ir = inw(ioaddr+INTERRUPT);
 	if (ir & IM_ALLOC_INT) {
@@ -1417,7 +1370,7 @@ static int smc_start_xmit(struct sk_buff *skb, struct net_device *dev)
     
 ======================================================================*/
 
-static void smc_tx_err( struct net_device * dev )
+static void smc_tx_err(struct net_device * dev)
 {
     struct smc_private *smc = (struct smc_private *)dev->priv;
     ioaddr_t ioaddr = dev->base_addr;
@@ -1426,10 +1379,10 @@ static void smc_tx_err( struct net_device * dev )
     int tx_status;
     
     /* select this as the packet to read from */
-    outw( packet_no, ioaddr + PNR_ARR );
+    outw(packet_no, ioaddr + PNR_ARR);
     
     /* read the first word from this packet */
-    outw( PTR_AUTOINC | PTR_READ | 0, ioaddr + POINTER );
+    outw(PTR_AUTOINC | PTR_READ | 0, ioaddr + POINTER);
     
     tx_status = inw(ioaddr + DATA_1);
 
@@ -1441,21 +1394,21 @@ static void smc_tx_err( struct net_device * dev )
 	smc->tx_err++;
     }
     
-    if ( tx_status & TS_SUCCESS ) {
+    if (tx_status & TS_SUCCESS) {
 	printk(KERN_NOTICE "%s: Successful packet caused error "
 	       "interrupt?\n", dev->name);
     }
     /* re-enable transmit */
-    SMC_SELECT_BANK( 0 );
-    outw( inw(ioaddr + TCR) | TCR_ENABLE, ioaddr + TCR);
-    SMC_SELECT_BANK( 2 );
+    SMC_SELECT_BANK(0);
+    outw(inw(ioaddr + TCR) | TCR_ENABLE, ioaddr + TCR);
+    SMC_SELECT_BANK(2);
     
-    outw( MC_FREEPKT, ioaddr + MMU_CMD ); 	/* Free the packet memory. */
+    outw(MC_FREEPKT, ioaddr + MMU_CMD); 	/* Free the packet memory. */
     
     /* one less packet waiting for me */
     smc->packets_waiting--;
     
-    outw( saved_packet, ioaddr + PNR_ARR );
+    outw(saved_packet, ioaddr + PNR_ARR);
     return;
 }
 
@@ -1465,14 +1418,14 @@ static void smc_eph_irq(struct net_device *dev)
 {
     struct smc_private *smc = dev->priv;
     ioaddr_t ioaddr = dev->base_addr;
-    unsigned short card_stats, ephs;
+    u_short card_stats, ephs;
     
     SMC_SELECT_BANK(0);
     ephs = inw(ioaddr + EPH);
     DEBUG(2, "%s: Ethernet protocol handler interrupt, status"
 	  " %4.4x.\n", dev->name, ephs);
     /* Could be a counter roll-over warning: update stats. */
-    card_stats = inw( ioaddr + COUNTER );
+    card_stats = inw(ioaddr + COUNTER);
     /* single collisions */
     smc->stats.collisions += card_stats & 0xF;
     card_stats >>= 4;
@@ -1483,7 +1436,7 @@ static void smc_eph_irq(struct net_device *dev)
     card_stats >>= 4;			/* excess deferred */
 #endif
     /* If we had a transmit error we must re-enable the transmitter. */
-    outw( inw(ioaddr + TCR) | TCR_ENABLE, ioaddr + TCR);
+    outw(inw(ioaddr + TCR) | TCR_ENABLE, ioaddr + TCR);
 
     /* Clear a link error interrupt. */
     SMC_SELECT_BANK(1);
@@ -1503,12 +1456,10 @@ static void smc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     u_short saved_bank, saved_pointer, mask, status;
     char bogus_cnt = INTR_WORK;		/* Work we are willing to do. */
 
-    if ((smc == NULL) || !netif_device_present(dev))
+    if (!netif_device_present(dev))
 	return;
     ioaddr = dev->base_addr;
     
-    spin_lock (&smc->lock);
-
     DEBUG(3, "%s: SMC91c92 interrupt %d at %#x.\n", dev->name,
 	  irq, ioaddr);
     
@@ -1517,11 +1468,8 @@ static void smc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     if ((saved_bank & 0xff00) != 0x3300) {
 	/* The device does not exist -- the card could be off-line, or
 	   maybe it has been ejected. */
-#ifdef PCMCIA_DEBUG
-	if (dev->start)
-	    DEBUG(1, "%s: SMC91c92 interrupt %d for non-existent"
-		  "/ejected device.\n", dev->name, irq);
-#endif
+	DEBUG(1, "%s: SMC91c92 interrupt %d for non-existent"
+	      "/ejected device.\n", dev->name, irq);
 	goto irq_done;
     }
     
@@ -1529,7 +1477,7 @@ static void smc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     saved_pointer = inw(ioaddr + POINTER);
     mask = inw(ioaddr + INTERRUPT) >> 8;
     /* clear all interrupts */
-    outw( 0, ioaddr + INTERRUPT );
+    outw(0, ioaddr + INTERRUPT);
     
     do { /* read the status flag, and mask it */
 	status = inw(ioaddr + INTERRUPT) & 0xff;
@@ -1561,10 +1509,10 @@ static void smc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    smc_hardware_send_packet(dev);
 	    
 	    /* enable xmit interrupts based on this */
-	    mask |= ( IM_TX_EMPTY_INT | IM_TX_INT );
+	    mask |= (IM_TX_EMPTY_INT | IM_TX_INT);
 	    
 	    /* and let the card send more packets to me */
-	    netif_wake_queue (dev);
+	    netif_wake_queue(dev);
 	}
 	if (status & IM_RX_OVRN_INT) {
 	    smc->stats.rx_errors++;
@@ -1573,7 +1521,7 @@ static void smc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 	if (status & IM_EPH_INT)
 	    smc_eph_irq(dev);
-    } while ( --bogus_cnt);
+    } while (--bogus_cnt);
 
     DEBUG(3, "  Restoring saved registers mask %2.2x bank %4.4x"
 	  " pointer %4.4x.\n", mask, saved_bank, saved_pointer);
@@ -1581,9 +1529,7 @@ static void smc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     /* restore state register */
     outw((mask<<8), ioaddr + INTERRUPT);
     outw(saved_pointer, ioaddr + POINTER);
-    SMC_SELECT_BANK( saved_bank );
-
-    spin_unlock (&smc->lock);
+    SMC_SELECT_BANK(saved_bank);
 
     DEBUG(3, "%s: Exiting interrupt IRQ%d.\n", dev->name, irq);
 
@@ -1631,24 +1577,24 @@ static void smc_rx(struct net_device *dev)
     }
     
     /*  Reset the read pointer, and read the status and packet length. */
-    outw( PTR_READ | PTR_RCV | PTR_AUTOINC, ioaddr + POINTER );
+    outw(PTR_READ | PTR_RCV | PTR_AUTOINC, ioaddr + POINTER);
     rx_status = inw(ioaddr + DATA_1);
     packet_length = inw(ioaddr + DATA_1) & 0x07ff;
 
     DEBUG(2, "%s: Receive status %4.4x length %d.\n",
 	  dev->name, rx_status, packet_length);
     
-    if ( !(rx_status & RS_ERRORS )) {		
+    if (!(rx_status & RS_ERRORS)) {		
 	/* do stuff to make a new packet */
 	struct sk_buff *skb;
 	
 	/* Note: packet_length adds 5 or 6 extra bytes here! */
 	skb = dev_alloc_skb(packet_length+2);
 	
-	if ( skb == NULL ) {
+	if (skb == NULL) {
 	    DEBUG(1, "%s: Low memory, packet dropped.\n", dev->name);
 	    smc->stats.rx_dropped++;
-	    outw( MC_RELEASE, ioaddr + MMU_CMD );
+	    outw(MC_RELEASE, ioaddr + MMU_CMD);
 	    return;
 	}
 	
@@ -1694,14 +1640,14 @@ static struct net_device_stats *smc91c92_get_stats(struct net_device *dev)
 
 ======================================================================*/
 
-static unsigned const ethernet_polynomial = 0x04c11db7U;
+static const u_int ethernet_polynomial = 0x04c11db7U;
 
-static unsigned ether_crc(int length, unsigned char *data)
+static u_int ether_crc(int length, u_char *data)
 {
     int crc = 0xffffffff;	/* Initial value. */
     
     while (--length >= 0) {
-	unsigned char current_octet = *data++;
+	u_char current_octet = *data++;
 	int bit;
 	for (bit = 0; bit < 8; bit++, current_octet >>= 1) {
 	    crc = (crc << 1) ^
@@ -1721,14 +1667,14 @@ static unsigned ether_crc(int length, unsigned char *data)
 ======================================================================*/
 
 static void fill_multicast_tbl(int count, struct dev_mc_list *addrs,
-			       unsigned char *multicast_table)
+			       u_char *multicast_table)
 {
     struct dev_mc_list	*mc_addr;
     
     for (mc_addr = addrs;  mc_addr && --count > 0;  mc_addr = mc_addr->next) {
-	unsigned int position = ether_crc(6, mc_addr->dmi_addr);
+	u_int position = ether_crc(6, mc_addr->dmi_addr);
 #ifndef final_version		/* Verify multicast address. */
-	if ( (mc_addr->dmi_addr[0] & 1) == 0)
+	if ((mc_addr->dmi_addr[0] & 1) == 0)
 	    continue;
 #endif
 	multicast_table[position >> 29] |= 1 << ((position >> 26) & 7);
@@ -1749,9 +1695,9 @@ static void fill_multicast_tbl(int count, struct dev_mc_list *addrs,
 static void set_rx_mode(struct net_device *dev)
 {
     ioaddr_t ioaddr = dev->base_addr;
-    unsigned int multicast_table[ 2 ] = { 0, };
+    u_int multicast_table[ 2 ] = { 0, };
     long flags;
-    uint16 rx_cfg_setting;
+    u_short rx_cfg_setting;
     
     if (dev->flags & IFF_PROMISC) {
 	printk(KERN_NOTICE "%s: setting Rx mode to promiscuous.\n", dev->name);
@@ -1761,7 +1707,7 @@ static void set_rx_mode(struct net_device *dev)
     else {
 	if (dev->mc_count)  {
 	    fill_multicast_tbl(dev->mc_count, dev->mc_list,
-			       (unsigned char *)multicast_table);
+			       (u_char *)multicast_table);
 	}
 	rx_cfg_setting = RxStripCRC | RxEnable;
     }
@@ -1769,7 +1715,7 @@ static void set_rx_mode(struct net_device *dev)
     /* Load MC table and Rx setting into the chip without interrupts. */
     save_flags(flags);
     cli();
-    SMC_SELECT_BANK( 3 );
+    SMC_SELECT_BANK(3);
     outl(multicast_table[0], ioaddr + MULTICAST0);
     outl(multicast_table[1], ioaddr + MULTICAST4);
     SMC_SELECT_BANK(0);
@@ -1846,14 +1792,14 @@ static void smc_reset(struct net_device *dev)
     
     /* The first interaction must be a write to bring the chip out
        of sleep mode. */
-    SMC_SELECT_BANK( 0 );
+    SMC_SELECT_BANK(0);
     /* Reset the chip. */
-    outw( RCR_SOFTRESET, ioaddr + RCR );
+    outw(RCR_SOFTRESET, ioaddr + RCR);
     udelay(10);
     
     /* Clear the transmit and receive configuration registers. */
-    outw( RCR_CLEAR, ioaddr + RCR );
-    outw( TCR_CLEAR, ioaddr + TCR );
+    outw(RCR_CLEAR, ioaddr + RCR);
+    outw(TCR_CLEAR, ioaddr + TCR);
     
     /* Set the Window 1 control, configuration and station addr registers.
        No point in writing the I/O base register ;-> */
@@ -1879,8 +1825,8 @@ static void smc_reset(struct net_device *dev)
     
     /* Reset the MMU */
     SMC_SELECT_BANK(2);
-    outw(MC_RESET, ioaddr + MMU_CMD );
-    outw(0, ioaddr + INTERRUPT );
+    outw(MC_RESET, ioaddr + MMU_CMD);
+    outw(0, ioaddr + INTERRUPT);
     
     /* Re-enable the chip. */
     SMC_SELECT_BANK(0);
@@ -1889,9 +1835,9 @@ static void smc_reset(struct net_device *dev)
     set_rx_mode(dev);
 
     /* Enable interrupts. */
-    SMC_SELECT_BANK( 2 );
-    outw( (IM_EPH_INT | IM_RX_OVRN_INT | IM_RCV_INT) << 8,
-	  ioaddr + INTERRUPT );
+    SMC_SELECT_BANK(2);
+    outw((IM_EPH_INT | IM_RX_OVRN_INT | IM_RCV_INT) << 8,
+	 ioaddr + INTERRUPT);
 }
 
 /*======================================================================

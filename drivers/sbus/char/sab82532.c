@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.44 2000/04/26 09:36:32 davem Exp $
+/* $Id: sab82532.c,v 1.45 2000/05/08 22:23:08 ecd Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -352,19 +352,17 @@ static inline void receive_chars(struct sab82532 *info,
 		free_fifo++;
 	}
 
+	if (stat->sreg.isr0 & SAB82532_ISR0_TCD) {
+		count = readb(&info->regs->r.rbcl) & (info->recv_fifo_size - 1);
+		free_fifo++;
+	}
+
 	/* Issue a FIFO read command in case we where idle. */
 	if (stat->sreg.isr0 & SAB82532_ISR0_TIME) {
 		sab82532_cec_wait(info);
 		writeb(SAB82532_CMDR_RFRD, &info->regs->w.cmdr);
 		/* Wait for command execution, to catch the TCD below. */
 		sab82532_cec_wait(info);
-	}
-
-	if (stat->sreg.isr0 & SAB82532_ISR0_TCD) {
-		count = readb(&info->regs->r.rbcl) & (info->recv_fifo_size - 1);
-		if (count == 0)
-			count = info->recv_fifo_size;
-		free_fifo++;
 	}
 
 	if (stat->sreg.isr0 & SAB82532_ISR0_RFO) {
@@ -835,8 +833,8 @@ static int startup(struct sab82532 *info)
 				SAB82532_IMR0_PLLA;
 	writeb(info->interrupt_mask0, &info->regs->w.imr0);
 	info->interrupt_mask1 = SAB82532_IMR1_BRKT | SAB82532_IMR1_XOFF |
-				SAB82532_IMR1_TIN | SAB82532_IMR1_XON |
-				SAB82532_IMR1_XPR;
+				SAB82532_IMR1_TIN | SAB82532_IMR1_CSC |
+				SAB82532_IMR1_XON | SAB82532_IMR1_XPR;
 	writeb(info->interrupt_mask1, &info->regs->w.imr1);
 
 	if (info->tty)
@@ -1056,10 +1054,14 @@ static void change_speed(struct sab82532 *info)
 		writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_RTS), &info->regs->rw.mode);
 		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FRTS, &info->regs->rw.mode);
 		writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_FCTS), &info->regs->rw.mode);
+		info->interrupt_mask1 &= ~(SAB82532_IMR1_CSC);
+		writeb(info->interrupt_mask1, &info->regs->w.imr1);
 	} else {
 		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RTS, &info->regs->rw.mode);
 		writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_FRTS), &info->regs->rw.mode);
 		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FCTS, &info->regs->rw.mode);
+		info->interrupt_mask1 |= SAB82532_IMR1_CSC;
+		writeb(info->interrupt_mask1, &info->regs->w.imr1);
 	}
 	writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RAC, &info->regs->rw.mode);
 	restore_flags(flags);
@@ -2171,7 +2173,7 @@ static void __init sab82532_kgdb_hook(int line)
 
 static inline void __init show_serial_version(void)
 {
-	char *revision = "$Revision: 1.44 $";
+	char *revision = "$Revision: 1.45 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

@@ -41,6 +41,7 @@ tristate 'OS/2 HPFS file system support' CONFIG_HPFS_FS
 bool '/proc file system support' CONFIG_PROC_FS
 
 dep_bool '/dev file system support (EXPERIMENTAL)' CONFIG_DEVFS_FS $CONFIG_EXPERIMENTAL
+dep_bool '  Automatically mount at boot' CONFIG_DEVFS_MOUNT $CONFIG_DEVFS_FS
 dep_bool '  Debug devfs' CONFIG_DEVFS_DEBUG $CONFIG_DEVFS_FS
 
 # It compiles as a module for testing only.  It should not be used

@@ -443,6 +443,14 @@
 	       Don't kill existing block ops in <devfs_read_inode>.
 	       Work sponsored by SGI.
   v0.94
+    20000424   Richard Gooch <rgooch@atnf.csiro.au>
+	       Don't create missing directories in <devfs_find_handle>.
+	       Work sponsored by SGI.
+  v0.95
+    20000430   Richard Gooch <rgooch@atnf.csiro.au>
+	       Added CONFIG_DEVFS_MOUNT.
+	       Work sponsored by SGI.
+  v0.96
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -477,7 +485,7 @@
 #include <asm/bitops.h>
 #include <asm/atomic.h>
 
-#define DEVFS_VERSION            "0.94 (20000415)"
+#define DEVFS_VERSION            "0.96 (20000430)"
 
 #ifndef DEVFS_NAME
 #  define DEVFS_NAME "devfs"
@@ -691,8 +699,11 @@ static unsigned int devfs_debug = DEBUG_NONE;
 #  endif
 #endif
 
-/* by default, we do not mount devfs on bootup */
+#ifdef CONFIG_DEVFS_MOUNT
+static unsigned int boot_options = OPTION_NONE;
+#else
 static unsigned int boot_options = OPTION_NOMOUNT;
+#endif
 
 /*  Forward function declarations  */
 static struct devfs_entry *search_for_entry (struct devfs_entry *dir,
@@ -959,7 +970,7 @@ static struct devfs_entry *find_entry (devfs_handle_t dir,
 	    ++name;
 	    --namelen;
 	}
-	entry = search_for_entry (dir, name, namelen, TRUE, FALSE, NULL,
+	entry = search_for_entry (dir, name, namelen, FALSE, FALSE, NULL,
 				  traverse_symlink);
 	if (entry != NULL) return entry;
     }

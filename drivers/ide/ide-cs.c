@@ -183,7 +183,6 @@ static dev_link_t *ide_attach(void)
 static void ide_detach(dev_link_t *link)
 {
     dev_link_t **linkp;
-    long flags;
     int ret;
 
     DEBUG(0, "ide_detach(0x%p)\n", link);
@@ -194,14 +193,7 @@ static void ide_detach(dev_link_t *link)
     if (*linkp == NULL)
 	return;
 
-    save_flags(flags);
-    cli();
-    if (link->state & DEV_RELEASE_PENDING) {
-	del_timer(&link->release);
-	link->state &= ~DEV_RELEASE_PENDING;
-    }
-    restore_flags(flags);
-    
+    del_timer(&link->release);
     if (link->state & DEV_CONFIG)
 	ide_release((u_long)link);
     
@@ -425,11 +417,8 @@ int ide_event(event_t event, int priority,
     switch (event) {
     case CS_EVENT_CARD_REMOVAL:
 	link->state &= ~DEV_PRESENT;
-	if (link->state & DEV_CONFIG) {
-	    link->release.expires = jiffies + HZ/20;
-	    link->state |= DEV_RELEASE_PENDING;
-	    add_timer(&link->release);
-	}
+	if (link->state & DEV_CONFIG)
+	    mod_timer(&link->release, jiffies + HZ/20);
 	break;
     case CS_EVENT_CARD_INSERTION:
 	link->state |= DEV_PRESENT | DEV_CONFIG_PENDING;

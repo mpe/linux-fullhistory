@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_stp_if.c,v 1.2 2000/02/21 15:51:34 davem Exp $
+ *	$Id: br_stp_if.c,v 1.3 2000/05/05 02:17:17 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License

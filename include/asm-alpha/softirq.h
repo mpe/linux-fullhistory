@@ -1,11 +1,12 @@
 #ifndef _ALPHA_SOFTIRQ_H
 #define _ALPHA_SOFTIRQ_H
 
+#include <linux/config.h>
 #include <linux/stddef.h>
 #include <asm/atomic.h>
 #include <asm/hardirq.h>
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 extern int __local_bh_count;
 #define local_bh_count(cpu)	((void)(cpu), __local_bh_count)
 #else

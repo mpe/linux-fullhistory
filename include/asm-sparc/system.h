@@ -66,7 +66,7 @@ extern void synchronize_user_stack(void);
 extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 		   void *fpqueue, unsigned long *fpqdepth);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define SWITCH_ENTER \
 	if(prev->flags & PF_USEDFPU) { \
 		put_psr(get_psr() | PSR_EF); \
@@ -249,7 +249,7 @@ extern __inline__ unsigned long read_psr_and_cli(void)
 #define local_irq_save(flags)		__save_and_cli(flags)
 #define local_irq_restore(flags)	__restore_flags(flags)
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 extern unsigned char global_irq_holder;
 
@@ -285,13 +285,13 @@ extern void __global_restore_flags(unsigned long flags);
 #define nop() __asm__ __volatile__ ("nop");
 
 /* This has special calling conventions */
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 BTFIXUPDEF_CALL(void, ___xchg32, void)
 #endif
 
 extern __inline__ unsigned long xchg_u32(__volatile__ unsigned long *m, unsigned long val)
 {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	__asm__ __volatile__("swap [%2], %0"
 			     : "=&r" (val)
 			     : "0" (val), "r" (m));

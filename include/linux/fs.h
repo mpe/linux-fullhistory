@@ -178,7 +178,6 @@ extern int max_super_blocks, nr_super_blocks;
 
 #ifdef __KERNEL__
 
-#include <linux/string.h>
 #include <asm/semaphore.h>
 #include <asm/byteorder.h>
 

@@ -18,6 +18,7 @@
 #ifndef _LINUX_NET_H
 #define _LINUX_NET_H
 
+#include <linux/config.h>
 #include <linux/socket.h>
 #include <linux/wait.h>
 
@@ -141,7 +142,7 @@ extern int	net_ratelimit(void);
 extern unsigned long net_random(void);
 extern void net_srandom(unsigned long);
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 #define SOCKOPS_WRAPPED(name) name
 #define SOCKOPS_WRAP(name, fam)
 #else

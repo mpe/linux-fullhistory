@@ -361,6 +361,7 @@ CONFIG_MINIX_FS=y
 # CONFIG_HPFS_FS is not set
 CONFIG_PROC_FS=y
 # CONFIG_DEVFS_FS is not set
+# CONFIG_DEVFS_MOUNT is not set
 # CONFIG_DEVFS_DEBUG is not set
 # CONFIG_DEVPTS_FS is not set
 # CONFIG_QNX4FS_FS is not set

@@ -11,6 +11,8 @@
 #ifndef _ASM_DELAY_H
 #define _ASM_DELAY_H
 
+#include <linux/config.h>
+
 extern __inline__ void
 __delay(unsigned long loops)
 {
@@ -43,7 +45,7 @@ extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 	__delay(usecs);
 }
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define __udelay_val cpu_data[smp_processor_id()].udelay_val
 #else
 #define __udelay_val loops_per_sec

@@ -9,6 +9,7 @@
  * Copyright (C) 1994 - 2000 by Ralf Baechle
  * Copyright (C) 1999, 2000 Silicon Graphics
  */
+#include <linux/config.h>
 #include <asm/asm.h>
 #include <asm/regdef.h>
 #include <asm/mipsregs.h>
@@ -33,7 +34,7 @@ reschedule:	jal	schedule
 
 FEXPORT(ret_from_sys_call)
 FEXPORT(ret_from_irq)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #error Barffff...
 #else
 		la	t1, softirq_state

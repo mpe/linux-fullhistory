@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.125 2000/04/12 08:10:26 davem Exp $
+/* $Id: pgtable.h,v 1.126 2000/05/05 21:57:03 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -196,6 +196,7 @@ extern inline pte_t pte_modify(pte_t orig_pte, pgprot_t new_prot)
  * Undefined behaviour if not..
  */
 #define pte_read(pte)		(pte_val(pte) & _PAGE_READ)
+#define pte_exec(pte)		pte_read(pte)
 #define pte_write(pte)		(pte_val(pte) & _PAGE_WRITE)
 #define pte_dirty(pte)		(pte_val(pte) & _PAGE_MODIFIED)
 #define pte_young(pte)		(pte_val(pte) & _PAGE_ACCESSED)

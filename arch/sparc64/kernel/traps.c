@@ -688,7 +688,7 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 		instruction_dump ((unsigned int *) regs->tpc);
 	} else
 		user_instruction_dump ((unsigned int *) regs->tpc);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	smp_report_regs();
 #endif
                                                 	
@@ -854,7 +854,7 @@ void do_tof_tl1(struct pt_regs *regs)
 #ifdef CONFIG_EC_FLUSH_TRAP
 void cache_flush_trap(struct pt_regs *regs)
 {
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 	unsigned node = linux_cpus[get_cpuid()].prom_node;
 #else
 #error cache_flush_trap not supported on sparc64/SMP yet
