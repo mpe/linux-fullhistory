@@ -37,7 +37,7 @@ struct rtable {
 
 
 extern void		rt_flush(struct device *dev);
-extern void		rt_add(short flags, unsigned long addr,
+extern void		rt_add(short flags, unsigned long addr, unsigned long mask,
 			       unsigned long gw, struct device *dev);
 extern struct rtable	*rt_route(unsigned long daddr, struct options *opt);
 extern int		rt_get_info(char * buffer);

@@ -115,39 +115,41 @@ void rt_flush(struct device *dev)
 }
 
 /*
- * Used by 'rt_add()' when we can't get the netmask from the device..
+ * Used by 'rt_add()' when we can't get the netmask any other way..
  *
  * If the lower byte or two are zero, we guess the mask based on the
  * number of zero 8-bit net numbers, otherwise we use the "default"
- * masks judging by the destination address.
- *
- * We should really use masks everywhere, but the current system
- * interface for adding routes doesn't even contain a netmask field.
- * Similarly, ICMP redirect messages contain only the address to
- * redirect.. Anyway, this function should give reasonable values
- * for almost anything.
+ * masks judging by the destination address and our device netmask.
  */
-static unsigned long guess_mask(unsigned long dst)
+static unsigned long guess_mask(unsigned long dst, struct device * dev)
 {
 	unsigned long mask = 0xffffffff;
 
 	while (mask & dst)
-		mask <<= 8;
+		mask >>= 8;
 	if (mask)
 		return ~mask;
 	dst = ntohl(dst);
 	if (IN_CLASSA(dst))
-		return htonl(IN_CLASSA_NET);
-	if (IN_CLASSB(dst))
-		return htonl(IN_CLASSB_NET);
-	return htonl(IN_CLASSC_NET);
+		mask = htonl(IN_CLASSA_NET);
+	else if (IN_CLASSB(dst))
+		mask = htonl(IN_CLASSB_NET);
+	else
+		mask = htonl(IN_CLASSC_NET);
+	if (dev->flags & IFF_POINTOPOINT)
+		return mask;
+	if ((dst ^ dev->pa_addr) & mask)
+		return mask;
+	return dev->pa_mask;
 }
 
 static inline struct device * get_gw_dev(unsigned long gw)
 {
 	struct rtable * rt;
 
-	for (rt = rt_base ; rt ; rt = rt->rt_next) {
+	for (rt = rt_base ; ; rt = rt->rt_next) {
+		if (!rt)
+			return NULL;
 		if ((gw ^ rt->rt_dst) & rt->rt_mask)
 			continue;
 		/* gateways behind gateways are a no-no */
@@ -155,23 +157,21 @@ static inline struct device * get_gw_dev(unsigned long gw)
 			return NULL;
 		return rt->rt_dev;
 	}
-	return NULL;
 }
 
 /*
  * rewrote rt_add(), as the old one was weird. Linus
  */
 void
-rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
+rt_add(short flags, unsigned long dst, unsigned long mask, unsigned long gw, struct device *dev)
 {
 	struct rtable *r, *rt;
 	struct rtable **rp;
-	unsigned long mask;
 	unsigned long cpuflags;
 
 	if (flags & RTF_HOST) {
 		mask = 0xffffffff;
-	} else {
+	} else if (!mask) {
 		if (!((dst ^ dev->pa_addr) & dev->pa_mask)) {
 			mask = dev->pa_mask;
 			flags &= ~RTF_GATEWAY;
@@ -180,7 +180,7 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
 				return;
 			}
 		} else
-			mask = guess_mask(dst);
+			mask = guess_mask(dst, dev);
 		dst &= mask;
 	}
 	if (gw == dev->pa_addr)
@@ -239,44 +239,44 @@ rt_add(short flags, unsigned long dst, unsigned long gw, struct device *dev)
 	return;
 }
 
-
-static int
-rt_new(struct rtentry *r)
+static inline int bad_mask(unsigned long mask, unsigned long addr)
 {
-  struct device *dev;
+	if (addr & (mask = ~mask))
+		return 1;
+	mask = ntohl(mask);
+	if (mask & (mask+1))
+		return 1;
+	return 0;
+}
 
-  if ((r->rt_dst.sa_family != AF_INET) ||
-      (r->rt_gateway.sa_family != AF_INET)) {
-	DPRINTF((DBG_RT, "RT: We only know about AF_INET !\n"));
-	return(-EAFNOSUPPORT);
-  }
+static int rt_new(struct rtentry *r)
+{
+	struct device *dev;
+	unsigned long flags, daddr, mask, gw;
 
-  /*
-   * I admit that the following bits of code were "inspired" by
-   * the Berkeley UNIX system source code.  I could think of no
-   * other way to find out how to make it compatible with it (I
-   * want this to be compatible to get "routed" up and running).
-   * -FvK
-   */
+	if (r->rt_dst.sa_family != AF_INET)
+		return -EAFNOSUPPORT;
 
-  /* If we have a 'gateway' route here, check the correct address. */
-  if (!(r->rt_flags & RTF_GATEWAY))
-	dev = dev_check(((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr);
-  else
-	dev = get_gw_dev(((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr);
+	flags = r->rt_flags;
+	daddr = ((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr;
+	mask = r->rt_genmask;
+	gw = ((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr;
 
-  DPRINTF((DBG_RT, "RT: dev for %s gw ",
-	in_ntoa((*(struct sockaddr_in *)&r->rt_dst).sin_addr.s_addr)));
-  DPRINTF((DBG_RT, "%s (0x%04X) is 0x%X (%s)\n",
-	in_ntoa((*(struct sockaddr_in *)&r->rt_gateway).sin_addr.s_addr),
-	r->rt_flags, dev, (dev == NULL) ? "NONE" : dev->name));
+	if (flags & RTF_GATEWAY) {
+		if (r->rt_gateway.sa_family != AF_INET)
+			return -EAFNOSUPPORT;
+		dev = get_gw_dev(gw);
+	} else
+		dev = dev_check(daddr);
 
-  if (dev == NULL) return(-ENETUNREACH);
+	if (dev == NULL)
+		return -ENETUNREACH;
 
-  rt_add(r->rt_flags, (*(struct sockaddr_in *) &r->rt_dst).sin_addr.s_addr,
-	 (*(struct sockaddr_in *) &r->rt_gateway).sin_addr.s_addr, dev);
+	if (bad_mask(mask, daddr))
+		mask = 0;
 
-  return(0);
+	rt_add(flags, daddr, mask, gw, dev);
+	return 0;
 }
 
 

@@ -361,6 +361,8 @@ asmlinkage void start_kernel(void)
 	}
 	low_memory_start = PAGE_ALIGN(low_memory_start);
 	memory_start = paging_init(memory_start,memory_end);
+	if (strncmp((char*)0x0FFFD9, "EISA", 4) == 0)
+		EISA_bus = 1;
 	trap_init();
 	init_IRQ();
 	sched_init();

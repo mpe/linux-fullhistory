@@ -24,6 +24,7 @@
 /* This structure gets passed by the SIOCADDRT and SIOCDELRT calls. */
 struct rtentry {
   unsigned long		rt_hash;	/* hash key for lookups		*/
+#define rt_genmask rt_hash
   struct sockaddr	rt_dst;
   struct sockaddr	rt_gateway;
   short			rt_flags;

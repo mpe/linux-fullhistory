@@ -92,9 +92,8 @@ int el3_probe(struct device *dev)
 	short *phys_addr = (short *)dev->dev_addr;
 	static int current_tag = 0;
 
-	/* First check for a board on the EISA bus.	 This first check should
-	   really be in init/main.c, along with a MCA check. */
-	if (strncmp((char*)0x0FFFD9, "EISA", 4) == 0) {
+	/* First check for a board on the EISA bus. */
+	if (EISA_bus) {
 		for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
 			if (inw(ioaddr) != 0x6d50)
 				continue;

@@ -1,10 +1,10 @@
-/* fdomain.c -- Future Domain TMC-16x0 driver
+/* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Sun Oct 31 19:53:49 1993 by faith@cs.unc.edu
+ * Revised: Tue Jan  4 20:43:57 1994 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
- * Copyright 1992, 1993 Rickard E. Faith
+ * Copyright 1992, 1993, 1994 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.6 1993/11/01 02:40:32 root Exp $
+ * $Id: fdomain.c,v 5.8 1994/01/05 01:44:16 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -144,7 +144,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
-#define VERSION          "$Revision: 5.6 $"
+#define VERSION          "$Revision: 5.8 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -323,7 +323,6 @@ struct signature {
 };
 
 #define SIGNATURE_COUNT (sizeof( signatures ) / sizeof( struct signature ))
-
 
 static void print_banner( void )
 {

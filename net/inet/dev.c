@@ -780,6 +780,17 @@ dev_get_info(char *buffer)
   return pos - buffer;
 }
 
+static inline int bad_mask(unsigned long mask, unsigned long addr)
+{
+	if (addr & (mask = ~mask))
+		return 1;
+	mask = ntohl(mask);
+	if (mask & (mask+1))
+		return 1;
+	return 0;
+}
+
+
 /* Perform the SIOCxIFxxx calls. */
 static int
 dev_ifsioc(void *arg, unsigned int getset)
@@ -878,11 +889,16 @@ dev_ifsioc(void *arg, unsigned int getset)
 		memcpy_tofs(arg, &ifr, sizeof(struct ifreq));
 		ret = 0;
 		break;
-	case SIOCSIFNETMASK:
-		dev->pa_mask = (*(struct sockaddr_in *)
-				 &ifr.ifr_netmask).sin_addr.s_addr;
+	case SIOCSIFNETMASK: {
+		unsigned long mask = (*(struct sockaddr_in *)
+			&ifr.ifr_netmask).sin_addr.s_addr;
+		ret = -EINVAL;
+		if (bad_mask(mask,0))
+			break;
+		dev->pa_mask = mask;
 		ret = 0;
 		break;
+	}
 	case SIOCGIFMETRIC:
 		ifr.ifr_metric = dev->metric;
 		memcpy_tofs(arg, &ifr, sizeof(struct ifreq));
@@ -970,9 +986,9 @@ dev_ioctl(unsigned int cmd, void *arg)
 	      return retval;
 	  printk("%s: adding HOST route of %8.8lx.\n", dev->name,
 		 htonl(ipc.paddr));
-	  rt_add(RTF_HOST, ipc.paddr, 0, dev);
+	  rt_add(RTF_HOST, ipc.paddr, 0, 0, dev);
 	  if (ipc.router != 0 && ipc.router != -1) {
-	      rt_add(RTF_GATEWAY, ipc.paddr, ipc.router, dev);
+	      rt_add(RTF_GATEWAY, ipc.paddr, 0, ipc.router, dev);
 	      printk("%s: adding GATEWAY route of %8.8lx.\n",
 		     dev->name, htonl(ipc.paddr));
 

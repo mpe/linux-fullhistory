@@ -1,10 +1,10 @@
 /* fdomain.h -- Header for Future Domain TMC-16x0 driver
  * Created: Sun May  3 18:47:33 1992 by faith@cs.unc.edu
- * Revised: Sun Jun  6 11:56:40 1993 by faith@cs.unc.edu
+ * Revised: Tue Jan  4 20:44:04 1994 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
- * Copyright 1992, 1993 Rickard E. Faith
+ * Copyright 1992, 1993, 1994 Rickard E. Faith
  *
- * $Id: fdomain.h,v 5.2 1993/10/24 16:40:41 root Exp $
+ * $Id: fdomain.h,v 5.3 1994/01/05 01:44:16 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the

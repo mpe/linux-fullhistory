@@ -67,6 +67,11 @@ int x86 = 0;			/* set by boot/head.S to 3 or 4 */
 int ignore_irq13 = 0;		/* set if exception 16 works */
 int wp_works_ok = 0;		/* set if paging hardware honours WP */ 
 
+/*
+ * Bus types ..
+ */
+int EISA_bus = 0;
+
 extern int _setitimer(int, struct itimerval *, struct itimerval *);
 unsigned long * prof_buffer = NULL;
 unsigned long prof_len = 0;

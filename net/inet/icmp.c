@@ -211,11 +211,11 @@ icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev)
   switch(icmph->code & 7) {
 	case ICMP_REDIR_NET:
 		rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_GATEWAY),
-			ip, icmph->un.gateway, dev);
+			ip, 0, icmph->un.gateway, dev);
 		break;
 	case ICMP_REDIR_HOST:
 		rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_HOST | RTF_GATEWAY),
-			ip, icmph->un.gateway, dev);
+			ip, 0, icmph->un.gateway, dev);
 		break;
 	case ICMP_REDIR_NETTOS:
 	case ICMP_REDIR_HOSTTOS:

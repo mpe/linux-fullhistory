@@ -58,7 +58,7 @@ extern inline void ins##s(unsigned short port, void * addr, unsigned long count)
 : "=D" (addr), "=c" (count) : "d" (port),"0" (addr),"1" (count)); }
 
 #define __OUTS(s) \
-extern inline void outs##s(unsigned short port, void * addr, unsigned long count) \
+extern inline void outs##s(unsigned short port, const void * addr, unsigned long count) \
 { __asm__ __volatile__ ("cld ; rep ; outs" #s \
 : "=S" (addr), "=c" (count) : "d" (port),"0" (addr),"1" (count)); }
 
