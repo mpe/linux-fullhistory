@@ -219,10 +219,11 @@ repeat:
 	if (!skb) {
 		spin_lock_irqsave(&skb_list_lock, flags);
 		skb = skbs;
-		if (skb)
+		if (skb) {
 			skbs = skb->next;
-		skb->next = NULL;
-		nr_skbs--;
+			skb->next = NULL;
+			nr_skbs--;
+		}
 		spin_unlock_irqrestore(&skb_list_lock, flags);
 	}
 
