@@ -41,7 +41,7 @@
  *
  *    -- Daniel M. Eischen, deischen@iworks.InterWorks.org, 04/03/95
  *
- *  $Id: aic7xxx.c,v 3.0 1996/04/16 09:11:53 deang Exp $
+ *  $Id: aic7xxx.c,v 3.2 1996/05/12 17:28:23 deang Exp $
  *-M*************************************************************************/
 
 #ifdef MODULE
@@ -74,7 +74,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
 
-#define AIC7XXX_C_VERSION  "$Revision: 3.0 $"
+#define AIC7XXX_C_VERSION  "$Revision: 3.2 $"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        ((a < b) ? a : b)
@@ -1069,8 +1069,7 @@ aic7xxx_length(Scsi_Cmnd *cmd, int sg_last)
  *-F*************************************************************************/
 static void
 aic7xxx_scsirate(struct aic7xxx_host *p, unsigned char *scsirate,
-                 short period, unsigned char offset,
-                 int target, char channel)
+    short period, unsigned char offset, int target, char channel)
 {
   int i;
 
@@ -1367,8 +1366,7 @@ aic7xxx_done_aborted_scbs (struct aic7xxx_host *p)
  *   Add this SCB to the head of the "waiting for selection" list.
  *-F*************************************************************************/
 static void
-aic7xxx_add_waiting_scb(u_long              base,
-                        struct aic7xxx_scb *scb)
+aic7xxx_add_waiting_scb(u_long base, struct aic7xxx_scb *scb)
 {
   unsigned char next;
   unsigned char curscb;
@@ -1393,7 +1391,7 @@ aic7xxx_add_waiting_scb(u_long              base,
  *-F*************************************************************************/
 static unsigned char
 aic7xxx_abort_waiting_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb,
-                          unsigned char prev, unsigned char timedout_scb)
+    unsigned char prev, unsigned char timedout_scb)
 {
   unsigned char curscb, next;
   int target = (scb->target_channel_lun >> 4) & 0x0F;
@@ -1457,7 +1455,7 @@ aic7xxx_abort_waiting_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb,
  *-F*************************************************************************/
 static int
 aic7xxx_reset_device(struct aic7xxx_host *p, int target, char channel,
-                     unsigned char timedout_scb)
+    unsigned char timedout_scb)
 {
   int base = p->base;
   struct aic7xxx_scb *scb;
@@ -1602,7 +1600,7 @@ aic7xxx_reset_current_bus(int base)
  *-F*************************************************************************/
 static int
 aic7xxx_reset_channel(struct aic7xxx_host *p, char channel,
-                     unsigned char timedout_scb, int initiate_reset)
+    unsigned char timedout_scb, int initiate_reset)
 {
   int base = p->base;
   unsigned char sblkctl;
@@ -1686,7 +1684,10 @@ aic7xxx_reset_channel(struct aic7xxx_host *p, char channel,
     {
       aic7xxx_reset_current_bus(base);
     }
-    /* Ensure we don't get a RSTI interrupt from this. */
+
+    /*
+     * Ensure we don't get a RSTI interrupt from this.
+     */
     outb(CLRSCSIRSTI | CLRSELTIMEO, CLRSINT1 + base);
     outb(CLRSCSIINT, CLRINT + base);
     outb(sblkctl, SBLKCTL + base);
@@ -1706,7 +1707,9 @@ aic7xxx_reset_channel(struct aic7xxx_host *p, char channel,
     {
       aic7xxx_reset_current_bus(base);
     }
-    /* Ensure we don't get a RSTI interrupt from this. */
+    /*
+     * Ensure we don't get a RSTI interrupt from this.
+     */
     outb(CLRSCSIRSTI | CLRSELTIMEO, CLRSINT1 + base);
     outb(CLRSCSIINT, CLRINT + base);
 
@@ -3121,7 +3124,7 @@ detect_maxscb(struct aic7xxx_host_config *config)
  *-F*************************************************************************/
 static int
 aic7xxx_register(Scsi_Host_Template *template,
-                 struct aic7xxx_host_config *config)
+    struct aic7xxx_host_config *config)
 {
   int i;
   unsigned char sblkctl;
@@ -3327,7 +3330,7 @@ aic7xxx_register(Scsi_Host_Template *template,
        * so we default it to 100%.
        */
       config->bus_speed = DFTHRSH_100;
-      scsi_conf = config->scsi_id | DFTHRSH_100;
+      scsi_conf = config->scsi_id | config->bus_speed;
 #if 0
       if (config->parity == AIC_ENABLED)
       {
@@ -3335,18 +3338,11 @@ aic7xxx_register(Scsi_Host_Template *template,
       }
 #endif
       outb(scsi_conf, SCSICONF + base);
-      outb(DFTHRSH_100, DSPCISTATUS + base);
+      outb(config->bus_speed, DSPCISTATUS + base);
 
       /*
        * In case we are a wide card...
        */
-/*
- * Try the following:
- *
- * 1) outb(config->scsi_id, SCSICONF + base + 1);
- * 2) outb(scsiconf, SCSICONF + base + 1);
- *
- */
       outb(config->scsi_id, SCSICONF + base + 1);
 
       printk("aic7xxx: Extended translation %sabled.\n",
@@ -3737,7 +3733,7 @@ aic7xxx_register(Scsi_Host_Template *template,
    * 2s compliment of SCBCOUNT
    */
   i = p->maxscb;
-  outb(-i & 0xff, COMP_SCBCOUNT + base);
+  outb(-i & 0xFF, COMP_SCBCOUNT + base);
 
   /*
    * Set the QCNT (queue count) mask to deal with broken aic7850s that
@@ -3788,7 +3784,9 @@ aic7xxx_register(Scsi_Host_Template *template,
       udelay(1000);
       outb(0, SCSISEQ + base);
 
-      /* Ensure we don't get a RSTI interrupt from this. */
+      /*
+       * Ensure we don't get a RSTI interrupt from this.
+       */
       outb(CLRSCSIRSTI, CLRSINT1 + base);
       outb(CLRSCSIINT, CLRINT + base);
 
@@ -3802,7 +3800,9 @@ aic7xxx_register(Scsi_Host_Template *template,
     udelay(1000);
     outb(0, SCSISEQ + base);
 
-    /* Ensure we don't get a RSTI interrupt from this. */
+    /*
+     * Ensure we don't get a RSTI interrupt from this.
+     */
     outb(CLRSCSIRSTI, CLRSINT1 + base);
     outb(CLRSCSIINT, CLRINT + base);
 
@@ -3970,7 +3970,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
 
             case AIC_7872:  /* 3940 */
             case AIC_7882:  /* 3940-Ultra */
-              config.chan_num = number_of_39xxs & 0x1;  /* Has 2 controllers */
+              config.chan_num = number_of_39xxs & 0x01;  /* Has 2 controllers */
               number_of_39xxs++;
               if (number_of_39xxs == 2)
               {
@@ -3980,7 +3980,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
 
             case AIC_7873:  /* 3985 */
             case AIC_7883:  /* 3985-Ultra */
-              config.chan_num = number_of_39xxs & 0x3;  /* Has 3 controllers */
+              config.chan_num = number_of_39xxs & 0x03;  /* Has 3 controllers */
               number_of_39xxs++;
               if (number_of_39xxs == 3)
               {
@@ -4013,7 +4013,8 @@ aic7xxx_detect(Scsi_Host_Template *template)
              */
             csize_lattime |= 8;
           }
-          if((csize_lattime & LATTIME) == 0)
+
+          if ((csize_lattime & LATTIME) == 0)
           {
             /*
              * Default to 64 PCLKS (is this a good value?)
@@ -4049,7 +4050,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
            * The first bit of PCI_BASE_ADDRESS_0 is always set, so
            * we mask it off.
            */
-          base = io_port & 0xfffffffe;
+          base = io_port & 0xFFFFFFFE;
 
           /*
            * I don't think we need to bother with allowing
@@ -4115,9 +4116,8 @@ aic7xxx_detect(Scsi_Host_Template *template)
  *   Build a SCB.
  *-F*************************************************************************/
 static void
-aic7xxx_buildscb(struct aic7xxx_host *p,
-		 Scsi_Cmnd *cmd,
-		 struct aic7xxx_scb *scb)
+aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
+    struct aic7xxx_scb *scb)
 {
   void *addr;
   unsigned short mask;
@@ -4638,7 +4638,7 @@ aic7xxx_abort(Scsi_Cmnd *cmd)
  *   the SCSI bus reset line.
  *-F*************************************************************************/
 int
-aic7xxx_reset(Scsi_Cmnd *cmd)
+aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int resetFlags)
 {
 #ifdef AIC7XXX_DEBUG_ABORT
   printk ("aic7xxx: (reset) target/channel %d/%d\n", cmd->target, cmd->channel);
@@ -4683,11 +4683,11 @@ aic7xxx_biosparam(Disk *disk, kdev_t dev, int geom[])
   sectors = 32;
   cylinders = disk->capacity / (heads * sectors);
 
-  if (p->extended && cylinders > 1024)
+  if (p->extended && (cylinders > 1024))
   {
     heads = 255;
     sectors = 63;
-    cylinders = disk->capacity / (255 * 63);
+    cylinders = disk->capacity / (heads * sectors);
   }
 
   geom[0] = heads;

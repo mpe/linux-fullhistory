@@ -1,6 +1,8 @@
 #!/bin/sh
 #
 # This script creates the proper /dev/ entries for IDE devices
+# on the primary, secondary, tertiary, and quaternary interfaces.
+# See ../Documentation/ide.txt for more information.
 #
 makedev () {
 	rm -f /dev/$1

@@ -311,6 +311,11 @@ M:	Bob Frey <bobf@advansys.com>
 W:	http://www.advansys.com/linux
 S:	Maintained
 
+CREDITS FILE
+P:	John A. Martin
+M:	jam@acm.org
+S:	Maintained
+
 REST:
 P:	Linus Torvalds
 S:	Buried alive in email

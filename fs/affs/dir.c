@@ -144,10 +144,10 @@ affs_readdir(struct inode *inode, struct file *filp, void *dirent, filldir_t fil
 		if (filp->private_data && filp->f_version == dir->i_version) {
 			i = (ULONG)filp->private_data;
 			j = 0;
-			pd_debug("AFFS: readdir() left off=%lu\n",i);
+			pr_debug("AFFS: readdir() left off=%lu\n",i);
 		}
 		filp->f_version = dir->i_version;
-		pd_debug("AFFS: hash_pos=%lu chain_pos=%lu\n", hash_pos, chain_pos);
+		pr_debug("AFFS: hash_pos=%lu chain_pos=%lu\n", hash_pos, chain_pos);
 		while (i) {
 			if (!(fh_bh = affs_bread(inode->i_dev,i,AFFS_I2BSIZE(inode)))) {
 				printk("AFFS: readdir: Can't get block %d\n",i);

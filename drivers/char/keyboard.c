@@ -1201,7 +1201,7 @@ int kbd_init(void)
 	ttytab = console_driver.table;
 
 	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard", NULL);
-	request_region(0x60,16,"kbd");
+	request_region(0x60,16,"keyboard");
 #ifdef INIT_KBD
 	initialize_kbd();
 #endif

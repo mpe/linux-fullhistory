@@ -370,11 +370,14 @@ printk ( "GSCD: open\n" );
 	if (gscdPresent == 0)
 		return -ENXIO;			/* no hardware */
 
+	MOD_INC_USE_COUNT;
+
         get_status ();
         st = disk_state & (ST_NO_DISK | ST_DOOR_OPEN);
         if ( st )
         {
            printk ( "GSCD: no disk or door open\n" );
+           MOD_DEC_USE_COUNT;
            return -ENXIO;
         }
                    
@@ -382,8 +385,6 @@ printk ( "GSCD: open\n" );
 		return -EIO;
 */
 
-	MOD_INC_USE_COUNT;
- 
 	return 0;
 }
 

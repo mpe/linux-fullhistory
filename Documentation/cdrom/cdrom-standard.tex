@@ -53,7 +53,7 @@ underlying hardware. Any structure is lost.
 Apart from the somewhat unstructured interfacing with software, the
 actual execution of the commands is different for most of the
 different drivers: e.g., some drivers close the tray if an $open()$ call
-occurs while the tray is unloaded, others not. Some drivers lock the
+occurs while the tray is unloaded, while others do not. Some drivers lock the
 door upon opening the device, to prevent an incoherent file system,
 but others don't, to allow software ejection. Undoubtedly, the
 capabilities of the different drives vary, but even when two drives have
@@ -272,7 +272,7 @@ $$
 \subsection{$Disc_status(dev_t\ dev)$}
 \label{disc status}
 
-As a complement to $drive_status()$, this functions can provide the
+As a complement to $drive_status()$, this function can provide the
 general \cdrom-routines with information about the current disc that is
 inserted in the drive represented by $dev$. The history of development
 of the CD's use as a carrier medium for various digital information
@@ -288,7 +288,7 @@ CDS_XA_2_1& mixed data (XA), mode 2, form 1 (2048 user bytes)\cr
 CDS_XA_2_2& mixed data (XA), mode 2, form 1 (2324  user bytes)\cr
 }
 $$
-As far as I know, \cdrom's are always of type $CDS_DATA_1$. For
+As far as I know, \cdrom s are always of type $CDS_DATA_1$. For
 some information concerning frame layout of the various disc types, see
 a recent version of {\tt cdrom.h}. 
 
@@ -347,8 +347,8 @@ If the drive can store multiple discs (a juke-box), it is likely that
 a disc selection can be made by software. This function should perform
 disc selection. It should return the number of the selected disc on
 success, a negative value on error. Currently, none of the \linux\ 
-\cdrom\ drivers appear to support such functionality, but it defined
-here for future purpose.
+\cdrom\ drivers appears to support such functionality, but it is defined
+here for future purposes.
 
 \subsection{$Get_last_session(dev_t\ dev, struct\ cdrom_multisession *
 ms_info)$}
@@ -418,12 +418,13 @@ supported, it should be done through the VFS and not via $ioctl$s. A
 problem here could be the fact that audio-frames are 2352 bytes long,
 so either the audio-file-system should ask for 75264 bytes at once
 (the least common multiple of 512 and 2352), or the drivers should
-bend their backs to cope with this incoherence (to which I would
-oppose, this code then should be standardized in \cdromc).
+bend their backs to cope with this incoherence (to which I would be
+opposed). Once this question is resolved, this code should be standardized in 
+\cdromc.
 
 Because there are so many $ioctl$s that seem to be introduced to
 satisfy certain drivers,\footnote{Is there software around that actually uses
-these? I 'd be interested!} any `non-standard' $ioctl$s are routed through
+these? I'd be interested!} any `non-standard' $ioctl$s are routed through
 the call $dev_ioctl()$. In principle, `private' $ioctl$s should be
 numbered after the device's major number, and not the general \cdrom\
 $ioctl$ number, {\tt 0x53}. Currently the non-supported $ioctl$s are:
@@ -450,8 +451,8 @@ CDC_MEDIA_CHANGED& can report if disc has changed\cr
 CDC_PLAY_AUDIO& can perform audio-functions (play, pause, etc)\cr
 }
 $$
-The capability flag is declared $const$, to prevent drivers to
-accidentally tamper with the contents. However, upon registration,
+The capability flag is declared $const$, to prevent drivers from
+accidentally tampering with the contents. However, upon registration,
 some (claimed) capability flags may be cleared if the supporting
 function has not been implemented (see $register_cdrom()$ in
 \cdromc). 
@@ -464,17 +465,17 @@ $$\it
 if\ (cdo\rightarrow capability \mathrel\& \mathord{\sim} cdo\rightarrow mask 
    \mathrel{\&} CDC_<capability>) \ldots
 $$
-The $mask$ could be set in the low-level driver code do disable
+The $mask$ could be set in the low-level driver code to disable
 certain capabilities for special brands of the device that can't
-perform the actions.  However, there is not (yet) and $ioctl$ to set
+perform the actions.  However, there is not (yet) an $ioctl$ to set
 the mask\dots The reason is that I think it is better to control the
 {\em behavior\/} rather than the {\em capabilities}.
 
 \subsection{Options}
 
 A final flag register controls the {\em behavior\/} of the \cdrom\
-drives, in order to satisfy the different users's wishes, hopefully
-independently of the ideas of the respectable author that happened to
+drives, in order to satisfy different users' wishes, hopefully
+independently of the ideas of the respective author who happened to
 have made the drive's support available to the \linux\ community. The
 current behavior options are:
 $$
@@ -537,7 +538,7 @@ behavior of the $open()$ call. Audio use simply wants to open the
 device in order to get a file handle which is needed for issuing
 $ioctl$ commands, while data use wants to open for correct and
 reliable data transfer. The only way user programs can indicate what
-their {\em purpose\/} of opening the device is, is trough the $flags$
+their {\em purpose\/} of opening the device is, is through the $flags$
 parameter (see {\tt open(2)}). For \cdrom\ devices, these flags aren't
 implemented (some drivers implement checking for write-related flags,
 but this is not strictly necessary if the device file has correct
@@ -545,11 +546,11 @@ permission flags). Most option flags simply don't make sense to
 \cdrom\ devices: $O_CREAT$, $O_NOCTTY$, $O_TRUNC$, $O_APPEND$, and
 $O_SYNC$ have no meaning to a \cdrom. 
 
-We therefore propose to use the flag $O_NONBLOCK$ as an indication
+We therefore propose to use the flag $O_NONBLOCK$ to indicate
 that the device is opened just for issuing $ioctl$
 commands. Strictly, the meaning of $O_NONBLOCK$ is that opening and
 subsequent calls to the device don't cause the calling process to
-wait. We could interpret this as ``don't wait until someone has been
+wait. We could interpret this as ``don't wait until someone has
 inserted some valid data-\cdrom.'' Thus, our proposal of the
 implementation for the $open()$ call for \cdrom s is:
 \begin{itemize}
@@ -564,7 +565,7 @@ no actions whatsoever.
 
 \subsection{And what about standards?}
 
-You might hesitate to accept this proposal as is comes from the
+You might hesitate to accept this proposal as it comes from the
 \linux\ community, and not from some standardizing institute. What
 about SUN, SGI, HP and all those other Unix and hardware vendors?
 Well, these companies are in the lucky position that they generally
@@ -583,8 +584,8 @@ implement such a user-program for \linux, I came across the
 differences in behavior of the various drivers, and the need for an
 $ioctl$ informing about media changes.}
 
-We believe that using $O_NONBLOCK$ as indication for opening a device
-for $ioctl$ commanding only, can be easily introduced in the \linux\
+We believe that using $O_NONBLOCK$ to indicate that a device is being opened
+for $ioctl$ commands only can be easily introduced in the \linux\
 community. All the CD-player authors will have to be informed, we can
 even send in our own patches to the programs. The use of $O_NONBLOCK$
 has most likely no influence on the behavior of the CD-players on
@@ -594,7 +595,7 @@ CDO_USE_FFLAGS)$.
 
 \subsection{The preferred strategy of $open()$}
 
-The routines in \cdromc\ are designed in such way, that a run-time
+The routines in \cdromc\ are designed in such a way that a run-time
 configuration of the behavior of \cdrom\ devices (of {\em any\/} type)
 can be carried out, by the $CDROM_SET/CLEAR_OPTIONS$ $ioctls$. Thus, various
 modes of operation can be set:
@@ -734,7 +735,7 @@ cdrom_volctrl *{}$.
 
 The following $ioctl$s have been introduced to allow user programs to
 control the behavior of individual \cdrom\ devices. New $ioctl$
-commands an be identified by their underscores in the name.
+commands can be identified by the underscores in their names.
 \begin{description}
 \item[CDROM_SET_OPTIONS] Set options specified by $arg$. Returns the
 option flag register after modification. Use  $arg = \rm0$ for reading
@@ -757,7 +758,7 @@ the current flags.
 \item[CDROM_DRIVE_STATUS] Returns the status of the drive by a call to
   $drive_status()$. Return values are as defined in section~\ref{drive
     status}. Note that this call doesn't return information on the
-  current playing activity of the drive, this can be polled through an
+  current playing activity of the drive; this can be polled through an
   $ioctl$ call to $CDROMSUBCHNL$.
 \item[CDROM_DISC_STATUS] Returns the type of the disc currently in the
   drive by a call to $disc_status()$. Return values are as defined in
@@ -802,10 +803,10 @@ the code in a large part, and you may just have to adapt the prototype
 and return values. 
 \item Rename your $<device>_ioctl()$ function to $audio_ioctl$ and
 change the prototype a little. Remove entries listed in the first part
-in section~\ref{cdrom-ioctl}, if your code was OK, this are just calls
+in section~\ref{cdrom-ioctl}, if your code was OK, these are just calls
 to the routines you adapted in the previous step. 
 \item You may remove all remaining memory checking code in the
-$audio_ioctl()$ function that deal with audio commands (these are
+$audio_ioctl()$ function that deals with audio commands (these are
 listed in the second part of section~\ref{cdrom-ioctl}). There is no
 need for memory allocation either, so most $case$s in the $switch$
 statement look similar to:
@@ -828,8 +829,8 @@ way.
 
 Thanks to all the people involved. Thanks to Thomas Quinot, Jon Tombs,
 Ken Pizzini, Eberhard M\"onkeberg and Andrew Kroll, the \linux\ 
-\cdrom\ device driver developers that were kind enough to give
-sugestions and criticisms during the writing. Finally of course, I
+\cdrom\ device driver developers who were kind enough to give
+suggestions and criticisms during the writing. Finally of course, I
 want to thank Linus Torvalds for making this possible in the first
 place.
 

@@ -99,12 +99,12 @@ int unregister_cdrom(int major, char *name)
 
 #define ENOMEDIUM EAGAIN				/* no medium in removable device */
 
-/* We use the open-option O_NONBLOCK as in indicator of that the
+/* We use the open-option O_NONBLOCK to indicate that the
  * purpose of opening is only for subsequent ioctl() calls; no device
  * integrity checks are performed.
  *
  * We hope that all cd-player programs will adopt this convention. It
- * is in their own advantage: device conotrol becomes a lot easier
+ * is in their own interest: device control becomes a lot easier
  * this way.
  */
 int open_for_data(struct cdrom_device_ops *, int);
@@ -261,7 +261,7 @@ void sanitize_format(union cdrom_addr *addr,
 
 /* All checking and format change makes this code really hard to read!
  * So let's make some check and memory move macros.  These macros are
- * a little inenficient when used both in the same piece of code, as
+ * a little inefficient when both used in the same piece of code, as
  * verify_area is used twice, but who cares, as ioctl() calls
  * shouldn't be in inner loops.
  */
@@ -280,8 +280,8 @@ void sanitize_format(union cdrom_addr *addr,
  * in parenthesis): CDROMREADMODE1 (2+ide), CDROMREADMODE2 (2+ide),
  * CDROMREADAUDIO (2+ide), CDROMREADRAW (2), CDROMREADCOOKED (2),
  * CDROMSEEK (2), CDROMPLAYBLK (scsi), CDROMREADALL (1). Read-audio,
- * OK (although i guess the record companies aren't too hapy with
- * this, most drives therefor refuse to transport audio data).  But
+ * OK (although i guess the record companies aren't too happy with
+ * this, most drives therefore refuse to transport audio data).  But
  * why are there 5 different READs defined? For now, these functions
  * are left over to the device-specific ioctl routine,
  * cdo->dev_ioctl. Note that as a result of this, no

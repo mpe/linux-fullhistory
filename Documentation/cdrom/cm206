@@ -6,7 +6,7 @@ cm206 in combination with the cm260 host adapter card.
 Changes since version 0.99
 --------------------------
 - Interfacing to the kernel is routed though an extra interface layer, 
-  cdrom.c. This allows runtime-configurable `bahavior' of the cdrom-drive, 
+  cdrom.c. This allows runtime-configurable `behavior' of the cdrom-drive, 
   independent of the driver. 
 
 Features since version 0.33
@@ -70,7 +70,7 @@ the module when you upgrade the kernel to a new version.
 
 Since version 0.96, much of the functionality has been transferred to
 a generic cdrom interface in the file cdrom.c. The module cm206.o
-depends on cdrom.o. If the latter is not compiled in in the kernel,
+depends on cdrom.o. If the latter is not compiled into the kernel,
 you must explicitly load it before cm206.o:
 
 	 insmod /usr/src/linux/modules/cdrom.o
@@ -84,7 +84,7 @@ line to be used, e.g.
 
 	insmod /usr/src/linux/modules/cm206.o cm206=0x300,11
 
-The order of base port and irq line don't matter; you may specify only
+The order of base port and irq line doesn't matter; you may specify only
 one, the other will have the value of the compiled-in default.  You
 may also have to install the file-system module `iso9660.o', if you
 didn't compile that into the kernel. 
@@ -181,5 +181,5 @@ The copyright of the cm206 driver for Linux is
     (c) 1995 David A. van Leeuwen
 
 The driver is released under the conditions of the GNU general public
-license, that can be found in the file COPYING in the root of this
+license, which can be found in the file COPYING in the root of this
 source tree.

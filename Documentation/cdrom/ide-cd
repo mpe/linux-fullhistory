@@ -1,0 +1,416 @@
+IDE-CD driver documentation
+10 May 1996
+scott snyder  <snyder@fnald0.fnal.gov>
+
+1. Introduction
+---------------
+
+The ide-cd driver should work with all ATAPI 1.2 compliant cdrom
+drives which attach to an IDE interface.  Note that some cdrom vendors
+(including Mitsumi, Sony, Creative, Aztech, and Goldstar) have made
+both ATAPI-compliant drives and drives which use a proprietary
+interface.  If your drive uses one of those proprietary interfaces,
+this driver will not work with it (but one of the other cdrom drivers
+probably will).  This driver will not work with `ATAPI' drives which
+attach to the parallel port.  In addition, there is at least one drive
+(CyCDROM CR520ie) which attaches to the IDE port but is not ATAPI;
+this driver will not work with drives like that either (but see the
+aztcd driver).
+
+This driver provides the following features:
+
+ - Reading from data tracks, and mounting iso9660 filesystems.
+
+ - Playing audio tracks.  Most of the cdrom player programs floating
+   around should work; i usually use Workman.
+
+ - Multisession support.
+
+ - On drives which support it, reading digital audio data directly
+   from audio tracks.  The program cdda2wav can be used for this.
+   Note, however, that only a few drives actually support this
+   function; the only ones which i've heard of successes with are Sony
+   and Toshiba drives.
+
+ - There is now rudimentary support for cdrom changers which comply
+   with the ATAPI 2.6 draft standard (such as the NEC CDR-251).  This
+   merely adds a function to switch between the slots of the changer
+   under control of an external program.  A sample such program is
+   appended to the end of this file.  I've heard that the Sanyo 3-disc
+   changer does not conform to this standard, so the changer functions
+   will probably not work with that drive.
+
+
+2. Installation
+---------------
+
+0. The ide-cd relies on the ide disk driver.  See
+   drivers/block/README.ide for up-to-date information on the ide
+   driver.
+
+1. Make sure that the ide and ide-cd drivers are compiled into the
+   kernel you're using.  When configuring the kernel, say `yes' to the
+   options 
+
+      Enhanced IDE/MFM/RLL disk/cdrom/tape support
+      Include IDE/ATAPI CDROM support
+
+   and `no' to
+
+      Use old disk-only driver on primary interface
+
+   Depending on what type of IDE interface you have, you may need to
+   specify additional configuration options.  See
+   drivers/block/README.ide.
+
+2. You should also ensure that the iso9660 filesystem is either
+   compiled into the kernel or available as a loadable module.  You
+   can see if a filesystem is known to the kernel by cat'ing the file
+   /proc/filesystems.
+
+3. The cdrom drive should be connected to the host on an IDE
+   interface.  Each interface on a system is defined by an I/O port
+   address and an IRQ number, the standard assignments being
+   0x170 and 14 for the primary interface and 0x1f0 and 15 for the
+   secondary interface.  Each interface can control up to two devices,
+   where each device can be either a hard drive, a cdrom drive, or a
+   tape drive.  The two devices on an interface are called `master'
+   and `slave'; this is usually selectable via a jumper on the drive.
+
+   Linux names these devices as follows.  The master and slave devices
+   on the primary IDE interface are called `hda' and `hdb',
+   respectively.  The drives on the secondary interface are called
+   `hdc' and `hdd'.  (Interfaces at other locations get other letters
+   in the third position; see drivers/block/README.ide.)
+
+   If you want your cdrom drive to be found automatically by the
+   driver, you should make sure your IDE interface uses either the
+   primary or secondary addresses mentioned above.  In addition, if
+   the cdrom drive is the only device on the IDE interface, it should
+   be jumpered as `master'.  (If for some reason you cannot configure
+   your system in this manner, you can probably still use the driver.
+   You may have to pass extra configuration information to the kernel
+   when you boot, however.  See drivers/block/README.ide for more
+   information.)
+
+4. Boot the system.  If the drive is recognized, you should see a
+   message which looks like
+
+     hdb: NEC CD-ROM DRIVE:260, ATAPI CDROM drive
+
+   If you do not see this, see section 5 below.
+
+5. You may want to create a symbolic link /dev/cdrom pointing to the
+   actual device.  You can do this with the command
+
+     ln -s  /dev/hdX  /dev/cdrom
+
+   where X should be replaced by the letter indicating where your
+   drive is installed.
+
+6. You should be able to see any error messages from the driver with
+   the `dmesg' command.
+
+
+3. Basic usage
+--------------
+
+An iso9660 format cdrom can be mounted by putting the disc in the
+drive and typing (as root)
+
+  mount -t iso9660 /dev/cdrom /mnt/cdrom
+
+where it is assumed that /dev/cdrom is a link pointing to the actual
+device (as described in step 5 of the last section) and /mnt/cdrom is
+an empty directory.  You should now be able to see the contents of the
+cdrom under the /mnt/cdrom directory.  If you want to eject the cdrom,
+you must first dismount it with a command like
+
+  umount /mnt/cdrom
+
+Note that audio cds cannot be mounted.
+
+Some distributions set up /etc/fstab to always try to mount a cdrom
+filesystem on bootup.  It is not required to mount the cdrom in this
+manner, though, and it may be a nuisance if you change cdroms often.
+You should feel free to remove the cdrom line from /etc/fstab and
+mount cdroms manually if that suits you better.
+
+Multisession and photocd discs should work with no special handling.
+The hpcdtoppm package (ftp.gwdg.de:/pub/linux/hpcdtoppm/) may be
+useful for reading photocds.
+
+To play an audio cd, you should first unmount and remove any data
+cdrom.  Any of the cdrom player programs should then work (workman,
+workbone, cdplayer, etc.).  Lacking anything else, you could use the
+cdtester program in Documentation/cdrom/sbpcd.
+
+On a few drives, you can read digital audio directly using a program
+such as cdda2wav.  The only types of drive which i've heard support
+this are Sony and Toshiba drives.  You will get errors if you try to
+use this function on a drive which does not support it.
+
+For supported changers, you can use the `cdload' program (appended to
+the end of this file) to switch between changer slots.  Note that the
+drive should be unmounted before attempting this.  The program takes
+two arguments: the cdrom device, and the slot number to which to change.
+If the slot number is -1, the drive is unloaded.
+
+
+4. Compilation options
+----------------------
+
+There are a few additional options which can be set when compiling the
+driver.  Most people should not need to mess with any of these; they
+are listed here simply for completeness.  A compilation option can be
+enabled by adding a line of the form `#define <option> 1' to the top
+of ide-cd.c.  All these options are disabled by default.
+
+VERBOSE_IDE_CD_ERRORS
+  If this is set, ATAPI error codes will be translated into textual
+  descriptions.  In addition, a dump is made of the command which
+  provoked the error.  This is off by default to save the memory used
+  by the (somewhat long) table of error descriptions.  
+
+STANDARD_ATAPI
+  If this is set, the code needed to deal with certain drives which do
+  not properly implement the ATAPI spec will be disabled.  If you know
+  your drive implements ATAPI properly, you can turn this on to get a
+  slightly smaller kernel.
+
+NO_DOOR_LOCKING
+  If this is set, the driver will never attempt to lock the door of
+  the drive.
+
+TEST
+  This presently enables an additional ioctl which enables a user-mode
+  program to execute an arbitrary packet command.  See the source for
+  details.  This should be left off unless you know what you're doing.
+
+
+5. Common problems
+------------------
+
+This section discusses some common problems encountered when trying to
+use the driver, and some possible solutions.  Note that if you are
+experiencing problems, you should probably also review
+drivers/block/README.ide for current information about the underlying
+IDE support code.  Some of these items apply only to earlier versions
+of the driver, but are mentioned here for completeness.
+
+In most cases, you should probably check with `dmesg' for any errors
+from the driver.
+
+a. Drive is not detected during booting.
+
+   - Review the configuration instructions above and in
+     drivers/block/README.ide, and check how your hardware is
+     configured.
+
+   - If your drive is the only device on an IDE interface, it should
+     be jumpered as master, if at all possible.
+
+   - If your IDE interface is not at the standard addresses of 0x170
+     or 0x1f0, you'll need to explicitly inform the driver using a
+     lilo option.  See drivers/block/README.ide.  (This feature was
+     added around kernel version 1.3.30.)
+
+   - If the autoprobing is not finding your drive, you can tell the
+     driver to assume that one exists by using a lilo option of the
+     form `hdX=cdrom', where X is the drive letter corresponding to
+     where your drive is installed (see section 2).  Note that if you
+     do this and you see a boot message like
+
+       hdX: ATAPI cdrom (?)
+
+     this does _not_ mean that the driver has successfully detected
+     the drive; rather, it means that the driver has not detected a
+     drive, but is assuming there's one there anyway because you told
+     it so.  If you actually try to do I/O to a drive defined at a
+     nonexistent or nonresponding I/O address, you'll probably get
+     errors with a status value of 0xff.
+
+   - Some IDE adapters require a nonstandard initialization sequence
+     before they'll function properly.  (If this is the case, there
+     will often be a separate MS-DOS driver just for the controller.)
+     IDE interfaces on sound cards often fall into this category.
+
+     Support for some interfaces needing extra initialization is
+     provided in later 1.3.x kernels.  You may need to turn on
+     additional kernel configuration options to get them to work;
+     see drivers/block/README.ide.
+
+     Even if support is not available for your interface, you may be
+     able to get it to work with the following procedure.  First boot
+     MS-DOS and load the appropriate drivers.  Then warm-boot linux
+     (i.e., without powering off).  If this works, it can be automated
+     by running loadlin from the MS-DOS autoexec.
+
+
+b. Timeout/IRQ errors.
+
+  - If you always get timeout errors, interrupts from the drive are
+    probably not making it to the host.
+
+  - IRQ problems may also be indicated by the message
+    `IRQ probe failed (<n>)' while booting.  If <n> is zero, that
+    means that the system did not see an interrupt from the drive when
+    it was expecting one (on any feasible IRQ).  If <n> is negative,
+    that means the system saw interrupts on multiple IRQ lines, when
+    it was expecting to receive just one from the cdrom drive.
+
+  - Double-check your hardware configuration to make sure that the IRQ
+    number of your IDE interface matches what the driver expects.
+    (The usual assignments are 14 for the primary (0x170) interface
+    and 15 for the secondary (0x1f0) interface.)  Also be sure that
+    you don't have some other hardware which might be conflicting with
+    the IRQ you're using.  Also check the BIOS setup for your system;
+    some have the ability to disable individual IRQ levels, and i've
+    had one report of a system which was shipped with IRQ 15 disabled
+    by default.
+
+  - Note that many MS-DOS cdrom drivers will still function even if
+    there are hardware problems with the interrupt setup; they
+    apparently don't use interrupts.
+
+
+c. System hangups.
+
+  - If the system locks up when you try to access the cdrom, the most
+    likely cause is that you have a buggy IDE adapter which doesn't
+    properly handle simultaneous transactions on multiple interfaces.
+    The most notorious of these is the CMD640B chip.  This problem can
+    be worked around by specifying the `serialize' option when
+    booting.  Recent kernels should be able to detect the need for
+    this automatically in most cases, but the detection is not
+    foolproof.  See drivers/block/README.ide for more information
+    about the `serialize' option and the CMD640B.
+
+  - Note that many MS-DOS cdrom drivers will work with such buggy
+    hardware, apparently because they never attempt to overlap cdrom
+    operations with other disk activity.
+
+
+d. Can't mount a cdrom.
+
+  - If you get errors from mount, it may help to check `dmesg' to see
+    if there are any more specific errors from the driver or from the
+    filesystem.
+
+  - Make sure there's a cdrom loaded in the drive, and that's it's an
+    iso9660 format disc.  You can't mount an audio cd.
+
+  - With the cdrom in the drive and unmounted, try something like
+
+      cat /dev/cdrom | od | more
+
+    If you see a dump, then the drive and driver are probably working
+    ok, and the problem is at the filesystem level (i.e., the cdrom is
+    not iso9660 format or has errors in the filesystem structure).
+
+  - If you see `not a block device' errors, check that the definitions
+    of the device special files are correct.  They should be as
+    follows:
+
+      brw-rw----   1 root     disk       3,   0 Nov 11 18:48 /dev/hda
+      brw-rw----   1 root     disk       3,  64 Nov 11 18:48 /dev/hdb
+      brw-rw----   1 root     disk      22,   0 Nov 11 18:48 /dev/hdc
+      brw-rw----   1 root     disk      22,  64 Nov 11 18:48 /dev/hdd
+
+    Some early Slackware releases had these defined incorrectly.  If
+    these are wrong, you can remake them by running the script
+    drivers/block/MAKEDEV.ide.  (You may have to make it executable
+    with chmod first.)
+
+    If you have a /dev/cdrom symbolic link, check that it is pointing
+    to the correct device file.
+
+    If you hear people talking of the devices `hd1a' and `hd1b', these
+    were old names for what are now called hdc and hdd.  Those names
+    should be considered obsolete.
+
+  - If mount is complaining that the iso9660 filesystem is not
+    available, but you know it is (check /proc/filesystems), you
+    probably need a newer version of mount.  Early versions would not
+    always give meaningful error messages.
+
+
+e. Directory listings are unpredictably truncated, and `dmesg' shows
+   `buffer botch' error messages from the driver.
+
+  - There was a bug in the version of the driver in 1.2.x kernels
+    which could cause this.  It was fixed in 1.3.0.  If you can't
+    upgrade, you can probably work around the problem by specifying a
+    blocksize of 2048 when mounting.  (Note that you won't be able to
+    directly execute binaries off the cdrom in that case.)
+
+    If you see this in kernels later than 1.3.0, please report it as a
+    bug.
+
+
+6. cdload.c
+-----------
+
+/*
+ * cdload.c  <device>  <slot>
+ *
+ * Load a cdrom from a specified slot in a changer.  The drive should be
+ * unmounted before executing this.
+ *
+ * Based on code originally from Gerhard Zuber <zuber@berlin.snafu.de>.
+ */
+
+#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <linux/cdrom.h>
+
+
+int
+main (int argc, char **argv)
+{
+	char *program;
+	char *device;
+	int x_slot;
+	int fd;           /* file descriptor for CD-ROM device */
+	int status;       /* return status for system calls */
+
+	program = argv[0];
+
+	if (argc != 3) {
+		fprintf (stderr, "usage: %s <device> <slot>\n", program);
+		exit (1);
+	}
+
+	device = argv[1];
+	x_slot = atoi (argv[2]);
+
+	/* open device */ 
+	fd = open (device, 0);
+	if (fd < 0) {
+		fprintf (stderr, "%s: open failed for `%s': %s\n",
+			 program, device, strerror (errno));
+		exit (1);
+	}
+
+	/* load */ 
+	status = ioctl (fd, CDROMLOADFROMSLOT, x_slot);
+	if (status != 0) {
+		fprintf (stderr,
+			 "%s: CDROMLOADFROMSLOT ioctl failed for `%s': %s\n",
+			 program, device, strerror (errno));
+		exit (1);
+	}
+ 
+	/* close device */
+	status = close (fd);
+	if (status != 0) {
+		fprintf (stderr, "%s: close failed for `%s': %s\n",
+			 program, device, strerror (errno));
+		exit (1);
+	}
+ 
+	exit (0);
+}

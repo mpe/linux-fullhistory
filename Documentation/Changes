@@ -89,7 +89,7 @@ Procps utilities
    In the latest 1.3.x kernel releases the /proc file system structure
 was changed, so you need to upgrade the procps package to version
 0.99a.  In the very latest kernels, /proc has changed again.  There's
-not yet an officially updated version of procps, so make due with
+not yet an officially updated version of procps, so make do with
 0.99a; you might want to look for one of the patches floating around to
 update 0.99a for use with 1.3.94 and later kernels.
 

@@ -123,6 +123,10 @@ E: hennus@sky.ow.nl [My uucp-fed Linux box at home]
 D: Author and maintainer of the QIC-02 tape driver
 S: The Netherlands
 
+N: Ross Biro
+E: bir7@leland.Stanford.Edu
+D: Original author of the Linux networking code
+
 N: Thomas Bogendoerfer
 E: tsbogend@bigbug.franken.de
 D: Lance32 driver
@@ -130,10 +134,6 @@ D: strace for Linux/Alpha
 S: Baumgartenweg 5
 S: 91452 Wilhermsdorf
 S: Germany
-
-N: Ross Biro
-E: bir7@leland.Stanford.Edu
-D: Original author of the Linux networking code
 
 N: Bill Bogstad
 E: bogstad@cs.jhu.edu
@@ -319,6 +319,16 @@ D: Boot sector "..." printing
 S: 2255 Spruce
 S: Boulder, Colorado 80302
 S: USA
+
+N: Heiko Eissfeldt
+E: heiko@colossus.escape.de heiko@unifix.de
+D: verify_area stuff, generic scsi fixes
+D: SCSI Programming HOWTO
+D: POSIX.1 compliance testing
+S: Unifix Software GmbH
+S: Bueltenweg 27a
+S: D-38106 Braunschweig
+S: Germany
 
 N: Bjorn Ekwall
 E: bj0rn@blox.se
@@ -583,6 +593,14 @@ S: 201 Howell Street, Apartment 1C
 S: Chapel Hill, North Carolina 27514-4818
 S: USA
 
+N: Bernhard Kaindl
+E: bartelt@computerhaus.at
+D: Author of a menu based configuration tool, kmenu, which 
+D: is the predecessor of 'make menuconfig' and 'make xconfig'.
+S: Tallak 95
+S: 8103 Rein
+S: Austria
+
 N: Fred N. van Kempen
 E: waltje@uwalt.nl.mugnet.org
 D: NET-2
@@ -633,19 +651,19 @@ N: Rudolf Koenig
 E: rfkoenig@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
 
+N: Gero Kuhlmann
+E: gero@gkminix.han.de
+D: mounting root via NFS
+S: Donarweg 4
+S: D-30657 Hannover
+S: Germany
+
 N: Markus Kuhn
 E: mskuhn@cip.informatik.uni-erlangen.de
 W: http://wwwcip.informatik.uni-erlangen.de/user/mskuhn
 D: Unicode, real-time, time, standards
 S: Schlehenweg 9
 S: D-91080 Uttenreuth
-S: Germany
-
-N: Gero Kuhlmann
-E: gero@gkminix.han.de
-D: mounting root via NFS
-S: Donarweg 4
-S: D-30657 Hannover
 S: Germany
 
 N: Bas Laarhoven
@@ -986,14 +1004,6 @@ D: Instigator, FHS standard
 D: Keeper of the Jargon File and curator of the Retrocomputing Museum
 D: Author, Emacs VC and GUD modes
 
-N: Bernhard Kaindl
-E: bartelt@computerhaus.at
-D: Author of a menu based configuration tool, kmenu, which 
-D: is the predecessor of 'make menuconfig' and 'make xconfig'.
-S: Tallak 95
-S: 8103 Rein
-S: Austria
-
 N: Stefan Reinauer
 E: stepan@home.culture.mipt.ru
 W: http://home.culture.mipt.ru/~stepan
@@ -1314,14 +1324,6 @@ D: Author of acct and quota
 S: Breeburgsingel 12
 S: 2135 CN Hoofddorp
 S: The Netherlands
-
-N: Stephen D. Williams
-E: sdw@lig.net
-E: sdw@meaddata.com
-D: Consultant, entrepreneur, developer
-S: 2464 Rosina Drive
-S: Dayton, Ohio 45342-6430
-S: USA
 
 N: G\"unter Windau
 E: gunter@mbfys.kun.nl

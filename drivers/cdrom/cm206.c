@@ -77,7 +77,7 @@ History:
 	      Upgrade to Linux kernel 1.3.78. 
 
  11 apr 1996  0.98 Upgrade to Linux kernel 1.3.85
-              More uniformization stuff.
+              Made it more uniform.
  * 
  * Parts of the code are based upon lmscd.c written by Kai Petzke,
  * sbpcd.c written by Eberhard Moenkeberg, and mcd.c by Martin
@@ -92,7 +92,7 @@ History:
  * with `cm206' in it, as this stuff is too series-dependent. 
  * 
  * Currently, my limited knowledge is based on:
- * - The Linux Kernel Hacker's guide, v. 0.5, by Michael J. Johnson
+ * - The Linux Kernel Hacker's guide, v. 0.5, by Michael K. Johnson
  * - Linux Kernel Programmierung, by Michael Beck and others
  * - Philips/LMS cm206 and cm226 product specification
  * - Philips/LMS cm260 product specification
@@ -176,7 +176,7 @@ struct cm206_struct {
   uch intr_ur;			/* uart receive buffer */
   uch dsb, cc;	 /* drive status byte and condition (error) code */
   uch fool;
-  int command;			/* command to be written to te uart */
+  int command;			/* command to be written to the uart */
   int openfiles;
   ush sector[READ_AHEAD*RAW_SECTOR_SIZE/2]; /* buffered cd-sector */
   int sector_first, sector_last;	/* range of these sector */
@@ -296,7 +296,7 @@ static void cm206_interrupt(int sig, void *dev_id, struct pt_regs * regs)
     stats(sync_error);
   }
   else if (cd->intr_ds & ds_toc_ready) {
-    /* do something appropiate */
+    /* do something appropriate */
   }
   /* couldn't see why this interrupt, maybe due to init */
   else {			
@@ -578,7 +578,7 @@ void get_disc_status(void)
   }
 }
 
-/* The new open. The real opeining strategy is defined in cdrom.c. */
+/* The new open. The real opening strategy is defined in cdrom.c. */
 
 static int cm206_open(dev_t dev, int purpose) 
 {
@@ -622,7 +622,7 @@ void empty_buffer(int sectors)
   cd->sector_last=cd->adapter_first; /* update the buffer sector */
 }
 
-/* try_adapter. This function determines if the requested sector is is
+/* try_adapter. This function determines if the requested sector is
    in adapter memory, or will appear there soon. Returns 0 upon
    success */
 int try_adapter(int sector)
@@ -883,7 +883,7 @@ void get_toc_entry(struct cdrom_tocentry * ep)
 /* Audio ioctl.  Ioctl commands connected to audio are in such an
  * idiosyncratic i/o format, that we leave these untouched. Return 0
  * upon success. Memory checking has been done by cdrom_ioctl(), the
- * calling function, as well as LBA/MSF sanatization.
+ * calling function, as well as LBA/MSF sanitization.
 */
 int cm206_audio_ioctl(dev_t dev, unsigned int cmd, void * arg)
 {
@@ -896,7 +896,7 @@ int cm206_audio_ioctl(dev_t dev, unsigned int cmd, void * arg)
   case CDROMPLAYMSF: 
     play_from_to_msf((struct cdrom_msf *) arg);
     return 0;
-  case CDROMPLAYTRKIND:		/* admittedly, not particulary beautiful */
+  case CDROMPLAYTRKIND:		/* admittedly, not particularly beautiful */
     play_from_to_track(((struct cdrom_ti *)arg)->cdti_trk0, 
 		       ((struct cdrom_ti *)arg)->cdti_trk1);
     return 0;
@@ -959,7 +959,7 @@ int cm206_media_changed(dev_t dev)
   else return -EIO;
 }
 
-/* The new generic cdrom support. Routines should be consice, most of
+/* The new generic cdrom support. Routines should be concise, most of
    the logic should be in cdrom.c */
 
 /* returns number of times device is in use */

@@ -107,8 +107,9 @@ void initrd_init(void);
 #endif
 
 #define RO_IOCTLS(dev,where) \
-  case BLKROSET: if (!suser()) return -EACCES; \
-		 set_device_ro((dev),get_fs_long((long *) (where))); return 0; \
+  case BLKROSET: { int __err;  if (!suser()) return -EACCES; \
+		   __err = verify_area(VERIFY_READ, (void *) (where), sizeof(long)); \
+		   if (!__err) set_device_ro((dev),get_fs_long((long *) (where))); return __err; } \
   case BLKROGET: { int __err = verify_area(VERIFY_WRITE, (void *) (where), sizeof(long)); \
 		   if (!__err) put_fs_long(0!=is_read_only(dev),(long *) (where)); return __err; }
 		 

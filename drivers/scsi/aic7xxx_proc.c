@@ -1,7 +1,7 @@
 /*+M*************************************************************************
  * Adaptec AIC7xxx device driver proc support for Linux.
  *
- * Copyright (c) 1995 Dean W. Gehnert
+ * Copyright (c) 1995, 1996 Dean W. Gehnert
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,13 +18,13 @@
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * ----------------------------------------------------------------
- *  o Modified from the EATA /proc support.
+ *  o Modified from the EATA-DMA /proc support.
  *  o Additional support for device block statistics provided by
  *    Matthew Jacob.
  *
- *  Dean W. Gehnert, deang@teleport.com, 08/30/95
+ *  Dean W. Gehnert, deang@teleport.com, 05/01/96
  *
- *  $Id: aic7xxx_proc.c,v 3.0 1996/04/16 08:52:23 deang Exp $
+ *  $Id: aic7xxx_proc.c,v 3.1 1996/05/12 17:25:56 deang Exp $
  *-M*************************************************************************/
 
 #define BLS buffer + len + size
