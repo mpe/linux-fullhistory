@@ -147,7 +147,6 @@ static int fs_index(const char * __name)
 			err = index;
 			break;
 		}
-		index++;
 	}
 	spin_unlock(&file_systems_lock);
 	putname(name);

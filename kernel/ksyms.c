@@ -207,6 +207,7 @@ EXPORT_SYMBOL(posix_unblock_lock);
 EXPORT_SYMBOL(locks_mandatory_area);
 EXPORT_SYMBOL(dput);
 EXPORT_SYMBOL(is_root_busy);
+EXPORT_SYMBOL(have_submounts);
 EXPORT_SYMBOL(prune_dcache);
 EXPORT_SYMBOL(shrink_dcache_sb);
 EXPORT_SYMBOL(shrink_dcache_parent);
@@ -324,12 +325,20 @@ EXPORT_SYMBOL(proc_doulongvec_ms_jiffies_minmax);
 EXPORT_SYMBOL(proc_doulongvec_minmax);
 
 /* interrupt handling */
-EXPORT_SYMBOL(request_irq);
-EXPORT_SYMBOL(free_irq);
-EXPORT_SYMBOL(probe_irq_on);
-EXPORT_SYMBOL(probe_irq_off);
 EXPORT_SYMBOL(add_timer);
 EXPORT_SYMBOL(del_timer);
+EXPORT_SYMBOL(request_irq);
+EXPORT_SYMBOL(free_irq);
+
+/* The notion of irq probe/assignment is foreign to S/390 */
+
+#if !defined(CONFIG_ARCH_S390)
+EXPORT_SYMBOL(probe_irq_on);
+EXPORT_SYMBOL(probe_irq_off);
+EXPORT_SYMBOL(autoirq_setup);
+EXPORT_SYMBOL(autoirq_report);
+#endif
+
 #ifdef __SMP__
 EXPORT_SYMBOL(del_timer_sync);
 #endif
@@ -365,10 +374,6 @@ EXPORT_SYMBOL(unmap_kiobuf);
 EXPORT_SYMBOL(lock_kiovec);
 EXPORT_SYMBOL(unlock_kiovec);
 EXPORT_SYMBOL(brw_kiovec);
-
-/* autoirq from  drivers/net/auto_irq.c */
-EXPORT_SYMBOL(autoirq_setup);
-EXPORT_SYMBOL(autoirq_report);
 
 /* dma handling */
 EXPORT_SYMBOL(request_dma);

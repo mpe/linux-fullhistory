@@ -57,6 +57,7 @@
  * Head entry for the doubly linked miscdevice list
  */
 static struct miscdevice misc_list = { 0, "head", NULL, &misc_list, &misc_list };
+static DECLARE_MUTEX(misc_sem);
 
 /*
  * Assigned numbers, used for dynamic minors
@@ -96,31 +97,41 @@ static int misc_read_proc(char *buf, char **start, off_t offset,
 static int misc_open(struct inode * inode, struct file * file)
 {
 	int minor = MINOR(inode->i_rdev);
-	struct miscdevice *c = misc_list.next;
+	struct miscdevice *c;
+	int err = -ENODEV;
+	
 	file->f_op = NULL;
+	
+	down(&misc_sem);
+	
+	c = misc_list.next;
 
 	while ((c != &misc_list) && (c->minor != minor))
 		c = c->next;
 	if (c == &misc_list) {
 		char modname[20];
+		up(&misc_sem);
 		sprintf(modname, "char-major-%d-%d", MISC_MAJOR, minor);
 		request_module(modname);
+		down(&misc_sem);
 		c = misc_list.next;
 		while ((c != &misc_list) && (c->minor != minor))
 			c = c->next;
 		if (c == &misc_list)
-			return -ENODEV;
+			goto fail;
 	}
 
 	if ((file->f_op = c->fops) && file->f_op->open)
-		return file->f_op->open(inode,file);
-	else
-		return -ENODEV;
+		err=file->f_op->open(inode,file);
+fail:
+	up(&misc_sem);
+	return err;
 }
 
 static struct file_operations misc_fops = {
 	open:		misc_open,
 };
+
 
 /**
  *	misc_register	-	register a miscellaneous device
@@ -144,12 +155,17 @@ int misc_register(struct miscdevice * misc)
 
 	if (misc->next || misc->prev)
 		return -EBUSY;
+	down(&misc_sem);
 	if (misc->minor == MISC_DYNAMIC_MINOR) {
 		int i = DYNAMIC_MINORS;
 		while (--i >= 0)
 			if ( (misc_minors[i>>3] & (1 << (i&7))) == 0)
 				break;
-		if (i<0) return -EBUSY;
+		if (i<0)
+		{
+			up(&misc_sem);
+			return -EBUSY;
+		}
 		misc->minor = i;
 	}
 	if (misc->minor < DYNAMIC_MINORS)
@@ -170,6 +186,7 @@ int misc_register(struct miscdevice * misc)
 	misc->next = misc_list.next;
 	misc->prev->next = misc;
 	misc->next->prev = misc;
+	up(&misc_sem);
 	return 0;
 }
 
@@ -188,6 +205,7 @@ int misc_deregister(struct miscdevice * misc)
 	int i = misc->minor;
 	if (!misc->next || !misc->prev)
 		return -EINVAL;
+	down(&misc_sem);
 	misc->prev->next = misc->next;
 	misc->next->prev = misc->prev;
 	misc->next = NULL;
@@ -196,6 +214,7 @@ int misc_deregister(struct miscdevice * misc)
 	if (i < DYNAMIC_MINORS && i>0) {
 		misc_minors[i>>3] &= ~(1 << (misc->minor & 7));
 	}
+	up(&misc_sem);
 	return 0;
 }
 

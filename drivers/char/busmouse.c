@@ -70,7 +70,13 @@ struct busmouse_data {
 #define DEV_TO_MOUSE(dev)	MINOR_TO_MOUSE(MINOR(dev))
 #define MINOR_TO_MOUSE(minor)	((minor) - FIRST_MOUSE)
 
+/*
+ *	List of mice and guarding semaphore. You must take the semaphore
+ *	before you take the misc device semaphore if you need both
+ */
+ 
 static struct busmouse_data *busmouse_data[NR_MICE];
+static DECLARE_MUTEX(mouse_sem);
 
 /* a mouse driver just has to interface with these functions
  *  These are !!!OLD!!!  Do not use!!!
@@ -98,8 +104,7 @@ int add_mouse_buttonchange(int set, int value)
 /* New interface.  !!! Use this one !!!
  * These routines will most probably be called from interrupt.
  */
-void
-busmouse_add_movementbuttons(int mousedev, int dx, int dy, int buttons)
+void busmouse_add_movementbuttons(int mousedev, int dx, int dy, int buttons)
 {
 	struct busmouse_data *mse = busmouse_data[mousedev];
 	int changed;
@@ -141,24 +146,21 @@ busmouse_add_movementbuttons(int mousedev, int dx, int dy, int buttons)
 	}
 }
 
-void
-busmouse_add_movement(int mousedev, int dx, int dy)
+void busmouse_add_movement(int mousedev, int dx, int dy)
 {
 	struct busmouse_data *mse = busmouse_data[mousedev];
 
 	busmouse_add_movementbuttons(mousedev, dx, dy, mse->buttons);
 }
 
-void
-busmouse_add_buttons(int mousedev, int clear, int eor)
+void busmouse_add_buttons(int mousedev, int clear, int eor)
 {
 	struct busmouse_data *mse = busmouse_data[mousedev];
 
 	busmouse_add_movementbuttons(mousedev, 0, 0, (mse->buttons & ~clear) ^ eor);
 }
 
-static int
-busmouse_fasync(int fd, struct file *filp, int on)
+static int busmouse_fasync(int fd, struct file *filp, int on)
 {
 	struct busmouse_data *mse = (struct busmouse_data *)filp->private_data;
 	int retval;
@@ -169,8 +171,7 @@ busmouse_fasync(int fd, struct file *filp, int on)
 	return 0;
 }
 
-static int
-busmouse_release(struct inode *inode, struct file *file)
+static int busmouse_release(struct inode *inode, struct file *file)
 {
 	struct busmouse_data *mse = (struct busmouse_data *)file->private_data;
 	int ret = 0;
@@ -190,33 +191,34 @@ busmouse_release(struct inode *inode, struct file *file)
 	return ret;
 }
 
-static int
-busmouse_open(struct inode *inode, struct file *file)
+static int busmouse_open(struct inode *inode, struct file *file)
 {
 	struct busmouse_data *mse;
 	unsigned long flags;
 	unsigned int mousedev;
-	int ret = 0;
+	int ret = -ENODEV;
 
 	mousedev = DEV_TO_MOUSE(inode->i_rdev);
 	if (mousedev >= NR_MICE)
 		return -EINVAL;
+	
+	down(&mouse_sem);
 	mse = busmouse_data[mousedev];
 	if (!mse)
 		/* shouldn't happen, but... */
-		return -ENODEV;
-
+		goto end;
+	
 	if (mse->ops &&
 	    mse->ops->open)
 		ret = mse->ops->open(inode, file);
 
 	if (ret)
-		return ret;
+		goto end;
 
 	file->private_data = mse;
 
 	if (mse->active++)
-		return 0;
+		goto end;
 
 	MOD_INC_USE_COUNT;
 
@@ -231,18 +233,17 @@ busmouse_open(struct inode *inode, struct file *file)
 		mse->buttons = 7;
 
 	spin_unlock_irqrestore(&mse->lock, flags);
-
-	return 0;
+end:
+	up(&mouse_sem);
+	return ret;
 }
 
-static ssize_t
-busmouse_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
+static ssize_t busmouse_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	return -EINVAL;
 }
 
-static ssize_t
-busmouse_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
+static ssize_t busmouse_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct busmouse_data *mse = (struct busmouse_data *)file->private_data;
 	DECLARE_WAITQUEUE(wait, current);
@@ -328,8 +329,7 @@ repeat:
 	return count;
 }
 
-static unsigned int
-busmouse_poll(struct file *file, poll_table *wait)
+static unsigned int busmouse_poll(struct file *file, poll_table *wait)
 {
 	struct busmouse_data *mse = (struct busmouse_data *)file->private_data;
 
@@ -351,8 +351,16 @@ struct file_operations busmouse_fops=
 	fasync:		busmouse_fasync,
 };
 
-int
-register_busmouse(struct busmouse *ops)
+/**
+ *	register_busmouse - register a bus mouse interface
+ *	@ops: busmouse structure for the mouse
+ *
+ *	Registers a mouse with the driver. The return is mouse number on
+ *	success and a negative errno code on an error. The passed ops
+ *	structure most not be freed until the mouser is unregistered
+ */
+ 
+int register_busmouse(struct busmouse *ops)
 {
 	unsigned int msedev = MINOR_TO_MOUSE(ops->minor);
 	struct busmouse_data *mse;
@@ -364,12 +372,17 @@ register_busmouse(struct busmouse *ops)
 		return -EINVAL;
 	}
 
-	if (busmouse_data[msedev])
-		return -EBUSY;
-
 	mse = kmalloc(sizeof(*mse), GFP_KERNEL);
 	if (!mse)
 		return -ENOMEM;
+
+	down(&mouse_sem);
+	if (busmouse_data[msedev])
+	{
+		up(&mouse_sem);
+		kfree(mse);
+		return -EBUSY;
+	}
 
 	memset(mse, 0, sizeof(*mse));
 
@@ -385,13 +398,23 @@ register_busmouse(struct busmouse *ops)
 	ret = misc_register(&mse->miscdev);
 	if (!ret)
 		ret = msedev;
-
+	up(&mouse_sem);
+	
 	return ret;
 }
 
-int
-unregister_busmouse(int mousedev)
+/**
+ *	unregister_busmouse - unregister a bus mouse interface
+ *	@mousedev: Mouse number to release
+ *
+ *	Unregister a previously installed mouse handler. The mousedev
+ *	passed is the return code from a previous call to register_busmouse
+ */
+ 
+
+int unregister_busmouse(int mousedev)
 {
+	int err = -EINVAL;
 	if (mousedev < 0)
 		return 0;
 	if (mousedev >= NR_MICE) {
@@ -400,27 +423,30 @@ unregister_busmouse(int mousedev)
 		return -EINVAL;
 	}
 
+	down(&mouse_sem);
+	
 	if (!busmouse_data[mousedev]) {
 		printk(KERN_WARNING "busmouse: trying to free free mouse"
 		       " on mousedev %d\n", mousedev);
-		return -EINVAL;
+		goto fail;
 	}
 
 	if (busmouse_data[mousedev]->active) {
 		printk(KERN_ERR "busmouse: trying to free active mouse"
 		       " on mousedev %d\n", mousedev);
-		return -EINVAL;
+		goto fail;
 	}
 
-	misc_deregister(&busmouse_data[mousedev]->miscdev);
+	err=misc_deregister(&busmouse_data[mousedev]->miscdev);
 
 	kfree(busmouse_data[mousedev]);
 	busmouse_data[mousedev] = NULL;
-	return 0;
+fail:
+	up(&mouse_sem);
+	return err;
 }
 
-int __init
-bus_mouse_init(void)
+int __init bus_mouse_init(void)
 {
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();
@@ -435,14 +461,12 @@ EXPORT_SYMBOL(register_busmouse);
 EXPORT_SYMBOL(unregister_busmouse);
 
 #ifdef MODULE
-int
-init_module(void)
+int init_module(void)
 {
 	return bus_mouse_init();
 }
 
-void
-cleanup_module(void)
+void cleanup_module(void)
 {
 }
 #endif
