@@ -79,6 +79,8 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(do_munmap),
 	X(insert_vm_struct),
 	X(zeromap_page_range),
+	X(unmap_page_range),
+	X(merge_segments),
 
 	/* internal kernel memory management */
 	X(__get_free_pages),
@@ -95,6 +97,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(iput),
 	X(namei),
 	X(lnamei),
+	X(open_namei),
 
 	/* device registration */
 	X(register_chrdev),
@@ -133,6 +136,8 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	/* process management */
 	X(wake_up),
 	X(wake_up_interruptible),
+	X(sleep_on),
+	X(interruptible_sleep_on),
 	X(schedule),
 	X(current),
 	X(jiffies),

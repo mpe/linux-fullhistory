@@ -537,6 +537,8 @@ void flush_old_exec(struct linux_binprm * bprm)
 		mpnt1 = mpnt->vm_next;
 		if (mpnt->vm_ops && mpnt->vm_ops->close)
 			mpnt->vm_ops->close(mpnt);
+		if (mpnt->vm_inode)
+			iput(mpnt->vm_inode);
 		kfree(mpnt);
 		mpnt = mpnt1;
 	}

@@ -537,5 +537,6 @@ _sys_call_table:
 	.long _sys_bdflush
 	.long _sys_sysfs		/* 135 */
 	.long _sys_personality
+	.long 0				/* for afs_syscall */
 
-	.space (NR_syscalls-136)*4
+	.space (NR_syscalls-137)*4

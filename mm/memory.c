@@ -724,9 +724,16 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 	from &= PAGE_MASK;
 	from_page = from + PAGE_PTR(from_address);
 	from = *(unsigned long *) from_page;
-/* is the page clean and present? */
-	if ((from & (PAGE_PRESENT | PAGE_DIRTY)) != PAGE_PRESENT)
+/* is the page present? */
+	if (!(from & PAGE_PRESENT))
 		return 0;
+/* if it is private, it must be clean to be shared */
+	if ((from_area->vm_page_prot & PAGE_COW) && (from & PAGE_DIRTY))
+		return 0;
+/* the swap caching doesn't really handle shared pages.. */
+	if (in_swap_cache(from))
+		return 0;
+/* is the page reasonable at all? */
 	if (from >= high_memory)
 		return 0;
 	if (mem_map[MAP_NR(from)] & MAP_PAGE_RESERVED)
@@ -856,6 +863,28 @@ static inline unsigned long get_empty_pgtable(struct task_struct * tsk,unsigned 
 	return 0;
 }
 
+static inline void do_swap_page(struct vm_area_struct * vma,
+	unsigned long address, unsigned long * pge, unsigned long entry)
+{
+	unsigned long page;
+
+	if (vma->vm_ops && vma->vm_ops->swapin)
+		page = vma->vm_ops->swapin(vma, entry);
+	else
+		page = swap_in(entry);
+	if (*pge != entry) {
+		free_page(page);
+		return;
+	}
+	page = page | vma->vm_page_prot;
+	if (mem_map[MAP_NR(page)] > 1 && (page & PAGE_COW))
+		page &= ~PAGE_RW;
+	++vma->vm_task->mm->rss;
+	++vma->vm_task->mm->maj_flt;
+	*pge = page;
+	return;
+}
+
 void do_no_page(struct vm_area_struct * vma, unsigned long address,
 	unsigned long error_code)
 {
@@ -870,9 +899,7 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 	if (entry & PAGE_PRESENT)
 		return;
 	if (entry) {
-		++vma->vm_task->mm->rss;
-		++vma->vm_task->mm->maj_flt;
-		swap_in((unsigned long *) page);
+		do_swap_page(vma, address, (unsigned long *) page, entry);
 		return;
 	}
 	address &= PAGE_MASK;
@@ -886,6 +913,7 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 	page = get_free_page(GFP_KERNEL);
 	if (share_page(vma, address, error_code, page)) {
 		++vma->vm_task->mm->min_flt;
+		++vma->vm_task->mm->rss;
 		return;
 	}
 	if (!page) {
@@ -1224,7 +1252,7 @@ void si_meminfo(struct sysinfo *val)
 
 
 /* This handles a generic mmap of a disk file */
-unsigned long file_mmap_nopage(struct vm_area_struct * area, unsigned long address,
+static unsigned long file_mmap_nopage(struct vm_area_struct * area, unsigned long address,
 	unsigned long page, int error_code)
 {
 	struct inode * inode = area->vm_inode;
@@ -1244,33 +1272,11 @@ unsigned long file_mmap_nopage(struct vm_area_struct * area, unsigned long addre
 	return bread_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize, !(error_code & PAGE_RW));
 }
 
-void file_mmap_free(struct vm_area_struct * area)
-{
-	if (area->vm_inode)
-		iput(area->vm_inode);
-#if 0
-	if (area->vm_inode)
-		printk("Free inode %x:%d (%d)\n",area->vm_inode->i_dev, 
-				 area->vm_inode->i_ino, area->vm_inode->i_count);
-#endif
-}
-
-/*
- * Compare the contents of the mmap entries, and decide if we are allowed to
- * share the pages
- */
-int file_mmap_share(struct vm_area_struct * area1, 
-		    struct vm_area_struct * area2, 
-		    unsigned long address)
-{
-	return 1;
-}
-
 struct vm_operations_struct file_mmap = {
 	NULL,			/* open */
-	file_mmap_free,		/* close */
+	NULL,			/* close */
 	file_mmap_nopage,	/* nopage */
 	NULL,			/* wppage */
-	file_mmap_share,	/* share */
+	NULL,			/* share */
 	NULL,			/* unmap */
 };

@@ -268,6 +268,9 @@ static int sr_open(struct inode * inode, struct file * filp)
 	if(MINOR(inode->i_rdev) >= NR_SR || 
 	   !scsi_CDs[MINOR(inode->i_rdev)].device) return -ENXIO;   /* No such device */
 
+	if (filp->f_mode & 2)  
+	    return -EACCES;
+
         check_disk_change(inode->i_rdev);
 
 	if(!scsi_CDs[MINOR(inode->i_rdev)].device->access_count++)

@@ -746,13 +746,13 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		entry->hlen = hlen;
 		entry->htype = htype;
 		entry->flags = ATF_COM;
+		entry->timer.next = entry->timer.prev = NULL;
 		memcpy(entry->ha, sha, hlen);
 		entry->last_used = jiffies;
 		entry->dev = skb->dev;
 		skb_queue_head_init(&entry->skb);
 		entry->next = arp_tables[hash];
 		arp_tables[hash] = entry;
-		entry->timer.next = entry->timer.prev = NULL;
 		sti();
 	}
 
@@ -837,14 +837,14 @@ int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 		entry->htype = dev->type;
 		entry->flags = 0;
 		memset(entry->ha, 0, dev->addr_len);
-		entry->last_used = jiffies;
-		entry->next = arp_tables[hash];
 		entry->dev = dev;
-		arp_tables[hash] = entry;
+		entry->last_used = jiffies;
 		entry->timer.next = entry->timer.prev = NULL;
 		entry->timer.function = arp_expire_request;
 		entry->timer.data = (unsigned long)entry;
 		entry->timer.expires = ARP_RES_TIME;
+		entry->next = arp_tables[hash];
+		arp_tables[hash] = entry;
 		add_timer(&entry->timer);
 		entry->retries = ARP_MAX_TRIES;
 		skb_queue_head_init(&entry->skb);
@@ -1048,8 +1048,8 @@ static int arp_req_set(struct arpreq *req)
 		entry->ip = ip;
 		entry->hlen = hlen;
 		entry->htype = htype;
-		entry->next = arp_tables[hash];
 		entry->timer.next = entry->timer.prev = NULL;
+		entry->next = arp_tables[hash];
 		arp_tables[hash] = entry;
 		skb_queue_head_init(&entry->skb);
 	}

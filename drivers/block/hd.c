@@ -218,12 +218,12 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 }
 
 static void hd_request (void);
-unsigned int identified  [MAX_HD] = {0,}; /* 1 = drive ID already displayed   */
-unsigned int unmask_intr [MAX_HD] = {0,}; /* 1 = unmask IRQs during I/O       */
-unsigned int max_mult    [MAX_HD] = {0,}; /* max sectors for MultMode         */
-unsigned int mult_req    [MAX_HD] = {0,}; /* requested MultMode count         */
-unsigned int mult_count  [MAX_HD] = {0,}; /* currently enabled MultMode count */
-struct request WCURRENT;
+static unsigned int identified  [MAX_HD] = {0,}; /* 1 = drive ID already displayed   */
+static unsigned int unmask_intr [MAX_HD] = {0,}; /* 1 = unmask IRQs during I/O       */
+static unsigned int max_mult    [MAX_HD] = {0,}; /* max sectors for MultMode         */
+static unsigned int mult_req    [MAX_HD] = {0,}; /* requested MultMode count         */
+static unsigned int mult_count  [MAX_HD] = {0,}; /* currently enabled MultMode count */
+static struct request WCURRENT;
 
 static void rawstring (char *prefix, char *s, int n)
 {

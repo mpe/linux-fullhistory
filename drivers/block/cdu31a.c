@@ -1772,6 +1772,9 @@ scd_open(struct inode *inode,
    int num_spin_ups;
 
 
+   if (filp->f_mode & 2)
+      return -EACCES;
+
    if (!sony_spun_up)
    {
       num_spin_ups = 0;

@@ -194,6 +194,8 @@ void unmap_fixup(struct vm_area_struct *area,
 	if (addr == area->vm_start && end == area->vm_end) {
 		if (area->vm_ops && area->vm_ops->close)
 			area->vm_ops->close(area);
+		if (area->vm_inode)
+			iput(area->vm_inode);
 		return;
 	}
 
@@ -216,8 +218,8 @@ void unmap_fixup(struct vm_area_struct *area,
 		mpnt->vm_start = end;
 		if (mpnt->vm_inode)
 			mpnt->vm_inode->i_count++;
-		insert_vm_struct(current, mpnt);
 		area->vm_end = addr;	/* Truncate area */
+		insert_vm_struct(current, mpnt);
 	}
 
 	/* construct whatever mapping is needed */

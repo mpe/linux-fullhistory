@@ -19,6 +19,7 @@ static int findkey (key_t key);
 static int newseg (key_t key, int shmflg, int size);
 static int shm_map (struct shm_desc *shmd, int remap);
 static void killseg (int id);
+static unsigned long shm_swap_in(struct vm_area_struct *, unsigned long);
 
 static int shm_tot = 0;  /* total number of shared memory pages */
 static int shm_rss = 0; /* number of shared memory pages that are in memory */
@@ -375,13 +376,24 @@ static int shm_map (struct shm_desc *shmd, int remap)
 	return 0;
 }
 
+static struct vm_operations_struct shm_vm_ops = {
+	NULL,			/* open */
+	NULL,			/* close */
+	NULL,			/* nopage (done with swapin) */
+	NULL,			/* wppage */
+	NULL,			/* share */
+	NULL,			/* unmap */
+	NULL,			/* swapout (hardcoded right now) */
+	shm_swap_in		/* swapin */
+};
+
 /*
  * This is really minimal support to make the shared mem stuff
  * ve known by the general VM manager. It should add the vm_ops
  * field so that 'munmap()' and friends work correctly on shared
  * memory areas..
  */
-static int add_vm_area(unsigned long addr, unsigned long len)
+static int add_vm_area(unsigned long addr, unsigned long len, int readonly)
 {
 	struct vm_area_struct * vma;
 
@@ -392,12 +404,15 @@ static int add_vm_area(unsigned long addr, unsigned long len)
 	vma->vm_task = current;
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
-	vma->vm_page_prot = PAGE_SHARED;
+	if (readonly)
+		vma->vm_page_prot = PAGE_READONLY;
+	else
+		vma->vm_page_prot = PAGE_SHARED;
 	vma->vm_flags = VM_SHM;
 	vma->vm_share = NULL;
 	vma->vm_inode = NULL;
 	vma->vm_offset = 0;
-	vma->vm_ops = NULL;
+	vma->vm_ops = &shm_vm_ops;
 	insert_vm_struct(current, vma);
 	merge_segments(current->mm->mmap, NULL, NULL);
 	return 0;
@@ -476,7 +491,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->end = addr + shp->shm_npages * PAGE_SIZE;
 	shmd->task = current;
 
-	if ((err = add_vm_area(shmd->start, shmd->end - shmd->start))) {
+	if ((err = add_vm_area(shmd->start, shmd->end - shmd->start, shmflg & SHM_RDONLY))) {
 		kfree(shmd);
 		return err;
 	}
@@ -614,36 +629,34 @@ int shm_fork (struct task_struct *p1, struct task_struct *p2)
 }
 
 /*
- * page not present ... go through shm_pages .. called from swap_in()
+ * page not present ... go through shm_pages
  */
-void shm_no_page (unsigned long *ptent)
+static unsigned long shm_swap_in(struct vm_area_struct * vma, unsigned long code)
 {
 	unsigned long page;
-	unsigned long code = *ptent;
 	struct shmid_ds *shp;
 	unsigned int id, idx;
 
 	id = (code >> SHM_ID_SHIFT) & SHM_ID_MASK;
 	if (id > max_shmid) {
 		printk ("shm_no_page: id=%d too big. proc mem corruptedn", id);
-		return;
+		return BAD_PAGE | PAGE_SHARED;
 	}
 	shp = shm_segs[id];
 	if (shp == IPC_UNUSED || shp == IPC_NOID) {
 		printk ("shm_no_page: id=%d invalid. Race.\n", id);
-		return;
+		return BAD_PAGE | PAGE_SHARED;
 	}
 	idx = (code >> SHM_IDX_SHIFT) & SHM_IDX_MASK;
 	if (idx >= shp->shm_npages) {
 		printk ("shm_no_page : too large page index. id=%d\n", id);
-		return;
+		return BAD_PAGE | PAGE_SHARED;
 	}
 
 	if (!(shp->shm_pages[idx] & PAGE_PRESENT)) {
 		if(!(page = get_free_page(GFP_KERNEL))) {
 			oom(current);
-			*ptent = BAD_PAGE | PAGE_ACCESSED | 7;
-			return;
+			return BAD_PAGE | PAGE_SHARED;
 		}
 		if (shp->shm_pages[idx] & PAGE_PRESENT) {
 			free_page (page);
@@ -667,10 +680,9 @@ done:
 	current->mm->min_flt++;
 	page = shp->shm_pages[idx];
 	if (code & SHM_READ_ONLY)           /* write-protect */
-		page &= ~2;
+		page &= ~PAGE_RW;
 	mem_map[MAP_NR(page)]++;
-	*ptent = page;
-	return;
+	return page;
 }
 
 /*

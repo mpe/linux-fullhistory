@@ -23,63 +23,11 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
+/*
+ * Fill in the supplied page for mmap
+ */
 static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area,
-	unsigned long address, unsigned long page, int error_code);
-
-extern void file_mmap_free(struct vm_area_struct * area);
-extern int file_mmap_share(struct vm_area_struct * from, struct vm_area_struct * to,
-				unsigned long address);
-
-struct vm_operations_struct nfs_file_mmap = {
-	NULL,			/* open */
-	file_mmap_free,		/* close */
-	nfs_file_mmap_nopage,	/* nopage */
-	NULL,			/* wppage */
-	file_mmap_share,	/* share */
-	NULL,			/* unmap */
-};
-
-
-/* This is used for a general mmap of a nfs file */
-int nfs_mmap(struct inode * inode, struct file * file,
-	unsigned long addr, size_t len, int prot, unsigned long off)
-{
-	struct vm_area_struct * mpnt;
-
-	if (prot & PAGE_RW)	/* only PAGE_COW or read-only supported now */
-		return -EINVAL;
-	if (off & (inode->i_sb->s_blocksize - 1))
-		return -EINVAL;
-	if (!inode->i_sb || !S_ISREG(inode->i_mode))
-		return -EACCES;
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
-
-	mpnt = (struct vm_area_struct * ) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
-	if (!mpnt)
-		return -ENOMEM;
-
-	unmap_page_range(addr, len);
-	mpnt->vm_task = current;
-	mpnt->vm_start = addr;
-	mpnt->vm_end = addr + len;
-	mpnt->vm_page_prot = prot;
-	mpnt->vm_flags = 0;
-	mpnt->vm_share = NULL;
-	mpnt->vm_inode = inode;
-	inode->i_count++;
-	mpnt->vm_offset = off;
-	mpnt->vm_ops = &nfs_file_mmap;
-	insert_vm_struct(current, mpnt);
-	merge_segments(current->mm->mmap, NULL, NULL);
-	return 0;
-}
-
-
-static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area, unsigned long address,
-	unsigned long page, int error_code)
+	unsigned long address, unsigned long page, int error_code)
 {
 	struct inode * inode = area->vm_inode;
 	unsigned int clear;
@@ -125,4 +73,50 @@ static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area, unsigned
 		*(char *)--tmp = 0;
 	}
 	return page;
+}
+struct vm_operations_struct nfs_file_mmap = {
+	NULL,			/* open */
+	NULL,			/* close */
+	nfs_file_mmap_nopage,	/* nopage */
+	NULL,			/* wppage */
+	NULL,			/* share */
+	NULL,			/* unmap */
+};
+
+
+/* This is used for a general mmap of a nfs file */
+int nfs_mmap(struct inode * inode, struct file * file,
+	unsigned long addr, size_t len, int prot, unsigned long off)
+{
+	struct vm_area_struct * mpnt;
+
+	if (prot & PAGE_RW)	/* only PAGE_COW or read-only supported now */
+		return -EINVAL;
+	if (off & (inode->i_sb->s_blocksize - 1))
+		return -EINVAL;
+	if (!inode->i_sb || !S_ISREG(inode->i_mode))
+		return -EACCES;
+	if (!IS_RDONLY(inode)) {
+		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
+	}
+
+	mpnt = (struct vm_area_struct * ) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	if (!mpnt)
+		return -ENOMEM;
+
+	unmap_page_range(addr, len);
+	mpnt->vm_task = current;
+	mpnt->vm_start = addr;
+	mpnt->vm_end = addr + len;
+	mpnt->vm_page_prot = prot;
+	mpnt->vm_flags = 0;
+	mpnt->vm_share = NULL;
+	mpnt->vm_inode = inode;
+	inode->i_count++;
+	mpnt->vm_offset = off;
+	mpnt->vm_ops = &nfs_file_mmap;
+	insert_vm_struct(current, mpnt);
+	merge_segments(current->mm->mmap, NULL, NULL);
+	return 0;
 }

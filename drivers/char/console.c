@@ -35,6 +35,9 @@
  * Code to check for different video-cards mostly by Galen Hunt,
  * <g-hunt@ee.utah.edu>
  *
+ * Code for xterm like mouse click reporting by Peter Orbaek 20-Jul-94
+ * <poe@daimi.aau.dk>
+ *
  */
 
 #define CAN_LOAD_EGA_FONTS    /* undefine if the user must not do this */
@@ -80,7 +83,7 @@ static struct termios *console_termios_locked[NR_CONSOLES];
 #include <linux/ctype.h>
 
 /* Routines for selection control. */
-int set_selection(const int arg);
+int set_selection(const int arg, struct tty_struct *tty);
 int paste_selection(struct tty_struct *tty);
 static void clear_selection(void);
 static void highlight_pointer(const int currcons, const int where);
@@ -153,6 +156,7 @@ static struct {
 	/* misc */
 	unsigned long	vc_ques		: 1;
 	unsigned long	vc_need_wrap	: 1;
+	unsigned long	vc_report_mouse : 1;
 	unsigned long	vc_tab_stop[5];		/* Tab stops. 160 columns. */
 	unsigned char * vc_translate;
 	unsigned char *	vc_G0_charset;
@@ -196,6 +200,7 @@ static int console_blanked = 0;
 #define deccm		(vc_cons[currcons].vc_deccm)
 #define decim		(vc_cons[currcons].vc_decim)
 #define need_wrap	(vc_cons[currcons].vc_need_wrap)
+#define report_mouse	(vc_cons[currcons].vc_report_mouse)
 #define color		(vc_cons[currcons].vc_color)
 #define s_color		(vc_cons[currcons].vc_s_color)
 #define def_color	(vc_cons[currcons].vc_def_color)
@@ -775,6 +780,16 @@ static void cursor_report(int currcons, struct tty_struct * tty)
 	respond_string(buf, tty);
 }
 
+static void mouse_report(int currcons, struct tty_struct * tty,
+			 int butt, int mrx, int mry)
+{
+	char buf[8];
+
+	sprintf(buf, "\033[M%c%c%c", (char)(' ' + butt), (char)('!' + mrx),
+		(char)('!' + mry));
+	respond_string(buf, tty);
+}
+
 static inline void status_report(int currcons, struct tty_struct * tty)
 {
 	respond_string("\033[0n", tty);	/* Terminal ok */
@@ -831,6 +846,9 @@ static void set_mode(int currcons, int on_off)
 					set_kbd(decarm);
 				else
 					clr_kbd(decarm);
+				break;
+			case 9:
+				report_mouse = on_off;
 				break;
 			case 25:		/* Cursor on/off */
 				deccm = on_off;
@@ -1001,6 +1019,7 @@ static void reset_terminal(int currcons, int do_clear)
 	G1_charset	= GRAF_TRANS;
 	charset		= 0;
 	need_wrap	= 0;
+	report_mouse	= 0;
 
 	disp_ctrl	= 0;
 	toggle_meta	= 0;
@@ -1838,8 +1857,16 @@ static inline short limit(const int v, const int l, const int u)
 	return (v < l) ? l : ((v > u) ? u : v);
 }
 
+/* invoked via ioctl(TIOCLINUX) */
+int mouse_reporting_p(void)
+{
+	int currcons = fg_console;
+
+	return ((report_mouse) ? 0 : -EINVAL);
+}
+
 /* set the current selection. Invoked by ioctl(). */
-int set_selection(const int arg)
+int set_selection(const int arg, struct tty_struct *tty)
 {
 	unsigned short *args, xs, ys, xe, ye;
 	int currcons = fg_console;
@@ -1862,6 +1889,11 @@ int set_selection(const int arg)
 	ye = limit(ye, 0, video_num_lines - 1);
 	ps = ys * video_size_row + (xs << 1);
 	pe = ye * video_size_row + (xe << 1);
+
+	if (report_mouse && (sel_mode & 16)) {
+		mouse_report(currcons, tty, sel_mode & 15, xs, ys);
+		return 0;
+	}
 
 	if (ps > pe)	/* make sel_start <= sel_end */
 	{

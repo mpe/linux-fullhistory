@@ -8,6 +8,7 @@
  * This file should contain most things doing the swapping from/to disk.
  * Started 18.12.91
  */
+#define SWAP_CACHE_INFO
 
 #include <linux/mm.h>
 #include <linux/sched.h>
@@ -47,12 +48,114 @@ static struct swap_info_struct {
 
 extern int shm_swap (int);
 
-/*
- * The following are used to make sure we don't thrash too much...
- * NOTE!! NR_LAST_FREE_PAGES must be a power of 2...
- */
-#define NR_LAST_FREE_PAGES 32
-static unsigned long last_free_pages[NR_LAST_FREE_PAGES] = {0,};
+unsigned long *swap_cache;
+static unsigned long swap_cache_size;
+
+#ifdef SWAP_CACHE_INFO
+static unsigned long add_calls_total = 0;
+static unsigned long add_calls_success = 0;
+static unsigned long del_calls_total = 0;
+static unsigned long del_calls_success = 0;
+static unsigned long find_calls_total = 0;
+static unsigned long find_calls_success = 0;
+
+extern inline void show_swap_cache_info (void)
+{
+	printk("Swap cache: add %ld/%ld, delete %ld/%ld, find %ld/%ld\n",
+	       add_calls_total, add_calls_success, 
+	       del_calls_total, del_calls_success,
+	       find_calls_total, find_calls_success);
+}
+#endif
+
+extern inline unsigned long init_swap_cache (unsigned long mem_start,
+					    unsigned long mem_end)
+{
+	mem_start = (mem_start + 15) & ~15;
+	swap_cache = (unsigned long *) mem_start;
+	swap_cache_size = mem_end >> PAGE_SHIFT;
+	memset(swap_cache, 0, swap_cache_size * sizeof (unsigned long));
+#ifdef SWAP_CACHE_INFO
+	printk("%ld bytes for swap cache allocated\n",
+	       swap_cache_size * sizeof(unsigned long));
+#endif	
+	
+	return (unsigned long) (swap_cache + swap_cache_size);
+}
+
+extern inline long find_in_swap_cache (unsigned long addr)
+{
+	unsigned long entry;
+
+#ifdef SWAP_CACHE_INFO
+	find_calls_total++;
+#endif
+	__asm__ __volatile__ (
+			      "xchgl %0,%1\n"
+			      : "=m" (swap_cache[addr >> PAGE_SHIFT]),
+			        "=r" (entry)
+			      : "0" (swap_cache[addr >> PAGE_SHIFT]),
+			        "1" (0)
+			      );
+#ifdef SWAP_CACHE_INFO
+	if (entry)
+		find_calls_success++;
+#endif	
+	
+	return entry;
+}
+
+extern  inline int add_to_swap_cache (unsigned long addr, unsigned long entry)
+{
+	struct swap_info_struct * p = &swap_info[SWP_TYPE(entry)];
+	
+#ifdef SWAP_CACHE_INFO
+	add_calls_total++;
+#endif
+	if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) { 
+		__asm__ __volatile__ (
+				      "xchgl %0,%1\n"
+				      : "=m" (swap_cache[addr >> PAGE_SHIFT]),
+				       "=r" (entry)
+				      : "0" (swap_cache[addr >> PAGE_SHIFT]),
+				       "1" (entry)
+				      );
+		if (entry)  {
+			printk("swap_cache: replacing non-NULL entry\n");
+		}
+#ifdef SWAP_CACHE_INFO
+		add_calls_success++;
+#endif
+		return 1;
+	}
+	return 0;
+}
+
+
+extern inline int delete_from_swap_cache(unsigned long addr)
+{
+	unsigned long entry;
+	
+#ifdef SWAP_CACHE_INFO
+	del_calls_total++;
+#endif	
+	__asm__ __volatile__ (
+			      "xchgl %0,%1\n"
+			      : "=m" (swap_cache[addr >> PAGE_SHIFT]),
+			        "=r" (entry)
+			      : "0" (swap_cache[addr >> PAGE_SHIFT]),
+			        "1" (0)
+			      );
+	if (entry)  {
+#ifdef SWAP_CACHE_INFO
+		del_calls_success++;
+#endif
+		swap_free(entry);
+		return 1;
+	}
+	return 0;
+}
+
 
 void rw_swap_page(int rw, unsigned long entry, char * buf)
 {
@@ -142,7 +245,7 @@ unsigned long swap_duplicate(unsigned long entry)
 	}
 	p = type + swap_info;
 	if (offset >= p->max) {
-		printk("swap_free: weirdness\n");
+		printk("swap_duplicate: weirdness\n");
 		return 0;
 	}
 	if (!p->swap_map[offset]) {
@@ -193,42 +296,24 @@ void swap_free(unsigned long entry)
 	wake_up(&lock_queue);
 }
 
-void swap_in(unsigned long *table_ptr)
+unsigned long swap_in(unsigned long entry)
 {
-	unsigned long entry;
 	unsigned long page;
 
-	entry = *table_ptr;
-	if (PAGE_PRESENT & entry) {
-		printk("trying to swap in present page\n");
-		return;
-	}
-	if (!entry) {
-		printk("No swap page in swap_in\n");
-		return;
-	}
-	if (SWP_TYPE(entry) == SHM_SWP_TYPE) {
-		shm_no_page ((unsigned long *) table_ptr);
-		return;
-	}
 	if (!(page = get_free_page(GFP_KERNEL))) {
 		oom(current);
-		page = BAD_PAGE;
-	} else	
-		read_swap_page(entry, (char *) page);
-	if (*table_ptr != entry) {
-		free_page(page);
-		return;
+		return BAD_PAGE;
 	}
-	*table_ptr = page | (PAGE_DIRTY | PAGE_PRIVATE);
-	swap_free(entry);
+	read_swap_page(entry, (char *) page);
+	if (add_to_swap_cache(page, entry))
+		return page | PAGE_PRIVATE;
+  	swap_free(entry);
+	return page | PAGE_DIRTY | PAGE_PRIVATE;
 }
 
 static inline int try_to_swap_out(unsigned long * table_ptr)
 {
-	int i;
-	unsigned long page;
-	unsigned long entry;
+	unsigned long page, entry;
 
 	page = *table_ptr;
 	if (!(PAGE_PRESENT & page))
@@ -237,13 +322,14 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
 		return 0;
 	if (mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED)
 		return 0;
+	
+	if ((PAGE_DIRTY & page) && delete_from_swap_cache(page))  {
+		return 0;
+	}
 	if (PAGE_ACCESSED & page) {
 		*table_ptr &= ~PAGE_ACCESSED;
 		return 0;
 	}
-	for (i = 0; i < NR_LAST_FREE_PAGES; i++)
-		if (last_free_pages[i] == (page & PAGE_MASK))
-			return 0;
 	if (PAGE_DIRTY & page) {
 		page &= PAGE_MASK;
 		if (mem_map[MAP_NR(page)] != 1)
@@ -256,6 +342,26 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
 		free_page(page);
 		return 1;
 	}
+
+        if ((entry = find_in_swap_cache(page)))  {
+		*table_ptr |= PAGE_DIRTY;
+		if (mem_map[MAP_NR(page)] != 1) {
+			return 0;
+		}
+		if (!entry)  {
+			if (!(entry = get_swap_page()))  {
+				return 0;
+			}
+			*table_ptr = entry;
+			invalidate();
+			write_swap_page(entry, (char *) (page & PAGE_MASK));
+		} else  {
+			*table_ptr = entry;
+			invalidate();
+		}
+		free_page(page & PAGE_MASK);
+		return 1;
+	} 
 	page &= PAGE_MASK;
 	*table_ptr = 0;
 	invalidate();
@@ -531,8 +637,10 @@ void free_pages(unsigned long addr, unsigned long order)
 			if (!(*map & MAP_PAGE_RESERVED)) {
 				save_flags(flag);
 				cli();
-				if (!--*map)
+				if (!--*map)  {
 					free_pages_ok(addr, order);
+					delete_from_swap_cache(addr);
+				}
 				restore_flags(flag);
 				if(*map == 1) {
 				  int j;
@@ -639,6 +747,9 @@ void show_free_areas(void)
 	}
 	restore_flags(flags);
 	printk("= %lukB)\n", total);
+#ifdef SWAP_CACHE_INFO
+	show_swap_cache_info();
+#endif	
 }
 
 /*
@@ -654,6 +765,7 @@ static int try_to_unuse(unsigned int type)
 	struct task_struct *p;
 
 	nr = 0;
+	
 /*
  * When we have to sleep, we restart the whole algorithm from the same
  * task we stopped in. That at least rids us of all races.
@@ -677,8 +789,15 @@ repeat:
 				page = *ppage;
 				if (!page)
 					continue;
-				if (page & PAGE_PRESENT)
+				if (page & PAGE_PRESENT) {
+					if (!(page = in_swap_cache(page)))
+						continue;
+					if (SWP_TYPE(page) != type)
+						continue;
+					*ppage |= PAGE_DIRTY;
+					delete_from_swap_cache(*ppage);
 					continue;
+				}
 				if (SWP_TYPE(page) != type)
 					continue;
 				if (!tmp) {
@@ -898,6 +1017,7 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	unsigned long mask = PAGE_MASK;
 	int i;
 
+	start_mem = init_swap_cache(start_mem, end_mem);
 	mem_map = (unsigned short *) start_mem;
 	p = mem_map + MAP_NR(end_mem);
 	start_mem = (unsigned long) p;

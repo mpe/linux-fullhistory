@@ -3211,6 +3211,9 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
 
   if (ndrives==0) return (-ENXIO);             /* no hardware */
 
+  if (fp->f_mode & 2)
+	  return -EACCES;
+
   i = MINOR(ip->i_rdev);
   if ( (i<0) || (i>=NR_SBPCD) )
     {

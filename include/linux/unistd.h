@@ -143,6 +143,7 @@
 #define __NR_bdflush		134
 #define __NR_sysfs		135
 #define __NR_personality	136
+#define __NR_afs_syscall	137 /* Syscall for Andrew File System */
 
 extern int errno;
 

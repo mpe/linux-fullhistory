@@ -61,6 +61,8 @@ struct vm_operations_struct {
 		unsigned long page);
 	int (*share)(struct vm_area_struct * from, struct vm_area_struct * to, unsigned long address);
 	int (*unmap)(struct vm_area_struct *area, unsigned long, size_t);
+	void (*swapout)(struct vm_area_struct *,  unsigned long *);
+	unsigned long (*swapin)(struct vm_area_struct *,  unsigned long);
 };
 
 extern unsigned long __bad_page(void);
@@ -167,7 +169,7 @@ extern int vread(char *buf, char *addr, int count);
 
 extern void swap_free(unsigned long page_nr);
 extern unsigned long swap_duplicate(unsigned long page_nr);
-extern void swap_in(unsigned long *table_ptr);
+extern unsigned long swap_in(unsigned long entry);
 extern void si_swapinfo(struct sysinfo * val);
 extern void rw_swap_page(int rw, unsigned long nr, char * buf);
 
@@ -222,5 +224,13 @@ extern unsigned short * mem_map;
 /* vm_ops not present page codes */
 #define SHM_SWP_TYPE 0x41
 extern void shm_no_page (ulong *);
+
+/* swap cache stuff (in swap.c) */
+extern unsigned long * swap_cache;
+
+extern inline unsigned long in_swap_cache (unsigned long addr)
+{
+	return swap_cache[addr >> PAGE_SHIFT]; 
+}
 
 #endif

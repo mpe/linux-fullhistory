@@ -412,8 +412,9 @@ int del_timer(struct timer_list * timer)
 			return 1;
 		}
 	}
-	if (p->next || p->prev)
-		printk("del_timer() called with timer not initialized\n");
+	if (timer->next || timer->prev)
+		printk("del_timer() called from %08lx with timer not initialized\n",
+			((unsigned long *) &timer)[-1]);
 	restore_flags(flags);
 	return 0;
 #else	
