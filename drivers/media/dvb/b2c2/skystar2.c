@@ -5,14 +5,14 @@
  * Copyright (C) 2003  Vadim Catana, skystar@moldova.cc
  *
  * FIX: DISEQC Tone Burst in flexcop_diseqc_ioctl()
- * FIX: FULL soft DiSEqC for skystar2 (FlexCopII rev 130) VP310 equipped 
+ * FIX: FULL soft DiSEqC for skystar2 (FlexCopII rev 130) VP310 equipped
  *     Vincenzo Di Massa, hawk.it at tiscalinet.it
- * 	
+ *
  * Converted to Linux coding style
  * Misc reorganization, polishing, restyling
- *     Roberto Ragusa, r.ragusa at libero.it
- *       
- * Added hardware filtering support, 
+ *     Roberto Ragusa, skystar2-c5b8 at robertoragusa dot it
+ *
+ * Added hardware filtering support,
  *     Niklas Peinecke, peinecke at gdv.uni-hannover.de
  *
  *
