@@ -113,7 +113,7 @@ void unload_sb(struct address_info *hw_config)
 }
 
 int sb_be_quiet=0;
-int esstype = 0;	/* ESS chip type */
+extern int esstype;	/* ESS chip type */
 
 #ifdef MODULE
 
@@ -130,13 +130,13 @@ int mpu_io = 0;
 int io = -1;
 int irq = -1;
 int dma = -1;
-int dma16 = -1;	/* Set this for modules that need it */
-int type = 0;	/* Can set this to a specific card type */
-int mad16 = 0;	/* Set mad16=1 to load this as support for mad16 */
-int trix = 0;	/* Set trix=1 to load this as support for trix */
-int pas2 = 0;	/* Set pas2=1 to load this as support for pas2 */
+int dma16 = -1;		/* Set this for modules that need it */
+int type = 0;		/* Can set this to a specific card type */
+int mad16 = 0;		/* Set mad16=1 to load this as support for mad16 */
+int trix = 0;		/* Set trix=1 to load this as support for trix */
+int pas2 = 0;		/* Set pas2=1 to load this as support for pas2 */
 int sm_games = 0;	/* Mixer - see sb_mixer.c */
-int acer = 0;	/* Do acer notebook init */
+int acer = 0;		/* Do acer notebook init */
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");

@@ -346,13 +346,13 @@ endmenu
 source fs/Config.in
 
 if [ "$CONFIG_VME" = "n" ]; then
+  mainmenu_option next_comment
+  comment 'Console drivers'
   if [ "$CONFIG_HP300" = "y" ]; then
     bool 'Frame buffer support' CONFIG_FB
   else
     define_bool CONFIG_FB y
   fi
-  mainmenu_option next_comment
-  comment 'Console drivers'
   source drivers/video/Config.in
   endmenu
 fi

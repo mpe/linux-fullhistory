@@ -130,6 +130,14 @@ static inline int is_extended_partition(struct partition *p)
 		SYS_IND(p) == LINUX_EXTENDED_PARTITION);
 }
 
+static int sector_partition_scale(kdev_t dev)
+{
+       if (hardsect_size[MAJOR(dev)] != NULL)
+               return (hardsect_size[MAJOR(dev)][MINOR(dev)]/512);
+       else
+               return (1);
+}
+
 static unsigned int get_ptable_blocksize(kdev_t dev)
 {
   int ret = 1024;
@@ -149,6 +157,7 @@ static unsigned int get_ptable_blocksize(kdev_t dev)
    * the natural blocksize for the device so that we don't have to try
    * and read partial sectors.  Anything smaller should be just fine.
    */
+
   switch( blksize_size[MAJOR(dev)][MINOR(dev)] )
     {
     case 2048:
@@ -196,6 +205,7 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 	struct partition *p;
 	unsigned long first_sector, first_size, this_sector, this_size;
 	int mask = (1 << hd->minor_shift) - 1;
+	int sector_size = sector_partition_scale(dev);
 	int i;
 
 	first_sector = hd->part[MINOR(dev)].start_sect;
@@ -233,22 +243,22 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 		 * First process the data partition(s)
 		 */
 		for (i=0; i<4; i++, p++) {
-		    if (!NR_SECTS(p) || is_extended_partition(p))
-		      continue;
+			if (!NR_SECTS(p) || is_extended_partition(p))
+				continue;
 
-		    /* Check the 3rd and 4th entries -
-		       these sometimes contain random garbage */
-		    if (i >= 2
-			&& START_SECT(p) + NR_SECTS(p) > this_size
-			&& (this_sector + START_SECT(p) < first_sector ||
-			    this_sector + START_SECT(p) + NR_SECTS(p) >
-			     first_sector + first_size))
-		      continue;
+			/* Check the 3rd and 4th entries -
+			   these sometimes contain random garbage */
+			if (i >= 2
+				&& START_SECT(p) + NR_SECTS(p) > this_size
+				&& (this_sector + START_SECT(p) < first_sector ||
+				    this_sector + START_SECT(p) + NR_SECTS(p) >
+				     first_sector + first_size))
+				continue;
 
-		    add_partition(hd, current_minor, this_sector+START_SECT(p), NR_SECTS(p));
-		    current_minor++;
-		    if ((current_minor & mask) == 0)
-		      goto done;
+			add_partition(hd, current_minor, this_sector+START_SECT(p)*sector_size, NR_SECTS(p)*sector_size);
+			current_minor++;
+			if ((current_minor & mask) == 0)
+				goto done;
 		}
 		/*
 		 * Next, process the (first) extended partition, if present.
@@ -262,20 +272,21 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 		 */
 		p -= 4;
 		for (i=0; i<4; i++, p++)
-		  if(NR_SECTS(p) && is_extended_partition(p))
-		    break;
+			if(NR_SECTS(p) && is_extended_partition(p))
+				break;
 		if (i == 4)
-		  goto done;	 /* nothing left to do */
+			goto done;	 /* nothing left to do */
 
-		hd->part[current_minor].nr_sects = NR_SECTS(p);
-		hd->part[current_minor].start_sect = first_sector + START_SECT(p);
-		this_sector = first_sector + START_SECT(p);
+		hd->part[current_minor].nr_sects = NR_SECTS(p) * sector_size; /* JSt */
+		hd->part[current_minor].start_sect = first_sector + START_SECT(p) * sector_size;
+		this_sector = first_sector + START_SECT(p) * sector_size;
 		dev = MKDEV(hd->major, current_minor);
 		brelse(bh);
 	}
 done:
 	brelse(bh);
 }
+
 #ifdef CONFIG_SOLARIS_X86_PARTITION
 static void
 solaris_x86_partition(struct gendisk *hd, kdev_t dev, long offset) {
@@ -317,11 +328,13 @@ solaris_x86_partition(struct gendisk *hd, kdev_t dev, long offset) {
 #endif
 
 #ifdef CONFIG_BSD_DISKLABEL
-static void check_and_add_bsd_partition(struct gendisk *hd, struct bsd_partition *bsd_p)
+static void check_and_add_bsd_partition(struct gendisk *hd,
+					struct bsd_partition *bsd_p, kdev_t dev)
 {
 	struct hd_struct *lin_p;
 		/* check relative position of partitions.  */
-	for (lin_p = hd->part + 1; lin_p - hd->part < current_minor; lin_p++) {
+	for (lin_p = hd->part + 1 + MINOR(dev);
+	     lin_p - hd->part - MINOR(dev) < current_minor; lin_p++) {
 			/* no relationship -> try again */
 		if (lin_p->start_sect + lin_p->nr_sects <= bsd_p->p_offset 
 			|| lin_p->start_sect >= bsd_p->p_offset + bsd_p->p_size)
@@ -383,7 +396,7 @@ static void bsd_disklabel_partition(struct gendisk *hd, kdev_t dev,
 			break;
 
 		if (p->p_fstype != BSD_FS_UNUSED) 
-			check_and_add_bsd_partition(hd, p);
+			check_and_add_bsd_partition(hd, p, dev);
 	}
 	brelse(bh);
 
@@ -436,6 +449,7 @@ static int msdos_partition(struct gendisk *hd, kdev_t dev, unsigned long first_s
 	struct partition *p;
 	unsigned char *data;
 	int mask = (1 << hd->minor_shift) - 1;
+	int sector_size = sector_partition_scale(dev);
 #ifdef CONFIG_BSD_DISKLABEL
 	/* no bsd disklabel as a default */
 	kdev_t bsd_kdev = 0;
@@ -538,7 +552,7 @@ check_table:
 	for (i=1 ; i<=4 ; minor++,i++,p++) {
 		if (!NR_SECTS(p))
 			continue;
-		add_partition(hd, minor, first_sector+START_SECT(p), NR_SECTS(p));
+               add_partition(hd, minor, first_sector+START_SECT(p)*sector_size, NR_SECTS(p)*sector_size);
 		if (is_extended_partition(p)) {
 			printk(" <");
 			/*
@@ -790,7 +804,7 @@ static int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 	struct sgi_partition *p;
 #define SGI_LABEL_MAGIC 0x0be5a941
 
-	if(!(bh = bread(dev, 0, 1024))) {
+	if(!(bh = bread(dev, 0, get_ptable_blocksize(dev)))) {
 		printk("Dev %s: unable to read partition table\n", kdevname(dev));
 		return -1;
 	}
@@ -854,11 +868,18 @@ amiga_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 	int			 blk;
 	int			 part, res;
 
+	/*
+	 *	Don't bother touching M/O 2K media.
+	 */
+	 
+	if (get_ptable_blocksize(dev) != 1024)
+		return 0;
+		
 	set_blocksize(dev,512);
 	res = 0;
 
 	for (blk = 0; blk < RDB_ALLOCATION_LIMIT; blk++) {
-		if(!(bh = bread(dev,blk,512))) {
+		if(!(bh = bread(dev,blk,get_ptable_blocksize(dev)))) {
 			printk("Dev %s: unable to read RDB block %d\n",
 			       kdevname(dev),blk);
 			goto rdb_done;
@@ -875,7 +896,7 @@ amiga_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 			blk = htonl(rdb->rdb_PartitionList);
 			brelse(bh);
 			for (part = 1; blk > 0 && part <= 16; part++) {
-				if (!(bh = bread(dev,blk,512))) {
+				if (!(bh = bread(dev,blk, get_ptable_blocksize(dev)))) {
 					printk("Dev %s: unable to read partition block %d\n",
 						       kdevname(dev),blk);
 					goto rdb_done;
@@ -908,6 +929,10 @@ amiga_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 	}
 
 rdb_done:
+	/*
+	 *	FIXME: should restore the original size. Then we could clean
+	 *	up the M/O skip. Amiga people ?
+	 */
 	set_blocksize(dev,BLOCK_SIZE);
 	return res;
 }
@@ -1089,7 +1114,7 @@ static int atari_partition (struct gendisk *hd, kdev_t dev,
 	      partsect = extensect = pi->st;
 	      while (1)
 		{
-		  xbh = bread (dev, partsect / 2, 1024);
+		  xbh = bread (dev, partsect / 2, get_ptable_blocksize(dev));
 		  if (!xbh)
 		    {
 		      printk (" block %ld read failed\n", partsect);

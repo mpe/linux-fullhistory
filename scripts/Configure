@@ -1,4 +1,3 @@
-
 #! /bin/sh
 #
 # This script is used to configure the Linux kernel.
@@ -8,18 +7,8 @@
 # something better'' because the old configure script wasn't flexible
 # enough.
 #
-# Please send comments / questions / bug fixes to raymondc@microsoft.com.
-#
-#              ***** IMPORTANT COMPATIBILITY NOTE ****
-# If configuration changes are made which might adversely effect 
-# Menuconfig or xconfig, please notify the respective maintainers so that 
-# those utilities can be updated in parallel.
-#
-# Menuconfig:  <mec@shout.net>
-# xconfig:     <apenwarr@foxnet.net>  <eric@aib.com>
-#              ****************************************
-#
-# Each line in the config file is a command.
+# Raymond Chen was the original author of Configure.
+# Michael Elizabeth Chastain (mec@shout.net) is the current maintainer.
 #
 # 050793 - use IFS='@' to get around a bug in a pre-version of bash-1.13
 # with an empty IFS.
@@ -56,6 +45,9 @@
 #
 # 102598 Michael Chastain (mec@shout.net) - put temporary files in
 # current directory, not in /tmp.
+#
+# 24 January 1999, Michael Elizabeth Chastain, <mec@shout.net>
+# - Improve the exit message (Jeff Ronne).
 
 #
 # Make sure we're really running bash.
@@ -528,10 +520,13 @@ mv .tmpconfig .config
 mv .tmpconfig.h include/linux/autoconf.h
 
 echo
-echo "The Linux kernel should now be configured for your setup."
-echo "Check the top-level Makefile for additional configuration,"
-echo "and do a 'make dep ; make clean' if you want to be sure all"
-echo "the files are correctly re-made"
+echo "*** End of Linux kernel configuration."
+echo "*** Check the top-level Makefile for additional configuration."
+if [ ! -f .hdepend -o "$CONFIG_MODVERSIONS" = "y" ] ; then
+    echo "*** Next, you must run 'make dep'."
+else
+    echo "*** Next, you may run 'make zImage', 'make zdisk', or 'make zlilo'."
+fi
 echo
 
 exit 0

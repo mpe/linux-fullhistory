@@ -13,6 +13,7 @@
  */
 /*
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ * Andrew Veliath  : adapted tmr2ticks from level 1 sequencer (avoid overflow)
  */
 #include <linux/config.h>
 
@@ -39,11 +40,17 @@ static unsigned long
 tmr2ticks(int tmr_value)
 {
 	/*
-	 *    Convert system timer ticks (HZ) to MIDI ticks
-	 *    (divide # of MIDI ticks/minute by # of system ticks/minute).
+	 *    Convert timer ticks to MIDI ticks
 	 */
 
-	return ((tmr_value * curr_tempo * curr_timebase) + (30 * 100)) / (60 * HZ);
+	unsigned long tmp;
+	unsigned long scale;
+
+	/* tmr_value (ticks per sec) *
+	   1000000 (usecs per sec) / HZ (ticks per sec) -=> usecs */
+	tmp = tmr_value * (1000000 / HZ);
+	scale = (60 * 1000000) / (curr_tempo * curr_timebase);	/* usecs per MIDI tick */
+	return (tmp + scale / 2) / scale;
 }
 
 static void

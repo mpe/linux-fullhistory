@@ -187,6 +187,7 @@ extern void entInt(void);
 extern void entMM(void);
 extern void entSys(void);
 extern void entUna(void);
+extern void entDbg(void);
 
 /* process.c */
 extern void generic_kill_arch (int mode, char *reboot_cmd);

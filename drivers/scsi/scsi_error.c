@@ -1972,6 +1972,7 @@ scsi_error_handler(void * data)
 	     */
             SCSI_LOG_ERROR_RECOVERY(1,printk("Error handler sleeping\n"));
 	    down_interruptible (&sem);
+	    sem.owner = 0;
 
 	    if (signal_pending(current) )
 	      break;

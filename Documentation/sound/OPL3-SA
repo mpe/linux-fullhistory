@@ -2,8 +2,7 @@ OPL3-SA1 sound driver (opl3sa.o)
 
 ---
 Note: This howto only describes how to setup the OPL3-SA1 chip; this info
-does not apply to the SA2, SA3, or SA4. Contact hannu@opensound.com for
-the support details of these other SAx chips.
+does not apply to the SA2, SA3, or SA4. 
 ---
 
 The Yamaha OPL3-SA1 sound chip is usually found built into motherboards, and

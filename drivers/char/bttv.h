@@ -206,7 +206,8 @@ struct bttv
 #define BTTV_MIROPRO       0x0b
 #define BTTV_ADSTECH_TV    0x0c
 #define BTTV_AVERMEDIA98   0x0d
-#define BTTV_VHX   	   0x0e
+#define BTTV_VHX           0x0e
+#define BTTV_ZOLTRIX       0x0f
 
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01

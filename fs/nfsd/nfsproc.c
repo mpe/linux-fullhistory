@@ -515,7 +515,7 @@ struct svc_procedure		nfsd_procedures2[18] = {
   PROC(symlink,	 symlinkargs,	void,		none,		RC_REPLSTAT),
   PROC(mkdir,	 createargs,	diropres,	fhandle,	RC_REPLBUFF),
   PROC(rmdir,	 diropargs,	void,		none,		RC_REPLSTAT),
-  PROC(readdir,	 readdirargs,	readdirres,	none,		RC_REPLSTAT),
+  PROC(readdir,	 readdirargs,	readdirres,	none,		RC_REPLBUFF),
   PROC(statfs,	 fhandle,	statfsres,	none,		RC_NOCACHE),
 };
 

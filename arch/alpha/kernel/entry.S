@@ -186,6 +186,18 @@ entIF:
 	jsr	$31,do_entIF
 .end entIF
 
+.align 3
+.globl	entDbg
+.ent	entDbg
+entDbg:
+	SAVE_ALL
+	lda	$8,0x3fff
+	bic	$30,$8,$8
+	lda	$26,ret_from_sys_call
+	jsr	$31,do_entDbg
+.end entDbg
+
+
 /*
  * Fork() is one of the special system calls: it needs to
  * save the callee-saved regs so that the regs can be found

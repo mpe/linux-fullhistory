@@ -12,6 +12,7 @@
  */
 /*
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
+ * Andrew Veliath  : fixed running status in MIDI input state machine
  */
 #include <linux/config.h>
 
@@ -196,13 +197,19 @@ midi_synth_input(int orig_dev, unsigned char data)
 				      inc->m_left = len_tab[(data >> 4) - 8];
 				      inc->m_buf[0] = inc->m_prev_status = data;
 			      }
-		  } else if (inc->m_prev_status & 0x80)		/* Ignore if no previous status (yet) */
-		    {		/* Data byte (use running status) */
-			    inc->m_state = MST_DATA;
+		    } else if (inc->m_prev_status & 0x80) {
+			    /* Data byte (use running status) */
 			    inc->m_ptr = 2;
-			    inc->m_left = len_tab[(data >> 4) - 8] - 1;
-			    inc->m_buf[0] = inc->m_prev_status;
 			    inc->m_buf[1] = data;
+			    inc->m_buf[0] = inc->m_prev_status;
+			    inc->m_left = len_tab[(inc->m_buf[0] >> 4) - 8] - 1;
+			    if (inc->m_left > 0)
+				    inc->m_state = MST_DATA; /* Not done yet */
+			    else {
+				    inc->m_state = MST_INIT;
+				    do_midi_msg(dev, inc->m_buf, inc->m_ptr);
+				    inc->m_ptr = 0;
+			    }
 		    }
 		  break;	/* MST_INIT */
 

@@ -89,6 +89,9 @@
  *   drives/net/Config.in and other places.
  * - Fix menu line wraparound at 128 menus (some fool used a 'char' for
  *   a counter).
+ *
+ * 23 January 1999, Michael Elizabeth Chastain <mec@shout.net>
+ * - Remove bug-compatible code.
  */
 
 #include <stdio.h>
@@ -749,11 +752,9 @@ void dump_tk_script( struct kconfig * scfg )
 	    break;
 
 	case token_endmenu:
-#if ! defined(BUG_COMPATIBLE)
 	    /* flatten menus with proper scoping */
 	    if ( --menu_depth < 0 )
 		{ fprintf( stderr, "unmatched endmenu\n" ); exit( 1 ); }
-#endif
 	    break;
 
 	case token_bool:

@@ -37,6 +37,7 @@
 #include <linux/file.h>
 #include <linux/console.h>
 #include <linux/poll.h>
+#include <linux/mm.h>
 
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
@@ -105,6 +106,7 @@ EXPORT_SYMBOL(max_mapnr);
 EXPORT_SYMBOL(high_memory);
 EXPORT_SYMBOL(update_vm_cache);
 EXPORT_SYMBOL(vmtruncate);
+EXPORT_SYMBOL(find_vma);
 
 /* filesystem internal functions */
 EXPORT_SYMBOL(in_group_p);

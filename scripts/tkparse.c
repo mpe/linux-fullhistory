@@ -26,6 +26,9 @@
  *   every architecture and comparing it character-for-character against
  *   the output of the old tkparse.
  *
+ * 23 January 1999, Michael Elizabeth Chastain, <mec@shout.net>
+ * - Remove bug-compatible code.
+ *
  * TO DO:
  * - xconfig is at the end of its life cycle.  Contact <mec@shout.net> if
  *   you are interested in working on the replacement.
@@ -434,25 +437,14 @@ static void tokenize_line( const char * pnt )
 
     case token_define_bool:
 	pnt = get_string( pnt, &cfg->optionname );
-#if ! defined(BUG_COMPATIBLE)
 	while ( *pnt == ' ' || *pnt == '\t' )
 	    pnt++;
-#endif
 	if      ( *pnt == 'n' || *pnt == 'N' ) cfg->value = "0";
 	else if ( *pnt == 'y' || *pnt == 'Y' ) cfg->value = "1";
 	else if ( *pnt == 'm' || *pnt == 'M' ) cfg->value = "2";
 	else
 	{
-#if ! defined(BUG_COMPATIBLE)
 	    syntax_error( "unknown define_bool value" );
-#else
-	    /*
-	     * This ought to give the same output as printf'ing
-	     * through the null pointer ... I don't want to be
-	     * SIGSEGV compatible!
-	     */
-	    cfg->value = "(null)";
-#endif
 	}
 	break;
 
@@ -558,12 +550,7 @@ static void do_source( const char * filename )
     if ( infile == NULL )
     {
 	sprintf( buffer, "unable to open %s", filename );
-#if defined(BUG_COMPATIBLE)
-	fprintf( stderr, "%s\n", buffer );
-	return;
-#else
 	syntax_error( buffer );
-#endif
     }
 
     /* push the new file name and line number */

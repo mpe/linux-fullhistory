@@ -637,7 +637,13 @@ void __init setup_ExtINT_pin(unsigned int pin)
 	entry.delivery_mode = dest_ExtINT;
 	entry.dest_mode = 1;				/* logical delivery */
 	entry.mask = 0;					/* unmask IRQ now */
-	entry.dest.logical.logical_dest = 0x01;		/* logical CPU #0 */
+	/*
+	 * Careful with this one. We do not use 'true' logical
+	 * delivery, as we set local APICs to LDR == 0. But
+	 * 0xff logical destination is special (broadcast).
+	 * Any other combination will cause problems.
+	 */
+	entry.dest.logical.logical_dest = 0xff;
 
 	entry.vector = 0;				/* it's ignored */
 

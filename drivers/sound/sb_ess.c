@@ -1,8 +1,37 @@
+#undef FKS_LOGGING
+#undef FKS_TEST
+
 /*
- * Created: 9-Jan-1999
+ * tabs should be 4 spaces, in vi(m): set tabstop=4
  *
  * TODO: 	consistency speed calculations!!
+ *			cleanup!
  * ????:	Did I break MIDI support?
+ *
+ * History:
+ *
+ * Rolf Fokkens	(Dec 20 1998):	ES188x recording level support on a per
+ *								input basis.
+ *				(Dec 24 1998):	Recognition of ES1788, ES1887, ES1888,
+ *								ES1868, ES1869 and ES1878. Could be used for
+ *								specific handling in the future. All except
+ *								ES1887 and ES1888 and ES688 are handled like
+ *								ES1688.
+ *				(Dec 27 1998):	RECLEV for all (?) ES1688+ chips. ES188x now
+ *								have the "Dec 20" support + RECLEV
+ *				(Jan  2 1999):	Preparation for Full Duplex. This means
+ *								Audio 2 is now used for playback when dma16
+ *								is specified. The next step would be to use
+ *								Audio 1 and Audio 2 at the same time.
+ *				(Jan  9 1999):	Put all ESS stuff into sb_ess.[ch], this
+ *								includes both the ESS stuff that has been in
+ *								sb_*[ch] before I touched it and the ESS suppor
+ *								I added later
+ *				(Jan 23 1998):	Full Duplex seems to work. I wrote a small
+ *								test proggy which works OK. Haven't found
+ *								any applications to test it though. So why did
+ *								I bother to create it anyway?? :) Just for
+ *								fun.
  *
  * This files contains ESS chip specifics. It's based on the existing ESS
  * handling as it resided in sb_common.c, sb_mixer.c and sb_audio.c. This
@@ -19,26 +48,12 @@
  *
  * ESS detection isn't full proof (yet). If it fails an additional module
  * parameter esstype can be specified to be one of the following:
- * 688, 1688, 1868, 1869, 1788, 1887, 1888
- *
- * History:
- *
- * Rolf Fokkens	(Dec 20 1998):	ES188x recording level support on a per
- *								input basis.
- *				(Dec 24 1998):	Recognition of ES1788, ES1887, ES1888,
- *								ES1868, ES1869 and ES1878. Could be used for
- *								specific handling in the future. All except
- *								ES1887 and ES1888 and ES688 are handled like
- *								ES1688.
- *				(Dec 27 1998):	RECLEV for all (?) ES1688+ chips. ES188x now
- *								have the "Dec 20" support + RECLEV
- *				(jan  2 1999):	Preparation for Full Duplex. This means
- *								Audio 2 is now used for playback when dma16
- *								is specified. The next step would be to use
- *								Audio 1 and Audio 2 at the same time.
+ * -1, 0, 688, 1688, 1868, 1869, 1788, 1887, 1888
+ * -1 means: mimic 2.0 behaviour, 
+ *  0 means: auto detect.
+ *   others: explicitly specify chip
+ * -1 is default, cause auto detect still doesn't work.
  */
-
-#undef FKS_LOGGING
 
 /*
  * About the documentation
@@ -156,13 +171,26 @@
  * ES1946	yes		This is a PCI chip; not handled by this driver
  */
 
+#include <linux/config.h>
+#include <linux/delay.h>
+
 #include "sound_config.h"
 #include "sb_mixer.h"
 #include "sb.h"
 
 #include "sb_ess.h"
 
-extern int esstype; /* module parameter in sb_card.c */
+#define ESSTYPE_LIKE20	-1		/* Mimic 2.0 behaviour					*/
+#define ESSTYPE_DETECT	0		/* Mimic 2.0 behaviour					*/
+
+int esstype = ESSTYPE_LIKE20; /* module parameter in sb_card.c */
+
+#define SUBMDL_ES1788	0x10	/* Subtype ES1788 for specific handling */
+#define SUBMDL_ES1868	0x11	/* Subtype ES1868 for specific handling */
+#define SUBMDL_ES1869	0x12	/* Subtype ES1869 for specific handling */
+#define SUBMDL_ES1878	0x13	/* Subtype ES1878 for specific handling */
+#define SUBMDL_ES1887	0x14	/* Subtype ES1887 for specific handling */
+#define SUBMDL_ES1888	0x15	/* Subtype ES1888 for specific handling */
 
 #ifdef FKS_LOGGING
 static void ess_show_mixerregs (sb_devc *devc);
@@ -369,45 +397,6 @@ printk (KERN_INFO "FKS: ess_speed (%d) b speed = %d, div=%x\n", audionum, devc->
 		ess_setmixer (devc, 0x72, div2);
 	}
 }
-
-#if 0
-static void ess_speed(sb_devc * devc)
-{
-	int divider;
-	unsigned char bits = 0;
-	int speed = devc->speed;
-
-	if (speed < 4000)
-		speed = 4000;
-	else if (speed > 48000)
-		speed = 48000;
-
-	if (speed > 22000)
-	{
-		bits = 0x80;
-		divider = 256 - (795500 + speed / 2) / speed;
-	}
-	else
-	{
-		divider = 128 - (397700 + speed / 2) / speed;
-	}
-
-	bits |= (unsigned char) divider;
-
-	ess_write (devc, 0xa1, bits);
-
-	/*
-	* Set filter divider register
-	*/
-
-	speed = (speed * 9) / 20;	/* Set filter roll-off to 90% of speed/2 */
-	divider = 256 - 7160000 / (speed * 82);
-
-	ess_write (devc, 0xa2, divider);
-
-	return;
-}
-#endif
 
 static int ess_audio_prepare_for_input(int dev, int bsize, int bcount)
 {
@@ -931,6 +920,29 @@ static int ess_set_irq_hw (sb_devc * devc)
 	return ess_common_set_irq_hw (devc);
 }
 
+#ifdef FKS_TEST
+
+/*
+ * FKS_test:
+ *	for ES1887: 00, 18, non wr bits: 0001 1000
+ *	for ES1868: 00, b8, non wr bits: 1011 1000
+ *	for ES1888: 00, f8, non wr bits: 1111 1000
+ *	for ES1688: 00, f8, non wr bits: 1111 1000
+ *	+   ES968
+ */
+
+static void FKS_test (sb_devc * devc)
+{
+	int val1, val2;
+	val1 = ess_getmixer (devc, 0x64);
+	ess_setmixer (devc, 0x64, ~val1);
+	val2 = ess_getmixer (devc, 0x64) ^ ~val1;
+	ess_setmixer (devc, 0x64, val1);
+	val1 ^= ess_getmixer (devc, 0x64);
+printk (KERN_INFO "FKS: FKS_test %02x, %02x\n", (val1 & 0x0ff), (val2 & 0x0ff));
+};
+#endif
+
 static unsigned int ess_identify (sb_devc * devc)
 {
 	unsigned int val;
@@ -1025,41 +1037,54 @@ int ess_init(sb_devc * devc, struct address_info *hw_config)
 
 	if (ess_major == 0x68 && (ess_minor & 0xf0) == 0x80) {
 		char *chip = NULL;
+		int submodel = -1;
 
-		if (esstype) {
-			int submodel = -1;
-
-			switch (esstype) {
-			case 688:
-				submodel = 0x00;
-				break;
-			case 1688:
-				submodel = 0x08;
-				break;
-			case 1868:
-				submodel = SUBMDL_ES1868;
-				break;
-			case 1869:
-				submodel = SUBMDL_ES1869;
-				break;
-			case 1788:
-				submodel = SUBMDL_ES1788;
-				break;
-			case 1887:
-				submodel = SUBMDL_ES1887;
-				break;
-			case 1888:
-				submodel = SUBMDL_ES1888;
-				break;
-			};
-			if (submodel != -1) {
-				devc->submodel = submodel;
-				sprintf (modelname, "ES%d", esstype);
-				chip = modelname;
-			};
+		switch (esstype) {
+		case ESSTYPE_DETECT:
+		case ESSTYPE_LIKE20:
+			break;
+		case 688:
+			submodel = 0x00;
+			break;
+		case 1688:
+			submodel = 0x08;
+			break;
+		case 1868:
+			submodel = SUBMDL_ES1868;
+			break;
+		case 1869:
+			submodel = SUBMDL_ES1869;
+			break;
+		case 1788:
+			submodel = SUBMDL_ES1788;
+			break;
+		case 1887:
+			submodel = SUBMDL_ES1887;
+			break;
+		case 1888:
+			submodel = SUBMDL_ES1888;
+			break;
+		default:
+			printk (KERN_ERR "Invalid esstype=%d specified\n", esstype);
+			return 0;
+		};
+		if (submodel != -1) {
+			devc->submodel = submodel;
+			sprintf (modelname, "ES%d", esstype);
+			chip = modelname;
 		};
 		if (chip == NULL && (ess_minor & 0x0f) < 8) {
 			chip = "ES688";
+		};
+#ifdef FKS_TEST
+FKS_test (devc);
+#endif
+		/*
+		 * If Nothing detected yet, and we want 2.0 behaviour...
+		 * Then let's assume it's ES1688.
+		 */
+		if (chip == NULL && esstype == ESSTYPE_LIKE20) {
+			chip = "ES1688";
 		};
 
 		if (chip == NULL) {
@@ -1080,6 +1105,10 @@ int ess_init(sb_devc * devc, struct address_info *hw_config)
 				chip = "ES1878";
 				devc->submodel = SUBMDL_ES1878;
 				break;
+			default:
+				if ((type & 0x00ff) != ((type >> 8) & 0x00ff)) {
+					printk ("ess_init: Unrecognized %04x\n", type);
+				}
 			};
 		};
 #if 0

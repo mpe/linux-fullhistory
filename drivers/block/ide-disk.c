@@ -101,20 +101,6 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 		id->cyls = lba_sects / (16 * 63); /* correct cyls */
 		return 1;	/* lba_capacity is our only option */
 	}
-	/*
-	 * This is a split test for drives less than 8 Gig only.
-	 * Drives less than 8GB sometimes declare that they have 15 heads.
-	 * This is an accounting trick (0-15) == (1-16), just an initial
-	 * zero point difference.
-	 */
-	if ((id->lba_capacity < 16514064) && (lba_sects > chs_sects) &&
-	    ((id->heads == 15) || (id->heads == 16)) && (id->sectors == 63)) {
-		if (id->heads == 15)
-			id->cyls = lba_sects / (15 * 63); /* correct cyls */
-		if (id->heads == 16)
-			id->cyls = lba_sects / (16 * 63); /* correct cyls */
-		return 1;	/* lba_capacity is our only option */
-	}
 	/* perform a rough sanity check on lba_sects:  within 10% is "okay" */
 	if ((lba_sects - chs_sects) < _10_percent) {
 		return 1;	/* lba_capacity is good */

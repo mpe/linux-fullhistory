@@ -4,12 +4,17 @@
 # CHANGES
 # =======
 #
-# 8 January 1998, Michael Elizabeth Chastain, <mec@shout.net>
-# Remove unused do_cmd function (part of the 2.0 sound support).
-# Arrange buttons in three columns for better screen fitting.
-# Add CONSTANT_Y, CONSTANT_M, CONSTANT_N for commands like:
-#   dep_tristate 'foo' CONFIG_FOO m
+# 8 January 1999, Michael Elizabeth Chastain, <mec@shout.net>
+# - Remove unused do_cmd function (part of the 2.0 sound support).
+# - Arrange buttons in three columns for better screen fitting.
+# - Add CONSTANT_Y, CONSTANT_M, CONSTANT_N for commands like:
+#     dep_tristate 'foo' CONFIG_FOO m
 #
+# 23 January 1999, Michael Elizabeth Chastain, <mec@shout.net>
+# - Shut vfix the hell up.
+#
+# 24 January 1999, Michael Elizabeth Chastain, <mec@shout.net>
+# - Improve the exit message (Jeff Ronne).
 
 #
 # This is a handy replacement for ".widget cget" that requires neither tk4
@@ -27,7 +32,6 @@ proc cget { w option } {
 proc vfix { var } {
 	global $var
 	if [ catch {eval concat $$var} ] {
-		puts stdout "WARNING - broken Config.in!  $var was not declared!"
 		set $var 0
 	}
 }
@@ -428,8 +432,15 @@ ${var}:\\
 proc wrapup {w }  {
 	catch {destroy $w}
 	toplevel $w -class Dialog
-	message $w.m -width 400 -aspect 300 -text \
-		"The Linux kernel should now be configured for your setup. Check the top-level Makefile for additional configuration, and do a 'make dep ; make clean' if you want to be sure all the files are correctly re-made."  -relief raised 
+
+	global CONFIG_MODVERSIONS; vfix CONFIG_MODVERSIONS
+	if { ([file exists .hdepend] != 1) || ($CONFIG_MODVERSIONS == 1) } then {
+	    message $w.m -width 400 -aspect 300 -relief raised -text \
+		"End of Linux kernel configuration.  Check the top-level Makefile for additional configuration.  Next, you must run 'make dep'."
+	} else {
+	    message $w.m -width 400 -aspect 300 -relief raised -text \
+		"End of Linux kernel configuration.  Check the top-level Makefile for additional configuration.  Next, you may 'make bzImage', 'make bzdisk', or 'make bzlilo.'"
+	}
 	label $w.bm -bitmap info
 	pack $w.bm $w.m -pady 10 -side top -padx 10
 	wm title $w "Kernel build instructions" 

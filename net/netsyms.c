@@ -382,6 +382,9 @@ EXPORT_SYMBOL(rtnl_unlock);
 EXPORT_SYMBOL(ipv4_config);
 EXPORT_SYMBOL(dev_open);
 
+/* Used by other modules */
+EXPORT_SYMBOL(in_ntoa);
+
 EXPORT_SYMBOL(ip_rcv);
 EXPORT_SYMBOL(arp_rcv);
 EXPORT_SYMBOL(arp_tbl);

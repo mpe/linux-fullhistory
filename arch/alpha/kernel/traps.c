@@ -121,9 +121,9 @@ long alpha_fp_emul (unsigned long pc);
 #endif
 
 asmlinkage void
-do_entArith(unsigned long summary, unsigned long write_mask, unsigned long a2,
-	    unsigned long a3, unsigned long a4, unsigned long a5,
-	    struct pt_regs regs)
+do_entArith(unsigned long summary, unsigned long write_mask,
+	    unsigned long a2, unsigned long a3, unsigned long a4,
+	    unsigned long a5, struct pt_regs regs)
 {
 	if ((summary & 1)) {
 		/*
@@ -145,9 +145,10 @@ do_entArith(unsigned long summary, unsigned long write_mask, unsigned long a2,
 	unlock_kernel();
 }
 
-asmlinkage void do_entIF(unsigned long type, unsigned long a1,
-			 unsigned long a2, unsigned long a3, unsigned long a4,
-			 unsigned long a5, struct pt_regs regs)
+asmlinkage void
+do_entIF(unsigned long type, unsigned long a1,
+	 unsigned long a2, unsigned long a3, unsigned long a4,
+	 unsigned long a5, struct pt_regs regs)
 {
 	lock_kernel();
 	die_if_kernel("Instruction fault", &regs, type, 0);
@@ -229,6 +230,25 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1,
 	}
 	unlock_kernel();
 }
+
+/* There is an ifdef in the PALcode in MILO that enables a 
+   "kernel debugging entry point" as an unprivilaged call_pal.
+
+   We don't want to have anything to do with it, but unfortunately
+   several versions of MILO included in distributions have it enabled,
+   and if we don't put something on the entry point we'll oops.  */
+
+asmlinkage void
+do_entDbg(unsigned long type, unsigned long a1,
+	  unsigned long a2, unsigned long a3, unsigned long a4,
+	  unsigned long a5, struct pt_regs regs)
+{
+	lock_kernel();
+	die_if_kernel("Instruction fault", &regs, type, 0);
+	force_sig(SIGILL, current);
+	unlock_kernel();
+}
+
 
 /*
  * entUna has a different register layout to be reasonably simple. It
@@ -895,4 +915,5 @@ trap_init(void)
 	wrent(entIF, 3);
 	wrent(entUna, 4);
 	wrent(entSys, 5);
+	wrent(entDbg, 6);
 }

@@ -3,14 +3,6 @@
  */
 
 /*
- * Define this symbol to generate exactly the same output, byte for byte,
- * as the previous version of xconfig.  I need to do this to make sure I
- * I don't break anything in my moby edit. -- mec
- */
-
-#define BUG_COMPATIBLE
-
-/*
  * Token types (mostly statement types).
  */
 

@@ -147,6 +147,17 @@ int skip_ioapic_setup = 0;				/* 1 if "noapic" boot option passed */
 #define APIC_DEFAULT_PHYS_BASE 0xfee00000
 
 /*
+ * Reads and clears the Pentium Timestamp-Counter
+ */
+#define READ_TSC(x)	__asm__ __volatile__ (  "rdtsc" \
+				:"=a" (((unsigned long*)&(x))[0]),  \
+				 "=d" (((unsigned long*)&(x))[1]))
+
+#define CLEAR_TSC \
+	__asm__ __volatile__ ("\t.byte 0x0f, 0x30;\n"::\
+		"a"(0x00001000), "d"(0x00001000), "c"(0x10):"memory")
+
+/*
  *	Setup routine for controlling SMP activation
  *
  *	Command-line option of "nosmp" or "maxcpus=0" will disable SMP
@@ -710,24 +721,19 @@ void __init enable_local_APIC(void)
 	value |= 0xff;			/* Set spurious IRQ vector to 0xff */
  	apic_write(APIC_SPIV,value);
 
+	/*
+	 * Set Task Priority to 'accept all'
+	 */
  	value = apic_read(APIC_TASKPRI);
- 	value &= ~APIC_TPRI_MASK;	/* Set Task Priority to 'accept all' */
+ 	value &= ~APIC_TPRI_MASK;
  	apic_write(APIC_TASKPRI,value);
 
 	/*
-	 * Set arbitrarion priority to 0
-	 */
- 	value = apic_read(APIC_ARBPRI);
- 	value &= ~APIC_ARBPRI_MASK;
- 	apic_write(APIC_ARBPRI, value);
-
-	/*
-	 * Set the logical destination ID to 'all', just to be safe.
+	 * Clear the logical destination ID, just to be safe.
 	 * also, put the APIC into flat delivery mode.
 	 */
  	value = apic_read(APIC_LDR);
 	value &= ~APIC_LDR_MASK;
-	value |= SET_APIC_LOGICAL_ID(0xff);
  	apic_write(APIC_LDR,value);
 
  	value = apic_read(APIC_DFR);
@@ -735,8 +741,6 @@ void __init enable_local_APIC(void)
  	apic_write(APIC_DFR, value);
 
 	udelay(100);			/* B safe */
-	ack_APIC_irq();
-	udelay(100);
 }
 
 unsigned long __init init_smp_mappings(unsigned long memory_start)
@@ -1815,10 +1819,6 @@ asmlinkage void smp_spurious_interrupt(void)
  * closely follows bus clocks.
  */
 
-#define RDTSC(x)	__asm__ __volatile__ (  "rdtsc" \
-				:"=a" (((unsigned long*)&x)[0]),  \
-				 "=d" (((unsigned long*)&x)[1]))
-
 /*
  * The timer chip is already set up at HZ interrupts per second here,
  * but we do not accept timer interrupts yet. We only allow the BP
@@ -1937,7 +1937,7 @@ int __init calibrate_APIC_clock(void)
 	/*
 	 * We wrapped around just now. Let's start:
 	 */
-	RDTSC(t1);
+	READ_TSC(t1);
 	tt1=apic_read(APIC_TMCCT);
 
 #define LOOPS (HZ/10)
@@ -1948,7 +1948,7 @@ int __init calibrate_APIC_clock(void)
 		wait_8254_wraparound ();
 
 	tt2=apic_read(APIC_TMCCT);
-	RDTSC(t2);
+	READ_TSC(t2);
 
 	/*
 	 * The APIC bus clock counter is 32 bits only, it

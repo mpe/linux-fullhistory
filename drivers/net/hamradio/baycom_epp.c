@@ -1075,6 +1075,7 @@ static int epp_open(struct device *dev)
 	if (!(pp->modes & (PARPORT_MODE_PCECPEPP|PARPORT_MODE_PCEPP))) {
                 printk(KERN_ERR "%s: parport at 0x%lx does not support any EPP mode\n",
 		       bc_drvname, pp->base);
+		parport_release(bc->pdev);
                 parport_unregister_device(bc->pdev);
                 return -EIO;		
 	}

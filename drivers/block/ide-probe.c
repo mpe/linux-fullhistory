@@ -720,17 +720,39 @@ static int hwif_init (ide_hwif_t *hwif)
 	}
 	if (register_blkdev (hwif->major, hwif->name, ide_fops)) {
 		printk("%s: UNABLE TO GET MAJOR NUMBER %d\n", hwif->name, hwif->major);
-	} else if (init_irq (hwif)) {
-		printk("%s: UNABLE TO GET IRQ %d\n", hwif->name, hwif->irq);
-		(void) unregister_blkdev (hwif->major, hwif->name);
-	} else {
-		init_gendisk(hwif);
-		blk_dev[hwif->major].data = hwif;
-		blk_dev[hwif->major].request_fn = rfn;
-		blk_dev[hwif->major].queue = ide_get_queue;
-		read_ahead[hwif->major] = 8;	/* (4kB) */
-		hwif->present = 1;	/* success */
+		return (hwif->present = 0);
 	}
+	
+	if (init_irq (hwif)) {
+		int i = hwif->irq;
+		/*
+		 *	It failed to initialise. Find the default IRQ for 
+		 *	this port and try that.
+		 */
+		if (!(hwif->irq = ide_default_irq(hwif->io_ports[IDE_DATA_OFFSET]))) 
+		{
+			printk("%s: Disabled unable to get IRQ %d.\n", hwif->name, i);
+			(void) unregister_blkdev (hwif->major, hwif->name);
+			return (hwif->present = 0);
+		}
+		if(init_irq (hwif)) 
+		{
+			printk("%s: probed IRQ %d and default IRQ %d failed.\n",
+				hwif->name, i, hwif->irq);
+			(void) unregister_blkdev (hwif->major, hwif->name);
+			return (hwif->present = 0);
+		}
+		printk("%s: probed IRQ %d failed, using default.\n",
+			hwif->name, hwif->irq);
+	}
+	
+	init_gendisk(hwif);
+	blk_dev[hwif->major].data = hwif;
+	blk_dev[hwif->major].request_fn = rfn;
+	blk_dev[hwif->major].queue = ide_get_queue;
+	read_ahead[hwif->major] = 8;	/* (4kB) */
+	hwif->present = 1;	/* success */
+
 #if (DEBUG_SPINLOCK > 0)
 {
 	static int done = 0;

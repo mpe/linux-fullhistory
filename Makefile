@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 2
-SUBLEVEL = 1
+SUBLEVEL = 2
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -221,35 +221,27 @@ symlinks:
 		mkdir include/linux/modules; \
 	fi
 
-oldconfig: symlinks scripts/split-include
+oldconfig: symlinks
 	$(CONFIG_SHELL) scripts/Configure -d arch/$(ARCH)/config.in
-	if [ -r include/linux/autoconf.h ]; then \
-	    scripts/split-include include/linux/autoconf.h include/config; \
-	fi
 
-xconfig: symlinks scripts/split-include
+xconfig: symlinks
 	$(MAKE) -C scripts kconfig.tk
 	wish -f scripts/kconfig.tk
-	if [ -r include/linux/autoconf.h ]; then \
-	    scripts/split-include include/linux/autoconf.h include/config; \
-	fi
 
-menuconfig: include/linux/version.h symlinks scripts/split-include
+menuconfig: include/linux/version.h symlinks
 	$(MAKE) -C scripts/lxdialog all
 	$(CONFIG_SHELL) scripts/Menuconfig arch/$(ARCH)/config.in
-	if [ -r include/linux/autoconf.h ]; then \
-	    scripts/split-include include/linux/autoconf.h include/config; \
-	fi
 
-config: symlinks scripts/split-include
+config: symlinks
 	$(CONFIG_SHELL) scripts/Configure arch/$(ARCH)/config.in
-	if [ -r include/linux/autoconf.h ]; then \
-	    scripts/split-include include/linux/autoconf.h include/config; \
-	fi
+
+include/config/MARKER: scripts/split-include include/linux/autoconf.h
+	scripts/split-include include/linux/autoconf.h include/config
+	@ touch include/config/MARKER
 
 linuxsubdirs: $(patsubst %, _dir_%, $(SUBDIRS))
 
-$(patsubst %, _dir_%, $(SUBDIRS)) : dummy
+$(patsubst %, _dir_%, $(SUBDIRS)) : dummy include/config/MARKER
 	$(MAKE) -C $(patsubst _dir_%, %, $@)
 
 $(TOPDIR)/include/linux/version.h: include/linux/version.h
@@ -286,10 +278,10 @@ include/linux/version.h: ./Makefile
 	@echo '#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))' >>.ver
 	@mv -f .ver $@
 
-init/version.o: init/version.c include/linux/compile.h
+init/version.o: init/version.c include/linux/compile.h include/config/MARKER
 	$(CC) $(CFLAGS) -DUTS_MACHINE='"$(ARCH)"' -c -o init/version.o init/version.c
 
-init/main.o: init/main.c
+init/main.o: init/main.c include/config/MARKER
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
 fs lib mm ipc kernel drivers net: dummy

@@ -2880,9 +2880,6 @@ static void idcard(int i)
 
 		} else if (I2CRead(&(btv->i2c), I2C_STBEE)>=0) {
 			btv->type=BTTV_STB;
-		} else 
-		        if (I2CRead(&(btv->i2c), I2C_VHX)>=0) {
-			        btv->type=BTTV_VHX;
 		} else {
 			if (I2CRead(&(btv->i2c), 0x80)>=0) /* check for msp34xx */
 				btv->type = BTTV_MIROPRO;
@@ -2907,8 +2904,8 @@ static void idcard(int i)
         }
         if(btv->type==BTTV_AVERMEDIA98)
         {
-          btv->pll.pll_ifreq=28636363;
-          btv->pll.pll_crystal=BT848_IFORM_XT0;
+        	btv->pll.pll_ifreq=28636363;
+        	btv->pll.pll_crystal=BT848_IFORM_XT0;
         }
           
 	if (btv->have_tuner && btv->tuner_type != -1) 

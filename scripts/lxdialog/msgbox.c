@@ -43,6 +43,14 @@ dialog_msgbox (const char *title, const char *prompt, int height, int width,
 
     draw_box (dialog, 0, 0, height, width, dialog_attr, border_attr);
 
+    if (title != NULL && strlen(title) >= width-2 ) {
+	/* truncate long title -- mec */
+	char * title2 = malloc(width-2+1);
+	memcpy( title2, title, width-2 );
+	title2[width-2] = '\0';
+	title = title2;
+    }
+
     if (title != NULL) {
 	wattrset (dialog, title_attr);
 	mvwaddch (dialog, 0, (width - strlen(title))/2 - 1, ' ');
