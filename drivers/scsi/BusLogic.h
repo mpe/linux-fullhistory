@@ -969,7 +969,7 @@ static inline void BusLogic_Delay(int Seconds)
   Internal Functions.
 */
 
-static void BusLogic_InterruptHandler(int, Registers_T *);
+static void BusLogic_InterruptHandler(int, void *, Registers_T *);
 static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *,
 				     SCSI_Command_T *);
 

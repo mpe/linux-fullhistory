@@ -11,6 +11,7 @@
  * GK 2/5/95  -  Changed to support mounting the root fs via NFS
  *
  *  Added kerneld support: Jacques Gelinas and Bjorn Ekwall
+ *  Added change_root: Werner Almesberger & Hans Lermen, Feb '96
  */
 
 #include <stdarg.h>
@@ -35,6 +36,10 @@
 #include <linux/kerneld.h>
 #endif
  
+#ifdef CONFIG_ROOT_NFS
+#include <linux/nfs_fs.h>
+#endif
+
 extern void wait_for_keypress(void);
 extern struct file_operations * get_blkfops(unsigned int major);
 extern void blkdev_release (struct inode *);
@@ -42,10 +47,6 @@ extern void blkdev_release (struct inode *);
 extern int root_mountflags;
 
 static int do_remount_sb(struct super_block *sb, int flags, char * data);
-
-#ifdef CONFIG_ROOT_NFS
-extern int nfs_root_mount(struct super_block *sb);
-#endif
 
 /* this is initialized in init/main.c */
 kdev_t ROOT_DEV;
@@ -482,12 +483,12 @@ void put_unnamed_dev(kdev_t dev)
 			kdevname(dev));
 }
 
-static int do_umount(kdev_t dev)
+static int do_umount(kdev_t dev,int unmount_root)
 {
 	struct super_block * sb;
 	int retval;
 	
-	if (dev==ROOT_DEV) {
+	if (dev==ROOT_DEV && !unmount_root) {
 		/*
 		 * Special case for "unmounting" root. We just try to remount
 		 * it readonly, and sync() the device.
@@ -581,7 +582,7 @@ asmlinkage int sys_umount(char * name)
 		iput(inode);
 		return -ENXIO;
 	}
-	if (!(retval = do_umount(dev)) && dev != ROOT_DEV) {
+	if (!(retval = do_umount(dev,0)) && dev != ROOT_DEV) {
 		blkdev_release (inode);
 		if (MAJOR(dev) == UNNAMED_MAJOR)
 			put_unnamed_dev(dev);
@@ -818,7 +819,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	return retval;
 }
 
-void mount_root(void)
+static void do_mount_root(void)
 {
 	struct file_system_type * fs_type;
 	struct super_block * sb;
@@ -827,12 +828,18 @@ void mount_root(void)
 	struct file filp;
 	int retval;
   
-	memset(super_blocks, 0, sizeof(super_blocks));
 #ifdef CONFIG_ROOT_NFS
+	if (MAJOR(ROOT_DEV) == UNNAMED_MAJOR)
+		if (nfs_root_init(nfs_root_name, nfs_root_addrs) < 0) {
+			printk(KERN_ERR "Root-NFS: Unable to contact NFS "
+			    "server for root fs, using /dev/fd0 instead\n");
+			ROOT_DEV = MKDEV(FLOPPY_MAJOR, 0);
+		}
 	if (MAJOR(ROOT_DEV) == UNNAMED_MAJOR) {
 		ROOT_DEV = 0;
 		if ((fs_type = get_fs_type("nfs"))) {
 			sb = &super_blocks[0];
+			while (sb->s_dev) sb++;
 			sb->s_dev = get_unnamed_dev();
 			sb->s_flags = root_mountflags & ~MS_RDONLY;
 			if (nfs_root_mount(sb) >= 0) {
@@ -873,15 +880,19 @@ void mount_root(void)
 	else
 		filp.f_mode = 3; /* read write */
 	retval = blkdev_open(&d_inode, &filp);
-	if(retval == -EROFS){
+	if (retval == -EROFS) {
 		root_mountflags |= MS_RDONLY;
 		filp.f_mode = 1;
 		retval = blkdev_open(&d_inode, &filp);
 	}
-
-	for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
-		if(retval)
-			break;
+	if (retval)
+	        /*
+		 * Allow the user to distinguish between failed open
+		 * and bad superblock on root device.
+		 */
+		printk("VFS: Cannot open root device %s\n",
+		       kdevname(ROOT_DEV));
+	else for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
   		if (!fs_type->requires_dev)
   			continue;
   		sb = read_super(ROOT_DEV,fs_type->name,root_mountflags,NULL,1);
@@ -896,10 +907,75 @@ void mount_root(void)
 				fs_type->name,
 				(sb->s_flags & MS_RDONLY) ? " readonly" : "");
 			vfsmnt = add_vfsmnt(ROOT_DEV, "rootfs", "/");
+			if (!vfsmnt)
+				panic("VFS: add_vfsmnt failed for root fs");
 			vfsmnt->mnt_sb = sb;
+			vfsmnt->mnt_flags = root_mountflags;
 			return;
 		}
 	}
 	panic("VFS: Unable to mount root fs on %s",
 		kdevname(ROOT_DEV));
 }
+
+
+void mount_root(void)
+{
+	memset(super_blocks, 0, sizeof(super_blocks));
+	do_mount_root();
+}
+
+
+#ifdef CONFIG_BLK_DEV_INITRD
+
+int change_root(kdev_t new_root_dev,const char *put_old)
+{
+	kdev_t old_root_dev;
+	struct vfsmount *vfsmnt;
+	struct inode *old_root,*old_pwd,*inode;
+	unsigned long old_fs;
+	int error;
+
+	old_root = current->fs->root;
+	old_pwd = current->fs->pwd;
+	old_root_dev = ROOT_DEV;
+	ROOT_DEV = new_root_dev;
+	do_mount_root();
+	old_fs = get_fs();
+	set_fs(get_ds());
+        error = namei(put_old,&inode);
+	if (error) inode = NULL;
+	set_fs(old_fs);
+	if (!error && (inode->i_count != 1 || inode->i_mount)) error = -EBUSY;
+	if (!error && !S_ISDIR(inode->i_mode)) error = -ENOTDIR;
+	iput(old_root); /* current->fs->root */
+	iput(old_pwd); /* current->fs->pwd */
+	if (error) {
+		int umount_error;
+
+		if (inode) iput(inode);
+		printk(KERN_NOTICE "Trying to unmount old root ... ");
+		old_root->i_mount = old_root;
+			/* does this belong into do_mount_root ? */
+		umount_error = do_umount(old_root_dev,1);
+		if (umount_error) printk(KERN_ERR "error %d\n",umount_error);
+		else {
+			printk(KERN_NOTICE "okay\n");
+			invalidate_buffers(old_root_dev);
+		}
+		return umount_error ? error : 0;
+	}
+	iput(old_root); /* sb->s_covered */
+	remove_vfsmnt(old_root_dev);
+	vfsmnt = add_vfsmnt(old_root_dev,"old_rootfs",put_old);
+	if (!vfsmnt) printk(KERN_CRIT "Trouble: add_vfsmnt failed\n");
+	else {
+		vfsmnt->mnt_sb = old_root->i_sb;
+		vfsmnt->mnt_sb->s_covered = inode;
+		vfsmnt->mnt_flags = vfsmnt->mnt_sb->s_flags;
+	}
+	inode->i_mount = old_root;
+	return 0;
+}
+
+#endif

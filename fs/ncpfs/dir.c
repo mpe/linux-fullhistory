@@ -416,8 +416,8 @@ ncp_read_volume_list(struct ncp_server *server, int fpos, int cache_size)
 						      info.volume_name,
 						      &(entry->i)) != 0)
 				{
-					printk("ncpfs: could not lookup vol "
-					       "%s\n", info.volume_name);
+					DPRINTK("ncpfs: could not lookup vol "
+						"%s\n", info.volume_name);
 					continue;
 				}
 
@@ -709,7 +709,13 @@ ncp_find_dir_inode(struct inode *dir, const char *name)
 	{
 		if (   (result->dir->finfo.i.DosDirNum == dir_info->DosDirNum)
 		    && (result->dir->finfo.i.volNumber == dir_info->volNumber)
-		    && (strcmp(result->finfo.i.entryName, name) == 0))
+		    && (strcmp(result->finfo.i.entryName, name) == 0)
+		    /* The root dir is never looked up using this
+		     * routine.  Without the following test a root
+		     * directory 'sys' in a volume named 'sys' could
+		     * never be looked up, because
+		     * server->root->dir==server->root. */
+		    && (result != &(server->root)))
 		{
                         return result;
 		}

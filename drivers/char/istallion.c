@@ -38,6 +38,7 @@
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
 #include <linux/cdk.h>
+#include <linux/comstats.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
@@ -179,7 +180,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  *	all the local structures required by a serial tty driver.
  */
 static char	*stli_drvname = "Stallion Intelligent Multiport Serial Driver";
-static char	*stli_drvversion = "1.0.2";
+static char	*stli_drvversion = "1.0.6";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -228,6 +229,14 @@ static struct termios		stli_deftermios = {
 	INIT_C_CC
 };
 
+/*
+ *	Define global stats structures. Not used often, and can be
+ *	re-used for each stats call.
+ */
+static comstats_t	stli_comstats;
+static combrd_t		stli_brdstats;
+static asystats_t	stli_cdkstats;
+
 /*****************************************************************************/
 
 /*
@@ -270,6 +279,7 @@ typedef struct {
 	struct termios		normaltermios;
 	struct termios		callouttermios;
 	asysigs_t		asig;
+	comstats_t		stats;
 	unsigned long		addr;
 	unsigned long		rxoffset;
 	unsigned long		txoffset;
@@ -302,6 +312,7 @@ typedef struct stlbrd {
 	int		slaveoffset;
 	int		bitsize;
 	int		panels[STL_MAXPANELS];
+	int		panelids[STL_MAXPANELS];
 	void		(*init)(struct stlbrd *brdp);
 	void		(*enable)(struct stlbrd *brdp);
 	void		(*reenable)(struct stlbrd *brdp);
@@ -661,6 +672,9 @@ static long	stli_mktiocm(unsigned long sigvalue);
 static void	stli_read(stlibrd_t *brdp, stliport_t *portp);
 static void	stli_getserial(stliport_t *portp, struct serial_struct *sp);
 static int	stli_setserial(stliport_t *portp, struct serial_struct *sp);
+static int	stli_getbrdstats(combrd_t *bp);
+static int	stli_getportstats(stliport_t *portp, comstats_t *cp);
+static int	stli_clrportstats(stliport_t *portp, comstats_t *cp);
 static void	*stli_memalloc(int len);
 
 static void	stli_ecpinit(stlibrd_t *brdp);
@@ -695,6 +709,8 @@ static void	stli_bbyreset(stlibrd_t *brdp);
 static void	stli_stalinit(stlibrd_t *brdp);
 static char	*stli_stalgetmemptr(stlibrd_t *brdp, unsigned long offset, int line);
 static void	stli_stalreset(stlibrd_t *brdp);
+
+static stliport_t *stli_getport(int brdnr, int panelnr, int portnr);
 
 #if STLI_HIMEMORY
 static void *stli_mapbrdmem(unsigned long physaddr, unsigned int size);
@@ -1937,6 +1953,14 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 			portp->pflag = get_fs_long((unsigned long *) arg);
 			stli_setport(portp);
 		}
+		break;
+	case COM_GETPORTSTATS:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(comstats_t))) == 0)
+			rc = stli_getportstats(portp, (comstats_t *) arg);
+		break;
+	case COM_CLRPORTSTATS:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(comstats_t))) == 0)
+			rc = stli_clrportstats(portp, (comstats_t *) arg);
 		break;
 	case TIOCSERCONFIG:
 	case TIOCSERGWILD:
@@ -3543,6 +3567,7 @@ static int stli_initecp(stlibrd_t *brdp)
 			brdp->nrports += 8;
 			nxtid++;
 		}
+		brdp->panelids[panelnr] = status;
 		brdp->nrpanels++;
 	}
 
@@ -3692,6 +3717,7 @@ static int stli_initonb(stlibrd_t *brdp)
 		}
 		brdp->nrports = i;
 	}
+	brdp->panels[0] = brdp->nrports;
 
 	request_region(brdp->iobase, ONB_IOSIZE, "serial(ONB/BBY)");
 	brdp->state |= BST_FOUND;
@@ -4244,6 +4270,169 @@ static int stli_memwrite(struct inode *ip, struct file *fp, const char *buf, int
 /*****************************************************************************/
 
 /*
+ *	Return the board stats structure to user app.
+ */
+
+static int stli_getbrdstats(combrd_t *bp)
+{
+	stlibrd_t	*brdp;
+	int		i;
+
+	memcpy_fromfs(&stli_brdstats, bp, sizeof(combrd_t));
+	if (stli_brdstats.brd >= STL_MAXBRDS)
+		return(-ENODEV);
+	brdp = stli_brds[stli_brdstats.brd];
+	if (brdp == (stlibrd_t *) NULL)
+		return(-ENODEV);
+
+	memset(&stli_brdstats, 0, sizeof(combrd_t));
+	stli_brdstats.brd = brdp->brdnr;
+	stli_brdstats.type = brdp->brdtype;
+	stli_brdstats.hwid = 0;
+	stli_brdstats.state = brdp->state;
+	stli_brdstats.ioaddr = brdp->iobase;
+	stli_brdstats.memaddr = brdp->memaddr;
+	stli_brdstats.nrpanels = brdp->nrpanels;
+	stli_brdstats.nrports = brdp->nrports;
+	for (i = 0; (i < brdp->nrpanels); i++) {
+		stli_brdstats.panels[i].panel = i;
+		stli_brdstats.panels[i].hwid = brdp->panelids[i];
+		stli_brdstats.panels[i].nrports = brdp->panels[i];
+	}
+
+	memcpy_tofs(bp, &stli_brdstats, sizeof(combrd_t));
+	return(0);
+}
+
+/*****************************************************************************/
+
+/*
+ *	Resolve the referenced port number into a port struct pointer.
+ */
+
+static stliport_t *stli_getport(int brdnr, int panelnr, int portnr)
+{
+	stlibrd_t	*brdp;
+	int		i;
+
+	if ((brdnr < 0) || (brdnr >= STL_MAXBRDS))
+		return((stliport_t *) NULL);
+	brdp = stli_brds[brdnr];
+	if (brdp == (stlibrd_t *) NULL)
+		return((stliport_t *) NULL);
+	for (i = 0; (i < panelnr); i++)
+		portnr += brdp->panels[i];
+	if ((portnr < 0) || (portnr >= brdp->nrports))
+		return((stliport_t *) NULL);
+	return(brdp->ports[portnr]);
+}
+
+/*****************************************************************************/
+
+/*
+ *	Return the port stats structure to user app. A NULL port struct
+ *	pointer passed in means that we need to find out from the app
+ *	what port to get stats for (used through board control device).
+ */
+
+static int stli_getportstats(stliport_t *portp, comstats_t *cp)
+{
+	stlibrd_t	*brdp;
+	int		rc;
+
+	if (portp == (stliport_t *) NULL) {
+		memcpy_fromfs(&stli_comstats, cp, sizeof(comstats_t));
+		portp = stli_getport(stli_comstats.brd, stli_comstats.panel, stli_comstats.port);
+		if (portp == (stliport_t *) NULL)
+			return(-ENODEV);
+	}
+
+	brdp = stli_brds[portp->brdnr];
+	if (brdp == (stlibrd_t *) NULL)
+		return(-ENODEV);
+
+	portp->stats.state = portp->state;
+	portp->stats.flags = portp->flags;
+	if (portp->tty != (struct tty_struct *) NULL) {
+		portp->stats.ttystate = portp->tty->flags;
+		portp->stats.cflags = portp->tty->termios->c_cflag;
+		portp->stats.iflags = portp->tty->termios->c_iflag;
+		portp->stats.oflags = portp->tty->termios->c_oflag;
+		portp->stats.lflags = portp->tty->termios->c_lflag;
+		portp->stats.rxbuffered = portp->tty->flip.count;
+	} else {
+		portp->stats.ttystate = 0;
+		portp->stats.cflags = 0;
+		portp->stats.iflags = 0;
+		portp->stats.oflags = 0;
+		portp->stats.lflags = 0;
+		portp->stats.rxbuffered = 0;
+	}
+
+	if ((rc = stli_cmdwait(brdp, portp, A_GETSTATS, &stli_cdkstats, sizeof(asystats_t), 1)) < 0)
+		return(rc);
+
+	portp->stats.txtotal = stli_cdkstats.txchars;
+	portp->stats.rxtotal = stli_cdkstats.rxchars + stli_cdkstats.ringover;
+	portp->stats.txbuffered = stli_cdkstats.txringq;
+	portp->stats.rxbuffered += stli_cdkstats.rxringq;
+	portp->stats.rxoverrun = stli_cdkstats.overruns;
+	portp->stats.rxparity = stli_cdkstats.parity;
+	portp->stats.rxframing = stli_cdkstats.framing;
+	portp->stats.rxlost = stli_cdkstats.ringover;
+	portp->stats.rxbreaks = stli_cdkstats.rxbreaks;
+	portp->stats.txbreaks = stli_cdkstats.txbreaks;
+	portp->stats.txxon = stli_cdkstats.txstart;
+	portp->stats.txxoff = stli_cdkstats.txstop;
+	portp->stats.rxxon = stli_cdkstats.rxstart;
+	portp->stats.rxxoff = stli_cdkstats.rxstop;
+	portp->stats.rxrtsoff = stli_cdkstats.rtscnt / 2;
+	portp->stats.rxrtson = stli_cdkstats.rtscnt - portp->stats.rxrtsoff;
+	portp->stats.modem = stli_cdkstats.dcdcnt;
+	portp->stats.hwid = stli_cdkstats.hwid;
+	portp->stats.signals = stli_mktiocm(stli_cdkstats.signals);
+
+	memcpy_tofs(cp, &portp->stats, sizeof(comstats_t));
+	return(0);
+}
+
+/*****************************************************************************/
+
+/*
+ *	Clear the port stats structure. We also return it zeroed out...
+ */
+
+static int stli_clrportstats(stliport_t *portp, comstats_t *cp)
+{
+	stlibrd_t	*brdp;
+	int		rc;
+
+	if (portp == (stliport_t *) NULL) {
+		memcpy_fromfs(&stli_comstats, cp, sizeof(comstats_t));
+		portp = stli_getport(stli_comstats.brd, stli_comstats.panel, stli_comstats.port);
+		if (portp == (stliport_t *) NULL)
+			return(-ENODEV);
+	}
+
+	brdp = stli_brds[portp->brdnr];
+	if (brdp == (stlibrd_t *) NULL)
+		return(-ENODEV);
+
+	memset(&portp->stats, 0, sizeof(comstats_t));
+	portp->stats.brd = portp->brdnr;
+	portp->stats.panel = portp->panelnr;
+	portp->stats.port = portp->portnr;
+
+	if ((rc = stli_cmdwait(brdp, portp, A_CLEARSTATS, 0, 0, 0)) < 0)
+		return(rc);
+
+	memcpy_tofs(cp, &portp->stats, sizeof(comstats_t));
+	return(0);
+}
+
+/*****************************************************************************/
+
+/*
  *	The "staliomem" device is also required to do some special operations on
  *	the board. We need to be able to send an interrupt to the board,
  *	reset it, and start/stop it.
@@ -4286,6 +4475,18 @@ static int stli_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, un
 			if (brdp->reenable != NULL)
 				(* brdp->reenable)(brdp);
 		}
+		break;
+	case COM_GETPORTSTATS:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(comstats_t))) == 0)
+			rc = stli_getportstats((stliport_t *) NULL, (comstats_t *) arg);
+		break;
+	case COM_CLRPORTSTATS:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(comstats_t))) == 0)
+			rc = stli_clrportstats((stliport_t *) NULL, (comstats_t *) arg);
+		break;
+	case COM_GETBRDSTATS:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(combrd_t))) == 0)
+			rc = stli_getbrdstats((combrd_t *) arg);
 		break;
 	default:
 		rc = -ENOIOCTLCMD;

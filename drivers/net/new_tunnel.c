@@ -18,7 +18,8 @@
 		-Alan Cox	(Alan.Cox@linux.org) 21 March 95
 
 	Reworked:
-		Changed to tunnel to destination gateway instead of pointopoint
+		Changed to tunnel to destination gateway in addition to the
+			tunnel's pointopoint address
 		Almost completely rewritten
 		Note:  There is currently no firewall or ICMP handling done.
 
@@ -81,7 +82,7 @@
  *	[36 bytes]
  */
  
-#define TUNL_HLEN	(((ETH_HLEN+15)&~15)+tunl_hlen)
+#define TUNL_HLEN	(((ETH_HLEN+15)&~15)+tunnel_hlen)
 
 
 #ifdef MODULE
@@ -168,15 +169,22 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		/* No route to host */
 		/* Where did the packet come from? */
 		/*icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, 0, dev);*/
-		printk ( KERN_INFO "%s: Packet with no route!\n", dev->name );
+		printk ( KERN_INFO "%s: Packet with no route!\n", dev->name);
 		dev->tbusy=0;
 		stats->tx_errors++;
 		return(1);
 	}
 
-	if (!(rt->rt_flags & RTF_GATEWAY))
-	{ 
-		/* No gateway to tunnel through? */
+	/*
+	 * Get the target address (other end of IP tunnel)
+	 */
+	if (rt->rt_flags & RTF_GATEWAY)
+		target = rt->rt_gateway;
+	else
+		target = dev->pa_dstaddr;
+
+	if ( ! target )
+	{	/* No gateway to tunnel through? */
 		/* Where did the packet come from? */
 		/*icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, 0, dev);*/
 		printk ( KERN_INFO "%s: Packet with no target gateway!\n", dev->name);
@@ -185,7 +193,6 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		stats->tx_errors++;
 		return(1);
 	}
-	target = rt->rt_gateway;
 	ip_rt_put(rt);
 
 	if ((rt = ip_rt_route(target, 0)) == NULL)
@@ -203,7 +210,7 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	if (tdev == dev)
 	{ 
 		/* Tunnel to ourselves?  -- I don't think so. */
-		printk ( KERN_INFO "%s: Packet targetted at myself!\n" ,dev->name);
+		printk ( KERN_INFO "%s: Packet targetted at myself!\n" , dev->name);
 		ip_rt_put(rt);
 		dev->tbusy=0;
 		stats->tx_errors++;
@@ -218,7 +225,7 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	/*
 	 * Okay, now see if we can stuff it in the buffer as-is.
 	 */
-	max_headroom = ((tunnel_hlen+tdev->hard_header_len+15)&~15);
+	max_headroom = (((tdev->hard_header_len+15)&~15)+tunnel_hlen);
 #ifdef TUNNEL_DEBUG
 printk("Room left at head: %d\n", skb_headroom(skb));
 printk("Room left at tail: %d\n", skb_tailroom(skb));
@@ -241,19 +248,22 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 		new_skb->free = 1;
 
 		/*
-		 * Reserve space for our header
+		 * Reserve space for our header and the lower device header
 		 */
-		skb_reserve(new_skb, tunnel_hlen);
-		new_skb->h.iph = (struct iphdr *) skb_push(new_skb, tunnel_hlen);
+		skb_reserve(new_skb, max_headroom);
+
 		/*
 		 * Copy the old packet to the new buffer.
-		 * Note that new_skb->h.iph is our (tunnel driver's) header
+		 * Note that new_skb->h.iph will be our (tunnel driver's) header
 		 * and new_skb->ip_hdr is the IP header of the old packet.
 		 */
 		new_skb->ip_hdr = (struct iphdr *) skb_put(new_skb, skb->len);
 		memcpy(new_skb->ip_hdr, skb->data, skb->len);
 		/* Is this necessary? */
 		memcpy(new_skb->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
+
+		/* Tack on our header */
+		new_skb->h.iph = (struct iphdr *) skb_push(new_skb, tunnel_hlen);
 
 		/* Free the old packet, we no longer need it */
 		kfree_skb(skb, FREE_WRITE);
@@ -353,12 +363,10 @@ int tunnel_init(struct device *dev)
 	dev->header_cache_update= NULL;
 
 	dev->type				= ARPHRD_TUNNEL;
-	dev->hard_header_len 	= (tunnel_hlen+ETH_HLEN);
+	dev->hard_header_len 	= TUNL_HLEN;
 	dev->mtu		= 1500-tunnel_hlen; 	/* eth_mtu */
 	dev->addr_len		= 0;		/* Is this only for ARP? */
 	dev->tx_queue_len	= 2;		/* Small queue */
-
-	/* it should all run through */
 	memset(dev->broadcast,0xFF, ETH_ALEN);
 
 	/* New-style flags. */
@@ -417,11 +425,4 @@ void cleanup_module(void)
 	dev_tunnel.priv=NULL;
 }
 #endif /* MODULE */
-
-
-
-
- 
-
-
 

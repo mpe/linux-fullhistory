@@ -65,3 +65,11 @@ int main(int argc, const char *argv[])
 }
 
 
+> People keep asking about the WDT watchdog timer hardware: The phone contacts
+> for Industrial Computer Source are:
+> 
+> US: 619 677 0898 (sales)  0895 (general)
+> UK: 01243 533900
+> France (1) 69.18.74.30
+> 
+> and please mention Linux when enquiring.

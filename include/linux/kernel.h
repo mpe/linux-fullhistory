@@ -58,16 +58,9 @@ asmlinkage int printk(const char * fmt, ...)
 	__attribute__ ((format (printf, 1, 2)));
 
 /*
- * This is defined as a macro, but at some point this might become a
- * real subroutine that sets a flag if it returns true (to do
- * BSD-style accounting where the process is flagged if it uses root
- * privs).  The implication of this is that you should do normal
- * permissions checks first, and check suser() last.
- *
  * "suser()" checks against the effective user id, while "fsuser()"
  * is used for file permission checking and checks against the fsuid..
  */
-#define suser() (current->euid == 0)
 #define fsuser() (current->fsuid == 0)
 
 #endif /* __KERNEL__ */

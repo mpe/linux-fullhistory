@@ -78,7 +78,8 @@ good_area:
  */
 bad_area:
 	if (user_mode(&regs)) {
-		printk("memory violation at pc=%08lx (%08lx)\n", regs.pc, address);
+		printk("%s: memory violation at pc=%08lx rp=%08lx (bad address = %08lx)\n",
+			current->comm, regs.pc, regs.r26, address);
 		die_if_kernel("oops", &regs, cause);
 		send_sig(SIGSEGV, current, 1);
 		return;

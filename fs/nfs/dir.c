@@ -612,7 +612,7 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 		printk("nfs_refresh_inode: inode number mismatch\n");
 		return;
 	}
-	was_empty = inode->i_mode == 0;
+	was_empty = (inode->i_mode == 0);
 	inode->i_mode = fattr->mode;
 	inode->i_nlink = fattr->nlink;
 	inode->i_uid = fattr->uid;
@@ -631,22 +631,21 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	inode->i_atime = fattr->atime.seconds;
 	inode->i_mtime = fattr->mtime.seconds;
 	inode->i_ctime = fattr->ctime.seconds;
-	if (was_empty) {
-		if (S_ISREG(inode->i_mode))
-			inode->i_op = &nfs_file_inode_operations;
-		else if (S_ISDIR(inode->i_mode))
-			inode->i_op = &nfs_dir_inode_operations;
-		else if (S_ISLNK(inode->i_mode))
-			inode->i_op = &nfs_symlink_inode_operations;
-		else if (S_ISCHR(inode->i_mode))
-			inode->i_op = &chrdev_inode_operations;
-		else if (S_ISBLK(inode->i_mode))
-			inode->i_op = &blkdev_inode_operations;
-		else if (S_ISFIFO(inode->i_mode))
+	if (S_ISREG(inode->i_mode))
+		inode->i_op = &nfs_file_inode_operations;
+	else if (S_ISDIR(inode->i_mode))
+		inode->i_op = &nfs_dir_inode_operations;
+	else if (S_ISLNK(inode->i_mode))
+		inode->i_op = &nfs_symlink_inode_operations;
+	else if (S_ISCHR(inode->i_mode))
+		inode->i_op = &chrdev_inode_operations;
+	else if (S_ISBLK(inode->i_mode))
+		inode->i_op = &blkdev_inode_operations;
+	else if (S_ISFIFO(inode->i_mode)) {
+		if (was_empty)
 			init_fifo(inode);
-		else
-			inode->i_op = NULL;
-	}
+	} else
+		inode->i_op = NULL;
 	nfs_lookup_cache_refresh(inode, fattr);
 }
 

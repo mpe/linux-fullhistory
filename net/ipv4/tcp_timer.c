@@ -70,8 +70,6 @@ static void tcp_retransmit_time(struct sock *sk, int all)
 	 * the 120 second clamps though!
 	 */
 
-	sk->retransmits++;
-	sk->prot->retransmits++;
 	sk->backoff++;
 	sk->rto = min(sk->rto << 1, 120*HZ);
 	tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
@@ -208,8 +206,6 @@ static void tcp_time_write_timeout(struct sock * sk)
 	/*
 	 *	Retransmission
 	 */
-	sk->retransmits++;
-	sk->prot->retransmits++;
 	sk->prot->retransmit (sk, 0);
 	tcp_write_timeout(sk);
 }

@@ -4,12 +4,41 @@
  * Eric Youngdale
  * 10/95
  *
- * 1996 01 04 - Avery Pennarun - Aesthetic improvements
- *              <apenwarr@foxnet.net>
+ * 1996 01 04
+ * Avery Pennarun - Aesthetic improvements.
  *
- * 1996 01 24 - Avery Pennarun - Bugfixes and more aesthetics
+ * 1996 01 24
+ * Avery Pennarun - Bugfixes and more aesthetics.
+ *
+ * 1996 03 08
+ * Avery Pennarun - The int and hex config.in commands work right.
+ *                - Choice buttons are more user-friendly.
+ *                - Disabling a text entry line greys it out properly.
+ *		  - dep_tristate now works like in Configure. (not pretty)
+ *                - No warnings in gcc -Wall. (Fixed some "interesting" bugs.)
+ *                - Faster/prettier "Help" lookups.
+ *
+ * TO DO:
+ *   - clean up - there are useless ifdef's everywhere.
+ *   - do more sensible things with the 'config -resizable" business.
+ *   - better comments throughout - C code generating tcl is really cryptic.
+ *   - eliminate silly "update idletasks" hack to improve display speed.
+ *   - make tabstops work left->right instead of right->left.
+ *   - make canvas contents resize with the window (good luck).
+ *   - make next/prev buttons go to next/previous menu.
+ *   - some way to make submenus inside of submenus (ie. Main->Networking->IP)
+ *           (perhaps a button where the description would be)
+ *   - make the main menu use the same tcl code as the submenus.
+ *   - make choice and int/hex input types line up vertically with
+ *           bool/tristate.
+ *   - general speedups - how?  The canvas seems to slow it down a lot.
+ *   - choice buttons should default to the first menu option, rather than a
+ *           blank.  Also look up the right variable when the help button
+ *           is pressed.
+ *   
  */
 #include <stdio.h>
+#include <unistd.h>
 #include "tkparse.h"
 
 #ifndef TRUE
@@ -36,15 +65,15 @@ static int tot_menu_num =0;
  * Generate portion of wish script for the beginning of a submenu.
  * The guts get filled in with the various options.
  */
-static start_proc(char * label, int menu_num, int flag)
+static void start_proc(char * label, int menu_num, int flag)
 {
   if( flag )
     printf("menu_option menu%d %d \"%s\"\n", menu_num, menu_num, label);
   printf("proc menu%d {w title} {\n", menu_num);
   printf("\tcatch {destroy $w}\n");
   printf("\ttoplevel $w -class Dialog\n");
-  printf("\tmessage $w.m -width 400 -aspect 300 -background grey -text \\\n");
-  printf("\t\t\"%s\"  -relief raised -bg grey\n",label);
+  printf("\tmessage $w.m -width 400 -aspect 300 -text \\\n");
+  printf("\t\t\"%s\"  -relief raised\n",label);
   printf("\tpack $w.m -pady 10 -side top -padx 10\n");
   printf("\twm title $w \"%s\" \n\n", label);
   
@@ -75,7 +104,7 @@ static start_proc(char * label, int menu_num, int flag)
  * a global declaration so we know whether we need to insert one for a
  * given function or not.
  */
-clear_globalflags(struct kconfig * cfg)
+void clear_globalflags(struct kconfig * cfg)
 {
   for(; cfg != NULL; cfg = cfg->next)
   {
@@ -87,12 +116,11 @@ clear_globalflags(struct kconfig * cfg)
  * This function walks the chain of conditions that we got from cond.c,
  * and creates a wish conditional to enable/disable a given widget.
  */
-generate_if(struct kconfig * item,
+void generate_if(struct kconfig * item,
 	    struct condition * cond,
 	    int menu_num,
 	    int line_num)
 {
-  int i;
   struct condition * ocond;
 
   ocond = cond;
@@ -173,8 +201,10 @@ generate_if(struct kconfig * item,
 	else if( strcmp(cond->variable.str, "m") == 0 )
 	  printf("2");
 	else
-	  printf("\"%s\"", cond->variable);
+	  printf("\"%s\"", cond->variable.str);
 	break;
+      default:
+        break;
       }
       cond = cond->next;
     }
@@ -195,11 +225,12 @@ generate_if(struct kconfig * item,
 	     menu_num, menu_num);
       break;
     case tok_int:
+    case tok_hex:
       printf("} then { ");
-      printf(".menu%d.config.f.x%d.x configure -state normal; ", menu_num, line_num);
+      printf(".menu%d.config.f.x%d.x configure -state normal -fore [ .ref cget -foreground ]; ", menu_num, line_num);
       printf(".menu%d.config.f.x%d.l configure -state normal; ", menu_num, line_num);
       printf("} else { ");
-      printf(".menu%d.config.f.x%d.x configure -state disabled -fore gray60;", menu_num, line_num );
+      printf(".menu%d.config.f.x%d.x configure -state disabled -fore [ .ref cget -disabledforeground ];", menu_num, line_num );
       printf(".menu%d.config.f.x%d.l configure -state disabled;", menu_num, line_num );
       printf("}\n");
       break;
@@ -234,7 +265,8 @@ generate_if(struct kconfig * item,
       if( item->tok == tok_dep_tristate )
 	{
 	  printf("global %s;", item->depend.str);
-	  printf("if { $%s == 2 } then {", item->depend.str);
+	  printf("if { $%s != 1 && $%s != 0 } then {", 
+	  	item->depend.str,item->depend.str);
 	  printf(".menu%d.config.f.x%d.y configure -state disabled;",menu_num, line_num);
 	  printf("} else {");
 	  printf(".menu%d.config.f.x%d.y configure -state normal;",menu_num, line_num);
@@ -280,7 +312,7 @@ generate_if(struct kconfig * item,
  * need to decide whether to write out a given configuration variable
  * to the output file.
  */
-generate_if_for_outfile(struct kconfig * item,
+void generate_if_for_outfile(struct kconfig * item,
 	    struct condition * cond)
 {
   struct condition * ocond;
@@ -352,8 +384,10 @@ generate_if_for_outfile(struct kconfig * item,
 	else if( strcmp(cond->variable.str, "m") == 0 )
 	  printf("2");
 	else
-	  printf("\"%s\"", cond->variable);
+	  printf("\"%s\"", cond->variable.str);
 	break;
+      default:
+        break;
       }
       cond = cond->next;
     }
@@ -368,20 +402,27 @@ generate_if_for_outfile(struct kconfig * item,
   switch(item->tok)
     {
     case tok_define:
-      printf("} then {write_variable $cfg $autocfg %s %s $notmod }\n", item->optionname, item->value);
+      printf("} then {write_tristate $cfg $autocfg %s %s $notmod }\n", item->optionname, item->value);
       break;
     case tok_comment:
       printf("} then {write_comment $cfg $autocfg \"%s\"}\n", item->label);
       break;
     case tok_dep_tristate:
-      printf("} then { write_variable $cfg $autocfg %s $%s $%s } \n", 
+      printf("} then { write_tristate $cfg $autocfg %s $%s $%s } \n", 
 	     item->optionname, item->optionname, item->depend.str);
       break;
     case tok_tristate:
     case tok_bool:
-    case tok_int:
-      printf("} then { write_variable $cfg $autocfg %s $%s $notmod }\n", 
+      printf("} then { write_tristate $cfg $autocfg %s $%s $notmod }\n", 
 	     item->optionname, item->optionname);
+      break;
+    case tok_int:
+      printf("} then { write_int $cfg $autocfg %s $%s $notmod }\n",
+             item->optionname, item->optionname);
+      break;
+    case tok_hex:
+      printf("} then { write_hex $cfg $autocfg %s $%s $notmod }\n",
+             item->optionname, item->optionname);
       break;
     case tok_choose:
     case tok_choice:
@@ -395,7 +436,7 @@ generate_if_for_outfile(struct kconfig * item,
 /*
  * Generates a fragment of wish script that closes out a submenu procedure.
  */
-static end_proc(int menu_num, int first, int last)
+static void end_proc(int menu_num, int first, int last)
 {
   struct kconfig * cfg;
 
@@ -521,10 +562,10 @@ static end_proc(int menu_num, int first, int last)
 	  if(cfg->tok == tok_dep_tristate)
 	    {
 	      printf("\tglobal %s;", cfg->depend.str);
-	      printf("\tif {$%s == 2 } then { .menu%d.config.f.x%d.y configure -state disabled } else { .menu%d.config.f.x%d.y configure -state normal}\n",cfg->depend.str,
+	      printf("\tif {$%s != 1 && $%s != 0 } then { .menu%d.config.f.x%d.y configure -state disabled } else { .menu%d.config.f.x%d.y configure -state normal}\n",
+		     cfg->depend.str,cfg->depend.str,
 		     menu_num, cfg->menu_line,
 		     menu_num, cfg->menu_line);
-	      
 	    }
 	}
 
@@ -540,14 +581,13 @@ static end_proc(int menu_num, int first, int last)
  * into submenus.  This function just calculates how many submenus,
  * and how many items go in each submenu.
  */
-static int find_menu_size(struct kconfig *cfg,
+static void find_menu_size(struct kconfig *cfg,
 			  int *menu_max, 
 			  int *menu_maxlines)
 
 {
   struct kconfig * pnt;
   int tot;
-  int div;
   
   /*
    * First count up the number of options in this menu.
@@ -562,6 +602,7 @@ static int find_menu_size(struct kconfig *cfg,
       case tok_tristate:
       case tok_dep_tristate:
       case tok_int:
+      case tok_hex:
       case tok_choose:
       case tok_sound:
 	tot++;
@@ -572,26 +613,15 @@ static int find_menu_size(struct kconfig *cfg,
       }
   }
 
-#ifdef OLD_SPLIT_MENUS
-  /*
-   * Now figure out how many items go on each page.
-   */
-  div = 1;
-  while(tot / div > 15) div++;
-  *menu_max = cfg->menu_number + div - 1;
-  *menu_maxlines = (tot + div -1) / div;
-#else
   *menu_max = cfg->menu_number;
   *menu_maxlines = tot;
-#endif
 }
 
 /*
  * This is the top level function for generating the tk script.
  */
-dump_tk_script(struct kconfig *scfg)
+void dump_tk_script(struct kconfig *scfg)
 {
-  int i;
   int menu_num =0;
   int menu_max =0;
   int menu_min =0;
@@ -629,6 +659,7 @@ dump_tk_script(struct kconfig *scfg)
 	case tok_tristate:
 	case tok_dep_tristate:
 	case tok_int:
+	case tok_hex:
 	case tok_choose:
 	case tok_sound:
 	  /*
@@ -707,11 +738,11 @@ dump_tk_script(struct kconfig *scfg)
 	  break;
 
 	case tok_choice:
-	  printf("\t$w.config.f.x%d.x.menu add radiobutton -label \"%s\" -variable %s -value %d -command \"update_menu%d .menu%d.config.f\"\n",
+	  printf("\t$w.config.f.x%d.x.menu add radiobutton -label \"%s\" -variable %s -value \"%s\" -command \"update_menu%d .menu%d.config.f\"\n",
 		 cfg1->menu_line,
 		 cfg->label,
 		 cfg1->optionname,
-		 cfg->choice_value,
+		 cfg->label,
 		 cfg1->menu_number, cfg1->menu_number);
 	  break;
 	case tok_choose:
@@ -721,20 +752,13 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-#if 0
-	  printf("\tmenubutton $w.config.f.line%d -text \"%s\" -menu $w.config.f.line%d.menu \\\n",
-		 cfg->menu_line, cfg->label, cfg->menu_line);
-	  printf("\t	-relief raised -width 35\n");
-	  printf("\tpack $w.config.f.line%d -anchor w\n", cfg->menu_line);
-	  printf("\tmenu $w.config.f.line%d.menu\n", cfg->menu_line);
-#else
+	  printf("\tglobal %s\n",cfg->optionname);
 	  printf("\tminimenu $w.config.f %d %d \"%s\" %s\n",
 	  	cfg->menu_number,
 	  	cfg->menu_line,
 	  	cfg->label,
 	  	cfg->optionname);
 	  printf("\tmenu $w.config.f.x%d.x.menu\n", cfg->menu_line);
-#endif
 	  cfg1 = cfg;
 	  break;
 	case tok_tristate:
@@ -757,12 +781,12 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-	  printf("\tdep_tristate $w.config.f %d %d \"%s\" %s\n",
+	  printf("\tdep_tristate $w.config.f %d %d \"%s\" %s %s\n",
 		 cfg->menu_number,
 		 cfg->menu_line,
 		 cfg->label,
 		 cfg->optionname,
-		 cfg->depend);
+		 cfg->depend.str);
 	  break;
 	case tok_int:
 	  if( cfg->menu_number != menu_num )
@@ -777,6 +801,20 @@ dump_tk_script(struct kconfig *scfg)
 		 cfg->label,
 		 cfg->optionname);
 	  break;
+	case tok_hex:
+	  if( cfg->menu_number != menu_num )
+	    {
+	      end_proc(menu_num, menu_min, menu_max);
+	      start_proc(menulabel, cfg->menu_number, FALSE);
+	      menu_num = cfg->menu_number;
+	    }
+	  printf("\thex $w.config.f %d %d \"%s\" %s\n",
+		 cfg->menu_number,
+		 cfg->menu_line,
+		 cfg->label,
+		 cfg->optionname);
+	  break;
+#ifdef INCOMPAT_SOUND_CONFIG
 	case tok_sound:
 	  if( cfg->menu_number != menu_num )
 	    {
@@ -788,6 +826,7 @@ dump_tk_script(struct kconfig *scfg)
 		 cfg->menu_number,
 		 cfg->menu_line);
 	  break;
+#endif
 	default:
 	  break;
 	}
@@ -869,15 +908,18 @@ dump_tk_script(struct kconfig *scfg)
     {
       switch (cfg->tok)
 	{
-	case tok_int:
 	case tok_bool:
 	case tok_tristate:
 	case tok_dep_tristate:
 	case tok_choice:
 	  printf("set %s 0\n", cfg->optionname);
 	  break;
+	case tok_int:
+	case tok_hex:
+	  printf("set %s %s\n", cfg->optionname, cfg->value);
+	  break;
 	case tok_choose:
-	  printf("set %s %d\n", cfg->optionname, cfg->choice_value);
+	  printf("set %s \"(not set)\"\n",cfg->optionname);
 	default:
 	  break;
 	}
@@ -906,6 +948,7 @@ dump_tk_script(struct kconfig *scfg)
       switch (cfg->tok)
 	{
 	case tok_int:
+	case tok_hex:
 	case tok_bool:
 	case tok_tristate:
 	case tok_dep_tristate:
@@ -923,9 +966,9 @@ dump_tk_script(struct kconfig *scfg)
 	      if(cfg->tok == tok_dep_tristate)
 		{
 		  printf("\tif {$%s == 0 } then {\n"
-		  	 "\t\twrite_variable $cfg $autocfg %s $notset $notmod\n"
+		  	 "\t\twrite_tristate $cfg $autocfg %s $notset $notmod\n"
 		  	 "\t} else {\n"
-		  	 "\t\twrite_variable $cfg $autocfg %s $%s $%s\n"
+		  	 "\t\twrite_tristate $cfg $autocfg %s $%s $%s\n"
 		  	 "\t}\n",
 		  	 cfg->depend.str,
 			 cfg->optionname,
@@ -950,18 +993,29 @@ dump_tk_script(struct kconfig *scfg)
 		      cfg1 != NULL && cfg1->tok == tok_choice;
 		      cfg1 = cfg1->next)
 		    {
-		      printf("\tif { $%s == %d } then { write_variable $cfg $autocfg %s 1 $notmod }\n",
+		      printf("\tif { $%s == \"%s\" } then { write_tristate $cfg $autocfg %s 1 $notmod }\n",
 			     cfg->optionname,
-			     cfg1->choice_value,
+			     cfg1->label,
 			     cfg1->optionname);
 		    }
 		}
-	      else
-		{
-		  printf("\twrite_variable $cfg $autocfg %s $%s $notmod\n",
+	      else if (cfg->tok == tok_int )
+	        {
+		  printf("\twrite_int $cfg $autocfg %s $%s $notmod\n",
 			 cfg->optionname,
 			 cfg->optionname);
-			 
+	        }
+	      else if (cfg->tok == tok_hex )
+	        {
+		  printf("\twrite_hex $cfg $autocfg %s $%s $notmod\n",
+			 cfg->optionname,
+			 cfg->optionname);
+	        }
+	      else
+		{
+		  printf("\twrite_tristate $cfg $autocfg %s $%s $notmod\n",
+			 cfg->optionname,
+			 cfg->optionname);
 		}
 	    }
 	  break;
@@ -1001,10 +1055,10 @@ dump_tk_script(struct kconfig *scfg)
 	  cfg1 = cfg1->next)
 	{
 	  printf("\tglobal %s\n", cfg1->optionname);
-	  printf("\tif { $%s == 1 } then { set %s %d }\n",
+	  printf("\tif { $%s == 1 } then { set %s \"%s\" }\n",
 		 cfg1->optionname,
 		 cfg->optionname,
-		 cfg1->choice_value);
+		 cfg1->label);
 	}
     }
   printf("}\n\n\n");

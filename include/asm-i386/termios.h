@@ -114,7 +114,7 @@ struct termios {
 #define VEOL2 16
 
 #ifdef __KERNEL__
-/*	intr=^C		quit=^|		erase=del	kill=^U
+/*	intr=^C		quit=^\		erase=del	kill=^U
 	eof=^D		vtime=\0	vmin=\1		sxtc=\0
 	start=^Q	stop=^S		susp=^Z		eol=\0
 	reprint=^R	discard=^U	werase=^W	lnext=^V

@@ -26,6 +26,9 @@ all: vmlinux
 vmlinux: piggy.o $(OBJECTS)
 	$(LD) $(ZLINKFLAGS) -o vmlinux $(OBJECTS) piggy.o
 
+bvmlinux: piggy.o $(OBJECTS)
+	$(LD) $(BZLINKFLAGS) -o bvmlinux $(OBJECTS) piggy.o
+
 ifdef SMP
 
 head.o: head.S $(TOPDIR)/include/linux/tasks.h
@@ -63,4 +66,4 @@ piggyback: piggyback.c
 endif
 
 clean:
-	rm -f xtract piggyback vmlinux
+	rm -f xtract piggyback vmlinux bvmlinux

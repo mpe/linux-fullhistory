@@ -151,6 +151,7 @@ extern void enable_irq(unsigned int);
 	"pushfl\n\t" \
 	"cli\n\t" \
 	GET_PROCESSOR_ID \
+	"btsl $" STR(SMP_FROM_INT) ","SYMBOL_NAME_STR(smp_proc_in_lock)"(,%eax,4)\n\t" \
 	"1: " \
 	"lock\n\t" \
 	"btsl $0, "SYMBOL_NAME_STR(kernel_flag)"\n\t" \
@@ -178,6 +179,8 @@ extern void enable_irq(unsigned int);
 	"popl %eax\n\t"
 
 #define	LEAVE_KERNEL \
+	GET_PROCESSOR_ID \
+	"btrl $" STR(SMP_FROM_INT) ","SYMBOL_NAME_STR(smp_proc_in_lock)"(,%eax,4)\n\t" \
 	"pushfl\n\t" \
 	"cli\n\t" \
 	"decl "SYMBOL_NAME_STR(kernel_counter)"\n\t" \
@@ -290,6 +293,8 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"addl $8,%esp\n\t" \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
+	GET_PROCESSOR_ID \
+	"btrl $" STR(SMP_FROM_INT) ","SYMBOL_NAME_STR(smp_proc_in_lock)"(,%eax,4)\n\t" \
 	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
 	"incl "SYMBOL_NAME_STR(syscall_count)"\n\t" \
 	"jmp ret_from_sys_call\n" \

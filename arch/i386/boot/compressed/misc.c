@@ -6,6 +6,7 @@
  *
  * malloc by Hannu Savolainen 1993 and Matthias Urlichs 1994
  * puts by Nick Holloway 1993, better puts by Martin Mares 1995
+ * High loaded stuff by Hans Lermen & Werner Almesberger, Feb. 1996
  */
 
 #include <string.h>
@@ -104,6 +105,7 @@ extern int input_len;
 static long bytes_out = 0;
 static uch *output_data;
 static unsigned long output_ptr = 0;
+
  
 static void *malloc(int size);
 static void free(void *where);
@@ -116,6 +118,15 @@ static void puts(const char *);
   
 extern int end;
 static long free_mem_ptr = (long)&end;
+static long free_mem_end_ptr = 0x90000;
+ 
+#define INPLACE_MOVE_ROUTINE  0x1000
+#define LOW_BUFFER_START      0x2000
+#define LOW_BUFFER_END       0x90000
+#define LOW_BUFFER_SIZE      ( LOW_BUFFER_END - LOW_BUFFER_START )
+#define HEAP_SIZE             0x2000
+static int high_loaded =0;
+static uch *high_buffer_start /* = (uch *)(((ulg)&end) + HEAP_SIZE)*/;
 
 static char *vidmem = (char *)0xb8000;
 static int vidport;
@@ -135,7 +146,7 @@ static void *malloc(int size)
 	p = (void *)free_mem_ptr;
 	free_mem_ptr += size;
 
-	if (free_mem_ptr >= 0x90000)
+	if (free_mem_ptr >= free_mem_end_ptr)
 		error("\nOut of memory\n");
 
 	return p;
@@ -239,7 +250,7 @@ static int fill_inbuf()
  * Write the output window window[0..outcnt-1] and update crc and bytes_out.
  * (Used for the decompressed data only.)
  */
-static void flush_window()
+static void flush_window_low()
 {
     ulg c = crc;         /* temporary variable */
     unsigned n;
@@ -255,6 +266,28 @@ static void flush_window()
     bytes_out += (ulg)outcnt;
     output_ptr += (ulg)outcnt;
     outcnt = 0;
+}
+
+static void flush_window_high()
+{
+    ulg c = crc;         /* temporary variable */
+    unsigned n;
+    uch *in,  ch;
+    in = window;
+    for (n = 0; n < outcnt; n++) {
+	ch = *output_data++ = *in++;
+	if ((ulg)output_data == LOW_BUFFER_END) output_data=high_buffer_start;
+	c = crc_32_tab[((int)c ^ ch) & 0xff] ^ (c >> 8);
+    }
+    crc = c;
+    bytes_out += (ulg)outcnt;
+    outcnt = 0;
+}
+
+static void flush_window()
+{
+	if (high_loaded) flush_window_high();
+	else flush_window_low();
 }
 
 static void error(char *x)
@@ -303,7 +336,44 @@ main(argc, argv)
 
 #else
 
-void decompress_kernel()
+void setup_normal_output_buffer()
+{
+	if (EXT_MEM_K < 1024) error("Less than 2MB of memory.\n");
+	output_data = (char *)0x100000; /* Points to 1M */
+}
+
+struct moveparams {
+	uch *low_buffer_start;  int lcount;
+	uch *high_buffer_start; int hcount;
+};
+
+void setup_output_buffer_if_we_run_high(struct moveparams *mv)
+{
+	high_buffer_start = (uch *)(((ulg)&end) + HEAP_SIZE);
+	if (EXT_MEM_K < (4*1024)) error("Less than 4MB of memory.\n");
+	mv->low_buffer_start = output_data = (char *)LOW_BUFFER_START;
+	high_loaded = 1;
+	free_mem_end_ptr = (long)high_buffer_start;
+	if ( (0x100000 + LOW_BUFFER_SIZE) > ((ulg)high_buffer_start)) {
+		high_buffer_start = (uch *)(0x100000 + LOW_BUFFER_SIZE);
+		mv->hcount = 0; /* say: we need not to move high_buffer */
+	}
+	else mv->hcount = -1;
+	mv->high_buffer_start = high_buffer_start;
+}
+
+void close_output_buffer_if_we_run_high(struct moveparams *mv)
+{
+	mv->lcount = bytes_out;
+	if (bytes_out > LOW_BUFFER_SIZE) {
+		mv->lcount = LOW_BUFFER_SIZE;
+		if (mv->hcount) mv->hcount = bytes_out - LOW_BUFFER_SIZE;
+	}
+	else mv->hcount = 0;
+}
+
+
+int decompress_kernel(struct moveparams *mv)
 {
 	if (SCREEN_INFO.orig_video_mode == 7) {
 		vidmem = (char *) 0xb0000;
@@ -316,13 +386,15 @@ void decompress_kernel()
 	lines = SCREEN_INFO.orig_video_lines;
 	cols = SCREEN_INFO.orig_video_cols;
 
-	if (EXT_MEM_K < 1024) error("Less than 2MB of memory.\n");
+	if (free_mem_ptr < 0x100000) setup_normal_output_buffer();
+	else setup_output_buffer_if_we_run_high(mv);
 
-	output_data = (char *)0x100000;	/* Points to 1M */
 	makecrc();
 	puts("Uncompressing Linux...");
 	gunzip();
 	puts("done.\nNow booting the kernel\n");
+	if (high_loaded) close_output_buffer_if_we_run_high(mv);
+	return high_loaded;
 }
 #endif
 

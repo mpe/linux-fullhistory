@@ -128,6 +128,8 @@ ENOSYS = 38
 #define	LEAVE_KERNEL \
 	pushfl; \
 	cli; \
+	GET_PROCESSOR_ID \
+	btrl $ SMP_FROM_SYSCALL,SYMBOL_NAME(smp_proc_in_lock)(,%eax,4); \
 	decl SYMBOL_NAME(syscall_count); \
 	decl SYMBOL_NAME(kernel_counter); \
 	jnz 1f;	\
@@ -166,6 +168,7 @@ ENOSYS = 38
 	pushfl; \
 	cli; \
 	GET_PROCESSOR_ID \
+	btsl $ SMP_FROM_SYSCALL,SYMBOL_NAME(smp_proc_in_lock)(,%eax,4); \
 	SMP_PROF_A \
 1:	lock; \
 	btsl $0, SYMBOL_NAME(kernel_flag); \

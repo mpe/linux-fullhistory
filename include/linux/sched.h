@@ -259,6 +259,10 @@ struct task_struct {
 					/* Not implemented yet, only for 486*/
 #define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called. */
 #define PF_TRACESYS	0x00000020	/* tracing system calls */
+#define PF_FORKNOEXEC	0x00000040	/* forked but didn't exec */
+#define PF_SUPERPREV	0x00000100	/* used super-user privileges */
+#define PF_DUMPCORE	0x00000200	/* dumped core */
+#define PF_SIGNALED	0x00000400	/* killed by a signal */
 
 #define PF_STARTING	0x00000100	/* being created */
 #define PF_EXITING	0x00000200	/* getting shut down */
@@ -348,6 +352,19 @@ extern int request_irq(unsigned int irq,
 		       const char *device,
 		       void *dev_id);
 extern void free_irq(unsigned int irq, void *dev_id);
+
+/*
+ * This has now become a routine instead of a macro, it sets a flag if
+ * it returns true (to do BSD-style accounting where the process is flagged
+ * if it uses root privs). The implication of this is that you should do
+ * normal permissions checks first, and check suser() last.
+ */
+extern inline int suser(void)
+{
+	if (current->euid == 0)
+		current->flags |= PF_SUPERPREV;
+	return (current->euid == 0);
+}
 
 extern void copy_thread(int, unsigned long, unsigned long, struct task_struct *, struct pt_regs *);
 extern void flush_thread(void);

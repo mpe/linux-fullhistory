@@ -16,11 +16,17 @@
 #
 # Set these to indicate how to link it..
 #
-# -zmagic:   
+# -zmagic:   (aout, old GCC-2.5.2)
 #
 # ZLINKFLAGS   = -Ttext 0x1000
+# BZLINKFLAGS  = -Ttext 0x100000     # (for big high loaded kernels)
 # LINKFLAGS    = -Ttext 0x100000
 #
+# -qmagic:   (aout)
+#
+# ZLINKFLAGS   = -Ttext 0x0xfe0
+# BZLINKFLAGS  = -Ttext 0xfffe0      # (for big high loaded kernels)
+# LINKFLAGS    = -Ttext 0xfffe0
 #
 
 AS86    =$(CROSS_COMPILE)as86 -0 -a
@@ -39,6 +45,7 @@ LDFLAGS=-e stext
 ZIMAGE_OFFSET=0x1000
 IMAGE_OFFSET=0x100000
 ZLINKFLAGS =-Ttext $(ZIMAGE_OFFSET) $(ZLDFLAGS)
+BZLINKFLAGS =-Ttext $(IMAGE_OFFSET) $(ZLDFLAGS)
 LINKFLAGS =-Ttext $(IMAGE_OFFSET) $(LDFLAGS)
 
 else
@@ -47,8 +54,10 @@ else
 # -qmagic (we need to remove the 32 byte header for bootup purposes)
 #
 ZLINKFLAGS =-qmagic -Ttext 0xfe0
+BZLINKFLAGS =-qmagic -Ttext 0xfffe0
 LINKFLAGS =-qmagic -Ttext 0xfffe0
 endif
+
 CFLAGS := $(CFLAGS) -pipe
 
 ifdef CONFIG_M386
@@ -93,13 +102,22 @@ MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 zImage: vmlinux
 	@$(MAKEBOOT) zImage
 
+bzImage: vmlinux
+	@$(MAKEBOOT) bzImage
+
 compressed: zImage
 
 zlilo: vmlinux
-	@$(MAKEBOOT) zlilo
+	@$(MAKEBOOT) BOOTIMAGE=zImage zlilo
+
+bzlilo: vmlinux
+	@$(MAKEBOOT) BOOTIMAGE=bzImage zlilo
 
 zdisk: vmlinux
-	@$(MAKEBOOT) zdisk
+	@$(MAKEBOOT) BOOTIMAGE=zImage zdisk
+
+bzdisk: vmlinux
+	@$(MAKEBOOT) BOOTIMAGE=bzImage zdisk
 
 install: vmlinux
 	@$(MAKEBOOT) install

@@ -200,6 +200,9 @@ extern void smp_callin(void);
 extern void smp_boot_cpus(void);
 extern void smp_store_cpu_info(int id);		/* Store per cpu info (like the initial udelay numbers */
 
+extern volatile unsigned long smp_proc_in_lock[NR_CPUS]; /* for computing process time */
+extern volatile unsigned long smp_process_available;
+
 /*
  *	APIC handlers: Note according to the Intel specification update
  *	you should put reads between APIC writes.
@@ -245,6 +248,8 @@ extern __inline int smp_processor_id(void)
  
 #define PROC_CHANGE_PENALTY	20		/* Schedule penalty */
 
+#define SMP_FROM_INT		1
+#define SMP_FROM_SYSCALL	2
 
 #endif
 #endif

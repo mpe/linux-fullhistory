@@ -512,9 +512,8 @@ do_ncp_rpc_call(struct ncp_server *server, int size)
 		 * a null buffer yet. */
 		_recvfrom(sock, (void *)&reply, sizeof(reply), 1, 0, NULL,
 			  &addrlen);
-#if 1
-		printk("ncp_rpc_call: reply mismatch\n");
-#endif
+
+		DPRINTK("ncp_rpc_call: reply mismatch\n");
 		goto re_select;
 	}
 	/* 

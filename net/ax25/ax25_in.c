@@ -28,6 +28,10 @@
  *					Upgraded state machine for SABME.
  *					Added arbitrary protocol id support.
  *	AX.25 031	Joerg(DL1BKE)	Added DAMA support
+ *			HaJo(DD8NE)	Added Idle Disc Timer T5
+ *			Joerg(DL1BKE)   renamed it to "IDLE" with a slightly
+ *					different behaviour. Fixed defrag
+ *					routine (I hope)
  */
 
 #include <linux/config.h>
@@ -71,10 +75,15 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 	if (ax25->fragno != 0) {
 		if (!(*skb->data & SEG_FIRST)) {
 			if ((ax25->fragno - 1) == (*skb->data & SEG_REM)) {
+			
+				/* enqueue fragment */
+				
 				ax25->fragno = *skb->data & SEG_REM;
-				skb_pull(skb, 1);
+				skb_pull(skb, 1);	/* skip fragno */
 				ax25->fraglen += skb->len;
 				skb_queue_tail(&ax25->frag_queue, skb);
+				
+				/* last fragment received? */
 
 				if (ax25->fragno == 0) {
 					if ((skbn = alloc_skb(AX25_MAX_HEADER_LEN + ax25->fraglen, GFP_ATOMIC)) == NULL)
@@ -82,28 +91,45 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 
 					skbn->free = 1;
 					skbn->arp  = 1;
+					skbn->dev  = skb->dev;
 
 					if (ax25->sk != NULL) {
 						skbn->sk = ax25->sk;
 						ax25->sk->rmem_alloc += skbn->truesize;
 					}
 
-					skb_reserve(skbn, AX25_MAX_HEADER_LEN);
-					skbn->h.raw = skbn->data;
-
+					/* get first fragment from queue */
+					
 					skbo = skb_dequeue(&ax25->frag_queue);
-					hdrlen = skbo->data - skbo->h.raw;
-					skb_push(skbo, hdrlen);
+					hdrlen = skbo->data - skbo->h.raw - 2;	/* skip PID & fragno */
+					
+					skb_push(skbo, hdrlen + 2);		/* start of address field */
+					skbn->data = skb_put(skbn, hdrlen);	/* get space for info */
+					memcpy(skbn->data, skbo->data, hdrlen);	/* copy address field */
+					skb_pull(skbo, hdrlen + 2);		/* start of data */
+					skb_pull(skbn, hdrlen + 1);		/* dito */
+
+					/* copy data from first fragment */
+
 					memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
-					skb_pull(skbn, hdrlen);
 					kfree_skb(skbo, FREE_READ);
+					
+					/* add other fragment's data */
 
 					while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL) {
 						memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
 						kfree_skb(skbo, FREE_READ);
 					}
 
-					ax25->fraglen = 0;
+					ax25->fraglen = 0;		/* reset counter */
+					
+					/* 
+					 * mysteriously we need to re-adjust skb->data.
+					 * Anyway, it seems to work. Do we have the address fields
+					 * encoded TWICE in one sk_buff?
+					 */
+					
+					skb_pull(skbn, hdrlen);
 
 					if (ax25_rx_iframe(ax25, skbn) == 0)
 						kfree_skb(skbn, FREE_READ);
@@ -113,9 +139,11 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 			}
 		}
 	} else {
+		/* first fragment received? */
+
 		if (*skb->data & SEG_FIRST) {
 			ax25->fragno = *skb->data & SEG_REM;
-			skb_pull(skb, 1);
+			skb_pull(skb, 1);		/* skip fragno */
 			ax25->fraglen = skb->len;
 			skb_queue_tail(&ax25->frag_queue, skb);
 			return 1;
@@ -141,6 +169,7 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 	switch (pid) {
 #ifdef CONFIG_NETROM
 		case AX25_P_NETROM:
+			ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
 			if (ax25_dev_get_value(ax25->device, AX25_VALUES_NETROM)) {
 				skb_pull(skb, 1);	/* Remove PID */
 				queued = nr_route_frame(skb, ax25);
@@ -149,6 +178,7 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 #endif
 #ifdef CONFIG_INET
 		case AX25_P_IP:
+			ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
 			skb_pull(skb, 1);	/* Remove PID */
 			skb->h.raw = skb->data;
 			ax25_ip_mode_set(&ax25->dest_addr, ax25->device, 'V');
@@ -158,11 +188,13 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 			break;
 #endif
 		case AX25_P_SEGMENT:
+			ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
 			skb_pull(skb, 1);	/* Remove PID */
 			queued = ax25_rx_fragment(ax25, skb);
 			break;
 
 		default:
+			ax25->idletimer = ax25->idle = 0;
 			if (ax25->sk != NULL && ax25_dev_get_value(ax25->device, AX25_VALUES_TEXT) && ax25->sk->protocol == pid) {
 				if (sock_queue_rcv_skb(ax25->sk, skb) == 0) {
 					queued = 1;
@@ -207,6 +239,7 @@ static int ax25_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				ax25_calculate_rtt(ax25);
 				ax25->t1timer = 0;
 				ax25->t3timer = ax25->t3;
+				ax25->idletimer = ax25->idle;
 				ax25->vs      = 0;
 				ax25->va      = 0;
 				ax25->vr      = 0;
@@ -353,6 +386,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25->condition = 0x00;
 			ax25->t1timer   = 0;
 			ax25->t3timer   = ax25->t3;
+			ax25->idletimer = ax25->idle;
 			ax25->vs        = 0;
 			ax25->va        = 0;
 			ax25->vr        = 0;
@@ -368,6 +402,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25->condition = 0x00;
 			ax25->t1timer   = 0;
 			ax25->t3timer   = ax25->t3;
+			ax25->idletimer = ax25->idle;
 			ax25->vs        = 0;
 			ax25->va        = 0;
 			ax25->vr        = 0;
@@ -546,6 +581,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25->condition = 0x00;
 			ax25->t1timer   = 0;
 			ax25->t3timer   = ax25->t3;
+			ax25->idletimer = ax25->idle;
 			ax25->vs        = 0;
 			ax25->va        = 0;
 			ax25->vr        = 0;
@@ -563,6 +599,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 			ax25->condition = 0x00;
 			ax25->t1timer   = 0;
 			ax25->t3timer   = ax25->t3;
+			ax25->idletimer = ax25->idle;
 			ax25->vs        = 0;
 			ax25->va        = 0;
 			ax25->vr        = 0;
@@ -620,8 +657,6 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				}
 				break;
 			}
-			/* dl1bke 960114: replaced if(..) ax25_enquiry_response */
-			/* 		  with ax25_check_need_response()       */
 			 
 			ax25_check_need_response(ax25, type, pf);
 			if (ax25_validate_nr(ax25, nr)) {
@@ -654,10 +689,10 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				break;
 			}
 
-			ax25_check_need_response(ax25, type, pf);	/* dl1bke 960114 */
+			ax25_check_need_response(ax25, type, pf);
 			if (ax25_validate_nr(ax25, nr)) {
 				ax25_frames_acked(ax25, nr);
-				dama_check_need_response(ax25, type, pf);	/* dl1bke 960114 */
+				dama_check_need_response(ax25, type, pf);
 			} else {
 				ax25_nr_error_recovery(ax25);
 				ax25->state = AX25_STATE_1;
@@ -685,13 +720,13 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype
 				break;
 			}
 			
-			ax25_check_need_response(ax25, type, pf);	/* dl1bke 960114 */
+			ax25_check_need_response(ax25, type, pf);	
 			if (ax25_validate_nr(ax25, nr)) {
 				ax25_frames_acked(ax25, nr);
 				if(ax25->vs != ax25->va) {
 					ax25_requeue_frames(ax25);
 				}
-				dama_check_need_response(ax25, type, pf);	/* dl1bke 960114 */
+				dama_check_need_response(ax25, type, pf);
 			} else {
 				ax25_nr_error_recovery(ax25);
 				ax25->state = AX25_STATE_1;

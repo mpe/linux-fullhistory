@@ -25,6 +25,9 @@
  *	AX.25 030	Jonathan(G4KLX)	Added fragmentation to ax25_output.
  *					Added support for extended AX.25.
  *	AX.25 031	Joerg(DL1BKE)	Added DAMA support
+ *
+ *			Joerg(DL1BKE)	modified fragmenter to fragment vanilla 
+ *					AX.25 I-Frames. Added PACLEN parameter.
  */
 
 #include <linux/config.h>
@@ -58,12 +61,35 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 {
 	struct sk_buff *skbn;
 	unsigned char *p;
-	int err, frontlen, mtu, len, fragno, first = 1;
+	int err, frontlen, mtu, len, fragno, ka9qfrag, first = 1;
 	
-	mtu = ax25->device->mtu;
+	/*
+	 * dl1bke 960301: We use the new PACLEN parameter as MTU of the AX.25 layer.
+	 *                This will (hopefully) allow user programs to write() data
+	 *                w/o having to think of the maximal amount of data we can
+	 *		  send with one call. It's called PACLEN to (1) avoid confusion
+	 *		  with (IP) MTU and (2) TAPR calls this PACLEN, too ;-)
+	 */
+
+	mtu = ax25->paclen;
 	
 	if ((skb->len - 1) > mtu) {
-		mtu -= 2;		/* Allow for fragment control info */
+		switch (*skb->data) {
+			case AX25_P_SEGMENT:
+				/* this is an error, but... */
+				printk("ax25_output(): woops, fragmentation of fragment?!\n");
+				/* okay, let's fragment it further (tss, tss...) */
+			case AX25_P_NETROM:	/* err, is this a good idea? */
+			case AX25_P_IP:
+				mtu -= 2;	/* Allow for fragment control info */
+				ka9qfrag = 1;
+				break;
+			default:
+				ka9qfrag = 0;
+				skb_pull(skb, 1); /* skip PID */
+				break;
+
+		}
 		
 		fragno = skb->len / mtu;
 		if (skb->len % mtu == 0) fragno--;
@@ -83,23 +109,29 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 			skbn->free = 1;
 			skbn->arp  = 1;
 
-			skb_reserve(skbn, frontlen + 2);
-
 			len = (mtu > skb->len) ? skb->len : mtu;
 			
-			memcpy(skb_put(skbn, len), skb->data, len);
-			skb_pull(skb, len);
+			if (ka9qfrag == 1) {
+				skb_reserve(skbn, frontlen + 2);
 
-			p = skb_push(skbn, 2);
+				memcpy(skb_put(skbn, len), skb->data, len);
+				p = skb_push(skbn, 2);
 
-			*p++ = AX25_P_SEGMENT;
+				*p++ = AX25_P_SEGMENT;
 
-			*p = fragno--;
-			if (first) {
-				*p |= SEG_FIRST;
-				first = 0;
+				*p = fragno--;
+				if (first) {
+					*p |= SEG_FIRST;
+					first = 0;
+				}
+			} else {
+				skb_reserve(skbn, frontlen + 1);
+				memcpy(skb_put(skbn, len), skb->data, len);
+				p = skb_push(skbn, 1);
+				*p = AX25_P_TEXT;
 			}
 
+			skb_pull(skb, len);
 			skb_queue_tail(&ax25->write_queue, skbn); /* Throw it on the queue */
 		}
 		

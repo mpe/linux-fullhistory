@@ -30,6 +30,10 @@ else
 fi
 
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
+if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
+  bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
+fi
+
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
 
 if [ "$CONFIG_BLK_DEV_HD_IDE" = "y" -o "$CONFIG_BLK_DEV_HD_ONLY" = "y" ]; then

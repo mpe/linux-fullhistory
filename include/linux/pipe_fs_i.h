@@ -1,9 +1,7 @@
 #ifndef _LINUX_PIPE_FS_I_H
 #define _LINUX_PIPE_FS_I_H
-#include <linux/nfs_fs_i.h>
 
 struct pipe_inode_info {
-	struct nfs_inode_info dummy;   /* NFS/fifo conflict workaround */
 	struct wait_queue * wait;
 	char * base;
 	unsigned int start;

@@ -303,7 +303,8 @@ extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list)
  *	Insert a packet before another one in a list.
  */
 
-extern __inline__ void __skb_insert(struct sk_buff *next, struct sk_buff *newsk)
+extern __inline__ void __skb_insert(struct sk_buff *next, struct sk_buff *newsk,
+	struct sk_buff_head * list)
 {
 	struct sk_buff * prev = next->prev;
 
@@ -311,8 +312,8 @@ extern __inline__ void __skb_insert(struct sk_buff *next, struct sk_buff *newsk)
 	newsk->prev = prev;
 	next->prev = newsk;
 	prev->next = newsk;
-	newsk->list = next->list;
-	newsk->list->qlen++;
+	newsk->list = list;
+	list->qlen++;
 }
 
 extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
@@ -321,7 +322,7 @@ extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 
 	save_flags(flags);
 	cli();
-	__skb_insert(old, newsk);
+	__skb_insert(old, newsk, old->list);
 	restore_flags(flags);
 }
 
@@ -329,7 +330,8 @@ extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
  *	Place a packet after a given packet in a list.
  */
 
-extern __inline__ void __skb_append(struct sk_buff *prev, struct sk_buff *newsk)
+extern __inline__ void __skb_append(struct sk_buff *prev, struct sk_buff *newsk,
+	struct sk_buff_head * list)
 {
 	struct sk_buff * next = prev->next;
 
@@ -337,8 +339,8 @@ extern __inline__ void __skb_append(struct sk_buff *prev, struct sk_buff *newsk)
 	newsk->prev = prev;
 	next->prev = newsk;
 	prev->next = newsk;
-	newsk->list = prev->list;
-	newsk->list->qlen++;
+	newsk->list = list;
+	list->qlen++;
 }
 
 extern __inline__ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
@@ -347,7 +349,7 @@ extern __inline__ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 
 	save_flags(flags);
 	cli();
-	__skb_append(old, newsk);
+	__skb_append(old, newsk, old->list);
 	restore_flags(flags);
 }
 

@@ -62,6 +62,15 @@ If you have trouble with the VFAT filesystem, mail bug reports to
 chaffee@bugs-bunny.cs.berkeley.edu.  Please specify the filename
 and the operation that gave you trouble.
 
+TEST SUITE
+----------------------------------------------------------------------
+If you plan to make any modifications to the vfat filesystem, please
+get the test suite that comes with the vfat distribution at
+
+  http://www-plateau.cs.berkeley.edu/people/chaffee/vfat.html
+
+This tests quite a few parts of the vfat filesystem and additional
+tests for new features or untested features would be appreciated.
 
 NOTES ON THE STRUCTURE OF THE VFAT FILESYTEM
 ----------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		     Last revised: March 2, 1996
+		     Last revised: March 9, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -187,6 +187,15 @@ an unreasonable effort.
 	
 		NOTE: These devices permit both read and write access.
 
+    block	Loopback devices
+		  0 = /dev/loop0	First loopback device
+		  1 = /dev/loop1	Second loopback device
+		      ...
+
+		The loopback devices are used to mount filesystems not
+		associated with block devices.  The binding to the
+		loopback devices is usually handled by mount(1).
+
   8 block	SCSI disk devices
     		  0 = /dev/sda		First SCSI disk whole disk
 		 16 = /dev/sdb		Second SCSI disk whole disk
@@ -228,15 +237,6 @@ an unreasonable effort.
 		131 = /dev/temperature	Machine internal temperature
 		132 = /dev/hwtrap	Hardware fault trap
 		133 = /dev/exttrp	External device trap
-
-    block	Loopback devices
-		  0 = /dev/loop0	First loopback device
-		  1 = /dev/loop1	Second loopback device
-		      ...
-
-		The loopback devices are used to mount filesystems not
-		associated with block devices.  The binding to the
-		loopback devices is usually handled by mount(1).
 
  11 char	Raw keyboard device
 		  0 = /dev/kbd		Raw keyboard device
@@ -414,7 +414,7 @@ an unreasonable effort.
 		  2 = /dev/sbpcd2	Panasonic CD-ROM controller 0 unit 2
 		  3 = /dev/sbpcd3	Panasonic CD-ROM controller 0 unit 3
 
- 26 char	Frame grabbers
+ 26 char	Quanta WinVision frame grabber
 		  0 = /dev/wvisfgrab	Quanta WinVision frame grabber
     block	Second Matsushita (Panasonic/SoundBlaster) CD-ROM
 		  0 = /dev/sbpcd4	Panasonic CD-ROM controller 1 unit 0
@@ -627,7 +627,8 @@ an unreasonable effort.
 		 51 = /dev/ml16pb-c2	Second card, third counter/timer
 		      ...
 
- 40		UNALLOCATED
+ 40		Matrox Meteor frame grabber
+		  0 = /dev/mmetfgrab	Matrox Meteor frame grabber
 
  41		Yet Another Micro Monitor
 		  0 = /dev/yamm		Yet Another Micro Monitor
@@ -661,7 +662,17 @@ an unreasonable effort.
 		 31 = /dev/isdnctrl15	16th channel control/debug
 		128 = /dev/isdninfo	ISDN monitor interface
 
- 46-59		UNALLOCATED
+ 46 char	Comtrol Rocketport serial card
+		  0 = /dev/ttyR0	First Rocketport port
+		  1 = /dev/ttyR1	Second Rocketport port
+		      ...
+
+ 47 char	Comtrol Rocketport serial card - alternate devices
+		  0 = /dev/cur0		Callout device corresponding to ttyR0
+		  1 = /dev/cur1		Callout device corresponding to ttyR1
+		      ...
+
+ 48-59		UNALLOCATED
 
  60-63		LOCAL/EXPERIMENTAL USE
 		Allocated for local/experimental use.  For devices not

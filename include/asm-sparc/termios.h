@@ -192,7 +192,7 @@ struct termios {
 #define VTIME    VEOL
 
 #ifdef __KERNEL__
-/*	intr=^C		quit=^|		erase=del	kill=^U
+/*	intr=^C		quit=^\		erase=del	kill=^U
 	eof/vmin=\1	eol/vtime=\0	eol2=\0		sxtc=\0
 	start=^Q	stop=^S		susp=^Z		dsusp=^Y
 	reprint=^R	discard=^U	werase=^W	lnext=^V

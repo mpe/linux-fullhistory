@@ -11,9 +11,9 @@
 #
 # Format of this file: description<nl>variable<nl>helptext<nl><nl>. 
 # If the question being documented is of type "choice", we list
-# only the first occuring config variable. The help texts
+# only the first occurring config variable. The help texts
 # must not contain empty lines. No variable should occur twice; if it
-# does, only the first occurance will be used by Configure. The lines
+# does, only the first occurrence will be used by Configure. The lines
 # in a help text should be indented two positions. Lines starting with
 # `#' are ignored. To be nice to menuconfig, limit your lines to 70
 # chars. Use emacs' kfill.el to edit this file or you lose.
@@ -79,6 +79,14 @@ CONFIG_BLK_DEV_RAM
   normal users won't need the RAM disk functionality, and can thus say
   N here.
 
+Initial RAM disk (initrd) support
+CONFIG_BLK_DEV_INITRD
+  The initial RAM disk is a RAM disk that is loaded by the boot loader
+  (LOADLIN or LILO) and that is mounted as root before the normal boot
+  procedure. It is typically used to load modules needed to mount the
+  "real" root file system, etc. See Documentation/initrd.txt for
+  details.
+
 Loop device support
 CONFIG_BLK_DEV_LOOP
   Enabling this option will allow you to mount a file as a file system.
@@ -86,9 +94,10 @@ CONFIG_BLK_DEV_LOOP
   burning the CD, or want to use floppy images without first writing
   them to floppy.
   This option also allows one to mount a filesystem with encryption.
-  To use these features, you will need the program losetup, available
-  via ftp (user: anonymous) from sunsite.unc.edu in the package 
-  lo.X.Y.tar.gz.
+  To use these features, you need a recent version of mount, such as
+  the one found at ftp.win.tue.nl:/pub/linux/util/mount-2.5X.tar.gz.
+  If you want to use encryption, you might also be interested in the
+  (old) DES package ftp.funet.fi:/pub/OS/Linux/BETA/loop/des.1.tar.gz.
   Note that this loop device has nothing to do with the loopback
   device used for network connections from the machine to itself.
   Most users will answer N here.
@@ -236,6 +245,35 @@ CONFIG_BLK_DEV_XD
   Very old 8 bit hard disk controllers used in the IBM XT
   computer. Pretty unlikely that you have this: say N.
 
+Multiple devices driver support
+CONFIG_BLK_DEV_MD
+  This driver lets you combine several harddisk partitions into one
+  logical block device. Information about how and why to use it and the
+  necessary tools are available over ftp (user: anonymous) from
+  sweet-smoke.ufr-info-p7.ibp.fr/pub/public/Linux in the md package
+  and the md-FAQ. Please read drivers/block/README.md. If unsure, say
+  N.
+
+Linear (append) mode
+CONFIG_MD_LINEAR
+  If you enable this, then your multiple devices driver will be able
+  to use the so-called linear mode, i.e. it will combine the harddisk
+  partitions by simply appending one to the other. If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt. If unsure, say Y.
+
+RAID-0 (striping) mode
+CONFIG_MD_STRIPED
+  If you enable this, then your multiple devices driver will be able
+  to use the so-called raid0 mode, i.e. it will combine the harddisk
+  partitions into one logical device in such a fashion as to fill them
+  up evenly, one chunk here and one chunk there. This will increase
+  the throughput rate if the partitions reside on distinct disks.  If
+  you want to compile this as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want), say M
+  here and read Documentation/modules.txt. If unsure, say Y.
+
 Support for Deskstation RPC44 
 CONFIG_DESKSTATION_RPC44
   This is a machine with a R4400 100 MHz CPU. To compile a Linux
@@ -367,7 +405,7 @@ CONFIG_ALPHA_AVANTI
   ** EB66: "Evaluation Board"
   ** EB66+: "Evaluation Board"
 ###
-### Add info about Platform2000
+### Add info about Platform2000, EB164
 ###
 
 Limit memory to low 16MB
@@ -537,7 +575,9 @@ CONFIG_M386
   specify "486" or "Pentium" or "PPro", then the kernel will run on
   486 and Pentium (=586) and Pentium Pro (=686) CPUs. In rare cases,
   it can make sense to specify "Pentium" even if running a 486: the
-  kernel will be smaller but slower.
+  kernel will be smaller but slower. On the other hand, if you use a
+  compiler before gcc 2.7 (say "gcc -v" to find out), then you have to
+  say "486" here even if running on a Pentium machine.
 
 Compile the kernel into the ELF object format 
 CONFIG_ELF_KERNEL
@@ -1039,9 +1079,9 @@ CONFIG_SCSI_CONSTANTS
   understand if you enable this; it will enlarge your kernel by about
   12KB. If in doubt, say Y.
 
-Automatic Disk Geometery Translation 
+Automatic Disk Geometry Translation 
 CONFIG_SCSI_AUTO_BIOSP
-  When this is set to Y, Linux will examine the parition table to
+  When this is set to Y, Linux will examine the partition table to
   determine the mapping used under the other operating systems (e.g.
   DOS), and set these parameters to the determined values, or if the
   disk has no valid partition table, to an optimal value.
@@ -2328,7 +2368,8 @@ CONFIG_MSDOS_FS
   NT installed on your MSDOS partitions, you should use the VFAT
   filesystem instead, or you will not be able to see the long
   filenames generated by Windows'95 / Windows NT. This option will
-  enlarge your kernel by about 7 kB. If unsure, say Y.  If you want to
+  enlarge your kernel by about 7 kB. If unsure, say Y. This will only
+  work if you said Y to "fat fs support" as well. If you want to
   compile this as a module however ( = code which can be inserted in
   and removed from the running kernel whenever you want), say M here
   and read Documentation/modules.txt. Note that the filesystem of your
@@ -2341,11 +2382,11 @@ CONFIG_VFAT_FS
   filenames used by Windows'95 and Windows NT fat-based (not NTFS)
   partitions. It does not support Windows'95 compressed filesystems.
   You cannot use the VFAT filesystem for your root partition; use
-  UMSDOS instead. This option enlarges your kernel by about 10 kB. 
+  UMSDOS instead. This option enlarges your kernel by about 10 kB and
+  it only works if you enabled the "fat fs support" above. 
   If unsure, say N. If you want to compile this as a module ( = code 
   which can be inserted in and removed from the running kernel whenever 
-  you want), say M here and read Documentation/modules.txt. Note that 
-  the filesystem of your root partition cannot be a module.
+  you want), say M here and read Documentation/modules.txt.
 
 umsdos: Unix like fs on top of std MSDOS fs
 CONFIG_UMSDOS_FS
@@ -2360,11 +2401,13 @@ CONFIG_UMSDOS_FS
   also allows unix style softlinks and owner/permissions of files on
   MSDOS floppies. You will need a program called umssync in order to
   make use of umsdos. Read Documentation/filesystems/umsdos.txt. This
-  option enlarges your kernel by about 25 kB. If unsure, say N.  If
-  you want to compile this as a module ( = code which can be inserted
-  in and removed from the running kernel whenever you want), say M
-  here and read Documentation/modules.txt. Note that the filesystem of
-  your root partition cannot be a module.
+  option enlarges your kernel by about 25 kB and it only works if you
+  enabled both "fat fs support" and "msdos fs support" above. If
+  unsure, say N.  If you want to compile this as a module ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read
+  Documentation/modules.txt. Note that the filesystem of your root
+  partition cannot be a module.
 
 /proc filesystem support
 CONFIG_PROC_FS
@@ -2708,7 +2751,7 @@ CONFIG_WATCHDOG
   result in rebooting the machine. This could be useful for a
   networked machine that needs to come back online as fast as possible
   after a lock-up. There's a watchdog implementation entirely in
-  software (which sometimes fail to reboot the machine) and a driver
+  software (which can sometimes fail to reboot the machine) and a driver
   for hardware watchdog boards, which are more robust and can also
   keep track of the temperature inside your computer. For details,
   read Documentation/watchdog.txt in the kernel source. If unsure, say
@@ -2917,4 +2960,5 @@ CONFIG_ISDN_DRV_TELES
 # LocalWords:  Keepalive linefill RELCOM keepalive analogue CDR conf CDI INIT
 # LocalWords:  OPTi isp irq noisp VFAT vfat NTFS losetup dmsdosfs dosfs ISDN MP
 # LocalWords:  NOWAYOUT behaviour dialin isdn callback BTX Teles ICN EDSS Cisco
-# LocalWords:  ipppd syncppp RFC MPP VJ downloaded icn NICCY Creatix shmem
+# LocalWords:  ipppd syncppp RFC MPP VJ downloaded icn NICCY Creatix shmem ufr
+# LocalWords:  ibp md ARCnet ether encap NDIS arcether ODI Amigas AmiTCP NetBSD

@@ -30,8 +30,11 @@
  *	Cosmetic changes in #ifdef MODULE, code movement, etc...
  * 	When the ramdisk is rmmod'ed, free the protected buffers
  * 	Default ramdisk size changed to 2.88MB
+ *
+ *  Added initrd: Werner Almesberger & Hans Lermen, Feb '96
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/ext2_fs.h>
@@ -68,6 +71,10 @@ extern void wait_for_keypress(void);
 
 void rd_load(void);
 static int crd_load(struct file *fp, struct file *outfp);
+
+#ifdef CONFIG_BLK_DEV_INITRD
+static int initrd_users = 0;
+#endif
 #endif
 
 /* Various static variables go here... mostly used within the ramdisk code only. */
@@ -85,6 +92,10 @@ static int rd_blocksizes[NUM_RAMDISKS];
 int rd_doload = 0;		/* 1 = load ramdisk, 0 = don't load */
 int rd_prompt = 1;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 int rd_image_start = 0;		/* starting block # of image */
+#ifdef CONFIG_BLK_DEV_INITRD
+unsigned long initrd_start,initrd_end;
+int mount_initrd = 1;		/* zero if initrd should not be mounted */
+#endif
 #endif
 
 /*
@@ -161,8 +172,61 @@ static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 	return 0;
 }
 
+
+#ifdef CONFIG_BLK_DEV_INITRD
+
+static int initrd_read(struct inode *inode,struct file *file,char *buf,
+    int count)
+{
+	int left;
+
+	left = initrd_end-initrd_start-file->f_pos;
+	if (count > left) count = left;
+	if (count <= 0) return 0;
+	memcpy_tofs(buf,(char *) initrd_start+file->f_pos,count);
+	file->f_pos += count;
+	return count;
+}
+
+
+static void initrd_release(struct inode *inode,struct file *file)
+{
+	unsigned long i;
+
+	if (--initrd_users) return;
+	for (i = initrd_start; i < initrd_end; i += PAGE_SIZE)
+		free_page(i);
+	initrd_start = 0;
+}
+
+
+static struct file_operations initrd_fops = {
+	NULL,		/* lseek */
+	initrd_read,	/* read */
+	NULL,		/* write */
+	NULL,		/* readdir */
+	NULL,		/* select */
+	NULL, 		/* ioctl */
+	NULL,		/* mmap */
+	NULL,		/* open */
+	initrd_release,	/* release */
+	NULL		/* fsync */ 
+};
+
+#endif
+
+
 static int rd_open(struct inode * inode, struct file * filp)
 {
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (DEVICE_NR(inode->i_rdev) == INITRD_MINOR) {
+		if (!initrd_start) return -ENODEV;
+		initrd_users++;
+		filp->f_op = &initrd_fops;
+		return 0;
+	}
+#endif
+
 	if (DEVICE_NR(inode->i_rdev) >= NUM_RAMDISKS)
 		return -ENODEV;
 
@@ -180,7 +244,7 @@ static void rd_release(struct inode * inode, struct file * filp)
 
 static struct file_operations fd_fops = {
 	NULL,		/* lseek - default */
-	block_read,	/* read - block dev write */
+	block_read,	/* read - block dev read */
 	block_write,	/* write - block dev write */
 	NULL,		/* readdir - not here! */
 	NULL,		/* select */
@@ -350,30 +414,18 @@ done:
 /*
  * This routine loads in the ramdisk image.
  */
-void rd_load()
+static void rd_load_image(kdev_t device,int offset)
 {
 	struct inode inode, out_inode;
 	struct file infile, outfile;
 	unsigned short fs;
-	kdev_t device, ram_device;
+	kdev_t ram_device;
 	int nblocks, i;
 	char *buf;
 	unsigned short rotate = 0;
 	char rotator[4] = { '|' , '/' , '-' , '\\' };
 
-	if (rd_doload == 0)
-		return;
-	
-	device = ROOT_DEV;
 	ram_device = MKDEV(MAJOR_NR, 0);
-
-	if (MAJOR(device) != FLOPPY_MAJOR) return;
-
-	if (rd_prompt) {
-		printk(KERN_NOTICE
-		       "VFS: Insert root floppy disk to be loaded into ramdisk and press ENTER\n");
-		wait_for_keypress();
-	}
 
 	memset(&infile, 0, sizeof(infile));
 	memset(&inode, 0, sizeof(inode));
@@ -393,7 +445,7 @@ void rd_load()
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 	
-	nblocks = identify_ramdisk_image(device, &infile, rd_image_start);
+	nblocks = identify_ramdisk_image(device, &infile, offset);
 	if (nblocks < 0)
 		goto done;
 
@@ -439,7 +491,7 @@ void rd_load()
 	kfree(buf);
 
 successful_load:
-	invalidate_buffers(ROOT_DEV);
+	invalidate_buffers(device);
 	ROOT_DEV = MKDEV(MAJOR_NR,0);
 
 done:
@@ -447,6 +499,33 @@ done:
 		infile.f_op->release(&inode, &infile);
 	set_fs(fs);
 }
+
+
+void rd_load()
+{
+	if (rd_doload == 0)
+		return;
+	
+	if (MAJOR(ROOT_DEV) != FLOPPY_MAJOR) return;
+
+	if (rd_prompt) {
+		printk(KERN_NOTICE
+		       "VFS: Insert root floppy disk to be loaded into ramdisk and press ENTER\n");
+		wait_for_keypress();
+	}
+
+	rd_load_image(ROOT_DEV,rd_image_start);
+
+}
+
+
+#ifdef CONFIG_BLK_DEV_INITRD
+void initrd_load(void)
+{
+	rd_load_image(MKDEV(MAJOR_NR, INITRD_MINOR),0);
+}
+#endif
+
 #endif /* RD_LOADER */
 
 #ifdef BUILD_CRAMDISK

@@ -131,7 +131,7 @@ static struct file_operations def_fifo_fops = {
 	NULL
 };
 
-static struct inode_operations fifo_inode_operations = {
+struct inode_operations fifo_inode_operations = {
 	&def_fifo_fops,		/* default file operations */
 	NULL,			/* create */
 	NULL,			/* lookup */

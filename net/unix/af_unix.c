@@ -691,6 +691,7 @@ static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_
 static struct cmsghdr *unix_copyrights(void *userp, int len)
 {
 	struct cmsghdr *cm;
+
 	if(len>256|| len <=0)
 		return NULL;
 	cm=kmalloc(len, GFP_KERNEL);
@@ -710,6 +711,7 @@ static void unix_returnrights(void *userp, int len, struct cmsghdr *cm)
 
 /*
  *	Copy file descriptors into system space.
+ *	Return number copied or negative error code
  */
  
 static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
@@ -719,6 +721,7 @@ static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
 	int *fdp=(int *)cmsg->cmsg_data;
 	num/=4;	/* Odd bytes are forgotten in BSD not errored */
 	
+
 	if(num>=UNIX_MAX_FD)
 		return -EINVAL;
 	
@@ -726,11 +729,17 @@ static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
 	 *	Verify the descriptors.
 	 */
 	 
-	for(i=0;i<=num;i++)
+	for(i=0; i< num; i++)
 	{
-		if(fdp[i]<0||fdp[i]>=NR_OPEN)
-			return -EINVAL;
-		if(current->files->fd[fdp[i]]==NULL)
+		int fd;
+		
+		fd = fdp[i];	
+#if 0
+		printk("testing  fd %d\n", fd);
+#endif
+		if(fd < 0|| fd >=NR_OPEN)
+			return -EBADF;
+		if(current->files->fd[fd]==NULL)
 			return -EBADF;
 	}
 	
@@ -741,7 +750,8 @@ static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
 	if(unix_gc_free<num)
 		return -ENOBUFS;
 	
-	for(i=0;i<=num;i++)
+        /* add another reference to these files */
+	for(i=0; i< num; i++)
 	{
 		fp[i]=current->files->fd[fdp[i]];
 		fp[i]->f_count++;
@@ -781,6 +791,7 @@ int unix_files_free(void)
 		if(current->files->fd[i])
 			n++;
 	}
+	
 	i=NR_OPEN;
 	if(i>current->rlim[RLIMIT_NOFILE].rlim_cur)
 		i=current->rlim[RLIMIT_NOFILE].rlim_cur;
@@ -891,8 +902,9 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	if(flags&MSG_OOB)
 		return -EOPNOTSUPP;
 			
-	if(flags)	/* For now */
+	if(flags)	/* For now */ {
 		return -EINVAL;
+	}
 		
 	if(sunaddr!=NULL)
 	{
@@ -923,13 +935,20 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		   cm->cmsg_level!=SOL_SOCKET ||
 		   msg->msg_accrightslen!=cm->cmsg_len)
 		{
+#if 0
+			printk("Sendmsg: bad access rights\n");
+#endif
 			kfree(cm);
 		   	return -EINVAL;
 		}
 		fpnum=unix_fd_copy(sk,cm,fp);
 		kfree(cm);
-		if(fpnum<0)
+		if(fpnum<0) {
+#if 0
+			printk("Sendmsg error = %d\n", fpnum);
+#endif
 			return fpnum;
+		}
 	}
 
 	while(sent < len)
@@ -1071,14 +1090,21 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 
 	if(msg->msg_accrights) 
 	{
+		printk("recvmsg with accrights\n");
 		cm=unix_copyrights(msg->msg_accrights, 
 			msg->msg_accrightslen);
-		if(msg->msg_accrightslen<sizeof(struct cmsghdr)||
+		if(msg->msg_accrightslen<sizeof(struct cmsghdr)
+#if 0 
+/*		investigate this furthur -- Stevens example doen't seem to care */
+		||
 		   cm->cmsg_type!=SCM_RIGHTS ||
 		   cm->cmsg_level!=SOL_SOCKET ||
-		   msg->msg_accrightslen!=cm->cmsg_len)
+		   msg->msg_accrightslen!=cm->cmsg_len
+#endif
+		)
 		{
 			kfree(cm);
+			printk("recvmsg: Bad msg_accrights\n");
 		   	return -EINVAL;
 		}
 	}

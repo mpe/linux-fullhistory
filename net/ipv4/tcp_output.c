@@ -464,7 +464,8 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 */
 		 
 		ct++;
-		sk->prot->retransmits ++;
+		sk->retransmits++;
+		sk->prot->retransmits++;
 		tcp_statistics.TcpRetransSegs++;
 		
 

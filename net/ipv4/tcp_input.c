@@ -396,6 +396,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->send_tail = NULL;
 	skb_queue_head_init(&newsk->back_log);
 	newsk->rtt = 0;		/*TCP_CONNECT_TIME<<3*/
+	newsk->ato = HZ/3;
 	newsk->rto = TCP_TIMEOUT_INIT;
 	newsk->mdev = 0;
 	newsk->max_window = 0;
@@ -1181,6 +1182,95 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 	return(0);
 }
 
+/*
+ * Called for each packet when we find a new ACK endpoint sequence in it
+ */
+static inline u32 tcp_queue_ack(struct sk_buff * skb, struct sock * sk)
+{
+	/*
+	 *	When we ack the fin, we do the FIN 
+	 *	processing.
+	 */
+	skb->acked = 1;
+	if (skb->h.th->fin)
+		tcp_fin(skb,sk,skb->h.th);
+	return skb->end_seq;
+}
+	  
+
+/*
+ * Add a sk_buff to the TCP receive queue, calculating
+ * the ACK sequence as we go..
+ */
+static void tcp_queue(struct sk_buff * skb, struct sock * sk,
+	struct tcphdr *th, unsigned long saddr)
+{
+	struct sk_buff_head * list = &sk->receive_queue;
+	struct sk_buff * next;
+	u32 ack_seq;
+
+	/*
+	 * Find where the new skb goes.. (This goes backwards,
+	 * on the assumption that we get the packets in order)
+	 */
+	next = list->prev;
+	while (next != (struct sk_buff *) list) {
+		if (!after(next->seq, skb->seq))
+			break;
+		next = next->prev;
+	}
+	/*
+	 * put it after the packet we found (which
+	 * may be the list-head, but that's fine).
+	 */
+	__skb_append(next, skb, list);
+	next = skb->next;
+
+	/*
+	 * Did we get anything new to ack?
+	 */
+	ack_seq = sk->acked_seq;
+	if (!after(skb->seq, ack_seq) && after(skb->end_seq, ack_seq)) {
+		ack_seq = tcp_queue_ack(skb, sk);
+
+		/*
+		 * Do we have any old packets to ack that the above
+		 * made visible? (Go forward from skb)
+		 */
+		while (next != (struct sk_buff *) list) {
+			if (after(next->seq, ack_seq))
+				break;
+			if (after(next->end_seq, ack_seq))
+				ack_seq = tcp_queue_ack(next, sk);
+			next = next->next;
+		}
+
+		/*
+		 * Ok, we found new data, update acked_seq as
+		 * necessary (and possibly send the actual
+		 * ACK packet).
+		 *
+		 *      rules for delaying an ack:
+		 *      - delay time <= 0.5 HZ
+		 *      - we don't have a window update to send
+		 *      - must send at least every 2 full sized packets
+		 */
+		sk->acked_seq = ack_seq;
+		if (!sk->delay_acks ||
+		    /* sk->ack_backlog >= sk->max_ack_backlog || */
+		    sk->bytes_rcv > sk->max_unacked || th->fin ||
+		    sk->ato > HZ/2) {
+			tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
+		}
+		else 
+		{	
+			sk->ack_backlog++;
+			if(sk->debug)				
+				printk("Ack queued.\n");
+			tcp_reset_xmit_timer(sk, TIME_WRITE, sk->ato);	
+		}		
+	}
+}
 
 
 /*
@@ -1192,9 +1282,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 static int tcp_data(struct sk_buff *skb, struct sock *sk, 
 	 unsigned long saddr, unsigned short len)
 {
-	struct sk_buff *skb1, *skb2;
 	struct tcphdr *th;
-	int dup_dumped=0;
 	u32 new_seq, shut_seq;
 
 	th = skb->h.th;
@@ -1277,170 +1365,7 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 
 #endif
 
-	/*
-	 * 	Now we have to walk the chain, and figure out where this one
-	 * 	goes into it.  This is set up so that the last packet we received
-	 * 	will be the first one we look at, that way if everything comes
-	 * 	in order, there will be no performance loss, and if they come
-	 * 	out of order we will be able to fit things in nicely.
-	 *
-	 *	[AC: This is wrong. We should assume in order first and then walk
-	 *	 forwards from the first hole based upon real traffic patterns.]
-	 *	
-	 */
-
-	if (skb_peek(&sk->receive_queue) == NULL) 	/* Empty queue is easy case */
-	{
-		skb_queue_head(&sk->receive_queue,skb);
-		skb1= NULL;
-	} 
-	else
-	{
-		for(skb1=sk->receive_queue.prev; ; skb1 = skb1->prev) 
-		{
-			if(sk->debug)
-			{
-				printk("skb1=%p :", skb1);
-				printk("skb1->seq = %d: ", skb1->seq);
-				printk("skb->seq = %d\n",skb->seq);
-				printk("copied_seq = %d acked_seq = %d\n", sk->copied_seq,
-						sk->acked_seq);
-			}
-			
-			/*
-			 *	Optimisation: Duplicate frame or extension of previous frame from
-			 *	same sequence point (lost ack case).
-			 *	The frame contains duplicate data or replaces a previous frame
-			 *	discard the previous frame (safe as sk->users is set) and put
-			 *	the new one in its place.
-			 */
-			 
-			if (skb->seq==skb1->seq && skb->len>=skb1->len)
-			{
-				skb_append(skb1,skb);
-				skb_unlink(skb1);
-				kfree_skb(skb1,FREE_READ);
-				dup_dumped=1;
-				skb1=NULL;
-				break;
-			}
-			
-			/*
-			 *	Found where it fits
-			 */
-			 
-			if (after(skb->seq+1, skb1->seq))
-			{
-				skb_append(skb1,skb);
-				break;
-			}
-			
-			/*
-			 *	See if we've hit the start. If so insert.
-			 */
-			if (skb1 == skb_peek(&sk->receive_queue))
-			{
-				skb_queue_head(&sk->receive_queue, skb);
-				break;
-			}
-		}
-  	}
-
-	/*
-	 *	Figure out what the ack value for this frame is
-	 */
-	 
-	if (before(sk->acked_seq, sk->copied_seq)) 
-	{
-		printk("*** tcp.c:tcp_data bug acked < copied\n");
-		sk->acked_seq = sk->copied_seq;
-	}
-
-	/*
-	 *	Now figure out if we can ack anything. This is very messy because we really want two
-	 *	receive queues, a completed and an assembly queue. We also want only one transmit
-	 *	queue.
-	 */
-
-	if ((!dup_dumped && (skb1 == NULL || skb1->acked)) || before(skb->seq, sk->acked_seq+1)) 
-	{
-		if (before(skb->seq, sk->acked_seq+1)) 
-		{
-
-			if (after(skb->end_seq, sk->acked_seq)) 
-				sk->acked_seq = skb->end_seq;
-
-			skb->acked = 1;
-
-			/*
-			 *	When we ack the fin, we do the FIN 
-			 *	processing.
-			 */
-
-			if (skb->h.th->fin) 
-			{
-				tcp_fin(skb,sk,skb->h.th);
-			}
-	  
-			for(skb2 = skb->next;
-			    skb2 != (struct sk_buff *)&sk->receive_queue;
-			    skb2 = skb2->next) 
-			{
-				if (before(skb2->seq, sk->acked_seq+1)) 
-				{
-					if (after(skb2->end_seq, sk->acked_seq))
-						sk->acked_seq = skb2->end_seq;
-
-					skb2->acked = 1;
-					/*
-					 * 	When we ack the fin, we do
-					 * 	the fin handling.
-					 */
-					if (skb2->h.th->fin) 
-					{
-						tcp_fin(skb,sk,skb->h.th);
-					}
-
-					/*
-					 *	Force an immediate ack.
-					 */
-					 
-					sk->ack_backlog = sk->max_ack_backlog;
-				}
-				else
-				{
-					break;
-				}
-			}
-
-			/*
-			 *	This also takes care of updating the window.
-			 *	This if statement needs to be simplified.
-			 *
-			 *      rules for delaying an ack:
-			 *      - delay time <= 0.5 HZ
-			 *      - we don't have a window update to send
-			 *      - must send at least every 2 full sized packets
-			 */
-			if (!sk->delay_acks ||
-			    /* sk->ack_backlog >= sk->max_ack_backlog || */
-			    sk->bytes_rcv > sk->max_unacked || th->fin ||
-			    sk->ato > HZ/2 ||
-			    tcp_raise_window(sk)) {
-				tcp_send_ack(sk->sent_seq, sk->acked_seq,sk,th, saddr);
-			}
-			else 
-			{	
-				sk->ack_backlog++;
-			
-				if(sk->debug)				
-					printk("Ack queued.\n");
-				
-				tcp_reset_xmit_timer(sk, TIME_WRITE, sk->ato);
-				
-			}
-		}
-	}
+	tcp_queue(skb, sk, th, saddr);
 
 	/*
 	 *	If we've missed a packet, send an ack.
@@ -1459,7 +1384,7 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 		 
 		while (sock_rspace(sk) < sk->mtu) 
 		{
-			skb1 = skb_peek(&sk->receive_queue);
+			struct sk_buff * skb1 = skb_peek(&sk->receive_queue);
 			if (skb1 == NULL) 
 			{
 				printk("INET: tcp.c:tcp_data memory leak detected.\n");

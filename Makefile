@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 72
+SUBLEVEL = 73
 
 ARCH = i386
 
@@ -344,6 +344,9 @@ distclean: mrproper
 backup: mrproper
 	cd .. && tar cf - linux/ | gzip -9 > backup.gz
 	sync
+
+sums:
+	find . -type f -print | sort | xargs sum > .SUMS
 
 dep-files: archdep .hdepend include/linux/version.h
 	$(AWK) -f scripts/depend.awk init/*.c > .tmpdepend

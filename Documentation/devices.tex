@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: March 2, 1996}
+\date{Last revised: March 9, 1996}
 \maketitle
 %
 \noindent
@@ -88,11 +88,11 @@ an unreasonable effort.
 \major{ 5}{}{char }{Alternate TTY devices}
 \major{ 6}{}{char }{Parallel printer devices}
 \major{ 7}{}{char }{Virtual console access devices}
+\major{  }{}{block}{Loopback devices}
 \major{ 8}{}{block}{SCSI disk devices}
 \major{ 9}{}{char }{SCSI tape devices}
 \major{  }{}{block}{Metadisk (RAID) devices}
 \major{10}{}{char }{Non-serial mice, misc features}
-\major{  }{}{block}{Loopback devices}
 \major{11}{}{char }{Raw keyboard device}
 \major{  }{}{block}{SCSI CD-ROM devices}
 \major{12}{}{char }{QIC-02 tape}
@@ -122,7 +122,7 @@ an unreasonable effort.
 \major{  }{}{block}{Sony CDU-535 CD-ROM}
 \major{25}{}{char }{Stallion serial card -- alternate devices}
 \major{  }{}{block}{First Matsushita (Panasonic/SoundBlaster) CD-ROM}
-\major{26}{}{char }{Frame grabbers}
+\major{26}{}{char }{Quanta WinVision frame grabber}
 \major{  }{}{block}{Second Matsushita (Panasonic/SoundBlaster) CD-ROM}
 \major{27}{}{char }{QIC-117 tape}
 \major{  }{}{block}{Third Matsushita (Panasonic/SoundBlaster) CD-ROM}
@@ -150,13 +150,15 @@ an unreasonable effort.
 \major{  }{}{block}{Zorro II ramdisk}
 \major{38}{}{char }{Myricom PCI Myrinet board}
 \major{39}{}{char }{ML-16P experimental I/O board}
-\major{40}{}{}{Unallocated}
+\major{40}{}{char }{Matrox Meteor frame grabber}
 \major{41}{}{char }{Yet Another Micro Monitor}
 \major{42}{}{}{Demo/sample use}
 \major{43}{}{char }{isdn4linux virtual modem}
 \major{44}{}{char }{isdn4linux virtual modem -- alternate devices}
 \major{45}{}{char }{isdn4linux ISDN BRI driver}
-\major{46}{--59}{}{Unallocated}
+\major{46}{}{char }{Comtrol Rocketport serial card}
+\major{47}{}{char }{Comtrol Rocketport serial card -- alternate devices}
+\major{48}{--59}{}{Unallocated}
 \major{60}{--63}{}{Local/experimental use}
 \major{64}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
@@ -354,6 +356,13 @@ Not all computers have the {\hex 0x3bc} parallel port, hence the
 NOTE: These devices permit both read and write access.
 
 \begin{devicelist}
+\major{  }{}{block}{Loopback devices}
+	\minor{0}{/dev/loop0}{First loopback device}
+	\minor{1}{/dev/loop1}{Second loopback device}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
 \major{ 8}{}{block}{SCSI disk devices}
 	\minor{0}{/dev/sda}{First SCSI disk whole disk}
 	\minor{16}{/dev/sdb}{Second SCSI disk whole disk}
@@ -402,11 +411,6 @@ physical disks.
 	\minor{131}{/dev/temperature}{Machine internal temperature}
 	\minor{132}{/dev/hwtrap}{Hardware fault trap}
 	\minor{133}{/dev/exttrp}{External device trap}
-\\
-\major{  }{}{block}{Loopback devices}
-	\minor{0}{/dev/loop0}{First loopback device}
-	\minor{1}{/dev/loop1}{Second loopback device}
-	\minordots
 \end{devicelist}
 
 \noindent
@@ -641,7 +645,7 @@ major number 3).
 \end{devicelist}
 
 \begin{devicelist}
-\major{26}{}{char }{Frame grabbers}
+\major{26}{}{char }{Quanta WinVision frame grabber}
 	\minor{0}{/dev/wvisfgrab}{Quanta WinVision frame grabber}
 \\
 \major{  }{}{block}{Second Matsushita (Panasonic/SoundBlaster) CD-ROM}
@@ -915,7 +919,8 @@ networking device.
 \end{devicelist}
 
 \begin{devicelist}
-\major{40}{}{}{Unallocated}
+\major{40}{}{char }{Matrox Meteor frame grabber}
+	\minor{0}{/dev/mmetfgrab}{Matrox Meteor frame grabber}
 \end{devicelist}
 
 \begin{devicelist}
@@ -961,7 +966,21 @@ driver with this number should not cause ill effects to the system
 \end{devicelist}
 
 \begin{devicelist}
-\major{46}{--59}{}{Unallocated}
+\major{46}{}{char }{Comtrol Rocketport serial card}
+	\minor{0}{/dev/ttyR0}{First Rocketport port}
+	\minor{1}{/dev/ttyR1}{Second Rocketport port}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{47}{}{char }{Comtrol Rocketport serial card -- alternate devices}
+	\minor{0}{/dev/cur0}{Callout device corresponding to {\file ttyR0}}
+	\minor{1}{/dev/cur1}{Callout device corresponding to {\file ttyR1}}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{48}{--59}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

@@ -464,4 +464,7 @@ de600.o: de600.c CONFIG
 de620.o: de620.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE620_OPTS) -c $<
 
+lance.o: lance.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LANCE_OPTS) -c $<
+
 8390.o: 8390.c 8390.h CONFIG

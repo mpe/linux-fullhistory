@@ -96,6 +96,16 @@ extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
 extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
 
+#ifdef CONFIG_BLK_DEV_INITRD
+
+#define INITRD_MINOR 250 /* shouldn't collide with /dev/ram* too soon ... */
+
+extern unsigned long initrd_start,initrd_end;
+extern int mount_initrd; /* zero if initrd should not be mounted */
+void initrd_init(void);
+
+#endif
+
 #define RO_IOCTLS(dev,where) \
   case BLKROSET: if (!suser()) return -EACCES; \
 		 set_device_ro((dev),get_fs_long((long *) (where))); return 0; \

@@ -18,6 +18,7 @@
 
 /*
  * Changes by tytso to allow root device specification
+ * High loaded stuff by Hans Lermen & Werner Almesberger, Feb. 1996
  */
 
 #include <stdio.h>	/* fprintf */
@@ -39,7 +40,11 @@
 static int GCC_HEADER = sizeof(struct exec);
 #endif
 
+#ifdef __BIG_KERNEL__
+#define SYS_SIZE 0xffff
+#else
 #define SYS_SIZE DEF_SYSSIZE
+#endif
 
 #define DEFAULT_MAJOR_ROOT 0
 #define DEFAULT_MINOR_ROOT 0
@@ -172,8 +177,22 @@ int main(int argc, char ** argv)
 	if (((long *) buf)[7] != 0)
 		die("Illegal symbol table in 'setup'");
 	for (i=0 ; (c=read(id,buf,sizeof buf))>0 ; i+=c )
+#ifdef __BIG_KERNEL__
+	{
+		if (!i) {
+			if (*((long *)(&buf[2])) != 0x53726448 )
+				die("Wrong magic in loader header of 'setup'");
+			if (*((int *)(&buf[6])) < 0x200 )
+				die("Wrong version of loader header of 'setup'");
+			buf[0x11] = 1; /* LOADED_HIGH */
+			*((long *)(&buf[0x14])) = 0x100000; /* code32_start */
+		}
+#endif
 		if (write(1,buf,c)!=c)
 			die("Write call failed");
+#ifdef __BIG_KERNEL__
+	}
+#endif
 	if (c != 0)
 		die("read-error on 'setup'");
 	close (id);

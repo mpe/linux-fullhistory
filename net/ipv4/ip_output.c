@@ -363,7 +363,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 */
 
 	iph = skb->ip_hdr;
-	iph->tot_len = ntohs(skb->len-(((unsigned char *)iph)-skb->data));
+	iph->tot_len = htons(skb->len-(((unsigned char *)iph)-skb->data));
 
 #ifdef CONFIG_FIREWALL
 	if(call_out_firewall(PF_INET, skb, iph) < FW_ACCEPT)

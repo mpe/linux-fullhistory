@@ -30,7 +30,10 @@ static int used_queues = 0;
 static int max_msqid = 0;
 static struct wait_queue *msg_lock = NULL;
 static int kerneld_msqid = -1;
-static int kerneld_pid;
+
+#define MAX_KERNELDS 20
+static int kerneld_arr[MAX_KERNELDS];
+static int n_kernelds = 0;
 
 void msg_init (void)
 {
@@ -152,8 +155,37 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 	return 0;
 }
 
+/*
+ * Take care of missing kerneld, especially in case of multiple daemons
+ */
+#define KERNELD_TIMEOUT 1 * (HZ)
+#define DROP_TIMER if ((msgflg & IPC_KERNELD) && kd_timer.next && kd_timer.prev) del_timer(&kd_timer)
+
+static void kd_timeout(unsigned long msgid)
+{
+	struct msqid_ds *msq;
+	struct msg *tmsg;
+
+	msq = msgque [ (unsigned int) kerneld_msqid % MSGMNI ];
+	if (msq == IPC_NOID || msq == IPC_UNUSED)
+		return;
+
+	for (tmsg = msq->msg_first; tmsg; tmsg = tmsg->msg_next)
+		if (*(long *)(tmsg->msg_spot) == msgid)
+			break;
+	if (tmsg) { /* still there! */
+		struct kerneld_msg kmsp = { msgid, -ENODEV, "" };
+
+		printk(KERN_ALERT "Ouch, kerneld timed out, message failed\n");
+		real_msgsnd(kerneld_msqid, (struct msgbuf *)&kmsp,
+			sizeof(long),
+			S_IRUSR | S_IWUSR | IPC_KERNELD | MSG_NOERROR);
+	}
+}
+
 static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg)
 {
+	struct timer_list kd_timer;
 	struct msqid_ds *msq;
 	struct ipc_perm *ipcp;
 	struct msg *tmsg, *leastp = NULL;
@@ -179,6 +211,16 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 	if (msq == IPC_NOID || msq == IPC_UNUSED)
 		return -EINVAL;
 	ipcp = &msq->msg_perm; 
+
+	/*
+	 * Start timer for missing kerneld
+	 */
+	if (msgflg & IPC_KERNELD) {
+		kd_timer.data = (unsigned long)msgtyp;
+		kd_timer.expires = jiffies + KERNELD_TIMEOUT;
+		kd_timer.function = kd_timeout;
+		add_timer(&kd_timer);
+	}
 
 	/* 
 	 *  find message of correct type.
@@ -224,6 +266,7 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 		}
 		
 		if (nmsg) { /* done finding a message */
+			DROP_TIMER;
 			if ((msgsz < nmsg->msg_ts) && !(msgflg & MSG_NOERROR))
 				return -E2BIG;
 			msgsz = (msgsz > nmsg->msg_ts)? nmsg->msg_ts : msgsz;
@@ -274,11 +317,16 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 			kfree(nmsg);
 			return msgsz;
 		} else {  /* did not find a message */
-			if (msgflg & IPC_NOWAIT)
+			if (msgflg & IPC_NOWAIT) {
+				DROP_TIMER;
 				return -ENOMSG;
-			if (current->signal & ~current->blocked)
+			}
+			if (current->signal & ~current->blocked) {
+				DROP_TIMER;
 				return -EINTR; 
+			}
 			if (intr_count) {
+				DROP_TIMER;
 				/* Won't happen... */
 				printk("Ouch, kerneld:msgrcv wants to sleep at interrupt!\n");
 				return -EINTR;
@@ -286,6 +334,7 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 			interruptible_sleep_on (&msq->rwait);
 		}
 	} /* end while */
+	DROP_TIMER;
 	return -1;
 }
 
@@ -371,12 +420,20 @@ asmlinkage int sys_msgget (key_t key, int msgflg)
 	 * and a designated kerneld message queue is created/refered to
 	 */
 	if ((msgflg & IPC_KERNELD)) {
+		int i;
 		if (!suser())
 			return -EPERM;
 		if ((kerneld_msqid == -1) && (kerneld_msqid =
-				newque(IPC_PRIVATE, msgflg & S_IRWXU)) >= 0)
-			kerneld_pid = current->pid;
-		return kerneld_msqid;
+				newque(IPC_PRIVATE, msgflg & S_IRWXU)) < 0)
+			return -ENOSPC;
+		for (i = 0; i < MAX_KERNELDS; ++i) {
+			if (kerneld_arr[i] == 0) {
+				kerneld_arr[i] = current->pid;
+				++n_kernelds;
+				return kerneld_msqid;
+			}
+		}
+		return -ENOSPC;
 	}
 	/* else it is a "normal" request */
 	if (key == IPC_PRIVATE) 
@@ -545,7 +602,7 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		 * mark it as non-existant
 		 */
 		if ((kerneld_msqid >= 0) && (msqid == kerneld_msqid))
-			kerneld_pid = kerneld_msqid = -1;
+			kerneld_msqid = -1;
 		freeque (id); 
 		return 0;
 	default:
@@ -558,12 +615,23 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
  * so that if they are terminated, a call from do_exit
  * will minimize the possibility of orphaned received
  * messages in the queue.  For now we just make sure
- * that the queue is shut down whenever kerneld dies.
+ * that the queue is shut down whenever all kernelds have died.
  */
 void kerneld_exit(void)
 {
-        if ((current->pid == kerneld_pid) && (kerneld_msqid != -1))
-                sys_msgctl(kerneld_msqid, IPC_RMID, NULL);
+	int i;
+
+        if (kerneld_msqid == -1)
+		return;
+	for (i = 0; i < MAX_KERNELDS; ++i) {
+		if (kerneld_arr[i] == current->pid) {
+			kerneld_arr[i] = 0;
+			--n_kernelds;
+			if (n_kernelds == 0)
+				sys_msgctl(kerneld_msqid, IPC_RMID, NULL);
+			break;
+		}
+	}
 }
 
 /*

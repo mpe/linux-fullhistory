@@ -46,6 +46,8 @@ struct ax25_bpqaddr_struct
 #define	AX25_BACKOFF	6
 #define	AX25_EXTSEQ	7
 #define	AX25_HDRINCL	8
+#define AX25_IDLE	9
+#define AX25_PACLEN	10
 
 #define SIOCAX25GETUID		(SIOCPROTOPRIVATE)
 #define SIOCAX25ADDUID		(SIOCPROTOPRIVATE+1)
@@ -74,6 +76,8 @@ struct ax25_bpqaddr_struct
 #define	AX25_VALUES_T3		10	/* Default T3 timeout value */
 #define	AX25_VALUES_N2		11	/* Default N2 value */
 #define	AX25_VALUES_DIGI	12	/* Digipeat mode */
+#define AX25_VALUES_IDLE	13	/* mode vc idle timer */
+#define AX25_VALUES_PACLEN	14	/* AX.25 MTU */
 #define	AX25_MAX_VALUES		20
 
 struct ax25_parms_struct

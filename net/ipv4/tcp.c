@@ -1347,7 +1347,6 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
  
 static inline void tcp_eat_skb(struct sock *sk, struct sk_buff * skb)
 {
-	sk->ack_backlog++;
 	skb->sk = sk;
 	__skb_unlink(skb, &sk->receive_queue);
 	kfree_skb(skb, FREE_READ);
@@ -1363,7 +1362,6 @@ static inline void tcp_eat_skb(struct sock *sk, struct sk_buff * skb)
 static void cleanup_rbuf(struct sock *sk)
 {
 	struct sk_buff *skb;
-	unsigned long rspace;
 
 	/*
 	 * NOTE! The socket must be locked, so that we don't get
@@ -1375,51 +1373,10 @@ static void cleanup_rbuf(struct sock *sk)
 		tcp_eat_skb(sk, skb);
 	}
 
-	/*
-	 *	FIXME:
-	 *	At this point we should send an ack if the difference
-	 *	in the window, and the amount of space is bigger than
-	 *	TCP_WINDOW_DIFF.
-	 */
-
-	rspace=sock_rspace(sk);
-	if(sk->debug)
-		printk("sk->rspace = %lu\n", rspace);
-	/*
-	 * This area has caused the most trouble.  The current strategy
-	 * is to simply do nothing if the other end has room to send at
-	 * least 3 full packets, because the ack from those will auto-
-	 * matically update the window.  If the other end doesn't think
-	 * we have much space left, but we have room for at least 1 more
-	 * complete packet than it thinks we do, we will send an ack
-	 * immediately.  Otherwise we will wait up to .5 seconds in case
-	 * the user reads some more.
-	 */
-
-	/*
-	 * It's unclear whether to use sk->mtu or sk->mss here.  They differ only
-	 * if the other end is offering a window smaller than the agreed on MSS
-	 * (called sk->mtu here).  In theory there's no connection between send
-	 * and receive, and so no reason to think that they're going to send
-	 * small packets.  For the moment I'm using the hack of reducing the mss
-	 * only on the send side, so I'm putting mtu here.
-	 */
-
-	if (rspace > (sk->window - sk->bytes_rcv + sk->mtu)) 
-	{
-		/* Send an ack right now. */
+	/* If we raised the window due to cleaning up, tell the world.. */
+	if (tcp_raise_window(sk)) {
+		sk->ack_backlog++;
 		tcp_read_wakeup(sk);
-	} 
-	else 
-	{
-		/* Force it to send an ack soon. */
-		int was_active = del_timer(&sk->retransmit_timer);
-		if (!was_active || jiffies+TCP_ACK_TIME < sk->timer.expires) 
-		{
-			tcp_reset_xmit_timer(sk, TIME_WRITE, TCP_ACK_TIME);
-		} 
-		else
-			add_timer(&sk->retransmit_timer);
 	}
 } 
 

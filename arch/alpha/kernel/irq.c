@@ -135,9 +135,9 @@ int get_irq_list(char *buf)
 	struct irqaction * action;
 
 	for (i = 0 ; i < NR_IRQS ; i++) {
-	        action = irq_action[i];
+		action = irq_action[i];
 		if (!action) 
-		        continue;
+			continue;
 		len += sprintf(buf+len, "%2d: %8d %c %s",
 			i, kstat.interrupts[i],
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
@@ -172,36 +172,40 @@ int request_irq(unsigned int irq,
 		const char * devname,
 		void *dev_id)
 {
-	struct irqaction *action, *tmp = NULL;
+	int shared = 0;
+	struct irqaction * action, **p;
 	unsigned long flags;
 
 	if (irq >= NR_IRQS)
 		return -EINVAL;
-	/* don't accept requests for irq #0 */
-	if (!irq)
-		return -EINVAL;
 	if (!handler)
-	    return -EINVAL;
-	action = irq_action[irq];
+		return -EINVAL;
+	p = irq_action + irq;
+	action = *p;
 	if (action) {
-	    if ((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ)) {
-		for (tmp = action; tmp->next; tmp = tmp->next);
-	    } else {
-		return -EBUSY;
-	    }
-	    if ((action->flags & SA_INTERRUPT) ^ (irqflags & SA_INTERRUPT)) {
-	      printk("Attempt to mix fast and slow interrupts on IRQ%d denied\n", irq);
-	      return -EBUSY;
-	    }   
+		/* Can't share interrupts unless both agree to */
+		if (!(action->flags & irqflags & SA_SHIRQ))
+			return -EBUSY;
+
+		/* Can't share interrupts unless both are same type */
+		if ((action->flags ^ irqflags) & SA_INTERRUPT)
+			return -EBUSY;
+
+		/* add new interrupt at end of irq queue */
+		do {
+			p = &action->next;
+			action = *p;
+		} while (action);
+		shared = 1;
 	}
-	save_flags(flags);
-	cli();
+
 	action = (struct irqaction *)kmalloc(sizeof(struct irqaction), GFP_KERNEL);
-	if (!action) { 
-	    restore_flags(flags);
-	    return -ENOMEM;
-	}
-	
+	if (!action)
+		return -ENOMEM;
+
+	if (irqflags & SA_SAMPLE_RANDOM)
+		rand_initialize_irq(irq);
+
 	action->handler = handler;
 	action->flags = irqflags;
 	action->mask = 0;
@@ -209,61 +213,41 @@ int request_irq(unsigned int irq,
 	action->next = NULL;
 	action->dev_id = dev_id;
 
-	if (tmp) {
-	    tmp->next = action;
-	} else {
-	    irq_action[irq] = action;
-	    enable_irq(irq);
-	    if (irq >= 8 && irq < 16) {
-		enable_irq(2);	/* ensure cascade is enabled too */
-	    }
-	}
+	save_flags(flags);
+	cli();
+	*p = action;
+
+	if (!shared)
+		unmask_irq(irq);
 
 	restore_flags(flags);
 	return 0;
 }
-
+		
 void free_irq(unsigned int irq, void *dev_id)
 {
-	struct irqaction * action = irq_action[irq];
-	struct irqaction * tmp = NULL;
+	struct irqaction * action, **p;
 	unsigned long flags;
 
 	if (irq >= NR_IRQS) {
-		printk("Trying to free IRQ%d\n", irq);
+		printk("Trying to free IRQ%d\n",irq);
 		return;
 	}
-	if (!action || !action->handler) {
-		printk("Trying to free free IRQ%d\n", irq);
-		return;
-	}
-	if (dev_id) {
-	    for (; action; action = action->next) {
-	        if (action->dev_id == dev_id) break;
-		tmp = action;
-	    }
-	    if (!action) {
-		printk("Trying to free free shared IRQ%d\n",irq);
-		return;
-	    }
-	} else if (action->flags & SA_SHIRQ) {
-	    printk("Trying to free shared IRQ%d with NULL device ID\n", irq);
-	    return;
-	}
-	save_flags(flags);
-	cli();
-	if (action && tmp) {
-	    tmp->next = action->next;
-	} else {
-	    irq_action[irq] = action->next;
-	}
-	kfree_s(action, sizeof(struct irqaction));
+	for (p = irq + irq_action; (action = *p) != NULL; p = &action->next) {
+		if (action->dev_id != dev_id)
+			continue;
 
-	if (!irq_action[irq]) {
-	    mask_irq(irq);
+		/* Found it - now free it */
+		save_flags(flags);
+		cli();
+		*p = action->next;
+		if (!irq[irq_action])
+			mask_irq(irq);
+		restore_flags(flags);
+		kfree(action);
+		return;
 	}
-
-	restore_flags(flags);
+	printk("Trying to free free IRQ%d\n",irq);
 }
 
 static inline void handle_nmi(struct pt_regs * regs)
@@ -281,9 +265,9 @@ static void unexpected_irq(int irq, struct pt_regs * regs)
 	printk("PC = %016lx PS=%04lx\n", regs->pc, regs->ps);
 	printk("Expecting: ");
 	for (i = 0; i < 16; i++)
-	        if ((action = irq_action[i]))
-		        while (action->handler) {
-			        printk("[%s:%d] ", action->name, i);
+		if ((action = irq_action[i]))
+			while (action->handler) {
+				printk("[%s:%d] ", action->name, i);
 				action = action->next;
 			}
 	printk("\n");
@@ -303,12 +287,12 @@ static inline void handle_irq(int irq, void *dev_id, struct pt_regs * regs)
 
 	kstat.interrupts[irq]++;
 	if (!action) {
-	    unexpected_irq(irq, regs);
-	    return;
+		unexpected_irq(irq, regs);
+		return;
 	}
 	do {
-	    action->handler(irq, action->dev_id, regs);
-	    action = action->next;
+		action->handler(irq, action->dev_id, regs);
+		action = action->next;
 	} while (action);
 }
 
@@ -326,10 +310,10 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 	if (action) {
 		/* quick interrupts get executed with no extra overhead */
 		if (action->flags & SA_INTERRUPT) {
-		        while (action) {
-			        action->handler(irq, action->dev_id, regs);
-			        action = action->next;
-		        }
+			while (action) {
+				action->handler(irq, action->dev_id, regs);
+				action = action->next;
+			}
 			ack_irq(ack);
 			return;
 		}
@@ -369,7 +353,7 @@ static inline void isa_device_interrupt(unsigned long vector,
 #elif defined(CONFIG_ALPHA_ALCOR)
 #	define IACK_SC	ALCOR_IACK_SC
 #else
-    	/*
+	/*
 	 * This is bogus but necessary to get it to compile
 	 * on all platforms.  If you try to use this on any
 	 * other than the intended platforms, you'll notice
@@ -390,10 +374,10 @@ static inline void isa_device_interrupt(unsigned long vector,
 	j = *(volatile int *) IACK_SC;
 	j &= 0xff;
 	if (j == 7) {
-	    if (!(inb(0x20) & 0x80)) {
-		/* it's only a passive release... */
-		return;
-	    }
+		if (!(inb(0x20) & 0x80)) {
+			/* it's only a passive release... */
+			return;
+		}
 	}
 	device_interrupt(j, j, regs);
 #else
@@ -558,7 +542,7 @@ unsigned long probe_irq_on(void)
 	unsigned int i;
 
 	for (i = NR_IRQS - 1; i > 0; i--) {
-	        action = irq_action[i];
+		action = irq_action[i];
 		if (!action) {
 			enable_irq(i);
 			irqs |= (1 << i);
@@ -679,4 +663,5 @@ void init_IRQ(void)
 	outb(cache_26, 0x26);
 	outb(cache_27, 0x27);
 #endif
+	enable_irq(2);		/* enable cascade */
 }

@@ -149,6 +149,20 @@ int cpu_idle(void *unused)
 	{
 		if(cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
 			__asm("hlt");
+                if(0==(0x7fffffff & smp_process_available)) 
+                	continue;
+                while(0x80000000 & smp_process_available);
+	        cli();
+                while(set_bit(31,&smp_process_available))
+                	while(test_bit(31,&smp_process_available));
+                if (0==(0x7fffffff & smp_process_available)){
+                        clear_bit(31,&smp_process_available);
+                        sti();
+                        continue;
+                }
+                smp_process_available--;
+                clear_bit(31,&smp_process_available);
+                sti();
 		idle();
 	}
 }

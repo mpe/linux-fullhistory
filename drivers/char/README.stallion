@@ -2,8 +2,8 @@
 Stallion Multiport Serial Drivers
 ---------------------------------
 
-Version: 1.0.2
-Date:    01FEB96
+Version: 1.0.6
+Date:    11MAR96
 Author:  Greg Ungerer (gerg@stallion.oz.au)
 
 
@@ -19,7 +19,7 @@ ONboard, Stallion, EasyConnection 8/64) with Linux you will need to get the
 driver utility package. This package is available at most of the Linux
 archive sites (and on CD's that contain these archives). The file will be
 called stallion-X.X.X.tar.gz where X.X.X will be the version number. In
-particular this package contains the board embedded executable images that
+particular this package contains the board embeded executable images that
 are required for these boards. It also contains the downloader program.
 These boards cannot be used without this.
 
@@ -85,7 +85,7 @@ When the new kernel is booted, or the loadable module loaded then the
 driver will emit some kernel trace messages about whether the configured
 boards where detected or not. Depending on how your system logger is set
 up these may come out on the console, or just be logged to
-/usr/adm/messages. You should check the messages to confirm that all is well.
+/var/adm/messages. You should check the messages to confirm that all is well.
 
 
 2.1 SHARING INTERRUPTS
@@ -310,6 +310,23 @@ wish to do this mapping on, eg
     ./stlstty maprts mapcts < /dev/cue0
 This enables RTS to act like DTR and CTS to act like DCD on the specified
 port.
+
+The ports of the EasyIO-8M board do not have DCD or DTR signals. So these
+ports cannot be used as real modem devices. Generally when using these
+ports you should only use the cueX devices.
+
+There is another new utility in this package that reports statistics on
+the serial ports. You will need to have the curses libray installed on
+your system to build it.
+
+To build the statistics display program type:
+    make stlstats
+Once compiled simply run it (you will need to be root) and it will display
+a port summary for the first board and panel installed. Use the digits to
+select different board numbers, or 'n' to cycle through the panels on a
+board. To look at detailed port information then hit 'p', that will display
+detailed port 0 information. Use the digits and letteres 'a' through 'f' to
+select the different ports (on this board and panel).
 
 
 

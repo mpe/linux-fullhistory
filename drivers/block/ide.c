@@ -2994,6 +2994,7 @@ static void probe_for_hwifs (void)
 #ifdef CONFIG_BLK_DEV_RZ1000
 		ide_pci_init_proc_t init_rz1000;
 		ide_probe_pci (PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1000, &init_rz1000, 0);
+		ide_probe_pci (PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1001, &init_rz1000, 0);
 #endif /* CONFIG_BLK_DEV_RZ1000 */
 #ifdef CONFIG_BLK_DEV_TRITON
 		/*

@@ -19,6 +19,7 @@
  *		Alan Cox		:	Added firewall hooks.
  *		Alan Cox		:	Supports new ARPHRD_LOOPBACK
  *		Christer Weinigel	: 	Routing and /proc fixes.
+ *		Bradford Johnson	:	Locatalk.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -348,7 +349,38 @@ static int atif_probe_device(struct atalk_iface *atif)
 	int netct;
 	int nodect;
 	
-	
+	struct ifreq atreq;
+	struct sockaddr_at *sa;
+	int err;
+
+/*
+ *	THIS IS A HACK: Farallon cards want to do their own picking of
+ *	addresses. This needs tidying up post 1.4, but we need it in 
+ *	now for the 1.4 release as is.
+ *
+ */
+	if(atif->dev->type == ARPHRD_LOCALTLK &&
+		atif->dev->do_ioctl) 
+	{
+		/* fake up the request and pass it down */
+		sa = (struct sockaddr_at*)&atreq.ifr_addr;
+		sa->sat_addr.s_node = probe_node;
+        	sa->sat_addr.s_net = probe_net;
+		if (!(err=atif->dev->do_ioctl(atif->dev,&atreq,SIOCSIFADDR)))
+		{
+			(void)atif->dev->do_ioctl(atif->dev,&atreq,SIOCGIFADDR);
+			atif->address.s_net=htons(sa->sat_addr.s_net);
+			atif->address.s_node=sa->sat_addr.s_node;
+			return 0;
+		}
+		/*
+		 *	If it didnt like our faked request then fail:
+		 *	This should check against -ENOIOCTLCMD and fall
+		 *	through. That needs us to fix all the devices up
+		 *	properly. We can then also dump the localtalk test.
+		 */
+		return err;
+	}	
 	/*
 	 *	Offset the network we start probing with.
 	 */
@@ -1597,6 +1629,7 @@ static int ltalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 						   if we slip up later */
 		*((__u16 *)ddp)=htons(*((__u16 *)ddp));		/* Mend the byte order */
 	}
+	skb->h.raw = skb->data;
 	return atalk_rcv(skb,dev,pt);
 }
 

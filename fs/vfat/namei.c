@@ -76,32 +76,52 @@ static struct super_operations vfat_sops = {
 	NULL
 };
 
-static int parse_options(char *options,	char *uni_xlate, char *posix,
-			 char *numtail)
+static int parse_options(char *options,	struct fat_mount_options *opts)
 {
-	char *this_char,*value;
+	char *this_char,*value,save,*savep;
+	int ret;
 
-	*uni_xlate = *posix = 0;
-	*numtail = 1;
+	opts->unicode_xlate = opts->posixfs = 0;
+	opts->numtail = 1;
 
 	if (!options) return 1;
+	save = 0;
+	savep = NULL;
+	ret = 1;
 	for (this_char = strtok(options,","); this_char; this_char = strtok(NULL,",")) {
-		if ((value = strchr(this_char,'=')) != NULL)
+		if ((value = strchr(this_char,'=')) != NULL) {
+			save = *value;
+			savep = value;
 			*value++ = 0;
+		}
 		if (!strcmp(this_char,"uni_xlate")) {
-			if (value)
-				return 0;
-			*uni_xlate = 1;
+			if (value) {
+				ret = 0;
+			} else {
+				opts->unicode_xlate = 1;
+			}
 		}
 		else if (!strcmp(this_char,"posix")) {
-			if (value)
-				return 0;
-			*posix = 1;
+			if (value) {
+				ret = 0;
+			} else {
+				opts->posixfs = 1;
+			}
 		}
 		else if (!strcmp(this_char,"nonumtail")) {
-			if (value)
-				return 0;
-			*numtail = 0;
+			if (value) {
+				ret = 0;
+			} else {
+				opts->numtail = 0;
+			}
+		}
+		if (this_char != options)
+			*(this_char-1) = ',';
+		if (value) {
+			*savep = save;
+		}
+		if (ret == 0) {
+			return 0;
 		}
 	}
 	return 1;
@@ -111,26 +131,22 @@ struct super_block *vfat_read_super(struct super_block *sb,void *data,
 				    int silent)
 {
 	struct super_block *res;
-	char uni_xlate, posix, numtail;
   
 	MOD_INC_USE_COUNT;
 	
 	sb->s_op = &vfat_sops;
-	if (!parse_options((char *) data,&uni_xlate,&posix,&numtail)) {
+	res = fat_read_super(sb, data, silent);
+	if (res == NULL) {
 		sb->s_dev = 0;
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
-	MSDOS_SB(sb)->unicode_xlate = uni_xlate;
-	MSDOS_SB(sb)->posix = posix;
-	MSDOS_SB(sb)->numtail = numtail;
 
-	res = fat_read_super(sb, data, silent);
-	if (res == NULL) {
+	if (!parse_options((char *) data, &(MSDOS_SB(sb)->options))) {
 		MOD_DEC_USE_COUNT;
 	} else {
-		MSDOS_SB(sb)->vfat = 1;
-		MSDOS_SB(sb)->dotsOK = 0;
+		MSDOS_SB(sb)->options.isvfat = 1;
+		MSDOS_SB(sb)->options.dotsOK = 0;
 	}
 
 	return res;
@@ -493,9 +509,9 @@ static int vfat_create_shortname(struct inode *dir, const char *name,
 	msdos_name[baselen] = '.';
 	strcpy(&msdos_name[baselen+1], ext);
 
-	totlen = baselen + extlen + 1;
+	totlen = baselen + extlen + (extlen > 0);
 	res = 0;
-	if (MSDOS_SB(dir->i_sb)->numtail == 0) {
+	if (MSDOS_SB(dir->i_sb)->options.numtail == 0) {
 		res = vfat_find(dir, msdos_name, totlen, 0, 0, 0, &sinfo);
 	}
 	i = 0;
@@ -704,7 +720,7 @@ static int vfat_build_slots(struct inode *dir,const char *name,int len,
 
 	PRINTK(("Entering vfat_build_slots: name=%s, len=%d\n", name, len));
 	de = (struct msdos_dir_entry *) ds;
-	xlate = MSDOS_SB(dir->i_sb)->unicode_xlate;
+	xlate = MSDOS_SB(dir->i_sb)->options.unicode_xlate;
 
 	*slots = 1;
 	*is_long = 0;
@@ -804,7 +820,7 @@ static int vfat_find(struct inode *dir,const char *name,int len,
 	vf.len = len;
 	vf.new_filename = new_filename;
 	vf.found = 0;
-	vf.posix = MSDOS_SB(sb)->posix;
+	vf.posix = MSDOS_SB(sb)->options.posixfs;
 	res = fat_readdirx(dir,&fil,(void *)&vf,vfat_readdir_cb,NULL,1,find_long,0);
 	PRINTK(("vfat_find: Debug 1\n"));
 	if (res < 0) return res;

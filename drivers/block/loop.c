@@ -237,24 +237,30 @@ error_out:
 
 static int loop_set_fd(struct loop_device *lo, unsigned int arg)
 {
+	struct file	*file;
 	struct inode	*inode;
 	
-	if (arg >= NR_OPEN || !current->files->fd[arg])
+	if (arg >= NR_OPEN || !(file = current->files->fd[arg]))
 		return -EBADF;
 	if (lo->lo_inode)
 		return -EBUSY;
-	inode = current->files->fd[arg]->f_inode;
+	inode = file->f_inode;
 	if (!inode) {
 		printk("loop_set_fd: NULL inode?!?\n");
 		return -EINVAL;
 	}
-	if (S_ISREG(inode->i_mode)) {
+	if (S_ISBLK(inode->i_mode)) {
+		int error = blkdev_open(inode, file);
+		if (error)
+			return error;
+		lo->lo_device = inode->i_rdev;
+		lo->lo_flags = 0;
+	} else if (S_ISREG(inode->i_mode)) {
 		lo->lo_device = inode->i_dev;
-		lo->lo_flags |= LO_FLAGS_DO_BMAP;
-	} else if (S_ISBLK(inode->i_mode))
-			lo->lo_device = inode->i_rdev;
-		else
-			return -EINVAL;
+		lo->lo_flags = LO_FLAGS_DO_BMAP;
+	} else
+		return -EINVAL;
+
 	invalidate_inode_pages (inode);
 	lo->lo_inode = inode;
 	lo->lo_inode->i_count++;
@@ -270,6 +276,8 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 		return -ENXIO;
 	if (lo->lo_refcnt > 1)
 		return -EBUSY;
+	if (S_ISBLK(lo->lo_inode->i_mode))
+		blkdev_release (lo->lo_inode);
 	iput(lo->lo_inode);
 	lo->lo_device = 0;
 	lo->lo_inode = NULL;
@@ -293,7 +301,7 @@ static int loop_set_status(struct loop_device *lo, struct loop_info *arg)
 	if (!arg)
 		return -EINVAL;
 	memcpy_fromfs(&info, arg, sizeof(info));
-	if (info.lo_encrypt_key_size > LO_KEY_SIZE)
+	if ((unsigned int) info.lo_encrypt_key_size > LO_KEY_SIZE)
 		return -EINVAL;
 	switch (info.lo_encrypt_type) {
 	case LO_CRYPT_NONE:

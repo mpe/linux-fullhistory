@@ -5,6 +5,10 @@
  * Modularized by Pauline Middelink <middelin@polyware.iaf.nl>
  * Changed to support io= irq= by Alan Cox <Alan.Cox@linux.org>
  * Reworked 1995 by John Sullivan <js10039@cam.ac.uk>
+ *
+ *  06mar96 Philip Blundell <pjb27@cam.ac.uk>
+ *     - move started, buffer sizes, and so on into private data area.
+ *     - fix module loading for multiple cards
  * 
  *  31jan96 Philip Blundell <pjb27@cam.ac.uk>
  *     - Tidy up
@@ -17,7 +21,6 @@
  *     - look at RAM size check
  *
  * ToDo:
- *   Move private globals into net_local structure
  *   Multicast/Promiscuous mode handling
  *   Put back debug reporting?
  *   More documentation
@@ -149,6 +152,9 @@ static unsigned int net_debug = NET_DEBUG;
 
 #include "eth82586.h"
 
+#define PRIV(x)         ((struct net_local *)(x)->priv)
+#define EEXP_IO_EXTENT  16
+
 /*
  * Private data declarations
  */
@@ -164,6 +170,11 @@ struct net_local
 	unsigned short tx_tail;         /* previous tx buf to tx_head */
 	unsigned short tx_link;         /* last known-executing tx buf */
 	unsigned short last_tx_restart; /* set to tx_link when we restart the CU */
+	unsigned char started;
+	unsigned short rx_buf_start;
+	unsigned short rx_buf_end;
+	unsigned short num_tx_bufs;
+	unsigned short num_rx_bufs;
 };
 
 unsigned short start_code[] = {
@@ -207,8 +218,6 @@ unsigned short start_code[] = {
 
 /* maps irq number to EtherExpress magic value */
 static char irqrmap[] = { 0,0,1,2,3,4,0,0,0,1,5,6,0,0,0,0 };
-
-static unsigned char started=0;
 
 /*
  * Prototypes for Linux interface
@@ -294,10 +303,10 @@ static int eexp_open(struct device *dev)
 	if (irq2dev_map[irq] ||
 	      /* more consistent, surely? */
 	   ((irq2dev_map[irq]=dev),0) ||
-	     request_irq(irq,&eexp_irq,0,"EExpress",NULL)) 
+	     request_irq(irq,&eexp_irq,0,"eexpress",NULL)) 
 		return -EAGAIN;
 
-	request_region(ioaddr,16,"EExpress");
+	request_region(ioaddr, EEXP_IO_EXTENT, "eexpress");
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	eexp_hw_init586(dev);
@@ -318,7 +327,7 @@ static int eexp_close(struct device *dev)
 	dev->start = 0;
   
 	outb(SIRQ_dis|irqrmap[irq],ioaddr+SET_IRQ);
-	started = 0;
+	PRIV(dev)->started = 0;
 	outw(SCB_CUsuspend|SCB_RUsuspend,ioaddr+SCB_CMD);
 	outb(0,ioaddr+SIGNAL_CA);
 	free_irq(irq,NULL);
@@ -366,7 +375,7 @@ static int eexp_xmit(struct sk_buff *buf, struct device *dev)
 		 * tbusy==0. If it happens too much, we probably ought
 		 * to think about unwedging ourselves...
 		 */
-		if (test_bit(0,(void *)&started)) 
+		if (test_bit(0,(void *)&PRIV(dev)->started)) 
 		{
 			if ((jiffies - dev->trans_start)>5) 
 			{
@@ -506,16 +515,16 @@ static void eexp_irq(int irq, void *dev_info, struct pt_regs *regs)
 	status = inw(ioaddr+SCB_STATUS);
 	ack_cmd = SCB_ack(status);
 
-	if (started==0 && SCB_complete(status)) 
+	if (PRIV(dev)->started==0 && SCB_complete(status)) 
 	{
 		if (SCB_CUstat(status)==2) 
 			while (SCB_CUstat(inw(ioaddr+SCB_STATUS))==2);
-		started=1;
+		PRIV(dev)->started=1;
 		outw(lp->tx_link,ioaddr+SCB_CBL);
-		outw(RX_BUF_START,ioaddr+SCB_RFA);
+		outw(PRIV(dev)->rx_buf_start,ioaddr+SCB_RFA);
 		ack_cmd |= SCB_CUstart | SCB_RUstart;
 	}
-	else if (started) 
+	else if (PRIV(dev)->started) 
 	{
 		unsigned short txstatus;
 		txstatus = eexp_hw_lasttxstat(dev);
@@ -526,17 +535,17 @@ static void eexp_irq(int irq, void *dev_info, struct pt_regs *regs)
 		eexp_hw_rx(dev);
 	}
 
-	if ((started&2)!=0 && SCB_RUstat(status)!=4) 
+	if ((PRIV(dev)->started&2)!=0 && SCB_RUstat(status)!=4) 
 	{
 		printk("%s: RU stopped status %04x, restarting...\n",
 			dev->name,status);
 		lp->stats.rx_errors++;
 		eexp_hw_rxinit(dev);
-		outw(RX_BUF_START,ioaddr+SCB_RFA);
+		outw(PRIV(dev)->rx_buf_start,ioaddr+SCB_RFA);
 		ack_cmd |= SCB_RUstart;
 	} 
-	else if (started==1 && SCB_RUstat(status)==4) 
-		started|=2;
+	else if (PRIV(dev)->started==1 && SCB_RUstat(status)==4) 
+		PRIV(dev)->started|=2;
 
 	outw(ack_cmd,ioaddr+SCB_CMD);
 	outb(0,ioaddr+SIGNAL_CA);
@@ -563,7 +572,7 @@ static void eexp_hw_rx(struct device *dev)
 	unsigned short old_wp = inw(ioaddr+WRITE_PTR);
 	unsigned short old_rp = inw(ioaddr+READ_PTR);
 	unsigned short rx_block = lp->rx_first;
-	unsigned short boguscount = NUM_RX_BUFS;
+	unsigned short boguscount = lp->num_rx_bufs;
 
 #if NET_DEBUG > 6
 	printk("%s: eexp_hw_rx()\n", dev->name);
@@ -665,7 +674,7 @@ static void eexp_hw_tx(struct device *dev, unsigned short *buf, unsigned short l
 	outw(lp->tx_head,ioaddr);
 	dev->trans_start = jiffies;
 	lp->tx_tail = lp->tx_head;
-	if (lp->tx_head==TX_BUF_START+((NUM_TX_BUFS-1)*TX_BUF_SIZE)) 
+	if (lp->tx_head==TX_BUF_START+((lp->num_tx_bufs-1)*TX_BUF_SIZE)) 
 		lp->tx_head = TX_BUF_START;
 	else 
 		lp->tx_head += TX_BUF_SIZE;
@@ -723,6 +732,9 @@ static int eexp_hw_probe(struct device *dev, unsigned short ioaddr)
 
 	eexp_hw_ASICrst(dev);
 
+	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	memset(dev->priv, 0, sizeof(struct net_local));
+
 	{
 		unsigned short i586mso = 0x023e;
 		unsigned short old_wp,old_rp,old_a0,old_a1;
@@ -753,14 +765,15 @@ static int eexp_hw_probe(struct device *dev, unsigned short ioaddr)
 			(a1_0 != 0x5a5a) || (a0_0 != 0x55aa)) 
 		{
 			printk("32k\n");
-			RX_BUF_END = 0x7ff6;
+			PRIV(dev)->rx_buf_end = 0x7ff6;
+			PRIV(dev)->num_tx_bufs = 4;
 		}
 		else
 		{
 			printk("64k\n");
-			NUM_TX_BUFS = 8;
-			RX_BUF_START = TX_BUF_START + (NUM_TX_BUFS*TX_BUF_SIZE);
-			RX_BUF_END = 0xfff6;
+			PRIV(dev)->num_tx_bufs = 8;
+			PRIV(dev)->rx_buf_start = TX_BUF_START + (PRIV(dev)->num_tx_bufs*TX_BUF_SIZE);
+			PRIV(dev)->rx_buf_end = 0xfff6;
 		}
 
 		outw(0x8000+i586mso,ioaddr+WRITE_PTR);
@@ -773,9 +786,6 @@ static int eexp_hw_probe(struct device *dev, unsigned short ioaddr)
   
 	if (net_debug) 
 		printk(version);
-
-	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
-	memset(dev->priv, 0, sizeof(struct net_local));
 	dev->open = eexp_open;
 	dev->stop = eexp_close;
 	dev->hard_start_xmit = eexp_xmit;
@@ -875,7 +885,7 @@ static unsigned short eexp_hw_lasttxstat(struct device *dev)
 			else
 				lp->stats.tx_packets++;
 		}
-		if (tx_block == TX_BUF_START+((NUM_TX_BUFS-1)*TX_BUF_SIZE)) 
+		if (tx_block == TX_BUF_START+((lp->num_tx_bufs-1)*TX_BUF_SIZE)) 
 			lp->tx_reap = tx_block = TX_BUF_START;
 		else
 			lp->tx_reap = tx_block += TX_BUF_SIZE;
@@ -959,7 +969,7 @@ static void eexp_hw_txinit(struct device *dev)
 	unsigned short tx_block = TX_BUF_START;
 	unsigned short curtbuf;
 
-	for ( curtbuf=0 ; curtbuf<NUM_TX_BUFS ; curtbuf++ ) 
+	for ( curtbuf=0 ; curtbuf<lp->num_tx_bufs ; curtbuf++ ) 
 	{
 		outw(tx_block,ioaddr+WRITE_PTR);
 		outw(0x0000,ioaddr);
@@ -979,7 +989,7 @@ static void eexp_hw_txinit(struct device *dev)
 	lp->tx_reap = TX_BUF_START;
 	lp->tx_tail = tx_block - TX_BUF_SIZE;
 	lp->tx_link = lp->tx_tail + 0x08;
-	RX_BUF_START = tx_block;
+	lp->rx_buf_start = tx_block;
 	outw(old_wp,ioaddr+WRITE_PTR);
 }
 
@@ -1004,13 +1014,13 @@ static void eexp_hw_rxinit(struct device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short ioaddr = dev->base_addr;
 	unsigned short old_wp = inw(ioaddr+WRITE_PTR);
-	unsigned short rx_block = RX_BUF_START;
+	unsigned short rx_block = lp->rx_buf_start;
 
-	NUM_RX_BUFS = 0;
+	lp->num_rx_bufs = 0;
 	lp->rx_first = rx_block;
 	do 
 	{
-		NUM_RX_BUFS++;
+		lp->num_rx_bufs++;
 		outw(rx_block,ioaddr+WRITE_PTR);
 		outw(0x0000,ioaddr);
 		outw(0x0000,ioaddr);
@@ -1024,7 +1034,7 @@ static void eexp_hw_rxinit(struct device *dev)
 		outw(0x8000|(RX_BUF_SIZE-0x20),ioaddr);
 		lp->rx_last = rx_block;
 		rx_block += RX_BUF_SIZE;
-	} while (rx_block <= RX_BUF_END-RX_BUF_SIZE);
+	} while (rx_block <= lp->rx_buf_end-RX_BUF_SIZE);
 
 	outw(lp->rx_last+4,ioaddr+WRITE_PTR);
 	outw(lp->rx_first,ioaddr);
@@ -1072,7 +1082,7 @@ static void eexp_hw_init586(struct device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short ioaddr = dev->base_addr;
 
-	started = 0;
+	PRIV(dev)->started = 0;
 	set_loopback;
 
 	outb(SIRQ_dis|irqrmap[dev->irq],ioaddr+SET_IRQ);
@@ -1082,11 +1092,11 @@ static void eexp_hw_init586(struct device *dev)
 		unsigned short wcnt;
 		wcnt = 0;
 		outw(0,ioaddr+WRITE_PTR);
-		while ((wcnt+=2) != RX_BUF_END+12) 
+		while ((wcnt+=2) != lp->rx_buf_end+12) 
 			outw(0,ioaddr);
 	} 
   
-	outw(RX_BUF_END,ioaddr+WRITE_PTR);
+	outw(lp->rx_buf_end,ioaddr+WRITE_PTR);
 	outsw(ioaddr, start_code, sizeof(start_code)>>1);
 	outw(CONF_HW_ADDR,ioaddr+WRITE_PTR);
 	outsw(ioaddr,dev->dev_addr,3);
@@ -1150,7 +1160,7 @@ static void eexp_hw_init586(struct device *dev)
 	outb(SIRQ_en|irqrmap[dev->irq],ioaddr+SET_IRQ);
 	clear_loopback;
 	lp->init_time = jiffies;
-	if (started) 
+	if (PRIV(dev)->started) 
 		printk("%s: Uh? We haven't started yet\n",dev->name);
 	return;
 }
@@ -1170,8 +1180,8 @@ static void eexp_hw_ASICrst(struct device *dev)
 
 	set_loopback;  /* yet more paranoia - since we're resetting the ASIC
 			* that controls this function, how can it possibly work?
-                        */
-	started = 0;
+			*/
+	PRIV(dev)->started = 0;
 	outb(ASIC_RST|i586_RST,ioaddr+EEPROM_Ctrl);
 	while (succount<20) 
 	{
@@ -1201,30 +1211,61 @@ static void eexp_hw_ASICrst(struct device *dev)
 /*
  * MODULE stuff
  */
-
 #ifdef MODULE
 
-static struct device dev_eexpress = 
+#define EEXP_MAX_CARDS     4    /* max number of cards to support */
+#define NAMELEN            8    /* max length of dev->name (inc null) */
+
+static char namelist[NAMELEN * EEXP_MAX_CARDS] = { 0, };
+
+static struct device dev_eexp[EEXP_MAX_CARDS] = 
 {
-	"EExpress", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe 
+        NULL,         /* will allocate dynamically */
+	0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, express_probe 
 };
 
-int irq = 0;
-int io = 0;
+int irq[MAX_EEXP_CARDS] = {0, };
+int io[MAX_EEXP_CARDS] = {0, };
 
+/* Ideally the user would give us io=, irq= for every card.  If any parameters
+ * are specified, we verify and then use them.  If no parameters are given, we
+ * autoprobe for one card only.
+ */
 int init_module(void)
 {
-	dev_eexpress.base_addr = io;
-	dev_eexpress.irq = irq;
-	if (register_netdev(&dev_eexpress) != 0) 
-		return -EIO;
+	int this_dev, found = 0;
+
+	for (this_dev = 0; this_dev < EEXP_MAX_CARDS; this_dev++) {
+		struct device *dev = &dev_eexp[this_dev];
+		dev->name = namelist + (NAMELEN*this_dev);
+		dev->irq = irq[this_dev];
+		dev->base_addr = io[this_dev];
+		if (io[this_dev] == 0) {
+			if (this_dev) break;
+			printk(KERN_NOTICE "eexpress.c: Module autoprobe not recommended, give io=xx.\n");
+		}
+		if (register_netdev(dev) != 0) {
+			printk(KERN_WARNING "eexpress.c: Failed to register card at 0x%x.\n", io[this_dev]);
+			if (found != 0) return 0;
+			return -ENXIO;
+		}
+		found++;
+	}
 	return 0;
 }
 
 void cleanup_module(void)
 {
-	unregister_netdev(&dev_eexpress);
-	kfree_s(dev_eexpress.priv,sizeof(struct net_local));
-	dev_eexpress.priv = NULL;
+	int this_dev;
+        
+	for (this_dev = 0; this_dev < EEXP_MAX_CARDS; this_dev++) {
+		struct device *dev = &dev_eexp[this_dev];
+		if (dev->priv != NULL) {
+			kfree_s(dev->priv. sizeof(struct net_local));
+			dev->priv = NULL;
+			release_region(dev->base_addr, EEXP_IO_EXTENT);
+			unregister_netdev(dev);
+		}
+	}
 }
 #endif

@@ -64,8 +64,8 @@ asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
 			return;		/* emulation was successful */
 		}
 	}
-	printk("Arithmetic trap at %016lx: %02lx %016lx\n",
-	       regs.pc, summary, write_mask);
+	printk("%s: arithmetic trap at %016lx: %02lx %016lx\n",
+		current->comm, regs.pc, summary, write_mask);
 	die_if_kernel("Arithmetic fault", &regs, 0);
 	send_sig(SIGFPE, current, 1);
 }

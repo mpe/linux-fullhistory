@@ -250,7 +250,8 @@ static char * parse_choices(struct kconfig * choice_kcfg, char * pnt)
       if( strcmp(kcfg->label, choice_kcfg->value) == 0 )
 	choice_kcfg->choice_value = kcfg->choice_value;
     }
-
+    
+    return pnt;
 }
 
 
@@ -262,7 +263,6 @@ static char * parse_choices(struct kconfig * choice_kcfg, char * pnt)
  */
 static char * get_string(char *pnt, char ** labl)
 {
-  char quotechar;
   char newlabel[1024];
   char * pnt1;
   char * pnt2;
@@ -290,10 +290,10 @@ static char * get_string(char *pnt, char ** labl)
  * and the result is that we create a token that describes this line
  * and insert it into our linked list.
  */
-int parse(char * pnt) {
+void parse(char * pnt) {
   enum token tok;
   struct kconfig * kcfg;
-  char tmpbuf[24];
+  char tmpbuf[24],fake_if[1024];
 
   /*
    * Ignore comments and leading whitespace.
@@ -366,6 +366,11 @@ int parse(char * pnt) {
       tok = tok_int;
       pnt += 3;
     }
+  else if (strncmp(pnt, "hex", 3) == 0) 
+    {
+      tok = tok_hex;
+      pnt += 3;
+    }
   else if (strncmp(pnt, "if", 2) == 0) 
     {
       tok = tok_if;
@@ -390,13 +395,13 @@ int parse(char * pnt) {
   if( tok == tok_unknown)
     {
       if( clast != NULL && clast->tok == tok_if 
-	  && strcmp(pnt,"then") == 0) return 0;
+	  && strcmp(pnt,"then") == 0) return;
       if( current_file != NULL )
 	fprintf(stderr, "unknown command=%s(%s %d)\n", pnt,
 		current_file, lineno);
       else
 	fprintf(stderr, "unknown command=%s(%d)\n", pnt,lineno);
-      return 1;
+      return;
     }
 
   /*
@@ -448,9 +453,14 @@ int parse(char * pnt) {
       break;
     case tok_bool:
     case tok_tristate:
-    case tok_int:
       pnt = get_qstring(pnt, &kcfg->label);
       pnt = get_string(pnt, &kcfg->optionname);
+      break;
+    case tok_int:
+    case tok_hex:
+      pnt = get_qstring(pnt, &kcfg->label);
+      pnt = get_string(pnt, &kcfg->optionname);
+      pnt = get_string(pnt, &kcfg->value);
       break;
     case tok_dep_tristate:
       pnt = get_qstring(pnt, &kcfg->label);
@@ -458,6 +468,26 @@ int parse(char * pnt) {
       pnt = skip_whitespace(pnt);
       if( *pnt == '$') pnt++;
       pnt = get_string(pnt, &kcfg->depend.str);
+
+      /*
+       * Create a conditional for this object's dependency.
+       *
+       * We can't use "!= n" because this is internally converted to "!= 0"
+       * and if UMSDOS depends on MSDOS which depends on FAT, then when FAT
+       * is disabled MSDOS has 16 added to its value, making UMSDOS fully
+       * available.  Whew.
+       *
+       * This is more of a hack than a fix.  Nested "if" conditionals are
+       * probably affected too - that +/- 16 affects things in too many
+       * places.  But this should do for now.
+       */
+      sprintf(fake_if,"[ \"$%s\" = \"y\" -o \"$%s\" = \"m\" ]; then",
+	      	kcfg->depend.str,kcfg->depend.str);
+      kcfg->cond = parse_if(fake_if);
+      if(kcfg->cond == NULL )
+	{
+	  exit(1);
+	}
       break;
     case tok_comment:
       pnt = get_qstring(pnt, &kcfg->label);
@@ -486,7 +516,7 @@ int parse(char * pnt) {
     case tok_if:
       /*
        * Conditionals are different.  For the first level parse, only
-       * tok_if items have a ->cond chain attached.
+       * tok_if and tok_dep_tristate items have a ->cond chain attached.
        */
       kcfg->cond = parse_if(pnt);
       if(kcfg->cond == NULL )
@@ -496,14 +526,15 @@ int parse(char * pnt) {
       break;
     default:
       exit(0);
-
     }
+    
+    return;
 }
 
 /*
  * Simple function to dump to the screen what the condition chain looks like.
  */
-dump_if(struct condition * cond)
+void dump_if(struct condition * cond)
 {
   printf(" ");
   while(cond != NULL )
@@ -528,11 +559,13 @@ dump_if(struct condition * cond)
 	printf(")");
 	break;
       case op_variable:
-	printf("$%s", cond->variable);
+	printf("$%s", cond->variable.str);
 	break;
       case op_constant:
-	printf("'%s'", cond->variable);
+	printf("'%s'", cond->variable.str);
 	break;
+      default:
+        break;
       }
       cond = cond->next;
     }
@@ -604,12 +637,14 @@ static int do_source(char * filename)
   return 0;
 }
 
-main(int argc, char * argv[])
+int main(int argc, char * argv[])
 {
+#if 0
   char buffer[1024];
   char * pnt;
   struct kconfig * cfg;
   int    i;
+#endif
 
   /*
    * Read stdin to get the top level script.
@@ -663,6 +698,9 @@ main(int argc, char * argv[])
 	case tok_int:
 	  printf("int ");
 	  break;
+	case tok_hex:
+	  printf("hex ");
+	  break;
 	case tok_comment:
 	  printf("comment ");
 	  break;
@@ -692,6 +730,7 @@ main(int argc, char * argv[])
 	case tok_tristate:
 	case tok_dep_tristate:
 	case tok_int:
+	case tok_hex:
 	  printf("%s %s\n", cfg->label, cfg->optionname);
 	  break;
 	case tok_if:

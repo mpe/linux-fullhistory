@@ -94,8 +94,17 @@ enum RxFilter {
 #define WN4_MEDIA	0x0A		/* Window 4: Various transcvr/media bits. */
 #define  MEDIA_TP	0x00C0		/* Enable link beat and jabber for 10baseT. */
 
+/*
+ * Must be a power of two (we use a binary and in the
+ * circular queue)
+ */
+#define SKB_QUEUE_SIZE	64
+
 struct el3_private {
 	struct enet_statistics stats;
+	/* skb send-queue */
+	int head, size;
+	struct sk_buff *queue[SKB_QUEUE_SIZE];
 };
 
 static ushort id_read_eeprom(int index);
@@ -378,75 +387,40 @@ el3_open(struct device *dev)
 	return 0;					/* Always succeed */
 }
 
-static int
-el3_start_xmit(struct sk_buff *skb, struct device *dev)
+static void
+el3_tx(struct device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	int ioaddr = dev->base_addr;
+	struct sk_buff * skb;
 
-	/* Transmitter timeout, serious problems. */
-	if (dev->tbusy) {
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 10)
-			return 1;
-		printk("%s: transmit timed out, tx_status %2.2x status %4.4x.\n",
-			   dev->name, inb(ioaddr + TX_STATUS), inw(ioaddr + EL3_STATUS));
-		dev->trans_start = jiffies;
-		/* Issue TX_RESET and TX_START commands. */
-		outw(TxReset, ioaddr + EL3_CMD);
-		outw(TxEnable, ioaddr + EL3_CMD);
-		dev->tbusy = 0;
-	}
+	if (el3_debug > 5)
+		printk("	TX room bit was handled.\n");
 
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
+	outw(AckIntr | 0x08, ioaddr + EL3_CMD);
+	if (!lp->size)
+		return;
 
-	if (skb->len <= 0)
-		return 0;
+	/* There's room in the FIFO for a full-sized packet. */
+	while (inw(ioaddr + TX_FREE) > 1536) {
+		skb = lp->queue[lp->head];
+		lp->head = (lp->head + 1) & (SKB_QUEUE_SIZE-1);
+		lp->size--;
 
-	if (el3_debug > 4) {
-		printk("%s: el3_start_xmit(length = %ld) called, status %4.4x.\n",
-			   dev->name, skb->len, inw(ioaddr + EL3_STATUS));
-	}
-#ifndef final_version
-	{	/* Error-checking code, delete for 1.30. */
-		ushort status = inw(ioaddr + EL3_STATUS);
-		if (status & 0x0001 		/* IRQ line active, missed one. */
-			&& inw(ioaddr + EL3_STATUS) & 1) { 			/* Make sure. */
-			printk("%s: Missed interrupt, status then %04x now %04x"
-				   "  Tx %2.2x Rx %4.4x.\n", dev->name, status,
-				   inw(ioaddr + EL3_STATUS), inb(ioaddr + TX_STATUS),
-				   inw(ioaddr + RX_STATUS));
-			/* Fake interrupt trigger by masking, acknowledge interrupts. */
-			outw(SetReadZero | 0x00, ioaddr + EL3_CMD);
-			outw(AckIntr | 0x69, ioaddr + EL3_CMD); /* Ack IRQ */
-			outw(SetReadZero | 0xff, ioaddr + EL3_CMD);
-		}
-	}
-#endif
-
-	/* Avoid timer-based retransmission conflicts. */
-	if (set_bit(0, (void*)&dev->tbusy) != 0)
-		printk("%s: Transmitter access conflict.\n", dev->name);
-	else {
 		/* Put out the doubleword header... */
 		outw(skb->len, ioaddr + TX_FIFO);
 		outw(0x00, ioaddr + TX_FIFO);
 		/* ... and the packet rounded to a doubleword. */
 		outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
 
+		/* free the skb, we're done with it */
+		dev_kfree_skb(skb, FREE_WRITE);
 		dev->trans_start = jiffies;
-		if (inw(ioaddr + TX_FREE) > 1536) {
-			dev->tbusy = 0;
-		} else
-			/* Interrupt us when the FIFO has room for max-sized packet. */
-			outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
+		if (!lp->size)
+			return;
 	}
-
-	dev_kfree_skb (skb, FREE_WRITE);
-
+	/* Interrupt us when the FIFO has room for max-sized packet. */
+	outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
 	/* Clear the Tx status stack. */
 	{
 		short tx_status;
@@ -459,6 +433,44 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 			outb(0x00, ioaddr + TX_STATUS); /* Pop the status stack. */
 		}
 	}
+}
+
+static int
+el3_start_xmit(struct sk_buff *skb, struct device *dev)
+{
+	struct el3_private *lp = (struct el3_private *)dev->priv;
+	unsigned long flags;
+	int ioaddr = dev->base_addr;
+
+	save_flags(flags);
+	cli();
+	/*
+	 * Do we have room in the send queue?
+	 */
+	if (lp->size < SKB_QUEUE_SIZE) {
+		int tail = (lp->head + lp->size) & (SKB_QUEUE_SIZE-1);
+		lp->queue[tail] = skb;
+		lp->size++;
+		/* fake a transmit interrupt to get it started */
+		el3_tx(dev);
+		restore_flags(flags);
+		return 0;
+	}
+
+	/*
+	 * No space, check if we might have timed out?
+	 */
+	if (jiffies - dev->trans_start > HZ) {
+		printk("%s: transmit timed out, tx_status %2.2x status %4.4x.\n",
+			   dev->name, inb(ioaddr + TX_STATUS), inw(ioaddr + EL3_STATUS));
+		dev->trans_start = jiffies;
+		/* Issue TX_RESET and TX_START commands. */
+		outw(TxReset, ioaddr + EL3_CMD);
+		outw(TxEnable, ioaddr + EL3_CMD);
+	}
+	/* free the skb, we might as well drop it on the floor */
+	dev_kfree_skb(skb, FREE_WRITE);
+	restore_flags(flags);
 	return 0;
 }
 
@@ -490,14 +502,9 @@ el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		if (status & 0x10)
 			el3_rx(dev);
 
-		if (status & 0x08) {
-			if (el3_debug > 5)
-				printk("	TX room bit was handled.\n");
-			/* There's room in the FIFO for a full-sized packet. */
-			outw(AckIntr | 0x08, ioaddr + EL3_CMD);
-			dev->tbusy = 0;
-			mark_bh(NET_BH);
-		}
+		if (status & 0x08)
+			el3_tx(dev);
+
 		if (status & 0x80)				/* Statistics full. */
 			update_stats(ioaddr, dev);
 

@@ -448,8 +448,7 @@ static struct format_descr format_req;
  * Track buffer
  * Because these are written to by the DMA controller, they must
  * not contain a 64k byte boundary crossing, or data will be
- * corrupted/lost. Alignment of these is enforced in boot/head.S.
- * Note that you must not change the sizes below without updating head.S.
+ * corrupted/lost.
  */
 static char *floppy_track_buffer=0;
 static int max_buffer_sectors=0;
@@ -3522,7 +3521,7 @@ static int check_floppy_change(kdev_t dev)
 	int drive = DRIVE(dev);
 
 	if (MAJOR(dev) != MAJOR_NR) {
-		DPRINT("floppy_changed: not a floppy\n");
+		DPRINT("check_floppy_change: not a floppy\n");
 		return 0;
 	}
 

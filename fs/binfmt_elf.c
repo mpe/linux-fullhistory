@@ -165,7 +165,8 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	int retval;
 	unsigned int last_bss;
 	int error;
-	int i, k;
+	int i;
+	unsigned int k;
 	
 	elf_bss = 0;
 	last_bss = 0;
@@ -220,13 +221,13 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	    if (eppnt->p_flags & PF_R) elf_prot =  PROT_READ;
 	    if (eppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
 	    if (eppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
-	    if (interp_elf_ex->e_type == ET_EXEC) {
+	    if (interp_elf_ex->e_type == ET_EXEC || load_addr != 0) {
 	    	elf_type |= MAP_FIXED;
 	    	vaddr = eppnt->p_vaddr;
 	    }
 	    
 	    error = do_mmap(file, 
-			    vaddr & 0xfffff000,
+			    load_addr + (vaddr & 0xfffff000),
 			    eppnt->p_filesz + (eppnt->p_vaddr & 0xfff),
 			    elf_prot,
 			    elf_type,
@@ -404,7 +405,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	
 	elf_stack = 0xffffffff;
 	elf_interpreter = NULL;
-	start_code = 0;
+	start_code = 0xffffffff;
 	end_code = 0;
 	end_data = 0;
 	
@@ -414,6 +415,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			{
 				kfree (elf_phdata);
 				kfree(elf_interpreter);
+				sys_close(elf_exec_fileno);
 				return -EINVAL;
 			}
 
@@ -426,6 +428,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 							   GFP_KERNEL);
 			if (elf_interpreter == NULL) {
 				kfree (elf_phdata);
+				sys_close(elf_exec_fileno);
 				return -ENOMEM;
 			}
 			
@@ -458,6 +461,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if(retval < 0) {
 				kfree (elf_phdata);
 				kfree(elf_interpreter);
+				sys_close(elf_exec_fileno);
 				return retval;
 			}
 		}
@@ -482,6 +486,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		  {
 		    kfree(elf_interpreter);
 		    kfree(elf_phdata);
+		    sys_close(elf_exec_fileno);
 		    return -ELIBBAD;
 		  }
 	}
@@ -506,6 +511,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			      kfree(elf_interpreter);
 			}
 			kfree (elf_phdata);
+			sys_close(elf_exec_fileno);
 			return -E2BIG;
 		}
 	}
@@ -582,11 +588,11 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if(!load_addr) 
 			  load_addr = elf_ppnt->p_vaddr - elf_ppnt->p_offset;
 			k = elf_ppnt->p_vaddr;
-			if(k > start_code) start_code = k;
+			if(k < start_code) start_code = k;
 			k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
 			if(k > elf_bss) elf_bss = k;
 #if 1
-			if((elf_ppnt->p_flags | PF_W) && end_code <  k)
+			if((elf_ppnt->p_flags & PF_X) && end_code <  k)
 #else
 			if( !(elf_ppnt->p_flags & PF_W) && end_code <  k)
 #endif
@@ -620,10 +626,11 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	bprm->inode->i_count++;
 #endif
 #ifdef LOW_ELF_STACK
-	current->start_stack = p = elf_stack - 4;
+	current->start_stack = bprm->p = elf_stack - 4;
 #endif
 	current->suid = current->euid = current->fsuid = bprm->e_uid;
 	current->sgid = current->egid = current->fsgid = bprm->e_gid;
+	current->flags &= ~PF_FORKNOEXEC;
 	bprm->p = (unsigned long) 
 	  create_elf_tables((char *)bprm->p,
 			bprm->argc,
@@ -834,6 +841,8 @@ static int dump_seek(struct file *file, off_t off)
  */
 static inline int maydump(struct vm_area_struct *vma)
 {
+	if (!(vma->vm_flags & (VM_READ|VM_WRITE|VM_EXEC)))
+		return 0;
 #if 1
 	if (vma->vm_flags & (VM_WRITE|VM_GROWSUP|VM_GROWSDOWN))
 		return 1;
@@ -1020,6 +1029,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	if (!file.f_op->write)
 		goto close_coredump;
 	has_dumped = 1;
+	current->flags |= PF_DUMPCORE;
 
 	DUMP_WRITE(&elf, sizeof(elf));
 	offset += sizeof(elf);				/* Elf header */

@@ -126,6 +126,16 @@ extern struct inode_operations nfs_symlink_inode_operations;
 
 extern int nfs_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma);
 
+/* NFS root */
+
+#define NFS_ROOT_NAME_LEN	256
+#define NFS_ROOT_ADDRS_LEN	128
+
+extern int nfs_root_mount(struct super_block *sb);
+extern int nfs_root_init(char *nfsname, char *nfsaddrs);
+extern char nfs_root_name[];
+extern char nfs_root_addrs[];
+
 #endif /* __KERNEL__ */
 
 #endif

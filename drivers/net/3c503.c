@@ -456,9 +456,9 @@ el2_block_output(struct device *dev, int count,
  *  Set up then start the internal memory transfer to Tx Start Page
  */
 
-    tmp_rev = htons((unsigned short)start_page);
-    outb(tmp_rev&0xFF, E33G_DMAAH);
-    outb(tmp_rev>>8, E33G_DMAAL);
+    tmp_rev = (unsigned short)start_page;
+    outb(tmp_rev&0xFF, E33G_DMAAL);
+    outb(tmp_rev>>8, E33G_DMAAH);
 
     outb_p((ei_status.interface_num ? ECNTRL_AUI : ECNTRL_THIN ) | ECNTRL_OUTPUT
 	   | ECNTRL_START, E33G_CNTRL);
@@ -519,9 +519,9 @@ el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
  *  No shared memory, use programmed I/O.
  */
 
-    tmp_rev = htons((unsigned short)ring_page);
-    outb(tmp_rev&0xFF, E33G_DMAAH);
-    outb(tmp_rev>>8, E33G_DMAAL);
+    tmp_rev = (unsigned short)ring_page;
+    outb(tmp_rev&0xFF, E33G_DMAAL);
+    outb(tmp_rev>>8, E33G_DMAAH);
 
     outb_p((ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI) | ECNTRL_INPUT
 	   | ECNTRL_START, E33G_CNTRL);
@@ -570,7 +570,7 @@ el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
 /*
  *  No shared memory, use programmed I/O.
  */
-    tmp_rev = htons((unsigned short) ring_offset);
+    tmp_rev = (unsigned short) ring_offset;
     outb(tmp_rev&0xFF, E33G_DMAAL);
     outb(tmp_rev>>8, E33G_DMAAH);
 

@@ -1765,6 +1765,7 @@ static int BusLogic_ComputeResultCode(BusLogic_HostAdapterStatus_T
 */
 
 static void BusLogic_InterruptHandler(int IRQ_Channel,
+				      void *DeviceIdentifier,
 				      Registers_T *InterruptRegisters)
 {
   BusLogic_CCB_T *FirstCompletedCCB = NULL, *LastCompletedCCB = NULL;
@@ -2210,7 +2211,7 @@ int BusLogic_AbortCommand(SCSI_Command_T *Command)
 	     HostAdapter->HostNumber, HostAdapter->IRQ_Channel);
       save_flags(ProcessorFlags);
       cli();
-      BusLogic_InterruptHandler(HostAdapter->IRQ_Channel, NULL);
+      BusLogic_InterruptHandler(HostAdapter->IRQ_Channel, NULL, NULL);
       restore_flags(ProcessorFlags);
       return SCSI_ABORT_SNOOZE;
     }

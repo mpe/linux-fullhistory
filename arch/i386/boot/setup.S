@@ -20,11 +20,16 @@
 ! add APM BIOS checking by Stephen Rothwell, May 1994
 ! (Stephen.Rothwell@pd.necisa.oz.au)
 !
+! High load stuff, initrd support and position independency
+! by Hans Lermen & Werner Almesberger, February 1996
+! <lermen@elserv.ffm.fgan.de>, <almesber@lrc.epfl.ch>
 
 ! NOTE! These had better be the same as in bootsect.s!
 #define __ASSEMBLY__
 #include <linux/config.h>
 #include <asm/segment.h>
+#include <linux/version.h>
+#include <linux/compile.h>
 
 #ifndef SVGA_MODE
 #define SVGA_MODE ASK_VGA
@@ -34,9 +39,11 @@
 #define SIG1	0xAA55
 #define SIG2	0x5A5A
 
-INITSEG  = DEF_INITSEG	! we move boot here - out of the way
-SYSSEG   = DEF_SYSSEG	! system loaded at 0x10000 (65536).
-SETUPSEG = DEF_SETUPSEG	! this is the current segment
+INITSEG  = DEF_INITSEG	! 0x9000, we move boot here - out of the way
+SYSSEG   = DEF_SYSSEG	! 0x1000, system loaded at 0x10000 (65536).
+SETUPSEG = DEF_SETUPSEG	! 0x9020, this is the current segment
+			! ... and the former contents of CS
+DELTA_INITSEG = SETUPSEG - INITSEG ! 0x0020
 
 .globl begtext, begdata, begbss, endtext, enddata, endbss
 .text
@@ -49,14 +56,61 @@ begbss:
 
 entry start
 start:
+	jmp	start_of_setup
+! ------------------------ start of header --------------------------------
+!
+! SETUP-header, must start at CS:2 (old 0x9020:2)
+!
+		.ascii	"HdrS"		! Signature for SETUP-header
+		.word	0x0200		! Version number of header format
+					! (must be >= 0x0105
+					! else old loadlin-1.5 will fail)
+realmode_swtch:	.word	0,0		! default_switch,SETUPSEG
+start_sys_seg:	.word	SYSSEG
+		.word	kernel_version	! pointing to kernel version string
+  ! note: above part of header is compatible with loadlin-1.5 (header v1.5),
+  !        must not change it
+
+type_of_loader:	.byte	0		! = 0, old one (LILO, Loadlin,
+					!      Bootlin, SYSLX, bootsect...)
+					! else it is set by the loader:
+					! 0xTV: T=0 for LILO
+					!       T=1 for Loadlin
+					!       T=2 for bootsect-loader
+					!       V = version
+loadflags:	.byte	0	! unused bits =0 (reserved for future development)
+LOADED_HIGH	= 1		! bit within loadflags,
+				! if set, then the kernel is loaded high
+setup_move_size: .word  0x8000	! size to move, when we (setup) are not
+				! loaded at 0x90000. We will move ourselves
+				! to 0x90000 then just before jumping into
+				! the kernel. However, only the loader
+				! know how much of data behind us also needs
+				! to be loaded.
+code32_start:	.long	0x1000		! here loaders can put a different
+					! start address for 32-bit code.
+					!   0x1000 = default for zImage
+					! 0x100000 = default for big kernel
+ramdisk_image:	.long	0	! address of loaded ramdisk image
+				! Here the loader (or kernel generator) puts
+				! the 32-bit address were it loaded the image.
+				! This only will be interpreted by the kernel.
+ramdisk_size:	.long	0	! its size in bytes
+bootsect_kludge:
+		.word   bootsect_helper,SETUPSEG
+! ------------------------ end of header ----------------------------------
+
+start_of_setup:
 ! Bootlin depends on this being done early
 	mov	ax,#0x01500
 	mov	dl,#0x81
 	int	0x13
 
-! Check signature at end of setup
-	mov	ax,#SETUPSEG
+! set DS=CS, we know that SETUPSEG == CS at this point
+	mov	ax,cs		! aka #SETUPSEG
 	mov	ds,ax
+
+! Check signature at end of setup
 	cmp	setup_sig1,#SIG1
 	jne	bad_sig
 	cmp	setup_sig2,#SIG2
@@ -89,14 +143,14 @@ beep:	mov	al,#0x07
 	
 no_sig_mess:	.ascii	"No setup signature found ..."
 		db	0x00
-start_sys_seg:	.word	SYSSEG
 
 good_sig1:
 	jmp	good_sig
 
 ! We now have to find the rest of the setup code/data
 bad_sig:
-	mov	ax,#INITSEG
+	mov	ax,cs		! aka #SETUPSEG
+	sub	ax,#DELTA_INITSEG ! aka #INITSEG
 	mov	ds,ax
 	xor	bh,bh
 	mov	bl,[497]	! get setup sects from boot sector
@@ -111,14 +165,14 @@ bad_sig:
 ! Move rest of setup code/data to here
 	mov	di,#2048	! four sectors loaded by LILO
 	sub	si,si
-	mov	ax,#SETUPSEG
+	mov	ax,cs		! aka #SETUPSEG
 	mov	es,ax
 	mov	ax,#SYSSEG
 	mov	ds,ax
 	rep
 	movsw
 
-	mov	ax,#SETUPSEG
+	mov	ax,cs		! aka #SETUPSEG
 	mov	ds,ax
 	cmp	setup_sig1,#SIG1
 	jne	no_sig
@@ -133,9 +187,29 @@ no_sig_loop:
 	jmp	no_sig_loop
 
 good_sig:
-	mov	ax,#INITSEG
+	mov	ax,cs		! aka #SETUPSEG
+	sub	ax,#DELTA_INITSEG ! aka #INITSEG
 	mov	ds,ax
 
+! check if an old loader tries to load a big-kernel
+	seg cs
+	test	byte ptr loadflags,#LOADED_HIGH ! have we a big kernel ?
+	jz	loader_ok	! NO, no danger even for old loaders
+				! YES, we have a big-kernel
+	seg cs
+	cmp	byte ptr type_of_loader,#0 ! have we one of the new loaders ?
+	jnz	loader_ok	! YES, ok
+				! NO, we have an old loader, must give up
+	push    cs
+	pop	ds
+	lea	si,loader_panic_mess
+	call	prtstr
+	jmp	no_sig_loop
+loader_panic_mess: 
+	.ascii	"Wrong loader, giving up..."
+	db	0
+
+loader_ok:
 ! Get memory size (extended mem, kB)
 
 	mov	ah,#0x88
@@ -191,7 +265,8 @@ novga:	mov	[14],al
 	xor	ax,ax		! clear ax
 	mov	ds,ax
 	lds	si,[4*0x41]
-	mov	ax,#INITSEG
+	mov	ax,cs		! aka #SETUPSEG
+	sub	ax,#DELTA_INITSEG ! aka #INITSEG
 	push	ax
 	mov	es,ax
 	mov	di,#0x0080
@@ -221,7 +296,8 @@ novga:	mov	[14],al
 	cmp	ah,#3
 	je	is_disk1
 no_disk1:
-	mov	ax,#INITSEG
+	mov	ax,cs		! aka #SETUPSEG
+	sub	ax,#DELTA_INITSEG ! aka #INITSEG
 	mov	es,ax
 	mov	di,#0x0090
 	mov	cx,#0x10
@@ -233,7 +309,8 @@ is_disk1:
 
 ! check for PS/2 pointing device
 
-	mov	ax,#INITSEG
+	mov	ax,cs		! aka #SETUPSEG
+	sub	ax,#DELTA_INITSEG ! aka #INITSEG
 	mov	ds,ax
 	mov	[0x1ff],#0	! default is no pointing device
 	int	0x11		! int 0x11: equipment determination
@@ -244,7 +321,8 @@ no_psmouse:
 
 #ifdef CONFIG_APM
 ! check for APM BIOS
-
+		! NOTE:	DS is pointing to the bootsector
+		!
 	mov	[64],#0		! version == 0 means no APM BIOS
 
 	mov	ax,#0x05300	! APM BIOS installation check
@@ -285,21 +363,43 @@ done_apm_bios:
 
 ! now we want to move to protected mode ...
 
-	cli			! no interrupts allowed !
-	mov	al,#0x80	! disable NMI for the bootup sequence
-	out	#0x70,al
+	seg cs
+	cmp	realmode_swtch,#0
+	jz	rmodeswtch_normal
+	seg cs
+	callf	far * realmode_swtch
+	jmp	rmodeswtch_end
+rmodeswtch_normal:
+        push	cs
+	call	default_switch
+rmodeswtch_end:
 
-! first we move the system to its rightful place
+! we get the code32 start address and modify the below 'jmpi'
+! (loader may have changed it)
+	seg cs
+	mov	eax,code32_start
+	seg cs
+	mov	code32,eax
 
+! Now we move the system to its rightful place
+! ...but we check, if we have a big-kernel.
+! in this case we *must* not move it ...
+	seg cs
+	test	byte ptr loadflags,#LOADED_HIGH
+	jz	do_move0	! we have a normal low loaded zImage
+				! we have a high loaded big kernel
+	jmp	end_move	! ... and we skip moving
+
+do_move0:
 	mov	ax,#0x100	! start of destination segment
+	mov	bp,cs		! aka #SETUPSEG
+	sub	bp,#DELTA_INITSEG ! aka #INITSEG
 	seg cs
 	mov	bx,start_sys_seg	! start of source segment
 	cld			! 'direction'=0, movs moves forward
 do_move:
 	mov	es,ax		! destination segment
 	inc	ah		! instead of add ax,#0x100
-	cmp	ax,#0x9000
-	jz	end_move
 	mov	ds,bx		! source segment
 	add	bx,#0x100
 	sub	di,di
@@ -307,13 +407,58 @@ do_move:
 	mov 	cx,#0x800
 	rep
 	movsw
-	jmp	do_move
+	cmp	bx,bp		! we assume start_sys_seg > 0x200,
+				! so we will perhaps read one page more then
+				! needed, but never overwrite INITSEG because
+				! destination is minimum one page below source
+	jb	do_move
 
 ! then we load the segment descriptors
 
 end_move:
-	mov	ax,#SETUPSEG	! right, forgot this at first. didn't work :-)
+	mov	ax,cs ! aka #SETUPSEG	! right, forgot this at first. didn't work :-)
 	mov	ds,ax
+
+! If we have our code not at 0x90000, we need to move it there now.
+! We also then need to move the params behind it (commandline)
+! Because we would overwrite the code on the current IP, we move
+! it in two steps, jumping high after the first one.
+	mov	ax,cs
+	cmp	ax,#SETUPSEG
+	je	end_move_self
+	cli	! make sure we really have interrupts disabled !
+		! because after this the stack should not be used
+	sub	ax,#DELTA_INITSEG ! aka #INITSEG
+	mov	dx,ss
+	cmp	dx,ax
+	jb	move_self_1
+	add	dx,#INITSEG
+	sub	dx,ax		! this will be SS after the move
+move_self_1:
+	mov	ds,ax
+	mov	ax,#INITSEG	! real INITSEG
+	mov	es,ax
+	seg cs
+	mov	cx,setup_move_size
+	std		! we have to move up, so we use direction down
+			! because the areas may overlap
+	mov	di,cx
+	dec	di
+	mov	si,di
+	sub	cx,#move_self_here+0x200
+	rep
+	movsb
+	jmpi	move_self_here,SETUPSEG ! jump to our final place
+move_self_here:
+	mov	cx,#move_self_here+0x200
+	rep
+	movsb
+	mov	ax,#SETUPSEG
+	mov	ds,ax
+	mov	ss,dx
+			! now we are at the right place
+end_move_self:
+
 	lidt	idt_48		! load idt with 0,0
 	lgdt	gdt_48		! load gdt with whatever appropriate
 
@@ -379,7 +524,8 @@ end_move:
 ! Well, now's the time to actually move into protected mode. To make
 ! things as simple as possible, we do no register set-up or anything,
 ! we let the gnu-compiled 32-bit programs do that. We just jump to
-! absolute address 0x00000, in 32-bit protected mode.
+! absolute address 0x1000 (or the loader supplied one),
+! in 32-bit protected mode.
 !
 ! Note that the short jump isn't strictly needed, although there are
 ! reasons why it might be a good idea. It won't hurt in any case.
@@ -390,7 +536,116 @@ end_move:
 	jmp	flush_instr
 flush_instr:
 	mov	bx,#0		! Flag to indicate a boot
-	jmpi	0x1000,KERNEL_CS	! jmp offset 1000 of segment 0x10 (cs)
+
+! NOTE: For high loaded big kernels we need a
+!	jmpi    0x100000,KERNEL_CS
+!
+!	but we yet haven't reloaded the CS register, so the default size 
+!	of the target offset still is 16 bit.
+!       However, using an operant prefix (0x66), the CPU will properly
+!	take our 48 bit far pointer. (INTeL 80386 Programmer's Reference
+!	Manual, Mixing 16-bit and 32-bit code, page 16-6)
+	db	0x66,0xea	! prefix + jmpi-opcode
+code32:	dd	0x1000		! will be set to 0x100000 for big kernels
+	dw	KERNEL_CS
+
+
+kernel_version:	.ascii	UTS_RELEASE
+		.ascii	" ("
+		.ascii	LINUX_COMPILE_BY
+		.ascii	"@"
+		.ascii	LINUX_COMPILE_HOST
+		.ascii	") "
+		.ascii	UTS_VERSION
+		db	0
+
+! This is the default real mode switch routine.
+! to be called just before protected mode transition
+
+default_switch:
+	cli			! no interrupts allowed !
+	mov	al,#0x80	! disable NMI for the bootup sequence
+	out	#0x70,al
+	retf
+
+! This routine only gets called, if we get loaded by the simple
+! bootsect loader _and_ have a bzImage to load.
+! Because there is no place left in the 512 bytes of the boot sector,
+! we must emigrate to code space here.
+!
+bootsect_helper:
+	seg cs
+	cmp	word ptr bootsect_es,#0
+	jnz	bootsect_second
+	seg cs
+	mov	byte ptr type_of_loader,#0x20
+	mov	ax,es
+	shr	ax,#4
+	seg	cs
+	mov	byte ptr bootsect_src_base+2,ah
+	mov	ax,es
+	seg cs
+	mov	bootsect_es,ax
+	sub	ax,#SYSSEG
+	retf			! nothing else to do for now
+bootsect_second:
+	push	cx
+	push	si
+	push	bx
+	test	bx,bx	! 64K full ?
+	jne	bootsect_ex
+	mov	cx,#0x8000	! full 64K move, INT15 moves words
+	push	cs
+	pop	es
+	mov	si,#bootsect_gdt
+	mov	ax,#0x8700
+	int	0x15
+	jc	bootsect_panic	! this, if INT15 fails
+	seg cs
+	mov	es,bootsect_es	! we reset es to always point to 0x10000
+	seg cs
+	inc	byte ptr bootsect_dst_base+2
+bootsect_ex:
+	seg cs
+	mov	ah, byte ptr bootsect_dst_base+2
+	shl	ah,4	! we now have the number of moved frames in ax
+	xor	al,al
+	pop	bx
+	pop	si
+	pop	cx
+	retf
+
+bootsect_gdt:
+	.word	0,0,0,0
+	.word	0,0,0,0
+bootsect_src:
+	.word	0xffff
+bootsect_src_base:
+	.byte	0,0,1			! base = 0x010000
+	.byte	0x93			! typbyte
+	.word	0			! limit16,base24 =0
+bootsect_dst:
+	.word	0xffff
+bootsect_dst_base:
+	.byte	0,0,0x10		! base = 0x100000
+	.byte	0x93			! typbyte
+	.word	0			! limit16,base24 =0
+	.word	0,0,0,0			! BIOS CS
+	.word	0,0,0,0			! BIOS DS
+bootsect_es:
+	.word	0
+
+bootsect_panic:
+	push	cs
+	pop	ds
+	cld
+	lea	si,bootsect_panic_mess
+	call	prtstr
+bootsect_panic_loop:
+	jmp	bootsect_panic_loop
+bootsect_panic_mess:
+	.ascii	"INT15 refuses to access high mem, giving up..."
+	db	0
 
 ! This routine checks that the keyboard command queue is empty
 ! (after emptying the output buffers)
@@ -975,15 +1230,15 @@ gdt:
 
 	.word	0,0,0,0		! unused
 
-	.word	0x07FF		! 8Mb - limit=2047 (2048*4096=8Mb)
+	.word	0xFFFF		! 4Gb - (0x100000*0x1000 = 4Gb)
 	.word	0x0000		! base address=0
 	.word	0x9A00		! code read/exec
-	.word	0x00C0		! granularity=4096, 386
+	.word	0x00CF		! granularity=4096, 386 (+5th nibble of limit)
 
-	.word	0x07FF		! 8Mb - limit=2047 (2048*4096=8Mb)
+	.word	0xFFFF		! 4Gb - (0x100000*0x1000 = 4Gb)
 	.word	0x0000		! base address=0
 	.word	0x9200		! data read/write
-	.word	0x00C0		! granularity=4096, 386
+	.word	0x00CF		! granularity=4096, 386 (+5th nibble of limit)
 
 idt_48:
 	.word	0			! idt limit=0

@@ -65,72 +65,71 @@ void fat_put_super(struct super_block *sb)
 }
 
 
-static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
-    gid_t *gid,int *umask,int *debug,int *fat,int *quiet,
-	int *blksize, char *dotsOK, char *sys_immutable, char *showexec)
+static int parse_options(char *options,int *fat, int *blksize, int *debug,
+			 struct fat_mount_options *opts)
 {
 	char *this_char,*value;
 
-	*check = 'n';
-	*conversion = 'b';
-	*dotsOK = 0;
-	*showexec = 0;
-	*uid = current->uid;
-	*gid = current->gid;
-	*umask = current->fs->umask;
-	*debug = *fat = *quiet = *sys_immutable = 0;
+	opts->name_check = 'n';
+	opts->conversion = 'b';
+	opts->fs_uid = current->uid;
+	opts->fs_gid = current->gid;
+	opts->fs_umask = current->fs->umask;
+	opts->quiet = opts->sys_immutable = opts->dotsOK = opts->showexec = opts->isvfat = 0;
+	*debug = *fat = 0;
+
 	if (!options) return 1;
 	for (this_char = strtok(options,","); this_char; this_char = strtok(NULL,",")) {
 		if ((value = strchr(this_char,'=')) != NULL)
 			*value++ = 0;
 		if (!strcmp(this_char,"check") && value) {
 			if (value[0] && !value[1] && strchr("rns",*value))
-				*check = *value;
-			else if (!strcmp(value,"relaxed")) *check = 'r';
-			else if (!strcmp(value,"normal")) *check = 'n';
-			else if (!strcmp(value,"strict")) *check = 's';
+				opts->name_check = *value;
+			else if (!strcmp(value,"relaxed")) opts->name_check = 'r';
+			else if (!strcmp(value,"normal")) opts->name_check = 'n';
+			else if (!strcmp(value,"strict")) opts->name_check = 's';
 			else return 0;
 		}
 		else if (!strcmp(this_char,"conv") && value) {
 			if (value[0] && !value[1] && strchr("bta",*value))
-				*conversion = *value;
-			else if (!strcmp(value,"binary")) *conversion = 'b';
-			else if (!strcmp(value,"text")) *conversion = 't';
-			else if (!strcmp(value,"auto")) *conversion = 'a';
+				opts->conversion = *value;
+			else if (!strcmp(value,"binary")) opts->conversion = 'b';
+			else if (!strcmp(value,"text")) opts->conversion = 't';
+			else if (!strcmp(value,"auto")) opts->conversion = 'a';
 			else return 0;
 		}
 		else if (!strcmp(this_char,"dots")) {
-			*dotsOK = 1;
+			opts->dotsOK = 1;
 		}
 		else if (!strcmp(this_char,"nodots")) {
-			*dotsOK = 0;
+			opts->dotsOK = 0;
 		}
 		else if (!strcmp(this_char,"showexec")) {
-			*showexec = 1;
+			opts->showexec = 1;
 		}
 		else if (!strcmp(this_char,"dotsOK") && value) {
-			if (!strcmp(value,"yes")) *dotsOK = 1;
-			else if (!strcmp(value,"no")) *dotsOK = 0;
+			if (!strcmp(value,"yes")) opts->dotsOK = 1;
+			else if (!strcmp(value,"no")) opts->dotsOK = 0;
 			else return 0;
 		}
 		else if (!strcmp(this_char,"uid")) {
 			if (!value || !*value)
 				return 0;
-			*uid = simple_strtoul(value,&value,0);
+			opts->fs_uid = simple_strtoul(value,&value,0);
 			if (*value)
 				return 0;
 		}
 		else if (!strcmp(this_char,"gid")) {
 			if (!value || !*value)
 				return 0;
-			*gid = simple_strtoul(value,&value,0);
+			opts->fs_gid = simple_strtoul(value,&value,0);
 			if (*value)
 				return 0;
 		}
 		else if (!strcmp(this_char,"umask")) {
 			if (!value || !*value)
 				return 0;
-			*umask = simple_strtoul(value,&value,8);
+			opts->fs_umask = simple_strtoul(value,&value,8);
 			if (*value)
 				return 0;
 		}
@@ -147,7 +146,7 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 		}
 		else if (!strcmp(this_char,"quiet")) {
 			if (value) return 0;
-			*quiet = 1;
+			opts->quiet = 1;
 		}
 		else if (!strcmp(this_char,"blocksize")) {
 			*blksize = simple_strtoul(value,&value,0);
@@ -160,7 +159,7 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 		else if (!strcmp(this_char,"sys_immutable")) {
 			if (value)
 				return 0;
-			*sys_immutable = 1;
+			opts->sys_immutable = 1;
 		}
 	}
 	return 1;
@@ -174,12 +173,9 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 	struct buffer_head *bh;
 	struct msdos_boot_sector *b;
 	int data_sectors,logical_sector_size,sector_mult,fat_clusters=0;
-	int debug,error,fat,quiet;
-	char check,conversion,dotsOK,sys_immutable,showexec;
-	uid_t uid;
-	gid_t gid;
-	int umask;
+	int debug,error,fat;
 	int blksize = 512;
+	struct fat_mount_options opts;
 
 	MOD_INC_USE_COUNT;
 	if (hardsect_size[MAJOR(sb->s_dev)] != NULL){
@@ -188,8 +184,7 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 			printk ("MSDOS: Hardware sector size is %d\n",blksize);
 		}
 	}
-	if (!parse_options((char *) data,&check,&conversion,&uid,&gid,&umask,
-	    &debug,&fat,&quiet,&blksize,&dotsOK,&sys_immutable,&showexec)
+	if (!parse_options((char *) data, &fat, &blksize, &debug, &opts)
 		|| (blksize != 512 && blksize != 1024)) {
 		sb->s_dev = 0;
 		MOD_DEC_USE_COUNT;
@@ -271,15 +266,17 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 	if (error || debug) {
 		/* The MSDOS_CAN_BMAP is obsolete, but left just to remember */
 		printk("[MS-DOS FS Rel. 12,FAT %d,check=%c,conv=%c,"
-		    "uid=%d,gid=%d,umask=%03o%s]\n",MSDOS_SB(sb)->fat_bits,check,
-		    conversion,uid,gid,umask,MSDOS_CAN_BMAP(MSDOS_SB(sb)) ?
-		    ",bmap" : "");
+		       "uid=%d,gid=%d,umask=%03o%s]\n",
+		       MSDOS_SB(sb)->fat_bits,opts.name_check,
+		       opts.conversion,opts.fs_uid,opts.fs_gid,opts.fs_umask,
+		       MSDOS_CAN_BMAP(MSDOS_SB(sb)) ? ",bmap" : "");
 		printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,"
-		    "se=%d,ts=%ld,ls=%d]\n",b->media,MSDOS_SB(sb)->cluster_size,
-		    MSDOS_SB(sb)->fats,MSDOS_SB(sb)->fat_start,MSDOS_SB(sb)->
-		    fat_length,MSDOS_SB(sb)->dir_start,MSDOS_SB(sb)->dir_entries,
-		    MSDOS_SB(sb)->data_start,CF_LE_W(*(unsigned short *) &b->
-		    sectors),(unsigned long)b->total_sect,logical_sector_size);
+		       "se=%d,ts=%ld,ls=%d]\n",b->media,MSDOS_SB(sb)->cluster_size,
+		       MSDOS_SB(sb)->fats,MSDOS_SB(sb)->fat_start,MSDOS_SB(sb)->fat_length,
+		       MSDOS_SB(sb)->dir_start,MSDOS_SB(sb)->dir_entries,
+		       MSDOS_SB(sb)->data_start,
+		       CF_LE_W(*(unsigned short *) &b->sectors),
+		       (unsigned long)b->total_sect,logical_sector_size);
 		printk ("Transaction block size = %d\n",blksize);
 	}
 	if (MSDOS_SB(sb)->clusters+2 > fat_clusters)
@@ -293,22 +290,12 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 		return NULL;
 	}
 	sb->s_magic = MSDOS_SUPER_MAGIC;
-	MSDOS_SB(sb)->name_check = check;
-	MSDOS_SB(sb)->conversion = conversion;
 	/* set up enough so that it can read an inode */
-	MSDOS_SB(sb)->fs_uid = uid;
-	MSDOS_SB(sb)->fs_gid = gid;
-	MSDOS_SB(sb)->fs_umask = umask;
-	MSDOS_SB(sb)->quiet = quiet;
-	MSDOS_SB(sb)->dotsOK = dotsOK;
-	MSDOS_SB(sb)->showexec = showexec;
-	MSDOS_SB(sb)->sys_immutable = sys_immutable;
-	MSDOS_SB(sb)->vfat = 0;   /* vfat_read_super sets this */
-	MSDOS_SB(sb)->umsdos = 0; /* umsdos_read_super will set this */
 	MSDOS_SB(sb)->free_clusters = -1; /* don't know yet */
 	MSDOS_SB(sb)->fat_wait = NULL;
 	MSDOS_SB(sb)->fat_lock = 0;
 	MSDOS_SB(sb)->prev_free = 0;
+	memcpy(&(MSDOS_SB(sb)->options), &opts, sizeof(struct fat_mount_options));
 	if (!(sb->s_mounted = iget(sb,MSDOS_ROOT_INO))) {
 		sb->s_dev = 0;
 		printk("get root inode failed\n");
@@ -382,11 +369,11 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 	MSDOS_I(inode)->i_busy = 0;
 	MSDOS_I(inode)->i_depend = MSDOS_I(inode)->i_old = NULL;
 	MSDOS_I(inode)->i_binary = 1;
-	inode->i_uid = MSDOS_SB(inode->i_sb)->fs_uid;
-	inode->i_gid = MSDOS_SB(inode->i_sb)->fs_gid;
+	inode->i_uid = MSDOS_SB(inode->i_sb)->options.fs_uid;
+	inode->i_gid = MSDOS_SB(inode->i_sb)->options.fs_gid;
 	inode->i_version = ++event;
 	if (inode->i_ino == MSDOS_ROOT_INO) {
-		inode->i_mode = (S_IRWXUGO & ~MSDOS_SB(inode->i_sb)->fs_umask) |
+		inode->i_mode = (S_IRWXUGO & ~MSDOS_SB(inode->i_sb)->options.fs_umask) |
 		    S_IFDIR;
 		inode->i_op = fs_dir_inode_ops;
 		inode->i_nlink = fat_subdirs(inode)+2;
@@ -412,7 +399,7 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 	    [inode->i_ino & (MSDOS_DPB-1)];
 	if ((raw_entry->attr & ATTR_DIR) && !IS_FREE(raw_entry->name)) {
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,S_IRWXUGO &
-		    ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IFDIR;
+		    ~MSDOS_SB(inode->i_sb)->options.fs_umask) | S_IFDIR;
 		inode->i_op = fs_dir_inode_ops;
 
 		MSDOS_I(inode)->i_start = CF_LE_W(raw_entry->start);
@@ -437,10 +424,11 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 			}
 	} else { /* not a directory */
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,
-		    ((IS_NOEXEC(inode) || (MSDOS_SB(inode->i_sb)->showexec &&
-						!is_exec(raw_entry->ext)))
+		    ((IS_NOEXEC(inode) || 
+		      (MSDOS_SB(inode->i_sb)->options.showexec &&
+		       !is_exec(raw_entry->ext)))
 		    	? S_IRUGO|S_IWUGO : S_IRWXUGO)
-		    & ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IFREG;
+		    & ~MSDOS_SB(inode->i_sb)->options.fs_umask) | S_IFREG;
 		inode->i_op = (sb->s_blocksize == 1024)
 			? &fat_file_inode_operations_1024
 			: &fat_file_inode_operations;
@@ -449,9 +437,9 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 		inode->i_size = CF_LE_L(raw_entry->size);
 	}
 	if(raw_entry->attr & ATTR_SYS)
-		if (MSDOS_SB(inode->i_sb)->sys_immutable)
+		if (MSDOS_SB(inode->i_sb)->options.sys_immutable)
 			inode->i_flags |= S_IMMUTABLE;
-	MSDOS_I(inode)->i_binary = is_binary(MSDOS_SB(inode->i_sb)->conversion,
+	MSDOS_I(inode)->i_binary = is_binary(MSDOS_SB(inode->i_sb)->options.conversion,
 	    raw_entry->ext);
 	MSDOS_I(inode)->i_attrs = raw_entry->attr & ATTR_UNUSED;
 	/* this is as close to the truth as we can get ... */
@@ -461,7 +449,7 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 	inode->i_mtime = inode->i_atime =
 	    date_dos2unix(CF_LE_W(raw_entry->time),CF_LE_W(raw_entry->date));
 	inode->i_ctime =
-		MSDOS_SB(inode->i_sb)->vfat
+		MSDOS_SB(inode->i_sb)->options.isvfat
 		? date_dos2unix(CF_LE_W(raw_entry->ctime),CF_LE_W(raw_entry->cdate))
 		: inode->i_mtime;
 	brelse(bh);
@@ -498,7 +486,7 @@ void fat_write_inode(struct inode *inode)
 	fat_date_unix2dos(inode->i_mtime,&raw_entry->time,&raw_entry->date);
 	raw_entry->time = CT_LE_W(raw_entry->time);
 	raw_entry->date = CT_LE_W(raw_entry->date);
-	if (MSDOS_SB(sb)->vfat) {
+	if (MSDOS_SB(sb)->options.isvfat) {
 		fat_date_unix2dos(inode->i_ctime,&raw_entry->ctime,&raw_entry->cdate);
 		raw_entry->ctime = CT_LE_W(raw_entry->ctime);
 		raw_entry->cdate = CT_LE_W(raw_entry->cdate);
@@ -517,15 +505,15 @@ int fat_notify_change(struct inode * inode,struct iattr * attr)
 		return error;
 
 	if (((attr->ia_valid & ATTR_UID) && 
-	     (attr->ia_uid != MSDOS_SB(inode->i_sb)->fs_uid)) ||
+	     (attr->ia_uid != MSDOS_SB(inode->i_sb)->options.fs_uid)) ||
 	    ((attr->ia_valid & ATTR_GID) && 
-	     (attr->ia_gid != MSDOS_SB(inode->i_sb)->fs_gid)) ||
+	     (attr->ia_gid != MSDOS_SB(inode->i_sb)->options.fs_gid)) ||
 	    ((attr->ia_valid & ATTR_MODE) &&
 	     (attr->ia_mode & ~MSDOS_VALID_MODE)))
 		error = -EPERM;
 
 	if (error)
-		return MSDOS_SB(inode->i_sb)->quiet ? 0 : error;
+		return MSDOS_SB(inode->i_sb)->options.quiet ? 0 : error;
 
 	inode_setattr(inode, attr);
 
@@ -535,8 +523,8 @@ int fat_notify_change(struct inode * inode,struct iattr * attr)
 		inode->i_mode |= S_IXUGO;
 
 	inode->i_mode = ((inode->i_mode & S_IFMT) | ((((inode->i_mode & S_IRWXU
-	    & ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IRUSR) >> 6)*S_IXUGO)) &
-	    ~MSDOS_SB(inode->i_sb)->fs_umask;
+	    & ~MSDOS_SB(inode->i_sb)->options.fs_umask) | S_IRUSR) >> 6)*S_IXUGO)) &
+	    ~MSDOS_SB(inode->i_sb)->options.fs_umask;
 	return 0;
 }
 

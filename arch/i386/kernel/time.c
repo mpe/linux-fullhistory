@@ -17,6 +17,7 @@
 #include <linux/param.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/interrupt.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -264,7 +265,7 @@ static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	   basically because we don't yet share IRQ's around. This message is
 	   rigged to be safe on the 386 - basically its a hack, so don't look
 	   closely for now.. */
-	smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0); 
+	/*smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0); */
 	    
 }
 
@@ -352,27 +353,26 @@ unsigned long get_cmos_time(void)
 	return mktime(year, mon, day, hour, min, sec);
 }
 
+struct irqaction irq0  = { timer_interrupt, 0, 0, "timer", NULL, NULL};
+
 void time_init(void)
 {
-	void (*irq_handler)(int, void *, struct pt_regs *);
 	xtime.tv_sec = get_cmos_time();
 	xtime.tv_usec = 0;
 
 	/* If we have the CPU hardware time counters, use them */
-	irq_handler = timer_interrupt;
 #ifndef CONFIG_APM
 				/* Don't use them if a suspend/resume could
                                    corrupt the timer value.  This problem
                                    needs more debugging. */
 	if (x86_capability & 16) {
-		irq_handler = pentium_timer_interrupt;
 		do_gettimeoffset = do_fast_gettimeoffset;
 		/* read Pentium cycle counter */
 		__asm__(".byte 0x0f,0x31"
 			:"=a" (((unsigned long *) &init_timer_cc)[0]),
 			 "=d" (((unsigned long *) &init_timer_cc)[1]));
+		irq0.handler = pentium_timer_interrupt;
 	}
 #endif
-	if (request_irq(TIMER_IRQ, irq_handler, 0, "timer", NULL) != 0)
-		panic("Could not allocate timer IRQ!");
+	enable_irq(0);
 }

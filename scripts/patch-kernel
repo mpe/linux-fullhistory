@@ -36,11 +36,11 @@ do
     fi
 
     echo -n "Applying $patch... "
-    if (gunzip -dc $patchdir/$patch | grep -v '^\\' | patch -p1 -s -E -d $sourcedir)
+    if gunzip -dc $patchdir/$patch | patch -p1 -s -N -E -d $sourcedir
     then
-	echo "done"
+	echo "done."
     else
-        echo "Patch failed.  Clean up yourself."
+        echo "failed.  Clean up yourself."
         break
     fi
     if [ "`find $sourcedir '(' -name '*.rej' -o -name '.*.rej' ')' -print`" ]

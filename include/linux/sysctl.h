@@ -56,6 +56,9 @@ struct __sysctl_args {
 #define KERN_MAXID	13
 #define KERN_SECURELVL	14	/* int: system security level */
 #define KERN_PANIC	15	/* int: panic timeout */
+#define KERN_REALROOTDEV 16	/* real root device to mount after initrd */
+#define KERN_NFSRNAME	17	/* NFS root name */
+#define KERN_NFSRADDRS	18	/* NFS root addresses */
 
 /* CTL_VM names: */
 #define VM_SWAPCTL	1	/* struct: Set vm swapping control */

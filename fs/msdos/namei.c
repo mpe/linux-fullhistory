@@ -154,9 +154,9 @@ static int msdos_find(struct inode *dir,const char *name,int len,
 	char dotsOK;
 	char scantype;
 
-	dotsOK = MSDOS_SB(dir->i_sb)->dotsOK;
-	res = msdos_format_name(MSDOS_SB(dir->i_sb)->name_check,
-	    name,len, msdos_name,1,dotsOK);
+	dotsOK = MSDOS_SB(dir->i_sb)->options.dotsOK;
+	res = msdos_format_name(MSDOS_SB(dir->i_sb)->options.name_check,
+				name,len, msdos_name,1,dotsOK);
 	if (res < 0)
 		return -ENOENT;
 	if((name[0]=='.') && dotsOK){
@@ -302,8 +302,9 @@ int msdos_create(struct inode *dir,const char *name,int len,int mode,
 	int ino,res,is_hid;
 
 	if (!dir) return -ENOENT;
-	if ((res = msdos_format_name(MSDOS_SB(dir->i_sb)->name_check,name,len,
-	    msdos_name,0,MSDOS_SB(dir->i_sb)->dotsOK)) < 0) {
+	if ((res = msdos_format_name(MSDOS_SB(dir->i_sb)->options.name_check,
+				     name,len,msdos_name,0,
+				     MSDOS_SB(dir->i_sb)->options.dotsOK)) < 0) {
 		iput(dir);
 		return res;
 	}
@@ -427,8 +428,9 @@ int msdos_mkdir(struct inode *dir,const char *name,int len,int mode)
 	char msdos_name[MSDOS_NAME];
 	int ino,res,is_hid;
 
-	if ((res = msdos_format_name(MSDOS_SB(dir->i_sb)->name_check,name,len,
-	    msdos_name,0,MSDOS_SB(dir->i_sb)->dotsOK)) < 0) {
+	if ((res = msdos_format_name(MSDOS_SB(dir->i_sb)->options.name_check,
+				     name,len,msdos_name,0,
+				     MSDOS_SB(dir->i_sb)->options.dotsOK)) < 0) {
 		iput(dir);
 		return res;
 	}
@@ -740,11 +742,13 @@ int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
 	int old_ino,error;
 	int is_hid,old_hid; /* if new file and old file are hidden */
 
-	if ((error = msdos_format_name(MSDOS_SB(old_dir->i_sb)->name_check,
-	    old_name,old_len,old_msdos_name,1,MSDOS_SB(old_dir->i_sb)->dotsOK))
+	if ((error = msdos_format_name(MSDOS_SB(old_dir->i_sb)->options.name_check,
+				       old_name,old_len,old_msdos_name,1,
+				       MSDOS_SB(old_dir->i_sb)->options.dotsOK))
 	    < 0) goto rename_done;
-	if ((error = msdos_format_name(MSDOS_SB(new_dir->i_sb)->name_check,
-	    new_name,new_len,new_msdos_name,0,MSDOS_SB(new_dir->i_sb)->dotsOK))
+	if ((error = msdos_format_name(MSDOS_SB(new_dir->i_sb)->options.name_check,
+				       new_name,new_len,new_msdos_name,0,
+				       MSDOS_SB(new_dir->i_sb)->options.dotsOK))
 	    < 0) goto rename_done;
 	is_hid = (new_name[0]=='.') && (new_msdos_name[0]!='.');
 	old_hid = (old_name[0]=='.') && (old_msdos_name[0]!='.');

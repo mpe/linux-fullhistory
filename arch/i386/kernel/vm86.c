@@ -379,6 +379,7 @@ void handle_vm86_fault(struct vm86_regs * regs, long error_code)
 			set_vflags_long(popl(ssp, sp), regs);
 			return;
 		}
+		break;
 
 	/* pushf */
 	case 0x9c:
@@ -425,8 +426,10 @@ void handle_vm86_fault(struct vm86_regs * regs, long error_code)
 		IP(regs)++;
 		set_IF(regs);
 		return;
-
-	default:
-		return_to_32bit(regs, VM86_UNKNOWN);
 	}
+
+	/*
+	 * We didn't recognize it, let the emulator take care of it..
+	 */
+	return_to_32bit(regs, VM86_UNKNOWN);
 }

@@ -69,7 +69,7 @@ extern int ni65_probe(struct device *);
 extern int SK_init(struct device *);
 extern int seeq8005_probe(struct device *);
 extern int tc59x_probe(struct device *);
-extern int smc9_init( struct device * );
+extern int smc_init( struct device * );
 
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
@@ -98,7 +98,7 @@ ethif_probe(struct device *dev)
 	&& ultra_probe(dev)
 #endif
 #if defined(CONFIG_SMC9194)
-	&& smc9_init(dev)
+	&& smc_init(dev)
 #endif
 #if defined(CONFIG_WD80x3) || defined(WD80x3)
 	&& wd_probe(dev)

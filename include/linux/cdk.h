@@ -21,7 +21,6 @@
  */
 
 /*****************************************************************************/
-
 #ifndef	_CDK_H
 #define	_CDK_H
 /*****************************************************************************/
@@ -192,6 +191,7 @@ typedef struct cdkmem {
 #define	A_GETSTATS	(ASYCMD | 17)
 #define	A_RQSTATE	(ASYCMD | 18)
 #define	A_FLOWSTATE	(ASYCMD | 19)
+#define	A_CLEARSTATS	(ASYCMD | 20)
 
 /*
  *	Define those arguments used for simple commands.
@@ -384,6 +384,8 @@ typedef struct asystats {
 	unsigned long	rxringq;
 	unsigned long	txmsgs;
 	unsigned long	rxmsgs;
+	unsigned long	txflushes;
+	unsigned long	rxflushes;
 	unsigned long	overruns;
 	unsigned long	framing;
 	unsigned long	parity;
@@ -403,6 +405,7 @@ typedef struct asystats {
 	unsigned long	rxbreaks;
 	unsigned long	signals;
 	unsigned long	state;
+	unsigned long	hwid;
 } asystats_t;
 
 /*****************************************************************************/

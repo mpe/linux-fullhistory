@@ -81,11 +81,7 @@
  */
 #define TX_BUF_START 0x0100
 #define TX_BUF_SIZE ((24+ETH_FRAME_LEN+31)&~0x1f)
-unsigned short NUM_TX_BUFS=4;
-unsigned short RX_BUF_START;
 #define RX_BUF_SIZE ((32+ETH_FRAME_LEN+31)&~0x1f)
-unsigned short RX_BUF_END=0x7ff6; /* updated automatically to 0xfff6 on 64k cards */
-unsigned short NUM_RX_BUFS = 4;
 
 
 

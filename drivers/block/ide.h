@@ -223,6 +223,7 @@ struct atapi_cdrom_subchnl
   {
     struct 			
     {
+      u_char    reserved;
       u_char	minute;
       u_char	second;
       u_char	frame;
@@ -233,6 +234,7 @@ struct atapi_cdrom_subchnl
   {
     struct 
     {
+      u_char    reserved;
       u_char	minute;
       u_char	second;
       u_char	frame;

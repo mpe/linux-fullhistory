@@ -86,6 +86,7 @@
  *                       Work around sporadic Sony55e audio play problem.
  * 3.07a Feb 11, 1996 -- check drive->id for NULL before dereferencing, to fix
  *                        problem with "hde=cdrom" with no drive present.  -ml
+ * 3.08  Mar  6, 1996 -- More Vertos workarounds.
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
@@ -2720,23 +2721,31 @@ void ide_cdrom_setup (ide_drive_t *drive)
         CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
       }
 
-    /* Vertos 300.
-       There seem to be at least two different, incompatible versions
-       of this drive floating around.  Luckily, they appear to return their
-       id strings with different byte orderings. */
+    /* Vertos 300. */
     else if (strcmp (drive->id->model, "V003S0DS") == 0)
       {
-        CDROM_CONFIG_FLAGS (drive)->vertos_lossage = 1;
-        CDROM_CONFIG_FLAGS (drive)->playmsf_uses_bcd = 1;
         CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+
+	/* Some versions of this drive like to talk BCD. */
+	if (drive->id->fw_rev[4] == '1' &&
+	    drive->id->fw_rev[6] <= '2')
+	  {
+	    CDROM_CONFIG_FLAGS (drive)->vertos_lossage = 1;
+	    CDROM_CONFIG_FLAGS (drive)->playmsf_uses_bcd = 1;
+	  }
       }
     else if (strcmp (drive->id->model, "0V300SSD") == 0 ||
-  	   strcmp (drive->id->model, "V003M0DP") == 0)
+	     strcmp (drive->id->model, "V003M0DP") == 0 ||
+	     strcmp (drive->id->model, "0V300MPD") == 0 ||
+	     strcmp (drive->id->model, "0V300HPD") == 0 ||
+	     strcmp (drive->id->model, "V003H0DP") == 0)
       CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
 
     /* Vertos 400. */
     else if (strcmp (drive->id->model, "V004E0DT") == 0 ||
-  	   strcmp (drive->id->model, "0V400ETD") == 0)
+	     strcmp (drive->id->model, "0V400ETD") == 0 ||
+	     strcmp (drive->id->model, "V004H0DT") == 0 ||
+	     strcmp (drive->id->model, "0V400HTD") == 0)
       CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
 
     else if ( strcmp (drive->id->model, "CD-ROM CDU55D") == 0) /*sony cdu55d */

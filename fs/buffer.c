@@ -112,7 +112,7 @@ union bdflush_param{
 
 
 /* These are the min and max parameter values that we will allow to be assigned */
-int bdflush_min[N_PARAM] = {  0,  10,    5,   60,  0,   100,   100, 1, 1};
+int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   100,   100, 1, 1};
 int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,100, 60000, 60000, 2047, 5};
 
 /*
@@ -1012,20 +1012,24 @@ static void get_more_buffer_heads(void)
  * the unused_list here.
  *
  * The reuse_list receives buffers from interrupt routines, so we need
- * to be IRQ-safe here.
+ * to be IRQ-safe here (but note that interrupts only _add_ to the
+ * reuse_list, never take away. So we don't need to worry about the
+ * reuse_list magically emptying).
  */
 static inline void recover_reusable_buffer_heads(void)
 {
-	struct buffer_head *bh;
-	unsigned long flags;
+	if (reuse_list) {
+		struct buffer_head *bh;
+		unsigned long flags;
 	
-	save_flags(flags);
-	while (reuse_list) {
-		cli();
-		bh = reuse_list;
-		reuse_list = bh->b_next_free;
-		restore_flags(flags);
-		put_unused_buffer_head(bh);
+		save_flags(flags);
+		do {
+			cli();
+			bh = reuse_list;
+			reuse_list = bh->b_next_free;
+			restore_flags(flags);
+			put_unused_buffer_head(bh);
+		} while (reuse_list);
 	}
 }
 
@@ -1146,15 +1150,19 @@ int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int b
 	if (nr)
 		ll_rw_block(rw, nr, arr);
 	else {
+		unsigned long flags;
 		page->locked = 0;
 		page->uptodate = 1;
 		wake_up(&page->wait);
 		next = bh;
+		save_flags(flags);
+		cli();
 		do {
 			next->b_next_free = reuse_list;
 			reuse_list = next;
 			next = next->b_this_page;
 		} while (next != bh);
+		restore_flags(flags);
 	}
 	++current->maj_flt;
 	return 0;

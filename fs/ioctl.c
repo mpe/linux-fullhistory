@@ -72,6 +72,10 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			return 0;
 
 		case FIONBIO:
+			on = verify_area(VERIFY_READ, (unsigned int *)arg,
+				sizeof(unsigned int));
+			if(on)	
+				return on;
 			on = get_user((unsigned int *) arg);
 			if (on)
 				filp->f_flags |= O_NONBLOCK;
@@ -81,6 +85,10 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 
 		case FIOASYNC: /* O_SYNC is not yet implemented,
 				  but it's here for completeness. */
+			on = verify_area(VERIFY_READ, (unsigned int *)arg,
+				sizeof(unsigned int));
+			if(on)	
+				return on;
 			on = get_user ((unsigned int *) arg);
 			if (on)
 				filp->f_flags |= O_SYNC;

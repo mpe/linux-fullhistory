@@ -18,6 +18,7 @@
 
 #include <asm/segment.h>
 extern void sem_exit (void);
+extern void acct_process (long exitcode);
 extern void kerneld_exit(void);
 
 int getrusage(struct task_struct *, int, struct rusage *);
@@ -34,7 +35,7 @@ static int generate(unsigned long sig, struct task_struct * p)
 			return 0;
 		/* some signals are ignored by default.. (but SIGCONT already did its deed) */
 		if ((sa->sa_handler == SIG_DFL) &&
-		    (sig == SIGCONT || sig == SIGCHLD || sig == SIGWINCH))
+		    (sig == SIGCONT || sig == SIGCHLD || sig == SIGWINCH || sig == SIGURG))
 			return 0;
 	}
 	p->signal |= mask;
@@ -509,6 +510,7 @@ NORET_TYPE void do_exit(long code)
 		intr_count = 0;
 	}
 fake_volatile:
+	acct_process(code);
 	current->flags |= PF_EXITING;
 	del_timer(&current->real_timer);
 	sem_exit();

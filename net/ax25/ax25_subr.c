@@ -29,6 +29,7 @@
  *					Thus we have ax25_kiss_cmd() now... ;-)
  *			Dave Brown(N2RJT)
  *					Killed a silly bug in the DAMA code.
+ *			Joerg(DL1BKE)	found the real bug in ax25.h --- sorry.
  */
 
 #include <linux/config.h>
@@ -348,7 +349,7 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 	}
 		
 	if (dama != NULL) 
-		*dama = ~(buf[13] & DAMA_FLAG);
+		*dama = ~buf[13] & DAMA_FLAG;
 		
 	/* Copy to, from */
 	if (dest != NULL) 
@@ -485,35 +486,35 @@ void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
 {
 	struct sk_buff *skb;
 	unsigned char *p;
-	
+
 	if (ax25->device == NULL)
 		return;
 
 	if ((skb = alloc_skb(2, GFP_ATOMIC)) == NULL)
 		return;
-		
+
 	skb->free = 1;
 	skb->arp = 1;
-	
+
 	if (ax25->sk != NULL) {
 		skb->sk = ax25->sk;
 		ax25->sk->wmem_alloc += skb->truesize;
 	}
-	
+
 	skb->protocol = htons(ETH_P_AX25);
-	
+
 	p = skb_put(skb, 2);
-	
+
 	*p++=cmd;
 	*p  =param;
-	
-	dev_queue_xmit(skb, ax25->device, SOPRI_NORMAL);	
+
+	dev_queue_xmit(skb, ax25->device, SOPRI_NORMAL);
 }
 
 void ax25_dama_on(ax25_cb *ax25)
 {
 	int count = ax25_dev_is_dama_slave(ax25->device);
-
+	
 	if (count == 0) {
 		if (ax25->sk != NULL && ax25->sk->debug)
 			printk("ax25_dama_on: DAMA on\n");

@@ -194,7 +194,8 @@ int fs_may_umount(kdev_t dev, struct inode * mount_root)
 	for (i=0 ; i < nr_inodes ; i++, inode = inode->i_next) {
 		if (inode->i_dev != dev || !inode->i_count)
 			continue;
-		if (inode == mount_root && inode->i_count == 1)
+		if (inode == mount_root && inode->i_count ==
+		    (inode->i_mount != inode ? 1 : 2))
 			continue;
 		return 0;
 	}

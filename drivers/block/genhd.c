@@ -24,6 +24,9 @@
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/string.h>
+#ifdef CONFIG_BLK_DEV_INITRD
+#include <linux/blk.h>
+#endif
 
 #include <asm/system.h>
 
@@ -48,6 +51,7 @@ struct gendisk *gendisk_head = NULL;
 static int current_minor = 0;
 extern int *blk_size[];
 extern void rd_load(void);
+extern void initrd_load(void);
 
 extern int chr_dev_init(void);
 extern int blk_dev_init(void);
@@ -601,6 +605,10 @@ void device_setup(void)
 		nr += p->nr_real;
 	}
 #ifdef CONFIG_BLK_DEV_RAM
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (initrd_start && mount_initrd) initrd_load();
+	else
+#endif
 	rd_load();
 #endif
 }

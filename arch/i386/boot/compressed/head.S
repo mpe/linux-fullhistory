@@ -21,6 +21,10 @@
  * useful for future device drivers that either access the BIOS via VM86 
  * mode.
  */
+
+/*
+ * High loaded stuff by Hans Lermen & Werner Almesberger, Feb. 1996
+ */
 .text
 
 #define __ASSEMBLY__
@@ -82,7 +86,55 @@ startup_32:
 /*
  * Do the decompression, and jump to the new kernel..
  */
+	subl $16,%esp	# place for structure on the stack
+	pushl %esp	# address of structure as first arg
 	call SYMBOL_NAME(decompress_kernel)
+	orl  %eax,%eax 
+	jnz  3f
 	xorl %ebx,%ebx
 	ljmp $(KERNEL_CS), $0x100000
 
+/*
+ * We come here, if we were loaded high.
+ * We need to move the move-in-place routine down to 0x1000
+ * and then start it with the buffer addresses in registers,
+ * which we got from the stack.
+ */
+3:
+	movl $move_routine_start,%esi
+	movl $0x1000,%edi
+	movl $move_routine_end,%ecx
+	subl %esi,%ecx
+	cld
+	rep
+	movsb
+
+	popl %esi	# discard the address
+	popl %esi	# low_buffer_start
+	popl %ecx	# lcount
+	popl %edx	# high_buffer_start
+	popl %eax	# hcount
+	movl $0x100000,%edi
+	cli		# make sure we don't get interrupted
+	ljmp $(KERNEL_CS), $0x1000 # and jump to the move routine
+
+/*
+ * Routine (template) for moving the decompressed kernel in place,
+ * if we were high loaded. This _must_ PIC-code !
+ */
+move_routine_start:
+	rep
+	movsb
+	movl %edx,%esi
+	movl %eax,%ecx	# NOTE: rep movsb won't move if %ecx == 0
+	rep
+	movsb
+	xorl %ebx,%ebx
+/*
+ * Well, the kernel relies on %esp pointing into low mem,
+ * with the decompressor loaded high this is no longer true,
+ * so we set esp here.
+ */
+	mov  $0x90000,%esp
+	ljmp $(KERNEL_CS), $0x100000
+move_routine_end:

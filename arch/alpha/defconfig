@@ -44,6 +44,7 @@ CONFIG_BLK_DEV_FD=y
 #
 # CONFIG_BLK_DEV_HD_ONLY is not set
 CONFIG_BLK_DEV_RAM=y
+# CONFIG_BLK_DEV_INITRD is not set
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_XD is not set
 # CONFIG_BLK_DEV_MD is not set
@@ -94,6 +95,7 @@ CONFIG_BLK_DEV_SR=y
 #
 # CONFIG_SCSI_MULTI_LUN is not set
 CONFIG_SCSI_CONSTANTS=y
+# CONFIG_SCSI_AUTO_BIOSP is not set
 
 #
 # SCSI low-level drivers
@@ -182,6 +184,7 @@ CONFIG_PSMOUSE=y
 # CONFIG_MS_BUSMOUSE is not set
 # CONFIG_ATIXL_BUSMOUSE is not set
 # CONFIG_QIC02_TAPE is not set
+# CONFIG_FTAPE is not set
 # CONFIG_APM is not set
 # CONFIG_WATCHDOG is not set
 

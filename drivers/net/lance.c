@@ -13,9 +13,26 @@
 	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
 	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
+
+
+	Fixing alignment problem with 1.3.* kernel and some minor changes
+	by Andrey V. Savochkin, 1996.
+
+	Problems or questions may be send to Donald Becker (see above) or to
+	Andrey Savochkin -- saw@shade.msu.ru or
+		Laboratory of Computation Methods, 
+		Department of Mathematics and Mechanics,
+		Moscow State University,
+		Leninskye Gory, Moscow 119899
+
+	But I should to inform you that I'm not an expert in the LANCE card
+	and it may occurs that you will receive no answer on your mail
+	to Donald Becker. I didn't receive any answer on all my letters
+	to him. Who knows why... But may be you are more lucky?  ;-)
+                                                          SAW
 */
 
-static const char *version = "lance.c:v1.08 4/10/95 dplatt@3do.com\n";
+static const char *version = "lance.c:v1.08.01 Mar 6 1996 saw@shade.msu.ru\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -137,9 +154,14 @@ tx_full and tbusy flags.
 
 */
 
+/* Memory accessed from LANCE card must be aligned on 8-byte boundaries.
+   But we can't believe that kmalloc()'ed memory satisfyes it. -- SAW */
+#define LANCE_KMALLOC(x) \
+	((void *) (((unsigned long)kmalloc((x)+7, GFP_DMA | GFP_KERNEL)+7) & ~7))
+
 /* Set the number of Tx and Rx buffers, using Log_2(# buffers).
-   Reasonable default values are 4 Tx buffers, and 16 Rx buffers.
-   That translates to 2 (4 == 2^^2) and 4 (16 == 2^^4). */
+   Reasonable default values are 16 Tx buffers, and 16 Rx buffers.
+   That translates to 4 and 4 (16 == 2^^4). */
 #ifndef LANCE_LOG_TX_BUFFERS
 #define LANCE_LOG_TX_BUFFERS 4
 #define LANCE_LOG_RX_BUFFERS 4
@@ -186,22 +208,21 @@ struct lance_init_block {
 };
 
 struct lance_private {
-	/* The Tx and Rx ring entries must be aligned on 8-byte boundaries.
-	   This is always true for kmalloc'ed memory */
+	/* The Tx and Rx ring entries must be aligned on 8-byte boundaries. */
 	struct lance_rx_head rx_ring[RX_RING_SIZE];
 	struct lance_tx_head tx_ring[TX_RING_SIZE];
-	struct lance_init_block		init_block;
+	struct lance_init_block	init_block;
 	const char *name;
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
-	long rx_buffs;				/* Address of Rx and Tx buffers. */
+	unsigned long rx_buffs;		/* Address of Rx and Tx buffers. */
 	/* Tx low-memory "bounce buffer" address. */
 	char (*tx_bounce_buffs)[PKT_BUF_SZ];
 	int cur_rx, cur_tx;			/* The next free ring entry */
 	int dirty_rx, dirty_tx;		/* The ring entries to be free()ed. */
 	int dma;
 	struct enet_statistics stats;
-	unsigned char chip_version;			/* See lance_chip_type. */
+	unsigned char chip_version;	/* See lance_chip_type. */
 	char tx_full;
 	char lock;
 };
@@ -338,7 +359,7 @@ void lance_probe1(int ioaddr)
 	int i, reset_val, lance_version;
 	const char *chipname;
 	/* Flags for specific chips or boards. */
-	unsigned char hpJ2405A = 0;						/* HP ISA adaptor */
+	unsigned char hpJ2405A = 0;			/* HP ISA adaptor */
 	int hp_builtin = 0;					/* HP on-board ethernet. */
 	static int did_version = 0;			/* Already printed version info. */
 
@@ -403,14 +424,16 @@ void lance_probe1(int ioaddr)
 	request_region(ioaddr, LANCE_TOTAL_SIZE, chip_table[lance_version].name);
 
 	/* Make certain the data structures used by the LANCE are aligned and DMAble. */
-	lp = (struct lance_private *) kmalloc(sizeof(*lp), GFP_DMA | GFP_KERNEL);
+	lp = (struct lance_private *) LANCE_KMALLOC(sizeof(*lp));
+	if (lance_debug > 6) printk(" (#0x%05lx)", (unsigned long)lp);
 	memset(lp, 0, sizeof(*lp));
 	dev->priv = lp;
 	lp->name = chipname;
-	lp->rx_buffs = (unsigned long) kmalloc(PKT_BUF_SZ*RX_RING_SIZE, GFP_DMA | GFP_KERNEL);
+	/* I'm not sure that buffs also must be aligned but it's safer to do it -- SAW */
+	lp->rx_buffs = (unsigned long) LANCE_KMALLOC(PKT_BUF_SZ*RX_RING_SIZE);
 	lp->tx_bounce_buffs = NULL;
 	if (lance_need_isa_bounce_buffers)
-		lp->tx_bounce_buffs = kmalloc(PKT_BUF_SZ*TX_RING_SIZE, GFP_DMA | GFP_KERNEL);
+		lp->tx_bounce_buffs = LANCE_KMALLOC(PKT_BUF_SZ*TX_RING_SIZE);
 
 	lp->chip_version = lance_version;
 

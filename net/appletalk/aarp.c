@@ -438,13 +438,16 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	if(dev->type==ARPHRD_LOCALTLK)
 	{
 		struct at_addr *at=atalk_find_dev_addr(dev);
+		struct ddpehdr *ddp=(struct ddpehdr *)skb->data;
 		int ft=2;
 		
 		/*
-		 *	Compressable ?
+		 *	Compressible ?
+		 * 
+		 *	IFF: src_net==dest_net==device_net
 		 */
 		 
-		if(at->s_net==sa->s_net)
+		if(at->s_net==sa->s_net && sa->s_net==ddp->deh_snet)
 		{
 			skb_pull(skb,sizeof(struct ddpehdr)-4);
 			/*

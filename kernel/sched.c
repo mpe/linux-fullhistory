@@ -41,7 +41,7 @@
 
 int securelevel = 0;			/* system security level */
 
-long tick = 1000000 / HZ;               /* timer interrupt period */
+long tick = 1000000 / HZ;		/* timer interrupt period */
 volatile struct timeval xtime;		/* The current time */
 int tickadj = 500/HZ;			/* microsecs */
 
@@ -52,18 +52,18 @@ DECLARE_TASK_QUEUE(tq_scheduler);
 /*
  * phase-lock loop variables
  */
-int time_state = TIME_BAD;     /* clock synchronization status */
+int time_state = TIME_BAD;	/* clock synchronization status */
 int time_status = STA_UNSYNC | STA_PLL;	/* clock status bits */
-long time_offset = 0;           /* time adjustment (us) */
-long time_constant = 2;         /* pll time constant */
-long time_tolerance = MAXFREQ;  /* frequency tolerance (ppm) */
-long time_precision = 1; 	/* clock precision (us) */
+long time_offset = 0;		/* time adjustment (us) */
+long time_constant = 2;		/* pll time constant */
+long time_tolerance = MAXFREQ;	/* frequency tolerance (ppm) */
+long time_precision = 1;	/* clock precision (us) */
 long time_maxerror = 0x70000000;/* maximum error */
 long time_esterror = 0x70000000;/* estimated error */
-long time_phase = 0;            /* phase offset (scaled us) */
-long time_freq = 0;             /* frequency offset (scaled ppm) */
-long time_adj = 0;              /* tick adjust (scaled 1 / HZ) */
-long time_reftime = 0;          /* time at last adjustment (s) */
+long time_phase = 0;		/* phase offset (scaled us) */
+long time_freq = 0;		/* frequency offset (scaled ppm) */
+long time_adj = 0;		/* tick adjust (scaled 1 / HZ) */
+long time_reftime = 0;		/* time at last adjustment (s) */
 
 long time_adjust = 0;
 long time_adjust_step = 0;
@@ -113,6 +113,21 @@ static inline void add_to_runqueue(struct task_struct * p)
 	(p->prev_run = init_task.prev_run)->next_run = p;
 	p->next_run = &init_task;
 	init_task.prev_run = p;
+#ifdef __SMP__
+	/* this is safe only if called with cli()*/
+	while(set_bit(31,&smp_process_available))
+		while(test_bit(31,&smp_process_available));
+	smp_process_available++;
+	clear_bit(31,&smp_process_available);
+	if ((0!=p->pid) && smp_threads_ready){
+		int i, found=0;
+		for (i=0;i<smp_num_cpus;i++)
+			if (0==current_set[i]->pid) {
+				smp_message_pass(i, MSG_RESCHEDULE, 0L, 0);
+				break;
+			}
+	}
+#endif
 }
 
 static inline void del_from_runqueue(struct task_struct * p)
@@ -763,7 +778,7 @@ void do_timer(struct pt_regs * regs)
 	unsigned long mask;
 	struct timer_struct *tp;
 	long ltemp, psecs;
-#ifdef  __SMP_PROF__
+#ifdef  __SMP__
 	int cpu,i;
 #endif
 
@@ -794,11 +809,11 @@ void do_timer(struct pt_regs * regs)
 	     * in the range -tickadj .. +tickadj
 	     */
 	     if (time_adjust > tickadj)
-	       time_adjust_step = tickadj;
+		time_adjust_step = tickadj;
 	     else if (time_adjust < -tickadj)
-	       time_adjust_step = -tickadj;
+		time_adjust_step = -tickadj;
 	     else
-	       time_adjust_step = time_adjust;
+		time_adjust_step = time_adjust;
 	     
 	    /* Reduce by this step the amount of time left  */
 	    time_adjust -= time_adjust_step;
@@ -814,12 +829,7 @@ void do_timer(struct pt_regs * regs)
 
 	jiffies++;
 	calc_load();
-#ifdef  __SMP_PROF__
-	smp_idle_count[NR_CPUS]++;    /* count timer ticks */
-	cpu = smp_processor_id();
-	for (i=0;i<(0==smp_num_cpus?1:smp_num_cpus);i++) 
-		if (test_bit(i,&smp_idle_map)) smp_idle_count[i]++;
-#endif
+#ifndef  __SMP__
 	if (user_mode(regs)) {
 		current->utime++;
 		if (current->pid) {
@@ -873,6 +883,81 @@ void do_timer(struct pt_regs * regs)
 		current->it_prof_value = current->it_prof_incr;
 		send_sig(SIGPROF,current,1);
 	}
+#else
+	cpu = smp_processor_id();
+	for (i=0;i<(0==smp_num_cpus?1:smp_num_cpus);i++){
+#ifdef __SMP_PROF__
+	if (test_bit(i,&smp_idle_map)) smp_idle_count[i]++;
+#endif
+		if (((cpu==i) && user_mode(regs)) ||
+			((cpu!=i) && 0==smp_proc_in_lock[i])) {
+			current_set[i]->utime++;
+			if (current_set[i]->pid) {
+				if (current_set[i]->priority < DEF_PRIORITY)
+					kstat.cpu_nice++;
+				else
+					kstat.cpu_user++;
+			}
+			/* Update ITIMER_VIRT for current task if not in a system call */
+			if (current_set[i]->it_virt_value && !(--current_set[i]->it_virt_value)) {
+				current_set[i]->it_virt_value = current_set[i]->it_virt_incr;
+				send_sig(SIGVTALRM,current_set[i],1);
+			}
+		} else {
+			current_set[i]->stime++;
+			if(current_set[i]->pid)
+				kstat.cpu_system++;
+			if (prof_buffer && current_set[i]->pid) {
+				extern int _stext;
+				unsigned long ip = instruction_pointer(regs);
+				ip -= (unsigned long) &_stext;
+				ip >>= prof_shift;
+				if (ip < prof_len)
+					prof_buffer[ip]++;
+			}
+		}
+		/*
+		 * check the cpu time limit on the process.
+		 */
+		if ((current_set[i]->rlim[RLIMIT_CPU].rlim_max != RLIM_INFINITY) &&
+			  (((current_set[i]->stime + current_set[i]->utime) / HZ) >=
+			  current_set[i]->rlim[RLIMIT_CPU].rlim_max))
+			send_sig(SIGKILL, current_set[i], 1);
+		if ((current_set[i]->rlim[RLIMIT_CPU].rlim_cur != RLIM_INFINITY) &&
+			  (((current_set[i]->stime + current_set[i]->utime) % HZ) == 0)) {
+			psecs = (current_set[i]->stime + current_set[i]->utime) / HZ;
+			/* send when equal */
+			if (psecs == current_set[i]->rlim[RLIMIT_CPU].rlim_cur)
+				send_sig(SIGXCPU, current_set[i], 1);
+			/* and every five seconds thereafter. */
+			else if ((psecs > current_set[i]->rlim[RLIMIT_CPU].rlim_cur) &&
+				  ((psecs - current_set[i]->rlim[RLIMIT_CPU].rlim_cur) % 5) == 0)
+				send_sig(SIGXCPU, current_set[i], 1);
+		}
+		if (current_set[i]->pid && 0 > --current_set[i]->counter) {
+			current_set[i]->counter = 0;
+			if (i==cpu)
+				need_resched = 1;
+			else
+				smp_message_pass(i, MSG_RESCHEDULE, 0L, 0);
+		} else
+			if ((0==current_set[i]->pid) && (0x7fffffff & smp_process_available)){
+				/* runnable process found; wakeup idle process */
+				if (cpu==i)
+					need_resched = 1;
+				else
+					smp_message_pass(i, MSG_RESCHEDULE, 0L, 0);
+			}
+
+		/* Update ITIMER_PROF for the current task */
+		if (current_set[i]->it_prof_value && !(--current_set[i]->it_prof_value)) {
+			current_set[i]->it_prof_value = current_set[i]->it_prof_incr;
+			send_sig(SIGPROF,current_set[i],1);
+		}
+	}
+
+#endif
+
 	for (mask = 1, tp = timer_table+0 ; mask ; tp++,mask += mask) {
 		if (mask > timer_active)
 			break;

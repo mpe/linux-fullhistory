@@ -124,6 +124,8 @@
 #define	AX25_DEF_T2		3
 #define	AX25_DEF_T3		300
 #define	AX25_DEF_N2		10
+#define AX25_DEF_IDLE		20
+#define AX25_DEF_PACLEN		256
 #define	AX25_DEF_DIGI		(AX25_DIGI_INBAND|AX25_DIGI_XBAND)
 
 typedef struct ax25_uid_assoc {
@@ -148,8 +150,9 @@ typedef struct ax25_cb {
 	unsigned short		vs, vr, va;
 	unsigned char		condition, backoff;
 	unsigned char		n2, n2count;
-	unsigned short		t1, t2, t3, rtt;
-	unsigned short		t1timer, t2timer, t3timer;
+	unsigned short		t1, t2, t3, idle, rtt;
+	unsigned short		t1timer, t2timer, t3timer, idletimer;
+	unsigned short		paclen;
 	unsigned short		fragno, fraglen;
 	ax25_digi		*digipeat;
 	struct sk_buff_head	write_queue;

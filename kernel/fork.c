@@ -226,7 +226,8 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->kernel_stack_page = new_stack;
 	*(unsigned long *) p->kernel_stack_page = STACK_MAGIC;
 	p->state = TASK_UNINTERRUPTIBLE;
-	p->flags &= ~(PF_PTRACED|PF_TRACESYS);
+	p->flags &= ~(PF_PTRACED|PF_TRACESYS|PF_SUPERPREV);
+	p->flags |= PF_FORKNOEXEC;
 	p->pid = get_pid(clone_flags);
 	p->next_run = NULL;
 	p->prev_run = NULL;

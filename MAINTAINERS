@@ -83,6 +83,12 @@ M:	jsn@cs.nott.ac.uk
 L:	linux-hams@vger.rutges.edu
 S:	Maintained
 
+BUSLOGIC SCSI DRIVER
+P:	Leonard N. Zubkoff
+M:	Leonard N. Zubkoff <lnz@dandelion.com>
+L:	None
+S:	Maintained
+
 FUTURE DOMAIN TMC-16x0 SCSI DRIVER (16-bit)
 P:      Rik Faith
 M:      faith@cs.unc.edu
@@ -113,6 +119,12 @@ M:	bj0rn@blox.se
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+NCP FILESYSTEM:
+P:	Volker Lendecke
+M:	lendecke@namu01.gwdg.de
+L:	linware@sh.cvut.cz
+S:	Maintained
+
 NETROM NETWORK LAYER
 P:	Jon Naylor
 M:	jsn@cs.nott.ac.uk
@@ -130,6 +142,12 @@ P:	Al Longyear
 M:	longyear@netcom.com, Cc: longyear@sii.com
 L:	linux-ppp@vger.rutgers.edu
 S:	Maintained
+
+SMB FILESYSTEM:
+P:	Volker Lendecke
+M:	lendecke@namu01.gwdg.de
+L:	samba@listproc.anu.edu.au
+S:	Odd Fixes
 
 SMP:
 P:	Alan Cox

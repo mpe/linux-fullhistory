@@ -41,43 +41,50 @@ static unsigned char cache_A1 = 0xff;
 static unsigned int int_count[NR_CPUS][NR_IRQS] = {{0},};
 #endif
 
-void disable_irq(unsigned int irq_nr)
+static inline void mask_irq(unsigned int irq_nr)
 {
-	unsigned long flags;
 	unsigned char mask;
 
 	mask = 1 << (irq_nr & 7);
-	save_flags(flags);
 	if (irq_nr < 8) {
-		cli();
 		cache_21 |= mask;
 		outb(cache_21,0x21);
-		restore_flags(flags);
-		return;
+	} else {
+		cache_A1 |= mask;
+		outb(cache_A1,0xA1);
 	}
+}
+
+static inline void unmask_irq(unsigned int irq_nr)
+{
+	unsigned char mask;
+
+	mask = ~(1 << (irq_nr & 7));
+	if (irq_nr < 8) {
+		cache_21 &= mask;
+		outb(cache_21,0x21);
+	} else {
+		cache_A1 &= mask;
+		outb(cache_A1,0xA1);
+	}
+}
+
+void disable_irq(unsigned int irq_nr)
+{
+	unsigned long flags;
+
+	save_flags(flags);
 	cli();
-	cache_A1 |= mask;
-	outb(cache_A1,0xA1);
+	mask_irq(irq_nr);
 	restore_flags(flags);
 }
 
 void enable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
-	unsigned char mask;
-
-	mask = ~(1 << (irq_nr & 7));
 	save_flags(flags);
-	if (irq_nr < 8) {
-		cli();
-		cache_21 &= mask;
-		outb(cache_21,0x21);
-		restore_flags(flags);
-		return;
-	}
 	cli();
-	cache_A1 &= mask;
-	outb(cache_A1,0xA1);
+	unmask_irq(irq_nr);
 	restore_flags(flags);
 }
 
@@ -167,13 +174,54 @@ static void (*bad_interrupt[16])(void) = {
 /*
  * Initial irq handlers.
  */
-static struct irqaction timer_irq   = { NULL, 0, 0, NULL, NULL, NULL};
-static struct irqaction cascade_irq = { NULL, 0, 0, NULL, NULL, NULL};
-static struct irqaction math_irq    = { NULL, 0, 0, NULL, NULL, NULL};
+
+static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
+
+#ifdef __SMP__
+
+/*
+ * On SMP boards, irq13 is used for interprocessor interrupts (IPI's).
+ */
+static struct irqaction irq13 = { smp_message_irq, SA_INTERRUPT, 0, "IPI", NULL, NULL }:
+
+#else
+
+/*
+ * Note that on a 486, we don't want to do a SIGFPE on a irq13
+ * as the irq is unreliable, and exception 16 works correctly
+ * (ie as explained in the intel literature). On a 386, you
+ * can't use exception 16 due to bad IBM design, so we have to
+ * rely on the less exact irq13.
+ *
+ * Careful.. Not only is IRQ13 unreliable, but it is also
+ * leads to races. IBM designers who came up with it should
+ * be shot.
+ */
+ 
+
+static void math_error_irq(int cpl, void *dev_id, struct pt_regs *regs)
+{
+	outb(0,0xF0);
+	if (ignore_irq13 || !hard_math)
+		return;
+	math_error();
+}
+
+static struct irqaction irq13 = { math_error_irq, 0, 0, "math error", NULL, NULL };
+
+#endif
+
+/*
+ * IRQ0 is timer, IRQ2 is cascade interrupt to second interrupt controller
+ */
+extern struct irqaction irq0;
+static struct irqaction irq2  = { no_action, 0, 0, "cascade", NULL, NULL};
 
 static struct irqaction *irq_action[16] = {
-	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL,
-	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL
+	&irq0, NULL, &irq2, NULL,
+	NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL,
+	NULL, &irq13 , NULL, NULL
 };
 
 int get_irq_list(char *buf)
@@ -182,9 +230,9 @@ int get_irq_list(char *buf)
 	struct irqaction * action;
 
 	for (i = 0 ; i < 16 ; i++) {
-	        action = *(i + irq_action);
+		action = irq_action[i];
 		if (!action) 
-		        continue;
+			continue;
 		len += sprintf(buf+len, "%2d: %8d %c %s",
 			i, kstat.interrupts[i],
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
@@ -209,69 +257,77 @@ int get_irq_list(char *buf)
 #ifdef __SMP_PROF__
 
 int get_smp_prof_list(char *buf) {
-        int i,j, len = 0;
-        struct irqaction * action;
-        unsigned long sum_spins = 0;
-        unsigned long sum_spins_syscall = 0;
-        unsigned long sum_spins_sys_idle = 0;
-        unsigned long sum_smp_idle_count = 0;
+	int i,j, len = 0;
+	struct irqaction * action;
+	unsigned long sum_spins = 0;
+	unsigned long sum_spins_syscall = 0;
+	unsigned long sum_spins_sys_idle = 0;
+	unsigned long sum_smp_idle_count = 0;
 
-        for (i=0;i<=smp_num_cpus;i++) {
-          sum_spins+=smp_spins[i];
-          sum_spins_syscall+=smp_spins_syscall[i];
-          sum_spins_sys_idle+=smp_spins_sys_idle[i];
-          sum_smp_idle_count+=smp_idle_count[i];
-        }
+	for (i=0;i<=smp_num_cpus;i++) {
+		sum_spins+=smp_spins[i];
+		sum_spins_syscall+=smp_spins_syscall[i];
+		sum_spins_sys_idle+=smp_spins_sys_idle[i];
+		sum_smp_idle_count+=smp_idle_count[i];
+	}
 
 	len += sprintf(buf+len,"CPUS: %10i \n", 
 		0==smp_num_cpus?1:smp_num_cpus);
-        len += sprintf(buf+len,"            SUM ");
-        for (i=0;i<smp_num_cpus;i++)
-          len += sprintf(buf+len,"        P%1d ",i);
-        len += sprintf(buf+len,"\n");
-        for (i = 0 ; i < NR_IRQS ; i++) {
-	        action = *(i + irq_action);
-                if (!action->handler)
-                        continue;
-                len += sprintf(buf+len, "%3d: %10d ",
-                        i, kstat.interrupts[i]);
-                for (j=0;j<smp_num_cpus;j++)
-                  len+=sprintf(buf+len, "%10d ",int_count[j][i]);
-                len += sprintf(buf+len, "%c %s\n",
-                        (action->flags & SA_INTERRUPT) ? '+' : ' ',
-                        action->name);
+	len += sprintf(buf+len,"            SUM ");
+	for (i=0;i<smp_num_cpus;i++)
+		len += sprintf(buf+len,"        P%1d ",i);
+	len += sprintf(buf+len,"\n");
+	for (i = 0 ; i < NR_IRQS ; i++) {
+		action = *(i + irq_action);
+		if (!action->handler)
+			continue;
+		len += sprintf(buf+len, "%3d: %10d ",
+			i, kstat.interrupts[i]);
+		for (j=0;j<smp_num_cpus;j++)
+			len+=sprintf(buf+len, "%10d ",int_count[j][i]);
+		len += sprintf(buf+len, "%c %s\n",
+			(action->flags & SA_INTERRUPT) ? '+' : ' ',
+			action->name);
 		for (action=action->next; action; action = action->next) {
 			len += sprintf(buf+len, ",%s %s",
 				(action->flags & SA_INTERRUPT) ? " +" : "",
 				action->name);
 		}
-        }
-        len+=sprintf(buf+len, "LCK: %10lu",
-                sum_spins);
-        for (i=0;i<smp_num_cpus;i++)
-          len+=sprintf(buf+len," %10lu",smp_spins[i]);
-        len +=sprintf(buf+len,"   spins from int\n");
+	}
+	len+=sprintf(buf+len, "LCK: %10lu",
+		sum_spins);
 
-        len+=sprintf(buf+len, "LCK: %10lu",
-                sum_spins_syscall);
-        for (i=0;i<smp_num_cpus;i++)
-          len+=sprintf(buf+len," %10lu",smp_spins_syscall[i]);
-        len +=sprintf(buf+len,"   spins from syscall\n");
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10lu",smp_spins[i]);
 
-        len+=sprintf(buf+len, "LCK: %10lu",
-                sum_spins_sys_idle);
-        for (i=0;i<smp_num_cpus;i++)
-          len+=sprintf(buf+len," %10lu",smp_spins_sys_idle[i]);
-        len +=sprintf(buf+len,"   spins from sysidle\n");
-        len+=sprintf(buf+len,"IDLE %10lu",sum_smp_idle_count);
-        for (i=0;i<smp_num_cpus;i++)
-          len+=sprintf(buf+len," %10lu",smp_idle_count[i]);
-        len +=sprintf(buf+len,"   idle ticks\n");
+	len +=sprintf(buf+len,"   spins from int\n");
 
-        len+=sprintf(buf+len, "IPI: %10lu   received\n",
-                ipi_count);
+	len+=sprintf(buf+len, "LCK: %10lu",
+		sum_spins_syscall);
 
-        return len;
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10lu",smp_spins_syscall[i]);
+
+	len +=sprintf(buf+len,"   spins from syscall\n");
+
+	len+=sprintf(buf+len, "LCK: %10lu",
+		sum_spins_sys_idle);
+
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10lu",smp_spins_sys_idle[i]);
+
+	len +=sprintf(buf+len,"   spins from sysidle\n");
+	len+=sprintf(buf+len,"IDLE %10lu",sum_smp_idle_count);
+
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10lu",smp_idle_count[i]);
+
+	len +=sprintf(buf+len,"   idle ticks\n");
+
+	len+=sprintf(buf+len, "IPI: %10lu   received\n",
+		ipi_count);
+
+	return len;
 }
 #endif 
 
@@ -295,14 +351,13 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 
 	kstat.interrupts[irq]++;
 #ifdef __SMP_PROF__
-        int_count[smp_processor_id()][irq]++;
+	int_count[smp_processor_id()][irq]++;
 #endif
 	while (action) {
-	    if (action->flags & SA_SAMPLE_RANDOM) {
-	        add_interrupt_randomness(irq);
-            }
-	    action->handler(irq, action->dev_id, regs);
-	    action = action->next;
+		if (action->flags & SA_SAMPLE_RANDOM)
+			add_interrupt_randomness(irq);
+		action->handler(irq, action->dev_id, regs);
+		action = action->next;
 	}
 }
 
@@ -322,17 +377,13 @@ asmlinkage void do_fast_IRQ(int irq)
 
 	kstat.interrupts[irq]++;
 #ifdef __SMP_PROF__
-        int_count[smp_processor_id()][irq]++;
+	int_count[smp_processor_id()][irq]++;
 #endif
 	while (action) {
-	    if (action->flags & SA_SAMPLE_RANDOM)
-		add_interrupt_randomness(irq);
-	    action->handler(irq, action->dev_id, NULL);
-	    action = action->next;
+		action->handler(irq, action->dev_id, NULL);
+		action = action->next;
 	}
 }
-
-#define SA_PROBE SA_ONESHOT
 
 int request_irq(unsigned int irq, 
 		void (*handler)(int, void *, struct pt_regs *),
@@ -340,42 +391,39 @@ int request_irq(unsigned int irq,
 		const char * devname,
 		void *dev_id)
 {
-	struct irqaction * action, *tmp = NULL;
+	int shared = 0;
+	struct irqaction * action, **p;
 	unsigned long flags;
 
 	if (irq > 15)
-	    return -EINVAL;
+		return -EINVAL;
 	if (!handler)
-	    return -EINVAL;
-	action = *(irq + irq_action);
+		return -EINVAL;
+	p = irq_action + irq;
+	action = *p;
 	if (action) {
-	    if ((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ)) {
-		for (tmp = action; tmp->next; tmp = tmp->next);
-	    } else {
-		return -EBUSY;
-	    }
-	    if ((action->flags & SA_INTERRUPT) ^ (irqflags & SA_INTERRUPT)) {
-	      printk("Attempt to mix fast and slow interrupts on IRQ%d denied\n", irq);
-	      return -EBUSY;
-	    }   
+		/* Can't share interrupts unless both agree to */
+		if (!(action->flags & irqflags & SA_SHIRQ))
+			return -EBUSY;
+
+		/* Can't share interrupts unless both are same type */
+		if ((action->flags ^ irqflags) & SA_INTERRUPT)
+			return -EBUSY;
+
+		/* add new interrupt at end of irq queue */
+		do {
+			p = &action->next;
+			action = *p;
+		} while (action);
+		shared = 1;
 	}
+
+	action = (struct irqaction *)kmalloc(sizeof(struct irqaction), GFP_KERNEL);
+	if (!action)
+		return -ENOMEM;
+
 	if (irqflags & SA_SAMPLE_RANDOM)
 		rand_initialize_irq(irq);
-	save_flags(flags);
-	cli();
-	if (irq == 2)
-	    action = &cascade_irq;
-	else if (irq == 13)
-	  action = &math_irq;
-	else if (irq == TIMER_IRQ)
-	  action = &timer_irq;
-	else
-	  action = (struct irqaction *)kmalloc(sizeof(struct irqaction), GFP_KERNEL);
-
-	if (!action) { 
-	    restore_flags(flags);
-	    return -ENOMEM;
-	}
 
 	action->handler = handler;
 	action->flags = irqflags;
@@ -384,140 +432,69 @@ int request_irq(unsigned int irq,
 	action->next = NULL;
 	action->dev_id = dev_id;
 
-	if (tmp) {
-	    tmp->next = action;
-	} else {
-	    *(irq + irq_action) = action;
-	    if (!(action->flags & SA_PROBE)) {/* SA_ONESHOT used by probing */
-		if (action->flags & SA_INTERRUPT)
-		  set_intr_gate(0x20+irq,fast_interrupt[irq]);
-		else
-		  set_intr_gate(0x20+irq,interrupt[irq]);
-	    }
-	    if (irq < 8) {
-		cache_21 &= ~(1<<irq);
-		outb(cache_21,0x21);
-	    } else {
-		cache_21 &= ~(1<<2);
-		cache_A1 &= ~(1<<(irq-8));
-		outb(cache_21,0x21);
-		outb(cache_A1,0xA1);
-	    }
-	}
+	save_flags(flags);
+	cli();
+	*p = action;
 
+	if (!shared) {
+		if (action->flags & SA_INTERRUPT)
+			set_intr_gate(0x20+irq,fast_interrupt[irq]);
+		else
+			set_intr_gate(0x20+irq,interrupt[irq]);
+		unmask_irq(irq);
+	}
 	restore_flags(flags);
 	return 0;
 }
 		
 void free_irq(unsigned int irq, void *dev_id)
 {
-	struct irqaction * action = *(irq + irq_action);
-	struct irqaction * tmp = NULL;
+	struct irqaction * action, **p;
 	unsigned long flags;
 
 	if (irq > 15) {
 		printk("Trying to free IRQ%d\n",irq);
 		return;
 	}
-	if (!action->handler) {
-		printk("Trying to free free IRQ%d\n",irq);
+	for (p = irq + irq_action; (action = *p) != NULL; p = &action->next) {
+		if (action->dev_id != dev_id)
+			continue;
+
+		/* Found it - now free it */
+		save_flags(flags);
+		cli();
+		*p = action->next;
+		if (!irq[irq_action]) {
+			mask_irq(irq);
+			set_intr_gate(0x20+irq,bad_interrupt[irq]);
+		}
+		restore_flags(flags);
+		kfree(action);
 		return;
 	}
-	if (dev_id) {
-	    for (; action; action = action->next) {
-	        if (action->dev_id == dev_id) break;
-		tmp = action;
-	    }
-	    if (!action) {
-		printk("Trying to free free shared IRQ%d\n",irq);
-		return;
-	    }
-	} else if (action->flags & SA_SHIRQ) {
-	    printk("Trying to free shared IRQ%d with NULL device ID\n", irq);
-	    return;
-	}
-	save_flags(flags);
-	cli();
-	if (action && tmp) {
-	    tmp->next = action->next;
-	} else {
-	    *(irq + irq_action) = action->next;
-	}
-
-	if ((irq == 2) || (irq == 13) | (irq == TIMER_IRQ))
-	  memset(action, 0, sizeof(struct irqaction));
-	else 
-	  kfree_s(action, sizeof(struct irqaction));
-	
-	if (!(*(irq + irq_action))) {
-	    if (irq < 8) {
-		cache_21 |= 1 << irq;
-		outb(cache_21,0x21);
-	    } else {
-		cache_A1 |= 1 << (irq-8);
-		outb(cache_A1,0xA1);
-	    }
-	    set_intr_gate(0x20+irq,bad_interrupt[irq]);
-	}
-
-	restore_flags(flags);
+	printk("Trying to free free IRQ%d\n",irq);
 }
-
-#ifndef __SMP__
-
-/*
- * Note that on a 486, we don't want to do a SIGFPE on a irq13
- * as the irq is unreliable, and exception 16 works correctly
- * (ie as explained in the intel literature). On a 386, you
- * can't use exception 16 due to bad IBM design, so we have to
- * rely on the less exact irq13.
- *
- * Careful.. Not only is IRQ13 unreliable, but it is also
- * leads to races. IBM designers who came up with it should
- * be shot.
- */
- 
-
-static void math_error_irq(int cpl, void *dev_id, struct pt_regs *regs)
-{
-	outb(0,0xF0);
-	if (ignore_irq13 || !hard_math)
-		return;
-	math_error();
-}
-
-#endif
-
-static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
 
 unsigned long probe_irq_on (void)
 {
 	unsigned int i, irqs = 0, irqmask;
 	unsigned long delay;
 
-	/* first, snaffle up any unassigned irqs */
+	/* first, enable any unassigned irqs */
 	for (i = 15; i > 0; i--) {
-		if (!request_irq(i, no_action, SA_PROBE, "probe", NULL)) {
+		if (!irq_action[i]) {
 			enable_irq(i);
 			irqs |= (1 << i);
 		}
 	}
 
 	/* wait for spurious interrupts to mask themselves out again */
-	for (delay = jiffies + 2; delay > jiffies; );	/* min 10ms delay */
+	for (delay = jiffies + HZ/10; delay > jiffies; )
+		/* about 100ms delay */;
 
 	/* now filter out any obviously spurious interrupts */
 	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
-	for (i = 15; i > 0; i--) {
-		if (irqs & (1 << i) & irqmask) {
-			irqs ^= (1 << i);
-			free_irq(i, NULL);
-		}
-	}
-#ifdef DEBUG
-	printk("probe_irq_on:  irqs=0x%04x irqmask=0x%04x\n", irqs, irqmask);
-#endif
-	return irqs;
+	return irqs & ~irqmask;
 }
 
 int probe_irq_off (unsigned long irqs)
@@ -525,11 +502,6 @@ int probe_irq_off (unsigned long irqs)
 	unsigned int i, irqmask;
 
 	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
-	for (i = 15; i > 0; i--) {
-		if (irqs & (1 << i)) {
-			free_irq(i, NULL);
-		}
-	}
 #ifdef DEBUG
 	printk("probe_irq_off: irqs=0x%04x irqmask=0x%04x\n", irqs, irqmask);
 #endif
@@ -561,15 +533,8 @@ void init_IRQ(void)
 #ifdef __SMP__	
 	set_intr_gate(0x20+i, interrupt[i]);	/* IRQ '16' - IPI for rescheduling */
 #endif	
-	if (request_irq(2, no_action, SA_INTERRUPT, "cascade", NULL))
-		printk("Unable to get IRQ2 for cascade.\n");
-#ifndef __SMP__		
-	if (request_irq(13, math_error_irq, 0, "math error", NULL))
-		printk("Unable to get IRQ13 for math-error handler.\n");
-#else
-	if (request_irq(13, smp_message_irq, SA_INTERRUPT, "IPI", NULL))
-		printk("Unable to get IRQ13 for IPI.\n");
-#endif				
 	request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");
+	enable_irq(2);
+	enable_irq(13);
 } 

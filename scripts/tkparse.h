@@ -11,6 +11,7 @@ enum token {
   tok_else, 
   tok_fi, 
   tok_int,
+  tok_hex,
   tok_sound,
   tok_define,
   tok_choose,
@@ -75,3 +76,8 @@ extern struct kconfig * config;
 extern struct kconfig * clast;
 extern struct kconfig * koption;
 
+/*
+ * Prototypes
+ */
+void fix_conditionals(struct kconfig * scfg);	/* tkcond.c */
+void dump_tk_script(struct kconfig *scfg);	/* tkgen.c  */

@@ -174,7 +174,8 @@ static void raw_getrawfrag(const void *p, __u32 saddr, char *to, unsigned int of
 	if(offset==0)
 	{
 		struct iphdr *iph=(struct iphdr *)to;
-		iph->saddr=saddr;
+		if(!iph->saddr)
+			iph->saddr=saddr;
 		iph->check=0;
 		iph->tot_len=htons(fraglen);	/* This is right as you cant frag
 					   RAW packets */

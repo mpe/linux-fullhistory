@@ -39,7 +39,7 @@
  * Walk a condition chain and invert it so that the logical result is
  * inverted.
  */
-static int invert_condition(struct condition * cnd)
+static void invert_condition(struct condition * cnd)
 {
   /*
    * This is simple.  Just walk through the list, and invert
@@ -69,6 +69,8 @@ static int invert_condition(struct condition * cnd)
 	case op_eq:
 	  cnd->op = op_neq;
 	  break;
+	default:
+	  break;
 	}
     }
 }
@@ -76,7 +78,7 @@ static int invert_condition(struct condition * cnd)
 /*
  * Walk a condition chain, and free the memory associated with it.
  */
-static int free_condition(struct condition * cnd)
+static void free_condition(struct condition * cnd)
 {
   struct condition * next;
   for(;cnd; cnd = next)
@@ -190,7 +192,9 @@ struct condition * get_token_cond(struct condition ** cond, int depth)
 		   */
 		  for(cfg = config;cfg != NULL; cfg = cfg->next)
 		    {
-		      if( cfg->tok != tok_bool && cfg->tok != tok_int
+		      if( cfg->tok != tok_bool
+		         && cfg->tok != tok_int
+		         && cfg->tok != tok_hex
 			 && cfg->tok != tok_tristate 
 			 && cfg->tok != tok_choice
 			 && cfg->tok != tok_dep_tristate)
@@ -251,12 +255,10 @@ struct condition * get_token_cond(struct condition ** cond, int depth)
 struct condition * get_token_cond_frag(struct condition * cond, 
 				       struct condition ** last)
 {
-  int i;
   struct condition * newcond;
   struct condition * tail;
   struct condition * new;
   struct condition * ocond;
-  struct kconfig * cfg;
 
   newcond = tail = NULL;
 
@@ -293,7 +295,7 @@ struct condition * get_token_cond_frag(struct condition * cond,
 /*
  * Walk through the if conditionals and maintain a chain.
  */
-int fix_conditionals(struct kconfig * scfg)
+void fix_conditionals(struct kconfig * scfg)
 {
   int depth = 0;
   int i;
@@ -354,8 +356,8 @@ int fix_conditionals(struct kconfig * scfg)
 	case tok_menuoption:
 	case tok_bool:
 	case tok_tristate:
-	case tok_dep_tristate:
 	case tok_int:
+	case tok_hex:
 	case tok_choice:
 	  /*
 	   * We need to duplicate the chain of conditions and attach them to
@@ -363,6 +365,18 @@ int fix_conditionals(struct kconfig * scfg)
 	   */
 	  cfg->cond = get_token_cond(&conditions[0], depth);
 	  break;
+	case tok_dep_tristate:
+	  /*
+	   * Same as tok_tristate et al except we have a temporary
+	   * conditional. (Sort of a hybrid tok_if, tok_tristate, tok_fi
+	   * option)
+	   */
+	  conditions[depth] = cfg->cond;
+	  depth++;
+	  cfg->cond = get_token_cond(&conditions[0], depth);
+	  depth--;
+	  free_condition(conditions[depth]);
+	  conditions[depth] = NULL;
 	default:
 	  break;
 	}
@@ -386,6 +400,7 @@ int fix_conditionals(struct kconfig * scfg)
 	case tok_tristate:
 	case tok_dep_tristate:
 	case tok_int:
+	case tok_hex:
 	  for(cfg1=cfg;cfg1 != NULL; cfg1 = cfg1->next)
 	    {
 	      switch(cfg1->tok)
@@ -395,6 +410,7 @@ int fix_conditionals(struct kconfig * scfg)
 		case tok_tristate:
 		case tok_dep_tristate:
 		case tok_int:
+		case tok_hex:
 		  if( strcmp(cfg->optionname, cfg1->optionname) == 0)
 		    {
 		      cfg->flags |= CFG_DUP;

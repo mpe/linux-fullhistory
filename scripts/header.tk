@@ -5,6 +5,11 @@ set winx 100
 set winy 200
 
 #
+# Create a "reference" object to steal colors from.
+#
+button .ref
+
+#
 # Define some macros we will need to parse the config.in file.
 #
 proc mainmenu_name { text } {
@@ -87,7 +92,7 @@ proc maybe_exit { w } {
 	label $w.bm -bitmap questhead
 	pack  $w.bm -pady 10 -side top -padx 10
 	message $w.m -width 400 -aspect 300 \
-		-text "Changes will be lost.  Are you sure?"  -relief raised
+		-text "Changes will be lost.  Are you sure?" -relief flat
 	pack  $w.m -pady 10 -side top -padx 10
 	wm title $w "Are you sure?" 
 
@@ -170,8 +175,12 @@ proc read_config { filename } {
 			if { $value == "m" } then { set cmd "global $var; set $var 2" }
 			eval $cmd
 		}
-		if [regexp {# ([0-9A-Z_]+) is not set} $line foo var] {
+		if [regexp {# ([0-9A-Za-z_]+) is not set} $line foo var] {
 			set cmd "global $var; set $var 0"
+			eval $cmd
+		}
+		if [regexp {([0-9A-Za-z_]+)=([0-9A-Fa-f]+)} $line foo var value] {
+			set cmd "global $var; set $var $value"
 			eval $cmd
 		}
 	}
@@ -189,7 +198,7 @@ proc write_comment { file1 file2 text } {
 	puts $file2 " */"
 }
 
-proc write_variable { file1 file2 varname variable dep } {
+proc write_tristate { file1 file2 varname variable dep } {
 	if { $variable == 0 } \
 		then { puts $file1 "# $varname is not set"; \
 		       puts $file2 "#undef $varname"} \
@@ -201,6 +210,26 @@ proc write_variable { file1 file2 varname variable dep } {
 		       puts $file2 "#define $varname 1" } \
 	else { \
 	    error "Attempting to write value for variable that is not configured ($varname)." \
+	}
+}
+
+proc write_int { file1 file2 varname variable dep } {
+	if { $dep == 0 } \
+		then { puts $file1 "# $varname is not set"; \
+		       puts $file2 "#undef $varname"} \
+	else {
+		puts $file1 "$varname=$variable"; \
+		puts $file2 "#define $varname $variable"; \
+	}
+}
+
+proc write_hex { file1 file2 varname variable dep } {
+	if { $dep == 0 } \
+		then { puts $file1 "# $varname is not set"; \
+		       puts $file2 "#undef $varname"} \
+	else {
+		puts $file1 "$varname=$variable"; \
+		puts $file2 "#define $varname 0x$variable"; \
 	}
 }
 
@@ -237,24 +266,29 @@ proc tristate {w mnum line text variable } {
 	pack $w.x$line -anchor w -fill both -expand on
 }
 
-proc dep_tristate {w mnum line text variable } {
+proc dep_tristate {w mnum line text variable depend } {
 	tristate $w $mnum $line $text $variable
 }
 
 proc int { w mnum line text variable } {
 	frame $w.x$line
 	option_name $w $mnum $line $text $variable
-	entry $w.x$line.x -width 15 -relief sunken -borderwidth 2 \
+	entry $w.x$line.x -width 18 -relief sunken -borderwidth 2 \
 		-textvariable $variable
 	pack $w.x$line.x -anchor w -side right -fill y
 	pack $w.x$line -anchor w -fill both -expand on
 }
 
+proc hex { w mnum line text variable } {
+	int $w $mnum $line $text $variable
+}
+
 proc minimenu { w mnum line text variable } {
 	frame $w.x$line
 	option_name $w $mnum $line $text $variable
-	menubutton $w.x$line.x -text "Choose..." -menu $w.x$line.x.menu \
-		-relief raised -width 15
+	menubutton $w.x$line.x -textvariable $variable -menu \
+		$w.x$line.x.menu -relief raised -indicatoron 1 \
+		-width 15 -anchor w
 	pack $w.x$line.x -anchor w -side right -fill y
 	pack $w.x$line -anchor w -fill both -expand on
 }
@@ -267,7 +301,7 @@ proc do_make { w line option dir target target } {
 #nothing to do for now.
 }
 
-proc dohelp {w varname }  {
+proc dohelp_old_version_ignore_me {w varname }  {
 	catch {destroy $w}
 	toplevel $w -class Dialog
 
@@ -323,6 +357,75 @@ proc dohelp {w varname }  {
 		-width 10 -command "destroy $w; focus $oldFocus"
 	pack $w.f.back -side bottom -pady 10 -anchor s
 	pack $w.f -pady 10 -side top -padx 10 -anchor s
+	focus $w
+	global winx; global winy
+	set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]
+	wm geometry $w +$winx+$winy
+}
+
+
+proc dohelp {w varname }  {
+	catch {destroy $w}
+	toplevel $w -class Dialog
+
+	set filefound 0
+	set found 0
+	set lineno 0
+
+	if { [file readable Documentation/Configure.help] == 1} then {
+		set filefound 1
+		set message [exec awk "
+			BEGIN {
+				start=0;
+			}
+			/^$varname\[ 	\]*\$/ {
+				start=1;
+				printf(\"%s:\\n\\n\",\$0);
+				continue;
+			}
+			!/^\[ 	\]/ {
+				start=0;
+			}
+			/^\[ 	\]*/ && start==1 {
+				gsub(\"^\[ 	\]*\",\"\");
+				printf(\"%s \",\$0);
+			}
+			" Documentation/Configure.help]
+		set found [expr [string length "$message"] > 0]
+	}
+	
+	frame $w.f1
+
+	if { $found == 0 } then {
+		if { $filefound == 0 } then {
+		message $w.f1.m -width 750 -aspect 300 -relief flat -text \
+			"No help available - unable to open file Documentation/Configure.help.  This file should have come with your kernel."
+		} else {
+		message $w.f1.m -width 400 -aspect 300 -relief flat -text \
+			"No help available for $varname"
+		}
+		label $w.f1.bm -bitmap error
+		wm title $w "RTFM"
+	} else {
+		message $w.f1.m -width 400 -aspect 300 -text $message \
+			 -relief flat
+		label $w.f1.bm -bitmap info
+		wm title $w "Configuration help" 
+	}
+	pack $w.f1.bm $w.f1.m -side left -padx 10
+	pack $w.f1 -side top
+	set oldFocus [focus]
+	
+	# Do the OK button
+	#
+	frame $w.f2
+	button $w.f2.ok -text "OK" -activebackground green \
+		-width 10 -command "destroy $w; focus $oldFocus"
+	pack $w.f2.ok -side bottom -pady 10 -anchor s
+	pack $w.f2 -side bottom -padx 10 -anchor s
+
+	# Finish off the window
+	#
 	focus $w
 	global winx; global winy
 	set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]

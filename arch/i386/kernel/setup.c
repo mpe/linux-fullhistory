@@ -26,7 +26,9 @@
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
 #endif
-
+#ifdef CONFIG_BLK_DEV_RAM
+#include <linux/blk.h>
+#endif
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/smp.h>
@@ -88,6 +90,10 @@ extern char empty_zero_page[PAGE_SIZE];
 #define RAMDISK_FLAGS (*(unsigned short *) (PARAM+0x1F8))
 #define ORIG_ROOT_DEV (*(unsigned short *) (PARAM+0x1FC))
 #define AUX_DEVICE_INFO (*(unsigned char *) (PARAM+0x1FF))
+#define LOADER_TYPE (*(unsigned char *) (PARAM+0x210))
+#define KERNEL_START (*(unsigned long *) (PARAM+0x214))
+#define INITRD_START (*(unsigned long *) (PARAM+0x218))
+#define INITRD_SIZE (*(unsigned long *) (PARAM+0x21c))
 #define COMMAND_LINE ((char *) (PARAM+2048))
 #define COMMAND_LINE_SIZE 256
 
@@ -149,6 +155,7 @@ void setup_arch(char **cmdline_p,
 		 * memory size
 		 */
 		if (c == ' ' && *(const unsigned long *)from == *(const unsigned long *)"mem=") {
+			if (to != command_line) to--;
 			if (!memcmp(from+4, "nopentium", 9)) {
 				from += 9+4;
 				x86_capability &= ~8;
@@ -174,6 +181,20 @@ void setup_arch(char **cmdline_p,
 	*cmdline_p = command_line;
 	*memory_start_p = memory_start;
 	*memory_end_p = memory_end;
+
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (LOADER_TYPE) {
+		initrd_start = INITRD_START;
+		initrd_end = INITRD_START+INITRD_SIZE;
+		if (initrd_end > memory_end) {
+			printk("initrd extends beyond end of memory "
+			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
+			    initrd_end,memory_end);
+			initrd_start = 0;
+		}
+	}
+#endif
+
 	/* request io space for devices used on all i[345]86 PC'S */
 	request_region(0x00,0x20,"dma1");
 	request_region(0x40,0x20,"timer");

@@ -72,6 +72,12 @@
  *			Joerg(DL1BKE)		Added DAMA support, fixed (?) digipeating, fixed buffer locking
  *						for "virtual connect" mode... Result: Probably the
  *						"Most Buggiest Code You've Ever Seen" (TM)
+ *			HaJo(DD8NE)		implementation of a T5 (idle) timer
+ *			Joerg(DL1BKE)		renamed T5 to IDLE and changed behaviour:
+ *						the timer gets reloaded on every received or transmited
+ *						I frame for IP or NETROM. The idle timer is not active
+ *						on "vanilla AX.25" connections. Furthermore added PACLEN
+ *						to provide AX.25-layer based fragmentation (like WAMPES)
  *
  *	To do:
  *		Restructure the ax25_rcv code to be cleaner/faster and
@@ -544,6 +550,8 @@ static ax25_cb *ax25_create_cb(void)
 	ax25->t2      = AX25_DEF_T2 * PR_SLOWHZ;
 	ax25->t3      = AX25_DEF_T3 * PR_SLOWHZ;
 	ax25->n2      = AX25_DEF_N2;
+	ax25->paclen  = AX25_DEF_PACLEN;
+	ax25->idle    = 0;
 
 	ax25->modulus   = AX25_DEF_AXDEFMODE;
 	ax25->fragno    = 0;
@@ -555,6 +563,7 @@ static ax25_cb *ax25_create_cb(void)
 	ax25->t2timer   = 0;
 	ax25->t3timer   = 0;
 	ax25->n2count   = 0;
+	ax25->idletimer = 0;
 
 	ax25->va      = 0;
 	ax25->vr      = 0;
@@ -606,13 +615,15 @@ static void ax25_fillin_cb(ax25_cb *ax25, struct device *dev)
 {
 	ax25->device = dev;
 
-	ax25->rtt = ax25_dev_get_value(dev, AX25_VALUES_T1);
-	ax25->t1  = ax25_dev_get_value(dev, AX25_VALUES_T1);
-	ax25->t2  = ax25_dev_get_value(dev, AX25_VALUES_T2);
-	ax25->t3  = ax25_dev_get_value(dev, AX25_VALUES_T3);
-	ax25->n2  = ax25_dev_get_value(dev, AX25_VALUES_N2);
+	ax25->rtt    = ax25_dev_get_value(dev, AX25_VALUES_T1);
+	ax25->t1     = ax25_dev_get_value(dev, AX25_VALUES_T1);
+	ax25->t2     = ax25_dev_get_value(dev, AX25_VALUES_T2);
+	ax25->t3     = ax25_dev_get_value(dev, AX25_VALUES_T3);
+	ax25->n2     = ax25_dev_get_value(dev, AX25_VALUES_N2);
+	ax25->paclen = ax25_dev_get_value(dev, AX25_VALUES_PACLEN);
 
 	ax25->dama_slave = 0;
+	ax25->idle = 0;
 
 	ax25->modulus = ax25_dev_get_value(dev, AX25_VALUES_AXDEFMODE);
 
@@ -642,6 +653,7 @@ int ax25_send_frame(struct sk_buff *skb, ax25_address *src, ax25_address *dest,
 
 		if (ax25cmp(&ax25->source_addr, src) == 0 && ax25cmp(&ax25->dest_addr, dest) == 0 && ax25->device == dev) {
 			ax25_output(ax25, skb);
+			ax25->idletimer = ax25->idle;	/* dl1bke 960228 */
 			return 1;		/* It already existed */
 		}
 	}
@@ -668,6 +680,10 @@ int ax25_send_frame(struct sk_buff *skb, ax25_address *src, ax25_address *dest,
 		dama_establish_data_link(ax25);
 	else
 		ax25_establish_data_link(ax25);
+
+	/* idle timeouts only for mode vc connections */
+
+	ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
 		
 	ax25_insert_socket(ax25);
 
@@ -780,6 +796,12 @@ static int ax25_setsockopt(struct socket *sock, int level, int optname,
 				return -EINVAL;
 			sk->ax25->t3 = opt * PR_SLOWHZ;
 			return 0;
+			
+		case AX25_IDLE:
+			if (opt < 0)
+				return -EINVAL;
+			sk->ax25->idle = opt * PR_SLOWHZ * 60;
+			return 0;
 
 		case AX25_BACKOFF:
 			sk->ax25->backoff = opt ? 1 : 0;
@@ -791,6 +813,12 @@ static int ax25_setsockopt(struct socket *sock, int level, int optname,
 
 		case AX25_HDRINCL:
 			sk->ax25->hdrincl = opt ? 1 : 0;
+			return 0;
+			
+		case AX25_PACLEN:
+			if (opt < 16 || opt > 65535)
+				return -EINVAL;
+			sk->ax25->paclen = opt;
 			return 0;
 
 		default:
@@ -833,6 +861,10 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname,
 		case AX25_T3:
 			val = sk->ax25->t3 / PR_SLOWHZ;
 			break;
+			
+		case AX25_IDLE:
+			val = sk->ax25->idle / (PR_SLOWHZ * 60);
+			break;
 
 		case AX25_BACKOFF:
 			val = sk->ax25->backoff;
@@ -844,6 +876,10 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname,
 
 		case AX25_HDRINCL:
 			val = sk->ax25->hdrincl;
+			break;
+			
+		case AX25_PACLEN:
+			val = sk->ax25->paclen;
 			break;
 
 		default:
@@ -1046,6 +1082,7 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	ax25->t2      = osk->ax25->t2;
 	ax25->t3      = osk->ax25->t3;
 	ax25->n2      = osk->ax25->n2;
+	ax25->idle    = osk->ax25->idle;
 
 	ax25->window  = osk->ax25->window;
 
@@ -1659,6 +1696,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		}
 
 		ax25_fillin_cb(ax25, dev);
+		ax25->idletimer = ax25->idle = ax25_dev_get_value(ax25->device, AX25_VALUES_IDLE);
 #else
 		if (mine)
 			ax25_return_dm(dev, &src, &dest, &dp);
@@ -2101,7 +2139,7 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
   
 	cli();
 
-	len += sprintf(buffer, "dest_addr src_addr  dev  st  vs  vr  va    t1     t2     t3     n2  rtt wnd Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "dest_addr src_addr  dev  st  vs  vr  va    t1     t2     t3      idle   n2  rtt wnd paclen   dama Snd-Q Rcv-Q\n");
 
 	for (ax25 = ax25_list; ax25 != NULL; ax25 = ax25->next) {
 		if ((dev = ax25->device) == NULL)
@@ -2111,7 +2149,7 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&ax25->dest_addr));
-		len += sprintf(buffer + len, "%-9s %-4s %2d %3d %3d %3d %3d/%03d %2d/%02d %3d/%03d %2d/%02d %3d %3d",
+		len += sprintf(buffer + len, "%-9s %-4s %2d %3d %3d %3d %3d/%03d %2d/%02d %3d/%03d %3d/%03d %2d/%02d %3d %3d  %5d",
 			ax2asc(&ax25->source_addr), devname,
 			ax25->state,
 			ax25->vs, ax25->vr, ax25->va,
@@ -2121,9 +2159,14 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 			ax25->t2      / PR_SLOWHZ,
 			ax25->t3timer / PR_SLOWHZ,
 			ax25->t3      / PR_SLOWHZ,
+			(ax25->idletimer / (PR_SLOWHZ*60))+1,
+			ax25->idle      / (PR_SLOWHZ*60),
 			ax25->n2count, ax25->n2,
 			ax25->rtt     / PR_SLOWHZ,
-			ax25->window);
+			ax25->window,
+			ax25->paclen);
+			
+		len += sprintf(buffer + len, " %s", ax25->dama_slave? " slave" : "    no");
 
 		if (ax25->sk != NULL) {
 			len += sprintf(buffer + len, " %5ld %5ld\n",
@@ -2387,20 +2430,6 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
 		if (mode == 'V' || mode == 'v' || (mode == ' ' && ax25_dev_get_value(dev, AX25_VALUES_IPDEFMODE) == 'V')) {
 /*			skb_device_unlock(skb); *//* Don't unlock - it might vanish.. TCP will respond correctly to this lock holding */
 			skb_pull(skb, AX25_HEADER_LEN - 1);	/* Keep PID */
-#ifdef HUNTING_FOR_ENCAP_BUG
-		/* dl1bke 960131: This is a weird bug: the AX.25 frame is encapsulated */
-		/* 		  twice... We'll try a work-around here and hope for   */
-		/* 		  the best.                                            */
-
-			if (!(ax25cmp((ax25_address *)(bp + 8), (ax25_address *)(skb->data + 8)) ||
-			      ax25cmp((ax25_address *)(bp + 1), (ax25_address *)(skb->data + 1)))) {
-				printk("ax25_rebuild_header(): encap bug...\n");
-				skb_pull(skb, AX25_HEADER_LEN);
-			} else {
-				if (!*skb->data)
-					printk("ax25_rebuild_header(): probably encap bug...\n");
-			}
-#endif
 			ax25_send_frame(skb, (ax25_address *)(bp + 8), (ax25_address *)(bp + 1), NULL, dev);
 			return 1;
 		}

@@ -283,6 +283,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 				/* fall through */
 			default:
 				current->signal |= _S(signr & 0x7f);
+				current->flags |= PF_SIGNALED;
 				do_exit(signr);
 			}
 		}

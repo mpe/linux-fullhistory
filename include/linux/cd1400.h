@@ -3,7 +3,7 @@
 /*
  *	cd1400.h  -- cd1400 UART hardware info.
  *
- *	Copyright (C) 1994,1995  Greg Ungerer (gerg@stallion.oz.au).
+ *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
  */
 
 /*****************************************************************************/
-
 #ifndef	_CD1400_H
 #define	_CD1400_H
 /*****************************************************************************/
@@ -30,8 +29,6 @@
  *	Define the number of async ports per cd1400 uart chip.
  */
 #define	CD1400_PORTS		4
-
-#define	CD1400_CLKHZ		25000000
 
 /*
  *	Define the cd1400 uarts internal FIFO sizes.
@@ -260,6 +257,7 @@
 #define	ST_SCHAR3	0x30
 #define	ST_SCHAR4	0x40
 #define	ST_RANGE	0x70
+#define	ST_SCHARMASK	0x70
 #define	ST_TIMEOUT	0x80
 
 #define	MISR_DCD	0x80

@@ -113,7 +113,7 @@ int fat_readdirx(
 	unsigned char long_len = 0; /* Make compiler warning go away */
 	unsigned char alias_checksum = 0; /* Make compiler warning go away */
 	unsigned char long_slots = 0;
-	int uni_xlate = MSDOS_SB(sb)->unicode_xlate;
+	int uni_xlate = MSDOS_SB(sb)->options.unicode_xlate;
 	unsigned char *unicode = NULL;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
@@ -138,10 +138,10 @@ int fat_readdirx(
 	ino = fat_get_entry(inode,&filp->f_pos,&bh,&de);
 	while (ino > -1) {
 		/* Check for long filename entry */
-		if (MSDOS_SB(sb)->vfat && (de->name[0] == (__s8) DELETED_FLAG)) {
+		if (MSDOS_SB(sb)->options.isvfat && (de->name[0] == (__s8) DELETED_FLAG)) {
 			is_long = 0;
 			oldpos = filp->f_pos;
-		} else if (MSDOS_SB(sb)->vfat && de->attr ==  ATTR_EXT) {
+		} else if (MSDOS_SB(sb)->options.isvfat && de->attr ==  ATTR_EXT) {
 			int get_new_entry;
 			struct msdos_dir_slot *ds;
 			int offset;
@@ -227,7 +227,7 @@ int fat_readdirx(
 				}
 			}
 
-			if ((de->attr & ATTR_HIDDEN) && MSDOS_SB(sb)->dotsOK) {
+			if ((de->attr & ATTR_HIDDEN) && MSDOS_SB(sb)->options.dotsOK) {
 				bufname[0] = '.';
 				dotoffset = 1;
 				ptname = bufname+1;

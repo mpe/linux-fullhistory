@@ -6,6 +6,7 @@
  * structures etc.
  */
 
+#include <linux/config.h>
 #include <linux/linkage.h>
 #include <linux/limits.h>
 #include <linux/wait.h>
@@ -490,6 +491,7 @@ extern struct file_operations def_chr_fops;
 extern struct inode_operations chrdev_inode_operations;
 
 extern void init_fifo(struct inode * inode);
+struct inode_operations fifo_inode_operations;
 
 extern struct file_operations connecting_fifo_fops;
 extern struct file_operations read_fifo_fops;
@@ -607,6 +609,11 @@ extern kdev_t ROOT_DEV;
 
 extern void show_buffers(void);
 extern void mount_root(void);
+
+#ifdef CONFIG_BLK_DEV_INITRD
+extern kdev_t real_root_dev;
+extern int change_root(kdev_t new_root_dev,const char *put_old);
+#endif
 
 extern int char_read(struct inode *, struct file *, char *, int);
 extern int block_read(struct inode *, struct file *, char *, int);

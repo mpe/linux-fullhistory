@@ -23,7 +23,6 @@
 
 #include <linux/kernel.h>
 #include <linux/string.h>
-#include <linux/config.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -80,6 +79,9 @@ volatile unsigned long smp_idle_count[1+NR_CPUS]={0,};	/* Count idle ticks					*
 #if defined (__SMP_PROF__)
 volatile unsigned long smp_idle_map=0;			/* Map for idle processors 				*/
 #endif
+
+volatile unsigned long  smp_proc_in_lock[NR_CPUS] = {0,};/* for computing process time */
+volatile unsigned long smp_process_available=0;
 
 /*#define SMP_DEBUG*/
 
@@ -1063,82 +1065,8 @@ void smp_reschedule_irq(int cpl, struct pt_regs *regs)
 	if(smp_processor_id()!=active_kernel_processor)
 		panic("SMP Reschedule on CPU #%d, but #%d is active.\n",
 			smp_processor_id(), active_kernel_processor);
-	/*
-	 *	Update resource usage on the slave timer tick.
-	 */
-			
-	if (user_mode(regs)) 
-	{
-		current->utime++;
-		if (current->pid) 
-		{
-			if (current->priority < 15)
-				kstat.cpu_nice++;
-			else
-				kstat.cpu_user++;
-		}
-		/* Update ITIMER_VIRT for current task if not in a system call */
-		if (current->it_virt_value && !(--current->it_virt_value)) {
-			current->it_virt_value = current->it_virt_incr;
-			send_sig(SIGVTALRM,current,1);
-		}
-	} else {
-		current->stime++;
-		if(current->pid)
-			kstat.cpu_system++;
-#ifdef CONFIG_PROFILE
-		if (prof_buffer && current->pid) {
-			extern int _stext;
-			unsigned long eip = regs->eip - (unsigned long) &_stext;
-			eip >>= CONFIG_PROFILE_SHIFT;
-			if (eip < prof_len)
-				prof_buffer[eip]++;
-		}
-#endif
-	}
-	/*
-	 * check the cpu time limit on the process.
-	 */
-	if ((current->rlim[RLIMIT_CPU].rlim_max != RLIM_INFINITY) &&
-	    (((current->stime + current->utime) / HZ) >= current->rlim[RLIMIT_CPU].rlim_max))
-		send_sig(SIGKILL, current, 1);
-	if ((current->rlim[RLIMIT_CPU].rlim_cur != RLIM_INFINITY) &&
-	    (((current->stime + current->utime) % HZ) == 0)) {
-		unsigned long psecs = (current->stime + current->utime) / HZ;
-		/* send when equal */
-		if (psecs == current->rlim[RLIMIT_CPU].rlim_cur)
-			send_sig(SIGXCPU, current, 1);
-		/* and every five seconds thereafter. */
-		else if ((psecs > current->rlim[RLIMIT_CPU].rlim_cur) &&
-		        ((psecs - current->rlim[RLIMIT_CPU].rlim_cur) % 5) == 0)
-			send_sig(SIGXCPU, current, 1);
-	}
 
-	/* Update ITIMER_PROF for the current task */
-	if (current->it_prof_value && !(--current->it_prof_value)) {
-		current->it_prof_value = current->it_prof_incr;
-		send_sig(SIGPROF,current,1);
-	}
-
-
-	/*
-	 *	Don't reschedule if we are in an interrupt...
-	 *	[This is test code and not needed in the end]
-	 */
-	 
-/*	if(intr_count==1)
-	{*/
-
-		/*
-		 *	See if the slave processors need a schedule.
-		 */
-
-		if ( 0 > --current->counter || current->pid == 0) 
-		{
-			current->counter = 0;
-			need_resched=1;
-		}
-/*	}*/
+	need_resched=1;
 
 	/*
 	 *	Clear the IPI

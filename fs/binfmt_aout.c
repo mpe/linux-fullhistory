@@ -129,6 +129,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 	if (!file.f_op->write)
 		goto close_coredump;
 	has_dumped = 1;
+	current->flags |= PF_DUMPCORE;
        	strncpy(dump.u_comm, current->comm, sizeof(current->comm));
 	dump.u_ar0 = (void *)(((unsigned long)(&dump.regs)) - ((unsigned long)(&dump)));
 	dump.signal = signr;
@@ -313,6 +314,7 @@ do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	current->mm->mmap = NULL;
 	current->suid = current->euid = current->fsuid = bprm->e_uid;
 	current->sgid = current->egid = current->fsgid = bprm->e_gid;
+ 	current->flags &= ~PF_FORKNOEXEC;
 	if (N_MAGIC(ex) == OMAGIC) {
 #ifdef __alpha__
 		do_mmap(NULL, N_TXTADDR(ex) & PAGE_MASK,

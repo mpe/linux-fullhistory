@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  GK 2/5/95  -  Changed to support mounting root fs via NFS
+ *  Added initrd & change_root: Werner Almesberger & Hans Lermen, Feb '96
  */
 
 #define __KERNEL_SYSCALLS__
@@ -16,6 +17,7 @@
 #include <linux/fcntl.h>
 #include <linux/config.h>
 #include <linux/sched.h>
+#include <linux/kernel.h>
 #include <linux/tty.h>
 #include <linux/head.h>
 #include <linux/unistd.h>
@@ -29,8 +31,12 @@
 #include <linux/hdreg.h>
 #include <linux/mm.h>
 #include <linux/major.h>
+#include <linux/blk.h>
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
+#endif
+#ifdef CONFIG_ROOT_NFS
+#include <linux/nfs_fs.h>
 #endif
 
 #include <asm/bugs.h>
@@ -115,6 +121,9 @@ extern void isp16_setup(char *str, int *ints);
 static void ramdisk_start_setup(char *str, int *ints);
 static void load_ramdisk(char *str, int *ints);
 static void prompt_ramdisk(char *str, int *ints);
+#ifdef CONFIG_BLK_DEV_INITRD
+static void no_initrd(char *s,int *ints);
+#endif
 #endif CONFIG_BLK_DEV_RAM
 #ifdef CONFIG_ISDN_DRV_ICN
 extern void icn_setup(char *str, int *ints);
@@ -144,14 +153,17 @@ int rows, cols;
 extern int rd_doload;		/* 1 = load ramdisk, 0 = don't load */
 extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
+#ifdef CONFIG_BLK_DEV_INITRD
+kdev_t real_root_dev;
+#endif
 #endif
 
 int root_mountflags = MS_RDONLY;
 char *execute_command = 0;
 
 #ifdef CONFIG_ROOT_NFS
-char nfs_root_name[256] = { NFS_ROOT };
-char nfs_root_addrs[128] = { "" };
+char nfs_root_name[NFS_ROOT_NAME_LEN] = { NFS_ROOT };
+char nfs_root_addrs[NFS_ROOT_ADDRS_LEN] = { "" };
 #endif
 
 extern void dquot_init(void);
@@ -201,6 +213,9 @@ struct {
 	{ "ramdisk_start=", ramdisk_start_setup },
 	{ "load_ramdisk=", load_ramdisk },
 	{ "prompt_ramdisk=", prompt_ramdisk },
+#ifdef CONFIG_BLK_DEV_INITRD
+	{ "noinitrd", no_initrd },
+#endif
 #endif
 	{ "swap=", swap_setup },
 	{ "buff=", buff_setup },
@@ -423,9 +438,9 @@ static void parse_options(char *line)
 {
 	char *next;
 	char *devnames[] = { "nfs", "hda", "hdb", "hdc", "hdd", "sda", "sdb",
-		"sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
+		"sdc", "sdd", "sde", "fd", "xda", "xdb", "ram", NULL };
 	int devnums[]    = { 0x0FF, 0x300, 0x340, 0x1600, 0x1640, 0x800,
-		0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
+		0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0x100, 0};
 	int args, envs;
 	if (!*line)
 		return;
@@ -663,6 +678,13 @@ asmlinkage void start_kernel(void)
 	memory_start = inode_init(memory_start,memory_end);
 	memory_start = file_table_init(memory_start,memory_end);
 	memory_start = name_cache_init(memory_start,memory_end);
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (initrd_start && initrd_start < memory_start) {
+		printk(KERN_CRIT "initrd overwritten (0x%08lx < 0x%08lx) - "
+		    "disabling it.\n",initrd_start,memory_start);
+		initrd_start = 0;
+	}
+#endif
 	mem_init(memory_start,memory_end);
 	buffer_init();
 	sock_init();
@@ -729,15 +751,42 @@ static int do_shell(void * shell)
 	return execve(shell, argv, envp);
 }
 
+#ifdef CONFIG_BLK_DEV_INITRD
+static int do_linuxrc(void * shell)
+{
+	static char *argv[] = { "linuxrc", NULL, };
+
+	close(0);close(1);close(2);
+	setsid();
+	(void) open("/dev/tty1",O_RDWR,0);
+	(void) dup(0);
+	(void) dup(0);
+	return execve(shell, argv, envp_init);
+}
+
+static void no_initrd(char *s,int *ints)
+{
+	mount_initrd = 0;
+}
+#endif
+
 static int init(void * unused)
 {
 	int pid,i;
+#ifdef CONFIG_BLK_DEV_INITRD
+	int real_root_mountflags;
+#endif
 
 	/* Launch bdflush from here, instead of the old syscall way. */
 	kernel_thread(bdflush, NULL, 0);
 	/* Start the background pageout daemon. */
 	kernel_thread(kswapd, NULL, 0);
 
+#ifdef CONFIG_BLK_DEV_INITRD
+	real_root_dev = ROOT_DEV;
+	real_root_mountflags = root_mountflags;
+	if (initrd_start && mount_initrd) root_mountflags &= ~MS_RDONLY;
+#endif
 	setup();
 
 #ifdef __SMP__
@@ -764,6 +813,23 @@ static int init(void * unused)
 	}
 	#endif
 
+#ifdef CONFIG_BLK_DEV_INITRD
+	root_mountflags = real_root_mountflags;
+	if (ROOT_DEV != real_root_dev && ROOT_DEV == MKDEV(RAMDISK_MAJOR,0)) {
+		int error;
+
+		pid = kernel_thread(do_linuxrc, "/linuxrc", SIGCHLD);
+		if (pid>0)
+			while (pid != wait(&i));
+		if (real_root_dev != MKDEV(RAMDISK_MAJOR, 0)) {
+			error = change_root(real_root_dev,"/initrd");
+			if (error)
+				printk(KERN_ERR "Change root to /initrd: "
+				    "error %d\n",error);
+		}
+	}
+#endif
+
 	(void) open("/dev/tty1",O_RDWR,0);
 	(void) dup(0);
 	(void) dup(0);
@@ -778,7 +844,7 @@ static int init(void * unused)
 		if (pid>0)
 			while (pid != wait(&i))
 				/* nothing */;
-		}
+	}
 
 	while (1) {
 		pid = kernel_thread(do_shell,

@@ -1027,6 +1027,16 @@ W: http://dutettk.et.tudelft.nl/~spiekman
 S: Utrecht
 S: The Netherlands
 
+N: Henrik Storner
+E: storner@osiris.ping.dk
+E: storner@olicom.dk
+W: http://eolicom.olicom.dk/~storner/
+D: Configure script: tristate, bugfixes
+D: vfat/msdos integration, kerneld docs, Linux promotion
+S: Chr. Winthersvej 1 B, st.th.
+S: DK-1860 Frederiksberg C
+S: Denmark
+
 N: Drew Sullivan
 E: drew@lethe.north.net
 D: iBCS2 developer

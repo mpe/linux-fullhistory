@@ -170,6 +170,40 @@ static void ax25_timer(unsigned long param)
 		}
 		ax25->t3timer = ax25->t3;
 	}
+	
+	if (ax25->idletimer > 0 && --ax25->idletimer == 0) {
+		/* dl1bke 960228: close the connection when IDLE expires */
+		/* 		  similar to DAMA T3 timeout but with    */
+		/* 		  a "clean" disconnect of the connection */
+
+		ax25_clear_queues(ax25);
+
+		ax25->n2count = 0;
+		if (!ax25->dama_slave)
+			ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
+		
+		/* state 1 or 2 should not happen, but... */
+		
+		if (ax25->state == AX25_STATE_1 || ax25->state == AX25_STATE_2)
+			ax25->state = AX25_STATE_0;
+		else
+			ax25->state = AX25_STATE_2;
+
+		ax25->t3timer = 0;
+		ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
+		ax25->state   = AX25_STATE_2;
+
+		if (ax25->sk != NULL)
+		{
+			ax25->sk->state = TCP_CLOSE;
+			ax25->sk->err = 0;
+			if (!ax25->sk->dead)
+				ax25->sk->state_change(ax25->sk);
+			ax25->sk->dead = 1;
+			ax25->sk->destroy = 1;
+		}
+	}
+		                                                                                                                                                                                                                                                                                                                                        
 
 	/* dl1bke 960114: DAMA T1 timeouts are handled in ax25_dama_slave_transmit */
 	/* 		  nevertheless we have to re-enqueue the timer struct...   */

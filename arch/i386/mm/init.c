@@ -17,6 +17,9 @@
 #include <linux/mm.h>
 #include <linux/swap.h>
 #include <linux/smp.h>
+#ifdef CONFIG_BLK_DEV_INITRD
+#include <linux/blk.h>
+#endif
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -243,7 +246,11 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 			continue;
 		}
 		mem_map[MAP_NR(tmp)].count = 1;
-		free_page(tmp);
+#ifdef CONFIG_BLK_DEV_INITRD
+		if (!initrd_start || (tmp < initrd_start || tmp >=
+		    initrd_end))
+#endif
+			free_page(tmp);
 	}
 	tmp = nr_free_pages << PAGE_SHIFT;
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data)\n",

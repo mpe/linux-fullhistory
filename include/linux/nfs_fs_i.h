@@ -2,11 +2,13 @@
 #define _NFS_FS_I
 
 #include <linux/nfs.h>
+#include <linux/pipe_fs_i.h>
 
 /*
  * nfs fs inode data in memory
  */
 struct nfs_inode_info {
+	struct pipe_inode_info pipeinfo;
 	struct nfs_fh fhandle;
 	/*
 	 * read_cache_jiffies is when we started read-caching this inode,

@@ -303,9 +303,9 @@ int UMSDOS_ioctl_dir (
 					umsdos_dirent.uid and gid sets the owner and group.
 					umsdos_dirent.mode set the permissions flags.
 				*/
-				dir->i_sb->u.msdos_sb.fs_uid = data.umsdos_dirent.uid;
-				dir->i_sb->u.msdos_sb.fs_gid = data.umsdos_dirent.gid;
-				dir->i_sb->u.msdos_sb.fs_umask = data.umsdos_dirent.mode;
+				dir->i_sb->u.msdos_sb.options.fs_uid = data.umsdos_dirent.uid;
+				dir->i_sb->u.msdos_sb.options.fs_gid = data.umsdos_dirent.gid;
+				dir->i_sb->u.msdos_sb.options.fs_umask = data.umsdos_dirent.mode;
 				ret = 0;
 			}
 		}

@@ -19,6 +19,10 @@
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/swap.h>
+#include <linux/fcntl.h>
+#include <linux/acct.h>
+#include <linux/tty.h>
+#include <sys/sysmacros.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -37,19 +41,22 @@ asmlinkage int sys_ni_syscall(void)
 
 static int proc_sel(struct task_struct *p, int which, int who)
 {
-	switch (which) {
-		case PRIO_PROCESS:
-			if (!who && p == current)
-				return 1;
-			return(p->pid == who);
-		case PRIO_PGRP:
-			if (!who)
-				who = current->pgrp;
-			return(p->pgrp == who);
-		case PRIO_USER:
-			if (!who)
-				who = current->uid;
-			return(p->uid == who);
+	if(p->pid)
+	{
+		switch (which) {
+			case PRIO_PROCESS:
+				if (!who && p == current)
+					return 1;
+				return(p->pid == who);
+			case PRIO_PGRP:
+				if (!who)
+					who = current->pgrp;
+				return(p->pgrp == who);
+			case PRIO_USER:
+				if (!who)
+					who = current->uid;
+				return(p->uid == who);
+		}
 	}
 	return 0;
 }
@@ -272,10 +279,113 @@ asmlinkage int sys_setgid(gid_t gid)
 		current->dumpable = 0;
 	return 0;
 }
+  
+static char acct_active = 0;
+static struct file acct_file;
 
-asmlinkage int sys_acct(void)
+int acct_process(long exitcode)
 {
-	return -ENOSYS;
+   struct acct ac;
+   unsigned short fs;
+
+   if (acct_active) {
+      strncpy(ac.ac_comm, current->comm, ACCT_COMM);
+      ac.ac_comm[ACCT_COMM] = '\0';
+      ac.ac_utime = current->utime;
+      ac.ac_stime = current->stime;
+      ac.ac_btime = CT_TO_SECS(current->start_time) + (xtime.tv_sec - (jiffies / HZ));
+      ac.ac_etime = CURRENT_TIME - ac.ac_btime;
+      ac.ac_uid   = current->uid;
+      ac.ac_gid   = current->gid;
+      ac.ac_tty   = (current)->tty == NULL ? -1 : 
+         makedev (4, current->tty->device);
+      ac.ac_flag  = 0;
+      if (current->flags & PF_FORKNOEXEC)
+         ac.ac_flag |= AFORK;
+      if (current->flags & PF_SUPERPREV)
+         ac.ac_flag |= ASU;
+      if (current->flags & PF_DUMPCORE)
+         ac.ac_flag |= ACORE;
+      if (current->flags & PF_SIGNALED)
+         ac.ac_flag |= AXSIG;
+      ac.ac_minflt = current->min_flt;
+      ac.ac_majflt = current->maj_flt;
+      ac.ac_exitcode = exitcode;
+
+      /* Kernel segment override */
+      fs = get_fs();
+      set_fs(KERNEL_DS);
+
+      acct_file.f_op->write(acct_file.f_inode, &acct_file,
+                             (char *)&ac, sizeof(struct acct));
+
+      set_fs(fs);
+   }
+   return 0;
+}
+
+asmlinkage int sys_acct(const char *name)
+{
+   struct inode *inode = (struct inode *)0;
+   char *tmp;
+   int error;
+
+   if (!suser())
+      return -EPERM;
+
+   if (name == (char *)0) {
+      if (acct_active) {
+         if (acct_file.f_op->release)
+            acct_file.f_op->release(acct_file.f_inode, &acct_file);
+
+         if (acct_file.f_inode != (struct inode *) 0)
+            iput(acct_file.f_inode);
+
+         acct_active = 0;
+      }
+      return 0;
+   } else {
+      if (!acct_active) {
+
+         if ((error = getname(name, &tmp)) != 0)
+            return (error);
+
+         error = open_namei(tmp, O_RDWR, 0600, &inode, 0);
+         putname(tmp);
+
+         if (error)
+            return (error);
+
+         if (!S_ISREG(inode->i_mode)) {
+            iput(inode);
+            return -EACCES;
+         }
+
+         if (!inode->i_op || !inode->i_op->default_file_ops || 
+             !inode->i_op->default_file_ops->write) {
+            iput(inode);
+            return -EIO;
+         }
+
+         acct_file.f_mode = 3;
+         acct_file.f_flags = 0;
+         acct_file.f_count = 1;
+         acct_file.f_inode = inode;
+         acct_file.f_pos = inode->i_size;
+         acct_file.f_reada = 0;
+         acct_file.f_op = inode->i_op->default_file_ops;
+
+         if (acct_file.f_op->open)
+            if (acct_file.f_op->open(acct_file.f_inode, &acct_file)) {
+               iput(inode);
+               return -EIO;
+            }
+
+         acct_active = 1;
+         return 0;
+      } else
+         return -EBUSY;
+   }
 }
 
 #ifndef __alpha__

@@ -31,6 +31,9 @@
  *			Joerg(DL1BKE)	ax25_rt_build_path() find digipeater list and device by 
  *					destination call. Needed for IP routing via digipeater
  *			Jonathan(G4KLX)	Added routing for IP datagram packets.
+ *			Joerg(DL1BKE)	changed routing for IP datagram and VC to use a default
+ *					route if available. Does not overwrite default routes
+ *					on route-table overflow anymore.
  */
  
 #include <linux/config.h>
@@ -75,6 +78,15 @@ static struct ax25_dev {
 	unsigned short values[AX25_MAX_VALUES];
 } *ax25_device = NULL;
 
+/*
+ * FIXME: heard and routing table should be two lists. The routing table
+ *        should be updated by connects only. (WAMPES way of doing it)
+ *
+ *        routing table should accept a new route to the same destination
+ *        if the old one was added manually. Nevertheless we should still
+ *        be able to add permanent routes. (dl1bke)
+ */
+
 void ax25_rt_rx_frame(ax25_address *src, struct device *dev, ax25_digi *digi)
 {
 	unsigned long flags;
@@ -87,7 +99,7 @@ void ax25_rt_rx_frame(ax25_address *src, struct device *dev, ax25_digi *digi)
 	oldest = NULL;
 
 	for (ax25_rt = ax25_route; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
-		if (count == 0 || (ax25_rt->stamp.tv_sec != 0 && ax25_rt->stamp.tv_sec < oldest->stamp.tv_sec))
+		if (count == 0 || oldest->stamp.tv_sec == 0 || (ax25_rt->stamp.tv_sec != 0 && ax25_rt->stamp.tv_sec < oldest->stamp.tv_sec))
 			oldest = ax25_rt;
 		
 		if (ax25cmp(&ax25_rt->callsign, src) == 0 && ax25_rt->dev == dev) {
@@ -101,6 +113,8 @@ void ax25_rt_rx_frame(ax25_address *src, struct device *dev, ax25_digi *digi)
 	}
 
 	if (count > AX25_ROUTE_MAX) {
+		if (oldest->stamp.tv_sec == 0)
+			return;
 		if (oldest->digipeat != NULL)
 			kfree_s(oldest->digipeat, sizeof(ax25_digi));
 		ax25_rt = oldest;
@@ -394,6 +408,8 @@ int ax25_rt_autobind(ax25_cb *ax25, ax25_address *addr)
 	if ((call = ax25_findbyuid(current->euid)) == NULL) {
 		if (ax25_uid_policy && !suser())
 			return -EPERM;
+		if (ax25->device == NULL)
+			return -ENODEV;
 		call = (ax25_address *)ax25->device->dev_addr;
 	}
 
@@ -413,27 +429,28 @@ int ax25_rt_autobind(ax25_cb *ax25, ax25_address *addr)
 
 /*
  *	dl1bke 960117: build digipeater path
+ *	dl1bke 960301: use the default route if it exists
  */
 void ax25_rt_build_path(ax25_cb *ax25, ax25_address *addr)
 {
 	struct ax25_route *ax25_rt;
-
+	
 	for (ax25_rt = ax25_route; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
-		if (ax25cmp(&ax25_rt->callsign, addr) == 0 && ax25_rt->digipeat != NULL) {
-			if (ax25_rt->dev == NULL)
-				continue;
-			
-			if ((ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL)
-				return;
-
-			ax25->device = ax25_rt->dev;
-			*ax25->digipeat = *ax25_rt->digipeat;
-
-			return;
-		}
+		if (ax25cmp(&ax25_rt->callsign, addr) == 0 && ax25_rt->dev != NULL)
+			break;
+		
+		if (ax25cmp(&ax25_rt->callsign, &null_ax25_address) == 0 && ax25_rt->dev != NULL)
+			break;
 	}
+	
+	if (ax25_rt == NULL || ax25_rt->digipeat == NULL)
+		return;
 
-	ax25->digipeat = NULL;
+	if ((ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL)
+		return;
+
+	ax25->device = ax25_rt->dev;
+	*ax25->digipeat = *ax25_rt->digipeat;
 }
 
 void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *dev)
@@ -442,31 +459,37 @@ void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *
 	ax25_address src, dest;
 	unsigned char *bp;
 	int len;
-
+	
+	/*
+	 * dl1bke 960301: use the default route if available
+	 *
+	 */
+	
 	for (ax25_rt = ax25_route; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
-		if (ax25cmp(&ax25_rt->callsign, addr) == 0 && ax25_rt->dev == dev) {
-			if (ax25_rt->digipeat == NULL)
-				return;
-
-			len = ax25_rt->digipeat->ndigi * AX25_ADDR_LEN;
-			
-			if (skb_headroom(skb) < len) {
-				printk("ax25_dg_build_path: not enough headroom for in skb\n");
-				return;
-			}
-
-			memcpy(&dest, skb->data + 1, AX25_ADDR_LEN);
-			memcpy(&src,  skb->data + 8, AX25_ADDR_LEN);
-
-			bp = skb_push(skb, len);
-
-			*bp++ = 0x00;		/* KISS Data */
-
-			build_ax25_addr(bp, &src, &dest, ax25_rt->digipeat, C_COMMAND, MODULUS);
-
-			return;
-		}
+		if (ax25cmp(&ax25_rt->callsign, addr) == 0 && ax25_rt->dev != NULL)
+			break;
+		if (ax25cmp(&ax25_rt->callsign, &null_ax25_address) == 0 && ax25_rt->dev != NULL)
+			break;
 	}
+	
+	
+	if (ax25_rt == NULL ||ax25_rt->digipeat == NULL)
+		return;
+
+	len = ax25_rt->digipeat->ndigi * AX25_ADDR_LEN;
+		
+	if (skb_headroom(skb) < len) {
+		printk("ax25_dg_build_path: not enough headroom for in skb\n");
+		return;
+	}
+
+	memcpy(&dest, skb->data + 1, AX25_ADDR_LEN);
+	memcpy(&src,  skb->data + 8, AX25_ADDR_LEN);
+
+	bp = skb_push(skb, len);
+	*bp++ = 0x00;		/* KISS Data */
+
+	build_ax25_addr(bp, &src, &dest, ax25_rt->digipeat, C_COMMAND, MODULUS);
 }
 
 /*
@@ -550,8 +573,10 @@ void ax25_dev_device_up(struct device *dev)
 	ax25_dev->values[AX25_VALUES_T1]        = AX25_DEF_T1 * PR_SLOWHZ;
 	ax25_dev->values[AX25_VALUES_T2]        = AX25_DEF_T2 * PR_SLOWHZ;
 	ax25_dev->values[AX25_VALUES_T3]        = AX25_DEF_T3 * PR_SLOWHZ;
+	ax25_dev->values[AX25_VALUES_IDLE]	= AX25_DEF_IDLE * PR_SLOWHZ * 60;
 	ax25_dev->values[AX25_VALUES_N2]        = AX25_DEF_N2;
 	ax25_dev->values[AX25_VALUES_DIGI]      = AX25_DEF_DIGI;
+	ax25_dev->values[AX25_VALUES_PACLEN]	= AX25_DEF_PACLEN;
 
 	save_flags(flags);
 	cli();
@@ -635,8 +660,12 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 				return -EINVAL;
 			if (ax25_parms.values[AX25_VALUES_T3] < 1)
 				return -EINVAL;
+			if (ax25_parms.values[AX25_VALUES_IDLE] > 100)
+				return -EINVAL;
 			if (ax25_parms.values[AX25_VALUES_N2] < 1 ||
 			    ax25_parms.values[AX25_VALUES_N2] > 31)
+				return -EINVAL;
+			if (ax25_parms.values[AX25_VALUES_PACLEN] < 16)
 				return -EINVAL;
 			if ((ax25_parms.values[AX25_VALUES_DIGI] &
 			    ~(AX25_DIGI_INBAND | AX25_DIGI_XBAND)) != 0)
@@ -646,6 +675,7 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 			ax25_dev->values[AX25_VALUES_T1] /= 2;
 			ax25_dev->values[AX25_VALUES_T2] *= PR_SLOWHZ;
 			ax25_dev->values[AX25_VALUES_T3] *= PR_SLOWHZ;
+			ax25_dev->values[AX25_VALUES_IDLE] *= PR_SLOWHZ * 60;
 			break;
 
 		case SIOCAX25GETPARMS:
@@ -661,6 +691,7 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 			ax25_parms.values[AX25_VALUES_T1] /= PR_SLOWHZ;
 			ax25_parms.values[AX25_VALUES_T2] /= PR_SLOWHZ;
 			ax25_parms.values[AX25_VALUES_T3] /= PR_SLOWHZ;
+			ax25_parms.values[AX25_VALUES_IDLE] /= PR_SLOWHZ * 60;
 			memcpy_tofs(arg, &ax25_parms, sizeof(ax25_parms));
 			break;
 	}

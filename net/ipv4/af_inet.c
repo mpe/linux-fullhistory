@@ -651,6 +651,7 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->allocation = GFP_KERNEL;
 	sk->sndbuf = SK_WMEM_MAX;
 	sk->rcvbuf = SK_RMEM_MAX;
+	sk->ato = HZ/3;
 	sk->rto = TCP_TIMEOUT_INIT;		/*TCP_WRITE_TIME*/
 	sk->cong_window = 1; /* start with only sending one packet at a time. */
 	sk->priority = 1;
