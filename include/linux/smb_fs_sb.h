@@ -34,7 +34,7 @@ struct smb_sb_info {
 	struct smb_conn_opt opt;
 
 	struct semaphore sem;
-	struct wait_queue * wait;
+	wait_queue_head_t wait;
 
 	__u32              packet_size;
 	unsigned char *    packet;

@@ -117,6 +117,11 @@ int register_sparcaudio_driver(struct sparcaudio_driver *drv, int duplex)
          * TODO: Make number of input/output buffers tunable parameters
          */
 
+        init_waitqueue_head(&drv->open_wait);
+        init_waitqueue_head(&drv->output_write_wait);
+        init_waitqueue_head(&drv->output_drain_wait);
+        init_waitqueue_head(&drv->input_read_wait);
+
         drv->num_output_buffers = 8;
 	drv->output_buffer_size = (4096 * 2);
 	drv->playing_count = 0;

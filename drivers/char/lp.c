@@ -187,15 +187,7 @@ int main(int argc, char **argv)
 /* if you have more than 3 printers, remember to increase LP_NO */
 #define LP_NO 3
 
-struct lp_struct lp_table[LP_NO] =
-{
-	[0 ... LP_NO-1] = {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT,
-			   NULL,
-#ifdef LP_STATS
-			   0, 0, {0},
-#endif
-			   NULL, 0, 0, 0}
-};
+struct lp_struct lp_table[LP_NO];
 
 /* Test if printer is ready */
 #define	LP_READY(status)	((status) & LP_PBUSY)
@@ -737,6 +729,7 @@ static int lp_open(struct inode * inode, struct file * file)
 		LP_F(minor) &= ~LP_BUSY;
 		return -ENOMEM;
 	}
+	init_waitqueue_head(&(lp_table[minor].wait_q));
 	return 0;
 }
 
@@ -928,6 +921,24 @@ int lp_init(void)
 	unsigned int count = 0;
 	unsigned int i;
 	struct parport *port;
+
+	for(i = 0; i < LP_NO; i++) {
+		lp_table[i].dev = NULL;
+		lp_table[i].flags = 0;
+		lp_table[i].chars = LP_INIT_CHAR;
+		lp_table[i].time = LP_INIT_TIME;
+		lp_table[i].wait = LP_INIT_WAIT;
+		lp_table[i].lp_buffer = NULL;
+#ifdef LP_STATS
+		lp_table[i].lastcall = 0;
+		lp_table[i].runchars = 0;
+		memset(&lp_table[i].stats, 0, sizeof(struct lp_stats));
+#endif
+		init_waitqueue_head(&lp_table[i].wait_q);
+		lp_table[i].last_error = 0;
+		lp_table[i].irq_detected = 0;
+		lp_table[i].irq_missed = 0;
+	}
 
 	switch (parport_nr[0])
 	{

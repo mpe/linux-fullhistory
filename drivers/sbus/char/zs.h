@@ -1,4 +1,4 @@
-/* $Id: zs.h,v 1.1 1997/08/28 02:23:45 ecd Exp $
+/* $Id: zs.h,v 1.2 1999/05/12 11:15:31 davem Exp $
  * zs.h: Definitions for the Sparc Zilog serial driver.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -151,8 +151,8 @@ struct sun_serial {
 	struct tq_struct	tqueue_hangup;
 	struct termios		normal_termios;
 	struct termios		callout_termios;
-	struct wait_queue	*open_wait;
-	struct wait_queue	*close_wait;
+	wait_queue_head_t	open_wait;
+	wait_queue_head_t	close_wait;
 };
 
 

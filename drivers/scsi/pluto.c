@@ -54,7 +54,7 @@ static struct ctrl_inquiry {
 static int fcscount __initdata = 0;
 static atomic_t fcss __initdata = ATOMIC_INIT(0);
 static struct timer_list fc_timer __initdata = { 0 };
-struct semaphore fc_sem __initdata = MUTEX_LOCKED;
+DECLARE_MUTEX_LOCKED(fc_sem);
 
 static int pluto_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr, fc_channel *fc, fcp_cmnd *fcmd);
 

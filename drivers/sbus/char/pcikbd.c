@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.27 1999/05/09 06:40:47 ecd Exp $
+/* $Id: pcikbd.c,v 1.28 1999/05/12 11:15:05 davem Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -588,7 +588,7 @@ static unsigned int pcimouse_irq;
 struct aux_queue {
 	unsigned long head;
 	unsigned long tail;
-	struct wait_queue *proc_list;
+	wait_queue_head_t proc_list;
 	struct fasync_struct *fasync;
 	unsigned char buf[AUX_BUF_SIZE];
 };
@@ -739,7 +739,7 @@ static void aux_write_cmd(int val)
  * doing so might cause the keyboard driver to ignore all incoming keystrokes.
  */
 
-static struct semaphore aux_sema4 = MUTEX;
+static DECLARE_MUTEX(aux_sema4);
 
 static inline void aux_start_atomic(void)
 {
@@ -879,7 +879,7 @@ static ssize_t aux_write(struct file * file, const char * buffer,
 static ssize_t aux_read(struct file * file, char * buffer,
 		        size_t count, loff_t *ppos)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t i = count;
 	unsigned char c;
 

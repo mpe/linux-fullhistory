@@ -2334,7 +2334,7 @@ static int idetape_queue_pc_tail (ide_drive_t *drive,idetape_pc_t *pc)
  */
 static void idetape_wait_for_request (ide_drive_t *drive, struct request *rq)
 {
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 
 #if IDETAPE_DEBUG_BUGS
 	if (rq == NULL || !IDETAPE_RQ_CMD (rq->cmd)) {

@@ -275,7 +275,7 @@ struct sparcaudio_driver
         struct linux_sbus_device *dev;
 
 	/* Processes blocked on open() sit here. */
-	struct wait_queue *open_wait;
+	wait_queue_head_t open_wait;
 
 	/* Task queue for this driver's bottom half. */
 	struct tq_struct tqueue;
@@ -288,7 +288,7 @@ struct sparcaudio_driver
 	size_t *output_sizes, output_size, output_buffer_size;
 	int num_output_buffers, output_front, output_rear, output_offset;
 	int output_count, output_active, playing_count, output_eof;
-	struct wait_queue *output_write_wait, *output_drain_wait;
+	wait_queue_head_t output_write_wait, output_drain_wait;
         char *output_notify;
 
         /* Support for a circular queue of input buffers. */
@@ -296,7 +296,7 @@ struct sparcaudio_driver
 	size_t *input_sizes, input_size, input_buffer_size;
         int num_input_buffers, input_front, input_rear, input_offset;
         int input_count, input_active, recording_count;
-        struct wait_queue *input_read_wait;
+        wait_queue_head_t input_read_wait;
 
         /* Hack to make it look like we support variable size buffers. */
         int buffer_size;

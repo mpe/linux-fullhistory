@@ -73,7 +73,7 @@ struct sun_mouse {
 	int ready;		       /* set if there if data is available */
 	int active;		       /* set if device is open */
         int vuid_mode;	               /* VUID_NATIVE or VUID_FIRM_EVENT */
-	struct wait_queue *proc_list;
+	wait_queue_head_t proc_list;
 	struct fasync_struct *fasync;
 	
 	/* The event/stream queue */
@@ -368,7 +368,7 @@ static ssize_t
 sun_mouse_read(struct file *file, char *buffer,
 	       size_t count, loff_t *ppos)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 	if (queue_empty ()){
 		if (file->f_flags & O_NONBLOCK)
@@ -503,7 +503,7 @@ __initfunc(int sun_mouse_init(void))
 	misc_register (&sun_mouse_mouse);
 	sunmouse.delta_x = sunmouse.delta_y = 0;
 	sunmouse.button_state = 0x80;
-	sunmouse.proc_list = NULL;
+	init_waitqueue_head(&sunmouse.proc_list);
 	sunmouse.byte = 69;
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.41 1999/04/16 16:22:27 jj Exp $
+/* $Id: zs.c,v 1.42 1999/05/12 11:15:26 davem Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -174,7 +174,7 @@ static struct termios **serial_termios_locked;
  * memory if large numbers of serial ports are open.
  */
 static unsigned char tmp_buf[4096]; /* This is cheating */
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static inline int serial_paranoia_check(struct sun_serial *info,
 					dev_t device, const char *routine)
@@ -1628,7 +1628,7 @@ void zs_hangup(struct tty_struct *tty)
 static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			   struct sun_serial *info)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int		retval;
 	int		do_clocal = 0;
 	unsigned char	r0;
@@ -1844,7 +1844,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.41 $";
+	char *revision = "$Revision: 1.42 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2517,8 +2517,8 @@ __initfunc(int zs_init(void))
 		info->tqueue_hangup.data = info;
 		info->callout_termios = callout_driver.init_termios;
 		info->normal_termios = serial_driver.init_termios;
-		info->open_wait = 0;
-		info->close_wait = 0;
+		init_waitqueue_head(&info->open_wait);
+		init_waitqueue_head(&info->close_wait);
 		printk("tty%02d at 0x%04x (irq = %s)", info->line, 
 		       info->port, __irq_itoa(info->irq));
 		printk(" is a Zilog8530\n");

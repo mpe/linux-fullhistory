@@ -83,7 +83,7 @@ struct msp3400c {
 
 	/* thread */
 	struct task_struct  *thread;
-	struct wait_queue   *wq;
+	wait_queue_head_t    wq;
 	struct semaphore    *notify;
 	int                  active,restart,rmmod;
 
@@ -523,7 +523,6 @@ static int msp3400c_thread(void *data)
 	current->fs->umask = 0;
 	strcpy(current->comm,"msp3400");
 
-	msp->wq     = NULL;
 	msp->thread = current;
 
 #ifdef __SMP__
@@ -748,7 +747,7 @@ static int msp3410d_thread(void *data)
 {
 	unsigned long flags;
 	struct msp3400c *msp = data;
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 	int              i, val;
 
 	/* lock_kernel(); */
@@ -844,7 +843,7 @@ done:
 static struct msp3400c *mspmix = NULL;  /* ugly hack, should do something more sensible */
 static int mixer_num;
 static int mixer_modcnt = 0;
-static struct semaphore mixer_sem = MUTEX;
+static DECLARE_MUTEX(mixer_sem);
 
 static int mix_to_v4l(int i)
 {
@@ -1016,7 +1015,7 @@ static /*const*/ struct file_operations msp3400c_mixer_fops = {
 
 static int msp3400c_attach(struct i2c_device *device)
 {
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 	struct msp3400c *msp;
 	int              rev1,rev2;
 	LOCK_FLAGS;
@@ -1030,6 +1029,7 @@ static int msp3400c_attach(struct i2c_device *device)
 	msp->right  = 65535;
 	msp->bass   = 32768;
 	msp->treble = 32768;
+	init_waitqueue_head(&msp->wq);
 
 	LOCK_I2C_BUS(msp->bus);
 	if (-1 == msp3400c_reset(msp->bus)) {
@@ -1069,7 +1069,6 @@ static int msp3400c_attach(struct i2c_device *device)
 
 	/* startup control thread */
 	MOD_INC_USE_COUNT;
-	msp->wq     = NULL;
 	msp->notify = &sem;
 	kernel_thread(msp3400c_thread, (void *)msp, 0);
 	down(&sem);
@@ -1090,7 +1089,7 @@ static int msp3400c_attach(struct i2c_device *device)
 
 static int msp3400c_detach(struct i2c_device *device)
 {
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 	struct msp3400c *msp  = (struct msp3400c*)device->data;
 	LOCK_FLAGS;
     

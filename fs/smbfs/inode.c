@@ -68,7 +68,7 @@ smb_invent_inos(unsigned long n)
 }
 
 static struct smb_fattr *read_fattr = NULL;
-static struct semaphore read_semaphore = MUTEX;
+static DECLARE_MUTEX(read_semaphore);
 
 struct inode *
 smb_iget(struct super_block *sb, struct smb_fattr *fattr)
@@ -362,8 +362,8 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	sb->s_op = &smb_sops;
 
 	sb->u.smbfs_sb.sock_file = NULL;
-	sb->u.smbfs_sb.sem = MUTEX;
-	sb->u.smbfs_sb.wait = NULL;
+	init_MUTEX(&sb->u.smbfs_sb.sem);
+	init_waitqueue_head(&sb->u.smbfs_sb.wait);
 	sb->u.smbfs_sb.conn_pid = 0;
 	sb->u.smbfs_sb.state = CONN_INVALID; /* no connection yet */
 	sb->u.smbfs_sb.generation = 0;
@@ -609,7 +609,7 @@ init_module(void)
 	smb_current_vmalloced = 0;
 #endif
 
-	read_semaphore = MUTEX;
+	init_MUTEX(&read_semaphore);
 
 	return init_smb_fs();
 }

@@ -85,7 +85,7 @@ struct dbri {
   struct cs4215 mm;				/* mmcodec special info */
 
 #if 0
-  struct wait_queue *wait, *int_wait;		/* Where to sleep if busy */
+  wait_queue_head_t wait, int_wait;		/* Where to sleep if busy */
 #endif
   struct audio_info perchip_info;
 

@@ -13,7 +13,6 @@
  * for more details.
  */
 
-#include <linux/config.h>
 #include <stdarg.h>
 #include <linux/types.h>
 #include <linux/kernel.h>

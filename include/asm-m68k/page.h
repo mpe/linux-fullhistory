@@ -1,6 +1,8 @@
 #ifndef _M68K_PAGE_H
 #define _M68K_PAGE_H
 
+#include <linux/config.h>
+
 /* PAGE_SHIFT determines the page size */
 #define PAGE_SHIFT	12
 #define PAGE_SIZE	(1UL << PAGE_SHIFT)

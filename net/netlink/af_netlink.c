@@ -331,7 +331,7 @@ int netlink_unicast(struct sock *ssk, struct sk_buff *skb, u32 pid, int nonblock
 	struct sock *sk;
 	int len = skb->len;
 	int protocol = ssk->protocol;
-	struct wait_queue wait = { current, NULL };
+        DECLARE_WAITQUEUE(wait, current);
 
 retry:
 	for (sk = nl_table[protocol]; sk; sk = sk->next) {

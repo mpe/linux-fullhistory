@@ -35,7 +35,7 @@ struct stripe_head {
 	int			count;			/* nr of waiters */
 	int			write_method;		/* reconstruct-write / read-modify-write */
 	int			phase;			/* PHASE_BEGIN, ..., PHASE_COMPLETE */
-	struct wait_queue	*wait;			/* processes waiting for this stripe */
+	wait_queue_head_t	wait;			/* processes waiting for this stripe */
 };
 
 /*
@@ -94,7 +94,7 @@ struct raid5_data {
 	 */
 	int			nr_free_sh;
 	struct stripe_head	*free_sh_list;
-	struct wait_queue	*wait_for_stripe;
+	wait_queue_head_t	wait_for_stripe;
 };
 
 #endif

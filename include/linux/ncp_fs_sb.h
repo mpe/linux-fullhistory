@@ -44,7 +44,7 @@ struct ncp_server {
 				   receive replies */
 
 	int lock;		/* To prevent mismatch in protocols. */
-	struct wait_queue *wait;
+	wait_queue_head_t wait;
 
 	int current_size;	/* for packet preparation */
 	int has_subfunction;

@@ -186,11 +186,11 @@ typedef struct {
 	unsigned char lock;
 	unsigned int owner_pc, owner_cpu;
 } spinlock_t;
-#define SPIN_LOCK_UNLOCKED (spinlock_t) { 0, 0, NO_PROC_ID }
+#define SPIN_LOCK_UNLOCKED (spinlock_t) { 0, 0, 0xff }
 #define spin_lock_init(__lock)	\
 do {	(__lock)->lock = 0; \
 	(__lock)->owner_pc = 0; \
-	(__lock)->owner_cpu = NO_PROC_ID; \
+	(__lock)->owner_cpu = 0xff; \
 } while(0)
 #define spin_is_locked(__lock)	(*((volatile unsigned char *)(&((__lock)->lock))) != 0)
 #define spin_unlock_wait(__lock)	\
@@ -322,7 +322,7 @@ typedef struct {
 	unsigned int writer_pc, writer_cpu;
 	unsigned int reader_pc[4];
 } rwlock_t;
-#define RW_LOCK_UNLOCKED	(rwlock_t) { 0, 0, NO_PROC_ID, { 0, 0, 0, 0 } }
+#define RW_LOCK_UNLOCKED	(rwlock_t) { 0, 0, 0xff, { 0, 0, 0, 0 } }
 
 extern void _do_read_lock(rwlock_t *rw, char *str);
 extern void _do_read_unlock(rwlock_t *rw, char *str);

@@ -817,7 +817,7 @@ struct md_thread *md_register_thread (void (*run) (void *), void *data)
 	struct md_thread *thread = (struct md_thread *)
 		kmalloc(sizeof(struct md_thread), GFP_KERNEL);
 	int ret;
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 	
 	if (!thread) return NULL;
 	
@@ -838,7 +838,7 @@ struct md_thread *md_register_thread (void (*run) (void *), void *data)
 
 void md_unregister_thread (struct md_thread *thread)
 {
-	struct semaphore sem = MUTEX_LOCKED;
+	DECLARE_MUTEX_LOCKED(sem);
 	
 	thread->sem = &sem;
 	thread->run = NULL;

@@ -1017,7 +1017,7 @@ static ssize_t do_read(struct file *fp, char *buf, size_t count, loff_t *ppos)
 	struct apm_bios_struct *	as;
 	int			i;
 	apm_event_t		event;
-	struct wait_queue	wait = { current,	NULL };
+        DECLARE_WAITQUEUE(wait, current);
 
 	as = fp->private_data;
 	if (check_apm_bios_struct(as, "read"))

@@ -907,7 +907,7 @@ void __wake_up(wait_queue_head_t *q, unsigned int mode)
 				goto out;
 			}
 #if WAITQUEUE_DEBUG
-			curr->__waker = (int)__builtin_return_address(0);
+			curr->__waker = (long)__builtin_return_address(0);
 #endif
 			wake_up_process(p);
 		}

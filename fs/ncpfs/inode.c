@@ -57,7 +57,7 @@ extern int ncp_symlink(struct inode*, struct dentry*, const char*);
 #endif
 
 static struct nw_file_info *read_nwinfo = NULL;
-static struct semaphore read_sem = MUTEX;
+static DECLARE_MUTEX(read_sem);
 
 /*
  * Fill in the ncpfs-specific information in the inode.
@@ -350,7 +350,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 
 	server->ncp_filp = ncp_filp;
 	server->lock = 0;
-	server->wait = NULL;
+	init_waitqueue_head(&server->wait);
 	server->packet = NULL;
 	server->buffer_size = 0;
 	server->conn_status = 0;
@@ -723,7 +723,7 @@ int init_module(void)
 {
 	DPRINTK(KERN_DEBUG "ncpfs: init_module called\n");
 
-	read_sem = MUTEX;
+	init_MUTEX(&read_sem);
 	read_nwinfo = NULL;
 
 #ifdef DEBUG_NCP_MALLOC

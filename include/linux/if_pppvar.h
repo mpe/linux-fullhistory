@@ -109,7 +109,7 @@ struct ppp {
 	__u16		rfcs;		/* FCS so far of rpkt		*/
 
 	/* Queues for select() functionality */
-	struct wait_queue *read_wait;	/* queue for reading processes	*/
+	wait_queue_head_t read_wait;	/* queue for reading processes	*/
 
 	/* info for detecting idle channels */
 	unsigned long	last_xmit;	/* time of last transmission	*/

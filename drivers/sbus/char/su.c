@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.18 1999/01/02 16:47:37 davem Exp $
+/* $Id: su.c,v 1.19 1999/05/12 11:15:14 davem Exp $
  * su.c: Small serial driver for keyboard/mouse interface on sparc32/PCI
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -135,9 +135,9 @@ struct su_struct {
 	int			xmit_tail;
 	int			xmit_cnt;
 	struct tq_struct	tqueue;
-	struct wait_queue	*open_wait;
-	struct wait_queue	*close_wait;
-	struct wait_queue	*delta_msr_wait;
+	wait_queue_head_t	open_wait;
+	wait_queue_head_t	close_wait;
+	wait_queue_head_t	delta_msr_wait;
 
 	int			count;
 	struct async_icount	icount;
@@ -200,7 +200,7 @@ static struct termios *serial_termios_locked[NR_PORTS];
  * memory if large numbers of serial ports are open.
  */
 static unsigned char *tmp_buf;
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static inline int serial_paranoia_check(struct su_struct *info,
 					kdev_t device, const char *routine)
@@ -1878,7 +1878,7 @@ static int
 block_til_ready(struct tty_struct *tty, struct file * filp,
 		struct su_struct *info)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int		  retval;
 	int		  do_clocal = 0, extra_count = 0;
 	unsigned long	  flags;
@@ -2215,7 +2215,7 @@ done:
  */
 __initfunc(static __inline__ void show_su_version(void))
 {
-	char *revision = "$Revision: 1.18 $";
+	char *revision = "$Revision: 1.19 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

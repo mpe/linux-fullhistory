@@ -1,4 +1,4 @@
-/* $Id: sab82532.h,v 1.4 1998/10/25 23:04:29 ecd Exp $
+/* $Id: sab82532.h,v 1.5 1999/05/12 11:21:22 davem Exp $
  * sab82532.h: Register Definitions for the Siemens SAB82532 DUSCC
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -173,9 +173,9 @@ struct sab82532 {
 	struct async_icount		 icount;
 	struct termios			 normal_termios;
 	struct termios			 callout_termios;
-	struct wait_queue		*open_wait;
-	struct wait_queue		*close_wait;
-	struct wait_queue		*delta_msr_wait;
+	wait_queue_head_t		 open_wait;
+	wait_queue_head_t		 close_wait;
+	wait_queue_head_t		 delta_msr_wait;
 	struct sab82532			*next;
 	struct sab82532			*prev;
 };

@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.30 1999/03/24 11:34:52 davem Exp $
+/* $Id: sab82532.c,v 1.31 1999/05/12 11:15:10 davem Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -100,7 +100,7 @@ static char serial_version[16];
  * memory if large numbers of serial ports are open.
  */
 static unsigned char *tmp_buf = 0;
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static inline int serial_paranoia_check(struct sab82532 *info,
 					kdev_t device, const char *routine)
@@ -1715,7 +1715,7 @@ static void sab82532_hangup(struct tty_struct *tty)
 static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			   struct sab82532 *info)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int retval;
 	int do_clocal = 0;
 
@@ -2136,7 +2136,7 @@ sab82532_kgdb_hook(int line))
 
 __initfunc(static inline void show_serial_version(void))
 {
-	char *revision = "$Revision: 1.30 $";
+	char *revision = "$Revision: 1.31 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2247,9 +2247,9 @@ __initfunc(int sab82532_init(void))
 		info->tqueue_hangup.data = info;
 		info->callout_termios = callout_driver.init_termios;
 		info->normal_termios = serial_driver.init_termios;
-		info->open_wait = 0;
-		info->close_wait = 0;
-		info->delta_msr_wait = 0;
+		init_waitqueue_head(&info->open_wait);
+		init_waitqueue_head(&info->close_wait);
+		init_waitqueue_head(&info->delta_msr_wait);
 		info->icount.cts = info->icount.dsr = 
 			info->icount.rng = info->icount.dcd = 0;
 		info->icount.rx = info->icount.tx = 0;

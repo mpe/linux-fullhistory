@@ -1,4 +1,4 @@
-/*  $Id: asyncd.c,v 1.12 1998/09/13 04:30:30 davem Exp $
+/*  $Id: asyncd.c,v 1.13 1999/05/12 11:11:34 davem Exp $
  *  The asyncd kernel daemon. This handles paging on behalf of 
  *  processes that receive page faults due to remote (async) memory
  *  accesses. 
@@ -39,7 +39,7 @@ static struct {
 /* 
  * The wait queue for waking up the async daemon:
  */
-static struct wait_queue * asyncd_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(asyncd_wait);
 
 struct async_job {
 	volatile struct async_job *next;

@@ -551,7 +551,7 @@ int fcp_initialize(fc_channel *fcchain, int count)
 	l->magic = LSMAGIC;
 	l->count = count;
 	FCND(("FCP Init for %d channels\n", count))
-	l->sem = MUTEX_LOCKED;
+	init_MUTEX_LOCKED(&l->sem);
 	l->timer.function = fcp_login_timeout;
 	l->timer.data = (unsigned long)l;
 	atomic_set (&l->todo, count);
@@ -672,7 +672,7 @@ int fcp_forceoffline(fc_channel *fcchain, int count)
 	l.count = count;
 	l.magic = LSOMAGIC;
 	FCND(("FCP Force Offline for %d channels\n", count))
-	l.sem = MUTEX_LOCKED;
+	init_MUTEX_LOCKED(&l.sem);
 	l.timer.function = fcp_login_timeout;
 	l.timer.data = (unsigned long)&l;
 	atomic_set (&l.todo, count);
@@ -933,7 +933,7 @@ int fcp_scsi_dev_reset(Scsi_Cmnd *SCpnt)
 	fcp_cmd *cmd;
 	fcp_cmnd *fcmd;
 	fc_channel *fc = FC_SCMND(SCpnt);
-        struct semaphore sem = MUTEX_LOCKED;
+        DECLARE_MUTEX_LOCKED(sem);
 
 	if (!fc->rst_pkt) {
 		fc->rst_pkt = (Scsi_Cmnd *) kmalloc(sizeof(SCpnt), GFP_KERNEL);
@@ -1070,7 +1070,7 @@ static int fc_do_els(fc_channel *fc, unsigned int alpa, void *data, int len)
 	
 	memset (&l, 0, sizeof(lse));
 	l.magic = LSEMAGIC;
-	l.sem = MUTEX_LOCKED;
+	init_MUTEX_LOCKED(&l.sem);
 	l.timer.function = fcp_login_timeout;
 	l.timer.data = (unsigned long)&l;
 	l.status = FC_STATUS_TIMED_OUT;

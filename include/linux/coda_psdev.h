@@ -23,7 +23,7 @@ struct coda_sb_info
 /* communication pending/processing queues */
 struct venus_comm {
 	u_long		    vc_seq;
-	struct wait_queue  *vc_waitq; /* Venus wait queue */
+	wait_queue_head_t   vc_waitq; /* Venus wait queue */
 	struct list_head    vc_pending;
 	struct list_head    vc_processing;
 	int                 vc_inuse;
@@ -93,7 +93,7 @@ struct upc_req {
 	u_short	            uc_outSize;
 	u_short	            uc_opcode;  /* copied from data to save lookup */
 	int		    uc_unique;
-	struct wait_queue  *uc_sleep;   /* process' wait queue */
+	wait_queue_head_t   uc_sleep;   /* process' wait queue */
 	unsigned long       uc_posttime;
 };
 

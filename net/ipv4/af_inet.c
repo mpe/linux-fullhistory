@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.87 1999/04/22 10:07:33 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.88 1999/05/12 11:24:27 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>

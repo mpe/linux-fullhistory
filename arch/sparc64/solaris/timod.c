@@ -1,4 +1,4 @@
-/* $Id: timod.c,v 1.1 1998/03/26 08:46:18 jj Exp $
+/* $Id: timod.c,v 1.2 1999/05/12 11:11:55 davem Exp $
  * timod.c: timod emulation.
  *
  * Copyright (C) 1998 Patrik Rak (prak3264@ss1000.ms.mff.cuni.cz)
@@ -76,7 +76,7 @@ void mykfree(void *p)
 
 #define BUF_SIZE	PAGE_SIZE
 #define PUT_MAGIC(a,m)
-#define CHECK_MAGIC(a,m)
+#define SCHECK_MAGIC(a,m)
 #define BUF_OFFSET	0
 #define MKCTL_TRAILER	0
 
@@ -86,7 +86,7 @@ void mykfree(void *p)
 #define BUFPAGE_MAGIC	0xBADC0DEDDEADBABEL
 #define MKCTL_MAGIC	0xDEADBABEBADC0DEDL
 #define PUT_MAGIC(a,m)	do{(*(u64*)(a))=(m);}while(0)
-#define CHECK_MAGIC(a,m)	do{if((*(u64*)(a))!=(m))printk("%s,%u,%s(): magic %08x at %p corrupted!\n",\
+#define SCHECK_MAGIC(a,m)	do{if((*(u64*)(a))!=(m))printk("%s,%u,%s(): magic %08x at %p corrupted!\n",\
 				__FILE__,__LINE__,__FUNCTION__,(m),(a));}while(0)
 #define BUF_OFFSET	sizeof(u64)
 #define MKCTL_TRAILER	sizeof(u64)
@@ -117,8 +117,8 @@ static void putpage(char *p)
 {
 	SOLD("putting page");
 	p = p - BUF_OFFSET;
-	CHECK_MAGIC(p,BUFPAGE_MAGIC);
-	CHECK_MAGIC(p+PAGE_SIZE-sizeof(u64),BUFPAGE_MAGIC);
+	SCHECK_MAGIC(p,BUFPAGE_MAGIC);
+	SCHECK_MAGIC(p+PAGE_SIZE-sizeof(u64),BUFPAGE_MAGIC);
 	spin_lock(&timod_pagelock);
 	if (page) {
 		spin_unlock(&timod_pagelock);
@@ -721,7 +721,7 @@ int timod_getmsg(unsigned int fd, char *ctl_buf, int ctl_maxlen, s32 *ctl_len,
 #define min(a,b) ((a)<(b)?(a):(b))
 #endif
 		int l = min(ctl_maxlen, it->length);
-		CHECK_MAGIC((char*)((u64)(((char *)&it->type)+sock->offset+it->length+7)&~7),MKCTL_MAGIC);
+		SCHECK_MAGIC((char*)((u64)(((char *)&it->type)+sock->offset+it->length+7)&~7),MKCTL_MAGIC);
 		SOLD("purting ctl data");
 		if(copy_to_user(ctl_buf,
 			(char*)&it->type + sock->offset, l))

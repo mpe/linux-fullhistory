@@ -9,10 +9,6 @@
  */
 
 
-#include <linux/config.h> /* CONFIG_MAGIC_SYSRQ */
-
-
-
 #ifdef __KERNEL__
 
 

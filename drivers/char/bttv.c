@@ -3421,10 +3421,10 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
         btv->risc_jmp=NULL;
         btv->vbi_odd=NULL;
         btv->vbi_even=NULL;
-        btv->vbiq=NULL;
-        btv->capq=NULL;
-        btv->capqo=NULL;
-        btv->capqe=NULL;
+        init_waitqueue_head(&btv->vbiq);
+        init_waitqueue_head(&btv->capq);
+        init_waitqueue_head(&btv->capqo);
+        init_waitqueue_head(&btv->capqe);
         btv->vbip=VBIBUF_SIZE;
 
         btv->id=dev->device;

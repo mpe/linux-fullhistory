@@ -122,10 +122,10 @@ struct bttv
 	u32 *vbi_even;
 	u32 bus_vbi_even;
 	u32 bus_vbi_odd;
-	struct wait_queue *vbiq;
-	struct wait_queue *capq;
-	struct wait_queue *capqo;
-	struct wait_queue *capqe;
+	wait_queue_head_t vbiq;
+	wait_queue_head_t capq;
+	wait_queue_head_t capqo;
+	wait_queue_head_t capqe;
 	int vbip;
 
 	u32 *risc_odd;

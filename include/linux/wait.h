@@ -26,13 +26,13 @@ extern int printk(const char *fmt, ...);
 	*(int*)0 = 0; \
 } while (0)
 
-#define CHECK_MAGIC(x) if (x != (int)&(x)) \
-	{ printk("bad magic %08x (should be %08x), ", x, (int)&(x)); WQ_BUG(); }
+#define CHECK_MAGIC(x) if (x != (long)&(x)) \
+	{ printk("bad magic %lx (should be %lx), ", x, (long)&(x)); WQ_BUG(); }
 
 #define CHECK_MAGIC_WQHEAD(x) do { \
-	if (x->__magic != (int)&(x->__magic)) { \
-		printk("bad magic %08x (should be %08x, creator %08x), ", \
-			x->__magic, (int)&(x->__magic), x->__creator); \
+	if (x->__magic != (long)&(x->__magic)) { \
+		printk("bad magic %lx (should be %lx, creator %lx), ", \
+			x->__magic, (long)&(x->__magic), x->__creator); \
 		WQ_BUG(); \
 	} \
 } while (0)
@@ -43,8 +43,8 @@ struct __wait_queue {
 	struct task_struct * task;
 	struct list_head task_list;
 #if WAITQUEUE_DEBUG
-	int __magic;
-	int __waker;
+	long __magic;
+	long __waker;
 #endif
 };
 typedef struct __wait_queue wait_queue_t;
@@ -87,17 +87,17 @@ struct __wait_queue_head {
 	wq_lock_t lock;
 	struct list_head task_list;
 #if WAITQUEUE_DEBUG
-	int __magic;
-	int __creator;
+	long __magic;
+	long __creator;
 #endif
 };
 typedef struct __wait_queue_head wait_queue_head_t;
 
 #if WAITQUEUE_DEBUG
 # define __WAITQUEUE_DEBUG_INIT(name) \
-		, (int)&(name).__magic, 0
+		, (long)&(name).__magic, 0
 # define __WAITQUEUE_HEAD_DEBUG_INIT(name) \
-		, (int)&(name).__magic, (int)&(name).__magic
+		, (long)&(name).__magic, (long)&(name).__magic
 #else
 # define __WAITQUEUE_DEBUG_INIT(name)
 # define __WAITQUEUE_HEAD_DEBUG_INIT(name)
@@ -125,8 +125,8 @@ static inline void init_waitqueue_head(wait_queue_head_t *q)
 	q->lock = WAITQUEUE_RW_LOCK_UNLOCKED;
 	INIT_LIST_HEAD(&q->task_list);
 #if WAITQUEUE_DEBUG
-	q->__magic = (int)&q->__magic;
-	__x: q->__creator = (int)&&__x;
+	q->__magic = (long)&q->__magic;
+	__x: q->__creator = (long)&&__x;
 #endif
 }
 
@@ -139,7 +139,7 @@ static inline void init_waitqueue_entry(wait_queue_t *q,
 #endif
 	q->task = p;
 #if WAITQUEUE_DEBUG
-	q->__magic = (int)&q->__magic;
+	q->__magic = (long)&q->__magic;
 #endif
 }
 

@@ -9,6 +9,8 @@
  * m68k version by Andreas Schwab
  */
 
+#include <linux/config.h>
+
 /*
  * These two _must_ execute atomically wrt each other.
  */

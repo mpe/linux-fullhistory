@@ -405,6 +405,8 @@ __initfunc(int pty_init(void))
 #ifdef CONFIG_UNIX98_PTYS
 	printk("pty: %d Unix98 ptys configured\n", UNIX98_NR_MAJORS*NR_PTYS);
 	for ( i = 0 ; i < UNIX98_NR_MAJORS ; i++ ) {
+		int j;
+
 		ptm_driver[i] = pty_driver;
 		ptm_driver[i].name = "ptm";
 		ptm_driver[i].proc_entry = 0;
@@ -417,6 +419,9 @@ __initfunc(int pty_init(void))
 		ptm_driver[i].termios = ptm_termios[i];
 		ptm_driver[i].termios_locked = ptm_termios_locked[i];
 		ptm_driver[i].driver_state = ptm_state[i];
+
+		for (j = 0; j < NR_PTYS; j++)
+			init_waitqueue_head(&ptm_state[i][j].open_wait);
 		
 		pts_driver[i] = pty_slave_driver;
 		pts_driver[i].name = "pts";
