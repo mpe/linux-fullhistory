@@ -56,15 +56,11 @@ int nr_output(struct sock *sk, struct sk_buff *skb)
  */
 static void nr_send_iframe(struct sock *sk, struct sk_buff *skb)
 {
-	unsigned char *dptr;
-
 	if (skb == NULL)
 		return;
 
-	dptr = skb->data + 17;
-	
-	*dptr++ = sk->nr->vs;
-	*dptr++ = sk->nr->vr;
+	skb->data[2] = sk->nr->vs;
+	skb->data[3] = sk->nr->vr;
 
 	nr_transmit_buffer(sk, skb);	
 }
@@ -151,24 +147,21 @@ void nr_transmit_buffer(struct sock *sk, struct sk_buff *skb)
 	unsigned char *dptr;
 
 	/*
-	 *	Add the protocol byte
+	 *	Add the protocol byte and network header.
 	 */
-	 
-	dptr = skb_push(skb,1);
+	dptr = skb_push(skb, NR_NETWORK_LEN);
 
-	*dptr++ = AX25_P_NETROM;
-	
 	memcpy(dptr, &sk->nr->source_addr, sizeof(ax25_address));
 	dptr[6] &= ~LAPB_C;
 	dptr[6] &= ~LAPB_E;
 	dptr[6] |= SSID_SPARE;
-	dptr += 7;
+	dptr += AX25_ADDR_LEN;
 
 	memcpy(dptr, &sk->nr->dest_addr,   sizeof(ax25_address));
 	dptr[6] &= ~LAPB_C;
 	dptr[6] |= LAPB_E;
 	dptr[6] |= SSID_SPARE;
-	dptr += 7;
+	dptr += AX25_ADDR_LEN;
 
 	*dptr++ = nr_default.ttl;
 

@@ -870,12 +870,12 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	unsigned short frametype, window, timeout;
 
 	skb->sk = NULL;		/* Initially we don't know who its for */
-	
+
 	/*
 	 *	skb->data points to the netrom frame start
 	 */
-	 
-	src  = (ax25_address *)(skb->data);
+	
+	src  = (ax25_address *)(skb->data + 0);
 	dest = (ax25_address *)(skb->data + 7);
 
 	circuit_index = skb->data[15];
@@ -887,7 +887,8 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	 * Check for an incoming IP over NET/ROM frame.
 	 */
 	 if ((frametype & 0x0F) == NR_PROTOEXT && circuit_index == NR_PROTO_IP && circuit_id == NR_PROTO_IP) {
-	 	skb->h.raw = skb->data + 20;
+		skb_pull(skb, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
+	 	skb->h.raw = skb->data;
 
 		return nr_rx_ip(skb, dev);
 	 }
@@ -898,12 +899,15 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	 * a Connect Request base it on their circuit ID.
 	 */
 	if (((frametype & 0x0F) != NR_CONNREQ && (sk = nr_find_socket(circuit_index, circuit_id, SOCK_SEQPACKET)) != NULL) ||
-	    ((frametype & 0x0F) == NR_CONNREQ && (sk = nr_find_peer(circuit_index, circuit_id, SOCK_SEQPACKET)) != NULL)) 
-	{
-		if((frametype & 0x0F) == NR_CONNACK && skb->len == 39)	/* ??? size check --FIXME-- */
+	    ((frametype & 0x0F) == NR_CONNREQ && (sk = nr_find_peer(circuit_index, circuit_id, SOCK_SEQPACKET)) != NULL)) {
+		skb_pull(skb, NR_NETWORK_LEN);
+		skb->h.raw = skb->data + NR_TRANSPORT_LEN;
+
+		if ((frametype & 0x0F) == NR_CONNACK && skb->len == 7)
 			sk->nr->bpqext = 1;
 		else
 			sk->nr->bpqext = 0;
+
 		return nr_process_rx_frame(sk, skb);
 	}
 
@@ -917,7 +921,7 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 
-	user   = (ax25_address *)(skb->data + 11);
+	user   = (ax25_address *)(skb->data + 21);
 	window = skb->data[20];
 
 	skb->sk             = make;
@@ -942,7 +946,7 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 
 	/* L4 timeout negotiation */
 	if (skb->len == 37) {
-		timeout = skb->data[53] * 256 + skb->data[52];
+		timeout = skb->data[36] * 256 + skb->data[35];
 		if (timeout * PR_SLOWHZ < make->nr->rtt * 2)
 			make->nr->rtt = (timeout * PR_SLOWHZ) / 2;
 		make->nr->bpqext = 1;
@@ -1018,7 +1022,7 @@ static int nr_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	if (sk->debug)
 		printk("NET/ROM: sendto: building packet.\n");
 
-	size = len + 37;
+	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 2 + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 
 	if ((skb = sock_alloc_send_skb(sk, size, 0, &err)) == NULL)
 		return err;
@@ -1026,34 +1030,17 @@ static int nr_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	skb->sk   = sk;
 	skb->free = 1;
 	skb->arp  = 1;
-	skb_reserve(skb,37);
+
+	skb_reserve(skb, size - len);
 	
 	/*
-	 *	Push down the NetROM header
+	 *	Push down the NET/ROM header
 	 */
-	 
-	asmptr = skb_push(skb,20);
+
+	asmptr = skb_push(skb, NR_TRANSPORT_LEN);
 
 	if (sk->debug)
 		printk("Building NET/ROM Header.\n");
-
-	/* Build a NET/ROM Network header */
-
-	*asmptr++ = AX25_P_NETROM;
-
-	memcpy(asmptr, &sk->nr->source_addr, sizeof(ax25_address));
-	asmptr[6] &= ~LAPB_C;
-	asmptr[6] &= ~LAPB_E;
-	asmptr[6] |= SSID_SPARE;
-	asmptr += 7;
-
-	memcpy(asmptr, &sax.sax25_call, sizeof(ax25_address));
-	asmptr[6] &= ~LAPB_C;
-	asmptr[6] |= LAPB_E;
-	asmptr[6] |= SSID_SPARE;
-	asmptr += 7;
-	
-	*asmptr++ = nr_default.ttl;
 
 	/* Build a NET/ROM Transport header */
 
@@ -1067,11 +1054,12 @@ static int nr_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 		printk("Built header.\n");
 
 	/*
-	 *	Put the data on the end.
+	 *	Put the data on the end
 	 */
-	 
-	skb->h.raw = skb_put(skb,len);
-	asmptr=skb->h.raw;
+
+	skb->h.raw = skb_put(skb, len);
+
+	asmptr = skb->h.raw;
 	
 	if (sk->debug)
 		printk("NET/ROM: Appending user data\n");
@@ -1128,10 +1116,9 @@ static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	if ((skb = skb_recv_datagram(sk, flags, noblock, &er)) == NULL)
 		return er;
 
-	/* Allow for the 20 byte netrom header */
-	copied = (size < skb->len-20) ? size : skb->len-20;
+	copied = (size < skb->len - NR_TRANSPORT_LEN) ? size : skb->len - NR_TRANSPORT_LEN;
 
-	skb_copy_datagram(skb, 20, ubuf, copied);
+	skb_copy_datagram(skb, 0, ubuf, copied);
 	
 	if (sax != NULL) {
 		struct sockaddr_ax25 addr;
@@ -1198,7 +1185,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			struct sk_buff *skb;
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
-				amount = skb->len-20;
+				amount = skb->len - 20;
 			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned long))) != 0)
 				return err;
 			put_fs_long(amount, (unsigned long *)arg);
@@ -1351,7 +1338,7 @@ void nr_proto_init(struct net_proto *pro)
 {
 	sock_register(nr_proto_ops.family, &nr_proto_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
-	printk("G4KLX NET/ROM for Linux. Version 0.3 ALPHA for AX25 029 Linux 1.3.0\n");
+	printk("G4KLX NET/ROM for Linux. Version 0.3 ALPHA for AX25 030 Linux 1.3.0\n");
 
 	nr_default.quality    = NR_DEFAULT_QUAL;
 	nr_default.obs_count  = NR_DEFAULT_OBS;

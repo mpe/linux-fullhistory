@@ -136,8 +136,6 @@ int aha1542_abort(Scsi_Cmnd *);
 int aha1542_reset(Scsi_Cmnd *);
 int aha1542_biosparam(Disk *, int, int*);
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
-
 #define AHA1542_MAILBOXES 8
 #define AHA1542_SCATTER 16
 #define AHA1542_CMDLUN 1
@@ -147,7 +145,7 @@ extern int generic_proc_info(char *, char **, off_t, int, int, int);
 #endif
 
 #define AHA1542 {  NULL, NULL,				\
-		     generic_proc_info,                 \
+		     NULL,		                \
 		     "aha1542",                         \
 		     PROC_SCSI_AHA1542,                 \
 		     "Adaptec 1542", 			\

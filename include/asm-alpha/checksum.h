@@ -6,7 +6,7 @@
  *	This is a version of ip_compute_csum() optimized for IP headers,
  *	which always checksum on 4 octet boundaries.
  */
-extern inline unsigned short ip_fast_csum(unsigned char * iph, unsigned int ihl);
+extern unsigned short ip_fast_csum(unsigned char * iph, unsigned int ihl);
 
 /*
  * computes the checksum of the TCP/UDP pseudo-header
@@ -33,14 +33,19 @@ extern unsigned short int csum_tcpudp_magic(unsigned long saddr,
 extern unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum);
 
 /*
- * the same as csum_partial, but copies from fs:src while it
+ * the same as csum_partial, but copies from src while it
  * checksums
  *
  * here even more important to align src and dst on a 32-bit (or even
  * better 64-bit) boundary
  */
+unsigned int csum_partial_copy( char *src, char *dst, int len, int sum);
 
-extern unsigned int csum_partial_copyffs( char *src, char *dst, int len, int sum);
+/*
+ * the same as csum_partial, but copies from user space (but on the alpha
+ * we have just one address space, so this is identical to the above)
+ */
+#define csum_partial_copy_fromuser csum_partial_copy
 
 
 /*

@@ -82,7 +82,7 @@ unsigned long readl(unsigned long addr)
 
 
 #undef writeb
-void writeb(unsigned short b, unsigned long addr)
+void writeb(unsigned char b, unsigned long addr)
 {
 	__writeb(b, addr);
 }
@@ -264,6 +264,7 @@ void outsl (unsigned long port, void *src, unsigned long count)
  * Copy data from IO memory space to "real" memory space.
  * This needs to be optimized.
  */
+#undef memcpy_fromio
 void memcpy_fromio(void * to, unsigned long from, unsigned long count)
 {
 	while (count) {
@@ -278,6 +279,7 @@ void memcpy_fromio(void * to, unsigned long from, unsigned long count)
  * Copy data from "real" memory space to IO memory space.
  * This needs to be optimized.
  */
+#undef memcpy_toio
 void memcpy_toio(unsigned long to, void * from, unsigned long count)
 {
 	while (count) {
@@ -292,6 +294,7 @@ void memcpy_toio(unsigned long to, void * from, unsigned long count)
  * "memset" on IO memory space.
  * This needs to be optimized.
  */
+#undef memset_io
 void memset_io(unsigned long dst, int c, unsigned long count)
 {
 	while (count) {

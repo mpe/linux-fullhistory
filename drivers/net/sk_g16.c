@@ -1570,7 +1570,7 @@ static void SK_rxintr(struct device *dev)
 	    int len = (rmdp->mlen & 0x0fff);  /* extract message length from receive buffer */
 	    struct sk_buff *skb;
 
-	    skb = dev_alloc_skb(len); /* allocate socket buffer */ 
+	    skb = dev_alloc_skb(len+2); /* allocate socket buffer */ 
 
 	    if (skb == NULL)                /* Could not get mem ? */
 	    {
@@ -1591,6 +1591,7 @@ static void SK_rxintr(struct device *dev)
 	    /* Prepare sk_buff to queue for upper layers */
 
 	    skb->dev = dev;
+	    skb_reserve(skb,2);		/* Align IP header on 16 byte boundary */
 	    
 	    /* 
              * Copy data out of our receive descriptor into sk_buff.

@@ -1153,9 +1153,10 @@ de4x5_rx(struct device *dev)
 	struct sk_buff *skb;
 	short pkt_len = (short)(lp->rx_ring[entry].status >> 16) - 4;
 
-	if ((skb = dev_alloc_skb(pkt_len)) != NULL) {
+	if ((skb = dev_alloc_skb(pkt_len+2)) != NULL) {
 	  skb->dev = dev;
 	
+	  skb_reserve(skb,2);		/* Align */
 	  if (entry < lp->rx_old) {         /* Wrapped buffer */
 	    short len = (lp->rxRingSize - lp->rx_old) * RX_BUFF_SZ;
 	    memcpy(skb_put(skb,len), bus_to_virt(lp->rx_ring[lp->rx_old].buf), len);
@@ -2663,21 +2664,21 @@ static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
       tmp.addr[j++] = dev->dev_addr[i];
     }
     tmp.addr[j++] = lp->rxRingSize;
-    tmp.lval[j>>2] = (s32)lp->rx_ring; j+=4;
-    tmp.lval[j>>2] = (s32)lp->tx_ring; j+=4;
+    tmp.lval[j>>2] = (long)lp->rx_ring; j+=4;
+    tmp.lval[j>>2] = (long)lp->tx_ring; j+=4;
 
     for (i=0;i<lp->rxRingSize-1;i++){
       if (i < 3) {
-	tmp.lval[j>>2] = (s32)&lp->rx_ring[i].status; j+=4;
+	tmp.lval[j>>2] = (long)&lp->rx_ring[i].status; j+=4;
       }
     }
-    tmp.lval[j>>2] = (s32)&lp->rx_ring[i].status; j+=4;
+    tmp.lval[j>>2] = (long)&lp->rx_ring[i].status; j+=4;
     for (i=0;i<lp->txRingSize-1;i++){
       if (i < 3) {
-	tmp.lval[j>>2] = (s32)&lp->tx_ring[i].status; j+=4;
+	tmp.lval[j>>2] = (long)&lp->tx_ring[i].status; j+=4;
       }
     }
-    tmp.lval[j>>2] = (s32)&lp->tx_ring[i].status; j+=4;
+    tmp.lval[j>>2] = (long)&lp->tx_ring[i].status; j+=4;
       
     for (i=0;i<lp->rxRingSize-1;i++){
       if (i < 3) {

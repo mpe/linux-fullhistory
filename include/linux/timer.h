@@ -31,6 +31,10 @@
  *
  * MCD_TIMER		Mitsumi CD-ROM Timer
  *
+ * GSCD_TIMER		Goldstar CD-ROM Timer
+ *
+ * OPTCD_TIMER		Optics Storage CD-ROM Timer
+ *
  */
 
 #define BLANK_TIMER	0
@@ -48,6 +52,8 @@
 #define MCD_TIMER	23
 
 #define HD_TIMER2	24
+#define GSCD_TIMER	25
+#define OPTCD_TIMER	26
 
 struct timer_struct {
 	unsigned long expires;

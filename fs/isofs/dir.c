@@ -137,6 +137,19 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		printk("Block, offset, f_pos: %x %x %x\n",
 		       block, offset, filp->f_pos);
 #endif
+		/* Next directory_record on next CDROM sector */
+		if (offset >= bufsize) {
+			brelse(bh);
+			offset = 0;
+			block = isofs_bmap(inode, (filp->f_pos) >> bufbits);
+			if (!block)
+				return 0;
+			bh = breada(inode->i_dev, block, bufsize, filp->f_pos, inode->i_size);
+			if (!bh)
+				return 0;
+			continue;
+		}
+
 		de = (struct iso_directory_record *) (bh->b_data + offset);
 		inode_number = (block << bufbits) + (offset & (bufsize - 1));
 

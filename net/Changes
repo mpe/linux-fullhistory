@@ -100,25 +100,33 @@ o	Major AX.25/NetROM fixes [John Nalor]		[IN]
 
 ------->>>>>  NET3 030  <<<<<----------
 
+o	Long word align ethernet IP headers (64byte align for pentium) [TESTED]
+		(less helpful than I'd have liked)
+o	Fixed variable length header support to really work	[TESTED]
+o	Mend appletalk/ipx partially			[IN]
+o	Start playing with input checksum & copy	[IN]
+o	Fixed PPP and other oddments			[IN]
+o	Mended IPIP					[Might work ;)]
+
+------->>>>>    1.3.7   <<<<<----------
+
 o	Finish merging the bridge code
 o	Device locking
-o	Faster ip_csum
 o	SIOCSLEEPRT patch
 o	Options support in ip_build_xmit		[PENDING]
 o	Fast checksum/copy on outgoing TCP
-o	Long word align ethernet IP headers (64byte align for pentium) [TESTING - EMAIL FOR INFO]
 o	Explode/implode headers for alpha,mips etc.
 o	Fast dev_grab_next() transmit reload function
 	and dev_push_failed() ??
-o	Faster ip_forward
-o	Faster loopback frame forwarding.
+o	Faster ip_forward				[PENDING]
 o	Forwarding queue control (+ fairness algorithms ??)
 o	IP forward flow control.
 o	Infinite PPP/SLIP devices.
-o	PI2 card doesn't do AX.25 VC yet
+o	PI2 card doesn't do AX.25 VC yet		[PENDING]
 o	AX.25 set protocol type
 o	Clean up RAW AX.25 sockets.
 o	Finish 802.2 Class I code to be compliant to the oddities of 802.2
+o	Full variable length AX.25 support		[JSN doing]
 
 0.2
 ---

@@ -365,17 +365,17 @@ extern inline void * __constant_memcpy(void * to, const void * from, size_t n)
 		case 0:
 			return to;
 		case 1:
-			*(unsigned char *)to = *(unsigned char *)from;
+			*(unsigned char *)to = *(const unsigned char *)from;
 			return to;
 		case 2:
-			*(unsigned short *)to = *(unsigned short *)from;
+			*(unsigned short *)to = *(const unsigned short *)from;
 			return to;
 		case 3:
-			*(unsigned short *)to = *(unsigned short *)from;
-			*(2+(unsigned char *)to) = *(2+(unsigned char *)from);
+			*(unsigned short *)to = *(const unsigned short *)from;
+			*(2+(unsigned char *)to) = *(2+(const unsigned char *)from);
 			return to;
 		case 4:
-			*(unsigned long *)to = *(unsigned long *)from;
+			*(unsigned long *)to = *(const unsigned long *)from;
 			return to;
 	}
 #define COMMON(x) \

@@ -9,9 +9,10 @@
  *            Also for the CreativeLabs CD200 drive (but I still need some
  *            detailed bug reports).
  *            Also for the TEAC CD-55A drive.
- *            Not for Funai or Sanyo drives.
+ *            Not for Sanyo drives (but sjcd is there...).
+ *            Not for Funai drives.
  *
- *  NOTE:     This is release 3.7.
+ *  NOTE:     This is release 3.8.
  *
  *  VERSION HISTORY
  *
@@ -214,6 +215,8 @@
  *       a lot of sessions.
  *       Bettered the sbpcd_open() behavior with TEAC drives.
  *
+ *  3.8  Elongated max_latency for CR-56x drives.
+ *
  *  TODO
  *
  *     disk change detection
@@ -295,7 +298,7 @@ char kernel_version[]=UTS_RELEASE;
 
 #include "blk.h"
 
-#define VERSION "v3.7 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "v3.8 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 /*==========================================================================*/
 /*
@@ -3979,6 +3982,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 	case CDROMEJECT:
 		msg(DBG_IOC,"ioctl: CDROMEJECT entered.\n");
 		if (fam0_drive) return (0);
+		if (D_S[d].open_count>1) return (-EBUSY);
 		i=UnLockDoor();
 		D_S[d].open_count=-9; /* to get it locked next time again */
 		i=cc_SpinDown();
@@ -4028,6 +4032,8 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 					    }
 		st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_subchnl));
 		if (st)	return (st);
+		st=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_subchnl));
+		if (st) return (st);
 		memcpy_fromfs(&SC, (void *) arg, sizeof(struct cdrom_subchnl));
 		switch (D_S[d].audio_state)
 		{
@@ -4564,9 +4570,7 @@ static int sbp_data(void)
 	max_latency=900;
 #else
 	if (D_S[d].f_multisession) max_latency=900;
-	else if (fam0L_drive) max_latency=300;
-	else if (famT_drive) max_latency=300;
-	else max_latency=100;
+	else max_latency=300;
 #endif
 	msg(DBG_TE2,"beginning to READ\n");
 	duration=jiffies;

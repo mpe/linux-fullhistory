@@ -179,7 +179,7 @@ int skb_check(struct sk_buff *skb, int head, int line, char *file)
 #endif
 
 
-#ifdef CONFIG_SKB_CHECK
+#if CONFIG_SKB_CHECK
 void skb_queue_head_init(struct sk_buff_head *list)
 {
 	list->prev = (struct sk_buff *)list;
@@ -440,7 +440,7 @@ void kfree_skb(struct sk_buff *skb, int rw)
 			__builtin_return_address(0));
 		return;
   	}
-#ifdef CONFIG_SKB_CHECK
+#if CONFIG_SKB_CHECK
 	IS_SKB(skb);
 #endif
 	if (skb->lock)
@@ -544,6 +544,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb->localroute=0;
 	skb->stamp.tv_sec=0;	/* No idea about time */
 	skb->localroute = 0;
+	skb->ip_summed = 0;
 	save_flags(flags);
 	cli();
 	net_skbcount++;

@@ -120,8 +120,6 @@ int pas16_detect(Scsi_Host_Template *);
 int pas16_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int pas16_reset(Scsi_Cmnd *);
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
-
 #ifndef NULL
 #define NULL 0
 #endif
@@ -142,7 +140,7 @@ extern int generic_proc_info(char *, char **, off_t, int, int, int);
 
 #ifdef HOSTS_C
 
-#define MV_PAS16 {NULL, NULL, generic_proc_info, "pas16",  PROC_SCSI_PAS16, \
+#define MV_PAS16 {NULL, NULL, NULL, "pas16",  PROC_SCSI_PAS16, \
 	"Pro Audio Spectrum-16 SCSI", 		\
 	pas16_detect, NULL, NULL,					\
 	NULL, pas16_queue_command, pas16_abort, pas16_reset, NULL, 	\

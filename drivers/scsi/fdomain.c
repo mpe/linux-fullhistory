@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Fri Jun 23 17:07:09 1995 by r.faith@ieee.org
+ * Revised: Tue Jul  4 13:58:47 1995 by r.faith@ieee.org
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.31 1995/06/23 21:07:16 faith Exp $
+ * $Id: fdomain.c,v 5.33 1995/07/04 18:59:49 faith Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -206,7 +206,7 @@
 #include <linux/bios32.h>
 #include <linux/pci.h>
   
-#define VERSION          "$Revision: 5.31 $"
+#define VERSION          "$Revision: 5.33 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -679,12 +679,12 @@ static int fdomain_pci_nobios_detect( int *irq, int *iobase )
    return 1;			/* success */
 }
 
-/* PCI detection function: int fdomain_36c70_detect(int* irq, int* iobase)
-   This function gets the Interrupt Level and I/O base address from the PCI
-   configuration registers.  The I/O base address is masked with 0xfff8
-   since on my card the address read from the PCI config registers is off
-   by one from the actual I/O base address necessary for accessing the
-   status and control registers on the card (PCI config register gives
+/* PCI detection function: int fdomain_pci_bios_detect(int* irq, int*
+   iobase) This function gets the Interrupt Level and I/O base address from
+   the PCI configuration registers.  The I/O base address is masked with
+   0xfff8 since on my card the address read from the PCI config registers
+   is off by one from the actual I/O base address necessary for accessing
+   the status and control registers on the card (PCI config register gives
    0xf801, actual address is 0xf800).  This is likely a bug in the FD
    config code that writes to the PCI registers, however using a mask
    should be safe since I think the scan done by the card to determine the
@@ -696,20 +696,20 @@ static int fdomain_pci_nobios_detect( int *irq, int *iobase )
    detection function.  Comments, bug reports, etc... on this function
    should be sent to mckinley@msupa.pa.msu.edu - James T. McKinley.  */
 
-#ifdef PCI_CONFIG
-static int fdomain_36c70_detect( int *irq, int *iobase )
+#ifdef CONFIG_PCI
+static int fdomain_pci_bios_detect( int *irq, int *iobase )
 {
    int              error;
    unsigned char    pci_bus, pci_dev_fn;    /* PCI bus & device function */
    unsigned char    pci_irq;                /* PCI interrupt line */
-   unsigned long    pci_base;               /* PCI I/O base address */
+   unsigned int     pci_base;               /* PCI I/O base address */
    unsigned short   pci_vendor, pci_device; /* PCI vendor & device IDs */
 
    /* If the PCI BIOS doesn't exist, use the old-style detection routines.
       Otherwise, get the I/O base address and interrupt from the PCI config
       registers. */
    
-   if (!pcibios_present()) return fdomain_pci_detect( irq, iobase );
+   if (!pcibios_present()) return fdomain_pci_nobios_detect( irq, iobase );
 
 #if DEBUG_DETECT
    /* Tell how to print a list of the known PCI devices from bios32 and
@@ -857,7 +857,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
    if (!PCI_bus) {
       flag = fdomain_isa_detect( &interrupt_level, &port_base );
    } else {
-#ifdef PCI_CONFIG
+#ifdef CONFIG_PCI
       flag = fdomain_pci_bios_detect( &interrupt_level, &port_base );
 #else
       flag = fdomain_pci_nobios_detect( &interrupt_level, &port_base );
@@ -868,7 +868,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 #if DEBUG_DETECT
       printk( " FAILED: NO PORT\n" );
 #endif
-#ifdef PCI_CONFIG
+#ifdef CONFIG_PCI
       printk( "\nTMC-3260 36C70 PCI scsi chip detection failed.\n" );
       printk( "Send mail to mckinley@msupa.pa.msu.edu.\n" );
 #endif

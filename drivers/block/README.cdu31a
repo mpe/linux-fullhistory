@@ -1,0 +1,160 @@
+   Tips for using cdu31a.c, the driver for Sony CDU-31A and CDU-33A CDROM
+   drives.
+  
+   Corey Minyard (minyard@wf-rch.cirr.com)
+  
+   Colossians 3:17
+  
+   The Sony interface device driver handles Sony interface CDROM
+   drives and provides a complete block-level interface as well as an
+   ioctl() interface compatible with the Sun (as specified in
+   include/linux/cdrom.h).  With this interface, CDROMs can be
+   accessed and standard audio CDs can be played back normally.
+  
+   WARNING - 	All autoprobes have been removed from the driver.
+  		You MUST configure the CDU31A via a LILO config
+  		at boot time or in lilo.conf.  I have the
+  		following in my lilo.conf:
+  
+                  append="cdu31a=0x1f88,0,PAS"
+  
+  		The first number is the I/O base address of the
+  		card.  The second is the interrupt (0 means none).
+  		The third should be "PAS" if on a Pro-Audio
+  		spectrum, or nothing if on something else.
+  
+   This interface is (unfortunately) a polled interface.  This is
+   because most Sony interfaces are set up with DMA and interrupts
+   disables.  Some (like mine) do not even have the capability to
+   handle interrupts or DMA.  For this reason you will see a lot of
+   the following:
+  
+     retry_count = jiffies+ SONY_JIFFIES_TIMEOUT;
+     while ((retry_count > jiffies) && (! <some condition to wait for))
+     {
+        while (handle_sony_cd_attention())
+           ;
+  
+        sony_sleep();
+     }
+     if (the condition not met)
+     {
+        return an error;
+     }
+  
+   This ugly hack waits for something to happen, sleeping a little
+   between every try.  it also handles attentions, which are
+   asynchronous events from the drive informing the driver that a disk
+   has been inserted, removed, etc.
+  
+   NEWS FLASH - The driver now supports interrupts but they are
+   turned off by default.  Use of interrupts is highly encouraged, it
+   cuts CPU usage down to a reasonable level.  I had DMA in for a while
+   but PC DMA is just too slow.  Better to just insb() it.
+  
+   One thing about these drives: They talk in MSF (Minute Second Frame) format.
+   There are 75 frames a second, 60 seconds a minute, and up to 75 minutes on a
+   disk.  The funny thing is that these are sent to the drive in BCD, but the
+   interface wants to see them in decimal.  A lot of conversion goes on.
+  
+   DRIVER SPECIAL FEATURES
+   -----------------------
+  
+   This section describes features beyond the normal audio and CD-ROM
+   functions of the drive.
+  
+   2048 byte buffer mode
+  
+   If a disk is mounted with -o block=2048, data is copied straight
+   from the drive data port to the buffer.  Otherwise, the readahead
+   buffer must be involved to hold the other 1K of data when a 1K
+   block operation is done.  Note that with 2048 byte blocks you
+   cannot execute files from the CD.
+  
+   XA compatibility
+  
+   The driver should support XA disks for both the CDU31A and CDU33A.
+   It does this transparently, the using program doesn't need to set it.
+  
+   Multi-Session
+  
+   A multi-session disk looks just like a normal disk to the user.
+   Just mount one normally, and all the data should be there.
+   A special thanks to Koen for help with this!
+   
+   Raw sector I/O
+  
+   Using the CDROMREADAUDIO it is possible to read raw audio and data
+   tracks.  Both operations return 2352 bytes per sector.  On the data
+   tracks, the first 12 bytes is not returned by the drive and the value
+   of that data is indeterminate.
+  
+  
+    Copyright (C) 1993  Corey Minyard
+  
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+  
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+  
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+  
+  /
+
+/*
+  
+   Setting up the Sony CDU31A/CDU33A drive interface card.  If
+   You have another card, you are on your own.
+   
+        +----------+-----------------+----------------------+
+        |  JP1     |  34 Pin Conn    |                      |
+        |  JP2     +-----------------+                      |
+        |  JP3                                              |
+        |  JP4                                              |
+        |                                                   +--+
+        |                                                   |  +-+
+        |                                                   |  | |  External
+        |                                                   |  | |  Connector
+        |                                                   |  | |
+        |                                                   |  +-+
+        |                                                   +--+
+        |                                                   |
+        |                                          +--------+
+        |                                          |
+        +------------------------------------------+
+   
+      JP1 sets the Base Address, using the following settings:
+   
+        Address         Pin 1           Pin 2
+        -------         -----           -----
+        0x320           Short           Short
+        0x330           Short           Open
+        0x340           Open            Short
+        0x360           Open            Open
+   
+      JP2 and JP3 configure the DMA channel; they must be set the same.
+   
+        DMA             Pin 1           Pin 2           Pin 3
+        ---             -----           -----           -----
+        1               On              Off             On
+        2               Off             On              Off
+        3               Off             Off             On
+   
+      JP4 Configures the IRQ:
+   
+        IRQ     Pin 1           Pin 2           Pin 3           Pin 4
+        ---     -----           -----           -----           -----
+        3       Off             Off             On              Off
+        4       Off             Off*            Off             On
+        5       On              Off             Off             Off
+        6       Off             On              Off             Off
+   
+                  The documentation states to set this for interrupt
+                  4, but I think that is a mistake.

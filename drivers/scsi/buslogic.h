@@ -12,10 +12,8 @@ const char *buslogic_info(struct Scsi_Host *);
 int buslogic_reset(Scsi_Cmnd *);
 int buslogic_biosparam(Disk *, int, int *);
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
-
 #define BUSLOGIC { NULL, NULL,			\
-		   generic_proc_info,           \
+		   NULL,		        \
 		   "buslogic",                  \
 		   PROC_SCSI_BUSLOGIC,          \
 		   "BusLogic",			\

@@ -1,0 +1,38 @@
+This is the README file for the Optics Storage 8000 AT CDROM device driver.
+
+The driver contains code to enable an ISP16 interface if it finds one, so if
+you have that, you're lucky.
+
+My configuration code for the ISP-16 card can get found at
+      dutette.et.tudelft.nl:/pub/linux/
+and at Eberhard's mirror
+      ftp.gwdg.de:/pub/linux/cdrom/drivers/optics/
+
+Much more elaborate information can be found at ftp:rbrf.msk.su,
+where Vadim Model (vadim@rbrf.msk.su) has made available an ISP16
+device driver.
+Vadim's directory is
+      rbrf.msk.su:/linux/mediamagic/
+and Eberhard is holding a mirror at
+      ftp.gwdg.de:/pub/linux/cdrom/drivers/sanyo/
+
+
+Before you can use the driver, you have to create the device file once:
+ # mknod /dev/optcd0 b 17 0
+
+To specify the base address if the driver is "compiled-in" to your kernel,
+you can use the kernel command line item (LILO option)
+             optcd=0x340
+with the right address.
+
+If you have compiled optcd as a module, you can load it with
+ # insmod /usr/src/linux/modules/optcd.o
+or
+ # insmod /usr/src/linux/modules/optcd.o optcd=0x340
+with the matching address value of your interface card.
+
+I have tried the module with several 1.2.x kernel versions, and it seems to
+work, as far as I tested. If you use it, I'd appreciate success/failure
+reports.
+
+Leo Spiekman (spiekman@dutette.et.tudelft.nl)

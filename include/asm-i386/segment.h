@@ -30,6 +30,7 @@ extern int bad_user_access_length(void);
  */
 struct __segment_dummy { unsigned long a[100]; };
 #define __sd(x) ((struct __segment_dummy *) (x))
+#define __const_sd(x) ((const struct __segment_dummy *) (x))
 
 static inline void __put_user(unsigned long x, void * y, int size)
 {
@@ -62,17 +63,17 @@ static inline unsigned long __get_user(const void * y, int size)
 		case 1:
 			__asm__ ("movb %%fs:%1,%b0"
 				:"=q" (result)
-				:"m" (*__sd(y)));
+				:"m" (*__const_sd(y)));
 			return (unsigned char) result;
 		case 2:
 			__asm__ ("movw %%fs:%1,%w0"
 				:"=r" (result)
-				:"m" (*__sd(y)));
+				:"m" (*__const_sd(y)));
 			return (unsigned short) result;
 		case 4:
 			__asm__ ("movl %%fs:%1,%0"
 				:"=r" (result)
-				:"m" (*__sd(y)));
+				:"m" (*__const_sd(y)));
 			return result;
 		default:
 			return bad_user_access_length();

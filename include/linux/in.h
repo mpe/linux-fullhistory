@@ -18,6 +18,7 @@
 #ifndef _LINUX_IN_H
 #define _LINUX_IN_H
 
+#include <linux/types.h>
 
 /* Standard well-defined IP protocols.  */
 enum {
@@ -38,7 +39,7 @@ enum {
 
 /* Internet address. */
 struct in_addr {
-	unsigned long int	s_addr;
+	__u32	s_addr;
 };
 
 /* Request struct for multicast socket ops */

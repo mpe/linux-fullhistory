@@ -89,6 +89,8 @@ gcc -c -D__KERNEL__ -DMODULE -O2 sonycd535.c -o sonycd535.o
 	To install the module, simply type:
 
 insmod sony535.o
+	or
+insmod sony535.o sonycd535=<address>
 
 	And to remove it:
 

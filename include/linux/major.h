@@ -33,11 +33,11 @@
  * 13 -                        xt disk
  * 14 - sound card
  * 15 -                        cdu31a cdrom
- * 16 - sockets
- * 17 - af_unix
- * 18 - af_inet
+ * 16 - sockets                goldstar cdrom
+ * 17 - af_unix                optics cdrom
+ * 18 - af_inet                sanyo cdrom
  * 19 - cyclades /dev/ttyC*
- * 20 - cyclades /dev/cub*
+ * 20 - cyclades /dev/cub*     mitsumi (mcdx) cdrom
  * 21 - scsi generic
  * 22 -                        (at2disk)
  * 23 -                        mitsumi cdrom
@@ -47,6 +47,7 @@
  * 27 - qic117 tape            matsushita cdrom 3     minors 0..3
  * 28 -                        matsushita cdrom 4     minors 0..3
  * 29 -                        aztech/orchid/okano/wearnes cdrom
+ * 32 -                        philips/lms cm206 cdrom
  */
 
 #define UNNAMED_MAJOR	0
@@ -67,20 +68,25 @@
 #define SOUND_MAJOR	14
 #define CDU31A_CDROM_MAJOR 15
 #define SOCKET_MAJOR	16
+#define GOLDSTAR_CDROM_MAJOR 16
 #define AF_UNIX_MAJOR	17
+#define OPTICS_CDROM_MAJOR 17
 #define AF_INET_MAJOR	18
+#define SANYO_CDROM_MAJOR 18
 #define CYCLADES_MAJOR  19
 #define CYCLADESAUX_MAJOR 20
+#define MITSUMI_X_CDROM_MAJOR 20
 #define SCSI_GENERIC_MAJOR 21
 #define IDE1_MAJOR	22
 #define MITSUMI_CDROM_MAJOR 23
 #define CDU535_CDROM_MAJOR 24
 #define MATSUSHITA_CDROM_MAJOR 25
 #define MATSUSHITA_CDROM2_MAJOR 26
+#define QIC117_TAPE_MAJOR 27
 #define MATSUSHITA_CDROM3_MAJOR 27
 #define MATSUSHITA_CDROM4_MAJOR 28
-#define QIC117_TAPE_MAJOR 27
 #define AZTECH_CDROM_MAJOR 29
+#define CM206_CDROM_MAJOR 32
 
 /*
  * Tests for SCSI devices.

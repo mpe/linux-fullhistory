@@ -39,6 +39,7 @@
 #include <net/ax25.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <net/arp.h>
 #include <linux/if_arp.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
@@ -61,7 +62,7 @@ static struct nr_neigh *nr_neigh_list = NULL;
  *	neighbour if it is new.
  */
 static int nr_add_node(ax25_address *nr, char *mnemonic, ax25_address *ax25,
-	struct device *dev, int quality, int obs_count)
+	ax25_digi *ax25_digi, struct device *dev, int quality, int obs_count)
 {
 	struct nr_node  *nr_node;
 	struct nr_neigh *nr_neigh;
@@ -86,11 +87,20 @@ static int nr_add_node(ax25_address *nr, char *mnemonic, ax25_address *ax25,
 
 		memcpy(&nr_neigh->callsign, ax25, sizeof(ax25_address));
 
+		nr_neigh->digipeat= NULL;
 		nr_neigh->dev     = dev;
 		nr_neigh->quality = nr_default.quality;
 		nr_neigh->locked  = 0;
 		nr_neigh->count   = 0;
 		nr_neigh->number  = nr_neigh_no++;
+
+		if (ax25_digi != NULL) {
+			if ((nr_neigh->digipeat = kmalloc(sizeof(*ax25_digi), GFP_KERNEL)) == NULL) {
+				kfree_s(nr_neigh, sizeof(*nr_neigh));
+				return -ENOMEM;
+			}
+			memcpy(nr_neigh->digipeat, ax25_digi, sizeof(*ax25_digi));
+		}
 			
 		save_flags(flags);
 		cli();
@@ -250,6 +260,8 @@ static void nr_remove_neigh(struct nr_neigh *nr_neigh)
 	if ((s = nr_neigh_list) == nr_neigh) {
 		nr_neigh_list = nr_neigh->next;
 		restore_flags(flags);
+		if (nr_neigh->digipeat != NULL)
+			kfree_s(nr_neigh->digipeat, sizeof(ax25_digi));
 		kfree_s(nr_neigh, sizeof(struct nr_neigh));
 		return;
 	}
@@ -258,6 +270,8 @@ static void nr_remove_neigh(struct nr_neigh *nr_neigh)
 		if (s->next == nr_neigh) {
 			s->next = nr_neigh->next;
 			restore_flags(flags);
+			if (nr_neigh->digipeat != NULL)
+				kfree_s(nr_neigh->digipeat, sizeof(ax25_digi));
 			kfree_s(nr_neigh, sizeof(struct nr_neigh));
 			return;
 		}
@@ -340,6 +354,7 @@ static int nr_add_neigh(ax25_address *callsign, struct device *dev, unsigned int
 
 	memcpy(&nr_neigh->callsign, callsign, sizeof(ax25_address));
 
+	nr_neigh->digipeat= NULL;
 	nr_neigh->dev     = dev;
 	nr_neigh->quality = quality;
 	nr_neigh->locked  = 1;
@@ -492,16 +507,22 @@ void nr_rt_device_down(struct device *dev)
 
 /*
  *	Check that the device given is a valid AX.25 interface that is "up".
+ *	Or a valid ethernet interface with an AX.25 callsign binding.
  */
 static struct device *nr_ax25_dev_get(char *devname)
 {
 	struct device *dev;
+	ax25_address callsign;
 
 	if ((dev = dev_get(devname)) == NULL)
 		return NULL;
 
 	if ((dev->flags & IFF_UP) && dev->type == ARPHRD_AX25)
 		return dev;
+
+	if ((dev->flags & IFF_UP) && dev->type == ARPHRD_ETHER)
+		if (arp_query((unsigned char *)&callsign, dev->pa_addr, ARPHRD_AX25))
+			return dev;
 	
 	return NULL;
 }
@@ -557,7 +578,7 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 					return nr_add_node(&nr_route.callsign,
 						nr_route.mnemonic,
 						&nr_route.neighbour,
-						dev, nr_route.quality,
+						NULL, dev, nr_route.quality,
 						nr_route.obs_count);
 				case NETROM_NEIGH:
 					return nr_add_neigh(&nr_route.callsign,
@@ -611,30 +632,28 @@ void nr_link_failed(ax25_address *callsign, struct device *dev)
 }
 
 /*
- *	Route a frame to an appropriate AX.25 connection. A NULL dev means
- *	that the frame was generated internally.
+ *	Route a frame to an appropriate AX.25 connection. A NULL ax25_cb
+ *	indicates an internally generated frame.
  */
-int nr_route_frame(struct sk_buff *skb, struct device *device)
+int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 {
-	ax25_address *ax25_src, *ax25_dest;
-	ax25_address *nr_src,   *nr_dest;
+	ax25_address *nr_src, *nr_dest;
 	struct nr_neigh *nr_neigh;
 	struct nr_node  *nr_node;
 	struct device *dev;
+	unsigned char *dptr;
 
-	ax25_dest = (ax25_address *)(skb->data + 1);
-	ax25_src  = (ax25_address *)(skb->data + 8);
-	nr_src    = (ax25_address *)(skb->data + 17);
-	nr_dest   = (ax25_address *)(skb->data + 24);
+	nr_src  = (ax25_address *)(skb->data + 0);
+	nr_dest = (ax25_address *)(skb->data + 7);
 
-	if (device != NULL)
-		nr_add_node(nr_src, "", ax25_src, device, 0, nr_default.obs_count);
+	if (ax25 != NULL)
+		nr_add_node(nr_src, "", &ax25->dest_addr, ax25->digipeat, ax25->device, 0, nr_default.obs_count);
 
 	if ((dev = nr_dev_get(nr_dest)) != NULL)	/* Its for me */
 		return nr_rx_frame(skb, dev);
 
 	/* Its Time-To-Live has expired */
-	if (--skb->data[31] == 0)
+	if (--skb->data[14] == 0)
 		return 0;
 
 	for (nr_node = nr_node_list; nr_node != NULL; nr_node = nr_node->next)
@@ -654,11 +673,10 @@ int nr_route_frame(struct sk_buff *skb, struct device *device)
 	if ((dev = nr_dev_first()) == NULL)
 		return 0;
 
-/*	if (device != NULL)
-		skb->len += dev->hard_header_len;*/
+	dptr  = skb_push(skb, 1);
+	*dptr = AX25_P_NETROM;
 
-	skb_push(skb,17);
-	ax25_send_frame(skb, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->dev);
+	ax25_send_frame(skb, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->digipeat, nr_neigh->dev);
 
 	return 1;
 }
@@ -676,14 +694,14 @@ int nr_nodes_get_info(char *buffer, char **start, off_t offset, int length)
 	len += sprintf(buffer, "callsign  mnemonic w n qual obs neigh qual obs neigh qual obs neigh\n");
 
 	for (nr_node = nr_node_list; nr_node != NULL; nr_node = nr_node->next) {
-		len += sprintf(buffer + len, "%-9s %-7s  %d %d ",
+		len += sprintf(buffer + len, "%-9s %-7s  %d %d",
 			ax2asc(&nr_node->callsign),
 			nr_node->mnemonic,
 			nr_node->which + 1,
 			nr_node->count);			
 
 		for (i = 0; i < nr_node->count; i++) {
-			len += sprintf(buffer + len, " %3d   %d %05d",
+			len += sprintf(buffer + len, "  %3d   %d %05d",
 				nr_node->routes[i].quality,
 				nr_node->routes[i].obs_count,
 				nr_node->routes[i].neighbour);
@@ -721,10 +739,10 @@ int nr_neigh_get_info(char *buffer, char **start, off_t offset, int length)
   
 	cli();
 
-	len += sprintf(buffer, "addr  callsign  dev qual lock count\n");
+	len += sprintf(buffer, "addr  callsign  dev  qual lock count\n");
 
 	for (nr_neigh = nr_neigh_list; nr_neigh != NULL; nr_neigh = nr_neigh->next) {
-		len += sprintf(buffer + len, "%05d %-9s %-3s  %3d    %d   %3d\n",
+		len += sprintf(buffer + len, "%05d %-9s %-4s  %3d    %d   %3d\n",
 			nr_neigh->number,
 			ax2asc(&nr_neigh->callsign),
 			nr_neigh->dev ? nr_neigh->dev->name : "???",

@@ -15,6 +15,7 @@
  */
 
 #ifdef MODULE
+#include <linux/autoconf.h>
 #include <linux/module.h>
 #endif
 

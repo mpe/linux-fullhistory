@@ -35,19 +35,21 @@ endif
 ifdef CONFIG_CDU31A
 OBJS := $(OBJS) cdu31a.o
 SRCS := $(SRCS) cdu31a.c
-endif
+endif #CONFIG_CDU31A
 
 ifdef CONFIG_MCD
 OBJS := $(OBJS) mcd.o
 SRCS := $(SRCS) mcd.c
-endif
-
-ifdef CONFIG_AZTCD
-OBJS := $(OBJS) aztcd.o
-SRCS := $(SRCS) aztcd.c
 else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) aztcd.o
-endif
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) mcd.o
+endif #CONFIG_MCD
+
+ifdef CONFIG_MCDX
+OBJS := $(OBJS) mcdx.o
+SRCS := $(SRCS) mcdx.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) mcdx.o
+endif #CONFIG_MCDX
 
 ifdef CONFIG_SBPCD
 OBJS := $(OBJS) sbpcd.o
@@ -71,6 +73,48 @@ OBJS := $(OBJS) sbpcd4.o
 SRCS := $(SRCS) sbpcd4.c
 endif #CONFIG_SBPCD4
 
+ifdef CONFIG_AZTCD
+OBJS := $(OBJS) aztcd.o
+SRCS := $(SRCS) aztcd.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) aztcd.o
+endif #CONFIG_AZTCD
+
+ifdef CONFIG_CDU535
+OBJS := $(OBJS) sonycd535.o
+SRCS := $(SRCS) sonycd535.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) sonycd535.o
+endif #CONFIG_CDU535
+
+ifdef CONFIG_GSCD
+OBJS := $(OBJS) gscd.o
+SRCS := $(SRCS) gscd.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) gscd.o
+endif #CONFIG_GSCD
+
+ifdef CONFIG_CM206
+OBJS := $(OBJS) cm206.o
+SRCS := $(SRCS) cm206.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) cm206.o
+endif #CONFIG_CM206
+
+ifdef CONFIG_OPTCD
+OBJS := $(OBJS) optcd.o
+SRCS := $(SRCS) optcd.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) optcd.o
+endif #CONFIG_OPTCD
+
+ifdef CONFIG_SJCD
+OBJS := $(OBJS) sjcd.o
+SRCS := $(SRCS) sjcd.c
+#else
+#BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) sjcd.o
+endif #CONFIG_SJCD
+
 ifdef CONFIG_BLK_DEV_HD
 OBJS := $(OBJS) hd.o
 SRCS := $(SRCS) hd.c
@@ -84,13 +128,6 @@ endif
 ifdef CONFIG_BLK_DEV_XD
 OBJS := $(OBJS) xd.o
 SRCS := $(SRCS) xd.c
-endif
-
-ifdef CONFIG_CDU535
-OBJS := $(OBJS) sonycd535.o
-SRCS := $(SRCS) sonycd535.c
-else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) sonycd535.o
 endif
 
 all: block.a

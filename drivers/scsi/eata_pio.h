@@ -73,8 +73,6 @@ int eata_pio_release(struct Scsi_Host *);
 #define eata_pio_release NULL  
 #endif
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
-
 
 #define EATA_PIO {		     \
     NULL, NULL,			 \

@@ -50,7 +50,7 @@ struct UMSDOS_DIR_ONCE {
 */
 static int umsdos_dir_once(
 	void * buf,
-	char * name,
+	const char * name,
 	int name_len,
 	off_t offset,
 	ino_t ino)
@@ -58,10 +58,12 @@ static int umsdos_dir_once(
 	int ret = -EINVAL;
 	struct UMSDOS_DIR_ONCE *d = (struct UMSDOS_DIR_ONCE *)buf;
 	if (d->count == 0){
-		char zname[100];
-		memcpy (zname,name,name_len);
-		zname[name_len] = '\0';
-		PRINTK (("dir_once :%s: offset %ld\n",zname,offset));
+		#if 0
+			char zname[100];
+			memcpy (zname,name,name_len);
+			zname[name_len] = '\0';
+			Printk (("dir_once :%s: offset %Ld\n",zname,offset));
+		#endif
 		ret = d->filldir (d->dirbuf,name,name_len,offset,ino);
 		d->stop = ret < 0;
 		d->count = 1;
@@ -160,6 +162,7 @@ static int umsdos_readdir_x(
 	}else{
 		struct inode *emd_dir = umsdos_emd_dir_lookup(dir,0);
 		if (emd_dir != NULL){
+			off_t start_fpos = filp->f_pos;
 			if (filp->f_pos <= UMSDOS_SPECIAL_DIRFPOS+1) filp->f_pos = 0;
 			PRINTK (("f_pos %lu i_size %ld\n",filp->f_pos,emd_dir->i_size));
 			ret = 0;
@@ -246,12 +249,12 @@ static int umsdos_readdir_x(
 				(see comments at the beginning), we put back
 				the special offset.
 			*/
-			if (filp->f_pos == 0) filp->f_pos = UMSDOS_SPECIAL_DIRFPOS;
+			if (filp->f_pos == 0) filp->f_pos = start_fpos;
 			iput(emd_dir);
 		}
 	}
 	umsdos_endlookup(dir);	
-	PRINTK (("read dir %p pos %lu ret %d\n",dir,filp->f_pos,ret));
+	PRINTK (("read dir %p pos %Ld ret %d\n",dir,filp->f_pos,ret));
 	return ret;
 }
 /*
@@ -279,7 +282,7 @@ static int UMSDOS_readdir(
 		if (bufk.count == 0) break;
 		count += bufk.count;
 	}
-	PRINTK (("UMSDOS_readdir out %d count %d pos %lu\n",ret,count
+	PRINTK (("UMSDOS_readdir out %d count %d pos %Ld\n",ret,count
 		,filp->f_pos));
 	return count == 0 ? -ENOENT : ret;
 }
@@ -349,6 +352,42 @@ void umsdos_lookup_patch (
 			inode->i_mtime = entry->mtime;
 			inode->i_uid   = entry->uid;
 			inode->i_gid   = entry->gid;
+			/* #Specification: umsdos / conversion mode
+				The msdos fs can do some inline conversion
+				of the data of a file. It can translate
+				silently from MsDOS text file format to Unix
+				one (crlf -> lf) while reading, and the reverse
+				while writting. This is activated using the mount
+				option conv=....
+
+				This is not useful for Linux file in promoted
+				directory. It can even be harmful. For this
+				reason, the binary (no conversion) mode is
+				always activated.
+			*/
+			/* #Specification: umsdos / conversion mode / todo
+				A flag could be added to file and directories
+				forcing an automatic conversion mode (as
+				done with the msdos fs).
+				
+				This flag could be setup on a directory basis
+				(instead of file) and all file in it would
+				logically inherited. If the conversion mode
+				is active (conv=) then the i_binary flag would
+				be left untouched in those directories.
+				
+				It was proposed that the sticky bit was used
+				to set this. The problem is that new file would
+				be written incorrectly. The other problem is that
+				the sticky bit has a meaning for directories. So
+				another bit should be used (there is some space
+				in the EMD file for it) and a special utilities
+				would be used to assign the flag to a directory).
+				I don't think it is useful to assign this flag
+				on a single file.
+			*/
+
+			MSDOS_I(inode)->i_binary = 1;
 			/* #Specification: umsdos / i_nlink
 				The nlink field of an inode is maintain by the MSDOS file system
 				for directory and by UMSDOS for other file. The logic is that
@@ -380,7 +419,7 @@ struct UMSDOS_DIRENT_K{
 */
 static int umsdos_filldir_k(
 	void * buf,
-	char * name,
+	const char * name,
 	int name_len,
 	off_t offset,
 	ino_t ino)
@@ -399,7 +438,7 @@ struct UMSDOS_DIR_SEARCH{
 
 static int umsdos_dir_search (
 	void * buf,
-	char * name,
+	const char * name,
 	int name_len,
 	off_t offset,
 	ino_t ino)

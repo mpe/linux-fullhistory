@@ -14,16 +14,7 @@ struct elf_siginfo
 	int	si_errno;			/* errno */
 };
 
-typedef unsigned long elf_greg_t;
-#define ELF_NGREG (sizeof (struct pt_regs) / sizeof(elf_greg_t))
-typedef elf_greg_t elf_gregset_t[ELF_NGREG];
-typedef struct
-#ifdef __i386__
-	user_i387_struct
-#else
-#error	"The FPU in this arch is not supported by ELF core dump.".
-#endif
-elf_fpregset_t;
+#include <asm/elf.h>
 
 #ifndef __KERNEL__
 typedef elf_greg_t greg_t;

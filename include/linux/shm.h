@@ -59,10 +59,10 @@ struct shm_info {
 	ulong swap_successes;
 };
 
-extern asmlinkage int sys_shmget (key_t key, int size, int flag);
-extern asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *addr);
-extern asmlinkage int sys_shmdt (char *shmaddr);
-extern asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
+asmlinkage int sys_shmget (key_t key, int size, int flag);
+asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *addr);
+asmlinkage int sys_shmdt (char *shmaddr);
+asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
 
 #endif /* __KERNEL__ */
 

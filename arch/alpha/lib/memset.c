@@ -10,7 +10,7 @@
 
 #include <linux/types.h>
 
-void * __constant_c_memset(void * s, unsigned long c, long count)
+inline void * __constant_c_memset(void * s, unsigned long c, long count)
 {
 	unsigned long xs = (unsigned long) s;
 
@@ -35,10 +35,6 @@ void * __constant_c_memset(void * s, unsigned long c, long count)
 
 void * __memset(void * s,char c,size_t count)
 {
-	char *xs = (char *) s;
-
-	while (count--)
-		*xs++ = c;
-
+	__constant_c_memset(s,0x0101010101010101UL * (unsigned char) c, count);
 	return s;
 }

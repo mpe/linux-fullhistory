@@ -1,4 +1,3 @@
-#if	defined(CONFIG_WAVELAN)
 /*
  * Intel 82586 IEEE 802.3 Ethernet LAN Coprocessor.
  *
@@ -407,4 +406,3 @@ in case, we leave the space.
  *
  * For more details, see wavelan.c.
  */
-#endif	/* defined(CONFIG_WAVELAN) */

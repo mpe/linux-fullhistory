@@ -601,7 +601,7 @@ static void hp100_rx( struct device *dev )
        else
         {
           skb -> dev = dev;
-          insl( ioaddr + HP100_REG_DATA32, skb_put(pkt_len), ( pkt_len + 3 ) >> 2 );
+          insl( ioaddr + HP100_REG_DATA32, skb_put(skb, pkt_len), ( pkt_len + 3 ) >> 2 );
           skb->protocol=eth_type_trans(skb,dev);
           netif_rx( skb );
           lp -> stats.rx_packets++;

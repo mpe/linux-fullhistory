@@ -152,13 +152,20 @@ void nr_write_internal(struct sock *sk, int frametype)
 	struct sk_buff *skb;
 	unsigned char  *dptr;
 	int len, timeout;
+
+	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 2 + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 	
 	switch (frametype & 0x0F) {
-		case NR_CONNREQ: len = 54; break;
-		case NR_CONNACK: len = (sk->nr->bpqext) ? 39 : 38; break;
-		case NR_DISCREQ: len = 37; break;
-		case NR_DISCACK: len = 37; break;
-		case NR_INFOACK: len = 37; break;
+		case NR_CONNREQ:
+			len += 17;
+			break;
+		case NR_CONNACK:
+			len += (sk->nr->bpqext) ? 2 : 1;
+			break;
+		case NR_DISCREQ:
+		case NR_DISCACK:
+		case NR_INFOACK:
+			break;
 		default:
 			printk("nr_write_internal: invalid frame type %d\n", frametype);
 			return;
@@ -168,34 +175,34 @@ void nr_write_internal(struct sock *sk, int frametype)
 		return;
 
 	/*
-	 *	Space for AX.25
+	 *	Space for AX.25 and NET/ROM network header
 	 */
-	skb_reserve(skb,17);
+	skb_reserve(skb, AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 2 + NR_NETWORK_LEN);
 	
-	dptr = skb_put(skb,len-17);
+	dptr = skb_put(skb, skb_tailroom(skb));
 
 	switch (frametype & 0x0F) {
 
 		case NR_CONNREQ:
-			timeout = (sk->nr->rtt / PR_SLOWHZ) * 2;
-			*dptr++ = sk->nr->my_index;
-			*dptr++ = sk->nr->my_id;
-			*dptr++ = 0;
-			*dptr++ = 0;
-			*dptr++ = frametype;
-			*dptr++ = sk->window;
+			timeout  = (sk->nr->rtt / PR_SLOWHZ) * 2;
+			*dptr++  = sk->nr->my_index;
+			*dptr++  = sk->nr->my_id;
+			*dptr++  = 0;
+			*dptr++  = 0;
+			*dptr++  = frametype;
+			*dptr++  = sk->window;
 			memcpy(dptr, &sk->nr->user_addr, sizeof(ax25_address));
 			dptr[6] &= ~LAPB_C;
 			dptr[6] &= ~LAPB_E;
 			dptr[6] |= SSID_SPARE;
-			dptr += 7;
+			dptr    += AX25_ADDR_LEN;
 			memcpy(dptr, &sk->nr->source_addr, sizeof(ax25_address));
 			dptr[6] &= ~LAPB_C;
 			dptr[6] &= ~LAPB_E;
 			dptr[6] |= SSID_SPARE;
-			dptr += 7;
-			*dptr++ = timeout % 256;
-			*dptr++ = timeout / 256;
+			dptr    += AX25_ADDR_LEN;
+			*dptr++  = timeout % 256;
+			*dptr++  = timeout / 256;
 			break;
 
 		case NR_CONNACK:
@@ -239,31 +246,33 @@ void nr_transmit_dm(struct sk_buff *skb)
 {
 	struct sk_buff *skbn;
 	unsigned char *dptr;
+	int len;
 
-	if ((skbn = alloc_skb(38, GFP_ATOMIC)) == NULL)
+	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 2 + NR_NETWORK_LEN + NR_TRANSPORT_LEN + 1;
+
+	if ((skbn = alloc_skb(len, GFP_ATOMIC)) == NULL)
 		return;
 
-	skb_reserve(skbn,17);
-	dptr = skb_put(skbn,21);
+	skb_reserve(skbn, AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 2);
 
-	*dptr++ = AX25_P_NETROM;
-	
-	memcpy(dptr, skb->data + 24, 7);
+	dptr = skb_put(skbn, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
+
+	memcpy(dptr, skb->data + 7, AX25_ADDR_LEN);
 	dptr[6] &= ~LAPB_C;
 	dptr[6] &= ~LAPB_E;
 	dptr[6] |= SSID_SPARE;
-	dptr += 7;
+	dptr += AX25_ADDR_LEN;
 	
-	memcpy(dptr, skb->data + 17, 7);
+	memcpy(dptr, skb->data + 0, AX25_ADDR_LEN);
 	dptr[6] &= ~LAPB_C;
 	dptr[6] |= LAPB_E;
 	dptr[6] |= SSID_SPARE;
-	dptr += 7;
+	dptr += AX25_ADDR_LEN;
 
 	*dptr++ = nr_default.ttl;
 
-	*dptr++ = skb->data[32];
-	*dptr++ = skb->data[33];
+	*dptr++ = skb->data[15];
+	*dptr++ = skb->data[16];
 	*dptr++ = 0;
 	*dptr++ = 0;
 	*dptr++ = NR_CONNACK + NR_CHOKE_FLAG;

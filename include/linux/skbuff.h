@@ -18,9 +18,10 @@
 #include <linux/time.h>
 #include <linux/config.h>
 
-/* #define CONFIG_SKB_CHECK 1 */
+#define CONFIG_SKB_CHECK 0
 
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
+#define HAVE_ALIGNABLE_SKB	/* Ditto 8)		   */
 
 
 #define FREE_READ	1
@@ -55,11 +56,18 @@ struct sk_buff {
 	unsigned char	*raw;
 	unsigned long	seq;
   } h;
+  
+  union {						/* As yet incomplete physical layer views 	*/
+  	unsigned char 		*raw;
+  	struct ethhdr		*ethernet;
+  } mac;
+  
   struct iphdr			*ip_hdr;		/* For IPPROTO_RAW 				*/
   unsigned long 		len;			/* Length of actual data			*/
   unsigned long 		saddr;			/* IP source address				*/
   unsigned long 		daddr;			/* IP target address				*/
   unsigned long			raddr;			/* IP next hop address				*/
+  unsigned long			csum;			/* Checksum 					*/
   volatile char 		acked,			/* Are we acked ?				*/
 				used,			/* Are we in use ?				*/
 				free,			/* How to free this buffer			*/
@@ -67,7 +75,8 @@ struct sk_buff {
   unsigned char			tries,			/* Times tried					*/
   				lock,			/* Are we locked ?				*/
   				localroute,		/* Local routing asserted for this frame	*/
-  				pkt_type;		/* Packet class					*/
+  				pkt_type,		/* Packet class					*/
+  				ip_summed;		/* Driver fed us an IP checksum			*/
 #define PACKET_HOST		0			/* To us					*/
 #define PACKET_BROADCAST	1			/* To all					*/
 #define PACKET_MULTICAST	2			/* To group					*/
@@ -84,7 +93,7 @@ struct sk_buff {
 #define SK_WMEM_MAX	32767
 #define SK_RMEM_MAX	32767
 
-#ifdef CONFIG_SKB_CHECK
+#if CONFIG_SKB_CHECK
 #define SK_FREED_SKB	0x0DE2C0DE
 #define SK_GOOD_SKB	0xDEC0DED1
 #define SK_HEAD_SKB	0x12231298

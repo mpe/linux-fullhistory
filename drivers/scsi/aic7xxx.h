@@ -47,7 +47,7 @@
 #define AIC7XXX	{						\
 	NULL,							\
 	NULL,							\
-	generic_proc_info,					\
+	NULL,							\
 	"aic7xxx",						\
 	PROC_SCSI_AIC7XXX,					\
 	NULL,							\
@@ -77,7 +77,5 @@ extern int aic7xxx_abort(Scsi_Cmnd *);
 extern int aic7xxx_reset(Scsi_Cmnd *);
 
 extern const char *aic7xxx_info(struct Scsi_Host *);
-
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
 
 #endif /* _aic7xxx_h */

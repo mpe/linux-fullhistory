@@ -515,7 +515,8 @@ void flush_old_exec(struct linux_binprm * bprm)
 	int ch;
 	char * name;
 
-	current->dumpable = 1;
+	if (current->euid == current->uid && current->egid == current->gid)
+		current->dumpable = 1;
 	name = bprm->filename;
 	for (i=0; (ch = *(name++)) != '\0';) {
 		if (ch == '/')

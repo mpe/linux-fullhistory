@@ -1515,8 +1515,8 @@ int buslogic_biosparam(Disk *disk, int dev, int *ip)
 		ip[1] = 32;
 	    }
 #else
-	    ip[0] = 256;
-	    ip[1] = 64;
+	    ip[0] = 255;
+	    ip[1] = 63;
 #endif
 	} else {
 	    ip[0] = 128;

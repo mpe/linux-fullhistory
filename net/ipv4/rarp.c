@@ -151,8 +151,6 @@ int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	long sip,tip;
 	unsigned char *sha,*tha;            /* s for "source", t for "target" */
 	
-	skb_pull(skb,dev->hard_header_len);
-  
 /*
  *	If this test doesn't pass, it's not IP, or we should ignore it anyway
  */

@@ -46,7 +46,7 @@
 #include <net/p8022.h>
 #include <net/psnap.h>
 #include <net/sock.h>
-#include <net/atalk.h>
+#include <linux/atalk.h>
 
 #ifdef CONFIG_ATALK
 
@@ -1334,10 +1334,6 @@ int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	struct sockaddr_at tosat;
         int origlen;
 	
-	/* First strip the MAC header */
-	
-	skb_pull(skb,dev->hard_header_len);
-	
 	/* Size check */
 	if(skb->len<sizeof(*ddp))
 	{
@@ -1549,16 +1545,13 @@ static int atalk_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	skb->arp=1;
 	skb_reserve(skb,ddp_dl->header_length);
 	skb_reserve(skb,dev->hard_header_len);
-	skb_put(skb,size);
 
 	skb->dev=dev;
 	
 	if(sk->debug)
 		printk("SK %p: Begin build.\n", sk);
 	
-	skb->h.raw=skb->data;	
-	
-	ddp=(struct ddpehdr *)skb->h.raw;
+	ddp=(struct ddpehdr *)skb_put(skb,sizeof(struct ddpehdr));
 	ddp->deh_pad=0;
 	ddp->deh_hops=0;
 	ddp->deh_len=len+sizeof(*ddp);
@@ -1579,7 +1572,7 @@ static int atalk_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	if(sk->debug)
 		printk("SK %p: Copy user data (%d bytes).\n", sk, len);
 		
-	memcpy_fromfs((char *)(ddp+1),ubuf,len);
+	memcpy_fromfs(skb_put(skb,len),ubuf,len);
 
 	if(sk->no_check==1)
 		ddp->deh_sum=0;
@@ -1616,6 +1609,7 @@ static int atalk_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 		sk->wmem_alloc-=skb->truesize;
 		ddp_dl->datalink_header(ddp_dl, skb, dev->dev_addr);
 		skb->sk = NULL;
+		skb->mac.raw=skb->data;
 		skb->h.raw = skb->data + ddp_dl->header_length + dev->hard_header_len;
 		skb_pull(skb,dev->hard_header_len);
 		skb_pull(skb,ddp_dl->header_length);

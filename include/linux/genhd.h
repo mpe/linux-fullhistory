@@ -8,6 +8,12 @@
  *
  *		<drew@colorado.edu>
  */
+
+#define CONFIG_MSDOS_PARTITION 1
+
+#ifdef __alpha__
+#define CONFIG_OSF_PARTITION 1
+#endif
 	
 #define EXTENDED_PARTITION 5
 	

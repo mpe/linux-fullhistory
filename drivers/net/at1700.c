@@ -527,7 +527,7 @@ net_rx(struct device *dev)
 				lp->stats.rx_errors++;
 				break;
 			}
-			skb = dev_alloc_skb(pkt_len+1);
+			skb = dev_alloc_skb(pkt_len+3);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet (len %d).\n",
 					   dev->name, pkt_len);
@@ -537,8 +537,8 @@ net_rx(struct device *dev)
 				lp->stats.rx_dropped++;
 				break;
 			}
-			skb->len = pkt_len;
 			skb->dev = dev;
+			skb_reserve(skb,2);
 
 			insw(ioaddr + DATAPORT, skb_put(skb,pkt_len), (pkt_len + 1) >> 1);
 			skb->protocol=eth_type_trans(skb, dev);

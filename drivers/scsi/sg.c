@@ -7,6 +7,7 @@
  *  Borrows code from st driver.
  */
 #ifdef MODULE
+#include <linux/autoconf.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #endif /* MODULE */

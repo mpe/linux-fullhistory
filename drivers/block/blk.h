@@ -37,23 +37,42 @@
 
 #define SUBSECTOR(block) (CURRENT->current_nr_sectors > 0)
 
-extern unsigned long cdu31a_init(unsigned long mem_start, unsigned long mem_end);
-extern unsigned long mcd_init(unsigned long mem_start, unsigned long mem_end);
+#ifdef CONFIG_CDU31A
+extern unsigned long cdu31a_init(unsigned long, unsigned long);
+#endif CONFIG_CDU31A
+#ifdef CONFIG_MCD
+extern unsigned long mcd_init(unsigned long, unsigned long);
+#endif CONFIG_MCD
+#ifdef CONFIG_MCDX
+extern unsigned long mcdx_init(unsigned long, unsigned long);
+#endif CONFIG_MCDX
+#ifdef CONFIG_SBPCD
+extern unsigned long sbpcd_init(unsigned long, unsigned long);
+#endif CONFIG_SBPCD
 #ifdef CONFIG_AZTCD
-extern unsigned long aztcd_init(unsigned long mem_start, unsigned long mem_end);
-#endif
+extern unsigned long aztcd_init(unsigned long, unsigned long);
+#endif CONFIG_AZTCD
 #ifdef CONFIG_CDU535
-extern unsigned long sony535_init(unsigned long mem_start, unsigned long mem_end);
-#endif
+extern unsigned long sony535_init(unsigned long, unsigned long);
+#endif CONFIG_CDU535
+#ifdef CONFIG_GSCD
+extern unsigned long gscd_init(unsigned long, unsigned long);
+#endif CONFIG_GSCD
+#ifdef CONFIG_CM206
+extern unsigned long cm206_init(unsigned long, unsigned long);
+#endif CONFIG_CM206
+#ifdef CONFIG_OPTCD
+extern unsigned long optcd_init(unsigned long, unsigned long);
+#endif CONFIG_OPTCD
+#ifdef CONFIG_SJCD
+extern unsigned long sjcd_init(unsigned long, unsigned long);
+#endif CONFIG_SJCD
 #ifdef CONFIG_BLK_DEV_HD
 extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 #endif
 #ifdef CONFIG_BLK_DEV_IDE
 extern unsigned long ide_init(unsigned long mem_start, unsigned long mem_end);
 #endif
-#ifdef CONFIG_SBPCD
-extern unsigned long sbpcd_init(unsigned long, unsigned long);
-#endif CONFIG_SBPCD
 extern void set_device_ro(int dev,int flag);
 
 extern int floppy_init(void);
@@ -165,19 +184,11 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
-#elif (MAJOR_NR == AZTECH_CDROM_MAJOR)
+#elif (MAJOR_NR == MITSUMI_X_CDROM_MAJOR)
 
-#define DEVICE_NAME "Aztech CD-ROM"
-#define DEVICE_REQUEST do_aztcd_request
-#define DEVICE_NR(device) (MINOR(device))
-#define DEVICE_ON(device)
-#define DEVICE_OFF(device)
-
-#elif (MAJOR_NR == CDU535_CDROM_MAJOR)
-
-#define DEVICE_NAME "SONY-CDU535"
-#define DEVICE_INTR do_cdu535
-#define DEVICE_REQUEST do_cdu535_request
+#define DEVICE_NAME "Mitsumi CD-ROM"
+/* #define DEVICE_INTR do_mcdx */
+#define DEVICE_REQUEST do_mcdx_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
@@ -210,6 +221,54 @@ static void floppy_off(unsigned int nr);
 
 #define DEVICE_NAME "Matsushita CD-ROM controller #4"
 #define DEVICE_REQUEST do_sbpcd4_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == AZTECH_CDROM_MAJOR)
+
+#define DEVICE_NAME "Aztech CD-ROM"
+#define DEVICE_REQUEST do_aztcd_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == CDU535_CDROM_MAJOR)
+
+#define DEVICE_NAME "SONY-CDU535"
+#define DEVICE_INTR do_cdu535
+#define DEVICE_REQUEST do_cdu535_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == GOLDSTAR_CDROM_MAJOR)
+
+#define DEVICE_NAME "Goldstar R420"
+#define DEVICE_REQUEST do_gscd_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == CM206_CDROM_MAJOR)
+#define DEVICE_NAME "Philips/LMS cd-rom cm206"
+#define DEVICE_REQUEST do_cm206_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == OPTICS_CDROM_MAJOR)
+
+#define DEVICE_NAME "DOLPHIN 8000AT CD-ROM"
+#define DEVICE_REQUEST do_optcd_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == SANYO_CDROM_MAJOR)
+
+#define DEVICE_NAME "Sanyo H94A CD-ROM"
+#define DEVICE_REQUEST do_sjcd_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)

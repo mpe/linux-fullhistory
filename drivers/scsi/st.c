@@ -14,6 +14,7 @@
   Last modified: Sat Feb 18 10:51:25 1995 by root@kai.home
 */
 #ifdef MODULE
+#include <linux/autoconf.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #endif /* MODULE */

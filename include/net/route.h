@@ -32,9 +32,9 @@ struct rtable
 	unsigned long		rt_dst;
 	unsigned long		rt_mask;
 	unsigned long		rt_gateway;
-	unsigned char		rt_flags;
-	unsigned char		rt_metric;
-	short			rt_refcnt;
+	unsigned short		rt_flags;
+	unsigned short		rt_metric;
+	unsigned int		rt_refcnt;
 	unsigned long		rt_use;
 	unsigned short		rt_mss;
 	unsigned short		rt_irtt;

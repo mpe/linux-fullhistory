@@ -1,3 +1,17 @@
+#ifdef MODULE
+/*
+ * Don't import our own symbols, as this would severely mess up our
+ * symbol tables.
+ */
+#define _SCSI_SYMS_VER_
+#include <linux/autoconf.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>

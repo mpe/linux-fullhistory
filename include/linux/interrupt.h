@@ -27,7 +27,8 @@ enum {
 	NET_BH,
 	IMMEDIATE_BH,
 	KEYBOARD_BH,
-	CYCLADES_BH
+	CYCLADES_BH,
+	CM206_BH
 };
 
 extern inline void mark_bh(int nr)

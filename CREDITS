@@ -639,6 +639,17 @@ S: Dragonvagen 1 A 13
 S: FIN-00330 Helsingfors
 S: Finland
 
+N: Jonathan Naylor
+E: jsn@cs.nott.ac.uk
+E: g4klx@amsat.org
+E: G4KLX@GB7DAD (Packet Radio)
+D: AX.25 and NET/ROM protocol suites
+S: 24 Castle View Drive
+S: Cromford
+S: Matlock
+S: Derbyshire DE4 3RL
+S: United Kingdom
+
 N: Michael Neuffer
 E: neuffer@goofy.zdv.uni-mainz.de
 D: developer and maintainer of the eata_dma SCSI driver 

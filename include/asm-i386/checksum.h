@@ -16,15 +16,24 @@
 unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum);
 
 /*
- * the same as csum_partial, but copies from fs:src while it
+ * the same as csum_partial, but copies from src while it
  * checksums
  *
  * here even more important to align src and dst on a 32-bit (or even
  * better 64-bit) boundary
  */
 
-unsigned int csum_partial_copyffs( char *src, char *dst, int len, int sum);
+unsigned int csum_partial_copy( char *src, char *dst, int len, int sum);
 
+
+/*
+ * the same as csum_partial_copy, but copies from user space.
+ *
+ * here even more important to align src and dst on a 32-bit (or even
+ * better 64-bit) boundary
+ */
+
+unsigned int csum_partial_copy_fromuser( char *src, char *dst, int len, int sum);
 
 /*
  *	This is a version of ip_compute_csum() optimized for IP headers,

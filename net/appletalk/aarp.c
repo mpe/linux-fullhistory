@@ -46,7 +46,7 @@
 #include <net/sock.h>
 #include <net/datalink.h>
 #include <net/psnap.h>
-#include <net/atalk.h>
+#include <linux/atalk.h>
 
 #ifdef CONFIG_ATALK
 /*
@@ -103,7 +103,7 @@ static void aarp_send_query(struct aarp_entry *a)
 	struct device *dev=a->dev;
 	int len=dev->hard_header_len+sizeof(struct elapaarp)+aarp_dl->header_length;
 	struct sk_buff *skb=alloc_skb(len, GFP_ATOMIC);
-	struct elapaarp *eah=(struct elapaarp *)(skb->data+dev->hard_header_len+aarp_dl->header_length);
+	struct elapaarp *eah;
 	struct at_addr *sat=atalk_find_dev_addr(dev);
 	
 	if(skb==NULL || sat==NULL)
@@ -112,10 +112,11 @@ static void aarp_send_query(struct aarp_entry *a)
 	/*
 	 *	Set up the buffer.
 	 */		
-	 
+
+	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
+	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));
 	skb->arp	=	1;
 	skb->free	=	1;
-	skb_put(skb,len);
 	skb->dev	=	a->dev;
 	
 	/*
@@ -164,7 +165,7 @@ static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_ad
 {
 	int len=dev->hard_header_len+sizeof(struct elapaarp)+aarp_dl->header_length;
 	struct sk_buff *skb=alloc_skb(len, GFP_ATOMIC);
-	struct elapaarp *eah=(struct elapaarp *)(skb->data+dev->hard_header_len+aarp_dl->header_length);
+	struct elapaarp *eah;
 	
 	if(skb==NULL)
 		return;
@@ -172,7 +173,9 @@ static void aarp_send_reply(struct device *dev, struct at_addr *us, struct at_ad
 	/*
 	 *	Set up the buffer.
 	 */		
-	 
+
+	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
+	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));	 
 	skb->arp	=	1;
 	skb->free	=	1;
 	skb_put(skb,len);
@@ -225,7 +228,7 @@ void aarp_send_probe(struct device *dev, struct at_addr *us)
 {
 	int len=dev->hard_header_len+sizeof(struct elapaarp)+aarp_dl->header_length;
 	struct sk_buff *skb=alloc_skb(len, GFP_ATOMIC);
-	struct elapaarp *eah=(struct elapaarp *)(skb->data+dev->hard_header_len+aarp_dl->header_length);
+	struct elapaarp *eah;
 	static char aarp_eth_multicast[ETH_ALEN]={ 0x09, 0x00, 0x07, 0xFF, 0xFF, 0xFF };
 	
 	if(skb==NULL)
@@ -234,7 +237,10 @@ void aarp_send_probe(struct device *dev, struct at_addr *us)
 	/*
 	 *	Set up the buffer.
 	 */		
-	 
+
+	skb_reserve(skb,dev->hard_header_len+aarp_dl->header_length);
+	eah		=	(struct elapaarp *)skb_put(skb,sizeof(struct elapaarp));
+	
 	skb->arp	=	1;
 	skb->free	=	1;
 	skb_put(skb,len);
@@ -575,8 +581,6 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
-	
-	skb_pull(skb,dev->hard_header_len);
 	
 	/*
 	 *	Frame size ok ?

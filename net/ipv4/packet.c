@@ -28,6 +28,7 @@
  *					dubious gcc output. Can you read
  *					compiler: it said _VOLATILE_
  *	Richard Kooijman	:	Timestamp fixes.
+ *		Alan Cox	:	New buffers. Use sk->mac.raw
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -80,6 +81,12 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	 */
 
 	sk = (struct sock *) pt->data;	
+	
+	/*
+	 *	Yank back the headers
+	 */
+	 
+	skb_push(skb,skb->data-skb->mac.raw);
 
 	/*
 	 *	The SOCK_PACKET socket receives _all_ frames.

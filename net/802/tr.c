@@ -92,6 +92,8 @@ unsigned short tr_type_trans(struct sk_buff *skb, struct device *dev) {
 	struct trh_hdr *trh=(struct trh_hdr *)skb->data;
 	struct trllc *trllc=(struct trllc *)(skb->data+sizeof(struct trh_hdr));
 	
+	skb_pull(skb,dev->hard_header_len);
+	
 	if(trh->saddr[0] & TR_RII)
 		tr_add_rif_info(trh);
 

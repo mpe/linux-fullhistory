@@ -572,7 +572,7 @@ el_receive(struct device *dev)
      
     outb(AX_SYS, AX_CMD);
 
-    skb = dev_alloc_skb(pkt_len);
+    skb = dev_alloc_skb(pkt_len+2);
     /*
      *	Start of frame
      */
@@ -582,6 +582,7 @@ el_receive(struct device *dev)
 	lp->stats.rx_dropped++;
 	return;
     } else {
+    	skb_reserve(skb,2);	/* Force 16 byte alignment */
 	skb->dev = dev;
 
 	/*

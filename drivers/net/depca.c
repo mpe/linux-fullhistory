@@ -943,9 +943,11 @@ depca_rx(struct device *dev)
 	short len, pkt_len = readw(&lp->rx_ring[entry].msg_length);
 	struct sk_buff *skb;
 
-	skb = dev_alloc_skb(pkt_len);
+	skb = dev_alloc_skb(pkt_len+2);
 	if (skb != NULL) {
-	  unsigned char * buf = skb_put(skb,pkt_len);
+	  unsigned char * buf;
+	  skb_reserve(skb,2);	/* 16 byte align the IP header */
+	  buf = skb_put(skb,pkt_len);
 	  skb->dev = dev;
 	  if (entry < lp->rx_old) {         /* Wrapped buffer */
 	    len = (lp->rxRingMask - lp->rx_old + 1) * RX_BUFF_SZ;
@@ -973,13 +975,13 @@ depca_rx(struct device *dev)
 	    }
 	  }
 	  if (buf[0] & 0x01) {              /* Multicast/Broadcast */
-	    if ((*(s32 *)&buf[0] == -1) && (*(s16 *)&buf[4] == -1)) {
+	    if ((*(s16 *)&buf[0] == -1) && (*(s32 *)&buf[2] == -1)) {
 	      lp->pktStats.broadcast++;
 	    } else {
 	      lp->pktStats.multicast++;
 	    }
-	  } else if ((*(s32 *)&buf[0] == *(s32 *)&dev->dev_addr[0]) &&
-		     (*(s16 *)&buf[4] == *(s16 *)&dev->dev_addr[4])) {
+	  } else if ((*(s16 *)&buf[0] == *(s16 *)&dev->dev_addr[0]) &&
+		     (*(s32 *)&buf[2] == *(s32 *)&dev->dev_addr[2])) {
 	    lp->pktStats.unicast++;
 	  }
 	  

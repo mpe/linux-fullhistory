@@ -7,6 +7,13 @@
 #ifndef _AX25_H
 #define _AX25_H 
 #include <linux/ax25.h>
+
+#define	AX25_BPQ_HEADER_LEN	16
+#define	AX25_KISS_HEADER_LEN	1
+
+#define	AX25_MAX_HEADER_LEN	56
+#define	AX25_HEADER_LEN		17
+#define	AX25_ADDR_LEN		7
  
 #define AX25_P_IP	0xCC
 #define AX25_P_ARP	0xCD
@@ -126,11 +133,10 @@ typedef struct ax25_cb {
 	struct sock		*sk;		/* Backlink to socket */
 } ax25_cb;
 
-/* ax25.c */
+/* af_ax25.c */
 extern char *ax2asc(ax25_address *);
 extern int  ax25cmp(ax25_address *, ax25_address *);
-extern int  ax25_send_frame(struct sk_buff *, ax25_address *, ax25_address *, struct device *);
-extern int  ax25_rcv(struct sk_buff *,struct device *,struct packet_type *);
+extern int  ax25_send_frame(struct sk_buff *, ax25_address *, ax25_address *, ax25_digi *, struct device *);
 extern void ax25_destroy_socket(ax25_cb *);
 extern struct device *ax25rtr_get_dev(ax25_address *);
 extern int  ax25_encapsulate(struct sk_buff *, struct device *, unsigned short,
@@ -140,6 +146,7 @@ extern int  ax25_get_info(char *, char **, off_t, int);
 extern ax25_uid_assoc *ax25_uid_list;
 extern int  ax25_uid_policy;
 extern ax25_address *ax25_findbyuid(uid_t);
+extern void ax25_queue_xmit(struct sk_buff *, struct device *, int);
 
 #include "ax25call.h"
 
@@ -184,5 +191,8 @@ extern void ax25_return_dm(struct device *, ax25_address *, ax25_address *, ax25
 
 /* ax25_timer */
 extern void ax25_set_timer(ax25_cb *);
+
+/* slip.c */
+extern int  sl_get_ax25_mode(struct device *);
 
 #endif

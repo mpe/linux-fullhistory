@@ -609,7 +609,7 @@ de600_rx_intr(struct device *dev)
 		return;
 	}
 
-	skb = dev_alloc_skb(size);
+	skb = dev_alloc_skb(size+2);
 	sti();
 	if (skb == NULL) {
 		printk("%s: Couldn't allocate a sk_buff of size %d.\n",
@@ -619,6 +619,7 @@ de600_rx_intr(struct device *dev)
 	/* else */
 
 	skb->dev = dev;
+	skb_reserve(skb,2);	/* Align */
 	
 	/* 'skb->data' points to the start of sk_buff data area. */
 	buffer = skb_put(skb,size);

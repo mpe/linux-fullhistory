@@ -195,6 +195,7 @@ void ctrl_alt_del(void)
 asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 {
 	int old_rgid = current->gid;
+	int old_egid = current->egid;
 
 	if (rgid != (gid_t) -1) {
 		if ((old_rgid == rgid) ||
@@ -219,6 +220,8 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 	    (egid != (gid_t) -1 && egid != old_rgid))
 		current->sgid = current->egid;
 	current->fsgid = current->egid;
+	if (current->egid != old_egid)
+		current->dumpable = 0;
 	return 0;
 }
 
@@ -227,12 +230,16 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
  */
 asmlinkage int sys_setgid(gid_t gid)
 {
+	int old_egid = current->egid;
+
 	if (suser())
 		current->gid = current->egid = current->sgid = current->fsgid = gid;
 	else if ((gid == current->gid) || (gid == current->sgid))
 		current->egid = current->fsgid = gid;
 	else
 		return -EPERM;
+	if (current->egid != old_egid)
+		current->dumpable = 0;
 	return 0;
 }
 
@@ -284,6 +291,7 @@ asmlinkage int sys_old_syscall(void)
 asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 {
 	int old_ruid = current->uid;
+	int old_euid = current->euid;
 
 	if (ruid != (uid_t) -1) {
 		if ((old_ruid == ruid) || 
@@ -308,6 +316,8 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 	    (euid != (uid_t) -1 && euid != old_ruid))
 		current->suid = current->euid;
 	current->fsuid = current->euid;
+	if (current->euid != old_euid)
+		current->dumpable = 0;
 	return 0;
 }
 
@@ -324,12 +334,16 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
  */
 asmlinkage int sys_setuid(uid_t uid)
 {
+	int old_euid = current->euid;
+
 	if (suser())
 		current->uid = current->euid = current->suid = current->fsuid = uid;
 	else if ((uid == current->uid) || (uid == current->suid))
 		current->fsuid = current->euid = uid;
 	else
 		return -EPERM;
+	if (current->euid != old_euid)
+		current->dumpable = 0;
 	return(0);
 }
 
@@ -346,6 +360,8 @@ asmlinkage int sys_setfsuid(uid_t uid)
 	if (uid == current->uid || uid == current->euid ||
 	    uid == current->suid || uid == current->fsuid || suser())
 		current->fsuid = uid;
+	if (current->fsuid != old_fsuid)
+		current->dumpable = 0;
 	return old_fsuid;
 }
 
@@ -359,6 +375,8 @@ asmlinkage int sys_setfsgid(gid_t gid)
 	if (gid == current->gid || gid == current->egid ||
 	    gid == current->sgid || gid == current->fsgid || suser())
 		current->fsgid = gid;
+	if (current->fsgid != old_fsgid)
+		current->dumpable = 0;
 	return old_fsgid;
 }
 

@@ -13,6 +13,19 @@
  * Andreas Heilwagen <crashcar@informatik.uni-koblenz.de>
  */
 
+#ifdef MODULE
+/*
+ * Don't import our own symbols, as this would severely mess up our
+ * symbol tables.
+ */
+#define _SCSI_SYMS_VER_
+#include <linux/autoconf.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
 
 #include <linux/string.h>
 #include <linux/mm.h>
@@ -39,13 +52,20 @@ int get_hba_index(int ino)
     struct Scsi_Host *hpnt = scsi_hostlist;
     uint x = 0;
 
+    /*
+     * Danger - this has massive race conditions in it.
+     * If the someone adds/removes entries from the scsi chain
+     * while someone else is looking at /proc/scsi, unpredictable
+     * results will be obtained.
+     */
     while (tpnt) {
 	if (ino == tpnt->low_ino) 
 		return(x);
 	x += 3;
 	while (hpnt) {
+            if(hpnt->hostt == tpnt) /* This gives us the correct index */
+                x++;
 	    hpnt = hpnt->next;
-	    x++;
 	}
 	tpnt = tpnt->next;
     }
@@ -86,16 +106,31 @@ int generic_proc_info(char *buffer, char **start, off_t offset,
 extern int dispatch_scsi_info(int ino, char *buffer, char **start, 
 			      off_t offset, int length, int func)
 {
+    int retval;
     struct Scsi_Host *hpnt = scsi_hostlist;
 
     if(func != 2) {    
-	if(ino == PROC_SCSI_SCSI) 
-	    return(scsi_proc_info(buffer, start, offset, length, 
-				  hpnt->host_no, func));
+	if(ino == PROC_SCSI_SCSI) {
+            /*
+             * If there are no hosts, tell the user to go away.
+             */
+            if( hpnt == NULL ) {
+                return (-ENOSYS);
+            }
+
+	    retval = scsi_proc_info(buffer, start, offset, length, 
+				  hpnt->host_no, func);
+            return(retval);
+        }
+
 	while(hpnt) {
 	    if (ino == (hpnt->host_no + PROC_SCSI_FILE)) 
-		return(hpnt->hostt->proc_info(buffer, start, offset, length, 
-					      hpnt->host_no, func));
+                if(hpnt->hostt->proc_info == NULL)
+                    return generic_proc_info(buffer, start, offset, length, 
+                                             hpnt->host_no, func);
+                else
+                    return(hpnt->hostt->proc_info(buffer, start, offset, length, 
+                                                  hpnt->host_no, func));
 	    hpnt = hpnt->next;
 	}
 	return(-EBADF);
@@ -118,7 +153,7 @@ inline uint count_templates(void)
 void build_proc_dir_hba_entries(void)
 {
     Scsi_Host_Template *tpnt = scsi_hosts;
-    struct Scsi_Host *hpnt = scsi_hostlist;
+    struct Scsi_Host *hpnt;
     static char names[PROC_SCSI_LAST - PROC_SCSI_FILE][3];
     uint x, y;
     
@@ -131,8 +166,9 @@ void build_proc_dir_hba_entries(void)
 	scsi_hba_dir[x].low_ino = PROC_SCSI;
 	scsi_hba_dir[x].namelen = 2;
 	scsi_hba_dir[x++].name = "..";
-	    
-	while (hpnt) {
+
+        hpnt = scsi_hostlist;
+        while (hpnt) {
 	    if (tpnt == hpnt->hostt) {
 		scsi_hba_dir[x].low_ino = PROC_SCSI_FILE + hpnt->host_no;
 		scsi_hba_dir[x].namelen = sprintf(names[y],"%d",hpnt->host_no);
@@ -142,8 +178,8 @@ void build_proc_dir_hba_entries(void)
 	    }
 	    hpnt = hpnt->next;
 	}
-	
-	scsi_hba_dir[x].low_ino = 0;
+
+        scsi_hba_dir[x].low_ino = 0;
 	scsi_hba_dir[x].namelen = 0;
 	scsi_hba_dir[x++].name = NULL;
 	tpnt = tpnt->next;
@@ -168,11 +204,13 @@ void build_proc_dir_entries(void)
     scsi_dir[2].low_ino = PROC_SCSI_SCSI;
     scsi_dir[2].namelen = 4;
     scsi_dir[2].name = "scsi";
-    for(x = 3; x < newnum + 3; x++, tpnt = tpnt->next) {
+
+    for(x = 3; x < newnum + 3; x++, tpnt = tpnt->next) { 
 	scsi_dir[x].low_ino = tpnt->low_ino;
 	scsi_dir[x].namelen = strlen(tpnt->procname);
 	scsi_dir[x].name = tpnt->procname;
     }
+
     scsi_dir[x].low_ino = 0;
     scsi_dir[x].namelen = 0;
     scsi_dir[x].name = NULL;

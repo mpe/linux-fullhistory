@@ -32,6 +32,7 @@
  *		Stefan Becker   :       ICMP redirects in icmp_send().
  *		Peter Belding	:	Tightened up ICMP redirect handling
  *		Alan Cox	:	Tightened even more.
+ *		Arnt Gulbrandsen:	Misplaced #endif with net redirect and break
  *
  * 
  *
@@ -213,7 +214,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 	len = dev->hard_header_len + sizeof(struct iphdr) + sizeof(struct icmphdr) +
 		sizeof(struct iphdr) + 32;	/* amount of header to return */
 	   
-	skb = (struct sk_buff *) alloc_skb(len, GFP_ATOMIC);
+	skb = (struct sk_buff *) alloc_skb(len+15, GFP_ATOMIC);
 	if (skb == NULL) 
 	{
 		icmp_statistics.IcmpOutErrors++;
@@ -380,8 +381,8 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
 #ifdef not_a_good_idea
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_GATEWAY),
 				ip, 0, icmph->un.gateway, dev,0, 0, 0);
-			break;
 #endif
+			break;
 		case ICMP_REDIR_HOST:
 			/*
 			 *	Add better route to host.
@@ -434,7 +435,7 @@ static void icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device 
 	icmp_statistics.IcmpOutEchoReps++;
 	icmp_statistics.IcmpOutMsgs++;
 	
-	size = dev->hard_header_len + 64 + len;
+	size = dev->hard_header_len + 64 + len + 15;
 	skb2 = alloc_skb(size, GFP_ATOMIC);
 
 	if (skb2 == NULL) 
@@ -508,7 +509,7 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
                 /* correct answers are possible for everything >= 12 */
 	}
 
-	size = dev->hard_header_len + 84;
+	size = dev->hard_header_len + 84 + 15;
 
 	if (! (skb2 = alloc_skb(size, GFP_ATOMIC))) 
 	{
@@ -599,7 +600,7 @@ static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	icmp_statistics.IcmpOutMsgs++;
 	icmp_statistics.IcmpOutAddrMaskReps++;
 	
-	size = dev->hard_header_len + 64 + len;
+	size = dev->hard_header_len + 64 + len + 15;
 	skb2 = alloc_skb(size, GFP_ATOMIC);
 	if (skb2 == NULL) 
 	{

@@ -185,7 +185,7 @@ static int ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct dev
 		 *	Build a hardware header. Source address is our mac, destination unknown
 		 *  	(rebuild header will sort this out)
 		 */
-		skb_reserve(skb,dev->hard_header_len);
+		skb_reserve(skb,(dev->hard_header_len+15)&~15);	/* 16 byte aligned IP headers are good */
 		mac = dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, len);
 		if (mac < 0)
 		{
@@ -307,15 +307,15 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	 */
 	 
 	iph=(struct iphdr *)skb_put(skb,sizeof(struct iphdr));
-	
+
 	iph->version  = 4;
+	iph->ihl      = 5;
 	iph->tos      = tos;
 	iph->frag_off = 0;
 	iph->ttl      = ttl;
 	iph->daddr    = daddr;
 	iph->saddr    = saddr;
 	iph->protocol = type;
-	iph->ihl      = 5;
 	skb->ip_hdr   = iph;
 
 	return(20 + tmp);	/* IP header plus MAC header size */
@@ -502,7 +502,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
 	 *	Allocate memory for the IP header (plus 8 octets for ICMP).
 	 */
 
-	ihlen = (iph->ihl * sizeof(unsigned long));
+	ihlen = iph->ihl * 4;
 	qp->iph = (struct iphdr *) kmalloc(64 + 8, GFP_ATOMIC);
 	if (qp->iph == NULL)
 	{
@@ -628,7 +628,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	/* Done with all fragments. Fixup the new IP header. */
 	iph = skb->h.iph;
 	iph->frag_off = 0;
-	iph->tot_len = htons((iph->ihl * sizeof(unsigned long)) + count);
+	iph->tot_len = htons((iph->ihl * 4) + count);
 	skb->ip_hdr = iph;
 
 	ip_statistics.IpReasmOKs++;
@@ -700,7 +700,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
 	 *	Determine the position of this fragment.
 	 */
 
-	ihl = (iph->ihl * sizeof(unsigned long));
+	ihl = iph->ihl * 4;
 	end = offset + ntohs(iph->tot_len) - ihl;
 
 	/*
@@ -857,7 +857,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 	 *	Setup starting values.
 	 */
 
-	hlen = (iph->ihl * sizeof(unsigned long));
+	hlen = iph->ihl * 4;
 	left = ntohs(iph->tot_len) - hlen;	/* Space per frame */
 	hlen += dev->hard_header_len;		/* Total header size */
 	mtu = (dev->mtu - hlen);		/* Size of data space */
@@ -901,7 +901,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 	 */
 
 	if (is_frag & 2)
-		offset = (ntohs(iph->frag_off) & 0x1fff) << 3;
+		offset = (ntohs(iph->frag_off) & IP_OFFSET) << 3;
 	else
 		offset = 0;
 
@@ -927,7 +927,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		 *	Allocate buffer.
 		 */
 
-		if ((skb2 = alloc_skb(len + hlen,GFP_ATOMIC)) == NULL)
+		if ((skb2 = alloc_skb(len + hlen+15,GFP_ATOMIC)) == NULL)
 		{
 			NETDEBUG(printk("IP: frag: no memory for new fragment!\n"));
 			ip_statistics.IpFragFails++;
@@ -1160,7 +1160,7 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 		 *	data so the problem goes away then.
 		 */
 
-		skb2 = alloc_skb(dev2->hard_header_len + skb->len, GFP_ATOMIC);
+		skb2 = alloc_skb(dev2->hard_header_len + skb->len + 15, GFP_ATOMIC);
 		
 		/*
 		 *	This is rare and since IP is tolerant of network failures
@@ -1250,13 +1250,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	int err;
 #endif	
 
-	/*
-	 *	IP is layered, throw away the
-	 *	MAC addresses.
-	 */
-	 
-	skb_pull(skb,dev->hard_header_len);
-	
 	ip_statistics.IpInReceives++;
 
 	/*
@@ -1332,7 +1325,9 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		int opt_space=4*(iph->ihl-5);
 		int opt_size;
 		unsigned char *opt_ptr=skb->h.raw+sizeof(struct iphdr);
-		
+	
+		skb->ip_summed=0;		/* Our free checksum is bogus for this case */
+			
 		while(opt_space>0)
 		{
 			if(*opt_ptr==IPOPT_NOOP)
@@ -1385,7 +1380,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 					if(opt_ptr[0]!=IPOPT_RR)
 					{
 						int t;
-						target_addr=*(long *)(&opt_ptr[opt_ptr[2]]);	/* Get hop */
+						target_addr=*(u32 *)(&opt_ptr[opt_ptr[2]]);	/* Get hop */
 						t=ip_chk_addr(target_addr);
 						if(t==IS_MULTICAST||t==IS_BROADCAST)
 						{
@@ -1395,7 +1390,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 							return -EINVAL;						
 						}
 					}
-					*(long *)(&opt_ptr[opt_ptr[2]])=skb->dev->pa_addr;	/* Record hop */
+					*(u32 *)(&opt_ptr[opt_ptr[2]])=skb->dev->pa_addr;	/* Record hop */
 					break;
 				case IPOPT_TIMESTAMP:
 				/*
@@ -1420,13 +1415,13 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 
 	if(iph->frag_off)
 	{
-		if (iph->frag_off & 0x0020)
+		if (iph->frag_off & htons(IP_MF))
 			is_frag|=1;
 		/*
 		 *	Last fragment ?
 		 */
 	
-		if (ntohs(iph->frag_off) & 0x1fff)
+		if (iph->frag_off & htons(IP_OFFSET))
 			is_frag|=2;
 	}
 	
@@ -2005,8 +2000,8 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 	if(err)
 		return err;
 
-	val = get_fs_long((unsigned long *)optval);
-	ucval=get_fs_byte((unsigned char *)optval);
+	val = get_user((int *) optval);
+	ucval=get_user((unsigned char *) optval);
 
 	if(level!=SOL_IP)
 		return -EOPNOTSUPP;
@@ -2277,7 +2272,7 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
   			err=verify_area(VERIFY_WRITE, optval, len);
 		  	if(err)
   				return err;
-  			put_fs_long(len,(unsigned long *) optlen);
+  			put_user(len,(int *) optlen);
 			memcpy_tofs((void *)optval,sk->ip_mc_name, len);
 			return 0;
 #endif
@@ -2287,12 +2282,12 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 	err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
 	if(err)
 		return err;
-	put_fs_long(sizeof(int),(unsigned long *) optlen);
+	put_user(sizeof(int),(int *) optlen);
 
 	err=verify_area(VERIFY_WRITE, optval, sizeof(int));
 	if(err)
 		return err;
-	put_fs_long(val,(unsigned long *)optval);
+	put_user(val,(int *) optval);
 
 	return(0);
 }
@@ -2475,10 +2470,10 @@ int ip_build_xmit(struct sock *sk,
 		char *data;
 
 		/*
-		 *	Get the memory we require.
+		 *	Get the memory we require with some space left for alignment.
 		 */
 
-		skb = sock_alloc_send_skb(sk, fraglen, 0, &error);
+		skb = sock_alloc_send_skb(sk, fraglen+15, 0, &error);
 		if (skb == NULL)
 			return(error);
 
@@ -2494,7 +2489,7 @@ int ip_build_xmit(struct sock *sk,
 		skb->arp = 0;
 		skb->saddr = saddr;
 		skb->raddr = (rt&&rt->rt_gateway) ? rt->rt_gateway : daddr;
-		skb_reserve(skb,dev->hard_header_len);
+		skb_reserve(skb,(dev->hard_header_len+15)&~15);
 		data = skb_put(skb, fraglen-dev->hard_header_len);
 
 		/*

@@ -7,6 +7,9 @@
 #ifndef _NETROM_H
 #define _NETROM_H 
 #include <linux/netrom.h>
+
+#define	NR_NETWORK_LEN		15
+#define	NR_TRANSPORT_LEN	5
  
 #define	NR_PROTO_IP		0x0C
 
@@ -72,6 +75,7 @@ struct nr_node {
 struct nr_neigh {
 	struct nr_neigh *next;
 	ax25_address    callsign;
+	ax25_digi       *digipeat;
 	struct device   *dev;
 	unsigned char   quality;
 	unsigned char   locked;
@@ -79,7 +83,7 @@ struct nr_neigh {
 	unsigned short  number;
 };
 
-/* netrom.c */
+/* af_netrom.c */
 extern struct nr_parms_struct nr_default;
 extern int  nr_rx_frame(struct sk_buff *, struct device *);
 extern void nr_destroy_socket(struct sock *);
@@ -110,7 +114,7 @@ extern struct device *nr_dev_first(void);
 extern struct device *nr_dev_get(ax25_address *);
 extern int  nr_rt_ioctl(unsigned int, void *);
 extern void nr_link_failed(ax25_address *, struct device *);
-extern int  nr_route_frame(struct sk_buff *, struct device *);
+extern int  nr_route_frame(struct sk_buff *, ax25_cb *);
 extern int  nr_nodes_get_info(char *, char **, off_t, int);
 extern int  nr_neigh_get_info(char *, char **, off_t, int);
 

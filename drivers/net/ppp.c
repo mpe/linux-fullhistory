@@ -1153,10 +1153,10 @@ ppp_do_ip (struct ppp *ppp, unsigned short proto, unsigned char *c,
   skb=dev_alloc_skb(count);
   if(skb)
   {
+  	skb->mac.raw=skb->data;
   	memcpy(skb_put(skb,count), c,count);
   	skb->protocol=htons(ETH_P_IP);
   	skb->dev=ppp->dev;
-  	skb->len=count;
   	netif_rx(skb);
   }
   return 1;
@@ -1717,7 +1717,7 @@ ppp_xmit(struct sk_buff *skb, struct device *dev)
   /* Get pointers to the various components */
   ppp   = &ppp_ctrl[dev->base_addr];
   tty   = ppp->tty;
-  p     = (unsigned char *) (skb + 1);
+  p     = skb->data;
   len   = skb->len;
   proto = PROTO_IP;
 
@@ -1791,7 +1791,7 @@ ppp_xmit(struct sk_buff *skb, struct device *dev)
     ++ppp->stats.suncomp;
       
   if (ppp_debug_netpackets) {
-    struct iphdr *iph = (struct iphdr *) (skb + 1);
+    struct iphdr *iph = (struct iphdr *)skb->data;
     PRINTK ((KERN_DEBUG "%s ==> proto %x len %d src %x dst %x proto %d\n",
 	    dev->name, (int) proto, (int) len, (int) iph->saddr,
 	    (int) iph->daddr, (int) iph->protocol))

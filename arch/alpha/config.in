@@ -27,7 +27,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
  bool '   PCI bridge optimisation (experimental)' CONFIG_PCI_OPTIMIZE n
 fi
 bool 'System V IPC' CONFIG_SYSVIPC y
-bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
+bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF n
 
 comment 'Loadable module support'
 bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS n
@@ -150,7 +150,7 @@ if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 	fi
 	bool '3c509/3c579 support' CONFIG_EL3 y
 fi
-bool 'Other ISA cards' CONFIG_NET_ISA n
+bool 'Other ISA cards' CONFIG_NET_ISA y
 if [ "$CONFIG_NET_ISA" = "y" ]; then
 	bool 'Arcnet support' CONFIG_ARCNET n
 	bool 'Cabletron E21xx support' CONFIG_E2100 n

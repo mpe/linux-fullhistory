@@ -15,6 +15,12 @@
  *	    low-level scsi drivers.
  */
 
+#ifdef MODULE
+#include <linux/autoconf.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#endif /* MODULE */
+
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -450,7 +456,32 @@ static void sr_photocd(struct inode *inode)
 	    scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size = 1;
 	}
 	break;
-	
+
+    case SCSI_MAN_SONY: /* Thomas QUINOT <thomas@melchior.frmug.fr.net> */
+#ifdef DEBUG
+        printk("sr_photocd: use SONY code\n");
+#endif
+        memset(buf,0,40);
+        *((unsigned long*)buf)   = 0x0;   /* we send nothing...     */
+        *((unsigned long*)buf+1) = 0x0c;  /* and receive 0x0c bytes */
+        cmd[0] = 0x43; /* Read TOC */
+        cmd[8] = 0x0c;
+        cmd[9] = 0x40;
+        rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
+                               SCSI_IOCTL_SEND_COMMAND, buf);
+        
+        if ((rc != 0) || ((rec[0] << 8) + rec[1] != 0x0a)) {
+            printk("sr_photocd: ioctl error (SONY): 0x%x\n",rc);
+            break;
+        }
+        sector = rec[11] + (rec[10] << 8) + (rec[9] << 16) + (rec[8] << 24);
+        is_xa = !!sector;
+#ifdef DEBUG
+        if (sector)
+            printk ("sr_photocd: multisession CD detected. start: %lu\n",sector);
+#endif
+        break;
+        
     case SCSI_MAN_NEC_OLDCDR:
     case SCSI_MAN_UNKNOWN:
     default:

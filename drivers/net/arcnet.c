@@ -2084,6 +2084,13 @@ int arc_rebuild_header(void *buff,struct device *dev,unsigned long dst,
 unsigned short arc_type_trans(struct sk_buff *skb,struct device *dev)
 {
 	struct ClientData *head = (struct ClientData *) skb->data;
+
+	/*
+	 *	Pull off the arcnet header.
+	 */
+	 
+	skb->mac.raw=skb->data;
+	skb_pull(skb,dev->hard_header_len);
 	
 	if (head->daddr==0)
 		skb->pkt_type=PACKET_BROADCAST;

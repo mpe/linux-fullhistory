@@ -1,0 +1,39 @@
+				80% of the work takes 20% of the time,
+				20% of the work takes 80% of the time...
+						(Murphy law)
+
+				Once started, training can not be stopped...
+						(StarWars)
+
+This file is meant as a tips & tricks edge for the usage of the SANYO CDR-H94A
+cdrom drive. It will grow as the questions arise. ;-)
+
+The driver should work with any SoundBlaster/Panasonic style CDROM interface,
+including the "soft configurable" MediaMagic sound card.
+To make this sound card (and others like "Mozart") working, it has to get 
+"configured" by software.
+So, you should boot DOS once (and by this, run the "configuration driver")
+and then switch to Linux by use of CTL-ALT-DEL. Each use of the RESET
+button or the power switch makes this procedure necessary again.
+
+Vadim has implemented a Linux "configuration driver" to set up the
+registers of the MediaMagic (ISP-16) sound card. These routines have to get
+integrated into the related CDROM and sound drivers directly at a later
+time. Currently, they reside at Vadim's server
+      rbrf.msk.su:/linux/mediamagic/
+and at Eberhard's mirror
+      ftp.gwdg.de:/pub/linux/cdrom/drivers/sanyo/
+
+Leo Spiekman's configuration routines for the ISP-16 card can get found at
+      dutette.et.tudelft.nl:/pub/linux/
+and at Eberhard's mirror
+      ftp.gwdg.de:/pub/linux/cdrom/drivers/optics/
+
+If something is wrong, e-mail to		vadim@rbrf.msk.su
+					or 	vadim@ipsun.ras.ru
+					or	model@cecmow.enet.dec.com
+
+It happens sometimes that Vadim is not reachable by mail. For these
+instances, Eric van der Maarel (maarel@marin.nl) will help, too.
+
+		Vadim V. Model, Eric van der Maarel, Eberhard Moenkeberg

@@ -6,6 +6,13 @@
 
 static struct datalink_proto *p8022_list = NULL;
 
+/*
+ *	We don't handle the loopback SAP stuff, the extended
+ *	802.2 command set, multicast SAP identifiers and non UI
+ *	frames. We have the absolute minimum needed for IPX,
+ *	IP and Appletalk phase 2.
+ */
+ 
 static struct datalink_proto *
 find_8022_client(unsigned char type)
 {

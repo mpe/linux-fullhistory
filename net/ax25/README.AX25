@@ -1,20 +1,50 @@
-This is a working version of the new state machine code for AX25 under
-Linux. It is closely based on the SDL diagrams published in the ARRL 7th
-Computer Networking Conference papers, and they should be referred to when
-reading the code, notably the stuff in ax25_in.c. The next stage is to
-separate the ax25 control block from the socket and then add NET/ROM and
-connected mode IP. I would also like to add the extended AX25 designed by a
-Dutch station which allows for window sizes up to 127.
+This is version 029 of the new AX.25 and NET/ROM code for Linux. It
+incorporates many enhancements since the last release, notably the rewriting
+of the connected mode IP code and the IP over NET/ROM code. The opportunity
+has been taken to add the G8BPQ NET/ROM extensions and to add BPQ Ethernet
+support. The latter has been much eased by the use of the new variable
+length header code by Alan Cox.
 
-This code will work the same as the old code, although the display in
-/proc/net/ax25 is a little different, but should be understandable. Please
-give this code a work out and report any bugs to me either at
-jsn@cs.nott.ac.uk or at GB7DAD.GBR.EU.
+To use the BPQ Ethernet option, first up the ethernet interface in the usual
+manner, the IP address of the interface is not that important but it will
+be required for the ARP table. Next create an ARP entry in the ARP table of
+type ax25 for the interface binding it to an AX.25 callsign, this callsign
+will be the callsign of that interface. By default BPQ Ethernet uses a
+multi-cast address, this implementation does not, instead the standard
+ethernet broadcast address is used. Therefore the NET.CFG file for the
+ODI driver should look similar to this:
 
-This code has taught me a lot about the internals of the networking side of
-Linux especially skbuff handling and I now feel happy about implementing the
-higher level protocols.
+------------------------------ cut here ------------------------------------
 
-73's
+LINK SUPPORT
 
-Jonathan
+	MAX STACKS 1
+	MAX BOARDS 1
+
+LINK DRIVER E2000			; or other MLID to suit your card
+
+	INT 10				;
+	PORT 300			; to suit your card
+
+	FRAME ETHERNET_II
+
+	PROTOCOL BPQ 8FF ETHERNET_II	; required for BPQ - can change PID
+
+BPQPARMS				; optional - only needed if you want
+					; to override the default target addr
+
+	ETH_ADDR  FF:FF:FF:FF:FF:FF	; Target address
+
+----------------------------- cut here -------------------------------------
+
+The above configuration assumes that only BPQ Ethernet is being used.
+
+It is not possible to run IP over AX.25 on the BPQ Ethernet port. To simply
+route IP frames to (say) eth0 would create standard ethernet IP frames and
+completely bypass the AX.25 code. However it is possible to use IP over
+NET/ROM across a BPQ Ethernet link, the performance of such a system is
+very acceptable indeed.
+
+Jonathan Naylor G4KLX
+
+g4klx@amsat.org

@@ -9,6 +9,8 @@
  *
  * Author:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Donald Becker, <becker@super.org>
+ *		Alan Cox, <alan@cymru.net>
+ *		Steve Whitehouse, <gw7rrm@eeshack3.swan.ac.uk>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -33,9 +35,18 @@
 #define ETH_P_ECHO	0x0200		/* Ethernet Echo packet		*/
 #define ETH_P_PUP	0x0400		/* Xerox PUP packet		*/
 #define ETH_P_IP	0x0800		/* Internet Protocol packet	*/
-#define ETH_P_ARP	0x0806		/* Address Resolution packet	*/
-#define ETH_P_RARP      0x8035		/* Reverse Addr Res packet	*/
 #define ETH_P_X25	0x0805		/* CCITT X.25			*/
+#define ETH_P_ARP	0x0806		/* Address Resolution packet	*/
+#define	ETH_P_BPQ	0x08FF		/* G8BPQ AX.25 Ethernet Packet	[ NOT AN OFFICIALLY REGISTERED ID ] */
+#define ETH_P_DEC       0x6000          /* DEC Assigned proto           */
+#define ETH_P_DNA_DL    0x6001          /* DEC DNA Dump/Load            */
+#define ETH_P_DNA_RC    0x6002          /* DEC DNA Remote Console       */
+#define ETH_P_DNA_RT    0x6003          /* DEC DNA Routing              */
+#define ETH_P_LAT       0x6004          /* DEC LAT                      */
+#define ETH_P_DIAG      0x6005          /* DEC Diagnostics              */
+#define ETH_P_CUST      0x6006          /* DEC Customer use             */
+#define ETH_P_SCA       0x6007          /* DEC Systems Comms Arch       */
+#define ETH_P_RARP      0x8035		/* Reverse Addr Res packet	*/
 #define ETH_P_ATALK	0x809B		/* Appletalk DDP		*/
 #define ETH_P_AARP	0x80F3		/* Appletalk AARP		*/
 #define ETH_P_IPX	0x8137		/* IPX over DIX			*/
@@ -44,6 +55,8 @@
 #define ETH_P_ALL	0x0003		/* Every packet (be careful!!!) */
 #define ETH_P_802_2	0x0004		/* 802.2 frames 		*/
 #define ETH_P_SNAP	0x0005		/* Internal only		*/
+#define ETH_P_DDCMP     0x0006          /* DEC DDCMP: Internal only     */
+
 /* This is an Ethernet frame header. */
 struct ethhdr {
   unsigned char		h_dest[ETH_ALEN];	/* destination eth addr	*/

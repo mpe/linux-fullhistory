@@ -57,6 +57,10 @@
 #include <linux/msdos_fs.h>
 #endif
 
+#if defined(CONFIG_PROC_FS)
+#include <linux/proc_fs.h>
+#endif
+
 #include <asm/irq.h>
 extern char *get_options(char *str, int *ints);
 extern void set_device_ro(int dev,int flag);
@@ -79,6 +83,11 @@ extern int generic_proc_info(char *, char **, off_t, int, int, int);
 int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start, 
 				off_t offset, int length, 
 				int inode, int func) = 0; /* Dirty hack */
+
+#if defined(CONFIG_PROC_FS)
+extern struct proc_dir_entry scsi_dir[]; 
+extern struct proc_dir_entry scsi_hba_dir[];
+#endif
 
 extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
@@ -222,6 +231,7 @@ struct symbol_table symbol_table = {
 	X(disable_irq),
 	X(bh_active),
 	X(bh_mask),
+	X(bh_base),
 	X(add_timer),
 	X(del_timer),
 	X(tq_timer),
@@ -375,6 +385,23 @@ struct symbol_table symbol_table = {
  	X(mem_map),
     	X(print_msg),
 	X(print_status),
+	X(gendisk_head), /* Needed for sd.c */
+	X(resetup_one_dev), /* Needed for sd.c */
+#else
+	/*
+	 * With no scsi configured, we still need to export a few
+	 * symbols so that scsi can be loaded later via insmod.
+	 */
+ 	X(intr_count),
+ 	X(mem_map),
+	X(gendisk_head),
+	X(resetup_one_dev),
+
+#if defined(CONFIG_PROC_FS)
+	X(scsi_dir),
+	X(scsi_hba_dir),
+#endif
+	X(dispatch_scsi_info_ptr),
 #endif
 	/* Added to make file system as module */
 	X(set_writetime),

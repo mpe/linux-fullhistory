@@ -1635,12 +1635,6 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	ipx_packet *ipx;
 	
 	
-	/*
-	 *	Throw away the MAC layer
-	 */
-	 
-	skb_pull(skb,dev->hard_header_len);
-	
 	ipx=(ipx_packet *)skb->h.raw;
 	
 	if(ipx->ipx_checksum!=IPX_NO_CHECKSUM) {

@@ -592,26 +592,41 @@ long blk_dev_init(long mem_start, long mem_end)
 #ifdef CONFIG_BLK_DEV_XD
 	mem_start = xd_init(mem_start,mem_end);
 #endif
-#ifdef CONFIG_CDU31A
-	mem_start = cdu31a_init(mem_start,mem_end);
-#endif
-#ifdef CONFIG_CDU535
-	mem_start = sony535_init(mem_start,mem_end);
-#endif
-#ifdef CONFIG_MCD
-	mem_start = mcd_init(mem_start,mem_end);
-#endif
-#ifdef CONFIG_AZTCD
-        mem_start = aztcd_init(mem_start,mem_end);
-#endif
 #ifdef CONFIG_BLK_DEV_FD
 	floppy_init();
 #else
 	outb_p(0xc, 0x3f2);
 #endif
+#ifdef CONFIG_CDU31A
+	mem_start = cdu31a_init(mem_start,mem_end);
+#endif CONFIG_CDU31A
+#ifdef CONFIG_MCD
+	mem_start = mcd_init(mem_start,mem_end);
+#endif CONFIG_MCD
+#ifdef CONFIG_MCDX
+	mem_start = mcdx_init(mem_start,mem_end);
+#endif CONFIG_MCDX
 #ifdef CONFIG_SBPCD
 	mem_start = sbpcd_init(mem_start, mem_end);
 #endif CONFIG_SBPCD
+#ifdef CONFIG_AZTCD
+        mem_start = aztcd_init(mem_start,mem_end);
+#endif CONFIG_AZTCD
+#ifdef CONFIG_CDU535
+	mem_start = sony535_init(mem_start,mem_end);
+#endif CONFIG_CDU535
+#ifdef CONFIG_GSCD
+	mem_start = gscd_init(mem_start, mem_end);
+#endif CONFIG_GSCD
+#ifdef CONFIG_CM206
+	mem_start = cm206_init(mem_start, mem_end);
+#endif
+#ifdef CONFIG_OPTCD
+	mem_start = optcd_init(mem_start,mem_end);
+#endif CONFIG_OPTCD
+#ifdef CONFIG_SJCD
+	mem_start = sjcd_init(mem_start,mem_end);
+#endif CONFIG_SJCD
 	if (ramdisk_size)
 		mem_start += rd_init(mem_start, ramdisk_size*1024);
 	return mem_start;

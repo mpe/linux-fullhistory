@@ -165,10 +165,9 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 }
 
 
-static unsigned short udp_check(struct udphdr *uh, int len, unsigned long saddr, unsigned long daddr)
+static unsigned short udp_check(struct udphdr *uh, int len, unsigned long saddr, unsigned long daddr, unsigned long base)
 {
-	return(csum_tcpudp_magic(saddr, daddr, len, IPPROTO_UDP,
-				 csum_partial((char*)uh, len, 0)));
+	return(csum_tcpudp_magic(saddr, daddr, len, IPPROTO_UDP, base));
 }
 
 struct udpfakehdr 
@@ -204,7 +203,7 @@ static void udp_getfrag(void *p, int saddr, char * to, unsigned int offset, unsi
  		src = ufh->from;
 		dst = to+sizeof(struct udphdr);
 	}
-	ufh->wcheck = csum_partial_copyffs(src, dst, len, ufh->wcheck);
+	ufh->wcheck = csum_partial_copy_fromuser(src, dst, len, ufh->wcheck);
 	if (offset == 0) 
 	{
  		ufh->wcheck = csum_partial((char *)ufh, sizeof(struct udphdr),
@@ -243,7 +242,7 @@ static void udp_getfrag_nosum(void *p, int saddr, char * to, unsigned int offset
  		src = ufh->from;
 		dst = to+sizeof(struct udphdr);
 	}
-	memcpy_fromfs(src,dst,len);
+	memcpy_fromfs(dst,src,len);
 	if (offset == 0) 
 		memcpy(to, ufh, sizeof(struct udphdr));
 }
@@ -542,7 +541,11 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		return(0);
 	}
 
-	if (uh->check && udp_check(uh, len, saddr, daddr)) 
+	if (uh->check && (
+		( skb->ip_summed && udp_check(uh, len, saddr, daddr, skb->csum ) ) ||
+		( !skb->ip_summed && udp_check(uh, len, saddr, daddr,csum_partial((char*)uh, len, 0)))
+		         )
+	   )
 	{
 		/* <mea@utu.fi> wants to know, who sent it, to
 		   go and stomp on the garbage sender... */

@@ -26,9 +26,7 @@ int seagate_st0x_reset(Scsi_Cmnd *);
 
 int seagate_st0x_biosparam(Disk *, int, int*);
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
-
-#define SEAGATE_ST0X  {  NULL, NULL, generic_proc_info, "seagate", \
+#define SEAGATE_ST0X  {  NULL, NULL, NULL, "seagate", \
 			 PROC_SCSI_SEAGATE, NULL, seagate_st0x_detect, 	\
 			 NULL, 						\
 			 seagate_st0x_info, seagate_st0x_command,  	\

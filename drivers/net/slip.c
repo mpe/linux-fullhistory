@@ -1,7 +1,7 @@
 /*
  * slip.c	This module implements the SLIP protocol for kernel-based
  *		devices like TTY.  It interfaces between a raw TTY, and the
- *		kernel's INET protocol layers (via DDI).
+ *		kernel's INET protocol layers.
  *
  * Version:	@(#)slip.c	0.8.3	12/24/94
  *
@@ -321,6 +321,7 @@ sl_bump(struct slip *sl)
 	}
 	skb->dev = sl->dev;
 	memcpy(skb_put(skb,count), sl->rbuff, count);
+	skb->mac.raw=skb->data;
 	if(sl->mode&(SL_MODE_AX25|SL_MODE_AX25VC))
 		skb->protocol=htons(ETH_P_AX25);
 	else
@@ -451,32 +452,6 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 		return 1;
 #endif
 	}
-
-#ifdef CONFIG_AX25
-#ifdef CONFIG_INET
-	/*
-	 * This code is not very intelligent. Fix me.
-	 */
-	if (skb->data[15] == LAPB_UI && skb->data[16] == AX25_P_IP) {
-		struct sk_buff *skbn;
-		char mode;
-		
-		mode = ax25_ip_mode_get((ax25_address *)(skb->data + 1), dev);
-
-		if (mode == 'V' || mode == 'v' || (mode == ' ' && sl->mode & SL_MODE_AX25VC)) {
-			if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
-				sl->tx_errors++;
-				return 1;
-			}
-
-			ax25_send_frame(skbn, (ax25_address *)dev->dev_addr, (ax25_address *)(skbn->data + 1), dev);
-			dev_kfree_skb(skb, FREE_WRITE);
-			mark_bh(NET_BH);
-			return 0;
-		}
-	}
-#endif
-#endif
 
 	/* We were not busy, so we are now... :-) */
 	if (skb != NULL) {
@@ -953,12 +928,12 @@ sl_set_mac_address(struct device *dev, void *addr)
 {
 	int err;
 
-	err = verify_area(VERIFY_READ, addr, 7);
+	err = verify_area(VERIFY_READ, addr, AX25_ADDR_LEN);
 	if (err)  {
 		return err;
 	}
 
-	memcpy_fromfs(dev->dev_addr, addr, 7);	/* addr is an AX.25 shifted ASCII mac address */
+	memcpy_fromfs(dev->dev_addr, addr, AX25_ADDR_LEN);	/* addr is an AX.25 shifted ASCII mac address */
 
 	return 0;
 }
@@ -966,9 +941,17 @@ sl_set_mac_address(struct device *dev, void *addr)
 static int
 sl_set_dev_mac_address(struct device *dev, void *addr)
 {
-	memcpy(dev->dev_addr, addr, 7);
+	memcpy(dev->dev_addr, addr, AX25_ADDR_LEN);
 	return 0;
 }
+
+int sl_get_ax25_mode(struct device *dev)
+{
+	struct slip *sl = &sl_ctrl[dev->base_addr];
+
+	return sl->mode & SL_MODE_AX25VC;
+}
+
 #endif /* CONFIG_AX25 */
 
 
@@ -1030,8 +1013,8 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		}
 #else
 		if ((tmp & SL_MODE_AX25) || (tmp & SL_MODE_AX25VC)) {
-			sl->dev->addr_len=7;	/* sizeof an AX.25 addr */
-			sl->dev->hard_header_len=17;	/* We don't do digipeaters */
+			sl->dev->addr_len=AX25_ADDR_LEN;	  /* sizeof an AX.25 addr */
+			sl->dev->hard_header_len=AX25_HEADER_LEN; /* We don't do digipeaters */
 		} else	{
 			sl->dev->addr_len=0;	/* No mac addr in slip mode */
 			sl->dev->hard_header_len=0;
@@ -1078,9 +1061,9 @@ slip_init(struct device *dev)
 	struct slip *sl = &sl_ctrl[dev->base_addr];
 	int i;
 #ifdef CONFIG_AX25
-	static char ax25_bcast[7] =
+	static char ax25_bcast[AX25_ADDR_LEN] =
 		{'Q'<<1,'S'<<1,'T'<<1,' '<<1,' '<<1,' '<<1,'0'<<1};
-	static char ax25_test[7] =
+	static char ax25_test[AX25_ADDR_LEN] =
 		{'L'<<1,'I'<<1,'N'<<1,'U'<<1,'X'<<1,' '<<1,'1'<<1};
 #endif
 
@@ -1143,8 +1126,8 @@ slip_init(struct device *dev)
 	if (sl->dev->type == 260 || sl->dev->type == 272)  {
 		sl->dev->type = ARPHRD_AX25;
 	}
-	memcpy(dev->broadcast, ax25_bcast, 7); /* Only activated in AX.25 mode */
-	memcpy(dev->dev_addr, ax25_test, 7);   /*    ""      ""       ""    "" */
+	memcpy(dev->broadcast, ax25_bcast, AX25_ADDR_LEN);	/* Only activated in AX.25 mode */
+	memcpy(dev->dev_addr, ax25_test, AX25_ADDR_LEN);	/*    ""      ""       ""    "" */
 #endif
 	dev->rebuild_header	= sl_rebuild_header;
 

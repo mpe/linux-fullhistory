@@ -24,7 +24,8 @@
  *				  and changes for new arp and skbuff.
  *		Alan Cox	: Redid header building to reflect new format.
  *		Alan Cox	: ARP only when compiled with CONFIG_INET
- *		Greg Page	: 802.2 and SNAP stuff
+ *		Greg Page	: 802.2 and SNAP stuff.
+ *		Alan Cox	: MAC layer pointers/new format.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -48,6 +49,7 @@
 #include <linux/config.h>
 #include <net/arp.h>
 #include <net/sock.h>
+#include <asm/checksum.h>
 
 void eth_setup(char *str, int *ints)
 {
@@ -166,8 +168,12 @@ int eth_rebuild_header(void *buff, struct device *dev, unsigned long dst,
  
 unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 {
-	struct ethhdr *eth = (struct ethhdr *) skb->data;
+	struct ethhdr *eth;
 	unsigned char *rawp;
+	
+	skb->mac.raw=skb->data;
+	skb_pull(skb,14);	
+	eth= skb->mac.ethernet;
 	
 	if(*eth->h_dest&1)
 	{
@@ -186,11 +192,20 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 	if (ntohs(eth->h_proto) >= 1536)
 		return eth->h_proto;
 		
-	rawp = (unsigned char *)(eth + 1);
+	rawp = skb->data;
 	
+	/*
+	 *	This is a magic hack to spot IPX packets. Older Novell breaks
+	 *	the protocol design and runs IPX over 802.3 without an 802.2 LLC
+	 *	layer. We look for FFFF which isnt a used 802.2 SSAP/DSAP. This
+	 *	won't work for fault tolerant netware but does for the rest.
+	 */
 	if (*(unsigned short *)rawp == 0xFFFF)
 		return htons(ETH_P_802_3);
 		
+	/*
+	 *	Real 802.2 LLC
+	 */
 	return htons(ETH_P_802_2);
 }
 
@@ -214,3 +229,20 @@ void eth_header_cache(struct device *dev, struct sock *sk, unsigned long saddr, 
 	}
 }
 
+/*
+ *	Copy from an ethernet device memory space to an sk_buff while checksumming if IP
+ */
+ 
+void eth_copy_and_sum(struct sk_buff *dest,unsigned char *src, int length, int base)
+{
+	struct ethhdr *eth=(struct ethhdr *)dest->data;
+	memcpy(dest->data,src,34);	/* ethernet is always >= 60 */
+	length-=34;
+	if(eth->h_proto!=htons(ETH_P_IP))
+	{
+		memcpy(dest->data+34,src+34,length);
+		return;
+	}
+	dest->csum=csum_partial_copy(src+34,dest->data+34,length,base);
+	dest->ip_summed=1;
+}

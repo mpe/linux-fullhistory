@@ -57,22 +57,24 @@
  *	This is where all valid I frames are sent to, to be dispatched to
  *	whichever protocol requires them.
  */
-static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb, unsigned char *iframe)
+static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 {
 	int queued = 0;
 
-	switch (iframe[1]) {
+	skb->h.raw = skb->data;
+
+	switch (skb->data[1]) {
 #ifdef CONFIG_NETROM
 		case AX25_P_NETROM:
-			/* We can't handle digipeated NET/ROM frames */
-			if (ax25->digipeat == NULL)
-				queued = nr_route_frame(skb, ax25->device);
+			skb_pull(skb, 2);
+			queued = nr_route_frame(skb, ax25);
 			break;
 #endif
 #ifdef CONFIG_INET
 		case AX25_P_IP:
 			ax25_ip_mode_set(&ax25->dest_addr, ax25->device, 'V');
-			skb->h.raw = skb->data;
+			skb->h.raw += 2;
+			skb_push(skb, skb->dev->hard_header_len);
 			ip_rcv(skb, skb->dev, NULL);	/* Wrong ptype */
 			queued = 1;
 			break;
@@ -99,9 +101,9 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb, unsigned char *ifr
  *	The handling of the timer(s) is in file ax25_timer.c.
  *	Handling of state 0 and connection release is in ax25.c.
  */
-static int ax25_state1_machine(ax25_cb *ax25, struct sk_buff *skb, unsigned char *frame, int frametype, int type)
+static int ax25_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype, int type)
 {
-	int pf = frame[0] & PF;
+	int pf = skb->data[0] & PF;
 
 	switch (frametype) {
 		case SABM:
@@ -157,9 +159,9 @@ static int ax25_state1_machine(ax25_cb *ax25, struct sk_buff *skb, unsigned char
  *	The handling of the timer(s) is in file ax25_timer.c
  *	Handling of state 0 and connection release is in ax25.c.
  */
-static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, unsigned char *frame, int frametype, int type)
+static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype, int type)
 {
-	int pf = frame[0] & PF;
+	int pf = skb->data[0] & PF;
 
 	switch (frametype) {
 		case SABM:
@@ -216,11 +218,11 @@ static int ax25_state2_machine(ax25_cb *ax25, struct sk_buff *skb, unsigned char
  *	The handling of the timer(s) is in file ax25_timer.c
  *	Handling of state 0 and connection release is in ax25.c.
  */
-static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, unsigned char *frame, int frametype, int type)
+static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype, int type)
 {
-	unsigned short nr = (frame[0] >> 5) & 7;
-	unsigned short ns = (frame[0] >> 1) & 7;
-	int pf = frame[0] & PF;
+	unsigned short nr = (skb->data[0] >> 5) & 7;
+	unsigned short ns = (skb->data[0] >> 1) & 7;
+	int pf = skb->data[0] & PF;
 	int queued = 0;
 
 	switch (frametype) {
@@ -320,7 +322,7 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, unsigned char
 				break;
 			}
 			if (ns == ax25->vr) {
-				queued = ax25_rx_iframe(ax25, skb, frame);
+				queued = ax25_rx_iframe(ax25, skb);
 				if (ax25->condition & OWN_RX_BUSY_CONDITION) {
 					if (pf) ax25_enquiry_response(ax25);
 					break;
@@ -364,11 +366,11 @@ static int ax25_state3_machine(ax25_cb *ax25, struct sk_buff *skb, unsigned char
  *	The handling of the timer(s) is in file ax25_timer.c
  *	Handling of state 0 and connection release is in ax25.c.
  */
-static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, unsigned char *frame, int frametype, int type)
+static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype, int type)
 {
-	unsigned short nr = (frame[0] >> 5) & 7;
-	unsigned short ns = (frame[0] >> 1) & 7;
-	int pf = frame[0] & PF;
+	unsigned short nr = (skb->data[0] >> 5) & 7;
+	unsigned short ns = (skb->data[0] >> 1) & 7;
+	int pf = skb->data[0] & PF;
 	int queued = 0;
 
 	switch (frametype) {
@@ -511,7 +513,7 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, unsigned char
 				break;
 			}
 			if (ns == ax25->vr) {
-				queued = ax25_rx_iframe(ax25, skb, frame);
+				queued = ax25_rx_iframe(ax25, skb);
 				if (ax25->condition & OWN_RX_BUSY_CONDITION) {
 					if (pf) ax25_enquiry_response(ax25);
 					break;
@@ -556,7 +558,6 @@ static int ax25_state4_machine(ax25_cb *ax25, struct sk_buff *skb, unsigned char
 int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type)
 {
 	int queued = 0, frametype;
-	unsigned char *frame;
 
 	if (ax25->state != AX25_STATE_1 && ax25->state != AX25_STATE_2 &&
 	    ax25->state != AX25_STATE_3 && ax25->state != AX25_STATE_4) {
@@ -566,22 +567,20 @@ int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type)
 
 	del_timer(&ax25->timer);
 
-	frame = skb->h.raw;
-
-	frametype = ax25_decode(frame);
+	frametype = ax25_decode(skb->data);
 
 	switch (ax25->state) {
 		case AX25_STATE_1:
-			queued = ax25_state1_machine(ax25, skb, frame, frametype, type);
+			queued = ax25_state1_machine(ax25, skb, frametype, type);
 			break;
 		case AX25_STATE_2:
-			queued = ax25_state2_machine(ax25, skb, frame, frametype, type);
+			queued = ax25_state2_machine(ax25, skb, frametype, type);
 			break;
 		case AX25_STATE_3:
-			queued = ax25_state3_machine(ax25, skb, frame, frametype, type);
+			queued = ax25_state3_machine(ax25, skb, frametype, type);
 			break;
 		case AX25_STATE_4:
-			queued = ax25_state4_machine(ax25, skb, frame, frametype, type);
+			queued = ax25_state4_machine(ax25, skb, frametype, type);
 			break;
 	}
 

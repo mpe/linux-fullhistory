@@ -591,12 +591,13 @@ el3_rx(struct device *dev)
 			short pkt_len = rx_status & 0x7ff;
 			struct sk_buff *skb;
 
-			skb = dev_alloc_skb(pkt_len+3);
+			skb = dev_alloc_skb(pkt_len+5);
 			if (el3_debug > 4)
 				printk("Receiving packet size %d status %4.4x.\n",
 					   pkt_len, rx_status);
 			if (skb != NULL) {
 				skb->dev = dev;
+				skb_reserve(skb,2);	/* Align IP on 16 byte boundaries */
 
 				/* 'skb->data' points to the start of sk_buff data area. */
 				insl(ioaddr+RX_FIFO, skb_put(skb,pkt_len),

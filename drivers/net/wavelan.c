@@ -6,7 +6,6 @@
 
 #include	<linux/config.h>
 
-#if	defined(CONFIG_WAVELAN)
 #if	defined(MODULE)
 #include	<linux/module.h>
 #include	<linux/version.h>
@@ -26,7 +25,7 @@
 #include	<asm/bitops.h>
 #include	<asm/io.h>
 #include	<asm/dma.h>
-#include	<errno.h>
+#include	<linux/errno.h>
 #include	<linux/netdevice.h>
 #include	<linux/etherdevice.h>
 #include	<linux/skbuff.h>
@@ -40,9 +39,10 @@
 #define WAVELAN_DEBUG			0
 #endif	/* WAVELAN_DEBUG */
 
-#define	nels(a)				(sizeof(a) / sizeof(a[0]))
-
 #define	WATCHDOG_JIFFIES		512	/* TODO: express in HZ. */
+#define	ENABLE_FULL_PROMISCUOUS		0x10000
+
+#define	nels(a)				(sizeof(a) / sizeof(a[0]))
 
 typedef struct device		device;
 typedef struct enet_statistics	en_stats;
@@ -63,6 +63,7 @@ struct net_local
 	unsigned int	correct_nwid;
 	unsigned int	wrong_nwid;
 	unsigned int	promiscuous;
+	unsigned int	full_promiscuous;
 	timer_list	watchdog;
 	device		*dev;
 	net_local	*prev;
@@ -242,6 +243,28 @@ psa_read(unsigned short ioaddr, unsigned short hacr, int o, unsigned char *b, in
 	wavelan_16_on(ioaddr, hacr);
 }
 
+#if	defined(IRQ_SET_WORKS)
+/*
+ * Write bytes to the PSA.
+ */
+static
+void
+psa_write(unsigned short ioaddr, unsigned short hacr, int o, unsigned char *b, int n)
+{
+	wavelan_16_off(ioaddr, hacr);
+
+	while (n-- > 0)
+	{
+		outw(o, PIOR2(ioaddr));
+		o++;
+		outb(*b, PIOP2(ioaddr));
+		b++;
+	}
+
+	wavelan_16_on(ioaddr, hacr);
+}
+#endif	/* defined(IRQ_SET_WORKS) */
+
 /*
  * Read bytes from the on-board RAM.
  */
@@ -310,21 +333,36 @@ mmc_write(unsigned short ioaddr, unsigned short o, unsigned char *b, int n)
 	}
 }
 
+static int	irqvals[]	=
+{
+	   0,    0,    0, 0x01,
+	0x02, 0x04,    0, 0x08,
+	   0,    0, 0x10, 0x20,
+	0x40,    0,    0, 0x80,
+};
+
+#if	defined(IRQ_SET_WORKS)
+static
+int
+wavelan_unmap_irq(int irq, unsigned char *irqval)
+{
+	if (irq < 0 || irq >= nels(irqvals) || irqvals[irq] == 0)
+		return -1;
+	
+	*irqval = (unsigned char)irqvals[irq];
+
+	return 0;
+}
+#endif	/* defined(IRQ_SET_WORKS) */
+
 /*
  * Map values from the irq parameter register to irq numbers.
  */
 static
 int
-wavelan_map_irq(unsigned short ioaddr, unsigned char irqval)
+wavelan_map_irq(unsigned char irqval)
 {
-	int		irq;
-	static int	irqvals[]	=
-	{
-		   0,    0,    0, 0x01,
-		0x02, 0x04,    0, 0x08,
-		   0,    0, 0x10, 0x20,
-		0x40,    0,    0, 0x80,
-	};
+	int	irq;
 
 	for (irq = 0; irq < nels(irqvals); irq++)
 	{
@@ -392,7 +430,7 @@ wavelan_mmc_init(device *dev, psa_t *psa)
 	}
 	else
 	{
-		if (lp->promiscuous)
+		if (lp->promiscuous && lp->full_promiscuous)
 			m.mmw_loopt_sel = MMW_LOOPT_SEL_UNDEFINED;
 		else
 			m.mmw_loopt_sel = 0x00;
@@ -816,6 +854,7 @@ wavelan_probe1(device *dev, unsigned short ioaddr)
 	int		irq;
 	int		i;
 	net_local	*lp;
+	int		enable_full_promiscuous;
 
 	if (wavelan_debug > 0)
 		printk("%s: ->wavelan_probe1(dev=0x%x, ioaddr=0x%x)\n", dev->name, (unsigned int)dev, ioaddr);
@@ -844,9 +883,27 @@ wavelan_probe1(device *dev, unsigned short ioaddr)
 
 	printk("%s: WaveLAN at %#x,", dev->name, ioaddr);
 
-	if ((irq = wavelan_map_irq(ioaddr, psa.psa_int_req_no)) == -1)
+	if (dev->irq != 0)
 	{
-		printk(" could not wavelan_map_irq(0x%x, %d).\n", ioaddr, psa.psa_int_req_no);
+		printk("[WARNING: explicit IRQ value %d ignored: using PSA value instead]", dev->irq);
+#if	defined(IRQ_SET_WORKS)
+Leave this out until I can get it to work -- BJ.
+		if (wavelan_unmap_irq(dev->irq, &psa.psa_int_req_no) == -1)
+		{
+			printk(" could not wavelan_unmap_irq(%d, ..) -- ignored.\n", dev->irq);
+			dev->irq = 0;
+		}
+		else
+		{
+			psa_write(ioaddr, HACR_DEFAULT, (char *)&psa.psa_int_req_no - (char *)&psa, (unsigned char *)&psa.psa_int_req_no, sizeof(psa.psa_int_req_no));
+			wavelan_reset(ioaddr);
+		}
+#endif	/* defined(IRQ_SET_WORKS) */
+	}
+
+	if ((irq = wavelan_map_irq(psa.psa_int_req_no)) == -1)
+	{
+		printk(" could not wavelan_map_irq(%d).\n", psa.psa_int_req_no);
 		if (wavelan_debug > 0)
 			printk("%s: <-wavelan_probe1(): EAGAIN\n", dev->name);
 		return EAGAIN;
@@ -858,10 +915,19 @@ wavelan_probe1(device *dev, unsigned short ioaddr)
 	dev->base_addr = ioaddr;
 
 	/*
-	 * Apparently the third numeric argument to LILO's
+	 * The third numeric argument to LILO's
 	 * `ether=' control line arrives here as `dev->mem_start'.
-	 * If it is non-zero we use it instead of the PSA NWID.
+	 *
+	 * If bit 16 of dev->mem_start is non-zero we enable
+	 * full promiscuity.
+	 *
+	 * If either of the least significant two bytes of
+	 * dev->mem_start are non-zero we use them instead
+	 * of the PSA NWID.
 	 */
+	enable_full_promiscuous = (dev->mem_start & ENABLE_FULL_PROMISCUOUS) == ENABLE_FULL_PROMISCUOUS;
+	dev->mem_start &= ~ENABLE_FULL_PROMISCUOUS;
+
 	if (dev->mem_start != 0)
 	{
 		psa.psa_nwid[0] = (dev->mem_start >> 8) & 0xFF;
@@ -878,6 +944,8 @@ wavelan_probe1(device *dev, unsigned short ioaddr)
 		printk("%s%02x", (i == 0) ? " " : ":", dev->dev_addr[i]);
 
 	printk(", IRQ %d", dev->irq);
+	if (enable_full_promiscuous)
+		printk(", promisc");
 	printk(", nwid 0x%02x%02x", psa.psa_nwid[0], psa.psa_nwid[1]);
 
 	printk(", PC");
@@ -957,6 +1025,7 @@ wavelan_probe1(device *dev, unsigned short ioaddr)
 
 	lp->hacr = HACR_DEFAULT;
 
+	lp->full_promiscuous = enable_full_promiscuous;
 	lp->nwid[0] = psa.psa_nwid[0];
 	lp->nwid[1] = psa.psa_nwid[1];
 
@@ -2444,4 +2513,3 @@ wavelan_local_show(device *dev)
  * Basser Department of Computer Science           Phone:  +61-2-351-3423
  * University of Sydney, N.S.W., 2006, AUSTRALIA   Fax:    +61-2-351-3838
  */
-#endif	/* defined(CONFIG_WAVELAN) */

@@ -33,11 +33,9 @@ int        fdomain_16x0_reset( Scsi_Cmnd * );
 int        fdomain_16x0_queue( Scsi_Cmnd *, void (*done)(Scsi_Cmnd *) );
 int        fdomain_16x0_biosparam( Disk *, int, int * );
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
-
 #define FDOMAIN_16X0 { NULL,                             \
 		       NULL,                             \
-		       generic_proc_info,                \
+		       NULL,		                 \
 		       "fdomain",                        \
 		       PROC_SCSI_FUTURE_DOMAIN,          \
 		       NULL,				 \

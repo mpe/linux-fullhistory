@@ -143,25 +143,22 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int type)
 	struct sk_buff *skb;
 	unsigned char  *dptr;
 	struct device *dev;
-	int asize;
 	
 	if ((dev = ax25->device) == NULL)
 		return;	/* Route died */
 
-	asize= 1+size_ax25_addr(ax25->digipeat);
-	
-	if ((skb = alloc_skb(16 + asize, GFP_ATOMIC)) == NULL)
+	if ((skb = alloc_skb(AX25_BPQ_HEADER_LEN + size_ax25_addr(ax25->digipeat) + 1, GFP_ATOMIC)) == NULL)
 		return;
-	skb_reserve(skb, asize);
-	
+
+	skb_reserve(skb, AX25_BPQ_HEADER_LEN + size_ax25_addr(ax25->digipeat));
+
 	if (ax25->sk != NULL) {
 		skb->sk = ax25->sk;
         	ax25->sk->wmem_alloc += skb->truesize;
 	}
 
 	/* Assume a response - address structure for DTE */
-	dptr = skb_put(skb,1);
-	
+	dptr = skb_put(skb, 1);
 	
 	if ((frametype & U) == S)		/* S frames carry NR */
 		frametype |= (ax25->vr << 5);
@@ -169,7 +166,7 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int type)
 	*dptr = frametype;
 
 	skb->free = 1;
-	skb_push(skb,asize);
+
 	ax25_transmit_buffer(ax25, skb, type);
 }
 
@@ -183,35 +180,33 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 	struct sk_buff *skb;
 	char *dptr;
 	ax25_digi retdigi;
-	int len = 2 + size_ax25_addr(digi);
-
-	if ((skb = alloc_skb(len, GFP_ATOMIC)) == NULL)
-		return;	/* Next SABM will get DM'd */
-
-	skb_reserve(skb,len-1);
-
-	ax25_digi_invert(digi, &retdigi);
-
-	dptr = skb_put(skb,1);
-	skb->sk = NULL;
-
-	*dptr = DM | PF;
 
 	if (dev == NULL)
 		return;
 
+	if ((skb = alloc_skb(AX25_BPQ_HEADER_LEN + size_ax25_addr(digi) + 1, GFP_ATOMIC)) == NULL)
+		return;	/* Next SABM will get DM'd */
+
+	skb_reserve(skb, AX25_BPQ_HEADER_LEN + size_ax25_addr(digi));
+
+	ax25_digi_invert(digi, &retdigi);
+
+	dptr = skb_put(skb, 1);
+	skb->sk = NULL;
+
+	*dptr = DM | PF;
+
 	/*
-	 *	Do the address ourselves.
+	 *	Do the address ourselves
 	 */
 
-	dptr    = skb_push(skb, len-1);
-	*dptr++ = 0;
-	dptr   += build_ax25_addr(dptr, dest, src, &retdigi, C_RESPONSE);
+	dptr  = skb_push(skb, size_ax25_addr(digi));
+	dptr += build_ax25_addr(dptr, dest, src, &retdigi, C_RESPONSE);
 
 	skb->arp  = 1;
 	skb->free = 1;
 
-	dev_queue_xmit(skb, dev, SOPRI_NORMAL);
+	ax25_queue_xmit(skb, dev, SOPRI_NORMAL);
 }
 
 /*
@@ -233,7 +228,7 @@ unsigned short ax25_calculate_t1(ax25_cb *ax25)
 }
 
 /*
- *	Calculate the r Round Trip Time
+ *	Calculate the Round Trip Time
  */
 void ax25_calculate_rtt(ax25_cb *ax25)
 {
@@ -273,10 +268,10 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 	}
 		
 	/* Copy to, from */
-	if (dest != NULL) memcpy(dest, buf + 0, 7);
-	if (src != NULL)  memcpy(src,  buf + 7, 7);
-	buf += 14;
-	len -= 14;
+	if (dest != NULL) memcpy(dest, buf + 0, AX25_ADDR_LEN);
+	if (src != NULL)  memcpy(src,  buf + 7, AX25_ADDR_LEN);
+	buf += 2 * AX25_ADDR_LEN;
+	len -= 2 * AX25_ADDR_LEN;
 	digi->lastrepeat = -1;
 	digi->ndigi      = 0;
 	
@@ -286,7 +281,7 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 		if (len < 7) return NULL;	/* Short packet */
 
 		if (digi != NULL) {
-			memcpy(&digi->calls[d], buf, 7);
+			memcpy(&digi->calls[d], buf, AX25_ADDR_LEN);
 			digi->ndigi = d + 1;
 			if (buf[6] & AX25_REPEATED) {
 				digi->repeated[d] = 1;
@@ -296,8 +291,8 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 			}
 		}
 
-		buf += 7;
-		len -= 7;
+		buf += AX25_ADDR_LEN;
+		len -= AX25_ADDR_LEN;
 		d++;
 	}
 
@@ -313,7 +308,7 @@ int build_ax25_addr(unsigned char *buf, ax25_address *src, ax25_address *dest, a
 	int len = 0;
 	int ct  = 0;
 
-	memcpy(buf, dest, 7);
+	memcpy(buf, dest, AX25_ADDR_LEN);
 	
 	if (flag != C_COMMAND && flag != C_RESPONSE)
 		printk("build_ax25_addr: Bogus flag %d\n!", flag);
@@ -322,9 +317,9 @@ int build_ax25_addr(unsigned char *buf, ax25_address *src, ax25_address *dest, a
 
 	if (flag == C_COMMAND) buf[6] |= LAPB_C;
 
-	buf += 7;
-	len += 7;
-	memcpy(buf, src, 7);
+	buf += AX25_ADDR_LEN;
+	len += AX25_ADDR_LEN;
+	memcpy(buf, src, AX25_ADDR_LEN);
 	buf[6] &= ~(LAPB_E | LAPB_C);
 	buf[6] |= SSID_SPARE;
 
@@ -334,14 +329,14 @@ int build_ax25_addr(unsigned char *buf, ax25_address *src, ax25_address *dest, a
 	 */
 	if (d == NULL || d->ndigi == 0) {
 		buf[6] |= LAPB_E;
-		return 14;
+		return 2 * AX25_ADDR_LEN;
 	}	
 	
-	buf += 7;
-	len += 7;
+	buf += AX25_ADDR_LEN;
+	len += AX25_ADDR_LEN;
 	
 	while (ct < d->ndigi) {
-		memcpy(buf, &d->calls[ct], 7);
+		memcpy(buf, &d->calls[ct], AX25_ADDR_LEN);
 		if (d->repeated[ct])
 			buf[6] |= AX25_REPEATED;
 		else
@@ -349,8 +344,8 @@ int build_ax25_addr(unsigned char *buf, ax25_address *src, ax25_address *dest, a
 		buf[6] &= ~LAPB_E;
 		buf[6] |= SSID_SPARE;
 
-		buf += 7;
-		len += 7;
+		buf += AX25_ADDR_LEN;
+		len += AX25_ADDR_LEN;
 		ct++;
 	}
 
@@ -362,9 +357,9 @@ int build_ax25_addr(unsigned char *buf, ax25_address *src, ax25_address *dest, a
 int size_ax25_addr(ax25_digi *dp)
 {
 	if (dp == NULL)
-		return 14;
+		return 2 * AX25_ADDR_LEN;
 
-	return 14 + (7 * dp->ndigi);
+	return AX25_ADDR_LEN * (2 + dp->ndigi);
 }
 	
 /* 

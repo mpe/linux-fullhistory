@@ -58,9 +58,9 @@ static int nr_state1_machine(struct sock *sk, struct sk_buff *skb, int frametype
 
 		case NR_CONNACK:
 			nr_calculate_rtt(sk);
-			sk->window         = skb->data[37];
-			sk->nr->your_index = skb->data[34];
-			sk->nr->your_id    = skb->data[35];
+			sk->window         = skb->data[5];
+			sk->nr->your_index = skb->data[2];
+			sk->nr->your_id    = skb->data[3];
 			sk->nr->t1timer    = 0;
 			sk->nr->t2timer    = 0;
 			sk->nr->t4timer    = 0;
@@ -135,8 +135,8 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 	unsigned short nr, ns;
 	int queued = 0;
 
-	nr = skb->data[18];
-	ns = skb->data[17];
+	nr = skb->data[3];
+	ns = skb->data[2];
 
 	switch (frametype) {
 
@@ -241,7 +241,7 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 			do {
 				save_vr = sk->nr->vr;
 				while ((skbn = skb_dequeue(&sk->nr->reseq_queue)) != NULL) {
-					ns = skbn->data[17];
+					ns = skbn->data[2];
 					if (ns == sk->nr->vr) {
 						if (sock_queue_rcv_skb(sk, skbn) == 0) {
 							sk->nr->vr = (sk->nr->vr + 1) % NR_MODULUS;
@@ -293,7 +293,7 @@ int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 
 	del_timer(&sk->timer);
 
-	frametype = skb->data[19];
+	frametype = skb->data[4];
 
 	switch (sk->nr->state)
 	{

@@ -24,6 +24,14 @@ CFLAGS = -D__KERNEL__=1 \
 	-O2 -fomit-frame-pointer -m486
 
 include ../../.config
+
+.EXPORT_ALL_VARIABLES:
+
+SYMTAB_OBJS = scsi_syms.o
+
+TOPDIR = ../..
+include ../../versions.mk
+
 endif
 
 SCSI_OBJS =
@@ -36,6 +44,10 @@ SCSI_SRCS := hosts.c scsi.c scsi_ioctl.c constants.c scsicam.c scsi_proc.c
 ifdef CONFIG_SCSI
 SCSI_OBJS := hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
 else
+ifdef CONFIG_MODVERSIONS
+# Create this before we build anything else.
+SCSI_MODULE_VER := scsi_syms.ver
+endif
 SCSI_MODULE_OBJS := $(SCSI_MODULE_OBJS) scsi_mod.o
 endif
 
@@ -235,17 +247,19 @@ seagate.o: seagate.c
 	mv scriptu.h 53c8xx_u.h
 	rm fake.c
 
-scsi_mod.o: hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
-	$(LD) $(LD_RFLAG) -r -o $@ hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
+scsi_mod.o: $(SCSI_MODULE_VER) hosts.o scsi.o scsi_ioctl.o constants.o \
+		scsicam.o scsi_proc.o $(SYMTAB_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o $(SYMTAB_OBJS)
 
-sr_mod.o: sr.o sr_ioctl.o
+sr_mod.o: $(SCSI_MODULE_VER) sr.o sr_ioctl.o
 	$(LD) $(LD_RFLAG) -r -o $@ sr.o sr_ioctl.o
 
-sd_mod.o: sd.o sd_ioctl.o
+sd_mod.o: $(SCSI_MODULE_VER) sd.o sd_ioctl.o
 	$(LD) $(LD_RFLAG) -r -o $@ sd.o sd_ioctl.o
 
+$(SYMTAB_OBJS): $(SYMTAB_OBJS:.o=.c)
 
-modules: $(SCSI_MODULE_OBJS)
+modules: $(SCSI_MODULE_VER) $(SCSI_MODULE_OBJS)
 	echo $(SCSI_MODULE_OBJS) > ../../modules/SCSI_MODULES
 	(cd ../../modules;for i in $(SCSI_MODULE_OBJS); do ln -sf ../drivers/scsi/$$i .; done)
 

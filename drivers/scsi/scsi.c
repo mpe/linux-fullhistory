@@ -20,6 +20,19 @@
  *  Native multichannel and wide scsi support added 
  *  by Michael Neuffer neuffer@goofy.zdv.uni-mainz.de
  */
+#ifdef MODULE
+/*
+ * Don't import our own symbols, as this would severely mess up our
+ * symbol tables.
+ */
+#define _SCSI_SYMS_VER_
+#include <linux/autoconf.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
 
 #include <asm/system.h>
 #include <linux/sched.h>
@@ -36,15 +49,8 @@
 #include "hosts.h"
 #include "constants.h"
 
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
-
 #undef USE_STATIC_SCSI_MEMORY
+
 
 /*
 static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/scsi.c,v 1.5 1993/09/24 12:45:18 drew Exp drew $";
@@ -511,6 +517,8 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 				SDpnt->manufacturer = SCSI_MAN_NEC;
 			} else if (!strncmp(scsi_result+8,"TOSHIBA",7))
 			    SDpnt->manufacturer = SCSI_MAN_TOSHIBA;
+                        else if (!strncmp(scsi_result+8,"SONY",4))
+                            SDpnt->manufacturer = SCSI_MAN_SONY;
 			else
 			    SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
 			
@@ -2865,55 +2873,28 @@ scsi_dump_status(void)
 }
 #endif
 
-
 #ifdef MODULE
-/* 
-extern int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
-extern int        scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
-*/
 
-struct symbol_table scsi_symbol_table = {
-#include <linux/symtab_begin.h>
-#ifdef CONFIG_MODVERSIONS
-    { (void *)1 /* Version version :-) */, "_Using_Versions" },
-#endif
-    X(scsi_register_module),
-    X(scsi_unregister_module),
-    X(scsi_free),
-    X(scsi_malloc),
-    X(scsi_register),
-    X(scsi_unregister),
-    X(scsicam_bios_param),
-    X(allocate_device),
-    X(scsi_do_cmd),
-    X(scsi_command_size),
-    X(scsi_init_malloc),
-    X(scsi_init_free),
-    X(scsi_ioctl),
-    X(print_command),
-    X(print_sense),
-    X(dma_free_sectors),
-    X(kernel_scsi_ioctl),
-    X(need_isa_buffer),
-    X(request_queueable),
-/*
- * These are here only while I debug the rest of the scsi stuff.
- */
-    X(scsi_hostlist),
-    X(scsi_hosts),
-    X(scsi_devicelist),
-    X(scsi_devices),
-
-    /********************************************************
-     * Do not add anything below this line,
-     * as the stacked modules depend on this!
-     */
-#include <linux/symtab_end.h>
-};
 
 char kernel_version[] = UTS_RELEASE;
 
+extern struct symbol_table scsi_symbol_table;
+
 int init_module(void) {
+
+#if CONFIG_PROC_FS 
+    /*
+     * This will initialize the directory so that we do not have
+     * random crap in there.
+     */
+    build_proc_dir_entries();
+#endif
+
+    /*
+     * This makes the real /proc/scsi visible.
+     */
+    dispatch_scsi_info_ptr = dispatch_scsi_info;
+
     timer_table[SCSI_TIMER].fn = scsi_main_timeout;
     timer_table[SCSI_TIMER].expires = 0;
     register_symtab(&scsi_symbol_table);

@@ -3,7 +3,7 @@
 
 	Copyright (C) 1992  Martin Harriss
 
-	martin@bdsi.com
+	martin@bdsi.com (no longer valid - where are you now, Martin?)
 
 	This program is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -32,13 +32,29 @@
    		   (Jon Tombs <jon@gtex02.us.es>)
 
 	October 1993 Bernd Huebner and Ruediger Helsch, Unifix Software GmbH,
-	Braunschweig, Germany: Total rework to speed up data read operation.
+	Braunschweig, Germany: rework to speed up data read operation.
 	Also enabled definition of irq and address from bootstrap, using the
-	environment. linux/init/main.c must be patched to export the env.
+	environment.
 	November 93 added code for FX001 S,D (single & double speed).
 	February 94 added code for broken M 5/6 series of 16-bit single speed.
+
+        0.4   Added support for loadable MODULEs, so mcd can now also be
+              loaded by insmod and removed by rmmod during runtime.
+              Werner Zimmermann (zimmerma@rz.fht-esslingen.de), Mar. 26, 95
 */
 
+#include <linux/config.h>
+
+#ifdef MODULE
+# include <linux/module.h>
+# include <linux/version.h>
+# ifndef CONFIG_MODVERSIONS
+    char kernel_version[]= UTS_RELEASE;
+# endif
+#else
+# define MOD_INC_USE_COUNT
+# define MOD_DEC_USE_COUNT
+#endif
 
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -59,6 +75,7 @@
 
 #define MAJOR_NR MITSUMI_CDROM_MAJOR
 #include "blk.h"
+#define mcd_port mcd    /* for compatible parameter passing with "insmod" */
 #include <linux/mcd.h>
 
 #if 0
@@ -114,8 +131,8 @@ static int MCMD_DATA_READ= MCMD_PLAY_READ;
 int mitsumi_bug_93_wait = 0;
 #endif /* WORK_AROUND_MITSUMI_BUG_93 */
 
-static short mcd_port = MCD_BASE_ADDR;
-static int   mcd_irq  = MCD_INTR_NR;
+static short mcd_port = MCD_BASE_ADDR; /* used as "mcd" by "insmod" */
+static int   mcd_irq  = MCD_INTR_NR; /* must directly follow mcd_port */
 
 static int McdTimeout, McdTries;
 static struct wait_queue *mcd_waitq = NULL;
@@ -1039,7 +1056,7 @@ mcd_open(struct inode *ip, struct file *fp)
 
 	}
 	++mcd_open_count;
-
+        MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1050,7 +1067,7 @@ mcd_open(struct inode *ip, struct file *fp)
 
 static void
 mcd_release(struct inode * inode, struct file * file)
-{
+{ MOD_DEC_USE_COUNT;
   if (!--mcd_open_count) {
 	mcd_invalidate_buffers();
 	sync_dev(inode->i_rdev);
@@ -1080,15 +1097,23 @@ static struct file_operations mcd_fops = {
  * Test for presence of drive and initialize it.  Called at boot time.
  */
 
+#ifndef MODULE
 unsigned long
 mcd_init(unsigned long mem_start, unsigned long mem_end)
+#else
+int init_module(void)
+#endif
 {
 	int count;
 	unsigned char result[3];
 
 	if (mcd_port <= 0 || mcd_irq <= 0) {
 	  printk("skip mcd_init\n");
+#ifndef MODULE
 	  return mem_start;
+#else
+          return -EIO;
+#endif
 	}
 
 	printk("mcd=0x%x,%d: ", mcd_port, mcd_irq);
@@ -1097,13 +1122,22 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 	{
 		printk("Unable to get major %d for Mitsumi CD-ROM\n",
 		       MAJOR_NR);
+#ifndef MODULE
 		return mem_start;
+#else
+                return -EIO;
+#endif
+              
 	}
 
         if (check_region(mcd_port, 4)) {
 	  printk("Init failed, I/O port (%X) already in use\n",
 		 mcd_port);
+#ifndef MODULE		 
 	  return mem_start;
+#else
+          return -EIO;
+#endif	  
 	}
 	  
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
@@ -1123,7 +1157,11 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 	if (count >= 2000000) {
 		printk("Init failed. No mcd device at 0x%x irq %d\n",
 		     mcd_port, mcd_irq);
+#ifndef MODULE
 		return mem_start;
+#else
+                return -EIO;
+#endif                
 	}
 	count = inb(MCDPORT(0));		/* pick up the status */
 	
@@ -1132,12 +1170,19 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 		if(getValue(result+count)) {
 			printk("mitsumi get version failed at 0x%d\n",
 			       mcd_port);
+#ifndef MODULE
 			return mem_start;
+#else
+                        return -EIO;
+#endif
 		}	
 
 	if (result[0] == result[1] && result[1] == result[2])
+#ifndef MODULE
 		return mem_start;
-
+#else
+                return -EIO;
+#endif
 	printk("Mitsumi status, type and version : %02X %c %x\n",
 	       result[0],result[1],result[2]);
 
@@ -1153,7 +1198,11 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 	if (request_irq(mcd_irq, mcd_interrupt, SA_INTERRUPT, "Mitsumi CD"))
 	{
 		printk("Unable to get IRQ%d for Mitsumi CD-ROM\n", mcd_irq);
+#ifndef MODULE
 		return mem_start;
+#else
+                return -EIO;
+#endif
 	}
 	request_region(mcd_port, 4,"mcd");
 
@@ -1169,7 +1218,11 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 
 	mcd_invalidate_buffers();
 	mcdPresent = 1;
+#ifndef MODULE	
 	return mem_start;
+#else
+        return 0;
+#endif
 }
 
 
@@ -1520,3 +1573,17 @@ Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
 	return limit > 0 ? 0 : -1;
 }
 
+#ifdef MODULE
+void cleanup_module(void)
+{ if (MOD_IN_USE)
+     { printk("mcd module in use - can't remove it.\n");
+       return;    
+     }
+  if ((unregister_blkdev(MAJOR_NR, "mcd") == -EINVAL))
+     { printk("What's that: can't unregister mcd\n");
+       return;    
+     }
+  release_region(mcd_port,4);
+  printk("mcd module released.\n");
+}
+#endif MODULE

@@ -560,7 +560,7 @@ receive_packet (struct device * dev, int len)
 
 	rlen = (len+1) & ~1;
 
-	skb = dev_alloc_skb(rlen);
+	skb = dev_alloc_skb(rlen+2);
 
 	/*
 	 * make sure the data register is going the right way
@@ -587,6 +587,7 @@ receive_packet (struct device * dev, int len)
 		adapter->stats.rx_dropped++;
 
 	} else {
+		skb_reserve(skb,2);	/* 16 byte alignment */
 		skb->dev = dev;
 
 		/*

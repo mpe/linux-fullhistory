@@ -20,6 +20,7 @@
 #include <linux/iso_fs.h>
 #include <linux/sysv_fs.h>
 #include <linux/hpfs_fs.h>
+#include <linux/smb_fs.h>
 
 extern void device_setup(void);
 
@@ -71,6 +72,11 @@ asmlinkage int sys_setup(void)
 #ifdef CONFIG_NFS_FS
 	register_filesystem(&(struct file_system_type)
 		{nfs_read_super, "nfs", 0, NULL});
+#endif
+
+#ifdef CONFIG_SMB_FS
+	register_filesystem(&(struct file_system_type)
+		{smb_read_super, "smbfs", 0, NULL});
 #endif
 
 #ifdef CONFIG_ISO9660_FS

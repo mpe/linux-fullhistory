@@ -68,7 +68,7 @@ static void ax25_send_iframe(ax25_cb *ax25, struct sk_buff *skb, int poll_bit)
 	if (skb == NULL)
 		return;
 	
-	frame = skb->h.raw;	/* KISS + header */
+	frame = skb_push(skb, 1);	/* KISS + header */
 
 	*frame = I;
 	*frame |= poll_bit;
@@ -146,7 +146,7 @@ void ax25_kick(ax25_cb *ax25)
 
 void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 {
-	unsigned char *ptr = skb->data;
+	unsigned char *ptr;
 
 	if (ax25->device == NULL) {
 		if (ax25->sk != NULL) {
@@ -159,12 +159,19 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 		return;
 	}
 
-	*ptr++ = 0;	/* KISS data */
-	ptr   += build_ax25_addr(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type);
+	if (skb_headroom(skb) < size_ax25_addr(ax25->digipeat)) {
+		printk("ax25_transmit_buffer: not enough room for digi-peaters\n");
+		skb->free = 1;
+		kfree_skb(skb, FREE_WRITE);
+		return;
+	}
+
+	ptr = skb_push(skb, size_ax25_addr(ax25->digipeat));
+	build_ax25_addr(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type);
 
 	skb->arp = 1;
 
-	dev_queue_xmit(skb, ax25->device, SOPRI_NORMAL);
+	ax25_queue_xmit(skb, ax25->device, SOPRI_NORMAL);
 }
 
 /*

@@ -358,7 +358,7 @@ static int znet_send_packet(struct sk_buff *skb, struct device *dev)
 		printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
 	else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned char *buf = (void *)(skb+1);
+		unsigned char *buf = (void *)skb->data;
 		ushort *tx_link = zn.tx_cur - 1;
 		ushort rnd_len = (length + 1)>>1;
 
@@ -565,7 +565,7 @@ static void znet_rx(struct device *dev)
 			} else {
 				memcpy(skb_put(skb,pkt_len), zn.rx_cur, pkt_len);
 				if (znet_debug > 6) {
-					unsigned int *packet = (unsigned int *) (skb + 1);
+					unsigned int *packet = (unsigned int *) skb->data;
 					printk(KERN_DEBUG "Packet data is %08x %08x %08x %08x.\n", packet[0],
 						   packet[1], packet[2], packet[3]);
 				}

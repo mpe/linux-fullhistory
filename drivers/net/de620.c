@@ -678,13 +678,14 @@ de620_rx_intr(struct device *dev)
 		printk("%s: Illegal packet size: %d!\n", dev->name, size);
 	}
 	else { /* Good packet? */
-		skb = dev_alloc_skb(size);
+		skb = dev_alloc_skb(size+2);
 		if (skb == NULL) { /* Yeah, but no place to put it... */
 			printk("%s: Couldn't allocate a sk_buff of size %d.\n",
 				dev->name, size);
 			((struct netstats *)(dev->priv))->rx_dropped++;
 		}
 		else { /* Yep! Go get it! */
+			skb_reserve(skb,2);	/* Align */
 			skb->dev = dev;
 			skb->free = 1;
 			/* skb->data points to the start of sk_buff data area */

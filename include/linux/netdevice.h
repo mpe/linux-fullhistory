@@ -73,11 +73,11 @@ struct device
   unsigned long		  mem_end;		/* sahared mem end	*/
   unsigned long		  mem_start;		/* shared mem start	*/
   unsigned long		  base_addr;		/* device I/O address	*/
+  unsigned long		  tbusy;		/* transmitter busy must be long for bitops */
   unsigned char		  irq;			/* device IRQ number	*/
 
   /* Low-level status flags. */
   volatile unsigned char  start,		/* start an operation	*/
-                          tbusy,		/* transmitter busy	*/
                           interrupt;		/* interrupt arrived	*/
 
   struct device		  *next;

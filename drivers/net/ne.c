@@ -20,6 +20,7 @@
 
     Paul Gortmaker	: use ENISR_RDC to monitor Tx PIO uploads, made
 			  sanity checks and bad clone support optional.
+    Paul Gortmaker	: new reset code, reset card after probe at boot.
 
 */
 
@@ -83,8 +84,6 @@ bad_clone_list[] = {
 #define NE1SM_STOP_PG 	0x40	/* Last page +1 of RX ring */
 #define NESM_START_PG	0x40	/* First page of TX buffer */
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
-
-#define NE_RDC_TIMEOUT	0x02	/* Max wait in jiffies for Tx RDC */
 
 int ne_probe(struct device *dev);
 static int ne_probe1(struct device *dev, int ioaddr);
@@ -172,6 +171,23 @@ static int ne_probe1(struct device *dev, int ioaddr)
     }
 
     printk("NE*000 ethercard probe at %#3x:", ioaddr);
+
+    /* Reset card. Who knows what dain-bramaged state it was left in. */
+    {	unsigned long reset_start_time = jiffies;
+
+	/* DON'T change these to inb_p/outb_p or reset will fail on clones. */
+	outb(inb(ioaddr + NE_RESET), ioaddr + NE_RESET);
+
+	/* wait 20 ms for the dust to settle. */
+	while (jiffies - reset_start_time < 2*HZ/100) 
+		barrier();
+
+	if ((inb_p(ioaddr+EN0_ISR) & ENISR_RESET) == 0) {
+		printk(" not found (no reset ack).\n");
+		return ENODEV;
+	}
+	outb_p(0xff, ioaddr + EN0_ISR);		/* Ack all intr. */
+    }
 
     /* Read the 16 bytes of station address PROM.
        We must first initialize registers, similar to NS8390_init(eifdev, 0).
@@ -328,17 +344,19 @@ static int ne_probe1(struct device *dev, int ioaddr)
 static void
 ne_reset_8390(struct device *dev)
 {
-    int tmp = inb_p(NE_BASE + NE_RESET);
-    int reset_start_time = jiffies;
+    unsigned long reset_start_time = jiffies;
 
     if (ei_debug > 1) printk("resetting the 8390 t=%ld...", jiffies);
+
+    /* DON'T change these to inb_p/outb_p or reset will fail on clones. */
+    outb(inb(NE_BASE + NE_RESET), NE_BASE + NE_RESET);
+
     ei_status.txing = 0;
     ei_status.dmaing = 0;
 
-    outb_p(tmp, NE_BASE + NE_RESET);
     /* This check _should_not_ be necessary, omit eventually. */
     while ((inb_p(NE_BASE+EN0_ISR) & ENISR_RESET) == 0)
-	if (jiffies - reset_start_time > 2) {
+	if (jiffies - reset_start_time > 2*HZ/100) {
 	    printk("%s: ne_reset_8390() did not complete.\n", dev->name);
 	    break;
 	}
@@ -502,7 +520,7 @@ ne_block_output(struct device *dev, int count,
 #endif
 
     while ((inb_p(nic_base + EN0_ISR) & ENISR_RDC) == 0)
-	if (jiffies - dma_start > NE_RDC_TIMEOUT) {
+	if (jiffies - dma_start > 2*HZ/100) {		/* 20ms */
 		printk("%s: timeout waiting for Tx RDC.\n", dev->name);
 		ne_reset_8390(dev);
 		NS8390_init(dev,1);

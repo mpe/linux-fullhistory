@@ -8,11 +8,13 @@
  */
 
 #ifdef MODULE
+#include <linux/autoconf.h>
 #include <linux/module.h>
 #endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/errno.h>
 #include <linux/timer.h>
 #include <linux/head.h>
 #include <linux/types.h>
@@ -598,6 +600,36 @@ const char *scsi_debug_info(void)
 {
     static char buffer[] = " ";         /* looks nicer without anything here */
     return buffer;
+}
+
+/* generic_proc_info
+ * Used if the driver currently has no own support for /proc/scsi
+ */
+int scsi_debug_proc_info(char *buffer, char **start, off_t offset, 
+		     int length, int inode, int inout)
+{
+    int len, pos, begin;
+
+    if(inout == 1)
+	return(-ENOSYS);  /* This is a no-op */
+    
+    begin = 0;
+    pos = len = sprintf(buffer, 
+			"This driver is not a real scsi driver, but it plays one on TV.\n"
+                        "It is very handy for debugging specific problems because you\n"
+                        "can simulate a variety of error conditions\n");
+    if(pos < offset)
+    {
+	len = 0;
+	begin = pos;
+    }
+    
+    *start = buffer + (offset - begin);   /* Start of wanted data */
+    len -= (offset - begin);
+    if(len > length)
+	len = length;
+    
+    return(len);
 }
 
 #ifdef MODULE

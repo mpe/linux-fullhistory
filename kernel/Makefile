@@ -26,7 +26,7 @@ all: kernel.o
 
 include ../versions.mk
 
-kernel.o: $(SYMTAB_OBJS) $(OBJS)
+kernel.o: $(SYMTAB_OBJS:.o=.ver) $(SYMTAB_OBJS) $(OBJS)
 	$(LD) -r -o kernel.o $(SYMTAB_OBJS) $(OBJS)
 	sync
 

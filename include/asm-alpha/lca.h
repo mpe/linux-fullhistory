@@ -292,7 +292,7 @@ extern void outl(unsigned int b, unsigned long addr);
 extern unsigned long readb(unsigned long addr);
 extern unsigned long readw(unsigned long addr);
 
-extern void writeb(unsigned short b, unsigned long addr);
+extern void writeb(unsigned char b, unsigned long addr);
 extern void writew(unsigned short b, unsigned long addr);
 
 #define inb(port) \

@@ -835,13 +835,14 @@ el16_rx(struct device *dev)
 			struct sk_buff *skb;
 
 			pkt_len &= 0x3fff;
-			skb = dev_alloc_skb(pkt_len);
+			skb = dev_alloc_skb(pkt_len+2);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 				lp->stats.rx_dropped++;
 				break;
 			}
-			skb->len = pkt_len;
+			
+			skb_reserve(skb,2);
 			skb->dev = dev;
 
 			/* 'skb->data' points to the start of sk_buff data area. */

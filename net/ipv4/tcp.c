@@ -1030,22 +1030,20 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			sk->inuse = 1;
 			amount = tcp_readable(sk);
 			release_sock(sk);
-			err=verify_area(VERIFY_WRITE,(void *)arg,
-						   sizeof(unsigned long));
+			err=verify_area(VERIFY_WRITE,(void *)arg, sizeof(int));
 			if(err)
 				return err;
-			put_fs_long(amount,(unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return(0);
 		}
 		case SIOCATMARK:
 		{
 			int answ = sk->urg_data && sk->urg_seq == sk->copied_seq;
 
-			err = verify_area(VERIFY_WRITE,(void *) arg,
-						  sizeof(unsigned long));
+			err = verify_area(VERIFY_WRITE,(void *) arg, sizeof(int));
 			if (err)
 				return err;
-			put_fs_long(answ,(int *) arg);
+			put_user(answ,(int *) arg);
 			return(0);
 		}
 		case TIOCOUTQ:
@@ -1054,11 +1052,10 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 
 			if (sk->state == TCP_LISTEN) return(-EINVAL);
 			amount = sk->prot->wspace(sk);
-			err=verify_area(VERIFY_WRITE,(void *)arg,
-						   sizeof(unsigned long));
+			err=verify_area(VERIFY_WRITE,(void *)arg, sizeof(int));
 			if(err)
 				return err;
-			put_fs_long(amount,(unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return(0);
 		}
 		default:
@@ -1075,10 +1072,9 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
  */
  
 unsigned short tcp_check(struct tcphdr *th, int len,
-	  unsigned long saddr, unsigned long daddr)
+	  unsigned long saddr, unsigned long daddr, unsigned long base)
 {     
-	return csum_tcpudp_magic(saddr,daddr,len,IPPROTO_TCP,
-		csum_partial((char *)th,len,0));
+	return csum_tcpudp_magic(saddr,daddr,len,IPPROTO_TCP,base);
 }
 
 
@@ -1087,7 +1083,8 @@ void tcp_send_check(struct tcphdr *th, unsigned long saddr,
 		unsigned long daddr, int len, struct sock *sk)
 {
 	th->check = 0;
-	th->check = tcp_check(th, len, saddr, daddr);
+	th->check = tcp_check(th, len, saddr, daddr,
+		csum_partial((char *)th,len,0));
 	return;
 }
 
@@ -1602,7 +1599,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 			 *	NB: following must be mtu, because mss can be increased.
 			 *	mss is always <= mtu 
 			 */
-			skb = prot->wmalloc(sk, sk->mtu + 128 + prot->max_header, 0, GFP_KERNEL);
+			skb = prot->wmalloc(sk, sk->mtu + 128 + prot->max_header + 15, 0, GFP_KERNEL);
 			sk->inuse = 1;
 			send_tmp = skb;
 		} 
@@ -1612,7 +1609,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 			 *	We will release the socket in case we sleep here. 
 			 */
 			release_sock(sk);
-			skb = prot->wmalloc(sk, copy + prot->max_header , 0, GFP_KERNEL);
+			skb = prot->wmalloc(sk, copy + prot->max_header + 15 , 0, GFP_KERNEL);
   			sk->inuse = 1;
 		}
 
@@ -4476,7 +4473,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	int syn_ok=0;
 	
 	tcp_statistics.TcpInSegs++;
-  
 	if(skb->pkt_type!=PACKET_HOST)
 	{
 	  	kfree_skb(skb,FREE_READ);
@@ -4519,7 +4515,13 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		 *	Pull up the IP header.
 		 */
 		skb_pull(skb, skb->h.raw-skb->data);
-		if (tcp_check(th, len, saddr, daddr )) 
+		/*
+		 *	Try to use the device checksum if provided.
+		 */
+		if (
+			(skb->ip_summed && tcp_check(th, len, saddr, daddr, skb->csum ))||
+		    	(!skb->ip_summed && tcp_check(th, len, saddr, daddr, csum_partial((char *)th, len, 0)))
+		    )
 		{
 			skb->sk = NULL;
 			kfree_skb(skb,FREE_READ);
@@ -4924,7 +4926,7 @@ static void tcp_write_wakeup(struct sock *sk)
 		 
 	    	buff = sk->prot->wmalloc(sk, win_size + th->doff * 4 + 
 				     (iph->ihl << 2) +
-				     skb->dev->hard_header_len, 
+				     skb->dev->hard_header_len + 15, 
 				     1, GFP_ATOMIC);
 	    	if ( buff == NULL )
 	    		return;
@@ -5119,7 +5121,7 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval, int op
   	if(err)
   		return err;
   	
-  	val = get_fs_long((unsigned long *)optval);
+  	val = get_user((int *)optval);
 
 	switch(optname)
 	{
@@ -5162,12 +5164,12 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval, int *o
 	err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
 	if(err)
   		return err;
-  	put_fs_long(sizeof(int),(unsigned long *) optlen);
+  	put_user(sizeof(int),(int *) optlen);
 
   	err=verify_area(VERIFY_WRITE, optval, sizeof(int));
   	if(err)
   		return err;
-  	put_fs_long(val,(unsigned long *)optval);
+  	put_user(val,(int *)optval);
 
   	return(0);
 }	

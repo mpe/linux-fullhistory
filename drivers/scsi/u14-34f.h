@@ -10,14 +10,12 @@ int u14_34f_abort(Scsi_Cmnd *);
 int u14_34f_reset(Scsi_Cmnd *);
 int u14_34f_biosparam(Disk *, int, int *);
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int); 
-
 #define U14_34F_VERSION "2.01.00"
 
 #define ULTRASTOR_14_34F {                                            \
 		NULL, /* Ptr for modules */                           \
 		NULL, /* usage count for modules */		      \
-		generic_proc_info,                                    \
+		NULL,		                                      \
 		"u14_34f",                                            \
 		PROC_SCSI_U14_34F,                                    \
 		"UltraStor 14F/34F rev. " U14_34F_VERSION " ",        \

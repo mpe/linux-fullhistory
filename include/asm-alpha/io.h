@@ -107,4 +107,20 @@ extern void outsb (unsigned long port, void *dst, unsigned long count);
 extern void outsw (unsigned long port, void *dst, unsigned long count);
 extern void outsl (unsigned long port, void *dst, unsigned long count);
 
+/*
+ * The "address" in IO memory space is not clearly either a integer or a
+ * pointer. We will accept both, thus the casts.
+ */
+#define readb(addr) ((unsigned char) (readb)((unsigned long)(addr)))
+#define readw(addr) ((unsigned short) (readw)((unsigned long)(addr)))
+#define readl(addr) ((unsigned int) (readl)((unsigned long)(addr)))
+
+#define writeb(b,addr) (writeb)((b),(unsigned long)(addr))
+#define writew(w,addr) (writew)((w),(unsigned long)(addr))
+#define writel(l,addr) (writel)((l),(unsigned long)(addr))
+
+#define memset_io(addr,c,len)		(memset_io)((unsigned long)(addr),(c),(len))
+#define memcpy_fromio(to,from,len)	(memcpy_fromio)((to),(unsigned long)(from),(len))
+#define memcpy_toio(to,from,len)	(memcpy_toio)((unsigned long)(to),(from),(len))
+
 #endif

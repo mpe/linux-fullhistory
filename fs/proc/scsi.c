@@ -89,30 +89,50 @@ static struct proc_dir_entry scsi_dir2[] = {
     { 0, 0, NULL }
 };
 
-inline static uint count_dir_entries(uint inode)
+inline static uint count_dir_entries(uint inode, uint *num)
 {
     struct proc_dir_entry *dir;
-    uint i = 0;
-    
+    uint index, flag;
+
+    (uint) *num = flag = index = 0;    
     
     if(dispatch_scsi_info_ptr)
-	if (inode <= PROC_SCSI_SCSI_DEBUG)
+    {
+	if (inode == PROC_SCSI) { 
 	    dir = scsi_dir;
-	else
+            while(dir[(uint)*num].low_ino)
+                (*num)++;
+        } else {
 	    dir = scsi_hba_dir;
-    else dir = scsi_dir2;
-    
-    while(dir[i].low_ino)
-	i++;
-    
-    return(i);
+            while(dir[index].low_ino || dir[index].low_ino <= PROC_SCSI_LAST) {
+                if(dir[index].low_ino == inode)
+                    flag = 1;
+                if(dir[index].low_ino == 0) {
+                    if(flag == 1)
+                        break;
+                    else
+                        *num = 0;
+                } else {
+                    (*num)++;
+                }
+                index++;
+            }
+            return(index - (*num));
+        }
+    }
+    else {
+        dir = scsi_dir2;
+        while(dir[(uint)*num].low_ino)
+            (*num)++;
+    }   
+    return(0);
 }
 
 static int proc_lookupscsi(struct inode * dir, const char * name, int len,
 			   struct inode ** result)
 {
     struct proc_dir_entry *de = NULL;
-    
+
     *result = NULL;
     if (!dir)
 	return(-ENOENT);
@@ -121,11 +141,13 @@ static int proc_lookupscsi(struct inode * dir, const char * name, int len,
 	return(-ENOENT);
     }
     if (dispatch_scsi_info_ptr != NULL)
+    {
 	if (dir->i_ino <= PROC_SCSI_SCSI)
 	    de = scsi_dir;
 	else {
 	    de = &scsi_hba_dir[dispatch_scsi_info_ptr(dir->i_ino, 0, 0, 0, 0, 2)];
 	}
+    }
     else
 	de = scsi_dir2;
     
@@ -146,19 +168,25 @@ static int proc_readscsidir(struct inode * inode, struct file * filp,
 			    void * dirent, filldir_t filldir)
 {
     struct proc_dir_entry * de;
-    unsigned int ino;
-    
+    uint index, num;
+ 
+    index = num = 0;
+
     if (!inode || !S_ISDIR(inode->i_mode))
 	return(-EBADF);
-    ino = inode->i_ino;
-    while (((unsigned) filp->f_pos) < count_dir_entries(ino)) {
-	if (dispatch_scsi_info_ptr)
-	    if (ino <= PROC_SCSI_SCSI)
+
+    index = count_dir_entries(inode->i_ino, &num);
+
+    while (((unsigned) filp->f_pos + index) < index + num) {
+	if (dispatch_scsi_info_ptr) {
+	    if (inode->i_ino <= PROC_SCSI_SCSI)
 		de = scsi_dir + filp->f_pos;
 	    else
-		de = scsi_hba_dir + filp->f_pos;
-	else
+		de = scsi_hba_dir + filp->f_pos + index;
+        }
+	else {
 	    de = scsi_dir2 + filp->f_pos;
+        }
 	if (filldir(dirent, de->name, de->namelen, filp->f_pos, de->low_ino)<0)
 	    break;
 	filp->f_pos++;
@@ -172,7 +200,7 @@ int get_not_present_info(char *buffer, char **start, off_t offset, int length)
     
     begin = 0;
     pos = len = sprintf(buffer, 
-			"The scsi core module is currently not present\n");
+			"No low-level scsi modules are currently present\n");
     if(pos < offset) {
 	len = 0;
 	begin = pos;
@@ -257,7 +285,6 @@ static int proc_readscsi(struct inode * inode, struct file * file,
 static int proc_writescsi(struct inode * inode, struct file * file,
 			 char * buf, int count)
 {
-    uint ino;
     int ret = 0;
     char * page;
     
@@ -268,11 +295,9 @@ static int proc_writescsi(struct inode * inode, struct file * file,
 	return(-EOVERFLOW);
     }
 
-    ino = inode->i_ino;
-    
     if(dispatch_scsi_info_ptr != NULL) {
 	memcpy_fromfs(page, buf, count);
-	ret = dispatch_scsi_info_ptr(ino, page, 0, 0, count, 1);
+	ret = dispatch_scsi_info_ptr(inode->i_ino, page, 0, 0, count, 1);
     } else {
 	free_page((ulong) page);   
 	return(-ENOPKG);	  /* Nothing here */

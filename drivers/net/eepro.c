@@ -1046,13 +1046,14 @@ eepro_rx(struct device *dev)
 			struct sk_buff *skb;
 
 			rcv_size &= 0x3fff;
-			skb = dev_alloc_skb(rcv_size);
+			skb = dev_alloc_skb(rcv_size+2);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 				lp->stats.rx_dropped++;
 				break;
 			}
 			skb->dev = dev;
+			skb_reserve(skb,2);
 
 			insw(ioaddr+IO_PORT, skb_put(skb,rcv_size), (rcv_size + 1) >> 1);
 	

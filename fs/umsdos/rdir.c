@@ -36,7 +36,7 @@ struct RDIR_FILLDIR {
 
 static int rdir_filldir(
 	void * buf,
-	char * name,
+	const char * name,
 	int name_len,
 	off_t offset,
 	ino_t ino)

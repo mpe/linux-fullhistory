@@ -1035,18 +1035,19 @@ ewrk3_rx(struct device *dev)
 	} else {
 	  struct sk_buff *skb;
 
-          if ((skb = dev_alloc_skb(pkt_len)) != NULL) {
+          if ((skb = dev_alloc_skb(pkt_len+2)) != NULL) {
+            unsigned char *p;
 	    skb->dev = dev;
+	    skb_reserve(skb,2);		/* Align to 16 bytes */
+	    p = skb_put(skb,pkt_len);
 
 	    if (lp->shmem_length == IO_ONLY) {
-	      unsigned char *p = skb_put(skb,pkt_len);
-
 	      *p = inb(EWRK3_DATA);         /* dummy read */
-	      for (i=0; i<skb->len; i++) {
+	      for (i=0; i<pkt_len; i++) {
 		*p++ = inb(EWRK3_DATA);
 	      }
 	    } else {
-	      memcpy(skb->data, buf, pkt_len);
+	      memcpy(p, buf, pkt_len);
 	    }
 
 	    /* 
@@ -1731,7 +1732,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     break;
   case EWRK3_GET_STATS:              /* Get the driver statistics */
-    err = verify_area(VERIFY_WRITE, (void *)ioc->data, sizeof(lp->pktStats)));
+    err = verify_area(VERIFY_WRITE, (void *)ioc->data, sizeof(lp->pktStats));
     if (err) return err;
 
     cli();
@@ -1879,6 +1880,7 @@ cleanup_module(void)
   if (MOD_IN_USE) {
     printk("%s: device busy, remove delayed\n",thisEthwrk.name);
   } else {
+    release_region(thisEthwrk.base_addr, EWRK3_TOTAL_SIZE);
     unregister_netdev(&thisEthwrk);
   }
 }

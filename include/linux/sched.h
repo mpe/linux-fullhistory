@@ -215,6 +215,12 @@ struct task_struct {
 #define COPYFD		0x00000200	/* set if fd's should be copied, not shared (NI) */
 
 /*
+ * Limit the stack by to some sane default: root can always
+ * increase this limit if needed..  8MB seems reasonable.
+ */
+#define _STK_LIM	(8*1024*1024)
+
+/*
  *  INIT_TASK is used to set up the first task table, touch at
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
@@ -233,7 +239,7 @@ struct task_struct {
 /* uid etc */	0,0,0,0,0,0,0,0, \
 /* timeout */	0,0,0,0,0,0,0,0,0,0,0,0, \
 /* rlimits */   { {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
-		  {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
+		  {LONG_MAX, LONG_MAX}, {_STK_LIM, _STK_LIM},  \
 		  {       0, LONG_MAX}, {LONG_MAX, LONG_MAX}, \
 		  {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER}, {NR_OPEN, NR_OPEN}}, \
 /* math */	0, \

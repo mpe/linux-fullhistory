@@ -16,6 +16,20 @@
  *       low-level scsi drivers.
  */
 
+#ifdef MODULE
+#include <linux/autoconf.h>
+#include <linux/module.h>
+#include <linux/version.h>
+/*
+ * This is a variable in scsi.c that is set when we are processing something
+ * after boot time.  By definition, this is true when we are a loadable module
+ * ourselves.
+ */
+#define MODULE_FLAG 1
+#else
+#define MODULE_FLAG scsi_loadable_module_flag
+#endif /* MODULE */
+
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -1174,7 +1188,7 @@ static void sd_finish()
 	    rscsi_disks[i].device)
 	{
 	    i = sd_init_onedisk(i);
-	    if (scsi_loadable_module_flag 
+	    if (MODULE_FLAG
 		&& !rscsi_disks[i].has_part_table) {
 		sd_sizes[i << 4] = rscsi_disks[i].capacity;
 		revalidate_scsidisk(i << 4, 0);

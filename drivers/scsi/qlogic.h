@@ -9,8 +9,6 @@ int qlogic_abort(Scsi_Cmnd *);
 int qlogic_reset(Scsi_Cmnd *);
 int qlogic_biosparam(Disk *,int,int[]);
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
-
 #ifndef NULL
 #define NULL (0)
 #endif
@@ -18,7 +16,7 @@ extern int generic_proc_info(char *, char **, off_t, int, int, int);
 #define QLOGIC {		\
 	NULL,			\
 	NULL,			\
-	generic_proc_info,      \
+	NULL,		        \
 	"qlogic",               \
 	PROC_SCSI_QLOGIC,       \
 	NULL,			\

@@ -145,10 +145,10 @@ int ax25_rt_get_info(char *buffer, char **start, off_t offset, int length)
   
 	cli();
 
-	len += sprintf(buffer, "callsign  dev count      time mode\n");
+	len += sprintf(buffer, "callsign  dev  count time      mode\n");
 
 	for (ax25_rt = ax25_route; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
-		len += sprintf(buffer + len, "%-9s %-3s %5d %9d",
+		len += sprintf(buffer + len, "%-9s %-4s %5d %9d",
 			ax2asc(&ax25_rt->callsign),
 			ax25_rt->dev ? ax25_rt->dev->name : "???",
 			ax25_rt->n,

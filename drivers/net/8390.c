@@ -455,7 +455,7 @@ static void ei_receive(struct device *dev)
 		} else if ((rx_frame.status & 0x0F) == ENRSR_RXOK) {
 			struct sk_buff *skb;
 			
-			skb = dev_alloc_skb(pkt_len);
+			skb = dev_alloc_skb(pkt_len+2);
 			if (skb == NULL) {
 				if (ei_debug > 1)
 					printk("%s: Couldn't allocate a sk_buff of size %d.\n",
@@ -463,6 +463,7 @@ static void ei_receive(struct device *dev)
 				ei_local->stat.rx_dropped++;
 				break;
 			} else {
+				skb_reserve(skb,2);	/* IP headers on 16 byte boundaries */
 				skb->dev = dev;
 				
 				ei_block_input(dev, pkt_len, skb_put(skb,pkt_len),

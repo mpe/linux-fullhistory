@@ -28,7 +28,7 @@
  *      (Heiko Eissfeldt <heiko@colossus.escape.de>)
  *
  * 1995-06-01
- *  More chages to support CDU-510/515 series
+ *  More changes to support CDU-510/515 series
  *      (Claudio Porfiri<C.Porfiri@nisms.tei.ericsson.se>)
  *
  * Things to do:
@@ -108,7 +108,6 @@
 
 
 #include <linux/config.h>
-#if defined(CONFIG_CDU535) || defined(MODULE)
 
 #ifdef MODULE
 # include <linux/module.h>
@@ -117,6 +116,9 @@
 # ifndef CONFIG_MODVERSIONS
 	char kernel_version[]= UTS_RELEASE;
 # endif
+#else
+# define MOD_INC_USE_COUNT
+# define MOD_DEC_USE_COUNT
 #endif
 
 #include <linux/errno.h>
@@ -136,17 +138,11 @@
 #include <asm/segment.h>
 
 #include <linux/cdrom.h>
-#include <linux/sonycd535.h>
 
 #define MAJOR_NR CDU535_CDROM_MAJOR
-
-#ifdef MODULE
 # include "blk.h"
-#else
-# include "blk.h"
-# define MOD_INC_USE_COUNT
-# define MOD_DEC_USE_COUNT
-#endif
+#define sony535_cd_base_io sonycd535 /* for compatible parameter passing with "insmod" */
+#include <linux/sonycd535.h>
 
 /*
  * this is the base address of the interface card for the Sony CDU-535
@@ -1541,8 +1537,8 @@ init_module(void)
 	int  i;
 #endif
 
-	/* Setting the base I/O address to 0xffff will disable it. */
-	if (sony535_cd_base_io == 0xffff)
+	/* Setting the base I/O address to 0 will disable it. */
+	if ((sony535_cd_base_io == 0xffff)||(sony535_cd_base_io == 0))
 		goto bail;
 
 	/* Set up all the register locations */
@@ -1739,5 +1735,3 @@ cleanup_module(void)
 		printk(CDU535_HANDLE " module released\n");
 }
 #endif	/* MODULE */
-
-#endif	/* CONFIG_CDU535 */

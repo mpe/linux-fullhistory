@@ -48,7 +48,7 @@
 #include "ipx.h"
 #endif
 #ifdef CONFIG_ATALK
-#include "atalk.h"
+#include <linux/atalk.h>
 #endif
 
 #include <linux/igmp.h>

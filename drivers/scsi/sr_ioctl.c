@@ -1,3 +1,9 @@
+#ifdef MODULE
+#include <linux/autoconf.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#endif /* MODULE */
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>

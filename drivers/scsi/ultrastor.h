@@ -20,7 +20,6 @@ int ultrastor_abort(Scsi_Cmnd *);
 int ultrastor_reset(Scsi_Cmnd *);
 int ultrastor_biosparam(Disk *, int, int *);
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
 
 #define ULTRASTOR_14F_MAX_SG 16
 #define ULTRASTOR_24F_MAX_SG 33
@@ -32,7 +31,7 @@ extern int generic_proc_info(char *, char **, off_t, int, int, int);
 
 
 #define ULTRASTOR_14F { NULL, NULL, /* Ptr for modules*/ \
-			  generic_proc_info,            \
+			  NULL,                         \
 			  "ultrastor",                  \
 			  PROC_SCSI_ULTRASTOR,          \
 			  "UltraStor 14F/24F/34F", 	\

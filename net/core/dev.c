@@ -93,7 +93,7 @@ struct notifier_block *netdev_chain=NULL;
 static struct sk_buff_head backlog = 
 {
 	(struct sk_buff *)&backlog, (struct sk_buff *)&backlog
-#ifdef CONFIG_SKB_CHECK
+#if CONFIG_SKB_CHECK
 	,SK_HEAD_SKB
 #endif
 };
@@ -320,7 +320,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 
 	if(pri>=0 && !skb_device_locked(skb))
 		skb_device_lock(skb);	/* Shove a lock on the frame */
-#ifdef CONFIG_SKB_CHECK 
+#if CONFIG_SKB_CHECK 
 	IS_SKB(skb);
 #endif    
 	skb->dev = dev;
@@ -444,7 +444,7 @@ void netif_rx(struct sk_buff *skb)
 	/*
 	 *	Add it to the "backlog" queue. 
 	 */
-#ifdef CONFIG_SKB_CHECK
+#if CONFIG_SKB_CHECK
 	IS_SKB(skb);
 #endif	
 	skb_queue_tail(&backlog,skb);
@@ -647,7 +647,7 @@ void net_bh(void *tmp)
 		*	skb->h.raw point to the MAC and encapsulated data
 		*/
 
-		skb->h.raw = skb->data+skb->dev->hard_header_len;
+		skb->h.raw = skb->data;
 
 	       /*
 		* 	Fetch the packet protocol ID. 

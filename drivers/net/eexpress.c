@@ -941,13 +941,14 @@ eexp_rx(struct device *dev)
 			struct sk_buff *skb;
 
 			pkt_len &= 0x3fff;
-			skb = dev_alloc_skb(pkt_len);
+			skb = dev_alloc_skb(pkt_len+2);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 				lp->stats.rx_dropped++;
 				break;
 			}
 			skb->dev = dev;
+			skb_reserve(skb,2);
 
 			outw(data_buffer_addr + 10, ioaddr + READ_PTR);
 

@@ -121,7 +121,7 @@
 #define _LINUX_SBPCD_H
 /*==========================================================================*/
 /*==========================================================================*/
-#define LONG_TIMING 1 /* test against timeouts with "gold" CDs on CR-521 */
+#define LONG_TIMING 0 /* test against timeouts with "gold" CDs on CR-521 */
 #undef  FUTURE
 
 #define TEST_UPC 0
@@ -139,8 +139,6 @@
 /*
  * "private" IOCTL functions
  */
-#define CDROMRESET		0x5380 /* hard-rest the drive */
-#define CDROMVOLREAD		0x5381 /* let the drive tell its volume settings */
 #define CDROMAUDIOBUFSIZ	0x5382 /* set the audio buffer size */
 
 /*==========================================================================*/

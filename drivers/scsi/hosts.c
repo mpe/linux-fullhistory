@@ -16,6 +16,20 @@
  *  hosts currently present in the system.
  */
 
+#ifdef MODULE
+/*
+ * Don't import our own symbols, as this would severely mess up our
+ * symbol tables.
+ */
+#define _SCSI_SYMS_VER_
+#include <linux/autoconf.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+
 #include <linux/config.h>
 #include "../block/blk.h"
 #include <linux/kernel.h>

@@ -414,4 +414,14 @@ struct cdrom_multisession
  */
 #define	CDROMMULTISESSION	0x5310 /* (struct cdrom_multisession) */
 
+/*
+ * obtain the "universal product code" number
+ * (only some data disks have it coded)
+ */
+#define	CDROM_GET_UPC		0x5311 /* 8 bytes returned */
+
+#define	CDROMRESET		0x5312 /* hard-reset the drive */
+#define	CDROMVOLREAD		0x5313 /* let the drive tell its volume setting */
+					/* (struct cdrom_volctrl) */
+
 #endif  _LINUX_CDROM_H

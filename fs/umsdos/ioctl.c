@@ -11,6 +11,7 @@
 
 #include <asm/segment.h>
 #include <linux/errno.h>
+#include <linux/mm.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -31,7 +32,7 @@ struct UMSDOS_DIR_ONCE {
 */
 static int umsdos_ioctl_fill(
 	void * buf,
-	char * name,
+	const char * name,
 	int name_len,
 	off_t offset,
 	ino_t ino)
@@ -65,7 +66,13 @@ int UMSDOS_ioctl_dir (
 		Only root (effective id) is allowed to do IOCTL on directory
 		in UMSDOS. EPERM is returned for other user.
 	*/
-	if (current->euid == 0
+	/*
+		Well, not all case require write access, but it simplify the code
+		and let's face it, there is only one client (umssync) for all this
+	*/
+	if (verify_area(VERIFY_WRITE,(void*)data,sizeof(struct umsdos_ioctl)) < 0){
+		ret = -EFAULT;
+	}else if (current->euid == 0
 		|| cmd == UMSDOS_GETVERSION){
 		struct umsdos_ioctl *idata = (struct umsdos_ioctl *)data;
 		ret = -EINVAL;

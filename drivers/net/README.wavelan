@@ -1,6 +1,4 @@
-#if	defined(CONFIG_WAVELAN)
-
-Thu Feb 23 00:10:31 EST 1995
+Sun Jul  2 01:38:33 EST 1995
 
 1. At present the driver autoprobes for a WaveLAN card only at I/O address 0x390.
    The version of the card that I use (NCR) supports four I/O addresses (selectable
@@ -23,9 +21,13 @@ Thu Feb 23 00:10:31 EST 1995
 	append	="ether=0,0x390,0x4321,eth0"
 	..
 
-3. If you encounter any problems send me some email.
+3. The driver uses the IRQ stored in the card's PSA.
+   To change this you will need to use the configuration/setup software that
+   accompanies each WaveLAN device.  Yes, the driver should use the value passed
+   in via LILO and it will, just as soon as I can work out why that part of the
+   code doesn't work :-(.
+
+4. If you encounter any problems send me some email.
 
 Good luck,
 Bruce Janson (bruce@cs.usyd.edu.au)
-
-#endif	/* defined(CONFIG_WAVELAN) */

@@ -78,9 +78,7 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 #define NCR53c7xx_release NULL
 #endif
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
-
-#define NCR53c7xx {NULL, NULL, generic_proc_info, "NCR53c7xx",          \
+#define NCR53c7xx {NULL, NULL, NULL, "NCR53c7xx",          \
  	PROC_SCSI_NCR53C7xx, "NCR53c{7,8}xx (rel 4)", NCR53c7xx_detect, \
     	NULL, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\

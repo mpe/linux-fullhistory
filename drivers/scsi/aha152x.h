@@ -18,8 +18,6 @@ int        aha152x_abort(Scsi_Cmnd *);
 int        aha152x_reset(Scsi_Cmnd *);
 int        aha152x_biosparam(Disk *, int, int*);
 
-extern int generic_proc_info(char *, char **, off_t, int, int, int);
-
 /* number of queueable commands
    (unless we support more than 1 cmd_per_lun this should do) */
 #define AHA152X_MAXQUEUE	7		
@@ -29,7 +27,7 @@ extern int generic_proc_info(char *, char **, off_t, int, int, int);
 /* Initial value of Scsi_Host entry */
 #define AHA152X       { /* next */		NULL,			    \
 			/* usage_count */  	NULL,			    \
-						generic_proc_info,          \
+						NULL,		            \
 						"aha152x",                  \
 						PROC_SCSI_AHA152X,          \
 			/* name */		AHA152X_REVID, 		    \

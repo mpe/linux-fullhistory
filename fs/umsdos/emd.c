@@ -89,7 +89,7 @@ int umsdos_emd_dir_read (
 	filp->f_flags = 0;
 	sizeread = umsdos_file_read_kmem (emd_dir,filp,buf,count);
 	if (sizeread != count){
-		printk ("UMSDOS: problem with EMD file. Can't read pos = %ld (%d != %d)\n"
+		printk ("UMSDOS: problem with EMD file. Can't read pos = %Ld (%d != %d)\n"
 			,filp->f_pos,sizeread,count);
 		ret = -EIO;
 	}

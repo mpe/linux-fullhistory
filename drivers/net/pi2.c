@@ -567,6 +567,7 @@ static void a_rxint(struct device *dev, struct pi_local *lp)
 	    memcpy(cfix, (char *) cur_buf->data,
 		   pkt_len - 1);
 	    skb->protocol=htons(ETH_P_AX25);
+	    skb->mac.raw=skb->data;
 	    IS_SKB(skb);
 	    netif_rx(skb);
 	    lp->stats.rx_packets++;

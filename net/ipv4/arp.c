@@ -86,8 +86,8 @@ struct arp_table
 	struct arp_table		*next;			/* Linked entry list 		*/
 	unsigned long			last_used;		/* For expiry 			*/
 	unsigned int			flags;			/* Control status 		*/
-	unsigned long			ip;			/* ip address of entry 		*/
-	unsigned long			mask;			/* netmask - used for generalised proxy arps (tridge) 		*/
+	u32				ip;			/* ip address of entry 		*/
+	u32				mask;			/* netmask - used for generalised proxy arps (tridge) 		*/
 	unsigned char			ha[MAX_ADDR_LEN];	/* Hardware address		*/
 	unsigned char			hlen;			/* Length of hardware address 	*/
 	unsigned short			htype;			/* Type of hardware in use	*/
@@ -143,7 +143,7 @@ enum proxy {
 
 /* Forward declarations. */
 static void arp_check_expire (unsigned long);  
-static struct arp_table *arp_lookup(unsigned long paddr, enum proxy proxy);
+static struct arp_table *arp_lookup(u32 paddr, enum proxy proxy);
 
 
 static struct timer_list arp_timer =
@@ -307,8 +307,8 @@ int arp_device_event(unsigned long event, void *ptr)
  *	message.
  */
 
-void arp_send(int type, int ptype, unsigned long dest_ip, 
-	      struct device *dev, unsigned long src_ip, 
+void arp_send(int type, int ptype, u32 dest_ip, 
+	      struct device *dev, u32 src_ip, 
 	      unsigned char *dest_hw, unsigned char *src_hw)
 {
 	struct sk_buff *skb;
@@ -406,7 +406,7 @@ static void arp_expire_request (unsigned long arg)
 
 	if (--entry->retries > 0)
 	{
-		unsigned long ip = entry->ip;
+		u32 ip = entry->ip;
 		struct device *dev = entry->dev;
 
 		/* Set new timer. */
@@ -493,14 +493,6 @@ static void arp_send_q(struct arp_table *entry, unsigned char *hw_dest)
 			else
 				dev_queue_xmit(skb,skb->dev,skb->sk->priority);
 		}
-		else
-		{
-			/* This routine is only ever called when 'entry' is
-			   complete. Thus this can't fail. */
-			printk("arp_send_q: The impossible occurred. Please notify Alan.\n");
-			printk("arp_send_q: active entity %s\n",in_ntoa(entry->ip));
-			printk("arp_send_q: failed to find %s\n",in_ntoa(skb->raddr));
-		}
 	}
 	restore_flags(flags);
 }
@@ -510,7 +502,7 @@ static void arp_send_q(struct arp_table *entry, unsigned char *hw_dest)
  *	Delete an ARP mapping entry in the cache.
  */
 
-void arp_destroy(unsigned long ip_addr, int force)
+void arp_destroy(u32 ip_addr, int force)
 {
         int checked_proxies = 0;
 	struct arp_table *entry;
@@ -571,14 +563,9 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	int addr_hint,hlen,htype;
 	unsigned long hash;
 	unsigned char ha[MAX_ADDR_LEN];	/* So we can enable ints again. */
-	long sip,tip;
 	unsigned char *sha,*tha;
+	u32 sip,tip;
 	
-/*
- *	ARP carries the MAC addresses wrapped in the packet. We can't sanity
- *	check this as proxy arp has them different.
- */
-	skb_pull(skb,dev->hard_header_len);
 /*
  *	The hardware length of the packet should match the hardware length
  *	of the device.  Similarly, the hardware types should match.  The
@@ -839,16 +826,49 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 
 /*
+ *	Find an arp mapping in the cache. If not found, return false.
+ */
+
+int arp_query(unsigned char *haddr, u32 paddr, unsigned short type)
+{
+	struct arp_table *entry;
+	unsigned long hash = HASH(paddr);
+
+	/*
+	 *	Find an entry
+	 */
+	cli();
+
+	for (entry = arp_tables[hash]; entry != NULL; entry = entry->next)
+		if (entry->ip == paddr && entry->htype == type)
+			break;
+
+	if (entry != NULL) {
+		/*
+		 *	Update the record
+		 */
+		
+		entry->last_used = jiffies;
+		memcpy(haddr, entry->ha, entry->hlen);
+		sti();
+		return 1;
+	}
+
+	sti();
+	return 0;
+}
+
+/*
  *	Find an arp mapping in the cache. If not found, post a request.
  */
 
-int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
-	   unsigned long saddr, struct sk_buff *skb)
+int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
+	   u32 saddr, struct sk_buff *skb)
 {
 	struct arp_table *entry;
 	unsigned long hash;
 #ifdef CONFIG_IP_MULTICAST
-	unsigned long taddr;
+	u32 taddr;
 #endif	
 
 	switch (ip_chk_addr(paddr))
@@ -1063,7 +1083,7 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length)
  *      for proxy entries, otherwise the netmask will be used
  */
 
-static struct arp_table *arp_lookup(unsigned long paddr, enum proxy proxy)
+static struct arp_table *arp_lookup(u32 paddr, enum proxy proxy)
 {
 	struct arp_table *entry;
 	unsigned long hash = HASH(paddr);
@@ -1082,14 +1102,14 @@ static struct arp_table *arp_lookup(unsigned long paddr, enum proxy proxy)
 }
 
 
-int arp_find_cache(unsigned char *dp, unsigned long daddr, struct device *dev)
+int arp_find_cache(unsigned char *dp, u32 daddr, struct device *dev)
 {	
 	/* 
 	 *	We need the broadcast/multicast awareness here and the find routine split up.
 	 */
 	struct arp_table *entry;
 #ifdef CONFIG_IP_MULTICAST
-	unsigned long taddr;
+	u32 taddr;
 #endif	
 
 	switch (ip_chk_addr(daddr))
@@ -1143,8 +1163,8 @@ static int arp_req_set(struct arpreq *req)
 	struct arp_table *entry;
 	struct sockaddr_in *si;
 	int htype, hlen;
-	unsigned long ip;
 	struct rtable *rt;
+	u32 ip;
 
 	memcpy_fromfs(&r, req, sizeof(r));
 

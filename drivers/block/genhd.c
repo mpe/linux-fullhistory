@@ -35,6 +35,8 @@ static void add_partition (struct gendisk *hd, int minor, int start, int size)
 	printk(" %s%c%d", hd->major_name, minor_name(hd, minor),
 		minor & ((1 << hd->minor_shift) - 1));
 }
+
+#ifdef CONFIG_MSDOS_PARTITION
 /*
  * Create devices for each logical partition in an extended partition.
  * The logical partitions form a linked list, with each entry being
@@ -101,14 +103,130 @@ done:
 	brelse(bh);
 }
 
-static void check_partition(struct gendisk *hd, unsigned int dev)
+static int msdos_partition(struct gendisk *hd, unsigned int dev, unsigned long first_sector)
 {
-	static int first_time = 1;
 	int i, minor = current_minor;
 	struct buffer_head *bh;
 	struct partition *p;
-	unsigned long first_sector;
 	int mask = (1 << hd->minor_shift) - 1;
+
+	if (!(bh = bread(dev,0,1024))) {
+		printk("unable to read partition table\n");
+		return -1;
+	}
+	if (*(unsigned short *) (bh->b_data+510) != 0xAA55) {
+		brelse(bh);
+		return 0;
+	}
+	current_minor += 4;  /* first "extra" minor (for extended partitions) */
+	p = (struct partition *) (0x1BE + bh->b_data);
+	for (i=1 ; i<=4 ; minor++,i++,p++) {
+		if (!p->nr_sects)
+			continue;
+		add_partition(hd, minor, first_sector+p->start_sect, p->nr_sects);
+		if ((current_minor & 0x3f) >= 60)
+			continue;
+		if (p->sys_ind == EXTENDED_PARTITION) {
+			printk(" <");
+			extended_partition(hd, (hd->major << 8) | minor);
+			printk(" >");
+		}
+	}
+	/*
+	 * check for Disk Manager partition table
+	 */
+	if (*(unsigned short *) (bh->b_data+0xfc) == 0x55AA) {
+		p = (struct partition *) (0x1BE + bh->b_data);
+		for (i = 4 ; i < 16 ; i++, current_minor++) {
+			p--;
+			if ((current_minor & mask) >= mask-2)
+				break;
+			if (!(p->start_sect && p->nr_sects))
+				continue;
+			add_partition(hd, current_minor, p->start_sect, p->nr_sects);
+		}
+	}
+	printk("\n");
+	brelse(bh);
+	return 1;
+}
+
+#endif /* CONFIG_MSDOS_PARTITION */
+
+#ifdef CONFIG_OSF_PARTITION
+
+static int osf_partition(struct gendisk *hd, unsigned int dev, unsigned long first_sector)
+{
+	int i;
+	struct buffer_head *bh;
+	struct disklabel {
+		u32 d_magic;
+		u16 d_type,d_subtype;
+		u8 d_typename[16];
+		u8 d_packname[16];
+		u32 d_secsize;
+		u32 d_nsectors;
+		u32 d_ntracks;
+		u32 d_ncylinders;
+		u32 d_secpercyl;
+		u32 d_secprtunit;
+		u16 d_sparespertrack;
+		u16 d_sparespercyl;
+		u32 d_acylinders;
+		u16 d_rpm, d_interleave, d_trackskew, d_cylskew;
+		u32 d_headswitch, d_trkseek, d_flags;
+		u32 d_drivedata[5];
+		u32 d_spare[5];
+		u32 d_magic2;
+		u16 d_checksum;
+		u16 d_npartitions;
+		u32 d_bbsize, d_sbsize;
+		struct d_partition {
+			u32 p_size;
+			u32 p_offset;
+			u32 p_fsize;
+			u8  p_fstype;
+			u8  p_frag;
+			u16 p_cpg;
+		} d_partitions[8];
+	} * label;
+	struct d_partition * partition;
+#define DISKLABELMAGIC (0x82564557UL)
+
+	if (!(bh = bread(dev,0,1024))) {
+		printk("unable to read partition table\n");
+		return -1;
+	}
+	label = (struct disklabel *) (bh->b_data+64);
+	partition = label->d_partitions;
+	if (label->d_magic != DISKLABELMAGIC) {
+		printk("magic: %08x\n", label->d_magic);
+		brelse(bh);
+		return 0;
+	}
+	if (label->d_magic2 != DISKLABELMAGIC) {
+		printk("magic2: %08x\n", label->d_magic2);
+		brelse(bh);
+		return 0;
+	}
+	for (i = 0 ; i < label->d_npartitions; i++, partition++) {
+		if (partition->p_size)
+			add_partition(hd, current_minor,
+				first_sector+partition->p_offset,
+				partition->p_size);
+		current_minor++;
+	}
+	printk("\n");
+	brelse(bh);
+	return 1;
+}
+
+#endif /* CONFIG_OSF_PARTITION */
+
+static void check_partition(struct gendisk *hd, unsigned int dev)
+{
+	static int first_time = 1;
+	unsigned long first_sector;
 
 	if (first_time)
 		printk("Partition check:\n");
@@ -124,44 +242,16 @@ static void check_partition(struct gendisk *hd, unsigned int dev)
 		return;
 	}
 
-	if (!(bh = bread(dev,0,1024))) {
-		printk("  unable to read partition table of device %04x\n",dev);
+	printk("  %s%c:", hd->major_name, minor_name(hd, MINOR(dev)));
+#ifdef CONFIG_MSDOS_PARTITION
+	if (msdos_partition(hd, dev, first_sector))
 		return;
-	}
-	printk("  %s%c:", hd->major_name, minor_name(hd, minor));
-	current_minor += 4;  /* first "extra" minor (for extended partitions) */
-	if (*(unsigned short *) (bh->b_data+510) == 0xAA55) {
-		p = (struct partition *) (0x1BE + bh->b_data);
-		for (i=1 ; i<=4 ; minor++,i++,p++) {
-			if (!p->nr_sects)
-				continue;
-			add_partition(hd, minor, first_sector+p->start_sect, p->nr_sects);
-			if ((current_minor & 0x3f) >= 60)
-				continue;
-			if (p->sys_ind == EXTENDED_PARTITION) {
-				printk(" <");
-				extended_partition(hd, (hd->major << 8) | minor);
-				printk(" >");
-			}
-		}
-		/*
-		 * check for Disk Manager partition table
-		 */
-		if (*(unsigned short *) (bh->b_data+0xfc) == 0x55AA) {
-			p = (struct partition *) (0x1BE + bh->b_data);
-			for (i = 4 ; i < 16 ; i++, current_minor++) {
-				p--;
-				if ((current_minor & mask) >= mask-2)
-					break;
-				if (!(p->start_sect && p->nr_sects))
-					continue;
-				add_partition(hd, current_minor, p->start_sect, p->nr_sects);
-			}
-		}
-	} else
-		printk(" bad partition table");
-	printk("\n");
-	brelse(bh);
+#endif
+#ifdef CONFIG_OSF_PARTITION
+	if (osf_partition(hd, dev, first_sector))
+		return;
+#endif
+	printk("unknown partition table\n");
 }
 
 /* This function is used to re-read partition tables for removable disks.
