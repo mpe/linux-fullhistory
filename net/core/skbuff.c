@@ -390,22 +390,27 @@ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
  *	Insert a packet before another one in a list.
  */
 
-void __skb_insert(struct sk_buff *old, struct sk_buff *newsk)
+void __skb_insert(struct sk_buff *newsk,
+	struct sk_buff * prev, struct sk_buff *next,
+	struct sk_buff_head * list)
 {
-	IS_SKB(old);
+	IS_SKB(prev);
 	IS_SKB(newsk);
+	IS_SKB(next);
 
-	if(!old->next || !old->prev)
+	if(!prev->next || !prev->prev)
+		printk("insert after unlisted item!\n");
+	if(!next->next || !next->prev)
 		printk("insert before unlisted item!\n");
 	if(newsk->next || newsk->prev)
 		printk("inserted item is already on a list.\n");
 
-	newsk->next = old;
-	newsk->prev = old->prev;
-	old->prev = newsk;
-	newsk->prev->next = newsk;
-	newsk->list = old->list;
-	newsk->list->qlen++;
+	newsk->next = next;
+	newsk->prev = prev;
+	next->prev = newsk;
+	prev->next = newsk;
+	newsk->list = list;
+	list->qlen++;
 
 }
 
@@ -435,25 +440,6 @@ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 	newsk->list->qlen++;
 
 	restore_flags(flags);
-}
-
-void __skb_append(struct sk_buff *old, struct sk_buff *newsk)
-{
-	IS_SKB(old);
-	IS_SKB(newsk);
-
-	if(!old->next || !old->prev)
-		printk("append before unlisted item!\n");
-	if(newsk->next || newsk->prev)
-		printk("append item is already on a list.\n");
-
-	newsk->prev = old;
-	newsk->next = old->next;
-	newsk->next->prev = newsk;
-	old->next = newsk;
-	newsk->list = old->list;
-	newsk->list->qlen++;
-
 }
 
 /*
@@ -724,30 +710,26 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 static inline void __kfree_skbmem(struct sk_buff *skb)
 {
 	/* don't do anything if somebody still uses us */
-	if (--skb->count <= 0) {
+	if (atomic_dec_and_test(&skb->count)) {
 		kfree(skb->head);
-		net_skbcount--;
+		atomic_dec(&net_skbcount);
 	}
 }
 
 void kfree_skbmem(struct sk_buff *skb)
 {
-	unsigned long flags;
 	void * addr = skb->head;
 
-	save_flags(flags);
-	cli();
 	/* don't do anything if somebody still uses us */
-	if (--skb->count <= 0) {
+	if (atomic_dec_and_test(&skb->count)) {
 		/* free the skb that contains the actual data if we've clone()'d */
 		if (skb->data_skb) {
 			addr = skb;
 			__kfree_skbmem(skb->data_skb);
 		}
 		kfree(addr);
-		net_skbcount--;
+		atomic_dec(&net_skbcount);
 	}
-	restore_flags(flags);
 }
 
 /*

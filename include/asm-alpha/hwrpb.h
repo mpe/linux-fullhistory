@@ -13,6 +13,8 @@
 #define LCA4_CPU                4       /* LCA4 (21066/21068)   */
 #define EV5_CPU                 5       /* EV5 (21164)          */
 #define EV45_CPU                6       /* EV4.5 (21064/xxx)    */
+#define EV56_CPU		7	/* EV5.6 (21164)	*/
+#define EV6_CPU			8	/* EV6 (21164)		*/
 
 /*
  * DEC system types for Alpha systems.  Found in HWRPB.

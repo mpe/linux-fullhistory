@@ -1184,6 +1184,31 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 }
 
 /*
+ * Add a sk_buff to the TCP receive queue, calculating
+ * the ACK sequence as we go..
+ */
+static inline void tcp_insert_skb(struct sk_buff * skb, struct sk_buff_head * list)
+{
+	struct sk_buff * prev, * next;
+	u32 seq;
+
+	/*
+	 * Find where the new skb goes.. (This goes backwards,
+	 * on the assumption that we get the packets in order)
+	 */
+	seq = skb->seq;
+	prev = list->prev;
+	next = (struct sk_buff *) list;
+	for (;;) {
+		if (prev == (struct sk_buff *) list || !after(prev->seq, seq))
+			break;
+		next = prev;
+		prev = prev->prev;
+	}
+	__skb_insert(skb, prev, next, list);
+}
+
+/*
  * Called for each packet when we find a new ACK endpoint sequence in it
  */
 static inline u32 tcp_queue_ack(struct sk_buff * skb, struct sock * sk)
@@ -1196,48 +1221,28 @@ static inline u32 tcp_queue_ack(struct sk_buff * skb, struct sock * sk)
 	if (skb->h.th->fin)
 		tcp_fin(skb,sk,skb->h.th);
 	return skb->end_seq;
-}
-	  
+}	
 
-/*
- * Add a sk_buff to the TCP receive queue, calculating
- * the ACK sequence as we go..
- */
 static void tcp_queue(struct sk_buff * skb, struct sock * sk,
 	struct tcphdr *th, unsigned long saddr)
 {
-	struct sk_buff_head * list = &sk->receive_queue;
-	struct sk_buff * next;
 	u32 ack_seq;
 
-	/*
-	 * Find where the new skb goes.. (This goes backwards,
-	 * on the assumption that we get the packets in order)
-	 */
-	next = list->prev;
-	while (next != (struct sk_buff *) list) {
-		if (!after(next->seq, skb->seq))
-			break;
-		next = next->prev;
-	}
-	/*
-	 * put it after the packet we found (which
-	 * may be the list-head, but that's fine).
-	 */
-	__skb_append(next, skb, list);
-	next = skb->next;
-
+	tcp_insert_skb(skb, &sk->receive_queue);
 	/*
 	 * Did we get anything new to ack?
 	 */
 	ack_seq = sk->acked_seq;
 	if (!after(skb->seq, ack_seq) && after(skb->end_seq, ack_seq)) {
+		struct sk_buff_head * list = &sk->receive_queue;
+		struct sk_buff * next;
 		ack_seq = tcp_queue_ack(skb, sk);
 
 		/*
 		 * Do we have any old packets to ack that the above
 		 * made visible? (Go forward from skb)
 		 */
+		next = skb->next;
 		while (next != (struct sk_buff *) list) {
 			if (after(next->seq, ack_seq))
 				break;
@@ -1472,11 +1477,42 @@ static inline void tcp_urg(struct sock *sk, struct tcphdr *th, unsigned long len
 }
 
 /*
+ * This should be a bit smarter and remove partially
+ * overlapping stuff too, but this should be good
+ * enough for any even remotely normal case (and the
+ * worst that can happen is that we have a few
+ * unnecessary packets in the receive queue).
+ *
+ * This function is never called with an empty list..
+ */
+static inline void tcp_remove_dups(struct sk_buff_head * list)
+{
+	struct sk_buff * next = list->next;
+
+	for (;;) {
+		struct sk_buff * skb = next;
+		next = next->next;
+		if (next == (struct sk_buff *) list)
+			break;
+		if (before(next->end_seq, skb->end_seq)) {
+			__skb_unlink(next, list);
+			kfree_skb(next, FREE_READ);
+			next = skb;
+			continue;
+		}
+		if (next->seq != skb->seq)
+			continue;
+		__skb_unlink(skb, list);
+		kfree_skb(skb, FREE_READ);
+	}
+}
+
+/*
  * Throw out all unnecessary packets: we've gone over the
  * receive queue limit. This shouldn't happen in a normal
  * TCP connection, but we might have gotten duplicates etc.
  */
-static inline void tcp_forget_unacked(struct sk_buff_head * list)
+static void prune_queue(struct sk_buff_head * list)
 {
 	for (;;) {
 		struct sk_buff * skb = list->prev;
@@ -1484,53 +1520,15 @@ static inline void tcp_forget_unacked(struct sk_buff_head * list)
 		/* gone through it all? */
 		if (skb == (struct sk_buff *) list)
 			break;
-		if (skb->acked)
-			break;
-		__skb_unlink(skb, list);
-	}
-}
-
-/*
- * This should be a bit smarter and remove partially
- * overlapping stuff too, but this should be good
- * enough for any even remotely normal case (and the
- * worst that can happen is that we have a few
- * unnecessary packets in the receive queue).
- */
-static inline void tcp_remove_dups(struct sk_buff_head * list)
-{
-	struct sk_buff * skb = list->next;
-
-	for (;;) {
-		struct sk_buff * next;
-
-		if (skb == (struct sk_buff *) list)
-			break;
-		next = skb->next;
-		if (next->seq == skb->seq) {
-			if (before(next->end_seq, skb->end_seq)) {
-				__skb_unlink(next, list);
-				continue;
-			}
+		if (!skb->acked) {
 			__skb_unlink(skb, list);
+			kfree_skb(skb, FREE_READ);
+			continue;
 		}
-		skb = next;
+		tcp_remove_dups(list);
+		break;
 	}
 }
-
-static void prune_queue(struct sk_buff_head * list)
-{
-	/*
-	 * Throw out things we haven't acked.
-	 */
-	tcp_forget_unacked(list);
-
-	/*
-	 * Throw out duplicates
-	 */
-	tcp_remove_dups(list);
-}
-
 
 /*
  *	A TCP packet has arrived.

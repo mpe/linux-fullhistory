@@ -1,0 +1,72 @@
+The Linux Digiboard Driver
+--------------------------
+
+The Digiboard Driver for Linux supports the following boards:
+
+ DigiBoard PC/Xe, PC/Xi, PC/Xeve
+
+Limitations:
+------------
+Currently the Driver does not do autoprobing. You have to configure
+the driver with the correct I/O address in drivers/char/pcxxconfig.h.
+
+The preconfigured I/O address is 0200h and the default memory address 0D0000h.
+Use them and you will not have to worry about configuring anything.
+
+Supporting Tools:
+-----------------
+Some tools and more detailed up to date information can be found at
+ftp://ftp.fuller.edu/Linux/digi
+
+The "ditty" tool described in the Digiboard Manuals for other Unixes
+is also available.
+
+Currently the Linux MAKEDEV command does not support generating the Digiboard
+Devices. Use the following script to generate the devices:
+
+------------------ mkdigidev begin
+#!/bin/sh
+#
+# Script to create Digiboard Devices
+# Christoph Lameter, April 4, 1996
+#
+# Usage:
+# mkdigidev [<number of devices>]
+# 
+
+DIGIMAJOR=30
+DIGICUMAJOR=31
+
+BOARDS=$1
+
+if [ "$BOARDS" = "" ]; then
+BOARDS=1
+fi
+
+boardnum=0
+while [ $boardnum -lt $BOARDS ];
+do
+  for c in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15;
+  do
+	name=`expr $boardnum \* 16 + $c`
+	mknod /dev/ttyd$name c $DIGIMAJOR $name
+	mknod /dev/ttyD$name c $DIGICUMAJOR $name
+  done
+  boardnum=`expr $boardnum + 1`
+done
+------------------ mkdigidev end
+
+The ttyd devices behave like the /dev/cua?? devices
+and the ttyD devices are like the /dev/ttyS?? devices.
+
+Sources of Information
+----------------------
+
+Webpage: http://private.fuller.edu/clameter/digi.html
+
+Mailing List: digiboard@list.fuller.edu
+
+(Write e-mail to that address to subscribe. Common ListServ commands work.
+Archive of messages available)
+
+Christoph Lameter (clameter@fuller.edu) 4. April 1996.

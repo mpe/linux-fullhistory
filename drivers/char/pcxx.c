@@ -12,10 +12,15 @@
  *  This driver does NOT support DigiBoard's fastcook FEP option and
  *  does not support the transparent print (i.e. digiprint) option.
  *
- *  Please email any suggestions or bug reports to troyd@skypoint.com
+ * This Driver is currently maintained by Christoph Lameter (clameter@fuller.edu)
+ * Please contact the mailing list for problems first. 
  *
+ * Sources of Information:
+ * 1. The Linux Digiboard Page at http://private.fuller.edu/clameter/digi.html
+ * 2. The Linux Digiboard Mailing list at digiboard@list.fuller.edu
+ *    (Simply write a message to introduce yourself to subscribe)
  *
- *  January 1996 Bug fixes by an unknown author and released as 1.5.2
+ *  1.5.2 Fall 1995 Bug fixes by David Nugent
  *  1.5.3 March 9, 1996 Christoph Lameter: Fixed 115.2K Support. Memory
  *		allocation harmonized with 1.3.X Series.
  *  1.5.4 March 30, 1996 Christoph Lameter: Fixup for 1.3.81. Use init_bh
@@ -30,6 +35,7 @@
    The driver supports the native 57.6K and 115K Baudrates under Linux, but
    some distributions like Slackware 3.0 dont like these high baudrates.
 */
+
 #include <linux/mm.h>
 #include <linux/ioport.h>
 #include <linux/errno.h>

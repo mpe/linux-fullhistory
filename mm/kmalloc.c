@@ -78,7 +78,6 @@ struct page_descriptor {
 struct size_descriptor {
 	struct page_descriptor *firstfree;
 	struct page_descriptor *dmafree;	/* DMA-able memory */
-	int size;
 	int nblocks;
 
 	int nmallocs;
@@ -91,49 +90,85 @@ struct size_descriptor {
 /*
  * For now it is unsafe to allocate bucket sizes between n and
  * n-sizeof(page_descriptor) where n is PAGE_SIZE * any power of two
+ *
+ * The blocksize and sizes arrays _must_ match!
  */
 #if PAGE_SIZE == 4096
-struct size_descriptor sizes[] =
+static const unsigned int blocksize[] = {
+	32,
+	64,
+	128,
+	252,
+	508,
+	1020,
+	2040,
+	4096 - 16,
+	8192 - 16,
+	16384 - 16,
+	32768 - 16,
+	65536 - 16,
+	131072 - 16,
+	0
+};
+
+static struct size_descriptor sizes[] =
 {
-	{NULL, NULL, 32, 127, 0, 0, 0, 0, 0},
-	{NULL, NULL, 64, 63, 0, 0, 0, 0, 0},
-	{NULL, NULL, 128, 31, 0, 0, 0, 0, 0},
-	{NULL, NULL, 252, 16, 0, 0, 0, 0, 0},
-	{NULL, NULL, 508, 8, 0, 0, 0, 0, 0},
-	{NULL, NULL, 1020, 4, 0, 0, 0, 0, 0},
-	{NULL, NULL, 2040, 2, 0, 0, 0, 0, 0},
-	{NULL, NULL, 4096 - 16, 1, 0, 0, 0, 0, 0},
-	{NULL, NULL, 8192 - 16, 1, 0, 0, 0, 0, 1},
-	{NULL, NULL, 16384 - 16, 1, 0, 0, 0, 0, 2},
-	{NULL, NULL, 32768 - 16, 1, 0, 0, 0, 0, 3},
-	{NULL, NULL, 65536 - 16, 1, 0, 0, 0, 0, 4},
-	{NULL, NULL, 131072 - 16, 1, 0, 0, 0, 0, 5},
-	{NULL, NULL, 0, 0, 0, 0, 0, 0, 0}
+	{NULL, NULL, 127, 0, 0, 0, 0, 0},
+	{NULL, NULL, 63, 0, 0, 0, 0, 0},
+	{NULL, NULL, 31, 0, 0, 0, 0, 0},
+	{NULL, NULL, 16, 0, 0, 0, 0, 0},
+	{NULL, NULL, 8, 0, 0, 0, 0, 0},
+	{NULL, NULL, 4, 0, 0, 0, 0, 0},
+	{NULL, NULL, 2, 0, 0, 0, 0, 0},
+	{NULL, NULL, 1, 0, 0, 0, 0, 0},
+	{NULL, NULL, 1, 0, 0, 0, 0, 1},
+	{NULL, NULL, 1, 0, 0, 0, 0, 2},
+	{NULL, NULL, 1, 0, 0, 0, 0, 3},
+	{NULL, NULL, 1, 0, 0, 0, 0, 4},
+	{NULL, NULL, 1, 0, 0, 0, 0, 5},
+	{NULL, NULL, 0, 0, 0, 0, 0, 0}
 };
 #elif PAGE_SIZE == 8192
+static const unsigned int blocksize[] = {
+	64,
+	128,
+	248,
+	504,
+	1016,
+	2040,
+	4080,
+	8192 - 32,
+	16384 - 32,
+	32768 - 32,
+	65536 - 32,
+	131072 - 32,
+	262144 - 32,
+	0
+};
+
 struct size_descriptor sizes[] =
 {
-	{NULL, NULL, 64, 127, 0, 0, 0, 0, 0},
-	{NULL, NULL, 128, 63, 0, 0, 0, 0, 0},
-	{NULL, NULL, 248, 31, 0, 0, 0, 0, 0},
-	{NULL, NULL, 504, 16, 0, 0, 0, 0, 0},
-	{NULL, NULL, 1016, 8, 0, 0, 0, 0, 0},
-	{NULL, NULL, 2040, 4, 0, 0, 0, 0, 0},
-	{NULL, NULL, 4080, 2, 0, 0, 0, 0, 0},
-	{NULL, NULL, 8192 - 32, 1, 0, 0, 0, 0, 0},
-	{NULL, NULL, 16384 - 32, 1, 0, 0, 0, 0, 1},
-	{NULL, NULL, 32768 - 32, 1, 0, 0, 0, 0, 2},
-	{NULL, NULL, 65536 - 32, 1, 0, 0, 0, 0, 3},
-	{NULL, NULL, 131072 - 32, 1, 0, 0, 0, 0, 4},
-	{NULL, NULL, 262144 - 32, 1, 0, 0, 0, 0, 5},
-	{NULL, NULL, 0, 0, 0, 0, 0, 0, 0}
+	{NULL, NULL, 127, 0, 0, 0, 0, 0},
+	{NULL, NULL, 63, 0, 0, 0, 0, 0},
+	{NULL, NULL, 31, 0, 0, 0, 0, 0},
+	{NULL, NULL, 16, 0, 0, 0, 0, 0},
+	{NULL, NULL, 8, 0, 0, 0, 0, 0},
+	{NULL, NULL, 4, 0, 0, 0, 0, 0},
+	{NULL, NULL, 2, 0, 0, 0, 0, 0},
+	{NULL, NULL, 1, 0, 0, 0, 0, 0},
+	{NULL, NULL, 1, 0, 0, 0, 0, 1},
+	{NULL, NULL, 1, 0, 0, 0, 0, 2},
+	{NULL, NULL, 1, 0, 0, 0, 0, 3},
+	{NULL, NULL, 1, 0, 0, 0, 0, 4},
+	{NULL, NULL, 1, 0, 0, 0, 0, 5},
+	{NULL, NULL, 0, 0, 0, 0, 0, 0}
 };
 #else
 #error you need to make a version for your pagesize
 #endif
 
 #define NBLOCKS(order)          (sizes[order].nblocks)
-#define BLOCKSIZE(order)        (sizes[order].size)
+#define BLOCKSIZE(order)        (blocksize[order])
 #define AREASIZE(order)		(PAGE_SIZE<<(sizes[order].gfporder))
 
 
@@ -160,31 +195,28 @@ long kmalloc_init(long start_mem, long end_mem)
 }
 
 
-
-int get_order(int size)
-{
-	int order;
-
-	/* Add the size of the header */
-	size += sizeof(struct block_header);
-	for (order = 0; BLOCKSIZE(order); order++)
-		if (size <= BLOCKSIZE(order))
-			return order;
-	return -1;
-}
-
 void *kmalloc(size_t size, int priority)
 {
 	unsigned long flags;
 	unsigned long type;
-	int order, i, sz, dma;
+	int order, dma;
 	struct block_header *p;
 	struct page_descriptor *page, **pg;
 
-	order = get_order(size);
-	if (order < 0) {
-		printk("kmalloc of too large a block (%d bytes).\n", (int) size);
-		return (NULL);
+	/* Get order */
+	order = 0;
+	{
+		unsigned int realsize = size + sizeof(struct block_header);
+		for (;;) {
+			int ordersize = BLOCKSIZE(order);
+			if (realsize <= ordersize)
+				break;
+			order++;
+			if (ordersize)
+				continue;
+			printk("kmalloc of too large a block (%d bytes).\n", (int) size);
+			return NULL;
+		}
 	}
 
 	dma = 0;
@@ -213,11 +245,8 @@ void *kmalloc(size_t size, int priority)
 	page = *pg;
 	if (page) {
 		p = page->firstfree;
-		if (p->bh_flags != MF_FREE) {
-			restore_flags(flags);
-			printk("Problem: block on freelist at %08lx isn't free.\n", (long) p);
-			return NULL;
-		}
+		if (p->bh_flags != MF_FREE)
+			goto not_free_on_freelist;
 		goto found_it;
 	}
 
@@ -225,34 +254,32 @@ void *kmalloc(size_t size, int priority)
 	/* This can be done with ints on: This is private to this invocation */
 	restore_flags(flags);
 
-	/* sz is the size of the blocks we're dealing with */
-	sz = BLOCKSIZE(order);
+	{
+		int i, sz;
+		
+		/* sz is the size of the blocks we're dealing with */
+		sz = BLOCKSIZE(order);
 
-	page = (struct page_descriptor *) __get_free_pages(priority,
-			sizes[order].gfporder, dma);
+		page = (struct page_descriptor *) __get_free_pages(priority,
+				sizes[order].gfporder, dma);
 
-	if (!page) {
-		static unsigned long last = 0;
-		if (priority != GFP_BUFFER && (last + 10 * HZ < jiffies)) {
-			last = jiffies;
-			printk("Couldn't get a free page.....\n");
+		if (!page)
+			goto no_free_page;
+		sizes[order].npages++;
+
+		/* Loop for all but last block: */
+		for (i = NBLOCKS(order), p = BH(page + 1); i > 1; i--, p = p->bh_next) {
+			p->bh_flags = MF_FREE;
+			p->bh_next = BH(((long) p) + sz);
 		}
-		return NULL;
-	}
-	sizes[order].npages++;
-
-	/* Loop for all but last block: */
-	for (i = NBLOCKS(order), p = BH(page + 1); i > 1; i--, p = p->bh_next) {
+		/* Last block: */
 		p->bh_flags = MF_FREE;
-		p->bh_next = BH(((long) p) + sz);
-	}
-	/* Last block: */
-	p->bh_flags = MF_FREE;
-	p->bh_next = NULL;
+		p->bh_next = NULL;
 
-	page->order = order;
-	page->nfree = NBLOCKS(order);
-	p = BH(page+1);
+		page->order = order;
+		page->nfree = NBLOCKS(order);
+		p = BH(page+1);
+	}
 
 	/*
 	 * Now we're going to muck with the "global" freelist
@@ -276,6 +303,21 @@ found_it:
 	memset(p+1, 0xf0, size);
 #endif
 	return p + 1;		/* Pointer arithmetic: increments past header */
+
+no_free_page:
+	{
+		static unsigned long last = 0;
+		if (priority != GFP_BUFFER && (last + 10 * HZ < jiffies)) {
+			last = jiffies;
+			printk("Couldn't get a free page.....\n");
+		}
+		return NULL;
+	}
+
+not_free_on_freelist:
+	restore_flags(flags);
+	printk("Problem: block on freelist at %08lx isn't free.\n", (long) p);
+	return NULL;
 }
 
 void kfree(void *ptr)

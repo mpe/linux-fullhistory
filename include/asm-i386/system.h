@@ -221,10 +221,10 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 #define cli() __asm__ __volatile__ ("cli": : :"memory")
 
 #define save_flags(x) \
-__asm__ __volatile__("pushfl ; popl %0":"=r" (x): /* no input */ :"memory")
+__asm__ __volatile__("pushfl ; popl %0":"=g" (x): /* no input */ :"memory")
 
 #define restore_flags(x) \
-__asm__ __volatile__("pushl %0 ; popfl": /* no output */ :"r" (x):"memory")
+__asm__ __volatile__("pushl %0 ; popfl": /* no output */ :"g" (x):"memory")
 
 #define iret() __asm__ __volatile__ ("iret": : :"memory")
 

@@ -18,6 +18,8 @@
 #include <linux/time.h>
 #include <linux/config.h>
 
+#include <asm/atomic.h>
+
 #define CONFIG_SKB_CHECK 0
 
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
@@ -101,7 +103,7 @@ struct sk_buff
 	unsigned short	protocol;		/* Packet protocol from driver. 		*/
 	unsigned short	truesize;		/* Buffer size 					*/
 
-	int		count;			/* reference count				*/
+	atomic_t	count;			/* reference count				*/
 	struct sk_buff	*data_skb;		/* Link to the actual data skb			*/
 	unsigned char	*head;			/* Head of buffer 				*/
 	unsigned char	*data;			/* Data head pointer				*/
@@ -300,14 +302,13 @@ extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list)
 }
 
 /*
- *	Insert a packet before another one in a list.
+ *	Insert a packet on a list.
  */
 
-extern __inline__ void __skb_insert(struct sk_buff *next, struct sk_buff *newsk,
+extern __inline__ void __skb_insert(struct sk_buff *newsk,
+	struct sk_buff * prev, struct sk_buff *next,
 	struct sk_buff_head * list)
 {
-	struct sk_buff * prev = next->prev;
-
 	newsk->next = next;
 	newsk->prev = prev;
 	next->prev = newsk;
@@ -316,13 +317,16 @@ extern __inline__ void __skb_insert(struct sk_buff *next, struct sk_buff *newsk,
 	list->qlen++;
 }
 
+/*
+ *	Place a packet before a given packet in a list
+ */
 extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
 	save_flags(flags);
 	cli();
-	__skb_insert(old, newsk, old->list);
+	__skb_insert(newsk, old->prev, old, old->list);
 	restore_flags(flags);
 }
 
@@ -330,26 +334,13 @@ extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
  *	Place a packet after a given packet in a list.
  */
 
-extern __inline__ void __skb_append(struct sk_buff *prev, struct sk_buff *newsk,
-	struct sk_buff_head * list)
-{
-	struct sk_buff * next = prev->next;
-
-	newsk->next = next;
-	newsk->prev = prev;
-	next->prev = newsk;
-	prev->next = newsk;
-	newsk->list = list;
-	list->qlen++;
-}
-
 extern __inline__ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
 	save_flags(flags);
 	cli();
-	__skb_append(old, newsk, old->list);
+	__skb_insert(newsk, old, old->next, old->list);
 	restore_flags(flags);
 }
 

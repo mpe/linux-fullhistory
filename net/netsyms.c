@@ -64,6 +64,8 @@ static struct symbol_table net_syms = {
 	X(memcpy_fromiovec),
 	X(sock_setsockopt),
 	X(sock_getsockopt),
+	X(sk_alloc),
+	X(sk_free),
 	X(sock_wake_async),
 	X(sock_alloc_send_skb),
 	X(skb_recv_datagram),

@@ -755,7 +755,7 @@ static inline void get_empty_page(struct task_struct * tsk, struct vm_area_struc
 	pte = pte_wrprotect(mk_pte(ZERO_PAGE, vma->vm_page_prot));
 	if (write_access) {
 		unsigned long page = get_free_page(GFP_KERNEL);
-		pte = pte_mkwrite(mk_pte(page, vma->vm_page_prot));
+		pte = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 		vma->vm_mm->rss++;
 		tsk->min_flt++;
 		if (!page) {

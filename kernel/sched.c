@@ -179,11 +179,15 @@ static inline void move_last_runqueue(struct task_struct * p)
 	struct task_struct *next = p->next_run;
 	struct task_struct *prev = p->prev_run;
 
+	/* remove from list */
 	next->prev_run = prev;
 	prev->next_run = next;
-	(p->prev_run = init_task.prev_run)->next_run = p;
+	/* add back to list */
 	p->next_run = &init_task;
+	prev = init_task.prev_run;
 	init_task.prev_run = p;
+	p->prev_run = prev;
+	prev->next_run = p;
 }
 
 /*

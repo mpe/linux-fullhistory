@@ -81,7 +81,11 @@ extern struct hwrpb_struct *hwrpb;
 
 #if PCI_MODIFY
 
+#if 0
 static unsigned int	io_base	 = 64*KB;	/* <64KB are (E)ISA ports */
+#else
+static unsigned int	io_base	 = 0xb000;
+#endif
 
 #if defined(CONFIG_ALPHA_XL)
 /*
@@ -318,15 +322,18 @@ static void layout_bus(struct pci_bus *bus)
 	if (bus->self) {
 		struct pci_dev *bridge = bus->self;
 		/*
-		 * Set up the top and bottom of the I/O memory segment
+		 * Set up the top and bottom of the PCI I/O segment
 		 * for this bus.
 		 */
 		pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
 					  0x1c, &l);
-		l = l | (bio >> 8) | ((tio - 1) & 0xf000);
+		l = (l & 0xffff0000) | (bio >> 8) | ((tio - 1) & 0xf000);
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
 					   0x1c, l);
-
+		/*
+		 * Set up the top and bottom of the  PCI Memory segment
+		 * for this bus.
+		 */
 		l = ((bmem & 0xfff00000) >> 16) | ((tmem - 1) & 0xfff00000);
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
 					   0x20, l);
@@ -445,6 +452,47 @@ static inline void enable_ide(long ide_base)
 	outb(data | 0x40, ide_base+1);	/* turn on IDE, really! */
 }
 
+/* 
+ * A small note about bridges and interrupts.    The DECchip 21050 (and later chips)
+ * adheres to the PCI-PCI bridge specification.   This says that the interrupts on
+ * the other side of a bridge are swizzled in the following manner:
+ *
+ * Dev    Interrupt   Interupt 
+ *        Pin on      Pin on 
+ *        Device      Connector
+ *
+ *   4    A           A
+ *        B           B
+ *        C           C
+ *        D           D
+ * 
+ *   5    A           B
+ *        B           C
+ *        C           D
+ *        D           A
+ *
+ *   6    A           C
+ *        B           D
+ *        C           A
+ *        D           B
+ *
+ *   7    A           D
+ *        B           A
+ *        C           B
+ *        D           C
+ *
+ *   Where A = pin 1, B = pin 2 and so on and pin=0 = default = A.
+ *   Thus, each swizzle is ((pin-1) + (device#-4)) % 4
+ *
+ *   The following code is somewhat simplistic as it assumes only one bridge.
+ *   I will fix it later (david.rusling@reo.mts.dec.com).
+ */
+static inline unsigned char bridge_swizzle(unsigned char pin, unsigned int slot) 
+{
+        /* swizzle */
+        return (((pin-1) + slot) % 4) + 1 ;
+}
+
 /*
  * Most evaluation boards share most of the fixup code, which is isolated here.
  * This function is declared "inline" as only one platform will ever be selected
@@ -457,40 +505,64 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 {
 	struct pci_dev *dev;
 	unsigned char pin;
+	unsigned char slot ;
 
 	/*
 	 * Go through all devices, fixing up irqs as we see fit:
 	 */
 	for (dev = pci_devices; dev; dev = dev->next) {
-		dev->irq = 0;
-		/*
-		 * Ignore things not on the primary bus - I'll figure
-		 * this out one day - Dave Rusling
-		 */
-		if (dev->bus->number != 0)
-			continue;
-
-		/* read the pin */
-		pcibios_read_config_byte(dev->bus->number, dev->devfn,
-					 PCI_INTERRUPT_PIN, &pin);
-		if (irq_tab[PCI_SLOT(dev->devfn) - min_idsel][pin] != -1)
-			dev->irq = irq_tab[PCI_SLOT(dev->devfn) - min_idsel][pin];
+	        if (dev->class >> 16 != PCI_BASE_CLASS_BRIDGE) {
+		        dev->irq = 0;
+			/*
+			 * This device is not on the primary bus, we need to figure out which
+			 * interrupt pin it will come in on.   We know which slot it will come
+			 * in on 'cos that slot is where the bridge is.   Each time the interrupt
+			 * line passes through a PCI-PCI bridge we must apply the swizzle function
+			 * (see the inline static routine above).
+			 */
+			if (dev->bus->number != 0) {
+			        struct pci_dev *curr = dev ;
+				/* read the pin and do the PCI-PCI bridge interrupt pin swizzle */
+				pcibios_read_config_byte(dev->bus->number, dev->devfn,
+							 PCI_INTERRUPT_PIN, &pin);
+				/* cope with 0 */
+				if (pin == 0) pin = 1 ;
+				/* follow the chain of bridges, swizzling as we go */
+				do {
+				        /* swizzle */
+				        pin = bridge_swizzle(pin, PCI_SLOT(curr->devfn)) ;
+					/* move up the chain of bridges */
+					curr = curr->bus->self ;
+				} while (curr->bus->self) ;
+				/* The slot is the slot of the last bridge. */
+				slot = PCI_SLOT(curr->devfn) ;
+			} else {
+			        /* work out the slot */
+		                slot = PCI_SLOT(dev->devfn) ;
+				/* read the pin */
+				pcibios_read_config_byte(dev->bus->number, dev->devfn,
+						 PCI_INTERRUPT_PIN, &pin);
+			}
+			if (irq_tab[slot - min_idsel][pin] != -1)
+			        dev->irq = irq_tab[slot - min_idsel][pin];
 #if PCI_MODIFY
-		/* tell the device: */
-		pcibios_write_config_byte(dev->bus->number, dev->devfn,
-					  PCI_INTERRUPT_LINE, dev->irq);
+			/* tell the device: */
+			pcibios_write_config_byte(dev->bus->number, dev->devfn,
+						  PCI_INTERRUPT_LINE, dev->irq);
 #endif
-		/*
-		 * if its a VGA, enable its BIOS ROM at C0000
-		 */
-		if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
-			pcibios_write_config_dword(dev->bus->number, dev->devfn,
-						   PCI_ROM_ADDRESS,
-						   0x000c0000 | PCI_ROM_ADDRESS_ENABLE);
+			/*
+			 * if its a VGA, enable its BIOS ROM at C0000
+			 */
+			if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA) {
+			  pcibios_write_config_dword(dev->bus->number, dev->devfn,
+						     PCI_ROM_ADDRESS,
+						     0x000c0000 | PCI_ROM_ADDRESS_ENABLE);
+			}
 		}
-	}
-	if (ide_base) {
-		enable_ide(ide_base);
+
+		if (ide_base) {
+		        enable_ide(ide_base);
+		}
 	}
 }
 

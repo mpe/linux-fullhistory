@@ -765,9 +765,17 @@ static struct device dev_3c509 = {
         0, 0,
         0, 0, 0, NULL, el3_probe };
 
+static int io  = 0;
+static int irq = 0;
+
 int
 init_module(void)
 {
+	dev_3c509.base_addr = io;
+        dev_3c509.irq       = irq;
+        if (!EISA_bus && !io) {
+		printk("3c509: WARNING! Module load-time probing works reliably only for EISA bus!!\n");
+	}
 	if (register_netdev(&dev_3c509) != 0)
 		return -EIO;
 	return 0;
