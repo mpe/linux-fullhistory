@@ -21,6 +21,8 @@ struct netpoll {
 	u32 local_ip, remote_ip;
 	u16 local_port, remote_port;
 	unsigned char local_mac[6], remote_mac[6];
+	spinlock_t poll_lock;
+	int poll_owner;
 };
 
 void netpoll_poll(struct netpoll *np);
@@ -37,8 +39,27 @@ static inline int netpoll_rx(struct sk_buff *skb)
 {
 	return skb->dev->np && skb->dev->np->rx_flags && __netpoll_rx(skb);
 }
+
+static inline void netpoll_poll_lock(struct net_device *dev)
+{
+	if (dev->np) {
+		spin_lock(&dev->np->poll_lock);
+		dev->np->poll_owner = __smp_processor_id();
+	}
+}
+
+static inline void netpoll_poll_unlock(struct net_device *dev)
+{
+	if (dev->np) {
+		spin_unlock(&dev->np->poll_lock);
+		dev->np->poll_owner = -1;
+	}
+}
+
 #else
 #define netpoll_rx(a) 0
+#define netpoll_poll_lock(a)
+#define netpoll_poll_unlock(a)
 #endif
 
 #endif

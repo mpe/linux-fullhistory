@@ -36,7 +36,6 @@ static int nr_skbs;
 static struct sk_buff *skbs;
 
 static atomic_t trapped;
-static DEFINE_SPINLOCK(netpoll_poll_lock);
 
 #define NETPOLL_RX_ENABLED  1
 #define NETPOLL_RX_DROP     2
@@ -63,8 +62,15 @@ static int checksum_udp(struct sk_buff *skb, struct udphdr *uh,
 }
 
 /*
- * Check whether delayed processing was scheduled for our current CPU,
- * and then manually invoke NAPI polling to pump data off the card.
+ * Check whether delayed processing was scheduled for our NIC. If so,
+ * we attempt to grab the poll lock and use ->poll() to pump the card.
+ * If this fails, either we've recursed in ->poll() or it's already
+ * running on another CPU.
+ *
+ * Note: we don't mask interrupts with this lock because we're using
+ * trylock here and interrupts are already disabled in the softirq
+ * case. Further, we test the poll_owner to avoid recursion on UP
+ * systems where the lock doesn't exist.
  *
  * In cases where there is bi-directional communications, reading only
  * one message at a time can lead to packets being dropped by the
@@ -74,13 +80,10 @@ static int checksum_udp(struct sk_buff *skb, struct udphdr *uh,
 static void poll_napi(struct netpoll *np)
 {
 	int budget = 16;
-	unsigned long flags;
-	struct softnet_data *queue;
 
-	spin_lock_irqsave(&netpoll_poll_lock, flags);
-	queue = &__get_cpu_var(softnet_data);
 	if (test_bit(__LINK_STATE_RX_SCHED, &np->dev->state) &&
-	    !list_empty(&queue->poll_list)) {
+	    np->poll_owner != __smp_processor_id() &&
+	    spin_trylock(&np->poll_lock)) {
 		np->rx_flags |= NETPOLL_RX_DROP;
 		atomic_inc(&trapped);
 
@@ -88,8 +91,8 @@ static void poll_napi(struct netpoll *np)
 
 		atomic_dec(&trapped);
 		np->rx_flags &= ~NETPOLL_RX_DROP;
+		spin_unlock(&np->poll_lock);
 	}
-	spin_unlock_irqrestore(&netpoll_poll_lock, flags);
 }
 
 void netpoll_poll(struct netpoll *np)
@@ -190,6 +193,12 @@ static void netpoll_send_skb(struct netpoll *np, struct sk_buff *skb)
 
 repeat:
 	if(!np || !np->dev || !netif_running(np->dev)) {
+		__kfree_skb(skb);
+		return;
+	}
+
+	/* avoid ->poll recursion */
+	if(np->poll_owner == __smp_processor_id()) {
 		__kfree_skb(skb);
 		return;
 	}
@@ -541,6 +550,9 @@ int netpoll_setup(struct netpoll *np)
 {
 	struct net_device *ndev = NULL;
 	struct in_device *in_dev;
+
+	np->poll_lock = SPIN_LOCK_UNLOCKED;
+	np->poll_owner = -1;
 
 	if (np->dev_name)
 		ndev = dev_get_by_name(np->dev_name);
