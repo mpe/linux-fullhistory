@@ -3633,7 +3633,8 @@ static char get_fdc_version(void)
 		return FDC_8272A;	/* 8272a/765 don't know DUMPREGS */
 	}
 	if (r != 10) {
-		printk("FDC init: DUMPREGS: unexpected return of %d bytes.\n", r);
+		printk("FDC %d init: DUMPREGS: unexpected return of %d bytes.\n",
+		       fdc, r);
 		return FDC_UNKNOWN;
 	}
 	output_byte(FD_VERSION);
@@ -3643,7 +3644,8 @@ static char get_fdc_version(void)
 		return FDC_82072;		/* 82072 doesn't know VERSION */
 	}
 	if ((r != 1) || (reply_buffer[0] != 0x90)) {
-		printk("FDC init: VERSION: unexpected return of %d bytes.\n", r);
+		printk("FDC %d init: VERSION: unexpected return of %d bytes.\n",
+		       fdc, r);
 		return FDC_UNKNOWN;
 	}
 	output_byte(FD_UNLOCK);
@@ -3653,13 +3655,15 @@ static char get_fdc_version(void)
 		return FDC_82077_ORIG;	/* Pre-1991 82077 doesn't know LOCK/UNLOCK */
 	}
 	if ((r != 1) || (reply_buffer[0] != 0x00)) {
-		printk("FDC init: UNLOCK: unexpected return of %d bytes.\n", r);
+		printk("FDC %d init: UNLOCK: unexpected return of %d bytes.\n",
+		       fdc, r);
 		return FDC_UNKNOWN;
 	}
 	output_byte(FD_PARTID);
 	r = result();
 	if (r != 1) {
-		printk("FDC init: PARTID: unexpected return of %d bytes.\n",r);
+		printk("FDC %d init: PARTID: unexpected return of %d bytes.\n",
+		       fdc, r);
 		return FDC_UNKNOWN;
 	}
 	if (reply_buffer[0] == 0x80) {
@@ -3671,7 +3675,7 @@ static char get_fdc_version(void)
 		output_byte(FD_SAVE);
 		r = result();
 		if (r != 17) {
-			printk("FDC init: SAVE: unexpected return of %d bytes.\n",r);
+			printk("FDC %d init: SAVE: unexpected return of %d bytes.\n",fdc,r);
 			return FDC_UNKNOWN;
 		}
 		if (!(reply_buffer[0] & 0x40)) {
@@ -3684,9 +3688,13 @@ static char get_fdc_version(void)
 	case 0x1:
 		printk("FDC %d is a 44pin 82078\n",fdc);
 		return FDC_82078;
+	case 0x3:
+		printk("FDC %d is a National Semiconductor PC87306\n",fdc);
+		return FDC_87306;
 	default:
-		printk("FDC %d init: PARTID returned an unknown ID: %d.\n", fdc, reply_buffer[0] >> 5);
-		return FDC_UNKNOWN;
+		printk("FDC %d init: Unknown 82077 variant, PARTID = %d.\n",
+		       fdc, reply_buffer[0] >> 5);
+		return FDC_82077_UNKN;
 	}
 } /* get_fdc_version */
 

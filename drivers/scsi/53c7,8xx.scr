@@ -1109,17 +1109,24 @@ selected:
 ;	a new value to a previously NULL head of the issue queue.
 ;
 ; 2.  The NCR53c810 was selected or reselected by another device.
-; 
+;
+; 3.  The bus was allready busy since we were selected or reselected
+;	before starting the command.
 
 wait_reselect_failed:
 #ifdef EVENTS 
 	INT int_EVENT_RESELECT_FAILED
 #endif
+; Check selected bit.  
     MOVE SIST0 & 0x20 TO SFBR
     JUMP selected, IF 0x20
 ; Reading CTEST2 clears the SIG_P bit in the ISTAT register.
     MOVE CTEST2 & 0x40 TO SFBR	
     JUMP schedule, IF 0x40
+; Check connected bit.  
+; FIXME: this needs to change if we support target mode
+    MOVE ISTAT & 0x08 TO SFBR
+    JUMP reselected, IF 0x08
 ; FIXME : Something bogus happened, and we shouldn't fail silently.
 #if 0
     JUMP schedule
@@ -1141,6 +1148,11 @@ select_failed:
 ; Reading CTEST2 clears the SIG_P bit in the ISTAT register.
     MOVE CTEST2 & 0x40 TO SFBR	
     JUMP select, IF 0x40
+; Check connected bit.  
+; FIXME: this needs to change if we support target mode
+; FIXME: is this really necessary? 
+    MOVE ISTAT & 0x08 TO SFBR
+    JUMP reselected, IF 0x08
 ; FIXME : Something bogus happened, and we shouldn't fail silently.
 #if 0
     JUMP schedule

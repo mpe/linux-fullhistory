@@ -1177,6 +1177,7 @@ normal_init (Scsi_Host_Template *tpnt, int board, int chip,
     char chip_str[80];
     int script_len = 0, dsa_len = 0, size = 0, max_cmd_size = 0, 
 	schedule_size = 0, ok = 0;
+    void *tmp;
 
     options |= perm_options;
 
@@ -1221,14 +1222,7 @@ normal_init (Scsi_Host_Template *tpnt, int board, int chip,
         	  tpnt->sg_tablesize + 
                   3 /* Current startup / termination required per phase */
 		) *
-	8 /* Each instruction is eight bytes */
-	+ (sizeof(void *) - sizeof(u32)); /* to ensure proper alignment */
-    /* Note that alignment will be guaranteed, since we put the command
-       allocated at probe time after the fixed-up SCSI script, which 
-       consists of 32 bit words, aligned on a 32 bit boundary.  But
-       on a 64bit machine we need 8 byte alignment for hostdata->free, so
-       we add in another 4 bytes to take care of potential misalignment
-       */
+	8 /* Each instruction is eight bytes */;
 
     /* Allocate fixed part of hostdata, dynamic part to hold appropriate
        SCSI SCRIPT(tm) plus a single, maximum-sized NCR53c7x0_cmd structure.
@@ -1251,8 +1245,14 @@ normal_init (Scsi_Host_Template *tpnt, int board, int chip,
 	 after all device driver initialization).
     */
 
-    size = sizeof(struct NCR53c7x0_hostdata) + script_len + max_cmd_size +
-	schedule_size;
+    size = sizeof(struct NCR53c7x0_hostdata) + script_len + 
+    /* Note that alignment will be guaranteed, since we put the command
+       allocated at probe time after the fixed-up SCSI script, which 
+       consists of 32 bit words, aligned on a 32 bit boundary.  But
+       on a 64bit machine we need 8 byte alignment for hostdata->free, so
+       we add in another 4 bytes to take care of potential misalignment
+       */
+	(sizeof(void *) - sizeof(u32)) + max_cmd_size + schedule_size;
 
     instance = scsi_register (tpnt, size);
     if (!instance)
@@ -1321,15 +1321,9 @@ normal_init (Scsi_Host_Template *tpnt, int board, int chip,
     hostdata->max_cmd_size = max_cmd_size;
     hostdata->num_cmds = 1;
     /* Initialize single command */
-    hostdata->free = (struct NCR53c7x0_cmd *) 
-	(hostdata->script + hostdata->script_count);
-/* 
- * FIXME: This is wrong.  If we add max_cmd_size to hostdata->free
- * once it's been rounded up, we end up going past the end of what 
- * we allocated.
- */
-    hostdata->free = ROUNDUP(hostdata->free, void *);
-    hostdata->free->real = (void *) hostdata->free;
+    tmp = (hostdata->script + hostdata->script_count);
+    hostdata->free = ROUNDUP(tmp, void *);
+    hostdata->free->real = tmp;
     hostdata->free->size = max_cmd_size;
     hostdata->free->free = NULL;
     hostdata->free->next = NULL;
@@ -2165,8 +2159,10 @@ abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
     if (left < 0) 
 	printk ("scsi%d: loop detected in host running list for scsi pid %ld\n",
 	    host->host_no, c->pid);
-    else if (linux_search) 
+    else if (linux_search) {
 	*linux_prev = linux_search->next;
+	--hostdata->busy[c->target][c->lun];
+    }
 
     /* Return the NCR command structure to the free list */
     cmd->next = hostdata->free;
@@ -2863,7 +2859,9 @@ NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 #endif
 #ifdef A_int_debug_panic
     case A_int_debug_panic:
-	panic("scsi%d : int_debug_panic received\n", host->host_no);
+	printk("scsi%d : int_debug_panic received\n", host->host_no);
+	print_lots (host);
+	return SPECIFIC_INT_PANIC;
 #endif
 #ifdef A_int_debug_saved
     case A_int_debug_saved:
@@ -3376,15 +3374,16 @@ NCR53c8x0_soft_reset (struct Scsi_Host *host) {
     NCR53c7x0_write8(STEST3_REG_800, STEST3_800_TE);
 }
 
-
 /*
  * Function static struct NCR53c7x0_cmd *allocate_cmd (Scsi_Cmnd *cmd)
  * 
  * Purpose : Return the first free NCR53c7x0_cmd structure (which are 
  * 	reused in a LIFO maner to minimize cache thrashing).
  *
- * Side effects : If we don't have enough NCR53c7x0_cmd structures,
- *	allocate more.  Teach programmers not to drink and hack.
+ * Side effects : If we haven't yet scheduled allocation of NCR53c7x0_cmd
+ *	structures for this device, do so.  Attempt to complete all scheduled
+ *	allocations using kmalloc(), putting NCR53c7x0_cmd structures on 
+ *	the free list.  Teach programmers not to drink and hack.
  *
  * Inputs : cmd - SCSI command
  *
@@ -3409,20 +3408,28 @@ allocate_cmd (Scsi_Cmnd *cmd) {
 	    cmd->target, cmd->lun, (hostdata->cmd_allocated[cmd->target] &
 		(1 << cmd->lun)) ? "allready allocated" : "not allocated");
 
-/* 
- * Under Linux 1.2.x, kmalloc() and friends are unavailable until after 
- * device driver initialization has happened.  Calling kmalloc()
- * during scsi device initialization will print a "cannot get free page"
- * message.  To avoid too many of these, we'll forget about trying 
- * to allocate command structures until AFTER initialization.
+/*
+ * If we have not yet reserved commands for this I_T_L nexus, and
+ * the device exists (as indicated by permanant Scsi_Cmnd structures
+ * being allocated under 1.3.x, or being outside of scan_scsis in 
+ * 1.2.x), do so now.
  */
+    if (!(hostdata->cmd_allocated[cmd->target] & (1 << cmd->lun)) &&
 #ifdef LINUX_1_2
-    if (!in_scan_scsis)
+				!in_scan_scsis
+#else
+				cmd->device && cmd->device->has_cmdblocks
 #endif
+	) {
+	if ((hostdata->extra_allocate + hostdata->num_cmds) < host->can_queue) 
+	    hostdata->extra_allocate += host->cmd_per_lun;
+	hostdata->cmd_allocated[cmd->target] |= (1 << cmd->lun);
+    }
+
     for (; hostdata->extra_allocate > 0 ; --hostdata->extra_allocate, 
     	++hostdata->num_cmds) {
-    /* kmalloc() can allocate any size, but historically has returned 
-       unaligned addresses, so we need to allow for alignment */
+    /* historically, kmalloc has returned unaligned addresses; pad so we 
+       have enough room to ROUNDUP */
 	size = hostdata->max_cmd_size + sizeof (void *);
 /* FIXME: for ISA bus '7xx chips, we need to or GFP_DMA in here */
 	real = kmalloc (size, GFP_ATOMIC);
@@ -4445,30 +4452,10 @@ restart:
 				host->host_no, tmp->pid, tmp->target, tmp->lun, tmp->result);
 			    print_command (tmp->cmnd);
 			}
-
 			
 #if 0
 			hostdata->options &= ~OPTION_DEBUG_INTR;
 #endif
-
-/*
- * If we have not yet reserved commands for this I_T_L nexus, and the 
- * command completed successfully, reserve NCR53c7x0_cmd structures
- * which will be allocated the next time we run the allocate
- * routine.
- */
-			if (!(hostdata->cmd_allocated[tmp->target] &
-			    	(1 << tmp->lun)) && 
-			    status_byte(tmp->result) == GOOD) {
-			    if ((hostdata->extra_allocate + hostdata->num_cmds)
-			    	< host->can_queue) {
-				hostdata->extra_allocate += 
-				    host->cmd_per_lun;
-			    }
-			    hostdata->cmd_allocated[tmp->target] |=
-				(1 << tmp->lun);
-			}
-
 			tmp->scsi_done(tmp);
 			goto restart;
 
@@ -5183,7 +5170,7 @@ intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	    printk(KERN_ALERT "scsi%d : unexpected single step interrupt at\n"
 		   "         ", host->host_no);
 	    print_insn (host, dsp, KERN_ALERT "", 1);
-	    printk(KERN_ALERT "         mail drew@colorado.edu\n");
+	    printk(KERN_ALERT "         mail drew@PoohSticks.ORG\n");
     	    FATAL (host);
     	}
     }
@@ -5808,16 +5795,24 @@ print_dsa (struct Scsi_Host *host, u32 *dsa, const char *prefix) {
 	    dsa[hostdata->dsa_msgout / sizeof(u32) + 1],
 	    bus_to_virt (dsa[hostdata->dsa_msgout / sizeof(u32) + 1]));
 
-    for (i = dsa[hostdata->dsa_msgout / sizeof(u32)],
-	ptr = bus_to_virt (dsa[hostdata->dsa_msgout / sizeof(u32) + 1]); 
-	i > 0 && !check_address ((unsigned long) ptr, 1);
-	ptr += len, i -= len) {
-	printk("               ");
-	len = print_msg (ptr);
-	printk("\n");
-	if (!len)
-	    break;
-    }
+    /* 
+     * Only print messages if they're sane in length so we don't
+     * blow the kernel printk buffer on something which won't buy us
+     * anything.
+     */
+
+    if (dsa[hostdata->dsa_msgout / sizeof(u32)] < 
+	    sizeof (hostdata->free->select)) 
+	for (i = dsa[hostdata->dsa_msgout / sizeof(u32)],
+	    ptr = bus_to_virt (dsa[hostdata->dsa_msgout / sizeof(u32) + 1]); 
+	    i > 0 && !check_address ((unsigned long) ptr, 1);
+	    ptr += len, i -= len) {
+	    printk("               ");
+	    len = print_msg (ptr);
+	    printk("\n");
+	    if (!len)
+		break;
+	}
 
     printk("        + %d : select_indirect = 0x%x\n",
 	hostdata->dsa_select, dsa[hostdata->dsa_select / sizeof(u32)]);
@@ -5953,12 +5948,15 @@ print_lots (struct Scsi_Host *host) {
 	sbcl = NCR53c7x0_read8 (SBCL_REG);
 	    
 	
-    	printk ("scsi%d : DCMD|DBC=0x%x, DSA=0x%lx (virt 0x%p)\n"
+    	printk ("scsi%d : DCMD|DBC=0x%x, DNAD=0x%x (virt 0x%p)\n"
+		"         DSA=0x%lx (virt 0x%p)\n"
 	        "         DSPS=0x%x, TEMP=0x%x (virt 0x%p), DMODE=0x%x\n"
 		"         SXFER=0x%x, SCNTL3=0x%x\n"
 		"         %s%s%sphase=%s, %d bytes in SCSI FIFO\n"
 		"         STEST0=0x%x\n",
-	    host->host_no, dbc_dcmd, virt_to_bus(dsa), dsa, 
+	    host->host_no, dbc_dcmd, NCR53c7x0_read32(DNAD_REG), 
+		bus_to_virt(NCR53c7x0_read32(DNAD_REG)),
+	    virt_to_bus(dsa), dsa, 
 	    NCR53c7x0_read32(DSPS_REG), NCR53c7x0_read32(TEMP_REG), 
 	    bus_to_virt (NCR53c7x0_read32(TEMP_REG)),
 	    (int) NCR53c7x0_read8(hostdata->dmode),

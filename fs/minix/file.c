@@ -13,6 +13,8 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
+#include <linux/mm.h>
+#include <linux/pagemap.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>

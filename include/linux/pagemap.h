@@ -12,16 +12,29 @@ static inline unsigned long page_address(struct page * page)
 	return PAGE_OFFSET + PAGE_SIZE*(page - mem_map);
 }
 
-#define PAGE_HASH_SIZE 257
+#define PAGE_HASH_BITS 10
+#define PAGE_HASH_SIZE (1 << PAGE_HASH_BITS)
+
 #define PAGE_AGE_VALUE 16
 
 extern unsigned long page_cache_size;
 extern struct page * page_hash_table[PAGE_HASH_SIZE];
 
+/*
+ * We use a power-of-two hash table to avoid a modulus,
+ * and get a reasonable hash by knowing roughly how the
+ * inode pointer and offsets are distributed (ie, we
+ * roughly know which bits are "significant")
+ */
 static inline unsigned long _page_hashfn(struct inode * inode, unsigned long offset)
 {
-	offset ^= (unsigned long) inode;
-	return offset % PAGE_HASH_SIZE;
+#define i (((unsigned long) inode)/sizeof(unsigned long))
+#define o (offset >> PAGE_SHIFT)
+#define s(x) ((x)+((x)>>PAGE_HASH_BITS))
+	return s(i+o) & (PAGE_HASH_SIZE-1);
+#undef i
+#undef o
+#undef s
 }
 
 #define page_hash(inode,offset) page_hash_table[_page_hashfn(inode,offset)]

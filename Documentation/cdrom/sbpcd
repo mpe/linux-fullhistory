@@ -1,4 +1,4 @@
-This README belongs to release 3.9 or newer of the SoundBlaster Pro
+This README belongs to release 4.1 or newer of the SoundBlaster Pro
 (Matsushita, Kotobuki, Panasonic, CreativeLabs, Longshine and TEAC)
 CD-ROM driver for Linux.
 
@@ -28,6 +28,9 @@ CR-574 is an IDE/ATAPI drive.
 
 The Longshine LCS-7260 is a double-speed drive which uses the "old"
 Matsushita command set. It is supported - with help by Serge Robyns.
+Vertos ("Elitegroup Computer Systems", ECS) has a similar drive - support
+has started; come in contact if you have such a "Vertos 100" or "ECS-AT"
+drive.
 
 There exists an "IBM External ISA CD-ROM Drive" which in fact is a CR-563
 with a special controller board. This drive is supported (the interface is
@@ -36,10 +39,12 @@ an internal drive, and you can use it as an internal, too - f.e. plug it into
 a soundcard).
 
 CreativeLabs has a new drive "CD200" and a similar drive "CD200F". The latter
-is made by Funai and sometimes named "E2550UA". Support is under construction
- - CD200F should work, CD200 is still giving problems.
-Drive detection and playing audio should work. I need qualified feedback
-about the bugs within the data functions or a drive (I never saw a CD200).
+is made by Funai and sometimes named "E2550UA", newer models may be named
+"MK4015". The CD200F drives should fully work.
+CD200 drives without "F" are still giving problems: drive detection and
+playing audio should work, data access will result in errors. I need qualified
+feedback about the bugs within the data functions or a drive (I never saw a
+CD200).
 
 The quad-speed TEAC CD-55A drive is supported, but still does not reach "full
 speed". The data rate already reaches 500 kB/sec if you set SBP_BUFFER_FRAMES
@@ -63,21 +68,21 @@ the IDE/ATAPI user questions disappear).
 
 
 This driver will work with the soundcard interfaces (SB Pro, SB 16, Galaxy,
-SoundFX, Mozart, ...) and with the "no-sound" cards (Panasonic CI-101P,
+SoundFX, Mozart, MAD16 ...) and with the "no-sound" cards (Panasonic CI-101P,
 LaserMate, WDH-7001C, Longshine LCS-6853, TEAC ...).
 
-It finally works now with the "configurable" interface "Sequoia S-1000", too,
-which is found on the Spea Media FX and Ensonic Soundscape sound cards. You
-have to specify the type "SBPRO 2" and the true CDROM port address with it,
-not the "configuration port" address.
+It works with the "configurable" interface "Sequoia S-1000", too, which is 
+used on the Spea Media FX and Ensonic Soundscape sound cards. You have to
+specify the type "SBPRO 2" and the true CDROM port address with it, not the
+"configuration port" address.
 
 If you have a sound card which needs a "configuration driver" instead of
 jumpers for interface types and addresses (like Mozart cards) - those
 drivers get invoked before the DOS CDROM driver in your CONFIG.SYS, typical
 names are "cdsetup.sys" and "mztinit.sys" -, let the sound driver do the
-CDROM port configuration (the leading comments within 
-linux/drivers/sound/mad16.c are just for you!). Hannu Savolainen's mad16.c
-code is able to set up my Mozart card - I simply had to add
+CDROM port configuration (the leading comments in linux/drivers/sound/mad16.c
+are just for you!). Hannu Savolainen's mad16.c code is able to set up my
+Mozart card - I simply had to add
    #define MAD16_CONF 0x06
    #define MAD16_CDSEL 0x03
 to configure the CDROM interface for type "Panasonic" (LaserMate) and address
@@ -133,8 +138,11 @@ different address and a second cable.
 The driver supports reading of data from the CD and playing of audio tracks.
 The audio part should run with WorkMan, xcdplayer, with the "non-X11" products
 CDplayer and WorkBone - tell me if it is not compatible with other software.
+The only accepted measure for correctness with the audio functions is the
+"cdtester" utility (appended) - most audio player programmers seem to be
+better musicians than programmers. ;-)
 
-With the CR-562 and CR-563 drives, the reading of audio frames is possible.
+With the CR-56x and the CD200 drives, the reading of audio frames is possible.
 This is implemented by an IOCTL function which reads READ_AUDIO frames of
 2352 bytes at once (configurable with the "READ_AUDIO" define, default is 0).
 Reading the same frame a second time gives different data; the frame data 
@@ -163,8 +171,8 @@ XA (PhotoCD) disks with "old" drives give only 50 kB/sec.
 
 This release consists of
 - this README file
-- the driver file linux/drivers/block/sbpcd.c
-- the stub files linux/drivers/block/sbpcd[234].c
+- the driver file linux/drivers/cdrom/sbpcd.c
+- the stub files linux/drivers/cdrom/sbpcd[234].c
 - the header file linux/include/linux/sbpcd.h.
 
 
@@ -185,9 +193,9 @@ To install:
           Most "compatible" sound cards (almost all "non-CreativeLabs" cards)
           need "SBPRO 0".
           The "no-sound" board from OmniCd needs the "SBPRO 1" setup.
-          All other "no-sound" boards need the "SBPRO 0" setup.
           Possibly some TEAC "no-sound" boards need the "SBPRO 1" setup.
-          The Spea Media FX sound card needs "SBPRO 2".
+          All other "no-sound" boards need the "SBPRO 0" setup.
+          The Spea Media FX and Ensoniq SoundScape cards need "SBPRO 2".
           sbpcd.c holds some examples in its auto-probe list.
           If you configure "SBPRO" wrong, the playing of audio CDs will work,
           but you will not be able to mount a data CD.
@@ -200,10 +208,10 @@ To install:
       or
           sbpcd=0x320,LaserMate
       or
-          sbpcd=0x330,SPEA
+          sbpcd=0x338,SoundScape
       This is especially useful if you install a fresh distribution.
       If the second parameter is a number, it gets taken as the type
-      setting; 0 is "LaserMate", 1 is "SoundBlaster".
+      setting; 0 is "LaserMate", 1 is "SoundBlaster", 2 is "SoundScape".
       So, for example
           sbpcd=0x230,1
       is equivalent to
@@ -257,7 +265,7 @@ Using sbpcd as a "loadable module":
 
 If you do NOT select "Matsushita/Panasonic CDROM driver support" during the
 "make config" of your kernel, you can build the "loadable module" sbpcd.o.
-Read /usr/src/linux/README.modules on this.
+Read /usr/src/linux/Documentation/modules.txt on this.
 
 If sbpcd gets used as a module, the support of more than one interface
 card (i.e. drives 4...15) is disabled.
@@ -266,6 +274,8 @@ You can specify interface address and type with the "insmod" command like:
  # insmod /usr/src/linux/modules/sbpcd.o sbpcd=0x340,0
 or
  # insmod /usr/src/linux/modules/sbpcd.o sbpcd=0x230,1
+or
+ # insmod /usr/src/linux/modules/sbpcd.o sbpcd=0x338,2
 where the last number represents the SBPRO setting (no strings allowed here).
 
 
@@ -281,7 +291,7 @@ No DMA and no IRQ is used.
 To reduce or increase the amount of kernel messages, edit sbpcd.c and play
 with the "DBG_xxx" switches (initialization of the variable "sbpcd_debug").
 Don't forget to reflect what you do; enabling all DBG_xxx switches at once
-may crash your system.
+may crash your system, and each message line is accompanied by a delay.
 
 The driver uses the "variable BLOCK_SIZE" feature. To use it, you have to
 specify "block=2048" as a mount option. Doing this will disable the direct
@@ -518,9 +528,7 @@ drives are mostly telling there is no UPC/EAN code on disk or there is, but it
 is an all-zero number. I guess now almost no CD holds such a number.
 
 Bug reports, comments, wishes, donations (technical information is a donation,
-too :-) etc. to
-                         emoenke@gwdg.de
- or to my FIDO address:  Eberhard Moenkeberg, 2:2437/210.27
+too :-) etc. to emoenke@gwdg.de.
 
 SnailMail address, preferable for CD editors if they want to submit a free
 "cooperation" copy:

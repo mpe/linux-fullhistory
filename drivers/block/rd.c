@@ -371,7 +371,7 @@ void rd_load()
 
 	if (rd_prompt) {
 		printk(KERN_NOTICE
-		       "VFS: Insert ramdisk floppy and press ENTER\n");
+		       "VFS: Insert root floppy disk to be loaded into ramdisk and press ENTER\n");
 		wait_for_keypress();
 	}
 

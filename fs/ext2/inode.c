@@ -41,7 +41,7 @@ void ext2_put_inode (struct inode * inode)
 
 #define inode_bmap(inode, nr) ((inode)->u.ext2_i.i_data[(nr)])
 
-static int block_bmap (struct buffer_head * bh, int nr)
+static inline int block_bmap (struct buffer_head * bh, int nr)
 {
 	int tmp;
 

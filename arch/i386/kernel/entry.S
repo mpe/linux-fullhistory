@@ -657,10 +657,18 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_readv)		/* 145 */
 	.long SYMBOL_NAME(sys_writev)
 	.long SYMBOL_NAME(sys_getsid)
-	.long 0
+	.long SYMBOL_NAME(sys_fdatasync)
 	.long 0
 	.long SYMBOL_NAME(sys_mlock)		/* 150 */
 	.long SYMBOL_NAME(sys_munlock)
 	.long SYMBOL_NAME(sys_mlockall)
 	.long SYMBOL_NAME(sys_munlockall)
-	.space (NR_syscalls-154)*4
+	.long SYMBOL_NAME(sys_sched_setparam)
+	.long SYMBOL_NAME(sys_sched_getparam)   /* 155 */
+	.long SYMBOL_NAME(sys_sched_setscheduler)
+	.long SYMBOL_NAME(sys_sched_getscheduler)
+	.long SYMBOL_NAME(sys_sched_yield)
+	.long SYMBOL_NAME(sys_sched_get_priority_max)
+	.long SYMBOL_NAME(sys_sched_get_priority_min)  /* 160 */
+	.long SYMBOL_NAME(sys_sched_rr_get_interval)
+	.space (NR_syscalls-162)*4

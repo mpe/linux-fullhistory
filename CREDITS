@@ -543,7 +543,7 @@ D: The Linux Support Team Erlangen
 N: Markus Kuhn
 E: mskuhn@cip.informatik.uni-erlangen.de
 W: http://wwwcip.informatik.uni-erlangen.de/user/mskuhn
-D: Unicode, time, standards
+D: Unicode, real-time, time, standards
 S: Schlehenweg 9
 S: D-91080 Uttenreuth
 S: Germany
@@ -902,10 +902,10 @@ D: several improvements to system programs
 S: Oldenburg, Germany
 
 N: Darren Senn
-E: sinster@scintilla.santa-clara.ca.us
+E: sinster@darkwater.com
 D: Whatever I notice needs doing (so far: itimers, /proc)
-S: 620 Park View Drive #206
-S: Santa Clara, California 95054
+S: POB 64132
+S: Sunnyvale, CA 94088-4132
 S: USA
 
 N: Rick Sladkey

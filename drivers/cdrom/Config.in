@@ -3,7 +3,7 @@
 #
 tristate 'Sony CDU31A/CDU33A CDROM support' CONFIG_CDU31A
 tristate 'Standard Mitsumi [no XA/Multisession] CDROM support' CONFIG_MCD
-tristate 'Experimental Mitsumi [XA/MultiSession] support' CONFIG_MCDX
+tristate 'Mitsumi [XA/MultiSession] CDROM support' CONFIG_MCDX
 tristate 'Matsushita/Panasonic/Creative, Longshine, TEAC CDROM support' CONFIG_SBPCD
 if [ "$CONFIG_SBPCD" = "y" ]; then
   bool 'Matsushita/Panasonic, ... second CDROM controller support' CONFIG_SBPCD2
@@ -18,5 +18,5 @@ tristate 'Aztech/Orchid/Okano/Wearnes/TXC (non IDE) CDROM support' CONFIG_AZTCD
 tristate 'Sony CDU535 CDROM support' CONFIG_CDU535
 tristate 'Goldstar R420 CDROM support' CONFIG_GSCD
 tristate 'Philips/LMS CM206 CDROM support' CONFIG_CM206
-tristate 'Experimental Optics Storage DOLPHIN 8000AT CDROM support' CONFIG_OPTCD
-tristate 'Experimental Sanyo H94A CDROM support' CONFIG_SJCD
+tristate 'Optics Storage DOLPHIN 8000AT CDROM support' CONFIG_OPTCD
+tristate 'Sanyo H94A CDROM support' CONFIG_SJCD

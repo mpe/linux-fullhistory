@@ -1,4 +1,4 @@
-# LAST EDIT: Thu Nov 30 22:39:07 1995 by Axel Boldt (boldt@math.ucsb.edu) 
+# Maintained by Axel Boldt (boldt@math.ucsb.edu) 
 #
 # This version of the Linux kernel configuration help texts
 # corresponds to the kernel versions 1.3.x. Be aware that these
@@ -1685,151 +1685,115 @@ CONFIG_CD_NO_IDESCSI
   will just cause this configure script to skip all the questions
   about these CDROM drives. If you are unsure what you have, say Y and
   find out whether you have one of the following drives.
+  For each of these drivers, a file Documentation/cdrom/<driver_name>
+  exists. Especially in cases where you do not know exactly which kind
+  of drive you have you should read there.
+  Most of these drivers use a file include/linux/<driver_name>.h where
+  you can define your interface parameters and switch some internal
+  goodies.
+  All these CDROM drivers are also usable as a module (= code which can
+  be inserted in and removed from the running kernel whenever you want).
+  If you want to compile them as module, say M instead of Y and read
+  Documentation/modules.txt.
+  If you want to use any of these CDROM drivers, you also have to say
+  Y to "ISO9660 cdrom filesystem support" below (this answer will get
+  "defaulted" for you if you enable any of the Linux CDROM drivers).
 
-Sony CDU31A/CDU33A CDROM driver support
+Sony CDU31A/CDU33A CDROM support
 CONFIG_CDU31A
   These CDROM drives have a spring-pop-out caddyless drawer, and a
-  rectangular green LED centered beneath it. If you have one of these,
-  say Y here and also to "ISO9660 cdrom filesystem support"
-  below. Read the CDROM-HOWTO, available via ftp (user: anonymous)
-  from sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, read
-  Documentation/cdrom/cdu31a. NOTE: this CDROM drive won't be
-  auto detected by the kernel at boot time; you have to provide its
-  specifications as an option to the kernel as described in the above
-  README.  See the documentation of your boot loader (lilo or loadlin)
-  about how to pass options to the kernel. The lilo procedure is also
-  explained in the SCSI-HOWTO. This driver is also available as a
-  module ( = code which can be inserted in and removed from the
-  running kernel whenever you want). If you want to compile it as a
-  module, say M here and read Documentation/modules.txt. If unsure,
-  say N.
+  rectangular green LED centered beneath it.
+  NOTE: these CDROM drives will not be auto detected by the kernel at
+  boot time; you have to provide the interface address as an option to
+  the kernel as described in Documentation/cdrom/cdu31a or fill in your
+  parameters into linux/drivers/cdrom/cdu31a.c. See the documentation
+  of your boot loader (lilo or loadlin) about how to pass options to 
+  the kernel. The lilo procedure is also explained in the SCSI-HOWTO.
 
 Standard Mitsumi [no XA/Multisession] CDROM support
 CONFIG_MCD
-  This is a very common CDROM drive. In some models, the whole drive
-  chassis slides out for cd insertion.  Later models use a motorized
-  tray type mechanism. If you have one of these CDROM drives, say Y
-  here and also to "ISO9660 cdrom filesystem support" below. Read the,
-  available via ftp (user: anonymous) CDROM-HOWTO from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that this driver does
-  not support XA or MultiSession CDs (PhotoCDs). There's a new
-  experimental driver in the 1.3 kernels that can do this, but cannot
-  play your music CDs. If you want that one, say N here. If the driver
-  doesn't work out of the box, you might want to have a look at
-  linux/include/linux/mcd.h. If your Mitsumi CDROM drive is of type
-  IDE/ATAPI, then you have to say N here and should have said Y to
-  "Support for IDE/ATAPI CDROMs" above. This driver is also available
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want). If you want to compile it as a
-  module, say M here and read Documentation/modules.txt. If unsure,
-  say N now.
+  This is the older of the two drivers for the older Mitsumi models
+  LU-005, FX-001 and FX-001D. This is not the right driver for the 
+  FX-001DE and the triple or quad speed models (all these are IDE/ATAPI
+  models).
+  With the old LU-005 model, the whole drive chassis slides out for
+  cd insertion.  The FX-xxx models use a motorized tray type mechanism.
+  Note that this driver does not support XA or MultiSession CDs (PhotoCDs).
+  There is a new driver (next question) which can do this. If you want
+  that one, say N here.
+  If the driver doesn't work out of the box, you might want to have
+  a look at linux/include/linux/mcd.h.
 
-Experimental Mitsumi [XA/MultiSession, no Audio] support
+Mitsumi [XA/MultiSession] support
 CONFIG_MCDX
   Use this driver if you want to be able to read XA or MultiSession
-  CDs (PhotoCDs) as well as ordinary CDs with your Mitsumi CDROM
-  drive. In addition, this driver uses much less kernel memory than
-  the old one, if that is a concern. However, you won't be able to
-  play audio CDs. If you have two Mitsumi CDROM drives, you can use
-  the old driver for one and the new for the other;
-  Documentation/cdrom/mcdx explains how. If you want to compile this
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
-  Documentation/modules.txt.
+  CDs (PhotoCDs) as well as ordinary CDs with your Mitsumi LU-005,
+  FX-001 or FX-001D CDROM drive. In addition, this driver uses much less
+  kernel memory than the old one, if that is a concern. This driver is
+  able to support more than one drive, but each drive needs a separate
+  interface card.
 
-Matsushita/Panasonic CDROM driver support
+Matsushita/Panasonic/Creative, Longshine, TEAC CDROM support
 CONFIG_SBPCD
-  The Creative Labs Soundblaster CD drives as well as Longshine and
-  IBM External ISA also fall under this category. It has a uniquely
-  shaped faceplate, with a caddyless motorized drawer which makes it
-  recognizable, but has no external brand markings. Some Soundblaster
-  drives have a caddy and manual loading/eject, but still no external
-  markings. If you have one of these, say Y here and also to "ISO9660
-  cdrom filesystem support" below. This driver can support up to four
-  CDROM controllers, each of which can support up to four CDROM
-  drives; you will be asked how many controllers you have. Read
-  Documentation/cdrom/sbpcd and include/linux/sbpcd.h in the kernel
-  source and the CDROM-HOWTO, available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.  If you
-  want to compile this as a module ( = code which can be inserted in
-  and removed from the running kernel whenever you want), say M here
-  and read Documentation/modules.txt.
+  This driver supports most of the drives which use the Panasonic or
+  SoundBlaster interface.
+  The Matsushita CR-521, CR-522, CR-523, CR-562, CR-563 drives (sometimes
+  labelled "Creative"), the CreativeLabs CD200, the Longshine LCS-7260,
+  the "IBM External ISA CDROM" (in fact a CR-56x model), the TEAC CD-55A
+  fall under this category. Some other "electrically compatible" drives
+  (Vertos, Genoa, some Funai models) are currently not supported; for the
+  Sanyo H94A drive currently a separate driver (asked later) is responsible.
+  Most drives have a uniquely shaped faceplate, with a caddyless motorized
+  drawer, but without external brand markings. The older CR-52x drives have
+  a caddy and manual loading/eject, but still no external markings.
+  The driver is able to do an extended auto-probing for interface addresses
+  and drive types; this can help to find facts in cases you are not sure,
+  but can consume some time during the boot process if none of the supported
+  drives gets found.
+  Once your drive got found, you should enter the reported parameters into
+  linux/include/linux/sbpcd.h and set "DISTRIBUTION 0" there.
+  This driver can support up to four CDROM interface cards, and each card
+  can support up to four CDROM drives; if you say Y here, you will be asked
+  how many controllers you have. If compiled as a module, only one interface
+  card (but with up to four drives) is usable.
 
-Matsushita/Panasonic second CDROM controller support
+Matsushita/Panasonic, ... second CDROM controller support
 CONFIG_SBPCD2
-  If you have two CDROM drives of this type that you want to use
-  simultaneously under Linux, say Y here, otherwise N.
+  Say Y here only if you have two CDROM controller boards of this type
+  (usually only if you have more than four drives). You should enter
+  the parameters for the second, third and fourth interface card into
+  linux/include/linux/sbpcd.h before compiling the new kernel.
 
-Aztech/Orchid/Okano/Wearnes (non IDE) CDROM support
+Aztech/Orchid/Okano/Wearnes/TXC (non IDE) CDROM support
 CONFIG_AZTCD
-  If you have a CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 or
-  Conrad TXC CDROM drive, say Y here and also to "ISO9660 cdrom
-  filesystem support" below. This is NOT for CDROM drives with IDE
-  interface, such as Aztech CDA269-031SE. (If you have one of those,
-  you should have said Y to the new IDE driver above.) You want to
-  read Documentation/cdrom/aztcd and include/linux/aztcd.h in the
-  kernel source and the CDROM-HOWTO, available via ftp (user:
-  anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure,
-  say N.  If you want to compile this as a module ( = code which can
-  be inserted in and removed from the running kernel whenever you
-  want), say M here and read Documentation/modules.txt.
+  This is your driver if you have an Aztech CDA268-01A, Orchid CD-3110,
+  Okano or Wearnes CDD110 or a Conrad TXC CDROM drive.
+  This driver - just like all these CDROM drivers - is NOT for CDROM
+  drives with IDE/ATAPI interface, such as Aztech CDA269-031SE.
 
-Sony CDU535 CDROM driver support
+Sony CDU535 CDROM support
 CONFIG_CDU535
-  If you have a CDU-535 or CDU-531 CDROM drive (this is one of the
-  older Sony drives with its own interface card), say Y here and also
-  to "ISO9660 cdrom filesystem support" below. You want to read
-  Documentation/cdrom/sonycd535 in the kernel source and the
-  CDROM-HOWTO, available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.  If you
-  want to compile this as a module ( = code which can be inserted in
-  and removed from the running kernel whenever you want), say M here
-  and read Documentation/modules.txt.
+  This is the driver for the older Sony CDU-535 and CDU-531 CDROM drives.
 
 Goldstar R420 CDROM support
 CONFIG_GSCD
-  If this is your CDROM drive, say Y here and also to "ISO9660 cdrom
-  filesystem support" below. You want to read Documentation/cdrom/gscd
-  in the kernel source and the CDROM-HOWTO, available via ftp (user:
-  anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. As described
-  in the file gscd, you might have to change a setting in the file
-  include/linux/gscd.h before compiling the kernel. If unsure, say N.
-  If you want to compile this as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt.
+  If this is your CDROM drive, say Y here.
+  As described in linux/Documentation/cdrom/gscd, you might have to
+  change a setting in the file include/linux/gscd.h before compiling
+  the kernel.
 
 Philips/LMS CM206 CDROM support
 CONFIG_CM206
   If you have a Philips/LMS CDROM drive cm206 in combination with a
-  cm260 host adapter card, say Y here and also to "ISO9660 cdrom
-  filesystem support" below. You want to read
-  Documentation/cdrom/cm206 in the kernel source and the CDROM-HOWTO,
-  available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.  If you
-  want to compile this as a module ( = code which can be inserted in
-  and removed from the running kernel whenever you want), say M here
-  and read Documentation/modules.txt.
+  cm260 host adapter card, say Y here.
 
-Experimental Optics Storage DOLPHIN 8000AT CDROM support
+Optics Storage DOLPHIN 8000AT CDROM support
 CONFIG_OPTCD
-  If this is your CDROM drive, say Y here and also to "ISO9660 cdrom
-  filesystem support" below. You want to read
-  Documentation/cdrom/optcd in the kernel source and the CDROM-HOWTO,
-  available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.  If you
-  want to compile this as a module ( = code which can be inserted in
-  and removed from the running kernel whenever you want), say M here
-  and read Documentation/modules.txt.
+  If this is your CDROM drive, say Y here.
 
-Experimental Sanyo H94A CDROM support
+Sanyo H94A CDROM support
 CONFIG_SJCD
-  If this is your CDROM drive, say Y here and also to "ISO9660 cdrom
-  filesystem support" below. You want to read
-  Documentation/cdrom/sjcd in the kernel source (this file includes
-  information about how to make the driver work together with an ISP16
-  soundcard) and the CDROM-HOWTO,
-  available via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If unsure, say N.
+  If this is your CDROM drive, say Y here.
 
 Standard (minix) fs support
 CONFIG_MINIX_FS

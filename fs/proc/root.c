@@ -131,7 +131,6 @@ struct proc_dir_entry proc_net = {
 	NULL, NULL	
 };
 
-#ifdef CONFIG_SCSI
 struct proc_dir_entry proc_scsi = {
 	PROC_SCSI, 4, "scsi",
 	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
@@ -139,7 +138,6 @@ struct proc_dir_entry proc_scsi = {
 	NULL, NULL,
 	NULL, &proc_root, NULL
 };
-#endif
 
 int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 {

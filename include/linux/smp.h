@@ -8,7 +8,6 @@
 
 #ifdef __SMP__
 #include <asm/smp.h>
-#include <asm/smp_lock.h>
  
 extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
 extern void smp_boot_cpus(void);		/* Boot processor call to load the other CPU's */

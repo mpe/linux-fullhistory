@@ -92,6 +92,10 @@ extern int nr_running, nr_tasks;
 #define SCHED_FIFO		1
 #define SCHED_RR		2
 
+struct sched_param {
+	int sched_priority;
+};
+
 #ifndef NULL
 #define NULL ((void *) 0)
 #endif
@@ -195,7 +199,7 @@ struct task_struct {
 	struct wait_queue *wait_chldexit;	/* for wait4() */
 	unsigned short uid,euid,suid,fsuid;
 	unsigned short gid,egid,sgid,fsgid;
-	unsigned long timeout, policy;
+	unsigned long timeout, policy, rt_priority;
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
 	struct timer_list real_timer;
@@ -273,7 +277,7 @@ struct task_struct {
 /* suppl grps*/ {NOGROUP,}, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL,NULL, \
 /* uid etc */	0,0,0,0,0,0,0,0, \
-/* timeout */	0,SCHED_OTHER,0,0,0,0,0,0, \
+/* timeout */	0,SCHED_OTHER,0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
 /* utime */	0,0,0,0,0, \
 /* flt */	0,0,0,0,0,0, \

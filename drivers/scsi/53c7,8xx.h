@@ -67,7 +67,7 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 #endif
 
 #ifdef LINUX_1_2
-#define NCR53c7xx {NULL, NULL, "NCR53c{7,8}xx (rel 14)", NCR53c7xx_detect,\
+#define NCR53c7xx {NULL, NULL, "NCR53c{7,8}xx (rel 17)", NCR53c7xx_detect,\
 	NULL, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\
 	NULL /* slave attach */, scsicam_bios_param, /* can queue */ 24, \
@@ -75,7 +75,7 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 	/* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
 #else
 #define NCR53c7xx {NULL, NULL, NULL, NULL, \
-        "NCR53c{7,8}xx (rel 14)", NCR53c7xx_detect,\
+        "NCR53c{7,8}xx (rel 17)", NCR53c7xx_detect,\
         NULL, /* info */ NULL, /* command, deprecated */ NULL,		\
 	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\
 	NULL /* slave attach */, scsicam_bios_param, /* can queue */ 24, \
@@ -1447,8 +1447,6 @@ struct NCR53c7x0_hostdata {
     volatile u16 initiate_wdtr;
     /* Bit fielded list of targets we've talked to. */
     volatile u16 talked_to;
-    /* Bit fielded list of targets that answered */
-    volatile u16 answered;
 
     /* Array of bit-fielded lun lists that we need to request_sense */
     volatile unsigned char request_sense[16];

@@ -100,14 +100,26 @@
 
 /* FDC version return types */
 #define FDC_NONE	0x00
-#define FDC_UNKNOWN	0x10
+#define FDC_UNKNOWN	0x10	/* DO NOT USE THIS TYPE EXCEPT IF IDENTIFICATION
+				   FAILS EARLY */
 #define FDC_8272A	0x20	/* Intel 8272a, NEC 765 */
 #define FDC_765ED	0x30	/* Non-Intel 1MB-compatible FDC, can't detect */
 #define FDC_82072	0x40	/* Intel 82072; 8272a + FIFO + DUMPREGS */
 #define FDC_82077_ORIG	0x50	/* Original version of 82077AA, sans LOCK */
 #define FDC_82077	0x52	/* 82077AA-1 */
+#define FDC_82077_UNKN	0x53	/* Unknown 82077 variant */
 #define FDC_82078	0x60	/* 44pin 82078 or 64pin 82078SL */
 #define FDC_82078_1	0x61	/* 82078-1 (2Mbps fdc) */
+#define FDC_87306	0x63	/* National Semiconductor PC 87306 */
+
+/*
+ * Beware: the fdc type list is roughly sorted by increasing features.
+ * Presence of features is tested by comparing the FDC version id with the
+ * "oldest" version that has the needed feature.
+ * If during FDC detection, an obscure test fails late in the sequence, don't
+ * assign FDC_UNKNOWN. Else the FDC will be treated as a dumb 8272a, or worse.
+ * This is especially true if the tests are unneeded.
+ */
 
 #define FD_RESET_DELAY 20
 #endif

@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/config.h>
 #include <linux/kernel.h>
+#include <linux/smp.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <linux/sched.h>
@@ -38,6 +39,7 @@
 #include <linux/ext2_fs.h>
 #include <linux/random.h>
 #include <linux/mount.h>
+#include <linux/pagemap.h>
 
 extern unsigned char aux_device_present, kbd_read_mask;
 
@@ -222,6 +224,7 @@ struct symbol_table symbol_table = {
  	X(mem_map),
  	X(remap_page_range),
 	X(high_memory),
+	X(update_vm_cache),
 
 	/* filesystem internal functions */
 	X(getname),
@@ -252,6 +255,8 @@ struct symbol_table symbol_table = {
 	X(dcache_add),
 	X(aout_core_dump),
 	X(add_blkdev_randomness),
+	X(generic_file_read),
+	X(generic_readpage),
 
 	/* device registration */
 	X(register_chrdev),
@@ -560,10 +565,7 @@ struct symbol_table symbol_table = {
 	X(proc_unregister),
 	X(in_group_p),
 	X(generate_cluster),
-#ifdef CONFIG_SCSI
 	X(proc_scsi),
-	X(proc_scsi_inode_operations),
-#endif
 	X(proc_net_inode_operations),
 	X(proc_net),
 #endif

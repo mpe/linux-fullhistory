@@ -138,7 +138,6 @@ void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, 
 	if (page) {
 		unsigned long addr;
 
-		page->count++;
 		if (!page->uptodate)
 			sleep_on(&page->wait);
 		addr = page_address(page);

@@ -59,6 +59,7 @@ static int softdog_open(struct inode *inode, struct file *file)
 	 */
 	watchdog_ticktock.expires=jiffies+TIMER_MARGIN;
 	add_timer(&watchdog_ticktock);
+	timer_alive++;
 	return 0;
 }
 
@@ -111,5 +112,5 @@ void watchdog_init(void)
 	mouse_register(&softdog_mouse);
 	init_timer(&watchdog_ticktock);
 	watchdog_ticktock.function=watchdog_fire;
-	printk("Software Watchdog Timer: 0.02\n");
+	printk("Software Watchdog Timer: 0.03\n");
 }	

@@ -39,7 +39,10 @@ static inline void invalidate_all(void)
  */
 static inline void invalidate_mm(struct mm_struct *mm)
 {
-	tbiap();
+	if (mm != current->mm)
+		mm->context = 0;
+	else
+		tbiap();
 }
 
 /*
@@ -53,7 +56,12 @@ static inline void invalidate_mm(struct mm_struct *mm)
 static inline void invalidate_page(struct vm_area_struct *vma,
 	unsigned long addr)
 {
-	tbi(2 + ((vma->vm_flags & VM_EXEC) != 0), addr);
+	struct mm_struct * mm = vma->vm_mm;
+
+	if (mm != current->mm)
+		mm->context = 0;
+	else
+		tbi(2 + ((vma->vm_flags & VM_EXEC) != 0), addr);
 }
 
 /*
@@ -63,7 +71,10 @@ static inline void invalidate_page(struct vm_area_struct *vma,
 static inline void invalidate_range(struct mm_struct *mm,
 	unsigned long start, unsigned long end)
 {
-	tbiap();
+	if (mm != current->mm)
+		mm->context = 0;
+	else
+		tbiap();
 }
 
 /* Certain architectures need to do special things when pte's

@@ -110,9 +110,8 @@ CONFIGURING the kernel:
 	  under some circumstances lead to problems: probing for a
 	  nonexistent controller card may confuse your other controllers
 	- compiling the kernel with "-m486" for a number of 486-specific
-	  will result in a kernel that still works on a 386: it may be
-	  slightly larger and possibly slower by an insignificant amount,
-	  but it should not hurt performance. 
+	  will result in a kernel that does NOT work on a 386.  The
+	  kernel will detect this on bootup, and give up.
 	- A kernel with math-emulation compiled in will still use the
 	  coprocessor if one is present: the math emulation will just
 	  never get used in that case.  The kernel will be slightly larger,
@@ -137,7 +136,9 @@ COMPILING the kernel:
    upgrade your compiler, remember to get the new binutils package too
    (for as/ld/nm and company). Do not use gcc-2.6.0; it has a few serious
    bugs.  Some problems have been reported occasionally with 2.6.3 as well,
-   so use that version at your own risk.
+   so use that version at your own risk.  Specifying "-fno-strength-reduce" 
+   in the CFLAGS of the main Makefile may help to work around a known
+   bug in gcc.
 
  - do a "make zImage" to create a compressed kernel image.  If you want
    to make a bootdisk (without root filesystem or lilo), insert a floppy

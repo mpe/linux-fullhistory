@@ -168,7 +168,7 @@ at 0x00000005 : */	0x78380000,0x00000000,
 /*
 	CALL scratch_to_dsa
 
-at 0x00000007 : */	0x88080000,0x00000960,
+at 0x00000007 : */	0x88080000,0x00000980,
 /*
 	CALL select
 
@@ -231,7 +231,7 @@ at 0x0000001c : */	0x78380000,0x00000000,
 /*
 	CALL scratch_to_dsa
 
-at 0x0000001e : */	0x88080000,0x00000960,
+at 0x0000001e : */	0x88080000,0x00000980,
 /*
 	JUMP reselected_check_next
 
@@ -506,7 +506,7 @@ dsa_schedule:
 ;
     CALL dsa_to_scratch
 
-at 0x0000005a : */	0x88080000,0x00000918,
+at 0x0000005a : */	0x88080000,0x00000938,
 /*
     MOVE SCRATCH0 + dsa_next TO SCRATCH0
 
@@ -548,7 +548,7 @@ at 0x0000006b : */	0xc0000004,0x00000000,0x00000000,
 ; And update the head pointer.
     CALL dsa_to_scratch
 
-at 0x0000006e : */	0x88080000,0x00000918,
+at 0x0000006e : */	0x88080000,0x00000938,
 /*
     MOVE dmode_ncr_to_memory TO DMODE	
 
@@ -645,7 +645,7 @@ at 0x0000007f : */	0x60000200,0x00000000,
 
     SELECT ATN FROM dsa_select, select_failed
 
-at 0x00000081 : */	0x4300003c,0x00000794,
+at 0x00000081 : */	0x4300003c,0x000007a4,
 /*
     JUMP select_msgout, WHEN MSG_OUT
 
@@ -813,7 +813,7 @@ end_data_transfer:
 do_dataout:
     CALL dsa_to_scratch
 
-at 0x000000a3 : */	0x88080000,0x00000918,
+at 0x000000a3 : */	0x88080000,0x00000938,
 /*
     MOVE SCRATCH0 + dsa_dataout TO SCRATCH0	
 
@@ -858,7 +858,7 @@ at 0x000000b7 : */	0x80080000,0x00000000,
 do_datain:
     CALL dsa_to_scratch
 
-at 0x000000b9 : */	0x88080000,0x00000918,
+at 0x000000b9 : */	0x88080000,0x00000938,
 /*
     MOVE SCRATCH0 + dsa_datain TO SCRATCH0	
 
@@ -1599,7 +1599,7 @@ at 0x000001a2 : */	0x78380000,0x00000000,
 /*
     CALL scratch_to_dsa
 
-at 0x000001a4 : */	0x88080000,0x00000960,
+at 0x000001a4 : */	0x88080000,0x00000980,
 /*
 
     ; Fix the update-next pointer so that the reconnect_dsa_head
@@ -1760,12 +1760,15 @@ at 0x000001d9 : */	0x98080000,0x00010000,
 ;	a new value to a previously NULL head of the issue queue.
 ;
 ; 2.  The NCR53c810 was selected or reselected by another device.
-; 
+;
+; 3.  The bus was allready busy since we were selected or reselected
+;	before starting the command.
 
 wait_reselect_failed:
 
 
 
+; Check selected bit.  
     MOVE SIST0 & 0x20 TO SFBR
 
 at 0x000001db : */	0x74422000,0x00000000,
@@ -1783,13 +1786,23 @@ at 0x000001df : */	0x741a4000,0x00000000,
 
 at 0x000001e1 : */	0x800c0040,0x00000000,
 /*
+; Check connected bit.  
+; FIXME: this needs to change if we support target mode
+    MOVE ISTAT & 0x08 TO SFBR
+
+at 0x000001e3 : */	0x74140800,0x00000000,
+/*
+    JUMP reselected, IF 0x08
+
+at 0x000001e5 : */	0x800c0008,0x0000065c,
+/*
 ; FIXME : Something bogus happened, and we shouldn't fail silently.
 
 
 
     INT int_debug_panic
 
-at 0x000001e3 : */	0x98080000,0x030b0000,
+at 0x000001e7 : */	0x98080000,0x030b0000,
 /*
 
 
@@ -1801,26 +1814,37 @@ select_failed:
 ; Otherwise, mask the selected and reselected bits off SIST0
     MOVE SIST0 & 0x30 TO SFBR
 
-at 0x000001e5 : */	0x74423000,0x00000000,
+at 0x000001e9 : */	0x74423000,0x00000000,
 /*
     JUMP selected, IF 0x20
 
-at 0x000001e7 : */	0x800c0020,0x00000764,
+at 0x000001eb : */	0x800c0020,0x00000764,
 /*
     JUMP reselected, IF 0x10 
 
-at 0x000001e9 : */	0x800c0010,0x0000065c,
+at 0x000001ed : */	0x800c0010,0x0000065c,
 /*
 ; If SIGP is set, the user just gave us another command, and
 ; we should restart or return to the scheduler.
 ; Reading CTEST2 clears the SIG_P bit in the ISTAT register.
     MOVE CTEST2 & 0x40 TO SFBR	
 
-at 0x000001eb : */	0x741a4000,0x00000000,
+at 0x000001ef : */	0x741a4000,0x00000000,
 /*
     JUMP select, IF 0x40
 
-at 0x000001ed : */	0x800c0040,0x000001fc,
+at 0x000001f1 : */	0x800c0040,0x000001fc,
+/*
+; Check connected bit.  
+; FIXME: this needs to change if we support target mode
+; FIXME: is this really necessary? 
+    MOVE ISTAT & 0x08 TO SFBR
+
+at 0x000001f3 : */	0x74140800,0x00000000,
+/*
+    JUMP reselected, IF 0x08
+
+at 0x000001f5 : */	0x800c0008,0x0000065c,
 /*
 ; FIXME : Something bogus happened, and we shouldn't fail silently.
 
@@ -1828,7 +1852,7 @@ at 0x000001ed : */	0x800c0040,0x000001fc,
 
     INT int_debug_panic
 
-at 0x000001ef : */	0x98080000,0x030b0000,
+at 0x000001f7 : */	0x98080000,0x030b0000,
 /*
 
 
@@ -1853,11 +1877,11 @@ ENTRY test_1
 test_1:
     MOVE MEMORY 4, test_src, test_dest
 
-at 0x000001f1 : */	0xc0000004,0x00000000,0x00000000,
+at 0x000001f9 : */	0xc0000004,0x00000000,0x00000000,
 /*
     INT int_test_1
 
-at 0x000001f4 : */	0x98080000,0x04000000,
+at 0x000001fc : */	0x98080000,0x04000000,
 /*
 
 ;
@@ -1868,61 +1892,61 @@ ENTRY test_2
 test_2:
     CLEAR TARGET
 
-at 0x000001f6 : */	0x60000200,0x00000000,
+at 0x000001fe : */	0x60000200,0x00000000,
 /*
     SELECT ATN FROM 0, test_2_fail
 
-at 0x000001f8 : */	0x43000000,0x00000830,
+at 0x00000200 : */	0x43000000,0x00000850,
 /*
     JUMP test_2_msgout, WHEN MSG_OUT
 
-at 0x000001fa : */	0x860b0000,0x000007f0,
+at 0x00000202 : */	0x860b0000,0x00000810,
 /*
 ENTRY test_2_msgout
 test_2_msgout:
     MOVE FROM 8, WHEN MSG_OUT
 
-at 0x000001fc : */	0x1e000000,0x00000008,
+at 0x00000204 : */	0x1e000000,0x00000008,
 /*
     MOVE FROM 16, WHEN CMD 
 
-at 0x000001fe : */	0x1a000000,0x00000010,
+at 0x00000206 : */	0x1a000000,0x00000010,
 /*
     MOVE FROM 24, WHEN DATA_IN
 
-at 0x00000200 : */	0x19000000,0x00000018,
+at 0x00000208 : */	0x19000000,0x00000018,
 /*
     MOVE FROM 32, WHEN STATUS
 
-at 0x00000202 : */	0x1b000000,0x00000020,
+at 0x0000020a : */	0x1b000000,0x00000020,
 /*
     MOVE FROM 40, WHEN MSG_IN
 
-at 0x00000204 : */	0x1f000000,0x00000028,
+at 0x0000020c : */	0x1f000000,0x00000028,
 /*
     MOVE SCNTL2 & 0x7f TO SCNTL2
 
-at 0x00000206 : */	0x7c027f00,0x00000000,
+at 0x0000020e : */	0x7c027f00,0x00000000,
 /*
     CLEAR ACK
 
-at 0x00000208 : */	0x60000040,0x00000000,
+at 0x00000210 : */	0x60000040,0x00000000,
 /*
     WAIT DISCONNECT
 
-at 0x0000020a : */	0x48000000,0x00000000,
+at 0x00000212 : */	0x48000000,0x00000000,
 /*
 test_2_fail:
     INT int_test_2
 
-at 0x0000020c : */	0x98080000,0x04010000,
+at 0x00000214 : */	0x98080000,0x04010000,
 /*
 
 ENTRY debug_break
 debug_break:
     INT int_debug_break
 
-at 0x0000020e : */	0x98080000,0x03000000,
+at 0x00000216 : */	0x98080000,0x03000000,
 /*
 
 ;
@@ -1938,26 +1962,26 @@ ENTRY target_abort
 target_abort:
     SET TARGET
 
-at 0x00000210 : */	0x58000200,0x00000000,
+at 0x00000218 : */	0x58000200,0x00000000,
 /*
     DISCONNECT
 
-at 0x00000212 : */	0x48000000,0x00000000,
+at 0x0000021a : */	0x48000000,0x00000000,
 /*
     CLEAR TARGET
 
-at 0x00000214 : */	0x60000200,0x00000000,
+at 0x0000021c : */	0x60000200,0x00000000,
 /*
     JUMP schedule
 
-at 0x00000216 : */	0x80080000,0x00000000,
+at 0x0000021e : */	0x80080000,0x00000000,
 /*
     
 ENTRY initiator_abort
 initiator_abort:
     SET ATN
 
-at 0x00000218 : */	0x58000008,0x00000000,
+at 0x00000220 : */	0x58000008,0x00000000,
 /*
 ;
 ; The SCSI-I specification says that targets may go into MSG out at 
@@ -1970,97 +1994,97 @@ at 0x00000218 : */	0x58000008,0x00000000,
 ; arbitrary number of bytes.
     JUMP spew_cmd, WHEN CMD
 
-at 0x0000021a : */	0x820b0000,0x00000898,
+at 0x00000222 : */	0x820b0000,0x000008b8,
 /*
     JUMP eat_msgin, WHEN MSG_IN
 
-at 0x0000021c : */	0x870b0000,0x000008a8,
+at 0x00000224 : */	0x870b0000,0x000008c8,
 /*
     JUMP eat_datain, WHEN DATA_IN
 
-at 0x0000021e : */	0x810b0000,0x000008d8,
+at 0x00000226 : */	0x810b0000,0x000008f8,
 /*
     JUMP eat_status, WHEN STATUS
 
-at 0x00000220 : */	0x830b0000,0x000008c0,
+at 0x00000228 : */	0x830b0000,0x000008e0,
 /*
     JUMP spew_dataout, WHEN DATA_OUT
 
-at 0x00000222 : */	0x800b0000,0x000008f0,
+at 0x0000022a : */	0x800b0000,0x00000910,
 /*
     JUMP sated
 
-at 0x00000224 : */	0x80080000,0x000008f8,
+at 0x0000022c : */	0x80080000,0x00000918,
 /*
 spew_cmd:
     MOVE 1, NCR53c7xx_zero, WHEN CMD
 
-at 0x00000226 : */	0x0a000001,0x00000000,
+at 0x0000022e : */	0x0a000001,0x00000000,
 /*
     JUMP sated
 
-at 0x00000228 : */	0x80080000,0x000008f8,
+at 0x00000230 : */	0x80080000,0x00000918,
 /*
 eat_msgin:
     MOVE 1, NCR53c7xx_sink, WHEN MSG_IN
 
-at 0x0000022a : */	0x0f000001,0x00000000,
+at 0x00000232 : */	0x0f000001,0x00000000,
 /*
     JUMP eat_msgin, WHEN MSG_IN
 
-at 0x0000022c : */	0x870b0000,0x000008a8,
+at 0x00000234 : */	0x870b0000,0x000008c8,
 /*
     JUMP sated
 
-at 0x0000022e : */	0x80080000,0x000008f8,
+at 0x00000236 : */	0x80080000,0x00000918,
 /*
 eat_status:
     MOVE 1, NCR53c7xx_sink, WHEN STATUS
 
-at 0x00000230 : */	0x0b000001,0x00000000,
+at 0x00000238 : */	0x0b000001,0x00000000,
 /*
     JUMP eat_status, WHEN STATUS
 
-at 0x00000232 : */	0x830b0000,0x000008c0,
+at 0x0000023a : */	0x830b0000,0x000008e0,
 /*
     JUMP sated
 
-at 0x00000234 : */	0x80080000,0x000008f8,
+at 0x0000023c : */	0x80080000,0x00000918,
 /*
 eat_datain:
     MOVE 1, NCR53c7xx_sink, WHEN DATA_IN
 
-at 0x00000236 : */	0x09000001,0x00000000,
+at 0x0000023e : */	0x09000001,0x00000000,
 /*
     JUMP eat_datain, WHEN DATA_IN
 
-at 0x00000238 : */	0x810b0000,0x000008d8,
+at 0x00000240 : */	0x810b0000,0x000008f8,
 /*
     JUMP sated
 
-at 0x0000023a : */	0x80080000,0x000008f8,
+at 0x00000242 : */	0x80080000,0x00000918,
 /*
 spew_dataout:
     MOVE 1, NCR53c7xx_zero, WHEN DATA_OUT
 
-at 0x0000023c : */	0x08000001,0x00000000,
+at 0x00000244 : */	0x08000001,0x00000000,
 /*
 sated:
     MOVE SCNTL2 & 0x7f TO SCNTL2
 
-at 0x0000023e : */	0x7c027f00,0x00000000,
+at 0x00000246 : */	0x7c027f00,0x00000000,
 /*
     MOVE 1, NCR53c7xx_msg_abort, WHEN MSG_OUT
 
-at 0x00000240 : */	0x0e000001,0x00000000,
+at 0x00000248 : */	0x0e000001,0x00000000,
 /*
     WAIT DISCONNECT
 
-at 0x00000242 : */	0x48000000,0x00000000,
+at 0x0000024a : */	0x48000000,0x00000000,
 /*
     INT int_norm_aborted
 
-at 0x00000244 : */	0x98080000,0x02040000,
+at 0x0000024c : */	0x98080000,0x02040000,
 /*
 
 ;
@@ -2081,82 +2105,82 @@ at 0x00000244 : */	0x98080000,0x02040000,
 dsa_to_scratch:
     MOVE DSA0 TO SFBR
 
-at 0x00000246 : */	0x72100000,0x00000000,
+at 0x0000024e : */	0x72100000,0x00000000,
 /*
     MOVE SFBR TO SCRATCH0
 
-at 0x00000248 : */	0x6a340000,0x00000000,
+at 0x00000250 : */	0x6a340000,0x00000000,
 /*
     MOVE DSA1 TO SFBR
 
-at 0x0000024a : */	0x72110000,0x00000000,
+at 0x00000252 : */	0x72110000,0x00000000,
 /*
     MOVE SFBR TO SCRATCH1
 
-at 0x0000024c : */	0x6a350000,0x00000000,
+at 0x00000254 : */	0x6a350000,0x00000000,
 /*
     MOVE DSA2 TO SFBR
 
-at 0x0000024e : */	0x72120000,0x00000000,
+at 0x00000256 : */	0x72120000,0x00000000,
 /*
     MOVE SFBR TO SCRATCH2
 
-at 0x00000250 : */	0x6a360000,0x00000000,
+at 0x00000258 : */	0x6a360000,0x00000000,
 /*
     MOVE DSA3 TO SFBR
 
-at 0x00000252 : */	0x72130000,0x00000000,
+at 0x0000025a : */	0x72130000,0x00000000,
 /*
     MOVE SFBR TO SCRATCH3
 
-at 0x00000254 : */	0x6a370000,0x00000000,
+at 0x0000025c : */	0x6a370000,0x00000000,
 /*
     RETURN
 
-at 0x00000256 : */	0x90080000,0x00000000,
+at 0x0000025e : */	0x90080000,0x00000000,
 /*
 
 scratch_to_dsa:
     MOVE SCRATCH0 TO SFBR
 
-at 0x00000258 : */	0x72340000,0x00000000,
+at 0x00000260 : */	0x72340000,0x00000000,
 /*
     MOVE SFBR TO DSA0
 
-at 0x0000025a : */	0x6a100000,0x00000000,
+at 0x00000262 : */	0x6a100000,0x00000000,
 /*
     MOVE SCRATCH1 TO SFBR
 
-at 0x0000025c : */	0x72350000,0x00000000,
+at 0x00000264 : */	0x72350000,0x00000000,
 /*
     MOVE SFBR TO DSA1
 
-at 0x0000025e : */	0x6a110000,0x00000000,
+at 0x00000266 : */	0x6a110000,0x00000000,
 /*
     MOVE SCRATCH2 TO SFBR
 
-at 0x00000260 : */	0x72360000,0x00000000,
+at 0x00000268 : */	0x72360000,0x00000000,
 /*
     MOVE SFBR TO DSA2
 
-at 0x00000262 : */	0x6a120000,0x00000000,
+at 0x0000026a : */	0x6a120000,0x00000000,
 /*
     MOVE SCRATCH3 TO SFBR
 
-at 0x00000264 : */	0x72370000,0x00000000,
+at 0x0000026c : */	0x72370000,0x00000000,
 /*
     MOVE SFBR TO DSA3
 
-at 0x00000266 : */	0x6a130000,0x00000000,
+at 0x0000026e : */	0x6a130000,0x00000000,
 /*
     RETURN
 
-at 0x00000268 : */	0x90080000,0x00000000,
+at 0x00000270 : */	0x90080000,0x00000000,
 };
 
 #define A_NCR53c7xx_msg_abort	0x00000000
 u32 A_NCR53c7xx_msg_abort_used[] = {
-	0x00000241,
+	0x00000249,
 };
 
 #define A_NCR53c7xx_msg_reject	0x00000000
@@ -2166,15 +2190,15 @@ u32 A_NCR53c7xx_msg_reject_used[] = {
 
 #define A_NCR53c7xx_sink	0x00000000
 u32 A_NCR53c7xx_sink_used[] = {
-	0x0000022b,
-	0x00000231,
-	0x00000237,
+	0x00000233,
+	0x00000239,
+	0x0000023f,
 };
 
 #define A_NCR53c7xx_zero	0x00000000
 u32 A_NCR53c7xx_zero_used[] = {
-	0x00000227,
-	0x0000023d,
+	0x0000022f,
+	0x00000245,
 };
 
 #define A_NOP_insn	0x00000000
@@ -2378,13 +2402,13 @@ u32 A_dsa_temp_target_used[] = {
 
 #define A_int_debug_break	0x03000000
 u32 A_int_debug_break_used[] = {
-	0x0000020f,
+	0x00000217,
 };
 
 #define A_int_debug_panic	0x030b0000
 u32 A_int_debug_panic_used[] = {
-	0x000001e4,
-	0x000001f0,
+	0x000001e8,
+	0x000001f8,
 };
 
 #define A_int_err_check_condition	0x00030000
@@ -2442,7 +2466,7 @@ u32 A_int_msg_wdtr_used[] = {
 
 #define A_int_norm_aborted	0x02040000
 u32 A_int_norm_aborted_used[] = {
-	0x00000245,
+	0x0000024d,
 };
 
 #define A_int_norm_command_complete	0x02020000
@@ -2467,12 +2491,12 @@ u32 A_int_norm_select_complete_used[] = {
 
 #define A_int_test_1	0x04000000
 u32 A_int_test_1_used[] = {
-	0x000001f5,
+	0x000001fd,
 };
 
 #define A_int_test_2	0x04010000
 u32 A_int_test_2_used[] = {
-	0x0000020d,
+	0x00000215,
 };
 
 #define A_int_test_3	0x04020000
@@ -2511,17 +2535,17 @@ u32 A_schedule_used[] = {
 	0x0000007e,
 	0x00000192,
 	0x000001e2,
-	0x00000217,
+	0x0000021f,
 };
 
 #define A_test_dest	0x00000000
 u32 A_test_dest_used[] = {
-	0x000001f3,
+	0x000001fb,
 };
 
 #define A_test_src	0x00000000
 u32 A_test_src_used[] = {
-	0x000001f2,
+	0x000001fa,
 };
 
 #define Ent_accept_message	0x000005d4
@@ -2530,7 +2554,7 @@ u32 A_test_src_used[] = {
 #define Ent_command_complete_msgin	0x0000061c
 #define Ent_data_transfer	0x00000254
 #define Ent_datain_to_jump	0x00000328
-#define Ent_debug_break	0x00000838
+#define Ent_debug_break	0x00000858
 #define Ent_dsa_code_begin	0x00000000
 #define Ent_dsa_code_check_reselect	0x000000f8
 #define Ent_dsa_code_fix_jump	0x0000003c
@@ -2541,7 +2565,7 @@ u32 A_test_src_used[] = {
 #define Ent_dsa_schedule	0x00000168
 #define Ent_dsa_zero	0x00000168
 #define Ent_end_data_transfer	0x0000028c
-#define Ent_initiator_abort	0x00000860
+#define Ent_initiator_abort	0x00000880
 #define Ent_msg_in	0x00000404
 #define Ent_msg_in_restart	0x000003e4
 #define Ent_other_in	0x00000374
@@ -2553,10 +2577,10 @@ u32 A_test_src_used[] = {
 #define Ent_respond_message	0x000005ec
 #define Ent_select	0x000001fc
 #define Ent_select_msgout	0x00000214
-#define Ent_target_abort	0x00000840
-#define Ent_test_1	0x000007c4
-#define Ent_test_2	0x000007d8
-#define Ent_test_2_msgout	0x000007f0
+#define Ent_target_abort	0x00000860
+#define Ent_test_1	0x000007e4
+#define Ent_test_2	0x000007f8
+#define Ent_test_2_msgout	0x00000810
 #define Ent_wait_reselect	0x00000654
 u32 LABELPATCHES[] = {
 	0x00000008,
@@ -2620,24 +2644,26 @@ u32 LABELPATCHES[] = {
 	0x000001b8,
 	0x000001cf,
 	0x000001de,
-	0x000001e8,
-	0x000001ea,
+	0x000001e6,
+	0x000001ec,
 	0x000001ee,
-	0x000001f9,
-	0x000001fb,
-	0x0000021b,
-	0x0000021d,
-	0x0000021f,
-	0x00000221,
+	0x000001f2,
+	0x000001f6,
+	0x00000201,
+	0x00000203,
 	0x00000223,
 	0x00000225,
+	0x00000227,
 	0x00000229,
+	0x0000022b,
 	0x0000022d,
-	0x0000022f,
-	0x00000233,
+	0x00000231,
 	0x00000235,
-	0x00000239,
+	0x00000237,
 	0x0000023b,
+	0x0000023d,
+	0x00000241,
+	0x00000243,
 };
 
 struct {
@@ -2646,6 +2672,6 @@ struct {
 } EXTERNAL_PATCHES[] = {
 };
 
-u32 INSTRUCTIONS	= 297;
-u32 PATCHES	= 79;
+u32 INSTRUCTIONS	= 301;
+u32 PATCHES	= 81;
 u32 EXTERNAL_PATCHES_LEN	= 0;

@@ -28,6 +28,7 @@
 #include <linux/pagemap.h>
 #include <linux/swapctl.h>
 #include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -258,6 +259,21 @@ asmlinkage int sys_fsync(unsigned int fd)
 		return -EBADF;
 	if (!file->f_op || !file->f_op->fsync)
 		return -EINVAL;
+	if (file->f_op->fsync(inode,file))
+		return -EIO;
+	return 0;
+}
+
+asmlinkage int sys_fdatasync(unsigned int fd)
+{
+	struct file * file;
+	struct inode * inode;
+
+	if (fd>=NR_OPEN || !(file=current->files->fd[fd]) || !(inode=file->f_inode))
+		return -EBADF;
+	if (!file->f_op || !file->f_op->fsync)
+		return -EINVAL;
+	/* this needs further work, at the moment it is identical to fsync() */
 	if (file->f_op->fsync(inode,file))
 		return -EIO;
 	return 0;

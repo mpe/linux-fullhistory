@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 54
+SUBLEVEL = 55
 
 ARCH = i386
 
@@ -309,7 +309,7 @@ mrproper: clean
 
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*~' -o -name '*.bak' \
-		-o -name '#*#' -o -name '.*.orig' \) -print`
+		-o -name '#*#' -o -name '.*.orig' \) -print` TAGS
 
 
 backup: mrproper

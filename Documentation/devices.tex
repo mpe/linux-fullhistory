@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@storm.net$>$}
-\date{Last revised: December 17, 1995}
+\date{Last revised: January 5, 1996}
 \maketitle
 %
 \noindent
@@ -149,7 +149,10 @@ an unreasonable effort.
 \major{39}{}{char }{Reserved for ncpfs $<$lendecke@namu01.gwdg.de$>$}
 \major{40}{--41}{}{Unallocated}
 \major{42}{}{}{Demo/sample use}
-\major{43}{--59}{}{Unallocated}
+\major{43}{}{char }{isdn4linux virtual modem}
+\major{44}{}{char }{isdn4linux virtual modem -- alternate devices}
+\major{45}{}{char }{isdn4linux ISDN BRI driver}
+\major{46}{--59}{}{Unallocated}
 \major{60}{--63}{}{Local/experimental use}
 \major{64}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
@@ -673,9 +676,14 @@ disk (same as SCSI.)
 \major{29}{}{char }{Universal frame buffer}
 	\minor{0}{/dev/fb0current}{First frame buffer}
 	\minor{1}{/dev/fb0autodetect}{}
+	\minor{24}{/dev/fb0user0}{}
 	\minordots
+	\minor{31}{/dev/fb0user7}{}
 	\minor{32}{/dev/fb1current}{Second frame buffer}
 	\minor{33}{/dev/fb1autodetect}{}
+	\minor{56}{/dev/fb1user0}{}
+	\minordots
+	\minor{63}{/dev/fb1user7}{}
 	\minordots
 \end{devicelist}
 
@@ -683,9 +691,11 @@ disk (same as SCSI.)
 The universal frame buffer device is currently supported only on
 Linux/68k.  The {\file current} device accesses the frame buffer at
 current resolution; the {\file autodetect} one at bootup (default)
-resolution.  Minor numbers 2--31 within each frame buffer assignment
+resolution.  Minor numbers 2--23 within each frame buffer assignment
 are used for specific device-dependent resolutions.  There appears to
-be no standard naming for these devices.
+be no standard naming for these devices.  Finally, 24--31 within each
+device are reserved for user-selected modes, usually entered at boot
+time.
 
 \begin{devicelist}
 \major{  }{}{block}{Aztech/Orchid/Okano/Wearnes CD-ROM}
@@ -868,7 +878,32 @@ driver with this number should not cause ill effects to the system
 (bugs excepted.)
 
 \begin{devicelist}
-\major{43}{--59}{}{Unallocated}
+\major{43}{}{char }{isdn4linux virtual modem}
+	\minor{0}{/dev/ttyI0}{First virtual modem}
+	\minordots
+	\minor{15}{/dev/ttyI15}{16th virtual modem}
+\end{devicelist}
+
+\begin{devicelist}
+\major{44}{}{char }{isdn4linux virtual modem -- alternate devices}
+	\minor{0}{/dev/cui0}{Callout device corresponding to {\file ttyI0}}
+	\minordots
+	\minor{15}{/dev/cui15}{Callout device corresponding to {\file ttyI15}}
+\end{devicelist}
+
+\begin{devicelist}
+\major{45}{}{char }{isdn4linux ISDN BRI driver}
+	\minor{0}{/dev/isdn0}{First virtual B channel raw data}
+	\minordots
+	\minor{15}{/dev/isdn15}{16th virtual B channel raw data}
+	\minor{16}{/dev/isdnctrl0}{First channel control/debug}
+	\minordots
+	\minor{31}{/dev/isdnctrl15}{16th channel control/debug}
+	\minor{128}{/dev/isdninfo}{ISDN monitor interface}
+\end{devicelist}
+
+\begin{devicelist}
+\major{46}{--59}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}
@@ -972,7 +1007,8 @@ point to the ``cooked'' devices ({\file /dev/st*} and {\file
 ({\file /dev/sg*}.)
 
 {\file /dev/mouse} may point to a dialout (alternate) TTY device, a
-hardware mouse device, or a socket for a mouse driver program.
+hardware mouse device, or a socket for a mouse driver program
+(e.g. {\file /dev/gpmdata}.)
 
 \subsection{Sockets and pipes}
 
@@ -982,6 +1018,7 @@ Common entries are:
 \begin{nodelist}
 \node{/dev/printer}{socket}{{\file lpd} local socket}
 \node{/dev/log}{socket}{{\file syslog} local socket}
+\node{/dev/gpmdata}{socket}{{\file gpm} mouse multiplexer}
 \end{nodelist}
 
 \end{document}

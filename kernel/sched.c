@@ -31,6 +31,7 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/pgtable.h>
+#include <asm/mmu_context.h>
 
 #include <linux/timex.h>
 
@@ -206,7 +207,7 @@ static inline int goodness(struct task_struct * p, int this_cpu)
 	 * into account).
 	 */
 	if (p->policy != SCHED_OTHER)
-		return 1000 + p->priority;
+		return 1000 + p->rt_priority;
 
 	/*
 	 * Give the process a first-approximation goodness value
@@ -338,6 +339,7 @@ asmlinkage void schedule(void)
 			timer.function = process_timeout;
 			add_timer(&timer);
 		}
+		get_mmu_context(next);
 		switch_to(next);
 		if (timeout)
 			del_timer(&timer);
@@ -933,6 +935,167 @@ asmlinkage int sys_nice(int increment)
 	if (newprio > DEF_PRIORITY*2)
 		newprio = DEF_PRIORITY*2;
 	current->priority = newprio;
+	return 0;
+}
+
+static struct task_struct *find_process_by_pid(pid_t pid) {
+	struct task_struct *p, *q;
+
+	if (pid == 0)
+		p = current;
+	else {
+		p = 0;
+		for_each_task(q) {
+			if (q && q->pid == pid) {
+				p = q;
+				break;
+			}
+		}
+	}
+	return p;
+}
+
+static int setscheduler(pid_t pid, int policy, 
+			struct sched_param *param)
+{
+	int error;
+	struct sched_param lp;
+	struct task_struct *p;
+
+	if (!param || pid < 0)
+		return -EINVAL;
+
+	error = verify_area(VERIFY_READ, param, sizeof(struct sched_param));
+	if (error)
+		return -EINVAL;
+        memcpy_fromfs(&lp, param, sizeof(struct sched_param));
+
+	p = find_process_by_pid(pid);
+	if (!p)
+		return -ESRCH;
+			
+	if (policy < 0)
+		policy = p->policy;
+	else if (policy != SCHED_FIFO && policy != SCHED_RR &&
+		 policy != SCHED_OTHER)
+		return -EINVAL;
+	
+	/*
+	 * Valid priorities for SCHED_FIFO and SCHED_RR are 1..99, valid
+         * priority for SCHED_OTHER is 0.
+	 */
+	if (lp.sched_priority < 0 || lp.sched_priority > 99)
+		return -EINVAL;
+	if ((policy == SCHED_OTHER) != (lp.sched_priority == 0))
+		return -EINVAL;
+
+	if ((policy == SCHED_FIFO || policy == SCHED_RR) && !suser())
+		return -EPERM;
+	if ((current->euid != p->euid) && (current->euid != p->uid) &&
+	    !suser())
+		return -EPERM;
+
+	p->policy = policy;
+	p->rt_priority = lp.sched_priority;
+	schedule();
+
+	return 0;
+}
+
+asmlinkage int sys_sched_setscheduler(pid_t pid, int policy, 
+				      struct sched_param *param)
+{
+	return setscheduler(pid, policy, param);
+}
+
+asmlinkage int sys_sched_setparam(pid_t pid, struct sched_param *param)
+{
+	return setscheduler(pid, -1, param);
+}
+
+asmlinkage int sys_sched_getscheduler(pid_t pid)
+{
+	struct task_struct *p;
+
+	if (pid < 0)
+		return -EINVAL;
+
+	p = find_process_by_pid(pid);
+	if (!p)
+		return -ESRCH;
+			
+	return p->policy;
+}
+
+asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
+{
+	int error;
+	struct task_struct *p;
+	struct sched_param lp;
+
+	if (!param || pid < 0)
+		return -EINVAL;
+
+	error = verify_area(VERIFY_WRITE, param, sizeof(struct sched_param));
+	if (error)
+		return -EINVAL;
+
+	p = find_process_by_pid(pid);
+	if (!p)
+		return -ESRCH;
+
+	lp.sched_priority = p->rt_priority;
+	memcpy_tofs(param, &lp, sizeof(struct sched_param));
+
+	return 0;
+}
+
+asmlinkage int sys_sched_yield(void)
+{
+	/* ... not yet implemented ... */
+	return -ENOSYS;
+}
+
+asmlinkage int sys_sched_get_priority_max(int policy)
+{
+	switch (policy) {
+	      case SCHED_FIFO:
+	      case SCHED_RR:
+		return 99;
+	      case SCHED_OTHER:
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+asmlinkage int sys_sched_get_priority_min(int policy)
+{
+	switch (policy) {
+	      case SCHED_FIFO:
+	      case SCHED_RR:
+		return 1;
+	      case SCHED_OTHER:
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
+{
+	int error;
+	struct timespec t;
+
+	error = verify_area(VERIFY_WRITE, interval, sizeof(struct timespec));
+	if (error)
+		return -EINVAL;
+	
+	t.tv_sec = 0;
+	t.tv_nsec = 0;   /* <-- Linus, please fill correct value in here */
+	return -ENOSYS;  /* and then delete this line. Thanks!           */
+	memcpy_tofs(interval, &t, sizeof(struct timespec));
+
 	return 0;
 }
 

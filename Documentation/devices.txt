@@ -1,8 +1,8 @@
 		       LINUX ALLOCATED DEVICES
 
-	 Maintained by H. Peter Anvin <Peter.Anvin@linux.org>
+	     Maintained by H. Peter Anvin <hpa@storm.net>
 
-		   Last revised: December 17, 1995
+		    Last revised: January 5, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he lost network access in 1993.  It is a
@@ -439,10 +439,14 @@ an unreasonable effort.
  29 char	Universal frame buffer
 		  0 = /dev/fb0current	First frame buffer
 		  1 = /dev/fb0autodetect
-		      ...
+		 24 = /dev/fb0user0
+	              ...
+		 31 = /dev/fb0user7
 		 32 = /dev/fb1current	Second frame buffer
 		 33 = /dev/fb1autodetect
+		 56 = /dev/fb1user0
 		      ...
+		 63 = /dev/fb1user7
     block	Aztech/Orchid/Okano/Wearnes CD-ROM
 		  0 = /dev/aztcd	Aztech CD-ROM
 
@@ -450,9 +454,11 @@ an unreasonable effort.
 		supported on Linux/68k.  The "current" device accesses
 		the fame buffer at current resolution; the
 		"autodetect" one at bootup (default) resolution.
-		Minor numbers 2-31 within each frame buffer assignment
+		Minor numbers 2-23 within each frame buffer assignment
 		are used for specific device-dependent resolutions.
 		There appears to be no standard naming for these devices.
+		Finally, 2-31 within each device are reserved for
+		user-selected modes, usually entered at boot time.
 
  30 char	iBCS-2 compatibility devices
 		  0 = /dev/socksys	Socket access
@@ -589,7 +595,26 @@ an unreasonable effort.
 		removal of a driver with this number should not cause
 		ill effects to the system (bugs excepted.)
 
- 43-59		UNALLOCATED
+ 43 char	isdn4linux virtual modem
+		  0 = /dev/ttyI0	First virtual modem
+		      ...
+		 15 = /dev/ttyI15	16th virtual modem
+
+ 44 char	isdn4linux virtual modem - alternate devices
+		  0 = /dev/cui0		Callout device corresponding to ttyI0
+		      ...
+		 15 = /dev/cui15	Callout device corresponding to ttyI15
+
+ 45 char	isdn4linux ISDN BRI driver
+		  0 = /dev/isdn0	First virtual B channel raw data
+		      ...
+		 15 = /dev/isdn15	16th virtual B channel raw data
+		 16 = /dev/isdnctrl0	First channel control/debug
+		      ...
+		 31 = /dev/isdnctrl15	16th channel control/debug
+		128 = /dev/isdninfo	ISDN monitor interface
+
+ 46-59		UNALLOCATED
 
  60-63		LOCAL/EXPERIMENTAL USE
 		Allocated for local/experimental use.  For devices not
@@ -670,7 +695,7 @@ For SCSI devices, /dev/tape and /dev/cdrom should point to the
 SCSI devices (/dev/sg*).
 
 /dev/mouse may point to a dialout (alternate) TTY device, a hardware
-mouse device, or a socket for a mouse driver program.
+mouse device, or a socket for a mouse driver program (e.g. /dev/gpmdata).
 
 	Sockets and pipes
 
@@ -678,3 +703,4 @@ Non-transient sockets and named pipes may exist in /dev.  Common entries are:
 
 /dev/printer	socket		lpd local socket
 /dev/log	socket		syslog local socket
+/dev/gpmdata	socket		gpm mouse multiplexer
