@@ -690,7 +690,7 @@ static void neo_flush_uart_read(struct jsm_channel *ch)
  */
 void neo_clear_break(struct jsm_channel *ch, int force)
 {
-	u64 lock_flags;
+	unsigned long lock_flags;
 
 	spin_lock_irqsave(&ch->ch_lock, lock_flags);
 
@@ -717,7 +717,7 @@ static inline void neo_parse_isr(struct jsm_board *brd, u32 port)
 	struct jsm_channel *ch;
 	u8 isr;
 	u8 cause;
-	u64 lock_flags;
+	unsigned long lock_flags;
 
 	if (!brd)
 		return;
@@ -830,7 +830,7 @@ static inline void neo_parse_lsr(struct jsm_board *brd, u32 port)
 {
 	struct jsm_channel *ch;
 	int linestatus;
-	u64 lock_flags;
+	unsigned long lock_flags;
 
 	if (!brd)
 		return;

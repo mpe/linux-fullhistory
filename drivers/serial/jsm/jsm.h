@@ -171,7 +171,7 @@ struct jsm_board
 	u64		membase;	/* Start of base memory of the card */
 	u64		membase_end;	/* End of base memory of the card */
 
-	u8		*re_map_membase;/* Remapped memory of the card */
+	u8	__iomem *re_map_membase;/* Remapped memory of the card */
 
 	u64		iobase;		/* Start of io base of the card */
 	u64		iobase_end;	/* End of io base of the card */
@@ -254,7 +254,7 @@ struct jsm_channel {
 	u8		ch_mostat;	/* FEP output modem status	*/
 	u8		ch_mistat;	/* FEP input modem status	*/
 
-	struct neo_uart_struct *ch_neo_uart;	/* Pointer to the "mapped" UART struct */
+	struct neo_uart_struct __iomem *ch_neo_uart;	/* Pointer to the "mapped" UART struct */
 	u8		ch_cached_lsr;	/* Cached value of the LSR register */
 
 	u8		*ch_rqueue;	/* Our read queue buffer - malloc'ed */

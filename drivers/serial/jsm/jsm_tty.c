@@ -34,7 +34,7 @@
 static inline int jsm_get_mstat(struct jsm_channel *ch)
 {
 	unsigned char mstat;
-	unsigned char result;
+	unsigned result;
 
 	jsm_printk(IOCTL, INFO, &ch->ch_bd->pci_dev, "start\n");
 
@@ -359,7 +359,7 @@ static struct uart_ops jsm_ops = {
 int jsm_tty_init(struct jsm_board *brd)
 {
 	int i;
-	u8 *vaddr;
+	void __iomem *vaddr;
 	struct jsm_channel *ch;
 
 	if (!brd)
@@ -370,8 +370,6 @@ int jsm_tty_init(struct jsm_board *brd)
 	/*
 	 * Initialize board structure elements.
 	 */
-
-	vaddr = brd->re_map_membase;
 
 	brd->nasync = brd->maxports;
 
@@ -408,8 +406,7 @@ int jsm_tty_init(struct jsm_board *brd)
 		spin_lock_init(&ch->ch_lock);
 
 		if (brd->bd_uart_offset == 0x200)
-			ch->ch_neo_uart = (struct neo_uart_struct *) ((u64) vaddr
-						+ (brd->bd_uart_offset * i));
+			ch->ch_neo_uart =  vaddr + (brd->bd_uart_offset * i);
 
 		ch->ch_bd = brd;
 		ch->ch_portnum = i;
@@ -427,7 +424,6 @@ int jsm_tty_init(struct jsm_board *brd)
 int jsm_uart_port_init(struct jsm_board *brd)
 {
 	int i;
-	u8 *vaddr;
 	struct jsm_channel *ch;
 
 	if (!brd)
@@ -439,7 +435,6 @@ int jsm_uart_port_init(struct jsm_board *brd)
 	 * Initialize board structure elements.
 	 */
 
-	vaddr = brd->re_map_membase;
 	brd->nasync = brd->maxports;
 
 	/* Set up channel variables */
@@ -504,7 +499,7 @@ void jsm_input(struct jsm_channel *ch)
 	u16 head;
 	u16 tail;
 	int data_len;
-	u64 lock_flags;
+	unsigned long lock_flags;
 	int flip_len;
 	int len = 0;
 	int n = 0;
