@@ -3808,6 +3808,7 @@ static struct file_operations mixer_fops =
 	mixer_ioctl,
 	NULL,			/* mixer_mmap */
 	mixer_open,
+	NULL,			/* flush */
 	mixer_release,
 };
 
@@ -4169,6 +4170,7 @@ static struct file_operations sq_fops =
 	sq_ioctl,
 	NULL,			/* sq_mmap */
 	sq_open,
+	NULL,			/* flush */
 	sq_release,
 };
 
@@ -4363,6 +4365,7 @@ static struct file_operations state_fops =
 	NULL,			/* state_ioctl */
 	NULL,			/* state_mmap */
 	state_open,
+	NULL,			/* flush */
 	state_release,
 };
 

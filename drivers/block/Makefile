@@ -269,10 +269,10 @@ endif
 
 ifeq ($(CONFIG_PARIDE),y)
 SUB_DIRS	+= paride
-MOD_SUB_DIRS	+= paride
+MOD_IN_SUB_DIRS	+= paride
 else
   ifeq ($(CONFIG_PARIDE),m)
-  MOD_SUB_DIRS	+= paride
+  MOD_IN_SUB_DIRS	+= paride
   endif
 endif
 

@@ -274,6 +274,7 @@ struct file_operations sgi_graphics_fops = {
 	sgi_graphics_ioctl,	/* ioctl */
 	sgi_graphics_mmap,	/* mmap */
 	sgi_graphics_open,	/* open */
+	NULL,			/* flush */
 	sgi_graphics_close,	/* release */
 	NULL,			/* fsync */
 	NULL,			/* check_media_change */

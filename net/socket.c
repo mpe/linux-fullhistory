@@ -122,6 +122,7 @@ static struct file_operations socket_file_ops = {
 	sock_ioctl,
 	NULL,			/* mmap */
 	NULL,			/* no special open code... */
+	NULL,			/* flush */
 	sock_close,
 	NULL,			/* no fsync */
 	sock_fasync
@@ -1441,7 +1442,7 @@ int sock_unregister(int family)
 	return 0;
 }
 
-__initfunc(void proto_init(void))
+void __init proto_init(void)
 {
 	extern struct net_proto protocols[];	/* Network protocols */
 	struct net_proto *pro;
@@ -1461,7 +1462,7 @@ extern void sk_init(void);
 extern void wanrouter_init(void);
 #endif
 
-__initfunc(void sock_init(void))
+void __init sock_init(void)
 {
 	int i;
 

@@ -110,7 +110,7 @@ struct linux_binfmt em86_format = {
 #endif
 };
 
-__initfunc(int init_em86_binfmt(void))
+int __init init_em86_binfmt(void)
 {
 	return register_binfmt(&em86_format);
 }

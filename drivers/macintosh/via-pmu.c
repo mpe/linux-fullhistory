@@ -903,6 +903,7 @@ static struct file_operations pmu_device_fops = {
 	pmu_ioctl,
 	NULL,		/* no mmap */
 	pmu_open,
+	NULL,		/* flush */
 	NULL		/* no release */
 };
 

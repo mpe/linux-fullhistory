@@ -402,6 +402,7 @@ static struct file_operations nvram_fops = {
 	nvram_ioctl,
 	NULL,			/* No mmap */
 	nvram_open,
+	NULL,			/* flush */
 	nvram_release
 };
 

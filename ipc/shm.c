@@ -3,6 +3,7 @@
  * Copyright (C) 1992, 1993 Krishna Balasubramanian
  *         Many improvements/fixes by Bruno Haible.
  * Replaced `struct shm_desc' by `struct vm_area_struct', July 1994.
+ * Fixed the shm swap deallocation (shm_unuse()), August 1998 Andrea Arcangeli.
  */
 
 #include <linux/errno.h>
@@ -45,7 +46,7 @@ static ulong swap_attempts = 0;
 static ulong swap_successes = 0;
 static ulong used_segs = 0;
 
-__initfunc(void shm_init (void))
+void __init shm_init (void)
 {
 	int id;
 
@@ -836,4 +837,39 @@ int shm_swap (int prio, int gfp_mask)
 	shm_swp++;
 	shm_rss--;
 	return 1;
+}
+
+/*
+ * Free the swap entry and set the new pte for the shm page.
+ */
+static void shm_unuse_page(struct shmid_ds *shp, unsigned long idx,
+			   unsigned long page, unsigned long entry)
+{
+	pte_t pte;
+
+	pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
+	shp->shm_pages[idx] = pte_val(pte);
+	atomic_inc(&mem_map[MAP_NR(page)].count);
+	shm_rss++;
+
+	swap_free(entry);
+	shm_swp--;
+}
+
+/*
+ * unuse_shm() search for an eventually swapped out shm page.
+ */
+void shm_unuse(unsigned long entry, unsigned long page)
+{
+	int i, n;
+
+	for (i = 0; i < SHMMNI; i++)
+		if (shm_segs[i] != IPC_UNUSED && shm_segs[i] != IPC_NOID)
+			for (n = 0; n < shm_segs[i]->shm_npages; n++)
+				if (shm_segs[i]->shm_pages[n] == entry)
+				{
+					shm_unuse_page(shm_segs[i], n,
+						       page, entry);
+					return;
+				}
 }

@@ -415,6 +415,7 @@ static struct file_operations mem_fops = {
 	NULL,		/* mem_ioctl */
 	mmap_mem,
 	NULL,		/* no special open code */
+	NULL,		/* flush */
 	NULL,		/* no special release code */
 	NULL		/* fsync */
 };
@@ -428,6 +429,7 @@ static struct file_operations kmem_fops = {
 	NULL,		/* kmem_ioctl */
 	mmap_kmem,
 	NULL,		/* no special open code */
+	NULL,		/* flush */
 	NULL,		/* no special release code */
 	NULL		/* fsync */
 };
@@ -441,6 +443,7 @@ static struct file_operations null_fops = {
 	NULL,		/* null_ioctl */
 	NULL,		/* null_mmap */
 	NULL,		/* no special open code */
+	NULL,		/* flush */
 	NULL,		/* no special release code */
 	NULL		/* fsync */
 };
@@ -454,6 +457,7 @@ static struct file_operations port_fops = {
 	NULL,		/* port_ioctl */
 	NULL,		/* port_mmap */
 	NULL,		/* no special open code */
+	NULL,		/* flush */
 	NULL,		/* no special release code */
 	NULL		/* fsync */
 };
@@ -467,6 +471,7 @@ static struct file_operations zero_fops = {
 	NULL,		/* zero_ioctl */
 	mmap_zero,
 	NULL,		/* no special open code */
+	NULL,		/* flush */
 	NULL		/* no special release code */
 };
 
@@ -479,6 +484,7 @@ static struct file_operations full_fops = {
 	NULL,		/* full_ioctl */	
 	NULL,		/* full_mmap */
 	NULL,		/* no special open code */
+	NULL,		/* flush */
 	NULL		/* no special release code */
 };
 
@@ -526,6 +532,7 @@ static struct file_operations memory_fops = {
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
 	memory_open,	/* just a selector for the real open */
+	NULL,		/* flush */
 	NULL,		/* release */
 	NULL		/* fsync */
 };

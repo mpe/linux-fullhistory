@@ -31,6 +31,7 @@ static struct file_operations minix_dir_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	file_fsync		/* default fsync */
 };

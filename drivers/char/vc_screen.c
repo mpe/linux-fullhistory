@@ -258,6 +258,7 @@ static struct file_operations vcs_fops = {
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
 	vcs_open,	/* open */
+	NULL,		/* flush */
 	NULL,		/* release */
 	NULL		/* fsync */
 };

@@ -1526,6 +1526,7 @@ struct file_operations random_fops = {
 	random_ioctl,
 	NULL,		/* random_mmap */
 	NULL,		/* no special open code */
+	NULL,		/* flush */
 	NULL		/* no special release code */
 };
 
@@ -1538,6 +1539,7 @@ struct file_operations urandom_fops = {
 	random_ioctl,
 	NULL,		/* urandom_mmap */
 	NULL,		/* no special open code */
+	NULL,		/* flush */
 	NULL		/* no special release code */
 };
 

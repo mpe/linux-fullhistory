@@ -158,10 +158,8 @@ nlmsvc_create_block(struct svc_rqst *rqstp, struct nlm_file *file,
 
 	/* Set notifier function for VFS, and init args */
 	lock->fl.fl_notify = nlmsvc_notify_blocked;
-	if (!nlmclnt_setgrantargs(&block->b_call, lock)) {
-		kfree(block);
-		goto failed;
-	}
+	if (!nlmclnt_setgrantargs(&block->b_call, lock))
+		goto failed_free;
 	block->b_call.a_args.cookie = cookie;	/* see above */
 
 	dprintk("lockd: created block %p...\n", block);
@@ -182,6 +180,8 @@ nlmsvc_create_block(struct svc_rqst *rqstp, struct nlm_file *file,
 
 	return block;
 
+failed_free:
+	kfree(block);
 failed:
 	nlm_release_host(host);
 	return NULL;

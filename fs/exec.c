@@ -67,7 +67,7 @@ asmlinkage int sys_brk(unsigned long);
 
 static struct linux_binfmt *formats = (struct linux_binfmt *) NULL;
 
-__initfunc(void binfmt_setup(void))
+void __init binfmt_setup(void)
 {
 #ifdef CONFIG_BINFMT_MISC
 	init_misc_binfmt();

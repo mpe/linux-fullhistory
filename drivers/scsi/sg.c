@@ -574,6 +574,7 @@ static struct file_operations sg_fops = {
     sg_ioctl,        /* ioctl */
     NULL,            /* mmap */
     sg_open,         /* open */
+    NULL,	     /* flush */
     sg_close,        /* release */
     NULL             /* fsync */
 };

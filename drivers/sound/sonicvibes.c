@@ -1208,6 +1208,7 @@ static /*const*/ struct file_operations sv_mixer_fops = {
 	&sv_ioctl_mixdev,
 	NULL,  /* mmap */
 	&sv_open_mixdev,
+	NULL,	/* flush */
 	&sv_release_mixdev,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
@@ -1810,6 +1811,7 @@ static /*const*/ struct file_operations sv_audio_fops = {
 	&sv_ioctl,
 	&sv_mmap,
 	&sv_open,
+	NULL,	/* flush */
 	&sv_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
@@ -2054,6 +2056,7 @@ static /*const*/ struct file_operations sv_midi_fops = {
 	NULL,  /* ioctl */
 	NULL,  /* mmap */
 	&sv_midi_open,
+	NULL,	/* flush */
 	&sv_midi_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
@@ -2227,6 +2230,7 @@ static /*const*/ struct file_operations sv_dmfm_fops = {
 	&sv_dmfm_ioctl,
 	NULL,  /* mmap */
 	&sv_dmfm_open,
+	NULL,	/* flush */
 	&sv_dmfm_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */

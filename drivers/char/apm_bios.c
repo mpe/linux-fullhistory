@@ -401,6 +401,7 @@ static struct file_operations apm_bios_fops = {
 	do_ioctl,
 	NULL,		/* mmap */
 	do_open,
+	NULL,		/* flush */
 	do_release,
 	NULL,		/* fsync */
 	NULL		/* fasync */

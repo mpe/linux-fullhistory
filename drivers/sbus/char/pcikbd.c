@@ -869,6 +869,7 @@ struct file_operations psaux_fops = {
 	NULL, 		/* ioctl */
 	NULL,		/* mmap */
 	aux_open,
+	NULL,		/* flush */
 	aux_release,
 	NULL,
 	aux_fasync,

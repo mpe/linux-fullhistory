@@ -54,6 +54,7 @@ static struct file_operations proc_kmsg_operations = {
 	NULL,		/* kmsg_ioctl */
 	NULL,		/* mmap */
 	kmsg_open,
+	NULL,		/* flush */
 	kmsg_release,
 	NULL		/* can't fsync */
 };

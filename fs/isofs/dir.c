@@ -35,6 +35,7 @@ static struct file_operations isofs_dir_operations =
 	NULL,			/* poll - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* fsync */
 };

@@ -72,10 +72,11 @@
 			(default "pt").
 
             verbose     This parameter controls the amount of logging
-                        that is done while the driver probes for
-                        devices.  Set it to 0 for a quiet load, or 1 to
-                        see all the progress messages.  (default 0)
-
+                        that the driver will do.  Set it to 0 for
+                        normal operation, 1 to see autoprobe progress
+                        messages, or 2 to see additional debugging
+                        output.  (default 0)
+ 
         If this driver is built into the kernel, you can use 
         the following command line parameters, with the same values
         as the corresponding module parameters listed above:
@@ -97,10 +98,12 @@
 				for clearing error status.
 				Eliminate sti();
 	1.02    GRG 1998.06.16  Eliminate an Ugh.
+	1.03    GRG 1998.08.15  Adjusted PT_TMO, use HZ in loop timing,
+				extra debugging
 
 */
 
-#define PT_VERSION      "1.02"
+#define PT_VERSION      "1.03"
 #define PT_MAJOR	96
 #define PT_NAME		"pt"
 #define PT_UNITS	4
@@ -174,13 +177,13 @@ MODULE_PARM(drive3,"1-6i");
 #include "paride.h"
 
 #define PT_MAX_RETRIES  5
-#define PT_TMO          800             /* interrupt timeout in jiffies */
+#define PT_TMO          3000            /* interrupt timeout in jiffies */
 #define PT_SPIN_DEL     50              /* spin delay in micro-seconds  */
-#define PT_RESET_TMO    30		/* 3 seconds */
+#define PT_RESET_TMO    30		/* 30 seconds */
 #define PT_READY_TMO	60		/* 60 seconds */
 #define PT_REWIND_TMO	1200		/* 20 minutes */
 
-#define PT_SPIN         (10000/PT_SPIN_DEL)*PT_TMO  
+#define PT_SPIN         ((1000000/(HZ*PT_SPIN_DEL))*PT_TMO)  
 
 #define STAT_ERR        0x00001
 #define STAT_INDEX      0x00002
@@ -265,6 +268,7 @@ static struct file_operations pt_fops = {
         pt_ioctl,               /* ioctl */
         NULL,                   /* mmap */
         pt_open,                /* open */
+	NULL,			/* flush */
         pt_release,             /* release */
         NULL,                   /* fsync */
         NULL,                   /* fasync */
@@ -505,7 +509,7 @@ static void pt_write_fm( int unit )
         pt_media_access_cmd(unit,PT_TMO,wm_cmd,"write filemark");
 }
 
-#define DBMSG(msg)      NULL
+#define DBMSG(msg)      ((verbose>1)?(msg):NULL)
 
 static int pt_reset( int unit )
 

@@ -68,7 +68,7 @@ static int mca_default_procfn( char* buf, int slot );
 static ssize_t proc_mca_read( struct file*, char*, size_t, loff_t *);
 static struct file_operations proc_mca_operations = {
 	NULL, proc_mca_read,
-	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 static struct inode_operations proc_mca_inode_operations = {
 	&proc_mca_operations,

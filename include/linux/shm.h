@@ -64,6 +64,7 @@ asmlinkage int sys_shmget (key_t key, int size, int flag);
 asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, unsigned long *addr);
 asmlinkage int sys_shmdt (char *shmaddr);
 asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
+extern void shm_unuse(unsigned long entry, unsigned long page);
 
 #endif /* __KERNEL__ */
 

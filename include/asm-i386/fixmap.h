@@ -60,6 +60,10 @@ extern void set_fixmap (enum fixed_addresses idx, unsigned long phys);
 #define FIXADDR_SIZE	(__end_of_fixed_addresses << PAGE_SHIFT)
 #define FIXADDR_START	(FIXADDR_TOP - FIXADDR_SIZE)
 
+#define __fix_to_virt(x)	(FIXADDR_TOP - ((x) << PAGE_SHIFT))
+
+extern void __this_fixmap_does_not_exist(void);
+
 /*
  * 'index to address' translation. If anyone tries to use the idx
  * directly without tranlation, we catch the bug with a NULL-deference
@@ -71,12 +75,15 @@ extern inline unsigned long fix_to_virt(const unsigned int idx)
 	 * this branch gets completely eliminated after inlining,
 	 * except when someone tries to use fixaddr indices in an
 	 * illegal way. (such as mixing up address types or using
-	 * out-of-range indices)
+	 * out-of-range indices).
+	 *
+	 * If it doesn't get removed, the linker will complain
+	 * loudly with a reasonably clear error message..
 	 */
 	if (idx >= __end_of_fixed_addresses)
-		panic("illegal fixaddr index!");
+		__this_fixmap_does_not_exist();
 
-        return FIXADDR_TOP - (idx << PAGE_SHIFT);
+        return __fix_to_virt(idx);
 }
 
 #endif

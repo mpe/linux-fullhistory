@@ -469,7 +469,7 @@ static struct dev_name_struct {
 	{ NULL, 0 }
 };
 
-__initfunc(kdev_t name_to_kdev_t(char *line))
+kdev_t __init name_to_kdev_t(char *line)
 {
 	int base = 0;
 	if (strncmp(line,"/dev/",5) == 0) {
@@ -488,7 +488,7 @@ __initfunc(kdev_t name_to_kdev_t(char *line))
 	return to_kdev_t(base + simple_strtoul(line,NULL,base?10:16));
 }
 
-__initfunc(static void root_dev_setup(char *line, int *num))
+static void __init root_dev_setup(char *line, int *num)
 {
 	ROOT_DEV = name_to_kdev_t(line);
 }
@@ -816,32 +816,32 @@ static struct kernel_param raw_params[] __initdata = {
 };
 
 #ifdef CONFIG_BLK_DEV_RAM
-__initfunc(static void ramdisk_start_setup(char *str, int *ints))
+static void __init ramdisk_start_setup(char *str, int *ints)
 {
    if (ints[0] > 0 && ints[1] >= 0)
       rd_image_start = ints[1];
 }
 
-__initfunc(static void load_ramdisk(char *str, int *ints))
+static void __init load_ramdisk(char *str, int *ints)
 {
    if (ints[0] > 0 && ints[1] >= 0)
       rd_doload = ints[1] & 1;
 }
 
-__initfunc(static void prompt_ramdisk(char *str, int *ints))
+static void __init prompt_ramdisk(char *str, int *ints)
 {
    if (ints[0] > 0 && ints[1] >= 0)
       rd_prompt = ints[1] & 1;
 }
 
-__initfunc(static void ramdisk_size(char *str, int *ints))
+static void __init ramdisk_size(char *str, int *ints)
 {
 	if (ints[0] > 0 && ints[1] >= 0)
 		rd_size = ints[1];
 }
 #endif
 
-__initfunc(static int checksetup(char *line))
+static int __init checksetup(char *line)
 {
 	int i, ints[11];
 
@@ -878,7 +878,7 @@ unsigned long loops_per_sec = (1<<12);
    better than 1% */
 #define LPS_PREC 8
 
-__initfunc(void calibrate_delay(void))
+void __init calibrate_delay(void)
 {
 	unsigned long ticks, loopbit;
 	int lps_precision = LPS_PREC;
@@ -930,7 +930,7 @@ __initfunc(void calibrate_delay(void))
  * This routine also checks for options meant for the kernel.
  * These options are not given to init - they are for internal kernel use only.
  */
-__initfunc(static void parse_options(char *line))
+static void __init parse_options(char *line)
 {
 	char *next;
 	int args, envs;
@@ -1014,7 +1014,7 @@ int cpu_idle(void *unused)
 extern int cpu_idle(void * unused);
 
 /* Called by boot processor to activate the rest. */
-__initfunc(static void smp_init(void))
+static void __init smp_init(void)
 {
 	/* Get other processors into their bootup holding patterns. */
 	smp_boot_cpus();
@@ -1026,7 +1026,7 @@ __initfunc(static void smp_init(void))
  *	they are finished.
  */
  
-__initfunc(static void smp_begin(void))
+static void __init smp_begin(void)
 {
 	smp_threads_ready=1;
 	smp_commence();
@@ -1040,7 +1040,7 @@ extern void initialize_secondary(void);
  *	Activate the first processor.
  */
  
-__initfunc(asmlinkage void start_kernel(void))
+asmlinkage void __init start_kernel(void)
 {
 	char * command_line;
 
@@ -1188,7 +1188,7 @@ static int do_linuxrc(void * shell)
 	return execve(shell, argv, envp_init);
 }
 
-__initfunc(static void no_initrd(char *s,int *ints))
+static void __init no_initrd(char *s,int *ints)
 {
 	mount_initrd = 0;
 }

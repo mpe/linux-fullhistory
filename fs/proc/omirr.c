@@ -268,6 +268,7 @@ static struct file_operations omirr_operations = {
     NULL,	/* omirr_ioctl */
     NULL,	/* mmap */
     omirr_open,
+    NULL,	/* flush */
     omirr_release,
     NULL,	/* fsync */
     NULL,       /* fasync */

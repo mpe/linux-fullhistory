@@ -222,6 +222,7 @@ static struct file_operations sd_fops = {
     sd_ioctl,                    /* ioctl */
     NULL,                        /* mmap */
     sd_open,                     /* open code */
+    NULL,			 /* flush */
     sd_release,                  /* release */
     block_fsync,                 /* fsync */
     NULL,                        /* fasync */

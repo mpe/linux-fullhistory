@@ -1469,16 +1469,17 @@ static struct file_operations cdu_fops =
 {
 	NULL,						/* lseek - default */
 	block_read,					/* read - general block-dev read */
-	block_write,				/* write - general block-dev write */
+	block_write,					/* write - general block-dev write */
 	NULL,						/* readdir - bad */
 	NULL,						/* poll */
 	cdu_ioctl,					/* ioctl */
 	NULL,						/* mmap */
 	cdu_open,					/* open */
-	cdu_release,				/* release */
+	NULL,						/* flush */
+	cdu_release,					/* release */
 	NULL,						/* fsync */
 	NULL,						/* fasync */
-	cdu535_check_media_change,	/* check media change */
+	cdu535_check_media_change,			/* check media change */
 	NULL						/* revalidate */
 };
 

@@ -55,6 +55,7 @@ static struct file_operations hfs_cap_info_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap - not yet */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	file_fsync,		/* fsync - default */
 	NULL,			/* fasync - default */

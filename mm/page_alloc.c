@@ -318,7 +318,7 @@ void show_free_areas(void)
  *   - mark all memory queues empty
  *   - clear the memory bitmaps
  */
-__initfunc(unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem))
+unsigned long __init free_area_init(unsigned long start_mem, unsigned long end_mem)
 {
 	mem_map_t * p;
 	unsigned long mask = PAGE_MASK;

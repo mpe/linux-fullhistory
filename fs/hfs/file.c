@@ -41,6 +41,7 @@ static struct file_operations hfs_file_operations = {
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* open */
+	NULL,			/* flush */
 	NULL,			/* release */
 	file_fsync,		/* fsync - default */
         NULL,			/* fasync - default */

@@ -102,6 +102,7 @@ static struct file_operations router_fops =
 	NULL,			/* ioctl   */
 	NULL,			/* mmap	   */
 	NULL,			/* no special open code	   */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* can't fsync */
 };
@@ -141,6 +142,7 @@ static struct file_operations wandev_fops =
 	wanrouter_ioctl,	/* ioctl   */
 	NULL,			/* mmap	   */
 	NULL,			/* no special open code	   */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* can't fsync */
 };

@@ -157,6 +157,7 @@ static struct file_operations xd_fops = {
 	xd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	xd_open,		/* open */
+	NULL,			/* flush */
 	xd_release,		/* release */
 	block_fsync		/* fsync */
 };

@@ -66,6 +66,7 @@ static struct file_operations hfs_dbl_dir_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap - none */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	file_fsync,		/* fsync - default */
         NULL,			/* fasync - default */

@@ -1390,6 +1390,7 @@ static struct file_operations proc_array_operations = {
 	NULL,		/* array_ioctl */
 	NULL,		/* mmap */
 	NULL,		/* no special open code */
+	NULL,		/* flush */
 	NULL,		/* no special release code */
 	NULL		/* can't fsync */
 };
@@ -1437,6 +1438,7 @@ static struct file_operations proc_arraylong_operations = {
 	NULL,		/* array_ioctl */
 	NULL,		/* mmap */
 	NULL,		/* no special open code */
+	NULL,		/* flush */
 	NULL,		/* no special release code */
 	NULL		/* can't fsync */
 };

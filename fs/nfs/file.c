@@ -35,6 +35,7 @@
 static int  nfs_file_mmap(struct file *, struct vm_area_struct *);
 static ssize_t nfs_file_read(struct file *, char *, size_t, loff_t *);
 static ssize_t nfs_file_write(struct file *, const char *, size_t, loff_t *);
+static int  nfs_file_flush(struct file *);
 static int  nfs_file_close(struct inode *, struct file *);
 static int  nfs_fsync(struct file *, struct dentry *dentry);
 
@@ -47,6 +48,7 @@ static struct file_operations nfs_file_operations = {
 	NULL,			/* ioctl - default */
 	nfs_file_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
+	nfs_file_flush,		/* flush */
 	nfs_file_close,		/* release */
 	nfs_fsync,		/* fsync */
 	NULL,			/* fasync */
@@ -84,13 +86,7 @@ struct inode_operations nfs_file_inode_operations = {
 #endif
 
 /*
- * Flush all dirty pages, and check for write errors.
- *
- * Note that since the file close operation is called only by the
- * _last_ process to close the file, we need to flush _all_ dirty 
- * pages. This also means that there is little sense in checking
- * for errors for this specific process -- we should probably just
- * clear all errors.
+ * Sync the file..
  */
 static int
 nfs_file_close(struct inode *inode, struct file *file)
@@ -104,6 +100,22 @@ nfs_file_close(struct inode *inode, struct file *file)
 	if (!status)
 		status = error;
 	return status;
+}
+
+/*
+ * Flush all dirty pages, and check for write errors.
+ *
+ * We should probably do this better - this does get called at every
+ * close, so we should probably just flush the changes that "this"
+ * file has done and report on only those.
+ *
+ * Right now we use the "flush everything" approach. Overkill, but
+ * works.
+ */
+static int
+nfs_file_flush(struct file *file)
+{
+	return nfs_file_close(file->f_dentry->d_inode, file);
 }
 
 static ssize_t

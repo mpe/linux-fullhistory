@@ -468,6 +468,7 @@ static struct file_operations fb_fops = {
 	fb_ioctl,	/* ioctl 	*/
 	fb_mmap,	/* mmap		*/
 	fb_open,	/* open 	*/
+	NULL,		/* flush	*/
 	fb_release,	/* release 	*/
 	NULL		/* fsync 	*/
 };

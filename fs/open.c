@@ -770,19 +770,17 @@ asmlinkage int sys_creat(const char * pathname, int mode)
 /*
  * Called when retiring the last use of a file pointer.
  */
-int __fput(struct file *filp)
+void __fput(struct file *filp)
 {
 	struct dentry * dentry = filp->f_dentry;
 	struct inode * inode = dentry->d_inode;
-	int	error = 0;
 
 	if (filp->f_op && filp->f_op->release)
-		error = filp->f_op->release(inode, filp);
+		filp->f_op->release(inode, filp);
 	filp->f_dentry = NULL;
 	if (filp->f_mode & FMODE_WRITE)
 		put_write_access(inode);
 	dput(dentry);
-	return error;
 }
 
 /*
@@ -791,6 +789,7 @@ int __fput(struct file *filp)
  */
 int close_fp(struct file *filp, fl_owner_t id)
 {
+	int retval;
 	struct dentry *dentry = filp->f_dentry;
 
 	if (filp->f_count == 0) {
@@ -799,7 +798,11 @@ int close_fp(struct file *filp, fl_owner_t id)
 	}
 	if (dentry->d_inode)
 		locks_remove_posix(filp, id);
-	return fput(filp);
+	retval = 0;
+	if (filp->f_op && filp->f_op->flush)
+		retval = filp->f_op->flush(filp);
+	fput(filp);
+	return retval;
 }
 
 /*

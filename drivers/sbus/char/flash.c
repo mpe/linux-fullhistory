@@ -143,6 +143,7 @@ static struct file_operations flash_fops = {
 	NULL,		/* ioctl */
 	flash_mmap,
 	flash_open,
+	NULL,		/* flush */
 	flash_release
 };
 

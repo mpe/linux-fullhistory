@@ -86,6 +86,7 @@ struct file_operations umsdos_file_operations =
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */
+	NULL,			/* flush */
 	NULL,			/* release */
 	file_fsync		/* fsync */
 };
@@ -123,6 +124,7 @@ struct file_operations umsdos_file_operations_no_bmap =
 	NULL,			/* ioctl - default */
 	fat_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
+	NULL,			/* flush */
 	NULL,			/* release */
 	file_fsync		/* fsync */
 };
@@ -160,6 +162,7 @@ struct file_operations umsdos_file_operations_readpage =
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */
+	NULL,			/* flush */
 	NULL,			/* release */
 	file_fsync		/* fsync */
 };

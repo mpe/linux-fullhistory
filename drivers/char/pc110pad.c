@@ -626,6 +626,7 @@ static struct file_operations pad_fops = {
 	pad_ioctl,
 	NULL,		/* pad_mmap */
 	open_pad,
+	NULL,		/* flush */
 	close_pad,
 	NULL,		/* fsync */
 	fasync_pad,

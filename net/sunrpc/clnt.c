@@ -413,7 +413,7 @@ call_allocate(struct rpc_task *task)
 		return;
 	printk("RPC: buffer allocation failed for task %p\n", task); 
 
-	if (1 || !signalled()) {
+	if (!signalled()) {
 		xprt_release(task);
 		task->tk_action = call_reserve;
 		rpc_delay(task, HZ);

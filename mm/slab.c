@@ -406,7 +406,7 @@ static kmem_cache_t	*cache_slabp = NULL;
 static unsigned long bufctl_limit = 0;
 
 /* Initialisation - setup the `cache' cache. */
-__initfunc(long kmem_cache_init(long start, long end))
+long __init kmem_cache_init(long start, long end)
 {
 	size_t size, i;
 
@@ -460,7 +460,7 @@ __initfunc(long kmem_cache_init(long start, long end))
 /* Initialisation - setup remaining internal and general caches.
  * Called after the gfp() functions have been enabled, and before smp_init().
  */
-__initfunc(void kmem_cache_sizes_init(void))
+void __init kmem_cache_sizes_init(void)
 {
 	unsigned int	found = 0;
 

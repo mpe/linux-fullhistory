@@ -134,6 +134,7 @@ static struct file_operations zft_cdev =
 	zft_ioctl,		/* ioctl */
 	zft_mmap,		/* mmap */
 	zft_open,		/* open */
+	NULL,			/* flush */
 	zft_close,		/* release */
 	NULL,			/* fsync */
 };

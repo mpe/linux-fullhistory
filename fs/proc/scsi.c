@@ -50,6 +50,7 @@ static struct file_operations proc_scsi_operations = {
     NULL,		/* ioctl   */
     NULL,		/* mmap	   */
     NULL,		/* no special open code	   */
+    NULL,		/* flush */
     NULL,		/* no special release code */
     NULL		/* can't fsync */
 };

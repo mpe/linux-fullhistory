@@ -1331,7 +1331,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 }
 #endif		/* USE_ELF_CORE_DUMP */
 
-__initfunc(int init_elf_binfmt(void))
+int __init init_elf_binfmt(void)
 {
 	return register_binfmt(&elf_format);
 }

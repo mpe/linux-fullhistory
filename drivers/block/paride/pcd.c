@@ -2,11 +2,11 @@
 	pcd.c	(c) 1997-8  Grant R. Guenther <grant@torque.net>
 		            Under the terms of the GNU public license.
 
-	This is a high-level driver for parallel port ATAPI CDROM
+	This is a high-level driver for parallel port ATAPI CD-ROM
         drives based on chips supported by the paride module.
 
         By default, the driver will autoprobe for a single parallel
-        port ATAPI CDROM drive, but if their individual parameters are
+        port ATAPI CD-ROM drive, but if their individual parameters are
         specified, the driver can handle up to 4 drives.
 
         The behaviour of the pcd driver can be altered by setting
@@ -38,7 +38,7 @@
                         of the mode numbers supported by the adapter.
                         (-1 if not given)
 
-		<slv>   ATAPI CDROMs can be jumpered to master or slave.
+		<slv>   ATAPI CD-ROMs can be jumpered to master or slave.
 			Set this to 0 to choose the master drive, 1 to
                         choose the slave, -1 (the default) to choose the
 			first drive found.
@@ -61,10 +61,11 @@
                         (default "pcd")
 
             verbose     This parameter controls the amount of logging
-                        that is done while the driver probes for
-                        devices.  Set it to 0 for a quiet load, or 1 to
-                        see all the progress messages.  (default 0)
-
+                        that the driver will do.  Set it to 0 for
+                        normal operation, 1 to see autoprobe progress
+                        messages, or 2 to see additional debugging
+                        output.  (default 0)
+  
             nice        This parameter controls the driver's use of
                         idle CPU time, at the expense of some speed.
  
@@ -85,16 +86,20 @@
 
 /* Changes:
 
-	1.01	GRG 1997.01.24	Added test unit ready support
+	1.01	GRG 1998.01.24	Added test unit ready support
 	1.02    GRG 1998.05.06  Changes to pcd_completion, ready_wait,
 				and loosen interpretation of ATAPI
 			        standard for clearing error status.
 				Use spinlocks. Eliminate sti().
 	1.03    GRG 1998.06.16  Eliminated an Ugh
+	1.04	GRG 1998.08.15  Added extra debugging, improvements to
+				pcd_completion, use HZ in loop timing
+	1.05	GRG 1998.08.16	Conformed to "Uniform CD-ROM" standard
+	1.06    GRG 1998.08.19  Added audio ioctl support
 
 */
 
-#define	PCD_VERSION	"1.03"
+#define	PCD_VERSION	"1.06"
 #define PCD_MAJOR	46
 #define PCD_NAME	"pcd"
 #define PCD_UNITS	4
@@ -185,9 +190,10 @@ MODULE_PARM(drive3,"1-6i");
 #define PCD_RETRIES	     5
 #define PCD_TMO		   800		/* timeout in jiffies */
 #define PCD_DELAY           50          /* spin delay in uS */
-#define PCD_READY_TMO	    20
+#define PCD_READY_TMO	    20		/* in seconds */
+#define PCD_RESET_TMO	    30		/* in tenths of a second */
 
-#define PCD_SPIN		(10000/PCD_DELAY)*PCD_TMO
+#define PCD_SPIN	(1000000*PCD_TMO)/(HZ*PCD_DELAY)
 
 #define IDE_ERR		0x01
 #define IDE_DRQ         0x08
@@ -197,33 +203,33 @@ MODULE_PARM(drive3,"1-6i");
 int pcd_init(void);
 void cleanup_module( void );
 
-static int 	pcd_open(struct inode *inode, struct file *file);
-static void 	do_pcd_request(void);
-static void 	do_pcd_read(void);
-static int 	pcd_ioctl(struct inode *inode,struct file *file,
-                         unsigned int cmd, unsigned long arg);
-
-static int pcd_release (struct inode *inode, struct file *file);
+static int pcd_open(struct cdrom_device_info *cdi, int purpose);
+static void pcd_release(struct cdrom_device_info *cdi);
+static int pcd_drive_status(struct cdrom_device_info *cdi, int slot_nr);
+static int pcd_media_changed(struct cdrom_device_info *cdi, int slot_nr);
+static int pcd_tray_move(struct cdrom_device_info *cdi, int position);
+static int pcd_lock_door(struct cdrom_device_info *cdi, int lock);
+static int pcd_drive_reset(struct cdrom_device_info *cdi);
+static int pcd_get_mcn (struct cdrom_device_info *cdi, struct cdrom_mcn *mcn);
+static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
+				unsigned int cmd, void *arg);
 
 static int 	pcd_detect(void);
-static void     pcd_lock(int unit);
-static void     pcd_unlock(int unit);
-static void     pcd_eject(int unit);
-static int      pcd_check_media(int unit);
 static void     do_pcd_read_drq(void);
+static void 	do_pcd_request(void);
+static void 	do_pcd_read(void);
 
 static int pcd_blocksizes[PCD_UNITS];
 
-#define PCD_NAMELEN	8
-
 struct pcd_unit {
-	struct pi_adapter pia;	/* interface to paride layer */
+	struct pi_adapter pia;		/* interface to paride layer */
 	struct pi_adapter *pi;
-	int drive;		/* master/slave */
-	int last_sense;		/* result of last request sense */
-	int access;		/* count of active opens */
-	int present;		/* does this unit exist ? */
-	char name[PCD_NAMELEN];	/* pcd0, pcd1, etc */
+	int drive;			/* master/slave */
+	int last_sense;			/* result of last request sense */
+	int changed;			/* media change seen */
+	int present;			/* does this unit exist ? */
+	char *name;			/* pcd0, pcd1, etc */
+	struct cdrom_device_info info;	/* uniform cdrom interface */
 	};
 
 struct pcd_unit pcd[PCD_UNITS];
@@ -251,22 +257,32 @@ static int pcd_sector;			/* address of next requested sector */
 static int pcd_count;			/* number of blocks still to do */
 static char * pcd_buf;			/* buffer for request in progress */
 
+static int pcd_warned = 0;		/* Have we logged a phase warning ? */
+
 /* kernel glue structures */
 
-static struct file_operations pcd_fops = {
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select */
-	pcd_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	pcd_open,		/* open */
-	pcd_release,		/* release */
-	block_fsync,		/* fsync */
-	NULL,			/* fasync */
-	NULL,                   /* media change ? */
-	NULL			/* revalidate new media */
+static struct cdrom_device_ops pcd_dops = {
+	pcd_open,
+	pcd_release,
+	pcd_drive_status,
+	pcd_media_changed,
+	pcd_tray_move,
+	pcd_lock_door,
+	0,			/* select speed */
+	0,			/* select disk  */
+	0, 			/* get last session */
+	pcd_get_mcn,
+	pcd_drive_reset,
+	pcd_audio_ioctl,
+	0,			/* dev_ioctl */
+	CDC_CLOSE_TRAY    |
+	CDC_OPEN_TRAY     |
+	CDC_LOCK          |
+	CDC_MCN		  |
+	CDC_MEDIA_CHANGED |
+	CDC_RESET	  |
+	CDC_PLAY_AUDIO,
+	0
 };
 
 static void pcd_init_units( void )
@@ -276,21 +292,31 @@ static void pcd_init_units( void )
         pcd_drive_count = 0;
         for (unit=0;unit<PCD_UNITS;unit++) {
                 PCD.pi = & PCD.pia;
-                PCD.access = 0;
                 PCD.present = 0;
 		PCD.last_sense = 0;
-                j = 0;
-                while ((j < PCD_NAMELEN-2) && (PCD.name[j]=name[j])) j++;
-                PCD.name[j++] = '0' + unit;
-                PCD.name[j] = 0;
+		PCD.changed = 1;
                 PCD.drive = DU[D_SLV];
                 if (DU[D_PRT]) pcd_drive_count++;
+ 
+                j = 0;
+                while ((j < (sizeof(PCD.info.name)-2)) && 
+		       (PCD.info.name[j]=name[j])) j++;
+                PCD.info.name[j++] = '0' + unit;
+                PCD.info.name[j] = 0;
+		PCD.name = &PCD.info.name[0];
+
+		PCD.info.ops = &pcd_dops;
+		PCD.info.handle = NULL;
+		PCD.info.dev = MKDEV(major,unit);
+		PCD.info.speed = 0;
+		PCD.info.capacity = 1;
+		PCD.info.mask = 0;
         }
 }
 
 int pcd_init (void)	/* preliminary initialisation */
 
-{       int 	i;
+{       int 	i, unit;
 
 	if (disable) return -1;
 
@@ -298,10 +324,14 @@ int pcd_init (void)	/* preliminary initialisation */
 
 	if (pcd_detect()) return -1;
 
-	if (register_blkdev(MAJOR_NR,name,&pcd_fops)) {
+	if (register_blkdev(MAJOR_NR,name,&cdrom_fops)) {
 		printk("pcd: unable to get major number %d\n",MAJOR_NR);
 		return -1;
 	}
+
+	for (unit=0;unit<PCD_UNITS;unit++)
+		if (PCD.present) register_cdrom(&PCD.info);
+
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB) read ahead */
 
@@ -311,100 +341,20 @@ int pcd_init (void)	/* preliminary initialisation */
 	return 0;
 }
 
-static int pcd_open (struct inode *inode, struct file *file)
+static int pcd_open(struct cdrom_device_info *cdi, int purpose)
 
-{	int unit = DEVICE_NR(inode->i_rdev);
+{	int unit = DEVICE_NR(cdi->dev);
 
 	if  ((unit >= PCD_UNITS) || (!PCD.present)) return -ENODEV;
-
-	if (file->f_mode & 2) return -EROFS;  /* wants to write ? */
 
 	MOD_INC_USE_COUNT;
 
-	if (pcd_check_media(unit)) {
-		MOD_DEC_USE_COUNT;
-		return -ENXIO;
-	}
-
-	pcd_lock(unit);
-
-	PCD.access++;
 	return 0;
 }
 
-static void do_pcd_request (void)
+static void pcd_release(struct cdrom_device_info *cdi)
 
-{       int unit;
-
-	if (pcd_busy) return;
-        while (1) {
-	    if ((!CURRENT) || (CURRENT->rq_status == RQ_INACTIVE)) return;
-	    INIT_REQUEST;
-	    if (CURRENT->cmd == READ) {
-		unit = MINOR(CURRENT->rq_dev);
-		if (unit != pcd_unit) {
-			pcd_bufblk = -1;
-			pcd_unit = unit;
-		}
-	        pcd_sector = CURRENT->sector;
-	        pcd_count = CURRENT->nr_sectors;
-	        pcd_buf = CURRENT->buffer;
-		pcd_busy = 1;
-	        ps_set_intr(do_pcd_read,0,0,nice); 
-		return;
-	    } 
-	    else end_request(0);
-	}
-}
-
-static int pcd_ioctl(struct inode *inode,struct file *file,
-		    unsigned int cmd, unsigned long arg)
-
-/* we currently support only the EJECT ioctl. */
-
-{	int unit = DEVICE_NR(inode->i_rdev);
-	if  ((unit >= PCD_UNITS) || (!PCD.present)) return -ENODEV;
-
-	switch (cmd) {
-            case CDROMEJECT: if (PCD.access == 1) {
-				pcd_eject(unit);
-				return 0;
-			     }
-	    default:
-	        return -EINVAL;
-	}
-}
-
-static int pcd_release (struct inode *inode, struct file *file)
-
-{	kdev_t	devp;
-	int 	unit;
-
-        struct super_block *sb;
-
-	devp = inode->i_rdev;
-	unit = DEVICE_NR(devp);
-
-	if  ((unit >= PCD_UNITS) || (PCD.access <= 0)) 
-			return -EINVAL;
-       
-	PCD.access--;
-
-	if (!PCD.access) { 
-		fsync_dev(devp);
-
-                sb = get_super(devp);
-                if (sb) invalidate_inodes(sb);
-
-	    	invalidate_buffers(devp);
-	    	pcd_unlock(unit);
-
-	}
-
-	MOD_DEC_USE_COUNT;
-
-        return 0;
-
+{	MOD_DEC_USE_COUNT;
 }
 
 #ifdef MODULE
@@ -423,11 +373,14 @@ int	init_module(void)
 void	cleanup_module(void)
 
 {	int unit;
-
-	unregister_blkdev(MAJOR_NR,name);
 	
         for (unit=0;unit<PCD_UNITS;unit++) 
-           if (PCD.present) pi_release(PI);
+           if (PCD.present) {
+		pi_release(PI);
+		unregister_cdrom(&PCD.info);
+	   }
+
+	unregister_blkdev(MAJOR_NR,name);
 }
 
 #endif
@@ -489,39 +442,68 @@ static int pcd_command( int unit, char * cmd, int dlen, char * fun )
 
 static int pcd_completion( int unit, char * buf,  char * fun )
 
-{	int r, s, n;
+{	int r, d, p, n, k, j;
 
-	r = pcd_wait(unit,IDE_BUSY,IDE_DRQ|IDE_READY|IDE_ERR,fun,"completion");
+	r = -1; k = 0; j = 0;
 
-	if ((RR(0,2)&2) && (RR(0,7)&IDE_DRQ)) { 
-	        n = (((RR(0,4)+256*RR(0,5))+3)&0xfffc);
-	        pi_read_block(PI,buf,n);
+	if (!pcd_wait(unit,IDE_BUSY,IDE_DRQ|IDE_READY|IDE_ERR,
+						fun,"completion")) {
+	    r = 0;
+	    while (RR(0,7)&IDE_DRQ) {
+	        d = (RR(0,4)+256*RR(0,5));
+	        n = ((d+3)&0xfffc);
+	        p = RR(0,2)&3;
+
+	        if ((p == 2) && (n > 0) && (j == 0)) {
+		    pi_read_block(PI,buf,n);
+	            if (verbose > 1) 
+			printk("%s: %s: Read %d bytes\n",PCD.name,fun,n);
+		    r = 0; j++;
+	        } else {
+		    if (verbose > 1) 
+		        printk("%s: %s: Unexpected phase %d, d=%d, k=%d\n",
+					PCD.name,fun,p,d,k);
+		    if ((verbose < 2) && !pcd_warned) {
+	               	pcd_warned = 1;
+			printk("%s: WARNING: ATAPI phase errors\n",PCD.name);
+			}
+		    mdelay(1);
+	        } 
+		if (k++ > PCD_TMO) {
+			printk("%s: Stuck DRQ\n",PCD.name);
+			break;
+		}
+	        if (pcd_wait(unit,IDE_BUSY,IDE_DRQ|IDE_READY|IDE_ERR,
+				fun,"completion")) { 
+			r = -1;
+			break;
+		}
+	    }
 	}
-
-	s = pcd_wait(unit,IDE_BUSY,IDE_READY|IDE_ERR,fun,"data done");
-
+	
 	pi_disconnect(PI); 
 
-	return (r?r:s);
+	return r;
 }
 
-static void pcd_req_sense( int unit, int quiet )
+static void pcd_req_sense( int unit, char *fun )
 
 {	char	rs_cmd[12] = { 0x03,0,0,0,16,0,0,0,0,0,0,0 };
 	char	buf[16];
-	int 	r;
+	int 	r, c;
 
 	r = pcd_command(unit,rs_cmd,16,"Request sense");
 	mdelay(1);
 	if (!r) pcd_completion(unit,buf,"Request sense");
 
-	PCD.last_sense = -1;
+	PCD.last_sense = -1;  c = 2;
 	if (!r) {
-            if (!quiet) printk("%s: Sense key: %x, ASC: %x, ASQ: %x\n",
-	                       PCD.name,buf[2]&0xf,buf[12],buf[13]);
-	    PCD.last_sense = (buf[2]&0xf) | ((buf[12]&0xff)<<8)
-                                          | ((buf[13]&0xff)<<16) ;
+            if (fun) printk("%s: %s: Sense key: %x, ASC: %x, ASQ: %x\n",
+	                       PCD.name,fun,buf[2]&0xf,buf[12],buf[13]);
+	    c = buf[2]&0xf;
+	    PCD.last_sense = c | ((buf[12]&0xff)<<8) | ((buf[13]&0xff)<<16);
         } 
+	if ((c == 2) || (c == 6)) PCD.changed = 1;
 }
 
 static int pcd_atapi( int unit, char * cmd, int dlen, char * buf, char * fun )
@@ -531,44 +513,41 @@ static int pcd_atapi( int unit, char * cmd, int dlen, char * buf, char * fun )
 	r = pcd_command(unit,cmd,dlen,fun);
 	mdelay(1);
 	if (!r) r = pcd_completion(unit,buf,fun);
-	if (r) pcd_req_sense(unit,!fun);
+	if (r) pcd_req_sense(unit,fun);
 	
 	return r;
 }
 
-#define DBMSG(msg)	NULL
+#define DBMSG(msg)	((verbose>1)?(msg):NULL)
 
-static void pcd_lock(int unit)
+static int pcd_media_changed(struct cdrom_device_info *cdi, int slot_nr)
 
-{	char	lo_cmd[12] = { 0x1e,0,0,0,1,0,0,0,0,0,0,0 };
-	char	cl_cmd[12] = { 0x1b,0,0,0,3,0,0,0,0,0,0,0 };
+{	int 	r;
+	int	unit = DEVICE_NR(cdi->dev);
 
-	pcd_atapi(unit,cl_cmd,0,pcd_scratch,DBMSG("cd1")); 
-	pcd_atapi(unit,cl_cmd,0,pcd_scratch,DBMSG("cd2"));
-	pcd_atapi(unit,cl_cmd,0,pcd_scratch,DBMSG("cd3"));
-	pcd_atapi(unit,cl_cmd,0,pcd_scratch,DBMSG("cd4"));
-	pcd_atapi(unit,cl_cmd,0,pcd_scratch,"close door");
+	r = PCD.changed;
+	PCD.changed = 0;
 
-        pcd_atapi(unit,lo_cmd,0,pcd_scratch,DBMSG("ld"));
-        pcd_atapi(unit,lo_cmd,0,pcd_scratch,"lock door");
+	return r;    
 }
 
-static void pcd_unlock( int unit )
+static int pcd_lock_door(struct cdrom_device_info *cdi, int lock)
 
-{	char	un_cmd[12] = { 0x1e,0,0,0,0,0,0,0,0,0,0,0 };
+{	char	un_cmd[12] = { 0x1e,0,0,0,lock,0,0,0,0,0,0,0 };
+        int     unit = DEVICE_NR(cdi->dev);
 
-	pcd_atapi(unit,un_cmd,0,pcd_scratch,"unlock door");
+	return pcd_atapi(unit,un_cmd,0,pcd_scratch,
+				lock?"lock door":"unlock door");
 }
 
-static void pcd_eject( int unit)
+static int pcd_tray_move(struct cdrom_device_info *cdi, int position)
 
-{	char	ej_cmd[12] = { 0x1b,0,0,0,2,0,0,0,0,0,0,0 };
+{	char	ej_cmd[12] = { 0x1b,0,0,0,3-position,0,0,0,0,0,0,0 };
+	int	unit = DEVICE_NR(cdi->dev);
 
-	pcd_unlock(unit);
-	pcd_atapi(unit,ej_cmd,0,pcd_scratch,"eject");
+	return pcd_atapi(unit,ej_cmd,0,pcd_scratch,
+				position?"eject":"close tray");
 }
-
-#define PCD_RESET_TMO	30		/* in tenths of a second */
 
 static void pcd_sleep( int cs )
 
@@ -579,11 +558,6 @@ static void pcd_sleep( int cs )
 
 static int pcd_reset( int unit )
 
-/* the ATAPI standard actually specifies the contents of all 7 registers
-   after a reset, but the specification is ambiguous concerning the last
-   two bytes, and different drives interpret the standard differently.
-*/
-
 {	int	i, k, flg;
 	int	expect[5] = {1,1,1,0x14,0xeb};
 
@@ -591,11 +565,11 @@ static int pcd_reset( int unit )
 	WR(0,6,0xa0 + 0x10*PCD.drive);
 	WR(0,7,8);
 
-	pcd_sleep(2);  		/* delay a bit*/
+	pcd_sleep(2);  		/* delay a bit */
 
 	k = 0;
 	while ((k++ < PCD_RESET_TMO) && (RR(1,6)&IDE_BUSY))
-		pcd_sleep(10);
+		pcd_sleep(HZ/10);
 
 	flg = 1;
 	for(i=0;i<5;i++) flg &= (RR(0,i+1) == expect[i]);
@@ -609,6 +583,11 @@ static int pcd_reset( int unit )
 	
 	pi_disconnect(PI);
 	return flg-1;	
+}
+
+static int pcd_drive_reset(struct cdrom_device_info *cdi)
+
+{	return pcd_reset(DEVICE_NR(cdi->dev));
 }
 
 static int pcd_ready_wait( int unit, int tmo )
@@ -629,12 +608,16 @@ static int pcd_ready_wait( int unit, int tmo )
         return 0x000020;        /* timeout */
 }
 
-static int pcd_check_media( int unit )
+static int pcd_drive_status(struct cdrom_device_info *cdi, int slot_nr)
 
 {	char    rc_cmd[12] = { 0x25,0,0,0,0,0,0,0,0,0,0,0};
+	int	unit = DEVICE_NR(cdi->dev);
 
-	pcd_ready_wait(unit,PCD_READY_TMO);
-	return (pcd_atapi(unit,rc_cmd,8,pcd_scratch,DBMSG("check media")));
+	if (pcd_ready_wait(unit,PCD_READY_TMO)) 
+		return CDS_DRIVE_NOT_READY;
+	if (pcd_atapi(unit,rc_cmd,8,pcd_scratch,DBMSG("check media")))
+		return CDS_NO_DISC;
+	return CDS_DISC_OK;
 }
 
 static int pcd_identify( int unit, char * id )
@@ -648,7 +631,7 @@ static int pcd_identify( int unit, char * id )
 
 	if (s) return -1;
 	if ((pcd_buffer[0] & 0x1f) != 5) {
-	  if (verbose) printk("%s: %s is not a CDROM\n",
+	  if (verbose) printk("%s: %s is not a CD-ROM\n",
 			PCD.name,PCD.drive?"Slave":"Master");
 	  return -1;
 	}
@@ -709,11 +692,36 @@ static int pcd_detect( void )
 
 	if (k) return 0;
 	
-	printk("%s: No CDROM drive found\n",name);
+	printk("%s: No CD-ROM drive found\n",name);
 	return -1;
 }
 
 /* I/O request processing */
+
+static void do_pcd_request (void)
+
+{       int unit;
+
+	if (pcd_busy) return;
+        while (1) {
+	    if ((!CURRENT) || (CURRENT->rq_status == RQ_INACTIVE)) return;
+	    INIT_REQUEST;
+	    if (CURRENT->cmd == READ) {
+		unit = MINOR(CURRENT->rq_dev);
+		if (unit != pcd_unit) {
+			pcd_bufblk = -1;
+			pcd_unit = unit;
+		}
+	        pcd_sector = CURRENT->sector;
+	        pcd_count = CURRENT->nr_sectors;
+	        pcd_buf = CURRENT->buffer;
+		pcd_busy = 1;
+	        ps_set_intr(do_pcd_read,0,0,nice); 
+		return;
+	    } 
+	    else end_request(0);
+	}
+}
 
 static int pcd_ready( void )
 
@@ -793,7 +801,7 @@ static void do_pcd_read_drq( void )
 
 	if (pcd_completion(unit,pcd_buffer,"read block")) {
                 if (pcd_retries < PCD_RETRIES) {
-                        mdelay(1);
+                        mdelay(1); 
                         pcd_retries++;
 			pi_do_claimed(PI,pcd_start);
                         return;
@@ -812,6 +820,227 @@ static void do_pcd_read_drq( void )
 	do_pcd_request();
 	spin_unlock_irqrestore(&io_request_lock,saved_flags); 
 }
+
+/* the audio_ioctl stuff is adapted from sr_ioctl.c */
+
+static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
+                                unsigned int cmd, void *arg)
+
+{	int	unit = DEVICE_NR(cdi->dev);
+ 
+    	switch (cmd) { 
+    
+	case CDROMPAUSE: 
+
+	{       char cmd[12]={SCMD_PAUSE_RESUME,0,0,0,0,0,0,0,0,0,0,0};
+
+		return (pcd_atapi(unit,cmd,0,NULL,"pause")) * EIO;
+	}
+
+	case CDROMRESUME:
 	
+	{       char cmd[12]={SCMD_PAUSE_RESUME,0,0,0,0,0,0,0,1,0,0,0};
+
+		return (pcd_atapi(unit,cmd,0,NULL,"resume")) * EIO;
+	}
+	
+	case CDROMPLAYMSF:
+
+	{	char cmd[12]={SCMD_PLAYAUDIO_MSF,0,0,0,0,0,0,0,0,0,0,0};
+		struct cdrom_msf* msf = (struct cdrom_msf*)arg;
+
+		cmd[3] = msf->cdmsf_min0;
+		cmd[4] = msf->cdmsf_sec0;
+		cmd[5] = msf->cdmsf_frame0;
+		cmd[6] = msf->cdmsf_min1;
+		cmd[7] = msf->cdmsf_sec1;
+		cmd[8] = msf->cdmsf_frame1;
+	
+		return (pcd_atapi(unit,cmd,0,NULL,"play msf")) * EIO;
+    	}
+
+    	case CDROMPLAYBLK:
+
+    	{	char cmd[12]={SCMD_PLAYAUDIO10,0,0,0,0,0,0,0,0,0,0,0};
+		struct cdrom_blk* blk = (struct cdrom_blk*)arg;
+
+		cmd[2] = blk->from >> 24;
+		cmd[3] = blk->from >> 16;
+		cmd[4] = blk->from >> 8;
+		cmd[5] = blk->from;
+		cmd[7] = blk->len >> 8;
+		cmd[8] = blk->len;
+	
+		return (pcd_atapi(unit,cmd,0,NULL,"play block")) * EIO;
+    	}
+		
+    	case CDROMPLAYTRKIND:
+
+    	{	char cmd[12]={SCMD_PLAYAUDIO_TI,0,0,0,0,0,0,0,0,0,0,0};
+		struct cdrom_ti* ti = (struct cdrom_ti*)arg;
+
+		cmd[4] = ti->cdti_trk0;
+		cmd[5] = ti->cdti_ind0;
+		cmd[7] = ti->cdti_trk1;
+		cmd[8] = ti->cdti_ind1;
+
+		return (pcd_atapi(unit,cmd,0,NULL,"play track")) * EIO;
+    	}
+	
+    	case CDROMREADTOCHDR:
+    
+	{	char cmd[12]={SCMD_READ_TOC,0,0,0,0,0,0,0,12,0,0,0};
+		struct cdrom_tochdr* tochdr = (struct cdrom_tochdr*)arg;
+		char buffer[32];
+		int r;
+	
+		r = pcd_atapi(unit,cmd,12,buffer,"read toc header");
+
+		tochdr->cdth_trk0 = buffer[2];
+		tochdr->cdth_trk1 = buffer[3];
+	
+		return r * EIO;
+    	}
+	
+    	case CDROMREADTOCENTRY:
+
+    	{	char cmd[12]={SCMD_READ_TOC,0,0,0,0,0,0,0,12,0,0,0};
+
+		struct cdrom_tocentry* tocentry = (struct cdrom_tocentry*)arg;
+		unsigned char buffer[32];
+		int	r;
+	
+		cmd[1] = (tocentry->cdte_format == CDROM_MSF ? 0x02 : 0);
+		cmd[6] = tocentry->cdte_track;
+	
+		r = pcd_atapi(unit,cmd,12,buffer,"read toc entry");
+
+        	tocentry->cdte_ctrl = buffer[5] & 0xf;	
+        	tocentry->cdte_adr = buffer[5] >> 4;
+        	tocentry->cdte_datamode = (tocentry->cdte_ctrl & 0x04)?1:0;
+		if (tocentry->cdte_format == CDROM_MSF) {
+		    tocentry->cdte_addr.msf.minute = buffer[9];
+	    	    tocentry->cdte_addr.msf.second = buffer[10];
+	            tocentry->cdte_addr.msf.frame = buffer[11];
+	        } else
+	            tocentry->cdte_addr.lba = 
+				(((((buffer[8] << 8) + buffer[9]) << 8)
+                                       + buffer[10]) << 8) + buffer[11];
+	
+                return r * EIO;
+        }
+
+    	case CDROMSTOP:
+
+	{	char cmd[12]={0x1b,1,0,0,0,0,0,0,0,0,0,0};
+
+                return (pcd_atapi(unit,cmd,0,NULL,"stop")) * EIO;
+        }                                                         
+	
+    	case CDROMSTART:
+
+        {       char cmd[12]={0x1b,1,0,0,1,0,0,0,0,0,0,0};
+
+                return (pcd_atapi(unit,cmd,0,NULL,"start")) * EIO;
+        } 
+	
+    	case CDROMVOLCTRL:
+
+	{	char cmd[12]={0x5a,0,0,0,0,0,0,0,0,0,0,0};
+		char buffer[32];
+		char mask[32];
+		struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
+
+		cmd[2] = 0xe;
+		cmd[4] = 28;
+
+                if (pcd_atapi(unit,cmd,28,buffer,"mode sense vol")) 
+			return -EIO;
+
+		cmd[2] = 0x4e;
+	
+		if (pcd_atapi(unit,cmd,28,buffer,"mode sense vol mask"))
+			return -EIO;
+	
+		buffer[0] = 0;
+	
+		buffer[21] = volctrl->channel0 & mask[21];
+		buffer[23] = volctrl->channel1 & mask[23];
+		buffer[25] = volctrl->channel2 & mask[25];
+		buffer[27] = volctrl->channel3 & mask[27];
+	
+		cmd[0] = 0x55;
+		cmd[1] = 0x10;
+
+		return pcd_atapi(unit,cmd,28,buffer,"mode select vol") * EIO;
+    	}
+
+    	case CDROMVOLREAD:
+
+        {       char cmd[12]={0x5a,0,0,0,0,0,0,0,0,0,0,0};
+                char buffer[32];
+                struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
+                int     r;
+
+                cmd[2] = 0xe;
+                cmd[4] = 28;
+
+                r = pcd_atapi(unit,cmd,28,buffer,"mode sense vol read");
+
+		volctrl->channel0 = buffer[21];
+		volctrl->channel1 = buffer[23];
+		volctrl->channel2 = buffer[25];
+		volctrl->channel3 = buffer[27];
+
+                return r * EIO;
+        }
+  
+	
+    	case CDROMSUBCHNL:
+
+	{	char cmd[12]={SCMD_READ_SUBCHANNEL,2,0x40,1,0,0,0,0,16,0,0,0};
+		struct cdrom_subchnl* subchnl = (struct cdrom_subchnl*)arg;
+		char buffer[32];
+	
+                if (pcd_atapi(unit,cmd,16,buffer,"read subchannel"))
+                        return -EIO;
+   	
+		subchnl->cdsc_audiostatus = buffer[1];
+		subchnl->cdsc_format = CDROM_MSF;
+		subchnl->cdsc_ctrl = buffer[5] & 0xf;
+		subchnl->cdsc_trk = buffer[6];
+		subchnl->cdsc_ind = buffer[7];
+	
+		subchnl->cdsc_reladdr.msf.minute = buffer[13];
+		subchnl->cdsc_reladdr.msf.second = buffer[14];
+		subchnl->cdsc_reladdr.msf.frame = buffer[15];
+		subchnl->cdsc_absaddr.msf.minute = buffer[9];
+		subchnl->cdsc_absaddr.msf.second = buffer[10];
+		subchnl->cdsc_absaddr.msf.frame = buffer[11];
+
+		return 0;	
+    	}
+
+    	default:
+
+        	return -ENOSYS;
+    	}
+}
+	
+static int pcd_get_mcn (struct cdrom_device_info *cdi, struct cdrom_mcn *mcn)
+
+{	char 	cmd[12]={SCMD_READ_SUBCHANNEL,0,0x40,2,0,0,0,0,24,0,0,0};
+        char 	buffer[32];
+	int	k;
+	int	unit = DEVICE_NR(cdi->dev);
+
+        if (pcd_atapi(unit,cmd,24,buffer,"get mcn")) return -EIO;
+
+	for (k=0;k<13;k++) mcn->medium_catalog_number[k] = buffer[k+9];
+	mcn->medium_catalog_number[13] = 0;
+	
+	return 0;
+}
+
 /* end of pcd.c */
 

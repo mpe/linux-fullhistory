@@ -1,0 +1,36 @@
+Because some people were asking about the bandwidth the Bt848 might use up
+on the PCI bus I did a little benchmark.
+
+"bonnie -s 200" with a Fireball TM 3.8 Gb using Busmaster DMA on an ASUS P6NP5
+
+without capturing:
+
+              -------Sequential Output-------- ---Sequential Input-- --Random--
+              -Per Char- --Block--- -Rewrite-- -Per Char- --Block--- --Seeks---
+Machine    MB K/sec %CPU K/sec %CPU K/sec %CPU K/sec %CPU K/sec %CPU  /sec %CPU
+          200  5353 76.6  5898 16.9  2363 12.1  5889 51.3  6416 10.2  37.8  0.9
+
+
+while capturing full screen PAL (786x576) with 24bpp:
+
+              -------Sequential Output-------- ---Sequential Input-- --Random--
+              -Per Char- --Block--- -Rewrite-- -Per Char- --Block--- --Seeks---
+Machine    MB K/sec %CPU K/sec %CPU K/sec %CPU K/sec %CPU K/sec %CPU  /sec %CPU
+          200  5619 69.3  5939 16.9  2334 12.0  5859 50.9  6441 10.5  37.9  0.9
+
+The differences are small and probably within the normal error margin of
+bonnie.
+So, one bt848 card does not have much(any?) impact on the normal operation 
+of a Linux system.
+If you have several cards running this will look very differently!
+The same is probably true if your Linux box is used as a file server 
+with 15 (or 30) SCSI drives.
+ 
+I tested having 2 Bt848 cards grabbing in 32 bit mode (That's almost 100MB/s!)
+while running bonnie.
+The xtvscreen windows showed severe pixel errors.
+After a while the ide driver failed to use DMA and switched DMA off.
+It continued running but the results where bad.
+
+
+

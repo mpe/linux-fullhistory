@@ -2008,6 +2008,7 @@ static struct file_operations opt_fops = {
 	opt_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	opt_open,		/* open */
+	NULL,			/* flush */
 	opt_release,		/* release */
 	NULL,			/* fsync */
 	NULL,			/* fasync */

@@ -174,6 +174,7 @@ static struct file_operations acq_fops = {
 	acq_ioctl,
 	NULL,		/* No mmap */
 	acq_open,
+	NULL,		/* flush */
 	acq_close
 };
 

@@ -968,7 +968,8 @@ static struct file_operations floppy_fops = {
 	floppy_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	floppy_open,		/* open */
-	floppy_release,		/* release */
+	NULL,			/* flush */
+	floppy_release,		/* release *
 	block_fsync,		/* fsync */
 	NULL,			/* fasync */
 	floppy_check_change,	/* check_media_change */

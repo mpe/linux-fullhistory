@@ -48,6 +48,7 @@ static struct file_operations sysv_file_operations = {
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */
+	NULL,			/* flush */
 	NULL,			/* release */
 	sysv_sync_file		/* fsync */
 };

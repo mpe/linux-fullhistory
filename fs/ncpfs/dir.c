@@ -70,6 +70,7 @@ static struct file_operations ncp_dir_operations =
 	ncp_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* fsync */
 };

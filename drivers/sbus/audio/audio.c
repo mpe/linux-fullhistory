@@ -881,6 +881,7 @@ static struct file_operations sparcaudioctl_fops = {
 	sparcaudio_ioctl,
 	NULL,			/* sparcaudio_mmap */
 	NULL,
+	NULL,			/* flush */
 	sparcaudioctl_release
 };
 

@@ -26,6 +26,7 @@
 #include <linux/config.h>
 #include <linux/delay.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include "../sound_config.h"
 #include "../soundmodule.h"
 
@@ -248,6 +249,10 @@
      the flexibility of modular version, I have removed all the conditional
      compilation for SBPRO, MPU and MSS code. Now it is all managed with
      the ae_config structure.
+   v1.2
+   - Module informations added.
+   - Removed aedsp16_delay_10msec(), now using mdelay(10)
+   - All data and funcs moved to .*.init section.
 
    Known Problems:
    - Audio Excel DSP 16 III don't work with this driver.
@@ -259,7 +264,7 @@
  */
 
 
-#define VERSION "1.1"		/* Version of Audio Excel DSP 16 driver */
+#define VERSION "1.2"		/* Version of Audio Excel DSP 16 driver */
 
 #undef	AEDSP16_DEBUG 1		/* Define this to enable debug code     */
 #undef	AEDSP16_DEBUG_MORE 1	/* Define this to enable more debug     */
@@ -421,14 +426,14 @@
 #define INIT_MSS    (1<<1)
 #define INIT_MPU401 (1<<2)
 
-static int      soft_cfg = 0;	/* Will contain or'ed values of soft cf */
-static int      soft_cfg_1 = 0;	/* Will contain or'ed values of some cf */
-static int      gc = 0;		/* generic counter (utility counter)    */
-static int      ver[3];         /* DSP Version, hi<-ver[0], lo<-ver[1]  */
+static int      soft_cfg __initdata = 0;	/* bitmapped config */
+static int      soft_cfg_mss __initdata = 0;	/* bitmapped mss config */
+static int      ver[CARDVERLEN] __initdata = {0, 0};	/* DSP Ver:
+						   hi->ver[0] lo->ver[1] */
 
 #if defined(CONFIG_SC6600)
 static int	hard_cfg[2]     /* lo<-hard_cfg[0] hi<-hard_cfg[1]      */
-                     = { 0, 0};
+                     __initdata = { 0, 0};
 #endif /* CONFIG_SC6600 */
 
 #if defined(CONFIG_SC6600)
@@ -440,7 +445,10 @@ struct	d_hcfg {
 	int wssbase;
 	int cdrom;
 	int cdrombase;
-} decoded_hcfg;
+};
+
+struct d_hcfg decoded_hcfg __initdata = {0, };
+
 #endif /* CONFIG_SC6600 */
 
 /* orVals contain the values to be or'ed       				*/
@@ -464,7 +472,7 @@ struct aedsp16_info {
  * Magic values that the DSP will eat when configuring irq/mirq/dma
  */
 /* DSP IRQ conversion array             */
-static struct orVals orIRQ[] = {
+static struct orVals orIRQ[] __initdata = {
 	{0x05, 0x28},
 	{0x07, 0x08},
 	{0x09, 0x10},
@@ -474,7 +482,7 @@ static struct orVals orIRQ[] = {
 };
 
 /* MPU-401 IRQ conversion array         */
-static struct orVals orMIRQ[] = {
+static struct orVals orMIRQ[] __initdata = {
 	{0x05, 0x04},
 	{0x07, 0x44},
 	{0x09, 0x84},
@@ -483,14 +491,14 @@ static struct orVals orMIRQ[] = {
 };
 
 /* DMA Channels conversion array        */
-static struct orVals orDMA[] = {
+static struct orVals orDMA[] __initdata = {
 	{0x00, 0x01},
 	{0x01, 0x02},
 	{0x03, 0x03},
 	{0x00, 0x00}
 };
 
-static struct aedsp16_info ae_config = {
+static struct aedsp16_info ae_config __initdata = {
 	DEF_AEDSP16_IOB,
 	DEF_AEDSP16_IRQ,
 	DEF_AEDSP16_MRQ,
@@ -503,16 +511,10 @@ static struct aedsp16_info ae_config = {
 /*
  * Buffers to store audio card informations
  */
-static char     DSPCopyright[CARDNAMELEN + 1];
-static char     DSPVersion[CARDVERLEN + 1];
+static char     DSPCopyright[CARDNAMELEN + 1] __initdata = {0, };
+static char     DSPVersion[CARDVERLEN + 1] __initdata = {0, };
 
-static void aedsp16_delay_10msec(void)
-{
-	for (gc = 0; gc < 1000; gc++)
-		udelay(10);
-}
-
-static int aedsp16_wait_data(int port)
+static int __init aedsp16_wait_data(int port)
 {
 	int             loop = STATUSRETRY;
 	unsigned char   ret = 0;
@@ -535,7 +537,7 @@ static int aedsp16_wait_data(int port)
 	return FALSE;
 }
 
-static int aedsp16_read(int port)
+static int __init aedsp16_read(int port)
 {
 	int inbyte;
 
@@ -553,12 +555,12 @@ static int aedsp16_read(int port)
 	return inbyte;
 }
 
-static int aedsp16_test_dsp(int port)
+static int __init aedsp16_test_dsp(int port)
 {
 	return ((aedsp16_read(port) == 0xaa) ? TRUE : FALSE);
 }
 
-static int aedsp16_dsp_reset(int port)
+static int __init aedsp16_dsp_reset(int port)
 {
 	/*
 	 * Reset DSP
@@ -579,7 +581,7 @@ static int aedsp16_dsp_reset(int port)
 	return FALSE;
 }
 
-static int aedsp16_write(int port, int cmd)
+static int __init aedsp16_write(int port, int cmd)
 {
 	unsigned char   ret;
 	int             loop = HARDRETRY;
@@ -607,7 +609,7 @@ static int aedsp16_write(int port, int cmd)
 #if defined(CONFIG_SC6600)
 
 #if defined(AEDSP16_INFO) || defined(AEDSP16_DEBUG)
-void aedsp16_pinfo(void) {
+void __init aedsp16_pinfo(void) {
 	DBG(("\n Base address:  %x\n", decoded_hcfg.iobase));
 	DBG((" Joystick    : %s present\n", decoded_hcfg.joystick?"":" not"));
 	DBG((" WSS addr    :  %x\n", decoded_hcfg.wssbase));
@@ -617,7 +619,7 @@ void aedsp16_pinfo(void) {
 }
 #endif
 
-void aedsp16_hard_decode(void) {
+void __init aedsp16_hard_decode(void) {
 
 	DBG((" aedsp16_hard_decode: 0x%x, 0x%x\n", hard_cfg[0], hard_cfg[1]));
 
@@ -661,7 +663,7 @@ void aedsp16_hard_decode(void) {
 	DBG(("success.\n"));
 }
 
-void aedsp16_hard_encode(void) {
+void __init aedsp16_hard_encode(void) {
 
 	DBG((" aedsp16_hard_encode: 0x%x, 0x%x\n", hard_cfg[0], hard_cfg[1]));
 
@@ -686,7 +688,7 @@ void aedsp16_hard_encode(void) {
 
 }
 
-static int aedsp16_hard_write(int port) {
+static int __init aedsp16_hard_write(int port) {
 
 	DBG(("aedsp16_hard_write:\n"));
 
@@ -721,7 +723,7 @@ static int aedsp16_hard_write(int port) {
 	return TRUE;
 }
 
-static int aedsp16_hard_read(int port) {
+static int __init aedsp16_hard_read(int port) {
 
 	DBG(("aedsp16_hard_read:\n"));
 
@@ -755,7 +757,7 @@ static int aedsp16_hard_read(int port) {
 	return TRUE;
 }
 
-static int aedsp16_ext_cfg_write(int port) {
+static int __init aedsp16_ext_cfg_write(int port) {
 
 	int extcfg, val;
 
@@ -809,7 +811,7 @@ static int aedsp16_ext_cfg_write(int port) {
 
 #endif /* CONFIG_SC6600 */
 
-static int aedsp16_cfg_write(int port) {
+static int __init aedsp16_cfg_write(int port) {
 	if (aedsp16_write(port, WRITE_MDIRQ_CFG)) {
 		printk("[AEDSP16] CMD 0x%x: failed!\n", WRITE_MDIRQ_CFG);
 		return FALSE;
@@ -821,11 +823,11 @@ static int aedsp16_cfg_write(int port) {
 	return TRUE;
 }
 
-static int aedsp16_init_mss(int port)
+static int __init aedsp16_init_mss(int port)
 {
 	DBG(("aedsp16_init_mss:\n"));
 
-	aedsp16_delay_10msec();
+	mdelay(10);
 
 	if (aedsp16_write(port, DSP_INIT_MSS)) {
 		printk("[AEDSP16] aedsp16_init_mss [0x%x]: failed!\n",
@@ -833,19 +835,20 @@ static int aedsp16_init_mss(int port)
 		DBG(("failure.\n"));
 		return FALSE;
 	}
-	aedsp16_delay_10msec();
+	
+	mdelay(10);
 
 	if (aedsp16_cfg_write(port) == FALSE)
 		return FALSE;
 
-	outb(soft_cfg_1, ae_config.mss_base);
+	outb(soft_cfg_mss, ae_config.mss_base);
 
 	DBG(("success.\n"));
 
 	return TRUE;
 }
 
-static int aedsp16_setup_board(int port) {
+static int __init aedsp16_setup_board(int port) {
 	int	loop = RETRY;
 
 #if defined(CONFIG_SC6600)
@@ -873,7 +876,7 @@ static int aedsp16_setup_board(int port) {
 			printk("[AEDSP16] CMD 0x%x: failed!\n", COMMAND_88);
 			return FALSE;
 		}
-		aedsp16_delay_10msec();
+		mdelay(10);
 	} while ((aedsp16_wait_data(port) == FALSE) && loop--);
 
 	if (aedsp16_read(port) == -1) {
@@ -934,7 +937,7 @@ static int aedsp16_setup_board(int port) {
 	return TRUE;
 }
 
-static int aedsp16_stdcfg(int port) {
+static int __init aedsp16_stdcfg(int port) {
 	if (aedsp16_write(port, WRITE_MDIRQ_CFG)) {
 		printk("[AEDSP16] CMD 0x%x: failed!\n", WRITE_MDIRQ_CFG);
 		return FALSE;
@@ -949,7 +952,7 @@ static int aedsp16_stdcfg(int port) {
 	return TRUE;
 }
 
-static int aedsp16_dsp_version(int port)
+static int __init aedsp16_dsp_version(int port)
 {
 	int             len = 0;
 	int             ret;
@@ -980,7 +983,7 @@ static int aedsp16_dsp_version(int port)
 	return TRUE;
 }
 
-static int aedsp16_dsp_copyright(int port)
+static int __init aedsp16_dsp_copyright(int port)
 {
 	int             len = 0;
 	int             ret;
@@ -1016,29 +1019,31 @@ static int aedsp16_dsp_copyright(int port)
 	return TRUE;
 }
 
-static void aedsp16_init_tables(void)
+static void __init aedsp16_init_tables(void)
 {
+	int i = 0;
+
 	memset(DSPCopyright, 0, CARDNAMELEN + 1);
 	memset(DSPVersion, 0, CARDVERLEN + 1);
 
-	for (gc = 0; orIRQ[gc].or; gc++)
-		if (orIRQ[gc].val == ae_config.irq) {
-			soft_cfg |= orIRQ[gc].or;
-			soft_cfg_1 |= orIRQ[gc].or;
+	for (i = 0; orIRQ[i].or; i++)
+		if (orIRQ[i].val == ae_config.irq) {
+			soft_cfg |= orIRQ[i].or;
+			soft_cfg_mss |= orIRQ[i].or;
 		}
 
-	for (gc = 0; orMIRQ[gc].or; gc++)
-		if (orMIRQ[gc].or == ae_config.mpu_irq)
-			soft_cfg |= orMIRQ[gc].or;
+	for (i = 0; orMIRQ[i].or; i++)
+		if (orMIRQ[i].or == ae_config.mpu_irq)
+			soft_cfg |= orMIRQ[i].or;
 
-	for (gc = 0; orDMA[gc].or; gc++)
-		if (orDMA[gc].val == ae_config.dma) {
-			soft_cfg |= orDMA[gc].or;
-			soft_cfg_1 |= orDMA[gc].or;
+	for (i = 0; orDMA[i].or; i++)
+		if (orDMA[i].val == ae_config.dma) {
+			soft_cfg |= orDMA[i].or;
+			soft_cfg_mss |= orDMA[i].or;
 		}
 }
 
-static int aedsp16_init_board(void)
+static int __init aedsp16_init_board(void)
 {
 	aedsp16_init_tables();
 
@@ -1134,12 +1139,12 @@ static int aedsp16_init_board(void)
 	printk("]\n");
 #endif /* MODULE || AEDSP16_INFO || AEDSP16_DEBUG */
 
-	aedsp16_delay_10msec();
+	mdelay(10);
 
 	return TRUE;
 }
 
-static int init_aedsp16_sb(void)
+static int __init init_aedsp16_sb(void)
 {
 	DBG(("init_aedsp16_sb: "));
 
@@ -1159,7 +1164,7 @@ static int init_aedsp16_sb(void)
 	return TRUE;
 }
 
-static void uninit_aedsp16_sb(void)
+static void __init uninit_aedsp16_sb(void)
 {
 	DBG(("uninit_aedsp16_sb: "));
 
@@ -1168,7 +1173,7 @@ static void uninit_aedsp16_sb(void)
 	DBG(("done.\n"));
 }
 
-static int init_aedsp16_mss(void)
+static int __init init_aedsp16_mss(void)
 {
 	DBG(("init_aedsp16_mss: "));
 
@@ -1207,7 +1212,7 @@ static int init_aedsp16_mss(void)
 	return TRUE;
 }
 
-static void uninit_aedsp16_mss(void)
+static void __init uninit_aedsp16_mss(void)
 {
 	DBG(("uninit_aedsp16_mss: "));
 
@@ -1221,7 +1226,7 @@ static void uninit_aedsp16_mss(void)
 	DBG(("done.\n"));
 }
 
-static int init_aedsp16_mpu(void)
+static int __init init_aedsp16_mpu(void)
 {
 	DBG(("init_aedsp16_mpu: "));
 
@@ -1251,7 +1256,7 @@ static int init_aedsp16_mpu(void)
 	return TRUE;
 }
 
-static void uninit_aedsp16_mpu(void)
+static void __init uninit_aedsp16_mpu(void)
 {
 	DBG(("uninit_aedsp16_mpu: "));
 
@@ -1266,7 +1271,7 @@ static void uninit_aedsp16_mpu(void)
 	DBG(("done.\n"));
 }
 
-int init_aedsp16(void)
+int __init init_aedsp16(void)
 {
 	int initialized = FALSE;
 
@@ -1324,7 +1329,7 @@ int init_aedsp16(void)
 	return initialized;
 }
 
-void uninit_aedsp16(void)
+void __init uninit_aedsp16(void)
 {
 	if (ae_config.mss_base != -1)
 		uninit_aedsp16_mss();
@@ -1344,12 +1349,20 @@ int mss_base = -1;
 int mpu_base = -1;
 
 
-MODULE_PARM(io,"i");
-MODULE_PARM(irq,"i");
-MODULE_PARM(dma,"i");
-MODULE_PARM(mpu_irq,"i");
-MODULE_PARM(mss_base,"i");
-MODULE_PARM(mpu_base,"i");
+MODULE_PARM(io, "i");
+MODULE_PARM_DESC(io, "I/O base address (0x220 0x240)");
+MODULE_PARM(irq, "i");
+MODULE_PARM_DESC(irq, "IRQ line (5 7 9 10 11)");
+MODULE_PARM(dma, "i");
+MODULE_PARM_DESC(dma, "dma line (0 1 3)");
+MODULE_PARM(mpu_irq, "i");
+MODULE_PARM_DESC(mpu_irq, "MPU-401 IRQ line (5 7 9 10 0)");
+MODULE_PARM(mss_base, "i");
+MODULE_PARM_DESC(mss_base, "MSS emulation I/O base address (0x530 0xE80)");
+MODULE_PARM(mpu_base, "i");
+MODULE_PARM_DESC(mpu_base,"MPU-401 I/O base address (0x300 0x310 0x320 0x330)");
+MODULE_AUTHOR("Riccardo Facchetti <fizban@tin.it>");
+MODULE_DESCRIPTION("Audio Excel DSP 16 Driver Version " VERSION);
 
 int init_module(void) {
 	printk("Audio Excel DSP 16 init driver Copyright (C) Riccardo Facchetti 1995-98\n");

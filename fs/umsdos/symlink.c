@@ -149,6 +149,7 @@ static struct file_operations umsdos_symlink_operations =
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open is needed */
+	NULL,			/* no flush code */
 	NULL,			/* release */
 	NULL			/* fsync */
 };

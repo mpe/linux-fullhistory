@@ -1,7 +1,7 @@
 /*
  * bios32.c - Low-Level PCI Access
  *
- * $Id: bios32.c,v 1.44 1998/08/04 14:54:56 mj Exp $
+ * $Id: bios32.c,v 1.45 1998/08/15 10:41:04 mj Exp $
  *
  * Copyright 1993, 1994 Drew Eckhardt
  *      Visionary Computing
@@ -945,7 +945,8 @@ __initfunc(void pcibios_fixup_ghosts(struct pci_bus *b))
 __initfunc(void pcibios_fixup_peer_bridges(void))
 {
 	struct pci_bus *b = &pci_root;
-	int i;
+	int i, cnt=-1;
+	struct pci_dev *d;
 
 #ifdef CONFIG_PCI_DIRECT
 	/*
@@ -956,23 +957,34 @@ __initfunc(void pcibios_fixup_peer_bridges(void))
 	if (access_pci == &pci_direct_conf2)
 		return;
 #endif
+	for(d=b->devices; d; d=d->sibling)
+		if ((d->class >> 8) == PCI_CLASS_BRIDGE_HOST)
+			cnt++;
 	do {
 		int n = b->subordinate+1;
+		int found = 0;
 		u16 l;
 		for(i=0; i<256; i += 8)
 			if (!pcibios_read_config_word(n, i, PCI_VENDOR_ID, &l) &&
 			    l != 0x0000 && l != 0xffff) {
 				DBG("Found device at %02x:%02x\n", n, i);
-				printk("PCI: Discovered primary peer bus %02x\n", n);
-				b = kmalloc(sizeof(*b), GFP_KERNEL);
-				memset(b, 0, sizeof(*b));
-				b->next = pci_root.next;
-				pci_root.next = b;
-				b->number = b->secondary = n;
-				b->subordinate = 0xff;
-				b->subordinate = pci_scan_bus(b);
-				break;
+				found++;
+				if (!pcibios_read_config_word(n, i, PCI_CLASS_DEVICE, &l) &&
+				    l == PCI_CLASS_BRIDGE_HOST)
+					cnt++;
 			}
+		if (found && cnt > 0) {
+			cnt--;
+			printk("PCI: Discovered primary peer bus %02x\n", n);
+			b = kmalloc(sizeof(*b), GFP_KERNEL);
+			memset(b, 0, sizeof(*b));
+			b->next = pci_root.next;
+			pci_root.next = b;
+			b->number = b->secondary = n;
+			b->subordinate = 0xff;
+			b->subordinate = pci_scan_bus(b);
+			break;
+		}
 	} while (i < 256);
 }
 
@@ -1032,21 +1044,25 @@ __initfunc(void pcibios_fixup_devices(void))
 #ifdef __SMP__
 		/*
 		 * Recalculate IRQ numbers if we use the I/O APIC
+		 *
+		 * NOTE! If the "original" interrupt is marked as an old-fashioned
+		 * irq, we have to keep it old-fashioned even if it's a PCI device
+		 * and we could have found it in the MP-table transform.
 		 */
-		{
-		int irq;
-		unsigned char pin;
+		if (IO_APIC_IRQ(dev->irq)) {
+			int irq;
+			unsigned char pin;
 
-		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
-		if (pin) {
-			pin--;		/* interrupt pins are numbered starting from 1 */
-			irq = IO_APIC_get_PCI_irq_vector (dev->bus->number, PCI_SLOT(dev->devfn), pin);
-			if (irq >= 0) {
-				printk("PCI->APIC IRQ transform: (B%d,I%d,P%d) -> %d\n",
-					dev->bus->number, PCI_SLOT(dev->devfn), pin, irq);
-				dev->irq = irq;
-				}
-		}
+			pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
+			if (pin) {
+				pin--;		/* interrupt pins are numbered starting from 1 */
+				irq = IO_APIC_get_PCI_irq_vector (dev->bus->number, PCI_SLOT(dev->devfn), pin);
+				if (irq >= 0) {
+					printk("PCI->APIC IRQ transform: (B%d,I%d,P%d) -> %d\n",
+						dev->bus->number, PCI_SLOT(dev->devfn), pin, irq);
+					dev->irq = irq;
+					}
+			}
 		}
 #endif
 		/*

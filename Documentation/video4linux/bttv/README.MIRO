@@ -1,0 +1,3 @@
+The right tuner type should automatically be detected.
+Look in your kernel log files to see which one bttv thinks it is.
+

@@ -12,6 +12,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/init.h>
 
 /* SLAB cache for filp's. */
 static kmem_cache_t *filp_cache;
@@ -44,8 +45,7 @@ static inline void put_inuse(struct file *file)
 	file->f_pprev = &inuse_filps;
 }
 
-/* N.B. This should be an __initfunc ... */
-void file_table_init(void)
+void __init file_table_init(void)
 {
 	filp_cache = kmem_cache_create("filp", sizeof(struct file),
 				       0,

@@ -218,31 +218,31 @@ static unsigned stat_swap_force = 0;
 #ifdef CONFIG_STRAM_SWAP
 static int swap_init( unsigned long start_mem, unsigned long swap_data );
 static inline int unswap_pte( struct vm_area_struct * vma, unsigned long
-                              address, pte_t *dir, unsigned long entry,
-                              unsigned long page, int isswap );
+			      address, pte_t *dir, unsigned long entry,
+			      unsigned long page, int isswap );
 static inline int unswap_pmd( struct vm_area_struct * vma, pmd_t *dir,
-                              unsigned long address, unsigned long size,
-                              unsigned long offset, unsigned long entry,
-                              unsigned long page, int isswap );
+			      unsigned long address, unsigned long size,
+			      unsigned long offset, unsigned long entry,
+			      unsigned long page, int isswap );
 static inline int unswap_pgd( struct vm_area_struct * vma, pgd_t *dir,
-                              unsigned long address, unsigned long size,
-                              unsigned long entry, unsigned long page, int
-                              isswap );
+			      unsigned long address, unsigned long size,
+			      unsigned long entry, unsigned long page, int
+			      isswap );
 static int unswap_vma( struct vm_area_struct * vma, pgd_t *pgdir, unsigned
-                       long entry, unsigned long page, int isswap );
+		       long entry, unsigned long page, int isswap );
 static int unswap_process( struct mm_struct * mm, unsigned long entry,
-                           unsigned long page, int isswap );
+			   unsigned long page, int isswap );
 static int unswap_by_move( unsigned char *map, unsigned long max, unsigned
-                           long start, unsigned long n_pages );
+			   long start, unsigned long n_pages );
 static int unswap_by_read( unsigned char *map, unsigned long max, unsigned
-                           long start, unsigned long n_pages );
+			   long start, unsigned long n_pages );
 static void *get_stram_region( unsigned long n_pages );
 static void free_stram_region( unsigned long offset, unsigned long n_pages
-                               );
+			       );
 static int in_some_region( unsigned long addr );
 static unsigned long find_free_region( unsigned long n_pages, unsigned long
-                                       *total_free, unsigned long
-                                       *region_free );
+				       *total_free, unsigned long
+				       *region_free );
 static void do_stram_request( void );
 static int stram_open( struct inode *inode, struct file *filp );
 static int stram_release( struct inode *inode, struct file *filp );
@@ -1249,16 +1249,17 @@ static int stram_release( struct inode *inode, struct file *filp )
 
 
 static struct file_operations stram_fops = {
-        NULL,                   /* lseek - default */
-        block_read,             /* read - general block-dev read */
-        block_write,            /* write - general block-dev write */
-        NULL,                   /* readdir - bad */
-        NULL,                   /* select */
-        NULL,                   /* ioctl */
-        NULL,                   /* mmap */
-        stram_open,             /* open */
-        stram_release,          /* release */
-        block_fsync             /* fsync */
+	NULL,                   /* lseek - default */
+	block_read,             /* read - general block-dev read */
+	block_write,            /* write - general block-dev write */
+	NULL,                   /* readdir - bad */
+	NULL,                   /* select */
+	NULL,                   /* ioctl */
+	NULL,                   /* mmap */
+	stram_open,             /* open */
+	NULL,			/* flush */
+	stram_release,          /* release */
+	block_fsync             /* fsync */
 };
 
 __initfunc(int stram_device_init(void))
@@ -1269,12 +1270,12 @@ __initfunc(int stram_device_init(void))
 	return( -ENXIO );
 
     if (!max_swap_size)
-        /* swapping not enabled */
+	/* swapping not enabled */
 	return( -ENXIO );
 	
     if (register_blkdev( STRAM_MAJOR, "stram", &stram_fops)) {
-        printk( KERN_ERR "stram: Unable to get major %d\n", STRAM_MAJOR );
-        return( -ENXIO );
+	printk( KERN_ERR "stram: Unable to get major %d\n", STRAM_MAJOR );
+	return( -ENXIO );
     }
 
     blk_dev[STRAM_MAJOR].request_fn = do_stram_request;

@@ -298,6 +298,7 @@ static struct file_operations envctrl_fops = {
 	envctrl_ioctl,
 	NULL,		/* mmap */
 	envctrl_open,
+	NULL,		/* flush */
 	envctrl_release
 };
 

@@ -415,6 +415,7 @@ static struct file_operations nbd_fops =
 	nbd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	nbd_open,		/* open */
+	NULL,			/* flush */
 	nbd_release		/* release */
 };
 

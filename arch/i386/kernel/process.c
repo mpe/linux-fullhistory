@@ -727,6 +727,13 @@ void __switch_to(struct task_struct *prev, struct task_struct *next)
 	gdt_table[next->tss.tr >> 3].b &= 0xfffffdff;
 	asm volatile("ltr %0": :"g" (*(unsigned short *)&next->tss.tr));
 
+	/*
+	 * Save away %fs and %gs. No need to save %es and %ds, as
+	 * those are always kernel segments while inside the kernel.
+	 */
+	asm volatile("movl %%fs,%0":"=m" (*(int *)&prev->tss.fs));
+	asm volatile("movl %%gs,%0":"=m" (*(int *)&prev->tss.gs));
+
 	/* Re-load LDT if necessary */
 	if (next->mm->segments != prev->mm->segments)
 		asm volatile("lldt %0": :"g" (*(unsigned short *)&next->tss.ldt));
@@ -736,13 +743,8 @@ void __switch_to(struct task_struct *prev, struct task_struct *next)
 		asm volatile("movl %0,%%cr3": :"r" (next->tss.cr3));
 
 	/*
-	 * Save away %fs and %gs. No need to save %es and %ds, as
-	 * those are always kernel segments while inside the kernel.
-	 * Restore the new values.
+	 * Restore %fs and %gs.
 	 */
-	asm volatile("movl %%fs,%0":"=m" (*(int *)&prev->tss.fs));
-	asm volatile("movl %%gs,%0":"=m" (*(int *)&prev->tss.gs));
-
 	loadsegment(fs,next->tss.fs);
 	loadsegment(gs,next->tss.gs);
 
@@ -761,28 +763,19 @@ void __switch_to(struct task_struct *prev, struct task_struct *next)
 
 asmlinkage int sys_fork(struct pt_regs regs)
 {
-	int ret;
-
-	lock_kernel();
-	ret = do_fork(SIGCHLD, regs.esp, &regs);
-	unlock_kernel();
-	return ret;
+	return do_fork(SIGCHLD, regs.esp, &regs);
 }
 
 asmlinkage int sys_clone(struct pt_regs regs)
 {
 	unsigned long clone_flags;
 	unsigned long newsp;
-	int ret;
 
-	lock_kernel();
 	clone_flags = regs.ebx;
 	newsp = regs.ecx;
 	if (!newsp)
 		newsp = regs.esp;
-	ret = do_fork(clone_flags, newsp, &regs);
-	unlock_kernel();
-	return ret;
+	return do_fork(clone_flags, newsp, &regs);
 }
 
 /*

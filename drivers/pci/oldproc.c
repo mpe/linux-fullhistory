@@ -1,5 +1,5 @@
 /*
- *	$Id: oldproc.c,v 1.16 1998/07/19 17:50:18 davem Exp $
+ *	$Id: oldproc.c,v 1.20 1998/08/23 12:12:01 mj Exp $
  *
  *	Backward-compatible procfs interface for PCI.
  *
@@ -122,7 +122,9 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( IBM,		IBM_82351,	"82351"),
 	DEVICE( IBM,		IBM_SERVERAID,	"ServeRAID"),
 	DEVICE( IBM,		IBM_TR_WAKE,	"Wake On LAN Token Ring"),
+	DEVICE( IBM,		IBM_MPIC,	"MPIC-2 Interrupt Controller"),
 	DEVICE( IBM,		IBM_3780IDSP,	"MWave DSP"),
+	DEVICE( IBM,		IBM_MPIC_2,	"MPIC-2 ASIC Interrupt Controller"),
 	DEVICE( WD,		WD_7197,	"WD 7197"),
 	DEVICE( AMD,		AMD_LANCE,	"79C970"),
 	DEVICE( AMD,		AMD_SCSI,	"53C974"),

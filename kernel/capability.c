@@ -147,7 +147,6 @@ asmlinkage int sys_capset(cap_user_header_t header, const cap_user_data_t data)
              return -EINVAL;
      }
 
-     /* may want to set other processes at some point -- for now demand 0 */
      if (get_user(pid, &header->pid))
 	     return -EFAULT; 
 

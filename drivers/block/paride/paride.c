@@ -11,10 +11,11 @@
 
 	1.01	GRG 1998.05.03	Use spinlocks
 	1.02	GRG 1998.05.05  init_proto, release_proto, ktti
+	1.03	GRG 1998.08.15  eliminate compiler warning
 
 */
 
-#define PI_VERSION      "1.02"
+#define PI_VERSION      "1.03"
 
 #include <linux/module.h>
 #include <linux/config.h>
@@ -249,7 +250,7 @@ static void pi_register_parport( PIA *pi, int verbose)
 
 	if (verbose) printk("%s: 0x%x is %s\n",pi->device,pi->port,pp->name);
 	
-	pi->parname = pp->name;
+	pi->parname = (char *)pp->name;
 
 #endif
 }

@@ -694,7 +694,7 @@ int sb_dsp_detect(struct address_info *hw_config)
 	return 1;
 }
 
-static int sb_dsp_init(struct address_info *hw_config)
+int sb_dsp_init(struct address_info *hw_config)
 {
 	sb_devc *devc;
 	char name[100];

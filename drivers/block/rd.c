@@ -223,6 +223,7 @@ static struct file_operations initrd_fops = {
 	NULL, 		/* ioctl */
 	NULL,		/* mmap */
 	NULL,		/* open */
+	NULL,		/* flush */
 	initrd_release,	/* release */
 	NULL		/* fsync */ 
 };
@@ -249,13 +250,11 @@ static int rd_open(struct inode * inode, struct file * filp)
 	return 0;
 }
 
-#ifdef MODULE
 static int rd_release(struct inode * inode, struct file * filp)
 {
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
-#endif
 
 static struct file_operations fd_fops = {
 	NULL,		/* lseek - default */
@@ -266,11 +265,8 @@ static struct file_operations fd_fops = {
 	rd_ioctl, 	/* ioctl */
 	NULL,		/* mmap */
 	rd_open,	/* open */
-#ifndef MODULE
-	NULL,		/* no special release code... */
-#else
+	NULL,		/* flush */
 	rd_release,	/* module needs to decrement use count */
-#endif
 	block_fsync		/* fsync */ 
 };
 

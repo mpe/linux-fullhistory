@@ -391,6 +391,7 @@ static struct file_operations coda_psdev_fops = {
       NULL,                  /* ioctl */
       NULL,		     /* coda_psdev_mmap */
       coda_psdev_open,       /* open */
+      NULL,                  /* flush */
       coda_psdev_release,    /* release */
       NULL,                  /* fsync */
       NULL,                  /* fasync */

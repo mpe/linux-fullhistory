@@ -50,6 +50,7 @@ static struct file_operations proc_dir_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* can't fsync */
 };
@@ -117,6 +118,7 @@ static struct file_operations proc_root_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* no fsync */
 };
@@ -276,6 +278,7 @@ static struct file_operations proc_openprom_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* can't fsync */
 };
@@ -901,19 +904,18 @@ int proc_readdir(struct file * filp,
  * tasklist lock while doing this, and we must release it before
  * we actually do the filldir itself, so we use a temp buffer..
  */
-static int get_pid_list(unsigned int index, unsigned int *pids)
+static int get_pid_list(int index, unsigned int *pids)
 {
 	struct task_struct *p;
-	int nr = FIRST_PROCESS_ENTRY;
 	int nr_pids = 0;
 
+	index -= FIRST_PROCESS_ENTRY;
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
-		int pid;
-		if (nr++ < index)
-			continue;
-		pid = p->pid;
+		int pid = p->pid;
 		if (!pid)
+			continue;
+		if (--index >= 0)
 			continue;
 		pids[nr_pids] = pid;
 		nr_pids++;

@@ -53,6 +53,7 @@ static struct file_operations autofs_dir_operations = {
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* open */
+	NULL,			/* flush */
 	NULL,			/* release */
 	NULL,			/* fsync */
 	NULL,			/* fasync */

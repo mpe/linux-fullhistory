@@ -67,6 +67,7 @@ P: 1024/CB4660B9 CC A0 71 81 F4 A0 63 AC  C0 4B 81 1D 8C 15 C8 E5
 D: Parport hacker
 D: Implemented a workaround for some interrupt buggy printers
 D: Author of pscan that helps to fix lp/parport bug
+D: Author of lil (Linux Interrupt Latency benchmark)
 D: Various other kernel hacks
 S: Via Ciaclini 26
 S: Imola 40026
@@ -333,18 +334,19 @@ S: East Malvern, Victoria, 3145
 S: Australia
 
 N: Alan Cox
-E: alan@lxorguk.ukuu.org.uk (linux related - except big patches)
-E: iialan@www.uk.linux.org (linux.org.uk/big patches)
-E: alan@cymru.net (commercial CymruNET stuff)
+W: http://roadrunner.swansea.linux.org.uk/alan.shtml
+E: alan@lxorguk.ukuu.org.uk
+E: alan@www.linux.org.uk (linux.org.uk stuff)
 E: Alan.Cox@linux.org (if others fail)
-D: NET2Debugged/NET3 author
-D: Network layer debugging
-D: Initial AX.25 & IPX releases
-D: Original Linux netatalk patches.
+D: Linux Networking (0.99.10->2.0.29)
+D: Original Appletalk, AX.25, and IPX code
 D: Current 3c501 hacker. >>More 3c501 info/tricks wanted<<.
 D: Watchdog timer drivers
-D: Linux/SMP
-S: CymruNet Limited
+D: Linux/SMP x86 (up to 2.0 only)
+D: Initial Mac68K port
+D: Video4Linux design, bw-qcam and PMS driver ports.
+D: 2.1.x modular sound
+S: c/o I2IT Limited
 S: The Innovation Centre
 S: Singleton Park
 S: Swansea, SA2 8PP

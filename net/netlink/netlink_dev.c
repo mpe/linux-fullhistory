@@ -185,6 +185,7 @@ static struct file_operations netlink_fops = {
 	netlink_ioctl,
 	NULL,		/* netlink_mmap */
 	netlink_open,
+	NULL,		/* flush */
 	netlink_release
 };
 

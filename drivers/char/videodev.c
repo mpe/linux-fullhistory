@@ -62,6 +62,9 @@ extern int rtrack_init(struct video_init *);
 #ifdef CONFIG_RADIO_SF16FMI
 extern int fmi_init(struct video_init *);
 #endif
+#ifdef CONFIG_RADIO_MIROPCM20
+extern int pcm20_init(struct video_init *);
+#endif
 
 static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_BT848
@@ -88,6 +91,9 @@ static struct video_init video_init_list[]={
 #endif	
 #ifdef CONFIG_RADIO_SF16FMI
 	{"SF16FMI", fmi_init}, 
+#endif
+#ifdef CONFIG_RADIO_MIROPCM20
+	{"PCM20", pcm20_init}, 
 #endif	
 	{"end", NULL}
 };
@@ -315,6 +321,7 @@ static struct file_operations video_fops=
 	video_ioctl,
 	video_mmap,
 	video_open,
+	NULL,		/* flush */
 	video_release
 };
 

@@ -32,17 +32,11 @@
 #include <linux/videodev.h>
 
 #define MAX_CLIPRECS	100
+#define MAX_GBUFFERS	2
 #define RISCMEM_LEN	(32744*2)
-#define BTTV_MAX_FBUF	0x144000
 
-
-/* clipping rectangle */
-struct cliprec 
-{
-	int x, y, x2, y2;
-	struct cliprec *next;
-};
-
+/* maximum needed buffer size for extended VBI frame mode capturing */
+#define BTTV_MAX_FBUF	0x151000
 
 #ifdef __KERNEL__
 
@@ -75,9 +69,14 @@ struct bttv
 	int have_msp3400;
 	int have_tuner;
         int tuner_type;
-
+        int channel;
+        
+        unsigned int nr;
 	unsigned short id;
+	unsigned char bus;          /* PCI bus the Bt848 is on */
+	unsigned char devfn;
 	struct pci_dev *dev;
+	unsigned char irq;          /* IRQ used by Bt848 card */
 	unsigned char revision;
 	unsigned int bt848_adr;      /* bus address of IO mem returned by PCI BIOS */
 	unsigned char *bt848_mem;   /* pointer to mapped IO memory */
@@ -106,24 +105,37 @@ struct bttv
 	u32 *risc_odd;
 	u32 *risc_even;
 	int cap;
-	struct cliprec *cliprecs;
-	int ncr;		/* number of clipping rectangles */
+	struct video_clip *cliprecs;
 
 	struct gbuffer *ogbuffers;
 	struct gbuffer *egbuffers;
 	u16 gwidth, gheight, gfmt;
 	u32 *grisc;
+	
 	unsigned long gro;
 	unsigned long gre;
 	unsigned long gro_next;
 	unsigned long gre_next;
-	char *fbuffer;
+
+        int grf,grf_next;  /* frame numbers in grab queue */
+        int frame_stat[MAX_GBUFFERS];
+#define GBUFFER_UNUSED       0
+#define GBUFFER_GRABBING     1
+#define GBUFFER_DONE         2
+
+        char *fbuffer;
 	int gmode;
 	int grabbing;
 	int lastgrab;
 	int grab;
 	int grabcount;
+
 	int pll;
+	unsigned int Fsc;
+	unsigned int field;
+	unsigned int last_field; /* number of last grabbed field */
+	int i2c_command;
+	int triton1;
 };
 
 #endif
@@ -148,6 +160,7 @@ struct bttv
 #define BTTV_READEE		_IOW('v',  BASE_VIDIOCPRIVATE+0, char [256])
 #define BTTV_WRITEE		_IOR('v',  BASE_VIDIOCPRIVATE+1, char [256])
 #define BTTV_GRAB		_IOR('v' , BASE_VIDIOCPRIVATE+2, struct gbuf)
+#define BTTV_FIELDNR		_IOR('v' , BASE_VIDIOCPRIVATE+2, unsigned int)
 
 
 #define BTTV_UNKNOWN       0x00
@@ -185,7 +198,6 @@ struct bttv
 #define TDA9850_ALI1       0x08
 #define TDA9850_ALI2       0x09
 #define TDA9850_ALI3       0x0a
-
 
 #define TDA8425_VL         0x00
 #define TDA8425_VR         0x01

@@ -1063,7 +1063,7 @@ int dquot_transfer(struct inode *inode, struct iattr *iattr, char direction, uid
 }
 
 
-__initfunc(void dquot_init_hash(void))
+void __init dquot_init_hash(void)
 {
 	printk(KERN_NOTICE "VFS: Diskquotas version %s initialized\n", __DQUOT_VERSION__);
 

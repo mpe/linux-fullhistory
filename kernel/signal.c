@@ -18,6 +18,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/slab.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 
@@ -38,8 +39,7 @@ static kmem_cache_t *signal_queue_cachep;
 static int nr_queued_signals;
 static int max_queued_signals = 1024;
 
-void
-signals_init(void)
+void __init signals_init(void)
 {
 	signal_queue_cachep =
 		kmem_cache_create("signal_queue",

@@ -866,6 +866,7 @@ static struct file_operations bpp_fops = {
 	bpp_ioctl,
 	NULL,		/* bpp_mmap */
 	bpp_open,
+	NULL,		/* flush */
 	bpp_release,
 };
 

@@ -1494,6 +1494,7 @@ file_operations kbd_fops =
 	kbd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	kbd_open,		/* open */
+	NULL,			/* flush */
 	kbd_close,		/* close */
 	NULL,			/* fsync */
 	kbd_fasync,		/* fasync */

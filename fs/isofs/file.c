@@ -31,6 +31,7 @@ static struct file_operations isofs_file_operations = {
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */
+	NULL,			/* flush */
 	NULL,			/* release */
 	NULL			/* fsync */
 };

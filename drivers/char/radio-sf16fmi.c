@@ -22,14 +22,12 @@
 #include <linux/videodev.h>	/* kernel radio structs		*/
 #include <linux/config.h>	/* CONFIG_RADIO_SF16MI_PORT 	*/
 
-#include "rsf16fmi.h"
-
 struct fmi_device
 {
 	int port;
-	int curvol;
-	unsigned long curfreq;
-	int flags;
+        int curvol; /* 1 or 0 */
+        unsigned long curfreq; /* RSF16_PREC * freq in MHz */
+        __u32 flags;
 };
 
 #ifndef CONFIG_RADIO_SF16FMI_PORT
@@ -39,11 +37,16 @@ struct fmi_device
 static int io = CONFIG_RADIO_SF16FMI_PORT; 
 static int users = 0;
 
-/* local things */
-/* freq in 1/16kHz to internal number */
-#define RSF16_ENCODE(x)	((x/16+10700)/50)
+/* freq is in 1/16 kHz to internal number, hw precision is 50 kHz */
+/* It is only usefull to give freq in intervall of 800 (=0.05Mhz),
+ * other bits will be truncated, e.g 92.7400016 -> 92.7, but 
+ * 92.7400017 -> 92.75
+ */
+#define RSF16_ENCODE(x)	((x)/800+214)
+#define RSF16_MINFREQ 88*16000
+#define RSF16_MAXFREQ 108*16000
 
-static void outbits(int bits, int data, int port)
+static void outbits(int bits, unsigned int data, int port)
 {
 	while(bits--) {
  		if(data & 1) {
@@ -73,7 +76,7 @@ static void fmi_unmute(int port)
 
 static int fmi_setfreq(struct fmi_device *dev, unsigned long freq)
 {
-	int myport = dev->port;
+        int myport = dev->port;
 
 	outbits(16, RSF16_ENCODE(freq), myport);
 	outbits(8, 0xC0, myport);
@@ -105,6 +108,7 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		case VIDIOCGCAP:
 		{
 			struct video_capability v;
+			strcpy(v.name, "SF16-FMx radio");
 			v.type=VID_TYPE_TUNER;
 			v.channels=1;
 			v.audios=1;
@@ -120,17 +124,16 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		case VIDIOCGTUNER:
 		{
 			struct video_tuner v;
+			int mult;
+
 			if(copy_from_user(&v, arg,sizeof(v))!=0)
 				return -EFAULT;
 			if(v.tuner)	/* Only 1 tuner */
 				return -EINVAL;
-			if (fmi->flags & VIDEO_TUNER_LOW) {
-				v.rangelow = 87500 * 16;
-				v.rangehigh = 108000 * 16;
-			} else {
-				v.rangelow=(int)(175*8 /* 87.5 *16 */);
-				v.rangehigh=(int)(108*16);
-			}
+			strcpy(v.name, "FM");
+			mult = (fmi->flags & VIDEO_TUNER_LOW) ? 1 : 1000;
+			v.rangelow = RSF16_MINFREQ/mult;
+			v.rangehigh = RSF16_MAXFREQ/mult;
 			v.flags=fmi->flags;
 			v.mode=VIDEO_MODE_AUTO;
 			v.signal=0xFFFF*fmi_getsigstr(fmi);
@@ -165,6 +168,8 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			if (!(fmi->flags & VIDEO_TUNER_LOW))
 				tmp *= 1000;
+			if ( tmp<RSF16_MINFREQ || tmp>RSF16_MAXFREQ )
+			  return -EINVAL;
 			fmi->curfreq = tmp;
 			fmi_setfreq(fmi, fmi->curfreq);
 			return 0;
@@ -172,12 +177,15 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		case VIDIOCGAUDIO:
 		{	
 			struct video_audio v;
-			memset(&v,0, sizeof(v));
-			v.flags|=VIDEO_AUDIO_MUTABLE;
-			v.mode=VIDEO_SOUND_MONO;
-			v.volume=fmi->curvol;
-			v.step=65535;
+			v.audio=0;
+			v.volume=0;
+			v.bass=0;
+			v.treble=0;
+			v.flags=( (!fmi->curvol)*VIDEO_AUDIO_MUTE | VIDEO_AUDIO_MUTABLE);
 			strcpy(v.name, "Radio");
+			v.mode=VIDEO_SOUND_MONO;
+			v.balance=0;
+			v.step=0; /* No volume, just (un)mute */
 			if(copy_to_user(arg,&v, sizeof(v)))
 				return -EFAULT;
 			return 0;			
@@ -189,14 +197,22 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			if(v.audio)
 				return -EINVAL;
-			fmi->curvol=v.volume;
-			if(v.flags&VIDEO_AUDIO_MUTE)
-				fmi_mute(fmi->port);
-			else if(fmi->curvol)
-				fmi_unmute(fmi->port);
-			else
-				fmi_mute(fmi->port);
+			fmi->curvol= v.flags&VIDEO_AUDIO_MUTE ? 0 : 1;
+			fmi->curvol ? 
+			  fmi_unmute(fmi->port) : fmi_mute(fmi->port);
 			return 0;
+		}
+	        case VIDIOCGUNIT:
+		{
+               		struct video_unit v;
+			v.video=VIDEO_NO_UNIT;
+			v.vbi=VIDEO_NO_UNIT;
+			v.radio=dev->minor;
+			v.audio=0; /* How do we find out this??? */
+			v.teletext=VIDEO_NO_UNIT;
+			if(copy_to_user(arg, &v, sizeof(v)))
+				return -EFAULT;
+			return 0;			
 		}
 		default:
 			return -ENOIOCTLCMD;
@@ -222,7 +238,7 @@ static struct fmi_device fmi_unit;
 
 static struct video_device fmi_radio=
 {
-	"SF16FMI radio",
+	"SF16FMx radio",
 	VID_TYPE_TUNER,
 	VID_HARDWARE_SF16MI,
 	fmi_open,
@@ -243,15 +259,17 @@ __initfunc(int fmi_init(struct video_init *v))
 		return -EBUSY;
 	}
 
-	fmi_unit.port=io;
+	fmi_unit.port = io;
+	fmi_unit.curvol = 0;
+	fmi_unit.curfreq = 0;
 	fmi_unit.flags = VIDEO_TUNER_LOW;
-	fmi_radio.priv=&fmi_unit;
+	fmi_radio.priv = &fmi_unit;
 	
 	if(video_register_device(&fmi_radio, VFL_TYPE_RADIO)==-1)
 		return -EINVAL;
 		
 	request_region(io, 2, "fmi");
-	printk(KERN_INFO "SF16FMI radio card driver.\n");
+	printk(KERN_INFO "SF16FMx radio card driver at 0x%x.\n", io);
 	printk(KERN_INFO "(c) 1998 Petr Vandrovec, vandrove@vc.cvut.cz.\n");
 	/* mute card - prevents noisy bootups */
 	fmi_mute(io);

@@ -506,6 +506,7 @@ static struct file_operations rtc_fops = {
 	rtc_ioctl,
 	NULL,		/* No mmap */
 	rtc_open,
+	NULL,		/* flush */
 	rtc_release
 };
 

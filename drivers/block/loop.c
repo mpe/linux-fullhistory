@@ -670,6 +670,7 @@ static struct file_operations lo_fops = {
 	lo_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	lo_open,		/* open */
+	NULL,			/* flush */
 	lo_release		/* release */
 };
 

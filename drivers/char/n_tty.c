@@ -842,22 +842,25 @@ static inline int input_available_p(struct tty_struct *tty, int amt)
  * buffer, and once to drain the space from the (physical) beginning of
  * the buffer to head pointer.
  */
-static inline void copy_from_read_buf(struct tty_struct *tty,
+static inline int copy_from_read_buf(struct tty_struct *tty,
 				      unsigned char **b,
 				      size_t *nr)
 
 {
+	int retval;
 	ssize_t n;
 
+	retval = 0;
 	n = MIN(*nr, MIN(tty->read_cnt, N_TTY_BUF_SIZE - tty->read_tail));
-	if (!n)
-		return;
-	/* N.B. copy_to_user may work only partially */
-	n -= copy_to_user(*b, &tty->read_buf[tty->read_tail], n);
-	tty->read_tail = (tty->read_tail + n) & (N_TTY_BUF_SIZE-1);
-	tty->read_cnt -= n;
-	*b += n;
-	*nr -= n;
+	if (n) {
+		retval = copy_to_user(*b, &tty->read_buf[tty->read_tail], n);
+		n -= retval;
+		tty->read_tail = (tty->read_tail + n) & (N_TTY_BUF_SIZE-1);
+		tty->read_cnt -= n;
+		*b += n;
+		*nr -= n;
+	}
+	return retval;
 }
 
 static ssize_t read_chan(struct tty_struct *tty, struct file *file,
@@ -996,9 +999,13 @@ do_it_again:
 				}
 			}
 		} else {
-			/* N.B. check for errors writing to user space? */
-			copy_from_read_buf(tty, &b, &nr);
-			copy_from_read_buf(tty, &b, &nr);
+			int uncopied;
+			uncopied = copy_from_read_buf(tty, &b, &nr);
+			uncopied += copy_from_read_buf(tty, &b, &nr);
+			if (uncopied) {
+				retval = -EFAULT;
+				break;
+			}
 		}
 
 		/* If there is enough space in the read buffer now, let the

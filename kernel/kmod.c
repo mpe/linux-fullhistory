@@ -116,7 +116,7 @@ int request_module(const char * module_name)
 	/* Block everything but SIGKILL/SIGSTOP */
 	spin_lock_irq(&current->sigmask_lock);
 	tmpsig = current->blocked;
-	siginitset(&current->blocked, ~(sigmask(SIGKILL)|sigmask(SIGSTOP)));
+	siginitsetinv(&current->blocked, sigmask(SIGKILL) | sigmask(SIGSTOP));
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 

@@ -39,6 +39,7 @@ static struct file_operations fat_file_operations = {
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */
+	NULL,			/* flush */
 	NULL,			/* release */
 	file_fsync		/* fsync */
 };
@@ -79,6 +80,7 @@ static struct file_operations fat_file_operations_1024 = {
 	NULL,			/* ioctl - default */
 	fat_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
+	NULL,			/* flush */
 	NULL,			/* release */
 	file_fsync		/* fsync */
 };
@@ -122,6 +124,7 @@ static struct file_operations fat_file_operations_readpage = {
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */
+	NULL,			/* flush */
 	NULL,			/* release */
 	file_fsync		/* fsync */
 };

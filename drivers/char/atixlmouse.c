@@ -191,6 +191,7 @@ struct file_operations atixl_busmouse_fops = {
 	NULL, 		/* mouse_ioctl */
 	NULL,		/* mouse_mmap */
 	open_mouse,
+	NULL,		/* flush */
 	release_mouse,
 	NULL,
 	fasync_mouse,

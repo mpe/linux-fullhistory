@@ -182,7 +182,7 @@ unsigned long occupy_region(unsigned long base, unsigned long end,
 #endif
 
 /* Called from init/main.c to reserve IO ports. */
-__initfunc(void reserve_setup(char *str, int *ints))
+void __init reserve_setup(char *str, int *ints)
 {
 	int i;
 

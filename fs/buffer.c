@@ -1736,7 +1736,7 @@ void show_buffers(void)
  * Use gfp() for the hash table to decrease TLB misses, use
  * SLAB cache for buffer heads.
  */
-__initfunc(void buffer_init(void))
+void __init buffer_init(void)
 {
 	int order = 5;		/* Currently maximum order.. */
 	unsigned int nr_hash;

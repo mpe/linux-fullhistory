@@ -10,10 +10,11 @@
 /* Changes:
 
 	1.01	GRG 1998.05.05 init_proto, release_proto, pi->delay 
+	1.02    GRG 1998.08.15 default pi->delay returned to 4
 
 */
 
-#define	BPCK_VERSION	"1.01" 
+#define	BPCK_VERSION	"1.02" 
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -450,7 +451,7 @@ static void bpck_release_proto( PIA *pi)
 {       MOD_DEC_USE_COUNT;
 }
 
-struct pi_protocol bpck = { "bpck",0,5,2,1,256,
+struct pi_protocol bpck = { "bpck",0,5,2,4,256,
 			  bpck_write_regr,
 			  bpck_read_regr,
 			  bpck_write_block,

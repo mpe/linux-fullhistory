@@ -174,7 +174,7 @@ static struct linux_binfmt applet_format = {
 #endif
 };
 
-__initfunc(int init_java_binfmt(void))
+int __init init_java_binfmt(void)
 {
 	register_binfmt(&java_format);
 	return register_binfmt(&applet_format);

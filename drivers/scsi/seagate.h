@@ -20,10 +20,6 @@ int seagate_st0x_abort(Scsi_Cmnd *);
 const char *seagate_st0x_info(struct Scsi_Host *);
 int seagate_st0x_reset(Scsi_Cmnd *, unsigned int); 
 
-#ifndef NULL
-	#define NULL 0
-#endif
-
 #include <linux/kdev_t.h>
 int seagate_st0x_biosparam(Disk *, kdev_t, int*);
 

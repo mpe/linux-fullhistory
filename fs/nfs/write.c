@@ -63,6 +63,8 @@
  *
  * Until we have a per-mount soft/hard mount policy that we can honour
  * we must default to hard mounting!
+ *
+ * And yes, this should be "interruptible", not soft.
  */
 #define IS_SOFT 0
 
@@ -442,11 +444,15 @@ schedule_write_request(struct nfs_wreq *req, int sync)
 		sync = 1;
 
 	if (sync) {
+		sigset_t	oldmask;
+		struct rpc_clnt *clnt = NFS_CLIENT(inode);
 		dprintk("NFS: %4d schedule_write_request (sync)\n",
 					task->tk_pid);
 		/* Page is already locked */
 		req->wb_flags |= NFS_WRITE_LOCKED;
+		rpc_clnt_sigmask(clnt, &oldmask);
 		rpc_execute(task);
+		rpc_clnt_sigunmask(clnt, &oldmask);
 	} else {
 		dprintk("NFS: %4d schedule_write_request (async)\n",
 					task->tk_pid);
@@ -467,19 +473,19 @@ wait_on_write_request(struct nfs_wreq *req)
 {
 	struct wait_queue	wait = { current, NULL };
 	struct page		*page = req->wb_page;
-	int			retval;
+	int retval;
 	sigset_t		oldmask;
+	struct rpc_clnt		*clnt = NFS_CLIENT(req->wb_inode);
 
-	rpc_clnt_sigmask(NFS_CLIENT(req->wb_inode), &oldmask);
+	rpc_clnt_sigmask(clnt, &oldmask);
 	add_wait_queue(&page->wait, &wait);
 	atomic_inc(&page->count);
 	for (;;) {
-		current->state = IS_SOFT ? TASK_INTERRUPTIBLE : TASK_UNINTERRUPTIBLE;
+		current->state = TASK_INTERRUPTIBLE;
 		retval = 0;
 		if (!PageLocked(page))
 			break;
 		retval = -ERESTARTSYS;
-		/* IS_SOFT is a timeout item .. */
 		if (signalled())
 			break;
 		schedule();
@@ -488,7 +494,7 @@ wait_on_write_request(struct nfs_wreq *req)
 	current->state = TASK_RUNNING;
 	/* N.B. page may have been unused, so we must use free_page() */
 	free_page(page_address(page));
-	rpc_clnt_sigunmask(NFS_CLIENT(req->wb_inode), &oldmask);
+	rpc_clnt_sigunmask(clnt, &oldmask);
 	return retval;
 }
 

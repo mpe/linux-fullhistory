@@ -474,6 +474,7 @@ struct file_operations sun_mouse_fops = {
 	sun_mouse_ioctl,
 	NULL,
 	sun_mouse_open,
+	NULL,		/* flush */
 	sun_mouse_close,
 	NULL,
 	sun_mouse_fasync,

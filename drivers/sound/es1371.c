@@ -1425,6 +1425,7 @@ static /*const*/ struct file_operations es1371_mixer_fops = {
 	&es1371_ioctl_mixdev,
 	NULL,  /* mmap */
 	&es1371_open_mixdev,
+	NULL,	/* flush */
 	&es1371_release_mixdev,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
@@ -2072,6 +2073,7 @@ static /*const*/ struct file_operations es1371_audio_fops = {
 	&es1371_ioctl,
 	&es1371_mmap,
 	&es1371_open,
+	NULL,	/* flush */
 	&es1371_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
@@ -2428,6 +2430,7 @@ static /*const*/ struct file_operations es1371_dac_fops = {
 	&es1371_ioctl_dac,
 	&es1371_mmap_dac,
 	&es1371_open_dac,
+	NULL,	/* flush */
 	&es1371_release_dac,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
@@ -2663,6 +2666,7 @@ static /*const*/ struct file_operations es1371_midi_fops = {
 	NULL,  /* ioctl */
 	NULL,  /* mmap */
 	&es1371_midi_open,
+	NULL,	/* flush */
 	&es1371_midi_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */

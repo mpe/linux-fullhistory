@@ -38,6 +38,7 @@ static struct file_operations bad_file_ops =
 	EIO_ERROR,		/* ioctl */
 	EIO_ERROR,		/* mmap */
 	EIO_ERROR,		/* open */
+	EIO_ERROR,		/* flush */
 	EIO_ERROR,		/* release */
 	EIO_ERROR,		/* fsync */
 	EIO_ERROR,		/* fasync */

@@ -1,5 +1,5 @@
 /*
- *	$Id: pci.h,v 1.80 1998/07/21 10:06:40 mj Exp $
+ *	$Id: pci.h,v 1.84 1998/08/17 23:06:43 cort Exp $
  *
  *	PCI defines and function prototypes
  *	Copyright 1994, Drew Eckhardt
@@ -381,7 +381,9 @@
 #define PCI_DEVICE_ID_IBM_82351		0x0022
 #define PCI_DEVICE_ID_IBM_SERVERAID	0x002e
 #define PCI_DEVICE_ID_IBM_TR_WAKE	0x003e
+#define PCI_DEVICE_ID_IBM_MPIC		0x0046
 #define PCI_DEVICE_ID_IBM_3780IDSP	0x007d
+#define PCI_DEVICE_ID_IBM_MPIC_2	0xffff
 
 #define PCI_VENDOR_ID_WD		0x101c
 #define PCI_DEVICE_ID_WD_7197		0x3296
@@ -599,6 +601,9 @@
 #define PCI_DEVICE_ID_DATABOOK_87144	0xb106
 
 #define PCI_VENDOR_ID_PLX		0x10b5
+#define PCI_DEVICE_ID_PLX_9060		0x9060
+#define PCI_DEVICE_ID_PLX_9060ES	0x906E
+#define PCI_DEVICE_ID_PLX_9060SD	0x906D
 #define PCI_DEVICE_ID_PLX_9080		0x9080
 
 #define PCI_VENDOR_ID_MADGE		0x10b6

@@ -1,0 +1,41 @@
+bttv - BT848 frame grabber driver
+
+Copyright (C) 1996,97 Ralph Metzler  (rjkm@thp.uni-koeln.de)
+                    & Marcus Metzler (mocm@thp.uni-koeln.de)
+                    according to GNU GPL in file COPYING.
+
+
+Bttv is a device driver for frame grabber cards using the Bt848 family
+of video decoder chips.
+Among those are the Bt848, Bt848A, Bt849, Bt878 and Bt879.
+The only major differences between the cards by different manufacturers 
+are the types of tuners and extra components on the boards.
+E.g., some cards by Hauppauge have an additional Videotext decoder 
+and/or sound decoder chip.
+Also type (Composite or S-VHS) and number of inputs differ.
+Other Brooktree chips (e.g. the Bt829) or chips by other manufacturers 
+(Philips, Zoran, ...) are NOT supported by bttv.
+
+You can use several cards at the same time.
+Interrupts can be shared with other Bt848 cards or any other drivers
+which allow it.
+The (arbitrary) maximum number of cards is 4 but can be adjusted by
+changing BTTV_MAX at the beginning of bttv.c if you need more.
+(But which board has more than 4 PCI slots plus 1 for the VGA card?)
+
+Bttv is a standard component of all newer 2.1.x kernels.
+This distribution additionally supports 2.0.x kernels and all other
+changes and improvements which did not make it into the kernel version
+yet. 
+It also includes versions of videodev.c, i2.c, tuner.c and others
+which are the same as in the latest 2.1.x kernel but with 2.0.x support.
+A kernel version >2.0.30 is recommended.
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Although bttv is now used and tested by many people it still might crash your
+computer! Take all precautions to avoid data loss until you are certain
+bttv runs on your setup without problems.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+The latest version of bttv can be found at:
+http://www.thp.uni-koeln.de/~rjkm/linux/bttv.html

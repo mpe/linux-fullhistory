@@ -5,6 +5,7 @@
 #include "lowlevel.h"
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include "../soundvers.h"
 
 #ifdef LOWLEVEL_MODULE
@@ -15,8 +16,8 @@ extern int attach_aci(void);
 extern void unload_aci(void);
 extern int attach_awe(void);
 extern void unload_awe(void);
-extern int init_aedsp16(void);
-extern void uninit_aedsp16(void);
+extern int init_aedsp16(void) __init;
+extern void uninit_aedsp16(void) __init;
 
 /*
  * There are two places where you can insert initialization calls of

@@ -385,6 +385,7 @@ struct file_operations ntfs_file_operations_nommap = {
 	NULL, /* ioctl */
 	NULL, /* mmap */
 	NULL, /* open */
+	NULL, /* flush */
 	NULL, /* release */
 	NULL, /* fsync */
 	NULL, /* fasync */
@@ -506,6 +507,7 @@ struct file_operations ntfs_file_operations = {
 	NULL, /* ioctl */
 	generic_file_mmap,
 	NULL, /* open */
+	NULL, /* flush */
 	NULL, /* release */
 	NULL, /* fsync */
 	NULL, /* fasync */
@@ -546,6 +548,7 @@ struct file_operations ntfs_dir_operations = {
 	NULL, /* ioctl */
 	NULL, /* mmap */
 	NULL, /* open */
+	NULL, /* flush */
 	NULL, /* release */
 	NULL, /* fsync */
 	NULL, /* fasync */

@@ -31,6 +31,7 @@ static struct file_operations proc_fd_link_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* very special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* can't fsync */
 };

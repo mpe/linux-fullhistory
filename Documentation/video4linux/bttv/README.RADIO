@@ -1,0 +1,15 @@
+Support is in now:
+  - Turn on the "big red switch" of the sound processor.
+  - two ioctls to access (some) registers of the sound processor.
+  - a function in the TV-Widget which monitors the signal quality
+    and does the mono/stereo switching.
+
+So you should have TV with (stereo) sound now.  Radio does _not_ work.
+It probably does not work with sat receivers. I can't test this and
+therefore hav'nt added support for it yet. If someone needs this and
+can help testing the sat stuff, drop me a note.
+
+  Gerd
+
+--
+Gerd Knorr <kraxel@cs.tu-berlin.de>

@@ -510,6 +510,7 @@ static struct file_operations dsp56k_fops = {
 	dsp56k_ioctl,
 	NULL,    /* no special dsp56k_mmap */
 	dsp56k_open,
+	NULL,	/* flush */
 	dsp56k_release,
 	NULL,    /* no special dsp56k_fsync */
 	NULL,    /* no special dsp56k_fasync */

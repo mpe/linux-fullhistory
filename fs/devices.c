@@ -261,6 +261,7 @@ struct file_operations def_blk_fops = {
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
 	blkdev_open,	/* open */
+	NULL,		/* flush */
 	NULL,		/* release */
 };
 
@@ -313,6 +314,7 @@ struct file_operations def_chr_fops = {
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
 	chrdev_open,	/* open */
+	NULL,		/* flush */
 	NULL,		/* release */
 };
 

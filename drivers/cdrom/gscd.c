@@ -160,6 +160,7 @@ static struct file_operations gscd_fops = {
 	gscd_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	gscd_open,		/* open */
+	NULL,			/* flush */
 	gscd_release,		/* release */
 	NULL,                   /* fsync */
 	NULL,                   /* fasync*/

@@ -2869,6 +2869,7 @@ struct file_operations ide_fops[] = {{
 	ide_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	ide_open,		/* open */
+	NULL,			/* flush */
 	ide_release,		/* release */
 	block_fsync,		/* fsync */
 	NULL,			/* fasync */

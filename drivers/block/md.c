@@ -754,6 +754,7 @@ static struct file_operations md_fops=
   md_ioctl,
   NULL,
   md_open,
+  NULL,
   md_release,
   block_fsync
 };

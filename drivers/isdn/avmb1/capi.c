@@ -464,6 +464,7 @@ static struct file_operations capi_fops =
 	capi_ioctl,
 	NULL,			/* capi_mmap */
 	capi_open,
+	NULL,			/* flush */
 	capi_release,
 	NULL,			/* capi_fsync */
 	NULL,			/* capi_fasync */

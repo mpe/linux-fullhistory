@@ -944,6 +944,7 @@ static struct file_operations dev_fileops = {
 	dev_ioctl,
 	NULL,
 	dev_open,
+	NULL,		/* flush */
 	dev_close,
 };
 

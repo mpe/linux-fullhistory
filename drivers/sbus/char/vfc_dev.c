@@ -603,6 +603,7 @@ static struct file_operations vfc_fops = {
 	vfc_ioctl,   
 	vfc_mmap, 
 	vfc_open,
+	NULL,		/* flush */
 	vfc_release,
 };
 

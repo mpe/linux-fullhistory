@@ -27,6 +27,7 @@ static struct file_operations adfs_dir_operations = {
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	file_fsync,		/* fsync */
 	NULL,			/* fasync */

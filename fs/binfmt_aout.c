@@ -318,7 +318,6 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 		return -ENOEXEC;
 	}
 
-	current->personality = PER_LINUX;
 	fd_offset = N_TXTOFF(ex);
 
 #ifdef __i386__
@@ -350,6 +349,8 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 		return retval;
 
 	/* OK, This is the point of no return */
+	current->personality = PER_LINUX;
+
 #if defined(__sparc__) && !defined(__sparc_v9__)
 	memcpy(&current->tss.core_exec, &ex, sizeof(struct exec));
 #endif
@@ -563,7 +564,7 @@ load_aout_library(int fd)
 }
 
 
-__initfunc(int init_aout_binfmt(void))
+int __init init_aout_binfmt(void)
 {
 	return register_binfmt(&aout_format);
 }

@@ -184,6 +184,7 @@ struct file_operations cdrom_fops =
 	cdrom_ioctl,                    /* ioctl */
 	NULL,                           /* mmap */
 	cdrom_open,                     /* open */
+	NULL,				/* flush */
 	cdrom_release,                  /* release */
 	NULL,                           /* fsync */
 	NULL,                           /* fasync */
@@ -1081,10 +1082,12 @@ static void cdrom_sysctl_register(void)
 	initialized = 1;
 }
 
+#ifdef MODULE
 static void cdrom_sysctl_unregister(void)
 {
 	unregister_sysctl_table(cdrom_sysctl_header);
 }
+#endif /* endif MODULE */
 #endif /* endif CONFIG_SYSCTL */
 
 #ifdef MODULE

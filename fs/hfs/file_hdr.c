@@ -48,6 +48,7 @@ static struct file_operations hfs_hdr_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap - XXX: not yet */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	file_fsync,		/* fsync - default */
         NULL,			/* fasync - default */

@@ -58,7 +58,7 @@ static int preferred_console = -1;
 /*
  *	Setup a list of consoles. Called from init/main.c
  */
-__initfunc(void console_setup(char *str, int *ints))
+void __init console_setup(char *str, int *ints)
 {
 	struct console_cmdline *c;
 	char name[sizeof(c->name)];

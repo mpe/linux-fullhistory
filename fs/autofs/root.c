@@ -32,6 +32,7 @@ static struct file_operations autofs_root_operations = {
         autofs_root_ioctl,	/* ioctl */
         NULL,                   /* mmap */
         NULL,                   /* open */
+	NULL,			/* flush */
         NULL,                   /* release */
         NULL,			/* fsync */
 	NULL,			/* fasync */

@@ -1,0 +1,29 @@
+The current I2C-Code could by accident overwrite the configuration EEPROM on 
+Hauppauge boards!!! 
+(E.g. the videotext driver and the bt848 driver do not know about each other.
+This might cause unwanted states on the I2C bus which overwrite the EEPROM)
+
+Back up this EEPROM before doing anything else by typing:
+(do this AFTER installing bttv.o with "make ins" but BEFORE starting the
+X application)
+
+make readee
+readee > tvee.h
+
+If you encounter any problems in Windows95 (like "PNP component not found" ...)
+go back into linux, load bttv and type:
+
+make writeee
+writeee
+
+to write the backed up contents.
+If you backed up your EEPROM as described above, this will restore it to its
+original state.
+A detailed description of the meaning of the EEPROM bytes by
+Hauppauge would of course be even more helpful! 
+
+If you have board type 405 and you did not make a backup, my tvee.h file in 
+mytvee.h might be of help.
+
+Forget about all of the above if you do not have a Hauppauge board.
+

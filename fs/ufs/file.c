@@ -61,6 +61,7 @@ static struct file_operations ufs_file_operations = {
 	NULL, 			/* ioctl */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */
+	NULL,			/* flush */
 	ufs_release_file,	/* release */
 	NULL, 			/* fsync */
 	NULL,			/* fasync */

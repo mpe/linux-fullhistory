@@ -1675,7 +1675,7 @@ void show_state(void)
 	read_unlock(&tasklist_lock);
 }
 
-__initfunc(void sched_init(void))
+void __init sched_init(void)
 {
 	/*
 	 *	We have to do a little magic to get the first

@@ -288,7 +288,8 @@ static struct file_operations slm_fops = {
 	slm_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	slm_open,		/* open */
-	slm_release,	/* release */
+	NULL,			/* flush */
+	slm_release,		/* release */
 	NULL			/* fsync */
 };
 

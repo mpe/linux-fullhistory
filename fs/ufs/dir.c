@@ -199,6 +199,7 @@ static struct file_operations ufs_dir_operations = {
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* open */
+	NULL,			/* flush */
 	NULL,			/* release */
 	file_fsync,		/* fsync */
 	NULL,			/* fasync */

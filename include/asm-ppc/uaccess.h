@@ -211,9 +211,12 @@ extern int __copy_tofrom_user(void *to, const void *from, unsigned long size);
 extern inline unsigned long
 copy_from_user(void *to, const void *from, unsigned long n)
 {
-	if (access_ok(VERIFY_READ, from, n))
-		return __copy_tofrom_user(to, from, n);
-	return n? -EFAULT: 0;
+	unsigned long res = n;
+	if (access_ok(VERIFY_READ, from, n)) {
+		 res = __copy_tofrom_user(to, from, n);
+		 if (res) memset((char *)to + n - res, 0, res);
+	}
+	return res;
 }
 
 extern inline unsigned long
@@ -221,7 +224,7 @@ copy_to_user(void *to, const void *from, unsigned long n)
 {
 	if (access_ok(VERIFY_WRITE, to, n))
 		return __copy_tofrom_user(to, from, n);
-	return n? -EFAULT: 0;
+	return n;
 }
 
 #define __copy_from_user(to, from, size) \

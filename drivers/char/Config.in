@@ -113,10 +113,15 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
   if [ "$CONFIG_RADIO_RTRACK" = "y" ]; then
     hex '  RadioTrack i/o port (0x20f or 0x30f)' CONFIG_RADIO_RTRACK_PORT 20f
   fi
+  dep_tristate 'AIMSlab RadioTrack II support' CONFIG_RADIO_RTRACK2 $CONFIG_VIDEO_DEV
+  if [ "$CONFIG_RADIO_RTRACK2" = "y" ]; then
+    hex '  RadioTrack II i/o port (0x20c or 0x30c)' CONFIG_RADIO_RTRACK2_PORT 30c
+  fi
   dep_tristate 'Aztech/Packard Bell Radio' CONFIG_RADIO_AZTECH $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_AZTECH" = "y" ]; then
     hex '  Aztech/Packard Bell I/O port (0x350 or 0x358)' CONFIG_RADIO_AZTECH_PORT 350
   fi
+  dep_tristate 'Miro PCM20 Radio' CONFIG_RADIO_MIROPCM20 $CONFIG_VIDEO_DEV
   dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
   if [ "$CONFIG_PARPORT" != "n" ]; then
     dep_tristate 'Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV

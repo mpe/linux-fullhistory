@@ -5,7 +5,7 @@
 #ifndef __LINUX_FILE_H
 #define __LINUX_FILE_H
 
-extern int __fput(struct file *);
+extern void __fput(struct file *);
 extern void insert_file_free(struct file *file);
 
 /*
@@ -58,20 +58,18 @@ extern inline void remove_filp(struct file *file)
 	*file->f_pprev = file->f_next;
 }
 
-extern inline int fput(struct file *file)
+extern inline void fput(struct file *file)
 {
 	int count = file->f_count-1;
-	int error = 0;
 
 	if (!count) {
 		locks_remove_flock(file);
-		error = __fput(file);
+		__fput(file);
 		file->f_count = 0;
 		remove_filp(file);
 		insert_file_free(file);
 	} else
 		file->f_count = count;
-	return error;
 }
 
 extern inline void put_filp(struct file *file)

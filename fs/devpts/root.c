@@ -29,6 +29,7 @@ static struct file_operations devpts_root_operations = {
 	NULL,			/* ioctl */
 	NULL,                   /* mmap */
 	NULL,                   /* open */
+	NULL,			/* flush */
 	NULL,                   /* release */
 	NULL,			/* fsync */
 	NULL,			/* fasync */

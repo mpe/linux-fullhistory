@@ -304,6 +304,7 @@ struct file_operations connecting_fifo_fops = {
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
 	pipe_read_open,
+	NULL,		/* flush */
 	pipe_read_release,
 	NULL
 };
@@ -317,6 +318,7 @@ struct file_operations read_fifo_fops = {
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
 	pipe_read_open,
+	NULL,		/* flush */
 	pipe_read_release,
 	NULL
 };
@@ -330,6 +332,7 @@ struct file_operations write_fifo_fops = {
 	pipe_ioctl,
 	NULL,		/* mmap */
 	pipe_write_open,
+	NULL,		/* flush */
 	pipe_write_release,
 	NULL
 };
@@ -343,6 +346,7 @@ struct file_operations rdwr_fifo_fops = {
 	pipe_ioctl,
 	NULL,		/* mmap */
 	pipe_rdwr_open,
+	NULL,		/* flush */
 	pipe_rdwr_release,
 	NULL
 };
@@ -356,6 +360,7 @@ struct file_operations read_pipe_fops = {
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
 	pipe_read_open,
+	NULL,		/* flush */
 	pipe_read_release,
 	NULL
 };
@@ -369,6 +374,7 @@ struct file_operations write_pipe_fops = {
 	pipe_ioctl,
 	NULL,		/* mmap */
 	pipe_write_open,
+	NULL,		/* flush */
 	pipe_write_release,
 	NULL
 };
@@ -382,6 +388,7 @@ struct file_operations rdwr_pipe_fops = {
 	pipe_ioctl,
 	NULL,		/* mmap */
 	pipe_rdwr_open,
+	NULL,		/* flush */
 	pipe_rdwr_release,
 	NULL
 };

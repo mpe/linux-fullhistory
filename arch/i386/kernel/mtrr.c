@@ -1086,6 +1086,7 @@ static struct file_operations mtrr_fops =
     mtrr_ioctl,  /*  IOctl             */
     NULL,        /*  MMAP              */
     mtrr_open,   /*  Open              */
+    NULL,        /*  Flush             */
     mtrr_close,  /*  Release           */
     NULL,        /*  Fsync             */
     NULL,        /*  Fasync            */

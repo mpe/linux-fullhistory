@@ -769,6 +769,7 @@ struct file_operations oss_sound_fops =
 	sound_ioctl,
 	sound_mmap,
 	sound_open,
+	NULL,			/* flush */
 	sound_release
 };
 

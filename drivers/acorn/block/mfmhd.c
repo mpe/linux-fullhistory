@@ -1372,6 +1372,7 @@ static struct file_operations mfm_fops =
 	mfm_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	mfm_open,		/* open */
+	NULL,			/* flush */
 	mfm_release,		/* release */
 	block_fsync,		/* fsync */
 	NULL,			/* fasync */

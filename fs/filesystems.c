@@ -50,7 +50,7 @@ extern void device_setup(void);
 extern void binfmt_setup(void);
 extern void free_initmem(void);
 
-__initfunc(static void do_sys_setup(void))
+static void __init do_sys_setup(void)
 {
 	device_setup();
 

@@ -24,7 +24,7 @@
 
 extern void sem_init (void), msg_init (void), shm_init (void);
 
-__initfunc(void ipc_init (void))
+void __init ipc_init (void)
 {
 	sem_init();
 	msg_init();

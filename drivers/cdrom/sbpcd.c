@@ -4540,7 +4540,7 @@ static int sbpcd_audio_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 		/* resume playing audio tracks when a previous PLAY AUDIO call has  */
 		/* been paused with a PAUSE command.                                */
 		/* It will resume playing from the location saved in SubQ_run_tot.  */
-		if (D_S[d].audio_state!=audio_pausing) return -EINVAL;
+		if (D_S[d].audio_state!=audio_pausing) RETURN_UP(-EINVAL);
 		if (famL_drive)
 			i=cc_PlayAudio(D_S[d].pos_audio_start,
 				       D_S[d].pos_audio_end);
@@ -4654,7 +4654,9 @@ static int sbpcd_audio_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 #endif SAFE_MIXED
 		i=cc_Pause_Resume(1);
 		D_S[d].audio_state=0;
+#if 0
 		cc_DriveReset();
+#endif
 		RETURN_UP(i);
 		
 	case CDROMSTART:  /* Spin up the drive */
@@ -4676,7 +4678,7 @@ static int sbpcd_audio_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 	case CDROMVOLREAD:   /* read Volume settings from drive */
 		msg(DBG_IOC,"ioctl: CDROMVOLREAD entered.\n");
 		st=cc_GetVolume();
-		if (st<0) return (st);
+		if (st<0) RETURN_UP(st);
 		volctrl.channel0=D_S[d].vol_ctrl0;
 		volctrl.channel1=D_S[d].vol_ctrl1;
 		volctrl.channel2=0;

@@ -216,6 +216,7 @@ static int rt_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.maxheight=0;
 			v.minwidth=0;
 			v.minheight=0;
+			strcpy(v.name, "RadioTrack");
 			if(copy_to_user(arg,&v,sizeof(v)))
 				return -EFAULT;
 			return 0;

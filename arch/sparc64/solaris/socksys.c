@@ -57,6 +57,7 @@ static struct file_operations socksys_file_ops = {
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
 	NULL,		/* open */
+	NULL,		/* flush */
 	NULL,		/* release */
 };
 
@@ -170,6 +171,7 @@ static struct file_operations socksys_fops = {
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
 	socksys_open,	/* open */
+	NULL,		/* flush */
 	socksys_release,/* release */
 };
 

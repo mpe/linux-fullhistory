@@ -220,7 +220,7 @@ static unsigned long __init fixmap_init(unsigned long start_mem)
 
 	for (idx=1; idx <= __end_of_fixed_addresses; idx += PTRS_PER_PTE)
 	{
-		address = fix_to_virt(__end_of_fixed_addresses-idx);
+		address = __fix_to_virt(__end_of_fixed_addresses-idx);
 		pg_dir = swapper_pg_dir + (address >> PGDIR_SHIFT);
 		memset((void *)start_mem, 0, PAGE_SIZE);
 		pgd_val(*pg_dir) = _PAGE_TABLE | __pa(start_mem);
@@ -246,8 +246,12 @@ static void set_pte_phys (unsigned long vaddr, unsigned long phys)
 
 void set_fixmap (enum fixed_addresses idx, unsigned long phys)
 {
-	unsigned long address = fix_to_virt(idx);
+	unsigned long address = __fix_to_virt(idx);
 
+	if (idx >= __end_of_fixed_addresses) {
+		printk("Invalid set_fixmap\n");
+		return;
+	}
 	set_pte_phys (address,phys);
 }
 

@@ -712,9 +712,16 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 }
 
 #define copy_from_user(to, from, n)		\
+{ void *__to = (to);				\
+  void *__from = (from);			\
+  unsigned long __n = (n);			\
+  char *__end = (char *)__to + __n;		\
+  unsigned long __res =				\
 (__builtin_constant_p(n) ?			\
  __constant_copy_from_user(to, from, n) :	\
- __generic_copy_from_user(to, from, n))
+ __generic_copy_from_user(to, from, n));	\
+  if (__res) memset(__end - __res, 0, __res);	\
+  res; }
 
 #define copy_to_user(to, from, n)		\
 (__builtin_constant_p(n) ?			\

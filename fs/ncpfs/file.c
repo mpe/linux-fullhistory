@@ -252,6 +252,7 @@ static struct file_operations ncp_file_operations =
 	ncp_ioctl,		/* ioctl */
 	ncp_mmap,		/* mmap */
 	NULL,			/* open */
+	NULL,			/* flush */
 	NULL,			/* release */
 	ncp_fsync,		/* fsync */
 };

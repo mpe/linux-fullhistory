@@ -596,6 +596,7 @@ struct file_operations {
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct file *, struct vm_area_struct *);
 	int (*open) (struct inode *, struct file *);
+	int (*flush) (struct file *);
 	int (*release) (struct inode *, struct file *);
 	int (*fsync) (struct file *, struct dentry *);
 	int (*fasync) (int, struct file *, int);
@@ -670,7 +671,6 @@ asmlinkage int sys_close(unsigned int);		/* yes, it's really unsigned */
 extern int do_truncate(struct dentry *, unsigned long);
 extern int get_unused_fd(void);
 extern void put_unused_fd(unsigned int);
-extern int __fput(struct file *);
 extern int close_fp(struct file *, fl_owner_t id);
 
 extern char * getname(const char * filename);

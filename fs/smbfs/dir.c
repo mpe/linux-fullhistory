@@ -40,6 +40,7 @@ static struct file_operations smb_dir_operations =
 	smb_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	smb_dir_open,		/* open(struct inode *, struct file *) */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* fsync */
 };

@@ -515,6 +515,7 @@ static struct file_operations pcwd_fops = {
 	pcwd_ioctl,	/* IOctl */
 	NULL,		/* MMAP */
 	pcwd_open,	/* Open */
+	NULL,		/* flush */
 	pcwd_close,	/* Release */
 	NULL,		/* Fsync */
 	NULL,		/* Fasync */

@@ -242,6 +242,7 @@ struct file_operations mac_mouse_fops = {
     NULL,		/* mouse_ioctl */
     NULL,		/* mouse_mmap */
     open_mouse,
+    NULL,		/* flush */
     release_mouse,
     NULL,
     fasync_mouse,

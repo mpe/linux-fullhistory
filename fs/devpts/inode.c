@@ -77,13 +77,15 @@ static int devpts_parse_options(char *options, struct devpts_sb_info *sbi)
 {
 	int setuid = 0;
 	int setgid = 0;
-	uid_t uid = 0;		/* To shut up gcc */
+	uid_t uid = 0;
 	gid_t gid = 0;
 	umode_t mode = 0600;
 	char *this_char, *value;
 
-	if ( !options ) return 1;
-	for (this_char = strtok(options,","); this_char; this_char = strtok(NULL,",")) {
+	this_char = NULL;
+	if ( options )
+		this_char = strtok(options,",");
+	for ( ; this_char; this_char = strtok(NULL,",")) {
 		if ((value = strchr(this_char,'=')) != NULL)
 			*value++ = 0;
 		if (!strcmp(this_char,"uid")) {

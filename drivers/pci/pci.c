@@ -1,5 +1,5 @@
 /*
- *	$Id: pci.c,v 1.86 1998/07/15 20:34:47 mj Exp $
+ *	$Id: pci.c,v 1.88 1998/08/15 10:37:12 mj Exp $
  *
  *	PCI Bus Services, see include/linux/pci.h for further explanation.
  *
@@ -170,13 +170,14 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 			/* not a multi-function device */
 			continue;
 		}
-		pcibios_read_config_byte(bus->number, devfn, PCI_HEADER_TYPE, &hdr_type);
+		if (pcibios_read_config_byte(bus->number, devfn, PCI_HEADER_TYPE, &hdr_type))
+			continue;
 		if (!PCI_FUNC(devfn))
 			is_multi = hdr_type & 0x80;
 
-		pcibios_read_config_dword(bus->number, devfn, PCI_VENDOR_ID, &l);
-		/* some broken boards return 0 if a slot is empty: */
-		if (l == 0xffffffff || l == 0x00000000 || l == 0x0000ffff || l == 0xffff0000) {
+		if (pcibios_read_config_dword(bus->number, devfn, PCI_VENDOR_ID, &l) ||
+		    /* some broken boards return 0 if a slot is empty: */
+		    l == 0xffffffff || l == 0x00000000 || l == 0x0000ffff || l == 0xffff0000) {
 			is_multi = 0;
 			continue;
 		}

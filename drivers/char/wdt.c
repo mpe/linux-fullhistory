@@ -327,6 +327,7 @@ static struct file_operations wdt_fops = {
 	wdt_ioctl,
 	NULL,		/* No mmap */
 	wdt_open,
+	NULL,		/* flush */
 	wdt_release
 };
 

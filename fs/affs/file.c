@@ -52,6 +52,7 @@ static struct file_operations affs_file_operations = {
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open */
+	NULL,			/* flush */
 	NULL,			/* release */
 	file_fsync,		/* brute force, but works */
 	NULL,			/* fasync */
@@ -92,6 +93,7 @@ static struct file_operations affs_file_operations_ofs = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open */
+	NULL,			/* flush */
 	NULL,			/* release */
 	file_fsync,		/* brute force, but works */
 	NULL,			/* fasync */

@@ -411,28 +411,22 @@ check_table:
 		} else {
 			/*
 			 * Examine the partition table for common translations.
-			 * This is necessary for drives for situations where
-			 * the translated geometry is unavailable from the BIOS.
+			 * This is useful for drives in situations where the
+			 * translated geometry is unavailable from the BIOS.
 			 */
-			int	xlate_done = 0;
-			for (i = 0; i < 4 && !xlate_done; i++) {
+			for (i = 0; i < 4; i++) {
 				struct partition *q = &p[i];
 				if (NR_SECTS(q)
 				   && (q->sector & 63) == 1
 				   && (q->end_sector & 63) == 63) {
 					unsigned int heads = q->end_head + 1;
-					if (heads == 32 || heads == 64 || heads == 128 || heads == 255) {
-
+					if (heads == 32 || heads == 64 ||
+					    heads == 128 || heads == 255 ||
+					    heads == 240) {
 						(void) ide_xlate_1024(dev, heads, " [PTBL]");
-						xlate_done = 1;
+						break;
 					}
 				}
-			}
-			if (!xlate_done) {
-				/*
-				 * Default translation is equivalent of "BIOS LBA":
-				 */
-				ide_xlate_1024(dev, -2, " [LBA]");
 			}
 		}
 	}

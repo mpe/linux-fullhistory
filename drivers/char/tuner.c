@@ -108,7 +108,7 @@ static void set_tv_freq(struct tuner *t, int freq)
 	else
 		config = tun->UHF;
 
-	div=freq + (int)(16*38.9);
+	div=freq + tun->IFPCoff;
   	div&=0x7fff;
 
 	LOCK_I2C_BUS(t->bus);

@@ -884,6 +884,7 @@ static struct file_operations ddv_fops = {
         ddv_ioctl,               /* ioctl */
         NULL,                   /* mmap */
         ddv_open,                /* open */
+	NULL,			/* flush */
 	ddv_release,
         block_fsync          /* fsync */
 };

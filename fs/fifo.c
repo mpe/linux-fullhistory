@@ -128,6 +128,8 @@ static struct file_operations def_fifo_fops = {
 	NULL,
 	fifo_open,		/* will set read or write pipe_fops */
 	NULL,
+	NULL,
+	NULL,
 	NULL
 };
 

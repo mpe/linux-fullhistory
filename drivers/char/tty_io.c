@@ -358,6 +358,7 @@ static struct file_operations tty_fops = {
 	tty_ioctl,
 	NULL,		/* tty_mmap */
 	tty_open,
+	NULL,		/* flush */
 	tty_release,
 	NULL,		/* tty_fsync */
 	tty_fasync
@@ -372,6 +373,7 @@ static struct file_operations hung_up_tty_fops = {
 	hung_up_tty_ioctl,
 	NULL,		/* hung_up_tty_mmap */
 	NULL,		/* hung_up_tty_open */
+	NULL,		/* flush */
 	tty_release,	/* hung_up_tty_release */
 	NULL,		/* hung_up_tty_fsync  */
 	NULL		/* hung_up_tty_fasync */
@@ -1976,7 +1978,7 @@ int tty_unregister_driver(struct tty_driver *driver)
  * Just do some early initializations, and do the complex setup
  * later.
  */
-long console_init(long kmem_start, long kmem_end)
+long __init console_init(long kmem_start, long kmem_end)
 {
 	/* Setup the default TTY line discipline. */
 	memset(ldiscs, 0, sizeof(ldiscs));

@@ -46,6 +46,7 @@ struct file_operations fat_dir_operations = {
 	fat_dir_ioctl,		/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	file_fsync		/* fsync */
 };

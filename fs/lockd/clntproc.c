@@ -51,34 +51,39 @@ nlmclnt_setlockargs(struct nlm_rqst *req, struct file_lock *fl)
 }
 
 /*
- * Initialize arguments for GRANTED call
+ * Initialize arguments for GRANTED call. The nlm_rqst structure
+ * has been cleared already.
  */
 int
 nlmclnt_setgrantargs(struct nlm_rqst *call, struct nlm_lock *lock)
 {
-	struct nlm_args	*argp = &call->a_args;
-	struct nlm_lock	*alock = &argp->lock;
-	void		*data = NULL;
+	call->a_args.cookie  = nlm_cookie++;
+	call->a_args.lock    = *lock;
+	call->a_args.lock.caller = system_utsname.nodename;
 
-	if (lock->oh.len > NLMCLNT_OHSIZE
-	 && !(data = kmalloc(lock->oh.len, GFP_KERNEL)))
-		return 0;
+	/* set default data area */
+	call->a_args.lock.oh.data = call->a_owner;
 
-	argp->cookie  = nlm_cookie++;
-	argp->lock    = *lock;
-	alock->caller = system_utsname.nodename;
-	if (data)
-		alock->oh.data = (u8 *) data;
-	else
-		alock->oh.data = call->a_owner;
-	memcpy(alock->oh.data, lock->oh.data, lock->oh.len);
+	if (lock->oh.len > NLMCLNT_OHSIZE) {
+		void *data = kmalloc(lock->oh.len, GFP_KERNEL);
+		if (!data)
+			return 0;
+		call->a_args.lock.oh.data = (u8 *) data;
+	}
+
+	memcpy(call->a_args.lock.oh.data, lock->oh.data, lock->oh.len);
 	return 1;
 }
 
 void
 nlmclnt_freegrantargs(struct nlm_rqst *call)
 {
-	kfree(call->a_args.lock.caller);
+	/*
+	 * Check whether we allocated memory for the owner.
+	 */
+	if (call->a_args.lock.oh.data != (u8 *) call->a_owner) {
+		kfree(call->a_args.lock.oh.data);
+	}
 }
 
 /*
@@ -404,8 +409,14 @@ nlmclnt_reclaim(struct nlm_host *host, struct file_lock *fl)
 static int
 nlmclnt_unlock(struct nlm_rqst *req, struct file_lock *fl)
 {
+	struct nlm_host	*host = req->a_host;
 	struct nlm_res	*resp = &req->a_res;
 	int		status;
+
+	/* No monitor, no lock: see nlmclnt_lock().
+	 * Since this is an UNLOCK, don't try to setup monitoring here. */
+	if (!host->h_monitored)
+		return -ENOLCK;
 
 	/* Clean the GRANTED flag now so the lock doesn't get
 	 * reclaimed while we're stuck in the unlock call. */

@@ -2504,6 +2504,7 @@ static struct file_operations adb_fops = {
 	NULL,		/* no ioctl yet */
 	NULL,		/* no mmap */
 	adb_open,
+	NULL,		/* flush */
 	adb_release
 };
 
@@ -2688,6 +2689,7 @@ static struct file_operations adb_fops = {
 	NULL,		/* no ioctl */
 	NULL,		/* no mmap */
 	adb_open,
+	NULL,		/* flush */
 	adb_release
 };
 

@@ -157,6 +157,7 @@ static struct file_operations ps2esdi_fops =
 	ps2esdi_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	ps2esdi_open,		/* open */
+	NULL,			/* flush */
 	ps2esdi_release,	/* release */
 	block_fsync		/* fsync */
 };

@@ -4,17 +4,21 @@
  * ACI is a protocol used to communicate with the microcontroller on
  * some sound cards produced by miro, e.g. the miroSOUND PCM12 and
  * PCM20. The ACI has been developed for miro by Norberto Pellicci
- * <pellicci@ix.netcom.com>. Special thanks to both him and miro for
+ * <pellicci@home.com>. Special thanks to both him and miro for
  * providing the ACI specification.
  *
  * The main function of the ACI is to control the mixer and to get a
  * product identification. On the PCM20, ACI also controls the radio
- * tuner on this card, however this is not yet supported in this
- * software.
+ * tuner on this card, this is supported in the Video for Linux 
+ * radio-miropcm20 driver.
  * 
  * This Voxware ACI driver currently only supports the ACI functions
- * on the miroSOUND PCM12 card. Support for miro sound cards with
- * additional ACI functions can easily be added later.
+ * on the miroSOUND PCM12 and PCM20 card. Support for miro sound cards 
+ * with additional ACI functions can easily be added later.
+ *
+ * / NOTE / When compiling as a module, make sure to load the module 
+ * after loading the mad16 module. The initialisation code expects the
+ * MAD16 default mixer to be already available.
  *
  * / NOTE / When compiling as a module, make sure to load the module 
  * after loading the mad16 module. The initialisation code expects the
@@ -31,8 +35,9 @@
  *   1996-05-28  Markus Kuhn
  *        Initialize CS4231A mixer, make ACI first mixer,
  *        use new private mixer API for solo mode.
- *   1998-08-04  Ruurd Reitsma <R.A.Reitsma@wbmt.tudelft.nl>
- *	  Small modification to complete modularisation.
+ *   1998-08-18  Ruurd Reitsma <R.A.Reitsma@wbmt.tudelft.nl>
+ *	  Small modification to export ACI functions and 
+ *	  complete modularisation.
  */
 
 /*
@@ -84,7 +89,7 @@ static int aci_present = 0;
 #ifdef MODULE                  /* Whether the aci mixer is to be reset.    */
 int aci_reset = 0;             /* Default: don't reset if the driver is a  */
 MODULE_PARM(aci_reset,"i");
-#else                          /* module; use "insmod sound.o aci_reset=1" */
+#else                          /* module; use "insmod aci.o aci_reset=1" */
 int aci_reset = 1;             /* to override.                             */
 #endif
 
@@ -150,12 +155,12 @@ static int read_general_status(void)
  * If a problem occurred, they return -1.
  */
 
-static int implied_cmd(unsigned char opcode)
+int aci_implied_cmd(unsigned char opcode)
 {
   unsigned long flags;
 
 #ifdef DEBUG
-  printk("ACI: implied_cmd(0x%02x)\n", opcode);
+  printk("ACI: aci_implied_cmd(0x%02x)\n", opcode);
 #endif
 
   save_flags(flags);
@@ -172,13 +177,13 @@ static int implied_cmd(unsigned char opcode)
 }
 
 
-static int write_cmd(unsigned char opcode, unsigned char parameter)
+int aci_write_cmd(unsigned char opcode, unsigned char parameter)
 {
   unsigned long flags;
   int status;
 
 #ifdef DEBUG
-  printk("ACI: write_cmd(0x%02x, 0x%02x)\n", opcode, parameter);
+  printk("ACI: aci_write_cmd(0x%02x, 0x%02x)\n", opcode, parameter);
 #endif
 
   save_flags(flags);
@@ -209,8 +214,53 @@ static int write_cmd(unsigned char opcode, unsigned char parameter)
   return 0;
 }
 
+/*
+ * This write command send 2 parameters instead of one.
+ * Only used in PCM20 radio frequency tuning control
+ */
 
-static int read_cmd(unsigned char opcode, int length, unsigned char *parameter)
+int aci_write_cmd_d(unsigned char opcode, unsigned char parameter, unsigned char parameter2)
+{
+  unsigned long flags;
+  int status;
+
+#ifdef DEBUG
+  printk("ACI: aci_write_cmd_d(0x%02x, 0x%02x)\n", opcode, parameter, parameter2);
+#endif
+
+  save_flags(flags);
+  cli();
+  
+  if (read_general_status() < 0 || busy_wait()) {
+    restore_flags(flags);
+    return -1;
+  }
+  outb_p(opcode, COMMAND_REGISTER);
+  if (busy_wait()) { restore_flags(flags); return -1; }
+  outb_p(parameter, COMMAND_REGISTER);
+  if (busy_wait()) { restore_flags(flags); return -1; }
+  outb_p(parameter2, COMMAND_REGISTER);
+
+  if ((status = read_general_status()) < 0) {
+    restore_flags(flags);
+    return -1;
+  }
+  /* polarity of the INVALID flag depends on ACI version */
+  if ((aci_version <  0xb0 && (status & 0x40) != 0) ||
+      (aci_version >= 0xb0 && (status & 0x40) == 0)) {
+    restore_flags(flags);
+#if 0	/* Frequency tuning works, but the INVALID flag is set ??? */
+    printk("ACI: invalid write (double) command 0x%02x, 0x%02x, 0x%02x.\n",
+	   opcode, parameter, parameter2);
+#endif
+    return -1;
+  }
+
+  restore_flags(flags);
+  return 0;
+}
+
+int aci_read_cmd(unsigned char opcode, int length, unsigned char *parameter)
 {
   unsigned long flags;
   int i = 0;
@@ -226,10 +276,10 @@ static int read_cmd(unsigned char opcode, int length, unsigned char *parameter)
     parameter[i++] = inb_p(STATUS_REGISTER);
 #ifdef DEBUG
     if (i == 1)
-      printk("ACI: read_cmd(0x%02x, %d) = 0x%02x\n", opcode, length,
+      printk("ACI: aci_read_cmd(0x%02x, %d) = 0x%02x\n", opcode, length,
 	     parameter[i-1]);
     else
-      printk("ACI: read_cmd cont.: 0x%02x\n", parameter[i-1]);
+      printk("ACI: aci_read_cmd cont.: 0x%02x\n", parameter[i-1]);
 #endif
   }
 
@@ -238,7 +288,7 @@ static int read_cmd(unsigned char opcode, int length, unsigned char *parameter)
 }
 
 
-static int indexed_cmd(unsigned char opcode, unsigned char index,
+int aci_indexed_cmd(unsigned char opcode, unsigned char index,
 		       unsigned char *parameter)
 {
   unsigned long flags;
@@ -256,7 +306,7 @@ static int indexed_cmd(unsigned char opcode, unsigned char index,
   if (busy_wait()) { restore_flags(flags); return -1; }
   *parameter = inb_p(STATUS_REGISTER);
 #ifdef DEBUG
-  printk("ACI: indexed_cmd(0x%02x, 0x%02x) = 0x%02x\n", opcode, index,
+  printk("ACI: aci_indexed_cmd(0x%02x, 0x%02x) = 0x%02x\n", opcode, index,
 	 *parameter);
 #endif
 
@@ -292,10 +342,10 @@ static int getvolume(caddr_t arg,
   unsigned char buf;
 
   /* left channel */
-  if (indexed_cmd(0xf0, left_index, &buf)) return -EIO;
+  if (aci_indexed_cmd(0xf0, left_index, &buf)) return -EIO;
   vol = SCALE(0x20, 100, buf < 0x20 ? 0x20-buf : 0);
   /* right channel */
-  if (indexed_cmd(0xf0, right_index, &buf)) return -EIO;
+  if (aci_indexed_cmd(0xf0, right_index, &buf)) return -EIO;
   vol |= SCALE(0x20, 100, buf < 0x20 ? 0x20-buf : 0) << 8;
 
   return (*(int *) arg = vol);
@@ -311,13 +361,13 @@ static int setvolume(caddr_t arg,
   vol = *(int *)arg & 0xff;
   if (vol > 100) vol = 100;
   vol = SCALE(100, 0x20, vol);
-  if (write_cmd(left_index, 0x20 - vol)) return -EIO;
+  if (aci_write_cmd(left_index, 0x20 - vol)) return -EIO;
   ret = SCALE(0x20, 100, vol);
   /* right channel */
   vol = (*(int *)arg >> 8) & 0xff;
   if (vol > 100) vol = 100;
   vol = SCALE(100, 0x20, vol);
-  if (write_cmd(right_index, 0x20 - vol)) return -EIO;
+  if (aci_write_cmd(right_index, 0x20 - vol)) return -EIO;
   ret |= SCALE(0x20, 100, vol) << 8;
  
   return (*(int *) arg = ret);
@@ -334,7 +384,7 @@ aci_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
   if (cmd == SOUND_MIXER_PRIVATE1) {
     if (*(int *) arg >= 0) {
       aci_solo = !!*(int *) arg;
-      if (write_cmd(0xd2, aci_solo)) return -EIO;
+      if (aci_write_cmd(0xd2, aci_solo)) return -EIO;
     } else if (aci_version >= 0xb0) {
       if ((status = read_general_status()) < 0) return -EIO;
       return (*(int *) arg = (status & 0x20) == 0);
@@ -366,7 +416,7 @@ aci_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	vol = *(int *) arg & 0xff;
 	if (vol > 100) vol = 100;
 	vol = SCALE(100, 3, vol);
-	if (write_cmd(0x03, vol)) return -EIO;
+	if (aci_write_cmd(0x03, vol)) return -EIO;
 	vol = SCALE(3, 100, vol);
 	return (*(int *) arg = vol | (vol << 8));
       case SOUND_MIXER_RECSRC:
@@ -421,7 +471,7 @@ aci_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
       case SOUND_MIXER_LINE2:  /* AUX2 */
 	return getvolume(arg, 0x13, 0x12);
       case SOUND_MIXER_IGAIN:  /* MIC pre-amp */
-	if (indexed_cmd(0xf0, 0x21, &buf)) return -EIO;
+	if (aci_indexed_cmd(0xf0, 0x21, &buf)) return -EIO;
 	vol = SCALE(3, 100, buf <= 3 ? buf : 3);
 	vol |= vol << 8;
 	return (*(int *) arg = vol);
@@ -485,13 +535,13 @@ int attach_aci(void)
     return 0;
   }
 
-  if (read_cmd(0xf2, 2, aci_idcode)) {
+  if (aci_read_cmd(0xf2, 2, aci_idcode)) {
 #ifdef DEBUG
     printk("ACI: Failed to read idcode.\n");
 #endif
     return 0;
   }
-  if (read_cmd(0xf1, 1, &aci_version)) {
+  if (aci_read_cmd(0xf1, 1, &aci_version)) {
 #ifdef DEBUG
     printk("ACI: Failed to read version.\n");
 #endif
@@ -523,7 +573,7 @@ int attach_aci(void)
 
   if (aci_reset) {
     /* initialize ACI mixer */
-    implied_cmd(0xff);
+    aci_implied_cmd(0xff);
     aci_solo = 0;
   }
 

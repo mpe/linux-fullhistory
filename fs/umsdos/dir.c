@@ -1022,6 +1022,7 @@ static struct file_operations umsdos_dir_operations =
 	UMSDOS_ioctl_dir,	/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* fsync *//* in original NULL. changed to file_fsync. FIXME? /mn/ */
 };

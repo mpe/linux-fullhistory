@@ -74,6 +74,7 @@ static struct file_operations ext2_file_operations = {
 #else
 	ext2_open_file,
 #endif
+	NULL,			/* flush */
 	ext2_release_file,	/* release */
 	ext2_sync_file,		/* fsync */
 	NULL,			/* fasync */

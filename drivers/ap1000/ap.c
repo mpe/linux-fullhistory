@@ -48,12 +48,10 @@ static int ap_fds[NUM_APDEVS];
 
 static volatile int request_count = 0;
 
-#ifdef MODULE
 static void ap_release(struct inode * inode, struct file * filp)
 {
 	MOD_DEC_USE_COUNT;
 }
-#endif
 
 static void ap_request(void)
 {
@@ -247,20 +245,17 @@ void ap_open_reply(struct cap_request *creq)
 } 
 
 static struct file_operations ap_fops = {
-        NULL,                   /* lseek - default */
-        block_read,             /* read - general block-dev read */
-        block_write,            /* write - general block-dev write */
-        NULL,                   /* readdir - bad */
-        NULL,                   /* poll */
-        ap_ioctl,               /* ioctl */
-        NULL,                   /* mmap */
-        ap_open,                /* open */
-#ifndef MODULE
-	NULL,		/* no special release code... */
-#else
-	ap_release,	/* module needs to decrement use count */
-#endif
-        block_fsync,            /* fsync */
+	NULL,                   /* lseek - default */
+	block_read,             /* read - general block-dev read */
+	block_write,            /* write - general block-dev write */
+	NULL,                   /* readdir - bad */
+	NULL,                   /* poll */
+	ap_ioctl,               /* ioctl */
+	NULL,                   /* mmap */
+	ap_open,                /* open */
+	NULL,			/* flush */
+	ap_release,		/* module needs to decrement use count */
+	block_fsync,            /* fsync */
 };
 
 

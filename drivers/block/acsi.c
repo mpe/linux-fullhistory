@@ -1788,7 +1788,8 @@ static struct file_operations acsi_fops = {
 	acsi_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	acsi_open,		/* open */
-	acsi_release,	/* release */
+	NULL,			/* flush */
+	acsi_release,		/* release */
 	block_fsync,		/* fsync */
 	NULL,			/* fasync */
 	acsi_media_change,	/* media_change */

@@ -40,6 +40,7 @@ static struct file_operations adfs_file_operations = {
 	NULL,			/* ioctl		*/
 	generic_file_mmap,	/* mmap			*/
 	NULL,			/* open - not special	*/
+	NULL,			/* flush		*/
 	NULL,			/* release		*/
 	file_fsync,		/* fsync		*/
 	NULL,			/* fasync		*/

@@ -30,6 +30,12 @@
 #ifndef PCI_DEVICE_ID_BT849
 #define PCI_DEVICE_ID_BT849     0x351
 #endif
+#ifndef PCI_DEVICE_ID_BT878
+#define PCI_DEVICE_ID_BT878     0x36e
+#endif
+#ifndef PCI_DEVICE_ID_BT879
+#define PCI_DEVICE_ID_BT879     0x36f
+#endif
 
 
 /* Brooktree 848 registers */
@@ -286,10 +292,6 @@
 #define BT848_RISC_COUNT       0x120
 #define BT848_GPIO_DATA        0x200
 
-/* Bt878 register */
-
-#define BT878_DEVCTRL 0x40
-#define BT878_NTBF 0x02
 
 /* Bt848 RISC commands */
 
@@ -340,7 +342,14 @@
 #define BT848_FCAP             0x0E8
 #define BT848_PLL_F_LO         0x0F0
 #define BT848_PLL_F_HI         0x0F4
-#define BT848_PLL_XCI          0x0F8
 
+#define BT848_PLL_XCI          0x0F8
+#define BT848_PLL_X            (1<<7)
+#define BT848_PLL_C            (1<<6)
+
+/* Bt878 register */
+
+#define BT878_DEVCTRL 0x40
+#define BT878_EN_TBFX 0x02
 
 #endif

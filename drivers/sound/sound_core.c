@@ -262,6 +262,7 @@ static struct file_operations soundcore_fops=
 	NULL,
 	NULL,
 	NULL,
+	NULL,
 	NULL
 };
 

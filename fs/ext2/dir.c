@@ -43,6 +43,7 @@ static struct file_operations ext2_dir_operations = {
 	ext2_ioctl,		/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	ext2_sync_file,		/* fsync */
 	NULL,			/* fasync */

@@ -113,6 +113,7 @@ static struct file_operations h8_fops = {
         NULL,
         NULL,           /* mmap */
         NULL,
+	NULL,		/* flush */
         NULL,
         NULL,           /* fsync */
         NULL            /* fasync */

@@ -467,6 +467,7 @@ static struct file_operations lp_fops = {
 	lp_ioctl,
 	NULL,		/* lp_mmap */
 	lp_open,
+	NULL,		/* flush */
 	lp_release
 };
 

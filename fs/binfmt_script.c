@@ -107,7 +107,7 @@ struct linux_binfmt script_format = {
 #endif
 };
 
-__initfunc(int init_script_binfmt(void))
+int __init init_script_binfmt(void)
 {
 	return register_binfmt(&script_format);
 }

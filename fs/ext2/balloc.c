@@ -213,7 +213,7 @@ static inline int load_block_bitmap (struct super_block * sb,
 	if (sb->u.ext2_sb.s_loaded_block_bitmaps > 0 &&
 	    sb->u.ext2_sb.s_block_bitmap_number[0] == block_group &&
 	    sb->u.ext2_sb.s_block_bitmap[block_group]) {
-		slot = 0;
+		return 0;
 	}
 	/*
 	 * Or can we do a fast lookup based on a loaded group on a filesystem

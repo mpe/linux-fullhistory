@@ -238,6 +238,7 @@ struct file_operations bus_mouse_fops = {
 	NULL, 		/* mouse_ioctl */
 	NULL,		/* mouse_mmap */
 	open_mouse,
+	NULL,		/* flush */
 	close_mouse,
 	NULL,
 	fasync_mouse,

@@ -565,6 +565,7 @@ static struct file_operations hfmodem_fops = {
 	hfmodem_ioctl,      /* hfmodem_ioctl */
 	NULL,		    /* hfmodem_mmap */
 	hfmodem_open,       /* hfmodem_open */
+	NULL,		    /* flush */
 	hfmodem_close,      /* hfmodem_close */
 	NULL,               /* hfmodem_fsync */
 	NULL,               /* hfmodem_fasync */

@@ -479,6 +479,7 @@ static struct file_operations openpromfs_prop_ops = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	property_release,	/* no special release code */
 	NULL			/* can't fsync */
 };
@@ -512,6 +513,7 @@ static struct file_operations openpromfs_nodenum_ops = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* can't fsync */
 };
@@ -545,6 +547,7 @@ static struct file_operations openprom_alias_operations = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
+	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* can't fsync */
 };

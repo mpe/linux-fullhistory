@@ -389,6 +389,7 @@ static struct file_operations smb_file_operations =
 	smb_ioctl,		/* ioctl */
 	smb_file_mmap,		/* mmap(struct file*, struct vm_area_struct*) */
 	smb_file_open,		/* open(struct inode*, struct file*) */
+	NULL,			/* flush */
 	smb_file_release,	/* release(struct inode*, struct file*) */
 	smb_fsync,		/* fsync(struct file*, struct dentry*) */
 	NULL,			/* fasync(struct file*, int) */

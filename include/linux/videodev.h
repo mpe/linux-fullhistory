@@ -216,7 +216,7 @@ struct video_unit
 
 #define VIDIOCGCAP		_IOR('v',1,struct video_capability)	/* Get capabilities */
 #define VIDIOCGCHAN		_IOWR('v',2,struct video_channel)	/* Get channel info (sources) */
-#define VIDIOCSCHAN		_IOW('v',3,int)				/* Set channel 	*/
+#define VIDIOCSCHAN		_IOW('v',3,struct video_channel)	/* Set channel 	*/
 #define VIDIOCGTUNER		_IOWR('v',4,struct video_tuner)		/* Get tuner abilities */
 #define VIDIOCSTUNER		_IOW('v',5,struct video_tuner)		/* Tune the tuner for the current channel */
 #define VIDIOCGPICT		_IOR('v',6,struct video_picture)	/* Get picture properties */

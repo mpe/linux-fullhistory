@@ -539,8 +539,8 @@ static struct super_block *get_empty_super(void)
 	if (nr_super_blocks >= max_super_blocks)
 		return NULL;
 	s = kmalloc(sizeof(struct super_block),  GFP_USER);
-	nr_super_blocks++;
 	if (s) {
+		nr_super_blocks++;
 		memset(s, 0, sizeof(struct super_block));
 		INIT_LIST_HEAD(&s->s_dirty);
 		list_add (&s->s_list, super_blocks.prev);
@@ -1129,7 +1129,7 @@ clean_up:
 	goto dput_and_out;
 }
 
-__initfunc(void mount_root(void))
+void __init mount_root(void)
 {
 	struct file_system_type * fs_type;
 	struct super_block * sb;
@@ -1228,7 +1228,7 @@ __initfunc(void mount_root(void))
 
 extern int initmem_freed;
 
-__initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
+static int __init do_change_root(kdev_t new_root_dev,const char *put_old)
 {
 	kdev_t old_root_dev;
 	struct vfsmount *vfsmnt;

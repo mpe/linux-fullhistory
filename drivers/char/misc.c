@@ -139,6 +139,7 @@ static struct file_operations misc_fops = {
 	NULL,		/* ioctl */
 	NULL,		/* mmap */
         misc_open,
+	NULL,		/* flush */
         NULL		/* release */
 };
 

@@ -56,7 +56,7 @@ static int max_semid = 0;
 
 static unsigned short sem_seq = 0;
 
-__initfunc(void sem_init (void))
+void __init sem_init (void)
 {
 	int i;
 

@@ -172,6 +172,7 @@ struct file_operations sgi_usemaclone_fops = {
 	sgi_usemaclone_ioctl,	/* ioctl */
 	NULL,			/* mmap */
 	sgi_usemaclone_open,	/* open */
+	NULL,			/* flush */
 	sgi_usemaclone_release,	/* release */
 	NULL,			/* fsync */
 	NULL,			/* check_media_change */

@@ -25,7 +25,7 @@ extern int C_A_D;
 
 int panic_timeout = 0;
 
-__initfunc(void panic_setup(char *str, int *ints))
+void __init panic_setup(char *str, int *ints)
 {
 	if (ints[0] == 1)
 		panic_timeout = ints[1];

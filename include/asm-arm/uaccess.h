@@ -60,8 +60,11 @@ extern inline int verify_area(int type, const void * addr, unsigned long size)
 
 static __inline__ unsigned long copy_from_user(void *to, const void *from, unsigned long n)
 {
-	if (access_ok(VERIFY_READ, from, n))
+	char *end = (char *)to + n;
+	if (access_ok(VERIFY_READ, from, n)) {
 		__do_copy_from_user(to, from, n);
+		if (n) memset(end - n, 0, n);
+	}
 	return n;
 }
 

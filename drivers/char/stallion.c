@@ -672,6 +672,7 @@ static struct file_operations	stl_fsiomem = {
 	stl_memioctl,
 	NULL,
 	stl_memopen,
+	NULL,		/* flush */
 	stl_memclose,
 	NULL
 };

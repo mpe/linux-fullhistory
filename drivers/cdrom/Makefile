@@ -25,6 +25,7 @@ obj-		:=
 
 obj-$(CONFIG_BLK_DEV_IDECD)	+=              cdrom.o
 obj-$(CONFIG_BLK_DEV_SR)	+=              cdrom.o
+obj-$(CONFIG_PARIDE_PCD)	+=		cdrom.o
 
 obj-$(CONFIG_AZTCD)		+= aztcd.o
 obj-$(CONFIG_CDU31A)		+= cdu31a.o     cdrom.o

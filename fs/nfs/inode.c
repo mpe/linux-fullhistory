@@ -652,6 +652,7 @@ _nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 	int		 status = 0;
 	struct nfs_fattr fattr;
 
+	/* Don't bother revalidating if we've done it recently */
 	if (jiffies - NFS_READTIME(inode) < NFS_ATTRTIMEO(inode))
 		goto out;
 
@@ -744,6 +745,20 @@ nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	 */
 	if ((inode->i_mode & S_IFMT) != (fattr->mode & S_IFMT))
 		goto out_changed;
+
+	/*
+	 * If we have pending write-back entries, we don't want
+	 * to look at the size the server sends us too closely..
+	 * In particular, ignore the server if it tells us that
+	 * the file is smaller or older than we locally think it
+	 * is.. 
+	 */
+	if (NFS_WRITEBACK(inode)) {
+		if (inode->i_size > fattr->size)
+			fattr->size = inode->i_size;
+		if (inode->i_mtime > fattr->mtime.seconds)
+			fattr->mtime.seconds = inode->i_mtime;
+	}
 
 	/*
 	 * If the size or mtime changed from outside, we want

@@ -125,7 +125,7 @@ int alloc_uid(struct task_struct *p)
 	return 0;
 }
 
-__initfunc(void uidcache_init(void))
+void __init uidcache_init(void)
 {
 	int i;
 
@@ -641,7 +641,7 @@ bad_fork_free:
 	goto bad_fork;
 }
 
-__initfunc(void filescache_init(void))
+void __init filescache_init(void)
 {
 	files_cachep = kmem_cache_create("files_cache", 
 					 sizeof(struct files_struct),

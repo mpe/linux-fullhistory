@@ -168,6 +168,7 @@ static struct file_operations softdog_fops=
 	softdog_ioctl,	/* Ioctl */
 	NULL,		/* MMap */
 	softdog_open,
+	NULL,		/* flush */
 	softdog_release,
 	NULL,		
 	NULL		/* Fasync */

@@ -11,7 +11,8 @@ Hannu Savolainen (hannu@voxware.pp.fi) for more info.
 The following low level drivers are included:
 
 - ACI MIXER for miroPCM12 by Markus Kuhn
-(mskuhn@cip.informatik.uni-erlangen.de).
+  (mskuhn@cip.informatik.uni-erlangen.de).
+- Audio Excel DSP 16 initialization driver by Riccardo Facchetti
+  (fizban@tin.it)
 - SB32/AWE synthesizer driver (Emu8000) by Takashi Iwai
-(iwai@dragon.mm.t.u-tokyo.ac.jp). See README.awe for more
-info.
+  (iwai@dragon.mm.t.u-tokyo.ac.jp). See README.awe for more info.

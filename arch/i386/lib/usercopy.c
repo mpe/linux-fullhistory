@@ -7,7 +7,7 @@
  */
 #include <asm/uaccess.h>
 
-inline unsigned long
+unsigned long
 __generic_copy_to_user(void *to, const void *from, unsigned long n)
 {
 	if (access_ok(VERIFY_WRITE, to, n))
@@ -15,11 +15,11 @@ __generic_copy_to_user(void *to, const void *from, unsigned long n)
 	return n;
 }
 
-inline unsigned long
+unsigned long
 __generic_copy_from_user(void *to, const void *from, unsigned long n)
 {
 	if (access_ok(VERIFY_READ, from, n))
-		__copy_user(to,from,n);
+		__copy_user_zeroing(to,from,n);
 	return n;
 }
 

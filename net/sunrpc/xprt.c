@@ -140,9 +140,8 @@ xprt_from_sock(struct sock *sk)
  *	Adjust the iovec to move on 'n' bytes
  */
  
-extern inline void xprt_move_iov(struct msghdr *msg, int amount)
+extern inline void xprt_move_iov(struct msghdr *msg, struct iovec *niv, int amount)
 {
-	struct iovec niv[MAX_IOVEC];
 	struct iovec *iv=msg->msg_iov;
 	
 	/*
@@ -187,6 +186,7 @@ xprt_sendmsg(struct rpc_xprt *xprt)
 	struct msghdr	msg;
 	mm_segment_t	oldfs;
 	int		result;
+	struct iovec	niv[MAX_IOVEC];
 
 	xprt_pktdump("packet data:",
 				xprt->snd_buf.io_vec->iov_base,
@@ -202,7 +202,7 @@ xprt_sendmsg(struct rpc_xprt *xprt)
 	/* Dont repeat bytes */
 	
 	if(xprt->snd_sent)
-		xprt_move_iov(&msg, xprt->snd_sent);
+		xprt_move_iov(&msg, niv, xprt->snd_sent);
 		
 	oldfs = get_fs(); set_fs(get_ds());
 	result = sock_sendmsg(sock, &msg, xprt->snd_buf.io_len);

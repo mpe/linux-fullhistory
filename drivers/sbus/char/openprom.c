@@ -564,6 +564,7 @@ static struct file_operations openprom_fops = {
 	openprom_ioctl,
 	NULL,			/* openprom_mmap */
 	openprom_open,
+	NULL,			/* flush */
 	openprom_release
 };
 

@@ -318,11 +318,14 @@ if (__copy_to_user(to,from,n)) \
 })
 
 #define copy_from_user(to,from,n) ({ \
+void *__copy_to = (void *) (to); \
 void *__copy_from = (void *) (from); \
 __kernel_size_t __copy_size = (__kernel_size_t) (n); \
 __kernel_size_t __copy_res; \
 if(__copy_size && __access_ok((unsigned long)__copy_from, __copy_size)) { \
-__copy_res = __copy_user((void *) (to), __copy_from, __copy_size); \
+__copy_res = __copy_user(__copy_to, __copy_from, __copy_size); \
+if(__copy_res) \
+memset((char *)__copy_to + __copy_size - __copy_res, 0, __copy_res); \
 } else __copy_res = __copy_size; \
 __copy_res; })
 

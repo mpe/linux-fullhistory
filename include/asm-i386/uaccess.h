@@ -268,13 +268,38 @@ do {									\
 		: "r"(size & 3), "0"(size / 4), "D"(to), "S"(from)	\
 		: "di", "si", "memory")
 
+#define __copy_user_zeroing(to,from,size)				\
+	__asm__ __volatile__(						\
+		"0:	rep; movsl\n"					\
+		"	movl %1,%0\n"					\
+		"1:	rep; movsb\n"					\
+		"2:\n"							\
+		".section .fixup,\"ax\"\n"				\
+		"3:	lea 0(%1,%0,4),%0\n"				\
+		"4:	pushl %0\n"					\
+		"	pushl %%eax\n"					\
+		"	xorl %%eax,%%eax\n"				\
+		"	rep; stosb\n"					\
+		"	popl %%eax\n"					\
+		"	popl %0\n"					\
+		"	jmp 2b\n"					\
+		".previous\n"						\
+		".section __ex_table,\"a\"\n"				\
+		"	.align 4\n"					\
+		"	.long 0b,3b\n"					\
+		"	.long 1b,4b\n"					\
+		".previous"						\
+		: "=&c"(size)						\
+		: "r"(size & 3), "0"(size / 4), "D"(to), "S"(from)	\
+		: "di", "si", "memory");
+
 /* We let the __ versions of copy_from/to_user inline, because they're often
  * used in fast paths and have only a small space overhead.
  */
 static inline unsigned long
 __generic_copy_from_user_nocheck(void *to, const void *from, unsigned long n)
 {
-	__copy_user(to,from,n);
+	__copy_user_zeroing(to,from,n);
 	return n;
 }
 
@@ -369,6 +394,141 @@ do {								\
 	}							\
 } while (0)
 
+/* Optimize just a little bit when we know the size of the move. */
+#define __constant_copy_user_zeroing(to, from, size)		\
+do {								\
+	switch (size & 3) {					\
+	default:						\
+		__asm__ __volatile__(				\
+			"0:	rep; movsl\n"			\
+			"1:\n"					\
+			".section .fixup,\"ax\"\n"		\
+			"2:	pushl %0\n"			\
+			"	pushl %%eax\n"			\
+			"	xorl %%eax,%%eax\n"		\
+			"	rep; stosl\n"			\
+			"	popl %%eax\n"			\
+			"	popl %0\n"			\
+			"	shl $2,%0\n"			\
+			"	jmp 1b\n"			\
+			".previous\n"				\
+			".section __ex_table,\"a\"\n"		\
+			"	.align 4\n"			\
+			"	.long 0b,2b\n"			\
+			".previous"				\
+			: "=c"(size)				\
+			: "S"(from), "D"(to), "0"(size/4)	\
+			: "di", "si", "memory");		\
+		break;						\
+	case 1:							\
+		__asm__ __volatile__(				\
+			"0:	rep; movsl\n"			\
+			"1:	movsb\n"			\
+			"2:\n"					\
+			".section .fixup,\"ax\"\n"		\
+			"3:	pushl %0\n"			\
+			"	pushl %%eax\n"			\
+			"	xorl %%eax,%%eax\n"		\
+			"	rep; stosl\n"			\
+			"	stosb\n"			\
+			"	popl %%eax\n"			\
+			"	popl %0\n"			\
+			"	shl $2,%0\n"			\
+			"	incl %0\n"			\
+			"	jmp 2b\n"			\
+			"4:	pushl %%eax\n"			\
+			"	xorl %%eax,%%eax\n"		\
+			"	stosb\n"			\
+			"	popl %%eax\n"			\
+			"	incl %0\n"			\
+			"	jmp 2b\n"			\
+			".previous\n"				\
+			".section __ex_table,\"a\"\n"		\
+			"	.align 4\n"			\
+			"	.long 0b,3b\n"			\
+			"	.long 1b,4b\n"			\
+			".previous"				\
+			: "=c"(size)				\
+			: "S"(from), "D"(to), "0"(size/4)	\
+			: "di", "si", "memory");		\
+		break;						\
+	case 2:							\
+		__asm__ __volatile__(				\
+			"0:	rep; movsl\n"			\
+			"1:	movsw\n"			\
+			"2:\n"					\
+			".section .fixup,\"ax\"\n"		\
+			"3:	pushl %0\n"			\
+			"	pushl %%eax\n"			\
+			"	xorl %%eax,%%eax\n"		\
+			"	rep; stosl\n"			\
+			"	stosw\n"			\
+			"	popl %%eax\n"			\
+			"	popl %0\n"			\
+			"	shl $2,%0\n"			\
+			"	addl $2,%0\n"			\
+			"	jmp 2b\n"			\
+			"4:	pushl %%eax\n"			\
+			"	xorl %%eax,%%eax\n"		\
+			"	stosw\n"			\
+			"	popl %%eax\n"			\
+			"	addl $2,%0\n"			\
+			"	jmp 2b\n"			\
+			".previous\n"				\
+			".section __ex_table,\"a\"\n"		\
+			"	.align 4\n"			\
+			"	.long 0b,3b\n"			\
+			"	.long 1b,4b\n"			\
+			".previous"				\
+			: "=c"(size)				\
+			: "S"(from), "D"(to), "0"(size/4)	\
+			: "di", "si", "memory");		\
+		break;						\
+	case 3:							\
+		__asm__ __volatile__(				\
+			"0:	rep; movsl\n"			\
+			"1:	movsw\n"			\
+			"2:	movsb\n"			\
+			"3:\n"					\
+			".section .fixup,\"ax\"\n"		\
+			"4:	pushl %0\n"			\
+			"	pushl %%eax\n"			\
+			"	xorl %%eax,%%eax\n"		\
+			"	rep; stosl\n"			\
+			"	stosw\n"			\
+			"	stosb\n"			\
+			"	popl %%eax\n"			\
+			"	popl %0\n"			\
+			"	shl $2,%0\n"			\
+			"	addl $3,%0\n"			\
+			"	jmp 2b\n"			\
+			"5:	pushl %%eax\n"			\
+			"	xorl %%eax,%%eax\n"		\
+			"	stosw\n"			\
+			"	stosb\n"			\
+			"	popl %%eax\n"			\
+			"	addl $3,%0\n"			\
+			"	jmp 2b\n"			\
+			"6:	pushl %%eax\n"			\
+			"	xorl %%eax,%%eax\n"		\
+			"	stosb\n"			\
+			"	popl %%eax\n"			\
+			"	incl %0\n"			\
+			"	jmp 2b\n"			\
+			".previous\n"				\
+			".section __ex_table,\"a\"\n"		\
+			"	.align 4\n"			\
+			"	.long 0b,4b\n"			\
+			"	.long 1b,5b\n"			\
+			"	.long 2b,6b\n"			\
+			".previous"				\
+			: "=c"(size)				\
+			: "S"(from), "D"(to), "0"(size/4)	\
+			: "di", "si", "memory");		\
+		break;						\
+	}							\
+} while (0)
+
 unsigned long __generic_copy_to_user(void *, const void *, unsigned long);
 unsigned long __generic_copy_from_user(void *, const void *, unsigned long);
 
@@ -384,7 +544,7 @@ static inline unsigned long
 __constant_copy_from_user(void *to, const void *from, unsigned long n)
 {
 	if (access_ok(VERIFY_READ, from, n))
-		__constant_copy_user(to,from,n);
+		__constant_copy_user_zeroing(to,from,n);
 	return n;
 }
 
@@ -398,7 +558,7 @@ __constant_copy_to_user_nocheck(void *to, const void *from, unsigned long n)
 static inline unsigned long
 __constant_copy_from_user_nocheck(void *to, const void *from, unsigned long n)
 {
-	__constant_copy_user(to,from,n);
+	__constant_copy_user_zeroing(to,from,n);
 	return n;
 }
 

@@ -78,9 +78,10 @@
 			(default 64)
 
 	    verbose	This parameter controls the amount of logging
-			that is done while the driver probes for
-			devices.  Set it to 0 for a quiet load, or to 1
-			see all the progress messages.  (default 0)
+			that the driver will do.  Set it to 0 for 
+			normal operation, 1 to see autoprobe progress
+			messages, or 2 to see additional debugging
+			output.  (default 0)
 
             nice        This parameter controls the driver's use of
                         idle CPU time, at the expense of some speed.
@@ -108,10 +109,11 @@
 	1.02    GRG 1998.05.06  SMP spinlock changes, 
 				Added slave support
 	1.03    GRG 1998.06.16  Eliminate an Ugh.
+	1.04	GRG 1998.08.15  Extra debugging, use HZ in loop timing
 
 */
 
-#define PD_VERSION      "1.03"
+#define PD_VERSION      "1.04"
 #define PD_MAJOR	45
 #define PD_NAME		"pd"
 #define PD_UNITS	4
@@ -223,7 +225,7 @@ MODULE_PARM(drive3,"1-8i");
 #define PD_TMO          800             /* interrupt timeout in jiffies */
 #define PD_SPIN_DEL     50              /* spin delay in micro-seconds  */
 
-#define PD_SPIN         (10000/PD_SPIN_DEL)*PD_TMO  
+#define PD_SPIN         (1000000*PD_TMO)/(HZ*PD_SPIN_DEL)  
 
 #define STAT_ERR        0x00001
 #define STAT_INDEX      0x00002
@@ -359,6 +361,7 @@ static struct file_operations pd_fops = {
         pd_ioctl,               /* ioctl */
         NULL,                   /* mmap */
         pd_open,                /* open */
+	NULL,			/* flush */
         pd_release,             /* release */
         block_fsync,            /* fsync */
         NULL,                   /* fasync */
@@ -666,7 +669,7 @@ static void pd_reset( int unit )    /* called only for MASTER drive */
 	udelay(250);
 }
 
-#define DBMSG(msg)	NULL
+#define DBMSG(msg)	((verbose>1)?(msg):NULL)
 
 static int pd_wait_for( int unit, int w, char * msg )    /* polled wait */
 

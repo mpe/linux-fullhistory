@@ -82,6 +82,7 @@ struct file_operations nvram_fops = {
 	NULL,		/* nvram_ioctl */
 	NULL,		/* nvram_mmap */
 	nvram_open,
+	NULL,		/* flush */
 	NULL,		/* no special release code */
 	NULL		/* fsync */
 };

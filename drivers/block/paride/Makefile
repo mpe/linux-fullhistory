@@ -12,6 +12,7 @@ SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
+MOD_LIST_NAME := PARIDE_MODULES
 L_TARGET := paride.a
 MX_OBJS  :=
 LX_OBJS  := 
@@ -30,7 +31,7 @@ ifeq ($(CONFIG_PARIDE_PD),y)
   LX_OBJS += pd.o
 else
   ifeq ($(CONFIG_PARIDE_PD),m)
-    MX_OBJS += pd.o
+    M_OBJS += pd.o
   endif
 endif
 
@@ -38,7 +39,7 @@ ifeq ($(CONFIG_PARIDE_PCD),y)
   LX_OBJS += pcd.o
 else
   ifeq ($(CONFIG_PARIDE_PCD),m)
-    MX_OBJS += pcd.o
+    M_OBJS += pcd.o
   endif
 endif
 
@@ -46,7 +47,7 @@ ifeq ($(CONFIG_PARIDE_PF),y)
   LX_OBJS += pf.o
 else
   ifeq ($(CONFIG_PARIDE_PF),m)
-    MX_OBJS += pf.o
+    M_OBJS += pf.o
   endif
 endif
 
@@ -54,7 +55,7 @@ ifeq ($(CONFIG_PARIDE_PT),y)
   LX_OBJS += pt.o
 else
   ifeq ($(CONFIG_PARIDE_PT),m)
-    MX_OBJS += pt.o
+    M_OBJS += pt.o
   endif
 endif
 
@@ -62,7 +63,7 @@ ifeq ($(CONFIG_PARIDE_PG),y)
   LX_OBJS += pg.o
 else
   ifeq ($(CONFIG_PARIDE_PG),m)
-    MX_OBJS += pg.o
+    M_OBJS += pg.o
   endif
 endif
 
@@ -70,7 +71,7 @@ ifeq ($(CONFIG_PARIDE_ATEN),y)
   LX_OBJS += aten.o
 else
   ifeq ($(CONFIG_PARIDE_ATEN),m)
-    MX_OBJS += aten.o
+    M_OBJS += aten.o
   endif
 endif
 
@@ -78,7 +79,7 @@ ifeq ($(CONFIG_PARIDE_BPCK),y)
   LX_OBJS += bpck.o
 else
   ifeq ($(CONFIG_PARIDE_BPCK),m)
-    MX_OBJS += bpck.o
+    M_OBJS += bpck.o
   endif
 endif
 
@@ -86,7 +87,7 @@ ifeq ($(CONFIG_PARIDE_COMM),y)
   LX_OBJS += comm.o
 else
   ifeq ($(CONFIG_PARIDE_COMM),m)
-    MX_OBJS += comm.o
+    M_OBJS += comm.o
   endif
 endif
 
@@ -94,7 +95,7 @@ ifeq ($(CONFIG_PARIDE_DSTR),y)
   LX_OBJS += dstr.o
 else
   ifeq ($(CONFIG_PARIDE_DSTR),m)
-    MX_OBJS += dstr.o
+    M_OBJS += dstr.o
   endif
 endif
 
@@ -102,7 +103,7 @@ ifeq ($(CONFIG_PARIDE_KBIC),y)
   LX_OBJS += kbic.o
 else
   ifeq ($(CONFIG_PARIDE_KBIC),m)
-    MX_OBJS += kbic.o
+    M_OBJS += kbic.o
   endif
 endif
 
@@ -110,7 +111,7 @@ ifeq ($(CONFIG_PARIDE_EPAT),y)
   LX_OBJS += epat.o
 else
   ifeq ($(CONFIG_PARIDE_EPAT),m)
-    MX_OBJS += epat.o
+    M_OBJS += epat.o
   endif
 endif
 
@@ -118,7 +119,7 @@ ifeq ($(CONFIG_PARIDE_EPIA),y)
   LX_OBJS += epia.o
 else
   ifeq ($(CONFIG_PARIDE_EPIA),m)
-    MX_OBJS += epia.o
+    M_OBJS += epia.o
   endif
 endif
 
@@ -126,7 +127,7 @@ ifeq ($(CONFIG_PARIDE_FIT2),y)
   LX_OBJS += fit2.o
 else
   ifeq ($(CONFIG_PARIDE_FIT2),m)
-    MX_OBJS += fit2.o
+    M_OBJS += fit2.o
   endif
 endif
 
@@ -134,7 +135,7 @@ ifeq ($(CONFIG_PARIDE_FIT3),y)
   LX_OBJS += fit3.o
 else
   ifeq ($(CONFIG_PARIDE_FIT3),m)
-    MX_OBJS += fit3.o
+    M_OBJS += fit3.o
   endif
 endif
 
@@ -142,7 +143,7 @@ ifeq ($(CONFIG_PARIDE_FRPW),y)
   LX_OBJS += frpw.o
 else
   ifeq ($(CONFIG_PARIDE_FRPW),m)
-    MX_OBJS += frpw.o
+    M_OBJS += frpw.o
   endif
 endif
 
@@ -150,7 +151,7 @@ ifeq ($(CONFIG_PARIDE_ON20),y)
   LX_OBJS += on20.o
 else
   ifeq ($(CONFIG_PARIDE_ON20),m)
-    MX_OBJS += on20.o
+    M_OBJS += on20.o
   endif
 endif
 
@@ -158,7 +159,7 @@ ifeq ($(CONFIG_PARIDE_ON26),y)
   LX_OBJS += on26.o
 else
   ifeq ($(CONFIG_PARIDE_ON26),m)
-    MX_OBJS += on26.o
+    M_OBJS += on26.o
   endif
 endif
 
@@ -166,7 +167,7 @@ ifeq ($(CONFIG_PARIDE_KTTI),y)
   LX_OBJS += ktti.o
 else
   ifeq ($(CONFIG_PARIDE_KTTI),m)
-    MX_OBJS += ktti.o
+    M_OBJS += ktti.o
   endif
 endif
 

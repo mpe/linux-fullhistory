@@ -916,7 +916,7 @@ out:
 	return ino;
 }
 
-__initfunc(void dcache_init(void))
+void __init dcache_init(void)
 {
 	int i;
 	struct list_head *d = dentry_hashtable;

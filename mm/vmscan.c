@@ -24,6 +24,7 @@
 #include <linux/dcache.h>
 #include <linux/fs.h>
 #include <linux/pagemap.h>
+#include <linux/init.h>
 
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
@@ -491,7 +492,7 @@ static int do_try_to_free_page(int gfp_mask)
  * may be printed in the middle of another driver's init 
  * message).  It looks very bad when that happens.
  */
-void kswapd_setup(void)
+void __init kswapd_setup(void)
 {
        int i;
        char *revision="$Revision: 1.5 $", *s, *e;

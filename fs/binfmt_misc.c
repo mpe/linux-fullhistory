@@ -488,7 +488,7 @@ static void bm_modcount(struct inode *inode, int fill)
 }
 #endif
 
-__initfunc(int init_misc_binfmt(void))
+int __init init_misc_binfmt(void)
 {
 	struct proc_dir_entry *status = NULL, *reg;
 	int error = -ENOMEM;

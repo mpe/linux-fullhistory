@@ -95,6 +95,7 @@ struct file_operations proc_sys_file_operations =
 	NULL,		/* ioctl   */
 	NULL,		/* mmap	   */
 	NULL,		/* no special open code	   */
+	NULL,		/* no special flush code */
 	NULL,		/* no special release code */
 	NULL		/* can't fsync */
 };
@@ -251,7 +252,7 @@ static ctl_table dev_table[] = {
 };  
 
 
-__initfunc(void sysctl_init(void))
+void __init sysctl_init(void)
 {
 #ifdef CONFIG_PROC_FS
 	register_proc_table(root_table, &proc_sys_root);

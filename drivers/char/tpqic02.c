@@ -2756,6 +2756,7 @@ static struct file_operations qic02_tape_fops = {
 	qic02_tape_ioctl,		/* ioctl */
 	NULL,				/* mmap not allowed */
 	qic02_tape_open,		/* open */
+	NULL,				/* flush */
 	qic02_tape_release,		/* release */
 	NULL,				/* fsync */
 	NULL,				/* fasync */

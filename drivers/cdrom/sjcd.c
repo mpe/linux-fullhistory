@@ -1429,6 +1429,7 @@ static struct file_operations sjcd_fops = {
   sjcd_ioctl,         /* ioctl */
   NULL,               /* mmap */
   sjcd_open,          /* open */
+  NULL,		      /* flush */
   sjcd_release,       /* release */
   NULL,               /* fsync */
   NULL,               /* fasync */

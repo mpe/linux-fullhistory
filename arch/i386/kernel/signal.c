@@ -184,26 +184,17 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc, int *peax)
 
 #define COPY_SEG(seg)							\
 	{ unsigned short tmp;						\
-	   err |= __get_user(tmp, &sc->seg);				\
-	  if ((tmp & 0xfffc)		/* not a NULL selectors */	\
-	      && (tmp & 0x4) != 0x4	/* not a LDT selector */	\
-	      && (tmp & 3) != 3)	/* not a RPL3 GDT selector */	\
-		  goto badframe;					\
+	  err |= __get_user(tmp, &sc->seg);				\
 	  regs->x##seg = tmp; }
 
 #define COPY_SEG_STRICT(seg)						\
 	{ unsigned short tmp;						\
 	  err |= __get_user(tmp, &sc->seg);				\
-	  if ((tmp & 0xfffc) && (tmp & 3) != 3) goto badframe;		\
-	  regs->x##seg = tmp; }
+	  regs->x##seg = tmp|3; }
 
 #define GET_SEG(seg)							\
 	{ unsigned short tmp;						\
 	  err |= __get_user(tmp, &sc->seg);				\
-	  if ((tmp & 0xfffc)		/* not a NULL selectors */	\
-	      && (tmp & 0x4) != 0x4	/* not a LDT selector */	\
-	      && (tmp & 3) != 3)	/* not a RPL3 GDT selector */	\
-		  goto badframe;					\
 	  loadsegment(seg,tmp); }
 
 	GET_SEG(gs);
@@ -459,15 +450,12 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 	/* Set up registers for signal handler */
 	regs->esp = (unsigned long) frame;
 	regs->eip = (unsigned long) ka->sa.sa_handler;
-	{
-		unsigned long seg = __USER_DS;
-		__asm__("movl %w0,%%fs ; movl %w0,%%gs": "=r"(seg) : "0"(seg));
-		set_fs(USER_DS);
-		regs->xds = seg;
-		regs->xes = seg;
-		regs->xss = seg;
-		regs->xcs = __USER_CS;
-	}
+
+	set_fs(USER_DS);
+	regs->xds = __USER_DS;
+	regs->xes = __USER_DS;
+	regs->xss = __USER_DS;
+	regs->xcs = __USER_CS;
 	regs->eflags &= ~TF_MASK;
 
 #if DEBUG_SIG
@@ -533,15 +521,12 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	/* Set up registers for signal handler */
 	regs->esp = (unsigned long) frame;
 	regs->eip = (unsigned long) ka->sa.sa_handler;
-	{
-		unsigned long seg = __USER_DS;
-		__asm__("movl %w0,%%fs ; movl %w0,%%gs": "=r"(seg) : "0"(seg));
-		set_fs(USER_DS);
-		regs->xds = seg;
-		regs->xes = seg;
-		regs->xss = seg;
-		regs->xcs = __USER_CS;
-	}
+
+	set_fs(USER_DS);
+	regs->xds = __USER_DS;
+	regs->xes = __USER_DS;
+	regs->xss = __USER_DS;
+	regs->xcs = __USER_CS;
 	regs->eflags &= ~TF_MASK;
 
 #if DEBUG_SIG

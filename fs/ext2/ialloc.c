@@ -101,7 +101,8 @@ static int load_inode_bitmap (struct super_block * sb,
 			    "block_group = %d, groups_count = %lu",
 			     block_group, sb->u.ext2_sb.s_groups_count);
 	if (sb->u.ext2_sb.s_loaded_inode_bitmaps > 0 &&
-	    sb->u.ext2_sb.s_inode_bitmap_number[0] == block_group)
+	    sb->u.ext2_sb.s_inode_bitmap_number[0] == block_group &&
+	    sb->u.ext2_sb.s_inode_bitmap[0] != NULL)
 		return 0;
 	if (sb->u.ext2_sb.s_groups_count <= EXT2_MAX_GROUP_LOADED) {
 		if (sb->u.ext2_sb.s_inode_bitmap[block_group]) {

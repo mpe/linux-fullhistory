@@ -379,6 +379,7 @@ static struct file_operations azt_fops = {
 	aztcd_ioctl,            /* ioctl */
 	NULL,                   /* mmap */
 	aztcd_open,             /* open */
+	NULL,			/* flush */
 	aztcd_release,          /* release */
 	NULL,                   /* fsync */
 	NULL,                   /* fasync*/

@@ -688,7 +688,7 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 	mm->mmap_cache = NULL;		/* Kill the cache. */
 }
 
-__initfunc(void vma_init(void))
+void __init vma_init(void)
 {
 	vm_area_cachep = kmem_cache_create("vm_area_struct",
 					   sizeof(struct vm_area_struct),
