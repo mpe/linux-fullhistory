@@ -295,7 +295,8 @@ static inline int lp_write_polled(unsigned int minor, const char * buf, int coun
 	return temp-buf;
 }
 
-static int lp_write(struct inode * inode, struct file * file, const char * buf, int count)
+static long lp_write(struct inode * inode, struct file * file,
+	const char * buf, unsigned long count)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
 
@@ -309,8 +310,8 @@ static int lp_write(struct inode * inode, struct file * file, const char * buf, 
 		return lp_write_polled(minor, buf, count);
 }
 
-static int lp_lseek(struct inode * inode, struct file * file,
-		    off_t offset, int origin)
+static long long lp_lseek(struct inode * inode, struct file * file,
+			  long long offset, int origin)
 {
 	return -ESPIPE;
 }

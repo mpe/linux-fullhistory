@@ -9,9 +9,9 @@
  *  about non-autovec ints yet. It hardcoded the number of possible ints to
  *  7 (IRQ1...IRQ7). But the Atari has lots of non-autovec ints! I made the
  *  number of possible ints a constant defined in interrupt.h, which is
- *  47 for the Atari. So we can call add_isr() for all Atari interrupts just
- *  the normal way. Additionally, all vectors >= 48 are initialized to call
- *  trap() instead of inthandler(). This must be changed here, too.
+ *  47 for the Atari. So we can call request_irq() for all Atari interrupts
+ *  just the normal way. Additionally, all vectors >= 48 are initialized to
+ *  call trap() instead of inthandler(). This must be changed here, too.
  *
  * 1995-07-16 Lars Brinkhoff <f93labr@dd.chalmers.se>:
  *  Corrected a bug in atari_add_isr() which rejected all SCC
@@ -24,6 +24,11 @@
  *  Total rewrite of Atari interrupt handling, for new scheme see comments
  *  below.
  *
+ * 1996-09-03 lars brinkhoff <f93labr@dd.chalmers.se>:
+ *  Added new function atari_unregister_vme_int(), and
+ *  modified atari_register_vme_int() as well as IS_VALID_INTNO()
+ *  to work with it.
+ *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive
  * for more details.
@@ -35,13 +40,13 @@
 #include <linux/ptrace.h>
 #include <linux/kernel_stat.h>
 
+#include <asm/setup.h>
 #include <asm/system.h>
 #include <asm/traps.h>
 
 #include <asm/atarihw.h>
 #include <asm/atariints.h>
 #include <asm/atari_stdma.h>
-#include <asm/bootinfo.h>
 #include <asm/irq.h>
 
 
@@ -74,14 +79,14 @@
  * The feature of more than one handler for one int source is still there, but
  * only applicable if all handers are of the same type. To not slow down
  * processing of ints with only one handler by the chaining feature, the list
- * calling function atari_call_isr_list() is only plugged in at the time the
+ * calling function atari_call_irq_list() is only plugged in at the time the
  * second handler is registered.
  *
  * Implementation notes: For fast-as-possible int handling, there are separate
  * entry points for each type (slow/fast/prio). The assembler handler calls
- * the isr directly in the usual case, no C wrapper is involved. In case of
- * multiple handlers, atari_call_isr_list() is registered as handler and calls
- * in turn the real isr's. To ease access from assembler level to the isr
+ * the irq directly in the usual case, no C wrapper is involved. In case of
+ * multiple handlers, atari_call_irq_list() is registered as handler and calls
+ * in turn the real irq's. To ease access from assembler level to the irq
  * function pointer and accompanying data, these two are stored in a separate
  * array, irq_handler[]. The rest of data (type, name) are put into a second
  * array, irq_param, that is accessed from C only. For each slow interrupt (32
@@ -106,17 +111,17 @@
 typedef void (*asm_irq_handler)(void);
 
 struct irqhandler {
-	isrfunc	isr;
-	void	*data;
+	void	(*handler)(int, void *, struct pt_regs *);
+	void	*dev_id;
 };
 
 struct irqparam {
-	int type;
-	char *name;
+	unsigned long	flags;
+	const char	*devname;
 };
 
 /*
- * Array with isr's and their parameter data. This array is accessed from low
+ * Array with irq's and their parameter data. This array is accessed from low
  * level assembler code, so an element size of 8 allows usage of index scaling
  * addressing mode.
  */
@@ -130,11 +135,11 @@ static struct irqhandler irq_handler[NUM_INT_SOURCES];
 static struct irqparam irq_param[NUM_INT_SOURCES];
 
 /*
- * Counter for next free interrupt vector number
+ * Bitmap for free interrupt vector numbers
  * (new vectors starting from 0x70 can be allocated by
  * atari_register_vme_int())
  */
-static int next_free_vme_vec = VME_SOURCE_BASE;
+static int free_vme_vec_bitmap = 0;
 
 /* check for valid int number (complex, sigh...) */
 #define	IS_VALID_INTNO(n)											\
@@ -147,8 +152,9 @@ static int next_free_vme_vec = VME_SOURCE_BASE;
 	  /* SCC ok if present and number even */						\
 	  ((n) >= SCC_SOURCE_BASE && (n) < VME_SOURCE_BASE &&			\
 	   !((n) & 1) && ATARIHW_PRESENT(SCC)) ||						\
-	  /* greater numbers ok if less than #registered VME vectors */	\
-	  ((n) >= VME_SOURCE_BASE && (n) < next_free_vme_vec)))
+	  /* greater numbers ok if they are registered VME vectors */		\
+	  ((n) >= VME_SOURCE_BASE && (n) < VME_SOURCE_BASE + VME_MAX_SOURCES && \
+		  free_vme_vec_bitmap & (1 << ((n) - VME_SOURCE_BASE)))))
 
 
 /*
@@ -165,8 +171,7 @@ static int next_free_vme_vec = VME_SOURCE_BASE;
 #define SR "0x28"
 #define SAVE_ALL				\
 	"clrl	%%sp@-;"    /* stk_adj */	\
-	"clrl	%%sp@-;"			\
-	"subql	#1,%%sp@;"  /* orig d0 = -1 */	\
+	"pea	-1:w;"	    /* orig d0 = -1 */	\
 	"movel	%%d0,%%sp@-;" /* d0 */		\
 	"moveml	%%d1-%%d5/%%a0-%%a1,%%sp@-"
 
@@ -176,21 +181,19 @@ asmlinkage void IRQ_NAME(n);						   \
 void atari_slow_irq_##n##_dummy (void) {				   \
 __asm__ (ALIGN_STR "\n"							   \
 SYMBOL_NAME_STR(atari_slow_irq_) #n "_handler:\t"			   \
-	SAVE_ALL "\n"							   \
 "	addql	#1,"SYMBOL_NAME_STR(intr_count)"\n"			   \
+	SAVE_ALL "\n"							   \
 "	andb	#~(1<<(" #n "&7)),"	/* mask this interrupt */	   \
 	"("MFP_MK_BASE"+(((" #n "&8)^8)>>2)+((" #n "&16)<<3)):w\n"	   \
-"	movew	%%sp@("SR"),%%d0\n"	/* get old IPL from stack frame */ \
+"	bfextu	%%sp@("SR"){#5,#3},%%d0\n" /* get old IPL from stack frame */ \
 "	movew	%%sr,%%d1\n"						   \
-"	andw	#0x0700,%%d0\n"						   \
-"	andw	#0xf8ff,%%d1\n"						   \
-"	orw 	%%d0,%%d1\n"						   \
+"	bfins	%%d0,%%d1{#21,#3}\n"					   \
 "	movew	%%d1,%%sr\n"		/* set IPL = previous value */	   \
 "	addql	#1,%a0\n"						   \
 "	lea	"SYMBOL_NAME_STR(irq_handler)"+("#n"+8)*8,%%a0\n"	   \
+"	pea 	%%sp@\n"		/* push addr of frame */	   \
 "	movel	%%a0@(4),%%sp@-\n"	/* push handler data */		   \
-"	pea 	%%sp@(4)\n"		/* push addr of frame */	   \
-"	pea 	(" #n "+8):w\n"		/* push int number */		   \
+"	pea 	(" #n "+0x10000008)\n"	/* push int number */		   \
 "	movel	%%a0@,%%a0\n"						   \
 "	jbsr	%%a0@\n"		/* call the handler */		   \
 "	addql	#8,%%sp\n"						   \
@@ -280,21 +283,21 @@ void atari_fast_prio_irq_dummy (void) {
 __asm__ (ALIGN_STR "\n"
 SYMBOL_NAME_STR(atari_fast_irq_handler) ":
 	orw 	#0x700,%%sr		/* disable all interrupts */
-"SYMBOL_NAME_STR(atari_prio_irq_handler) ":\t"
+"SYMBOL_NAME_STR(atari_prio_irq_handler) ":\t
+	addql	#1,"SYMBOL_NAME_STR(intr_count)"\n"
 	SAVE_ALL "
-	addql	#1,"SYMBOL_NAME_STR(intr_count)"
-	movew	%%sp@(" FORMATVEC "),%%d0	/* get vector number from stack frame */
-	andil	#0xfff,%%d0		/* mask off format nibble */
-	lsrl	#2,%%d0			/* convert vector to source */
-	subl	#(0x40-8),%%d0
+	/* get vector number from stack frame and convert to source */
+	bfextu	%%sp@(" FORMATVEC "){#4,#10},%%d0
+	subw	#(0x40-8),%%d0
 	jpl 	1f
-	addl	#(0x40-8-0x18),%%d0
+	addw	#(0x40-8-0x18),%%d0
 1:	lea	%a0,%%a0
 	addql	#1,%%a0@(%%d0:l:4)
 	lea	"SYMBOL_NAME_STR(irq_handler)",%%a0
 	lea	%%a0@(%%d0:l:8),%%a0
+	pea 	%%sp@			/* push frame address */
 	movel	%%a0@(4),%%sp@-		/* push handler data */
-	pea 	%%sp@(4)		/* push frame address */
+	bset	#28,%%d0		/* set MACHSPEC bit */
 	movel	%%d0,%%sp@-		/* push int number */
 	movel	%%a0@,%%a0
 	jsr	%%a0@			/* and call the handler */
@@ -313,12 +316,7 @@ asmlinkage void falcon_hblhandler(void);
 asm(".text\n"
 ALIGN_STR "\n"
 SYMBOL_NAME_STR(falcon_hblhandler) ":
-	movel	%d0,%sp@-
-	movew	%sp@(4),%d0
-	andw	#0xf8ff,%d0
-	orw	#0x0200,%d0	/* set saved ipl to 2 */
-	movew	%d0,%sp@(4)
-	movel	%sp@+,%d0
+	orw	#0x200,%sp@	/* set saved ipl to 2 */
 	rte");
 
 /* Defined in entry.S; only increments 'num_spurious' */
@@ -327,7 +325,7 @@ asmlinkage void bad_interrupt(void);
 extern void atari_microwire_cmd( int cmd );
 
 /*
- * void atari_init_INTS (void)
+ * void atari_init_IRQ (void)
  *
  * Parameters:	None
  *
@@ -337,7 +335,7 @@ extern void atari_microwire_cmd( int cmd );
  * the atari IRQ handling routines.
  */
 
-void atari_init_INTS(void)
+void atari_init_IRQ(void)
 {
 	int i;
 
@@ -353,9 +351,9 @@ void atari_init_INTS(void)
 #else
 	mfp.vec_adr  = 0x40;	/* Automatic EOI-Mode */
 #endif
-	mfp.int_en_a =		    /* turn off MFP-Ints */
+	mfp.int_en_a = 0x00;	/* turn off MFP-Ints */
 	mfp.int_en_b = 0x00;
-	mfp.int_mk_a =			/* no Masking */
+	mfp.int_mk_a = 0xff;	/* no Masking */
 	mfp.int_mk_b = 0xff;
 
 	if (ATARIHW_PRESENT(TT_MFP)) {
@@ -364,9 +362,9 @@ void atari_init_INTS(void)
 #else
 		tt_mfp.vec_adr  = 0x50;		/* Automatic EOI-Mode */
 #endif
-		tt_mfp.int_en_a =			/* turn off MFP-Ints */
+		tt_mfp.int_en_a = 0x00;		/* turn off MFP-Ints */
 		tt_mfp.int_en_b = 0x00;
-		tt_mfp.int_mk_a =			/* no Masking */
+		tt_mfp.int_mk_a = 0xff;		/* no Masking */
 		tt_mfp.int_mk_b = 0xff;
 	}
 
@@ -407,177 +405,169 @@ void atari_init_INTS(void)
 }
 
 
-static void atari_call_isr_list( int irq, struct pt_regs *fp, void *_p )
+static void atari_call_irq_list( int irq, void *dev_id, struct pt_regs *fp )
 {
-  isr_node_t *p;
-	
-  for( p = (isr_node_t *)_p; p; p = p->next )
-    p->isr( irq, fp, p->data );
+	irq_node_t *node;
+
+	for (node = (irq_node_t *)dev_id; node; node = node->next)
+		node->handler(irq, node->dev_id, fp);
 }
 
 
 /*
- * atari_add_isr : add an interrupt service routine for a particular
- *		   machine specific interrupt source.
- *		   If the addition was successful, it returns 1, otherwise
- *		   it returns 0.  It will fail if the interrupt is already
- *                 occupied of another handler with different type
+ * atari_request_irq : add an interrupt service routine for a particular
+ *                     machine specific interrupt source.
+ *                     If the addition was successful, it returns 0.
  */
 
-int atari_add_isr(unsigned long source, isrfunc isr, int type, void
-		  *data, char *name)
+int atari_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+                      unsigned long flags, const char *devname, void *dev_id)
 {
 	int vector;
 	
-	source &= ~IRQ_MACHSPEC;
-	if (type < IRQ_TYPE_SLOW || type > IRQ_TYPE_PRIO) {
-		printk ("atari_add_isr: Bad irq type %d requested from %s\n",
-				type, name );
-		return( 0 );
+	if (flags < IRQ_TYPE_SLOW || flags > IRQ_TYPE_PRIO) {
+		printk ("%s: Bad irq type %ld requested from %s\n",
+		        __FUNCTION__, flags, devname);
+		return -EINVAL;
 	}
-	if (!IS_VALID_INTNO(source)) {
-		printk ("atari_add_isr: Unknown irq %ld requested from %s\n",
-				source, name );
-		return( 0 );
+	if (!IS_VALID_INTNO(irq)) {
+		printk ("%s: Unknown irq %d requested from %s\n",
+		        __FUNCTION__, irq, devname);
+		return -ENXIO;
 	}
-	vector = IRQ_SOURCE_TO_VECTOR(source);
+	vector = IRQ_SOURCE_TO_VECTOR(irq);
 
 	/*
 	 * Check type/source combination: slow ints are (currently)
 	 * only possible for MFP-interrupts.
 	 */
-	if (type == IRQ_TYPE_SLOW &&
-		(source < STMFP_SOURCE_BASE || source >= SCC_SOURCE_BASE)) {
-		printk ("atari_add_isr: Slow irq requested for non-MFP source %ld from %s\n",
-				source, name );
-		return( 0 );
+	if (flags == IRQ_TYPE_SLOW &&
+		(irq < STMFP_SOURCE_BASE || irq >= SCC_SOURCE_BASE)) {
+		printk ("%s: Slow irq requested for non-MFP source %d from %s\n",
+		        __FUNCTION__, irq, devname);
+		return -EINVAL;
 	}
 		
 	if (vectors[vector] == bad_interrupt) {
 		/* int has no handler yet */
-		irq_handler[source].isr = isr;
-		irq_handler[source].data = data;
-		irq_param[source].type = type;
-		irq_param[source].name = name;
+		irq_handler[irq].handler = handler;
+		irq_handler[irq].dev_id  = dev_id;
+		irq_param[irq].flags   = flags;
+		irq_param[irq].devname = devname;
 		vectors[vector] =
-			(type == IRQ_TYPE_SLOW) ? slow_handlers[source-STMFP_SOURCE_BASE] :
-			(type == IRQ_TYPE_FAST) ? atari_fast_irq_handler :
-									  atari_prio_irq_handler;
+			(flags == IRQ_TYPE_SLOW) ? slow_handlers[irq-STMFP_SOURCE_BASE] :
+			(flags == IRQ_TYPE_FAST) ? atari_fast_irq_handler :
+			                          atari_prio_irq_handler;
 		/* If MFP int, also enable and umask it */
-		atari_turnon_irq(source);
-		atari_enable_irq(source);
+		atari_turnon_irq(irq);
+		atari_enable_irq(irq);
 
-		return 1;
+		return 0;
 	}
-	else if (irq_param[source].type == type) {
+	else if (irq_param[irq].flags == flags) {
 		/* old handler is of same type -> handlers can be chained */
-		isr_node_t *p;
+		irq_node_t *node;
 		unsigned long flags;
 
 		save_flags(flags);
 		cli();
 
-		if (irq_handler[source].isr != atari_call_isr_list) {
+		if (irq_handler[irq].handler != atari_call_irq_list) {
 			/* Only one handler yet, make a node for this first one */
-			p = new_isr_node();
-			if (p == NULL) return 0;
-			p->isr = irq_handler[source].isr;
-			p->data = irq_handler[source].data;
-			p->name = irq_param[source].name;
-			p->next = NULL;
+			if (!(node = new_irq_node()))
+				return -ENOMEM;
+			node->handler = irq_handler[irq].handler;
+			node->dev_id  = irq_handler[irq].dev_id;
+			node->devname = irq_param[irq].devname;
+			node->next = NULL;
 
-			irq_handler[source].isr = atari_call_isr_list;
-			irq_handler[source].data = p;
-			irq_param[source].name = "chained";
+			irq_handler[irq].handler = atari_call_irq_list;
+			irq_handler[irq].dev_id  = node;
+			irq_param[irq].devname   = "chained";
 		}
 
-		p = new_isr_node();
-		if (p == NULL) return 0;
-		p->isr = isr;
-		p->data = data;
-		p->name = name;
+		if (!(node = new_irq_node()))
+			return -ENOMEM;
+		node->handler = handler;
+		node->dev_id  = dev_id;
+		node->devname = devname;
 		/* new handlers are put in front of the queue */
-		p->next = irq_handler[source].data;
-		irq_handler[source].data = p;
+		node->next = irq_handler[irq].dev_id;
+		irq_handler[irq].dev_id = node;
 
 		restore_flags(flags);
-		return 1;
-	}
-	else {
-		printk ("atari_add_isr: Irq %ld allocated by other type int (call from %s)\n",
-				source, name );
-		return( 0 );
+		return 0;
+	} else {
+		printk ("%s: Irq %d allocated by other type int (call from %s)\n",
+		        __FUNCTION__, irq, devname);
+		return -EBUSY;
 	}
 }
 
-
-int atari_remove_isr(unsigned long source, isrfunc isr, void *data)
+void atari_free_irq(unsigned int irq, void *dev_id)
 {
 	unsigned long flags;
 	int vector;
-	isr_node_t **p, *q;
+	irq_node_t **list, *node;
 
-	source &= ~IRQ_MACHSPEC;
-
-	if (!IS_VALID_INTNO(source)) {
-		printk("atari_remove_isr: Unknown irq %ld\n", source);
-		return 0;
+	if (!IS_VALID_INTNO(irq)) {
+		printk("%s: Unknown irq %d\n", __FUNCTION__, irq);
+		return;
 	}
 
-	vector = IRQ_SOURCE_TO_VECTOR(source);
+	vector = IRQ_SOURCE_TO_VECTOR(irq);
 	if (vectors[vector] == bad_interrupt)
 		goto not_found;
 
 	save_flags(flags);
 	cli();
 
-	if (irq_handler[source].isr != atari_call_isr_list) {
+	if (irq_handler[irq].handler != atari_call_irq_list) {
 		/* It's the only handler for the interrupt */
-		if (irq_handler[source].isr != isr &&
-		    irq_handler[source].data != data) {
+		if (irq_handler[irq].dev_id != dev_id) {
 			restore_flags(flags);
 			goto not_found;
 		}
-		irq_handler[source].isr = NULL;
-		irq_handler[source].data = NULL;
-		irq_param[source].name = NULL;
+		irq_handler[irq].handler = NULL;
+		irq_handler[irq].dev_id  = NULL;
+		irq_param[irq].devname   = NULL;
 		vectors[vector] = bad_interrupt;
 		/* If MFP int, also disable it */
-		atari_disable_irq(source);
-		atari_turnoff_irq(source);
+		atari_disable_irq(irq);
+		atari_turnoff_irq(irq);
 
 		restore_flags(flags);
-		return 1;
+		return;
 	}
 
-	/* The interrupt is chained, find the isr on the list */
-	for( p = (isr_node_t **)&irq_handler[source].data; *p; p = &(*p)->next ) {
-		if ((*p)->isr == isr) break;
+	/* The interrupt is chained, find the irq on the list */
+	for(list = (irq_node_t **)&irq_handler[irq].dev_id; *list; list = &(*list)->next) {
+		if ((*list)->dev_id == dev_id) break;
 	}
-	if (!*p) {
+	if (!*list) {
 		restore_flags(flags);
 		goto not_found;
 	}
 
-	(*p)->isr = NULL; /* Mark it as free for reallocation */
-	*p = (*p)->next;
+	(*list)->handler = NULL; /* Mark it as free for reallocation */
+	*list = (*list)->next;
 
 	/* If there's now only one handler, unchain the interrupt, i.e. plug in
-	 * the handler directly again and omit atari_call_isr_list */
-	q = (isr_node_t *)irq_handler[source].data;
-	if (q && !q->next) {
-		irq_handler[source].isr = q->isr;
-		irq_handler[source].data = q->data;
-		irq_param[source].name = q->name;
-		q->isr = NULL; /* Mark it as free for reallocation */
+	 * the handler directly again and omit atari_call_irq_list */
+	node = (irq_node_t *)irq_handler[irq].dev_id;
+	if (node && !node->next) {
+		irq_handler[irq].handler = node->handler;
+		irq_handler[irq].dev_id  = node->dev_id;
+		irq_param[irq].devname   = node->devname;
+		node->handler = NULL; /* Mark it as free for reallocation */
 	}
 
 	restore_flags(flags);
-	return 1;
+	return;
 
-  not_found:
-	printk("atari_remove_isr: isr %p not found on list!\n", isr);
-	return 0;
+not_found:
+	printk("%s: tried to remove invalid irq\n", __FUNCTION__);
+	return;
 }
 
 
@@ -588,46 +578,60 @@ int atari_remove_isr(unsigned long source, isrfunc isr, void *data)
 
 unsigned long atari_register_vme_int(void)
 {
-	unsigned long source;
+	int i;
+
+	for(i = 0; i < 32; i++)
+		if((free_vme_vec_bitmap & (1 << i)) == 0)
+			break;
 	
-	if (next_free_vme_vec == NUM_ATARI_SOURCES)
+	if(i == 16)
 		return 0;
 
-	source = next_free_vme_vec | IRQ_MACHSPEC;
-	next_free_vme_vec++;
-	return source;
+	free_vme_vec_bitmap |= 1 << i;
+	return (VME_SOURCE_BASE + i) | IRQ_MACHSPEC;
 }
 
 
-int atari_get_irq_list(char *buf, int len)
+void atari_unregister_vme_int(unsigned long irq)
 {
-	int i;
+	irq &= ~IRQ_MACHSPEC;
+	
+	if(irq >= VME_SOURCE_BASE && irq < VME_SOURCE_BASE + VME_MAX_SOURCES) {
+		irq -= VME_SOURCE_BASE;
+		free_vme_vec_bitmap &= ~(1 << irq);
+	}
+}
+
+
+int atari_get_irq_list(char *buf)
+{
+	int i, len = 0;
 
 	for (i = 0; i < NUM_INT_SOURCES; ++i) {
 		if (vectors[IRQ_SOURCE_TO_VECTOR(i)] == bad_interrupt)
 			continue;
 		if (i < STMFP_SOURCE_BASE)
-			len += sprintf(buf+len, "auto %2d: %8d ",
+			len += sprintf(buf+len, "auto %2d: %10u ",
 				       i, kstat.interrupts[i]);
 		else
-			len += sprintf(buf+len, "vec $%02x: %8d ",
+			len += sprintf(buf+len, "vec $%02x: %10u ",
 				       IRQ_SOURCE_TO_VECTOR(i),
 				       kstat.interrupts[i]);
 
-		if (irq_handler[i].isr != atari_call_isr_list) {
-			len += sprintf(buf+len, "%s\n", irq_param[i].name);
+		if (irq_handler[i].handler != atari_call_irq_list) {
+			len += sprintf(buf+len, "%s\n", irq_param[i].devname);
 		}
 		else {
-			isr_node_t *p;
-			for( p = (isr_node_t *)irq_handler[i].data; p; p = p->next ) {
-				len += sprintf(buf+len, "%s\n", p->name);
+			irq_node_t *p;
+			for( p = (irq_node_t *)irq_handler[i].dev_id; p; p = p->next ) {
+				len += sprintf(buf+len, "%s\n", p->devname);
 				if (p->next)
 					len += sprintf( buf+len, "                  " );
 			}
 		}
 	}
 	if (num_spurious)
-		len += sprintf(buf+len, "spurio.: %8ld\n", num_spurious);
+		len += sprintf(buf+len, "spurio.: %10u\n", num_spurious);
 	
 	return len;
 }

@@ -102,10 +102,11 @@ static void mark_screen_rdonly(struct task_struct * tsk)
 asmlinkage int sys_vm86(struct vm86_struct * v86)
 {
 	struct vm86_struct info;
+	struct task_struct *tsk = current;
 	struct pt_regs * pt_regs = (struct pt_regs *) &v86;
 	int error;
 
-	if (current->saved_kernel_stack)
+	if (tsk->saved_kernel_stack)
 		return -EPERM;
 	/* v86 must be readable (now) and writable (for save_v86_state) */
 	error = verify_area(VERIFY_WRITE,v86,sizeof(*v86));
@@ -131,16 +132,16 @@ asmlinkage int sys_vm86(struct vm86_struct * v86)
 
 	switch (info.cpu_type) {
 		case CPU_286:
-			current->tss.v86mask = 0;
+			tsk->tss.v86mask = 0;
 			break;
 		case CPU_386:
-			current->tss.v86mask = NT_MASK | IOPL_MASK;
+			tsk->tss.v86mask = NT_MASK | IOPL_MASK;
 			break;
 		case CPU_486:
-			current->tss.v86mask = AC_MASK | NT_MASK | IOPL_MASK;
+			tsk->tss.v86mask = AC_MASK | NT_MASK | IOPL_MASK;
 			break;
 		default:
-			current->tss.v86mask = ID_MASK | AC_MASK | NT_MASK | IOPL_MASK;
+			tsk->tss.v86mask = ID_MASK | AC_MASK | NT_MASK | IOPL_MASK;
 			break;
 	}
 
@@ -148,17 +149,17 @@ asmlinkage int sys_vm86(struct vm86_struct * v86)
  * Save old state, set default return value (%eax) to 0
  */
 	pt_regs->eax = 0;
-	current->saved_kernel_stack = current->tss.esp0;
-	current->tss.esp0 = (unsigned long) pt_regs;
-	current->tss.vm86_info = v86;
+	tsk->saved_kernel_stack = tsk->tss.esp0;
+	tsk->tss.esp0 = (unsigned long) pt_regs;
+	tsk->tss.vm86_info = v86;
 
-	current->tss.screen_bitmap = info.screen_bitmap;
+	tsk->tss.screen_bitmap = info.screen_bitmap;
 	if (info.flags & VM86_SCREEN_BITMAP)
-		mark_screen_rdonly(current);
+		mark_screen_rdonly(tsk);
 	__asm__ __volatile__("movl %0,%%esp\n\t"
 		"jmp ret_from_sys_call"
 		: /* no outputs */
-		:"r" (&info.regs));
+		:"r" (&info.regs), "b" (tsk));
 	return 0;
 }
 
@@ -170,7 +171,7 @@ static inline void return_to_32bit(struct vm86_regs * regs16, int retval)
 	regs32->eax = retval;
 	__asm__ __volatile__("movl %0,%%esp\n\t"
 		"jmp ret_from_sys_call"
-		: : "r" (regs32));
+		: : "r" (regs32), "b" (current));
 }
 
 static inline void set_IF(struct vm86_regs * regs)

@@ -523,19 +523,19 @@ static unsigned short ports[] =
 
 #if !defined(SKIP_BIOSTEST)
 /* possible locations for the Adaptec BIOS */
-static void *addresses[] =
+static unsigned int addresses[] =
 {
-  (void *) 0xdc000,   /* default first */
-  (void *) 0xc8000,
-  (void *) 0xcc000,
-  (void *) 0xd0000,
-  (void *) 0xd4000,
-  (void *) 0xd8000,
-  (void *) 0xe0000,
-  (void *) 0xeb800,   /* VTech Platinum SMP */
-  (void *) 0xf0000,
+  0xdc000,   /* default first */
+  0xc8000,
+  0xcc000,
+  0xd0000,
+  0xd4000,
+  0xd8000,
+  0xe0000,
+  0xeb800,   /* VTech Platinum SMP */
+  0xf0000,
 };
-#define ADDRESS_COUNT (sizeof(addresses) / sizeof(void *))
+#define ADDRESS_COUNT (sizeof(addresses) / sizeof(unsigned int))
 
 /* signatures for various AIC-6[23]60 based controllers.
    The point in detecting signatures is to avoid useless and maybe
@@ -545,7 +545,7 @@ static void *addresses[] =
    needed anyway.  May be an information whether or not the BIOS supports
    extended translation could be also useful here. */
 static struct signature {
-  char *signature;
+  unsigned char *signature;
   int  sig_offset;
   int  sig_length;
 } signatures[] =
@@ -895,9 +895,8 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
     ok=0;
     for(i=0; i < ADDRESS_COUNT && !ok; i++)
       for(j=0; (j < SIGNATURE_COUNT) && !ok; j++)
-        ok=!memcmp((void *) addresses[i]+signatures[j].sig_offset,
-                   (void *) signatures[j].signature,
-                   (int) signatures[j].sig_length);
+      	ok = check_signature(addresses[i]+signatures[j].sig_offset,
+      		signatures[j].signature, signatures[j].sig_length);
 
     if(!ok && setup_count==0)
       return 0;

@@ -80,7 +80,7 @@
  */
 
 #define BLANK 0x0020
-#undef CAN_LOAD_EGA_FONTS    /* undefine if the user must not do this */
+#define CAN_LOAD_EGA_FONTS    /* undefine if the user must not do this */
 
 /* A bitmap for codes <32. A bit of 1 indicates that the code
  * corresponding to that bit number invokes some special action
@@ -175,6 +175,8 @@ static unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
        int do_poke_blanked_console = 0;
        int console_blanked = 0;
 static int blankinterval = 10*60*HZ;
+static int vesa_off_interval = 0;
+static int vesa_blank_mode = 0; /* 0:none 1:suspendV 2:suspendH 3:powerdown */
 
 static struct vc {
 	struct vc_data *d;
@@ -537,7 +539,7 @@ static unsigned char color_table[] = { 0, 4, 2, 6, 1, 5, 3, 7,
  */
 static void gotoxy(int currcons, int new_x, int new_y)
 {
-	int max_y;
+	int min_y, max_y;
 
 	if (new_x < 0)
 		x = 0;
@@ -547,19 +549,26 @@ static void gotoxy(int currcons, int new_x, int new_y)
 		else
 			x = new_x;
  	if (decom) {
-		new_y += top;
+		min_y = top;
 		max_y = bottom;
-	} else
+	} else {
+		min_y = 0;
 		max_y = rows;
-	if (new_y < 0)
-		y = 0;
+	}
+	if (new_y < min_y)
+		y = min_y;
+	else if (new_y >= max_y)
+		y = max_y - 1;
 	else
-		if (new_y >= max_y)
-			y = max_y - 1;
-		else
-			y = new_y;
+		y = new_y;
 	pos = video_mem_start + y * cols + x;
 	need_wrap = 0;
+}
+
+/* for absolute user moves, when decom is set */
+static void gotoxay(int currcons, int new_x, int new_y)
+{
+	gotoxy(currcons, new_x, decom ? (top+new_y) : new_y);
 }
 
 static void hide_cursor(int currcons)
@@ -1144,7 +1153,7 @@ static void set_mode(int currcons, int on_off)
 				break;
 			case 6:			/* Origin relative/absolute */
 				decom = on_off;
-				gotoxy(currcons,0,0);
+				gotoxay(currcons,0,0);
 				break;
 			case 7:			/* Autowrap on/off */
 				decawm = on_off;
@@ -1226,6 +1235,9 @@ static void setterm_command(int currcons)
 			break;
 		case 13: /* unblank the screen */
 			unblank_screen();
+			break;
+		case 14: /* set vesa powerdown interval */
+			vesa_off_interval = ((par[1] < 60) ? par[1] : 60) * 60 * HZ;
 			break;
 	}
 }
@@ -1516,34 +1528,34 @@ static int con_write(struct tty_struct * tty, int from_user,
 		    tc = translate[toggle_meta ? (c|0x80) : c];
 		}
 
-		/* If the original code was < 32 we only allow a
-		 * glyph to be displayed if the code is not normally
-		 * used (such as for cursor movement) or if the
-		 * disp_ctrl mode has been explicitly enabled.
-		 * Note: ESC is *never* allowed to be displayed as
-		 * that would disable all escape sequences!
-		 * To display font position 0x1B, go into UTF mode
-		 * and display character U+F01B, or change the mapping.
-		 */
-		ok = (tc && (c >= 32 || (!utf && !(((disp_ctrl ? CTRL_ALWAYS
-					    : CTRL_ACTION) >> c) & 1))));
+                /* If the original code was a control character we
+                 * only allow a glyph to be displayed if the code is
+                 * not normally used (such as for cursor movement) or
+                 * if the disp_ctrl mode has been explicitly enabled.
+                 * Certain characters (as given by the CTRL_ALWAYS
+                 * bitmap) are always displayed as control characters,
+                 * as the console would be pretty useless without
+                 * them; to display an arbitrary font position use the
+                 * direct-to-font zone in UTF-8 mode.
+                 */
+                ok = tc && (c >= 32 ||
+                            (!utf && !(((disp_ctrl ? CTRL_ALWAYS
+                                         : CTRL_ACTION) >> c) & 1)))
+                        && (c != 127 || disp_ctrl);
 
 		if (vc_state == ESnormal && ok) {
 			/* Now try to find out how to display it */
 			tc = conv_uni_to_pc(tc);
-			if ( tc == -4 )
-			  {
-			    /* If we got -4 (not found) then see if we have
-			       defined a replacement character (U+FFFD) */
-			    tc = conv_uni_to_pc(0xfffd);
-			  }
-			else if ( tc == -3 )
-			  {
-			    /* Bad hash table -- hope for the best */
-			    tc = c;
-			  }
+			if ( tc == -4 ) {
+                                /* If we got -4 (not found) then see if we have
+                                   defined a replacement character (U+FFFD) */
+                                tc = conv_uni_to_pc(0xfffd);
+                        } else if ( tc == -3 ) {
+                                /* Bad hash table -- hope for the best */
+                                tc = c;
+                        }
 			if (tc & ~console_charmask)
-			  continue; /* Conversion failed */
+				continue; /* Conversion failed */
 
 			if (need_wrap) {
 				cr(currcons);
@@ -1851,12 +1863,12 @@ static int con_write(struct tty_struct * tty, int from_user,
 				continue;
 			    case 'd':
 				if (par[0]) par[0]--;
-				gotoxy(currcons,x,par[0]);
+				gotoxay(currcons,x,par[0]);
 				continue;
 			    case 'H': case 'f':
 				if (par[0]) par[0]--;
 				if (par[1]) par[1]--;
-				gotoxy(currcons,par[1],par[0]);
+				gotoxay(currcons,par[1],par[0]);
 				continue;
 			    case 'J':
 				csi_J(currcons,par[0]);
@@ -1907,7 +1919,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 				    par[1] <= rows) {
 					top=par[0]-1;
 					bottom=par[1];
-					gotoxy(currcons,0,0);
+					gotoxay(currcons,0,0);
 				}
 				continue;
 			    case 's':
@@ -2258,6 +2270,29 @@ unsigned long con_init(unsigned long kmem_start)
 	return kmem_start;
 }
 
+void vesa_powerdown_screen(void)
+{
+	int currcons = fg_console;
+
+	timer_active &= ~(1<<BLANK_TIMER);
+	timer_table[BLANK_TIMER].fn = unblank_screen;
+
+	/* Power down if currently suspended (1 or 2),
+	 * suspend if currently blanked (0),
+	 * else do nothing (i.e. already powered down (3)).
+	 * Called only if powerdown features are allowed.
+	 */
+	switch (vesa_blank_mode) {
+	case 0:
+		sw->con_blank(2);
+		break;
+	case 1:
+	case 2:
+		sw->con_blank(4);
+		break;
+	}
+}
+
 void do_blank_screen(int nopowersave)
 {
 	int currcons;
@@ -2273,14 +2308,22 @@ void do_blank_screen(int nopowersave)
 
 	/* don't blank graphics */
 	if (vt_cons[fg_console]->vc_mode == KD_TEXT) {
-		timer_active &= ~(1<<BLANK_TIMER);
-		timer_table[BLANK_TIMER].fn = unblank_screen;
+		if (vesa_off_interval && !nopowersave) {
+			timer_table[BLANK_TIMER].fn = vesa_powerdown_screen;
+			timer_table[BLANK_TIMER].expires = jiffies + vesa_off_interval;
+			timer_active |= (1<<BLANK_TIMER);
+		} else {
+			timer_active &= ~(1<<BLANK_TIMER);
+			timer_table[BLANK_TIMER].fn = unblank_screen;
+		}
 
 		/* try not to lose information by blanking,
 		   and not to waste memory */
 		currcons = fg_console;
 		has_scrolled = 0;
-		sw->con_blank (1);
+		sw->con_blank(1);
+		if (!nopowersave)
+			sw->con_blank(vesa_blank_mode + 1);
 	}
 	else
 		hide_cursor(fg_console);
@@ -2413,89 +2456,56 @@ int con_open(struct tty_struct *tty, struct file * filp)
 /*
  * PIO_FONT support.
  *
- * The font loading code goes back to the codepage package by
- * Joel Hoffman (joel@wam.umd.edu). (He reports that the original
- * reference is: "From: p. 307 of _Programmer's Guide to PC & PS/2
- * Video Systems_ by Richard Wilton. 1987.  Microsoft Press".)
- *
- * Change for certain monochrome monitors by Yury Shevchuck
- * (sizif@botik.yaroslavl.su).
+ * Currently we only support 8 pixels wide fonts, at a maximum height
+ * of 32 pixels. Userspace fontdata is stored with 32 bytes reserved
+ * for each character which is kinda wasty, but this is done in order
+ * to maintain compatibility with the EGA/VGA fonts. It is upto the
+ * actual low-level console-driver convert data into its favorite
+ * format (maybe we should add a `fontoffset' field to the `display'
+ * structure so we wont have to convert the fontdata all the time.
+ * /Jes
  */
 
-#define colourmap ((char *)0xa0000)
-/* Pauline Middelink <middelin@polyware.iaf.nl> reports that we
-   should use 0xA0000 for the bwmap as well.. */
-#define blackwmap ((char *)0xa0000)
 #define cmapsz 8192
-#define seq_port_reg (0x3c4)
-#define seq_port_val (0x3c5)
-#define gr_port_reg (0x3ce)
-#define gr_port_val (0x3cf)
 
-static int set_get_font(char * arg, int set)
+static int set_get_font(char * arg, int set, int ch512)
 {
 #ifdef CAN_LOAD_EGA_FONTS
-	int i;
+	int i, unit, size;
 	char *charmap;
-	int beg;
 
-	/* no use to "load" CGA... */
-
-	if (video_type == VIDEO_TYPE_EGAC) {
-		charmap = colourmap;
-		beg = 0x0e;
-	} else if (video_type == VIDEO_TYPE_EGAM) {
-		charmap = blackwmap;
-		beg = 0x0a;
-	} else
+	if (arg){
+		i = verify_area(set ? VERIFY_READ : VERIFY_WRITE,
+				(void *)arg, ch512 ? 2*cmapsz : cmapsz);
+		if (i)
+			return i;
+	}else
 		return -EINVAL;
 
-	i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg, cmapsz);
-	if (i)
-		return i;
 
-	cli();
-	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
-	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
-	outb_p( 0x02, seq_port_reg );
-	outb_p( 0x04, seq_port_val );   /* CPU writes only to map 2 */
-	outb_p( 0x04, seq_port_reg );
-	outb_p( 0x07, seq_port_val );   /* Sequential addressing */
-	outb_p( 0x00, seq_port_reg );
-	outb_p( 0x03, seq_port_val );   /* Clear synchronous reset */
+	size = ch512 ? 2*cmapsz : cmapsz;
 
-	outb_p( 0x04, gr_port_reg );    /* Now, the graphics controller */
-	outb_p( 0x02, gr_port_val );    /* select map 2 */
-	outb_p( 0x05, gr_port_reg );
-	outb_p( 0x00, gr_port_val );    /* disable odd-even addressing */
-	outb_p( 0x06, gr_port_reg );
-	outb_p( 0x00, gr_port_val );    /* map start at A000:0000 */
-	sti();
+	charmap = (char *)kmalloc(size, GFP_USER);
 
-	if (set)
-		memcpy_fromfs (charmap, arg, cmapsz);
-	else
-		memcpy_tofs (arg, charmap, cmapsz);
+	if (set){
+		memcpy_fromfs(charmap, arg, size);
 
-	cli();
-	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
-	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
-	outb_p( 0x02, seq_port_reg );
-	outb_p( 0x03, seq_port_val );   /* CPU writes to maps 0 and 1 */
-	outb_p( 0x04, seq_port_reg );
-	outb_p( 0x03, seq_port_val );   /* odd-even addressing */
-	outb_p( 0x00, seq_port_reg );
-	outb_p( 0x03, seq_port_val );   /* clear synchronous reset */
+		for (unit = 32; unit > 0; unit--)
+			for (i = 0; i < (ch512 ? 512 : 256); i++)
+				if (charmap[32*i+unit-1])
+					goto nonzero;
+	nonzero:
+		i = conswitchp->con_set_font(vc_cons[fg_console].d, 8,
+					     unit, charmap);
+	}else{
+		memset(charmap, 0, size);
+		i = conswitchp->con_get_font(vc_cons[fg_console].d,
+					     &unit, &unit, charmap);
+		memcpy_tofs(arg, charmap, size);
+	}
+	kfree(charmap);
 
-	outb_p( 0x04, gr_port_reg );    /* Now, the graphics controller */
-	outb_p( 0x00, gr_port_val );    /* select map 0 for CPU */
-	outb_p( 0x05, gr_port_reg );
-	outb_p( 0x10, gr_port_val );    /* enable even-odd addressing */
-	outb_p( 0x06, gr_port_reg );
-	outb_p( beg, gr_port_val );     /* map starts at b800:0 or b000:0 */
-	sti();
-
-	return 0;
+	return i;
 #else
 	return -EINVAL;
 #endif
@@ -2530,15 +2540,22 @@ void set_palette(void)
  * 8xH fonts (0 < H <= 32).
  */
 
-int con_set_font (char *arg)
+int con_set_font (char *arg, int ch512)
 {
-	hashtable_contents_valid = 0;
-	return set_get_font (arg,1);
+	int i;
+
+	i = set_get_font (arg,1,ch512);
+  	if ( !i ) {
+		hashtable_contents_valid = 0;
+      		video_mode_512ch = ch512;
+      		console_charmask = ch512 ? 0x1ff : 0x0ff;
+	}
+	return i;
 }
 
 int con_get_font (char *arg)
 {
-	return set_get_font (arg,0);
+	return set_get_font (arg,0,video_mode_512ch);
 }
 
 /*
@@ -2554,6 +2571,9 @@ int con_adjust_height(unsigned long fontheight)
 
 void set_vesa_blanking(int arg)
 {
+	char *argp = (char *)arg + 1;
+	unsigned int mode = get_fs_byte(argp);
+	vesa_blank_mode = (mode < 4) ? mode : 0;
 }
 
 unsigned long get_video_num_lines(unsigned int currcons)

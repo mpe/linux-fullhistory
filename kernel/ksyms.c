@@ -19,6 +19,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
 #include <linux/ptrace.h>
 #include <linux/sys.h>
 #include <linux/utsname.h>
@@ -129,10 +130,10 @@ struct symbol_table symbol_table = {
 	X(kmalloc),
 	X(kfree),
 	X(vmalloc),
-	X(vremap),
 	X(vfree),
  	X(mem_map),
  	X(remap_page_range),
+	X(max_mapnr),
 	X(high_memory),
 	X(update_vm_cache),
 

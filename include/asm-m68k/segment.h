@@ -138,18 +138,18 @@ static inline void __generic_memcpy_tofs(void * to, const void * from, unsigned 
 	tmp = n;
 	n >>= 2;
 	if (n != 0)
-		__asm__ ("1:\t"
+		__asm__ __volatile__ ("1:\t"
 			 "movel %1@+,%/d0\n\t"
 			 "movesl %/d0,%2@+\n\t"
-			      "dbra %0,1b\n\t"
-			      "clrw %0\n\t"
-			      "subql #1,%0\n\t"
+			 "dbra %0,1b\n\t"
+			 "clrw %0\n\t"
+			 "subql #1,%0\n\t"
 			 "bccs 1b\n\t"
-			      : "=d" (n), "=a" (from), "=a" (to)
+			 : "=d" (n), "=a" (from), "=a" (to)
 			 : "0" (n-1), "1" (from), "2" (to)
 			 : "d0", "memory");
 	if (tmp & 2)
-		__asm__ ("movew %0@+,%/d0\n\t"
+		__asm__ __volatile__ ("movew %0@+,%/d0\n\t"
 			 "movesw %/d0,%1@+\n\t"
 			 : "=a" (from), "=a" (to)
 			 : "0" (from), "1" (to)
@@ -159,7 +159,7 @@ static inline void __generic_memcpy_tofs(void * to, const void * from, unsigned 
 			 "movesb %/d0,%1@\n\t"
 			 : /* no outputs */
 			 : "a" (from), "a" (to)
-			      : "d0", "memory");
+			 : "d0", "memory");
 }
 
 static inline void __constant_memcpy_tofs(void * to, const void * from, unsigned long n)
@@ -234,18 +234,18 @@ static inline void __generic_memcpy_fromfs(void * to, const void * from, unsigne
 	tmp = n;
 	n >>= 2;
 	if (n != 0)
-		__asm__ ("1:\t"
+		__asm__ __volatile__ ("1:\t"
 			 "movesl %1@+,%/d0\n\t"
 			 "movel %/d0,%2@+\n\t"
-			      "dbra %0,1b\n\t"
-			      "clrw %0\n\t"
-			      "subql #1,%0\n\t"
+			 "dbra %0,1b\n\t"
+			 "clrw %0\n\t"
+			 "subql #1,%0\n\t"
 			 "bccs 1b\n\t"
-			      : "=d" (n), "=a" (from), "=a" (to)
+			 : "=d" (n), "=a" (from), "=a" (to)
 			 : "0" (n-1), "1" (from), "2" (to)
 			 : "d0", "memory");
 	if (tmp & 2)
-		__asm__ ("movesw %0@+,%/d0\n\t"
+		__asm__ __volatile__ ("movesw %0@+,%/d0\n\t"
 			 "movew %/d0,%1@+\n\t"
 			 : "=a" (from), "=a" (to)
 			 : "0" (from), "1" (to)
@@ -255,7 +255,7 @@ static inline void __generic_memcpy_fromfs(void * to, const void * from, unsigne
 			 "moveb %/d0,%1@\n\t"
 			 : /* no outputs */
 			 : "a" (from), "a" (to)
-			      : "d0", "memory");
+			 : "d0", "memory");
 }
 
 static inline void __constant_memcpy_fromfs(void * to, const void * from, unsigned long n)

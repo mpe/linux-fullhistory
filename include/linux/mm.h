@@ -9,7 +9,8 @@
 
 #include <linux/string.h>
 
-extern unsigned long high_memory;
+extern unsigned long max_mapnr;
+extern void * high_memory;
 
 #include <asm/page.h>
 #include <asm/atomic.h>
@@ -274,13 +275,6 @@ extern void mem_init(unsigned long start_mem, unsigned long end_mem);
 extern void show_mem(void);
 extern void oom(struct task_struct * tsk);
 extern void si_meminfo(struct sysinfo * val);
-
-/* vmalloc.c */
-
-extern void * vmalloc(unsigned long size);
-extern void * vremap(unsigned long offset, unsigned long size);
-extern void vfree(void * addr);
-extern int vread(char *buf, char *addr, int count);
 
 /* mmap.c */
 extern unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,

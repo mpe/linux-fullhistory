@@ -108,7 +108,8 @@ unsigned long * create_elf_tables(char *p, int argc, int envc,
 				  unsigned long load_addr,
 				  unsigned long interp_load_addr, int ibcs)
 {
-	unsigned long *argv, *envp, *dlinfo;
+	char **argv, **envp;
+	unsigned long *dlinfo;
 	unsigned long *sp;
 
 	/*
@@ -118,12 +119,12 @@ unsigned long * create_elf_tables(char *p, int argc, int envc,
 	sp -= exec ? DLINFO_ITEMS*2 : 2;
 	dlinfo = sp;
 	sp -= envc+1;
-	envp = sp;
+	envp = (char **) sp;
 	sp -= argc+1;
-	argv = sp;
+	argv = (char **) sp;
 	if (!ibcs) {
-		put_user(envp,--sp);
-		put_user(argv,--sp);
+		put_user((unsigned long) envp,--sp);
+		put_user((unsigned long) argv,--sp);
 	}
 
 #define NEW_AUX_ENT(id, val) \
@@ -154,13 +155,13 @@ unsigned long * create_elf_tables(char *p, int argc, int envc,
 		put_user(p,argv++);
 		while (get_user(p++)) /* nothing */ ;
 	}
-	put_user(0,argv);
+	put_user(NULL, argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
 		put_user(p,envp++);
 		while (get_user(p++)) /* nothing */ ;
 	}
-	put_user(0,envp);
+	put_user(NULL, envp);
 	current->mm->env_end = (unsigned long) p;
 	return sp;
 }
@@ -754,8 +755,8 @@ do_load_elf_library(int fd){
 		return -EACCES;
 
 	/* seek to the beginning of the file */
-	if (file->f_op->lseek) {
-		if ((error = file->f_op->lseek(inode, file, 0, 0)) != 0)
+	if (file->f_op->llseek) {
+		if ((error = file->f_op->llseek(inode, file, 0, 0)) != 0)
 			return -ENOEXEC;
 	} else
 		file->f_pos = 0;
@@ -863,8 +864,8 @@ static int dump_write(struct file *file, const void *addr, int nr)
 
 static int dump_seek(struct file *file, off_t off)
 {
-	if (file->f_op->lseek) {
-		if (file->f_op->lseek(file->f_inode, file, off, 0) != off)
+	if (file->f_op->llseek) {
+		if (file->f_op->llseek(file->f_inode, file, off, 0) != off)
 			return 0;
 	} else
 		file->f_pos = off;

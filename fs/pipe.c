@@ -27,7 +27,8 @@
 /* in case of paging and multiple read/write on the same pipe. (FGC)         */
 
 
-static int pipe_read(struct inode * inode, struct file * filp, char * buf, int count)
+static long pipe_read(struct inode * inode, struct file * filp,
+	char * buf, unsigned long count)
 {
 	int chars = 0, size = 0, read = 0;
         char *pipebuf;
@@ -76,7 +77,8 @@ static int pipe_read(struct inode * inode, struct file * filp, char * buf, int c
 	return 0;
 }
 	
-static int pipe_write(struct inode * inode, struct file * filp, const char * buf, int count)
+static long pipe_write(struct inode * inode, struct file * filp,
+	const char * buf, unsigned long count)
 {
 	int chars = 0, free = 0, written = 0;
 	char *pipebuf;
@@ -124,17 +126,20 @@ static int pipe_write(struct inode * inode, struct file * filp, const char * buf
 	return written;
 }
 
-static int pipe_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
+static long long pipe_lseek(struct inode * inode, struct file * file,
+	long long offset, int orig)
 {
 	return -ESPIPE;
 }
 
-static int bad_pipe_r(struct inode * inode, struct file * filp, char * buf, int count)
+static long bad_pipe_r(struct inode * inode, struct file * filp,
+	char * buf, unsigned long count)
 {
 	return -EBADF;
 }
 
-static int bad_pipe_w(struct inode * inode, struct file * filp, const char * buf, int count)
+static long bad_pipe_w(struct inode * inode, struct file * filp,
+	const char * buf, unsigned long count)
 {
 	return -EBADF;
 }
@@ -214,7 +219,8 @@ static int fifo_select(struct inode * inode, struct file * filp, int sel_type, s
  * the open() code hasn't guaranteed a connection (O_NONBLOCK),
  * and we need to act differently until we do get a writer..
  */
-static int connect_read(struct inode * inode, struct file * filp, char * buf, int count)
+static long connect_read(struct inode * inode, struct file * filp,
+	char * buf, unsigned long count)
 {
 	if (PIPE_EMPTY(*inode) && !PIPE_WRITERS(*inode))
 		return 0;

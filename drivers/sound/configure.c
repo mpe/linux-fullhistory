@@ -735,11 +735,13 @@ ask_parameters (void)
    * IRQ and DMA settings
    */
 
+#if 0	/* Disable this broken question. */
   ask_int_choice (B (OPT_AEDSP16), "AEDSP16_BASE",
 		  "I/O base for Audio Excel DSP 16",
 		  FMT_HEX,
 		  0x220,
 		  "220 or 240");
+#endif
 
   ask_int_choice (B (OPT_SB), "SBC_BASE",
 		  "I/O base for SB",

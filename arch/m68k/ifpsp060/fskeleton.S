@@ -34,6 +34,7 @@
 |	(3) example "Call-out" table
 |
 
+#include <linux/linkage.h>
 
 |################################
 | (1) EXAMPLE CALL-OUTS		#
@@ -61,7 +62,7 @@
 |
 	.global		_060_fpsp_done
 _060_fpsp_done:
-	rte
+	bral	 _060_isp_done	| do the same as isp_done
 
 |
 | _060_real_ovfl():
@@ -79,7 +80,8 @@ _060_real_ovfl:
 	fsave		-(%sp)
 	move.w		#0x6000,0x2(%sp)
 	frestore	(%sp)+
-	rte
+	bral		SYMBOL_NAME(trap)	| jump to trap handler
+
 
 |
 | _060_real_unfl():
@@ -97,7 +99,7 @@ _060_real_unfl:
 	fsave		-(%sp)
 	move.w		#0x6000,0x2(%sp)
 	frestore	(%sp)+
-	rte
+	bral		SYMBOL_NAME(trap)	| jump to trap handler
 
 |
 | _060_real_operr():
@@ -116,7 +118,7 @@ _060_real_operr:
 	fsave		-(%sp)
 	move.w		#0x6000,0x2(%sp)
 	frestore	(%sp)+
-	rte
+	bral		SYMBOL_NAME(trap)	| jump to trap handler
 
 |
 | _060_real_snan():
@@ -135,7 +137,7 @@ _060_real_snan:
 	fsave		-(%sp)
 	move.w		#0x6000,0x2(%sp)
 	frestore	(%sp)+
-	rte
+	bral		SYMBOL_NAME(trap)	| jump to trap handler
 
 |
 | _060_real_dz():
@@ -154,7 +156,7 @@ _060_real_dz:
 	fsave		-(%sp)
 	move.w		#0x6000,0x2(%sp)
 	frestore	(%sp)+
-	rte
+	bral		SYMBOL_NAME(trap)	| jump to trap handler
 
 |
 | _060_real_inex():
@@ -173,7 +175,7 @@ _060_real_inex:
 	fsave		-(%sp)
 	move.w		#0x6000,0x2(%sp)
 	frestore	(%sp)+
-	rte
+	bral		SYMBOL_NAME(trap)	| jump to trap handler
 
 |
 | _060_real_bsun():
@@ -189,14 +191,13 @@ _060_real_inex:
 |
 	.global		_060_real_bsun
 _060_real_bsun:
-	fsave		-(%sp)
+|	fsave		-(%sp)
 
 	fmove.l		%fpsr,-(%sp)
 	andi.b		#0xfe,(%sp)
 	fmove.l		(%sp)+,%fpsr
 
-	add.l		#0xc,%sp
-	rte
+	bral		SYMBOL_NAME(trap)	| jump to trap handler
 
 |
 | _060_real_fline():
@@ -210,7 +211,7 @@ _060_real_bsun:
 | 
 	.global		_060_real_fline
 _060_real_fline:
-	bras		_060_real_fline
+	bral		SYMBOL_NAME(trap)	| jump to trap handler
 
 |
 | _060_real_fpu_disabled():
@@ -230,11 +231,9 @@ _060_real_fline:
 	.global		_060_real_fpu_disabled
 _060_real_fpu_disabled:
 	move.l		%d0,-(%sp)		| enabled the fpu
-	.long	0x4E7A0808
-	|movec		pcr,d0
+	.long	0x4E7A0808			|movec		pcr,%d0
 	bclr		#0x1,%d0
-	.long	0x4E7B0808
-	|movec		%d0,pcr
+	.long	0x4E7B0808			|movec		%d0,pcr
 	move.l		(%sp)+,%d0
 
 	move.l		0xc(%sp),0x2(%sp)	| set "Current PC"
@@ -251,7 +250,7 @@ _060_real_fpu_disabled:
 |
 	.global		_060_real_trap
 _060_real_trap:
-	rte
+	bral		SYMBOL_NAME(trap)	| jump to trap handler
 
 |############################################################################
 

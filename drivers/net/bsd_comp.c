@@ -67,6 +67,7 @@
 #include <linux/ioport.h>
 #include <linux/in.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
 #include <linux/tty.h>
 #include <linux/errno.h>
 #include <linux/sched.h>	/* to get the struct task_struct */

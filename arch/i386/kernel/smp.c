@@ -67,7 +67,7 @@ int apic_version[NR_CPUS];				/* APIC version number					*/
 static volatile int smp_commenced=0;			/* Tripped when we start scheduling 		    	*/
 unsigned long apic_addr=0xFEE00000;			/* Address of APIC (defaults to 0xFEE00000)		*/
 unsigned long nlong = 0;				/* dummy used for apic_reg address + 0x20		*/
-unsigned char *apic_reg=((unsigned char *)(&nlong))-0x20;/* Later set to the vremap() of the APIC 		*/
+unsigned char *apic_reg=((unsigned char *)(&nlong))-0x20;/* Later set to the ioremap() of the APIC 		*/
 unsigned long apic_retval;				/* Just debugging the assembler.. 			*/
 unsigned char *kernel_stacks[NR_CPUS];			/* Kernel stack pointers for CPU's (debugging)		*/
 
@@ -619,7 +619,7 @@ void smp_boot_cpus(void)
 	 *	Map the local APIC into kernel space
 	 */
 
-	apic_reg = vremap(apic_addr,4096);
+	apic_reg = ioremap(apic_addr,4096);
 	
 	if(apic_reg == NULL)
 		panic("Unable to map local apic.\n");

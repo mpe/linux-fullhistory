@@ -183,14 +183,8 @@ values.  To do the latter, you can stick the following in your .emacs file:
   "C mode with adjusted defaults for use with the Linux kernel."
   (interactive)
   (c-mode)
-  (setq c-indent-level 8)
-  (setq c-brace-imaginary-offset 0)
-  (setq c-brace-offset -8)
-  (setq c-argdecl-indent 8)
-  (setq c-label-offset -8)
-  (setq c-continued-statement-offset 8)
-  (setq indent-tabs-mode nil)
-  (setq tab-width 8))
+  (c-set-style "K&R")
+  (setq c-basic-offset 8))
 
 This will define the M-x linux-c-mode command.  When hacking on a
 module, if you put the string -*- linux-c -*- somewhere on the first

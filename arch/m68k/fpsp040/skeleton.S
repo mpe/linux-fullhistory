@@ -46,15 +46,6 @@
 |
 |	The following counters are used for standalone testing
 |
-sigunimp:	.long	0
-sigbsun:		.long	0
-siginex:		.long	0
-sigdz:		.long	0
-sigunfl:		.long	0
-sigovfl:		.long	0
-sigoperr:	.long	0
-sigsnan:		.long	0
-sigunsupp:	.long	0
 
 	|section 8
  
@@ -84,8 +75,6 @@ real_dz:
 	bclrb		#E1,E_BYTE(%a6)
 	frestore	(%sp)+
 	unlk		%a6
-
-	addl	#1,sigdz		|for standalone testing
 
 	SAVE_ALL
 	moveq	#-1,%d0
@@ -160,8 +149,6 @@ not_b1232:
 
 real_inex:
 
-	addl		#1,siginex		|for standalone testing
-
 	link		%a6,#-LOCAL_SIZE
 	fsave		-(%sp)
 not_fmt40:
@@ -203,8 +190,6 @@ ovfl:
 	jmp	fpsp_ovfl
 real_ovfl:
 
-	addl		#1,sigovfl		|for standalone testing
-
 	link		%a6,#-LOCAL_SIZE
 	fsave		-(%sp)
 	bclrb		#E3,E_BYTE(%a6)		|clear and test E3 flag
@@ -233,8 +218,6 @@ ovfl_done:
 unfl:
 	jmp	fpsp_unfl
 real_unfl:
-
-	addl		#1,sigunfl		|for standalone testing
 
 	link		%a6,#-LOCAL_SIZE
 	fsave		-(%sp)
@@ -270,8 +253,6 @@ real_snan:
 	frestore	(%sp)+
 	unlk		%a6
 
-	addl		#1,sigsnan		|for standalone testing
-
 	SAVE_ALL
 	moveq	#-1,%d0
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
@@ -296,9 +277,6 @@ real_operr:
 	bclrb		#E1,E_BYTE(%a6)	|operr is always an E1 exception
 	frestore	(%sp)+
 	unlk		%a6
-
-	addl		#1,sigoperr		|for standalone testing
-
 
 	SAVE_ALL
 	moveq	#-1,%d0
@@ -331,10 +309,6 @@ real_bsun:
 	frestore	(%sp)+
 	unlk		%a6
 
-	addl		#1,sigbsun		|for standalone testing
-
-
-
 	SAVE_ALL
 	moveq	#-1,%d0
 	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
@@ -358,9 +332,6 @@ real_bsun:
 fline:
 	jmp	fpsp_fline
 real_fline:
-
-	addl		#1,sigunimp		|for standalone testing
-
 
 	SAVE_ALL
 	moveq	#-1,%d0
@@ -386,9 +357,6 @@ real_unsupp:
 	bclrb		#E1,E_BYTE(%a6)	|unsupp is always an E1 exception
 	frestore	(%sp)+
 	unlk		%a6
-
-	addl		#1,sigunsupp		|for standalone testing
-
 
 	SAVE_ALL
 	moveq	#-1,%d0

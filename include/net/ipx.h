@@ -28,9 +28,9 @@ typedef struct
 
 typedef struct ipx_packet
 {
-	unsigned short	ipx_checksum;
+	unsigned short	ipx_checksum __attribute__ ((packed));
 #define IPX_NO_CHECKSUM	0xFFFF
-	unsigned short  ipx_pktsize;
+	unsigned short  ipx_pktsize __attribute__ ((packed));
 	unsigned char   ipx_tctrl;
 	unsigned char   ipx_type;
 #define IPX_TYPE_UNKNOWN	0x00

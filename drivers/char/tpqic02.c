@@ -1878,7 +1878,8 @@ static void qic02_tape_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 } /* qic02_tape_interrupt */
 
 
-static int qic02_tape_lseek(struct inode * inode, struct file * file, off_t offset, int origin)
+static long long qic02_tape_lseek(struct inode * inode, struct file * file,
+	long long offset, int origin)
 {
 	return -EINVAL;	/* not supported */
 } /* qic02_tape_lseek */
@@ -1916,7 +1917,8 @@ static int qic02_tape_lseek(struct inode * inode, struct file * file, off_t offs
  * request would return the EOF flag for the previous file.
  */
 
-static int qic02_tape_read(struct inode * inode, struct file * filp, char * buf, int count)
+static long qic02_tape_read(struct inode * inode, struct file * filp,
+	char * buf, unsigned long count)
 {
 	int error;
 	kdev_t dev = inode->i_rdev;
@@ -1931,7 +1933,7 @@ static int qic02_tape_read(struct inode * inode, struct file * filp, char * buf,
 
 	if (TP_DIAGS(current_tape_dev))
 		/* can't print a ``long long'' (for filp->f_pos), so chop it */
-		printk(TPQIC02_NAME ": request READ, minor=%x, buf=%p, count=%x, pos=%lx, flags=%x\n",
+		printk(TPQIC02_NAME ": request READ, minor=%x, buf=%p, count=%lx, pos=%lx, flags=%x\n",
 			MINOR(dev), buf, count, (unsigned long) filp->f_pos, flags);
 
 	if (count % TAPE_BLKSIZE) {	/* Only allow mod 512 bytes at a time. */
@@ -1953,7 +1955,7 @@ static int qic02_tape_read(struct inode * inode, struct file * filp, char * buf,
 	/* This is rather ugly because it has to implement a finite state
 	 * machine in order to handle the EOF situations properly.
 	 */
-	while (count>=0) {
+	while ((signed)count>=0) {
 		bytes_done = 0;
 		/* see how much fits in the kernel buffer */
 		bytes_todo = TPQBUF_SIZE;
@@ -2091,7 +2093,8 @@ static int qic02_tape_read(struct inode * inode, struct file * filp, char * buf,
  * tape device again. The driver will detect an exception status in (No Cartridge)
  * and force a rewind. After that tar may continue writing.
  */
-static int qic02_tape_write(struct inode * inode, struct file * filp, const char * buf, int count)
+static long qic02_tape_write(struct inode * inode, struct file * filp,
+	const char * buf, unsigned long count)
 {
 	int error;
 	kdev_t dev = inode->i_rdev;
@@ -2105,7 +2108,7 @@ static int qic02_tape_write(struct inode * inode, struct file * filp, const char
 
 	if (TP_DIAGS(current_tape_dev))
 		/* can't print a ``long long'' (for filp->f_pos), so chop it */
-		printk(TPQIC02_NAME ": request WRITE, minor=%x, buf=%p, count=%x, pos=%lx, flags=%x\n",
+		printk(TPQIC02_NAME ": request WRITE, minor=%x, buf=%p, count=%lx, pos=%lx, flags=%x\n",
 			MINOR(dev), buf, count, (unsigned long) filp->f_pos, flags);
 
 	if (count % TAPE_BLKSIZE) {	/* only allow mod 512 bytes at a time */
@@ -2135,7 +2138,7 @@ static int qic02_tape_write(struct inode * inode, struct file * filp, const char
 	if (doing_read == YES)
 		terminate_read(0);
 
-	while (count>=0) {
+	while ((signed)count>=0) {
 		/* see how much fits in the kernel buffer */
 		bytes_done = 0;
 		bytes_todo = TPQBUF_SIZE;
@@ -2226,7 +2229,7 @@ static int qic02_tape_write(struct inode * inode, struct file * filp, const char
 	}
 	tpqputs(TPQD_ALWAYS, "write request for <0 bytes");
 	if (TPQDBG(DEBUG))
-		printk(TPQIC02_NAME ": status_bytes_wr %x, buf %p, total_bytes_done %lx, count %x\n", status_bytes_wr, buf, total_bytes_done, count);
+		printk(TPQIC02_NAME ": status_bytes_wr %x, buf %p, total_bytes_done %lx, count %lx\n", status_bytes_wr, buf, total_bytes_done, count);
 	return -EINVAL;
 } /* qic02_tape_write */
 

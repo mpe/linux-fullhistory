@@ -104,7 +104,7 @@ struct thread_struct {
 	unsigned short	trace, bitmap;
 	unsigned long	io_bitmap[IO_BITMAP_SIZE+1];
 	unsigned long	tr;
-	unsigned long	cr2, trap_no, error_code;
+	unsigned long	cr2, trap_no, error_code, segment;
 /* floating point info */
 	union i387_union i387;
 /* virtual 86 mode info */
@@ -113,20 +113,20 @@ struct thread_struct {
 	unsigned long v86flags, v86mask, v86mode;
 };
 
-#define INIT_MMAP { &init_mm, 0, 0x40000000, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
+#define INIT_MMAP { &init_mm, 0xC0000000, 0xFFFFF000, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
 
 #define INIT_TSS  { \
 	0,0, \
 	sizeof(init_kernel_stack) + (long) &init_kernel_stack, \
 	KERNEL_DS, 0, \
 	0,0,0,0,0,0, \
-	(long) &swapper_pg_dir, \
+	(long) &swapper_pg_dir - PAGE_OFFSET, \
 	0,0,0,0,0,0,0,0,0,0, \
 	USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0, \
 	_LDT(0),0, \
 	0, 0x8000, \
 	{~0, }, /* ioperm */ \
-	_TSS(0), 0, 0,0, \
+	_TSS(0), 0, 0, 0, KERNEL_DS, \
 	{ { 0, }, },  /* 387 state */ \
 	NULL, 0, 0, 0, 0 /* vm86_info */ \
 }
@@ -134,13 +134,13 @@ struct thread_struct {
 #define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)
 #define free_kernel_stack(page) free_page((page))
 
-static inline void start_thread(struct pt_regs * regs, unsigned long eip, unsigned long esp)
-{
-	regs->cs = USER_CS;
-	regs->ds = regs->es = regs->ss = regs->fs = regs->gs = USER_DS;
-	regs->eip = eip;
-	regs->esp = esp;
-}
+#define start_thread(regs, new_eip, new_esp) do {\
+	set_fs(USER_DS); \
+	regs->cs = USER_CS; \
+	regs->ds = regs->es = regs->ss = regs->fs = regs->gs = USER_DS; \
+	regs->eip = new_eip; \
+	regs->esp = new_esp; \
+} while (0)
 
 /*
  * Return saved PC of a blocked thread.

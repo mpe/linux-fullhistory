@@ -327,6 +327,8 @@
 #include <linux/ioport.h>
 #include <linux/major.h> 
 #include <linux/string.h>
+#include <linux/vmalloc.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>

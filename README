@@ -1,9 +1,23 @@
 
-	Linux kernel release 2.0.xx
+	Linux kernel release 2.1.xx
 
-These are the release notes for linux version 2.0.  Read them carefully,
+These are the release notes for linux version 2.1.  Read them carefully,
 as they tell you what this is all about, explain how to install the
 kernel, and what to do if something goes wrong. 
+
+Linux version 2.1 is a DEVELOPMENT kernel, and not intended for general
+public use.  Different releases may have various and sometimes severe
+bugs.  It is *strongly* recommended that you back up the previous kernel
+before installing any new 2.1.xx release.
+
+If you need to use a proven and stable Linux kernel, please use 1.0.9,
+1.2.13, or 2.0.xx.  All features which will be in the 2.1.xx releases will
+be contained in 2.2.xx when the code base has stabilized again.
+
+If you decide to use 2.1, it is recommended that you join the kernel mailing
+list.  To do this, e-mail majordomo@vger.rutgers.edu, and put in the body
+of the message "subscribe linux-kernel" or "subscribe linux-kernel-digest"
+for a daily digest of the mailing list (it is a high-traffic list.)
 
 WHAT IS LINUX?
 
@@ -27,7 +41,7 @@ ON WHAT HARDWARE DOES IT RUN?
 
 DOCUMENTATION:
 
- - there is a lot of documentation available both in electronic form on
+ - There is a lot of documentation available both in electronic form on
    the internet and in books, both Linux-specific and pertaining to
    general UNIX questions.  I'd recommend looking into the documentation
    subdirectories on any Linux ftp site for the LDP (Linux Documentation
@@ -44,13 +58,13 @@ INSTALLING the kernel:
  - If you install the full sources, do a
 
 		cd /usr/src
-		gzip -cd linux-2.0.XX.tar.gz | tar xfv -
+		gzip -cd linux-2.1.XX.tar.gz | tar xfv -
 
    to get it all put in place. Replace "XX" with the version number of the
    latest kernel.
 
- - You can also upgrade between 2.0.xx releases by patching.  Each
-   patch that is released for 2.0.xx contains only bugfixes.  No
+ - You can also upgrade between 2.1.xx releases by patching.  Each
+   patch that is released for 2.1.xx contains only bugfixes.  No
    new features will be added to the Linux kernel until the 2.1.xx
    development effort begins.  To install by patching, get all the
    newer patch files and do
@@ -76,7 +90,7 @@ INSTALLING the kernel:
    the current directory, but an alternative directory can be specified
    as the second argument.
 
- - make sure your /usr/include/asm, /usr/include/linux, and /usr/include/scsi
+ - Make sure your /usr/include/asm, /usr/include/linux, and /usr/include/scsi
    directories are just symlinks to the kernel sources:
 
 		cd /usr/include
@@ -85,7 +99,7 @@ INSTALLING the kernel:
 		ln -s /usr/src/linux/include/linux linux
 		ln -s /usr/src/linux/include/scsi scsi
 
- - make sure you have no stale .o files and dependencies lying around:
+ - Make sure you have no stale .o files and dependencies lying around:
 
 		cd /usr/src/linux
 		make mrproper
@@ -94,7 +108,7 @@ INSTALLING the kernel:
 
 CONFIGURING the kernel:
 
- - do a "make config" to configure the basic kernel.  "make config"
+ - Do a "make config" to configure the basic kernel.  "make config"
    needs bash to work: it will search for bash in $BASH, /bin/bash and
    /bin/sh (in that order), so hopefully one of those is correct. 
 
@@ -128,26 +142,28 @@ CONFIGURING the kernel:
 
 COMPILING the kernel:
 
- - make sure you have gcc-2.6.3 or newer available.  It seems older gcc
-   versions can have problems compiling newer versions of linux.  If you
-   upgrade your compiler, remember to get the new binutils package too
+ - Make sure you have gcc-2.7.0 or newer available.  It seems older gcc
+   versions can have problems compiling newer versions of linux.  This
+   is mainly because they only compile programs in the a.out binary
+   format.  As of Linux 2.1.0, the kernel must be compiled as ELF.  If
+   you upgrade your compiler, remember to get the new binutils package too
    (for as/ld/nm and company).
 
- - do a "make zImage" to create a compressed kernel image.  If you want
+ - Do a "make zImage" to create a compressed kernel image.  If you want
    to make a bootdisk (without root filesystem or lilo), insert a floppy
    in your A: drive, and do a "make zdisk".  It is also possible to do
    "make zlilo" if you have lilo installed to suit the kernel makefiles,
    but you may want to check your particular lilo setup first. 
 
- - if your kernel is too large for "make zImage", use "make bzImage"
+ - If your kernel is too large for "make zImage", use "make bzImage"
    instead.
 
- - if you configured any of the parts of the kernel as `modules', you
+ - If you configured any of the parts of the kernel as `modules', you
    will have to do "make modules" followed by "make modules_install".
    Read Documentation/modules.txt for more information.  For example,
    an explanation of how to use the modules is included there.
 
- - keep a backup kernel handy in case something goes wrong.  This is 
+ - Keep a backup kernel handy in case something goes wrong.  This is 
    especially true for the development releases, since each new release
    contains new code which has not been debugged. 
 
@@ -157,9 +173,9 @@ COMPILING the kernel:
 
    For some, this is on a floppy disk, in which case you can "cp
    /usr/src/linux/arch/i386/boot/zImage /dev/fd0" to make a bootable
-   floppy.  Note that as of Linux 2.0.0, a kernel copied to a 720k
-   double-density 3.5" floppy disk no longer boots.  In this case,
-   it is highly recommended that you install LILO on your
+   floppy.  Note that a change in the 1.3.x series prevented a kernel
+   copied to a 720k double-density 3.5" floppy from booting.  In this
+   case, it is highly recommended that you install LILO on your
    double-density bootfloppy or switch to high-density floppies.
 
    If you boot Linux from the hard drive, chances are you use LILO which
@@ -183,11 +199,11 @@ COMPILING the kernel:
    alternatively the LILO boot options when appropriate).  No need to
    recompile the kernel to change these parameters. 
 
- - reboot with the new kernel and enjoy. 
+ - Reboot with the new kernel and enjoy. 
 
 IF SOMETHING GOES WRONG:
 
- - if you have problems that seem to be due to kernel bugs, please check
+ - If you have problems that seem to be due to kernel bugs, please check
    the file MAINTAINERS to see if there is a particular person associated
    with the part of the kernel that you are having trouble with. If there
    isn't anyone listed there, then the second best thing is to mail
@@ -201,7 +217,7 @@ IF SOMETHING GOES WRONG:
    sense).  If the problem is new, tell me so, and if the problem is
    old, please try to tell me when you first noticed it.
 
- - if the bug results in a message like
+ - If the bug results in a message like
 
 	unable to handle kernel paging request at address C0000010
 	Oops: 0002
@@ -224,7 +240,7 @@ IF SOMETHING GOES WRONG:
    the C++ sources under the scripts/ directory to avoid having to do
    the dump lookup by hand:
 
- - in debugging dumps like the above, it helps enormously if you can
+ - In debugging dumps like the above, it helps enormously if you can
    look up what the EIP value means.  The hex value as such doesn't help
    me or anybody else very much: it will depend on your particular
    kernel setup.  What you should do is take the hex value from the EIP
@@ -255,7 +271,7 @@ IF SOMETHING GOES WRONG:
    kernel image or similar), telling me as much about your setup as
    possible will help. 
 
- - alternately, you can use gdb on a running kernel. (read-only; i.e. you
+ - Alternately, you can use gdb on a running kernel. (read-only; i.e. you
    cannot change values or set break points.) To do this, first compile the
    kernel with -g; edit arch/i386/Makefile appropriately, then do a "make
    clean". You'll also need to enable CONFIG_PROC_FS (via "make config").

@@ -14,7 +14,8 @@
 
 #include <asm/segment.h>
 
-static int minix_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
+static long minix_dir_read(struct inode * inode, struct file * filp,
+	char * buf, unsigned long count)
 {
 	return -EISDIR;
 }

@@ -17,7 +17,7 @@
  */
 
 static const char *version = 
-	"Equalizer1996: $Revision: 1.2 $ $Date: 1996/04/11 17:51:52 $ Simon Janes (simon@ncm.com)\n";
+	"Equalizer1996: $Revision: 1.2.1 $ $Date: 1996/09/22 13:52:00 $ Simon Janes (simon@ncm.com)\n";
 
 /*
  * Sources:
@@ -459,28 +459,35 @@ static int eql_enslave(struct device *dev, slaving_request_t *srqp)
 
 	if (master_dev != 0 && slave_dev != 0)
 	{
-		if (! eql_is_master (slave_dev)  &&   /* slave is not a master */
-			! eql_is_slave (slave_dev)      ) /* slave is not already a slave */
-		{
-			slave_t *s = eql_new_slave ();
-			equalizer_t *eql = (equalizer_t *) master_dev->priv;
-			s->dev = slave_dev;
-			s->priority = srq.priority;
-			s->priority_bps = srq.priority;
-			s->priority_Bps = srq.priority / 8;
-			slave_dev->flags |= IFF_SLAVE;
-			eql_insert_slave (eql->queue, s);
-			return 0;
+		if ((master_dev->flags & IFF_UP) == IFF_UP)
+                {
+			/*slave is not a master & not already a slave:*/
+			if (! eql_is_master (slave_dev)  &&
+			    ! eql_is_slave (slave_dev) )
+			{
+				slave_t *s = eql_new_slave ();
+				equalizer_t *eql = 
+					(equalizer_t *) master_dev->priv;
+				s->dev = slave_dev;
+				s->priority = srq.priority;
+				s->priority_bps = srq.priority;
+				s->priority_Bps = srq.priority / 8;
+				slave_dev->flags |= IFF_SLAVE;
+				eql_insert_slave (eql->queue, s);
+				return 0;
+			}
+#ifdef EQL_DEBUG
+			else if (eql_debug >= 20)
+				printk ("EQL enslave: slave is master or slave is already slave\n");
+#endif  
 		}
 #ifdef EQL_DEBUG
-	if (eql_debug >= 20)
-		printk ("EQL enslave: slave is master or slave is already slave\n");
+		else if (eql_debug >= 20)
+			printk ("EQL enslave: master device not up!\n");
 #endif  
-
-		return -EINVAL;
 	}
 #ifdef EQL_DEBUG
-	if (eql_debug >= 20)
+	else if (eql_debug >= 20)
 		printk ("EQL enslave: master or slave are NULL");
 #endif  
 	return -EINVAL;

@@ -80,12 +80,12 @@
 extern void export_net_symbols(void);
 #endif
 
-static int sock_lseek(struct inode *inode, struct file *file, off_t offset,
-		      int whence);
-static int sock_read(struct inode *inode, struct file *file, char *buf,
-		     int size);
-static int sock_write(struct inode *inode, struct file *file, const char *buf,
-		      int size);
+static long long sock_lseek(struct inode *inode, struct file *file,
+			    long long offset, int whence);
+static long sock_read(struct inode *inode, struct file *file,
+		      char *buf, unsigned long size);
+static long sock_write(struct inode *inode, struct file *file,
+		       const char *buf, unsigned long size);
 
 static void sock_close(struct inode *inode, struct file *file);
 static int sock_select(struct inode *inode, struct file *file, int which, select_table *seltable);
@@ -316,9 +316,10 @@ void sock_release(struct socket *sock)
  *	Sockets are not seekable.
  */
 
-static int sock_lseek(struct inode *inode, struct file *file, off_t offset, int whence)
+static long long sock_lseek(struct inode *inode, struct file *file,
+	long long offset, int whence)
 {
-	return(-ESPIPE);
+	return -ESPIPE;
 }
 
 /*
@@ -326,7 +327,8 @@ static int sock_lseek(struct inode *inode, struct file *file, off_t offset, int 
  *	area ubuf...ubuf+size-1 is writable before asking the protocol.
  */
 
-static int sock_read(struct inode *inode, struct file *file, char *ubuf, int size)
+static long sock_read(struct inode *inode, struct file *file,
+	char *ubuf, unsigned long size)
 {
 	struct socket *sock;
 	int err;
@@ -358,7 +360,8 @@ static int sock_read(struct inode *inode, struct file *file, char *ubuf, int siz
  *	readable by the user process.
  */
 
-static int sock_write(struct inode *inode, struct file *file, const char *ubuf, int size)
+static long sock_write(struct inode *inode, struct file *file,
+	const char *ubuf, unsigned long size)
 {
 	struct socket *sock;
 	int err;

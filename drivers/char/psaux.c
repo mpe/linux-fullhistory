@@ -388,11 +388,12 @@ static int open_qp(struct inode * inode, struct file * file)
  * Write to the aux device.
  */
 
-static int write_aux(struct inode * inode, struct file * file, const char * buffer, int count)
+static long write_aux(struct inode * inode, struct file * file,
+	const char * buffer, unsigned long count)
 {
 	int retval = 0;
 
-	if (count > 0) {
+	if (count) {
 		int written = 0;
 
 		/* disable kbd bh to avoid mixing of cmd bytes */
@@ -425,7 +426,8 @@ static int write_aux(struct inode * inode, struct file * file, const char * buff
  * Write to the 82C710 mouse device.
  */
 
-static int write_qp(struct inode * inode, struct file * file, const char * buffer, int count)
+static long write_qp(struct inode * inode, struct file * file,
+	const char * buffer, unsigned long count)
 {
 	int i = count;
 
@@ -444,7 +446,8 @@ static int write_qp(struct inode * inode, struct file * file, const char * buffe
  * Put bytes from input queue to buffer.
  */
 
-static int read_aux(struct inode * inode, struct file * file, char * buffer, int count)
+static long read_aux(struct inode * inode, struct file * file,
+	char * buffer, unsigned long count)
 {
 	struct wait_queue wait = { current, NULL };
 	int i = count;

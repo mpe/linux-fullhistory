@@ -27,8 +27,8 @@ extern struct inode *pseudo_root;
 /*
 	So  grep *  doesn't complain in the presence of directories.
 */
-int UMSDOS_dir_read(struct inode *inode,struct file *filp,char *buf,
-    int count)
+long UMSDOS_dir_read(struct inode *inode,struct file *filp,
+	char *buf, unsigned long count)
 {
 	return -EISDIR;
 }

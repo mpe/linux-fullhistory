@@ -54,8 +54,10 @@ typedef unsigned long pgprot_t;
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
 /* This handles the memory map.. */
-#define PAGE_OFFSET		0
-#define MAP_NR(addr)		(((unsigned long)(addr)) >> PAGE_SHIFT)
+#define PAGE_OFFSET		0xC0000000
+#define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
+#define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
+#define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
 
 #endif /* __KERNEL__ */
 

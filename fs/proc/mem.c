@@ -76,7 +76,8 @@ static struct task_struct * get_task(int pid)
 	return tsk;
 }
 
-static int mem_read(struct inode * inode, struct file * file,char * buf, int count)
+static long mem_read(struct inode * inode, struct file * file,
+	char * buf, unsigned long count)
 {
 	pgd_t *page_dir;
 	pmd_t *page_middle;
@@ -87,8 +88,6 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 	char *tmp;
 	int i;
 
-	if (count < 0)
-		return -EINVAL;
 	tsk = get_task(inode->i_ino >> 16);
 	if (!tsk)
 		return -ESRCH;
@@ -134,7 +133,8 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 
 #ifndef mem_write
 
-static int mem_write(struct inode * inode, struct file * file,char * buf, int count)
+static long mem_write(struct inode * inode, struct file * file,
+	char * buf, unsigned long count)
 {
 	pgd_t *page_dir;
 	pmd_t *page_middle;
@@ -145,8 +145,6 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 	char *tmp;
 	int i;
 
-	if (count < 0)
-		return -EINVAL;
 	addr = file->f_pos;
 	tsk = get_task(inode->i_ino >> 16);
 	if (!tsk)
@@ -195,7 +193,8 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 
 #endif
 
-static int mem_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
+static long long mem_lseek(struct inode * inode, struct file * file,
+	long long offset, int orig)
 {
 	switch (orig) {
 		case 0:

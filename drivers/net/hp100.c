@@ -390,9 +390,9 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
         }
       if ( mem_mapped && bus == HP100_BUS_PCI )
         {
-          if ( ( mem_ptr_virt = vremap( (u_long)mem_ptr_phys, 0x2000 ) ) == NULL )
+          if ( ( mem_ptr_virt = ioremap( (u_long)mem_ptr_phys, 0x2000 ) ) == NULL )
             {
-              printk( "hp100: vremap for high PCI memory at 0x%lx failed\n", (u_long)mem_ptr_phys );
+              printk( "hp100: ioremap for high PCI memory at 0x%lx failed\n", (u_long)mem_ptr_phys );
               mem_ptr_phys = NULL;
               mem_mapped = 0;
             }
@@ -1132,7 +1132,7 @@ void cleanup_module( void )
   unregister_netdev( &dev_hp100 );
   release_region( dev_hp100.base_addr, HP100_REGION_SIZE );
   if ( ((struct hp100_private *)dev_hp100.priv) -> mem_ptr_virt )
-    vfree( ((struct hp100_private *)dev_hp100.priv) -> mem_ptr_virt );
+    iounmap( ((struct hp100_private *)dev_hp100.priv) -> mem_ptr_virt );
   kfree_s( dev_hp100.priv, sizeof( struct hp100_private ) );
   dev_hp100.priv = NULL;
 }

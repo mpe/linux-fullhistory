@@ -1,7 +1,7 @@
 /*
- *  linux/atari/config.c
+ *  linux/arch/m68k/atari/config.c
  *
- *  Copyright (C) 1994 Bj”rn Brauel
+ *  Copyright (C) 1994 Bjoern Brauel
  *
  *  5/2/94 Roman Hodek:
  *    Added setting of time_adj to get a better clock.
@@ -27,12 +27,13 @@
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/mm.h>
-#include <asm/bootinfo.h>
 #include <linux/mc146818rtc.h>
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/console.h>
+#include <linux/interrupt.h>
 
+#include <asm/setup.h>
 #include <asm/atarihw.h>
 #include <asm/atarihdreg.h>
 #include <asm/atariints.h>
@@ -43,16 +44,20 @@
 #include <asm/pgtable.h>
 #include <asm/machdep.h>
 
-extern void atari_sched_init(isrfunc);
+extern void atari_sched_init(void (*)(int, void *, struct pt_regs *));
+/* atari specific keyboard functions */
 extern int atari_keyb_init(void);
 extern int atari_kbdrate (struct kbd_repeat *);
 extern void atari_kbd_leds (unsigned int);
-extern void atari_init_INTS (void);
-extern int atari_add_isr (unsigned long, isrfunc, int, void *, char *);
-extern int atari_remove_isr (unsigned long, isrfunc, void *);
-extern void atari_enable_irq (unsigned);
-extern void atari_disable_irq (unsigned);
-extern int atari_get_irq_list (char *buf, int len);
+/* atari specific irq functions */
+extern void atari_init_IRQ (void);
+extern int atari_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+                              unsigned long flags, const char *devname, void *dev_id);
+extern int atari_free_irq (unsigned int irq, void *dev_id);
+extern void atari_enable_irq (unsigned int);
+extern void atari_disable_irq (unsigned int);
+extern int atari_get_irq_list (char *buf);
+/* atari specific timer functions */
 extern unsigned long atari_gettimeoffset (void);
 extern void atari_mste_gettod (int *, int *, int *, int *, int *, int *);
 extern void atari_gettod (int *, int *, int *, int *, int *, int *);
@@ -206,9 +211,9 @@ void config_atari(void)
     mach_keyb_init       = atari_keyb_init;
     mach_kbdrate         = atari_kbdrate;
     mach_kbd_leds        = atari_kbd_leds;
-    mach_init_INTS       = atari_init_INTS;
-    mach_add_isr         = atari_add_isr;
-    mach_remove_isr      = atari_remove_isr;
+    mach_init_IRQ        = atari_init_IRQ;
+    mach_request_irq     = atari_request_irq;
+    mach_free_irq        = atari_free_irq;
     mach_enable_irq      = atari_enable_irq;
     mach_disable_irq     = atari_disable_irq;
     mach_get_irq_list	 = atari_get_irq_list;
@@ -380,7 +385,7 @@ void config_atari(void)
     }
     printk("\n");
 
-    if (m68k_is040or060)
+    if (CPU_IS_040_OR_060)
         /* Now it seems to be safe to turn of the tt0 transparent
          * translation (the one that must not be turned off in
          * head.S...)
@@ -406,7 +411,7 @@ void config_atari(void)
      * design of the bus.
      */
 
-    if (!m68k_is040or060) {
+    if (CPU_IS_020_OR_030) {
         unsigned long	tt1_val;
         tt1_val = 0xfe008543;	/* Translate 0xfexxxxxx, enable, cache
                                  * inhibit, read and write, FDC mask = 3,
@@ -427,14 +432,15 @@ void config_atari(void)
     }
 }
 
-void atari_sched_init (isrfunc timer_routine)
+void atari_sched_init(void (*timer_routine)(int, void *, struct pt_regs *))
 {
     /* set Timer C data Register */
     mfp.tim_dt_c = INT_TICKS;
     /* start timer C, div = 1:100 */
     mfp.tim_ct_cd = (mfp.tim_ct_cd & 15) | 0x60; 
     /* install interrupt service routine for MFP Timer C */
-    add_isr (IRQ_MFP_TIMC, timer_routine, IRQ_TYPE_SLOW, NULL, "timer");
+    request_irq(IRQ_MFP_TIMC, timer_routine, IRQ_TYPE_SLOW,
+                "timer", timer_routine);
 }
 
 /* ++andreas: gettimeoffset fixed to check for pending interrupt */
@@ -1031,9 +1037,9 @@ void atari_reset (void)
 	 "movec	%/d0,%/vbr"
 	 : : : "d0" );
     
-    if (m68k_is040or060) {
+    if (CPU_IS_040_OR_060) {
         unsigned long jmp_addr040 = VTOP(&&jmp_addr_label040);
-	if (m68k_is040or060 == 6) {
+	if (CPU_IS_060) {
 	    /* 68060: clear PCR to turn off superscalar operation */
 	    __asm__ __volatile__
 		("moveq	#0,%/d0\n\t"

@@ -46,10 +46,10 @@ extern ctl_table net_table[];
 
 #ifdef CONFIG_PROC_FS
 
-static int proc_readsys(struct inode * inode, struct file * file,
-			char * buf, int count);
-static int proc_writesys(struct inode * inode, struct file * file,
-			 const char * buf, int count);
+static long proc_readsys(struct inode * inode, struct file * file,
+			char * buf, unsigned long count);
+static long proc_writesys(struct inode * inode, struct file * file,
+			 const char * buf, unsigned long count);
 static int proc_sys_permission(struct inode *, int);
 
 struct file_operations proc_sys_file_operations =
@@ -456,13 +456,14 @@ static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root
 }
 
 
-static int do_rw_proc(int write, struct inode * inode, struct file * file,
-		      char * buf, int count)
+static long do_rw_proc(int write, struct inode * inode, struct file * file,
+		      char * buf, unsigned long count)
 {
-	int error, op;
+	int op;
 	struct proc_dir_entry *de;
 	struct ctl_table *table;
 	size_t res;
+	long error;
 	
 	error = verify_area(write ? VERIFY_READ : VERIFY_WRITE, buf, count);
 	if (error)
@@ -485,14 +486,14 @@ static int do_rw_proc(int write, struct inode * inode, struct file * file,
 	return res;
 }
 
-static int proc_readsys(struct inode * inode, struct file * file,
-			char * buf, int count)
+static long proc_readsys(struct inode * inode, struct file * file,
+			char * buf, unsigned long count)
 {
 	return do_rw_proc(0, inode, file, buf, count);
 }
 
-static int proc_writesys(struct inode * inode, struct file * file,
-			 const char * buf, int count)
+static long proc_writesys(struct inode * inode, struct file * file,
+			 const char * buf, unsigned long count)
 {
 	return do_rw_proc(1, inode, file, (char *) buf, count);
 }

@@ -652,6 +652,8 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
     SDpnt->manufacturer = SCSI_MAN_SONY;
   else if (!strncmp (scsi_result + 8, "PIONEER", 7))
     SDpnt->manufacturer = SCSI_MAN_PIONEER;
+  else if (!strncmp (scsi_result + 8, "MATSHITA", 8))
+    SDpnt->manufacturer = SCSI_MAN_MATSHITA;
   else
     SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
 
@@ -2126,8 +2128,7 @@ int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 		  that the delay in internal_cmnd will guarantee at least a
 		  MIN_RESET_DELAY bus settle time.
 		*/
-		if ((host->last_reset < jiffies) || 
-		    (host->last_reset > (jiffies + 20 * HZ)))
+		if (host->last_reset - jiffies > 20UL * HZ)
 		  host->last_reset = jiffies;
 	    }
 	    else
@@ -2886,7 +2887,7 @@ static void resize_dma_pool(void)
 	
     new_dma_sectors = 2*SECTORS_PER_PAGE;		/* Base value we use */
 
-    if (high_memory-1 > ISA_DMA_THRESHOLD)
+    if (__pa(high_memory)-1 > ISA_DMA_THRESHOLD)
 	scsi_need_isa_bounce_buffers = 1;
     else
 	scsi_need_isa_bounce_buffers = 0;

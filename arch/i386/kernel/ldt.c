@@ -8,9 +8,11 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/vmalloc.h>
+
 #include <asm/segment.h>
 #include <asm/system.h>
-#include <linux/ldt.h>
+#include <asm/ldt.h>
 
 static int read_ldt(void * ptr, unsigned long bytecount)
 {

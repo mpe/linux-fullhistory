@@ -30,6 +30,7 @@
 #include <linux/swapctl.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/vmalloc.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -1865,7 +1866,7 @@ void buffer_init(void)
 {
 	int i;
 	int isize = BUFSIZE_INDEX(BLOCK_SIZE);
-	long memsize = MAP_NR(high_memory) << PAGE_SHIFT;
+	long memsize = max_mapnr << PAGE_SHIFT;
 
 	if (memsize >= 64*1024*1024)
 		nr_hash = 65521;

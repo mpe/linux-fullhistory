@@ -244,6 +244,9 @@ int date_dos2unix(unsigned short time,unsigned short date)
 	    month < 2 ? 1 : 0)+3653);
 			/* days since 1.1.70 plus 80's leap day */
 	secs += sys_tz.tz_minuteswest*60;
+	if (sys_tz.tz_dsttime) {
+	    secs -= 3600;
+	}
 	return secs;
 }
 

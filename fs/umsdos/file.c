@@ -24,11 +24,11 @@
 /*
 	Read a file into user space memory
 */
-static int UMSDOS_file_read(
+static long UMSDOS_file_read(
 	struct inode *inode,
 	struct file *filp,
 	char *buf,
-    int count)
+	unsigned long count)
 {
 	/* We have to set the access time because msdos don't care */
 	int ret = fat_file_read(inode,filp,buf,count);
@@ -41,11 +41,11 @@ static int UMSDOS_file_read(
 /*
 	Write a file from user space memory
 */
-static int UMSDOS_file_write(
+static long UMSDOS_file_write(
 	struct inode *inode,
 	struct file *filp,
 	const char *buf,
-    int count)
+	unsigned long count)
 {
 	return fat_file_write(inode,filp,buf,count);
 }

@@ -222,8 +222,8 @@ static void write_dquot(struct dquot *dquot)
 		return;
 	lock_dquot(dquot);
 	down(&dquot->dq_mnt->mnt_sem);
-	if (filp->f_op->lseek) {
-		if (filp->f_op->lseek(filp->f_inode, filp,
+	if (filp->f_op->llseek) {
+		if (filp->f_op->llseek(filp->f_inode, filp,
 		    dqoff(dquot->dq_id), 0) != dqoff(dquot->dq_id)) {
 			up(&dquot->dq_mnt->mnt_sem);
 			unlock_dquot(dquot);
@@ -252,8 +252,8 @@ static void read_dquot(struct dquot *dquot)
 		return;
 	lock_dquot(dquot);
 	down(&dquot->dq_mnt->mnt_sem);
-	if (filp->f_op->lseek) {
-		if (filp->f_op->lseek(filp->f_inode, filp,
+	if (filp->f_op->llseek) {
+		if (filp->f_op->llseek(filp->f_inode, filp,
 		    dqoff(dquot->dq_id), 0) != dqoff(dquot->dq_id)) {
 			up(&dquot->dq_mnt->mnt_sem);
 			unlock_dquot(dquot);

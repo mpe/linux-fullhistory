@@ -1,7 +1,7 @@
 /*
- * linux/amiga/amisound.c
+ * linux/arch/m68k/amiga/amisound.c
  *
- * amiga sound driver for 680x0 Linux
+ * amiga sound driver for Linux/m68k
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive
@@ -11,9 +11,9 @@
 #include <linux/sched.h>
 #include <linux/timer.h>
 
+#include <asm/amigatypes.h>
 #include <asm/system.h>
 #include <asm/amigahw.h>
-#include <asm/bootinfo.h>
 
 static u_short *snd_data = NULL;
 static const signed char sine_data[] = {

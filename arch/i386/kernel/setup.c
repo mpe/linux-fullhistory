@@ -16,7 +16,6 @@
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
-#include <linux/ldt.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
 #include <linux/tty.h>
@@ -140,10 +139,10 @@ void setup_arch(char **cmdline_p,
 	if (!MOUNT_ROOT_RDONLY)
 		root_mountflags &= ~MS_RDONLY;
 	memory_start = (unsigned long) &_end;
-	init_task.mm->start_code = TASK_SIZE;
-	init_task.mm->end_code = TASK_SIZE + (unsigned long) &_etext;
-	init_task.mm->end_data = TASK_SIZE + (unsigned long) &_edata;
-	init_task.mm->brk = TASK_SIZE + (unsigned long) &_end;
+	init_task.mm->start_code = PAGE_OFFSET;
+	init_task.mm->end_code = (unsigned long) &_etext;
+	init_task.mm->end_data = (unsigned long) &_edata;
+	init_task.mm->brk = (unsigned long) &_end;
 
 	/* Save unparsed command line copy for /proc/cmdline */
 	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
@@ -180,13 +179,14 @@ void setup_arch(char **cmdline_p,
 	}
 	*to = '\0';
 	*cmdline_p = command_line;
+	memory_end += PAGE_OFFSET;
 	*memory_start_p = memory_start;
 	*memory_end_p = memory_end;
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (LOADER_TYPE) {
-		initrd_start = INITRD_START;
-		initrd_end = INITRD_START+INITRD_SIZE;
+		initrd_start = INITRD_START + PAGE_OFFSET;
+		initrd_end = initrd_start+INITRD_SIZE;
 		if (initrd_end > memory_end) {
 			printk("initrd extends beyond end of memory "
 			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",

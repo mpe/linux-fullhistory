@@ -197,7 +197,7 @@ static void setup_frame(struct sigaction * sa,
 	put_user(regs->eflags, frame+18);
 	put_user(regs->esp, frame+19);
 	put_user(regs->ss, frame+20);
-	put_user(save_i387((struct _fpstate *)(frame+32)),frame+21);
+	put_user((unsigned long) save_i387((struct _fpstate *)(frame+32)),frame+21);
 /* non-iBCS2 extensions.. */
 	put_user(oldmask, frame+22);
 	put_user(current->tss.cr2, frame+23);

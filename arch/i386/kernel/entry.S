@@ -38,6 +38,8 @@
  *	38(%esp) - %eflags
  *	3C(%esp) - %oldesp
  *	40(%esp) - %oldss
+ *
+ * "current" is in register %ebx during any slow entries.
  */
 
 #include <linux/sys.h>
@@ -99,9 +101,7 @@ ENOSYS = 38
 	pushl %ebx; \
 	movl $(KERNEL_DS),%edx; \
 	mov %dx,%ds; \
-	mov %dx,%es; \
-	movl $(USER_DS),%edx; \
-	mov %dx,%fs;
+	mov %dx,%es;
 
 #ifdef	__SMP__
 
@@ -194,13 +194,7 @@ ENOSYS = 38
 
 
 #define RESTORE_ALL \
-	cmpw $(KERNEL_CS),CS(%esp); \
-	je 1f;   \
-	GET_PROCESSOR_OFFSET(%edx) \
-	movl SYMBOL_NAME(current_set)(,%edx), %eax ; ; \
-	movl dbgreg7(%eax),%ebx; \
-	movl %ebx,%db7;	\
-1:	LEAVE_KERNEL \
+	LEAVE_KERNEL \
 	popl %ebx; \
 	popl %ecx; \
 	popl %edx; \
@@ -215,15 +209,16 @@ ENOSYS = 38
 	addl $4,%esp; \
 	iret
 
+#define GET_CURRENT \
+	GET_PROCESSOR_OFFSET(%ebx) \
+	movl SYMBOL_NAME(current_set)(%ebx),%ebx
+
 #else
 
+#define GET_CURRENT \
+	movl SYMBOL_NAME(current_set),%ebx
+
 #define RESTORE_ALL \
-	cmpw $(KERNEL_CS),CS(%esp); \
-	je 1f;   \
-	movl SYMBOL_NAME(current_set),%eax; \
-	movl dbgreg7(%eax),%ebx; \
-	movl %ebx,%db7;	\
-1:	\
 	popl %ebx; \
 	popl %ecx; \
 	popl %edx; \
@@ -244,6 +239,7 @@ ENTRY(lcall7)
 	pushfl			# We get a different stack layout with call gates,
 	pushl %eax		# which has to be cleaned up later..
 	SAVE_ALL
+	GET_CURRENT
 #ifdef __SMP__
 	ENTER_KERNEL
 #endif
@@ -281,6 +277,7 @@ reschedule:
 ENTRY(system_call)
 	pushl %eax			# save orig_eax
 	SAVE_ALL
+	GET_CURRENT
 #ifdef __SMP__
 	ENTER_KERNEL
 #endif
@@ -290,33 +287,11 @@ ENTRY(system_call)
 	movl SYMBOL_NAME(sys_call_table)(,%eax,4),%eax
 	testl %eax,%eax
 	je ret_from_sys_call
-#ifdef __SMP__
-	GET_PROCESSOR_OFFSET(%edx)
-	movl SYMBOL_NAME(current_set)(,%edx),%ebx
-#else
-	movl SYMBOL_NAME(current_set),%ebx
-#endif
 	andl $~CF_MASK,EFLAGS(%esp)	# clear carry - assume no errors
-	movl %db6,%edx
-	movl %edx,dbgreg6(%ebx)  # save current hardware debugging status
 	testb $0x20,flags(%ebx)		# PF_TRACESYS
-	jne 1f
+	jne tracesys
 	call *%eax
 	movl %eax,EAX(%esp)		# save the return value
-	jmp ret_from_sys_call
-	ALIGN
-1:	call SYMBOL_NAME(syscall_trace)
-	movl ORIG_EAX(%esp),%eax
-	call SYMBOL_NAME(sys_call_table)(,%eax,4)
-	movl %eax,EAX(%esp)		# save the return value
-#ifdef __SMP__
-	GET_PROCESSOR_OFFSET(%eax)
-	movl SYMBOL_NAME(current_set)(,%eax),%eax
-#else
-	movl SYMBOL_NAME(current_set),%eax
-#endif
-	call SYMBOL_NAME(syscall_trace)
-
 	ALIGN
 	.globl ret_from_sys_call
 ret_from_sys_call:
@@ -336,18 +311,12 @@ ret_from_sys_call:
 	movl %eax,EFLAGS(%esp)		# stupid
 	cmpl $0,SYMBOL_NAME(need_resched)
 	jne reschedule
-#ifdef __SMP__
-	GET_PROCESSOR_OFFSET(%eax)
-	movl SYMBOL_NAME(current_set)(,%eax), %eax
-#else
-	movl SYMBOL_NAME(current_set),%eax
-#endif
-	cmpl SYMBOL_NAME(task),%eax	# task[0] cannot have signals
+	cmpl SYMBOL_NAME(task),%ebx	# task[0] cannot have signals
 	je 2f
-	movl blocked(%eax),%ecx
-	movl %ecx,%ebx			# save blocked in %ebx for signal handling
+	movl blocked(%ebx),%ecx
+	movl %ecx,%eax			# save blocked in %eax for signal handling
 	notl %ecx
-	andl signal(%eax),%ecx
+	andl signal(%ebx),%ecx
 	jne signal_return
 2:	RESTORE_ALL
 	ALIGN
@@ -356,21 +325,32 @@ signal_return:
 	pushl %ecx
 	testl $(VM_MASK),EFLAGS(%ecx)
 	jne v86_signal_return
-	pushl %ebx
+	pushl %eax
 	call SYMBOL_NAME(do_signal)
-	popl %ebx
-	popl %ebx
+	popl %eax
+	popl %eax
 	RESTORE_ALL
 	ALIGN
 v86_signal_return:
+	pushl %eax
 	call SYMBOL_NAME(save_v86_state)
+	popl %edx
 	movl %eax,%esp
 	pushl %eax
-	pushl %ebx
+	pushl %edx
 	call SYMBOL_NAME(do_signal)
-	popl %ebx
-	popl %ebx
+	popl %edx
+	popl %edx
 	RESTORE_ALL
+	ALIGN
+tracesys:
+	call SYMBOL_NAME(syscall_trace)
+	movl ORIG_EAX(%esp),%eax
+	call SYMBOL_NAME(sys_call_table)(,%eax,4)
+	movl %eax,EAX(%esp)		# save the return value
+	call SYMBOL_NAME(syscall_trace)
+	jmp ret_from_sys_call
+
 
 ENTRY(divide_error)
 	pushl $0		# no error code
@@ -390,28 +370,21 @@ error_code:
 	pushl %ecx
 	pushl %ebx
 	cld
-	xorl %ebx,%ebx			# zero ebx
+	xorl %ecx,%ecx			# zero ecx
 	xchgl %eax, ORIG_EAX(%esp)	# orig_eax (get the error code. )
 	mov %gs,%bx			# get the lower order bits of gs
 	movl %esp,%edx
-	xchgl %ebx, GS(%esp)		# get the address and save gs.
+	xchgl %ecx, GS(%esp)		# get the address and save gs.
 	pushl %eax			# push the error code
 	pushl %edx
 	movl $(KERNEL_DS),%edx
 	mov %dx,%ds
 	mov %dx,%es
-	movl $(USER_DS),%edx
-	mov %dx,%fs
+	GET_CURRENT
 #ifdef __SMP__
 	ENTER_KERNEL
-	GET_PROCESSOR_OFFSET(%eax)
-	movl SYMBOL_NAME(current_set)(,%eax), %eax
-#else
-	movl SYMBOL_NAME(current_set),%eax
 #endif
-	movl %db6,%edx
-	movl %edx,dbgreg6(%eax)  # save current hardware debugging status
-	call *%ebx
+	call *%ecx
 	addl $8,%esp
 	jmp ret_from_sys_call
 
@@ -423,6 +396,7 @@ ENTRY(coprocessor_error)
 ENTRY(device_not_available)
 	pushl $-1		# mark this as an int
 	SAVE_ALL
+	GET_CURRENT
 #ifdef __SMP__
 	ENTER_KERNEL
 #endif

@@ -152,11 +152,11 @@ static void fat_prefetch (
 /*
 	Read a file into user space
 */
-int fat_file_read(
+long fat_file_read(
 	struct inode *inode,
 	struct file *filp,
 	char *buf,
-	int count)
+	unsigned long count)
 {
 	struct super_block *sb = inode->i_sb;
 	char *start = buf;
@@ -175,7 +175,7 @@ int fat_file_read(
 		printk("fat_file_read: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
-	if (filp->f_pos >= inode->i_size || count <= 0) return 0;
+	if (filp->f_pos >= inode->i_size || count == 0) return 0;
 	/*
 		Tell the buffer cache which block we expect to read in advance
 		Since we are limited with the stack, we preread only MSDOS_PREFETCH
@@ -269,11 +269,11 @@ int fat_file_read(
 /*
 	Write to a file either from user space
 */
-int fat_file_write(
+long fat_file_write(
 	struct inode *inode,
 	struct file *filp,
 	const char *buf,
-	int count)
+	unsigned long count)
 {
 	struct super_block *sb = inode->i_sb;
 	int sector,offset,size,left,written;
@@ -301,7 +301,7 @@ int fat_file_write(
  */
 	if (filp->f_flags & O_APPEND)
 		filp->f_pos = inode->i_size;
-	if (count <= 0)
+	if (count == 0)
 		return 0;
 	error = carry = 0;
 	for (start = buf; count || carry; count -= size) {

@@ -144,7 +144,7 @@ static const struct super_operations hpfs_sops =
 
 /* file ops */
 
-static int hpfs_file_read(struct inode *, struct file *, char *, int);
+static long hpfs_file_read(struct inode *, struct file *, char *, unsigned long);
 static secno hpfs_bmap(struct inode *, unsigned);
 
 static const struct file_operations hpfs_file_ops =
@@ -185,8 +185,8 @@ static const struct inode_operations hpfs_file_iops =
 
 /* directory ops */
 
-static int hpfs_dir_read(struct inode *inode, struct file *filp,
-			 char *buf, int count);
+static long hpfs_dir_read(struct inode *inode, struct file *filp,
+			  char *buf, unsigned long count);
 static int hpfs_readdir(struct inode *inode, struct file *filp,
 			void *dirent, filldir_t filldir);
 static int hpfs_lookup(struct inode *, const char *, int, struct inode **);
@@ -321,7 +321,7 @@ static inline int ino_is_dir(ino_t ino)
 static inline time_t local_to_gmt(time_t t)
 {
 	extern struct timezone sys_tz;
-	return t + sys_tz.tz_minuteswest * 60;
+	return t + sys_tz.tz_minuteswest * 60 - (sys_tz.tz_dsttime ? 3600 : 0);
 }
 
 /* super block ops */
@@ -878,8 +878,8 @@ static unsigned count_one_bitmap(kdev_t dev, secno secno)
  * read.  Read the bytes, put them in buf, return the count.
  */
 
-static int hpfs_file_read(struct inode *inode, struct file *filp,
-			  char *buf, int count)
+static long hpfs_file_read(struct inode *inode, struct file *filp,
+			  char *buf, unsigned long count)
 {
 	unsigned q, r, n, n0;
 	struct buffer_head *bh;
@@ -1579,8 +1579,8 @@ static struct hpfs_dirent *map_nth_dirent(kdev_t dev, dnode_secno dno,
 	return 0;
 }
 
-static int hpfs_dir_read(struct inode *inode, struct file *filp,
-			 char *buf, int count)
+static long hpfs_dir_read(struct inode *inode, struct file *filp,
+			  char *buf, unsigned long count)
 {
 	return -EISDIR;
 }

@@ -35,8 +35,8 @@
 
 #define PROC_BLOCK_SIZE	(3*1024)		/* 4K page size but our output routines use some slack for overruns */
 
-static int proc_readnet(struct inode * inode, struct file * file,
-			char * buf, int count)
+static long proc_readnet(struct inode * inode, struct file * file,
+			char * buf, unsigned long count)
 {
 	char * page;
 	int bytes=count;

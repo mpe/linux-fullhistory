@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.h	Version 1.7 - ALPHA	Sep  10, 1996
+ * linux/drivers/block/ide-tape.h	Version 1.8 - ALPHA	Sep  26, 1996
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -232,6 +232,15 @@
  */
 
 #define IDETAPE_ANTICIPATE_READ_WRITE_DSC	1
+
+/*
+ *	The following parameter is used to select the point in the internal
+ *	tape fifo in which we will start to refill the buffer. Decreasing
+ *	the following parameter will improve the system's latency and
+ *	interactive response, while using a high value might improve sytem
+ *	throughput.
+ */
+#define	IDETAPE_FIFO_THRESHOLD 			2
 
 /*
  *	DSC timings.

@@ -4,6 +4,7 @@
 #include <linux/elfcore.h>
 
 #include <asm/semaphore.h>
+#include <asm/io.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
@@ -13,6 +14,7 @@ static struct symbol_table arch_symbol_table = {
 	/* platform dependent support */
 	X(dump_thread),
 	X(dump_fpu),
+	X(ioremap),
 	XNOVERS(down_failed),
 	XNOVERS(up_wakeup),
 #ifdef __SMP__

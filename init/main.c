@@ -98,6 +98,7 @@ extern void wd7000_setup(char *str, int *ints);
 extern void ppa_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
+extern void reboot_setup(char *str, int *ints);
 #ifdef CONFIG_CDU31A
 extern void cdu31a_setup(char *str, int *ints);
 #endif CONFIG_CDU31A
@@ -268,6 +269,7 @@ struct {
 #ifdef CONFIG_BUGi386
 	{ "no-hlt", no_halt },
 	{ "no387", no_387 },
+	{ "reboot=", reboot_setup },
 #endif
 #ifdef CONFIG_INET
 	{ "ether=", eth_setup },

@@ -328,14 +328,14 @@ static struct timer_rand_state *irq_timer_state[NR_IRQS];
 static struct timer_rand_state *blkdev_timer_state[MAX_BLKDEV];
 static struct wait_queue *random_wait;
 
-static int random_read(struct inode * inode, struct file * file,
-		       char * buf, int nbytes);
-static int random_read_unlimited(struct inode * inode, struct file * file,
-				 char * buf, int nbytes);
+static long random_read(struct inode * inode, struct file * file,
+		       char * buf, unsigned long nbytes);
+static long random_read_unlimited(struct inode * inode, struct file * file,
+				 char * buf, unsigned long nbytes);
 static int random_select(struct inode *inode, struct file *file,
 			 int sel_type, select_table * wait);
-static int random_write(struct inode * inode, struct file * file,
-			const char * buffer, int count);
+static long random_write(struct inode * inode, struct file * file,
+			const char * buffer, unsigned long count);
 static int random_ioctl(struct inode * inode, struct file * file,
 			unsigned int cmd, unsigned long arg);
 
@@ -1022,8 +1022,8 @@ void get_random_bytes(void *buf, int nbytes)
 	extract_entropy(&random_state, (char *) buf, nbytes, 0);
 }
 
-static int
-random_read(struct inode * inode, struct file * file, char * buf, int nbytes)
+static long
+random_read(struct inode * inode, struct file * file, char * buf, unsigned long nbytes)
 {
 	struct wait_queue 	wait = { current, NULL };
 	int			n;
@@ -1079,9 +1079,9 @@ random_read(struct inode * inode, struct file * file, char * buf, int nbytes)
 	return (count ? count : retval);
 }
 
-static int
+static long
 random_read_unlimited(struct inode * inode, struct file * file,
-		      char * buf, int nbytes)
+		      char * buf, unsigned long nbytes)
 {
 	return extract_entropy(&random_state, buf, nbytes, 1);
 }
@@ -1105,19 +1105,12 @@ random_select(struct inode *inode, struct file *file,
 	return 0;
 }
 
-static int
+static long
 random_write(struct inode * inode, struct file * file,
-	     const char * buffer, int count)
+	     const char * buffer, unsigned long count)
 {
 	int i;
 	__u32 word, *p;
-
-	if (count < 0)
-		return -EINVAL;
-
-	i = verify_area(VERIFY_READ, (void *) buffer, count);
-	if (i)
-		return i;
 
 	for (i = count, p = (__u32 *)buffer;
 	     i >= sizeof(__u32);
@@ -1230,6 +1223,9 @@ random_ioctl(struct inode * inode, struct file * file,
 		if (ent_count < 0)
 			return -EINVAL;
 		size = get_user(p++);
+		retval = verify_area(VERIFY_READ, (void *) p, size);
+		if (retval)
+			return retval;
 		retval = random_write(0, file, (const char *) p, size);
 		if (retval < 0)
 			return retval;

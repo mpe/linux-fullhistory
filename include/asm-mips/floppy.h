@@ -25,7 +25,7 @@
 #define fd_free_dma()			feature->fd_free_dma()
 #define fd_clear_dma_ff()		feature->fd_clear_dma_ff()
 #define fd_set_dma_mode(mode)		feature->fd_set_dma_mode(mode)
-#define fd_set_dma_addr(addr)		feature->fd_set_dma_addr(addr)
+#define fd_set_dma_addr(addr)		feature->fd_set_dma_addr(virt_to_bus(addr))
 #define fd_set_dma_count(count)		feature->fd_set_dma_count(count)
 #define fd_get_dma_residue()		feature->fd_get_dma_residue()
 #define fd_enable_irq()			feature->fd_enable_irq()

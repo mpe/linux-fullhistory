@@ -5,8 +5,8 @@
 			   15 April 1996
 
 
-What is  mandatory locking?
----------------------------
+1. What is  mandatory locking?
+------------------------------
 
 Mandatory locking is kernel enforced file locking, as opposed to the more usual
 cooperative file locking used to guarantee sequential access to files among
@@ -44,8 +44,8 @@ Note 2: POSIX.1 does not specify any scheme for mandatory locking, despite
 borrowing the fcntl() locking scheme from System V. The mandatory locking
 scheme is defined by the System V Interface Definition (SVID) Version 3.
 
-Marking a file for mandatory locking
-------------------------------------
+2. Marking a file for mandatory locking
+---------------------------------------
 
 A file is marked as a candidate for mandatory by setting the group-id bit in
 its file mode but removing the group-execute bit. This is an otherwise
@@ -58,8 +58,8 @@ modified to recognize the special case of a mandatory lock candidate and to
 refrain from clearing this bit. Similarly the kernel has been modified not
 to run mandatory lock candidates with setgid privileges.
 
-Available implementations
--------------------------
+3. Available implementations
+----------------------------
 
 I have considered the implementations of mandatory locking available with
 SunOS 4.1.x, Solaris 2.x and HP-UX 9.x.
@@ -93,8 +93,8 @@ I'm afraid that this is such an esoteric area that the semantics described
 below are just as valid as any others, so long as the main points seem to
 agree. 
 
-Semantics
----------
+4. Semantics
+------------
 
 1. Mandatory locks can only be applied via the fcntl()/lockf() locking
    interface - in other words the System V/POSIX interface. BSD style
@@ -124,8 +124,8 @@ Semantics
    that has any mandatory locks in effect will be rejected with the error status
    EAGAIN.
 
-Which system calls are affected?
---------------------------------
+5. Which system calls are affected?
+-----------------------------------
 
 Those which modify a file's contents, not just the inode. That gives read(),
 write(), readv(), writev(), open(), creat(), mmap(), truncate() and
@@ -142,8 +142,8 @@ Note 3: I may have overlooked some system calls that need mandatory lock
 checking in my eagerness to get this code out the door. Please let me know, or
 better still fix the system calls yourself and submit a patch to me or Linus.
 
-Warning!
---------
+6. Warning!
+-----------
 
 Not even root can override a mandatory lock, so runaway process can wreak
 havoc if they lock crucial files. The way around it is to change the file

@@ -8,7 +8,9 @@
  * License.  See the file README.legal in the main directory of this archive
  * for more details.
  *
- * 680x0 support by Hamish Macdonald
+ * Linux/m68k support by Hamish Macdonald
+ *
+ * 68060 fixes by Jesper Skov
  *
  */
 
@@ -46,10 +48,10 @@
  */
 
 #include <linux/sys.h>
-
+#include <linux/config.h>
+#include <linux/linkage.h>
+#include <asm/setup.h>
 #include <asm/segment.h>
-
-LCF_MASK	= 0x0001
 
 LENOSYS = 38
 
@@ -62,18 +64,16 @@ LTASK_PRIORITY	=  8
 LTASK_SIGNAL	= 12
 LTASK_BLOCKED	= 16
 LTASK_FLAGS	= 20
-LTASK_ERRNO	= 24
-
-#include <linux/config.h>
-#include <linux/linkage.h>
 
 /* the following macro is used when enabling interrupts */
-#if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC)
+#if defined(CONFIG_ATARI_ONLY)
 	/* block out HSYNC on the atari */
 #define ALLOWINT 0xfbff
+#define	MAX_NOINT_IPL	3
 #else
 	/* portable version */
 #define ALLOWINT 0xf8ff
+#define	MAX_NOINT_IPL	0
 #endif /* machine compilation types */ 
 
 LD0		= 0x1C
@@ -164,23 +164,12 @@ ENTRY(system_call)
 	lea	SYMBOL_NAME(sys_call_table),%a0
 	movel	%a0@(%d2:l:4),%d3
 	jeq	SYMBOL_NAME(ret_from_exception)
-	andw	#~LCF_MASK,%sp@(LSR)	| assume syscall success
 	movel	SYMBOL_NAME(current_set),%a0
-	clrl	%a0@(LTASK_ERRNO)
 	btst	#5,%a0@(LTASK_FLAGS+3)	| PF_TRACESYS
 	bnes	1f
 	movel	%d3,%a0
 	jbsr	%a0@
 	movel	%d0,%sp@(LD0)		| save the return value
-	jpl	2f
-	orw	#LCF_MASK,%sp@(LSR)	| set carry to indicate error
-2:
-	movel	SYMBOL_NAME(current_set),%a0
-	movel	%a0@(LTASK_ERRNO),%d1
-	negl	%d1
-	jeq	SYMBOL_NAME(ret_from_exception)
-	movel	%d1,%sp@(LD0)
-	orw	#LCF_MASK,%sp@(LSR)	| set carry to indicate error
 	jra	SYMBOL_NAME(ret_from_exception)
 1:
 	subql	#4,%sp
@@ -191,16 +180,7 @@ ENTRY(system_call)
 	movel	%d3,%a0
 	jbsr	%a0@
 	movel	%d0,%sp@(LD0)		| save the return value
-	jpl	2f
-	orw	#LCF_MASK,%sp@(LSR)	| set carry to indicate error
-2:
-	movel	SYMBOL_NAME(current_set),%a0
-	movel	%a0@(LTASK_ERRNO),%d1
-	negl	%d1
-	jeq	2f
-	movel	%d1,%sp@(LD0)
-	orw	#LCF_MASK,%sp@(LSR)	| set carry to indicate error
-2:	subql	#4,%sp			| dummy return address
+	subql	#4,%sp			| dummy return address
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(syscall_trace)
 
@@ -225,19 +205,21 @@ SYMBOL_NAME_LABEL(ret_from_exception)
 	jbsr	SYMBOL_NAME(send_sig)
 	addql	#8,%sp
 	addql	#4,%sp
+	movel	SYMBOL_NAME(current_set),%a0
 
 1:
-	moveq	#0,%d0
-	movel	SYMBOL_NAME(current_set),%a0
-	cmpl	%a0@(LTASK_STATE),%d0     | state
+	tstl	%a0@(LTASK_STATE)	| state
 	jne	SYMBOL_NAME(reschedule)
-	cmpl	%a0@(LTASK_COUNTER),%d0   | counter
+	tstl	%a0@(LTASK_COUNTER)	| counter
 	jeq	SYMBOL_NAME(reschedule)
 
 	movel	%a0@(LTASK_BLOCKED),%d0
 	movel	%d0,%d1			| save blocked in d1 for sig handling
 	notl	%d0
-	andl	%a0@(LTASK_SIGNAL),%d0
+	btst	#4,%a0@(LTASK_FLAGS+3)	| PF_PTRACED
+	jeq	1f
+	moveq	#-1,%d0			| let the debugger see all signals
+1:	andl	%a0@(LTASK_SIGNAL),%d0
 	jne	Lsignal_return
 2:	RESTORE_ALL
 
@@ -261,13 +243,11 @@ SYMBOL_NAME_LABEL(inthandler)
 	movel	%d0,%sp@(LORIG_D0)	| a -1 in the ORIG_D0 field
 					| signifies that the stack frame
 					| is NOT for syscall
-	
 	addql	#1,SYMBOL_NAME(intr_count)
+					|  put exception # in d0
+	bfextu %sp@(LFORMATVEC){#4,#10},%d0
 
-	movew	%sp@(LFORMATVEC),%d0      |  put exception # in d0
-	andil	#0xfff,%d0		|  mask out format nybble
-
-	movel	%sp,%sp@-		
+	movel	%sp,%sp@-
 	movel	%d0,%sp@- 		|  put vector # on stack
 	jbsr	SYMBOL_NAME(process_int)|  process the IRQ
 	addql	#8,%sp			|  pop parameters off stack
@@ -275,27 +255,27 @@ SYMBOL_NAME_LABEL(inthandler)
 SYMBOL_NAME_LABEL(ret_from_interrupt)
 	/* check if we need to do software interrupts */
 1:
-	movel	SYMBOL_NAME(intr_count),%d2
-	subql	#1,%d2
-	jne	2f
-
+	movel	SYMBOL_NAME(intr_count),%d1
+	subql	#1,%d1
+	jne	4f
+	bfextu  %sp@(LSR){#5,#3},%d0    | Check for nested interrupt.
+#if MAX_NOINT_IPL > 0
+	cmpiw	#MAX_NOINT_IPL,%d0
+#endif
+	jhi	4f
+2:
 	movel	SYMBOL_NAME(bh_active),%d0
 	andl	SYMBOL_NAME(bh_mask),%d0
 	jne	3f
 
-	movel	%d2,SYMBOL_NAME(intr_count)
-
+	clrl	SYMBOL_NAME(intr_count)	| deliver signals, reschedule etc..
 	jra	SYMBOL_NAME(ret_from_exception)
-					| deliver signals, reschedule etc..
-
-2:	movel	%d2,SYMBOL_NAME(intr_count)
-	RESTORE_ALL
-3:
-	movew	%sr,%sp@-
-	andiw	#(ALLOWINT),%sr		| allow interrupts
+3:	
 	jbsr	SYMBOL_NAME(do_bottom_half)
-	movew	%sp@+,%sr
-	jra	1b
+	jbra	2b
+4:
+	movel	%d1,SYMBOL_NAME(intr_count)
+	RESTORE_ALL
 
 
 /* Handler for uninitialized and spurious interrupts */
@@ -335,7 +315,6 @@ ENTRY(sys_sigreturn)
 	rts
 
 LFLUSH_I_AND_D = 0x00000808
-LBI_CPU = 4
 LTSS_KSP	= 0
 LTSS_USP	= 4
 LTSS_SR		= 8
@@ -345,17 +324,16 @@ LTSS_FPCTXT	= 32
 
 SYMBOL_NAME_LABEL(resume)
 	/*
-	 * Beware - when entering resume, offset of tss is in a1 and
-	 * next (the new task) is in d1, so don't chance these
-	 * registers before their contents have been used.
+	 * Beware - when entering resume, offset of tss is in d1,
+	 * prev (the current task) is in a0, next (the new task)
+	 * is in a1 and d2.b is non-zero if the mm structure is
+	 * shared between the tasks, so don't change these
+	 * registers until their contents are no longer needed.
 	 */
-	
-	/* current tasks task_struct */
- 	movel	SYMBOL_NAME(current_set),%a0
 
 	/* offset of tss struct (processor state) from beginning
 	   of task struct */
-	addl	%a1,%a0
+	addl	%d1,%a0
 
 	/* save sr */
 	movew	%sr,%a0@(LTSS_SR)
@@ -372,11 +350,6 @@ SYMBOL_NAME_LABEL(resume)
 	movec	%usp,%d0
 	movel	%d0,%a0@(LTSS_USP)
 
-	/* load new task (before adjusting stack) */
-	/* The task has already been put in d1 by switch_to (Jes) */
-/*
-	movel	%sp@(4),%d1
-*/
 	/* save non-scratch registers on stack */
 	SAVE_SWITCH_STACK
 
@@ -385,41 +358,59 @@ SYMBOL_NAME_LABEL(resume)
 
 	/* save floating point context */
 	fsave	%a0@(LTSS_FPCTXT+27*4)
-	tstb	%a0@(LTSS_FPCTXT+27*4)
-	jeq	1f
-	fmovemx	%fp0-%fp7,%a0@(LTSS_FPCTXT)
+
+#if defined(CONFIG_M68060)
+#if !defined(CONFIG_M68060_ONLY)
+	btst	#3,SYMBOL_NAME(boot_info)+BI_cputype+3
+	beqs	1f
+#endif
+	/* The 060 FPU keeps status in bits 15-8 of the first longword */
+	tstb	%a0@(LTSS_FPCTXT+27*4+2)
+	jeq	3f
+#if !defined(CONFIG_M68060_ONLY)
+	jra	2f
+#endif
+#endif /* CONFIG_M68060 */
+#if !defined(CONFIG_M68060_ONLY)
+1:	tstb	%a0@(LTSS_FPCTXT+27*4)
+	jeq	3f
+#endif
+2:	fmovemx	%fp0-%fp7,%a0@(LTSS_FPCTXT)
 	fmoveml	%fpcr/%fpsr/%fpiar,%a0@(LTSS_FPCTXT+24*4)
-1:
+3:
 
-	/* get pointer to tss struct (d1 contains new task) */
-	movel	%d1,SYMBOL_NAME(current_set)
-	movel	%d1,%a0
-	addl	%a1,%a0
+	/* get pointer to tss struct (a1 contains new task) */
+	movel	%a1,SYMBOL_NAME(current_set)
+	addl	%d1,%a1
 
+	/* Skip address space switching if they are the same. */
+	tstb	%d2
+	jne	4f
+
+#if defined(CONFIG_M68020_OR_M68030) && defined(CONFIG_M68040_OR_M68060)
 	/* 68040 or 68060 ? */
-	btst	#2,SYMBOL_NAME(boot_info)+LBI_CPU+3
+	tstl	SYMBOL_NAME(m68k_is040or060)
 	bnes	1f
-	btst	#3,SYMBOL_NAME(boot_info)+LBI_CPU+3
-	bnes	1f
-
+#endif
+#if defined(CONFIG_M68020_OR_M68030)
 	/*
 	 * switch address space
 	 */
 
 	/* flush MC68030/MC68020 caches (they are virtually addressed) */
 	movec	%cacr,%d0
-	oril	#LFLUSH_I_AND_D,%d0
+	oriw	#LFLUSH_I_AND_D,%d0
 	movec	%d0,%cacr
 
 	/* switch the root pointer */
-	pmove	%a0@(LTSS_CRP),%crp
+	pmove	%a1@(LTSS_CRP),%crp
+#endif
 
-	/* flush address translation cache (probably not needed */
-	pflusha
-
+#if defined(CONFIG_M68020_OR_M68030) && defined(CONFIG_M68040_OR_M68060)
 	jra	2f	/* skip m68040 stuff */
-
 1:
+#endif
+#if defined(CONFIG_M68040_OR_M68060)
 	/*
 	 * switch address space
 	 */
@@ -428,42 +419,60 @@ SYMBOL_NAME_LABEL(resume)
 	.word	0xf510			/* pflushan */
 
 	/* switch the root pointer */
-	movel	%a0@(LTSS_CRP+4),%d0
+	movel	%a1@(LTSS_CRP+4),%d0
 	.long	0x4e7b0806		/* movec d0,urp */
 
+#if defined (CONFIG_M68060)
 	/* is it a '060 ? */
-	btst	#3,SYMBOL_NAME(boot_info)+LBI_CPU+3
+	btst	#3,SYMBOL_NAME(boot_info)+BI_cputype+3
 	beqs	2f
 	/* clear user entries in the branch cache */
 	movec	%cacr,%d0
 	orl	#0x00200000,%d0
 	movec	%d0,%cacr
-
+#endif /* CONFIG_M68060 */
+#endif /* CONFIG_M68040_OR_M68060 */
 2:
+4:
 	/* restore floating point context */
-	tstb	%a0@(LTSS_FPCTXT+27*4)
-	jeq	1f
-	fmovemx	%a0@(LTSS_FPCTXT),%fp0-%fp7
-	fmoveml	%a0@(LTSS_FPCTXT+24*4),%fpcr/%fpsr/%fpiar
-1:	frestore %a0@(LTSS_FPCTXT+27*4)
+
+#if defined(CONFIG_M68060)
+#if !defined(CONFIG_M68060_ONLY)
+	btst	#3,SYMBOL_NAME(boot_info)+BI_cputype+3
+	beqs	1f
+#endif
+	/* The 060 FPU keeps status in bits 15-8 of the first longword */
+	tstb	%a1@(LTSS_FPCTXT+27*4+2)
+	jeq	3f
+#if !defined(CONFIG_M68060_ONLY)
+	jra	2f
+#endif
+#endif /* CONFIG_M68060 */
+#if !defined(CONFIG_M68060_ONLY)
+1:	tstb	%a1@(LTSS_FPCTXT+27*4)
+	jeq	3f
+#endif	
+2:	fmovemx	%a1@(LTSS_FPCTXT),%fp0-%fp7
+	fmoveml	%a1@(LTSS_FPCTXT+24*4),%fpcr/%fpsr/%fpiar
+3:	frestore %a1@(LTSS_FPCTXT+27*4)
 
 	/* restore the kernel stack pointer */
-	movel	%a0@(LTSS_KSP),%sp
+	movel	%a1@(LTSS_KSP),%sp
 
 	/* restore non-scratch registers */
 	RESTORE_SWITCH_STACK
 
 	/* restore user stack pointer */
-	movel	%a0@(LTSS_USP),%d0
-	movec	%d0,%usp
+	movel	%a1@(LTSS_USP),%a0
+	movel	%a0,%usp
 
 	/* restore fs (sfc,%dfc) */
-	movew	%a0@(LTSS_FS),%a1
-	movec	%a1,%sfc
-	movec	%a1,%dfc
+	movew	%a1@(LTSS_FS),%a0
+	movec	%a0,%sfc
+	movec	%a0,%dfc
 
 	/* restore status register */
-	movew	%a0@(LTSS_SR),%sr
+	movew	%a1@(LTSS_SR),%sr
 
 	rts
 

@@ -29,8 +29,8 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-static int xiafs_file_read(struct inode *, struct file *, char *, int);
-static int xiafs_file_write(struct inode *, struct file *, const char *, int);
+static long xiafs_file_read(struct inode *, struct file *, char *, unsigned long);
+static long xiafs_file_write(struct inode *, struct file *, const char *, unsigned long);
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -69,8 +69,8 @@ struct inode_operations xiafs_file_inode_operations = {
     NULL			/* permission */
 };
 
-static int 
-xiafs_file_read(struct inode * inode, struct file * filp, char * buf, int count)
+static long
+xiafs_file_read(struct inode * inode, struct file * filp, char * buf, unsigned long count)
 {
     int read, left, chars;
     int zone_nr, zones, f_zones, offset;
@@ -189,8 +189,8 @@ xiafs_file_read(struct inode * inode, struct file * filp, char * buf, int count)
     return read;
 }
 
-static int 
-xiafs_file_write(struct inode * inode, struct file * filp, const char * buf, int count)
+static long
+xiafs_file_write(struct inode * inode, struct file * filp, const char * buf, unsigned long count)
 {
     off_t pos;
     int written, c;

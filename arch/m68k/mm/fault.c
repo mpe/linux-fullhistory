@@ -29,14 +29,17 @@ asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
 			      unsigned long error_code)
 {
 	struct vm_area_struct * vma;
+	struct task_struct *tsk = current;
+	struct mm_struct *mm = tsk->mm;
 
 #ifdef DEBUG
 	printk ("regs->sr=%#x, regs->pc=%#lx, address=%#lx, %ld, %p\n",
 		regs->sr, regs->pc, address, error_code,
-		current->tss.pagedir_v);
+		tsk->tss.pagedir_v);
 #endif
 
-	vma = find_vma(current, address);
+	down(&mm->mmap_sem);
+	vma = find_vma(mm, address);
 	if (!vma)
 	  goto bad_area;
 	if (vma->vm_start <= address)
@@ -73,17 +76,18 @@ good_area:
 	    goto bad_area;
 	}
 	if (error_code & 1) {
-		do_wp_page(current, vma, address, error_code & 2);
+		do_wp_page(tsk, vma, address, error_code & 2);
+		up(&mm->mmap_sem);
 		return 0;
 	}
-	do_no_page(current, vma, address, error_code & 2);
+	do_no_page(tsk, vma, address, error_code & 2);
+	up(&mm->mmap_sem);
 
 	/* There seems to be a missing invalidate somewhere in do_no_page.
 	 * Until I found it, this one cures the problem and makes
 	 * 1.2 run on the 68040 (Martin Apel).
 	 */
-	flush_tlb_all();
-
+	flush_tlb_page(vma, address);
 	return 0;
 
 /*
@@ -91,9 +95,10 @@ good_area:
  * Fix it, but check if it's kernel or user first..
  */
 bad_area:
+	up(&mm->mmap_sem);
 	if (user_mode(regs)) {
 		/* User memory access */
-		force_sig (SIGSEGV, current);
+		force_sig (SIGSEGV, tsk);
 		return 1;
 	}
 
@@ -111,3 +116,4 @@ bad_area:
 
 	return 1;
 }
+

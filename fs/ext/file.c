@@ -32,8 +32,8 @@
 #include <linux/fs.h>
 #include <linux/ext_fs.h>
 
-static int ext_file_read(struct inode *, struct file *, char *, int);
-static int ext_file_write(struct inode *, struct file *, const char *, int);
+static long ext_file_read(struct inode *, struct file *, char *, unsigned long);
+static long ext_file_write(struct inode *, struct file *, const char *, unsigned long);
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -72,7 +72,8 @@ struct inode_operations ext_file_inode_operations = {
 	NULL			/* permission */
 };
 
-static int ext_file_read(struct inode * inode, struct file * filp, char * buf, int count)
+static long ext_file_read(struct inode * inode, struct file * filp,
+	char * buf, unsigned long count)
 {
 	int read,left,chars;
 	int block, blocks, offset;
@@ -197,7 +198,8 @@ static int ext_file_read(struct inode * inode, struct file * filp, char * buf, i
 	return read;
 }
 
-static int ext_file_write(struct inode * inode, struct file * filp, const char * buf, int count)
+static long ext_file_write(struct inode * inode, struct file * filp,
+	const char * buf, unsigned long count)
 {
 	off_t pos;
 	int written,c;

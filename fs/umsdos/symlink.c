@@ -29,7 +29,7 @@
 static int umsdos_readlink_x (
 	struct inode *inode,
 	char *buffer,
-	int (*msdos_read)(struct inode *, struct file *, char *, int),
+	long (*msdos_read)(struct inode *, struct file *, char *, unsigned long),
 	int bufsiz)
 {
 	int ret = inode->i_size;

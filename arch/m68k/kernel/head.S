@@ -14,7 +14,7 @@
 ** 94/11/14 Andreas Schwab: put kernel at PAGESIZE
 ** 94/11/18 Andreas Schwab: remove identity mapping of STRAM for Atari
 ** ++ Bjoern & Roman: ATARI-68040 support for the Medusa
-** 96/04/26 G|nther Kelleter: fixed identity mapping for Falcon with
+** 96/04/26 Guenther Kelleter: fixed identity mapping for Falcon with
 ** 			      Magnum- and FX-alternate ram
 **
 ** This file is subject to the terms and conditions of the GNU General Public
@@ -65,9 +65,9 @@
  *   d4 - machine type
  */
 
-#include <linux/autoconf.h>
+#include <linux/config.h>
 #include <linux/linkage.h>
-#include <asm/bootinfo.h>
+#include <asm/setup.h>
 #include <asm/pgtable.h>
 
 .globl SYMBOL_NAME(kernel_pg_dir), SYMBOL_NAME(kpt)
@@ -197,7 +197,7 @@ ENTRY(_start)
 	btst	#CPUB_68060,%d0
 	jeq	1f
 	/* '060: d6 := BIT0460|BIT060, cache mode 0x60 (no-cache/non-ser) */
-	movel	#D6F_060+_PAGE_NOCACHE,%d6
+	movel	#D6F_060+_PAGE_CACHE040W,%d6
 	jra	2f
 1:	btst	#CPUB_68040,%d0
 	jeq	1f
@@ -604,8 +604,10 @@ Lmapphys:
  * will overlap later virtual location, but as we already mapped the first
  * 16MB to 0x80000000, we can jump there after translation and MMU is enabled
  * and then we can switch off translation and go to the final place.
+ * On 020/030 we must emulate transparant translation, since 020 doesn't know
+ * it, but due to early termination pointer this is easy to do.
  * When MMU is enabled, stack pointer and Lcustom will become again valid and
- * points to the unused first page.
+ * stack points to the unused first page.
  */
 
 /*
@@ -622,15 +624,16 @@ Lmapphys:
 
 	is_040_or_060(Lamimmu68040)
 
-	lea	2f:w,%a0
+	moveq	#ROOT_INDEX_SHIFT,%d2
 	movel	%d5,%d0
-	andl	#0xff000000,%d0
-	jne	1f
-	lea	%pc@(2f+0x80000000),%a0
-1:	orw	#TTR_ENABLE+TTR_CI+TTR_RWM+TTR_FCB2+TTR_FCM1+TTR_FCM0,%d0
+	lsrl	%d2,%d0
+	movel	%d0,%d1
+	lsll	%d2,%d1
+	addql	#_PAGE_PRESENT,%d1
+	lsll	#2,%d0
+	movel	%a5@(%d0:w),%d2
+	movel	%d1,%a5@(%d0:w)
 	lea	%pc@(Lmmu),%a3
-	movel	%d0,%a3@
-	.long	0xf0130800	/* pmove %a3@,%tt0 */
 	/* no limit, 4byte descriptors */
 	movel	#0x80000002,%a3@
 	movel	%a5,%a3@(4)
@@ -643,9 +646,12 @@ Lmapphys:
 	 */
 	movel	#0x82c07760,%a3@
 	.long	0xf0134000	/* pmove %a3@,%tc (enable the MMU) */
-	jmp	%a0@
-2:	clrl	%a3@
-	.long	0xf0130800	/* pmove %a3@,%tt0 */
+	tstl	%d0
+	jne	1f
+	jmp	%pc@(2f+0x80000000)
+1:	jmp	2f:w
+2:	movel	%d2,%a5@(%d0:w)
+	.long	0xf0002400	/* pflusha */
 	jmp	LdoneMMUenable:w
 
 Lamimmu68040:
@@ -708,7 +714,7 @@ Lmapphysnotamiga:
 	 * Requires that this code until after MMU enabling lies in
 	 * the 256K page around %d5
 	 */
-2:	movel	%a4@,%d1
+2:	movel	%a5@,%d1
 	andw	#0xfff0,%d1
 	movel	%d1,%a1
 	movel	%d5,%d1
@@ -748,7 +754,8 @@ Latarimmu68040:
 	andl	#0xff000000,%d0 /* logical address base */
 	orw	#TTR_ENABLE+TTR_KERNELMODE+_PAGE_NOCACHE_S,%d0
 	.long	0x4e7b0004	/* movec %d0,%itt0 */
-2:	.word	0xf518		/* pflusha */
+2:	nop
+	.word	0xf518		/* pflusha */
 	.long	0x4e7bd807	/* movec %a5,%srp */
 	.long	0x4e7bd806	/* movec %a5,%urp */
 	movel	#TC_ENABLE+TC_PAGE4K,%d0
@@ -1096,7 +1103,7 @@ Lshowtest:
 	putc('=')
 	putn(%a1)
 
-	ptestr	#5,%a1@,#7,%a0
+	.long	0xf0119f15		| ptestr	#5,%a1@,#7,%a0
 
 	putc('D')
 	putc('A')
@@ -1110,7 +1117,7 @@ Lshowtest:
 	putc('S')
 	putc('=')
 	lea	%pc@(Lmmu),%a0
-	pmove	%psr,%a0@
+	.long	0xf0106200		| pmove		%psr,%a0@
 	clrl	%d7
 	movew	%a0@,%d7
 	jbsr	Lserial_putnum

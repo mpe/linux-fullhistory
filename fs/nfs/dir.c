@@ -21,7 +21,7 @@
 #include <asm/segment.h>	/* for fs functions */
 
 static int nfs_dir_open(struct inode * inode, struct file * file);
-static int nfs_dir_read(struct inode *, struct file *, char *, int);
+static long nfs_dir_read(struct inode *, struct file *, char *, unsigned long);
 static int nfs_readdir(struct inode *, struct file *, void *, filldir_t);
 static int nfs_lookup(struct inode *, const char *, int, struct inode **);
 static int nfs_create(struct inode *, const char *, int, int, struct inode **);
@@ -93,8 +93,8 @@ static int nfs_dir_open(struct inode * dir, struct file * file)
 	return 0;
 }
 
-static int nfs_dir_read(struct inode *inode, struct file *filp, char *buf,
-			int count)
+static long nfs_dir_read(struct inode *inode, struct file *filp,
+	char *buf, unsigned long count)
 {
 	return -EISDIR;
 }

@@ -20,7 +20,8 @@ extern int *blksize_size[];
 #define MAX_BUF_PER_PAGE (PAGE_SIZE / 512)
 #define NBUF 64
 
-int block_write(struct inode * inode, struct file * filp, const char * buf, int count)
+long block_write(struct inode * inode, struct file * filp,
+	const char * buf, unsigned long count)
 {
 	int blocksize, blocksize_bits, i, j, buffercount,write_error;
 	int block, blocks;
@@ -157,7 +158,8 @@ int block_write(struct inode * inode, struct file * filp, const char * buf, int 
 	return written;
 }
 
-int block_read(struct inode * inode, struct file * filp, char * buf, int count)
+long block_read(struct inode * inode, struct file * filp,
+	char * buf, unsigned long count)
 {
 	unsigned int block;
 	loff_t offset;

@@ -35,6 +35,14 @@
 
 #include "aha1542.h"
 
+#define SCSI_PA(address) virt_to_bus(address)
+
+#define BAD_DMA(msg, address, length) \
+  { \
+    printk(KERN_CRIT "%s address %p length %d\n", msg, address, length); \
+    panic("Buffer at physical address > 16Mb used for aha1542"); \
+  }
+
 #include<linux/stat.h>
 
 struct proc_dir_entry proc_scsi_aha1542 = {
@@ -427,7 +435,7 @@ static void aha1542_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
 	return;
       };
 
-      mbo = (scsi2int(mb[mbi].ccbptr) - ((unsigned int) &ccb[0])) / sizeof(struct ccb);
+      mbo = (scsi2int(mb[mbi].ccbptr) - (SCSI_PA(&ccb[0]))) / sizeof(struct ccb);
       mbistatus = mb[mbi].status;
       mb[mbi].status = 0;
       HOSTDATA(shost)->aha1542_last_mbi_used = mbi;
@@ -587,7 +595,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     printk("Sending command (%d %x)...",mbo, done);
 #endif
 
-    any2scsi(mb[mbo].ccbptr, &ccb[mbo]); /* This gets trashed for some reason*/
+    any2scsi(mb[mbo].ccbptr, SCSI_PA(&ccb[mbo])); /* This gets trashed for some reason*/
 
     memset(&ccb[mbo], 0, sizeof(struct ccb));
 
@@ -627,12 +635,13 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	  for(i=0;i<18;i++) printk("%02x ", ptr[i]);
 	  panic("Foooooooood fight!");
 	};
-	any2scsi(cptr[i].dataptr, sgpnt[i].address);
-	if(((unsigned  int) sgpnt[i].address) & 0xff000000) goto baddma;
+	any2scsi(cptr[i].dataptr, SCSI_PA(sgpnt[i].address));
+	if(SCSI_PA(sgpnt[i].address+sgpnt[i].length) > ISA_DMA_THRESHOLD)
+	  BAD_DMA("sgpnt", sgpnt[i].address, sgpnt[i].length);
 	any2scsi(cptr[i].datalen, sgpnt[i].length);
       };
       any2scsi(ccb[mbo].datalen, SCpnt->use_sg * sizeof(struct chain));
-      any2scsi(ccb[mbo].dataptr, cptr);
+      any2scsi(ccb[mbo].dataptr, SCSI_PA(cptr));
 #ifdef DEBUG
       printk("cptr %x: ",cptr);
       ptr = (unsigned char *) cptr;
@@ -642,8 +651,9 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       ccb[mbo].op = 0;	      /* SCSI Initiator Command */
       SCpnt->host_scribble = NULL;
       any2scsi(ccb[mbo].datalen, bufflen);
-      if(((unsigned int) buff & 0xff000000)) goto baddma;
-      any2scsi(ccb[mbo].dataptr, buff);
+      if(buff && SCSI_PA(buff+bufflen) > ISA_DMA_THRESHOLD)
+        BAD_DMA("buff", buff, bufflen);
+      any2scsi(ccb[mbo].dataptr, SCSI_PA(buff));
     };
     ccb[mbo].idlun = (target&7)<<5 | direction | (lun & 7); /*SCSI Target Id*/
     ccb[mbo].rsalen = 16;
@@ -669,8 +679,6 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       printk("aha1542_queuecommand: done can't be NULL\n");
     
     return 0;
- baddma:
-    panic("Buffer at address  > 16Mb used for 1542B");
 }
 
 static void internal_done(Scsi_Cmnd * SCpnt)
@@ -704,10 +712,10 @@ static void setup_mailboxes(int bse, struct Scsi_Host * shpnt)
 
     for(i=0; i<AHA1542_MAILBOXES; i++){
       mb[i].status = mb[AHA1542_MAILBOXES+i].status = 0;
-      any2scsi(mb[i].ccbptr, &ccb[i]);
+      any2scsi(mb[i].ccbptr, SCSI_PA(&ccb[i]));
     };
     aha1542_intr_reset(bse);     /* reset interrupts, so they don't block */	
-    any2scsi((cmd+2), mb);
+    any2scsi((cmd+2), SCSI_PA(mb));
     aha1542_out(bse, cmd, 5);
     WAIT(INTRFLAGS(bse), INTRMASK, HACC, 0);
     while (0) {
@@ -942,7 +950,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 
 		    /* For now we do this - until kmalloc is more intelligent
 		       we are resigned to stupid hacks like this */
-		    if ((unsigned int) shpnt > 0xffffff) {
+		    if (SCSI_PA(shpnt+1) > ISA_DMA_THRESHOLD) {
 		      printk("Invalid address for shpnt with 1542.\n");
 		      goto unregister;
 		    }

@@ -21,7 +21,7 @@ CC	:= $(CC)
 # set up for cross compiling
 COMPILE_ARCH = $(shell uname -m)
 ifneq ($(COMPILE_ARCH),$(ARCH))
-	CROSSDIR=/usr/$(ARCH)-linux
+	CROSSDIR=/usr/$(ARCH)-linux/bin
 	CC := $(CROSSDIR)/$(CC)
 	AS := $(CROSSDIR)/$(AS)
 	LD := $(CROSSDIR)/$(LD)
@@ -50,12 +50,16 @@ LINKFLAGS = -Ttext 0x1000
 else
 LINKFLAGS = -qmagic -Ttext 0xFE0
 endif
+
 CFLAGS := $(CFLAGS) -pipe
+
+ifdef CONFIG_OPTIMIZE_040
+CFLAGS := $(CFLAGS) -m68040
+endif
 
 HEAD := arch/m68k/kernel/head.o
 
 SUBDIRS += arch/m68k/kernel arch/m68k/mm arch/m68k/console arch/m68k/lib
-#SUBDIRS += arch/m68k/kernel arch/m68k/mm arch/m68k/lib
 ARCHIVES := arch/m68k/kernel/kernel.o arch/m68k/mm/mm.o $(ARCHIVES)
 LIBS += arch/m68k/lib/lib.a
 
@@ -77,12 +81,12 @@ endif
 # add in console.a after {amiga,atari}.o that need it
 ARCHIVES := $(ARCHIVES) arch/m68k/console/console.a
 
-ifdef CONFIG_FPSP_040
+ifdef CONFIG_M68040
 ARCHIVES := $(ARCHIVES) arch/m68k/fpsp040/fpsp.o
 SUBDIRS := $(SUBDIRS) arch/m68k/fpsp040
 endif
 
-ifdef CONFIG_IFPSP_060
+ifdef CONFIG_M68060
 ARCHIVES := $(ARCHIVES) arch/m68k/ifpsp060/ifpsp.o
 SUBDIRS := $(SUBDIRS) arch/m68k/ifpsp060
 endif

@@ -29,11 +29,11 @@
 #include <asm/segment.h>
 
 /* forward references */
-static int proc_readscsi(struct inode * inode, struct file * file,
-			 char * buf, int count);
-static int proc_writescsi(struct inode * inode, struct file * file,
-			 const char * buf, int count);
-static int proc_scsilseek(struct inode *, struct file *, off_t, int);
+static long proc_readscsi(struct inode * inode, struct file * file,
+			 char * buf, unsigned long count);
+static long proc_writescsi(struct inode * inode, struct file * file,
+			 const char * buf, unsigned long count);
+static long long proc_scsilseek(struct inode *, struct file *, long long, int);
 
 extern void build_proc_dir_hba_entries(uint);
 
@@ -101,8 +101,8 @@ int get_not_present_info(char *buffer, char **start, off_t offset, int length)
 				      * use some slack for overruns 
 				      */
 
-static int proc_readscsi(struct inode * inode, struct file * file,
-			 char * buf, int count)
+static long proc_readscsi(struct inode * inode, struct file * file,
+			  char * buf, unsigned long count)
 {
     int length;
     int bytes = count;
@@ -111,16 +111,12 @@ static int proc_readscsi(struct inode * inode, struct file * file,
     char * page;
     char * start;
     
-    if (count < -1)		  /* Normally I wouldn't do this, */ 
-	return(-EINVAL);	  /* but it saves some redundant code.
-				   * Now it is possible to seek to the 
-				   * end of the file */
     if (!(page = (char *) __get_free_page(GFP_KERNEL)))
 	return(-ENOMEM);
     
-    while(bytes > 0 || count == -1) {	
+    while (bytes > 0) {	
 	thistime = bytes;
-	if(bytes > PROC_BLOCK_SIZE || count == -1)
+	if(bytes > PROC_BLOCK_SIZE)
 	    thistime = PROC_BLOCK_SIZE;
 	
 	if(dispatch_scsi_info_ptr)
@@ -141,11 +137,9 @@ static int proc_readscsi(struct inode * inode, struct file * file,
 	if (length <= 0)
 	    break;
 	/*
-	 *  Copy the bytes, if we're not doing a seek to 
-	 *	the end of the file 
+	 *  Copy the bytes
 	 */
-	if (count != -1)
-	    memcpy_tofs(buf + copied, start, length);
+	memcpy_tofs(buf + copied, start, length);
 	file->f_pos += length;	/* Move down the file */
 	bytes -= length;
 	copied += length;
@@ -160,8 +154,8 @@ static int proc_readscsi(struct inode * inode, struct file * file,
 }
 
 
-static int proc_writescsi(struct inode * inode, struct file * file,
-			 const char * buf, int count)
+static long proc_writescsi(struct inode * inode, struct file * file,
+			   const char * buf, unsigned long count)
 {
     int ret = 0;
     char * page;
@@ -183,8 +177,8 @@ static int proc_writescsi(struct inode * inode, struct file * file,
 }
 
 
-static int proc_scsilseek(struct inode * inode, struct file * file, 
-			  off_t offset, int orig)
+static long long proc_scsilseek(struct inode * inode, struct file * file, 
+				long long offset, int orig)
 {
     switch (orig) {
     case 0:
@@ -193,11 +187,8 @@ static int proc_scsilseek(struct inode * inode, struct file * file,
     case 1:
 	file->f_pos += offset;
 	return(file->f_pos);
-    case 2:		     /* This ugly hack allows us to    */
-	if (offset)	     /* to determine the length of the */
-	    return(-EINVAL); /* file and then later safely to  */ 
-	proc_readscsi(inode, file, 0, -1); /* seek in it       */ 
-	return(file->f_pos);
+    case 2:
+	return(-EINVAL);
     default:
 	return(-EINVAL);
     }

@@ -11,7 +11,6 @@ EXTRA_CFLAGS := -Wa,-m68030
 
 O_TARGET := atari.o
 O_OBJS	 := config.o atakeyb.o ataints.o \
-            stdma.o atasound.o joystick.o stram.o atafb.o
-OX_OBJS = ksyms.o
+            stdma.o atasound.o joystick.o stram.o atafb.o ksyms.o
 
 include $(TOPDIR)/Rules.make

@@ -4,79 +4,21 @@
 #include <linux/string.h>
 
 /*
- * This is a gcc optimization barrier, which essentially
- * inserts a sequence point in the gcc RTL tree that gcc
- * can't move code around. This is needed when we enter
- * or exit a critical region (in this case around user-level
- * accesses that may sleep, and we can't let gcc optimize
- * global state around them).
- */
-#define __gcc_barrier() __asm__ __volatile__("": : :"memory")
-
-/*
  * Uh, these should become the main single-value transfer routines..
  * They automatically use the right size if we just have the right
  * pointer type..
+ *
+ * As the alpha uses the same address space for kernel and user
+ * data, we can just do these as direct assignments.
  */
-#define put_user(x,ptr) __put_user((unsigned long)(x),(ptr),sizeof(*(ptr)))
-#define get_user(ptr) ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr))))
+#define put_user(x,ptr)	do { (*(ptr)=(x)); } while (0)
+#define get_user(ptr)	(*(ptr))
 
 /*
- * This is a silly but good way to make sure that
- * the __put_user function is indeed always optimized,
- * and that we use the correct sizes..
+ * These are deprecated..
+ *
+ * Use "put_user()" and "get_user()" with the proper pointer types instead.
  */
-extern int bad_user_access_length(void);
-
-/* I should make this use unaligned transfers etc.. */
-static inline void __put_user(unsigned long x, void * y, int size)
-{
-	__gcc_barrier();
-	switch (size) {
-		case 1:
-			*(char *) y = x;
-			break;
-		case 2:
-			*(short *) y = x;
-			break;
-		case 4:
-			*(int *) y = x;
-			break;
-		case 8:
-			*(long *) y = x;
-			break;
-		default:
-			bad_user_access_length();
-	}
-	__gcc_barrier();
-}
-
-/* I should make this use unaligned transfers etc.. */
-static inline unsigned long __get_user(const void * y, int size)
-{
-	unsigned long result;
-
-	__gcc_barrier();
-	switch (size) {
-		case 1:
-			result = *(unsigned char *) y;
-			break;
-		case 2:
-			result = *(unsigned short *) y;
-			break;
-		case 4:
-			result = *(unsigned int *) y;
-			break;
-		case 8:
-			result = *(unsigned long *) y;
-			break;
-		default:
-			result = bad_user_access_length();
-	}
-	__gcc_barrier();
-	return result;
-}
-
 #define get_fs_byte(addr) get_user((unsigned char *)(addr))
 #define get_fs_word(addr) get_user((unsigned short *)(addr))
 #define get_fs_long(addr) get_user((unsigned int *)(addr))
@@ -87,19 +29,8 @@ static inline unsigned long __get_user(const void * y, int size)
 #define put_fs_long(x,addr) put_user((x),(int *)(addr))
 #define put_fs_quad(x,addr) put_user((x),(long *)(addr))
 
-static inline void memcpy_fromfs(void * to, const void * from, unsigned long n)
-{
-	__gcc_barrier();
-	memcpy(to, from, n);
-	__gcc_barrier();
-}
-
-static inline void memcpy_tofs(void * to, const void * from, unsigned long n)
-{
-	__gcc_barrier();
-	memcpy(to, from, n);
-	__gcc_barrier();
-}
+#define memcpy_fromfs(to,from,n) memcpy((to),(from),(n))
+#define memcpy_tofs(to,from,n) memcpy((to),(from),(n))
 
 /*
  * The fs value determines whether argument validity checking should be

@@ -221,8 +221,8 @@ extern int fat_dir_ioctl(struct inode * inode, struct file * filp,
 /* file.c */
 extern struct inode_operations fat_file_inode_operations;
 extern struct inode_operations fat_file_inode_operations_1024;
-extern int fat_file_read(struct inode *, struct file *, char *, int);
-extern int fat_file_write(struct inode *, struct file *, const char *, int);
+extern long fat_file_read(struct inode *, struct file *, char *, unsigned long);
+extern long fat_file_write(struct inode *, struct file *, const char *, unsigned long);
 extern void fat_truncate(struct inode *inode);
 
 /* mmap.c */

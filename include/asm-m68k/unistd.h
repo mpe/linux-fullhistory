@@ -437,6 +437,10 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 {
 	register long retval __asm__ ("d0") = __NR_clone;
 	register long clone_arg __asm__ ("d1") = flags | CLONE_VM;
+	unsigned short fs;
+
+	fs = get_fs();
+	set_fs (KERNEL_DS);
 
 	__asm__ __volatile__
 	  ("movel %%sp,%%d2\n\t"
@@ -453,6 +457,7 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 	     "r" (arg), "a" (fn), "d" (clone_arg)
 	   : "d0", "d2");
 
+	set_fs (fs);
 	return retval;
 }
 

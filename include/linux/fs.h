@@ -336,16 +336,22 @@ struct file {
 	void *private_data;	/* needed for tty driver, and maybe others */
 };
 
+#define FL_POSIX	1
+#define FL_FLOCK	2
+#define FL_BROKEN	4	/* broken flock() emulation */
+#define FL_ACCESS	8	/* for processes suspended by mandatory locking */
+
 struct file_lock {
 	struct file_lock *fl_next;	/* singly linked list for this inode  */
 	struct file_lock *fl_nextlink;	/* doubly linked list of all locks */
 	struct file_lock *fl_prevlink;	/* used to simplify lock removal */
-	struct file_lock *fl_block;
+	struct file_lock *fl_nextblock; /* circular list of blocked processes */
+	struct file_lock *fl_prevblock;
 	struct task_struct *fl_owner;
 	struct wait_queue *fl_wait;
 	struct file *fl_file;
-	char fl_flags;
-	char fl_type;
+	unsigned char fl_flags;
+	unsigned char fl_type;
 	off_t fl_start;
 	off_t fl_end;
 };
@@ -455,9 +461,9 @@ struct super_block {
 typedef int (*filldir_t)(void *, const char *, int, off_t, ino_t);
 	
 struct file_operations {
-	int (*lseek) (struct inode *, struct file *, off_t, int);
-	int (*read) (struct inode *, struct file *, char *, int);
-	int (*write) (struct inode *, struct file *, const char *, int);
+	long long (*llseek) (struct inode *, struct file *, long long, int);
+	long (*read) (struct inode *, struct file *, char *, unsigned long);
+	long (*write) (struct inode *, struct file *, const char *, unsigned long);
 	int (*readdir) (struct inode *, struct file *, void *, filldir_t);
 	int (*select) (struct inode *, struct file *, int, select_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
@@ -652,10 +658,11 @@ extern struct buffer_head * bread(kdev_t dev, int block, int size);
 extern struct buffer_head * breada(kdev_t dev,int block, int size, 
 				   unsigned int pos, unsigned int filesize);
 
-extern int generic_readpage(struct inode *, struct page *);
-extern int generic_file_read(struct inode *, struct file *, char *, int);
-extern int generic_file_mmap(struct inode *, struct file *, struct vm_area_struct *);
 extern int brw_page(int, struct page *, kdev_t, int [], int, int);
+
+extern int generic_readpage(struct inode *, struct page *);
+extern int generic_file_mmap(struct inode *, struct file *, struct vm_area_struct *);
+extern long generic_file_read(struct inode *, struct file *, char *, unsigned long);
 
 extern void put_super(kdev_t dev);
 unsigned long generate_cluster(kdev_t dev, int b[], int size);
@@ -669,12 +676,12 @@ extern kdev_t real_root_dev;
 extern int change_root(kdev_t new_root_dev,const char *put_old);
 #endif
 
-extern int char_read(struct inode *, struct file *, char *, int);
-extern int block_read(struct inode *, struct file *, char *, int);
+extern long char_read(struct inode *, struct file *, char *, unsigned long);
+extern long block_read(struct inode *, struct file *, char *, unsigned long);
 extern int read_ahead[];
 
-extern int char_write(struct inode *, struct file *, const char *, int);
-extern int block_write(struct inode *, struct file *, const char *, int);
+extern long char_write(struct inode *, struct file *, const char *, unsigned long);
+extern long block_write(struct inode *, struct file *, const char *, unsigned long);
 
 extern int block_fsync(struct inode *, struct file *);
 extern int file_fsync(struct inode *, struct file *);

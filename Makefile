@@ -1,6 +1,6 @@
 VERSION = 2
-PATCHLEVEL = 0
-SUBLEVEL = 21
+PATCHLEVEL = 1
+SUBLEVEL = 0
 
 ARCH = i386
 
@@ -26,7 +26,7 @@ TOPDIR	:= $(shell if [ "$$PWD" != "" ]; then echo $$PWD; else pwd; fi)
 HPATH   	= $(TOPDIR)/include
 FINDHPATH	= $(HPATH)/asm $(HPATH)/linux $(HPATH)/scsi $(HPATH)/net
 
-HOSTCC  	=gcc -I$(HPATH)
+HOSTCC  	=gcc
 HOSTCFLAGS	=-O2 -fomit-frame-pointer
 
 CROSS_COMPILE 	=

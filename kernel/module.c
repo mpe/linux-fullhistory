@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
 #include <linux/config.h>
 /*
  * Originally by Anonymous (as far as I know...)

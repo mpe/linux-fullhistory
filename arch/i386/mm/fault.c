@@ -123,14 +123,14 @@ bad_area:
  *
  * First we check if it was the bootup rw-test, though..
  */
-	if (wp_works_ok < 0 && address == TASK_SIZE && (error_code & 1)) {
+	if (wp_works_ok < 0 && !address && (error_code & 1)) {
 		wp_works_ok = 1;
 		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
 		flush_tlb();
 		printk("This processor honours the WP bit even when in supervisor mode. Good.\n");
 		return;
 	}
-	if ((unsigned long) (address-TASK_SIZE) < PAGE_SIZE) {
+	if (address < PAGE_SIZE) {
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
 		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
 	} else
@@ -139,12 +139,12 @@ bad_area:
 	__asm__("movl %%cr3,%0" : "=r" (page));
 	printk(KERN_ALERT "current->tss.cr3 = %08lx, %%cr3 = %08lx\n",
 		tsk->tss.cr3, page);
-	page = ((unsigned long *) page)[address >> 22];
+	page = ((unsigned long *) __va(page))[address >> 22];
 	printk(KERN_ALERT "*pde = %08lx\n", page);
 	if (page & 1) {
 		page &= PAGE_MASK;
 		address &= 0x003ff000;
-		page = ((unsigned long *) page)[address >> PAGE_SHIFT];
+		page = ((unsigned long *) __va(page))[address >> PAGE_SHIFT];
 		printk(KERN_ALERT "*pte = %08lx\n", page);
 	}
 	die_if_kernel("Oops", regs, error_code);

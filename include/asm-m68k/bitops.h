@@ -59,11 +59,11 @@ extern __inline__ int find_first_zero_bit(void * vaddr, unsigned size)
 	if (!size)
 		return 0;
 
+	size = (size >> 5) + ((size & 31) > 0);
 	while (*p++ == allones)
 	{
-		if (size <= 32)
+		if (--size == 0)
 			return (p - addr) << 5;
-		size -= 32;
 	}
 
 	num = ~*--p;
@@ -123,11 +123,11 @@ minix_find_first_zero_bit (const void *vaddr, unsigned size)
 	if (!size)
 		return 0;
 
+	size = (size >> 4) + ((size & 15) > 0);
 	while (*p++ == 0xffff)
 	{
-		if (size <= 16)
+		if (--size == 0)
 			return (p - addr) << 4;
-		size -= 16;
 	}
 
 	num = ~*--p;
@@ -203,11 +203,11 @@ ext2_find_first_zero_bit (const void *vaddr, unsigned size)
 	if (!size)
 		return 0;
 
+	size = (size >> 5) + ((size & 31) > 0);
 	while (*p++ == ~0UL)
 	{
-		if (size <= 32)
+		if (--size == 0)
 			return (p - addr) << 5;
-		size -= 32;
 	}
 
 	--p;
@@ -237,6 +237,21 @@ ext2_find_next_zero_bit (const void *vaddr, unsigned size, unsigned offset)
 	/* No zero yet, search remaining full bytes for a zero */
 	res = ext2_find_first_zero_bit (p, size - 32 * (p - addr));
 	return (p - addr) * 32 + res;
+}
+
+/* Byte swapping. */
+
+extern __inline__ unsigned short
+swab16 (unsigned short val)
+{
+	return (val << 8) | (val >> 8);
+}
+
+extern __inline__ unsigned int
+swab32 (unsigned int val)
+{
+	__asm__ ("rolw #8,%0; swap %0; rolw #8,%0" : "=d" (val) : "0" (val));
+	return val;
 }
 
 #endif /* _M68K_BITOPS_H */

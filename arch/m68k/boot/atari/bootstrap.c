@@ -43,7 +43,7 @@
 #include <asm/page.h>
 
 #define _LINUX_TYPES_H		/* Hack to prevent including <linux/types.h> */
-#include <asm/bootinfo.h>
+#include <asm/setup.h>
 
 /* Atari bootstrap include file */
 #include "bootstrap.h"
@@ -162,6 +162,33 @@ int test_medusa( void )
 }
 
 
+/* Test if FPU instructions are executed in hardware, or if they're
+   emulated in software.  For this, the F-line vector is temporarily
+   replaced. */
+
+int test_software_fpu(void)
+{
+	int rv = 0;
+
+	__asm__ __volatile__
+		( "movel	0x2c,a0\n\t"
+		  "movel	sp,a1\n\t"
+		  "movel	#Lfline,0x2c\n\t"
+		  "moveq	#1,%0\n\t"
+		  "fnop 	\n\t"
+		  "nop		\n\t"
+		  "moveq	#0,%0\n"
+		"Lfline:\t"
+		  "movel	a1,sp\n\t"
+		  "movel	a0,0x2c"
+		  : "=d" (rv)
+		  : /* no inputs */
+		  : "a0", "a1" );
+
+	return rv;
+}
+
+
 void get_medusa_bank_sizes( u_long *bank1, u_long *bank2 )
 
 {	static u_long	save_addr;
@@ -248,6 +275,47 @@ void get_medusa_bank_sizes( u_long *bank1, u_long *bank2 )
 #undef TESTADDR
 #undef TESTPAT
 
+
+static int check_bootinfo_version(char *memptr)
+{
+    struct bootversion *bv = (struct bootversion *)memptr;
+    unsigned long version = 0;
+    int i, kernel_major, kernel_minor, boots_major, boots_minor;
+
+    printf( "\n" );
+    if (bv->magic == BOOTINFOV_MAGIC) {
+	for( i = 0; bv->machversions[i].machtype != 0; ++i ) {
+	    if (bv->machversions[i].machtype == MACH_ATARI) {
+		version = bv->machversions[i].version;
+		break;
+	    }
+	}
+    }
+    if (!version)
+	printf("Kernel has no bootinfo version info, assuming 0.0\n");
+
+    kernel_major = BI_VERSION_MAJOR(version);
+    kernel_minor = BI_VERSION_MINOR(version);
+    boots_major  = BI_VERSION_MAJOR(ATARI_BOOTI_VERSION);
+    boots_minor  = BI_VERSION_MINOR(ATARI_BOOTI_VERSION);
+    printf("Bootstrap's bootinfo version: %d.%d\n",
+	   boots_major, boots_minor);
+    printf("Kernel's bootinfo version   : %d.%d\n",
+	   kernel_major, kernel_minor);
+    
+    if (kernel_major != boots_major) {
+	printf("\nThis bootstrap is too %s for this kernel!\n",
+	       boots_major < kernel_major ? "old" : "new");
+	return 0;
+    }
+    if (kernel_minor > boots_minor) {
+	printf("Warning: Bootinfo version of bootstrap and kernel differ!\n");
+	printf("         Certain features may not work.\n");
+    }
+    return 1;
+}
+
+
 #ifdef USE_BOOTP
 # include "bootp.h"
 #else
@@ -287,7 +355,7 @@ int main(int argc, char *argv[])
     kernel_name = "vmlinux";
 
     /* print the startup message */
-    puts("\fLinux/68k Atari Bootstrap version 1.6"
+    puts("\fLinux/68k Atari Bootstrap version 1.8"
 #ifdef USE_BOOTP
 	 " (with BOOTP)"
 #endif
@@ -329,7 +397,7 @@ int main(int argc, char *argv[])
 	    break;
 #ifdef USE_BOOTP
 	  case 'b':
-	    prefer_bootp = 1;
+	    prefer_bootp = 0;
 	    break;
 #endif
 	  case '?':
@@ -370,8 +438,7 @@ int main(int argc, char *argv[])
     getcookie("_MCH", &mch_type);
 
     /* check if we are on a 68030/40 with FPU */
-    if ((cpu_type != 30 && cpu_type != 40 && cpu_type != 60) ||
-		(fpu_type >> 16) < 2)
+    if ((cpu_type != 30 && cpu_type != 40 && cpu_type != 60))
     {
 	puts("Machine type currently not supported. Aborting...");
 	boot_exit(EXIT_FAILURE);
@@ -404,9 +471,12 @@ int main(int argc, char *argv[])
 		puts( "68060\n" );
 	}
 	else {
-		switch ((fpu_type >> 16) & 6) {
+		switch ((fpu_type >> 16) & 7) {
 		  case 0:
 			puts("not present\n");
+			break;
+		  case 1:
+			puts("SFP004 not supported. Assuming no FPU.");
 			break;
 		  case 2:
 			/* try to determine real type */
@@ -425,6 +495,14 @@ int main(int argc, char *argv[])
 		  default:
 			puts("Unknown FPU type. Assuming no FPU.");
 			break;
+		}
+	}
+	/* ++roman: If an FPU was announced in the cookie, test
+	   whether it is a real hardware FPU or a software emulator!  */
+	if (bi.cputype & FPU_MASK) {
+		if (test_software_fpu()) {
+			bi.cputype &= ~FPU_MASK;
+			puts("FPU: software emulated. Assuming no FPU.");
 		}
 	}
 
@@ -766,7 +844,9 @@ int main(int argc, char *argv[])
       }
     else
       kernel_size = kexec.a_text + kexec.a_data + kexec.a_bss;
-    memreq = kernel_size + sizeof (bi) + rd_size;
+    memreq = kernel_size + sizeof (bi);
+    /* align load address of ramdisk image, read() is sloooow on odd addr. */
+    memreq = ((memreq + 3) & ~3) + rd_size;
 	
     /* allocate RAM for the kernel */
     if (!(memptr = (char *)Malloc (memreq)))
@@ -824,6 +904,12 @@ int main(int argc, char *argv[])
       }
     kclose (kfd);
 
+    /* Check kernel's bootinfo version */
+    if (!check_bootinfo_version(memptr)) {
+	Mfree ((void *)memptr);
+	boot_exit (EXIT_FAILURE);
+    }
+    
     /* copy the boot_info struct to the end of the kernel image */
     memcpy ((void *)(memptr + kernel_size),
 	    &bi, sizeof(bi));
@@ -837,7 +923,7 @@ int main(int argc, char *argv[])
 	    Mfree ((void *)memptr);
 	    boot_exit (EXIT_FAILURE);
 	}
-	if (read (rfd, memptr + kernel_size + sizeof (bi),
+	if (read (rfd, memptr + memreq - rd_size,
 		  rd_size) != rd_size)
 	{
 	    fprintf (stderr, "Failed to read ramdisk file\n");
@@ -852,7 +938,7 @@ int main(int argc, char *argv[])
     {
 	if (bi.ramdisk_size)
 	    printf ("RAM disk at %#lx, size is %ldK\n",
-		    (u_long)memptr + kernel_size,
+		    (u_long)(memptr + memreq - rd_size),
 		    bi.ramdisk_size);
 
 	if (elf_kernel)
@@ -879,10 +965,8 @@ int main(int argc, char *argv[])
 		elf_kernel ? kexec_elf.e_entry : kexec.a_entry);
 	printf ("ramdisk dest top is %#lx\n", bi.ramdisk_addr + rd_size);
 	printf ("ramdisk lower limit is %#lx\n",
-		(u_long)(memptr + kernel_size));
-	printf ("ramdisk src top is %#lx\n",
-		(u_long)(memptr + kernel_size) +
-		rd_size);
+		(u_long)(memptr + memreq - rd_size));
+	printf ("ramdisk src top is %#lx\n", (u_long)(memptr + memreq));
 
 	printf ("Type a key to continue the Linux boot...");
 	fflush (stdout);

@@ -110,8 +110,8 @@ char vt_dont_switch = 0;
 
 static void initialize_tty_struct(struct tty_struct *tty);
 
-static int tty_read(struct inode *, struct file *, char *, int);
-static int tty_write(struct inode *, struct file *, const char *, int);
+static long tty_read(struct inode *, struct file *, char *, unsigned long);
+static long tty_write(struct inode *, struct file *, const char *, unsigned long);
 static int tty_select(struct inode *, struct file *, int, select_table *);
 static int tty_open(struct inode *, struct file *);
 static void tty_release(struct inode *, struct file *);
@@ -312,17 +312,20 @@ int tty_check_change(struct tty_struct * tty)
 	return -ERESTARTSYS;
 }
 
-static int hung_up_tty_read(struct inode * inode, struct file * file, char * buf, int count)
+static long hung_up_tty_read(struct inode * inode, struct file * file,
+	char * buf, unsigned long count)
 {
 	return 0;
 }
 
-static int hung_up_tty_write(struct inode * inode, struct file * file, const char * buf, int count)
+static long hung_up_tty_write(struct inode * inode,
+	struct file * file, const char * buf, unsigned long count)
 {
 	return -EIO;
 }
 
-static int hung_up_tty_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
+static int hung_up_tty_select(struct inode * inode, struct file * filp,
+	int sel_type, select_table * wait)
 {
 	return 1;
 }
@@ -333,7 +336,8 @@ static int hung_up_tty_ioctl(struct inode * inode, struct file * file,
 	return cmd == TIOCSPGRP ? -ENOTTY : -EIO;
 }
 
-static int tty_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
+static long long tty_lseek(struct inode * inode, struct file * file,
+	long long offset, int orig)
 {
 	return -ESPIPE;
 }
@@ -719,7 +723,8 @@ void start_tty(struct tty_struct *tty)
 	wake_up_interruptible(&tty->write_wait);
 }
 
-static int tty_read(struct inode * inode, struct file * file, char * buf, int count)
+static long tty_read(struct inode * inode, struct file * file,
+	char * buf, unsigned long count)
 {
 	int i;
 	struct tty_struct * tty;
@@ -747,8 +752,7 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 		}
 #endif
 	if (tty->ldisc.read)
-		/* XXX casts are for what kernel-wide prototypes should be. */
-		i = (tty->ldisc.read)(tty,file,(unsigned char *)buf,(unsigned int)count);
+		i = (tty->ldisc.read)(tty,file,buf,count);
 	else
 		i = -EIO;
 	if (i > 0)
@@ -771,7 +775,7 @@ static inline int do_tty_write(
 	int ret = 0, written = 0;
 
 	for (;;) {
-		unsigned int size = PAGE_SIZE*2;
+		unsigned long size = PAGE_SIZE*2;
 		if (size > count)
 			size = count;
 		ret = write(tty, file, buf, size);
@@ -796,7 +800,8 @@ static inline int do_tty_write(
 }
 
 
-static int tty_write(struct inode * inode, struct file * file, const char * buf, int count)
+static long tty_write(struct inode * inode, struct file * file,
+	const char * buf, unsigned long count)
 {
 	int is_console;
 	struct tty_struct * tty;

@@ -27,7 +27,7 @@
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
 
-static int minix_file_write(struct inode *, struct file *, const char *, int);
+static long minix_file_write(struct inode *, struct file *, const char *, unsigned long);
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -66,7 +66,8 @@ struct inode_operations minix_file_inode_operations = {
 	NULL			/* permission */
 };
 
-static int minix_file_write(struct inode * inode, struct file * filp, const char * buf, int count)
+static long minix_file_write(struct inode * inode, struct file * filp,
+	const char * buf, unsigned long count)
 {
 	off_t pos;
 	int written,c;

@@ -29,7 +29,8 @@
 
 #define PRINTK(X)
 
-static int fat_dir_read(struct inode * inode,struct file * filp, char * buf,int count)
+static long fat_dir_read(struct inode * inode,struct file * filp,
+	char * buf, unsigned long count)
 {
 	return -EISDIR;
 }

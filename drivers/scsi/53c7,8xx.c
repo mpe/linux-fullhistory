@@ -452,7 +452,7 @@ static Scsi_Host_Template *the_template = NULL;
  *     the right way, we need to provide options to reverse words
  *     when the scripts are relocated.
  *
- * 7.  Use vremap() to access memory mapped boards.  
+ * 7.  Use ioremap() to access memory mapped boards.  
  */
 
 /* 

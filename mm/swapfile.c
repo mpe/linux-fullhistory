@@ -17,6 +17,7 @@
 #include <linux/fs.h>
 #include <linux/swapctl.h>
 #include <linux/blkdev.h> /* for blk_size */
+#include <linux/vmalloc.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
@@ -170,7 +171,7 @@ static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 		return 0;
 	if (pte_present(pte)) {
 		unsigned long page_nr = MAP_NR(pte_page(pte));
-		if (page_nr >= MAP_NR(high_memory))
+		if (page_nr >= max_mapnr)
 			return 0;
 		if (!in_swap_cache(page_nr))
 			return 0;

@@ -50,7 +50,8 @@
 #include <asm/pgtable.h>
 #include <asm/string.h>
 
-unsigned long high_memory = 0;
+unsigned long max_mapnr = 0;
+void * high_memory = NULL;
 
 /*
  * We special-case the C-O-W ZERO_PAGE, because it's such
@@ -191,7 +192,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte, int cow)
 		return;
 	}
 	page_nr = MAP_NR(pte_page(pte));
-	if (page_nr >= MAP_NR(high_memory) || PageReserved(mem_map+page_nr)) {
+	if (page_nr >= max_mapnr || PageReserved(mem_map+page_nr)) {
 		set_pte(new_pte, pte);
 		return;
 	}
@@ -302,7 +303,7 @@ static inline void free_pte(pte_t page)
 {
 	if (pte_present(page)) {
 		unsigned long addr = pte_page(page);
-		if (addr >= high_memory || PageReserved(mem_map+MAP_NR(addr)))
+		if (MAP_NR(addr) >= max_mapnr || PageReserved(mem_map+MAP_NR(addr)))
 			return;
 		free_page(addr);
 		if (current->mm->rss <= 0)
@@ -462,7 +463,7 @@ int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
  * in null mappings (currently treated as "copy-on-access")
  */
 static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned long size,
-	unsigned long offset, pgprot_t prot)
+	unsigned long phys_addr, pgprot_t prot)
 {
 	unsigned long end;
 
@@ -471,19 +472,22 @@ static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned 
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
+		unsigned long mapnr;
 		pte_t oldpage = *pte;
 		pte_clear(pte);
-		if (offset >= high_memory || PageReserved(mem_map+MAP_NR(offset)))
- 			set_pte(pte, mk_pte(offset, prot));
+
+		mapnr = MAP_NR(__va(phys_addr));
+		if (mapnr >= max_mapnr || PageReserved(mem_map+mapnr))
+ 			set_pte(pte, mk_pte_phys(phys_addr, prot));
 		forget_pte(oldpage);
 		address += PAGE_SIZE;
-		offset += PAGE_SIZE;
+		phys_addr += PAGE_SIZE;
 		pte++;
 	} while (address < end);
 }
 
 static inline int remap_pmd_range(pmd_t * pmd, unsigned long address, unsigned long size,
-	unsigned long offset, pgprot_t prot)
+	unsigned long phys_addr, pgprot_t prot)
 {
 	unsigned long end;
 
@@ -491,26 +495,26 @@ static inline int remap_pmd_range(pmd_t * pmd, unsigned long address, unsigned l
 	end = address + size;
 	if (end > PGDIR_SIZE)
 		end = PGDIR_SIZE;
-	offset -= address;
+	phys_addr -= address;
 	do {
 		pte_t * pte = pte_alloc(pmd, address);
 		if (!pte)
 			return -ENOMEM;
-		remap_pte_range(pte, address, end - address, address + offset, prot);
+		remap_pte_range(pte, address, end - address, address + phys_addr, prot);
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
 	} while (address < end);
 	return 0;
 }
 
-int remap_page_range(unsigned long from, unsigned long offset, unsigned long size, pgprot_t prot)
+int remap_page_range(unsigned long from, unsigned long phys_addr, unsigned long size, pgprot_t prot)
 {
 	int error = 0;
 	pgd_t * dir;
 	unsigned long beg = from;
 	unsigned long end = from + size;
 
-	offset -= from;
+	phys_addr -= from;
 	dir = pgd_offset(current->mm, from);
 	flush_cache_range(current->mm, beg, end);
 	while (from < end) {
@@ -518,7 +522,7 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 		error = -ENOMEM;
 		if (!pmd)
 			break;
-		error = remap_pmd_range(pmd, from, end - from, offset + from, prot);
+		error = remap_pmd_range(pmd, from, end - from, phys_addr + from, prot);
 		if (error)
 			break;
 		from = (from + PGDIR_SIZE) & PGDIR_MASK;
@@ -551,7 +555,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 	pmd_t * pmd;
 	pte_t * pte;
 
-	if (page >= high_memory)
+	if (MAP_NR(page) >= max_mapnr)
 		printk("put_dirty_page: trying to put page %08lx at %08lx\n",page,address);
 	if (mem_map[MAP_NR(page)].count != 1)
 		printk("mem_map disagrees with %08lx at %08lx\n",page,address);
@@ -622,7 +626,7 @@ void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	if (pte_write(pte))
 		goto end_wp_page;
 	old_page = pte_page(pte);
-	if (old_page >= high_memory)
+	if (MAP_NR(old_page) >= max_mapnr)
 		goto bad_wp_page;
 	tsk->min_flt++;
 	/*
@@ -787,7 +791,7 @@ static void partial_clear(struct vm_area_struct *vma, unsigned long address)
 	flush_cache_page(vma, address);
 	address &= ~PAGE_MASK;
 	address += pte_page(pte);
-	if (address >= high_memory)
+	if (MAP_NR(address) >= max_mapnr)
 		return;
 	memset((void *) address, 0, PAGE_SIZE - (address & ~PAGE_MASK));
 	flush_page_to_ram(pte_page(pte));

@@ -29,6 +29,6 @@ struct rootsector
   u_long bsl_st;		/* start of bad sector list */
   u_long bsl_cnt;		/* length of bad sector list */
   u_short checksum;		/* checksum for bootable disks */
-};
+} __attribute__((__packed__));
 
 #endif /* _LINUX_ATARI_ROOTSEC_H */

@@ -197,8 +197,8 @@ static inline void flush_tlb_range(struct mm_struct *mm,
  * area for the same reason. ;)
  */
 #define VMALLOC_OFFSET	(8*1024*1024)
-#define VMALLOC_START ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
-#define VMALLOC_VMADDR(x) (TASK_SIZE + (unsigned long)(x))
+#define VMALLOC_START	(((unsigned long) high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
+#define VMALLOC_VMADDR(x) ((unsigned long)(x))
 
 /*
  * The 4MB page is guessing..  Detailed in the infamous "Chapter H"
@@ -216,6 +216,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define _PAGE_4M	0x080	/* 4 MB page, Pentium+.. */
 
 #define _PAGE_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY)
+#define _KERNPG_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | _PAGE_DIRTY)
 #define _PAGE_CHG_MASK	(PAGE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY)
 
 #define PAGE_NONE	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED)
@@ -289,9 +290,10 @@ extern pte_t * __bad_pagetable(void);
 /* to set the page-dir */
 #define SET_PAGE_DIR(tsk,pgdir) \
 do { \
-	(tsk)->tss.cr3 = (unsigned long) (pgdir); \
+	unsigned long __pgdir = __pa(pgdir); \
+	(tsk)->tss.cr3 = __pgdir; \
 	if ((tsk) == current) \
-		__asm__ __volatile__("movl %0,%%cr3": :"r" (pgdir)); \
+		__asm__ __volatile__("movl %0,%%cr3": :"r" (__pgdir)); \
 } while (0)
 
 #define pte_none(x)	(!pte_val(x))
@@ -299,7 +301,7 @@ do { \
 #define pte_clear(xp)	do { pte_val(*(xp)) = 0; } while (0)
 
 #define pmd_none(x)	(!pmd_val(x))
-#define	pmd_bad(x)	((pmd_val(x) & ~PAGE_MASK) != _PAGE_TABLE)
+#define	pmd_bad(x)	((pmd_val(x) & (~PAGE_MASK & ~_PAGE_USER)) != _KERNPG_TABLE)
 #define pmd_present(x)	(pmd_val(x) & _PAGE_PRESENT)
 #define pmd_clear(xp)	do { pmd_val(*(xp)) = 0; } while (0)
 
@@ -338,23 +340,25 @@ extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= _PAGE_ACCESSED; ret
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
-extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
-{ pte_t pte; pte_val(pte) = page | pgprot_val(pgprot); return pte; }
+#define mk_pte(page, pgprot) \
+({ pte_t __pte; pte_val(__pte) = __pa(page) + pgprot_val(pgprot); __pte; })
+
+/* This takes a physical page address that is used by the remapping functions */
+#define mk_pte_phys(physpage, pgprot) \
+({ pte_t __pte; pte_val(__pte) = physpage + pgprot_val(pgprot); __pte; })
 
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
 
-extern inline unsigned long pte_page(pte_t pte)
-{ return pte_val(pte) & PAGE_MASK; }
+#define pte_page(pte) \
+((unsigned long) __va(pte_val(pte) & PAGE_MASK))
 
-extern inline unsigned long pmd_page(pmd_t pmd)
-{ return pmd_val(pmd) & PAGE_MASK; }
+#define pmd_page(pmd) \
+((unsigned long) __va(pmd_val(pmd) & PAGE_MASK))
 
 /* to find an entry in a page-table-directory */
-extern inline pgd_t * pgd_offset(struct mm_struct * mm, unsigned long address)
-{
-	return mm->pgd + (address >> PGDIR_SHIFT);
-}
+#define pgd_offset(mm, address) \
+((mm)->pgd + ((address) >> PGDIR_SHIFT))
 
 /* Find an entry in the second-level page table.. */
 extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
@@ -363,10 +367,8 @@ extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
 }
 
 /* Find an entry in the third-level page table.. */ 
-extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
-{
-	return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1));
-}
+#define pte_offset(pmd, address) \
+((pte_t *) (pmd_page(*pmd) + ((address>>10) & ((PTRS_PER_PTE-1)<<2))))
 
 /*
  * Allocate and free page tables. The xxx_kernel() versions are
@@ -385,17 +387,17 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 		pte_t * page = (pte_t *) get_free_page(GFP_KERNEL);
 		if (pmd_none(*pmd)) {
 			if (page) {
-				pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) page;
+				pmd_val(*pmd) = _KERNPG_TABLE + __pa(page);
 				return page + address;
 			}
-			pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
+			pmd_val(*pmd) = _KERNPG_TABLE + __pa(BAD_PAGETABLE);
 			return NULL;
 		}
 		free_page((unsigned long) page);
 	}
 	if (pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
+		pmd_val(*pmd) = _KERNPG_TABLE + __pa(BAD_PAGETABLE);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + address;
@@ -439,7 +441,7 @@ getnew:
 	if (!page)
 		goto oom;
 	memset((void *) page, 0, PAGE_SIZE);
-	pmd_val(*pmd) = _PAGE_TABLE | page;
+	pmd_val(*pmd) = _PAGE_TABLE + __pa(page);
 	return (pte_t *) (page + address);
 freenew:
 	free_page(page);
@@ -449,7 +451,7 @@ freenew:
 fix:
 	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
 oom:
-	pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
+	pmd_val(*pmd) = _PAGE_TABLE + __pa(BAD_PAGETABLE);
 	return NULL;
 }
 

@@ -1,6 +1,9 @@
 #ifndef _M68K_STRING_H_
 #define _M68K_STRING_H_
 
+#include <linux/config.h>
+#include <asm/page.h>
+
 #define __HAVE_ARCH_STRCPY
 extern inline char * strcpy(char * dest,const char *src)
 {
@@ -187,14 +190,65 @@ extern inline int strncmp(const char * cs,const char * ct,size_t count)
 }
 
 #define __HAVE_ARCH_MEMSET
-extern inline void * memset(void * s,int c,size_t count)
+/*
+ * This is really ugly, but its highly optimizatiable by the
+ * compiler and is meant as compensation for gcc's missing
+ * __builtin_memset(). For the 680[23]0	it might be worth considering
+ * the optimal number of misaligned writes compared to the number of
+ * tests'n'branches needed to align the destination address. The
+ * 680[46]0 doesn't really care due to their copy-back caches.
+ *						10/09/96 - Jes Sorensen
+ */
+extern inline void * __memset_g(void * s, int c, size_t count)
 {
   void *xs = s;
   size_t temp;
 
   if (!count)
     return xs;
+
   c &= 0xff;
+  c |= c << 8;
+  c |= c << 16;
+
+  if (count < 36){
+	  long *ls = s;
+
+	  switch(count){
+	  case 32: case 33: case 34: case 35:
+		  *ls++ = c;
+	  case 28: case 29: case 30: case 31:
+		  *ls++ = c;
+	  case 24: case 25: case 26: case 27:
+		  *ls++ = c;
+	  case 20: case 21: case 22: case 23:
+		  *ls++ = c;
+	  case 16: case 17: case 18: case 19:
+		  *ls++ = c;
+	  case 12: case 13: case 14: case 15:
+		  *ls++ = c;
+	  case 8: case 9: case 10: case 11:
+		  *ls++ = c;
+	  case 4: case 5: case 6: case 7:
+		  *ls++ = c;
+		  break;
+	  default:
+		  break;
+	  }
+	  s = ls;
+	  if (count & 0x02){
+		  short *ss = s;
+		  *ss++ = c;
+		  s = ss;
+	  }
+	  if (count & 0x01){
+		  char *cs = s;
+		  *cs++ = c;
+		  s = cs;
+	  }
+	  return xs;
+  }
+
   if ((long) s & 1)
     {
       char *cs = s;
@@ -202,7 +256,6 @@ extern inline void * memset(void * s,int c,size_t count)
       s = cs;
       count--;
     }
-  c |= c << 8;
   if (count > 2 && (long) s & 2)
     {
       short *ss = s;
@@ -214,7 +267,6 @@ extern inline void * memset(void * s,int c,size_t count)
   if (temp)
     {
       long *ls = s;
-      c |= c << 16;
       temp--;
       do
 	*ls++ = c;
@@ -235,10 +287,141 @@ extern inline void * memset(void * s,int c,size_t count)
   return xs;
 }
 
+/*
+ * __memset_page assumes that data is longword aligned. Most, if not
+ * all, of these page sized memsets are performed on page aligned
+ * areas, thus we do not need to check if the destination is longword
+ * aligned. Of course we suffer a serious performance loss if this is
+ * not the case but I think the risk of this ever happening is
+ * extremely small. We spend a lot of time clearing pages in
+ * get_empty_page() so I think it is worth it anyway. Besides, the
+ * 680[46]0 do not really care about misaligned writes due to their
+ * copy-back cache.
+ *
+ * The optimized case for the 680[46]0 is implemented using the move16
+ * instruction. My tests showed that this implementation is 35-45%
+ * faster than the original implementation using movel, the only
+ * caveat is that the destination address must be 16-byte aligned.
+ *                                            01/09/96 - Jes Sorensen
+ */
+extern inline void * __memset_page(void * s,int c,size_t count)
+{
+  unsigned long data, tmp;
+  void *xs, *sp;
+
+  xs = sp = s;
+
+  c = c & 255;
+  data = c | (c << 8);
+  data |= data << 16;
+
+#if defined(CONFIG_OPTIMIZE_040) || defined(CONFIG_OPTIMIZE_060)
+
+  if (((unsigned long) s) & 0x0f)
+	  memset(s, c, count);
+  else{
+	  *((unsigned long *)(s))++ = data;
+	  *((unsigned long *)(s))++ = data;
+	  *((unsigned long *)(s))++ = data;
+	  *((unsigned long *)(s))++ = data;
+
+	  __asm__ __volatile__("1:\t"
+			       "move16 %2@+,%0@+\n\t"
+			       "subqw  #8,%2\n\t"
+			       "subqw  #8,%2\n\t"
+			       "dbra   %1,1b\n\t"
+			       : "=a" (s), "=d" (tmp)
+			       : "a" (sp), "0" (s), "1" ((count - 16) / 16 - 1)
+			       );
+  }
+
+#else
+  __asm__ __volatile__("1:\t"
+		       "movel %2,%0@+\n\t"
+		       "movel %2,%0@+\n\t"
+		       "movel %2,%0@+\n\t"
+		       "movel %2,%0@+\n\t"
+		       "movel %2,%0@+\n\t"
+		       "movel %2,%0@+\n\t"
+		       "movel %2,%0@+\n\t"
+		       "movel %2,%0@+\n\t"
+		       "dbra  %1,1b\n\t"
+		       : "=a" (s), "=d" (tmp)
+		       : "d" (data), "0" (s), "1" (count / 32 - 1)
+		       );
+#endif
+
+  return xs;
+}
+
+#define __memset_const(s,c,count) \
+((count==PAGE_SIZE) ? \
+  __memset_page((s),(c),(count)) : \
+  __memset_g((s),(c),(count)))
+
+#define memset(s, c, count) \
+(__builtin_constant_p(count) ? \
+ __memset_const((s),(c),(count)) : \
+ memset((s),(c),(count)))
+
 #define __HAVE_ARCH_MEMCPY
+/*
+ * __builtin_memcpy() does not handle page-sized memcpys very well,
+ * thus following the same assumptions as for page-sized memsets, this
+ * function copies page-sized areas using an unrolled loop, without
+ * considering alignment.
+ *
+ * For the 680[46]0 only kernels we use the move16 instruction instead
+ * as it writes through the data-cache, invalidating the cache-lines
+ * touched. In this way we do not use up the entire data-cache (well,
+ * half of it on the 68060) by copying a page. An unrolled loop of two
+ * move16 instructions seem to the fastest. The only caveat is that
+ * both source and destination must be 16-byte aligned, if not we fall
+ * back to the generic memcpy function.  - Jes
+ */
+extern inline void * __memcpy_page(void * to, const void * from, size_t count)
+{
+  unsigned long tmp;
+  void *xto = to;
+
+#if defined(CONFIG_OPTIMIZE_040) || defined(CONFIG_OPTIMIZE_060)
+
+  if (((unsigned long) to | (unsigned long) from) & 0x0f)
+	  return memcpy(to, from, count);
+
+  __asm__ __volatile__("1:\t"
+		       "move16 %1@+,%0@+\n\t"
+		       "move16 %1@+,%0@+\n\t"
+		       "dbra  %2,1b\n\t"
+		       : "=a" (to), "=a" (from), "=d" (tmp)
+		       : "0" (to), "1" (from) , "2" (count / 32 - 1)
+		       );
+#else
+  __asm__ __volatile__("1:\t"
+		       "movel %1@+,%0@+\n\t"
+		       "movel %1@+,%0@+\n\t"
+		       "movel %1@+,%0@+\n\t"
+		       "movel %1@+,%0@+\n\t"
+		       "movel %1@+,%0@+\n\t"
+		       "movel %1@+,%0@+\n\t"
+		       "movel %1@+,%0@+\n\t"
+		       "movel %1@+,%0@+\n\t"
+		       "dbra  %2,1b\n\t"
+		       : "=a" (to), "=a" (from), "=d" (tmp)
+		       : "0" (to), "1" (from) , "2" (count / 32 - 1)
+		       );
+#endif
+  return xto;
+}
+
+#define __memcpy_const(to, from, n) \
+((n==PAGE_SIZE) ? \
+  __memcpy_page((to),(from),(n)) : \
+  __builtin_memcpy((to),(from),(n)))
+
 #define memcpy(to, from, n) \
 (__builtin_constant_p(n) ? \
- __builtin_memcpy((to),(from),(n)) : \
+ __memcpy_const((to),(from),(n)) : \
  memcpy((to),(from),(n)))
 
 #define __HAVE_ARCH_MEMMOVE

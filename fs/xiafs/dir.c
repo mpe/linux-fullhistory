@@ -20,7 +20,7 @@
 
 #include "xiafs_mac.h"
 
-static int xiafs_dir_read(struct inode *, struct file *, char *, int);
+static long xiafs_dir_read(struct inode *, struct file *, char *, unsigned long);
 static int xiafs_readdir(struct inode *, struct file *, void *, filldir_t);
 
 static struct file_operations xiafs_dir_operations = {
@@ -59,8 +59,8 @@ struct inode_operations xiafs_dir_inode_operations = {
     NULL			/* permission */
 };
 
-static int xiafs_dir_read(struct inode * inode, 
-			struct file * filp, char * buf, int count)
+static long xiafs_dir_read(struct inode * inode, struct file * filp,
+	char * buf, unsigned long count)
 {
   return -EISDIR;
 }

@@ -29,11 +29,9 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
-#include <linux/config.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/irq.h>
-#include <asm/bootinfo.h>
 #include <asm/zorro.h>
 #include <asm/pgtable.h>
 #include <linux/fb.h>
@@ -331,7 +329,8 @@ for (i = 0; i < 256; i++)
   }
 
 *memstart = (*memstart + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-CyberMem = kernel_map (board_addr + 0x01400000, 0x00400000,
+/* This includes the video memory as well as the S3 register set */
+CyberMem = kernel_map (board_addr + 0x01400000, 0x01000000,
                        KERNELMAP_NOCACHE_SER, memstart);
 
 if (Cyberfb_Cyber8)
@@ -339,8 +338,7 @@ if (Cyberfb_Cyber8)
 else
   memset ((char*)CyberMem, 0, CYBER16_WIDTH * CYBER16_HEIGHT);
 
-CyberRegs = (char*) kernel_map (board_addr + 0x02000000, 0xf000,
-                                KERNELMAP_NOCACHE_SER, memstart);
+CyberRegs = (char*) (CyberMem + 0x00c00000);
 
 /* Disable hardware cursor */
 *(CyberRegs + S3_CRTC_ADR)  = S3_REG_LOCK2;
@@ -410,7 +408,11 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 
    strcpy(fix->id, Cyber_fb_name);
    fix->smem_start = CyberMem;
+#if 0
    fix->smem_len = CyberSize;
+#else
+   fix->smem_len = 0x01000000;
+#endif
 
    fix->type = FB_TYPE_PACKED_PIXELS;
    fix->type_aux = 0;

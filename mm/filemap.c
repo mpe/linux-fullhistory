@@ -129,7 +129,7 @@ int shrink_mmap(int priority, int dma)
 {
 	static int clock = 0;
 	struct page * page;
-	unsigned long limit = MAP_NR(high_memory);
+	unsigned long limit = max_mapnr;
 	struct buffer_head *tmp, *bh;
 	int count_max, count_min;
 
@@ -566,7 +566,8 @@ static inline unsigned long generic_file_readahead(int reada_ok, struct file * f
  * of the logic when it comes to error handling etc.
  */
 
-int generic_file_read(struct inode * inode, struct file * filp, char * buf, int count)
+long generic_file_read(struct inode * inode, struct file * filp,
+	char * buf, unsigned long count)
 {
 	int error, read;
 	unsigned long pos, ppos, page_cache;

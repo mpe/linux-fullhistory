@@ -8,38 +8,28 @@
 # Copyright (C) 1994 by Linus Torvalds
 #
 
-ifdef CONFIG_KERNEL_ELF
 HOSTCFLAGS := $(HOSTCFLAGS) -D__BFD__
-endif
 
 ifdef SMP
 HOSTCFLAGS := $(HOSTCFLAGS) -D__SMP__
 endif
 
 zImage: $(CONFIGURE) bootsect setup compressed/vmlinux tools/build
-ifdef CONFIG_KERNEL_ELF
 	if hash $(ENCAPS) 2> /dev/null; then \
 	  $(OBJDUMP) $(OBJDUMP_FLAGS) -o $(ZIMAGE_OFFSET) compressed/vmlinux > compressed/vmlinux.out; \
 	else \
 	  $(OBJCOPY) compressed/vmlinux compressed/vmlinux.out; \
 	fi
 	tools/build bootsect setup compressed/vmlinux.out $(ROOT_DEV) > zImage
-else
-	tools/build bootsect setup compressed/vmlinux $(ROOT_DEV) > zImage
-endif
 	sync
 
 bzImage: $(CONFIGURE) bbootsect setup compressed/bvmlinux tools/bbuild
-ifdef CONFIG_KERNEL_ELF
 	if hash $(ENCAPS) 2> /dev/null; then \
 	  $(OBJDUMP) $(OBJDUMP_FLAGS) -o $(IMAGE_OFFSET) compressed/bvmlinux > compressed/bvmlinux.out; \
 	else \
 	  $(OBJCOPY) compressed/bvmlinux compressed/bvmlinux.out; \
 	fi
 	tools/bbuild bbootsect setup compressed/bvmlinux.out $(ROOT_DEV) > bzImage
-else
-	tools/bbuild bbootsect setup compressed/bvmlinux $(ROOT_DEV) > bzImage
-endif
 	sync
 
 compressed/vmlinux: $(TOPDIR)/vmlinux

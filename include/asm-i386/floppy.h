@@ -10,6 +10,7 @@
 #ifndef __ASM_I386_FLOPPY_H
 #define __ASM_I386_FLOPPY_H
 
+#include <linux/vmalloc.h>
 
 #define SW fd_routine[use_virtual_dma&1]
 
@@ -38,7 +39,7 @@
 
 static int virtual_dma_count=0;
 static int virtual_dma_residue=0;
-static unsigned long virtual_dma_addr=0;
+static char *virtual_dma_addr=0;
 static int virtual_dma_mode=0;
 static int doing_pdma=0;
 
@@ -101,7 +102,7 @@ static void floppy_hardint(int irq, void *dev_id, struct pt_regs * regs)
 		register char *lptr;
 
 		st = 1;
-		for(lcount=virtual_dma_count, lptr=(char *)virtual_dma_addr; 
+		for(lcount=virtual_dma_count, lptr=virtual_dma_addr; 
 		    lcount; lcount--, lptr++) {
 			st=inb(virtual_dma_port+4) & 0xa0 ;
 			if(st != 0xa0) 
@@ -113,7 +114,7 @@ static void floppy_hardint(int irq, void *dev_id, struct pt_regs * regs)
 			st = inb(virtual_dma_port+4);
 		}
 		virtual_dma_count = lcount;
-		virtual_dma_addr = (int) lptr;
+		virtual_dma_addr = lptr;
 	}
 #endif
 
@@ -168,7 +169,12 @@ static void vdma_set_dma_mode(unsigned int dummy,char mode)
 	virtual_dma_mode = (mode  == DMA_MODE_WRITE);
 }
 
-static void vdma_set_dma_addr(unsigned int dummy,unsigned int addr)
+static void hset_dma_addr(unsigned int no, char *addr)
+{
+	set_dma_addr(no, virt_to_bus(addr));
+}
+
+static void vdma_set_dma_addr(unsigned int dummy, char *addr)
 {
 	virtual_dma_addr = addr;
 }
@@ -222,7 +228,7 @@ struct fd_routine_l {
 	void (*_free_dma)(unsigned int dmanr);
 	void (*_clear_dma_ff)(unsigned int dummy);
 	void (*_set_dma_mode)(unsigned int dummy, char mode);
-	void (*_set_dma_addr)(unsigned int dummy, unsigned int addr);
+	void (*_set_dma_addr)(unsigned int dummy, char *addr);
 	void (*_set_dma_count)(unsigned int dummy, unsigned int count);
 	int (*_get_dma_residue)(unsigned int dummy);
 	int (*_request_irq)(unsigned int irq,
@@ -240,7 +246,7 @@ struct fd_routine_l {
 		free_dma,
 		clear_dma_ff,
 		set_dma_mode,
-		set_dma_addr,
+		hset_dma_addr,
 		set_dma_count,
 		get_dma_residue,
 		request_irq,

@@ -40,6 +40,7 @@
 
 
 #include <linux/types.h>
+#include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/tty.h>
@@ -49,7 +50,7 @@
 #include <linux/kd.h>
 #include <linux/malloc.h>
 
-#include <asm/bootinfo.h>
+#include <asm/setup.h>
 #include <asm/irq.h>
 #ifdef CONFIG_AMIGA
 #include <asm/amigahw.h>
@@ -269,7 +270,7 @@ static __inline__ u_short expand2w(u_char c);
 static __inline__ u_long expand2l(u_char c);
 static __inline__ u_short dup2w(u_char c);
 static __inline__ int real_y(struct display *p, int y);
-static void fbcon_vbl_handler(int irq, struct pt_regs *fp, void *dummy);
+static void fbcon_vbl_handler(int irq, void *dummy, struct pt_regs *fp);
 static void fbcon_bmove_rec(struct display *p, int sy, int sx, int dy, int dx,
                             int height, int width, u_int y_break);
 
@@ -520,19 +521,19 @@ static u_long fbcon_startup(u_long kmem_start, char **display_desc)
 #ifdef CONFIG_AMIGA
    if (MACH_IS_AMIGA) {
       cursor_blink_rate = AMIGA_CURSOR_BLINK_RATE;
-      irqres = add_isr(IRQ_AMIGA_VERTB, fbcon_vbl_handler, 0, NULL,
-                       "console/cursor");
+      irqres = request_irq(IRQ_AMIGA_VERTB, fbcon_vbl_handler, 0,
+                           "console/cursor", fbcon_vbl_handler);
    }
 #endif /* CONFIG_AMIGA */
 #ifdef CONFIG_ATARI
    if (MACH_IS_ATARI) {
       cursor_blink_rate = ATARI_CURSOR_BLINK_RATE;
-      irqres = add_isr(IRQ_AUTO_4, fbcon_vbl_handler, IRQ_TYPE_PRIO, NULL,
-		       "console/cursor");
+      irqres = request_irq(IRQ_AUTO_4, fbcon_vbl_handler, IRQ_TYPE_PRIO,
+                           "console/cursor", fbcon_vbl_handler);
    }
 #endif /* CONFIG_ATARI */
 
-   if (!irqres)
+   if (irqres)
       panic("fbcon_startup: Couldn't add vblank interrupt");
 
    return(kmem_start);
@@ -1487,7 +1488,7 @@ static int fbcon_cursor(struct vc_data *conp, int mode)
 }
 
 
-static void fbcon_vbl_handler(int irq, struct pt_regs *fp, void *dummy)
+static void fbcon_vbl_handler(int irq, void *dummy, struct pt_regs *fp)
 {
    struct display *p;
 
@@ -1713,7 +1714,7 @@ static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data)
 {
 	int unit = conp->vc_num;
 	struct display *p = &disp[unit];
-	int i, size, alloc;
+	int i, j, size, alloc;
 
 	size = (p->fontwidth+7)/8 * p->fontheight * 256;
 	alloc = (*w+7)/8 * *h * 256;
@@ -1724,10 +1725,9 @@ static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data)
 		/* allocation length not sufficient */
 		return( -ENAMETOOLONG );
 
-	if ((i = verify_area( VERIFY_WRITE, (void *)data, size )))
-		return i;
-
-	memcpy_tofs( data, p->fontdata, size );
+	for (i = 0; i < 256; i++)
+		for (j = 0; j < p->fontheight; j++)
+			data[i*32+j] = p->fontdata[i*p->fontheight+j];
 	return( 0 );
 }
 
@@ -1738,7 +1738,7 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
 {
 	int unit = conp->vc_num;
 	struct display *p = &disp[unit];
-	int i, size, userspace = 1, resize;
+	int i, j, size, userspace = 1, resize;
 	char *old_data = NULL, *new_data;
 
 	if (w < 0)
@@ -1794,13 +1794,15 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
 		old_data = p->fontdata;
 	
 	if (userspace) {
-		if ((i = verify_area( VERIFY_READ, (void *)data, size )))
-			return i;
 		if (!(new_data = kmalloc( sizeof(int)+size, GFP_USER )))
 			return( -ENOMEM );
 		new_data += sizeof(int);
 		REFCOUNT(new_data) = 1; /* usage counter */
-		memcpy_fromfs( new_data, data, size );
+
+		for (i = 0; i < 256; i++)
+			for (j = 0; j < h; j++)
+				new_data[i*h+j] = data[i*32+j];
+
 		p->fontdata = new_data;
 		p->userfont = 1;
 	}
@@ -1814,6 +1816,9 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
   activate:
 	if (resize) {
 		p->var.xoffset = p->var.yoffset = p->yscroll = 0;  /* reset wrap/pan */
+		/* Adjust the virtual screen-size to fontheight*rows */
+		p->var.yres_virtual = (p->var.yres/h)*h;
+		p->vrows = p->var.yres_virtual/h;
 		if (divides(p->ywrapstep, p->fontheight))
 			p->scrollmode = SCROLL_YWRAP;
 		else if (divides(p->ypanstep, p->fontheight) &&

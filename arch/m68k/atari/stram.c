@@ -2,7 +2,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <asm/bootinfo.h>
+#include <asm/setup.h>
 #include <asm/atarihw.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>

@@ -18,7 +18,9 @@
 **
 */
 
-#define NUM_AMIGA_SOURCES   (24)
+#define AMI_IRQS            (24)
+#define AMI_STD_IRQS        (14)
+#define CIA_IRQS            (5)
 
 /* vertical blanking interrupt */
 #define IRQ_AMIGA_VERTB     (IRQ_MACHSPEC | 0)
@@ -43,22 +45,26 @@
 #define IRQ_AMIGA_RBF	    (IRQ_MACHSPEC | 9)
 #define IRQ_AMIGA_TBE	    (IRQ_MACHSPEC | 10)
 
+/* software interrupts */
+#define IRQ_AMIGA_SOFT      (IRQ_MACHSPEC | 11)
+
+/* interrupts from external hardware */
+#define IRQ_AMIGA_PORTS	    (IRQ_MACHSPEC | 12)
+#define IRQ_AMIGA_EXTER	    (IRQ_MACHSPEC | 13)
+
 /* CIA interrupt sources */
-#define IRQ_AMIGA_CIAA_TA   (IRQ_MACHSPEC | 11)
-#define IRQ_AMIGA_CIAA_TB   (IRQ_MACHSPEC | 12)
-#define IRQ_AMIGA_CIAA_ALRM (IRQ_MACHSPEC | 13)
-#define IRQ_AMIGA_CIAA_SP   (IRQ_MACHSPEC | 14)
-#define IRQ_AMIGA_CIAA_FLG  (IRQ_MACHSPEC | 15)
-#define IRQ_AMIGA_CIAB_TA   (IRQ_MACHSPEC | 16)
-#define IRQ_AMIGA_CIAB_TB   (IRQ_MACHSPEC | 17)
-#define IRQ_AMIGA_CIAB_ALRM (IRQ_MACHSPEC | 18)
-#define IRQ_AMIGA_CIAB_SP   (IRQ_MACHSPEC | 19)
-#define IRQ_AMIGA_CIAB_FLG  (IRQ_MACHSPEC | 20)
-
-#define IRQ_AMIGA_SOFT      (IRQ_MACHSPEC | 21)
-
-#define IRQ_AMIGA_PORTS	    (IRQ_MACHSPEC | 22)
-#define IRQ_AMIGA_EXTER	    (IRQ_MACHSPEC | 23)
+#define IRQ_AMIGA_CIAA      (IRQ_MACHSPEC | 14)
+#define IRQ_AMIGA_CIAA_TA   (IRQ_MACHSPEC | 14)
+#define IRQ_AMIGA_CIAA_TB   (IRQ_MACHSPEC | 15)
+#define IRQ_AMIGA_CIAA_ALRM (IRQ_MACHSPEC | 16)
+#define IRQ_AMIGA_CIAA_SP   (IRQ_MACHSPEC | 17)
+#define IRQ_AMIGA_CIAA_FLG  (IRQ_MACHSPEC | 18)
+#define IRQ_AMIGA_CIAB      (IRQ_MACHSPEC | 19)
+#define IRQ_AMIGA_CIAB_TA   (IRQ_MACHSPEC | 19)
+#define IRQ_AMIGA_CIAB_TB   (IRQ_MACHSPEC | 20)
+#define IRQ_AMIGA_CIAB_ALRM (IRQ_MACHSPEC | 21)
+#define IRQ_AMIGA_CIAB_SP   (IRQ_MACHSPEC | 22)
+#define IRQ_AMIGA_CIAB_FLG  (IRQ_MACHSPEC | 23)
 
 #define IRQ_FLOPPY	    IRQ_AMIGA_DSKBLK
 
@@ -88,12 +94,30 @@
 #define IF_DSKBLK   0x0002	/* diskblock DMA finished */
 #define IF_TBE	    0x0001	/* serial transmit buffer empty interrupt */
 
+struct irq_server {
+	unsigned short count, reentrance;
+};
+
+extern void amiga_do_irq(int irq, struct pt_regs *fp);
+extern void amiga_do_irq_list(int irq, struct pt_regs *fp, struct irq_server *server);
+
 /* CIA interrupt control register bits */
 
-#define CIA_ICR_TA   0x01
-#define CIA_ICR_TB   0x02
-#define CIA_ICR_ALRM 0x04
-#define CIA_ICR_SP   0x08
-#define CIA_ICR_FLG  0x10
+#define CIA_ICR_TA	0x01
+#define CIA_ICR_TB	0x02
+#define CIA_ICR_ALRM	0x04
+#define CIA_ICR_SP	0x08
+#define CIA_ICR_FLG	0x10
+#define CIA_ICR_ALL	0x1f
+#define CIA_ICR_SETCLR	0x80
+
+/* to access the interrupt control registers of CIA's use only
+** these functions, they behave exactly like the amiga os routines
+*/
+
+extern struct ciabase ciaa_base, ciab_base;
+
+extern unsigned char cia_set_irq(struct ciabase *base, unsigned char mask);
+extern unsigned char cia_able_irq(struct ciabase *base, unsigned char mask);
 
 #endif /* asm-m68k/amigaints.h */

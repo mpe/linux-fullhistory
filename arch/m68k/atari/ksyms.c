@@ -1,4 +1,3 @@
-#include <linux/config.h>
 #include <linux/module.h>
 #include <asm/ptrace.h>
 #include <asm/traps.h>
@@ -13,6 +12,7 @@ static struct symbol_table mach_atari_symbol_table = {
 
 	X(is_medusa),
 	X(atari_register_vme_int),
+	X(atari_unregister_vme_int),
 	X(stdma_lock),
 	X(stdma_release),
 	X(stdma_others_waiting),

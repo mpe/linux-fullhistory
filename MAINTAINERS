@@ -159,6 +159,12 @@ M:	mike@i-Connect.Net
 L:	linux-eata@i-connect.net, linux-scsi@vger.rutgers.edu
 S:	Maintained
 
+FILE LOCKING (flock() and fcntl()/lockf())
+P:	Andy Walker
+M:	andy@lysaker.kvaerner.no
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 FRAME RELAY DLCI/FRAD (Sangoma drivers too)
 P:	Mike McLagan
 M:	mike.mclagan@linux.org

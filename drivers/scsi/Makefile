@@ -6,11 +6,6 @@
 # unless it's something special (ie not a .c file).
 #
 
-ifdef CONFIG_KERNEL_ELF
-# This is used for ELF - it needs to migrate or be moved.
-LD_RFLAG = -m elf_i386
-endif
-
 L_TARGET := scsi.a
 L_OBJS   := 
 M_OBJS   := 

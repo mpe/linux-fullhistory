@@ -25,6 +25,7 @@
 #include <asm/dma.h>
 #include <linux/wait.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
 #include <linux/utsname.h>

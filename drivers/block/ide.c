@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.51  Aug  10, 1996
+ *  linux/drivers/block/ide.c	Version 5.52  Sep  24, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -259,6 +259,8 @@
  * Version 5.50		allow values as small as 20 for idebus=
  * Version 5.51		force non io_32bit in drive_cmd_intr()
  *			change delay_10ms() to delay_50ms() to fix problems
+ * Version 5.52		fix incorrect invalidation of removable devices
+ *			add "hdx=slow" command line option
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -485,8 +487,18 @@ void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 		} else
 #endif /* SUPPORT_VLB_SYNC */
 			insl(data_reg, buffer, wcount);
-	} else
-		insw(data_reg, buffer, wcount<<1);
+	} else {
+#if SUPPORT_SLOW_DATA_PORTS
+		if (drive->slow) {
+			unsigned short *ptr = (unsigned short *) buffer;
+			while (wcount--) {
+				*ptr++ = inw_p(data_reg);
+				*ptr++ = inw_p(data_reg);
+			}
+		} else
+#endif /* SUPPORT_SLOW_DATA_PORTS */
+			insw(data_reg, buffer, wcount<<1);
+	}
 }
 
 /*
@@ -509,8 +521,18 @@ void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 		} else
 #endif /* SUPPORT_VLB_SYNC */
 			outsl(data_reg, buffer, wcount);
-	} else
-		outsw(data_reg, buffer, wcount<<1);
+	} else {
+#if SUPPORT_SLOW_DATA_PORTS
+		if (drive->slow) {
+			unsigned short *ptr = (unsigned short *) buffer;
+			while (wcount--) {
+				outw_p(*ptr++, data_reg);
+				outw_p(*ptr++, data_reg);
+			}
+		} else
+#endif /* SUPPORT_SLOW_DATA_PORTS */
+			outsw(data_reg, buffer, wcount<<1);
+	}
 }
 
 /*
@@ -684,6 +706,7 @@ static void atapi_reset_pollfunc (ide_drive_t *drive)
 		hwgroup->poll_timeout = 0;	/* end of polling */
 		printk("%s: ATAPI reset timed-out, status=0x%02x\n", drive->name, stat);
 		do_reset1 (drive, 1);	/* do it the old fashioned way */
+		return;
 	}
 	hwgroup->poll_timeout = 0;	/* done polling */
 }
@@ -1874,7 +1897,7 @@ static int ide_open(struct inode * inode, struct file * filp)
 	if (drive->media == ide_tape)
 		return idetape_blkdev_open (inode, filp, drive);
 #endif	/* CONFIG_BLK_DEV_IDETAPE */
-	if (drive->removable) {
+	if (drive->removable && drive->usage == 1) {
 		byte door_lock[] = {WIN_DOORLOCK,0,0,0};
 		struct request rq;
 		check_disk_change(inode->i_rdev);
@@ -1955,7 +1978,7 @@ static int revalidate_disk(kdev_t i_rdev)
 	for (p = 0; p < (1<<PARTN_BITS); ++p) {
 		if (drive->part[p].nr_sects > 0) {
 			kdev_t devp = MKDEV(major, minor+p);
-			sync_dev           (devp);
+			fsync_dev          (devp);
 			invalidate_inodes  (devp);
 			invalidate_buffers (devp);
 		}
@@ -2865,7 +2888,8 @@ void ide_setup (char *s)
 	 */
 	if (s[0] == 'h' && s[1] == 'd' && s[2] >= 'a' && s[2] <= max_drive) {
 		const char *hd_words[] = {"none", "noprobe", "nowerr", "cdrom",
-				"serialize", "autotune", "noautotune", NULL};
+				"serialize", "autotune", "noautotune",
+				"slow", NULL};
 		unit = s[2] - 'a';
 		hw   = unit / MAX_DRIVES;
 		unit = unit % MAX_DRIVES;
@@ -2894,6 +2918,9 @@ void ide_setup (char *s)
 				goto done;
 			case -7: /* "noautotune" */
 				drive->autotune = 2;
+				goto done;
+			case -8: /* "slow" */
+				drive->slow = 1;
 				goto done;
 			case 3: /* cyl,head,sect */
 				drive->media	= ide_disk;

@@ -19,7 +19,7 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 
-#include <asm/bootinfo.h>
+#include <asm/setup.h>
 #include <asm/irq.h>
 #include <asm/machdep.h>
 #include <asm/amigatypes.h>
@@ -47,17 +47,22 @@ static void dummy_waitbut(void)
 {
 }
 
-void (*mach_sched_init) (isrfunc);
+void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *));
+/* machine dependent keyboard functions */
 int (*mach_keyb_init) (void);
 int (*mach_kbdrate) (struct kbd_repeat *) = NULL;
 void (*mach_kbd_leds) (unsigned int) = NULL;
-void (*mach_init_INTS) (void);
-int (*mach_add_isr) (unsigned long, isrfunc, int, void *, char *);
-int (*mach_remove_isr) (unsigned long, isrfunc, void *);
+/* machine dependent irq functions */
+void (*mach_init_IRQ) (void);
+void (*(*mach_default_handler)[]) (int, void *, struct pt_regs *) = NULL;
+int (*mach_request_irq) (unsigned int, void (*)(int, void *, struct pt_regs *),
+                         unsigned long, const char *, void *);
+int (*mach_free_irq) (unsigned int, void *);
+void (*mach_enable_irq) (unsigned int) = NULL;
+void (*mach_disable_irq) (unsigned int) = NULL;
+int (*mach_get_irq_list) (char *) = NULL;
 void (*mach_process_int) (int, struct pt_regs *) = NULL;
-void (*mach_enable_irq) (unsigned) = NULL;
-void (*mach_disable_irq) (unsigned) = NULL;
-int (*mach_get_irq_list) (char *, int) = NULL;
+/* machine dependent timer functions */
 unsigned long (*mach_gettimeoffset) (void);
 void (*mach_gettod) (int*, int*, int*, int*, int*, int*);
 int (*mach_hwclk) (int, struct hwclk_time*) = NULL;
@@ -78,6 +83,7 @@ void (*mach_floppy_eject) (void) = NULL;
 extern void config_amiga(void);
 extern void config_atari(void);
 extern void config_mac(void);
+extern void config_sun3(void);
 
 extern void register_console(void (*proc)(const char *));
 extern void ami_serial_print (const char *str);
@@ -102,18 +108,15 @@ void setup_arch(char **cmdline_p,
 	int i;
 	char *p, *q;
 
-#ifdef CONFIG_AMIGA
 	if (MACH_IS_AMIGA)
-	  register_console (ami_serial_print);
-#endif
-#ifdef CONFIG_ATARI
-	if (MACH_IS_ATARI)
-	  register_console (ata_serial_print);
-#endif
+		register_console(ami_serial_print);
 
-	if (boot_info.cputype & CPU_68040)
+	if (MACH_IS_ATARI)
+		register_console(ata_serial_print);
+
+	if (CPU_IS_040)
 		m68k_is040or060 = 4;
-	else if (boot_info.cputype & CPU_68060)
+	else if (CPU_IS_060)
 		m68k_is040or060 = 6;
 
 	/* clear the fpu if we have one */
@@ -179,6 +182,11 @@ void setup_arch(char **cmdline_p,
 		config_mac();
 		break;
 #endif
+#ifdef CONFIG_SUN3
+	    case MACH_SUN3:
+	    	config_sun3();
+	    	break;
+#endif
 	    default:
 		panic ("No configuration setup");
 	}
@@ -191,39 +199,29 @@ void setup_arch(char **cmdline_p,
 #endif
 }
 
-int setkeycode(unsigned int scancode, unsigned int keycode)
-{
-	return -EOPNOTSUPP;
-}
-
-int getkeycode(unsigned int scancode)
-{
-	return -EOPNOTSUPP;
-}
-
 int get_cpuinfo(char * buffer)
 {
     char *cpu, *mmu, *fpu;
     u_long clockfreq, clockfactor;
 
-#define CLOCK_FACTOR_68020	(8046)	/*  3107016 loops/s @ 25 MHz (Sun-3) */
-#define CLOCK_FACTOR_68030	(8010)	/*  3994575 loops/s @ 32 MHz */
-#define CLOCK_FACTOR_68040	(3010)	/*  8305552 loops/s @ 25 MHz */
-#define CLOCK_FACTOR_68060	(998)	/* 50081241 loops/s @ 50 MHz */
+#define LOOP_CYCLES_68020	(8)
+#define LOOP_CYCLES_68030	(8)
+#define LOOP_CYCLES_68040	(3)
+#define LOOP_CYCLES_68060	(1)
 
-    if (boot_info.cputype & CPU_68020) {
+    if (CPU_IS_020) {
 	cpu = "68020";
 	mmu = "68851";
-	clockfactor = CLOCK_FACTOR_68020;
-    } else if (boot_info.cputype & CPU_68030) {
+	clockfactor = LOOP_CYCLES_68020;
+    } else if (CPU_IS_030) {
 	cpu = mmu = "68030";
-	clockfactor = CLOCK_FACTOR_68030;
-    } else if (boot_info.cputype & CPU_68040) {
+	clockfactor = LOOP_CYCLES_68030;
+    } else if (CPU_IS_040) {
 	cpu = mmu = "68040";
-	clockfactor = CLOCK_FACTOR_68040;
-    } else if (boot_info.cputype & CPU_68060) {
+	clockfactor = LOOP_CYCLES_68040;
+    } else if (CPU_IS_060) {
 	cpu = mmu = "68060";
-	clockfactor = CLOCK_FACTOR_68060;
+	clockfactor = LOOP_CYCLES_68060;
     } else {
 	cpu = mmu = "680x0";
 	clockfactor = 0;
@@ -240,16 +238,19 @@ int get_cpuinfo(char * buffer)
     else
 	fpu = "none";
 
-    clockfreq = loops_per_sec/1000*clockfactor;
+    clockfreq = loops_per_sec*clockfactor;
 
     return(sprintf(buffer, "CPU:\t\t%s\n"
 		   "MMU:\t\t%s\n"
 		   "FPU:\t\t%s\n"
-		   "Clockspeed:\t%lu.%1luMHz\n"
-		   "BogoMips:\t%lu.%02lu\n",
-		   cpu, mmu, fpu, (clockfreq+50000)/1000000,
-		   ((clockfreq+50000)/100000)%10, loops_per_sec/500000,
-		   (loops_per_sec/5000)%100));
+		   "Clocking:\t%lu.%1luMHz\n"
+		   "BogoMips:\t%lu.%02lu\n"
+		   "Calibration:\t%lu loops\n",
+		   cpu, mmu, fpu,
+		   clockfreq/1000000,(clockfreq/100000)%10,
+		   loops_per_sec/500000,(loops_per_sec/5000)%100,
+		   loops_per_sec));
+
 }
 
 int get_hardware_list(char *buffer)

@@ -20,7 +20,8 @@
 #include <linux/ext_fs.h>
 #include <linux/stat.h>
 
-static int ext_dir_read(struct inode * inode, struct file * filp, char * buf, int count)
+static long ext_dir_read(struct inode * inode, struct file * filp,
+	char * buf, unsigned long count)
 {
 	return -EISDIR;
 }

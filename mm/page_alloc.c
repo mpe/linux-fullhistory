@@ -135,7 +135,7 @@ void free_pages(unsigned long addr, unsigned long order)
 {
 	unsigned long map_nr = MAP_NR(addr);
 
-	if (map_nr < MAP_NR(high_memory)) {
+	if (map_nr < max_mapnr) {
 		mem_map_t * map = mem_map + map_nr;
 		if (PageReserved(map))
 			return;

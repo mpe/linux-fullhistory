@@ -1043,7 +1043,7 @@ static void setup_DMA(void)
 	fd_cacheflush(raw_cmd->kernel_data, raw_cmd->length);
 	fd_set_dma_mode((raw_cmd->flags & FD_RAW_READ)?
 			DMA_MODE_READ : DMA_MODE_WRITE);
-	fd_set_dma_addr(virt_to_bus(raw_cmd->kernel_data));
+	fd_set_dma_addr(raw_cmd->kernel_data);
 	fd_set_dma_count(raw_cmd->length);
 	virtual_dma_port = FDCS->address;
 	fd_enable_dma();
@@ -2087,7 +2087,7 @@ static void setup_format_params(int track)
 
 	/* determine interleave */
 	il = 1;
-	if (_floppy->sect > DP->interleave_sect && F_SIZECODE == 2)
+	if (_floppy->fmt_gap < 0x22)
 		il++;
 
 	/* initialize field */
@@ -3485,8 +3485,8 @@ static void config_types(void)
 		printk("\n");
 }
 
-static int floppy_read(struct inode * inode, struct file * filp,
-		       char * buf, int count)
+static long floppy_read(struct inode * inode, struct file * filp,
+		       char * buf, unsigned long count)
 {
 	int drive = DRIVE(inode->i_rdev);
 
@@ -3496,8 +3496,8 @@ static int floppy_read(struct inode * inode, struct file * filp,
 	return block_read(inode, filp, buf, count);
 }
 
-static int floppy_write(struct inode * inode, struct file * filp,
-			const char * buf, int count)
+static long floppy_write(struct inode * inode, struct file * filp,
+			const char * buf, unsigned long count)
 {
 	int block;
 	int ret;

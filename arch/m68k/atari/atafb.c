@@ -39,6 +39,7 @@
 #define ATAFB_FALCON
 
 #include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/mm.h>
@@ -46,13 +47,13 @@
 #include <linux/malloc.h>
 #include <linux/delay.h>
 
+#include <asm/setup.h>
 #include <asm/segment.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
 
 #include <asm/atarihw.h>
 #include <asm/atariints.h>
-#include <asm/bootinfo.h>
 
 #include <linux/fb.h>
 #include <asm/atarikb.h>
@@ -82,10 +83,6 @@ static int sttt_xres=640,st_yres=400,tt_yres=480;
 static int sttt_xres_virtual=640,sttt_yres_virtual=400;
 static int ovsc_offset=0, ovsc_addlen=0;
 int        ovsc_switchmode=0;
-
-#ifdef ATAFB_FALCON
-static int pwrsave = 0;	/* use VESA suspend mode instead of blanking only? */
-#endif
 
 static struct atari_fb_par {
 	unsigned long screen_base;
@@ -282,9 +279,12 @@ extern unsigned short packed16_cmap[16];
  *   if yres_virtual > yres or xres_virtual > xres.
  *
  * int (*blank)( int blank_mode )
- *   Blank the screen if blank_mode != 0, else unblank. If NULL then blanking
- *   is done by setting the CLUT to black. Return != 0 if un-/blanking
- *   failed due to e.g. video mode which doesn't support it.
+ *   Blank the screen if blank_mode!=0, else unblank. If blank==NULL then
+ *   the caller blanks by setting the CLUT to all black. Return 0 if blanking
+ *   succeeded, !=0 if un-/blanking failed due to e.g. a video mode which
+ *   doesn't support it. Implements VESA suspend and powerdown modes on
+ *   hardware that supports disabling hsync/vsync:
+ *       blank_mode==2: suspend vsync, 3:suspend hsync, 4: powerdown.
  */
 
 static struct fb_hwswitch {
@@ -529,6 +529,7 @@ static int tt_decode_var( struct fb_var_screeninfo *var,
 	int yres=var->yres;
 	int bpp=var->bits_per_pixel;
 	int linelen;
+	int yres_virtual = var->yres_virtual;
 
 	if (mono_moni) {
 		if (bpp > 1 || xres > sttt_xres*2 || yres >tt_yres*2)
@@ -582,14 +583,23 @@ static int tt_decode_var( struct fb_var_screeninfo *var,
 			bpp=1;
 		}
 	}
+	if (yres_virtual <= 0)
+		yres_virtual = 0;
+	else if (yres_virtual < yres)
+		yres_virtual = yres;
 	if (var->sync & FB_SYNC_EXT)
 		par->hw.tt.sync=0;
 	else
 		par->hw.tt.sync=1;
 	linelen=xres*bpp/8;
-	if ((var->yoffset + yres)*linelen > screen_len && screen_len)
+	if (yres_virtual * linelen > screen_len && screen_len)
 		return -EINVAL;
-	par->screen_base=screen_base+ var->yoffset*linelen;
+	if (yres * linelen > screen_len && screen_len)
+		return -EINVAL;
+	if (var->yoffset + yres > yres_virtual && yres_virtual)
+		return -EINVAL;
+	par->vyres = yres_virtual;
+	par->screen_base = screen_base + var->yoffset * linelen;
 	return 0;
 }
 
@@ -665,7 +675,11 @@ static int tt_encode_var( struct fb_var_screeninfo *var,
 	if (! use_hwscroll)
 		var->yres_virtual=var->yres;
 	else if (screen_len)
-		var->yres_virtual=screen_len/linelen;
+		if (par->vyres)
+			var->yres_virtual = par->vyres;
+		else
+			/* vyres==0 means use maximum */
+			var->yres_virtual = screen_len / linelen;
 	else {
 		if (hwscroll < 0)
 			var->yres_virtual = 2 * var->yres;
@@ -784,17 +798,17 @@ static long vfmin=58, vfmax=62, hfmin=31000, hfmax=32000;
 static struct pixel_clock {
 	unsigned long f;	/* f/[Hz] */
 	unsigned long t;	/* t/[ps] (=1/f) */
-	short right, hsync, left;	/* standard timing in clock cycles, not pixel */
+	int right, hsync, left;	/* standard timing in clock cycles, not pixel */
 		/* hsync initialized in falcon_detect() */
-	short sync_mask;	/* or-mask for hw.falcon.sync to set this clock */
-	short control_mask; /* ditto, for hw.falcon.vid_control */
+	int sync_mask;		/* or-mask for hw.falcon.sync to set this clock */
+	int control_mask;	/* ditto, for hw.falcon.vid_control */
 }
-f25  = {25175000, 39722, 18, 0, 42, 0x0, VCO_CLOCK25},
+f25  = {25175000, 39721, 18, 0, 42, 0x0, VCO_CLOCK25},
 f32  = {32000000, 31250, 18, 0, 42, 0x0, 0},
 fext = {       0,     0, 18, 0, 42, 0x1, 0};
 
 /* VIDEL-prescale values [mon_type][pixel_length from VCO] */
-static short vdl_prescale[4][3] = {{4,2,1}, {4,2,1}, {4,2,2}, {4,2,1}};
+static int vdl_prescale[4][3] = {{4,2,1}, {4,2,1}, {4,2,2}, {4,2,1}};
 
 /* Default hsync timing [mon_type] in picoseconds */
 static long h_syncs[4] = {3000000, 4700000, 4000000, 4700000};
@@ -817,22 +831,22 @@ static int falcon_encode_fix( struct fb_fix_screeninfo *fix,
 	fix->type = FB_TYPE_INTERLEAVED_PLANES;
 	fix->type_aux = 2;
 	fix->visual = FB_VISUAL_PSEUDOCOLOR;
+	fix->xpanstep = 1;
+	fix->ypanstep = 1;
+	fix->ywrapstep = 0;
 	if (par->hw.falcon.mono) {
 		fix->type = FB_TYPE_PACKED_PIXELS;
 		fix->type_aux = 0;
+		/* no smooth scrolling with longword aligned video mem */
+		fix->xpanstep = 32;
 	}
 	else if (par->hw.falcon.f_shift & 0x100) {
 		fix->type = FB_TYPE_PACKED_PIXELS;
 		fix->type_aux = 0;
-		fix->visual = FB_VISUAL_TRUECOLOR;  /* is this ok or should this be DIRECTCOLOR? */
+		/* Is this ok or should it be DIRECTCOLOR? */
+		fix->visual = FB_VISUAL_TRUECOLOR;
+		fix->xpanstep = 2;
 	}
-	if (par->hw.falcon.mono)
-		/* no smooth scrolling possible with longword aligned video mem */
-		fix->xpanstep = 32;
-	else
-		fix->xpanstep = 1;
-	fix->ypanstep = 1;
-	fix->ywrapstep = 0;
 	fix->line_length = 0;
 	for (i=0; i<arraysize(fix->reserved); i++)
 		fix->reserved[i]=0;
@@ -843,7 +857,6 @@ static int falcon_encode_fix( struct fb_fix_screeninfo *fix,
 static int falcon_decode_var( struct fb_var_screeninfo *var,
 							  struct atari_fb_par *par )
 {
-	int use_default_timing = 0;
 	int bpp = var->bits_per_pixel;
 	int xres = var->xres;
 	int yres = var->yres;
@@ -970,19 +983,21 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 		xres_virtual = (xres_virtual + 31) & ~31;
 	else
 		xres_virtual = (xres_virtual + 15) & ~15;
-	/* <=0 : yres_virtual determined by screensize */
-	if (yres_virtual < yres && yres_virtual > 0)
+
+	if (yres_virtual <= 0)
+		yres_virtual = 0;
+	else if (yres_virtual < yres)
 		yres_virtual = yres;
+
+	/* backward bug-compatibility */
+	if (var->pixclock > 1)
+		var->pixclock -= 1;
 
 	par->hw.falcon.line_width = bpp * xres / 16;
 	par->hw.falcon.line_offset = bpp * (xres_virtual - xres) / 16;
 
 	/* single or double pixel width */
 	xstretch = (xres == 320) ? 2 : 1;
-
-	/* Default values are used for vert./hor. timing if no pixelclock given. */
-	if (var->pixclock == 0)
-		use_default_timing = 1;
 
 #if 0 /* currently unused */
 	if (mon_type == F_MON_SM) {
@@ -1011,7 +1026,8 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 	{	/* F_MON_VGA */
 		if (bpp == 16)
 			xstretch = 2; /* hicolor only double pixel width */
-		if (use_default_timing) {
+		/* Default values are used for vert./hor. timing if no pixelclock given. */
+		if (var->pixclock == 0) {
 			int linesize;
 
 			/* Choose master pixelclock depending on hor. timing */
@@ -1035,36 +1051,27 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 			vsync_len = 3;
 		}
 		else {
-#if 0 /* TODO enable this (untested yet) */
-			/* Round down pixelclock */
-			int i; unsigned long pcl=0;
-			for (i=1; i<=4; i*=2) {
-				if (f25.t*i<=var->pixclock && pcl<f25.t*i) {
-					pcl=f25.t*i; pclock=&f25;
+			/* Choose largest pixelclock <= wanted clock */
+			int i;
+			unsigned long pcl = ULONG_MAX;
+			pclock = 0;
+			for (i=1; i <= 4; i *= 2) {
+				if (f25.t*i >= var->pixclock && f25.t*i < pcl) {
+					pcl = f25.t * i;
+					pclock = &f25;
 				}
-				if (f32.t*i<=var->pixclock && pcl<f32.t*i) {
-					pcl=f32.t*i; pclock=&f32;
+				if (f32.t*i >= var->pixclock && f32.t*i < pcl) {
+					pcl = f32.t * i;
+					pclock = &f32;
 				}
-				if (fext.t && fext.t*i<=var->pixclock && pcl<fext.t*i) {
-					pcl=fext.t*i; pclock=&fext;
+				if (fext.t && fext.t*i >= var->pixclock && fext.t*i < pcl) {
+					pcl = fext.t * i;
+					pclock = &fext;
 				}
 			}
-			if (!pcl)
+			if (!pclock)
 				return -EINVAL;
 			plen = pcl / pclock->t;
-
-#else
-			if (var->pixclock == f25.t || var->pixclock == 2*f25.t)
-				pclock = &f25;
-			else if (var->pixclock == f32.t || var->pixclock == 2*f32.t)
-				pclock = &f32;
-			else if ((var->pixclock == fext.t || var->pixclock == 2*fext.t) && fext.t) {
-				pclock = &fext;
-			}
-			else
-				return -EINVAL;
-			plen = var->pixclock / pclock->t;
-#endif
 
 			left_margin = var->left_margin;
 			right_margin = var->right_margin;
@@ -1122,7 +1129,7 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 	/*********************
 	Horizontal timing: unit = [master clock cycles]
 	unit of hxx-registers: [master clock cycles * prescale]
-	Hxx-registers are 9-bit wide
+	Hxx-registers are 9 bit wide
 
 	1 line = ((hht + 2) * 2 * prescale) clock cycles
 
@@ -1209,7 +1216,7 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 	 * of the first displayed line!
 	 * One frame consists of VFT+1 half lines. VFT+1 must be even in
 	 * non-interlace, odd in interlace mode for synchronisation.
-	 * Vxx-registers are 11-bit wide
+	 * Vxx-registers are 11 bit wide
 	 */
 	par->VBE = (upper_margin * 2 + 1); /* must begin on odd halfline */
 	par->VDB = par->VBE;
@@ -1264,11 +1271,11 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 
   set_screen_base:
 	linelen = xres_virtual * bpp / 8;
-	if ((var->yoffset + yres)*linelen > screen_len && screen_len)
+	if (yres_virtual * linelen > screen_len && screen_len)
 		return -EINVAL;
-	if (var->yres_virtual * linelen > screen_len && screen_len)
+	if (yres * linelen > screen_len && screen_len)
 		return -EINVAL;
-	if (var->yres * linelen > screen_len && screen_len)
+	if (var->yoffset + yres > yres_virtual && yres_virtual)
 		return -EINVAL;
 	par->vyres = yres_virtual;
 	par->screen_base = screen_base + var->yoffset * linelen;
@@ -1368,7 +1375,8 @@ static int falcon_encode_var( struct fb_var_screeninfo *var,
 		if (par->vyres)
 			var->yres_virtual = par->vyres;
 		else
-			var->yres_virtual=screen_len/linelen;
+			/* vyres==0 means use maximum */
+			var->yres_virtual = screen_len / linelen;
 	else {
 		if (hwscroll < 0)
 			var->yres_virtual = 2 * var->yres;
@@ -1499,7 +1507,7 @@ static void falcon_set_par( struct atari_fb_par *par )
 }
 
 
-static void falcon_vbl_switcher( int irq, struct pt_regs *fp, void *dummy )
+static void falcon_vbl_switcher( int irq, void *dummy, struct pt_regs *fp )
 {
 	struct falcon_hw *hw = &f_new_mode;
 
@@ -1528,8 +1536,6 @@ static void falcon_vbl_switcher( int irq, struct pt_regs *fp, void *dummy )
 		videl.vdb = hw->vdb;
 		videl.vde = hw->vde;
 		videl.vss = hw->vss;
-
-		/*f030_sreg[2] = 0;*/
 
 		videl.f_shift = 0; /* write enables Falcon palette, 0: 4 planes */
 		if (hw->ste_mode) {
@@ -1565,19 +1571,24 @@ static int falcon_pan_display( struct fb_var_screeninfo *var,
 							   struct atari_fb_par *par )
 {
 	int xoffset;
+	int bpp = disp[currcon].var.bits_per_pixel;
 
-	if (disp[currcon].var.bits_per_pixel == 1)
+	if (bpp == 1)
 		var->xoffset = up(var->xoffset, 32);
-	par->hw.falcon.xoffset = var->xoffset & 15;
-	par->hw.falcon.line_offset = disp[currcon].var.bits_per_pixel *
-	       	  (disp[currcon].var.xres_virtual - disp[currcon].var.xres) / 16;
+	if (bpp != 16)
+		par->hw.falcon.xoffset = var->xoffset & 15;
+	else {
+		par->hw.falcon.xoffset = 0;
+		var->xoffset = up(var->xoffset, 2);
+	}
+	par->hw.falcon.line_offset = bpp *
+	       	(disp[currcon].var.xres_virtual - disp[currcon].var.xres) / 16;
 	if (par->hw.falcon.xoffset)
-		par->hw.falcon.line_offset -= disp[currcon].var.bits_per_pixel;
+		par->hw.falcon.line_offset -= bpp;
 	xoffset = var->xoffset - par->hw.falcon.xoffset;
 
-	par->screen_base
-		= screen_base + (var->yoffset * disp[currcon].var.xres_virtual +
-				xoffset) * disp[currcon].var.bits_per_pixel / 8;
+	par->screen_base = screen_base +
+	        (var->yoffset * disp[currcon].var.xres_virtual + xoffset) * bpp / 8;
 	if (fbhw->set_screen_base)
 		fbhw->set_screen_base (par->screen_base);
 	else
@@ -1629,24 +1640,37 @@ static int falcon_blank( int blank_mode )
 {
 /* ++guenther: we can switch off graphics by changing VDB and VDE,
  * so VIDEL doesn't hog the bus while saving.
- * (this affects usleep()).
+ * (this may affect usleep()).
  */
+	int vdb, vss, hbe, hss;
+
 	if (mon_type == F_MON_SM)	/* this doesn't work on SM124 */
 		return 1;
-	if (blank_mode) {
+
+	vdb = current_par.VDB;
+	vss = current_par.VSS;
+	hbe = current_par.HBE;
+	hss = current_par.HSS;
+
+	if (blank_mode >= 1) {
 		/* disable graphics output (this speeds up the CPU) ... */
-		videl.vdb = current_par.VFT + 1;
+		vdb = current_par.VFT + 1;
 		/* ... and blank all lines */
-		videl.hbe = current_par.HHT + 2;
-		/* VESA suspend mode, switch off HSYNC */
-		if (pwrsave && mon_type == F_MON_VGA)
-			videl.hss = current_par.HHT + 2;
+		hbe = current_par.HHT + 2;
 	}
-	else {
-		videl.vdb = current_par.VDB;
-		videl.hbe = current_par.HBE;
-		videl.hss = current_par.HSS;
+	/* use VESA suspend modes on VGA monitors */
+	if (mon_type == F_MON_VGA) {
+		if (blank_mode == 2 || blank_mode == 4)
+			vss = current_par.VFT + 1;
+		if (blank_mode == 3 || blank_mode == 4)
+			hss = current_par.HHT + 2;
 	}
+
+	videl.vdb = vdb;
+	videl.vss = vss;
+	videl.hbe = hbe;
+	videl.hss = hss;
+
 	return 0;
 }
 
@@ -1713,11 +1737,13 @@ static int stste_encode_fix( struct fb_fix_screeninfo *fix,
 		fix->type_aux=0;
 		fix->visual=FB_VISUAL_MONO10;
 	}
-	fix->xpanstep = 0;
-	if (ATARIHW_PRESENT(EXTD_SHIFTER))
+	if (ATARIHW_PRESENT(EXTD_SHIFTER)) {
+		fix->xpanstep = 16;
 		fix->ypanstep = 1;
-	else
+	} else {
+		fix->xpanstep = 0;
 		fix->ypanstep = 0;
+	}
 	fix->ywrapstep = 0;
 	fix->line_length = 0;
 	for (i=0; i<arraysize(fix->reserved); i++)
@@ -1733,6 +1759,7 @@ static int stste_decode_var( struct fb_var_screeninfo *var,
 	int yres=var->yres;
 	int bpp=var->bits_per_pixel;
 	int linelen;
+	int yres_virtual = var->yres_virtual;
 
 	if (mono_moni) {
 		if (bpp > 1 || xres > sttt_xres || yres > st_yres)
@@ -1763,13 +1790,22 @@ static int stste_decode_var( struct fb_var_screeninfo *var,
 		else
 			return -EINVAL;
 	}
+	if (yres_virtual <= 0)
+		yres_virtual = 0;
+	else if (yres_virtual < yres)
+		yres_virtual = yres;
 	if (var->sync & FB_SYNC_EXT)
 		par->hw.st.sync=(par->hw.st.sync & ~1) | 1;
 	else
 		par->hw.st.sync=(par->hw.st.sync & ~1);
 	linelen=xres*bpp/8;
-	if ((var->yoffset + yres)*linelen > screen_len && screen_len)
+	if (yres_virtual * linelen > screen_len && screen_len)
 		return -EINVAL;
+	if (yres * linelen > screen_len && screen_len)
+		return -EINVAL;
+	if (var->yoffset + yres > yres_virtual && yres_virtual)
+		return -EINVAL;
+	par->vyres = yres_virtual;
 	par->screen_base=screen_base+ var->yoffset*linelen;
 	return 0;
 }
@@ -1827,7 +1863,11 @@ static int stste_encode_var( struct fb_var_screeninfo *var,
 	if (! use_hwscroll)
 		var->yres_virtual=var->yres;
 	else if (screen_len)
-		var->yres_virtual=screen_len/linelen;
+		if (par->vyres)
+			var->yres_virtual = par->vyres;
+		else
+			/* vyres==0 means use maximum */
+			var->yres_virtual = screen_len / linelen;
 	else {
 		if (hwscroll < 0)
 			var->yres_virtual = 2 * var->yres;
@@ -2238,11 +2278,13 @@ static void set_screen_base(unsigned long s_base)
 static int pan_display( struct fb_var_screeninfo *var,
                         struct atari_fb_par *par )
 {
-	if (var->xoffset)
+	if (!ATARIHW_PRESENT(EXTD_SHIFTER) && var->xoffset)
 		return -EINVAL;
-	par->screen_base
-		= screen_base + (var->yoffset * disp[currcon].var.xres_virtual
-						 * disp[currcon].var.bits_per_pixel / 8);
+	else
+		var->xoffset = up(var->xoffset, 16);
+	par->screen_base = screen_base +
+	        (var->yoffset * disp[currcon].var.xres_virtual + var->xoffset)
+	        * disp[currcon].var.bits_per_pixel / 8;
 	if (fbhw->set_screen_base)
 		fbhw->set_screen_base (par->screen_base);
 	else
@@ -2609,18 +2651,21 @@ atari_fb_set_disp(int con)
 static int
 atari_fb_set_var(struct fb_var_screeninfo *var, int con)
 {
-	int err,oldxres,oldyres,oldbpp,oldxres_virtual,oldyoffset;
+	int err,oldxres,oldyres,oldbpp,oldxres_virtual,
+	    oldyres_virtual,oldyoffset;
 	if ((err=do_fb_set_var(var, con==currcon)))
 		return err;
 	if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) {
 		oldxres=disp[con].var.xres;
 		oldyres=disp[con].var.yres;
 		oldxres_virtual=disp[con].var.xres_virtual;
+		oldyres_virtual=disp[con].var.yres_virtual;
 		oldbpp=disp[con].var.bits_per_pixel;
 		oldyoffset=disp[con].var.yoffset;
 		disp[con].var=*var;
 		if (oldxres != var->xres || oldyres != var->yres 
 		    || oldxres_virtual != var->xres_virtual
+		    || oldyres_virtual != var->yres_virtual
 		    || oldbpp != var->bits_per_pixel
 		    || oldyoffset != var->yoffset) {
 			atari_fb_set_disp(con);
@@ -2778,6 +2823,13 @@ atafb_switch(int con)
 	return 0;
 }
 
+/* (un)blank/poweroff
+ * 0 = unblank
+ * 1 = blank
+ * 2 = suspend vsync
+ * 3 = suspend hsync
+ * 4 = off
+ */
 static void
 atafb_blank(int blank)
 {
@@ -2828,8 +2880,8 @@ atari_fb_init(long *mem_start)
 #ifdef ATAFB_FALCON
 		if (ATARIHW_PRESENT(VIDEL_SHIFTER)) {
 			fbhw = &falcon_switch;
-			add_isr(IRQ_AUTO_4, falcon_vbl_switcher, IRQ_TYPE_PRIO, NULL,
-					"framebuffer/modeswitch");
+			request_irq(IRQ_AUTO_4, falcon_vbl_switcher, IRQ_TYPE_PRIO,
+			            "framebuffer/modeswitch", falcon_vbl_switcher);
 			break;
 		}
 #endif
@@ -2862,7 +2914,7 @@ atari_fb_init(long *mem_start)
 		real_screen_base=screen_base+ovsc_offset;
 		screen_len = (mem_req - pad - ovsc_offset) & PAGE_MASK;
 		st_ovsc_switch(ovsc_switchmode);
-		if (m68k_is040or060) {
+		if (CPU_IS_040_OR_060) {
 			/* On a '040+, the cache mode of video RAM must be set to
 			 * write-through also for internal video hardware! */
 			cache_push( VTOP(screen_base), screen_len );
@@ -2979,12 +3031,10 @@ void atari_video_setup( char *options, int *ints )
 	else if (!strncmp(this_opt,"internal:",9))
 		strcpy(int_str, this_opt+9);
 #ifdef ATAFB_FALCON
-	else if (!strcmp(this_opt, "pwrsave"))
-		pwrsave = 1;
 	else if (!strncmp(this_opt, "eclock:", 7)) {
 		fext.f = simple_strtoul(this_opt+7, NULL, 10);
 		/* external pixelclock in kHz --> ps */
-		fext.t = (2000000000UL/fext.f+1)/2;
+		fext.t = 1000000000/fext.f;
 		fext.f *= 1000;
 	}
 	else if (!strncmp(this_opt, "monitorcap:", 11))

@@ -128,8 +128,8 @@
 #endif
 
 
-#define IN2000_VERSION    "1.28"
-#define IN2000_DATE       "07/May/1996"
+#define IN2000_VERSION    "1.29"
+#define IN2000_DATE       "24/Sep/1996"
 
 #define PROC_INTERFACE     /* add code for /proc/scsi/in2000/xxx interface */
 #define SYNC_DEBUG         /* extra info on sync negotiation printed */
@@ -1924,6 +1924,11 @@ struct proc_dir_entry proc_scsi_in2000 = {
    };
 
 
+/* As of the 2.1.x kernel series, memory-mapped hardware such
+ * as the IN2000 EPROM and dip switch must be accessed through
+ * special macros declared in 'asm/io.h'. We use readb() and
+ * readl() when reading from the card's BIOS area in in2000_detect().
+ */
 const unsigned int *bios_tab[] = {
    (unsigned int *)0xc8000,
    (unsigned int *)0xd0000,
@@ -1983,13 +1988,13 @@ char buf[32];
          printk("Forcing IN2000 detection at IOport 0x%x ",base);
          bios = 2;
          }
-      else if (*(bios_tab[bios]+0x04) == 0x41564f4e ||
-          *(bios_tab[bios]+0x0c) == 0x61776c41) {
+      else if (readl(bios_tab[bios]+0x04) == 0x41564f4e ||
+               readl(bios_tab[bios]+0x0c) == 0x61776c41) {
          printk("Found IN2000 BIOS at 0x%x ",(unsigned int)bios_tab[bios]);
 
 /* Read the switch image that's mapped into EPROM space */
 
-         switches = ~((*(bios_tab[bios]+0x08) & 0xff));
+         switches = ~((readb(bios_tab[bios]+0x08) & 0xff));
 
 /* Find out where the IO space is */
 
@@ -2082,7 +2087,7 @@ char buf[32];
 
 /* Older BIOS's had a 'sync on/off' switch - use its setting */
 
-      if (*(bios_tab[bios]+0x04) == 0x41564f4e && (switches & SW_SYNC_DOS5))
+      if (readl(bios_tab[bios]+0x04) == 0x41564f4e && (switches & SW_SYNC_DOS5))
          hostdata->sync_off = 0x00;    /* sync defaults to on */
       else
          hostdata->sync_off = 0xff;    /* sync defaults to off */
@@ -2188,31 +2193,21 @@ int size;
       iinfo[0] = 255;
       iinfo[1] = 63;
       iinfo[2] = disk->capacity / (iinfo[0] * iinfo[1]);
+
+/* This next little bit of code was intended to prevent the number of
+ * tracks from exceeding 1023. As Andries Brouwer (aeb@cwi.nl) pointed
+ * out in his "Large Disk HOWTO" (June 1996), this kind of DOS
+ * compatibility is pointless. And wasteful on disks larger than 8 gigs.
+ */
+
+#if 0
       if (iinfo[2] > 1023)
          iinfo[2] = 1023;
+#endif
+
       }
     return 0;
 }
-
-
-#ifdef PROC_INTERFACE
-
-/* Certain older compilers (such as a.out 2.5.8) choke and give a
- * "Too many reloads" error when there are a lot of calls to 'strcat()'
- * in one function. Modern kernels define 'strcat()' as an inline
- * function - I _guess_ this is related to the problem. Regardless,
- * we can make everyone happy by doing some macro fudging to force
- * gcc to do calls instead of inline expansion.
- */
-
-char * in2000_strcat(char * dest, const char * src)
-{
-   return strcat(dest,src);
-}
-
-#define strcat(d,s) (in2000_strcat((d),(s)))
-
-#endif
 
 
 int in2000_proc_info(char *buf, char **start, off_t off, int len, int hn, int in)

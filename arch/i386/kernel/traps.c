@@ -134,7 +134,8 @@ int kstack_depth_to_print = 24;
 	printk("\nCall Trace: ");
 	stack = (unsigned long *) esp;
 	i = 1;
-	module_start = ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1));
+	module_start = PAGE_OFFSET + (max_mapnr << PAGE_SHIFT);
+	module_start = ((module_start + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1));
 	module_end = module_start + MODULE_RANGE;
 	while (((long) stack & 4095) != 0) {
 		addr = get_seg_long(ss, stack++);
@@ -329,7 +330,7 @@ void trap_init(void)
 		return;
 	}
 	smptrap++;
-	if (strncmp((char*)0x0FFFD9, "EISA", 4) == 0)
+	if (strncmp((char*)phys_to_virt(0x0FFFD9), "EISA", 4) == 0)
 		EISA_bus = 1;
 	set_call_gate(&default_ldt,lcall7);
 	set_trap_gate(0,&divide_error);

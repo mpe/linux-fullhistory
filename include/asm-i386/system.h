@@ -96,6 +96,7 @@ __asm__("pushl %%edx\n\t" \
 		loaddebug(prev,2); \
 		loaddebug(prev,3); \
 		loaddebug(prev,6); \
+		loaddebug(prev,7); \
 	} \
 } while (0)
 
@@ -117,6 +118,7 @@ __asm__("movl %2,"SYMBOL_NAME_STR(current_set)"\n\t" \
 		loaddebug(prev,2); \
 		loaddebug(prev,3); \
 		loaddebug(prev,6); \
+		loaddebug(prev,7); \
 	} \
 } while (0)
 #endif
@@ -275,7 +277,7 @@ __asm__ __volatile__ ("movw $" #limit ",%1\n\t" \
 	"movb %%ah,%6\n\t" \
 	"rorl $16,%%eax" \
 	: /* no output */ \
-	:"a" (addr+0xc0000000), "m" (*(n)), "m" (*(n+2)), "m" (*(n+4)), \
+	:"a" (addr), "m" (*(n)), "m" (*(n+2)), "m" (*(n+4)), \
 	 "m" (*(n+5)), "m" (*(n+6)), "m" (*(n+7)) \
 	)
 

@@ -8,24 +8,22 @@ struct hwclk_time;
 struct gendisk;
 struct buffer_head;
 
-#ifndef ISRFUNC_T
-typedef void (*isrfunc) (int irq, struct pt_regs *fp, void *data);
-#define ISRFUNC_T
-#endif /* ISRFUNC_T */
-
-extern void (*mach_sched_init)(isrfunc);
+extern void (*mach_sched_init) (void (*handler)(int, void *, struct pt_regs *));
+/* machine dependent keyboard functions */
 extern int (*mach_keyb_init) (void);
 extern int (*mach_kbdrate) (struct kbd_repeat *);
 extern void (*mach_kbd_leds) (unsigned int);
-extern void (*mach_init_INTS) (void);
-extern int (*mach_add_isr) (unsigned long source, isrfunc handler,
-			    int pri, void *data, char *name);
-extern int (*mach_remove_isr) (unsigned long source, isrfunc handler,
-			       void *data);
-extern int (*mach_get_irq_list)(char *buf, int len);
-extern void (*mach_process_int) (int level, struct pt_regs *fp);
-extern void (*mach_enable_irq) (unsigned);
-extern void (*mach_disable_irq) (unsigned);
+/* machine dependent irq functions */
+extern void (*mach_init_IRQ) (void);
+extern void (*(*mach_default_handler)[]) (int, void *, struct pt_regs *);
+extern int (*mach_request_irq) (unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+                                unsigned long flags, const char *devname, void *dev_id);
+extern int (*mach_free_irq) (unsigned int irq, void *dev_id);
+extern void (*mach_enable_irq) (unsigned int irq);
+extern void (*mach_disable_irq) (unsigned int irq);
+extern int (*mach_get_irq_list) (char *buf);
+extern void (*mach_process_int) (int irq, struct pt_regs *fp);
+/* machine dependent timer functions */
 extern unsigned long (*mach_gettimeoffset)(void);
 extern void (*mach_gettod)(int *year, int *mon, int *day, int *hour,
 			   int *min, int *sec);

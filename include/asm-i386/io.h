@@ -37,21 +37,26 @@
 #define SLOW_DOWN_IO __SLOW_DOWN_IO
 #endif
 
+#include <asm/page.h>
+
+#define __io_virt(x)		((void *)(PAGE_OFFSET | (unsigned long)(x)))
+#define __io_phys(x)		((unsigned long)(x) & ~PAGE_OFFSET)
 /*
  * Change virtual addresses to physical addresses and vv.
- * These are trivial on the 1:1 Linux/i386 mapping (but if we ever
- * make the kernel segment mapped at 0, we need to do translation
- * on the i386 as well)
+ * These are pretty trivial
  */
 extern inline unsigned long virt_to_phys(volatile void * address)
 {
-	return (unsigned long) address;
+	return __io_phys(address);
 }
 
 extern inline void * phys_to_virt(unsigned long address)
 {
-	return (void *) address;
+	return __io_virt(address);
 }
+
+extern void * ioremap(unsigned long offset, unsigned long size);
+extern void iounmap(void *addr);
 
 /*
  * IO bus memory addresses are also 1:1 with the physical address
@@ -65,23 +70,24 @@ extern inline void * phys_to_virt(unsigned long address)
  * differently. On the x86 architecture, we just read/write the
  * memory location directly.
  */
-#define readb(addr) (*(volatile unsigned char *) (addr))
-#define readw(addr) (*(volatile unsigned short *) (addr))
-#define readl(addr) (*(volatile unsigned int *) (addr))
 
-#define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
-#define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
-#define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
+#define readb(addr) (*(volatile unsigned char *) __io_virt(addr))
+#define readw(addr) (*(volatile unsigned short *) __io_virt(addr))
+#define readl(addr) (*(volatile unsigned int *) __io_virt(addr))
 
-#define memset_io(a,b,c)	memset((void *)(a),(b),(c))
-#define memcpy_fromio(a,b,c)	memcpy((a),(void *)(b),(c))
-#define memcpy_toio(a,b,c)	memcpy((void *)(a),(b),(c))
+#define writeb(b,addr) (*(volatile unsigned char *) __io_virt(addr) = (b))
+#define writew(b,addr) (*(volatile unsigned short *) __io_virt(addr) = (b))
+#define writel(b,addr) (*(volatile unsigned int *) __io_virt(addr) = (b))
+
+#define memset_io(a,b,c)	memset(__io_virt(a),(b),(c))
+#define memcpy_fromio(a,b,c)	memcpy((a),__io_virt(b),(c))
+#define memcpy_toio(a,b,c)	memcpy(__io_virt(a),(b),(c))
 
 /*
  * Again, i386 does not require mem IO specific function.
  */
 
-#define eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),(void *)(b),(c),(d))
+#define eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),__io_virt(b),(c),(d))
 
 /*
  * Talk about misusing macros..
@@ -209,5 +215,21 @@ __OUTS(l)
 ((__builtin_constant_p((port)) && (port) < 256) ? \
 	__inlc_p(port) : \
 	__inl_p(port))
+
+static inline int check_signature(unsigned long io_addr,
+	const unsigned char *signature, int length)
+{
+	int retval = 0;
+	do {
+		if (readb(io_addr) != *signature)
+			goto out;
+		io_addr++;
+		signature++;
+		length--;
+	} while (length);
+	retval = 1;
+out:
+	return retval;
+}
 
 #endif

@@ -1,7 +1,7 @@
 /*
- * linux/amiga/amikeyb.c
+ * linux/arch/m68k/amiga/amikeyb.c
  *
- * Amiga Keyboard driver for 680x0 Linux
+ * Amiga Keyboard driver for Linux/m68k
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive
@@ -21,18 +21,19 @@
 #include <linux/timer.h>
 #include <linux/kd.h>
 #include <linux/random.h>
+#include <linux/kernel.h>
 
-#include <asm/bootinfo.h>
+#include <asm/setup.h>
 #include <asm/amigatypes.h>
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 #include <asm/irq.h>
 
-extern int do_poke_blanked_console;
-extern void process_keycode (int);
+extern void handle_scancode(unsigned char);
 
 #define AMIKEY_CAPS	(0x62)
 #define BREAK_MASK	(0x80)
+#define RESET_WARNING	(0xf0)	/* before rotation */
 
 static u_short amiplain_map[NR_KEYS] = {
 	0xf060, 0xf031, 0xf032, 0xf033, 0xf034, 0xf035, 0xf036, 0xf037,
@@ -46,7 +47,7 @@ static u_short amiplain_map[NR_KEYS] = {
 	0xf020, 0xf07f, 0xf009, 0xf30e, 0xf201, 0xf01b, 0xf07f, 0xf200,
 	0xf200, 0xf200, 0xf30b, 0xf200, 0xf603, 0xf600, 0xf602, 0xf601,
 	0xf100, 0xf101, 0xf102, 0xf103, 0xf104, 0xf105, 0xf106, 0xf107,
-	0xf108, 0xf109, 0xf208, 0xf209, 0xf30d, 0xf30c, 0xf30a, 0xf10a,
+	0xf108, 0xf109, 0xf312, 0xf313, 0xf30d, 0xf30c, 0xf30a, 0xf11b,
 	0xf700, 0xf700, 0xf207, 0xf702, 0xf703, 0xf701, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
@@ -65,7 +66,7 @@ static u_short amishift_map[NR_KEYS] = {
 	0xf020, 0xf07f, 0xf009, 0xf30e, 0xf201, 0xf01b, 0xf07f, 0xf200,
 	0xf200, 0xf200, 0xf30b, 0xf200, 0xf603, 0xf600, 0xf602, 0xf601,
 	0xf10a, 0xf10b, 0xf10c, 0xf10d, 0xf10e, 0xf10f, 0xf110, 0xf111,
-	0xf112, 0xf113, 0xf208, 0xf203, 0xf30d, 0xf30c, 0xf30a, 0xf10a,
+	0xf112, 0xf113, 0xf208, 0xf209, 0xf30d, 0xf30c, 0xf30a, 0xf203,
 	0xf700, 0xf700, 0xf207, 0xf702, 0xf703, 0xf701, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
@@ -84,7 +85,7 @@ static u_short amialtgr_map[NR_KEYS] = {
 	0xf200, 0xf07f, 0xf200, 0xf30e, 0xf201, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf30b, 0xf200, 0xf603, 0xf600, 0xf602, 0xf601,
 	0xf50c, 0xf50d, 0xf50e, 0xf50f, 0xf510, 0xf511, 0xf512, 0xf513,
-	0xf514, 0xf515, 0xf208, 0xf202, 0xf30d, 0xf30c, 0xf30a, 0xf516,
+	0xf514, 0xf515, 0xf208, 0xf209, 0xf30d, 0xf30c, 0xf30a, 0xf204,
 	0xf700, 0xf700, 0xf207, 0xf702, 0xf703, 0xf701, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
@@ -103,7 +104,7 @@ static u_short amictrl_map[NR_KEYS] = {
 	0xf000, 0xf07f, 0xf200, 0xf30e, 0xf201, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf30b, 0xf200, 0xf603, 0xf600, 0xf602, 0xf601,
 	0xf100, 0xf101, 0xf102, 0xf103, 0xf104, 0xf105, 0xf106, 0xf107,
-	0xf108, 0xf109, 0xf208, 0xf204, 0xf30d, 0xf30c, 0xf30a, 0xf10a,
+	0xf108, 0xf109, 0xf208, 0xf209, 0xf30d, 0xf30c, 0xf30a, 0xf202,
 	0xf700, 0xf700, 0xf207, 0xf702, 0xf703, 0xf701, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
@@ -122,7 +123,7 @@ static u_short amishift_ctrl_map[NR_KEYS] = {
 	0xf200, 0xf07f, 0xf200, 0xf30e, 0xf201, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf30b, 0xf200, 0xf603, 0xf600, 0xf602, 0xf601,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
-	0xf200, 0xf200, 0xf208, 0xf200, 0xf30d, 0xf30c, 0xf30a, 0xf200,
+	0xf200, 0xf200, 0xf208, 0xf209, 0xf30d, 0xf30c, 0xf30a, 0xf200,
 	0xf700, 0xf700, 0xf207, 0xf702, 0xf703, 0xf701, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
@@ -141,7 +142,7 @@ static u_short amialt_map[NR_KEYS] = {
 	0xf820, 0xf87f, 0xf809, 0xf30e, 0xf80d, 0xf81b, 0xf87f, 0xf200,
 	0xf200, 0xf200, 0xf30b, 0xf200, 0xf603, 0xf600, 0xf602, 0xf601,
 	0xf500, 0xf501, 0xf502, 0xf503, 0xf504, 0xf505, 0xf506, 0xf507,
-	0xf508, 0xf509, 0xf208, 0xf209, 0xf30d, 0xf30c, 0xf30a, 0xf50a,
+	0xf508, 0xf509, 0xf208, 0xf209, 0xf30d, 0xf30c, 0xf30a, 0xf204,
 	0xf700, 0xf700, 0xf207, 0xf702, 0xf703, 0xf701, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
@@ -160,7 +161,7 @@ static u_short amictrl_alt_map[NR_KEYS] = {
 	0xf200, 0xf07f, 0xf200, 0xf30e, 0xf201, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf30b, 0xf200, 0xf603, 0xf600, 0xf602, 0xf601,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
-	0xf200, 0xf200, 0xf208, 0xf200, 0xf30d, 0xf30c, 0xf30a, 0xf200,
+	0xf200, 0xf200, 0xf208, 0xf209, 0xf30d, 0xf30c, 0xf30a, 0xf200,
 	0xf700, 0xf700, 0xf207, 0xf702, 0xf703, 0xf701, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200,
@@ -175,30 +176,31 @@ static unsigned int key_repeat_delay = DEFAULT_KEYB_REP_DELAY;
 static unsigned int key_repeat_rate  = DEFAULT_KEYB_REP_RATE;
 
 static unsigned char rep_scancode;
-static void amikeyb_rep (unsigned long ignore);
+static void amikeyb_rep(unsigned long ignore);
 static struct timer_list amikeyb_rep_timer = {NULL, NULL, 0, 0, amikeyb_rep};
 
 extern struct pt_regs *pt_regs;
 
-static void amikeyb_rep (unsigned long ignore)
+static void amikeyb_rep(unsigned long ignore)
 {
-	unsigned long flags;
-	save_flags(flags);
-	cli();
+    unsigned long flags;
+    save_flags(flags);
+    cli();
 
-	pt_regs = NULL;
+    pt_regs = NULL;
 
-	amikeyb_rep_timer.expires = jiffies + key_repeat_rate;
-	amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
-	add_timer(&amikeyb_rep_timer);
-	process_keycode (rep_scancode);
+    amikeyb_rep_timer.expires = jiffies + key_repeat_rate;
+    amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
+    add_timer(&amikeyb_rep_timer);
+    handle_scancode(rep_scancode);
 
-	restore_flags(flags);
+    restore_flags(flags);
 }
 
-static void keyboard_interrupt (int irq, struct pt_regs *fp, void *dummy)
+static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 {
     unsigned char scancode, break_flag;
+    static int reset_warning = 0;
 
     /* save frame for register dump */
     pt_regs = (struct pt_regs *)fp;
@@ -208,49 +210,94 @@ static void keyboard_interrupt (int irq, struct pt_regs *fp, void *dummy)
 
     /* switch SP pin to output for handshake */
     ciaa.cra |= 0x40;
+
+    /*
+     *  On receipt of the second RESET_WARNING, we must not pull KDAT high
+     *  again to delay the hard reset as long as possible.
+     *
+     *  Note that not all keyboards send reset warnings...
+     */
+    if (reset_warning)
+	if (scancode == RESET_WARNING) {
+	    printk(KERN_ALERT "amikeyb: Ctrl-Amiga-Amiga reset warning!!\n"
+		   "The system will be reset within 10 seconds!!\n");
+	    /* Panic doesn't sync from within an interrupt, so we do nothing */
+	    return;
+	} else
+	    /* Probably a mistake, cancel the alert */
+	    reset_warning = 0;
+
     /* wait until 85 us have expired */
     udelay(85);
     /* switch CIA serial port to input mode */
     ciaa.cra &= ~0x40;
 
+    mark_bh(KEYBOARD_BH);
+
     /* rotate scan code to get up/down bit in proper position */
     __asm__ __volatile__ ("rorb #1,%0" : "=g" (scancode) : "0" (scancode));
 
     /*
-     * do machine independent keyboard processing of "normalized" scancode
-     * A "normalized" scancode is one that an IBM PC might generate
      * Check make/break first
      */
     break_flag = scancode & BREAK_MASK;
     scancode &= (unsigned char )~BREAK_MASK;
 
     if (scancode == AMIKEY_CAPS) {
-	    /* if the key is CAPS, fake a press/release. */
-	    process_keycode (AMIKEY_CAPS);
-	    process_keycode (BREAK_MASK | AMIKEY_CAPS);
-    } else {
-	    /* handle repeat */
-	    if (break_flag) {
-		    del_timer(&amikeyb_rep_timer);
-		    rep_scancode = 0;
-	    } else {
-		    del_timer(&amikeyb_rep_timer);
-		    rep_scancode = break_flag | scancode;
-		    amikeyb_rep_timer.expires = jiffies + key_repeat_delay;
-		    amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
-		    add_timer(&amikeyb_rep_timer);
-	    }
-	    process_keycode (break_flag | scancode);
-    }
-
-    do_poke_blanked_console = 1;
-    mark_bh(CONSOLE_BH);
-    add_keyboard_randomness(scancode);
-
-    return;
+	/* if the key is CAPS, fake a press/release. */
+	handle_scancode(AMIKEY_CAPS);
+	handle_scancode(BREAK_MASK | AMIKEY_CAPS);
+    } else if (scancode < 0x78) {
+	/* handle repeat */
+	if (break_flag) {
+	    del_timer(&amikeyb_rep_timer);
+	    rep_scancode = 0;
+	} else {
+	    del_timer(&amikeyb_rep_timer);
+	    rep_scancode = scancode;
+	    amikeyb_rep_timer.expires = jiffies + key_repeat_delay;
+	    amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
+	    add_timer(&amikeyb_rep_timer);
+	}
+	handle_scancode(break_flag | scancode);
+    } else
+	switch (scancode) {
+	    case 0x78:
+		reset_warning = 1;
+		break;
+	    case 0x79:
+		printk(KERN_WARNING "amikeyb: keyboard lost sync\n");
+		break;
+	    case 0x7a:
+		printk(KERN_WARNING "amikeyb: keyboard buffer overflow\n");
+		break;
+#if 0 /* obsolete according to the HRM */
+	    case 0x7b:
+		printk(KERN_WARNING "amikeyb: keyboard controller failure\n");
+		break;
+#endif
+	    case 0x7c:
+		printk(KERN_ERR "amikeyb: keyboard selftest failure\n");
+		break;
+	    case 0x7d:
+		printk(KERN_INFO "amikeyb: initiate power-up key stream\n");
+		break;
+	    case 0x7e:
+		printk(KERN_INFO "amikeyb: terminate power-up key stream\n");
+		break;
+#if 0 /* obsolete according to the HRM */
+	    case 0x7f:
+		printk(KERN_WARNING "amikeyb: keyboard interrupt\n");
+		break;
+#endif
+	    default:
+		printk(KERN_WARNING "amikeyb: unknown keyboard communication code 0x%02x\n",
+		       break_flag | scancode);
+		break;
+	}
 }
 
-int amiga_keyb_init (void)
+int amiga_keyb_init(void)
 {
     if (!AMIGAHW_PRESENT(AMI_KEYBOARD))
         return -EIO;
@@ -263,7 +310,7 @@ int amiga_keyb_init (void)
     key_maps[5]  = amishift_ctrl_map;
     key_maps[8]  = amialt_map;
     key_maps[12] = amictrl_alt_map;
-    memcpy (plain_map, amiplain_map, sizeof(plain_map));
+    memcpy(plain_map, amiplain_map, sizeof(plain_map));
 
     /*
      * Initialize serial data direction.
@@ -273,28 +320,27 @@ int amiga_keyb_init (void)
     /*
      * arrange for processing of keyboard interrupt
      */
-    add_isr (IRQ_AMIGA_CIAA_SP, keyboard_interrupt, 0, NULL, "keyboard");
+    request_irq(IRQ_AMIGA_CIAA_SP, keyboard_interrupt, 0, "keyboard", NULL);
 
     return 0;
 }
 
 int amiga_kbdrate( struct kbd_repeat *k )
-
 {
-	if (k->delay > 0) {
-		/* convert from msec to jiffies */
-		key_repeat_delay = (k->delay * HZ + 500) / 1000;
-		if (key_repeat_delay < 1)
-			key_repeat_delay = 1;
-	}
-	if (k->rate > 0) {
-		key_repeat_rate = (k->rate * HZ + 500) / 1000;
-		if (key_repeat_rate < 1)
-			key_repeat_rate = 1;
-	}
+    if (k->delay > 0) {
+	/* convert from msec to jiffies */
+	key_repeat_delay = (k->delay * HZ + 500) / 1000;
+	if (key_repeat_delay < 1)
+            key_repeat_delay = 1;
+    }
+    if (k->rate > 0) {
+	key_repeat_rate = (k->rate * HZ + 500) / 1000;
+	if (key_repeat_rate < 1)
+            key_repeat_rate = 1;
+    }
 
-	k->delay = key_repeat_delay * 1000 / HZ;
-	k->rate  = key_repeat_rate  * 1000 / HZ;
-	
-	return( 0 );
+    k->delay = key_repeat_delay * 1000 / HZ;
+    k->rate  = key_repeat_rate  * 1000 / HZ;
+    
+    return( 0 );
 }

@@ -108,8 +108,6 @@ static inline unsigned short scr_readw(unsigned short * addr)
  *
  */ 
 
-#ifdef __alpha__
-
 #include <asm/io.h> 
 
 /*
@@ -147,33 +145,6 @@ static inline unsigned short scr_readw(unsigned short * addr)
 	return readw((unsigned long) addr);
 }
 
-#else /* __alpha__ */
-/*
- * normal VGA console access
- * 
- * NOTE: these do normal PC-style frame buffer accesses
- */
-static inline void scr_writeb(unsigned char val, unsigned char * addr)
-{
-	*addr = val;
-}
-
-static inline unsigned char scr_readb(unsigned char * addr)
-{
-	return *addr;
-}
-
-static inline void scr_writew(unsigned short val, unsigned short * addr)
-{
-	*addr = val;
-}
-
-static inline unsigned short scr_readw(unsigned short * addr)
-{
-	return *addr;
-}
-
-#endif /* __alpha__ */
 #endif /* CONFIG_TGA_CONSOLE */
 
 static inline void memsetw(void * s, unsigned short c, unsigned int count)

@@ -546,8 +546,10 @@ sound_install_audiodrv (int vers,
   audio_devs[num_audiodevs] = op;
   num = num_audiodevs++;
 
+#ifdef CONFIG_AUDIO
   DMAbuf_init ();
   audio_init ();
+#endif
   return num;
 }
 

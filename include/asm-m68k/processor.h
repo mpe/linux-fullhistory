@@ -30,7 +30,7 @@
 #define wp_works_ok 1
 
 /* MAX floating point unit state size (FSAVE/FRESTORE) */
-#define FPSTATESIZE   (216/sizeof(unsigned short))
+#define FPSTATESIZE   (216/sizeof(unsigned char))
 
 /* 
  * if you change this structure, you must change the code and offsets
@@ -48,7 +48,7 @@ struct thread_struct {
 	unsigned long  esp0;		/* points to SR of stack frame */
 	unsigned long  fp[8*3];
 	unsigned long  fpcntl[3];	/* fp control regs */
-	unsigned short fpstate[FPSTATESIZE];  /* floating point state */
+	unsigned char  fpstate[FPSTATESIZE];  /* floating point state */
 };
 
 #define INIT_MMAP { &init_mm, 0, 0x40000000, __pgprot(_PAGE_PRESENT|_PAGE_ACCESSED), VM_READ | VM_WRITE | VM_EXEC }
@@ -59,7 +59,7 @@ struct thread_struct {
 	NULL, 0, {0, 0}, 0 \
 }
 
-#define alloc_kernel_stack()    get_free_page(GFP_KERNEL)
+#define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)
 #define free_kernel_stack(page) free_page((page))
 
 /*

@@ -385,7 +385,7 @@ extern int sysv_bmap(struct inode *,int);
 
 extern struct buffer_head * sysv_getblk(struct inode *, unsigned int, int);
 extern struct buffer_head * sysv_file_bread(struct inode *, int, int);
-extern int sysv_file_read(struct inode *, struct file *, char *, int);
+extern long sysv_file_read(struct inode *, struct file *, char *, unsigned long);
 
 extern void sysv_truncate(struct inode *);
 extern void sysv_put_super(struct super_block *);

@@ -97,9 +97,9 @@ extern char emulating;
 
 struct address {
   unsigned int offset;
-  unsigned int selector:16;
-  unsigned int opcode:11;
-  unsigned int empty:5;
+  unsigned short selector;
+  unsigned short opcode:11,
+		 empty:5;
 };
 typedef void (*FUNC)(void);
 typedef struct fpu_reg FPU_REG;

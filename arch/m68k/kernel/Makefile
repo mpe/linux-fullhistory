@@ -8,13 +8,12 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ -traditional -Wa,-m68030 -c $< -o $*.o
+	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o
 
 all: kernel.o head.o
 O_TARGET := kernel.o
 O_OBJS := entry.o process.o traps.o ints.o signal.o ptrace.o \
-	  setup.o bios32.o sys_m68k.o console.o time.o
-OX_OBJS = ksyms.o
+	  setup.o bios32.o sys_m68k.o console.o time.o ksyms.o
 
 head.o: head.S
 

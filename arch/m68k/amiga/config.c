@@ -1,5 +1,5 @@
 /*
- *  linux/amiga/config.c
+ *  linux/arch/m68k/amiga/config.c
  *
  *  Copyright (C) 1993 Hamish Macdonald
  *
@@ -20,11 +20,10 @@
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/console.h>
-#include <linux/linkage.h>
 
+#include <asm/setup.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
-#include <asm/bootinfo.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
 #include <asm/irq.h>
@@ -35,15 +34,20 @@ u_long amiga_colorclock;
 
 extern char m68k_debug_device[];
 
-extern void amiga_sched_init(isrfunc handler);
+extern void amiga_sched_init(void (*handler)(int, void *, struct pt_regs *));
+/* amiga specific keyboard functions */
 extern int amiga_keyb_init(void);
 extern int amiga_kbdrate (struct kbd_repeat *);
-extern void amiga_init_INTS (void);
-extern int amiga_add_isr (unsigned long, isrfunc, int, void *, char *);
-extern int amiga_remove_isr (unsigned long, isrfunc, void *);
-extern int amiga_get_irq_list (char *, int);
-extern void amiga_enable_irq(unsigned int);
-extern void amiga_disable_irq(unsigned int);
+/* amiga specific irq functions */
+extern void amiga_init_IRQ (void);
+extern void (*amiga_default_handler[]) (int, void *, struct pt_regs *);
+extern int amiga_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+                              unsigned long flags, const char *devname, void *dev_id);
+extern int amiga_free_irq (unsigned int irq, void *dev_id);
+extern void amiga_enable_irq (unsigned int);
+extern void amiga_disable_irq (unsigned int);
+extern int amiga_get_irq_list (char *);
+/* amiga specific timer functions */
 extern unsigned long amiga_gettimeoffset (void);
 extern void a3000_gettod (int *, int *, int *, int *, int *, int *);
 extern void a2000_gettod (int *, int *, int *, int *, int *, int *);
@@ -199,7 +203,7 @@ void config_amiga(void)
       switch (custom.deniseid & 0xf) {
       case 0x0c:
 	AMIGAHW_SET(DENISE_HR);
-	printk("DENISE_HR");
+	printk("DENISE_HR ");
 	break;
       case 0x08:
 	AMIGAHW_SET(LISA);
@@ -257,9 +261,10 @@ void config_amiga(void)
   mach_sched_init      = amiga_sched_init;
   mach_keyb_init       = amiga_keyb_init;
   mach_kbdrate         = amiga_kbdrate;
-  mach_init_INTS       = amiga_init_INTS;
-  mach_add_isr         = amiga_add_isr;
-  mach_remove_isr      = amiga_remove_isr;
+  mach_init_IRQ        = amiga_init_IRQ;
+  mach_default_handler = &amiga_default_handler;
+  mach_request_irq     = amiga_request_irq;
+  mach_free_irq        = amiga_free_irq;
   mach_enable_irq      = amiga_enable_irq;
   mach_disable_irq     = amiga_disable_irq;
   mach_get_irq_list    = amiga_get_irq_list;
@@ -330,60 +335,24 @@ void config_amiga(void)
 #endif /* CONFIG_ZORRO */
 }
 
-extern long time_finetune;	/* from kernel/sched.c */
-
 static unsigned short jiffy_ticks;
 
-#if 1 /* ++1.3++ */
-static void timer_wrapper( int irq, struct pt_regs *fp, void *otimerf )
- {
-   unsigned short flags, old_flags;
-
-   ciab.icr = 0x01;
-
-   save_flags(flags);
-   old_flags = (flags & ~0x0700) | (fp->sr & 0x0700);
-   
-   restore_flags(old_flags);
-
-   (*(isrfunc)otimerf)( irq, fp, NULL );
-
-   restore_flags(flags);
-   ciab.icr = 0x81;
-}
-#endif
-
-void amiga_sched_init (isrfunc timer_routine)
+void amiga_sched_init(void (*timer_routine)(int, void *, struct pt_regs *))
 {
+	jiffy_ticks = (amiga_eclock+HZ/2)/HZ;
 
-#if 0 /* XXX */ /* I think finetune was removed by the 1.3.29 patch */
-    double finetune;
-#endif
+	ciab.cra &= 0xC0;	 /* turn off timer A, continuous mode, from Eclk */
+	ciab.talo = jiffy_ticks % 256;
+	ciab.tahi = jiffy_ticks / 256;
 
-    jiffy_ticks = (amiga_eclock+50)/100;
-#if 0 /* XXX */
-    finetune = (jiffy_ticks-amiga_eclock/HZ)/amiga_eclock*1000000*(1<<24);
-    time_finetune = finetune+0.5;
-#endif
-
-    ciab.cra &= 0xC0;	 /* turn off timer A, continuous mode, from Eclk */
-    ciab.talo = jiffy_ticks % 256;
-    ciab.tahi = jiffy_ticks / 256;
-    /* CIA interrupts when counter underflows, so adjust ticks by 1 */
-    jiffy_ticks -= 1;
-
-    /* install interrupt service routine for CIAB Timer A */
-    /*
-     * Please don't change this to use ciaa, as it interferes with the
-     * SCSI code. We'll have to take a look at this later
-     */
-#if 0
-    add_isr (IRQ_AMIGA_CIAB_TA, timer_routine, 0, NULL, "timer");
-#else
-    add_isr (IRQ_AMIGA_CIAB_TA, timer_wrapper, 0, timer_routine, "timer");
-#endif
-    /* start timer */
-    ciab.cra |= 0x01;
+	/* install interrupt service routine for CIAB Timer A
+	 *
+	 * Please don't change this to use ciaa, as it interferes with the
+	 * SCSI code. We'll have to take a look at this later
+	 */
+	request_irq(IRQ_AMIGA_CIAB_TA, timer_routine, IRQ_FLG_LOCK, "timer", NULL);
+	/* start timer */
+	ciab.cra |= 0x11;
 }
 
 #define TICK_SIZE 10000
@@ -391,33 +360,30 @@ void amiga_sched_init (isrfunc timer_routine)
 /* This is always executed with interrupts disabled.  */
 unsigned long amiga_gettimeoffset (void)
 {
-    unsigned short hi, lo, hi2;
-    unsigned long ticks, offset = 0;
+	unsigned short hi, lo, hi2;
+	unsigned long ticks, offset = 0;
 
-    /* read CIA A timer A current value */
-    hi	= ciab.tahi;
-    lo	= ciab.talo;
-    hi2 = ciab.tahi;
+	/* read CIA B timer A current value */
+	hi  = ciab.tahi;
+	lo  = ciab.talo;
+	hi2 = ciab.tahi;
 
-    if (hi != hi2) {
-	lo = ciab.talo;
-	hi = hi2;
-    }
+	if (hi != hi2) {
+		lo = ciab.talo;
+		hi = hi2;
+	}
 
-    ticks = hi << 8 | lo;
+	ticks = hi << 8 | lo;
 
-#if 0 /* XXX */
-/* reading the ICR clears all interrupts.  bad idea! */
-      if (ticks > jiffy_ticks - jiffy_ticks / 100)
-	/* check for pending interrupt */
-	if (ciab.icr & CIA_ICR_TA)
-	  offset = 10000;
-#endif
+	if (ticks > jiffy_ticks / 2)
+		/* check for pending interrupt */
+		if (cia_set_irq(&ciab_base, 0) & CIA_ICR_TA)
+			offset = 10000;
 
-    ticks = (jiffy_ticks-1) - ticks;
-    ticks = (10000 * ticks) / jiffy_ticks;
+	ticks = jiffy_ticks - ticks;
+	ticks = (10000 * ticks) / jiffy_ticks;
 
-    return ticks + offset;
+	return ticks + offset;
 }
 
 void a3000_gettod (int *yearp, int *monp, int *dayp,
@@ -657,7 +623,7 @@ void amiga_reset (void)
   unsigned long jmp_addr = VTOP(&&jmp_addr_label);
 
   cli();
-  if (m68k_is040or060)
+  if (CPU_IS_040_OR_060)
     /* Setup transparent translation registers for mapping
      * of 16 MB kernel segment before disabling translation
      */

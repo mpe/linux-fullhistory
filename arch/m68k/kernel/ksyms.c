@@ -1,14 +1,16 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/linkage.h>
+#include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/user.h>
 #include <linux/elfcore.h>
 
-#include <asm/bootinfo.h>
+#include <asm/setup.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
+#include <asm/semaphore.h>
 
 asmlinkage long long __ashrdi3 (long long, int);
 extern char m68k_debug_device[];
@@ -34,14 +36,16 @@ static struct symbol_table arch_symbol_table = {
 	X(boot_info),
 	X(m68k_is040or060),
 	X(cache_push),
+	X(cache_push_v),
 	X(cache_clear),
 	X(mm_vtop),
 	X(mm_ptov),
 	X(m68k_debug_device),
-	X(add_isr),
-	X(remove_isr),
+	X(request_irq),
+	X(free_irq),
 	X(dump_fpu),
 	X(dump_thread),
+	X(strnlen),
 
 	/* The following are special because they're not called
 	   explicitly (the C compiler generates them).  Fortunately,
@@ -49,7 +53,11 @@ static struct symbol_table arch_symbol_table = {
 	   it's OK to leave it out of version control.  */
 	XNOVERS(__ashrdi3),
 	XNOVERS(memcpy),
-	
+	XNOVERS(memset),
+
+	XNOVERS(down_failed),
+	XNOVERS(up_wakeup),
+
 #include <linux/symtab_end.h>
 };
 

@@ -1137,7 +1137,6 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 						/* happen in net_bh() in dev.c) */
 			}
 			/* ok, forward this frame... */
-			skb_device_lock(skb);
 			return(br_forward(skb, port));
 		default:
 			printk(KERN_DEBUG "br_receive_frame: port [%i] unknown state [%i]\n",

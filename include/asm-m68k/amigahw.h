@@ -195,6 +195,7 @@ struct CIA {
 void amiga_chip_init (void);
 void *amiga_chip_alloc (long size);
 void amiga_chip_free (void *);
+unsigned long amiga_chip_avail( void ); /*MILAN*/
 
 struct tod3000 {
   unsigned int  :28, second2:4;	/* lower digit */

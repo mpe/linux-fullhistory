@@ -50,10 +50,6 @@ typedef unsigned long pgprot_t;
 
 #endif
 
-/* m68k_is040or060 is != 0 for a '040 or higher; used numbers are 4 for 68040
- * and 6 for 68060 */
-extern int m68k_is040or060;
-
 /* This is the cache mode to be used for pages containing page descriptors for
  * processors >= '040. It is in pte_mknocache(), and the variable is defined
  * and initialized in head.S */

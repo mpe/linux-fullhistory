@@ -79,7 +79,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	if (!pte_present(pte))
 		return 0;
 	page = pte_page(pte);
-	if (MAP_NR(page) >= MAP_NR(high_memory))
+	if (MAP_NR(page) >= max_mapnr)
 		return 0;
 
 	page_map = mem_map + MAP_NR(page);

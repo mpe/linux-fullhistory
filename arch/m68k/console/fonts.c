@@ -12,8 +12,8 @@
 
 #include <linux/types.h>
 #include <linux/string.h>
+#include <asm/setup.h>
 #include <asm/font.h>
-#include <asm/bootinfo.h>
 
 
    /*

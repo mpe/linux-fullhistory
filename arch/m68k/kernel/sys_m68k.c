@@ -6,7 +6,6 @@
  * platform.
  */
 
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -16,8 +15,10 @@
 #include <linux/stat.h>
 #include <linux/mman.h>
 
+#include <asm/setup.h>
 #include <asm/segment.h>
 #include <asm/cachectl.h>
+#include <asm/traps.h>
 
 /*
  * sys_pipe() is the normal C calling standard for creating
@@ -198,12 +199,12 @@ asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
 			: "=d" (_tmp2)					\
 			: "a" (_tmp1));					\
   _mmusr = _tmp2;							\
-  if (0 /* XXX _mmusr & MMU_?_040 */)					\
+  if (!(_mmusr & MMU_R_040))						\
     (valid) = 0;							\
   else									\
     {									\
       (valid) = 1;							\
-      (paddr) = _mmusr & ~0xfff;					\
+      (paddr) = _mmusr & PAGE_MASK;					\
     }									\
 }
 
@@ -237,6 +238,8 @@ cache_flush_040 (unsigned long addr, int scope, int cache, unsigned long len)
 
     case FLUSH_SCOPE_LINE:
       len >>= 4;
+      /* Find the physical address of the first mapped page in the
+	 address range.  */
       for (;;)
 	{
 	  virt_to_phys_040 (addr, paddr, valid);
@@ -244,8 +247,8 @@ cache_flush_040 (unsigned long addr, int scope, int cache, unsigned long len)
 	    break;
 	  if (len <= PAGE_SIZE / 16)
 	    return 0;
-	  len -= PAGE_SIZE / 16;
-	  addr += PAGE_SIZE;
+	  len -= (PAGE_SIZE - (addr & PAGE_MASK)) / 16;
+	  addr = (addr + PAGE_SIZE) & PAGE_MASK;
 	}
       while (len--)
 	{
@@ -283,8 +286,8 @@ cache_flush_040 (unsigned long addr, int scope, int cache, unsigned long len)
 			break;
 		      if (len <= PAGE_SIZE / 16)
 			return 0;
-		      len -= PAGE_SIZE / 16;
-		      addr += PAGE_SIZE;
+		      len -= (PAGE_SIZE - (addr & PAGE_MASK)) / 16;
+		      addr = (addr + PAGE_SIZE) & PAGE_MASK;
 		    }
 		}
 	      else
@@ -367,6 +370,8 @@ cache_flush_060 (unsigned long addr, int scope, int cache, unsigned long len)
 
     case FLUSH_SCOPE_LINE:
       len >>= 4;
+      /* Find the physical address of the first mapped page in the
+	 address range.  */
       for (;;)
 	{
 	  virt_to_phys_060 (addr, paddr, valid);
@@ -374,8 +379,8 @@ cache_flush_060 (unsigned long addr, int scope, int cache, unsigned long len)
 	    break;
 	  if (len <= PAGE_SIZE / 16)
 	    return 0;
-	  len -= PAGE_SIZE / 16;
-	  addr += PAGE_SIZE;
+	  len -= (PAGE_SIZE - (addr & PAGE_MASK)) / 16;
+	  addr = (addr + PAGE_SIZE) & PAGE_MASK;
 	}
       while (len--)
 	{
@@ -413,8 +418,8 @@ cache_flush_060 (unsigned long addr, int scope, int cache, unsigned long len)
 			break;
 		      if (len <= PAGE_SIZE / 16)
 			return 0;
-		      len -= PAGE_SIZE / 16;
-		      addr += PAGE_SIZE;
+		      len -= (PAGE_SIZE - (addr & PAGE_MASK)) / 16;
+		      addr = (addr + PAGE_SIZE) & PAGE_MASK;
 		    }
 		}
 	      else
@@ -477,17 +482,15 @@ sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
     {
       /* Verify that the specified address region actually belongs to
 	 this process.  */
-      vma = find_vma (current, addr);
+      vma = find_vma (current->mm, addr);
       if (vma == NULL || addr < vma->vm_start || addr + len > vma->vm_end)
 	return -EINVAL;
     }
 
-  switch (m68k_is040or060)
-    {
-    default: /* 030 */
-      /* Always flush the whole cache, everything else would not be
-	 worth the hassle.  */
-      __asm__ __volatile__
+  if (CPU_IS_020_OR_030) {
+    /* Always flush the whole cache, everything else would not be
+       worth the hassle.  */
+    __asm__ __volatile__
 	("movec %%cacr, %%d0\n\t"
 	 "or %0, %%d0\n\t"
 	 "movec %%d0, %%cacr"
@@ -495,12 +498,9 @@ sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
 	 : "di" ((cache & FLUSH_CACHE_INSN ? 8 : 0)
 		 | (cache & FLUSH_CACHE_DATA ? 0x800 : 0))
 	 : "d0");
-      return 0;
-
-    case 4: /* 040 */
-      return cache_flush_040 (addr, scope, cache, len);
-
-    case 6: /* 060 */
-      return cache_flush_060 (addr, scope, cache, len);
-    }
+    return 0;
+  } else if (CPU_IS_040)
+    return cache_flush_040 (addr, scope, cache, len);
+  else if (CPU_IS_060)
+    return cache_flush_060 (addr, scope, cache, len);
 }

@@ -40,13 +40,20 @@ extern inline void wrusp(unsigned long usp) {
  * to push them onto the stack and read them back right after.
  *
  * 02/17/96 - Jes Sorensen (jds@kom.auc.dk)
+ *
+ * Changed 96/09/19 by Andreas Schwab
+ * pass prev in a0, next in a1, offset of tss in d1, and whether
+ * the mm structures are shared in d2 (to avoid atc flushing).
  */
 asmlinkage void resume(void);
 #define switch_to(prev,next) { \
-  register int k __asm__ ("a1") = (int)&((struct task_struct *)0)->tss; \
-  register int n __asm__ ("d1") = (int)next; \
+  register void *_prev __asm__ ("a0") = (prev); \
+  register void *_next __asm__ ("a1") = (next); \
+  register int _tssoff __asm__ ("d1") = (int)&((struct task_struct *)0)->tss; \
+  register char _shared __asm__ ("d2") = ((prev)->mm == (next)->mm); \
   __asm__ __volatile__("jbsr " SYMBOL_NAME_STR(resume) "\n\t" \
-		       : : "a" (k), "d" (n) \
+		       : : "a" (_prev), "a" (_next), "d" (_tssoff), \
+		           "d" (_shared) \
 		       : "d0", "d1", "d2", "d3", "d4", "d5", "a0", "a1"); \
 }
 
@@ -74,7 +81,7 @@ __asm__ __volatile__("movew %0,%/sr": /* no outputs */ :"d" (x) : "memory")
 
 #define iret() __asm__ __volatile__ ("rte": : :"memory", "sp", "cc")
 
-#if 1
+#ifndef CONFIG_RMW_INSNS
 static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
 {
   unsigned long tmp, flags;

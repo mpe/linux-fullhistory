@@ -7,10 +7,6 @@
  *		       (Geert.Uytterhoeven@cs.kuleuven.ac.be)
  *
  *
- *  Compilation (under AmigaOS):
- *
- *	gcc -o dmesg dmesg.c -noixemul -idirafter INCLUDE: -Wall -s -O3
- *
  *  Usage:
  *
  *	dmesg

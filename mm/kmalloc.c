@@ -405,7 +405,7 @@ void kfree(void *__ptr)
 		goto bad_order;
 	ptr->bh_flags = MF_FREE;	/* As of now this block is officially free */
 #ifdef SADISTIC_KMALLOC
-	memset(ptr+1, 0xe0, ptr->bh_length);
+	memset(ptr+1, 0x0e, ptr->bh_length);
 #endif
 	save_flags(flags);
 	cli();

@@ -1,5 +1,5 @@
-#ifndef __ARCH_I386_POSIX_TYPES_H
-#define __ARCH_I386_POSIX_TYPES_H
+#ifndef __ARCH_M68K_POSIX_TYPES_H
+#define __ARCH_M68K_POSIX_TYPES_H
 
 /*
  * This file is generally used by user-level software, so you need to
@@ -28,7 +28,11 @@ typedef long long	__kernel_loff_t;
 #endif
 
 typedef struct {
+#if defined(__KERNEL__) || defined(__USE_ALL)
 	int	val[2];
+#else /* !defined(__KERNEL__) && !defined(__USE_ALL) */
+	int	__val[2];
+#endif /* !defined(__KERNEL__) && !defined(__USE_ALL) */
 } __kernel_fsid_t;
 
 #undef	__FD_SET

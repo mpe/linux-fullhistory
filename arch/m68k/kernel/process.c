@@ -2,6 +2,8 @@
  *  linux/arch/m68k/kernel/process.c
  *
  *  Copyright (C) 1995  Hamish Macdonald
+ *
+ *  68060 fixes by Jesper Skov
  */
 
 /*
@@ -23,6 +25,7 @@
 #include <asm/system.h>
 #include <asm/traps.h>
 #include <asm/machdep.h>
+#include <asm/setup.h>
 
 asmlinkage void ret_from_exception(void);
 
@@ -125,10 +128,17 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 
 	p->tss.usp = usp;
 	p->tss.ksp = (unsigned long)childstack;
+	/*
+	 * Must save the current SFC/DFC value, NOT the value when
+	 * the parent was last descheduled - RGH  10-08-96
+	 */
+	p->tss.fs = get_fs();
 
 	/* Copy the current fpu state */
 	asm volatile ("fsave %0" : : "m" (p->tss.fpstate[0]) : "memory");
-	if (p->tss.fpstate[0])
+
+	if((!CPU_IS_060 && p->tss.fpstate[0]) ||
+	   (CPU_IS_060 && p->tss.fpstate[2]))
 	  asm volatile ("fmovemx %/fp0-%/fp7,%0\n\t"
 			"fmoveml %/fpiar/%/fpcr/%/fpsr,%1"
 			: : "m" (p->tss.fp[0]), "m" (p->tss.fpcntl[0])
@@ -145,8 +155,8 @@ int dump_fpu (struct user_m68kfp_struct *fpu)
 
   /* First dump the fpu context to avoid protocol violation.  */
   asm volatile ("fsave %0" :: "m" (fpustate[0]) : "memory");
-  if (!fpustate[0])
-    return 0;
+  if((!CPU_IS_060 && !fpustate[0]) || (CPU_IS_060 && !fpustate[2]))
+     return 0;
 
   asm volatile ("fmovem %/fpiar/%/fpcr/%/fpsr,%0"
 		:: "m" (fpu->fpcntl[0])

@@ -9,7 +9,17 @@
  */
 
 /*
- * 680x0 support by Hamish Macdonald
+ * Linux/m68k support by Hamish Macdonald
+ *
+ * 68060 fixes by Jesper Skov
+ */
+
+/*
+ * ++roman (07/09/96): implemented signal stacks (specially for tosemu on
+ * Atari :-) Current limitation: Only one sigstack can be active at one time.
+ * If a second signal with SA_STACK set arrives while working on a sigstack,
+ * SA_STACK is ignored. This behaviour avoids lots of trouble with nested
+ * signal handlers!
  */
 
 #include <linux/sched.h>
@@ -21,10 +31,10 @@
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
 
+#include <asm/setup.h>
 #include <asm/segment.h>
 #include <asm/pgtable.h>
 #include <asm/traps.h>
-#include <asm/bootinfo.h>
 
 #define offsetof(type, member)  ((size_t)(&((type *)0)->member))
 
@@ -74,13 +84,10 @@ asmlinkage int do_sigsuspend(struct pt_regs *regs)
 
 static unsigned char fpu_version = 0;	/* version number of fpu, set by setup_frame */
 
-/*
- * This sets regs->usp even though we don't actually use sigstacks yet..
- */
 asmlinkage int do_sigreturn(unsigned long __unused)
 {
 	struct sigcontext_struct context;
-	struct frame * regs;
+	struct pt_regs *regs;
 	struct switch_stack *sw;
 	int fsize = 0;
 	int formatvec = 0;
@@ -93,7 +100,7 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 
 	/* get stack frame pointer */
 	sw = (struct switch_stack *) &__unused;
-	regs = (struct frame *) (sw + 1);
+	regs = (struct pt_regs *) (sw + 1);
 
 	/* get previous context (including pointer to possible extra junk) */
         if (verify_area(VERIFY_READ, (void *)usp, sizeof(context)))
@@ -107,37 +114,21 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 	current->blocked = context.sc_mask & _BLOCKABLE;
 
 	/* restore passed registers */
-	regs->ptregs.d0 = context.sc_d0;
-	regs->ptregs.d1 = context.sc_d1;
-	regs->ptregs.a0 = context.sc_a0;
-	regs->ptregs.a1 = context.sc_a1;
-	regs->ptregs.sr = (regs->ptregs.sr & 0xff00)|(context.sc_sr & 0xff);
-	regs->ptregs.pc = context.sc_pc;
-
+	regs->d0 = context.sc_d0;
+	regs->d1 = context.sc_d1;
+	regs->a0 = context.sc_a0;
+	regs->a1 = context.sc_a1;
+	regs->sr = (regs->sr & 0xff00) | (context.sc_sr & 0xff);
+	regs->pc = context.sc_pc;
+	regs->orig_d0 = -1;		/* disable syscall checks */
 	wrusp(context.sc_usp);
 	formatvec = context.sc_formatvec;
-	regs->ptregs.format = formatvec >> 12;
-	regs->ptregs.vector = formatvec & 0xfff;
-	if (context.sc_fpstate[0])
-	  {
+	regs->format = formatvec >> 12;
+	regs->vector = formatvec & 0xfff;
+	if ((!CPU_IS_060 && context.sc_fpstate[0]) || (CPU_IS_060 && context.sc_fpstate[2])){
 	    /* Verify the frame format.  */
-	    if (context.sc_fpstate[0] != fpu_version){
-#if DEBUG
-	    printk("fpregs=%08x fpcntl=%08x\n", context.sc_fpregs,
-		   context.sc_fpcntl); 
-	    printk("Wrong fpu: sc_fpstate[0]=%02x fpu_version=%02x\n",
-		   (unsigned) context.sc_fpstate[0], (unsigned) fpu_version);
-	    {
-	      int i;
-	      printk("Saved fp_state: ");
-	      for (i = 0; i < 216; i++){
-		printk("%02x ", context.sc_fpstate[i]);
-	      }
-	      printk("\n");
-	    }
-#endif
+	    if (!CPU_IS_060 && (context.sc_fpstate[0] != fpu_version))
 	      goto badframe;
-	    }
 	    if (boot_info.cputype & FPU_68881)
 	      {
 		if (context.sc_fpstate[1] != 0x18
@@ -147,34 +138,22 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 	    else if (boot_info.cputype & FPU_68882)
 	      {
 		if (context.sc_fpstate[1] != 0x38
-		    && context.sc_fpstate[1] != 0xd4){
-#if 0
-		  printk("Wrong 68882 fpu-state\n");
-#endif
+		    && context.sc_fpstate[1] != 0xd4)
 		  goto badframe;
-		}
 	      }
 	    else if (boot_info.cputype & FPU_68040)
 	      {
-		if (!((context.sc_fpstate[1] == 0x00)|| \
-                      (context.sc_fpstate[1] == 0x28)|| \
-                      (context.sc_fpstate[1] == 0x60))){
-#if 0
-		  printk("Wrong 68040 fpu-state\n");
-#endif
+		if (!(context.sc_fpstate[1] == 0x00 ||
+                      context.sc_fpstate[1] == 0x28 ||
+                      context.sc_fpstate[1] == 0x60))
 		  goto badframe;
-		}
 	      }
 	    else if (boot_info.cputype & FPU_68060)
 	      {
-		if (!((context.sc_fpstate[1] == 0x00)|| \
-                      (context.sc_fpstate[1] == 0x60)|| \
-                      (context.sc_fpstate[1] == 0xe0))){
-#if 0
-		  printk("Wrong 68060 fpu-state\n");
-#endif
+		if (!(context.sc_fpstate[3] == 0x00 ||
+                      context.sc_fpstate[3] == 0x60 ||
+		      context.sc_fpstate[3] == 0xe0))
 		  goto badframe;
-		}
 	      }
 	    __asm__ volatile ("fmovemx %0,%/fp0-%/fp1\n\t"
 			      "fmoveml %1,%/fpcr/%/fpsr/%/fpiar"
@@ -184,17 +163,20 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 	  }
 	__asm__ volatile ("frestore %0" : : "m" (*context.sc_fpstate));
 
-	fsize = extra_sizes[regs->ptregs.format];
+	fsize = extra_sizes[regs->format];
 	if (fsize < 0) {
 		/*
 		 * user process trying to return with weird frame format
 		 */
 #if DEBUG
-	      printk("user process returning with weird frame format\n");
+		printk("user process returning with weird frame format\n");
 #endif
 		goto badframe;
 	}
 
+	if (context.sc_usp != fp+fsize)
+		current->flags &= ~PF_ONSIGSTK;
+	
 	/* OK.	Make room on the supervisor stack for the extra junk,
 	 * if necessary.
 	 */
@@ -227,7 +209,7 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 		/* NOTREACHED */
 	}
 
-	return regs->ptregs.d0;
+	return regs->d0;
 badframe:
         do_exit(SIGSEGV);
 }
@@ -275,25 +257,31 @@ badframe:
 
 #define UFRAME_SIZE(fs) (sizeof(struct sigcontext_struct)/4 + 6 + fs/4)
 
-static void setup_frame (struct sigaction * sa, unsigned long **fp,
-			 unsigned long pc, struct frame *regs, int
-			 signr, unsigned long oldmask)
+static void setup_frame (struct sigaction * sa, struct pt_regs *regs,
+			 int signr, unsigned long oldmask)
 {
 	struct sigcontext_struct context;
 	unsigned long *frame, *tframe;
-	int fsize = extra_sizes[regs->ptregs.format];
+	int fsize = extra_sizes[regs->format];
 
 	if (fsize < 0) {
 		printk ("setup_frame: Unknown frame format %#x\n",
-			regs->ptregs.format);
+			regs->format);
 		do_exit(SIGSEGV);
 	}
-	frame = *fp - UFRAME_SIZE(fsize);
+
+	frame = (unsigned long *)rdusp();
+	if (!(current->flags & PF_ONSIGSTK) && (sa->sa_flags & SA_STACK)) {
+		frame = (unsigned long *)sa->sa_restorer;
+		current->flags |= PF_ONSIGSTK;
+	}
+	frame -= UFRAME_SIZE(fsize);
+
 	if (verify_area(VERIFY_WRITE,frame,UFRAME_SIZE(fsize)*4))
 		do_exit(SIGSEGV);
 	if (fsize) {
-		memcpy_tofs (frame + UFRAME_SIZE(0), &regs->un, fsize);
-		regs->ptregs.stkadj = fsize;
+		memcpy_tofs (frame + UFRAME_SIZE(0), regs + 1, fsize);
+		regs->stkadj = fsize;
 	}
 
 /* set up the "normal" stack seen by the signal handler */
@@ -307,7 +295,7 @@ static void setup_frame (struct sigaction * sa, unsigned long **fp,
 	    put_user(signr, tframe);
 	tframe++;
 
-	put_user(regs->ptregs.vector, tframe); tframe++;
+	put_user(regs->vector, tframe); tframe++;
 	/* "scp" parameter.  points to sigcontext */
 	put_user((ulong)(frame+6), tframe); tframe++;
 
@@ -320,60 +308,85 @@ static void setup_frame (struct sigaction * sa, unsigned long **fp,
 
 /* setup and copy the sigcontext structure */
 	context.sc_mask       = oldmask;
-	context.sc_usp	      = (unsigned long)*fp;
-	context.sc_d0	      = regs->ptregs.d0;
-	context.sc_d1	      = regs->ptregs.d1;
-	context.sc_a0	      = regs->ptregs.a0;
-	context.sc_a1	      = regs->ptregs.a1;
-	context.sc_sr	      = regs->ptregs.sr;
-	context.sc_pc	      = pc;
-	context.sc_formatvec  = (regs->ptregs.format << 12 |
-				 regs->ptregs.vector);
-#if DEBUG
-	printk("formatvec: %02x\n", (unsigned) context.sc_formatvec);
-#endif
+	context.sc_usp	      = rdusp();
+	context.sc_d0	      = regs->d0;
+	context.sc_d1	      = regs->d1;
+	context.sc_a0	      = regs->a0;
+	context.sc_a1	      = regs->a1;
+	context.sc_sr	      = regs->sr;
+	context.sc_pc	      = regs->pc;
+	context.sc_formatvec  = (regs->format << 12 | regs->vector);
 	__asm__ volatile ("fsave %0" : : "m" (*context.sc_fpstate) : "memory");
-	if (context.sc_fpstate[0])
-	  {
-	    fpu_version = context.sc_fpstate[0];
-#if DEBUG
-	    {
-	      int i;
-	      printk("Saved fp_state: ");
-	      for (i = 0; i < 216; i++){
-		printk("%02x ", context.sc_fpstate[i]);
-	      }
-	      printk("\n");
-	    }
-	    printk("fpregs=%08x fpcntl=%08x\n", context.sc_fpregs,
-		   context.sc_fpcntl); 
-#endif
-	    __asm__ volatile ("fmovemx %/fp0-%/fp1,%0\n\t"
-			      "fmoveml %/fpcr/%/fpsr/%/fpiar,%1"
-			      : /* no outputs */
-			      : "m" (*context.sc_fpregs),
-				"m" (*context.sc_fpcntl)
-			      : "memory");
-	  }
-#if DEBUG
-	{
-	  int i;
-	  printk("Saved fp_state: ");
-	  for (i = 0; i < 216; i++){
-	    printk("%02x ", context.sc_fpstate[i]);
-	  }
-	  printk("\n");
+	if ((!CPU_IS_060 && context.sc_fpstate[0]) || (CPU_IS_060 && context.sc_fpstate[2])){
+		fpu_version = context.sc_fpstate[0];
+		__asm__ volatile ("fmovemx %/fp0-%/fp1,%0\n\t"
+				  "fmoveml %/fpcr/%/fpsr/%/fpiar,%1"
+				  : /* no outputs */
+				  : "m" (*context.sc_fpregs),
+				  "m" (*context.sc_fpcntl)
+				  : "memory");
 	}
-#endif
 	memcpy_tofs (tframe, &context, sizeof(context));
+
 	/*
 	 * no matter what frame format we were using before, we
 	 * will do the "RTE" using a normal 4 word frame.
 	 */
-	regs->ptregs.format = 0;
+	regs->format = 0;
 
-	/* "return" new usp to caller */
-	*fp = frame;
+	/* Set up registers for signal handler */
+	wrusp ((unsigned long) frame);
+	regs->pc = (unsigned long) sa->sa_handler;
+
+	/* Prepare to skip over the extra stuff in the exception frame.  */
+	if (regs->stkadj) {
+		struct pt_regs *tregs =
+			(struct pt_regs *)((ulong)regs + regs->stkadj);
+#if DEBUG
+		printk("Performing stackadjust=%04x\n", regs->stkadj);
+#endif
+		/* This must be copied with decreasing addresses to
+                   handle overlaps.  */
+		tregs->vector = regs->vector;
+		tregs->format = regs->format;
+		tregs->pc = regs->pc;
+		tregs->sr = regs->sr;
+	}
+}
+
+/*
+ * OK, we're invoking a handler
+ */	
+static void handle_signal(unsigned long signr, struct sigaction *sa,
+			  unsigned long oldmask, struct pt_regs *regs)
+{
+	/* are we from a system call? */
+	if (regs->orig_d0 >= 0) {
+		/* If so, check system call restarting.. */
+		switch (regs->d0) {
+			case -ERESTARTNOHAND:
+				regs->d0 = -EINTR;
+				break;
+
+			case -ERESTARTSYS:
+				if (!(sa->sa_flags & SA_RESTART)) {
+					regs->d0 = -EINTR;
+					break;
+				}
+			/* fallthrough */
+			case -ERESTARTNOINTR:
+				regs->d0 = regs->orig_d0;
+				regs->pc -= 2;
+		}
+	}
+
+	/* set up the stack frame */
+	setup_frame(sa, regs, signr, oldmask);
+
+	if (sa->sa_flags & SA_ONESHOT)
+		sa->sa_handler = NULL;
+	if (!(sa->sa_flags & SA_NOMASK))
+		current->blocked |= (sa->sa_mask | _S(signr)) & _BLOCKABLE;
 }
 
 /*
@@ -385,52 +398,59 @@ static void setup_frame (struct sigaction * sa, unsigned long **fp,
  * that the kernel can handle, and then we build all the user-level signal
  * handling stack-frames in one go after that.
  */
-asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs_in)
+asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs)
 {
 	unsigned long mask = ~current->blocked;
-	unsigned long handler_signal = 0;
-	unsigned long *frame = NULL;
-	unsigned long pc = 0;
 	unsigned long signr;
-	struct frame *regs = (struct frame *)regs_in;
 	struct sigaction * sa;
 
 	current->tss.esp0 = (unsigned long) regs;
 
+	/* If the process is traced, all signals are passed to the debugger. */
+	if (current->flags & PF_PTRACED)
+		mask = ~0UL;
 	while ((signr = current->signal & mask)) {
 		__asm__("bfffo  %2,#0,#0,%1\n\t"
 			"bfclr  %0,%1,#1\n\t"
 			"eorw   #31,%1"
-			:"=m" (current->signal),"=r" (signr)
-			:"1" (signr));
+			:"=m" (current->signal),"=d" (signr)
+			:"0" (current->signal), "1" (signr));
 		sa = current->sig->action + signr;
 		signr++;
 
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
+
+			/* Did we come from a system call? */
+			if (regs->orig_d0 >= 0) {
+				/* Restart the system call */
+				if (regs->d0 == -ERESTARTNOHAND ||
+				    regs->d0 == -ERESTARTSYS ||
+				    regs->d0 == -ERESTARTNOINTR) {
+					regs->d0 = regs->orig_d0;
+					regs->pc -= 2;
+				}
+			}
 			notify_parent(current);
 			schedule();
 			if (!(signr = current->exit_code)) {
 			discard_frame:
-				/* Make sure that a faulted bus cycle
-				   isn't restarted.  */
-				switch (regs->ptregs.format) {
-				case 7:
-				case 9:
-				case 10:
-				case 11:
-				  regs->ptregs.stkadj = extra_sizes[regs->ptregs.format];
-				  regs->ptregs.format = 0;
-				  break;
-				}
-				continue;
+			    /* Make sure that a faulted bus cycle
+			       isn't restarted (only needed on the
+			       68030).  */
+			    if (regs->format == 10 || regs->format == 11) {
+				regs->stkadj = extra_sizes[regs->format];
+				regs->format = 0;
+			    }
+			    continue;
 			}
 			current->exit_code = 0;
 			if (signr == SIGSTOP)
 				goto discard_frame;
 			if (_S(signr) & current->blocked) {
 				current->signal |= _S(signr);
+				mask &= ~_S(signr);
 				continue;
 			}
 			sa = current->sig->action + signr - 1;
@@ -447,10 +467,13 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs_in)
 			if (current->pid == 1)
 				continue;
 			switch (signr) {
-			    case SIGCONT: case SIGCHLD: case SIGWINCH:
+			case SIGCONT: case SIGCHLD: case SIGWINCH:
 				continue;
 
-			    case SIGSTOP: case SIGTSTP: case SIGTTIN: case SIGTTOU:
+			case SIGTSTP: case SIGTTIN: case SIGTTOU:
+				if (is_orphaned_pgrp(current->pgrp))
+					continue;
+			case SIGSTOP:
 				if (current->flags & PF_PTRACED)
 					continue;
 				current->state = TASK_STOPPED;
@@ -461,97 +484,46 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs_in)
 				schedule();
 				continue;
 
-			    case SIGQUIT: case SIGILL: case SIGTRAP:
-			    case SIGIOT: case SIGFPE: case SIGSEGV:
+			case SIGQUIT: case SIGILL: case SIGTRAP:
+			case SIGIOT: case SIGFPE: case SIGSEGV:
 				if (current->binfmt && current->binfmt->core_dump) {
-				    if (current->binfmt->core_dump(signr, (struct pt_regs *)regs))
+				    if (current->binfmt->core_dump(signr, regs))
 					signr |= 0x80;
 				}
 				/* fall through */
-			    default:
+			default:
 				current->signal |= _S(signr & 0x7f);
+				current->flags |= PF_SIGNALED;
 				do_exit(signr);
 			}
 		}
-		/*
-		 * OK, we're invoking a handler
-		 */
-		if (regs->ptregs.orig_d0 >= 0) {
-		  if (regs->ptregs.d0 == -ERESTARTNOHAND ||
-		      (regs->ptregs.d0 == -ERESTARTSYS &&
-		       !(sa->sa_flags & SA_RESTART)))
-		    regs->ptregs.d0 = -EINTR;
+		handle_signal(signr, sa, oldmask, regs);
+		return 1;
+	}
+
+	/* Did we come from a system call? */
+	if (regs->orig_d0 >= 0) {
+		/* Restart the system call - no handlers present */
+		if (regs->d0 == -ERESTARTNOHAND ||
+		    regs->d0 == -ERESTARTSYS ||
+		    regs->d0 == -ERESTARTNOINTR) {
+			regs->d0 = regs->orig_d0;
+			regs->pc -= 2;
 		}
-		handler_signal |= 1 << (signr-1);
-		mask &= ~sa->sa_mask;
 	}
-	if (regs->ptregs.orig_d0 >= 0 &&
-	    (regs->ptregs.d0 == -ERESTARTNOHAND ||
-	     regs->ptregs.d0 == -ERESTARTSYS ||
-	     regs->ptregs.d0 == -ERESTARTNOINTR)) {
-		regs->ptregs.d0 = regs->ptregs.orig_d0;
-		regs->ptregs.pc -= 2;
-	}
-	if (!handler_signal)    /* no handler will be called - return 0 */
-	  {
-	    /* If we are about to discard some frame stuff we must
-	       copy over the remaining frame. */
-	    if (regs->ptregs.stkadj)
-	      {
-		struct frame *tregs =
-		  (struct frame *) ((ulong) regs + regs->ptregs.stkadj);
+
+	/* If we are about to discard some frame stuff we must copy
+	   over the remaining frame. */
+	if (regs->stkadj) {
+		struct pt_regs *tregs =
+		  (struct pt_regs *) ((ulong) regs + regs->stkadj);
 
 		/* This must be copied with decreasing addresses to
 		   handle overlaps.  */
-		tregs->ptregs.vector = regs->ptregs.vector;
-		tregs->ptregs.format = regs->ptregs.format;
-		tregs->ptregs.pc = regs->ptregs.pc;
-		tregs->ptregs.sr = regs->ptregs.sr;
-	      }
-	    return 0;
-	  }
-	pc = regs->ptregs.pc;
-	frame = (unsigned long *)rdusp();
-	signr = 1;
-	sa = current->sig->action;
-	for (mask = 1 ; mask ; sa++,signr++,mask += mask) {
-		if (mask > handler_signal)
-			break;
-		if (!(mask & handler_signal))
-			continue;
-		setup_frame(sa,&frame,pc,regs,signr,oldmask);
-		pc = (unsigned long) sa->sa_handler;
-		if (sa->sa_flags & SA_ONESHOT)
-			sa->sa_handler = NULL;
-/* force a supervisor-mode page-in of the signal handler to reduce races */
-		__asm__ __volatile__("movesb %0,%/d0": :"m" (*(char *)pc):"d0");
-		current->blocked |= sa->sa_mask;
-		oldmask |= sa->sa_mask;
+		tregs->vector = regs->vector;
+		tregs->format = regs->format;
+		tregs->pc = regs->pc;
+		tregs->sr = regs->sr;
 	}
-	wrusp((unsigned long)frame);
-	regs->ptregs.pc = pc;
-
-	/*
-	 * if setup_frame saved some extra frame junk, we need to
-	 * skip over that stuff when doing the RTE.  This means we have
-	 * to move the machine portion of the stack frame to where the
-	 * "RTE" instruction expects it. The signal that we need to
-	 * do this is that regs->stkadj is nonzero.
-	 */
-	if (regs->ptregs.stkadj) {
-		struct frame *tregs =
-			(struct frame *)((ulong)regs + regs->ptregs.stkadj);
-#if DEBUG
-	  printk("Performing stackadjust=%04x\n", (unsigned)
-		 regs->ptregs.stkadj);
-#endif
-		/* This must be copied with decreasing addresses to
-                   handle overlaps.  */
-		tregs->ptregs.vector = regs->ptregs.vector;
-		tregs->ptregs.format = regs->ptregs.format;
-		tregs->ptregs.pc = regs->ptregs.pc;
-		tregs->ptregs.sr = regs->ptregs.sr;
-	}
-
-	return 1;
+	return 0;
 }

@@ -19,19 +19,20 @@
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
-#include <linux/ldt.h>
+#include <linux/vmalloc.h>
 #include <linux/user.h>
 #include <linux/a.out.h>
 #include <linux/interrupt.h>
 #include <linux/config.h>
 #include <linux/unistd.h>
 #include <linux/delay.h>
+#include <linux/smp.h>
 
 #include <asm/segment.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include <linux/smp.h>
+#include <asm/ldt.h>
 
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
@@ -182,6 +183,17 @@ int cpu_idle(void *unused)
  * and if it doesn't work, we do some other stupid things.
  */
 static long no_idt[2] = {0, 0};
+static int reboot_mode = 0;
+
+void reboot_setup(char *str, int *ints)
+{
+	int mode = 0;
+
+	/* "w" for "warm" reboot (no memory testing etc) */
+	if (str[0] == 'w')
+		mode = 0x1234;
+	reboot_mode = mode;
+}
 
 static inline void kb_wait(void)
 {
@@ -197,16 +209,14 @@ void hard_reset_now(void)
 	int i, j;
 
 	sti();
-/* rebooting needs to touch the page at absolute addr 0 */
-	pg0[0] = 7;
-	*((unsigned short *)0x472) = 0x1234;
+	*((unsigned short *)__va(0x472)) = reboot_mode;
 	for (;;) {
 		for (i=0; i<100; i++) {
 			kb_wait();
 			for(j = 0; j < 100000 ; j++)
 				/* nothing */;
 			outb(0xfe,0x64);	 /* pulse reset low */
-			udelay(10);
+			udelay(100);
 		}
 		__asm__ __volatile__("\tlidt %0": "=m" (no_idt));
 	}
@@ -307,6 +317,7 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	childregs = ((struct pt_regs *) (p->kernel_stack_page + PAGE_SIZE)) - 1;
 	p->tss.esp = (unsigned long) childregs;
 	p->tss.eip = (unsigned long) ret_from_sys_call;
+	p->tss.ebx = (unsigned long) p;
 	*childregs = *regs;
 	childregs->eax = 0;
 	childregs->esp = esp;

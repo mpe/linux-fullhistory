@@ -55,6 +55,7 @@
 #include <linux/bios32.h>
 #include <linux/pci.h>
 
+#include <asm/page.h>
 #include <asm/segment.h>
 
 #define PCIBIOS_PCI_FUNCTION_ID 	0xb1XX
@@ -164,7 +165,7 @@ extern unsigned long check_pcibios(unsigned long memory_start, unsigned long mem
 	int pack;
 
 	if ((pcibios_entry = bios32_service(PCI_SERVICE))) {
-		pci_indirect.address = pcibios_entry;
+		pci_indirect.address = pcibios_entry | PAGE_OFFSET;
 
 		__asm__("lcall (%%edi)\n\t"
 			"jc 1f\n\t"
@@ -417,7 +418,9 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 	 *
 	 */
 
-	for (check = (union bios32 *) 0xe0000; check <= (union bios32 *) 0xffff0; ++check) {
+	for (check = (union bios32 *) __va(0xe0000);
+	     check <= (union bios32 *) __va(0xffff0);
+	     ++check) {
 		if (check->fields.signature != BIOS32_SIGNATURE)
 			continue;
 		length = check->fields.length * 16;
@@ -438,8 +441,9 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 			if (check->fields.entry >= 0x100000) {
 				printk("pcibios_init: entry in high memory, unable to access\n");
 			} else {
-				bios32_indirect.address = bios32_entry = check->fields.entry;
+				bios32_entry = check->fields.entry;
 				printk ("pcibios_init : BIOS32 Service Directory entry at 0x%lx\n", bios32_entry);
+				bios32_indirect.address = bios32_entry + PAGE_OFFSET;
 			}
 		}
 	}

@@ -322,7 +322,7 @@ static int board_inquiry(unsigned int j) {
    memset(cpp, 0, sizeof(struct mscp));
    cpp->opcode = OP_HOST_ADAPTER;
    cpp->xdir = DTD_IN;
-   cpp->data_address = (unsigned int) HD(j)->board_id;
+   cpp->data_address = virt_to_bus(HD(j)->board_id);
    cpp->data_len = sizeof(HD(j)->board_id);
    cpp->scsi_cdbs_len = 6;
    cpp->scsi_cdbs[0] = HA_CMD_INQUIRY;
@@ -338,7 +338,7 @@ static int board_inquiry(unsigned int j) {
    outb(CMD_CLR_INTR, sh[j]->io_port + REG_SYS_INTR);
 
    /* Store pointer in OGM address bytes */
-   outl((unsigned int)cpp, sh[j]->io_port + REG_OGM);
+   outl(virt_to_bus(cpp), sh[j]->io_port + REG_OGM);
 
    /* Issue OGM interrupt */
    outb(CMD_OGM_INTR, sh[j]->io_port + REG_LCL_INTR);
@@ -568,13 +568,13 @@ static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
    sgpnt = (struct scatterlist *) SCpnt->request_buffer;
 
    for (k = 0; k < SCpnt->use_sg; k++) {
-      cpp->sglist[k].address = (unsigned int) sgpnt[k].address;
+      cpp->sglist[k].address = virt_to_bus(sgpnt[k].address);
       cpp->sglist[k].num_bytes = sgpnt[k].length;
       data_len += sgpnt[k].length;
       }
 
    cpp->use_sg = SCpnt->use_sg;
-   cpp->data_address = (unsigned int) cpp->sglist;
+   cpp->data_address = virt_to_bus(cpp->sglist);
    cpp->data_len = data_len;
 }
 
@@ -649,7 +649,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    cpp->target = SCpnt->target;
    cpp->lun = SCpnt->lun;
    cpp->SCpnt = SCpnt;
-   cpp->sense_addr = (unsigned int) SCpnt->sense_buffer;
+   cpp->sense_addr = virt_to_bus(SCpnt->sense_buffer);
    cpp->sense_len = sizeof SCpnt->sense_buffer;
 
    if (SCpnt->use_sg) {
@@ -657,7 +657,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       build_sg_list(cpp, SCpnt);
       }
    else {
-      cpp->data_address = (unsigned int)SCpnt->request_buffer;
+      cpp->data_address = virt_to_bus(SCpnt->request_buffer);
       cpp->data_len = SCpnt->request_bufflen;
       }
 
@@ -675,7 +675,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       }
 
    /* Store pointer in OGM address bytes */
-   outl((unsigned int)cpp, sh[j]->io_port + REG_OGM);
+   outl(virt_to_bus(cpp), sh[j]->io_port + REG_OGM);
 
    /* Issue OGM interrupt */
    outb(CMD_OGM_INTR, sh[j]->io_port + REG_LCL_INTR);
@@ -901,7 +901,7 @@ static void u14_34f_interrupt_handler(int irq, void *dev_id, struct pt_regs * re
 	 if (do_trace) printk("%s: ihdlr, start service, count %d.\n",
 			      BN(j), HD(j)->iocount);
 
-	 spp = (struct mscp *)inl(sh[j]->io_port + REG_ICM);
+	 spp = (struct mscp *)bus_to_virt(inl(sh[j]->io_port + REG_ICM));
 
 	 /* Clear interrupt pending flag */
 	 outb(CMD_CLR_INTR, sh[j]->io_port + REG_SYS_INTR);

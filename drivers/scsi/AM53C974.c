@@ -156,6 +156,11 @@ static volatile int main_running = 0;
 static int commandline_current = 0;
 override_t overrides[7] = { {-1, 0, 0, 0}, };   /* LILO overrides */
 
+struct proc_dir_entry proc_scsi_am53c974 = {
+	PROC_SCSI_AM53C974, 8, "am53c974",
+	S_IFDIR | S_IRUGO | S_IXUGO, 2
+};
+
 #ifdef AM53C974_DEBUG
 static int deb_stop = 1;
 
@@ -564,6 +569,8 @@ int AM53C974_detect(Scsi_Host_Template *tpnt)
 {
 int count;        /* number of boards detected */
 
+tpnt->proc_dir = &proc_scsi_am53c974;
+
 #if defined (CONFIG_PCI)
 if (pcibios_present())
    count = AM53C974_bios_detect(tpnt);
@@ -596,7 +603,7 @@ struct AM53C974_hostdata *hostdata;
 
 #ifdef AM53C974_OPTION_DEBUG_PROBE_ONLY
    printk ("AM53C974: probe only enabled, aborting initialization\n");
-   return -1;
+   return 0;
 #endif
 
 instance = scsi_register(tpnt, sizeof(struct AM53C974_hostdata));
@@ -659,7 +666,7 @@ if (!search) {
    if (request_irq(instance->irq, AM53C974_intr, SA_INTERRUPT, "AM53C974", NULL)) {
       printk("scsi%d: IRQ%d not free, detaching\n", instance->host_no, instance->irq);
       scsi_unregister(instance);
-      return -1; } 
+      return 0; } 
    }
   else {
    printk("scsi%d: using interrupt handler previously installed for scsi%d\n",
@@ -677,8 +684,7 @@ AM53C974_write_8(CNTLREG1, CNTLREG1_DISR | instance->this_id);
 AM53C974_write_8(CMDREG, CMDREG_RBUS);     /* reset SCSI bus */
 udelay(10);
 AM53C974_config_after_reset(instance);
-
-return(0);
+return(1);
 }
 
 /*********************************************************************
@@ -1797,7 +1803,11 @@ if (cfifo) {
    AM53C974_write_8(CMDREG, CMDREG_CFIFO); /* clear FIFO */
    }                  
 
+#ifdef AM53C974_PROHIBIT_DISCONNECT
+tmp[0] = IDENTIFY(0, cmd->lun);
+#else
 tmp[0] = IDENTIFY(1, cmd->lun);
+#endif
 
 #ifdef SCSI2
 if (cmd->device->tagged_queue && (tag != TAG_NONE)) {
@@ -2005,7 +2015,7 @@ AM53C974_write_8(STCLREG, (unsigned char)(length & 0xff));
 AM53C974_write_8(STCMREG, (unsigned char)((length & 0xff00) >> 8));
 AM53C974_write_8(STCHREG, (unsigned char)((length & 0xff0000) >> 16));
 AM53C974_write_32(DMASTC, length & 0xffffff);
-AM53C974_write_32(DMASPA, (unsigned long)data);
+AM53C974_write_32(DMASPA, virt_to_bus(data));
 AM53C974_write_8(CMDREG, CMDREG_IT | CMDREG_DMA);
 AM53C974_write_8(DMACMD, (dir << 7) | DMACMD_INTE_D | DMACMD_START);
 }
@@ -2241,3 +2251,9 @@ cmd->result = DID_RESET << 16;
 cmd->scsi_done(cmd);
 return SCSI_ABORT_SUCCESS;
 }
+
+#ifdef MODULE
+static Scsi_Host_Template driver_template = AM53C974;
+
+#include "scsi_module.c"
+#endif

@@ -36,8 +36,8 @@ vcs_size(struct inode *inode)
 	return size;
 }
 
-static int
-vcs_lseek(struct inode *inode, struct file *file, off_t offset, int orig)
+static long long
+vcs_lseek(struct inode *inode, struct file *file, long long offset, int orig)
 {
 	int size = vcs_size(inode);
 
@@ -59,8 +59,8 @@ vcs_lseek(struct inode *inode, struct file *file, off_t offset, int orig)
 	return file->f_pos;
 }
 
-static int
-vcs_read(struct inode *inode, struct file *file, char *buf, int count)
+static long
+vcs_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
 {
 	unsigned long p = file->f_pos;
 	unsigned int cons = MINOR(inode->i_rdev);
@@ -81,7 +81,7 @@ vcs_read(struct inode *inode, struct file *file, char *buf, int count)
 		return -ENXIO;
 
 	size = vcs_size(inode);
-	if (count < 0 || p > size)
+	if (p > size)
 		return -EINVAL;
 	if (count > size - p)
 		count = size - p;
@@ -117,8 +117,8 @@ vcs_read(struct inode *inode, struct file *file, char *buf, int count)
 	return read;
 }
 
-static int
-vcs_write(struct inode *inode, struct file *file, const char *buf, int count)
+static long
+vcs_write(struct inode *inode, struct file *file, const char *buf, unsigned long count)
 {
 	unsigned long p = file->f_pos;
 	unsigned int cons = MINOR(inode->i_rdev);
@@ -139,7 +139,7 @@ vcs_write(struct inode *inode, struct file *file, const char *buf, int count)
 		return -ENXIO;
 
 	size = vcs_size(inode);
-	if (count < 0 || p > size)
+	if (p > size)
 		return -EINVAL;
 	if (count > size - p)
 		count = size - p;

@@ -89,23 +89,23 @@ typedef struct {
 
 /* this structure is returned to the HDIO_GETGEO ioctl */
 typedef struct {
-	u_char heads;
-	u_char sectors;
-	u_short cylinders;
-	u_long start;
+	__u8 heads;
+	__u8 sectors;
+	__u8 cylinders;
+	__u32 start;
 } XD_GEOMETRY;
 
 /* this structure defines a ROM BIOS signature */
 typedef struct {
-	u_long offset;
+	unsigned int offset;
 	const char *string;
-	void (*init_controller)(u_char *address);
+	void (*init_controller)(unsigned int address);
 	void (*init_drive)(u_char drive);
 	const char *name;
 } XD_SIGNATURE;
 
 void xd_setup (char *command,int *integers);
-static u_char xd_detect (u_char *controller,u_char **address);
+static u_char xd_detect (u_char *controller, unsigned int *address);
 static u_char xd_initdrives (void (*init_drive)(u_char drive));
 static void xd_geninit (struct gendisk *);
 
@@ -124,13 +124,13 @@ static inline u_char xd_waitport (u_short port,u_char flags,u_char mask,u_long t
 static u_int xd_command (u_char *command,u_char mode,u_char *indata,u_char *outdata,u_char *sense,u_long timeout);
 
 /* card specific setup and geometry gathering code */
-static void xd_dtc_init_controller (u_char *address);
+static void xd_dtc_init_controller (unsigned int address);
 static void xd_dtc_init_drive (u_char drive);
-static void xd_wd_init_controller (u_char *address);
+static void xd_wd_init_controller (unsigned int address);
 static void xd_wd_init_drive (u_char drive);
-static void xd_seagate_init_controller (u_char *address);
+static void xd_seagate_init_controller (unsigned int address);
 static void xd_seagate_init_drive (u_char drive);
-static void xd_omti_init_controller (u_char *address);
+static void xd_omti_init_controller (unsigned int address);
 static void xd_omti_init_drive (u_char drive);
 static void xd_setparam (u_char command,u_char drive,u_char heads,u_short cylinders,u_short rwrite,u_short wprecomp,u_char ecc);
 static void xd_override_init_drive (u_char drive);

@@ -57,25 +57,29 @@ static void handle_config(void)
 #endif
 
 #ifdef LE_MACHINE
-#define first_byte(x) current = (unsigned char) x; x >>= 8;
+#define next_byte(x) (x >>= 8)
+#define current ((unsigned char) __buf)
 #else
-#define first_byte(x) current = x >> 8*(sizeof(unsigned long)-1); x <<= 8;
+#define next_byte(x) (x <<= 8)
+#define current (__buf >> 8*(sizeof(unsigned long)-1))
 #endif
 
 #define GETNEXT { \
-if (!__buf) { \
+next_byte(__buf); \
+if (!__nrbuf) { \
 	__buf = *(unsigned long *) next; \
+	__nrbuf = sizeof(unsigned long); \
 	if (!__buf) \
 		break; \
-} first_byte(__buf); next++; }
+} next++; __nrbuf--; }
 #define CASE(c,label) if (current == c) goto label
 #define NOTCASE(c,label) if (current != c) goto label
 
-static void state_machine(char *next)
+static void state_machine(register char *next)
 {
 	for(;;) {
-	unsigned long __buf = 0;
-	unsigned char current;
+	register unsigned long __buf = 0;
+	register unsigned long __nrbuf = 0;
 
 normal:
 	GETNEXT
@@ -181,19 +185,33 @@ if_line:
 	if (needsconfig)
 		goto skippreproc;
 if_start:
-	if (!memcmp("CONFIG_", next, 7)) {
-		handle_config();
-		goto skippreproc;
-	}
 	GETNEXT
+	CASE('C', config);
 	CASE('\n', normal);
 	CASE('_', if_middle);
 	if (current >= 'a' && current <= 'z')
 		goto if_middle;
 	if (current < 'A' || current > 'Z')
 		goto if_start;
+config:
+	GETNEXT
+	NOTCASE('O', __if_middle);
+	GETNEXT
+	NOTCASE('N', __if_middle);
+	GETNEXT
+	NOTCASE('F', __if_middle);
+	GETNEXT
+	NOTCASE('I', __if_middle);
+	GETNEXT
+	NOTCASE('G', __if_middle);
+	GETNEXT
+	NOTCASE('_', __if_middle);
+	handle_config();
+	goto skippreproc;
+
 if_middle:
 	GETNEXT
+__if_middle:
 	CASE('\n', normal);
 	CASE('_', if_middle);
 	if (current >= 'a' && current <= 'z')

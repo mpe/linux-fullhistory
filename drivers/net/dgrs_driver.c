@@ -225,10 +225,10 @@ check_board_dma(struct device *dev)
 	/*
 	 *	Now map the DMA registers into our virtual space
 	 */
-	priv->vplxdma = (ulong *) vremap (priv->plxdma, 256);
+	priv->vplxdma = (ulong *) ioremap (priv->plxdma, 256);
 	if (!priv->vplxdma)
 	{
-		printk("%s: can't vremap() the DMA regs", dev->name);
+		printk("%s: can't ioremap() the DMA regs", dev->name);
 		return (0);
 	}
 
@@ -835,7 +835,7 @@ dgrs_download(struct device *dev)
 	/*
 	 * Map in the dual port memory
 	 */
-	priv->vmem = vremap(dev->mem_start, 2048*1024);
+	priv->vmem = ioremap(dev->mem_start, 2048*1024);
 	if (!priv->vmem)
 	{
 		printk("%s: cannot map in board memory\n", dev->name);
@@ -882,7 +882,7 @@ dgrs_download(struct device *dev)
 	memcpy(priv->vmem, dgrs_code, dgrs_ncode);	/* Load code */
 	if (memcmp(priv->vmem, dgrs_code, dgrs_ncode))
 	{
-		vfree(priv->vmem);
+		iounmap(priv->vmem);
 		priv->vmem = NULL;
 		printk("%s: download compare failed\n", dev->name);
 		return -ENXIO;
@@ -1330,9 +1330,9 @@ cleanup_module(void)
 		proc_reset(dgrs_root_dev, 1);
 
 		if (priv->vmem)
-			vfree(priv->vmem);
+			iounmap(priv->vmem);
 		if (priv->vplxdma)
-			vfree((uchar *) priv->vplxdma);
+			iounmap((uchar *) priv->vplxdma);
 
 		release_region(dgrs_root_dev->base_addr, 256);
 

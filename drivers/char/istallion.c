@@ -538,8 +538,8 @@ static int	stli_eisamemprobe(stlibrd_t *brdp);
 static int	stli_findeisabrds(void);
 static int	stli_initports(stlibrd_t *brdp);
 static int	stli_startbrd(stlibrd_t *brdp);
-static int	stli_memread(struct inode *ip, struct file *fp, char *buf, int count);
-static int	stli_memwrite(struct inode *ip, struct file *fp, const char *buf, int count);
+static long	stli_memread(struct inode *ip, struct file *fp, char *buf, unsigned long count);
+static long	stli_memwrite(struct inode *ip, struct file *fp, const char *buf, unsigned long count);
 static int	stli_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg);
 static void	stli_poll(unsigned long arg);
 static int	stli_hostcmd(stlibrd_t *brdp, int channr);
@@ -721,7 +721,7 @@ void cleanup_module()
 		}
 
 		if (brdp->memaddr >= 0x100000)
-			vfree(brdp->membase);
+			iounmap(brdp->membase);
 		if ((brdp->brdtype == BRD_ECP) || (brdp->brdtype == BRD_ECPE) || (brdp->brdtype == BRD_ECPMC))
 			release_region(brdp->iobase, ECP_IOSIZE);
 		else
@@ -3394,7 +3394,7 @@ static int stli_initecp(stlibrd_t *brdp)
 	EBRDINIT(brdp);
 
 	if (brdp->memaddr > 0x100000) {
-		brdp->membase = vremap(brdp->memaddr, brdp->memsize);
+		brdp->membase = ioremap(brdp->memaddr, brdp->memsize);
 		if (brdp->membase == (void *) NULL)
 			return(-ENOMEM);
 	}
@@ -3550,7 +3550,7 @@ static int stli_initonb(stlibrd_t *brdp)
 	EBRDINIT(brdp);
 
 	if (brdp->memaddr > 0x100000) {
-		brdp->membase = vremap(brdp->memaddr, brdp->memsize);
+		brdp->membase = ioremap(brdp->memaddr, brdp->memsize);
 		if (brdp->membase == (void *) NULL)
 			return(-ENOMEM);
 	}
@@ -3815,7 +3815,7 @@ static int stli_eisamemprobe(stlibrd_t *brdp)
 		brdp->memaddr = stli_eisamemprobeaddrs[i];
 		brdp->membase = (void *) brdp->memaddr;
 		if (brdp->memaddr > 0x100000) {
-			brdp->membase = vremap(brdp->memaddr, brdp->memsize);
+			brdp->membase = ioremap(brdp->memaddr, brdp->memsize);
 			if (brdp->membase == (void *) NULL)
 				continue;
 		}
@@ -3832,7 +3832,7 @@ static int stli_eisamemprobe(stlibrd_t *brdp)
 				foundit = 1;
 		}
 		if (brdp->memaddr >= 0x100000)
-			vfree(brdp->membase);
+			iounmap(brdp->membase);
 		if (foundit)
 			break;
 	}
@@ -4045,7 +4045,8 @@ static int stli_initbrds()
  *	the slave image (and debugging :-)
  */
 
-static int stli_memread(struct inode *ip, struct file *fp, char *buf, int count)
+static long stli_memread(struct inode *ip, struct file *fp,
+	char *buf, unsigned long count)
 {
 	unsigned long	flags;
 	void		*memptr;
@@ -4053,7 +4054,7 @@ static int stli_memread(struct inode *ip, struct file *fp, char *buf, int count)
 	int		brdnr, size, n;
 
 #if DEBUG
-	printk("stli_memread(ip=%x,fp=%x,buf=%x,count=%d)\n", (int) ip, (int) fp, (int) buf, count);
+	printk("stli_memread(ip=%x,fp=%x,buf=%x,count=%lu)\n", (int) ip, (int) fp, (int) buf, count);
 #endif
 
 	brdnr = MINOR(ip->i_rdev);
@@ -4094,7 +4095,8 @@ static int stli_memread(struct inode *ip, struct file *fp, char *buf, int count)
  *	the slave image (and debugging :-)
  */
 
-static int stli_memwrite(struct inode *ip, struct file *fp, const char *buf, int count)
+static long stli_memwrite(struct inode *ip, struct file *fp,
+	const char *buf, unsigned long count)
 {
 	unsigned long	flags;
 	void		*memptr;
@@ -4103,7 +4105,7 @@ static int stli_memwrite(struct inode *ip, struct file *fp, const char *buf, int
 	int		brdnr, size, n;
 
 #if DEBUG
-	printk("stli_memwrite(ip=%x,fp=%x,buf=%x,count=%x)\n", (int) ip, (int) fp, (int) buf, count);
+	printk("stli_memwrite(ip=%x,fp=%x,buf=%x,count=%lx)\n", (int) ip, (int) fp, (int) buf, count);
 #endif
 
 	brdnr = MINOR(ip->i_rdev);

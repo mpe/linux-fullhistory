@@ -15,6 +15,7 @@
 #include <linux/tpqic02.h>
 #include <linux/ftape.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/random.h>
@@ -33,31 +34,35 @@ void isdn_init(void);
 void pcwatchdog_init(void);
 #endif
 
-static int read_ram(struct inode * inode, struct file * file, char * buf, int count)
+static long read_ram(struct inode * inode, struct file * file,
+	char * buf, unsigned long count)
 {
 	return -EIO;
 }
 
-static int write_ram(struct inode * inode, struct file * file, const char * buf, int count)
+static long write_ram(struct inode * inode, struct file * file,
+	const char * buf, unsigned long count)
 {
 	return -EIO;
 }
 
-static int read_mem(struct inode * inode, struct file * file, char * buf, int count)
+static long read_mem(struct inode * inode, struct file * file,
+	char * buf, unsigned long count)
 {
 	unsigned long p = file->f_pos;
+	unsigned long end_mem;
 	int read;
 
-	p += PAGE_OFFSET;
 	if (count < 0)
 		return -EINVAL;
-	if (MAP_NR(p) >= MAP_NR(high_memory))
+	end_mem = __pa(high_memory);
+	if (p >= end_mem)
 		return 0;
-	if (count > high_memory - p)
-		count = high_memory - p;
+	if (count > end_mem - p)
+		count = end_mem - p;
 	read = 0;
-#if defined(__i386__) || defined(__sparc__) /* we don't have page 0 mapped on x86/sparc.. */
-	while (p < PAGE_OFFSET + PAGE_SIZE && count > 0) {
+#if defined(__sparc__) /* we don't have page 0 mapped on sparc.. */
+	while (p < PAGE_SIZE && count > 0) {
 		put_user(0,buf);
 		buf++;
 		p++;
@@ -65,27 +70,29 @@ static int read_mem(struct inode * inode, struct file * file, char * buf, int co
 		read++;
 	}
 #endif
-	memcpy_tofs(buf, (void *) p, count);
+	memcpy_tofs(buf, __va(p), count);
 	read += count;
 	file->f_pos += read;
 	return read;
 }
 
-static int write_mem(struct inode * inode, struct file * file, const char * buf, int count)
+static long write_mem(struct inode * inode, struct file * file,
+	const char * buf, unsigned long count)
 {
 	unsigned long p = file->f_pos;
+	unsigned long end_mem;
 	int written;
 
-	p += PAGE_OFFSET;
 	if (count < 0)
 		return -EINVAL;
-	if (MAP_NR(p) >= MAP_NR(high_memory))
+	end_mem = __pa(high_memory);
+	if (p >= end_mem)
 		return 0;
-	if (count > high_memory - p)
-		count = high_memory - p;
+	if (count > end_mem - p)
+		count = end_mem - p;
 	written = 0;
-#if defined(__i386__) || defined(__sparc__) /* we don't have page 0 mapped on x86/sparc.. */
-	while (PAGE_OFFSET + p < PAGE_SIZE && count > 0) {
+#if defined(__sparc__) /* we don't have page 0 mapped on sparc.. */
+	while (p < PAGE_SIZE && count > 0) {
 		/* Hmm. Do something? */
 		buf++;
 		p++;
@@ -93,7 +100,7 @@ static int write_mem(struct inode * inode, struct file * file, const char * buf,
 		written++;
 	}
 #endif
-	memcpy_fromfs((void *) p, buf, count);
+	memcpy_fromfs(__va(p), buf, count);
 	written += count;
 	file->f_pos += written;
 	return count;
@@ -101,7 +108,10 @@ static int write_mem(struct inode * inode, struct file * file, const char * buf,
 
 static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
-	if (vma->vm_offset & ~PAGE_MASK)
+	unsigned long offset = vma->vm_offset;
+
+	
+	if (offset & ~PAGE_MASK)
 		return -ENXIO;
 #if defined(__i386__)
 	/*
@@ -110,17 +120,18 @@ static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_str
 	 * The surround logic should disable caching for the high device
 	 * addresses anyway, but right now this seems still needed.
 	 */
-	if (x86 > 3 && vma->vm_offset >= high_memory)
+	if (x86 > 3 && offset >= __pa(high_memory))
 		pgprot_val(vma->vm_page_prot) |= _PAGE_PCD;
 #endif
-	if (remap_page_range(vma->vm_start, vma->vm_offset, vma->vm_end - vma->vm_start, vma->vm_page_prot))
+	if (remap_page_range(vma->vm_start, offset, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
 	vma->vm_inode = inode;
 	inode->i_count++;
 	return 0;
 }
 
-static int read_kmem(struct inode *inode, struct file *file, char *buf, int count)
+static long read_kmem(struct inode *inode, struct file *file,
+	char *buf, unsigned long count)
 {
 	int read1, read2;
 
@@ -134,7 +145,8 @@ static int read_kmem(struct inode *inode, struct file *file, char *buf, int coun
 	return read1 + read2;
 }
 
-static int read_port(struct inode * inode, struct file * file,char * buf, int count)
+static long read_port(struct inode * inode, struct file * file,
+	char * buf, unsigned long count)
 {
 	unsigned int i = file->f_pos;
 	char * tmp = buf;
@@ -148,7 +160,8 @@ static int read_port(struct inode * inode, struct file * file,char * buf, int co
 	return tmp-buf;
 }
 
-static int write_port(struct inode * inode, struct file * file, const char * buf, int count)
+static long write_port(struct inode * inode, struct file * file,
+	const char * buf, unsigned long count)
 {
 	unsigned int i = file->f_pos;
 	const char * tmp = buf;
@@ -162,17 +175,20 @@ static int write_port(struct inode * inode, struct file * file, const char * buf
 	return tmp-buf;
 }
 
-static int read_null(struct inode * node, struct file * file, char * buf, int count)
+static long read_null(struct inode * node, struct file * file,
+	char * buf, unsigned long count)
 {
 	return 0;
 }
 
-static int write_null(struct inode * inode, struct file * file, const char * buf, int count)
+static long write_null(struct inode * inode, struct file * file,
+	const char * buf, unsigned long count)
 {
 	return count;
 }
 
-static int read_zero(struct inode * node, struct file * file, char * buf, int count)
+static long read_zero(struct inode * node, struct file * file,
+	char * buf, unsigned long count)
 {
 	int left;
 
@@ -194,13 +210,15 @@ static int mmap_zero(struct inode * inode, struct file * file, struct vm_area_st
 	return 0;
 }
 
-static int read_full(struct inode * node, struct file * file, char * buf,int count)
+static long read_full(struct inode * node, struct file * file,
+	char * buf, unsigned long count)
 {
 	file->f_pos += count;
 	return count;
 }
 
-static int write_full(struct inode * inode, struct file * file, const char * buf, int count)
+static long write_full(struct inode * inode, struct file * file,
+	const char * buf, unsigned long count)
 {
 	return -ENOSPC;
 }
@@ -210,7 +228,8 @@ static int write_full(struct inode * inode, struct file * file, const char * buf
  * both devices with "a" now.  This was previously impossible.  SRB.
  */
 
-static int null_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
+static long long null_lseek(struct inode * inode, struct file * file,
+	long long offset, int orig)
 {
 	return file->f_pos=0;
 }
@@ -222,7 +241,8 @@ static int null_lseek(struct inode * inode, struct file * file, off_t offset, in
  * also note that seeking relative to the "end of file" isn't supported:
  * it has no meaning, so it returns -EINVAL.
  */
-static int memory_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
+static long long memory_lseek(struct inode * inode, struct file * file,
+	long long offset, int orig)
 {
 	switch (orig) {
 		case 0:

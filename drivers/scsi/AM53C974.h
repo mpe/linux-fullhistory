@@ -47,6 +47,12 @@
 #define DEFAULT_RATE			 5 /* MHz, min: 3; max: 10 */
 #define DEFAULT_SYNC_OFFSET		 0 /* bytes, min: 0; max: 15; use 0 for async. mode */
 
+/***************************************************************************************
+* If defined, don't allow targets to disconnect during commands.  This will reduce     *
+* performance, but may be worthwhile if you suspect the driver of corrupting data when *
+* a disconnect happens.                                                                *
+***************************************************************************************/
+#define AM53C974_PROHIBIT_DISCONNECT
 
 /* --------------------- don't edit below here  --------------------- */
 
@@ -258,10 +264,12 @@ struct AM53C974_hostdata {
     unsigned  char max_offset[8];       /* max. sync. offset (setup), only valid if corresponding sync_en is nonzero */
     };
 
+extern struct proc_dir_entry proc_scsi_am53c974;
+
 #define AM53C974 { \
     NULL,              		/* pointer to next in list                      */  \
     NULL,			/* long * usage_count				*/  \
-    NULL,                       /* struct proc_dir_entry *proc_dir              */ \
+    &proc_scsi_am53c974,        /* struct proc_dir_entry *proc_dir              */ \
     NULL,                       /* int (*proc_info)(char *, char **, off_t, int, int, int); */ \
     "AM53C974",        		/* name                                         */  \
     AM53C974_detect,   		/* int (* detect)(struct SHT *)                 */  \

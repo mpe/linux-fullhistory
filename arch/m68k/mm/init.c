@@ -16,21 +16,16 @@
 #include <linux/blk.h>
 #endif
 
+#include <asm/setup.h>
 #include <asm/segment.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
-#include <asm/bootinfo.h>
 #include <asm/machdep.h>
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void init_kpointer_table(void);
 extern void show_net_buffers(void);
-extern unsigned long mm_phys_to_virt (unsigned long addr);
-extern char *rd_start;
-extern int rd_doload;
-
-unsigned long ramdisk_length;
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -94,14 +89,12 @@ void show_mem(void)
 #endif
 }
 
-#if 0 /* The 68030 doesn't care about reserved bits. */
 /*
  * Bits to add to page descriptors for "normal" caching mode.
  * For 68020/030 this is 0.
  * For 68040, this is _PAGE_CACHE040 (cachable, copyback)
  */
-unsigned long mm_cachebits;
-#endif
+unsigned long mm_cachebits = 0;
 
 pte_t *kernel_page_table (unsigned long *memavailp)
 {
@@ -122,7 +115,6 @@ static unsigned long map_chunk (unsigned long addr,
 #define ONEMEG	(1024*1024)
 #define L3TREESIZE (256*1024)
 
-	int is040 = m68k_is040or060;
 	static unsigned long mem_mapped = 0;
 	static unsigned long virtaddr = 0;
 	static pte_t *ktablep = NULL;
@@ -158,7 +150,7 @@ static unsigned long map_chunk (unsigned long addr,
 	 * arch/head.S
 	 *
 	 */
-	if (is040 && mem_mapped == 0)
+	if (CPU_IS_040_OR_060 && mem_mapped == 0)
 		ktablep = kpt;
 
 	for (physaddr = addr;
@@ -180,7 +172,7 @@ static unsigned long map_chunk (unsigned long addr,
 			pindex = 0;
 		}
 
-		if (is040) {
+		if (CPU_IS_040_OR_060) {
 			int i;
 			unsigned long ktable;
 
@@ -306,30 +298,14 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 #endif
 
 	init_kpointer_table();
-#if 0
-	/*
-	 * Setup cache bits
-	 */
-	mm_cachebits = m68k_is040or060 ? _PAGE_CACHE040 : 0;
 
-	/* Initialize protection map.  */
-	protection_map[0] = PAGE_READONLY;
-	protection_map[1] = PAGE_READONLY;
-	protection_map[2] = PAGE_COPY;
-	protection_map[3] = PAGE_COPY;
-	protection_map[4] = PAGE_READONLY;
-	protection_map[5] = PAGE_READONLY;
-	protection_map[6] = PAGE_COPY;
-	protection_map[7] = PAGE_COPY;
-	protection_map[8] = PAGE_READONLY;
-	protection_map[9] = PAGE_READONLY;
-	protection_map[10] = PAGE_SHARED;
-	protection_map[11] = PAGE_SHARED;
-	protection_map[12] = PAGE_READONLY;
-	protection_map[13] = PAGE_READONLY;
-	protection_map[14] = PAGE_SHARED;
-	protection_map[15] = PAGE_SHARED;
-#endif
+	/* Fix the cache mode in the page descriptors for the 680[46]0.  */
+	if (CPU_IS_040_OR_060) {
+		int i;
+		mm_cachebits = _PAGE_CACHE040;
+		for (i = 0; i < 16; i++)
+			pgprot_val(protection_map[i]) |= _PAGE_CACHE040;
+	}
 
 	/*
 	 * Map the physical memory available into the kernel virtual
@@ -394,17 +370,18 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	task[0]->tss.crp[0] = 0x80000000 | _PAGE_SHORT;
 	task[0]->tss.crp[1] = task[0]->tss.pagedir_p;
 
-	if (m68k_is040or060)
-		asm ("movel %0,%/d0\n\t"
-		     ".long 0x4e7b0806" /* movec d0,urp */
-		     : /* no outputs */
-		     : "g" (task[0]->tss.crp[1])
-		     : "d0");
+	if (CPU_IS_040_OR_060)
+		asm __volatile__ ("movel %0,%/d0\n\t"
+				  ".long 0x4e7b0806" /* movec d0,urp */
+				  : /* no outputs */
+				  : "g" (task[0]->tss.crp[1])
+				  : "d0");
 	else
-		asm ("pmove %0@,%/crp"
-		     : /* no outputs */
-		     : "a" (task[0]->tss.crp));
-
+		asm __volatile__ ("movel %0,%/a0\n\t"
+				  ".long 0xf0104c00" /* pmove %/a0@,%/crp */
+				  : /* no outputs */
+				  : "g" (task[0]->tss.crp)
+				  : "a0");
 #ifdef DEBUG
 	printk ("set crp\n");
 #endif
@@ -416,34 +393,6 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 
 #ifdef DEBUG
 	printk ("before free_area_init\n");
-#endif
-
-#ifdef CONFIG_BLK_DEV_RAM
-#ifndef CONFIG_BLK_DEV_INITRD
-	/*
-	 * Since the initialization of the ramdisk's has been changed
-	 * so it fits the new driver initialization scheme, we have to
-	 * make room for our preloaded image here, instead of doing it
-	 * in rd_init() as we cannot kmalloc() a block large enough
-	 * for the image.
-	 */
-
-	ramdisk_length = boot_info.ramdisk_size * 1024;
-
-	if ((ramdisk_length > 0) && (ROOT_DEV == 0)) {
-	  char *rdp;	     /* current location of ramdisk */
-
-	  rd_start = (char *) start_mem;
-
-	  /* get current address of ramdisk */
-	  rdp = (char *)mm_phys_to_virt (boot_info.ramdisk_addr);
-
-	  /* copy the ram disk image */
-	  memcpy (rd_start, rdp, ramdisk_length);
-	  start_mem += ramdisk_length;
-	  rd_doload = 1;     /* tell rd_load to load this thing */
-	}
-#endif
 #endif
 
 	return free_area_init (start_mem, end_mem);
@@ -512,7 +461,8 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		}
 		mem_map[MAP_NR(tmp)].count = 1;
 #ifdef CONFIG_BLK_DEV_INITRD
-		if (!initrd_start || (tmp < initrd_start || tmp >= initrd_end))
+		if (!initrd_start ||
+		    (tmp < (initrd_start & PAGE_MASK) || tmp >= initrd_end))
 #endif
 			free_page(tmp);
 	}

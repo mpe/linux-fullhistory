@@ -18,8 +18,8 @@
 #define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
 #define ROUND_UP(x) (((x)+3) & ~3)
 
-static int 
-smb_dir_read(struct inode *inode, struct file *filp, char *buf, int count);
+static long
+smb_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count);
 
 static int 
 smb_readdir(struct inode *inode, struct file *filp,
@@ -115,8 +115,8 @@ struct inode_operations smb_dir_inode_operations =
 };
 
 
-static int 
-smb_dir_read(struct inode *inode, struct file *filp, char *buf, int count)
+static long
+smb_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count)
 {
 	return -EISDIR;
 }

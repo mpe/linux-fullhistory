@@ -352,6 +352,14 @@ e. Directory listings are unpredictably truncated, and `dmesg' shows
     bug.
 
 
+f. Data corruption.
+
+  - Random data corruption was occasionally observed with the Hitachi
+    CDR-7730 cdrom. If you experience data corruption, using "hdx=slow"
+    as a command line parameter may work around the problem, at the
+    expense of low system performance.
+
+
 6. cdload.c
 -----------
 

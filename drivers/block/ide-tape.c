@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.7 - ALPHA	Sep  10, 1996
+ * linux/drivers/block/ide-tape.c	Version 1.8 - ALPHA	Sep  26, 1996
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
  *
@@ -187,6 +187,8 @@
  * Ver 1.6   Aug 16 96   Fixed FPU usage in the driver.
  *                       Fixed end of media bug.
  * Ver 1.7   Sep 10 96   Minor changes for the CONNER CTT8000-A model.
+ * Ver 1.8   Sep 26 96   Attempt to find a better balance between good
+ *                        interactive response and high system throughput.
  *
  * We are currently in an *alpha* stage. The driver is not complete and not
  * much tested. I would strongly suggest to:
@@ -1228,6 +1230,10 @@ void idetape_setup (ide_drive_t *drive)
 {
 	idetape_tape_t *tape=&(drive->tape);
 	unsigned int allocation_length;
+#if IDETAPE_ANTICIPATE_READ_WRITE_DSC
+	ide_hwif_t *hwif = HWIF(drive);
+	unsigned long t1, tmid, tn;
+#endif /* IDETAPE_ANTICIPATE_READ_WRITE_DSC */
 
 #if IDETAPE_DEBUG_LOG
 	printk ("ide-tape: Reached idetape_setup\n");
@@ -1310,10 +1316,28 @@ void idetape_setup (ide_drive_t *drive)
 	 *	constantly streaming.
 	 */
 
-	if (tape->max_number_of_stages)	
-		tape->best_dsc_rw_frequency = (unsigned long) ((tape->capabilities.buffer_size * 32 * HZ) / (tape->capabilities.speed * 125));
-	else
-		tape->best_dsc_rw_frequency = (unsigned long) ((tape->data_buffer_size * HZ) / (tape->capabilities.speed * 1000));
+	/*
+	 *	We will ignore the above algorithm for now, as it can have
+	 *	a bad effect on interactive response under some conditions.
+	 *	The following attempts to find a balance between good latency
+	 *	and good system throughput. It will be nice to have all this
+	 *	configurable in run time at some point.
+	 */
+	t1 = (tape->data_buffer_size * HZ) / (tape->capabilities.speed * 1000);
+	tmid = (tape->capabilities.buffer_size * 32 * HZ) / (tape->capabilities.speed * 125);
+	tn = (IDETAPE_FIFO_THRESHOLD * tape->data_buffer_size * HZ) / (tape->capabilities.speed * 1000);
+
+	if (tape->max_number_of_stages) {
+		if (drive->using_dma)
+			tape->best_dsc_rw_frequency = tmid;
+		else {
+			if (hwif->drives[drive->select.b.unit ^ 1].present || hwif->next != hwif)
+				tape->best_dsc_rw_frequency = IDETAPE_MIN ((tn + tmid) / 2, tmid);
+			else
+				tape->best_dsc_rw_frequency = IDETAPE_MIN (tn, tmid);
+		}
+	} else
+		tape->best_dsc_rw_frequency = t1;
 
 	/*
 	 *	Ensure that the number we got makes sense.
@@ -1336,8 +1360,10 @@ void idetape_setup (ide_drive_t *drive)
 	tape->best_dsc_rw_frequency=IDETAPE_DSC_READ_WRITE_FALLBACK_FREQUENCY;
 #endif /* IDETAPE_ANTICIPATE_READ_WRITE_DSC */
 
-	printk ("ide-tape: Tape speed - %d KBps. Recommended transfer unit - %d bytes.\n",tape->capabilities.speed,tape->data_buffer_size);
-
+	printk (KERN_INFO "ide-tape: %s <-> %s, %dKBps, %d*%dkB buffer, %dkB pipeline, %lums tDSC%s\n",
+		drive->name, "ht0", tape->capabilities.speed, (tape->capabilities.buffer_size * 512) / tape->data_buffer_size,
+		tape->data_buffer_size / 1024, tape->max_number_of_stages * tape->data_buffer_size / 1024,
+		tape->best_dsc_rw_frequency * 1000 / HZ, drive->using_dma ? ", DMA":"");
 	return;
 }
 

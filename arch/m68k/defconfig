@@ -3,6 +3,11 @@
 #
 
 #
+# Code maturity level options
+#
+CONFIG_EXPERIMENTAL=y
+
+#
 # Loadable module support
 #
 # CONFIG_MODULES is not set
@@ -10,30 +15,57 @@
 # CONFIG_KERNELD is not set
 
 #
-# General setup
+# Platform dependant setup
 #
 CONFIG_AMIGA=y
 # CONFIG_ATARI is not set
 # CONFIG_MAC is not set
-CONFIG_FPSP_040=y
-# CONFIG_IFPSP_060 is not set
+
+#
+# Processor type
+#
+CONFIG_M68020=y
+CONFIG_M68030=y
+CONFIG_M68040=y
+# CONFIG_OPTIMIZE_040 is not set
+# CONFIG_M68060 is not set
+# CONFIG_OPTIMIZE_060 is not set
+# CONFIG_ADVANCED_CPU is not set
+# CONFIG_RMW_INSNS is not set
+
+#
+# General setup
+#
 CONFIG_NET=y
 CONFIG_SYSVIPC=y
 CONFIG_BINFMT_AOUT=y
 CONFIG_BINFMT_ELF=y
 CONFIG_KERNEL_ELF=y
-# CONFIG_ZORRO is not set
+CONFIG_ZORRO=y
+CONFIG_AMIFB_OCS=y
+CONFIG_AMIFB_ECS=y
+CONFIG_AMIFB_AGA=y
+# CONFIG_FB_CYBER is not set
+# CONFIG_AMIGA_GSP is not set
+# CONFIG_GSP_RESOLVER is not set
+# CONFIG_GSP_A2410 is not set
 
 #
 # Block device driver configuration
 #
 CONFIG_BLK_DEV_FD=y
-CONFIG_BLK_DEV_RAM=y
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_IDE is not set
-# CONFIG_FB_CYBER is not set
 # CONFIG_AMIGA_Z2RAM is not set
 # CONFIG_ATARI_ACSI is not set
+# CONFIG_ACSI_MULTI_LUN is not set
+# CONFIG_ATARI_SLM
+# CONFIG_BLK_DEV_LOOP is not set
+# CONFIG_BLK_DEV_MD is not set
+# CONFIG_MD_LINEAR is not set
+# CONFIG_MD_STRIPED is not set
+CONFIG_BLK_DEV_RAM=y
+CONFIG_BLK_DEV_INITRD=y
 
 #
 # Networking options
@@ -89,6 +121,7 @@ CONFIG_BLK_DEV_SR=y
 CONFIG_A3000_SCSI=y
 # CONFIG_A2091_SCSI is not set
 # CONFIG_GVP11_SCSI is not set
+# CONFIG_CYBERSTORM_SCSI is not set
 # CONFIG_ATARI_SCSI is not set
 
 #
@@ -102,11 +135,14 @@ CONFIG_A3000_SCSI=y
 # CONFIG_A2065 is not set
 # CONFIG_HYDRA is not set
 # CONFIG_ATARILANCE is not set
+# CONFIG_ATARI_BIONET is not set
+# CONFIG_ATARI_PAMSNET is not set
 
 #
 # Filesystems
 #
 # CONFIG_QUOTA is not set
+# CONFIG_LOCK_MANDATORY is not set
 CONFIG_MINIX_FS=y
 # CONFIG_EXT_FS is not set
 CONFIG_EXT2_FS=y
@@ -131,6 +167,11 @@ CONFIG_NFS_FS=y
 # CONFIG_PRINTER is not set
 CONFIG_AMIGAMOUSE=y
 # CONFIG_ATARIMOUSE is not set
+CONFIG_AMIGA_BUILTIN_SERIAL=y
+# CONFIG_GVPIOEXT is not set
+# CONFIG_MULTIFACE_III_TTY is not set
+# CONFIG_USERIAL is not set
+# CONFIG_WATCHDOG is not set
 # CONFIG_UMISC is not set
 
 #

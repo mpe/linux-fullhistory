@@ -305,7 +305,7 @@ static void	do_apm_timer(unsigned long);
 
 static int	do_open(struct inode *, struct file *);
 static void	do_release(struct inode *, struct file *);
-static int	do_read(struct inode *, struct file *, char *, int);
+static long	do_read(struct inode *, struct file *, char *, unsigned long);
 static int	do_select(struct inode *, struct file *, int,
 			  select_table *);
 static int	do_ioctl(struct inode *, struct file *, u_int, u_long);
@@ -817,7 +817,8 @@ static int check_apm_bios_struct(struct apm_bios_struct *as, const char *func)
 	return 0;
 }
 
-static int do_read(struct inode *inode, struct file *fp, char *buf, int count)
+static long do_read(struct inode *inode, struct file *fp,
+	char *buf, unsigned long count)
 {
 	struct apm_bios_struct *	as;
 	int			i;

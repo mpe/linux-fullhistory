@@ -23,8 +23,8 @@
 #include <linux/sched.h>
 #include <linux/stat.h>
 
-static int ext2_dir_read (struct inode * inode, struct file * filp,
-			    char * buf, int count)
+static long ext2_dir_read (struct inode * inode, struct file * filp,
+			    char * buf, unsigned long count)
 {
 	return -EISDIR;
 }

@@ -29,7 +29,6 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/genhd.h>
-#include <linux/xd.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -38,6 +37,8 @@
 
 #define MAJOR_NR XT_DISK_MAJOR
 #include <linux/blk.h>
+
+#include "xd.h"
 
 XD_INFO xd_info[XD_MAXDRIVES];
 
@@ -77,11 +78,12 @@ static XD_SIGNATURE xd_sigs[] = {
 	{ 0x0010,"ST11 BIOS v1.7",xd_seagate_init_controller,xd_seagate_init_drive," Seagate ST11R" }, /* Alan Hourihane, alanh@fairlite.demon.co.uk */
 	{ 0x1000,"(c)Copyright 1987 SMS",xd_omti_init_controller,xd_omti_init_drive,"n OMTI 5520" }, /* Dirk Melchers, dirk@merlin.nbg.sub.org */
 };
-static u_char *xd_bases[] =
+
+static unsigned int xd_bases[] =
 {
-	(u_char *) 0xC8000,(u_char *) 0xCA000,(u_char *) 0xCC000,
-	(u_char *) 0xCE000,(u_char *) 0xD0000,(u_char *) 0xD8000,
-	(u_char *) 0xE0000
+	0xC8000, 0xCA000, 0xCC000,
+	0xCE000, 0xD0000, 0xD8000,
+	0xE0000
 };
 
 static struct hd_struct xd[XD_MAXDRIVES << 6];
@@ -138,20 +140,20 @@ int xd_init (void)
 }
 
 /* xd_detect: scan the possible BIOS ROM locations for the signature strings */
-static u_char xd_detect (u_char *controller,u_char **address)
+static u_char xd_detect (u_char *controller, unsigned int *address)
 {
 	u_char i,j,found = 0;
 
 	if (xd_override)
 	{
 		*controller = xd_type;
-		*address = NULL;
+		*address = 0;
 		return(1);
 	}
 
 	for (i = 0; i < (sizeof(xd_bases) / sizeof(xd_bases[0])) && !found; i++)
 		for (j = 1; j < (sizeof(xd_sigs) / sizeof(xd_sigs[0])) && !found; j++)
-			if (!memcmp(xd_bases[i] + xd_sigs[j].offset,xd_sigs[j].string,strlen(xd_sigs[j].string))) {
+			if (check_signature(xd_bases[i] + xd_sigs[j].offset,xd_sigs[j].string,strlen(xd_sigs[j].string))) {
 				*controller = j;
 				*address = xd_bases[i];
 				found++;
@@ -163,11 +165,12 @@ static u_char xd_detect (u_char *controller,u_char **address)
 /* and set up the "raw" device entries in the table */
 static void xd_geninit (struct gendisk *ignored)
 {
-	u_char i,controller,*address;
+	u_char i,controller;
+	unsigned int address;
 
 	if (xd_detect(&controller,&address)) {
 
-		printk("xd_geninit: detected a%s controller (type %d) at address %p\n",xd_sigs[controller].name,controller,address);
+		printk("xd_geninit: detected a%s controller (type %d) at address %06x\n",xd_sigs[controller].name,controller,address);
 		if (controller)
 			xd_sigs[controller].init_controller(address);
 		xd_drives = xd_initdrives(xd_sigs[controller].init_drive);
@@ -538,12 +541,12 @@ static u_char xd_initdrives (void (*init_drive)(u_char drive))
 	return (count);
 }
 
-static void xd_dtc_init_controller (u_char *address)
+static void xd_dtc_init_controller (unsigned int address)
 {
-	switch ((u_long) address) {
+	switch (address) {
 		case 0xC8000:	xd_iobase = 0x320; break;
 		case 0xCA000:	xd_iobase = 0x324; break;
-		default:        printk("xd_dtc_init_controller: unsupported BIOS address %p\n",address);
+		default:        printk("xd_dtc_init_controller: unsupported BIOS address %06x\n",address);
 				xd_iobase = 0x320; break;
 	}
 	xd_irq = 5;			/* the IRQ _can_ be changed on this card, but requires a hardware mod */
@@ -578,16 +581,16 @@ static void xd_dtc_init_drive (u_char drive)
 		printk("xd_dtc_init_drive: error reading geometry for drive %d\n",drive);
 }
 
-static void xd_wd_init_controller (u_char *address)
+static void xd_wd_init_controller (unsigned int address)
 {
-	switch ((u_long) address) {
+	switch (address) {
 		case 0xC8000:	xd_iobase = 0x320; break;
 		case 0xCA000:	xd_iobase = 0x324; break;
 		case 0xCC000:   xd_iobase = 0x328; break;
 		case 0xCE000:   xd_iobase = 0x32C; break;
 		case 0xD0000:	xd_iobase = 0x328; break;
 		case 0xD8000:	xd_iobase = 0x32C; break;
-		default:        printk("xd_wd_init_controller: unsupported BIOS address %p\n",address);
+		default:        printk("xd_wd_init_controller: unsupported BIOS address %06x\n",address);
 				xd_iobase = 0x320; break;
 	}
 	xd_irq = 5;			/* don't know how to auto-detect this yet */
@@ -619,14 +622,14 @@ static void xd_wd_init_drive (u_char drive)
 		printk("xd_wd_init_drive: error reading geometry for drive %d\n",drive);	
 }
 
-static void xd_seagate_init_controller (u_char *address)
+static void xd_seagate_init_controller (unsigned int address)
 {
-	switch ((u_long) address) {
+	switch (address) {
 		case 0xC8000:	xd_iobase = 0x320; break;
 		case 0xD0000:	xd_iobase = 0x324; break;
 		case 0xD8000:	xd_iobase = 0x328; break;
 		case 0xE0000:	xd_iobase = 0x32C; break;
-		default:	printk("xd_seagate_init_controller: unsupported BIOS address %p\n",address);
+		default:	printk("xd_seagate_init_controller: unsupported BIOS address %06x\n",address);
 				xd_iobase = 0x320; break;
 	}
 	xd_irq = 5;			/* the IRQ and DMA channel are fixed on the Seagate controllers */
@@ -652,14 +655,14 @@ static void xd_seagate_init_drive (u_char drive)
 }
 
 /* Omti support courtesy Dirk Melchers */
-static void xd_omti_init_controller (u_char *address)
+static void xd_omti_init_controller (unsigned int address)
 {
-	switch ((u_long) address) {
+	switch (address) {
 		case 0xC8000:	xd_iobase = 0x320; break;
 		case 0xD0000:	xd_iobase = 0x324; break;
 		case 0xD8000:	xd_iobase = 0x328; break;
 		case 0xE0000:	xd_iobase = 0x32C; break;
-		default:	printk("xd_omti_init_controller: unsupported BIOS address %p\n",address);
+		default:	printk("xd_omti_init_controller: unsupported BIOS address %06x\n",address);
 				xd_iobase = 0x320; break;
 	}
 	

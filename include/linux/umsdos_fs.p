@@ -1,10 +1,10 @@
 /* check.c 23/01/95 03.38.30 */
 void check_page_tables (void);
 /* dir.c 22/06/95 00.22.12 */
-int UMSDOS_dir_read (struct inode *inode,
+long UMSDOS_dir_read (struct inode *inode,
 	 struct file *filp,
 	 char *buf,
-	 int count);
+	 unsigned long count);
 void umsdos_lookup_patch (struct inode *dir,
 	 struct inode *inode,
 	 struct umsdos_dirent *entry,
@@ -20,22 +20,22 @@ int UMSDOS_lookup (struct inode *dir,
 	 struct inode **result);
 int umsdos_hlink2inode (struct inode *hlink, struct inode **result);
 /* emd.c 22/06/95 00.22.04 */
-int umsdos_file_read_kmem (struct inode *inode,
+long umsdos_file_read_kmem (struct inode *inode,
 	 struct file *filp,
 	 char *buf,
-	 int count);
-int umsdos_file_write_kmem (struct inode *inode,
+	 unsigned long count);
+long umsdos_file_write_kmem (struct inode *inode,
 	 struct file *filp,
 	 const char *buf,
-	 int count);
-int umsdos_emd_dir_write (struct inode *emd_dir,
+	 unsigned long count);
+long umsdos_emd_dir_write (struct inode *emd_dir,
 	 struct file *filp,
 	 char *buf,
-	 int count);
-int umsdos_emd_dir_read (struct inode *emd_dir,
+	 unsigned long count);
+long umsdos_emd_dir_read (struct inode *emd_dir,
 	 struct file *filp,
 	 char *buf,
-	 int count);
+	 unsigned long count);
 struct inode *umsdos_emd_dir_lookup (struct inode *dir, int creat);
 int umsdos_emd_dir_readentry (struct inode *emd_dir,
 	 struct file *filp,

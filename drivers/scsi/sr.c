@@ -545,8 +545,9 @@ void sr_photocd(struct inode *inode)
 
     case SCSI_MAN_SONY: /* Thomas QUINOT <thomas@melchior.cuivre.fdn.fr> */
     case SCSI_MAN_PIONEER:
+    case SCSI_MAN_MATSHITA:
 #ifdef DEBUG
-	printk(KERN_DEBUG "sr_photocd: use SONY/PIONEER code\n");
+	printk(KERN_DEBUG "sr_photocd: use SONY/PIONEER/MATSHITA code\n");
 #endif
 	get_sectorsize(MINOR(inode->i_rdev));	/* spinup (avoid timeout) */
 	memset(buf,0,40);
@@ -560,11 +561,11 @@ void sr_photocd(struct inode *inode)
 	
 	if (rc != 0) {
             if (rc != 0x28000002) /* drop "not ready" */
-                printk(KERN_WARNING "sr_photocd: ioctl error (SONY/PIONEER): 0x%x\n",rc);
+                printk(KERN_WARNING "sr_photocd: ioctl error (SONY/PIONEER/MATSHITA): 0x%x\n",rc);
 	    break;
 	}
 	if ((rec[0] << 8) + rec[1] != 0x0a) {
-	    printk(KERN_INFO "sr_photocd: (SONY/PIONEER) Hmm, seems the CDROM doesn't support multisession CD's\n");
+	    printk(KERN_INFO "sr_photocd: (SONY/PIONEER/MATSHITA) Hmm, seems the CDROM doesn't support multisession CD's\n");
 	    no_multi = 1;
 	    break;
 	}

@@ -170,13 +170,15 @@ extern struct timezone sys_tz;
 static int
 utc2local(int time)
 {
-        return time - sys_tz.tz_minuteswest*60;
+        return time - sys_tz.tz_minuteswest*60 +
+	    (sys_tz.tz_dsttime ? 3600 : 0);
 }
 
 static int
 local2utc(int time)
 {
-        return time + sys_tz.tz_minuteswest*60;
+        return time + sys_tz.tz_minuteswest*60 -
+	    (sys_tz.tz_dsttime ? 3600 : 0);
 }
 
 /* Convert a MS-DOS time/date pair to a UNIX date (seconds since 1 1 70). */

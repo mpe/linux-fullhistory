@@ -5,6 +5,11 @@
 mainmenu_name "Linux/68k Kernel Configuration"
 
 mainmenu_option next_comment
+comment 'Code maturity level options'
+bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
+endmenu
+
+mainmenu_option next_comment
 comment 'Loadable module support'
 bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
@@ -14,22 +19,48 @@ fi
 endmenu
 
 mainmenu_option next_comment
-comment 'General setup'
+comment 'Platform dependant setup'
 
 bool 'Amiga support' CONFIG_AMIGA
 bool 'Atari support' CONFIG_ATARI
 bool 'Macintosh support' CONFIG_MAC
-bool '68040 floating point software package' CONFIG_FPSP_040
-bool '68060 integer/floating point software package' CONFIG_IFPSP_060
+
+comment 'Processor type'
+bool '68020 support' CONFIG_M68020
+bool '68030 support' CONFIG_M68030
+bool '68040 support' CONFIG_M68040
+if [ "$CONFIG_M68040" = "y" ]; then
+  bool 'Use 68040 specific optimizations' CONFIG_OPTIMIZE_040
+fi
+bool '68060 support' CONFIG_M68060
+if [ "$CONFIG_M68060" = "y" ]; then
+  bool 'Use 68060 specific optimizations' CONFIG_OPTIMIZE_060
+fi
+bool 'Advanced processor options' CONFIG_ADVANCED_CPU
+if [ "$CONFIG_ADVANCED_CPU" = "y" ]; then
+  bool 'Use read-modify-write instructions' CONFIG_RMW_INSNS
+fi
+endmenu
+
+mainmenu_option next_comment
+comment 'General setup'
+
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
-if [ "$CONFIG_BINFMT_ELF" = "y" ]; then
-  bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF
-fi
+bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF
 if [ "$CONFIG_AMIGA" = "y" ]; then
   bool 'Amiga AutoConfig Identification' CONFIG_ZORRO
+  bool 'Amiga OCS chipset support' CONFIG_AMIFB_OCS
+  bool 'Amiga ECS chipset support' CONFIG_AMIFB_ECS
+  bool 'Amiga AGA chipset support' CONFIG_AMIFB_AGA
+  bool 'Amiga Cybervision support' CONFIG_FB_CYBER
+  bool 'Amiga GSP (TMS340x0) support' CONFIG_AMIGA_GSP
+  if [ "$CONFIG_AMIGA_GSP" = "y" ]; then
+    bool 'DMI Resolver support' CONFIG_GSP_RESOLVER
+#    bool 'A2410 support' CONFIG_GSP_A2410
+  fi
 fi
 endmenu
 
@@ -41,20 +72,33 @@ comment 'Floppy, IDE, and other block devices'
 
 tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 bool 'IDE harddisk support' CONFIG_BLK_DEV_IDE
+if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
+  bool '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD
+fi
 if [ "$CONFIG_AMIGA" = "y" ]; then
-bool 'Amiga Cybervision support' CONFIG_FB_CYBER
-bool 'Amiga Zorro II ramdisk support' CONFIG_AMIGA_Z2RAM
+tristate 'Amiga Zorro II ramdisk support' CONFIG_AMIGA_Z2RAM
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
 bool 'Atari ACSI support' CONFIG_ATARI_ACSI
+if [ "$CONFIG_ATARI_ACSI" = "y" ]; then
+comment 'Some devices (e.g. CD jukebox) support multiple LUNs'
+bool 'Probe all LUNs on each ACSI device' CONFIG_ACSI_MULTI_LUN
+bool 'Atari SLM laser printer support' CONFIG_ATARI_SLM
+fi
 fi
 
+comment 'Additional Block Devices'
+
+tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
+bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
+if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
+  tristate '   Linear (append) mode' CONFIG_MD_LINEAR
+  tristate '   RAID-0 (striping) mode' CONFIG_MD_STRIPED
+fi
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
   bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
 fi
-
-tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
 endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
@@ -68,11 +112,11 @@ tristate 'SCSI support' CONFIG_SCSI
 
 if [ "$CONFIG_SCSI" != "n" ]; then
 
-comment 'SCSI support type (disk, tape, CDrom)'
+comment 'SCSI support type (disk, tape, CD-ROM)'
 
 dep_tristate 'SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
 dep_tristate 'SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
-dep_tristate 'SCSI CDROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
+dep_tristate 'SCSI CD-ROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
 dep_tristate 'SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
 
 comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
@@ -88,9 +132,11 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
 bool 'A3000 WD33C93A support' CONFIG_A3000_SCSI
 bool 'A2091 WD33C93A support' CONFIG_A2091_SCSI
 bool 'GVP Series II WD33C93A support' CONFIG_GVP11_SCSI
+bool 'CyberStorm SCSI support' CONFIG_CYBERSTORM_SCSI
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
 dep_tristate 'Atari native SCSI support' CONFIG_ATARI_SCSI $CONFIG_SCSI
+bool 'Long delays for Toshiba CD-ROMs' CONFIG_ATARI_SCSI_TOSHIBA_DELAY
 fi
 #dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
 endmenu
@@ -112,6 +158,8 @@ tristate 'Dummy net driver support' CONFIG_DUMMY
 tristate 'SLIP (serial line) support' CONFIG_SLIP
 if [ "$CONFIG_SLIP" != "n" ]; then
   bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
+  bool ' Keepalive and linefill' CONFIG_SLIP_SMART
+  bool ' Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
 fi
 tristate 'PPP (point-to-point) support' CONFIG_PPP
 if [ ! "$CONFIG_PPP" = "n" ]; then
@@ -125,6 +173,10 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   bool 'Atari Lance support' CONFIG_ATARILANCE
+if [ "$CONFIG_ATARI_ACSI" = "y" ]; then
+  bool 'BioNet-100 support' CONFIG_ATARI_BIONET
+  bool 'PAMsNet support' CONFIG_ATARI_PAMSNET
+fi
 fi
 fi
 endmenu
@@ -143,12 +195,12 @@ fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari mouse support' CONFIG_ATARIMOUSE
 fi
-if [ "$CONFIG_ATARI" = y ]; then
+if [ "$CONFIG_ATARI" = "y" ]; then
   tristate 'Atari MFP serial support' CONFIG_ATARI_MFPSER
   tristate 'Atari SCC serial support' CONFIG_ATARI_SCC
   tristate 'Atari MIDI serial support' CONFIG_ATARI_MIDI
 fi
-if [ "$CONFIG_AMIGA" = y ]; then
+if [ "$CONFIG_AMIGA" = "y" ]; then
   tristate 'Amiga builtin serial support' CONFIG_AMIGA_BUILTIN_SERIAL
   bool 'GVP IO-Extender support' CONFIG_GVPIOEXT
   tristate 'Multiface Card III serial support' CONFIG_MULTIFACE_III_TTY

@@ -30,7 +30,7 @@ static char rcsid[] =
  * remove unused diagnostic statements; minor 0 is first;
  *
  * Revision 1.36.3.6  1996/03/13 13:21:17  marcio
- * The kernel function vremap (available only in later 1.3.xx kernels)
+ * The kernel function ioremap (available only in later 1.3.xx kernels)
  * allows the access to memory addresses above the RAM. This revision
  * of the driver supports PCI boards below 1Mb (device id 0x100) and
  * above 1Mb (device id 0x101).
@@ -3083,7 +3083,7 @@ cy_detect_pci()
 		cy_pci_address &= 0xfffffff0;
 		if ((ulong)cy_pci_address >= 0x100000) { /* above 1M? */
 			cy_pci_address =
-			    (unsigned int) vremap(cy_pci_address,0x4000);
+			    (unsigned int) ioremap(cy_pci_address,0x4000);
 		}
 		cy_pci_io  &= 0xfffffffc;
 		cy_pci_nchan = 4 * cy_init_card((unsigned char *)

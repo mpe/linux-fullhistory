@@ -127,12 +127,14 @@ static int open_mouse(struct inode * inode, struct file * file)
 }
 
 
-static int write_mouse(struct inode * inode, struct file * file, const char * buffer, int count)
+static long write_mouse(struct inode * inode, struct file * file,
+	const char * buffer, unsigned long count)
 {
 	return -EINVAL;
 }
 
-static int read_mouse(struct inode * inode, struct file * file, char * buffer, int count)
+static long read_mouse(struct inode * inode, struct file * file,
+	char * buffer, unsigned long count)
 {
 	int i, dx, dy;
 

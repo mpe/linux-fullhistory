@@ -7,6 +7,10 @@
 ** 5/1/94 Roman Hodek:
 **   Added definitions for TT specific chips.
 **
+** 1996-09-13 lars brinkhoff <f93labr@dd.chalmers.se>:
+**   Finally added definitions for the matrix/codec and the DSP56001 host
+**   interface.
+**
 ** This file is subject to the terms and conditions of the GNU General Public
 ** License.  See the file COPYING in the main directory of this archive
 ** for more details.
@@ -48,7 +52,7 @@ static inline void dma_cache_maintenance( unsigned long paddr,
 
 {
 	if (writeflag) {
-		if (!is_medusa || m68k_is040or060 == 6)
+		if (!is_medusa || CPU_IS_060)
 			cache_push( paddr, len );
 	}
 	else {
@@ -273,8 +277,46 @@ struct TT_5380 {
 
 /* 
 ** Falcon DMA Sound Subsystem
-** not implemented yet
  */     
+
+#define MATRIX_BASE (0xffff8930)
+struct MATRIX
+{
+  u_short source;
+  u_short destination;
+  u_char external_frequency_divider;
+  u_char internal_frequency_divider;
+};
+#define matrix (*(volatile struct MATRIX *)MATRIX_BASE)
+
+#define CODEC_BASE (0xffff8936)
+struct CODEC
+{
+  u_char tracks;
+  u_char input_source;
+#define CODEC_SOURCE_MATRIX     1
+#define CODEC_SOURCE_ADC        2
+  u_char adc_source;
+#define ADC_SOURCE_RIGHT_PSG    1
+#define ADC_SOURCE_LEFT_PSG     2
+  u_char gain;
+#define CODEC_GAIN_RIGHT        0x0f
+#define CODEC_GAIN_LEFT         0xf0
+  u_char attenuation;
+#define CODEC_ATTENUATION_RIGHT 0x0f
+#define CODEC_ATTENUATION_LEFT  0xf0
+  u_char unused1;
+  u_char status;
+#define CODEC_OVERFLOW_RIGHT    1
+#define CODEC_OVERFLOW_LEFT     2
+  u_char unused2, unused3, unused4, unused5;
+  u_char gpio_directions;
+#define GPIO_IN                 0
+#define GPIO_OUT                1
+  u_char unused6;
+  u_char gpio_data;
+};
+#define codec (*(volatile struct CODEC *)CODEC_BASE)
 
 /*
 ** Falcon Blitter
@@ -321,13 +363,13 @@ struct SCC
  };
 # define scc ((*(volatile struct SCC*)SCC_BAS))
 
-/* The ESCC (Z85230) in an Atari ST. The channels are revered! */
+/* The ESCC (Z85230) in an Atari ST. The channels are reversed! */
 # define st_escc ((*(volatile struct SCC*)0xfffffa31))
 # define st_escc_dsr ((*(volatile char *)0xfffffa39))
 
 /* TT SCC DMA Controller (same chip as SCSI DMA) */
 
-#define	TT_SCC_DMA_BAS	(0xffff8c01)
+#define	TT_SCC_DMA_BAS	(0xffff8c00)
 #define	tt_scc_dma	((*(volatile struct TT_DMA *)TT_SCC_DMA_BAS))
 
 /*
@@ -344,8 +386,41 @@ struct VIDEL_PALETTE
 
 /*
 ** Falcon DSP Host Interface
-** not implemented yet
  */
+
+#define DSP56K_HOST_INTERFACE_BASE (0xffffa200)
+struct DSP56K_HOST_INTERFACE {
+  u_char icr;
+#define DSP56K_ICR_RREQ	0x01
+#define DSP56K_ICR_TREQ	0x02
+#define DSP56K_ICR_HF0	0x08
+#define DSP56K_ICR_HF1	0x10
+#define DSP56K_ICR_HM0	0x20
+#define DSP56K_ICR_HM1	0x40
+#define DSP56K_ICR_INIT	0x80
+  
+  u_char cvr;
+#define DSP56K_CVR_HV_MASK 0x1f
+#define DSP56K_CVR_HC	0x80
+
+  u_char isr;
+#define DSP56K_ISR_RXDF	0x01
+#define DSP56K_ISR_TXDE	0x02
+#define DSP56K_ISR_TRDY	0x04
+#define DSP56K_ISR_HF2	0x08
+#define DSP56K_ISR_HF3	0x10
+#define DSP56K_ISR_DMA	0x40
+#define DSP56K_ISR_HREQ	0x80
+  
+  u_char ivr;
+
+  union {
+    u_char b[4];
+    u_short w[2];
+    u_long l;
+  } data;
+};
+#define dsp56k_host_interface ((*(volatile struct DSP56K_HOST_INTERFACE *)DSP56K_HOST_INTERFACE_BASE))
  
 /*
 ** MFP 68901

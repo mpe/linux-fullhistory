@@ -27,13 +27,10 @@ unsigned int csum_partial_copy( const char *src, char *dst, int len, int sum);
 
 
 /*
- * the same as csum_partial_copy, but copies from user space.
- *
- * here even more important to align src and dst on a 32-bit (or even
- * better 64-bit) boundary
+ * the same as csum_partial, but copies from user space (but on the x86
+ * we have just one address space, so this is identical to the above)
  */
-
-unsigned int csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum);
+#define csum_partial_copy_fromuser csum_partial_copy
 
 /*
  *	This is a version of ip_compute_csum() optimized for IP headers,

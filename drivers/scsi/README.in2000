@@ -1,4 +1,14 @@
 
+UPDATE NEWS: version 1.29 - 24 Sep 96
+
+   The memory-mapped hardware on the card is now accessed via
+   the 'readb()' and 'readl()' macros - required by the new
+   memory management scheme in the 2.1.x kernel series.
+   As suggested by Andries Brouwer, 'bios_param()' no longer
+   forces an artificial 1023 track limit on drives. Also
+   removed some kludge-code left over from struggles with
+   older (buggy) compilers.
+
 UPDATE NEWS: version 1.28 - 07 May 96
 
    Tightened up the "interrupts enabled/disabled" discipline
@@ -130,7 +140,7 @@ line with the 'period' keyword.
       on  = enabled
    In later ROMs (starting with 01.3 in April 1994) sw1-8 controls
    the "greater than 2 disk drive" feature that first appeared in
-   MSDOS 5.0 (ignored by linux):
+   MSDOS 5.0 (ignored by Linux):
       off = 2 drives maximum
       on  = 7 drives maximum
 

@@ -21,6 +21,8 @@
 #define OF(args)  args
 #define STATIC static
 
+#undef memset
+#undef memcpy
 #define memzero(s, n)     memset ((s), 0, (n))
 
 typedef unsigned char  uch;

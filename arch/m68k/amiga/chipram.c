@@ -8,7 +8,7 @@
 
 #include <linux/types.h>
 #include <linux/kernel.h>
-#include <asm/bootinfo.h>
+#include <asm/setup.h>
 #include <asm/amigahw.h>
 
 struct chip_desc {
@@ -22,6 +22,17 @@ struct chip_desc {
 #define DP(ptr) ((struct chip_desc *)(ptr))
 
 static unsigned long chipsize;
+static unsigned long chipavail; /*MILAN*/
+
+/*MILAN*/
+unsigned long amiga_chip_avail( void )
+{
+#ifdef DEBUG
+   printk("chip_avail : %ld bytes\n",chipavail);
+#endif
+   return chipavail;
+}
+
 
 void amiga_chip_init (void)
 {
@@ -46,6 +57,7 @@ void amiga_chip_init (void)
   
   dp->alloced = 0;
   dp->length = chipsize - 2*sizeof(*dp);
+  chipavail = dp->length;  /*MILAN*/
 
 #ifdef DEBUG
   printk ("chipram end boundary is %p, length is %d\n", dp,
@@ -63,7 +75,7 @@ void *amiga_chip_alloc (long size)
 	size = (size + 7) & ~7;
 
 #ifdef DEBUG
-	printk ("chip_alloc: allocate %ld bytes\n", size);
+   printk("chip_alloc: allocate %ld bytes\n", size);
 #endif
 
 	/*
@@ -121,7 +133,9 @@ void *amiga_chip_alloc (long size)
 	if ((unsigned long)ptr & 7)
 		panic("chip_alloc: alignment violation\n");
 
-	return ptr;
+    chipavail -= size + (2*sizeof(*dp)); /*MILAN*/
+
+    return ptr;
 }
 
 void amiga_chip_free (void *ptr)
@@ -129,6 +143,10 @@ void amiga_chip_free (void *ptr)
 	struct chip_desc *sdp = DP(ptr) - 1, *dp2;
 	struct chip_desc *edp = DP((unsigned long)ptr + sdp->length);
 
+    chipavail += sdp->length + (2* sizeof(sdp)); /*MILAN*/
+#ifdef DEBUG
+   printk("chip_free: free %ld bytes at %p\n",sdp->length,ptr);
+#endif
 	/* deallocate the chunk */
 	sdp->alloced = edp->alloced = 0;
 

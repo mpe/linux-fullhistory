@@ -338,8 +338,8 @@ int read_exec(struct inode *inode, unsigned long offset,
 			goto end_readexec;
 	if (!file.f_op || !file.f_op->read)
 		goto close_readexec;
-	if (file.f_op->lseek) {
-		if (file.f_op->lseek(inode,&file,offset,0) != offset)
+	if (file.f_op->llseek) {
+		if (file.f_op->llseek(inode,&file,offset,0) != offset)
  			goto close_readexec;
 	} else
 		file.f_pos = offset;

@@ -63,8 +63,8 @@ smb_make_open(struct inode *i, int right)
         return -EACCES;
 }
 
-static int 
-smb_file_read(struct inode *inode, struct file *file, char *buf, int count)
+static long
+smb_file_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
 {
 	int result, bufsize, to_read, already_read;
 	off_t pos;
@@ -140,9 +140,9 @@ smb_file_read(struct inode *inode, struct file *file, char *buf, int count)
         return already_read;
 }
 
-static int 
+static long
 smb_file_write(struct inode *inode, struct file *file, const char *buf,
-	       int count)
+	       unsigned long count)
 {
 	int result, bufsize, to_write, already_written;
         off_t pos;
@@ -161,7 +161,7 @@ smb_file_write(struct inode *inode, struct file *file, const char *buf,
 
         DPRINTK("smb_file_write: enter %s\n", SMB_FINFO(inode)->path);
 
-	if (count <= 0)
+	if (!count)
 		return 0;
 
         if ((errno = smb_make_open(inode, O_RDWR)) != 0)

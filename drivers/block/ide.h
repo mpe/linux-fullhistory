@@ -25,6 +25,9 @@
 #undef REALLY_FAST_IO			/* define if ide ports are perfect */
 #define INITIAL_MULT_COUNT	0	/* off=0; on=2,4,8,16,32, etc.. */
 
+#ifndef SUPPORT_SLOW_DATA_PORTS		/* 1 to support slow data ports */
+#define SUPPORT_SLOW_DATA_PORTS	1	/* 0 to reduce kernel size */
+#endif
 #ifndef SUPPORT_VLB_SYNC		/* 1 to support weird 32-bit chips */
 #define SUPPORT_VLB_SYNC	1	/* 0 to reduce kernel size */
 #endif
@@ -327,6 +330,7 @@ typedef struct ide_drive_s {
 	unsigned no_unmask	: 1;	/* disallow setting unmask bit */
 	unsigned no_io_32bit	: 1;	/* disallow enabling 32bit I/O */
 	unsigned nobios		: 1;	/* flag: do not probe bios for drive */
+	unsigned slow		: 1;	/* flag: slow data port */
 	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
 #if FAKE_FDISK_FOR_EZDRIVE
 	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */

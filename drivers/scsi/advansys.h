@@ -1,4 +1,4 @@
-/* $Id: advansys.h,v 1.11 1996/08/12 17:20:44 bobf Exp bobf $ */
+/* $Id: advansys.h,v 1.12 1996/09/23 18:12:02 bobf Exp bobf $ */
 /*
  * advansys.h - Linux Host Driver for AdvanSys SCSI Adapters
  *
@@ -85,10 +85,12 @@ void advansys_setup(char *, int *);
 	1,						/* unsigned unchecked_isa_dma:1 */ \
 	/* \
 	 * All adapters controlled by this driver are capable of large \
-	 * scatter-gather lists. This apparently obviates any performance
-	 * gain provided by setting 'use_clustering'. \
+	 * scatter-gather lists. According to the mid-level SCSI documentation \
+	 * this obviates any performance gain provided by setting \
+	 * 'use_clustering'. But empirically while CPU utilization is increased \
+	 * by enabling clustering, I/O throughput increases as well. \
 	 */ \
-	DISABLE_CLUSTERING,		/* unsigned use_clustering:1 */ \
+	ENABLE_CLUSTERING,		/* unsigned use_clustering:1 */ \
 }
 #else /* version >= v1.3.0 */
 #define ADVANSYS { \
@@ -126,10 +128,12 @@ void advansys_setup(char *, int *);
 	1,						/* unsigned unchecked_isa_dma:1 */ \
 	/* \
 	 * All adapters controlled by this driver are capable of large \
-	 * scatter-gather lists. This apparently obviates any performance
-	 * gain provided by setting 'use_clustering'. \
+	 * scatter-gather lists. According to the mid-level SCSI documentation \
+	 * this obviates any performance gain provided by setting \
+	 * 'use_clustering'. But empirically while CPU utilization is increased \
+	 * by enabling clustering, I/O throughput increases as well. \
 	 */ \
-	DISABLE_CLUSTERING,		/* unsigned use_clustering:1 */ \
+	ENABLE_CLUSTERING,		/* unsigned use_clustering:1 */ \
 }
 #endif /* version >= v1.3.0 */
 #endif /* _ADVANSYS_H */
