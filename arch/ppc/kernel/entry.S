@@ -45,40 +45,37 @@
 #endif
 
 #ifdef CONFIG_BOOKE
-#define	COR	r8	/* Critical Offset Register (COR) */
-#define BOOKE_LOAD_COR	lis COR,crit_save@ha
-#define BOOKE_REST_COR	mfspr COR,SPRN_SPRG2
-#define BOOKE_SAVE_COR	mtspr SPRN_SPRG2,COR
-#else
-#define COR	0
-#define BOOKE_LOAD_COR
-#define BOOKE_REST_COR
-#define BOOKE_SAVE_COR
-#endif
-
-#ifdef CONFIG_BOOKE
+#include "head_booke.h"
 	.globl	mcheck_transfer_to_handler
 mcheck_transfer_to_handler:
-	mtspr	SPRN_SPRG6W,r8
-	lis	r8,mcheck_save@ha
-	lwz	r0,mcheck_r10@l(r8)
+	mtspr	MCHECK_SPRG,r8
+	BOOKE_LOAD_MCHECK_STACK
+	lwz	r0,GPR10-INT_FRAME_SIZE(r8)
 	stw	r0,GPR10(r11)
-	lwz	r0,mcheck_r11@l(r8)
+	lwz	r0,GPR11-INT_FRAME_SIZE(r8)
 	stw	r0,GPR11(r11)
-	mfspr	r8,SPRN_SPRG6R
+	mfspr	r8,MCHECK_SPRG
 	b	transfer_to_handler_full
-#endif
 
-#if defined(CONFIG_40x) || defined(CONFIG_BOOKE)
 	.globl	crit_transfer_to_handler
 crit_transfer_to_handler:
-	BOOKE_SAVE_COR
-	BOOKE_LOAD_COR
-	lwz	r0,crit_r10@l(COR)
+	mtspr	CRIT_SPRG,r8
+	BOOKE_LOAD_CRIT_STACK
+	lwz	r0,GPR10-INT_FRAME_SIZE(r8)
 	stw	r0,GPR10(r11)
-	lwz	r0,crit_r11@l(COR)
+	lwz	r0,GPR11-INT_FRAME_SIZE(r8)
 	stw	r0,GPR11(r11)
-	BOOKE_REST_COR
+	mfspr	r8,CRIT_SPRG
+	/* fall through */
+#endif
+
+#ifdef CONFIG_40x
+	.globl	crit_transfer_to_handler
+crit_transfer_to_handler:
+	lwz	r0,crit_r10@l(0)
+	stw	r0,GPR10(r11)
+	lwz	r0,crit_r11@l(0)
+	stw	r0,GPR11(r11)
 	/* fall through */
 #endif
 
@@ -724,8 +721,6 @@ exc_exit_restart_end:
  * We have to restore various SPRs that may have been in use at the
  * time of the critical interrupt.
  *
- * Note that SPRG6 is used for machine check on CONFIG_BOOKE parts and
- * thus not saved in the critical handler
  */
 	.globl	ret_from_crit_exc
 ret_from_crit_exc:
@@ -770,32 +765,9 @@ ret_from_crit_exc:
 	mtspr	SPRN_CSRR1,r12
 	lwz	r9,GPR9(r1)
 	lwz	r12,GPR12(r1)
-	BOOKE_SAVE_COR
-	BOOKE_LOAD_COR
-	lwz	r10,crit_sprg0@l(COR)
-	mtspr	SPRN_SPRG0,r10
-	lwz	r10,crit_sprg1@l(COR)
-	mtspr	SPRN_SPRG1,r10
-	lwz	r10,crit_sprg4@l(COR)
-	mtspr	SPRN_SPRG4,r10
-	lwz	r10,crit_sprg5@l(COR)
-	mtspr	SPRN_SPRG5,r10
-#ifdef CONFIG_40x
-	lwz	r10,crit_sprg6@l(COR)
-	mtspr	SPRN_SPRG6,r10
-#endif
-	lwz	r10,crit_sprg7@l(COR)
-	mtspr	SPRN_SPRG7,r10
-	lwz	r10,crit_srr0@l(COR)
-	mtspr	SPRN_SRR0,r10
-	lwz	r10,crit_srr1@l(COR)
-	mtspr	SPRN_SRR1,r10
-	lwz	r10,crit_pid@l(COR)
-	mtspr	SPRN_PID,r10
 	lwz	r10,GPR10(r1)
 	lwz	r11,GPR11(r1)
 	lwz	r1,GPR1(r1)
-	BOOKE_REST_COR
 	PPC405_ERR77_SYNC
 	rfci
 	b	.		/* prevent prefetch past rfci */
@@ -839,32 +811,9 @@ ret_from_mcheck_exc:
 	mtspr	SPRN_MCSRR1,r12
 	lwz	r9,GPR9(r1)
 	lwz	r12,GPR12(r1)
-	mtspr	SPRN_SPRG6W,r8
-	lis	r8,mcheck_save@ha
-	lwz	r10,mcheck_sprg0@l(r8)
-	mtspr	SPRN_SPRG0,r10
-	lwz	r10,mcheck_sprg1@l(r8)
-	mtspr	SPRN_SPRG1,r10
-	lwz	r10,mcheck_sprg4@l(r8)
-	mtspr	SPRN_SPRG4,r10
-	lwz	r10,mcheck_sprg5@l(r8)
-	mtspr	SPRN_SPRG5,r10
-	lwz	r10,mcheck_sprg7@l(r8)
-	mtspr	SPRN_SPRG7,r10
-	lwz	r10,mcheck_srr0@l(r8)
-	mtspr	SPRN_SRR0,r10
-	lwz	r10,mcheck_srr1@l(r8)
-	mtspr	SPRN_SRR1,r10
-	lwz	r10,mcheck_csrr0@l(r8)
-	mtspr	SPRN_CSRR0,r10
-	lwz	r10,mcheck_csrr1@l(r8)
-	mtspr	SPRN_CSRR1,r10
-	lwz	r10,mcheck_pid@l(r8)
-	mtspr	SPRN_PID,r10
 	lwz	r10,GPR10(r1)
 	lwz	r11,GPR11(r1)
 	lwz	r1,GPR1(r1)
-	mfspr	r8,SPRN_SPRG6R
 	RFMCI
 #endif /* CONFIG_BOOKE */
 
