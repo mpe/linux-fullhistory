@@ -365,7 +365,7 @@ end_readexec:
 
 static int exec_mmap(void)
 {
-	struct mm_struct * mm, * old_mm, * active_mm;
+	struct mm_struct * mm, * old_mm;
 
 	old_mm = current->mm;
 	if (old_mm && atomic_read(&old_mm->mm_users) == 1) {

@@ -220,7 +220,7 @@ int parport_negotiate (struct parport *port, int mode)
 	printk (KERN_ERR "parport: IEEE1284 not supported in this kernel\n");
 	return -1;
 #else
-	int m = mode;
+	int m = mode & ~IEEE1284_ADDR;
 	unsigned char xflag;
 
 	port = port->physport;
@@ -228,6 +228,12 @@ int parport_negotiate (struct parport *port, int mode)
 	/* Is there anything to do? */
 	if (port->ieee1284.mode == mode)
 		return 0;
+
+	/* Is the difference just an address-or-not bit? */
+	if ((port->ieee1284.mode & ~IEEE1284_ADDR) == (mode & ~IEEE1284_ADDR)){
+		port->ieee1284.mode = mode;
+		return 0;
+	}
 
 	/* Go to compability forward idle mode */
 	if (port->ieee1284.mode != IEEE1284_MODE_COMPAT)
@@ -409,10 +415,11 @@ ssize_t parport_write (struct parport *port, const void *buffer, size_t len)
 #else
 	ssize_t retval;
 	int mode = port->ieee1284.mode;
+	int addr = mode & IEEE1284_ADDR;
 	size_t (*fn) (struct parport *, const void *, size_t, int);
 
-	/* Ignore the device-ID-request bit. */
-	mode &= ~IEEE1284_DEVICEID;
+	/* Ignore the device-ID-request bit and the address bit. */
+	mode &= ~(IEEE1284_DEVICEID | IEEE1284_ADDR);
 
 	/* Use the mode we're in. */
 	switch (mode) {
@@ -426,13 +433,19 @@ ssize_t parport_write (struct parport *port, const void *buffer, size_t len)
 
 	case IEEE1284_MODE_EPP:
 		DPRINTK (KERN_DEBUG "%s: Using EPP mode\n", port->name);
-		fn = port->ops->epp_write_data;
+		if (addr)
+			fn = port->ops->epp_write_addr;
+		else
+			fn = port->ops->epp_write_data;
 		break;
 
 	case IEEE1284_MODE_ECP:
 	case IEEE1284_MODE_ECPRLE:
 		DPRINTK (KERN_DEBUG "%s: Using ECP mode\n", port->name);
-		fn = port->ops->ecp_write_data;
+		if (addr)
+			fn = port->ops->ecp_write_addr;
+		else
+			fn = port->ops->ecp_write_data;
 		break;
 
 	case IEEE1284_MODE_ECPSWE:
@@ -440,7 +453,10 @@ ssize_t parport_write (struct parport *port, const void *buffer, size_t len)
 			 port->name);
 		/* The caller has specified that it must be emulated,
 		 * even if we have ECP hardware! */
-		fn = parport_ieee1284_ecp_write_data;
+		if (addr)
+			fn = parport_ieee1284_ecp_write_addr;
+		else
+			fn = parport_ieee1284_ecp_write_data;
 		break;
 
 	default:
@@ -464,10 +480,11 @@ ssize_t parport_read (struct parport *port, void *buffer, size_t len)
 	return -ENODEV;
 #else
 	int mode = port->physport->ieee1284.mode;
+	int addr = mode & IEEE1284_ADDR;
 	size_t (*fn) (struct parport *, void *, size_t, int);
 
-	/* Ignore the device-ID-request bit. */
-	mode &= ~IEEE1284_DEVICEID;
+	/* Ignore the device-ID-request bit and the address bit. */
+	mode &= ~(IEEE1284_DEVICEID | IEEE1284_ADDR);
 
 	/* Use the mode we're in. */
 	switch (mode) {
@@ -486,7 +503,10 @@ ssize_t parport_read (struct parport *port, void *buffer, size_t len)
 
 	case IEEE1284_MODE_EPP:
 		DPRINTK (KERN_DEBUG "%s: Using EPP mode\n", port->name);
-		fn = port->ops->epp_read_data;
+		if (addr)
+			fn = port->ops->epp_read_addr;
+		else
+			fn = port->ops->epp_read_data;
 		break;
 
 	case IEEE1284_MODE_ECP:

@@ -70,6 +70,11 @@ typedef enum {
 #define IEEE1284_MODE_EPPSWE            (1<<12) /* Software-emulated */
 #define IEEE1284_DEVICEID               (1<<2)  /* This is a flag */
 
+/* For the benefit of parport_read/write, you can use these with
+ * parport_negotiate to use address operations.  They have no effect
+ * other than to make parport_read/write use address transfers. */
+#define IEEE1284_ADDR			(1<<13)	/* This is a flag */
+
 /* The rest is for the kernel only */
 #ifdef __KERNEL__
 
