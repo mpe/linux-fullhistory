@@ -3,7 +3,7 @@ Mon Dec 15 1997	  Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
 
 Fri Jan 23 1998   Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
 	*    inode.c: corrected 1 track offset setting (in sb->sv_block_base).
-		      Originally it was overriden (by setting to zero)
+		      Originally it was overridden (by setting to zero)
 		      in detected_[xenix,sysv4,sysv2,coherent]. Thanks
 		      to Andrzej Krzysztofowicz <ankry@mif.pg.gda.pl>
 		      for identifying the problem.

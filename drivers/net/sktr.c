@@ -42,7 +42,6 @@
 
 static const char *version = "sktr.c: v1.01 08/29/97 by Christoph Goos\n";
 
-#include <linux/config.h>
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>

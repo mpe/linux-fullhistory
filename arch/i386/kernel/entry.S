@@ -547,7 +547,8 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_capget)
 	.long SYMBOL_NAME(sys_capset)           /* 185 */
 	.long SYMBOL_NAME(sys_sigaltstack)
+	.long SYMBOL_NAME(sys_sendfile)
 	
-	.rept NR_syscalls-186
+	.rept NR_syscalls-187
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

@@ -11,6 +11,8 @@
 #ifndef _LINUX_CONSOLE_COMPAT_H_
 #define _LINUX_CONSOLE_COMPAT_H_
 
+#include <linux/config.h>
+
 #undef video_num_columns
 #undef video_num_lines
 #undef video_size_row

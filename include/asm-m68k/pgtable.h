@@ -1,6 +1,7 @@
 #ifndef _M68K_PGTABLE_H
 #define _M68K_PGTABLE_H
 
+#include <linux/config.h>
 #include <asm/setup.h>
 
 #ifndef __ASSEMBLY__

@@ -52,7 +52,6 @@ int unicount[MAX_FONTLEN];
 void addpair(int fp, int un)
 {
   int i;
-  unicode hu;
 
   if ( un <= 0xfffe )
     {

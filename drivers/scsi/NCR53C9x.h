@@ -11,6 +11,8 @@
 #ifndef NCR53C9X_H
 #define NCR53C9X_H
 
+#include <linux/config.h>
+
 /* Macros for debugging messages */
 
 /* #define DEBUG_ESP */

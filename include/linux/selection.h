@@ -4,8 +4,6 @@
  * Interface between console.c, tty_io.c, vt.c, vc_screen.c and selection.c
  */
 
-#include <linux/config.h>
-
 extern int sel_cons;
 
 extern void clear_selection(void);
@@ -59,8 +57,6 @@ extern void putconsxy(int currcons, char *p);
 
 
 /* how to access screen memory */
-
-#include <linux/config.h>
 
 static inline void scr_writew(unsigned short val, unsigned short *addr)
 {

@@ -23,8 +23,8 @@
 #ifdef CONFIG_PROC_FS
 #include <linux/proc_fs.h>
 #endif
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 #ifdef __mc68000__
@@ -262,7 +262,7 @@ static void set_con2fb_map(int unit, int newidx)
     }
 }
 
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 static void try_to_load(int fb)
 {
 	char modname[16];
@@ -337,7 +337,7 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		    return -EINVAL;
 		if (con2fb.framebuffer < 0 || con2fb.framebuffer >= FB_MAX)
 		    return -EINVAL;
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 		if (!registered_fb[con2fb.framebuffer])
 		    try_to_load(con2fb.framebuffer);
 #endif
@@ -419,7 +419,7 @@ fb_open(struct inode *inode, struct file *file)
 	int fbidx = GET_FB_IDX(inode->i_rdev);
 	struct fb_info *info;
 
-#ifdef CONFIG_KERNELD
+#ifdef CONFIG_KMOD
 	if (!(info = registered_fb[fbidx]))
 		try_to_load(fbidx);
 #endif

@@ -466,7 +466,7 @@ int get_cpuinfo(char * buffer)
 			continue;
 #endif
 		p += sprintf(p, "processor\t: %d\n"
-			       "CPU family\t: %c\n"
+			       "cpu family\t: %c\n"
 			       "model\t\t: %s\n"
 			       "vendor_id\t: %s\n",
 			       n,
@@ -512,9 +512,9 @@ int get_cpuinfo(char * buffer)
 			        "hlt_bug\t\t: %s\n"
 			        "sep_bug\t\t: %s\n"
 			        "f00f_bug\t: %s\n"
-			        "FPU\t\t: %s\n"
-			        "FPU_exception\t: %s\n"
-			        "CPUID level\t: %d\n"
+			        "fpu\t\t: %s\n"
+			        "fpu_exception\t: %s\n"
+			        "cpuid level\t: %d\n"
 			        "wp\t\t: %s\n"
 			        "flags\t\t:",
 			     c->fdiv_bug ? "yes" : "no",

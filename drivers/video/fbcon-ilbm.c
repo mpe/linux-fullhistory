@@ -201,7 +201,7 @@ void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p, const char *s,
 #if defined(__BIG_ENDIAN)
 		d = *cdat1++<<24 | *cdat2++<<16 | *cdat3++<<8 | *cdat4++;
 #elif defined(__LITTLE_ENDIAN)
-		d = *cdat1++ | *cdat2++<<8 | *cdat3++<<16 | *cdat4++<<32);
+		d = *cdat1++ | *cdat2++<<8 | *cdat3++<<16 | *cdat4++<<24;
 #else
 #error FIXME: No endianness??
 #endif

@@ -232,7 +232,7 @@ static int get_kstat(char * buffer)
 
 #ifdef __SMP__
 	len = sprintf(buffer,
-		"CPU  %u %u %u %lu\n",
+		"cpu  %u %u %u %lu\n",
 		kstat.cpu_user,
 		kstat.cpu_nice,
 		kstat.cpu_system,

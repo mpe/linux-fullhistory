@@ -36,7 +36,7 @@
 static ssize_t sysv_file_write(struct file *, const char *, size_t, loff_t *);
 
 /*
- * We have mostly NULL's here: the current defaults are ok for
+ * We have mostly NULLs here: the current defaults are OK for
  * the coh filesystem.
  */
 static struct file_operations sysv_file_operations = {
@@ -220,7 +220,7 @@ static ssize_t sysv_file_write(struct file * filp, const char * buf,
 		return -EINVAL;
 	}
 /*
- * ok, append may not work when many processes are writing at the same time
+ * OK, append may not work when many processes are writing at the same time
  * but so what. That way leads to madness anyway.
  * But we need to protect against simultaneous truncate as we may end up
  * writing our data into blocks that have meanwhile been incorporated into

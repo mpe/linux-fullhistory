@@ -8,7 +8,6 @@
  *  moment everything difficult is handled by the generic code.
  */
 
-#include <linux/config.h>
 #include <asm/ptrace.h>
 #include <linux/types.h>
 #include <linux/init.h>

@@ -192,6 +192,7 @@
 #define __NR_capget		184
 #define __NR_capset		185
 #define __NR_sigaltstack	186
+#define __NR_sendfile		187
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-i386/errno.h> */
 

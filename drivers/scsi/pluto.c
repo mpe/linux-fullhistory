@@ -14,8 +14,8 @@
 #include <linux/stat.h>
 #include <linux/init.h>
 #include <linux/config.h>
-#ifdef CONFIG_KERNELD
-#include <linux/kerneld.h>
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
 #endif
 
 #include <asm/irq.h>
@@ -104,7 +104,7 @@ __initfunc(int pluto_detect(Scsi_Host_Template *tpnt))
 		fcscount++;
 	PLND(("%d channels online\n", fcscount))
 	if (!fcscount) {
-#if defined(MODULE) && defined(CONFIG_FC4_SOC_MODULE) && defined(CONFIG_KERNELD)
+#if defined(MODULE) && defined(CONFIG_FC4_SOC_MODULE) && defined(CONFIG_KMOD)
 		request_module("soc");
 		
 		for_each_online_fc_channel(fc)

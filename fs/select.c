@@ -297,21 +297,25 @@ static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait)
 
 		current->state = TASK_INTERRUPTIBLE;
 		for (fdpnt = fds, j = 0; j < nfds; j++, fdpnt++) {
+			int fd;
 			unsigned int mask;
-			struct file * file;
 
-			mask = POLLNVAL;
-			/* poll_wait increments f_count if needed */
-			file = fcheck(fdpnt->fd);
-			if (file != NULL) {
-				mask = DEFAULT_POLLMASK;
-				if (file->f_op && file->f_op->poll)
-					mask = file->f_op->poll(file, wait);
-				mask &= fdpnt->events | POLLERR | POLLHUP;
-			}
-			if (mask) {
-				wait = NULL;
-				count++;
+			mask = 0;
+			fd = fdpnt->fd;
+			if (fd >= 0) {
+				/* poll_wait increments f_count if needed */
+				struct file * file = fcheck(fd);
+				mask = POLLNVAL;
+				if (file != NULL) {
+					mask = DEFAULT_POLLMASK;
+					if (file->f_op && file->f_op->poll)
+						mask = file->f_op->poll(file, wait);
+					mask &= fdpnt->events | POLLERR | POLLHUP;
+				}
+				if (mask) {
+					wait = NULL;
+					count++;
+				}
 			}
 			fdpnt->revents = mask;
 		}

@@ -12,9 +12,7 @@
  * most of a2025 and sunlance with the aim of merging them, so the 
  * common code was pretty obvious.
  */
-#include <linux/config.h>
 #include <linux/module.h>
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>

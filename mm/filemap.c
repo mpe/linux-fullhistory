@@ -567,6 +567,23 @@ static inline unsigned long generic_file_readahead(int reada_ok,
 	return page_cache;
 }
 
+/*
+ * "descriptor" for what we're up to with a read.
+ * This allows us to use the same read code yet
+ * have multiple different users of the data that
+ * we read from a file.
+ *
+ * The simplest case just copies the data to user
+ * mode.
+ */
+typedef struct {
+	size_t written;
+	size_t count;
+	char * buf;
+	int error;
+} read_descriptor_t;
+
+typedef int (*read_actor_t)(read_descriptor_t *, const char *, unsigned long);
 
 /*
  * This is a generic file read routine, and uses the
@@ -576,23 +593,14 @@ static inline unsigned long generic_file_readahead(int reada_ok,
  * This is really ugly. But the goto's actually try to clarify some
  * of the logic when it comes to error handling etc.
  */
-
-ssize_t generic_file_read(struct file * filp, char * buf,
-			  size_t count, loff_t *ppos)
+static void do_generic_file_read(struct file * filp, loff_t *ppos, read_descriptor_t * desc, read_actor_t actor)
 {
 	struct dentry *dentry = filp->f_dentry;
 	struct inode *inode = dentry->d_inode;
-	ssize_t error, read;
 	size_t pos, pgpos, page_cache;
 	int reada_ok;
 	int max_readahead = get_max_readahead(inode);
 
-	if (!access_ok(VERIFY_WRITE, buf, count))
-		return -EFAULT;
-	if (!count)
-		return 0;
-	error = 0;
-	read = 0;
 	page_cache = 0;
 
 	pos = *ppos;
@@ -620,12 +628,12 @@ ssize_t generic_file_read(struct file * filp, char * buf,
  * Then, at least MIN_READAHEAD if read ahead is ok,
  * and at most MAX_READAHEAD in all cases.
  */
-	if (pos + count <= (PAGE_SIZE >> 1)) {
+	if (pos + desc->count <= (PAGE_SIZE >> 1)) {
 		filp->f_ramax = 0;
 	} else {
 		unsigned long needed;
 
-		needed = ((pos + count) & PAGE_MASK) - pgpos;
+		needed = ((pos + desc->count) & PAGE_MASK) - pgpos;
 
 		if (filp->f_ramax < needed)
 			filp->f_ramax = needed;
@@ -678,20 +686,20 @@ success:
 
 		offset = pos & ~PAGE_MASK;
 		nr = PAGE_SIZE - offset;
-		if (nr > count)
-			nr = count;
 		if (nr > inode->i_size - pos)
 			nr = inode->i_size - pos;
-		nr -= copy_to_user(buf, (void *) (page_address(page) + offset), nr);
-		release_page(page);
-		error = -EFAULT;
-		if (!nr)
-			break;
-		buf += nr;
+
+		/*
+		 * The actor routine returns how many bytes were actually used..
+		 * NOTE! This may not be the same as how much of a user buffer
+		 * we filled up (we may be padding etc), so we can only update
+		 * "pos" here (the actor routine has to update the user buffer
+		 * pointers and the remaining count).
+		 */
+		nr = actor(desc, (const char *) (page_address(page) + offset), nr);
 		pos += nr;
-		read += nr;
-		count -= nr;
-		if (count)
+		release_page(page);
+		if (nr && desc->count)
 			continue;
 		break;
 	}
@@ -709,7 +717,7 @@ no_cached_page:
 			 */
 			if (page_cache)
 				continue;
-			error = -ENOMEM;
+			desc->error = -ENOMEM;
 			break;
 		}
 
@@ -738,11 +746,14 @@ no_cached_page:
 		if (reada_ok && filp->f_ramax > MIN_READAHEAD)
 			filp->f_ramax = MIN_READAHEAD;
 
-		error = inode->i_op->readpage(filp, page);
-		if (!error)
-			goto found_page;
-		release_page(page);
-		break;
+		{
+			int error = inode->i_op->readpage(filp, page);
+			if (!error)
+				goto found_page;
+			desc->error = error;
+			release_page(page);
+			break;
+		}
 
 page_read_error:
 		/*
@@ -750,15 +761,18 @@ page_read_error:
 		 * Try to re-read it _once_. We do this synchronously,
 		 * because this happens only if there were errors.
 		 */
-		error = inode->i_op->readpage(filp, page);
-		if (!error) {
-			wait_on_page(page);
-			if (PageUptodate(page) && !PageError(page))
-				goto success;
-			error = -EIO; /* Some unspecified error occurred.. */
+		{
+			int error = inode->i_op->readpage(filp, page);
+			if (!error) {
+				wait_on_page(page);
+				if (PageUptodate(page) && !PageError(page))
+					goto success;
+				error = -EIO; /* Some unspecified error occurred.. */
+			}
+			desc->error = error;
+			release_page(page);
+			break;
 		}
-		release_page(page);
-		break;
 	}
 
 	*ppos = pos;
@@ -766,9 +780,146 @@ page_read_error:
 	if (page_cache)
 		free_page(page_cache);
 	UPDATE_ATIME(inode);
-	if (!read)
-		read = error;
-	return read;
+}
+
+static int file_read_actor(read_descriptor_t * desc, const char *area, unsigned long size)
+{
+	unsigned long left;
+	unsigned long count = desc->count;
+
+	if (size > count)
+		size = count;
+	left = __copy_to_user(desc->buf, area, size);
+	if (left) {
+		size -= left;
+		desc->error = -EFAULT;
+	}
+	desc->count = count - size;
+	desc->written += size;
+	desc->buf += size;
+	return size;
+}
+
+/*
+ * This is the "read()" routine for all filesystems
+ * that can use the page cache directly.
+ */
+ssize_t generic_file_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
+{
+	ssize_t retval;
+
+	retval = -EFAULT;
+	if (access_ok(VERIFY_WRITE, buf, count)) {
+		retval = 0;
+		if (count) {
+			read_descriptor_t desc;
+
+			desc.written = 0;
+			desc.count = count;
+			desc.buf = buf;
+			desc.error = 0;
+			do_generic_file_read(filp, ppos, &desc, file_read_actor);
+
+			retval = desc.written;
+			if (!retval)
+				retval = desc.error;
+		}
+	}
+	return retval;
+}
+
+static int file_send_actor(read_descriptor_t * desc, const char *area, unsigned long size)
+{
+	ssize_t written;
+	unsigned long count = desc->count;
+	struct file *file = (struct file *) desc->buf;
+	struct inode *inode = file->f_dentry->d_inode;
+
+	if (size > count)
+		size = count;
+	down(&inode->i_sem);
+	set_fs(KERNEL_DS);
+	written = file->f_op->write(file, area, size, &file->f_pos);
+	set_fs(USER_DS);
+	up(&inode->i_sem);
+	if (written < 0) {
+		desc->error = written;
+		written = 0;
+	}
+	desc->count = count - written;
+	desc->written += written;
+	return written;
+}
+
+asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, size_t count)
+{
+	ssize_t retval;
+	struct file * in_file, * out_file;
+	struct inode * in_inode, * out_inode;
+
+	lock_kernel();
+
+	/*
+	 * Get input file, and verify that it is ok..
+	 */
+	retval = -EBADF;
+	in_file = fget(in_fd);
+	if (!in_file)
+		goto out;
+	if (!(in_file->f_mode & FMODE_READ))
+		goto fput_in;
+	retval = -EINVAL;
+	in_inode = in_file->f_dentry->d_inode;
+	if (!in_inode)
+		goto fput_in;
+	if (!in_inode->i_op || !in_inode->i_op->readpage)
+		goto fput_in;
+	retval = locks_verify_area(FLOCK_VERIFY_READ, in_inode, in_file, in_file->f_pos, count);
+	if (retval)
+		goto fput_in;
+
+	/*
+	 * Get output file, and verify that it is ok..
+	 */
+	retval = -EBADF;
+	out_file = fget(out_fd);
+	if (!out_file)
+		goto fput_in;
+	if (!(out_file->f_mode & FMODE_WRITE))
+		goto fput_out;
+	retval = -EINVAL;
+	if (!out_file->f_op || !out_file->f_op->write)
+		goto fput_out;
+	out_inode = out_file->f_dentry->d_inode;
+	if (!out_inode)
+		goto fput_out;
+	retval = locks_verify_area(FLOCK_VERIFY_WRITE, out_inode, out_file, out_file->f_pos, count);
+	if (retval)
+		goto fput_out;
+
+	retval = 0;
+	if (count) {
+		read_descriptor_t desc;
+
+		desc.written = 0;
+		desc.count = count;
+		desc.buf = (char *) out_file;
+		desc.error = 0;
+		do_generic_file_read(in_file, &in_file->f_pos, &desc, file_send_actor);
+
+		retval = desc.written;
+		if (!retval)
+			retval = desc.error;
+	}
+
+
+fput_out:
+	fput(out_file);
+fput_in:
+	fput(in_file);
+out:
+	unlock_kernel();
+	return retval;
 }
 
 /*

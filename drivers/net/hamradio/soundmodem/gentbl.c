@@ -438,7 +438,7 @@ static void gentbl_hapn4800(FILE *f)
 {
         int i, j, k, l;
 	float s;
-	float c[40];
+	float c[44];
 	float min, max;
 
 	fprintf(f, "\n/*\n * hapn4800 specific tables\n */\n\n");
