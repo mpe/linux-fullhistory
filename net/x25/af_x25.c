@@ -859,7 +859,7 @@ int x25_rx_call_request(struct sk_buff *skb, struct x25_neigh *nb,
 	/*
 	 *	We can't accept the Call Request.
 	 */
-	if (!sk || sk->sk_ack_backlog == sk->sk_max_ack_backlog)
+	if (sk == NULL || sk_acceptq_is_full(sk))
 		goto out_clear_request;
 
 	/*

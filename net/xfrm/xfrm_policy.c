@@ -301,18 +301,22 @@ static void xfrm_policy_gc_task(void *data)
 static void xfrm_policy_kill(struct xfrm_policy *policy)
 {
 	write_lock_bh(&policy->lock);
-	if (policy->dead)
-		goto out;
-
+	if (policy->dead) {
+		write_unlock_bh(&policy->lock);
+		return;
+	}
 	policy->dead = 1;
 
 	spin_lock(&xfrm_policy_gc_lock);
 	list_add(&policy->list, &xfrm_policy_gc_list);
-	spin_unlock(&xfrm_policy_gc_lock);
-	schedule_work(&xfrm_policy_gc_work);
-
-out:
+	/*
+	 * Unlock the policy (out of order unlocking), to make sure
+	 * the GC context does not free it with an active lock:
+	 */
 	write_unlock_bh(&policy->lock);
+	spin_unlock(&xfrm_policy_gc_lock);
+
+	schedule_work(&xfrm_policy_gc_work);
 }
 
 /* Generate new index... KAME seems to generate them ordered by cost

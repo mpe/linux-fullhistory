@@ -441,7 +441,7 @@ static __devinit int via_ircc_open(int i, chipio_t * info, unsigned int id)
 	if (err)
 		goto err_out4;
 
-	MESSAGE("IrDA: Registered device %s (via-ircc)\n", dev->name);
+	IRDA_MESSAGE("IrDA: Registered device %s (via-ircc)\n", dev->name);
 
 	/* Initialise the hardware..
 	*/
@@ -474,7 +474,7 @@ static int via_ircc_close(struct via_ircc_cb *self)
 
 	IRDA_DEBUG(3, "%s()\n", __FUNCTION__);
 
-	ASSERT(self != NULL, return -1;);
+	IRDA_ASSERT(self != NULL, return -1;);
 
 	iobase = self->io.fir_base;
 
@@ -565,7 +565,7 @@ static int via_ircc_read_dongle_id(int iobase)
 {
 	int dongle_id = 9;	/* Default to IBM */
 
-	ERROR("via-ircc: dongle probing not supported, please specify dongle_id module parameter.\n");
+	IRDA_ERROR("via-ircc: dongle probing not supported, please specify dongle_id module parameter.\n");
 	return dongle_id;
 }
 
@@ -707,8 +707,8 @@ static void via_ircc_change_dongle_speed(int iobase, int speed,
 		break;
 
 	default:
-		ERROR("%s: Error: dongle_id %d unsupported !\n",
-		      __FUNCTION__, dongle_id);
+		IRDA_ERROR("%s: Error: dongle_id %d unsupported !\n",
+			   __FUNCTION__, dongle_id);
 	}
 }
 
@@ -826,7 +826,7 @@ static int via_ircc_hard_xmit_sir(struct sk_buff *skb,
 	__u32 speed;
 
 	self = (struct via_ircc_cb *) dev->priv;
-	ASSERT(self != NULL, return 0;);
+	IRDA_ASSERT(self != NULL, return 0;);
 	iobase = self->io.fir_base;
 
 	netif_stop_queue(dev);
@@ -1351,8 +1351,8 @@ static irqreturn_t via_ircc_interrupt(int irq, void *dev_id,
 	u8 iHostIntType, iRxIntType, iTxIntType;
 
 	if (!dev) {
-		WARNING("%s: irq %d for unknown device.\n", driver_name,
-			irq);
+		IRDA_WARNING("%s: irq %d for unknown device.\n", driver_name,
+			     irq);
 		return IRQ_NONE;
 	}
 	self = (struct via_ircc_cb *) dev->priv;
@@ -1498,7 +1498,7 @@ static int via_ircc_is_receiving(struct via_ircc_cb *self)
 	int status = FALSE;
 	int iobase;
 
-	ASSERT(self != NULL, return FALSE;);
+	IRDA_ASSERT(self != NULL, return FALSE;);
 
 	iobase = self->io.fir_base;
 	if (CkRxRecv(iobase, self))
@@ -1524,14 +1524,14 @@ static int via_ircc_net_open(struct net_device *dev)
 
 	IRDA_DEBUG(3, "%s()\n", __FUNCTION__);
 
-	ASSERT(dev != NULL, return -1;);
+	IRDA_ASSERT(dev != NULL, return -1;);
 	self = (struct via_ircc_cb *) dev->priv;
 	self->stats.rx_packets = 0;
-	ASSERT(self != NULL, return 0;);
+	IRDA_ASSERT(self != NULL, return 0;);
 	iobase = self->io.fir_base;
 	if (request_irq(self->io.irq, via_ircc_interrupt, 0, dev->name, dev)) {
-		WARNING("%s, unable to allocate irq=%d\n", driver_name,
-			self->io.irq);
+		IRDA_WARNING("%s, unable to allocate irq=%d\n", driver_name,
+			     self->io.irq);
 		return -EAGAIN;
 	}
 	/*
@@ -1539,15 +1539,15 @@ static int via_ircc_net_open(struct net_device *dev)
 	 * failure.
 	 */
 	if (request_dma(self->io.dma, dev->name)) {
-		WARNING("%s, unable to allocate dma=%d\n", driver_name,
-			self->io.dma);
+		IRDA_WARNING("%s, unable to allocate dma=%d\n", driver_name,
+			     self->io.dma);
 		free_irq(self->io.irq, self);
 		return -EAGAIN;
 	}
 	if (self->io.dma2 != self->io.dma) {
 		if (request_dma(self->io.dma2, dev->name)) {
-			WARNING("%s, unable to allocate dma2=%d\n",
-				driver_name, self->io.dma2);
+			IRDA_WARNING("%s, unable to allocate dma2=%d\n",
+				     driver_name, self->io.dma2);
 			free_irq(self->io.irq, self);
 			return -EAGAIN;
 		}
@@ -1590,9 +1590,9 @@ static int via_ircc_net_close(struct net_device *dev)
 
 	IRDA_DEBUG(3, "%s()\n", __FUNCTION__);
 
-	ASSERT(dev != NULL, return -1;);
+	IRDA_ASSERT(dev != NULL, return -1;);
 	self = (struct via_ircc_cb *) dev->priv;
-	ASSERT(self != NULL, return 0;);
+	IRDA_ASSERT(self != NULL, return 0;);
 
 	/* Stop device */
 	netif_stop_queue(dev);
@@ -1627,9 +1627,9 @@ static int via_ircc_net_ioctl(struct net_device *dev, struct ifreq *rq,
 	unsigned long flags;
 	int ret = 0;
 
-	ASSERT(dev != NULL, return -1;);
+	IRDA_ASSERT(dev != NULL, return -1;);
 	self = dev->priv;
-	ASSERT(self != NULL, return -1;);
+	IRDA_ASSERT(self != NULL, return -1;);
 	IRDA_DEBUG(1, "%s(), %s, (cmd=0x%X)\n", __FUNCTION__, dev->name,
 		   cmd);
 	/* Disable interrupts & save flags */

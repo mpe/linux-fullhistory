@@ -12,14 +12,15 @@
 #include <net/ip_mp_alg.h>
 
 static DEFINE_SPINLOCK(alg_table_lock);
-struct ip_mp_alg_ops *ip_mp_alg_table[IP_MP_ALG_MAX];
+struct ip_mp_alg_ops *ip_mp_alg_table[IP_MP_ALG_MAX + 1];
 
 int multipath_alg_register(struct ip_mp_alg_ops *ops, enum ip_mp_alg n)
 {
 	struct ip_mp_alg_ops **slot;
 	int err;
 
-	if (n < IP_MP_ALG_NONE || n > IP_MP_ALG_MAX)
+	if (n < IP_MP_ALG_NONE || n > IP_MP_ALG_MAX ||
+	    !ops->mp_alg_select_route)
 		return -EINVAL;
 
 	spin_lock(&alg_table_lock);

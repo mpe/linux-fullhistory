@@ -68,7 +68,7 @@ static DECLARE_MUTEX(rfcomm_sem);
 #define rfcomm_lock()	down(&rfcomm_sem);
 #define rfcomm_unlock()	up(&rfcomm_sem);
 
-unsigned long rfcomm_event;
+static unsigned long rfcomm_event;
 
 static LIST_HEAD(session_list);
 static atomic_t terminate, running;
