@@ -19,8 +19,18 @@
 
 #include <net/dst.h>
 
-struct dst_entry * dst_garbage_list;
-atomic_t	dst_total = ATOMIC_INIT(0);
+/* Locking strategy:
+ * 1) Garbage collection state of dead destination cache
+ *    entries is protected by dst_lock.
+ * 2) GC is run only from BH context, and is the only remover
+ *    of entries.
+ * 3) Entries are added to the garbage list from both BH
+ *    and non-BH context, so local BH disabling is needed.
+ * 4) All operations modify state, so a spinlock is used.
+ */
+static struct dst_entry 	*dst_garbage_list;
+static atomic_t			 dst_total = ATOMIC_INIT(0);
+static spinlock_t		 dst_lock = SPIN_LOCK_UNLOCKED;
 
 static unsigned long dst_gc_timer_expires;
 static unsigned long dst_gc_timer_inc = DST_GC_MAX;
@@ -38,6 +48,8 @@ static void dst_run_gc(unsigned long dummy)
 	int    delayed = 0;
 	struct dst_entry * dst, **dstp;
 
+	spin_lock(&dst_lock);
+
 	del_timer(&dst_gc_timer);
 	dstp = &dst_garbage_list;
 	while ((dst = *dstp) != NULL) {
@@ -51,7 +63,7 @@ static void dst_run_gc(unsigned long dummy)
 	}
 	if (!dst_garbage_list) {
 		dst_gc_timer_inc = DST_GC_MAX;
-		return;
+		goto out;
 	}
 	if ((dst_gc_timer_expires += dst_gc_timer_inc) > DST_GC_MAX)
 		dst_gc_timer_expires = DST_GC_MAX;
@@ -62,6 +74,9 @@ static void dst_run_gc(unsigned long dummy)
 	       atomic_read(&dst_total), delayed,  dst_gc_timer_expires);
 #endif
 	add_timer(&dst_gc_timer);
+
+out:
+	spin_unlock(&dst_lock);
 }
 
 static int dst_discard(struct sk_buff *skb)
@@ -100,7 +115,8 @@ void * dst_alloc(int size, struct dst_ops * ops)
 
 void __dst_free(struct dst_entry * dst)
 {
-	start_bh_atomic();
+	spin_lock_bh(&dst_lock);
+
 	/* The first case (dev==NULL) is required, when
 	   protocol module is unloaded.
 	 */
@@ -119,7 +135,8 @@ void __dst_free(struct dst_entry * dst)
 		dst_gc_timer.expires = jiffies + dst_gc_timer_expires;
 		add_timer(&dst_gc_timer);
 	}
-	end_bh_atomic();
+
+	spin_unlock_bh(&dst_lock);
 }
 
 void dst_destroy(struct dst_entry * dst)

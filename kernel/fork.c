@@ -390,7 +390,10 @@ static inline int copy_mm(int nr, unsigned long clone_flags, struct task_struct 
 	return 0;
 
 free_mm:
-	mm->pgd = NULL;
+	tsk->mm = NULL;
+	release_segments(mm);
+	kmem_cache_free(mm_cachep, mm);
+	return retval;
 free_pt:
 	tsk->mm = NULL;
 	mmput(mm);

@@ -975,4 +975,26 @@ extern __inline__ int gfp_any(void)
 #define NETDEBUG(x)	do { x; } while (0)
 #endif
 
+/*
+ * Macros for sleeping on a socket. Use them like this:
+ *
+ * SOCK_SLEEP_PRE(sk)
+ * if (condition)
+ * 	schedule();
+ * SOCK_SLEEP_POST(sk)
+ *
+ */
+
+#define SOCK_SLEEP_PRE(sk) 	{ struct task_struct *tsk = current; \
+				DECLARE_WAITQUEUE(wait, tsk); \
+				tsk->state = TASK_INTERRUPTIBLE; \
+				add_wait_queue((sk)->sleep, &wait); \
+				release_sock(sk);
+
+#define SOCK_SLEEP_POST(sk)	tsk->state = TASK_RUNNING; \
+				remove_wait_queue((sk)->sleep, &wait); \
+				lock_sock(sk); \
+				}
+
+
 #endif	/* _SOCK_H */

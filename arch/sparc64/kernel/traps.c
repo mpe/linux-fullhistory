@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.58 1999/03/29 12:38:10 jj Exp $
+/* $Id: traps.c,v 1.59 1999/05/18 16:57:10 jj Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -452,8 +452,26 @@ void instruction_dump (unsigned int *pc)
 	if((((unsigned long) pc) & 3))
 		return;
 
+	printk("Instruction DUMP:");
 	for(i = -3; i < 6; i++)
 		printk("%c%08x%c",i?' ':'<',pc[i],i?' ':'>');
+	printk("\n");
+}
+
+void user_instruction_dump (unsigned int *pc)
+{
+	int i;
+	unsigned int buf[9];
+	
+	if((((unsigned long) pc) & 3))
+		return;
+		
+	if(copy_from_user(buf, pc - 3, sizeof(buf)))
+		return;
+
+	printk("Instruction DUMP:");
+	for(i = 0; i < 9; i++)
+		printk("%c%08x%c",i==3?' ':'<',buf[i],i==3?' ':'>');
 	printk("\n");
 }
 
@@ -461,6 +479,8 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 {
 	extern void __show_regs(struct pt_regs * regs);
 	extern void smp_report_regs(void);
+	int count = 0;
+	struct reg_window *lastrw;
 	
 	/* Amuse the user. */
 	printk(
@@ -472,25 +492,28 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 	printk("%s(%d): %s\n", current->comm, current->pid, str);
 	__asm__ __volatile__("flushw");
 	__show_regs(regs);
-	{
+	if(regs->tstate & TSTATE_PRIV) {
 		struct reg_window *rw = (struct reg_window *)
 			(regs->u_regs[UREG_FP] + STACK_BIAS);
 
 		/* Stop the back trace when we hit userland or we
 		 * find some badly aligned kernel stack.
 		 */
+		lastrw = (struct reg_window *)current;
 		while(rw					&&
-		      (((unsigned long) rw) >= PAGE_OFFSET)	&&
+		      count++ < 30				&&
+		      rw >= lastrw				&&
+		      (char *) rw < ((char *) current)
+		        + sizeof (union task_union) 		&&
 		      !(((unsigned long) rw) & 0x7)) {
 			printk("Caller[%016lx]\n", rw->ins[7]);
+			lastrw = rw;
 			rw = (struct reg_window *)
 				(rw->ins[6] + STACK_BIAS);
 		}
-	}
-	if(regs->tstate & TSTATE_PRIV) {
-		printk("Instruction DUMP:");
 		instruction_dump ((unsigned int *) regs->tpc);
-	}
+	} else
+		user_instruction_dump ((unsigned int *) regs->tpc);
 #ifdef __SMP__
 	smp_report_regs();
 #endif

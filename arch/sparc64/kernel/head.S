@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.60 1999/04/12 08:08:21 davem Exp $
+/* $Id: head.S,v 1.61 1999/05/25 16:53:10 jj Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -286,6 +286,7 @@ sun4u_init:
 	wr	%g6, 0x0, %pic
 #endif
 
+	wr	%g0, ASI_P, %asi
 	mov	1, %g5
 	sllx	%g5, (PAGE_SHIFT + 1), %g5
 	sub	%g5, (REGWIN_SZ + STACK_BIAS), %g5

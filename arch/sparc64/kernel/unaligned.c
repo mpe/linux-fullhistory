@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.15 1999/04/03 11:36:21 anton Exp $
+/* $Id: unaligned.c,v 1.16 1999/05/25 16:53:15 jj Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -228,7 +228,8 @@ __asm__ __volatile__ (								\
 	"sra	%%g7, 0, %%g7\n\t"						\
 	"stx	%%l1, [%0]\n\t"							\
 	"stx	%%g7, [%0 + 8]\n"						\
-"0:\n\n\t"									\
+"0:\n\t"									\
+	"wr	%%g0, %5, %%asi\n\n\t"						\
 	".section __ex_table\n\t"						\
 	".word	4b, " #errh "\n\t"						\
 	".word	5b, " #errh "\n\t"						\
@@ -244,7 +245,8 @@ __asm__ __volatile__ (								\
 	".word	15b, " #errh "\n\t"						\
 	".word	16b, " #errh "\n\n\t"						\
 	".previous\n\t"								\
-	: : "r" (dest_reg), "r" (size), "r" (saddr), "r" (is_signed), "r" (asi)	\
+	: : "r" (dest_reg), "r" (size), "r" (saddr), "r" (is_signed),		\
+	  "r" (asi), "i" (ASI_AIUS)						\
 	: "l1", "l2", "g7", "g1", "cc");					\
 })
 	
@@ -282,7 +284,8 @@ __asm__ __volatile__ (								\
 "2:\t"	"srl	%%l1, 8, %%l2\n"						\
 "16:\t"	"stba	%%l2, [%0] %%asi\n"						\
 "17:\t"	"stba	%%l1, [%0 + 1] %%asi\n"						\
-"0:\n\n\t"									\
+"0:\n\t"									\
+	"wr	%%g0, %4, %%asi\n\n\t"						\
 	".section __ex_table\n\t"						\
 	".word	4b, " #errh "\n\t"						\
 	".word	5b, " #errh "\n\t"						\
@@ -299,7 +302,7 @@ __asm__ __volatile__ (								\
 	".word	16b, " #errh "\n\t"						\
 	".word	17b, " #errh "\n\n\t"						\
 	".previous\n\t"								\
-	: : "r" (dst_addr), "r" (size), "r" (src_val), "r" (asi)		\
+	: : "r" (dst_addr), "r" (size), "r" (src_val), "r" (asi), "i" (ASI_AIUS)\
 	: "l1", "l2", "g7", "g1", "cc");					\
 })
 

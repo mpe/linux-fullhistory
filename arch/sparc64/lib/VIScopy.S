@@ -1,9 +1,9 @@
-/* $Id: VIScopy.S,v 1.19 1998/10/19 21:52:19 davem Exp $
+/* $Id: VIScopy.S,v 1.20 1999/05/25 16:52:57 jj Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996, 1997, 1998 Jakub Jelinek (jj@ultra.linux.cz)
+ * Copyright (C) 1996, 1997, 1998, 1999 Jakub Jelinek (jj@ultra.linux.cz)
  */
 
 #include "VIS.h"
@@ -26,18 +26,25 @@
 #ifdef __KERNEL__
 
 #include <asm/visasm.h>
+#include <asm/asm_offsets.h>
 
-#define FPU_CLEAN_RETL				\
-	VISExit					\
-	retl;					\
-	 clr		%o0;
-#define FPU_RETL				\
-	VISExit					\
-	retl;					\
-	 clr		%o0;
-#define NORMAL_RETL				\
-	retl;					\
-	 clr		%o0;
+#define FPU_CLEAN_RETL								\
+	ldub		[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %o1;	\
+	VISExit									\
+	clr		%o0;							\
+	retl;									\
+	 wr		%o1, %g0, %asi;
+#define FPU_RETL								\
+	ldub		[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %o1;	\
+	VISExit									\
+	clr		%o0;							\
+	retl;									\
+	 wr		%o1, %g0, %asi;
+#define NORMAL_RETL								\
+	ldub		[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %o1;	\
+	clr		%o0;							\
+	retl;									\
+	 wr		%o1, %g0, %asi;
 #define EX(x,y,a,b) 				\
 98: 	x,y;					\
 	.section .fixup;			\
@@ -146,10 +153,20 @@
 	EXVIS(STBLK		%fsrc, [%dest] ASIBLK);		\
 	add			%dest, 0x40, %dest;
 
+#ifdef __KERNEL__
+#define STORE_JUMP(dest, fsrc, target)				\
+	srl			asi_dest, 3, %g5;		\
+	EXVIS3(STBLK		%fsrc, [%dest] ASIBLK);		\
+	xor		       asi_dest, ASI_BLK_XOR1, asi_dest;\
+	add			%dest, 0x40, %dest;		\
+	xor			asi_dest, %g5, asi_dest;	\
+	ba,pt			%xcc, target;
+#else
 #define STORE_JUMP(dest, fsrc, target)				\
 	EXVIS3(STBLK		%fsrc, [%dest] ASIBLK);		\
 	add			%dest, 0x40, %dest;		\
 	ba,pt			%xcc, target;
+#endif
 
 #ifndef __KERNEL__
 #define VISLOOP_PAD nop; nop; nop; nop; \
@@ -157,9 +174,7 @@
 		    nop; nop; nop; nop; \
 		    nop; nop; nop;
 #else
-#define VISLOOP_PAD nop; nop; nop; nop; \
-		    nop; nop; nop; nop; \
-		    nop;
+#define VISLOOP_PAD
 #endif
 
 #define FINISH_VISCHUNK(dest, f0, f1, left)			\
@@ -170,11 +185,13 @@
 	EXVIS4(STDF		%f48, [%dest] ASINORMAL);	\
 	add			%dest, 8, %dest;
 
-#define UNEVEN_VISCHUNK(dest, f0, f1, left)			\
+#define UNEVEN_VISCHUNK_LAST(dest, f0, f1, left)		\
 	subcc			%left, 8, %left;		\
 	bl,pn			%xcc, vis_out;			\
-	 fsrc1			%f0, %f1;			\
-	ba,a,pt			%xcc, vis_slk;
+	 fsrc1			%f0, %f1;
+#define UNEVEN_VISCHUNK(dest, f0, f1, left)			\
+	UNEVEN_VISCHUNK_LAST(dest, f0, f1, left)		\
+	ba,a,pt			%xcc, vis_out_slk;
 
 	/* Macros for non-VIS memcpy code. */
 #ifdef REGS_64BIT
@@ -303,32 +320,32 @@
 		.type			__memcpy_entry,@function
 memcpy_private:
 __memcpy:
-memcpy:		mov		ASI_BLK_P, asi_src		! IEU0	Group
+memcpy:		mov		ASI_P, asi_src			! IEU0	Group
 		brnz,pt		%o2, __memcpy_entry		! CTI
-		 mov		ASI_BLK_P, asi_dest		! IEU1
+		 mov		ASI_P, asi_dest			! IEU1
 		retl
 		 clr		%o0
 
 		.align			32
 		.globl			__copy_from_user
 		.type			__copy_from_user,@function
-__copy_from_user:mov		ASI_BLK_S, asi_src		! IEU0	Group
+__copy_from_user:rd		%asi, asi_src			! IEU0	Group
 		brnz,pt		%o2, __memcpy_entry		! CTI
-		 mov		ASI_BLK_P, asi_dest		! IEU1
+		 mov		ASI_P, asi_dest			! IEU1
 
 		.globl			__copy_to_user
 		.type			__copy_to_user,@function
-__copy_to_user:	mov		ASI_BLK_P, asi_src		! IEU0	Group
+__copy_to_user:	mov		ASI_P, asi_src			! IEU0	Group
 		brnz,pt		%o2, __memcpy_entry		! CTI
-		 mov		ASI_BLK_S, asi_dest		! IEU1
+		 rd		%asi, asi_dest			! IEU1
 		retl						! CTI	Group
 		 clr		%o0				! IEU0	Group
 
 		.globl			__copy_in_user
 		.type			__copy_in_user,@function
-__copy_in_user:	mov		ASI_BLK_S, asi_src		! IEU0	Group
+__copy_in_user:	rd		%asi, asi_src			! IEU0	Group
 		brnz,pt		%o2, __memcpy_entry		! CTI
-		 mov		ASI_BLK_S, asi_dest		! IEU1
+		 mov		asi_src, asi_dest		! IEU1
 		retl						! CTI	Group
 		 clr		%o0				! IEU0	Group
 #endif
@@ -446,6 +463,10 @@ dest_is_64byte_aligned:
 	fmovd			%f0, %f2			! FPU
 	sub			%g3, 0x10, %g3			! IEU0	Group
 	sub			%o2, %g7, %o2			! IEU1
+#ifdef __KERNEL__
+	or			asi_src, ASI_BLK_OR, asi_src	! IEU0	Group
+	or			asi_dest, ASI_BLK_OR, asi_dest	! IEU1
+#endif
 	alignaddr		%g1, %g0, %g0			! GRU	Group
 	add			%g1, %g7, %g1			! IEU0	Group
 	subcc			%o2, %g3, %o2			! IEU1
@@ -584,7 +605,13 @@ finish_f38:	FINISH_VISCHUNK(o0, f38, f40, g3)
 finish_f40:	FINISH_VISCHUNK(o0, f40, f42, g3)
 finish_f42:	FINISH_VISCHUNK(o0, f42, f44, g3)
 finish_f44:	FINISH_VISCHUNK(o0, f44, f46, g3)
-finish_f46:	UNEVEN_VISCHUNK(o0, f46, f0,  g3)
+finish_f46:	UNEVEN_VISCHUNK_LAST(o0, f46, f0,  g3)
+vis_out_slk:
+#ifdef __KERNEL__
+	srl		asi_src, 3, %g5				! IEU0	Group
+	xor		asi_src, ASI_BLK_XOR1, asi_src		! IEU1
+	xor		asi_src, %g5, asi_src			! IEU0	Group
+#endif
 vis_slk:ASI_SETSRC_NOBLK					! LSU	Group
 	EXVIS4(LDDF	[%o1] ASINORMAL, %f2)			! Load	Group
 	add		%o1, 8, %o1				! IEU0
@@ -592,7 +619,7 @@ vis_slk:ASI_SETSRC_NOBLK					! LSU	Group
 	ASI_SETDST_NOBLK					! LSU	Group
 	faligndata	%f0, %f2, %f8				! GRU	Group
 	EXVIS5(STDF	%f8, [%o0] ASINORMAL)			! Store
-	bl,pn		%xcc, vis_out				! CTI
+	bl,pn		%xcc, vis_out_slp			! CTI
 	 add		%o0, 8, %o0				! IEU0	Group
 	ASI_SETSRC_NOBLK					! LSU	Group
 	EXVIS4(LDDF	[%o1] ASINORMAL, %f0)			! Load	Group
@@ -603,8 +630,20 @@ vis_slk:ASI_SETSRC_NOBLK					! LSU	Group
 	EXVIS5(STDF	%f8, [%o0] ASINORMAL)			! Store
 	bge,pt		%xcc, vis_slk				! CTI
 	 add		%o0, 8, %o0				! IEU0	Group
+vis_out_slp:
+#ifdef __KERNEL__
+	brz,pt		%o2, vis_ret				! CTI	Group
+	 mov		%g1, %o1				! IEU0
+	ba,pt		%xcc, vis_slp+4				! CTI	Group
+	 ASI_SETSRC_NOBLK					! LSU	Group
+#endif
 vis_out:brz,pt		%o2, vis_ret				! CTI	Group
 	 mov		%g1, %o1				! IEU0
+#ifdef __KERNEL__
+	srl		asi_src, 3, %g5				! IEU0	Group
+	xor		asi_src, ASI_BLK_XOR1, asi_src		! IEU1
+	xor		asi_src, %g5, asi_src			! IEU0	Group
+#endif
 vis_slp:ASI_SETSRC_NOBLK					! LSU	Group
 	EXO2(LDUB	[%o1] ASINORMAL, %g5)			! LOAD
 	add		%o1, 1, %o1				! IEU0
@@ -970,11 +1009,13 @@ VIScopyfixup_ret:
 		/* If this is copy_from_user(), zero out the rest of the
 		 * kernel buffer.
 		 */
+		ldub		[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %o4
 		andcc		asi_src, 0x1, %g0
 		be,pt		%icc, 1f
-		 andcc		asi_dest, 0x1, %g0
-		bne,pn		%icc, 1f
 		 VISExit
+		andcc		asi_dest, 0x1, %g0
+		bne,pn		%icc, 1f
+		 nop
 		save		%sp, -160, %sp
 		mov		%i0, %o0
 		call		__bzero
@@ -982,7 +1023,7 @@ VIScopyfixup_ret:
 		restore
 1:		mov		%o1, %o0
 		retl
-		 nop
+		 wr		%o4, %g0, %asi
 VIScopyfixup1:	subcc		%g2, 18, %g2
 		add		%o0, 32, %o0
 		bgeu,a,pt	%icc, VIScopyfixup1

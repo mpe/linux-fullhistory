@@ -892,7 +892,7 @@ next:
 		left_over -= slab_align_size;
 	}
 
-	/* Offset must be a factor of the alignment. */
+	/* Offset must be a multiple of the alignment. */
 	offset += (align-1);
 	offset &= ~(align-1);
 

@@ -189,9 +189,10 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	}
 
 #if CONFIG_BLK_DEV_PDC4030
-	if (IS_PDC4030_DRIVE) {
-		extern int pdc4030_cmd(ide_drive_t *, byte);
-		if (pdc4030_cmd(drive,PROMISE_IDENTIFY)) {
+	if (HWIF(drive)->chipset == ide_pdc4030) {
+		/* DC4030 hosted drives need their own identify... */
+		extern int pdc4030_identify(ide_drive_t *);
+		if (pdc4030_identify(drive)) {
 			if (irqs)
 				(void) probe_irq_off(irqs);
 			return 1;

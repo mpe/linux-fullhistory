@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.67 1999/05/08 20:00:20 davem Exp $
+ * Version:	$Id: route.c,v 1.68 1999/05/27 00:37:54 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -174,6 +174,16 @@ __u8 ip_tos2prio[16] = {
  * Route cache.
  */
 
+/* The locking scheme is rather straight forward:
+ *
+ * 1) A BH protected rwlock protects the central route hash.
+ * 2) Only writers remove entries, and they hold the lock
+ *    as they look at rtable reference counts.
+ * 3) Only readers acquire references to rtable entries,
+ *    they do so with atomic increments and with the
+ *    lock held.
+ */
+
 static struct rtable 	*rt_hash_table[RT_HASH_DIVISOR];
 static rwlock_t		 rt_hash_lock = RW_LOCK_UNLOCKED;
 
@@ -293,6 +303,7 @@ static __inline__ int rt_may_expire(struct rtable *rth, int tmo1, int tmo2)
 	return 1;
 }
 
+/* This runs via a timer and thus is always in BH context. */
 static void rt_check_expire(unsigned long dummy)
 {
 	int i;
@@ -306,7 +317,7 @@ static void rt_check_expire(unsigned long dummy)
 		rover = (rover + 1) & (RT_HASH_DIVISOR-1);
 		rthp = &rt_hash_table[rover];
 
-		write_lock_bh(&rt_hash_lock);
+		write_lock(&rt_hash_lock);
 		while ((rth = *rthp) != NULL) {
 			if (rth->u.dst.expires) {
 				/* Entrie is expired even if it is in use */
@@ -327,7 +338,7 @@ static void rt_check_expire(unsigned long dummy)
 			*rthp = rth->u.rt_next;
 			rt_free(rth);
 		}
-		write_unlock_bh(&rt_hash_lock);
+		write_unlock(&rt_hash_lock);
 
 		/* Fallback loop breaker. */
 		if ((jiffies - now) > 0)
@@ -337,6 +348,9 @@ static void rt_check_expire(unsigned long dummy)
 	add_timer(&rt_periodic_timer);
 }
 
+/* This can run from both BH and non-BH contexts, the latter
+ * in the case of a forced flush event.
+ */
 static void rt_run_flush(unsigned long dummy)
 {
 	int i;
@@ -344,12 +358,11 @@ static void rt_run_flush(unsigned long dummy)
 
 	rt_deadline = 0;
 
-	write_lock_bh(&rt_hash_lock);
 	for (i=0; i<RT_HASH_DIVISOR; i++) {
+		write_lock_bh(&rt_hash_lock);
 		rth = rt_hash_table[i];
-		if(rth == NULL)
-			continue;
-		rt_hash_table[i] = NULL;
+		if(rth != NULL)
+			rt_hash_table[i] = NULL;
 		write_unlock_bh(&rt_hash_lock);
 
 		for (; rth; rth=next) {
@@ -357,10 +370,7 @@ static void rt_run_flush(unsigned long dummy)
 			rth->u.rt_next = NULL;
 			rt_free(rth);
 		}
-
-		write_lock_bh(&rt_hash_lock);
 	}
-	write_unlock_bh(&rt_hash_lock);
 }
   
 static spinlock_t rt_flush_lock = SPIN_LOCK_UNLOCKED;
@@ -466,6 +476,9 @@ static int rt_garbage_collect(void)
 	do {
 		int i, k;
 
+		/* The write lock is held during the entire hash
+		 * traversal to ensure consistent state of the rover.
+		 */
 		write_lock_bh(&rt_hash_lock);
 		for (i=0, k=rover; i<RT_HASH_DIVISOR; i++) {
 			unsigned tmo = expire;
@@ -600,8 +613,8 @@ restart:
 	}
 #endif
 	rt_hash_table[hash] = rt;
-	*rp = rt;
 	write_unlock_bh(&rt_hash_lock);
+	*rp = rt;
 	return 0;
 }
 
@@ -696,12 +709,15 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 				}
 
 				*rthp = rth->u.rt_next;
+				write_unlock_bh(&rt_hash_lock);
 				if (!rt_intern_hash(hash, rt, &rt))
 					ip_rt_put(rt);
 				rt_drop(rth);
-				break;
+				goto do_next;
 			}
 			write_unlock_bh(&rt_hash_lock);
+		do_next:
+			;
 		}
 	}
 	return;
@@ -1835,9 +1851,7 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 			return -ENODEV;
 		skb->protocol = __constant_htons(ETH_P_IP);
 		skb->dev = dev;
-		start_bh_atomic();
 		err = ip_route_input(skb, dst, src, rtm->rtm_tos, dev);
-		end_bh_atomic();
 		rt = (struct rtable*)skb->dst;
 		if (!err && rt->u.dst.error)
 			err = -rt->u.dst.error;

@@ -129,8 +129,9 @@ const char *if_port_text[] = {
  *		86DD	IPv6
  */
 
-struct packet_type *ptype_base[16];		/* 16 way hashed list */
-struct packet_type *ptype_all = NULL;		/* Taps */
+static struct packet_type *ptype_base[16];		/* 16 way hashed list */
+static struct packet_type *ptype_all = NULL;		/* Taps */
+static rwlock_t ptype_lock = RW_LOCK_UNLOCKED;
 
 /*
  *	Device list lock. Setting it provides that interface
@@ -199,6 +200,7 @@ void dev_add_pack(struct packet_type *pt)
 		dev_clear_fastroute(pt->dev);
 	}
 #endif
+	write_lock_bh(&ptype_lock);
 	if(pt->type==htons(ETH_P_ALL))
 	{
 		netdev_nit++;
@@ -211,6 +213,7 @@ void dev_add_pack(struct packet_type *pt)
 		pt->next = ptype_base[hash];
 		ptype_base[hash] = pt;
 	}
+	write_unlock_bh(&ptype_lock);
 }
 
 
@@ -228,19 +231,21 @@ void dev_remove_pack(struct packet_type *pt)
 	}
 	else
 		pt1=&ptype_base[ntohs(pt->type)&15];
+	write_lock_bh(&ptype_lock);
 	for(; (*pt1)!=NULL; pt1=&((*pt1)->next))
 	{
 		if(pt==(*pt1))
 		{
 			*pt1=pt->next;
-			synchronize_bh();
 #ifdef CONFIG_NET_FASTROUTE
 			if (pt->data)
 				netdev_fastroute_obstacles--;
 #endif
+			write_unlock_bh(&ptype_lock);
 			return;
 		}
 	}
+	write_unlock_bh(&ptype_lock);
 	printk(KERN_WARNING "dev_remove_pack: %p not found.\n", pt);
 }
 
@@ -526,6 +531,7 @@ void dev_queue_xmit_nit(struct sk_buff *skb, struct device *dev)
 	struct packet_type *ptype;
 	get_fast_time(&skb->stamp);
 
+	read_lock(&ptype_lock);
 	for (ptype = ptype_all; ptype!=NULL; ptype = ptype->next) 
 	{
 		/* Never send packets back to the socket
@@ -566,6 +572,7 @@ void dev_queue_xmit_nit(struct sk_buff *skb, struct device *dev)
 			ptype->func(skb2, skb->dev, ptype);
 		}
 	}
+	read_unlock(&ptype_lock);
 }
 
 /*
@@ -953,6 +960,7 @@ void net_bh(void)
 		 */
 
 		pt_prev = NULL;
+		read_lock(&ptype_lock);
 		for (ptype = ptype_all; ptype!=NULL; ptype=ptype->next)
 		{
 			if (!ptype->dev || ptype->dev == skb->dev) {
@@ -1006,6 +1014,7 @@ void net_bh(void)
 		else {
 			kfree_skb(skb);
 		}
+		read_unlock(&ptype_lock);
   	}	/* End of queue loop */
   	
   	/*

@@ -1,4 +1,4 @@
-/* $Id: VISmemset.S,v 1.8 1998/06/12 14:53:59 jj Exp $
+/* $Id: VISmemset.S,v 1.9 1999/05/25 16:53:01 jj Exp $
  * VISmemset.S: High speed memset operations utilizing the UltraSparc
  *        Visual Instruction Set.
  *
@@ -143,7 +143,8 @@ memset:
 	VISEntryHalf
 #endif
 	ldd		[%o0 - 8], %f0
-18:	wr		%g0, ASI_BLK_P, %asi
+18:	rd		%asi, %g2
+	wr		%g0, ASI_BLK_P, %asi
 	membar		#StoreStore | #LoadStore
 	andcc		%o3, 0xc0, %g5
 	and		%o2, 0x3f, %o2
@@ -174,6 +175,7 @@ memset:
 	 add		%o0, 256, %o0
 12:
 #ifdef __KERNEL__
+	wr		%g2, %g0, %asi
 	VISExitHalf
 #else
 #ifndef REGS_64BIT

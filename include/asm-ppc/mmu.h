@@ -5,6 +5,8 @@
 #ifndef _PPC_MMU_H_
 #define _PPC_MMU_H_
 
+#include <linux/config.h>
+
 #ifndef __ASSEMBLY__
 /* Hardware Page Table Entry */
 typedef struct _PTE {

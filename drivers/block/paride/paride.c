@@ -247,7 +247,7 @@ static void pi_register_parport( PIA *pi, int verbose)
 	pi->pardev = (void *) parport_register_device(
 	      pp,pi->device,NULL,pi_wake_up,NULL,0,(void *)pi);
 
-	init_wait_queue_head(&pi->parq);
+	init_waitqueue_head(&pi->parq);
 
 	if (verbose) printk("%s: 0x%x is %s\n",pi->device,pi->port,pp->name);
 	
@@ -357,7 +357,7 @@ int pi_init(PIA *pi, int autoprobe, int port, int mode,
 
 		pi->parname = NULL;
 		pi->pardev = NULL;
-		init_wait_queue_head(&pi->parq);
+		init_waitqueue_head(&pi->parq);
 		pi->claimed = 0;
 		pi->claim_cont = NULL;
 	        

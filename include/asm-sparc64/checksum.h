@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.11 1998/04/17 02:37:22 davem Exp $ */
+/* $Id: checksum.h,v 1.12 1999/05/25 16:53:36 jj Exp $ */
 #ifndef __SPARC64_CHECKSUM_H
 #define __SPARC64_CHECKSUM_H
 
@@ -49,17 +49,20 @@ extern __inline__ unsigned int
 csum_partial_copy_nocheck (const char *src, char *dst, int len, 
 			   unsigned int sum)
 {
-	__asm__ __volatile__ ("wr	%%g0, %0, %%asi" : : "i" (ASI_P));
-	return csum_partial_copy_sparc64(src, dst, len, sum);
+	int ret;
+	unsigned char cur_ds = current->tss.current_ds.seg;
+	__asm__ __volatile__ ("wr %%g0, %0, %%asi" : : "i" (ASI_P));
+	ret = csum_partial_copy_sparc64(src, dst, len, sum);
+	__asm__ __volatile__ ("wr %%g0, %0, %%asi" : : "r" (cur_ds));
+	return ret;
 }
 
 extern __inline__ unsigned int 
 csum_partial_copy_from_user(const char *src, char *dst, int len, 
 			    unsigned int sum, int *err)
 {
-	__asm__ __volatile__ ("wr	%%g0, %0, %%asi
-			       stx	%1, [%%sp + 0x7ff + 128]
-			      " : : "i" (ASI_S), "r" (err));
+	__asm__ __volatile__ ("stx	%0, [%%sp + 0x7ff + 128]"
+			      : : "r" (err));
 	return csum_partial_copy_sparc64(src, dst, len, sum);
 }
 

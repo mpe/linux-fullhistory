@@ -1,9 +1,9 @@
-/* $Id: VIS.h,v 1.3 1997/06/27 14:53:18 jj Exp $
+/* $Id: VIS.h,v 1.4 1999/05/25 16:52:50 jj Exp $
  * VIS.h: High speed copy/clear operations utilizing the UltraSparc
  *        Visual Instruction Set.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996, 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996, 1997, 1999 Jakub Jelinek (jj@ultra.linux.cz)
  */
 
 	/* VIS code can be used for numerous copy/set operation variants.
@@ -28,6 +28,8 @@
 #include <asm/head.h>
 #include <asm/asi.h>
 #else
+#define ASI_AIUS		0x11 /* Secondary, user				*/
+#define ASI_BLK_AIUS		0x71 /* Secondary, user, blk ld/st		*/
 #define ASI_P			0x80 /* Primary, implicit			*/
 #define ASI_S			0x81 /* Secondary, implicit			*/
 #define ASI_BLK_COMMIT_P	0xe0 /* Primary, blk store commit		*/
@@ -43,15 +45,28 @@
 	 * cell exchange program...
 	 */
 #define ASI_BLK_XOR		(ASI_P ^ ASI_BLK_P)
+	/* Well, things get more hairy if we use ASI_AIUS as
+	 * USER_DS and ASI_P as KERNEL_DS, we'd reach
+	 * commit block stores this way which is not what we want...
+	 */
+	/* ASI_P->ASI_BLK_P && ASI_AIUS->ASI_BLK_AIUS transitions can be done
+	 * as blkasi = asi | ASI_BLK_OR
+	 */
+#define ASI_BLK_OR		(ASI_BLK_P & ~ASI_P)
+	/* Transition back from ASI_BLK_P->ASI_P && ASI_BLK_AIUS->ASI_AIUS is
+	 * more complicated:
+	 * asi = blkasi ^ (blkasi >> 3) ^ ASI_BLK_XOR1
+	 */
+#define ASI_BLK_XOR1		(ASI_BLK_P ^ (ASI_BLK_P >> 3) ^ ASI_P)
 
 #define	asi_src			%o3
 #define asi_dest		%o4
 
 #ifdef __KERNEL__
 #define ASI_SETSRC_BLK		wr	asi_src, 0, %asi;
-#define ASI_SETSRC_NOBLK	wr	asi_src, ASI_BLK_XOR, %asi;
+#define ASI_SETSRC_NOBLK	wr	asi_src, 0, %asi;
 #define ASI_SETDST_BLK		wr	asi_dest, 0, %asi;
-#define ASI_SETDST_NOBLK	wr	asi_dest, ASI_BLK_XOR, %asi;
+#define ASI_SETDST_NOBLK	wr	asi_dest, 0, %asi;
 #define ASIBLK			%asi
 #define ASINORMAL		%asi
 #define LDUB			lduba

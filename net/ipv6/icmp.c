@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.21 1999/03/21 05:22:51 davem Exp $
+ *	$Id: icmp.c,v 1.22 1999/05/19 22:06:39 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -315,6 +315,7 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	fl.nl_u.ip6_u.daddr = &hdr->saddr;
 	fl.nl_u.ip6_u.saddr = saddr;
 	fl.oif = iif;
+	fl.fl6_flowlabel = 0;
 	fl.uli_u.icmpt.type = type;
 	fl.uli_u.icmpt.code = code;
 
@@ -388,6 +389,7 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 	fl.nl_u.ip6_u.daddr = &hdr->saddr;
 	fl.nl_u.ip6_u.saddr = saddr;
 	fl.oif = skb->dev->ifindex;
+	fl.fl6_flowlabel = 0;
 	fl.uli_u.icmpt.type = ICMPV6_ECHO_REPLY;
 	fl.uli_u.icmpt.code = 0;
 

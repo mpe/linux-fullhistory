@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.63 1999/05/15 23:02:21 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.64 1999/05/27 00:37:31 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -168,16 +168,16 @@ void tcp_delack_timer(unsigned long data)
 {
 	struct sock *sk = (struct sock*)data;
 
+	bh_lock_sock(sk);
 	if(!sk->zapped &&
 	   sk->tp_pinfo.af_tcp.delayed_acks &&
 	   sk->state != TCP_CLOSE) {
-		bh_lock_sock(sk);
 		if (!sk->lock.users)
 			tcp_send_ack(sk);
 		else
 			tcp_send_delayed_ack(&(sk->tp_pinfo.af_tcp), HZ/10);
-		bh_unlock_sock(sk);
 	}
+	bh_unlock_sock(sk);
 }
 
 void tcp_probe_timer(unsigned long data)

@@ -1,4 +1,4 @@
-/* $Id: md.h,v 1.2 1997/12/27 16:28:38 jj Exp $
+/* $Id: md.h,v 1.3 1999/05/25 16:53:28 jj Exp $
  * md.h: High speed xor_block operation for RAID4/5 
  *            utilizing the UltraSparc Visual Instruction Set.
  *
@@ -11,7 +11,7 @@
 #include <asm/head.h>
 #include <asm/asi.h>
 
-#define HAVE_ARCH_XORBLOCK
+#undef HAVE_ARCH_XORBLOCK
 
 #define MD_XORBLOCK_ALIGNMENT	64
 

@@ -126,6 +126,9 @@ struct iso9660_options{
 	uid_t uid;
 	char *iocharset;
 	unsigned char utf8;
+        /* LVE */
+        s32 session;
+        s32 sbsector;
 };
 
 /*
@@ -294,6 +297,8 @@ static int parse_options(char *options, struct iso9660_options * popt)
 	popt->uid = 0;
 	popt->iocharset = NULL;
 	popt->utf8 = 0;
+	popt->session=-1;
+	popt->sbsector=-1;
 	if (!options) return 1;
 	for (this_char = strtok(options,","); this_char; this_char = strtok(NULL,",")) {
 	        if (strncmp(this_char,"norock",6) == 0) {
@@ -336,6 +341,18 @@ static int parse_options(char *options, struct iso9660_options * popt)
 			else if (!strcmp(value,"normal")) popt->map = 'n';
 			else if (!strcmp(value,"acorn")) popt->map = 'a';
 			else return 0;
+		}
+		if (!strcmp(this_char,"session") && value) {
+			char * vpnt = value;
+			unsigned int ivalue = simple_strtoul(vpnt, &vpnt, 0);
+			if(ivalue < 0 || ivalue >99) return 0;
+			popt->session=ivalue+1;
+		}
+		if (!strcmp(this_char,"sbsector") && value) {
+			char * vpnt = value;
+			unsigned int ivalue = simple_strtoul(vpnt, &vpnt, 0);
+			if(ivalue < 0 || ivalue >660*512) return 0;
+			popt->sbsector=ivalue;
 		}
 		else if (!strcmp(this_char,"check") && value) {
 			if (value[0] && !value[1] && strchr("rs",*value))
@@ -404,7 +421,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
  */
 #define WE_OBEY_THE_WRITTEN_STANDARDS 1
 
-static unsigned int isofs_get_last_session(kdev_t dev)
+static unsigned int isofs_get_last_session(kdev_t dev,s32 session )
 {
   struct cdrom_multisession ms_info;
   unsigned int vol_desc_start;
@@ -426,11 +443,26 @@ static unsigned int isofs_get_last_session(kdev_t dev)
       init_waitqueue_head(&inode_fake.i_wait);
       ms_info.addr_format=CDROM_LBA;
       set_fs(KERNEL_DS);
+      if(session >= 0 && session <= 99) {
+	      struct cdrom_tocentry Te;
+	      Te.cdte_track=session;
+	      Te.cdte_format=CDROM_LBA;
+	      i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,
+				       NULL,
+				       CDROMREADTOCENTRY,
+				       (unsigned long) &Te);
+	      set_fs(old_fs);
+	      if(!i) printk(KERN_ERR"Session %d start %d type %d\n",session,Te.cdte_addr.lba,Te.cdte_ctrl&CDROM_DATA_TRACK);
+	      if(i || (Te.cdte_ctrl&CDROM_DATA_TRACK) != 4)
+			printk(KERN_ERR"Invalid session number or type of track\n");
+		else return Te.cdte_addr.lba;
+      }
       i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,
 				       NULL,
 				       CDROMMULTISESSION,
 				       (unsigned long) &ms_info);
       set_fs(old_fs);
+      if(session > 0) printk(KERN_ERR"Invalid session number\n");
 #if 0
       printk("isofs.inode: CDROMMULTISESSION: rc=%d\n",i);
       if (i==0)
@@ -524,7 +556,8 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 
 	s->u.isofs_sb.s_high_sierra = high_sierra = 0; /* default is iso9660 */
 
-	vol_desc_start = isofs_get_last_session(dev);
+	vol_desc_start = (opt.sbsector != -1) ?
+		opt.sbsector : isofs_get_last_session(dev,opt.session);
 
   	for (iso_blknum = vol_desc_start+16;
              iso_blknum < vol_desc_start+100; iso_blknum++)
@@ -1117,7 +1150,7 @@ void isofs_read_inode(struct inode * inode)
 	   .. but a DVD may be up to 1Gig (Ulrich Habel) */
 	if((inode->i_size < 0 || inode->i_size > 1073741824) &&
 	    inode->i_sb->u.isofs_sb.s_cruft == 'n') {
-	  printk("Warning: defective cdrom.  Enabling \"cruft\" mount option.\n");
+	  printk(KERN_WARNING "Warning: defective CD-ROM.  Enabling \"cruft\" mount option.\n");
 	  inode->i_sb->u.isofs_sb.s_cruft = 'y';
 	}
 
@@ -1192,7 +1225,7 @@ void isofs_read_inode(struct inode * inode)
 	 */
 	if (inode->i_sb->u.isofs_sb.s_cruft == 'n' &&
 	    (volume_seq_no != 0) && (volume_seq_no != 1)) {
-	  printk("Warning: defective cdrom (volume sequence number). Enabling \"cruft\" mount option.\n");
+	  printk(KERN_WARNING "Warning: defective CD-ROM (volume sequence number). Enabling \"cruft\" mount option.\n");
 	  inode->i_sb->u.isofs_sb.s_cruft = 'y';
 	}
 
@@ -1201,7 +1234,7 @@ void isofs_read_inode(struct inode * inode)
 #ifndef IGNORE_WRONG_MULTI_VOLUME_SPECS
 	if (inode->i_sb->u.isofs_sb.s_cruft != 'y' &&
 	    (volume_seq_no != 0) && (volume_seq_no != 1)) {
-		printk("Multi volume CD somehow got mounted.\n");
+		printk(KERN_WARNING "Multi-volume CD somehow got mounted.\n");
 	} else
 #endif IGNORE_WRONG_MULTI_VOLUME_SPECS
 	{

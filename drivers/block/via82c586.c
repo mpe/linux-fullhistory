@@ -41,6 +41,7 @@
  *  and its threshold is set to 3/4.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/timer.h>

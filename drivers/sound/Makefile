@@ -76,6 +76,7 @@ obj-$(CONFIG_SOUND_WAVEARTIST)	+= waveartist.o
 obj-$(CONFIG_SOUND_WAVEFRONT)   += wavefront.o
 
 #jnx
+obj-$(CONFIG_SOUND_CMPCI)	+= cmpci.o
 obj-$(CONFIG_SOUND_ES1370)	+= es1370.o
 obj-$(CONFIG_SOUND_ES1371)	+= es1371.o
 obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o

@@ -130,16 +130,14 @@ void clear_page_tables(struct mm_struct *mm, unsigned long first, int nr)
 {
 	pgd_t * page_dir = mm->pgd;
 
-	if (page_dir && page_dir != swapper_pg_dir) {
-		page_dir += first;
-		do {
-			free_one_pgd(page_dir);
-			page_dir++;
-		} while (--nr);
+	page_dir += first;
+	do {
+		free_one_pgd(page_dir);
+		page_dir++;
+	} while (--nr);
 
-		/* keep the page table cache within bounds */
-		check_pgt_cache();
-	}
+	/* keep the page table cache within bounds */
+	check_pgt_cache();
 }
 
 /*

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.70 1999/03/24 11:42:44 davem Exp $
+/* $Id: processor.h,v 1.71 1999/05/27 04:52:43 davem Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -8,10 +8,10 @@
 #define __ASM_SPARC_PROCESSOR_H
 
 /*
- * Default implementation of macro that returns current
+ * Sparc32 implementation of macro that returns current
  * instruction pointer ("program counter").
  */
-#define current_text_addr() ({ __label__ _l; _l: &&_l;})
+#define current_text_addr() ({ void *pc; __asm__("sethi %%hi(1f), %0; or %0, %%lo(1f), %0;\n1:" : "=r" (pc)); pc; })
 
 #include <linux/a.out.h>
 

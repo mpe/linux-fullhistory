@@ -111,6 +111,7 @@ bool 'BSD disklabel (BSD partition tables) support' CONFIG_BSD_DISKLABEL
 bool 'Macintosh partition map support' CONFIG_MAC_PARTITION
 bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
 bool 'Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
+bool 'SGI disklabel support' CONFIG_SGI_DISKLABEL
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'Unixware slices support (EXPERIMENTAL)' CONFIG_UNIXWARE_DISKLABEL
 fi

@@ -415,12 +415,11 @@ static int exec_mmap(void)
 	 * Failure ... restore the prior mm_struct.
 	 */
 fail_restore:
-	/* The pgd belongs to the parent ... don't free it! */
-	mm->pgd = NULL;
 	current->mm = old_mm;
 	/* restore the ldt for this task */
 	copy_segments(nr, current, NULL);
-	mmput(mm);
+	release_segments(mm);
+	kmem_cache_free(mm_cachep, mm);
 
 fail_nomem:
 	return retval;

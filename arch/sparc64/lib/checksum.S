@@ -18,6 +18,7 @@
 #include <asm/ptrace.h>
 #include <asm/asi.h>
 #include <asm/page.h>
+#include <asm/asm_offsets.h>
 
 	/* The problem with the "add with carry" instructions on Ultra
 	 * are two fold.  Firstly, they cannot pair with jack shit,
@@ -265,10 +266,12 @@ cpc_end:
 	.globl	cpc_handler
 cpc_handler:
 	ldx	[%sp + 0x7ff + 128], %g1
+	ldub	[%g6 + AOFF_task_tss + AOFF_thread_current_ds], %g3
 	sub	%g0, EFAULT, %g2
 	brnz,a,pt %g1, 1f
 	 st	%g2, [%g1]
 1:	sethi	%uhi(PAGE_OFFSET), %g4
+	wr	%g3, %g0, %asi
 	retl
 	 sllx	%g4, 32, %g4
 

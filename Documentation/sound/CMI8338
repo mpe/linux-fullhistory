@@ -1,0 +1,32 @@
+Audio driver for CM8338/CM8738 chips by Chen-Li Tien
+
+   Be aware: C-Media Electronics Inc. is basically an IC design house,
+   and whose development of software drivers is mainly for use by its OEM
+   customers in their products. C-Media Electronics Inc. itself does not
+   manufacture end-user products, such as PC or sound cards, so it can
+   not fully control the drivers provided to consumers. Drivers provided
+   at this site, therefore, MAY NOT BE APPLICABLE to all sound cards.
+   Drivers you download from this site may function well at certain
+   situation, but C-Media Electronics Inc. does not give any guarantee or
+   assurances. Please be aware that these drivers might cause some
+   technical difficulties when installed
+
+
+1. Config cm8338 driver by 'make menuconfig' or 'make config' command.
+
+2. Please select Sound Card (CONFIG_SOUND=m) support and CMPCI driver (CONFIG_SOUND_CMPCI=m) as modules. Resident mode not tested.
+
+3. Compile the kernel if necessary.
+
+4. Compile the modules by 'make modules'.
+
+5. Install the modules by 'make modules_install'
+
+6. Before first time to run the driver, create module dependency by 'depmod -a'
+
+7. To install the driver, enter 'modprobe cmpci'.
+
+
+Bugs:
+
+1. Real player cannot be run (the same as es1371).

@@ -979,10 +979,10 @@ awe_wait(unsigned short delay)
 }
 #else
 
-static DECLARE_WAIT_QUEUE_HEAD(awe_sleeper);
 static void awe_wait(unsigned short delay)
 {
-	interruptible_sleep_on_timeout(&awe_sleeper, (HZ * (unsigned long)delay + 44099) / 44100);
+	current->state = TASK_INTERRUPTIBLE;
+	schedule_timeout((HZ*(unsigned long)delay + 44099)/44100);
 }
 #endif /* wait by loop */
 

@@ -3110,6 +3110,44 @@ CONFIG_SPX
   The module will be called af_spx.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+DECnet networking
+CONFIG_DECNET
+  The DECnet networking protocol was used in many products made by
+  Digital (now Compaq). It provides reliable stream and sequenced
+  packet communications over which run a variety of services similar
+  to those which run over TCP/IP.
+
+  To find some tools to use with the kernel layer support, please
+  look at Patrick Caulfield's web site: 
+  http://linux.dreamtime.org/decnet/
+
+  More detailed documentation is available in the
+  Documentation/networking/decnet.txt file.
+
+  Be sure to turn on the CONFIG_PROCFS and CONFIG_SYSCTL options
+  when using DECnet, since you will need sysctl support to aid in
+  configuration at run time.
+
+DECnet SIOCFIGCONF support
+CONFIG_DECNET_SIOCGIFCONF
+   This option should only be turned on if you are really sure that
+   you know what you are doing. It can break other applications which
+   use this system call and the proper way to get the information
+   provided by this call is to use rtnetlink.
+
+DECnet Router Support
+CONFIG_DECNET_ROUTER
+   Add support for turning your DECnet Endnode into a level 1 or 2
+   router. This is an unfinished option for developers only. If you
+   do turn it on, then make sure you also have rtnetlink configured
+   in, since thats the only current method of configuration.
+
+DECnet Raw Socket Support
+CONFIG_DECNET_RAW
+   Add support for the SOCK_RAW type under DECnet. Used by userland
+   routing programs to receive routing messages from the kernel and
+   also as a general debugging aid to see whats going on "under the hood".
+
 AppleTalk DDP
 CONFIG_ATALK
   AppleTalk is the way Apple computers speak to each other on a
@@ -7525,6 +7563,18 @@ CONFIG_UFS_FS_WRITE
   Say Y here if you want to try writing to UFS partitions. This is
   experimental, so you should back up your UFS partitions beforehand.
 
+EFS filesystem support (experimental)
+CONFIG_EFS_FS
+  EFS is the filesystem used for CDROMs and filesystems by SGI's IRIX.
+  This implementation only offers read-only access. If you don't know
+  what all this is about, it's safe to say N. For more information
+  about EFS see its homepage at http://aeschi.ch.eu.org/efs/.
+
+SGI disklabel support
+CONFIG_SGI_DISKLABEL
+  Say Y to this only if you plan on mounting disks with SGI disklabels.
+  This is not required to mount EFS-format CDROMs.
+
 BSD disklabel (FreeBSD partition tables) support
 CONFIG_BSD_DISKLABEL
   FreeBSD uses its own hard disk partition scheme on your PC. It
@@ -11559,6 +11609,64 @@ CONFIG_BVME6000_SCC
   This is the driver for the serial ports on the BVME4000 and BVME6000
   boards from BVM Ltd.  Everyone using one of these boards should say
   Y here.
+
+Universal Serial Bus (USB) Support (Experimental)
+CONFIG_USB
+  This will enable support for the Universal Serial Bus (USB).  USB 
+  allows you to connect up to 127 external devices such as keyboards, 
+  mice, printers and modems to your computer through a USB connector.
+  This code can also be built as a module (i.e. code outside the 
+  kernel that can be added and removed at runtime), consult 
+  Documentation/modules.txt for more information.
+
+UHCI (intel PIIX4 and others) support
+CONFIG_USB_UHCI
+  The UHCI is the USB host controller for many computers, and is built
+  into all recent boards with intel PCI chipsets. This driver is
+  needed for these motherboards to support USB.
+
+OHCI (compaq and some others) support
+CONFIG_USB_OHCI
+  The OHCI (Open Host Controller Interface) is the USB host controller
+  on most non-Intel architectures, several USB-adding PCI cards, and
+  is on several x86 compatibles with non-Intel chipsets. This driver
+  is needed for these motherboards to support USB. There is presently
+  two OHCI drivers in development. Say 'N' here if you would like to
+  compile the other OHCI driver into the linux kernel.
+
+OHCI-HCD (other OHCI opt. Virt. Root Hub) support
+CONFIG_USB_OHCI_HCD
+  The OHCI (Open Host Controller Interface) is the USB host controller
+  on most non-Intel architectures, several USB-adding PCI cards, and
+  is on several x86 compatibles with non-Intel chipsets. This driver
+  is needed for these motherboards to support USB. There is presently
+  two OHCI drivers in development. 
+
+USB hub support
+CONFIG_USB_HUB
+  To expand beyond the USB ports on the computer, a device called a 
+  hub is used. This driver supports hubs, allowing them to be used. 
+  Say 'Y'
+
+USB mouse support
+CONFIG_USB_MOUSE  
+  This driver allows mice to work under the USB stack. It currently
+  patches into /dev/ps2aux, although it does not require the ps2 
+  mouse code to be included in the kernel as well.
+
+USB keyboard support
+CONFIG_USB_KBD
+  This driver allows usb keyboards to work under the USB stack.
+
+USB audio parsing support (Preliminary)
+CONFIG_USB_AUDIO
+  This driver will eventually handle audio devices, such 
+  as USB speakers.
+
+USB Abstract Control Model support (Preliminary)
+CONFIG_USB_ACM
+  This driver allows for devices which support the Abstract Control Model,
+  including many USB-based modems, ISDN adapters, and network adapters.
 
 #
 # A couple of things I keep forgetting:

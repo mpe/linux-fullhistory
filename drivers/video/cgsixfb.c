@@ -1,4 +1,4 @@
-/* $Id: cgsixfb.c,v 1.16 1999/03/09 14:01:49 davem Exp $
+/* $Id: cgsixfb.c,v 1.17 1999/05/25 01:00:31 davem Exp $
  * cgsixfb.c: CGsix (GX,GXplus) frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -588,7 +588,7 @@ static void cg6_margins (struct fb_info_sbusfb *fb, struct display *p, int x_mar
 	p->screen_base += (y_margin - fb->y_margin) * p->line_length + (x_margin - fb->x_margin);
 }
 
-static char idstring[60] __initdata = { 0 };
+static char idstring[70] __initdata = { 0 };
 
 __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 {
@@ -599,6 +599,7 @@ __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 	unsigned long phys = fb->sbdp->reg_addrs[0].phys_addr;
 	u32 conf;
 	char *p;
+	char *cardtype;
 	struct bt_regs *bt;
 
 	strcpy(fb->info.modename, "CGsix");
@@ -656,15 +657,29 @@ __initfunc(char *cgsixfb_init(struct fb_info_sbusfb *fb))
 	case CG6_FHC_CPU_68020: p = "68020"; break;
 	default: p = "i386"; break;
 	}
+
+	if (((conf >> CG6_FHC_REV_SHIFT) & CG6_FHC_REV_MASK) >= 11) {
+		if (fix->smem_len <= 0x100000) {
+			cardtype = "TurboGX";
+		} else {
+			cardtype = "TurboGX+";
+		}
+	} else {
+		if (fix->smem_len <= 0x100000) {
+			cardtype = "GX";
+		} else {
+			cardtype = "GX+";
+		}
+	}
 	                                                                        
 	sprintf(idstring, 
 #ifdef __sparc_v9__
-		    "cgsix at %016lx TEC Rev %x CPU %s Rev %x", phys, 
+		    "cgsix at %016lx TEC Rev %x CPU %s Rev %x [%s]", phys, 
 #else	
-		    "cgsix at %x.%08lx TEC Rev %x CPU %s Rev %x", fb->iospace, phys, 
+		    "cgsix at %x.%08lx TEC Rev %x CPU %s Rev %x [%s]", fb->iospace, phys, 
 #endif
 		    (fb->s.cg6.thc->thc_misc >> CG6_THC_MISC_REV_SHIFT) & CG6_THC_MISC_REV_MASK,
-		    p, conf >> CG6_FHC_REV_SHIFT & CG6_FHC_REV_MASK);
+		    p, conf >> CG6_FHC_REV_SHIFT & CG6_FHC_REV_MASK, cardtype);
 		    
 	cg6_reset(fb);
 		    

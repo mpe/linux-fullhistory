@@ -203,7 +203,6 @@ EXPORT_SYMBOL(tty_unregister_driver);
 EXPORT_SYMBOL(tty_std_termios);
 
 /* block device driver support */
-EXPORT_SYMBOL(blk_ioctl);
 EXPORT_SYMBOL(block_read);
 EXPORT_SYMBOL(block_write);
 EXPORT_SYMBOL(block_fsync);

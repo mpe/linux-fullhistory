@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.45 1998/11/09 15:33:29 davem Exp $
+/* $Id: rtrap.S,v 1.46 1999/05/25 16:53:20 jj Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -106,7 +106,6 @@ rt_continue:	lduh			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %l0
 		brnz,pn			%l3, kern_rtt
 		 mov			PRIMARY_CONTEXT, %l7
 		stxa			%l0, [%l7] ASI_DMMU
-		stxa			%l0, [%l7 + %l7] ASI_DMMU
 		flush			%o5
 		rdpr			%wstate, %l1
 

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.19 1999/03/25 10:04:50 davem Exp $
+ *	$Id: mcast.c,v 1.20 1999/05/27 00:38:23 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *

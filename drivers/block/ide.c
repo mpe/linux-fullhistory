@@ -295,8 +295,9 @@ int drive_is_flashcard (ide_drive_t *drive)
 
 	if (drive->removable && id != NULL) {
 		if (!strncmp(id->model, "KODAK ATA_FLASH", 15)	/* Kodak */
-		 || !strncmp(id->model, "Hitachi CV", 10)		/* Hitachi */
-		 || !strncmp(id->model, "SunDisk SDCFB", 13))	/* SunDisk */
+		 || !strncmp(id->model, "Hitachi CV", 10)	/* Hitachi */
+		 || !strncmp(id->model, "SunDisk SDCFB", 13)	/* SunDisk */
+		 || !strncmp(id->model, "HAGIWARA HPC", 12))	/* Hagiwara */
 		{
 			return 1;	/* yes, it is a flash memory card */
 		}
@@ -1549,8 +1550,10 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	struct request *cur_rq;
 	DECLARE_MUTEX_LOCKED(sem);
 
-	if (IS_PDC4030_DRIVE && rq->buffer != NULL)
+#ifdef CONFIG_BLK_DEV_PDC4030
+	if (HWIF(drive)->chipset == ide_pdc4030 && rq->buffer != NULL)
 		return -ENOSYS;  /* special drive cmds not supported */
+#endif
 	rq->errors = 0;
 	rq->rq_status = RQ_ACTIVE;
 	rq->rq_dev = MKDEV(major,(drive->select.b.unit)<<PARTN_BITS);
@@ -1779,6 +1782,8 @@ void ide_unregister (unsigned int index)
 	sti();
 	for (unit = 0; unit < MAX_DRIVES; ++unit) {
 		drive = &hwif->drives[unit];
+		if (!drive->present)
+			continue;
 		minor = drive->select.b.unit << PARTN_BITS;
 		for (p = 0; p < (1<<PARTN_BITS); ++p) {
 			if (drive->part[p].nr_sects > 0) {
@@ -2786,8 +2791,8 @@ __initfunc(void ide_setup (char *s))
 #ifdef CONFIG_BLK_DEV_PDC4030
 			case -14: /* "dc4030" */
 			{
-				extern void setup_pdc4030(ide_hwif_t *);
-				setup_pdc4030(hwif);
+				extern void init_pdc4030(void);
+				init_pdc4030();
 				goto done;
 			}
 #endif /* CONFIG_BLK_DEV_PDC4030 */
@@ -3040,8 +3045,8 @@ __initfunc(static void probe_for_hwifs (void))
 #endif /* CONFIG_BLK_DEV_CMD640 */
 #ifdef CONFIG_BLK_DEV_PDC4030
 	{
-		extern int init_pdc4030(void);
-		(void) init_pdc4030();
+		extern int ide_probe_for_pdc4030(void);
+		(void) ide_probe_for_pdc4030();
 	}
 #endif /* CONFIG_BLK_DEV_PDC4030 */
 #ifdef CONFIG_BLK_DEV_IDE_PMAC

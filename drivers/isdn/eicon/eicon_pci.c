@@ -54,6 +54,7 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/pci.h>
 
 #include "eicon.h"

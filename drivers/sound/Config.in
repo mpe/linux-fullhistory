@@ -9,6 +9,7 @@
 
 # Prompt user for primary drivers.
 
+dep_tristate 'C-Media PCI (CMI8338/8378)' CONFIG_SOUND_CMPCI $CONFIG_SOUND
 dep_tristate 'Ensoniq AudioPCI (ES1370)' CONFIG_SOUND_ES1370 $CONFIG_SOUND
 if [ "$CONFIG_SOUND_ES1370" = "y" ]; then
    bool 'Joystick support at boot time' CONFIG_SOUND_ES1370_JOYPORT_BOOT

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.176 1999/05/12 11:24:46 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.177 1999/05/27 00:37:27 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1360,9 +1360,9 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 
 		newsk->done = 0;
 		newsk->proc = 0;
-		newsk->pair = NULL;
 		newsk->backlog.head = newsk->backlog.tail = NULL;
 		skb_queue_head_init(&newsk->error_queue);
+		newsk->write_space = tcp_write_space;
 #ifdef CONFIG_FILTER
 		if ((filter = newsk->filter) != NULL)
 			sk_filter_charge(newsk, filter);
@@ -1584,7 +1584,8 @@ static inline struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
 	}
 
 	/* Check for SYN|ACK */
-	if (flg & __constant_htonl(0x00120000)) {
+	flg &= __constant_htonl(0x00120000);
+	if (flg) {
 		struct open_request *req, *dummy; 
 		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 

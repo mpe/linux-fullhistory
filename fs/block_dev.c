@@ -273,6 +273,8 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 			if (++bhe == &buflist[NBUF])
 				bhe = buflist;
 		} while (left > 0 && bhe != bhb && (!*bhe || !buffer_locked(*bhe)));
+		if (bhe == bhb && !blocks)
+			break;
 	} while (left > 0);
 
 /* Release the read-ahead blocks */

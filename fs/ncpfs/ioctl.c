@@ -89,7 +89,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 
 		result = ncp_request2(server, request.function, 
 			bouncebuffer, NCP_PACKET_SIZE);
-		if (result)
+		if (result < 0)
 			result = -EIO;
 		else
 			result = server->reply_size;

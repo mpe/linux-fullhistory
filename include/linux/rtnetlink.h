@@ -418,7 +418,9 @@ enum
 	IFLA_MTU,
 	IFLA_LINK,
 	IFLA_QDISC,
-	IFLA_STATS
+	IFLA_STATS,
+	IFLA_COST,
+	IFLA_PRIORITY
 };
 
 
@@ -505,6 +507,9 @@ enum
 #define RTMGRP_IPV6_IFADDR	0x100
 #define RTMGRP_IPV6_MROUTE	0x200
 #define RTMGRP_IPV6_ROUTE	0x400
+
+#define RTMGRP_DECnet_IFADDR    0x1000
+#define RTMGRP_DECnet_ROUTE     0x4000
 
 /* End of information exported to user level */
 

@@ -34,7 +34,6 @@
 
  */
 
-#include <linux/config.h>	/* for CONFIG_BLK_DEV_IDEPCI */
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>

@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.88 1999/05/12 11:24:27 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.89 1999/05/27 00:37:42 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -219,12 +219,6 @@ void destroy_sock(struct sock *sk)
 
 	kill_sk_queues(sk);
 
-	/* Now if it has a half accepted/ closed socket. */
-	if (sk->pair) {
-		sk->pair->prot->close(sk->pair, 0);
-		sk->pair = NULL;
-  	}
-
 	/* Now if everything is gone we can free the socket
 	 * structure, otherwise we need to keep it around until
 	 * everything is gone.
@@ -290,6 +284,14 @@ static int inet_autobind(struct sock *sk)
 	return 0;
 }
 
+/* Listening INET sockets never sleep to wait for memory, so
+ * it is completely silly to wake them up on queue space
+ * available events.  So we hook them up to this dummy callback.
+ */
+static void inet_listen_write_space(struct sock *sk)
+{
+}
+
 /*
  *	Move a socket into listening state.
  */
@@ -316,6 +318,7 @@ int inet_listen(struct socket *sock, int backlog)
 		dst_release(xchg(&sk->dst_cache, NULL));
 		sk->prot->rehash(sk);
 		add_to_prot_sklist(sk);
+		sk->write_space = inet_listen_write_space;
 	}
 	sk->socket->flags |= SO_ACCEPTCON;
 	return(0);
@@ -690,14 +693,8 @@ int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	if (sk1->prot->accept == NULL)
 		goto do_err;
 
-	/* Restore the state if we have been interrupted, and then returned. */
-	if (sk1->pair != NULL) {
-		sk2 = sk1->pair;
-		sk1->pair = NULL;
-	} else {
-		if((sk2 = sk1->prot->accept(sk1,flags)) == NULL)
-			goto do_sk1_err;
-	}
+	if((sk2 = sk1->prot->accept(sk1,flags)) == NULL)
+		goto do_sk1_err;
 
 	/*
 	 *	We've been passed an extra socket.

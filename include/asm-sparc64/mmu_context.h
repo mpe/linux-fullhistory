@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.35 1999/05/08 03:03:20 davem Exp $ */
+/* $Id: mmu_context.h,v 1.36 1999/05/25 16:53:34 jj Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -27,7 +27,7 @@ extern void get_new_mmu_context(struct mm_struct *mm);
 #define init_new_context(__mm)	((__mm)->context = NO_CONTEXT)
 
 /* Kernel threads like rpciod and nfsd drop their mm, and then use
- * init_mm, when this happens we must make sure the tsk->tss.ctx is
+ * init_mm, when this happens we must make sure the secondary context is
  * updated as well.  Otherwise we have disasters relating to
  * set_fs/get_fs usage later on.
  *
@@ -49,12 +49,7 @@ extern void get_new_mmu_context(struct mm_struct *mm);
 	} 									\
 } while (0)
 
-/* This routine must called with interrupts off,
- * this is necessary to guarentee that the current->tss.ctx
- * to CPU secontary context register relationship is maintained
- * when traps can happen.
- *
- * Also the caller must flush the current set of user windows
+/* The caller must flush the current set of user windows
  * to the stack (if necessary) before we get here.
  */
 extern __inline__ void __get_mmu_context(struct task_struct *tsk)
@@ -62,27 +57,30 @@ extern __inline__ void __get_mmu_context(struct task_struct *tsk)
 	register unsigned long paddr asm("o5");
 	register unsigned long pgd_cache asm("o4");
 	struct mm_struct *mm = tsk->mm;
+	unsigned long asi;
 
 	if(!(tsk->tss.flags & SPARC_FLAG_KTHREAD)	&&
 	   !(tsk->flags & PF_EXITING)) {
 		unsigned long ctx = tlb_context_cache;
 		if((mm->context ^ ctx) & CTX_VERSION_MASK)
 			get_new_mmu_context(mm);
+		tsk->tss.ctx = mm->context & 0x3ff;
+		spitfire_set_secondary_context(mm->context & 0x3ff);
+		__asm__ __volatile__("flush %g6");
 		if(!(mm->cpu_vm_mask & (1UL<<smp_processor_id()))) {
-			spitfire_set_secondary_context(mm->context & 0x3ff);
-			__asm__ __volatile__("flush %g6");
 			spitfire_flush_dtlb_secondary_context();
 			spitfire_flush_itlb_secondary_context();
 			__asm__ __volatile__("flush %g6");
 		}
-		/* Don't worry, set_fs() will restore it... */
-		/* Sigh, damned include loops... just poke seg directly.  */
-		tsk->tss.ctx = (tsk->tss.current_ds.seg ?
-				(mm->context & 0x3ff) : 0);
-	} else
+		asi = tsk->tss.current_ds.seg;
+	} else {
 		tsk->tss.ctx = 0;
-	spitfire_set_secondary_context(tsk->tss.ctx);
-	__asm__ __volatile__("flush %g6");
+		spitfire_set_secondary_context(0);
+		__asm__ __volatile__("flush %g6");
+		asi = ASI_P;
+	}
+	/* Sigh, damned include loops... just poke seg directly.  */
+	__asm__ __volatile__ ("wr %%g0, %0, %%asi" : : "r" (asi));
 	paddr = __pa(mm->pgd);
 	if((tsk->tss.flags & (SPARC_FLAG_32BIT|SPARC_FLAG_KTHREAD)) ==
 	   (SPARC_FLAG_32BIT))

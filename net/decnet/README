@@ -1,15 +1,8 @@
                        Linux DECnet Project
                       ======================
 
-For information on the Linux DECnet Project and the latest progress,
-look at the project home page:
-
-http://www.sucs.swan.ac.uk/~rohan/DECnet/
-
-To contribute either mail <SteveW@ACM.org> or post on one of the Linux
-mailing lists (either linux-net or netdev). DECnet for Linux will not
-be distributed as part of the 2.2.xx kernel series. It is available as a
-patch from the above site. Expect DECnet to arrive as part of the standard 
-kernel distribution early in the 2.3.xx series.
+The documentation for this kernel subsystem is available in the
+Documentation/networking subdirctory of this distribution and also
+on line at http://www.sucs.swan.ac.uk/~rohan/DECnet/index.html.
 
 Steve Whitehouse <SteveW@ACM.org>

@@ -750,8 +750,8 @@ static struct net_device_stats *cosa_net_stats(struct device *dev)
 
 static void chardev_channel_init(struct channel_data *chan)
 {
-	chan->rsem = MUTEX;
-	chan->wsem = MUTEX;
+	init_MUTEX(&chan->rsem);
+	init_MUTEX(&chan->wsem);
 }
 
 static long long cosa_lseek(struct file * file,

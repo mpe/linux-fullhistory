@@ -382,6 +382,9 @@ int soundcore_init(void)
 #ifdef CONFIG_SOUND_SONICVIBES
 	init_sonicvibes();
 #endif
+#ifdef CONFIG_SOUND_CMPCI
+	init_cmpci();
+#endif
 #ifdef CONFIG_SOUND_ES1370
 	init_es1370();
 #endif

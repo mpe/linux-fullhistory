@@ -249,6 +249,7 @@
 
 #define IDECD_VERSION "4.53"
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -3014,6 +3015,7 @@ static void ide_cdrom_slot_check (ide_drive_t *drive, int nslots)
 				break;
 		}
 	}
+	(void) ide_cdrom_select_disc(devinfo, 0);
 }
 #endif /* CONFIG_IDECD_SLOTS */
 

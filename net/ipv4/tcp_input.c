@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.165 1999/05/14 23:10:08 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.166 1999/05/27 00:37:22 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -2068,8 +2068,26 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 		/* These use the socket TOS.. 
 		 * might want to be the received TOS 
 		 */
-		if(th->ack)
-			return 1;
+		if(th->ack) {
+			struct sock *realsk;
+			int ret;
+
+			realsk = tp->af_specific->get_sock(skb, th);
+			if(realsk == sk)
+				return 1;
+
+			bh_lock_sock(realsk);
+			ret = 0;
+			if(realsk->lock.users != 0) {
+				skb_orphan(skb);
+				sk_add_backlog(realsk, skb);
+			} else {
+				ret = tcp_rcv_state_process(realsk, skb,
+							    skb->h.th, skb->len);
+			}
+			bh_unlock_sock(realsk);
+			return ret;
+		}
 		
 		if(th->syn) {
 			if(tp->af_specific->conn_request(sk, skb, 0) < 0)

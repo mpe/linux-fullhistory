@@ -194,7 +194,6 @@ EXPORT_SYMBOL(neigh_rand_reach_time);
 /*	dst_entry	*/
 EXPORT_SYMBOL(dst_alloc);
 EXPORT_SYMBOL(__dst_free);
-EXPORT_SYMBOL(dst_total);
 EXPORT_SYMBOL(dst_destroy);
 
 /*	misc. support routines */

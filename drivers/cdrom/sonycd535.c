@@ -318,7 +318,7 @@ static void
 cdu535_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	disable_interrupts();
-	if (wait_queue_active(&cdu535_irq_wait))
+	if (waitqueue_active(&cdu535_irq_wait))
 		wake_up(&cdu535_irq_wait);
 	else
 		printk(CDU535_MESSAGE_NAME

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.24 1999/04/22 10:07:45 davem Exp $
+ *	$Id: raw.c,v 1.25 1999/05/27 00:38:16 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License

@@ -1,7 +1,7 @@
-/* $Id: strncpy_from_user.S,v 1.5 1997/09/08 11:29:23 jj Exp $
+/* $Id: strncpy_from_user.S,v 1.6 1999/05/25 16:53:05 jj Exp $
  * strncpy_from_user.S: Sparc64 strncpy from userspace.
  *
- *  Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ *  Copyright (C) 1997, 1999 Jakub Jelinek (jj@ultra.linux.cz)
  */
 
 #include <asm/asi.h>
@@ -37,19 +37,20 @@ __strncpy_from_user:
 	andcc	%o1, 7, %g0		! IEU1
 	bne,pn	%icc, 30f		! CTI
 	 ldx	[%o5 + %lo(0b)], %o4	! Load	Group
-60:	ldxa	[%o1] ASI_S, %g1	! Load	Group
-	add	%o1, %o2, %o1		! IEU0
-	subcc	%g0, %o2, %o3		! IEU1
-	bgeu,pn	%xcc, 10f		! CTI
+	add	%o0, %o2, %g3		! IEU0
+60:	ldxa	[%o1] %asi, %g1		! Load	Group
+	brlez,pn %o2, 10f		! CTI
 	 sllx	%o4, 7, %o5		! IEU0	Group
-	add	%o0, %o2, %o0		! IEU1
+	mov	%o0, %o3		! IEU1
 1:	sub	%g1, %o4, %g2		! IEU0	Group
-	stx	%g1, [%o0 + %o3]	! Store
+	stx	%g1, [%o0]		! Store
+	add	%o0, 8, %o0		! IEU1
 	andcc	%g2, %o5, %g0		! IEU1	Group
 	bne,pn	%xcc, 5f		! CTI
-	 add	%o3, 8, %o3		! IEU0
-	brlz,a,pt %o3, 1b		! CTI(IEU1) Group
-61:	 ldxa	[%o1 + %o3] ASI_S, %g1	! Load
+	 add	%o1, 8, %o1		! IEU0
+	cmp	%o0, %g3		! IEU1	Group
+	bl,a,pt %xcc, 1b		! CTI
+61:	 ldxa	[%o1] %asi, %g1		! Load
 10:	retl				! CTI	Group
 	 mov	%o2, %o0		! IEU0
 5:	srlx	%g2, 32, %g7		! IEU0	Group
@@ -78,44 +79,45 @@ __strncpy_from_user:
 	be,pn	%icc, 56f		! CTI
 	 andcc	%g1, 0xff, %g0		! IEU1	Group
 	be,a,pn	%icc, 57f		! CTI
-	 add	%o2, %o3, %o0		! IEU0
-2:	brlz,a,pt %o3, 1b		! CTI(IEU1) Group
-62:	 ldxa	[%o1 + %o3] ASI_S, %g1	! Load
+	 sub	%o0, %o3, %o0		! IEU0
+2:	cmp	%o0, %g3		! IEU1	Group
+	bl,a,pt	%xcc, 1b		! CTI
+62:	 ldxa	[%o1] %asi, %g1		! Load
 	retl				! CTI	Group
 	 mov	%o2, %o0		! IEU0
-50:	add	%o2, %o3, %o0
+50:	sub	%o0, %o3, %o0
 	retl
 	 sub	%o0, 8, %o0
-51:	add	%o2, %o3, %o0
+51:	sub	%o0, %o3, %o0
 	retl
 	 sub	%o0, 7, %o0
-52:	add	%o2, %o3, %o0
+52:	sub	%o0, %o3, %o0
 	retl
 	 sub	%o0, 6, %o0
-53:	add	%o2, %o3, %o0
+53:	sub	%o0, %o3, %o0
 	retl
 	 sub	%o0, 5, %o0
-54:	add	%o2, %o3, %o0
+54:	sub	%o0, %o3, %o0
 	retl
 	 sub	%o0, 4, %o0
-55:	add	%o2, %o3, %o0
+55:	sub	%o0, %o3, %o0
 	retl
 	 sub	%o0, 3, %o0
-56:	add	%o2, %o3, %o0
+56:	sub	%o0, %o3, %o0
 	retl
 	 sub	%o0, 2, %o0
 57:	retl
 	 sub	%o0, 1, %o0
 30:	brlez,pn %o2, 3f
-	 add	%o1, %o2, %o1
-	sub	%g0, %o2, %o3
+	 sub	%g0, %o2, %o3
 	add	%o0, %o2, %o0
-63:	lduba	[%o1 + %o3] ASI_S, %o4
-1:	brz,pn	%o4, 2f
+63:	lduba	[%o1] %asi, %o4
+1:	add	%o1, 1, %o1
+	brz,pn	%o4, 2f
 	 stb	%o4, [%o0 + %o3]
 	addcc	%o3, 1, %o3
 	bne,pt	%xcc, 1b
-64:	 lduba	[%o1 + %o3] ASI_S, %o4
+64:	 lduba	[%o1] %asi, %o4
 3:	retl
 	 mov	%o2, %o0
 2:	retl

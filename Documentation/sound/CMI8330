@@ -1,27 +1,27 @@
-How to enable CMI 8330 soundchip on Linux
+How to enable CMI 8330 (SOUNDPRO) soundchip on Linux
 ------------------------------------------
 Stefan Laudat <Stefan.Laudat@asit.ro>
 
-Hello folks, 
+[Note: The CMI 8338 is unrelated and right now unsupported]
+
 	
-	The CMI8330 soundchip is a very small chip found on many recent 
-	motherboards. In order to use it you just have to use a proper 
-        isapnp.conf and a little bit of patience. 
-	
-	Of course you will have to compile kernel sound support as module, 
-        as shown below:
+	In order to use CMI8330 under Linux  you just have to use a proper isapnp.conf, a good isapnp and a little bit of patience.  I use isapnp 1.17, but
+you may get a better one I guess at http://www.roestock.demon.co.uk/isapnptools/.
+
+	Of course you will have to compile kernel sound support as module, as shown below:
 
 CONFIG_SOUND=m
 CONFIG_SOUND_OSS=m
 CONFIG_SOUND_SB=m
 CONFIG_SOUND_ADLIB=m
 CONFIG_SOUND_MPU401=m
-# Just for fun :)
+# Mikro$chaft sound system (kinda useful here ;))	
 CONFIG_SOUND_MSS=m
 
 	The /etc/isapnp.conf file will be:
 
 <snip below>
+
 
 (READPORT 0x0203)
 (ISOLATE PRESERVE)
@@ -29,18 +29,20 @@ CONFIG_SOUND_MSS=m
 (VERBOSITY 2)
 (CONFLICT (IO FATAL)(IRQ FATAL)(DMA FATAL)(MEM FATAL)) # or WARNING
 (VERIFYLD N)
+
+
 # WSS 
 
 (CONFIGURE CMI0001/16777472 (LD 0
 (IO 0 (SIZE 8) (BASE 0x0530))
 (IO 1 (SIZE 8) (BASE 0x0388))
-(INT 0 (IRQ 5 (MODE +E)))
+(INT 0 (IRQ 7 (MODE +E)))
 (DMA 0 (CHANNEL 0))
 (NAME "CMI0001/16777472[0]{CMI8330/C3D Audio Adapter}")
 (ACT Y)
 ))
 
-# Control device ? 
+# MPU
 
 (CONFIGURE CMI0001/16777472 (LD 1
 (IO 0 (SIZE 2) (BASE 0x0330))
@@ -57,10 +59,11 @@ CONFIG_SOUND_MSS=m
 (ACT Y)
 ))
 
-#  SB... 
+# SoundBlaster 
+ 
 (CONFIGURE CMI0001/16777472 (LD 3
 (IO 0 (SIZE 16) (BASE 0x0220))
-(INT 0 (IRQ 7 (MODE +E)))
+(INT 0 (IRQ 5 (MODE +E)))
 (DMA 0 (CHANNEL 1))
 (DMA 1 (CHANNEL 5))
 (NAME "CMI0001/16777472[3]{CMI8330/C3D Audio Adapter}")
@@ -74,13 +77,22 @@ CONFIG_SOUND_MSS=m
 
 	The module sequence is trivial:
 
-/sbin/modprobe sound
-# You need to load the ad1848 module first. That matters, otherwise the 
-# chip falls into soundblaster compatibility and you won't get it back out
-/sbin/insmod ad1848 io=0x530 dma=0 irq=5 soundpro=1
+/sbin/insmod soundcore
+/sbin/insmod sound
 /sbin/insmod uart401
-/sbin/insmod sb io=0x220 irq=5 dma=1 dma16=-1
-/sbin/insmod mpu401 io=0x330
-/sbin/insmod opl3 io=0x388
+# insert this first
+/sbin/insmod ad1848 io=0x530 irq=7 dma=0 soundpro=1
+# The sb module is an alternative to the ad1848 (Microsoft Sound System)
+# Anyhow, this is full duplex and has MIDI
+/sbin/insmod sb io=0x220 dma=1 dma16=5 irq=5 mpu_io=0x330
 
-	The soundchip is now fully initialized. Enjoy it.
+
+
+Alma Chao <elysian@ethereal.torsion.org> suggests the following /etc/conf.modules:
+
+alias sound ad1848
+alias synth0 opl3
+options ad1848 io=0x530 irq=7 dma=0 soundpro=1
+options opl3 io=0x388
+
+	

@@ -1,0 +1,59 @@
+Steve's quick list of things that need finishing off:
+[they are in no particular order and range from the trivial to the long winded]
+
+ o Proper timeouts on each neighbour (in routing mode) rather than
+   just the 60 second On-Ethernet cache value.
+
+ o MOP support (probably as part of Raw sockets) [hooks in]
+
+ o Routing stuff in dn_fib.c
+
+ o Misc. get/set_sockopt() functions [done for the time being, more later]
+
+ o Support for X.25 linklayer
+
+ o Support for DDCMP link layer
+
+ o The DDCMP device itself
+
+ o PPP support (rfc1762)
+
+ o sendmsg() in the raw socket layer
+
+ o Better filtering of traffic in raw sockets
+
+ o Fix /proc for raw sockets
+
+ o Lots of testing with real applications
+
+ o Verify errors etc. against POSIX 1003.1g (draft)
+
+ o Using send/recvmsg() to get at connect/disconnect data (POSIX 1003.1g) 
+   [maybe this should be done at socket level... the control data in the
+    send/recvmsg() calls should simply be a vector of set/getsockopt()
+    calls]
+
+ o recvmsg() to optionally report remote address.
+
+ o check MSG_TRUNC, MSG_CTRUNC are set where they should be.
+
+ o Work out if I really need support for rtnetlink "link" messages and if
+   so how they should be handled.
+
+ o More rtnetlink "route" message support & testing of this code
+
+ o Routing ioctl() support
+
+ o Start to hack together user level software and add more DECnet support
+   in ifconfig for example. Also a DECnet equivalent to Alexey's ip config
+   tool is required. Hopefully I can steal some code from that.
+
+ o Sort out MSG_EOR in sendmsg.... should it be used, or is each transmission
+   a seperate message ? What about when you get interrupted by a signal ?
+
+ o Fix conninit_rx to check out each CI before queuing it
+
+ o Work out which errors we can return from conninit_rx, and how to do it
+
+ o Check out receiving of errors in the light of what conninit_rx can return
+

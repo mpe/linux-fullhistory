@@ -119,11 +119,13 @@ static efs_block_t efs_validate_vh(struct volume_header *vh) {
 
 	if (slice == -1) {
 		printk(KERN_NOTICE "EFS: partition table contained no EFS partitions\n");
+#ifdef DEBUG
 	} else {
 		printk(KERN_INFO "EFS: using slice %d (type %s, offset 0x%x)\n",
 			slice,
 			(pt_entry->pt_name) ? pt_entry->pt_name : "unknown",
 			sblock);
+#endif
 	}
 	return(sblock);
 }
@@ -178,12 +180,14 @@ struct super_block *efs_read_super(struct super_block *s, void *d, int silent) {
 
 	bh = bread(dev, sb->fs_start + EFS_SUPER, EFS_BLOCKSIZE);
 	if (!bh) {
-		printk(KERN_ERR "EFS: unable to read superblock\n");
+		printk(KERN_ERR "EFS: cannot read superblock\n");
 		goto out_no_fs_ul;
 	}
 		
 	if (efs_validate_super(sb, (struct efs_super *) bh->b_data)) {
+#ifdef DEBUG
 		printk(KERN_WARNING "EFS: invalid superblock at block %u\n", sb->fs_start + EFS_SUPER);
+#endif
 		brelse(bh);
 		goto out_no_fs_ul;
 	}

@@ -742,10 +742,7 @@ int sb_dsp_init(struct address_info *hw_config)
 					hw_config->name = "Sound Blaster Pro (8 BIT ONLY)";
 				break;
 			case MDL_ESS:
-				if (!ess_dsp_init(devc, hw_config)) {
-					release_region (hw_config->io_base, 16);
-					return 0;
-				}
+				ess_dsp_init(devc, hw_config);
 				break;
 			}
 			break;
@@ -887,6 +884,9 @@ void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 
 	if (devc && devc->base == hw_config->io_base)
 	{
+		if ((devc->model & MDL_ESS) && devc->pcibase)
+			release_region(devc->pcibase, 8);
+
 		release_region(devc->base, 16);
 
 		if (!(devc->caps & SB_NO_AUDIO))
@@ -1190,7 +1190,16 @@ static int init_Jazz16_midi(sb_devc * devc, struct address_info *hw_config)
 
 void attach_sbmpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
+	if (last_sb->model == MDL_ESS) {
+#if defined(CONFIG_SOUND_MPU401)
+		attach_mpu401(hw_config);
+		if (last_sb->irq == -hw_config->irq) {
+			last_sb->midi_irq_cookie=(void *)hw_config->slots[1];
+		}
+#endif
+		return;
+	}
+#if defined(CONFIG_UART401)
 	attach_uart401(hw_config);
 	last_sb->midi_irq_cookie=midi_devs[hw_config->slots[4]]->devc;
 #endif
@@ -1198,7 +1207,6 @@ void attach_sbmpu(struct address_info *hw_config)
 
 int probe_sbmpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
 	sb_devc *devc = last_devc;
 
 	if (last_devc == NULL)
@@ -1209,6 +1217,23 @@ int probe_sbmpu(struct address_info *hw_config)
 	if (hw_config->io_base <= 0)
 		return 0;
 
+#if defined(CONFIG_SOUND_MPU401)
+	if (devc->model == MDL_ESS)
+	{
+		if (check_region(hw_config->io_base, 2))
+		{
+			printk(KERN_ERR "sbmpu: I/O port conflict (%x)\n", hw_config->io_base);
+			return 0;
+		}
+		if (!ess_midi_init(devc, hw_config))
+			return 0;
+		hw_config->name = "ESS1xxx MPU";
+		devc->midi_irq_cookie = -1;
+		return probe_mpu401(hw_config);
+	}
+#endif
+
+#if defined(CONFIG_UART401)
 	if (check_region(hw_config->io_base, 4))
 	{
 		printk(KERN_ERR "sbmpu: I/O port conflict (%x)\n", hw_config->io_base);
@@ -1226,14 +1251,6 @@ int probe_sbmpu(struct address_info *hw_config)
 			hw_config->irq = -devc->irq;
 			if (devc->minor > 12)		/* What is Vibra's version??? */
 				sb16_set_mpu_port(devc, hw_config);
-			break;
-
-		case MDL_ESS:
-			if (hw_config->irq < 3 || hw_config->irq == devc->irq)
-				hw_config->irq = -devc->irq;
-			if (!ess_midi_init(devc, hw_config))
-				return 0;
-			hw_config->name = "ESS ES1688";
 			break;
 
 		case MDL_JAZZ:
@@ -1258,7 +1275,13 @@ int probe_sbmpu(struct address_info *hw_config)
 
 void unload_sbmpu(struct address_info *hw_config)
 {
-#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
+#if defined(CONFIG_SOUND_MPU401)
+	if (!strcmp (hw_config->name, "ESS1xxx MPU")) {
+		unload_mpu401(hw_config);
+		return;
+	}
+#endif
+#if defined(CONFIG_UART401)
 	unload_uart401(hw_config);
 #endif
 }

@@ -77,9 +77,6 @@ struct dst_ops
 
 #ifdef __KERNEL__
 
-extern struct dst_entry * dst_garbage_list;
-extern atomic_t	dst_total;
-
 extern __inline__
 struct dst_entry * dst_clone(struct dst_entry * dst)
 {

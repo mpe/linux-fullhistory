@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.141 1999/05/12 11:24:40 davem Exp $
+ * Version:	$Id: tcp.c,v 1.144 1999/05/27 01:03:37 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -433,7 +433,7 @@ kmem_cache_t *tcp_timewait_cachep;
 
 /*
  *	Find someone to 'accept'. Must be called with
- *	the socket locked or with interrupts disabled
+ *	the listening socket locked.
  */
 
 static struct open_request *tcp_find_established(struct tcp_opt *tp, 
@@ -442,10 +442,11 @@ static struct open_request *tcp_find_established(struct tcp_opt *tp,
 	struct open_request *req = tp->syn_wait_queue;
 	struct open_request *prev = (struct open_request *)&tp->syn_wait_queue; 
 	while(req) {
-		if (req->sk && 
-		    ((1 << req->sk->state) &
-		     ~(TCPF_SYN_SENT|TCPF_SYN_RECV)))
-			break;
+		if (req->sk) {
+			if((1 << req->sk->state) &
+			   ~(TCPF_SYN_SENT|TCPF_SYN_RECV))
+				break;
+		}
 		prev = req; 
 		req = req->dl_next;
 	}
@@ -1426,16 +1427,15 @@ void tcp_shutdown(struct sock *sk, int how)
 		return;
 
 	/* If we've already sent a FIN, or it's a closed state, skip this. */
+	lock_sock(sk);
 	if ((1 << sk->state) &
 	    (TCPF_ESTABLISHED|TCPF_SYN_SENT|TCPF_SYN_RECV|TCPF_CLOSE_WAIT)) {
-		lock_sock(sk);
 
 		/* Clear out any half completed packets.  FIN if needed. */
 		if (tcp_close_state(sk,0))
 			tcp_send_fin(sk);
-
-		release_sock(sk);
 	}
+	release_sock(sk);
 }
 
 
@@ -1485,17 +1485,17 @@ void tcp_close(struct sock *sk, long timeout)
 	/* We need to grab some memory, and put together a FIN,
 	 * and then put it into the queue to be sent.
 	 */
-	unlock_kernel();
 	lock_sock(sk);
 	if(sk->state == TCP_LISTEN) {
 		/* Special case. */
 		tcp_set_state(sk, TCP_CLOSE);
 		tcp_close_pending(sk);
 		release_sock(sk);
-		lock_kernel();
 		sk->dead = 1;
 		return;
 	}
+
+	unlock_kernel();
 
 	/* It is questionable, what the role of this is now.
 	 * In any event either it should be removed, or
@@ -1543,21 +1543,20 @@ void tcp_close(struct sock *sk, long timeout)
 		DECLARE_WAITQUEUE(wait, current);
 
 		add_wait_queue(sk->sleep, &wait);
-		release_sock(sk);
 
 		while (1) {
 			tsk->state = TASK_INTERRUPTIBLE;
 			if (!closing(sk))
 				break;
+			release_sock(sk);
 			timeout = schedule_timeout(timeout);
+			lock_sock(sk);
 			if (signal_pending(tsk) || !timeout)
 				break;
 		}
 
 		tsk->state = TASK_RUNNING;
 		remove_wait_queue(sk->sleep, &wait);
-		
-		lock_sock(sk);
 	}
 
 	/* Now that the socket is dead, if we are in the FIN_WAIT2 state
@@ -1565,9 +1564,10 @@ void tcp_close(struct sock *sk, long timeout)
          */
 	tcp_check_fin_timer(sk);
 
+	sk->dead = 1;
+
 	release_sock(sk);
 	lock_kernel();
-	sk->dead = 1;
 }
 
 /*
@@ -1586,9 +1586,6 @@ static struct open_request * wait_for_connect(struct sock * sk,
 	 * one process gets woken up, not the 'whole herd'.
 	 * Since we do not 'race & poll' for established sockets
 	 * anymore, the common case will execute the loop only once.
-	 *
-	 * Or rather, it _would_ execute only once if it wasn't for
-	 * some extraneous wakeups that currently happen.
 	 *
 	 * Subtle issue: "add_wait_queue_exclusive()" will be added
 	 * after any current non-exclusive waiters, and we know that
@@ -1659,14 +1656,13 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 	sk->ack_backlog--; 
 	if(sk->keepopen)
 		tcp_inc_slow_timer(TCP_SLT_KEEPALIVE);
-
 	release_sock(sk);
 	lock_kernel();
 	return newsk;
 
 out:
 	/* sk should be in LISTEN state, thus accept can use sk->err for
-	 * internal purposes without stomping one anyone's feed.
+	 * internal purposes without stomping on anyone's feed.
 	 */ 
 	sk->err = error; 
 	release_sock(sk);

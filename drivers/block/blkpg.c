@@ -35,6 +35,7 @@
 #include <linux/blkpg.h>
 #include <linux/genhd.h>
 #include <linux/swap.h>			/* for is_swap_partition() */
+#include <linux/module.h>               /* for EXPORT_SYMBOL */
 
 #include <asm/uaccess.h>
 
@@ -286,3 +287,4 @@ int blk_ioctl(kdev_t dev, unsigned int cmd, unsigned long arg)
 	}
 }
 
+EXPORT_SYMBOL(blk_ioctl);

@@ -55,6 +55,12 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
+#ifdef CONFIG_BLK_DEV_PDC4030
+#define IS_PDC4030_DRIVE (HWIF(drive)->chipset == ide_pdc4030)
+#else
+#define IS_PDC4030_DRIVE (0)	/* auto-NULLs out pdc4030 code */
+#endif
+
 static void idedisk_bswap_data (void *buffer, int wcount)
 {
 	u16 *p = buffer;
@@ -336,27 +342,11 @@ static void recal_intr (ide_drive_t *drive)
  */
 static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long block)
 {
-#ifdef CONFIG_BLK_DEV_PDC4030
-	ide_hwif_t *hwif = HWIF(drive);
-	int use_pdc4030_io = 0;
-#endif /* CONFIG_BLK_DEV_PDC4030 */
-
 	if (IDE_CONTROL_REG)
 		OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
 	OUT_BYTE(rq->nr_sectors,IDE_NSECTOR_REG);
 #ifdef CONFIG_BLK_DEV_PDC4030
-#ifdef CONFIG_BLK_DEV_PDC4030_TESTING
-	if (IS_PDC4030_DRIVE) {
-		use_pdc4030_io = 1;
-	}
-#else
-	if (IS_PDC4030_DRIVE) {
-		if (hwif->channel != 0 || rq->cmd == READ) {
-			use_pdc4030_io = 1;
-		}
-	}
-#endif /* CONFIG_BLK_DEV_PDC4030_TESTING */
-	if (drive->select.b.lba || use_pdc4030_io) {
+	if (drive->select.b.lba || IS_PDC4030_DRIVE) {
 #else /* !CONFIG_BLK_DEV_PDC4030 */
 	if (drive->select.b.lba) {
 #endif /* CONFIG_BLK_DEV_PDC4030 */
@@ -386,7 +376,7 @@ static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long bl
 #endif
 	}
 #ifdef CONFIG_BLK_DEV_PDC4030
-	if (use_pdc4030_io) {
+	if (IS_PDC4030_DRIVE) {
 		extern void do_pdc4030_io(ide_drive_t *, struct request *);
 		do_pdc4030_io (drive, rq);
 		return;

@@ -1,8 +1,8 @@
-/* $Id: VIScsumcopy.S,v 1.5 1998/06/12 14:53:48 jj Exp $
+/* $Id: VIScsumcopy.S,v 1.6 1999/05/25 16:53:03 jj Exp $
  * VIScsumcopy.S: High bandwidth IP checksumming with simultaneous
  *            copying utilizing the UltraSparc Visual Instruction Set.
  *
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997, 1999 Jakub Jelinek (jj@ultra.linux.cz)
  *
  * Based on older sparc32/sparc64 checksum.S, which is:
  *
@@ -28,14 +28,17 @@
 #include <asm/asi.h>
 #include <asm/page.h>
 #include <asm/visasm.h>
+#define ASI_BLK_XOR	0
+#define ASI_BLK_XOR1	(ASI_BLK_P ^ (ASI_BLK_P >> 3) ^ ASI_P)
+#define ASI_BLK_OR	(ASI_BLK_P & ~ASI_P)
 #else
 #define ASI_P		0x80
 #define ASI_BLK_P	0xf0
 #define FRPS_FEF	0x04
 #define FPRS_DU		0x02
 #define FPRS_DL		0x01
-#endif
 #define ASI_BLK_XOR	(ASI_BLK_P ^ ASI_P)
+#endif
 
 #define src		o0
 #define dst		o1
@@ -244,7 +247,7 @@
 	.text
 	.globl		csum_partial_copy_vis
 	.align		32
-/* %asi should be either ASI_P or ASI_S for csum_partial_copy resp. csum_partial_copy_from_user */
+/* %asi should be either ASI_P or ASI_AIUS for csum_partial_copy resp. csum_partial_copy_from_user */
 /* This assumes that !((%src^%dst)&3) && !((%src|%dst)&1) && %len >= 256 */
 csum_partial_copy_vis:
 	andcc		%dst, 7, %g0		/*  IEU1	Group			*/
@@ -368,6 +371,7 @@ csum_partial_copy_vis:
 3:	rd		%asi, %g2		/*  LSU		Group + 4 bubbles	*/
 #ifdef __KERNEL__
 4:	sethi		%hi(vis0s), %g7		/*  IEU0	Group			*/
+	or		%g2, ASI_BLK_OR, %g2	/*  IEU1				*/
 #else
 4:	rd		%pc, %g7		/*  LSU		Group + 4 bubbles	*/
 #endif
@@ -775,18 +779,24 @@ vis7e2:	DO_THE_TRICK(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f2,f4,f6,f8,f10,f12,f14
 e1:	END_THE_TRICK1(	f0,f2,f4,f6,f8,f10,f12,f14,f16,f6)
 e2:	END_THE_TRICK1(	f16,f18,f20,f22,f24,f26,f28,f30,f32,f6)
 e3:	END_THE_TRICK1(	f32,f34,f36,f38,f40,f42,f44,f46,f0,f6)
-ett:	rd		%gsr, %x3		/*  LSU		Group+4bubbles		*/
+ett:	rd		%asi, %x4		/*  LSU		Group+4bubbles		*/
+	rd		%gsr, %x3		/*  LSU		Group+4bubbles		*/
+#ifdef __KERNEL__
+	srl		%x4, 3, %x5		/*  IEU0	Group			*/
+	xor		%x4, ASI_BLK_XOR1, %x4	/*  IEU1				*/
+	wr		%x4, %x5, %asi		/*  LSU		Group+4bubbles		*/
+#else
+	wr		%x4, ASI_BLK_XOR, %asi	/*  LSU		Group+4bubbles		*/
+#endif
 	andcc		%x3, 7, %x3		/*  IEU1	Group			*/
-	add		%dst, 8, %dst		/*  IEU0	Group			*/
+	add		%dst, 8, %dst		/*  IEU0				*/
 	bne,pn		%icc, 1f		/*  CTI					*/
 	 fzero		%f10			/*  FPA					*/
 	brz,a,pn	%len, 2f		/*  CTI+IEU1	Group			*/
 	 std		%f6, [%dst - 8]		/*  Store				*/
-1:	rd		%asi, %x4		/*  LSU		Group+4bubbles		*/
-	sub		%src, 64, %src		/*  IEU0	Group			*/
-	cmp		%len, 8			/*  IEU1				*/
+1:	cmp		%len, 8			/*  IEU1				*/
 	blu,pn		%icc, 3f		/*  CTI					*/
-	 wr		%x4, ASI_BLK_XOR, %asi	/*  LSU		Group+4bubbles		*/
+	 sub		%src, 64, %src		/*  IEU0	Group			*/
 1:	ldda		[%src] %asi, %f2	/*  Load	Group			*/
 	fpadd32		%f10, %f2, %f12		/*  FPA		Group+load stall	*/
 	add		%src, 8, %src		/*  IEU0				*/

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.53 1999/01/19 07:57:51 davem Exp $
+/* $Id: processor.h,v 1.55 1999/05/27 04:52:54 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -8,10 +8,10 @@
 #define __ASM_SPARC64_PROCESSOR_H
 
 /*
- * Default implementation of macro that returns current
+ * Sparc64 implementation of macro that returns current
  * instruction pointer ("program counter").
  */
-#define current_text_addr() ({ __label__ _l; _l: &&_l;})
+#define current_text_addr() ({ void *pc; __asm__("rd %%pc, %0" : "=r" (pc)); pc; })
 
 #include <asm/asi.h>
 #include <asm/a.out.h>
@@ -42,7 +42,7 @@
 #define NSWINS		7
 
 typedef struct {
-	unsigned long seg;
+	unsigned char seg;
 } mm_segment_t;
 
 /* The Sparc processor specific thread struct. */
@@ -51,15 +51,19 @@ struct thread_struct {
 	unsigned short wstate;
 	unsigned short cwp;
 	unsigned short flags;
-	unsigned short ctx;
+	mm_segment_t current_ds;
 
 /*DC2*/	unsigned short w_saved;
 	unsigned short new_signal;
-	unsigned int ___pad;
-	mm_segment_t current_ds;
+	unsigned short ctx;
+	struct pt_regs *kregs;
 
-/*DC3*/	struct pt_regs *kregs;
-	unsigned long *utraps;
+/*DC3*/ unsigned long *utraps;
+	unsigned char fpdepth;
+	unsigned char fpsaved[7];
+	
+/*DC4*/	unsigned char gsr[7];
+	unsigned long xfsr[7];
 
 	struct reg_window reg_window[NSWINS] __attribute__ ((aligned (16)));
 	unsigned long rwbuf_stkptrs[NSWINS] __attribute__ ((aligned (8)));
@@ -72,10 +76,6 @@ struct thread_struct {
 	u64 kernel_cntd0, kernel_cntd1;
 	u64 pcr_reg;
 
-	unsigned char fpdepth;
-	unsigned char fpsaved[7];
-	unsigned char gsr[7];
-	unsigned long xfsr[7];
 };
 
 #endif /* !(__ASSEMBLY__) */
@@ -91,12 +91,14 @@ struct thread_struct {
 		    NULL, PAGE_SHARED , VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
 #define INIT_TSS  {						\
-/* ksp, wstate, cwp, flags,              ctx, */ 		\
-   0,   0,      0,   SPARC_FLAG_KTHREAD, 0,			\
-/* w_saved, new_signal, padding, current_ds, */			\
-   0,       0,          0,       KERNEL_DS,			\
-/* kregs,   utraps, */						\
-   0,       0,							\
+/* ksp, wstate, cwp, flags,              current_ds, */ 	\
+   0,   0,      0,   SPARC_FLAG_KTHREAD, KERNEL_DS,		\
+/* w_saved, new_signal, ctx,		 kregs, */		\
+   0,       0,          0,		 0,			\
+/* utraps, */							\
+   0,								\
+/* fpdepth, fpsaved, gsr,   xfsr */				\
+   0,       { 0 },   { 0 }, { 0 },				\
 /* reg_window */						\
    { { { 0, }, { 0, } }, }, 					\
 /* rwbuf_stkptrs */						\
@@ -105,8 +107,6 @@ struct thread_struct {
    0,           0,						\
 /* user_cntd0, user_cndd1, kernel_cntd0, kernel_cntd0, pcr_reg */ \
    0,          0,          0,		 0,            0,	\
-/* fpdepth, fpsaved, gsr,   xfsr */				\
-   0,       { 0 },   { 0 }, { 0 },				\
 }
 
 #ifndef __ASSEMBLY__

@@ -27,3 +27,5 @@ Mount options unique to the isofs filesystem.
   nojoliet      Ignore Joliet extensions if they are present.
   norock        Ignore Rock Ridge extensions if they are present.
   unhide        Show hidden files.
+  session=x     Select number of session on multisession CD
+  sbsector=xxx  Session begins from sector xxx

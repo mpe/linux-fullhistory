@@ -810,12 +810,4 @@ void ide_setup_dma (ide_hwif_t *hwif, unsigned long dmabase, unsigned int num_po
 unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) __init;
 #endif
 
-/* This is too ugly to live! */
-#ifdef CONFIG_BLK_DEV_PDC4030
-#include "pdc4030.h"
-#define IS_PDC4030_DRIVE (HWIF(drive)->chipset == ide_pdc4030)
-#else
-#define IS_PDC4030_DRIVE (0)	/* auto-NULLs out pdc4030 code */
-#endif /* CONFIG_BLK_DEV_PDC4030 */
-
 #endif /* _IDE_H */

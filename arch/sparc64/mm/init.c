@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.127 1999/05/08 03:00:38 davem Exp $
+/*  $Id: init.c,v 1.128 1999/05/25 16:53:24 jj Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -21,6 +21,7 @@
 #include <asm/oplib.h>
 #include <asm/iommu.h>
 #include <asm/io.h>
+#include <asm/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/vaddrs.h>
 #include <asm/dma.h>
@@ -729,6 +730,9 @@ void prom_world(int enter)
 {
 	unsigned long pstate;
 	int i;
+
+	if (!enter)
+		set_fs(current->tss.current_ds);
 
 	if (!prom_ditlb_set)
 		return;

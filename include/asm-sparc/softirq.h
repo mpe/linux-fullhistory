@@ -103,7 +103,8 @@ static inline void end_bh_atomic(void)
 static inline int softirq_trylock(int cpu)
 {
 	if (spin_trylock(&global_bh_count)) {
-		if (atomic_read(&global_bh_lock) == 0) {
+		if (atomic_read(&global_bh_lock) == 0 &&
+		    local_bh_count[cpu] == 0) {
 			++local_bh_count[cpu];
 			return 1;
 		}
@@ -118,6 +119,9 @@ static inline void softirq_endlock(int cpu)
 	spin_unlock(&global_bh_count);
 }
 
+#define local_bh_disable()	(local_bh_count[smp_processor_id()]++)
+#define local_bh_enable()	(local_bh_count[smp_processor_id()]--)
+
 #else
 extern unsigned int local_bh_count;
 
@@ -128,6 +132,9 @@ extern unsigned int local_bh_count;
 #define softirq_trylock(cpu)	(local_bh_count ? 0 : (local_bh_count=1))
 #define softirq_endlock(cpu)	(local_bh_count = 0)
 #define synchronize_bh()	barrier()
+
+#define local_bh_disable()	(local_bh_count++)
+#define local_bh_enable()	(local_bh_count--)
 
 /*
  * These use a mask count to correctly handle

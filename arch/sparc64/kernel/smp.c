@@ -272,25 +272,26 @@ __initfunc(void smp_boot_cpus(void))
 static inline void xcall_deliver(u64 data0, u64 data1, u64 data2, u64 pstate, unsigned long cpu)
 {
 	u64 result, target = (cpu << 14) | 0x70;
-	int stuck;
+	int stuck, tmp;
 
 #ifdef XCALL_DEBUG
 	printk("CPU[%d]: xcall(data[%016lx:%016lx:%016lx],tgt[%016lx])\n",
 	       smp_processor_id(), data0, data1, data2, target);
 #endif
 again:
+	tmp = 0x40;
 	__asm__ __volatile__("
-	wrpr	%0, %1, %%pstate
-	wr	%%g0, %2, %%asi
-	stxa	%3, [0x40] %%asi
-	stxa	%4, [0x50] %%asi
-	stxa	%5, [0x60] %%asi
+	wrpr	%1, %2, %%pstate
+	stxa	%4, [%0] %3
+	stxa	%5, [%0+%8] %3
+	add	%0, %8, %0
+	stxa	%6, [%0+%8] %3
 	membar	#Sync
-	stxa	%%g0, [%6] %%asi
+	stxa	%%g0, [%7] %3
 	membar	#Sync"
-	: /* No outputs */
+	: "=r" (tmp)
 	: "r" (pstate), "i" (PSTATE_IE), "i" (ASI_UDB_INTR_W),
-	  "r" (data0), "r" (data1), "r" (data2), "r" (target));
+	  "r" (data0), "r" (data1), "r" (data2), "r" (target), "r" (0x10), "0" (tmp));
 
 	/* NOTE: PSTATE_IE is still clear. */
 	stuck = 100000;

@@ -154,7 +154,7 @@ static int			stl_refcount = 0;
  *	is already swapping a shared buffer won't make things any worse.
  */
 static char			*stl_tmpwritebuf;
-static struct semaphore		stl_tmpwritesem = MUTEX;
+static DECLARE_MUTEX(stl_tmpwritesem);
 
 /*
  *	Define a local default termios struct. All ports will be created

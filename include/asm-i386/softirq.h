@@ -91,6 +91,9 @@ extern inline void end_bh_atomic(void)
 	local_bh_count[smp_processor_id()]--;
 }
 
+#define local_bh_disable()	(local_bh_count[smp_processor_id()]++)
+#define local_bh_enable()	(local_bh_count[smp_processor_id()]--)
+
 /* These are for the irq's testing the lock */
 #define softirq_trylock(cpu)	(local_bh_count[cpu] ? 0 : (local_bh_count[cpu]=1))
 #define softirq_endlock(cpu)	(local_bh_count[cpu] = 0)

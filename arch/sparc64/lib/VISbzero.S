@@ -1,9 +1,9 @@
-/* $Id: VISbzero.S,v 1.9 1998/06/12 14:53:50 jj Exp $
+/* $Id: VISbzero.S,v 1.10 1999/05/25 16:52:56 jj Exp $
  * VISbzero.S: High speed clear operations utilizing the UltraSparc
  *        Visual Instruction Set.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996, 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996, 1997, 1999 Jakub Jelinek (jj@ultra.linux.cz)
  */
 
 #include "VIS.h"
@@ -84,9 +84,14 @@
 	.align		32
 #ifdef __KERNEL__
 	.globl		__bzero, __bzero_noasi
-__bzero:
-	wr		%g0, ASI_P, %asi		! LSU	Group
 __bzero_noasi:
+	rd		%asi, %g5
+	ba,pt		%xcc, __bzero+12
+	 mov		%g5, %o4
+__bzero:
+	rd		%asi, %g5
+	wr		%g0, ASI_P, %asi		! LSU	Group
+	mov		ASI_P, %o4
 #else
 	.globl		bzero
 bzero_private:
@@ -143,8 +148,8 @@ bzero:
 6:	andncc		%o1, 0x3f, %o3
 7:	be,pn		%xcc, 9f
 #ifdef __KERNEL__
-	 rd		%asi, %o4
-	wr		%o4, ASI_BLK_XOR, %asi
+	 or		%o4, ASI_BLK_OR, %g7 
+	wr		%g7, %g0, %asi
 	VISEntryHalf
 #else
 	 wr		%g0, ASI_BLK_P, %asi
@@ -221,7 +226,11 @@ bzero:
 	add		%o0, 2, %o0
 1:	bne,a,pn	%xcc, 8f
 	 EX(STB		%g0, [%o0] ASINORMAL, add %g0, 1)
-8:	retl
+8:
+#ifdef __KERNEL__
+	wr		%g5, %g0, %asi
+#endif
+	retl
 	 RETL
 17:	be,pn		%xcc, 13b
 	 orcc		%o1, 0, %g0
@@ -230,7 +239,11 @@ bzero:
 	subcc		%o1, 1, %o1
 	bne,pt		%xcc, 8b
 	 EX(STB		%g0, [%o0 - 1] ASINORMAL, add %o1, 1)
-0:	retl
+0:
+#ifdef __KERNEL__
+	wr		%g5, %g0, %asi
+#endif
+	retl
 	 RETL
 
 #ifdef __KERNEL__
@@ -239,6 +252,7 @@ bzero:
 VISbzerofixup_reto1:
 	mov		%o1, %o0
 VISbzerofixup_ret0:
+	wr		%g5, %g0, %asi
 	retl
 	 wr		%g0, 0, %fprs
 VISbzerofixup_ret1:

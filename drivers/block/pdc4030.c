@@ -1,5 +1,5 @@
 /*  -*- linux-c -*-
- *  linux/drivers/block/pdc4030.c	Version 0.10  Jan 25, 1999
+ *  linux/drivers/block/pdc4030.c	Version 0.11  May 17, 1999
  *
  *  Copyright (C) 1995-1999  Linus Torvalds & authors (see below)
  */
@@ -33,27 +33,43 @@
  *  Version 0.09	Obsolete - never released - did manual write request
  *			splitting before max_sectors[major][minor] available.
  *  Version 0.10	Updated for 2.1 series of kernels
+ *  Version 0.11	Updated for 2.3 series of kernels
+ *			Autodetection code added.
  */
 
 /*
  * Once you've compiled it in, you'll have to also enable the interface
  * setup routine from the kernel command line, as in 
  *
- *	'linux ide0=dc4030'
+ *	'linux ide0=dc4030' or 'linux ide1=dc4030'
  *
  * It should now work as a second controller also ('ide1=dc4030') but only
- * if you DON'T have BIOS V4.44, which has a bug. If you have this and EPROM
- * programming facilities, I can tell you what to fix...
+ * if you DON'T have BIOS V4.44, which has a bug. If you have this version
+ * and EPROM programming facilities, you need to fix 4 bytes:
+ * 	2496:	81	81
+ *	2497:	3E	3E
+ *	2498:	22	98	*
+ *	2499:	06	05	*
+ *	249A:	F0	F0
+ *	249B:	01	01
+ *	...
+ *	24A7:	81	81
+ *	24A8:	3E	3E
+ *	24A9:	22	98	*
+ *	24AA:	06	05	*
+ *	24AB:	70	70
+ *	24AC:	01	01
  *
  * As of January 1999, Promise Technology Inc. have finally supplied me with
  * some technical information which has shed a glimmer of light on some of the
  * problems I was having, especially with writes. 
+ *
+ * There are still problems with the robustness and efficiency of this driver
+ * because I still don't understand what the card is doing with interrupts.
  */
 
-#define DEBUG_READ
-#define DEBUG_WRITE
-
-#undef REALLY_SLOW_IO		/* most systems can safely undef this */
+#undef DEBUG_READ
+#undef DEBUG_WRITE
 
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -69,11 +85,6 @@
 #include <asm/irq.h>
 
 #include "pdc4030.h"
-
-/* This is needed as the controller may not interrupt if the required data is
-available in the cache. We have to simulate an interrupt. Ugh! */
-
-extern void ide_intr(int, void *dev_id, struct pt_regs*);
 
 /*
  * promise_selectproc() is invoked by ide.c
@@ -119,21 +130,27 @@ int pdc4030_cmd(ide_drive_t *drive, byte cmd)
 		return 1; /* device returned failure */
 }
 
-ide_hwif_t *hwif_required = NULL;
-
-void setup_pdc4030 (ide_hwif_t *hwif)
+/*
+ * pdc4030_identify sends a vendor-specific IDENTIFY command to the drive
+ */
+int pdc4030_identify(ide_drive_t *drive)
 {
-    hwif_required = hwif;
+	return pdc4030_cmd(drive, PROMISE_IDENTIFY);
+}
+
+int enable_promise_support = 0;
+
+void __init init_pdc4030 (void)
+{
+	enable_promise_support = 1;
 }
 
 /*
-init_pdc4030: Test for presence of a Promise caching controller card.
-Returns: 0 if no Promise card present at this io_base
-	 1 if Promise card found
-*/
-int init_pdc4030 (void)
+ * setup_pdc4030()
+ * Completes the setup of a Promise DC4030 controller card, once found.
+ */
+int __init setup_pdc4030 (ide_hwif_t *hwif)
 {
-	ide_hwif_t *hwif = hwif_required;
         ide_drive_t *drive;
 	ide_hwif_t *hwif2;
 	struct dc_ident ident;
@@ -186,11 +203,25 @@ int init_pdc4030 (void)
             default:   hwif->irq = 15; break;
 	}
 	printk("on IRQ %d\n",hwif->irq);
+
+	/*
+	 * Once found and identified, we set up the next hwif in the array
+	 * (hwif2 = ide_hwifs[hwif->index+1]) with the same io ports, irq
+	 * and other settings as the main hwif. This gives us two "mated"
+	 * hwifs pointing to the Promise card.
+	 *
+	 * We also have to shift the default values for the remaining
+	 * interfaces "up by one" to make room for the second interface on the
+	 * same set of values.
+	 */
+
 	hwif->chipset	= hwif2->chipset = ide_pdc4030;
 	hwif->mate	= hwif2;
 	hwif2->mate	= hwif;
 	hwif2->channel	= 1;
 	hwif->selectproc = hwif2->selectproc = &promise_selectproc;
+	hwif->serialized = hwif2->serialized = 1;
+
 /* Shift the remaining interfaces down by one */
 	for (i=MAX_HWIFS-1 ; i > hwif->index+1 ; i--) {
 		ide_hwif_t *h = &ide_hwifs[i];
@@ -218,6 +249,50 @@ int init_pdc4030 (void)
 	}
         return 1;
 }
+
+/*
+ * detect_pdc4030()
+ * Tests for the presence of a DC4030 Promise card on this interface
+ * Returns: 1 if found, 0 if not found
+ */
+int __init detect_pdc4030(ide_hwif_t *hwif)
+{
+	ide_drive_t *drive = &hwif->drives[0];
+
+	if (IDE_DATA_REG == 0) { /* Skip test for non-existent interface */
+		return 0;
+	}
+	OUT_BYTE(0xF3, IDE_SECTOR_REG);
+	OUT_BYTE(0x14, IDE_SELECT_REG);
+	OUT_BYTE(PROMISE_EXTENDED_COMMAND, IDE_COMMAND_REG);
+	
+	ide_delay_50ms();
+
+	if (IN_BYTE(IDE_ERROR_REG) == 'P' &&
+	    IN_BYTE(IDE_NSECTOR_REG) == 'T' &&
+	    IN_BYTE(IDE_SECTOR_REG) == 'I') {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+void __init ide_probe_for_pdc4030(void)
+{
+	unsigned int	index;
+	ide_hwif_t	*hwif;
+
+	if (enable_promise_support == 0)
+		return;
+	for (index = 0; index < MAX_HWIFS; index++) {
+		hwif = &ide_hwifs[index];
+		if (hwif->chipset == ide_unknown && detect_pdc4030(hwif)) {
+			setup_pdc4030(hwif);
+		}
+	}
+}
+
+
 
 /*
  * promise_read_intr() is the handler for disk read/multread interrupts
@@ -297,6 +372,21 @@ read_next:
 }
 
 /*
+ * promise_finish_write()
+ * called at the end of all writes
+ */
+static void promise_finish_write(ide_drive_t *drive)
+{
+	struct request *rq = HWGROUP(drive)->rq;
+	int i;
+
+	for (i = rq->nr_sectors; i > 0; ) {
+		i -= rq->current_nr_sectors;
+		ide_end_request(1, HWGROUP(drive));
+	}
+}
+
+/*
  * promise_write_intr()
  * This interrupt is called after the particularly odd polling for completion
  * of the write request, once all the data has been sent.
@@ -304,8 +394,6 @@ read_next:
 static void promise_write_intr(ide_drive_t *drive)
 {
 	byte stat;
-	int i;
-	struct request *rq;
 
 	if (!OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
 		ide_error(drive, "promise_write_intr", stat);
@@ -314,11 +402,7 @@ static void promise_write_intr(ide_drive_t *drive)
 #ifdef DEBUG_WRITE
 	printk(KERN_DEBUG "%s: Write complete - end_request\n", drive->name);
 #endif
-	rq = HWGROUP(drive)->rq;
-	for (i = rq->nr_sectors; i > 0;) {
-		i -= rq->current_nr_sectors;
-		ide_end_request(1, HWGROUP(drive));
-	}
+	promise_finish_write(drive);
 }
 
 /*
@@ -336,10 +420,11 @@ static void promise_write_pollfunc (ide_drive_t *drive)
 		return;
 	}
 
-#ifdef DEBUG_WRITE
-	printk(KERN_DEBUG "%s: Doing last 4 sectors\n", drive->name);
-#endif
 	ide_multwrite(drive, 4);
+#ifdef DEBUG_WRITE
+	printk(KERN_DEBUG "%s: Done last 4 sectors - status = %02x\n",
+		drive->name, GET_STAT());
+#endif
 	ide_set_handler(drive, &promise_write_intr, WAIT_CMD);
 	return;
 }
@@ -358,8 +443,8 @@ static void promise_write (ide_drive_t *drive)
 
 #ifdef DEBUG_WRITE
 	printk(KERN_DEBUG "%s: promise_write: sectors(%ld-%ld), "
-	       "buffer=0x%08lx\n", drive->name, rq->sector,
-	       rq->sector + rq->nr_sectors - 1, rq->buffer);
+	       "buffer=0x%08x\n", drive->name, rq->sector,
+	       rq->sector + rq->nr_sectors - 1, (unsigned int)rq->buffer);
 #endif
 	if (rq->nr_sectors > 4) {
 		ide_multwrite(drive, rq->nr_sectors - 4);
@@ -368,7 +453,11 @@ static void promise_write (ide_drive_t *drive)
 		return;
 	} else {
 		ide_multwrite(drive, rq->nr_sectors);
-		ide_set_handler(drive, &promise_write_intr, WAIT_CMD);
+#ifdef DEBUG_WRITE
+		printk(KERN_DEBUG "%s: promise_write: <= 4 sectors, "
+			"status = %02x\n", drive->name, GET_STAT());
+#endif
+		promise_finish_write(drive);
 	}
 }
 

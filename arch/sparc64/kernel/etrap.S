@@ -1,8 +1,8 @@
-/* $Id: etrap.S,v 1.40 1998/06/12 14:54:03 jj Exp $
+/* $Id: etrap.S,v 1.41 1999/05/25 16:53:09 jj Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1997, 1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997, 1998, 1999 Jakub Jelinek (jj@ultra.linux.cz)
  */
 
 #include <asm/asi.h>
@@ -59,10 +59,9 @@ etrap_irq:	rdpr			%tstate, %g1						! Single 	Group
 		stb			%l5, [%l6 + AOFF_task_tss + AOFF_thread_fpdepth]	! Store
 		wrpr			%g3, 0, %otherwin					! Single	Group+4bubbles
 		wrpr			%g2, 0, %wstate						! Single	Group+4bubbles
-		ldxa			[%l4] ASI_DMMU, %g2					! Load		Group
 		stxa			%g0, [%l4] ASI_DMMU					! Store		Group
-		stxa			%g2, [%l4 + %l4] ASI_DMMU				! Store		Group
 		flush			%l6							! Single	Group+9bubbles
+		wr			%g0, ASI_AIUS, %asi					! Single	Group+4bubbles
 2:		wrpr			%g0, 0x0, %tl						! Single	Group+4bubbles
 		andn			%g1, PSTATE_MM, %l1					! IEU0		Group
 		mov			%g4, %l4						! IEU1
@@ -135,10 +134,9 @@ scetrap:	rdpr			%pil, %g2						! Single 	Group
 		sll			%g2, 3, %g2						! IEU0		Group
 		wrpr			%g3, 0, %otherwin					! Single	Group+4bubbles
 		wrpr			%g2, 0, %wstate						! Single	Group+4bubbles
-		ldxa			[%l4] ASI_DMMU, %g2					! Load		Group
 		stxa			%g0, [%l4] ASI_DMMU					! Store		Group
-		stxa			%g2, [%l4 + %l4] ASI_DMMU				! Store		Group
 		flush			%l6							! Single	Group+9bubbles
+		wr			%g0, ASI_AIUS, %asi					! Single	Group+4bubbles
 2:		wrpr			%g0, 0x0, %tl						! Single	Group+4bubbles
 		andn			%g1, PSTATE_MM, %l1					! IEU0		Group
 		mov			%g4, %l4						! IEU1

@@ -22,7 +22,6 @@
 #include <linux/selection.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
-#include <linux/config.h>
 
 #include <asm/io.h>
 
