@@ -51,6 +51,7 @@ extern int open_dentry(struct dentry *, int mode);
 
 extern int init_elf_binfmt(void);
 extern int init_elf32_binfmt(void);
+extern int init_irix_binfmt(void);
 extern int init_aout_binfmt(void);
 extern int init_aout32_binfmt(void);
 extern int init_script_binfmt(void);

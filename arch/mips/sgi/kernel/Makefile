@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.3 1998/06/25 20:19:17 ralf Exp $
+# $Id: Makefile,v 1.7 1999/05/07 18:00:16 ulfc Exp $
 # Makefile for the SGI specific kernel interface routines
 # under Linux.
 #
@@ -13,8 +13,11 @@
 .S.o:
 	$(CC) $(CFLAGS) -c $< -o $*.o
 
-OBJS  = indy_mc.o indy_sc.o indy_hpc.o indy_int.o indy_rtc.o system.o \
-	indy_timer.o indyIRQ.o reset.o setup.o time.o
+OBJS  = indy_mc.o indy_sc.o indy_hpc.o indy_int.o indy_rtc.o \
+        system.o indy_timer.o indyIRQ.o reset.o setup.o time.o
+ifdef CONFIG_SGI_PROM_CONSOLE
+OBJS += promcon.o
+endif
 
 all: sgikern.a
 

@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.13 1998/09/16 22:50:46 ralf Exp $
+/* $Id: setup.c,v 1.24 1999/06/12 17:26:15 ulfc Exp $
  *
  * setup.c: SGI specific setup, including init of the feature struct.
  *
@@ -14,6 +14,7 @@
 #include <linux/console.h>
 #include <linux/sched.h>
 #include <linux/mc146818rtc.h>
+#include <linux/pc_keyb.h>
 
 #include <asm/addrspace.h>
 #include <asm/bcache.h>
@@ -25,15 +26,54 @@
 #include <asm/sgimc.h>
 #include <asm/sgihpc.h>
 #include <asm/sgint23.h>
+#include <asm/gdb-stub.h>
 
-extern int serial_console; /* in sgiserial.c  */
+#ifdef CONFIG_REMOTE_DEBUG
+extern void rs_kgdb_hook(int);
+extern void breakpoint(void);
+#endif
+
+#if defined(CONFIG_SERIAL_CONSOLE) || defined(CONFIG_PROM_CONSOLE)
+extern void console_setup(char *, int *);
+#endif
 
 extern struct rtc_ops indy_rtc_ops;
 void indy_reboot_setup(void);
+void sgi_volume_set(unsigned char);
 
-static volatile struct hpc_keyb *sgi_kh = (struct hpc_keyb *) (KSEG1 + 0x1fbd9800 + 64);
+static int remote_debug = 0;
+
+#define sgi_kh ((struct hpc_keyb *) (KSEG1 + 0x1fbd9800 + 64))
 
 #define KBD_STAT_IBF		0x02	/* Keyboard input buffer full */
+
+static void sgi_request_region(void)
+{
+	/* No I/O ports are being used on the Indy.  */
+}
+
+static int sgi_request_irq(void (*handler)(int, void *, struct pt_regs *))
+{
+	/* Dirty hack, this get's called as a callback from the keyboard
+	   driver.  We piggyback the initialization of the front panel
+	   button handling on it even though they're technically not
+	   related with the keyboard driver in any way.  Doing it from
+	   indy_setup wouldn't work since kmalloc isn't initialized yet.  */
+	indy_reboot_setup();
+
+	return request_irq(SGI_KEYBOARD_IRQ, handler, 0, "keyboard", NULL);
+}
+
+static int sgi_aux_request_irq(void (*handler)(int, void *, struct pt_regs *))
+{
+	/* Nothing to do, interrupt is shared with the keyboard hw  */
+	return 0;
+}
+
+static void sgi_aux_free_irq(void)
+{
+	/* Nothing to do, interrupt is shared with the keyboard hw  */
+}
 
 static unsigned char sgi_read_input(void)
 {
@@ -65,27 +105,28 @@ static unsigned char sgi_read_status(void)
 	return sgi_kh->command;
 }
 
-__initfunc(static void sgi_keyboard_setup(void))
-{
-	kbd_read_input = sgi_read_input;
-	kbd_write_output = sgi_write_output;
-	kbd_write_command = sgi_write_command;
-	kbd_read_status = sgi_read_status;
+struct kbd_ops sgi_kbd_ops = {
+	sgi_request_region,
+	sgi_request_irq,
 
-	request_irq(SGI_KEYBOARD_IRQ, keyboard_interrupt,
-	            0, "keyboard", NULL);
+	sgi_aux_request_irq,
+	sgi_aux_free_irq,
 
-	/* Dirty hack, this get's called as a callback from the keyboard
-	   driver.  We piggyback the initialization of the front panel
-	   button handling on it even though they're technically not
-	   related with the keyboard driver in any way.  Doing it from
-	   indy_setup wouldn't work since kmalloc isn't initialized yet.  */
-	indy_reboot_setup();
-}
+	sgi_read_input,
+	sgi_write_output,
+	sgi_write_command,
+	sgi_read_status
+};
 
 __initfunc(static void sgi_irq_setup(void))
 {
 	sgint_init();
+
+#ifdef CONFIG_REMOTE_DEBUG
+	if (remote_debug)
+		set_debug_traps();
+	breakpoint(); /* you may move this line to whereever you want :-) */
+#endif
 }
 
 __initfunc(void sgi_setup(void))
@@ -93,9 +134,12 @@ __initfunc(void sgi_setup(void))
 #ifdef CONFIG_SERIAL_CONSOLE
 	char *ctype;
 #endif
+#ifdef CONFIG_REMOTE_DEBUG
+	char *kgdb_ttyd;
+#endif
+
 
 	irq_setup = sgi_irq_setup;
-	keyboard_setup = sgi_keyboard_setup;
 
 	/* Init the INDY HPC I/O controller.  Need to call this before
 	 * fucking with the memory controller because it needs to know the
@@ -115,23 +159,55 @@ __initfunc(void sgi_setup(void))
 	 * line and "d2" for the second serial line.
 	 */
 	ctype = prom_getenv("console");
-	serial_console = 0;
 	if(*ctype == 'd') {
 		if(*(ctype+1)=='2')
-			serial_console = 1;
+			console_setup ("ttyS1", NULL);
 		else
-			serial_console = 2;
-		if(!serial_console) {
-			prom_printf("Weird console env setting %s\n", ctype);
-			prom_printf("Press a key to reboot.\n");
-			prom_getchar();
-			prom_imode();
-		}
+			console_setup ("ttyS0", NULL);
 	}
 #endif
 
-#ifdef CONFIG_VT
-	conswitchp = &newport_con;
+#ifdef CONFIG_REMOTE_DEBUG
+	kgdb_ttyd = prom_getcmdline();
+	if ((kgdb_ttyd = strstr(kgdb_ttyd, "kgdb=ttyd")) != NULL) {
+		int line;
+		kgdb_ttyd += strlen("kgdb=ttyd");
+		if (*kgdb_ttyd != '1' && *kgdb_ttyd != '2')
+			printk("KGDB: Uknown serial line /dev/ttyd%c, "
+			       "falling back to /dev/ttyd1\n", *kgdb_ttyd);
+		line = *kgdb_ttyd == '2' ? 0 : 1;
+		printk("KGDB: Using serial line /dev/ttyd%d for session\n",
+		       line ? 1 : 2);
+		rs_kgdb_hook(line);
+
+		prom_printf("KGDB: Using serial line /dev/ttyd%d for session, "
+			    "please connect your debugger\n", line ? 1 : 2);
+
+		remote_debug = 1;
+		/* Breakpoints and stuff are in sgi_irq_setup() */
+	}
 #endif
+
+#ifdef CONFIG_SGI_PROM_CONSOLE
+	console_setup("ttyS0", NULL);
+#endif
+	  
+	sgi_volume_set(simple_strtoul(prom_getenv("volume"), NULL, 10));
+
+#ifdef CONFIG_VT
+#ifdef CONFIG_SGI_NEWPORT_CONSOLE
+	conswitchp = &newport_con;
+#else
+	conswitchp = &dummy_con;
+#endif
+#endif
+
 	rtc_ops = &indy_rtc_ops;
+	kbd_ops = &sgi_kbd_ops;
+#ifdef CONFIG_PSMOUSE
+	aux_device_present = 0xaa;
+#endif
+#ifdef CONFIG_VIDEO_VINO
+	init_vino();
+#endif
 }

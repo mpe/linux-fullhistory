@@ -7,7 +7,7 @@
  *
  * Copyright (c) 1996 by Ralf Baechle
  *
- * $Id: strncpy_user.S,v 1.3 1998/05/03 11:13:45 ralf Exp $
+ * $Id: strncpy_user.S,v 1.2 1998/05/04 09:12:54 ralf Exp $
  */
 #include <linux/errno.h>
 #include <asm/asm.h>

@@ -14,11 +14,11 @@
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <asm/addrspace.h>
-#include <asm/vector.h>
 #include <asm/jazz.h>
 #include <asm/jazzdma.h>
 #include <asm/keyboard.h>
 #include <asm/pgtable.h>
+#include <asm/floppy.h>
 
 static unsigned char jazz_fd_inb(unsigned int port)
 {
@@ -108,7 +108,7 @@ extern inline int __get_order(unsigned long size)
 	return order;
 }
 
-extern inline unsigned long jazz_fd_dma_mem_alloc(unsigned long size)
+static unsigned long jazz_fd_dma_mem_alloc(unsigned long size)
 {
 	int order = __get_order(size);
 	unsigned long mem;
@@ -121,14 +121,14 @@ extern inline unsigned long jazz_fd_dma_mem_alloc(unsigned long size)
 	return mem;
 }
 
-extern inline void jazz_fd_dma_mem_free(unsigned long addr,
+static void jazz_fd_dma_mem_free(unsigned long addr,
                                         unsigned long size)
 {       
-	vdma_free(PHYSADDR(addr));
+	vdma_free(vdma_phys2log(PHYSADDR(addr)));
 	free_pages(addr, __get_order(size));	
 }
 
-static void std_fd_drive_type(unsigned long n)
+static unsigned long jazz_fd_drive_type(unsigned long n)
 {
 	/* XXX This is wrong for machines with ED 2.88mb disk drives like the
 	   Olivetti M700.  Anyway, we should suck this from the ARC

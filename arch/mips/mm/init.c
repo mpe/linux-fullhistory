@@ -1,4 +1,4 @@
-/* $Id: init.c,v 1.13 1998/10/16 19:22:42 ralf Exp $
+/* $Id: init.c,v 1.13 1999/05/01 22:40:40 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -35,12 +35,6 @@
 #endif
 #include <asm/mmu_context.h>
 
-/*
- * Define this to effectivly disable the userpage colouring shit.
- */
-#define CONF_GIVE_A_SHIT_ABOUT_COLOURS
-
-extern void deskstation_tyne_dma_init(void);
 extern void show_net_buffers(void);
 
 void __bad_pte_kernel(pmd_t *pmd)
@@ -59,7 +53,7 @@ pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
 {
 	pte_t *page;
 
-	page = (pte_t *) __get_free_page(GFP_KERNEL);
+	page = (pte_t *) __get_free_page(GFP_USER);
 	if (pmd_none(*pmd)) {
 		if (page) {
 			clear_page((unsigned long)page);
@@ -126,6 +120,7 @@ static inline unsigned long setup_zero_pages(void)
 	case CPU_R4400SC:
 	case CPU_R4400MC:
 		order = 3;
+		break;
 	default:
 		order = 0;
 	}
@@ -137,6 +132,7 @@ static inline unsigned long setup_zero_pages(void)
 	pg = MAP_NR(empty_zero_page);
 	while(pg < MAP_NR(empty_zero_page) + (1 << order)) {
 		set_bit(PG_reserved, &mem_map[pg].flags);
+		atomic_set(&mem_map[pg].count, 0);
 		pg++;
 	}
 
@@ -243,83 +239,6 @@ pte_t __bad_page(void)
 	return pte_mkdirty(mk_pte(page, PAGE_SHARED));
 }
 
-#ifdef __SMP__
-spinlock_t user_page_lock = SPIN_LOCK_UNLOCKED;
-#endif
-struct upcache user_page_cache[8] __attribute__((aligned(32)));
-static unsigned long user_page_order;
-unsigned long user_page_colours;
-
-unsigned long get_user_page_slow(int which)
-{
-	unsigned long chunk;
-	struct upcache *up = &user_page_cache[0];
-	struct page *p, *res;
-	int i;
-
-	do {
-		chunk = __get_free_pages(GFP_KERNEL, user_page_order);
-	} while(chunk==0);
-
-	p = mem_map + MAP_NR(chunk);
-	res = p + which;
-	spin_lock(&user_page_lock);
-	for (i=user_page_colours; i>=0; i--,p++,up++,chunk+=PAGE_SIZE) {
-		atomic_set(&p->count, 1);
-		p->age = PAGE_INITIAL_AGE;
-
-		if (p != res) {
-			if(up->count < USER_PAGE_WATER) {
-				p->next = up->list;
-				up->list = p;
-				up->count++;
-			} else
-				free_pages(chunk, 0);
-		}
-	}
-	spin_unlock(&user_page_lock);
-
-	return page_address(res);
-}
-
-static inline void user_page_setup(void)
-{
-	unsigned long assoc = 0;
-	unsigned long dcache_log, icache_log, cache_log;
-	unsigned long config = read_32bit_cp0_register(CP0_CONFIG);
-
-	switch(mips_cputype) {
-	case CPU_R4000SC:
-	case CPU_R4000MC:
-	case CPU_R4400SC:
-	case CPU_R4400MC:
-		cache_log = 3;	/* => 32k, sucks  */
-		break;
-
-        case CPU_R4600:                 /* two way set associative caches?  */
-        case CPU_R4700:
-        case CPU_R5000:
-        case CPU_NEVADA:
-		assoc = 1;
-		/* fall through */
-	default:
-		/* use bigger cache  */
-		icache_log = (config >> 9) & 7;
-		dcache_log = (config >> 6) & 7;
-		if (dcache_log > icache_log)
-			cache_log = dcache_log;
-		else
-			cache_log = icache_log;
-	}
-
-#ifdef CONF_GIVE_A_SHIT_ABOUT_COLOURS
-	cache_log = assoc = 0;
-#endif
-
-	user_page_order = cache_log - assoc;
-	user_page_colours = (1 << (cache_log - assoc)) - 1;
-}
-
 void show_mem(void)
 {
 	int i, free = 0, total = 0, reserved = 0;
@@ -375,8 +294,9 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 #endif
 
 	end_mem &= PAGE_MASK;
-	max_mapnr = num_physpages = MAP_NR(end_mem);
+	max_mapnr = MAP_NR(end_mem);
 	high_memory = (void *)end_mem;
+	num_physpages = 0;
 
 	/* mark usable pages in the mem_map[] */
 	start_mem = PAGE_ALIGN(start_mem);
@@ -384,15 +304,12 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	for(tmp = MAP_NR(start_mem);tmp < max_mapnr;tmp++)
 		clear_bit(PG_reserved, &mem_map[tmp].flags);
 
-
-#ifdef CONFIG_SGI
 	prom_fixup_mem_map(start_mem, (unsigned long)high_memory);
-#endif
 
 	for (tmp = PAGE_OFFSET; tmp < end_mem; tmp += PAGE_SIZE) {
 		/*
 		 * This is only for PC-style DMA.  The onboard DMA
-		 * of Jazz and Tyne machines is completly different and
+		 * of Jazz and Tyne machines is completely different and
 		 * not handled via a flag in mem_map_t.
 		 */
 		if (tmp >= MAX_DMA_ADDRESS)
@@ -406,6 +323,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 				datapages++;
 			continue;
 		}
+		num_physpages++;
 		atomic_set(&mem_map[MAP_NR(tmp)].count, 1);
 #ifdef CONFIG_BLK_DEV_INITRD
 		if (!initrd_start || (tmp < initrd_start || tmp >=
@@ -423,9 +341,6 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 		max_mapnr << (PAGE_SHIFT-10),
 		codepages << (PAGE_SHIFT-10),
 		datapages << (PAGE_SHIFT-10));
-
-	/* Initialize allocator for colour matched mapped pages.  */
-	user_page_setup();
 }
 
 extern char __init_begin, __init_end;
@@ -433,7 +348,9 @@ extern char __init_begin, __init_end;
 void free_initmem(void)
 {
 	unsigned long addr;
-        
+
+	prom_free_prom_memory ();
+    
 	addr = (unsigned long)(&__init_begin);
 	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
 		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);

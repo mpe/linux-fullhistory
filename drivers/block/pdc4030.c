@@ -1,5 +1,5 @@
 /*  -*- linux-c -*-
- *  linux/drivers/block/pdc4030.c	Version 0.11  May 17, 1999
+ *  linux/drivers/block/pdc4030.c	Version 0.90  May 27, 1999
  *
  *  Copyright (C) 1995-1999  Linus Torvalds & authors (see below)
  */
@@ -35,6 +35,8 @@
  *  Version 0.10	Updated for 2.1 series of kernels
  *  Version 0.11	Updated for 2.3 series of kernels
  *			Autodetection code added.
+ *
+ *  Version 0.90	Transition to BETA code. No lost/unexpected interrupts
  */
 
 /*
@@ -68,8 +70,8 @@
  * because I still don't understand what the card is doing with interrupts.
  */
 
-#undef DEBUG_READ
-#undef DEBUG_WRITE
+#define DEBUG_READ
+#define DEBUG_WRITE
 
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -100,7 +102,8 @@ static void promise_selectproc (ide_drive_t *drive)
 
 /*
  * pdc4030_cmd handles the set of vendor specific commands that are initiated
- * by command F0. They all have the same success/failure notification.
+ * by command F0. They all have the same success/failure notification -
+ * 'P' (=0x50) on success, 'p' (=0x70) on failure.
  */
 int pdc4030_cmd(ide_drive_t *drive, byte cmd)
 {
@@ -358,11 +361,11 @@ read_next:
 		if (stat & DRQ_STAT)
 			goto read_again;
 		if (stat & BUSY_STAT) {
+			ide_set_handler (drive, &promise_read_intr, WAIT_CMD);
 #ifdef DEBUG_READ
 			printk(KERN_DEBUG "%s: promise_read: waiting for"
 			       "interrupt\n", drive->name);
 #endif 
-			ide_set_handler (drive, &promise_read_intr, WAIT_CMD);
 			return;
 		}
 		printk(KERN_ERR "%s: Eeek! promise_read_intr: sectors left "
@@ -372,37 +375,39 @@ read_next:
 }
 
 /*
- * promise_finish_write()
- * called at the end of all writes
+ * promise_complete_pollfunc()
+ * This is the polling function for waiting (nicely!) until drive stops
+ * being busy. It is invoked at the end of a write, after the previous poll
+ * has finished.
+ *
+ * Once not busy, the end request is called.
  */
-static void promise_finish_write(ide_drive_t *drive)
+static void promise_complete_pollfunc(ide_drive_t *drive)
 {
-	struct request *rq = HWGROUP(drive)->rq;
+	ide_hwgroup_t *hwgroup = HWGROUP(drive);
+	struct request *rq = hwgroup->rq;
 	int i;
 
-	for (i = rq->nr_sectors; i > 0; ) {
-		i -= rq->current_nr_sectors;
-		ide_end_request(1, HWGROUP(drive));
-	}
-}
-
-/*
- * promise_write_intr()
- * This interrupt is called after the particularly odd polling for completion
- * of the write request, once all the data has been sent.
- */ 
-static void promise_write_intr(ide_drive_t *drive)
-{
-	byte stat;
-
-	if (!OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
-		ide_error(drive, "promise_write_intr", stat);
+	if (GET_STAT() & BUSY_STAT) {
+		if (time_before(jiffies, hwgroup->poll_timeout)) {
+			ide_set_handler(drive, &promise_complete_pollfunc, 1);
+			return; /* continue polling... */
+		}
+		hwgroup->poll_timeout = 0;
+		printk(KERN_ERR "%s: completion timeout - still busy!\n",
+		       drive->name);
+		ide_error(drive, "busy timeout", GET_STAT());
+		return;
 	}
 
+	hwgroup->poll_timeout = 0;
 #ifdef DEBUG_WRITE
 	printk(KERN_DEBUG "%s: Write complete - end_request\n", drive->name);
 #endif
-	promise_finish_write(drive);
+	for (i = rq->nr_sectors; i > 0; ) {
+		i -= rq->current_nr_sectors;
+		ide_end_request(1, hwgroup);
+	}
 }
 
 /*
@@ -410,22 +415,29 @@ static void promise_write_intr(ide_drive_t *drive)
  */
 static void promise_write_pollfunc (ide_drive_t *drive)
 {
+	ide_hwgroup_t *hwgroup = HWGROUP(drive);
+
 	if (IN_BYTE(IDE_NSECTOR_REG) != 0) {
-		if (time_before(jiffies, HWGROUP(drive)->poll_timeout)) {
+		if (time_before(jiffies, hwgroup->poll_timeout)) {
 			ide_set_handler (drive, &promise_write_pollfunc, 1);
 			return; /* continue polling... */
 		}
+		hwgroup->poll_timeout = 0;
 		printk(KERN_ERR "%s: write timed-out!\n",drive->name);
 		ide_error (drive, "write timeout", GET_STAT());
 		return;
 	}
 
+	/*
+	 * Now write out last 4 sectors and poll for not BUSY
+	 */
 	ide_multwrite(drive, 4);
+	hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
+	ide_set_handler(drive, &promise_complete_pollfunc, 1);
 #ifdef DEBUG_WRITE
 	printk(KERN_DEBUG "%s: Done last 4 sectors - status = %02x\n",
 		drive->name, GET_STAT());
 #endif
-	ide_set_handler(drive, &promise_write_intr, WAIT_CMD);
 	return;
 }
 
@@ -433,8 +445,8 @@ static void promise_write_pollfunc (ide_drive_t *drive)
  * promise_write() transfers a block of one or more sectors of data to a
  * drive as part of a disk write operation. All but 4 sectors are transfered
  * in the first attempt, then the interface is polled (nicely!) for completion
- * before the final 4 sectors are transfered. The interrupt generated on 
- * writes occurs after this process, which is why I got it wrong for so long!
+ * before the final 4 sectors are transfered. There is no interrupt generated
+ * on writes (at least on the DC4030VL-2), we just have to poll for NOT BUSY.
  */
 static void promise_write (ide_drive_t *drive)
 {
@@ -446,18 +458,27 @@ static void promise_write (ide_drive_t *drive)
 	       "buffer=0x%08x\n", drive->name, rq->sector,
 	       rq->sector + rq->nr_sectors - 1, (unsigned int)rq->buffer);
 #endif
+
+	/*
+	 * If there are more than 4 sectors to transfer, do n-4 then go into
+	 * the polling strategy as defined above.
+	 */
 	if (rq->nr_sectors > 4) {
 		ide_multwrite(drive, rq->nr_sectors - 4);
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
 		ide_set_handler (drive, &promise_write_pollfunc, 1);
-		return;
 	} else {
+	/*
+	 * There are 4 or fewer sectors to transfer, do them all in one go
+	 * and wait for NOT BUSY.
+	 */
 		ide_multwrite(drive, rq->nr_sectors);
+		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
+		ide_set_handler(drive, &promise_complete_pollfunc, 1);
 #ifdef DEBUG_WRITE
 		printk(KERN_DEBUG "%s: promise_write: <= 4 sectors, "
 			"status = %02x\n", drive->name, GET_STAT());
 #endif
-		promise_finish_write(drive);
 	}
 }
 

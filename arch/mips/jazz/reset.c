@@ -3,7 +3,7 @@
  *
  *  Reset a Jazz machine.
  *
- *  $Id: reset.c,v 1.2 1998/03/04 12:17:40 ralf Exp $
+ *  $Id: reset.c,v 1.3 1998/03/04 08:29:10 ralf Exp $
  */
 
 #include <linux/sched.h>

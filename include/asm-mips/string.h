@@ -96,16 +96,16 @@ extern __inline__ int strncmp(__const__ char *__cs, __const__ char *__ct, size_t
   __asm__ __volatile__(
 	".set\tnoreorder\n\t"
 	".set\tnoat\n"
-	"1:\tlbu\t%3,(%0)\n\t"
+	"1:\tlbu\t%3,(%1)\n\t"
 	"beqz\t%2,2f\n\t"
-	"lbu\t$1,(%1)\n\t"
-	"subu\t%2,1\n\t"
-	"bne\t$1,%3,3f\n\t"
+	"lbu\t$1,(%0)\n\t"
+	"addiu\t%1,1\n\t"
+	"subu\t%3,$1,%3\n\t"
+	"bnez\t%3,2f\n\t"
 	"addiu\t%0,1\n\t"
-	"bnez\t%3,1b\n\t"
-	"addiu\t%1,1\n"
-	"2:\tmove\t%3,$1\n"
-	"3:\tsubu\t%3,$1\n\t"
+	"bnez\t%1,1b\n"
+	"addiu\t%2,-1\n"
+	"2:\n\t"
 	".set\tat\n\t"
 	".set\treorder"
 	: "=r" (__cs), "=r" (__ct), "=r" (__count), "=r" (__res)
@@ -132,12 +132,14 @@ extern __inline__ void *memscan(void *__addr, int __c, size_t __size)
 {
 	char *__end = (char *)__addr + __size;
 
-	__asm__(".set\tnoat\n"
+	__asm__(".set\tpush\n\t"
+		".set\tnoat\n\t"
+		".set\treorder\n\t"
 		"1:\tbeq\t%0,%1,2f\n\t"
 		"addiu\t%0,1\n\t"
 		"lb\t$1,-1(%0)\n\t"
 		"bne\t$1,%4,1b\n"
-		"2:\t.set\tat"
+		"2:\t.set\tpop"
 		: "=r" (__addr), "=r" (__end)
 		: "0" (__addr), "1" (__end), "r" (__c)
 		: "$1");

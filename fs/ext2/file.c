@@ -37,7 +37,6 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-static int ext2_writepage (struct file * file, struct page * page);
 static long long ext2_file_lseek(struct file *, long long, int);
 #if BITS_PER_LONG < 64
 static int ext2_open_file (struct inode *, struct file *);
@@ -106,51 +105,16 @@ static inline void remove_suid(struct inode *inode)
 	}
 }
 
-static int ext2_get_block(struct inode *inode, unsigned long block, struct buffer_head *bh, unsigned int flags)
-{
-	int error, created;
-	unsigned long blocknr;
-
-	blocknr = ext2_getblk_block(inode, block, flags & FS_GETBLK_ALLOCATE, &error, &created);
-	if (!blocknr) {
-		if (error)
-			return error;
-		if (!(flags & FS_GETBLK_ALLOCATE))
-			goto clear_and_uptodate;
-		return -ENOSPC;
-	}
-
-	bh->b_dev = inode->i_dev;
-	bh->b_blocknr = blocknr;
-	set_bit(BH_Allocated, &bh->b_state);
-
-	if (created) {
-clear_and_uptodate:
-		if (flags & FS_GETBLK_UPDATE) {
-			memset(bh->b_data, 0, bh->b_size);
-			set_bit(BH_Uptodate, &bh->b_state);
-		}
-	}
-	return 0;
-}
-
-static int ext2_writepage (struct file * file, struct page * page)
-{
-	return block_write_full_page(file, page, ext2_get_block);
-}
-
-static long ext2_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
-{
-	return block_write_partial_page(file, page, offset, bytes, buf, ext2_get_block);
-}
-
 /*
  * Write to a file (through the page cache).
  */
 static ssize_t
 ext2_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
-	ssize_t retval = generic_file_write(file, buf, count, ppos, ext2_write_one_page);
+	ssize_t retval;
+
+	retval = generic_file_write(file, buf, count,
+						 ppos, block_write_partial_page);
 	if (retval > 0) {
 		struct inode *inode = file->f_dentry->d_inode;
 		remove_suid(inode);
@@ -223,9 +187,9 @@ struct inode_operations ext2_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	ext2_bmap,		/* bmap */
+	ext2_get_block,		/* get_block */
 	block_read_full_page,	/* readpage */
-	ext2_writepage,		/* writepage */
+	block_write_full_page,	/* writepage */
 	block_flushpage,	/* flushpage */
 	ext2_truncate,		/* truncate */
 	ext2_permission,	/* permission */

@@ -9,6 +9,10 @@
  * as inline code in <asm-xx/string.h>
  *
  * These are buggy as well..
+ *
+ * * Fri Jun 25 1999, Ingo Oeser <ioe@informatik.tu-chemnitz.de>
+ * -  Added strsep() which will replace strtok() soon (because strsep() is
+ *    reentrant and should be faster). Use only strsep() in new code, please.
  */
  
 #include <linux/types.h>
@@ -228,6 +232,25 @@ char * strtok(char * s,const char * ct)
 	if (send && *send != '\0')
 		*send++ = '\0';
 	___strtok = send;
+	return (sbegin);
+}
+#endif
+
+#ifndef __HAVE_ARCH_STRSEP
+
+char * strsep(char **s, const char * ct)
+{
+	char *sbegin=*s;
+	if (!sbegin) 
+		return NULL;
+	
+	sbegin += strspn(sbegin,ct);
+	if (*sbegin == '\0') 
+		return NULL;
+	
+	*s = strpbrk( sbegin, ct);
+	if (*s && **s != '\0')
+		**s++ = '\0';
 	return (sbegin);
 }
 #endif

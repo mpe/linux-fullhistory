@@ -71,7 +71,7 @@ struct inode_operations nfs_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	nfs_readpage,		/* readpage */
 	nfs_writepage,		/* writepage */
 	NULL,			/* flushpage */
@@ -167,7 +167,7 @@ nfs_fsync(struct file *file, struct dentry *dentry)
  * If the writer ends up delaying the write, the writer needs to
  * increment the page use counts until he is done with the page.
  */
-static long nfs_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
+static int nfs_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
 {
 	long status;
 

@@ -117,7 +117,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
 	  dep_tristate '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI $CONFIG_BLK_DEV_IDE
 	  define_bool CONFIG_BLK_DEV_IDEPCI y
 	  define_bool CONFIG_BLK_DEV_IDEDMA y
-	  define_bool CONFIG_IDEDMA_AUTO y
+	  define_bool CONFIG_IDEDMA_PCI_AUTO y
 	  define_bool CONFIG_BLK_DEV_NS87415 y
 	  define_bool CONFIG_BLK_DEV_CMD646 y
 	fi

@@ -1,4 +1,4 @@
-/* $Id: r4xx0.c,v 1.30 1998/10/16 19:22:43 ralf Exp $
+/* $Id: r4xx0.c,v 1.22 1999/06/17 13:25:51 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -2172,6 +2172,12 @@ r4k_dma_cache_inv_sc(unsigned long addr, unsigned long size)
 	}
 }
 
+static void
+r4k_dma_cache_wback(unsigned long addr, unsigned long size)
+{
+	panic("r4k_dma_cache called - should not happen.\n");
+}
+
 /*
  * While we're protected against bad userland addresses we don't care
  * very much about what happens in that case.  Usually a segmentation
@@ -2652,6 +2658,7 @@ __initfunc(static void setup_noscache_funcs(void))
 		break;
 	}
 	dma_cache_wback_inv = r4k_dma_cache_wback_inv_pc;
+	dma_cache_wback = r4k_dma_cache_wback;
 	dma_cache_inv = r4k_dma_cache_inv_pc;
 }
 
@@ -2735,6 +2742,7 @@ __initfunc(static void setup_scache_funcs(void))
 		break;
 	}
 	dma_cache_wback_inv = r4k_dma_cache_wback_inv_sc;
+	dma_cache_wback = r4k_dma_cache_wback;
 	dma_cache_inv = r4k_dma_cache_inv_sc;
 }
 

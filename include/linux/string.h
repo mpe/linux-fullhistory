@@ -20,6 +20,7 @@ extern char * strchr(const char *,int);
 extern char * strrchr(const char *,int);
 extern char * strpbrk(const char *,const char *);
 extern char * strtok(char *,const char *);
+extern char * strsep(char **,const char *);
 extern char * strstr(const char *,const char *);
 extern __kernel_size_t strlen(const char *);
 extern __kernel_size_t strnlen(const char *,__kernel_size_t);

@@ -1,4 +1,4 @@
-/* $Id: r6000.c,v 1.6 1998/10/16 19:22:44 ralf Exp $
+/* $Id: r6000.c,v 1.6 1999/01/04 16:03:54 ralf Exp $
  *
  * r6000.c: MMU and cache routines for the R6000 processors.
  *

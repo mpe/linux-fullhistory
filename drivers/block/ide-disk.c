@@ -856,11 +856,16 @@ void cleanup_module (void)
 	ide_drive_t *drive;
 	int failed = 0;
 
-	while ((drive = ide_scan_devices (ide_disk, idedisk_driver.name, &idedisk_driver, failed)) != NULL)
+	while ((drive = ide_scan_devices (ide_disk, idedisk_driver.name, &idedisk_driver, failed)) != NULL) {
 		if (idedisk_cleanup (drive)) {
 			printk (KERN_ERR "%s: cleanup_module() called while still busy\n", drive->name);
 			failed++;
 		}
+		/* We must remove proc entries defined in this module.
+		   Otherwise we oops while accessing these entries */
+		if (drive->proc)
+			ide_remove_proc_entries(drive->proc, idedisk_proc);
+	}
 	ide_unregister_module(&idedisk_module);
 }
 #endif /* MODULE */

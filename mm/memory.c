@@ -52,7 +52,7 @@ void * high_memory = NULL;
  */
 static inline void copy_cow_page(unsigned long from, unsigned long to)
 {
-	if (from == ZERO_PAGE) {
+	if (from == ZERO_PAGE(to)) {
 		clear_page(to);
 		return;
 	}
@@ -405,7 +405,8 @@ void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long s
 	}
 }
 
-static inline void zeromap_pte_range(pte_t * pte, unsigned long address, unsigned long size, pte_t zero_pte)
+static inline void zeromap_pte_range(pte_t * pte, unsigned long address,
+                                     unsigned long size, pgprot_t prot)
 {
 	unsigned long end;
 
@@ -414,6 +415,8 @@ static inline void zeromap_pte_range(pte_t * pte, unsigned long address, unsigne
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
+		pte_t zero_pte = pte_wrprotect(mk_pte(ZERO_PAGE(address),
+		                               prot));
 		pte_t oldpage = *pte;
 		set_pte(pte, zero_pte);
 		forget_pte(oldpage);
@@ -422,7 +425,8 @@ static inline void zeromap_pte_range(pte_t * pte, unsigned long address, unsigne
 	} while (address < end);
 }
 
-static inline int zeromap_pmd_range(pmd_t * pmd, unsigned long address, unsigned long size, pte_t zero_pte)
+static inline int zeromap_pmd_range(pmd_t * pmd, unsigned long address,
+                                    unsigned long size, pgprot_t prot)
 {
 	unsigned long end;
 
@@ -434,7 +438,7 @@ static inline int zeromap_pmd_range(pmd_t * pmd, unsigned long address, unsigned
 		pte_t * pte = pte_alloc(pmd, address);
 		if (!pte)
 			return -ENOMEM;
-		zeromap_pte_range(pte, address, end - address, zero_pte);
+		zeromap_pte_range(pte, address, end - address, prot);
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
 	} while (address < end);
@@ -447,9 +451,7 @@ int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
 	pgd_t * dir;
 	unsigned long beg = address;
 	unsigned long end = address + size;
-	pte_t zero_pte;
 
-	zero_pte = pte_wrprotect(mk_pte(ZERO_PAGE, prot));
 	dir = pgd_offset(current->mm, address);
 	flush_cache_range(current->mm, beg, end);
 	while (address < end) {
@@ -457,7 +459,7 @@ int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
 		error = -ENOMEM;
 		if (!pmd)
 			break;
-		error = zeromap_pmd_range(pmd, address, end - address, zero_pte);
+		error = zeromap_pmd_range(pmd, address, end - address, prot);
 		if (error)
 			break;
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
@@ -790,9 +792,9 @@ static int do_swap_page(struct task_struct * tsk,
 /*
  * This only needs the MM semaphore
  */
-static int do_anonymous_page(struct task_struct * tsk, struct vm_area_struct * vma, pte_t *page_table, int write_access)
+static int do_anonymous_page(struct task_struct * tsk, struct vm_area_struct * vma, pte_t *page_table, int write_access, unsigned long addr)
 {
-	pte_t entry = pte_wrprotect(mk_pte(ZERO_PAGE, vma->vm_page_prot));
+	pte_t entry = pte_wrprotect(mk_pte(ZERO_PAGE(addr), vma->vm_page_prot));
 	if (write_access) {
 		unsigned long page = __get_free_page(GFP_USER);
 		if (!page)
@@ -827,7 +829,8 @@ static int do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 
 	if (!vma->vm_ops || !vma->vm_ops->nopage) {
 		unlock_kernel();
-		return do_anonymous_page(tsk, vma, page_table, write_access);
+		return do_anonymous_page(tsk, vma, page_table, write_access,
+		                         address);
 	}
 
 	/*

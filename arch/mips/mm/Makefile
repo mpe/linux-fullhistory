@@ -15,4 +15,8 @@ ifdef CONFIG_SGI
 O_OBJS   += umap.o
 endif
 
+ifdef CONFIG_BAGET_MIPS
+O_OBJS   += umap.o
+endif
+
 include $(TOPDIR)/Rules.make

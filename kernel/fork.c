@@ -556,13 +556,14 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	if (p->user) {
 		if (atomic_read(&p->user->count) >= p->rlim[RLIMIT_NPROC].rlim_cur)
 			goto bad_fork_free;
+		atomic_inc(&p->user->count);
 	}
 
 	{
 		struct task_struct **tslot;
 		tslot = find_empty_process();
 		if (!tslot)
-			goto bad_fork_free;
+			goto bad_fork_cleanup_count;
 		p->tarray_ptr = tslot;
 		*tslot = p;
 		nr = tslot - &task[0];
@@ -666,8 +667,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		write_unlock_irq(&tasklist_lock);
 
 		nr_tasks++;
-		if (p->user)
-			atomic_inc(&p->user->count);
 
 		p->next_run = NULL;
 		p->prev_run = NULL;
@@ -695,6 +694,9 @@ bad_fork_cleanup:
 		__MOD_DEC_USE_COUNT(p->binfmt->module);
 
 	add_free_taskslot(p->tarray_ptr);
+bad_fork_cleanup_count:
+	if (p->user)
+		free_uid(p);
 bad_fork_free:
 	free_task_struct(p);
 	goto bad_fork;

@@ -1,20 +1,15 @@
 /*
  * sonic.c
  *
- * (C) 1996 by Thomas Bogendoerfer (tsbogend@bigbug.franken.de)
+ * (C) 1996,1998 by Thomas Bogendoerfer (tsbogend@alpha.franken.de)
  * 
  * This driver is based on work from Andreas Busse, but most of
  * the code is rewritten.
  * 
  * (C) 1995 by Andreas Busse (andy@waldorf-gmbh.de)
  *
- * A driver for the onboard Sonic ethernet controller on Mips Jazz
- * systems (Acer Pica-61, Mips Magnum 4000, Olivetti M700 and
- * perhaps others, too)
+ *    Core code included by system sonic drivers
  */
-
-static const char *version =
-	"sonic.c:v0.10 6.7.96 tsbogend@bigbug.franken.de\n";
 
 /*
  * Sources: Olivetti M700-10 Risc Personal Computer hardware handbook,
@@ -22,269 +17,7 @@ static const char *version =
  * controller, and the files "8390.c" and "skeleton.c" in this directory.
  */
 
-#include <linux/kernel.h>
-#include <linux/sched.h>
-#include <linux/types.h>
-#include <linux/fcntl.h>
-#include <linux/interrupt.h>
-#include <linux/ptrace.h>
-#include <linux/init.h>
-#include <linux/ioport.h>
-#include <linux/in.h>
-#include <linux/malloc.h>
-#include <linux/string.h>
-#include <linux/delay.h>
-#include <asm/bootinfo.h>
-#include <asm/system.h>
-#include <asm/bitops.h>
-#include <asm/pgtable.h>
-#include <asm/segment.h>
-#include <asm/io.h>
-#include <asm/dma.h>
-#include <asm/jazz.h>
-#include <asm/jazzdma.h>
-#include <linux/errno.h>
 
-#include <linux/netdevice.h>
-#include <linux/etherdevice.h>
-#include <linux/skbuff.h>
-
-#include "sonic.h"
-
-/* use 0 for production, 1 for verification, >2 for debug */
-#ifdef SONIC_DEBUG
-static unsigned int sonic_debug = SONIC_DEBUG;
-#else 
-static unsigned int sonic_debug = 2;
-#endif
-
-/*
- * Some tunables for the buffer areas. Power of 2 is required
- * the current driver uses one receive buffer for each descriptor.
- */
-#define SONIC_NUM_RRS    16             /* number of receive resources */
-#define SONIC_NUM_RDS    SONIC_NUM_RRS  /* number of receive descriptors */
-#define SONIC_NUM_TDS    16      /* number of transmit descriptors */
-#define SONIC_RBSIZE   1520      /* size of one resource buffer */
-
-#define SONIC_RDS_MASK   (SONIC_NUM_RDS-1)
-#define SONIC_TDS_MASK   (SONIC_NUM_TDS-1)
-
-/*
- * Base address and interupt of the SONIC controller on JAZZ boards
- */
-static struct {
-    unsigned int port;
-    unsigned int irq;
-    } sonic_portlist[] = { {JAZZ_ETHERNET_BASE, JAZZ_ETHERNET_IRQ}, {0, 0}};
-
-
-/* Information that need to be kept for each board. */
-struct sonic_local {
-    sonic_cda_t   cda;                     /* virtual CPU address of CDA */
-    sonic_td_t    tda[SONIC_NUM_TDS];      /* transmit descriptor area */
-    sonic_rr_t    rra[SONIC_NUM_RRS];      /* receive resource arrea */
-    sonic_rd_t    rda[SONIC_NUM_RDS];      /* receive descriptor area */
-    struct sk_buff* tx_skb[SONIC_NUM_TDS]; /* skbuffs for packets to transmit */
-    unsigned int  tx_laddr[SONIC_NUM_TDS]; /* logical DMA address fro skbuffs */
-    unsigned char *rba;                    /* start of receive buffer areas */    
-    unsigned int  cda_laddr;               /* logical DMA address of CDA */    
-    unsigned int  tda_laddr;               /* logical DMA address of TDA */
-    unsigned int  rra_laddr;               /* logical DMA address of RRA */    
-    unsigned int  rda_laddr;               /* logical DMA address of RDA */
-    unsigned int  rba_laddr;               /* logical DMA address of RBA */
-    unsigned int  cur_tx, cur_rx;          /* current indexes to resource areas */
-    unsigned int  dirty_tx,cur_rra;        /* last unacked transmit packet */
-    char tx_full;
-    struct enet_statistics stats;
-};
-
-/*
- * We cannot use station (ethernet) address prefixes to detect the
- * sonic controller since these are board manufacturer depended.
- * So we check for known Silicon Revision IDs instead. 
- */
-static unsigned short known_revisions[] =
-{
-  0x04,				/* Mips Magnum 4000 */
-  0xffff			/* end of list */
-};
-
-/* Index to functions, as function prototypes. */
-
-extern int sonic_probe(struct device *dev);
-static int sonic_probe1(struct device *dev, unsigned int base_addr, unsigned int irq);
-static int sonic_open(struct device *dev);
-static int sonic_send_packet(struct sk_buff *skb, struct device *dev);
-static void sonic_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void sonic_rx(struct device *dev);
-static int sonic_close(struct device *dev);
-static struct enet_statistics *sonic_get_stats(struct device *dev);
-static void sonic_multicast_list(struct device *dev);
-static int sonic_init(struct device *dev);
-
-
-/*
- * Probe for a SONIC ethernet controller on a Mips Jazz board.
- * Actually probing is superfluous but we're paranoid.
- */
-__initfunc(int sonic_probe(struct device *dev))
-{
-    unsigned int base_addr = dev ? dev->base_addr : 0;
-    int i;
-
-    /*
-     * Don't probe if we're not running on a Jazz board.
-     */
-    if (mips_machgroup != MACH_GROUP_JAZZ)
-	return -ENODEV;
-    if (base_addr > 0x1ff)	/* Check a single specified location. */
-	return sonic_probe1(dev, base_addr, dev->irq);
-    else if (base_addr != 0)	/* Don't probe at all. */
-	return -ENXIO;
-    
-    for (i = 0; sonic_portlist[i].port; i++) {
-	int base_addr = sonic_portlist[i].port;
-	if (check_region(base_addr, 0x100))
-	    continue;
-	if (sonic_probe1(dev, base_addr, sonic_portlist[i].irq) == 0)
-	    return 0;
-    }
-    return -ENODEV;
-}
-
-__initfunc(static int sonic_probe1(struct device *dev,
-                                   unsigned int base_addr, unsigned int irq))
-{
-    static unsigned version_printed = 0;
-    unsigned int silicon_revision;
-    unsigned int val;
-    struct sonic_local *lp;
-    int i;
-    
-    /*
-     * get the Silicon Revision ID. If this is one of the known
-     * one assume that we found a SONIC ethernet controller at
-     * the expected location.
-     */
-    silicon_revision = SONIC_READ(SONIC_SR);
-    if (sonic_debug > 1)
-      printk("SONIC Silicon Revision = 0x%04x\n",silicon_revision);
-
-    i = 0;
-    while ((known_revisions[i] != 0xffff) &&
-	   (known_revisions[i] != silicon_revision))
-      i++;
-	
-    if (known_revisions[i] == 0xffff) {
-	printk("SONIC ethernet controller not found (0x%4x)\n",
-	       silicon_revision);
-	return -ENODEV;
-    }
-    
-    request_region(base_addr, 0x100, "SONIC");
-    
-    /* Allocate a new 'dev' if needed. */
-    if (dev == NULL)
-      dev = init_etherdev(0, sizeof(struct sonic_local));
-
-    if (sonic_debug  &&  version_printed++ == 0)
-      printk(version);
-
-    printk("%s: %s found at 0x%08x, ",
-	   dev->name, "SONIC ethernet", base_addr);
-
-    /* Fill in the 'dev' fields. */
-    dev->base_addr = base_addr;
-    dev->irq = irq;
-
-    /*
-     * Put the sonic into software reset, then
-     * retrieve and print the ethernet address.
-     */
-    SONIC_WRITE(SONIC_CMD,SONIC_CR_RST);
-    SONIC_WRITE(SONIC_CEP,0);
-    for (i=0; i<3; i++) {
-	val = SONIC_READ(SONIC_CAP0-i);
-	dev->dev_addr[i*2] = val;
-	dev->dev_addr[i*2+1] = val >> 8;
-    }
-
-    printk("HW Address ");
-    for (i = 0; i < 6; i++) {
-	printk("%2.2x", dev->dev_addr[i]);
-	if (i<5)
-	  printk(":");
-    }
-    
-    printk(" IRQ %d\n", irq);
-    
-    /* Initialize the device structure. */
-    if (dev->priv == NULL) {
-	/*
-	 * the memory be located in the same 64kb segment
-	 */
-	lp = NULL;
-	i = 0;
-	do {
-	    lp = (struct sonic_local *)kmalloc(sizeof(*lp), GFP_KERNEL);
-	    if ((unsigned long)lp >> 16 != ((unsigned long)lp + sizeof(*lp) ) >> 16) {
-		/* FIXME, free the memory later */
-		kfree (lp);
-		lp = NULL;
-	    }
-	} while (lp == NULL && i++ < 20);
-	
-	if (lp == NULL) {
-	    printk ("%s: couldn't allocate memory for descriptors\n",
-	            dev->name);
-	    return -ENOMEM;
-	}
-	
-	memset(lp, 0, sizeof(struct sonic_local));
-	
-	/* get the virtual dma address */
-	lp->cda_laddr = vdma_alloc(PHYSADDR(lp),sizeof(*lp));
-	if (lp->cda_laddr == ~0UL) {
-	    printk ("%s: couldn't get DMA page entry for descriptors\n",
-	            dev->name);
-	    return -ENOMEM;
-	}
-
-	lp->tda_laddr = lp->cda_laddr + sizeof (lp->cda);
-	lp->rra_laddr = lp->tda_laddr + sizeof (lp->tda);
-	lp->rda_laddr = lp->rra_laddr + sizeof (lp->rra);
-	
-	/* allocate receive buffer area */
-	/* FIXME, maybe we should use skbs */
-	if ((lp->rba = (char *)kmalloc(SONIC_NUM_RRS * SONIC_RBSIZE, GFP_KERNEL)) == NULL) {
-	    printk ("%s: couldn't allocate receive buffers\n",dev->name);
-	    return -ENOMEM;
-	}
-	
-	/* get virtual dma address */
-	if ((lp->rba_laddr = vdma_alloc(PHYSADDR(lp->rba),SONIC_NUM_RRS * SONIC_RBSIZE)) == ~0UL) {
-	    printk ("%s: couldn't get DMA page entry for receive buffers\n",dev->name);
-	    return -ENOMEM;
-	}
-	
-	/* now convert pointer to KSEG1 pointer */
-	lp->rba = (char *)KSEG1ADDR(lp->rba);
-	flush_cache_all();
-	dev->priv = (struct sonic_local *)KSEG1ADDR(lp);
-    }
-
-    lp = (struct sonic_local *)dev->priv;
-    dev->open = sonic_open;
-    dev->stop = sonic_close;
-    dev->hard_start_xmit = sonic_send_packet;
-    dev->get_stats	= sonic_get_stats;
-    dev->set_multicast_list = &sonic_multicast_list;
-
-    /* Fill in the fields of the device structure with ethernet values. */
-    ether_setup(dev);
-    return 0;
-}
 
 /*
  * Open/initialize the SONIC controller.
@@ -308,8 +41,8 @@ static int sonic_open(struct device *dev)
  * covering another bug otherwise corrupting data.  This doesn't mean
  * this glue works ok under all situations.
  */
-//    if (request_irq(dev->irq, &sonic_interrupt, 0, "sonic", dev)) {
-    if (request_irq(dev->irq, &sonic_interrupt, SA_INTERRUPT, "sonic", dev)) {
+//    if (sonic_request_irq(dev->irq, &sonic_interrupt, 0, "sonic", dev)) {
+    if (sonic_request_irq(dev->irq, &sonic_interrupt, SA_INTERRUPT, "sonic", dev)) {
 	printk ("\n%s: unable to get IRQ %d .\n", dev->name, dev->irq);
 	return EAGAIN;
     }
@@ -351,7 +84,7 @@ sonic_close(struct device *dev)
     SONIC_WRITE(SONIC_IMR,0);
     SONIC_WRITE(SONIC_CMD,SONIC_CR_RST);
 
-    free_irq(dev->irq, dev);			/* release the IRQ */
+    sonic_free_irq(dev->irq, dev);		/* release the IRQ */
 
     return 0;
 }
@@ -424,11 +157,6 @@ static int sonic_send_packet(struct sk_buff *skb, struct device *dev)
     lp->tda[entry].tx_frag_ptr_l = laddr & 0xffff;
     lp->tda[entry].tx_frag_ptr_h = laddr >> 16;
     lp->tda[entry].tx_frag_size  = length;
-    
-    /* if there are already packets queued, allow sending several packets at once */
-    if (lp->dirty_tx != lp->cur_tx)
-	lp->tda[(lp->cur_tx-1) % SONIC_TDS_MASK].link &= ~SONIC_END_OF_LINKS;
-    
     lp->cur_tx++;
     lp->stats.tx_bytes += length;
     
@@ -479,20 +207,23 @@ sonic_interrupt(int irq, void *dev_id, struct pt_regs * regs)
     
     if (status & SONIC_INT_TXDN) {
 	int dirty_tx = lp->dirty_tx;
-	
+
 	while (dirty_tx < lp->cur_tx) {
 	    int entry = dirty_tx & SONIC_TDS_MASK;
 	    int status = lp->tda[entry].tx_status;
-	    
+
 	    if (sonic_debug > 3)
 	      printk ("sonic_interrupt: status %d, cur_tx %d, dirty_tx %d\n",
 		      status,lp->cur_tx,lp->dirty_tx);
-	    
-	    if (status == 0)
-	      break;			/* It still hasn't been Txed */
+
+	    if (status == 0) {
+		/* It still hasn't been Txed, kick the sonic again */
+		SONIC_WRITE(SONIC_CMD,SONIC_CR_TXP);		
+		break;
+	    }
 
 	    /* put back EOL and free descriptor */
-	    lp->tda[entry].link |= SONIC_END_OF_LINKS;
+	    lp->tda[entry].tx_frag_count = 0;
 	    lp->tda[entry].tx_status = 0;
 
 	    if (status & 0x0001)
@@ -574,27 +305,25 @@ sonic_rx(struct device *dev)
 {
     unsigned int base_addr = dev->base_addr;
     struct sonic_local *lp = (struct sonic_local *)dev->priv;
-    int entry = lp->cur_rx & SONIC_RDS_MASK;
+    sonic_rd_t *rd = &lp->rda[lp->cur_rx & SONIC_RDS_MASK];
     int status;
 
-    while(lp->rda[entry].in_use == 0)
-    {
+    while (rd->in_use == 0) {
 	struct sk_buff *skb;
 	int pkt_len;
 	unsigned char *pkt_ptr;
 	
-	status = lp->rda[entry].rx_status;
+	status = rd->rx_status;
 	if (sonic_debug > 3)
-	  printk ("status %x, cur_rx %d, cur_rra %d\n",status,lp->cur_rx,lp->cur_rra);
+	  printk ("status %x, cur_rx %d, cur_rra %x\n",status,lp->cur_rx,lp->cur_rra);
 	if (status & SONIC_RCR_PRX) {	    
-	    pkt_len = lp->rda[entry].rx_pktlen;
-	    pkt_ptr = (char *)KSEG1ADDR(vdma_log2phys((lp->rda[entry].rx_pktptr_h << 16) +
-						      lp->rda[entry].rx_pktptr_l));
+	    pkt_len = rd->rx_pktlen;
+	    pkt_ptr = (char *)sonic_chiptomem((rd->rx_pktptr_h << 16) +
+						      rd->rx_pktptr_l);
 	    
 	    if (sonic_debug > 3)
-	      printk ("pktptr %p (rba %p) h:%x l:%x, rra h:%x l:%x bsize h:%x l:%x\n", pkt_ptr,lp->rba,
-		      lp->rda[entry].rx_pktptr_h,lp->rda[entry].rx_pktptr_l,
-		      lp->rra[lp->cur_rra & 15].rx_bufadr_h,lp->rra[lp->cur_rra & 15].rx_bufadr_l,
+	      printk ("pktptr %p (rba %p) h:%x l:%x, bsize h:%x l:%x\n", pkt_ptr,lp->rba,
+		      rd->rx_pktptr_h,rd->rx_pktptr_l,
 		      SONIC_READ(SONIC_RBWC1),SONIC_READ(SONIC_RBWC0));
 	
 	    /* Malloc up new buffer. */
@@ -620,21 +349,26 @@ sonic_rx(struct device *dev)
 	    if (status & SONIC_RCR_CRCR) lp->stats.rx_crc_errors++;
 	}
 	
-	lp->rda[entry].in_use = 1;
-	entry = (++lp->cur_rx) & SONIC_RDS_MASK;
+	rd->in_use = 1;
+	rd = &lp->rda[(++lp->cur_rx) & SONIC_RDS_MASK];
 	/* now give back the buffer to the receive buffer area */
 	if (status & SONIC_RCR_LPKT) {
 	    /*
 	     * this was the last packet out of the current receice buffer
 	     * give the buffer back to the SONIC
 	     */
-	    SONIC_WRITE(SONIC_RWP,(lp->rra_laddr + (++lp->cur_rra & 15) * sizeof(sonic_rr_t)) & 0xffff);
-	}
+	    lp->cur_rra += sizeof(sonic_rr_t);
+	    if (lp->cur_rra > (lp->rra_laddr + (SONIC_NUM_RRS-1) * sizeof(sonic_rr_t)))
+		lp->cur_rra = lp->rra_laddr;
+	    SONIC_WRITE(SONIC_RWP, lp->cur_rra & 0xffff);
+	} else
+	    printk ("%s: rx desc without RCR_LPKT. Shouldn't happen !?\n",dev->name);
     }
-  
-    /* If any worth-while packets have been received, dev_rint()
-     has done a mark_bh(NET_BH) for us and will work on them
-     when we get to the bottom-half routine. */
+    /*
+     * If any worth-while packets have been received, dev_rint()
+     * has done a mark_bh(NET_BH) for us and will work on them
+     * when we get to the bottom-half routine.
+     */
     return;
 }
 
@@ -689,16 +423,15 @@ sonic_multicast_list(struct device *dev)
 	    for (i = 1; i <= dev->mc_count; i++) {
 		addr = dmi->dmi_addr;
 		dmi = dmi->next;
-		lp->cda.cam_desc[i].cam_frag2 = addr[1] << 8 | addr[0];
-		lp->cda.cam_desc[i].cam_frag1 = addr[3] << 8 | addr[2];
-		lp->cda.cam_desc[i].cam_frag0 = addr[5] << 8 | addr[4];
+		lp->cda.cam_desc[i].cam_cap0 = addr[1] << 8 | addr[0];
+		lp->cda.cam_desc[i].cam_cap1 = addr[3] << 8 | addr[2];
+		lp->cda.cam_desc[i].cam_cap2 = addr[5] << 8 | addr[4];
 		lp->cda.cam_enable |= (1 << i);
 	    }
-	    /* number of CAM entries to load */
-	    SONIC_WRITE(SONIC_CDC,dev->mc_count+1);
+	    SONIC_WRITE(SONIC_CDC,16);
 	    /* issue Load CAM command */
 	    SONIC_WRITE(SONIC_CDP, lp->cda_laddr & 0xffff);	    
-	    SONIC_WRITE(SONIC_CMD,SONIC_CR_LCAM);	    
+	    SONIC_WRITE(SONIC_CMD,SONIC_CR_LCAM);
 	}
     }
     
@@ -736,7 +469,6 @@ static int sonic_init(struct device *dev)
     SONIC_WRITE(SONIC_CMD,0);
     SONIC_WRITE(SONIC_CMD,SONIC_CR_RXDIS);
 
-
     /*
      * initialize the receive resource area
      */
@@ -761,7 +493,7 @@ static int sonic_init(struct device *dev)
     SONIC_WRITE(SONIC_URRA,lp->rra_laddr >> 16);
     SONIC_WRITE(SONIC_EOBC,(SONIC_RBSIZE-2) >> 1);
     
-    lp->cur_rra = SONIC_NUM_RRS - 2;
+    lp->cur_rra = lp->rra_laddr + (SONIC_NUM_RRS-1) * sizeof(sonic_rr_t);
 
     /* load the resource pointers */
     if (sonic_debug > 3)
@@ -796,7 +528,6 @@ static int sonic_init(struct device *dev)
     /* fix last descriptor */
     lp->rda[SONIC_NUM_RDS-1].link = lp->rda_laddr;
     lp->cur_rx = 0;
-    
     SONIC_WRITE(SONIC_URDA,lp->rda_laddr >> 16);
     SONIC_WRITE(SONIC_CRDA,lp->rda_laddr & 0xffff);
     
@@ -816,13 +547,14 @@ static int sonic_init(struct device *dev)
 
     SONIC_WRITE(SONIC_UTDA,lp->tda_laddr >> 16);
     SONIC_WRITE(SONIC_CTDA,lp->tda_laddr & 0xffff);
+    lp->cur_tx = lp->dirty_tx = 0;
     
     /*
      * put our own address to CAM desc[0]
      */
-    lp->cda.cam_desc[0].cam_frag2 = dev->dev_addr[1] << 8 | dev->dev_addr[0];
-    lp->cda.cam_desc[0].cam_frag1 = dev->dev_addr[3] << 8 | dev->dev_addr[2];
-    lp->cda.cam_desc[0].cam_frag0 = dev->dev_addr[5] << 8 | dev->dev_addr[4];
+    lp->cda.cam_desc[0].cam_cap0 = dev->dev_addr[1] << 8 | dev->dev_addr[0];
+    lp->cda.cam_desc[0].cam_cap1 = dev->dev_addr[3] << 8 | dev->dev_addr[2];
+    lp->cda.cam_desc[0].cam_cap2 = dev->dev_addr[5] << 8 | dev->dev_addr[4];
     lp->cda.cam_enable = 1;
     
     for (i=0; i < 16; i++)
@@ -832,7 +564,7 @@ static int sonic_init(struct device *dev)
      * initialize CAM registers
      */
     SONIC_WRITE(SONIC_CDP, lp->cda_laddr & 0xffff);
-    SONIC_WRITE(SONIC_CDC,1);
+    SONIC_WRITE(SONIC_CDC,16);
     
     /*
      * load the CAM

@@ -75,7 +75,7 @@ else
         if [ "$CONFIG_BLK_DEV_IDE_PMAC" != "n" ]; then
           bool '     PowerMac IDE DMA support' CONFIG_BLK_DEV_IDEDMA_PMAC
           if [ "$CONFIG_BLK_DEV_IDEDMA_PMAC" = "y" ]; then
-            bool '     Use DMA by default' CONFIG_PMAC_IDEDMA_AUTO
+            bool '     Use DMA by default' CONFIG_IDEDMA_PMAC_AUTO
           fi
        fi
     fi
@@ -93,6 +93,11 @@ else
          "$CONFIG_BLK_DEV_IDEDMA_PMAC" = "y" -o \
          "$CONFIG_BLK_DEV_IDEDMA_ICS" = "y" ]; then
       define_bool CONFIG_BLK_DEV_IDEDMA y
+      if [ "$CONFIG_IDEDMA_PCI_AUTO" = "y" -o \
+           "$CONFIG_IDEDMA_PMAC_AUTO" = "y" -o \
+           "$CONFIG_IDEDMA_ICS_AUTO" = "y" ]; then
+        define_bool CONFIG_IDEDMA_AUTO y
+      fi
     fi
     bool '   Other IDE chipset support' CONFIG_IDE_CHIPSETS
     if [ "$CONFIG_IDE_CHIPSETS" = "y" ]; then

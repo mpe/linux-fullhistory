@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.13 1998/05/28 03:17:55 ralf Exp $
+/* $Id: irq.c,v 1.15 1999/02/25 21:50:49 tsbogend Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -12,6 +12,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/kernel_stat.h>
+#include <linux/module.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -27,9 +28,21 @@
 #include <asm/irq.h>
 #include <asm/mipsregs.h>
 #include <asm/system.h>
+#include <asm/sni.h>
 
-unsigned char cache_21 = 0xff;
-unsigned char cache_A1 = 0xff;
+/*
+ * This contains the irq mask for both 8259A irq controllers, it's an
+ * int so we can deal with the third PIC in some systems like the RM300.
+ * (XXX This is broken for big endian.)
+ */
+static unsigned int cached_irq_mask = 0xffff;
+
+#define __byte(x,y) (((unsigned char *)&(y))[x])
+#define __word(x,y) (((unsigned short *)&(y))[x])
+#define __long(x,y) (((unsigned int *)&(y))[x])
+
+#define cached_21       (__byte(0,cached_irq_mask))
+#define cached_A1       (__byte(1,cached_irq_mask))
 
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
@@ -39,31 +52,23 @@ unsigned long spurious_count = 0;
  * (un)mask_irq, disable_irq() and enable_irq() only handle (E)ISA and
  * PCI devices.  Other onboard hardware needs specific routines.
  */
-static inline void mask_irq(unsigned int irq_nr)
+static inline void mask_irq(unsigned int irq)
 {
-	unsigned char mask;
-
-	mask = 1 << (irq_nr & 7);
-	if (irq_nr < 8) {
-		cache_21 |= mask;
-		outb(cache_21,0x21);
+	cached_irq_mask |= 1 << irq;
+	if (irq & 8) {
+		outb(cached_A1, 0xa1);
 	} else {
-		cache_A1 |= mask;
-		outb(cache_A1,0xA1);
+		outb(cached_21, 0x21);
 	}
 }
 
-static inline void unmask_irq(unsigned int irq_nr)
+static inline void unmask_irq(unsigned int irq)
 {
-	unsigned char mask;
-
-	mask = ~(1 << (irq_nr & 7));
-	if (irq_nr < 8) {
-		cache_21 &= mask;
-		outb(cache_21,0x21);
+	cached_irq_mask &= ~(1 << irq);
+	if (irq & 8) {
+		outb(cached_A1, 0xa1);
 	} else {
-		cache_A1 &= mask;
-		outb(cache_A1,0xA1);
+		outb(cached_21, 0x21);
 	}
 }
 
@@ -84,13 +89,11 @@ void enable_irq(unsigned int irq_nr)
 	restore_flags(flags);
 }
 
-/*
- * Pointers to the low-level handlers: first the general ones, then the
- * fast ones, then the bad ones.
- */
-extern void interrupt(void);
-
-static struct irqaction *irq_action[32] = {
+static struct irqaction *irq_action[NR_IRQS] = {
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -122,6 +125,59 @@ int get_irq_list(char *buf)
 
 atomic_t __mips_bh_counter;
 
+static inline void i8259_mask_and_ack_irq(int irq)
+{
+	cached_irq_mask |= 1 << irq;
+
+	if (irq & 8) {
+		inb(0xa1);
+		outb(cached_A1, 0xa1);
+		outb(0x62, 0x20);		/* Specific EOI to cascade */
+                outb(0x20, 0xa0);
+        } else {
+		inb(0x21);
+		outb(cached_21, 0x21);
+		outb(0x20, 0x20);
+        }
+}
+
+asmlinkage void i8259_do_irq(int irq, struct pt_regs *regs)
+{
+	struct irqaction *action;
+	int do_random, cpu;
+
+	cpu = smp_processor_id();
+	hardirq_enter(cpu);
+
+	if (irq >= 16)
+		goto out;
+
+	i8259_mask_and_ack_irq(irq);
+
+	kstat.irqs[cpu][irq]++;
+
+	action = *(irq + irq_action);
+	if (!action)
+		goto out;
+
+	if (!(action->flags & SA_INTERRUPT))
+		__sti();
+	action = *(irq + irq_action);
+	do_random = 0;
+       	do {
+		do_random |= action->flags;
+		action->handler(irq, action->dev_id, regs);
+		action = action->next;
+       	} while (action);
+	if (do_random & SA_SAMPLE_RANDOM)
+		add_interrupt_randomness(irq);
+	__cli();
+	unmask_irq (irq);
+
+out:
+	hardirq_exit(cpu);
+}
+
 /*
  * do_IRQ handles IRQ's that have been installed without the
  * SA_INTERRUPT flag: it uses the full signal-handling return
@@ -135,22 +191,8 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	int do_random, cpu;
 
 	cpu = smp_processor_id();
-	irq_enter(cpu, irq);
+	hardirq_enter(cpu);
 	kstat.irqs[cpu][irq]++;
-
-	/*
-	 * mask and ack quickly, we don't want the irq controller
-	 * thinking we're snobs just because some other CPU has
-	 * disabled global interrupts (we have already done the
-	 * INT_ACK cycles, it's too late to try to pretend to the
-	 * controller that we aren't taking the interrupt).
-	 *
-	 * Commented out because we've already done this in the
-	 * machinespecific part of the handler.  It's reasonable to
-	 * do this here in a highlevel language though because that way
-	 * we could get rid of a good part of duplicated code ...
-	 */
-        /* mask_and_ack_irq(irq); */
 
 	action = *(irq + irq_action);
 	if (action) {
@@ -165,21 +207,14 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
         	} while (action);
 		if (do_random & SA_SAMPLE_RANDOM)
 			add_interrupt_randomness(irq);
-		unmask_irq (irq);
 		__cli();
 	}
-	irq_exit(cpu, irq);
+	hardirq_exit(cpu);
 
 	/* unmasking and bottom half handling is done magically for us. */
 }
 
-/*
- * Used only for setup of PC style interrupts and therefore still
- * called setup_x86_irq.  Later on I'll provide a machine specific
- * function with similar purpose.  Idea is to put all interrupts
- * in a single table and differenciate them just by number.
- */
-int setup_x86_irq(int irq, struct irqaction * new)
+int i8259_setup_irq(int irq, struct irqaction * new)
 {
 	int shared = 0;
 	struct irqaction *old, **p;
@@ -216,11 +251,15 @@ int setup_x86_irq(int irq, struct irqaction * new)
 	return 0;
 }
 
+/*
+ * Request_interrupt and free_interrupt ``sort of'' handle interrupts of
+ * non i8259 devices.  They will have to be replaced by architecture
+ * specific variants.  For now we still use this as broken as it is because
+ * it used to work ...
+ */
 int request_irq(unsigned int irq, 
 		void (*handler)(int, void *, struct pt_regs *),
-		unsigned long irqflags, 
-		const char * devname,
-		void *dev_id)
+		unsigned long irqflags, const char * devname, void *dev_id)
 {
 	int retval;
 	struct irqaction * action;
@@ -241,7 +280,7 @@ int request_irq(unsigned int irq,
 	action->next = NULL;
 	action->dev_id = dev_id;
 
-	retval = setup_x86_irq(irq, action);
+	retval = i8259_setup_irq(irq, action);
 
 	if (retval)
 		kfree(action);
@@ -275,7 +314,7 @@ void free_irq(unsigned int irq, void *dev_id)
 
 unsigned long probe_irq_on (void)
 {
-	unsigned int i, irqs = 0, irqmask;
+	unsigned int i, irqs = 0;
 	unsigned long delay;
 
 	/* first, enable any unassigned (E)ISA irqs */
@@ -291,19 +330,17 @@ unsigned long probe_irq_on (void)
 		/* about 100ms delay */;
 
 	/* now filter out any obviously spurious interrupts */
-	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
-	return irqs & ~irqmask;
+	return irqs & ~cached_irq_mask;
 }
 
 int probe_irq_off (unsigned long irqs)
 {
-	unsigned int i, irqmask;
+	unsigned int i;
 
-	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
 #ifdef DEBUG
 	printk("probe_irq_off: irqs=0x%04x irqmask=0x%04x\n", irqs, irqmask);
 #endif
-	irqs &= irqmask;
+	irqs &= cached_irq_mask;
 	if (!irqs)
 		return 0;
 	i = ffz(~irqs);
@@ -314,13 +351,36 @@ int probe_irq_off (unsigned long irqs)
 
 int (*irq_cannonicalize)(int irq);
 
-static int i8259a_irq_cannonicalize(int irq)
+static int i8259_irq_cannonicalize(int irq)
 {
 	return ((irq == 2) ? 9 : irq);
 }
 
+__initfunc(static void i8259_init(void))
+{
+	/* Init master interrupt controller */
+	outb(0x11, 0x20); /* Start init sequence */
+	outb(0x00, 0x21); /* Vector base */
+	outb(0x04, 0x21); /* edge tiggered, Cascade (slave) on IRQ2 */
+	outb(0x01, 0x21); /* Select 8086 mode */
+	outb(0xff, 0x21); /* Mask all */
+        
+	/* Init slave interrupt controller */
+	outb(0x11, 0xa0); /* Start init sequence */
+	outb(0x08, 0xa1); /* Vector base */
+	outb(0x02, 0xa1); /* edge triggered, Cascade (slave) on IRQ2 */
+	outb(0x01, 0xa1); /* Select 8086 mode */
+	outb(0xff, 0xa1); /* Mask all */
+
+	outb(cached_A1, 0xa1);
+	outb(cached_21, 0x21);
+}
+
 __initfunc(void init_IRQ(void))
 {
-	irq_cannonicalize = i8259a_irq_cannonicalize;
+	irq_cannonicalize = i8259_irq_cannonicalize;
+	/* i8259_init(); */
 	irq_setup();
 }
+
+EXPORT_SYMBOL(irq_cannonicalize);

@@ -1,10 +1,10 @@
-/* $Id: r4k_switch.S,v 1.4 1998/07/14 09:15:33 ralf Exp $
+/* $Id: r4k_switch.S,v 1.7 1999/06/13 16:30:32 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994, 1995, 1996, 1998 by Ralf Baechle
+ * Copyright (C) 1994, 1995, 1996, 1998, 1999 by Ralf Baechle
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  * Copyright (C) 1994, 1995, 1996, by Andreas Busse
  */
@@ -24,30 +24,41 @@
 
 #include <asm/asmmacro.h>
 
+/*
+ * task_struct *r4xx0_resume(task_struct *prev,
+ *                           task_struct *next)
+ */
 	.set	noreorder
 	.set	mips3
 	.align	5
 	LEAF(r4xx0_resume)
 	mfc0	t1, CP0_STATUS
-	sw	t1, THREAD_STATUS($28)
-	CPU_SAVE_NONSCRATCH($28)
-	sw	ra, THREAD_REG31($28)
+	sw	t1, THREAD_STATUS(a0)
+	CPU_SAVE_NONSCRATCH(a0)
+	sw	ra, THREAD_REG31(a0)
 
 	/*
 	 * The order of restoring the registers takes care of the race
 	 * updating $28, $29 and kernelsp without disabling ints.
 	 */
-	move	$28, a0
+	move	$28, a1
 	CPU_RESTORE_NONSCRATCH($28)
 	addiu	t0, $28, KERNEL_STACK_SIZE-32
 	sw	t0, kernelsp
-	lw	a3, TASK_MM($28)
+	mfc0	t1, CP0_STATUS		/* Do we really need this? */
+	li	a3, 0xff00
+	and	t1, a3
 	lw	a2, THREAD_STATUS($28)
+	nor	a3, $0, a3
+	and	a2, a3
+	lw	a3, TASK_MM($28)
+	or	a2, t1
 	lw	a3, MM_CONTEXT(a3)
 	mtc0	a2, CP0_STATUS
 	andi	a3, a3, 0xff
+	mtc0	a3, CP0_ENTRYHI
 	jr	ra
-	 mtc0	a3, CP0_ENTRYHI
+	 move	v0, a0
 	END(r4xx0_resume)
 
 /*
@@ -104,8 +115,8 @@ LEAF(r4xx0_save_fp)
 
 /*
  * Load the FPU with signalling NANS.  This bit pattern we're using has
- * the property that no matter wether considered as single or as double
- * precission represents signaling NANS.
+ * the property that no matter whether considered as single or as double
+ * precision represents signaling NANS.
  *
  * We initialize fcr31 to rounding to nearest, no exceptions.
  */

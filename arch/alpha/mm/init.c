@@ -219,7 +219,7 @@ paging_init(unsigned long start_mem, unsigned long end_mem)
 
 	/* Initialize the kernel's page tables.  Linux puts the vptb in
 	   the last slot of the L1 page table.  */
-	memset((void *) ZERO_PAGE, 0, PAGE_SIZE);
+	memset((void *) ZERO_PAGE(0), 0, PAGE_SIZE);
 	memset(swapper_pg_dir, 0, PAGE_SIZE);
 	newptbr = ((unsigned long) swapper_pg_dir - PAGE_OFFSET) >> PAGE_SHIFT;
 	pgd_val(swapper_pg_dir[1023]) =

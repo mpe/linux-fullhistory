@@ -1,35 +1,38 @@
-/*
+/* $Id: pcimt_scache.c,v 1.4 1999/01/04 16:03:59 ralf Exp $
+ *
  * arch/mips/sni/pcimt_scache.c
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (c) 1997 by Ralf Baechle
- *
- * $Id: pcimt_scache.c,v 1.2 1998/05/28 03:18:02 ralf Exp $
+ * Copyright (c) 1997, 1998 by Ralf Baechle
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <asm/bcache.h>
 #include <asm/sni.h>
 
+#define cacheconf (*(volatile unsigned int *)PCIMT_CACHECONF)
+#define invspace (*(volatile unsigned int *)PCIMT_INVSPACE)
+
 __initfunc(void sni_pcimt_sc_init(void))
 {
-	unsigned int cacheconf, sc_size;
+	unsigned int scsiz, sc_size;
 
-	cacheconf = *(volatile unsigned int *)PCIMT_CACHECONF;
-	if ((cacheconf & 7) == 0) {
-		printk("No second level cache detected\n");
-		printk("WARNING: not activating second level cache, "
-		       "tell ralf@gnu.org\n");
+	scsiz = cacheconf & 7;
+	if (scsiz == 0) {
+		printk("Second level cache is deactived.\n");
 		return;
 	}
-	if ((cacheconf & 7) >= 6) {
-		printk("Invalid second level cache size detected\n");
+	if (scsiz >= 6) {
+		printk("Invalid second level cache size configured, "
+		       "deactivating second level cache.\n");
+		cacheconf = 0;
 		return;
 	}
-	
-	sc_size = 128 << (cacheconf & 7);
-	printk("%dkb second level cache detected.\n", sc_size);
+
+	sc_size = 128 << scsiz;
+	printk("%dkb second level cache detected, deactivating.\n", sc_size);
+	cacheconf = 0;
 }

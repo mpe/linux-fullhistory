@@ -1,4 +1,4 @@
-/* $Id: process.c,v 1.11 1998/08/17 12:14:53 ralf Exp $
+/* $Id: process.c,v 1.12 1999/06/17 13:25:46 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -144,4 +144,41 @@ void dump_thread(struct pt_regs *regs, struct user *dump)
 		(current->mm->start_stack - dump->start_stack + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	memcpy(&dump->regs[0], regs, sizeof(struct pt_regs));
 	memcpy(&dump->regs[EF_SIZE/4], &current->tss.fpu, sizeof(current->tss.fpu));
+}
+
+/*
+ * Create a kernel thread
+ */
+int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
+{
+	long retval;
+
+	__asm__ __volatile__(
+		".set\tnoreorder\n\t"
+		"move\t$6,$sp\n\t"
+		"move\t$4,%5\n\t"
+		"li\t$2,%1\n\t"
+		"syscall\n\t"
+		"beq\t$6,$sp,1f\n\t"
+		"subu\t$sp,32\n\t"	/* delay slot */
+		"jalr\t%4\n\t"
+		"move\t$4,%3\n\t"	/* delay slot */
+		"move\t$4,$2\n\t"
+		"li\t$2,%2\n\t"
+		"syscall\n"
+		"1:\taddiu\t$sp,32\n\t"
+		"move\t%0,$2\n\t"
+		".set\treorder"
+		:"=r" (retval)
+		:"i" (__NR_clone), "i" (__NR_exit),
+		 "r" (arg), "r" (fn),
+		 "r" (flags | CLONE_VM)
+		 /*
+		  * The called subroutine might have destroyed any of the
+		  * at, result, argument or temporary registers ...
+		  */
+		:"$1", "$2", "$3", "$4", "$5", "$6", "$7", "$8",
+		 "$9","$10","$11","$12","$13","$14","$15","$24","$25");
+
+	return retval;
 }

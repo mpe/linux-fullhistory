@@ -498,6 +498,16 @@ else
   endif
 endif
 
+# Newport Text Console
+
+ifeq ($(CONFIG_SGI_NEWPORT_CONSOLE),y)
+L_OBJS += newport_con.o vga_font.o
+else
+  ifeq ($(CONFIG_SGI_NEWPORT_CONSOLE),m)
+  M_OBJS += newport_con.o vga_font.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 promcon_tbl.c: prom.uni ../char/conmakehash

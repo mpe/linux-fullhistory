@@ -71,7 +71,7 @@ struct inode_operations proc_dir_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */
@@ -97,7 +97,7 @@ struct inode_operations proc_dyna_dir_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */
@@ -142,7 +142,7 @@ static struct inode_operations proc_root_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */
@@ -302,7 +302,7 @@ struct inode_operations proc_openprom_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */
@@ -490,7 +490,7 @@ static struct inode_operations proc_self_inode_operations = {
 	NULL,			/* rename */
 	proc_self_readlink,	/* readlink */
 	proc_self_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */
@@ -513,7 +513,7 @@ static struct inode_operations proc_link_inode_operations = {
 	NULL,			/* rename */
 	proc_readlink,		/* readlink */
 	proc_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

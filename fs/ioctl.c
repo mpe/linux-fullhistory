@@ -18,14 +18,21 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 
 	switch (cmd) {
 		case FIBMAP:
+		{
+			struct buffer_head tmp;
+
 			if (inode->i_op == NULL)
 				return -EBADF;
-		    	if (inode->i_op->bmap == NULL)
+		    	if (inode->i_op->get_block == NULL)
 				return -EINVAL;
 			if ((error = get_user(block, (int *) arg)) != 0)
 				return error;
-			block = inode->i_op->bmap(inode,block);
-			return put_user(block, (int *) arg);
+
+			tmp.b_state = 0;
+			tmp.b_blocknr = 0;
+			inode->i_op->get_block(inode, block, &tmp, 0);
+			return put_user(tmp.b_blocknr, (int *) arg);
+		}
 		case FIGETBSZ:
 			if (inode->i_sb == NULL)
 				return -EBADF;

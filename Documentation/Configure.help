@@ -1527,8 +1527,8 @@ CONFIG_SGI_SERIAL
   If you want to use your SGI's built-in serial ports under Linux,
   answer Y.
 
-SGI graphics support
-CONFIG_SGI_GRAPHICS
+SGI Newport Graphics support
+CONFIG_SGI_NEWPORT_GFX
   If you have an SGI machine and you want to compile the graphics
   drivers, say Y here. This will include the code for the
   /dev/graphics and /dev/gfx drivers into the kernel for supporting

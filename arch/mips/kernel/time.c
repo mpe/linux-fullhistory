@@ -1,15 +1,10 @@
-/*
- *  linux/arch/mips/kernel/time.c
+/* $Id: time.c,v 1.12 1999/06/13 16:30:34 ralf Exp $
  *
  *  Copyright (C) 1991, 1992, 1995  Linus Torvalds
+ *  Copyright (C) 1996, 1997, 1998  Ralf Baechle
  *
  * This file contains the time handling details for PC-style clocks as
  * found in some MIPS systems.
- *
- * 1997-09-10	Updated NTP code according to technical memorandum Jan '96
- *		"A Kernel Model for Precision Timekeeping" by Dave Mills
- *
- * $Id: time.c,v 1.6 1998/08/17 13:57:44 ralf Exp $
  */
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -67,7 +62,7 @@ static unsigned long do_fast_gettimeoffset(void)
 
 	quotient = cached_quotient;
 
-	if (last_jiffies != tmp) {
+	if (tmp && last_jiffies != tmp) {
 		last_jiffies = tmp;
 		__asm__(".set\tnoreorder\n\t"
 			".set\tnoat\n\t"
@@ -340,6 +335,25 @@ static long last_rtc_update = 0;
 static void inline
 timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
+#ifdef CONFIG_PROFILE
+	if(!user_mode(regs)) {
+		if (prof_buffer && current->pid) {
+			extern int _stext;
+			unsigned long pc = regs->cp0_epc;
+
+			pc -= (unsigned long) &_stext;
+			pc >>= prof_shift;
+			/*
+			 * Dont ignore out-of-bounds pc values silently,
+			 * put them into the last histogram slot, so if
+			 * present, they will show up as a sharp peak.
+			 */
+			if (pc > prof_len-1)
+				pc = prof_len-1;
+			atomic_inc((atomic_t *)&prof_buffer[pc]);
+		}
+	}
+#endif
 	do_timer(regs);
 
 	/*
@@ -375,6 +389,16 @@ static void r4k_timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	timerlo = count;
 
 	timer_interrupt(irq, dev_id, regs);
+
+	if (!jiffies)
+	{
+		/*
+		 * If jiffies has overflowed in this timer_interrupt we must
+		 * update the timer[hi]/[lo] to make do_fast_gettimeoffset()
+		 * quotient calc still valid. -arca
+		 */
+		timerhi = timerlo = 0;
+	}
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
@@ -456,7 +480,7 @@ void (*board_time_init)(struct irqaction *irq);
 
 __initfunc(void time_init(void))
 {
-	unsigned int year, mon, day, hour, min, sec;
+	unsigned int epoch, year, mon, day, hour, min, sec;
 	int i;
 
 	/* The Linux interpretation of the CMOS clock register contents:
@@ -488,13 +512,17 @@ __initfunc(void time_init(void))
 	    BCD_TO_BIN(mon);
 	    BCD_TO_BIN(year);
 	  }
-#if 0	/* the IBM way */
-	if ((year += 1900) < 1970)
-		year += 100;
-#else
-	/* Acer PICA clock starts from 1980.  True for all MIPS machines?  */
-	year += 1980;
-#endif
+
+	/* Attempt to guess the epoch.  This is the same heuristic as in rtc.c so
+	   no stupid things will happen to timekeeping.  Who knows, maybe Ultrix
+  	   also uses 1952 as epoch ...  */
+	if (year > 10 && year < 44) {
+		epoch = 1980;
+	} else if (year < 96) {
+		epoch = 1952;
+	}
+	year += epoch;
+
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
 	xtime.tv_usec = 0;
 

@@ -1,11 +1,10 @@
-/*
- * Process resource limits
+/* $Id: resource.h,v 1.2 1999/01/04 16:09:25 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1996 by Ralf Baechle
+ * Copyright (C) 1995, 1996, 1998 by Ralf Baechle
  */
 #ifndef __ASM_MIPS_RESOURCE_H
 #define __ASM_MIPS_RESOURCE_H
@@ -30,15 +29,15 @@
 
 #define INIT_RLIMITS					\
 {							\
-	{LONG_MAX, LONG_MAX},				\
-	{LONG_MAX, LONG_MAX},				\
-	{LONG_MAX, LONG_MAX},				\
-	{_STK_LIM, _STK_LIM},				\
-	{       0, LONG_MAX},				\
-	{NR_OPEN, NR_OPEN},				\
-	{LONG_MAX, LONG_MAX},				\
-	{LONG_MAX, LONG_MAX},				\
-	{MAX_TASKS_PER_USER, MAX_TASKS_PER_USER},	\
+	{ LONG_MAX, LONG_MAX },				\
+	{ LONG_MAX, LONG_MAX },				\
+	{ LONG_MAX, LONG_MAX },				\
+	{ _STK_LIM, LONG_MAX },				\
+	{        0, LONG_MAX },				\
+	{ NR_OPEN, NR_OPEN },				\
+	{ LONG_MAX, LONG_MAX },				\
+	{ LONG_MAX, LONG_MAX },				\
+	{ MAX_TASKS_PER_USER, MAX_TASKS_PER_USER },	\
 	{ LONG_MAX, LONG_MAX },				\
 }
 

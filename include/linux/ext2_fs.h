@@ -553,7 +553,8 @@ extern unsigned long ext2_count_free_inodes (struct super_block *);
 extern void ext2_check_inodes_bitmap (struct super_block *);
 
 /* inode.c */
-extern int ext2_bmap (struct inode *, int);
+extern long ext2_bmap (struct inode *, long);
+extern int ext2_get_block (struct inode *, long, struct buffer_head *, int);
 
 extern struct buffer_head * ext2_getblk (struct inode *, long, int, int *);
 extern int ext2_getblk_block (struct inode *, long, int, int *, int *);

@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: irixsig.c,v 1.11 1998/03/26 07:39:09 ralf Exp $
+ * $Id: irixsig.c,v 1.11 1999/06/17 13:25:46 ralf Exp $
  */
 
 #include <linux/kernel.h>
@@ -666,7 +666,7 @@ asmlinkage int irix_waitsys(int type, int pid, struct irix5_siginfo *info,
 			    int options, struct rusage *ru)
 {
 	int flag, retval;
-	DECLARE_WAITQUEUE(wait,current);
+	DECLARE_WAITQUEUE(wait, current);
 	struct task_struct *p;
 
 	lock_kernel();

@@ -178,8 +178,7 @@ struct hpc3_ethregs {
 
 struct hpc3_regs {
 	/* First regs for the PBUS 8 dma channels. */
-	struct hpc3_pbus_dmacregs pbdma0, pbdma1, pbdma2, pbdma3;
-	struct hpc3_pbus_dmacregs pbdma4, pbdma5, pbdma6, pbdma7;
+	struct hpc3_pbus_dmacregs pbdma[8];
 
 	/* Now the HPC scsi registers, we get two scsi reg sets. */
 	struct hpc3_scsiregs scsi_chan0, scsi_chan1;
@@ -191,7 +190,7 @@ struct hpc3_regs {
 	 * via PIO accesses.  Under normal operation we never stick
 	 * our grubby paws in here so it's just padding.
 	 */
-	char _unused1[PAGE_SIZE * 16];
+	char _unused1[PAGE_SIZE * 24];
 
 	/* HPC3 irq status regs.  Due to a peculiar bug you need to
 	 * look at two different register addresses to get at all of
@@ -223,15 +222,20 @@ struct hpc3_regs {
 #define HPC3_GIOESTAT_PIDMSK  0x3f700  /* DMA channel parity identifier */
 
 	/* Now direct PIO per-HPC3 peripheral access to external regs. */
-	char _unused2[0x13ff0]; /* Trust me... */
+	char _unused2[0x13fec]; /* Trust me... */
 	hpcreg scsi0_ext[256];  /* SCSI channel 0 external regs */
 	char _unused3[0x07c00]; /* Trust me... */
 	hpcreg scsi1_ext[256];  /* SCSI channel 1 external regs */
 	char _unused4[0x07c00]; /* It'll only hurt a little... */
 
+	/* Did DaveM forget the ethernet external regs?
+	 * Anyhow, they're not here and we need some padding instead.
+	 */
+	char _unused5[0x04000]; /* It'll hurt a lot if you leave this out */
+
 	/* Per-peripheral device external registers and dma/pio control. */
-	hpcreg pbus_extregs[256][10]; /* 2nd indice indexes controller */
-	hpcreg pbus_dmacfgs[128][10]; /* 2nd indice indexes controller */
+	hpcreg pbus_extregs[16][256]; /* 2nd indice indexes controller */
+	hpcreg pbus_dmacfgs[8][128]; /* 2nd indice indexes controller */
 #define HPC3_PIODCFG_D3R    0x00000001 /* Cycles to spend in D3 for reads */
 #define HPC3_PIODCFG_D4R    0x0000001e /* Cycles to spend in D4 for reads */
 #define HPC3_PIODCFG_D5R    0x000001e0 /* Cycles to spend in D5 for reads */
@@ -258,15 +262,15 @@ struct hpc3_regs {
 	hpcreg pbus_promwe;     /* PROM write enable register */
 #define HPC3_PROM_WENAB     0x1 /* Enable writes to the PROM */
 
-	char _unused5[0x800 - sizeof(hpcreg)];
+	char _unused6[0x800 - sizeof(hpcreg)];
 	hpcreg pbus_promswap;   /* Chip select swap reg */
 #define HPC3_PROM_SWAP      0x1 /* invert GIO addr bit to select prom0 or prom1 */
 
-	char _unused6[0x800 - sizeof(hpcreg)];
+	char _unused7[0x800 - sizeof(hpcreg)];
 	hpcreg pbus_gout;       /* PROM general purpose output reg */
 #define HPC3_PROM_STAT      0x1 /* General purpose status bit in gout */
 
-	char _unused7[0x1000 - sizeof(hpcreg)];
+	char _unused8[0x1000 - sizeof(hpcreg)];
 	hpcreg pbus_promram[16384]; /* 64k of PROM battery backed ram */
 };
 

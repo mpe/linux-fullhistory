@@ -25,7 +25,7 @@
 #define MAX_RETRY_COUNT ((60*60*HZ)/NAK_TIMEOUT)	/* should not take 1 minute a page! */
 
 #ifndef USB_PRINTER_MAJOR
-#define USB_PRINTER_MAJOR 0
+#define USB_PRINTER_MAJOR 63
 #endif
 
 static int mymajor = USB_PRINTER_MAJOR;
@@ -166,6 +166,7 @@ static ssize_t write_printer(struct file * file,
 	do {
 		char *obuf = p->obuf;
 		unsigned long thistime;
+		partial = 0;
 
 		thistime = copy_size = (count > p->maxout) ? p->maxout : count;
 		if (copy_from_user(p->obuf, buffer, copy_size))
@@ -179,16 +180,19 @@ static ssize_t write_printer(struct file * file,
 			}
 			result = p->pusb_dev->bus->op->bulk_msg(p->pusb_dev,
 					 usb_sndbulkpipe(p->pusb_dev, 1), obuf, thistime, &partial);
+			if (partial) {
+				obuf += partial;
+				thistime -= partial;
+				maxretry = MAX_RETRY_COUNT;
+			}
 			if (result == USB_ST_TIMEOUT) {	/* NAK - so hold for a while */
 				if(!maxretry--)
 					return -ETIME;
                                 interruptible_sleep_on_timeout(&p->wait_q, NAK_TIMEOUT);
 				continue;
-			} else if (!result & partial) {
-				obuf += partial;
-				thistime -= partial;
-			} else
+			} else if (!result && !partial) {
 				break;
+			}
 		};
 		if (result) {
 			/* whoops - let's reset and fail the request */
@@ -255,7 +259,8 @@ static int printer_probe(struct usb_device *dev)
 	/*
 	 * FIXME - this will not cope with combined printer/scanners
 	 */
-	if (dev->descriptor.bDeviceClass != 7 ||
+	if ((dev->descriptor.bDeviceClass != 7 &&
+	     dev->descriptor.bDeviceClass != 0) ||
 	    dev->descriptor.bNumConfigurations != 1 ||
 	    dev->config[0].bNumInterfaces != 1) {
 		return -1;
@@ -408,6 +413,6 @@ void cleanup_module(void)
 	unsigned int offset;
 
 	usb_deregister(&printer_driver);
-	unregister_chrdev(mymajor, "usblplp");
+	unregister_chrdev(mymajor, "usblp");
 }
 #endif

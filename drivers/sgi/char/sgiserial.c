@@ -1,6 +1,7 @@
 /* sgiserial.c: Serial port driver for SGI machines.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
  */
 
 #include <linux/config.h> /* for CONFIG_REMOTE_DEBUG */
@@ -18,6 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/console.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -33,39 +35,22 @@
 #define NUM_SERIAL 1     /* One chip on board. */
 #define NUM_CHANNELS (NUM_SERIAL * 2)
 
-extern struct wait_queue_head_t keypress_wait;
+extern wait_queue_head_t keypress_wait;
 
 struct sgi_zslayout *zs_chips[NUM_SERIAL] = { 0, };
 struct sgi_zschannel *zs_channels[NUM_CHANNELS] = { 0, 0, };
 struct sgi_zschannel *zs_conschan;
 struct sgi_zschannel *zs_kgdbchan;
-int zs_nodes[NUM_SERIAL] = { 0, };
 
 struct sgi_serial zs_soft[NUM_CHANNELS];
 struct sgi_serial *zs_chain;  /* IRQ servicing chain */
 static int zilog_irq = 21;
-
-struct tty_struct zs_ttys[NUM_CHANNELS];
-/** struct tty_struct *zs_constty; **/
 
 /* Console hooks... */
 static int zs_cons_chanout = 0;
 static int zs_cons_chanin = 0;
 struct sgi_serial *zs_consinfo = 0;
 
-static struct console sgi_console_driver = {
-        "debug",
-        NULL,                   /* write */
-        NULL,                   /* read */
-        NULL,                   /* device */
-        NULL,                   /* wait_key */
-        NULL,                   /* unblank */
-        NULL,                   /* setup */
-        CON_PRINTBUFFER,
-        -1,
-        0,
-        NULL
-};
 static unsigned char kgdb_regs[16] = {
 	0, 0, 0,                     /* write 0, 1, 2 */
 	(Rx8 | RxENABLE),            /* write 3 */
@@ -78,6 +63,22 @@ static unsigned char kgdb_regs[16] = {
 	0, 0,                        /* BRG time constant, write 12 + 13 */
 	(BRENABL),                   /* write 14 */
 	(DCDIE)                      /* write 15 */
+};
+
+static unsigned char zscons_regs[16] = {
+	0,                           /* write 0 */
+	(EXT_INT_ENAB | INT_ALL_Rx), /* write 1 */
+	0,                           /* write 2 */
+	(Rx8 | RxENABLE),            /* write 3 */
+	(X16CLK),                    /* write 4 */
+	(DTR | Tx8 | TxENAB),        /* write 5 */
+	0, 0, 0,                     /* write 6, 7, 8 */
+	(NV | MIE),                  /* write 9 */
+	(NRZ),                       /* write 10 */
+	(TCBR | RCBR),               /* write 11 */
+	0, 0,                        /* BRG time constant, write 12 + 13 */
+	(BRENABL),                   /* write 14 */
+	(DCDIE | CTSIE | TxUIE | BRKIE) /* write 15 */
 };
 
 #define ZS_CLOCK         3672000   /* Zilog input clock rate */
@@ -126,7 +127,7 @@ static struct termios *serial_termios_locked[NUM_CHANNELS];
  * memory if large numbers of serial ports are open.
  */
 static unsigned char tmp_buf[4096]; /* This is cheating */
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static inline int serial_paranoia_check(struct sgi_serial *info,
 					dev_t device, const char *routine)
@@ -161,6 +162,10 @@ static int baud_table[] = {
  * driver work on the Sun4 which needs a settling delay after each chip
  * register access, other machines handle this in hardware via auxiliary
  * flip-flops which implement the settle time we do in software.
+ *
+ * read_zsreg() and write_zsreg() may get called from rs_kgdb_hook() before
+ * interrupts are enabled. Therefore we have to check ioc_iocontrol before we
+ * access it.
  */
 static inline unsigned char read_zsreg(struct sgi_zschannel *channel, unsigned char reg)
 {
@@ -169,7 +174,8 @@ static inline unsigned char read_zsreg(struct sgi_zschannel *channel, unsigned c
 
 	udelay(2);
 	channel->control = reg;
-	junk = ioc_icontrol->istat0;
+	if (ioc_icontrol)
+		junk = ioc_icontrol->istat0;
 	udelay(1);
 	retval = channel->control;
 	return retval;
@@ -181,10 +187,12 @@ static inline void write_zsreg(struct sgi_zschannel *channel, unsigned char reg,
 
 	udelay(2);
 	channel->control = reg;
-	junk = ioc_icontrol->istat0;
+	if (ioc_icontrol)
+		junk = ioc_icontrol->istat0;
 	udelay(1);
 	channel->control = value;
-	junk = ioc_icontrol->istat0;
+	if (ioc_icontrol)
+		junk = ioc_icontrol->istat0;
 	return;
 }
 
@@ -235,7 +243,7 @@ static inline void kgdb_chaninit(struct sgi_serial *ss, int intson, int bps)
 		kgdb_regs[R1] = 0;
 		kgdb_regs[R9] &= ~MIE;
 	}
-	brg = BPS_TO_BRG(bps, ZS_CLOCK/16);
+	brg = BPS_TO_BRG(bps, ZS_CLOCK/ss->clk_divisor);
 	kgdb_regs[R12] = (brg & 255);
 	kgdb_regs[R13] = ((brg >> 8) & 255);
 	load_zsregs(ss->zs_channel, kgdb_regs);
@@ -552,7 +560,7 @@ void rs_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	struct sgi_serial * info = (struct sgi_serial *) dev_id;
 	unsigned char zs_intreg;
 
-	zs_intreg = read_zsreg(info->zs_channel, 3);
+	zs_intreg = read_zsreg(info->zs_next->zs_channel, 3);
 
 	/* NOTE: The read register 3, which holds the irq status,
 	 *       does so for both channels on each chip.  Although
@@ -564,18 +572,6 @@ void rs_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 #define CHAN_B_IRQMASK (CHBRxIP | CHBTxIP | CHBEXT)
 
 	/* *** Chip 1 *** */
-	/* Channel A -- /dev/ttya, could be the console */
-	if(zs_intreg & CHAN_A_IRQMASK) {
-		if (zs_intreg & CHARxIP)
-			receive_chars(info, regs);
-		if (zs_intreg & CHATxIP)
-			transmit_chars(info);
-		if (zs_intreg & CHAEXT)
-			status_handle(info);
-	}
-
-	info=info->zs_next;
-
 	/* Channel B -- /dev/ttyb, could be the console */
 	if(zs_intreg & CHAN_B_IRQMASK) {
 		if (zs_intreg & CHBRxIP)
@@ -583,6 +579,18 @@ void rs_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		if (zs_intreg & CHBTxIP)
 			transmit_chars(info);
 		if (zs_intreg & CHBEXT)
+			status_handle(info);
+	}
+
+	info=info->zs_next;
+
+	/* Channel A -- /dev/ttya, could be the console */
+	if(zs_intreg & CHAN_A_IRQMASK) {
+		if (zs_intreg & CHARxIP)
+			receive_chars(info, regs);
+		if (zs_intreg & CHATxIP)
+			transmit_chars(info);
+		if (zs_intreg & CHAEXT)
 			status_handle(info);
 	}
 }
@@ -904,7 +912,7 @@ static void rs_put_char(char ch)
 /* These are for receiving and sending characters under the kgdb
  * source level kernel debugger.
  */
-void putDebugChar(char kgdb_char)
+int putDebugChar(char kgdb_char)
 {
 	struct sgi_zschannel *chan = zs_kgdbchan;
 	volatile unsigned char junk;
@@ -919,6 +927,8 @@ void putDebugChar(char kgdb_char)
 	chan->data = kgdb_char;
 	junk = ioc_icontrol->istat0;
 	restore_flags(flags);
+
+	return 1;
 }
 
 char getDebugChar(void)
@@ -971,63 +981,6 @@ static void rs_fair_output(void)
 	return;
 }
 
-/*
- * zs_console_print is registered for printk.
- */
-
-static void zs_console_print(struct console *co, const char *str, unsigned int count)
-{
-
-	while(count--) {
-		if(*str == '\n')
-			rs_put_char('\r');
-		rs_put_char(*str++);
-	}
-
-	/* Comment this if you want to have a strict interrupt-driven output */
-	rs_fair_output();
-}
-
-static void rs_flush_chars(struct tty_struct *tty)
-{
-	struct sgi_serial *info = (struct sgi_serial *)tty->driver_data;
-	unsigned long flags;
-
-	if (serial_paranoia_check(info, tty->device, "rs_flush_chars"))
-		return;
-
-	if (info->xmit_cnt <= 0 || tty->stopped || tty->hw_stopped ||
-	    !info->xmit_buf)
-		return;
-
-	/* Enable transmitter */
-	save_flags(flags); cli();
-	info->curregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
-	info->pendregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
-	write_zsreg(info->zs_channel, 1, info->curregs[1]);
-	info->curregs[5] |= TxENAB;
-	info->pendregs[5] |= TxENAB;
-	write_zsreg(info->zs_channel, 5, info->curregs[5]);
-
-	/*
-	 * Send a first (bootstrapping) character. A best solution is
-	 * to call transmit_chars() here which handles output in a
-	 * generic way. Current transmit_chars() not only transmits,
-	 * but resets interrupts also what we do not desire here.
-	 * XXX Discuss with David.
-	 */
-	if (info->zs_channel->control & Tx_BUF_EMP) {
-		volatile unsigned char junk;
-
-		/* Send char */
-		udelay(2);
-		info->zs_channel->data = info->xmit_buf[info->xmit_tail++];
-		junk = ioc_icontrol->istat0;
-		info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE-1);
-		info->xmit_cnt--;
-	}
-	restore_flags(flags);
-}
 
 static int rs_write(struct tty_struct * tty, int from_user,
 		    const unsigned char *buf, int count)
@@ -1115,6 +1068,47 @@ static void rs_flush_buffer(struct tty_struct *tty)
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
+}
+
+static void rs_flush_chars(struct tty_struct *tty)
+{
+	struct sgi_serial *info = (struct sgi_serial *)tty->driver_data;
+	unsigned long flags;
+
+	if (serial_paranoia_check(info, tty->device, "rs_flush_chars"))
+		return;
+
+	if (info->xmit_cnt <= 0 || tty->stopped || tty->hw_stopped ||
+	    !info->xmit_buf)
+		return;
+
+	/* Enable transmitter */
+	save_flags(flags); cli();
+	info->curregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
+	info->pendregs[1] |= TxINT_ENAB|EXT_INT_ENAB;
+	write_zsreg(info->zs_channel, 1, info->curregs[1]);
+	info->curregs[5] |= TxENAB;
+	info->pendregs[5] |= TxENAB;
+	write_zsreg(info->zs_channel, 5, info->curregs[5]);
+
+	/*
+	 * Send a first (bootstrapping) character. A best solution is
+	 * to call transmit_chars() here which handles output in a
+	 * generic way. Current transmit_chars() not only transmits,
+	 * but resets interrupts also what we do not desire here.
+	 * XXX Discuss with David.
+	 */
+	if (info->zs_channel->control & Tx_BUF_EMP) {
+		volatile unsigned char junk;
+
+		/* Send char */
+		udelay(2);
+		info->zs_channel->data = info->xmit_buf[info->xmit_tail++];
+		junk = ioc_icontrol->istat0;
+		info->xmit_tail = info->xmit_tail & (SERIAL_XMIT_SIZE-1);
+		info->xmit_cnt--;
+	}
+	restore_flags(flags);
 }
 
 /*
@@ -1614,7 +1608,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		if (!(info->flags & ZILOG_CALLOUT_ACTIVE) &&
 		    !(info->flags & ZILOG_CLOSING) && do_clocal)
 			break;
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;
 		}
@@ -1725,16 +1719,13 @@ static inline struct sgi_zslayout *get_zs(int chip)
 }
 
 
-
 static inline void
 rs_cons_check(struct sgi_serial *ss, int channel)
 {
 	int i, o, io;
-	static consout_registered = 0;
-	static msg_printed = 0;
+	static int msg_printed = 0;
 
 	i = o = io = 0;
-
 
 	/* Is this one of the serial console lines? */
 	if((zs_cons_chanout != channel) &&
@@ -1743,18 +1734,6 @@ rs_cons_check(struct sgi_serial *ss, int channel)
 	zs_conschan = ss->zs_channel;
 	zs_consinfo = ss;
 
-
-	/* Register the console output putchar, if necessary */
-	if((zs_cons_chanout == channel)) {
-		o = 1;
-		/* double whee.. */
-
-		if(!consout_registered) {
-		  sgi_console_driver.write = zs_console_print;
-			register_console(&sgi_console_driver);
-			consout_registered = 1;
-		}
-	}
 
 
 	/* If this is console input, we handle the break received
@@ -1873,8 +1852,8 @@ int rs_init(void)
 		if(!zs_chips[chip]) {
 			zs_chips[chip] = get_zs(chip);
 			/* Two channels per chip */
-			zs_channels[(chip*2)] = &zs_chips[chip]->channelA;
-			zs_channels[(chip*2)+1] = &zs_chips[chip]->channelB;
+			zs_channels[(chip*2)] = &zs_chips[chip]->channelB;
+			zs_channels[(chip*2)+1] = &zs_chips[chip]->channelA;
 			zs_soft[(chip*2)].kgdb_channel = 0;
 			zs_soft[(chip*2)+1].kgdb_channel = 0;
 		}
@@ -1946,8 +1925,8 @@ int rs_init(void)
 		info->tqueue_hangup.data = info;
 		info->callout_termios =callout_driver.init_termios;
 		info->normal_termios = serial_driver.init_termios;
-		info->open_wait = 0;
-		info->close_wait = 0;
+		init_waitqueue_head(&info->open_wait);
+		init_waitqueue_head(&info->close_wait);
 		printk("tty%02d at 0x%04x (irq = %d)", info->line, 
 		       info->port, info->irq);
 		printk(" is a Zilog8530\n");
@@ -1990,14 +1969,14 @@ rs_cons_hook(int chip, int out, int line)
 	
 	if(chip)
 		panic("rs_cons_hook called with chip not zero");
-	if(line != 1 && line != 2)
+	if(line != 0 && line != 1)
 		panic("rs_cons_hook called with line not ttya or ttyb");
-	channel = line - 1;
+	channel = line;
 	if(!zs_chips[chip]) {
 		zs_chips[chip] = get_zs(chip);
 		/* Two channels per chip */
-		zs_channels[(chip*2)] = &zs_chips[chip]->channelA;
-		zs_channels[(chip*2)+1] = &zs_chips[chip]->channelB;
+		zs_channels[(chip*2)] = &zs_chips[chip]->channelB;
+		zs_channels[(chip*2)+1] = &zs_chips[chip]->channelA;
 	}
 	zs_soft[channel].zs_channel = zs_channels[channel];
 	zs_soft[channel].change_needed = 0;
@@ -2041,3 +2020,176 @@ rs_kgdb_hook(int tty_num)
 	udelay(5);
 	ZS_CLEARFIFO(zs_kgdbchan);
 }
+
+static void zs_console_write(struct console *co, const char *str, unsigned int count)
+{
+
+	while(count--) {
+		if(*str == '\n')
+			rs_put_char('\r');
+		rs_put_char(*str++);
+	}
+
+	/* Comment this if you want to have a strict interrupt-driven output */
+	rs_fair_output();
+}
+
+static int zs_console_wait_key(struct console *con)
+{
+	sleep_on(&keypress_wait);
+	return 0;
+}
+
+static kdev_t zs_console_device(struct console *con)
+{
+	return MKDEV(TTY_MAJOR, 64 + con->index);
+}
+
+
+__initfunc(static int zs_console_setup(struct console *con, char *options))
+{
+	struct sgi_serial *info;
+	int	baud = 9600;
+	int	bits = 8;
+	int	parity = 'n';
+	int	cflag = CREAD | HUPCL | CLOCAL;
+	char	*s;
+	int     i, brg;
+    
+	if (options) {
+		baud = simple_strtoul(options, NULL, 10);
+		s = options;
+		while(*s >= '0' && *s <= '9')
+			s++;
+		if (*s) parity = *s++;
+		if (*s) bits   = *s - '0';
+	}
+
+	/*
+	 *	Now construct a cflag setting.
+	 */
+	switch(baud) {
+		case 1200:
+			cflag |= B1200;
+			break;
+		case 2400:
+			cflag |= B2400;
+			break;
+		case 4800:
+			cflag |= B4800;
+			break;
+		case 19200:
+			cflag |= B19200;
+			break;
+		case 38400:
+			cflag |= B38400;
+			break;
+		case 57600:
+			cflag |= B57600;
+			break;
+		case 115200:
+			cflag |= B115200;
+			break;
+		case 9600:
+		default:
+			cflag |= B9600;
+			break;
+	}
+	switch(bits) {
+		case 7:
+			cflag |= CS7;
+			break;
+		default:
+		case 8:
+			cflag |= CS8;
+			break;
+	}
+	switch(parity) {
+		case 'o': case 'O':
+			cflag |= PARODD;
+			break;
+		case 'e': case 'E':
+			cflag |= PARENB;
+			break;
+	}
+	con->cflag = cflag;
+
+        rs_cons_hook(0, 0, con->index);
+	info = zs_soft + con->index;
+	info->is_cons = 1;
+    
+	printk("Console: ttyS%d (Zilog8530)\n", info->line);
+
+	i = con->cflag & CBAUD;
+	if (con->cflag & CBAUDEX) {
+		i &= ~CBAUDEX;
+		con->cflag &= ~CBAUDEX;
+	}
+	info->zs_baud = baud;
+
+	switch (con->cflag & CSIZE) {
+		case CS5:
+			zscons_regs[3] = Rx5 | RxENABLE;
+			zscons_regs[5] = Tx5 | TxENAB;
+			break;
+		case CS6:
+			zscons_regs[3] = Rx6 | RxENABLE;
+			zscons_regs[5] = Tx6 | TxENAB;
+			break;
+		case CS7:
+			zscons_regs[3] = Rx7 | RxENABLE;
+			zscons_regs[5] = Tx7 | TxENAB;
+			break;
+		default:
+		case CS8:
+			zscons_regs[3] = Rx8 | RxENABLE;
+			zscons_regs[5] = Tx8 | TxENAB;
+			break;
+	}
+	zscons_regs[5] |= DTR;
+
+	if (con->cflag & PARENB)
+		zscons_regs[4] |= PAR_ENA;
+	if (!(con->cflag & PARODD))
+		zscons_regs[4] |= PAR_EVEN;
+
+	if (con->cflag & CSTOPB)
+		zscons_regs[4] |= SB2;
+	else
+		zscons_regs[4] |= SB1;
+
+	brg = BPS_TO_BRG(baud, ZS_CLOCK / info->clk_divisor);
+	zscons_regs[12] = brg & 0xff;
+	zscons_regs[13] = (brg >> 8) & 0xff;
+	memcpy(info->curregs, zscons_regs, sizeof(zscons_regs));
+	memcpy(info->pendregs, zscons_regs, sizeof(zscons_regs));    
+	load_zsregs(info->zs_channel, zscons_regs);
+	ZS_CLEARERR(info->zs_channel);
+	ZS_CLEARFIFO(info->zs_channel);
+	return 0;
+}
+
+static struct console sgi_console_driver = {
+        "ttyS",
+        zs_console_write,       /* write */
+        NULL,                   /* read */
+        zs_console_device,      /* device */
+        zs_console_wait_key,    /* wait_key */
+        NULL,                   /* unblank */
+        zs_console_setup,       /* setup */
+        CON_PRINTBUFFER,
+        -1,
+        0,
+        NULL
+};
+
+/*
+ *	Register console.
+ */
+__initfunc (long serial_console_init(long kmem_start, long kmem_end))
+{
+	register_console(&sgi_console_driver);
+	return kmem_start;
+}
+
+

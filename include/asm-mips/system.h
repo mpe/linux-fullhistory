@@ -88,6 +88,12 @@ __restore_flags(int flags)
 {
 	__asm__ __volatile__(
 		".set\tnoreorder\n\t"
+		"mfc0\t$8,$12\n\t"
+		"li\t$9,0xff00\n\t"
+		"and\t$8,$9\n\t"
+		"nor\t$9,$0,$9\n\t"
+		"and\t%0,$9\n\t"
+		"or\t%0,$8\n\t"
 		"mtc0\t%0,$12\n\t"
 		"nop\n\t"
 		"nop\n\t"
@@ -95,7 +101,7 @@ __restore_flags(int flags)
 		".set\treorder"
 		: /* no output */
 		: "r" (flags)
-		: "memory");
+		: "$8", "$9", "memory");
 }
 
 /*
@@ -107,6 +113,15 @@ __restore_flags(int flags)
 #define save_and_cli(x) __save_and_cli(x)
 #define restore_flags(x) __restore_flags(x)
 
+/* For spinlocks etc */
+#define local_irq_save(x)	__save_and_cli(x);
+#define local_irq_restore(x)	__restore_flags(x);
+#define local_irq_disable()	__cli();
+#define local_irq_enable()	__sti();
+
+/*
+ * These are probably defined overly paranoid ...
+ */
 #define mb()						\
 __asm__ __volatile__(					\
 	"# prevent instructions being moved around\n\t"	\
@@ -117,18 +132,20 @@ __asm__ __volatile__(					\
 	: /* no output */				\
 	: /* no input */				\
 	: "memory")
+#define rmb() mb()
+#define wmb() mb()
 
 #if !defined (_LANGUAGE_ASSEMBLY)
 /*
  * switch_to(n) should switch tasks to task nr n, first
  * checking that n isn't the current task, in which case it does nothing.
  */
-extern asmlinkage void (*resume)(void *tsk);
+extern asmlinkage void *(*resume)(void *last, void *next);
 #endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
-#define switch_to(prev,next) \
+#define switch_to(prev,next,last) \
 do { \
-	resume(next); \
+	(last) = resume(prev, next); \
 } while(0)
 
 /*

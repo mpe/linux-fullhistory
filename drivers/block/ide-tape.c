@@ -3814,8 +3814,14 @@ void cleanup_module (void)
 
 	for (minor = 0; minor < MAX_HWIFS * MAX_DRIVES; minor++) {
 		drive = idetape_chrdevs[minor].drive;
-		if (drive != NULL && idetape_cleanup (drive))
-			printk (KERN_ERR "ide-tape: %s: cleanup_module() called while still busy\n", drive->name);
+		if (drive) {
+			if (idetape_cleanup (drive))
+				printk (KERN_ERR "ide-tape: %s: cleanup_module() called while still busy\n", drive->name);
+			/* We must remove proc entries defined in this module.
+			   Otherwise we oops while accessing these entries */
+			if (drive->proc)
+				ide_remove_proc_entries(drive->proc, idetape_proc);
+		}
 	}
 	ide_unregister_module(&idetape_module);
 }

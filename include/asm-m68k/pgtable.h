@@ -398,7 +398,7 @@ extern pte_t * __bad_pagetable(void);
 
 #define BAD_PAGETABLE __bad_pagetable()
 #define BAD_PAGE __bad_page()
-#define ZERO_PAGE empty_zero_page
+#define ZERO_PAGE(vaddr) empty_zero_page
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))

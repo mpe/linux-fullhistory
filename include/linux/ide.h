@@ -463,6 +463,8 @@ typedef struct {
 #ifdef CONFIG_PROC_FS
 void proc_ide_create(void);
 void proc_ide_destroy(void);
+void destroy_proc_ide_drives(ide_hwif_t *);
+void create_proc_ide_interfaces(void);
 void ide_add_proc_entries(struct proc_dir_entry *dir, ide_proc_entry_t *p, void *data);
 void ide_remove_proc_entries(struct proc_dir_entry *dir, ide_proc_entry_t *p);
 read_proc_t proc_ide_read_capacity;
@@ -757,6 +759,7 @@ void ide_init_subdrivers (void);
 
 #ifndef _IDE_C
 extern struct file_operations ide_fops[];
+extern ide_proc_entry_t generic_subdriver_entries[];
 #endif
 
 #ifdef _IDE_C

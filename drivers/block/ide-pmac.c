@@ -218,9 +218,9 @@ pmac_ide_setup_dma(struct device_node *np, ide_hwif_t *hwif))
 	}
 
 	hwif->dmaproc = &pmac_ide_dmaproc;
-#ifdef CONFIG_PMAC_IDEDMA_AUTO
+#ifdef CONFIG_IDEDMA_PMAC_AUTO
 	hwif->autodma = 1;
-#endif
+#endif /* CONFIG_IDEDMA_PMAC_AUTO */
 }
 
 /*

@@ -157,7 +157,7 @@ extern pte_t __bad_page(void);
  * hit for all __pa()/__va() operations.
  */
 extern unsigned long phys_base;
-#define ZERO_PAGE	((unsigned long)__va(phys_base))
+#define ZERO_PAGE(vaddr)	((unsigned long)__va(phys_base))
 
 /* Allocate a block of RAM which is aligned to its size.
  * This procedure can be used until the call to mem_init().

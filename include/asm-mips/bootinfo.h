@@ -25,10 +25,10 @@
 #define MACH_GROUP_SNI_RM	4 /* Siemens Nixdorf RM series                */
 #define MACH_GROUP_ACN		5
 #define MACH_GROUP_SGI          6 /* Silicon Graphics workstations and servers */
-#define MACH_GROUP_RESERVED     7 /* No Such Architecture	 	      */
+#define MACH_GROUP_COBALT       7 /* Cobalt servers		 	      */
 
 #define GROUP_NAMES { "unknown", "Jazz", "Digital", "ARC", \
-                      "SNI", "ACN", "SGI", "NSA" }
+                      "SNI", "ACN", "SGI", "Cobalt" }
 
 /*
  * Valid machtype values for group unknown (low order halfword of mips_machtype)
@@ -49,11 +49,21 @@
 /*
  * Valid machtype for group DEC 
  */
-/* FIXME: this is a very fuzzy name, and we got a big "name space now" */
-/* So otiginal DEC codes can be used -Stoned */
-#define MACH_DECSTATION		0	/* DECStation 5000/2x for now */
+#define MACH_DSUNKNOWN		0
+#define MACH_DS23100		1	/* DECstation 2100 or 3100	*/
+#define MACH_DS5100		2	/* DECstation 5100		*/
+#define MACH_DS5000_200		3	/* DECstation 5000/200		*/
+#define MACH_DS5000_1XX		4	/* DECstation 5000/120, 125, 133, 150 */
+#define MACH_DS5000_XX		5	/* DECstation 5000/20, 25, 33, 50 */
+#define MACH_DS5000_2X0		6	/* DECstation 5000/240, 260	*/
+#define MACH_DS5400		7	/* DECstation 5400		*/
+#define MACH_DS5500		8	/* DECstation 5500		*/
+#define MACH_DS5800		9	/* DECstation 5800		*/
 
-#define GROUP_DEC_NAMES { "3min" }
+#define GROUP_DEC_NAMES { "unknown", "DECstation 2100/3100", "DECstation 5100", \
+	"DECstation 5000/200", "DECstation 5000/1xx", "Personal DECstation 5000/xx", \
+	"DECstation 5000/2x0", "DECstation 5400", "DECstation 5500", \
+	"DECstation 5800" }
 
 /*
  * Valid machtype for group ARC
@@ -83,6 +93,13 @@
 #define MACH_SGI_INDY		0	/* R4?K and R5K Indy workstaions */
 
 #define GROUP_SGI_NAMES { "Indy" }
+
+/*
+ * Valid machtype for group COBALT
+ */
+#define MACH_COBALT_27 		 0	/* Proto "27" hardware */
+
+#define GROUP_COBALT_NAMES { "Microserver 27" }
 
 /*
  * Valid cputype values
@@ -144,134 +161,14 @@ typedef struct mips_arc_DisplayInfo {	/* video adapter information */
 	unsigned short lines;
 } mips_arc_DisplayInfo;
 
-/*
- * New style bootinfo
- *
- * Add new tags only at the end of the enum; *never* remove any tags
- * or you'll break compatibility!
- */
-enum bi_tag {
- 	/*
- 	 * not a real tag
- 	 */
-	tag_dummy,
- 
- 	/*
- 	 * machine type
- 	 */
-	tag_machtype,
- 
- 	/*
- 	 * system CPU & FPU
- 	 */
-	tag_cputype,
- 
- 	/*
- 	 * Installed RAM
- 	 */
-	tag_memlower,
-	tag_memupper,
- 
- 	/*
- 	 * Cache Sizes (0xffffffff = unknown)
- 	 */
-	tag_icache_size,
-	tag_icache_linesize,
-	tag_dcache_size,
-	tag_dcache_linesize,
-	tag_scache_size,
-	tag_scache_linesize,
- 
- 	/*
- 	 * TLB Info
- 	 */
-	tag_tlb_entries,
- 
- 	/*
- 	 * DMA buffer size (Deskstation only)
- 	 */
-	tag_dma_cache_size,
-	tag_dma_cache_base,
- 
- 	/*
-	 * Ramdisk Info 
- 	 */
-	tag_ramdisk_size,		/* ramdisk size in 1024 byte blocks */
-	tag_ramdisk_base,		/* address of the ram disk in mem */
- 
- 	/*
- 	 * Boot flags for the kernel
- 	 */
-	tag_mount_root_rdonly,
-	tag_drive_info,
- 
- 	/*
- 	 * Video ram info (not in tty.h)
- 	 */
-	tag_vram_base,			/* video ram base address */
-       
-	tag_command_line,		/* kernel command line parameters */
-
-        /*
-         * machine group
-         */
-	tag_machgroup,
-
-	/*
-	 * info on the display from the ARC BIOS
-	 */
-	tag_arcdisplayinfo,
-
-	/*
-	 * tag to pass a complete struct screen_info
-	 */
-	tag_screen_info
-};
-
-/* struct defining a tag */
-typedef struct {
-	enum bi_tag tag;
-	unsigned long size;
-} tag;
-
-/* struct to define a tag and it's data */
-typedef struct {
-	tag t;
-	void* d;
-} tag_def;
-
-/* macros for parsing tag list */
-#define TAGVALPTR(t) ((void*)(((void*)(t)) - ((t)->size)))
-#define NEXTTAGPTR(t) ((void*)(TAGVALPTR(t) - (sizeof(tag))))
-
-/* size macros for tag size field */
-#define UCHARSIZE (sizeof(unsigned char))
-#define ULONGSIZE (sizeof(unsigned long))
-#define UINTSIZE  (sizeof(unsigned int))
-#define DRVINFOSIZE (sizeof(struct drive_info_struct))
-#define CMDLINESIZE (sizeof(char[CL_SIZE])
-
-/*
- * For tag readers aka the kernel
- */
-tag *bi_TagFind(enum bi_tag type);
-void bi_EarlySnarf(void);
-
-/* For tag creators aka bootloaders */
-/* Now implemented in Milo 0.26 */
-int bi_TagAdd(enum bi_tag type, unsigned long size, void *data);
-int bi_TagAddList(tag_def* taglist);
-void bi_TagWalk(void); 
-
-
 #ifdef CONFIG_SGI
 /* screen info will dissapear... soon */
 //#define DEFAULT_SCREEN_INFO {0, 0, 0, 0, 0, 158, 0, 0, 0, 62, 0, 16}
 #define DEFAULT_SCREEN_INFO {0, 0, 0, 0, 0, 160, 0, 0, 0, 64, 0, 16}
 #define DEFAULT_DRIVE_INFO { {0,}}
 #else
-/* default values for screen_info variable */
-#define DEFAULT_SCREEN_INFO {0, 0, 0, 52, 3, 80, 4626, 3, 9, 50}
+/* default values for screen_info variable (Colour VGA) */
+#define DEFAULT_SCREEN_INFO {0, 0, 0, 52, 3, 80, 4626, 3, 9, 50, 0x22, 16}
 #endif
 
 /* default values for drive info */
@@ -289,9 +186,6 @@ extern unsigned long mips_cputype;
 extern unsigned long mips_machtype;
 extern unsigned long mips_machgroup;
 extern unsigned long mips_tlb_entries;
-extern unsigned long mips_vram_base;
-extern unsigned long mips_dma_cache_size;
-extern unsigned long mips_dma_cache_base;
 
 #endif /* _LANGUAGE_ASSEMBLY */
 

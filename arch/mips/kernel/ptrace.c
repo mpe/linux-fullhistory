@@ -1,4 +1,4 @@
-/* $Id: ptrace.c,v 1.11 1998/10/19 16:26:31 ralf Exp $
+/* $Id: ptrace.c,v 1.13 1999/06/17 13:25:46 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -240,6 +240,7 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
+	unsigned int flags;
 	int res;
 
 	lock_kernel();
@@ -278,23 +279,26 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		    (current->uid != child->uid) ||
 	 	    (current->gid != child->egid) ||
 		    (current->gid != child->sgid) ||
-		    (!cap_issubset(child->cap_permitted, current->cap_permitted)) ||
-	 	    (current->gid != child->gid)) && 
-		    !capable(CAP_SYS_PTRACE)) {
+	 	    (current->gid != child->gid) ||
+		    (!cap_issubset(child->cap_permitted,
+		                  current->cap_permitted)) ||
+                    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE)){
 			res = -EPERM;
 			goto out;
 		}
 		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED) {
-			res = -EPERM;
+		if (child->flags & PF_PTRACED)
 			goto out;
-		}
 		child->flags |= PF_PTRACED;
+
+		write_lock_irqsave(&tasklist_lock, flags);
 		if (child->p_pptr != current) {
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
 		}
+		write_unlock_irqrestore(&tasklist_lock, flags);
+
 		send_sig(SIGSTOP, child, 1);
 		res = 0;
 		goto out;
@@ -319,15 +323,16 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	case PTRACE_PEEKDATA: {
 		unsigned long tmp;
 
+		down(&child->mm->mmap_sem);
 		res = read_long(child, addr, &tmp);
+		up(&child->mm->mmap_sem);
 		if (res < 0)
 			goto out;
 		res = put_user(tmp,(unsigned long *) data);
 		goto out;
 		}
 
-	/* read the word at location addr in the USER area. */
-/* #define DEBUG_PEEKUSR */
+	/* Read the word at location addr in the USER area.  */
 	case PTRACE_PEEKUSR: {
 		struct pt_regs *regs;
 		unsigned long tmp;
@@ -335,12 +340,15 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		regs = (struct pt_regs *) ((unsigned long) child +
 		       KERNEL_STACK_SIZE - 32 - sizeof(struct pt_regs));
 		tmp = 0;  /* Default return value. */
-		if (addr < 32 && addr >= 0)
-			tmp = regs->regs[addr];
-		else if (addr >= 32 && addr < 64) {
-			unsigned long long *fregs;
 
+		switch(addr) {
+		case 0 ... 31:
+			tmp = regs->regs[addr];
+			break;
+		case FPR_BASE ... FPR_BASE + 31:
 			if (child->used_math) {
+				unsigned long long *fregs;
+
 				if (last_task_used_math == child) {
 					enable_cp1();
 					r4xx0_save_fp(child);
@@ -353,35 +361,32 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			} else {
 				tmp = -1;	/* FP not yet used  */
 			}
-		} else {
-			addr -= 64;
-			switch(addr) {
-			case 0:
-				tmp = regs->cp0_epc;
-				break;
-			case 1:
-				tmp = regs->cp0_cause;
-				break;
-			case 2:
-				tmp = regs->cp0_badvaddr;
-				break;
-			case 3:
-				tmp = regs->lo;
-				break;
-			case 4:
-				tmp = regs->hi;
-				break;
-			case 5:
-				tmp = child->tss.fpu.hard.control;
-				break;
-			case 6:	/* implementation / version register */
-				tmp = 0;	/* XXX */
-				break;
-			default:
-				tmp = 0;
-				res = -EIO;
-				goto out;
-			}
+			break;
+		case PC:
+			tmp = regs->cp0_epc;
+			break;
+		case CAUSE:
+			tmp = regs->cp0_cause;
+			break;
+		case BADVADDR:
+			tmp = regs->cp0_badvaddr;
+			break;
+		case MMHI:
+			tmp = regs->hi;
+			break;
+		case MMLO:
+			tmp = regs->lo;
+			break;
+		case FPC_CSR:
+			tmp = child->tss.fpu.hard.control;
+			break;
+		case FPC_EIR:	/* implementation / version register */
+			tmp = 0;	/* XXX */
+			break;
+		default:
+			tmp = 0;
+			res = -EIO;
+			goto out;
 		}
 		res = put_user(tmp, (unsigned long *) data);
 		goto out;
@@ -389,20 +394,22 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 	case PTRACE_POKETEXT: /* write the word at location addr. */
 	case PTRACE_POKEDATA:
+		down(&child->mm->mmap_sem);
 		res = write_long(child,addr,data);
+		up(&child->mm->mmap_sem);
 		goto out;
 
 	case PTRACE_POKEUSR: {
+		unsigned long long *fregs;
 		struct pt_regs *regs;
 		int res = 0;
 
-		regs = (struct pt_regs *) ((unsigned long) child +
-		       KERNEL_STACK_SIZE - 32 - sizeof(struct pt_regs));
-		if (addr < 32 && addr >= 0)
-			regs->regs[addr] = data;
-		else if (addr >= 32 && addr < 64) {
-			unsigned long long *fregs;
-
+		switch (addr) {
+		case 0 ... 31:
+			regs = (struct pt_regs *) ((unsigned long) child +
+			       KERNEL_STACK_SIZE - 32 - sizeof(struct pt_regs));
+			break;
+		case FPR_BASE ... FPR_BASE + 31:
 			if (child->used_math) {
 				if (last_task_used_math == child) {
 					enable_cp1();
@@ -419,26 +426,23 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			fregs = (unsigned long long *)
 				&child->tss.fpu.hard.fp_regs[0];
 			fregs[(addr - 32)] = (unsigned long long) data;
-		} else {
-			addr -= 64;
-			switch (addr) {
-			case 0:
-				regs->cp0_epc = data;
-				break;
-			case 3:
-				regs->lo = data;
-				break;
-			case 4:
-				regs->hi = data;
-				break;
-			case 5:
-				child->tss.fpu.hard.control = data;
-				break;
-			default:
-				/* The rest are not allowed. */
-				res = -EIO;
-				break;
-			};
+			break;
+		case PC:
+			regs->cp0_epc = data;
+			break;
+		case MMHI:
+			regs->hi = data;
+			break;
+		case MMLO:
+			regs->lo = data;
+			break;
+		case FPC_CSR:
+			child->tss.fpu.hard.control = data;
+			break;
+		default:
+			/* The rest are not allowed. */
+			res = -EIO;
+			break;
 		}
 		goto out;
 		}

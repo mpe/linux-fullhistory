@@ -162,6 +162,10 @@ ifdef CONFIG_PNP
 DRIVERS := $(DRIVERS) drivers/pnp/pnp.a
 endif
 
+ifdef CONFIG_SGI
+DRIVERS := $(DRIVERS) drivers/sgi/sgi.a
+endif
+
 ifdef CONFIG_VT
 DRIVERS := $(DRIVERS) drivers/video/video.a
 endif
@@ -172,6 +176,10 @@ endif
 
 ifdef CONFIG_HAMRADIO
 DRIVERS := $(DRIVERS) drivers/net/hamradio/hamradio.a
+endif
+
+ifeq ($(CONFIG_TC),y)
+DRIVERS := $(DRIVERS) drivers/tc/tc.a
 endif
 
 ifeq ($(CONFIG_USB),y)

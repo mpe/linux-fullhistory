@@ -24,6 +24,9 @@ struct ipc_kludge {
 #define SHMGET		23
 #define SHMCTL		24
 
+/* Used by the DIPC package, try and avoid reusing it */
+#define DIPC		25
+
 #define IPCCALL(version,op)	((version)<<16 | (op))
 
 #endif /* __ASM_MIPS_IPC_H */

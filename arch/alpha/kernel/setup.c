@@ -66,7 +66,7 @@ static void get_sysnames(long, long, char **, char **);
  * initialized, we need to copy things out into a more permanent
  * place.
  */
-#define PARAM			ZERO_PAGE
+#define PARAM			ZERO_PAGE(0)
 #define COMMAND_LINE		((char*)(PARAM + 0x0000))
 #define COMMAND_LINE_SIZE	256
 #define INITRD_START		(*(unsigned long *) (PARAM+0x100))

@@ -187,7 +187,7 @@ extern unsigned long *empty_zero_page;
 
 #define BAD_PAGETABLE	__bad_pagetable()
 #define BAD_PAGE	__bad_page()
-#define ZERO_PAGE	((unsigned long) empty_zero_page)
+#define ZERO_PAGE(vaddr)	((unsigned long) empty_zero_page)
 
 /* number of bits that fit into a memory pointer */
 #define BYTES_PER_PTR	(sizeof(unsigned long))

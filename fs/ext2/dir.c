@@ -67,7 +67,7 @@ struct inode_operations ext2_dir_inode_operations = {
 	ext2_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

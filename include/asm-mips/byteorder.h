@@ -1,7 +1,24 @@
+/* $Id: byteorder.h,v 1.7 1999/01/04 16:09:20 ralf Exp $
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Copyright (C) by Ralf Baechle
+ */
 #ifndef _MIPS_BYTEORDER_H
 #define _MIPS_BYTEORDER_H
 
 #include <asm/types.h>
+
+#ifdef __GNUC__
+
+#if !defined(__STRICT_ANSI__) || defined(__KERNEL__)
+#  define __BYTEORDER_HAS_U64__
+#  define __SWAB_64_THRU_32__
+#endif
+
+#endif /* __GNUC__ */
 
 #if defined (__MIPSEB__)
 #  include <linux/byteorder/big_endian.h>

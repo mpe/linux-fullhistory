@@ -384,6 +384,14 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
 
+	/* We'd better have a real physical mapping! */
+	if (!buffer_mapped(bh))
+		BUG();
+
+	/* It had better not be a new buffer by the time we see it */
+	if (buffer_new(bh))
+		BUG();
+
 	/* Only one thread can actually submit the I/O. */
 	if (test_and_set_bit(BH_Lock, &bh->b_state))
 		return;

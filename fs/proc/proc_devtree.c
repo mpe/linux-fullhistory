@@ -57,7 +57,7 @@ struct inode_operations devtree_symlink_inode_operations = {
 	NULL,			/* rename */
 	devtree_readlink,	/* readlink */
 	devtree_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

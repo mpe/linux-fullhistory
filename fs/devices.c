@@ -277,7 +277,7 @@ struct inode_operations blkdev_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */
@@ -333,7 +333,7 @@ struct inode_operations chrdev_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

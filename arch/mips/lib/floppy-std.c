@@ -1,4 +1,4 @@
-/* $Id: floppy-std.c,v 1.2 1998/05/28 03:17:57 ralf Exp $
+/* $Id: floppy-std.c,v 1.3 1998/10/28 12:38:13 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -12,7 +12,6 @@
 #include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/sched.h>
-#include <linux/kbdcntrlr.h>
 #include <linux/kernel.h>
 #include <linux/linkage.h>
 #include <linux/types.h>

@@ -188,7 +188,8 @@ typedef char buffer_block[BLOCK_SIZE];
 #define BH_Dirty	1	/* 1 if the buffer is dirty */
 #define BH_Lock		2	/* 1 if the buffer is locked */
 #define BH_Req		3	/* 0 if the buffer has been invalidated */
-#define BH_Allocated	4	/* 1 if the buffer has allocated backing store */
+#define BH_Mapped	4	/* 1 if the buffer has a disk mapping */
+#define BH_New		5	/* 1 if the buffer is new and not yet written out */
 #define BH_Protected	6	/* 1 if the buffer is protected */
 
 /*
@@ -242,7 +243,8 @@ void init_buffer(struct buffer_head *, bh_end_io_t *, void *);
 #define buffer_dirty(bh)	__buffer_state(bh,Dirty)
 #define buffer_locked(bh)	__buffer_state(bh,Lock)
 #define buffer_req(bh)		__buffer_state(bh,Req)
-#define buffer_allocated(bh)	__buffer_state(bh,Allocated)
+#define buffer_mapped(bh)	__buffer_state(bh,Mapped)
+#define buffer_new(bh)		__buffer_state(bh,New)
 #define buffer_protected(bh)	__buffer_state(bh,Protected)
 
 #define buffer_page(bh)		(mem_map + MAP_NR((bh)->b_data))
@@ -601,13 +603,19 @@ struct inode_operations {
 	struct dentry * (*follow_link) (struct dentry *, struct dentry *, unsigned int);
 	/*
 	 * the order of these functions within the VFS template has been
-	 * changed because SMP locking has changed: from now on all bmap,
+	 * changed because SMP locking has changed: from now on all get_block,
 	 * readpage, writepage and flushpage functions are supposed to do
 	 * whatever locking they need to get proper SMP operation - for
 	 * now in most cases this means a lock/unlock_kernel at entry/exit.
 	 * [The new order is also slightly more logical :)]
 	 */
-	int (*bmap) (struct inode *,int);
+	/*
+	 * Generic block allocator exported by the lowlevel fs. All metadata
+	 * details are handled by the lowlevel fs, all 'logical data content'
+	 * details are handled by the highlevel block layer.
+	 */
+	int (*get_block) (struct inode *, long, struct buffer_head *, int);
+
 	int (*readpage) (struct file *, struct page *);
 	int (*writepage) (struct file *, struct page *);
 	int (*flushpage) (struct inode *, struct page *, unsigned long);
@@ -751,12 +759,28 @@ extern int buffermem;
 #define BUF_DIRTY	2	/* Dirty buffers, not yet scheduled for write */
 #define NR_LIST		3
 
-void mark_buffer_uptodate(struct buffer_head *, int);
+/*
+ * This is called by bh->b_end_io() handlers when I/O has completed.
+ */
+extern inline void mark_buffer_uptodate(struct buffer_head * bh, int on)
+{
+	if (on)
+		set_bit(BH_Uptodate, &bh->b_state);
+	else
+		clear_bit(BH_Uptodate, &bh->b_state);
+}
+
+#define atomic_set_buffer_clean(bh) test_and_clear_bit(BH_Dirty, &(bh)->b_state)
+
+extern inline void __mark_buffer_clean(struct buffer_head *bh)
+{
+	refile_buffer(bh);
+}
 
 extern inline void mark_buffer_clean(struct buffer_head * bh)
 {
-	if (test_and_clear_bit(BH_Dirty, &bh->b_state))
-		refile_buffer(bh);
+	if (atomic_set_buffer_clean(bh))
+		__mark_buffer_clean(bh);
 }
 
 extern void FASTCALL(__mark_buffer_dirty(struct buffer_head *bh, int flag));
@@ -872,16 +896,12 @@ extern struct buffer_head * breada(kdev_t, int, int, unsigned int, unsigned int)
 
 extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 
-typedef long (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
-typedef int (*fs_getblock_t)(struct inode *, unsigned long, struct buffer_head *, unsigned int);
-
-#define FS_GETBLK_ALLOCATE	1
-#define FS_GETBLK_UPDATE	2
+typedef int (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
 
 /* Generic buffer handling for block filesystems.. */
 extern int block_read_full_page(struct file *, struct page *);
-extern int block_write_full_page (struct file *, struct page *, fs_getblock_t);
-extern int block_write_partial_page (struct file *, struct page *, unsigned long, unsigned long, const char *, fs_getblock_t);
+extern int block_write_full_page (struct file *, struct page *);
+extern int block_write_partial_page (struct file *, struct page *, unsigned long, unsigned long, const char *);
 extern int block_flushpage(struct inode *, struct page *, unsigned long);
 
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);

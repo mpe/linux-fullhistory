@@ -33,7 +33,9 @@
  * SHMMAX <= (PAGE_SIZE << _SHM_IDX_BITS).
  */
 
-#define SHMMAX 0x1000000		/* max shared seg size (bytes) */
+#define SHMMAX 0x2000000		/* max shared seg size (bytes) */
+/* Try not to change the default shipped SHMMAX - people rely on it */
+
 #define SHMMIN 1 /* really PAGE_SIZE */	/* min shared seg size (bytes) */
 #define SHMMNI (1<<_SHM_ID_BITS)	/* max num of segs system wide */
 #define SHMALL				/* max shm system wide (pages) */ \

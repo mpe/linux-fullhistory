@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.12 1998/10/19 21:27:37 ralf Exp $
+/* $Id: fault.c,v 1.9 1999/01/04 16:03:53 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

@@ -182,7 +182,7 @@ void start_kernel(void)
 		nbytes = 0;
 	}
 	envval[nbytes] = '\0';
-	strcpy((char*)ZERO_PAGE, envval);
+	strcpy((char*)ZERO_PAGE(0), envval);
 
 	srm_printk(" Ok\nNow booting the kernel\n");
 	runkernel();

@@ -139,7 +139,12 @@
 		ori	t0, 0x1f;                        \
 		xori	t0, 0x1f;                        \
 		mtc0	t0, CP0_STATUS;                  \
+		li	v1, 0xff00;                      \
+		and	t0, v1;				 \
 		lw	v0, PT_STATUS(sp);               \
+		nor	v1, $0, v1;			 \
+		and	v0, v1;				 \
+		or	v0, t0;				 \
 		mtc0	v0, CP0_STATUS;                  \
 		lw	v1, PT_EPC(sp);                  \
 		mtc0	v1, CP0_EPC;                     \

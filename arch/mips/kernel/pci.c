@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.6 1998/08/19 21:53:50 ralf Exp $
+/* $Id: pci.c,v 1.8 1999/05/01 22:40:36 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -36,13 +36,13 @@ int pcibios_present (void)
 }
 
 /*
- * The functions below are machine specific and must be reimplented for
+ * The functions below are machine specific and must be reimplimented for
  * each PCI chipset configuration.  We just run the hook to the machine
  * specific implementation.
  */
 void pcibios_fixup (void)
 {
-	return pci_ops->pcibios_fixup();
+	pci_ops->pcibios_fixup();
 }
 
 int pcibios_read_config_byte (unsigned char bus, unsigned char dev_fn,
@@ -88,11 +88,6 @@ __initfunc(char *pcibios_setup(char *str))
 
 __initfunc(void pcibios_fixup_bus(struct pci_bus *bus))
 {
-}
-
-__initfunc(char *pcibios_setup(char *str))
-{
-	return str;
 }
 
 #endif /* defined(CONFIG_PCI) */

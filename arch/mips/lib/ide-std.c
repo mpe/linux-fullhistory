@@ -1,5 +1,4 @@
-/*
- * include/asm-mips/types.h
+/* $Id: ide-std.c,v 1.4 1999/06/17 13:25:49 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -7,12 +6,14 @@
  *
  * IDE routines for typical pc-like standard configurations.
  *
- * Copyright (C) 1998 by Ralf Baechle
+ * Copyright (C) 1998, 1999 by Ralf Baechle
  */
+#include <linux/sched.h>
+#include <linux/ide.h>
+#include <linux/ioport.h>
 #include <linux/hdreg.h>
 #include <asm/ptrace.h>
 #include <asm/hdreg.h>
-#include <asm/ide.h>
 
 static int std_ide_default_irq(ide_ioreg_t base)
 {
@@ -42,10 +43,8 @@ static ide_ioreg_t std_ide_default_io_base(int index)
 	}
 }
 
-static void std_ide_init_hwif_ports (	hw_regs_t *hw,
-					ide_ioreg_t data_port,
-					ide_ioreg_t ctrl_port,
-					int *irq)
+static void std_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port,
+                                     ide_ioreg_t ctrl_port, int *irq)
 {
 	ide_ioreg_t reg = data_port;
 	int i;

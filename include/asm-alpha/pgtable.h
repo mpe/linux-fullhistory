@@ -299,7 +299,7 @@ extern unsigned long __zero_page(void);
 
 #define BAD_PAGETABLE	__bad_pagetable()
 #define BAD_PAGE	__bad_page()
-#define ZERO_PAGE	(PAGE_OFFSET+0x30A000)
+#define ZERO_PAGE(vaddr)	(PAGE_OFFSET+0x30A000)
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))

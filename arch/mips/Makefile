@@ -36,7 +36,7 @@ ifdef CONFIG_CROSSCOMPILE
 CROSS_COMPILE  = $(tool-prefix)
 endif
 
-LINKFLAGS	= -static #-N
+LINKFLAGS	= -static -N
 MODFLAGS	+= -mlong-calls
 
 #
@@ -97,22 +97,37 @@ CORE_FILES    += arch/mips/algor/algor.o
 SUBDIRS       += arch/mips/algor
 #LOADADDR      += 0x80000000
 endif
+
+#
+# DECstation family
+#
+ifdef CONFIG_DECSTATION
+CORE_FILES    += arch/mips/dec/dec.o
+SUBDIRS       += arch/mips/dec arch/mips/dec/prom
+LIBS          += arch/mips/dec/prom/rexlib.a
+LOADADDR      += 0x80040000
+endif
+
 #
 # Acer PICA 61, Mips Magnum 4000 and Olivetti M700.
 #
 ifdef CONFIG_MIPS_JAZZ
 CORE_FILES    += arch/mips/jazz/jazz.o
-SUBDIRS       += arch/mips/jazz
-LOADADDR      += 0x80000000
+SUBDIRS       += arch/mips/jazz arch/mips/arc
+LIBS          += arch/mips/arc/arclib.a
+LOADADDR      += 0x80080000
 endif
+
 ifdef CONFIG_SNI_RM200_PCI
 CORE_FILES    += arch/mips/sni/sni.o
-SUBDIRS       += arch/mips/sni
-LOADADDR      += 0x80000000
+SUBDIRS       += arch/mips/sni arch/mips/arc
+LIBS          += arch/mips/arc/arclib.a
+LOADADDR      += 0x80080000
 endif
+
 ifdef CONFIG_SGI
-LIBS          += arch/mips/sgi/kernel/sgikern.a arch/mips/sgi/prom/promlib.a
-SUBDIRS       += arch/mips/sgi/kernel arch/mips/sgi/prom
+LIBS          += arch/mips/sgi/kernel/sgikern.a arch/mips/arc/arclib.a
+SUBDIRS       += arch/mips/sgi/kernel arch/mips/arc
 #
 # Set LOADADDR to >= 0x88069000 if you want to leave space for symmon,
 # 0x88002000 for production kernels.  Note that the value must be
@@ -120,6 +135,14 @@ SUBDIRS       += arch/mips/sgi/kernel arch/mips/sgi/prom
 #
 LOADADDR      += 0x88002000
 HOSTCC        = cc
+endif
+
+#
+# Baget/MIPS
+#
+ifdef CONFIG_BAGET_MIPS
+SUBDIRS       += arch/mips/baget arch/mips/baget/prom
+LIBS          += arch/mips/baget/baget.a arch/mips/baget/prom/bagetlib.a
 endif
 
 #
@@ -150,7 +173,16 @@ HEAD := arch/mips/kernel/head.o arch/mips/kernel/init_task.o
 
 SUBDIRS := $(SUBDIRS) $(addprefix arch/mips/, kernel mm lib tools)
 CORE_FILES := arch/mips/kernel/kernel.o arch/mips/mm/mm.o $(CORE_FILES)
-LIBS := arch/mips/lib/lib.a $(LIBS) arch/mips/lib/lib.a
+LIBS := arch/mips/lib/lib.a $(LIBS)
+
+ifdef CONFIG_BAGET_MIPS
+
+BAGETBOOT = $(MAKE) -C arch/$(ARCH)/baget
+
+balo:  vmlinux
+	$(BAGETBOOT) balo
+
+endif
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 

@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.20 1998/10/14 20:26:26 ralf Exp $
+/* $Id: traps.c,v 1.20 1999/06/13 16:30:34 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -202,17 +202,16 @@ static void default_be_board_handler(struct pt_regs *regs)
 	 * Assume it would be too dangerous to continue ...
 	 */
 	force_sig(SIGBUS, current);
+show_regs(regs); while(1);
 }
 
 void do_ibe(struct pt_regs *regs)
 {
-show_regs(regs); while(1);
 	ibe_board_handler(regs);
 }
 
 void do_dbe(struct pt_regs *regs)
 {
-show_regs(regs); while(1);
 	dbe_board_handler(regs);
 }
 
@@ -325,7 +324,7 @@ void do_bp(struct pt_regs *regs)
 	/*
 	 * (A short test says that IRIX 5.3 sends SIGTRAP for all break
 	 * insns, even for break codes that indicate arithmetic failures.
-	 * Wiered ...)
+	 * Weird ...)
 	 */
 	force_sig(SIGTRAP, current);
 }
@@ -465,8 +464,8 @@ extern asmlinkage void r4k_restore_fp_context(struct sigcontext *sc);
 extern asmlinkage void r2300_restore_fp_context(struct sigcontext *sc);
 extern asmlinkage void r6000_restore_fp_context(struct sigcontext *sc);
 
-extern asmlinkage void r4xx0_resume(void *tsk);
-extern asmlinkage void r2300_resume(void *tsk);
+extern asmlinkage void *r4xx0_resume(void *last, void *next);
+extern asmlinkage void *r2300_resume(void *last, void *next);
 
 __initfunc(void trap_init(void))
 {

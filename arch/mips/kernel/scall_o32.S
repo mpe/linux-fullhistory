@@ -1,4 +1,4 @@
-/* $Id: scall_o32.S,v 1.5 1998/08/19 21:53:50 ralf Exp $
+/* $Id: scall_o32.S,v 1.4 1998/06/25 20:01:01 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -44,6 +44,7 @@ NESTED(handle_sys, PT_SIZE, sp)
 	beqz	t2, illegal_syscall;
 
 	subu	t0, t3, 5		# 5 or more arguments?
+	sw	a3, PT_R26(sp)		# save a3 for syscall restarting
 	bgez	t0, stackargs
 
 stack_done:

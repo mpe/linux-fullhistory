@@ -49,7 +49,7 @@ struct inode_operations proc_link_inode_operations = {
 	NULL,			/* rename */
 	proc_readlink,		/* readlink */
 	proc_follow_link,	/* follow_link */
-	NULL,			/* bmap */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* flushpage */

@@ -2,8 +2,9 @@
  * indy_mc.c: Routines for manipulating the INDY memory controller.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ * Copyright (C) 1999 Andrew R. Baker (andrewb@uab.edu) - Indigo2 changes
  *
- * $Id: indy_mc.c,v 1.3 1998/04/25 15:43:32 ralf Exp $
+ * $Id: indy_mc.c,v 1.4 1999/05/07 22:34:32 ulfc Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -150,6 +151,8 @@ __initfunc(void sgimc_init(void))
 			tmpreg |= SGIMC_GIOPARM_PLINEEXP0; /* exp[01] pipelined */
 			tmpreg |= SGIMC_GIOPARM_PLINEEXP1;
 			tmpreg |= SGIMC_GIOPARM_MASTEREISA;/* EISA masters */
+			/* someone forgot this poor little guy... */
+			tmpreg |= SGIMC_GIOPARM_GFX64; 	/* GFX at 64 bits */
 		}
 	}
 	mcmisc_regs->gioparm = tmpreg; /* poof */

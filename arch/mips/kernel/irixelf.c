@@ -1,4 +1,5 @@
-/*
+/* $Id: irixelf.c,v 1.17 1999/06/17 13:25:45 ralf Exp $
+ *
  * irixelf.c: Code to load IRIX ELF executables which conform to
  *            the MIPS ABI.
  *
@@ -612,7 +613,7 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 	unsigned int load_addr, elf_bss, elf_brk;
 	unsigned int elf_entry, interp_load_addr = 0;
 	unsigned int start_code, end_code, end_data, elf_stack;
-	int elf_exec_fileno, retval, has_interp, has_ephdr, i;
+	int elf_exec_fileno, retval, has_interp, has_ephdr, size, i;
 	char *elf_interpreter;
 	mm_segment_t old_fs;
 	
@@ -629,13 +630,13 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 #endif
 
 	/* Now read in all of the header information */
-	elf_phdata = (struct elf_phdr *) kmalloc(elf_ex.e_phentsize * 
-						 elf_ex.e_phnum, GFP_KERNEL);
+	size = elf_ex.e_phentsize * elf_ex.e_phnum;
+	elf_phdata = (struct elf_phdr *) kmalloc(size, GFP_KERNEL);
 	if (elf_phdata == NULL)
 		return -ENOMEM;
 	
-	retval = read_exec(bprm->dentry, elf_ex.e_phoff, (char *) elf_phdata,
-			   elf_ex.e_phentsize * elf_ex.e_phnum, 1);
+	retval = read_exec(bprm->dentry, elf_ex.e_phoff,
+	                   (char *) elf_phdata, size, 1);
 	if (retval < 0) {
 		kfree (elf_phdata);
 		return retval;
@@ -727,7 +728,7 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 	 * change some of these later.
 	 */
 	current->mm->rss = 0;
-	bprm->p = setup_arg_pages(bprm->p, bprm);
+	setup_arg_pages(bprm);
 	current->mm->start_stack = bprm->p;
 	
 	/* At this point, we assume that the image should be loaded at
@@ -797,12 +798,12 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 	padzero(elf_bss);
 
 #ifdef DEBUG_ELF
-	printk("(start_brk) %08lx\n" , current->mm->start_brk);
-	printk("(end_code) %08lx\n" , current->mm->end_code);
-	printk("(start_code) %08lx\n" , current->mm->start_code);
-	printk("(end_data) %08lx\n" , current->mm->end_data);
-	printk("(start_stack) %08lx\n" , current->mm->start_stack);
-	printk("(brk) %08lx\n" , current->mm->brk);
+	printk("(start_brk) %lx\n" , (long) current->mm->start_brk);
+	printk("(end_code) %lx\n" , (long) current->mm->end_code);
+	printk("(start_code) %lx\n" , (long) current->mm->start_code);
+	printk("(end_data) %lx\n" , (long) current->mm->end_data);
+	printk("(start_stack) %lx\n" , (long) current->mm->start_stack);
+	printk("(brk) %lx\n" , (long) current->mm->brk);
 #endif
 
 #if 0 /* XXX No fucking way dude... */
@@ -1101,10 +1102,10 @@ static int writenote(struct memelfnote *men, struct file *file)
 #undef DUMP_SEEK
 
 #define DUMP_WRITE(addr, nr)	\
-	if (!dump_write(&file, (addr), (nr))) \
+	if (!dump_write(file, (addr), (nr))) \
 		goto close_coredump;
 #define DUMP_SEEK(off)	\
-	if (!dump_seek(&file, (off))) \
+	if (!dump_seek(file, (off))) \
 		goto close_coredump;
 /* Actual dumper.
  *
@@ -1115,7 +1116,7 @@ static int writenote(struct memelfnote *men, struct file *file)
 static int irix_core_dump(long signr, struct pt_regs * regs)
 {
 	int has_dumped = 0;
-	struct file file;
+	struct file *file;
 	struct dentry *dentry;
 	struct inode *inode;
 	mm_segment_t fs;
@@ -1184,26 +1185,28 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 	
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+
 	memcpy(corefile,"core.", 5);
 #if 0
 	memcpy(corefile+5,current->comm,sizeof(current->comm));
 #else
 	corefile[4] = '\0';
 #endif
-	dentry = open_namei(corefile, O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
-	if (IS_ERR(dentry)) {
-		inode = NULL;
+	file = filp_open(corefile, O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
+	if (IS_ERR(file))
 		goto end_coredump;
-	}
+	dentry = file->f_dentry;
 	inode = dentry->d_inode;
+	if (inode->i_nlink > 1)
+		goto close_coredump;	/* multiple links - don't dump */
+
 	if (!S_ISREG(inode->i_mode))
-		goto end_coredump;
-	if (!inode->i_op || !inode->i_op->default_file_ops)
-		goto end_coredump;
-	if (init_private_file(&file, dentry, 3))
-		goto end_coredump;
-	if (!file.f_op->write)
 		goto close_coredump;
+	if (!inode->i_op || !inode->i_op->default_file_ops)
+		goto close_coredump;
+	if (!file->f_op->write)
+		goto close_coredump;
+
 	has_dumped = 1;
 	current->flags |= PF_DUMPCORE;
 
@@ -1339,7 +1342,7 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 	}
 
 	for(i = 0; i < numnote; i++)
-		if (!writenote(&notes[i], &file))
+		if (!writenote(&notes[i], file))
 			goto close_coredump;
 	
 	set_fs(fs);
@@ -1361,19 +1364,17 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 		DUMP_WRITE((void *)addr, len);
 	}
 
-	if ((off_t) file.f_pos != offset) {
+	if ((off_t) file->f_pos != offset) {
 		/* Sanity check. */
-		printk("elf_core_dump: file.f_pos (%ld) != offset (%ld)\n",
-		       (off_t) file.f_pos, offset);
+		printk("elf_core_dump: file->f_pos (%ld) != offset (%ld)\n",
+		       (off_t) file->f_pos, offset);
 	}
 
  close_coredump:
-	if (file.f_op->release)
-		file.f_op->release(inode, &file);
+	filp_close(file, NULL);
 
  end_coredump:
 	set_fs(fs);
-	dput(dentry);
 #ifndef CONFIG_BINFMT_ELF
 	MOD_DEC_USE_COUNT;
 #endif

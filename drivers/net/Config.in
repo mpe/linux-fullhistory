@@ -42,7 +42,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate 'Hydra support' CONFIG_HYDRA
   fi
   if [ "$CONFIG_MIPS_JAZZ" = "y" ]; then
-    bool 'MIPS JAZZ onboard SONIC Ethernet support' CONFIG_MIPS_JAZZ_SONIC
+    tristate 'MIPS JAZZ onboard SONIC Ethernet support' CONFIG_MIPS_JAZZ_SONIC
   fi
   bool '3COM cards' CONFIG_NET_VENDOR_3COM
   if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then

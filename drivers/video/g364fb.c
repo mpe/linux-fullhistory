@@ -144,7 +144,7 @@ void fbcon_g364fb_cursor(struct display *p, int mode, int x, int y)
      case CM_MOVE:
      case CM_DRAW:
 	*(unsigned int *) CTLA_REG &= ~CURS_TOGGLE;
-	*(unsigned int *) CURS_POS_REG = ((x * p->fontwidth) << 12) | ((y * p->fontheight)-p->var.yoffset);
+	*(unsigned int *) CURS_POS_REG = ((x * fontwidth(p)) << 12) | ((y * fontheight(p))-p->var.yoffset);
 	break;
     }
 }
@@ -485,7 +485,7 @@ static int g364fb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     if (regno > 255)
 	return 1;
 
-    red >> = 8;
+    red >>= 8;
     green >>= 8;
     blue >>=8;
     palette[regno].red = red;

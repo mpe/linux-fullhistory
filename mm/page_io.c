@@ -99,7 +99,7 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 	} else if (p->swap_file) {
 		struct inode *swapf = p->swap_file->d_inode;
 		int i;
-		if (swapf->i_op->bmap == NULL
+		if (swapf->i_op->get_block == NULL
 			&& swapf->i_op->smap != NULL){
 			/*
 				With MS-DOS, we use msdos_smap which returns
@@ -110,7 +110,7 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 				It sounds like ll_rw_swap_file defined
 				its operation size (sector size) based on
 				PAGE_SIZE and the number of blocks to read.
-				So using bmap or smap should work even if
+				So using get_block or smap should work even if
 				smap will require more blocks.
 			*/
 			int j;

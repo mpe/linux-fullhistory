@@ -88,19 +88,36 @@ struct linux_sysid {
 };
 
 /* ARCS prom memory descriptors. */
-enum linux_memtypes {
-	eblock,  /* exception block */
-	rvpage,  /* ARCS romvec page */
-	fcontig, /* Contiguous and free */
-	free,    /* Generic free memory */
-	bmem,    /* Borken memory, don't use */
-	prog,    /* A loaded program resides here */
-	atmp,    /* ARCS temporary storage area, wish Sparc OpenBoot told this */
-	aperm,   /* ARCS permanent storage... */
+enum arcs_memtypes {
+	arcs_eblock,  /* exception block */
+	arcs_rvpage,  /* ARCS romvec page */
+	arcs_fcontig, /* Contiguous and free */
+	arcs_free,    /* Generic free memory */
+	arcs_bmem,    /* Borken memory, don't use */
+	arcs_prog,    /* A loaded program resides here */
+	arcs_atmp,    /* ARCS temporary storage area, wish Sparc OpenBoot told this */
+	arcs_aperm,   /* ARCS permanent storage... */
+};
+
+/* ARC has slightly different types than ARCS */
+enum arc_memtypes {
+	arc_eblock,  /* exception block */
+	arc_rvpage,  /* romvec page */
+	arc_free,    /* Generic free memory */
+	arc_bmem,    /* Borken memory, don't use */
+	arc_prog,    /* A loaded program resides here */
+	arc_atmp,    /* temporary storage area */
+	arc_aperm,   /* permanent storage */
+	arc_fcontig, /* Contiguous and free */    
+};
+
+union linux_memtypes {
+    enum arcs_memtypes arcs;
+    enum arc_memtypes arc;
 };
 
 struct linux_mdesc {
-	enum linux_memtypes type;
+        union linux_memtypes type;
 	unsigned long base;
 	unsigned long pages;
 };

@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.6 1998/05/07 14:17:48 ralf Exp $
+/* $Id: pci.c,v 1.7 1999/01/04 16:03:58 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -9,6 +9,7 @@
  * Copyright (C) 1997, 1998 Ralf Baechle
  */
 #include <linux/config.h>
+#include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/types.h>
 #include <asm/byteorder.h>
@@ -28,13 +29,37 @@ do {                                                                         \
 
 static void sni_rm200_pcibios_fixup (void)
 {
-	/*
-	 * TODO: Fix PCI_INTERRUPT_LINE register for onboard cards.
-	 * Take care of RM300 revision D boards for where the network
-	 * slot became an ordinary PCI slot.
-	 */
-	pcibios_write_config_byte(0, PCI_DEVFN(1, 0), PCI_INTERRUPT_LINE,
-	                          PCIMT_IRQ_SCSI);
+	struct pci_dev *dev;
+
+	for (dev=pci_devices; dev; dev=dev->next) {
+		/*
+		 * TODO: Take care of RM300 revision D boards for where the
+		 * network slot became an ordinary PCI slot.
+		 */
+		if (dev->devfn == PCI_DEVFN(1, 0)) {
+			/* Evil hack ...  */
+			set_cp0_config(CONF_CM_CMASK, CONF_CM_CACHABLE_NO_WA);
+			dev->irq = PCIMT_IRQ_SCSI;
+			continue;
+		}
+		if (dev->devfn == PCI_DEVFN(2, 0)) {
+			dev->irq = PCIMT_IRQ_ETHERNET;
+			continue;
+		}
+
+		switch(dev->irq) {
+		case 1 ... 4:
+			dev->irq += PCIMT_IRQ_INTA - 1;
+			break;
+		case 0:
+			break;
+		default:
+			printk("PCI device on bus %d, dev %d, function %d "
+			       "impossible interrupt configured.\n",
+			       dev->bus->number, PCI_SLOT(dev->devfn),
+			       PCI_SLOT(dev->devfn));
+		}
+	}
 }
 
 /*

@@ -112,6 +112,8 @@ static int xx_xx_parse_error (const char *data, unsigned long len, const char *m
 	return -EINVAL;
 }
 
+static struct proc_dir_entry * proc_ide_root = NULL;
+
 static int proc_ide_write_config
 	(struct file *file, const char *buffer, unsigned long count, void *data)
 {
@@ -384,7 +386,7 @@ static int proc_ide_read_identify
 	ide_drive_t	*drive = (ide_drive_t *)data;
 	int		len = 0, i = 0;
 
-	if (!proc_ide_get_identify(drive, page)) {
+	if (drive && !proc_ide_get_identify(drive, page)) {
 		unsigned short *val = ((unsigned short *)page) + 2;
 		char *out = ((char *)val) + (SECTOR_WORDS * 4);
 		page = out;
@@ -394,6 +396,8 @@ static int proc_ide_read_identify
 		} while (i < (SECTOR_WORDS * 2));
 		len = out - page;
 	}
+	else
+		len = sprintf(page, "\n");
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
 
@@ -525,8 +529,8 @@ int proc_ide_read_geometry
 	char		*out = page;
 	int		len;
 
-	out += sprintf(out,"physical     %hi/%hi/%hi\n", drive->cyl, drive->head, drive->sect);
-	out += sprintf(out,"logical      %hi/%hi/%hi\n", drive->bios_cyl, drive->bios_head, drive->bios_sect);
+	out += sprintf(out,"physical     %d/%d/%d\n", drive->cyl, drive->head, drive->sect);
+	out += sprintf(out,"logical      %d/%d/%d\n", drive->bios_cyl, drive->bios_head, drive->bios_sect);
 	len = out - page;
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
@@ -634,25 +638,53 @@ static int proc_ide_readlink(struct proc_dir_entry *de, char *page)
 	return sprintf(page, "ide%d/%s", n, de->name);
 }
 
-static void create_proc_ide_drives (ide_hwif_t *hwif, struct proc_dir_entry *parent, struct proc_dir_entry *root)
+static void create_proc_ide_drives(ide_hwif_t *hwif)
 {
 	int	d;
 	struct proc_dir_entry *ent;
+	struct proc_dir_entry *parent = hwif->proc;
 
 	for (d = 0; d < MAX_DRIVES; d++) {
 		ide_drive_t *drive = &hwif->drives[d];
+		ide_driver_t *driver = drive->driver;
 
 		if (!drive->present)
 			continue;
-		drive->proc = create_proc_entry(drive->name, S_IFDIR, parent);
 		if (drive->proc)
-			ide_add_proc_entries(drive->proc, generic_drive_entries, drive);
+			continue;
 
-		ent = create_proc_entry(drive->name, S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO, root);
+		drive->proc = create_proc_entry(drive->name, S_IFDIR, parent);
+		if (drive->proc) {
+			ide_add_proc_entries(drive->proc, generic_drive_entries, drive);
+			if (driver) {
+				ide_add_proc_entries(drive->proc, generic_subdriver_entries, drive);
+				ide_add_proc_entries(drive->proc, driver->proc, drive);
+			}
+		}
+		ent = create_proc_entry(drive->name, S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO, proc_ide_root);
 		if (!ent) return;
 		ent->data = drive;
 		ent->readlink_proc = proc_ide_readlink;
 		ent->nlink = 1;
+	}
+}
+
+void destroy_proc_ide_drives(ide_hwif_t *hwif)
+{
+	int	d;
+
+	for (d = 0; d < MAX_DRIVES; d++) {
+		ide_drive_t *drive = &hwif->drives[d];
+		ide_driver_t *driver = drive->driver;
+
+		if (!drive->proc)
+			continue;
+		if (driver)
+			ide_remove_proc_entries(drive->proc, driver->proc);
+		ide_remove_proc_entries(drive->proc, generic_drive_entries);
+		remove_proc_entry(drive->name, proc_ide_root);
+		remove_proc_entry(drive->name, hwif->proc);
+		drive->proc = NULL;
 	}
 }
 
@@ -664,42 +696,66 @@ static ide_proc_entry_t hwif_entries[] = {
 	{ NULL,	0, NULL, NULL }
 };
 
-static void create_proc_ide_interfaces (struct proc_dir_entry *parent)
+void create_proc_ide_interfaces(void)
 {
 	int	h;
-	struct proc_dir_entry *hwif_ent;
 
 	for (h = 0; h < MAX_HWIFS; h++) {
 		ide_hwif_t *hwif = &ide_hwifs[h];
+		int exist = (hwif->proc != NULL);
 
 		if (!hwif->present)
 			continue;
-		hwif_ent = create_proc_entry(hwif->name, S_IFDIR, parent);
-		if (!hwif_ent) return;
-		ide_add_proc_entries(hwif_ent, hwif_entries, hwif);
-		create_proc_ide_drives(hwif, hwif_ent, parent);
+		if (!exist)
+			hwif->proc = create_proc_entry(hwif->name, S_IFDIR, proc_ide_root);
+		if (!hwif->proc)
+			return;
+		if (!exist)
+			ide_add_proc_entries(hwif->proc, hwif_entries, hwif);
+		create_proc_ide_drives(hwif);
+	}
+}
+
+static void destroy_proc_ide_interfaces(void)
+{
+	int	h;
+
+	for (h = 0; h < MAX_HWIFS; h++) {
+		ide_hwif_t *hwif = &ide_hwifs[h];
+		int exist = (hwif->proc != NULL);
+
+/*		if (!hwif->present)
+			continue;*/
+		if (!hwif->proc)
+			continue;
+		else {
+			destroy_proc_ide_drives(hwif);
+			ide_remove_proc_entries(hwif->proc, hwif_entries);
+			remove_proc_entry(hwif->name, proc_ide_root);
+			hwif->proc = NULL;
+		}
 	}
 }
 
 void proc_ide_create(void)
 {
-	struct proc_dir_entry *root, *ent;
-	root = create_proc_entry("ide", S_IFDIR, 0);
-	if (!root) return;
-	create_proc_ide_interfaces(root);
+	struct proc_dir_entry *ent;
+	proc_ide_root = create_proc_entry("ide", S_IFDIR, 0);
+	if (!proc_ide_root) return;
+	create_proc_ide_interfaces();
 
-	ent = create_proc_entry("drivers", 0, root);
+	ent = create_proc_entry("drivers", 0, proc_ide_root);
 	if (!ent) return;
 	ent->read_proc  = proc_ide_read_drivers;
 #ifdef CONFIG_BLK_DEV_VIA82C586
 	if (via_display_info) {
-		ent = create_proc_entry("via", 0, root);
+		ent = create_proc_entry("via", 0, proc_ide_root);
 		ent->get_info = via_display_info;
 	}
 #endif /* CONFIG_BLK_DEV_VIA82C586 */
 #ifdef CONFIG_BLK_DEV_ALI15X3
 	if (ali_display_info) {
-		ent = create_proc_entry("ali", 0, root);
+		ent = create_proc_entry("ali", 0, proc_ide_root);
 		ent->get_info = ali_display_info;
 	}
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
@@ -720,5 +776,6 @@ void proc_ide_destroy(void)
 		remove_proc_entry("ide/ali",0);
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
 	remove_proc_entry("ide/drivers", 0);
+	destroy_proc_ide_interfaces();
 	remove_proc_entry("ide", 0);
 }

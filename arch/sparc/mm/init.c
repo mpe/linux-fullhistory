@@ -245,7 +245,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	struct page *page, *end;
 
 	/* Saves us work later. */
-	memset((void *) ZERO_PAGE, 0, PAGE_SIZE);
+	memset((void *) ZERO_PAGE(0), 0, PAGE_SIZE);
 
 	end_mem &= PAGE_MASK;
 	max_mapnr = MAP_NR(end_mem);

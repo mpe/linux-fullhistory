@@ -6,7 +6,7 @@
  *
  * Copyright (C) 1997 Ralf Baechle
  *
- * $Id: fpe.c,v 1.2 1998/03/27 08:53:39 ralf Exp $
+ * $Id: fpe.c,v 1.4 1999/05/01 22:40:35 ralf Exp $
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -39,7 +39,7 @@ out:
 
 /*
  * For easier experimentation we never increment/decrement
- * the module useable counter.
+ * the module usable counter.
  */
 int register_fpe(void (*handler)(struct pt_regs *regs, unsigned int fcr31));
 int unregister_fpe(void (*handler)(struct pt_regs *regs, unsigned int fcr31));

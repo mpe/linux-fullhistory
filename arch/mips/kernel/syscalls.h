@@ -1,4 +1,4 @@
-/* $Id: syscalls.h,v 1.16 1998/09/16 22:50:43 ralf Exp $
+/* $Id: syscalls.h,v 1.15 1998/09/19 19:16:17 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

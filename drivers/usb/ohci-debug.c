@@ -124,7 +124,9 @@ void show_ohci_td(struct ohci_td *td)
 		td_cc_accessed(*td) ? "" : "Not ",
 		td_active(*td) ? "" : "Not ");
 
-	printk(KERN_DEBUG "        %s\n", td_allocated(*td) ? "Allocated" : "Free");
+	printk(KERN_DEBUG "        %s%s\n",
+		td_allocated(*td) ? "Allocated" : "Free",
+		td_dummy(*td) ? " DUMMY" : "");
 
 	printk(KERN_DEBUG "      cur_buf  =  0x%x\n", le32_to_cpup(&td->cur_buf));
 	printk(KERN_DEBUG "      next_td  =  0x%x\n", le32_to_cpup(&td->next_td));
@@ -139,6 +141,26 @@ void show_ohci_td(struct ohci_td *td)
 			d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7] );
 	}
 } /* show_ohci_td() */
+
+
+void show_ohci_td_chain(struct ohci_td *td)
+{
+	struct ohci_td *cur_td;
+	if (td == NULL) return;
+
+	printk(KERN_DEBUG "+++ OHCI TD Chain %lx: +++\n", virt_to_bus(td));
+
+	cur_td = td;
+	for (;;) {
+		show_ohci_td(cur_td);
+		if (!cur_td->next_td) break;
+		cur_td = bus_to_virt(le32_to_cpup(&cur_td->next_td));
+		/* we can't trust -anything- we find inside of a dummy TD */
+		if (td_dummy(*cur_td)) break;
+	}
+
+	printk(KERN_DEBUG "--- End  TD Chain %lx: ---\n", virt_to_bus(td));
+} /* show_ohci_td_chain () */
 
 
 void show_ohci_device(struct ohci_device *dev)

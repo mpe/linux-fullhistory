@@ -337,6 +337,10 @@ S: 4 Place Jussieu
 S: 75252 Paris Cedex 05
 S: France
 
+N: Ulf Carlsson
+D: SGI Indy audio (HAL2) drivers
+E: ulfc@bun.falkenberg.se
+
 N: Ed Carp
 E: ecarp@netcom.com
 D: uucp, elm, pine, pico port
@@ -465,6 +469,14 @@ D: Random console hacks and other miscellaneous stuff
 S: 3000 FORE Drive
 S: Warrendale, Pennsylvania 15086
 S: USA
+
+N: Alex deVries
+E: puffin@redhat.com
+D: Various SGI parts, bits of HAL2 and Newport
+S: 18 Bernier Terrace
+S: Kanata, Ontario
+S: K2L 2V@
+S: CANADA
 
 N: Eddie C. Dost
 E: ecd@skynet.be
@@ -977,12 +989,14 @@ S: Dr. Holsts Vej 34, lejl. 164
 S: DK-8230 Åbyhøj
 S: Denmark
 
-N: Andrzej Krzysztofowicz
-E: ankry@green.mif.pg.gda.pl
+N: Andrzej M. Krzysztofowicz
+E: ankry@mif.pg.gda.pl
+D: XT disk driver
 D: Aladdin 1533/1543(C) chipset IDE
 D: PIIX chipset IDE
-S: Faculty of Applied Phys. & Math.
-S: Technical University of Gdansk
+S: ul. Matemblewska 1B/10
+S: 80-283 Gdansk
+S: Poland
 
 N: Michael K. Johnson
 E: johnsonm@redhat.com

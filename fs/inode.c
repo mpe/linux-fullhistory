@@ -778,8 +778,14 @@ kdevname(inode->i_dev), inode->i_ino, atomic_read(&inode->i_sem.count));
 
 int bmap(struct inode * inode, int block)
 {
-	if (inode->i_op && inode->i_op->bmap)
-		return inode->i_op->bmap(inode, block);
+	struct buffer_head tmp;
+
+	if (inode->i_op && inode->i_op->get_block) {
+		tmp.b_state = 0;
+		tmp.b_blocknr = 0;
+		inode->i_op->get_block(inode, block, &tmp, 0);
+		return tmp.b_blocknr;
+	}
 	return 0;
 }
 

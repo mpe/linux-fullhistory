@@ -29,6 +29,7 @@
 #define DEVID_PIIXb	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371FB_1})
 #define DEVID_PIIX3	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371SB_1})
 #define DEVID_PIIX4	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371AB})
+#define DEVID_VIA_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C561})
 #define DEVID_VP_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C586_1})
 #define DEVID_PDC20246	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20246})
 #define DEVID_PDC20262	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20262})
@@ -190,6 +191,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_PIIXb,	"PIIX",		NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
 	{DEVID_PIIX3,	"PIIX3",	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
 	{DEVID_PIIX4,	"PIIX4",	NULL,		INIT_PIIX,	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}}, 	ON_BOARD,	0 },
+	{DEVID_VIA_IDE,	"VIA_IDE",	NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_VP_IDE,	"VP_IDE",	NULL,		INIT_VIA82C586,	DMA_VIA82C586,	{{0x40,0x02,0x02}, {0x40,0x01,0x01}}, 	ON_BOARD,	0 },
 	{DEVID_PDC20246,"PDC20246",	PCI_PDC202XX,	INIT_PDC202XX,	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}}, 	OFF_BOARD,	16 },
 	{DEVID_PDC20262,"PDC20262",	PCI_PDC202XX,	INIT_PDC202XX,	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}},	OFF_BOARD,	48 },
@@ -366,7 +368,7 @@ __initfunc(static void ide_setup_pci_device (struct pci_dev *dev, ide_pci_device
 	byte tmp = 0;
 	ide_hwif_t *hwif, *mate = NULL;
 
-#ifdef CONFIG_IDEDMA_PCI_AUTO
+#ifdef CONFIG_IDEDMA_AUTO
 	autodma = 1;
 #endif
 check_if_enabled:
@@ -548,6 +550,8 @@ __initfunc(void ide_scan_pcibus (void))
 			continue;	/* OPTI Viper-M uses same devid for functions 0 and 1 */
 		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) && (!(PCI_FUNC(dev->devfn) & 1) || !((dev->class >> 8) == PCI_CLASS_STORAGE_IDE)))
 			continue;	/* CY82C693 is more than only a IDE controller */
+		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_UM8886A) && !(PCI_FUNC(dev->devfn) & 1))
+			continue;	/* UM8886A/BF pair */
 		else if (!IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL) || (dev->class >> 8) == PCI_CLASS_STORAGE_IDE) {
 			if (IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL))
 				printk("%s: unknown IDE controller on PCI bus %02x device %02x, VID=%04x, DID=%04x\n",

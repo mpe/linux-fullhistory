@@ -2,19 +2,14 @@
  * Open Host Controller Interface driver for USB.
  *
  * (C) Copyright 1999 Gregory P. Smith <greg@electricrain.com>
+ * Significant code from the following individuals has also been used:
+ * (C) Copyright 1999 Roman Weissgaerber <weissg@vienna.at> [ohci-hcd.c]
+ * (C) Copyright 1999 Linus Torvalds [uhci.c]
  *
  * This is the "other" host controller interface for USB.  You will
  * find this on many non-Intel based motherboards, and of course the
- * Mac.  As Linus hacked his UHCI driver together first, I modeled
- * this after his.. (it should be obvious)
- *
- * From the programming standpoint the OHCI interface seems a little
- * prettier and potentially less CPU intensive.  This remains to be
- * proven.  In reality, I don't believe it'll make one darn bit of
- * difference.  USB v1.1 is a slow bus by today's standards.
- *
- * OHCI hardware takes care of most of the scheduling of different
- * transfer types with the correct prioritization for us.
+ * Mac.  As Linus hacked his UHCI driver together first, I originally
+ * modeled this after his.. (it should be obvious)
  *
  * To get started in USB, I used the "Universal Serial Bus System
  * Architecture" book by Mindshare, Inc.  It was a reasonable introduction
@@ -76,6 +71,7 @@ static spinlock_t ohci_edtd_lock = SPIN_LOCK_UNLOCKED;
 #define FIELDS_OF_TD(t)	le32_to_cpup(&t->info), le32_to_cpup(&t->cur_buf), \
 			le32_to_cpup(&t->next_td), le32_to_cpup(&t->buf_end)
 
+#ifdef OHCI_DEBUG
 static const char *cc_names[16] = {
 	"no error",
 	"CRC error",
@@ -94,6 +90,7 @@ static const char *cc_names[16] = {
 	"not accessed (14)",
 	"not accessed"
 };
+#endif
 
 /*
  * Add a chain of TDs to the end of the TD list on a given ED.
@@ -150,6 +147,36 @@ static struct ohci_td *ohci_add_td_to_ed(struct ohci_td *td,
 
 	return dummy_td;	/* replacement head of chain */
 } /* ohci_add_td_to_ed() */
+
+
+/*
+ * Add a whole chain of TDs to an ED using the above function.
+ * The same restrictions apply.
+ *
+ * XXX This function is being removed in the future! XXX
+ */
+static struct ohci_td *ohci_add_td_chain_to_ed(struct ohci_td *td, struct ohci_ed *ed)
+{
+	struct ohci_td *cur_td;
+	if (!td)
+		return NULL;
+
+	/* Find the last TD in this chain, storing its pointer in cur_td */
+	cur_td = td;
+	for (;;) {
+		__u32 next_td = cur_td->next_td;
+
+		/* advance to the next td, exit if there isn't one */
+		if (!next_td)
+			break;
+		cur_td = bus_to_virt(le32_to_cpup(&next_td));
+	}
+
+	return td = ohci_add_td_to_ed(td, cur_td, ed);
+} /* ohci_add_td_chain_to_ed() */
+
+
+/* .......... */
 
 
 inline void ohci_start_control(struct ohci *ohci)
@@ -474,7 +501,7 @@ void ohci_remove_device(struct ohci *ohci, int devnum)
 }
 
 /*
- *  Remove a TD from the given EDs TD list.
+ *  Remove a TD from the given EDs TD list.  The TD is freed as well.
  */
 static void ohci_remove_td_from_ed(struct ohci_td *td, struct ohci_ed *ed)
 {
@@ -484,10 +511,10 @@ static void ohci_remove_td_from_ed(struct ohci_td *td, struct ohci_ed *ed)
 	if ((td == NULL) || (ed == NULL))
 		return;
 
-	spin_lock_irqsave(&ohci_edtd_lock, flags);
-
 	if (ed_head_td(ed) == 0)
 		return;
+
+	spin_lock_irqsave(&ohci_edtd_lock, flags);
 
 	/* set the "skip me bit" in this ED */
 	ed->status |= cpu_to_le32(OHCI_ED_SKIP);
@@ -569,6 +596,10 @@ static struct ohci_td *ohci_get_free_td(struct ohci_device *dev)
 /*
  * Get a pointer (virtual) to an available TD from the given device's
  * pool.  Return NULL if none are left.
+ *
+ * NOTE: This function does not allocate and attach the dummy_td.
+ * That is done in ohci_fill_ed().  FIXME: it should probably be moved
+ * into here.
  */
 static struct ohci_ed *ohci_get_free_ed(struct ohci_device *dev)
 {
@@ -593,6 +624,11 @@ static struct ohci_ed *ohci_get_free_ed(struct ohci_device *dev)
 } /* ohci_get_free_ed() */
 
 
+/*
+ * Free an OHCI ED and all of the TDs on its list.  It is assumed that
+ * this ED is not active.  You should call ohci_wait_for_ed_safe()
+ * beforehand if you can't guarantee that.
+ */
 void ohci_free_ed(struct ohci_ed *ed)
 {
 	if (!ed)
@@ -692,6 +728,140 @@ struct ohci_ed *ohci_fill_ed(struct ohci_device *dev, struct ohci_ed *ed,
 } /* ohci_fill_ed() */
 
 
+/*
+ *  Create a chain of Normal TDs to be used for a large data transfer
+ *  (bulk or control).
+ *
+ *  Returns the head TD in the chain.
+ */
+struct ohci_td *ohci_build_td_chain(struct ohci_device *dev, void *data, unsigned int len, int dir, __u32 toggle, int round, int auto_free, void* dev_id, usb_device_irq handler, __u32 next_td)
+{
+	struct ohci_td *head, *cur_td;
+	__u32 bus_data_start, bus_data_end;
+	unsigned short max_page0_len;
+
+	if (!data || (len == 0))
+		return NULL;
+
+	/* Setup the first TD, leaving buf_end = 0 */
+	head = ohci_get_free_td(dev);
+	if (head == NULL) {
+		printk(KERN_ERR "usb-ohci: out of TDs\n");
+		return NULL;
+	}
+
+	ohci_fill_new_td(head,
+		td_set_dir_out(dir),
+		toggle & OHCI_TD_DT,
+		(round ? OHCI_TD_ROUND : 0),
+		data, 0,
+		dev_id, handler);
+	if (!auto_free)
+		noauto_free_td(head);
+
+	cur_td = head;
+
+	/* AFICT, that the OHCI controller takes care of the innards of
+	 * bulk & control data transfers by sending zero length
+	 * packets as necessary if the transfer falls on an even packet
+	 * size boundary, we don't need a special TD for that. */
+
+	while (len > 0) {
+		bus_data_start = virt_to_bus(data);
+		bus_data_end = virt_to_bus(data+(len-1));
+
+		/* check the 4096 byte alignment of the start of the data */
+		max_page0_len = 0x1000 - (bus_data_start & 0xfff);
+
+		/* check if the remaining data occupies more than two pages */
+		if ((max_page0_len < len) && (len - max_page0_len > 0x1000)) {
+			struct ohci_td *new_td;
+
+			/* Point this TD to data up through the end of
+			 * the second page */
+			cur_td->buf_end = bus_data_start +
+				(max_page0_len + 0xfff);
+
+			/* adjust the data pointer & remaining length */
+			data += (max_page0_len + 0x1000);
+			len  -= (max_page0_len + 0x1000);
+
+			/* TODO lookup effect of rounding bit on
+			 * individual TDs vs. whole TD chain transfers;
+			 * disable cur_td's rounding bit here if needed. */
+
+			/* mark that this is not the last TD... */
+			clear_td_endofchain(cur_td);
+
+			/* allocate another td */
+			new_td = ohci_get_free_td(dev);
+			if (new_td == NULL) {
+				printk(KERN_ERR "usb-ohci: out of TDs\n");
+				/* FIXME: free any allocated TDs */
+				return NULL;
+			}
+
+			ohci_fill_new_td(new_td,
+				td_set_dir_out(dir),
+				TOGGLE_AUTO,  /* toggle Data0/1 via the ED */
+				round ? OHCI_TD_ROUND : 0,
+				data, 0,
+				dev_id, handler);
+			if (!auto_free)
+				noauto_free_td(new_td);
+
+			/* Link the new TD to the chain & advance */
+			cur_td->next_td = virt_to_bus(new_td);
+			cur_td = new_td;
+		} else {
+			/* Last TD in this chain, normal buf_end is fine */
+			cur_td->buf_end = bus_data_end;
+
+			set_td_endofchain(cur_td);
+
+			len = 0;
+			break;
+		}
+	} /* while */
+
+	/* link the given next_td to the end of this chain */
+	cur_td->next_td = next_td;
+
+	return head;
+} /* ohci_build_td_chain() */
+
+
+/*
+ * Compute the number of bytes that have been transferred on a given
+ * TD.  Do not call this on TDs that are active on the host
+ * controller.
+ */
+static __u16 ohci_td_bytes_done(struct ohci_td *td)
+{
+	__u16 result;
+	__u32 bus_data_start, bus_data_end;
+
+	bus_data_start = virt_to_bus(td->data);
+	if (!td->data || !bus_data_start)
+		return 0;
+
+	/* if cur_buf is 0, all data has been transferred */
+	bus_data_end = td->cur_buf ? td->cur_buf : td->buf_end;
+
+	/* is it on the same page? */
+	if ((bus_data_start & ~0xfff) == (bus_data_end & ~0xfff)) {
+		result = bus_data_end - bus_data_start + 1;
+	} else {
+		/* compute the amount transferred on the first page */
+		result = 0x1000 - (bus_data_start & 0xfff);
+		/* add the amount done in the second page */
+		result += (bus_data_end & 0xfff) + 1;
+	}
+
+	return result;
+} /* ohci_td_bytes_done() */
+
+
 /**********************************
  * OHCI interrupt list operations *
  **********************************/
@@ -762,6 +932,10 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	/* Assimilate the new ED into the collective */
 	ohci_add_periodic_ed(dev->ohci, interrupt_ed, period);
 
+	/* FIXME: return a request handle that can be used by the
+	 * caller to cancel this request.  Be sure its guaranteed not
+	 * to be re-used until the caller is guaranteed to know that
+	 * the transfer has ended or been cancelled */
 	return 0;
 } /* ohci_request_irq() */
 
@@ -794,8 +968,7 @@ static int ohci_control_completed(int stats, void *buffer, int len, void *dev_id
  * Send or receive a control message on a "pipe"
  *
  * The cmd parameter is a pointer to the 8 byte setup command to be
- * sent.  FIXME:  This is a devrequest in usb.h.  The function
- * should be updated to accept a devrequest* instead of void*..
+ * sent.
  *
  * A control message contains:
  *   - The command itself
@@ -811,7 +984,6 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 	struct ohci_ed *control_ed = ohci_get_free_ed(dev);
 	struct ohci_td *setup_td, *data_td, *status_td;
 	DECLARE_WAITQUEUE(wait, current);
-	unsigned long flags;
 	int completion_status = -1;
 	devrequest our_cmd;
 
@@ -861,55 +1033,15 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 	ohci_fill_new_td(setup_td, OHCI_TD_D_SETUP, TOGGLE_DATA0,
 			OHCI_TD_IOC_OFF,
 			&our_cmd, 8,	/* cmd is always 8 bytes long */
-			NULL, NULL);
+			&completion_status, NULL);
 
-	/* allocate the next TD */
-	data_td = ohci_get_free_td(dev);
-	if (!data_td) {
-		printk(KERN_ERR "usb-ohci: couldn't get TD for dev %p [cntl data]\n", dev);
+	/* Allocate a TD for the control xfer status */
+	status_td = ohci_get_free_td(dev);
+	if (!status_td) {
+		printk("usb-ohci: couldn't get TD for dev %p [cntl status]\n", dev);
 		ohci_free_td(setup_td);
 		ohci_free_ed(control_ed);
 		return -1;
-	}
-
-	/* link to the next TD */
-	setup_td->next_td = cpu_to_le32(virt_to_bus(data_td));
-
-	if (len > 0) {
-
-		/* build the Control DATA TD, it starts with a DATA1. */
-		ohci_fill_new_td(data_td, td_set_dir_out(usb_pipeout(pipe)),
-				TOGGLE_DATA1,
-				OHCI_TD_ROUND | OHCI_TD_IOC_OFF,
-				data, len,
-				NULL, NULL);
-
-		/*
-		 * TODO: Normal TDs can transfer up to 8192 bytes on OHCI.
-		 * However, for that to happen, the data must -start-
-		 * on a nice 4kb page.  We need to check for data
-		 * sizes > 4096 and, if they cross more than two 4096
-		 * byte pages of memory one or more additional TDs
-		 * will need to be created.  (repeat doing this in a
-		 * loop until all of the DATA is on a TD)
-		 *
-		 * Control transfers are -highly unlikely- to need to
-		 * transfer this much data.. but who knows.. sadistic
-		 * hardware is sure to exist.
-		 */
-
-		status_td = ohci_get_free_td(dev);  /* TODO check for NULL */
-		if (!status_td) {
-			printk(KERN_ERR "usb-ohci: couldn't get TD for dev %p [cntl status]\n", dev);
-			ohci_free_td(setup_td);
-			ohci_free_td(data_td);
-			ohci_free_ed(control_ed);
-			return -1;
-		}
-
-		data_td->next_td = cpu_to_le32(virt_to_bus(status_td));
-	} else {
-		status_td = data_td; /* no data_td, use it for status */
 	}
 
 	/* The control status packet always uses a DATA1
@@ -923,27 +1055,44 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 			&completion_status, ohci_control_completed);
 	status_td->next_td = 0; /* end of TDs */
 
+	/* If there is data to transfer, create the chain of data TDs
+	 * followed by the status TD. */
+	if (len > 0) {
+		data_td = ohci_build_td_chain( dev, data, len,
+				usb_pipeout(pipe), TOGGLE_DATA1,
+				1 /* round */, 1 /* autofree */,
+				&completion_status, NULL /* no handler here */,
+				virt_to_bus(status_td) );
+		if (!data_td) {
+			printk(KERN_ERR "usb-ohci: couldn't allocate control data TDs for dev %p\n", dev);
+			ohci_free_td(setup_td);
+			ohci_free_td(status_td);
+			ohci_free_ed(control_ed);
+			return -1;
+		}
+
+		/* link the to the data & status TDs */
+		setup_td->next_td = virt_to_bus(data_td);
+	} else {
+		/* no data TDs, link to the status TD */
+		setup_td->next_td = virt_to_bus(status_td);
+	}
+
 	/*
-	 * Add the chain of 2-3 control TDs to the control ED's TD list
+	 * Add the control TDs to the control ED (setup_td is the first)
 	 */
-	spin_lock_irqsave(&ohci_edtd_lock, flags);
-	setup_td = ohci_add_td_to_ed(setup_td, status_td, control_ed);
-	spin_unlock_irqrestore(&ohci_edtd_lock, flags);
+	setup_td = ohci_add_td_chain_to_ed(setup_td, control_ed);
+  	control_ed->status &= ~OHCI_ED_SKIP;
+  	ohci_unhalt_ed(control_ed);
 
 #ifdef OHCI_DEBUG
 	if (MegaDebug) {
 	/* complete transaction debugging output (before) */
 	printk(KERN_DEBUG " Control ED %lx:\n", virt_to_bus(control_ed));
 	show_ohci_ed(control_ed);
-	printk(KERN_DEBUG " Setup TD %lx:\n", virt_to_bus(setup_td));
-	show_ohci_td(setup_td);
-	if (data_td != status_td) {
-		printk(KERN_DEBUG " Data TD %lx:\n", virt_to_bus(data_td));
-		show_ohci_td(data_td);
-	}
-	printk(KERN_DEBUG " Status TD %lx:\n", virt_to_bus(status_td));
-	show_ohci_td(status_td);
-	printk(KERN_DEBUG " Controller Status:\n");
+	printk(KERN_DEBUG " Control TD chain:\n");
+	show_ohci_td_chain(setup_td);
+	printk(KERN_DEBUG " OHCI Controller Status:\n");
 	show_ohci_status(dev->ohci);
 	}
 #endif
@@ -966,18 +1115,14 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 	/* complete transaction debugging output (after) */
 	printk(KERN_DEBUG " *after* Control ED %lx:\n", virt_to_bus(control_ed));
 	show_ohci_ed(control_ed);
-	printk(KERN_DEBUG " *after* Setup TD %lx:\n", virt_to_bus(setup_td));
-	show_ohci_td(setup_td);
-	if (data_td != status_td) {
-		printk(KERN_DEBUG " *after* Data TD %lx:\n", virt_to_bus(data_td));
-		show_ohci_td(data_td);
-	}
-	printk(KERN_DEBUG " *after* Status TD %lx:\n", virt_to_bus(status_td));
-	show_ohci_td(status_td);
-	printk(KERN_DEBUG " *after* Controller Status:\n");
+	printk(KERN_DEBUG " *after* Control TD chain:\n");
+	show_ohci_td_chain(setup_td);
+	printk(KERN_DEBUG " *after* OHCI Controller Status:\n");
 	show_ohci_status(dev->ohci);
 	}
 #endif
+
+	/* no TD cleanup, the TDs were auto-freed as they finished */
 
 	/* remove the control ED from the HC */
 	ohci_remove_control_ed(dev->ohci, control_ed);
@@ -1006,6 +1151,219 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 #endif
 	return completion_status;
 } /* ohci_control_msg() */
+
+
+/**********************************************************************
+ *  Bulk transfer processing
+ **********************************************************************/
+
+/*
+ * Internal state for an ohci_bulk_request
+ */
+struct ohci_bulk_request_state {
+	struct usb_device *usb_dev;
+	unsigned int	pipe;		/* usb "pipe" */
+	void		*data;		/* ptr to data */
+	int		length;		/* length to transfer */
+	int		_bytes_done;	/* bytes transferred so far */
+	unsigned long	*bytes_transferred_p;	/* where to increment */
+	void		*dev_id;	/* pass to the completion handler */
+	usb_device_irq	completion;	/* completion handler */
+};
+
+/*
+ * this handles the individual TDs of a (possibly) larger bulk
+ * request.  It keeps track of the total bytes transferred, calls the
+ * final completion handler, etc.
+ */
+static int ohci_bulk_td_handler(int stats, void *buffer, int len, void *dev_id)
+{
+	struct ohci_bulk_request_state *req;
+
+	req = (struct ohci_bulk_request_state *) dev_id;
+
+#ifdef OHCI_DEBUG
+	printk(KERN_DEBUG "ohci_bulk_td_handler stats %x, buffer %p, len %d, req %p\n", stats, buffer, len, req);
+#endif
+
+	/* only count TDs that were completed successfully */
+	if (stats == USB_ST_NOERROR)
+		req->_bytes_done += len;
+
+#ifdef OHCI_DEBUG
+	printk(KERN_DEBUG "ohci_bulk_td_handler %d bytes done\n", req->_bytes_done);
+#endif
+
+	/* call the real completion handler when done or on an error */
+	if ((stats != USB_ST_NOERROR) ||
+	    (req->_bytes_done >= req->length && req->completion != NULL)) {
+		*req->bytes_transferred_p += req->_bytes_done;
+#ifdef OHCI_DEBUG
+		printk(KERN_DEBUG "usb-ohci: bulk request %p ending after %d bytes\n", req, req->_bytes_done);
+#endif
+		req->completion(stats, buffer, req->_bytes_done, req->dev_id);
+	}
+
+	return 0;	/* do not re-queue the TD */
+} /* ohci_bulk_td_handler() */
+
+
+/*
+ * Request to send or receive bulk data.  The completion() function
+ * will be called when the transfer has completed or been aborted due
+ * to an error.
+ *
+ * bytes_transferred_p is a pointer to an integer that will be
+ * -incremented- by the number of bytes that have been successfully
+ * transferred.  The interrupt handler will update it after each
+ * internal TD completes successfully.
+ *
+ * This function can NOT be called from an interrupt (?)
+ * (TODO: verify & fix this if needed).
+ *
+ * Returns: a pointer to the ED being used for this request.  At the
+ * moment, removing & freeing it is the responsibilty of the caller.
+ */
+static struct ohci_ed* ohci_request_bulk(struct ohci_bulk_request_state *bulk_request)
+{
+	/* local names for the readonly fields */
+	struct usb_device *usb_dev = bulk_request->usb_dev;
+	unsigned int pipe = bulk_request->pipe;
+	void *data = bulk_request->data;
+	int len = bulk_request->length;
+
+	struct ohci_device *dev = usb_to_ohci(usb_dev);
+	struct ohci_ed *bulk_ed;
+	struct ohci_td *head_td;
+	unsigned long flags;
+
+#ifdef OHCI_DEBUG 
+	printk(KERN_DEBUG "ohci_request_bulk(%p) ohci_dev %p, completion %p, pipe %x, data %p, len %d\n", bulk_request, dev, bulk_request->completion, pipe, data, len);
+#endif
+
+	bulk_ed = ohci_get_free_ed(dev);
+	if (!bulk_ed) {
+		printk("usb-ohci: couldn't get ED for dev %p\n", dev);
+		return NULL;
+	}
+
+	/* allocate & fill in the TDs for this request */
+	head_td = ohci_build_td_chain(dev, data, len, usb_pipeout(pipe),
+			TOGGLE_AUTO,
+			0 /* round not required */, 1 /* autofree */,
+			bulk_request,  /* dev_id: the bulk_request  */
+			ohci_bulk_td_handler,
+			0 /* no additional TDs */);
+	if (!head_td) {
+		printk("usb-ohci: couldn't get TDs for dev %p\n", dev);
+		ohci_free_ed(bulk_ed);
+		return NULL;
+	}
+
+	/* Set the max packet size, device speed, endpoint number, usb
+	 * device number (function address), and type of TD. */
+	ohci_fill_ed(dev, bulk_ed,
+		usb_maxpacket(usb_dev, pipe),
+		usb_pipeslow(pipe),
+		usb_pipe_endpdev(pipe), 0 /* bulk uses normal TDs */);
+
+	/* initialize the internal counter */
+	bulk_request->_bytes_done = 0;
+
+	/*
+	 * Add the TDs to the ED
+	 */
+	spin_lock_irqsave(&ohci_edtd_lock, flags);
+	bulk_ed->status |= OHCI_ED_SKIP;
+	head_td = ohci_add_td_chain_to_ed(head_td, bulk_ed);
+	bulk_ed->status &= ~OHCI_ED_SKIP;
+	ohci_unhalt_ed(bulk_ed);
+	spin_unlock_irqrestore(&ohci_edtd_lock, flags);
+
+
+#ifdef OHCI_DEBUG
+/*	if (MegaDebug) { */
+	/* complete transaction debugging output (before) */
+	printk(KERN_DEBUG " Bulk ED %lx:\n", virt_to_bus(bulk_ed));
+	show_ohci_ed(bulk_ed);
+	printk(KERN_DEBUG " Bulk TDs %lx:\n", virt_to_bus(head_td));
+	show_ohci_td_chain(head_td);
+/*	} */
+#endif
+
+	/* Give the ED to the HC */
+	ohci_add_bulk_ed(dev->ohci, bulk_ed);
+
+	return bulk_ed;
+} /* ohci_request_bulk() */
+
+
+static DECLARE_WAIT_QUEUE_HEAD(bulk_wakeup);
+
+
+static int ohci_bulk_msg_completed(int stats, void *buffer, int len, void *dev_id)
+{
+	if (dev_id != NULL) {
+		int *completion_status = (int *)dev_id;
+		*completion_status = stats;
+	}
+
+	wake_up(&bulk_wakeup);
+	return 0;	/* don't requeue the TD */
+} /* ohci_bulk_msg_completed() */
+
+
+static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *bytes_transferred_p)
+{
+	DECLARE_WAITQUEUE(wait, current);
+	int completion_status = USB_ST_INTERNALERROR;
+	struct ohci_bulk_request_state req;
+	struct ohci_ed *req_ed;
+
+	/* ....... */
+
+#ifdef OHCI_DEBUG 
+	printk(KERN_DEBUG "ohci_bulk_msg %p pipe %x, data %p, len %d, bytes_transferred %p\n", usb_dev, pipe, data, len, bytes_transferred_p);
+#endif
+
+	req.usb_dev = usb_dev;
+	req.pipe = pipe;
+	req.data = data;
+	req.length = len;
+	req.bytes_transferred_p = bytes_transferred_p;
+	req.dev_id = &completion_status;
+	req.completion = ohci_bulk_msg_completed;
+
+	/*
+	 * Start the transaction..
+	 */
+	current->state = TASK_UNINTERRUPTIBLE;
+	add_wait_queue(&bulk_wakeup, &wait);
+
+	req_ed = ohci_request_bulk(&req);
+
+	/* FIXME this should to wait for a caller specified time... */
+	schedule_timeout(HZ*5);
+
+#ifdef OHCI_DEBUG
+	printk(KERN_DEBUG "ohci_bulk_msg request completed or timed out w/ status %x\n", completion_status);
+#endif
+
+	remove_wait_queue(&bulk_wakeup, &wait);
+
+	/* remove the ED from the HC */
+	ohci_remove_bulk_ed(usb_to_ohci(usb_dev)->ohci, req_ed);
+	ohci_free_ed(req_ed);	 /* return it to the pool */
+
+#ifdef OHCI_DEBUG
+	printk(KERN_DEBUG "ohci_bulk_msg done.\n");
+#endif
+
+	return completion_status;
+} /* ohci_bulk_msg() */
+
+
+/* .......... */
 
 
 /*
@@ -1079,8 +1437,6 @@ static int ohci_usb_deallocate(struct usb_device *usb_dev)
 	return 0;
 }
 
-/* FIXME! */
-#define ohci_bulk_msg NULL
 
 /*
  * functions for the generic USB driver
@@ -1404,6 +1760,7 @@ static void ohci_reap_donelist(struct ohci *ohci)
 {
 	struct ohci_td *td;		/* used for walking the list */
 
+	/* um... isn't this dangerous to do in an interrupt handler? -greg */
 	spin_lock(&ohci_edtd_lock);
 
 	/* create the FIFO ordered donelist */
@@ -1416,18 +1773,12 @@ static void ohci_reap_donelist(struct ohci *ohci)
 		if (td_dummy(*td))
 			printk(KERN_ERR "yikes! reaping a dummy TD\n");
 
-		/* FIXME: munge td->info into a future standard status format */
-
-		if (cc != 0 && ohci_ed_halted(td->ed) && td->completed == 0) {
+		if (cc != 0 && ohci_ed_halted(td->ed) && !td_endofchain(*td)) {
 			/*
 			 * There was an error on this TD and the ED
 			 * is halted, and this was not the last TD
 			 * of the transaction, so there will be TDs
 			 * to clean off the ED.
-			 * (We assume that a TD with a non-NULL completed
-			 * field is the last one of a transaction.
-			 * Ultimately we should have a flag in the TD
-			 * to say that it is the last one.)
 			 */
 			struct ohci_ed *ed = td->ed;
 			struct ohci_td *tail_td = bus_to_virt(ed_tail_td(ed));
@@ -1437,17 +1788,27 @@ static void ohci_reap_donelist(struct ohci *ohci)
 			td = ntd = bus_to_virt(ed_head_td(ed));
 			while (td != tail_td) {
 				ntd = bus_to_virt(le32_to_cpup(&td->next_td));
-				if (td->completed != 0)
-					break;
-				ohci_free_td(td);
+
+				/* only deal with TDs from this ED,
+				 * the host controller could have
+				 * processed other endpoints at the
+				 * same time as this one.. */
+				if (td->ed == ed) {
+					if (td_endofchain(*td))
+						break;
+
+					/* FIXME: unlink this TD from the
+					 * reverse donelist! */
+					ohci_free_td(td);
+				}
+
 				td = ntd;
 			}
 			/* Set the ED head past the ones we cleaned
 			   off, and clear the halted flag */
 			set_ed_head_td(ed, virt_to_bus(ntd));
 			ohci_unhalt_ed(ed);
-			/* If we didn't find a TD with a completion
-			   routine, give up */
+			/* If we didn't find an endofchain TD, give up */
 			if (td == tail_td) {
 				td = next_td;
 				continue;
@@ -1456,7 +1817,7 @@ static void ohci_reap_donelist(struct ohci *ohci)
 
 		/* Check if TD should be re-queued */
 		if ((td->completed != NULL) &&
-		    (td->completed(cc, td->data, -1 /* XXX */, td->dev_id))) {
+		    (td->completed(cc, td->data, ohci_td_bytes_done(td), td->dev_id))) {
 			/* Mark the TD as active again:
 			 * Set the not accessed condition code
 			 * Reset the Error count
@@ -1473,7 +1834,8 @@ static void ohci_reap_donelist(struct ohci *ohci)
 			ohci_add_td_to_ed(td, td, td->ed);
 		} else {
 			/* return it to the pool of free TDs */
-			ohci_free_td(td);
+			if (can_auto_free(*td))
+				ohci_free_td(td);
 		}
 
 		td = next_td;
@@ -1515,6 +1877,13 @@ static void ohci_interrupt(int irq, void *__ohci, struct pt_regs *r)
 
 	/* Disable HC interrupts */ /* why? - paulus */
 	writel(OHCI_INTR_MIE, &regs->intrdisable);
+
+#if 0
+	/* Only do this for SERIOUS debugging, be sure kern.debug logs
+	 * are not going to the console as this can cause your
+	 * machine to lock up if so... -greg */
+	show_ohci_status(ohci);
+#endif
 
 	/* Process the done list */
 	if (context & OHCI_INTR_WDH) {
@@ -1856,9 +2225,11 @@ static int ohci_control_thread(void * __ohci)
 				show_ohci_status(ohci);
 			} else if (signr == SIGUSR2) {
 				/* toggle mega TD/ED debugging output */
+#ifdef OHCI_DEBUG
 				MegaDebug = !MegaDebug;
 				printk(KERN_DEBUG "usb-ohci: Mega debugging %sabled.\n",
 						MegaDebug ? "en" : "dis");
+#endif
 			} else {
 				/* unknown signal, exit the thread */
 				break;
@@ -2084,9 +2455,6 @@ int ohci_init(void)
 } /* ohci_init */
 
 
-/* vim:sw=8
- */
-
 #ifdef MODULE
 /*
  *  Clean up when unloading the module
@@ -2103,4 +2471,5 @@ int init_module(void){
 }
 #endif //MODULE
 
-
+/* vim:sw=8
+ */

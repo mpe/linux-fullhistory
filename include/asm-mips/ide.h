@@ -23,7 +23,8 @@
 struct ide_ops {
 	int (*ide_default_irq)(ide_ioreg_t base);
 	ide_ioreg_t (*ide_default_io_base)(int index);
-	void (*ide_init_hwif_ports)(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq);
+	void (*ide_init_hwif_ports)(hw_regs_t *hw, ide_ioreg_t data_port,
+	                            ide_ioreg_t ctrl_port, int *irq);
 	int (*ide_request_irq)(unsigned int irq, void (*handler)(int, void *,
 	                       struct pt_regs *), unsigned long flags,
 	                       const char *device, void *dev_id);
@@ -46,9 +47,11 @@ static __inline__ ide_ioreg_t ide_default_io_base(int index)
 	return ide_ops->ide_default_io_base(index);
 }
 
-static __inline__ void ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq)
+static __inline__ void ide_init_hwif_ports(hw_regs_t *hw,
+                                           ide_ioreg_t data_port,
+                                           ide_ioreg_t ctrl_port, int *irq)
 {
-	ide_ops->ide_init_hwif_ports(hw->io_ports, data_port, ctrl_port, &hw->irq);
+	ide_ops->ide_init_hwif_ports(hw, data_port, ctrl_port, &hw->irq);
 
 	hw->irq = ide_ops->ide_default_irq(data_port);
 }

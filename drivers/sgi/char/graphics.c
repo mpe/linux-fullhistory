@@ -1,7 +1,10 @@
-/*
+/* $Id: graphics.c,v 1.16 1999/04/01 23:45:00 ulfc Exp $
+ *
  * gfx.c: support for SGI's /dev/graphics, /dev/opengl
  *
  * Author: Miguel de Icaza (miguel@nuclecu.unam.mx)
+ *         Ralf Baechle (ralf@gnu.org)
+ *         Ulf Carlsson (ulfc@bun.falkenberg.se)
  *
  * On IRIX, /dev/graphics is [10, 146]
  *          /dev/opengl   is [10, 147]
@@ -21,35 +24,56 @@
  * We implement those misterious things, and tried not to think about
  * the reasons behind them.
  */
+#include <linux/kernel.h>
 #include <linux/fs.h>
+#include <linux/init.h>
 #include <linux/miscdevice.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
+#include <linux/malloc.h>
+#include <linux/module.h>
 #include <asm/uaccess.h>
 #include "gconsole.h"
 #include "graphics.h"
+#include "usema.h"
 #include <asm/gfx.h>
 #include <asm/rrm.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/newport.h>
+
+#define DEBUG
 
 /* The boards */
-#include "newport.h"
-
-#ifdef PRODUCTION_DRIVER
-#define enable_gconsole()
-#define disable_gconsole()
-#endif
+extern struct graphics_ops *newport_probe (int, const char **);
 
 static struct graphics_ops cards [MAXCARDS];
 static int boards;
 
 #define GRAPHICS_CARD(inode) 0
 
+/*
+void enable_gconsole(void) {};
+void disable_gconsole(void) {};
+*/
+
+
 int
 sgi_graphics_open (struct inode *inode, struct file *file)
 {
+	struct newport_regs *nregs =
+		(struct newport_regs *) KSEG1ADDR(cards[0].g_regs);
+
+	newport_wait();
+	nregs->set.wrmask = 0xffffffff;
+	nregs->set.drawmode0 = (NPORT_DMODE0_DRAW | NPORT_DMODE0_BLOCK |
+			     NPORT_DMODE0_DOSETUP | NPORT_DMODE0_STOPX |
+			     NPORT_DMODE0_STOPY);
+	nregs->set.colori = 1;
+	nregs->set.xystarti = (0 << 16) | 0;
+	nregs->go.xyendi = (1280 << 16) | 1024;
+
 	return 0;
 }
 
@@ -59,10 +83,10 @@ sgi_graphics_ioctl (struct inode *inode, struct file *file, unsigned int cmd, un
 	unsigned int board;
 	unsigned int devnum = GRAPHICS_CARD (inode->i_rdev);
 	int i;
-	
+
 	if ((cmd >= RRM_BASE) && (cmd <= RRM_CMD_LIMIT))
 		return rrm_command (cmd-RRM_BASE, (void *) arg);
-	
+
 	switch (cmd){
 	case GFX_GETNUM_BOARDS:
 		return boards;
@@ -113,7 +137,7 @@ sgi_graphics_ioctl (struct inode *inode, struct file *file, unsigned int cmd, un
 			printk ("Parameter board does not match the current board\n");
 			return -EINVAL;
 		}
-		
+
 		if (board >= boards)
 			return -EINVAL;
 
@@ -126,11 +150,11 @@ sgi_graphics_ioctl (struct inode *inode, struct file *file, unsigned int cmd, un
 		 * sgi_graphics_mmap
 		 */
 		disable_gconsole ();
-		r = do_mmap (file, (unsigned long)vaddr, cards [board].g_regs_size,
-			 PROT_READ|PROT_WRITE, MAP_FIXED|MAP_PRIVATE, 0);
+		r = do_mmap (file, (unsigned long)vaddr,
+			     cards[board].g_regs_size, PROT_READ|PROT_WRITE,
+			     MAP_FIXED|MAP_PRIVATE, 0);
 		if (r)
 			return r;
-
 	}
 
 	/* Strange, the real mapping seems to be done at GFX_ATTACH_BOARD,
@@ -141,13 +165,13 @@ sgi_graphics_ioctl (struct inode *inode, struct file *file, unsigned int cmd, un
 
 	case GFX_LABEL:
 		return 0;
-			
+
 		/* Version check
 		 * for my IRIX 6.2 X server, this is what the kernel returns
 		 */
 	case 1:
 		return 3;
-		
+
 	/* Xsgi does not use this one, I assume minor is the board being queried */
 	case GFX_IS_MANAGED:
 		if (devnum > boards)
@@ -166,14 +190,15 @@ int
 sgi_graphics_close (struct inode *inode, struct file *file)
 {
 	int board = GRAPHICS_CARD (inode->i_rdev);
-	
+
 	/* Tell the rendering manager that one client is going away */
 	rrm_close (inode, file);
 
 	/* Was this file handle from the board owner?, clear it */
 	if (current == cards [board].g_owner){
 		cards [board].g_owner = 0;
-		(*cards [board].g_reset_console)();
+		if (cards [board].g_reset_console)
+			(*cards [board].g_reset_console)();
 		enable_gconsole ();
 	}
 	return 0;
@@ -184,37 +209,42 @@ sgi_graphics_close (struct inode *inode, struct file *file)
  */
 
 unsigned long
-sgi_graphics_nopage (struct vm_area_struct *vma, unsigned long address, int write_access)
+sgi_graphics_nopage (struct vm_area_struct *vma, unsigned long address, int
+		     no_share)
 {
-	unsigned long page;
+	pgd_t *pgd; pmd_t *pmd; pte_t *pte; 
 	int board = GRAPHICS_CARD (vma->vm_dentry->d_inode->i_rdev);
 
-#ifdef DEBUG_GRAPHICS
-	printk ("Got a page fault for board %d address=%lx guser=%lx\n", board, address,
-		cards [board].g_user);
-#endif
-	
-	/* 1. figure out if another process has this mapped,
-	 * and revoke the mapping in that case.
-	 */
-	if (cards [board].g_user && cards [board].g_user != current){
-		/* FIXME: save graphics context here, dump it to rendering node? */
-		remove_mapping (cards [board].g_user, vma->vm_start, vma->vm_end);
-	}
-	cards [board].g_user = current;
-#if DEBUG_GRAPHICS
-	printk ("Registers: 0x%lx\n", cards [board].g_regs);
-	printk ("vm_start:  0x%lx\n", vma->vm_start);
-	printk ("address:   0x%lx\n", address);
-	printk ("diff:      0x%lx\n", (address - vma->vm_start));
+	unsigned long virt_add, phys_add;
 
-	printk ("page/pfn:  0x%lx\n", page);
-	printk ("TLB entry: %lx\n", pte_val (mk_pte (page + PAGE_OFFSET, PAGE_USERIO)));
+#ifdef DEBUG
+	printk ("Got a page fault for board %d address=%lx guser=%lx\n", board,
+		address, (unsigned long) cards[board].g_user);
 #endif
 	
-	/* 2. Map this into the current process address space */
-	page = ((cards [board].g_regs) + (address - vma->vm_start));
-	return page + PAGE_OFFSET;
+	/* Figure out if another process has this mapped, and revoke the mapping
+	 * in that case. */
+	if (cards[board].g_user && cards[board].g_user != current) {
+		/* FIXME: save graphics context here, dump it to rendering
+		 * node? */
+
+		remove_mapping(cards[board].g_user, vma->vm_start, vma->vm_end);
+	}
+
+	cards [board].g_user = current;
+
+	/* Map the physical address of the newport registers into the address
+	 * space of this process */
+
+	virt_add = address & PAGE_MASK;
+	phys_add = cards[board].g_regs + virt_add - vma->vm_start;
+	remap_page_range(virt_add, phys_add, PAGE_SIZE, vma->vm_page_prot);
+
+	pgd = pgd_offset(current->mm, address);
+	pmd = pmd_offset(pgd, address);
+	pte = pte_offset(pmd, address);
+	printk("page: %08lx\n", pte_page(*pte));
+	return pte_page(*pte);
 }
 
 /*
@@ -237,7 +267,7 @@ static struct vm_operations_struct graphics_mmap = {
 };
 	
 int
-sgi_graphics_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
+sgi_graphics_mmap (struct file *file, struct vm_area_struct *vma)
 {
 	uint size;
 
@@ -250,12 +280,13 @@ sgi_graphics_mmap (struct inode *inode, struct file *file, struct vm_area_struct
 
 	/* 2. Set the special tlb permission bits */
 	vma->vm_page_prot = PAGE_USERIO;
-		
+
 	/* final setup */
-	vma->vm_dentry = dget (file->f_dentry);
+	vma->vm_file = file;
 	return 0;
 }
-	
+
+#if 0
 /* Do any post card-detection setup on graphics_ops */
 static void
 graphics_ops_post_init (int slot)
@@ -264,6 +295,7 @@ graphics_ops_post_init (int slot)
 	cards [slot].g_owner = (struct task_struct *) 0;
 	cards [slot].g_user  = (struct task_struct *) 0;
 }
+#endif
 
 struct file_operations sgi_graphics_fops = {
 	NULL,			/* llseek */
@@ -284,33 +316,36 @@ struct file_operations sgi_graphics_fops = {
 
 /* /dev/graphics */
 static struct miscdevice dev_graphics = {
-        SGI_GRAPHICS_MINOR, "sgi-graphics", &sgi_graphics_fops
+	SGI_GRAPHICS_MINOR, "sgi-graphics", &sgi_graphics_fops
 };
 
 /* /dev/opengl */
 static struct miscdevice dev_opengl = {
-        SGI_OPENGL_MINOR, "sgi-opengl", &sgi_graphics_fops
+	SGI_OPENGL_MINOR, "sgi-opengl", &sgi_graphics_fops
 };
 
 /* This is called later from the misc-init routine */
-void
-gfx_register (void)
+__initfunc(void gfx_register (void))
 {
 	misc_register (&dev_graphics);
 	misc_register (&dev_opengl);
 }
 
-void 
-gfx_init (const char **name)
+__initfunc(void gfx_init (const char **name))
 {
+#if 0
 	struct console_ops *console;
 	struct graphics_ops *g;
+#endif
 
 	printk ("GFX INIT: ");
 	shmiq_init ();
 	usema_init ();
-	
-	if ((g = newport_probe (boards, name)) != 0){
+
+	boards++;
+
+#if 0
+	if ((g = newport_probe (boards, name)) != 0) {
 		cards [boards] = *g;
 		graphics_ops_post_init (boards);
 		boards++;
@@ -318,11 +353,39 @@ gfx_init (const char **name)
 	}
 	/* Add more graphic drivers here */
 	/* Keep passing console around */
-	
-	if (boards > MAXCARDS){
-		printk ("Too many cards found on the system\n");
-		prom_halt ();
-	}
+#endif
+
+	if (boards > MAXCARDS)
+		printk (KERN_WARNING "Too many cards found on the system\n");
 }
 
+#ifdef MODULE
+int init_module(void) {
+	static int initiated = 0;
 
+	printk("SGI Newport Graphics version %i.%i.%i\n",42,54,69);
+
+	if (!initiated++) {
+		shmiq_init();
+		usema_init();
+		printk("Adding first board\n");
+		boards++;
+		cards[0].g_regs = 0x1f0f0000;
+		cards[0].g_regs_size = sizeof (struct newport_regs);
+	}
+
+	printk("Boards: %d\n", boards);
+
+	misc_register (&dev_graphics);
+	misc_register (&dev_opengl);
+
+	return 0;
+}
+
+void cleanup_module(void) {
+	printk("Shutting down SGI Newport Graphics\n");
+
+	misc_deregister (&dev_graphics);
+	misc_deregister (&dev_opengl);
+}
+#endif

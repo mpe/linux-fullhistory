@@ -1,4 +1,4 @@
-/* $Id: int-handler.S,v 1.6 1998/08/28 15:55:19 ralf Exp $
+/* $Id: int-handler.S,v 1.14 1999/05/01 22:40:34 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -91,51 +91,8 @@ ll_local_dev:	lbu	t0,JAZZ_IO_IRQ_SOURCE
  * whistles and bells and we're aware of the problem.
  */
 ll_isa_irq:	lw	a0,JAZZ_EISA_IRQ_ACK
-		lui	s0,%hi(JAZZ_PORT_BASE)
-		li	s1,1
-		andi	t0,a0,8				# which pic?
-		bnez	t0,ack_second
-		andi	a0,7				# delay slot
 
-		/*
-		 * Acknowledge first pic
-		 */
-		lb	t2,%lo(JAZZ_PORT_BASE)+0x21(s0)
-		lui	s4,%hi(cache_21)
-		lb	t0,%lo(cache_21)(s4)
-		sllv	s1,s1,a0
-		or	t0,s1
-		sb	t0,%lo(cache_21)(s4)
-		sb	t0,%lo(JAZZ_PORT_BASE)+0x21(s0)
-		li	t2,0x20
-		sb	t2,%lo(JAZZ_PORT_BASE)+0x20(s0)
-		/*
-		 * Now call the real handler
-		 */
-		jal	do_IRQ
-		 move	a1,sp
-		j	ret_from_irq
-		nop
-
-		.align	5
-ack_second:	/*
-		 * Acknowledge second pic
-		 */
-		lbu	t2,%lo(JAZZ_PORT_BASE)+0xa1(s0)
-		lui	s4,%hi(cache_A1)
-		lb	t3,%lo(cache_A1)(s4)
-		sllv	s1,s1,a0
-		or	t3,s1
-		sb	t3,%lo(cache_A1)(s4)
-		sb	t3,%lo(JAZZ_PORT_BASE)+0xa1(s0)
-		li	t3,0x20
-		sb	t3,%lo(JAZZ_PORT_BASE)+0xa0(s0)
-		sb	t3,%lo(JAZZ_PORT_BASE)+0x20(s0)
-		/*
-		 * Now call the real handler
-		 */
-		or      a0, 8
-		jal	do_IRQ
+		jal	i8259_do_irq
 		 move	a1,sp
 
 		j	ret_from_irq
@@ -144,7 +101,7 @@ ack_second:	/*
 /*
  * Hmm...  This is not just a plain PC clone so the question is
  * which devices on Jazz machines can generate an (E)ISA NMI?
- * (Writing to nonexistant memory?)
+ * (Writing to nonexistent memory?)
  */
 ll_isa_nmi:	li	s1,~IE_IRQ3
 		PANIC("Unimplemented isa_nmi handler")
@@ -152,7 +109,7 @@ ll_isa_nmi:	li	s1,~IE_IRQ3
 /*
  * Timer IRQ - remapped to be more similar to an IBM compatible.
  *
- * The timer interrupt is handled specially to insure that the jiffies
+ * The timer interrupt is handled specially to ensure that the jiffies
  * variable is updated at all times.  Specifically, the timer interrupt is
  * just like the complete handlers except that it is invoked with interrupts
  * disabled and should never re-enable them.  If other interrupts were
@@ -163,7 +120,7 @@ ll_isa_nmi:	li	s1,~IE_IRQ3
 ll_timer:	lw	zero,JAZZ_TIMER_REGISTER # timer irq cleared on read
 		li	s1,~IE_IRQ4
 
-		li	a0,0
+		li	a0, JAZZ_TIMER_IRQ
 		jal	do_IRQ
 		 move	a1,sp
 
@@ -228,14 +185,14 @@ loc_parallel:	li	s1,~JAZZ_IE_PARALLEL
 		b	loc_call
 
 /*
- * Floppy IRQ, remapped to level 6
+ * Floppy IRQ
  */
 loc_floppy:	li	s1,~JAZZ_IE_FLOPPY
 		li	a0,JAZZ_FLOPPY_IRQ
 		b	loc_call
 
 /*
- * Sound? What sound hardware (whistle) ???
+ * Sound IRQ
  */
 loc_sound:	PANIC("Unimplemented loc_sound handler")
 loc_video:	PANIC("Unimplemented loc_video handler")

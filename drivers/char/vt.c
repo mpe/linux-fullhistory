@@ -88,7 +88,8 @@ unsigned int video_scan_lines;
  * comments - KDMKTONE doesn't put the process to sleep.
  */
 
-#if defined(__i386__) || defined(__alpha__) || defined(__powerpc__) || defined(__mips__)
+#if defined(__i386__) || defined(__alpha__) || defined(__powerpc__) \
+    || (defined(__mips__) && !defined(CONFIG_SGI))
 
 static void
 kd_nosound(unsigned long ignored)

@@ -845,7 +845,9 @@ int init_module (void)
 	
 	for (index = 0; index < MAX_HWIFS; ++index)
 		ide_unregister(index);
-	return ideprobe_init();
+	ideprobe_init();
+	create_proc_ide_interfaces();
+	return 0;
 }
 
 void cleanup_module (void)

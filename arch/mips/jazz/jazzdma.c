@@ -97,6 +97,7 @@ unsigned long vdma_alloc(unsigned long paddr, unsigned long size)
     unsigned int frame;
     unsigned long laddr;
     int i;
+    unsigned long flags;
 
     /* check arguments */
   
@@ -113,6 +114,7 @@ unsigned long vdma_alloc(unsigned long paddr, unsigned long size)
         return VDMA_ERROR;	/* invalid physical address */
     }
   
+    save_and_cli (flags);
     /*
      * Find free chunk
      */
@@ -123,8 +125,10 @@ unsigned long vdma_alloc(unsigned long paddr, unsigned long size)
         while (entry[first].owner != VDMA_PAGE_EMPTY &&
                first < VDMA_PGTBL_ENTRIES)
             first++;
-        if (first+pages > VDMA_PGTBL_ENTRIES) /* nothing free */
+        if (first+pages > VDMA_PGTBL_ENTRIES) { /* nothing free */
+	    restore_flags (flags);
             return VDMA_ERROR;
+	}
 
         last = first+1;
         while (entry[last].owner == VDMA_PAGE_EMPTY && last-first < pages)
@@ -170,6 +174,7 @@ unsigned long vdma_alloc(unsigned long paddr, unsigned long size)
         printk("\n");
     }
   
+    restore_flags(flags);
     return laddr;
 }
 

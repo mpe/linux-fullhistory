@@ -10,7 +10,7 @@
 #define __ASM_MIPS_PCI_H
 
 struct pci_ops {
-	unsigned long (*pcibios_fixup) (void);
+	void (*pcibios_fixup) (void);
 	int (*pcibios_read_config_byte) (unsigned char bus,
 	                                 unsigned char dev_fn,
 	                                 unsigned char where,

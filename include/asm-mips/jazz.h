@@ -203,15 +203,19 @@ typedef struct {
  * This is somewhat broken.  For reasons which nobody can remember anymore
  * we remap the Jazz interrupts to the usual ISA style interrupt numbers.
  */
-#define JAZZ_TIMER_IRQ          0
-#define JAZZ_KEYBOARD_IRQ       1
-#define JAZZ_FLOPPY_IRQ         6 /* needs to be consistent with floppy driver! */
-#define JAZZ_SCSI_IRQ           16
-#define JAZZ_ETHERNET_IRQ       17
-#define JAZZ_SERIAL1_IRQ        18
-#define JAZZ_SERIAL2_IRQ        19
-#define JAZZ_PARALLEL_IRQ       20
-#define JAZZ_MOUSE_IRQ          21
+#define JAZZ_PARALLEL_IRQ       16
+#define JAZZ_FLOPPY_IRQ          6 /* needs to be consistent with floppy driver! */
+#define JAZZ_SOUND_IRQ          18
+#define JAZZ_VIDEO_IRQ          19
+#define JAZZ_ETHERNET_IRQ       20
+#define JAZZ_SCSI_IRQ           21
+#define JAZZ_KEYBOARD_IRQ       22
+#define JAZZ_MOUSE_IRQ          23
+#define JAZZ_SERIAL1_IRQ        24
+#define JAZZ_SERIAL2_IRQ        25
+
+#define JAZZ_TIMER_IRQ          31
+
 
 /*
  * JAZZ DMA Channels

@@ -1748,6 +1748,13 @@ abort:
 	return 1;
 }
 
+#ifdef CONFIG_PROC_FS
+ide_proc_entry_t generic_subdriver_entries[] = {
+	{ "capacity",	S_IFREG|S_IRUGO,	proc_ide_read_capacity,	NULL },
+	{ NULL, 0, NULL, NULL }
+};
+#endif
+
 void ide_unregister (unsigned int index)
 {
 	struct gendisk *gd, **gdp;
@@ -1757,6 +1764,7 @@ void ide_unregister (unsigned int index)
 	int irq_count = 0, unit, i;
 	unsigned long flags;
 	unsigned int p, minor;
+	ide_hwif_t old_hwif;
 
 	if (index >= MAX_HWIFS)
 		return;
@@ -1793,6 +1801,9 @@ void ide_unregister (unsigned int index)
 				invalidate_buffers (devp);
 			}
 		}
+#ifdef CONFIG_PROC_FS
+		destroy_proc_ide_drives(hwif);
+#endif
 	}
 	cli();
 	hwgroup = hwif->hwgroup;
@@ -1875,7 +1886,21 @@ void ide_unregister (unsigned int index)
 		kfree(gd->part);
 		kfree(gd);
 	}
+	old_hwif = *hwif;
 	init_hwif_data (index);	/* restore hwif data to pristine status */
+	hwif->hwgroup = old_hwif.hwgroup;
+	hwif->tuneproc = old_hwif.tuneproc;
+	hwif->dmaproc = old_hwif.dmaproc;
+	hwif->dma_base = old_hwif.dma_base;
+	hwif->dma_extra = old_hwif.dma_extra;
+	hwif->config_data = old_hwif.config_data;
+	hwif->select_data = old_hwif.select_data;
+	hwif->irq = old_hwif.irq;
+	hwif->major = old_hwif.major;
+	hwif->proc = old_hwif.proc;
+	hwif->chipset = old_hwif.chipset;
+	hwif->pci_dev = old_hwif.pci_dev;
+	hwif->pci_devid = old_hwif.pci_devid;
 abort:
 	restore_flags(flags);	/* all CPUs */
 }
@@ -1950,6 +1975,9 @@ found:
 
 	if (!initializing) {
 		ide_init_module(IDE_PROBE_MODULE);
+#ifdef CONFIG_PROC_FS
+		create_proc_ide_interfaces();
+#endif
 		ide_init_module(IDE_DRIVER_MODULE);
 	}
 
@@ -1966,7 +1994,6 @@ found:
 int ide_register (int arg1, int arg2, int irq)
 {
 	hw_regs_t hw;
-
 	ide_init_hwif_ports(&hw, (ide_ioreg_t) arg1, (ide_ioreg_t) arg2, NULL);
 	hw.irq = irq;
 	return ide_register_hw(&hw, NULL);
@@ -3239,13 +3266,6 @@ search:
 	return NULL;
 }
 
-#ifdef CONFIG_PROC_FS
-static ide_proc_entry_t generic_subdriver_entries[] = {
-	{ "capacity",	S_IFREG|S_IRUGO,	proc_ide_read_capacity,	NULL },
-	{ NULL, 0, NULL, NULL }
-};
-#endif
-
 int ide_register_subdriver (ide_drive_t *drive, ide_driver_t *driver, int version)
 {
 	unsigned long flags;
@@ -3401,6 +3421,7 @@ EXPORT_SYMBOL(ide_stall_queue);
 EXPORT_SYMBOL(ide_add_proc_entries);
 EXPORT_SYMBOL(ide_remove_proc_entries);
 EXPORT_SYMBOL(proc_ide_read_geometry);
+EXPORT_SYMBOL(create_proc_ide_interfaces);
 #endif
 EXPORT_SYMBOL(ide_add_setting);
 EXPORT_SYMBOL(ide_remove_setting);

@@ -16,6 +16,7 @@
 #include <asm/io.h>			/* need byte IO */
 #include <asm/spinlock.h>		/* And spinlocks */
 #include <linux/delay.h>
+#include <asm/system.h>
 
 
 #ifdef HAVE_REALLY_SLOW_DMA_CONTROLLER
@@ -175,8 +176,6 @@ static __inline__ void disable_dma(unsigned int dmanr)
 		dma_outb(dmanr | 4,  DMA1_MASK_REG);
 	else
 		dma_outb((dmanr & 3) | 4,  DMA2_MASK_REG);
-	/* I hate voodoo programming but .. */
-	udelay(20);
 }
 
 /* Clear the 'DMA Pointer Flip Flop'.

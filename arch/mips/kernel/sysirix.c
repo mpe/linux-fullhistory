@@ -1,4 +1,4 @@
-/* $Id: sysirix.c,v 1.12 1998/08/17 10:16:27 ralf Exp $
+/* $Id: sysirix.c,v 1.20 1999/06/17 13:25:48 ralf Exp $
  *
  * sysirix.c: IRIX system call emulation.
  *
@@ -172,7 +172,7 @@ asmlinkage int irix_prctl(struct pt_regs *regs)
 	case PR_RESIDENT:
 		printk("irix_prctl[%s:%ld]: Wants PR_RESIDENT\n",
 		       current->comm, current->pid);
-		error = 0; /* Compatability indeed. */
+		error = 0; /* Compatibility indeed. */
 		break;
 
 	case PR_ATTACHADDR:
@@ -731,8 +731,9 @@ asmlinkage int irix_statfs(const char *path, struct irix_statfs *buf,
 	struct statfs kbuf;
 	int error, i;
 
-	/* We don't support this feature yet. */
 	lock_kernel();
+
+	/* We don't support this feature yet. */
 	if(fs_type) {
 		error = -EINVAL;
 		goto out;
@@ -1621,8 +1622,7 @@ asmlinkage int irix_fstatvfs(int fd, struct irix_statvfs *buf)
 		__put_user(0, &buf->f_basetype[i]);
 	__put_user(0, &buf->f_flag);
 	__put_user(kbuf.f_namelen, &buf->f_namemax);
-	for(i = 0; i < 32; i++)
-		__put_user(0, &buf->f_fstr[i]);
+	__clear_user(&buf->f_fstr, sizeof(buf->f_fstr));
 
 out_f:
 	fput(file);
@@ -1916,8 +1916,8 @@ asmlinkage int irix_fstatvfs64(int fd, struct irix_statvfs *buf)
 		__put_user(0, &buf->f_basetype[i]);
 	__put_user(0, &buf->f_flag);
 	__put_user(kbuf.f_namelen, &buf->f_namemax);
-	for(i = 0; i < 32; i++)
-		__put_user(0, &buf->f_fstr[i]);
+	__clear_user(buf->f_fstr, sizeof(buf->f_fstr[i]));
+
 out_f:
 	fput(file);
 out:
@@ -1982,22 +1982,21 @@ struct irix_dirent32_callback {
 #define NAME_OFFSET32(de) ((int) ((de)->d_name - (char *) (de)))
 #define ROUND_UP32(x) (((x)+sizeof(u32)-1) & ~(sizeof(u32)-1))
 
-static int irix_filldir32(void *__buf, const char *name, int namlen, off_t offset, ino_t ino)
+static int irix_filldir32(void *__buf, const char *name, int namlen,
+                          off_t offset, ino_t ino)
 {
 	struct irix_dirent32 *dirent;
-	struct irix_dirent32_callback *buf = (struct irix_dirent32_callback *)__buf;
+	struct irix_dirent32_callback *buf =
+		 (struct irix_dirent32_callback *)__buf;
 	unsigned short reclen = ROUND_UP32(NAME_OFFSET32(dirent) + namlen + 1);
-	int retval;
 
 #ifdef DEBUG_GETDENTS
 	printk("\nirix_filldir32[reclen<%d>namlen<%d>count<%d>]",
 	       reclen, namlen, buf->count);
 #endif
 	buf->error = -EINVAL;	/* only used if we fail.. */
-	if (reclen > buf->count) {
-		retval = -EINVAL;
-		goto out;
-	}
+	if (reclen > buf->count)
+		return -EINVAL;
 	dirent = buf->previous;
 	if (dirent)
 		__put_user(offset, &dirent->d_off);
@@ -2011,10 +2010,7 @@ static int irix_filldir32(void *__buf, const char *name, int namlen, off_t offse
 	buf->current_dir = dirent;
 	buf->count -= reclen;
 
-	retval = 0;
-
-out:
-	return retval;
+	return 0;
 }
 
 asmlinkage int irix_ngetdents(unsigned int fd, void * dirent, unsigned int count, int *eob)
@@ -2036,10 +2032,6 @@ asmlinkage int irix_ngetdents(unsigned int fd, void * dirent, unsigned int count
 		goto out;
 
 	inode = file->f_dentry->d_inode;
-	if (!inode)
-		goto out_putf;
-
-	inode = dentry->d_inode;
 	if (!inode)
 		goto out_putf;
 
@@ -2110,13 +2102,10 @@ static int irix_filldir64(void * __buf, const char * name, int namlen,
 	struct irix_dirent64_callback * buf =
 		(struct irix_dirent64_callback *) __buf;
 	unsigned short reclen = ROUND_UP64(NAME_OFFSET64(dirent) + namlen + 1);
-	int retval;
 
 	buf->error = -EINVAL;	/* only used if we fail.. */
-	if (reclen > buf->count) {
-		retval = -EINVAL;
-		goto out;
-	}
+	if (reclen > buf->count)
+		return -EINVAL;
 	dirent = buf->previous;
 	if (dirent)
 		__put_user(offset, &dirent->d_off);
@@ -2124,15 +2113,13 @@ static int irix_filldir64(void * __buf, const char * name, int namlen,
 	buf->previous = dirent;
 	__put_user(ino, &dirent->d_ino);
 	__put_user(reclen, &dirent->d_reclen);
-	copy_to_user(dirent->d_name, name, namlen);
+	__copy_to_user(dirent->d_name, name, namlen);
 	__put_user(0, &dirent->d_name[namlen]);
 	((char *) dirent) += reclen;
 	buf->curr = dirent;
 	buf->count -= reclen;
 
-	retval = 0;
-out:
-	return retval;
+	return 0;
 }
 
 asmlinkage int irix_getdents64(int fd, void *dirent, int cnt)

@@ -1,4 +1,4 @@
-/* $Id: mips_ksyms.c,v 1.12 1998/09/16 22:50:41 ralf Exp $
+/* $Id: mips_ksyms.c,v 1.19 1999/04/11 18:37:55 harald Exp $
  *
  * Export MIPS-specific functions needed for loadable modules.
  *
@@ -13,6 +13,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
+#include <asm/irq.h>
 #include <linux/in6.h>
 #include <linux/pci.h>
 
@@ -50,23 +51,25 @@ EXPORT_SYMBOL_NOVERS(strncat);
 EXPORT_SYMBOL_NOVERS(strnlen);
 EXPORT_SYMBOL_NOVERS(strrchr);
 EXPORT_SYMBOL_NOVERS(strtok);
+EXPORT_SYMBOL_NOVERS(strpbrk);
 
 EXPORT_SYMBOL(clear_page);
 EXPORT_SYMBOL(__mips_bh_counter);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
-//EXPORT_SYMBOL(enable_irq);
-//EXPORT_SYMBOL(disable_irq);
+EXPORT_SYMBOL(enable_irq);
+EXPORT_SYMBOL(disable_irq);
+EXPORT_SYMBOL(kernel_thread);
 
 /*
  * Userspace access stuff.
  */
-EXPORT_SYMBOL(__copy_user);
-EXPORT_SYMBOL(__bzero);
-EXPORT_SYMBOL(__strncpy_from_user_nocheck_asm);
-EXPORT_SYMBOL(__strncpy_from_user_asm);
-EXPORT_SYMBOL(__strlen_user_nocheck_asm);
-EXPORT_SYMBOL(__strlen_user_asm);
+EXPORT_SYMBOL_NOVERS(__copy_user);
+EXPORT_SYMBOL_NOVERS(__bzero);
+EXPORT_SYMBOL_NOVERS(__strncpy_from_user_nocheck_asm);
+EXPORT_SYMBOL_NOVERS(__strncpy_from_user_asm);
+EXPORT_SYMBOL_NOVERS(__strlen_user_nocheck_asm);
+EXPORT_SYMBOL_NOVERS(__strlen_user_asm);
 
 
 /* Networking helper routines. */
@@ -77,6 +80,10 @@ EXPORT_SYMBOL(csum_partial_copy);
  */
 EXPORT_SYMBOL(flush_page_to_ram);
 EXPORT_SYMBOL(flush_cache_all);
+EXPORT_SYMBOL(dma_cache_wback_inv);
+EXPORT_SYMBOL(dma_cache_inv);
+
+EXPORT_SYMBOL(invalid_pte_table);
 
 /*
  * Base address of ports for Intel style I/O.
@@ -106,12 +113,12 @@ int register_fpe(void (*handler)(struct pt_regs *regs, unsigned int fcr31));
 int unregister_fpe(void (*handler)(struct pt_regs *regs, unsigned int fcr31));
 
 #ifdef CONFIG_MIPS_FPE_MODULE
-EXPORT_SYMBOL(force_sig);
 EXPORT_SYMBOL(__compute_return_epc);
 EXPORT_SYMBOL(register_fpe);
 EXPORT_SYMBOL(unregister_fpe);
 #endif
 
-#if CONFIG_PCI
-EXPORT_SYMBOL(pci_devices);
+#ifdef CONFIG_VT
+EXPORT_SYMBOL(screen_info);
 #endif
+

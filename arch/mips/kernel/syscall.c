@@ -1,10 +1,10 @@
-/* $Id: syscall.c,v 1.10 1998/08/20 14:38:40 ralf Exp $
+/* $Id: syscall.c,v 1.10 1999/02/15 02:16:52 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995 - 1998 by Ralf Baechle
+ * Copyright (C) 1995 - 1999 by Ralf Baechle
  *
  * TODO:  Implement the compatibility syscalls.
  *        Don't waste that much memory for empty entries in the syscall
@@ -82,11 +82,10 @@ out:
 asmlinkage int sys_idle(void)
 {
 	unsigned long start_idle = 0;
-        int ret = -EPERM;
 
-	lock_kernel();
 	if (current->pid != 0)
-		goto out;
+		return -EPERM;
+
 	/* endless idle loop with no priority at all */
 	current->priority = 0;
 	current->counter = 0;
@@ -112,10 +111,8 @@ asmlinkage int sys_idle(void)
 			start_idle = 0;
 		schedule();
 	}
-	ret = 0;
-out:
-	unlock_kernel();
-	return ret;
+
+	return 0;
 }
 
 asmlinkage int sys_fork(struct pt_regs regs)
@@ -123,9 +120,7 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	int res;
 
 	save_static(&regs);
-	lock_kernel();
 	res = do_fork(SIGCHLD, regs.regs[29], &regs);
-	unlock_kernel();
 	return res;
 }
 
@@ -136,13 +131,11 @@ asmlinkage int sys_clone(struct pt_regs regs)
 	int res;
 
 	save_static(&regs);
-	lock_kernel();
 	clone_flags = regs.regs[4];
 	newsp = regs.regs[5];
 	if (!newsp)
 		newsp = regs.regs[29];
 	res = do_fork(clone_flags, newsp, &regs);
-	unlock_kernel();
 	return res;
 }
 

@@ -38,10 +38,12 @@ struct ohci_td {
 	void *data;			/* virt. address of the the buffer */
 	usb_device_irq completed;	/* Completion handler routine */
 	int hcd_flags;			/* Flags for the HCD: */
-		/* bit0 = boolean: Is this TD allocated? */
-		/* bit1 = boolean: Is this a dummy (end of list) TD? */
+		/* bit0: Is this TD allocated? */
+		/* bit1: Is this a dummy (end of list) TD? */
+		/* bit2: do NOT automatically free this TD on completion */
+		/* bit3: this is NOT the last TD in a contiguious TD chain
+		 *       on the indicated ED.  (0 means it is the last) */
 
-	/* User or Device class driver specific fields */
 	void *dev_id;	/* user defined pointer passed to irq handler */
 } __attribute((aligned(16)));
 
@@ -54,6 +56,7 @@ struct ohci_td {
 #define td_set_dir_out(d)	((d) ? OHCI_TD_D_OUT : OHCI_TD_D_IN )
 #define OHCI_TD_IOC_DELAY (7 << 21)	/* frame delay allowed before int. */
 #define OHCI_TD_IOC_OFF	(OHCI_TD_IOC_DELAY)	/* no interrupt on complete */
+#define td_set_ioc_delay(frames)	(((frames) & 7) << 21)
 #define OHCI_TD_DT	(3 << 24)	/* data toggle bits */
 #define TOGGLE_AUTO	(0 << 24)	/* automatic (from the ED) */
 #define TOGGLE_DATA0	(2 << 24)	/* force Data0 */
@@ -81,6 +84,19 @@ struct ohci_td {
 #define td_dummy(td)		((td).hcd_flags & 2)
 #define make_dumb_td(td)	((td)->hcd_flags |= 2)
 #define clear_dumb_td(td)	((td)->hcd_flags &= ~(__u32)2)
+
+#define td_endofchain(td)	(!((td).hcd_flags & (1 << 3)))
+#define set_td_endofchain(td)	((td)->hcd_flags &= ~(1 << 3))
+#define clear_td_endofchain(td)	((td)->hcd_flags |= (1 << 3))
+
+/*
+ * These control if the IRQ will call ohci_free_td after taking the TDs
+ * off of the donelist (assuming the completion function does not ask
+ * for the TD to be requeued).
+ */
+#define can_auto_free(td)	(!((td).hcd_flags & 4))
+#define noauto_free_td(td)	((td)->hcd_flags |= 4)
+#define auto_free_td(td)	((td)->hcd_flags &= ~(__u32)4)
 
 
 /*
@@ -369,6 +385,7 @@ struct ohci {
     	int irq;
 	struct ohci_regs *regs;			/* OHCI controller's memory */
 	struct usb_bus *bus;
+	struct ohci_device *root_hub;		/* Root hub & controller */
 	struct list_head interrupt_list;	/* List of interrupt active TDs for this OHCI */
 };
 
@@ -380,6 +397,7 @@ struct ohci {
 /* Debugging code [ohci-debug.c] */
 void show_ohci_ed(struct ohci_ed *ed);
 void show_ohci_td(struct ohci_td *td);
+void show_ohci_td_chain(struct ohci_td *td);
 void show_ohci_status(struct ohci *ohci);
 void show_ohci_device(struct ohci_device *dev);
 void show_ohci_hcca(struct ohci_hcca *hcca);

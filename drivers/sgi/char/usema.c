@@ -27,11 +27,13 @@
 #include <linux/sched.h>
 #include <linux/file.h>
 #include <linux/major.h>
+#include <linux/poll.h>
 #include <linux/string.h>
 #include <linux/dcache.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/smp_lock.h>
+#include "usema.h"
 
 #include <asm/usioctl.h>
 #include <asm/mman.h>
@@ -41,6 +43,7 @@ struct irix_usema {
 	struct file *filp;
 	wait_queue_head_t proc_list;
 };
+
 
 static int
 sgi_usema_attach (usattach_t * attach, struct irix_usema *usema)
@@ -64,7 +67,7 @@ sgi_usemaclone_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	struct irix_usema *usema = file->private_data;
 	int retval;
 	
-	printk("[%s:%d] wants ioctl 0x%xd (arg 0x%lx)",
+	printk("[%s:%ld] wants ioctl 0x%xd (arg 0x%lx)",
 	       current->comm, current->pid, cmd, arg);
 
 	switch(cmd) {
@@ -76,7 +79,7 @@ sgi_usemaclone_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		usattach_t *attach = (usattach_t *)arg;
 		retval = verify_area(VERIFY_READ, attach, sizeof(usattach_t));
 		if (retval) {
-			printk("[%s:%d] sgi_usema_ioctl(UIOCATTACHSEMA): "
+			printk("[%s:%ld] sgi_usema_ioctl(UIOCATTACHSEMA): "
 			       "verify_area failure",
 			       current->comm, current->pid);
 			return retval;
@@ -84,7 +87,8 @@ sgi_usemaclone_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		if (usema == 0)
 			return -EINVAL;
 
-		printk("UIOCATTACHSEMA: attaching usema %p to process %d\n", usema, current->pid);
+		printk("UIOCATTACHSEMA: attaching usema %p to process %ld\n",
+		       usema, current->pid);
 		/* XXX what is attach->us_handle for? */
 		return sgi_usema_attach(attach, usema);
 		break;
@@ -97,12 +101,12 @@ sgi_usemaclone_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 
 		retval = verify_area(VERIFY_READ, attach, sizeof(usattach_t));
 		if (retval) {
-			printk("[%s:%d] sgi_usema_ioctl(UIOC*BLOCK): "
+			printk("[%s:%ld] sgi_usema_ioctl(UIOC*BLOCK): "
 			       "verify_area failure",
 			       current->comm, current->pid);
 			return retval;
 		}
-		printk("UIOC*BLOCK: putting process %d to sleep on usema %p",
+		printk("UIOC*BLOCK: putting process %ld to sleep on usema %p",
 		       current->pid, usema);
 		if (cmd == UIOCNOIBLOCK)
 			interruptible_sleep_on(&usema->proc_list);
@@ -117,13 +121,13 @@ sgi_usemaclone_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 
 		retval = verify_area(VERIFY_READ, attach, sizeof(usattach_t));
 		if (retval) {
-			printk("[%s:%d] sgi_usema_ioctl(UIOC*BLOCK): "
+			printk("[%s:%ld] sgi_usema_ioctl(UIOC*BLOCK): "
 			       "verify_area failure",
 			       current->comm, current->pid);
 			return retval;
 		}
 
-		printk("[%s:%d] releasing usema %p",
+		printk("[%s:%ld] releasing usema %p",
 		       current->comm, current->pid, usema);
 		wake_up(&usema->proc_list);
 		return 0;
@@ -137,7 +141,8 @@ sgi_usemaclone_poll(struct file *filp, poll_table *wait)
 {
 	struct irix_usema *usema = filp->private_data;
 	
-	printk("[%s:%d] wants to poll usema %p", current->comm, current->pid, usema);
+	printk("[%s:%ld] wants to poll usema %p",
+	       current->comm, current->pid, usema);
 	
 	return 0;
 }
@@ -152,10 +157,11 @@ sgi_usemaclone_open(struct inode *inode, struct file *filp)
 		return -ENOMEM;
 	
 	usema->filp        = filp;
-	usema->proc_list   = NULL;
+	init_waitqueue_head(&usema->proc_list);
 	filp->private_data = usema;
+
 	return 0;
-}	
+}
 
 static int
 sgi_usemaclone_release(struct inode *inode, struct file *filp)
@@ -187,6 +193,7 @@ static struct miscdevice dev_usemaclone = {
 void
 usema_init(void)
 {
-	printk("usemaclone misc device registered (minor: %d)\n", SGI_USEMACLONE);
+	printk("usemaclone misc device registered (minor: %d)\n",
+	       SGI_USEMACLONE);
 	misc_register(&dev_usemaclone);
 }

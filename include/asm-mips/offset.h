@@ -78,9 +78,9 @@
 #define THREAD_OLDCTX  912
 
 /* Linux mm_struct offsets. */
-#define MM_COUNT      12
-#define MM_PGD        8
-#define MM_CONTEXT    32
+#define MM_COUNT      16
+#define MM_PGD        12
+#define MM_CONTEXT    52
 
 /* Linux sigcontext offsets. */
 #define SC_REGMASK    0

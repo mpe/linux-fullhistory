@@ -24,6 +24,9 @@
 #define PER_BSD			(0x0006)
 #define PER_XENIX		(0x0007 | STICKY_TIMEOUTS)
 #define PER_LINUX32		(0x0008)
+#define PER_IRIX32              (0x0009 | STICKY_TIMEOUTS) /* IRIX5 32-bit     */
+#define PER_IRIXN32             (0x000a | STICKY_TIMEOUTS) /* IRIX6 new 32-bit */
+#define PER_IRIX64              (0x000b | STICKY_TIMEOUTS) /* IRIX6 64-bit     */
 
 /* Prototype for an lcall7 syscall handler. */
 typedef void (*lcall7_func)(struct pt_regs *);

@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: system.c,v 1.4 1998/03/27 08:53:45 ralf Exp $
+ * $Id: system.c,v 1.7 1998/10/18 22:55:34 tsbogend Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -21,28 +21,6 @@ struct smatch {
 	int type;
 };
 
-static struct smatch sgi_mtable[] = {
-	{ "SGI-IP4", ip4 },
-	{ "SGI-IP5", ip5 },
-	{ "SGI-IP6", ip6 },
-	{ "SGI-IP7", ip7 },
-	{ "SGI-IP9", ip9 },
-	{ "SGI-IP12", ip12 },
-	{ "SGI-IP15", ip15 },
-	{ "SGI-IP17", ip17 },
-	{ "SGI-IP19", ip19 },
-	{ "SGI-IP20", ip20 },
-	{ "SGI-IP21", ip21 },
-	{ "SGI-IP22", ip22 },
-	{ "SGI-IP25", ip25 },
-	{ "SGI-IP26", ip26 },
-	{ "SGI-IP28", ip28 },
-	{ "SGI-IP30", ip30 },
-	{ "SGI-IP32", ip32 }
-};
-
-#define NUM_MACHS 17 /* for now */
-
 static struct smatch sgi_cputable[] = {
 	{ "MIPS-R2000", CPU_R2000 },
 	{ "MIPS-R3000", CPU_R3000 },
@@ -57,28 +35,13 @@ static struct smatch sgi_cputable[] = {
 
 #define NUM_CPUS 9 /* for now */
 
-__initfunc(static enum sgi_mach string_to_mach(char *s))
-{
-	int i;
-
-	for(i = 0; i < NUM_MACHS; i++) {
-		if(!strcmp(s, sgi_mtable[i].name))
-			return (enum sgi_mach) sgi_mtable[i].type;
-	}
-	prom_printf("\nYeee, could not determine SGI architecture type <%s>\n", s);
-	prom_printf("press a key to reboot\n");
-	prom_getchar();
-	romvec->imode();
-	return (enum sgi_mach) 0;
-}
-
 __initfunc(static int string_to_cpu(char *s))
 {
 	int i;
 
 	for(i = 0; i < NUM_CPUS; i++) {
 		if(!strcmp(s, sgi_cputable[i].name))
-			return sgi_mtable[i].type;
+			return sgi_cputable[i].type;
 	}
 	prom_printf("\nYeee, could not determine MIPS cpu type <%s>\n", s);
 	prom_printf("press a key to reboot\n");
@@ -101,8 +64,6 @@ __initfunc(void sgi_sysinit(void))
 	 * have here.
 	 */
 	p = prom_getchild(PROM_NULL_COMPONENT);
-	printk("ARCH: %s\n", p->iname);
-	sgimach = string_to_mach(p->iname);
 
 	/* Now scan for cpu(s). */
 	toplev = p = prom_getchild(p);

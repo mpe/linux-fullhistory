@@ -1,3 +1,12 @@
+/* $Id: delay.h,v 1.2 1999/01/04 16:09:20 ralf Exp $
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Copyright (C) 1994 by Waldorf Electronics
+ * Copyright (C) 1995 - 1998 by Ralf Baechle
+ */
 #ifndef __ASM_MIPS_DELAY_H
 #define __ASM_MIPS_DELAY_H
 
@@ -25,7 +34,7 @@ extern __inline__ void __delay(int loops)
 extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 {
 	usecs *= 0x000010c6;		/* 2**32 / 1000000 */
-	__asm__("multu\t%0,%1\n\t"
+	__asm__("multu\t%0,%2\n\t"
 		"mfhi\t%0"
 		:"=r" (usecs)
 		:"0" (usecs),"r" (lps));
@@ -39,14 +48,5 @@ extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 #endif
 
 #define udelay(usecs) __udelay((usecs),__udelay_val)
-
-/*
- * The different variants for 32/64 bit are pure paranoia. The typical
- * range of numbers that appears for MIPS machines avoids overflows.
- */
-extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
-{
-	return (a*b)/c;
-}
 
 #endif /* __ASM_MIPS_DELAY_H */

@@ -320,7 +320,7 @@ int setup_arg_pages(struct linux_binprm *bprm)
 /*
  * Read in the complete executable. This is used for "-N" files
  * that aren't on a block boundary, and for files on filesystems
- * without bmap support.
+ * without get_block support.
  */
 int read_exec(struct dentry *dentry, unsigned long offset,
 	char * addr, unsigned long count, int to_kmem)

@@ -162,7 +162,6 @@ EXPORT_SYMBOL(__brelse);
 EXPORT_SYMBOL(__bforget);
 EXPORT_SYMBOL(ll_rw_block);
 EXPORT_SYMBOL(__wait_on_buffer);
-EXPORT_SYMBOL(mark_buffer_uptodate);
 EXPORT_SYMBOL(add_blkdev_randomness);
 EXPORT_SYMBOL(generic_file_read);
 EXPORT_SYMBOL(generic_file_write);

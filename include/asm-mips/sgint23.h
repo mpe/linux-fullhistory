@@ -1,7 +1,8 @@
-/* $Id: sgint23.h,v 1.2 1998/03/11 11:58:36 ralf Exp $
+/* $Id: sgint23.h,v 1.3 1999/05/07 22:35:37 ulfc Exp $
  * sgint23.h: Defines for the SGI INT2 and INT3 chipsets.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ * Copyright (C) 1999 Andrew R. Baker (andrewb@uab.edu) - INT2 corrections
  */
 #ifndef _MIPS_SGINT23_H
 #define _MIPS_SGINT23_H
@@ -20,7 +21,7 @@
 #define SGINT_END      52  /* End of 'spaces' */
 
 /* INT2 occupies HPC PBUS slot 4, INT3 uses slot 6. */
-#define SGI_INT2_BASE 0x1fb80100 /* physical */
+#define SGI_INT2_BASE 0x1fbd9000 /* physical */
 #define SGI_INT3_BASE 0x1fbd9880 /* physical */
 
 struct sgi_ioc_ints {
@@ -128,6 +129,10 @@ struct sgi_ioc_timers {
 
 #define SGINT_TCSAMP_COUNTER  10255
 
+/* FIXME: What does this really look like?  It was written to have
+ * 17 registers, but there are only 16 in my Indigo2.
+ * I guessed at which one to remove...  	- andrewb
+ */
 struct sgi_int2_regs {
 	struct sgi_ioc_ints ints;
 
@@ -147,8 +152,11 @@ struct sgi_int2_regs {
 #endif
 #define INT2_TCLEAR_T0CLR      0x1        /* Clear timer0 IRQ */
 #define INT2_TCLEAR_T1CLR      0x2        /* Clear timer1 IRQ */
-
-	unsigned long _unused[3];
+/* I am guesing there are only two unused registers here 
+ * but I could be wrong...			- andrewb
+ */
+/*	unsigned long _unused[3]; */
+	unsigned long _unused[2];
 	struct sgi_ioc_timers timers;
 };
 

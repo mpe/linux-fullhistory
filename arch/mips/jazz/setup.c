@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.14 1998/09/16 22:50:40 ralf Exp $
+/* $Id: setup.c,v 1.20 1999/02/25 21:57:47 tsbogend Exp $
  *
  * Setup pointers to hardware-dependent routines.
  *
@@ -12,7 +12,6 @@
 #include <linux/hdreg.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
-#include <linux/kbd_ll.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/mm.h>
@@ -40,7 +39,6 @@ static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
 static struct irqaction irq2  = { no_action, 0, 0, "cascade", NULL, NULL};
 
 extern asmlinkage void jazz_handle_int(void);
-extern void jazz_keyboard_setup(void);
 
 extern void jazz_machine_restart(char *command);
 extern void jazz_machine_halt(void);
@@ -48,6 +46,9 @@ extern void jazz_machine_power_off(void);
 
 extern struct ide_ops std_ide_ops;
 extern struct rtc_ops jazz_rtc_ops;
+extern struct kbd_ops jazz_kbd_ops;
+extern struct fd_ops *fd_ops;
+extern struct fd_ops jazz_fd_ops;
 
 void (*board_time_init)(struct irqaction *irq);
 
@@ -55,7 +56,7 @@ __initfunc(static void jazz_time_init(struct irqaction *irq))
 {
         /* set the clock to 100 Hz */
         r4030_write_reg32(JAZZ_TIMER_INTERVAL, 9);
-        setup_x86_irq(0, irq);
+        i8259_setup_irq(JAZZ_TIMER_IRQ, irq);
 }
 
 __initfunc(static void jazz_irq_setup(void))
@@ -75,43 +76,16 @@ __initfunc(static void jazz_irq_setup(void))
 	r4030_write_reg32(JAZZ_TIMER_INTERVAL, 9);
 	request_region(0x20, 0x20, "pic1");
 	request_region(0xa0, 0x20, "pic2");
-	setup_x86_irq(2, &irq2);
+	i8259_setup_irq(2, &irq2);
 }
 
 __initfunc(void jazz_setup(void))
 {
-    tag *atag;
-
-    /*
-     * we just check if a tag_screen_info can be gathered
-     * in setup_arch(), if yes we don't proceed futher...
-     */
-    atag = bi_TagFind(tag_screen_info);
-    if (!atag) {
-	/*
-	 * If no, we try to find the tag_arc_displayinfo which is
-	 * always created by Milo for an ARC box (for now Milo only
-	 * works on ARC boxes :) -Stoned.
-	 */
-	atag = bi_TagFind(tag_arcdisplayinfo);
-	if (atag) {
-	    screen_info.orig_x = 
-		((mips_arc_DisplayInfo*)TAGVALPTR(atag))->cursor_x;
-	    screen_info.orig_y = 
-		((mips_arc_DisplayInfo*)TAGVALPTR(atag))->cursor_y;
-	    screen_info.orig_video_cols  = 
-		((mips_arc_DisplayInfo*)TAGVALPTR(atag))->columns;
-	    screen_info.orig_video_lines  = 
-		((mips_arc_DisplayInfo*)TAGVALPTR(atag))->lines;
-	}
-    }
-
 	add_wired_entry (0x02000017, 0x03c00017, 0xe0000000, PM_64K);
 	add_wired_entry (0x02400017, 0x02440017, 0xe2000000, PM_16M);
 	add_wired_entry (0x01800017, 0x01000017, 0xe4000000, PM_4M);
 
 	irq_setup = jazz_irq_setup;
-	keyboard_setup = jazz_keyboard_setup;
 	mips_io_port_base = JAZZ_PORT_BASE;
 	isa_slot_offset = 0xe3000000;
 	request_region(0x00,0x20,"dma1");
@@ -128,6 +102,8 @@ __initfunc(void jazz_setup(void))
 #ifdef CONFIG_BLK_DEV_IDE
 	ide_ops = &std_ide_ops;
 #endif
-	conswitchp = &fb_con;
+	conswitchp = &dummy_con;
 	rtc_ops = &jazz_rtc_ops;
+	kbd_ops = &jazz_kbd_ops;
+	fd_ops = &jazz_fd_ops;
 }

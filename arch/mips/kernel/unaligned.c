@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1998 by Ralf Baechle
  *
- * $Id: unaligned.c,v 1.5 1998/08/17 13:57:44 ralf Exp $
+ * $Id: unaligned.c,v 1.5 1999/05/01 22:40:39 ralf Exp $
  *
  * This file contains exception handler for address error exception with the
  * special capability to execute faulting instructions in software.  The
@@ -17,7 +17,7 @@
  * Putting data to unaligned addresses is a bad practice even on Intel where
  * only the performance is affected.  Much worse is that such code is non-
  * portable.  Due to several programs that die on MIPS due to alignment
- * problems I decieded to implement this handler anyway though I originally
+ * problems I decided to implement this handler anyway though I originally
  * didn't intend to do this at all for user code.
  *
  * For now I enable fixing of address errors by default to make life easier.
@@ -140,7 +140,7 @@ emulate_load_store_insn(struct pt_regs *regs,
 		goto sigbus;
 
 	/*
-	 * The remaining opcodes are the ones that are really of interrest.
+	 * The remaining opcodes are the ones that are really of interest.
 	 */
 	case lh_op:
 		check_axs(pc, addr, 2);

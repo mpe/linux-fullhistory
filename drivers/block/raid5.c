@@ -594,7 +594,7 @@ static void raid5_build_block (struct stripe_head *sh, struct buffer_head *bh, i
 	bh->b_rdev	= raid_conf->disks[i].dev;
 	bh->b_rsector   = sh->sector;
 
-	bh->b_state	= (1 << BH_Req) | (1 << BH_Allocated);
+	bh->b_state	= (1 << BH_Req) | (1 << BH_Mapped);
 	bh->b_size	= sh->size;
 	bh->b_list	= BUF_LOCKED;
 }

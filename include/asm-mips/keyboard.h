@@ -17,6 +17,8 @@
 #include <linux/ioport.h>
 #include <asm/bootinfo.h>
 
+#define DISABLE_KBD_DURING_INTERRUPTS 0
+
 extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int pckbd_getkeycode(unsigned int scancode);
 extern int pckbd_translate(unsigned char scancode, unsigned char *keycode,
@@ -39,60 +41,36 @@ extern unsigned char pckbd_sysrq_xlate[128];
 /* Some stoneage hardware needs delays after some operations.  */
 #define kbd_pause() do { } while(0)
 
-/* Pointers to keyboard hardware access and init functions.  */
-unsigned char (*kbd_read_input)(void);
-void (*kbd_write_output)(unsigned char val);
-void (*kbd_write_command)(unsigned char val);
-unsigned char (*kbd_read_status)(void);
+struct kbd_ops {
+	/* Keyboard driver resource allocation  */
+	void (*kbd_request_region)(void);
+	int (*kbd_request_irq)(void (*handler)(int, void *, struct pt_regs *));
 
-void (*keyboard_setup)(void);
+	/* PSaux driver resource managment  */
+	int (*aux_request_irq)(void (*handler)(int, void *, struct pt_regs *));
+	void (*aux_free_irq)(void);
 
-#ifdef CONFIG_MIPS_JAZZ
+	/* Methods to access the keyboard processor's I/O registers  */
+	unsigned char (*kbd_read_input)(void);
+	void (*kbd_write_output)(unsigned char val);
+	void (*kbd_write_command)(unsigned char val);
+	unsigned char (*kbd_read_status)(void);
+};
 
-extern int jazz_ps2_request_irq(void);
-extern void jazz_ps2_free_irq(void);
+extern struct kbd_ops *kbd_ops;
 
-#define ps2_request_irq()      jazz_ps2_request_irq()
-#define ps2_free_irq(inode)    jazz_ps2_free_irq()
+/* Do the actual calls via kbd_ops vector  */
+#define kbd_request_region() kbd_ops->kbd_request_region()
+#define kbd_request_irq(handler) kbd_ops->kbd_request_irq(handler)
 
-#endif /* CONFIG_MIPS_JAZZ */
+#define aux_request_irq(hand, dev_id) kbd_ops->aux_request_irq(hand)
+#define aux_free_irq(dev_id) kbd_ops->aux_free_irq()
 
-#ifdef CONFIG_SGI
-
-#define DISABLE_KBD_DURING_INTERRUPTS 1
-
-/*
- * Machine specific bits for the PS/2 driver.
- * Aux device and keyboard share the interrupt on the Indy.
- */
-#define ps2_request_irq() 0
-#define ps2_free_irq(void) do { } while(0);
-
-#endif /* CONFIG_SGI */
-
-#if defined(CONFIG_ACER_PICA_61) || defined(CONFIG_SNI_RM200_PCI)
-#define CONF_KEYBOARD_USES_IO_PORTS
-#endif
-
-#ifdef CONF_KEYBOARD_USES_IO_PORTS
-/*
- * Most other MIPS machines access the keyboard controller via
- * memory mapped I/O ports.
- */
-#include <asm/io.h>
-
-/*
- * Machine specific bits for the PS/2 driver
- */
-
-#define AUX_IRQ 12
-
-#define ps2_request_irq()						\
-	request_irq(AUX_IRQ, aux_interrupt, 0, "PS/2 Mouse", NULL)
-
-#define ps2_free_irq(inode) free_irq(AUX_IRQ, NULL)
-
-#endif /* CONF_KEYBOARD_USES_IO_PORTS */
+#define kbd_read_input() kbd_ops->kbd_read_input()
+#define kbd_write_output(val) kbd_ops->kbd_write_output(val)
+#define kbd_write_command(val) kbd_ops->kbd_write_command(val)
+#define kbd_read_status() kbd_ops->kbd_read_status()
 
 #endif /* __KERNEL */
+
 #endif /* __ASM_MIPS_KEYBOARD_H */

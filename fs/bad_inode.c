@@ -60,7 +60,7 @@ struct inode_operations bad_inode_ops =
 	EIO_ERROR,		/* rename */
 	EIO_ERROR,		/* readlink */
 	bad_follow_link,	/* follow_link */
-	EIO_ERROR,		/* bmap */
+	EIO_ERROR,		/* get_block */
 	EIO_ERROR,		/* readpage */
 	EIO_ERROR,		/* writepage */
 	EIO_ERROR,		/* flushpage */

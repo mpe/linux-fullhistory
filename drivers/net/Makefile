@@ -876,10 +876,26 @@ else
 endif
 
 ifeq ($(CONFIG_MIPS_JAZZ_SONIC),y)
-L_OBJS += sonic.o
+L_OBJS += jazzsonic.o
 else
   ifeq ($(CONFIG_MIPS_JAZZ_SONIC),m)
-    M_OBJS += sonic.o
+  M_OBJS += jazzsonic.o
+  endif
+endif
+
+ifeq ($(CONFIG_BAGETLANCE),y)
+L_OBJS += bagetlance.o
+else
+  ifeq ($(CONFIG_BAGETLANCE),m)
+  M_OBJS += bagetlance.o
+  endif
+endif
+
+ifeq ($(CONFIG_DECLANCE),y)
+L_OBJS += declance.o
+else
+  ifeq ($(CONFIG_DECLANCE),m)
+  M_OBJS += declance.o
   endif
 endif
 
