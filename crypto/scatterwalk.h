@@ -49,6 +49,7 @@ static inline int scatterwalk_across_pages(struct scatter_walk *walk,
 static inline void scatterwalk_advance(struct scatter_walk *walk,
 				       unsigned int nbytes)
 {
+	walk->data += nbytes;
 	walk->offset += nbytes;
 	walk->len_this_page -= nbytes;
 	walk->len_this_segment -= nbytes;

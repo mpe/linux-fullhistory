@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/highmem.h>
+#include <asm/bug.h>
 #include <asm/scatterlist.h>
 #include "internal.h"
 #include "scatterwalk.h"
@@ -45,6 +46,8 @@ void scatterwalk_start(struct scatter_walk *walk, struct scatterlist *sg)
 	walk->page = sg->page;
 	walk->len_this_segment = sg->length;
 
+	BUG_ON(!sg->length);
+
 	rest_of_page = PAGE_CACHE_SIZE - (sg->offset & (PAGE_CACHE_SIZE - 1));
 	walk->len_this_page = min(sg->length, rest_of_page);
 	walk->offset = sg->offset;
@@ -55,13 +58,17 @@ void scatterwalk_map(struct scatter_walk *walk, int out)
 	walk->data = crypto_kmap(walk->page, out) + walk->offset;
 }
 
-static void scatterwalk_pagedone(struct scatter_walk *walk, int out,
-				 unsigned int more)
+static inline void scatterwalk_unmap(struct scatter_walk *walk, int out)
 {
 	/* walk->data may be pointing the first byte of the next page;
 	   however, we know we transfered at least one byte.  So,
 	   walk->data - 1 will be a virtual address in the mapped page. */
+	crypto_kunmap(walk->data - 1, out);
+}
 
+static void scatterwalk_pagedone(struct scatter_walk *walk, int out,
+				 unsigned int more)
+{
 	if (out)
 		flush_dcache_page(walk->page);
 
@@ -81,7 +88,7 @@ static void scatterwalk_pagedone(struct scatter_walk *walk, int out,
 
 void scatterwalk_done(struct scatter_walk *walk, int out, int more)
 {
-	crypto_kunmap(walk->data, out);
+	scatterwalk_unmap(walk, out);
 	if (walk->len_this_page == 0 || !more)
 		scatterwalk_pagedone(walk, out, more);
 }
@@ -98,7 +105,7 @@ int scatterwalk_copychunks(void *buf, struct scatter_walk *walk,
 		buf += walk->len_this_page;
 		nbytes -= walk->len_this_page;
 
-		crypto_kunmap(walk->data, out);
+		scatterwalk_unmap(walk, out);
 		scatterwalk_pagedone(walk, out, 1);
 		scatterwalk_map(walk, out);
 	} while (nbytes > walk->len_this_page);
