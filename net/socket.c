@@ -670,21 +670,23 @@ asmlinkage int sys_bind(int fd, struct sockaddr *umyaddr, int addrlen)
 asmlinkage int sys_listen(int fd, int backlog)
 {
 	struct socket *sock;
-
+	int err=-EOPNOTSUPP;
+	
 	if (fd < 0 || fd >= NR_OPEN || current->files->fd[fd] == NULL)
 		return(-EBADF);
 	if (!(sock = sockfd_lookup(fd, NULL))) 
 		return(-ENOTSOCK);
 
 	if (sock->state != SS_UNCONNECTED) 
-	{
 		return(-EINVAL);
-	}
 
 	if (sock->ops && sock->ops->listen)
-		sock->ops->listen(sock, backlog);
-	sock->flags |= SO_ACCEPTCON;
-	return(0);
+	{
+		err=sock->ops->listen(sock, backlog);
+		if(!err)
+			sock->flags |= SO_ACCEPTCON;
+	}
+	return(err);
 }
 
 

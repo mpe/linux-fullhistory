@@ -290,7 +290,7 @@ static int ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev);
 static void ewrk3_interrupt(int irq, struct pt_regs *regs);
 static int ewrk3_close(struct device *dev);
 static struct enet_statistics *ewrk3_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd);
 
 /*
@@ -303,7 +303,7 @@ static int  ewrk3_tx(struct device *dev);
 
 static void EthwrkSignature(char * name, char *eeprom_image);
 static int  DevicePresent(short iobase);
-static void SetMulticastFilter(struct device *dev, int num_addrs, char *addrs, char *multicast_table);
+static void SetMulticastFilter(struct device *dev, int num_addr, char *multicast_table);
 
 static int  Read_EEPROM(short iobase, unsigned char eaddr);
 static int  Write_EEPROM(short data, short iobase, unsigned char eaddr);
@@ -723,11 +723,15 @@ ewrk3_init(struct device *dev)
   struct ewrk3_private *lp = (struct ewrk3_private *)dev->priv;
   char csr, page;
   short iobase = dev->base_addr;
+  int flags=dev->flags;
   
   /* 
   ** Enable all multicasts 
   */
-  set_multicast_list(dev, HASH_TABLE_LEN, NULL);
+  
+  dev->flags|=IFF_ALLMULTI;
+  set_multicast_list(dev);
+  dev->flags=flags;
 
   /*
   ** Clean out any remaining entries in all the queues here
@@ -1207,7 +1211,7 @@ ewrk3_get_stats(struct device *dev)
 ** 			best-effort filtering.
 */
 static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+set_multicast_list(struct device *dev)
 {
   struct ewrk3_private *lp = (struct ewrk3_private *)dev->priv;
   int iobase = dev->base_addr;
@@ -1216,20 +1220,23 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 
   csr = inb(EWRK3_CSR);
 
-  if (lp->shmem_length == IO_ONLY) {
+  if (lp->shmem_length == IO_ONLY) 
+  {
     multicast_table = (char *) PAGE0_HTE;
   } else {
     multicast_table = (char *)(lp->shmem_base + PAGE0_HTE);
   }
 
-  if (num_addrs >= 0) {
-    SetMulticastFilter(dev, num_addrs, (char *)addrs, multicast_table);
-    csr &= ~PME;
-    csr |= MCE;
-    outb(csr, EWRK3_CSR);
-  } else {                             /* set promiscuous mode */
+  if (dev->flags&(IFF_ALLMULTI|IFF_PROMISC)) 
+  {
     csr |= PME;
     csr &= ~MCE;
+    outb(csr, EWRK3_CSR);
+    dev->flags|=IFF_PROMISC;
+  } else {                             /* set promiscuous mode */
+    SetMulticastFilter(dev, dev->mc_count, multicast_table);
+    csr &= ~PME;
+    csr |= MCE;
     outb(csr, EWRK3_CSR);
   }
 }
@@ -1242,83 +1249,110 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 ** Note that when clearing the table, the broadcast bit must remain asserted
 ** to receive broadcast messages.
 */
-static void SetMulticastFilter(struct device *dev, int num_addrs, char *addrs, char *multicast_table)
+static void SetMulticastFilter(struct device *dev, int num_addrs, char *multicast_table)
 {
-  struct ewrk3_private *lp = (struct ewrk3_private *)dev->priv;
-  int i, iobase = dev->base_addr;
-  char j, bit, byte;
-  short *p = (short *) multicast_table;
-  u_short hashcode;
-  u_long crc, poly = CRC_POLYNOMIAL_LE;
+	struct ewrk3_private *lp = (struct ewrk3_private *)dev->priv;
+	char *addrs;
+	struct dev_mc_list *dmi=dev->mc_list;
+	int i, iobase = dev->base_addr;
+	char j, bit, byte;
+	short *p = (short *) multicast_table;
+	u_short hashcode;
+	u_long crc, poly = CRC_POLYNOMIAL_LE;
 
-  while (set_bit(0, (void *)&lp->lock) != 0); /* Wait for lock to free */
+	while (set_bit(0, (void *)&lp->lock) != 0); /* Wait for lock to free */
 
-  if (lp->shmem_length == IO_ONLY) {
-    outb(0, EWRK3_IOPR);
-    outw((short)((long)multicast_table), EWRK3_PIR1);
-  } else {
-    outb(0, EWRK3_MPR);
-  }
-
-  if (num_addrs == HASH_TABLE_LEN) {
-    for (i=0; i<(HASH_TABLE_LEN >> 3); i++) {
-      if (lp->shmem_length == IO_ONLY) {
-	outb(0xff, EWRK3_DATA);
-      } else {                /* memset didn't work here */
-	*p++ = 0xffff;
-	i++;
-      }
-    }
-  } else {
-    /* Clear table except for broadcast bit */
-    if (lp->shmem_length == IO_ONLY) {
-      for (i=0; i<(HASH_TABLE_LEN >> 4) - 1; i++) {
-	outb(0x00, EWRK3_DATA);
-      } 
-      outb(0x80, EWRK3_DATA); i++;           /* insert the broadcast bit */
-      for (; i<(HASH_TABLE_LEN >> 3); i++) {
-	outb(0x00, EWRK3_DATA);
-      } 
-    } else {
-      memset(multicast_table, 0, (HASH_TABLE_LEN >> 3));
-      *(multicast_table + (HASH_TABLE_LEN >> 4) - 1) = 0x80;
-    }
-
-    /* Update table */
-    for (i=0;i<num_addrs;i++) {              /* for each address in the list */
-      if ((*addrs & 0x01) == 1) {            /* multicast address? */ 
-	crc = 0xffffffff;                    /* init CRC for each address */
-	for (byte=0;byte<ETH_ALEN;byte++) {  /* for each address byte */
-	                                     /* process each address bit */ 
-	  for (bit = *addrs++,j=0;j<8;j++, bit>>=1) {
-	    crc = (crc >> 1) ^ (((crc ^ bit) & 0x01) ? poly : 0);
-	  }
+	if (lp->shmem_length == IO_ONLY) 
+	{
+		outb(0, EWRK3_IOPR);
+		outw((short)((long)multicast_table), EWRK3_PIR1);
+	} 
+	else
+	{
+		outb(0, EWRK3_MPR);
 	}
-	hashcode = crc & ((1 << 9) - 1);     /* hashcode is 9 LSb of CRC */
 
-	byte = hashcode >> 3;                /* bit[3-8] -> byte in filter */
-	bit = 1 << (hashcode & 0x07);        /* bit[0-2] -> bit in byte */
-
-	if (lp->shmem_length == IO_ONLY) {
-	  unsigned char tmp;
-
-	  outw((short)((long)multicast_table) + byte, EWRK3_PIR1);
-	  tmp = inb(EWRK3_DATA);
-	  tmp |= bit;
-	  outw((short)((long)multicast_table) + byte, EWRK3_PIR1);
-	  outb(tmp, EWRK3_DATA); 
-	} else {
-	  multicast_table[byte] |= bit;
+	if (num_addrs >= HASH_TABLE_LEN) 
+	{
+		for (i=0; i<(HASH_TABLE_LEN >> 3); i++) 
+		{
+			if (lp->shmem_length == IO_ONLY) 
+			{
+				outb(0xff, EWRK3_DATA);
+			}
+			else
+			{                /* memset didn't work here */
+				*p++ = 0xffff;
+				i++;
+			}
+		}
 	}
-      } else {                               /* skip this address */
-	addrs += ETH_ALEN;
-      }
-    }
-  }
+	else
+	{
+		/* Clear table except for broadcast bit */
+		if (lp->shmem_length == IO_ONLY) 
+		{
+			for (i=0; i<(HASH_TABLE_LEN >> 4) - 1; i++) 
+			{
+				outb(0x00, EWRK3_DATA);
+			} 
+			outb(0x80, EWRK3_DATA); i++;           /* insert the broadcast bit */
+			for (; i<(HASH_TABLE_LEN >> 3); i++) 
+			{
+				outb(0x00, EWRK3_DATA);
+			} 
+		}
+		else
+		{
+			memset(multicast_table, 0, (HASH_TABLE_LEN >> 3));
+			*(multicast_table + (HASH_TABLE_LEN >> 4) - 1) = 0x80;
+		}
 
-  lp->lock = 0;                              /* Unlock the page register */
+		/* Update table */
 
-  return;
+		for (i=0;i<dev->mc_count;i++) 
+		{
+		        /* for each address in the list */
+		        addrs=dmi->dmi_addr;
+		        dmi=dmi->next;
+		        
+			if ((*addrs & 0x01) == 1) 
+			{            /* multicast address? */ 
+				crc = 0xffffffff;                    /* init CRC for each address */
+				for (byte=0;byte<ETH_ALEN;byte++) 
+				{  /* for each address byte */
+	                           /* process each address bit */ 
+					for (bit = *addrs++,j=0;j<8;j++, bit>>=1) 
+					{
+						crc = (crc >> 1) ^ (((crc ^ bit) & 0x01) ? poly : 0);
+					}
+				}
+				hashcode = crc & ((1 << 9) - 1);     /* hashcode is 9 LSb of CRC */
+
+				byte = hashcode >> 3;                /* bit[3-8] -> byte in filter */
+				bit = 1 << (hashcode & 0x07);        /* bit[0-2] -> bit in byte */
+
+				if (lp->shmem_length == IO_ONLY) 
+				{
+					unsigned char tmp;
+
+					outw((short)((long)multicast_table) + byte, EWRK3_PIR1);
+					tmp = inb(EWRK3_DATA);
+					tmp |= bit;
+					outw((short)((long)multicast_table) + byte, EWRK3_PIR1);
+					outb(tmp, EWRK3_DATA); 
+				}
+				else
+				{
+					multicast_table[byte] |= bit;
+				}
+			}
+		}
+	}
+
+	lp->lock = 0;                              /* Unlock the page register */
+
+	return;
 }
 
 #ifndef MODULE
@@ -1669,7 +1703,8 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     break;
   case EWRK3_SAY_BOO:                /* Say "Boo!" to the kernel log file */
-    printk("%s: Boo!\n", dev->name);
+    if(suser())
+    	printk("%s: Boo!\n", dev->name);
 
     break;
   case EWRK3_GET_MCA:                /* Get the multicast address table */
@@ -1692,6 +1727,8 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     lp->lock = 0;                               /* Unlock the page register */
 
     break;
+    
+#if 0    
   case EWRK3_SET_MCA:                /* Set a multicast address */
     if (suser()) {
       err = verify_area(VERIFY_READ, (void *)ioc->data, ETH_ALEN * ioc->len);
@@ -1725,6 +1762,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     }
 
     break;
+#endif
   case EWRK3_GET_STATS:              /* Get the driver statistics */
     err = verify_area(VERIFY_WRITE, (void *)ioc->data, sizeof(lp->pktStats));
     if (err) return err;

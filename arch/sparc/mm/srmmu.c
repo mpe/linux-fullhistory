@@ -1,4 +1,5 @@
-/* srmmu.c:  SRMMU specific routines for memory management.
+/* $Id: srmmu.c,v 1.22 1995/11/25 00:59:33 davem Exp $
+ * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Peter A. Zaitcev (zaitcev@lab.ipmce.su)
@@ -20,53 +21,6 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
 unsigned int srmmu_pmd_align(unsigned int addr) { return SRMMU_PMD_ALIGN(addr); }
 unsigned int srmmu_pgdir_align(unsigned int addr) { return SRMMU_PGDIR_ALIGN(addr); }
 
-/* Idea taken from Hamish McDonald's MC680x0 Linux code, nice job.
- * Many of the page table/directory functions on the SRMMU use this
- * routine.
- *
- * Having a complete physical ram structure walk happen for each
- * invocation is quite costly.  However, this does do some nice
- * sanity checking and we'll see when our maps don't match.  Eventually
- * when I trust my code I will just do a direct mmu probe in mk_pte().
- */
-static inline unsigned int
-srmmu_virt_to_phys(unsigned int vaddr)
-{
-	unsigned int paddr = 0;
-	unsigned int voff = (vaddr - PAGE_OFFSET);
-	int i;
-
-	for(i=0; sp_banks[i].num_bytes != 0; i++) {
-		if(voff < paddr + sp_banks[i].num_bytes) {
-			/* This matches. */
-			return sp_banks[i].base_addr + voff - paddr;
-		} else
-			paddr += sp_banks[i].num_bytes;
-	}
-	/* Shit, gotta consult the MMU, this shouldn't happen... */
-	printk("srmmu_virt_to_phys: SRMMU virt to phys translation failed, halting\n");
-	halt();
-}		
-
-static inline unsigned long
-srmmu_phys_to_virt(unsigned long paddr)
-{
-        int i;
-        unsigned long offset = PAGE_OFFSET;
-
-        for (i=0; sp_banks[i].num_bytes != 0; i++)
-        {
-                if (paddr >= sp_banks[i].base_addr &&
-                    paddr < (sp_banks[i].base_addr
-                             + sp_banks[i].num_bytes)) {
-                        return (paddr - sp_banks[i].base_addr) + offset;
-                } else
-                        offset += sp_banks[i].num_bytes;
-        }
-	printk("srmmu_phys_to_virt: Could not make translation, halting...\n");
-	halt();
-}
-
 unsigned long
 srmmu_vmalloc_start(void)
 {
@@ -79,7 +33,7 @@ srmmu_pmd_page(pmd_t pmd)
 	unsigned long page;
 
 	page = (pmd_val(pmd) & (SRMMU_PTD_PTP_MASK)) << SRMMU_PTD_PTP_PADDR_SHIFT;
-	return srmmu_phys_to_virt(page);
+	return (page + PAGE_OFFSET);
 }
 
 unsigned long
@@ -88,7 +42,7 @@ srmmu_pgd_page(pgd_t pgd)
 	unsigned long page;
 
 	page = (pgd_val(pgd) & (SRMMU_PTD_PTP_MASK)) << SRMMU_PTD_PTP_PADDR_SHIFT;
-	return srmmu_phys_to_virt(page);
+	return (page + PAGE_OFFSET);
 }
 
 unsigned long 
@@ -97,18 +51,17 @@ srmmu_pte_page(pte_t pte)
 	unsigned long page;
 
 	page = (pte_val(pte) & (SRMMU_PTE_PPN_MASK)) << SRMMU_PTE_PPN_PADDR_SHIFT;
-	printk("srmmu_pte_page: page = %08lx\n", page);
-	return srmmu_phys_to_virt(page);
+	return (page + PAGE_OFFSET);
 }
 
 int srmmu_pte_none(pte_t pte)		{ return !pte_val(pte); }
 int srmmu_pte_present(pte_t pte)	{ return pte_val(pte) & SRMMU_ET_PTE; }
-int srmmu_pte_inuse(pte_t *ptep)        { return mem_map[MAP_NR(ptep)] != 1; }
+int srmmu_pte_inuse(pte_t *ptep)        { return mem_map[MAP_NR(ptep)].reserved || mem_map[MAP_NR(ptep)].count != 1; }
 void srmmu_pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
 void srmmu_pte_reuse(pte_t *ptep)
 {
-  if(!(mem_map[MAP_NR(ptep)] & MAP_PAGE_RESERVED))
-    mem_map[MAP_NR(ptep)]++;
+  if(!mem_map[MAP_NR(ptep)].reserved)
+    mem_map[MAP_NR(ptep)].count++;
 }
 
 int srmmu_pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
@@ -119,12 +72,12 @@ int srmmu_pmd_bad(pmd_t pmd)
 }
 
 int srmmu_pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & SRMMU_ET_PTD; }
-int srmmu_pmd_inuse(pmd_t *pmdp)        { return mem_map[MAP_NR(pmdp)] != 1; }
+int srmmu_pmd_inuse(pmd_t *pmdp)        { return mem_map[MAP_NR(pmdp)].reserved || mem_map[MAP_NR(pmdp)].count != 1; }
 void srmmu_pmd_clear(pmd_t *pmdp)	{ pmd_val(*pmdp) = 0; }
 void srmmu_pmd_reuse(pmd_t * pmdp)
 {
-        if (!(mem_map[MAP_NR(pmdp)] & MAP_PAGE_RESERVED))
-                mem_map[MAP_NR(pmdp)]++;
+        if (!mem_map[MAP_NR(pmdp)].reserved)
+                mem_map[MAP_NR(pmdp)].count++;
 }
 
 int srmmu_pgd_none(pgd_t pgd)		{ return !pgd_val(pgd); }
@@ -134,12 +87,12 @@ int srmmu_pgd_bad(pgd_t pgd)
 		(srmmu_pgd_page(pgd) > high_memory);
 }
 int srmmu_pgd_present(pgd_t pgd)	{ return pgd_val(pgd) & SRMMU_ET_PTD; }
-int srmmu_pgd_inuse(pgd_t *pgdp)        { return mem_map[MAP_NR(pgdp)] != 1; }
+int srmmu_pgd_inuse(pgd_t *pgdp)        { return mem_map[MAP_NR(pgdp)].reserved; }
 void srmmu_pgd_clear(pgd_t * pgdp)	{ pgd_val(*pgdp) = 0; }
 void srmmu_pgd_reuse(pgd_t *pgdp)
 {
-  if (!(mem_map[MAP_NR(pgdp)] & MAP_PAGE_RESERVED))
-    mem_map[MAP_NR(pgdp)]++;
+  if (!mem_map[MAP_NR(pgdp)].reserved)
+    mem_map[MAP_NR(pgdp)].count++;
 }
 
 /*
@@ -179,7 +132,7 @@ srmmu_mk_pte(unsigned long page, pgprot_t pgprot)
 	pte_t pte;
 
 	if(page & (~PAGE_MASK)) panic("srmmu_mk_pte() called with unaligned page");
-	page = (srmmu_virt_to_phys(page) >> SRMMU_PTE_PPN_PADDR_SHIFT);
+	page = ((page - PAGE_OFFSET) >> SRMMU_PTE_PPN_PADDR_SHIFT);
 	pte_val(pte) = (page & SRMMU_PTE_PPN_MASK);
 	pte_val(pte) |= pgprot_val(pgprot);
 	return pte;
@@ -190,7 +143,7 @@ srmmu_pgd_set(pgd_t * pgdp, pmd_t * pmdp)
 {
 	unsigned long page = (unsigned long) pmdp;
 
-	page = (srmmu_virt_to_phys(page) >> SRMMU_PTD_PTP_PADDR_SHIFT);
+	page = ((page - PAGE_OFFSET) >> SRMMU_PTD_PTP_PADDR_SHIFT);
 
 	pgd_val(*pgdp) = ((page & SRMMU_PTD_PTP_MASK) | SRMMU_ET_PTD);
 }
@@ -200,7 +153,7 @@ srmmu_pmd_set(pmd_t * pmdp, pte_t * ptep)
 {
 	unsigned long page = (unsigned long) ptep;
 
-	page = (srmmu_virt_to_phys(page) >> SRMMU_PTD_PTP_PADDR_SHIFT);
+	page = ((page - PAGE_OFFSET) >> SRMMU_PTD_PTP_PADDR_SHIFT);
 
 	pmd_val(*pmdp) = ((page & SRMMU_PTD_PTP_MASK) | SRMMU_ET_PTD);
 }
@@ -214,10 +167,9 @@ srmmu_pte_modify(pte_t pte, pgprot_t newprot)
 
 /* to find an entry in a top-level page table... */
 pgd_t *
-srmmu_pgd_offset(struct task_struct * tsk, unsigned long address)
+srmmu_pgd_offset(struct mm_struct * mm, unsigned long address)
 {
-	return ((pgd_t *) tsk->tss.pgd_ptr) +
-		((address >> SRMMU_PGDIR_SHIFT) & (SRMMU_PTRS_PER_PGD - 1));
+	return mm->pgd + ((address >> SRMMU_PGDIR_SHIFT) & (SRMMU_PTRS_PER_PGD - 1));
 }
 
 /* Find an entry in the second-level page table.. */
@@ -243,7 +195,7 @@ srmmu_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdir)
 	/* See if this process has a context entry already, like after execve() */
 	if(tsk->tss.context != -1) {
 		pgd_t *ctable_ptr = 0;
-		ctable_ptr = (pgd_t *) srmmu_phys_to_virt(srmmu_get_ctable_ptr());
+		ctable_ptr = (pgd_t *) (srmmu_get_ctable_ptr() + PAGE_OFFSET);
 		ctable_ptr += tsk->tss.context;
 		srmmu_pgd_set(ctable_ptr, (pmd_t *) pgdir);
 		/* Should flush caches here too... */
@@ -263,7 +215,7 @@ srmmu_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdir)
 void
 srmmu_pte_free_kernel(pte_t *pte)
 {
-	mem_map[MAP_NR(pte)] = 1;
+	mem_map[MAP_NR(pte)].reserved = 0;
 	free_page((unsigned long) pte);
 }
 
@@ -278,7 +230,7 @@ srmmu_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 		if (srmmu_pmd_none(*pmd)) {
 			if (page) {
 				srmmu_pmd_set(pmd, page);
-				mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
+				mem_map[MAP_NR(page)].reserved = 1;
 				return page + address;
 			}
 			srmmu_pmd_set(pmd, (pte_t *) SRMMU_ET_PTDBAD);
@@ -298,7 +250,7 @@ srmmu_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 void
 srmmu_pmd_free_kernel(pmd_t *pmd)
 {
-	mem_map[MAP_NR(pmd)] = 1;
+	mem_map[MAP_NR(pmd)].reserved = 0;
 	free_page((unsigned long) pmd);
 }
 
@@ -313,7 +265,7 @@ srmmu_pmd_alloc_kernel(pgd_t *pgd, unsigned long address)
 		if (srmmu_pgd_none(*pgd)) {
 			if (page) {
 				srmmu_pgd_set(pgd, page);
-				mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
+				mem_map[MAP_NR(page)].reserved = 1;
 				return page + address;
 			}
 			srmmu_pgd_set(pgd, (pmd_t *) SRMMU_ET_PTDBAD);
@@ -346,7 +298,6 @@ srmmu_pte_alloc(pmd_t * pmd, unsigned long address)
 		if (srmmu_pmd_none(*pmd)) {
 			if (page) {
 				srmmu_pmd_set(pmd, page);
-				mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
 				return page + address;
 			}
 			srmmu_pmd_set(pmd, (pte_t *) SRMMU_ET_PTDBAD);
@@ -383,7 +334,6 @@ srmmu_pmd_alloc(pgd_t * pgd, unsigned long address)
 		if (srmmu_pgd_none(*pgd)) {
 			if (page) {
 				srmmu_pgd_set(pgd, page);
-				mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
 				return page + address;
 			}
 			srmmu_pgd_set(pgd, (pmd_t *) SRMMU_ET_PTDBAD);
@@ -427,18 +377,19 @@ srmmu_invalidate(void)
 	return;
 }
 
-void
-srmmu_set_pte(pte_t *ptep, pte_t entry)
+/* XXX Needs to be written */
+void srmmu_set_pte(pte_t *ptep, pte_t pteval)
 {
-	/* for now... */
-	*ptep = entry;
+	/* More than this is needed. */
+	*ptep = pteval;
 }
 
 /* XXX Needs to be written */
 void
-srmmu_switch_to_context(int context)
+srmmu_switch_to_context(void *vtask)
 {
-	printk("switching to context %d\n", context);
+	struct task_struct *tsk = vtask;
+	printk("switching to context %d\n", tsk->tss.context);
 
 	return;
 }
@@ -460,7 +411,7 @@ srmmu_mapioaddr(unsigned long physaddr, unsigned long virt_addr,
   pmd_t *pmdp;
   pte_t *ptep;
 
-  pgdp = srmmu_pgd_offset(&init_task, virt_addr);
+  pgdp = srmmu_pgd_offset(init_task.mm, virt_addr);
   pmdp = srmmu_pmd_offset(pgdp, virt_addr);
   ptep = srmmu_pte_offset(pmdp, virt_addr);
   pte_val(*ptep) = (physaddr >> SRMMU_PTE_PPN_PADDR_SHIFT) & SRMMU_PTE_PPN_MASK;
@@ -476,6 +427,25 @@ srmmu_mapioaddr(unsigned long physaddr, unsigned long virt_addr,
   flush_ei_ctx(0x0);
 
   return;
+}
+
+char *srmmu_lockarea(char *vaddr, unsigned long len)
+{
+	return vaddr;
+}
+
+void srmmu_unlockarea(char *vaddr, unsigned long len)
+{
+}
+
+char *srmmu_get_scsi_buffer(char *vaddr, unsigned long len)
+{
+	panic("sun4m: get_scsi_buffer() not implemented yet.");
+}
+
+void srmmu_release_scsi_buffer(char *vaddr, unsigned long len)
+{
+	panic("sun4m: release_scsi_buffer() not implemented yet.");
 }
 
 /* Perfom a some soft of MMU tablewalk.
@@ -590,28 +560,13 @@ srmmu_init_alloc(unsigned long *kbrk, unsigned size)
 	return (void*) ret;
 }
 
-extern unsigned long srmmu_data_fault, srmmu_text_fault;
-
-/* Patch in the SRMMU fault handlers for the trap table. */
-void
-srmmu_patch_fhandlers(void)
+/* Get fault information on an SRMMU. */
+int
+srmmu_get_fault_info(unsigned long *address, unsigned long *error_code,
+		     unsigned long from_user)
 {
-	/* Say the following ten times fast... */
-	sparc_ttable[SP_TRAP_TFLT].inst_one = SPARC_MOV_CONST_L3(0x1);
-	sparc_ttable[SP_TRAP_TFLT].inst_two =
-		SPARC_BRANCH((unsigned long) &srmmu_text_fault, 
-			     (unsigned long) &sparc_ttable[SP_TRAP_TFLT].inst_two);
-	sparc_ttable[SP_TRAP_TFLT].inst_three = SPARC_RD_PSR_L0;
-	sparc_ttable[SP_TRAP_TFLT].inst_four = SPARC_NOP;
-
-	sparc_ttable[SP_TRAP_DFLT].inst_one = SPARC_MOV_CONST_L3(0x9);
-	sparc_ttable[SP_TRAP_DFLT].inst_two =
-		SPARC_BRANCH((unsigned long) &srmmu_data_fault,
-			     (unsigned long) &sparc_ttable[SP_TRAP_DFLT].inst_two);
-	sparc_ttable[SP_TRAP_DFLT].inst_three = SPARC_RD_PSR_L0;
-	sparc_ttable[SP_TRAP_DFLT].inst_four = SPARC_NOP;
-
-	return;
+	/* XXX Foo, write this... XXX */
+	return 0;
 }
 
 /* Paging initialization on the Sparc Reference MMU. */
@@ -653,7 +608,7 @@ srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 
 	/* Make Linux physical page tables. */
 	for(vaddr = KERNBASE; vaddr < end_mem; vaddr+=PAGE_SIZE) {
-		pgdp = srmmu_pgd_offset(&init_task, vaddr);
+		pgdp = srmmu_pgd_offset(init_task.mm, vaddr);
 		if(srmmu_pgd_none(*pgdp)) {
 			pmdp = srmmu_init_alloc(&mempool,
 						SRMMU_PTRS_PER_PMD*sizeof(pmd_t));
@@ -674,7 +629,7 @@ srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 	/* Map IO areas. */
 	for(vaddr = IOBASE_VADDR; vaddr < (IOBASE_VADDR+IOBASE_LEN);
 	    vaddr += SRMMU_PMD_SIZE) {
-		pgdp = srmmu_pgd_offset(&init_task, vaddr);
+		pgdp = srmmu_pgd_offset(init_task.mm, vaddr);
 		if(srmmu_pgd_none(*pgdp)) {
 			pmdp = srmmu_init_alloc(&mempool,
 						SRMMU_PTRS_PER_PMD*sizeof(pmd_t));
@@ -688,12 +643,37 @@ srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 		}
 	}
 
+	/* Map DVMA areas. */
+	for(vaddr = (DVMA_VADDR); vaddr < (DVMA_VADDR + DVMA_LEN);
+	    vaddr += PAGE_SIZE) {
+		pgdp = srmmu_pgd_offset(init_task.mm, vaddr);
+		if(srmmu_pgd_none(*pgdp)) {
+			pmdp = srmmu_init_alloc(&mempool,
+						SRMMU_PTRS_PER_PMD*sizeof(pmd_t));
+			srmmu_pgd_set(pgdp, pmdp);
+		}
+		pmdp = srmmu_pmd_offset(pgdp, vaddr);
+		if(srmmu_pmd_none(*pmdp)) {
+			ptep = srmmu_init_alloc(&mempool,
+						SRMMU_PTRS_PER_PTE*sizeof(pte_t));
+			srmmu_pmd_set(pmdp, ptep);
+		}
+
+		ptep = srmmu_pte_offset(pmdp, vaddr);
+		*ptep = srmmu_mk_pte((unsigned int) srmmu_init_alloc(&mempool, PAGE_SIZE), SRMMU_PAGE_KERNEL);
+		pte_val(*ptep) &= ~(SRMMU_PTE_C_MASK);
+	}
+	srmmu_flush_whole_tlb();
+	flush_ei_ctx(0x0);
+
 	/* Map in the PERCPU areas in virtual address space. */
-	printk("PERCPU_VADDR + PERCPU_LEN = %08lx\n",
-	       (PERCPU_VADDR + PERCPU_LEN));
+#if 0
+	prom_printf("PERCPU_VADDR + PERCPU_LEN = %08lx\n",
+		    (PERCPU_VADDR + PERCPU_LEN));
+#endif
 	for(vaddr = PERCPU_VADDR; vaddr < (PERCPU_VADDR + PERCPU_LEN);
 	    vaddr += PERCPU_ENTSIZE) {
-		pgdp = srmmu_pgd_offset(&init_task, vaddr);
+		pgdp = srmmu_pgd_offset(init_task.mm, vaddr);
 		if(srmmu_pgd_none(*pgdp)) {
 			pmdp = srmmu_init_alloc(&mempool,
 						SRMMU_PTRS_PER_PMD*sizeof(pmd_t));
@@ -724,6 +704,10 @@ srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 	 * you will lose with video cards when we take over the ctx table.
 	 * Also, must take into consideration that prom might be using level
 	 * two or one PTE's. TODO
+	 *
+	 * XXX This still isn't right, the cg* graphics cards get their
+	 * XXX mapped screens all fucked up when I jump onto Linux's
+	 * XXX page tables.  Must investigate...
 	 */
 	for(vaddr = KADB_DEBUGGER_BEGVM; vaddr != 0x0;) {
 		unsigned int prom_pte;
@@ -731,7 +715,7 @@ srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 		prom_pte = srmmu_init_twalk(vaddr, 0);
 
 		if(prom_pte) {
-			pgdp = srmmu_pgd_offset(&init_task, vaddr);
+			pgdp = srmmu_pgd_offset(init_task.mm, vaddr);
 			if((prom_pte&0x3) == 0x0) {
 				prom_pte &= ~0x3;
 				prom_pte |= SRMMU_ET_PTE;
@@ -772,9 +756,9 @@ srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 	/* We probably do, and should do it just to be safe... -Davem */
 
 	/* Take the MMU over from the PROM */
-	printk("Taking over MMU from PROM.\n");
+	prom_printf("Taking over MMU from PROM.\n");
 
-	srmmu_set_ctable_ptr(srmmu_virt_to_phys((unsigned)lnx_root));
+	srmmu_set_ctable_ptr(((unsigned)lnx_root) - PAGE_OFFSET);
 
 	srmmu_flush_whole_tlb();
 
@@ -784,14 +768,14 @@ srmmu_paging_init(unsigned long start_mem, unsigned long end_mem)
 	start_mem = PAGE_ALIGN(start_mem);
 
 #if 0
-	printk("Testing context switches...\n");
+	prom_printf("Testing context switches...\n");
 	for(i=0; i<num_contexts; i++)
 		srmmu_set_context(i);
-	printk("done...\n");
+	prom_printf("done...\n");
 	srmmu_set_context(0);
 #endif
 
-	printk("survived...\n");
+	prom_printf("survived...\n");
 	return start_mem;
 }
 
@@ -800,8 +784,6 @@ void
 srmmu_test_wp(void)
 {
 	pgd_t *pgdp;
-	pmd_t *pmdp;
-	pte_t *ptep;
 	
 	wp_works_ok = -1;
 	/* We mapped page zero as a read-only page in paging_init()
@@ -814,17 +796,54 @@ srmmu_test_wp(void)
 	if (wp_works_ok < 0)
 		wp_works_ok = 0;
 
-	pgdp = srmmu_pgd_offset(&init_task, 0x0);
+	pgdp = srmmu_pgd_offset(init_task.mm, 0x0);
 	pgd_val(*pgdp) = 0x0;
 
 	return;
+}
+
+void srmmu_update_mmu_cache(struct vm_area_struct * vma,
+			    unsigned long address, pte_t pte)
+{
+	printk("WHOOPS, update_mmu_cache called on a SRMMU!\n");
+	panic("SRMMU bolixed...");
+}
+
+void
+srmmu_fork_hook(void *vtask, unsigned long kthread_usp)
+{
+	return; /* XXX */
+}
+
+void
+srmmu_exit_hook(void *vtask)
+{
+	return; /* XXX */
+}
+
+void
+srmmu_release_hook(void *vtask)
+{
+	return; /* XXX */
+}
+
+void
+srmmu_flush_hook(void *vtask)
+{
+	return; /* XXX */
+}
+
+void
+srmmu_task_cacheflush(void *vtask)
+{
+	return; /* XXX */
 }
 
 /* Load up routines and constants for sun4m mmu */
 void
 ld_mmu_srmmu(void)
 {
-	printk("Loading srmmu MMU routines\n");
+	prom_printf("Loading srmmu MMU routines\n");
 
 	/* First the constants */
 	pmd_shift = SRMMU_PMD_SHIFT;
@@ -880,7 +899,7 @@ ld_mmu_srmmu(void)
 	pgd_reuse = srmmu_pgd_reuse;
 
 	mk_pte = srmmu_mk_pte;
-	pgd_set = srmmu_pgd_set;  /* XXX needs a cast */
+	pgd_set = srmmu_pgd_set;
 	pte_modify = srmmu_pte_modify;
 	pgd_offset = srmmu_pgd_offset;
 	pmd_offset = srmmu_pmd_offset;
@@ -914,7 +933,15 @@ ld_mmu_srmmu(void)
 	pte_mkdirty = srmmu_pte_mkdirty;
 	pte_mkyoung = srmmu_pte_mkyoung;
 	pte_mkcow = srmmu_pte_mkcow;
-
-	return;
+	get_fault_info = srmmu_get_fault_info;
+	update_mmu_cache = srmmu_update_mmu_cache;
+	mmu_exit_hook = srmmu_exit_hook;
+	mmu_fork_hook = srmmu_fork_hook;
+	mmu_release_hook = srmmu_release_hook;
+	mmu_flush_hook = srmmu_flush_hook;
+	mmu_task_cacheflush = srmmu_task_cacheflush;
+	mmu_lockarea = srmmu_lockarea;
+	mmu_unlockarea = srmmu_unlockarea;
+	mmu_get_scsi_buffer = srmmu_get_scsi_buffer;
+	mmu_release_scsi_buffer = srmmu_release_scsi_buffer;
 }
-

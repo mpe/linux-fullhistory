@@ -1,4 +1,5 @@
-/* umul.S:      This routine was taken from glibc-1.09 and is covered
+/* $Id: umul.S,v 1.2 1995/11/25 00:59:08 davem Exp $
+ * umul.S:      This routine was taken from glibc-1.09 and is covered
  *              by the GNU Library General Public License Version 2.
  */
 

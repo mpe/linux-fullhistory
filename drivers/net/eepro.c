@@ -140,7 +140,7 @@ static void 	eepro_rx(struct device *dev);
 static void 	eepro_transmit_interrupt(struct device *dev);
 static int	eepro_close(struct device *dev);
 static struct enet_statistics *eepro_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 
 static int read_eeprom(int ioaddr, int location);
 static void hardware_send_packet(struct device *dev, void *buf, short length);
@@ -351,7 +351,7 @@ int eepro_probe1(struct device *dev, short ioaddr)
 				printk("%c%02x", i ? ':' : ' ', dev->dev_addr[i]);
 			}
 				
-			outb(BANK2_SELECT, ioaddr); /* be CAREFULL, BANK 2 now */
+			outb(BANK2_SELECT, ioaddr); /* be CAREFUL, BANK 2 now */
 			id = inb(ioaddr + REG3);
 			if (id & TPE_BIT)
 				dev->if_port = TPE;
@@ -441,13 +441,13 @@ static int	eepro_grab_irq(struct device *dev)
 	int irqlist[] = { 5, 9, 10, 11, 4, 3, 0};	
 	int *irqp = irqlist, temp_reg, ioaddr = dev->base_addr;
 
-	outb(BANK1_SELECT, ioaddr); /* be CAREFULL, BANK 1 now */
+	outb(BANK1_SELECT, ioaddr); /* be CAREFUL, BANK 1 now */
 
 	/* Enable the interrupt line. */
 	temp_reg = inb(ioaddr + REG1);
 	outb(temp_reg | INT_ENABLE, ioaddr + REG1); 
 	
-	outb(BANK0_SELECT, ioaddr); /* be CAREFULL, BANK 0 now */
+	outb(BANK0_SELECT, ioaddr); /* be CAREFUL, BANK 0 now */
 
 	/* clear all interrupts */
 	outb(ALL_MASK, ioaddr + STATUS_REG); 
@@ -455,7 +455,7 @@ static int	eepro_grab_irq(struct device *dev)
 	outb(ALL_MASK & ~(EXEC_MASK), ioaddr + INT_MASK_REG); 
 
 	do {
-		outb(BANK1_SELECT, ioaddr); /* be CAREFULL, BANK 1 now */
+		outb(BANK1_SELECT, ioaddr); /* be CAREFUL, BANK 1 now */
 
 		temp_reg = inb(ioaddr + INT_NO_REG);
 		outb((temp_reg & 0xf8) | irqrmap[*irqp], ioaddr + INT_NO_REG); 
@@ -522,7 +522,7 @@ eepro_open(struct device *dev)
 
 	/* Initialize the 82595. */
 
-	outb(BANK2_SELECT, ioaddr); /* be CAREFULL, BANK 2 now */
+	outb(BANK2_SELECT, ioaddr); /* be CAREFUL, BANK 2 now */
 	temp_reg = inb(ioaddr + EEPROM_REG);
 	if (temp_reg & 0x10) /* Check the TurnOff Enable bit */
 		outb(temp_reg & 0xef, ioaddr + EEPROM_REG);
@@ -540,7 +540,7 @@ eepro_open(struct device *dev)
 	outb(temp_reg & 0x3f, ioaddr + REG3); /* clear test mode */
 
 	/* Set the receiving mode */
-	outb(BANK1_SELECT, ioaddr); /* be CAREFULL, BANK 1 now */
+	outb(BANK1_SELECT, ioaddr); /* be CAREFUL, BANK 1 now */
 	
 	temp_reg = inb(ioaddr + INT_NO_REG);
 	outb((temp_reg & 0xf8) | irqrmap[dev->irq], ioaddr + INT_NO_REG); 
@@ -769,19 +769,17 @@ eepro_get_stats(struct device *dev)
 }
 
 /* Set or clear the multicast filter for this adaptor.
-   num_addrs == -1	Promiscuous mode, receive all packets
-   num_addrs == 0	Normal mode, clear multicast list
-   num_addrs > 0	Multicast mode, receive normal and MC packets, and do
-			best-effort filtering.
  */
 static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+set_multicast_list(struct device *dev)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 	short ioaddr = dev->base_addr;
 	unsigned short mode;
+	struct dev_mc_list *dmi=dev->mc_list;
 
-	if (num_addrs <= -1 || num_addrs > 63) {
+	if (dev->flags&(IFF_ALLMULTI|IFF_PROMISC) || dev->mc_count > 63) 
+	{
 		/*
 		 *	We must make the kernel realise we had to move
 		 *	into promisc mode or we start all out war on
@@ -790,7 +788,7 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		 */
 		dev->flags|=IFF_PROMISC;		
 
-		outb(BANK2_SELECT, ioaddr); /* be CAREFULL, BANK 2 now */
+		outb(BANK2_SELECT, ioaddr); /* be CAREFUL, BANK 2 now */
 		mode = inb(ioaddr + REG2);
 		outb(mode | PRMSC_Mode, ioaddr + REG2);	
 		mode = inb(ioaddr + REG3);
@@ -798,16 +796,18 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		outb(BANK0_SELECT, ioaddr); /* Return to BANK 0 now */
 		printk("%s: promiscuous mode enabled.\n", dev->name);
 	} 
-	else if (num_addrs == 0) {
-		outb(BANK2_SELECT, ioaddr); /* be CAREFULL, BANK 2 now */
+	else if (dev->mc_count==0 ) 
+	{
+		outb(BANK2_SELECT, ioaddr); /* be CAREFUL, BANK 2 now */
 		mode = inb(ioaddr + REG2);
 		outb(mode & 0xd6, ioaddr + REG2); /* Turn off Multi-IA and PRMSC_Mode bits */
 		mode = inb(ioaddr + REG3);
 		outb(mode, ioaddr + REG3); /* writing reg. 3 to complete the update */
 		outb(BANK0_SELECT, ioaddr); /* Return to BANK 0 now */
 	}
-	else {
-		unsigned short status, *eaddrs = addrs;
+	else 
+	{
+		unsigned short status, *eaddrs;
 		int i, boguscount = 0;
 		
 		/* Disable RX and TX interrupts.  Neccessary to avoid
@@ -815,7 +815,7 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		   service routines. */
 		outb(ALL_MASK, ioaddr + INT_MASK_REG);
 
-		outb(BANK2_SELECT, ioaddr); /* be CAREFULL, BANK 2 now */
+		outb(BANK2_SELECT, ioaddr); /* be CAREFUL, BANK 2 now */
 		mode = inb(ioaddr + REG2);
 		outb(mode | Multi_IA, ioaddr + REG2);	
 		mode = inb(ioaddr + REG3);
@@ -825,8 +825,11 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		outw(MC_SETUP, ioaddr + IO_PORT);
 		outw(0, ioaddr + IO_PORT);
 		outw(0, ioaddr + IO_PORT);
-		outw(6*(num_addrs + 1), ioaddr + IO_PORT);
-		for (i = 0; i < num_addrs; i++) {
+		outw(6*(dev->mc_count + 1), ioaddr + IO_PORT);
+		for (i = 0; i < dev->mc_count; i++) 
+		{
+			eaddrs=(unsigned short *)dmi->dmi_addr;
+			dmi=dmi->next;
 			outw(*eaddrs++, ioaddr + IO_PORT);
 			outw(*eaddrs++, ioaddr + IO_PORT);
 			outw(*eaddrs++, ioaddr + IO_PORT);
@@ -839,8 +842,9 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		outb(MC_SETUP, ioaddr);
 
 		/* Update the transmit queue */
-		i = lp->tx_end + XMT_HEADER + 6*(num_addrs + 1);
-		if (lp->tx_start != lp->tx_end) { 
+		i = lp->tx_end + XMT_HEADER + 6*(dev->mc_count + 1);
+		if (lp->tx_start != lp->tx_end) 
+		{ 
 			/* update the next address and the chain bit in the 
 			   last packet */
 			outw(lp->tx_last + XMT_CHAIN, ioaddr + HOST_ADDRESS_REG);
@@ -849,13 +853,15 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 			status = inw(ioaddr + IO_PORT);
 			outw(status | CHAIN_BIT, ioaddr + IO_PORT);
 			lp->tx_end = i ;
-		} else lp->tx_start = lp->tx_end = i ;
+		}
+		else lp->tx_start = lp->tx_end = i ;
 
 		/* Acknowledge that the MC setup is done */
 		do { /* We should be doing this in the eepro_interrupt()! */
 			SLOW_DOWN_IO;
 			SLOW_DOWN_IO;
-			if (inb(ioaddr + STATUS_REG) & 0x08) {
+			if (inb(ioaddr + STATUS_REG) & 0x08) 
+			{
 				i = inb(ioaddr);
 				outb(0x08, ioaddr + STATUS_REG);
 				if (i & 0x20) { /* command ABORTed */
@@ -864,7 +870,7 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 					break;
 				} else if ((i & 0x0f) == 0x03)	{ /* MC-Done */
 					printk("%s: set Rx mode to %d addresses.\n", 
-						dev->name, num_addrs);
+						dev->name, dev->mc_count);
 					break;
 				}
 			}

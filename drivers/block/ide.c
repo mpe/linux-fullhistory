@@ -1,11 +1,11 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.18  Nov 16, 1995
+ *  linux/drivers/block/ide.c	Version 5.17  Nov 3, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
 
 /*
- * This is the multiple IDE interface driver, as evolved from hd.c.
+ * This is the multiple IDE interface driver, as evolved from hd.c.  
  * It supports up to four IDE interfaces, on one or more IRQs (usually 14 & 15).
  * There can be up to two drives per interface, as per the ATA-2 spec.
  *
@@ -13,17 +13,17 @@
  * Secondary i/f:  ide1: major=22; (hdc or hd1a) minor=0; (hdd or hd1b) minor=64
  * Tertiary i/f:   ide2: major=33; (hde)         minor=0; (hdf)         minor=64
  * Quaternary i/f: ide3: major=34; (hdg)         minor=0; (hdh)         minor=64
- *
+ * 
  * It is easy to extend ide.c to handle more than four interfaces:
  *
  *	Change the MAX_HWIFS constant in ide.h.
- *
+ * 
  *	Define some new major numbers (in major.h), and insert them into
  *	the ide_hwif_to_major table in ide.c.
- *
+ * 
  *	Fill in the extra values for the new interfaces into the two tables
  *	inside ide.c:  default_io_base[]  and  default_irqs[].
- *
+ * 
  *	Create the new request handlers by cloning "do_ide3_request()"
  *	for each new interface, and add them to the switch statement
  *	in the ide_init() function in ide.c.
@@ -56,7 +56,7 @@
  *  Maintained by Mark Lord (mlord@bnr.ca):  ide.c, ide.h, triton.c, hd.c, ..
  *
  *  This was a rewrite of just about everything from hd.c, though some original
- *  code is still sprinkled about.  Think of it as a major evolution, with
+ *  code is still sprinkled about.  Think of it as a major evolution, with 
  *  inspiration from lots of linux users, esp.  hamish@zot.apana.org.au
  *
  *  Version 1.0 ALPHA	initial code, primary i/f working okay
@@ -167,18 +167,15 @@
  *			remove "Huh?" from cmd640 code
  *			added qd6580 interface speed select from Colten Edwards
  *  Version 5.17	kludge around bug in BIOS32 on Intel triton motherboards
- *  Version 5.18	new CMD640 code, moved to cmd640.c, #include'd for now
- *			new UMC8672 code, moved to umc8672.c, #include'd for now
- *			disallow turning on DMA when h/w not capable of DMA
  *
  *  Driver compile-time options are in ide.h
  *
  *  To do, in likely order of completion:
- *	- make cmd640.c and umc8672.c compile separately from ide.c
  *	- add ALI M1443/1445 chipset support from derekn@vw.ece.cmu.edu
- *	- add ioctls to get/set interface timings on various interfaces
  *	- add Promise Caching controller support from peterd@pnd-pc.demon.co.uk
+ *	- add ioctls to get/set interface timings on various interfaces
  *	- modify kernel to obtain BIOS geometry for drives on 2nd/3rd/4th i/f
+ *	- improved CMD support:  handed this off to someone else
  *	- find someone to work on IDE *tape drive* support
  */
 
@@ -212,14 +209,9 @@
 
 #include "ide.h"
 
-#ifdef SUPPORT_CMD640
-void cmd640_tune_drive(ide_drive_t *);
-static int cmd640_vlb = 0;
-#endif
-
        ide_hwif_t	ide_hwifs[MAX_HWIFS];		/* hwif info */
 static ide_hwgroup_t	*irq_to_hwgroup [16];
-static const byte	ide_hwif_to_major[MAX_HWIFS] = {IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR};
+static const byte	ide_hwif_to_major[MAX_HWIFS]   = {IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR};
 
 static const unsigned short default_io_base[MAX_HWIFS] = {0x1f0, 0x170, 0x1e8, 0x168};
 static const byte	default_irqs[MAX_HWIFS]     = {14, 15, 11, 10};
@@ -1007,7 +999,7 @@ static void write_intr (ide_drive_t *drive)
 
 /*
  * multwrite() transfers a block of one or more sectors of data to a drive
- * as part of a disk multwrite operation.
+ * as part of a disk multwrite operation.  
  */
 static void multwrite (ide_drive_t *drive)
 {
@@ -1240,7 +1232,7 @@ static inline void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned 
 	if (drive->select.b.lba) {
 #ifdef DEBUG
 		printk("%s: %sing: LBAsect=%ld, sectors=%ld, buffer=0x%08lx\n",
-			drive->name, (rq->cmd==READ)?"read":"writ",
+			drive->name, (rq->cmd==READ)?"read":"writ", 
 			block, rq->nr_sectors, (unsigned long) rq->buffer);
 #endif
 		OUT_BYTE(block,io_base+IDE_SECTOR_OFFSET);
@@ -1503,7 +1495,7 @@ static void timer_expiry (unsigned long data)
 		printk("%s: marginal timeout\n", drive->name);
 	} else {				 /* drive not responding */
 		hwgroup->handler = NULL;
-		if (hwgroup->hwif->dmaproc)
+		if (hwgroup->hwif->dmaproc) 
 			(void) hwgroup->hwif->dmaproc (ide_dma_abort, drive);
 		if (!ide_error(drive, "irq timeout", GET_STAT()))
 			do_hwgroup_request (hwgroup);
@@ -1530,7 +1522,7 @@ static void timer_expiry (unsigned long data)
  * In reality, this is a non-issue.  The new command is not sent unless the
  * drive is ready to accept one, in which case we know the drive is not
  * trying to interrupt us.  And ide_set_handler() is always invoked before
- * completing the issuance of any new drive command, so we will not be
+ * completing the issuance of any new drive command, so we will not be 
  * accidently invoked as a result of any valid command completion interrupt.
  *
  */
@@ -1814,24 +1806,24 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		case BLKRAGET:
 			return write_fs_long(arg, read_ahead[MAJOR(inode->i_rdev)]);
 
-	 	case BLKGETSIZE:   /* Return device size */
+         	case BLKGETSIZE:   /* Return device size */
 			return write_fs_long(arg, drive->part[MINOR(inode->i_rdev)&PARTN_MASK].nr_sects);
 		case BLKRRPART: /* Re-read partition tables */
 			return revalidate_disk(inode->i_rdev);
 
-		case HDIO_GET_KEEPSETTINGS:
+                case HDIO_GET_KEEPSETTINGS:
 			return write_fs_long(arg, drive->keep_settings);
 
-		case HDIO_GET_UNMASKINTR:
+                case HDIO_GET_UNMASKINTR:
 			return write_fs_long(arg, drive->unmask);
 
-		case HDIO_GET_DMA:
+                case HDIO_GET_DMA:
 			return write_fs_long(arg, drive->using_dma);
 
-		case HDIO_GET_CHIPSET:
+                case HDIO_GET_CHIPSET:
 			return write_fs_long(arg, drive->chipset);
 
-		case HDIO_GET_MULTCOUNT:
+                case HDIO_GET_MULTCOUNT:
 			return write_fs_long(arg, drive->mult_count);
 
 		case HDIO_GET_IDENTITY:
@@ -1866,10 +1858,6 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			cli();
 			switch (cmd) {
 				case HDIO_SET_DMA:
-					if (!(HWIF(drive)->dmaproc)) {
-						restore_flags(flags);
-						return -EPERM;
-					}
 					drive->using_dma = arg;
 					break;
 				case HDIO_SET_KEEPSETTINGS:
@@ -2058,7 +2046,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		drive->present = 1;
 		drive->cyl     = drive->bios_cyl  = id->cyls;
 		drive->head    = drive->bios_head = id->heads;
-		drive->sect    = drive->bios_sect = id->sectors;
+		drive->sect    = drive->bios_sect = id->sectors; 
 	}
 	/* Handle logical geometry translation by the drive */
 	if ((id->field_valid & 1) && id->cur_cyls && id->cur_heads
@@ -2067,7 +2055,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		/*
 		 * Extract the physical drive geometry for our use.
 		 * Note that we purposely do *not* update the bios info.
-		 * This way, programs that use it (like fdisk) will
+		 * This way, programs that use it (like fdisk) will 
 		 * still have the same logical view as the BIOS does,
 		 * which keeps the partition table from being screwed.
 		 *
@@ -2091,7 +2079,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	if ((!drive->head || drive->head > 16) && id->heads && id->heads <= 16) {
 		drive->cyl  = id->cyls;
 		drive->head = id->heads;
-		drive->sect = id->sectors;
+		drive->sect = id->sectors; 
 	}
 	/* Correct the number of cyls if the bios value is too small */
 	if (drive->sect == drive->bios_sect && drive->head == drive->bios_head) {
@@ -2119,9 +2107,6 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 			printk(", DMA");
 	}
 	printk("\n");
-#ifdef SUPPORT_CMD640
-	cmd640_tune_drive(drive);	/* but can we tune a fish? */
-#endif
 }
 
 /*
@@ -2351,8 +2336,8 @@ static void probe_for_drives (ide_hwif_t *hwif)
  * The code enables the secondary IDE controller and the PIO4 (3?) timings on
  * the primary (EIDE). You may probably have to enable the 32-bit support to
  * get the full speed. You better get the disk interrupts disabled ( hdparm -u0
- * /dev/hd.. ) for the drives connected to the EIDE interface. (I get my
- * filesystem  corrupted with -u1, but under heavy disk load only :-)
+ * /dev/hd.. ) for the drives connected to the EIDE interface. (I get my 
+ * filesystem  corrupted with -u1, but under heavy disk load only :-)  
  *
  * From: mlord@bnr.ca -- this chipset is now forced to use the "serialize" feature,
  * which hopefully will make it more reliable to use.. maybe it has the same bugs
@@ -2432,13 +2417,59 @@ static void init_qd6580 (void)
 }
 #endif /* SUPPORT_QD6580 */
 
-#ifdef SUPPORT_UMC8672
-#include "umc8672.c"	/* until we tidy up the interface some more */
-#endif
+#if SUPPORT_CMD640
+/*
+ * ??? fixme: 
+ */
+byte read_cmd640_vlb (byte port, byte reg)
+{
+	byte val;
 
-#ifdef SUPPORT_CMD640
-#include "cmd640.c"	/* until we tidy up the interface some more */
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	outw(reg, port);
+	val = inb(port+4);
+	restore_flags(flags);
+	return val;
+}
+
+void write_cmd640_vlb (byte port, byte reg, byte val)
+{
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	outw(reg, port);
+	outw(val, port+4);
+	restore_flags(flags);
+}
+
+void init_cmd640_vlb (void)
+{
+	byte reg;
+	unsigned short port = 0x178;
+
+	serialized = 1;
+ 	printk("ide: buggy CMD640 interface: serialized, ");
+	reg = read_cmd640_vlb(port, 0x50);
+	if (reg == 0xff || (reg & 0x90) != 0x90) {
+#if TRY_CMD640_VLB_AT_0x78
+		port = 0x78;
+		reg = read_cmd640_vlb(port, 0x50);
+		if (reg == 0xff || (reg & 0x90) != 0x90)
 #endif
+		{
+			disallow_unmask = 1;
+			printk("(probe failed) disabled unmasking\n");
+			return;
+		}
+	}
+	write_cmd640_vlb(port, 0x51, read_cmd640_vlb(port, 0x51)|0xc8);
+	write_cmd640_vlb(port, 0x57, read_cmd640_vlb(port, 0x57)|0x0c);
+	printk("disabled read-ahead, enabled secondary\n");
+
+}
+#endif /* SUPPORT_CMD640 */
 
 /*
  * stridx() returns the offset of c within s,
@@ -2457,7 +2488,7 @@ static int stridx (const char *s, char c)
  * 2. if the remainder matches one of the supplied keywords,
  *     the index (1 based) of the keyword is negated and returned.
  * 3. if the remainder is a series of no more than max_vals numbers
- *     separated by commas, the numbers are saved in vals[] and a
+ *     separated by commas, the numbers are saved in vals[] and a 
  *     count of how many were saved is returned.  Base10 is assumed,
  *     and base16 is allowed when prefixed with "0x".
  * 4. otherwise, zero is returned.
@@ -2480,7 +2511,7 @@ static int match_parm (char *s, const char *keywords[], int vals[], int max_vals
 		/*
 		 * Look for a series of no more than "max_vals"
 		 * numeric values separated by commas, in base10,
-		 * or base16 when prefixed with "0x".
+		 * or base16 when prefixed with "0x".  
 		 * Return a count of how many were found.
 		 */
 		for (n = 0; (i = stridx(decimal, *s)) >= 0;) {
@@ -2590,18 +2621,11 @@ void ide_setup (char *s)
 	 * Look for interface options:  "idex="
 	 */
 	if (s[0] == 'i' && s[1] == 'd' && s[2] == 'e' && s[3] >= '0' && s[3] <= max_hwif) {
-		const char *ide_words[] = {"noprobe", "serialize", "dtc2278", "ht6560b",
-					"cmd640_vlb", "qd6580", "umc8672", NULL};
+		const char *ide_words[] = {"noprobe", "serialize", "dtc2278", "ht6560b", "cmd640_vlb", "qd6580", NULL};
 		hw = s[3] - '0';
 		hwif = &ide_hwifs[hw];
 
 		switch (match_parm(&s[4], ide_words, vals, 3)) {
-#if SUPPORT_UMC8672
-			case -7: /* "umc8672" */
-				if (hw != 0) goto bad_hwif;
-				init_umc8672();
-				goto done;
-#endif /* SUPPORT_UMC8672 */
 #if SUPPORT_QD6580
 			case -6: /* "qd6580" */
 				if (hw != 0) goto bad_hwif;
@@ -2611,7 +2635,8 @@ void ide_setup (char *s)
 #if SUPPORT_CMD640
 			case -5: /* "cmd640_vlb" */
 				if (hw > 1) goto bad_hwif;
-				cmd640_vlb = 1;
+				init_cmd640_vlb();
+				goto do_serialize; /* not necessary once we implement the above */
 				break;
 #endif /* SUPPORT_CMD640 */
 #if SUPPORT_HT6560B
@@ -2684,7 +2709,7 @@ int ide_xlate_1024 (kdev_t i_rdev, int offset, const char *msg)
 
 	drive->cyl  = drive->bios_cyl  = drive->id->cyls;
 	drive->head = drive->bios_head = drive->id->heads;
-	drive->sect = drive->bios_sect = drive->id->sectors;
+	drive->sect = drive->bios_sect = drive->id->sectors; 
 	drive->special.b.set_geometry = 1;
 
 	tracks = drive->bios_cyl * drive->bios_head * drive->bios_sect / 63;
@@ -2720,7 +2745,7 @@ int ide_xlate_1024 (kdev_t i_rdev, int offset, const char *msg)
  * drives in the system -- the ones reflected as drive 1 or 2.  The first
  * drive is stored in the high nibble of CMOS byte 0x12, the second in the low
  * nibble.  This will be either a 4 bit drive type or 0xf indicating use byte
- * 0x19 for an 8 bit type, drive 1, 0x1a for drive 2 in CMOS.  A non-zero value
+ * 0x19 for an 8 bit type, drive 1, 0x1a for drive 2 in CMOS.  A non-zero value 
  * means we have an AT controller hard disk for that drive.
  *
  * Of course, there is no guarantee that either drive is actually on the
@@ -2880,6 +2905,45 @@ void init_rz1000 (byte bus, byte fn)
 }
 #endif /* SUPPORT_RZ1000 */
 
+#if SUPPORT_CMD640
+void init_cmd640 (byte bus, byte fn)
+{
+	int rc;
+	unsigned char reg;
+
+	serialized = 1;
+	printk("ide: buggy CMD640 interface: ");
+
+#if 0	/* funny.. the cmd640b I tried this on claimed to not be enabled.. */
+	unsigned short sreg;
+	if ((rc = pcibios_read_config_word (bus, fn, PCI_COMMAND, &sreg))) {
+		ide_pci_access_error (rc);
+	} else if (!(sreg & 1)) {
+		printk("not enabled\n");
+	} else {
+
+	/*
+	 * The first part is undocumented magic from the DOS driver.
+	 * According to the datasheet, there is no port 0x5b on the cmd640.
+	 */
+	(void) pcibios_write_config_byte(bus, fn, 0x5b, 0xbd);
+	if (pcibios_write_config_byte(bus, fn, 0x5b, 0xbd) != 0xbd)
+		printk("init_cmd640: huh? 0x5b read back wrong\n");
+	(void) pcibios_write_config_byte(bus, fn, 0x5b, 0);
+#endif /* 0 */
+	/*
+	 * The rest is from the cmd640b datasheet.
+	 */
+	if ((rc = pcibios_read_config_byte(bus, fn, 0x51, &reg))
+	 || (rc =  pcibios_write_config_byte(bus, fn, 0x51, reg | 0xc0)) /* 0xc8 to enable 2nd i/f */
+	 || (rc =  pcibios_read_config_byte(bus, fn, 0x57, &reg))
+	 || (rc =  pcibios_write_config_byte(bus, fn, 0x57, reg | 0x0c)))
+		buggy_interface_fallback (rc);
+	else
+		printk("serialized, disabled read-ahead\n");
+}
+#endif /* SUPPORT_CMD640 */
+
 typedef void (ide_pci_init_proc_t)(byte, byte);
 
 /*
@@ -2902,7 +2966,7 @@ static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci
 
 /*
  * ide_init_pci() finds/initializes "known" PCI IDE interfaces
- *
+ * 
  * This routine should ideally be using pcibios_find_class() to find
  * all IDE interfaces, but that function causes some systems to "go weird".
  */
@@ -2910,6 +2974,9 @@ static void ide_init_pci (void)
 {
 #if SUPPORT_RZ1000
 	ide_probe_pci (PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1000, &init_rz1000, 0);
+#endif
+#if SUPPORT_CMD640
+	ide_probe_pci (PCI_VENDOR_ID_CMD, PCI_DEVICE_ID_CMD_640, &init_cmd640, 0);
 #endif
 #ifdef CONFIG_BLK_DEV_TRITON
 	/*
@@ -2941,9 +3008,6 @@ int ide_init (void)
 	if (pcibios_present())
 		ide_init_pci ();
 #endif /* CONFIG_PCI */
-#ifdef SUPPORT_CMD640
-	ide_probe_for_cmd640x();
-#endif
 
 	/*
 	 * Probe for drives in the usual way.. CMOS/BIOS, then poke at ports

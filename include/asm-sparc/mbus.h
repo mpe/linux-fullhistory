@@ -1,4 +1,5 @@
-/* mbus.h:  Various defines for MBUS modules.
+/* $Id: mbus.h,v 1.5 1995/11/25 02:32:00 davem Exp $
+ * mbus.h:  Various defines for MBUS modules.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */

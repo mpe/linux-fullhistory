@@ -1,4 +1,5 @@
-/* mp.c:  OpenBoot Prom Multiprocessor support routines.  Don't call
+/* $Id: mp.c,v 1.4 1995/11/25 01:00:06 davem Exp $
+ * mp.c:  OpenBoot Prom Multiprocessor support routines.  Don't call
  *        these on a UP or else you will halt and catch fire. ;)
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

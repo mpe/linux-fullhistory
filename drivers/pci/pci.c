@@ -41,6 +41,7 @@ struct pci_dev *pci_devices = 0;
  * it is sequential by both vendor and device id.
  */
 struct pci_dev_info dev_info[] = {
+	DEVICE( COMPAQ,		COMPAQ_1280,	"QVision 1280/p"),
 	DEVICE( NCR,		NCR_53C810,	"53c810"),
 	DEVICE( NCR,		NCR_53C820,	"53c820"),
 	DEVICE( NCR,		NCR_53C825,	"53c825"),
@@ -88,12 +89,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( SI,		SI_5511,		"85C5511"),
 	DEVICE( SI,		SI_5513,		"85C5513"),
 	DEVICE( HP,		HP_J2585A,	"J2585A"),
-#if 0
-	DEVICE( SMC,		SMC_37C665,	"FDC 37C665"),  /* 1042 ? */
-	DEVICE( SMC,		SMC_37C922,	"FDC 37C922"),
-#else
-	DEVICE( PCTECH,		PCTECH_RZ1000,  "RZ1000 (buggy)"), /* 1042 */
-#endif
+	DEVICE( PCTECH,		PCTECH_RZ1000,  "RZ1000 (buggy)"),
 	DEVICE( DPT,		DPT,		"SmartCache/Raid"),
 	DEVICE( OPTI,		OPTI_82C557,	"82C557"),
 	DEVICE( OPTI,		OPTI_82C558,	"82C558"),
@@ -101,6 +97,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( OPTI,		OPTI_82C822,	"82C822"),
 	DEVICE( BUSLOGIC,	BUSLOGIC_946C_2,"946C"),
 	DEVICE( BUSLOGIC,	BUSLOGIC_946C,	"946C"),
+	DEVICE( BUSLOGIC,	BUSLOGIC_930,	"BT-930"),
 	DEVICE( PROMISE,	PROMISE_5300,	"DC5030"),
 	DEVICE( N9,		N9_I128,	"Imagine 128"),
 	DEVICE( UMC,		UMC_UM8673F,	"UM8673F"),
@@ -118,6 +115,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( CMD,		CMD_646,	"646"),
 	DEVICE( VISION,		VISION_QD8500,	"QD-8500"),
 	DEVICE( VISION,		VISION_QD8580,	"QD-8580"),
+	DEVICE( SIERRA,		SIERRA_STB,	"STB Horizon 64"),
 	DEVICE( WINBOND,	WINBOND_83769,	"W83769F"),
 	DEVICE( 3COM,		3COM_3C590,	"3C590 10bT"),
 	DEVICE( 3COM,		3COM_3C595TX,	"3C595 100bTX"),
@@ -128,18 +126,22 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( AL,		AL_M1451,	"M1451"),
 	DEVICE( AL,		AL_M1461,	"M1461"),
 	DEVICE( AL,		AL_M4803,	"M4803"),
+	DEVICE( ASP,		ASP_ABP940,	"ABP940"),
 	DEVICE( IMS,		IMS_8849,	"8849"),
+	DEVICE( TEKRAM2,	TEKRAM2_690c,	"DC690c"),
 	DEVICE( REALTEK,	REALTEK_8029,	"8029"),
 	DEVICE( VIA,		VIA_82C505,	"VT 82C505"),
 	DEVICE( VIA,		VIA_82C561,	"VT 82C561"),
 	DEVICE( VIA,		VIA_82C576,	"VT 82C576 3V"),
 	DEVICE( VORTEX,		VORTEX_GDT,	"GDT 6000b"),
-	DEVICE( EF,		EF_ATM,		"155P-MF1"),
+	DEVICE( EF,		EF_ATM_FPGA,		"155P-MF1 (FPGA)"),
+	DEVICE( EF,		EF_ATM_ASIC,	"155P-MF1 (ASIC)"),
 	DEVICE( IMAGINGTECH,	IMAGINGTECH_ICPCI, "MVC IC-PCI"),
 	DEVICE( PLX,		PLX_9060,	"PCI9060 i960 bridge"),
 	DEVICE( ALLIANCE,	ALLIANCE_PROVIDEO, "Provideo"),
 	DEVICE( MUTECH,		MUTECH_MV1000,	"MV-1000"),
-	DEVICE( ZEINET,		ZEINET_1221,	"1221"),
+	DEVICE( ZEITNET,	ZEITNET_1221,	"1221"),
+	DEVICE( HAL,		HAL_RIO,	"RIO host"),
 	DEVICE( CYCLADES,	CYCLADES_Y,	"Cyclome-Y"),
 	DEVICE( SYMPHONY,	SYMPHONY_101,	"82C101"),
 	DEVICE( TEKRAM,		TEKRAM_DC290,	"DC-290"),
@@ -160,14 +162,16 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_7116,	"SAA7116"),
 	DEVICE( INTEL,		INTEL_82596,	"82596"),
 	DEVICE( INTEL,		INTEL_82865,	"82865"),
+	DEVICE( INTEL,		INTEL_82557,	"82557"),
 	DEVICE( INTEL,		INTEL_82437,	"82437"),
 	DEVICE( INTEL,		INTEL_82371_0,	"82371 Triton PIIX"),
 	DEVICE( INTEL,		INTEL_82371_1,	"82371 Triton PIIX"),
-	DEVICE( INTEL,		INTEL_P6,	"Experimental P6 bridge"),
+	DEVICE( INTEL,		INTEL_P6,	"Orion P6"),
 	DEVICE( ADAPTEC,	ADAPTEC_7850,	"AIC-7850"),
 	DEVICE( ADAPTEC,	ADAPTEC_7870,	"AIC-7870"),
 	DEVICE( ADAPTEC,	ADAPTEC_7871,	"AIC-7871"),
 	DEVICE( ADAPTEC,	ADAPTEC_7872,	"AIC-7872"),
+	DEVICE( ADAPTEC,	ADAPTEC_7873,	"AIC-7873"),
 	DEVICE( ADAPTEC,	ADAPTEC_7880,	"AIC-7880U"),
 	DEVICE( ADAPTEC,	ADAPTEC_7881,	"AIC-7881U"),
 	DEVICE( ADAPTEC,	ADAPTEC_7882,	"AIC-7882U"),
@@ -368,61 +372,66 @@ const char *pci_strclass (unsigned int class)
 const char *pci_strvendor(unsigned int vendor)
 {
 	switch (vendor) {
+	      case PCI_VENDOR_ID_COMPAQ:	return "Compaq";
 	      case PCI_VENDOR_ID_NCR:		return "NCR";
-	      case PCI_VENDOR_ID_ADAPTEC:	return "Adaptec";
-	      case PCI_VENDOR_ID_DPT:		return "DPT";
-	      case PCI_VENDOR_ID_S3:		return "S3 Inc.";
-	      case PCI_VENDOR_ID_OPTI:		return "OPTI";
-	      case PCI_VENDOR_ID_UMC:		return "UMC";
-	      case PCI_VENDOR_ID_DEC:		return "DEC";
-	      case PCI_VENDOR_ID_MATROX:	return "Matrox";
-	      case PCI_VENDOR_ID_INTEL:		return "Intel";
-#if 0
-	      case PCI_VENDOR_ID_SMC:		return "SMC";
-#else
-	      case PCI_VENDOR_ID_PCTECH:	return "PCTECH";
-#endif
 	      case PCI_VENDOR_ID_ATI:		return "ATI";
-	      case PCI_VENDOR_ID_WEITEK:	return "Weitek";
-	      case PCI_VENDOR_ID_CIRRUS:	return "Cirrus Logic";
-	      case PCI_VENDOR_ID_BUSLOGIC:	return "BusLogic";
-	      case PCI_VENDOR_ID_N9:		return "Number Nine";
-	      case PCI_VENDOR_ID_AI:		return "Acer Incorporated";
-	      case PCI_VENDOR_ID_AL:		return "Acer Labs";
-	      case PCI_VENDOR_ID_TSENG:		return "Tseng'Lab";
-	      case PCI_VENDOR_ID_CMD:		return "CMD";
-	      case PCI_VENDOR_ID_VISION:	return "Vision";
-	      case PCI_VENDOR_ID_AMD:		return "AMD";
 	      case PCI_VENDOR_ID_VLSI:		return "VLSI";
 	      case PCI_VENDOR_ID_ADL:		return "Advance Logic";
-	      case PCI_VENDOR_ID_SYMPHONY:	return "Symphony";
-	      case PCI_VENDOR_ID_TRIDENT:	return "Trident";
-	      case PCI_VENDOR_ID_CONTAQ:	return "Contaq";
 	      case PCI_VENDOR_ID_NS:		return "NS";
-	      case PCI_VENDOR_ID_VIA:		return "VIA Technologies";
-	      case PCI_VENDOR_ID_SI:		return "Silicon Integrated Systems";
-	      case PCI_VENDOR_ID_LEADTEK:	return "Leadtek Research";
-	      case PCI_VENDOR_ID_IMS:		return "IMS";
-	      case PCI_VENDOR_ID_ZEINET:	return "ZeiNet";
-	      case PCI_VENDOR_ID_EF:		return "Efficient Networks";
-	      case PCI_VENDOR_ID_HER:		return "Hercules";
-	      case PCI_VENDOR_ID_ATRONICS:	return "Atronics";
+	      case PCI_VENDOR_ID_TSENG:		return "Tseng'Lab";
+	      case PCI_VENDOR_ID_WEITEK:	return "Weitek";
+	      case PCI_VENDOR_ID_DEC:		return "DEC";
+	      case PCI_VENDOR_ID_CIRRUS:	return "Cirrus Logic";
+	      case PCI_VENDOR_ID_IBM:		return "IBM";
+	      case PCI_VENDOR_ID_AMD:		return "AMD";
+	      case PCI_VENDOR_ID_TRIDENT:	return "Trident";
+	      case PCI_VENDOR_ID_AI:		return "Acer Incorporated";
+	      case PCI_VENDOR_ID_MATROX:	return "Matrox";
 	      case PCI_VENDOR_ID_CT:		return "Chips & Technologies";
 	      case PCI_VENDOR_ID_FD:		return "Future Domain";
+	      case PCI_VENDOR_ID_SI:		return "Silicon Integrated Systems";
+	      case PCI_VENDOR_ID_HP:		return "Hewlett Packard";
+	      case PCI_VENDOR_ID_PCTECH:	return "PCTECH";
+	      case PCI_VENDOR_ID_DPT:		return "DPT";
+	      case PCI_VENDOR_ID_OPTI:		return "OPTI";
+	      case PCI_VENDOR_ID_BUSLOGIC:	return "BusLogic";
+	      case PCI_VENDOR_ID_PROMISE:	return "Promise Technology";
+	      case PCI_VENDOR_ID_N9:		return "Number Nine";
+	      case PCI_VENDOR_ID_UMC:		return "UMC";
+	      case PCI_VENDOR_ID_X:		return "X TECHNOLOGY";
+	      case PCI_VENDOR_ID_QLOGIC:	return "Q Logic";
+	      case PCI_VENDOR_ID_LEADTEK:	return "Leadtek Research";
+	      case PCI_VENDOR_ID_CONTAQ:	return "Contaq";
+	      case PCI_VENDOR_ID_OLICOM:	return "Olicom";
+	      case PCI_VENDOR_ID_CMD:		return "CMD";
+	      case PCI_VENDOR_ID_VISION:	return "Vision";
+	      case PCI_VENDOR_ID_SIERRA:	return "Sierra";
+	      case PCI_VENDOR_ID_ACC:		return "ACC MICROELECTRONICS";
 	      case PCI_VENDOR_ID_WINBOND:	return "Winbond";
 	      case PCI_VENDOR_ID_3COM:		return "3Com";
-	      case PCI_VENDOR_ID_PROMISE:	return "Promise Technology";
-	      case PCI_VENDOR_ID_QLOGIC:	return "Q Logic";
-	      case PCI_VENDOR_ID_X:		return "X TECHNOLOGY";
-	      case PCI_VENDOR_ID_ACC:		return "ACC MICROELECTRONICS";
+	      case PCI_VENDOR_ID_AL:		return "Acer Labs";
+	      case PCI_VENDOR_ID_ASP:		return "Advanced System Products";
+	      case PCI_VENDOR_ID_IMS:		return "IMS";
+	      case PCI_VENDOR_ID_TEKRAM2:	return "Tekram";
+	      case PCI_VENDOR_ID_REALTEK:	return "Realtek";
+	      case PCI_VENDOR_ID_VIA:		return "VIA Technologies";
 	      case PCI_VENDOR_ID_VORTEX:	return "VORTEX";
-	      case PCI_VENDOR_ID_HP:		return "Hewlett Packard";
+	      case PCI_VENDOR_ID_EF:		return "Efficient Networks";
 	      case PCI_VENDOR_ID_IMAGINGTECH:	return "Imaging Technology";
-	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
-	      case PCI_VENDOR_ID_OLICOM:	return "Olicom";
-	      case PCI_VENDOR_ID_IBM:		return "IBM";
-	      case PCI_VENDOR_ID_AVANCE:	return "Avance";
+	      case PCI_VENDOR_ID_PLX:		return "PLX";
 	      case PCI_VENDOR_ID_ALLIANCE:	return "Alliance";
+	      case PCI_VENDOR_ID_MUTECH:	return "Mutech";
+	      case PCI_VENDOR_ID_ZEITNET:	return "ZeitNet";
+	      case PCI_VENDOR_ID_HAL:		return "HAL";
+	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
+	      case PCI_VENDOR_ID_SYMPHONY:	return "Symphony";
+	      case PCI_VENDOR_ID_TEKRAM:	return "Tekram";
+	      case PCI_VENDOR_ID_AVANCE:	return "Avance";
+	      case PCI_VENDOR_ID_S3:		return "S3 Inc.";
+	      case PCI_VENDOR_ID_INTEL:		return "Intel";
+	      case PCI_VENDOR_ID_ADAPTEC:	return "Adaptec";
+	      case PCI_VENDOR_ID_ATRONICS:	return "Atronics";
+	      case PCI_VENDOR_ID_HER:		return "Hercules";
 	      default:				return "Unknown vendor";
 	}
 }

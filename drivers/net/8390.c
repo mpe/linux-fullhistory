@@ -32,6 +32,8 @@ static const char *version =
   Much of this code should have been cleaned up, but every attempt 
   has broken some clone part.
   
+  Doesn't currently work on all shared memory cards.
+  
   Sources:
   The National Semiconductor LAN Databook, and the 3Com 3c503 databook.
   */
@@ -105,9 +107,7 @@ static void ei_rx_overrun(struct device *dev);
 /* Routines generic to NS8390-based boards. */
 static void NS8390_trigger_send(struct device *dev, unsigned int length,
 								int start_page);
-#ifdef HAVE_MULTICAST
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
-#endif
+static void set_multicast_list(struct device *dev);
 
 
 /* Open/initialize the board.  This routine goes all-out, setting everything
@@ -572,27 +572,27 @@ static struct enet_statistics *get_stats(struct device *dev)
     return &ei_local->stat;
 }
 
-#ifdef HAVE_MULTICAST
-/* Set or clear the multicast filter for this adaptor.
-   num_addrs == -1	Promiscuous mode, receive all packets
-   num_addrs == 0	Normal mode, clear multicast list
-   num_addrs > 0	Multicast mode, receive normal and MC packets, and do
-   .   				best-effort filtering.
-   */
+/*
+ *	Set or clear the multicast filter for this adaptor.
+ */
+ 
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
-    short ioaddr = dev->base_addr;
+	short ioaddr = dev->base_addr;
     
-    if (num_addrs > 0 || num_addrs == -2) {
+	if(dev->flags&IFF_PROMISC)
+	{
+		outb_p(E8390_RXCONFIG | 0x18, ioaddr + EN0_RXCR);
+	}
+	else if((dev->flags&IFF_ALLMULTI)||dev->mc_list)
+	{
 		/* The multicast-accept list is initialized to accept-all, and we
 		   rely on higher-level filtering for now. */
 		outb_p(E8390_RXCONFIG | 0x08, ioaddr + EN0_RXCR);
-    } else if (num_addrs < 0)
-		outb_p(E8390_RXCONFIG | 0x18, ioaddr + EN0_RXCR);
-    else
+	} 
+	else
 		outb_p(E8390_RXCONFIG, ioaddr + EN0_RXCR);
 }
-#endif
 
 /* Initialize the rest of the 8390 device structure. */
 int ethdev_init(struct device *dev)
@@ -680,6 +680,8 @@ void NS8390_init(struct device *dev, int startp)
 		outb_p(E8390_TXCONFIG, e8390_base + EN0_TXCR); /* xmit on. */
 		/* 3c503 TechMan says rxconfig only after the NIC is started. */
 		outb_p(E8390_RXCONFIG,	e8390_base + EN0_RXCR); /* rx on,  */
+		dev->set_multicast_list(dev);		/* Get the multicast status right if this
+							   was a reset. */
     }
     return;
 }

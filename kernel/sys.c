@@ -545,6 +545,19 @@ asmlinkage int sys_getpgrp(void)
 	return current->pgrp;
 }
 
+asmlinkage int sys_getsid(pid_t pid)
+{
+	struct task_struct * p;
+
+	if (!pid)
+		return current->session;
+	for_each_task(p) {
+		if (p->pid == pid)
+			return p->session;
+	}
+	return -ESRCH;
+}
+
 asmlinkage int sys_setsid(void)
 {
 	if (current->leader)

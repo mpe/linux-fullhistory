@@ -359,6 +359,7 @@ int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 	 */
 	
 	cli();
+
 	cache=ipmr_cache_find(mfc->mfcc_origin.s_addr,mfc->mfcc_mcastgrp.s_addr);
 	
 	/*

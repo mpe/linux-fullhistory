@@ -1,4 +1,5 @@
-/* ioport.c:  Simple io mapping allocator.
+/* $Id: ioport.c,v 1.12 1995/11/25 00:58:07 davem Exp $
+ * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -17,10 +18,13 @@
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/ioport.h>
+#include <linux/mm.h>
 
 #include <asm/io.h>
 #include <asm/vaddrs.h>
 #include <asm/oplib.h>
+#include <asm/page.h>
+#include <asm/pgtable.h>
 
 /* This points to the next to use virtual memory for io mappings */
 static long next_free_region = IOBASE_VADDR;
@@ -48,25 +52,26 @@ void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
 {
 	unsigned long vaddr, base_address;
 	unsigned long addr = (unsigned long) address;
-
+	unsigned long offset = (addr & (~PAGE_MASK));
 
 	if (virtual){
 		vaddr = (unsigned long) virtual;
 	} else {
 		vaddr = next_free_region;
 	}
-	
+		
+	len += offset;
 	if (((unsigned long) virtual + len) > (IOBASE_VADDR + IOBASE_LEN)){
 		printk ("alloc_io: Mapping ouside IOBASE area\n");
 		prom_halt ();
 	}
-	if (check_region (vaddr, len)){
+	if (check_region ((vaddr | offset), len)){
 		printk ("alloc_io: 0x%lx is already in use\n", vaddr);
 		prom_halt ();
 	}
 
 	/* Tell Linux resource manager about the mapping */
-	request_region (vaddr, len, name);
+	request_region ((vaddr | offset), len, name);
 
 	base_address = vaddr;
 	/* Do the actual mapping */
@@ -77,10 +82,18 @@ void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
 		if (!virtual)
 			next_free_region += PAGE_SIZE;
 	}
-	return (void *) base_address;
+	return (void *) (base_address | offset);
 }
 
-/* Does DVMA allocations with PAGE_SIZE granulatity */
+/* Does DVMA allocations with PAGE_SIZE granulatity.  How this basically
+ * works is that the ESP chip can do DVMA transfers at ANY address with
+ * certain size and boundry restrictions.  But other devices that are
+ * attached to it and would like to do DVMA have to set things up in
+ * a special way, if the DVMA see's a device attached to it transfer data
+ * at addresses above DVMA_VADDR it will grab them, this way it does not
+ * now have to know the peculiarities of where to read the Lance data
+ * from. (for example)
+ */
 void *sparc_dvma_malloc (int len, char *name)
 {
 	unsigned long vaddr, base_address;
@@ -95,17 +108,15 @@ void *sparc_dvma_malloc (int len, char *name)
 		prom_halt ();
 	}
 
-	/* Tell Linux resource manager about the mapping */
-	request_region (vaddr, len, name);
-
+	/* Basically these can be mapped just like any old
+	 * IO pages, cacheable bit off, etc.  The physical
+	 * pages are pre-mapped in paging_init()
+	 */
 	base_address = vaddr;
-	/* Assign the memory area and remove the cache bit */
-	/* XXX EWWWWEE!!  Sun4c specific, fix now! XXX */
-	for (; len > 0; len -= PAGE_SIZE){
-		printk ("Len=%d\n", len);
-		put_pte (vaddr, get_pte (vaddr) | PTE_NC);
-		vaddr += PAGE_SIZE;
-		dvma_next_free += PAGE_SIZE;
-	}
+	/* Assign the memory area. */
+	dvma_next_free = PAGE_ALIGN(dvma_next_free+len);
+
+	request_region(base_address, len, name);
+
 	return (void *) base_address;
 }

@@ -274,6 +274,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			/*
 			 *	Add the physical headers.
 			 */
+			skb2->protocol=htons(ETH_P_IP);
 #ifdef CONFIG_IP_MROUTE
 			if(is_frag&16)
 			{

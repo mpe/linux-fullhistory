@@ -1,11 +1,12 @@
-/* psr.h: This file holds the macros for masking off various parts of
-          the processor status register on the Sparc. This is valid
-	  for Version 8. On the V9 this is renamed to the PSTATE
-	  register and its members are accessed as fields like
-	  PSTATE.PRIV for the current CPU privilege level.
-
-   Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
-*/
+/* $Id: psr.h,v 1.5 1995/11/25 02:32:31 davem Exp $
+ * psr.h: This file holds the macros for masking off various parts of
+ *        the processor status register on the Sparc. This is valid
+ *        for Version 8. On the V9 this is renamed to the PSTATE
+ *        register and its members are accessed as fields like
+ *        PSTATE.PRIV for the current CPU privilege level.
+ *
+ * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
+ */
 
 #ifndef __LINUX_SPARC_PSR_H
 #define __LINUX_SPARC_PSR_H
@@ -15,21 +16,12 @@
 #ifdef __LINUX_SPARC_V8
 
 /* The Sparc PSR fields are laid out as the following:
-
-    ------------------------------------------------------------------------
-    | impl  | vers  | icc   | resv  | EC | EF | PIL  | S | PS | ET |  CWP  |
-bits| 31-28 | 27-24 | 23-20 | 19-14 | 13 | 12 | 11-8 | 7 | 6  | 5  |  4-0  |
-    ------------------------------------------------------------------------
-
-   The PSR can only be directly be written/read by the privileged instructions
-   'rd' and 'wr'. Certain fields are changed as a side effect due to the 'Ticc',
-   'save', 'restore', and 'rett' instructions. Also the integer condition codes
-   'icc' are modified by various arithmetic instructions.
-
-   For example:  wr  %o2, or'd_bit_pattern, %psr
-                 rd  %psr, %o3
-
-*/
+ *
+ *  ------------------------------------------------------------------------
+ *  | impl  | vers  | icc   | resv  | EC | EF | PIL  | S | PS | ET |  CWP  |
+ *  | 31-28 | 27-24 | 23-20 | 19-14 | 13 | 12 | 11-8 | 7 | 6  | 5  |  4-0  |
+ *  ------------------------------------------------------------------------
+ */
 
 #define PSR_CWP     0x0000001f         /* current window pointer     */
 #define PSR_ET      0x00000020         /* enable traps field         */
@@ -87,18 +79,18 @@ extern inline unsigned int get_fsr(void)
 #ifdef __LINUX_SPARC_V9
 
 /* The information available in the %psr on the V8 is spread amongst
-   a whole bunch of registers on the V9. The main one being PSTATE.
-
-     --------------------------------------------------------
-     |  CLE  | TLE |  MM  | RED | PEF | AM | PRIV | IE | AG |
-bits |   9   |  8  |  7-6 |  5  |  4  |  3 |   2  |  1 |  0 |
-     --------------------------------------------------------
-
-   Writes and reads to PSTATE are done via 'wrpr' and 'rdpr' instructions.
-
-   For example:  wrpr %o2, or'd_bit_pattern, %pstate
-                 rdpr %pstate, %o3
-*/
+ * a whole bunch of registers on the V9. The main one being PSTATE.
+ *
+ *   --------------------------------------------------------
+ *   |  CLE  | TLE |  MM  | RED | PEF | AM | PRIV | IE | AG |
+ *   |   9   |  8  |  7-6 |  5  |  4  |  3 |   2  |  1 |  0 |
+ *   --------------------------------------------------------
+ *
+ * Writes and reads to PSTATE are done via 'wrpr' and 'rdpr' instructions.
+ *
+ * For example:  wrpr %o2, or'd_bit_pattern, %pstate
+ *               rdpr %pstate, %o3
+ */
 
 #define PSTATE_AG    0x001   /* Alternate Globals             */
 #define PSTATE_IE    0x002   /* Interrupt Enable              */
@@ -132,13 +124,13 @@ extern inline void put_v9_pstate(unsigned int pstate)
 }
 
 /* The Version Register holds vendor information for the chip:
-
-    ---------------------------------------------------------------------------
-    | manufacturer | implementation | mask | reserved | maxtl | resv | maxwin |
-bits|  63-48       |   47-32        | 31-24|   23-16  | 15-8  | 7-5  |  4-0   |
-    ---------------------------------------------------------------------------
-
-*/
+ *
+ *  ---------------------------------------------------------------------------
+ *  | manufacturer | implementation | mask | reserved | maxtl | resv | maxwin |
+ *  |  63-48       |   47-32        | 31-24|   23-16  | 15-8  | 7-5  |  4-0   |
+ *  ---------------------------------------------------------------------------
+ *
+ */
 
 #define VERS_MAXWIN  0x000000000000001f     /* 'nwindows' on this chip       */
 #define VERS_MAXTL   0x00000000000ff000     /* Maximum Trap-level supported  */

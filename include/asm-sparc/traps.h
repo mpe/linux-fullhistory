@@ -1,4 +1,5 @@
-/* traps.h:  Format of entries for the Sparc trap table.
+/* $Id: traps.h,v 1.5 1995/11/25 02:33:05 davem Exp $
+ * traps.h:  Format of entries for the Sparc trap table.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -37,6 +38,14 @@ struct tt_v9_entry {
  */
 extern struct tt_v9_entry *sparc_v9_ttablel0;
 extern struct tt_v9_entry *sparc_v9_ttablel1;
+
+extern __inline__ unsigned long get_tbr(void)
+{
+	unsigned long tbr;
+
+	__asm__ __volatile__("rd %%tbr, %0\n\t" : "=r" (tbr));
+	return tbr;
+}
 
 /* For patching the trap table at boot time, we need to know how to
  * form various common Sparc instructions.  Thus these macros...
@@ -105,6 +114,16 @@ extern struct tt_v9_entry *sparc_v9_ttablel1;
 #define SP_TRAP_SOLARIS 0x88         /* Solaris System Call */
 #define SP_TRAP_NETBSD  0x89         /* NetBSD System Call */
 #define SP_TRAP_LINUX   0x90         /* Linux System Call */
+
+/* Names used for compatibility with SunOS */
+#define ST_SYSCALL              0x00
+#define ST_BREAKPOINT           0x01
+#define ST_DIV0                 0x02
+#define ST_FLUSH_WINDOWS        0x03
+#define ST_CLEAN_WINDOWS        0x04
+#define ST_RANGE_CHECK          0x05
+#define ST_FIX_ALIGN            0x06
+#define ST_INT_OVERFLOW         0x07
 
 /* Special traps... */
 #define SP_TRAP_KBPT1   0xfe         /* KADB/PROM Breakpoint one */

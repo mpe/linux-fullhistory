@@ -1,4 +1,5 @@
-/* console.c: Routines that deal with sending and receiving IO
+/* $Id: console.c,v 1.5 1995/11/25 00:59:54 davem Exp $
+ * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -6,6 +7,7 @@
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
+#include <linux/string.h>
 
 /* Non blocking get character from console input device, returns -1
  * if no input was taken.  This can be used for polling.
@@ -71,3 +73,53 @@ prom_putchar(char c)
 	return;
 }
 
+/* Query for input device type */
+enum prom_input_device
+prom_query_input_device()
+{
+	switch(*romvec->pv_stdin) {
+	case PROMDEV_KBD:	return PROMDEV_IKBD;
+	case PROMDEV_TTYA:	return PROMDEV_ITTYA;
+	case PROMDEV_TTYB:	return PROMDEV_ITTYB;
+	default:
+		return PROMDEV_I_UNK;
+	};
+}
+
+/* Query for output device type */
+
+enum prom_output_device
+prom_query_output_device()
+{
+	int st_p;
+	char propb[ sizeof("display") ];
+	int propl;
+
+	switch(prom_vers) {
+	case PROM_V0:
+		switch(*romvec->pv_stdin) {
+		case PROMDEV_SCREEN:	return PROMDEV_OSCREEN;
+		case PROMDEV_TTYA:	return PROMDEV_OTTYA;
+		case PROMDEV_TTYB:	return PROMDEV_OTTYB;
+		};
+		break;
+	case PROM_V2:
+	case PROM_V3:
+	case PROM_P1275:
+		st_p = (*romvec->pv_v2devops.v2_inst2pkg)(*romvec->pv_v2bootargs.fd_stdout);
+		propl = prom_getproperty(st_p, "device_type", propb, sizeof(propb));
+		if (propl >= 0 && propl == sizeof("display") &&
+			strncmp("display", propb, sizeof("display")) == 0)
+		{
+			return PROMDEV_OSCREEN;
+		}
+		/* This works on SS-2 (an early OpenFirmware) still. */
+		/* XXX fix for serial cases at SS-5.                 */
+		switch(*romvec->pv_stdin) {
+		case PROMDEV_TTYA:	return PROMDEV_OTTYA;
+		case PROMDEV_TTYB:	return PROMDEV_OTTYB;
+		};
+		break;
+	};
+	return PROMDEV_O_UNK;
+}

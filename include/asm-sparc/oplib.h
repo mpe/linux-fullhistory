@@ -1,4 +1,5 @@
-/* oplib.h:  Describes the interface and available routines in the
+/* $Id: oplib.h,v 1.5 1995/11/25 02:32:14 davem Exp $
+ * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -40,7 +41,7 @@ extern struct linux_nodeops *prom_nodeops;
 /* You must call prom_init() before using any of the library services,
  * preferably as early as possible.  Pass it the romvec pointer.
  */
-extern int prom_init(struct linux_romvec *rom_ptr);
+extern void prom_init(struct linux_romvec *rom_ptr);
 
 /* Boot argument acquisition, returns the boot command line string. */
 extern char *prom_getbootargs(void);
@@ -148,6 +149,28 @@ extern void prom_putchar(char character);
 
 /* Prom's internal printf routine, don't use in kernel/boot code. */
 void prom_printf(char *fmt, ...);
+
+/* Query for input device type */
+
+enum prom_input_device {
+	PROMDEV_IKBD,			/* input from keyboard */
+	PROMDEV_ITTYA,			/* input from ttya */
+	PROMDEV_ITTYB,			/* input from ttyb */
+	PROMDEV_I_UNK,
+};
+
+extern enum prom_input_device prom_query_input_device(void);
+
+/* Query for output device type */
+
+enum prom_output_device {
+	PROMDEV_OSCREEN,		/* to screen */
+	PROMDEV_OTTYA,			/* to ttya */
+	PROMDEV_OTTYB,			/* to ttyb */
+	PROMDEV_O_UNK,
+};
+
+extern enum prom_output_device prom_query_output_device(void);
 
 /* Multiprocessor operations... */
 

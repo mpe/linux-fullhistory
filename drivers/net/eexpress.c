@@ -290,7 +290,7 @@ static void	eexp_interrupt(int irq, struct pt_regs *regs);
 static void eexp_rx(struct device *dev);
 static int	eexp_close(struct device *dev);
 static struct enet_statistics *eexp_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 
 static int read_eeprom(int ioaddr, int location);
 static void hardware_send_packet(struct device *dev, void *buf, short length);
@@ -671,13 +671,9 @@ eexp_get_stats(struct device *dev)
 }
 
 /* Set or clear the multicast filter for this adaptor.
-   num_addrs == -1	Promiscuous mode, receive all packets
-   num_addrs == 0	Normal mode, clear multicast list
-   num_addrs > 0	Multicast mode, receive normal and MC packets, and do
-			best-effort filtering.
  */
 static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+set_multicast_list(struct device *dev)
 {
 /* This doesn't work yet */
 #if 0

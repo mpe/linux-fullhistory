@@ -998,7 +998,8 @@ sl_set_mac_address(struct device *dev, void *addr)
 static int
 sl_set_dev_mac_address(struct device *dev, void *addr)
 {
-	memcpy(dev->dev_addr, addr, AX25_ADDR_LEN);
+	struct sockaddr *sa=addr;
+	memcpy(dev->dev_addr, sa->sa_data, AX25_ADDR_LEN);
 	return 0;
 }
 #endif /* CONFIG_AX25 */

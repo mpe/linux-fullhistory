@@ -69,12 +69,12 @@
  *                       Fix handling of errors occuring before the
  *                        packet command is transferred.
  *                       Fix transfers with odd bytelengths.
+ * 3.03  Oct 27, 1995 -- Some Creative drives have an id of just `CD'.
+ *                       `DCI-2S10' drives are broken too.
+ * 3.04  Nov 20, 1995 -- So are Vertros drives.
  *
- * NOTE: I've tried to implement support for direct audio reads
- * in this version, but i haven't been able to fully test it
- * due to a lack of the proper hardware.  I'd  be interested in hearing
- * if you get anything other than a `Parameter not supported'
- * (asc=0x26, ascq=1) error when trying to do a direct audio read.
+ * NOTE: Direct audio reads will only work on some types of drive.
+ * So far, i've received reports of success for Sony and Toshiba drives.
  *
  * ATAPI cd-rom driver.  To be used with ide.c.
  *
@@ -2603,11 +2603,17 @@ void ide_cdrom_setup (ide_drive_t *drive)
     ((drive->id->config & 0x0060) == 0x20);
 
   /* Accommodate some broken drives... */
-  if (strcmp (drive->id->model, "CD220E") == 0)  /* Creative Labs */
+  if (strcmp (drive->id->model, "CD220E") == 0 ||
+      strcmp (drive->id->model, "CD")     == 0)        /* Creative Labs */
     CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
 
   else if (strcmp (drive->id->model, "TO-ICSLYAL") == 0 ||  /* Acer CD525E */
            strcmp (drive->id->model, "OTI-SCYLLA") == 0)
+    CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+
+  /* I don't know who makes this.
+     Francesco Messineo <sidera@ccii.unipi.it> says this one's broken too. */
+  else if (strcmp (drive->id->model, "DCI-2S10") == 0)
     CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
 
   else if (strcmp (drive->id->model, "CDA26803I SE") == 0) /* Aztech */
@@ -2617,6 +2623,12 @@ void ide_cdrom_setup (ide_drive_t *drive)
       /* This drive _also_ does not implement PLAYAUDIO12 correctly. */
       CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
     }
+
+  else if (strcmp (drive->id->model, "V003S0DS") == 0 ||  /* Vertros */
+	   strcmp (drive->id->model, "0V300SSD") == 0 ||
+	   strcmp (drive->id->model, "V004E0DT") == 0 ||
+	   strcmp (drive->id->model, "0V400ETD") == 0)
+    CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
 
   drive->cdrom_info.toc               = NULL;
   drive->cdrom_info.sector_buffer     = NULL;
@@ -2635,4 +2647,6 @@ void ide_cdrom_setup (ide_drive_t *drive)
  *   duplicated functionality between read and ioctl paths?
  *  Establish interfaces for an IDE port driver, and break out the cdrom
  *   code into a loadable module.
+ *  Support changers.
+ *  Write some real documentation.
  */

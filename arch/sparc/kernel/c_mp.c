@@ -1,7 +1,10 @@
-/* mp.c:  SMP cpu idling and dispatch on the Sparc.
+/* $Id: c_mp.c,v 1.3 1995/11/25 00:57:50 davem Exp $
+ * mp.c:  SMP cpu idling and dispatch on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
  */
+
+#include <linux/kernel.h>
 
 #include <asm/mp.h>
 #include <asm/mbus.h>

@@ -188,9 +188,7 @@ static int i596_close(struct device *dev);
 static struct enet_statistics *i596_get_stats(struct device *dev);
 static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd);
 static void print_eth(char *);
-#ifdef HAVE_MULTICAST
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
-#endif
+static void set_multicast_list(struct device *dev);
 
 
 static inline int
@@ -729,9 +727,7 @@ int apricot_probe(struct device *dev)
     dev->stop = &i596_close;
     dev->hard_start_xmit = &i596_start_xmit;
     dev->get_stats = &i596_get_stats;
-#ifdef HAVE_MULTICAST
     dev->set_multicast_list = &set_multicast_list;
-#endif
 
     dev->mem_start = (int)kmalloc(sizeof(struct i596_private)+ 0x0f, GFP_KERNEL);
     /* align for scp */
@@ -954,49 +950,55 @@ i596_get_stats(struct device *dev)
     return &lp->stats;
 }
 
-#ifdef HAVE_MULTICAST
-/* Set or clear the multicast filter for this adaptor.
-   num_addrs == -1	Promiscuous mode, receive all packets
-   num_addrs == 0	Normal mode, clear multicast list
-   num_addrs > 0	Multicast mode, receive normal and MC packets, and do
-   			best-effort filtering.
+/*
+ *	Set or clear the multicast filter for this adaptor.
  */
-static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+ 
+static void set_multicast_list(struct device *dev)
 {
-    struct i596_private *lp = (struct i596_private *)dev->priv;
-    struct i596_cmd *cmd;
+	struct i596_private *lp = (struct i596_private *)dev->priv;
+	struct i596_cmd *cmd;
 
-    if (i596_debug > 1)
-	printk ("%s: set multicast list %d\n", dev->name, num_addrs);
+	if (i596_debug > 1)
+		printk ("%s: set multicast list %d\n", dev->name, num_addrs);
 
-    if (num_addrs > 0) {
-	cmd = (struct i596_cmd *) kmalloc(sizeof(struct i596_cmd)+2+num_addrs*6, GFP_ATOMIC);
-	if (cmd == NULL)
+	if (dev->mc_count > 0) 
 	{
-	    printk ("%s: set_multicast Memory squeeze.\n", dev->name);
-	    return;
+		struct dev_mc_list *dmi;
+		char *cp;
+		cmd = (struct i596_cmd *) kmalloc(sizeof(struct i596_cmd)+2+dev->mc_count*6, GFP_ATOMIC);
+		if (cmd == NULL)
+		{
+			printk ("%s: set_multicast Memory squeeze.\n", dev->name);
+			return;
+		}
+		cmd->command = CmdMulticastList;
+		*((unsigned short *) (cmd + 1)) = dev->mc_count * 6;
+		cp=((char *)(cmd + 1))+2
+		for(dmi=dev->mc_list;dmi!=NULL;dmi=dmi->next)
+		{
+			memcpy(cp, addr,6);
+			cp+=6;
+		}
+		print_eth (((char *)(cmd + 1)) + 2);
+		i596_add_cmd(dev, cmd);
 	}
-
-	    cmd->command = CmdMulticastList;
-	    *((unsigned short *) (cmd + 1)) = num_addrs * 6;
-	    memcpy (((char *)(cmd + 1))+2, addrs, num_addrs * 6);
-	    print_eth (((char *)(cmd + 1)) + 2);
-		
-	    i596_add_cmd(dev, cmd);
-    } else
-    {
-	if (lp->set_conf.next != (struct i596_cmd * ) I596_NULL) return;
-	if (num_addrs == 0)
-	    lp->i596_config[8] &= ~0x01;
 	else
-	    lp->i596_config[8] |= 0x01;
+	{
+		if (lp->set_conf.next != (struct i596_cmd * ) I596_NULL) 
+			return;
+		if (dev->mc_count == 0 && !(dev->flags&(IFF_PROMISC|IFF_ALLMULTI)))
+		{
+			if(dev->flags&IFF_ALLMULTI)
+				dev->flags|=IFF_PROMISC;
+			lp->i596_config[8] &= ~0x01;
+		}
+		else
+			lp->i596_config[8] |= 0x01;
 
-	i596_add_cmd(dev, &lp->set_conf);
-    }
-
+		i596_add_cmd(dev, &lp->set_conf);
+	}
 }
-#endif
 
 #ifdef HAVE_DEVLIST
 static unsigned int apricot_portlist[] = {0x300, 0};

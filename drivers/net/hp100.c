@@ -195,9 +195,7 @@ static void hp100_rx( struct device *dev );
 static struct enet_statistics *hp100_get_stats( struct device *dev );
 static void hp100_update_stats( struct device *dev );
 static void hp100_clear_stats( int ioaddr );
-#ifdef HAVE_MULTICAST
-static void hp100_set_multicast_list( struct device *dev, int num_addrs, void *addrs );
-#endif
+static void hp100_set_multicast_list( struct device *dev);
 static void hp100_interrupt( int irq, struct pt_regs *regs );
 
 static void hp100_start_interface( struct device *dev );
@@ -430,9 +428,7 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
   dev -> stop = hp100_close;
   dev -> hard_start_xmit = hp100_start_xmit;
   dev -> get_stats = hp100_get_stats;
-#ifdef HAVE_MULTICAST
   dev -> set_multicast_list = &hp100_set_multicast_list;
-#endif
 
   request_region( dev -> base_addr, HP100_REGION_SIZE, eid -> name );
 
@@ -846,37 +842,30 @@ static void hp100_clear_stats( int ioaddr )
  *  multicast setup
  */
 
-#ifdef HAVE_MULTICAST
-
 /*
  *  Set or clear the multicast filter for this adapter.
- *
- *  num_addrs == -1             Promiscuous mode, receive all packets
- *  num_addrs == 0              Normal mode, clear multicast list
- *  num_addrs > 0               Multicast mode, receive normal and MC packets,
- *                              best-effort filtering.
  */
                                                           
-static void hp100_set_multicast_list( struct device *dev, int num_addrs, void *addrs )
+static void hp100_set_multicast_list( struct device *dev)
 {
   int ioaddr = dev -> base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev -> priv;
 
 #ifdef HP100_DEBUG_MULTI
-  printk( "hp100_set_multicast_list: num_addrs = %d\n", num_addrs );
+  printk( "hp100_set_multicast_list: num_addrs = %d\n", dev->mc_count);
 #endif
   cli();
   hp100_ints_off();
   hp100_page( MAC_CTRL );
   hp100_andb( ~(HP100_RX_EN | HP100_TX_EN), MAC_CFG_1 );	/* stop rx/tx */
 
-  if ( num_addrs == -1 )
+  if ( dev->flags&IFF_PROMISC)
     {
       lp -> mac2_mode = HP100_MAC2MODE6;  /* promiscuous mode, all good */
       lp -> mac1_mode = HP100_MAC1MODE6;  /* packets on the net */
     }
    else
-  if ( num_addrs != 0 )
+  if ( dev->mc_count || dev->flags&IFF_ALLMULTI )
     {
       lp -> mac2_mode = HP100_MAC2MODE5;  /* multicast mode, packets for me */
       lp -> mac1_mode = HP100_MAC1MODE5;  /* broadcasts and all multicasts */
@@ -896,8 +885,6 @@ static void hp100_set_multicast_list( struct device *dev, int num_addrs, void *a
   hp100_ints_on();
   sti();
 }
-
-#endif /* HAVE_MULTICAST */
 
 /*
  *  hardware interrupt handling

@@ -1,4 +1,5 @@
-/* init_me.c:  Initialize imperical constants and gather some info from
+/* $Id: init_me.c,v 1.2 1995/11/25 00:57:44 davem Exp $
+ * init_me.c:  Initialize imperical constants and gather some info from
  *             the boot prom.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

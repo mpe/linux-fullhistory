@@ -240,10 +240,6 @@ static int connect_select(struct inode * inode, struct file * filp, int sel_type
 	return 0;
 }
 
-/*
- * Ok, these three routines NOW keep track of readers/writers,
- * Linus previously did it with inode->i_count checking.
- */
 static void pipe_read_release(struct inode * inode, struct file * filp)
 {
 	PIPE_READERS(*inode)--;
@@ -263,6 +259,25 @@ static void pipe_rdwr_release(struct inode * inode, struct file * filp)
 	wake_up_interruptible(&PIPE_WAIT(*inode));
 }
 
+static int pipe_read_open(struct inode * inode, struct file * filp)
+{
+	PIPE_READERS(*inode)++;
+	return 0;
+}
+
+static int pipe_write_open(struct inode * inode, struct file * filp)
+{
+	PIPE_WRITERS(*inode)++;
+	return 0;
+}
+
+static int pipe_rdwr_open(struct inode * inode, struct file * filp)
+{
+	PIPE_READERS(*inode)++;
+	PIPE_WRITERS(*inode)++;
+	return 0;
+}
+
 /*
  * The file_operations structs are not static because they
  * are also used in linux/fs/fifo.c to do operations on fifo's.
@@ -275,7 +290,7 @@ struct file_operations connecting_fifo_fops = {
 	connect_select,
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
-	NULL,		/* no special open code */
+	pipe_read_open,
 	pipe_read_release,
 	NULL
 };
@@ -288,7 +303,7 @@ struct file_operations read_fifo_fops = {
 	fifo_select,
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
-	NULL,		/* no special open code */
+	pipe_read_open,
 	pipe_read_release,
 	NULL
 };
@@ -301,7 +316,7 @@ struct file_operations write_fifo_fops = {
 	fifo_select,
 	pipe_ioctl,
 	NULL,		/* mmap */
-	NULL,		/* no special open code */
+	pipe_write_open,
 	pipe_write_release,
 	NULL
 };
@@ -314,7 +329,7 @@ struct file_operations rdwr_fifo_fops = {
 	fifo_select,
 	pipe_ioctl,
 	NULL,		/* mmap */
-	NULL,		/* no special open code */
+	pipe_rdwr_open,
 	pipe_rdwr_release,
 	NULL
 };
@@ -327,7 +342,7 @@ struct file_operations read_pipe_fops = {
 	pipe_select,
 	pipe_ioctl,
 	NULL,		/* no mmap on pipes.. surprise */
-	NULL,		/* no special open code */
+	pipe_read_open,
 	pipe_read_release,
 	NULL
 };
@@ -340,7 +355,7 @@ struct file_operations write_pipe_fops = {
 	pipe_select,
 	pipe_ioctl,
 	NULL,		/* mmap */
-	NULL,		/* no special open code */
+	pipe_write_open,
 	pipe_write_release,
 	NULL
 };
@@ -353,7 +368,7 @@ struct file_operations rdwr_pipe_fops = {
 	pipe_select,
 	pipe_ioctl,
 	NULL,		/* mmap */
-	NULL,		/* no special open code */
+	pipe_rdwr_open,
 	pipe_rdwr_release,
 	NULL
 };

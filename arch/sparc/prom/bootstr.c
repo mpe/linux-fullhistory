@@ -1,4 +1,5 @@
-/* bootstr.c:  Boot string/argument acquisition from the PROM.
+/* $Id: bootstr.c,v 1.3 1995/11/25 00:59:51 davem Exp $
+ * bootstr.c:  Boot string/argument acquisition from the PROM.
  *
  * Copyright(C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */

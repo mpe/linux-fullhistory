@@ -158,7 +158,7 @@ static int tulip_rx(struct device *dev);
 static void tulip_interrupt(int irq, struct pt_regs *regs);
 static int tulip_close(struct device *dev);
 static struct enet_statistics *tulip_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 static int set_mac_address(struct device *dev, void *addr);
 
 
@@ -254,12 +254,8 @@ static void tulip_probe1(int ioaddr, int irq)
 	dev->hard_start_xmit = &tulip_start_xmit;
 	dev->stop = &tulip_close;
 	dev->get_stats = &tulip_get_stats;
-#ifdef HAVE_MULTICAST
 	dev->set_multicast_list = &set_multicast_list;
-#endif
-#ifdef HAVE_SET_MAC_ADDR
 	dev->set_mac_address = &set_mac_address;
-#endif
 
 	return;
 }
@@ -673,36 +669,44 @@ tulip_get_stats(struct device *dev)
 	return &tp->stats;
 }
 
-/* Set or clear the multicast filter for this adaptor.
-   num_addrs == -1		Promiscuous mode, receive all packets
-   num_addrs == 0		Normal mode, clear multicast list
-   num_addrs > 0		Multicast mode, receive normal and MC packets, and do
-						best-effort filtering.
+/*
+ *	Set or clear the multicast filter for this adaptor.
  */
-static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+
+static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
 	short ioaddr = dev->base_addr;
 	int csr6 = inl(ioaddr + CSR6) & ~0x00D5;
 
-	if (num_addrs > 15 || num_addrs == -2) {
-		/* Too many to filter perfectly -- accept all multicasts. */
-		outl(csr6 | 0x0080, ioaddr + CSR6);
-	} else if (num_addrs < 0) {			/* Set promiscuous. */
+	if (dev->flags&IFF_PROMISC) 
+	{			/* Set promiscuous. */
 		outl(csr6 | 0x00C0, ioaddr + CSR6);
 		/* Log any net taps. */
 		printk("%s: Promiscuous mode enabled.\n", dev->name);
-	} else {
+	}
+	else if (dev->mc_count > 15 || (dev->mc_flags&IFF_ALLMULTI)) 
+	{
+		/* Too many to filter perfectly -- accept all multicasts. */
+		outl(csr6 | 0x0080, ioaddr + CSR6);
+	}
+	else
+	{
 		struct tulip_private *tp = (struct tulip_private *)dev->priv;
+		struct dev_mc_list *dmi=dev->mc_list;
 		int *setup_frm = tp->setup_frame;
-		unsigned short *eaddrs = addrs;
+		unsigned short *eaddrs;
 		int i;
 
 		/* We have <= 15 addresses that we can use the wonderful
 		   16 address perfect filtering of the Tulip.  Note that only
 		   the low shortword of setup_frame[] is valid. */
 		outl(csr6 | 0x0000, ioaddr + CSR6);
-		for(i = 0; i < num_addrs; i++) {
+		i=0;
+		while(dmi) 
+		{
+			eaddrs=(unsigned short *)dmi->dmi_addr;
+			dmi=dmi->next;
+			i++;
 			*setup_frm++ = *eaddrs++;
 			*setup_frm++ = *eaddrs++;
 			*setup_frm++ = *eaddrs++;

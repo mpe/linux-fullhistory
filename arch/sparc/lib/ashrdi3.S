@@ -1,4 +1,5 @@
-/* ashrdi3.S:	The filesystem code creates all kinds of references to
+/* $Id: ashrdi3.S,v 1.2 1995/11/25 00:58:59 davem Exp $
+ * ashrdi3.S:	The filesystem code creates all kinds of references to
  *              this little routine on the sparc with gcc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

@@ -1,134 +1,54 @@
-#
-# arch/sparc/config.in
-#
-# Bare minimum configuration file for the Sparc.
-#
-# Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
-#
+# $Id: config.in,v 1.5 1995/11/25 00:57:32 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
-mainmenu_name 'Sparc Linux Kernel Configuration'
-
-echo "#define CONFIG_SPARCDEVS 1" >> $CONFIG_H
-echo "CONFIG_SPARCDEVS=y" >> $CONFIG
+mainmenu_name "Kernel configuration of Linux for SparcStations"
 
 mainmenu_option next_comment
-comment 'Sparc Kernel setup'
+comment 'General setup'
 
-bool 'Sun floppy controller support' CONFIG_BLK_DEV_SUNFD n
-bool 'Networking support' CONFIG_NET n
-bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
-bool 'System V IPC' CONFIG_SYSVIPC y
-bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
+# Global things across all Sparc machines.
+define_bool CONFIG_SBUS y
+define_bool CONFIG_SUN_MOUSE y
+define_bool CONFIG_SUN_SERIAL y
+define_bool CONFIG_SUN_KEYBOARD y
+define_bool CONFIG_SUN_CONSOLE y
+
+bool 'Networking support' CONFIG_NET
+bool 'System V IPC' CONFIG_SYSVIPC
+tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+
+source drivers/block/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
-mainmenu_option next_comment
-comment 'Networking options'
-bool 'TCP/IP networking' CONFIG_INET y
-if [ "$CONFIG_INET" "=" "y" ]; then
-bool 'IP forwarding/gatewaying' CONFIG_IP_FORWARD n
-bool 'IP multicasting (ALPHA)' CONFIG_IP_MULTICAST n
-bool 'IP firewalling' CONFIG_IP_FIREWALL n
-bool 'IP accounting' CONFIG_IP_ACCT n
-comment '(it is safe to leave these untouched)'
-bool 'PC/TCP compatibility mode' CONFIG_INET_PCTCP n
-bool 'Reverse ARP' CONFIG_INET_RARP n
-bool 'Assume subnets are local' CONFIG_INET_SNARL y
-bool 'Disable NAGLE algorithm (normally enabled)' CONFIG_TCP_NAGLE_OFF n
-fi
-bool 'The IPX protocol' CONFIG_IPX n
-#bool 'Amateur Radio AX.25 Level 2' CONFIG_AX25 n
+	source net/Config.in
 fi
 
 mainmenu_option next_comment
 comment 'SCSI support'
 
-bool 'SCSI support?' CONFIG_SCSI n
+tristate 'SCSI support' CONFIG_SCSI
 
-if [ "$CONFIG_SCSI" = "n" ]; then
-
-comment 'Skipping SCSI configuration options...'
-
-else
-
-comment 'SCSI support type (disk, tape, CDrom)'
-
-bool 'SCSI disk support' CONFIG_BLK_DEV_SD y
-bool 'SCSI tape support' CONFIG_CHR_DEV_ST n
-bool 'SCSI CDROM support' CONFIG_BLK_DEV_SR n
-bool 'SCSI generic support' CONFIG_CHR_DEV_SG n
-
-comment 'SCSI low-level drivers'
-
-bool 'Sun ESP Scsi support' CONFIG_SCSI_SUN_ESP n
-
+if [ "$CONFIG_SCSI" != "n" ]; then
+	source drivers/scsi/Config.in
 fi
-
 
 if [ "$CONFIG_NET" = "y" ]; then
+	mainmenu_option next_comment
+	comment 'Network device support'
 
-mainmenu_option next_comment
-comment 'Network device support'
-
-bool 'Network device support?' CONFIG_NETDEVICES y
-if [ "$CONFIG_NETDEVICES" = "n" ]; then
-
-comment 'Skipping network driver configuration options...'
-
-else
-bool 'Dummy net driver support' CONFIG_DUMMY n
-bool 'SLIP (serial line) support' CONFIG_SLIP n
-if [ "$CONFIG_SLIP" = "y" ]; then
-  bool ' CSLIP compressed headers' SL_COMPRESSED y
-#  bool ' SLIP debugging on' SL_DUMP y
-fi
-bool 'PPP (point-to-point) support' CONFIG_PPP n
-bool 'PLIP (parallel port) support' CONFIG_PLIP n
-bool 'Load balancing support (experimental)' CONFIG_SLAVE_BALANCING n
-bool 'Sun LANCE Ethernet support' CONFIG_SUN_LANCE n
-bool 'Sun Intel Ethernet support' CONFIG_SUN_INTEL n
-fi
+	bool 'Network device support' CONFIG_NETDEVICES
+	if [ "$CONFIG_NETDEVICES" = "y" ]; then
+		source drivers/net/Config.in
+	fi
 fi
 
-mainmenu_option next_comment
-comment 'Filesystems'
-
-bool 'Standard (minix) fs support' CONFIG_MINIX_FS n
-bool 'Extended fs support' CONFIG_EXT_FS n
-bool 'Second extended fs support' CONFIG_EXT2_FS y
-bool 'xiafs filesystem support' CONFIG_XIA_FS n
-bool 'msdos fs support' CONFIG_MSDOS_FS n
-bool '/proc filesystem support' CONFIG_PROC_FS n
-if [ "$CONFIG_INET" = "y" ]; then
-bool 'NFS filesystem support' CONFIG_NFS_FS n
-fi
-if [ "$CONFIG_BLK_DEV_SR" = "y" -o "$CONFIG_CDU31A" = "y" -o "$CONFIG_MCD" = "y" -o "$CONFIG_SBPCD" = "y" -o "$CONFIG_BLK_DEV_IDECD" = "y" ]; then
-	bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n
-else
-	bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n
-fi
-bool 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS n
-bool 'System V and Coherent filesystem support' CONFIG_SYSV_FS n
-
-
-mainmenu_option next_comment
-comment 'character devices'
-
-bool 'Zilog serial support' CONFIG_SUN_ZS n
-
-comment 'Sound'
-
-bool 'Sun Audio support' CONFIG_SUN_AUDIO n
+source fs/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'
 
-bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC n
-bool 'Kernel profiling support' CONFIG_PROFILE n
+bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
-  int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
-fi
-if [ "$CONFIG_SCSI" = "y" ]; then
-bool 'Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS y
+	int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi

@@ -1,4 +1,5 @@
-/* cache.h:  Cache specific code for the Sparc.  These include flushing
+/* $Id: cache.h,v 1.3 1995/11/25 02:31:22 davem Exp $
+ * cache.h:  Cache specific code for the Sparc.  These include flushing
  *           and direct tag/data line access.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -38,7 +39,6 @@ extern inline void put_icache_tag(int setnum, int tagnum, unsigned int entry)
 	__asm__ __volatile__("sta %0, [%1] %2\n\t" : :
 			     "r" (entry), "r" (vaddr), "i" (ASI_M_TXTC_TAG) :
 			     "memory");
-	return;
 }
 
 /* Second cache-data access.  The data is returned two-32bit quantities
@@ -49,7 +49,8 @@ extern inline void get_icache_data(int setnum, int tagnum, int subblock,
 {
 	unsigned int value1, value2, vaddr;
 
-	vaddr = ((setnum&0x1) << 12) | ((tagnum&0x7f) << 5) | ((subblock&0x3) << 3);
+	vaddr = ((setnum&0x1) << 12) | ((tagnum&0x7f) << 5) |
+		((subblock&0x3) << 3);
 	__asm__ __volatile__("ldda [%2] %3, %%g2\n\t"
 			     "or %%g0, %%g2, %0\n\t"
 			     "or %%g0, %%g3, %1\n\t" :
@@ -57,7 +58,6 @@ extern inline void get_icache_data(int setnum, int tagnum, int subblock,
 			     "r" (vaddr), "i" (ASI_M_TXTC_DATA) :
 			     "g2", "g3");
 	data[0] = value1; data[1] = value2;
-	return;
 }
 
 extern inline void put_icache_data(int setnum, int tagnum, int subblock,
@@ -65,7 +65,8 @@ extern inline void put_icache_data(int setnum, int tagnum, int subblock,
 {
 	unsigned int value1, value2, vaddr;
 
-	vaddr = ((setnum&0x1) << 12) | ((tagnum&0x7f) << 5) | ((subblock&0x3) << 3);
+	vaddr = ((setnum&0x1) << 12) | ((tagnum&0x7f) << 5) |
+		((subblock&0x3) << 3);
 	value1 = data[0]; value2 = data[1];
 	__asm__ __volatile__("or %%g0, %0, %%g2\n\t"
 			     "or %%g0, %1, %%g3\n\t"
@@ -73,7 +74,6 @@ extern inline void put_icache_data(int setnum, int tagnum, int subblock,
 			     "r" (value1), "r" (value2), 
 			     "r" (vaddr), "i" (ASI_M_TXTC_DATA) :
 			     "g2", "g3", "memory" /* no joke */);
-	return;
 }
 
 /* Different types of flushes with the ICACHE.  Some of the flushes
@@ -90,7 +90,6 @@ extern inline void flush_ei_page(unsigned int addr)
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_PAGE) :
 			     "memory");
-	return;
 }
 
 extern inline void flush_ei_seg(unsigned int addr)
@@ -98,7 +97,6 @@ extern inline void flush_ei_seg(unsigned int addr)
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_SEG) :
 			     "memory");
-	return;
 }
 
 extern inline void flush_ei_region(unsigned int addr)
@@ -106,7 +104,6 @@ extern inline void flush_ei_region(unsigned int addr)
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_REGION) :
 			     "memory");
-	return;
 }
 
 extern inline void flush_ei_ctx(unsigned int addr)
@@ -114,7 +111,6 @@ extern inline void flush_ei_ctx(unsigned int addr)
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_CTX) :
 			     "memory");
-	return;
 }
 
 extern inline void flush_ei_user(unsigned int addr)
@@ -122,7 +118,6 @@ extern inline void flush_ei_user(unsigned int addr)
 	__asm__ __volatile__("sta %%g0, [%0] %1\n\t" : :
 			     "r" (addr), "i" (ASI_M_FLUSH_USER) :
 			     "memory");
-	return;
 }
 
 #endif /* !(_SPARC_CACHE_H) */

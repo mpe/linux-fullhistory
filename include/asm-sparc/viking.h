@@ -1,4 +1,5 @@
-/* viking.h:  Defines specific to the TI Viking MBUS module.
+/* $Id: viking.h,v 1.5 1995/11/25 02:33:21 davem Exp $
+ * viking.h:  Defines specific to the TI Viking MBUS module.
  *            This is SRMMU stuff.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

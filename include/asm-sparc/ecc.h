@@ -1,4 +1,5 @@
-/* ecc.h: Definitions and defines for the external cache/memory
+/* $Id: ecc.h,v 1.2 1995/11/25 02:31:37 davem Exp $
+ * ecc.h: Definitions and defines for the external cache/memory
  *        controller on the sun4m.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

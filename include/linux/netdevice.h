@@ -171,8 +171,7 @@ struct device
   int			  (*rebuild_header)(void *eth, struct device *dev,
 				unsigned long raddr, struct sk_buff *skb);
 #define HAVE_MULTICAST			 
-  void			  (*set_multicast_list)(struct device *dev,
-  					 int num_addrs, void *addrs);
+  void			  (*set_multicast_list)(struct device *dev);
 #define HAVE_SET_MAC_ADDR  		 
   int			  (*set_mac_address)(struct device *dev, void *addr);
 #define HAVE_PRIVATE_IOCTL

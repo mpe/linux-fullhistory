@@ -2162,6 +2162,7 @@ void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	}	
 	
 #endif	
+	skb->protocol = htons (ETH_P_AX25);
 
 	if (dev->type == ARPHRD_ETHER) 
 	{

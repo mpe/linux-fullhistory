@@ -4,6 +4,16 @@
 #include <linux/string.h>
 
 /*
+ * This is a gcc optimization barrier, which essentially
+ * inserts a sequence point in the gcc RTL tree that gcc
+ * can't move code around. This is needed when we enter
+ * or exit a critical region (in this case around user-level
+ * accesses that may sleep, and we can't let gcc optimize
+ * global state around them).
+ */
+#define __gcc_barrier() __asm__ __volatile__("": : :"memory")
+
+/*
  * Uh, these should become the main single-value transfer routines..
  * They automatically use the right size if we just have the right
  * pointer type..
@@ -21,6 +31,7 @@ extern int bad_user_access_length(void);
 /* I should make this use unaligned transfers etc.. */
 static inline void __put_user(unsigned long x, void * y, int size)
 {
+	__gcc_barrier();
 	switch (size) {
 		case 1:
 			*(char *) y = x;
@@ -37,84 +48,58 @@ static inline void __put_user(unsigned long x, void * y, int size)
 		default:
 			bad_user_access_length();
 	}
+	__gcc_barrier();
 }
 
 /* I should make this use unaligned transfers etc.. */
 static inline unsigned long __get_user(const void * y, int size)
 {
+	unsigned long result;
+
+	__gcc_barrier();
 	switch (size) {
 		case 1:
-			return *(unsigned char *) y;
+			result = *(unsigned char *) y;
+			break;
 		case 2:
-			return *(unsigned short *) y;
+			result = *(unsigned short *) y;
+			break;
 		case 4:
-			return *(unsigned int *) y;
+			result = *(unsigned int *) y;
+			break;
 		case 8:
-			return *(unsigned long *) y;
+			result = *(unsigned long *) y;
+			break;
 		default:
-			return bad_user_access_length();
+			result = bad_user_access_length();
 	}
+	__gcc_barrier();
+	return result;
 }
 
-static inline unsigned char get_user_byte(const char * addr)
+#define get_fs_byte(addr) get_user((unsigned char *)(addr))
+#define get_fs_word(addr) get_user((unsigned short *)(addr))
+#define get_fs_long(addr) get_user((unsigned int *)(addr))
+#define get_fs_quad(addr) get_user((unsigned long *)(addr))
+
+#define put_fs_byte(x,addr) put_user((x),(char *)(addr))
+#define put_fs_word(x,addr) put_user((x),(short *)(addr))
+#define put_fs_long(x,addr) put_user((x),(int *)(addr))
+#define put_fs_quad(x,addr) put_user((x),(long *)(addr))
+
+static inline void memcpy_fromfs(void * to, const void * from, unsigned long n)
 {
-	return *addr;
+	__gcc_barrier();
+	memcpy(to, from, n);
+	__gcc_barrier();
 }
 
-#define get_fs_byte(addr) get_user_byte((char *)(addr))
-
-static inline unsigned short get_user_word(const short *addr)
+static inline void memcpy_tofs(void * to, const void * from, unsigned long n)
 {
-	return *addr;
+	__gcc_barrier();
+	memcpy(to, from, n);
+	__gcc_barrier();
 }
-
-#define get_fs_word(addr) get_user_word((short *)(addr))
-
-static inline unsigned long get_user_long(const int *addr)
-{
-	return *addr;
-}
-
-#define get_fs_long(addr) get_user_long((int *)(addr))
-
-static inline unsigned long get_user_quad(const long *addr)
-{
-	return *addr;
-}
-
-#define get_fs_quad(addr) get_user_quad((long *)(addr))
-
-static inline void put_user_byte(char val,char *addr)
-{
-	*addr = val;
-}
-
-#define put_fs_byte(x,addr) put_user_byte((x),(char *)(addr))
-
-static inline void put_user_word(short val,short * addr)
-{
-	*addr = val;
-}
-
-#define put_fs_word(x,addr) put_user_word((x),(short *)(addr))
-
-static inline void put_user_long(unsigned long val,int * addr)
-{
-	*addr = val;
-}
-
-#define put_fs_long(x,addr) put_user_long((x),(int *)(addr))
-
-static inline void put_user_quad(unsigned long val,long * addr)
-{
-	*addr = val;
-}
-
-#define put_fs_quad(x,addr) put_user_quad((x),(long *)(addr))
-
-#define memcpy_fromfs(to, from, n) memcpy((to),(from),(n))
-
-#define memcpy_tofs(to, from, n) memcpy((to),(from),(n))
 
 /*
  * For segmented architectures, these are used to specify which segment

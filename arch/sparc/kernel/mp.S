@@ -1,4 +1,5 @@
-/* mp.S:  Multiprocessor low-level routines on the Sparc.
+/* $Id: mp.S,v 1.2 1995/11/25 00:58:11 davem Exp $
+ * mp.S:  Multiprocessor low-level routines on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */

@@ -22,14 +22,14 @@ Board		Multicast	AllMulti	Promisc		Filter
 ac3200		YES		YES		YES		Software(#)
 apricot		YES		PROMISC		YES		Hardware
 arcnet		NO		NO		NO		N/A
-at1700		****		PROMISC		YES		Software
-atp		****		PROMISC		YES		Software
+at1700		PROMISC		PROMISC		YES		Software
+atp		PROMISC		PROMISC		YES		Software
 de4x5		YES		NO		YES		Hardware
 de600		NO		NO		NO		N/A
-de620		****		PROMISC		YES		Software
+de620		PROMISC		PROMISC		YES		Software
 depca		YES		PROMISC		YES		Hardware
 e2100		YES		YES		YES		Software(#)
-eepro		YES(*)		PROMISC		YES		Hardware
+eepro		YES		PROMISC		YES		Hardware
 eexpress	NO		NO		NO		N/A
 ewrk3		YES		PROMISC		YES		Hardware
 hp-plus		YES		YES		YES		Software(#)
@@ -49,10 +49,8 @@ wd		YES		YES		YES		Software(#)
 znet		YES		YES		YES		Software
 
 
-**** = This driver would take down your entire network if you use it in a
-       multicast kernel with IP forwarding enabled (patches sent to Linus)
-YES(*) = As above but only if >64 addresses are activated.
-PROMISC = All multicasts mode is in fact promiscuous mode.
+PROMISC = This multicasts mode is in fact promiscuous mode. Avoid using
+cards who go PROMISC on any multicast in a multicast kernel.
 (#) = Hardware multicast support is not used yet.
 
 

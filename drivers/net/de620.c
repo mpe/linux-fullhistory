@@ -206,7 +206,7 @@ static unsigned int de620_debug = DE620_DEBUG;
 static int	de620_open(struct device *);
 static int	de620_close(struct device *);
 static struct netstats *get_stats(struct device *);
-static void	de620_set_multicast_list(struct device *, int, void *);
+static void	de620_set_multicast_list(struct device *);
 static int	de620_start_xmit(struct sk_buff *, struct device *);
 
 /* Dispatch from interrupts. */
@@ -481,15 +481,11 @@ get_stats(struct device *dev)
  * Set or clear the multicast filter for this adaptor.
  * (no real multicast implemented for the DE-620, but she can be promiscuous...)
  *
- * num_addrs == -1	Promiscuous mode, receive all packets
- * num_addrs == 0	Normal mode, clear multicast list
- * num_addrs > 0	Multicast mode, receive normal and MC packets, and do
- *			best-effort filtering.
  */
-static void
-de620_set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+
+static void de620_set_multicast_list(struct device *dev)
 {
-	if (num_addrs) 
+	if (dev->mc_count || dev->flags&(IFF_ALLMULTI|IFF_PROMISC)) 
 	{ /* Enable promiscuous mode */
 		/*
 		 *	We must make the kernel realise we had to move
@@ -500,7 +496,8 @@ de620_set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 	
 		de620_set_register(dev, W_TCR, (TCR_DEF & ~RXPBM) | RXALL);
 	}
-	else { /* Disable promiscuous mode, use normal mode */
+	else 
+	{ /* Disable promiscuous mode, use normal mode */
 		de620_set_register(dev, W_TCR, TCR_DEF);
 	}
 }

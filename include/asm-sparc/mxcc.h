@@ -1,4 +1,5 @@
-/* mxcc.h:  Definitions of the Viking MXCC registers
+/* $Id: mxcc.h,v 1.2 1995/11/25 02:32:11 davem Exp $
+ * mxcc.h:  Definitions of the Viking MXCC registers
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */

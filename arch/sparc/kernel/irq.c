@@ -1,4 +1,5 @@
-/*  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
+/*  $Id: irq.c,v 1.29 1995/11/25 00:58:08 davem Exp $
+ *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
  *                            node trees to find out who's got which IRQ.
@@ -8,19 +9,6 @@
  *  Copyright (C) 1995 Pete A. Zaitcev (zaitcev@jamica.lab.ipmce.su)
  */
 
-/*
- * IRQ's are in fact implemented a bit like signal handlers for the kernel.
- * The same sigaction struct is used, and with similar semantics (ie there
- * is a SA_INTERRUPT flag etc). Naturally it's not a 1:1 relation, but there
- * are similarities.
- *
- * sa_handler(int irq_NR) is the default function called (0 if no).
- * sa_mask is horribly ugly (I won't even mention it)
- * sa_flags contains various info: SA_INTERRUPT etc
- * sa_restorer is the unused
- */
-
-#include <linux/config.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/linkage.h>
@@ -37,37 +25,27 @@
 #include <asm/timer.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
+#include <asm/traps.h>
 #include <asm/irq.h>
 #include <asm/io.h>
 
 /* Pointer to the interrupt enable byte */
-/* XXX Ugh, this is so sun4c specific it's driving me nuts. XXX */
 unsigned char *interrupt_enable = 0;
 struct sun4m_intregs *sun4m_interrupts;
 
-/* XXX Needs to handle Sun4m semantics XXX */
 void
-disable_irq(unsigned int irq_nr)
+sun4c_disable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
 	unsigned char current_mask, new_mask;
 
-	if(sparc_cpu_model != sun4c) return;
-
-	save_flags(flags);
-	cli();
-
+	if(sparc_cpu_model != sun4c)
+		return;
+	save_flags(flags); cli();
 	current_mask = *interrupt_enable;
-
 	switch(irq_nr) {
 	case 1:
 		new_mask = ((current_mask) & (~(SUN4C_INT_E1)));
-		break;
-	case 4:
-		new_mask = ((current_mask) & (~(SUN4C_INT_E4)));
-		break;
-	case 6:
-		new_mask = ((current_mask) & (~(SUN4C_INT_E6)));
 		break;
 	case 8:
 		new_mask = ((current_mask) & (~(SUN4C_INT_E8)));
@@ -79,41 +57,48 @@ disable_irq(unsigned int irq_nr)
 		new_mask = ((current_mask) & (~(SUN4C_INT_E14)));
 		break;
 	default:
-#if 0 /* Actually this is safe, as the floppy driver needs this */
-		printk("AIEEE, Illegal interrupt disable requested irq=%d\n", 
-		       (int) irq_nr);
-		prom_halt();
-#endif
-		break;
+		restore_flags(flags);
+		return;
 	};
   
+	*interrupt_enable = new_mask;
 	restore_flags(flags);
-	return;
 }
 
-/* XXX Needs to handle sun4m semantics XXX */
 void
-enable_irq(unsigned int irq_nr)
+sun4m_disable_irq(unsigned int irq_nr)
+{
+	printk("IRQ routines not yet written for the sun4m\n");
+	panic("disable_irq: Unsupported arch.");
+}
+
+void
+disable_irq(unsigned int irq_nr)
+{
+	switch(sparc_cpu_model) {
+	case sun4c:
+		sun4c_disable_irq(irq_nr);
+		break;
+	case sun4m:
+		sun4m_disable_irq(irq_nr);
+	default:
+		panic("disable_irq: Unsupported arch.");
+	}
+}
+
+void
+sun4c_enable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
 	unsigned char current_mask, new_mask;
 
-	if(sparc_cpu_model != sun4c) return;
-
-	save_flags(flags);
-	cli();
-
+	if(sparc_cpu_model != sun4c)
+		return;
+	save_flags(flags); cli();
 	current_mask = *interrupt_enable;
-
 	switch(irq_nr) {
 	case 1:
 		new_mask = ((current_mask) | SUN4C_INT_E1);
-		break;
-	case 4:
-		new_mask = ((current_mask) | SUN4C_INT_E4);
-		break;
-	case 6:
-		new_mask = ((current_mask) | SUN4C_INT_E6);
 		break;
 	case 8:
 		new_mask = ((current_mask) | SUN4C_INT_E8);
@@ -125,19 +110,34 @@ enable_irq(unsigned int irq_nr)
 		new_mask = ((current_mask) | SUN4C_INT_E14);
 		break;
 	default:
-#if 0  /* Floppy driver does this on sun4c's anyhow */
-		printk ("Interrupt does not need to enable IE\n");
-		return;
-#endif
 		restore_flags(flags);
 		return;
 	};
 
 	*interrupt_enable = new_mask;
-
 	restore_flags(flags);
+}
 
-	return;
+void
+sun4m_enable_irq(unsigned int irq_nr)
+{
+	printk("IRQ routines not written for the sun4m yet.\n");
+	panic("IRQ unsupported arch.");
+}
+
+void
+enable_irq(unsigned int irq_nr)
+{
+	switch(sparc_cpu_model) {
+	case sun4c:
+		sun4c_enable_irq(irq_nr);
+		break;
+	case sun4m:
+		sun4m_enable_irq(irq_nr);
+		break;
+	default:
+		panic("IRQ unsupported arch.");
+	}
 }
 
 /*
@@ -193,8 +193,7 @@ free_irq(unsigned int irq)
                 printk("Trying to free free IRQ%d\n", irq);
                 return;
         }
-        save_flags(flags);
-        cli();
+        save_flags(flags); cli();
         disable_irq(irq);
         action->handler = NULL;
         action->flags = 0;
@@ -210,14 +209,14 @@ unexpected_irq(int irq, struct pt_regs * regs)
 
         printk("IO device interrupt, irq = %d\n", irq);
         printk("PC = %08lx NPC = %08lx FP=%08lx\n", regs->pc, 
-	       regs->npc, regs->u_regs[14]);
+		    regs->npc, regs->u_regs[14]);
         printk("Expecting: ");
         for (i = 0; i < 16; i++)
                 if (irq_action[i].handler)
-                        printk("[%s:%d:0x%x] ", irq_action[i].name, (int) i,
+                        prom_printf("[%s:%d:0x%x] ", irq_action[i].name, (int) i,
 			       (unsigned int) irq_action[i].handler);
         printk("AIEEE\n");
-	prom_halt();
+	panic("bogus interrupt received");
 }
 
 void
@@ -225,11 +224,11 @@ handler_irq(int irq, struct pt_regs * regs)
 {
 	struct irqaction * action = irq_action + irq;
 
-	if (!action->handler) {
+	kstat.interrupts[irq]++;
+	if (!action->handler)
 		unexpected_irq(irq, regs);
-		return;
-	}
-	action->handler(irq, regs);
+	else
+		action->handler(irq, regs);
 }
 
 /*
@@ -262,6 +261,40 @@ do_fast_IRQ(int irq)
 	return;
 }
 
+int
+request_fast_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
+		 unsigned long irqflags, const char *devname)
+{
+	struct irqaction *action;
+	unsigned long flags;
+
+	if(irq > 14)
+		return -EINVAL;
+	action = irq + irq_action;
+	if(action->handler)
+		return -EBUSY;
+	if(!handler)
+		return -EINVAL;
+
+	save_flags(flags); cli();
+
+	/* Dork with trap table if we get this far. */
+	sparc_ttable[SP_TRAP_IRQ1+(irq-1)].inst_one =
+		SPARC_BRANCH((unsigned long) handler,
+			     (unsigned long) &sparc_ttable[SP_TRAP_IRQ1+(irq-1)].inst_one);
+	sparc_ttable[SP_TRAP_IRQ1+(irq-1)].inst_two = SPARC_RD_PSR_L0;
+	sparc_ttable[SP_TRAP_IRQ1+(irq-1)].inst_three = SPARC_NOP;
+	sparc_ttable[SP_TRAP_IRQ1+(irq-1)].inst_four = SPARC_NOP;
+
+	action->handler = handler;
+	action->flags = irqflags;
+	action->mask = 0;
+	action->name = devname;
+
+	restore_flags(flags);
+	return 0;
+}
+
 extern void probe_clock(void);
 		
 int
@@ -271,42 +304,38 @@ request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 	struct irqaction *action;
 	unsigned long flags;
 
-	if(irq > 14)  /* Only levels 1-14 are valid on the Sparc. */
+	if(irq > 14)
 		return -EINVAL;
 
-	/* i386 keyboard interrupt request, just return */
-	if(irq == 1) return 0;
-
-	/* sched_init() requesting the timer IRQ */
-	if(irq == 0) {
-		irq = 10;
-	}
-
 	action = irq + irq_action;
-
 	if(action->handler)
 		return -EBUSY;
-
 	if(!handler)
 		return -EINVAL;
 
-	save_flags(flags);
-
-	cli();
-
+	save_flags(flags); cli();
 	action->handler = handler;
 	action->flags = irqflags;
 	action->mask = 0;
 	action->name = devname;
-
 	enable_irq(irq);
-
-	/* Init the timer/clocks if necessary. */
-	if(irq == 10) probe_clock();
-
+	if(irq == 10)
+		probe_clock();
 	restore_flags(flags);
-
 	return 0;
+}
+
+/* We really don't need these at all on the Sparc.  We only have
+ * stubs here because they are exported to modules.
+ */
+unsigned long probe_irq_on(void)
+{
+  return 0;
+}
+
+int probe_irq_off(unsigned long mask)
+{
+  return 0;
 }
 
 void
@@ -317,10 +346,8 @@ sun4c_init_IRQ(void)
 
 	ie_node = prom_searchsiblings (prom_getchild(prom_root_node),
 				       "interrupt-enable");
-	if(ie_node == 0) {
-		printk("Cannot find /interrupt-enable node\n");
-		prom_halt();
-	}
+	if(ie_node == 0)
+		panic("Cannot find /interrupt-enable node");
 	/* Depending on the "address" property is bad news... */
 	prom_getproperty(ie_node, "reg", (char *) int_regs, sizeof(int_regs));
 	sparc_alloc_io(int_regs[0].phys_addr, (void *) INTREG_VADDR,
@@ -330,16 +357,14 @@ sun4c_init_IRQ(void)
 	interrupt_enable = (char *) INTREG_VADDR;
 
 	/* Default value, accept interrupts, but no one is actually active */
-	/* We also turn on level14 interrupts so PROM can run the console. */
-	*interrupt_enable = (SUN4C_INT_ENABLE | SUN4C_INT_E14);
-	sti(); /* As of NOW, L1-A works.  Turn irq's on full-blast. */
-	return;
+	*interrupt_enable = (SUN4C_INT_ENABLE);
+	sti(); /* Turn irq's on full-blast. */
 }
 
 void
 sun4m_init_IRQ(void)
 {
-	int ie_node, i;
+	int ie_node;
 
 	struct linux_prom_registers int_regs[PROMREG_MAX];
 	int num_regs;
@@ -349,10 +374,7 @@ sun4m_init_IRQ(void)
 	if((ie_node = prom_searchsiblings(prom_getchild(prom_root_node), "obio")) == 0 ||
 	   (ie_node = prom_getchild (ie_node)) == 0 ||
 	   (ie_node = prom_searchsiblings (ie_node, "interrupt")) == 0)
-	{
-		printk("Cannot find /obio/interrupt node\n");
-		prom_halt();
-	}
+		panic("Cannot find /obio/interrupt node\n");
 	num_regs = prom_getproperty(ie_node, "reg", (char *) int_regs,
 				    sizeof(int_regs));
 	num_regs = (num_regs/sizeof(struct linux_prom_registers));
@@ -372,27 +394,7 @@ sun4m_init_IRQ(void)
 		       int_regs[num_regs-1].which_io, 0x0);
 
 	sun4m_interrupts = (struct sun4m_intregs *) INTREG_VADDR;
-
-#if 0
-	printk("Interrupt register dump...\n");
-
-	for(i=0; i<NCPUS; i++)
-		printk("cpu%d: tbt %08x\n", i,
-		       sun4m_interrupts->cpu_intregs[i].tbt);
-
-	printk("Master tbt %08x\n", sun4m_interrupts->tbt);
-	printk("Master irqs %08x\n", sun4m_interrupts->irqs);
-	printk("Master set %08x\n", sun4m_interrupts->set);
-	printk("Master clear %08x\n", sun4m_interrupts->clear);
-	printk("Undirected ints taken by: %08x\n",
-	       sun4m_interrupts->undirected_target);
-
-	prom_halt();
-#endif
-
 	sti();
-
-	return;
 }
 
 void
@@ -406,10 +408,7 @@ init_IRQ(void)
 		sun4m_init_IRQ();
 		break;
 	default:
-		printk("Cannot initialize IRQ's on this Sun machine...\n");
-		halt();
+		panic("Cannot initialize IRQ's on this Sun machine...");
 		break;
 	};
-
-	return;
 }

@@ -50,7 +50,7 @@ struct inode_operations proc_fd_inode_operations = {
 	NULL			/* permission */
 };
 
-static int proc_lookupfd(struct inode * dir,const char * name, int len,
+static int proc_lookupfd(struct inode * dir, const char * name, int len,
 	struct inode ** result)
 {
 	unsigned int ino, pid, fd, c;
@@ -167,7 +167,7 @@ static int proc_readfd(struct inode * inode, struct file * filp,
 		if (filldir(dirent, buf+j, NUMBUF-j, fd+2, ino) < 0)
 			break;
 
-		/* filldir() migth have slept, so we must re-validate "p" */
+		/* filldir() might have slept, so we must re-validate "p" */
 		if (p != task[task_nr] || p->pid != pid)
 			break;
 	}

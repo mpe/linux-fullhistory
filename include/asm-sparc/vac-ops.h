@@ -1,89 +1,171 @@
+/* $Id: vac-ops.h,v 1.7 1995/11/25 02:33:18 davem Exp $ */
 #ifndef _SPARC_VAC_OPS_H
 #define _SPARC_VAC_OPS_H
 
 /* vac-ops.h: Inline assembly routines to do operations on the Sparc
-              VAC (virtual address cache).
+ *            VAC (virtual address cache) for the sun4c.
+ *
+ * Copyright (C) 1994, David S. Miller (davem@caip.rutgers.edu)
+ */
 
-   Copyright (C) 1994, David S. Miller (davem@caip.rutgers.edu)
-*/
+#include <asm/sysen.h>
+#include <asm/contregs.h>
+#include <asm/asi.h>
 
-extern unsigned long *trapbase;
-extern char end, etext, edata;
+/* The SUN4C models have a virtually addressed write-through
+ * cache.
+ *
+ * The cache tags are directly accessible through an ASI and
+ * each have the form:
+ *
+ * ------------------------------------------------------------
+ * | MBZ | CONTEXT | WRITE | PRIV | VALID | MBZ | TagID | MBZ |
+ * ------------------------------------------------------------
+ *  31 25  24   22     21     20     19    18 16  15   2  1  0
+ *
+ * MBZ: These bits are either unused and/or reserved and should
+ *      be written as zeroes.
+ *
+ * CONTEXT: Records the context to which this cache line belongs.
+ *
+ * WRITE: A copy of the writable bit from the mmu pte access bits.
+ *
+ * PRIV: A copy of the privileged bit from the pte access bits.
+ *
+ * VALID: If set, this line is valid, else invalid.
+ *
+ * TagID: Fourteen bits of tag ID.
+ *
+ * Every virtual address is seen by the cache like this:
+ *
+ * ----------------------------------------
+ * |  RESV  | TagID | LINE | BYTE-in-LINE |
+ * ----------------------------------------
+ *  31    30 29   16 15   4 3            0
+ *
+ * RESV: Unused/reserved.
+ *
+ * TagID: Used to match the Tag-ID in that vac tags.
+ *
+ * LINE: Which line within the cache
+ *
+ * BYTE-in-LINE: Which byte within the cache line.
+ */
 
-extern void flush_vac_context(void);
-extern void flush_vac_segment(unsigned int foo_segment);
-extern void flush_vac_page(unsigned int foo_addr);
+/* Sun4c VAC Tags */
+#define S4CVACTAG_CID      0x01c00000
+#define S4CVACTAG_W        0x00200000
+#define S4CVACTAG_P        0x00100000
+#define S4CVACTAG_V        0x00080000
+#define S4CVACTAG_TID      0x0000fffc
 
-extern int vac_do_hw_vac_flushes, vac_size, vac_linesize;
-extern int vac_entries_per_context, vac_entries_per_segment;
-extern int vac_entries_per_page;
+/* Sun4c VAC Virtual Address */
+#define S4CVACVA_TID       0x3fff0000
+#define S4CVACVA_LINE      0x0000fff0
+#define S4CVACVA_BIL       0x0000000f
 
-/* enable_vac() enables the virtual address cache. It returns 0 on
-   success, 1 on failure.
-*/
+/* The indexing of cache lines creates a problem.  Because the line
+ * field of a virtual address extends past the page offset within
+ * the virtual address it is possible to have what are called
+ * 'bad aliases' which will create inconsistancies.  So we must make
+ * sure that within a context that if a physical page is mapped
+ * more than once, that 'extra' line bits are the same.  If this is
+ * not the case, and thus is a 'bad alias' we must turn off the
+ * cacheable bit in the pte's of all such pages.
+ */
+#define S4CVAC_BADBITS     0x0000f000
 
-extern __inline__ int enable_vac(void)
+/* The following is true if vaddr1 and vaddr2 would cause
+ * a 'bad alias'.
+ */
+#define S4CVAC_BADALIAS(vaddr1, vaddr2) \
+        (((unsigned long) (vaddr1)) ^ ((unsigned long) (vaddr2)) & \
+	 (S4CVAC_BADBITS))
+
+/* The following structure describes the characteristics of a sun4c
+ * VAC as probed from the prom during boot time.
+ */
+struct sun4c_vac_props {
+	unsigned int num_bytes;     /* Size of the cache */
+	unsigned int num_lines;     /* Number of cache lines */
+	unsigned int do_hwflushes;  /* Hardware flushing available? */
+	unsigned int linesize;      /* Size of each line in bytes */
+	unsigned int log2lsize;     /* log2(linesize) */
+	unsigned int on;            /* VAC is enabled */
+};
+
+extern struct sun4c_vac_props sun4c_vacinfo;
+
+extern void sun4c_flush_all(void);
+
+/* sun4c_enable_vac() enables the sun4c virtual address cache. */
+extern __inline__ void sun4c_enable_vac(void)
 {
-  int success=0;
-
-  __asm__ __volatile__("lduba [%1] 2, %0\n\t"
-		       "or    %0, 0x10, %0\n\t"
-		       "stba  %0, [%1] 2\n\t"
-		       "or    %%g0, %%g0, %0" :
-		       "=r" (success) :
-		       "r" ((unsigned int) 0x40000000),
-		       "0" (success));
-  return success;
+  __asm__ __volatile__("lduba [%0] %1, %%g1\n\t"
+		       "or    %%g1, %2, %%g1\n\t"
+		       "stba  %%g1, [%0] %1\n\t" : :
+		       "r" ((unsigned int) AC_SENABLE),
+		       "i" (ASI_CONTROL), "i" (SENABLE_CACHE) :
+		       "g1");
+  sun4c_vacinfo.on = 1;
 }
 
-/* disable_vac() disables the virtual address cache. It returns 0 on
-   success, 1 on failure.
-*/
-
-extern __inline__ int disable_vac(void)
+/* sun4c_disable_vac() disables the virtual address cache. */
+extern __inline__ void sun4c_disable_vac(void)
 {
-  int success=0;
-
-  __asm__ __volatile__("lduba [%1] 0x2, %0\n\t"
-			"xor   %0, 0x10, %0\n\t"
-			"stba  %0, [%1] 0x2\n\t"
-			"or    %%g0, %%g0, %0" : 
-		       "=r" (success) : 
-		       "r" (0x40000000),
-		       "0" (success));
-  return success;
+  __asm__ __volatile__("lduba [%0] %1, %%g1\n\t"
+		       "andn  %%g1, %2, %%g1\n\t"
+		       "stba  %%g1, [%0] %1\n\t" : :
+		       "r" ((unsigned int) AC_SENABLE),
+		       "i" (ASI_CONTROL), "i" (SENABLE_CACHE) :
+		       "g1");
+  sun4c_vacinfo.on = 0;
 }
 
-/* Various one-shot VAC entry flushes on the Sparc */
+extern unsigned long sun4c_ctxflush;
+extern unsigned long sun4c_segflush;
+extern unsigned long sun4c_pgflush;
 
-extern __inline__ void hw_flush_vac_context_entry(char* addr)
+extern void sun4c_ctxflush_hw64KB16B(void);
+extern void sun4c_ctxflush_hw64KB32B(void);
+extern void sun4c_ctxflush_sw64KB16B(void);
+extern void sun4c_ctxflush_sw64KB32B(void);
+
+extern void sun4c_segflush_hw64KB16B(void);
+extern void sun4c_segflush_hw64KB32B(void);
+extern void sun4c_segflush_sw64KB16B(void);
+extern void sun4c_segflush_sw64KB32B(void);
+
+extern void sun4c_pgflush_hw64KB16B(void);
+extern void sun4c_pgflush_hw64KB32B(void);
+extern void sun4c_pgflush_sw64KB16B(void);
+extern void sun4c_pgflush_sw64KB32B(void);
+
+/* These do indirect calls to the in-line assembly routines
+ * in s4ctlb.S, see that file for more answers.
+ */
+extern inline void sun4c_flush_context(void)
 {
-  __asm__ __volatile__("sta %%g0, [%0] 0x7" : : "r" (addr));
+	__asm__ __volatile__("jmpl %0, %%l4\n\t"
+			     "nop\n\t" : :
+			     "r" (sun4c_ctxflush) :
+			     "l4", "l6", "l7", "memory");
 }
 
-extern __inline__ void sw_flush_vac_context_entry(char* addr)
+extern inline void sun4c_flush_segment(unsigned long segment)
 {
-  __asm__ __volatile__("sta %%g0, [%0] 0xe" : : "r" (addr));
+	__asm__ __volatile__("jmpl %0, %%l4\n\t"
+			     "or %1, %%g0, %%l2\n\t" : :
+			     "r" (sun4c_segflush), "r" (segment) :
+			     "l2", "l4", "l6", "l7", "memory");
 }
 
-extern __inline__ void hw_flush_vac_segment_entry(char* addr)
+extern inline void sun4c_flush_page(unsigned long page)
 {
-  __asm__ __volatile__("sta %%g0, [%0] 0x5" : : "r" (addr));
+	__asm__ __volatile__("jmpl %0, %%l4\n\t"
+			     "or %1, %%g0, %%l2\n\t" : :
+			     "r" (sun4c_pgflush), "r" (page) :
+			     "l2", "l4", "l6", "l7", "memory");
 }
 
-extern __inline__ void sw_flush_vac_segment_entry(char* addr)
-{
-  __asm__ __volatile__("sta %%g0, [%0] 0xc" : : "r" (addr));
-}
-
-extern __inline__ void hw_flush_vac_page_entry(unsigned long* addr)
-{
-  __asm__ __volatile__("sta %%g0, [%0] 0x6" : : "r" (addr));
-}
-
-extern __inline__ void sw_flush_vac_page_entry(unsigned long* addr)
-{
-  __asm__ __volatile__("sta %%g0, [%0] 0xd" : : "r" (addr));
-}
- 
 #endif /* !(_SPARC_VAC_OPS_H) */

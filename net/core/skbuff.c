@@ -461,6 +461,7 @@ void kfree_skb(struct sk_buff *skb, int rw)
 	if (skb->next)
 	 	printk("Warning: kfree_skb passed an skb still on a list (from %p).\n",
 			__builtin_return_address(0));
+
 	if(skb->destructor)
 		skb->destructor(skb);
 	if (skb->sk)
@@ -542,6 +543,9 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	
 	skb=(struct sk_buff *)(bptr+size)-1;
 
+	skb->count = 1;		/* only one reference to this */
+	skb->data_skb = NULL;	/* and we're our own data skb */
+
 	skb->free = 2;	/* Invalid so we pick up forgetful users */
 	skb->lock = 0;
 	skb->pkt_type = PACKET_HOST;	/* Default type */
@@ -579,10 +583,20 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 void kfree_skbmem(struct sk_buff *skb)
 {
 	unsigned long flags;
+	void * addr = skb->head;
+
 	save_flags(flags);
 	cli();
-	kfree((void *)skb->head);
-	net_skbcount--;
+	/* don't do anything if somebody still uses us */
+	if (--skb->count <= 0) {
+		/* free the skb that contains the actual data if we've clone()'d */
+		if (skb->data_skb) {
+			addr = skb;
+			kfree_skbmem(skb->data_skb);
+		}
+		kfree(addr);
+		net_skbcount--;
+	}
 	restore_flags(flags);
 }
 
@@ -590,7 +604,38 @@ void kfree_skbmem(struct sk_buff *skb)
  *	Duplicate an sk_buff. The new one is not owned by a socket or locked
  *	and will be freed on deletion.
  */
+#if 1
+struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
+{
+	struct sk_buff *n;
+	unsigned long flags;
 
+	IS_SKB(skb);
+	n = kmalloc(sizeof(*n), priority);
+	if (!n)
+		return NULL;
+	memcpy(n, skb, sizeof(*n));
+	n->count = 1;
+	if (skb->data_skb)
+		skb = skb->data_skb;
+	save_flags(flags);
+	cli();
+	skb->count++;
+	net_allocs++;
+	net_skbcount++;
+	restore_flags(flags);
+	n->data_skb = skb;
+	n->next = n->prev = n->link3 = NULL;
+	n->sk = NULL;
+	n->truesize = sizeof(*n);
+	n->free = 1;
+	n->tries = 0;
+	n->lock = 0;
+	n->users = 0;
+	return n;
+}
+#else
+/* this is slower, and copies the whole data area */
 struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 {
 	struct sk_buff *n;
@@ -628,6 +673,9 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->saddr=skb->saddr;
 	n->daddr=skb->daddr;
 	n->raddr=skb->raddr;
+	n->raddr=skb->seq;
+	n->raddr=skb->end_seq;
+	n->raddr=skb->ack_seq;
 	n->acked=skb->acked;
 	memcpy(n->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
 	n->used=skb->used;
@@ -642,7 +690,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	IS_SKB(n);
 	return n;
 }
-
+#endif
 
 /*
  *     Skbuff device locking

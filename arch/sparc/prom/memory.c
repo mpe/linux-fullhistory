@@ -1,4 +1,5 @@
-/* memory.c: Prom routine for acquiring various bits of information
+/* $Id: memory.c,v 1.4 1995/11/25 01:00:02 davem Exp $
+ * memory.c: Prom routine for acquiring various bits of information
  *           about RAM on the machine, both virtual and physical.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

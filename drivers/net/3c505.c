@@ -1173,21 +1173,26 @@ elp_close (struct device *dev)
  ************************************************************/
 
 static void
-elp_set_mc_list (struct device *dev, int num_addrs, void *addrs)
+elp_set_mc_list (struct device *dev)
 {
 	elp_device *adapter = (elp_device *) dev->priv;
+	struct dev_mc_list *dmi=dev->mc_list;
 	int i;
 
 	if (elp_debug >= 3)
 		printk("%s: request to set multicast list\n", dev->name);
 
-	if (num_addrs != -1) {
+	if (!(dev->flags&(IFF_PROMISC|IFF_ALLMULTI)))
+	{
 		/* send a "load multicast list" command to the board, max 10 addrs/cmd */
 		/* if num_addrs==0 the list will be cleared */
 		adapter->tx_pcb.command = CMD_LOAD_MULTICAST_LIST;
-		adapter->tx_pcb.length  = 6*num_addrs;
-		for (i=0;i<num_addrs;i++)
-			memcpy(adapter->tx_pcb.data.multicast[i], addrs+6*i,6);
+		adapter->tx_pcb.length  = 6*dev->mc_count;
+		for (i=0;i<dev->mc_count;i++)
+		{
+			memcpy(adapter->tx_pcb.data.multicast[i], dmi->dmi_addr,6);
+			dmi=dmi->next;
+		}
 		adapter->got[CMD_LOAD_MULTICAST_LIST] = 0;
 		if (!send_pcb(dev, &adapter->tx_pcb))
 			printk("%s: couldn't send set_multicast command\n", dev->name);
@@ -1199,11 +1204,12 @@ elp_set_mc_list (struct device *dev, int num_addrs, void *addrs)
 				TIMEOUT_MSG(__LINE__);
 			}
 		}
-		if (num_addrs)
+		if (dev->mc_count)
 			adapter->tx_pcb.data.configure = NO_LOOPBACK | RECV_BROAD | RECV_MULTI;
 		else /* num_addrs == 0 */
 			adapter->tx_pcb.data.configure = NO_LOOPBACK | RECV_BROAD;
-	} else /* num_addrs == -1 */
+	} 
+	else
 		adapter->tx_pcb.data.configure = NO_LOOPBACK | RECV_PROMISC;
 	/*
 	 * configure adapter to receive messages (as specified above)

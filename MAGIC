@@ -85,6 +85,7 @@ Ioctl	Include File		Comments
 'T'	asm/termios.h		conflict!
 'V'	linux/vt.h
 'Y'	linux/cyclades.h	codes in 0x004359NN
+'a'	various, see http://lrcwww.epfl.ch/linux-atm/magic.html
 'f'	linux/ext2_fs.h
 'm'	linux/mtio.h		conflict!
 'm'	linux/soundcard.h	conflict!

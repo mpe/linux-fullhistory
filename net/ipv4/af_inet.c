@@ -1016,10 +1016,11 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	sk1 = (struct sock *) sock->data;
 
 	/*
-	 * We've been passed an extra socket.
-	 * We need to free it up because the tcp module creates
-	 * its own when it accepts one.
+	 *	We've been passed an extra socket.
+	 *	We need to free it up because the tcp module creates
+	 *	its own when it accepts one.
 	 */
+	 
 	if (newsock->data)
 	{
 	  	struct sock *sk=(struct sock *)newsock->data;
@@ -1031,7 +1032,10 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	if (sk1->prot->accept == NULL) 
 		return(-EOPNOTSUPP);
 
-	/* Restore the state if we have been interrupted, and then returned. */
+	/*
+	 *	Restore the state if we have been interrupted, and then returned. 
+	 */
+	 
 	if (sk1->pair != NULL ) 
 	{
 		sk2 = sk1->pair;

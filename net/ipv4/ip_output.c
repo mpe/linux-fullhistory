@@ -116,6 +116,7 @@ int ip_send(struct rtable * rt, struct sk_buff *skb, __u32 daddr, int len, struc
 
 	skb->dev = dev;
 	skb->arp = 1;
+	skb->protocol = htons(ETH_P_IP);
 	if (dev->hard_header)
 	{
 		/*
@@ -152,6 +153,7 @@ static int ip_send_room(struct rtable * rt, struct sk_buff *skb, __u32 daddr, in
 
 	skb->dev = dev;
 	skb->arp = 1;
+	skb->protocol = ETH_P_IP;
 	if (dev->hard_header)
 	{
 		skb_reserve(skb,MAX_HEADER);

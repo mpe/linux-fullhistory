@@ -1,4 +1,5 @@
-/* misc.c:  Miscellaneous prom functions that don't belong
+/* $Id: misc.c,v 1.3 1995/11/25 01:00:04 davem Exp $
+ * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

@@ -1,14 +1,67 @@
+/* $Id: segment.h,v 1.6 1995/11/25 02:32:40 davem Exp $ */
 #ifndef _ASM_SEGMENT_H
 #define _ASM_SEGMENT_H
 
-#define KERNEL_CS   0x0
-#define KERNEL_DS   0x0
-
-#define USER_CS     0x1
-#define USER_DS     0x1
+/* Sparc is not segmented, these are just place holders. */
+#define KERNEL_DS   0
+#define USER_DS     1
 
 #include <linux/string.h>
 #include <asm/vac-ops.h>
+
+#ifndef __ASSEMBLY__
+
+/*
+ * Uh, these should become the main single-value transfer routines..
+ * They automatically use the right size if we just have the right
+ * pointer type..
+ */
+#define put_user(x,ptr) __put_user((unsigned long)(x),(ptr),sizeof(*(ptr)))
+#define get_user(ptr) ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr))))
+
+/*
+ * This is a silly but good way to make sure that
+ * the __put_user function is indeed always optimized,
+ * and that we use the correct sizes..
+ */
+extern int bad_user_access_length(void);
+
+/* I should make this use unaligned transfers etc.. */
+static inline void __put_user(unsigned long x, void * y, int size)
+{
+	switch (size) {
+		case 1:
+			*(char *) y = x;
+			break;
+		case 2:
+			*(short *) y = x;
+			break;
+		case 4:
+			*(int *) y = x;
+			break;
+		default:
+			bad_user_access_length();
+	}
+}
+
+/* I should make this use unaligned transfers etc.. */
+static inline unsigned long __get_user(const void * y, int size)
+{
+	switch (size) {
+		case 1:
+			return *(unsigned char *) y;
+		case 2:
+			return *(unsigned short *) y;
+		case 4:
+			return *(unsigned int *) y;
+		default:
+			return bad_user_access_length();
+	}
+}
+
+/*
+ * Deprecated routines
+ */
 
 static inline unsigned char get_user_byte(const char * addr)
 {
@@ -31,13 +84,6 @@ static inline unsigned long get_user_long(const int *addr)
 
 #define get_fs_long(addr) get_user_long((int *)(addr))
 
-static inline unsigned long get_user_quad(const long *addr)
-{
-	return *addr;
-}
-
-#define get_fs_quad(addr) get_user_quad((long *)(addr))
-
 static inline void put_user_byte(char val,char *addr)
 {
 	*addr = val;
@@ -59,33 +105,27 @@ static inline void put_user_long(unsigned long val,int * addr)
 
 #define put_fs_long(x,addr) put_user_long((x),(int *)(addr))
 
-static inline void put_user_quad(unsigned long val,long * addr)
-{
-	*addr = val;
-}
-
-#define put_fs_quad(x,addr) put_user_quad((x),(long *)(addr))
-
 #define memcpy_fromfs(to, from, n) memcpy((to),(from),(n))
 
 #define memcpy_tofs(to, from, n) memcpy((to),(from),(n))
 
+extern int current_user_segment;
+
 static inline unsigned long get_fs(void)
 {
-	return 0;
+	return current_user_segment;
 }
 
 static inline unsigned long get_ds(void)
 {
-	return 0;
+	return KERNEL_DS;
 }
 
 static inline void set_fs(unsigned long val)
 {
-  unsigned long foo;
-  foo = val;
-
-  return;
+	current_user_segment = val;
 }
+
+#endif  /* __ASSEMBLY__ */
 
 #endif /* _ASM_SEGMENT_H */

@@ -51,6 +51,8 @@
  */
 
 /*
+ * 18.Nov.95: Mcast changes (AC).
+ *
  * 19.Jan.95: verified (MH)
  *
  * 19.Sep.94: Added Multicast support (not tested yet) (MH)
@@ -163,10 +165,10 @@ static int     ni52_open(struct device *dev);
 static int     ni52_close(struct device *dev);
 static int     ni52_send_packet(struct sk_buff *,struct device *);
 static struct  enet_statistics *ni52_get_stats(struct device *dev);
-static void    set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void    set_multicast_list(struct device *dev);
 
 /* helper-functions */
-static int     init586(struct device *dev,int num_addrs,void *addrs);
+static int     init586(struct device *dev);
 static int     check586(struct device *dev,char *where,unsigned size);
 static void    alloc586(struct device *dev);
 static void    startrecv586(struct device *dev);
@@ -221,7 +223,7 @@ static int ni52_close(struct device *dev)
 static int ni52_open(struct device *dev)
 {
   alloc586(dev);
-  init586(dev,0,NULL);  
+  init586(dev);  
   startrecv586(dev);
 
   if(request_irq(dev->irq, &ni52_interrupt,0,"ni52")) 
@@ -446,7 +448,7 @@ static int ni52_probe1(struct device *dev,int ioaddr)
  * needs a correct 'allocated' memory
  */
 
-static int init586(struct device *dev,int num_addrs,void *addrs)
+static int init586(struct device *dev)
 {
   void *ptr;
   unsigned long s;
@@ -456,6 +458,8 @@ static int init586(struct device *dev,int num_addrs,void *addrs)
   volatile struct iasetup_cmd_struct *ias_cmd;
   volatile struct tdr_cmd_struct *tdr_cmd;
   volatile struct mcsetup_cmd_struct *mc_cmd;
+  struct dev_mc_list *dmi=dev->mc_list;
+  int num_addrs=dev->mc_count;
 
   ptr = (void *) ((char *)p->scb + sizeof(struct scb_struct));
 
@@ -472,7 +476,12 @@ static int init586(struct device *dev,int num_addrs,void *addrs)
   cfg_cmd->ifs        = 0x60;
   cfg_cmd->time_low   = 0x00;
   cfg_cmd->time_high  = 0xf2;
-  cfg_cmd->promisc    = (num_addrs < 0) ? 1 : 0;  /* promisc on/off */
+  cfg_cmd->promisc    = 0;
+  if(dev->flags&(IFF_ALLMULTI|IFF_PROMISC))
+  {
+	cfg_cmd->promisc=1;
+	dev->flags|=IFF_PROMISC;
+  }
   cfg_cmd->carr_coll  = 0x00;
  
   p->scb->cbl_offset = make16(cfg_cmd);
@@ -598,7 +607,7 @@ static int init586(struct device *dev,int num_addrs,void *addrs)
    * Multicast setup
    */
   
-  if(num_addrs > 0)
+  if(dev->mc_count)
   { /* I don't understand this: do we really need memory after the init? */
     int len = ((char *) p->iscp - (char *) ptr - 8) / 6;
     if(len <= 0)
@@ -609,6 +618,7 @@ static int init586(struct device *dev,int num_addrs,void *addrs)
     {
       if(len < num_addrs)
       {
+      	/* BUG - should go ALLMULTI in this case */
         num_addrs = len;
         printk("%s: Sorry, can only apply %d MC-Address(es).\n",dev->name,num_addrs);
       }
@@ -618,7 +628,10 @@ static int init586(struct device *dev,int num_addrs,void *addrs)
       mc_cmd->cmd_link = 0xffff;
       mc_cmd->mc_cnt = num_addrs * 6;
       for(i=0;i<num_addrs;i++)
-        memcpy((char *) mc_cmd->mc_list[i],((char (*)[6]) addrs)[i],6);
+      {
+		memcpy((char *) mc_cmd->mc_list[i], dmi->dmi_addr,6);
+		dmi=dmi->next;
+      }
       p->scb->cbl_offset = make16(mc_cmd);
       p->scb->cmd = CUC_START;
       ni_attn586();
@@ -1077,9 +1090,9 @@ static struct enet_statistics *ni52_get_stats(struct device *dev)
  * Set MC list ..  
  */
 
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+static void set_multicast_list(struct device *dev)
 {
-  if(!dev->start && !num_addrs)
+  if(!dev->start)
   {
     printk("%s: Can't apply promiscuous/multicastmode to a not running interface.\n",dev->name);
     return;
@@ -1087,7 +1100,7 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 
   dev->start = 0;
   alloc586(dev);
-  init586(dev,num_addrs,addrs);  
+  init586(dev);  
   startrecv586(dev);
   dev->start = 1;
 }

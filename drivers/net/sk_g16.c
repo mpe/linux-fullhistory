@@ -496,9 +496,7 @@ static struct enet_statistics *SK_get_stats(struct device *dev);
 
 unsigned int SK_rom_addr(void);
 
-#ifdef HAVE_MULTICAST
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
-#endif
+static void set_multicast_list(struct device *dev);
 
 /*
  * LANCE Functions
@@ -798,10 +796,7 @@ int SK_probe(struct device *dev, short ioaddr)
     dev->stop                   = &SK_close;
     dev->hard_start_xmit        = &SK_send_packet;
     dev->get_stats              = &SK_get_stats;
-
-#ifdef HAVE_MULTICAST
     dev->set_multicast_list     = &set_multicast_list;
-#endif
 
 
     /* Set the generic fields of the device structure */
@@ -1706,7 +1701,6 @@ static struct enet_statistics *SK_get_stats(struct device *dev)
 
 } /* End of SK_get_stats() */
 
-#ifdef HAVE_MULTICAST
 
 /*-
  * Function       : set_multicast_list
@@ -1724,32 +1718,27 @@ static struct enet_statistics *SK_get_stats(struct device *dev)
  *                  that all information on the net is not encrypted.
  *
  * Parameters     : I : struct device *dev - SK_G16 device Structure
- *                  I : int num_addrs      - explanation further down
- *                  I : void *addrs        - 
  * Return Value   : None
  * Errors         : None
  * Globals        : None
  * Update History :
  *     YY/MM/DD  uid  Description
+ *     95/10/18  ACox  Noew multicast calling scheme
 -*/
 
 
 /* Set or clear the multicast filter for SK_G16.
- *
- * num_addrs == -1      Promiscuous mode, receive all packets
- * num_addrs == 0       Normal mode, clear multicast list
- * num_addrs > 0        Multicast mode, receive normal and MC packets
  */
 
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
 
-    if (num_addrs == -1)
+    if (dev->flags&IFF_PROMISC)
     {
 	/* Reinitialize LANCE with MODE_PROM set */
 	SK_lance_init(dev, MODE_PROM);
     }
-    else if (num_addrs == 0)
+    else if (dev->mc_count==0 && !(dev->flags&IFF_ALLMULTI))
     {
 	/* Reinitialize LANCE without MODE_PROM */
 	SK_lance_init(dev, MODE_NORMAL);
@@ -1757,6 +1746,8 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
     else
     {
 	/* Multicast with logical address filter on */
+	/* Reinitialize LANCE without MODE_PROM */
+	SK_lance_init(dev, MODE_NORMAL);
 	
 	/* Not implemented yet. */
     }

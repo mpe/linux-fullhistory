@@ -1,4 +1,4 @@
-/* eth16i.c An ICL EtherTeam 16i/32 ethernet driver for Linux
+/* eth16i.c An ICL EtherTeam 16i and 32 EISA ethernet driver for Linux
 
    Written 1994-95 by Mika Kuoppala
 
@@ -8,11 +8,15 @@
    This software may be used and distributed according to the terms
    of the GNU Public Licence, incorporated herein by reference.
 
-   The author may be reached as miku@pupu.elt.icl.fi
+   The author may be reached as miku@elt.icl.fi
+
+   This driver supports following cards :
+	- ICL EtherTeam 16i
+	- ICL EtherTeam 32 EISA
 
    Sources:
      - skeleton.c  a sample network driver core for linux,
-       written by Donald Becker <becker@cesdis.gsfc.nasa.gov>
+       written by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
      - at1700.c a driver for Allied Telesis AT1700, written 
        by Donald Becker.
      - e16iSRV.asm a Netware 3.X Server Driver for ICL EtherTeam16i
@@ -68,7 +72,7 @@
 */
 
 static char *version = 
-	"eth16i.c: v0.21 17-10-95 Mika Kuoppala (miku@pupu.elt.icl.fi)\n";
+	"eth16i.c: v0.21 17-10-95 Mika Kuoppala (miku@elt.icl.fi)\n";
 
 #include <linux/module.h>
 
@@ -1147,7 +1151,9 @@ static void eth16i_multicast(struct device *dev, int num_addrs, void *addrs)
 {
   short ioaddr = dev->base_addr;
   
-  if(num_addrs) {
+  if(dev->mc_count || dev->flags&(IFF_ALLMULTI|IFF_PROMISC)) 
+  {
+    dev->flags|=IFF_PROMISC;	/* Must do this */
     outb(3, ioaddr + RECEIVE_MODE_REG);    
   } else {
     outb(2, ioaddr + RECEIVE_MODE_REG);
@@ -1197,16 +1203,10 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("eth16i: Device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev( &dev_eth16i );
-
-		free_irq( dev_eth16i.irq );
-		irq2dev_map[ dev_eth16i.irq ] = NULL;
-		release_region( dev_eth16i.base_addr, ETH16I_IO_EXTENT );
-	}
+	unregister_netdev( &dev_eth16i );
+	free_irq( dev_eth16i.irq );
+	irq2dev_map[ dev_eth16i.irq ] = NULL;
+	release_region( dev_eth16i.base_addr, ETH16I_IO_EXTENT );
 }
 
 #endif /* MODULE */

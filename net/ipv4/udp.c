@@ -196,6 +196,12 @@ void udp_err(int type, int code, unsigned char *header, __u32 daddr,
 
 	if (code < 13 && icmp_err_convert[code].fatal)
 	{
+		/*
+		 *	4.x BSD compatibility item. Break RFC1122 to
+		 *	get BSD socket semantics.
+		 */
+		if(sk->bsdism && sk->state!=TCP_ESTABLISHED)
+			return;
 		sk->err = icmp_err_convert[code].errno;
 		sk->error_report(sk);
 	}

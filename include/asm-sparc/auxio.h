@@ -1,35 +1,69 @@
-/* auxio.h:  Definitons and code for the Auxiliary I/O register.
+/* $Id: auxio.h,v 1.8 1995/11/25 02:31:13 davem Exp $
+ * auxio.h:  Definitons and code for the Auxiliary I/O register.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 #ifndef _SPARC_AUXIO_H
 #define _SPARC_AUXIO_H
 
-/* This defines the register as I know it on the Sun4c, it may be
- * different or not exist at all on sun4m's.
- */
-
-#define AUXIO_IOADDR  0xf7400000  /* Physical address is IO space */
+#include <asm/system.h>
+#include <asm/vaddrs.h>
 
 /* This register is an unsigned char in IO space.  It does two things.
  * First, it is used to control the front panel LED light on machines
  * that have it (good for testing entry points to trap handlers and irq's)
- * Secondly, it controls various floppy drive parameters on machines that
- * have a drive.
+ * Secondly, it controls various floppy drive parameters.
  */
 
 #define AUXIO_ORMEIN      0xf0    /* All writes must set these bits. */
-#define AUXIO_FLPY_DENS   0x20    /* Floppy density, high if set. */
-#define AUXIO_FLPY_DCHG   0x10    /* A disk change occurred. */
-#define AUXIO_FLPY_DSEL   0x08    /* Drive select, 0 'a drive' 1 'b drive'. */
-#define AUXIO_FLPY_TCNT   0x04    /* Floppy terminal count... ??? */
-#define AUXIO_FLPY_EJCT   0x02    /* Eject floppy disk. */
-#define AUXIO_LED         0x01    /* On if set, off if unset. */
+#define AUXIO_ORMEIN4M    0xc0    /* sun4m - All writes must set these bits. */
+#define AUXIO_FLPY_DENS   0x20    /* Floppy density, high if set. Read only. */
+#define AUXIO_FLPY_DCHG   0x10    /* A disk change occurred.  Read only. */
+#define AUXIO_EDGE_ON     0x10    /* sun4m - On means Jumper block is in. */
+#define AUXIO_FLPY_DSEL   0x08    /* Drive select/start-motor. Write only. */
 
-#define AUXREG ((volatile unsigned char *)(AUXIO_VADDR + 3))
+/* Set the following to one, then zero, after doing a pseudo DMA transfer. */
+#define AUXIO_FLPY_TCNT   0x04    /* Floppy terminal count. Write only. */
 
-#define TURN_ON_LED  *AUXREG = AUXIO_ORMEIN | AUXIO_FLPY_EJCT | AUXIO_LED
-#define TURN_OFF_LED *AUXREG = AUXIO_ORMEIN | AUXIO_FLPY_EJCT
-#define FLIP_LED     *AUXREG = (*AUXREG | AUXIO_ORMEIN) ^ AUXIO_LED
+/* Set the following to zero to eject the floppy. */
+#define AUXIO_FLPY_EJCT   0x02    /* Eject floppy disk.  Write only. */
+#define AUXIO_LED         0x01    /* On if set, off if unset. Read/Write */
+
+#define AUXREG   ((volatile unsigned char *)(AUXIO_VADDR + 3))
+#define AUXREG4M ((volatile unsigned char *)(AUXIO_VADDR))
+
+#define TURN_ON_LED   *AUXREG = (*AUXREG | AUXIO_ORMEIN | AUXIO_LED)
+#define TURN_OFF_LED  *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_LED))
+#define FLIP_LED      *AUXREG = ((*AUXREG | AUXIO_ORMEIN) ^ AUXIO_LED)
+#define FLPY_MOTORON  *AUXREG = ((*AUXREG | AUXIO_ORMEIN) | AUXIO_FLPY_DSEL)
+#define FLPY_MOTOROFF *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_FLPY_DSEL))
+#define FLPY_TCNTON   *AUXREG = ((*AUXREG | AUXIO_ORMEIN) | AUXIO_FLPY_TCNT)
+#define FLPY_TCNTOFF  *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_FLPY_TCNT))
+
+#ifndef __ASSEMBLY__
+extern inline void set_auxio(unsigned char bits_on, unsigned char bits_off)
+{
+	unsigned char regval;
+
+	cli();
+
+	switch(sparc_cpu_model) {
+	case sun4c:
+		regval = *AUXREG;
+		*AUXREG = ((regval | bits_on) & ~bits_off) | AUXIO_ORMEIN;
+		break;
+	case sun4m:
+		regval = *AUXREG4M;
+		*AUXREG4M = ((regval | bits_on) & ~bits_off) | AUXIO_ORMEIN4M;
+		break;
+	default:
+		panic("Can't set AUXIO register on this machine.");
+	};
+
+	sti();
+
+	return;
+}
+#endif /* !(__ASSEMBLY__) */
 
 #endif /* !(_SPARC_AUXIO_H) */

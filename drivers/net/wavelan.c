@@ -80,7 +80,7 @@ static int		wavelan_send_packet(struct sk_buff *, device *);
 static void		wavelan_interrupt(int, struct pt_regs *);
 static int		wavelan_close(device *);
 static en_stats		*wavelan_get_stats(device *);
-static void		wavelan_set_multicast_list(device *, int, void *);
+static void		wavelan_set_multicast_list(device *);
 static int		wavelan_get_info(char*, char**, off_t, int, int);
 
 /*
@@ -1051,6 +1051,8 @@ Leave this out until I can get it to work -- BJ.
 	 */
 	ether_setup(dev);
 
+	dev->flags &= ~IFF_MULTICAST;		/* Not yet supported */
+	
 	dev->mtu = WAVELAN_MTU;
 
 	if (wavelan_debug > 0)
@@ -2015,19 +2017,18 @@ wavelan_get_stats(device *dev)
 
 static
 void
-wavelan_set_multicast_list(device *dev, int num_addrs, void *addrs)
+wavelan_set_multicast_list(device *dev)
 {
 	net_local	*lp;
 	unsigned long	x;
 
 	if (wavelan_debug > 0)
-		printk("%s: ->wavelan_set_multicast_list(dev=0x%x, num_addrs=%d, addrs=0x%x)\n", dev->name, (unsigned int)dev, num_addrs, (unsigned int)addrs);
+		printk("%s: ->wavelan_set_multicast_list(dev=0x%x)", dev->name, dev);
 
 	lp = (net_local *)dev->priv;
 
-	switch (num_addrs)
+	if(dev->flags&IFF_PROMISC)
 	{
-	case -1:
 		/*
 		 * Promiscuous mode: receive all packets.
 		 */
@@ -2035,9 +2036,16 @@ wavelan_set_multicast_list(device *dev, int num_addrs, void *addrs)
 		x = wavelan_splhi();
 		(void)wavelan_hardware_reset(dev);
 		wavelan_splx(x);
-		break;
-
-	case 0:
+	}
+#if MULTICAST_IS_ADDED	
+	else if((dev->flags&IFF_ALLMULTI)||dev->mc_list)
+	{
+			
+	
+	}
+#endif	
+	else	
+	{
 		/*
 		 * Normal mode: disable promiscuous mode,
 		 * clear multicast list.
@@ -2046,14 +2054,6 @@ wavelan_set_multicast_list(device *dev, int num_addrs, void *addrs)
 		x = wavelan_splhi();
 		(void)wavelan_hardware_reset(dev);
 		wavelan_splx(x);
-		break;
-
-	default:
-		/*
-		 * Multicast mode: receive normal and
-		 * multicast packets and do best-effort filtering.
-		 */
-		break;
 	}
 
 	if (wavelan_debug > 0)

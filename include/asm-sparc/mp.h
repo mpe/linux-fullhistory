@@ -1,4 +1,5 @@
-/* mp.h:  Multiprocessing definitions for the Sparc.
+/* $Id: mp.h,v 1.2 1995/11/25 02:32:06 davem Exp $
+ * mp.h:  Multiprocessing definitions for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */

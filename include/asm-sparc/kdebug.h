@@ -1,4 +1,5 @@
-/* kdebug.h:  Defines and definitions for debugging the Linux kernel
+/* $Id: kdebug.h,v 1.7 1995/11/25 02:31:55 davem Exp $
+ * kdebug.h:  Defines and definitions for debugging the Linux kernel
  *            under various kernel debuggers.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -13,7 +14,7 @@
  */
 
 #define DEBUG_FIRSTVADDR       0xffc00000
-#define DEBUG_LASTVADDR       LINUX_OPPROM_BEGVM
+#define DEBUG_LASTVADDR        LINUX_OPPROM_BEGVM
 
 /* Breakpoints are enter through trap table entry 126.  So in sparc assembly
  * if you want to drop into the debugger you do:
@@ -53,7 +54,6 @@ extern struct kernel_debug *linux_dbvec;
 /* Use this macro in C-code to enter the debugger. */
 extern __inline__ void sp_enter_debugger(void)
 {
-	printk("Entering debugger in file %s line %d\n", __FILE__, __LINE__);
 	__asm__ __volatile__("jmpl %0, %%o7\n\t"
 			     "nop\n\t" : :
 			     "r" (linux_dbvec) : "o7", "memory");

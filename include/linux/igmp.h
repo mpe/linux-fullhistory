@@ -23,7 +23,7 @@
 /*
  *	Header in on cable format
  */
- 
+
 struct igmphdr
 {
 	__u8 type;
@@ -36,8 +36,8 @@ struct igmphdr
 #define IGMP_HOST_MEMBERSHIP_REPORT	0x12	/* Ditto */
 #define IGMP_DVMRP			0x13	/* DVMRP routing */
 #define IGMP_PIM			0x14	/* PIM routing */
-#define IGMP_HOST_NEW_MEMBERSHIP_REPORT	0x16	/* New version of 0x11 */
-#define IGMP_HOST_LEAVE_MESSAGE		0x17	/* An extra BSD seems to send */
+#define IGMP_HOST_NEW_MEMBERSHIP_REPORT 0x16	/* New version of 0x11 */
+#define IGMP_HOST_LEAVE_MESSAGE 	0x17	/* An extra BSD seems to send */
 
 #define IGMP_MTRACE_RESP		0x1e
 #define IGMP_MTRACE			0x1f
@@ -53,12 +53,25 @@ struct igmphdr
 #define IGMP_SLEEPING_MEMBER		0x04
 #define IGMP_AWAKENING_MEMBER		0x05
 
-#define IGMP_OLD_ROUTER			0x00
-#define IGMP_NEW_ROUTER			0x01
+#define IGMP_OLD_ROUTER 		0x00
+#define IGMP_NEW_ROUTER 		0x01
 
+#define IGMP_MINLEN			8
 
+#define IGMP_MAX_HOST_REPORT_DELAY	10	/* max delay for response to */
+						/* query (in seconds)	*/
+
+#define IGMP_TIMER_SCALE		10	/* denotes that the igmphdr->timer field */
+						/* specifies time in 10th of seconds	 */
+
+#define IGMP_AGE_THRESHOLD		540	/* If this host don't hear any IGMP V1	*/
+						/* message in this period of time, revert */
+						/* to IGMP v2 router */
 
 #define IGMP_ALL_HOSTS		htonl(0xE0000001L)
+#define IGMP_ALL_ROUTER 	htonl(0xE0000002L)
+#define IGMP_LOCAL_GROUP	htonl(0xE0000000L)
+#define IGMP_LOCAL_GROUP_MASK	htonl(0xFFFFFF00L)
 
 /*
  * struct for keeping the multicast list in
@@ -71,7 +84,7 @@ struct ip_mc_socklist
 	struct device *multidev[IP_MAX_MEMBERSHIPS];
 };
 
-struct ip_mc_list 
+struct ip_mc_list
 {
 	struct device *interface;
 	unsigned long multiaddr;
@@ -80,13 +93,21 @@ struct ip_mc_list
 	int tm_running;
 	int users;
 };
- 
+
+struct router_info
+{
+	struct device *dev;
+	int    type; /* type of router which is querier on this interface */
+	int    time; /* # of slow timeouts since last old query */
+	struct router_info *next;
+};
+
 extern struct ip_mc_list *ip_mc_head;
 
 
 extern int igmp_rcv(struct sk_buff *, struct device *, struct options *, __u32, unsigned short,
 	__u32, int , struct inet_protocol *);
-extern void ip_mc_drop_device(struct device *dev); 
+extern void ip_mc_drop_device(struct device *dev);
 extern int ip_mc_join_group(struct sock *sk, struct device *dev, unsigned long addr);
 extern int ip_mc_leave_group(struct sock *sk, struct device *dev,unsigned long addr);
 extern void ip_mc_drop_socket(struct sock *sk);

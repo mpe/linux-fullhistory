@@ -102,7 +102,7 @@ static void net_interrupt(int irq, struct pt_regs *regs);
 static void net_rx(struct device *dev);
 static int net_close(struct device *dev);
 static struct enet_statistics *net_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 
 /* Example routines you must write ;->. */
 #define tx_done(dev) 1
@@ -514,13 +514,24 @@ net_get_stats(struct device *dev)
 			best-effort filtering.
  */
 static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+set_multicast_list(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
-	if (num_addrs) {
-		outw(69, ioaddr);		/* Enable promiscuous mode */
-	} else
-		outw(99, ioaddr);		/* Disable promiscuous mode, use normal mode */
+	if (dev->flags&IFF_PROMISC) {
+		outw(MULTICAST|PROMISC, ioaddr);		/* Enable promiscuous mode */
+	}
+	else if((dev->flags&IFF_ALLMULTI) || dev->mc_count > HW_MAX_ADDRS)
+	{
+		hardware_set_filter(NULL);
+		outw(MULTICAST, ioaddr);		/* Disable promiscuous mode, use normal mode */
+	}
+	else if(dev->mc_count)
+	{
+		hardware_set_filter(dev->mc_list);	/* Walk the address list and load the filter */
+		outw(MULTICAST, ioaddr);
+	}
+	else 
+		outw(0, ioaddr);
 }
 
 #ifdef MODULE

@@ -1,3 +1,4 @@
+/* $Id: asi.h,v 1.11 1995/11/25 02:31:11 davem Exp $ */
 #ifndef _SPARC_ASI_H
 #define _SPARC_ASI_H
 
@@ -9,39 +10,29 @@
  * Joint edition for sun4c+sun4m: Pete A. Zaitcev <zaitcev@ipmce.su>
  */
 
-/* These are sun4c, beware on other architectures. Although things should
- * be similar under regular sun4's.
- */
+/* The first batch are for the sun4c. */
 
-#define ASI_NULL1        0x0
-#define ASI_NULL2        0x1
+#define ASI_NULL1           0x00
+#define ASI_NULL2           0x01
 
 /* sun4c and sun4 control registers and mmu/vac ops */
-#define ASI_CONTROL          0x2
-#define ASI_SEGMAP           0x3
-#define ASI_PTE              0x4
-#define ASI_HWFLUSHSEG       0x5      /* These are to initiate hw flushes of the cache */
-#define ASI_HWFLUSHPAGE      0x6
-#define ASI_REGMAP           0x6      /* Top level segmaps on Sun4's with MUTANT MMU */
-#define ASI_HWFLUSHCONTEXT   0x7
+#define ASI_CONTROL         0x02
+#define ASI_SEGMAP          0x03
+#define ASI_PTE             0x04
+#define ASI_HWFLUSHSEG      0x05
+#define ASI_HWFLUSHPAGE     0x06
+#define ASI_REGMAP          0x06
+#define ASI_HWFLUSHCONTEXT  0x07
 
-
-#define ASI_USERTXT      0x8
-#define ASI_KERNELTXT    0x9
-#define ASI_USERDATA     0xa
-#define ASI_KERNELDATA   0xb
+#define ASI_USERTXT         0x08
+#define ASI_KERNELTXT       0x09
+#define ASI_USERDATA        0x0a
+#define ASI_KERNELDATA      0x0b
 
 /* VAC Cache flushing on sun4c and sun4 */
-
-#define ASI_FLUSHSEG     0xc      /* These are for "software" flushes of the cache */
-#define ASI_FLUSHPG      0xd
-#define ASI_FLUSHCTX     0xe
-
-/* The following are now not so SS5 specific any more, it is pretty
- * much a complete generic sun4m/V8 ASI assignment listing now.
- *
- * -- davem@caip.rutgers.edu
- */
+#define ASI_FLUSHSEG        0x0c
+#define ASI_FLUSHPG         0x0d
+#define ASI_FLUSHCTX        0x0e
 
 /* SPARCstation-5: only 6 bits are decoded. */
 /* wo = Write Only, rw = Read Write;        */
@@ -64,8 +55,8 @@
 #define ASI_M_DATAC_DATA    0x0F   /* Data Cache Data; rw, ss */
 
 /* The following cache flushing ASIs work only with the 'sta'
- * instruction results are unpredictable for 'swap' and 'ldstuba' etc.
- * So don't do it.
+ * instruction. Results are unpredictable for 'swap' and 'ldstuba',
+ * so don't do it.
  */
 
 /* These ASI flushes affect external caches too. */
@@ -75,7 +66,7 @@
 #define ASI_M_FLUSH_CTX     0x13   /* Flush I&D Cache Line (context); wo, ss */
 #define ASI_M_FLUSH_USER    0x14   /* Flush I&D Cache Line (user); wo, ss */
 
-/* Block-copy operations are available on certain V8 cpus */
+/* Block-copy operations are available only on certain V8 cpus. */
 #define ASI_M_BCOPY         0x17   /* Block copy */
 
 /* These affect only the ICACHE and are Ross HyperSparc specific. */
@@ -108,7 +99,7 @@
 
 #define ASI_M_DCDR         0x39   /* Data Cache Diagnostics Registerl rw, ss */
 
-/* Sparc V9 TI UltraSparc ASI's */
+/* Sparc V9 TI UltraSparc ASI's (V8 ploos ploos) */
 
 /* ASIs 0x0-0x7f are Supervisor Only.  0x80-0xff are for anyone. */
 
@@ -126,9 +117,9 @@
 #define ASI_V9_USER_SEC    0x11   /* User secondary address space */
 
 #define ASI_V9_MMUPASS     0x14   /* OBMEM (external cache, no data cache) */
-#define ASI_V9_IOPASS      0x15   /* Like MMUPASS but for I/O areas (uncached) */
-#define ASI_V9_USER_PRIML  0x18   /* User primary address space, little-endian. */
-#define ASI_V9_USER_SECL   0x19   /* User secondary address space, little-endian. */
+#define ASI_V9_IOPASS      0x15   /* Like MMUPASS, for I/O areas (uncached) */
+#define ASI_V9_USER_PRIML  0x18   /* User primary addr space, lil-endian. */
+#define ASI_V9_USER_SECL   0x19   /* User secondary addr space, lil-endian. */
 #define ASI_V9_MMUPASSL    0x1C   /* OBMEM little-endian */
 #define ASI_V9_IOPASSL     0x1D   /* Like IOPASS but little-endian */
 #define ASI_V9_ATOMICQ     0x24   /* Atomic 128-bit load address space */

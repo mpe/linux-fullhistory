@@ -51,6 +51,7 @@ extern int eepro_probe(struct device *);
 extern int el3_probe(struct device *);
 extern int at1500_probe(struct device *);
 extern int at1700_probe(struct device *);
+extern int eth16i_probe(struct device *);
 extern int depca_probe(struct device *);
 extern int apricot_probe(struct device *);
 extern int ewrk3_probe(struct device *);
@@ -117,6 +118,9 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_AT1700
 	&& at1700_probe(dev)
+#endif
+#ifdef CONFIG_ETH16I
+	&& eth16i_probe(dev)	/* ICL EtherTeam 16i/32 */
 #endif
 #ifdef CONFIG_EL3		/* 3c509 */
 	&& el3_probe(dev)

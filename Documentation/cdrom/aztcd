@@ -1,9 +1,9 @@
-$Id: README.aztcd,v 1.90 1995/10/21 17:52:16 root Exp root $
-                       Readme-File README.aztcd
+$Id: README.aztcd,v 2.0 1995/11/10 19:37:18 root Exp root $
+          Readme-File /usr/src/Documentation/cdrom/aztcd
            for Aztech CD-ROM CDA268-01A, ORCHID CD-3110,
                   OKANO/WEARNES CDD110, Conrad TXC
                            CD-ROM Driver 
-                       Version 1.9 and newer
+                       Version 2.0 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
@@ -53,7 +53,7 @@ old kernel, in order to reboot if something goes wrong!
 2. INSTALLATION
 The driver consists of a header file 'aztcd.h', which normally should reside 
 in /usr/include/linux and the source code 'aztcd.c', which normally resides in
-/usr/src/linux/drivers/block. It uses /dev/aztcd (/dev/aztcd0 in some distri-
+/usr/src/linux/drivers/cdrom. It uses /dev/aztcd (/dev/aztcd0 in some distri-
 butions), which must be a valid block device with major number 29 and reside 
 in directory /dev. To mount a CD-ROM, your kernel needs to have the ISO9660-
 filesystem support included.
@@ -163,7 +163,7 @@ to load it before you can mount the CDROM:
                     insmod /lib/modules/X.X.X/fs/isofs.o
 The mount procedure works as described in 4. above.
 (In all commands 'X.X.X' is the current linux kernel version number. For details
-see file README.modules in /usr/src/linux.)
+see file modules.txt in /usr/src/linux/Documentation)
 
 4.2 CDROM CONNECTED TO A SOUNDCARD
 Most soundcards do have a bus interface to the CDROM-drive. In many cases
@@ -460,7 +460,7 @@ and also were very patient with the problems which occurred.
 Reinhard Max delivered the information for the CDROM-interface of the
 SoundWave32 soundcards.
 
-Jochen Koch and Olaf ? delivered the information for supporting Conrad's TXC
+Jochen Koch and Olaf Koluza delivered the information for supporting Conrad's TXC
 drive.
 
 Anybody, who is interested in these items should have a look at 'ftp.gwdg.de',

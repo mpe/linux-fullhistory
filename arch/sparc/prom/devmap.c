@@ -1,4 +1,5 @@
-/* promdevmap.c:  Map device/IO areas to virtual addresses.
+/* $Id: devmap.c,v 1.2 1995/11/25 00:59:56 davem Exp $
+ * promdevmap.c:  Map device/IO areas to virtual addresses.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */

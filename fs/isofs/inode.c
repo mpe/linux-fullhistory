@@ -339,13 +339,13 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	
 	brelse(bh);
 	
-	printk("Max size:%ld   Log zone size:%ld\n",
+	printk(KERN_DEBUG "Max size:%ld   Log zone size:%ld\n",
 	       s->u.isofs_sb.s_max_size, 
 	       1UL << s->u.isofs_sb.s_log_zone_size);
-	printk("First datazone:%ld   Root inode number %d\n",
+	printk(KERN_DEBUG "First datazone:%ld   Root inode number %d\n",
 	       s->u.isofs_sb.s_firstdatazone >> s -> u.isofs_sb.s_log_zone_size,
 	       isonum_733 (rootp->extent) << s -> u.isofs_sb.s_log_zone_size);
-	if(high_sierra) printk("Disc in High Sierra format.\n");
+	if(high_sierra) printk(KERN_DEBUG "Disc in High Sierra format.\n");
 	unlock_super(s);
 	/* set up enough so that it can read an inode */
 	

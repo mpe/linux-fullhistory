@@ -85,7 +85,7 @@ static void seeq8005_interrupt(int irq, struct pt_regs *regs);
 static void seeq8005_rx(struct device *dev);
 static int seeq8005_close(struct device *dev);
 static struct enet_statistics *seeq8005_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 
 /* Example routines you must write ;->. */
 #define tx_done(dev)	(inw(SEEQ_STATUS) & SEEQSTAT_TX_ON)
@@ -608,7 +608,7 @@ seeq8005_get_stats(struct device *dev)
 			best-effort filtering.
  */
 static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+set_multicast_list(struct device *dev)
 {
 /*
  * I _could_ do upto 6 addresses here, but wont (yet?)
@@ -623,6 +623,7 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
  
 	if (num_addrs) {			/* Enable promiscuous mode */
 		outw( (inw(SEEQ_CFG1) & ~SEEQCFG1_MATCH_MASK)| SEEQCFG1_MATCH_ALL,  SEEQ_CFG1);
+		dev->flags|=IFF_PROMISC;
 	} else {				/* Disable promiscuous mode, use normal mode */
 		outw( (inw(SEEQ_CFG1) & ~SEEQCFG1_MATCH_MASK)| SEEQCFG1_MATCH_BROAD, SEEQ_CFG1);
 	}

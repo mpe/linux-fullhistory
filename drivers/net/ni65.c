@@ -21,6 +21,8 @@
  */
 
 /*
+ * Nov.18: multicast tweaked (AC).
+ *
  * Aug.22: changes in xmit_intr (ack more than one xmitted-packet), ni65_send_packet (p->lock) (MH)
  *
  * July.16: fixed bugs in recv_skb and skb-alloc stuff  (MH)
@@ -121,7 +123,7 @@ static int   ni65_send_packet(struct sk_buff *skb, struct device *dev);
 static int   ni65_close(struct device *dev);
 static struct enet_statistics *ni65_get_stats(struct device *);
 
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 
 struct priv 
 {
@@ -636,7 +638,7 @@ static struct enet_statistics *ni65_get_stats(struct device *dev)
   return &((struct priv *) dev->priv)->stats;
 }
 
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+static void set_multicast_list(struct device *dev)
 {
 }
 

@@ -1,8 +1,11 @@
-/* init.c:  Initialize internal variables used by the PROM
+/* $Id: init.c,v 1.6 1995/11/25 01:00:01 davem Exp $
+ * init.c:  Initialize internal variables used by the PROM
  *          library functions.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
+
+#include <linux/kernel.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -25,15 +28,11 @@ struct linux_nodeops *prom_nodeops;
 extern void prom_meminit(void);
 extern void prom_ranges_init(void);
 
-int
+void
 prom_init(struct linux_romvec *rp)
 {
-	if(!rp) return 1;
 	romvec = rp;
-	if(romvec->pv_magic_cookie != LINUX_OPPROM_MAGIC)
-		return 1;
 
-	/* Ok, we seem to have a sane romvec here. */
 	switch(romvec->pv_romvers) {
 	case 0:
 		prom_vers = PROM_V0;
@@ -47,12 +46,12 @@ prom_init(struct linux_romvec *rp)
 	case 4:
 		prom_vers = PROM_P1275;
 		prom_printf("PROMLIB: Sun IEEE Prom not supported yet\n");
-		return 1;
+		prom_halt();
 		break;
 	default:
 		prom_printf("PROMLIB: Bad PROM version %d\n",
 			    romvec->pv_romvers);
-		return 1;
+		prom_halt();
 		break;
 	};
 
@@ -62,18 +61,19 @@ prom_init(struct linux_romvec *rp)
 
 	prom_root_node = prom_getsibling(0);
 	if((prom_root_node == 0) || (prom_root_node == -1))
-		return 1;
+		prom_halt();
 
 	if((((unsigned long) prom_nodeops) == 0) || 
 	   (((unsigned long) prom_nodeops) == -1))
-		return 1;
+		prom_halt();
 
 	prom_meminit();
+
 	prom_ranges_init();
 
-	prom_printf("PROMLIB: Sun Boot Prom Version %d Revision %d\n",
-		    romvec->pv_romvers, prom_rev);
+	printk("PROMLIB: Sun Boot Prom Version %d Revision %d\n",
+	       romvec->pv_romvers, prom_rev);
 
 	/* Initialization successful. */
-	return 0;
+	return;
 }

@@ -121,7 +121,7 @@ static void net_interrupt(int irq, struct pt_regs *regs);
 static void net_rx(struct device *dev);
 static int net_close(struct device *dev);
 static struct enet_statistics *net_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 
 
 /* Check for a network adaptor of this type, and return '0' iff one exists.
@@ -611,10 +611,10 @@ net_get_stats(struct device *dev)
 			best-effort filtering.
  */
 static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+set_multicast_list(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
-	if (num_addrs) 
+	if (dev->mc_count || dev->flags&(IFF_PROMISC|IFF_ALLMULTI)) 
 	{
 		/*
 		 *	We must make the kernel realise we had to move

@@ -59,7 +59,7 @@ p8022_datalink_header(struct datalink_proto *dl,
 
 static struct packet_type p8022_packet_type = 
 {
-	0,	/* MUTTER ntohs(ETH_P_IPX),*/
+	0,	/* MUTTER ntohs(ETH_P_8022),*/
 	NULL,		/* All devices */
 	p8022_rcv,
 	NULL,

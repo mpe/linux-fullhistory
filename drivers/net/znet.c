@@ -186,7 +186,7 @@ static void	znet_interrupt(int irq, struct pt_regs *regs);
 static void	znet_rx(struct device *dev);
 static int	znet_close(struct device *dev);
 static struct enet_statistics *net_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 static void hardware_init(struct device *dev);
 static void update_stop_hit(short ioaddr, unsigned short rx_stop_offset);
 
@@ -625,10 +625,6 @@ static struct enet_statistics *net_get_stats(struct device *dev)
 
 #ifdef HAVE_MULTICAST
 /* Set or clear the multicast filter for this adaptor.
-   num_addrs == -1	Promiscuous mode, receive all packets
-   num_addrs == 0	Normal mode, clear multicast list
-   num_addrs > 0	Multicast mode, receive normal and MC packets, and do
-			best-effort filtering.
    As a side effect this routine must also initialize the device parameters.
    This is taken advantage of in open().
 
@@ -636,15 +632,15 @@ static struct enet_statistics *net_get_stats(struct device *dev)
    mode change persistent, but must be changed if this code is moved to
    a multiple adaptor environment.
  */
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+static void set_multicast_list(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
 
-	if (num_addrs == -1) {
+	if (dev->flags&IFF_PROMISC) {
 		/* Enable promiscuous mode */
 		i593_init[7] &= ~3;		i593_init[7] |= 1;
 		i593_init[13] &= ~8;	i593_init[13] |= 8;
-	} else if (num_addrs != 0) {
+	} else if (dev->mc_list || (dev->flags&IFF_ALLMULTI)) {
 		/* Enable accept-all-multicast mode */
 		i593_init[7] &= ~3;		i593_init[7] |= 0;
 		i593_init[13] &= ~8;	i593_init[13] |= 8;

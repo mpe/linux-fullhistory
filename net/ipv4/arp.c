@@ -50,6 +50,7 @@
  *					eg intelligent arp probing and generation
  *					of host down events.
  *		Alan Cox	:	Missing unlock in device events.
+ *		Eckes		:	ARP ioctl control errors.
  */
 
 /* RFC1122 Status:
@@ -649,6 +650,7 @@ void arp_send(int type, int ptype, u32 dest_ip,
 	skb->arp = 1;
 	skb->dev = dev;
 	skb->free = 1;
+	skb->protocol = htons (ETH_P_IP);
 
 	/*
 	 *	Fill the device header for the ARP frame
@@ -1057,7 +1059,7 @@ static struct arp_table *arp_lookup(u32 paddr, unsigned short flags, struct devi
 	{
 		for (entry = arp_tables[HASH(paddr)];
 		     entry != NULL; entry = entry->next)
-			if (entry->ip == paddr && entry->dev == dev)
+			if (entry->ip == paddr && (!dev || entry->dev == dev))
 				break;
 		return entry;
 	}
@@ -1066,13 +1068,14 @@ static struct arp_table *arp_lookup(u32 paddr, unsigned short flags, struct devi
 	{
 		for (entry = arp_proxy_list;
 		     entry != NULL; entry = entry->next)
-			if (entry->ip == paddr && entry->dev == dev)
+			if (entry->ip == paddr && (!dev || entry->dev == dev))
 				break;
 		return entry;
 	}
 
 	for (entry=arp_proxy_list; entry != NULL; entry = entry->next)
-		if (!((entry->ip^paddr)&entry->mask) && entry->dev == dev)
+		if (!((entry->ip^paddr)&entry->mask) && 
+		                                  (!dev || entry->dev == dev))
 			break;
 	return entry;
 }
@@ -1597,6 +1600,19 @@ static void arp_run_bh()
 	restore_flags(flags);
 }
 
+/*
+ * Test if a hardware address is all zero
+ */
+static inline int empty(unsigned char * addr, int len)
+{
+	while (len > 0) {
+		if (*addr)
+			return 0;
+		len--;
+		addr++;
+	}
+	return 1;
+}
 
 /*
  *	Set (create) an ARP cache entry.
@@ -1607,7 +1623,8 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 	struct arp_table *entry;
 	struct sockaddr_in *si;
 	struct rtable *rt;
-	struct device * dev1;
+	struct device *dev1;
+	unsigned char *ha;
 	u32 ip;
 
 	/*
@@ -1626,12 +1643,19 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 	 *	Is it reachable ?
 	 */
 
-	rt = ip_rt_route(ip, 0);
-	if (!rt)
-		return -ENETUNREACH;
-	dev1 = rt->rt_dev;
-	ip_rt_put(rt);
+	if (ip_chk_addr(ip) == IS_MYADDR)
+		dev1 = dev_get("lo");
+	else {
+		rt = ip_rt_route(ip, 0);
+		if (!rt)
+			return -ENETUNREACH;
+		dev1 = rt->rt_dev;
+		ip_rt_put(rt);
+	}
 
+	if (!dev)	/* this is can only be NULL if ATF_PUBL is not set */
+		dev = dev1;
+		
 	if (((r->arp_flags & ATF_PUBL) && dev == dev1) ||
 	    (!(r->arp_flags & ATF_PUBL) && dev != dev1))
 		return -EINVAL;
@@ -1697,11 +1721,10 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 	/*
 	 *	We now have a pointer to an ARP entry.  Update it!
 	 */
-	
-	if ((r->arp_flags & ATF_COM) && !r->arp_ha.sa_data[0])
-		memcpy(&entry->ha, dev->dev_addr, dev->addr_len);
-	else
-		memcpy(&entry->ha, &r->arp_ha.sa_data, dev->addr_len);
+	ha = r->arp_ha.sa_data;
+	if ((r->arp_flags & ATF_COM) && empty(ha, dev->addr_len))
+		ha = dev->dev_addr;
+	memcpy(entry->ha, ha, dev->addr_len);
 	entry->last_updated = entry->last_used = jiffies;
 	entry->flags = r->arp_flags | ATF_COM;
 	if ((entry->flags & ATF_PUBL) && (entry->flags & ATF_NETMASK))
@@ -1773,7 +1796,7 @@ static int arp_req_delete(struct arpreq *r, struct device * dev)
 		for (entry = arp_tables[HASH(si->sin_addr.s_addr)];
 		     entry != NULL; entry = entry->next)
 			if (entry->ip == si->sin_addr.s_addr 
-			    && entry->dev == dev)
+			    && (!dev || entry->dev == dev))
 			{
 				arp_destroy(entry);
 				arp_unlock();
@@ -1785,7 +1808,7 @@ static int arp_req_delete(struct arpreq *r, struct device * dev)
 		for (entry = arp_proxy_list;
 		     entry != NULL; entry = entry->next)
 			if (entry->ip == si->sin_addr.s_addr 
-			    && entry->dev == dev) 
+			    && (!dev || entry->dev == dev)) 
 			{
 				arp_destroy(entry);
 				arp_unlock();
@@ -1852,12 +1875,12 @@ int arp_ioctl(unsigned int cmd, void *arg)
 	}
 	else
 	{
-		/*
-		 * Device was not specified. Take the first suitable one.
-		 */
-		if ((dev = dev_getbytype(r.arp_ha.sa_family)) == NULL)
-			return -ENODEV;
-	}
+		if ((r.arp_flags & ATF_PUBL) &&
+		    ((cmd == SIOCSARP) || (cmd == OLD_SIOCSARP))) {
+			if ((dev = dev_getbytype(r.arp_ha.sa_family)) == NULL)
+				return -ENODEV;
+		}
+	}		 
 
 	switch(cmd)
 	{

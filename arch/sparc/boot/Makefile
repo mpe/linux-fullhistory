@@ -1,3 +1,4 @@
+# $Id: Makefile,v 1.2 1995/11/25 00:57:37 davem Exp $
 # Makefile for the Sparc low level /boot module.
 #
 # Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -18,5 +19,3 @@ boot: $(OBJS)
 dep:
 	$(CPP) -M *.c > .depend
 	$(CPP) -M -D__ASSEMBLY__ -ansi *.S >>.depend
-
-include $(TOPDIR)/Rules.make

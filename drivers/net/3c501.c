@@ -120,7 +120,7 @@ static void el_receive(struct device *dev);
 static void el_reset(struct device *dev);
 static int  el1_close(struct device *dev);
 static struct enet_statistics *el1_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 
 #define EL1_IO_EXTENT	16
 
@@ -647,29 +647,32 @@ el1_get_stats(struct device *dev)
     return &lp->stats;
 }
 
-/* Set or clear the multicast filter for this adaptor.
-   num_addrs == -2	All multicast hosts
-   num_addrs == -1	Promiscuous mode, receive all packets
-   num_addrs == 0	Normal mode, clear multicast list
-   num_addrs > 0	Multicast mode, receive normal and MC packets, and do
-			best-effort filtering.
+/*
+ *	Set or clear the multicast filter for this adaptor.
+ *			best-effort filtering.
  */
-static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
-{
-    int ioaddr = dev->base_addr;
 
-    if (num_addrs > 0 || num_addrs==-2) {
-	outb(RX_MULT, RX_CMD);	/* Multicast or all multicast is the same */
-	inb(RX_STATUS);		/* Clear status. */
-    } else if (num_addrs < 0) {
-	outb(RX_PROM, RX_CMD);
-	inb(RX_STATUS);
-    } else {
-	outb(RX_NORM, RX_CMD);
-	inb(RX_STATUS);
-    }
+static void set_multicast_list(struct device *dev)
+{
+	int ioaddr = dev->base_addr;
+
+	if(dev->flags&IFF_PROMISC)
+	{    
+		outb(RX_PROM, RX_CMD);
+		inb(RX_STATUS);
+	}
+	else if (dev->mc_list || dev->flags&IFF_ALLMULTI)
+	{
+		outb(RX_MULT, RX_CMD);	/* Multicast or all multicast is the same */
+		inb(RX_STATUS);		/* Clear status. */
+	}
+	else 
+	{
+		outb(RX_NORM, RX_CMD);
+		inb(RX_STATUS);
+	}
 }
+
 #ifdef MODULE
 static char devicename[9] = { 0, };
 static struct device dev_3c501 = {

@@ -54,7 +54,6 @@ struct sk_buff {
 	struct iphdr	*iph;
 	struct udphdr	*uh;
 	unsigned char	*raw;
-	unsigned long	seq;
   } h;
   
   union {						/* As yet incomplete physical layer views 	*/
@@ -64,10 +63,13 @@ struct sk_buff {
   
   struct iphdr			*ip_hdr;		/* For IPPROTO_RAW 				*/
   unsigned long 		len;			/* Length of actual data			*/
-  unsigned long 		saddr;			/* IP source address				*/
-  unsigned long 		daddr;			/* IP target address				*/
-  unsigned long			raddr;			/* IP next hop address				*/
   unsigned long			csum;			/* Checksum 					*/
+  __u32				saddr;			/* IP source address				*/
+  __u32				daddr;			/* IP target address				*/
+  __u32				raddr;			/* IP next hop address				*/
+  __u32				seq;			/* TCP sequence number				*/
+  __u32				end_seq;		/* seq [+ fin] [+ syn] + datalen		*/
+  __u32				ack_seq;		/* TCP ack sequence number			*/
   unsigned char			proto_priv[16];	        /* Protocol private data			*/
   volatile char 		acked,			/* Are we acked ?				*/
 				used,			/* Are we in use ?				*/
@@ -85,6 +87,9 @@ struct sk_buff {
   unsigned short		users;			/* User count - see datagram.c,tcp.c 		*/
   unsigned short		protocol;		/* Packet protocol from driver. 		*/
   unsigned short		truesize;		/* Buffer size 					*/
+
+  int				count;			/* reference count				*/
+  struct sk_buff		*data_skb;		/* Link to the actual data skb			*/
   unsigned char			*head;			/* Head of buffer 				*/
   unsigned char			*data;			/* Data head pointer				*/
   unsigned char			*tail;			/* Tail pointer					*/

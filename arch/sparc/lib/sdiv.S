@@ -1,4 +1,5 @@
-/* sdiv.S:      This routine was taken from glibc-1.09 and is covered
+/* $Id: sdiv.S,v 1.2 1995/11/25 00:59:04 davem Exp $
+ * sdiv.S:      This routine was taken from glibc-1.09 and is covered
  *              by the GNU Library General Public License Version 2.
  */
 

@@ -1,4 +1,5 @@
-/* idprom.c: Routines to load the idprom into kernel addresses and
+/* $Id: idprom.c,v 1.18 1995/11/25 00:58:05 davem Exp $
+ * idprom.c: Routines to load the idprom into kernel addresses and
  *           interpret the data contained within.
  *
  * Because they use the IDPROM's machine type field, some of the
@@ -8,8 +9,8 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/types.h>
 
-#include <asm/types.h>
 #include <asm/oplib.h>
 #include <asm/idprom.h>
 #include <asm/machines.h>  /* Fun with Sun released architectures. */
@@ -77,8 +78,8 @@ get_idprom(void)
 	sparc_display_systype(idprom->id_machtype);
 
 	printk("Ethernet address: %x:%x:%x:%x:%x:%x\n",
-	       idprom->id_eaddr[0], idprom->id_eaddr[1], idprom->id_eaddr[2],
-	       idprom->id_eaddr[3], idprom->id_eaddr[4], idprom->id_eaddr[5]);
+		    idprom->id_eaddr[0], idprom->id_eaddr[1], idprom->id_eaddr[2],
+		    idprom->id_eaddr[3], idprom->id_eaddr[4], idprom->id_eaddr[5]);
 
 	return;
 }

@@ -257,9 +257,7 @@ static int lance_rx(struct device *dev);
 static void lance_interrupt(int irq, struct pt_regs *regs);
 static int lance_close(struct device *dev);
 static struct enet_statistics *lance_get_stats(struct device *dev);
-#ifdef HAVE_MULTICAST
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
-#endif
+static void set_multicast_list(struct device *dev);
 
 
 
@@ -1076,24 +1074,27 @@ lance_get_stats(struct device *dev)
 }
 
 /* Set or clear the multicast filter for this adaptor.
-   num_addrs == -2		All multicasts
-   num_addrs == -1		Promiscuous mode, receive all packets
-   num_addrs == 0		Normal mode, clear multicast list
-   num_addrs > 0		Multicast mode, receive normal and MC packets, and do
-						best-effort filtering.
  */
-static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+
+static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
 	short ioaddr = dev->base_addr;
 
 	outw(0, ioaddr+LANCE_ADDR);
 	outw(0x0004, ioaddr+LANCE_DATA); /* Temporarily stop the lance.	 */
 
-	if (num_addrs >= 0 || num_addrs==-2) {
+	if (dev->flags&IFF_PROMISC) {
+		/* Log any net taps. */
+		printk("%s: Promiscuous mode enabled.\n", dev->name);
+		outw(15, ioaddr+LANCE_ADDR);
+		outw(0x8000, ioaddr+LANCE_DATA); /* Set promiscuous mode */
+	} else {
 		short multicast_table[4];
 		int i;
-		/* We don't use the multicast table, but rely on upper-layer filtering. */
+		int num_addrs=dev->mc_count;
+		if(dev->flags&IFF_ALLMULTI)
+			num_addrs=1;
+		/* FIXIT: We don't use the multicast table, but rely on upper-layer filtering. */
 		memset(multicast_table, (num_addrs == 0) ? 0 : -1, sizeof(multicast_table));
 		for (i = 0; i < 4; i++) {
 			outw(8 + i, ioaddr+LANCE_ADDR);
@@ -1101,11 +1102,6 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		}
 		outw(15, ioaddr+LANCE_ADDR);
 		outw(0x0000, ioaddr+LANCE_DATA); /* Unset promiscuous mode */
-	} else {
-		/* Log any net taps. */
-		printk("%s: Promiscuous mode enabled.\n", dev->name);
-		outw(15, ioaddr+LANCE_ADDR);
-		outw(0x8000, ioaddr+LANCE_DATA); /* Set promiscuous mode */
 	}
 
 	lance_restart(dev, 0x0142, 0); /*  Resume normal operation */

@@ -363,7 +363,7 @@ static void   depca_interrupt(int irq, struct pt_regs * regs);
 static int    depca_close(struct device *dev);
 static int    depca_ioctl(struct device *dev, struct ifreq *rq, int cmd);
 static struct enet_statistics *depca_get_stats(struct device *dev);
-static void   set_multicast_list(struct device *dev,int num_addrs,void *addrs);
+static void   set_multicast_list(struct device *dev);
 
 /*
 ** Private functions
@@ -379,7 +379,7 @@ static void   DepcaSignature(char *name, u_long paddr);
 static int    DevicePresent(u_long ioaddr);
 static int    get_hw_addr(struct device *dev);
 static int    EISA_signature(char *name, s32 eisa_id);
-static void   SetMulticastFilter(struct device *dev,int num_addrs,char *addrs);
+static void   SetMulticastFilter(struct device *dev);
 static void   isa_probe(struct device *dev, u_long iobase);
 static void   eisa_probe(struct device *dev, u_long iobase);
 static struct device *alloc_device(struct device *dev, u_long iobase);
@@ -788,7 +788,7 @@ depca_init_ring(struct device *dev)
   lp->init_block.rx_ring = ((u32)((u_long)lp->rx_ring)&LA_MASK) | lp->rx_rlen;
   lp->init_block.tx_ring = ((u32)((u_long)lp->tx_ring)&LA_MASK) | lp->tx_rlen;
 
-  SetMulticastFilter(dev, 0, NULL);
+  SetMulticastFilter(dev);
 
   for (i = 0; i < ETH_ALEN; i++) {
     lp->init_block.phys_addr[i] = dev->dev_addr[i];
@@ -1151,13 +1151,9 @@ depca_get_stats(struct device *dev)
 
 /*
 ** Set or clear the multicast filter for this adaptor.
-** num_addrs == -1	Promiscuous mode, receive all packets
-** num_addrs == 0	Normal mode, clear multicast list
-** num_addrs > 0	Multicast mode, receive normal and MC packets, and do
-** 			best-effort filtering.
 */
 static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+set_multicast_list(struct device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   u_long ioaddr = dev->base_addr;
@@ -1170,13 +1166,15 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
     STOP_DEPCA;                       /* Temporarily stop the depca.  */
     depca_init_ring(dev);             /* Initialize the descriptor rings */
 
-    if (num_addrs >= 0) {
-      SetMulticastFilter(dev, num_addrs, (char *)addrs);
-      lp->init_block.mode &= ~PROM;   /* Unset promiscuous mode */
-    } else {
-      lp->init_block.mode |= PROM;    /* Set promiscuous mode */
+    if (dev->flags&(IFF_ALLMULTI|IFF_PROMISC)) 
+    {
+	lp->init_block.mode |= PROM;    /* Set promiscuous mode */
     }
-
+    else
+    {
+    	SetMulticastFilter(dev);
+    	lp->init_block.mode &= ~PROM;   /* Unset promiscuous mode */
+    }
     LoadCSRs(dev);                    /* Reload CSR3 */
     InitRestartDepca(dev);            /* Resume normal operation. */
     dev->tbusy = 0;                   /* Unlock the TX ring */
@@ -1189,25 +1187,31 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 ** Big endian crc one liner is mine, all mine, ha ha ha ha!
 ** LANCE calculates its hash codes big endian.
 */
-static void SetMulticastFilter(struct device *dev, int num_addrs, char *addrs)
+static void SetMulticastFilter(struct device *dev)
 {
   struct depca_private *lp = (struct depca_private *)dev->priv;
   int i, j, bit, byte;
   u16 hashcode;
   s32 crc, poly = CRC_POLYNOMIAL_BE;
+  struct dev_mc_list *dmi=dev->mc_list;
 
-  if (num_addrs == HASH_TABLE_LEN) {       /* Set all multicast bits */
-    for (i=0; i<(HASH_TABLE_LEN>>3); i++) {
-      lp->init_block.mcast_table[i] = (char)0xff;
-    }
-  } else {
+  if (dev->mc_count >= HASH_TABLE_LEN) 
+  {       /* Set all multicast bits */
+  	for (i=0; i<(HASH_TABLE_LEN>>3); i++) 
+  	{
+		lp->init_block.mcast_table[i] = (char)0xff;
+	}
+  }
+  else {
     /* Clear the multicast table first */
     for (i=0; i<(HASH_TABLE_LEN>>3); i++){
       lp->init_block.mcast_table[i]=0;
     }
 
     /* Add multicast addresses */
-    for (i=0;i<num_addrs;i++) {            /* for each address in the list */
+    for (i=0;i<dev->mc_count;i++) {            /* for each address in the list */
+      unsigned char *addrs=dmi->dmi_addr;
+      dmi=dmi->next;
       if ((*addrs & 0x01) == 1) {          /* multicast address? */ 
 	crc = 0xffffffff;                  /* init CRC for each address */
 	for (byte=0;byte<ETH_ALEN;byte++) {/* for each address byte */
@@ -1741,6 +1745,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     }
 
     break;
+#if 0    
   case DEPCA_SET_MCA:                /* Set a multicast address */
     if (suser()) {
       if (ioc->len != HASH_TABLE_LEN) {         /* MCA changes */
@@ -1772,6 +1777,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     }
 
     break;
+#endif    
   case DEPCA_GET_STATS:              /* Get the driver statistics */
     cli();
     ioc->len = sizeof(lp->pktStats);

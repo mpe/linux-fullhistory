@@ -140,7 +140,7 @@ static void net_rx(struct device *dev);
 static void read_block(short ioaddr, int length, unsigned char *buffer, int data_mode);
 static int net_close(struct device *dev);
 static struct enet_statistics *net_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 
 
 /* Check for a network adapter of this type, and return '0' iff one exists.
@@ -754,17 +754,18 @@ net_get_stats(struct device *dev)
 	return &lp->stats;
 }
 
-/* Set or clear the multicast filter for this adapter.
-   num_addrs == -1	Promiscuous mode, receive all packets
-   num_addrs == 0	Normal mode, clear multicast list
-   num_addrs > 0	Multicast mode, receive normal and MC packets, and do
-			best-effort filtering.
+/*
+ *	Set or clear the multicast filter for this adapter.
  */
-static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+ 
+static void set_multicast_list(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
+	int num_addrs=dev->mc_list;
+	
+	if(dev->flags&(IFF_ALLMULTI|IFF_PROMISC))
+		num_addrs=1;
 	/*
 	 *	We must make the kernel realise we had to move
 	 *	into promisc mode or we start all out war on

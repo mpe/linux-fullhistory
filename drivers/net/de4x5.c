@@ -399,7 +399,7 @@ static int     de4x5_queue_pkt(struct sk_buff *skb, struct device *dev);
 static void    de4x5_interrupt(int irq, struct pt_regs *regs);
 static int     de4x5_close(struct device *dev);
 static struct  enet_statistics *de4x5_get_stats(struct device *dev);
-static void    set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void    set_multicast_list(struct device *dev);
 static int     de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd);
 
 /*
@@ -1384,35 +1384,42 @@ static void load_packet(struct device *dev, char *buf, u32 flags, struct sk_buff
 **	                Set all multicast bits (pass all multicasts).
 */
 static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+set_multicast_list(struct device *dev)
 {
-  struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
-  u_long iobase = dev->base_addr;
+	struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+	u_long iobase = dev->base_addr;
 
-  /* First, double check that the adapter is open */
-  if (irq2dev_map[dev->irq] != NULL) {
-    if (num_addrs >= 0) {
-      SetMulticastFilter(dev, num_addrs, (char *)addrs);
-      if (lp->setup_f == HASH_PERF) {
-	load_packet(dev, lp->setup_frame, TD_IC | HASH_F | TD_SET | 
+	/* First, double check that the adapter is open */
+	if (irq2dev_map[dev->irq] != NULL) 
+	{
+		if (num_addrs >= 0) 
+		{
+		   	SetMulticastFilter(dev);
+			if (lp->setup_f == HASH_PERF) 
+			{
+				load_packet(dev, lp->setup_frame, TD_IC | HASH_F | TD_SET | 
 		                                        SETUP_FRAME_LEN, NULL);
-      } else {
-	load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
+      			}
+      			else
+      			{
+				load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
 		                                        SETUP_FRAME_LEN, NULL);
-      }
+			}
 
-      lp->tx_new = (++lp->tx_new) % lp->txRingSize;
-      outl(POLL_DEMAND, DE4X5_TPD);                /* Start the TX */
-      dev->trans_start = jiffies;
-    } else { /* set promiscuous mode */
-      u32 omr;
-      omr = inl(DE4X5_OMR);
-      omr |= OMR_PR;
-      outl(omr, DE4X5_OMR);
-    }
-  }
-
-  return;
+			lp->tx_new = (++lp->tx_new) % lp->txRingSize;
+			outl(POLL_DEMAND, DE4X5_TPD);                /* Start the TX */
+			dev->trans_start = jiffies;
+		}
+		else
+		{ 
+			/* set promiscuous mode */
+			u32 omr;
+			omr = inl(DE4X5_OMR);
+			omr |= OMR_PR;
+			outl(omr, DE4X5_OMR);
+		}
+	}
+	return;
 }
 
 /*
@@ -1420,64 +1427,88 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 ** from a list of ethernet multicast addresses.
 ** Little endian crc one liner from Matt Thomas, DEC.
 */
-static void SetMulticastFilter(struct device *dev, int num_addrs, char *addrs)
+static void SetMulticastFilter(struct device *dev)
 {
   struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+  struct dev_mc_list *dmi=dev->mc_list;
   u_long iobase = dev->base_addr;
   int i, j, bit, byte;
   u16 hashcode;
   u32 omr, crc, poly = CRC_POLYNOMIAL_LE;
   char *pa;
+  unsigned char *addrs;
 
   omr = inl(DE4X5_OMR);
   pa = build_setup_frame(dev, ALL);          /* Build the basic frame */
 
-  if (lp->setup_f == HASH_PERF) {
-    if (num_addrs == HASH_TABLE_LEN) {       /* Pass all multicasts */
-      omr |= OMR_PM;
-    } else {
-      omr &= ~OMR_PM;
-                                             /* Now update the MCA table */
-      for (i=0;i<num_addrs;i++) {            /* for each address in the list */
-	if ((*addrs & 0x01) == 1) {          /* multicast address? */ 
-	  crc = 0xffffffff;                  /* init CRC for each address */
-	  for (byte=0;byte<ETH_ALEN;byte++) {/* for each address byte */
-	                                     /* process each address bit */ 
-	    for (bit = *addrs++,j=0;j<8;j++, bit>>=1) {
-	      crc = (crc >> 1) ^ (((crc ^ bit) & 0x01) ? poly : 0);
-	    }
-	  }
-	  hashcode = crc & HASH_BITS;        /* hashcode is 9 LSb of CRC */
-
-	  byte = hashcode >> 3;              /* bit[3-8] -> byte in filter */
-	  bit = 1 << (hashcode & 0x07);      /* bit[0-2] -> bit in byte */
-
-	  byte <<= 1;                        /* calc offset into setup frame */
-	  if (byte & 0x02) {
-	    byte -= 1;
-	  }
-	  lp->setup_frame[byte] |= bit;
-	  
-	} else {                             /* skip this address */
-	  addrs += ETH_ALEN;
+  if (lp->setup_f == HASH_PERF) 
+  {
+  	if (num_addrs >= HASH_TABLE_LEN || (dev->flags&IFF_ALLMULTI)) 
+  	{
+  		/* Pass all multicasts */
+     		omr |= OMR_PM;
 	}
-      }
-    }
-  } else {                                   /* Perfect filtering */
-    omr &= ~OMR_PM;
-    for (j=0; j<num_addrs; j++) {
-      for (i=0; i<ETH_ALEN; i++) { 
-	*(pa + (i&1)) = *addrs++;
-	if (i & 0x01) pa += 4;
-      }
-    }
-  }
+	else
+	{
+		omr &= ~OMR_PM;
+                                             /* Now update the MCA table */
+		for (i=0;i<num_addrs;i++) 
+		{     
+			/* for each address in the list */
+			addrs=dmi->dmi_addr;
+			dmi=dmi->next;
+			if ((*addrs & 0x01) == 1) 
+			{       
+				/* multicast address? */ 
+				crc = 0xffffffff;                  /* init CRC for each address */
+				for (byte=0;byte<ETH_ALEN;byte++) 
+				{
+					/* for each address byte */
+	                        	/* process each address bit */ 
+					for (bit = *addrs++,j=0;j<8;j++, bit>>=1) 
+					{
+						crc = (crc >> 1) ^ (((crc ^ bit) & 0x01) ? poly : 0);
+					}
+				}
+				hashcode = crc & HASH_BITS;        /* hashcode is 9 LSb of CRC */
 
-  if (num_addrs == 0)
-    omr &= ~OMR_PR;
-  outl(omr, DE4X5_OMR);
+				byte = hashcode >> 3;              /* bit[3-8] -> byte in filter */
+				bit = 1 << (hashcode & 0x07);      /* bit[0-2] -> bit in byte */
 
-  return;
+				byte <<= 1;                        /* calc offset into setup frame */
+				if (byte & 0x02) 
+				{
+					byte -= 1;
+				}
+				lp->setup_frame[byte] |= bit;
+	  
+			}
+			else
+			{                             /* skip this address */
+				addrs += ETH_ALEN;
+			}
+		}
+	}
+	else
+	{                                   /* Perfect filtering */
+		omr &= ~OMR_PM;
+		for (j=0; j<dev->mc_count; j++) 
+		{
+			addrs=dmi->dmi_addr;
+			dmi=dmi->next;
+			for (i=0; i<ETH_ALEN; i++) 
+			{ 
+				*(pa + (i&1)) = *addrs++;
+				if (i & 0x01) pa += 4;
+			}
+		}
+	}
+
+	if (dev->mc_count == 0)
+		omr &= ~OMR_PR;
+	outl(omr, DE4X5_OMR);
+
+	return;
 }
 
 /*

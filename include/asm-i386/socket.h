@@ -25,6 +25,7 @@
 #define SO_NO_CHECK	11
 #define SO_PRIORITY	12
 #define SO_LINGER	13
-/* To add :#define SO_REUSEPORT 14 */
+#define SO_BSDCOMPAT	14
+/* To add :#define SO_REUSEPORT 15 */
 
 #endif /* _ASM_SOCKET_H */

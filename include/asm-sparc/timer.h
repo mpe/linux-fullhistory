@@ -1,4 +1,5 @@
-/* timer.h:  Definitions for the timer chips on the Sparc.
+/* $Id: timer.h,v 1.10 1995/11/25 02:33:03 davem Exp $
+ * timer.h:  Definitions for the timer chips on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -78,6 +79,7 @@ struct sun4m_timer_regs {
 };
 
 extern struct sun4m_timer_regs *sun4m_timers;
+extern volatile unsigned int *master_l10_counter;
 extern volatile unsigned int *master_l10_limit;
 
 #endif /* !(_SPARC_TIMER_H) */

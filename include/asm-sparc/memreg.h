@@ -1,3 +1,4 @@
+/* $Id: memreg.h,v 1.4 1995/11/25 02:32:02 davem Exp $ */
 #ifndef _SPARC_MEMREG_H
 #define _SPARC_MEMREG_H
 /* memreg.h:  Definitions of the values found in the synchronous
@@ -11,28 +12,25 @@
  * normal page faults.
  */
 
-#define SUN4C_SYNC_WDRESET   0x1  /* watchdog reset, only the prom sees this */
-#define SUN4C_SYNC_SIZE      0x2  /* bad access size? whuz this? */
-#define SUN4C_SYNC_PARITY    0x8  /* bad ram chips caused a parity error */
-#define SUN4C_SYNC_SBUS      0x10 /* the SBUS had some problems... */
-#define SUN4C_SYNC_NOMEM     0x20 /* translation pointed to non-existant ram */
-#define SUN4C_SYNC_PROT      0x40 /* access violated pte protection settings */
-#define SUN4C_SYNC_NPRESENT  0x80 /* pte said that page was not present */
+#define SUN4C_SYNC_WDRESET   0x0001  /* watchdog reset */
+#define SUN4C_SYNC_SIZE      0x0002  /* bad access size? whuz this? */
+#define SUN4C_SYNC_PARITY    0x0008  /* bad ram chips caused a parity error */
+#define SUN4C_SYNC_SBUS      0x0010  /* the SBUS had some problems... */
+#define SUN4C_SYNC_NOMEM     0x0020  /* translation to non-existant ram */
+#define SUN4C_SYNC_PROT      0x0040  /* access violated pte protections */
+#define SUN4C_SYNC_NPRESENT  0x0080  /* pte said that page was not present */
 #define SUN4C_SYNC_BADWRITE  0x8000  /* while writing something went bogus */
+
+#define SUN4C_SYNC_BOLIXED  \
+        (SUN4C_SYNC_WDRESET|SUN4C_SYNC_SIZE|SUN4C_SYNC_SBUS|SUN4C_SYNC_NOMEM)
 
 /* Now the asynchronous error codes, these are almost always produced
  * by the cache writing things back to memory and getting a bad translation.
  * Bad DVMA transactions can cause these faults too.
  */
 
-#define SUN4C_ASYNC_BADDVMA  0x10 /* error during DVMA access */
-#define SUN4C_ASYNC_NOMEM    0x20 /* write back pointed to bad phys addr */
-#define SUN4C_ASYNC_BADWB    0x80 /* write back points to non-present page */
-
-/* These are the values passed as the first arguement to the fault
- * entry c-code from the assembly entry points.
- */
-#define FAULT_ASYNC          0x0
-#define FAULT_SYNC           0x1
+#define SUN4C_ASYNC_BADDVMA 0x0010  /* error during DVMA access */
+#define SUN4C_ASYNC_NOMEM   0x0020  /* write back pointed to bad phys addr */
+#define SUN4C_ASYNC_BADWB   0x0080  /* write back points to non-present page */
 
 #endif /* !(_SPARC_MEMREG_H) */

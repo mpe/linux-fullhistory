@@ -656,7 +656,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_msync)
 	.long SYMBOL_NAME(sys_readv)		/* 145 */
 	.long SYMBOL_NAME(sys_writev)
-	.long 0
+	.long SYMBOL_NAME(sys_getsid)
 	.long 0
 	.long 0
 	.long SYMBOL_NAME(sys_mlock)		/* 150 */

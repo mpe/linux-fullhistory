@@ -390,7 +390,19 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 	 * that skb1 and skb2 point to it (them) so that it (they) can be 
 	 * demuxed to sock1 and/or sock2.  If we are unable to make enough
 	 * copies, we do as much as is possible.
+	 *
+	 * Firstly stop charging the sender for the space. We will
+	 * charge the recipient or discard. If we are called from ipx_rcv
+	 * this is ok as no socket owns an input buffer.
 	 */
+	 
+	if(skb->sk)
+	{
+		skb->sk->wmem_alloc -= skb->truesize;	/* Adjust */
+		skb->sk=NULL;				/* Disown */
+	}
+
+	 
 	if (copy) {
 		skb1 = skb_clone(skb, GFP_ATOMIC);
 		if (skb1 != NULL) {
@@ -529,14 +541,14 @@ ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 	/* set up data link and physical headers */
 	skb->dev = dev;
 	dl->datalink_header(dl, skb, dest_node);
-
+#ifdef ALREADY_DONE_GUV
 	if (skb->sk != NULL) {
 		/* This is an outbound packet from this host.  We need to 
 		 * increment the write count.
 		 */
 		skb->sk->wmem_alloc += skb->truesize;
 	}
-
+#endif
 #if 0
 	/* Now log the packet just before transmission */
 	dump_pkt("IPX snd:", (ipx_packet *)skb->h.raw);

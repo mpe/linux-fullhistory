@@ -43,6 +43,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
     bool 'NI5210 support' CONFIG_NI52
     bool 'NI6510 support' CONFIG_NI65
     tristate 'WaveLAN support' CONFIG_WAVELAN
+    tristate 'ICL EtherTeam 16i/32 support' CONFIG_ETH16I
   fi
   tristate 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS
   tristate 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN
@@ -60,7 +61,6 @@ if [ "$CONFIG_NET_EISA" = "y" ]; then
   fi
   tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT
   tristate 'DE425, DE434, DE435, DE500 support' CONFIG_DE4X5
-  tristate 'ICL EtherTeam 16i/32 support' CONFIG_ETH16
 # tristate 'DEC 21040 PCI support' CONFIG_DEC_ELCP
 # bool 'LPL T100V 100Mbs support' CONFIG_LPL_T100
 # bool 'PCnet32 (32 bit VLB and PCI LANCE) support' CONFIG_PCNET32

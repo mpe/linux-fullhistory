@@ -1,4 +1,5 @@
-/* sbus.h:  Defines for the Sun SBus.
+/* $Id: sbus.h,v 1.8 1995/11/25 02:32:38 davem Exp $
+ * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -6,7 +7,7 @@
 #ifndef _SPARC_SBUS_H
 #define _SPARC_SBUS_H
 
-#include <asm/openprom.h>  /* For linux_prom_registers and linux_prom_irqs */
+#include <asm/oplib.h>
 
 /* We scan which devices are on the SBus using the PROM node device
  * tree.  SBus devices are described in two different ways.  You can
@@ -37,21 +38,20 @@ extern inline unsigned long sbus_dev_offset(unsigned long dev_addr)
   return (unsigned long) (((dev_addr)-SUN_SBUS_BVADDR)&SBUS_OFF_MASK);
 }
 
-/* Handy macro */
-#define STRUCT_ALIGN(addr) ((addr+7)&(~7))
+struct linux_sbus;
 
-/* Linus SBUS device tables */
+/* Linux SBUS device tables */
 struct linux_sbus_device {
   struct linux_sbus_device *next;      /* next device on this SBus or null */
+  struct linux_sbus_device *child;     /* For ledma and espdma on sun4m */
+  struct linux_sbus *my_bus;           /* Back ptr to sbus */
   int prom_node;                       /* PROM device tree node for this device */
-  char *prom_name;                     /* PROM device name */
-  char *linux_name;                    /* Name used internally by Linux */
+  char prom_name[64];                  /* PROM device name */
+  char linux_name[64];                 /* Name used internally by Linux */
 
-  /* device register addresses */
   struct linux_prom_registers reg_addrs[PROMREG_MAX];
   int num_registers;
 
-  /* List of IRQ's this device uses. */
   struct linux_prom_irqs irqs[PROMINTR_MAX];
   int num_irqs;
 
@@ -59,18 +59,32 @@ struct linux_sbus_device {
   unsigned long sbus_vaddrs[PROMVADDR_MAX];
   unsigned long num_vaddrs;
   unsigned long offset;                /* Offset given by PROM */
-  int slot;                            /* Device slot number */
+  int slot;
 };
 
-/* This struct describes the SBus-es found on this machine. */
+/* This struct describes the SBus(s) found on this machine. */
 struct linux_sbus {
   struct linux_sbus *next;             /* next SBus, if more than one SBus */
   struct linux_sbus_device *devices;   /* Link to devices on this SBus */
   int prom_node;                       /* PROM device tree node for this SBus */
-  char *prom_name;                     /* Usually "sbus" */
-  int clock_freq;                 /* Speed of this SBus */
+  char prom_name[64];                  /* Usually "sbus" */
+  int clock_freq;
 };
 
-extern struct linux_sbus Linux_SBus;
+extern struct linux_sbus *SBus_chain;
+
+extern inline int
+sbus_is_slave(struct linux_sbus_device *dev)
+{
+	/* Have to write this for sun4c's */
+	return 0;
+}
+
+/* Device probing routines could find these handy */
+#define for_each_sbus(bus) \
+        for((bus) = SBus_chain; (bus); (bus)=(bus)->next)
+
+#define for_each_sbusdev(device, bus) \
+        for((device) = (bus)->devices; (device); (device)=(device)->next)
 
 #endif /* !(_SPARC_SBUS_H) */

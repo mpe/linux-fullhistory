@@ -1,4 +1,5 @@
-/* page.h:  Various defines and such for MMU operations on the Sparc for
+/* $Id: page.h,v 1.22 1995/11/25 02:32:16 davem Exp $
+ * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -12,14 +13,16 @@
 #include <asm/head.h>       /* for KERNBASE */
 
 #define PAGE_SHIFT   12             /* This is the virtual page... */
-#define PAGE_OFFSET    KERNBASE
+#define PAGE_OFFSET  KERNBASE
 #define PAGE_SIZE    (1 << PAGE_SHIFT)
 
 /* to mask away the intra-page address bits */
-#define PAGE_MASK         (~(PAGE_SIZE-1))
+#define PAGE_MASK    (~(PAGE_SIZE-1))
 
 #ifdef __KERNEL__
 #ifndef __ASSEMBLY__
+
+#include <asm/processor.h>
 
 /* The following structure is used to hold the physical
  * memory configuration of the machine.  This is filled in
@@ -86,7 +89,12 @@ typedef unsigned long pgprot_t;
  */
 
 extern void (*invalidate)(void);
-extern void (*set_pte)(pte_t *ptep, pte_t entry);
+
+/* Certain architectures need to do special things when pte's
+ * within a page table are directly modified.  Thus, the following
+ * hook is made available.
+ */
+extern void (*set_pte)(pte_t *pteptr, pte_t pteval);
 
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)  (((addr)+PAGE_SIZE-1)&PAGE_MASK)
@@ -94,9 +102,7 @@ extern void (*set_pte)(pte_t *ptep, pte_t entry);
 /* We now put the free page pool mapped contiguously in high memory above
  * the kernel.
  */
-#define MAP_NR(addr) ((((unsigned long)addr) - PAGE_OFFSET) >> PAGE_SHIFT)
-#define MAP_PAGE_RESERVED (1<<15)
-
+#define MAP_NR(addr) ((((unsigned long) (addr)) - PAGE_OFFSET) >> PAGE_SHIFT)
 
 #endif /* !(__ASSEMBLY__) */
 
@@ -249,17 +255,18 @@ extern __inline__ unsigned long get_segmap(unsigned long addr)
 {
   register unsigned long entry;
 
-  __asm__ __volatile__("lduba [%1] %2, %0" : 
+  __asm__ __volatile__("\n\tlduba [%1] %2, %0\n\t" : 
 		       "=r" (entry) :
 		       "r" (addr), "i" (ASI_SEGMAP));
 
-  return (entry&0xff);
+  return entry;
 }
 
 extern __inline__ void put_segmap(unsigned long addr, unsigned long entry)
 {
 
-  __asm__ __volatile__("stba %1, [%0] %2" : : "r" (addr), "r" (entry&0xff),
+  __asm__ __volatile__("\n\tstba %1, [%0] %2\n\t" : :
+		       "r" (addr), "r" (entry),
 		       "i" (ASI_SEGMAP));
 
   return;
@@ -269,7 +276,7 @@ extern __inline__ unsigned long get_pte(unsigned long addr)
 {
   register unsigned long entry;
 
-  __asm__ __volatile__("lda [%1] %2, %0" : 
+  __asm__ __volatile__("\n\tlda [%1] %2, %0\n\t" : 
 		       "=r" (entry) :
 		       "r" (addr), "i" (ASI_PTE));
   return entry;
@@ -277,27 +284,33 @@ extern __inline__ unsigned long get_pte(unsigned long addr)
 
 extern __inline__ void put_pte(unsigned long addr, unsigned long entry)
 {
-  __asm__ __volatile__("sta %1, [%0] %2" : :
+  __asm__ __volatile__("\n\tsta %1, [%0] %2\n\t" : :
 		       "r" (addr), 
 		       "r" (entry), "i" (ASI_PTE));
 
   return;
 }
 
-extern void (*switch_to_context)(int);
+extern void (*switch_to_context)(void *tsk);
 
 extern __inline__ int get_context(void)
 {
   register int ctx;
 
-  __asm__ __volatile__("lduba [%1] %2, %0" :
+  __asm__ __volatile__("\n\tlduba [%1] %2, %0\n\t" :
 		       "=r" (ctx) :
 		       "r" (AC_CONTEXT), "i" (ASI_CONTROL));
 
   return ctx;
 }
 
-typedef unsigned short mem_map_t;
+extern __inline__ int set_context(int ctx)
+{
+  __asm__ __volatile__("\n\tstba %0, [%1] %2\n\t" : :
+		       "r" (ctx), "r" (AC_CONTEXT), "i" (ASI_CONTROL));
+
+  return ctx;
+}
 
 #endif /* __ASSEMBLY__ */
 

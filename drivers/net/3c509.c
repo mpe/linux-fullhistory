@@ -107,9 +107,7 @@ static void update_stats(int addr, struct device *dev);
 static struct enet_statistics *el3_get_stats(struct device *dev);
 static int el3_rx(struct device *dev);
 static int el3_close(struct device *dev);
-#ifdef HAVE_MULTICAST
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
-#endif
+static void set_multicast_list(struct device *dev);
 
 
 
@@ -259,9 +257,7 @@ int el3_probe(struct device *dev)
 	dev->hard_start_xmit = &el3_start_xmit;
 	dev->stop = &el3_close;
 	dev->get_stats = &el3_get_stats;
-#ifdef HAVE_MULTICAST
 	dev->set_multicast_list = &set_multicast_list;
-#endif
 
 	/* Fill in the generic fields of the device structure. */
 	ether_setup(dev);
@@ -630,33 +626,32 @@ el3_rx(struct device *dev)
 	return 0;
 }
 
-#ifdef HAVE_MULTICAST
-/* Set or clear the multicast filter for this adaptor.
-   num_addrs == -1		Promiscuous mode, receive all packets
-   num_addrs == 0		Normal mode, clear multicast list
-   num_addrs > 0		Multicast mode, receive normal and MC packets, and do
-						best-effort filtering.
+/* 
+ *	Set or clear the multicast filter for this adaptor.
  */
-static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+ 
+static void set_multicast_list(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
 	if (el3_debug > 1) {
 		static int old = 0;
-		if (old != num_addrs) {
-			old = num_addrs;
-			printk("%s: Setting Rx mode to %d addresses.\n", dev->name, num_addrs);
+		if (old != dev->mc_count) {
+			old = dev->mc_count;
+			printk("%s: Setting Rx mode to %d addresses.\n", dev->name, dev->mc_count);
 		}
 	}
-	if (num_addrs > 0 || num_addrs == -2) {
+	if (dev->mc_count || (dev->flags&IFF_ALLMULTI)) 
+	{
 		outw(SetRxFilter|RxStation|RxMulticast|RxBroadcast, ioaddr + EL3_CMD);
-	} else if (num_addrs < 0) {
+	} 
+	else if (dev->flags&IFF_PROMISC) 
+	{
 		outw(SetRxFilter | RxStation | RxMulticast | RxBroadcast | RxProm,
 			 ioaddr + EL3_CMD);
-	} else
+	}
+	else
 		outw(SetRxFilter | RxStation | RxBroadcast, ioaddr + EL3_CMD);
 }
-#endif
 
 static int
 el3_close(struct device *dev)

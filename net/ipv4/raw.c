@@ -125,6 +125,16 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, __u32 sadd
 	skb->dev = dev;
 	skb->saddr = daddr;
 	skb->daddr = saddr;
+
+#if 0	
+	/*
+	 *	For no adequately explained reasons BSD likes to mess up the header of
+	 *	the received frame. 
+	 */
+	 
+	if(sk->bsdism)
+		skb->ip_hdr->tot_len=ntohs(skb->ip_hdr->tot_len-4*skb->ip_hdr->ihl);
+#endif
 	
 	/* Charge it to the socket. */
 	

@@ -1,11 +1,7 @@
-/*
- *  linux/arch/alpha/kernel/setup.c
+/*  $Id: setup.c,v 1.41 1995/11/25 00:58:21 davem Exp $
+ *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
- */
-
-/*
- * bootup setup stuff..
  */
 
 #include <linux/errno.h>
@@ -24,27 +20,25 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/kgdb.h>
 #include <asm/processor.h>
-#include <asm/oplib.h>    /* The PROM is your friend... */
+#include <asm/oplib.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/traps.h>
 #include <asm/vaddrs.h>
 #include <asm/kdebug.h>
 
-extern unsigned long probe_devices(unsigned long);
-
-/*
- * Gcc is hard to keep happy ;-)
- */
 struct screen_info screen_info = {
 	0, 0,			/* orig-x, orig-y */
 	{ 0, 0, },		/* unused */
 	0,			/* orig-video-page */
 	0,			/* orig-video-mode */
-	80,			/* orig-video-cols */
+	128,			/* orig-video-cols */
 	0,0,0,			/* ega_ax, ega_bx, ega_cx */
-	25			/* orig-video-lines */
+	54,			/* orig-video-lines */
+	0,                      /* orig-video-isVGA */
+	16                      /* orig-video-points */
 };
 
 char wp_works_ok = 0;
@@ -54,43 +48,45 @@ unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
 	return memory_start;
 }
 
-/* Lame prom console routines, gets registered below. Thanks for the
- * tip Linus.  We now use a generic putchar prom routine through the
- * linux prom library.
- */
-
-void sparc_console_print(const char * p)
-{
-  unsigned char c;
-
-	while ((c = *(p++)) != 0)
-	  {
-	    if (c == '\n')
-	      prom_putchar('\r');
-	    prom_putchar(c);
-	  }
-
-  return;
-
-}
-
 /* Typing sync at the prom promptcalls the function pointed to by
  * romvec->pv_synchook which I set to the following function.
  * This should sync all filesystems and return, for now it just
  * prints out pretty messages and returns.
  */
+
+extern unsigned long trapbase;
+
+/* Pretty sick eh? */
 void prom_sync_me(void)
 {
-	printk("PROM SYNC COMMAND...\n");
+	unsigned long prom_tbr, flags;
+
+	save_flags(flags); cli();
+	__asm__ __volatile__("rd %%tbr, %0\n\t" : "=r" (prom_tbr));
+	__asm__ __volatile__("wr %0, 0x0, %%tbr\n\t"
+			     "nop\n\t"
+			     "nop\n\t"
+			     "nop\n\t" : : "r" (&trapbase));
+
+	prom_printf("PROM SYNC COMMAND...\n");
 	show_free_areas();
-	printk("Returning to prom\n");
+	prom_printf("Returning to prom\n");
+
+	__asm__ __volatile__("wr %0, 0x0, %%tbr\n\t"
+			     "nop\n\t"
+			     "nop\n\t"
+			     "nop\n\t" : : "r" (prom_tbr));
+	restore_flags(flags);
+
 	return;
 }
+
+extern void rs_kgdb_hook(int tty_num); /* sparc/serial.c */
 
 unsigned int boot_flags;
 #define BOOTME_DEBUG  0x1
 #define BOOTME_SINGLE 0x2
-#define BOOTME_KGDB   0x3
+#define BOOTME_KGDB   0x4
 
 /* This routine does no error checking, make sure your string is sane
  * before calling this!
@@ -100,8 +96,8 @@ void
 boot_flags_init(char *commands)
 {
 	int i;
-	for(i=0; i<strlen(commands); i++)
-		if(commands[i]=='-')
+	for(i=0; i<strlen(commands); i++) {
+		if(commands[i]=='-') {
 			switch(commands[i+1]) {
 			case 'd':
 				boot_flags |= BOOTME_DEBUG;
@@ -110,19 +106,34 @@ boot_flags_init(char *commands)
 				boot_flags |= BOOTME_SINGLE;
 				break;
 			case 'h':
-				printk("boot_flags_init: Found halt flag, doing so now...\n");
+				prom_printf("boot_flags_init: Found halt flag, doing so now...\n");
 				halt();
-				break;
-			case 'k':
-				printk("Found KGDB boot flag...\n");
-				boot_flags |= BOOTME_KGDB;
 				break;
 			default:
 				printk("boot_flags_init: Unknown boot arg (-%c)\n",
 				       commands[i+1]);
 				break;
 			};
-
+		} else {
+			if(commands[i]=='k' && commands[i+1]=='g' &&
+			   commands[i+2]=='d' && commands[i+3]=='b' &&
+			   commands[i+4]=='=' && commands[i+5]=='t' &&
+			   commands[i+6]=='t' && commands[i+7]=='y') {
+				printk("KGDB: Using serial line /dev/tty%c for "
+				       "session\n", commands[i+8]);
+				boot_flags |= BOOTME_KGDB;
+				if(commands[i+8]=='a')
+					rs_kgdb_hook(0);
+				else if(commands[i+8]=='b')
+					rs_kgdb_hook(1);
+				else {
+					printk("KGDB: whoops bogon tty line "
+					       "requested, disabling session\n");
+					boot_flags &= (~BOOTME_KGDB);
+				}
+			}
+		}
+	}
 	return;
 }
 
@@ -132,47 +143,29 @@ boot_flags_init(char *commands)
  * physical memory probe as on the alpha.
  */
 
-extern void register_console(void (*proc)(const char *));
 extern void load_mmu(void);
 extern int prom_probe_memory(void);
-extern void probe_mmu(int node);
+extern void probe_vac(void);
 extern void get_idprom(void);
-extern void srmmu_patch_fhandlers(void);
-extern unsigned int prom_iface_vers, end_of_phys_memory, phys_bytes_of_ram;
+extern unsigned int end_of_phys_memory;
 extern char cputypval;
-extern unsigned long start;
+extern unsigned long start, end, bootup_stack, bootup_kstack;
+
+
 char sparc_command_line[256];  /* Should be enough */
 enum sparc_cpu sparc_cpu_model;
 
 struct tt_entry *sparc_ttable;
 
-/* #define DEBUG_CMDLINE */
-
 void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
-	int counter, total, i, node;
-	char devtype[64];
+	int total, i;
 
 	sparc_ttable = (struct tt_entry *) &start;
 
-	register_console(sparc_console_print);
-
 	/* Initialize PROM console and command line. */
 	*cmdline_p = prom_getbootargs();
-	boot_flags_init(*cmdline_p);
-
-	/* Synchronize with debugger if necessary.  Grrr, have to check
-	 * the boot flags too. ;(
-	 */
-	if((boot_flags&BOOTME_DEBUG) && (linux_dbvec!=0) && 
-	   ((*(short *)linux_dbvec) != -1)) {
-		printk("Booted under debugger. Syncing up trap table.\n");
-		/* Sync us up... */
-		(*(linux_dbvec->teach_debugger))();
-
-		SP_ENTER_DEBUGGER;
-	}
 
 	/* Set sparc_cpu_model */
 	sparc_cpu_model = sun_unknown;
@@ -185,23 +178,10 @@ void setup_arch(char **cmdline_p,
 	switch(sparc_cpu_model)
 	  {
 	  case sun4c:
-		  memset(phys_seg_map, 0x0, sizeof(phys_seg_map[PSEG_ENTRIES]));
-		  put_segmap(IOBASE_VADDR, IOBASE_SUN4C_SEGMAP);
-		  phys_seg_map[IOBASE_SUN4C_SEGMAP] = PSEG_RSV;
-		  node = prom_root_node;
-
 		  printk("SUN4C\n");
+		  probe_vac();
 		  break;
           case sun4m:
-		  node = prom_getchild(prom_root_node);
-		  prom_getproperty(node, "device_type", devtype, sizeof(devtype));
-		  while(strcmp(devtype, "cpu") != 0) {
-			  node = prom_getsibling(node);
-			  prom_getproperty(node, "device_type", devtype,
-					   sizeof(devtype));
-		  }
-		  /* Patch trap table. */
-		  srmmu_patch_fhandlers();
 		  printk("SUN4M\n");
 		  break;
 	  case sun4d:
@@ -218,51 +198,69 @@ void setup_arch(char **cmdline_p,
 		  break;
 	  };
 
-	/* probe_devices() expects this to be done. */
+	boot_flags_init(*cmdline_p);
+	if((boot_flags&BOOTME_DEBUG) && (linux_dbvec!=0) && 
+	   ((*(short *)linux_dbvec) != -1)) {
+		printk("Booted under KADB. Syncing trap table.\n");
+		(*(linux_dbvec->teach_debugger))();
+	}
+	if((boot_flags & BOOTME_KGDB)) {
+		set_debug_traps();
+		breakpoint();
+	}
+
 	get_idprom();
-
-	/* Probe the mmu constants. */
-	probe_mmu(node);
-
-	/* Set pointers to memory management routines. */
 	load_mmu();
-
-	/* Probe for memory. */
 	total = prom_probe_memory();
 	*memory_start_p = (((unsigned long) &end));
-
 	printk("Physical Memory: %d bytes (in hex %08lx)\n", (int) total,
-	       (unsigned long) total);
+		    (unsigned long) total);
 
 	for(i=0; sp_banks[i].num_bytes != 0; i++) {
 #if 0
 		printk("Bank %d:  base 0x%x  bytes %d\n", i,
-		       (unsigned int) sp_banks[i].base_addr, 
-		       (int) sp_banks[i].num_bytes);
+			    (unsigned int) sp_banks[i].base_addr, 
+			    (int) sp_banks[i].num_bytes);
 #endif
 		end_of_phys_memory = sp_banks[i].base_addr + sp_banks[i].num_bytes;
 	}
 
-	/* Set prom sync hook pointer */
 	prom_setsync(prom_sync_me);
 
-	init_task.mm->start_code = PAGE_OFFSET;
-	init_task.mm->end_code = PAGE_OFFSET + (unsigned long) &etext;
-	init_task.mm->end_data = PAGE_OFFSET + (unsigned long) &edata;
-	init_task.mm->brk = PAGE_OFFSET + (unsigned long) &end;
+	/* Due to stack alignment restrictions and assumptions... */
 	init_task.mm->mmap->vm_page_prot = PAGE_SHARED;
 
-	/* Grrr, wish I knew why I have to do this ;-( */
-	for(counter=1; counter<NR_TASKS; counter++) {
-		task[counter] = NULL;
+	*memory_end_p = (end_of_phys_memory + PAGE_OFFSET);
+
+	{
+		extern int serial_console;  /* in console.c, of course */
+		int idev = prom_query_input_device();
+		int odev = prom_query_output_device();
+		if (idev == PROMDEV_IKBD && odev == PROMDEV_OSCREEN) {
+			serial_console = 0;
+		} else if (idev == PROMDEV_ITTYA && odev == PROMDEV_OTTYA) {
+			serial_console = 1;
+		} else if (idev == PROMDEV_ITTYB && odev == PROMDEV_OTTYB) {
+			prom_printf("Console on ttyb is not supported\n");
+			prom_halt();
+		} else {
+			prom_printf("Inconsistent console\n");
+			prom_halt();
+		}
 	}
-
-	*memory_end_p = (((unsigned long) (total) + PAGE_OFFSET));
-
-	return;
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
 {
 	return -EIO;
+}
+
+/*
+ * BUFFER is PAGE_SIZE bytes long.
+ *
+ * XXX Need to do better than this! XXX
+ */
+int get_cpuinfo(char *buffer)
+{
+	return sprintf(buffer, "Sparc RISC\n");
 }

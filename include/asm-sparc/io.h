@@ -1,3 +1,4 @@
+/* $Id: io.h,v 1.8 1995/11/25 02:31:50 davem Exp $ */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
 
@@ -15,42 +16,42 @@
 
 extern inline unsigned long inb_local(unsigned long addr)
 {
-  return 0;
+	return 0;
 }
 
 extern inline void outb_local(unsigned char b, unsigned long addr)
 {
-  return;
+	return;
 }
 
 extern inline unsigned long inb(unsigned long addr)
 {
-  return 0;
+	return 0;
 }
 
 extern inline unsigned long inw(unsigned long addr)
 {
-  return 0;
+	return 0;
 }
 
 extern inline unsigned long inl(unsigned long addr)
 {
-  return 0;
+	return 0;
 }
 
 extern inline void outb(unsigned char b, unsigned long addr)
 {
-  return;
+	return;
 }
 
 extern inline void outw(unsigned short b, unsigned long addr)
 {
-  return;
+	return;
 }
 
 extern inline void outl(unsigned int b, unsigned long addr)
 {
-  return;
+	return;
 }
 
 /*
@@ -58,32 +59,32 @@ extern inline void outl(unsigned int b, unsigned long addr)
  */
 extern inline unsigned long readb(unsigned long addr)
 {
-  return 0;
+	return 0;
 }
 
 extern inline unsigned long readw(unsigned long addr)
 {
-  return 0;
+	return 0;
 }
 
 extern inline unsigned long readl(unsigned long addr)
 {
-  return 0;
+	return 0;
 }
 
 extern inline void writeb(unsigned short b, unsigned long addr)
 {
-  return;
+	return;
 }
 
 extern inline void writew(unsigned short b, unsigned long addr)
 {
-  return;
+	return;
 }
 
 extern inline void writel(unsigned int b, unsigned long addr)
 {
-  return;
+	return;
 }
 
 #define inb_p inb

@@ -9,7 +9,8 @@ pEII_datalink_header(struct datalink_proto *dl,
 		struct sk_buff *skb, unsigned char *dest_node)
 {
 	struct device	*dev = skb->dev;
-	
+
+	skb->protocol = htons (ETH_P_IPX);
 	dev->hard_header(skb, dev, ETH_P_IPX, dest_node, NULL, skb->len);
 }
 

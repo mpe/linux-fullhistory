@@ -207,7 +207,10 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 			}
 			return 0;
 
-
+		case SO_BSDCOMPAT:
+			sk->bsdism = valbool;
+			return 0;
+			
 		default:
 		  	return(-ENOPROTOOPT);
   	}
@@ -285,7 +288,9 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 			memcpy_tofs(optval,&ling,sizeof(ling));
 			return 0;
 		
-
+		case SO_BSDCOMPAT:
+			val = sk->bsdism;
+			break;
 
 		default:
 			return(-ENOPROTOOPT);

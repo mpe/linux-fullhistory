@@ -128,6 +128,20 @@ extern void		_writew(unsigned short b, unsigned long addr);
 # define outb_p		outb
 #endif
 
+#ifndef inw_p
+# define inw_p		inw
+#endif
+#ifndef outw_p
+# define outw_p		outw
+#endif
+
+#ifndef inl_p
+# define inl_p		inl
+#endif
+#ifndef outl_p
+# define outl_p		outl
+#endif
+
 /*
  * The "address" in IO memory space is not clearly either a integer or a
  * pointer. We will accept both, thus the casts.

@@ -152,6 +152,7 @@
 #define __NR_msync		144
 #define __NR_readv		145
 #define __NR_writev		146
+#define __NR_getsid		147
 
 #define __NR_mlock		150
 #define __NR_munlock		151

@@ -40,9 +40,6 @@
 #ifndef SUPPORT_CMD640			/* 1 to support CMD640 chipset */
 #define SUPPORT_CMD640		1	/* 0 to reduce kernel size */
 #endif
-#ifndef SUPPORT_UMC8672			/* 1 to support UMC8672 chipset */
-#define SUPPORT_UMC8672		1	/* 0 to reduce kernel size */
-#endif
 #ifndef SUPPORT_HT6560B			/* 1 to support HT6560B chipset */
 #define SUPPORT_HT6560B		1	/* 0 to reduce kernel size */
 #endif

@@ -1,4 +1,5 @@
-/* ultra.h: Definitions and defines for the TI V9 UltraSparc.
+/* $Id: ultra.h,v 1.2 1995/11/25 02:33:10 davem Exp $
+ * ultra.h: Definitions and defines for the TI V9 UltraSparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */

@@ -127,7 +127,8 @@ struct sock
 				no_check,
 				zapped,	/* In ax25 & ipx means not linked */
 				broadcast,
-				nonagle;
+				nonagle,
+				bsdism;
 	unsigned long	        lingertime;
 	int			proc;
 	struct sock		*next;

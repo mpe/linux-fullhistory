@@ -90,6 +90,10 @@ extern void __remqu (void);
 #endif
 
 #include <asm/irq.h>
+#ifdef __SMP__
+#include <linux/smp.h>
+#endif
+
 extern char *get_options(char *str, int *ints);
 extern void set_device_ro(int dev,int flag);
 extern struct file_operations * get_blkfops(unsigned int);

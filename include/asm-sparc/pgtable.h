@@ -1,3 +1,4 @@
+/* $Id: pgtable.h,v 1.25 1995/11/25 02:32:22 davem Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -11,8 +12,25 @@
 #include <asm/asi.h>
 #include <asm/pgtsun4c.h>
 #include <asm/pgtsrmmu.h>
+#include <asm/vac-ops.h>
+#include <asm/oplib.h>
 
 extern void load_mmu(void);
+
+/* mmu-specific process creation/cloning/etc hooks. */
+extern void (*mmu_exit_hook)(void *);
+extern void (*mmu_fork_hook)(void *, unsigned long);
+extern void (*mmu_release_hook)(void *);
+extern void (*mmu_flush_hook)(void *);
+extern void (*mmu_task_cacheflush)(void *);
+
+/* Routines for data transfer buffers. */
+extern char *(*mmu_lockarea)(char *, unsigned long);
+extern void  (*mmu_unlockarea)(char *, unsigned long);
+
+/* Routines for getting a dvma scsi buffer. */
+extern char *(*mmu_get_scsi_buffer)(char *, unsigned long);
+extern void  (*mmu_release_scsi_buffer)(char *, unsigned long);
 
 extern unsigned int pmd_shift;
 extern unsigned int pmd_size;
@@ -67,68 +85,37 @@ extern pgd_t swapper_pg_dir[1024];
 /* Page table for 0-4MB for everybody, on the Sparc this
  * holds the same as on the i386.
  */
-extern unsigned long pg0[1024];
+extern pte_t pg0[1024];
 
 extern unsigned long ptr_in_current_pgd;
 
 /* the no. of pointers that fit on a page: this will go away */
 #define PTRS_PER_PAGE   (PAGE_SIZE/sizeof(void*))
 
-/* I define these like the i386 does because the check for text or data fault
- * is done at trap time by the low level handler. Maybe I can set these bits
- * then once determined. I leave them like this for now though.
+/* Here is a trick, since mmap.c need the initializer elements for
+ * protection_map[] to be constant at compile time, I set the following
+ * to all zeros.  I set it to the real values after I link in the
+ * appropriate MMU page table routines at boot time.
  */
-#define __P000  PAGE_NONE
-#define __P001  PAGE_READONLY
-#define __P010  PAGE_COPY
-#define __P011  PAGE_COPY
-#define __P100  PAGE_READONLY
-#define __P101  PAGE_READONLY
-#define __P110  PAGE_COPY
-#define __P111  PAGE_COPY
+#define __P000  __pgprot(0)
+#define __P001  __pgprot(0)
+#define __P010  __pgprot(0)
+#define __P011  __pgprot(0)
+#define __P100  __pgprot(0)
+#define __P101  __pgprot(0)
+#define __P110  __pgprot(0)
+#define __P111  __pgprot(0)
 
-#define __S000	PAGE_NONE
-#define __S001	PAGE_READONLY
-#define __S010	PAGE_SHARED
-#define __S011	PAGE_SHARED
-#define __S100	PAGE_READONLY
-#define __S101	PAGE_READONLY
-#define __S110	PAGE_SHARED
-#define __S111	PAGE_SHARED
-
-/* Contexts on the Sparc. */
-#define MAX_CTXS 256
-#define NO_CTX   0xffff     /* In tss.context means task has no context currently */
-extern struct task_struct * ctx_tasks[MAX_CTXS];
-extern int ctx_tasks_last_frd;
+#define __S000	__pgprot(0)
+#define __S001	__pgprot(0)
+#define __S010	__pgprot(0)
+#define __S011	__pgprot(0)
+#define __S100	__pgprot(0)
+#define __S101	__pgprot(0)
+#define __S110	__pgprot(0)
+#define __S111	__pgprot(0)
 
 extern int num_contexts;
-
-/* This routine allocates a new context.  And 'p' must not be 'current'! */
-extern inline int alloc_mmu_ctx(struct task_struct *p)
-{
-	int i;
-
-	for(i=0; i<num_contexts; i++)
-		if(ctx_tasks[i] == NULL) break;
-
-	if(i<num_contexts) {
-		p->tss.context = i;
-		ctx_tasks[i] = p;
-		return i;
-	}
-
-	/* Have to free one up */
-	ctx_tasks_last_frd++;
-	if(ctx_tasks_last_frd >= num_contexts) ctx_tasks_last_frd=0;
-	/* Right here is where we invalidate the user mappings that were
-	 * present.  TODO
-	 */
-        ctx_tasks[ctx_tasks_last_frd]->tss.context = NO_CTX;
-	ctx_tasks[ctx_tasks_last_frd] = p;
-	p->tss.context = ctx_tasks_last_frd;
-	return ctx_tasks_last_frd;
-}
 
 /*
  * BAD_PAGETABLE is used when we need a bogus page-table, while
@@ -142,7 +129,6 @@ extern pte_t * __bad_pagetable(void);
 
 extern unsigned long __zero_page(void);
 
-
 #define BAD_PAGETABLE __bad_pagetable()
 #define BAD_PAGE __bad_page()
 #define ZERO_PAGE __zero_page()
@@ -152,7 +138,6 @@ extern unsigned long __zero_page(void);
 
 /* to align the pointer to a pointer address */
 #define PTR_MASK          (~(sizeof(void*)-1))
-
 
 #define SIZEOF_PTR_LOG2   2
 
@@ -168,15 +153,12 @@ extern unsigned long (*pgd_page)(pgd_t);
  * all the pages since not all can be loaded at once in the mmu.
  *
  * Actually on the SRMMU things do work exactly like the i386, the
- * page tables live in real physical ram, no funky TLB buisness.  But
- * we have to do lots of flushing. And we have to update the root level
- * page table pointer for this process if it has a context.
+ * page tables live in real physical ram, no funky TLB buisness.
  */
 
 extern void (*sparc_update_rootmmu_dir)(struct task_struct *, pgd_t *pgdir);
 
-#define SET_PAGE_DIR(tsk,pgdir) \
-do { sparc_update_rootmmu_dir(tsk, pgdir); } while (0)
+#define SET_PAGE_DIR(tsk,pgdir) sparc_update_rootmmu_dir(tsk, pgdir)
        
 /* to find an entry in a page-table */
 #define PAGE_PTR(address) \
@@ -234,12 +216,12 @@ extern pte_t (*pte_mkcow)(pte_t);
  */
 extern pte_t (*mk_pte)(unsigned long, pgprot_t);
 
-extern void (*pgd_set)(pgd_t *, pte_t *);
+extern void (*pgd_set)(pgd_t *, pmd_t *);
 
 extern pte_t (*pte_modify)(pte_t, pgprot_t);
 
 /* to find an entry in a page-table-directory */
-extern pgd_t * (*pgd_offset)(struct task_struct *, unsigned long);
+extern pgd_t * (*pgd_offset)(struct mm_struct *, unsigned long);
 
 /* Find an entry in the second-level page table.. */
 extern pmd_t * (*pmd_offset)(pgd_t *, unsigned long);
@@ -278,75 +260,45 @@ extern pmd_t * (*pmd_alloc)(pgd_t *, unsigned long);
 
 extern void (*pgd_free)(pgd_t *);
 
-/* A page directory on the sun4c needs 16k, thus we request an order of
- * two.
- *
- * I need 16k for a sun4c page table, so I use kmalloc since kmalloc_init()
- * is called before pgd_alloc ever is (I think).
- */
-
 extern pgd_t * (*pgd_alloc)(void);
+
+/* Fault handler stuff... */
+#define FAULT_CODE_PROT     0x1
+#define FAULT_CODE_WRITE    0x2
+#define FAULT_CODE_USER     0x4
+extern int (*get_fault_info)(unsigned long *, unsigned long *, unsigned long);
+extern void (*update_mmu_cache)(struct vm_area_struct *vma, unsigned long address, pte_t pte);
 
 extern int invalid_segment;
 
-/* Sun4c specific routines.  They can stay inlined. */
-extern inline int alloc_sun4c_pseg(void)
-{
-	int oldseg, i;
-	/* First see if any are free already */
-	for(i=0; i<PSEG_ENTRIES; i++)
-		if(phys_seg_map[i]==PSEG_AVL) return i;
+#define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
+#define SWP_OFFSET(entry) ((entry) >> 8)
+#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
 
-	/* Uh-oh, gotta unallocate a TLB pseg */
-	oldseg=0;
-	for(i=0; i<PSEG_ENTRIES; i++) {
-		/* Can not touch PSEG_KERNEL and PSEG_RSV segmaps */
-		if(phys_seg_map[i]!=PSEG_USED) continue;
-		/* Ok, take a look at it's lifespan */
-		oldseg = (phys_seg_life[i]>oldseg) ? phys_seg_life[i] : oldseg;
-	}
-	phys_seg_life[oldseg]=PSEG_BORN;
-	return oldseg;
+struct ctx_list {
+	struct ctx_list *next;
+	struct ctx_list *prev;
+	unsigned char ctx_number;
+	struct task_struct *ctx_task; /* Who has it now, if not free */
+};
+
+extern struct ctx_list *ctx_list_pool;  /* Dynamically allocated */
+extern struct ctx_list ctx_free;        /* Head of free list */
+extern struct ctx_list ctx_used;        /* Head of used contexts list */
+
+extern inline void remove_from_ctx_list(struct ctx_list *entry)
+{
+	entry->next->prev = entry->prev;
+	entry->prev->next = entry->next;
 }
 
-/* Age all psegs except pseg_skip */
-extern inline void age_sun4c_psegs(int pseg_skip)
+extern inline void add_to_ctx_list(struct ctx_list *head, struct ctx_list *entry)
 {
-	int i;
-
-	for(i=0; i<pseg_skip; i++) phys_seg_life[i]++;
-	i++;
-	while(i<PSEG_ENTRIES) phys_seg_life[i++]++;
-	return;
+	entry->next = head;
+	(entry->prev = head->prev)->next = entry;
+	head->prev = entry;
 }
-
-/*
- * This is only ever called when the sun4c page fault routines run
- * so we can keep this here as the srmmu code will never get to it.
- */
-extern inline void update_mmu_cache(struct vm_area_struct * vma,
-	unsigned long address, pte_t pte)
-{
-  unsigned long clr_addr;
-  int segmap;
-
-  segmap = (int) get_segmap(address & SUN4C_REAL_PGDIR_MASK);
-  if(segmap == invalid_segment) {
-    segmap = alloc_sun4c_pseg();
-    put_segmap((address & SUN4C_REAL_PGDIR_MASK), segmap);
-    phys_seg_map[segmap] = PSEG_USED;
-
-    /* We got a segmap, clear all the pte's in it. */
-    for(clr_addr=(address&SUN4C_REAL_PGDIR_MASK); clr_addr<((address&SUN4C_REAL_PGDIR_MASK) + SUN4C_REAL_PGDIR_SIZE); 
-	clr_addr+=PAGE_SIZE)
-	    put_pte(clr_addr, 0);
-  }
-
-  /* Do aging */
-  age_sun4c_psegs(segmap);
-  put_pte((address & PAGE_MASK), pte_val(pte));
-  return;
-
-}
+#define add_to_free_ctxlist(entry) add_to_ctx_list(&ctx_free, entry)
+#define add_to_used_ctxlist(entry) add_to_ctx_list(&ctx_used, entry)
 
 #endif /* !(_SPARC_PGTABLE_H) */

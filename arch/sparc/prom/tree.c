@@ -1,4 +1,5 @@
-/* tree.c: Basic device tree traversal/scanning for the Linux
+/* $Id: tree.c,v 1.6 1995/11/25 01:00:16 davem Exp $
+ * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

@@ -332,10 +332,10 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_ETH16),y)
+ifeq ($(CONFIG_ETH16I),y)
 L_OBJS += eth16i.o
 else
-  ifeq ($(CONFIG_ETH16),m)
+  ifeq ($(CONFIG_ETH16I),m)
   M_OBJS += eth16i.o
   endif
 endif

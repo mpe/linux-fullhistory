@@ -1,4 +1,5 @@
-/* ross.h: Ross module specific definitions and defines.
+/* $Id: ross.h,v 1.3 1995/11/25 02:32:37 davem Exp $
+ * ross.h: Ross module specific definitions and defines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */

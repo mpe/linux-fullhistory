@@ -1,4 +1,5 @@
-/* devops.c:  Device operations using the PROM.
+/* $Id: devops.c,v 1.3 1995/11/25 00:59:59 davem Exp $
+ * devops.c:  Device operations using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */

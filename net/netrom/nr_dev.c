@@ -14,6 +14,7 @@
  *
  *	History
  *	NET/ROM 001	Jonathan(G4KLX)	Cloned from loopback.c
+ *	NET/ROM 002	Steve Whitehouse(GW7RRM) fixed the set_mac_address
  */
 
 #include <linux/config.h>
@@ -140,7 +141,8 @@ static int nr_rebuild_header(void *buff, struct device *dev,
 
 static int nr_set_mac_address(struct device *dev, void *addr)
 {
-	memcpy(dev->dev_addr, addr, dev->addr_len);
+	struct sockaddr *sa=addr;
+	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);
 
 	return 0;
 }

@@ -1,22 +1,13 @@
+/* $Id: system.h,v 1.19 1995/11/25 02:32:59 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
 #include <asm/segment.h>
 
-/*
- * I wish the boot time image was as beautiful as the Alpha's
- * but no such luck. The icky PROM loads us at 0x0, and jumps
- * to magic address 0x4000 to start things going.
- *
- * Sorry, I can't impress people with cool looking 64-bit values
- * yet. Wait till V9 ;-)
- */
-
 #include <asm/page.h>
 #include <asm/openprom.h>
 #include <asm/psr.h>
 
-#define START_ADDR	(0x00004000)
 #define EMPTY_PGT       (&empty_bad_page)
 #define EMPTY_PGE	(&empty_bad_page_table)
 #define ZERO_PGE	(&empty_zero_page)
@@ -32,7 +23,7 @@ enum sparc_cpu {
   sun4m       = 0x02,
   sun4d       = 0x03,
   sun4e       = 0x04,
-  sun4u       = 0x05,
+  sun4u       = 0x05, /* V8 ploos ploos */
   sun_unknown = 0x06,
 };
 
@@ -42,98 +33,99 @@ extern unsigned long empty_bad_page;
 extern unsigned long empty_bad_page_table;
 extern unsigned long empty_zero_page;
 
-extern void wrent(void *, unsigned long);
-extern void wrkgp(unsigned long);
 extern struct linux_romvec *romvec;
-
-#define halt() do { \
-			 printk("Entering monitor in file %s at line %d\n", __FILE__, __LINE__); \
-romvec->pv_halt(); } while(0)
-
-#define move_to_user_mode() halt()
-
-#ifndef stbar  /* store barrier Sparc insn to synchronize stores in PSO */
-#define stbar() __asm__ __volatile__("stbar": : :"memory")
-#endif
+#define halt() romvec->pv_halt()
 
 /* When a context switch happens we must flush all user windows so that
  * the windows of the current process are flushed onto it's stack. This
- * way the windows are all clean for the next process.
+ * way the windows are all clean for the next process and the stack
+ * frames are up to date.
  */
-
-#define flush_user_windows() \
-do { __asm__ __volatile__( \
-			  "save %sp, -64, %sp\n\t" \
-			  "save %sp, -64, %sp\n\t" \
-			  "save %sp, -64, %sp\n\t" \
-			  "save %sp, -64, %sp\n\t" \
-			  "save %sp, -64, %sp\n\t" \
-			  "save %sp, -64, %sp\n\t" \
-			  "save %sp, -64, %sp\n\t" \
-			  "restore\n\t" \
-			  "restore\n\t" \
-			  "restore\n\t" \
-			  "restore\n\t" \
-			  "restore\n\t" \
-			  "restore\n\t" \
-			  "restore\n\t"); } while(0)
-
+extern void flush_user_windows(void);
 extern void sparc_switch_to(void *new_task);
+#define switch_to(p) do { \
+			  flush_user_windows(); \
+		          switch_to_context(p); \
+                          sparc_switch_to(p); \
+                     } while(0)
 
-#define switch_to(p) sparc_switch_to(p)
-
-/* Changing the PIL on the sparc is a bit hairy. I'll figure out some
- * more optimized way of doing this soon. This is bletcherous code.
- */
-
-#define swpipl(__new_ipl) \
-({ unsigned long psr, retval; \
-__asm__ __volatile__( \
-        "rd %%psr, %0\n\t" : "=&r" (psr)); \
-retval = psr; \
-psr = (psr & ~(PSR_PIL)); \
-psr |= ((__new_ipl << 8) & PSR_PIL); \
-__asm__ __volatile__( \
-	"wr  %0, 0x0, %%psr\n\t" \
-	: : "r" (psr)); \
-retval = ((retval>>8)&15); \
-retval; })
-
-#define cli()			swpipl(15)  /* 15 = no int's except nmi's */
-#define sti()			swpipl(0)   /* I'm scared */
-#define save_flags(flags)	do { flags = swpipl(15); } while (0)
-#define restore_flags(flags)	swpipl(flags)
-
-#define iret() __asm__ __volatile__ ("jmp %%l1\n\t" \
-				     "rett %%l2\n\t": : :"memory")
-
-/* Must this be atomic? */
-
-extern inline void *xchg_u32(int * m, unsigned long val)
+/* Changing the IRQ level on the Sparc. */
+extern inline void setipl(int __new_ipl)
 {
-	unsigned long dummy;
-
-	__asm__ __volatile__(
-		"ld %1,%2\n\t"
-		"st %0, %1\n\t"
-		"or %%g0, %2, %0"
-		: "=r" (val), "=m" (*m), "=r" (dummy)
-		: "0" (val));
-	return (void *) val;
+	__asm__ __volatile__("rd %%psr, %%g1\n\t"
+			     "andn %%g1, %1, %%g1\n\t"
+			     "sll %0, 8, %%g2\n\t"
+			     "and %%g2, %1, %%g2\n\t"
+			     "or %%g1, %%g2, %%g1\n\t"
+			     "wr %%g1, 0x0, %%psr\n\t"
+			     "nop; nop; nop\n\t" : :
+			     "r" (__new_ipl), "i" (PSR_PIL) :
+			     "g1", "g2");
 }
 
-
-/* pointers are 32 bits on the sparc (at least the v8, and they'll work
- * on the V9 none the less). I don't need the xchg_u64 routine for now.
- */
-
-extern inline void *xchg_ptr(void *m, void *val)
+extern inline int getipl(void)
 {
-	return (void *) xchg_u32((int *) m, (unsigned long) val);
+	int retval;
+
+	__asm__ __volatile__("rd %%psr, %0\n\t"
+			     "and %0, %1, %0\n\t"
+			     "srl %0, 8, %0\n\t" :
+			     "=r" (retval) :
+			     "i" (PSR_PIL));
+	return retval;
 }
 
+extern inline int swpipl(int __new_ipl)
+{
+	int retval;
 
+	__asm__ __volatile__("rd %%psr, %%g1\n\t"
+			     "srl %%g1, 8, %0\n\t"
+			     "and %0, 15, %0\n\t"
+			     "andn %%g1, %2, %%g1\n\t"
+			     "and %1, 15, %%g2\n\t"
+			     "sll %%g2, 8, %%g2\n\t"
+			     "or %%g1, %%g2, %%g1\n\t"
+			     "wr %%g1, 0x0, %%psr\n\t"
+			     "nop; nop; nop\n\t" :
+			     "=r" (retval) :
+			     "r" (__new_ipl), "i" (PSR_PIL) :
+			     "g1", "g2");
+	return retval;
+}
+
+#define cli()			setipl(15)  /* 15 = no int's except nmi's */
+#define sti()			setipl(0)   /* I'm scared */
+#define save_flags(flags)	do { flags = getipl(); } while (0)
+#define restore_flags(flags)	setipl(flags)
+#define nop() __asm__ __volatile__ ("nop");
+
+extern inline unsigned long xchg_u32(volatile unsigned long *m, unsigned long val)
+{
+	unsigned long flags, retval;
+
+	save_flags(flags); cli();
+	retval = *m;
+	*m = val;
+	restore_flags(flags);
+	return retval;
+}
+
+#define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
+#define tas(ptr) (xchg((ptr),1))
+
+extern void __xchg_called_with_bad_pointer(void);
+
+static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
+{
+	switch (size) {
+	case 4:
+		return xchg_u32(ptr, x);
+	};
+	__xchg_called_with_bad_pointer();
+	return x;
+}
 
 #endif /* __ASSEMBLY__ */
 
-#endif
+#endif /* !(__SPARC_SYSTEM_H) */
