@@ -57,7 +57,7 @@ static int msdos_dummy_read(struct inode *inode,struct file *filp,char *buf,
 	static long last_warning = 0;
 
 	if (CURRENT_TIME-last_warning >= 10) {
-		printk("COMPATIBILITY WARNING: reading a directory\r\n");
+		printk("COMPATIBILITY WARNING: reading a directory\n");
 		last_warning = CURRENT_TIME;
 	}
 	return 0;

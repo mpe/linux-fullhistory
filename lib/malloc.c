@@ -45,6 +45,11 @@
  *	so it isn't all that bad.
  */
 
+/* I'm going to modify it to keep some free pages around.  Get free page
+   can sleep, and tcp/ip needs to call malloc at interrupt time  (Or keep
+   big buffers around for itself.)  I guess I'll have return from
+   syscall fill up the free page descriptors. -RAB */
+
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <asm/system.h>
@@ -86,10 +91,88 @@ struct _bucket_dir bucket_dir[] = {
 	{ 4096, (struct bucket_desc *) 0},
 	{ 0,    (struct bucket_desc *) 0}};   /* End of list marker */
 
+/* Where to keep the extra pages, and how many. */
+#define FREE_PAGES 20
+static volatile unsigned long free_pages[FREE_PAGES]={0,};
+volatile short free_page_ptr=0; /* this -1 is next free page. */
+
+/* malloc_free_page makes sure that we have all the free pages we
+   want around before actually freeing the page. */
+
+/* called with interrupts off. */
+void
+malloc_free_page (unsigned long addr)
+{
+   if (free_page_ptr < FREE_PAGES)
+     free_pages[free_page_ptr++] = addr;
+   else
+     free_page (addr);
+}
+
+/* Fill up the extra page buffer. Should be called quite often to make
+   sure we have some floating around. */
+
+void
+malloc_grab_pages(void)
+{
+   while (free_page_ptr < FREE_PAGES)
+     {
+	unsigned long page;
+
+	page = get_free_page (GFP_KERNEL);
+	if (page == 0)
+	  {
+	     printk ("malloc_grab_pages: Can't happen. no memory.\n");
+	     continue;
+	  }
+	/* see if we still need the page. This can only happen if
+	    we get interrupted while we are trying to get some pages,
+	    and we are out of pages.  It shouldn't happen, but it
+	    could and we had better check for it. */
+	cli();
+	if (free_page_ptr < FREE_PAGES)
+	  {
+	     free_pages[free_page_ptr] = page;
+	     free_page_ptr++;
+	  }
+	else
+	  {
+	     free_page(page);
+	  }
+	sti();
+     }
+}
+
+/* called with interrupts off. */
+static inline unsigned long
+malloc_get_free_page (void)
+{
+   unsigned long page;
+   int page_ptr;
+
+   if (free_page_ptr > 0)
+     {
+	page_ptr = --free_page_ptr;
+	page = free_pages[page_ptr];
+	free_pages[page_ptr] = 0;
+	return (page);
+     }
+
+   printk ("malloc_get_free_page: Calling malloc_grab_pages\n");
+   /* this routine turns on interrupts.  Maybe we should do a pushflags
+      pop flags around it. */
+   malloc_grab_pages();
+   cli();
+   page_ptr = --free_page_ptr;
+   page = free_pages[page_ptr];
+   free_pages[page_ptr] = 0;
+   return (page);
+}
+
 /*
  * This contains a linked list of free bucket descriptor blocks
  */
-struct bucket_desc *free_bucket_desc = (struct bucket_desc *) 0;
+static struct bucket_desc *free_bucket_desc = (struct bucket_desc *) 0;
 
 /*
  * This routine initializes a bucket description page.
@@ -98,8 +181,8 @@ static inline void init_bucket_desc()
 {
 	struct bucket_desc *bdesc, *first;
 	int	i;
-	
-	first = bdesc = (struct bucket_desc *) get_free_page(GFP_KERNEL);
+	/* this turns interrupt on, so we should be carefull. */
+	first = bdesc = (struct bucket_desc *) malloc_get_free_page();
 	if (!bdesc)
 		panic("Out of memory in init_bucket_desc()");
 	for (i = PAGE_SIZE/sizeof(struct bucket_desc); i > 1; i--) {
@@ -153,7 +236,8 @@ void *malloc(unsigned int len)
 		free_bucket_desc = bdesc->next;
 		bdesc->refcnt = 0;
 		bdesc->bucket_size = bdir->size;
-		bdesc->page = bdesc->freeptr = (void *) cp = get_free_page(GFP_KERNEL);
+		bdesc->page = bdesc->freeptr =
+		  (void *) cp = malloc_get_free_page();
 		if (!cp)
 			panic("Out of memory in kernel malloc()");
 		/* Set up the chain of free objects */
@@ -199,7 +283,8 @@ void free_s(void *obj, int size)
 			prev = bdesc;
 		}
 	}
-	panic("Bad address passed to kernel free_s()");
+	printk("Bad address passed to kernel free_s()");
+	return;
 found:
 	cli(); /* To avoid race conditions */
 	*((void **)obj) = bdesc->freeptr;
@@ -222,7 +307,7 @@ found:
 				panic("malloc bucket chains corrupted");
 			bdir->chain = bdesc->next;
 		}
-		free_page((unsigned long) bdesc->page);
+		malloc_free_page((unsigned long) bdesc->page);
 		bdesc->next = free_bucket_desc;
 		free_bucket_desc = bdesc;
 	}

@@ -23,7 +23,7 @@ SOCK_FLAGS	=# -DINET_SOCKETS
 OBJS	=  socket.o unix.o 
 
 net.o: $(OBJS) subdirs
-	$(LD) -r -o net.o $(OBJS) #tcp/tcpip.o
+	$(LD) -r -o net.o $(OBJS)# tcp/tcpip.o
 
 
 subdirs: dummy

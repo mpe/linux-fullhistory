@@ -82,9 +82,9 @@ static int msdos_file_read(struct inode *inode,struct file *filp,char *buf,
 	struct buffer_head *bh;
 	void *data;
 
-/* printk("msdos_file_read\r\n"); */
+/* printk("msdos_file_read\n"); */
 	if (!inode) {
-		printk("msdos_file_read: inode = NULL\r\n");
+		printk("msdos_file_read: inode = NULL\n");
 		return -EINVAL;
 	}
 	if (!S_ISREG(inode->i_mode)) {
@@ -99,7 +99,7 @@ static int msdos_file_read(struct inode *inode,struct file *filp,char *buf,
 		offset = filp->f_pos & (SECTOR_SIZE-1);
 		if (!(bh = msdos_sread(inode->i_dev,sector,&data))) break;
 		filp->f_pos += (size = MIN(SECTOR_SIZE-offset,left));
-		if (inode->i_data[D_BINARY]) {
+		if (MSDOS_I(inode)->i_binary) {
 			memcpy_tofs(buf,data+offset,size);
 			buf += size;
 		}
@@ -149,14 +149,17 @@ static int msdos_file_write(struct inode *inode,struct file *filp,char *buf,
 	for (start = buf; count || carry; count -= size) {
 		while (!(sector = msdos_smap(inode,filp->f_pos >> SECTOR_BITS)))
 			if ((error = msdos_add_cluster(inode)) < 0) break;
-		if (error) break;
+		if (error) {
+			msdos_truncate(inode);
+			break;
+		}
 		offset = filp->f_pos & (SECTOR_SIZE-1);
 		size = MIN(SECTOR_SIZE-offset,MAX(carry,count));
 		if (!(bh = msdos_sread(inode->i_dev,sector,&data))) {
 			error = -EIO;
 			break;
 		}
-		if (inode->i_data[D_BINARY]) {
+		if (MSDOS_I(inode)->i_binary) {
 			memcpy_fromfs(data+(filp->f_pos & (SECTOR_SIZE-1)),
 			    buf,written = size);
 			buf += size;
@@ -191,7 +194,7 @@ static int msdos_file_write(struct inode *inode,struct file *filp,char *buf,
 		brelse(bh);
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	inode->i_data[D_ATTRS] |= ATTR_ARCH;
+	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;
 	inode->i_dirt = 1;
 	return start == buf ? error : buf-start;
 }
@@ -203,6 +206,6 @@ void msdos_truncate(struct inode *inode)
 
 	cluster = SECTOR_SIZE*MSDOS_SB(inode->i_sb)->cluster_size;
 	(void) fat_free(inode,(inode->i_size+(cluster-1))/cluster);
-	inode->i_data[D_ATTRS] |= ATTR_ARCH;
+	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;
 	inode->i_dirt = 1;
 }

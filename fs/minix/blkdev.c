@@ -56,6 +56,6 @@ struct inode_operations minix_blkdev_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	minix_bmap,		/* bmap */
-	minix_truncate		/* truncate */
+	NULL,			/* bmap */
+	NULL			/* truncate */
 };

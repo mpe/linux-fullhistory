@@ -115,7 +115,7 @@ static struct sigaction irq_sigaction[16] = {
 /*
  * do_IRQ handles IRQ's that have been installed without the
  * SA_INTERRUPT flag: it uses the full signal-handling return
- * and runs with other interrupts disabled. All relatively slow
+ * and runs with other interrupts enabled. All relatively slow
  * IRQ's should use this format: notably the keyboard/timer
  * routines.
  */
@@ -136,7 +136,7 @@ int do_fast_IRQ(int irq)
 {
 	struct sigaction * sa = irq + irq_sigaction;
 
-	sa->sa_handler(0);
+	sa->sa_handler(irq);
 	return 0;		/* re-enable the irq when returning */
 }
 

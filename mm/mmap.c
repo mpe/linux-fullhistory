@@ -50,12 +50,12 @@ mmap_chr(unsigned long addr, size_t len, int prot, int flags,
 	minor = MINOR(inode->i_rdev);
 
 	/*
-	 * for character devices, only /dev/mem may be mapped. when the
+	 * for character devices, only /dev/[k]mem may be mapped. when the
 	 * swapping code is modified to allow arbitrary sources of pages,
 	 * then we can open it up to regular files.
 	 */
 
-	if (major != 1 || minor != 1)
+	if (major != 1 || (minor != 1 && minor != 2))
 		return (caddr_t)-ENODEV;
 
 	/*

@@ -566,7 +566,7 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 
 	if (!(newsock = sock_alloc(0))) {
 		printk("sys_accept: no more sockets\n");
-		return -EINVAL;
+		return -EAGAIN;
 	}
 	newsock->type = sock->type;
 	newsock->ops = sock->ops;
@@ -583,7 +583,7 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 
 	if ( i < 0)
 	  {
-	     sock_release (newsock);
+	     sys_close (fd);
 	     return (i);
 	  }
 

@@ -26,88 +26,6 @@ static int write_ram(struct inode * inode, struct file * file,char * buf, int co
 
 static int read_mem(struct inode * inode, struct file * file,char * buf, int count)
 {
-	unsigned long addr;
-	char *tmp;
-	unsigned long pde, pte, page;
-	int i;
-
-	if (count < 0)
-		return -EINVAL;
-	addr = file->f_pos;
-	tmp = buf;
-	while (count > 0) {
-		if (current->signal & ~current->blocked)
-			break;
-		pde = current->tss.cr3 + (addr >> 20 & 0xffc);
-		pte = *(unsigned long *) pde;
-		if (!(pte & PAGE_PRESENT))
-			break;
-		pte &= 0xfffff000;
-		pte += (addr >> 10) & 0xffc;
-		page = *(unsigned long *) pte;
-		if (!(page & 1))
-			break;
-		page &= 0xfffff000;
-		page += addr & 0xfff;
-		i = 4096-(addr & 0xfff);
-		if (i > count)
-			i = count;
-		memcpy_tofs(tmp,(void *) page,i);
-		addr += i;
-		tmp += i;
-		count -= i;
-	}
-	file->f_pos = addr;
-	return tmp-buf;
-}
-
-static int write_mem(struct inode * inode, struct file * file,char * buf, int count)
-{
-	unsigned long addr;
-	char *tmp;
-	unsigned long pde, pte, page;
-	int i;
-
-	if (count < 0)
-		return -EINVAL;
-	addr = file->f_pos;
-	tmp = buf;
-	while (count > 0) {
-		if (current->signal & ~current->blocked)
-			break;
-		pde = current->tss.cr3 + (addr >> 20 & 0xffc);
-		pte = *(unsigned long *) pde;
-		if (!(pte & PAGE_PRESENT))
-			break;
-		pte &= 0xfffff000;
-		pte += (addr >> 10) & 0xffc;
-		page = *(unsigned long *) pte;
-		if (!(page & PAGE_PRESENT))
-			break;
-		if (!(page & 2)) {
-			do_wp_page(0,addr,current,0);
-			continue;
-		}
-		page &= 0xfffff000;
-		page += addr & 0xfff;
-		i = 4096-(addr & 0xfff);
-		if (i > count)
-			i = count;
-		memcpy_fromfs((void *) page,tmp,i);
-		addr += i;
-		tmp += i;
-		count -= i;
-	}
-	file->f_pos = addr;
-	if (tmp != buf)
-		return tmp-buf;
-	if (current->signal & ~current->blocked)
-		return -ERESTARTSYS;
-	return 0;
-}
-
-static int read_kmem(struct inode * inode, struct file * file,char * buf, int count)
-{
 	unsigned long p = file->f_pos;
 
 	if (count < 0)
@@ -121,7 +39,7 @@ static int read_kmem(struct inode * inode, struct file * file,char * buf, int co
 	return count;
 }
 
-static int write_kmem(struct inode * inode, struct file * file,char * buf, int count)
+static int write_mem(struct inode * inode, struct file * file,char * buf, int count)
 {
 	unsigned long p = file->f_pos;
 
@@ -199,6 +117,9 @@ static int mem_lseek(struct inode * inode, struct file * file, off_t offset, int
 		return 0;
 	return file->f_pos;
 }
+
+#define read_kmem read_mem
+#define write_kmem write_mem
 
 static int mem_read(struct inode * inode, struct file * file, char * buf, int count)
 {

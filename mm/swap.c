@@ -16,9 +16,25 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+#include <asm/system.h> /* for cli()/sti() */
 
-static int lowest_bit = 0;
-static int highest_bit = 0;
+#define MAX_SWAPFILES 8
+
+#define SWP_USED	1
+#define SWP_WRITEOK	3
+
+static int nr_swapfiles = 0;
+static struct wait_queue * lock_queue = NULL;
+
+static struct swap_info_struct {
+	unsigned long flags;
+	struct inode * swap_file;
+	unsigned int swap_device;
+	unsigned char * swap_map;
+	char * swap_lockmap;
+	int lowest_bit;
+	int highest_bit;
+} swap_info[MAX_SWAPFILES];
 
 extern unsigned long free_page_list;
 
@@ -28,7 +44,7 @@ extern unsigned long free_page_list;
 #define NR_LAST_FREE_PAGES 32
 static unsigned long last_free_pages[NR_LAST_FREE_PAGES] = {0,};
 
-#define SWAP_BITS (4096<<3)
+#define SWAP_BITS 4096
 
 #define bitop(name,op) \
 static inline int name(char * addr,unsigned int nr) \
@@ -44,70 +60,124 @@ bitop(bit,"")
 bitop(setbit,"s")
 bitop(clrbit,"r")
 
-static char * swap_bitmap = NULL;
-static char * swap_lockmap = NULL;
-unsigned int swap_device = 0;
-struct inode * swap_file = NULL;
-
 void rw_swap_page(int rw, unsigned int nr, char * buf)
 {
-	static struct wait_queue * lock_queue = NULL;
+	struct swap_info_struct * p;
 
-	if (!swap_lockmap) {
-		printk("No swap lock-map\n");
+	if ((nr >> 24) >= nr_swapfiles) {
+		printk("Internal error: bad swap-device\n");
 		return;
 	}
-	while (setbit(swap_lockmap,nr))
+	p = swap_info + (nr >> 24);
+	nr &= 0x00ffffff;
+	if (nr >= SWAP_BITS) {
+		printk("rw_swap_page: weirdness\n");
+		return;
+	}
+	if (!(p->flags & SWP_USED)) {
+		printk("Trying to swap to unused swap-device\n");
+		return;
+	}
+	while (setbit(p->swap_lockmap,nr))
 		sleep_on(&lock_queue);
-	if (swap_device) {
-		ll_rw_page(rw,swap_device,nr,buf);
-	} else if (swap_file) {
+	if (p->swap_device) {
+		ll_rw_page(rw,p->swap_device,nr,buf);
+	} else if (p->swap_file) {
 		unsigned int zones[4];
 		unsigned int block = nr << 2;
 		int i;
 
 		for (i = 0; i < 4; i++)
-			if (!(zones[i] = bmap(swap_file,block++))) {
+			if (!(zones[i] = bmap(p->swap_file,block++))) {
 				printk("rw_swap_page: bad swap file\n");
 				return;
 			}
-		ll_rw_swap_file(rw,swap_file->i_dev, zones,4,buf);
+		ll_rw_swap_file(rw,p->swap_file->i_dev, zones,4,buf);
 	} else
 		printk("re_swap_page: no swap file or device\n");
-	if (!clrbit(swap_lockmap,nr))
+	if (!clrbit(p->swap_lockmap,nr))
 		printk("rw_swap_page: lock already cleared\n");
 	wake_up(&lock_queue);
 }
 
 static unsigned int get_swap_page(void)
 {
-	unsigned int nr;
+	struct swap_info_struct * p;
+	unsigned int block_nr, swap_nr;
 
-	if (!swap_bitmap)
-		return 0;
-	for (nr = lowest_bit; nr <= highest_bit ; nr++)
-		if (clrbit(swap_bitmap,nr)) {
-			if (nr == highest_bit)
-				highest_bit--;
-			return lowest_bit = nr;
+	p = swap_info;
+	for (swap_nr = 0 ; swap_nr < nr_swapfiles ; swap_nr++,p++) {
+		if ((p->flags & SWP_WRITEOK) != SWP_WRITEOK)
+			continue;
+		for (block_nr = p->lowest_bit; block_nr <= p->highest_bit ; block_nr++) {
+			if (p->swap_map[block_nr])
+				continue;
+			p->swap_map[block_nr] = 1;
+			if (block_nr == p->highest_bit)
+				p->highest_bit--;
+			p->lowest_bit = block_nr;
+			return block_nr + (swap_nr << 24);
 		}
+	}
 	return 0;
 }
 
-void swap_free(unsigned int swap_nr)
+void swap_duplicate(unsigned int nr)
 {
-	if (!swap_nr)
+	struct swap_info_struct * p;
+
+	if (!nr)
 		return;
-	if (swap_bitmap && swap_nr < SWAP_BITS) {
-		if (swap_nr < lowest_bit)
-			lowest_bit = swap_nr;
-		if (swap_nr > highest_bit)
-			highest_bit = swap_nr;
-		if (!setbit(swap_bitmap,swap_nr))
-			return;
+	if ((nr >> 24) >= nr_swapfiles) {
+		printk("Trying to free nonexistent swap-page\n");
+		return;
 	}
-	printk("swap_free: swap-space bitmap bad (bit %d)\n",swap_nr);
-	return;
+	p = (nr >> 24) + swap_info;
+	nr &= 0x00ffffff;
+	if (nr >= SWAP_BITS) {
+		printk("swap_free: weirness\n");
+		return;
+	}
+	if (!p->swap_map[nr]) {
+		printk("swap_duplicate: trying to duplicate unused page\n");
+		return;
+	}
+	p->swap_map[nr]++;
+}
+
+void swap_free(unsigned int nr)
+{
+	struct swap_info_struct * p;
+
+	if (!nr)
+		return;
+	if ((nr >> 24) >= nr_swapfiles) {
+		printk("Trying to free nonexistent swap-page\n");
+		return;
+	}
+	p = (nr >> 24) + swap_info;
+	nr &= 0x00ffffff;
+	if (nr >= SWAP_BITS) {
+		printk("swap_free: weirness\n");
+		return;
+	}
+	if (!(p->flags & SWP_USED)) {
+		printk("Trying to free swap from unused swap-device\n");
+		return;
+	}
+	while (setbit(p->swap_lockmap,nr))
+		sleep_on(&lock_queue);
+	if (nr < p->lowest_bit)
+		p->lowest_bit = nr;
+	if (nr > p->highest_bit)
+		p->highest_bit = nr;
+	if (!p->swap_map[nr])
+		printk("swap_free: swap-space map bad (page %d)\n",nr);
+	else
+		p->swap_map[nr]--;
+	if (!clrbit(p->swap_lockmap,nr))
+		printk("swap_free: lock already cleared\n");
+	wake_up(&lock_queue);
 }
 
 void swap_in(unsigned long *table_ptr)
@@ -124,11 +194,6 @@ void swap_in(unsigned long *table_ptr)
 		printk("No swap page in swap_in\n\r");
 		return;
 	}
-	if (!swap_bitmap) {
-		printk("Trying to swap in without swap bit-map");
-		*table_ptr = BAD_PAGE;
-		return;
-	}
 	page = get_free_page(GFP_KERNEL);
 	if (!page) {
 		oom(current);
@@ -139,11 +204,11 @@ void swap_in(unsigned long *table_ptr)
 		free_page(page);
 		return;
 	}
-	swap_free(swap_nr>>1);
 	*table_ptr = page | (PAGE_DIRTY | 7);
+	swap_free(swap_nr>>1);
 }
 
-int try_to_swap_out(unsigned long * table_ptr)
+static int try_to_swap_out(unsigned long * table_ptr)
 {
 	int i;
 	unsigned long page;
@@ -152,11 +217,17 @@ int try_to_swap_out(unsigned long * table_ptr)
 	page = *table_ptr;
 	if (!(PAGE_PRESENT & page))
 		return 0;
-	*table_ptr &= ~PAGE_ACCESSED;
-	if (PAGE_ACCESSED & page)
+	if (page >= high_memory) {
+		printk("try_to_swap_out: bad page (%08x)\n",page);
+		*table_ptr = 0;
 		return 0;
-	if (page < low_memory || page >= high_memory)
+	}
+	if (mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED)
 		return 0;
+	if (PAGE_ACCESSED & page) {
+		*table_ptr &= ~PAGE_ACCESSED;
+		return 0;
+	}
 	for (i = 0; i < NR_LAST_FREE_PAGES; i++)
 		if (last_free_pages[i] == (page & 0xfffff000))
 			return 0;
@@ -176,12 +247,8 @@ int try_to_swap_out(unsigned long * table_ptr)
 	*table_ptr = 0;
 	invalidate();
 	free_page(page);
-	return 1;
+	return !mem_map[MAP_NR(page)];
 }
-
-static int swap_task = 1;
-static int swap_table = 0;
-static int swap_page = 0;
 
 /*
  * sys_idle() does nothing much: it just searches for likely candidates for
@@ -190,54 +257,28 @@ static int swap_page = 0;
  */
 int sys_idle(void)
 {
-	struct task_struct * p;
-	unsigned long page;
-
 	need_resched = 1;
-	if (swap_task >= NR_TASKS)
-		swap_task = 1;
-	p = task[swap_task];
-	if (!p || !p->swappable) {
-		swap_task++;
-		return 0;
-	}
-	if (swap_table >= 1024) {
-		swap_task++;
-		swap_table = 0;
-		return 0;
-	}
-	page = ((unsigned long *) p->tss.cr3)[swap_table];
-	if (!(page & 1) || (page < low_memory)) {
-		swap_table++;
-		return 0;
-	}
-	page &= 0xfffff000;
-	if (swap_page >= 1024) {
-		swap_page = 0;
-		swap_table++;
-		return 0;
-	}
-	page = *(swap_page + (unsigned long *) page);
-	if ((page < low_memory) || !(page & PAGE_PRESENT) || (page & PAGE_ACCESSED))
-		swap_page++;
 	return 0;
 }
 
 /*
  * Go through the page tables, searching for a user page that
  * we can swap out.
- *
+ * 
  * We now check that the process is swappable (normally only 'init'
  * is un-swappable), allowing high-priority processes which cannot be
  * swapped out (things like user-level device drivers (Not implemented)).
  */
-int swap_out(unsigned int priority)
+static int swap_out(unsigned int priority)
 {
-	int counter = NR_TASKS;
+	static int swap_task = 1;
+	static int swap_table = 0;
+	static int swap_page = 0;
+	int counter = NR_TASKS*8;
 	int pg_table;
 	struct task_struct * p;
 
-	counter <<= priority;
+	counter >>= priority;
 check_task:
 	if (counter-- < 0)
 		return 0;
@@ -257,7 +298,7 @@ check_dir:
 		goto check_task;
 	}
 	pg_table = ((unsigned long *) p->tss.cr3)[swap_table];
-	if (pg_table < low_memory) {
+	if (pg_table >= high_memory || (mem_map[MAP_NR(pg_table)] & MAP_PAGE_RESERVED)) {
 		swap_table++;
 		goto check_dir;
 	}
@@ -285,21 +326,94 @@ check_table:
 
 static int try_to_free_page(void)
 {
-	if (shrink_buffers(0))
-		return 1;
-	if (swap_out(0))
-		return 1;
-	if (shrink_buffers(1))
-		return 1;
-	if (swap_out(1))
-		return 1;
-	if (shrink_buffers(2))
-		return 1;
-	if (swap_out(2))
-		return 1;
-	if (shrink_buffers(3))
-		return 1;
-	return swap_out(3);
+	int i=6;
+
+	while (i--) {
+		if (shrink_buffers(i))
+			return 1;
+		if (swap_out(i))
+			return 1;
+	}
+	return 0;
+}
+
+/*
+ * Note that this must be atomic, or bad things will happen when
+ * pages are requested in interrupts (as malloc can do). Thus the
+ * cli/sti's.
+ */
+static inline void add_mem_queue(unsigned long addr, unsigned long * queue)
+{
+	addr &= 0xfffff000;
+	*(unsigned long *) addr = *queue;
+	*queue = addr;
+}
+
+void free_page(unsigned long addr)
+{
+	unsigned long i;
+	unsigned long flag;
+
+	if (addr >= high_memory) {
+		printk("Trying to free nonexistent page %08x\n",addr);
+		return;
+	}
+	i = MAP_NR(addr);
+	if (mem_map[i] & MAP_PAGE_RESERVED)
+		return;
+	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flag));
+	if (!mem_map[i])
+		goto bad_free_page;
+	if (!--mem_map[i])
+		if (nr_secondary_pages < MAX_SECONDARY_PAGES) {
+			add_mem_queue(addr,&secondary_page_list);
+			nr_secondary_pages++;
+		} else {
+			add_mem_queue(addr,&free_page_list);
+			nr_free_pages++;
+		}
+	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flag));
+	return;
+bad_free_page:
+	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flag));
+	printk("Trying to free free memory (%08x): memory probabably corrupted\n");
+}
+
+static unsigned long remove_from_mem_queue(unsigned long * queue)
+{
+	unsigned long result;
+	static unsigned long index = 0;
+
+	cli();
+	result = *queue;
+	if (!result) {
+		sti();
+		return 0;
+	}
+	if ((result & 0xfff) || result >= high_memory) {
+		*queue = 0;
+		printk("Result = %08x - memory map destroyed\n");
+		sti();
+		panic("mm error");
+	}
+	*queue = *(unsigned long *) result;
+	sti();
+	if (mem_map[MAP_NR(result)]) {
+		printk("Free page %08x has mem_map = %d\n",
+			result,mem_map[MAP_NR(result)]);
+		return 0;
+	}
+	mem_map[MAP_NR(result)] = 1;
+	cli();
+	if (index >= NR_LAST_FREE_PAGES)
+		index = 0;
+	last_free_pages[index] = result;
+	index++;
+	sti();
+	__asm__ __volatile__("cld ; rep ; stosl"
+		::"a" (0),"c" (1024),"D" (result)
+		:"di","cx");
+	return result;
 }
 
 /*
@@ -309,42 +423,154 @@ static int try_to_free_page(void)
 unsigned long get_free_page(int priority)
 {
 	unsigned long result;
-	static unsigned long index = 0;
+
+	/* this routine can be called at interrupt time via
+	   malloc.  We want to make sure that the critical
+	   sections of code have interrupts disabled. -RAB
+	   Is this code reentrant? */
 
 repeat:
-	result = free_page_list;
+	result = remove_from_mem_queue(&free_page_list);
 	if (result) {
-		if ((result & 0xfff) || result < low_memory || result >= high_memory) {
-			free_page_list = 0;
-			printk("Result = %08x - memory map destroyed\n");
-			panic("mm error");
-		}
-		free_page_list = *(unsigned long *) result;
 		nr_free_pages--;
-		if (mem_map[MAP_NR(result)]) {
-			printk("Free page %08x has mem_map = %d\n",
-				result,mem_map[MAP_NR(result)]);
-			goto repeat;
-		}
-		mem_map[MAP_NR(result)] = 1;
-		__asm__ __volatile__("cld ; rep ; stosl"
-			::"a" (0),"c" (1024),"D" (result)
-			:"di","cx");
-		if (index >= NR_LAST_FREE_PAGES)
-			index = 0;
-		last_free_pages[index] = result;
-		index++;
 		return result;
 	}
 	if (nr_free_pages) {
-		printk("Damn. mm_free_page count is off by %d\r\n",
-			nr_free_pages);
+		printk("nr_free_pages is %d, but no free memory found\n",nr_free_pages);
 		nr_free_pages = 0;
 	}
-	if (priority <= GFP_BUFFER)
+	if (priority == GFP_BUFFER)
 		return 0;
-	if (try_to_free_page())
-		goto repeat;
+	if (priority != GFP_ATOMIC)
+		if (try_to_free_page())
+			goto repeat;
+	result = remove_from_mem_queue(&secondary_page_list);
+	if (result) {
+		nr_secondary_pages--;
+		return result;
+	}
+	if (nr_secondary_pages) {
+		printk("nr_secondary_pages is %d, but no free memory found\n",nr_secondary_pages);
+		nr_secondary_pages = 0;
+	}
+	return 0;
+}
+
+/*
+ * Trying to stop swapping from a file is fraught with races, so
+ * we repeat quite a bit here when we have to pause. swapoff()
+ * isn't exactly timing-critical, so who cares?
+ *
+ * Note the '>> 25' instead of '>> 24' when checking against
+ * swap_nr: remember that the low bit in a page-address is used
+ * for the PAGE_PRESENT bit, and is not part of the swap address.
+ */
+static int try_to_unuse(unsigned int swap_nr)
+{
+	int nr, pgt, pg;
+	unsigned long page, *ppage;
+	unsigned long tmp = 0;
+	struct task_struct *p;
+
+	nr = 0;
+/*
+ * When we have to sleep, we restart the whole algorithm from the same
+ * task we stopped in. That at least rids us of all races.
+ */
+repeat:
+	for (; nr < NR_TASKS ; nr++) {
+		p = task[nr];
+		if (!p)
+			continue;
+		for (pgt = 0 ; pgt < 1024 ; pgt++) {
+			ppage = pgt + ((unsigned long *) p->tss.cr3);
+			page = *ppage;
+			if (!page)
+				continue;
+			if (!(page & PAGE_PRESENT) || (page >= high_memory)) {
+				printk("try_to_unuse: bad page directory (%d,%d:%08x)\n",nr,pgt,page);
+				*ppage = 0;
+				continue;
+			}
+			if (mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED)
+				continue;
+			ppage = (unsigned long *) (page & 0xfffff000);	
+			for (pg = 0 ; pg < 1024 ; pg++,ppage++) {
+				page = *ppage;
+				if (!page)
+					continue;
+				if (page & PAGE_PRESENT) {
+					if (page >= high_memory) {
+						printk("try_to_unuse: bad page table (%d,%d,%d:%08x)\n",nr,pgt,pg,page);
+						*ppage = 0;
+					}
+					continue;
+				}
+				if ((page >> 25) != swap_nr)
+					continue;
+				if (!tmp) {
+					tmp = get_free_page(GFP_KERNEL);
+					if (!tmp)
+						return -ENOMEM;
+					goto repeat;
+				}
+				read_swap_page(page>>1, (char *) tmp);
+				if (*ppage == page) {
+					*ppage = tmp | (PAGE_DIRTY | 7);
+					swap_free(page>>1);
+					tmp = 0;
+				}
+				goto repeat;
+			}
+		}
+	}
+	free_page(tmp);
+	return 0;
+}
+
+int sys_swapoff(const char * specialfile)
+{
+	struct swap_info_struct * p;
+	struct inode * inode;
+	unsigned int swap_nr;
+	int i;
+
+	if (!suser())
+		return -EPERM;
+	i = namei(specialfile,&inode);
+	if (i)
+		return i;
+	p = swap_info;
+	for (swap_nr = 0 ; swap_nr < nr_swapfiles ; swap_nr++,p++) {
+		if ((p->flags & SWP_WRITEOK) != SWP_WRITEOK)
+			continue;
+		if (p->swap_file) {
+			if (p->swap_file == inode)
+				break;
+		} else {
+			if (!S_ISBLK(inode->i_mode))
+				continue;
+			if (p->swap_device == inode->i_rdev)
+				break;
+		}
+	}
+	iput(inode);
+	if (swap_nr >= nr_swapfiles)
+		return -EINVAL;
+	p->flags = SWP_USED;
+	i = try_to_unuse(swap_nr);
+	if (i) {
+		p->flags = SWP_WRITEOK;
+		return i;
+	}
+	iput(p->swap_file);
+	p->swap_file = NULL;
+	p->swap_device = 0;
+	free_page((long) p->swap_map);
+	p->swap_map = NULL;
+	free_page((long) p->swap_lockmap);
+	p->swap_lockmap = NULL;
+	p->flags = 0;
 	return 0;
 }
 
@@ -355,76 +581,121 @@ repeat:
  */
 int sys_swapon(const char * specialfile)
 {
+	struct swap_info_struct * p;
 	struct inode * swap_inode;
+	unsigned int swap_nr;
 	char * tmp;
 	int i,j;
 
 	if (!suser())
 		return -EPERM;
+	p = swap_info;
+	for (swap_nr = 0 ; swap_nr < nr_swapfiles ; swap_nr++,p++)
+		if (!(p->flags & SWP_USED))
+			break;
+	if (swap_nr >= MAX_SWAPFILES)
+		return -EPERM;
+	if (swap_nr >= nr_swapfiles)
+		nr_swapfiles = swap_nr+1;
+	p->flags = SWP_USED;
+	p->swap_file = NULL;
+	p->swap_device = 0;
+	p->swap_map = NULL;
+	p->swap_lockmap = NULL;
+	p->lowest_bit = 0;
+	p->highest_bit = 0;
 	i = namei(specialfile,&swap_inode);
-	if (i)
+	if (i) {
+		p->flags = 0;
 		return i;
-	if (swap_file || swap_device || swap_bitmap || swap_lockmap) {
+	}
+	if (swap_inode->i_count != 1) {
 		iput(swap_inode);
+		p->flags = 0;
 		return -EBUSY;
 	}
 	if (S_ISBLK(swap_inode->i_mode)) {
-		swap_device = swap_inode->i_rdev;
+		p->swap_device = swap_inode->i_rdev;
 		iput(swap_inode);
+		if (!p->swap_device) {
+			p->flags = 0;
+			return -ENODEV;
+		}
+		for (i = 0 ; i < nr_swapfiles ; i++) {
+			if (i == swap_nr)
+				continue;
+			if (p->swap_device == swap_info[i].swap_device) {
+				p->swap_device = 0;
+				p->flags = 0;
+				return -EBUSY;
+			}
+		}
 	} else if (S_ISREG(swap_inode->i_mode))
-		swap_file = swap_inode;
+		p->swap_file = swap_inode;
 	else {
 		iput(swap_inode);
+		p->flags = 0;
 		return -EINVAL;
 	}
 	tmp = (char *) get_free_page(GFP_USER);
-	swap_lockmap = (char *) get_free_page(GFP_USER);
-	if (!tmp || !swap_lockmap) {
+	p->swap_lockmap = (char *) get_free_page(GFP_USER);
+	if (!tmp || !p->swap_lockmap) {
 		printk("Unable to start swapping: out of memory :-)\n");
 		free_page((long) tmp);
-		free_page((long) swap_lockmap);
-		iput(swap_file);
-		swap_device = 0;
-		swap_file = NULL;
-		swap_bitmap = NULL;
-		swap_lockmap = NULL;
+		free_page((long) p->swap_lockmap);
+		iput(p->swap_file);
+		p->swap_device = 0;
+		p->swap_file = NULL;
+		p->swap_map = NULL;
+		p->swap_lockmap = NULL;
+		p->flags = 0;
 		return -ENOMEM;
 	}
-	read_swap_page(0,tmp);
+	read_swap_page(swap_nr << 24,tmp);
 	if (strncmp("SWAP-SPACE",tmp+4086,10)) {
 		printk("Unable to find swap-space signature\n\r");
 		free_page((long) tmp);
-		free_page((long) swap_lockmap);
-		iput(swap_file);
-		swap_device = 0;
-		swap_file = NULL;
-		swap_bitmap = NULL;
-		swap_lockmap = NULL;
+		free_page((long) p->swap_lockmap);
+		iput(p->swap_file);
+		p->swap_device = 0;
+		p->swap_file = NULL;
+		p->swap_map = NULL;
+		p->swap_lockmap = NULL;
+		p->flags = 0;
 		return -EINVAL;
 	}
 	memset(tmp+4086,0,10);
 	j = 0;
-	lowest_bit = 0;
-	highest_bit = 0;
+	p->lowest_bit = 0;
+	p->highest_bit = 0;
 	for (i = 1 ; i < SWAP_BITS ; i++)
 		if (bit(tmp,i)) {
-			if (!lowest_bit)
-				lowest_bit = i;
-			highest_bit = i;
+			if (!p->lowest_bit)
+				p->lowest_bit = i;
+			p->highest_bit = i;
 			j++;
 		}
 	if (!j) {
 		printk("Empty swap-file\n");
 		free_page((long) tmp);
-		free_page((long) swap_lockmap);
-		iput(swap_file);
-		swap_device = 0;
-		swap_file = NULL;
-		swap_bitmap = NULL;
-		swap_lockmap = NULL;
+		free_page((long) p->swap_lockmap);
+		iput(p->swap_file);
+		p->swap_device = 0;
+		p->swap_file = NULL;
+		p->swap_map = NULL;
+		p->swap_lockmap = NULL;
+		p->flags = 0;
 		return -EINVAL;
 	}
-	swap_bitmap = tmp;
-	printk("Adding Swap: %d pages (%d bytes) swap-space\n\r",j,j*4096);
+	i = SWAP_BITS;
+	while (i--)
+		if (bit(tmp,i))
+			tmp[i] = 0;
+		else
+			tmp[i] = 128;
+	tmp[0] = 128;
+	p->swap_map = tmp;
+	p->flags = SWP_WRITEOK;
+	printk("Adding Swap: %dk swap-space\n\r",j<<2);
 	return 0;
 }

@@ -66,8 +66,10 @@ extern int minix_new_block(int dev);
 extern int minix_free_block(int dev, int block);
 extern unsigned long minix_count_free_blocks(struct super_block *sb);
 
-extern int minix_create_block(struct inode *, int);
 extern int minix_bmap(struct inode *,int);
+
+extern struct buffer_head * minix_getblk(struct inode *, int, int);
+extern struct buffer_head * minix_bread(struct inode *, int, int);
 
 extern void minix_truncate(struct inode *);
 extern void minix_put_super(struct super_block *);

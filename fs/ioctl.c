@@ -11,20 +11,37 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 
+static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
+{
+	int block;
+
+	switch (cmd) {
+		case FIBMAP:
+			if (filp->f_inode->i_op == NULL) return -EBADF;
+		    	if (filp->f_inode->i_op->bmap == NULL) return -EINVAL;
+			block = get_fs_long((long *) arg);
+			block = filp->f_inode->i_op->bmap(filp->f_inode,block);
+			put_fs_long(block,(long *) arg);
+			return 0;
+		case FIGETBSZ:
+			if (filp->f_inode->i_sb == NULL) return -EBADF;
+			put_fs_long(filp->f_inode->i_sb->s_blocksize,
+			    (long *) arg);
+			return 0;
+		default:
+			return -EINVAL;
+	}
+}
+
+
 int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
-	int block;
 
 	if (fd >= NR_OPEN || !(filp = current->filp[fd]))
 		return -EBADF;
-	if (S_ISREG(filp->f_inode->i_mode) && cmd == BMAP_IOCTL &&
-	    filp->f_inode->i_op->bmap) {
-		block = get_fs_long((long *) arg);
-		block = filp->f_inode->i_op->bmap(filp->f_inode,block);
-		put_fs_long(block,(long *) arg);
-		return 0;
-	}
+	if (filp->f_inode && S_ISREG(filp->f_inode->i_mode))
+		return file_ioctl(filp,cmd,arg);
 	if (filp->f_op && filp->f_op->ioctl)
 		return filp->f_op->ioctl(filp->f_inode, filp, cmd,arg);
 	return -EINVAL;

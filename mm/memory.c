@@ -37,14 +37,23 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 
-unsigned long low_memory = 0;
 unsigned long high_memory = 0;
+
+int nr_free_pages = 0;
 unsigned long free_page_list = 0;
+/*
+ * The secondary free_page_list is used for malloc() etc things that
+ * may need pages during interrupts etc. Normal get_free_page() operations
+ * don't touch it, so it stays as a kind of "panic-list", that can be
+ * accessed when all other mm tricks have failed.
+ */
+int nr_secondary_pages = 0;
+unsigned long secondary_page_list = 0;
 
 #define copy_page(from,to) \
 __asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024):"cx","di","si")
 
-unsigned char * mem_map = NULL;
+unsigned short * mem_map = NULL;
 
 /*
  * oom() prints a message (so that the user knows why the process died),
@@ -58,31 +67,6 @@ void oom(struct task_struct * task)
 	send_sig(SIGSEGV,task,1);
 }
 
-int nr_free_pages = 0;
-/*
- * Free a page of memory at physical address 'addr'. Used by
- * 'free_page_tables()'
- */
-void free_page(unsigned long addr)
-{
-	unsigned long i;
-
-	if (addr < low_memory)
-		return;
-	i = addr - low_memory;
-	i >>= 12;
-	if (addr < high_memory && mem_map[i]) {
-		if (--mem_map[i])
-			return;
-		addr &= 0xfffff000;
-		*(unsigned long *) addr = free_page_list;
-		free_page_list = addr;
-		++nr_free_pages;
-		return;
-	}
-	printk("trying to free free page (%08x): memory probably corrupted\n",addr);
-}
-
 static void free_one_table(unsigned long * page_dir)
 {
 	int j;
@@ -91,13 +75,13 @@ static void free_one_table(unsigned long * page_dir)
 
 	if (!pg_table)
 		return;
-	if (!(pg_table & 1)) {
+	if (pg_table >= high_memory || !(pg_table & 1)) {
 		printk("Bad page table: [%08x]=%08x\n",page_dir,pg_table);
 		*page_dir = 0;
 		return;
 	}
 	*page_dir = 0;
-	if (pg_table < low_memory)
+	if (mem_map[MAP_NR(pg_table)] & MAP_PAGE_RESERVED)
 		return;
 	page_table = (unsigned long *) (pg_table & 0xfffff000);
 	for (j = 0 ; j < 1024 ; j++,page_table++) {
@@ -172,26 +156,13 @@ void free_page_tables(struct task_struct * tsk)
 }
 
 /*
- *  Well, here is one of the most complicated functions in mm. It
- * copies a range of linerar addresses by copying only the pages.
- * Let's hope this is bug-free, 'cause this one I don't want to debug :-)
- *
- * Note! We don't copy just any chunks of memory - addresses have to
- * be divisible by 4Mb (one page-directory entry), as this makes the
- * function easier. It's used only by fork anyway.
- *
- * NOTE 2!! When from==0 we are copying kernel space for the first
- * fork(). Then we DONT want to copy a full page-directory entry, as
- * that would lead to some serious memory waste - we just copy the
- * first 160 pages - 640kB. Even that is more than we need, but it
- * doesn't take any more memory - we don't copy-on-write in the low
- * 1 Mb-range, so the pages can be shared with the kernel. Thus the
- * special case for nr=xxxx.
+ * copy_page_tables() just copies the whole process memory range:
+ * note the special handling of RESERVED (ie kernel) pages, which
+ * means that they are always shared by all processes.
  */
 int copy_page_tables(struct task_struct * tsk)
 {
 	int i;
-	unsigned long temp_page = 0;
 	unsigned long old_pg_dir, *old_page_dir;
 	unsigned long new_pg_dir, *new_page_dir;
 
@@ -210,20 +181,19 @@ int copy_page_tables(struct task_struct * tsk)
 		old_pg_table = *old_page_dir;
 		if (!old_pg_table)
 			continue;
-		if (!(1 & old_pg_table)) {
-			printk("copy_page_tables: page table swapped out, "
+		if (old_pg_table >= high_memory || !(1 & old_pg_table)) {
+			printk("copy_page_tables: bad page table: "
 				"probable memory corruption");
 			*old_page_dir = 0;
 			continue;
 		}
-		if (old_pg_table < low_memory) {
+		if (mem_map[MAP_NR(old_pg_table)] & MAP_PAGE_RESERVED) {
 			*new_page_dir = old_pg_table;
 			continue;
 		}
 		new_pg_table = get_free_page(GFP_KERNEL);
 		if (!new_pg_table) {
 			free_page_tables(tsk);
-			free_page(temp_page);
 			return -ENOMEM;
 		}
 		*new_page_dir = new_pg_table | PAGE_ACCESSED | 7;
@@ -231,37 +201,22 @@ int copy_page_tables(struct task_struct * tsk)
 		new_page_table = (unsigned long *) (0xfffff000 & new_pg_table);
 		for (j = 0 ; j < 1024 ; j++,old_page_table++,new_page_table++) {
 			unsigned long pg;
-repeat:
 			pg = *old_page_table;
 			if (!pg)
 				continue;
-			if (pg & 1) {
-				pg &= ~2;
+			if (!(pg & PAGE_PRESENT)) {
+				swap_duplicate(pg>>1);
 				*new_page_table = pg;
-				if (pg < low_memory)
-					continue;
-				*old_page_table = pg;
-				mem_map[(pg-low_memory)>>12]++;
 				continue;
 			}
-			if (!temp_page) {
-				temp_page = get_free_page(GFP_KERNEL);
-				if (!temp_page) {
-					free_page_tables(tsk);
-					return -ENOMEM;
-				}
-				goto repeat;
-			}
-			++current->rss;
-			read_swap_page(pg>>1, (char *) temp_page);
-			if (*old_page_table != pg)
-				goto repeat;
+			pg &= ~2;
 			*new_page_table = pg;
-			*old_page_table = temp_page | (PAGE_DIRTY | PAGE_ACCESSED | 7);
-			temp_page = 0;
+			if (mem_map[MAP_NR(pg)] & MAP_PAGE_RESERVED)
+				continue;
+			*old_page_table = pg;
+			mem_map[MAP_NR(pg)]++;
 		}
 	}
-	free_page(temp_page);
 	invalidate();
 	return 0;
 }
@@ -280,9 +235,9 @@ int unmap_page_range(unsigned long from, unsigned long size)
 		panic("unmap_page_range called with wrong alignment");
 	if (!from)
 		panic("unmap_page_range trying to free swapper memory space");
-	size = (size + 0xfff) >> 12;
+	size = (size + 0xfff) >> PAGE_SHIFT;
 	dir = (unsigned long *) (current->tss.cr3 + ((from >> 20) & 0xffc));
-	poff = (from >> 12) & 0x3ff;
+	poff = (from >> PAGE_SHIFT) & 0x3ff;
 	if ((pcnt = 1024 - poff) > size)
 		pcnt = size;
 
@@ -344,8 +299,8 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 	if ((from & 0xfff) || (to & 0xfff))
 		panic("remap_page_range called with wrong alignment");
 	dir = (unsigned long *) (current->tss.cr3 + ((from >> 20) & 0xffc));
-	size = (size + 0xfff) >> 12;
-	poff = (from >> 12) & 0x3ff;
+	size = (size + 0xfff) >> PAGE_SHIFT;
+	poff = (from >> PAGE_SHIFT) & 0x3ff;
 	if ((pcnt = 1024 - poff) > size)
 		pcnt = size;
 
@@ -400,13 +355,8 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 			else {
 				++current->rss;
 				*page_table++ = (to | mask);
-				if (to > low_memory) {
-					unsigned long frame;
-					frame = to - low_memory;
-					frame >>= 12;
-					if (!mem_map[frame]++)
-						--nr_free_pages;
-				}
+				if (!(mem_map[MAP_NR(to)] & MAP_PAGE_RESERVED))
+					mem_map[MAP_NR(to)]++;
 			}
 			to += PAGE_SIZE;
 		}
@@ -432,7 +382,8 @@ static unsigned long put_page(struct task_struct * tsk,unsigned long page,unsign
 		printk("put_page: trying to put page %p at %p\n",page,address);
 		return 0;
 	}
-	if (page >= low_memory && mem_map[(page-low_memory)>>12] != 1) {
+	tmp = mem_map[MAP_NR(page)];
+	if (!(tmp & MAP_PAGE_RESERVED) && (tmp != 1)) {
 		printk("put_page: mem_map disagrees with %p at %p\n",page,address);
 		return 0;
 	}
@@ -448,7 +399,7 @@ static unsigned long put_page(struct task_struct * tsk,unsigned long page,unsign
 		*page_table = tmp | PAGE_ACCESSED | 7;
 		return 0;
 	}
-	page_table += (address>>12) & 0x3ff;
+	page_table += (address >> PAGE_SHIFT) & 0x3ff;
 	if (*page_table) {
 		printk("put_page: page already exists\n");
 		*page_table = 0;
@@ -471,9 +422,9 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 
 /* NOTE !!! This uses the fact that _pg_dir=0 */
 
-	if (page < low_memory || page >= high_memory)
+	if (page >= high_memory)
 		printk("put_dirty_page: trying to put page %p at %p\n",page,address);
-	if (mem_map[(page-low_memory)>>12] != 1)
+	if (mem_map[MAP_NR(page)] != 1)
 		printk("mem_map disagrees with %p at %p\n",page,address);
 	page_table = (unsigned long *) (tsk->tss.cr3 + ((address>>20) & 0xffc));
 	if ((*page_table)&1)
@@ -484,7 +435,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 		*page_table = tmp|7;
 		page_table = (unsigned long *) tmp;
 	}
-	page_table += (address>>12) & 0x3ff;
+	page_table += (address >> PAGE_SHIFT) & 0x3ff;
 	if (*page_table) {
 		printk("put_dirty_page: page already exists\n");
 		*page_table = 0;
@@ -518,7 +469,7 @@ repeat:
 		*table_entry = BAD_PAGE | 7;
 		return;
 	}
-	if (old_page >= low_memory && mem_map[MAP_NR(old_page)]==1) {
+	if (mem_map[MAP_NR(old_page)]==1) {
 		*table_entry |= 2;
 		invalidate();
 		if (new_page)
@@ -531,7 +482,7 @@ repeat:
 		copy_page(old_page,new_page);
 	else {
 		new_page = BAD_PAGE;
-		send_sig(SIGSEGV,task,1);
+		oom(task);
 	}
 	*table_entry = new_page | dirty | PAGE_ACCESSED | 7;
 	free_page(old_page);
@@ -628,7 +579,9 @@ static int try_to_share(unsigned long address, struct task_struct * tsk,
 	if ((phys_addr & 0x41) != 0x01)
 		return 0;
 	phys_addr &= 0xfffff000;
-	if (phys_addr >= high_memory || phys_addr < low_memory)
+	if (phys_addr >= high_memory)
+		return 0;
+	if (mem_map[MAP_NR(phys_addr)] & MAP_PAGE_RESERVED)
 		return 0;
 	to = *(unsigned long *) to_page;
 	if (!(to & 1)) {
@@ -645,10 +598,8 @@ static int try_to_share(unsigned long address, struct task_struct * tsk,
 	*(unsigned long *) from_page &= ~2;
 	*(unsigned long *) to_page = *(unsigned long *) from_page;
 	invalidate();
-	phys_addr -= low_memory;
-	phys_addr >>= 12;
-	if (!mem_map[phys_addr]++)
-		--nr_free_pages;
+	phys_addr >>= PAGE_SHIFT;
+	mem_map[phys_addr]++;
 	return 1;
 }
 
@@ -688,11 +639,12 @@ static int share_page(struct task_struct * tsk, struct inode * inode, unsigned l
 /*
  * fill in an empty page-table if none exists
  */
-static unsigned long get_empty_pgtable(unsigned long * p)
+static unsigned long get_empty_pgtable(struct task_struct * tsk,unsigned long address)
 {
 	unsigned long page = 0;
-
+	unsigned long *p;
 repeat:
+	p = (unsigned long *) (tsk->tss.cr3 + ((address >> 20) & 0xffc));
 	if (1 & *p) {
 		free_page(page);
 		return *p;
@@ -721,7 +673,7 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	unsigned int block,i;
 	struct inode * inode;
 
-	page = get_empty_pgtable((unsigned long *) (tsk->tss.cr3 + ((address >> 20) & 0xffc)));
+	page = get_empty_pgtable(tsk,address);
 	if (!page)
 		return;
 	page &= 0xfffff000;
@@ -787,10 +739,10 @@ void do_no_page(unsigned long error_code, unsigned long address,
 			nr[i] = bmap(inode,block);
 		bread_page(page,inode->i_dev,nr);
 	}
-	i = address + 4096 - tsk->end_data;
-	if (i>4095)
+	i = address + PAGE_SIZE - tsk->end_data;
+	if (i > PAGE_SIZE-1)
 		i = 0;
-	tmp = page + 4096;
+	tmp = page + PAGE_SIZE;
 	while (i--) {
 		tmp--;
 		*(char *)tmp = 0;
@@ -803,23 +755,28 @@ void do_no_page(unsigned long error_code, unsigned long address,
 
 void show_mem(void)
 {
-	int i,free=0,total=0;
+	int i,free = 0,total = 0,reserved = 0;
 	int shared = 0;
 
-	printk("Mem-info:\n\r");
-	printk("Free pages:    %6d\n",nr_free_pages);
-	printk("Buffer heads:  %6d\n",nr_buffer_heads);
-	printk("Buffer blocks: %6d\n",nr_buffers);
-	i = (high_memory - low_memory) >> 12;
+	printk("Mem-info:\n");
+	printk("Free pages:      %6d\n",nr_free_pages);
+	printk("Secondary pages: %6d\n",nr_secondary_pages);
+	printk("Buffer heads:    %6d\n",nr_buffer_heads);
+	printk("Buffer blocks:   %6d\n",nr_buffers);
+	i = high_memory >> PAGE_SHIFT;
 	while (i-- > 0) {
 		total++;
-		if (!mem_map[i])
+		if (mem_map[i] & MAP_PAGE_RESERVED)
+			reserved++;
+		else if (!mem_map[i])
 			free++;
 		else
 			shared += mem_map[i]-1;
 	}
-	printk("%d free pages of %d\n\r",free,total);
-	printk("%d pages shared\n\r",shared);
+	printk("%d pages of RAM\n",total);
+	printk("%d free pages\n",free);
+	printk("%d reserved pages\n",reserved);
+	printk("%d pages shared\n",shared);
 }
 
 
@@ -845,28 +802,60 @@ void do_page_fault(unsigned long *esp, unsigned long error_code)
 		do_wp_page(error_code, address, current, user_esp);
 }
 
-unsigned long mem_init(unsigned long start_mem, unsigned long end_mem)
+void mem_init(unsigned long start_low_mem,
+	      unsigned long start_mem, unsigned long end_mem)
 {
+	int codepages = 0;
+	int reservedpages = 0;
+	int datapages = 0;
 	unsigned long tmp;
+	unsigned short * p;
 
+	cli();
 	end_mem &= 0xfffff000;
 	high_memory = end_mem;
-	mem_map = (char *) start_mem;
-	tmp = (end_mem - start_mem) >> 12;
-	start_mem += tmp;
-	start_mem += 0xfff;
+	start_mem += 0x0000000f;
+	start_mem &= 0xfffffff0;
+	tmp = MAP_NR(end_mem);
+	mem_map = (unsigned short *) start_mem;
+	p = mem_map + tmp;
+	start_mem = (unsigned long) p;
+	while (p > mem_map)
+		*--p = MAP_PAGE_RESERVED;
+	start_low_mem += 0x00000fff;
+	start_low_mem &= 0xfffff000;
+	start_mem += 0x00000fff;
 	start_mem &= 0xfffff000;
-	low_memory = start_mem;
-	tmp = (high_memory - low_memory) >> 12;
-	swap_device = 0;
-	swap_file = NULL;
-	memset(mem_map,0,tmp);
-	nr_free_pages = tmp;
-	free_page_list = low_memory;
-	*(unsigned long *) free_page_list = 0;
-	while ((tmp = free_page_list + 4096) < high_memory) {
+	while (start_low_mem < 0xA0000) {
+		mem_map[MAP_NR(start_low_mem)] = 0;
+		start_low_mem += 4096;
+	}
+	while (start_mem < end_mem) {
+		mem_map[MAP_NR(start_mem)] = 0;
+		start_mem += 4096;
+	}
+	free_page_list = 0;
+	nr_free_pages = 0;
+	for (tmp = 0 ; tmp < end_mem ; tmp += 4096) {
+		if (mem_map[MAP_NR(tmp)]) {
+			if (tmp < 0xA0000)
+				codepages++;
+			else if (tmp < 0x100000)
+				reservedpages++;
+			else
+				datapages++;
+			continue;
+		}
 		*(unsigned long *) tmp = free_page_list;
 		free_page_list = tmp;
+		nr_free_pages++;
 	}
-	return start_mem;
+	tmp = nr_free_pages << PAGE_SHIFT;
+	printk("Memory: %dk/%dk available (%dk kernel, %dk reserved, %dk data)\n",
+		tmp >> 10,
+		end_mem >> 10,
+		codepages << 2,
+		reservedpages << 2,
+		datapages << 2);
+	return;
 }

@@ -21,4 +21,6 @@ struct new_utsname {
 	char machine[65];
 };
 
+extern struct new_utsname system_utsname;
+
 #endif

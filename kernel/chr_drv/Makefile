@@ -17,7 +17,7 @@
 	$(CC) $(CFLAGS) -c $<
 
 OBJS  = tty_io.o console.o keyboard.o serial.o \
-	tty_ioctl.o pty.o lp.o vt.o mem.o mouse.o
+	tty_ioctl.o pty.o lp.o vt.o mem.o mouse.o busmouse.o psaux.o
 
 chr_drv.a: $(OBJS)
 	$(AR) rcs chr_drv.a $(OBJS)

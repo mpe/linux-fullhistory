@@ -12,15 +12,11 @@
 #ifndef UTS_NODENAME
 #define UTS_NODENAME "(none)"	/* set by sethostname() */
 #endif
-#include <linux/config_rel.h>
-#ifndef UTS_RELEASE
-#define UTS_RELEASE "0.95c-0" 
-#endif
-#include <linux/config_ver.h>
-#ifndef UTS_VERSION
-#define UTS_VERSION "mm/dd/yy"
-#endif
 #define UTS_MACHINE "i386"	/* hardware type */
+/*
+ * The definitions for UTS_RELEASE and UTS_VERSION are now defined
+ * in linux/version.h, and should only be used by linux/version.c
+ */
 
 /* Don't touch these, unless you really know what your doing. */
 #define DEF_INITSEG	0x9000

@@ -9,6 +9,7 @@
 #include <linux/errno.h>
 #include <linux/stat.h>
 
+
 static struct fat_cache *fat_cache,cache[FAT_CACHE];
 
 /* Returns the this'th FAT entry, -1 if it is an end-of-file entry. If
@@ -28,7 +29,7 @@ int fat_access(struct super_block *sb,int this,int new_value)
 	}
 	if (!(bh = msdos_sread(sb->s_dev,MSDOS_SB(sb)->fat_start+(first >>
 	    SECTOR_BITS),&data))) {
-		printk("bread in fat_access failed\r\n");
+		printk("bread in fat_access failed\n");
 		return 0;
 	}
 	if ((first >> SECTOR_BITS) == (last >> SECTOR_BITS)) {
@@ -39,11 +40,12 @@ int fat_access(struct super_block *sb,int this,int new_value)
 		if (!(bh2 = msdos_sread(sb->s_dev,MSDOS_SB(sb)->fat_start+(last
 		    >> SECTOR_BITS),&data2))) {
 			brelse(bh);
-			printk("bread in fat_access failed\r\n");
+			printk("bread in fat_access failed\n");
 			return 0;
 		}
 	}
 	if (MSDOS_SB(sb)->fat_bits == 16) {
+		p_first = p_last = NULL; /* GCC needs that stuff */
 		next = ((unsigned short *) data)[(first & (SECTOR_SIZE-1))
 		    >> 1];
 		if (next >= 0xfff8) next = -1;
@@ -119,7 +121,8 @@ void cache_lookup(struct inode *inode,int cluster,int *f_clu,int *d_clu)
 	struct fat_cache *walk;
 
 #ifdef DEBUG
-printk("cache lookup: %d\r\n",*f_clu);
+printk("cache lookup: <%d,%d> %d (%d,%d) -> ",inode->i_dev,inode->i_ino,cluster,
+    *f_clu,*d_clu);
 #endif
 	for (walk = fat_cache; walk; walk = walk->next)
 		if (inode->i_dev == walk->device && walk->ino == inode->i_ino &&
@@ -127,10 +130,13 @@ printk("cache lookup: %d\r\n",*f_clu);
 		    *f_clu) {
 			*d_clu = walk->disk_cluster;
 #ifdef DEBUG
-printk("cache hit: %d (%d)\r\n",walk->file_cluster,*d_clu);
+printk("cache hit: %d (%d)\n",walk->file_cluster,*d_clu);
 #endif
 			if ((*f_clu = walk->file_cluster) == cluster) return;
 		}
+#ifdef DEBUG
+printk("cache miss\n");
+#endif
 }
 
 
@@ -140,11 +146,12 @@ static void list_cache(void)
 	struct fat_cache *walk;
 
 	for (walk = fat_cache; walk; walk = walk->next) {
-		if (walk->device) printk("(%d,%d) ",walk->file_cluster,
-			walk->disk_cluster);
+		if (walk->device)
+			printk("<%d,%d>(%d,%d) ",walk->device,walk->ino,
+			    walk->file_cluster,walk->disk_cluster);
 		else printk("-- ");
 	}
-	printk("\r\n");
+	printk("\n");
 }
 #endif
 
@@ -154,7 +161,7 @@ void cache_add(struct inode *inode,int f_clu,int d_clu)
 	struct fat_cache *walk,*last;
 
 #ifdef DEBUG
-printk("cache add: %d (%d)\r\n",f_clu,d_clu);
+printk("cache add: <%d,%d> %d (%d)\n",inode->i_dev,inode->i_ino,f_clu,d_clu);
 #endif
 	last = NULL;
 	for (walk = fat_cache; walk->next; walk = (last = walk)->next)
@@ -211,7 +218,7 @@ int get_cluster(struct inode *inode,int cluster)
 {
 	int this,count;
 
-	if (!(this = inode->i_data[D_START])) return 0;
+	if (!(this = MSDOS_I(inode)->i_start)) return 0;
 	if (!cluster) return this;
 	count = 0;
 	for (cache_lookup(inode,cluster,&count,&this); count < cluster;
@@ -219,7 +226,10 @@ int get_cluster(struct inode *inode,int cluster)
 		if ((this = fat_access(inode->i_sb,this,-1)) == -1) return 0;
 		if (!this) return 0;
 	}
-	cache_add(inode,cluster,this);
+	if (!(MSDOS_I(inode)->i_busy || inode->i_nlink))
+		cache_add(inode,cluster,this);
+	/* don't add clusters of moved files, because we can't invalidate them
+	   when this inode is returned. */
 	return this;
 }
 
@@ -231,7 +241,7 @@ int msdos_smap(struct inode *inode,int sector)
 
 	sb = MSDOS_SB(inode->i_sb);
 	if (inode->i_ino == MSDOS_ROOT_INO || (S_ISDIR(inode->i_mode) &&
-	    !inode->i_data[D_START])) {
+	    !MSDOS_I(inode)->i_start)) {
 		if (sector >= sb->dir_entries >> MSDOS_DPS_BITS) return 0;
 		return sector+sb->dir_start;
 	}
@@ -249,14 +259,13 @@ int fat_free(struct inode *inode,int skip)
 {
 	int this,last;
 
-	if (!(this = inode->i_data[D_START])) return 0;
+	if (!(this = MSDOS_I(inode)->i_start)) return 0;
 	last = 0;
 	while (skip--) {
 		last = this;
-		if ((this = fat_access(inode->i_sb,this,-1)) == -1)
-			return 0;
+		if ((this = fat_access(inode->i_sb,this,-1)) == -1) return 0;
 		if (!this) {
-			printk("fat_free: skipped EOF\r\n");
+			printk("fat_free: skipped EOF\n");
 			return -EIO;
 		}
 	}
@@ -264,12 +273,18 @@ int fat_free(struct inode *inode,int skip)
 		fat_access(inode->i_sb,last,MSDOS_SB(inode->i_sb)->fat_bits ==
 		    12 ? 0xff8 : 0xfff8);
 	else {
-		inode->i_data[D_START] = 0;
+		MSDOS_I(inode)->i_start = 0;
 		inode->i_dirt = 1;
 	}
-	while (this != -1)
+	lock_fat(inode->i_sb);
+	while (this != -1) {
 		if (!(this = fat_access(inode->i_sb,this,0)))
 			panic("fat_free: deleting beyond EOF");
+		if (MSDOS_SB(inode->i_sb)->free_clusters != -1)
+			MSDOS_SB(inode->i_sb)->free_clusters++;
+		inode->i_blocks--;
+	}
+	unlock_fat(inode->i_sb);
 	cache_inval_inode(inode);
 	return 0;
 }

@@ -311,6 +311,20 @@ int sys_chown(const char * filename, uid_t user, gid_t group)
 	return -EPERM;
 }
 
+/*
+ * Note that while the flag value (low two bits) for sys_open means:
+ *	00 - read-only
+ *	01 - write-only
+ *	10 - read-write
+ *	11 - special
+ * it is changed into
+ *	00 - no permissions needed
+ *	01 - read-permission
+ *	10 - write-permission
+ *	11 - read-write
+ * for the internal routines (ie open_namei()/follow_link() etc). 00 is
+ * used by symlinks.
+ */
 int sys_open(const char * filename,int flag,int mode)
 {
 	struct inode * inode;
@@ -327,13 +341,26 @@ int sys_open(const char * filename,int flag,int mode)
 	if (!f)
 		return -ENFILE;
 	current->filp[fd] = f;
-	if ((i = open_namei(filename,flag,mode,&inode,NULL))<0) {
+	f->f_flags = flag;
+	if (f->f_mode = (flag+1) & O_ACCMODE)
+		flag++;
+	if (flag & (O_TRUNC | O_CREAT))
+		flag |= 2;
+	i = open_namei(filename,flag,mode,&inode,NULL);
+	if (i) {
 		current->filp[fd]=NULL;
 		f->f_count--;
 		return i;
 	}
-	f->f_mode = "\001\002\003\000"[flag & O_ACCMODE];
-	f->f_flags = flag;
+	if (flag & O_TRUNC)
+		if (inode->i_op && inode->i_op->truncate) {
+			inode->i_size = 0;
+			inode->i_op->truncate(inode);
+		}
+	if (!IS_RDONLY(inode)) {
+		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
+	}
 	f->f_inode = inode;
 	f->f_pos = 0;
 	f->f_reada = 0;

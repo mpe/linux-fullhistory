@@ -1,0 +1,5 @@
+#define UTS_RELEASE "0.97.pl3-34"
+#define UTS_VERSION "09/05/92"
+#define LINUX_COMPILE_TIME "17:58:09"
+#define LINUX_COMPILE_BY "root"
+#define LINUX_COMPILE_HOST "home"

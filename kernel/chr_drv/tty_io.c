@@ -735,7 +735,7 @@ long tty_init(long kmem_start)
 			0, 0, 0, 0, 0,
 			0,
 			0,
-			{25,80,0,0},
+			{24,80,0,0},
 			rs_write,
 			NULL,		/* other-tty */
 			rs_queues+0+i*3,rs_queues+1+i*3,rs_queues+2+i*3
@@ -754,7 +754,7 @@ long tty_init(long kmem_start)
 			0, 0, 0, 0, 0,
 			0,
 			0,
-			{25,80,0,0},
+			{24,80,0,0},
 			mpty_write,
 			spty_table+i,
 			mpty_queues+0+i*3,mpty_queues+1+i*3,mpty_queues+2+i*3
@@ -771,7 +771,7 @@ long tty_init(long kmem_start)
 			0, 0, 0, 0, 0,
 			0,
 			0,
-			{25,80,0,0},
+			{24,80,0,0},
 			spty_write,
 			mpty_table+i,
 			spty_queues+0+i*3,spty_queues+1+i*3,spty_queues+2+i*3

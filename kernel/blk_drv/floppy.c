@@ -191,7 +191,7 @@ static int keep_data[4] = { 0,0,0,0 };
  * Announce successful media type detection and media information loss after
  * disk changes.
  */
-static ftd_msg[4] = { 1,1,1,1 };
+static ftd_msg[4] = { 0,0,0,0 };
 
 /* Prevent "aliased" accesses. */
 
@@ -1008,12 +1008,15 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 	switch (cmd) {
 		RO_IOCTLS(inode->i_rdev,param);
 	}
-	if (!suser()) return -EPERM;
 	drive = MINOR(inode->i_rdev);
 	switch (cmd) {
 		case FDFMTBEG:
+			if (!suser())
+				return -EPERM;
 			return 0;
 		case FDFMTEND:
+			if (!suser())
+				return -EPERM;
 			cli();
 			fake_change |= 1 << (drive & 3);
 			sti();
@@ -1030,6 +1033,8 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 				    (char *) param+cnt);
 			return 0;
 		case FDFMTTRK:
+			if (!suser())
+				return -EPERM;
 			cli();
 			while (format_status != FORMAT_NONE)
 				sleep_on(&format_done);
@@ -1056,7 +1061,10 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			wake_up(&format_done);
 			return okay ? 0 : -EIO;
  	}
-	if (drive < 0 || drive > 3) return -EINVAL;
+	if (!suser())
+		return -EPERM;
+	if (drive < 0 || drive > 3)
+		return -EINVAL;
 	switch (cmd) {
 		case FDCLRPRM:
 			current_type[drive] = NULL;

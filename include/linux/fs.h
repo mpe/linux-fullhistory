@@ -89,7 +89,9 @@ extern void buffer_init(void);
 #define BLKROSET 4701 /* set device read-only (0 = read-write) */
 #define BLKROGET 4702 /* get read-only status (0 = read_write) */
 
-#define BMAP_IOCTL 1
+#define BMAP_IOCTL 1	/* obsolete - kept for compatibility */
+#define FIBMAP	   1	/* bmap access */
+#define FIGETBSZ   2	/* get the block size used for bmap */
 
 typedef char buffer_block[BLOCK_SIZE];
 

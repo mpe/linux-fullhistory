@@ -19,7 +19,7 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 
-#define ACC_MODE(x) ("\004\002\006\377"[(x)&O_ACCMODE])
+#define ACC_MODE(x) ("\000\004\002\006"[(x)&O_ACCMODE])
 
 /*
  * comment out this line if you want names > MINIX_NAME_LEN chars to be
@@ -200,6 +200,14 @@ int namei(const char * pathname, struct inode ** res_inode)
  *	open_namei()
  *
  * namei for open - this is in fact almost the whole open-routine.
+ *
+ * Note that the low bits of "flag" aren't the same asin the open
+ * system call - they are 00 - no permissions needed
+ *			  01 - read permission needed
+ *			  10 - write permission needed
+ *			  11 - read/write permissions needed
+ * which is a lot more logical, and also allows the "no perm" needed
+ * for symlinks (where the permissions are checked later).
  */
 int open_namei(const char * pathname, int flag, int mode,
 	struct inode ** res_inode, struct inode * base)
@@ -209,15 +217,13 @@ int open_namei(const char * pathname, int flag, int mode,
 	struct inode * dir, *inode;
 	struct task_struct ** p;
 
-	if ((flag & O_TRUNC) && !(flag & O_ACCMODE))
-		flag |= O_WRONLY;
 	mode &= 07777 & ~current->umask;
 	mode |= I_REGULAR;
 	error = dir_namei(pathname,&namelen,&basename,base,&dir);
 	if (error)
 		return error;
 	if (!namelen) {			/* special case: '/usr/' etc */
-		if (!(flag & (O_ACCMODE|O_CREAT|O_TRUNC))) {
+		if (!(flag & 2)) {
 			*res_inode=dir;
 			return 0;
 		}
@@ -252,23 +258,26 @@ int open_namei(const char * pathname, int flag, int mode,
 	}
 	if (error = follow_link(dir,inode,flag,mode,&inode))
 		return error;
+	if (S_ISDIR(inode->i_mode) && (flag & 2)) {
+		iput(inode);
+		return -EPERM;
+	}
+	if (!permission(inode,ACC_MODE(flag))) {
+		iput(inode);
+		return -EACCES;
+	}
 	if (S_ISBLK(inode->i_mode) || S_ISCHR(inode->i_mode)) {
 		if (IS_NODEV(inode)) {
 			iput(inode);
 			return -EACCES;
 		}
 	} else {
-		if (IS_RDONLY(inode) && (flag & (O_TRUNC | O_ACCMODE))) {
+		if (IS_RDONLY(inode) && (flag & 2)) {
 			iput(inode);
 			return -EROFS;
 		}
 	}
-	if ((S_ISDIR(inode->i_mode) && (flag & O_ACCMODE)) ||
-	    !permission(inode,ACC_MODE(flag))) {
-		iput(inode);
-		return -EPERM;
-	}
- 	if ((inode->i_count > 1) && (flag & O_ACCMODE))
+ 	if ((inode->i_count > 1) && (flag & 2))
  		for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
  			if (!*p)
  				continue;
@@ -282,15 +291,6 @@ int open_namei(const char * pathname, int flag, int mode,
  					return -ETXTBSY;
  				}
  		}
-	if (flag & O_TRUNC)
-		if (inode->i_op && inode->i_op->truncate) {
-			inode->i_size = 0;
-			inode->i_op->truncate(inode);
-		}
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
 	*res_inode = inode;
 	return 0;
 }

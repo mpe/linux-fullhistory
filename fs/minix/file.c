@@ -24,6 +24,14 @@
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
 
+static inline void wait_on_buffer(struct buffer_head * bh)
+{
+	cli();
+	while (bh->b_lock)
+		sleep_on(&bh->b_wait);
+	sti();
+}
+
 int minix_file_read(struct inode *, struct file *, char *, int);
 static int minix_file_write(struct inode *, struct file *, char *, int);
 
@@ -59,14 +67,6 @@ struct inode_operations minix_file_inode_operations = {
 	minix_truncate		/* truncate */
 };
 
-static inline void wait_on_buffer(struct buffer_head * bh)
-{
-	cli();
-	while (bh->b_lock)
-		sleep_on(&bh->b_wait);
-	sti();
-}
-
 /*
  * minix_file_read() is also needed by the directory read-routine,
  * so it's not static. NOTE! reading directories directly is a bad idea,
@@ -75,7 +75,7 @@ static inline void wait_on_buffer(struct buffer_head * bh)
  */
 int minix_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
-	int read,left,chars,nr;
+	int read,left,chars;
 	int block, blocks, offset;
 	struct buffer_head ** bhb, ** bhe;
 	struct buffer_head * buflist[NBUF];
@@ -104,12 +104,9 @@ int minix_file_read(struct inode * inode, struct file * filp, char * buf, int co
 	do {
 		if (blocks) {
 			--blocks;
-			if (nr = minix_bmap(inode,block++)) {
-				*bhb = getblk(inode->i_dev,nr,BLOCK_SIZE);
-				if (!(*bhb)->b_uptodate)
-					ll_rw_block(READ,*bhb);
-			} else
-				*bhb = NULL;
+			*bhb = minix_getblk(inode,block++,0);
+			if (*bhb && !(*bhb)->b_uptodate)
+				ll_rw_block(READ,*bhb);
 
 			if (++bhb == &buflist[NBUF])
 				bhb = buflist;
@@ -160,7 +157,7 @@ int minix_file_read(struct inode * inode, struct file * filp, char * buf, int co
 static int minix_file_write(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	off_t pos;
-	int written,block,c;
+	int written,c;
 	struct buffer_head * bh;
 	char * p;
 
@@ -182,7 +179,8 @@ static int minix_file_write(struct inode * inode, struct file * filp, char * buf
 		pos = filp->f_pos;
 	written = 0;
 	while (written<count) {
-		if (!(block = minix_create_block(inode,pos/BLOCK_SIZE))) {
+		bh = minix_getblk(inode,pos/BLOCK_SIZE,1);
+		if (!bh) {
 			if (!written)
 				written = -ENOSPC;
 			break;
@@ -190,14 +188,15 @@ static int minix_file_write(struct inode * inode, struct file * filp, char * buf
 		c = BLOCK_SIZE - (pos % BLOCK_SIZE);
 		if (c > count-written)
 			c = count-written;
-		if (c == BLOCK_SIZE)
-			bh = getblk(inode->i_dev, block, BLOCK_SIZE);
-		else
-			bh = bread(inode->i_dev,block, BLOCK_SIZE);
-		if (!bh) {
-			if (!written)
-				written = -EIO;
-			break;
+		if (c != BLOCK_SIZE && !bh->b_uptodate) {
+			ll_rw_block(READ,bh);
+			wait_on_buffer(bh);
+			if (!bh->b_uptodate) {
+				brelse(bh);
+				if (!written)
+					written = -EIO;
+				break;
+			}
 		}
 		p = (pos % BLOCK_SIZE) + bh->b_data;
 		pos += c;

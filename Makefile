@@ -84,7 +84,7 @@ CPP	=$(CC) -E
 AR	=ar
 
 ARCHIVES	=kernel/kernel.o mm/mm.o fs/fs.o net/net.o
-FILESYSTEMS	=fs/minix/minix.o fs/ext/ext.o fs/msdos/msdos.o
+FILESYSTEMS	=fs/minix/minix.o fs/ext/ext.o fs/msdos/msdos.o fs/proc/proc.o
 DRIVERS		=kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a \
 		 kernel/blk_drv/scsi/scsi.a
 MATH		=kernel/math/math.a
@@ -102,14 +102,21 @@ KERNELHDRS	=/usr/src/linux/include
 
 all:	Version Image
 
+lilo: Image
+	if [ -f /vmlinux ]; then mv /vmlinux /vmlinux.old; fi
+	dd if=Image of=/vmlinux
+	/etc/lilo/lilo -b /dev/hda /vmlinux
+
 linuxsubdirs: dummy
 	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.97.pl2-`cat .version`\" > include/linux/config_rel.h
-	@echo \#define UTS_VERSION \"`date +%D`\" > include/linux/config_ver.h
-	touch include/linux/config.h
+	@echo \#define UTS_RELEASE \"0.97.pl3-`cat .version`\" > tools/version.h
+	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
+	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
+	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
+	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h
 
 Image: boot/bootsect boot/setup tools/system tools/build
 	cp tools/system system.tmp
@@ -127,11 +134,13 @@ tools/build: tools/build.c
 
 boot/head.o: boot/head.s
 
+tools/version.o: tools/version.c tools/version.h
+
 init/main.o: init/main.c
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
-tools/system:	boot/head.o init/main.o linuxsubdirs
-	$(LD) $(LDFLAGS) -M boot/head.o init/main.o \
+tools/system:	boot/head.o init/main.o tools/version.o linuxsubdirs
+	$(LD) $(LDFLAGS) -M boot/head.o init/main.o tools/version.o \
 		$(ARCHIVES) \
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
@@ -156,10 +165,16 @@ boot/bootsect:	boot/bootsect.s
 fs: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=fs
 
+mm: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=mm
+
+kernel: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=kernel
+
 clean:
 	rm -f Image System.map tmp_make core boot/bootsect boot/setup \
 		boot/bootsect.s boot/setup.s init/main.s
-	rm -f init/*.o tools/system tools/build boot/*.o
+	rm -f init/*.o tools/system tools/build boot/*.o tools/*.o
 	for i in $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
 
 backup: clean

@@ -470,14 +470,14 @@ static int empty_dir(struct inode * inode)
 	if (inode->i_size < 2 * 12 || !inode->i_data[0] ||
 	    !(bh=bread(inode->i_dev, inode->i_data[0], BLOCK_SIZE))) {
 	    	printk("warning - bad directory on dev %04x\n",inode->i_dev);
-		return 0;
+		return 1;
 	}
 	de = (struct ext_dir_entry *) bh->b_data;
 	de1 = (struct ext_dir_entry *) ((char *) de + de->rec_len);
 	if (de->inode != inode->i_ino || !de1->inode || 
 	    strcmp(".",de->name) || strcmp("..",de1->name)) {
 	    	printk("warning - bad directory on dev %04x\n",inode->i_dev);
-		return 0;
+		return 1;
 	}
 	offset = de->rec_len + de1->rec_len;
 	de = (struct ext_dir_entry *) ((char *) de1 + de1->rec_len);

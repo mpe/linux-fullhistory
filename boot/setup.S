@@ -120,6 +120,40 @@ no_disk1:
 	stosb
 is_disk1:
 
+! check for PS/2 pointing device
+
+	mov	ax,#INITSEG
+	mov	ds,ax
+	mov	[0x1ff],#0	! default is no pointing device
+	int	0x11		! int 0x11: equipment determination
+	test	al,#0x04	! check if pointing device installed
+	jz	no_psmouse
+	mov	ax,#0xc201	! reset pointing device
+	int	0x15
+	jc	no_psmouse
+	mov	bh,#0x03	! 3 bytes/packet
+	mov	ax,#0xc205	! initialize pointing device
+	int	0x15
+	jc	no_psmouse
+	mov	ax,#0xc203	! set resolution
+	mov	bh,#0x03	! 8 counts/mm
+	int	0x15
+	jc	no_psmouse
+	mov	ax,#0xc206	! set scaling
+	mov	bh,0x02		! 2:1 scaling
+	int	0x15
+	jc	no_psmouse
+	mov	ax,#0xc202	! set sample rate
+	mov	bh,#0x05	! 100 reports per second
+	int	0x15
+	jc	no_psmouse
+	mov	bh,#0x01
+	mov	ax,#0xc200	! enable pointing device
+	int	0x15
+	jc	no_psmouse
+	mov	[0x1ff],#0xaa	! device present
+no_psmouse:
+
 ! now we want to move to protected mode ...
 
 	cli			! no interrupts allowed !

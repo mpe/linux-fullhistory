@@ -356,36 +356,44 @@ void add_timer(long jiffies, void (*fn)(void))
 	sti();
 }
 
-#define	FSHIFT	11
-#define	FSCALE	(1<<FSHIFT)
-/*
- * Constants for averages over 1, 5, and 15 minutes
- * when sampling at 5 second intervals.
- */
-static unsigned long cexp[3] = {
-	1884,	/* 0.9200444146293232 * FSCALE,	 exp(-1/12) */
-	2014,	/* 0.9834714538216174 * FSCALE,	 exp(-1/60) */
-	2037,	/* 0.9944598480048967 * FSCALE,	 exp(-1/180) */
-};
-unsigned long averunnable[3] = { 0, };	/* fixed point numbers */
-
-void update_avg(void)
-{
-    	int i, n=0;
-	struct task_struct **p;
-
-	for(p = &LAST_TASK; p > &FIRST_TASK; --p)
-		if (*p && ((*p)->state == TASK_RUNNING || 
-			   (*p)->state == TASK_UNINTERRUPTIBLE))
-			++n;
-	
-	for (i = 0; i < 3; ++i)
-		averunnable[i] = (cexp[i] * averunnable[i] +
-			n * FSCALE * (FSCALE - cexp[i])) >> FSHIFT;
-}
-
 unsigned long timer_active = 0;
 struct timer_struct timer_table[32];
+
+/*
+ * Hmm.. Changed this, as the GNU make sources (load.c) seems to
+ * imply that avenrun[] is the standard name for this kind of thing.
+ * Nothing else seems to be standardized: the fractional size etc
+ * all seem to differ on different machines.
+ */
+unsigned long avenrun[3] = { 0,0,0 };
+
+/*
+ * Nr of active tasks - counted in fixed-point numbers
+ */
+static unsigned long count_active_tasks(void)
+{
+	struct task_struct **p;
+	unsigned long nr = 0;
+
+	for(p = &LAST_TASK; p > &FIRST_TASK; --p)
+		if (*p && (*p)->state == TASK_RUNNING)
+			nr += FIXED_1;
+	return nr;
+}
+
+static inline void calc_load(void)
+{
+	unsigned long active_tasks; /* fixed-point */
+	static int count = LOAD_FREQ;
+
+	if (count-- > 0)
+		return;
+	count = LOAD_FREQ;
+	active_tasks = count_active_tasks();
+	CALC_LOAD(avenrun[0], EXP_1, active_tasks);
+	CALC_LOAD(avenrun[1], EXP_5, active_tasks);
+	CALC_LOAD(avenrun[2], EXP_15, active_tasks);
+}
 
 /*
  * The int argument is really a (struct pt_regs *), in case the
@@ -398,9 +406,9 @@ static void do_timer(struct pt_regs * regs)
 	unsigned long mask;
 	struct timer_struct *tp = timer_table+0;
 	struct task_struct ** task_p;
-	static int avg_cnt = 0;
 
 	jiffies++;
+	calc_load();
 	if ((VM_MASK & regs->eflags) || (3 & regs->cs)) {
 		current->utime++;
 		/* Update ITIMER_VIRT for current task if not in a system call */
@@ -418,10 +426,6 @@ static void do_timer(struct pt_regs * regs)
 				prof_buffer[eip]++;
 		}
 #endif
-	}
-	if (--avg_cnt < 0) {
-		avg_cnt = 500;
-		update_avg();
 	}
 	if (current == task[0] || (--current->counter)<=0) {
 		current->counter=0;

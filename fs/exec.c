@@ -80,8 +80,10 @@ int core_dump(long signr, struct pt_regs * regs)
 	if(current->rlim[RLIMIT_CORE].rlim_cur < PAGE_SIZE/1024) return 0;
 	__asm__("mov %%fs,%0":"=r" (fs));
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
-	if (open_namei("core",O_CREAT | O_WRONLY | O_TRUNC,0600,&inode,NULL))
+	if (open_namei("core",O_CREAT | O_WRONLY | O_TRUNC,0600,&inode,NULL)) {
+		inode = NULL;
 		goto end_coredump;
+	}
 	if (!S_ISREG(inode->i_mode))
 		goto end_coredump;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
@@ -415,7 +417,7 @@ restart_interp:
 		retval = -EACCES;
 		goto exec_error2;
 	}
-	if (IS_NOEXEC(inode)) { /* FS mustn't be mounted noexec */
+	if (IS_NOEXEC(inode)) {		/* FS mustn't be mounted noexec */
 		retval = -EPERM;
 		goto exec_error2;
 	}

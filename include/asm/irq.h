@@ -110,7 +110,7 @@ void BAD_IRQ_NAME(nr); \
 __asm__( \
 "\n.align 2\n" \
 "_IRQ" #nr "_interrupt:\n\t" \
-	"pushl $-1\n\t" \
+	"pushl $-"#nr"-2\n\t" \
 	SAVE_ALL \
 	ACK_##chip(mask) \
 	"sti\n\t" \

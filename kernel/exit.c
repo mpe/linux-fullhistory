@@ -11,12 +11,14 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/resource.h>
 #include <linux/mm.h>
 #include <linux/tty.h>
 
 #include <asm/segment.h>
 
 int sys_close(int fd);
+void getrusage(struct task_struct *, int, struct rusage *);
 
 int send_sig(long sig,struct task_struct * p,int priv)
 {
@@ -435,7 +437,7 @@ int sys_exit(int error_code)
 	do_exit((error_code&0xff)<<8);
 }
 
-int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
+int sys_wait4(pid_t pid,unsigned long * stat_addr, int options, struct rusage * ru)
 {
 	int flag;
 	struct task_struct *p;
@@ -467,12 +469,16 @@ repeat:
 					put_fs_long((p->exit_code << 8) | 0x7f,
 						stat_addr);
 				p->exit_code = 0;
+				if (ru != NULL)
+					getrusage(p, RUSAGE_BOTH, ru);
 				return p->pid;
 			case TASK_ZOMBIE:
 				current->cutime += p->utime + p->cutime;
 				current->cstime += p->stime + p->cstime;
 				current->cmin_flt += p->min_flt + p->cmin_flt;
 				current->cmaj_flt += p->maj_flt + p->cmaj_flt;
+				if (ru != NULL)
+					getrusage(p, RUSAGE_BOTH, ru);
 				flag = p->pid;
 				if (stat_addr)
 					put_fs_long(p->exit_code, stat_addr);
@@ -506,4 +512,13 @@ repeat:
 			goto repeat;
 	}
 	return -ECHILD;
+}
+
+/*
+ * sys_waitpid() remains for compatibility. waitpid() should be
+ * implemented by calling sys_wait4() from libc.a.
+ */
+int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
+{
+	return sys_wait4(pid, stat_addr, options, NULL);
 }

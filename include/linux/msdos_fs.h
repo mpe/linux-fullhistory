@@ -33,17 +33,8 @@
 
 #define DELETED_FLAG 0xe5 /* marks file as deleted when in name[0] */
 
-#define D_START    0 /* i_data[0]: first cluster or 0 */
-#define D_ATTRS    1 /* i_data[1]: unused attribute bits */
-#define D_BUSY     2 /* i_data[2]: file is either deleted but still open, or
-				   inconsistent (mkdir) */
-#define D_DEPEND   3 /* i_data[3]: pointer to inode that depends on the current
-				   inode */
-#define D_OLD	   4 /* i_data[4]: pointer to the old inode this inode depends
-				   on */
-#define D_BINARY   5 /* i_data[5]: file contains non-text data */
-
 #define MSDOS_SB(s) (&((s)->u.msdos_sb))
+#define MSDOS_I(i) (&((i)->u.msdos_i))
 
 #define MSDOS_NAME 11 /* maximum name length */
 #define MSDOS_DOT    ".          " /* ".", padded to MSDOS_NAME chars */
@@ -112,6 +103,8 @@ static inline struct buffer_head *msdos_sread(int dev,int sector,void **start)
 extern int is_binary(char conversion,char *extension);
 extern void lock_creation(void);
 extern void unlock_creation(void);
+extern void lock_fat(struct super_block *sb);
+extern void unlock_fat(struct super_block *sb);
 extern int msdos_add_cluster(struct inode *inode);
 extern int date_dos2unix(unsigned short time,unsigned short date);
 extern void date_unix2dos(int unix_date,unsigned short *time,
@@ -121,6 +114,7 @@ extern int msdos_get_entry(struct inode *dir,int *pos,struct buffer_head **bh,
 extern int msdos_scan(struct inode *dir,char *name,struct buffer_head **res_bh,
     struct msdos_dir_entry **res_de,int *ino);
 extern int msdos_parent_ino(struct inode *dir,int locked);
+extern int msdos_subdirs(struct inode *dir);
 
 /* fat.c */
 

@@ -10,6 +10,7 @@
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
+#include <linux/proc_fs.h>
 #include <linux/ext_fs.h>
 #include <linux/msdos_fs.h>
 #include <linux/kernel.h>
@@ -39,6 +40,7 @@ static struct file_system_type file_systems[] = {
 	{minix_read_super,"minix"},
 	{ext_read_super,"ext"},
 	{msdos_read_super,"msdos"},
+	{proc_read_super,"proc"},
 	{NULL,NULL}
 };
 
