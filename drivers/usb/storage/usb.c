@@ -304,9 +304,9 @@ static int usb_stor_control_thread(void * __us)
 		/* lock the device pointers */
 		down(&(us->dev_semaphore));
 
-		/* if us->srb is NULL, we are being asked to exit */
-		if (us->srb == NULL) {
-			US_DEBUGP("-- exit command received\n");
+		/* if the device has disconnected, we are free to exit */
+		if (test_bit(US_FLIDX_DISCONNECTING, &us->flags)) {
+			US_DEBUGP("-- exiting\n");
 			up(&(us->dev_semaphore));
 			break;
 		}
@@ -318,12 +318,6 @@ static int usb_stor_control_thread(void * __us)
 		if (test_bit(US_FLIDX_TIMED_OUT, &us->flags)) {
 			us->srb->result = DID_ABORT << 16;
 			goto SkipForAbort;
-		}
-
-		/* don't do anything if we are disconnecting */
-		if (test_bit(US_FLIDX_DISCONNECTING, &us->flags)) {
-			US_DEBUGP("No command during disconnect\n");
-			goto SkipForDisconnect;
 		}
 
 		scsi_unlock(host);
@@ -393,7 +387,6 @@ SkipForAbort:
 			complete(&(us->notify));
 
 		/* finished working on this command */
-SkipForDisconnect:
 		us->srb = NULL;
 		scsi_unlock(host);
 
@@ -776,33 +769,12 @@ static void usb_stor_release_resources(struct us_data *us)
 {
 	US_DEBUGP("-- %s\n", __FUNCTION__);
 
-	/* Kill the control thread.  The SCSI host must already have been
-	 * removed so it won't try to queue any more commands.
+	/* Tell the control thread to exit.  The SCSI host must
+	 * already have been removed so it won't try to queue
+	 * any more commands.
 	 */
-	if (us->pid) {
-
-		/* Wait for the thread to be idle */
-		down(&us->dev_semaphore);
-		US_DEBUGP("-- sending exit command to thread\n");
-
-		/* If the SCSI midlayer queued a final command just before
-		 * scsi_remove_host() was called, us->srb might not be
-		 * NULL.  We can overwrite it safely, because the midlayer
-		 * will not wait for the command to finish.  Also the
-		 * control thread will already have been awakened.
-		 * That's okay, an extra up() on us->sema won't hurt.
-		 *
-		 * Enqueue the command, wake up the thread, and wait for 
-		 * notification that it has exited.
-		 */
-		scsi_lock(us_to_host(us));
-		us->srb = NULL;
-		scsi_unlock(us_to_host(us));
-		up(&us->dev_semaphore);
-
-		up(&us->sema);
-		wait_for_completion(&us->notify);
-	}
+	US_DEBUGP("-- sending exit command to thread\n");
+	up(&us->sema);
 
 	/* Call the destructor routine, if it exists */
 	if (us->extra_destructor) {
@@ -975,6 +947,7 @@ static int storage_probe(struct usb_interface *intf,
 	/* We come here if there are any problems */
 BadDevice:
 	US_DEBUGP("storage_probe() failed\n");
+	set_bit(US_FLIDX_DISCONNECTING, &us->flags);
 	usb_stor_release_resources(us);
 	dissociate_dev(us);
 	scsi_host_put(host);
