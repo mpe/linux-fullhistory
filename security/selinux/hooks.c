@@ -877,7 +877,7 @@ static int inode_doinit_with_dentry(struct inode *inode, struct dentry *opt_dent
 	isec->initialized = 1;
 
 out:
-	if (inode->i_sock) {
+	if (S_ISSOCK(inode->i_mode)) {
 		struct socket *sock = SOCKET_I(inode);
 		if (sock->sk) {
 			isec->sclass = socket_type_to_security_class(sock->sk->sk_family,
